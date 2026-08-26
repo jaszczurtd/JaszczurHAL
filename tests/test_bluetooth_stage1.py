@@ -50,7 +50,9 @@ for forbidden in ("pico_cyw43_arch", "pico_btstack_cyw43"):
 require(
     "jh_target_enable_btstack_stage1" in btstack_cmake
     and "ENABLE_BLE=1" in btstack_cmake
-    and "jh_ble_hci_transport.c" in btstack_cmake
+    and "jh_bluetooth_host_runtime.c" in btstack_cmake
+    and "jh_btstack_host.c" in btstack_cmake
+    and "jh_bluetooth_hci_transport.c" in btstack_cmake
     and "jh_btstack_run_loop.c" in btstack_cmake,
     "Bluetooth integration does not own the JH transport and run loop",
 )
@@ -100,17 +102,17 @@ transport_adapter = (
     / "src/hal/bluetooth/jh_btstack_hci_transport_cyw43.c"
 ).read_text(encoding="utf-8")
 transport = (
-    ROOT / "src/hal/bluetooth/jh_ble_hci_transport.c"
+    ROOT / "src/hal/bluetooth/jh_bluetooth_hci_transport.c"
 ).read_text(encoding="utf-8")
 transport_header = (
-    ROOT / "src/hal/bluetooth/jh_ble_hci_transport.h"
+    ROOT / "src/hal/bluetooth/jh_bluetooth_hci_transport.h"
 ).read_text(encoding="utf-8")
 require(
-    "length != 0u && length < JH_BLE_HCI_FRAME_HEADER_SIZE" in transport,
+    "length != 0u && length < JH_BLUETOOTH_HCI_FRAME_HEADER_SIZE" in transport,
     "HCI transport does not reject truncated CYW43 packet headers",
 )
 require(
-    "JH_BLE_HCI_SERVICE_BUDGET 8u" in transport_header,
+    "JH_BLUETOOTH_HCI_SERVICE_BUDGET 8u" in transport_header,
     "HCI receive drain is no longer bounded",
 )
 for diagnostic in (
@@ -130,14 +132,14 @@ require(
     "host-testable HCI core directly depends on CYW43",
 )
 require(
-    "jh_ble_controller_backend()" in transport_adapter
+    "jh_bluetooth_controller_backend()" in transport_adapter
     and "jh_btstack_run_loop_notify()" in transport_adapter
     and "btstack_run_loop_poll_data_sources_from_irq" not in transport_adapter,
     "BTstack adapter bypasses the target controller or JH run loop",
 )
 
 controller = (
-    ROOT / "src/hal/bluetooth/jh_ble_controller_cyw43.c"
+    ROOT / "src/hal/bluetooth/jh_bluetooth_controller_cyw43.c"
 ).read_text(encoding="utf-8")
 for operation in (
     "cyw43_bluetooth_hci_init",
@@ -149,15 +151,15 @@ for operation in (
 
 for backend in (
     ROOT
-    / "src/hal/impl/rp2040/drivers/rp2040/rp2040_cyw43_ble_controller.cpp",
+    / "src/hal/impl/rp2040/drivers/rp2040/rp2040_cyw43_bluetooth_controller.cpp",
     ROOT
-    / "src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_cyw43_ble_controller.cpp",
+    / "src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_cyw43_bluetooth_controller.cpp",
 ):
     backend_text = backend.read_text(encoding="utf-8")
     require(
-        "jh_ble_controller_backend" in backend_text
-        and "jh_ble_controller_cyw43_instance" in backend_text,
-        f"{backend.name} does not bind the private BLE controller contract",
+        "jh_bluetooth_controller_backend" in backend_text
+        and "jh_bluetooth_controller_cyw43_instance" in backend_text,
+        f"{backend.name} does not bind the private Bluetooth controller boundary",
     )
 
 run_loop = (
@@ -189,13 +191,35 @@ require(
     "Stage 1 must not receive connection events through the deprecated ATT forwarder",
 )
 require(
-    "s_controller->start(" in probe and "s_controller->service(" in probe,
-    "Stage 1 probe bypasses the target BLE controller contract",
+    "jh_btstack_host_acquire(" in probe and "jh_btstack_host_service(" in probe,
+    "Stage 1 probe bypasses the shared Bluetooth host runtime",
 )
 require(
     "btstack_run_loop_embedded_execute_once" not in probe,
     "Stage 1 probe bypasses the JH-owned run loop",
 )
+
+host_runtime = (
+    ROOT / "src/hal/bluetooth/jh_bluetooth_host_runtime.c"
+).read_text(encoding="utf-8")
+for expected in (
+    "JH_BLUETOOTH_HOST_TRANSITION_ADD_PROFILE",
+    "JH_BLUETOOTH_HOST_TRANSITION_STOP",
+    "next_generation",
+    "controller_invalidated",
+):
+    require(expected in host_runtime, f"shared host runtime is missing {expected}")
+
+host_runtime_test = (
+    ROOT / "tests/test_bluetooth_host_runtime.cpp"
+).read_text(encoding="utf-8")
+for expected in (
+    "test_profiles_and_duplicate_references_share_one_host",
+    "test_profile_and_power_failures_roll_back_in_reverse_order",
+    "test_failed_second_profile_does_not_reset_the_running_host",
+    "test_invalidation_makes_handles_stale_and_allows_clean_restart",
+):
+    require(expected in host_runtime_test, f"host lifecycle coverage is missing {expected}")
 
 radio_facade = (
     ROOT
@@ -232,7 +256,7 @@ require(
     "shared CYW43 service order must be driver, client stacks, then lwIP timers",
 )
 
-host_test = (ROOT / "tests/test_ble_hci_transport.cpp").read_text(
+host_test = (ROOT / "tests/test_bluetooth_hci_transport.cpp").read_text(
     encoding="utf-8"
 )
 for expected in (

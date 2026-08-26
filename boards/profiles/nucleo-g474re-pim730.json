@@ -38,5 +38,5 @@
       "fdcan1": { "rx": { "domain": "soc-gpio", "id": "PA11" }, "tx": { "domain": "soc-gpio", "id": "PA12" } }
     }
   },
-  "components": { "cyw43-stm32-gspi": { "mode": "board-owned" }, "cyw43-lwip": { "mode": "feature-gated" }, "btstack-ble": { "mode": "feature-gated" } }
+  "components": { "cyw43-stm32-gspi": { "mode": "board-owned" }, "cyw43-lwip": { "mode": "feature-gated" }, "btstack-host": { "mode": "feature-gated" } }
 }

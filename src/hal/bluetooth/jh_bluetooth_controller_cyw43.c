@@ -1,4 +1,4 @@
-#include "jh_ble_controller.h"
+#include "jh_bluetooth_controller.h"
 
 #include "cybt_shared_bus_driver.h"
 #include "cyw43.h"
@@ -28,44 +28,44 @@ static hal_status_t status_from_cybt(int status) {
 }
 
 static hal_status_t
-controller_start(void *context, jh_ble_controller_service_fn service,
+controller_start(void *context, jh_bluetooth_controller_service_fn service,
                  void *service_context,
-                 jh_ble_controller_invalidation_fn invalidation,
+                 jh_bluetooth_controller_invalidation_fn invalidation,
                  void *invalidation_context) {
   (void)context;
   if (service == NULL) {
     return HAL_EINVAL;
   }
   hal_status_t status = jh_cyw43_radio_set_service_handler(
-      JH_CYW43_RADIO_CLIENT_BLE, service, service_context);
+      JH_CYW43_RADIO_CLIENT_BLUETOOTH, service, service_context);
   if (status != HAL_OK) {
     return status;
   }
   status = jh_cyw43_radio_set_invalidation_handler(
-      JH_CYW43_RADIO_CLIENT_BLE, invalidation, invalidation_context);
+      JH_CYW43_RADIO_CLIENT_BLUETOOTH, invalidation, invalidation_context);
   if (status != HAL_OK) {
-    (void)jh_cyw43_radio_set_service_handler(JH_CYW43_RADIO_CLIENT_BLE, NULL,
-                                             NULL);
+    (void)jh_cyw43_radio_set_service_handler(JH_CYW43_RADIO_CLIENT_BLUETOOTH,
+                                             NULL, NULL);
     return status;
   }
-  status = jh_cyw43_radio_acquire(JH_CYW43_RADIO_CLIENT_BLE);
+  status = jh_cyw43_radio_acquire(JH_CYW43_RADIO_CLIENT_BLUETOOTH);
   if (status != HAL_OK) {
-    (void)jh_cyw43_radio_set_invalidation_handler(JH_CYW43_RADIO_CLIENT_BLE,
-                                                  NULL, NULL);
-    (void)jh_cyw43_radio_set_service_handler(JH_CYW43_RADIO_CLIENT_BLE, NULL,
-                                             NULL);
+    (void)jh_cyw43_radio_set_invalidation_handler(
+        JH_CYW43_RADIO_CLIENT_BLUETOOTH, NULL, NULL);
+    (void)jh_cyw43_radio_set_service_handler(JH_CYW43_RADIO_CLIENT_BLUETOOTH,
+                                             NULL, NULL);
   }
   return status;
 }
 
 static hal_status_t controller_stop(void *context) {
   (void)context;
-  hal_status_t status = jh_cyw43_radio_release(JH_CYW43_RADIO_CLIENT_BLE);
+  hal_status_t status = jh_cyw43_radio_release(JH_CYW43_RADIO_CLIENT_BLUETOOTH);
   const hal_status_t invalidation_status =
-      jh_cyw43_radio_set_invalidation_handler(JH_CYW43_RADIO_CLIENT_BLE, NULL,
-                                              NULL);
-  const hal_status_t service_status =
-      jh_cyw43_radio_set_service_handler(JH_CYW43_RADIO_CLIENT_BLE, NULL, NULL);
+      jh_cyw43_radio_set_invalidation_handler(JH_CYW43_RADIO_CLIENT_BLUETOOTH,
+                                              NULL, NULL);
+  const hal_status_t service_status = jh_cyw43_radio_set_service_handler(
+      JH_CYW43_RADIO_CLIENT_BLUETOOTH, NULL, NULL);
   if (status == HAL_OK) {
     status = invalidation_status;
   }
@@ -74,7 +74,7 @@ static hal_status_t controller_stop(void *context) {
 
 static hal_status_t controller_service(void *context) {
   (void)context;
-  return jh_cyw43_radio_service(JH_CYW43_RADIO_CLIENT_BLE);
+  return jh_cyw43_radio_service(JH_CYW43_RADIO_CLIENT_BLUETOOTH);
 }
 
 static hal_status_t controller_hci_init(void *context) {
@@ -106,7 +106,7 @@ static hal_status_t controller_read_factory_address(void *context,
   return HAL_OK;
 }
 
-static const jh_ble_controller_t s_controller = {
+static const jh_bluetooth_controller_t s_controller = {
     .context = NULL,
     .start = controller_start,
     .stop = controller_stop,
@@ -117,6 +117,6 @@ static const jh_ble_controller_t s_controller = {
     .read_factory_address = controller_read_factory_address,
 };
 
-const jh_ble_controller_t *jh_ble_controller_cyw43_instance(void) {
+const jh_bluetooth_controller_t *jh_bluetooth_controller_cyw43_instance(void) {
   return &s_controller;
 }

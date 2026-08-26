@@ -52,7 +52,7 @@
       "slot": "network-stack"
     },
     {
-      "id": "btstack-ble",
+      "id": "btstack-host",
       "providers": [
         "jh-stm32-baremetal",
         "pico-sdk"

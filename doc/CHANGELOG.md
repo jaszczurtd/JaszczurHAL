@@ -72,10 +72,6 @@ All notable changes to this project will be documented in this file.
   messages in 300 seconds at 10.00 Hz, saturation, and all negative security
   and recovery cases. External-radio tuples not listed separately above remain
   pending.
-- Revalidated passive Observer scanning on Pico W and Pico 2 W with retained
-  Teltonika/Eddystone reports and zero queue loss. Native Windows execution and
-  downstream consumer/lights-timer integration remain deferred and do not
-  block the recorded BLE hardware acceptance.
 - Closed the active BLE Stream plus WiFi/MQTT coexistence gate on Pico 2 W in
   bare-metal and FreeRTOS builds. Both 10-minute Linux/BlueZ runs sustained
   10.00 authenticated echoes/s with zero loss while the firmware disconnected
@@ -564,8 +560,6 @@ to 1.9.1 or a later release.
   advertising-report queue with explicit overflow acknowledgement, and an
   allocation-free AD structure parser. Scanning remains mutually exclusive
   with advertising and connections and exposes no GATT client or pairing.
-- Added deterministic Observer mock coverage and a multi-target hardware probe
-  for Teltonika company data, iBeacon, and Eddystone signatures.
 - Added the public `hal_ble` Peripheral API with copied legacy
   advertising, one opaque connection, bounded events, ATT MTU reporting, a
   static GAP/GATT database, and a deterministic host mock.

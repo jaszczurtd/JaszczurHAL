@@ -1,4 +1,4 @@
-#include "jh_ble_hci_transport.h"
+#include "jh_bluetooth_hci_transport.h"
 
 #include <limits.h>
 #include <stddef.h>
@@ -12,13 +12,13 @@
 #define JH_HCI_OPCODE_HOST_BUFFER_SIZE 0x0c33u
 #define JH_HCI_OPCODE_SET_CONTROLLER_TO_HOST_FLOW_CONTROL 0x0c31u
 
-static bool controller_is_valid(const jh_ble_controller_t *controller) {
+static bool controller_is_valid(const jh_bluetooth_controller_t *controller) {
   return controller != NULL && controller->hci_init != NULL &&
          controller->hci_read != NULL && controller->hci_write != NULL &&
          controller->read_factory_address != NULL;
 }
 
-static void record_received_packet(jh_ble_hci_transport_t *transport,
+static void record_received_packet(jh_bluetooth_hci_transport_t *transport,
                                    uint8_t packet_type, const uint8_t *packet,
                                    uint16_t size) {
   if (packet_type == JH_HCI_ACL_DATA_PACKET) {
@@ -42,15 +42,14 @@ static void record_received_packet(jh_ble_hci_transport_t *transport,
   }
 }
 
-hal_status_t jh_ble_hci_transport_init(jh_ble_hci_transport_t *transport,
-                                       const jh_ble_controller_t *controller,
-                                       uint8_t *receive_buffer,
-                                       uint32_t receive_capacity,
-                                       jh_ble_hci_packet_fn packet_handler,
-                                       void *packet_context) {
+hal_status_t jh_bluetooth_hci_transport_init(
+    jh_bluetooth_hci_transport_t *transport,
+    const jh_bluetooth_controller_t *controller, uint8_t *receive_buffer,
+    uint32_t receive_capacity, jh_bluetooth_hci_packet_fn packet_handler,
+    void *packet_context) {
   if (transport == NULL || !controller_is_valid(controller) ||
       receive_buffer == NULL ||
-      receive_capacity < JH_BLE_HCI_FRAME_HEADER_SIZE ||
+      receive_capacity < JH_BLUETOOTH_HCI_FRAME_HEADER_SIZE ||
       ((uintptr_t)receive_buffer & 3u) != 0u || packet_handler == NULL) {
     return HAL_EINVAL;
   }
@@ -67,7 +66,8 @@ hal_status_t jh_ble_hci_transport_init(jh_ble_hci_transport_t *transport,
   return HAL_OK;
 }
 
-hal_status_t jh_ble_hci_transport_open(jh_ble_hci_transport_t *transport) {
+hal_status_t
+jh_bluetooth_hci_transport_open(jh_bluetooth_hci_transport_t *transport) {
   if (transport == NULL || !transport->initialized) {
     return HAL_EUNINIT;
   }
@@ -90,7 +90,8 @@ hal_status_t jh_ble_hci_transport_open(jh_ble_hci_transport_t *transport) {
   return HAL_OK;
 }
 
-hal_status_t jh_ble_hci_transport_close(jh_ble_hci_transport_t *transport) {
+hal_status_t
+jh_bluetooth_hci_transport_close(jh_bluetooth_hci_transport_t *transport) {
   if (transport == NULL || !transport->initialized) {
     return HAL_EUNINIT;
   }
@@ -99,8 +100,8 @@ hal_status_t jh_ble_hci_transport_close(jh_ble_hci_transport_t *transport) {
   return HAL_OK;
 }
 
-void jh_ble_hci_transport_invalidate(jh_ble_hci_transport_t *transport,
-                                     hal_status_t status) {
+void jh_bluetooth_hci_transport_invalidate(
+    jh_bluetooth_hci_transport_t *transport, hal_status_t status) {
   if (transport != NULL && transport->initialized) {
     transport->ready = false;
     transport->in_service = false;
@@ -108,7 +109,8 @@ void jh_ble_hci_transport_invalidate(jh_ble_hci_transport_t *transport,
   }
 }
 
-hal_status_t jh_ble_hci_transport_service(jh_ble_hci_transport_t *transport) {
+hal_status_t
+jh_bluetooth_hci_transport_service(jh_bluetooth_hci_transport_t *transport) {
   if (transport == NULL || !transport->initialized || !transport->ready) {
     return HAL_EUNINIT;
   }
@@ -130,20 +132,21 @@ hal_status_t jh_ble_hci_transport_service(jh_ble_hci_transport_t *transport) {
       break;
     }
     if (length > transport->receive_capacity ||
-        (length != 0u && length < JH_BLE_HCI_FRAME_HEADER_SIZE)) {
+        (length != 0u && length < JH_BLUETOOTH_HCI_FRAME_HEADER_SIZE)) {
       status = HAL_EPROTO;
       break;
     }
     had_work = length != 0u;
     if (had_work) {
-      const uint32_t payload_length = length - JH_BLE_HCI_FRAME_HEADER_SIZE;
+      const uint32_t payload_length =
+          length - JH_BLUETOOTH_HCI_FRAME_HEADER_SIZE;
       if (payload_length > UINT16_MAX) {
         status = HAL_EOVERFLOW;
         break;
       }
       const uint8_t packet_type = transport->receive_buffer[3];
       uint8_t *const packet =
-          &transport->receive_buffer[JH_BLE_HCI_FRAME_HEADER_SIZE];
+          &transport->receive_buffer[JH_BLUETOOTH_HCI_FRAME_HEADER_SIZE];
       ++transport->snapshot.rx_packets;
       record_received_packet(transport, packet_type, packet,
                              (uint16_t)payload_length);
@@ -151,9 +154,10 @@ hal_status_t jh_ble_hci_transport_service(jh_ble_hci_transport_t *transport) {
                                 (uint16_t)payload_length);
     }
     ++loop_count;
-  } while (had_work && loop_count < JH_BLE_HCI_SERVICE_BUDGET);
+  } while (had_work && loop_count < JH_BLUETOOTH_HCI_SERVICE_BUDGET);
 
-  if (status == HAL_OK && had_work && loop_count == JH_BLE_HCI_SERVICE_BUDGET) {
+  if (status == HAL_OK && had_work &&
+      loop_count == JH_BLUETOOTH_HCI_SERVICE_BUDGET) {
     ++transport->snapshot.drain_budget_hits;
   }
   transport->in_service = false;
@@ -161,9 +165,10 @@ hal_status_t jh_ble_hci_transport_service(jh_ble_hci_transport_t *transport) {
   return status;
 }
 
-hal_status_t jh_ble_hci_transport_send(jh_ble_hci_transport_t *transport,
-                                       uint8_t packet_type, uint8_t *packet,
-                                       uint16_t size) {
+hal_status_t
+jh_bluetooth_hci_transport_send(jh_bluetooth_hci_transport_t *transport,
+                                uint8_t packet_type, uint8_t *packet,
+                                uint16_t size) {
   if (transport == NULL || !transport->initialized || !transport->ready) {
     return HAL_EUNINIT;
   }
@@ -171,11 +176,11 @@ hal_status_t jh_ble_hci_transport_send(jh_ble_hci_transport_t *transport,
     transport->snapshot.last_status = HAL_EINVAL;
     return HAL_EINVAL;
   }
-  uint8_t *const frame = packet - JH_BLE_HCI_FRAME_HEADER_SIZE;
+  uint8_t *const frame = packet - JH_BLUETOOTH_HCI_FRAME_HEADER_SIZE;
   frame[3] = packet_type;
   const hal_status_t status = transport->controller->hci_write(
       transport->controller->context, frame,
-      (size_t)size + JH_BLE_HCI_FRAME_HEADER_SIZE);
+      (size_t)size + JH_BLUETOOTH_HCI_FRAME_HEADER_SIZE);
   transport->snapshot.last_status = status;
   if (status != HAL_OK) {
     return status;
@@ -189,9 +194,8 @@ hal_status_t jh_ble_hci_transport_send(jh_ble_hci_transport_t *transport,
   return HAL_OK;
 }
 
-hal_status_t
-jh_ble_hci_transport_address(const jh_ble_hci_transport_t *transport,
-                             uint8_t out_address[6]) {
+hal_status_t jh_bluetooth_hci_transport_address(
+    const jh_bluetooth_hci_transport_t *transport, uint8_t out_address[6]) {
   if (transport == NULL || !transport->initialized || !transport->ready) {
     return HAL_EUNINIT;
   }
@@ -202,9 +206,9 @@ jh_ble_hci_transport_address(const jh_ble_hci_transport_t *transport,
   return HAL_OK;
 }
 
-void jh_ble_hci_transport_snapshot(
-    const jh_ble_hci_transport_t *transport,
-    jh_ble_hci_transport_snapshot_t *out_snapshot) {
+void jh_bluetooth_hci_transport_snapshot(
+    const jh_bluetooth_hci_transport_t *transport,
+    jh_bluetooth_hci_transport_snapshot_t *out_snapshot) {
   if (transport != NULL && out_snapshot != NULL) {
     *out_snapshot = transport->snapshot;
   }

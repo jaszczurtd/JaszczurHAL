@@ -5,18 +5,17 @@
 #include "btstack.h"
 #include "hal/core/hal_mutex_once.h"
 #include "hal/system/hal_sync.h"
-#include "jh_ble_controller.h"
 #include "jh_ble_peripheral_gatt.h"
 #include "jh_ble_stream_session.h"
 #include "jh_btstack_hci_transport_cyw43.h"
-#include "jh_btstack_run_loop.h"
+#include "jh_btstack_host.h"
 
 #include <stddef.h>
 #include <string.h>
 
 typedef struct {
   hal_mutex_t mutex;
-  const jh_ble_controller_t *controller;
+  jh_bluetooth_host_reference_t host_reference;
   jh_ble_backend_event_fn event_handler;
   void *event_context;
   hal_ble_advertising_config_t advertising;
@@ -35,8 +34,6 @@ typedef struct {
   bool disconnect_pending;
   bool bootstrapping;
   bool stopping;
-  bool shutdown_requested;
-  bool shutdown_complete;
   bool hci_handler_registered;
   bool faulted;
 #ifdef HAL_ENABLE_BLE_STREAM
@@ -436,7 +433,8 @@ static int att_write_callback(hci_con_handle_t connection_handle,
 }
 #endif
 
-static void teardown_btstack(void) {
+static void ble_profile_stop(void *context) {
+  (void)context;
   if (s_ble.scan_active) {
     gap_stop_scan();
   }
@@ -450,10 +448,6 @@ static void teardown_btstack(void) {
   att_server_register_packet_handler(NULL);
   att_server_deinit();
   sm_deinit();
-  l2cap_deinit();
-  hci_close();
-  btstack_memory_deinit();
-  jh_btstack_run_loop_deinit();
   s_ble.started = false;
   s_ble.ready = false;
   s_ble.connected = false;
@@ -471,6 +465,22 @@ static void teardown_btstack(void) {
   memset(s_ble.stream_pending_frame, 0, sizeof(s_ble.stream_pending_frame));
   s_ble.stream_pending_frame_length = 0u;
 #endif
+}
+
+static hal_status_t ble_profile_start(void *context) {
+  (void)context;
+  sm_init();
+#ifdef HAL_ENABLE_BLE_STREAM
+  att_server_init(profile_data, att_read_callback, att_write_callback);
+#else
+  att_server_init(profile_data, NULL, NULL);
+#endif
+  att_server_register_packet_handler(att_packet_handler);
+  memset(&s_hci_events, 0, sizeof(s_hci_events));
+  s_hci_events.callback = packet_handler;
+  hci_add_event_handler(&s_hci_events);
+  s_ble.hci_handler_registered = true;
+  return HAL_OK;
 }
 
 #ifdef HAL_ENABLE_BLE_STREAM
@@ -544,26 +554,13 @@ static void service_stream_notification_under_radio_lock(void) {
 }
 #endif
 
-static hal_status_t service_under_radio_lock(void *context) {
+static hal_status_t ble_profile_service(void *context) {
   (void)context;
-  if (__atomic_load_n(&s_ble.bootstrapping, __ATOMIC_ACQUIRE)) {
-    return HAL_OK;
-  }
-  if (__atomic_load_n(&s_ble.shutdown_requested, __ATOMIC_ACQUIRE)) {
-    teardown_btstack();
-    __atomic_store_n(&s_ble.shutdown_complete, true, __ATOMIC_RELEASE);
-    return HAL_OK;
-  }
   if (__atomic_load_n(&s_ble.faulted, __ATOMIC_ACQUIRE)) {
     return HAL_EHW;
   }
   if (!s_ble.started) {
     return HAL_OK;
-  }
-
-  hal_status_t status = jh_btstack_run_loop_service_once(NULL);
-  if (status != HAL_OK) {
-    return status;
   }
 
   hal_ble_advertising_config_t advertising = {0};
@@ -653,17 +650,23 @@ static hal_status_t service_under_radio_lock(void *context) {
   return HAL_OK;
 }
 
-static void controller_invalidated(void *context, uint32_t generation) {
+static void ble_profile_invalidated(void *context, uint32_t generation) {
   (void)context;
   (void)generation;
-  jh_btstack_run_loop_invalidate(NULL, generation);
-  jh_btstack_cyw43_transport_invalidate();
   if (__atomic_load_n(&s_ble.stopping, __ATOMIC_ACQUIRE)) {
     return;
   }
   __atomic_store_n(&s_ble.faulted, true, __ATOMIC_RELEASE);
   emit_error(HAL_EHW, true);
 }
+
+static const jh_bluetooth_host_profile_ops_t s_profile_ops = {
+    .context = NULL,
+    .start = ble_profile_start,
+    .stop = ble_profile_stop,
+    .service = ble_profile_service,
+    .invalidated = ble_profile_invalidated,
+};
 
 static hal_status_t backend_start(void *context,
                                   jh_ble_backend_event_fn event_handler,
@@ -683,56 +686,21 @@ static hal_status_t backend_start(void *context,
   }
   s_ble.event_handler = event_handler;
   s_ble.event_context = event_context;
-  s_ble.controller = jh_ble_controller_backend();
   s_ble.connection = HCI_CON_HANDLE_INVALID;
   s_ble.bootstrapping = true;
   s_ble.stopping = false;
-  s_ble.shutdown_requested = false;
-  s_ble.shutdown_complete = false;
   s_ble.faulted = false;
   s_ble.scan_requested = false;
   s_ble.scan_active = false;
   s_ble.scan_pending = false;
   hal_mutex_unlock(mutex);
-  if (s_ble.controller == NULL || s_ble.controller->start == NULL ||
-      s_ble.controller->stop == NULL || s_ble.controller->service == NULL) {
-    s_ble.bootstrapping = false;
-    return HAL_ECONFIG;
-  }
-
-  hal_status_t status = s_ble.controller->start(s_ble.controller->context,
-                                                service_under_radio_lock, NULL,
-                                                controller_invalidated, NULL);
+  const hal_status_t status = jh_btstack_host_acquire(
+      JH_BLUETOOTH_HOST_PROFILE_BLE, &s_profile_ops, &s_ble.host_reference);
   if (status != HAL_OK) {
+    s_ble.event_handler = NULL;
+    s_ble.event_context = NULL;
     s_ble.bootstrapping = false;
     return status;
-  }
-
-  btstack_memory_init();
-  status = jh_btstack_run_loop_init();
-  if (status != HAL_OK) {
-    (void)s_ble.controller->stop(s_ble.controller->context);
-    s_ble.bootstrapping = false;
-    return status;
-  }
-  hci_init(jh_btstack_cyw43_hci_transport_instance(), NULL);
-  l2cap_init();
-  sm_init();
-#ifdef HAL_ENABLE_BLE_STREAM
-  att_server_init(profile_data, att_read_callback, att_write_callback);
-#else
-  att_server_init(profile_data, NULL, NULL);
-#endif
-  att_server_register_packet_handler(att_packet_handler);
-  memset(&s_hci_events, 0, sizeof(s_hci_events));
-  s_hci_events.callback = packet_handler;
-  hci_add_event_handler(&s_hci_events);
-  s_ble.hci_handler_registered = true;
-  if (hci_power_control(HCI_POWER_ON) != 0) {
-    teardown_btstack();
-    (void)s_ble.controller->stop(s_ble.controller->context);
-    s_ble.bootstrapping = false;
-    return HAL_EIO;
   }
   s_ble.started = true;
   __atomic_store_n(&s_ble.bootstrapping, false, __ATOMIC_RELEASE);
@@ -741,38 +709,25 @@ static hal_status_t backend_start(void *context,
 
 static hal_status_t backend_stop(void *context) {
   (void)context;
-  if (s_ble.controller == NULL) {
+  if (!s_ble.host_reference.active) {
     return HAL_OK;
   }
   __atomic_store_n(&s_ble.stopping, true, __ATOMIC_RELEASE);
-  __atomic_store_n(&s_ble.shutdown_requested, true, __ATOMIC_RELEASE);
-  hal_status_t status = s_ble.controller->service(s_ble.controller->context);
-  if (status == HAL_OK &&
-      !__atomic_load_n(&s_ble.shutdown_complete, __ATOMIC_ACQUIRE)) {
-    status = HAL_EIO;
-  }
-  const hal_status_t stop_status =
-      s_ble.controller->stop(s_ble.controller->context);
-  if (status == HAL_OK) {
-    status = stop_status;
-  }
-  s_ble.controller = NULL;
+  const hal_status_t status = jh_btstack_host_release(&s_ble.host_reference);
   s_ble.event_handler = NULL;
   s_ble.event_context = NULL;
   s_ble.advertising_requested = false;
   s_ble.scan_requested = false;
   s_ble.stopping = false;
-  s_ble.shutdown_requested = false;
-  s_ble.shutdown_complete = false;
   return status;
 }
 
 static hal_status_t backend_service(void *context) {
   (void)context;
-  if (s_ble.controller == NULL || !s_ble.started) {
+  if (!s_ble.host_reference.active || !s_ble.started) {
     return s_ble.faulted ? HAL_EHW : HAL_EUNINIT;
   }
-  hal_status_t status = s_ble.controller->service(s_ble.controller->context);
+  hal_status_t status = jh_btstack_host_service(&s_ble.host_reference);
   if (status != HAL_OK) {
     return status;
   }

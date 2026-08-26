@@ -368,21 +368,37 @@ target_compile_definitions(test_lwip_mdns_teardown PRIVATE
 jh_enable_host_warnings(test_lwip_mdns_teardown ERRORS)
 add_test(NAME test_lwip_mdns_teardown COMMAND test_lwip_mdns_teardown)
 
-add_executable(test_ble_hci_transport
-    test_ble_hci_transport.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/bluetooth/jh_ble_hci_transport.c
+add_executable(test_bluetooth_hci_transport
+    test_bluetooth_hci_transport.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/bluetooth/jh_bluetooth_hci_transport.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
 )
-target_include_directories(test_ble_hci_transport PRIVATE
+target_include_directories(test_bluetooth_hci_transport PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../src
 )
-target_compile_definitions(test_ble_hci_transport PRIVATE
+target_compile_definitions(test_bluetooth_hci_transport PRIVATE
     HAL_TARGET_MOCK=1
     HAL_ENABLE_UNITY
     UNITY_INCLUDE_CONFIG_H
 )
-jh_enable_host_warnings(test_ble_hci_transport ERRORS)
-add_test(NAME test_ble_hci_transport COMMAND test_ble_hci_transport)
+jh_enable_host_warnings(test_bluetooth_hci_transport ERRORS)
+add_test(NAME test_bluetooth_hci_transport COMMAND test_bluetooth_hci_transport)
+
+add_executable(test_bluetooth_host_runtime
+    test_bluetooth_host_runtime.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/bluetooth/jh_bluetooth_host_runtime.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
+)
+target_include_directories(test_bluetooth_host_runtime PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_compile_definitions(test_bluetooth_host_runtime PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+jh_enable_host_warnings(test_bluetooth_host_runtime ERRORS)
+add_test(NAME test_bluetooth_host_runtime COMMAND test_bluetooth_host_runtime)
 
 add_executable(test_network_backend
     test_network_backend.cpp

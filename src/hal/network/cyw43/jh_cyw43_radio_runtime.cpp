@@ -22,7 +22,7 @@ service_port(const jh_cyw43_radio_runtime_t *runtime) {
 
 bool has_references(const jh_cyw43_radio_runtime_t *runtime) {
   return runtime->references[JH_CYW43_RADIO_CLIENT_WIFI] != 0u ||
-         runtime->references[JH_CYW43_RADIO_CLIENT_BLE] != 0u;
+         runtime->references[JH_CYW43_RADIO_CLIENT_BLUETOOTH] != 0u;
 }
 
 void notify_active_clients(jh_cyw43_radio_runtime_t *runtime,
@@ -220,7 +220,7 @@ jh_cyw43_radio_runtime_release(jh_cyw43_radio_runtime_t *runtime,
   if (runtime->references[client] > 1u ||
       (runtime->references[client] == 1u &&
        runtime->references[client == JH_CYW43_RADIO_CLIENT_WIFI
-                               ? JH_CYW43_RADIO_CLIENT_BLE
+                               ? JH_CYW43_RADIO_CLIENT_BLUETOOTH
                                : JH_CYW43_RADIO_CLIENT_WIFI] != 0u)) {
     --runtime->references[client];
     const bool became_inactive = runtime->references[client] == 0u;
@@ -345,7 +345,8 @@ extern "C" hal_status_t jh_cyw43_radio_runtime_snapshot(
   out_snapshot->generation = runtime->service.generation;
   out_snapshot->wifi_references =
       runtime->references[JH_CYW43_RADIO_CLIENT_WIFI];
-  out_snapshot->ble_references = runtime->references[JH_CYW43_RADIO_CLIENT_BLE];
+  out_snapshot->bluetooth_references =
+      runtime->references[JH_CYW43_RADIO_CLIENT_BLUETOOTH];
   port->state_unlock(port->context);
   return HAL_OK;
 }

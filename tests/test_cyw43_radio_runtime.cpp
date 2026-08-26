@@ -100,7 +100,7 @@ hal_status_t client_service(void *context) {
 }
 
 jh_cyw43_radio_client_t s_wifi_client = JH_CYW43_RADIO_CLIENT_WIFI;
-jh_cyw43_radio_client_t s_ble_client = JH_CYW43_RADIO_CLIENT_BLE;
+jh_cyw43_radio_client_t s_bluetooth_client = JH_CYW43_RADIO_CLIENT_BLUETOOTH;
 
 jh_cyw43_radio_runtime_snapshot_t snapshot(void) {
   jh_cyw43_radio_runtime_snapshot_t value{};
@@ -132,8 +132,8 @@ void setUp(void) {
                                     &s_runtime, JH_CYW43_RADIO_CLIENT_WIFI,
                                     invalidated, &s_wifi_client));
   TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_radio_runtime_set_invalidation_handler(
-                                    &s_runtime, JH_CYW43_RADIO_CLIENT_BLE,
-                                    invalidated, &s_ble_client));
+                                    &s_runtime, JH_CYW43_RADIO_CLIENT_BLUETOOTH,
+                                    invalidated, &s_bluetooth_client));
 }
 
 void tearDown(void) {
@@ -146,8 +146,9 @@ void test_wifi_and_ble_share_one_driver_lifecycle(void) {
                                     &s_runtime, JH_CYW43_RADIO_CLIENT_WIFI));
   const uint32_t generation = snapshot().generation;
   TEST_ASSERT_NOT_EQUAL(0u, generation);
-  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_radio_runtime_acquire(
-                                    &s_runtime, JH_CYW43_RADIO_CLIENT_BLE));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, jh_cyw43_radio_runtime_acquire(&s_runtime,
+                                             JH_CYW43_RADIO_CLIENT_BLUETOOTH));
   TEST_ASSERT_EQUAL_UINT(1u, s_state.starts);
 
   TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_radio_runtime_release(
@@ -155,17 +156,19 @@ void test_wifi_and_ble_share_one_driver_lifecycle(void) {
   const auto after_wifi = snapshot();
   TEST_ASSERT_EQUAL_INT(JH_CYW43_RADIO_STATE_READY, after_wifi.state);
   TEST_ASSERT_EQUAL_UINT16(0u, after_wifi.wifi_references);
-  TEST_ASSERT_EQUAL_UINT16(1u, after_wifi.ble_references);
+  TEST_ASSERT_EQUAL_UINT16(1u, after_wifi.bluetooth_references);
   TEST_ASSERT_EQUAL_UINT(0u, s_state.stops);
   TEST_ASSERT_EQUAL_UINT(1u, s_state.invalidations[JH_CYW43_RADIO_CLIENT_WIFI]);
   TEST_ASSERT_EQUAL_UINT32(
       generation, s_state.invalidated_generation[JH_CYW43_RADIO_CLIENT_WIFI]);
 
-  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_radio_runtime_service(
-                                    &s_runtime, JH_CYW43_RADIO_CLIENT_BLE));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, jh_cyw43_radio_runtime_service(&s_runtime,
+                                             JH_CYW43_RADIO_CLIENT_BLUETOOTH));
   TEST_ASSERT_EQUAL_UINT(1u, s_state.services);
-  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_radio_runtime_release(
-                                    &s_runtime, JH_CYW43_RADIO_CLIENT_BLE));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, jh_cyw43_radio_runtime_release(&s_runtime,
+                                             JH_CYW43_RADIO_CLIENT_BLUETOOTH));
   TEST_ASSERT_EQUAL_INT(JH_CYW43_RADIO_STATE_OFF, snapshot().state);
   TEST_ASSERT_EQUAL_UINT(1u, s_state.stops);
   TEST_ASSERT_EQUAL_UINT(1u, s_state.synchronized_stops);
@@ -174,8 +177,9 @@ void test_wifi_and_ble_share_one_driver_lifecycle(void) {
 void test_restart_invalidates_both_clients_and_pending_operations(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_radio_runtime_acquire(
                                     &s_runtime, JH_CYW43_RADIO_CLIENT_WIFI));
-  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_radio_runtime_acquire(
-                                    &s_runtime, JH_CYW43_RADIO_CLIENT_BLE));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, jh_cyw43_radio_runtime_acquire(&s_runtime,
+                                             JH_CYW43_RADIO_CLIENT_BLUETOOTH));
   const uint32_t old_generation = snapshot().generation;
   jh_network_operation_t operation{};
   TEST_ASSERT_EQUAL_INT(
@@ -189,13 +193,14 @@ void test_restart_invalidates_both_clients_and_pending_operations(void) {
   TEST_ASSERT_EQUAL_UINT(1u, s_state.stops);
   TEST_ASSERT_EQUAL_UINT(1u, s_state.synchronized_stops);
   TEST_ASSERT_EQUAL_UINT(1u, s_state.invalidations[JH_CYW43_RADIO_CLIENT_WIFI]);
-  TEST_ASSERT_EQUAL_UINT(1u, s_state.invalidations[JH_CYW43_RADIO_CLIENT_BLE]);
+  TEST_ASSERT_EQUAL_UINT(
+      1u, s_state.invalidations[JH_CYW43_RADIO_CLIENT_BLUETOOTH]);
   TEST_ASSERT_FALSE(jh_cyw43_radio_runtime_generation_is_current(
       &s_runtime, JH_CYW43_RADIO_CLIENT_WIFI, old_generation));
   TEST_ASSERT_TRUE(jh_cyw43_radio_runtime_generation_is_current(
       &s_runtime, JH_CYW43_RADIO_CLIENT_WIFI, restarted.generation));
   TEST_ASSERT_TRUE(jh_cyw43_radio_runtime_generation_is_current(
-      &s_runtime, JH_CYW43_RADIO_CLIENT_BLE, restarted.generation));
+      &s_runtime, JH_CYW43_RADIO_CLIENT_BLUETOOTH, restarted.generation));
 }
 
 void test_duplicate_references_release_only_the_matching_client(void) {
@@ -203,8 +208,9 @@ void test_duplicate_references_release_only_the_matching_client(void) {
                                     &s_runtime, JH_CYW43_RADIO_CLIENT_WIFI));
   TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_radio_runtime_acquire(
                                     &s_runtime, JH_CYW43_RADIO_CLIENT_WIFI));
-  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_radio_runtime_acquire(
-                                    &s_runtime, JH_CYW43_RADIO_CLIENT_BLE));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, jh_cyw43_radio_runtime_acquire(&s_runtime,
+                                             JH_CYW43_RADIO_CLIENT_BLUETOOTH));
   TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_radio_runtime_release(
                                     &s_runtime, JH_CYW43_RADIO_CLIENT_WIFI));
   TEST_ASSERT_EQUAL_UINT(0u, s_state.invalidations[JH_CYW43_RADIO_CLIENT_WIFI]);
@@ -217,32 +223,37 @@ void test_duplicate_references_release_only_the_matching_client(void) {
 }
 
 void test_service_failure_is_propagated_and_context_is_unwound(void) {
-  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_radio_runtime_acquire(
-                                    &s_runtime, JH_CYW43_RADIO_CLIENT_BLE));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, jh_cyw43_radio_runtime_acquire(&s_runtime,
+                                             JH_CYW43_RADIO_CLIENT_BLUETOOTH));
   s_state.service_status = HAL_EIO;
-  TEST_ASSERT_EQUAL_INT(HAL_EIO, jh_cyw43_radio_runtime_service(
-                                     &s_runtime, JH_CYW43_RADIO_CLIENT_BLE));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EIO, jh_cyw43_radio_runtime_service(&s_runtime,
+                                              JH_CYW43_RADIO_CLIENT_BLUETOOTH));
   TEST_ASSERT_EQUAL_UINT(1u, s_state.services);
   TEST_ASSERT_EQUAL_UINT(0u, s_runtime.service.depth);
 }
 
 void test_wifi_service_runs_active_ble_hook_under_stack_lock(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_radio_runtime_set_service_handler(
-                                    &s_runtime, JH_CYW43_RADIO_CLIENT_BLE,
+                                    &s_runtime, JH_CYW43_RADIO_CLIENT_BLUETOOTH,
                                     client_service, &s_state));
   TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_radio_runtime_acquire(
                                     &s_runtime, JH_CYW43_RADIO_CLIENT_WIFI));
-  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_radio_runtime_acquire(
-                                    &s_runtime, JH_CYW43_RADIO_CLIENT_BLE));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, jh_cyw43_radio_runtime_acquire(&s_runtime,
+                                             JH_CYW43_RADIO_CLIENT_BLUETOOTH));
   TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_radio_runtime_service(
                                     &s_runtime, JH_CYW43_RADIO_CLIENT_WIFI));
   TEST_ASSERT_EQUAL_UINT(1u, s_state.client_services);
   TEST_ASSERT_EQUAL_INT(
-      HAL_EBUSY, jh_cyw43_radio_runtime_set_service_handler(
-                     &s_runtime, JH_CYW43_RADIO_CLIENT_BLE, nullptr, nullptr));
+      HAL_EBUSY,
+      jh_cyw43_radio_runtime_set_service_handler(
+          &s_runtime, JH_CYW43_RADIO_CLIENT_BLUETOOTH, nullptr, nullptr));
 
-  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_radio_runtime_release(
-                                    &s_runtime, JH_CYW43_RADIO_CLIENT_BLE));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, jh_cyw43_radio_runtime_release(&s_runtime,
+                                             JH_CYW43_RADIO_CLIENT_BLUETOOTH));
   TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_radio_runtime_service(
                                     &s_runtime, JH_CYW43_RADIO_CLIENT_WIFI));
   TEST_ASSERT_EQUAL_UINT(1u, s_state.client_services);
@@ -265,8 +276,9 @@ void test_restart_while_context_is_active_preserves_running_generation(void) {
 }
 
 void test_generation_rollover_never_exposes_zero(void) {
-  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_radio_runtime_acquire(
-                                    &s_runtime, JH_CYW43_RADIO_CLIENT_BLE));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, jh_cyw43_radio_runtime_acquire(&s_runtime,
+                                             JH_CYW43_RADIO_CLIENT_BLUETOOTH));
   s_runtime.service.generation = UINT32_MAX;
   TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_radio_runtime_restart(&s_runtime));
   TEST_ASSERT_EQUAL_UINT32(2u, snapshot().generation);
@@ -281,8 +293,9 @@ void test_start_failure_is_sticky_and_does_not_create_references(void) {
   TEST_ASSERT_EQUAL_UINT16(0u, failed.wifi_references);
   TEST_ASSERT_EQUAL_UINT(1u, s_state.stops);
   TEST_ASSERT_EQUAL_UINT(0u, s_state.synchronized_stops);
-  TEST_ASSERT_EQUAL_INT(HAL_EHW, jh_cyw43_radio_runtime_acquire(
-                                     &s_runtime, JH_CYW43_RADIO_CLIENT_BLE));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EHW, jh_cyw43_radio_runtime_acquire(&s_runtime,
+                                              JH_CYW43_RADIO_CLIENT_BLUETOOTH));
   TEST_ASSERT_EQUAL_INT(HAL_EHW, jh_cyw43_radio_runtime_restart(&s_runtime));
   TEST_ASSERT_EQUAL_INT(HAL_EHW, jh_cyw43_radio_runtime_service(
                                      &s_runtime, JH_CYW43_RADIO_CLIENT_WIFI));
