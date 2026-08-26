@@ -7,15 +7,24 @@ For the target-selectable VS Code firmware project model, see
 [FwProjectWorkflow.md](FwProjectWorkflow.md). For native RP and ESP32-S3 OTA
 provisioning and operation, see [OTAWorkflow.md](OTAWorkflow.md).
 
-## Platform and build capabilities
+Application code and reusable drivers are expected to use the public
+JaszczurHAL API. Pico SDK, ESP-IDF and register-level target details are
+implementation concerns of the selected backend, not alternative
+application-facing APIs. Applications may still call Pico SDK or ESP-IDF APIs
+directly when target-specific behavior is required, but those calls bypass the
+HAL abstraction, couple the affected code to that platform and work against
+the portability goal of JaszczurHAL.
+
+## Portable API, platforms and build capabilities
 
 | Area | What it offers | Source |
 |---|---|---|
-| RP2040 / RP2350 backend | Official Pico SDK backend and FreeRTOS (optional) for RP2040, RP2350 ARM, and RP2350 Hazard3 RISC-V, with exact chip and ISA selection. | [RP backend](../src/hal/impl/rp2040/), [native build](../rp_native_lib/) |
+| One portable JaszczurHAL API | Application and reusable driver code calls the same public C `hal_*` API across supported targets. Target selection chooses the implementation backend, while board capabilities and status results expose intentional hardware differences without changing the application-facing programming model. | [public HAL](../src/hal/), [API reference](JaszczurHAL_API.md) |
 | Board profiles and runtime capabilities | Generated RP2040, RP2350, STM32G474, ESP32-S3, and host profiles from the board registry. Supported builds expose the shared runtime board facade. | [board registry](../boards/README.md), [hal_board.h](../src/hal/system/hal_board.h) |
-| STM32G474 backend | Bare-metal and FreeRTOS (optional) STM32G474 backend with startup/runtime glue, linker support, coordinated flash services, native peripherals, and optional CYW43-over-gSPI networking. | [STM32G474 backend](../src/hal/impl/stm32g474/) |
-| ESP32-S3 backend | Production ESP-IDF project build/flash/artifact runner, safe USB Serial/JTAG selection, VS Code build/upload/monitor/IntelliSense/raw-app OTA, generated board/memory configuration, FreeRTOS task0/task1 dispatch, core/peripheral backends, and native WiFi/lwIP services. | [ESP32 implementation](../src/hal/impl/esp32/), [Phase 2 fixture](api/03_build_tests.md#esp32-s3-phase-2-hardware-probe), [Phase 3 compile fixture](../tests/fixtures/esp32s3_phase3/) |
-| Mock backend | Deterministic host backend for unit tests and API development without hardware. | [mock backend](../src/hal/impl/.mock/) |
+| RP2040 / RP2350 backend | Implements the shared JaszczurHAL API for RP2040, RP2350 ARM, and RP2350 Hazard3 RISC-V, with exact chip and ISA selection and optional FreeRTOS. The backend uses the official Pico SDK underneath for low-level platform support and native builds; portable application code continues to call JaszczurHAL. | [RP backend](../src/hal/impl/rp2040/), [native build](../rp_native_lib/) |
+| STM32G474 backend | Implements the shared JaszczurHAL API for STM32G474 with bare-metal and optional FreeRTOS runtimes. Target-specific internals provide startup/runtime support, linker support, coordinated flash services, native peripherals, and optional CYW43-over-gSPI networking. | [STM32G474 backend](../src/hal/impl/stm32g474/) |
+| ESP32-S3 backend | Implements the shared JaszczurHAL API on top of ESP-IDF, which supplies the underlying platform runtime, build system and native services. The backend and project tooling provide generated board/memory configuration, FreeRTOS task0/task1 dispatch, core/peripheral implementations, native WiFi/lwIP, safe USB Serial/JTAG selection, build/upload/monitor/IntelliSense and raw-app OTA. | [ESP32 implementation](../src/hal/impl/esp32/), [Phase 2 fixture](api/03_build_tests.md#esp32-s3-phase-2-hardware-probe), [Phase 3 compile fixture](../tests/fixtures/esp32s3_phase3/) |
+| Mock backend | Implements the same public JaszczurHAL API as a deterministic host backend for unit tests and portable API development without hardware. | [mock backend](../src/hal/impl/.mock/) |
 | Compile-time opt-in modules | Optional features are selected with `HAL_ENABLE_*` flags and pull in only their dependencies. | [hal_config.h](../src/hal/core/hal_config.h) |
 | Compiler portability layer | One header resolves the compiler extensions the HAL depends on - noreturn, forced inline, trap/unreachable, structure packing and leading-zero count - across GNU, Clang and MSVC. | [hal_compiler.h](../src/hal/core/hal_compiler.h) |
 | Portable app entry | Common `app_start()` / `app_task0()` / optional `app_task1()` model across supported targets and examples, including HAL-owned `main()`, ESP-IDF `app_main()`, and opt-in RP core-1 startup. | [hal_app.h](../src/hal/core/hal_app.h) |

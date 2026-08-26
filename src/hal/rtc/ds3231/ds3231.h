@@ -9,6 +9,8 @@
 
 #pragma once
 
+#include "hal/core/hal_status.h"
+
 #include <stdint.h>
 #include <time.h>
 
@@ -53,6 +55,13 @@ bool isleapYear(const uint16_t y);
 class DS3231 {
 public:
   DS3231(uint8_t i2c_bus = 0u, uint8_t i2c_addr = 0x68u);
+
+  hal_status_t getDateTimeEx(DateTime *out_datetime);
+  hal_status_t adjustEx(const DateTime &dt);
+  hal_status_t getTemperatureEx(float *out_temperature_c);
+  hal_status_t oscillatorCheckEx(bool *out_ok);
+  hal_status_t setSquareWaveEx(bool enabled, bool battery, byte frequency);
+  hal_status_t set32kHzEx(bool enabled);
 
   byte getSecond();
   byte getMinute();

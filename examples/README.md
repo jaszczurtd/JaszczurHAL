@@ -79,7 +79,7 @@ Target abbreviations used below are `R0` = `rp2040`, `RA` = `rp2350-arm`,
 | `13_adc` | Internal ADC sampling and external ADS1115 conversion | R0, RA, RV, S | R0, S | - |
 | `14_can_mcp2515` | MCP2515 classic CAN backend | R0, RA, RV, S | R0, S | - |
 | `15_display_oled_lcd` | SSD1306 OLED and HD44780 character LCD | R0, RA, RV, S | R0, S | - |
-| `16_rtc_backends` | RTC facade, target-native relative wake-up, and portable low-power transitions | R0, RA, RV, S | R0, S | - |
+| `16_rtc_backends` | RTC facade, target-native relative wake-up, portable low-power transitions, and a DS3231/ILI9341 retention clock | R0, RA, RV, S | R0, S | manual `display-clock` on S |
 | `17_audio_output` | PGA2311 volume control and DMA/PWM audio output | R0, RA, RV, S | R0, S | - |
 | `18_freertos_suite` | FreeRTOS tasks/affinity, WiFi, cJSON, BSD sockets, HTTP/HTTPS client/server, files, WebSocket, network console, commands, and Telegram notifications | R0, RA, RV, S | R0, S | `network` on R0, RA, S; gate on R0, S |
 | `19_touch` | TSC2007 and STMPE610 touch controllers | R0, RA, RV, S | R0, S | - |

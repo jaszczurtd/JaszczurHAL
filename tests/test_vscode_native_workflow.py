@@ -469,10 +469,10 @@ require(
         "rp2040": 34,
         "rp2350-arm": 27,
         "rp2350-riscv": 22,
-        "stm32g474": 32,
+        "stm32g474": 33,
     }
-    and sum(full_configuration_counts.values()) == 115,
-    "full example build matrix must contain exactly 115 configurations: "
+    and sum(full_configuration_counts.values()) == 116,
+    "full example build matrix must contain exactly 116 configurations: "
     f"{full_configuration_counts}",
 )
 require(

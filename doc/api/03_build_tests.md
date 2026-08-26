@@ -28,7 +28,7 @@
 | `hal_i2c` | RP2040 native Pico SDK `hardware/i2c.h`; STM32G474 register backend; ESP32-S3 ESP-IDF I2C master on I2C0/I2C1. |
 | `hal_swserial` | native Pico SDK PIO/DMA backend on RP2040; shared HAL GPIO/timing/sync backend on other targets |
 | `hal_gps` | one portable facade selecting `hal_uart` / `hal_swserial` at compile time, plus the shared in-tree NMEA engine |
-| `hal_rgb_led` | shared NeoPixel core (`hal/gpio/neopixel/jh_neopixel.*`) + target transport glue, including ESP32-S3 RMT |
+| `hal_rgb_led` | shared NeoPixel core (`hal/gpio/neopixel/jh_neopixel.*`) + target transport implementation, including ESP32-S3 RMT |
 | `hal_thermocouple` (MCP9600/MCP9601) | shared driver (`hal/temperature/mcp9600/mcp9600_driver.*`) |
 | `hal_thermocouple` (MAX6675) | shared driver (`hal/temperature/max6675/max6675_driver.*`) |
 | `hal_onewire` | shared bit-bang driver (`hal/onewire/onewire_driver.*`) over HAL GPIO/time |
@@ -626,7 +626,7 @@ Pico 2 W hardware acceptance uses the public
 is unsupported because its CYW43 Bluetooth transport is not enabled.
 
 The build owns BTstack sources directly and does not link `pico_cyw43_arch`,
-`pico_btstack_cyw43`, or Pico SDK Bluetooth storage glue. It brings up the
+`pico_btstack_cyw43`, or Pico SDK Bluetooth storage integration. It brings up the
 shared JH CYW43 radio owner through its BLE reference, downloads the Bluetooth
 firmware through the same CYW43 instance, starts connectable advertising as
 `JH BLE Stage 1`, and exposes a bounded static read/write GATT characteristic.
@@ -1416,7 +1416,7 @@ is intentionally not a second exhaustive test registry.
 | `test_hal_dht` | DHT GPIO transaction timing, checksum handling, cached sample getters and critical-section restoration |
 | `test_hal_onewire` | reset/read/write/select/search wrappers, CRC8/CRC16 helpers and mock bus locking |
 | `test_hal_rtc` | RTC init/get/set datetime, internal/external clock-source reporting, non-I2C provider dispatch, full Gregorian validation, 1970/2000/2099 epoch boundaries and overflow, integrity flag, interrupt mask, read-clear event flags, relative wake-up one-shot/state behavior, CLKOUT/timer/alarm configuration, legacy invalid-input guards and `_ex` status mapping |
-| `test_jh_rtc_i2c_provider` | Shared PCF8563/DS3231 provider selection, metadata, datetime/event translation, and backend capability status mapping over mock HAL I2C |
+| `test_jh_rtc_i2c_provider` | Shared PCF8563/DS3231 provider selection, metadata, datetime/event translation, safe DS3231 CLKOUT control, I2C error propagation, and backend capability status mapping over mock HAL I2C |
 | `test_stm32_rtc_codec` | STM32G474 RTC TR/DR and Alarm A BCD register encoding, calendar/range rejection, day-versus-weekday constraints, LSE/LSI 1 Hz prescalers, and wake-up counter rounding/bounds |
 | `test_rtc_architecture` | Single RTC facade ownership, I2C/internal provider boundaries, shared validation/locking, HAL-only chip drivers, STM32G474 WUT and RP AON alarm dispatch, and source-manifest wiring |
 | `test_hal_power` / `test_hal_power_header_c` | Power capabilities, request validation, callback ordering, RTC wake, monotonic elapsed time, reset-style mock behavior, cleanup, and C header compatibility |
@@ -1510,7 +1510,7 @@ is intentionally not a second exhaustive test registry.
 | `test_hal_modem_at` | generic AT engine command/response parsing, URCs, timeouts and callback dispatch |
 | `test_hal_simcom_a76xx` | SIMCom A76xx power/SIM/PDP/GNSS/LBS/MQTT command flows and URC handling |
 | `test_pcf8563_driver` | shared PCF8563 register encoding, datetime, alarm, timer, CLKOUT and integrity behavior |
-| `test_ds3231_driver` | shared DS3231 datetime, alarm, status, temperature and register behavior |
+| `test_ds3231_driver` | shared DS3231 datetime, full-calendar writes, alarm, status, oscillator-safe CLKOUT, temperature, I2C failures and register behavior |
 | `test_ili9341_driver` | shared ILI9341 command/init sequence, address windows and pixel writes |
 | `test_st77xx_driver` | shared ST7735/ST7789/ST7796S/GC9A01 initialization, offsets, windows and pixel writes |
 | `test_ssd1306_driver` | shared SSD1306-family initialization, framebuffer updates, controller addressing offsets, suspend/resume and I2C/SPI command/data transfers |

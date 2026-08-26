@@ -352,6 +352,10 @@ require(
     'LINK_DEPENDS "${_ldscript}"' in stm32_recipe,
     "STM32 firmware does not relink when its linker script changes",
 )
+require(
+    "-Wl,-u,_printf_float" in stm32_recipe,
+    "STM32 firmware does not enable newlib-nano floating-point formatting",
+)
 stm32_library = (ROOT / "stm32_lib" / "CMakeLists.txt").read_text(encoding="utf-8")
 require(
     'OUTPUT_ROOT "${CMAKE_BINARY_DIR}"' in stm32_library,
