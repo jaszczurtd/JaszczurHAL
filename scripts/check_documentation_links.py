@@ -13,6 +13,7 @@ from urllib.parse import unquote
 DOCUMENTATION_GLOBS = (
     "*.md",
     "boards/**/*.md",
+    "config/**/*.md",
     "doc/**/*.md",
     "doc/**/*.txt",
     "examples/**/*.md",
@@ -21,6 +22,7 @@ DOCUMENTATION_GLOBS = (
     "src/**/*.md",
     "stm32_lib/**/*.md",
     "tests/hardware/**/*.md",
+    "tests/fixtures/**/*.md",
     "vscode/**/*.md",
 )
 

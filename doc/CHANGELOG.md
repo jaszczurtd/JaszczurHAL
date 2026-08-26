@@ -4,8 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-11
 
-- Added one shared generated-artifact runner for feature, board, example, and
-  root VS Code projections. The full local gate now reports changed generated
+- Added the CycloneDX SBOM to the shared generated-artifact runner and its
+  read-only CI verification path. Audited the maintained documentation against
+  current registries and public headers, removed duplicated inventories,
+  corrected stale examples and target descriptions, and expanded local link
+  checking to configuration and fixture documentation.
+- Added one shared generated-artifact runner for all tracked projections. The
+  full local gate now reports changed generated
   files at the end and offers `--check-generated`; CI uses the same generator
   list in read-only mode. Restored minimal per-fixture README links while
   retaining the central hardware guide as the sole operator reference.
@@ -21,7 +26,7 @@ All notable changes to this project will be documented in this file.
   per-fixture instructions, completed the fixture index, redirected module and
   workflow links to the central sections, and reduced the root test overview
   to links for the test and process-script references. Also moved the local
-  `config/tooling` contract guide into the central process-script reference and
+  `config/tooling` data-model guide into the central process-script reference and
   removed its redundant README.
 - Added the STM32G474 hardware-watchdog backend over the LSI-clocked IWDG,
   including 1-32768 ms timeout validation, shortest-fitting prescaler/reload
@@ -46,7 +51,7 @@ All notable changes to this project will be documented in this file.
   bare-metal and 9.77 Hz in FreeRTOS and closed STM32 MCU-reset acceptance.
 - Removed the unused `hal_ble_stream_config_t::identity` field and the obsolete
   BLE maturity macros without changing the JH BLE Stream v1 GATT or frame
-  contract. Enabled the BLE backend for RP2350 ARM/Pico 2 W, retained RP2350
+  format. Enabled the BLE backend for RP2350 ARM/Pico 2 W, retained RP2350
   RISC-V as unsupported, and documented both the standard BlueKitchen BTstack
   license and the separate Raspberry Pi Product/Customer Product grant in the
   API and SBOM.
@@ -80,12 +85,12 @@ All notable changes to this project will be documented in this file.
   The test therefore distinguishes a real MCU reboot from a BLE-only restart
   even when the previous reset reason was already watchdog.
 - Added the exact `esp32s3` target and Waveshare ESP32-S3-Zero
-  SKU 25081 board profile. The generated contract now carries ESP-IDF target,
+  SKU 25081 board profile. The generated metadata now carries ESP-IDF target,
   4 MiB flash, 2 MiB Quad PSRAM, pin-trait, native WiFi/Bluetooth/USB,
   `303a:1001` USB Serial/JTAG programming, and target-required FreeRTOS facts
   with provenance. The controlled, feature-resolved ESP-IDF component builds
   the portable application entry and validates the final `sdkconfig` against the
-  generated target/board contract.
+  generated target/board metadata.
 - Added the ESP32-S3 Phase 2 backend set: system timing/watchdog/architecture/
   reset/UID/temperature services, FreeRTOS mutexes and critical sections,
   generated-mask GPIO/IRQ and ADC, the existing USB Serial/JTAG console VFS
@@ -104,7 +109,7 @@ All notable changes to this project will be documented in this file.
   snapshots contain only map bytes, partial queue acceptance preserves the
   retry cursor, and driver destruction precedes deletion of callback-visible
   synchronization objects. Documented the ESP-IDF snapshot-cursor and activity-
-  counter semantics without changing the exact byte-clocked contract of RP,
+  counter semantics without changing the exact byte-clocked behavior of RP,
   STM32, or mock backends.
 - Made the ESP32-S3 LEDC logical maximum an exact idle-high 100% state with a
   verified transition back to waveform duty updates. Failed LEDC channel
@@ -139,7 +144,7 @@ All notable changes to this project will be documented in this file.
   provenance, and the production `build_esp_idf.py` project runner for build,
   artifact validation, and flash. Its relocatable manifest retains the complete
   image/offset/hash set, partition and `sdkconfig` provenance, generated
-  board/link contracts, and actual compiler/CMake/Ninja/Python/esptool tool
+  board/link metadata, and actual compiler/CMake/Ninja/Python/esptool tool
   versions. The former Phase 0 command is now a thin compatibility wrapper.
 - Added ESP-IDF support to `jh-vscode` for build, identity-verified upload,
   persistent monitor handoff/reconnect, and Xtensa compile-database
@@ -149,7 +154,7 @@ All notable changes to this project will be documented in this file.
   chip/core/flash/PSRAM facts and a repeated `app_task0()` heartbeat. Physical
   closure on the Waveshare board completed three full three-image uploads,
   matched the exact S3/two-core/4 MiB flash/initialized 2 MiB Quad PSRAM
-  contract, and verified monitor release/reconnect across reset.
+  requirements, and verified monitor release/reconnect across reset.
 - Added one shared `hal_time` wall-clock setter and status snapshot, 64-bit
   monotonic progression, RP/STM32 libc adapters, RTC restore, and automatic RTC
   persistence after validated NTP synchronization.
@@ -183,7 +188,7 @@ All notable changes to this project will be documented in this file.
   regression coverage.
 - Added opt-in `HAL_ENABLE_NOTIFY` with generation-checked notification
   channels, backend descriptors, a Telegram Bot API backend over the existing
-  HTTP/HTTPS client, canonical public-host HTTPS enforcement, custom HTTP host
+  HTTP/HTTPS client, normalized public-host HTTPS enforcement, custom HTTP host
   support for local/proxy deployments, severity/device prefixes, plain-text
   multipart delivery, multipart receipts, propagated backend close failures,
   host/C header tests, API documentation, and feature listing. The network
@@ -303,7 +308,7 @@ All notable changes to this project will be documented in this file.
 - Registered the provider-neutral `HAL_ENABLE_LORA` feature and the
   `HAL_ENABLE_SX126X` provider closure over LoRa and SPI, with a compile-time
   rejection for facade-only configurations that select no provider.
-- Added the provider-neutral C/C++ `hal_lora_radio.h` MVP contract for SX1262
+- Added the provider-neutral C/C++ `hal_lora_radio.h` MVP interface for SX1262
   hardware/module profiles, raw modem configuration, blocking TX, polling RX,
   power state and time-on-air, with standalone public-header compile gates.
 - Added the bounded `HAL_LORA_RADIO_MAX_INSTANCES` lifecycle pool with
@@ -453,7 +458,7 @@ to 1.9.1 or a later release.
   parity coverage.
 - Connected the resolved registry closure to C preprocessing, RP and STM32G474
   source/dependency selection, board generation, the feature hash and link
-  contract, and `jh-vscode` preflight and OTA decisions. Direct feature
+  signature, and `jh-vscode` preflight and OTA decisions. Direct feature
   requests remain the compiler and CMake inputs.
 - Added parity failures when board or STM32 helper compile definitions disagree
   with their requested/resolved feature sets, and require Fiesta core-1 entry
@@ -466,10 +471,10 @@ to 1.9.1 or a later release.
 - Generated the complete `HAL_CONFIG_VERBOSE` report from the registry after
   conditional configuration rules have run.
 - Installed generated feature/board headers, resolved board metadata, and the
-  link-contract reference source with RP and STM32G474 static packages, with a
+  link-signature reference source with RP and STM32G474 static packages, with a
   direct ARM compiler compile/link gate for the PIM730/WiFi profile that runs
   without Python in `PATH`. Board/provider definitions are materialized in the
-  installed header and resolved JSON, and the generated contract reference
+  installed header and resolved JSON, and the generated signature reference
   remains live under `--gc-sections`.
 - Kept tunable-dependent defaults, provider choices, board capability checks,
   and target constraints in `hal_config.h`, with coverage identifying these
@@ -678,7 +683,7 @@ to 1.9.1 or a later release.
   pinned CMake/Ninja/GNU Arm/GNU RISC-V/OpenOCD/picotool fallbacks, and an Arm
   RP2040-multilib `<cstdlib>` compiler self-check. Incomplete system OpenOCD
   installations fall back to the managed archive.
-- Added the public Windows host inventory, CMake 3.20 contract, registry build
+- Added the public Windows host inventory, CMake 3.20 requirement, registry build
   fallback, explicit host/extension consent switches, and verify-only tests for
   idempotency and damaged content/stamps.
 - Added a firmware-only inventory scope for headless builders and CI while
@@ -804,10 +809,10 @@ to 1.9.1 or a later release.
   CMake/C headers, resolved diagnostics, physical board facts, and controlled
   component selection.
 - Made native RP and STM32 static libraries board-aware and added a
-  target/board/feature link-time contract symbol that rejects incompatible
+  target/board/feature link-time compatibility symbol that rejects incompatible
   archives.
 - Added unit, golden, semantic-negative, determinism, flash, WS2812, and
-  positive/negative contract-link tests.
+  positive/negative link-signature tests.
 - Switched jh-vscode, project generation, example dispatch, upload metadata,
   config dumps, and artifact-layout tests to the declarative `boards/` registry;
   removed the duplicate `vscode/targets/` descriptors and raw Pico board
@@ -836,7 +841,7 @@ to 1.9.1 or a later release.
   association and DHCP instead of the join returning `HAL_EUNSUPPORTED`.
 - Expanded the native RP quality gate from representative smoke/storage
   projects to every declared example: 56 RP2040, 56 RP2350 ARM and 45 RP2350
-  RISC-V projects. The manifest contract now rejects unclassified targets,
+  RISC-V projects. The manifest validation now rejects unclassified targets,
   boards and variants.
 - Added build-gated bare-metal/FreeRTOS hardware fixtures for concurrent CDC
   producers on both RP cores and for SDLogger mount/write/close/reset/remount,
@@ -909,7 +914,7 @@ to 1.9.1 or a later release.
   the RP2350 RISC-V toolchain under `third_party/`: tracked version files are
   the source of truth, ignored installations are synchronized or replaced by
   `update_components.sh`, and `runmefirst.sh` uses that single entry point.
-- Added an artifact-layout regression contract and constrained static/native
+- Added an artifact-layout regression check and constrained static/native
   build helper `--output` paths to the managed `.build/` tree.
 - Added a shared native RP flash transaction coordinator for bare-metal and
   FreeRTOS SMP firmware. It serializes callers, coordinates core 1 and local
@@ -1039,7 +1044,7 @@ to 1.9.1 or a later release.
 - Added cross-core diagnostic owner queries, mock core-affinity simulation and
   host coverage for RP2040-style ownership plus STM32G474 single-core/EXTI-line
   behavior. Legacy attach/detach APIs remain compatibility wrappers.
-- Documented the separate RP2040 peripheral-IRQ contract: hardware UART RX is
+- Documented the separate RP2040 peripheral-IRQ behavior: hardware UART RX is
   implicitly bound to the core that calls `hal_uart_begin()`, and GPS inherits
   that affinity when `HAL_GPS_TRANSPORT_UART` is selected. The RP2040
   SoftwareSerial GPS transport uses PIO/DMA and has no CPU IRQ owner.
@@ -1543,7 +1548,7 @@ to 1.9.1 or a later release.
 - Added public `hal_status_t` in `hal_status.h` as a shared status vocabulary
   for new APIs (`HAL_OK`, `HAL_EINVAL`, `HAL_EBUSY`, `HAL_ETIMEOUT`,
   `HAL_EIO`, `HAL_EUNSUPPORTED`, `HAL_ENOENT`, `HAL_EAGAIN`) without changing
-  existing module return contracts.
+  existing module return behavior.
 - Added `hal_status_to_string()` for stable symbolic status names in logs and
   diagnostics.
 - Added small status helper functions (`hal_status_is_ok()`,
@@ -1699,7 +1704,7 @@ to 1.9.1 or a later release.
   over HAL socket descriptors.
 - Added minimal `netdb.h` support with `getaddrinfo()`, `freeaddrinfo()` and
   `gai_strerror()` for IPv4 hostname/literal resolution through the shared
-  HAL resolver contract.
+  HAL resolver interface.
 - Added `hal_net_resolve_ipv4()` plus mock DNS entries and an RP2040
   `WiFi.hostByName()` backend path so simple TCP/UDP clients can connect by
   hostname while keeping HAL transport endpoints numeric.
@@ -2184,7 +2189,7 @@ to 1.9.1 or a later release.
   target-neutral drivers:
   `src/hal/analog/digipot/digipot_mcp401x.cpp` and
   `src/hal/analog/digipot/digipot_max5395.cpp`.
-- Added the internal `hal_digipot_ops_t` contract
+- Added the internal `hal_digipot_ops_t` interface
   (`hal/analog/digipot/hal_digipot_ops.h`). `hal_digipot.cpp` now owns only the
   public handle pool, per-instance mutex, backend selection and ops dispatch,
   matching the portable-driver shape used by `hal_thermocouple`.
@@ -2233,7 +2238,7 @@ to 1.9.1 or a later release.
   reference on RP2040).
 - Added `examples/README.md` documenting the build system, requirements,
   per-platform compilation commands, application structure, and the
-  `app_start`/`app_task0`/`app_task1` entry-point contract.
+  `app_start`/`app_task0`/`app_task1` entry-point interface.
 
 ### stm32g474 / hal_spi - hardware SPI transfer layer
 
@@ -2371,7 +2376,7 @@ to 1.9.1 or a later release.
   channel 0 = TIM2_CH1 (PA0/AF1), zero CPU per edge (register-level under
   `JH_STM32G474_HW`).
 - RP2040 backend: software counter driven by a GPIO edge interrupt
-  (`hal_gpio_attach_interrupt`) - same contract, ISR-rate limited. A nice
+  (`hal_gpio_attach_interrupt`) - same behavior, ISR-rate limited. A nice
   contrast: identical API, hardware timer on G474 vs ISR counter on RP2040.
 - Mock backend with `hal_mock_pcnt_inject/_get_edge/_get_pin` and a Unity
   suite (`test_hal_pcnt`); documented in `doc/HAL_FLAGS.txt`.
@@ -2497,7 +2502,7 @@ to 1.9.1 or a later release.
 
 ### hal_modem_at - new `hal_modem_at_listen_more()`
 
-- Same contract as `hal_modem_at_listen_until()` but does **not** call
+- Same behavior as `hal_modem_at_listen_until()` but does **not** call
   `reset_rx()` before draining. Lets callers preserve the partial
   response left in the scratch buffer by a preceding
   `hal_modem_at_send()` / `_send_with_data()` and append additional
@@ -2900,7 +2905,7 @@ to 1.9.1 or a later release.
   `HAL_ENABLE_RTC` automatically.
 - Documentation synchronized with the current RTC surface:
   `README.md` and `JaszczurHAL_API.md` now include RTC module scope,
-  flags/dependency notes, API contracts, and test-suite coverage.
+  flags/dependency notes, API guarantees, and test-suite coverage.
 
 ## [Unreleased] - 2026-05-22 (DS18B20 non-blocking module bootstrap)
 
@@ -3150,7 +3155,7 @@ Next release.
   appears only in `tests/` as fixture data (acceptance criterion
   from the R1.0 pre-flight grep snapshot).
 - `test_hal_serial_session_vocabulary.cpp` updated the two cases
-  that encoded the R1.0 fallback contract:
+  that encoded the R1.0 fallback behavior:
   * `test_classic_init_default_vocabulary_is_empty` - verifies the
     new empty-default semantics (unknown-cmd silently dropped,
     HELLO still works structurally).
@@ -3547,7 +3552,7 @@ Next release.
   - Return false when table is NULL
   - Return false when count is 0
   - Emit hal_derr(...) log on invalid input
-- JaszczurHAL API docs updated to include table APIs, return contract, and validation behavior.
+- JaszczurHAL API docs updated to include table APIs, return behavior, and validation rules.
 - JaszczurHAL docs updated to include the shared CAN temperature-byte helper.
 - Test build configuration updated:
   - Added src/hal/timers/hal_soft_timer.cpp to host test utility sources

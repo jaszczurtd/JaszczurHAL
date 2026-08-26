@@ -30,7 +30,7 @@ builds select a target and a physical board from the declarative registry descri
 Repository-produced artifacts stay below `.build/`. The helper scripts reject
 an output path outside this directory.
 
-## Target and board contract
+## Target and board compatibility
 
 The public target selectors live in `src/hal/core/hal_target.h`. Define exactly one
 selector when a toolchain does not provide enough information for automatic
@@ -55,7 +55,7 @@ include/generated/
   jh_link_contract.h
 ```
 
-The generated contract symbol has the form
+The generated compatibility symbol has the form
 `jh_board_contract_<target>_<board>_<featureHash>`. It makes mismatched
 libraries, board headers, and feature sets fail during linking. Keep
 `libJaszczurHAL.a` together with the generated headers from the same build.
@@ -65,7 +65,7 @@ Production feature resolution distinguishes:
 - `requestedFeatures`: direct requests collected from CMake definition inputs
   and `hal_project_config.h`;
 - `resolvedFeatures`: the sorted transitive registry closure used for source,
-  dependency, and link-contract selection.
+  dependency, and link-signature selection.
 
 An exact target may add a required feature. ESP32-S3 always adds
 `HAL_ENABLE_FREERTOS` with target provenance because ESP-IDF starts its
@@ -75,7 +75,7 @@ The resolved board JSON stores both sets and their full closure digest. Its
 `features` field remains as an alias of `resolvedFeatures`. The 12-character
 `featureHash` is SHA-256 over `hal.profileId` followed by the sorted resolved
 closure, with feature names serialized as `=1`. Redundant direct requests that
-do not change the closure therefore do not change the archive contract. The
+do not change the closure therefore do not change the archive signature. The
 same JSON records `boardCompileDefinitions`; generated CMake exposes them as
 `JH_BOARD_COMPILE_DEFINITIONS`, while `jh_board_config.h` materializes them for
 direct compiler consumers.
@@ -159,10 +159,10 @@ listed in `jh_board_resolved.json.boardCompileDefinitions`, including radio
 backend, bus, stack, and pin selections. Pass only the target selector and the
 recorded direct feature requests on the command line; do not repeat those
 board-owned definitions with `-D` options. The generated reference uses a
-GCC/Clang `constructor, used` root, so the board/feature contract remains live
+GCC/Clang `constructor, used` root, so the board/feature signature remains live
 under `--gc-sections` when the supported linker script retains constructor
 arrays. The target SDK, startup objects, linker script, and platform libraries
-remain part of the normal target toolchain contract.
+remain part of the normal target toolchain requirements.
 
 ## Host mock
 
@@ -288,7 +288,7 @@ add_executable(firmware
 jh_add_rp_native_firmware(firmware)
 ```
 
-The helper attaches the HAL, generated board contract, selected Pico SDK
+The helper attaches the HAL, generated board metadata, selected Pico SDK
 libraries, linker layout, application entry, and ELF/BIN/UF2 post-processing.
 
 Flash layout, persistent storage, OTA slots, and RAM ownership are documented
@@ -358,10 +358,10 @@ external `JH_FREERTOS_KERNEL_DIR` is verified and never replaced. Bare-metal
 firmware calls the generated HAL application entry in a cooperative loop;
 FreeRTOS firmware uses scheduler-managed tasks.
 
-The firmware link must include the generated contract reference object and use
+The firmware link must include the generated link-signature reference object and use
 the matching linker configuration. Its constructor root keeps the reference
 live when `--gc-sections` is enabled; a missing or mismatched archive therefore
-still fails with the expected undefined contract symbol. See
+still fails with the expected undefined compatibility symbol. See
 [STM32G474 memory map](../stm32_lib/MEMORY_MAP.md) for flash, SRAM, persistent
 storage, and OTA reservations.
 
@@ -407,7 +407,7 @@ The runner generates board-derived flash/PSRAM `sdkconfig` defaults, builds the
 project sources with a small JaszczurHAL integration component, and validates
 the result before publishing `jh_esp_idf_artifacts.json`. The manifest contains
 relative paths for the ELF, MAP, application BIN, bootloader, partition table,
-compile database, generated board/link contracts, and logs. Its ordered
+compile database, generated board/link metadata, and logs. Its ordered
 `flashImages` retain each offset, size, and SHA-256. Configuration provenance
 includes the final `sdkconfig` digest and selected partition profile; toolchain
 provenance includes the pinned ESP-IDF version/commit, actual compiler, CMake,
@@ -456,18 +456,19 @@ same incremental build explicitly before rewriting the gitignored
 `libJaszczurHAL.a`; the mock profile contains `libhal_mock.a`.
 
 `Project: Install library` builds the active production profile and installs
-its archive, public headers, generated board headers, and link-contract data to
+its archive, public headers, generated board headers, and link-signature data to
 `.build/install/<target>/<board>/`. The mock target has no installation
-contract. `Project: Clean` removes only these two directories for the active
+installation interface. `Project: Clean` removes only these two directories for the active
 profile and its matching managed IntelliSense file. It preserves other builds,
 managed tools, and dependency sources.
 
 The tracked root `.vscode` files are derived from the board registry. Verify or
-regenerate them after a registry or workspace-task change:
+regenerate all tracked generated artifacts after a registry or workspace-task
+change:
 
 ```bash
-python3 scripts/vscode_library_workspace.py sync-vscode --check
-python3 scripts/vscode_library_workspace.py sync-vscode
+python3 scripts/sync_generated.py --check
+python3 scripts/sync_generated.py --write
 ```
 
 Upload, serial-monitor, and debug-probe shortcuts remain firmware-only and are

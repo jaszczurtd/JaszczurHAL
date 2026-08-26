@@ -41,7 +41,7 @@ bool hal_soft_timer_tick_table(const hal_soft_timer_table_entry_t *table,
 **Implementation:** delegates to `SmartTimers` internally (same runtime semantics).
 **Thread safety:** Thread-safe and multicore-safe (inherits `SmartTimers` per-instance mutex protection).
 **Table helpers:** `hal_soft_timer_setup_table(...)` creates/configures timers from a descriptor array and optionally calls `idle_cb` + inter-entry delay. `hal_soft_timer_tick_table(...)` ticks all entries from the same array.
-**Validation contract:** table helpers validate `table != NULL` and `count > 0`. For invalid input they log via `hal_derr(...)` and return `false`.
+**Validation rules:** table helpers validate `table != NULL` and `count > 0`. For invalid input they log via `hal_derr(...)` and return `false`.
 
 **Example: periodic callback with C wrapper**
 ```c

@@ -149,9 +149,8 @@ clears the registration.
 
 STM32G474 currently returns `HAL_EUNSUPPORTED`; the host mock provides
 deterministic RX/TX buffers and reset observation for unit tests.
-ESP32-S3 does not expose this public USB lifecycle: the target rejects
-`HAL_ENABLE_USB`, while its debug console uses the startup-owned ESP-IDF USB
-Serial/JTAG VFS described below.
+ESP32-S3 does not expose this public USB lifecycle. Its debug console uses the
+startup-owned ESP-IDF USB Serial/JTAG VFS described below.
 
 ---
 
@@ -324,7 +323,7 @@ target timing semantics.
 `src/hal/serial/hal_serial.cpp` is the only serial/debug core. It owns public serial
 and debug entry points, streamed formatting, prefixes, timestamp hooks, mute
 state, rate-limit slots, the ISR SPSC ring, net-console mirroring, lazy init and
-all common mutexes. The internal `jh_serial_port.h` contract is resolved at
+all common mutexes. The internal `jh_serial_port.h` interface is resolved at
 link time and deliberately exposes only transport operations: begin/configure,
 logical message boundary, byte write, target line ending/flush and byte RX.
 
@@ -369,7 +368,7 @@ void  setDebugPrefixWithColon(const char *moduleName); // appends ':' and forwar
 `setDebugPrefixWithColon(...)` truncates the module name if needed so the
 generated `<module>:` prefix always fits inside `HAL_DEBUG_PREFIX_SIZE`.
 
-The architecture and concurrency contract is covered by
+The architecture and concurrency behavior is covered by
 `test_serial_architecture`, `test_hal_serial`, and the FreeRTOS POSIX runtime
 test. They prevent target-local debug cores from returning and exercise lazy
 mutex publication, complete message boundaries, ISR FIFO/overflow summaries,
@@ -606,7 +605,7 @@ Vocabulary configuration (R1.0 + R1.6 + R1.7):
   the rest of the dialect intact.
 - HELLO and the `OK HELLO module=... proto=... session=... fw=... build=...
   uid=...` reply are intentionally NOT configurable: their structure is
-  parsed by every host and is treated as part of the protocol contract.
+  parsed by every host and is treated as part of the protocol specification.
 - Reply strings ending in `_fmt` (currently only `reply_auth_challenge_fmt`)
   are passed to `printf`-family formatters; overrides MUST preserve the
   `%s` placeholder for the hex challenge.

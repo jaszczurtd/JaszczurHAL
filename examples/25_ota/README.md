@@ -11,7 +11,7 @@ rule persistently after showing its exact scope.
 
 Read [Native RP OTA Workflow](../../doc/OTAWorkflow.md) for the complete
 project, firmware, first-flash, VS Code, firewall, confirmation, rollback, and
-recovery contract.
+recovery procedure.
 
 The application confirms a trial image only after WiFi connectivity has been
 established, then starts the authenticated OTA service. Use:

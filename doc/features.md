@@ -2,7 +2,7 @@
 
 This document is a high-level inventory of what JaszczurHAL offers. It is meant
 as a compact feature map, not an API reference. For function signatures,
-configuration details and module contracts, see [JaszczurHAL_API.md](JaszczurHAL_API.md).
+configuration details and module behavior, see [JaszczurHAL_API.md](JaszczurHAL_API.md).
 For the target-selectable VS Code firmware project model, see
 [FwProjectWorkflow.md](FwProjectWorkflow.md). For native RP and ESP32-S3 OTA
 provisioning and operation, see [OTAWorkflow.md](OTAWorkflow.md).
@@ -12,10 +12,10 @@ provisioning and operation, see [OTAWorkflow.md](OTAWorkflow.md).
 | Area | What it offers | Source |
 |---|---|---|
 | RP2040 / RP2350 backend | Official Pico SDK backend and FreeRTOS (optional) for RP2040, RP2350 ARM, and RP2350 Hazard3 RISC-V, with exact chip and ISA selection. | [RP backend](../src/hal/impl/rp2040/), [native build](../rp_native_lib/) |
-| Board profiles and runtime capabilities | Generated Pico, Pico W, Pico 2, Pico 2 W, Pico+PIM730, Waveshare RP2040-LoRa-LF, Pico+Core1262-HF, NUCLEO-G474RE, Nucleo+Core1262-HF, Waveshare ESP32-S3-Zero, and host profiles. RP, STM32G474, ESP32-S3, and mock builds expose the shared runtime board facade. | [board registry](../boards/README.md), [hal_board.h](../src/hal/system/hal_board.h) |
+| Board profiles and runtime capabilities | Generated RP2040, RP2350, STM32G474, ESP32-S3, and host profiles from the board registry. Supported builds expose the shared runtime board facade. | [board registry](../boards/README.md), [hal_board.h](../src/hal/system/hal_board.h) |
 | STM32G474 backend | Bare-metal and FreeRTOS (optional) STM32G474 backend with startup/runtime glue, linker support, coordinated flash services, native peripherals, and optional CYW43-over-gSPI networking. | [STM32G474 backend](../src/hal/impl/stm32g474/) |
 | ESP32-S3 backend | Production ESP-IDF project build/flash/artifact runner, safe USB Serial/JTAG selection, VS Code build/upload/monitor/IntelliSense/raw-app OTA, generated board/memory configuration, FreeRTOS task0/task1 dispatch, core/peripheral backends, and native WiFi/lwIP services. | [ESP32 implementation](../src/hal/impl/esp32/), [Phase 2 fixture](api/03_build_tests.md#esp32-s3-phase-2-hardware-probe), [Phase 3 compile fixture](../tests/fixtures/esp32s3_phase3/) |
-| Mock backend | Deterministic host backend for unit tests and simulation-oriented development without hardware. | [mock backend](../src/hal/impl/.mock/) |
+| Mock backend | Deterministic host backend for unit tests and API development without hardware. | [mock backend](../src/hal/impl/.mock/) |
 | Compile-time opt-in modules | Optional features are selected with `HAL_ENABLE_*` flags and pull in only their dependencies. | [hal_config.h](../src/hal/core/hal_config.h) |
 | Compiler portability layer | One header resolves the compiler extensions the HAL depends on - noreturn, forced inline, trap/unreachable, structure packing and leading-zero count - across GNU, Clang and MSVC. | [hal_compiler.h](../src/hal/core/hal_compiler.h) |
 | Portable app entry | Common `app_start()` / `app_task0()` / optional `app_task1()` model across supported targets and examples, including HAL-owned `main()`, ESP-IDF `app_main()`, and opt-in RP core-1 startup. | [hal_app.h](../src/hal/core/hal_app.h) |
@@ -154,7 +154,7 @@ provisioning and operation, see [OTAWorkflow.md](OTAWorkflow.md).
 | Area | What it offers | Source |
 |---|---|---|
 | Portable examples | Buildable example applications covering core, sensors, displays, connectivity, storage and media modules. | [examples](../examples/) |
-| API reference | Detailed module contracts, signatures and backend notes. | [doc/api](api/) |
+| API reference | Detailed module guarantees, signatures and backend notes. | [doc/api](api/) |
 | Firmware project workflow | Manifest, target/board selection, source discovery, CMake or ESP-IDF provider dispatch, upload/monitor/IntelliSense behavior and generated files. | [FwProjectWorkflow.md](FwProjectWorkflow.md) |
 | Native OTA workflow | RP and ESP32-S3 firmware integration, target-specific artifacts, first flash, VS Code upload, firewall, confirmation, rollback and recovery. | [OTAWorkflow.md](OTAWorkflow.md) |
 | Local datasheets | Local reference PDFs and notes for supported hardware. | [datasheets](datasheets/) |

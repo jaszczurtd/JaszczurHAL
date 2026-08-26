@@ -15,13 +15,12 @@ devices, capabilities, and controlled build components. Application features
 remain opt-in through `HAL_ENABLE_*`; a hardware capability never enables a
 feature by itself.
 
-Supported profiles include `pico`, `picow`, `pico2`, `pico2w`, `pico-rm2`,
-`pico-core1262-hf`, `rp2040-zero`, `rp2040-plus-4mb`, `rp2040-lora-lf`,
-`nucleo-g474re`, `nucleo-g474re-pim730`,
-`nucleo-g474re-core1262-hf`, `waveshare-esp32-s3-zero`, and `host-mock`.
+The current profile inventory comes from `boards/profiles/*.json`; list its
+stable IDs with
+`python3 scripts/generate_board_config.py --boards-root boards --list boards`.
 The ESP32-S3 target provides its delivered core/peripheral backend set and the
 Phase 3 native connectivity/service graph. The build generator validates target
-compatibility, flash size, pins, components, and feature contracts before
+compatibility, flash size, pins, components, and feature rules before
 toolchain import. The same descriptors generate the source fallback, so board
 names and compile-time facts stay identical without a build-generated config.
 
@@ -192,7 +191,7 @@ pins are encoded into the same integer pin IDs the HAL consumes. The full
 descriptor also reaches `jh_board_resolved.json` unchanged for tooling.
 
 Component IDs, providers, and exclusive slots come from the authoritative
-`config/tooling/board_components.json` contract. The board generator consumes
+`config/tooling/board_components.json` model. The board generator consumes
 it directly and writes the CMake projection included by
 `cmake/jh_board_components.cmake`. Every official build validates the resolved
 component list against that registry: an unknown component, a component that
@@ -223,12 +222,12 @@ python3 scripts/generate_board_config.py \
 
 `--feature` remains a compatibility spelling for `--requested-feature`.
 
-Refresh or verify the tracked source-level board artifacts independently of a
-selected build:
+Refresh or verify all tracked generated artifacts, including the source-level
+board projections:
 
 ```bash
-python3 scripts/generate_board_config.py --boards-root boards --write-static
-python3 scripts/generate_board_config.py --boards-root boards --check-static
+python3 scripts/sync_generated.py --write
+python3 scripts/sync_generated.py --check
 ```
 
 These commands materialize the public enum/capability registry and the complete
@@ -243,7 +242,7 @@ The deterministic output contains:
 - `jh_board_config.h`;
 - `jh_board_resolved.json`;
 - `jh_link_contract.h`;
-- contract definition and reference translation units;
+- link-signature definition and reference translation units;
 - `generation.d`.
 
 Firmware never parses JSON. CMake runs the generator before importing Pico SDK
@@ -259,7 +258,7 @@ registry `resolvedFeatures`, their `featureProvenance`,
 `JH_BOARD_RESOLVED_FEATURES_DIGEST`, and exports the provider definitions as
 `JH_BOARD_COMPILE_DEFINITIONS`. `jh_board_config.h` materializes those provider
 definitions as preprocessor macros so a direct compiler consumer receives the
-same backend, bus, and pin contract without running CMake or Python.
+same backend, bus, and pin configuration without running CMake or Python.
 
 ## Board-aware static libraries
 
@@ -320,7 +319,7 @@ host of each type are not equivalent to a stable carrier design.
 
 Different Core1262 wiring uses the plain `pico` or `nucleo-g474re` profile and
 an explicit application descriptor. It must not select a composite profile
-whose fixed pin contract does not match the physical assembly.
+whose fixed pin configuration does not match the physical assembly.
 
 The archive defines:
 
@@ -333,19 +332,19 @@ jh_board_contract_<target>_<board>_<featureHash>
 as `HAL_ENABLE_*=1` or `HAL_DISABLE_*=1`. Bare feature names and `=1` therefore
 produce the same hash; the generator rejects `=0`, unknown features, derived
 feature requests, and other explicit feature values. Two different requested
-sets that produce the same closure have the same feature hash and link contract,
+sets that produce the same closure have the same feature hash and link signature,
 while `requestedFeatures` still preserves their diagnostic difference.
 
 Official firmware builds always compile the generated reference translation
 unit. Linking an archive for another target, board, or resolved feature set
-therefore fails with an undefined contract symbol. For GCC and Clang, the
+therefore fails with an undefined compatibility symbol. For GCC and Clang, the
 reference is rooted through a generated `constructor, used` function. The
-constructor array is retained by the supported linker scripts, so the contract
+constructor array is retained by the supported linker scripts, so the signature
 remains effective when function/data sections and `--gc-sections` are enabled.
 
 The archive and its generated headers are one unit. Never copy or link
 `libJaszczurHAL.a` without the matching `include/generated/` directory and
-contract reference translation unit.
+link-signature reference translation unit.
 
 Two conditional compatibility rules remain outside the v1 registry closure:
 AT24C256 EEPROM can add I2C, and GPS can select UART when no serial transport
@@ -400,7 +399,7 @@ The existing `rp2040-zero` profile demonstrates the complete procedure:
 5. Describe the LED as addressable WS2812 with project-owned RGB/GRB order.
 6. Run registry validation and generation below `.build`.
 7. Inspect the generated CMake, header, and resolved JSON.
-8. Add golden, negative, target/board, flash, and link-contract tests.
+8. Add golden, negative, target/board, flash, and link-signature tests.
 9. Select `target: rp2040` and `board: rp2040-zero` in the consumer manifest.
 
 The generated profile exposes GPIO16 and WS2812 facts but deliberately does

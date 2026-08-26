@@ -6,7 +6,7 @@
 
 | HAL module | External dependency |
 |---|---|
-| ESP32-S3 component contract | Pinned ESP-IDF with one generated source/dependency graph: baseline core/simple-PWM sources, feature-selected Phase 2 peripherals, and native Phase 3 connectivity/services. |
+| ESP32-S3 component model | Pinned ESP-IDF with one generated source/dependency graph: baseline core/simple-PWM sources, feature-selected Phase 2 peripherals, and native Phase 3 connectivity/services. |
 | `hal_gpio`, `hal_pwm`, `hal_adc`, `hal_system` | Pico SDK `hardware_*` / `pico_*` APIs on the RP family; STM32G474 register backend; ESP-IDF GPIO, LEDC PWM, ADC and system services for ESP32-S3. `hal_system` also uses FreeRTOS task APIs in supported `HAL_ENABLE_FREERTOS` builds. |
 | `hal_usb` | HAL-owned TinyUSB device on RP: CDC descriptors, IRQ/timer pump in bare builds, core-0 worker task in FreeRTOS builds, and BOOTSEL reset. STM32G474 is currently unsupported. Mock provides deterministic CDC buffers and a reset observer. |
 | `hal_serial` | One target-independent serial/debug core plus link-time ports: RP `hal_usb` CDC, ESP32-S3 startup-owned USB Serial/JTAG VFS, STM32G474 debug USART2/host stdout, and mock stdout capture/injectable RX. |
@@ -132,8 +132,7 @@ Runs the complete quality-gate suite (8 gates, in order):
    `01_core_runtime`/`18_freertos_suite` ELF/BIN/UF2 builds, and one clean
    compile-only `tests/fixtures/esp32s3_phase3` build with the pinned ESP-IDF
    and validated multi-image manifest)
-8. Examples build (63 dispatcher-backed `gateTargets` configurations: 32 for
-   RP2040, one for RP2350 ARM, and 30 for STM32G474, plus the dedicated
+8. Examples build (the dispatcher-derived `gateTargets` matrix plus dedicated
    target/runtime fixtures)
 
 Exits non-zero on the first failure; logs capture any warnings/errors.
@@ -176,7 +175,7 @@ the complete Linux quality gate:
   `runmefirst.ps1 -VerifyOnly`, runs the shared runtime/platform/bootstrap and
   generator tests, verifies the RP and STM32 FreeRTOS CMake dependency source
   selection, performs a clean production ESP32-S3/ESP-IDF build and uploads its
-  multi-image artifacts, then compiles and runs the portable host contracts
+  multi-image artifacts, then compiles and runs the portable host checks
   with MSVC `/W4 /permissive- /WX`;
 - `Windows firmware (<target>)` builds a generated consumer from a path
   containing spaces through Ninja for `rp2040`, `rp2350-arm`,
@@ -208,7 +207,7 @@ applications and keep their artifacts below `.build/hardware/`:
 | `tests/hardware/rp_sdlogger` | Physical SPI SD mount, deterministic append, flush/close, reset/remount, content and EEPROM log-counter persistence |
 | `tests/hardware/rp_ota` | Discovery, authentication, transfer, trial/confirm, rollback and USB/network recovery |
 | `tests/hardware/lora_sx1262` | Two-device SX1262 initialization, bidirectional packets, RSSI/SNR, sleep/wake and destroy/create reinitialization on integrated LF or external HF pairs |
-| `tests/hardware/esp32s3_phase1` | Phase 1 ESP32-S3 target/board identity, generated link contract, chip/core count, physical flash, initialized Quad PSRAM, and a repeated FreeRTOS `app_task0()` heartbeat over native USB Serial/JTAG. |
+| `tests/hardware/esp32s3_phase1` | Phase 1 ESP32-S3 target/board identity, generated link signature, chip/core count, physical flash, initialized Quad PSRAM, and a repeated FreeRTOS `app_task0()` heartbeat over native USB Serial/JTAG. |
 | `tests/hardware/esp32s3_phase2` | ESP32-S3 Phase 2 runtime probe for both application tasks, system/sync, GPIO/IRQ, ADC, USB Serial/JTAG TX/RX, hardware UART, I2C master scan, SPI master transfer path, dedicated-pool timer callbacks, and enabled FreeRTOS stack-guard configuration. |
 
 The subsections below are the complete operator reference for each physical
@@ -665,7 +664,7 @@ The WiFi-only images still exclude BTstack, Bluetooth firmware, and shared-bus
 Bluetooth pools. The owner migration adds no static SRAM to either WiFi-only
 baseline.
 
-After the Stage 3 controller-contract, bounded-HCI, and JH-owned run-loop
+After the Stage 3 controller-interface, bounded-HCI, and JH-owned run-loop
 migration, the matched images measured:
 
 | Target and variant | FLASH load | SRAM static | Reserved heap/stack |
@@ -996,7 +995,7 @@ The current host oracle is Linux/BlueZ. Native Windows execution is deferred,
 as is downstream consumer/lights-timer integration; neither is a requirement
 for the results recorded above.
 
-#### Fixture command and identity contract
+#### Fixture command and identity rules
 
 Identity, restart, saturation, and stats controls are fixture-only commands
 carried inside mutually authenticated and encrypted Stream DATA payloads. Each
@@ -1205,7 +1204,7 @@ physical flash, and initialized 2097152-byte Quad PSRAM. The persistent ESP
 monitor also released the port for upload, reconnected after reset, and resumed
 the repeated `app_task0()` heartbeat.
 
-This result validates the Phase 1 target/board/build/flash/monitor contract for
+This result validates the Phase 1 target/board/build/flash/monitor workflow for
 the Waveshare ESP32-S3-Zero SKU 25081. It does not extend support to the GPIO,
 serial, bus, networking, storage, or optional second-task surfaces assigned to
 Phase 2.
@@ -1219,7 +1218,7 @@ no external sensor, jumper, or SPI/I2C device is required.
 The firmware checks:
 
 - system time, architecture, UID, heap, die temperature, watchdog, retained-
-  fault boundary, and the enabled FreeRTOS stack-guard contract;
+  fault boundary, and the enabled FreeRTOS stack-guard behavior;
 - FreeRTOS mutexes, critical sections, and `app_task0`/`app_task1` affinity on
   cores 0/1;
 - GPIO input with pull-up, output/readback, and a same-owner reconfigured GPIO
@@ -1421,7 +1420,17 @@ cmake --build .build/host --target test_my_module
 ctest --test-dir .build/host -R test_my_module --output-on-failure
 ```
 
-### Test suites
+### Test suite guide
+
+`tests/CMakeLists.txt` is the authoritative test inventory. Inspect the suite
+registered by the current checkout with:
+
+```bash
+ctest --test-dir .build/host -N
+```
+
+The table below is a coverage guide for representative and grouped suites; it
+is intentionally not a second exhaustive test registry.
 
 | Suite | What it covers |
 |---|---|
@@ -1465,7 +1474,7 @@ ctest --test-dir .build/host -R test_my_module --output-on-failure
 | `test_irsmall_decoder_driver` | IRsmallDecoder NEC/NECx/SIRC/Samsung frame decode, RC5 transition-table decode including extended command bit, repeat/held reporting, timeout reset and interrupt disable/enable paths |
 | `test_hal_i2c` | bus0/bus1 transfer and status paths, direct read helpers, locking, init/deinit, bus clear, bounded scan results, count-only/overflow behavior and per-address callback coverage |
 | `test_hal_rgb_led` | status-first init/init_ex, invalid config, allocation/transport failure, retry, brightness clamp, off and pre-init guard |
-| `test_hal_display` | status-first display API, capabilities/raw-write contract, text sizing/formatting, presets, drawing, SSD1306 init, streaming/async DMA state, validation and injected backend-I/O failures |
+| `test_hal_display` | status-first display API, capabilities/raw-write rules, text sizing/formatting, presets, drawing, SSD1306 init, streaming/async DMA state, validation and injected backend-I/O failures |
 | `test_hal_can` | send/receive, ring buffer, null-data guard, payload clamp, backend selection, classic-vs-FD frame validation, filter API, `hal_can_process_all`, `hal_can_create_with_retry`, `hal_can_encode_temp_i8` |
 | `test_hal_thermocouple` | MCP9600 + MAX6675 inject, unsupported-op NAN returns, ADC resolution, enable/disable, alert/status |
 | `test_max6675_driver` | Shared MAX6675 raw decode, open-circuit fault, GPIO pin setup and bit-bang read sequence |
@@ -1497,7 +1506,7 @@ ctest --test-dir .build/host -R test_my_module --output-on-failure
 | `test_hal_net_commands` | JSON/text command registration and dispatch, HTTP route integration, WebSocket message integration, structured errors and API validation |
 | `test_hal_notify` | Notification facade validation, fake-backend dispatch, generation-checked handle lifetime, Telegram request JSON, public-host HTTP rejection and rate-limit mapping |
 | `test_bsd_sockets` | BSD/POSIX adapter fd mapping, sockaddr translation, errno/EAI paths, TCP/UDP flow, nonblocking mode, `select()`, `getaddrinfo()` and `setsockopt()` |
-| `test_bsd_socket_headers_c` | portable C declaration/constant/structure contract for BSD socket headers; runs under GNU-like hosts and MSVC |
+| `test_bsd_socket_headers_c` | portable C declarations, constants, and structures for BSD socket headers; runs under GNU-like hosts and MSVC |
 | `test_hal_tls` / `test_bearssl_provider` | public TLS lifecycle, native HAL TCP transport, bounded BearSSL progression and optional TLS-over-BSD callbacks |
 | TLS/BSD compile probes | prove that TLS builds without BSD, BSD builds without TLS, and each flag propagates only its required network modules |
 | `test_bsd_sockets_c_compile` | C compile/link smoke test for socket headers, `netdb.h`, TCP/UDP client/server shapes, `fcntl()`, `select()`, `getaddrinfo()` and `setsockopt()` |

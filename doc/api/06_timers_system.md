@@ -39,7 +39,7 @@ static inline const char *hal_status_to_string(hal_status_t status);
 ```
 
 This is the common status vocabulary for new public APIs. Existing value,
-handle and `bool` contracts remain compatibility wrappers when migrated;
+handle and `bool` APIs remain compatibility wrappers when migrated;
 fallible historical `void` operations may change in place to return
 `hal_status_t` because callers can continue ignoring the result.
 
@@ -127,7 +127,7 @@ ID, whose per-slot sequence repeats after 32767 allocations.
 **impl/stm32g474:** TIM6 runs as a 1 MHz one-shot alarm scheduler derived from
 the explicit 170 MHz APB1 timer-kernel clock. Long delays are chunked across
 16-bit TIM6 periods, callback return values greater than zero reschedule the
-same alarm, and software pools provide the same public pool/cancel contract as
+same alarm, and software pools provide the same public pool/cancel behavior as
 RP2040.
 **impl/esp32:** one 1 MHz ESP-IDF GPTimer backs the default logical alarm pool,
 which holds up to 16 simultaneous alarms by default. Positive callback return
@@ -210,7 +210,7 @@ void example_managed_timer(void) {
         &my_timer
     );
 
-    if (result == HAL_TIMER_RESULT_OK) {
+    if (result == HAL_TIMER_OK) {
         hal_deb("Timer created successfully");
 
         // Start the timer
@@ -619,11 +619,9 @@ void example_device_uid_and_reset(void) {
     uint32_t free_heap = hal_get_free_heap();
     float chip_temp = 0.0f;
     hal_status_t temp_status = hal_read_chip_temp_ex(&chip_temp);
-    uint32_t core_id = hal_get_core_id();
-
     if (temp_status == HAL_OK) {
-        hal_deb("Free heap: %lu bytes, Chip temp: %.1f°C, Core: %lu",
-                free_heap, chip_temp, core_id);
+        hal_deb("Free heap: %lu bytes, Chip temp: %.1f°C",
+                free_heap, chip_temp);
     }
 
     // Mark alive for brownout detection

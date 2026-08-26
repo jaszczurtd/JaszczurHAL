@@ -75,10 +75,9 @@ flash of a blank board, and the full task reference are documented in
 
 ## Examples
 
-The `examples/` tree contains 27 consolidated applications that preserve the
-coverage of the former 60 examples while demonstrating related HAL modules
-together. Each example is a portable `app.c`/`app.cpp` with a matching
-`hal_project_config.h`, built on the portable entry-point contract:
+The `examples/` tree contains consolidated applications that demonstrate
+related HAL modules together. Each example is a portable `app.c`/`app.cpp` with a matching
+`hal_project_config.h`, built on the portable entry-point interface:
 `app_start()`, `app_task0()`, and optional `app_task1()`
 (`HAL_ENABLE_APP_TASK1`, mapped to dual-core execution on RP and cooperative
 calls on bare-metal STM32G474). ESP-IDF maps `app_start()`, `app_task0()`, and
@@ -123,7 +122,7 @@ of the following in `hal_project_config.h` (or via `-D`):
 #define HAL_TARGET_RP2350_RISCV  // RP2350, Hazard3 RISC-V
 #define HAL_TARGET_STM32G474     // STM32G474
 #define HAL_TARGET_ESP32_S3      // ESP32-S3, native ESP-IDF
-#define HAL_TARGET_MOCK          // host unit-test / simulation backend
+#define HAL_TARGET_MOCK          // deterministic host test backend
 ```
 
 If you define none, the target is **auto-detected** from the toolchain.
@@ -135,8 +134,8 @@ registry. See
 Also see [FwProjectWorkflow.md](doc/FwProjectWorkflow.md) for the full
 target/board/configuration model.
 
-In practice, you do not need to know how the target-selection magic works internally.
- Just press `Ctrl+Shift+Alt+1` in your projectm and select the target from the menu.
+In practice, you do not need to know how the target-selection logic works internally.
+Just press `Ctrl+Shift+Alt+1` in your project and select the target from the menu.
 
 This is the [full list](vscode/README.md#vs-code-keyboard-shortcuts) of available VS Code Keyboard Shortcuts.
 
@@ -169,7 +168,7 @@ deterministic single-threaded tests, and the optional
 `JH_ENABLE_FREERTOS_POSIX_TESTS` flag adds host-side FreeRTOS scheduler
 coverage on top of it.
 
-For detailed signatures, exact guarantees, module contracts, backend notes, and test coverage,
+For detailed signatures, exact guarantees, module behavior, backend notes, and test coverage,
 see [JaszczurHAL_API.md](doc/JaszczurHAL_API.md).
 
 ## Building as a static library (.a)
@@ -178,7 +177,7 @@ The complete guide for compiling JaszczurHAL to a linkable static library
 (`libJaszczurHAL.a`), including example-application builds and the core/entry
 policy: [lib_compilation.md](doc/lib_compilation.md). Installed RP and
 STM32G474 packages include the generated feature and board headers, resolved
-board metadata, and link-contract reference source required by a direct
+board metadata, and link-compatibility reference source required by a direct
 compiler consumer. Compiling and linking the installed package does not invoke
 Python.
 
@@ -189,8 +188,9 @@ Python.
 ```
 
 It covers host unit tests (with FreeRTOS POSIX coverage), Valgrind memcheck,
-static analysis, duplicate and documentation checks, target/firmware build
-matrices, and separately executed physical hardware fixtures. The complete
+static analysis, duplicate and documentation checks, and target/firmware build
+matrices. Physical hardware fixtures are documented and executed separately.
+The complete
 test architecture, requirements, configuration, extension rules, fixture
 procedures, and recorded results are in
 [Build dependencies, tests, and hardware fixtures](doc/api/03_build_tests.md).
@@ -227,7 +227,7 @@ delegates ESP32-S3 build/flash to the production ESP-IDF runner, starts
 persistent serial monitors, and refreshes IntelliSense from the active
 toolchain's compile database.
 
-- CLI contract, task labels, keyboard shortcuts, and the project generator:
+- CLI interface, task labels, keyboard shortcuts, and the project generator:
   [vscode/README.md](vscode/README.md)
 - End-to-end project model and
   [adding project source files](doc/FwProjectWorkflow.md#adding-project-source-files):
@@ -274,7 +274,7 @@ littlefs, BTstack, and the Semtech SX126x driver live in
 ./third_party/update_components.sh --verify-only
 ```
 
-The complete component contract, including the update checklist (security
+The complete component policy, including the update checklist (security
 inventory, SBOM, affected builds, full gate), is documented in
 [third_party/README.md](third_party/README.md).
 

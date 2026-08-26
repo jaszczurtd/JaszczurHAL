@@ -73,7 +73,7 @@ options. Such user-managed paths are verified but are never replaced.
 
 ESP-IDF is pinned to an exact release commit and fetched on demand with
 `scripts/ensure_esp_idf.sh --enable`. Its recursive submodules are part of the
-verified checkout contract. The same command idempotently runs the official
+verified checkout set. The same command idempotently runs the official
 ESP-IDF installer for `ESP_IDF_TARGETS`, then verifies the toolchain and Python
 environment. Set `JH_ESP_IDF_DIR` or pass `--dir` to verify and use an external
 checkout without replacing it. Source `third_party/esp-idf/export.sh` in each
@@ -81,7 +81,7 @@ terminal that invokes ESP-IDF tools directly.
 
 The production runner accepts a project directory, resolves the
 `esp32s3` target and `waveshare-esp32-s3-zero` board descriptors, prepares the
-pinned SDK environment, and validates the complete build contract:
+pinned SDK environment, and validates the complete build requirements:
 
 ```bash
 python3 scripts/build_esp_idf.py build \

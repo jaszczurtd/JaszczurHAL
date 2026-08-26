@@ -22,7 +22,7 @@ They ship as regular Python packages with an `__init__.py` in every level, so
 `vscode.runtime` always resolves inside this repository.
 For the full firmware project model, see
 [`doc/FwProjectWorkflow.md`](../doc/FwProjectWorkflow.md). For the complete
-native RP and ESP32-S3 OTA contracts, including firewall and recovery, see
+native RP and ESP32-S3 OTA requirements, including firewall and recovery, see
 [`doc/OTAWorkflow.md`](../doc/OTAWorkflow.md).
 
 ## Host Launchers
@@ -50,7 +50,7 @@ This keeps task labels and arguments identical on both hosts.
 Windows device actions use native COM and volume APIs; they do not require WSL,
 Git Bash, or a POSIX compatibility layer.
 
-## CLI Contract
+## CLI interface
 
 ```text
 jh-vscode <action> [options]
@@ -236,7 +236,7 @@ launch profiles.
 
 ## Adding Project Source Files
 
-Source discovery and the complete `JH_PROJECT_SOURCES` contract are defined in
+Source discovery and the complete `JH_PROJECT_SOURCES` rules are defined in
 [Adding Project Source Files](../doc/FwProjectWorkflow.md#adding-project-source-files).
 That document is the only source for project layout and manifest examples.
 
@@ -328,18 +328,16 @@ The full generated project should live outside `libraries/JaszczurHAL/vscode/`.
 The `vscode/examples/` directory remains a place for lightweight configuration
 snippets, not a checked-in firmware project.
 
-The shared snippets and all checked-in example `.vscode` files have one drift
-check:
+The shared snippets and all checked-in example `.vscode` files use the
+repository-wide generated-artifact runner:
 
 ```bash
-scripts/examples_dispatcher.py check-template
-scripts/examples_dispatcher.py generate-template
-scripts/examples_dispatcher.py generate
+python3 scripts/sync_generated.py --check
+python3 scripts/sync_generated.py --write
 ```
 
-The first command is suitable for CI. The second rewrites the shared snippets
-from the task and extension registries. The third rewrites the generated VS
-Code files for every example declared in the example registry.
+The first command is read-only and suitable for CI. The second refreshes every
+tracked projection from its registry.
 
 ## VS Code Extensions
 

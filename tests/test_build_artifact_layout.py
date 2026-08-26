@@ -228,6 +228,9 @@ require(
     "runalltests.sh memcheck progress is filtered or not logged live",
 )
 tests_cmake = (ROOT / "tests" / "CMakeLists.txt").read_text(encoding="utf-8")
+generated_runner = (ROOT / "scripts" / "sync_generated.py").read_text(
+    encoding="utf-8"
+)
 require(
     "DIRECTORY PROPERTY TESTS" in tests_cmake
     and "DIRECTORY PROPERTY BUILDSYSTEM_TARGETS" in tests_cmake
@@ -250,12 +253,18 @@ require(
     'done < "${GENERATED_REPORT}"' in quality_gate,
     "runalltests.sh does not include generated changes in its final summary",
 )
+require(
+    '("scripts/generate_sbom.py",)' in generated_runner
+    and '("scripts/generate_sbom.py", "--check")' in generated_runner,
+    "shared generated-artifact runner does not refresh and verify the SBOM",
+)
 for duplicated_generator in (
     "scripts/generate_hal_features.py --write",
     "scripts/generate_board_config.py --boards-root boards --write-static",
     "scripts/examples_dispatcher.py generate-template",
     "scripts/examples_dispatcher.py generate",
     "scripts/vscode_library_workspace.py sync-vscode",
+    "scripts/generate_sbom.py",
 ):
     require(
         duplicated_generator not in quality_gate,

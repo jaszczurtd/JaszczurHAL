@@ -59,6 +59,11 @@ GENERATOR_STEPS = (
         (("scripts/vscode_library_workspace.py", "sync-vscode"),),
         (("scripts/vscode_library_workspace.py", "sync-vscode", "--check"),),
     ),
+    GeneratorStep(
+        "repository SBOM",
+        (("scripts/generate_sbom.py",),),
+        (("scripts/generate_sbom.py", "--check"),),
+    ),
 )
 
 

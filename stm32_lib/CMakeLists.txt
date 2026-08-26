@@ -44,7 +44,7 @@ if(DEFINED HAL_PROJECT_CONFIG_DIR)
     list(REMOVE_DUPLICATES _jh_project_features)
 endif()
 # Default STM32G474 feature profile. Keep this as the single requested set used
-# by compilation, source/link selection, and the board feature contract.
+# by compilation, source/link selection, and the board feature signature.
 set(_jh_stm32_default_features
     HAL_ENABLE_I2C
     HAL_ENABLE_I2C_SLAVE

@@ -4,7 +4,7 @@ Hardware Abstraction Layer for embedded projects.
 The RP2040/RP2350 backend builds against the official Pico SDK. STM32G474 is
 available as a bare-metal or FreeRTOS backend with native peripheral support
 and the shared driver stack. ESP32-S3 provides exact target/board identity,
-ESP-IDF application entry and build-contract validation plus the delivered
+ESP-IDF application entry and build-compatibility validation plus the delivered
 core/peripheral backend set and native WiFi/lwIP connectivity graph. Its
 network surface includes TLS and HTTPS clients plus plaintext HTTP and
 WebSocket servers; no public TLS server, HTTPS server, WSS, or WebSocket-client
@@ -12,7 +12,7 @@ API is defined. The application-facing HAL API stays stable across targets.
 
 This document is the established, detailed API reference.
 The top-level [README.md](../README.md) intentionally stays concise and links
-here for full behavior/contracts.
+here for full behavior and guarantees.
 
 **Author:** Marcin 'Jaszczur' Kielesiński
 
@@ -150,20 +150,19 @@ Target-independent code is co-located with its public API in the corresponding
 common facades, private `jh_*` helpers, device-driver subdirectories, and
 reusable engines. This keeps one thematic hierarchy for both declarations and
 implementations. `src/hal/impl/` is reserved for target-specific ports and
-backends; portable domain code must depend only on HAL-level contracts.
+backends; portable domain code must depend only on HAL-level APIs.
 
 ### Compile-time feature resolution
 
 The versioned registry under `config/features/` generates the production C and
 CMake resolvers. `hal_config.h` includes the C closure, while RP and STM32G474
 CMake builds use it for source and dependency selection. The ESP-IDF runner
-resolves the same request graph for board/link provenance, then rejects
-features outside the target descriptor's allowlist. Phase 1 deliberately
-builds a fixed minimal integration graph: the portable application entry,
-handle pool, ESP build-contract checks, generated link contract, and project
-sources. It does not yet select portable peripheral modules.
+resolves the same request graph, rejects features outside the target
+descriptor's allowlist, and selects the supported baseline, peripheral, and
+network source graph. It records requested and resolved features together with
+board and link provenance.
 The board generator records both `requestedFeatures` and `resolvedFeatures`;
-its feature hash and link contract use the resolved set. `jh-vscode` resolves
+its feature hash and link signature use the resolved set. `jh-vscode` resolves
 the active profile and variant into the same closure and publishes the registry
 digest, closure digest, and request provenance through `config-dump`.
 
@@ -171,7 +170,7 @@ Conditional defaults, provider choices, board capability checks, and target
 constraints remain in `hal_config.h`. `HAL_CONFIG_VERBOSE` activates the
 generated report of every active registered flag. CI treats registry drift
 and raw/effective feature lint as errors. Installed RP and STM32G474 packages
-carry the generated feature/board headers, resolution JSON, link-contract
+carry the generated feature/board headers, resolution JSON, link-signature
 header, and reference source, so direct compiler consumers can compile and
 link the fixed package without invoking Python.
 
@@ -189,10 +188,10 @@ link the fixed package without invoking Python.
   FreeRTOS, Pico SDK, picotool, PMD CPD and the RP2350 RISC-V toolchain to their
   tracked `third_party/*_version.conf` pins. ESP-IDF is prepared on demand by
   its production runner or focused ensure command.
-- `scripts/generate_sbom.py` - deterministic CycloneDX SBOM generator for the
-  security inventory.
-- `scripts/check_sbom.sh` - verifies that the committed SBOM matches the
-  security inventory.
+- `scripts/generate_sbom.py` - deterministic CycloneDX SBOM generator with a
+  read-only `--check` mode.
+- `scripts/check_sbom.sh` - compatibility wrapper for focused SBOM checking;
+  the shared generated-artifact runner owns repository-wide synchronization.
 - `scripts/check_vulnerabilities.sh` - optional local vulnerability scanner
   wrapper that regenerates the SBOM and runs available source/vendored
   dependency scanners.
@@ -207,7 +206,7 @@ link the fixed package without invoking Python.
 - `doc/boards_profiles_howto.md` - declarative target/board descriptors,
   generated configuration, board-aware static libraries, and the procedure
   for adding a physical board.
-- `doc/OTAWorkflow.md` - native RP and ESP32-S3 OTA contracts: firmware
+- `doc/OTAWorkflow.md` - native RP and ESP32-S3 OTA requirements: firmware
   integration, target-specific artifacts, VS Code upload, firewall, trial
   confirmation, rollback, and recovery.
 - `SECURITY.md` - vulnerability reporting, triage and maintenance policy.
@@ -289,7 +288,7 @@ Recommended split of responsibilities:
 - `doc/JaszczurHAL_API.md`: module layout, migration notes, public API details, feature-flag reference
 
 Each document owns the details in its assigned scope. The others should provide
-short context and link to that owner instead of repeating commands, contracts,
+short context and link to that owner instead of repeating commands, interfaces,
 or configuration examples.
 
 ---
@@ -303,20 +302,27 @@ The repository contains both the HAL itself and a set of utility modules.
 These are the portability-oriented interfaces intended to decouple application
 logic from board-specific SDK calls:
 
-- `hal_gpio`, `hal_adc`, `hal_pwm`, `hal_pwm_freq`
-- `hal_timer`, `hal_soft_timer`, `hal_system`, `hal_power`, `hal_bits`, `hal_sync`,
-  `hal_usb`, `hal_serial`
-- `hal_board` for target-independent board identity and runtime hardware state
-- `hal_crypto`, `hal_crc`
-- `hal_pid_controller`
-- `hal_uart`, `hal_swserial`, `hal_spi`, `hal_i2c`, `hal_onewire`
+- core and system: `hal_config`, `hal_status`, `hal_bits`, `hal_math`,
+  `hal_board`, `hal_system`, `hal_power`, `hal_sync`, `hal_timer`,
+  `hal_soft_timer`, and `hal_pid_controller`
+- analog, GPIO, and audio: `hal_gpio`, `hal_adc`, `hal_dac`, `hal_pwm`,
+  `hal_pwm_freq`, `hal_pcnt`, `hal_dacless`, and `hal_dma_pwm_audio`
+- buses and serial: `hal_uart`, `hal_swserial`, `hal_serial`, `hal_usb`,
+  `hal_spi`, `hal_spi_device`, `hal_i2c`, `hal_i2c_slave`, and `hal_onewire`
+- security and connectivity: `hal_crypto`, `hal_crc`, `hal_net`, `hal_wifi`,
+  `hal_udp`, `hal_tcp`, `hal_tls`, `hal_http_client`, `hal_http_server`,
+  `hal_http_files`, `hal_websocket`, `hal_net_console`, `hal_net_commands`,
+  `hal_notify`, `hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time`,
+  `hal_ble`, and `hal_ble_stream`
 - `hal_lora_radio` for provider-neutral raw LoRa operation with SX126x and
   SX127x family providers
 - `hal_lora_link` for addressed, acknowledged, fragmented private messages
   over one raw LoRa radio, with optional authenticated encryption
-- `hal_can`, `hal_display`, `hal_rgb_led`
-- `hal_thermocouple`, `hal_ds18b20`, `hal_rtc`, `hal_external_adc`, `hal_gps`, `hal_digipot`, `hal_pga2311`, `hal_pn532`
-- `hal_eeprom`, `hal_kv`, `hal_sdlogger`, `hal_wifi`, `hal_littlefs`, `hal_udp`, `hal_http_server`, `hal_http_files`, `hal_websocket`, `hal_net_console`, `hal_net_commands`, `hal_notify`, `hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time`
+- devices and media: `hal_can`, `hal_display`, `hal_hd44780`, `hal_rgb_led`,
+  `hal_thermocouple`, `hal_ds18b20`, `hal_rtc`, `hal_external_adc`,
+  `hal_gps`, `hal_tsc2007`, `hal_stmpe610`, `hal_irsmall_decoder`,
+  `hal_digipot`, `hal_pga2311`, `hal_mfrc522`, and `hal_pn532`
+- storage: `hal_eeprom`, `hal_kv`, `hal_littlefs`, and `hal_sdlogger`
 - always-available `hal_time` helpers for deterministic Gregorian
   date/time-to-epoch conversion, CET/CEST adjustment, half-open range checks,
   and minute extraction; optional NTP/local-time APIs remain flag-controlled
@@ -343,14 +349,15 @@ boundary conceptually.
 
 `HAL_TARGET_*` identifies the MCU and ISA. `JH_BOARD` selects the physical
 profile from `boards/profiles/`; the generator emits the matching
-`HAL_BOARD_PROFILE_*` selector and target configuration. Supported profiles
-include `pico`, `picow`, `pico2`, `pico2w`, `pico-rm2`,
-`pico-core1262-hf`, `rp2040-plus-4mb`, `rp2040-zero`, `rp2040-lora-lf`,
-`nucleo-g474re`, `nucleo-g474re-pim730`, and
-`nucleo-g474re-core1262-hf`, and `waveshare-esp32-s3-zero`.
+`HAL_BOARD_PROFILE_*` selector and target configuration. The board descriptors
+are the authoritative profile inventory. List the current IDs with:
+
+```bash
+python3 scripts/generate_board_config.py --boards-root boards --list boards
+```
 
 The ESP32-S3 component consumes generated target/board facts and the link
-contract and compiles the public `hal_board` runtime facade. Capability state
+metadata and compiles the public `hal_board` runtime facade. Capability state
 still follows the shared owner model: a declared capability remains
 `HAL_BOARD_CAP_INACTIVE` until the module that owns it publishes an available
 or failed state.
@@ -367,45 +374,10 @@ A declared capability is initially
 `HAL_BOARD_CAP_INACTIVE`; its owner moves it to `AVAILABLE` or `FAILED`.
 The RP CYW43 provider publishes these transitions during init/deinit.
 
-Public types and functions (`hal/system/hal_board.h`):
-
-```c
-typedef uint32_t hal_board_capabilities_t;   /* HAL_BOARD_CAP_* bitmask */
-
-typedef enum {                               /* stable board identity */
-  HAL_BOARD_RP_PICO = 1, HAL_BOARD_RP_PICO_W, HAL_BOARD_RP_PICO_2,
-  HAL_BOARD_RP_PICO_2_W, HAL_BOARD_RP_PICO_PIM730,
-  HAL_BOARD_STM32G474_NUCLEO_G474RE, HAL_BOARD_HOST_MOCK,
-  HAL_BOARD_RP2040_ZERO, HAL_BOARD_RP2040_PLUS_4MB,
-  HAL_BOARD_RP2040_LORA_LF,
-  HAL_BOARD_STM32G474_NUCLEO_PIM730,
-  HAL_BOARD_RP_PICO_CORE1262_HF,
-  HAL_BOARD_STM32G474_NUCLEO_CORE1262_HF,
-  HAL_BOARD_WAVESHARE_ESP32_S3_ZERO
-} hal_board_profile_t;
-
-typedef enum {                               /* runtime state of one capability */
-  HAL_BOARD_CAP_NOT_PRESENT = 0,
-  HAL_BOARD_CAP_INACTIVE = 1,
-  HAL_BOARD_CAP_AVAILABLE = 2,
-  HAL_BOARD_CAP_FAILED = 3
-} hal_board_capability_state_t;
-
-typedef struct {                             /* consistent snapshot */
-  hal_board_profile_t profile;
-  const char *name;                          /* e.g. "pico2w" */
-  hal_board_capabilities_t declared;
-  hal_board_capabilities_t available;
-  hal_board_capabilities_t failed;
-} hal_board_info_t;
-
-hal_status_t hal_board_get_info(hal_board_info_t *out_info);
-hal_status_t hal_board_get_capability_state(
-    hal_board_capabilities_t capability,
-    hal_board_capability_state_t *out_state);
-hal_status_t hal_board_require_capabilities(
-    hal_board_capabilities_t capabilities);
-```
+`hal/system/hal_board.h` defines the stable profile enum, capability bitmask,
+runtime states, snapshot type, and query functions. The generated
+`src/hal/generated/jh_board_registry.h` maps every registry profile to that
+public identity without maintaining another hand-written profile list here.
 
 `hal_board_require_capabilities()` returns `HAL_OK` when every requested
 capability is available, `HAL_EUNSUPPORTED` when the board does not declare
@@ -427,7 +399,7 @@ The complete reference is split across the following focused documents:
 | # | File | Contents |
 |---|------|----------|
 | 0 | [Process scripts and orchestration](api/00_scripts.md) | Essential operational architecture: workstation setup, managed dependencies, build entrypoints, examples, validation, security tooling, VS Code integration, artifact ownership, and the relationships between these processes |
-| 1 | [Library compilation guide](lib_compilation.md) | Building for all targets, generated board contracts, static-library helpers, FreeRTOS build variants, and firmware integration |
+| 1 | [Library compilation guide](lib_compilation.md) | Building for all targets, generated board metadata, static-library helpers, FreeRTOS build variants, and firmware integration |
 | P | [Firmware project workflow](FwProjectWorkflow.md) | Dispatcher-backed VS Code firmware projects: manifest model, target/board selection, source discovery, per-target CMake cache layout, upload/debug-build behavior and generated files |
 | O | [Native OTA workflow](OTAWorkflow.md) | Target-specific RP and ESP32-S3 OTA project/firmware configuration, artifacts, first flash, VS Code integration, firewall, confirmation, rollback, recovery and security boundary |
 | 2 | [Module flags and configuration](api/02_module_flags.md) | `HAL_ENABLE_*` opt-in flags, dependency propagation, FreeRTOS selection, stack-size overrides, and core modules |

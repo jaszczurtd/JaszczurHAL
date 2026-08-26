@@ -557,7 +557,7 @@ Backend configs keep referenced strings and TLS security storage caller-owned.
 JaszczurHAL does not persist or provision the bot token or chat ID. Applications
 should obtain them from their credentials/storage component, keep the referenced
 buffers alive through `hal_notify_close()`, and then release them according to
-that component's ownership contract. Channel-level `device_name` is inherited
+that component's ownership rules. Channel-level `device_name` is inherited
 by messages that do not provide their own override.
 
 The Telegram backend prepends severity and optional device identity, for
@@ -589,9 +589,9 @@ when the operation itself otherwise succeeds.
 **Implementation:** `hal/network/notify/hal_notify.cpp` and
 `hal/network/notify/hal_notify_telegram.cpp`.
 **Tests:** `test_hal_notify` covers facade validation, fake-backend dispatch,
-handle lifetime and close errors, Telegram request JSON/prefixes, canonical
+handle lifetime and close errors, Telegram request JSON/prefixes, normalized
 public-host HTTP rejection, multipart delivery and rate-limit mapping.
-`test_hal_notify_c_compile` covers the C header contract.
+`test_hal_notify_c_compile` covers the C header interface.
 
 ---
 
@@ -1280,7 +1280,7 @@ Default static limits can be overridden before including HAL headers:
 
 Thread-safe native OTA service over HAL UDP/TCP. RP and ESP32-S3 share the
 discovery, password-derived HMAC-SHA256 AUTH2 exchange, transfer, callbacks,
-and public boot-status contract while retaining target-specific image and
+and public boot-status behavior while retaining target-specific image and
 activation models.
 
 ```c
@@ -1389,7 +1389,7 @@ uint32_t    hal_mock_ota_get_handle_count(void);
 ```
 
 The target-specific project, firmware, VS Code, firewall, confirmation,
-rollback, recovery, and security contracts are documented in
+rollback, recovery, and security requirements are documented in
 [Native OTA Workflow](../OTAWorkflow.md). The RP reference application is
 available in [`examples/25_ota`](../../examples/25_ota/).
 
@@ -1676,12 +1676,12 @@ copies remain invalid.
 
 The core TLS path resolves through `hal_net_resolve_ex()` and owns a native
 `hal_tcp_socket_t`. BearSSL record progression uses a small private transport
-contract rather than POSIX descriptors. This keeps TLS usable when
+interface rather than POSIX descriptors. This keeps TLS usable when
 `HAL_ENABLE_BSD_SOCKETS` is disabled.
 
 BSD sockets remain independently supported TLS transports. When both flags are
 enabled, the BearSSL BSD adapter maps an existing descriptor's non-blocking
-`send()`/`recv()` operations into the same private BearSSL transport contract.
+`send()`/`recv()` operations into the same private BearSSL transport interface.
 Applications and third-party TLS clients that use BSD I/O continue to operate
 over the public socket API; enabling native `hal_tls` does not change descriptor
 ownership or BSD semantics.
@@ -1803,7 +1803,7 @@ are stored in a table sized by `HAL_BSD_SOCKET_MAX_FDS`.
   values may round up when read back.
 - `getsockname(...)` reports the local endpoint known to the adapter. TCP
   clients that did not explicitly `bind()` may report `0.0.0.0:0` because the
-  HAL TCP contract does not expose the backend-assigned local port.
+  HAL TCP API does not expose the backend-assigned local port.
 - `getpeername(...)` reports the connected TCP or UDP peer, including TCP
   sockets returned by `accept()`. It fails with `ENOTCONN` before a peer is
   known.
@@ -1822,8 +1822,8 @@ are stored in a table sized by `HAL_BSD_SOCKET_MAX_FDS`.
   `EINPROGRESS` in `SO_ERROR`, but no background connect remains pending; retry
   `connect()` later or use blocking/timeout-based connect.
 - Closing a descriptor from another task while a blocking `connect()`,
-  `accept()`, `recv()` or `recvfrom()` is waiting is not an async cancellation
-  contract. The adapter releases its fd-table lock while waiting and
+  `accept()`, `recv()` or `recvfrom()` is waiting does not provide asynchronous
+  cancellation. The adapter releases its fd-table lock while waiting and
   re-validates descriptors after the backend call returns, but callers that need
   cancellable waits should use `O_NONBLOCK` plus `select()` polling.
 - Unsupported flags/operations fail with `errno`.

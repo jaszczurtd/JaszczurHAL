@@ -1,7 +1,7 @@
 # JaszczurHAL Examples
 
-The `examples/` tree contains 27 dispatcher-backed firmware projects that
-preserve the coverage of the former 60 examples. Each project has its own
+The `examples/` tree contains consolidated dispatcher-backed firmware projects.
+Each project has its own
 generated `.vscode/jaszczurhal.project.json`; opening that directory directly
 in VS Code exposes the same Build, Upload, Serial Monitor, Clean, Config Dump,
 OTA, and board-selection tasks as a standalone firmware project.
@@ -14,20 +14,15 @@ by `vscode/entry/jh-vscode` and `cmake/jh_firmware_project`.
 ## Matrix and gate policy
 
 A configuration is one base project or project variant built for one target.
-The complete supported matrix contains 115 configurations:
+The dispatcher registry derives the complete supported and default-gate
+matrices. Inspect the current result instead of maintaining a second count:
 
-| Matrix | `rp2040` | `rp2350-arm` | `rp2350-riscv` | `stm32g474` | Total |
-|---|---:|---:|---:|---:|---:|
-| Full supported matrix | 34 | 27 | 22 | 32 | **115** |
-| Default examples gate | 32 | 1 | 0 | 30 | **63** |
-| Representative Gate 6 builds | 2 | 2 | 2 | 0 | **6** |
-| Example-related default HAL gate builds | 34 | 3 | 2 | 30 | **69** |
+```bash
+scripts/examples_dispatcher.py list
+```
 
-The six Gate 6 invocations build the core-runtime and FreeRTOS representative
-firmware once with each RP toolchain/architecture. They deliberately exercise
-the direct native build path in addition to the dispatcher-backed examples
-gate, so they are counted as build invocations rather than additional example
-configurations.
+Gate 6 also builds representative core-runtime and FreeRTOS firmware through
+the direct native path for each RP toolchain/architecture.
 
 Generated manifests distinguish two target lists:
 
@@ -49,8 +44,7 @@ the run to configurations whose `gateTargets` contain that target:
 # Complete matrix for one target.
 scripts/examples_dispatcher.py build --target rp2350-arm --jobs "$(nproc)"
 
-# Default examples gate: 32 RP2040, one RP2350 ARM, and 30 STM32G474
-# configurations.
+# Default examples gate for each supported target.
 scripts/examples_dispatcher.py build \
   --target rp2040 --gate --jobs "$(nproc)"
 scripts/examples_dispatcher.py build \
@@ -149,7 +143,7 @@ keeps related runtime paths together and avoids rebuilding the complete HAL in
 many small firmware projects on every target.
 
 A separate project is appropriate when target, toolchain, runtime, board
-profile, mutually exclusive resources, or hardware contracts prevent a useful
+profile, mutually exclusive resources, or hardware requirements prevent a useful
 combined image. Document that constraint here and declare the exact `targets`
 and `gateTargets` in `config/tooling/examples.json`. Use a variant only when the
 behavior cannot be selected at runtime. Every change must review the
@@ -181,12 +175,12 @@ scripts/examples_dispatcher.py build \
   --example 01_core_runtime --example 10_storage
 ```
 
-Inspect the generated matrix or regenerate manifests after changing the
-registry:
+Inspect the generated matrix or refresh all tracked artifacts after changing
+the registry:
 
 ```bash
 scripts/examples_dispatcher.py list
-scripts/examples_dispatcher.py generate
+python3 scripts/sync_generated.py --write
 ```
 
 Repository-owned final artifacts stay below `.build/examples/<example>/`.

@@ -20,7 +20,7 @@ The JaszczurHAL integration replaced the target-specific wrapper with:
   timer, and teardown lifecycle using byte-array IPv4 values;
 - the public, target-neutral facade in `hal/network/wireguard/hal_wireguard.h`.
 
-## Integration contract
+## Integration requirements
 
 The selected network backend must advertise resolver, UDP, host-stack L3,
 virtual-netif/route, stack-context, and cryptographic-entropy capabilities. The

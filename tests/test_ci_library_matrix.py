@@ -69,12 +69,20 @@ for duplicated_check in (
     "scripts/generate_board_config.py --boards-root boards --check-static",
     "scripts/vscode_library_workspace.py sync-vscode --check",
     "scripts/examples_dispatcher.py check-template",
+    "scripts/check_sbom.sh",
 ):
     if duplicated_check in test_job:
         raise AssertionError(
             f"Linux CI bypasses the shared generated-artifact runner: "
             f"{duplicated_check}"
         )
+
+if "scripts/check_sbom.sh" in job("security-scan"):
+    raise AssertionError(
+        "security CI repeats the SBOM check already owned by sync_generated.py"
+    )
+if "needs: test" not in job("security-scan"):
+    raise AssertionError("security CI must consume the SBOM verified by the test job")
 
 windows_tooling = job("windows-tooling")
 if "'tests/test_vscode_library_workspace.py'" not in windows_tooling:

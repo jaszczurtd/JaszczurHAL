@@ -7,15 +7,16 @@ their dependency graph.
 Run the generator after changing a fragment:
 
 ```bash
-python3 scripts/generate_hal_features.py --write
+python3 scripts/sync_generated.py --write
 ```
 
 The generated C and CMake artifacts are tracked so installed packages and
-direct compiler builds do not require Python. CI verifies them with `--check`.
+direct compiler builds do not require Python. CI verifies them through
+`python3 scripts/sync_generated.py --check`.
 
 Production C/C++ compilation includes
 `src/hal/generated/jh_hal_features.h` through `hal_config.h`. RP, STM32, board
-generation, link-contract generation, and `jh-vscode` use the generated CMake
+generation, link-signature generation, and `jh-vscode` use the generated CMake
 table or the same registry model. Unconditional feature dependencies therefore
 have one maintained source of truth.
 

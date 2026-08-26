@@ -1,6 +1,6 @@
 # Native OTA Workflow
 
-This document is the complete operational contract for native JaszczurHAL OTA:
+This document is the complete operational specification for native JaszczurHAL OTA:
 target-specific project and firmware configuration, build artifacts, first
 installation, VS Code integration, network flow, host firewall rules, trial
 confirmation, rollback, recovery, and security boundaries.
@@ -215,7 +215,7 @@ project defines when adding OTA, for example
 `"HAL_ENABLE_OTA;HAL_ENABLE_FREERTOS"`. `HAL_ENABLE_OTA` automatically enables
 the required WiFi, UDP, TCP, crypto, and CRC modules.
 
-The build metadata has the following contract:
+The build metadata has the following format:
 
 | Setting | Meaning |
 |---|---|
@@ -473,7 +473,7 @@ Packaging leaves the HMAC field zeroed. Upload verifies the payload digest,
 computes the lowercase ASCII hexadecimal MD5 of the UTF-8 password, and uses
 those 32 ASCII bytes as the HMAC-SHA256 key for header bytes `0..95`. It writes
 the digest at bytes `96..127` and recomputes the CRC32. This key derivation
-preserves the OTA transport contract; it is not a password-hardening
+preserves the OTA transport protocol; it is not a password-hardening
 construction. The device verifies target/layout bounds, header CRC, HMAC, and
 payload digest before marking staging pending.
 
@@ -802,7 +802,7 @@ If discovery or upload fails, check these in order:
 2. The firmware was built with `HAL_ENABLE_OTA`; `firmware.ota` and the merged
    `firmware.uf2` exist below the resolved `buildDir`.
    For RP2040, every touched sector before the final UF2 page must contain all
-   sixteen 256-byte pages; `test_rp_ota_artifacts` enforces this contract.
+   sixteen 256-byte pages; `test_rp_ota_artifacts` enforces this layout.
 3. Firmware has joined WiFi, `hal_ota_begin()` returned true, and
    `hal_ota_handle()` continues to run.
 4. Firmware and host use the same port, hostname, and exact password bytes.

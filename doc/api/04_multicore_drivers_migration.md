@@ -40,7 +40,7 @@ establish internal state.  They are **not** protected by mutexes because:
 - pool allocation is inherently single-shot (done once at boot),
 - hardware peripheral setup must complete before use,
 - adding mutex overhead to init paths provides no practical benefit when the
-  documented contract is respected.
+  documented guarantee is respected.
 
 ### Runtime: concurrent hardware backends
 
@@ -114,7 +114,7 @@ font headers (e.g. `TomThumb.h`, `Tiny3x3a2pt7b.h`).
 | I2C synchronization | Drivers doing I2C traffic integrate `hal_i2c_lock_bus`/`hal_i2c_unlock_bus` and bus mapping where needed. | Prevents mixed bus-0/bus-1 transactions and improves determinism under concurrency. |
 | Per-driver mutexes | Selected drivers/wrappers now own mutexes for multi-step operations (`MCP2515`, `MAX6675`, `MCP9600`, HAL wrappers). | Reduces race conditions in read/modify/write and multi-call command sequences. |
 | Shared RTC facade | `hal_rtc.cpp` owns the handle pool, validation, mutexes, epoch conversion, status mapping, and compatibility wrappers; link-time providers supply shared PCF8563/DS3231 I2C behavior, the STM32G474 backup-domain RTC, the RP AON timer, or mock storage. | Keeps chip protocol, target registers, and test injection behind provider operations while allowing I2C and native providers to share one facade. |
-| Separate low-power API | `hal_power.h` owns portable states, policies, capabilities, wake reasons, and prepare/resume callbacks; target backends own WFI/STOP/Standby details and reuse the internal RTC relative-wake contract. | Prevents RTC device ownership from absorbing processor, clock-tree, peripheral-suspend, reset, or scheduler policy. |
+| Separate low-power API | `hal_power.h` owns portable states, policies, capabilities, wake reasons, and prepare/resume callbacks; target backends own WFI/STOP/Standby details and reuse the internal RTC relative-wake interface. | Prevents RTC device ownership from absorbing processor, clock-tree, peripheral-suspend, reset, or scheduler policy. |
 | Shared GPS facade | `hal_gps.cpp` selects HAL UART or SoftwareSerial at compile time and owns transport initialization, polling, framing fallback and availability. The shared GPS engine owns parsing, locking, diagnostics and every fix getter, including the mock injection path. | Removes identical RP2040/STM32G474 transport facades and the mock getter copy while preserving transport selection and deterministic injection. |
 | Shared serial/debug core | `hal_serial.cpp` owns formatting, prefixes, timestamps, mute/rate-limit state, the ISR SPSC ring, net-console mirroring, lazy create-once mutexes and public serial/debug entry points. Link-time ports own only RP USB CDC, ESP32-S3 USB Serial/JTAG VFS, STM32 USART2/stdout, or mock capture/RX transport. | Keeps one formatting/state implementation while preserving target line endings, transport-specific flush behavior and atomic cross-task/cross-core message boundaries. |
 | Second I2C controller support | HAL I2C APIs and driver adapters use bus index 0/1 for the target's first and second hardware controllers. | Allows second controller usage without bypassing HAL thread-safety. |
