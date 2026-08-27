@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-11
 
+- Extended the Linux `runmefirst.sh` udev setup to cover RP2040/RP2350 USB CDC
+  `/dev/ttyACM*` nodes, allowing the native uploader to perform its 1200-bps
+  BOOTSEL reset without a manual permission or group change.
 - Corrected DS3231 calendar writes to include the month register, clear OSF
   after a successful adjustment, preserve the timekeeping oscillator when
   CLKOUT is disabled, decode 12-hour calendar values, and propagate I2C errors

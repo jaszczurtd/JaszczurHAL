@@ -77,7 +77,8 @@ One-time, idempotent setup for Debian/Ubuntu-like systems. It:
   OpenOCD, `gdb-multiarch`, serial, libusb, and other host packages;
 - invokes `third_party/update_components.sh`;
 - installs `osv-scanner` and `cve-bin-tool`;
-- installs a udev rule for RP2040/RP2350 USB access;
+- installs a udev rule for RP2040/RP2350 BOOTSEL/picotool USB access and the
+  app-mode `/dev/ttyACM*` port used by the automatic 1200-bps reset;
 - checks for a persistent LAN-scoped OTA TCP/8266 callback rule and asks before
   changing the firewall or installing `iptables-persistent`;
 - configures the repository Git hooks;

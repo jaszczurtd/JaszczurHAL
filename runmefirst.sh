@@ -27,8 +27,8 @@ This setup needs sudo (you'll be prompted for your password) to:
     host test/QA tooling (valgrind, clang-tidy, cppcheck, ...), openocd, and
     libusb + pkg-config (picotool USB access),
   - install (or update) osv-scanner into /usr/local/bin,
-  - write a udev rule under /etc/udev/rules.d so you can flash RP2040/RP2350
-    boards over USB without sudo afterwards,
+  - write a udev rule under /etc/udev/rules.d so you can access RP2040/RP2350
+    USB and serial devices without sudo afterwards,
   - inspect the host firewall and, only after separate confirmation, allow the
     OTA TCP/8266 callback from the detected local IPv4 network persistently.
 
@@ -105,30 +105,32 @@ install_cve_bin_tool() {
   python3 -m pipx install cve-bin-tool
 }
 
-# udev rule for sudo-less USB flashing of Raspberry Pi RP2040/RP2350 boards.
-# picotool and the native UF2 upload need write access to the USB device node;
-# without this rule that requires sudo on every flash. Vendor-wide 2e8a covers
-# both BOOTSEL (2e8a:0003) and the app-mode CDC/picotool interface. Idempotent
-# and skipped cleanly where udev is absent (minimal containers / non-udev CI).
+# udev rules for sudo-less USB flashing of Raspberry Pi RP2040/RP2350 boards.
+# picotool and native UF2 upload need the USB device node, while the automatic
+# 1200-bps BOOTSEL touch needs the app-mode ttyACM node. Vendor-wide 2e8a covers
+# BOOTSEL (2e8a:0003) and JaszczurHAL's CDC/picotool interfaces. Idempotent and
+# skipped cleanly where udev is absent (minimal containers / non-udev CI).
 install_pico_udev_rule() {
   local rule_file="/etc/udev/rules.d/99-jaszczurhal-pico.rules"
-  local rule='SUBSYSTEM=="usb", ATTRS{idVendor}=="2e8a", MODE="0666", GROUP="plugdev", TAG+="uaccess"'
+  local usb_rule='SUBSYSTEM=="usb", ATTRS{idVendor}=="2e8a", MODE="0666", GROUP="plugdev", TAG+="uaccess"'
+  local serial_rule='SUBSYSTEM=="tty", KERNEL=="ttyACM*", ATTRS{idVendor}=="2e8a", MODE="0666", GROUP="plugdev", TAG+="uaccess"'
+  local rules="${usb_rule}"$'\n'"${serial_rule}"
 
   if [ ! -d /etc/udev/rules.d ]; then
     echo "  udev not present; skipping RP2040/RP2350 USB flashing rule."
     return 0
   fi
 
-  if [ -f "${rule_file}" ] && [ "$(cat "${rule_file}" 2>/dev/null)" = "${rule}" ]; then
+  if [ -f "${rule_file}" ] && [ "$(cat "${rule_file}" 2>/dev/null)" = "${rules}" ]; then
     return 0
   fi
 
-  printf '%s\n' "${rule}" | sudo tee "${rule_file}" >/dev/null
+  printf '%s\n' "${rules}" | sudo tee "${rule_file}" >/dev/null
   if command -v udevadm >/dev/null 2>&1; then
     sudo udevadm control --reload-rules >/dev/null 2>&1 || true
     sudo udevadm trigger >/dev/null 2>&1 || true
   fi
-  echo "  Installed ${rule_file} (sudo-less RP2040/RP2350 USB flashing; reattach device to apply)."
+  echo "  Installed ${rule_file} (sudo-less RP2040/RP2350 USB and ttyACM access)."
 }
 
 install_osv_scanner

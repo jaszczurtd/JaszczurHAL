@@ -104,6 +104,8 @@ Two convenience scripts in the repository root simplify local development:
 Configures your local environment for the first time:
 - Installs git hooks (pre-commit and commit-msg from `.githooks/`)
 - Synchronizes all pinned components through `third_party/update_components.sh`
+- Installs persistent RP2040/RP2350 USB and `/dev/ttyACM*` access rules for
+  sudo-less upload and automatic 1200-bps BOOTSEL reset
 - Offers persistent, LAN-scoped TCP/8266 firewall setup for OTA callbacks
 - Sets up build directories and initial CMake configuration
 - Run this once when cloning the repository or after environment changes

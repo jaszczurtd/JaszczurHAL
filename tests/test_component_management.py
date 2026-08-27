@@ -68,6 +68,15 @@ require(
     "scripts/configure_ota_firewall.py" in runmefirst,
     "runmefirst does not prepare the OTA callback firewall",
 )
+require(
+    'SUBSYSTEM=="usb", ATTRS{idVendor}=="2e8a", MODE="0666"' in runmefirst,
+    "runmefirst does not grant access to Raspberry Pi USB device nodes",
+)
+require(
+    'SUBSYSTEM=="tty", KERNEL=="ttyACM*", ATTRS{idVendor}=="2e8a", MODE="0666"'
+    in runmefirst,
+    "runmefirst does not grant access to Raspberry Pi USB CDC serial ports",
+)
 
 for path in (
     ROOT / "src/hal/network/tls/BearSSL/vendor",
