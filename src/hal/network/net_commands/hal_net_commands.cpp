@@ -1,59 +1,25 @@
 /** @file Target-neutral network command dispatcher service. */
 #include "hal/network/net_commands/hal_net_commands.h"
-#include "hal/network/http/jh_http_text.h"
 
 #ifdef HAL_ENABLE_NET_COMMANDS
+
+#include "hal/commands/jh_command_router_internal.h"
 
 #include <stdio.h>
 #include <string.h>
 
 typedef struct {
-  bool used;
-  char name[HAL_NET_COMMANDS_NAME_MAX];
-  hal_net_command_handler_t handler;
-  void *user;
-} net_command_slot_t;
-
-static net_command_slot_t s_commands[HAL_NET_COMMANDS_MAX_COMMANDS];
+  const char *args_text;
+  const cJSON *json_root;
+  const cJSON *json_args;
+  const hal_http_request_t *http_request;
+  hal_websocket_client_t websocket_client;
+} net_command_source_context_t;
 
 static bool is_valid_format(hal_net_commands_format_t format) {
   return format == HAL_NET_COMMANDS_FORMAT_TEXT ||
          format == HAL_NET_COMMANDS_FORMAT_JSON ||
          format == HAL_NET_COMMANDS_FORMAT_AUTO;
-}
-
-static bool is_valid_name_char(char c) { return c > ' ' && c != '\x7f'; }
-
-static bool is_valid_command_name(const char *name, size_t *out_len) {
-  if (!name || name[0] == '\0') {
-    return false;
-  }
-  size_t len = 0u;
-  while (name[len]) {
-    if (!is_valid_name_char(name[len])) {
-      return false;
-    }
-    ++len;
-    if (len >= HAL_NET_COMMANDS_NAME_MAX) {
-      return false;
-    }
-  }
-  if (out_len) {
-    *out_len = len;
-  }
-  return true;
-}
-
-static net_command_slot_t *find_command(const char *name) {
-  if (!name) {
-    return NULL;
-  }
-  for (size_t i = 0u; i < HAL_NET_COMMANDS_MAX_COMMANDS; ++i) {
-    if (s_commands[i].used && strcmp(s_commands[i].name, name) == 0) {
-      return &s_commands[i];
-    }
-  }
-  return NULL;
 }
 
 static hal_status_t
@@ -132,21 +98,48 @@ static void trim_end(char *text) {
   }
 }
 
-static hal_status_t dispatch_command(const hal_net_command_request_t *request,
-                                     hal_net_command_response_t *response,
-                                     hal_net_commands_format_t format) {
-  net_command_slot_t *slot = find_command(request->command);
-  if (!slot) {
-    return finalize_response(response, HAL_ENOENT, "unknown command", format);
+static hal_status_t invoke_net_handler(const void *callback_storage,
+                                       size_t callback_size,
+                                       const hal_command_request_t *request,
+                                       hal_command_response_t *response,
+                                       void *user) {
+  if (callback_storage == NULL ||
+      callback_size != sizeof(hal_net_command_handler_t) || request == NULL ||
+      response == NULL || request->source_context == NULL) {
+    return HAL_EINTERNAL;
   }
 
-  hal_status_t status = slot->handler(request, response, slot->user);
-  if (status != HAL_OK && response->status == HAL_OK) {
-    hal_net_command_response_set_status(response, status,
-                                        hal_status_to_string(status));
+  hal_net_command_handler_t handler = NULL;
+  memcpy(reinterpret_cast<void *>(&handler), callback_storage, sizeof(handler));
+  if (handler == NULL) {
+    return HAL_EINTERNAL;
   }
-  return finalize_response(response, response->status, response->message,
-                           format);
+
+  const net_command_source_context_t *context =
+      (const net_command_source_context_t *)request->source_context;
+  hal_net_command_request_t net_request = {};
+  net_request.source = (hal_net_commands_source_t)request->source;
+  net_request.command = request->command;
+  net_request.args_text = context->args_text;
+  net_request.json_root = context->json_root;
+  net_request.json_args = context->json_args;
+  net_request.http_request = context->http_request;
+  net_request.websocket_client = context->websocket_client;
+  return handler(&net_request, response, user);
+}
+
+static hal_status_t dispatch_command(const hal_command_request_t *request,
+                                     hal_net_command_response_t *response,
+                                     hal_net_commands_format_t format) {
+  hal_command_router_t router = NULL;
+  hal_status_t status = hal_command_router_default(&router);
+  if (status == HAL_OK) {
+    status = hal_command_router_dispatch(router, request, response);
+  }
+  const char *message = response->message != NULL
+                            ? response->message
+                            : hal_status_to_string(status);
+  return finalize_response(response, status, message, format);
 }
 
 static hal_status_t execute_text_data(const void *data, size_t len,
@@ -188,12 +181,18 @@ static hal_status_t execute_text_data(const void *data, size_t len,
     args = (char *)skip_ws(args);
   }
 
-  hal_net_command_request_t request = {};
+  net_command_source_context_t context = {};
+  context.args_text = args ? args : "";
+  context.http_request = http_request;
+  context.websocket_client = websocket_client;
+
+  hal_command_request_t request = {};
   request.source = source;
+  request.encoding = HAL_COMMAND_ENCODING_TEXT;
   request.command = command;
-  request.args_text = args ? args : "";
-  request.http_request = http_request;
-  request.websocket_client = websocket_client;
+  request.arguments = (const uint8_t *)context.args_text;
+  request.arguments_length = strlen(context.args_text);
+  request.source_context = &context;
 
   return dispatch_command(&request, response, HAL_NET_COMMANDS_FORMAT_TEXT);
 }
@@ -259,17 +258,38 @@ static hal_status_t execute_json_data(const void *data, size_t len,
   }
 
   const cJSON *args = find_json_args_item(root);
-  hal_net_command_request_t request = {};
+  char *arguments_json = args != NULL ? cJSON_PrintUnformatted(args) : NULL;
+  if (args != NULL && arguments_json == NULL) {
+    result =
+        finalize_response(response, HAL_ENOMEM, "json args allocation failed",
+                          HAL_NET_COMMANDS_FORMAT_JSON);
+    cJSON_Delete(root);
+    return result;
+  }
+
+  net_command_source_context_t context = {};
+  context.args_text =
+      args != NULL && cJSON_IsString(args) && args->valuestring != NULL
+          ? args->valuestring
+          : "";
+  context.json_root = root;
+  context.json_args = args;
+  context.http_request = http_request;
+  context.websocket_client = websocket_client;
+
+  hal_command_request_t request = {};
   request.source = source;
+  request.encoding = HAL_COMMAND_ENCODING_JSON;
   request.command = command->valuestring;
-  request.args_text =
-      cJSON_IsString(args) && args->valuestring ? args->valuestring : "";
-  request.json_root = root;
-  request.json_args = args;
-  request.http_request = http_request;
-  request.websocket_client = websocket_client;
+  request.arguments = (const uint8_t *)arguments_json;
+  request.arguments_length =
+      arguments_json != NULL ? strlen(arguments_json) : 0u;
+  request.source_context = &context;
 
   result = dispatch_command(&request, response, HAL_NET_COMMANDS_FORMAT_JSON);
+  if (arguments_json != NULL) {
+    cJSON_free(arguments_json);
+  }
   cJSON_Delete(root);
   return result;
 }
@@ -362,104 +382,87 @@ static hal_status_t http_route_handler(const hal_http_request_t *request,
 hal_status_t hal_net_commands_register(const char *name,
                                        hal_net_command_handler_t handler,
                                        void *user) {
-  size_t name_len = 0u;
-  if (!is_valid_command_name(name, &name_len) || !handler) {
+  static_assert(sizeof(hal_net_command_handler_t) <=
+                    JH_COMMAND_ROUTER_CALLBACK_STORAGE_SIZE,
+                "network command callback storage is too small");
+  if (handler == NULL) {
     return HAL_EINVAL;
   }
 
-  net_command_slot_t *slot = find_command(name);
-  if (!slot) {
-    for (size_t i = 0u; i < HAL_NET_COMMANDS_MAX_COMMANDS; ++i) {
-      if (!s_commands[i].used) {
-        slot = &s_commands[i];
-        break;
-      }
-    }
-  }
-  if (!slot) {
-    return HAL_ENOMEM;
+  hal_command_router_t router = NULL;
+  hal_status_t status = hal_command_router_default(&router);
+  if (status != HAL_OK) {
+    return status;
   }
 
-  memset(slot, 0, sizeof(*slot));
-  slot->used = true;
-  memcpy(slot->name, name, name_len);
-  slot->name[name_len] = '\0';
-  slot->handler = handler;
-  slot->user = user;
-  return HAL_OK;
+  jh_command_router_definition_t definition = {};
+  definition.name = name;
+  definition.allowed_sources =
+      HAL_COMMAND_SOURCE_MASK(HAL_COMMAND_SOURCE_DIRECT) |
+      HAL_COMMAND_SOURCE_MASK(HAL_COMMAND_SOURCE_HTTP) |
+      HAL_COMMAND_SOURCE_MASK(HAL_COMMAND_SOURCE_WEBSOCKET);
+  definition.invoke = invoke_net_handler;
+  definition.callback = reinterpret_cast<const void *>(&handler);
+  definition.callback_size = sizeof(handler);
+  definition.user = user;
+  return jh_command_router_register_erased(router, &definition);
 }
 
 hal_status_t hal_net_commands_unregister(const char *name) {
-  size_t name_len = 0u;
-  if (!is_valid_command_name(name, &name_len)) {
-    return HAL_EINVAL;
+  hal_command_router_t router = NULL;
+  hal_status_t status = hal_command_router_default(&router);
+  if (status != HAL_OK) {
+    return status;
   }
-  (void)name_len;
-
-  net_command_slot_t *slot = find_command(name);
-  if (!slot) {
-    return HAL_ENOENT;
-  }
-  memset(slot, 0, sizeof(*slot));
-  return HAL_OK;
+  return hal_command_router_unregister(router, name);
 }
 
-void hal_net_commands_clear(void) { memset(s_commands, 0, sizeof(s_commands)); }
+void hal_net_commands_clear(void) {
+  hal_command_router_t router = NULL;
+  if (hal_command_router_default(&router) == HAL_OK) {
+    (void)hal_command_router_clear(router);
+  }
+}
 
 size_t hal_net_commands_count(void) {
   size_t count = 0u;
-  for (size_t i = 0u; i < HAL_NET_COMMANDS_MAX_COMMANDS; ++i) {
-    if (s_commands[i].used) {
-      ++count;
-    }
+  hal_command_router_t router = NULL;
+  if (hal_command_router_default(&router) == HAL_OK) {
+    (void)hal_command_router_count(router, &count);
   }
   return count;
 }
 
 void hal_net_command_response_reset(hal_net_command_response_t *response) {
-  if (!response) {
-    return;
+  hal_command_response_reset(response);
+  if (response != NULL) {
+    (void)hal_command_response_set_encoding(response,
+                                            HAL_COMMAND_ENCODING_TEXT);
   }
-  response->status = HAL_OK;
-  response->message = "OK";
-  response->content_type = "text/plain";
-  response->body_len = 0u;
-  response->body[0] = '\0';
-  response->overflow = false;
 }
 
 hal_status_t
 hal_net_command_response_set_status(hal_net_command_response_t *response,
                                     hal_status_t status, const char *message) {
-  if (!response || status == HAL_NONE) {
-    return HAL_EINVAL;
-  }
-  response->status = status;
-  response->message = message ? message : hal_status_to_string(status);
-  return HAL_OK;
+  return hal_command_response_set_status(response, status, message);
 }
 
 hal_status_t
 hal_net_command_response_set_content_type(hal_net_command_response_t *response,
                                           const char *content_type) {
-  if (!response || !content_type) {
-    return HAL_EINVAL;
-  }
-  response->content_type = content_type;
-  return HAL_OK;
+  return hal_command_response_set_content_type(response, content_type);
 }
 
 hal_status_t
 hal_net_command_response_write(hal_net_command_response_t *response,
                                const void *data, size_t len) {
-  return jh_buffered_response_write(response, data, len);
+  return hal_command_response_write(response, data, len);
 }
 
 hal_status_t
 hal_net_command_response_write_str(hal_net_command_response_t *response,
                                    const char *text) {
-  return text ? hal_net_command_response_write(response, text, strlen(text))
-              : HAL_EINVAL;
+  return hal_command_response_write_str(response, text);
 }
 
 hal_status_t
@@ -475,7 +478,7 @@ hal_net_command_response_write_json(hal_net_command_response_t *response,
   }
 
   hal_status_t status =
-      hal_net_command_response_set_content_type(response, "application/json");
+      hal_command_response_set_encoding(response, HAL_COMMAND_ENCODING_JSON);
   if (status == HAL_OK) {
     status = hal_net_command_response_write_str(response, printed);
   }

@@ -5,6 +5,7 @@
 #ifdef HAL_ENABLE_NET_COMMANDS
 
 #include "hal/codecs/cjson/cJSON.h"
+#include "hal/commands/hal_command_router.h"
 #include "hal/core/hal_status.h"
 #include "hal/network/http/hal_http_server.h"
 #include "hal/network/websocket/hal_websocket.h"
@@ -24,38 +25,14 @@
  * stay independent from the concrete server that delivered the request.
  */
 
-#ifndef HAL_NET_COMMANDS_MAX_COMMANDS
-#define HAL_NET_COMMANDS_MAX_COMMANDS 8u
-#endif
-
-#ifndef HAL_NET_COMMANDS_NAME_MAX
-#define HAL_NET_COMMANDS_NAME_MAX 32u
-#endif
-
 #ifndef HAL_NET_COMMANDS_TEXT_BUFFER_SIZE
 #define HAL_NET_COMMANDS_TEXT_BUFFER_SIZE 256u
 #endif
 
-#ifndef HAL_NET_COMMANDS_RESPONSE_BUFFER_SIZE
-#define HAL_NET_COMMANDS_RESPONSE_BUFFER_SIZE 512u
-#endif
-
 #define HAL_NET_COMMANDS_DEFAULT_HTTP_PATH "/api/command"
-
-#if HAL_NET_COMMANDS_MAX_COMMANDS < 1
-#error "HAL_NET_COMMANDS_MAX_COMMANDS must be at least 1"
-#endif
-
-#if HAL_NET_COMMANDS_NAME_MAX < 2
-#error "HAL_NET_COMMANDS_NAME_MAX must be at least 2"
-#endif
 
 #if HAL_NET_COMMANDS_TEXT_BUFFER_SIZE < 8
 #error "HAL_NET_COMMANDS_TEXT_BUFFER_SIZE must be at least 8"
-#endif
-
-#if HAL_NET_COMMANDS_RESPONSE_BUFFER_SIZE < 32
-#error "HAL_NET_COMMANDS_RESPONSE_BUFFER_SIZE must be at least 32"
 #endif
 
 #ifdef __cplusplus
@@ -68,11 +45,11 @@ typedef enum {
   HAL_NET_COMMANDS_FORMAT_AUTO
 } hal_net_commands_format_t;
 
-typedef enum {
-  HAL_NET_COMMANDS_SOURCE_DIRECT = 0,
-  HAL_NET_COMMANDS_SOURCE_HTTP,
-  HAL_NET_COMMANDS_SOURCE_WEBSOCKET
-} hal_net_commands_source_t;
+typedef hal_command_source_t hal_net_commands_source_t;
+
+#define HAL_NET_COMMANDS_SOURCE_DIRECT HAL_COMMAND_SOURCE_DIRECT
+#define HAL_NET_COMMANDS_SOURCE_HTTP HAL_COMMAND_SOURCE_HTTP
+#define HAL_NET_COMMANDS_SOURCE_WEBSOCKET HAL_COMMAND_SOURCE_WEBSOCKET
 
 typedef struct {
   hal_net_commands_source_t source;
@@ -84,14 +61,7 @@ typedef struct {
   hal_websocket_client_t websocket_client;
 } hal_net_command_request_t;
 
-typedef struct {
-  hal_status_t status;
-  const char *message;
-  const char *content_type;
-  char body[HAL_NET_COMMANDS_RESPONSE_BUFFER_SIZE];
-  size_t body_len;
-  bool overflow;
-} hal_net_command_response_t;
+typedef hal_command_response_t hal_net_command_response_t;
 
 typedef hal_status_t (*hal_net_command_handler_t)(
     const hal_net_command_request_t *request,

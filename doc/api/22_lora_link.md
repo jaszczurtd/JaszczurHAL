@@ -120,6 +120,42 @@ continuous receive. State, send-status and diagnostics snapshots are protected
 by the handle mutex and may be queried from another task. The complete
 `process()` state machine must still have one logical owner.
 
+## Command adapter
+
+`HAL_ENABLE_LORA_COMMANDS` adds the
+[`hal_lora_commands`](23_commands.md#reliable-lora-adapter) adapter and
+propagates both `HAL_ENABLE_COMMAND_ROUTER` and `HAL_ENABLE_LORA_LINK`. It
+encodes bounded request, response and event messages on one application-defined
+link port:
+
+```c
+hal_lora_commands_config_t commands_config =
+    hal_lora_commands_config_defaults(link, 7u);
+hal_lora_commands_t commands = NULL;
+
+status = hal_lora_commands_create(&commands_config, &commands);
+if (status == HAL_OK) {
+  uint32_t request_id = 0u;
+  status = hal_lora_commands_request_start(
+      commands, UINT16_C(0x1002), "status", HAL_COMMAND_ENCODING_TEXT,
+      NULL, 0u, &request_id);
+}
+```
+
+The link must already be receiving when attached. The adapter then becomes its
+sole processing and receive owner: call `hal_lora_commands_process()` instead
+of the two corresponding link functions. Incoming requests are dispatched
+synchronously through the configured router and responses are sent
+automatically. Application-visible responses and events are consumed through
+`hal_lora_commands_receive()`.
+
+Plaintext links report no command security flags. A link using
+`HAL_LORA_LINK_SECURITY_CHACHA20_POLY1305` reports authenticated, encrypted,
+integrity-protected and replay-protected delivery, so router policies can
+reject less protected requests. The handler receives the source address,
+session and complete link metadata without coupling its command logic to the
+radio provider.
+
 ## Reliability and fragmentation
 
 The default policy waits 1500 ms for one acknowledgement after the complete
@@ -178,7 +214,8 @@ reassembly drops/timeouts, queue drops, send timeouts, cancellation and recent
 address/RF observations.
 
 `examples/27_lora_point_to_point` provides `link` and `link-responder`
-variants. They exchange acknowledged 360-byte messages, forcing fragmentation
-over the same SX1262 fixtures used by the raw-radio example. The example uses
-plaintext intentionally; a product should enable AEAD only after it has a
-real key-provisioning and unique-session strategy.
+variants. They exchange a correlated 500-byte command request and response
+through `hal_lora_commands`, forcing three fragments in each direction over
+the same SX1262 fixtures used by the raw-radio example. The example uses
+plaintext intentionally; a product should enable AEAD only after it has a real
+key-provisioning and unique-session strategy.

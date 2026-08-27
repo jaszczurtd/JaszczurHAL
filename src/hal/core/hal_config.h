@@ -671,6 +671,89 @@
 #endif
 
 /**
+ * @def HAL_COMMAND_ROUTER_MAX_INSTANCES
+ * Maximum number of command-router instances, including the default router.
+ */
+#ifndef HAL_COMMAND_ROUTER_MAX_INSTANCES
+#define HAL_COMMAND_ROUTER_MAX_INSTANCES 2u
+#endif
+#if HAL_COMMAND_ROUTER_MAX_INSTANCES < 1u ||                                   \
+    HAL_COMMAND_ROUTER_MAX_INSTANCES > 16u
+#error "HAL_COMMAND_ROUTER_MAX_INSTANCES must be in range 1..16"
+#endif
+
+/* Legacy net-command tunables select the shared router limits when present. */
+#if defined(HAL_NET_COMMANDS_MAX_COMMANDS) &&                                  \
+    defined(HAL_COMMAND_ROUTER_MAX_COMMANDS) &&                                \
+    HAL_NET_COMMANDS_MAX_COMMANDS != HAL_COMMAND_ROUTER_MAX_COMMANDS
+#error                                                                         \
+    "HAL_NET_COMMANDS_MAX_COMMANDS must match HAL_COMMAND_ROUTER_MAX_COMMANDS"
+#endif
+#ifndef HAL_COMMAND_ROUTER_MAX_COMMANDS
+#ifdef HAL_NET_COMMANDS_MAX_COMMANDS
+#define HAL_COMMAND_ROUTER_MAX_COMMANDS HAL_NET_COMMANDS_MAX_COMMANDS
+#else
+#define HAL_COMMAND_ROUTER_MAX_COMMANDS 8u
+#endif
+#endif
+#ifndef HAL_NET_COMMANDS_MAX_COMMANDS
+#define HAL_NET_COMMANDS_MAX_COMMANDS HAL_COMMAND_ROUTER_MAX_COMMANDS
+#endif
+#if HAL_COMMAND_ROUTER_MAX_COMMANDS < 1u ||                                    \
+    HAL_COMMAND_ROUTER_MAX_COMMANDS > 64u
+#error "HAL_COMMAND_ROUTER_MAX_COMMANDS must be in range 1..64"
+#endif
+
+#if defined(HAL_NET_COMMANDS_NAME_MAX) &&                                      \
+    defined(HAL_COMMAND_ROUTER_NAME_MAX) &&                                    \
+    HAL_NET_COMMANDS_NAME_MAX != HAL_COMMAND_ROUTER_NAME_MAX
+#error "HAL_NET_COMMANDS_NAME_MAX must match HAL_COMMAND_ROUTER_NAME_MAX"
+#endif
+#ifndef HAL_COMMAND_ROUTER_NAME_MAX
+#ifdef HAL_NET_COMMANDS_NAME_MAX
+#define HAL_COMMAND_ROUTER_NAME_MAX HAL_NET_COMMANDS_NAME_MAX
+#else
+#define HAL_COMMAND_ROUTER_NAME_MAX 32u
+#endif
+#endif
+#ifndef HAL_NET_COMMANDS_NAME_MAX
+#define HAL_NET_COMMANDS_NAME_MAX HAL_COMMAND_ROUTER_NAME_MAX
+#endif
+#if HAL_COMMAND_ROUTER_NAME_MAX < 2u || HAL_COMMAND_ROUTER_NAME_MAX > 256u
+#error "HAL_COMMAND_ROUTER_NAME_MAX must be in range 2..256"
+#endif
+
+#if defined(HAL_NET_COMMANDS_RESPONSE_BUFFER_SIZE) &&                          \
+    defined(HAL_COMMAND_RESPONSE_BUFFER_SIZE) &&                               \
+    HAL_NET_COMMANDS_RESPONSE_BUFFER_SIZE != HAL_COMMAND_RESPONSE_BUFFER_SIZE
+#error                                                                         \
+    "HAL_NET_COMMANDS_RESPONSE_BUFFER_SIZE must match HAL_COMMAND_RESPONSE_BUFFER_SIZE"
+#endif
+#ifndef HAL_COMMAND_RESPONSE_BUFFER_SIZE
+#ifdef HAL_NET_COMMANDS_RESPONSE_BUFFER_SIZE
+#define HAL_COMMAND_RESPONSE_BUFFER_SIZE HAL_NET_COMMANDS_RESPONSE_BUFFER_SIZE
+#else
+#define HAL_COMMAND_RESPONSE_BUFFER_SIZE 512u
+#endif
+#endif
+#ifndef HAL_NET_COMMANDS_RESPONSE_BUFFER_SIZE
+#define HAL_NET_COMMANDS_RESPONSE_BUFFER_SIZE HAL_COMMAND_RESPONSE_BUFFER_SIZE
+#endif
+#if HAL_COMMAND_RESPONSE_BUFFER_SIZE < 32u ||                                  \
+    HAL_COMMAND_RESPONSE_BUFFER_SIZE > 65535u
+#error "HAL_COMMAND_RESPONSE_BUFFER_SIZE must be in range 32..65535"
+#endif
+
+/** Maximum payload copied by the shared command wire decoder. */
+#ifndef HAL_COMMAND_MESSAGE_MAX_PAYLOAD
+#define HAL_COMMAND_MESSAGE_MAX_PAYLOAD 512u
+#endif
+#if HAL_COMMAND_MESSAGE_MAX_PAYLOAD < 1u ||                                    \
+    HAL_COMMAND_MESSAGE_MAX_PAYLOAD > 65535u
+#error "HAL_COMMAND_MESSAGE_MAX_PAYLOAD must be in range 1..65535"
+#endif
+
+/**
  * @def HAL_LORA_SX126X_BUSY_TIMEOUT_MS
  * Maximum time for the SX126x BUSY line to remain asserted during one driver
  * operation. Override in hal_project_config.h before including HAL headers.

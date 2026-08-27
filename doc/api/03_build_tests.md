@@ -208,7 +208,7 @@ applications and keep their artifacts below `.build/hardware/`:
 | `tests/hardware/rp_storage` | EEPROM commit/persistence, LittleFS format/remount and cross-reset mounting |
 | `tests/hardware/rp_sdlogger` | Physical SPI SD mount, deterministic append, flush/close, reset/remount, content and EEPROM log-counter persistence |
 | `tests/hardware/rp_ota` | Discovery, authentication, transfer, trial/confirm, rollback and USB/network recovery |
-| `tests/hardware/lora_sx1262` | Two-device SX1262 initialization, bidirectional packets, RSSI/SNR, sleep/wake and destroy/create reinitialization on integrated LF or external HF pairs |
+| `tests/hardware/lora_sx1262` | Two-device SX1262 initialization, bidirectional raw packets, reliable-link lifecycle, and fragmented command-router request/response transactions on integrated LF or external HF pairs |
 | `tests/hardware/esp32s3_phase1` | Phase 1 ESP32-S3 target/board identity, generated link signature, chip/core count, physical flash, initialized Quad PSRAM, and a repeated FreeRTOS `app_task0()` heartbeat over native USB Serial/JTAG. |
 | `tests/hardware/esp32s3_phase2` | ESP32-S3 Phase 2 runtime probe for both application tasks, system/sync, GPIO/IRQ, ADC, USB Serial/JTAG TX/RX, hardware UART, I2C master scan, SPI master transfer path, dedicated-pool timer callbacks, and enabled FreeRTOS stack-guard configuration. |
 
@@ -1105,6 +1105,64 @@ Do not assume that SF12/14 dBm is permitted. Both ends of a run must use the
 matching variant family. Record module/antenna labels, exact wiring, firmware
 revision, distance, packet counts, loss, RSSI/SNR range and the verifier JSON
 in the private hardware report.
+
+### SX1262 command-router over LoRa hardware gate
+
+The `link` and `link-responder` variants of
+[`27_lora_point_to_point`](../../examples/27_lora_point_to_point/) attach
+`hal_lora_commands` to one reliable link. The initiator sends a correlated
+500-byte binary `echo` request; the responder dispatches it through the shared
+router and returns the exact payload. Both encoded directions require three
+plaintext link fragments with the default bounds.
+
+The handler policy permits both `LORA_LINK` and `BLE_STREAM`. This gate supplies
+only the LoRa adapter. The BLE source entry demonstrates that the route and
+wire API are reusable by a later BLE adapter; it does not claim that such an
+adapter is implemented.
+
+For two integrated LF boards, build and upload opposite roles. When both
+boards are already in BOOTSEL and therefore have no serial port, select each
+drive explicitly:
+
+```bash
+vscode/entry/jh-vscode upload \
+  --project examples/27_lora_point_to_point \
+  --target rp2040 --board rp2040-lora-lf --variant link \
+  --bootsel-volume /dev/<initiator-partition>
+
+vscode/entry/jh-vscode upload \
+  --project examples/27_lora_point_to_point \
+  --target rp2040 --board rp2040-lora-lf --variant link-responder \
+  --bootsel-volume /dev/<responder-partition>
+```
+
+After both CDC devices enumerate, use stable `/dev/serial/by-id/` paths and
+capture at least three complete transactions:
+
+```bash
+python3 tests/hardware/lora_sx1262/verify_commands.py \
+  --initiator-port /dev/serial/by-id/<command-initiator> \
+  --responder-port /dev/serial/by-id/<command-responder> \
+  --duration 75 --minimum-transactions 3
+```
+
+A pass requires the expected role marker from both devices and no `JHCMD1`
+error or timeout. For at least three nonzero request identifiers, the
+initiator request, responder handler and initiator response must agree on the
+500-byte length, CRC-32 and three-fragment count. The handler peer and response
+source must be `0x1001` and `0x1002`, respectively; both session identifiers
+must match their role's nonzero `READY` value. The plaintext security flags
+must be zero, RSSI must be in the negative LoRa range, SNR must be bounded, the
+handler source must be `LORA_LINK`, handler calls must strictly increase, and
+the final status and byte comparison must both succeed. Saved logs can be
+checked with `--initiator-log` and `--responder-log` instead of live serial
+ports.
+
+Swap the two physical devices' roles and repeat. Record their module and
+antenna labels, firmware revision, distance, matched request identifiers,
+RSSI/SNR range and verifier JSON only in the private hardware report. The
+434.0 MHz fixture settings are technical test values; connect the LF antennas
+and follow the local spectrum, power and duty-cycle requirements.
 
 ### ESP32-S3 Phase 1 hardware probe
 

@@ -6,6 +6,14 @@
     "HAL_DISABLE_ASSERTS": {},
     "HAL_ENABLE_APP_TASK1": {},
     "HAL_ENABLE_CJSON": {},
+    "HAL_ENABLE_COMMAND_ROUTER": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/commands/hal_command_router.cpp",
+          "src/hal/commands/hal_command_wire.cpp"
+        ]
+      }
+    },
     "HAL_ENABLE_CRC": {
       "buildEffects": {
         "portableSources": ["src/hal/security/hal_crc.cpp"]

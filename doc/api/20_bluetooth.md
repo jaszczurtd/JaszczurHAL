@@ -269,6 +269,14 @@ the generation.
 by one static GATT service. The flag enables `HAL_ENABLE_BLE` and
 `HAL_ENABLE_CRYPTO`.
 
+BLE Stream remains a general application byte stream. The
+[`hal_command_router`](23_commands.md) source model and binary wire messages
+are prepared for a later BLE Stream command adapter, but that adapter is not
+implemented in this module. `HAL_ENABLE_BLE_STREAM` does not enable
+`HAL_ENABLE_COMMAND_ROUTER`, and there is currently no BLE command feature
+flag. Applications must not treat the `HAL_COMMAND_SOURCE_BLE_STREAM` policy
+value as evidence that such an adapter is active.
+
 The header is the single source of truth for the service UUIDs, the frame
 layout and the capability bits. Changing any of them raises the profile
 version.

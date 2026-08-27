@@ -1098,8 +1098,11 @@ Default static limits can be overridden before including HAL headers:
 
 ## `hal_net_commands` - HTTP/WebSocket command layer  *(opt-in - `HAL_ENABLE_NET_COMMANDS`)*
 
-Small command registry inspired by embedded WebUI control channels. Enabling
-`HAL_ENABLE_NET_COMMANDS` also enables `HAL_ENABLE_HTTP_SERVER`,
+Text/JSON adapters for embedded WebUI control channels. The module parses HTTP
+and WebSocket input, dispatches it through the shared default
+[`hal_command_router`](23_commands.md), and formats the bounded response.
+Enabling `HAL_ENABLE_NET_COMMANDS` also enables
+`HAL_ENABLE_COMMAND_ROUTER`, `HAL_ENABLE_HTTP_SERVER`,
 `HAL_ENABLE_WEBSOCKET`, `HAL_ENABLE_CJSON`, `HAL_ENABLE_TCP` and
 `HAL_ENABLE_WIFI`.
 
@@ -1120,6 +1123,12 @@ or JSON parsed by cJSON:
 are exposed to handlers as `json_args`; string args are also mirrored through
 `args_text`.
 
+A generic `hal_command_handler_t` sees text arguments as the binary-safe bytes
+remaining after the command name. For JSON it sees the compact serialization
+of the `args` or `params` value alone; a missing value produces an empty
+argument view. Network requests use request, peer and session identifiers zero
+and currently report no command security flags.
+
 ```c
 #include <hal/network/net_commands/hal_net_commands.h>
 
@@ -1129,11 +1138,11 @@ typedef enum {
   HAL_NET_COMMANDS_FORMAT_AUTO
 } hal_net_commands_format_t;
 
-typedef enum {
-  HAL_NET_COMMANDS_SOURCE_DIRECT = 0,
-  HAL_NET_COMMANDS_SOURCE_HTTP,
-  HAL_NET_COMMANDS_SOURCE_WEBSOCKET
-} hal_net_commands_source_t;
+typedef hal_command_source_t hal_net_commands_source_t;
+
+#define HAL_NET_COMMANDS_SOURCE_DIRECT HAL_COMMAND_SOURCE_DIRECT
+#define HAL_NET_COMMANDS_SOURCE_HTTP HAL_COMMAND_SOURCE_HTTP
+#define HAL_NET_COMMANDS_SOURCE_WEBSOCKET HAL_COMMAND_SOURCE_WEBSOCKET
 
 typedef struct {
   hal_net_commands_source_t source;
@@ -1145,14 +1154,7 @@ typedef struct {
   hal_websocket_client_t websocket_client;
 } hal_net_command_request_t;
 
-typedef struct {
-  hal_status_t status;
-  const char *message;
-  const char *content_type;
-  char body[HAL_NET_COMMANDS_RESPONSE_BUFFER_SIZE];
-  size_t body_len;
-  bool overflow;
-} hal_net_command_response_t;
+typedef hal_command_response_t hal_net_command_response_t;
 
 typedef hal_status_t (*hal_net_command_handler_t)(
     const hal_net_command_request_t *request,
@@ -1194,6 +1196,18 @@ hal_status_t hal_net_commands_handle_websocket_message(
     hal_net_commands_format_t format);
 ```
 
+The compatibility registration functions store handlers in the default
+router, but limit them to direct, HTTP and WebSocket sources because their
+request view contains network-only parsed fields. Register a
+`hal_command_definition_t` directly on the default router when one binary-safe
+handler must also accept LoRa or another adapter. The network paths currently
+assert no command security flags, so router policies requiring such flags
+reject those requests. `hal_net_commands_count()`, unregister and clear view
+the same shared handler set. `hal_net_commands_clear()` removes generic
+registrations too when no handler is active. Its established return type is
+`void`, so an internal `HAL_EBUSY` during active dispatch is not surfaced and
+the handler set remains unchanged.
+
 Response helpers append to a fixed response buffer and use `hal_status_t`:
 
 ```c
@@ -1215,7 +1229,15 @@ hal_status_t hal_net_command_response_write_str(
 hal_status_t hal_net_command_response_write_json(
     hal_net_command_response_t *response,
     const cJSON *json);
+
+const char *hal_net_commands_format_to_string(
+    hal_net_commands_format_t format);
 ```
+
+The shared response preserves the order of the established network fields and
+adds `encoding` at the end. `message` and `content_type` are borrowed pointers;
+handler-provided values must remain valid until the response has been formatted
+and sent.
 
 Basic flow:
 
@@ -1263,11 +1285,15 @@ HTTP status codes (`400`, `403`, `404`, `413`, `500`) and still returns
 Default static limits can be overridden before including HAL headers:
 
 ```c
-#define HAL_NET_COMMANDS_MAX_COMMANDS 8u
-#define HAL_NET_COMMANDS_NAME_MAX 32u
+#define HAL_COMMAND_ROUTER_MAX_COMMANDS 8u
+#define HAL_COMMAND_ROUTER_NAME_MAX 32u
 #define HAL_NET_COMMANDS_TEXT_BUFFER_SIZE 256u
-#define HAL_NET_COMMANDS_RESPONSE_BUFFER_SIZE 512u
+#define HAL_COMMAND_RESPONSE_BUFFER_SIZE 512u
 ```
+
+The previous `HAL_NET_COMMANDS_MAX_COMMANDS`, `HAL_NET_COMMANDS_NAME_MAX` and
+`HAL_NET_COMMANDS_RESPONSE_BUFFER_SIZE` spellings remain aliases of the shared
+router limits. If both forms are defined, their values must match.
 
 **shared thematic implementation:** `hal/network/net_commands/hal_net_commands.cpp`.
 **impl/.mock:** covered through mock HTTP/WebSocket TCP backends and

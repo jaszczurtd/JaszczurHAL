@@ -172,7 +172,7 @@ def check_macro_dump_parity(compiler: str) -> None:
             continue
         if name == "HAL_ENABLE_TFT":
             support = ("HAL_ENABLE_ILI9341",)
-        elif name == "HAL_ENABLE_LORA_LINK":
+        elif name in {"HAL_ENABLE_LORA_LINK", "HAL_ENABLE_LORA_COMMANDS"}:
             support = ("HAL_ENABLE_SX126X",)
         else:
             support = ()
@@ -506,6 +506,25 @@ def check_production_feature_facade(compiler: str) -> None:
         <= lora_link,
         "hal_config.h did not expose the reliable LoRa link closure",
     )
+    lora_commands = preprocess_hal_config_features(
+        compiler,
+        (
+            "HAL_TARGET_MOCK=1",
+            "HAL_ENABLE_SX126X=1",
+            "HAL_ENABLE_LORA_COMMANDS=1",
+        ),
+    )
+    require(
+        {
+            "HAL_ENABLE_COMMAND_ROUTER",
+            "HAL_ENABLE_LORA_COMMANDS",
+            "HAL_ENABLE_LORA_LINK",
+            "HAL_ENABLE_LORA",
+            "HAL_ENABLE_CRC",
+        }
+        <= lora_commands,
+        "hal_config.h did not expose the LoRa command adapter closure",
+    )
     require_hal_config_failure(
         compiler,
         (
@@ -558,6 +577,26 @@ def check_production_feature_facade(compiler: str) -> None:
             "HAL_LORA_LINK_MAX_PEERS=33",
         ),
         "HAL_LORA_LINK_MAX_PEERS must be in range 1..32",
+    )
+    require_hal_config_failure(
+        compiler,
+        ("HAL_TARGET_MOCK=1", "HAL_COMMAND_ROUTER_MAX_INSTANCES=0"),
+        "HAL_COMMAND_ROUTER_MAX_INSTANCES must be in range 1..16",
+    )
+    require_hal_config_failure(
+        compiler,
+        ("HAL_TARGET_MOCK=1", "HAL_COMMAND_ROUTER_MAX_COMMANDS=65"),
+        "HAL_COMMAND_ROUTER_MAX_COMMANDS must be in range 1..64",
+    )
+    require_hal_config_failure(
+        compiler,
+        ("HAL_TARGET_MOCK=1", "HAL_COMMAND_ROUTER_NAME_MAX=1"),
+        "HAL_COMMAND_ROUTER_NAME_MAX must be in range 2..256",
+    )
+    require_hal_config_failure(
+        compiler,
+        ("HAL_TARGET_MOCK=1", "HAL_COMMAND_MESSAGE_MAX_PAYLOAD=65536"),
+        "HAL_COMMAND_MESSAGE_MAX_PAYLOAD must be in range 1..65535",
     )
     require_hal_config_failure(
         compiler,
@@ -689,7 +728,7 @@ TEST_ROOT.mkdir(parents=True)
 )
 
 model = generate_hal_features.load_registry(CONFIG)
-require(len(model.features) == 103, "feature registry symbol count drifted")
+require(len(model.features) == 105, "feature registry symbol count drifted")
 catalog_text = (ROOT / "doc/api/02_module_flags.md").read_text(encoding="utf-8")
 catalog_features = set(
     re.findall(
@@ -708,11 +747,11 @@ require(
     f"unknown={sorted(catalog_features - public_features)}",
 )
 require(
-    sum(bool(feature.implies) for feature in model.features.values()) == 65,
+    sum(bool(feature.implies) for feature in model.features.values()) == 66,
     "feature registry implies-source count drifted",
 )
 require(
-    sum(len(feature.implies) for feature in model.features.values()) == 120,
+    sum(len(feature.implies) for feature in model.features.values()) == 123,
     "feature registry direct-edge count drifted",
 )
 require(
@@ -733,6 +772,11 @@ require(
     model.features["HAL_ENABLE_LORA_LINK"].implies
     == ("HAL_ENABLE_CRC", "HAL_ENABLE_LORA"),
     "reliable LoRa link dependencies drifted",
+)
+require(
+    model.features["HAL_ENABLE_LORA_COMMANDS"].implies
+    == ("HAL_ENABLE_COMMAND_ROUTER", "HAL_ENABLE_LORA_LINK"),
+    "LoRa command adapter dependencies drifted",
 )
 effect_features = (
     "HAL_ENABLE_LITTLEFS",
@@ -832,8 +876,8 @@ for facade in facade_provider_checks:
     )
 require(
     len(re.findall(r"^#error(?:\s|$)", hal_config_text, flags=re.MULTILINE))
-    == 62,
-    "hal_config.h retained validation inventory drifted from 62 #error checks",
+    == 70,
+    "hal_config.h retained validation inventory drifted from 70 #error checks",
 )
 
 checked = run_generator("--check")
