@@ -64,10 +64,12 @@ Stack protection uses two independent opt-ins:
 
 | Flag | Header | Impl | 3rd-party deps pulled in |
 |---|---|---|---|
+| `HAL_ENABLE_COMMAND_ROUTER` | `hal_command_router.h`, `hal_command_wire.h` | `hal/commands/hal_command_router.cpp` + `hal/commands/hal_command_wire.cpp` | Transport-neutral handler registry, source/security policy, bounded responses and versioned binary request/response/event messages; see the [command API](23_commands.md) |
 | `HAL_ENABLE_BLE` | `hal_ble.h` | `hal_ble.cpp` + `hal/bluetooth/*` | BLE Peripheral and passive Observer over the pinned BTstack and CYW43 controller; supported on RP2040 Pico W/Pico+RM2, RP2350 ARM Pico 2 W, STM32G474+PIM730/RM2, and mock. RP2350 RISC-V is unsupported. The applicable standard or Raspberry Pi product-scoped BTstack grant is described in the [Bluetooth API](20_bluetooth.md#license-and-distribution-boundary). |
 | `HAL_ENABLE_BLE_STREAM` | `hal_ble_stream.h` | `hal_ble_stream.cpp` + `hal/bluetooth/*` | Authenticated bounded framed byte stream over BLE (propagates BLE + CRYPTO) |
 | `HAL_ENABLE_LORA` | `hal_lora_radio.h` | `hal_lora_radio.cpp` | Provider-neutral raw LoRa lifecycle, modem presets, blocking TX, polling RX, diagnostics, power state and time-on-air; requires exactly one provider |
 | `HAL_ENABLE_LORA_LINK` | `hal_lora_link.h` | `hal_lora_link.cpp` + `jh_lora_link_frame.cpp` | Reliable private messages with addressing, sequences, ACK/retry, duplicate suppression and fragmentation (propagates LORA + CRC); optional AEAD requires CRYPTO; see the [LoRa link API](22_lora_link.md) |
+| `HAL_ENABLE_LORA_COMMANDS` | `hal_lora_commands.h` | `hal/radio/hal_lora_commands.cpp` | Requests, automatic dispatched responses and events over one exclusively owned reliable LoRa link (propagates COMMAND_ROUTER + LORA_LINK); see the [command API](23_commands.md) |
 | `HAL_ENABLE_SX126X` | `hal_lora_radio.h` | `hal_lora_radio.cpp` + `hal/radio/sx126x/*` + pinned Semtech driver | SX1262 plus experimental, software-only SX1261 provider over HAL SPI/GPIO (propagates LORA + SPI); see the [LoRa radio API](21_lora.md) |
 | `HAL_ENABLE_SX127X` | `hal_lora_radio.h` | `hal_lora_radio.cpp` + `hal/radio/sx127x/*` | Experimental, software-only SX1276/SX1278 provider over HAL SPI/GPIO (propagates LORA + SPI and conflicts with SX126X); see the [LoRa radio API](21_lora.md) |
 | `HAL_ENABLE_WIFI` | `hal_wifi.h` | `hal_wifi.cpp` | CYW43/lwIP or native ESP-IDF WiFi/`esp_netif`/lwIP backend selected by target/board configuration |
@@ -79,7 +81,7 @@ Stack protection uses two independent opt-ins:
 | `HAL_ENABLE_HTTP_FILES` | `hal_http_files.h` | `hal/network/http/hal_http_files.cpp` | Callback-backed file serving, ETag and upload helpers over HAL HTTP routes (propagates HTTP_SERVER + TCP + WIFI) |
 | `HAL_ENABLE_WEBSOCKET` | `hal_websocket.h` | `hal/network/websocket/hal_websocket.cpp` | Small poll-driven plaintext WebSocket server over HAL TCP (propagates TCP + WIFI); no WSS or WebSocket-client API |
 | `HAL_ENABLE_NET_CONSOLE` | `hal_net_console.h` | `hal/network/net_console/hal_net_console.cpp` | Password-protected serial/debug mirror and command stream over HAL TCP (propagates TCP + WIFI) |
-| `HAL_ENABLE_NET_COMMANDS` | `hal_net_commands.h` | `hal/network/net_commands/hal_net_commands.cpp` | Shared JSON/text command dispatcher for HTTP and WebSocket control channels (propagates HTTP_SERVER + WEBSOCKET + CJSON + TCP + WIFI) |
+| `HAL_ENABLE_NET_COMMANDS` | `hal_net_commands.h` | `hal/network/net_commands/hal_net_commands.cpp` | cJSON-backed text/JSON HTTP and WebSocket adapter over the shared default router (propagates COMMAND_ROUTER + HTTP_SERVER + WEBSOCKET + CJSON + TCP + WIFI) |
 | `HAL_ENABLE_NOTIFY` | `hal_notify.h` | `hal/network/notify/hal_notify.cpp` | Backend-dispatched notification facade with generation-checked channel handles |
 | `HAL_ENABLE_NOTIFY_TELEGRAM` | `hal_notify.h` | `hal/network/notify/hal_notify_telegram.cpp` | Telegram Bot API backend over `hal_http_client`; public Telegram delivery uses HTTPS, while custom HTTP hosts may be used for local/proxy deployments (propagates NOTIFY + HTTP_CLIENT + TLS + CJSON + TCP + WIFI) |
 | `HAL_ENABLE_BSD_SOCKETS` | `sys/socket.h`, `netinet/in.h`, `arpa/inet.h`, `netdb.h`, `fcntl.h`, `sys/select.h`, `unistd.h` | `hal/network/adapters/bsd/hal_bsd_sockets.cpp` | Public BSD/POSIX adapter over HAL UDP/TCP, including `getaddrinfo()` (propagates UDP + TCP + WIFI); remains usable with or without TLS |
@@ -187,6 +189,8 @@ feature implications; internal edges to the derived
 HAL_ENABLE_KV          -> HAL_ENABLE_EEPROM
 HAL_ENABLE_SDLOGGER    -> HAL_ENABLE_FAT + HAL_ENABLE_EEPROM + HAL_ENABLE_SPI
 HAL_ENABLE_BLE_STREAM  -> HAL_ENABLE_BLE + HAL_ENABLE_CRYPTO
+HAL_ENABLE_LORA_COMMANDS -> HAL_ENABLE_COMMAND_ROUTER + HAL_ENABLE_LORA_LINK ->
+                            HAL_ENABLE_LORA + HAL_ENABLE_CRC
 HAL_ENABLE_TIME        -> HAL_ENABLE_UDP + HAL_ENABLE_WIFI
 HAL_ENABLE_MQTT        -> HAL_ENABLE_TCP + HAL_ENABLE_WIFI
 HAL_ENABLE_UDP         -> HAL_ENABLE_WIFI
@@ -195,8 +199,9 @@ HAL_ENABLE_HTTP_SERVER -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
 HAL_ENABLE_HTTP_FILES  -> HAL_ENABLE_HTTP_SERVER -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
 HAL_ENABLE_WEBSOCKET   -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
 HAL_ENABLE_NET_CONSOLE -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
-HAL_ENABLE_NET_COMMANDS -> HAL_ENABLE_HTTP_SERVER + HAL_ENABLE_WEBSOCKET +
-                           HAL_ENABLE_CJSON + HAL_ENABLE_TCP + HAL_ENABLE_WIFI
+HAL_ENABLE_NET_COMMANDS -> HAL_ENABLE_COMMAND_ROUTER + HAL_ENABLE_HTTP_SERVER +
+                           HAL_ENABLE_WEBSOCKET + HAL_ENABLE_CJSON +
+                           HAL_ENABLE_TCP + HAL_ENABLE_WIFI
 HAL_ENABLE_NOTIFY_TELEGRAM -> HAL_ENABLE_NOTIFY + HAL_ENABLE_HTTP_CLIENT +
                               HAL_ENABLE_TLS + HAL_ENABLE_CJSON +
                               HAL_ENABLE_TCP + HAL_ENABLE_WIFI

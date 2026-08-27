@@ -25,6 +25,14 @@ configuration examples, and diagnostics are in:
 - `config/features/README.md`;
 - `doc/boards_profiles_howto.md`.
 
+Command routing uses three public opt-ins. `HAL_ENABLE_COMMAND_ROUTER` selects
+the transport-neutral router and versioned wire messages.
+`HAL_ENABLE_LORA_COMMANDS` adds the reliable-LoRa adapter and propagates the
+router plus `HAL_ENABLE_LORA_LINK`. `HAL_ENABLE_NET_COMMANDS` adds the
+HTTP/WebSocket text/JSON adapter and also propagates the router. BLE Stream is
+a general byte stream; it does not currently provide or enable a command
+adapter.
+
 Use the shared generator runner after changing the feature or board registry:
 
     python3 scripts/sync_generated.py --write

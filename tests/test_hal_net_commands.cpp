@@ -9,6 +9,11 @@
 static uint32_t s_handler_calls;
 static hal_net_commands_source_t s_last_source;
 static char s_last_args[64];
+static uint32_t s_generic_handler_calls;
+static hal_command_source_t s_generic_last_source;
+static hal_command_encoding_t s_generic_last_encoding;
+static uint8_t s_generic_last_arguments[128];
+static size_t s_generic_last_arguments_length;
 
 void setUp(void) {
   hal_mock_serial_reset();
@@ -21,6 +26,11 @@ void setUp(void) {
   s_handler_calls = 0u;
   s_last_source = HAL_NET_COMMANDS_SOURCE_DIRECT;
   s_last_args[0] = '\0';
+  s_generic_handler_calls = 0u;
+  s_generic_last_source = HAL_COMMAND_SOURCE_DIRECT;
+  s_generic_last_encoding = HAL_COMMAND_ENCODING_BINARY;
+  s_generic_last_arguments_length = 0u;
+  memset(s_generic_last_arguments, 0, sizeof(s_generic_last_arguments));
 }
 
 void tearDown(void) {
@@ -77,6 +87,50 @@ static hal_status_t deny_handler(const hal_net_command_request_t *request,
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_net_command_response_set_status(
                                     response, HAL_EPERM, "denied"));
   return HAL_EPERM;
+}
+
+static hal_status_t generic_handler(const hal_command_request_t *request,
+                                    hal_command_response_t *response,
+                                    void *user) {
+  (void)user;
+  s_generic_handler_calls++;
+  s_generic_last_source = request->source;
+  s_generic_last_encoding = request->encoding;
+  TEST_ASSERT_LESS_OR_EQUAL_UINT(sizeof(s_generic_last_arguments),
+                                 request->arguments_length);
+  s_generic_last_arguments_length = request->arguments_length;
+  if (request->arguments_length > 0u) {
+    memcpy(s_generic_last_arguments, request->arguments,
+           request->arguments_length);
+  }
+
+  TEST_ASSERT_EQUAL_STRING("generic", request->command);
+  if (request->encoding == HAL_COMMAND_ENCODING_JSON) {
+    return hal_command_response_write_str(response, "{\"generic\":true}");
+  }
+  hal_status_t status = hal_command_response_write_str(response, "generic: ");
+  if (status == HAL_OK) {
+    status = hal_command_response_write(response, request->arguments,
+                                        request->arguments_length);
+  }
+  return status;
+}
+
+static hal_command_router_t register_generic_command(void) {
+  hal_command_router_t router = NULL;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_command_router_default(&router));
+  TEST_ASSERT_NOT_NULL(router);
+
+  hal_command_definition_t definition = {};
+  definition.name = "generic";
+  definition.allowed_sources =
+      HAL_COMMAND_SOURCE_MASK(HAL_COMMAND_SOURCE_DIRECT) |
+      HAL_COMMAND_SOURCE_MASK(HAL_COMMAND_SOURCE_HTTP) |
+      HAL_COMMAND_SOURCE_MASK(HAL_COMMAND_SOURCE_WEBSOCKET);
+  definition.handler = generic_handler;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_command_router_register(router, &definition));
+  return router;
 }
 
 static size_t make_masked_frame(uint8_t opcode, const uint8_t *payload,
@@ -232,6 +286,111 @@ void test_websocket_message_dispatches_and_replies(void) {
   TEST_ASSERT_NOT_NULL(strstr(body, "\"cmd\":\"status\""));
 }
 
+void test_default_router_handler_dispatches_through_text_and_json(void) {
+  hal_command_router_t router = register_generic_command();
+  size_t router_count = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_command_router_count(router, &router_count));
+  TEST_ASSERT_EQUAL_UINT(1u, router_count);
+  TEST_ASSERT_EQUAL_UINT(1u, hal_net_commands_count());
+
+  hal_net_command_response_t response;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_net_commands_execute_text("generic hello", &response));
+  TEST_ASSERT_EQUAL_UINT(1u, s_generic_handler_calls);
+  TEST_ASSERT_EQUAL_INT(HAL_COMMAND_SOURCE_DIRECT, s_generic_last_source);
+  TEST_ASSERT_EQUAL_INT(HAL_COMMAND_ENCODING_TEXT, s_generic_last_encoding);
+  TEST_ASSERT_EQUAL_UINT(5u, s_generic_last_arguments_length);
+  TEST_ASSERT_EQUAL_MEMORY("hello", s_generic_last_arguments, 5u);
+  TEST_ASSERT_EQUAL_STRING("generic: hello", response.body);
+
+  const char json[] =
+      "{\"cmd\":\"generic\",\"args\":{\"mode\":\"unit\",\"value\":2}}";
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_net_commands_execute_json(json, strlen(json), &response));
+  TEST_ASSERT_EQUAL_UINT(2u, s_generic_handler_calls);
+  TEST_ASSERT_EQUAL_INT(HAL_COMMAND_ENCODING_JSON, s_generic_last_encoding);
+  TEST_ASSERT_EQUAL_UINT(strlen("{\"mode\":\"unit\",\"value\":2}"),
+                         s_generic_last_arguments_length);
+  TEST_ASSERT_EQUAL_MEMORY("{\"mode\":\"unit\",\"value\":2}",
+                           s_generic_last_arguments,
+                           s_generic_last_arguments_length);
+  TEST_ASSERT_EQUAL_STRING("application/json", response.content_type);
+  TEST_ASSERT_EQUAL_STRING("{\"generic\":true}", response.body);
+}
+
+void test_default_router_handler_dispatches_through_http_and_websocket(void) {
+  (void)register_generic_command();
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_net_commands_register_http_route(
+                            "/api/command", HAL_NET_COMMANDS_FORMAT_JSON));
+
+  const char request[] =
+      "POST /api/command HTTP/1.1\r\nHost: unit\r\nContent-Length: 40\r\n\r\n"
+      "{\"cmd\":\"generic\",\"args\":{\"mode\":\"http\"}}";
+  hal_tcp_socket_t http_socket = send_http_request(8090u, request);
+  TEST_ASSERT_EQUAL_UINT(1u, s_generic_handler_calls);
+  TEST_ASSERT_EQUAL_INT(HAL_COMMAND_SOURCE_HTTP, s_generic_last_source);
+  TEST_ASSERT_EQUAL_UINT(15u, s_generic_last_arguments_length);
+  TEST_ASSERT_EQUAL_MEMORY("{\"mode\":\"http\"}", s_generic_last_arguments,
+                           s_generic_last_arguments_length);
+  assert_response_contains(http_socket, "HTTP/1.1 200 OK\r\n");
+  assert_response_contains(http_socket, "{\"generic\":true}");
+
+  hal_tcp_socket_t websocket_socket = accept_websocket_client(8099u);
+  uint8_t frame[96];
+  const char payload[] =
+      "{\"cmd\":\"generic\",\"args\":{\"mode\":\"websocket\"}}";
+  size_t frame_len = make_masked_frame(0x1u, (const uint8_t *)payload,
+                                       strlen(payload), frame, sizeof(frame));
+  hal_mock_tcp_inject_rx(websocket_socket, frame, (uint16_t)frame_len);
+  hal_websocket_server_poll();
+
+  TEST_ASSERT_EQUAL_UINT(2u, s_generic_handler_calls);
+  TEST_ASSERT_EQUAL_INT(HAL_COMMAND_SOURCE_WEBSOCKET, s_generic_last_source);
+  TEST_ASSERT_EQUAL_UINT(20u, s_generic_last_arguments_length);
+  TEST_ASSERT_EQUAL_MEMORY("{\"mode\":\"websocket\"}", s_generic_last_arguments,
+                           s_generic_last_arguments_length);
+  const uint8_t *tx = hal_mock_tcp_get_last_tx_payload(websocket_socket);
+  const uint16_t tx_len = hal_mock_tcp_get_last_tx_len(websocket_socket);
+  TEST_ASSERT_GREATER_THAN_UINT(2u, tx_len);
+  char body[96];
+  const size_t body_len = (size_t)tx_len - 2u;
+  TEST_ASSERT_LESS_THAN(sizeof(body), body_len);
+  memcpy(body, tx + 2u, body_len);
+  body[body_len] = '\0';
+  TEST_ASSERT_NOT_NULL(strstr(body, "{\"generic\":true}"));
+}
+
+void test_legacy_registry_wrappers_operate_on_default_router(void) {
+  hal_command_router_t router = register_generic_command();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_net_commands_unregister("generic"));
+
+  size_t count = 1u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_command_router_count(router, &count));
+  TEST_ASSERT_EQUAL_UINT(0u, count);
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_net_commands_register("echo", echo_handler, NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_command_router_count(router, &count));
+  TEST_ASSERT_EQUAL_UINT(1u, count);
+  hal_net_commands_clear();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_command_router_count(router, &count));
+  TEST_ASSERT_EQUAL_UINT(0u, count);
+}
+
+void test_response_keeps_legacy_aggregate_field_order(void) {
+  hal_net_command_response_t response = {HAL_OK,           "OK", "text/plain",
+                                         {'o', 'k', '\0'}, 2u,   false};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, response.status);
+  TEST_ASSERT_EQUAL_STRING("OK", response.message);
+  TEST_ASSERT_EQUAL_STRING("text/plain", response.content_type);
+  TEST_ASSERT_EQUAL_STRING("ok", response.body);
+  TEST_ASSERT_EQUAL_UINT(2u, response.body_len);
+  TEST_ASSERT_FALSE(response.overflow);
+  TEST_ASSERT_EQUAL_INT(HAL_COMMAND_ENCODING_BINARY, response.encoding);
+}
+
 void test_api_rejects_invalid_configuration(void) {
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
                         hal_net_commands_register(NULL, echo_handler, NULL));
@@ -255,6 +414,10 @@ int main(void) {
   RUN_TEST(test_http_route_dispatches_json_command);
   RUN_TEST(test_http_route_maps_command_permission_error);
   RUN_TEST(test_websocket_message_dispatches_and_replies);
+  RUN_TEST(test_default_router_handler_dispatches_through_text_and_json);
+  RUN_TEST(test_default_router_handler_dispatches_through_http_and_websocket);
+  RUN_TEST(test_legacy_registry_wrappers_operate_on_default_router);
+  RUN_TEST(test_response_keeps_legacy_aggregate_field_order);
   RUN_TEST(test_api_rejects_invalid_configuration);
   return UNITY_END();
 }

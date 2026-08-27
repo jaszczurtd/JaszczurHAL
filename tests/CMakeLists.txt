@@ -109,6 +109,52 @@ jh_enable_host_warnings(test_hal_lora_link_header_cpp ERRORS)
 add_test(NAME test_hal_lora_link_header_cpp
     COMMAND test_hal_lora_link_header_cpp)
 
+add_executable(test_hal_command_router_header_c
+    test_hal_command_router_header.c)
+target_compile_definitions(test_hal_command_router_header_c PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_COMMAND_ROUTER=1)
+target_include_directories(test_hal_command_router_header_c PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+jh_enable_host_warnings(test_hal_command_router_header_c ERRORS)
+add_test(NAME test_hal_command_router_header_c
+    COMMAND test_hal_command_router_header_c)
+
+add_executable(test_hal_command_router_header_cpp
+    test_hal_command_router_header.cpp)
+target_compile_definitions(test_hal_command_router_header_cpp PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_COMMAND_ROUTER=1)
+target_include_directories(test_hal_command_router_header_cpp PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+jh_enable_host_warnings(test_hal_command_router_header_cpp ERRORS)
+add_test(NAME test_hal_command_router_header_cpp
+    COMMAND test_hal_command_router_header_cpp)
+
+add_executable(test_hal_lora_commands_header_c
+    test_hal_lora_commands_header.c)
+target_compile_definitions(test_hal_lora_commands_header_c PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_SX126X=1
+    HAL_ENABLE_LORA_COMMANDS=1)
+target_include_directories(test_hal_lora_commands_header_c PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+jh_enable_host_warnings(test_hal_lora_commands_header_c ERRORS)
+add_test(NAME test_hal_lora_commands_header_c
+    COMMAND test_hal_lora_commands_header_c)
+
+add_executable(test_hal_lora_commands_header_cpp
+    test_hal_lora_commands_header.cpp)
+target_compile_definitions(test_hal_lora_commands_header_cpp PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_SX126X=1
+    HAL_ENABLE_LORA_COMMANDS=1)
+target_include_directories(test_hal_lora_commands_header_cpp PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+jh_enable_host_warnings(test_hal_lora_commands_header_cpp ERRORS)
+add_test(NAME test_hal_lora_commands_header_cpp
+    COMMAND test_hal_lora_commands_header_cpp)
+
 # The reliable link must remain usable without the optional crypto module.
 # Compile its implementation independently from the all-features mock library,
 # whose public definitions intentionally enable HAL_ENABLE_CRYPTO.
@@ -1322,6 +1368,9 @@ add_hal_test(test_hal_lora_radio_lifecycle)
 add_hal_test(test_hal_lora_radio)
 add_hal_test(test_hal_lora_link)
 add_hal_test(test_lora_link_frame)
+add_hal_test(test_hal_command_router)
+add_hal_test(test_hal_command_wire)
+add_hal_test(test_hal_lora_commands)
 add_hal_test(test_sx126x_adapter)
 
 add_executable(test_sx127x_adapter

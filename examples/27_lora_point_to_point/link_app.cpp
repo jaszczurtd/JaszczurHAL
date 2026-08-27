@@ -1,12 +1,14 @@
 /**
  * @file link_app.cpp
- * @brief Addressed, acknowledged and fragmented LoRa link example.
+ * @brief Fragmented command-router round trip over a reliable LoRa link.
  */
 
-#ifdef HAL_ENABLE_LORA_LINK
+#ifdef HAL_ENABLE_LORA_COMMANDS
 
+#include <hal/commands/hal_command_router.h>
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_status.h>
+#include <hal/radio/hal_lora_commands.h>
 #include <hal/radio/hal_lora_link.h>
 #include <hal/radio/hal_lora_radio.h>
 #include <hal/security/hal_crc.h>
@@ -14,7 +16,7 @@
 #include <hal/system/hal_system.h>
 #include <tools.h>
 
-#include <stdio.h>
+#include <stdint.h>
 #include <string.h>
 
 namespace {
@@ -23,24 +25,40 @@ constexpr uint16_t kInitiatorAddress = UINT16_C(0x1001);
 constexpr uint16_t kResponderAddress = UINT16_C(0x1002);
 constexpr uint8_t kApplicationPort = 1u;
 constexpr uint32_t kLfTestFrequencyHz = UINT32_C(434000000);
-constexpr uint32_t kTransmitPeriodMs = UINT32_C(5000);
-constexpr size_t kMessageLength = 360u;
+constexpr uint32_t kFirstRequestDelayMs = UINT32_C(1000);
+constexpr uint32_t kRequestPeriodMs = UINT32_C(3000);
+constexpr uint32_t kResponseTimeoutMs = UINT32_C(20000);
+constexpr uint32_t kReadyPeriodMs = UINT32_C(5000);
+constexpr size_t kPayloadLength = 500u;
+constexpr char kCommandName[] = "echo";
 
 #ifdef HAL_LORA_LINK_EXAMPLE_RESPONDER
 constexpr uint16_t kLocalAddress = kResponderAddress;
 constexpr uint16_t kPeerAddress = kInitiatorAddress;
+constexpr char kRole[] = "responder";
 #else
 constexpr uint16_t kLocalAddress = kInitiatorAddress;
 constexpr uint16_t kPeerAddress = kResponderAddress;
+constexpr char kRole[] = "initiator";
 #endif
 
 hal_lora_radio_t s_radio = nullptr;
 hal_lora_link_t s_link = nullptr;
+hal_command_router_t s_router = nullptr;
+hal_lora_commands_t s_commands = nullptr;
 bool s_ready = false;
+uint32_t s_handler_calls = 0u;
+uint32_t s_session_id = 0u;
+uint32_t s_next_ready_ms = 0u;
+
 #ifndef HAL_LORA_LINK_EXAMPLE_RESPONDER
-bool s_send_active = false;
-uint32_t s_application_sequence = 0u;
-uint32_t s_next_transmit_ms = 0u;
+uint8_t s_expected_payload[kPayloadLength]{};
+bool s_request_active = false;
+uint32_t s_expected_request_id = 0u;
+uint32_t s_expected_crc = 0u;
+uint32_t s_request_started_ms = 0u;
+uint32_t s_next_request_ms = 0u;
+uint32_t s_payload_generation = 0u;
 #endif
 
 hal_lora_modem_config_t modem_config(const hal_lora_radio_config_t &hardware) {
@@ -62,83 +80,195 @@ uint32_t example_session_id(void) {
          sizeof(kLocalAddress));
   uint32_t session_id = hal_crc32(seed, sizeof(seed));
   if (session_id == 0u) {
-    session_id = (uint32_t)kLocalAddress;
+    session_id = static_cast<uint32_t>(kLocalAddress);
   }
   return session_id;
 }
 
-void receive_messages(void) {
-  uint8_t message[HAL_LORA_LINK_MAX_MESSAGE_SIZE + 1u]{};
-  size_t length = 0u;
-  hal_lora_link_message_info_t info{};
-  const hal_status_t status = hal_lora_link_receive(
-      s_link, message, HAL_LORA_LINK_MAX_MESSAGE_SIZE, &length, &info);
-  if (status == HAL_EAGAIN) {
-    return;
+hal_status_t echo_handler(const hal_command_request_t *request,
+                          hal_command_response_t *response, void *) {
+  if (request == nullptr || response == nullptr) {
+    return HAL_EINVAL;
   }
+
+  uint8_t fragments = 0u;
+  int16_t rssi_dbm = 0;
+  int8_t snr_db = 0;
+  if (request->source == HAL_COMMAND_SOURCE_LORA_LINK &&
+      request->source_context != nullptr) {
+    const auto *link_info = static_cast<const hal_lora_link_message_info_t *>(
+        request->source_context);
+    fragments = link_info->fragment_count;
+    rssi_dbm = link_info->packet.rssi_dbm;
+    snr_db = link_info->packet.snr_db;
+  }
+
+  hal_status_t status =
+      hal_command_response_set_encoding(response, request->encoding);
+  if (status == HAL_OK) {
+    status = hal_command_response_write(response, request->arguments,
+                                        request->arguments_length);
+  }
+  const uint32_t crc = hal_crc32(request->arguments, request->arguments_length);
+  const uint32_t handler_call = ++s_handler_calls;
+  deb("JHCMD1 HANDLE id=%lu len=%u crc=%08lX fragments=%u status=%s "
+      "call=%lu source=%s peer=0x%04llX session=0x%08llX "
+      "security=0x%08lX rssi=%d snr=%d",
+      static_cast<unsigned long>(request->request_id),
+      static_cast<unsigned>(request->arguments_length),
+      static_cast<unsigned long>(crc), static_cast<unsigned>(fragments),
+      hal_status_to_string(status), static_cast<unsigned long>(handler_call),
+      hal_command_source_to_string(request->source),
+      static_cast<unsigned long long>(request->peer_id),
+      static_cast<unsigned long long>(request->session_id),
+      static_cast<unsigned long>(request->security_flags),
+      static_cast<int>(rssi_dbm), static_cast<int>(snr_db));
+  return status;
+}
+
+hal_status_t register_routes(void) {
+  hal_status_t status = hal_command_router_default(&s_router);
   if (status != HAL_OK) {
-    derr("Link receive failed: %s", hal_status_to_string(status));
-    return;
+    return status;
   }
-  message[length] = '\0';
-  deb("RX link src=0x%04X dst=0x%04X seq=%lu fragments=%u RSSI=%d dBm "
-      "SNR=%d dB bytes=%u prefix='%.48s'",
-      (unsigned)info.source, (unsigned)info.destination,
-      (unsigned long)info.sequence, (unsigned)info.fragment_count,
-      (int)info.packet.rssi_dbm, (int)info.packet.snr_db, (unsigned)length,
-      reinterpret_cast<const char *>(message));
+
+  hal_command_definition_t echo = {};
+  echo.name = kCommandName;
+  echo.allowed_sources = HAL_COMMAND_SOURCE_MASK(HAL_COMMAND_SOURCE_LORA_LINK) |
+                         HAL_COMMAND_SOURCE_MASK(HAL_COMMAND_SOURCE_BLE_STREAM);
+  echo.required_security = 0u;
+  echo.handler = echo_handler;
+  return hal_command_router_register(s_router, &echo);
+}
+
+void report_error(const char *stage, hal_status_t status) {
+  derr("JHCMD1 ERROR stage=%s status=%s", stage, hal_status_to_string(status));
+}
+
+void report_ready(void) {
+  deb("JHCMD1 READY role=%s local=0x%04X peer=0x%04X payload=%u "
+      "sources=LORA_LINK|BLE_STREAM session=0x%08lX",
+      kRole, static_cast<unsigned>(kLocalAddress),
+      static_cast<unsigned>(kPeerAddress),
+      static_cast<unsigned>(kPayloadLength),
+      static_cast<unsigned long>(s_session_id));
+  s_next_ready_ms = hal_millis() + kReadyPeriodMs;
+}
+
+void report_ready_if_due(void) {
+  if (static_cast<int32_t>(hal_millis() - s_next_ready_ms) >= 0) {
+    report_ready();
+  }
 }
 
 #ifndef HAL_LORA_LINK_EXAMPLE_RESPONDER
-void start_message(void) {
-  if (s_send_active || (int32_t)(hal_millis() - s_next_transmit_ms) < 0) {
+void fill_expected_payload(void) {
+  const uint32_t generation = ++s_payload_generation;
+  for (size_t index = 0u; index < sizeof(s_expected_payload); ++index) {
+    s_expected_payload[index] =
+        static_cast<uint8_t>(index * 29u + generation * 17u + (index >> 8u));
+  }
+  s_expected_crc = hal_crc32(s_expected_payload, sizeof(s_expected_payload));
+}
+
+void start_request(void) {
+  if (s_request_active ||
+      static_cast<int32_t>(hal_millis() - s_next_request_ms) < 0) {
     return;
   }
-  uint8_t message[kMessageLength]{};
-  const uint32_t sequence = ++s_application_sequence;
-  const int prefix_length =
-      snprintf(reinterpret_cast<char *>(message), sizeof(message),
-               "JHLINK1 message=%lu uptime=%lu fragmented payload: ",
-               (unsigned long)sequence, (unsigned long)hal_millis());
-  if (prefix_length <= 0 || (size_t)prefix_length >= sizeof(message)) {
+
+  fill_expected_payload();
+  uint32_t request_id = 0u;
+  const hal_status_t status = hal_lora_commands_request_start(
+      s_commands, kPeerAddress, kCommandName, HAL_COMMAND_ENCODING_BINARY,
+      s_expected_payload, sizeof(s_expected_payload), &request_id);
+  if (status == HAL_EBUSY || status == HAL_EAGAIN) {
+    s_next_request_ms = hal_millis() + 100u;
     return;
   }
-  for (size_t index = (size_t)prefix_length; index < sizeof(message); ++index) {
-    message[index] = (uint8_t)('A' + (index % 26u));
+  if (status != HAL_OK) {
+    report_error("request_start", status);
+    s_next_request_ms = hal_millis() + kRequestPeriodMs;
+    return;
   }
-  const hal_status_t status = hal_lora_link_send_start(
-      s_link, kPeerAddress, kApplicationPort, message, sizeof(message), true);
-  if (status == HAL_OK) {
-    s_send_active = true;
-    deb("TX link started: application=%lu bytes=%u destination=0x%04X",
-        (unsigned long)sequence, (unsigned)sizeof(message),
-        (unsigned)kPeerAddress);
-  } else {
-    derr("Link send start failed: %s", hal_status_to_string(status));
-    s_next_transmit_ms = hal_millis() + kTransmitPeriodMs;
+
+  hal_lora_commands_info_t info = {};
+  const hal_status_t info_status =
+      hal_lora_commands_get_info(s_commands, &info);
+  if (info_status != HAL_OK) {
+    report_error("request_info", info_status);
+  }
+
+  s_expected_request_id = request_id;
+  s_request_started_ms = hal_millis();
+  s_request_active = true;
+  deb("JHCMD1 REQUEST id=%lu len=%u crc=%08lX fragments=%u",
+      static_cast<unsigned long>(request_id),
+      static_cast<unsigned>(sizeof(s_expected_payload)),
+      static_cast<unsigned long>(s_expected_crc),
+      static_cast<unsigned>(info.link_send.fragment_count));
+}
+
+void receive_response(void) {
+  hal_command_message_t response = {};
+  hal_lora_link_message_info_t link_info = {};
+  const hal_status_t receive_status =
+      hal_lora_commands_receive(s_commands, &response, &link_info);
+  if (receive_status == HAL_EAGAIN) {
+    return;
+  }
+  if (receive_status != HAL_OK) {
+    report_error("receive", receive_status);
+    return;
+  }
+
+  const uint32_t response_crc =
+      hal_crc32(response.payload, response.payload_length);
+  const bool current_request = s_request_active &&
+                               response.type == HAL_COMMAND_MESSAGE_RESPONSE &&
+                               response.request_id == s_expected_request_id;
+  const bool length_matches =
+      response.payload_length == sizeof(s_expected_payload);
+  const bool payload_matches =
+      length_matches && memcmp(response.payload, s_expected_payload,
+                               sizeof(s_expected_payload)) == 0;
+  const bool matches = current_request && response.status == HAL_OK &&
+                       response.encoding == HAL_COMMAND_ENCODING_BINARY &&
+                       response_crc == s_expected_crc && payload_matches;
+
+  const hal_command_security_flags_t security_flags =
+      link_info.encrypted ? HAL_COMMAND_SECURITY_ALL : 0u;
+  deb("JHCMD1 RESPONSE id=%lu len=%u crc=%08lX fragments=%u status=%s "
+      "match=%u source=0x%04X session=0x%08lX security=0x%08lX "
+      "rssi=%d snr=%d",
+      static_cast<unsigned long>(response.request_id),
+      static_cast<unsigned>(response.payload_length),
+      static_cast<unsigned long>(response_crc),
+      static_cast<unsigned>(link_info.fragment_count),
+      hal_status_to_string(response.status), matches ? 1u : 0u,
+      static_cast<unsigned>(link_info.source),
+      static_cast<unsigned long>(link_info.session_id),
+      static_cast<unsigned long>(security_flags),
+      static_cast<int>(link_info.packet.rssi_dbm),
+      static_cast<int>(link_info.packet.snr_db));
+
+  if (current_request) {
+    s_request_active = false;
+    s_next_request_ms = hal_millis() + kRequestPeriodMs;
   }
 }
 
-void report_send_completion(void) {
-  if (!s_send_active) {
+void check_response_timeout(void) {
+  if (!s_request_active ||
+      hal_millis() - s_request_started_ms < kResponseTimeoutMs) {
     return;
   }
-  hal_lora_link_send_status_t send{};
-  const hal_status_t status = hal_lora_link_get_send_status(s_link, &send);
-  if (status != HAL_OK || send.state == HAL_LORA_OPERATION_IN_PROGRESS) {
-    return;
-  }
-  if (send.state == HAL_LORA_OPERATION_SUCCEEDED) {
-    deb("TX link acknowledged: sequence=%lu attempts=%u fragments=%u",
-        (unsigned long)send.sequence, (unsigned)send.attempts,
-        (unsigned)send.fragment_count);
-  } else {
-    derr("TX link failed: sequence=%lu result=%s attempts=%u",
-         (unsigned long)send.sequence, hal_status_to_string(send.result),
-         (unsigned)send.attempts);
-  }
-  s_send_active = false;
-  s_next_transmit_ms = hal_millis() + kTransmitPeriodMs;
+  derr("JHCMD1 TIMEOUT id=%lu len=%u crc=%08lX",
+       static_cast<unsigned long>(s_expected_request_id),
+       static_cast<unsigned>(sizeof(s_expected_payload)),
+       static_cast<unsigned long>(s_expected_crc));
+  s_request_active = false;
+  s_next_request_ms = hal_millis() + kRequestPeriodMs;
 }
 #endif
 
@@ -146,13 +276,8 @@ void report_send_completion(void) {
 
 extern "C" void app_start(void) {
   debugInit();
-#ifdef HAL_LORA_LINK_EXAMPLE_RESPONDER
-  deb("=== JaszczurHAL reliable LoRa link responder ===");
-#else
-  deb("=== JaszczurHAL reliable LoRa link initiator ===");
-#endif
 
-  hal_lora_radio_config_t hardware{};
+  hal_lora_radio_config_t hardware = {};
   hal_status_t status = hal_lora_radio_config_from_board(&hardware);
   if (status == HAL_OK) {
     status = hal_spi_init(hardware.spi_bus, hardware.spi_miso_pin,
@@ -165,22 +290,31 @@ extern "C" void app_start(void) {
     const hal_lora_modem_config_t modem = modem_config(hardware);
     status = hal_lora_radio_configure(s_radio, &modem);
   }
-  const uint32_t session_id = example_session_id();
+
+  s_session_id = example_session_id();
   if (status == HAL_OK) {
-    hal_lora_link_config_t config =
-        hal_lora_link_config_defaults(s_radio, kLocalAddress, session_id);
-    status = hal_lora_link_create(&config, &s_link);
+    hal_lora_link_config_t link_config =
+        hal_lora_link_config_defaults(s_radio, kLocalAddress, s_session_id);
+    status = hal_lora_link_create(&link_config, &s_link);
+  }
+  if (status == HAL_OK) {
+    status = register_routes();
+  }
+  if (status == HAL_OK) {
+    hal_lora_commands_config_t commands_config =
+        hal_lora_commands_config_defaults(s_link, kApplicationPort);
+    commands_config.router = s_router;
+    status = hal_lora_commands_create(&commands_config, &s_commands);
   }
   if (status != HAL_OK) {
-    derr("Reliable link setup failed: %s", hal_status_to_string(status));
+    report_error("setup", status);
     return;
   }
-  deb("Link ready: local=0x%04X peer=0x%04X session=0x%08lX",
-      (unsigned)kLocalAddress, (unsigned)kPeerAddress,
-      (unsigned long)session_id);
+
   s_ready = true;
+  report_ready();
 #ifndef HAL_LORA_LINK_EXAMPLE_RESPONDER
-  s_next_transmit_ms = hal_millis() + 500u;
+  s_next_request_ms = hal_millis() + kFirstRequestDelayMs;
 #endif
 }
 
@@ -189,15 +323,19 @@ extern "C" void app_task0(void) {
     hal_delay_ms(100u);
     return;
   }
-  const hal_status_t status = hal_lora_link_process(s_link);
-  if (status != HAL_OK && status != HAL_EAGAIN && status != HAL_IGNORED) {
-    derr("Link process failed: %s", hal_status_to_string(status));
+
+  const hal_status_t status = hal_lora_commands_process(s_commands);
+  if (status != HAL_OK && status != HAL_EAGAIN && status != HAL_IGNORED &&
+      status != HAL_ETIMEOUT) {
+    report_error("process", status);
   }
-  receive_messages();
+  report_ready_if_due();
+
 #ifndef HAL_LORA_LINK_EXAMPLE_RESPONDER
-  report_send_completion();
-  start_message();
+  receive_response();
+  check_response_timeout();
+  start_request();
 #endif
 }
 
-#endif /* HAL_ENABLE_LORA_LINK */
+#endif /* HAL_ENABLE_LORA_COMMANDS */

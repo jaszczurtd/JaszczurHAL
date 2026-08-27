@@ -14,6 +14,10 @@
 
 #include "hal/core/hal_bits.h"
 #include "hal/core/hal_config.h"
+#ifdef HAL_ENABLE_COMMAND_ROUTER
+#include "hal/commands/hal_command_router.h"
+#include "hal/commands/hal_command_wire.h"
+#endif
 #include "hal/system/hal_board.h"
 #ifdef HAL_ENABLE_BLE
 #include "hal/bluetooth/hal_ble.h"
@@ -26,6 +30,9 @@
 #endif
 #ifdef HAL_ENABLE_LORA_LINK
 #include "hal/radio/hal_lora_link.h"
+#endif
+#ifdef HAL_ENABLE_LORA_COMMANDS
+#include "hal/radio/hal_lora_commands.h"
 #endif
 #include "hal/core/hal_math.h"
 #include "hal/gpio/hal_gpio.h"

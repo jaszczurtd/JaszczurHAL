@@ -84,7 +84,7 @@
                     "stm32g474"
                 ],
                 "extraDefines": [
-                    "HAL_ENABLE_LORA_LINK=1"
+                    "HAL_ENABLE_LORA_COMMANDS=1"
                 ],
                 "gateTargets": [
                     "rp2040",
@@ -102,7 +102,7 @@
                     "stm32g474"
                 ],
                 "extraDefines": [
-                    "HAL_ENABLE_LORA_LINK=1",
+                    "HAL_ENABLE_LORA_COMMANDS=1",
                     "HAL_LORA_LINK_EXAMPLE_RESPONDER=1"
                 ],
                 "gateTargets": [

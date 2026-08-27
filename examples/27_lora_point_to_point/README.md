@@ -7,11 +7,18 @@ continuous receive. Build one device as the initiator and the other with the
 explicit calibration, current RSSI, CAD and standby.
 
 The `link` and `link-responder` variants replace the raw ping/pong application
-with `hal_lora_link`. The initiator sends an acknowledged 360-byte message to
-address `0x1002`; the responder at `0x1002` reassembles it and automatically
-returns an ACK. Since one plaintext link frame carries at most 230 data bytes,
-every successful exchange exercises fragmentation as well as addressing,
-message sequences, duplicate suppression and bounded retransmission.
+with `hal_lora_commands` over `hal_lora_link`. The initiator sends a binary
+500-byte `echo` request to address `0x1002`. The responder dispatches it through
+the shared command router and returns the exact bytes in a correlated response.
+Both the request and response occupy three plaintext link fragments, so a
+successful transaction covers command framing, request identifiers, route
+dispatch, response correlation, fragmentation, reassembly, duplicate
+suppression and bounded retransmission.
+
+The transport-neutral `echo` route allows both `LORA_LINK` and `BLE_STREAM`
+sources. This example implements only the LoRa adapter; the second source in
+the route policy demonstrates that the handler itself is ready to be reused by
+a later BLE Stream adapter.
 
 When the selected board exposes a GPIO status LED, the LED remains on during
 transmit and pulses for 120 ms after a packet is received. Boards without a
@@ -38,7 +45,7 @@ The representative gate builds the base initiator plus `probe`, `responder`,
 `responder-sf7` remain available through `jh-vscode`; they are excluded from
 the representative compile gate.
 
-Build only the reliable pair from the VS Code variant selector, or directly:
+Build only the command pair from the VS Code variant selector, or directly:
 
 ```bash
 vscode/entry/jh-vscode build \
@@ -50,7 +57,13 @@ vscode/entry/jh-vscode build \
   --variant link-responder
 ```
 
-The link example intentionally uses CRC-protected plaintext. Encrypted links
+For two integrated Waveshare LF boards, use `--target rp2040 --board
+rp2040-lora-lf` with the `link` and `link-responder` variants. The complete
+upload procedure, stable serial-port selection and `JHCMD1` acceptance criteria
+are maintained in the
+[central command-router hardware gate](../../doc/api/03_build_tests.md#sx1262-command-router-over-lora-hardware-gate).
+
+The command example intentionally uses CRC-protected plaintext. Encrypted links
 also require `HAL_ENABLE_CRYPTO`, a provisioned 32-byte secret and a session ID
 that is never reused for the same address/key. See the
 [reliable LoRa link API](../../doc/api/22_lora_link.md) before enabling AEAD.

@@ -101,6 +101,8 @@ set(UTIL_SOURCES
     ${SRC}/hal/bluetooth/hal_ble.cpp
     ${SRC}/hal/bluetooth/hal_ble_stream.cpp
     ${SRC}/hal/core/hal_config.cpp
+    ${SRC}/hal/commands/hal_command_router.cpp
+    ${SRC}/hal/commands/hal_command_wire.cpp
     ${SRC}/hal/gps/hal_gps.cpp
     ${SRC}/hal/rtc/hal_rtc.cpp
     ${SRC}/hal/security/hal_sc_auth.cpp
@@ -111,6 +113,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/temperature/hal_thermocouple.cpp
     ${SRC}/hal/radio/hal_lora_radio.cpp
     ${SRC}/hal/radio/hal_lora_link.cpp
+    ${SRC}/hal/radio/hal_lora_commands.cpp
     ${SRC}/hal/radio/jh_lora_link_frame.cpp
     ${SRC}/hal/radio/jh_lora_modem.cpp
     ${SRC}/hal/spi/hal_spi_device.cpp
@@ -238,8 +241,10 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_WIFI
     HAL_ENABLE_BLE
     HAL_ENABLE_BLE_STREAM
+    HAL_ENABLE_COMMAND_ROUTER
     HAL_ENABLE_SX126X       # propagates HAL_ENABLE_LORA + HAL_ENABLE_SPI
     HAL_ENABLE_LORA_LINK    # reliable private link over the selected radio
+    HAL_ENABLE_LORA_COMMANDS # command transport over the reliable LoRa link
     HAL_ENABLE_TIME
     HAL_ENABLE_MQTT
     HAL_ENABLE_UDP

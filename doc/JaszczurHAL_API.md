@@ -105,6 +105,7 @@ src/
   arpa/, netinet/, sys/     # host/embedded socket compatibility headers
   hal/                      # HAL umbrella + thematic shared domains
     hal.h                   # HAL-only umbrella include
+    commands/               # transport-neutral command router and wire messages
     core/                   # configuration, status, assertions, compatibility
     bluetooth/              # BLE public API, facade, and shared BTstack support
     i2c/, spi/, serial/     # bus and serial APIs with common implementations
@@ -116,8 +117,9 @@ src/
       tls/, wireguard/      # secure transports and reusable engines
       websocket/            # WebSocket public API and implementation
       net_console/          # remote console public API and implementation
-      net_commands/         # command API and implementation
+      net_commands/         # HTTP/WebSocket command adapter
       cyw43/, lwip/         # radio and IP-stack integration
+    radio/                  # raw LoRa, reliable link, and command adapter
     storage/                # EEPROM, KV, SD logger, filesystem, flash helpers
     display/, gpio/         # display/GFX and GPIO-oriented drivers
     analog/, audio/, can/   # additional thematic API and driver domains
@@ -314,10 +316,14 @@ logic from board-specific SDK calls:
   `hal_http_files`, `hal_websocket`, `hal_net_console`, `hal_net_commands`,
   `hal_notify`, `hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time`,
   `hal_ble`, and `hal_ble_stream`
+- `hal_command_router` and `hal_command_wire` for transport-neutral command
+  policy, dispatch and bounded binary messages
 - `hal_lora_radio` for provider-neutral raw LoRa operation with SX126x and
   SX127x family providers
 - `hal_lora_link` for addressed, acknowledged, fragmented private messages
   over one raw LoRa radio, with optional authenticated encryption
+- `hal_lora_commands` for command requests, responses and events over one
+  exclusively owned reliable LoRa link
 - devices and media: `hal_can`, `hal_display`, `hal_hd44780`, `hal_rgb_led`,
   `hal_thermocouple`, `hal_ds18b20`, `hal_rtc`, `hal_external_adc`,
   `hal_gps`, `hal_tsc2007`, `hal_stmpe610`, `hal_irsmall_decoder`,
@@ -425,6 +431,7 @@ The complete reference is split across the following focused documents:
 | 20 | [Bluetooth Low Energy](api/20_bluetooth.md) | Peripheral and Observer lifecycle, advertising and scanning, connection events, ATT MTU, authenticated Stream, bounded queues, board support, coexistence, and BTstack distribution boundary |
 | 21 | [Raw LoRa radio](api/21_lora.md) | Validated SX1262 profiles plus experimental software-only SX1261/SX1276/SX1278, asynchronous TX/RX/CAD, current RSSI, capabilities, callbacks, diagnostics and time-on-air |
 | 22 | [Reliable LoRa link](api/22_lora_link.md) | 16-bit addressing, message sequences, ACK/retry, duplicate suppression, fragmentation and optional ChaCha20-Poly1305 over `hal_lora_radio` |
+| 23 | [Command routing](api/23_commands.md) | Transport-neutral handler registration and policy, bounded request/response/event wire messages, network compatibility and the reliable LoRa command adapter |
 
 ---
 
@@ -438,6 +445,7 @@ The complete reference is split across the following focused documents:
 | `hal_adp5360` | [Sensors](api/11_sensors.md) |
 | `hal_bits` | [Timers and system](api/06_timers_system.md) |
 | `hal_can` | [CAN and display](api/10_can_display.md) |
+| `hal_command_router` / `hal_command_wire` | [Command routing](api/23_commands.md) |
 | `hal_crc` | [Utilities](api/16_utilities.md) |
 | `hal_crypto` | [Cryptography](api/07_crypto.md) |
 | `cJSON` / `cJSON_Utils` | [cJSON](api/17_cJSON.md) |
@@ -457,6 +465,7 @@ The complete reference is split across the following focused documents:
 | `hal_littlefs` | [Storage](api/14_storage.md) |
 | `hal_lora_radio` | [Raw LoRa radio](api/21_lora.md) |
 | `hal_lora_link` | [Reliable LoRa link](api/22_lora_link.md) |
+| `hal_lora_commands` | [Command routing](api/23_commands.md) |
 | `hal_math` | [Timers and system](api/06_timers_system.md) / [Output devices](api/13_output_devices.md) |
 | `hal_mcp23017` | [Output devices](api/13_output_devices.md) |
 | `hal_mcp3221` | [Sensors](api/11_sensors.md) |

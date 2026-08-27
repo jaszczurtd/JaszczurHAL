@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-11
 
+- Added a transport-neutral command router with binary-safe request metadata,
+  per-handler source/security policy, bounded responses and versioned binary
+  request/response/event messages. The network text/JSON API now dispatches
+  through the shared default router, and the new opt-in reliable-LoRa adapter
+  carries commands, automatic responses and events over one owned link. The
+  API leaves room for a separate BLE Stream adapter without presenting one as
+  available now.
 - Extended the Linux `runmefirst.sh` udev setup to cover RP2040/RP2350 USB CDC
   `/dev/ttyACM*` nodes, allowing the native uploader to perform its 1200-bps
   BOOTSEL reset without a manual permission or group change.
