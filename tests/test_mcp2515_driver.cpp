@@ -3,6 +3,7 @@
 #define private public
 #include "hal/can/mcp2515/mcp2515_driver.h"
 #undef private
+#include "hal/can/mcp2515/hal_can_mcp2515.h"
 
 /* MCP2515 datasheet (register map: TXBnSIDH/TXBnSIDL/TXBnEID8/TXBnEID0):
  * - Standard 11-bit ID uses SIDH[10:3] and SIDL[2:0] -> bits [2:0] shifted to
@@ -23,6 +24,50 @@ static void assert_spi_tx_equals(const uint8_t *expected, size_t expected_len) {
   for (size_t i = 0; i < expected_len; ++i) {
     TEST_ASSERT_EQUAL_UINT8(expected[i], tx[i]);
   }
+}
+
+static void assert_spi_tx_contains(const uint8_t *expected,
+                                   size_t expected_len) {
+  uint8_t tx[512] = {};
+  const size_t tx_len = hal_mock_spi_get_tx(0u, tx, sizeof(tx));
+  bool found = false;
+  for (size_t offset = 0u; offset + expected_len <= tx_len; ++offset) {
+    size_t matched = 0u;
+    while (matched < expected_len &&
+           tx[offset + matched] == expected[matched]) {
+      ++matched;
+    }
+    if (matched == expected_len) {
+      found = true;
+      break;
+    }
+  }
+  TEST_ASSERT_TRUE(found);
+}
+
+static void push_set_filter_rx_script(void) {
+  /* Successful CONFIG/NORMAL transitions for init_Mask and init_Filt. The
+   * latter also performs two RXBnCTRL bit-modify transactions. */
+  uint8_t rx_script[76] = {};
+  rx_script[13] = MODE_CONFIG;
+  rx_script[22] = MODE_CONFIG;
+  rx_script[47] = MODE_CONFIG;
+  rx_script[64] = MODE_CONFIG;
+  hal_mock_spi_push_rx(0u, rx_script, sizeof(rx_script));
+}
+
+static INT8U send_with_final_txctrl(JHMCP2515 *can, uint8_t txctrl,
+                                    uint8_t canctrl = MODE_ONESHOT) {
+  /* Empty standard frame: initial TXB0CTRL read, buffer writes, TXREQ bit
+   * modify, final TXB0CTRL read, then CANCTRL when a failure flag is present.
+   * Every register read returns its value on the third SPI byte. */
+  uint8_t rx_script[24] = {};
+  rx_script[2] = 0u;
+  rx_script[20] = txctrl;
+  rx_script[23] = canctrl;
+  hal_mock_spi_reset();
+  hal_mock_spi_push_rx(0u, rx_script, sizeof(rx_script));
+  return can->sendMsgBuf(0x123u, 0u, nullptr);
 }
 
 void setUp(void) {
@@ -256,6 +301,90 @@ void test_set_msg_clamps_dlc_to_8_and_write_does_not_overflow_payload(void) {
   assert_spi_tx_equals(expected, sizeof(expected));
 }
 
+void test_backend_set_filter_enables_filters_on_both_receive_buffers(void) {
+  JHMCP2515 can(10u, 0u);
+  hal_mock_spi_reset();
+  push_set_filter_rx_script();
+  const hal_can_filter_t filter = {0x127u, HAL_CAN_STD_ID_MASK, 0u};
+
+  TEST_ASSERT_TRUE(hal_can_mcp2515_set_filter(&can, 0u, &filter));
+
+  const uint8_t enable_rxb0_filters[] = {MCP_BITMOD, MCP_RXB0CTRL,
+                                         MCP_RXB_RX_MASK, MCP_RXB_RX_STDEXT};
+  const uint8_t enable_rxb1_filters[] = {MCP_BITMOD, MCP_RXB1CTRL,
+                                         MCP_RXB_RX_MASK, MCP_RXB_RX_STDEXT};
+  assert_spi_tx_contains(enable_rxb0_filters, sizeof(enable_rxb0_filters));
+  assert_spi_tx_contains(enable_rxb1_filters, sizeof(enable_rxb1_filters));
+}
+
+void test_one_shot_configuration_reports_readback_failure(void) {
+  JHMCP2515 can(10u, 0u);
+  hal_mock_spi_reset();
+  const uint8_t rx_script[7] = {};
+  hal_mock_spi_push_rx(0u, rx_script, sizeof(rx_script));
+
+  TEST_ASSERT_EQUAL_UINT8(CAN_FAIL, can.enOneShotTX());
+}
+
+void test_set_mode_caches_confirmed_hardware_mode(void) {
+  JHMCP2515 can(10u, 0u);
+  hal_mock_spi_reset();
+  uint8_t rx_script[14] = {};
+  rx_script[13] = MCP_LOOPBACK;
+  hal_mock_spi_push_rx(0u, rx_script, sizeof(rx_script));
+
+  TEST_ASSERT_EQUAL_UINT8(CAN_OK, can.setMode(MCP_LOOPBACK));
+  TEST_ASSERT_EQUAL_UINT8(MCP_LOOPBACK, can.mcpMode);
+}
+
+void test_send_reports_success_when_txreq_clears_without_error_flags(void) {
+  JHMCP2515 can(10u, 0u);
+
+  TEST_ASSERT_EQUAL_UINT8(CAN_OK, send_with_final_txctrl(&can, 0u));
+}
+
+void test_send_reports_failure_when_one_shot_sets_abtf(void) {
+  JHMCP2515 can(10u, 0u);
+
+  TEST_ASSERT_EQUAL_UINT8(CAN_FAILTX,
+                          send_with_final_txctrl(&can, MCP_TXB_ABTF_M));
+}
+
+void test_send_reports_failure_when_one_shot_sets_mloa(void) {
+  JHMCP2515 can(10u, 0u);
+
+  TEST_ASSERT_EQUAL_UINT8(CAN_FAILTX,
+                          send_with_final_txctrl(&can, MCP_TXB_MLOA_M));
+}
+
+void test_send_reports_failure_when_one_shot_sets_txerr(void) {
+  JHMCP2515 can(10u, 0u);
+
+  TEST_ASSERT_EQUAL_UINT8(CAN_FAILTX,
+                          send_with_final_txctrl(&can, MCP_TXB_TXERR_M));
+}
+
+void test_send_accepts_successful_normal_mode_retry_with_latched_errors(void) {
+  JHMCP2515 can(10u, 0u);
+
+  TEST_ASSERT_EQUAL_UINT8(
+      CAN_OK, send_with_final_txctrl(&can, MCP_TXB_MLOA_M | MCP_TXB_TXERR_M,
+                                     MCP_NORMAL));
+}
+
+void test_backend_send_propagates_one_shot_tx_failure(void) {
+  JHMCP2515 can(10u, 0u);
+
+  uint8_t rx_script[24] = {};
+  rx_script[2] = 0u;
+  rx_script[20] = MCP_TXB_ABTF_M | MCP_TXB_MLOA_M | MCP_TXB_TXERR_M;
+  rx_script[23] = MODE_ONESHOT;
+  hal_mock_spi_reset();
+  hal_mock_spi_push_rx(0u, rx_script, sizeof(rx_script));
+
+  TEST_ASSERT_FALSE(hal_can_mcp2515_send(&can, 0x123u, 0u, nullptr));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_set_gpo_uses_hal_spi_and_configures_cs_pin);
@@ -268,5 +397,14 @@ int main(void) {
   RUN_TEST(test_read_can_message_does_not_treat_srr_as_rtr_for_extended_frame);
   RUN_TEST(test_write_can_message_sets_rtr_bit_and_keeps_dlc_low_nibble);
   RUN_TEST(test_set_msg_clamps_dlc_to_8_and_write_does_not_overflow_payload);
+  RUN_TEST(test_backend_set_filter_enables_filters_on_both_receive_buffers);
+  RUN_TEST(test_one_shot_configuration_reports_readback_failure);
+  RUN_TEST(test_set_mode_caches_confirmed_hardware_mode);
+  RUN_TEST(test_send_reports_success_when_txreq_clears_without_error_flags);
+  RUN_TEST(test_send_reports_failure_when_one_shot_sets_abtf);
+  RUN_TEST(test_send_reports_failure_when_one_shot_sets_mloa);
+  RUN_TEST(test_send_reports_failure_when_one_shot_sets_txerr);
+  RUN_TEST(test_send_accepts_successful_normal_mode_retry_with_latched_errors);
+  RUN_TEST(test_backend_send_propagates_one_shot_tx_failure);
   return UNITY_END();
 }

@@ -1,5 +1,5 @@
 #include "hal/core/hal_target.h"
-#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474)
+#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK)
 
 #include "hal/core/hal_config.h"
 #if defined(HAL_ENABLE_CAN) && defined(HAL_ENABLE_MCP2515)
@@ -130,11 +130,13 @@ bool hal_can_mcp2515_init(JHMCP2515 *mcp, const hal_can_mcp2515_config_t *cfg) {
   if (mcp->begin(MCP_ANY, speed, clock) != CAN_OK) {
     return false;
   }
-  mcp->setMode(MCP_NORMAL);
-  if (cfg->one_shot_tx) {
-    mcp->enOneShotTX();
-  } else {
-    mcp->disOneShotTX();
+  if (mcp->setMode(MCP_NORMAL) != CAN_OK) {
+    return false;
+  }
+  const uint8_t one_shot_result =
+      cfg->one_shot_tx ? mcp->enOneShotTX() : mcp->disOneShotTX();
+  if (one_shot_result != CAN_OK) {
+    return false;
   }
   mcp->setSleepWakeup(cfg->sleep_wakeup ? 1u : 0u);
   return true;
@@ -370,4 +372,4 @@ bool hal_can_mcp2515_get_error_counters(JHMCP2515 *mcp,
 }
 
 #endif /* HAL_ENABLE_CAN && HAL_ENABLE_MCP2515 */
-#endif /* HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 */
+#endif /* HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK */

@@ -1212,6 +1212,7 @@ target_link_libraries(test_jh_gfx_geometry PRIVATE hal_mock)
 add_test(NAME test_jh_gfx_geometry COMMAND test_jh_gfx_geometry)
 add_executable(test_mcp2515_driver
     test_mcp2515_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/can/mcp2515/hal_can_mcp2515.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/can/mcp2515/mcp2515_driver.cpp
 )
 target_link_libraries(test_mcp2515_driver PRIVATE hal_mock)

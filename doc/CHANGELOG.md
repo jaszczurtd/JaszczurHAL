@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-11
 
+- Fixed MCP2515 one-shot transmission reporting so `hal_can_send()` returns
+  `false` when `TXREQ` clears with `ABTF`, `MLOA`, or `TXERR` set instead of
+  treating the failed attempt as a successful delivery. Receive filter setup
+  now disables receive-any mode on both RX buffers, and initialization rejects
+  failed normal-mode or one-shot-mode register readback.
 - Added a transport-neutral command router with binary-safe request metadata,
   per-handler source/security policy, bounded responses and versioned binary
   request/response/event messages. The network text/JSON API now dispatches
