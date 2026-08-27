@@ -35,6 +35,8 @@ typedef uint32_t INT32U;
 #define MCP_TXB_TXREQ_M 0x08
 #define MCP_TXB_TXIE_M 0x04
 #define MCP_TXB_TXP10_M 0x03
+#define MCP_TXB_TX_FAILURE_MASK                                                \
+  (MCP_TXB_ABTF_M | MCP_TXB_MLOA_M | MCP_TXB_TXERR_M)
 
 #define MCP_TXB_RTR_M 0x40
 #define MCP_RXB_IDE_M 0x08

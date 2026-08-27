@@ -111,8 +111,11 @@ void JHMCP2515::setSleepWakeup(const INT8U enable) {
 
 INT8U JHMCP2515::setMode(const INT8U opMode) {
   JHMCP2515Guard guard(*this);
-  mcpMode = opMode;
-  return mcp2515_setCANCTRL_Mode(mcpMode);
+  const INT8U result = mcp2515_setCANCTRL_Mode(opMode);
+  if (result == MCP2515_OK) {
+    mcpMode = opMode;
+  }
+  return result;
 }
 
 INT8U JHMCP2515::mcp2515_setCANCTRL_Mode(const INT8U newmode) {
@@ -605,10 +608,13 @@ INT8U JHMCP2515::init_Filt(INT8U num, INT8U ext, INT32U ulData) {
     res = MCP2515_FAIL;
     break;
   }
-  if (res == MCP2515_OK) {
-    res = mcp2515_setCANCTRL_Mode(mcpMode);
+  const INT8U filterResult = res;
+  if (filterResult == MCP2515_OK) {
+    mcp2515_modifyRegister(MCP_RXB0CTRL, MCP_RXB_RX_MASK, MCP_RXB_RX_STDEXT);
+    mcp2515_modifyRegister(MCP_RXB1CTRL, MCP_RXB_RX_MASK, MCP_RXB_RX_STDEXT);
   }
-  return res;
+  const INT8U modeResult = mcp2515_setCANCTRL_Mode(mcpMode);
+  return modeResult == MCP2515_OK ? filterResult : modeResult;
 }
 
 INT8U JHMCP2515::init_Filt(INT8U num, INT32U ulData) {
@@ -643,7 +649,7 @@ INT8U JHMCP2515::clearMsg() {
 }
 
 INT8U JHMCP2515::sendMsg() {
-  INT8U res, res1, txbuf_n;
+  INT8U res, txctrl, txbuf_n;
   uint32_t uiTimeOut, temp;
   temp = hal_micros();
   do {
@@ -657,11 +663,17 @@ INT8U JHMCP2515::sendMsg() {
                          MCP_TXB_TXREQ_M);
   temp = hal_micros();
   do {
-    res1 = (INT8U)(mcp2515_readRegister((INT8U)(txbuf_n - 1)) & 0x08u);
+    txctrl = mcp2515_readRegister((INT8U)(txbuf_n - 1));
     uiTimeOut = hal_micros() - temp;
-  } while (res1 && (uiTimeOut < TIMEOUTVALUE));
+  } while ((txctrl & MCP_TXB_TXREQ_M) != 0u && (uiTimeOut < TIMEOUTVALUE));
   if (uiTimeOut >= TIMEOUTVALUE)
     return CAN_SENDMSGTIMEOUT;
+  /* Normal mode can retain MLOA/TXERR from an attempt that was later retried
+   * successfully. In one-shot mode, cleared TXREQ plus any failure flag means
+   * the frame was not delivered. */
+  if ((txctrl & MCP_TXB_TX_FAILURE_MASK) != 0u &&
+      (mcp2515_readRegister(MCP_CANCTRL) & MODE_ONESHOT) != 0u)
+    return CAN_FAILTX;
   return CAN_OK;
 }
 

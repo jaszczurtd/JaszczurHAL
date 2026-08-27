@@ -229,7 +229,9 @@ State/error-counter APIs map backend controller registers into
 guarantees, so it is the portable slot count to rely on. MCP2515 maps them onto
 its six hardware filters; MCP251XFD and STM32G474 FDCAN map them onto the first
 six hardware filter objects routed to RX FIFO 0 (and may have more in hardware). `hal_can_set_std_filters()` remains a
-convenience helper for two exact 11-bit IDs.
+convenience helper for two exact 11-bit IDs. Programming an MCP2515 filter also
+clears receive-any mode on both hardware RX buffers so unmatched frames are
+rejected before consuming either buffer.
 `hal_can_create_with_retry()` retries init up to `max_retries + 1` attempts and can auto-attach an IRQ handler when `int_pin != HAL_CAN_NO_INT_PIN`.
 `hal_can_process_all()` repeatedly calls `hal_can_receive()` and forwards only frames with `id != 0` and `len > 0`.
 `hal_can_encode_temp_i8()` is a small shared wire-format helper for signed 1-byte temperature fields on CAN frames. It truncates the float input toward zero, saturates to `int8_t` range, and returns the matching two's complement payload byte.
@@ -240,9 +242,14 @@ the hardware frees the TX buffer immediately instead of retransmitting indefinit
 starvation: without one-shot, just 3 consecutive un-ACK'd frames permanently block all 3 TX buffers, making
 every subsequent `hal_can_send()` fail with `CAN_GETTXBFTIMEOUT`. For periodic broadcast applications (where
 fresh data is sent on the next timer tick anyway) one-shot has no practical downside - an individual lost frame
-is transparent to the receiver. When the bus is healthy and all receivers are present, one-shot behaviour is
-identical to normal mode: the first attempt succeeds and no retry is needed. `hal_can_send()` failure due to
-missing ACK is logged via `hal_derr_limited("can", ...)` to avoid serial flooding.
+is replaced by the next update. Change-only publishers must instead retry a
+failed send, add a periodic heartbeat, or disable `one_shot_tx`; otherwise one
+lost frame can leave the receiver stale. When the bus is healthy and all receivers are present, one-shot behaviour is
+identical to normal mode: the first attempt succeeds and no retry is needed. In
+one-shot mode, a missing ACK, lost arbitration, an aborted transmission, or a
+bus error is reported by `hal_can_send()` as `false` and logged via
+`hal_derr_limited("can", ...)` to avoid serial flooding. Normal mode continues
+hardware retransmission and reports success when a later attempt completes.
 
 ---
 
