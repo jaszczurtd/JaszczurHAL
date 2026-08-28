@@ -153,6 +153,10 @@ void tearDown(void) {
   /* Always leave the mock in a sane state for the next test. */
   hal_mock_set_in_isr(false);
   hal_mock_debug_isr_restore_default_ring();
+  hal_mock_debug_serial_full_reset();
+  /* stdout_capture_end() closes a pipe fd through the intercepted close(),
+   * which lazily creates the BSD sockets fd-table mutex as a side effect. */
+  hal_mock_bsd_sockets_reset();
 }
 
 void test_println_captured(void) {

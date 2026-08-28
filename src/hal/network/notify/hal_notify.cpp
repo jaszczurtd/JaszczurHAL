@@ -332,4 +332,25 @@ hal_status_t hal_notify_close(hal_notify_channel_t channel) {
   return HAL_OK;
 }
 
+#if HAL_TARGET_IS_MOCK
+/* Test-only: force the pool mutex and every context mutex through a real
+ * destroy so Helgrind/DRD can observe the teardown path, then mark the
+ * pool uninitialized so the next channel operation recreates them from
+ * scratch. Firmware never calls this. Call only when no other thread is
+ * using the notify pool. */
+void hal_mock_notify_full_reset(void) {
+  for (size_t index = 0u; index < HAL_NOTIFY_MAX_CHANNELS; ++index) {
+    if (s_contexts[index].mutex != NULL) {
+      hal_mutex_destroy(s_contexts[index].mutex);
+    }
+  }
+  memset(s_contexts, 0, sizeof(s_contexts));
+  if (s_pool_mutex != NULL) {
+    hal_mutex_destroy(s_pool_mutex);
+    s_pool_mutex = NULL;
+  }
+  s_pool_initialized = false;
+}
+#endif /* HAL_TARGET_IS_MOCK */
+
 #endif /* HAL_ENABLE_NOTIFY */

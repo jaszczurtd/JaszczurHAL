@@ -14,7 +14,11 @@ void setUp(void) {
   TEST_ASSERT_TRUE(hal_kv_init(0, 512));
 }
 
-void tearDown(void) {}
+void tearDown(void) {
+  hal_mock_kv_full_reset();
+  hal_mock_eeprom_reset();
+  hal_mock_debug_serial_full_reset();
+}
 
 void test_set_get_u32_and_reinit(void) {
   TEST_ASSERT_TRUE(hal_kv_set_u32(100, 0x12345678u));

@@ -275,6 +275,16 @@ void hal_gps_engine_mock_reset(void) {
   s_mock_injection_active = true;
   hal_mutex_unlock(s_mutex);
 }
+
+/* Test-only: force the singleton mutex through a real destroy so
+ * Helgrind/DRD can observe the teardown path. Firmware never calls this -
+ * the mutex is a process-lifetime singleton by design. */
+void hal_mock_gps_engine_full_reset(void) {
+  if (s_mutex != nullptr) {
+    hal_mutex_destroy(s_mutex);
+    s_mutex = nullptr;
+  }
+}
 #endif
 
 #endif /* HAL_ENABLE_GPS */

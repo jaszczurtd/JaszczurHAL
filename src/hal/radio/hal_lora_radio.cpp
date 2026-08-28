@@ -1528,4 +1528,25 @@ hal_status_t jh_lora_radio_set_provider_for_test(
 }
 #endif
 
+#if HAL_TARGET_IS_MOCK
+/* Test-only: force the pool mutex and every context mutex through a real
+ * destroy so Helgrind/DRD can observe the teardown path, then mark the
+ * pool uninitialized so the next radio operation recreates them from
+ * scratch. Firmware never calls this. Call only when no other thread is
+ * using the radio pool. */
+void hal_mock_lora_radio_dispatch_full_reset(void) {
+  for (size_t index = 0u; index < HAL_LORA_RADIO_MAX_INSTANCES; ++index) {
+    if (s_contexts[index].mutex != NULL) {
+      hal_mutex_destroy(s_contexts[index].mutex);
+    }
+  }
+  memset(s_contexts, 0, sizeof(s_contexts));
+  if (s_pool_mutex != NULL) {
+    hal_mutex_destroy(s_pool_mutex);
+    s_pool_mutex = NULL;
+  }
+  s_pool_initialized = false;
+}
+#endif /* HAL_TARGET_IS_MOCK */
+
 #endif /* HAL_ENABLE_LORA */

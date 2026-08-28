@@ -92,24 +92,18 @@ static hal_status_t finish_operation(jh_command_adapter_operation_t *operation,
 
 static void record_error(jh_lora_commands_context_t *context,
                          hal_status_t status) {
-  if (status != HAL_OK && status != HAL_EAGAIN && status != HAL_EBUSY &&
-      status != HAL_IGNORED) {
+  if (jh_command_adapter_status_is_hard(status)) {
     context->diagnostics.last_error = status;
   }
-}
-
-static bool process_status_is_hard(hal_status_t status) {
-  return status != HAL_OK && status != HAL_EAGAIN && status != HAL_EBUSY &&
-         status != HAL_IGNORED;
 }
 
 static hal_status_t select_process_status(hal_status_t link_status,
                                           hal_status_t operation_status,
                                           bool progressed) {
-  if (process_status_is_hard(link_status)) {
+  if (jh_command_adapter_status_is_hard(link_status)) {
     return link_status;
   }
-  if (process_status_is_hard(operation_status)) {
+  if (jh_command_adapter_status_is_hard(operation_status)) {
     return operation_status;
   }
   if (operation_status == HAL_IGNORED || link_status == HAL_IGNORED) {
@@ -624,5 +618,26 @@ hal_status_t hal_lora_commands_get_diagnostics(
   *out_diagnostics = context->diagnostics;
   return finish_operation(&operation, HAL_OK);
 }
+
+#if HAL_TARGET_IS_MOCK
+/* Test-only: force the pool mutex and every context mutex through a real
+ * destroy so Helgrind/DRD can observe the teardown path, then mark the
+ * pool uninitialized so the next adapter operation recreates them from
+ * scratch. Firmware never calls this. Call only when no other thread is
+ * using the adapter pool. */
+void hal_mock_lora_commands_full_reset(void) {
+  for (size_t index = 0u; index < HAL_LORA_LINK_MAX_INSTANCES; ++index) {
+    if (s_contexts[index].mutex != NULL) {
+      hal_mutex_destroy(s_contexts[index].mutex);
+    }
+  }
+  memset(s_contexts, 0, sizeof(s_contexts));
+  if (s_pool_mutex != NULL) {
+    hal_mutex_destroy(s_pool_mutex);
+    s_pool_mutex = NULL;
+  }
+  s_pool_initialized = false;
+}
+#endif /* HAL_TARGET_IS_MOCK */
 
 #endif /* HAL_ENABLE_LORA_COMMANDS */

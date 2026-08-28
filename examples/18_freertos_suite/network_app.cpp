@@ -593,9 +593,9 @@ static bool configure_services(void) {
   run_cjson_self_test();
   hal_http_server_clear_routes();
   hal_http_files_clear();
-  hal_net_commands_clear();
 
-  if (!require_status(
+  if (!require_status(hal_net_commands_clear(), "clear net commands") ||
+      !require_status(
           hal_net_commands_register("status", status_command, nullptr),
           "register status command") ||
       !require_status(hal_net_commands_register("echo", echo_command, nullptr),

@@ -55,6 +55,8 @@ hal_status_t
 jh_command_adapter_operation_finish(jh_command_adapter_operation_t *operation,
                                     hal_status_t status);
 
+bool jh_command_adapter_status_is_hard(hal_status_t status);
+
 uint32_t jh_command_adapter_next_request_id(uint32_t request_id);
 
 hal_status_t jh_command_adapter_prepare_message(

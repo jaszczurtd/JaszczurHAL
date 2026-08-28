@@ -938,6 +938,19 @@ void hal_mock_time_reset(void) {
     hal_udp_socket_close(socket);
   }
   service_leave();
+  /* Test-only: force every singleton mutex through a real destroy so
+   * Helgrind/DRD can observe the teardown path. Firmware never calls
+   * this - these mutexes are process-lifetime singletons by design. */
+  if (s_state_mutex != nullptr) {
+    hal_mutex_destroy(s_state_mutex);
+    s_state_mutex = nullptr;
+  }
+#ifdef HAL_ENABLE_RTC
+  if (s_rtc_operation_mutex != nullptr) {
+    hal_mutex_destroy(s_rtc_operation_mutex);
+    s_rtc_operation_mutex = nullptr;
+  }
+#endif
 }
 
 void hal_mock_time_set_unix(uint64_t unix_time) {

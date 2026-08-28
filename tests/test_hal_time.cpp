@@ -63,7 +63,10 @@ void setUp(void) {
   TEST_ASSERT_TRUE(hal_mock_net_set_dns_entry("time.nist.gov", "192.0.2.20"));
 }
 
-void tearDown(void) {}
+void tearDown(void) {
+  hal_mock_time_reset();
+  hal_mock_debug_serial_full_reset();
+}
 
 void test_timezone_and_ntp_sync_requests_are_recorded(void) {
   TEST_ASSERT_TRUE(hal_time_set_timezone("CET-1CEST,M3.5.0/2,M10.5.0/3"));

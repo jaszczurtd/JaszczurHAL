@@ -76,7 +76,11 @@ void setUp(void) {
   hal_mock_lora_reset();
 }
 
-void tearDown(void) { hal_mock_lora_reset(); }
+void tearDown(void) {
+  hal_mock_lora_reset();
+  hal_mock_lora_link_full_reset();
+  hal_mock_lora_radio_dispatch_full_reset();
+}
 
 void test_defaults_validation_lifecycle_and_stale_handles(void) {
   const hal_lora_link_config_t defaults =

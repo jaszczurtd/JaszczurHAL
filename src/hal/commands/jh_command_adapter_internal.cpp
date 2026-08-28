@@ -112,6 +112,11 @@ jh_command_adapter_operation_finish(jh_command_adapter_operation_t *operation,
   return end_status == HAL_OK ? status : end_status;
 }
 
+bool jh_command_adapter_status_is_hard(hal_status_t status) {
+  return status != HAL_OK && status != HAL_EAGAIN && status != HAL_EBUSY &&
+         status != HAL_IGNORED;
+}
+
 uint32_t jh_command_adapter_next_request_id(uint32_t request_id) {
   return request_id == UINT32_MAX ? UINT32_C(1) : request_id + UINT32_C(1);
 }

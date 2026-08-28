@@ -659,4 +659,31 @@ void hal_debug_loop(void) {
     hal_serial_println(drop_line);
   }
 }
+
+#if HAL_TARGET_IS_MOCK
+/* Test-only: force every debug/serial singleton mutex through a real
+ * destroy so Helgrind/DRD can observe the teardown path, then clear the
+ * lazy-init flag so the next hal_debug_init()/hal_debug_ensure_init() call
+ * recreates them from scratch. Firmware never calls this. */
+void hal_mock_debug_serial_full_reset(void) {
+  if (s_deb_mutex != NULL) {
+    hal_mutex_destroy(s_deb_mutex);
+    s_deb_mutex = NULL;
+  }
+  if (s_derr_mutex != NULL) {
+    hal_mutex_destroy(s_derr_mutex);
+    s_derr_mutex = NULL;
+  }
+  if (s_rl_mutex != NULL) {
+    hal_mutex_destroy(s_rl_mutex);
+    s_rl_mutex = NULL;
+  }
+  if (s_tx_mutex != NULL) {
+    hal_mutex_destroy(s_tx_mutex);
+    s_tx_mutex = NULL;
+  }
+  __atomic_store_n(&s_debug_initialized, false, __ATOMIC_RELEASE);
+}
+#endif /* HAL_TARGET_IS_MOCK */
+
 #endif // supported target

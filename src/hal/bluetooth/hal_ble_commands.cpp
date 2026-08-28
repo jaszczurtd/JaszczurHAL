@@ -103,8 +103,7 @@ hal_status_t finish_operation(jh_command_adapter_operation_t *operation,
 }
 
 void record_error(jh_ble_commands_context_t *context, hal_status_t status) {
-  if (status != HAL_OK && status != HAL_EAGAIN && status != HAL_EBUSY &&
-      status != HAL_IGNORED) {
+  if (jh_command_adapter_status_is_hard(status)) {
     context->diagnostics.last_error = status;
   }
 }
@@ -915,5 +914,24 @@ hal_status_t hal_ble_commands_get_diagnostics(
           ->diagnostics;
   return finish_operation(&operation, HAL_OK);
 }
+
+#if HAL_TARGET_IS_MOCK
+/* Test-only: force the pool mutex and the context mutex through a real
+ * destroy so Helgrind/DRD can observe the teardown path, then mark the
+ * pool uninitialized so the next adapter operation recreates them from
+ * scratch. Firmware never calls this. Call only when no other thread is
+ * using the adapter. */
+void hal_mock_ble_commands_full_reset(void) {
+  if (s_context.mutex != nullptr) {
+    hal_mutex_destroy(s_context.mutex);
+  }
+  memset(&s_context, 0, sizeof(s_context));
+  if (s_pool_mutex != nullptr) {
+    hal_mutex_destroy(s_pool_mutex);
+    s_pool_mutex = nullptr;
+  }
+  s_pool_initialized = false;
+}
+#endif /* HAL_TARGET_IS_MOCK */
 
 #endif /* HAL_ENABLE_BLE_COMMANDS */
