@@ -7,6 +7,12 @@
       "implies": ["HAL_ENABLE_CELLULAR_MODEM", "HAL_ENABLE_UART"]
     },
     "HAL_ENABLE_BLE": {},
+    "HAL_ENABLE_BLE_COMMANDS": {
+      "buildEffects": {
+        "portableSources": ["src/hal/bluetooth/hal_ble_commands.cpp"]
+      },
+      "implies": ["HAL_ENABLE_BLE_STREAM", "HAL_ENABLE_COMMAND_ROUTER"]
+    },
     "HAL_ENABLE_BLE_STREAM": {
       "implies": ["HAL_ENABLE_BLE", "HAL_ENABLE_CRYPTO"]
     },
@@ -116,6 +122,12 @@
         "HAL_ENABLE_UDP",
         "HAL_ENABLE_WIFI"
       ]
+    },
+    "HAL_ENABLE_SERIAL_COMMANDS": {
+      "buildEffects": {
+        "portableSources": ["src/hal/serial/hal_serial_commands.cpp"]
+      },
+      "implies": ["HAL_ENABLE_COMMAND_ROUTER"]
     },
     "HAL_ENABLE_SX126X": {
       "buildEffects": {

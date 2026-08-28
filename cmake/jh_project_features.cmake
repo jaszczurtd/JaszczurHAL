@@ -37,6 +37,7 @@ function(jh_all_features_for_target OUT_VAR TARGET_NAME)
         # BTstack and the CYW43 BLE backend are not enabled for Hazard3.
         list(REMOVE_ITEM _jh_all_features
             HAL_ENABLE_BLE
+            HAL_ENABLE_BLE_COMMANDS
             HAL_ENABLE_BLE_STREAM)
     endif()
     if(TARGET_NAME STREQUAL "rp2350-riscv")

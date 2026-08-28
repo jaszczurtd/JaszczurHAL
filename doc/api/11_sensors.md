@@ -970,6 +970,11 @@ and 7N1 and re-initialises the port once. This handles genuine u-blox modules
 //         framing after repeated checksum failures.
 void hal_gps_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud, uint16_t config);
 
+// Temporarily release the GPS transport while retaining the parsed fix.
+// Both operations are idempotent and return a hal_status_t result.
+hal_status_t hal_gps_pause(void);
+hal_status_t hal_gps_resume(void);
+
 // Drain available serial bytes into the parser.
 // Must be called frequently (normally every main-loop iteration) to move
 // buffered transport data into the NMEA parser.
@@ -1037,13 +1042,16 @@ deterministic engine state without reimplementing public getters.
 **Thread safety:** one internal `hal_mutex_t` protects parser state, mock
 injection, byte feeds and all accessors. Initialization remains a singleton
 init operation on hardware; mock initialization resets state for each test.
+Pause and resume are lifecycle operations: call them from the transport owner
+and do not overlap them with `hal_gps_update()`.
 
 **RP2040 transport and core affinity:**
 
 - With `HAL_GPS_TRANSPORT_SWSERIAL`, reception runs in PIO state machines and
   DMA writes the raw ring. There is no GPS RX ISR on either CPU core;
   `hal_gps_update()` consumes the DMA-backed buffer in its caller's task
-  context.
+  context. `hal_gps_pause()` stops that DMA and releases the PIO transport;
+  `hal_gps_resume()` recreates it with the saved pins, baud rate and framing.
 - With `HAL_GPS_TRANSPORT_UART`, `hal_gps_init()` calls `hal_uart_begin()`.
   The hardware UART RX IRQ is therefore installed on, and implicitly owned by,
   the core executing `hal_gps_init()`.

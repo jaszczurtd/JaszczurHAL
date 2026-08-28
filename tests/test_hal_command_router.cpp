@@ -13,6 +13,7 @@ uint32_t s_calls = 0u;
 hal_command_request_t s_last_request{};
 uint8_t s_arguments[32]{};
 hal_status_t s_reentrant_status = HAL_NONE;
+hal_status_t s_owned_reentrant_status = HAL_NONE;
 uint8_t s_user_marker = 0u;
 std::atomic<bool> s_blocking_handler_entered{false};
 std::atomic<bool> s_blocking_handler_may_return{false};
@@ -80,6 +81,15 @@ hal_status_t reentrant_handler(const hal_command_request_t *command_request,
   return HAL_OK;
 }
 
+hal_status_t
+owned_reentrant_handler(const hal_command_request_t *command_request,
+                        hal_command_response_t *, void *user) {
+  hal_command_router_t router = (hal_command_router_t)user;
+  s_owned_reentrant_status = hal_command_router_unregister_if_matches(
+      router, command_request->command, owned_reentrant_handler, user);
+  return HAL_OK;
+}
+
 hal_status_t blocking_handler(const hal_command_request_t *,
                               hal_command_response_t *, void *) {
   s_blocking_handler_entered.store(true, std::memory_order_release);
@@ -99,6 +109,7 @@ void setUp(void) {
   memset(&s_last_request, 0, sizeof(s_last_request));
   memset(s_arguments, 0, sizeof(s_arguments));
   s_reentrant_status = HAL_NONE;
+  s_owned_reentrant_status = HAL_NONE;
   s_blocking_handler_entered.store(false, std::memory_order_relaxed);
   s_blocking_handler_may_return.store(false, std::memory_order_relaxed);
 }
@@ -196,6 +207,90 @@ void test_register_copies_name_and_replaces_existing_route(void) {
       HAL_ENOENT, hal_command_router_unregister(s_default_router, "copy"));
 }
 
+void test_unique_registration_and_owned_unregister_preserve_foreign_route(
+    void) {
+  hal_command_definition_t owned = definition("owned", capture_handler);
+  owned.user = &s_user_marker;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_command_router_register_unique(s_default_router, &owned));
+
+  hal_command_definition_t foreign =
+      definition("owned", denied_handler,
+                 HAL_COMMAND_SOURCE_MASK(HAL_COMMAND_SOURCE_SERIAL_SESSION),
+                 HAL_COMMAND_SECURITY_AUTHENTICATED);
+  TEST_ASSERT_EQUAL_INT(HAL_EEXIST, hal_command_router_register_unique(
+                                        s_default_router, &foreign));
+
+  size_t count = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_command_router_count(s_default_router, &count));
+  TEST_ASSERT_EQUAL_UINT(1u, count);
+
+  hal_command_request_t command_request = request("owned");
+  hal_command_response_t response{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_command_router_dispatch(s_default_router,
+                                                            &command_request,
+                                                            &response));
+  TEST_ASSERT_EQUAL_UINT32(1u, s_calls);
+
+  TEST_ASSERT_EQUAL_INT(HAL_EBUSY, hal_command_router_unregister_if_matches(
+                                       s_default_router, "owned",
+                                       denied_handler, &s_user_marker));
+  TEST_ASSERT_EQUAL_INT(HAL_EBUSY,
+                        hal_command_router_unregister_if_matches(
+                            s_default_router, "owned", capture_handler, NULL));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_command_router_unregister_if_matches(
+                  s_default_router, "owned", capture_handler, &s_user_marker));
+  TEST_ASSERT_EQUAL_INT(HAL_ENOENT, hal_command_router_unregister_if_matches(
+                                        s_default_router, "owned",
+                                        capture_handler, &s_user_marker));
+}
+
+void test_concurrent_unique_registration_has_one_owner(void) {
+  hal_command_definition_t first = definition("race", capture_handler);
+  first.user = &s_user_marker;
+  hal_command_definition_t second = definition("race", response_status_handler);
+
+  std::atomic<uint32_t> ready{0u};
+  std::atomic<bool> start{false};
+  hal_status_t first_status = HAL_NONE;
+  hal_status_t second_status = HAL_NONE;
+  auto register_after_start = [&](const hal_command_definition_t *route,
+                                  hal_status_t *out_status) {
+    ready.fetch_add(1u, std::memory_order_release);
+    while (!start.load(std::memory_order_acquire)) {
+      std::this_thread::yield();
+    }
+    *out_status = hal_command_router_register_unique(s_default_router, route);
+  };
+
+  std::thread first_thread(register_after_start, &first, &first_status);
+  std::thread second_thread(register_after_start, &second, &second_status);
+  while (ready.load(std::memory_order_acquire) != 2u) {
+    std::this_thread::yield();
+  }
+  start.store(true, std::memory_order_release);
+  first_thread.join();
+  second_thread.join();
+
+  TEST_ASSERT_TRUE((first_status == HAL_OK && second_status == HAL_EEXIST) ||
+                   (first_status == HAL_EEXIST && second_status == HAL_OK));
+  size_t count = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_command_router_count(s_default_router, &count));
+  TEST_ASSERT_EQUAL_UINT(1u, count);
+  if (first_status == HAL_OK) {
+    TEST_ASSERT_EQUAL_INT(
+        HAL_OK, hal_command_router_unregister_if_matches(
+                    s_default_router, "race", capture_handler, &s_user_marker));
+  } else {
+    TEST_ASSERT_EQUAL_INT(
+        HAL_OK, hal_command_router_unregister_if_matches(
+                    s_default_router, "race", response_status_handler, NULL));
+  }
+}
+
 void test_independent_router_has_a_separate_registry(void) {
   hal_command_router_t private_router = NULL;
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_command_router_create(&private_router));
@@ -230,6 +325,20 @@ void test_active_route_cannot_remove_itself(void) {
                                                             &command_request,
                                                             &response));
   TEST_ASSERT_EQUAL_INT(HAL_EBUSY, s_reentrant_status);
+}
+
+void test_active_route_cannot_owned_unregister_itself(void) {
+  hal_command_definition_t route =
+      definition("owned_busy", owned_reentrant_handler);
+  route.user = s_default_router;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_command_router_register_unique(s_default_router, &route));
+  hal_command_request_t command_request = request("owned_busy");
+  hal_command_response_t response{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_command_router_dispatch(s_default_router,
+                                                            &command_request,
+                                                            &response));
+  TEST_ASSERT_EQUAL_INT(HAL_EBUSY, s_owned_reentrant_status);
 }
 
 void test_destroy_does_not_reuse_context_during_active_dispatch(void) {
@@ -316,6 +425,14 @@ void test_router_rejects_invalid_definitions_and_requests(void) {
                         hal_command_router_register(s_default_router, &route));
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
                         hal_command_router_register(s_default_router, NULL));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL, hal_command_router_register_unique(s_default_router, NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_command_router_unregister_if_matches(
+                            s_default_router, "missing", NULL, NULL));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL, hal_command_router_unregister_if_matches(
+                      s_default_router, "bad name", capture_handler, NULL));
 
   hal_command_request_t command_request = request("missing");
   hal_command_response_t response{};
@@ -334,8 +451,12 @@ int main(void) {
   RUN_TEST(test_dispatch_preserves_binary_arguments_and_metadata);
   RUN_TEST(test_source_and_security_policies_reject_before_handler);
   RUN_TEST(test_register_copies_name_and_replaces_existing_route);
+  RUN_TEST(
+      test_unique_registration_and_owned_unregister_preserve_foreign_route);
+  RUN_TEST(test_concurrent_unique_registration_has_one_owner);
   RUN_TEST(test_independent_router_has_a_separate_registry);
   RUN_TEST(test_active_route_cannot_remove_itself);
+  RUN_TEST(test_active_route_cannot_owned_unregister_itself);
   RUN_TEST(test_destroy_does_not_reuse_context_during_active_dispatch);
   RUN_TEST(test_router_rejects_invalid_definitions_and_requests);
   return UNITY_END();

@@ -30,6 +30,8 @@ endforeach()
 file(READ "${_facade}" _facade_contents)
 foreach(_owned_symbol IN ITEMS
         hal_gps_init
+        hal_gps_pause
+        hal_gps_resume
         hal_gps_update
         hal_gps_serial_available)
     if(NOT _facade_contents MATCHES "${_owned_symbol}[ \t\r\n]*\\(")

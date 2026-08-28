@@ -1486,6 +1486,7 @@ is intentionally not a second exhaustive test registry.
 | `test_hal_eeprom` | byte/int write-read, `commit` flag |
 | `test_hal_serial` | Serial wire/message boundaries, binary RX inject + `available`/`read`, task/ISR debug prefixes, accepted/rejected timestamps, rate-limit configuration/lifecycle/source isolation, streamed formatting beyond `HAL_DEBUG_BUF_SIZE`, ISR-deferred ring/drop summaries, mute and flush semantics |
 | `test_hal_serial_session` | Framed HELLO/AUTH lifecycle, deterministic and consecutive random challenges, entropy fail-closed behavior, challenge cleanup, command compatibility, unknown-handler dispatch, seq echo, malformed-frame drops and null-arg safety |
+| `test_hal_serial_commands`, `test_hal_serial_commands_header_c`, `test_hal_serial_commands_header_cpp` | Active-session gating and selected pre-HELLO routing, SC name/argument parsing, sequence/session/auth metadata, verbatim text responses, legacy formatting, prefix fallback, payload bounds, callback ownership, reentrant lifecycle safety and standalone C/C++ headers |
 | `test_hal_sc_auth` | Stable per-device key/response vectors, invalid-input output clearing and shared constant-time MAC comparison |
 | `test_jh_security_primitives` | Secure zeroization, constant-time equality/mismatch behavior, deterministic mock entropy vector and failure output clearing |
 | `test_security_architecture` | Compiled Serial Session/auth ownership, one shared entropy/zeroize/constant-time implementation, BLE adoption and source-manifest wiring |

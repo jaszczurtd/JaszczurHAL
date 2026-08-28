@@ -19,8 +19,8 @@ if(NOT _digest_length EQUAL 64)
 endif()
 
 list(LENGTH JH_HAL_FEATURE_SYMBOLS _symbol_count)
-if(NOT _symbol_count EQUAL 105)
-    message(FATAL_ERROR "Expected 105 registered symbols, got ${_symbol_count}")
+if(NOT _symbol_count EQUAL 107)
+    message(FATAL_ERROR "Expected 107 registered symbols, got ${_symbol_count}")
 endif()
 if(NOT "${JH_HAL_FEATURE_DERIVED_SYMBOLS}" STREQUAL
        "HAL_ENABLE_NETWORK_CORE")
@@ -33,6 +33,18 @@ endif()
 if(NOT "${JH_HAL_FEATURE_HAL_ENABLE_NET_COMMANDS_TRANSITIVE_IMPLIES}" STREQUAL
        "HAL_ENABLE_CJSON;HAL_ENABLE_COMMAND_ROUTER;HAL_ENABLE_HTTP_SERVER;HAL_ENABLE_NETWORK_CORE;HAL_ENABLE_TCP;HAL_ENABLE_WEBSOCKET;HAL_ENABLE_WIFI")
     message(FATAL_ERROR "NET_COMMANDS transitive dependency table drifted")
+endif()
+if(NOT "${JH_HAL_FEATURE_HAL_ENABLE_BLE_COMMANDS_IMPLIES}" STREQUAL
+       "HAL_ENABLE_BLE_STREAM;HAL_ENABLE_COMMAND_ROUTER" OR
+   NOT "${JH_HAL_FEATURE_HAL_ENABLE_BLE_COMMANDS_TRANSITIVE_IMPLIES}" STREQUAL
+       "HAL_ENABLE_BLE;HAL_ENABLE_BLE_STREAM;HAL_ENABLE_COMMAND_ROUTER;HAL_ENABLE_CRYPTO")
+    message(FATAL_ERROR "BLE_COMMANDS dependency table drifted")
+endif()
+if(NOT "${JH_HAL_FEATURE_HAL_ENABLE_SERIAL_COMMANDS_IMPLIES}" STREQUAL
+       "HAL_ENABLE_COMMAND_ROUTER" OR
+   NOT "${JH_HAL_FEATURE_HAL_ENABLE_SERIAL_COMMANDS_TRANSITIVE_IMPLIES}"
+       STREQUAL "HAL_ENABLE_COMMAND_ROUTER")
+    message(FATAL_ERROR "SERIAL_COMMANDS dependency table drifted")
 endif()
 if(NOT "${JH_HAL_FEATURE_HAL_ENABLE_NOTIFY_TELEGRAM_TRANSITIVE_IMPLIES}" STREQUAL
        "HAL_ENABLE_CJSON;HAL_ENABLE_HTTP_CLIENT;HAL_ENABLE_NETWORK_CORE;HAL_ENABLE_NOTIFY;HAL_ENABLE_TCP;HAL_ENABLE_TLS;HAL_ENABLE_WIFI")
@@ -52,13 +64,24 @@ if(NOT "${JH_HAL_FEATURE_HAL_ENABLE_TLS_BUILD_EFFECT_DEPENDENCIES}" STREQUAL
 endif()
 jh_hal_resolve_build_effects(
     _effect_sources _portable_sources _effect_dependencies
-    HAL_ENABLE_LITTLEFS HAL_ENABLE_MQTT HAL_ENABLE_TLS HAL_ENABLE_UNITY)
+    HAL_ENABLE_BLE_COMMANDS HAL_ENABLE_LITTLEFS HAL_ENABLE_MQTT
+    HAL_ENABLE_SERIAL_COMMANDS HAL_ENABLE_TLS HAL_ENABLE_UNITY)
 if(NOT "${_effect_dependencies}" STREQUAL "bearssl;littlefs")
     message(FATAL_ERROR "Resolved managed build dependencies drifted")
 endif()
 list(FIND _effect_sources "src/utils/unity.c" _unity_source_index)
 if(_unity_source_index EQUAL -1)
     message(FATAL_ERROR "Unity feature source effect is missing")
+endif()
+list(FIND _portable_sources
+    "src/hal/bluetooth/hal_ble_commands.cpp" _ble_commands_source_index)
+if(_ble_commands_source_index EQUAL -1)
+    message(FATAL_ERROR "BLE command portable source effect is missing")
+endif()
+list(FIND _portable_sources
+    "src/hal/serial/hal_serial_commands.cpp" _serial_commands_source_index)
+if(_serial_commands_source_index EQUAL -1)
+    message(FATAL_ERROR "Serial command portable source effect is missing")
 endif()
 if(NOT "${JH_HAL_FEATURE_HAL_ENABLE_LORA_LINK_TRANSITIVE_IMPLIES}" STREQUAL
        "HAL_ENABLE_CRC;HAL_ENABLE_LORA")
@@ -74,6 +97,25 @@ endif()
 if(NOT "${_resolved}" STREQUAL
        "HAL_ENABLE_BLE;HAL_ENABLE_BLE_STREAM;HAL_ENABLE_CRYPTO;HAL_ENABLE_MQTT;HAL_ENABLE_NETWORK_CORE;HAL_ENABLE_TCP;HAL_ENABLE_WIFI")
     message(FATAL_ERROR "Unexpected resolved feature set: ${_resolved}")
+endif()
+
+jh_hal_resolve_features(_ble_commands_requested _ble_commands_resolved
+    HAL_ENABLE_BLE_COMMANDS)
+if(NOT "${_ble_commands_requested}" STREQUAL "HAL_ENABLE_BLE_COMMANDS" OR
+   NOT "${_ble_commands_resolved}" STREQUAL
+       "HAL_ENABLE_BLE;HAL_ENABLE_BLE_COMMANDS;HAL_ENABLE_BLE_STREAM;HAL_ENABLE_COMMAND_ROUTER;HAL_ENABLE_CRYPTO")
+    message(FATAL_ERROR
+        "Unexpected BLE command feature set: ${_ble_commands_resolved}")
+endif()
+
+jh_hal_resolve_features(_serial_commands_requested _serial_commands_resolved
+    HAL_ENABLE_SERIAL_COMMANDS)
+if(NOT "${_serial_commands_requested}" STREQUAL
+       "HAL_ENABLE_SERIAL_COMMANDS" OR
+   NOT "${_serial_commands_resolved}" STREQUAL
+       "HAL_ENABLE_COMMAND_ROUTER;HAL_ENABLE_SERIAL_COMMANDS")
+    message(FATAL_ERROR
+        "Unexpected Serial command feature set: ${_serial_commands_resolved}")
 endif()
 
 foreach(_target IN ITEMS rp2040 rp2350-arm rp2350-riscv stm32g474)
@@ -99,20 +141,32 @@ endforeach()
 
 jh_all_features_for_target(_rp2040_features rp2040)
 list(FIND _rp2040_features HAL_ENABLE_BLE _rp2040_ble_index)
+list(FIND _rp2040_features HAL_ENABLE_BLE_COMMANDS _rp2040_ble_commands_index)
 list(FIND _rp2040_features HAL_ENABLE_OTA _rp2040_ota_index)
-if(_rp2040_ble_index EQUAL -1 OR _rp2040_ota_index EQUAL -1)
-    message(FATAL_ERROR "RP2040 all-features profile omitted BLE or OTA")
+if(_rp2040_ble_index EQUAL -1 OR _rp2040_ble_commands_index EQUAL -1 OR
+   _rp2040_ota_index EQUAL -1)
+    message(FATAL_ERROR
+        "RP2040 all-features profile omitted BLE commands or OTA")
 endif()
 
 jh_all_features_for_target(_rp2350_arm_features rp2350-arm)
 list(FIND _rp2350_arm_features HAL_ENABLE_BLE _rp2350_arm_ble_index)
+list(FIND _rp2350_arm_features HAL_ENABLE_BLE_COMMANDS
+    _rp2350_arm_ble_commands_index)
 list(FIND _rp2350_arm_features HAL_ENABLE_OTA _rp2350_arm_ota_index)
-if(_rp2350_arm_ble_index EQUAL -1 OR _rp2350_arm_ota_index EQUAL -1)
-    message(FATAL_ERROR "RP2350 ARM all-features profile omitted BLE or OTA")
+if(_rp2350_arm_ble_index EQUAL -1 OR
+   _rp2350_arm_ble_commands_index EQUAL -1 OR
+   _rp2350_arm_ota_index EQUAL -1)
+    message(FATAL_ERROR
+        "RP2350 ARM all-features profile omitted BLE commands or OTA")
 endif()
 
 jh_all_features_for_target(_rp2350_riscv_features rp2350-riscv)
-foreach(_unsupported IN ITEMS HAL_ENABLE_BLE HAL_ENABLE_OTA)
+foreach(_unsupported IN ITEMS
+        HAL_ENABLE_BLE
+        HAL_ENABLE_BLE_COMMANDS
+        HAL_ENABLE_BLE_STREAM
+        HAL_ENABLE_OTA)
     list(FIND _rp2350_riscv_features "${_unsupported}" _unsupported_index)
     if(NOT _unsupported_index EQUAL -1)
         message(FATAL_ERROR
@@ -121,7 +175,11 @@ foreach(_unsupported IN ITEMS HAL_ENABLE_BLE HAL_ENABLE_OTA)
 endforeach()
 
 jh_all_features_for_target(_stm32_features stm32g474)
-foreach(_supported IN ITEMS HAL_ENABLE_BLE HAL_ENABLE_OTA HAL_ENABLE_STM32G474_FDCAN)
+foreach(_supported IN ITEMS
+        HAL_ENABLE_BLE
+        HAL_ENABLE_BLE_COMMANDS
+        HAL_ENABLE_OTA
+        HAL_ENABLE_STM32G474_FDCAN)
     list(FIND _stm32_features "${_supported}" _supported_index)
     if(_supported_index EQUAL -1)
         message(FATAL_ERROR

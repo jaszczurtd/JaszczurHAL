@@ -343,8 +343,8 @@ registered_names = {
 }
 examples_dispatcher.validate_example_registry()
 require(
-    len(examples_dispatcher.EXAMPLES) == 27 and len(registered_names) == 27,
-    "dispatcher registry must contain exactly 27 active examples",
+    len(examples_dispatcher.EXAMPLES) == 28 and len(registered_names) == 28,
+    "dispatcher registry must contain exactly 28 active examples",
 )
 require(
     registered_names == manifest_example_names,
@@ -456,35 +456,35 @@ for example_dir in example_dirs:
 require(
     example_counts
     == {
-        "rp2040": 26,
-        "rp2350-arm": 25,
-        "rp2350-riscv": 21,
-        "stm32g474": 25,
+        "rp2040": 27,
+        "rp2350-arm": 26,
+        "rp2350-riscv": 22,
+        "stm32g474": 26,
     },
     f"declared example target matrix changed without review: {example_counts}",
 )
 require(
     full_configuration_counts
     == {
-        "rp2040": 34,
-        "rp2350-arm": 27,
-        "rp2350-riscv": 22,
-        "stm32g474": 33,
+        "rp2040": 37,
+        "rp2350-arm": 30,
+        "rp2350-riscv": 23,
+        "stm32g474": 36,
     }
-    and sum(full_configuration_counts.values()) == 116,
-    "full example build matrix must contain exactly 116 configurations: "
+    and sum(full_configuration_counts.values()) == 126,
+    "full example build matrix must contain exactly 126 configurations: "
     f"{full_configuration_counts}",
 )
 require(
     gate_configuration_counts
     == {
-        "rp2040": 32,
+        "rp2040": 35,
         "rp2350-arm": 1,
         "rp2350-riscv": 0,
-        "stm32g474": 30,
+        "stm32g474": 31,
     }
-    and sum(gate_configuration_counts.values()) == 63,
-    "example gate matrix must contain exactly 63 configurations: "
+    and sum(gate_configuration_counts.values()) == 67,
+    "example gate matrix must contain exactly 67 configurations: "
     f"{gate_configuration_counts}",
 )
 required_feature_surface = {
@@ -493,6 +493,7 @@ required_feature_surface = {
     "HAL_ENABLE_APP_TASK1",
     "HAL_ENABLE_BH1750",
     "HAL_ENABLE_BLE",
+    "HAL_ENABLE_BLE_COMMANDS",
     "HAL_ENABLE_BLE_STREAM",
     "HAL_ENABLE_BSD_SOCKETS",
     "HAL_ENABLE_CJSON",
@@ -538,6 +539,7 @@ required_feature_surface = {
     "HAL_ENABLE_RGB_LED",
     "HAL_ENABLE_RTC",
     "HAL_ENABLE_SDLOGGER",
+    "HAL_ENABLE_SERIAL_COMMANDS",
     "HAL_ENABLE_SSD1306",
     "HAL_ENABLE_SSD16XX",
     "HAL_ENABLE_STM32G474_FDCAN",

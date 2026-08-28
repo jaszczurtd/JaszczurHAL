@@ -10,7 +10,8 @@
       "buildEffects": {
         "portableSources": [
           "src/hal/commands/hal_command_router.cpp",
-          "src/hal/commands/hal_command_wire.cpp"
+          "src/hal/commands/hal_command_wire.cpp",
+          "src/hal/commands/jh_command_adapter_internal.cpp"
         ]
       }
     },

@@ -294,9 +294,10 @@ hal_status_t hal_command_router_destroy(hal_command_router_t router) {
   return status == HAL_OK ? finish_status : status;
 }
 
-hal_status_t jh_command_router_register_erased(
-    hal_command_router_t router,
-    const jh_command_router_definition_t *definition) {
+static hal_status_t
+command_router_register_erased(hal_command_router_t router,
+                               const jh_command_router_definition_t *definition,
+                               bool replace_existing) {
   size_t name_length = 0u;
   if (definition == NULL ||
       !jh_command_name_valid(definition->name, &name_length) ||
@@ -316,8 +317,13 @@ hal_status_t jh_command_router_register_erased(
     return status;
   }
   jh_command_slot_t *slot = find_command(context, definition->name, NULL);
-  if (slot != NULL && slot->active_dispatches != 0u) {
-    return context_finish_with_status(context, &lease, HAL_EBUSY);
+  if (slot != NULL) {
+    if (!replace_existing) {
+      return context_finish_with_status(context, &lease, HAL_EEXIST);
+    }
+    if (slot->active_dispatches != 0u) {
+      return context_finish_with_status(context, &lease, HAL_EBUSY);
+    }
   }
   if (slot == NULL) {
     for (size_t index = 0u; index < HAL_COMMAND_ROUTER_MAX_COMMANDS; ++index) {
@@ -344,25 +350,53 @@ hal_status_t jh_command_router_register_erased(
   return context_finish(context, &lease);
 }
 
-hal_status_t
-hal_command_router_register(hal_command_router_t router,
-                            const hal_command_definition_t *definition) {
+hal_status_t jh_command_router_register_erased(
+    hal_command_router_t router,
+    const jh_command_router_definition_t *definition) {
+  return command_router_register_erased(router, definition, true);
+}
+
+static hal_status_t
+make_public_definition(const hal_command_definition_t *definition,
+                       jh_command_router_definition_t *out_erased) {
   static_assert(sizeof(hal_command_handler_t) <=
                     JH_COMMAND_ROUTER_CALLBACK_STORAGE_SIZE,
                 "command callback storage is too small");
-  if (definition == NULL || definition->handler == NULL) {
+  if (definition == NULL || definition->handler == NULL || out_erased == NULL) {
     return HAL_EINVAL;
   }
-  jh_command_router_definition_t erased = {};
-  erased.name = definition->name;
-  erased.allowed_sources = definition->allowed_sources;
-  erased.required_security = definition->required_security;
-  erased.invoke = invoke_public_handler;
-  erased.callback =
+  memset(out_erased, 0, sizeof(*out_erased));
+  out_erased->name = definition->name;
+  out_erased->allowed_sources = definition->allowed_sources;
+  out_erased->required_security = definition->required_security;
+  out_erased->invoke = invoke_public_handler;
+  out_erased->callback =
       reinterpret_cast<const unsigned char *>(&definition->handler);
-  erased.callback_size = sizeof(definition->handler);
-  erased.user = definition->user;
+  out_erased->callback_size = sizeof(definition->handler);
+  out_erased->user = definition->user;
+  return HAL_OK;
+}
+
+hal_status_t
+hal_command_router_register(hal_command_router_t router,
+                            const hal_command_definition_t *definition) {
+  jh_command_router_definition_t erased = {};
+  const hal_status_t status = make_public_definition(definition, &erased);
+  if (status != HAL_OK) {
+    return status;
+  }
   return jh_command_router_register_erased(router, &erased);
+}
+
+hal_status_t
+hal_command_router_register_unique(hal_command_router_t router,
+                                   const hal_command_definition_t *definition) {
+  jh_command_router_definition_t erased = {};
+  const hal_status_t status = make_public_definition(definition, &erased);
+  if (status != HAL_OK) {
+    return status;
+  }
+  return command_router_register_erased(router, &erased, false);
 }
 
 hal_status_t hal_command_router_unregister(hal_command_router_t router,
@@ -383,6 +417,38 @@ hal_status_t hal_command_router_unregister(hal_command_router_t router,
   if (slot->active_dispatches != 0u) {
     return context_finish_with_status(context, &lease, HAL_EBUSY);
   }
+  memset(slot, 0, sizeof(*slot));
+  return context_finish(context, &lease);
+}
+
+hal_status_t hal_command_router_unregister_if_matches(
+    hal_command_router_t router, const char *name,
+    hal_command_handler_t handler, void *user) {
+  if (!jh_command_name_valid(name, NULL) || handler == NULL) {
+    return HAL_EINVAL;
+  }
+  jh_handle_lease_t lease = {};
+  jh_command_router_context_t *context = NULL;
+  hal_status_t status = context_acquire(router, &lease, &context);
+  if (status != HAL_OK) {
+    return status;
+  }
+  jh_command_slot_t *slot = find_command(context, name, NULL);
+  if (slot == NULL) {
+    return context_finish_with_status(context, &lease, HAL_ENOENT);
+  }
+
+  hal_command_handler_t registered_handler = NULL;
+  if (slot->invoke != invoke_public_handler ||
+      slot->callback_size != sizeof(registered_handler) || slot->user != user) {
+    return context_finish_with_status(context, &lease, HAL_EBUSY);
+  }
+  memcpy(reinterpret_cast<unsigned char *>(&registered_handler), slot->callback,
+         sizeof(registered_handler));
+  if (registered_handler != handler || slot->active_dispatches != 0u) {
+    return context_finish_with_status(context, &lease, HAL_EBUSY);
+  }
+
   memset(slot, 0, sizeof(*slot));
   return context_finish(context, &lease);
 }

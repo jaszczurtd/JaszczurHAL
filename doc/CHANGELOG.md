@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-11
 
+- Fixed bare-metal RP dual-core startup so the core-1 flash-safety bootstrap
+  completes before `app_start()`, while `app_task1()` still waits for all
+  application initialization. EEPROM/KV can now initialize blank flash during
+  `app_start()` without an unsafe-core rejection from the Pico SDK.
+- Added idempotent `hal_gps_pause()` and `hal_gps_resume()` lifecycle
+  operations. They release and recreate the selected transport while retaining
+  parsed fix state, so an RP2040 application can stop long-running GPS DMA
+  before a flash transaction and resume reception afterward.
+- Added the opt-in `hal_serial_commands` adapter for synchronous TEXT/JSON
+  dispatch from active framed serial sessions. It preserves SC command names,
+  sequence numbers and textual handler bodies, reports only authenticated
+  session state to router policy, supports a legacy response formatter plus a
+  prefix-selected fallback, and safely owns the session's unknown-payload
+  callback. Serial Session also gains status-first callback attach/detach,
+  current-request sequence and framed-print APIs. A dedicated multi-target
+  example demonstrates router registration, framed exchange and lifecycle
+  rollback without external hardware.
+- Added the opt-in `hal_ble_commands` adapter over authenticated JH BLE Stream
+  sessions. It fragments and reassembles full command-wire messages according
+  to the negotiated ATT MTU, dispatches requests with BLE peer/session and full
+  Stream security metadata, sends automatic bounded responses, exposes
+  bidirectional requests/events, and closes a session when lost or malformed
+  chunks make byte-stream alignment unsafe. BLE Stream now exposes immutable
+  per-payload session/counter metadata while retaining its original receive
+  API. Command adapters share internal message preparation and response
+  encoding between BLE and LoRa. The trailing additions to the BLE snapshot
+  structures preserve source compatibility; consumers of prebuilt static
+  libraries must rebuild so caller and library structure sizes match.
 - Fixed MCP2515 one-shot transmission reporting so `hal_can_send()` returns
   `false` when `TXREQ` clears with `ABTF`, `MLOA`, or `TXERR` set instead of
   treating the failed attempt as a successful delivery. Receive filter setup
@@ -14,8 +42,9 @@ All notable changes to this project will be documented in this file.
   request/response/event messages. The network text/JSON API now dispatches
   through the shared default router, and the new opt-in reliable-LoRa adapter
   carries commands, automatic responses and events over one owned link. The
-  API leaves room for a separate BLE Stream adapter without presenting one as
-  available now.
+  source and wire APIs are shared with the BLE Stream adapter. Shared-router
+  services can now register without replacing an existing name and remove only
+  a matching public handler/user pair.
 - Extended the Linux `runmefirst.sh` udev setup to cover RP2040/RP2350 USB CDC
   `/dev/ttyACM*` nodes, allowing the native uploader to perform its 1200-bps
   BOOTSEL reset without a manual permission or group change.

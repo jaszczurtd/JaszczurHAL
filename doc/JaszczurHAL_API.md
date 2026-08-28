@@ -416,7 +416,7 @@ The complete reference is split across the following focused documents:
 | 5 | [GPIO, ADC and PWM](api/05_gpio_adc_pwm.md) | `hal_gpio`, `hal_pwm`, `hal_dac`, `hal_pcnt`, `hal_pwm_freq`, `hal_dacless`, `hal_adc` |
 | 6 | [Timers and system](api/06_timers_system.md) | `hal_timer` (alarms + managed timers), `hal_system` (millis/watchdog/crash diagnostics/UID), `hal_power` (Sleep/deep-sleep/power-down transitions), `hal_bits`, `hal_compiler` (portable attributes and builtins), `hal_math` |
 | 7 | [Cryptography](api/07_crypto.md) | `hal_crypto` - Base64, MD5, SHA-256, HMAC-SHA256, ChaCha20, ChaCha20-Poly1305 |
-| 8 | [Sync, USB, serial, framing and auth](api/08_sync_serial.md) | `hal_sync` (mutex/critical-section), `hal_usb` (status-first USB lifecycle and CDC), `hal_serial` (one TX-serialized core with link-time transport ports, streamed debug formatting, ISR-deferred logging and rate-limiter), `hal_serial_session` (framed SC protocol), `hal_serial_frame` (wire codec), `hal_sc_auth` (HMAC challenge/response) |
+| 8 | [Sync, USB, serial, framing and auth](api/08_sync_serial.md) | `hal_sync` (mutex/critical-section), `hal_usb` (status-first USB lifecycle and CDC), `hal_serial` (one TX-serialized core with link-time transport ports, streamed debug formatting, ISR-deferred logging and rate-limiter), `hal_serial_session` (framed SC protocol), `hal_serial_commands` (text router adapter), `hal_serial_frame` (wire codec), `hal_sc_auth` (HMAC challenge/response) |
 | 9 | [Communication buses](api/09_buses.md) | `hal_spi` (status `_ex` transfer and DMA helpers), `hal_i2c` (status-first master API, bounded scanner with watchdog callback, one-shot helpers and bus clear), `hal_i2c_slave` (register map), `hal_uart`, `hal_swserial`, `hal_onewire` |
 | 10 | [CAN bus and display](api/10_can_display.md) | `hal_can` (backend-selected CAN: MCP2515 classic CAN, MCP251XFD CAN FD, and STM32G474 native FDCAN), `hal_display` (status-first TFT/OLED/LCD/EPD facade, raw writes, EPD refresh, GFX primitives, streaming, text and fonts) |
 | 11 | [Sensors](api/11_sensors.md) | `hal_thermocouple` (one provider-dispatched MCP9600/MAX6675/mock facade), `hal_ds18b20` (non-blocking workflow), `hal_dht` (DHT11/DHT22), `hal_bh1750` (ambient light), `hal_adp5360` (PMIC charger/fuel-gauge/regulators), `hal_mcp3221` (I2C 12-bit ADC), `hal_rtc` (PCF8563/DS3231/internal AON providers and relative wake), `hal_external_adc` (ADS1115), `hal_gps` (NMEA, auto-detect framing) |
@@ -431,7 +431,7 @@ The complete reference is split across the following focused documents:
 | 20 | [Bluetooth Low Energy](api/20_bluetooth.md) | Peripheral and Observer lifecycle, advertising and scanning, connection events, ATT MTU, authenticated Stream, bounded queues, board support, coexistence, and BTstack distribution boundary |
 | 21 | [Raw LoRa radio](api/21_lora.md) | Validated SX1262 profiles plus experimental software-only SX1261/SX1276/SX1278, asynchronous TX/RX/CAD, current RSSI, capabilities, callbacks, diagnostics and time-on-air |
 | 22 | [Reliable LoRa link](api/22_lora_link.md) | 16-bit addressing, message sequences, ACK/retry, duplicate suppression, fragmentation and optional ChaCha20-Poly1305 over `hal_lora_radio` |
-| 23 | [Command routing](api/23_commands.md) | Transport-neutral handler registration and policy, bounded request/response/event wire messages, network compatibility and the reliable LoRa command adapter |
+| 23 | [Command routing](api/23_commands.md) | Transport-neutral handler registration and policy, bounded request/response/event wire messages, network compatibility, framed serial, reliable LoRa and authenticated BLE Stream adapters |
 
 ---
 
@@ -487,6 +487,7 @@ The complete reference is split across the following focused documents:
 | `hal_sc_auth` | [Sync, serial, framing](api/08_sync_serial.md) |
 | `hal_sdlogger` | [Storage](api/14_storage.md) |
 | `hal_serial` | [Sync, serial, framing](api/08_sync_serial.md) |
+| `hal_serial_commands` | [Command routing](api/23_commands.md#framed-serial-session-adapter) |
 | `hal_serial_frame` | [Sync, serial, framing](api/08_sync_serial.md) |
 | `hal_serial_session` | [Sync, serial, framing](api/08_sync_serial.md) |
 | `hal_simcom_a76xx` | [Cellular modem](api/12_modem.md) |

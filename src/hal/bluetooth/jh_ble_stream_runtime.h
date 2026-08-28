@@ -6,6 +6,7 @@
 
 #include "jh_ble_backend.h"
 
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -30,6 +31,17 @@ void jh_ble_stream_on_link_lost(uint32_t generation);
  * the authentication backoff once its window closes.
  */
 void jh_ble_stream_on_poll(void);
+
+/** Queue a payload only while the expected authenticated session is active. */
+hal_status_t jh_ble_stream_send_for_session(const void *data, size_t length,
+                                            uint32_t expected_generation,
+                                            uint64_t expected_session_id);
+
+/** Pop a payload only while the expected authenticated session is active. */
+hal_status_t jh_ble_stream_receive_for_session(
+    void *out, size_t capacity, size_t *out_length,
+    hal_ble_stream_payload_info_t *out_payload_info,
+    uint32_t expected_generation, uint64_t expected_session_id);
 
 #ifdef __cplusplus
 }

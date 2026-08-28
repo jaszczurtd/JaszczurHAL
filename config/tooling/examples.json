@@ -287,7 +287,44 @@
         "stm32g474"
       ],
       "board": "picow",
-      "stm32Board": "nucleo-g474re-pim730"
+      "stm32Board": "nucleo-g474re-pim730",
+      "variants": [
+        {
+          "id": "commands",
+          "module": "26_ble_stream_commands",
+          "targets": [
+            "rp2040",
+            "rp2350-arm",
+            "stm32g474"
+          ],
+          "gateTargets": [
+            "rp2040"
+          ],
+          "extraDefines": [
+            "HAL_ENABLE_BLE_COMMANDS=1",
+            "HAL_ENABLE_CRC=1",
+            "HAL_BLE_STREAM_EXAMPLE_COMMANDS=1"
+          ]
+        },
+        {
+          "id": "commands-freertos",
+          "module": "26_ble_stream_commands_freertos",
+          "targets": [
+            "rp2040",
+            "rp2350-arm",
+            "stm32g474"
+          ],
+          "gateTargets": [
+            "rp2040"
+          ],
+          "extraDefines": [
+            "HAL_ENABLE_BLE_COMMANDS=1",
+            "HAL_ENABLE_CRC=1",
+            "HAL_BLE_STREAM_EXAMPLE_COMMANDS=1",
+            "HAL_ENABLE_FREERTOS=1"
+          ]
+        }
+      ]
     },
     {
       "dir": "27_lora_point_to_point",
@@ -377,6 +414,13 @@
             "HAL_LORA_LINK_EXAMPLE_RESPONDER=1"
           ]
         }
+      ]
+    },
+    {
+      "dir": "28_serial_commands",
+      "targets": [
+        "rp2040",
+        "stm32g474"
       ]
     }
   ]

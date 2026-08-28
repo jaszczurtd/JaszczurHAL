@@ -19,9 +19,9 @@
  *   the leading `$` and the `*` (i.e. over `SC,<seq>,<payload>`).
  * - Trailing `\n` line terminator.
  *
- * This header may be shared verbatim between firmware and companion host
- * tooling. If your host stack carries a stand-alone copy with matching
- * constants and CRC parameters, keep both sides synchronized.
+ * This portable C header is intended for direct inclusion by firmware and
+ * companion host tooling. Include it from JaszczurHAL instead of maintaining
+ * a local copy of the frame constants or CRC implementation.
  */
 
 #include <stdbool.h>

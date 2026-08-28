@@ -470,6 +470,30 @@ def require_hal_config_failure(
 
 
 def check_production_feature_facade(compiler: str) -> None:
+    serial_commands = preprocess_hal_config_features(
+        compiler, ("HAL_TARGET_MOCK=1", "HAL_ENABLE_SERIAL_COMMANDS=1")
+    )
+    require(
+        {"HAL_ENABLE_COMMAND_ROUTER", "HAL_ENABLE_SERIAL_COMMANDS"}
+        <= serial_commands,
+        "hal_config.h did not expose the Serial command adapter closure",
+    )
+
+    ble_commands = preprocess_hal_config_features(
+        compiler, ("HAL_TARGET_MOCK=1", "HAL_ENABLE_BLE_COMMANDS=1")
+    )
+    require(
+        {
+            "HAL_ENABLE_BLE",
+            "HAL_ENABLE_BLE_COMMANDS",
+            "HAL_ENABLE_BLE_STREAM",
+            "HAL_ENABLE_COMMAND_ROUTER",
+            "HAL_ENABLE_CRYPTO",
+        }
+        <= ble_commands,
+        "hal_config.h did not expose the BLE command adapter closure",
+    )
+
     stream = preprocess_hal_config_features(
         compiler, ("HAL_TARGET_MOCK=1", "HAL_ENABLE_BLE_STREAM=1")
     )
@@ -693,6 +717,21 @@ def check_production_feature_facade(compiler: str) -> None:
             f"generated verbose report omitted resolved feature {feature}",
         )
 
+    verbose_ble_commands = preprocess_hal_config_verbose(
+        compiler, ("HAL_TARGET_MOCK=1", "HAL_ENABLE_BLE_COMMANDS=1")
+    )
+    for feature in (
+        "HAL_ENABLE_BLE",
+        "HAL_ENABLE_BLE_COMMANDS",
+        "HAL_ENABLE_BLE_STREAM",
+        "HAL_ENABLE_COMMAND_ROUTER",
+        "HAL_ENABLE_CRYPTO",
+    ):
+        require(
+            f"HAL_CONFIG: {feature}" in verbose_ble_commands,
+            f"generated verbose report omitted BLE command feature {feature}",
+        )
+
 
 def preprocess_generated_header(
     compiler: str,
@@ -728,7 +767,7 @@ TEST_ROOT.mkdir(parents=True)
 )
 
 model = generate_hal_features.load_registry(CONFIG)
-require(len(model.features) == 105, "feature registry symbol count drifted")
+require(len(model.features) == 107, "feature registry symbol count drifted")
 catalog_text = (ROOT / "doc/api/02_module_flags.md").read_text(encoding="utf-8")
 catalog_features = set(
     re.findall(
@@ -747,12 +786,22 @@ require(
     f"unknown={sorted(catalog_features - public_features)}",
 )
 require(
-    sum(bool(feature.implies) for feature in model.features.values()) == 66,
+    sum(bool(feature.implies) for feature in model.features.values()) == 68,
     "feature registry implies-source count drifted",
 )
 require(
-    sum(len(feature.implies) for feature in model.features.values()) == 123,
+    sum(len(feature.implies) for feature in model.features.values()) == 126,
     "feature registry direct-edge count drifted",
+)
+require(
+    model.features["HAL_ENABLE_BLE_COMMANDS"].implies
+    == ("HAL_ENABLE_BLE_STREAM", "HAL_ENABLE_COMMAND_ROUTER"),
+    "BLE command adapter dependencies drifted",
+)
+require(
+    model.features["HAL_ENABLE_SERIAL_COMMANDS"].implies
+    == ("HAL_ENABLE_COMMAND_ROUTER",),
+    "Serial command adapter dependencies drifted",
 )
 require(
     model.features["HAL_ENABLE_LORA"].implies == (),
@@ -779,9 +828,11 @@ require(
     "LoRa command adapter dependencies drifted",
 )
 effect_features = (
+    "HAL_ENABLE_BLE_COMMANDS",
     "HAL_ENABLE_LITTLEFS",
     "HAL_ENABLE_MQTT",
     "HAL_ENABLE_SX126X",
+    "HAL_ENABLE_SERIAL_COMMANDS",
     "HAL_ENABLE_TLS",
     "HAL_ENABLE_UNITY",
 )
@@ -797,7 +848,9 @@ require(
     "feature-owned source effects drifted",
 )
 require(
-    "src/hal/network/mqtt/hal_mqtt.cpp" in portable_sources
+    "src/hal/bluetooth/hal_ble_commands.cpp" in portable_sources
+    and "src/hal/serial/hal_serial_commands.cpp" in portable_sources
+    and "src/hal/network/mqtt/hal_mqtt.cpp" in portable_sources
     and "src/hal/network/tls/hal_tls.cpp" in portable_sources,
     "portable source effects drifted",
 )
@@ -921,6 +974,14 @@ for relative_path in OUTPUTS:
     )
 
 header = (first_output / OUTPUTS[0]).read_text(encoding="utf-8")
+require(
+    "Resolved implications of HAL_ENABLE_SERIAL_COMMANDS" in header,
+    "missing Serial command closure",
+)
+require(
+    "Resolved implications of HAL_ENABLE_BLE_COMMANDS" in header,
+    "missing BLE command closure",
+)
 require("Resolved implications of HAL_ENABLE_BLE_STREAM" in header, "missing BLE closure")
 require("#define HAL_ENABLE_CRYPTO 1" in header, "missing BLE crypto implication")
 require("Resolved implications of HAL_ENABLE_MQTT" in header, "missing MQTT closure")

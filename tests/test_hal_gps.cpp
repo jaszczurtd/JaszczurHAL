@@ -74,6 +74,20 @@ void test_update_and_encode_do_not_corrupt_state_in_mock(void) {
   TEST_ASSERT_TRUE(fabs(hal_gps_longitude() - 19.0) < 0.0001);
 }
 
+void test_pause_resume_is_idempotent_and_preserves_fix(void) {
+  hal_mock_gps_set_location(50.0, 19.0);
+  hal_mock_gps_set_valid(true);
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gps_pause());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gps_pause());
+  TEST_ASSERT_TRUE(hal_gps_location_is_valid());
+  TEST_ASSERT_TRUE(fabs(hal_gps_latitude() - 50.0) < 0.0001);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gps_resume());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gps_resume());
+  TEST_ASSERT_TRUE(hal_gps_location_is_valid());
+  TEST_ASSERT_TRUE(fabs(hal_gps_longitude() - 19.0) < 0.0001);
+}
+
 void test_public_encode_uses_shared_nmea_engine(void) {
   feed_nmea("GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,100525,003.1,W");
 
@@ -139,6 +153,7 @@ int main(void) {
   RUN_TEST(test_location_speed_date_time_getters);
   RUN_TEST(test_init_resets_mock_state);
   RUN_TEST(test_update_and_encode_do_not_corrupt_state_in_mock);
+  RUN_TEST(test_pause_resume_is_idempotent_and_preserves_fix);
   RUN_TEST(test_public_encode_uses_shared_nmea_engine);
   RUN_TEST(test_extended_fix_fields);
   RUN_TEST(test_mock_reset_clears_injected_state);

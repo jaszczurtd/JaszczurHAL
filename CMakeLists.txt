@@ -99,14 +99,17 @@ set(UTIL_SOURCES
     ${SRC}/hal/core/hal_assert.cpp
     ${SRC}/hal/system/hal_board.cpp
     ${SRC}/hal/bluetooth/hal_ble.cpp
+    ${SRC}/hal/bluetooth/hal_ble_commands.cpp
     ${SRC}/hal/bluetooth/hal_ble_stream.cpp
     ${SRC}/hal/core/hal_config.cpp
     ${SRC}/hal/commands/hal_command_router.cpp
     ${SRC}/hal/commands/hal_command_wire.cpp
+    ${SRC}/hal/commands/jh_command_adapter_internal.cpp
     ${SRC}/hal/gps/hal_gps.cpp
     ${SRC}/hal/rtc/hal_rtc.cpp
     ${SRC}/hal/security/hal_sc_auth.cpp
     ${SRC}/hal/serial/hal_serial.cpp
+    ${SRC}/hal/serial/hal_serial_commands.cpp
     ${SRC}/hal/serial/hal_serial_session.cpp
     ${SRC}/hal/time/hal_time.cpp
     ${SRC}/hal/time/hal_time_ntp.cpp
@@ -240,8 +243,10 @@ target_compile_definitions(hal_mock PUBLIC
     # the consistency checks in hal_config.h are satisfied.
     HAL_ENABLE_WIFI
     HAL_ENABLE_BLE
+    HAL_ENABLE_BLE_COMMANDS
     HAL_ENABLE_BLE_STREAM
     HAL_ENABLE_COMMAND_ROUTER
+    HAL_ENABLE_SERIAL_COMMANDS
     HAL_ENABLE_SX126X       # propagates HAL_ENABLE_LORA + HAL_ENABLE_SPI
     HAL_ENABLE_LORA_LINK    # reliable private link over the selected radio
     HAL_ENABLE_LORA_COMMANDS # command transport over the reliable LoRa link

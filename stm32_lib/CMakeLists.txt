@@ -143,6 +143,7 @@ list(FILTER STM32_SHARED_SOURCES EXCLUDE REGEX "/network/mqtt/PubSubClient/")
 list(FILTER STM32_SHARED_SOURCES EXCLUDE REGEX "/bluetooth/")
 list(APPEND STM32_SHARED_SOURCES
     ${SRC}/hal/bluetooth/hal_ble.cpp
+    ${SRC}/hal/bluetooth/hal_ble_commands.cpp
     ${SRC}/hal/bluetooth/hal_ble_stream.cpp
 )
 list(APPEND STM32_IMPL_SOURCES ${STM32_SHARED_SOURCES})

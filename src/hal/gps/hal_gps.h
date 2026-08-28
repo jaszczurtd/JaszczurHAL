@@ -18,6 +18,7 @@ extern "C" {
  * Only one GPS instance is supported (singleton).
  */
 
+#include "hal/core/hal_status.h"
 #include "hal/serial/hal_uart_config.h"
 #include <stdbool.h>
 #include <stdint.h>
@@ -43,6 +44,28 @@ extern "C" {
  */
 void hal_gps_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud,
                   uint16_t config);
+
+/**
+ * @brief Pause the GPS transport while retaining the parsed fix state.
+ *
+ * This operation is idempotent. Calling it before a successful init is a
+ * no-op. On transports that own background resources, such as RP PIO/DMA
+ * SoftwareSerial, those resources are released until hal_gps_resume().
+ *
+ * @return HAL_OK on success, or a transport status when pausing fails.
+ */
+hal_status_t hal_gps_pause(void);
+
+/**
+ * @brief Resume a GPS transport previously paused by hal_gps_pause().
+ *
+ * The saved pins, baud rate, and frame format are reused. Parser state is not
+ * reset, so callers retain the most recent fix while the receiver restarts.
+ * This operation is idempotent and is a no-op before a successful init.
+ *
+ * @return HAL_OK on success, or a transport status when restart fails.
+ */
+hal_status_t hal_gps_resume(void);
 
 /**
  * @brief Drain all available bytes from the serial port into the NMEA parser.

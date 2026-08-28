@@ -159,6 +159,34 @@ void test_ex_uninitialised_and_size_status(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_reset());
 }
 
+void test_mock_eeprom_injects_io_failures(void) {
+  uint8_t value = 0u;
+  hal_mock_eeprom_set_io_status(HAL_EIO);
+
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, hal_eeprom_read_bytes(0u, &value, 1u));
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, hal_eeprom_write_bytes(0u, &value, 1u));
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, hal_eeprom_commit());
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, hal_eeprom_reset());
+
+  hal_mock_eeprom_set_io_status(HAL_OK);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_read_bytes(0u, &value, 1u));
+}
+
+void test_mock_eeprom_injects_init_and_commit_failures_separately(void) {
+  uint16_t size = 0u;
+  hal_mock_eeprom_set_commit_status(HAL_EIO);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, hal_eeprom_commit());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_size_ex(&size));
+
+  hal_mock_eeprom_set_commit_status(HAL_OK);
+  hal_mock_eeprom_set_io_status(HAL_EIO);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, hal_eeprom_init(HAL_EEPROM_FLASH, 256u, 0u));
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_eeprom_size_ex(&size));
+
+  hal_mock_eeprom_set_io_status(HAL_OK);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_init(HAL_EEPROM_FLASH, 256u, 0u));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_init_sets_type);
@@ -177,5 +205,7 @@ int main(void) {
   RUN_TEST(test_ex_byte_and_int_roundtrip);
   RUN_TEST(test_ex_range_validation_reports_overflow);
   RUN_TEST(test_ex_uninitialised_and_size_status);
+  RUN_TEST(test_mock_eeprom_injects_io_failures);
+  RUN_TEST(test_mock_eeprom_injects_init_and_commit_failures_separately);
   return UNITY_END();
 }

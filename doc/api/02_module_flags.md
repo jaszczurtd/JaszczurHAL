@@ -65,7 +65,9 @@ Stack protection uses two independent opt-ins:
 | Flag | Header | Impl | 3rd-party deps pulled in |
 |---|---|---|---|
 | `HAL_ENABLE_COMMAND_ROUTER` | `hal_command_router.h`, `hal_command_wire.h` | `hal/commands/hal_command_router.cpp` + `hal/commands/hal_command_wire.cpp` | Transport-neutral handler registry, source/security policy, bounded responses and versioned binary request/response/event messages; see the [command API](23_commands.md) |
+| `HAL_ENABLE_SERIAL_COMMANDS` | `hal_serial_commands.h` | `hal/serial/hal_serial_commands.cpp` | Synchronous TEXT/JSON router dispatch for active framed serial sessions, with optional response formatter and prefix fallback (propagates COMMAND_ROUTER); see the [command API](23_commands.md#framed-serial-session-adapter) |
 | `HAL_ENABLE_BLE` | `hal_ble.h` | `hal_ble.cpp` + `hal/bluetooth/*` | BLE Peripheral and passive Observer over the pinned BTstack and CYW43 controller; supported on RP2040 Pico W/Pico+RM2, RP2350 ARM Pico 2 W, STM32G474+PIM730/RM2, and mock. RP2350 RISC-V is unsupported. The applicable standard or Raspberry Pi product-scoped BTstack grant is described in the [Bluetooth API](20_bluetooth.md#license-and-distribution-boundary). |
+| `HAL_ENABLE_BLE_COMMANDS` | `hal_ble_commands.h` | `hal/bluetooth/hal_ble_commands.cpp` | Bidirectional requests, automatic dispatched responses and events over one exclusively consumed authenticated BLE Stream session (propagates BLE_STREAM + COMMAND_ROUTER); see the [command API](23_commands.md#authenticated-ble-stream-adapter) |
 | `HAL_ENABLE_BLE_STREAM` | `hal_ble_stream.h` | `hal_ble_stream.cpp` + `hal/bluetooth/*` | Authenticated bounded framed byte stream over BLE (propagates BLE + CRYPTO) |
 | `HAL_ENABLE_LORA` | `hal_lora_radio.h` | `hal_lora_radio.cpp` | Provider-neutral raw LoRa lifecycle, modem presets, blocking TX, polling RX, diagnostics, power state and time-on-air; requires exactly one provider |
 | `HAL_ENABLE_LORA_LINK` | `hal_lora_link.h` | `hal_lora_link.cpp` + `jh_lora_link_frame.cpp` | Reliable private messages with addressing, sequences, ACK/retry, duplicate suppression and fragmentation (propagates LORA + CRC); optional AEAD requires CRYPTO; see the [LoRa link API](22_lora_link.md) |
@@ -188,7 +190,10 @@ feature implications; internal edges to the derived
 ```
 HAL_ENABLE_KV          -> HAL_ENABLE_EEPROM
 HAL_ENABLE_SDLOGGER    -> HAL_ENABLE_FAT + HAL_ENABLE_EEPROM + HAL_ENABLE_SPI
+HAL_ENABLE_BLE_COMMANDS -> HAL_ENABLE_BLE_STREAM + HAL_ENABLE_COMMAND_ROUTER ->
+                           HAL_ENABLE_BLE + HAL_ENABLE_CRYPTO
 HAL_ENABLE_BLE_STREAM  -> HAL_ENABLE_BLE + HAL_ENABLE_CRYPTO
+HAL_ENABLE_SERIAL_COMMANDS -> HAL_ENABLE_COMMAND_ROUTER
 HAL_ENABLE_LORA_COMMANDS -> HAL_ENABLE_COMMAND_ROUTER + HAL_ENABLE_LORA_LINK ->
                             HAL_ENABLE_LORA + HAL_ENABLE_CRC
 HAL_ENABLE_TIME        -> HAL_ENABLE_UDP + HAL_ENABLE_WIFI
