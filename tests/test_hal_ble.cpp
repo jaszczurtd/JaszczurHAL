@@ -212,6 +212,31 @@ void test_concurrent_backend_operations_are_serialized(void) {
   TEST_ASSERT_NOT_EQUAL(HAL_BLE_INVALID_HANDLE, first_handle);
 }
 
+void test_fatal_event_during_advertising_start_cannot_publish_a_handle(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_initialize());
+  const hal_ble_advertising_config_t config = advertising();
+  hal_ble_advertising_handle_t handle = HAL_BLE_INVALID_HANDLE;
+  hal_status_t start_status = HAL_NONE;
+  hal_mock_ble_block_advertising_start(true);
+  std::thread starter(
+      [&]() { start_status = hal_ble_advertising_start(&config, &handle); });
+  while (!hal_mock_ble_advertising_start_entered()) {
+    std::this_thread::yield();
+  }
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_ble_inject_failure(HAL_EIO));
+  hal_mock_ble_block_advertising_start(false);
+  starter.join();
+
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, start_status);
+  TEST_ASSERT_EQUAL_UINT32(HAL_BLE_INVALID_HANDLE, handle);
+  hal_ble_info_t info{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_get_info(&info));
+  TEST_ASSERT_EQUAL_INT(HAL_BLE_STATE_FAILED, info.state);
+  TEST_ASSERT_EQUAL_UINT32(HAL_BLE_INVALID_HANDLE, info.advertising);
+  TEST_ASSERT_FALSE(info.advertising_requested);
+}
+
 void test_connection_mtu_disconnect_and_reconnect_invalidate_handles(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_initialize());
   ready();
@@ -252,6 +277,68 @@ void test_connection_mtu_disconnect_and_reconnect_invalidate_handles(void) {
   TEST_ASSERT_EQUAL_INT(HAL_BLE_EVENT_CONNECTED, event.type);
   TEST_ASSERT_NOT_EQUAL(first, event.connection);
   TEST_ASSERT_EQUAL_INT(HAL_ENOENT, hal_ble_disconnect(first));
+}
+
+void test_delayed_disconnect_does_not_close_a_reconnected_peer(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_initialize());
+  ready();
+  const hal_ble_address_t first_peer = address(0x61u);
+  const hal_ble_address_t second_peer = address(0x62u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_ble_inject_connection(&first_peer));
+  const uint16_t first_native = hal_mock_ble_native_connection();
+  TEST_ASSERT_NOT_EQUAL(0u, first_native);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_ble_inject_disconnect(0x13u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_ble_inject_connection(&second_peer));
+  const uint16_t second_native = hal_mock_ble_native_connection();
+  TEST_ASSERT_NOT_EQUAL(first_native, second_native);
+  drain_events();
+
+  hal_ble_info_t before{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_get_info(&before));
+  TEST_ASSERT_EQUAL_INT(HAL_BLE_STATE_CONNECTED, before.state);
+  TEST_ASSERT_EQUAL_MEMORY(&second_peer, &before.peer_address,
+                           sizeof(second_peer));
+
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_mock_ble_inject_delayed_disconnect(first_native, 0x16u));
+  hal_ble_info_t after{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_get_info(&after));
+  TEST_ASSERT_EQUAL_INT(HAL_BLE_STATE_CONNECTED, after.state);
+  TEST_ASSERT_EQUAL_UINT32(before.connection, after.connection);
+  TEST_ASSERT_EQUAL_MEMORY(&second_peer, &after.peer_address,
+                           sizeof(second_peer));
+  hal_ble_event_t event{};
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, hal_ble_event_next(&event));
+}
+
+void test_peer_snapshot_is_cleared_when_connection_lifetime_ends(void) {
+  const hal_ble_address_t peer = address(0x44u, HAL_BLE_ADDRESS_RANDOM);
+  const hal_ble_address_t zero_address{};
+  hal_ble_info_t info{};
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_initialize());
+  ready();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_ble_inject_connection(&peer));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_get_info(&info));
+  TEST_ASSERT_EQUAL_MEMORY(&peer, &info.peer_address, sizeof(peer));
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_deinitialize());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_get_info(&info));
+  TEST_ASSERT_EQUAL_UINT32(HAL_BLE_INVALID_HANDLE, info.connection);
+  TEST_ASSERT_EQUAL_UINT16(0u, info.mtu);
+  TEST_ASSERT_EQUAL_MEMORY(&zero_address, &info.peer_address,
+                           sizeof(zero_address));
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_initialize());
+  ready();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_ble_inject_connection(&peer));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_ble_inject_failure(HAL_EHW));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_get_info(&info));
+  TEST_ASSERT_EQUAL_INT(HAL_BLE_STATE_FAILED, info.state);
+  TEST_ASSERT_EQUAL_UINT32(HAL_BLE_INVALID_HANDLE, info.connection);
+  TEST_ASSERT_EQUAL_UINT16(0u, info.mtu);
+  TEST_ASSERT_EQUAL_MEMORY(&zero_address, &info.peer_address,
+                           sizeof(zero_address));
 }
 
 void test_callbacks_are_dispatched_by_poll_and_allow_state_queries(void) {
@@ -299,6 +386,51 @@ void test_fatal_failure_is_dispatched_before_poll_reports_it(void) {
   TEST_ASSERT_EQUAL_INT(HAL_EIO, hal_ble_poll());
   TEST_ASSERT_EQUAL_UINT32(1u, capture.calls);
   TEST_ASSERT_EQUAL_INT(HAL_BLE_EVENT_ERROR, capture.last_type);
+}
+
+void test_fatal_service_failure_invalidates_connection_snapshot(void) {
+  const hal_ble_address_t peer = address(0x55u);
+  const hal_ble_address_t zero_address{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_initialize());
+  ready();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_ble_inject_connection(&peer));
+  hal_mock_ble_set_service_status(HAL_EIO);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, hal_ble_poll());
+
+  hal_ble_info_t info{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_get_info(&info));
+  TEST_ASSERT_EQUAL_INT(HAL_BLE_STATE_FAILED, info.state);
+  TEST_ASSERT_EQUAL_UINT32(HAL_BLE_INVALID_HANDLE, info.connection);
+  TEST_ASSERT_EQUAL_UINT16(0u, info.mtu);
+  TEST_ASSERT_EQUAL_MEMORY(&zero_address, &info.peer_address,
+                           sizeof(zero_address));
+}
+
+void test_fatal_state_ignores_delayed_controller_events(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_initialize());
+  ready();
+  drain_events();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_ble_inject_failure(HAL_EIO));
+  hal_ble_info_t failed{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_get_info(&failed));
+  TEST_ASSERT_EQUAL_INT(HAL_BLE_STATE_FAILED, failed.state);
+  drain_events();
+
+  const hal_ble_address_t late_address = address(0x7Fu);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_ble_inject_ready(&late_address));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_ble_inject_advertising_stopped());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_ble_inject_scan_stopped());
+
+  hal_ble_info_t after{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_get_info(&after));
+  TEST_ASSERT_EQUAL_INT(HAL_BLE_STATE_FAILED, after.state);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, after.last_status);
+  TEST_ASSERT_EQUAL_UINT32(failed.generation, after.generation);
+  TEST_ASSERT_EQUAL_MEMORY(&failed.local_address, &after.local_address,
+                           sizeof(after.local_address));
+  hal_ble_event_t event{};
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, hal_ble_event_next(&event));
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, hal_ble_poll());
 }
 
 void test_passive_scan_copies_reports_and_parses_ad_fields(void) {
@@ -408,10 +540,15 @@ int main(void) {
   RUN_TEST(test_lifecycle_ready_address_and_capability);
   RUN_TEST(test_advertising_is_bounded_copied_and_handle_checked);
   RUN_TEST(test_concurrent_backend_operations_are_serialized);
+  RUN_TEST(test_fatal_event_during_advertising_start_cannot_publish_a_handle);
   RUN_TEST(test_connection_mtu_disconnect_and_reconnect_invalidate_handles);
+  RUN_TEST(test_delayed_disconnect_does_not_close_a_reconnected_peer);
+  RUN_TEST(test_peer_snapshot_is_cleared_when_connection_lifetime_ends);
   RUN_TEST(test_callbacks_are_dispatched_by_poll_and_allow_state_queries);
   RUN_TEST(test_queue_overflow_and_fatal_failure_are_observable);
   RUN_TEST(test_fatal_failure_is_dispatched_before_poll_reports_it);
+  RUN_TEST(test_fatal_service_failure_invalidates_connection_snapshot);
+  RUN_TEST(test_fatal_state_ignores_delayed_controller_events);
   RUN_TEST(test_passive_scan_copies_reports_and_parses_ad_fields);
   RUN_TEST(test_scan_report_queue_overflow_is_acknowledged);
   return UNITY_END();

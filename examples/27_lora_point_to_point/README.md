@@ -16,9 +16,8 @@ dispatch, response correlation, fragmentation, reassembly, duplicate
 suppression and bounded retransmission.
 
 The transport-neutral `echo` route allows both `LORA_LINK` and `BLE_STREAM`
-sources. This example implements only the LoRa adapter; the second source in
-the route policy demonstrates that the handler itself is ready to be reused by
-a later BLE Stream adapter.
+sources. This example attaches the LoRa adapter; the BLE command variant of
+example 26 reuses the same route policy over authenticated BLE Stream.
 
 When the selected board exposes a GPIO status LED, the LED remains on during
 transmit and pulses for 120 ms after a packet is received. Boards without a

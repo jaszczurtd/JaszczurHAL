@@ -112,12 +112,30 @@ int main(void) {
 #else
 
 #include <pico/multicore.h>
+#include <pico/platform.h>
+
+static void hal_rp_native_require_flash_ready(hal_status_t status,
+                                              const char *message) {
+  (void)message;
+  HAL_ASSERT(status == HAL_OK, message);
+  while (status != HAL_OK) {
+    tight_loop_contents();
+  }
+}
 
 #ifdef HAL_ENABLE_APP_TASK1
+static hal_status_t s_core1_flash_status = HAL_NONE;
+static bool s_app_start_complete = false;
+
 static void hal_rp_native_core1_entry(void) {
   const hal_status_t flash_status = jh_rp_flash_transaction_core_init();
-  HAL_ASSERT(flash_status == HAL_OK,
-             "hal_app_entry: core1 flash coordinator init failed");
+  __atomic_store_n(&s_core1_flash_status, flash_status, __ATOMIC_RELEASE);
+  hal_rp_native_require_flash_ready(
+      flash_status, "hal_app_entry: core1 flash coordinator init failed");
+
+  while (!__atomic_load_n(&s_app_start_complete, __ATOMIC_ACQUIRE)) {
+    tight_loop_contents();
+  }
 
   for (;;) {
     app_task1();
@@ -128,13 +146,25 @@ static void hal_rp_native_core1_entry(void) {
 int main(void) {
   hal_fault_subsystem_init();
   const hal_status_t flash_status = jh_rp_flash_transaction_core_init();
-  HAL_ASSERT(flash_status == HAL_OK,
-             "hal_app_entry: flash coordinator init failed");
+  hal_rp_native_require_flash_ready(
+      flash_status, "hal_app_entry: flash coordinator init failed");
   (void)hal_usb_init();
-  app_start();
 
 #ifdef HAL_ENABLE_APP_TASK1
   multicore_launch_core1(hal_rp_native_core1_entry);
+  hal_status_t core1_flash_status = HAL_NONE;
+  while ((core1_flash_status = __atomic_load_n(&s_core1_flash_status,
+                                               __ATOMIC_ACQUIRE)) == HAL_NONE) {
+    tight_loop_contents();
+  }
+  hal_rp_native_require_flash_ready(
+      core1_flash_status, "hal_app_entry: core1 flash coordinator init failed");
+#endif
+
+  app_start();
+
+#ifdef HAL_ENABLE_APP_TASK1
+  __atomic_store_n(&s_app_start_complete, true, __ATOMIC_RELEASE);
 #endif
 
   for (;;) {

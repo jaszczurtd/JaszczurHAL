@@ -329,6 +329,42 @@
                 "showReuseMessage": false
             },
             "problemMatcher": []
+        },
+        {
+            "label": "Project: Build variant: commands",
+            "detail": "Compile example variant commands",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "build",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "commands"
+            ],
+            "group": "build",
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Project: Build variant: commands-freertos",
+            "detail": "Compile example variant commands-freertos",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "build",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "commands-freertos"
+            ],
+            "group": "build",
+            "problemMatcher": "$gcc"
         }
     ]
 }

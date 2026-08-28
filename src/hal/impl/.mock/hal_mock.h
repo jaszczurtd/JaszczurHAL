@@ -15,6 +15,11 @@ void hal_mock_ble_reset(void);
 hal_status_t hal_mock_ble_inject_ready(const hal_ble_address_t *address);
 hal_status_t hal_mock_ble_inject_connection(const hal_ble_address_t *peer);
 hal_status_t hal_mock_ble_inject_disconnect(uint8_t reason);
+uint16_t hal_mock_ble_native_connection(void);
+hal_status_t hal_mock_ble_inject_delayed_disconnect(uint16_t native_connection,
+                                                    uint8_t reason);
+hal_status_t hal_mock_ble_inject_advertising_stopped(void);
+hal_status_t hal_mock_ble_inject_scan_stopped(void);
 hal_status_t hal_mock_ble_inject_mtu(uint16_t mtu);
 hal_status_t hal_mock_ble_inject_failure(hal_status_t status);
 hal_status_t hal_mock_ble_inject_advertising_report(
@@ -33,6 +38,16 @@ hal_status_t hal_mock_ble_inject_stream_frame(const uint8_t *frame,
                                               size_t length);
 hal_status_t hal_mock_ble_inject_stream_can_send(void);
 void hal_mock_ble_set_stream_notify_status(hal_status_t status);
+void hal_mock_ble_set_stream_discard_status(hal_status_t status);
+void hal_mock_ble_set_stream_notifications_deferred(bool deferred);
+void hal_mock_ble_set_stream_notification_in_progress(bool in_progress);
+void hal_mock_ble_set_stream_publish_status(hal_status_t status);
+void hal_mock_ble_set_stream_unpublish_status(hal_status_t status);
+void hal_mock_ble_block_stream_publish(bool blocked);
+bool hal_mock_ble_stream_publish_entered(void);
+void hal_mock_ble_block_stream_unpublish(bool blocked);
+bool hal_mock_ble_stream_unpublish_entered(void);
+bool hal_mock_ble_stream_notification_pending(void);
 hal_status_t hal_mock_ble_get_stream_frame(uint8_t *out_frame, size_t capacity,
                                            size_t *out_length);
 size_t hal_mock_ble_stream_notify_count(void);
@@ -46,6 +61,7 @@ hal_status_t hal_mock_ble_get_stream_published(uint8_t *out_version,
 void hal_mock_secure_random_reset(void);
 void hal_mock_secure_random_set_status(hal_status_t status);
 void hal_mock_secure_random_set_seed(uint64_t seed);
+void hal_mock_secure_random_set_force_zero(bool enabled);
 
 // ── GPIO ─────────────────────────────────────────────────────────────────────
 typedef enum {
@@ -860,6 +876,13 @@ void hal_mock_eeprom_clear_committed_flag(void);
 uint32_t hal_mock_eeprom_get_write_count(void);
 /** @brief Clear EEPROM byte-write counter. */
 void hal_mock_eeprom_clear_write_count(void);
+/**
+ * @brief Select the status returned by mock EEPROM read/write/commit/reset.
+ * @param status HAL_OK for normal operation or an injected failure status.
+ */
+void hal_mock_eeprom_set_io_status(hal_status_t status);
+/** Override only EEPROM commit results; pass HAL_OK to restore success. */
+void hal_mock_eeprom_set_commit_status(hal_status_t status);
 /** @brief Reset all mock EEPROM state (memory, type, committed flag) to
  * defaults. */
 void hal_mock_eeprom_reset(void);

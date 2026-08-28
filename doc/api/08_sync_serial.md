@@ -472,12 +472,25 @@ void     hal_serial_session_init_with_vocabulary(
 void     hal_serial_session_set_unknown_handler(hal_serial_session_t *s,
                                                 hal_serial_session_unknown_cb_t cb,
                                                 void *user);
+hal_status_t hal_serial_session_attach_unknown_handler(
+                                 hal_serial_session_t *session,
+                                 hal_serial_session_unknown_cb_t cb,
+                                 void *user);
+hal_status_t hal_serial_session_detach_unknown_handler(
+                                 hal_serial_session_t *session,
+                                 hal_serial_session_unknown_cb_t cb,
+                                 void *user);
 bool     hal_serial_session_is_active(const hal_serial_session_t *session);
 bool     hal_serial_session_is_authenticated(const hal_serial_session_t *session);
 uint32_t hal_serial_session_id(const hal_serial_session_t *session);
+hal_status_t hal_serial_session_current_request_seq(
+                                 const hal_serial_session_t *session,
+                                 uint16_t *out_seq);
 void     hal_serial_session_poll(hal_serial_session_t *session);
 void     hal_serial_session_println(hal_serial_session_t *session,
                                     const char *payload);
+hal_status_t hal_serial_session_println_ex(hal_serial_session_t *session,
+                                           const char *payload);
 ```
 
 Wire protocol (both directions):
@@ -530,6 +543,10 @@ Unrecognised inner payloads:
   `hal_serial_session_set_unknown_handler`, it receives the unwrapped
   inner line and is responsible for any reply (use
   `hal_serial_session_println` so the reply inherits the request's `<seq>`).
+- `hal_serial_session_attach_unknown_handler()` claims an empty callback slot
+  without replacing a project callback. Its matching detach function clears
+  only the same callback/user pair. Transport adapters use these status-first
+  functions for safe ownership.
 - otherwise the helper emits the vocabulary's `reply_unknown_cmd` (still
   framed). With the classic init this field is NULL, so the unknown line
   is silently dropped - register the callback to observe it.
@@ -556,6 +573,10 @@ Reply gating:
   inject unsolicited bytes into the framed stream; if you need to send
   state asynchronously, do it from the unknown-handler callback in
   response to a request.
+- `hal_serial_session_println_ex()` reports invalid arguments, inactive
+  dispatch windows, oversized payloads and forbidden frame characters through
+  `hal_status_t`. `hal_serial_session_current_request_seq()` returns the active
+  `<seq>` only within the same dispatch window.
 
 Authentication (Phase 3) - opt-in:
 - The whole AUTH path is compiled in only when `HAL_ENABLE_CRYPTO` is
@@ -651,6 +672,12 @@ For AUTH/REBOOT-capable modules, swap the init for
 FW_VERSION, BUILD_ID, &my_vocab)` where `my_vocab` is the project's
 populated `hal_serial_session_vocabulary_t` instance. See the
 "Vocabulary configuration" section below.
+
+Applications that expose these payloads through `hal_command_router` should
+attach [`hal_serial_commands`](23_commands.md#framed-serial-session-adapter)
+instead of adding another command-name dispatch tree to the unknown callback.
+The direct callback remains useful for small protocols and for the adapter's
+optional non-command fallback.
 
 Test observability (mock backend):
 - Build a framed request with `hal_serial_frame_encode(seq, "HELLO", buf,
@@ -773,9 +800,9 @@ Frame format (both directions):
 - `\n` line terminator (encode helpers do **not** append it; use
   `hal_serial_println()` which already does).
 
-This header can be mirrored byte-for-byte on the host side. If your
-host stack carries a stand-alone copy, keep both sides synchronized;
-both sides should assert the same CRC reference vector in test suites.
+Firmware and companion host tools should include this portable C header
+directly from JaszczurHAL. Do not maintain another frame codec or copied
+constants. Both sides should assert the same CRC reference vector in tests.
 
 ### Examples
 

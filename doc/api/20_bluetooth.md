@@ -13,7 +13,8 @@ GATT database containing the mandatory GAP and GATT services. It does not yet
 provide active scanning or scan-response requests, arbitrary application
 characteristics, a GATT client, pairing, or bonding. The opt-in
 `HAL_ENABLE_BLE_STREAM` profile adds one fixed authenticated application
-service and its notification path.
+service and its notification path. `HAL_ENABLE_BLE_COMMANDS` dedicates that
+Stream payload to the shared command router; it does not add a GATT client.
 
 ## Supported profiles
 
@@ -257,9 +258,9 @@ The API uses `hal_status_t` throughout. Common results are:
 | `HAL_EUNSUPPORTED` | selected board has no required radio hardware |
 | `HAL_EHW` / `HAL_EIO` | controller or transport failure |
 
-Use `hal_ble_get_info()` for a consistent state snapshot, current handles,
-generation, last status, MTU, scan state, pending report count, and both drop
-counters. A fatal controller or transport error moves the subsystem to
+Use `hal_ble_get_info()` for a consistent state snapshot, local and peer
+addresses, current handles, generation, last status, MTU, scan state, pending
+report count, and both drop counters. A fatal controller or transport error moves the subsystem to
 `HAL_BLE_STATE_FAILED`, invalidates its handles, stops scanning, and advances
 the generation.
 
@@ -269,13 +270,13 @@ the generation.
 by one static GATT service. The flag enables `HAL_ENABLE_BLE` and
 `HAL_ENABLE_CRYPTO`.
 
-BLE Stream remains a general application byte stream. The
-[`hal_command_router`](23_commands.md) source model and binary wire messages
-are prepared for a later BLE Stream command adapter, but that adapter is not
-implemented in this module. `HAL_ENABLE_BLE_STREAM` does not enable
-`HAL_ENABLE_COMMAND_ROUTER`, and there is currently no BLE command feature
-flag. Applications must not treat the `HAL_COMMAND_SOURCE_BLE_STREAM` policy
-value as evidence that such an adapter is active.
+BLE Stream remains a general application byte stream when selected alone. The
+separate [`hal_ble_commands`](23_commands.md#authenticated-ble-stream-adapter)
+module fragments the shared binary command format across authenticated Stream
+payloads and dispatches requests through `hal_command_router`.
+`HAL_ENABLE_BLE_STREAM` does not enable that behavior or the router;
+`HAL_ENABLE_BLE_COMMANDS` enables both dependencies and gives the command
+adapter exclusive ownership of Stream payload send/receive operations.
 
 The header is the single source of truth for the service UUIDs, the frame
 layout and the capability bits. Changing any of them raises the profile
@@ -335,7 +336,18 @@ Handshake responses and application payloads use bounded pending slots. An
 `HAL_EAGAIN` from the controller retains the frame and does not consume its
 directional counter; the next poll or can-send event retries it. The BTstack
 notification itself is issued only by the shared CYW43 radio service while it
-owns the radio lock.
+owns the radio lock. Stream keeps at most one backend-accepted notification in
+flight, and `pending_tx` includes that notification in addition to locally
+queued payloads. Before accepting a new `HELLO`, Stream discards a notification
+that is still staged in the backend. If local submission or its completion
+callback is already in progress, the `HELLO` is refused with `HAL_EBUSY` and
+the current session remains available for a retry. Any other discard failure
+closes the session without sending `HELLO_ACK`. This prevents an in-link rekey
+from overtaking data from the previous session.
+
+Stream initialization and deinitialization serialize service publish and
+unpublish operations. A concurrent lifecycle call returns `HAL_EBUSY`; failed
+publication rolls the Stream state back to `HAL_BLE_STREAM_STATE_UNINITIALIZED`.
 
 ### Stream example
 
@@ -426,9 +438,17 @@ The example retains at most one echo after `HAL_EAGAIN` and retries it before
 removing another RX payload. A disconnect or any other send error discards that
 pending echo so data from an old session cannot enter a new one.
 
+`hal_ble_stream_receive_ex()` has the same queue and overflow behavior while
+also returning immutable provenance for the popped DATA payload: Stream
+generation, public handshake session identifier and authenticated directional
+counter. Stream adapters use it to prevent fragments from different sessions
+or counter ranges from being combined. The original
+`hal_ble_stream_receive()` remains the convenience form when that metadata is
+not needed.
+
 `hal_ble_stream_get_info()` reports the state, negotiated capabilities,
-directional counters, authentication failures, replay rejections and queue
-depth for diagnostics.
+public session identifier, directional counters, authentication failures,
+replay rejections and queue depth for diagnostics.
 
 ## WiFi coexistence and ownership
 

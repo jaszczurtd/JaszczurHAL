@@ -25,6 +25,9 @@
 #ifdef HAL_ENABLE_BLE_STREAM
 #include "hal/bluetooth/hal_ble_stream.h"
 #endif
+#ifdef HAL_ENABLE_BLE_COMMANDS
+#include "hal/bluetooth/hal_ble_commands.h"
+#endif
 #ifdef HAL_ENABLE_LORA
 #include "hal/radio/hal_lora_radio.h"
 #endif
@@ -61,6 +64,9 @@
 #include "hal/core/hal_status.h"
 #include "hal/serial/hal_serial.h"
 #include "hal/serial/hal_serial_session.h"
+#ifdef HAL_ENABLE_SERIAL_COMMANDS
+#include "hal/serial/hal_serial_commands.h"
+#endif
 #include "hal/system/hal_sync.h"
 #include "hal/system/hal_system.h"
 #include "hal/time/hal_time.h"

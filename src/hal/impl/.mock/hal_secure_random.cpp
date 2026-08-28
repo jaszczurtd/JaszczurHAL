@@ -12,6 +12,7 @@ namespace {
 /* The host has no entropy source, so tests supply one explicitly. */
 hal_status_t s_status = HAL_EUNSUPPORTED;
 uint64_t s_state = 0x9E3779B97F4A7C15ull;
+bool s_force_zero = false;
 
 uint8_t next_byte(void) {
   s_state ^= s_state >> 12;
@@ -30,6 +31,10 @@ extern "C" hal_status_t jh_secure_random_bytes(void *buffer, size_t length) {
     jh_secure_zeroize(buffer, length);
     return s_status;
   }
+  if (s_force_zero) {
+    jh_secure_zeroize(buffer, length);
+    return HAL_OK;
+  }
   uint8_t *bytes = static_cast<uint8_t *>(buffer);
   for (size_t index = 0u; index < length; ++index) {
     bytes[index] = next_byte();
@@ -40,6 +45,7 @@ extern "C" hal_status_t jh_secure_random_bytes(void *buffer, size_t length) {
 void hal_mock_secure_random_reset(void) {
   s_status = HAL_EUNSUPPORTED;
   s_state = 0x9E3779B97F4A7C15ull;
+  s_force_zero = false;
 }
 
 void hal_mock_secure_random_set_status(hal_status_t status) {
@@ -48,6 +54,10 @@ void hal_mock_secure_random_set_status(hal_status_t status) {
 
 void hal_mock_secure_random_set_seed(uint64_t seed) {
   s_state = seed != 0u ? seed : 0x9E3779B97F4A7C15ull;
+}
+
+void hal_mock_secure_random_set_force_zero(bool enabled) {
+  s_force_zero = enabled;
 }
 
 #endif

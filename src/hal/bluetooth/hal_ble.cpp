@@ -60,6 +60,19 @@ uint32_t next_nonzero(uint32_t value) {
   return value == HAL_BLE_INVALID_HANDLE ? 1u : value;
 }
 
+uint32_t fail_runtime_locked(void) {
+  s_ble.state = HAL_BLE_STATE_FAILED;
+  s_ble.connection = HAL_BLE_INVALID_HANDLE;
+  s_ble.native_connection = 0u;
+  s_ble.mtu = 0u;
+  memset(&s_ble.peer_address, 0, sizeof(s_ble.peer_address));
+  s_ble.advertising = HAL_BLE_INVALID_HANDLE;
+  s_ble.advertising_requested = false;
+  s_ble.scan_requested = false;
+  s_ble.generation = next_nonzero(s_ble.generation);
+  return s_ble.generation;
+}
+
 hal_ble_address_type_t address_type_from_backend(hal_ble_address_type_t type) {
   switch (type) {
   case HAL_BLE_ADDRESS_PUBLIC:
@@ -146,6 +159,12 @@ void backend_event(void *, const jh_ble_backend_event_t *backend_event) {
     hal_mutex_unlock(mutex);
     return;
   }
+  /* Fatal backend failures are terminal until explicit deinitialization.
+     Delayed controller events must not revive invalidated runtime state. */
+  if (s_ble.state == HAL_BLE_STATE_FAILED) {
+    hal_mutex_unlock(mutex);
+    return;
+  }
 
   hal_ble_event_t event{};
   event.status = backend_event->status;
@@ -222,6 +241,10 @@ void backend_event(void *, const jh_ble_backend_event_t *backend_event) {
     s_ble.mtu = 0u;
     memset(&s_ble.peer_address, 0, sizeof(s_ble.peer_address));
     s_ble.state = HAL_BLE_STATE_READY;
+#ifdef HAL_ENABLE_BLE_STREAM
+    stream_link_lost = true;
+    stream_generation = s_ble.generation;
+#endif
     break;
   case JH_BLE_BACKEND_EVENT_MTU_UPDATED:
     if (s_ble.connection == HAL_BLE_INVALID_HANDLE ||
@@ -265,16 +288,13 @@ void backend_event(void *, const jh_ble_backend_event_t *backend_event) {
     s_ble.last_status = backend_event->status;
     queue_error_locked(backend_event->status);
     if (backend_event->fatal) {
-      s_ble.state = HAL_BLE_STATE_FAILED;
-      s_ble.connection = HAL_BLE_INVALID_HANDLE;
-      s_ble.advertising = HAL_BLE_INVALID_HANDLE;
-      s_ble.advertising_requested = false;
-      s_ble.scan_requested = false;
-      s_ble.generation = next_nonzero(s_ble.generation);
+      const uint32_t failed_generation = fail_runtime_locked();
       publish_failed = true;
 #ifdef HAL_ENABLE_BLE_STREAM
       stream_link_lost = true;
-      stream_generation = s_ble.generation;
+      stream_generation = failed_generation;
+#else
+      (void)failed_generation;
 #endif
     }
     break;
@@ -288,12 +308,6 @@ void backend_event(void *, const jh_ble_backend_event_t *backend_event) {
     break;
 #endif
   }
-#ifdef HAL_ENABLE_BLE_STREAM
-  if (backend_event->type == JH_BLE_BACKEND_EVENT_DISCONNECTED) {
-    stream_link_lost = true;
-    stream_generation = s_ble.generation;
-  }
-#endif
   hal_mutex_unlock(mutex);
 
 #ifdef HAL_ENABLE_BLE_STREAM
@@ -486,13 +500,20 @@ hal_status_t hal_ble_deinitialize(void) {
   s_ble.advertising = HAL_BLE_INVALID_HANDLE;
   s_ble.native_connection = 0u;
   s_ble.mtu = 0u;
+  memset(&s_ble.peer_address, 0, sizeof(s_ble.peer_address));
   s_ble.advertising_requested = false;
   s_ble.scan_requested = false;
   s_ble.callback = nullptr;
   s_ble.callback_context = nullptr;
   reset_queue_locked();
   reset_scan_queue_locked();
+#ifdef HAL_ENABLE_BLE_STREAM
+  const uint32_t generation = s_ble.generation;
+#endif
   hal_mutex_unlock(mutex);
+#ifdef HAL_ENABLE_BLE_STREAM
+  jh_ble_stream_on_link_lost(generation);
+#endif
   (void)(status == HAL_OK
              ? jh_board_runtime_set_inactive(HAL_BOARD_CAP_BLUETOOTH_CONTROLLER)
              : jh_board_runtime_set_failed(HAL_BOARD_CAP_BLUETOOTH_CONTROLLER));
@@ -526,11 +547,21 @@ hal_status_t hal_ble_poll(void) {
   hal_status_t status = backend->service(backend->context);
   hal_mutex_lock(mutex);
   s_ble.poll_active = false;
+#ifdef HAL_ENABLE_BLE_STREAM
+  bool stream_link_lost = false;
+  uint32_t stream_generation = 0u;
+#endif
   if (status != HAL_OK) {
     s_ble.last_status = status;
     queue_error_locked(status);
-    if (status == HAL_EHW || status == HAL_EIO) {
-      s_ble.state = HAL_BLE_STATE_FAILED;
+    if ((status == HAL_EHW || status == HAL_EIO) &&
+        s_ble.state != HAL_BLE_STATE_FAILED) {
+#ifdef HAL_ENABLE_BLE_STREAM
+      stream_generation = fail_runtime_locked();
+      stream_link_lost = true;
+#else
+      (void)fail_runtime_locked();
+#endif
     }
   }
   const bool overflow =
@@ -541,7 +572,11 @@ hal_status_t hal_ble_poll(void) {
   const hal_status_t dispatch_status = dispatch_callbacks();
 #ifdef HAL_ENABLE_BLE_STREAM
   /* Outside every lock, so the stream keeps its own serialization. */
-  jh_ble_stream_on_poll();
+  if (stream_link_lost) {
+    jh_ble_stream_on_link_lost(stream_generation);
+  } else {
+    jh_ble_stream_on_poll();
+  }
 #endif
   if (status == HAL_EHW || status == HAL_EIO) {
     (void)jh_board_runtime_set_failed(HAL_BOARD_CAP_BLUETOOTH_CONTROLLER);
@@ -567,6 +602,7 @@ hal_status_t hal_ble_get_info(hal_ble_info_t *out_info) {
   out_info->state = s_ble.state;
   out_info->last_status = s_ble.last_status;
   out_info->local_address = s_ble.local_address;
+  out_info->peer_address = s_ble.peer_address;
   out_info->connection = s_ble.connection;
   out_info->advertising = s_ble.advertising;
   out_info->mtu = s_ble.mtu;
@@ -653,6 +689,7 @@ hal_ble_advertising_start(const hal_ble_advertising_config_t *config,
   s_ble.next_handle = next_nonzero(s_ble.next_handle);
   const hal_ble_advertising_handle_t handle = s_ble.next_handle;
   const jh_ble_backend_t *backend = s_ble.backend;
+  const uint32_t operation_generation = s_ble.generation;
   s_ble.operation_active = true;
   hal_mutex_unlock(mutex);
 
@@ -663,6 +700,14 @@ hal_ble_advertising_start(const hal_ble_advertising_config_t *config,
   if (status != HAL_OK) {
     hal_mutex_unlock(mutex);
     return status;
+  }
+  if (!s_ble.initialized || s_ble.backend != backend ||
+      s_ble.generation != operation_generation ||
+      s_ble.state == HAL_BLE_STATE_FAILED) {
+    const hal_status_t invalidated_status =
+        s_ble.last_status < HAL_NONE ? s_ble.last_status : HAL_ESTATE;
+    hal_mutex_unlock(mutex);
+    return invalidated_status;
   }
   s_ble.advertising = handle;
   s_ble.advertising_requested = true;
@@ -790,12 +835,21 @@ hal_status_t hal_ble_scan_start(const hal_ble_scan_config_t *config) {
     return HAL_EBUSY;
   }
   const jh_ble_backend_t *backend = s_ble.backend;
+  const uint32_t operation_generation = s_ble.generation;
   s_ble.operation_active = true;
   hal_mutex_unlock(mutex);
 
   const hal_status_t status = backend->scan_start(backend->context, config);
   hal_mutex_lock(mutex);
   s_ble.operation_active = false;
+  if (status == HAL_OK && (!s_ble.initialized || s_ble.backend != backend ||
+                           s_ble.generation != operation_generation ||
+                           s_ble.state == HAL_BLE_STATE_FAILED)) {
+    const hal_status_t invalidated_status =
+        s_ble.last_status < HAL_NONE ? s_ble.last_status : HAL_ESTATE;
+    hal_mutex_unlock(mutex);
+    return invalidated_status;
+  }
   if (status == HAL_OK) {
     s_ble.scan_requested = true;
     reset_scan_queue_locked();

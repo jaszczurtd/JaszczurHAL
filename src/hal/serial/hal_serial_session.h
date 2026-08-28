@@ -15,6 +15,7 @@
  */
 
 #include "hal/core/hal_config.h"
+#include "hal/core/hal_status.h"
 #include "hal/serial/hal_serial_session_vocabulary.h"
 #include "hal/system/hal_system.h"
 #ifdef HAL_ENABLE_CRYPTO
@@ -110,11 +111,43 @@ void hal_serial_session_set_unknown_handler(hal_serial_session_t *session,
                                             hal_serial_session_unknown_cb_t cb,
                                             void *user);
 
+/**
+ * @brief Claim the currently unused unknown-payload callback slot.
+ *
+ * This status-first API lets an adapter attach without replacing an existing
+ * project callback. The legacy setter remains available for intentional
+ * replacement.
+ */
+hal_status_t
+hal_serial_session_attach_unknown_handler(hal_serial_session_t *session,
+                                          hal_serial_session_unknown_cb_t cb,
+                                          void *user);
+
+/**
+ * @brief Clear an unknown-payload callback only when callback and user match.
+ *
+ * A mismatched owner returns @ref HAL_EBUSY and remains installed.
+ */
+hal_status_t
+hal_serial_session_detach_unknown_handler(hal_serial_session_t *session,
+                                          hal_serial_session_unknown_cb_t cb,
+                                          void *user);
+
 /** @brief Return whether HELLO has activated the session. */
 bool hal_serial_session_is_active(const hal_serial_session_t *session);
 
 /** @brief Return the current session id, or zero for a NULL session. */
 uint32_t hal_serial_session_id(const hal_serial_session_t *session);
+
+/**
+ * @brief Copy the sequence number of the request currently being dispatched.
+ *
+ * Returns @ref HAL_ESTATE outside an unknown-handler or built-in command
+ * dispatch window.
+ */
+hal_status_t
+hal_serial_session_current_request_seq(const hal_serial_session_t *session,
+                                       uint16_t *out_seq);
 
 /**
  * @brief Return whether the current session completed authentication.
@@ -133,6 +166,10 @@ bool hal_serial_session_should_mute_debug_for_line(const char *line);
  */
 void hal_serial_session_println(hal_serial_session_t *session,
                                 const char *payload);
+
+/** @brief Status-first form of @ref hal_serial_session_println. */
+hal_status_t hal_serial_session_println_ex(hal_serial_session_t *session,
+                                           const char *payload);
 
 /** @brief Consume and dispatch every currently available serial frame. */
 void hal_serial_session_poll(hal_serial_session_t *session);

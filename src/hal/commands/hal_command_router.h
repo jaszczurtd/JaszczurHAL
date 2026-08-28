@@ -9,7 +9,7 @@
  * @brief Transport-neutral command registration and dispatch.
  *
  * One router can serve direct calls, network adapters, reliable LoRa links,
- * serial sessions and a future or application-provided BLE Stream adapter.
+ * serial sessions and the authenticated BLE Stream adapter.
  * Command handlers receive binary-safe arguments plus source, peer, session
  * and security metadata.
  */
@@ -121,9 +121,30 @@ hal_status_t
 hal_command_router_register(hal_command_router_t router,
                             const hal_command_definition_t *definition);
 
+/**
+ * @brief Add one copied command definition only when its name is unused.
+ *
+ * Returns HAL_EEXIST without changing the existing slot when the name is
+ * already registered.
+ */
+hal_status_t
+hal_command_router_register_unique(hal_command_router_t router,
+                                   const hal_command_definition_t *definition);
+
 /** @brief Remove one named command. */
 hal_status_t hal_command_router_unregister(hal_command_router_t router,
                                            const char *name);
+
+/**
+ * @brief Remove a command only when its public handler and user pointer match.
+ *
+ * Returns HAL_EBUSY without changing the slot on an ownership mismatch or
+ * while the matching handler is active. Returns HAL_ENOENT when the name is
+ * not registered.
+ */
+hal_status_t hal_command_router_unregister_if_matches(
+    hal_command_router_t router, const char *name,
+    hal_command_handler_t handler, void *user);
 
 /** @brief Remove every command when no handler is active. */
 hal_status_t hal_command_router_clear(hal_command_router_t router);

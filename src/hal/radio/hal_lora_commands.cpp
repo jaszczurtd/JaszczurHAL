@@ -2,6 +2,7 @@
 
 #ifdef HAL_ENABLE_LORA_COMMANDS
 
+#include "hal/commands/jh_command_adapter_internal.h"
 #include "hal/core/hal_mutex_once.h"
 #include "hal/core/jh_handle_pool.h"
 #include "hal/system/hal_sync.h"
@@ -33,11 +34,6 @@ typedef struct {
   bool allocated;
 } jh_lora_commands_context_t;
 
-typedef struct {
-  jh_lora_commands_context_t *context;
-  jh_handle_lease_t lease;
-} jh_lora_commands_operation_t;
-
 static jh_lora_commands_context_t s_contexts[HAL_LORA_LINK_MAX_INSTANCES] = {};
 static jh_handle_slot_t s_handle_slots[HAL_LORA_LINK_MAX_INSTANCES] = {};
 static jh_handle_pool_t s_handle_pool = {};
@@ -65,7 +61,9 @@ static hal_status_t pool_lock(void) {
 
 static void pool_unlock(void) { hal_mutex_unlock(s_pool_mutex); }
 
-static void clear_context(jh_lora_commands_context_t *context) {
+static void clear_context(void *token) {
+  jh_lora_commands_context_t *context =
+      static_cast<jh_lora_commands_context_t *>(token);
   hal_mutex_t mutex = context->mutex;
   memset(context, 0, sizeof(*context));
   context->mutex = mutex;
@@ -73,74 +71,23 @@ static void clear_context(jh_lora_commands_context_t *context) {
   context->diagnostics.last_error = HAL_NONE;
 }
 
-static hal_status_t end_operation(jh_lora_commands_operation_t *operation) {
-  if (operation == NULL || operation->context == NULL ||
-      !operation->lease.active) {
-    return HAL_EINVAL;
-  }
-  hal_status_t status = pool_lock();
-  if (status != HAL_OK) {
-    return status;
-  }
-  void *deferred_token = NULL;
-  status = jh_handle_end_operation(&s_handle_pool, &operation->lease,
-                                   &deferred_token);
-  if (status == HAL_OK && deferred_token != NULL) {
-    if (deferred_token == operation->context) {
-      clear_context(operation->context);
-    } else {
-      status = HAL_EINTERNAL;
-    }
-  }
-  pool_unlock();
-  operation->context = NULL;
-  return status;
-}
-
-static hal_status_t finish_operation(jh_lora_commands_operation_t *operation,
-                                     hal_status_t status) {
-  if (operation == NULL || operation->context == NULL) {
-    return HAL_EINVAL;
-  }
-  hal_mutex_unlock(operation->context->mutex);
-  const hal_status_t end_status = end_operation(operation);
-  return end_status == HAL_OK ? status : end_status;
-}
+static const jh_command_adapter_context_access_t s_context_access = {
+    &s_handle_pool,
+    pool_lock,
+    pool_unlock,
+    jh_command_adapter_context_mutex<jh_lora_commands_context_t>,
+    jh_command_adapter_context_allocated<jh_lora_commands_context_t>,
+    clear_context};
 
 static hal_status_t context_lock(hal_lora_commands_t commands,
-                                 jh_lora_commands_operation_t *operation) {
-  if (operation == NULL) {
-    return HAL_EINVAL;
-  }
-  memset(operation, 0, sizeof(*operation));
-  hal_status_t status = pool_lock();
-  if (status != HAL_OK) {
-    return status;
-  }
-  status = jh_handle_acquire(&s_handle_pool, commands, &operation->lease);
-  pool_unlock();
-  if (status != HAL_OK || operation->lease.token == NULL) {
-    return HAL_EUNINIT;
-  }
+                                 jh_command_adapter_operation_t *operation) {
+  return jh_command_adapter_context_lock(&s_context_access, commands,
+                                         operation);
+}
 
-  jh_lora_commands_context_t *context =
-      static_cast<jh_lora_commands_context_t *>(operation->lease.token);
-  operation->context = context;
-  hal_mutex_lock(context->mutex);
-  status = pool_lock();
-  if (status != HAL_OK) {
-    hal_mutex_unlock(context->mutex);
-    const hal_status_t end_status = end_operation(operation);
-    return end_status == HAL_OK ? status : end_status;
-  }
-  const bool open = jh_handle_lease_is_open(&s_handle_pool, &operation->lease);
-  pool_unlock();
-  if (!open || !context->allocated) {
-    hal_mutex_unlock(context->mutex);
-    const hal_status_t end_status = end_operation(operation);
-    return end_status == HAL_OK ? HAL_EUNINIT : end_status;
-  }
-  return HAL_OK;
+static hal_status_t finish_operation(jh_command_adapter_operation_t *operation,
+                                     hal_status_t status) {
+  return jh_command_adapter_operation_finish(operation, status);
 }
 
 static void record_error(jh_lora_commands_context_t *context,
@@ -171,59 +118,21 @@ static hal_status_t select_process_status(hal_status_t link_status,
   return progressed ? HAL_OK : HAL_EAGAIN;
 }
 
-static hal_status_t finish_process(jh_lora_commands_operation_t *operation,
+static hal_status_t finish_process(jh_command_adapter_operation_t *operation,
                                    hal_status_t status) {
-  operation->context->process_active = false;
+  jh_command_adapter_operation_context<jh_lora_commands_context_t>(operation)
+      ->process_active = false;
   return finish_operation(operation, status);
-}
-
-static uint32_t next_nonzero_request_id(uint32_t request_id) {
-  return request_id == UINT32_MAX ? UINT32_C(1) : request_id + UINT32_C(1);
-}
-
-static hal_status_t copy_message_name(hal_command_message_t *message,
-                                      const char *name) {
-  if (name == NULL) {
-    return HAL_EINVAL;
-  }
-  size_t length = 0u;
-  while (length < sizeof(message->name) && name[length] != '\0') {
-    ++length;
-  }
-  if (length == 0u || length >= sizeof(message->name)) {
-    return HAL_EINVAL;
-  }
-  memcpy(message->name, name, length);
-  message->name[length] = '\0';
-  return HAL_OK;
 }
 
 static hal_status_t prepare_outgoing_message(
     jh_lora_commands_context_t *context, hal_command_message_type_t type,
     uint32_t request_id, const char *name, hal_command_encoding_t encoding,
     const void *payload, size_t payload_length, size_t *out_wire_length) {
-  if ((payload_length > 0u && payload == NULL) ||
-      payload_length > sizeof(context->scratch_message.payload)) {
-    return payload_length > sizeof(context->scratch_message.payload)
-               ? HAL_EOVERFLOW
-               : HAL_EINVAL;
-  }
-  memset(&context->scratch_message, 0, sizeof(context->scratch_message));
-  context->scratch_message.type = type;
-  context->scratch_message.encoding = encoding;
-  context->scratch_message.request_id = request_id;
-  context->scratch_message.status = HAL_NONE;
-  hal_status_t status = copy_message_name(&context->scratch_message, name);
-  if (status != HAL_OK) {
-    return status;
-  }
-  if (payload_length > 0u) {
-    memcpy(context->scratch_message.payload, payload, payload_length);
-  }
-  context->scratch_message.payload_length = payload_length;
-  return hal_command_message_encode(
-      &context->scratch_message, context->transmit_wire,
-      sizeof(context->transmit_wire), out_wire_length);
+  return jh_command_adapter_prepare_message(
+      &context->scratch_message, type, request_id, name, encoding, payload,
+      payload_length, context->transmit_wire, sizeof(context->transmit_wire),
+      out_wire_length);
 }
 
 static hal_status_t try_pending_response(jh_lora_commands_context_t *context) {
@@ -255,37 +164,10 @@ static hal_status_t try_pending_response(jh_lora_commands_context_t *context) {
 static hal_status_t
 encode_dispatch_response(jh_lora_commands_context_t *context,
                          uint32_t request_id, uint16_t destination) {
-  memset(&context->scratch_message, 0, sizeof(context->scratch_message));
-  context->scratch_message.type = HAL_COMMAND_MESSAGE_RESPONSE;
-  context->scratch_message.encoding = context->handler_response.encoding;
-  context->scratch_message.request_id = request_id;
-  context->scratch_message.status = context->handler_response.status;
-  if (context->handler_response.overflow ||
-      context->handler_response.body_len >
-          sizeof(context->scratch_message.payload)) {
-    context->scratch_message.encoding = HAL_COMMAND_ENCODING_BINARY;
-    context->scratch_message.status = HAL_EOVERFLOW;
-  } else if (context->handler_response.body_len > 0u) {
-    memcpy(context->scratch_message.payload, context->handler_response.body,
-           context->handler_response.body_len);
-    context->scratch_message.payload_length =
-        context->handler_response.body_len;
-  }
-
   size_t wire_length = 0u;
-  hal_status_t status = hal_command_message_encode(
-      &context->scratch_message, context->transmit_wire,
-      sizeof(context->transmit_wire), &wire_length);
-  if (status != HAL_OK) {
-    memset(&context->scratch_message, 0, sizeof(context->scratch_message));
-    context->scratch_message.type = HAL_COMMAND_MESSAGE_RESPONSE;
-    context->scratch_message.encoding = HAL_COMMAND_ENCODING_BINARY;
-    context->scratch_message.request_id = request_id;
-    context->scratch_message.status = HAL_EINTERNAL;
-    status = hal_command_message_encode(
-        &context->scratch_message, context->transmit_wire,
-        sizeof(context->transmit_wire), &wire_length);
-  }
+  const hal_status_t status = jh_command_adapter_encode_response(
+      &context->handler_response, request_id, &context->scratch_message,
+      context->transmit_wire, sizeof(context->transmit_wire), &wire_length);
   if (status != HAL_OK) {
     ++context->diagnostics.response_send_failures;
     ++context->diagnostics.dropped_messages;
@@ -464,12 +346,14 @@ hal_status_t hal_lora_commands_create(const hal_lora_commands_config_t *config,
 }
 
 hal_status_t hal_lora_commands_destroy(hal_lora_commands_t commands) {
-  jh_lora_commands_operation_t operation = {};
+  jh_command_adapter_operation_t operation = {};
   hal_status_t status = context_lock(commands, &operation);
   if (status != HAL_OK) {
     return status;
   }
-  jh_lora_commands_context_t *context = operation.context;
+  jh_lora_commands_context_t *context =
+      jh_command_adapter_operation_context<jh_lora_commands_context_t>(
+          &operation);
   if (context->process_active || context->dispatch_active ||
       context->pending_response || context->received_ready) {
     return finish_operation(&operation, HAL_EBUSY);
@@ -508,12 +392,14 @@ hal_status_t hal_lora_commands_request_start(
   if (destination == HAL_LORA_LINK_ADDRESS_BROADCAST) {
     return HAL_EINVAL;
   }
-  jh_lora_commands_operation_t operation = {};
+  jh_command_adapter_operation_t operation = {};
   hal_status_t status = context_lock(commands, &operation);
   if (status != HAL_OK) {
     return status;
   }
-  jh_lora_commands_context_t *context = operation.context;
+  jh_lora_commands_context_t *context =
+      jh_command_adapter_operation_context<jh_lora_commands_context_t>(
+          &operation);
   if (context->pending_response) {
     return finish_operation(&operation, HAL_EBUSY);
   }
@@ -531,7 +417,7 @@ hal_status_t hal_lora_commands_request_start(
   if (status == HAL_OK) {
     ++context->diagnostics.requests_sent;
     *out_request_id = request_id;
-    context->next_request_id = next_nonzero_request_id(request_id);
+    context->next_request_id = jh_command_adapter_next_request_id(request_id);
     memset(context->transmit_wire, 0, wire_length);
   } else {
     record_error(context, status);
@@ -545,12 +431,14 @@ hal_status_t hal_lora_commands_event_start(hal_lora_commands_t commands,
                                            hal_command_encoding_t encoding,
                                            const void *payload,
                                            size_t payload_length) {
-  jh_lora_commands_operation_t operation = {};
+  jh_command_adapter_operation_t operation = {};
   hal_status_t status = context_lock(commands, &operation);
   if (status != HAL_OK) {
     return status;
   }
-  jh_lora_commands_context_t *context = operation.context;
+  jh_lora_commands_context_t *context =
+      jh_command_adapter_operation_context<jh_lora_commands_context_t>(
+          &operation);
   if (context->pending_response) {
     return finish_operation(&operation, HAL_EBUSY);
   }
@@ -577,12 +465,14 @@ hal_status_t hal_lora_commands_event_start(hal_lora_commands_t commands,
 }
 
 hal_status_t hal_lora_commands_process(hal_lora_commands_t commands) {
-  jh_lora_commands_operation_t operation = {};
+  jh_command_adapter_operation_t operation = {};
   hal_status_t status = context_lock(commands, &operation);
   if (status != HAL_OK) {
     return status;
   }
-  jh_lora_commands_context_t *context = operation.context;
+  jh_lora_commands_context_t *context =
+      jh_command_adapter_operation_context<jh_lora_commands_context_t>(
+          &operation);
   if (context->process_active) {
     return finish_operation(&operation, HAL_EBUSY);
   }
@@ -659,12 +549,14 @@ hal_lora_commands_receive(hal_lora_commands_t commands,
     memset(out_link_info, 0, sizeof(*out_link_info));
   }
 
-  jh_lora_commands_operation_t operation = {};
+  jh_command_adapter_operation_t operation = {};
   const hal_status_t status = context_lock(commands, &operation);
   if (status != HAL_OK) {
     return status;
   }
-  jh_lora_commands_context_t *context = operation.context;
+  jh_lora_commands_context_t *context =
+      jh_command_adapter_operation_context<jh_lora_commands_context_t>(
+          &operation);
   if (!context->received_ready) {
     return finish_operation(&operation, HAL_EAGAIN);
   }
@@ -684,12 +576,14 @@ hal_status_t hal_lora_commands_get_info(hal_lora_commands_t commands,
     return HAL_EINVAL;
   }
   memset(out_info, 0, sizeof(*out_info));
-  jh_lora_commands_operation_t operation = {};
+  jh_command_adapter_operation_t operation = {};
   hal_status_t status = context_lock(commands, &operation);
   if (status != HAL_OK) {
     return status;
   }
-  jh_lora_commands_context_t *context = operation.context;
+  jh_lora_commands_context_t *context =
+      jh_command_adapter_operation_context<jh_lora_commands_context_t>(
+          &operation);
 
   hal_lora_commands_info_t info = {};
   status = hal_lora_link_get_state(context->config.link, &info.link_state);
@@ -719,12 +613,14 @@ hal_status_t hal_lora_commands_get_diagnostics(
     return HAL_EINVAL;
   }
   memset(out_diagnostics, 0, sizeof(*out_diagnostics));
-  jh_lora_commands_operation_t operation = {};
+  jh_command_adapter_operation_t operation = {};
   const hal_status_t status = context_lock(commands, &operation);
   if (status != HAL_OK) {
     return status;
   }
-  jh_lora_commands_context_t *context = operation.context;
+  jh_lora_commands_context_t *context =
+      jh_command_adapter_operation_context<jh_lora_commands_context_t>(
+          &operation);
   *out_diagnostics = context->diagnostics;
   return finish_operation(&operation, HAL_OK);
 }

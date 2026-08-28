@@ -15,13 +15,16 @@ The following design rules apply:
 The native runtime owns `main()` when `HAL_PROVIDE_APP_ENTRY` is enabled.
 `app_start()` runs once before task dispatch. On bare-metal RP,
 `app_task0()` runs as the core-0 super-loop; `HAL_ENABLE_APP_TASK1` launches
-core 1 through `multicore_launch_core1()`, registers both participating cores
-with the flash transaction coordinator, and repeatedly dispatches
-`app_task1()`. On RP FreeRTOS SMP, the same hooks become tasks pinned to cores
-0 and 1. On STM32G474, bare-metal dispatch is cooperative in one super-loop,
-while FreeRTOS creates independent task0 and optional task1 tasks. ESP-IDF
-already owns the scheduler; HAL creates task0 on core 0 by default and optional
-task1 on core 1, with explicit core overrides or `-1` for no affinity.
+core 1 through `multicore_launch_core1()` before `app_start()`. The core-1
+bootstrap joins the flash transaction coordinator and waits; application
+dispatch begins only after core 0 finishes `app_start()`. This makes EEPROM/KV
+flash initialization safe during startup without exposing partially initialized
+application state to `app_task1()`. On RP FreeRTOS SMP, the same hooks become
+tasks pinned to cores 0 and 1. On STM32G474, bare-metal dispatch is cooperative
+in one super-loop, while FreeRTOS creates independent task0 and optional task1
+tasks. ESP-IDF already owns the scheduler; HAL creates task0 on core 0 by
+default and optional task1 on core 1, with explicit core overrides or `-1` for
+no affinity.
 
 The coordinator serializes native flash mutations, makes the other core safe,
 pauses TinyUSB, rejects active DMA and XIP-resident operation state, masks local

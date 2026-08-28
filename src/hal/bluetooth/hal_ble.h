@@ -152,6 +152,8 @@ typedef struct {
   size_t pending_scan_reports;
   bool advertising_requested;
   bool scan_requested;
+  /** Current peer, or a zeroed address while no connection is active. */
+  hal_ble_address_t peer_address;
 } hal_ble_info_t;
 
 /** Initialize the BLE host and controller. Idempotent after a successful call.

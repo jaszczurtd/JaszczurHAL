@@ -43,6 +43,13 @@ typedef struct {
   bool stream_published;
   bool stream_subscribed;
   bool stream_waiting_can_send;
+  bool stream_notify_in_progress;
+  uint16_t stream_notify_connection;
+  uint32_t stream_notify_sequence;
+  uint32_t stream_notify_active_sequence;
+  bool stream_completion_dispatching;
+  uint16_t stream_completion_connection;
+  uint32_t stream_completion_sequence;
   uint8_t stream_pending_frame[HAL_BLE_STREAM_MAX_FRAME_LEN];
   size_t stream_pending_frame_length;
 #endif
@@ -215,6 +222,12 @@ static void packet_handler(uint8_t packet_type, uint16_t channel,
     s_ble.stream_mtu = ATT_DEFAULT_MTU;
     s_ble.stream_subscribed = false;
     s_ble.stream_waiting_can_send = false;
+    s_ble.stream_notify_in_progress = false;
+    s_ble.stream_notify_connection = HCI_CON_HANDLE_INVALID;
+    s_ble.stream_notify_active_sequence = 0u;
+    s_ble.stream_completion_dispatching = false;
+    s_ble.stream_completion_connection = HCI_CON_HANDLE_INVALID;
+    s_ble.stream_completion_sequence = 0u;
     memset(s_ble.stream_pending_frame, 0, sizeof(s_ble.stream_pending_frame));
     s_ble.stream_pending_frame_length = 0u;
 #endif
@@ -258,6 +271,12 @@ static void packet_handler(uint8_t packet_type, uint16_t channel,
       s_ble.stream_mtu = 0u;
       s_ble.stream_subscribed = false;
       s_ble.stream_waiting_can_send = false;
+      s_ble.stream_notify_in_progress = false;
+      s_ble.stream_notify_connection = HCI_CON_HANDLE_INVALID;
+      s_ble.stream_notify_active_sequence = 0u;
+      s_ble.stream_completion_dispatching = false;
+      s_ble.stream_completion_connection = HCI_CON_HANDLE_INVALID;
+      s_ble.stream_completion_sequence = 0u;
       memset(s_ble.stream_pending_frame, 0, sizeof(s_ble.stream_pending_frame));
       s_ble.stream_pending_frame_length = 0u;
 #endif
@@ -389,6 +408,12 @@ static int att_write_callback(hci_con_handle_t connection_handle,
     s_ble.stream_subscribed = subscribed;
     if (!subscribed) {
       s_ble.stream_waiting_can_send = false;
+      s_ble.stream_notify_in_progress = false;
+      s_ble.stream_notify_connection = HCI_CON_HANDLE_INVALID;
+      s_ble.stream_notify_active_sequence = 0u;
+      s_ble.stream_completion_dispatching = false;
+      s_ble.stream_completion_connection = HCI_CON_HANDLE_INVALID;
+      s_ble.stream_completion_sequence = 0u;
       memset(s_ble.stream_pending_frame, 0, sizeof(s_ble.stream_pending_frame));
       s_ble.stream_pending_frame_length = 0u;
     }
@@ -462,6 +487,12 @@ static void ble_profile_stop(void *context) {
   s_ble.stream_subscribed = false;
   s_ble.stream_mtu = 0u;
   s_ble.stream_waiting_can_send = false;
+  s_ble.stream_notify_in_progress = false;
+  s_ble.stream_notify_connection = HCI_CON_HANDLE_INVALID;
+  s_ble.stream_notify_active_sequence = 0u;
+  s_ble.stream_completion_dispatching = false;
+  s_ble.stream_completion_connection = HCI_CON_HANDLE_INVALID;
+  s_ble.stream_completion_sequence = 0u;
   memset(s_ble.stream_pending_frame, 0, sizeof(s_ble.stream_pending_frame));
   s_ble.stream_pending_frame_length = 0u;
 #endif
@@ -505,6 +536,7 @@ static void service_stream_notification_under_radio_lock(void) {
   uint8_t frame[HAL_BLE_STREAM_MAX_FRAME_LEN];
   size_t length = 0u;
   uint16_t connection = HCI_CON_HANDLE_INVALID;
+  uint32_t sequence = 0u;
   hal_mutex_t mutex = backend_mutex();
   if (mutex == NULL) {
     emit_error(HAL_ENOMEM, true);
@@ -515,11 +547,20 @@ static void service_stream_notification_under_radio_lock(void) {
   const bool ready = s_ble.started && !s_ble.faulted && s_ble.connected &&
                      s_ble.stream_subscribed &&
                      !s_ble.stream_waiting_can_send &&
+                     !s_ble.stream_notify_in_progress &&
                      s_ble.stream_pending_frame_length != 0u;
   if (ready) {
     connection = s_ble.connection;
     length = s_ble.stream_pending_frame_length;
     memcpy(frame, s_ble.stream_pending_frame, length);
+    ++s_ble.stream_notify_sequence;
+    if (s_ble.stream_notify_sequence == 0u) {
+      ++s_ble.stream_notify_sequence;
+    }
+    sequence = s_ble.stream_notify_sequence;
+    s_ble.stream_notify_in_progress = true;
+    s_ble.stream_notify_connection = connection;
+    s_ble.stream_notify_active_sequence = sequence;
   }
   hal_mutex_unlock(mutex);
   if (!ready) {
@@ -534,23 +575,59 @@ static void service_stream_notification_under_radio_lock(void) {
   const hal_status_t status = stream_send_status(bt_status);
   if (status == HAL_EAGAIN) {
     hal_mutex_lock(mutex);
-    s_ble.stream_waiting_can_send = true;
+    const bool current = s_ble.stream_notify_in_progress &&
+                         s_ble.stream_notify_connection == connection &&
+                         s_ble.stream_notify_active_sequence == sequence;
+    if (current) {
+      s_ble.stream_waiting_can_send = true;
+      s_ble.stream_notify_in_progress = false;
+      s_ble.stream_notify_connection = HCI_CON_HANDLE_INVALID;
+      s_ble.stream_notify_active_sequence = 0u;
+    }
     hal_mutex_unlock(mutex);
-    att_server_request_can_send_now_event(connection);
+    if (current) {
+      att_server_request_can_send_now_event(connection);
+    }
     return;
   }
 
   hal_mutex_lock(mutex);
-  memset(s_ble.stream_pending_frame, 0, sizeof(s_ble.stream_pending_frame));
-  s_ble.stream_pending_frame_length = 0u;
-  s_ble.stream_waiting_can_send = false;
+  const bool current = s_ble.stream_notify_in_progress &&
+                       s_ble.stream_notify_connection == connection &&
+                       s_ble.stream_notify_active_sequence == sequence;
+  if (current) {
+    memset(s_ble.stream_pending_frame, 0, sizeof(s_ble.stream_pending_frame));
+    s_ble.stream_pending_frame_length = 0u;
+    s_ble.stream_waiting_can_send = false;
+    s_ble.stream_notify_in_progress = false;
+    s_ble.stream_notify_connection = HCI_CON_HANDLE_INVALID;
+    s_ble.stream_notify_active_sequence = 0u;
+    /* Keep discard fail-safe until the synchronous completion callback has
+     * observed this submission. A callback may still stage the next frame. */
+    s_ble.stream_completion_dispatching = true;
+    s_ble.stream_completion_connection = connection;
+    s_ble.stream_completion_sequence = sequence;
+  }
   hal_mutex_unlock(mutex);
+  if (!current) {
+    return;
+  }
   const jh_ble_backend_event_t event = {
       .type = JH_BLE_BACKEND_EVENT_STREAM_CAN_SEND,
       .status = status,
       .native_connection = connection,
   };
   emit_event(&event);
+
+  hal_mutex_lock(mutex);
+  if (s_ble.stream_completion_dispatching &&
+      s_ble.stream_completion_connection == connection &&
+      s_ble.stream_completion_sequence == sequence) {
+    s_ble.stream_completion_dispatching = false;
+    s_ble.stream_completion_connection = HCI_CON_HANDLE_INVALID;
+    s_ble.stream_completion_sequence = 0u;
+  }
+  hal_mutex_unlock(mutex);
 }
 #endif
 
@@ -876,12 +953,41 @@ static hal_status_t backend_stream_notify(void *context,
     hal_mutex_unlock(mutex);
     return HAL_EOVERFLOW;
   }
-  if (s_ble.stream_pending_frame_length != 0u) {
+  if (s_ble.stream_pending_frame_length != 0u ||
+      s_ble.stream_notify_in_progress) {
     hal_mutex_unlock(mutex);
     return HAL_EAGAIN;
   }
   memcpy(s_ble.stream_pending_frame, frame, length);
   s_ble.stream_pending_frame_length = length;
+  hal_mutex_unlock(mutex);
+  return HAL_OK;
+}
+
+static hal_status_t backend_stream_discard_pending(void *context,
+                                                   uint16_t native_connection) {
+  (void)context;
+  hal_mutex_t mutex = backend_mutex();
+  if (mutex == NULL) {
+    return HAL_ENOMEM;
+  }
+  hal_mutex_lock(mutex);
+  if (!s_ble.started || s_ble.faulted) {
+    const hal_status_t status = s_ble.faulted ? HAL_EHW : HAL_EUNINIT;
+    hal_mutex_unlock(mutex);
+    return status;
+  }
+  if (!s_ble.connected || native_connection == HCI_CON_HANDLE_INVALID ||
+      native_connection != s_ble.connection) {
+    hal_mutex_unlock(mutex);
+    return HAL_ENOENT;
+  }
+  if (s_ble.stream_notify_in_progress || s_ble.stream_completion_dispatching) {
+    hal_mutex_unlock(mutex);
+    return HAL_EBUSY;
+  }
+  memset(s_ble.stream_pending_frame, 0, sizeof(s_ble.stream_pending_frame));
+  s_ble.stream_pending_frame_length = 0u;
   hal_mutex_unlock(mutex);
   return HAL_OK;
 }
@@ -899,6 +1005,15 @@ static hal_status_t backend_stream_publish(void *context,
     hal_mutex_unlock(mutex);
     return HAL_EUNINIT;
   }
+  if (s_ble.faulted) {
+    hal_mutex_unlock(mutex);
+    return HAL_EHW;
+  }
+  if (s_ble.stream_pending_frame_length != 0u ||
+      s_ble.stream_notify_in_progress || s_ble.stream_completion_dispatching) {
+    hal_mutex_unlock(mutex);
+    return HAL_EBUSY;
+  }
   s_ble.stream_version = protocol_version;
   s_ble.stream_capabilities = capabilities;
   s_ble.stream_published = true;
@@ -913,9 +1028,18 @@ static hal_status_t backend_stream_unpublish(void *context) {
     return HAL_ENOMEM;
   }
   hal_mutex_lock(mutex);
+  /* An att_server_notify() already outside this mutex cannot be cancelled.
+   * Invalidating its sequence makes the late return silent, while all staged
+   * bytes and GATT access are dropped immediately. */
   s_ble.stream_published = false;
   s_ble.stream_subscribed = false;
   s_ble.stream_waiting_can_send = false;
+  s_ble.stream_notify_in_progress = false;
+  s_ble.stream_notify_connection = HCI_CON_HANDLE_INVALID;
+  s_ble.stream_notify_active_sequence = 0u;
+  s_ble.stream_completion_dispatching = false;
+  s_ble.stream_completion_connection = HCI_CON_HANDLE_INVALID;
+  s_ble.stream_completion_sequence = 0u;
   s_ble.stream_version = 0u;
   s_ble.stream_capabilities = 0u;
   memset(s_ble.stream_pending_frame, 0, sizeof(s_ble.stream_pending_frame));
@@ -937,6 +1061,7 @@ static const jh_ble_backend_t s_backend = {
     .scan_stop = backend_scan_stop,
 #ifdef HAL_ENABLE_BLE_STREAM
     .stream_notify = backend_stream_notify,
+    .stream_discard_pending = backend_stream_discard_pending,
     .stream_publish = backend_stream_publish,
     .stream_unpublish = backend_stream_unpublish,
 #endif

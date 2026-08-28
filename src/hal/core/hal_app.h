@@ -24,14 +24,16 @@
  * ── Backend mapping ──────────────────────────────────────────────────────────
  *
  *   RP family:
- *       bare: main() -> app_start()
+ *       bare: main() -> optional core-1 flash-safety bootstrap
+ *                    -> app_start()
  *                    -> core 0 super-loop with app_task0()
  *                    -> optional core 1 super-loop with app_task1()
  *       FreeRTOS: main() -> app_start()
  *                         -> create app_task0 pinned to core 0
  *                         -> optional app_task1 pinned to core 1
  *                         -> vTaskStartScheduler()
- *       The bare core-1 path registers as a multicore-lockout victim.
+ *       The bare core-1 path registers as a multicore-lockout victim before
+ *       app_start(), then waits until application initialization completes.
  *
  *   STM32G474 (bare-metal):
  *       main() { app_start(); for(;;) { app_task0(); optional app_task1(); } }

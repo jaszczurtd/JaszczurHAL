@@ -12,12 +12,27 @@ proves knowledge of the per-device secret. Once authenticated it publishes a
 telemetry line every second, retains at most one sample for retry during TX
 backpressure, and logs whatever the client sends.
 
+The separate `commands` and `commands-freertos` variants advertise as
+`JH Commands`. They give `hal_ble_commands` exclusive ownership of Stream
+payloads, register transport-neutral handlers and exchange command-wire
+requests, responses and events with an authenticated Central.
+
 ## Build and run
 
 ```bash
 ./scripts/examples_dispatcher.py build --target rp2040 --example 26_ble_stream
 ./scripts/examples_dispatcher.py build --target rp2350-arm --example 26_ble_stream
 ./scripts/examples_dispatcher.py build --target stm32g474 --example 26_ble_stream
+```
+
+The dispatcher command for example 26 builds the base firmware and both command
+variants. To build only one command variant, use the shared project entrypoint:
+
+```bash
+vscode/entry/jh-vscode build --project examples/26_ble_stream \
+  --target rp2040 --board picow --variant commands
+vscode/entry/jh-vscode build --project examples/26_ble_stream \
+  --target rp2040 --board picow --variant commands-freertos
 ```
 
 The dispatcher-backed default profiles are RP2040 `picow`, RP2350 ARM `pico2w`,
@@ -64,6 +79,23 @@ and every constant live in
 The negotiated ATT MTU must reach `HAL_BLE_STREAM_MIN_ATT_MTU` before a
 handshake fits in one write; the example logs the MTU it observes.
 
+The command variants use Linux/BlueZ as the Central. JaszczurHAL currently
+provides Peripheral and passive Observer roles; a second board running this
+example is another Peripheral. The short hardware verifier performs the
+client-side handshake and splits command-wire data according to the negotiated
+MTU:
+
+```bash
+python3 tests/hardware/bluetooth_stream/verify_commands.py \
+  --address XX:XX:XX:XX:XX:XX \
+  --target rp2040 --board picow --runtime baremetal
+```
+
+The verifier covers a fragmented 500-byte binary echo, handler provenance and
+security metadata, source policy, unknown commands, an outbound event, a
+Peripheral-originated request and one reconnect. Use `--runtime freertos` for
+the `commands-freertos` image.
+
 ## What the example shows
 
 - initializing the BLE controller, reading its address, advertising and
@@ -74,6 +106,13 @@ handshake fits in one write; the example logs the MTU it observes.
 - retaining and retrying one bounded telemetry sample after `HAL_EAGAIN`;
 - retaining one advertising request so advertising resumes automatically after
   a disconnect.
+
+The command variants additionally show:
+
+- attaching one command adapter to the initialized authenticated Stream;
+- registering BLE-only and source-restricted routes on the shared router;
+- processing incoming requests and automatic responses incrementally;
+- sending an event and a Peripheral-originated request to the Central.
 
 For an independent client implementation and multi-target stability/security
 test, see

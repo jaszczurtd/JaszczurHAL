@@ -195,6 +195,7 @@ function(jh_collect_rp_hal_sources OUT_VAR SRC_DIR)
     list(FILTER _common_sources EXCLUDE REGEX "/bluetooth/")
     list(APPEND _common_sources
         "${SRC_DIR}/hal/bluetooth/hal_ble.cpp"
+        "${SRC_DIR}/hal/bluetooth/hal_ble_commands.cpp"
         "${SRC_DIR}/hal/bluetooth/hal_ble_stream.cpp"
     )
 

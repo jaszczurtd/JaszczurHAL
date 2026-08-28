@@ -36,8 +36,10 @@ static uint8_t s_tx_pin = 0u;
 static uint32_t s_baud = 0u;
 static uint16_t s_config = HAL_GPS_DEFAULT_UART_CONFIG;
 static bool s_autodetect_done = false;
+static bool s_initialized = false;
+static bool s_paused = false;
 
-static void gps_reinit_serial(uint16_t config) {
+static hal_status_t gps_reinit_serial(uint16_t config) {
   if (s_serial) {
     hal_swserial_destroy(s_serial);
     s_serial = nullptr;
@@ -48,7 +50,7 @@ static void gps_reinit_serial(uint16_t config) {
   if (status != HAL_OK) {
     hal_derr_limited("gps", "reinit failed: swserial create: %s",
                      hal_status_to_string(status));
-    return;
+    return status;
   }
 
   status = hal_swserial_begin(s_serial, s_baud, s_config);
@@ -58,11 +60,26 @@ static void gps_reinit_serial(uint16_t config) {
     hal_swserial_destroy(s_serial);
     s_serial = nullptr;
   }
+  return status;
+}
+
+static hal_status_t gps_reconfigure_serial(uint16_t config) {
+  if (s_serial == nullptr) {
+    return HAL_EUNINIT;
+  }
+  const hal_status_t status = hal_swserial_begin(s_serial, s_baud, config);
+  if (status == HAL_OK) {
+    s_config = config;
+  } else {
+    hal_derr_limited("gps", "reconfigure failed: swserial begin: %s",
+                     hal_status_to_string(status));
+  }
+  return status;
 }
 
 void hal_gps_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud,
                   uint16_t config) {
-  if (s_serial) {
+  if (s_initialized) {
     return;
   }
 
@@ -86,10 +103,40 @@ void hal_gps_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud,
                      hal_status_to_string(status));
     hal_swserial_destroy(s_serial);
     s_serial = nullptr;
+    return;
   }
+  s_initialized = true;
+  s_paused = false;
+}
+
+hal_status_t hal_gps_pause(void) {
+  if (!s_initialized || s_paused) {
+    return HAL_OK;
+  }
+  if (s_serial == nullptr) {
+    return HAL_ESTATE;
+  }
+  hal_swserial_destroy(s_serial);
+  s_serial = nullptr;
+  s_paused = true;
+  return HAL_OK;
+}
+
+hal_status_t hal_gps_resume(void) {
+  if (!s_initialized || !s_paused) {
+    return HAL_OK;
+  }
+  const hal_status_t status = gps_reinit_serial(s_config);
+  if (status == HAL_OK) {
+    s_paused = false;
+  }
+  return status;
 }
 
 void hal_gps_update(void) {
+  if (s_paused) {
+    return;
+  }
   if (!s_serial) {
     hal_derr_limited("gps", "update failed: swserial not initialized");
     return;
@@ -117,14 +164,14 @@ void hal_gps_update(void) {
               (unsigned long)hal_gps_failed_checksum(), (unsigned)s_config,
               (unsigned)alternate);
       hal_gps_engine_reset();
-      gps_reinit_serial(alternate);
+      (void)gps_reconfigure_serial(alternate);
     }
     s_autodetect_done = true;
   }
 }
 
 int hal_gps_serial_available(void) {
-  return s_serial ? hal_swserial_available(s_serial) : -1;
+  return s_serial ? hal_swserial_available(s_serial) : (s_paused ? 0 : -1);
 }
 
 #elif defined(JH_GPS_TRANSPORT_UART)
@@ -136,30 +183,75 @@ int hal_gps_serial_available(void) {
 #endif
 
 static hal_uart_t s_uart = nullptr;
+static uint8_t s_rx_pin = 0u;
+static uint8_t s_tx_pin = 0u;
+static uint32_t s_baud = 0u;
+static uint16_t s_config = HAL_GPS_DEFAULT_UART_CONFIG;
+static bool s_initialized = false;
+static bool s_paused = false;
 
-void hal_gps_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud,
-                  uint16_t config) {
-  if (s_uart) {
-    return;
-  }
-
-  hal_gps_engine_reset();
-  s_uart = hal_uart_create(HAL_GPS_UART_PORT, rx_pin, tx_pin);
+static hal_status_t gps_start_uart(void) {
+  s_uart = hal_uart_create(HAL_GPS_UART_PORT, s_rx_pin, s_tx_pin);
   if (!s_uart) {
-    hal_derr_limited("gps", "init failed: uart create returned NULL");
-    return;
+    return HAL_ENOMEM;
   }
-
-  const hal_status_t status = hal_uart_begin(s_uart, baud, config);
+  const hal_status_t status = hal_uart_begin(s_uart, s_baud, s_config);
   if (status != HAL_OK) {
-    hal_derr_limited("gps", "init failed: uart begin: %s",
-                     hal_status_to_string(status));
     hal_uart_destroy(s_uart);
     s_uart = nullptr;
   }
+  return status;
+}
+
+void hal_gps_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud,
+                  uint16_t config) {
+  if (s_initialized) {
+    return;
+  }
+
+  s_rx_pin = rx_pin;
+  s_tx_pin = tx_pin;
+  s_baud = baud;
+  s_config = config;
+  hal_gps_engine_reset();
+  const hal_status_t status = gps_start_uart();
+  if (status != HAL_OK) {
+    hal_derr_limited("gps", "init failed: uart begin: %s",
+                     hal_status_to_string(status));
+    return;
+  }
+  s_initialized = true;
+  s_paused = false;
+}
+
+hal_status_t hal_gps_pause(void) {
+  if (!s_initialized || s_paused) {
+    return HAL_OK;
+  }
+  if (s_uart == nullptr) {
+    return HAL_ESTATE;
+  }
+  hal_uart_destroy(s_uart);
+  s_uart = nullptr;
+  s_paused = true;
+  return HAL_OK;
+}
+
+hal_status_t hal_gps_resume(void) {
+  if (!s_initialized || !s_paused) {
+    return HAL_OK;
+  }
+  const hal_status_t status = gps_start_uart();
+  if (status == HAL_OK) {
+    s_paused = false;
+  }
+  return status;
 }
 
 void hal_gps_update(void) {
+  if (s_paused) {
+    return;
+  }
   if (!s_uart) {
     hal_derr_limited("gps", "update failed: uart not initialized");
     return;
@@ -175,10 +267,13 @@ void hal_gps_update(void) {
 }
 
 int hal_gps_serial_available(void) {
-  return s_uart ? hal_uart_available(s_uart) : -1;
+  return s_uart ? hal_uart_available(s_uart) : (s_paused ? 0 : -1);
 }
 
 #elif defined(JH_GPS_TRANSPORT_MOCK)
+
+static bool s_initialized = false;
+static bool s_paused = false;
 
 void hal_gps_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud,
                   uint16_t config) {
@@ -187,6 +282,23 @@ void hal_gps_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud,
   (void)baud;
   (void)config;
   hal_gps_engine_reset();
+  s_initialized = true;
+  s_paused = false;
+}
+
+hal_status_t hal_gps_pause(void) {
+  if (s_initialized) {
+    s_paused = true;
+  }
+  return HAL_OK;
+}
+
+hal_status_t hal_gps_resume(void) {
+  if (!s_initialized || !s_paused) {
+    return HAL_OK;
+  }
+  s_paused = false;
+  return HAL_OK;
 }
 
 void hal_gps_update(void) {}

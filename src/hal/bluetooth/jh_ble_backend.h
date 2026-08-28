@@ -68,15 +68,20 @@ typedef struct {
                              const hal_ble_scan_config_t *config);
   hal_status_t (*scan_stop)(void *context);
 #ifdef HAL_ENABLE_BLE_STREAM
-  /* Publish one TX frame. HAL_EAGAIN asks the caller to retry after
-     JH_BLE_BACKEND_EVENT_STREAM_CAN_SEND. */
+  /* Accept one TX frame into backend-owned staging. Completion after local
+     submission is reported through JH_BLE_BACKEND_EVENT_STREAM_CAN_SEND. */
   hal_status_t (*stream_notify)(void *context, uint16_t native_connection,
                                 const uint8_t *frame, size_t length);
+  /* Discard a staged frame before rekey. HAL_EBUSY means local submission or
+     its completion callback is in progress and cannot be cancelled safely. */
+  hal_status_t (*stream_discard_pending)(void *context,
+                                         uint16_t native_connection);
   /* Values served from the read-only version and capabilities
      characteristics. */
   hal_status_t (*stream_publish)(void *context, uint8_t protocol_version,
                                  uint16_t capabilities);
-  /* Deactivate stream GATT access and cancel an accepted notification. */
+  /* Deactivate stream GATT access and discard backend-owned staging. An
+     already executing controller call may finish without a completion event. */
   hal_status_t (*stream_unpublish)(void *context);
 #endif
 } jh_ble_backend_t;

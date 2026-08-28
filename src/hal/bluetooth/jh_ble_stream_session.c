@@ -44,6 +44,14 @@ static uint64_t load_u64_le(const uint8_t *in) {
   return value;
 }
 
+static bool bytes_are_all_zero(const uint8_t *data, size_t length) {
+  uint8_t combined = 0u;
+  for (size_t index = 0u; index < length; ++index) {
+    combined |= data[index];
+  }
+  return combined == 0u;
+}
+
 /* transcript = domain | profile | version | device caps | client caps |
                 session id | client nonce | device nonce */
 _Static_assert(sizeof(HAL_BLE_STREAM_PROFILE_NAME) - 1u ==
@@ -179,8 +187,10 @@ static hal_status_t handle_hello(jh_ble_stream_session_t *session,
      handshake fails closed. */
   if (jh_secure_random_bytes(session->device_nonce, HAL_BLE_STREAM_NONCE_LEN) !=
           HAL_OK ||
+      bytes_are_all_zero(session->device_nonce, HAL_BLE_STREAM_NONCE_LEN) ||
       jh_secure_random_bytes(session->session_id,
-                             HAL_BLE_STREAM_SESSION_ID_LEN) != HAL_OK) {
+                             HAL_BLE_STREAM_SESSION_ID_LEN) != HAL_OK ||
+      bytes_are_all_zero(session->session_id, HAL_BLE_STREAM_SESSION_ID_LEN)) {
     jh_ble_stream_session_reset(session);
     close_with(result, HAL_BLE_STREAM_CLOSE_PROTOCOL_ERROR);
     return HAL_EINTERNAL;

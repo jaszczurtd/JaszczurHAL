@@ -8,7 +8,7 @@
  * @file hal_ble_stream.h
  * @brief JH BLE Stream v1 - bounded byte stream over one static GATT service.
  *
- * The profile is a versioned JaszczurHAL contract. A client reads the protocol
+ * The profile is a versioned JaszczurHAL interface. A client reads the protocol
  * version and capabilities without a session. Every mutating or sensitive
  * operation requires a mutually authenticated session built on a per-device
  * secret, HMAC-SHA256 proofs and ChaCha20-Poly1305 frames.
@@ -163,18 +163,32 @@ typedef struct {
   uint32_t dropped_rx_frames;
   uint32_t dropped_tx_frames;
   size_t pending_rx;
+  /** Locally queued payloads plus one notification accepted by the backend. */
   size_t pending_tx;
   bool secret_provisioned;
   bool subscribed;
+  /** Active public handshake identifier represented as a little-endian integer.
+   */
+  uint64_t session_id;
 } hal_ble_stream_info_t;
+
+/** @brief Authenticated provenance copied with one received payload. */
+typedef struct {
+  uint32_t generation;
+  uint64_t session_id;
+  uint64_t counter;
+} hal_ble_stream_payload_info_t;
 
 /**
  * Publish the service and reset session state. Requires an initialized
- * hal_ble subsystem. Idempotent after a successful call.
+ * hal_ble subsystem. Idempotent after a successful call. A concurrent Stream
+ * lifecycle transition returns HAL_EBUSY.
  */
 hal_status_t hal_ble_stream_initialize(const hal_ble_stream_config_t *config);
 
-/** Close any session, unpublish the stream and zero all key material. */
+/** Close any session, unpublish the stream and zero all key material.
+ * A concurrent Stream lifecycle transition returns HAL_EBUSY.
+ */
 hal_status_t hal_ble_stream_deinitialize(void);
 
 /**
@@ -198,6 +212,11 @@ hal_status_t hal_ble_stream_send(const void *data, size_t length);
  */
 hal_status_t hal_ble_stream_receive(void *out, size_t capacity,
                                     size_t *out_length);
+
+/** @brief Pop one payload together with its immutable session metadata. */
+hal_status_t
+hal_ble_stream_receive_ex(void *out, size_t capacity, size_t *out_length,
+                          hal_ble_stream_payload_info_t *out_payload_info);
 
 /** Read a consistent stream snapshot. */
 hal_status_t hal_ble_stream_get_info(hal_ble_stream_info_t *out_info);

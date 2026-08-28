@@ -89,8 +89,9 @@ Target abbreviations used below are `R0` = `rp2040`, `RA` = `rp2350-arm`,
 | `23_io_pmic` | RGB LED, simple I/O expanders/DAC, and ADP5360 PMIC | R0, RA, RV, S | R0, S | - |
 | `24_epd_display` | E-paper display facade and refresh path | R0, RA, RV, S | R0, S | - |
 | `25_ota` | Discovery, authenticated OTA staging, trial confirmation, rollback, and BOOTSEL recovery | R0, RA | R0 | - |
-| `26_ble_stream` | BLE Peripheral lifecycle and authenticated JH BLE Stream v1 | R0, RA, S | R0, RA, S | - |
+| `26_ble_stream` | BLE Peripheral lifecycle, authenticated JH BLE Stream v1, and command-router adapter | R0, RA, S | R0, RA, S | `commands` and `commands-freertos` on R0, RA, S; gate on R0 |
 | `27_lora_point_to_point` | Raw SX1262 ping/pong plus fragmented command-router request/response over `hal_lora_link` | R0, S | R0, S | `probe`, `responder`, `link` and `link-responder` on R0, S; manual hardware variants `sf7` and `responder-sf7` |
+| `28_serial_commands` | Framed Serial Session dispatch through an independent command router | R0, RA, RV, S | R0, S | - |
 
 RP-family network builds use `picow` for RP2040 and `pico2w` for RP2350 ARM.
 RP2350 RISC-V configurations that require CYW43 are unsupported. STM32G474
@@ -107,7 +108,7 @@ the deterministic SF7/6 dBm hardware-test pair.
 The `link` and `link-responder` variants exchange a correlated binary 500-byte
 `echo` command and response through the shared command router. Both directions
 exercise addressing, request identifiers, three-fragment reassembly, duplicate
-suppression and retransmission. The handler route also allows the future
+suppression and retransmission. The handler route also allows the implemented
 `BLE_STREAM` source without adding BLE transport code to this example.
 SX1261, SX1276 and SX1278 remain experimental software-only integrations and
 do not add example board profiles or claim physical support for this fixture.

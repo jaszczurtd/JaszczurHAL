@@ -284,12 +284,70 @@ void hal_serial_session_set_unknown_handler(hal_serial_session_t *session,
   session->unknown_user = user;
 }
 
+hal_status_t
+hal_serial_session_attach_unknown_handler(hal_serial_session_t *session,
+                                          hal_serial_session_unknown_cb_t cb,
+                                          void *user) {
+  if (session == nullptr || cb == nullptr) {
+    return HAL_EINVAL;
+  }
+  if (session->module_tag == nullptr) {
+    return HAL_EUNINIT;
+  }
+  if (session->unknown_handler != nullptr) {
+    return session->unknown_handler == cb && session->unknown_user == user
+               ? HAL_EEXIST
+               : HAL_EBUSY;
+  }
+  session->unknown_handler = cb;
+  session->unknown_user = user;
+  return HAL_OK;
+}
+
+hal_status_t
+hal_serial_session_detach_unknown_handler(hal_serial_session_t *session,
+                                          hal_serial_session_unknown_cb_t cb,
+                                          void *user) {
+  if (session == nullptr || cb == nullptr) {
+    return HAL_EINVAL;
+  }
+  if (session->module_tag == nullptr) {
+    return HAL_EUNINIT;
+  }
+  if (session->unknown_handler == nullptr) {
+    return HAL_ENOENT;
+  }
+  if (session->unknown_handler != cb || session->unknown_user != user) {
+    return HAL_EBUSY;
+  }
+  session->unknown_handler = nullptr;
+  session->unknown_user = nullptr;
+  return HAL_OK;
+}
+
 bool hal_serial_session_is_active(const hal_serial_session_t *session) {
   return session != nullptr ? session->active : false;
 }
 
 uint32_t hal_serial_session_id(const hal_serial_session_t *session) {
   return session != nullptr ? session->session_id : 0u;
+}
+
+hal_status_t
+hal_serial_session_current_request_seq(const hal_serial_session_t *session,
+                                       uint16_t *out_seq) {
+  if (out_seq == nullptr || session == nullptr) {
+    return HAL_EINVAL;
+  }
+  *out_seq = 0u;
+  if (session->module_tag == nullptr) {
+    return HAL_EUNINIT;
+  }
+  if (!session->in_request) {
+    return HAL_ESTATE;
+  }
+  *out_seq = session->request_seq;
+  return HAL_OK;
 }
 
 bool hal_serial_session_is_authenticated(const hal_serial_session_t *session) {
@@ -308,15 +366,39 @@ bool hal_serial_session_should_mute_debug_for_line(const char *line) {
 
 void hal_serial_session_println(hal_serial_session_t *session,
                                 const char *payload) {
-  if (session == nullptr || payload == nullptr || !session->in_request) {
-    return;
+  (void)hal_serial_session_println_ex(session, payload);
+}
+
+hal_status_t hal_serial_session_println_ex(hal_serial_session_t *session,
+                                           const char *payload) {
+  if (session == nullptr || payload == nullptr) {
+    return HAL_EINVAL;
+  }
+  if (session->module_tag == nullptr) {
+    return HAL_EUNINIT;
+  }
+  if (!session->in_request) {
+    return HAL_ESTATE;
+  }
+  const size_t payload_length = strlen(payload);
+  if (payload_length > HAL_SERIAL_FRAME_PAYLOAD_MAX) {
+    return HAL_EOVERFLOW;
+  }
+  for (size_t index = 0u; index < payload_length; ++index) {
+    if (payload[index] == '*' || payload[index] == '\r' ||
+        payload[index] == '\n') {
+      return HAL_EPROTO;
+    }
   }
   char framed[HAL_SERIAL_FRAME_LINE_MAX] = {0};
-  if (hal_serial_frame_encode(session->request_seq, payload, framed,
-                              sizeof(framed), nullptr)) {
-    hal_serial_println(framed);
+  if (!hal_serial_frame_encode(session->request_seq, payload, framed,
+                               sizeof(framed), nullptr)) {
+    jh_secure_zeroize(framed, sizeof(framed));
+    return HAL_EINTERNAL;
   }
+  hal_serial_println(framed);
   jh_secure_zeroize(framed, sizeof(framed));
+  return HAL_OK;
 }
 
 void hal_serial_session_poll(hal_serial_session_t *session) {
