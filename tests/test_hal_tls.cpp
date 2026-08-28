@@ -36,7 +36,10 @@ static hal_status_t reentrant_time(void *context, uint64_t *out_unix_seconds) {
 }
 
 void setUp(void) { hal_mock_time_reset(); }
-void tearDown(void) {}
+void tearDown(void) {
+  hal_mock_tls_full_reset();
+  hal_mock_time_reset();
+}
 
 void test_default_config_is_finite_and_poll_driven(void) {
   hal_tls_client_config_t config = {};

@@ -1110,4 +1110,25 @@ hal_lora_link_get_diagnostics(hal_lora_link_t link,
   return HAL_OK;
 }
 
+#if HAL_TARGET_IS_MOCK
+/* Test-only: force the pool mutex and every context mutex through a real
+ * destroy so Helgrind/DRD can observe the teardown path, then mark the
+ * pool uninitialized so the next link operation recreates them from
+ * scratch. Firmware never calls this. Call only when no other thread is
+ * using the link pool. */
+void hal_mock_lora_link_full_reset(void) {
+  for (size_t index = 0u; index < HAL_LORA_LINK_MAX_INSTANCES; ++index) {
+    if (s_contexts[index].mutex != NULL) {
+      hal_mutex_destroy(s_contexts[index].mutex);
+    }
+  }
+  memset(s_contexts, 0, sizeof(s_contexts));
+  if (s_pool_mutex != NULL) {
+    hal_mutex_destroy(s_pool_mutex);
+    s_pool_mutex = NULL;
+  }
+  s_pool_initialized = false;
+}
+#endif /* HAL_TARGET_IS_MOCK */
+
 #endif /* HAL_ENABLE_LORA_LINK */

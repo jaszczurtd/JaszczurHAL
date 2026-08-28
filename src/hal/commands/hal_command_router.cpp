@@ -2,6 +2,7 @@
 
 #ifdef HAL_ENABLE_COMMAND_ROUTER
 
+#include "hal/commands/jh_command_adapter_internal.h"
 #include "hal/commands/jh_command_router_internal.h"
 #include "hal/core/hal_mutex_once.h"
 #include "hal/core/jh_handle_pool.h"
@@ -65,7 +66,9 @@ static hal_status_t pool_lock(void) {
 
 static void pool_unlock(void) { hal_mutex_unlock(s_pool_mutex); }
 
-static void clear_context(jh_command_router_context_t *context) {
+static void clear_context(void *token) {
+  jh_command_router_context_t *context =
+      static_cast<jh_command_router_context_t *>(token);
   hal_mutex_t mutex = context->mutex;
   memset(context, 0, sizeof(*context));
   context->mutex = mutex;
@@ -97,69 +100,22 @@ static hal_status_t allocate_context_locked(bool is_default,
   return HAL_OK;
 }
 
-static hal_status_t lease_finish(jh_handle_lease_t *lease) {
-  hal_status_t status = pool_lock();
-  if (status != HAL_OK) {
-    return status;
-  }
-  void *deferred_token = NULL;
-  status = jh_handle_end_operation(&s_handle_pool, lease, &deferred_token);
-  if (status == HAL_OK && deferred_token != NULL) {
-    clear_context(static_cast<jh_command_router_context_t *>(deferred_token));
-  }
-  pool_unlock();
-  return status;
+static const jh_command_adapter_context_access_t s_context_access = {
+    &s_handle_pool,
+    pool_lock,
+    pool_unlock,
+    jh_command_adapter_context_mutex<jh_command_router_context_t>,
+    jh_command_adapter_context_allocated<jh_command_router_context_t>,
+    clear_context};
+
+static hal_status_t context_lock(hal_command_router_t router,
+                                 jh_command_adapter_operation_t *operation) {
+  return jh_command_adapter_context_lock(&s_context_access, router, operation);
 }
 
-static hal_status_t context_acquire(hal_command_router_t router,
-                                    jh_handle_lease_t *out_lease,
-                                    jh_command_router_context_t **out_context) {
-  if (out_lease == NULL || out_context == NULL) {
-    return HAL_EINVAL;
-  }
-  memset(out_lease, 0, sizeof(*out_lease));
-  *out_context = NULL;
-  hal_status_t status = pool_lock();
-  if (status != HAL_OK) {
-    return status;
-  }
-  status = jh_handle_acquire(&s_handle_pool, router, out_lease);
-  pool_unlock();
-  if (status != HAL_OK || out_lease->token == NULL) {
-    return HAL_EUNINIT;
-  }
-  jh_command_router_context_t *context =
-      static_cast<jh_command_router_context_t *>(out_lease->token);
-  hal_mutex_lock(context->mutex);
-  status = pool_lock();
-  if (status != HAL_OK) {
-    hal_mutex_unlock(context->mutex);
-    (void)lease_finish(out_lease);
-    return status;
-  }
-  const bool lease_is_open = jh_handle_lease_is_open(&s_handle_pool, out_lease);
-  pool_unlock();
-  if (!lease_is_open) {
-    hal_mutex_unlock(context->mutex);
-    status = lease_finish(out_lease);
-    return status == HAL_OK ? HAL_EUNINIT : status;
-  }
-  *out_context = context;
-  return HAL_OK;
-}
-
-static hal_status_t context_finish(jh_command_router_context_t *context,
-                                   jh_handle_lease_t *lease) {
-  hal_mutex_unlock(context->mutex);
-  return lease_finish(lease);
-}
-
-static hal_status_t
-context_finish_with_status(jh_command_router_context_t *context,
-                           jh_handle_lease_t *lease,
-                           hal_status_t operation_status) {
-  const hal_status_t finish_status = context_finish(context, lease);
-  return finish_status == HAL_OK ? operation_status : finish_status;
+static hal_status_t finish_operation(jh_command_adapter_operation_t *operation,
+                                     hal_status_t status) {
+  return jh_command_adapter_operation_finish(operation, status);
 }
 
 bool jh_command_name_valid(const char *name, size_t *out_length) {
@@ -265,19 +221,21 @@ hal_status_t hal_command_router_create(hal_command_router_t *out_router) {
 }
 
 hal_status_t hal_command_router_destroy(hal_command_router_t router) {
-  jh_handle_lease_t lease = {};
-  jh_command_router_context_t *context = NULL;
-  hal_status_t status = context_acquire(router, &lease, &context);
+  jh_command_adapter_operation_t operation = {};
+  hal_status_t status = context_lock(router, &operation);
   if (status != HAL_OK) {
     return status;
   }
+  jh_command_router_context_t *context =
+      jh_command_adapter_operation_context<jh_command_router_context_t>(
+          &operation);
   if (context->is_default) {
-    status = context_finish(context, &lease);
+    status = finish_operation(&operation, HAL_OK);
     return status == HAL_OK ? HAL_EPERM : status;
   }
   for (size_t index = 0u; index < HAL_COMMAND_ROUTER_MAX_COMMANDS; ++index) {
     if (context->commands[index].active_dispatches != 0u) {
-      return context_finish_with_status(context, &lease, HAL_EBUSY);
+      return finish_operation(&operation, HAL_EBUSY);
     }
   }
 
@@ -290,7 +248,7 @@ hal_status_t hal_command_router_destroy(hal_command_router_t router) {
     }
     pool_unlock();
   }
-  const hal_status_t finish_status = context_finish(context, &lease);
+  const hal_status_t finish_status = finish_operation(&operation, HAL_OK);
   return status == HAL_OK ? finish_status : status;
 }
 
@@ -310,19 +268,21 @@ command_router_register_erased(hal_command_router_t router,
     return HAL_EINVAL;
   }
 
-  jh_handle_lease_t lease = {};
-  jh_command_router_context_t *context = NULL;
-  hal_status_t status = context_acquire(router, &lease, &context);
+  jh_command_adapter_operation_t operation = {};
+  hal_status_t status = context_lock(router, &operation);
   if (status != HAL_OK) {
     return status;
   }
+  jh_command_router_context_t *context =
+      jh_command_adapter_operation_context<jh_command_router_context_t>(
+          &operation);
   jh_command_slot_t *slot = find_command(context, definition->name, NULL);
   if (slot != NULL) {
     if (!replace_existing) {
-      return context_finish_with_status(context, &lease, HAL_EEXIST);
+      return finish_operation(&operation, HAL_EEXIST);
     }
     if (slot->active_dispatches != 0u) {
-      return context_finish_with_status(context, &lease, HAL_EBUSY);
+      return finish_operation(&operation, HAL_EBUSY);
     }
   }
   if (slot == NULL) {
@@ -334,7 +294,7 @@ command_router_register_erased(hal_command_router_t router,
     }
   }
   if (slot == NULL) {
-    return context_finish_with_status(context, &lease, HAL_ENOMEM);
+    return finish_operation(&operation, HAL_ENOMEM);
   }
 
   memset(slot, 0, sizeof(*slot));
@@ -347,7 +307,7 @@ command_router_register_erased(hal_command_router_t router,
   memcpy(slot->callback, definition->callback, definition->callback_size);
   slot->callback_size = definition->callback_size;
   slot->user = definition->user;
-  return context_finish(context, &lease);
+  return finish_operation(&operation, HAL_OK);
 }
 
 hal_status_t jh_command_router_register_erased(
@@ -404,21 +364,23 @@ hal_status_t hal_command_router_unregister(hal_command_router_t router,
   if (!jh_command_name_valid(name, NULL)) {
     return HAL_EINVAL;
   }
-  jh_handle_lease_t lease = {};
-  jh_command_router_context_t *context = NULL;
-  hal_status_t status = context_acquire(router, &lease, &context);
+  jh_command_adapter_operation_t operation = {};
+  hal_status_t status = context_lock(router, &operation);
   if (status != HAL_OK) {
     return status;
   }
+  jh_command_router_context_t *context =
+      jh_command_adapter_operation_context<jh_command_router_context_t>(
+          &operation);
   jh_command_slot_t *slot = find_command(context, name, NULL);
   if (slot == NULL) {
-    return context_finish_with_status(context, &lease, HAL_ENOENT);
+    return finish_operation(&operation, HAL_ENOENT);
   }
   if (slot->active_dispatches != 0u) {
-    return context_finish_with_status(context, &lease, HAL_EBUSY);
+    return finish_operation(&operation, HAL_EBUSY);
   }
   memset(slot, 0, sizeof(*slot));
-  return context_finish(context, &lease);
+  return finish_operation(&operation, HAL_OK);
 }
 
 hal_status_t hal_command_router_unregister_if_matches(
@@ -427,46 +389,50 @@ hal_status_t hal_command_router_unregister_if_matches(
   if (!jh_command_name_valid(name, NULL) || handler == NULL) {
     return HAL_EINVAL;
   }
-  jh_handle_lease_t lease = {};
-  jh_command_router_context_t *context = NULL;
-  hal_status_t status = context_acquire(router, &lease, &context);
+  jh_command_adapter_operation_t operation = {};
+  hal_status_t status = context_lock(router, &operation);
   if (status != HAL_OK) {
     return status;
   }
+  jh_command_router_context_t *context =
+      jh_command_adapter_operation_context<jh_command_router_context_t>(
+          &operation);
   jh_command_slot_t *slot = find_command(context, name, NULL);
   if (slot == NULL) {
-    return context_finish_with_status(context, &lease, HAL_ENOENT);
+    return finish_operation(&operation, HAL_ENOENT);
   }
 
   hal_command_handler_t registered_handler = NULL;
   if (slot->invoke != invoke_public_handler ||
       slot->callback_size != sizeof(registered_handler) || slot->user != user) {
-    return context_finish_with_status(context, &lease, HAL_EBUSY);
+    return finish_operation(&operation, HAL_EBUSY);
   }
   memcpy(reinterpret_cast<unsigned char *>(&registered_handler), slot->callback,
          sizeof(registered_handler));
   if (registered_handler != handler || slot->active_dispatches != 0u) {
-    return context_finish_with_status(context, &lease, HAL_EBUSY);
+    return finish_operation(&operation, HAL_EBUSY);
   }
 
   memset(slot, 0, sizeof(*slot));
-  return context_finish(context, &lease);
+  return finish_operation(&operation, HAL_OK);
 }
 
 hal_status_t hal_command_router_clear(hal_command_router_t router) {
-  jh_handle_lease_t lease = {};
-  jh_command_router_context_t *context = NULL;
-  hal_status_t status = context_acquire(router, &lease, &context);
+  jh_command_adapter_operation_t operation = {};
+  hal_status_t status = context_lock(router, &operation);
   if (status != HAL_OK) {
     return status;
   }
+  jh_command_router_context_t *context =
+      jh_command_adapter_operation_context<jh_command_router_context_t>(
+          &operation);
   for (size_t index = 0u; index < HAL_COMMAND_ROUTER_MAX_COMMANDS; ++index) {
     if (context->commands[index].active_dispatches != 0u) {
-      return context_finish_with_status(context, &lease, HAL_EBUSY);
+      return finish_operation(&operation, HAL_EBUSY);
     }
   }
   memset(context->commands, 0, sizeof(context->commands));
-  return context_finish(context, &lease);
+  return finish_operation(&operation, HAL_OK);
 }
 
 hal_status_t hal_command_router_count(hal_command_router_t router,
@@ -475,18 +441,20 @@ hal_status_t hal_command_router_count(hal_command_router_t router,
     return HAL_EINVAL;
   }
   *out_count = 0u;
-  jh_handle_lease_t lease = {};
-  jh_command_router_context_t *context = NULL;
-  hal_status_t status = context_acquire(router, &lease, &context);
+  jh_command_adapter_operation_t operation = {};
+  hal_status_t status = context_lock(router, &operation);
   if (status != HAL_OK) {
     return status;
   }
+  jh_command_router_context_t *context =
+      jh_command_adapter_operation_context<jh_command_router_context_t>(
+          &operation);
   for (size_t index = 0u; index < HAL_COMMAND_ROUTER_MAX_COMMANDS; ++index) {
     if (context->commands[index].used) {
       ++(*out_count);
     }
   }
-  return context_finish(context, &lease);
+  return finish_operation(&operation, HAL_OK);
 }
 
 static hal_status_t reject_request(hal_command_response_t *response,
@@ -512,17 +480,19 @@ hal_status_t hal_command_router_dispatch(hal_command_router_t router,
   }
   (void)hal_command_response_set_encoding(response, request->encoding);
 
-  jh_handle_lease_t lease = {};
-  jh_command_router_context_t *context = NULL;
-  hal_status_t status = context_acquire(router, &lease, &context);
+  jh_command_adapter_operation_t operation = {};
+  hal_status_t status = context_lock(router, &operation);
   if (status != HAL_OK) {
     return reject_request(response, status, hal_status_to_string(status));
   }
+  jh_command_router_context_t *context =
+      jh_command_adapter_operation_context<jh_command_router_context_t>(
+          &operation);
   size_t slot_index = 0u;
   jh_command_slot_t *slot =
       find_command(context, request->command, &slot_index);
   if (slot == NULL) {
-    status = context_finish(context, &lease);
+    status = finish_operation(&operation, HAL_OK);
     if (status != HAL_OK) {
       return reject_request(response, status, hal_status_to_string(status));
     }
@@ -531,7 +501,7 @@ hal_status_t hal_command_router_dispatch(hal_command_router_t router,
   const hal_command_source_mask_t source_mask =
       HAL_COMMAND_SOURCE_MASK(request->source);
   if ((slot->allowed_sources & source_mask) == 0u) {
-    status = context_finish(context, &lease);
+    status = finish_operation(&operation, HAL_OK);
     if (status != HAL_OK) {
       return reject_request(response, status, hal_status_to_string(status));
     }
@@ -539,7 +509,7 @@ hal_status_t hal_command_router_dispatch(hal_command_router_t router,
   }
   if ((request->security_flags & slot->required_security) !=
       slot->required_security) {
-    status = context_finish(context, &lease);
+    status = finish_operation(&operation, HAL_OK);
     if (status != HAL_OK) {
       return reject_request(response, status, hal_status_to_string(status));
     }
@@ -552,22 +522,22 @@ hal_status_t hal_command_router_dispatch(hal_command_router_t router,
   const size_t callback_size = slot->callback_size;
   memcpy(callback, slot->callback, callback_size);
   void *user = slot->user;
-  hal_mutex_unlock(context->mutex);
+  hal_mutex_unlock(operation.context_mutex);
 
   hal_status_t handler_status =
       invoke(callback, callback_size, request, response, user);
 
-  hal_mutex_lock(context->mutex);
+  hal_mutex_lock(operation.context_mutex);
   jh_command_slot_t *active_slot = &context->commands[slot_index];
   if (!active_slot->used || active_slot->active_dispatches == 0u) {
-    status = context_finish(context, &lease);
+    status = finish_operation(&operation, HAL_OK);
     if (status != HAL_OK) {
       return reject_request(response, status, hal_status_to_string(status));
     }
     return reject_request(response, HAL_EINTERNAL, "dispatch state lost");
   }
   --active_slot->active_dispatches;
-  status = context_finish(context, &lease);
+  status = finish_operation(&operation, HAL_OK);
   if (status != HAL_OK) {
     return reject_request(response, status, hal_status_to_string(status));
   }
@@ -692,5 +662,26 @@ const char *hal_command_encoding_to_string(hal_command_encoding_t encoding) {
     return "UNKNOWN";
   }
 }
+
+#if HAL_TARGET_IS_MOCK
+/* Test-only: force the pool mutex and every context mutex through a real
+ * destroy so Helgrind/DRD can observe the teardown path. Firmware never
+ * calls this - the pool is a process-lifetime singleton by design. Callers
+ * must guarantee no other thread is using the router when this runs. */
+void hal_mock_command_router_full_reset(void) {
+  for (size_t index = 0u; index < HAL_COMMAND_ROUTER_MAX_INSTANCES; ++index) {
+    if (s_contexts[index].mutex != NULL) {
+      hal_mutex_destroy(s_contexts[index].mutex);
+    }
+  }
+  memset(s_contexts, 0, sizeof(s_contexts));
+  if (s_pool_mutex != NULL) {
+    hal_mutex_destroy(s_pool_mutex);
+    s_pool_mutex = NULL;
+  }
+  s_pool_initialized = false;
+  s_default_router = NULL;
+}
+#endif /* HAL_TARGET_IS_MOCK */
 
 #endif /* HAL_ENABLE_COMMAND_ROUTER */

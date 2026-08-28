@@ -37,7 +37,10 @@ void setUp(void) {
   s_callback_reentrant_status = HAL_NONE;
 }
 
-void tearDown(void) { hal_mock_lora_reset(); }
+void tearDown(void) {
+  hal_mock_lora_reset();
+  hal_mock_lora_radio_dispatch_full_reset();
+}
 
 void test_core1262_hf_defaults_and_presets_are_valid(void) {
   hal_lora_sx126x_hardware_config_t hardware = {};

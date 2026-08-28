@@ -17,7 +17,7 @@ void setUp(void) {
   hal_eeprom_init(HAL_EEPROM_AT24C256, 0, 0x50);
 }
 
-void tearDown(void) {}
+void tearDown(void) { hal_mock_eeprom_reset(); }
 
 void test_init_sets_type(void) {
   TEST_ASSERT_EQUAL_INT(HAL_EEPROM_AT24C256, hal_mock_eeprom_get_type());

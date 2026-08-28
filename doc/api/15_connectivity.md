@@ -1165,7 +1165,7 @@ hal_status_t hal_net_commands_register(const char *name,
                                        hal_net_command_handler_t handler,
                                        void *user);
 hal_status_t hal_net_commands_unregister(const char *name);
-void hal_net_commands_clear(void);
+hal_status_t hal_net_commands_clear(void);
 size_t hal_net_commands_count(void);
 
 hal_status_t hal_net_commands_execute_text(
@@ -1204,9 +1204,9 @@ handler must also accept LoRa or another adapter. The network paths currently
 assert no command security flags, so router policies requiring such flags
 reject those requests. `hal_net_commands_count()`, unregister and clear view
 the same shared handler set. `hal_net_commands_clear()` removes generic
-registrations too when no handler is active. Its established return type is
-`void`, so an internal `HAL_EBUSY` during active dispatch is not surfaced and
-the handler set remains unchanged.
+registrations too when no handler is active, and returns `hal_status_t`:
+`HAL_EBUSY` during active dispatch anywhere on the shared default router
+leaves the handler set unchanged.
 
 Response helpers append to a fixed response buffer and use `hal_status_t`:
 

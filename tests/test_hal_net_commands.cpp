@@ -89,6 +89,18 @@ static hal_status_t deny_handler(const hal_net_command_request_t *request,
   return HAL_EPERM;
 }
 
+static hal_status_t s_reentrant_clear_status = HAL_NONE;
+
+static hal_status_t busy_handler(const hal_net_command_request_t *request,
+                                 hal_net_command_response_t *response,
+                                 void *user) {
+  (void)request;
+  (void)response;
+  (void)user;
+  s_reentrant_clear_status = hal_net_commands_clear();
+  return HAL_OK;
+}
+
 static hal_status_t generic_handler(const hal_command_request_t *request,
                                     hal_command_response_t *response,
                                     void *user) {
@@ -374,7 +386,7 @@ void test_legacy_registry_wrappers_operate_on_default_router(void) {
                         hal_net_commands_register("echo", echo_handler, NULL));
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_command_router_count(router, &count));
   TEST_ASSERT_EQUAL_UINT(1u, count);
-  hal_net_commands_clear();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_net_commands_clear());
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_command_router_count(router, &count));
   TEST_ASSERT_EQUAL_UINT(0u, count);
 }
@@ -389,6 +401,20 @@ void test_response_keeps_legacy_aggregate_field_order(void) {
   TEST_ASSERT_EQUAL_UINT(2u, response.body_len);
   TEST_ASSERT_FALSE(response.overflow);
   TEST_ASSERT_EQUAL_INT(HAL_COMMAND_ENCODING_BINARY, response.encoding);
+}
+
+void test_clear_reports_busy_during_active_dispatch(void) {
+  s_reentrant_clear_status = HAL_NONE;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_net_commands_register("busy", busy_handler, NULL));
+
+  hal_net_command_response_t response{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_net_commands_execute_text("busy", &response));
+  TEST_ASSERT_EQUAL_INT(HAL_EBUSY, s_reentrant_clear_status);
+
+  TEST_ASSERT_EQUAL_UINT(1u, hal_net_commands_count());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_net_commands_clear());
 }
 
 void test_api_rejects_invalid_configuration(void) {
@@ -417,6 +443,7 @@ int main(void) {
   RUN_TEST(test_default_router_handler_dispatches_through_text_and_json);
   RUN_TEST(test_default_router_handler_dispatches_through_http_and_websocket);
   RUN_TEST(test_legacy_registry_wrappers_operate_on_default_router);
+  RUN_TEST(test_clear_reports_busy_during_active_dispatch);
   RUN_TEST(test_response_keeps_legacy_aggregate_field_order);
   RUN_TEST(test_api_rejects_invalid_configuration);
   return UNITY_END();

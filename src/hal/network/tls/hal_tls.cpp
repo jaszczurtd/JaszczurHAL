@@ -822,6 +822,26 @@ hal_status_t hal_mock_tls_mark_connected_for_zero_io(hal_tls_client_t handle) {
   }
   return status;
 }
+
+/* Test-only: force the pool mutex and every client mutex through a real
+ * destroy so Helgrind/DRD can observe the teardown path, then mark the
+ * pool uninitialized so the next client operation recreates them from
+ * scratch. Firmware never calls this. Call only when no other thread is
+ * using the TLS pool. */
+void hal_mock_tls_full_reset(void) {
+  for (size_t index = 0u; index < HAL_TLS_MAX_CLIENTS; ++index) {
+    if (s_client_mutexes[index] != NULL) {
+      hal_mutex_destroy(s_client_mutexes[index]);
+    }
+  }
+  memset(s_client_mutexes, 0, sizeof(s_client_mutexes));
+  memset(s_clients, 0, sizeof(s_clients));
+  if (s_pool_mutex != NULL) {
+    hal_mutex_destroy(s_pool_mutex);
+    s_pool_mutex = NULL;
+  }
+  s_pool_initialized = false;
+}
 #endif
 
 #endif

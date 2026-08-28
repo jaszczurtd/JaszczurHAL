@@ -277,6 +277,11 @@ void jh_eeprom_mock_reset_facade(void) {
   s_progress_callback = nullptr;
   s_progress_ctx = nullptr;
   hal_mutex_unlock(mutex);
+  /* Force the singleton mutex through a real destroy so Helgrind/DRD can
+   * observe the teardown path. Only the mock's hal_mock_eeprom_reset()
+   * calls this facade, so firmware never reaches this destroy. */
+  hal_mutex_destroy(s_eeprom_mutex);
+  s_eeprom_mutex = nullptr;
 }
 
 #endif /* HAL_ENABLE_EEPROM */

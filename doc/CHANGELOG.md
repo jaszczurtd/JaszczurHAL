@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-11
 
+- Changed `hal_net_commands_clear()` to return `hal_status_t` instead of
+  `void`, so `HAL_EBUSY` from an active dispatch on the shared default router
+  is now surfaced instead of silently discarded, leaving the handler set
+  unchanged without any way for the caller to detect it.
 - Fixed bare-metal RP dual-core startup so the core-1 flash-safety bootstrap
   completes before `app_start()`, while `app_task1()` still waits for all
   application initialization. EEPROM/KV can now initialize blank flash during

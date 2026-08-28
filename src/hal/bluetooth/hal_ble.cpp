@@ -976,4 +976,18 @@ hal_status_t hal_ble_set_event_callback(hal_ble_event_callback_t callback,
   return HAL_OK;
 }
 
+#if HAL_TARGET_IS_MOCK
+/* Test-only: force the runtime mutex through a real destroy so
+ * Helgrind/DRD can observe the teardown path, then clear it so the next
+ * operation recreates it from scratch. Firmware never calls this - call
+ * hal_ble_deinitialize() first so the mutex is not destroyed while held or
+ * while the backend is still active. */
+void hal_mock_ble_runtime_full_reset(void) {
+  if (s_ble.mutex != nullptr) {
+    hal_mutex_destroy(s_ble.mutex);
+    s_ble.mutex = nullptr;
+  }
+}
+#endif /* HAL_TARGET_IS_MOCK */
+
 #endif /* HAL_ENABLE_BLE */

@@ -770,4 +770,18 @@ extern "C" void jh_ble_stream_on_link_lost(uint32_t generation) {
   hal_mutex_unlock(mutex);
 }
 
+#if HAL_TARGET_IS_MOCK
+/* Test-only: force the runtime mutex through a real destroy so
+ * Helgrind/DRD can observe the teardown path, then clear it so the next
+ * operation recreates it from scratch. Firmware never calls this - call
+ * hal_ble_stream_deinitialize() first so the mutex is not destroyed while
+ * held or while a session is still active. */
+void hal_mock_ble_stream_runtime_full_reset(void) {
+  if (s_stream.mutex != nullptr) {
+    hal_mutex_destroy(s_stream.mutex);
+    s_stream.mutex = nullptr;
+  }
+}
+#endif /* HAL_TARGET_IS_MOCK */
+
 #endif /* HAL_ENABLE_BLE_STREAM */

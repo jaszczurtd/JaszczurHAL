@@ -73,7 +73,7 @@ hal_status_t hal_net_commands_register(const char *name,
 
 hal_status_t hal_net_commands_unregister(const char *name);
 
-void hal_net_commands_clear(void);
+hal_status_t hal_net_commands_clear(void);
 
 size_t hal_net_commands_count(void);
 

@@ -110,7 +110,10 @@ void setUp(void) {
   s_fake_send_release.store(false, std::memory_order_relaxed);
 }
 
-void tearDown(void) {}
+void tearDown(void) {
+  hal_mock_notify_full_reset();
+  hal_mock_debug_serial_full_reset();
+}
 
 static void init_local_telegram_config(hal_notify_telegram_config_t *telegram,
                                        hal_notify_config_t *config) {

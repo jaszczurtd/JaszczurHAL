@@ -417,11 +417,13 @@ hal_status_t hal_net_commands_unregister(const char *name) {
   return hal_command_router_unregister(router, name);
 }
 
-void hal_net_commands_clear(void) {
+hal_status_t hal_net_commands_clear(void) {
   hal_command_router_t router = NULL;
-  if (hal_command_router_default(&router) == HAL_OK) {
-    (void)hal_command_router_clear(router);
+  hal_status_t status = hal_command_router_default(&router);
+  if (status != HAL_OK) {
+    return status;
   }
+  return hal_command_router_clear(router);
 }
 
 size_t hal_net_commands_count(void) {

@@ -232,7 +232,13 @@ void setUp(void) {
   hal_mock_lora_reset();
 }
 
-void tearDown(void) { hal_mock_lora_reset(); }
+void tearDown(void) {
+  hal_mock_lora_reset();
+  hal_mock_lora_commands_full_reset();
+  hal_mock_lora_link_full_reset();
+  hal_mock_lora_radio_dispatch_full_reset();
+  hal_mock_command_router_full_reset();
+}
 
 void test_defaults_default_router_lifecycle_and_broadcast_rules(void) {
   endpoint_t endpoint = create_endpoint(1u, 91u, false, NULL, 0x43u, 3u);

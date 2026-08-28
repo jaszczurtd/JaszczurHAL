@@ -10,6 +10,9 @@ void tearDown(void) {
   (void)hal_ble_stream_deinitialize();
   (void)hal_ble_deinitialize();
   hal_mock_secure_random_reset();
+  hal_mock_ble_stream_runtime_full_reset();
+  hal_mock_ble_runtime_full_reset();
+  hal_mock_board_runtime_full_reset();
 }
 
 static void test_publishes_version_and_capabilities(void) {

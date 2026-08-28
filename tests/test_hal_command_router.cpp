@@ -1,4 +1,5 @@
 #include "hal/commands/hal_command_router.h"
+#include "hal/impl/.mock/hal_mock.h"
 #include "utils/unity.h"
 
 #include <atomic>
@@ -118,6 +119,8 @@ void tearDown(void) {
   if (s_default_router != NULL) {
     TEST_ASSERT_EQUAL_INT(HAL_OK, hal_command_router_clear(s_default_router));
   }
+  hal_mock_command_router_full_reset();
+  s_default_router = NULL;
 }
 
 void test_dispatch_preserves_binary_arguments_and_metadata(void) {

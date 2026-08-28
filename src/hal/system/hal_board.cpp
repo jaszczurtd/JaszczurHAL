@@ -122,3 +122,15 @@ hal_status_t
 jh_board_runtime_set_inactive(hal_board_capabilities_t capabilities) {
   return set_capability_state(capabilities, 0u, 0u);
 }
+
+#if HAL_TARGET_IS_MOCK
+/* Test-only: force the singleton mutex through a real destroy so
+ * Helgrind/DRD can observe the teardown path. Firmware never calls this -
+ * the mutex is a process-lifetime singleton by design. */
+void hal_mock_board_runtime_full_reset(void) {
+  if (s_board_mutex != nullptr) {
+    hal_mutex_destroy(s_board_mutex);
+    s_board_mutex = nullptr;
+  }
+}
+#endif /* HAL_TARGET_IS_MOCK */

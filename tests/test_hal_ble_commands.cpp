@@ -273,6 +273,11 @@ void tearDown(void) {
   (void)hal_ble_stream_deinitialize();
   (void)hal_ble_deinitialize();
   hal_mock_secure_random_reset();
+  hal_mock_ble_commands_full_reset();
+  hal_mock_ble_stream_runtime_full_reset();
+  hal_mock_ble_runtime_full_reset();
+  hal_mock_board_runtime_full_reset();
+  hal_mock_command_router_full_reset();
 }
 
 static void test_defaults_lifecycle_stale_handle_and_validation(void) {

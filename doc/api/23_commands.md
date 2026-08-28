@@ -473,9 +473,10 @@ must accept both network and LoRa sources. Text execution passes the bytes
 after the command name. JSON execution passes a compact serialization of the
 `args` or `params` value. Network request, peer and session identifiers and
 security flags are zero. The compatibility count and unregister operations act
-on that shared handler set. `hal_net_commands_clear()` attempts to clear the
-whole default router; because its legacy return type is `void`, an active
-handler leaves the set unchanged without surfacing the internal `HAL_EBUSY`.
+on that shared handler set. `hal_net_commands_clear()` clears the whole
+default router and returns `hal_status_t`; it returns `HAL_EBUSY` and leaves
+the set unchanged while any registered command, including one owned by
+another adapter on the shared default router, is mid-dispatch.
 The shared response keeps the established network-response fields in their
 original order and appends its transport-neutral `encoding` field.
 

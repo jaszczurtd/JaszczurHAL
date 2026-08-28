@@ -1010,3 +1010,114 @@ void hal_mock_ext_adc_inject_raw(uint8_t channel, int16_t value);
 void hal_mock_ext_adc_inject_scaled(uint8_t channel, float value);
 /** @brief Return the adc_range value set by hal_ext_adc_init(). */
 float hal_mock_ext_adc_get_range(void);
+
+// ── Command router ───────────────────────────────────────────────────────────
+
+/** @brief Destroy the pool mutex and every context mutex, then mark the pool
+ * uninitialized so the next hal_command_router_default()/_create() call
+ * recreates them from scratch. Lets Helgrind/DRD observe a real destroy;
+ * production firmware never calls this. Call only when no other thread is
+ * using the router (e.g. after joining every worker thread in a test). */
+void hal_mock_command_router_full_reset(void);
+
+// ── KV store ─────────────────────────────────────────────────────────────────
+
+/** @brief Destroy the KV module's singleton mutex so the next hal_kv_init()
+ * call recreates it from scratch. Lets Helgrind/DRD observe a real destroy;
+ * production firmware never calls this. Call only when no other thread is
+ * using the KV store. */
+void hal_mock_kv_full_reset(void);
+
+// ── Debug / serial ───────────────────────────────────────────────────────────
+
+/** @brief Destroy every debug/serial singleton mutex and clear the lazy-init
+ * flag so the next hal_debug_init()/hal_debug_ensure_init() call recreates
+ * them from scratch. Lets Helgrind/DRD observe a real destroy; production
+ * firmware never calls this. */
+void hal_mock_debug_serial_full_reset(void);
+
+// ── TLS
+// ───────────────────────────────────────────────────────────────────────
+
+/** @brief Destroy the pool mutex and every client mutex, then mark the pool
+ * uninitialized so the next client operation recreates them from scratch.
+ * Lets Helgrind/DRD observe a real destroy; production firmware never
+ * calls this. Call only when no other thread is using the TLS pool. */
+void hal_mock_tls_full_reset(void);
+
+// ── Notify
+// ────────────────────────────────────────────────────────────────────
+
+/** @brief Destroy the pool mutex and every channel-context mutex, then mark
+ * the pool uninitialized so the next channel operation recreates them from
+ * scratch. Lets Helgrind/DRD observe a real destroy; production firmware
+ * never calls this. Call only when no other thread is using the notify
+ * pool. */
+void hal_mock_notify_full_reset(void);
+
+// ── LoRa radio dispatch pool ─────────────────────────────────────────────────
+
+/** @brief Destroy the pool mutex and every context mutex, then mark the
+ * pool uninitialized so the next radio operation recreates them from
+ * scratch. Lets Helgrind/DRD observe a real destroy; production firmware
+ * never calls this. Call only when no other thread is using the radio
+ * pool. */
+void hal_mock_lora_radio_dispatch_full_reset(void);
+
+// ── LoRa link pool ───────────────────────────────────────────────────────────
+
+/** @brief Destroy the pool mutex and every context mutex, then mark the
+ * pool uninitialized so the next link operation recreates them from
+ * scratch. Lets Helgrind/DRD observe a real destroy; production firmware
+ * never calls this. Call only when no other thread is using the link
+ * pool. */
+void hal_mock_lora_link_full_reset(void);
+
+// ── LoRa command adapter pool ────────────────────────────────────────────────
+
+/** @brief Destroy the pool mutex and every context mutex, then mark the
+ * pool uninitialized so the next adapter operation recreates them from
+ * scratch. Lets Helgrind/DRD observe a real destroy; production firmware
+ * never calls this. Call only when no other thread is using the adapter
+ * pool. */
+void hal_mock_lora_commands_full_reset(void);
+
+// ── BLE runtime ──────────────────────────────────────────────────────────────
+
+/** @brief Destroy the BLE runtime's singleton mutex so the next operation
+ * recreates it from scratch. Lets Helgrind/DRD observe a real destroy;
+ * production firmware never calls this. Call hal_ble_deinitialize() first
+ * so the mutex is not destroyed while held or while the backend is still
+ * active. */
+void hal_mock_ble_runtime_full_reset(void);
+
+// ── Board runtime ────────────────────────────────────────────────────────────
+
+/** @brief Destroy the board-capability registry's singleton mutex so the
+ * next operation recreates it from scratch. Lets Helgrind/DRD observe a
+ * real destroy; production firmware never calls this. */
+void hal_mock_board_runtime_full_reset(void);
+
+// ── BLE Stream runtime ───────────────────────────────────────────────────────
+
+/** @brief Destroy the BLE Stream runtime's singleton mutex so the next
+ * operation recreates it from scratch. Lets Helgrind/DRD observe a real
+ * destroy; production firmware never calls this. Call
+ * hal_ble_stream_deinitialize() first so the mutex is not destroyed while
+ * held or while a session is still active. */
+void hal_mock_ble_stream_runtime_full_reset(void);
+
+// ── BLE command adapter ──────────────────────────────────────────────────────
+
+/** @brief Destroy the pool mutex and the context mutex, then mark the pool
+ * uninitialized so the next adapter operation recreates them from scratch.
+ * Lets Helgrind/DRD observe a real destroy; production firmware never
+ * calls this. Call only when no other thread is using the adapter. */
+void hal_mock_ble_commands_full_reset(void);
+
+// ── GPS engine ───────────────────────────────────────────────────────────────
+
+/** @brief Destroy the GPS engine's singleton mutex so the next hal_gps_init()
+ * call recreates it from scratch. Lets Helgrind/DRD observe a real destroy;
+ * production firmware never calls this. */
+void hal_mock_gps_engine_full_reset(void);

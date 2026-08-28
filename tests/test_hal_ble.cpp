@@ -119,7 +119,14 @@ void setUp(void) {
                                     HAL_BOARD_CAP_BLUETOOTH_CONTROLLER));
 }
 
-void tearDown(void) { (void)hal_ble_deinitialize(); }
+void tearDown(void) {
+  (void)hal_ble_deinitialize();
+  hal_mock_ble_runtime_full_reset();
+  hal_mock_board_runtime_full_reset();
+#ifdef HAL_ENABLE_BLE_STREAM
+  hal_mock_ble_stream_runtime_full_reset();
+#endif
+}
 
 void test_lifecycle_ready_address_and_capability(void) {
   hal_ble_info_t info{};

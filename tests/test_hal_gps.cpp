@@ -7,7 +7,7 @@
 
 void setUp(void) { hal_gps_init(4, 5, 9600, HAL_UART_CFG_8N1); }
 
-void tearDown(void) {}
+void tearDown(void) { hal_mock_gps_engine_full_reset(); }
 
 static void feed_nmea(const char *body) {
   uint8_t checksum = 0u;

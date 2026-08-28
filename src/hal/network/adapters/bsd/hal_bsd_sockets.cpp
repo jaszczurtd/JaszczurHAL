@@ -1891,6 +1891,11 @@ void hal_mock_bsd_sockets_reset(void) {
   }
   s_next_ephemeral_udp_port = 49152u;
   fd_table_unlock();
+  /* Test-only: force the singleton mutex through a real destroy so
+   * Helgrind/DRD can observe the teardown path. Firmware never resets this
+   * table - the mutex is a process-lifetime singleton by design. */
+  hal_mutex_destroy(s_fd_table_mutex);
+  s_fd_table_mutex = NULL;
 }
 
 hal_udp_socket_t hal_mock_bsd_socket_get_udp_handle(int fd) {

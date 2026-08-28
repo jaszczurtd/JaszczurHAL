@@ -971,4 +971,16 @@ hal_status_t hal_kv_commit_ex(void) {
 
 bool hal_kv_commit(void) { return hal_status_to_bool(hal_kv_commit_ex()); }
 
+#if HAL_TARGET_IS_MOCK
+/* Test-only: force the singleton mutex through a real destroy so
+ * Helgrind/DRD can observe the teardown path. Firmware never calls this -
+ * the mutex is a process-lifetime singleton by design. */
+void hal_mock_kv_full_reset(void) {
+  if (s_kv_mutex != NULL) {
+    hal_mutex_destroy(s_kv_mutex);
+    s_kv_mutex = NULL;
+  }
+}
+#endif /* HAL_TARGET_IS_MOCK */
+
 #endif /* HAL_ENABLE_KV */
