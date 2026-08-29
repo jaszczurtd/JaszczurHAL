@@ -1,9 +1,11 @@
 #include "jh_btstack_host.h"
 
-#include "btstack.h"
+#include "btstack_memory.h"
+#include "hci.h"
 #include "jh_bluetooth_controller.h"
 #include "jh_btstack_hci_transport_cyw43.h"
 #include "jh_btstack_run_loop.h"
+#include "l2cap.h"
 
 #include <stdbool.h>
 #include <stddef.h>

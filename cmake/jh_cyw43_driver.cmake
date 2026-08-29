@@ -163,11 +163,17 @@ endfunction()
 # ownership of provider detection and pass resolved boolean inputs here.
 function(jh_target_enable_cyw43_feature_stack TARGET_NAME)
     cmake_parse_arguments(JH_CYW43_FEATURE ""
-        "LWIP;OTA;BLUETOOTH_STAGE1;BLE;BLE_STREAM" "" ${ARGN})
+        "LWIP;OTA;BLUETOOTH_STAGE1;BLUETOOTH_CLASSIC_HID;BLE;BLE_STREAM" "" ${ARGN})
     if(JH_CYW43_FEATURE_BLUETOOTH_STAGE1 AND
+       (JH_CYW43_FEATURE_BLUETOOTH_CLASSIC_HID OR
+        JH_CYW43_FEATURE_BLE OR JH_CYW43_FEATURE_BLE_STREAM))
+        message(FATAL_ERROR
+            "Select exactly one private Bluetooth probe or public BLE mode")
+    endif()
+    if(JH_CYW43_FEATURE_BLUETOOTH_CLASSIC_HID AND
        (JH_CYW43_FEATURE_BLE OR JH_CYW43_FEATURE_BLE_STREAM))
         message(FATAL_ERROR
-            "Select either JH_BLUETOOTH_STAGE1_PROBE or HAL_ENABLE_BLE")
+            "JH_BLUETOOTH_CLASSIC_HID_PROBE cannot be combined with BLE")
     endif()
 
     set(_jh_cyw43_options)
@@ -178,6 +184,7 @@ function(jh_target_enable_cyw43_feature_stack TARGET_NAME)
         list(APPEND _jh_cyw43_options MDNS)
     endif()
     if(JH_CYW43_FEATURE_BLUETOOTH_STAGE1 OR
+       JH_CYW43_FEATURE_BLUETOOTH_CLASSIC_HID OR
        JH_CYW43_FEATURE_BLE OR JH_CYW43_FEATURE_BLE_STREAM)
         list(APPEND _jh_cyw43_options BLUETOOTH)
     endif()
@@ -185,6 +192,8 @@ function(jh_target_enable_cyw43_feature_stack TARGET_NAME)
 
     if(JH_CYW43_FEATURE_BLUETOOTH_STAGE1)
         jh_target_enable_btstack_stage1(${TARGET_NAME})
+    elseif(JH_CYW43_FEATURE_BLUETOOTH_CLASSIC_HID)
+        jh_target_enable_btstack_classic_hid(${TARGET_NAME})
     elseif(JH_CYW43_FEATURE_BLE_STREAM)
         jh_target_enable_btstack_ble_stream(${TARGET_NAME})
     elseif(JH_CYW43_FEATURE_BLE)

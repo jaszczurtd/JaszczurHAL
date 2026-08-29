@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-11
 
+- Added a private Classic HID Host build probe with isolated BTstack base, BLE,
+  and minimal Classic source sets, bounded one-gamepad pools, rollback-tested
+  profile initialization, and a sanitized 8BitDo Zero 2 descriptor/report
+  fixture. The probe keeps Classic out of the public HAL surface and rejects
+  mixed Classic/BLE or non-CYW43 builds.
 - Moved `doc/datasheets/` to the private `context-providers` context repo
   (`context_JaszczurHAL/datasheets/`). Datasheets are reference material for
   development, not part of the shipped API documentation; the public `doc/`

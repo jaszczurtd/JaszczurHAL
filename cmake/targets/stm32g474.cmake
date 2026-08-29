@@ -100,7 +100,13 @@ jh_add_stm32g474_firmware(firmware
     LIBRARIES ${JH_LINK_LIBRARIES}
 )
 
+jh_cmake_defines_contain(_stm32_has_bluetooth_classic_hid
+    JH_BLUETOOTH_CLASSIC_HID_PROBE ${_defines})
 jh_cmake_defines_contain(_stm32_has_cyw43_gspi HAL_CYW43_BUS_STM32_GSPI ${_defines})
+if(_stm32_has_bluetooth_classic_hid AND NOT _stm32_has_cyw43_gspi)
+    message(FATAL_ERROR
+        "JH_BLUETOOTH_CLASSIC_HID_PROBE requires a CYW43 board profile")
+endif()
 if(_stm32_has_cyw43_gspi)
     jh_cmake_defines_contain(_stm32_has_cyw43_lwip HAL_CYW43_STACK_LWIP ${_defines})
     jh_cmake_defines_contain(_stm32_has_bluetooth_stage1
@@ -115,6 +121,7 @@ if(_stm32_has_cyw43_gspi)
         LWIP "${_stm32_has_cyw43_lwip}"
         OTA "${_stm32_has_ota}"
         BLUETOOTH_STAGE1 "${_stm32_has_bluetooth_stage1}"
+        BLUETOOTH_CLASSIC_HID "${_stm32_has_bluetooth_classic_hid}"
         BLE "${_stm32_has_ble}"
         BLE_STREAM "${_stm32_has_ble_stream}")
 endif()

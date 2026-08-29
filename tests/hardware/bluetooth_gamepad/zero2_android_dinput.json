@@ -1,0 +1,162 @@
+{
+  "schemaVersion": 1,
+  "capturedOn": "2026-08-29",
+  "anonymization": {
+    "omittedFields": [
+      "bluetoothDeviceAddress",
+      "hostDeviceAddress",
+      "linkKey",
+      "hostName",
+      "usbSerialNumber"
+    ]
+  },
+  "device": {
+    "manufacturer": "8BitDo",
+    "product": "Zero 2 gamepad",
+    "model": "80EH",
+    "fccId": "2AH7N-ZERO",
+    "firmware": "unavailable",
+    "mode": "Android D-input",
+    "transport": "Bluetooth Classic HID",
+    "name": "8BitDo Zero 2 gamepad",
+    "classOfDevice": "0x2508",
+    "pnp": {
+      "vendorId": "0x2dc8",
+      "productId": "0x3230",
+      "version": "0x0100"
+    }
+  },
+  "sdp": {
+    "serviceName": "Bluetooth Wireless Controller",
+    "serviceDescription": "Joypad",
+    "serviceProvider": "szmy-power Ltd.",
+    "hidProfileVersion": "0x0100",
+    "controlPsm": "0x0011"
+  },
+  "reportDescriptor": {
+    "length": 137,
+    "bytes": "05 01 09 05 a1 01 85 03 15 00 25 01 35 00 45 01 75 01 95 0f 05 09 19 01 29 0f 81 02 95 01 81 01 05 01 25 07 46 3b 01 75 04 95 01 65 14 09 39 81 42 65 00 95 01 81 01 26 ff 00 46 ff 00 09 30 09 31 09 32 09 35 75 08 95 04 81 02 65 00 75 08 95 02 81 01 85 05 09 ff 75 08 95 14 81 03 05 08 09 43 15 00 26 ff 00 35 00 46 ff 00 75 08 95 02 91 82 09 44 91 82 09 45 91 82 09 46 91 82 85 21 09 ff 75 08 95 14 91 02 c0 00",
+    "inputReports": [
+      {
+        "reportId": "0x03",
+        "declaredBytesIncludingId": 10,
+        "observedBytes": 11,
+        "note": "hidraw appends one undeclared trailing zero byte"
+      },
+      {
+        "reportId": "0x05",
+        "declaredBytesIncludingId": 21,
+        "observedBytes": 0,
+        "note": "constant report declared but not observed"
+      }
+    ]
+  },
+  "reportFormat": {
+    "source": "Linux hidraw",
+    "includesReportId": true,
+    "bytesPerObservedReport": 11,
+    "neutralAxis": 127,
+    "ignoredObservedByteIndexes": [
+      8,
+      9,
+      10
+    ],
+    "note": "byte 8 varies between 0x87 and 0x88 despite being declared constant; byte 10 is undeclared"
+  },
+  "controls": [
+    {
+      "physical": "Y",
+      "evdev": "BTN_WEST",
+      "buttonMask": "0x0010",
+      "pressed": "03 10 00 0f 7f 7f 7f 7f 88 01 00"
+    },
+    {
+      "physical": "X",
+      "evdev": "BTN_NORTH",
+      "buttonMask": "0x0008",
+      "pressed": "03 08 00 0f 7f 7f 7f 7f 87 01 00"
+    },
+    {
+      "physical": "A",
+      "evdev": "BTN_SOUTH",
+      "buttonMask": "0x0001",
+      "pressed": "03 01 00 0f 7f 7f 7f 7f 88 01 00"
+    },
+    {
+      "physical": "B",
+      "evdev": "BTN_EAST",
+      "buttonMask": "0x0002",
+      "pressed": "03 02 00 0f 7f 7f 7f 7f 88 01 00"
+    },
+    {
+      "physical": "L",
+      "evdev": "BTN_TL",
+      "buttonMask": "0x0040",
+      "pressed": "03 40 00 0f 7f 7f 7f 7f 88 01 00"
+    },
+    {
+      "physical": "R",
+      "evdev": "BTN_TR",
+      "buttonMask": "0x0080",
+      "pressed": "03 80 00 0f 7f 7f 7f 7f 88 01 00"
+    },
+    {
+      "physical": "Select",
+      "evdev": "BTN_SELECT",
+      "buttonMask": "0x0400",
+      "pressed": "03 00 04 0f 7f 7f 7f 7f 88 01 00"
+    },
+    {
+      "physical": "Start",
+      "evdev": "BTN_START",
+      "buttonMask": "0x0800",
+      "pressed": "03 00 08 0f 7f 7f 7f 7f 88 01 00"
+    },
+    {
+      "physical": "Up",
+      "evdev": "ABS_Y",
+      "axisValue": 0,
+      "pressed": "03 00 00 0f 7f 00 7f 7f 88 01 00"
+    },
+    {
+      "physical": "Down",
+      "evdev": "ABS_Y",
+      "axisValue": 255,
+      "pressed": "03 00 00 0f 7f ff 7f 7f 88 01 00"
+    },
+    {
+      "physical": "Left",
+      "evdev": "ABS_X",
+      "axisValue": 0,
+      "pressed": "03 00 00 0f 00 7f 7f 7f 87 01 00"
+    },
+    {
+      "physical": "Right",
+      "evdev": "ABS_X",
+      "axisValue": 255,
+      "pressed": "03 00 00 0f ff 7f 7f 7f 87 01 00"
+    }
+  ],
+  "rawSequence": [
+    {
+      "state": "neutral",
+      "report": "03 00 00 0f 7f 7f 7f 7f 88 01 00"
+    },
+    {
+      "state": "Y pressed",
+      "report": "03 10 00 0f 7f 7f 7f 7f 88 01 00"
+    },
+    {
+      "state": "Y pressed repeated",
+      "report": "03 10 00 0f 7f 7f 7f 7f 88 01 00"
+    },
+    {
+      "state": "neutral after Y",
+      "report": "03 00 00 0f 7f 7f 7f 7f 88 01 00"
+    },
+    {
+      "state": "neutral constant-byte variant",
+      "report": "03 00 00 0f 7f 7f 7f 7f 87 01 00"
+    }
+  ]
+}

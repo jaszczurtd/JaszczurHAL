@@ -210,6 +210,7 @@ Code co aplikacje i przechowują swoje artefakty poniżej `.build/hardware/`:
 | Stanowisko | Pokrycie |
 |---|---|
 | `tests/hardware/bluetooth_stage1` | Wewnętrzny, przed-API kontroler CYW43/BTstack, advertising, statyczny GATT oraz baza pamięciowa tylko-WiFi na Pico W i STM32G474/PIM730. |
+| `tests/hardware/bluetooth_gamepad` | Zanonimizowany deskryptor i raporty 8BitDo Zero 2 Android D-input oraz prywatna sonda buildu Classic HID Host dla Pico 2 W. |
 | `tests/hardware/bluetooth_observer` | Publiczne pasywne skanowanie Observer, ograniczona kolejka raportów oraz parsowanie BLE Teltonika/iBeacon/Eddystone na Pico W, Pico 2 W i STM32G474/PIM730. |
 | `tests/hardware/bluetooth_stream` | Publiczny cykl życia BLE i uwierzytelniona bramka Stream w różnych krotkach target/board/runtime, w tym ponowne łączenie, watchdog, ciągły ruch, nasycenie i negatywne przypadki bezpieczeństwa. |
 | `tests/hardware/rp_usb_cdc_echo` | Natywna enumeracja CDC TinyUSB, przeciwciśnienie (backpressure), ponowne łączenie i przepustowość |
@@ -754,6 +755,36 @@ powinien zostać zaprogramowany przez ST-Link Nucleo. Zarejestruj okresowy
 status `JHBT1` przed testowaniem odkrywania, połączenia, odczytu/zapisu
 charakterystyki, rozłączenia/ponownego połączenia oraz regresji tylko-WiFi.
 Przebieg z radiem wbudowanym w Pico W następuje jako drugi profil sprzętowy.
+
+### Sprzętowy test gamepada Bluetooth Classic HID
+
+`tests/hardware/bluetooth_gamepad` zawiera prywatną sondę Classic HID Host
+sprzed API i zanonimizowany zapis `zero2_android_dinput.json`. Zapis obejmuje
+137-bajtowy deskryptor raportu, tożsamość PnP, metadane SDP, wszystkie dwanaście
+stanów wejściowych, niedeklarowany końcowy bajt wejścia i powtórzony surowy
+raport. Pomija adresy Bluetooth, link keys, tożsamość hosta i numery seryjne
+USB.
+
+Firmware C4 inicjalizuje współdzielony runtime HCI/L2CAP, pamięciową bazę link
+keys, klienta SDP, jedno połączenie HID Host i jeden event handler. Nie otwiera
+inquiry, pairingu ani połączenia z gamepadem. Prywatnego selectora nie wolno
+łączyć z publicznym BLE ani wcześniejszą sondą Etapu 1.
+
+Zbuduj wymagany obraz Pico 2 W:
+
+```sh
+vscode/entry/jh-vscode build \
+  --project tests/hardware/bluetooth_gamepad \
+  --target rp2350-arm --board pico2w --variant classic-hid
+```
+
+ELF/map i lista symboli muszą wykazać HID Host `ENABLE_CLASSIC`, klienta SDP,
+parser HID oraz pamięciową bazę link keys, jednocześnie wykluczając ATT, GATT,
+SM, RFCOMM, serwer SDP, HID Device i profile audio. Dodatkowy test runtime na
+Pico W może użyć `--target rp2040 --board picow`; okresowy raport `JHBT4`
+przechodzi dla `start=HAL_OK`, `ready=1`, `profile=1` i transportu pozostającego
+w stanie `HAL_OK`. Połączenie fizycznego pada należy do następnego etapu
+sprzętowego.
 
 ### Sprzętowy test Bluetooth Observer
 
