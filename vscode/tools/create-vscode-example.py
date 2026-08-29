@@ -499,7 +499,7 @@ board connected on that port.
 The generated task set also contains `Project: Upload (OTA)` and
 `Project: Discover OTA devices`. Configure `HAL_ENABLE_OTA`, OTA artifact
 metadata, and credentials according to
-[`OTAWorkflow.md`](@@JH_ROOT_REL@@/doc/OTAWorkflow.md) before using them.
+[`OTAWorkflow.md`](@@JH_ROOT_REL@@/doc/en/OTAWorkflow.md) before using them.
 """
 
 

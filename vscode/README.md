@@ -6,7 +6,7 @@ monitor, IntelliSense refresh, board/port helpers, and USB identity cleanup.
 
 The tracked configuration used when the JaszczurHAL repository root itself is
 opened in VS Code is a separate static-library workflow documented in the
-[library compilation guide](../doc/lib_compilation.md#repository-workspace-and-vs-code).
+[library compilation guide](../doc/en/lib_compilation.md#repository-workspace-and-vs-code).
 It deliberately does not treat the repository root as a firmware project.
 
 The stable public surface is `entry/`. Project `.vscode/tasks.json` files should
@@ -21,9 +21,9 @@ are implementation details.
 They ship as regular Python packages with an `__init__.py` in every level, so
 `vscode.runtime` always resolves inside this repository.
 For the full firmware project model, see
-[`doc/FwProjectWorkflow.md`](../doc/FwProjectWorkflow.md). For the complete
+[`doc/en/FwProjectWorkflow.md`](../doc/en/FwProjectWorkflow.md). For the complete
 native RP and ESP32-S3 OTA requirements, including firewall and recovery, see
-[`doc/OTAWorkflow.md`](../doc/OTAWorkflow.md).
+[`doc/en/OTAWorkflow.md`](../doc/en/OTAWorkflow.md).
 
 ## Host Launchers
 
@@ -237,7 +237,7 @@ launch profiles.
 ## Adding Project Source Files
 
 Source discovery and the complete `JH_PROJECT_SOURCES` rules are defined in
-[Adding Project Source Files](../doc/FwProjectWorkflow.md#adding-project-source-files).
+[Adding Project Source Files](../doc/en/FwProjectWorkflow.md#adding-project-source-files).
 That document is the only source for project layout and manifest examples.
 
 ## New Project Generator
@@ -449,12 +449,12 @@ for an explicit `--port`.
 
 Target/board selection, manifest overlays, settings fallback, and local state
 precedence are defined only in
-[Target And Configuration Resolution](../doc/FwProjectWorkflow.md#target-and-configuration-resolution).
+[Target And Configuration Resolution](../doc/en/FwProjectWorkflow.md#target-and-configuration-resolution).
 
 ## Minimal Project Manifest
 
 The maintained manifest example and overlay rules live in
-[Minimal Manifest](../doc/FwProjectWorkflow.md#minimal-manifest).
+[Minimal Manifest](../doc/en/FwProjectWorkflow.md#minimal-manifest).
 Machine validation uses `schema/jh_vscode_project.schema.json`.
 
 ## USB Identity
@@ -557,7 +557,7 @@ hostname. If several match, the generated task uses `--interactive`; automation
 should set manifest `ota.host` or pass `--host <address>` explicitly.
 
 The shared `ota` settings and RP-only `artifacts.ota` field are defined in
-[OTA Manifest Configuration](../doc/FwProjectWorkflow.md#ota-manifest-configuration).
+[OTA Manifest Configuration](../doc/en/FwProjectWorkflow.md#ota-manifest-configuration).
 Keep secrets outside the tracked manifest with `ota.passwordEnv`. An inline
 `ota.password` is intended only for development examples. Empty passwords are
 rejected unless `ota.allowEmptyPassword` is explicitly true. With a non-empty
@@ -572,7 +572,7 @@ LAN-scoped firewall rule for that port after explicit confirmation.
 
 Firmware integration, first installation, host firewall rules, keyboard
 shortcuts, trial confirmation, rollback, recovery, and troubleshooting are
-owned by [Native OTA Workflow](../doc/OTAWorkflow.md).
+owned by [Native OTA Workflow](../doc/en/OTAWorkflow.md).
 
 For RP, the first installation still uses the merged UF2 through BOOTSEL. That image
 contains the boot applier and application. Later OTA boots are trials:
@@ -611,4 +611,4 @@ not implement and a Windows launcher without a usable Python 3 plus pyserial.
 
 Artifact roots, compile databases, generated adapters, target/board cache
 isolation, stale-cache reset, and cache-key ownership are defined only in
-[Build Directories And Generated Files](../doc/FwProjectWorkflow.md#build-directories-and-generated-files).
+[Build Directories And Generated Files](../doc/en/FwProjectWorkflow.md#build-directories-and-generated-files).

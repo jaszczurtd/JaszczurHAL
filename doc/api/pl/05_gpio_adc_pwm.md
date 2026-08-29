@@ -1,0 +1,446 @@
+# GPIO, ADC i PWM
+
+*Dostępne również [po angielsku](../en/05_gpio_adc_pwm.md).*
+
+> **Część [Dokumentacji API JaszczurHAL](../../pl/JaszczurHAL_API.md)**
+
+## `hal_gpio` - GPIO
+
+```c
+#include <hal/gpio/hal_gpio.h>
+
+typedef enum {
+    HAL_GPIO_INPUT                  = 0,
+    HAL_GPIO_OUTPUT                 = 1,
+    HAL_GPIO_INPUT_PULLUP           = 2,
+    HAL_GPIO_INPUT_PULLDOWN         = 3,
+    HAL_GPIO_OUTPUT_LOW             = 4,
+    HAL_GPIO_OUTPUT_HIGH            = 5,
+    HAL_GPIO_OUTPUT_OPEN_DRAIN      = 6,
+    HAL_GPIO_OUTPUT_OPEN_DRAIN_LOW  = 7,
+    HAL_GPIO_OUTPUT_OPEN_DRAIN_HIGH = 8,
+} hal_gpio_mode_t;
+
+typedef enum {
+    HAL_GPIO_IRQ_FALLING = 0,
+    HAL_GPIO_IRQ_RISING  = 1,
+    HAL_GPIO_IRQ_CHANGE  = 2,
+} hal_gpio_irq_mode_t;
+
+void hal_gpio_set_mode(uint8_t pin, hal_gpio_mode_t mode);
+void hal_gpio_write(uint8_t pin, bool high);
+bool hal_gpio_read(uint8_t pin);
+void hal_gpio_attach_interrupt(uint8_t pin, void (*callback)(void), hal_gpio_irq_mode_t mode);
+void hal_gpio_detach_interrupt(uint8_t pin);
+
+#define HAL_GPIO_IRQ_CORE_NONE UINT8_MAX
+
+hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin,
+                                          void (*callback)(void),
+                                          hal_gpio_irq_mode_t mode,
+                                          uint8_t owner_core);
+hal_status_t hal_gpio_detach_interrupt_ex(uint8_t pin);
+hal_status_t hal_gpio_get_interrupt_owner_ex(uint8_t pin,
+                                             uint8_t *out_owner_core);
+
+typedef enum {
+    HAL_IRQ_PRIORITY_HIGHEST = 0,
+    HAL_IRQ_PRIORITY_HIGH    = 1,
+    HAL_IRQ_PRIORITY_DEFAULT = 2,
+    HAL_IRQ_PRIORITY_LOW     = 3,
+} hal_irq_priority_t;
+
+void hal_gpio_set_irq_priority(hal_irq_priority_t priority);
+```
+
+**Uwaga:** Callback przekazywany do `hal_gpio_attach_interrupt` działa w kontekście ISR - unikaj `printf`, `malloc` lub jakiegokolwiek wywołania blokującego wewnątrz niego.
+
+**Walidacja:** Nieprawidłowe argumenty przekazane do historycznych operacji `void` wyzwalają `HAL_ASSERT` w buildach z kontrolą (checked builds). Operacje IRQ zwracające status raportują `HAL_EINVAL` (lub `HAL_EUNSUPPORTED` dla niewspieranego backendu/pinu) bez konfigurowania sprzętu.
+
+**Początkowy stan wyjścia:** `HAL_GPIO_OUTPUT_LOW/HIGH` oraz `HAL_GPIO_OUTPUT_OPEN_DRAIN_LOW/HIGH` czynią zamierzony początkowy stan zatrzasku jawnym. `HAL_GPIO_OUTPUT` pozostaje kompatybilne i oznacza wyjście push-pull z początkowym stanem niskim.
+
+**Dren otwarty:** Na STM32G474 i ESP32-S3 mapuje się to na sprzętowy dren otwarty. Na
+RP2040 (natywny pico-sdk) jest to emulowane przez wymuszanie LOW dla `false` i
+zwalnianie pinu jako wejścia (high-Z) dla `true`.
+
+**Thread safety:** `hal_gpio_write` / `hal_gpio_read` to cienkie przejścia bezpośrednie (pass-through). Współbieżny dostęp do różnych pinów z różnych rdzeni jest bezpieczny. Współbieżny dostęp do tego samego pinu z dwóch rdzeni wymaga zewnętrznej synchronizacji.
+
+**Własność rdzenia IRQ:** Użyj `hal_gpio_attach_interrupt_ex` w kodzie
+wielordzeniowym. Zwraca `HAL_ESTATE`, chyba że wywołujący aktualnie działa na
+`owner_core`, i atomowo zapisuje ten rdzeń jako właściciela przerwania pinu.
+Rekonfiguracja oraz `hal_gpio_detach_interrupt_ex` są akceptowane wyłącznie z
+zapisanego rdzenia właściciela; `hal_gpio_get_interrupt_owner_ex` jest
+diagnostyką tylko do odczytu i może być wywoływana z dowolnego rdzenia.
+Odłączony pin zwraca `HAL_ENOENT` i zapisuje `HAL_GPIO_IRQ_CORE_NONE`.
+Historyczny wrapper attach wiąże IRQ z bieżącym rdzeniem wywołującego,
+natomiast historyczny wrapper detach zgłasza assert, jeśli własność zostanie
+naruszona. Na jednordzeniowym backendzie STM32G474 jedynym prawidłowym
+wywołującym/właścicielem jest rdzeń 0. ESP32-S3 alokuje jedną usługę ISR GPIO
+ESP-IDF dla wszystkich callbacków HAL GPIO na rdzeniu, który wykonuje pierwsze
+udane dołączenie (attach). W konsekwencji każde aktywne przerwanie HAL GPIO
+musi używać tego samego rdzenia właściciela, dopóki ostatni callback nie
+zostanie odłączony, a usługa zwolniona. Inny właściciel raportuje
+`HAL_ESTATE`. API statusów jest przeznaczone do diagnostyki
+inicjalizacji/zadań, nie do kontekstu ISR.
+To jawne API własności obejmuje wyłącznie przerwania GPIO. Przerwania
+peryferyjne mają własne wymagania backendu. W szczególności przerwanie RX
+sprzętowego UART RP2040 jest obecnie wiązane niejawnie z rdzeniem, który
+wywołuje `hal_uart_begin()`; GPS dziedziczy to zachowanie, gdy zbudowany jest
+z `HAL_GPS_TRANSPORT_UART`. API UART nie udostępnia zapytania o właściciela.
+Begin/rekonfiguracja/destroy RP muszą być serializowane na tym samym rdzeniu;
+ESP32-S3 dodatkowo raportuje `HAL_ESTATE` przy rekonfiguracji z niewłaściwego
+rdzenia i zachowuje uchwyt, gdy jego kompatybilnościowa operacja destroy jest
+wywołana z innego rdzenia. Zobacz
+[dokumentację magistrali `hal_uart`](09_buses.md) i
+[dokumentację czujnika `hal_gps`](11_sensors.md).
+RP2040 SoftwareSerial odbiera zamiast tego przez PIO/DMA i nie instaluje
+przerwania RX CPU.
+
+**Routing STM32G474:** Id pinu to `port * 16 + pin` (`PA0=0`, `PB0=16`, ...). EXTI działa na bazie linii (`line == pin_number`), więc tylko jedno źródło portu może posiadać daną linię naraz; dołączenie innego pinu z tym samym numerem pinu przemapowuje tę linię EXTI.
+
+**Priorytet IRQ:** `hal_gpio_set_irq_priority` ustawia priorytet przerwania
+GPIO. Na RP2040 wszystkie piny GPIO współdzielą `IO_IRQ_BANK0`. Na STM32G474
+przerwania GPIO są podzielone między `EXTI0..EXTI4`, `EXTI9_5` i
+`EXTI15_10`; ten sam priorytet HAL jest stosowany do wszystkich tych wpisów
+NVIC. ESP32-S3 odtwarza swoją współdzieloną usługę ISR na rdzeniu-właścicielu
+usługi; highest/high/default-or-low mapują się na poziomy przerwań ESP-IDF
+3/2/1.
+
+**impl/esp32:** Walidacja pinów używa wygenerowanych masek: target-valid,
+input-only, board-exposed, hard-reserved i soft-reserved. Piny hard-reserved
+USB/pamięci są odrzucane; piny board soft-reserved pozostają dostępne dla
+celowego nadpisania przez aplikację. Callbacki GPIO działają w kontekście ISR
+poprzez współdzieloną usługę ESP-IDF.
+
+**Odłączanie przerwania:** `hal_gpio_detach_interrupt` usuwa zarejestrowany callback i maskuje źródło pin/EXTI tam, gdzie backend wspiera sprzętowe maskowanie przerwań.
+
+Na przykład przechwytywanie RPM przeznaczone dla rdzenia 1 RP2040 może szybko
+zgłosić błąd (fail fast) podczas inicjalizacji, zamiast po cichu zarejestrować
+się na niewłaściwym rdzeniu:
+
+```c
+hal_status_t status = hal_gpio_attach_interrupt_ex(
+    rpm_pin, rpm_edge_isr, HAL_GPIO_IRQ_RISING, 1u);
+if (status != HAL_OK) {
+    /* Abort ECU startup or report a core-affinity configuration fault. */
+}
+```
+
+---
+
+## `hal_pwm` - PWM
+
+```c
+#include <hal/gpio/hal_pwm.h>
+
+void hal_pwm_set_resolution(uint8_t bits);
+bool hal_pwm_is_pin_supported(uint8_t pin);
+void hal_pwm_write(uint8_t pin, uint32_t value);
+```
+
+`hal_pwm` to przenośne, proste API PWM. Ma celowo małą funkcjonalność:
+rozdzielczość to 1..16 bitów, `hal_pwm_write()` przycina wartości powyżej
+bieżącego maksimum, a niewspierane piny wyzwalają `HAL_ASSERT` w buildach z
+kontrolą i są ignorowane. Użyj `hal_pwm_is_pin_supported()` przed dynamicznym
+wyborem pinu.
+
+Nie gwarantuje częstotliwości wybranej przez wywołującego ani niezależnej
+alokacji kanału. Użyj `hal_pwm_freq`, gdy liczy się częstotliwość, wartość
+okresu/wrap oraz cykl życia kanału. Domyślna rozdzielczość to 8 bitów.
+
+**impl/rp2040:** natywny pico-sdk `hardware/pwm.h` (`pwm_init`, `pwm_config_set_wrap`,
+`pwm_set_gpio_level`, `pwm_set_enabled`). Publiczny zakres duty pozostaje
+`0..2^bits-1`; wewnętrznie backend może zwiększyć wrap slice'a przy niskich
+rozdzielczościach, aby zachować przybliżoną domyślną częstotliwość 1 kHz, gdy
+`clkdiv` w przeciwnym razie przekroczyłby limit sprzętowy. Dwa GPIO na tym
+samym slice'ie sprzętowym (`gpio/2 mod 8`) współdzielą jedną
+częstotliwość/wrap, ale zachowują niezależny duty. Użyj `hal_pwm_freq`, gdy
+liczy się dokładna częstotliwość.
+
+**impl/stm32g474:** PWM TIM na poziomie rejestrów na zmapowanych kanałach
+timera; domyślna docelowa częstotliwość prostego PWM to 1 kHz w trybie
+best-effort. Backend używa jawnych stałych `JH_G474_TIMCLK1_HZ` /
+`JH_G474_TIMCLK2_HZ`. Obie wynoszą 170 MHz w bieżącym drzewie zegarów,
+ponieważ APB1 i APB2 działają bez preskalera; przyszłe zmiany APB muszą
+aktualizować stałe zegara jądra timera zgodnie z regułą zegara x2 timera
+STM32.
+
+**impl/esp32:** wyjście ESP-IDF LEDC przy 1 kHz. Backend leniwie alokuje
+logiczny kanał LEDC dla każdego pinu zdolnego do wyjścia, mapuje wybrany
+zakres 1..16-bitowy na sprzętowy zakres duty i zwalnia wszystkie aktywne
+kanały prostego PWM przy zmianie globalnej rozdzielczości. Maksimum logiczne
+wykorzystuje stan zatrzymania idle-high LEDC dla dokładnego wyjścia 100%;
+późniejszy niższy zapis wykorzystuje ścieżkę aktualizacji duty, która
+ponownie włącza przebieg po tym stanie zatrzymania. Nieudane
+zatrzymanie/dekonfiguracja kanału pozostawia wewnętrzny kanał jako zajęty i
+nie zmienia globalnej rozdzielczości, zapobiegając ponownemu użyciu wciąż
+aktywnego kanału sprzętowego.
+
+**Thread safety:** RP2040 mapuje piny na sprzętowe slice'y PWM;
+STM32G474 mapuje piny na kanały TIM. Kanały współdzielące timer współdzielą
+też częstotliwość/rozdzielczość, a piny współdzielące ten sam kanał TIM nie
+są niezależne. Wywołuj `hal_pwm_set_resolution` podczas inicjalizacji, nie
+współbieżnie z zapisami.
+
+---
+
+## `hal_dac` - Prawdziwe wyjście DAC *(opcjonalny - `HAL_ENABLE_DAC`)*
+
+```c
+#include <hal/analog/hal_dac.h>
+
+bool hal_dac_is_supported(void);
+uint8_t hal_dac_resolution_bits(void);
+uint16_t hal_dac_max_value(void);
+
+hal_status_t hal_dac_init_ex(uint8_t channel);
+bool hal_dac_init(uint8_t channel);
+
+hal_status_t hal_dac_write(uint8_t channel, uint16_t value);
+hal_status_t hal_dac_write_millivolts(uint8_t channel, uint16_t millivolts);
+```
+
+API statusów raportuje `HAL_OK`, `HAL_EUNSUPPORTED` na targetach bez
+prawdziwego DAC (RP2040), `HAL_EINVAL` dla nieprawidłowych kanałów oraz
+`HAL_EUNINIT` dla zapisów przed inicjalizacją kanału. `hal_dac_init()`
+pozostaje historycznym wrapperem kompatybilności `bool` nad
+`hal_dac_init_ex()`. Historyczne funkcje zapisu zwracają teraz `hal_status_t`
+w miejscu; istniejący wywołujący mogą nadal ignorować wynik.
+
+**impl/stm32g474:** prawdziwy DAC1, 12-bitowy, kanał 0 -> PA4 i kanał 1 -> PA5.
+
+**impl/rp2040:** brak prawdziwego peryferium DAC; API statusów zwraca
+`HAL_EUNSUPPORTED`.
+
+**impl/.mock:** dwa kanały 12-bitowe z funkcjami pomocniczymi mock do odczytu zwrotnego.
+
+---
+
+## `hal_pcnt` - Licznik impulsów / zboczy *(opcjonalny - `HAL_ENABLE_PCNT`)*
+
+```c
+#include <hal/analog/hal_pcnt.h>
+
+bool hal_pcnt_is_supported(void);
+uint8_t hal_pcnt_channel_count(void);
+
+hal_status_t hal_pcnt_init_ex(uint8_t channel, uint8_t pin,
+                              hal_pcnt_edge_t edge);
+bool hal_pcnt_init(uint8_t channel, uint8_t pin, hal_pcnt_edge_t edge);
+
+hal_status_t hal_pcnt_read_ex(uint8_t channel, uint32_t *out_count);
+uint32_t hal_pcnt_read(uint8_t channel);
+
+hal_status_t hal_pcnt_reset(uint8_t channel);
+
+hal_status_t hal_pcnt_read_and_reset_ex(uint8_t channel, uint32_t *out_count);
+uint32_t hal_pcnt_read_and_reset(uint8_t channel);
+```
+
+API statusów raportuje `HAL_OK`, `HAL_EINVAL` dla nieprawidłowych kanałów,
+pinów, zboczy lub wskaźników wyjściowych, oraz `HAL_EUNINIT` przy
+odczycie/resecie prawidłowego kanału, który nie został zainicjalizowany.
+Historyczne `void hal_pcnt_reset()` zwraca teraz bezpośrednio
+`hal_status_t`; istniejący wywołujący mogą nadal ignorować wynik.
+Historyczne wrappery init/read/read-and-reset zachowują swoje kształty
+`bool`/`uint32_t`.
+
+**impl/rp2040:** liczniki programowe oparte na przerwaniu GPIO.
+
+**impl/stm32g474:** tryb zegara zewnętrznego TIM2 dla kanału 0.
+
+**impl/esp32:** cztery liczniki logiczne oparte na jednostkach ESP-IDF PCNT.
+Każde wejście wybiera zbocze narastające, opadające lub oba; tryb zliczania
+skumulowanego oraz punkty obserwacyjne limitu ze znakiem rozszerzają leżący
+u podstaw licznik dla publicznego wyniku `uint32_t`. Ponowna inicjalizacja
+kanału logicznego najpierw demontuje jego poprzednią jednostkę PCNT.
+
+**impl/.mock:** liczniki w pamięci z funkcjami pomocniczymi do wstrzykiwania impulsów.
+
+
+---
+
+## `hal_pwm_freq` - PWM ze sterowaniem częstotliwością *(opcjonalny - `HAL_ENABLE_PWM_FREQ`)*
+
+Użyj tego zamiast `hal_pwm`, gdy potrzebujesz konkretnej częstotliwości PWM (np. 160 Hz, 300 Hz).
+
+```c
+#include <hal/gpio/hal_pwm_freq.h>
+
+// Opaque handle
+typedef hal_pwm_freq_channel_impl_t *hal_pwm_freq_channel_t;
+
+// Create a channel: pin, frequency in Hz, resolution (wrap value, e.g. 2047 for 11-bit = 2^11-1)
+hal_pwm_freq_channel_t hal_pwm_freq_create(uint8_t pin,
+                                           uint32_t frequency_hz,
+                                           uint32_t resolution);
+
+// Write value in [0, resolution] - values outside range are clamped automatically
+void hal_pwm_freq_write(hal_pwm_freq_channel_t ch, int value);
+
+// Stop output without releasing the channel; the next write starts it again
+void hal_pwm_freq_stop(hal_pwm_freq_channel_t ch);
+
+// Free resources
+void hal_pwm_freq_destroy(hal_pwm_freq_channel_t ch);
+```
+
+**impl/rp2040:** pico SDK `hardware/pwm.h` + `hardware/clocks.h` - oblicza clkdiv i wrap
+aby uzyskać dokładnie żądaną częstotliwość, z korekcją pseudo/slow-scale dla przypadków brzegowych.
+
+**impl/stm32g474:** PWM TIM na poziomie rejestrów na zmapowanych kanałach
+TIM2/TIM3/TIM4/TIM15/TIM16/TIM17. Częstotliwość jest zasobem na poziomie
+timera, więc wiele kanałów na tym samym TIM współdzieli tę samą częstotliwość
+i efektywny okres. Podobnie jak `hal_pwm`, wykorzystuje jawne stałe TIMCLK
+170 MHz, co utrzymuje raportowanie sample-rate DACless spójne z
+programowaniem timera. Slice PWM jest konfigurowany w chwili
+`hal_pwm_freq_create()`, ale **nie jest uruchamiany** - funkcja GPIO /
+włączenie kanału TIM są odroczone do pierwszego wywołania
+`hal_pwm_freq_write()`. Zapobiega to glitchowi na pinach z logiką odwróconą
+(0% duty = aktuator ON) przy włączeniu zasilania.
+
+**impl/esp32:** ESP-IDF LEDC przez ten sam lokalny dla targetu alokator
+używany przez prosty PWM. Utworzenie rezerwuje jeden ograniczony uchwyt
+logiczny oraz kompatybilny timer/kanał LEDC dla żądanego pinu, częstotliwości
+i maksimum logicznego. Zapisy są przycinane do tego maksimum; stop zachowuje
+uchwyt, a destroy zwalnia zarówno zasoby logiczne, jak i LEDC. Współdzielony
+alokator zapewnia maksimum logicznemu dokładny stan idle-high 100% i
+restartuje LEDC przy kolejnym zapisie częściowego duty. Jeśli ESP-IDF
+odrzuci demontaż, uchwyt logiczny i slot LEDC pozostają zajęte do ponowienia
+próby; buildy z kontrolą raportują nieudane `hal_pwm_freq_destroy()` przez
+`HAL_ASSERT`.
+
+**impl/.mock:** przechowuje ostatnio zapisaną wartość; wstrzykiwalne przez funkcje pomocnicze mock.
+
+**Funkcje pomocnicze mock:**
+```c
+int      hal_mock_pwm_freq_get_value(hal_pwm_freq_channel_t ch);
+uint32_t hal_mock_pwm_freq_get_frequency(hal_pwm_freq_channel_t ch);
+uint8_t  hal_mock_pwm_freq_get_pin(hal_pwm_freq_channel_t ch);
+bool     hal_mock_pwm_freq_is_running(hal_pwm_freq_channel_t ch);
+```
+
+**Thread safety:** Backendy RP2040, STM32G474 i ESP32-S3 chronią
+`hal_pwm_freq_create()`, `hal_pwm_freq_write()`, `hal_pwm_freq_stop()` i
+`hal_pwm_freq_destroy()` wewnętrznym mutexem. Wywołujący nadal są
+właścicielami cyklu życia uchwytu kanału i nie mogą używać uchwytu po
+`hal_pwm_freq_destroy()`. Backend mock nie zapewnia synchronizacji
+współbieżnego dostępu.
+
+---
+
+## `DAClessAudio` - Silnik audio PWM *(opcjonalny - `HAL_ENABLE_DACLESS`)*
+
+```cpp
+#include <hal/audio/hal_dacless.h>
+
+struct DAClessConfig {
+    uint8_t  pinPWM;      // default 6
+    uint16_t pwmBits;     // default 12
+    uint16_t blockSize;   // default 128, capped by DACLESS_MAX_BLOCK_SIZE
+    uint8_t  nAdcInputs;  // capped by DACLESS_MAX_ADC_INPUTS
+    bool     useDma;      // default true; set false for cooperative service()
+    uint8_t  adcPins[DACLESS_MAX_ADC_INPUTS];
+};
+
+class DAClessAudio {
+public:
+    using SampleCallback = uint16_t (*)(void *);
+    using BlockCallback  = void (*)(void *, uint16_t *);
+
+    explicit DAClessAudio(const DAClessConfig &cfg = DAClessConfig());
+    bool begin();
+    void service();
+    void mute();
+    void unmute();
+    void setSampleCallback(SampleCallback cb, void *userdata = nullptr);
+    void setBlockCallback(BlockCallback cb, void *userdata = nullptr);
+    uint16_t getADC(uint8_t channel) const;
+    float getSampleRate() const;
+    const volatile uint16_t *getOutBufPtr() const;
+    const volatile uint16_t *getAdcBuffer() const;
+    bool isDmaActive() const;
+};
+
+uint16_t interpolate(uint16_t x, uint16_t y, uint16_t mu_scaled);
+```
+
+`HAL_ENABLE_DACLESS` propaguje `HAL_ENABLE_DMA_PWM_AUDIO` i
+`HAL_ENABLE_PWM_FREQ`. Współdzielony driver jest wzorowany na silniku
+DACless autorstwa Briana Varrena i zachowuje konfigurację, przepływ bloków z
+podwójnym buforowaniem, callbacki próbkowe/blokowe, bufor wyników ADC,
+globalne zmienne kompatybilności (`audio_rate`, `out_buf_ptr`,
+`adc_results_buf`) oraz semantykę funkcji pomocniczej interpolacji ułamka
+mieszania (blend-fraction) 8-bitowej RP2040.
+
+Domyślna ścieżka (`cfg.useDma = true`) używa `hal_dma_pwm_audio` do zasilania
+PWM z podwójnie buforowanego DMA i utrzymania odświeżanego bufora wyników
+ADC. RP2040 odzwierciedla oryginalny łańcuchowy przepływ DMA PWM
+kanał-A/kanał-B plus DMA próbkowania/sterowania ADC. STM32G474 wykorzystuje
+DMA aktualizacji TIM do aktywnego rejestru CCR, cykliczne callbacki
+half-transfer/transfer-complete dla dwóch połówek audio oraz cykliczne
+skanowanie DMA ADC1 dla skonfigurowanych pinów ADC.
+
+`begin()` zwraca `true`, gdy backend PWM/DMA został utworzony i uruchomiony.
+Gdy zwraca `false`, instancja pozostaje zatrzymana i wyciszona; może się to
+zdarzyć, gdy backend targetu wyczerpał stały zasób sprzętowy.
+
+Ustaw `cfg.useDma = false`, aby użyć ścieżki kooperacyjnej: wywołuj
+`service()` często z `app_task0()` lub zadania FreeRTOS. Zapisuje ona
+zaległe próbki przez `hal_pwm_freq_write()`, uzupełnia zakończony bufor
+przez callback blokowy, gdy jest obecny, w przeciwnym razie przez callback
+próbkowy, a w ostateczności ciszą w punkcie środkowym. Jeśli `service()`
+zostanie wywołane z opóźnieniem, odtwarzanie odpytujące nadrabia co najwyżej
+`DACLESS_MAX_POLLING_CATCHUP_SAMPLES` próbek przed ponowną synchronizacją z
+bieżącym czasem. Callbacki są wywoływane poza mutexem instancji, więc mogą
+odczytywać `getADC()` bez ryzyka deadlocku.
+
+Domyślne piny ADC to GPIO 26..29 na RP2040/mock oraz PA0..PA3 na STM32G474
+(`port * 16 + pin`). Nadpisz `cfg.adcPins[]` dla niestandardowego
+okablowania.
+
+**Thread safety:** Publiczne metody serializują stan instancji za
+pomocą mutexu HAL per-instancja utworzonego przez `jh_hal_mutex_create_once`.
+Callbacki bufora DMA działają z poziomu przerwania DMA backendu i nie
+przejmują mutexu instancji. Rejestracja callbacków, `begin()`, `service()`,
+`mute()`, `unmute()` i `getADC()` są bezpieczne do wywołania z normalnego
+kontekstu zadania/rdzenia. Nie wywołuj `service()` z ISR.
+
+---
+
+## `hal_adc` - Wejście analogowe
+
+```c
+#include <hal/analog/hal_adc.h>
+
+void hal_adc_set_resolution(uint8_t bits);
+int  hal_adc_read(uint8_t pin);
+```
+
+Domyślna rozdzielczość to 12 bitów (spójna we wszystkich backendach RP2040,
+STM32G474, ESP32-S3 i mock).
+
+**impl/rp2040:** natywny pico-sdk `hardware/adc.h` (`adc_init`, `adc_gpio_init`,
+`adc_select_input`, `adc_read`). Prawidłowe piny ADC to GPIO 26-29 (kanały 0-3);
+12-bitowa próbka sprzętowa jest przeskalowywana do skonfigurowanej rozdzielczości.
+**impl/stm32g474:** regularne konwersje single-ended ADC1 z leniwym
+uruchamianiem regulatora, kalibracją i walidacją mapowania pin-na-kanał.
+ADC12 jest taktowane synchronicznie z HCLK/4, czyli 42,5 MHz przy bieżącym
+drzewie zegarów 170 MHz.
+**impl/esp32:** konwersja jednorazowa (oneshot) ESP-IDF ADC z leniwą
+konfiguracją jednostki/kanału i tłumieniem 12 dB. Akceptowane są wyłącznie
+piny zdolne do ADC, które są exposed lub soft-reserved przez wygenerowany
+profil płytki. 12-bitowy wynik sprzętowy jest skalowany do skonfigurowanego
+zakresu 1..16-bitowego; nieprawidłowy pin lub nieudana konwersja zwraca
+wartość kompatybilności `0`.
+**impl/.mock:** wartości wstrzykiwalne per-pin przez `hal_mock_adc_inject(pin, value)`.
+**Thread safety:** Thread-safe i wielordzeniowo. Wewnętrzny
+mutex chroni współdzielony stan ADC na RP2040, STM32G474 i ESP32-S3, więc
+współbieżne odczyty są serializowane automatycznie.
+
+---
+
+
+---
+
+*Dalej: [Timery i system](06_timers_system.md)*

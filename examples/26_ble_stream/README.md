@@ -116,4 +116,4 @@ The command variants additionally show:
 
 For an independent client implementation and multi-target stability/security
 test, see
-the [`bluetooth_stream` hardware gate](../../doc/api/03_build_tests.md#jh-ble-stream-v1-hardware-gate).
+the [`bluetooth_stream` hardware gate](../../doc/api/en/03_build_tests.md#jh-ble-stream-v1-hardware-gate).
