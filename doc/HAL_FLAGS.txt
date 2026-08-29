@@ -21,9 +21,9 @@ conditional choices that cannot be expressed by the registry.
 The maintained public catalog, dependency overview, target selection rules,
 configuration examples, and diagnostics are in:
 
-- `doc/api/02_module_flags.md`;
+- `doc/api/en/02_module_flags.md`;
 - `config/features/README.md`;
-- `doc/boards_profiles_howto.md`.
+- `doc/en/boards_profiles_howto.md`.
 
 Command routing uses five public opt-ins. `HAL_ENABLE_COMMAND_ROUTER` selects
 the transport-neutral router and versioned wire messages.

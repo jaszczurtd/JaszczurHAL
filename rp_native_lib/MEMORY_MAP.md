@@ -104,6 +104,6 @@ HAL-owned USB worker, coordinates the other core, masks local interrupts during
 the RAM-resident operation, and restores acquired runtime state on every exit
 path.
 
-See [Storage](../doc/api/14_storage.md) for filesystem and persistence behavior
-and [Native RP OTA Workflow](../doc/OTAWorkflow.md) for image format,
+See [Storage](../doc/api/en/14_storage.md) for filesystem and persistence behavior
+and [Native RP OTA Workflow](../doc/en/OTAWorkflow.md) for image format,
 provisioning, update, and recovery.

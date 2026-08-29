@@ -2,4 +2,4 @@
 
 The complete requirements, procedure, acceptance criteria, and recorded results
 are maintained in the
-[central hardware-fixture reference](../../../doc/api/03_build_tests.md#esp32-s3-phase-2-hardware-probe).
+[central hardware-fixture reference](../../../doc/api/en/03_build_tests.md#esp32-s3-phase-2-hardware-probe).

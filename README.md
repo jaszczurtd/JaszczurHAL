@@ -1,9 +1,13 @@
 # JaszczurHAL
 
+*Also available in [Polish](README.pl.md).*
+
 Author: Marcin 'Jaszczur' Kielesinski
 
 JaszczurHAL is a hardware abstraction layer and utility library for embedded projects using RP2040/2350/STM32/ESP32.
-See [features.md](doc/features.md) for a compact inventory of supported modules and functionality.
+Start with the [English documentation index](doc/table_of_contents.md), or see
+the [feature overview](doc/en/features.md) for a compact inventory of supported
+modules and functionality.
 
 ## How do you even pronounce this library name?
 
@@ -50,7 +54,7 @@ There are also smaller (but not trivial) projects, for example:
 
 There are two common starting points:
 
-- To explore [HAL APIs](doc/JaszczurHAL_API.md), portability patterns, and backend coverage, start with
+- To explore [HAL APIs](doc/en/JaszczurHAL_API.md), portability patterns, and backend coverage, start with
   the checked-in examples: [examples/README.md](examples/README.md).
 - To create a new target-selectable firmware project for day-to-day work in
   VS Code, use the project generator:
@@ -83,12 +87,13 @@ maintained in [examples/README.md](examples/README.md).
 
 ## Supported targets and modules (quick overview)
 
-RP2040 and RP2350 firmware builds directly against the official Pico SDK.
+RP2040 and RP2350 firmware is built directly against the official Pico SDK.
 STM32G474 is supported through the repository's bare-metal implementation and
-linker flow. The ESP32-S3 target is build on top of ESP-IDF SDK. FreeRTOS is optional
+linker flow. The ESP32-S3 target is built on top of ESP-IDF. FreeRTOS is optional
 on RP and STM32G474 and required by the ESP-IDF runtime. The mock backend provides deterministic host-side validation.
 
-See [features.md](doc/features.md) for a compact inventory of supported functionality and modules.
+See the [feature overview](doc/en/features.md) for a compact inventory of
+supported functionality and modules.
 
 ## Module selection (quick)
 
@@ -108,8 +113,8 @@ The project uses its own validation mechanisms to check whether a given flag is 
 For the complete flag matrix, dependency propagation rules, and `HAL_ENABLE_*` options,
 see:
 
-- [JaszczurHAL_API.md](doc/JaszczurHAL_API.md)
-- [doc/api/02_module_flags.md](doc/api/02_module_flags.md)
+- [JaszczurHAL_API.md](doc/en/JaszczurHAL_API.md)
+- [doc/api/en/02_module_flags.md](doc/api/en/02_module_flags.md)
 - [doc/HAL_FLAGS.txt](doc/HAL_FLAGS.txt)
 
 ## Target selection example (multiplatform)
@@ -132,8 +137,8 @@ Backend files compile only for their selected target, so unused backends cost ze
 
 Official builds select a stable target and board ID through the generated board
 registry. See
-[Target and board profiles](doc/boards_profiles_howto.md).
-Also see [FwProjectWorkflow.md](doc/FwProjectWorkflow.md) for the full
+[Target and board profiles](doc/en/boards_profiles_howto.md).
+Also see [FwProjectWorkflow.md](doc/en/FwProjectWorkflow.md) for the full
 target/board/configuration model.
 
 In practice, you do not need to know how the target-selection logic works internally.
@@ -158,7 +163,7 @@ Cortex-M4F port. ESP32-S3 uses the FreeRTOS instance supplied by the pinned
 ESP-IDF; its target descriptor adds `HAL_ENABLE_FREERTOS` as a required feature
 and supports the optional second application task.
 
-Detailed notes about kernel pinning, ports, and build variants are available in [lib_compilation.md](doc/lib_compilation.md) and [doc/api/04_multicore_drivers_migration.md](doc/api/04_multicore_drivers_migration.md).
+Detailed notes about kernel pinning, ports, and build variants are available in [lib_compilation.md](doc/en/lib_compilation.md) and [doc/api/en/04_multicore_drivers_migration.md](doc/api/en/04_multicore_drivers_migration.md).
 
 ## Thread safety (overview)
 
@@ -171,13 +176,13 @@ deterministic single-threaded tests, and the optional
 coverage on top of it.
 
 For detailed signatures, exact guarantees, module behavior, backend notes, and test coverage,
-see [JaszczurHAL_API.md](doc/JaszczurHAL_API.md).
+see [JaszczurHAL_API.md](doc/en/JaszczurHAL_API.md).
 
 ## Building as a static library (.a)
 
 The complete guide for compiling JaszczurHAL to a linkable static library
 (`libJaszczurHAL.a`), including example-application builds and the core/entry
-policy: [lib_compilation.md](doc/lib_compilation.md). Installed RP and
+policy: [lib_compilation.md](doc/en/lib_compilation.md). Installed RP and
 STM32G474 packages include the generated feature and board headers, resolved
 board metadata, and link-compatibility reference source required by a direct
 compiler consumer. Compiling and linking the installed package does not invoke
@@ -195,9 +200,9 @@ matrices. Physical hardware fixtures are documented and executed separately.
 The complete
 test architecture, requirements, configuration, extension rules, fixture
 procedures, and recorded results are in
-[Build dependencies, tests, and hardware fixtures](doc/api/03_build_tests.md).
+[Build dependencies, tests, and hardware fixtures](doc/api/en/03_build_tests.md).
 Runner and quality-gate implementation details are in
-[JaszczurHAL Process Scripts](doc/api/00_scripts.md).
+[JaszczurHAL Process Scripts](doc/api/en/00_scripts.md).
 
 ## Security and SBOM
 
@@ -206,7 +211,7 @@ pinned dependencies:
 
 - [SECURITY.md](SECURITY.md) - vulnerability reporting, triage and maintenance
   policy,
-- [doc/security_supply_chain.md](doc/security_supply_chain.md) - SBOM
+- [doc/en/security_supply_chain.md](doc/en/security_supply_chain.md) - SBOM
   generation, vulnerability checks, and the CI `security-scan` policy,
 - [security/third_party.json](security/third_party.json) - human-maintained
   third-party inventory,
@@ -232,10 +237,10 @@ toolchain's compile database.
 - CLI interface, task labels, keyboard shortcuts, and the project generator:
   [vscode/README.md](vscode/README.md)
 - End-to-end project model and
-  [adding project source files](doc/FwProjectWorkflow.md#adding-project-source-files):
-  [FwProjectWorkflow.md](doc/FwProjectWorkflow.md)
+  [adding project source files](doc/en/FwProjectWorkflow.md#adding-project-source-files):
+  [FwProjectWorkflow.md](doc/en/FwProjectWorkflow.md)
 - Native RP and ESP32-S3 network updates, first flash, and security boundaries:
-  [OTAWorkflow.md](doc/OTAWorkflow.md)
+  [OTAWorkflow.md](doc/en/OTAWorkflow.md)
 - [Full list of keyboard shortcuts](vscode/README.md#vs-code-keyboard-shortcuts)
 
 When the JaszczurHAL repository root itself is opened in VS Code, the tracked
@@ -243,7 +248,7 @@ When the JaszczurHAL repository root itself is opened in VS Code, the tracked
 existing global shortcuts build, install, clean, and refresh IntelliSense for
 one target/board profile selected directly from the shared board registry.
 Artifacts remain below `.build/vscode/library/`; details are in the
-[library compilation guide](doc/lib_compilation.md#repository-workspace-and-vs-code).
+[library compilation guide](doc/en/lib_compilation.md#repository-workspace-and-vs-code).
 
 ## Debugging with VS Code
 
@@ -252,7 +257,7 @@ Raspberry Pi Debug Probe or a Pico running Debug Probe/Picoprobe firmware.
 STM32G474 projects use the on-board ST-Link of the NUCLEO-G474RE. The VS Code
 Run and Debug workflow builds and loads the Debug ELF with managed OpenOCD and
 an Arm-capable GDB on Windows and Linux; see
-[Native Windows Setup](doc/windows_setup.md) for wiring and setup details.
+[Native Windows Setup](doc/en/windows_setup.md) for wiring and setup details.
 
 Both Linux and native Windows provide the VS Code firmware-development
 workflow for the released target paths. RP/STM targets provide their documented
@@ -261,7 +266,7 @@ serial upload, monitor, IntelliSense, and raw application OTA, but no managed
 debug profile; its OTA path still requires the Phase 3.5 hardware validation
 described above. Linux provides the full repository quality gate, including
 Valgrind, static analysis, and POSIX-only host integrations. See
-[Native Windows Setup](doc/windows_setup.md) for setup, verification, and the
+[Native Windows Setup](doc/en/windows_setup.md) for setup, verification, and the
 explicit Linux-only boundaries.
 
 ## Managed dependencies
@@ -284,14 +289,16 @@ inventory, SBOM, affected builds, full gate), is documented in
 
 Primary docs:
 
-- Process scripts and orchestration: [00_scripts.md](doc/api/00_scripts.md)
-- API reference: [JaszczurHAL_API.md](doc/JaszczurHAL_API.md)
-- Firmware project workflow: [FwProjectWorkflow.md](doc/FwProjectWorkflow.md)
-- Native OTA workflow: [OTAWorkflow.md](doc/OTAWorkflow.md)
-- Target and board profiles: [boards_profiles_howto.md](doc/boards_profiles_howto.md)
-- Changelog: [CHANGELOG.md](doc/CHANGELOG.md)
+- Complete index: [table_of_contents.md](doc/table_of_contents.md)
+- Feature overview: [features.md](doc/en/features.md)
+- Process scripts and orchestration: [00_scripts.md](doc/api/en/00_scripts.md)
+- API reference: [JaszczurHAL_API.md](doc/en/JaszczurHAL_API.md)
+- Firmware project workflow: [FwProjectWorkflow.md](doc/en/FwProjectWorkflow.md)
+- Native OTA workflow: [OTAWorkflow.md](doc/en/OTAWorkflow.md)
+- Target and board profiles: [boards_profiles_howto.md](doc/en/boards_profiles_howto.md)
+- Changelog (English only): [CHANGELOG.md](doc/CHANGELOG.md)
 - Build-time flags summary: [HAL_FLAGS](doc/HAL_FLAGS.txt)
-- Linkable static library build guide: [lib_compilation.md](doc/lib_compilation.md)
+- Linkable static library build guide: [lib_compilation.md](doc/en/lib_compilation.md)
 - VS Code firmware workflow: [vscode/README.md](vscode/README.md)
 
 ## Notes and credits

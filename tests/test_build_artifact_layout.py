@@ -24,7 +24,7 @@ def load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-hardware_reference = (ROOT / "doc" / "api" / "03_build_tests.md").read_text(
+hardware_reference = (ROOT / "doc" / "api" / "en" / "03_build_tests.md").read_text(
     encoding="utf-8"
 )
 for fixture_dir in sorted((ROOT / "tests" / "hardware").iterdir()):
@@ -37,7 +37,7 @@ for fixture_dir in sorted((ROOT / "tests" / "hardware").iterdir()):
     )
     readme = readme_path.read_text(encoding="utf-8")
     require(
-        "../../../doc/api/03_build_tests.md#" in readme,
+        "../../../doc/api/en/03_build_tests.md#" in readme,
         f"{fixture_dir.name}: README does not link to the central fixture reference",
     )
     require(

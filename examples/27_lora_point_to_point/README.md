@@ -60,12 +60,12 @@ For two integrated Waveshare LF boards, use `--target rp2040 --board
 rp2040-lora-lf` with the `link` and `link-responder` variants. The complete
 upload procedure, stable serial-port selection and `JHCMD1` acceptance criteria
 are maintained in the
-[central command-router hardware gate](../../doc/api/03_build_tests.md#sx1262-command-router-over-lora-hardware-gate).
+[central command-router hardware gate](../../doc/api/en/03_build_tests.md#sx1262-command-router-over-lora-hardware-gate).
 
 The command example intentionally uses CRC-protected plaintext. Encrypted links
 also require `HAL_ENABLE_CRYPTO`, a provisioned 32-byte secret and a session ID
 that is never reused for the same address/key. See the
-[reliable LoRa link API](../../doc/api/22_lora_link.md) before enabling AEAD.
+[reliable LoRa link API](../../doc/api/en/22_lora_link.md) before enabling AEAD.
 
 ## External Core1262-HF wiring
 

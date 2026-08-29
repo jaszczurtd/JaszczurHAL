@@ -362,8 +362,9 @@
 /* ── Module enable flags (opt-in) ────────────────────────────────────── */
 /* JaszczurHAL uses an opt-in model: only explicitly enabled modules and their
    propagated dependencies are compiled. The maintained public flag catalog is
-   in doc/api/02_module_flags.md; doc/HAL_FLAGS.txt provides a concise summary.
-   The generated feature registry resolves unconditional dependencies. */
+   in doc/api/en/02_module_flags.md; doc/HAL_FLAGS.txt provides a concise
+   summary. The generated feature registry resolves unconditional dependencies.
+ */
 
 /* Conditional residual outside feature registry v1. */
 #if defined(HAL_ENABLE_EEPROM) && (HAL_EEPROM_TYPE == EEPROM_TYPE_AT24C256)

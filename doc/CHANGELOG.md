@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-11
 
+- Moved `doc/datasheets/` to the private `context-providers` context repo
+  (`context_JaszczurHAL/datasheets/`). Datasheets are reference material for
+  development, not part of the shipped API documentation; the public `doc/`
+  tree no longer references them.
+- Split the maintained documentation into matching English `doc/en` and
+  `doc/api/en` trees and Polish `doc/pl` and `doc/api/pl` trees. Added
+  language-specific top-level indexes, completed the Polish translations, and
+  added automated file, heading, symbol, code-fence, and link parity checks.
 - Changed `hal_net_commands_clear()` to return `hal_status_t` instead of
   `void`, so `HAL_EBUSY` from an active dispatch on the shared default router
   is now surfaced instead of silently discarded, leaving the handler set

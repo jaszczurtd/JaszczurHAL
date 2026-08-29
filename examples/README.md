@@ -269,4 +269,4 @@ through an explicit hardware descriptor when no fixed composite profile fits.
 Generated task labels and keyboard shortcuts are documented in
 [JaszczurHAL VS Code Entry](../vscode/README.md). Project configuration,
 target/board resolution, source discovery, and artifact paths are documented in
-[Firmware Project Workflow](../doc/FwProjectWorkflow.md).
+[Firmware Project Workflow](../doc/en/FwProjectWorkflow.md).

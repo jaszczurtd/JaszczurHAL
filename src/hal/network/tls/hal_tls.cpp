@@ -834,7 +834,7 @@ void hal_mock_tls_full_reset(void) {
       hal_mutex_destroy(s_client_mutexes[index]);
     }
   }
-  memset(s_client_mutexes, 0, sizeof(s_client_mutexes));
+  std::fill_n(s_client_mutexes, HAL_TLS_MAX_CLIENTS, nullptr);
   memset(s_clients, 0, sizeof(s_clients));
   if (s_pool_mutex != NULL) {
     hal_mutex_destroy(s_pool_mutex);

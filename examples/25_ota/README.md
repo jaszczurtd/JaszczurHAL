@@ -9,7 +9,7 @@ narrow firewall rule is sufficient on hosts that filter inbound callbacks.
 `runmefirst.sh` detects the local IPv4 network and offers to provision that
 rule persistently after showing its exact scope.
 
-Read [Native RP OTA Workflow](../../doc/OTAWorkflow.md) for the complete
+Read [Native RP OTA Workflow](../../doc/en/OTAWorkflow.md) for the complete
 project, firmware, first-flash, VS Code, firewall, confirmation, rollback, and
 recovery procedure.
 

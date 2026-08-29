@@ -246,11 +246,6 @@ for path in upstream_files:
         cwd=ROOT,
     )
     require(result.stdout.strip().endswith("eol: lf"), f"wrong eol policy for {path}")
-pdf_attr = run_checked(
-    ["git", "check-attr", "text", "--", "doc/datasheets/RP2040.pdf"],
-    cwd=ROOT,
-)
-require(pdf_attr.stdout.strip().endswith("text: unset"), "PDF files are not marked binary")
 
 registry = tooling_target_registry(ROOT)
 expected_tasks = project_tasks_document(registry, "rp2040", "pico")

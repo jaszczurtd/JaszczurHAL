@@ -27,8 +27,7 @@ LICENSE* text eol=lf
 *.bat text eol=crlf
 *.ps1 text eol=crlf
 
-# Datasheets and generated firmware artifacts are binary.
-*.pdf binary
+# Generated firmware artifacts are binary.
 *.a binary
 *.bin binary
 *.elf binary

@@ -53,7 +53,7 @@
   Windows launcher verifies pyserial, supports a managed interpreter override,
   preserves arguments and exit codes, and handles paths with spaces and Unicode.
 - Add repository line-ending policy for Unix scripts, Windows launchers,
-  source text, and binary datasheets/artifacts.
+  source text, and binary artifacts.
 - Generate every standard VS Code task from one shared helper with a Windows
   command override, add a drift gate for the shared template and all checked-in
   examples, and test standalone generator idempotence.
