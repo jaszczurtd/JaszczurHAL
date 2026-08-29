@@ -490,6 +490,23 @@ target_compile_definitions(test_bluetooth_host_runtime PRIVATE
 jh_enable_host_warnings(test_bluetooth_host_runtime ERRORS)
 add_test(NAME test_bluetooth_host_runtime COMMAND test_bluetooth_host_runtime)
 
+add_executable(test_bluetooth_classic_hid_lifecycle
+    test_bluetooth_classic_hid_lifecycle.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/bluetooth/jh_bluetooth_classic_hid_lifecycle.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
+)
+target_include_directories(test_bluetooth_classic_hid_lifecycle PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_compile_definitions(test_bluetooth_classic_hid_lifecycle PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+jh_enable_host_warnings(test_bluetooth_classic_hid_lifecycle ERRORS)
+add_test(NAME test_bluetooth_classic_hid_lifecycle
+    COMMAND test_bluetooth_classic_hid_lifecycle)
+
 add_executable(test_network_backend
     test_network_backend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/core/jh_handle_pool.cpp
@@ -730,6 +747,11 @@ add_test(NAME test_component_management
 add_test(NAME test_bluetooth_stage1
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_bluetooth_stage1.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_bluetooth_classic_hid
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_bluetooth_classic_hid.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
 add_test(NAME test_component_manager

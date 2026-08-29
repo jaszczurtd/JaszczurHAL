@@ -289,6 +289,12 @@ endif()
 target_link_libraries(JaszczurHAL PUBLIC tinyusb_device)
 
 jh_hal_define_enabled(_jh_native_cyw43_backend HAL_NETWORK_BACKEND_CYW43)
+jh_hal_define_enabled(_jh_native_bluetooth_classic_hid
+    JH_BLUETOOTH_CLASSIC_HID_PROBE)
+if(_jh_native_bluetooth_classic_hid AND NOT _jh_native_cyw43_backend)
+    message(FATAL_ERROR
+        "JH_BLUETOOTH_CLASSIC_HID_PROBE requires a CYW43 network backend")
+endif()
 if(_jh_native_cyw43_backend)
     jh_hal_define_enabled(_jh_native_bluetooth_stage1
         JH_BLUETOOTH_STAGE1_PROBE)
@@ -298,6 +304,7 @@ if(_jh_native_cyw43_backend)
         LWIP TRUE
         OTA "${_jh_native_ota}"
         BLUETOOTH_STAGE1 "${_jh_native_bluetooth_stage1}"
+        BLUETOOTH_CLASSIC_HID "${_jh_native_bluetooth_classic_hid}"
         BLE "${_jh_native_ble}"
         BLE_STREAM "${_jh_native_ble_stream}")
 elseif(_jh_pico_board_has_cyw43)

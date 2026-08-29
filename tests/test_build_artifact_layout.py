@@ -73,6 +73,7 @@ for fixture in (
     "rp_sdlogger",
     "rp_ota",
     "bluetooth_stage1",
+    "bluetooth_gamepad",
     "bluetooth_stream",
 ):
     manifest = load_json(

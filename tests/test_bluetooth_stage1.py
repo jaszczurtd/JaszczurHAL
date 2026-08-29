@@ -83,8 +83,14 @@ for expected in (
     "ENABLE_HCI_CONTROLLER_TO_HOST_FLOW_CONTROL",
 ):
     require(expected in config, f"bounded BTstack config is missing {expected}")
-for forbidden in ("ENABLE_CLASSIC", "ENABLE_LE_CENTRAL", "ENABLE_MESH"):
+for forbidden in ("ENABLE_LE_CENTRAL", "ENABLE_MESH"):
     require(forbidden not in config, f"Stage 1 unexpectedly enables {forbidden}")
+require(
+    "#if defined(JH_BLUETOOTH_CLASSIC_HID_PROBE)" in config
+    and "#else\n/* BLE Peripheral sizing validated by the hardware gates. */"
+    in config,
+    "Classic sizing is not isolated from the Stage 1 BLE configuration",
+)
 
 shared_bus_dir = ROOT / "src/hal/network/cyw43/vendor/src"
 shared_bus = "\n".join(

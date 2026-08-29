@@ -201,6 +201,7 @@ applications and keep their artifacts below `.build/hardware/`:
 | Fixture | Coverage |
 |---|---|
 | `tests/hardware/bluetooth_stage1` | Internal pre-API CYW43/BTstack controller, advertising, static GATT and WiFi-only memory baseline on Pico W and STM32G474/PIM730. |
+| `tests/hardware/bluetooth_gamepad` | Sanitized 8BitDo Zero 2 Android D-input descriptor/report capture and the private Classic HID Host build probe for Pico 2 W. |
 | `tests/hardware/bluetooth_observer` | Public passive Observer scan, bounded report queue and Teltonika/iBeacon/Eddystone BLE parsing on Pico W, Pico 2 W and STM32G474/PIM730. |
 | `tests/hardware/bluetooth_stream` | Public BLE lifecycle and authenticated Stream gate across target/board/runtime tuples, including reconnect, watchdog, sustained traffic, saturation and negative security cases. |
 | `tests/hardware/rp_usb_cdc_echo` | Native TinyUSB CDC enumeration, backpressure, reconnect and throughput |
@@ -726,6 +727,35 @@ STM32 Bluetooth image be programmed through the Nucleo ST-Link. Record the
 periodic `JHBT1` status before testing discovery, connection, characteristic
 read/write, disconnect/reconnect, and the WiFi-only regression. The Pico W
 on-board-radio run follows as the second hardware profile.
+
+### Bluetooth Classic HID gamepad probe
+
+`tests/hardware/bluetooth_gamepad` owns the private pre-API Classic HID Host
+probe and the sanitized `zero2_android_dinput.json` capture. The capture keeps
+the 137-byte report descriptor, PnP identity, SDP metadata, all twelve input
+states, the undeclared trailing input byte, and a repeated raw report. It omits
+Bluetooth addresses, link keys, host identity, and USB serial numbers.
+
+The C4 firmware initializes the shared HCI/L2CAP runtime, an in-memory link-key
+database, the SDP client, one HID Host connection, and one event handler. It
+does not open inquiry, pairing, or a gamepad connection. The private selector
+must not be combined with public BLE or the earlier Stage 1 probe.
+
+Build the required Pico 2 W image:
+
+```sh
+vscode/entry/jh-vscode build \
+  --project tests/hardware/bluetooth_gamepad \
+  --target rp2350-arm --board pico2w --variant classic-hid
+```
+
+The ELF/map and a symbol listing must show `ENABLE_CLASSIC` HID Host, SDP
+client, HID parser, and the memory link-key database while excluding ATT,
+GATT, SM, RFCOMM, SDP server, HID Device, and audio profiles. A supplementary
+Pico W runtime smoke test may use `--target rp2040 --board picow`; periodic
+`JHBT4` output passes when `start=HAL_OK`, `ready=1`, `profile=1`, and the
+transport remains `HAL_OK`. Connecting the physical pad belongs to the next
+hardware stage.
 
 ### Bluetooth Observer hardware probe
 
