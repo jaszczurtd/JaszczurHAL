@@ -507,6 +507,23 @@ jh_enable_host_warnings(test_bluetooth_classic_hid_lifecycle ERRORS)
 add_test(NAME test_bluetooth_classic_hid_lifecycle
     COMMAND test_bluetooth_classic_hid_lifecycle)
 
+add_executable(test_bluetooth_classic_hid_probe_logic
+    test_bluetooth_classic_hid_probe_logic.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/bluetooth/jh_bluetooth_classic_hid_probe_logic.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
+)
+target_include_directories(test_bluetooth_classic_hid_probe_logic PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_compile_definitions(test_bluetooth_classic_hid_probe_logic PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+jh_enable_host_warnings(test_bluetooth_classic_hid_probe_logic ERRORS)
+add_test(NAME test_bluetooth_classic_hid_probe_logic
+    COMMAND test_bluetooth_classic_hid_probe_logic)
+
 add_executable(test_network_backend
     test_network_backend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/core/jh_handle_pool.cpp

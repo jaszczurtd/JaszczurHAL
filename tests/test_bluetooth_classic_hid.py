@@ -61,6 +61,19 @@ require(
     "captured HID report descriptor length is inconsistent",
 )
 require(
+    descriptor["fnv1a32"] == "0x6e8fcc1a",
+    "captured HID report descriptor hash changed",
+)
+require(
+    descriptor["btstackExtraction"]["length"] == 136
+    and descriptor["btstackExtraction"]["fnv1a32"] == "0xe51f7bbe",
+    "BTstack descriptor extraction differs from the characterized capture",
+)
+require(
+    capture["sdp"]["pnpRecordHandle"] == "0x00010000",
+    "characterized PnP record handle changed",
+)
+require(
     descriptor["inputReports"]
     == [
         {
@@ -144,6 +157,8 @@ for source in (
     "src/classic/hid_host.c",
     "src/classic/sdp_client.c",
     "src/classic/sdp_util.c",
+    "jh_bluetooth_classic_hid_memory_probe.c",
+    "jh_bluetooth_classic_hid_probe_logic.c",
 ):
     require(source in btstack_cmake, f"Classic HID source set is missing {source}")
 for forbidden in (
@@ -157,9 +172,20 @@ for forbidden in (
     require(forbidden not in btstack_cmake, f"minimal build includes {forbidden}")
 require(
     "ENABLE_CLASSIC=1" in btstack_cmake
+    and "ENABLE_SDP_EXTRA_QUERIES=1" in btstack_cmake
     and "JH_BLUETOOTH_CLASSIC_HID_PROBE=1" in btstack_cmake,
     "Classic HID mode definitions are missing",
 )
+for wrapped_pool_function in (
+    "btstack_memory_l2cap_service_get",
+    "btstack_memory_l2cap_channel_get",
+    "btstack_memory_btstack_link_key_db_memory_entry_get",
+    "btstack_memory_hid_host_connection_get",
+):
+    require(
+        f"--wrap={wrapped_pool_function}" in btstack_cmake,
+        f"Classic HID memory probe does not wrap {wrapped_pool_function}",
+    )
 
 config = (ROOT / "src" / "hal" / "bluetooth" / "btstack_config.h").read_text(
     encoding="utf-8"
@@ -204,12 +230,94 @@ for expected in (
     "hid_host_register_packet_handler(packet_handler);",
     "jh_btstack_host_acquire(",
     "JH_BLUETOOTH_HOST_PROFILE_CLASSIC_HID",
+    "gap_inquiry_start(",
+    "sdp_client_query_uuid16(",
+    "sdp_client_service_search(",
+    "sdp_parser_init_service_search();",
+    "BLUETOOTH_SERVICE_CLASS_HUMAN_INTERFACE_DEVICE_SERVICE",
+    "BLUETOOTH_SERVICE_CLASS_PNP_INFORMATION",
+    "HID_PROTOCOL_MODE_REPORT_WITH_FALLBACK_TO_BOOT",
+    "hid_host_accept_connection(hid_cid, HID_PROTOCOL_MODE_BOOT)",
+    "hid_host_send_set_protocol_mode(",
+    "s_snapshot.descriptor_matches_capture",
+    "gap_ssp_set_auto_accept(0)",
+    "gap_ssp_confirmation_response(",
+    "gap_pin_code_response(",
+    "jh_bluetooth_classic_hid_probe_logic_disconnected(&s_logic)",
 ):
     require(expected in probe, f"Classic HID probe is missing {expected}")
 require(
-    "gap_discoverable_control(1" not in probe and "gap_inquiry_start" not in probe,
-    "C4 probe must not open discovery or pairing",
+    "gap_discoverable_control(1" not in probe,
+    "C5 probe must not expose unsolicited page-scan pairing",
 )
+start_body = probe.split(
+    "hal_status_t jh_bluetooth_classic_hid_probe_start(void)", 1
+)[1].split("hal_status_t jh_bluetooth_classic_hid_probe_service(void)", 1)[0]
+require(
+    "start_inquiry_cycle" not in start_body and "gap_inquiry_start" not in start_body,
+    "C5 probe opens discovery during startup instead of waiting for a command",
+)
+
+logic = (
+    ROOT / "src" / "hal" / "bluetooth" / "jh_bluetooth_classic_hid_probe_logic.c"
+).read_text(encoding="utf-8")
+for expected in (
+    "JH_CLASSIC_HID_DISCOVERY_WINDOW_MS",
+    "JH_CLASSIC_HID_EXPECTED_NAME",
+    "JH_CLASSIC_HID_EXPECTED_VENDOR_ID",
+    "JH_CLASSIC_HID_EXPECTED_PRODUCT_ID",
+    "JH_CLASSIC_HID_EXPECTED_VERSION",
+):
+    require(expected in logic, f"C5 identity/window logic is missing {expected}")
+
+memory_probe = (
+    ROOT / "src" / "hal" / "bluetooth" / "jh_bluetooth_classic_hid_memory_probe.c"
+).read_text(encoding="utf-8")
+require(
+    "allocation_failures" in memory_probe and "high_water" in memory_probe,
+    "C5 memory probe does not record pool failures and high-water marks",
+)
+
+verifier_path = FIXTURE_DIR / "verify_zero2.py"
+verifier = verifier_path.read_text(encoding="utf-8")
+for expected in (
+    "DISCONNECT_TIMEOUT_S = 60.0",
+    "RECONNECT_CYCLES = 5",
+    "RECONNECT_SETTLE_MS = 3_000",
+    "RECONNECT_TIMEOUT_S = 180.0",
+    "STABILITY_DURATION_MS = 30 * 60 * 1000",
+    'probe.command("DISCOVER")',
+    'probe.command("AUTHORIZE")',
+    'probe.command("DISCONNECT")',
+    "known-pad reconnect in cycle",
+    '"--resume-stability"',
+    '"hostVerifierResumed"',
+    "health_counter",
+    '"gamepad": "unavailable"',
+):
+    require(expected in verifier, f"C5 verifier is missing {expected}")
+require(
+    all(
+        secret not in verifier
+        for secret in ("bd_addr_to_str", '"linkKey":', '"deviceAddress":')
+    ),
+    "C5 verifier exposes an address or key field",
+)
+
+result_path = FIXTURE_DIR / "zero2_pico2w_c5_result.json"
+if result_path.exists():
+    result_text = result_path.read_text(encoding="utf-8")
+    result = json.loads(result_text)
+    require(result["result"] == "pass", "stored C5 result is not a pass")
+    require(
+        result["capture"] == capture_path.name
+        and result["firmware"]["gamepad"] == "unavailable",
+        "stored C5 result is detached from the characterized fixture",
+    )
+    require(
+        re.search(r"(?i)(?:[0-9a-f]{2}:){5}[0-9a-f]{2}", result_text) is None,
+        "stored C5 result contains a Bluetooth device address",
+    )
 
 manifest = json.loads(
     (FIXTURE_DIR / ".vscode" / "jaszczurhal.project.json").read_text(
