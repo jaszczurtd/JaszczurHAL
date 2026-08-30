@@ -2,6 +2,7 @@
 
 #include "hal/core/hal_status.h"
 #include "jh_bluetooth_classic_hid_memory_probe.h"
+#include "jh_bluetooth_gamepad_parser.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -37,6 +38,7 @@ typedef enum {
 
 typedef struct {
   jh_bluetooth_classic_hid_memory_snapshot_t pools;
+  jh_bluetooth_gamepad_parser_diagnostics_t parser;
   uint32_t hid_events;
   uint32_t rejected_incoming_connections;
   uint32_t accepted_incoming_connections;

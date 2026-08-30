@@ -14,7 +14,7 @@
 
 enum {
   JHBT5_COMMAND_CAPACITY = 32u,
-  JHBT5_SNAPSHOT_CAPACITY = 1800u,
+  JHBT5_SNAPSHOT_CAPACITY = 2300u,
   JHBT5_REPORT_PERIOD_MS = 1000u,
 };
 
@@ -63,6 +63,16 @@ static void report_snapshot(void) {
       "\"reportBytes\":%lu,\"invalidReports\":%lu,"
       "\"releaseAllEvents\":%lu,\"lastBtstackStatus\":%u,"
       "\"lastStatus\":%d,\"transportStatus\":%d,"
+      "\"parser\":{\"descriptorLimit\":%u,\"reportLimit\":%u,"
+      "\"queueCapacity\":%u,\"descriptorsAccepted\":%lu,"
+      "\"descriptorsRejected\":%lu,\"reportsReceived\":%lu,"
+      "\"reportsAccepted\":%lu,\"reportsRejected\":%lu,"
+      "\"duplicateReports\":%lu,\"stateChanges\":%lu,"
+      "\"ignoredUsages\":%lu,\"unknownReportIds\":%lu,"
+      "\"truncatedReports\":%lu,\"droppedSnapshots\":%lu,"
+      "\"reportBytes\":%lu,\"descriptorLengthHighWater\":%u,"
+      "\"reportLengthHighWater\":%u,\"queueHighWater\":%u,"
+      "\"lastStatus\":%d,\"lastRejectReason\":%u},"
       "\"transport\":{\"rx\":%lu,\"rxEvents\":%lu,\"rxAcl\":%lu,"
       "\"tx\":%lu,\"txCommands\":%lu,\"txAcl\":%lu,"
       "\"drainBudgetHits\":%lu},"
@@ -109,7 +119,28 @@ static void report_snapshot(void) {
       (unsigned long)snapshot.invalid_reports,
       (unsigned long)snapshot.release_all_events,
       (unsigned)snapshot.last_btstack_status, (int)snapshot.last_status,
-      (int)snapshot.transport_status, (unsigned long)snapshot.rx_packets,
+      (int)snapshot.transport_status,
+      (unsigned)JH_BLUETOOTH_GAMEPAD_DESCRIPTOR_MAX,
+      (unsigned)JH_BLUETOOTH_GAMEPAD_REPORT_MAX,
+      (unsigned)JH_BLUETOOTH_GAMEPAD_QUEUE_CAPACITY,
+      (unsigned long)snapshot.parser.descriptors_accepted,
+      (unsigned long)snapshot.parser.descriptors_rejected,
+      (unsigned long)snapshot.parser.reports_received,
+      (unsigned long)snapshot.parser.reports_accepted,
+      (unsigned long)snapshot.parser.reports_rejected,
+      (unsigned long)snapshot.parser.duplicate_reports,
+      (unsigned long)snapshot.parser.state_changes,
+      (unsigned long)snapshot.parser.ignored_usages,
+      (unsigned long)snapshot.parser.unknown_report_ids,
+      (unsigned long)snapshot.parser.truncated_reports,
+      (unsigned long)snapshot.parser.dropped_snapshots,
+      (unsigned long)snapshot.parser.report_bytes,
+      (unsigned)snapshot.parser.descriptor_length_high_water,
+      (unsigned)snapshot.parser.report_length_high_water,
+      (unsigned)snapshot.parser.queue_high_water,
+      (int)snapshot.parser.last_status,
+      (unsigned)snapshot.parser.last_reject_reason,
+      (unsigned long)snapshot.rx_packets,
       (unsigned long)snapshot.rx_event_packets,
       (unsigned long)snapshot.rx_acl_packets,
       (unsigned long)snapshot.tx_packets,

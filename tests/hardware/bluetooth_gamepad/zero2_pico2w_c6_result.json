@@ -1,0 +1,119 @@
+{
+  "capture": "zero2_android_dinput.json",
+  "counters": {
+    "acceptedIncomingConnections": 6,
+    "authenticationFailures": 0,
+    "authenticationSuccesses": 1,
+    "connectionFailures": 0,
+    "connections": 7,
+    "disconnections": 6,
+    "drainBudgetHits": 0,
+    "hidEvents": 1869,
+    "identityRejections": 0,
+    "inquiryCycles": 3,
+    "inquiryResults": 7,
+    "invalidReports": 0,
+    "linkKeysStored": 1,
+    "pairingAuthorizations": 1,
+    "pairingRequests": 1,
+    "peripheralCandidates": 1,
+    "pnpIdentityMatches": 1,
+    "reconnectAttempts": 0,
+    "reconnectSuccesses": 0,
+    "rejectedIncomingConnections": 0,
+    "releaseAllEvents": 2,
+    "reportBytes": 22032,
+    "reports": 1836,
+    "rx": 2136,
+    "rxAcl": 1937,
+    "rxEvents": 199,
+    "sdpHidMatches": 1,
+    "tx": 2099,
+    "txAcl": 96,
+    "txCommands": 2003
+  },
+  "firmware": {
+    "btstack": "1.6.2",
+    "gamepad": "unavailable",
+    "picoSdk": "2.2.0"
+  },
+  "hardware": {
+    "board": "pico2w",
+    "target": "rp2350-arm"
+  },
+  "link": {
+    "allControlsMask": "0x0fff",
+    "connectedMs": 1952988,
+    "descriptorFNV1a32": "0xe51f7bbe",
+    "descriptorLength": 136,
+    "descriptorLengthHighWater": 136,
+    "pairingMethod": "ssp-just-works",
+    "protocol": "report",
+    "reportLengthHighWater": 12
+  },
+  "parser": {
+    "descriptorLengthHighWater": 136,
+    "descriptorLimit": 256,
+    "descriptorsAccepted": 1,
+    "descriptorsRejected": 0,
+    "droppedSnapshots": 0,
+    "duplicateReports": 1713,
+    "ignoredUsages": 0,
+    "lastRejectReason": 0,
+    "lastStatus": 1,
+    "queueCapacity": 16,
+    "queueHighWater": 1,
+    "reportBytes": 20196,
+    "reportLengthHighWater": 11,
+    "reportLimit": 32,
+    "reportsAccepted": 1836,
+    "reportsReceived": 1836,
+    "reportsRejected": 0,
+    "stateChanges": 123,
+    "truncatedReports": 0,
+    "unknownReportIds": 0
+  },
+  "resources": {
+    "hidConnections": {
+      "allocationFailures": 0,
+      "capacity": 1,
+      "current": 1,
+      "highWater": 1
+    },
+    "l2capChannels": {
+      "allocationFailures": 0,
+      "capacity": 3,
+      "current": 2,
+      "highWater": 2
+    },
+    "l2capServices": {
+      "allocationFailures": 0,
+      "capacity": 2,
+      "current": 2,
+      "highWater": 2
+    },
+    "linkKeys": {
+      "allocationFailures": 0,
+      "capacity": 1,
+      "current": 1,
+      "highWater": 1
+    }
+  },
+  "result": "pass",
+  "scenario": {
+    "hostVerifierResumed": false,
+    "powerCycleReconnect": true,
+    "reconnectCycles": 5,
+    "releaseActiveInputOnDisconnect": true,
+    "stabilityRequiredMs": 1800000,
+    "timings": {
+      "controlCaptureMs": 23011,
+      "discoveryMs": 36016,
+      "powerCycleMs": 90019,
+      "reconnectCyclesMs": 108043,
+      "scenarioMs": 2093638,
+      "stabilityMs": 1800000
+    }
+  },
+  "schemaVersion": 1
+}

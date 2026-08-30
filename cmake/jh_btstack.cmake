@@ -84,6 +84,7 @@ function(_jh_target_enable_btstack TARGET_NAME MODE)
     elseif(MODE STREQUAL "CLASSIC_HID")
         set(_jh_mode_upstream_sources ${_jh_btstack_classic_hid_sources})
         set(_jh_mode_jh_sources
+            "${_jh_bluetooth_root}/jh_bluetooth_gamepad_parser.c"
             "${_jh_bluetooth_root}/jh_bluetooth_classic_hid_lifecycle.c"
             "${_jh_bluetooth_root}/jh_bluetooth_classic_hid_memory_probe.c"
             "${_jh_bluetooth_root}/jh_bluetooth_classic_hid_probe_logic.c"
