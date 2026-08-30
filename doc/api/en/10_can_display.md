@@ -549,10 +549,17 @@ or `HAL_COLOR(name)` selector, for example `HAL_COLOR(ORANGE)`.
 `HAL_DISPLAY_INVERT_ON/OFF`, `HAL_DISPLAY_COLOR_ORDER_RGB/BGR`.
 **Capabilities and raw buffers:** Query the active backend with
 `hal_display_get_capabilities_ex()`, then use only advertised formats and
-alignments with `hal_display_write_raw_ex()`. `pitch` is in pixels. Current
-hardware backends require `pitch == width`; larger pitches return
-`HAL_EUNSUPPORTED`. TFT and RGB OLED backends accept contiguous
-`RGB565_BE`/`RGB565_NATIVE`. ST7567 accepts `MONO01`/`MONO10`, reports
+alignments with `hal_display_write_raw_ex()`. `pitch` is in pixels. TFT and
+RGB OLED backends (and the mock) accept `pitch > width`: each source row is
+streamed separately inside one addressing window, so the caller's buffer
+only needs real bytes up to the last row's `width` pixels -- trailing
+padding past that does not need to be backed by memory. Page-tiled or
+per-call-reconfiguring backends still require `pitch == width` and return
+`HAL_EUNSUPPORTED` otherwise: ST7567 always (a byte encodes 8 stacked pixel
+rows, so there is no per-pixel-row boundary), SSD16xx at rotation 0/180
+(tiling flips with rotation), and UC81xx (its write call re-applies the
+panel profile on every invocation, so splitting it per row would replay
+that side effect once per row). ST7567 accepts `MONO01`/`MONO10`, reports
 `HAL_DISPLAY_SCREEN_INFO_MONO_VTILED`, and requires `y` and `height` aligned
 to 8 pixels. Use `hal_display_set_pixel_format_ex()` before changing the
 ST7567 monochrome polarity.

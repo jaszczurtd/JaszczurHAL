@@ -227,9 +227,15 @@ typedef struct {
  *
  * - width/height describe the updated rectangle in pixels.
  * - pitch is the number of pixels between consecutive rows in the source
- *   buffer. The descriptor can express pitch > width, but callers must query
- *   backend capabilities; current hardware backends reject non-contiguous
- *   raw areas with HAL_EUNSUPPORTED.
+ *   buffer. pitch > width (row padding) is supported on row-major,
+ *   pixel-addressable backends (RGB565 TFT/RGB-OLED, and the mock). It is
+ *   still rejected with HAL_EUNSUPPORTED on backends whose wire format
+ *   tiles several pixel rows into one byte plane (ST7567 always; SSD16xx at
+ *   rotation 0/180) or whose write call re-applies panel configuration on
+ *   every invocation (UC81xx) -- see hal_display_write_raw_ex() in
+ *   drivers/hal_display.cpp for the per-backend reasoning. When buf_size
+ *   only needs to cover the pixels actually read, the last row's trailing
+ *   padding does not need to be backed by real memory.
  * - buf_size is the available source-buffer size in bytes.
  * - frame_incomplete lets future streaming backends keep a panel transaction
  *   open across several area writes.

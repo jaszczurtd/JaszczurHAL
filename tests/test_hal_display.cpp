@@ -70,13 +70,25 @@ void test_raw_write_validates_descriptor_and_area(void) {
                         hal_display_write_raw_ex(1u, 2u, &desc, pixels));
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
                         hal_display_write_raw_ex(127u, 0u, &desc, pixels));
-  desc.pitch = 3u;
-  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED,
-                        hal_display_write_raw_ex(0u, 0u, &desc, pixels));
-  desc.pitch = 2u;
   desc.pixel_format = HAL_DISPLAY_PIXEL_FORMAT_MONO01;
   TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED,
                         hal_display_write_raw_ex(0u, 0u, &desc, pixels));
+}
+
+void test_raw_write_supports_padded_pitch(void) {
+  const uint8_t pixels[8] = {};
+  hal_display_buffer_desc_t desc = {
+      HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE, 3u, 2u, 2u, sizeof(pixels), false};
+
+  /* pitch=3 with height=2 needs (2-1)*3*2 + 2*2 = 10 bytes; the 8-byte
+   * buffer only covers a tightly packed layout. */
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_display_write_raw_ex(0u, 0u, &desc, pixels));
+
+  const uint8_t padded_pixels[10] = {};
+  desc.buf_size = sizeof(padded_pixels);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_display_write_raw_ex(0u, 0u, &desc, padded_pixels));
 }
 
 void test_draw_image_draws_background_and_bitmap(void) {
@@ -444,6 +456,7 @@ int main(void) {
   RUN_TEST(test_display_buffer_descriptor_describes_raw_area);
   RUN_TEST(test_capabilities_describe_active_mock_backend);
   RUN_TEST(test_raw_write_validates_descriptor_and_area);
+  RUN_TEST(test_raw_write_supports_padded_pitch);
   RUN_TEST(test_draw_image_draws_background_and_bitmap);
   RUN_TEST(test_stream_write_api_tracks_window_and_counts);
   RUN_TEST(test_stream_write_api_rejects_invalid_order_and_odd_bytes);

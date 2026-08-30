@@ -19,8 +19,8 @@ if(NOT _digest_length EQUAL 64)
 endif()
 
 list(LENGTH JH_HAL_FEATURE_SYMBOLS _symbol_count)
-if(NOT _symbol_count EQUAL 107)
-    message(FATAL_ERROR "Expected 107 registered symbols, got ${_symbol_count}")
+if(NOT _symbol_count EQUAL 108)
+    message(FATAL_ERROR "Expected 108 registered symbols, got ${_symbol_count}")
 endif()
 if(NOT "${JH_HAL_FEATURE_DERIVED_SYMBOLS}" STREQUAL
        "HAL_ENABLE_NETWORK_CORE")

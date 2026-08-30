@@ -206,14 +206,15 @@ hal_status_t hal_display_write_raw_ex(uint16_t x, uint16_t y,
       (uint32_t)y + desc->height > (uint32_t)s_height) {
     return HAL_EINVAL;
   }
-  if (desc->pitch != desc->width) {
-    return HAL_EUNSUPPORTED;
-  }
   if (desc->pixel_format != HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE &&
       desc->pixel_format != HAL_DISPLAY_PIXEL_FORMAT_RGB565_NATIVE) {
     return HAL_EUNSUPPORTED;
   }
-  if (desc->buf_size < (size_t)desc->width * desc->height * 2u) {
+  const size_t bytes_per_desc_row = (size_t)desc->width * 2u;
+  const size_t bytes_per_pitch_row = (size_t)desc->pitch * 2u;
+  const size_t required =
+      (size_t)(desc->height - 1u) * bytes_per_pitch_row + bytes_per_desc_row;
+  if (desc->buf_size < required) {
     return HAL_EINVAL;
   }
   if (s_fail_next_io) {
