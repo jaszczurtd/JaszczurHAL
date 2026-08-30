@@ -60,13 +60,19 @@ void notify(hal_eeprom_progress_callback_t progress, void *ctx) {
 hal_status_t store(void *context, const uint8_t *mirror, uint16_t storage_size,
                    hal_eeprom_progress_callback_t progress, void *ctx) {
   (void)context;
-  if (storage_size != s_reserved_size || !jh_stm32g474_flash_unlock()) {
-    return HAL_EIO;
+  if (storage_size != s_reserved_size) {
+    return HAL_EINVAL;
   }
   bool ok = true;
   for (uint32_t offset = 0u; offset < s_reserved_size;
        offset += HAL_STM32_FLASH_PAGE_SIZE) {
-    if (!jh_stm32g474_flash_erase_page(s_flash_start + offset)) {
+    if (!jh_stm32g474_flash_unlock()) {
+      ok = false;
+      break;
+    }
+    const bool erased = jh_stm32g474_flash_erase_page(s_flash_start + offset);
+    jh_stm32g474_flash_lock();
+    if (!erased) {
       ok = false;
       break;
     }
@@ -80,13 +86,20 @@ hal_status_t store(void *context, const uint8_t *mirror, uint16_t storage_size,
         break;
       }
     }
-    if (!erased && !jh_stm32g474_flash_program_doubleword(
-                       s_flash_start + offset, &mirror[offset])) {
-      ok = false;
+    if (!erased) {
+      if (!jh_stm32g474_flash_unlock()) {
+        ok = false;
+        break;
+      }
+      const bool programmed = jh_stm32g474_flash_program_doubleword(
+          s_flash_start + offset, &mirror[offset]);
+      jh_stm32g474_flash_lock();
+      if (!programmed) {
+        ok = false;
+      }
     }
     notify(progress, ctx);
   }
-  jh_stm32g474_flash_lock();
   if (!ok) {
     hal_derr("hal_eeprom_commit: STM32 flash commit failed");
   }

@@ -73,6 +73,9 @@ jh_rp_flash_storage_partition(jh_rp_flash_partition_id_t id,
                 "RP EEPROM reservation must be sector-aligned");
   static_assert((kLittlefsSize % FLASH_SECTOR_SIZE) == 0u,
                 "RP LittleFS reservation must be sector-aligned");
+  static_assert(kLittlefsSize == 0u ||
+                    kLittlefsSize >= (2u * FLASH_SECTOR_SIZE),
+                "RP LittleFS reservation must contain at least two sectors");
   static_assert(kEepromSize + kLittlefsSize <= kFlashSize,
                 "RP storage reservations exceed physical flash");
   static_assert((kOtaSlotSize % FLASH_SECTOR_SIZE) == 0u,

@@ -534,6 +534,10 @@ bool hal_mock_sdlogger_crash_was_closed(void);
 void hal_mock_littlefs_reset(void);
 /** @brief Control result returned by hal_littlefs_begin() (default: true). */
 void hal_mock_littlefs_set_begin_result(bool result);
+/** @brief Inject the exact status returned by the LittleFS mount provider. */
+void hal_mock_littlefs_set_begin_status(hal_status_t status);
+/** @brief Control result returned by hal_littlefs_end() (default: true). */
+void hal_mock_littlefs_set_end_result(bool result);
 /** @brief Control result returned by hal_littlefs_format() (default: true). */
 void hal_mock_littlefs_set_format_result(bool result);
 /** @brief Inject total bytes returned by hal_littlefs_total_bytes(). */

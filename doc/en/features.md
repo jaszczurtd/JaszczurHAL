@@ -98,10 +98,10 @@ the portability goal of JaszczurHAL.
 
 | Area | What it offers | Source |
 |---|---|---|
-| Flash transaction coordinator | Single internal coordinator for all native flash mutations: serializes callers, makes the other core safe, pauses TinyUSB, rejects XIP-resident callbacks and active DMA, applies bounded timeouts and restores runtime state. EEPROM/KV, LittleFS and OTA staging route through it on native RP; STM32G474 uses its coordinated flash services. | [rp flash drivers](../../src/hal/impl/rp2040/drivers/flash/), [storage API](../api/en/14_storage.md) |
+| Flash mutation coordination | Native RP routes EEPROM/KV, LittleFS and OTA staging through one coordinator that serializes callers, makes the other core safe, pauses TinyUSB, rejects XIP-resident callbacks and active DMA, applies bounded timeouts and restores runtime state. STM32G474 serializes EEPROM/KV and LittleFS erase/program sequences with one flash mutex. | [RP flash drivers](../../src/hal/impl/rp2040/drivers/flash/), [storage API](../api/en/14_storage.md) |
 | EEPROM abstraction | One provider-dispatched persistent-storage facade with shared locking/range behavior, a portable AT24C256 driver, target flash providers, a host-memory provider, and status-returning (`hal_status_t`) APIs. | [hal_eeprom.h](../../src/hal/storage/hal_eeprom.h) |
 | Key-value storage | Small persistent key-value layer on top of EEPROM-style storage, including status-returning (`hal_status_t`) get/set/commit APIs. | [hal_kv.h](../../src/hal/storage/hal_kv.h) |
-| LittleFS | Lightweight filesystem lifecycle/helpers, including status-returning (`hal_status_t`) mount/format/path APIs; native RP and STM32G474 use linker-reserved internal flash partitions. | [hal_littlefs.h](../../src/hal/storage/hal_littlefs.h) |
+| LittleFS | One thread-safe, target-independent facade owns lifecycle, validation, mounted state, size queries and progress configuration over a shared littlefs provider. Native RP and STM32G474 use linker-reserved internal flash partitions; the mock injects provider results through the same facade. | [LittleFS facade and provider](../../src/hal/storage/), [storage API](../api/en/14_storage.md) |
 | FatFs / SD over SPI | Exact-commit FatFs R0.16 checkout and shared SD-over-SPI disk I/O. | [filesystem framework](../../src/hal/storage/filesystem/) |
 | SD logger | SD-card logging and crash-report logging support. | [hal_sdlogger.h](../../src/hal/storage/hal_sdlogger.h), [sdlogger](../../src/hal/storage/filesystem/sdlogger/) |
 

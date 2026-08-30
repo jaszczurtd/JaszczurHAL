@@ -38,7 +38,7 @@
 | `hal_external_adc` | shared ADS1X15/ADS1115 driver (`hal/analog/ads1x15/ads1x15_driver.*`) |
 | `hal_pga2311` | shared PGA2311 stereo volume driver (`hal/audio/pga2311/pga2311_driver.*`) over HAL SPI/GPIO |
 | `hal_wifi` | pinned CYW43 driver/lwIP on RP and STM32G474, or native ESP-IDF WiFi/`esp_netif`/lwIP on ESP32-S3 |
-| `hal_littlefs` | pinned `third_party/littlefs` core plus coordinated internal flash on RP and STM32G474 |
+| `hal_littlefs` | one target-independent facade and shared provider over the pinned `third_party/littlefs` core; RP and STM32G474 provide geometry and coordinated raw internal-flash operations, while a dedicated host integration test uses a RAM flash model |
 | `hal_udp` | shared lwIP raw UDP engine over the selected CYW43 network backend |
 | `hal_tls` | bundled BearSSL over native `hal_tcp`; the optional BSD transport adapter is built only when `HAL_ENABLE_BSD_SOCKETS` is also enabled |
 | BSD sockets adapter | shared `hal/network/adapters/bsd/hal_bsd_sockets.cpp` over HAL UDP/TCP; remains independently selectable without TLS |
@@ -1583,7 +1583,9 @@ is intentionally not a second exhaustive test registry.
 | `test_hal_bits` | bit helper macros (`is_set`, `set_bit`, `clr_bit`, `bitSet`, `bitClear`, `bitRead`, `set_bit_v`, `clr_bit_v`) |
 | `test_hal_wifi` | mode/hostname/RSSI/ping, IP/DNS/MAC inject, input validation |
 | `test_hal_net` | shared endpoint/status shape, network limits, IPv4 literal/localhost/mock-DNS resolver behavior |
-| `test_hal_littlefs` | mount/unmount flow, size stats, path exists/remove helpers, format success/failure behavior, direct status operations, missing-path and unmounted-state semantics, input validation |
+| `test_hal_littlefs` | Shared-facade mount/unmount flow, idempotent mount, mounted-state clearing after unmount failure, concurrent lifecycle/stat serialization, size stats and output initialization, path exists/remove helpers, exact provider-status propagation, destructive-format success and best-effort remount outcomes, progress callback configuration and input validation |
+| `test_jh_littlefs_lfs_provider` | Real pinned littlefs lifecycle over a flash-like RAM backend, format/mount/file/stat/remove/size behavior, checked block range/alignment/overflow guards, flash programming rules and injected raw-I/O failure/recovery |
+| `test_littlefs_architecture` | Single ownership of public LittleFS behavior and library lifecycle, target-only geometry/block operations, mock separation from facade state, shared STM32G474 flash serialization and source-inventory wiring |
 | `test_hal_sdlogger` | EEPROM-backed file numbering, buffered log flush/close, crash-report formatting, SD/open failure paths |
 | `test_hal_udp` | begin/parse/read flow, handle-based multi-socket bind/RX/TX separation, chunked datagram reads, remote endpoint capture/reset-on-stop, beginPacket explicit/remote sender paths, write/endPacket behavior, input validation |
 | `test_hal_tcp` | TCP client connect/send/recv/shutdown/close, listener bind/listen/accept, backlog/pool limits, readiness probes and accepted-socket independence |

@@ -68,9 +68,12 @@ include(CTest)
 set(SRC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/jh_managed_frameworks.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/jh_host_warnings.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/jh_littlefs.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/jh_sx126x.cmake)
 jh_managed_framework_include_dirs(JH_MANAGED_FRAMEWORK_INCLUDE_DIRS)
 jh_managed_framework_configure_sources()
+jh_littlefs_source_manifest(JH_LITTLEFS_TEST_SOURCES
+    JH_LITTLEFS_TEST_INCLUDE_DIRS)
 jh_sx126x_source_manifest(JH_SX126X_SOURCES JH_SX126X_INCLUDE_DIRS)
 
 option(JH_ENABLE_FREERTOS_POSIX_TESTS
@@ -130,6 +133,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/display/hal_display.cpp
     ${SRC}/hal/storage/hal_sdlogger.cpp
     ${SRC}/hal/storage/hal_eeprom.cpp
+    ${SRC}/hal/storage/hal_littlefs.cpp
     ${SRC}/hal/storage/jh_eeprom_flash_provider.cpp
     ${SRC}/hal/storage/at24c256/jh_at24c256_provider.cpp
     ${SRC}/hal/serial/hal_swserial.cpp

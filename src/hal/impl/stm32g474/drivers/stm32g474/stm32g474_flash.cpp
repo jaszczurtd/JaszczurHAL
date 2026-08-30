@@ -3,6 +3,8 @@
 
 #include "../../port/stm32g474_regs.h"
 #include "hal/core/hal_config.h"
+#include "hal/core/hal_mutex_once.h"
+#include "hal/system/hal_sync.h"
 #include "stm32g474_flash.h"
 
 #include <string.h>
@@ -10,6 +12,9 @@
 static constexpr uintptr_t STM32_FLASH_BASE_ADDR = 0x08000000u;
 static constexpr uint32_t STM32_FLASH_BANK_SIZE = 256u * 1024u;
 static constexpr uint32_t STM32_FLASH_TIMEOUT = 2000000u;
+
+static hal_mutex_t s_flash_mutex = NULL;
+static bool s_flash_transaction_active = false;
 
 bool jh_stm32g474_flash_wait_ready(void) {
   uint32_t timeout = STM32_FLASH_TIMEOUT;
@@ -30,17 +35,44 @@ bool jh_stm32g474_flash_wait_ready(void) {
   return true;
 }
 
+bool jh_stm32g474_flash_access_begin(void) {
+  hal_mutex_t mutex = jh_hal_mutex_create_once(&s_flash_mutex);
+  if (mutex == NULL) {
+    return false;
+  }
+  hal_mutex_lock(mutex);
+  return true;
+}
+
+void jh_stm32g474_flash_access_end(void) { hal_mutex_unlock(s_flash_mutex); }
+
 bool jh_stm32g474_flash_unlock(void) {
+  if (!jh_stm32g474_flash_access_begin()) {
+    return false;
+  }
+
   if ((FLASH_CR & FLASH_CR_LOCK) == 0u) {
+    s_flash_transaction_active = true;
     return true;
   }
 
   FLASH_KEYR = FLASH_KEY1;
   FLASH_KEYR = FLASH_KEY2;
-  return (FLASH_CR & FLASH_CR_LOCK) == 0u;
+  if ((FLASH_CR & FLASH_CR_LOCK) != 0u) {
+    jh_stm32g474_flash_access_end();
+    return false;
+  }
+  s_flash_transaction_active = true;
+  return true;
 }
 
-void jh_stm32g474_flash_lock(void) { FLASH_CR |= FLASH_CR_LOCK; }
+void jh_stm32g474_flash_lock(void) {
+  FLASH_CR |= FLASH_CR_LOCK;
+  if (s_flash_transaction_active) {
+    s_flash_transaction_active = false;
+    jh_stm32g474_flash_access_end();
+  }
+}
 
 static uint32_t flash_page_number(uintptr_t address, bool *bank2) {
   uint32_t offset = (uint32_t)(address - STM32_FLASH_BASE_ADDR);

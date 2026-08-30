@@ -49,15 +49,20 @@ class CpdGateTests(unittest.TestCase):
         }
         for expected in (
             "src/hal/impl/.mock/hal_i2c.cpp",
+            "src/hal/impl/.mock/hal_littlefs.cpp",
             "src/hal/impl/.mock/hal_wireguard.cpp",
             "src/hal/impl/rp2040/hal_time.cpp",
             "src/hal/impl/rp2040/hal_eeprom.cpp",
+            "src/hal/impl/rp2040/hal_littlefs.cpp",
             "src/hal/impl/rp2040/hal_i2c.cpp",
             "src/hal/impl/rp2040/hal_can.cpp",
             "src/hal/impl/stm32g474/hal_time.cpp",
             "src/hal/impl/stm32g474/hal_eeprom.cpp",
+            "src/hal/impl/stm32g474/hal_littlefs.cpp",
             "src/hal/impl/stm32g474/hal_i2c.cpp",
             "src/hal/impl/stm32g474/hal_can.cpp",
+            "src/hal/storage/hal_littlefs.cpp",
+            "src/hal/storage/jh_littlefs_lfs_provider.cpp",
             "src/hal/network/wireguard/hal_wireguard.cpp",
         ):
             self.assertIn(expected, sources)

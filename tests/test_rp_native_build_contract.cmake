@@ -34,6 +34,12 @@ set(_rp_eeprom "${JH_ROOT}/src/hal/impl/rp2040/hal_eeprom.cpp")
 set(_shared_eeprom
     "${JH_ROOT}/src/hal/storage/hal_eeprom.cpp")
 set(_rp_littlefs "${JH_ROOT}/src/hal/impl/rp2040/hal_littlefs.cpp")
+set(_shared_littlefs
+    "${JH_ROOT}/src/hal/storage/hal_littlefs.cpp")
+set(_littlefs_provider_header
+    "${JH_ROOT}/src/hal/storage/jh_littlefs_provider.h")
+set(_littlefs_provider
+    "${JH_ROOT}/src/hal/storage/jh_littlefs_lfs_provider.cpp")
 set(_littlefs_core
     "${JH_ROOT}/third_party/littlefs/lfs.c")
 set(_littlefs_cmake "${JH_ROOT}/cmake/jh_littlefs.cmake")
@@ -73,7 +79,9 @@ foreach(_file IN ITEMS
         "${_flash_header}" "${_flash_impl}" "${_flash_storage_header}"
         "${_flash_storage}" "${_flash_runtime}" "${_rp_eeprom}"
         "${_shared_eeprom}"
-        "${_rp_littlefs}" "${_littlefs_core}" "${_littlefs_cmake}"
+        "${_rp_littlefs}" "${_shared_littlefs}"
+        "${_littlefs_provider_header}" "${_littlefs_provider}"
+        "${_littlefs_core}" "${_littlefs_cmake}"
         "${_flash_probe}" "${_flash_verifier}"
         "${_usb_descriptors}" "${_tusb_config}"
         "${_serial_impl}" "${_freertos_cmake}" "${_freertos_config}"
@@ -109,6 +117,9 @@ file(READ "${_flash_runtime}" _flash_runtime_text)
 file(READ "${_rp_eeprom}" _rp_eeprom_text)
 file(READ "${_shared_eeprom}" _shared_eeprom_text)
 file(READ "${_rp_littlefs}" _rp_littlefs_text)
+file(READ "${_shared_littlefs}" _shared_littlefs_text)
+file(READ "${_littlefs_provider_header}" _littlefs_provider_header_text)
+file(READ "${_littlefs_provider}" _littlefs_provider_text)
 file(READ "${_littlefs_core}" _littlefs_core_text)
 file(READ "${_flash_probe}" _flash_probe_text)
 file(READ "${_flash_verifier}" _flash_verifier_text)
@@ -245,11 +256,12 @@ foreach(_storage_client_contract IN ITEMS
 endforeach()
 
 foreach(_storage_client_contract IN ITEMS
+        "jh_rp_flash_storage_read"
         "jh_rp_flash_storage_program"
         "jh_rp_flash_storage_erase"
         "JH_RP_FLASH_PARTITION_LITTLEFS"
-        "lfs_mount"
-        "lfs_format")
+        "jh_littlefs_block_backend_t"
+        "jh_littlefs_lfs_provider_configure")
     string(FIND "${_rp_littlefs_text}" "${_storage_client_contract}"
         _littlefs_storage_at)
     if(_littlefs_storage_at EQUAL -1)
@@ -258,6 +270,64 @@ foreach(_storage_client_contract IN ITEMS
             "${_storage_client_contract}")
     endif()
 endforeach()
+
+foreach(_littlefs_lifecycle_contract IN ITEMS
+        "lfs_mount"
+        "lfs_unmount"
+        "lfs_format"
+        "lfs_stat"
+        "lfs_remove"
+        "lfs_fs_size")
+    string(FIND "${_littlefs_provider_text}"
+        "${_littlefs_lifecycle_contract}" _littlefs_lifecycle_at)
+    if(_littlefs_lifecycle_at EQUAL -1)
+        message(FATAL_ERROR
+            "Shared LittleFS provider is missing: "
+            "${_littlefs_lifecycle_contract}")
+    endif()
+    string(FIND "${_rp_littlefs_text}"
+        "${_littlefs_lifecycle_contract}" _rp_lifecycle_at)
+    if(NOT _rp_lifecycle_at EQUAL -1)
+        message(FATAL_ERROR
+            "RP LittleFS backend owns shared lifecycle: "
+            "${_littlefs_lifecycle_contract}")
+    endif()
+endforeach()
+
+foreach(_littlefs_facade_contract IN ITEMS
+        "jh_littlefs_provider_get"
+        "jh_hal_mutex_create_once"
+        "hal_littlefs_begin_ex"
+        "hal_littlefs_format_ex"
+        "hal_littlefs_exists_ex"
+        "hal_littlefs_remove_ex")
+    string(FIND "${_shared_littlefs_text}"
+        "${_littlefs_facade_contract}" _littlefs_facade_at)
+    if(_littlefs_facade_at EQUAL -1)
+        message(FATAL_ERROR
+            "Shared LittleFS facade is missing: "
+            "${_littlefs_facade_contract}")
+    endif()
+endforeach()
+
+foreach(_littlefs_provider_contract IN ITEMS
+        "jh_littlefs_geometry_t"
+        "jh_littlefs_block_backend_t"
+        "jh_littlefs_provider_t"
+        "jh_littlefs_lfs_provider_configure")
+    string(FIND "${_littlefs_provider_header_text}"
+        "${_littlefs_provider_contract}" _littlefs_provider_at)
+    if(_littlefs_provider_at EQUAL -1)
+        message(FATAL_ERROR
+            "LittleFS provider interface is missing: "
+            "${_littlefs_provider_contract}")
+    endif()
+endforeach()
+
+if(_rp_littlefs_text MATCHES
+   "(bool|size_t|hal_status_t)[ \t\r\n]+hal_littlefs_[a-z_]+[ \t\r\n]*\\(")
+    message(FATAL_ERROR "RP LittleFS backend exports a public facade operation")
+endif()
 
 foreach(_direct_flash_call IN ITEMS flash_range_erase flash_range_program)
     string(FIND
