@@ -765,10 +765,13 @@ stanów wejściowych, niedeklarowany końcowy bajt wejścia i powtórzony surowy
 raport. Pomija adresy Bluetooth, link keys, tożsamość hosta i numery seryjne
 USB.
 
-Firmware C4 inicjalizuje współdzielony runtime HCI/L2CAP, pamięciową bazę link
-keys, klienta SDP, jedno połączenie HID Host i jeden event handler. Nie otwiera
-inquiry, pairingu ani połączenia z gamepadem. Prywatnego selectora nie wolno
-łączyć z publicznym BLE ani wcześniejszą sondą Etapu 1.
+Firmware inicjalizuje współdzielony runtime HCI/L2CAP, ulotną bazę jednego link
+key, klienta SDP, jedno połączenie HID Host i jeden event handler. Inquiry
+uruchamia się wyłącznie po komendzie szeregowej `DISCOVER` i kończy po 120
+sekundach albo po zaakceptowaniu jednego zgodnego urządzenia. Kandydat musi
+mieć klasę peryferium, zapisaną nazwę, usługę Classic HID i zapisaną tożsamość
+PnP. Prywatnego selectora nie wolno łączyć z publicznym BLE ani wcześniejszą
+sondą Etapu 1.
 
 Zbuduj wymagany obraz Pico 2 W:
 
@@ -778,13 +781,33 @@ vscode/entry/jh-vscode build \
   --target rp2350-arm --board pico2w --variant classic-hid
 ```
 
-ELF/map i lista symboli muszą wykazać HID Host `ENABLE_CLASSIC`, klienta SDP,
-parser HID oraz pamięciową bazę link keys, jednocześnie wykluczając ATT, GATT,
-SM, RFCOMM, serwer SDP, HID Device i profile audio. Dodatkowy test runtime na
-Pico W może użyć `--target rp2040 --board picow`; okresowy raport `JHBT4`
-przechodzi dla `start=HAL_OK`, `ready=1`, `profile=1` i transportu pozostającego
-w stanie `HAL_OK`. Połączenie fizycznego pada należy do następnego etapu
-sprzętowego.
+Wgraj go i uruchom weryfikator sprzętowy na powstałym porcie CDC:
+
+```sh
+vscode/entry/jh-vscode upload \
+  --project tests/hardware/bluetooth_gamepad \
+  --target rp2350-arm --board pico2w --variant classic-hid \
+  --port /dev/ttyACM0
+
+python3 tests/hardware/bluetooth_gamepad/verify_zero2.py \
+  --port /dev/ttyACM0
+```
+
+Po pojawieniu się komunikatu uruchom Zero 2 w trybie Android D-input przez
+`B+Start`, a następnie przytrzymaj `Select`, aż dioda parowania zacznie migać.
+Weryfikator autoryzuje metodę pairingu zgłoszoną przez kontroler, sprawdza
+zapisany deskryptor i wszystkie wejścia, wykonuje rozłączenia/ponowne
+połączenia oraz power-cycle, a następnie utrzymuje ciągłe połączenie przez 30
+minut. Podczas pierwszego reconnectu prosi o przytrzymanie wejścia, aby ścieżka
+disconnect mogła zwolnić aktywny stan.
+
+Weryfikator zapisuje `zero2_pico2w_c5_result.json`. Raport zawiera wersje
+targetu i bibliotek, czasy, liczniki transportu oraz maksymalne zajęcie pul.
+Nie może zawierać adresów Bluetooth, materiału link key, tożsamości hosta,
+nazwy portu szeregowego ani numeru seryjnego USB. ELF/map i lista symboli muszą
+również wykazać HID Host `ENABLE_CLASSIC`, klienta SDP, parser HID oraz
+pamięciową bazę link keys, jednocześnie wykluczając ATT, GATT, SM, RFCOMM,
+serwer SDP, HID Device i profile audio.
 
 ### Sprzętowy test Bluetooth Observer
 

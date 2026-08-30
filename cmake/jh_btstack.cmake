@@ -85,9 +85,12 @@ function(_jh_target_enable_btstack TARGET_NAME MODE)
         set(_jh_mode_upstream_sources ${_jh_btstack_classic_hid_sources})
         set(_jh_mode_jh_sources
             "${_jh_bluetooth_root}/jh_bluetooth_classic_hid_lifecycle.c"
+            "${_jh_bluetooth_root}/jh_bluetooth_classic_hid_memory_probe.c"
+            "${_jh_bluetooth_root}/jh_bluetooth_classic_hid_probe_logic.c"
             "${_jh_bluetooth_root}/jh_bluetooth_classic_hid_probe.c")
         set(_jh_mode_definitions
             ENABLE_CLASSIC=1
+            ENABLE_SDP_EXTRA_QUERIES=1
             JH_BLUETOOTH_CLASSIC_HID_PROBE=1)
     else()
         message(FATAL_ERROR "Unknown JaszczurHAL BTstack mode: ${MODE}")
@@ -140,6 +143,20 @@ function(_jh_target_enable_btstack TARGET_NAME MODE)
         HAVE_BTSTACK_CONFIG_H=1
         JH_BLUETOOTH_BTSTACK=1
         ${_jh_mode_definitions})
+    if(MODE STREQUAL "CLASSIC_HID")
+        # The BTstack sources are compiled into the static HAL target, while
+        # GNU --wrap is evaluated only by the final firmware link. Propagate
+        # these options to that link so the probe sees real pool activity.
+        target_link_options(${TARGET_NAME} PUBLIC
+            "-Wl,--wrap=btstack_memory_l2cap_service_get"
+            "-Wl,--wrap=btstack_memory_l2cap_service_free"
+            "-Wl,--wrap=btstack_memory_l2cap_channel_get"
+            "-Wl,--wrap=btstack_memory_l2cap_channel_free"
+            "-Wl,--wrap=btstack_memory_btstack_link_key_db_memory_entry_get"
+            "-Wl,--wrap=btstack_memory_btstack_link_key_db_memory_entry_free"
+            "-Wl,--wrap=btstack_memory_hid_host_connection_get"
+            "-Wl,--wrap=btstack_memory_hid_host_connection_free")
+    endif()
     # Keep compatibility suppressions scoped to pinned upstream code.  The JH
     # port and probe remain subject to the target's complete warning policy.
     set_source_files_properties(${_jh_btstack_upstream_sources} PROPERTIES

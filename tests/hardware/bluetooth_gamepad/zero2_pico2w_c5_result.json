@@ -1,0 +1,94 @@
+{
+  "capture": "zero2_android_dinput.json",
+  "counters": {
+    "acceptedIncomingConnections": 7,
+    "authenticationFailures": 0,
+    "authenticationSuccesses": 1,
+    "connectionFailures": 1,
+    "connections": 7,
+    "disconnections": 6,
+    "drainBudgetHits": 0,
+    "hidEvents": 1770,
+    "identityRejections": 1,
+    "inquiryCycles": 2,
+    "inquiryResults": 6,
+    "invalidReports": 0,
+    "linkKeysStored": 1,
+    "pairingAuthorizations": 1,
+    "pairingRequests": 1,
+    "peripheralCandidates": 2,
+    "pnpIdentityMatches": 1,
+    "reconnectAttempts": 0,
+    "reconnectSuccesses": 0,
+    "rejectedIncomingConnections": 0,
+    "releaseAllEvents": 2,
+    "reportBytes": 20820,
+    "reports": 1735,
+    "rx": 2056,
+    "rxAcl": 1839,
+    "rxEvents": 217,
+    "sdpHidMatches": 1,
+    "tx": 2014,
+    "txAcl": 104,
+    "txCommands": 1910
+  },
+  "firmware": {
+    "btstack": "1.6.2",
+    "gamepad": "unavailable",
+    "picoSdk": "2.2.0"
+  },
+  "hardware": {
+    "board": "pico2w",
+    "target": "rp2350-arm"
+  },
+  "link": {
+    "allControlsMask": "0x0fff",
+    "connectedMs": 2127155,
+    "descriptorFNV1a32": "0xe51f7bbe",
+    "descriptorLength": 136,
+    "descriptorLengthHighWater": 136,
+    "pairingMethod": "ssp-just-works",
+    "protocol": "report",
+    "reportLengthHighWater": 12
+  },
+  "resources": {
+    "hidConnections": {
+      "allocationFailures": 0,
+      "capacity": 1,
+      "current": 1,
+      "highWater": 1
+    },
+    "l2capChannels": {
+      "allocationFailures": 0,
+      "capacity": 3,
+      "current": 2,
+      "highWater": 2
+    },
+    "l2capServices": {
+      "allocationFailures": 0,
+      "capacity": 2,
+      "current": 2,
+      "highWater": 2
+    },
+    "linkKeys": {
+      "allocationFailures": 0,
+      "capacity": 1,
+      "current": 1,
+      "highWater": 1
+    }
+  },
+  "result": "pass",
+  "scenario": {
+    "hostVerifierResumed": true,
+    "powerCycleReconnect": true,
+    "reconnectCycles": 5,
+    "releaseActiveInputOnDisconnect": true,
+    "stabilityRequiredMs": 1800000,
+    "timings": {
+      "preStabilityConnectedMs": 326901,
+      "resumeScenarioMs": 1801162,
+      "stabilityMs": 1800000
+    }
+  },
+  "schemaVersion": 1
+}

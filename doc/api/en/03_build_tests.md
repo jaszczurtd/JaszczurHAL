@@ -736,10 +736,13 @@ the 137-byte report descriptor, PnP identity, SDP metadata, all twelve input
 states, the undeclared trailing input byte, and a repeated raw report. It omits
 Bluetooth addresses, link keys, host identity, and USB serial numbers.
 
-The C4 firmware initializes the shared HCI/L2CAP runtime, an in-memory link-key
-database, the SDP client, one HID Host connection, and one event handler. It
-does not open inquiry, pairing, or a gamepad connection. The private selector
-must not be combined with public BLE or the earlier Stage 1 probe.
+The firmware initializes the shared HCI/L2CAP runtime, a volatile one-entry
+link-key database, the SDP client, one HID Host connection, and one event
+handler. Inquiry starts only after the `DISCOVER` serial command and closes
+after 120 seconds or after one matching device is accepted. A candidate must
+have the peripheral device class, the captured name, a Classic HID service,
+and the captured PnP identity. The private selector must not be combined with
+public BLE or the earlier Stage 1 probe.
 
 Build the required Pico 2 W image:
 
@@ -749,13 +752,32 @@ vscode/entry/jh-vscode build \
   --target rp2350-arm --board pico2w --variant classic-hid
 ```
 
-The ELF/map and a symbol listing must show `ENABLE_CLASSIC` HID Host, SDP
-client, HID parser, and the memory link-key database while excluding ATT,
-GATT, SM, RFCOMM, SDP server, HID Device, and audio profiles. A supplementary
-Pico W runtime smoke test may use `--target rp2040 --board picow`; periodic
-`JHBT4` output passes when `start=HAL_OK`, `ready=1`, `profile=1`, and the
-transport remains `HAL_OK`. Connecting the physical pad belongs to the next
-hardware stage.
+Upload it and run the hardware verifier on the resulting CDC port:
+
+```sh
+vscode/entry/jh-vscode upload \
+  --project tests/hardware/bluetooth_gamepad \
+  --target rp2350-arm --board pico2w --variant classic-hid \
+  --port /dev/ttyACM0
+
+python3 tests/hardware/bluetooth_gamepad/verify_zero2.py \
+  --port /dev/ttyACM0
+```
+
+When prompted, start the Zero 2 in Android D-input mode with `B+Start`, then
+hold `Select` until the pairing LED flashes. The verifier authorizes the
+pairing method reported by the controller, checks the captured descriptor and
+all controls, runs the disconnect/reconnect and power-cycle cases, and keeps a
+continuous connected interval for 30 minutes. During the first reconnect it
+asks for a held control so the disconnect path can release active input.
+
+The verifier writes `zero2_pico2w_c5_result.json`. The report contains
+target/library versions, durations, transport counters, and pool high-water
+marks. It must not contain Bluetooth addresses, link-key material, host
+identity, a serial port name, or a USB serial number. The ELF/map and a symbol
+listing must also show `ENABLE_CLASSIC` HID Host, SDP client, HID parser, and
+the memory link-key database while excluding ATT, GATT, SM, RFCOMM, SDP
+server, HID Device, and audio profiles.
 
 ### Bluetooth Observer hardware probe
 
