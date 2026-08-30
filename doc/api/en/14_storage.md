@@ -377,15 +377,24 @@ default:            break;
 
 ## `hal_littlefs` - LittleFS lifecycle helpers  *(opt-in - `HAL_ENABLE_LITTLEFS`)*
 
-Thread-safe wrapper for LittleFS mount/format and lightweight path helpers.
+Thread-safe, target-independent facade for LittleFS lifecycle, path helpers and
+filesystem size queries.
 
 ```c
 #include <hal/storage/hal_littlefs.h>
 
 hal_status_t hal_littlefs_set_progress_callback(
     hal_littlefs_progress_callback_t callback, void *ctx);
-bool         hal_littlefs_begin(void);
+hal_status_t hal_littlefs_begin_ex(void);
 hal_status_t hal_littlefs_end(void);
+hal_status_t hal_littlefs_format_ex(void);
+hal_status_t hal_littlefs_exists_ex(const char *path);
+hal_status_t hal_littlefs_remove_ex(const char *path);
+hal_status_t hal_littlefs_total_bytes_ex(size_t *out_bytes);
+hal_status_t hal_littlefs_used_bytes_ex(size_t *out_bytes);
+
+// Historical compatibility wrappers.
+bool         hal_littlefs_begin(void);
 bool         hal_littlefs_format(void);
 bool         hal_littlefs_is_mounted(void);
 bool         hal_littlefs_exists(const char *path);
@@ -395,78 +404,133 @@ size_t       hal_littlefs_used_bytes(void);
 ```
 
 **Behavior notes:**
+
 - Module is available only when `HAL_ENABLE_LITTLEFS` is defined.
-- `hal_littlefs_begin()` mounts the filesystem; `hal_littlefs_end()` unmounts it.
-- `hal_littlefs_format()` formats the LittleFS partition.
-- When `hal_littlefs_format()` fails, mounted/path/stat state is left unchanged.
+- `hal_littlefs_begin_ex()` mounts the filesystem and is idempotent while it is
+  already mounted.
+- `hal_littlefs_end()` is idempotent while unmounted. It always clears the
+  facade's mounted state, including when the provider reports an unmount error.
+- Formatting is destructive. A successful `hal_littlefs_format_ex()` leaves
+  the filesystem unmounted; mount it explicitly before using path or size APIs.
+- If unmount or format fails while the filesystem was mounted, the facade
+  attempts one best-effort remount and returns the original failure.
+  `hal_littlefs_is_mounted()` reports whether that remount succeeded. If a
+  format attempt fails after flash mutation begins, data may already be
+  partially modified and preservation is not guaranteed.
 - Path helpers require mounted filesystem and validate non-empty paths.
+- Size-query output is initialized to zero before an error is returned.
 - The public HAL API currently exposes lifecycle, path removal/existence and
   size stats only. It does not provide portable file open/read/write wrappers.
+
+`hal_littlefs.cpp` owns the public API, mounted state, validation, locking and
+provider dispatch for every target, including the mock. One shared littlefs v2
+provider owns mount, unmount, format, path and filesystem-stat operations.
+Hardware backends provide only geometry and checked read/program/erase/sync
+operations; the mock provides injectable provider results.
 
 **Native RP implementation:** uses the pinned upstream littlefs v2.11.3
 checkout under `third_party/littlefs/` and an internal flash partition
 controlled by `HAL_RP_FLASH_LITTLEFS_SIZE`. The native CMake recipe reserves
 64 KiB when `HAL_ENABLE_LITTLEFS` is enabled without an explicit size. The
+nonzero reservation must contain at least two 4096-byte erase sectors. The
 partition sits immediately before the final 4 KiB EEPROM sector. Every
-256-byte program and 4096-byte erase callback goes through the native RP flash
-transaction coordinator; reads use the XIP mapping. The linker prevents the
-firmware image from overlapping either partition.
+256-byte program and 4096-byte erase operation goes through the native RP
+flash transaction coordinator; reads use the XIP mapping. The linker prevents
+the firmware image from overlapping either partition.
 
 **STM32G474 implementation:** uses the same managed littlefs checkout under
 `third_party/littlefs/` and the internal STM32 flash reservation exposed by the
 linker script. `HAL_STM32_FLASH_LITTLEFS_SIZE` controls the reservation size
 and must be a multiple of `HAL_STM32_FLASH_PAGE_SIZE` (2048 bytes). The size
-may be zero when the backend is compiled but not used; mounting then fails
-safely. The STM32 CMake helpers reserve 64 KB automatically when
+may be zero when the backend is compiled but not used; a nonzero reservation
+must contain at least two pages. Mounting an empty partition fails safely. The
+STM32 CMake helpers reserve 64 KB automatically when
 `HAL_ENABLE_LITTLEFS` is passed through their define lists and no explicit
 size is provided.
 
 LittleFS erase block size is one STM32 flash page; program granularity is one
-STM32 doubleword (8 bytes). `hal_littlefs_total_bytes()` reports the reserved
-partition size after mount. `hal_littlefs_used_bytes()` reports allocated
-littlefs blocks multiplied by the flash page size.
+STM32 doubleword (8 bytes). EEPROM/KV and LittleFS flash mutations share one
+STM32 flash mutex, so their erase/program sequences cannot overlap.
+`hal_littlefs_total_bytes_ex()` reports the reserved partition size after
+mount. `hal_littlefs_used_bytes_ex()` reports allocated littlefs blocks
+multiplied by the target erase-block size.
 
 LittleFS never feeds the watchdog implicitly. Use
 `hal_littlefs_set_progress_callback()` before long operations such as format or
 large garbage-collection/write bursts if the application wants to feed its own
-watchdog or report progress.
+watchdog or report progress. Configure the callback before concurrent access.
+It runs while the shared facade mutex is held and must not call any
+`hal_littlefs_*` API, including the callback setter and
+`hal_littlefs_is_mounted()`. On hardware targets, platform flash coordination
+has already been released when the callback runs. The number of calls per
+operation depends on the selected backend. A callback may run during an
+operation that later reports failure; use the operation's return status as the
+success result.
 
-**Example: mount, format-on-first-use, inspect and remove a path**
+**Example: mount with an explicit destructive-format opt-in**
+
+Pass `true` only when erasing the reserved partition is acceptable. A mount
+failure alone does not distinguish blank media from corruption or a transient
+I/O failure.
+
 ```c
 #include <hal/storage/hal_littlefs.h>
 #include <tools_c.h>
 
-void example_littlefs(void) {
-    if (!hal_littlefs_begin()) {
-        derr("LittleFS mount failed; formatting");
-        if (!hal_littlefs_format() || !hal_littlefs_begin()) {
-            derr("LittleFS unavailable");
-            return;
-        }
+static hal_status_t mount_littlefs(bool allow_destructive_format) {
+    hal_status_t status = hal_littlefs_begin_ex();
+    if (status == HAL_OK || !allow_destructive_format) {
+        return status;
     }
 
-    deb("LittleFS mounted: %lu/%lu bytes used",
-        (unsigned long)hal_littlefs_used_bytes(),
-        (unsigned long)hal_littlefs_total_bytes());
+    status = hal_littlefs_format_ex();
+    if (status != HAL_OK) {
+        return status;
+    }
+    return hal_littlefs_begin_ex();
+}
 
-    if (hal_littlefs_exists("/data.txt")) {
-        (void)hal_littlefs_remove("/data.txt");
+void example_littlefs(bool allow_destructive_format) {
+    hal_status_t status = mount_littlefs(allow_destructive_format);
+    if (status != HAL_OK) {
+        derr("LittleFS unavailable: %s", hal_status_to_string(status));
+        return;
     }
 
-    hal_littlefs_end();
+    size_t total = 0;
+    size_t used = 0;
+    status = hal_littlefs_total_bytes_ex(&total);
+    if (status == HAL_OK) {
+        status = hal_littlefs_used_bytes_ex(&used);
+    }
+    if (status == HAL_OK) {
+        deb("LittleFS mounted: %lu/%lu bytes used",
+            (unsigned long)used, (unsigned long)total);
+    }
+
+    if (hal_littlefs_exists_ex("/data.txt") == HAL_OK) {
+        (void)hal_littlefs_remove_ex("/data.txt");
+    }
+
+    (void)hal_littlefs_end();
 }
 ```
 
----
-**impl/.mock:** deterministic test double with injectable mount/format result,
-path presence, and volume size stats.
-**Thread safety:** RP2040 and STM32G474 backends are thread-safe for public
-APIs. A singleton `hal_mutex_t` serializes all wrapper calls.
+**Mock provider:** deterministic provider with injectable mount/unmount/format
+results, path presence and volume size stats. Resetting it also clears the
+shared facade's provider and mounted state.
+
+**Thread safety:** all targets use the same singleton facade mutex to serialize
+public calls. The mock remains intended for deterministic tests rather than
+simulation of hardware concurrency.
 
 **Mock helpers:**
+
 ```c
 void hal_mock_littlefs_reset(void);
 void hal_mock_littlefs_set_begin_result(bool result);
+void hal_mock_littlefs_set_begin_status(hal_status_t status);
+void hal_mock_littlefs_set_end_result(bool result);
 void hal_mock_littlefs_set_format_result(bool result);
 void hal_mock_littlefs_set_total_bytes(size_t total_bytes);
 void hal_mock_littlefs_set_used_bytes(size_t used_bytes);
@@ -479,13 +543,11 @@ The historically `void` callback setter and unmount function now return
 `hal_status_t` directly. The plain state query
 `hal_littlefs_is_mounted()` has no `_ex` form. An invalid path/output maps to
 `HAL_EINVAL`, use while unmounted to `HAL_EUNINIT`, a missing path to
-`HAL_ENOENT`, an unconfigured STM32 partition to `HAL_ECONFIG`, and native
-mount/format/stat/unmount failures to `HAL_EIO`.
+`HAL_ENOENT`, a missing provider or invalid/empty partition geometry to
+`HAL_ECONFIG`, mutex allocation failure to `HAL_ENOMEM`, size overflow to
+`HAL_EOVERFLOW`, and littlefs/raw-storage failures to `HAL_EIO`.
 
 ```c
-if (hal_littlefs_begin_ex() != HAL_OK) {
-    return;                 // HAL_EIO: mount failed
-}
 hal_status_t st = hal_littlefs_exists_ex("/config.json");
 // HAL_OK -> present, HAL_ENOENT -> absent,
 // HAL_EUNINIT -> not mounted, HAL_EINVAL -> NULL/empty path

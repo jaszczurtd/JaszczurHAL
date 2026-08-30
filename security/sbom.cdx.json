@@ -1500,6 +1500,11 @@
           "type": "other",
           "url": "third_party/littlefs_version.conf",
           "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "src/hal/storage/jh_littlefs_lfs_provider.cpp",
+          "comment": "repository path"
         }
       ],
       "properties": [
@@ -1509,7 +1514,7 @@
         },
         {
           "name": "jaszczurhal:notes",
-          "value": "Git-ignored exact-commit littlefs checkout compiled by the native RP and STM32G474 internal-flash backends."
+          "value": "Git-ignored exact-commit littlefs checkout used by the shared provider, native RP/STM32G474 internal-flash builds, and the dedicated host RAM-flash integration test."
         },
         {
           "name": "jaszczurhal:feature_flags",
@@ -1517,7 +1522,7 @@
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "third_party/littlefs,third_party/littlefs_version.conf"
+          "value": "third_party/littlefs,third_party/littlefs_version.conf,src/hal/storage/jh_littlefs_lfs_provider.cpp"
         }
       ]
     },
@@ -1870,5 +1875,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:26d4daba-c485-e17b-b3c8-a11b919a5c0b"
+  "serialNumber": "urn:uuid:c23aa601-3212-bde9-04ee-6b75dff0d075"
 }

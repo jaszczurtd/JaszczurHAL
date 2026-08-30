@@ -38,7 +38,7 @@
 | `hal_external_adc` | współdzielony driver ADS1X15/ADS1115 (`hal/analog/ads1x15/ads1x15_driver.*`) |
 | `hal_pga2311` | współdzielony driver stereo-głośności PGA2311 (`hal/audio/pga2311/pga2311_driver.*`) nad HAL SPI/GPIO |
 | `hal_wifi` | przypięty driver CYW43/lwIP na RP i STM32G474, lub natywne WiFi ESP-IDF/`esp_netif`/lwIP na ESP32-S3 |
-| `hal_littlefs` | przypięty rdzeń `third_party/littlefs` plus skoordynowany wewnętrzny flash na RP i STM32G474 |
+| `hal_littlefs` | jedna niezależna od targetu fasada i wspólny provider nad przypiętym rdzeniem `third_party/littlefs`; RP i STM32G474 dostarczają geometrię oraz skoordynowane surowe operacje wewnętrznej flash, a dedykowany test integracyjny hosta używa modelu flash w RAM |
 | `hal_udp` | współdzielony silnik surowego UDP lwIP nad wybranym backendem sieciowym CYW43 |
 | `hal_tls` | wbudowany BearSSL nad natywnym `hal_tcp`; opcjonalny adapter transportu BSD jest kompilowany tylko, gdy dodatkowo włączono `HAL_ENABLE_BSD_SOCKETS` |
 | Adapter BSD sockets | współdzielony `hal/network/adapters/bsd/hal_bsd_sockets.cpp` nad HAL UDP/TCP; pozostaje niezależnie wybieralny bez TLS |
@@ -1653,7 +1653,9 @@ testów.
 | `test_hal_bits` | makra pomocnicze bitów (`is_set`, `set_bit`, `clr_bit`, `bitSet`, `bitClear`, `bitRead`, `set_bit_v`, `clr_bit_v`) |
 | `test_hal_wifi` | tryb/nazwa hosta/RSSI/ping, wstrzyknięcie IP/DNS/MAC, walidacja wejścia |
 | `test_hal_net` | współdzielony kształt punktu końcowego/statusu, limity sieci, zachowanie resolvera literału IPv4/localhost/mock-DNS |
-| `test_hal_littlefs` | przepływ mount/unmount, statystyki rozmiaru, pomocnicy istnienia/usuwania ścieżki, zachowanie sukcesu/porażki formatowania, bezpośrednie operacje statusu, semantyka brakującej ścieżki i niezamontowanego stanu, walidacja wejścia |
+| `test_hal_littlefs` | Przepływ mount/unmount wspólnej fasady, idempotentny mount, czyszczenie stanu zamontowania po błędzie unmount, współbieżna serializacja cyklu życia/statystyk, statystyki rozmiaru i inicjalizacja wyjścia, pomocnicy istnienia/usuwania ścieżki, dokładna propagacja statusu providera, wynik destrukcyjnego formatowania i best-effort remount, konfiguracja callbacku postępu oraz walidacja wejścia |
+| `test_jh_littlefs_lfs_provider` | Rzeczywisty cykl życia przypiętego littlefs nad backendem RAM zachowującym się jak flash, zachowanie format/mount/file/stat/remove/size, sprawdzanie granic/wyrównania/przepełnienia bloków, reguły programowania flash oraz wstrzyknięty błąd surowego I/O i odzyskanie |
+| `test_littlefs_architecture` | Jedno miejsce zachowania publicznego LittleFS i cyklu życia biblioteki, wyłącznie geometria/operacje blokowe w targetach, oddzielenie mocka od stanu fasady, wspólna serializacja flash STM32G474 oraz wiring inventory źródeł |
 | `test_hal_sdlogger` | numerowanie plików wspierane przez EEPROM, buforowany flush/close logu, formatowanie raportu awarii, ścieżki błędów SD/otwarcia |
 | `test_hal_udp` | przepływ begin/parse/read, wiązanie/RX/TX wielu gniazd oparte na uchwytach, odczyty datagramów w kawałkach, przechwycenie punktu końcowego zdalnego/reset przy stopie, ścieżki beginPacket jawne/nadawcy zdalnego, zachowanie write/endPacket, walidacja wejścia |
 | `test_hal_tcp` | połączenie/wysyłanie/odbieranie/zamknięcie klienta TCP, wiązanie/nasłuchiwanie/akceptacja listenera, limity kolejki oczekujących/puli, sondy gotowości i niezależność zaakceptowanego gniazda |

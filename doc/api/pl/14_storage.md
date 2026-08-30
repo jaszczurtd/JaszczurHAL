@@ -392,16 +392,24 @@ default:            break;
 
 ## `hal_littlefs` - pomocnicy cyklu życia LittleFS  *(opt-in - `HAL_ENABLE_LITTLEFS`)*
 
-Thread-safe wrapper montowania/formatowania LittleFS oraz lekcy
-pomocnicy ścieżek.
+Thread-safe, niezależna od targetu fasada cyklu życia LittleFS, pomocników
+ścieżek i zapytań o rozmiar systemu plików.
 
 ```c
 #include <hal/storage/hal_littlefs.h>
 
 hal_status_t hal_littlefs_set_progress_callback(
     hal_littlefs_progress_callback_t callback, void *ctx);
-bool         hal_littlefs_begin(void);
+hal_status_t hal_littlefs_begin_ex(void);
 hal_status_t hal_littlefs_end(void);
+hal_status_t hal_littlefs_format_ex(void);
+hal_status_t hal_littlefs_exists_ex(const char *path);
+hal_status_t hal_littlefs_remove_ex(const char *path);
+hal_status_t hal_littlefs_total_bytes_ex(size_t *out_bytes);
+hal_status_t hal_littlefs_used_bytes_ex(size_t *out_bytes);
+
+// Historyczne wrappery zgodności.
+bool         hal_littlefs_begin(void);
 bool         hal_littlefs_format(void);
 bool         hal_littlefs_is_mounted(void);
 bool         hal_littlefs_exists(const char *path);
@@ -411,84 +419,139 @@ size_t       hal_littlefs_used_bytes(void);
 ```
 
 **Uwagi dotyczące zachowania:**
+
 - Moduł jest dostępny tylko, gdy zdefiniowano `HAL_ENABLE_LITTLEFS`.
-- `hal_littlefs_begin()` montuje system plików; `hal_littlefs_end()` go odmontowuje.
-- `hal_littlefs_format()` formatuje partycję LittleFS.
-- Gdy `hal_littlefs_format()` zawiedzie, stan montowania/ścieżki/stat pozostaje niezmieniony.
+- `hal_littlefs_begin_ex()` montuje system plików i jest idempotentne, gdy jest
+  on już zamontowany.
+- `hal_littlefs_end()` jest idempotentne przy odmontowanym systemie. Zawsze
+  czyści stan zamontowania fasady, także gdy provider zgłosi błąd unmount.
+- Formatowanie jest destrukcyjne. Udane `hal_littlefs_format_ex()` pozostawia
+  system plików odmontowany; zamontuj go jawnie przed użyciem API ścieżek lub
+  rozmiaru.
+- Jeśli unmount albo format zawiedzie, gdy system plików był zamontowany,
+  fasada wykonuje jedną próbę best-effort remount i zwraca pierwotny błąd.
+  `hal_littlefs_is_mounted()` informuje, czy remount się powiódł. Jeśli próba
+  formatowania zawiedzie po rozpoczęciu mutacji flash, dane mogą być już
+  częściowo zmienione i ich zachowanie nie jest gwarantowane.
 - Pomocnicy ścieżek wymagają zamontowanego systemu plików i walidują niepuste ścieżki.
+- Wyjście zapytania o rozmiar jest zerowane przed zwróceniem błędu.
 - Publiczne API HAL obecnie udostępnia wyłącznie cykl życia, usuwanie/istnienie
   ścieżki oraz statystyki rozmiaru. Nie zapewnia przenośnych wrapperów
   otwierania/odczytu/zapisu plików.
+
+`hal_littlefs.cpp` jest właścicielem publicznego API, stanu zamontowania,
+walidacji, blokowania i wyboru providera dla każdego targetu, w tym mocka.
+Jeden wspólny provider littlefs v2 obsługuje mount, unmount, format, operacje
+ścieżek i statystyki systemu plików. Backendy sprzętowe dostarczają wyłącznie
+geometrię oraz sprawdzone operacje read/program/erase/sync; mock dostarcza
+wstrzykiwalne wyniki providera.
 
 **Natywna implementacja RP:** używa przypiętego komponentu upstream
 checkoutu littlefs v2.11.3 pod `third_party/littlefs/` oraz wewnętrznej
 partycji flash kontrolowanej przez `HAL_RP_FLASH_LITTLEFS_SIZE`. Natywna
 receptura CMake rezerwuje 64 KiB, gdy `HAL_ENABLE_LITTLEFS` jest włączone
-bez jawnego rozmiaru. Partycja znajduje się bezpośrednio przed ostatnim
-4 KiB sektorem EEPROM. Każdy 256-bajtowy program i 4096-bajtowy callback
-kasowania przechodzi przez natywny koordynator transakcji flash RP; odczyty
-używają mapowania XIP. Linker uniemożliwia obrazowi firmware'u nakładanie
-się na którąkolwiek z partycji.
+bez jawnego rozmiaru. Niezerowa rezerwacja musi zawierać co najmniej dwa
+sektory kasowania po 4096 bajtów. Partycja znajduje się bezpośrednio przed
+ostatnim 4 KiB sektorem EEPROM. Każda 256-bajtowa operacja programowania i
+4096-bajtowa operacja kasowania przechodzi przez natywny koordynator
+transakcji flash RP; odczyty używają mapowania XIP. Linker uniemożliwia
+obrazowi firmware'u nakładanie się na którąkolwiek z partycji.
 
 **Implementacja STM32G474:** używa tego samego zarządzanego checkoutu
 littlefs pod `third_party/littlefs/` oraz wewnętrznej rezerwacji flash STM32
 udostępnianej przez skrypt linkera. `HAL_STM32_FLASH_LITTLEFS_SIZE`
 kontroluje rozmiar rezerwacji i musi być wielokrotnością
 `HAL_STM32_FLASH_PAGE_SIZE` (2048 bajtów). Rozmiar może wynosić zero, gdy
-backend jest skompilowany, ale nieużywany; montowanie wtedy zawodzi
-bezpiecznie. Pomocnicy CMake dla STM32 automatycznie rezerwują 64 KB, gdy
+backend jest skompilowany, ale nieużywany; niezerowa rezerwacja musi zawierać
+co najmniej dwie strony. Montowanie pustej partycji zawodzi bezpiecznie.
+Pomocnicy CMake dla STM32 automatycznie rezerwują 64 KB, gdy
 `HAL_ENABLE_LITTLEFS` jest przekazane przez ich listy definicji i nie podano
 jawnego rozmiaru.
 
 Rozmiar bloku kasowania LittleFS to jedna strona flash STM32; granularność
-programowania to jedno podwójne słowo (doubleword, 8 bajtów) STM32.
-`hal_littlefs_total_bytes()` raportuje zarezerwowany rozmiar partycji po
-zamontowaniu. `hal_littlefs_used_bytes()` raportuje przydzielone bloki
-littlefs pomnożone przez rozmiar strony flash.
+programowania to jedno podwójne słowo (doubleword, 8 bajtów) STM32. Mutacje
+flash EEPROM/KV i LittleFS współdzielą jeden mutex flash STM32, więc ich
+sekwencje erase/program nie mogą się nakładać.
+`hal_littlefs_total_bytes_ex()` raportuje zarezerwowany rozmiar partycji po
+zamontowaniu. `hal_littlefs_used_bytes_ex()` raportuje przydzielone bloki
+littlefs pomnożone przez rozmiar bloku kasowania targetu.
 
 LittleFS nigdy niejawnie nie karmi watchdoga. Użyj
 `hal_littlefs_set_progress_callback()` przed długimi operacjami, takimi jak
 formatowanie lub duże serie odśmiecania (garbage-collection)/zapisu, jeśli
-aplikacja chce nakarmić własny watchdog lub raportować postęp.
+aplikacja chce nakarmić własny watchdog lub raportować postęp. Skonfiguruj
+callback przed dostępem współbieżnym. Działa on pod mutexem wspólnej fasady i
+nie może wywoływać żadnego API `hal_littlefs_*`, w tym settera callbacku ani
+`hal_littlefs_is_mounted()`. Na targetach sprzętowych platformowa koordynacja
+flash jest już zwolniona, gdy callback jest wykonywany. Liczba wywołań na
+operację zależy od wybranego backendu. Callback może zostać wywołany podczas
+operacji, która później zgłosi błąd; o powodzeniu informuje status zwrotny
+operacji.
 
-**Przykład: montowanie, formatowanie przy pierwszym użyciu, inspekcja i usunięcie ścieżki**
+**Przykład: montowanie z jawnym opt-inem destrukcyjnego formatowania**
+
+Przekaż `true` wyłącznie wtedy, gdy wymazanie zarezerwowanej partycji jest
+dopuszczalne. Sam błąd mount nie rozróżnia pustego nośnika od uszkodzenia lub
+przejściowego błędu I/O.
+
 ```c
 #include <hal/storage/hal_littlefs.h>
 #include <tools_c.h>
 
-void example_littlefs(void) {
-    if (!hal_littlefs_begin()) {
-        derr("LittleFS mount failed; formatting");
-        if (!hal_littlefs_format() || !hal_littlefs_begin()) {
-            derr("LittleFS unavailable");
-            return;
-        }
+static hal_status_t mount_littlefs(bool allow_destructive_format) {
+    hal_status_t status = hal_littlefs_begin_ex();
+    if (status == HAL_OK || !allow_destructive_format) {
+        return status;
     }
 
-    deb("LittleFS mounted: %lu/%lu bytes used",
-        (unsigned long)hal_littlefs_used_bytes(),
-        (unsigned long)hal_littlefs_total_bytes());
+    status = hal_littlefs_format_ex();
+    if (status != HAL_OK) {
+        return status;
+    }
+    return hal_littlefs_begin_ex();
+}
 
-    if (hal_littlefs_exists("/data.txt")) {
-        (void)hal_littlefs_remove("/data.txt");
+void example_littlefs(bool allow_destructive_format) {
+    hal_status_t status = mount_littlefs(allow_destructive_format);
+    if (status != HAL_OK) {
+        derr("LittleFS unavailable: %s", hal_status_to_string(status));
+        return;
     }
 
-    hal_littlefs_end();
+    size_t total = 0;
+    size_t used = 0;
+    status = hal_littlefs_total_bytes_ex(&total);
+    if (status == HAL_OK) {
+        status = hal_littlefs_used_bytes_ex(&used);
+    }
+    if (status == HAL_OK) {
+        deb("LittleFS mounted: %lu/%lu bytes used",
+            (unsigned long)used, (unsigned long)total);
+    }
+
+    if (hal_littlefs_exists_ex("/data.txt") == HAL_OK) {
+        (void)hal_littlefs_remove_ex("/data.txt");
+    }
+
+    (void)hal_littlefs_end();
 }
 ```
 
----
-**impl/.mock:** deterministyczny test double z wstrzykiwalnym wynikiem
-montowania/formatowania, obecnością ścieżki i statystykami rozmiaru
-wolumenu.
-**Thread safety:** Backendy RP2040 i STM32G474 są thread-safe dla publicznego
-API. Singletonowy `hal_mutex_t` serializuje
-wszystkie wywołania wrappera.
+**Mock provider:** deterministyczny provider z wstrzykiwalnymi wynikami
+mount/unmount/format, obecnością ścieżki i statystykami rozmiaru wolumenu.
+Reset czyści również provider i stan zamontowania wspólnej fasady.
+
+**Thread safety:** wszystkie targety używają tego samego mutexu singletonowego
+fasady do serializacji wywołań publicznych. Mock nadal służy do
+deterministycznych testów, a nie do symulacji współbieżności sprzętowej.
 
 **Pomocnicy mock:**
+
 ```c
 void hal_mock_littlefs_reset(void);
 void hal_mock_littlefs_set_begin_result(bool result);
+void hal_mock_littlefs_set_begin_status(hal_status_t status);
+void hal_mock_littlefs_set_end_result(bool result);
 void hal_mock_littlefs_set_format_result(bool result);
 void hal_mock_littlefs_set_total_bytes(size_t total_bytes);
 void hal_mock_littlefs_set_used_bytes(size_t used_bytes);
@@ -502,13 +565,11 @@ callbacku i funkcja odmontowania teraz zwracają bezpośrednio
 `hal_status_t`. Zwykłe zapytanie o stan `hal_littlefs_is_mounted()` nie ma
 formy `_ex`. Nieprawidłowa ścieżka/wyjście mapuje się na `HAL_EINVAL`,
 użycie podczas odmontowania na `HAL_EUNINIT`, brakująca ścieżka na
-`HAL_ENOENT`, nieskonfigurowana partycja STM32 na `HAL_ECONFIG`, a natywne
-błędy montowania/formatowania/stat/odmontowania na `HAL_EIO`.
+`HAL_ENOENT`, brak providera albo nieprawidłowa/pusta geometria partycji na
+`HAL_ECONFIG`, błąd alokacji mutexu na `HAL_ENOMEM`, przepełnienie rozmiaru na
+`HAL_EOVERFLOW`, a błędy littlefs/surowego storage na `HAL_EIO`.
 
 ```c
-if (hal_littlefs_begin_ex() != HAL_OK) {
-    return;                 // HAL_EIO: montowanie nieudane
-}
 hal_status_t st = hal_littlefs_exists_ex("/config.json");
 // HAL_OK -> obecny, HAL_ENOENT -> nieobecny,
 // HAL_EUNINIT -> niezamontowany, HAL_EINVAL -> ścieżka NULL/pusta

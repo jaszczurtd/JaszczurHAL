@@ -1024,6 +1024,12 @@ add_test(NAME test_thermocouple_architecture
         -P ${CMAKE_CURRENT_SOURCE_DIR}/test_thermocouple_architecture.cmake
 )
 
+add_test(NAME test_littlefs_architecture
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_SOURCE_DIR}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_littlefs_architecture.cmake
+)
+
 add_test(NAME test_gps_architecture
     COMMAND ${CMAKE_COMMAND}
         -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
@@ -1542,6 +1548,30 @@ add_hal_test(test_hal_ble)
 add_hal_test(test_hal_ble_stream)
 add_hal_test(test_hal_ble_commands)
 add_hal_test(test_hal_littlefs)
+add_executable(test_jh_littlefs_lfs_provider
+    test_jh_littlefs_lfs_provider.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/storage/jh_littlefs_lfs_provider.cpp
+    ${JH_LITTLEFS_TEST_SOURCES}
+    ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+target_include_directories(test_jh_littlefs_lfs_provider PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${JH_LITTLEFS_TEST_INCLUDE_DIRS})
+target_compile_definitions(test_jh_littlefs_lfs_provider PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_LITTLEFS=1
+    HAL_ENABLE_UNITY=1
+    LFS_NO_ASSERT=1
+    UNITY_INCLUDE_CONFIG_H)
+if(MSVC)
+    set_source_files_properties(${JH_LITTLEFS_TEST_SOURCES}
+        PROPERTIES COMPILE_OPTIONS "/w")
+else()
+    set_source_files_properties(${JH_LITTLEFS_TEST_SOURCES}
+        PROPERTIES COMPILE_OPTIONS "-w")
+endif()
+jh_enable_host_warnings(test_jh_littlefs_lfs_provider ERRORS)
+add_test(NAME test_jh_littlefs_lfs_provider
+    COMMAND test_jh_littlefs_lfs_provider)
 add_hal_test(test_hal_sdlogger)
 add_hal_test(test_hal_net)
 add_executable(test_hal_config_storage_flags

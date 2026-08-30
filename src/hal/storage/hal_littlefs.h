@@ -10,7 +10,7 @@ extern "C" {
 
 /**
  * @file hal_littlefs.h
- * @brief Thread-safe wrapper for LittleFS filesystem lifecycle helpers.
+ * @brief Thread-safe facade for LittleFS filesystem lifecycle helpers.
  */
 
 #include "hal/core/hal_status.h"
@@ -20,13 +20,20 @@ extern "C" {
 /**
  * @brief Optional callback invoked during long filesystem flash operations.
  *
- * The callback runs while the LittleFS mutex is held. Keep it short: feed an
- * application-owned watchdog, update a counter, or set a flag.
+ * Configure the callback before concurrent access. It runs while the shared
+ * LittleFS facade owns its mutex and therefore must not call any
+ * hal_littlefs_* API, including the callback setter and mounted-state query.
+ * Keep it short: feed an application-owned watchdog, update a counter, or set
+ * a flag. The number of calls per operation is backend-dependent.
+ * A callback may run during an operation that later reports failure; it is a
+ * liveness/progress notification, not a success signal.
  */
 typedef void (*hal_littlefs_progress_callback_t)(void *ctx);
 
 /** @brief Register an optional callback for long LittleFS operations.
- *  @return HAL_OK when the callback configuration was stored.
+ *  @return HAL_OK when stored, HAL_ENOMEM when locking cannot be initialized,
+ *          HAL_ECONFIG when no complete provider is available, or a provider
+ *          error status.
  */
 hal_status_t
 hal_littlefs_set_progress_callback(hal_littlefs_progress_callback_t callback,
@@ -38,11 +45,21 @@ hal_littlefs_set_progress_callback(hal_littlefs_progress_callback_t callback,
 bool hal_littlefs_begin(void);
 
 /** @brief Unmount LittleFS.
- *  @return HAL_OK, or HAL_EIO when the backend cannot unmount it.
+ *
+ *  The facade clears its mounted state even when the backend reports an
+ *  unmount failure.
+ *  @return HAL_OK, HAL_ENOMEM when locking cannot be initialized,
+ *          HAL_ECONFIG when no complete provider is available, or HAL_EIO
+ *          when the backend cannot unmount it.
  */
 hal_status_t hal_littlefs_end(void);
 
-/** @brief Format LittleFS partition.
+/** @brief Destructively format the LittleFS partition.
+ *
+ *  Success leaves the filesystem unmounted. After an unmount/format failure
+ *  on a previously mounted filesystem, the facade attempts one best-effort
+ *  remount. Flash may already be partially modified; data preservation is not
+ *  guaranteed.
  *  @return true on successful format.
  */
 bool hal_littlefs_format(void);
@@ -73,11 +90,13 @@ size_t hal_littlefs_used_bytes(void);
  * Status-returning LittleFS APIs own validation and backend I/O. Historical
  * bool/value entry points are compatibility wrappers; the _ex variants return
  * hal_status_t so callers can
- * distinguish a NULL/empty path or NULL output (HAL_EINVAL), an operation
- * issued while unmounted (HAL_EUNINIT), a path that does not exist
- * (HAL_ENOENT) and a mount/format backend failure (HAL_EIO). Byte-count
- * queries expose their result through an output parameter. The plain state
- * query hal_littlefs_is_mounted() has no _ex form.
+ * distinguish a NULL/empty path or NULL output (HAL_EINVAL), unavailable or
+ * invalid provider geometry (HAL_ECONFIG), lock allocation failure
+ * (HAL_ENOMEM), an operation issued while unmounted (HAL_EUNINIT), a path
+ * that does not exist (HAL_ENOENT), backend I/O failure (HAL_EIO), and a size
+ * that cannot be represented (HAL_EOVERFLOW). Byte-count queries expose their
+ * result through an output parameter. The plain state query
+ * hal_littlefs_is_mounted() has no _ex form.
  */
 hal_status_t hal_littlefs_begin_ex(void);
 hal_status_t hal_littlefs_format_ex(void);

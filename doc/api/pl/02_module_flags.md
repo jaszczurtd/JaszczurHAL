@@ -98,7 +98,7 @@ Ochrona stosu wykorzystuje dwa niezależne opt-iny:
 | `HAL_ENABLE_WIREGUARD` | `hal_wireguard.h` | `hal/network/wireguard/hal_wireguard.cpp` + port rozszerzenia lwIP specyficzny dla targetu | Dołączony WireGuard poprzez stos lwIP hosta zgłaszający swoje capabilities, w tym ESP32-S3 (propaguje UDP + WIFI) |
 | `HAL_ENABLE_EEPROM` | `hal_eeprom.h` | `hal_eeprom.cpp` | Emulacja EEPROM we flashu targetu; AT24C256 przez HAL I2C, gdy wybrane |
 | `HAL_ENABLE_KV` | `hal_kv.h` | `hal_kv.cpp` | *(propaguje EEPROM)* |
-| `HAL_ENABLE_LITTLEFS` | `hal_littlefs.h` | `hal_littlefs.cpp` | Funkcje pomocnicze cyklu życia LittleFS; natywny RP używa `HAL_RP_FLASH_LITTLEFS_SIZE`, STM32G474 używa `HAL_STM32_FLASH_LITTLEFS_SIZE` |
+| `HAL_ENABLE_LITTLEFS` | `hal_littlefs.h` | `hal/storage/hal_littlefs.cpp` + wspólny provider littlefs + provider targetu/mocka | Jedna fasada cyklu życia/blokowania/ścieżek/statystyk; natywny RP używa `HAL_RP_FLASH_LITTLEFS_SIZE`, STM32G474 używa `HAL_STM32_FLASH_LITTLEFS_SIZE` |
 | `HAL_ENABLE_FAT` | FatFs `ff.h` | zarządzane źródła FatFs oraz we/wy dysku targetu | Współdzielone wsparcie systemu plików FatFs, wykorzystywane przez moduły oparte na SD |
 | `HAL_ENABLE_SDLOGGER` | `hal_sdlogger.h` | `hal/storage/filesystem/sdlogger/hal_sdlogger.cpp` | Logger SD przez współdzielony FatFs (propaguje FAT + EEPROM + SPI) |
 | `HAL_ENABLE_UART` | `hal_uart.h` | `hal_uart.cpp` | Sprzętowy UART |

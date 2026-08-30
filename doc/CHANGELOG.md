@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-30
 
+- Consolidated `hal_littlefs` lifecycle, validation, mounted state, locking,
+  progress configuration, path helpers and size reporting into one
+  target-independent facade used by RP, STM32G474 and mock. Native targets now
+  provide only geometry and checked block operations to one shared littlefs v2
+  provider; legacy bool/value entry points remain wrappers over the
+  status-returning APIs.
+- Serialized STM32G474 internal-flash mutations across EEPROM/KV and LittleFS,
+  moved progress notification outside the platform flash lock, and added real
+  pinned-littlefs RAM-provider coverage, partition-boundary checks and an
+  architecture regression guard.
 - `hal_display_write_raw_ex()` now accepts `pitch > width` (padded source
   rows) on the TFT and RGB OLED backends and the mock: each row is streamed
   separately inside one addressing window, so a caller's buffer only needs

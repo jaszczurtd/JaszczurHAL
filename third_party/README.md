@@ -37,7 +37,7 @@ entry point.
 | FatFs | `fatfs_version.conf` | `FatFs/` | FAT filesystem core used by shared SD storage |
 | Unity | `unity_version.conf` | `Unity/` | Test framework used by host and target-side test builds |
 | lwIP | `lwip_version.conf` | `lwip/` | TCP/IP stack used by the JaszczurHAL CYW43 integration |
-| littlefs | `littlefs_version.conf` | `littlefs/` | Filesystem core used by native RP and STM32G474 storage |
+| littlefs | `littlefs_version.conf` | `littlefs/` | Filesystem core used by the shared provider, host integration test, and native RP/STM32G474 storage |
 | BTstack | `btstack_version.conf` | `BTstack/` | BLE host stack used by the CYW43 Bluetooth integration |
 | Semtech SX126x driver | `sx126x_driver_version.conf` | `sx126x_driver/` | Portable SX1261/SX1262 command driver for the LoRa provider |
 | FreeRTOS-Kernel | `freertos_core_version.conf` | `FreeRTOS-Kernel/` | Native RP SMP and STM32G474 FreeRTOS kernel |
@@ -54,9 +54,10 @@ exact-commit checkouts; verify-only mode rejects local or untracked changes.
 Configured repository origins are enforced, including the project-owned
 BearSSL, LodePNG, FatFs and Unity repositories. The `jaszczurtd/ff16` checkout
 is a direct mirror of ChaN's unchanged R0.16 archive and replaces the unreliable
-runtime download from `elm-chan.org`. The littlefs checkout is consumed directly
-by the native RP and STM32G474 CMake recipes; target-specific flash adapters
-remain tracked in their respective backend directories.
+runtime download from `elm-chan.org`. The littlefs checkout is consumed by one
+shared filesystem provider, native RP and STM32G474 CMake recipes, and a
+dedicated host RAM-flash integration test. Target backends provide only flash
+geometry and checked read/program/erase/sync operations.
 
 The Semtech checkout is kept clean at the exact `v2.5.0` commit. Its tracked
 Clear BSD license copy is `LICENSE.SX126X`. Stage 1 LoRa integration will use

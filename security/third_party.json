@@ -233,10 +233,14 @@
       "supplier": "littlefs authors and Arm Limited",
       "licenses": ["BSD-3-Clause"],
       "purl": "pkg:github/littlefs-project/littlefs@6cb4e86540eca0d9ba62500a298385c9d863c8be",
-      "paths": ["third_party/littlefs", "third_party/littlefs_version.conf"],
+      "paths": [
+        "third_party/littlefs",
+        "third_party/littlefs_version.conf",
+        "src/hal/storage/jh_littlefs_lfs_provider.cpp"
+      ],
       "upstream": "https://github.com/littlefs-project/littlefs",
       "feature_flags": ["HAL_ENABLE_LITTLEFS"],
-      "notes": "Git-ignored exact-commit littlefs checkout compiled by the native RP and STM32G474 internal-flash backends."
+      "notes": "Git-ignored exact-commit littlefs checkout used by the shared provider, native RP/STM32G474 internal-flash builds, and the dedicated host RAM-flash integration test."
     },
     {
       "name": "PubSubClient",

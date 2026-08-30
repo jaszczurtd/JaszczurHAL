@@ -95,7 +95,7 @@ Stack protection uses two independent opt-ins:
 | `HAL_ENABLE_WIREGUARD` | `hal_wireguard.h` | `hal/network/wireguard/hal_wireguard.cpp` + target lwIP extension port | Bundled WireGuard over a capability-advertised host lwIP stack, including ESP32-S3 (propagates UDP + WIFI) |
 | `HAL_ENABLE_EEPROM` | `hal_eeprom.h` | `hal_eeprom.cpp` | Target flash EEPROM emulation; AT24C256 over HAL I2C when selected |
 | `HAL_ENABLE_KV` | `hal_kv.h` | `hal_kv.cpp` | *(propagates EEPROM)* |
-| `HAL_ENABLE_LITTLEFS` | `hal_littlefs.h` | `hal_littlefs.cpp` | LittleFS lifecycle helpers; native RP uses `HAL_RP_FLASH_LITTLEFS_SIZE`, STM32G474 uses `HAL_STM32_FLASH_LITTLEFS_SIZE` |
+| `HAL_ENABLE_LITTLEFS` | `hal_littlefs.h` | `hal/storage/hal_littlefs.cpp` + shared littlefs provider + target/mock provider | One lifecycle/locking/path/stats facade; native RP uses `HAL_RP_FLASH_LITTLEFS_SIZE`, STM32G474 uses `HAL_STM32_FLASH_LITTLEFS_SIZE` |
 | `HAL_ENABLE_FAT` | FatFs `ff.h` | managed FatFs sources and target disk I/O | Shared FatFs filesystem support used by SD-backed modules |
 | `HAL_ENABLE_SDLOGGER` | `hal_sdlogger.h` | `hal/storage/filesystem/sdlogger/hal_sdlogger.cpp` | SD logger over shared FatFs (propagates FAT + EEPROM + SPI) |
 | `HAL_ENABLE_UART` | `hal_uart.h` | `hal_uart.cpp` | Hardware UART |

@@ -127,6 +127,12 @@ flash. With the STM32 LittleFS backend, LittleFS uses the optional internal
 flash reservation immediately before the EEPROM/KV reservation. The two regions
 must not overlap.
 
+EEPROM/KV and LittleFS mutations share one singleton STM32 flash mutex. The
+driver holds it from flash unlock through the matching hardware lock, so erase
+and program sequences from the two storage providers cannot overlap. Progress
+callbacks run after this flash mutex is released; the public storage facade's
+own mutex remains held, so a callback must not re-enter its module API.
+
 ## Linker Sections
 
 Flash-backed sections:
