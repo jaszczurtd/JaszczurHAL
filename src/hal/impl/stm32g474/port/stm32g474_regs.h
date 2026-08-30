@@ -438,6 +438,13 @@
 #define I2C_OAR1_REG(base) JH_REG32((base) + 0x08u)
 #define I2C_OAR1_OA1EN (1u << 15)
 #define I2C_CR2_RD_WRN (1u << 10)
+#define I2C_CR2_ADD10 (1u << 11)
+/* 10-bit header-only-read shortcut. Deliberately unused: the mainline Linux
+ * i2c-stm32f7 driver (same I2C v2 IP as G474) always clears HEAD10R and lets
+ * the peripheral send the complete 10-bit address sequence on every
+ * START/repeated-START, for both write and read phases. Defined here for
+ * completeness/documentation only. */
+#define I2C_CR2_HEAD10R (1u << 12)
 #define I2C_CR2_START (1u << 13)
 #define I2C_CR2_STOP (1u << 14)
 #define I2C_CR2_AUTOEND (1u << 25)

@@ -149,6 +149,7 @@ class Phase2RegistryAndBuildModelTests(unittest.TestCase):
                 "HAL_ENABLE_HTTP_FILES",
                 "HAL_ENABLE_HTTP_SERVER",
                 "HAL_ENABLE_I2C",
+                "HAL_ENABLE_I2C_10BIT",
                 "HAL_ENABLE_I2C_SLAVE",
                 "HAL_ENABLE_MQTT",
                 "HAL_ENABLE_NETWORK_CORE",

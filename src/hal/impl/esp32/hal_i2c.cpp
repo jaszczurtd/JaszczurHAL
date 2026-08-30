@@ -27,7 +27,16 @@ constexpr size_t kI2cBufferSize = UINT8_MAX;
 constexpr int kI2cTransferTimeoutMs = 100;
 constexpr uint32_t kI2cBusClearDelayUs = 5u;
 constexpr uint8_t kI2cBusClearPulses = 9u;
-constexpr uint8_t kI2cAddressCount = 128u;
+/* Device-handle cache capacity: sized for the full addressable space of the
+ * widest addressing mode compiled in. 7-bit-only builds keep the original
+ * 128-entry footprint; enabling HAL_ENABLE_I2C_10BIT trades RAM (2x
+ * i2c_master_dev_handle_t per bus, ~8 KiB total on typical pointer size) for
+ * full 10-bit device-handle caching. */
+#ifdef HAL_ENABLE_I2C_10BIT
+constexpr uint16_t kI2cAddressCount = 1024u;
+#else
+constexpr uint16_t kI2cAddressCount = 128u;
+#endif
 
 struct I2cBusState {
   uint8_t rx_buffer[kI2cBufferSize];
@@ -35,7 +44,10 @@ struct I2cBusState {
   size_t rx_position;
   uint8_t tx_buffer[kI2cBufferSize];
   size_t tx_length;
-  uint8_t current_address;
+  hal_i2c_address_t current_address;
+#ifdef HAL_ENABLE_I2C_10BIT
+  hal_i2c_addr_mode_t addr_mode;
+#endif
   uint8_t sda_pin;
   uint8_t scl_pin;
   uint32_t clock_hz;
@@ -59,7 +71,9 @@ uint8_t i2c_bus_index(uint8_t bus) {
 
 I2cBusState &i2c_state(uint8_t bus) { return s_i2c[i2c_bus_index(bus)]; }
 
-bool i2c_address_valid(uint8_t address) { return address < kI2cAddressCount; }
+bool i2c_address_valid(hal_i2c_address_t address) {
+  return address < kI2cAddressCount;
+}
 
 bool i2c_pin_usable(uint8_t pin) {
   if (pin >= 64u) {
@@ -191,14 +205,20 @@ hal_status_t i2c_deinit_locked(I2cBusState &state) {
   return HAL_OK;
 }
 
-hal_status_t i2c_get_device(I2cBusState &state, uint8_t address,
+hal_status_t i2c_get_device(I2cBusState &state, hal_i2c_address_t address,
                             i2c_master_dev_handle_t *out_device) {
   if (out_device == nullptr || !i2c_address_valid(address)) {
     return HAL_EINVAL;
   }
   if (state.devices[address] == nullptr) {
     i2c_device_config_t config = {};
+#ifdef HAL_ENABLE_I2C_10BIT
+    config.dev_addr_length = (state.addr_mode == HAL_I2C_ADDR_MODE_10BIT)
+                                 ? I2C_ADDR_BIT_LEN_10
+                                 : I2C_ADDR_BIT_LEN_7;
+#else
     config.dev_addr_length = I2C_ADDR_BIT_LEN_7;
+#endif
     config.device_address = address;
     config.scl_speed_hz = state.clock_hz;
     config.scl_wait_us = 0u;
@@ -213,6 +233,10 @@ hal_status_t i2c_get_device(I2cBusState &state, uint8_t address,
   return HAL_OK;
 }
 
+/* i2c_master_probe() zero-initialises the transaction's addr_length (see
+ * i2c_master.c), i.e. it always probes as a 7-bit address regardless of the
+ * value passed in - it is not usable for a 10-bit probe. Kept 7-bit-only;
+ * see i2c_zero_byte_probe_locked() for the 10-bit substitute. */
 hal_status_t i2c_probe_locked(I2cBusState &state, uint8_t address) {
   if (!i2c_address_valid(address)) {
     return HAL_EINVAL;
@@ -220,6 +244,43 @@ hal_status_t i2c_probe_locked(I2cBusState &state, uint8_t address) {
   const esp_err_t error =
       i2c_master_probe(state.bus_handle, address, kI2cTransferTimeoutMs);
   return i2c_transfer_status(state, error);
+}
+
+#ifdef HAL_ENABLE_I2C_10BIT
+/* ESP-IDF has no zero-length-write / address-only probe for a configured
+ * device handle (i2c_master_transmit() rejects write_size == 0), so a 10-bit
+ * "is the device present/ready" check is approximated with a 1-byte read
+ * through the correctly-configured (dev_addr_length = I2C_ADDR_BIT_LEN_10)
+ * device handle instead: NACK on the address phase still surfaces as an
+ * error, at the cost of consuming and discarding one byte from the device.
+ * This is an ESP32-S3-specific deviation from the true zero-byte probe the
+ * mock/RP2040/STM32G474 backends perform; document it wherever
+ * hal_i2c_is_busy_bus() is used against a 10-bit ESP32-S3 bus. */
+hal_status_t i2c_probe_10bit_locked(I2cBusState &state,
+                                    hal_i2c_address_t address) {
+  i2c_master_dev_handle_t device = nullptr;
+  hal_status_t status = i2c_get_device(state, address, &device);
+  if (hal_status_is_error(status)) {
+    return status;
+  }
+  uint8_t discard = 0u;
+  const esp_err_t error =
+      i2c_master_receive(device, &discard, 1u, kI2cTransferTimeoutMs);
+  return i2c_transfer_status(state, error);
+}
+#endif
+
+hal_status_t i2c_zero_byte_probe_locked(I2cBusState &state,
+                                        hal_i2c_address_t address) {
+#ifdef HAL_ENABLE_I2C_10BIT
+  if (state.addr_mode == HAL_I2C_ADDR_MODE_10BIT) {
+    return i2c_probe_10bit_locked(state, address);
+  }
+#endif
+  if (!i2c_address_valid(address)) {
+    return HAL_EINVAL;
+  }
+  return i2c_probe_locked(state, (uint8_t)address);
 }
 
 void i2c_count_transaction(I2cBusState &state) {
@@ -234,7 +295,7 @@ hal_status_t i2c_require_initialized(const I2cBusState &state) {
   return HAL_EUNINIT;
 }
 
-hal_status_t i2c_transfer_locked(I2cBusState &state, uint8_t address,
+hal_status_t i2c_transfer_locked(I2cBusState &state, hal_i2c_address_t address,
                                  const uint8_t *tx, size_t tx_length,
                                  uint8_t *rx, size_t rx_length) {
   i2c_master_dev_handle_t device = nullptr;
@@ -277,12 +338,15 @@ bool jh_hal_i2c_bus_is_initialized(uint8_t bus) {
   return i2c_bus_valid(bus) && s_i2c[bus].initialized;
 }
 
-hal_status_t hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz) {
-  return hal_i2c_init_bus(0u, sda_pin, scl_pin, clock_hz);
+#ifdef HAL_ENABLE_I2C_10BIT
+bool jh_hal_i2c_bus_is_10bit(uint8_t bus) {
+  return i2c_bus_valid(bus) && s_i2c[bus].addr_mode == HAL_I2C_ADDR_MODE_10BIT;
 }
+#endif
 
-hal_status_t hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
-                              uint32_t clock_hz) {
+static hal_status_t esp32_i2c_init_bus_common(uint8_t bus, uint8_t sda_pin,
+                                              uint8_t scl_pin,
+                                              uint32_t clock_hz) {
   if (!i2c_bus_valid(bus) || sda_pin == scl_pin || !i2c_pin_usable(sda_pin) ||
       !i2c_pin_usable(scl_pin)) {
     return HAL_EINVAL;
@@ -324,6 +388,59 @@ hal_status_t hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
   i2c_clear_buffers(state);
   __atomic_store_n(&state.transaction_count, 0u, __ATOMIC_RELEASE);
   i2c_unlock_index(index);
+  return HAL_OK;
+}
+
+hal_status_t hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz) {
+  return hal_i2c_init_bus(0u, sda_pin, scl_pin, clock_hz);
+}
+
+hal_status_t hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
+                              uint32_t clock_hz) {
+  const hal_status_t status =
+      esp32_i2c_init_bus_common(bus, sda_pin, scl_pin, clock_hz);
+#ifdef HAL_ENABLE_I2C_10BIT
+  if (status == HAL_OK) {
+    i2c_state(bus).addr_mode = HAL_I2C_ADDR_MODE_7BIT;
+  }
+#endif
+  return status;
+}
+
+#ifdef HAL_ENABLE_I2C_10BIT
+hal_status_t hal_i2c_init_10bit(uint8_t sda_pin, uint8_t scl_pin,
+                                uint32_t clock_hz) {
+  return hal_i2c_init_bus_10bit(0u, sda_pin, scl_pin, clock_hz);
+}
+
+hal_status_t hal_i2c_init_bus_10bit(uint8_t bus, uint8_t sda_pin,
+                                    uint8_t scl_pin, uint32_t clock_hz) {
+  const hal_status_t status =
+      esp32_i2c_init_bus_common(bus, sda_pin, scl_pin, clock_hz);
+  if (status == HAL_OK) {
+    i2c_state(bus).addr_mode = HAL_I2C_ADDR_MODE_10BIT;
+  }
+  return status;
+}
+
+hal_i2c_addr_mode_t hal_i2c_get_addr_mode(void) {
+  return hal_i2c_get_addr_mode_bus(0u);
+}
+
+hal_i2c_addr_mode_t hal_i2c_get_addr_mode_bus(uint8_t bus) {
+  return i2c_state(bus).addr_mode;
+}
+#endif /* HAL_ENABLE_I2C_10BIT */
+
+hal_status_t hal_i2c_get_clock(uint32_t *out_clock_hz) {
+  return hal_i2c_get_clock_bus(0u, out_clock_hz);
+}
+
+hal_status_t hal_i2c_get_clock_bus(uint8_t bus, uint32_t *out_clock_hz) {
+  if (!i2c_bus_valid(bus) || out_clock_hz == nullptr) {
+    return HAL_EINVAL;
+  }
+  *out_clock_hz = i2c_state(bus).clock_hz;
   return HAL_OK;
 }
 
@@ -371,11 +488,11 @@ void hal_i2c_unlock(void) { hal_i2c_unlock_bus(0u); }
 
 void hal_i2c_unlock_bus(uint8_t bus) { i2c_unlock_index(i2c_bus_index(bus)); }
 
-void hal_i2c_begin_transmission(uint8_t address) {
+void hal_i2c_begin_transmission(hal_i2c_address_t address) {
   hal_i2c_begin_transmission_bus(0u, address);
 }
 
-void hal_i2c_begin_transmission_bus(uint8_t bus, uint8_t address) {
+void hal_i2c_begin_transmission_bus(uint8_t bus, hal_i2c_address_t address) {
   const uint8_t index = i2c_bus_index(bus);
   if (!i2c_lock_index(index)) {
     return;
@@ -408,11 +525,12 @@ hal_status_t hal_i2c_end_transmission_bus_ex(uint8_t bus) {
   I2cBusState &state = s_i2c[index];
   hal_status_t status = i2c_require_initialized(state);
   if (hal_status_is_ok(status)) {
+    status = jh_hal_i2c_validate_address(bus, state.current_address);
+  }
+  if (hal_status_is_ok(status)) {
     if (state.tx_length == 0u) {
-      status = i2c_probe_locked(state, state.current_address);
+      status = i2c_zero_byte_probe_locked(state, state.current_address);
       i2c_count_transaction(state);
-    } else if (!i2c_address_valid(state.current_address)) {
-      status = HAL_EINVAL;
     } else {
       status =
           i2c_transfer_locked(state, state.current_address, state.tx_buffer,
@@ -424,10 +542,11 @@ hal_status_t hal_i2c_end_transmission_bus_ex(uint8_t bus) {
   return status;
 }
 
-hal_status_t hal_i2c_write_read_bus_ex(uint8_t bus, uint8_t address,
+hal_status_t hal_i2c_write_read_bus_ex(uint8_t bus, hal_i2c_address_t address,
                                        const uint8_t *tx, size_t tx_len,
                                        uint8_t *rx, size_t rx_len) {
-  if (!i2c_bus_valid(bus) || !i2c_address_valid(address) ||
+  if (!i2c_bus_valid(bus) ||
+      hal_status_is_error(jh_hal_i2c_validate_address(bus, address)) ||
       (tx_len > 0u && tx == nullptr) || (rx_len > 0u && rx == nullptr) ||
       tx_len > kI2cBufferSize || rx_len > kI2cBufferSize) {
     return HAL_EINVAL;
@@ -449,9 +568,10 @@ hal_status_t hal_i2c_write_read_bus_ex(uint8_t bus, uint8_t address,
   return status;
 }
 
-hal_status_t hal_i2c_read_bytes_bus_ex(uint8_t bus, uint8_t address,
+hal_status_t hal_i2c_read_bytes_bus_ex(uint8_t bus, hal_i2c_address_t address,
                                        uint8_t *rx, size_t rx_len) {
-  if (!i2c_bus_valid(bus) || !i2c_address_valid(address) ||
+  if (!i2c_bus_valid(bus) ||
+      hal_status_is_error(jh_hal_i2c_validate_address(bus, address)) ||
       (rx_len > 0u && rx == nullptr) || rx_len > kI2cBufferSize) {
     return HAL_EINVAL;
   }
@@ -474,9 +594,10 @@ hal_status_t hal_i2c_read_bytes_bus_ex(uint8_t bus, uint8_t address,
   return status;
 }
 
-hal_status_t hal_i2c_request_from_bus_ex(uint8_t bus, uint8_t address,
+hal_status_t hal_i2c_request_from_bus_ex(uint8_t bus, hal_i2c_address_t address,
                                          uint8_t count, uint8_t *out_received) {
-  if (!i2c_bus_valid(bus) || !i2c_address_valid(address) ||
+  if (!i2c_bus_valid(bus) ||
+      hal_status_is_error(jh_hal_i2c_validate_address(bus, address)) ||
       out_received == nullptr) {
     return HAL_EINVAL;
   }
@@ -524,12 +645,13 @@ int hal_i2c_read_bus(uint8_t bus) {
   return state.rx_buffer[state.rx_position++];
 }
 
-bool hal_i2c_is_busy(uint8_t address) {
+bool hal_i2c_is_busy(hal_i2c_address_t address) {
   return hal_i2c_is_busy_bus(0u, address);
 }
 
-bool hal_i2c_is_busy_bus(uint8_t bus, uint8_t address) {
-  if (!i2c_bus_valid(bus) || !i2c_address_valid(address)) {
+bool hal_i2c_is_busy_bus(uint8_t bus, hal_i2c_address_t address) {
+  if (!i2c_bus_valid(bus) ||
+      hal_status_is_error(jh_hal_i2c_validate_address(bus, address))) {
     return true;
   }
   hal_i2c_begin_transmission_bus(bus, address);

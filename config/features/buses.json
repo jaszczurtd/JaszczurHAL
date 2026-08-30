@@ -12,6 +12,9 @@
         "portableSources": ["src/hal/i2c/hal_i2c.cpp"]
       }
     },
+    "HAL_ENABLE_I2C_10BIT": {
+      "implies": ["HAL_ENABLE_I2C"]
+    },
     "HAL_ENABLE_I2C_SLAVE": {},
     "HAL_ENABLE_MCP23017": {
       "implies": ["HAL_ENABLE_I2C"]

@@ -58,9 +58,23 @@ void test_st7567_raw_write_validates_format_and_page_alignment(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_write_raw_ex(4u, 8u, &desc, page));
 }
 
+void test_st7567_raw_write_still_rejects_padded_pitch(void) {
+  const hal_display_st7567_config_t config = st7567_config();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_init_st7567_ex(&config));
+  const uint8_t page[16] = {};
+  const hal_display_buffer_desc_t desc = {
+      HAL_DISPLAY_PIXEL_FORMAT_MONO10, 9u, 8u, 8u, sizeof(page), false};
+
+  /* Page-tiled buffer: no well-defined per-pixel-row byte boundary, so
+   * pitch > width must keep failing until a page-granularity design lands. */
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED,
+                        hal_display_write_raw_ex(0u, 0u, &desc, page));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_st7567_capabilities_expose_page_layout);
   RUN_TEST(test_st7567_raw_write_validates_format_and_page_alignment);
+  RUN_TEST(test_st7567_raw_write_still_rejects_padded_pitch);
   return UNITY_END();
 }

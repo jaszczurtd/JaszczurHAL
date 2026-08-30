@@ -29,7 +29,10 @@ typedef struct {
   size_t rx_pos;
   uint8_t tx_buf[RP2040_I2C_BUF_SIZE];
   size_t tx_len;
-  uint8_t cur_addr;
+  hal_i2c_address_t cur_addr;
+#ifdef HAL_ENABLE_I2C_10BIT
+  hal_i2c_addr_mode_t addr_mode;
+#endif
   uint8_t sda_pin;
   uint8_t scl_pin;
   uint32_t clock_hz;
@@ -48,6 +51,12 @@ static inline bool i2c_bus_valid(uint8_t bus) { return bus <= 1u; }
 bool jh_hal_i2c_bus_is_initialized(uint8_t bus) {
   return i2c_bus_valid(bus) && s_i2c[bus].initialized;
 }
+
+#ifdef HAL_ENABLE_I2C_10BIT
+bool jh_hal_i2c_bus_is_10bit(uint8_t bus) {
+  return i2c_bus_valid(bus) && s_i2c[bus].addr_mode == HAL_I2C_ADDR_MODE_10BIT;
+}
+#endif
 
 static inline uint8_t i2c_bus_index(uint8_t bus) {
   HAL_ASSERT(bus <= 1u, "hal_i2c: invalid bus index");
@@ -129,6 +138,192 @@ static void i2c_hw_init_bus(uint8_t idx) {
   st->actual_clock_hz = i2c_init(i2c_bus_hw(idx), st->clock_hz);
 }
 
+#ifdef HAL_ENABLE_I2C_10BIT
+/* i2c_init() (called by i2c_hw_init_bus() above) assigns IC_CON outright
+ * without the 10-bit bit, so every hal_i2c_init_bus[_10bit]() call already
+ * leaves the controller in a clean 7-bit state; this only needs to OR the
+ * 10-bit mode bit back in for a 10-bit init. Kept set for the controller's
+ * lifetime per the addressing-mode contract (hal_i2c_address_t). */
+static void i2c_hw_enable_10bit_mode(uint8_t idx) {
+  i2c_hw_t *hw = i2c_get_hw(i2c_bus_hw(idx));
+  hw->enable = 0;
+  hw_write_masked(&hw->con, I2C_IC_CON_IC_10BITADDR_MASTER_BITS,
+                  I2C_IC_CON_IC_10BITADDR_MASTER_BITS);
+  hw->enable = 1;
+}
+
+/* Shared mutable state for i2c_10bit_write_timeout_us()/
+ * i2c_10bit_read_timeout_us(): both adapt the same Pico SDK FIFO/abort/
+ * timeout skeleton around a different per-byte body, so the skeleton's
+ * setup and bookkeeping fields live here once instead of twice. */
+struct i2c_10bit_xfer_ctx {
+  i2c_hw_t *hw;
+  absolute_time_t deadline;
+  int ilen;
+  int byte_ctr;
+  bool abort;
+  bool timeout;
+  uint32_t abort_reason;
+};
+
+/* Program IC_TAR for this transfer and initialize the shared loop state.
+ * IC_10BITADDR_MASTER is expected to already be set by
+ * i2c_hw_enable_10bit_mode() for the controller's lifetime, so this only
+ * programs IC_TAR per transfer, matching the 7-bit i2c_write_timeout_us()/
+ * i2c_read_timeout_us() call sites it parallels. */
+static i2c_10bit_xfer_ctx i2c_10bit_begin_xfer(i2c_inst_t *i2c, uint16_t addr,
+                                               size_t len, uint timeout_us) {
+  i2c_10bit_xfer_ctx ctx;
+  ctx.hw = i2c_get_hw(i2c);
+  ctx.hw->enable = 0;
+  ctx.hw->tar = addr;
+  ctx.hw->enable = 1;
+  ctx.deadline = make_timeout_time_us(timeout_us);
+  ctx.ilen = (int)len;
+  ctx.byte_ctr = 0;
+  ctx.abort = false;
+  ctx.timeout = false;
+  ctx.abort_reason = 0u;
+  return ctx;
+}
+
+/* Adapted from the pinned Pico SDK's i2c_write_blocking_internal()/
+ * i2c_read_blocking_internal() (third_party/pico-sdk/.../hardware_i2c/i2c.c,
+ * BSD-3-Clause): same FIFO/abort/timeout handling, but addr is not limited to
+ * uint8_t/0x7F - IC_TAR already carries the full 10-bit value in silicon
+ * (I2C_IC_TAR_IC_TAR_BITS = 0x3FF) - and abort-reason checks recognise the
+ * 10-bit address-phase NACK bits (ABRT_10ADDR1/2_NOACK) alongside the 7-bit
+ * one. */
+static int i2c_10bit_write_timeout_us(i2c_inst_t *i2c, uint16_t addr,
+                                      const uint8_t *src, size_t len,
+                                      bool nostop, uint timeout_us) {
+  if (len == 0u) {
+    return 0;
+  }
+  i2c_10bit_xfer_ctx ctx = i2c_10bit_begin_xfer(i2c, addr, len, timeout_us);
+  for (; ctx.byte_ctr < ctx.ilen; ++ctx.byte_ctr) {
+    const bool first = ctx.byte_ctr == 0;
+    const bool last = ctx.byte_ctr == ctx.ilen - 1;
+
+    ctx.hw->data_cmd = (uint32_t)((first && i2c->restart_on_next) ? 1u : 0u)
+                           << I2C_IC_DATA_CMD_RESTART_LSB |
+                       (uint32_t)((last && !nostop) ? 1u : 0u)
+                           << I2C_IC_DATA_CMD_STOP_LSB |
+                       src[ctx.byte_ctr];
+
+    while (!ctx.timeout &&
+           !(ctx.hw->raw_intr_stat & I2C_IC_RAW_INTR_STAT_TX_EMPTY_BITS)) {
+      ctx.timeout = time_reached(ctx.deadline);
+      ctx.abort |= ctx.timeout;
+      tight_loop_contents();
+    }
+
+    if (!ctx.timeout) {
+      ctx.abort_reason = ctx.hw->tx_abrt_source;
+      if (ctx.abort_reason) {
+        (void)ctx.hw->clr_tx_abrt;
+        ctx.abort = true;
+      }
+      if (ctx.abort || (last && !nostop)) {
+        while (!ctx.timeout &&
+               !(ctx.hw->raw_intr_stat & I2C_IC_RAW_INTR_STAT_STOP_DET_BITS)) {
+          ctx.timeout = time_reached(ctx.deadline);
+          ctx.abort |= ctx.timeout;
+          tight_loop_contents();
+        }
+        if (!ctx.timeout) {
+          (void)ctx.hw->clr_stop_det;
+        }
+      }
+    }
+    if (ctx.abort) {
+      break;
+    }
+  }
+
+  int rval;
+  if (ctx.abort) {
+    if (ctx.timeout) {
+      rval = PICO_ERROR_TIMEOUT;
+    } else if (!ctx.abort_reason ||
+               (ctx.abort_reason &
+                (I2C_IC_TX_ABRT_SOURCE_ABRT_7B_ADDR_NOACK_BITS |
+                 I2C_IC_TX_ABRT_SOURCE_ABRT_10ADDR1_NOACK_BITS |
+                 I2C_IC_TX_ABRT_SOURCE_ABRT_10ADDR2_NOACK_BITS))) {
+      rval = PICO_ERROR_GENERIC;
+    } else if (ctx.abort_reason &
+               I2C_IC_TX_ABRT_SOURCE_ABRT_TXDATA_NOACK_BITS) {
+      rval = ctx.byte_ctr;
+    } else {
+      rval = PICO_ERROR_GENERIC;
+    }
+  } else {
+    rval = ctx.byte_ctr;
+  }
+
+  i2c->restart_on_next = nostop;
+  return rval;
+}
+
+static int i2c_10bit_read_timeout_us(i2c_inst_t *i2c, uint16_t addr,
+                                     uint8_t *dst, size_t len, bool nostop,
+                                     uint timeout_us) {
+  if (len == 0u) {
+    return 0;
+  }
+  i2c_10bit_xfer_ctx ctx = i2c_10bit_begin_xfer(i2c, addr, len, timeout_us);
+  for (; ctx.byte_ctr < ctx.ilen; ++ctx.byte_ctr) {
+    const bool first = ctx.byte_ctr == 0;
+    const bool last = ctx.byte_ctr == ctx.ilen - 1;
+
+    while (!i2c_get_write_available(i2c)) {
+      tight_loop_contents();
+    }
+
+    ctx.hw->data_cmd = (uint32_t)((first && i2c->restart_on_next) ? 1u : 0u)
+                           << I2C_IC_DATA_CMD_RESTART_LSB |
+                       (uint32_t)((last && !nostop) ? 1u : 0u)
+                           << I2C_IC_DATA_CMD_STOP_LSB |
+                       I2C_IC_DATA_CMD_CMD_BITS;
+
+    do {
+      ctx.abort_reason = ctx.hw->tx_abrt_source;
+      if (ctx.hw->raw_intr_stat & I2C_IC_RAW_INTR_STAT_TX_ABRT_BITS) {
+        ctx.abort = true;
+        (void)ctx.hw->clr_tx_abrt;
+      }
+      ctx.timeout = time_reached(ctx.deadline);
+      ctx.abort |= ctx.timeout;
+    } while (!ctx.abort && !i2c_get_read_available(i2c));
+
+    if (ctx.abort) {
+      break;
+    }
+    dst[ctx.byte_ctr] = (uint8_t)ctx.hw->data_cmd;
+  }
+
+  int rval;
+  if (ctx.abort) {
+    if (ctx.timeout) {
+      rval = PICO_ERROR_TIMEOUT;
+    } else if (!ctx.abort_reason ||
+               (ctx.abort_reason &
+                (I2C_IC_TX_ABRT_SOURCE_ABRT_7B_ADDR_NOACK_BITS |
+                 I2C_IC_TX_ABRT_SOURCE_ABRT_10ADDR1_NOACK_BITS |
+                 I2C_IC_TX_ABRT_SOURCE_ABRT_10ADDR2_NOACK_BITS))) {
+      rval = PICO_ERROR_GENERIC;
+    } else {
+      rval = PICO_ERROR_GENERIC;
+    }
+  } else {
+    rval = ctx.byte_ctr;
+  }
+
+  i2c->restart_on_next = nostop;
+  return rval;
+}
+#endif /* HAL_ENABLE_I2C_10BIT */
+
 static bool i2c_ensure_initialized(uint8_t idx) {
   if (!s_i2c[idx].initialized) {
     HAL_ASSERT(false, "hal_i2c: bus used before hal_i2c_init_bus");
@@ -177,12 +372,23 @@ static uint8_t i2c_probe_read(uint8_t idx, uint8_t address) {
   return HAL_I2C_ERROR_GENERIC;
 }
 
-hal_status_t hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz) {
-  return hal_i2c_init_bus(0, sda_pin, scl_pin, clock_hz);
+#ifdef HAL_ENABLE_I2C_10BIT
+static uint8_t i2c_probe_read_10bit(uint8_t idx, hal_i2c_address_t address) {
+  uint8_t dummy = 0u;
+  int rc = i2c_10bit_read_timeout_us(i2c_bus_hw(idx), address, &dummy, 1u,
+                                     false, RP2040_I2C_TIMEOUT_US);
+  if (rc == 1) {
+    return HAL_I2C_RESULT_OK;
+  }
+  if (rc == PICO_ERROR_TIMEOUT) {
+    return HAL_I2C_ERROR_TIMEOUT;
+  }
+  return HAL_I2C_ERROR_GENERIC;
 }
+#endif
 
-hal_status_t hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
-                              uint32_t clock_hz) {
+static hal_status_t i2c_init_bus_common(uint8_t bus, uint8_t sda_pin,
+                                        uint8_t scl_pin, uint32_t clock_hz) {
   if (!i2c_bus_valid(bus)) {
     return HAL_EINVAL;
   }
@@ -205,6 +411,61 @@ hal_status_t hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
 
   i2c_hw_init_bus(idx);
   st->initialized = true;
+  return HAL_OK;
+}
+
+hal_status_t hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz) {
+  return hal_i2c_init_bus(0, sda_pin, scl_pin, clock_hz);
+}
+
+hal_status_t hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
+                              uint32_t clock_hz) {
+  const hal_status_t status =
+      i2c_init_bus_common(bus, sda_pin, scl_pin, clock_hz);
+#ifdef HAL_ENABLE_I2C_10BIT
+  if (status == HAL_OK) {
+    s_i2c[i2c_bus_index(bus)].addr_mode = HAL_I2C_ADDR_MODE_7BIT;
+  }
+#endif
+  return status;
+}
+
+#ifdef HAL_ENABLE_I2C_10BIT
+hal_status_t hal_i2c_init_10bit(uint8_t sda_pin, uint8_t scl_pin,
+                                uint32_t clock_hz) {
+  return hal_i2c_init_bus_10bit(0, sda_pin, scl_pin, clock_hz);
+}
+
+hal_status_t hal_i2c_init_bus_10bit(uint8_t bus, uint8_t sda_pin,
+                                    uint8_t scl_pin, uint32_t clock_hz) {
+  const hal_status_t status =
+      i2c_init_bus_common(bus, sda_pin, scl_pin, clock_hz);
+  if (status == HAL_OK) {
+    const uint8_t idx = i2c_bus_index(bus);
+    s_i2c[idx].addr_mode = HAL_I2C_ADDR_MODE_10BIT;
+    i2c_hw_enable_10bit_mode(idx);
+  }
+  return status;
+}
+
+hal_i2c_addr_mode_t hal_i2c_get_addr_mode(void) {
+  return hal_i2c_get_addr_mode_bus(0);
+}
+
+hal_i2c_addr_mode_t hal_i2c_get_addr_mode_bus(uint8_t bus) {
+  return s_i2c[i2c_bus_index(bus)].addr_mode;
+}
+#endif /* HAL_ENABLE_I2C_10BIT */
+
+hal_status_t hal_i2c_get_clock(uint32_t *out_clock_hz) {
+  return hal_i2c_get_clock_bus(0, out_clock_hz);
+}
+
+hal_status_t hal_i2c_get_clock_bus(uint8_t bus, uint32_t *out_clock_hz) {
+  if (!i2c_bus_valid(bus) || out_clock_hz == NULL) {
+    return HAL_EINVAL;
+  }
+  *out_clock_hz = s_i2c[i2c_bus_index(bus)].clock_hz;
   return HAL_OK;
 }
 
@@ -254,11 +515,11 @@ void hal_i2c_unlock_bus(uint8_t bus) {
   i2c_unlock_idx(idx);
 }
 
-void hal_i2c_begin_transmission(uint8_t address) {
+void hal_i2c_begin_transmission(hal_i2c_address_t address) {
   hal_i2c_begin_transmission_bus(0, address);
 }
 
-void hal_i2c_begin_transmission_bus(uint8_t bus, uint8_t address) {
+void hal_i2c_begin_transmission_bus(uint8_t bus, hal_i2c_address_t address) {
   uint8_t idx = i2c_bus_index(bus);
   i2c_lock_idx(idx);
   (void)i2c_ensure_initialized(idx);
@@ -287,13 +548,31 @@ hal_status_t hal_i2c_end_transmission_bus_ex(uint8_t bus) {
   }
   uint8_t idx = i2c_bus_index(bus);
   i2c_bus_state_t *st = &s_i2c[idx];
+  if (hal_status_is_error(jh_hal_i2c_validate_address(bus, st->cur_addr))) {
+    st->tx_len = 0u;
+    i2c_unlock_idx(idx);
+    return HAL_EINVAL;
+  }
   uint8_t result = HAL_I2C_ERROR_TIMEOUT;
   if (st->initialized) {
-    if (st->tx_len == 0u) {
-      result = i2c_probe_read(idx, st->cur_addr);
+#ifdef HAL_ENABLE_I2C_10BIT
+    if (st->addr_mode == HAL_I2C_ADDR_MODE_10BIT) {
+      if (st->tx_len == 0u) {
+        result = i2c_probe_read_10bit(idx, st->cur_addr);
+      } else {
+        int rc = i2c_10bit_write_timeout_us(i2c_bus_hw(idx), st->cur_addr,
+                                            st->tx_buf, st->tx_len, false,
+                                            RP2040_I2C_TIMEOUT_US);
+        result = i2c_result_from_write_rc(rc, st->tx_len);
+      }
+    } else
+#endif
+        if (st->tx_len == 0u) {
+      result = i2c_probe_read(idx, (uint8_t)st->cur_addr);
     } else {
-      int rc = i2c_write_timeout_us(i2c_bus_hw(idx), st->cur_addr, st->tx_buf,
-                                    st->tx_len, false, RP2040_I2C_TIMEOUT_US);
+      int rc = i2c_write_timeout_us(i2c_bus_hw(idx), (uint8_t)st->cur_addr,
+                                    st->tx_buf, st->tx_len, false,
+                                    RP2040_I2C_TIMEOUT_US);
       result = i2c_result_from_write_rc(rc, st->tx_len);
     }
   }
@@ -303,12 +582,15 @@ hal_status_t hal_i2c_end_transmission_bus_ex(uint8_t bus) {
   return i2c_status_from_result(result);
 }
 
-hal_status_t hal_i2c_write_read_bus_ex(uint8_t bus, uint8_t address,
+hal_status_t hal_i2c_write_read_bus_ex(uint8_t bus, hal_i2c_address_t address,
                                        const uint8_t *tx, size_t tx_len,
                                        uint8_t *rx, size_t rx_len) {
   if (!i2c_bus_valid(bus) || (tx_len > 0u && tx == NULL) ||
       (rx_len > 0u && rx == NULL) || tx_len > RP2040_I2C_BUF_SIZE ||
       rx_len > RP2040_I2C_BUF_SIZE) {
+    return HAL_EINVAL;
+  }
+  if (hal_status_is_error(jh_hal_i2c_validate_address(bus, address))) {
     return HAL_EINVAL;
   }
   if (tx_len == 0u) {
@@ -325,8 +607,18 @@ hal_status_t hal_i2c_write_read_bus_ex(uint8_t bus, uint8_t address,
     return HAL_EUNINIT;
   }
 
-  int written = i2c_write_timeout_us(i2c_bus_hw(idx), address, tx, tx_len,
-                                     rx_len > 0u, RP2040_I2C_TIMEOUT_US);
+  int written;
+  int got = 0;
+#ifdef HAL_ENABLE_I2C_10BIT
+  if (s_i2c[idx].addr_mode == HAL_I2C_ADDR_MODE_10BIT) {
+    written = i2c_10bit_write_timeout_us(i2c_bus_hw(idx), address, tx, tx_len,
+                                         rx_len > 0u, RP2040_I2C_TIMEOUT_US);
+  } else
+#endif
+  {
+    written = i2c_write_timeout_us(i2c_bus_hw(idx), (uint8_t)address, tx,
+                                   tx_len, rx_len > 0u, RP2040_I2C_TIMEOUT_US);
+  }
   __atomic_fetch_add(&s_i2c[idx].transaction_count, 1u, __ATOMIC_RELAXED);
   if (written != (int)tx_len) {
     i2c_unlock_idx(idx);
@@ -334,8 +626,16 @@ hal_status_t hal_i2c_write_read_bus_ex(uint8_t bus, uint8_t address,
   }
 
   if (rx_len > 0u) {
-    int got = i2c_read_timeout_us(i2c_bus_hw(idx), address, rx, rx_len, false,
-                                  RP2040_I2C_TIMEOUT_US);
+#ifdef HAL_ENABLE_I2C_10BIT
+    if (s_i2c[idx].addr_mode == HAL_I2C_ADDR_MODE_10BIT) {
+      got = i2c_10bit_read_timeout_us(i2c_bus_hw(idx), address, rx, rx_len,
+                                      false, RP2040_I2C_TIMEOUT_US);
+    } else
+#endif
+    {
+      got = i2c_read_timeout_us(i2c_bus_hw(idx), (uint8_t)address, rx, rx_len,
+                                false, RP2040_I2C_TIMEOUT_US);
+    }
     __atomic_fetch_add(&s_i2c[idx].transaction_count, 1u, __ATOMIC_RELAXED);
     if (got != (int)rx_len) {
       i2c_unlock_idx(idx);
@@ -347,13 +647,16 @@ hal_status_t hal_i2c_write_read_bus_ex(uint8_t bus, uint8_t address,
   return HAL_OK;
 }
 
-static bool i2c_read_bytes_bus_impl(uint8_t bus, uint8_t address, uint8_t *rx,
-                                    size_t rx_len);
+static bool i2c_read_bytes_bus_impl(uint8_t bus, hal_i2c_address_t address,
+                                    uint8_t *rx, size_t rx_len);
 
-hal_status_t hal_i2c_read_bytes_bus_ex(uint8_t bus, uint8_t address,
+hal_status_t hal_i2c_read_bytes_bus_ex(uint8_t bus, hal_i2c_address_t address,
                                        uint8_t *rx, size_t rx_len) {
   if (!i2c_bus_valid(bus) || (rx_len > 0u && rx == NULL) ||
       rx_len > RP2040_I2C_BUF_SIZE) {
+    return HAL_EINVAL;
+  }
+  if (hal_status_is_error(jh_hal_i2c_validate_address(bus, address))) {
     return HAL_EINVAL;
   }
   if (rx_len == 0u) {
@@ -368,8 +671,8 @@ hal_status_t hal_i2c_read_bytes_bus_ex(uint8_t bus, uint8_t address,
                               HAL_EBUS);
 }
 
-static bool i2c_read_bytes_bus_impl(uint8_t bus, uint8_t address, uint8_t *rx,
-                                    size_t rx_len) {
+static bool i2c_read_bytes_bus_impl(uint8_t bus, hal_i2c_address_t address,
+                                    uint8_t *rx, size_t rx_len) {
   if ((rx_len > 0u && rx == NULL) || rx_len > RP2040_I2C_BUF_SIZE) {
     return false;
   }
@@ -383,8 +686,17 @@ static bool i2c_read_bytes_bus_impl(uint8_t bus, uint8_t address, uint8_t *rx,
     i2c_unlock_idx(idx);
     return false;
   }
-  int got = i2c_read_timeout_us(i2c_bus_hw(idx), address, rx, rx_len, false,
-                                RP2040_I2C_TIMEOUT_US);
+  int got;
+#ifdef HAL_ENABLE_I2C_10BIT
+  if (s_i2c[idx].addr_mode == HAL_I2C_ADDR_MODE_10BIT) {
+    got = i2c_10bit_read_timeout_us(i2c_bus_hw(idx), address, rx, rx_len, false,
+                                    RP2040_I2C_TIMEOUT_US);
+  } else
+#endif
+  {
+    got = i2c_read_timeout_us(i2c_bus_hw(idx), (uint8_t)address, rx, rx_len,
+                              false, RP2040_I2C_TIMEOUT_US);
+  }
   s_i2c[idx].rx_len = 0u;
   s_i2c[idx].rx_pos = 0u;
   __atomic_fetch_add(&s_i2c[idx].transaction_count, 1u, __ATOMIC_RELAXED);
@@ -392,15 +704,18 @@ static bool i2c_read_bytes_bus_impl(uint8_t bus, uint8_t address, uint8_t *rx,
   return got == (int)rx_len;
 }
 
-static uint8_t i2c_request_from_bus_impl(uint8_t bus, uint8_t address,
+static uint8_t i2c_request_from_bus_impl(uint8_t bus, hal_i2c_address_t address,
                                          uint8_t count);
 
-hal_status_t hal_i2c_request_from_bus_ex(uint8_t bus, uint8_t address,
+hal_status_t hal_i2c_request_from_bus_ex(uint8_t bus, hal_i2c_address_t address,
                                          uint8_t count, uint8_t *outReceived) {
   if (outReceived == NULL || !i2c_bus_valid(bus)) {
     return HAL_EINVAL;
   }
   *outReceived = 0u;
+  if (hal_status_is_error(jh_hal_i2c_validate_address(bus, address))) {
+    return HAL_EINVAL;
+  }
   const uint8_t idx = i2c_bus_index(bus);
   if (!s_i2c[idx].initialized && count > 0u) {
     HAL_ASSERT(false, "hal_i2c: bus used before hal_i2c_init_bus");
@@ -410,7 +725,7 @@ hal_status_t hal_i2c_request_from_bus_ex(uint8_t bus, uint8_t address,
   return (*outReceived == count) ? HAL_OK : HAL_EBUS;
 }
 
-static uint8_t i2c_request_from_bus_impl(uint8_t bus, uint8_t address,
+static uint8_t i2c_request_from_bus_impl(uint8_t bus, hal_i2c_address_t address,
                                          uint8_t count) {
   uint8_t idx = i2c_bus_index(bus);
   i2c_bus_state_t *st = &s_i2c[idx];
@@ -422,8 +737,16 @@ static uint8_t i2c_request_from_bus_impl(uint8_t bus, uint8_t address,
 
   int got = 0;
   if (count > 0u) {
-    got = i2c_read_timeout_us(i2c_bus_hw(idx), address, st->rx_buf, count,
-                              false, RP2040_I2C_TIMEOUT_US);
+#ifdef HAL_ENABLE_I2C_10BIT
+    if (st->addr_mode == HAL_I2C_ADDR_MODE_10BIT) {
+      got = i2c_10bit_read_timeout_us(i2c_bus_hw(idx), address, st->rx_buf,
+                                      count, false, RP2040_I2C_TIMEOUT_US);
+    } else
+#endif
+    {
+      got = i2c_read_timeout_us(i2c_bus_hw(idx), (uint8_t)address, st->rx_buf,
+                                count, false, RP2040_I2C_TIMEOUT_US);
+    }
     if (got < 0) {
       got = 0;
     }
@@ -452,11 +775,11 @@ int hal_i2c_read_bus(uint8_t bus) {
   return st->rx_buf[st->rx_pos++];
 }
 
-bool hal_i2c_is_busy(uint8_t address) {
+bool hal_i2c_is_busy(hal_i2c_address_t address) {
   return hal_i2c_is_busy_bus(0, address);
 }
 
-bool hal_i2c_is_busy_bus(uint8_t bus, uint8_t address) {
+bool hal_i2c_is_busy_bus(uint8_t bus, hal_i2c_address_t address) {
   hal_i2c_begin_transmission_bus(bus, address);
   return hal_i2c_end_transmission_bus(bus) != 0u;
 }

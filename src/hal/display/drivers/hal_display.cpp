@@ -1648,9 +1648,6 @@ hal_status_t hal_display_write_raw_ex(uint16_t x, uint16_t y,
       (uint32_t)y + desc->height > writable_height) {
     return HAL_EINVAL;
   }
-  if (desc->pitch != desc->width) {
-    return HAL_EUNSUPPORTED;
-  }
 
 #ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
   if (using_immediate_rgb()) {
@@ -1658,19 +1655,30 @@ hal_status_t hal_display_write_raw_ex(uint16_t x, uint16_t y,
         desc->pixel_format != HAL_DISPLAY_PIXEL_FORMAT_RGB565_NATIVE) {
       return HAL_EUNSUPPORTED;
     }
-    const size_t pixel_count = (size_t)desc->width * desc->height;
-    const size_t required = pixel_count * sizeof(uint16_t);
+    /* Row-major pixel-addressable format: a padded pitch just means extra
+     * bytes to skip between rows, so stream each row separately inside one
+     * begin/end window instead of requiring a tightly packed buffer. Only
+     * the last row's trailing padding is allowed to be missing from
+     * buf_size. */
+    const size_t bytes_per_desc_row = (size_t)desc->width * sizeof(uint16_t);
+    const size_t bytes_per_pitch_row = (size_t)desc->pitch * sizeof(uint16_t);
+    const size_t required =
+        (size_t)(desc->height - 1u) * bytes_per_pitch_row + bytes_per_desc_row;
     if (desc->buf_size < required) {
       return HAL_EINVAL;
     }
     if (!tft_begin_write_driver(x, y, desc->width, desc->height)) {
       return HAL_EIO;
     }
-    const bool write_ok =
-        desc->pixel_format == HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE
-            ? tft_write_pixels_be_driver((const uint8_t *)buffer, required)
-            : tft_write_pixels_fast_driver((const uint16_t *)buffer,
-                                           pixel_count);
+    bool write_ok = true;
+    const uint8_t *row = (const uint8_t *)buffer;
+    for (uint16_t r = 0u; r < desc->height && write_ok; ++r) {
+      write_ok = desc->pixel_format == HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE
+                     ? tft_write_pixels_be_driver(row, bytes_per_desc_row)
+                     : tft_write_pixels_fast_driver((const uint16_t *)row,
+                                                    desc->width);
+      row += bytes_per_pitch_row;
+    }
     const bool end_ok = tft_end_write_driver();
     return write_ok && end_ok ? HAL_OK : HAL_EIO;
   }
@@ -1683,6 +1691,12 @@ hal_status_t hal_display_write_raw_ex(uint16_t x, uint16_t y,
             ? HAL_DISPLAY_PIXEL_FORMAT_MONO01
             : HAL_DISPLAY_PIXEL_FORMAT_MONO10;
     if (desc->pixel_format != current) {
+      return HAL_EUNSUPPORTED;
+    }
+    /* Vertically page-tiled buffer: a byte encodes 8 stacked pixel rows, so
+     * a single-pixel-row pitch has no well-defined byte boundary within a
+     * page. Needs a dedicated page-granularity design, not a guess. */
+    if (desc->pitch != desc->width) {
       return HAL_EUNSUPPORTED;
     }
     if ((y & 7u) != 0u || (desc->height & 7u) != 0u) {
@@ -1703,6 +1717,13 @@ hal_status_t hal_display_write_raw_ex(uint16_t x, uint16_t y,
     if (desc->pixel_format != HAL_DISPLAY_PIXEL_FORMAT_MONO10) {
       return HAL_EUNSUPPORTED;
     }
+    /* Tiling direction depends on the active rotation (page-tiled at
+     * 0/180, row-major at 90/270 per hal_display_get_capabilities_ex), so
+     * a single row-split strategy can't be applied without first branching
+     * on orientation. Needs a dedicated per-orientation design. */
+    if (desc->pitch != desc->width) {
+      return HAL_EUNSUPPORTED;
+    }
     const size_t required = (size_t)desc->width * desc->height / 8u;
     if (required == 0u || desc->buf_size < required) {
       return HAL_EINVAL;
@@ -1715,6 +1736,14 @@ hal_status_t hal_display_write_raw_ex(uint16_t x, uint16_t y,
 #ifdef HAL_ENABLE_UC81XX
   if (using_uc81xx()) {
     if (desc->pixel_format != HAL_DISPLAY_PIXEL_FORMAT_MONO10) {
+      return HAL_EUNSUPPORTED;
+    }
+    /* jh_uc81xx_write() re-applies the panel profile/PTIN command on every
+     * call; looping it per row would replay that panel-configuration side
+     * effect once per row instead of once per update. A padded path needs
+     * a lower-level primitive that separates window+data writes from
+     * profile setup, so pitch > width stays unsupported here. */
+    if (desc->pitch != desc->width) {
       return HAL_EUNSUPPORTED;
     }
     const size_t required = (size_t)desc->width * desc->height / 8u;

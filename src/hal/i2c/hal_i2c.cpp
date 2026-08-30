@@ -48,6 +48,11 @@ hal_status_t hal_i2c_scan_bus(uint8_t bus, uint8_t *addresses, size_t capacity,
   if (!jh_hal_i2c_bus_is_initialized(bus)) {
     return HAL_EUNINIT;
   }
+#ifdef HAL_ENABLE_I2C_10BIT
+  if (jh_hal_i2c_bus_is_10bit(bus)) {
+    return HAL_EUNSUPPORTED;
+  }
+#endif
 
   for (uint8_t address = HAL_I2C_SCAN_FIRST_ADDRESS;
        address <= HAL_I2C_SCAN_LAST_ADDRESS; ++address) {
@@ -70,16 +75,17 @@ hal_status_t hal_i2c_scan_bus(uint8_t bus, uint8_t *addresses, size_t capacity,
                                                         : HAL_OK;
 }
 
-uint8_t hal_i2c_write_byte(uint8_t address, uint8_t data, bool *outWriteOk) {
+uint8_t hal_i2c_write_byte(hal_i2c_address_t address, uint8_t data,
+                           bool *outWriteOk) {
   return hal_i2c_write_byte_bus(0u, address, data, outWriteOk);
 }
 
-hal_status_t hal_i2c_write_byte_ex(uint8_t address, uint8_t data,
+hal_status_t hal_i2c_write_byte_ex(hal_i2c_address_t address, uint8_t data,
                                    bool *outWriteOk) {
   return hal_i2c_write_byte_bus_ex(0u, address, data, outWriteOk);
 }
 
-hal_status_t hal_i2c_write_byte_bus_ex(uint8_t bus, uint8_t address,
+hal_status_t hal_i2c_write_byte_bus_ex(uint8_t bus, hal_i2c_address_t address,
                                        uint8_t data, bool *outWriteOk) {
   if (!bus_is_valid(bus)) {
     if (outWriteOk != nullptr) {
@@ -96,21 +102,22 @@ hal_status_t hal_i2c_write_byte_bus_ex(uint8_t bus, uint8_t address,
   return write_ok ? transfer_status : HAL_EIO;
 }
 
-uint8_t hal_i2c_write_byte_bus(uint8_t bus, uint8_t address, uint8_t data,
-                               bool *outWriteOk) {
+uint8_t hal_i2c_write_byte_bus(uint8_t bus, hal_i2c_address_t address,
+                               uint8_t data, bool *outWriteOk) {
   return legacy_result(
       hal_i2c_write_byte_bus_ex(bus, address, data, outWriteOk));
 }
 
-uint8_t hal_i2c_read_byte(uint8_t address, bool *outReadOk) {
+uint8_t hal_i2c_read_byte(hal_i2c_address_t address, bool *outReadOk) {
   return hal_i2c_read_byte_bus(0u, address, outReadOk);
 }
 
-hal_status_t hal_i2c_read_byte_ex(uint8_t address, uint8_t *outValue) {
+hal_status_t hal_i2c_read_byte_ex(hal_i2c_address_t address,
+                                  uint8_t *outValue) {
   return hal_i2c_read_byte_bus_ex(0u, address, outValue);
 }
 
-hal_status_t hal_i2c_read_byte_bus_ex(uint8_t bus, uint8_t address,
+hal_status_t hal_i2c_read_byte_bus_ex(uint8_t bus, hal_i2c_address_t address,
                                       uint8_t *outValue) {
   if (outValue == nullptr) {
     return HAL_EINVAL;
@@ -122,7 +129,8 @@ hal_status_t hal_i2c_read_byte_bus_ex(uint8_t bus, uint8_t address,
   return hal_i2c_read_bytes_bus_ex(bus, address, outValue, 1u);
 }
 
-uint8_t hal_i2c_read_byte_bus(uint8_t bus, uint8_t address, bool *outReadOk) {
+uint8_t hal_i2c_read_byte_bus(uint8_t bus, hal_i2c_address_t address,
+                              bool *outReadOk) {
   uint8_t value = 0u;
   const hal_status_t status = hal_i2c_read_byte_bus_ex(bus, address, &value);
   if (outReadOk != nullptr) {
@@ -131,50 +139,52 @@ uint8_t hal_i2c_read_byte_bus(uint8_t bus, uint8_t address, bool *outReadOk) {
   return hal_status_to_bool(status) ? value : 0u;
 }
 
-bool hal_i2c_write_read(uint8_t address, const uint8_t *tx, size_t tx_len,
-                        uint8_t *rx, size_t rx_len) {
+bool hal_i2c_write_read(hal_i2c_address_t address, const uint8_t *tx,
+                        size_t tx_len, uint8_t *rx, size_t rx_len) {
   return hal_status_to_bool(
       hal_i2c_write_read_ex(address, tx, tx_len, rx, rx_len));
 }
 
-hal_status_t hal_i2c_write_read_ex(uint8_t address, const uint8_t *tx,
+hal_status_t hal_i2c_write_read_ex(hal_i2c_address_t address, const uint8_t *tx,
                                    size_t tx_len, uint8_t *rx, size_t rx_len) {
   return hal_i2c_write_read_bus_ex(0u, address, tx, tx_len, rx, rx_len);
 }
 
-bool hal_i2c_write_read_bus(uint8_t bus, uint8_t address, const uint8_t *tx,
-                            size_t tx_len, uint8_t *rx, size_t rx_len) {
+bool hal_i2c_write_read_bus(uint8_t bus, hal_i2c_address_t address,
+                            const uint8_t *tx, size_t tx_len, uint8_t *rx,
+                            size_t rx_len) {
   return hal_status_to_bool(
       hal_i2c_write_read_bus_ex(bus, address, tx, tx_len, rx, rx_len));
 }
 
-bool hal_i2c_read_bytes(uint8_t address, uint8_t *rx, size_t rx_len) {
+bool hal_i2c_read_bytes(hal_i2c_address_t address, uint8_t *rx, size_t rx_len) {
   return hal_status_to_bool(hal_i2c_read_bytes_ex(address, rx, rx_len));
 }
 
-hal_status_t hal_i2c_read_bytes_ex(uint8_t address, uint8_t *rx,
+hal_status_t hal_i2c_read_bytes_ex(hal_i2c_address_t address, uint8_t *rx,
                                    size_t rx_len) {
   return hal_i2c_read_bytes_bus_ex(0u, address, rx, rx_len);
 }
 
-bool hal_i2c_read_bytes_bus(uint8_t bus, uint8_t address, uint8_t *rx,
+bool hal_i2c_read_bytes_bus(uint8_t bus, hal_i2c_address_t address, uint8_t *rx,
                             size_t rx_len) {
   return hal_status_to_bool(
       hal_i2c_read_bytes_bus_ex(bus, address, rx, rx_len));
 }
 
-uint8_t hal_i2c_request_from(uint8_t address, uint8_t count) {
+uint8_t hal_i2c_request_from(hal_i2c_address_t address, uint8_t count) {
   uint8_t received = 0u;
   (void)hal_i2c_request_from_ex(address, count, &received);
   return received;
 }
 
-hal_status_t hal_i2c_request_from_ex(uint8_t address, uint8_t count,
+hal_status_t hal_i2c_request_from_ex(hal_i2c_address_t address, uint8_t count,
                                      uint8_t *outReceived) {
   return hal_i2c_request_from_bus_ex(0u, address, count, outReceived);
 }
 
-uint8_t hal_i2c_request_from_bus(uint8_t bus, uint8_t address, uint8_t count) {
+uint8_t hal_i2c_request_from_bus(uint8_t bus, hal_i2c_address_t address,
+                                 uint8_t count) {
   uint8_t received = 0u;
   (void)hal_i2c_request_from_bus_ex(bus, address, count, &received);
   return received;

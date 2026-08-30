@@ -104,6 +104,7 @@ Ochrona stosu wykorzystuje dwa niezależne opt-iny:
 | `HAL_ENABLE_UART` | `hal_uart.h` | `hal_uart.cpp` | Sprzętowy UART |
 | `HAL_ENABLE_SWSERIAL` | `hal_swserial.h` | `hal_swserial.cpp` specyficzny dla targetu | Natywny programowy UART PIO/DMA Pico SDK na RP2040; współdzielony backend HAL GPIO na pozostałych targetach |
 | `HAL_ENABLE_I2C` | `hal_i2c.h` | `hal_i2c.cpp` | Magistrala I2C master/kontroler |
+| `HAL_ENABLE_I2C_10BIT` | `hal_i2c.h` | `hal_i2c.cpp` + backendy targetów | Opcjonalne 10-bitowe adresowanie I2C master przez `hal_i2c_init_10bit()`/`hal_i2c_init_bus_10bit()` i `hal_i2c_address_t` (propaguje I2C); `hal_i2c_scan()` pozostaje wyłącznie 7-bitowy |
 | `HAL_ENABLE_I2C_SLAVE` | `hal_i2c_slave.h` | `hal_i2c_slave.cpp` | Tryb I2C slave/target z mapą rejestrów |
 | `HAL_ENABLE_SPI` | `hal_spi.h` | `hal_spi.cpp` | SPI master/kontroler |
 | `HAL_ENABLE_CAN` | `hal_can.h` | `hal_can.cpp` + `hal_can_util.cpp` | Generyczna fasada API CAN; wymaga co najmniej jednego backendu |
@@ -222,6 +223,7 @@ HAL_ENABLE_TLS         -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
 HAL_ENABLE_HTTP_CLIENT -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
 HAL_ENABLE_OTA         -> HAL_ENABLE_WIFI + HAL_ENABLE_UDP + HAL_ENABLE_TCP + HAL_ENABLE_CRYPTO + HAL_ENABLE_CRC
 HAL_ENABLE_WIREGUARD   -> HAL_ENABLE_UDP + HAL_ENABLE_WIFI
+HAL_ENABLE_I2C_10BIT   -> HAL_ENABLE_I2C
 HAL_ENABLE_EXTERNAL_ADC-> HAL_ENABLE_I2C
 HAL_ENABLE_BH1750      -> HAL_ENABLE_I2C
 HAL_ENABLE_ADP5360     -> HAL_ENABLE_I2C

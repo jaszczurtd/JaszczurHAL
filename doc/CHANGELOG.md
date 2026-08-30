@@ -2,8 +2,38 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2026-08-11
+## [Unreleased] - 2026-08-30
 
+- `hal_display_write_raw_ex()` now accepts `pitch > width` (padded source
+  rows) on the TFT and RGB OLED backends and the mock: each row is streamed
+  separately inside one addressing window, so a caller's buffer only needs
+  real bytes up to the last row's `width` pixels. ST7567 (always page-tiled),
+  SSD16xx (page-tiled at rotation 0/180), and UC81xx (its write call
+  re-applies the panel profile on every invocation) still return
+  `HAL_EUNSUPPORTED` for a padded pitch - each needs a dedicated design that
+  a plain per-row loop cannot provide safely.
+- Added opt-in I2C master 10-bit addressing (`HAL_ENABLE_I2C_10BIT`, implies
+  `HAL_ENABLE_I2C`) across the mock and all three real backends
+  (RP2040/RP2350, STM32G474, ESP32-S3). Widened every address-taking public
+  I2C function from `uint8_t` to the new `hal_i2c_address_t` (`uint16_t`) -
+  a deliberate breaking type change; ordinary call sites passing a `uint8_t`
+  keep compiling unchanged. Added `hal_i2c_init_10bit()`/
+  `hal_i2c_init_bus_10bit()`, `hal_i2c_get_addr_mode(_bus)()` and
+  `hal_i2c_get_clock(_bus)()` (the latter unconditional). `hal_i2c_scan()`
+  stays 7-bit-only and now returns `HAL_EUNSUPPORTED` on a 10-bit bus.
+  RP2040/RP2350 add a dedicated low-level `IC_TAR`/`IC_10BITADDR_MASTER`
+  transfer path (the stock Pico SDK helpers assert a 7-bit address).
+  STM32G474 sets `CR2.ADD10`/raw `SADD[9:0]`, deliberately never setting
+  `CR2.HEAD10R` (matching the mainline Linux `i2c-stm32f7` driver for the
+  same I2C v2 IP). ESP32-S3 threads `I2C_ADDR_BIT_LEN_10` through the
+  per-address device-handle cache, which widens from 128 to 1024 entries
+  only when the flag is compiled in; `hal_i2c_is_busy_bus()` on a 10-bit
+  ESP32-S3 bus substitutes a 1-byte read for the true zero-byte probe
+  because ESP-IDF's `i2c_master_probe()` is 7-bit-only regardless of the
+  address value passed to it. Hardware ACK/payload verification against a
+  real 10-bit device remains outstanding on every backend pending one being
+  available; this is unrelated to whether the code compiles or the mock/host
+  test suite passes.
 - Added a private Classic HID Host build probe with isolated BTstack base, BLE,
   and minimal Classic source sets, bounded one-gamepad pools, rollback-tested
   profile initialization, and a sanitized 8BitDo Zero 2 descriptor/report

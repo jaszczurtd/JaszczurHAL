@@ -5,6 +5,7 @@ void hal_mock_spi_reset(void);
 uint32_t hal_mock_spi_get_transfer_count(uint8_t bus);
 int hal_mock_spi_get_lock_depth(uint8_t bus);
 bool hal_mock_spi_transaction_active(uint8_t bus);
+size_t hal_mock_spi_get_tx(uint8_t bus, uint8_t *out, size_t max_len);
 
 void setUp(void) { hal_mock_spi_reset(); }
 void tearDown(void) {}
@@ -57,9 +58,50 @@ void test_rgb_oled_raw_write_dispatches_rgb565_bytes(void) {
   TEST_ASSERT_FALSE(hal_mock_spi_transaction_active(0u));
 }
 
+void test_rgb_oled_raw_write_strips_row_padding(void) {
+  const hal_display_rgb_oled_config_t config = rgb_config();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_init_rgb_oled_ex(&config));
+
+  /* 2x2 logical image at pitch=3: one padding pixel trails every row and
+   * must never reach the wire. */
+  const uint8_t padded[] = {
+      0xF8u, 0x00u, 0x07u, 0xE0u, 0xDEu, 0xADu,
+      0x00u, 0x1Fu, 0xFFu, 0xFFu, 0xBEu, 0xEFu,
+  };
+  const hal_display_buffer_desc_t desc = {
+      HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE, 3u, 2u, 2u, sizeof(padded), false};
+
+  hal_mock_spi_reset();
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_display_write_raw_ex(0u, 0u, &desc, padded));
+
+  uint8_t tx[128] = {};
+  const size_t tx_len = hal_mock_spi_get_tx(0u, tx, sizeof(tx));
+  const uint8_t expected_pixels[] = {0xF8u, 0x00u, 0x07u, 0xE0u,
+                                     0x00u, 0x1Fu, 0xFFu, 0xFFu};
+  TEST_ASSERT_GREATER_OR_EQUAL_UINT32(sizeof(expected_pixels), tx_len);
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(expected_pixels,
+                                tx + (tx_len - sizeof(expected_pixels)),
+                                sizeof(expected_pixels));
+}
+
+void test_rgb_oled_raw_write_rejects_undersized_padded_buffer(void) {
+  const hal_display_rgb_oled_config_t config = rgb_config();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_init_rgb_oled_ex(&config));
+
+  const uint8_t pixels[8] = {};
+  const hal_display_buffer_desc_t desc = {
+      HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE, 3u, 2u, 2u, sizeof(pixels), false};
+
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_display_write_raw_ex(0u, 0u, &desc, pixels));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_rgb_oled_is_exposed_as_immediate_rgb_backend);
   RUN_TEST(test_rgb_oled_raw_write_dispatches_rgb565_bytes);
+  RUN_TEST(test_rgb_oled_raw_write_strips_row_padding);
+  RUN_TEST(test_rgb_oled_raw_write_rejects_undersized_padded_buffer);
   return UNITY_END();
 }

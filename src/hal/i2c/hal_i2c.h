@@ -3,6 +3,33 @@
 #include "hal/core/hal_config.h"
 #include "hal/core/hal_status.h"
 
+#include <stdint.h>
+
+/**
+ * @brief I2C device address.
+ *
+ * Holds 0x000..0x07F after 7-bit init (hal_i2c_init()/hal_i2c_init_bus()) or
+ * 0x000..0x3FF after 10-bit init (hal_i2c_init_10bit()/
+ * hal_i2c_init_bus_10bit(), HAL_ENABLE_I2C_10BIT). Addressing mode is a
+ * property of the initialised controller, not of a single call: the same
+ * numeric value is a 7-bit address after one kind of init and a 10-bit
+ * address after the other. A controller never mixes 7-bit and 10-bit devices;
+ * switching modes requires re-initialising the bus.
+ *
+ * Declared unconditionally (even when HAL_ENABLE_I2C is off) so headers and
+ * mocks that merely reference the type - without requiring the I2C module
+ * itself - still compile.
+ */
+typedef uint16_t hal_i2c_address_t;
+
+#ifdef HAL_ENABLE_I2C_10BIT
+/** @brief Addressing mode of an initialised I2C controller. */
+typedef enum {
+  HAL_I2C_ADDR_MODE_7BIT = 0,
+  HAL_I2C_ADDR_MODE_10BIT = 1,
+} hal_i2c_addr_mode_t;
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -51,7 +78,6 @@ extern "C" {
 
 #include <stdbool.h>
 #include <stddef.h>
-#include <stdint.h>
 
 /** @brief I2C standard-mode clock: 100 kHz. */
 #define HAL_I2C_CLOCK_STANDARD_HZ 100000UL
@@ -132,48 +158,49 @@ hal_status_t hal_i2c_end_transmission_bus_ex(uint8_t bus);
  * @p outWriteOk remains optional and receives the byte-queue result, matching
  * the legacy helper. The returned status also reports a queue failure.
  */
-hal_status_t hal_i2c_write_byte_ex(uint8_t address, uint8_t data,
+hal_status_t hal_i2c_write_byte_ex(hal_i2c_address_t address, uint8_t data,
                                    bool *outWriteOk);
 
 /** @brief Bus-selecting variant of hal_i2c_write_byte_ex(). */
-hal_status_t hal_i2c_write_byte_bus_ex(uint8_t bus, uint8_t address,
+hal_status_t hal_i2c_write_byte_bus_ex(uint8_t bus, hal_i2c_address_t address,
                                        uint8_t data, bool *outWriteOk);
 
 /**
  * @brief Status-returning one-byte read helper.
  * @param outValue Destination byte. Must not be NULL.
  */
-hal_status_t hal_i2c_read_byte_ex(uint8_t address, uint8_t *outValue);
+hal_status_t hal_i2c_read_byte_ex(hal_i2c_address_t address, uint8_t *outValue);
 
 /** @brief Bus-selecting variant of hal_i2c_read_byte_ex(). */
-hal_status_t hal_i2c_read_byte_bus_ex(uint8_t bus, uint8_t address,
+hal_status_t hal_i2c_read_byte_bus_ex(uint8_t bus, hal_i2c_address_t address,
                                       uint8_t *outValue);
 
 /** @brief Status-returning variant of hal_i2c_write_read(). */
-hal_status_t hal_i2c_write_read_ex(uint8_t address, const uint8_t *tx,
+hal_status_t hal_i2c_write_read_ex(hal_i2c_address_t address, const uint8_t *tx,
                                    size_t tx_len, uint8_t *rx, size_t rx_len);
 
 /** @brief Bus-selecting variant of hal_i2c_write_read_ex(). */
-hal_status_t hal_i2c_write_read_bus_ex(uint8_t bus, uint8_t address,
+hal_status_t hal_i2c_write_read_bus_ex(uint8_t bus, hal_i2c_address_t address,
                                        const uint8_t *tx, size_t tx_len,
                                        uint8_t *rx, size_t rx_len);
 
 /** @brief Status-returning variant of hal_i2c_read_bytes(). */
-hal_status_t hal_i2c_read_bytes_ex(uint8_t address, uint8_t *rx, size_t rx_len);
+hal_status_t hal_i2c_read_bytes_ex(hal_i2c_address_t address, uint8_t *rx,
+                                   size_t rx_len);
 
 /** @brief Bus-selecting variant of hal_i2c_read_bytes_ex(). */
-hal_status_t hal_i2c_read_bytes_bus_ex(uint8_t bus, uint8_t address,
+hal_status_t hal_i2c_read_bytes_bus_ex(uint8_t bus, hal_i2c_address_t address,
                                        uint8_t *rx, size_t rx_len);
 
 /**
  * @brief Status-returning variant of hal_i2c_request_from().
  * @param outReceived Destination for received byte count. Must not be NULL.
  */
-hal_status_t hal_i2c_request_from_ex(uint8_t address, uint8_t count,
+hal_status_t hal_i2c_request_from_ex(hal_i2c_address_t address, uint8_t count,
                                      uint8_t *outReceived);
 
 /** @brief Bus-selecting variant of hal_i2c_request_from_ex(). */
-hal_status_t hal_i2c_request_from_bus_ex(uint8_t bus, uint8_t address,
+hal_status_t hal_i2c_request_from_bus_ex(uint8_t bus, hal_i2c_address_t address,
                                          uint8_t count, uint8_t *outReceived);
 
 /**
@@ -200,6 +227,50 @@ hal_status_t hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz);
 hal_status_t hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
                               uint32_t clock_hz);
 
+#ifdef HAL_ENABLE_I2C_10BIT
+/**
+ * @brief Configure I2C pins and start the default bus in 10-bit addressing
+ *        mode.
+ *
+ * Every address passed to a transfer on this bus is then interpreted as a
+ * 10-bit address (0x000..0x3FF). See hal_i2c_address_t for the mode
+ * contract. hal_i2c_scan()/hal_i2c_scan_bus() remain 7-bit-only and return
+ * HAL_EUNSUPPORTED on a bus initialised this way.
+ *
+ * @param sda_pin  SDA pin number.
+ * @param scl_pin  SCL pin number.
+ * @param clock_hz Bus clock frequency in Hz.
+ * @return HAL_OK on success or HAL_EINVAL/HAL_ECONFIG for an invalid setup.
+ */
+hal_status_t hal_i2c_init_10bit(uint8_t sda_pin, uint8_t scl_pin,
+                                uint32_t clock_hz);
+
+/**
+ * @brief Configure pins and start the selected I2C controller in 10-bit
+ *        addressing mode. See hal_i2c_init_10bit().
+ * @param bus      I2C controller index (0 = default, 1 = second controller).
+ * @param sda_pin  SDA pin number.
+ * @param scl_pin  SCL pin number.
+ * @param clock_hz Bus clock frequency in Hz.
+ * @return HAL_OK on success or HAL_EINVAL/HAL_ECONFIG for an invalid setup.
+ */
+hal_status_t hal_i2c_init_bus_10bit(uint8_t bus, uint8_t sda_pin,
+                                    uint8_t scl_pin, uint32_t clock_hz);
+
+/**
+ * @brief Return the addressing mode of the default I2C controller.
+ * @return HAL_I2C_ADDR_MODE_7BIT before init or after 7-bit init,
+ *         HAL_I2C_ADDR_MODE_10BIT after 10-bit init.
+ */
+hal_i2c_addr_mode_t hal_i2c_get_addr_mode(void);
+
+/**
+ * @brief Return the addressing mode of the selected I2C controller.
+ * @param bus I2C controller index (0 = default, 1 = second controller).
+ */
+hal_i2c_addr_mode_t hal_i2c_get_addr_mode_bus(uint8_t bus);
+#endif /* HAL_ENABLE_I2C_10BIT */
+
 /**
  * @brief Change the clock of the default I2C controller after init.
  * @param clock_hz Bus clock frequency in Hz.
@@ -214,6 +285,29 @@ hal_status_t hal_i2c_set_clock(uint32_t clock_hz);
  * @return HAL_OK on success or HAL_EINVAL for an invalid bus.
  */
 hal_status_t hal_i2c_set_clock_bus(uint8_t bus, uint32_t clock_hz);
+
+/**
+ * @brief Read back the configured clock of the default I2C controller.
+ *
+ * Returns the normalised value accepted by the last hal_i2c_init()/
+ * hal_i2c_set_clock() (e.g. 0 replaced by the standard-mode default) - the
+ * requested setting, not the effective prescaler output or a measured value.
+ *
+ * @param out_clock_hz Destination for the configured frequency. Must not be
+ *                      NULL.
+ * @return HAL_OK on success or HAL_EINVAL for a NULL output pointer.
+ */
+hal_status_t hal_i2c_get_clock(uint32_t *out_clock_hz);
+
+/**
+ * @brief Read back the configured clock of the selected I2C controller.
+ * @param bus          I2C controller index (0 = default, 1 = second
+ *                      controller).
+ * @param out_clock_hz Destination for the configured frequency. Must not be
+ *                      NULL.
+ * @return HAL_OK on success or HAL_EINVAL for an invalid bus/NULL pointer.
+ */
+hal_status_t hal_i2c_get_clock_bus(uint8_t bus, uint32_t *out_clock_hz);
 
 /**
  * @brief Stop the I2C bus.
@@ -262,16 +356,16 @@ void hal_i2c_unlock_bus(uint8_t bus);
  * this reuses that guarded section. Pair with hal_i2c_end_transmission(),
  * which releases only this begin/end nesting level.
  *
- * @param address 7-bit I2C device address.
+ * @param address I2C device address; see hal_i2c_address_t.
  */
-void hal_i2c_begin_transmission(uint8_t address);
+void hal_i2c_begin_transmission(hal_i2c_address_t address);
 
 /**
  * @brief Acquire the selected bus guard and begin transmission to address.
  * @param bus     I2C controller index (0 = default, 1 = second controller).
- * @param address 7-bit I2C device address.
+ * @param address I2C device address; see hal_i2c_address_t.
  */
-void hal_i2c_begin_transmission_bus(uint8_t bus, uint8_t address);
+void hal_i2c_begin_transmission_bus(uint8_t bus, hal_i2c_address_t address);
 
 /**
  * @brief Write one byte into the current transmission buffer.
@@ -308,24 +402,25 @@ uint8_t hal_i2c_end_transmission(void);
  * cooperating threads without any extra locking. If called inside an explicit
  * hal_i2c_lock() section, it reuses that outer lock.
  *
- * @param address    7-bit I2C slave address.
+ * @param address    I2C device address; see hal_i2c_address_t.
  * @param data       Byte to transmit.
  * @param outWriteOk Optional pointer. Receives true when hal_i2c_write()
  *                   reported the byte was queued, false otherwise. May be NULL.
  * @return hal_i2c_end_transmission() status (0 on success, non-zero on error).
  */
-uint8_t hal_i2c_write_byte(uint8_t address, uint8_t data, bool *outWriteOk);
+uint8_t hal_i2c_write_byte(hal_i2c_address_t address, uint8_t data,
+                           bool *outWriteOk);
 
 /**
  * @brief Bus-selecting variant of hal_i2c_write_byte().
  * @param bus        I2C controller index (0 = default, 1 = second controller).
- * @param address    7-bit I2C slave address.
+ * @param address    I2C device address; see hal_i2c_address_t.
  * @param data       Byte to transmit.
  * @param outWriteOk Optional pointer; see hal_i2c_write_byte(). May be NULL.
  * @return hal_i2c_end_transmission_bus() status.
  */
-uint8_t hal_i2c_write_byte_bus(uint8_t bus, uint8_t address, uint8_t data,
-                               bool *outWriteOk);
+uint8_t hal_i2c_write_byte_bus(uint8_t bus, hal_i2c_address_t address,
+                               uint8_t data, bool *outWriteOk);
 
 /**
  * @brief One-shot "request 1 byte + read" helper, symmetric to
@@ -335,23 +430,24 @@ uint8_t hal_i2c_write_byte_bus(uint8_t bus, uint8_t address, uint8_t data,
  * mutex is held across the full request+read sequence, making this helper
  * atomic with respect to other HAL I2C operations on the same bus.
  *
- * @param address   7-bit I2C slave address.
+ * @param address   I2C device address; see hal_i2c_address_t.
  * @param outReadOk Optional pointer. Receives true when the atomic request
  *                  and byte copy completed successfully. Receives false on
  *                  any failure. May be NULL.
  * @return The byte read, or 0 when the transaction failed (inspect @p outReadOk
  *         to distinguish a valid 0x00 from a failure).
  */
-uint8_t hal_i2c_read_byte(uint8_t address, bool *outReadOk);
+uint8_t hal_i2c_read_byte(hal_i2c_address_t address, bool *outReadOk);
 
 /**
  * @brief Bus-selecting variant of hal_i2c_read_byte().
  * @param bus       I2C controller index (0 = default, 1 = second controller).
- * @param address   7-bit I2C slave address.
+ * @param address   I2C device address; see hal_i2c_address_t.
  * @param outReadOk Optional pointer; see hal_i2c_read_byte(). May be NULL.
  * @return The byte read, or 0 when the transaction failed.
  */
-uint8_t hal_i2c_read_byte_bus(uint8_t bus, uint8_t address, bool *outReadOk);
+uint8_t hal_i2c_read_byte_bus(uint8_t bus, hal_i2c_address_t address,
+                              bool *outReadOk);
 
 /**
  * @brief Combined write-then-read transaction on the default I2C controller.
@@ -360,21 +456,22 @@ uint8_t hal_i2c_read_byte_bus(uint8_t bus, uint8_t address, bool *outReadOk);
  * read, then reads @p rx_len bytes into @p rx. This matches the common
  * register-pointer pattern used by I2C sensors.
  *
- * @param address 7-bit I2C slave address.
+ * @param address I2C device address; see hal_i2c_address_t.
  * @param tx      Bytes to write before the repeated-start read.
  * @param tx_len  Number of bytes to write.
  * @param rx      Destination buffer for read bytes.
  * @param rx_len  Number of bytes to read.
  * @return true when both phases complete and exactly @p rx_len bytes are read.
  */
-bool hal_i2c_write_read(uint8_t address, const uint8_t *tx, size_t tx_len,
-                        uint8_t *rx, size_t rx_len);
+bool hal_i2c_write_read(hal_i2c_address_t address, const uint8_t *tx,
+                        size_t tx_len, uint8_t *rx, size_t rx_len);
 
 /**
  * @brief Bus-selecting variant of hal_i2c_write_read().
  */
-bool hal_i2c_write_read_bus(uint8_t bus, uint8_t address, const uint8_t *tx,
-                            size_t tx_len, uint8_t *rx, size_t rx_len);
+bool hal_i2c_write_read_bus(uint8_t bus, hal_i2c_address_t address,
+                            const uint8_t *tx, size_t tx_len, uint8_t *rx,
+                            size_t rx_len);
 
 /**
  * @brief Read bytes from an I2C device without a preceding register write.
@@ -384,17 +481,17 @@ bool hal_i2c_write_read_bus(uint8_t bus, uint8_t address, const uint8_t *tx,
  * register is read directly after address+read, without a register pointer
  * phase.
  *
- * @param address 7-bit I2C slave address.
+ * @param address I2C device address; see hal_i2c_address_t.
  * @param rx      Destination buffer.
  * @param rx_len  Number of bytes to read.
  * @return true when exactly @p rx_len bytes are read.
  */
-bool hal_i2c_read_bytes(uint8_t address, uint8_t *rx, size_t rx_len);
+bool hal_i2c_read_bytes(hal_i2c_address_t address, uint8_t *rx, size_t rx_len);
 
 /**
  * @brief Bus-selecting variant of hal_i2c_read_bytes().
  */
-bool hal_i2c_read_bytes_bus(uint8_t bus, uint8_t address, uint8_t *rx,
+bool hal_i2c_read_bytes_bus(uint8_t bus, hal_i2c_address_t address, uint8_t *rx,
                             size_t rx_len);
 
 /**
@@ -413,20 +510,21 @@ uint8_t hal_i2c_end_transmission_bus(uint8_t bus);
  * hal_i2c_lock()/hal_i2c_unlock(). Prefer hal_i2c_read_bytes() or
  * hal_i2c_write_read() in new thread-safe code.
  *
- * @param address 7-bit I2C device address.
+ * @param address I2C device address; see hal_i2c_address_t.
  * @param count   Number of bytes to request.
  * @return Number of bytes received.
  */
-uint8_t hal_i2c_request_from(uint8_t address, uint8_t count);
+uint8_t hal_i2c_request_from(hal_i2c_address_t address, uint8_t count);
 
 /**
  * @brief Bus-selecting variant of the legacy buffered receive API.
  * @param bus     I2C controller index (0 = default, 1 = second controller).
- * @param address 7-bit I2C device address.
+ * @param address I2C device address; see hal_i2c_address_t.
  * @param count   Number of bytes to request.
  * @return Number of bytes received.
  */
-uint8_t hal_i2c_request_from_bus(uint8_t bus, uint8_t address, uint8_t count);
+uint8_t hal_i2c_request_from_bus(uint8_t bus, hal_i2c_address_t address,
+                                 uint8_t count);
 
 /**
  * @brief Return bytes available in the legacy receive buffer.
@@ -464,19 +562,19 @@ int hal_i2c_read_bus(uint8_t bus);
  * Typical use: poll after a write to an AT24C256 EEPROM until the chip
  * finishes its internal write cycle and starts ACKing again.
  *
- * @param address 7-bit I2C address to probe.
+ * @param address I2C address to probe; see hal_i2c_address_t.
  * @return true  if the device did NOT ACK (busy / absent).
  * @return false if the device ACKed (ready).
  */
-bool hal_i2c_is_busy(uint8_t address);
+bool hal_i2c_is_busy(hal_i2c_address_t address);
 
 /**
  * @brief Probe device ACK state on the selected I2C controller.
  * @param bus     I2C controller index (0 = default, 1 = second controller).
- * @param address 7-bit I2C address to probe.
+ * @param address I2C address to probe; see hal_i2c_address_t.
  * @return true if the device did NOT ACK (busy / absent), false otherwise.
  */
-bool hal_i2c_is_busy_bus(uint8_t bus, uint8_t address);
+bool hal_i2c_is_busy_bus(uint8_t bus, hal_i2c_address_t address);
 
 /**
  * @brief Return the number of completed I2C transactions (writes and reads)

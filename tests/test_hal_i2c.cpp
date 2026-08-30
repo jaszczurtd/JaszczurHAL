@@ -512,14 +512,28 @@ void test_status_init_and_clock_helpers_report_errors(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_init(4, 5, HAL_I2C_CLOCK_FAST_HZ));
   TEST_ASSERT_EQUAL_UINT32(HAL_I2C_CLOCK_FAST_HZ, hal_mock_i2c_get_clock_hz());
 
+  uint32_t clock_hz = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_get_clock(&clock_hz));
+  TEST_ASSERT_EQUAL_UINT32(HAL_I2C_CLOCK_FAST_HZ, clock_hz);
+
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_set_clock(HAL_I2C_CLOCK_STANDARD_HZ));
   TEST_ASSERT_EQUAL_UINT32(HAL_I2C_CLOCK_STANDARD_HZ,
                            hal_mock_i2c_get_clock_hz());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_get_clock(&clock_hz));
+  TEST_ASSERT_EQUAL_UINT32(HAL_I2C_CLOCK_STANDARD_HZ, clock_hz);
+
+  /* 0 must normalize to the standard-mode default, consistently with every
+   * other backend. */
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_set_clock(0));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_get_clock(&clock_hz));
+  TEST_ASSERT_EQUAL_UINT32(HAL_I2C_CLOCK_STANDARD_HZ, clock_hz);
 
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
                         hal_i2c_init_bus(9, 4, 5, HAL_I2C_CLOCK_STANDARD_HZ));
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
                         hal_i2c_set_clock_bus(9, HAL_I2C_CLOCK_STANDARD_HZ));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_i2c_get_clock_bus(9, &clock_hz));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_i2c_get_clock_bus(0, NULL));
 }
 
 void test_status_end_transmission_maps_legacy_result(void) {
@@ -615,6 +629,98 @@ void test_status_bus_clear_reports_selected_bus(void) {
 
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_i2c_bus_clear_bus(9, 6, 7));
 }
+
+/* ── 10-bit addressing (HAL_ENABLE_I2C_10BIT) ────────────────────────────── */
+#ifdef HAL_ENABLE_I2C_10BIT
+
+void test_10bit_init_selects_addressing_mode(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_I2C_ADDR_MODE_7BIT, hal_i2c_get_addr_mode());
+  TEST_ASSERT_FALSE(hal_mock_i2c_is_10bit());
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_init_10bit(4, 5, 400000));
+  TEST_ASSERT_EQUAL_INT(HAL_I2C_ADDR_MODE_10BIT, hal_i2c_get_addr_mode());
+  TEST_ASSERT_TRUE(hal_mock_i2c_is_10bit());
+
+  /* bus 1 stays independent: initialising it in 7-bit mode must not affect
+   * the already-10-bit bus 0. */
+  hal_i2c_init_bus(1, 6, 7, 100000);
+  TEST_ASSERT_EQUAL_INT(HAL_I2C_ADDR_MODE_7BIT, hal_i2c_get_addr_mode_bus(1));
+  TEST_ASSERT_EQUAL_INT(HAL_I2C_ADDR_MODE_10BIT, hal_i2c_get_addr_mode_bus(0));
+}
+
+void test_10bit_reinit_switches_mode_and_resets_state(void) {
+  hal_i2c_init_10bit(4, 5, 400000);
+  TEST_ASSERT_TRUE(hal_mock_i2c_is_10bit());
+  bool write_ok = false;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_write_byte_ex(0x150, 0xAA, &write_ok));
+
+  /* Explicit re-init back to 7-bit must go through the normal init cycle
+   * and invalidate the 10-bit-only address used above. */
+  hal_i2c_init(4, 5, 400000);
+  TEST_ASSERT_FALSE(hal_mock_i2c_is_10bit());
+  TEST_ASSERT_EQUAL_INT(HAL_I2C_ADDR_MODE_7BIT, hal_i2c_get_addr_mode());
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_i2c_write_byte_ex(0x150, 0xAA, &write_ok));
+}
+
+void test_10bit_address_range_validation_depends_on_mode(void) {
+  /* 0x090 (144) exceeds the 7-bit range but is a valid 10-bit address: the
+   * same numeric value is interpreted differently depending on which init
+   * variant configured the controller. */
+  bool write_ok = false;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_i2c_write_byte_ex(0x090, 0xAA, &write_ok));
+
+  hal_i2c_init_10bit(4, 5, 400000);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_write_byte_ex(0x090, 0xAA, &write_ok));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_write_byte_ex(0x3FF, 0xAA, &write_ok));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_i2c_write_byte_ex(0x400, 0xAA, &write_ok));
+}
+
+void test_10bit_atomic_and_buffered_transfers_succeed(void) {
+  hal_i2c_init_10bit(4, 5, 400000);
+  const hal_i2c_address_t address = 0x150;
+
+  bool write_ok = false;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_i2c_write_byte_ex(address, 0xA5, &write_ok));
+  TEST_ASSERT_TRUE(write_ok);
+  TEST_ASSERT_EQUAL_UINT16(address, hal_mock_i2c_get_last_addr());
+
+  const uint8_t rx[] = {0x11, 0x22};
+  hal_mock_i2c_inject_rx(rx, 2);
+  uint8_t out[2] = {};
+  const uint8_t reg = 0x01;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_i2c_write_read_ex(address, &reg, 1, out, sizeof(out)));
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(rx, out, 2);
+
+  hal_mock_i2c_inject_rx(rx, 2);
+  uint8_t direct[2] = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_i2c_read_bytes_ex(address, direct, sizeof(direct)));
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(rx, direct, 2);
+}
+
+void test_10bit_scan_is_unsupported(void) {
+  hal_i2c_init_10bit(4, 5, 400000);
+  uint8_t addresses[2] = {};
+  size_t found = 123u;
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED,
+                        hal_i2c_scan(addresses, 2u, &found, NULL));
+  TEST_ASSERT_EQUAL_UINT(0u, found);
+}
+
+void test_10bit_lock_depth_balances_like_7bit(void) {
+  hal_i2c_init_10bit(4, 5, 400000);
+  hal_i2c_begin_transmission(0x150);
+  TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_lock_depth());
+  TEST_ASSERT_EQUAL_UINT8(0, hal_i2c_end_transmission());
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_i2c_get_lock_depth());
+}
+
+#endif /* HAL_ENABLE_I2C_10BIT */
 
 void test_scan_returns_present_devices_and_calls_progress_callback(void) {
   uint8_t addresses[4] = {};
@@ -715,6 +821,14 @@ int main(void) {
   RUN_TEST(test_status_read_bytes_and_write_read_validate_arguments);
   RUN_TEST(test_status_request_from_returns_count);
   RUN_TEST(test_status_bus_clear_reports_selected_bus);
+#ifdef HAL_ENABLE_I2C_10BIT
+  RUN_TEST(test_10bit_init_selects_addressing_mode);
+  RUN_TEST(test_10bit_reinit_switches_mode_and_resets_state);
+  RUN_TEST(test_10bit_address_range_validation_depends_on_mode);
+  RUN_TEST(test_10bit_atomic_and_buffered_transfers_succeed);
+  RUN_TEST(test_10bit_scan_is_unsupported);
+  RUN_TEST(test_10bit_lock_depth_balances_like_7bit);
+#endif
   RUN_TEST(test_scan_returns_present_devices_and_calls_progress_callback);
   RUN_TEST(test_scan_reports_output_overflow_but_counts_all_devices);
   RUN_TEST(test_scan_validates_arguments_bus_and_initialization);

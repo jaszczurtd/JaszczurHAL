@@ -889,6 +889,7 @@ void hal_mock_eeprom_reset(void);
 #endif
 
 // ── I2C ──────────────────────────────────────────────────────────────────────
+#include "hal/i2c/hal_i2c.h"
 
 /**
  * @brief Pre-load the receive buffer used by hal_i2c_read().
@@ -899,11 +900,19 @@ void hal_mock_i2c_inject_rx(const uint8_t *data, int len);
 /** @brief Pre-load receive buffer for selected I2C mock bus (0 = Wire, 1 =
  * Wire1). */
 void hal_mock_i2c_inject_rx_bus(uint8_t bus, const uint8_t *data, int len);
-/** @brief Return the 7-bit address of the last hal_i2c_begin_transmission()
+/** @brief Return the address of the last hal_i2c_begin_transmission()
  * call. */
-uint8_t hal_mock_i2c_get_last_addr(void);
+hal_i2c_address_t hal_mock_i2c_get_last_addr(void);
 /** @brief Return the last transmission address for selected I2C mock bus. */
-uint8_t hal_mock_i2c_get_last_addr_bus(uint8_t bus);
+hal_i2c_address_t hal_mock_i2c_get_last_addr_bus(uint8_t bus);
+#ifdef HAL_ENABLE_I2C_10BIT
+/** @brief Return true when the default I2C mock bus is in 10-bit addressing
+ * mode. */
+bool hal_mock_i2c_is_10bit(void);
+/** @brief Return true when the selected I2C mock bus is in 10-bit addressing
+ * mode. */
+bool hal_mock_i2c_is_10bit_bus(uint8_t bus);
+#endif
 /** @brief Return the current logical/reentrant lock depth for selected I2C mock
  * bus. */
 int hal_mock_i2c_get_lock_depth_bus(uint8_t bus);

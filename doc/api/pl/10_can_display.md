@@ -580,10 +580,19 @@ lub selektora `HAL_COLOR(name)`, na przykład `HAL_COLOR(ORANGE)`.
 **Możliwości i surowe bufory:** Odpytaj aktywny backend przez
 `hal_display_get_capabilities_ex()`, a następnie używaj wyłącznie
 zgłoszonych formatów i wyrównań z `hal_display_write_raw_ex()`. `pitch`
-podawany jest w pikselach. Obecne backendy sprzętowe wymagają
-`pitch == width`; większe wartości pitch zwracają `HAL_EUNSUPPORTED`.
-Backendy TFT i RGB OLED akceptują ciągłe `RGB565_BE`/`RGB565_NATIVE`. ST7567
-akceptuje `MONO01`/`MONO10`, zgłasza `HAL_DISPLAY_SCREEN_INFO_MONO_VTILED`
+podawany jest w pikselach. Backendy TFT i RGB OLED (oraz mock) akceptują
+`pitch > width`: każdy wiersz źródłowy jest przesyłany osobno w ramach
+jednego okna adresowania, więc bufor wywołującego musi zawierać realne
+bajty tylko do `width` pikseli ostatniego wiersza -- końcowy padding poza
+tym miejscem nie musi być podparty pamięcią. Backendy page-tiled albo
+rekonfigurujące profil panelu przy każdym wywołaniu nadal wymagają
+`pitch == width` i w przeciwnym razie zwracają `HAL_EUNSUPPORTED`: ST7567
+zawsze (jeden bajt koduje 8 ułożonych w stos wierszy pikseli, więc nie ma
+granicy bajtowej per pojedynczy wiersz), SSD16xx przy rotacji 0/180 (tiling
+zmienia kierunek wraz z rotacją) oraz UC81xx (jego wywołanie zapisu za
+każdym razem ponownie nakłada profil panelu, więc podział na wiersze
+powielałby ten efekt uboczny raz na wiersz). ST7567 akceptuje
+`MONO01`/`MONO10`, zgłasza `HAL_DISPLAY_SCREEN_INFO_MONO_VTILED`
 i wymaga, aby `y` oraz `height` były wyrównane do 8 pikseli. Użyj
 `hal_display_set_pixel_format_ex()` przed zmianą polaryzacji monochromatycznej
 ST7567.

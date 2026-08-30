@@ -145,6 +145,20 @@ backendu, dezaktywują CS i odblokowują magistralę.
 ```c
 #include <hal/i2c/hal_i2c.h>
 
+// Adres urządzenia I2C: 0x000..0x07F po inicjalizacji 7-bitowej,
+// 0x000..0x3FF po inicjalizacji 10-bitowej (HAL_ENABLE_I2C_10BIT). Tryb
+// adresowania jest właściwością zainicjalizowanego kontrolera, a nie
+// pojedynczego wywołania - ta sama wartość liczbowa jest interpretowana
+// inaczej w zależności od tego, który wariant init skonfigurował magistralę.
+typedef uint16_t hal_i2c_address_t;
+
+#ifdef HAL_ENABLE_I2C_10BIT
+typedef enum {
+  HAL_I2C_ADDR_MODE_7BIT = 0,
+  HAL_I2C_ADDR_MODE_10BIT = 1,
+} hal_i2c_addr_mode_t;
+#endif
+
 // Popularne stałe zegara I2C:
 #define HAL_I2C_CLOCK_STANDARD_HZ    100000UL   // Standard-mode, 100 kHz
 #define HAL_I2C_CLOCK_FAST_HZ        400000UL   // Fast-mode, 400 kHz
@@ -162,8 +176,23 @@ hal_status_t hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin,
                           uint32_t clock_hz);
 hal_status_t hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin,
                               uint8_t scl_pin, uint32_t clock_hz);
+#ifdef HAL_ENABLE_I2C_10BIT
+// Jak hal_i2c_init(_bus), ale kontroler interpretuje każdy adres przekazany
+// do transferu na tej magistrali jako adres 10-bitowy. hal_i2c_scan(_bus)
+// pozostaje wyłącznie 7-bitowy i zwraca HAL_EUNSUPPORTED na magistrali 10-bit.
+hal_status_t hal_i2c_init_10bit(uint8_t sda_pin, uint8_t scl_pin,
+                                uint32_t clock_hz);
+hal_status_t hal_i2c_init_bus_10bit(uint8_t bus, uint8_t sda_pin,
+                                    uint8_t scl_pin, uint32_t clock_hz);
+hal_i2c_addr_mode_t hal_i2c_get_addr_mode(void);
+hal_i2c_addr_mode_t hal_i2c_get_addr_mode_bus(uint8_t bus);
+#endif
 hal_status_t hal_i2c_set_clock(uint32_t clock_hz);
 hal_status_t hal_i2c_set_clock_bus(uint8_t bus, uint32_t clock_hz);
+// Odczytaj skonfigurowany (znormalizowany żądany, nie efektywny/zmierzony)
+// zegar zaakceptowany przez ostatnie wywołanie init()/set_clock().
+hal_status_t hal_i2c_get_clock(uint32_t *out_clock_hz);
+hal_status_t hal_i2c_get_clock_bus(uint8_t bus, uint32_t *out_clock_hz);
 hal_status_t hal_i2c_bus_clear(uint8_t sda_pin, uint8_t scl_pin);
 hal_status_t hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin,
                                    uint8_t scl_pin);
@@ -172,6 +201,8 @@ hal_status_t hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin,
 // opcjonalny i uruchamia się przed każdą próbą; hal_watchdog_feed można przekazać
 // bezpośrednio. Wskaźnik addresses równy NULL z capacity 0 wykonuje skanowanie
 // tylko liczące. outFound otrzymuje całkowitą liczbę nawet gdy wyjście jest za małe.
+// Zawsze wyłącznie 7-bitowy, nawet na magistrali zainicjalizowanej przez
+// hal_i2c_init_10bit().
 typedef void (*hal_i2c_scan_callback_t)(void);
 hal_status_t hal_i2c_scan(uint8_t *addresses, size_t capacity,
                           size_t *outFound,
@@ -183,26 +214,26 @@ hal_status_t hal_i2c_scan_bus(uint8_t bus, uint8_t *addresses,
 // Towarzysze statusowe dla dotychczasowych operacji zwracających value/bool.
 hal_status_t hal_i2c_end_transmission_ex(void);
 hal_status_t hal_i2c_end_transmission_bus_ex(uint8_t bus);
-hal_status_t hal_i2c_write_byte_ex(uint8_t address, uint8_t data,
+hal_status_t hal_i2c_write_byte_ex(hal_i2c_address_t address, uint8_t data,
                                    bool *outWriteOk);
-hal_status_t hal_i2c_write_byte_bus_ex(uint8_t bus, uint8_t address,
+hal_status_t hal_i2c_write_byte_bus_ex(uint8_t bus, hal_i2c_address_t address,
                                        uint8_t data, bool *outWriteOk);
-hal_status_t hal_i2c_read_byte_ex(uint8_t address, uint8_t *outValue);
-hal_status_t hal_i2c_read_byte_bus_ex(uint8_t bus, uint8_t address,
+hal_status_t hal_i2c_read_byte_ex(hal_i2c_address_t address, uint8_t *outValue);
+hal_status_t hal_i2c_read_byte_bus_ex(uint8_t bus, hal_i2c_address_t address,
                                       uint8_t *outValue);
-hal_status_t hal_i2c_write_read_ex(uint8_t address,
+hal_status_t hal_i2c_write_read_ex(hal_i2c_address_t address,
                                    const uint8_t *tx, size_t tx_len,
                                    uint8_t *rx, size_t rx_len);
-hal_status_t hal_i2c_write_read_bus_ex(uint8_t bus, uint8_t address,
+hal_status_t hal_i2c_write_read_bus_ex(uint8_t bus, hal_i2c_address_t address,
                                        const uint8_t *tx, size_t tx_len,
                                        uint8_t *rx, size_t rx_len);
-hal_status_t hal_i2c_read_bytes_ex(uint8_t address, uint8_t *rx,
+hal_status_t hal_i2c_read_bytes_ex(hal_i2c_address_t address, uint8_t *rx,
                                    size_t rx_len);
-hal_status_t hal_i2c_read_bytes_bus_ex(uint8_t bus, uint8_t address,
+hal_status_t hal_i2c_read_bytes_bus_ex(uint8_t bus, hal_i2c_address_t address,
                                        uint8_t *rx, size_t rx_len);
-hal_status_t hal_i2c_request_from_ex(uint8_t address, uint8_t count,
+hal_status_t hal_i2c_request_from_ex(hal_i2c_address_t address, uint8_t count,
                                      uint8_t *outReceived);
-hal_status_t hal_i2c_request_from_bus_ex(uint8_t bus, uint8_t address,
+hal_status_t hal_i2c_request_from_bus_ex(uint8_t bus, hal_i2c_address_t address,
                                          uint8_t count, uint8_t *outReceived);
 void    hal_i2c_deinit(void);
 void    hal_i2c_deinit_bus(uint8_t bus);
@@ -215,50 +246,50 @@ void    hal_i2c_lock_bus(uint8_t bus);
 void    hal_i2c_unlock_bus(uint8_t bus);
 
 // Prymitywy transakcji (begin/write/end automatycznie przejmują/zwalniają mutex)
-void    hal_i2c_begin_transmission(uint8_t address);
+void    hal_i2c_begin_transmission(hal_i2c_address_t address);
 size_t  hal_i2c_write(uint8_t data);        // zwraca 1 przy powodzeniu, 0 przy niepowodzeniu
 uint8_t hal_i2c_end_transmission(void);     // zwraca 0 przy powodzeniu, wartość niezerową przy błędzie
-void    hal_i2c_begin_transmission_bus(uint8_t bus, uint8_t address);
+void    hal_i2c_begin_transmission_bus(uint8_t bus, hal_i2c_address_t address);
 size_t  hal_i2c_write_bus(uint8_t bus, uint8_t data);
 uint8_t hal_i2c_end_transmission_bus(uint8_t bus);
 
 // Jednorazowy pomocnik "begin + write jednego bajtu + end" (przejmuje/zwalnia mutex wewnętrznie).
 // *outWriteOk (opcjonalny) otrzymuje status kolejkowanych bajtów z hal_i2c_write().
 // Wartość zwracana to status end_transmission (0 przy powodzeniu).
-uint8_t hal_i2c_write_byte(uint8_t address, uint8_t data, bool *outWriteOk);
-uint8_t hal_i2c_write_byte_bus(uint8_t bus, uint8_t address, uint8_t data, bool *outWriteOk);
+uint8_t hal_i2c_write_byte(hal_i2c_address_t address, uint8_t data, bool *outWriteOk);
+uint8_t hal_i2c_write_byte_bus(uint8_t bus, hal_i2c_address_t address, uint8_t data, bool *outWriteOk);
 
 // Symetryczny jednorazowy pomocnik "request + read 1 bajt".
 // Wewnętrzny mutex jest utrzymywany przez całą sekwencję request+read.
 // *outReadOk (opcjonalny) otrzymuje true, gdy odebrano dokładnie jeden bajt.
 // Zwraca odczytany bajt lub 0 przy niepowodzeniu - sprawdź *outReadOk, aby odróżnić
 // prawdziwe 0x00 od błędu komunikacji.
-uint8_t hal_i2c_read_byte(uint8_t address, bool *outReadOk);
-uint8_t hal_i2c_read_byte_bus(uint8_t bus, uint8_t address, bool *outReadOk);
+uint8_t hal_i2c_read_byte(hal_i2c_address_t address, bool *outReadOk);
+uint8_t hal_i2c_read_byte_bus(uint8_t bus, hal_i2c_address_t address, bool *outReadOk);
 
 // Połączony pomocnik write-then-read dla czujników z wskaźnikiem rejestru.
 // Zapisuje bajty tx, utrzymuje magistralę aktywną dla odczytu z powtórzonym startem
 // i odczytuje dokładnie rx_len bajtów. Zwraca true tylko gdy obie fazy się zakończą.
-bool    hal_i2c_write_read(uint8_t address,
+bool    hal_i2c_write_read(hal_i2c_address_t address,
                            const uint8_t *tx, size_t tx_len,
                            uint8_t *rx, size_t rx_len);
-bool    hal_i2c_write_read_bus(uint8_t bus, uint8_t address,
+bool    hal_i2c_write_read_bus(uint8_t bus, hal_i2c_address_t address,
                                const uint8_t *tx, size_t tx_len,
                                uint8_t *rx, size_t rx_len);
 
 // Bezpośredni pomocnik odczytu dla czujników udostępniających bieżące dane bez fazy
 // wskaźnika rejestru. Utrzymuje mutex magistrali przez request+copy.
-bool    hal_i2c_read_bytes(uint8_t address, uint8_t *rx, size_t rx_len);
-bool    hal_i2c_read_bytes_bus(uint8_t bus, uint8_t address,
+bool    hal_i2c_read_bytes(hal_i2c_address_t address, uint8_t *rx, size_t rx_len);
+bool    hal_i2c_read_bytes_bus(uint8_t bus, hal_i2c_address_t address,
                                uint8_t *rx, size_t rx_len);
 
 // Odziedziczone (legacy) buforowane API odbioru. Nie jest atomową sekwencją odczytu, chyba że
 // wywołujący opakuje request+available/read w hal_i2c_lock()/hal_i2c_unlock().
 // Preferuj hal_i2c_read_bytes(_bus) lub hal_i2c_write_read(_bus) w driverach.
-uint8_t hal_i2c_request_from(uint8_t address, uint8_t count);  // zwraca liczbę odebranych bajtów
+uint8_t hal_i2c_request_from(hal_i2c_address_t address, uint8_t count);  // zwraca liczbę odebranych bajtów
 int     hal_i2c_available(void);    // bajty w buforze odbiorczym
 int     hal_i2c_read(void);         // jeden bajt lub -1, gdy pusto
-uint8_t hal_i2c_request_from_bus(uint8_t bus, uint8_t address, uint8_t count);
+uint8_t hal_i2c_request_from_bus(uint8_t bus, hal_i2c_address_t address, uint8_t count);
 int     hal_i2c_available_bus(uint8_t bus);
 int     hal_i2c_read_bus(uint8_t bus);
 
@@ -270,8 +301,8 @@ uint32_t hal_i2c_get_transaction_count_bus(uint8_t bus);
 // Sonda zajętości urządzenia - wyślij adres, sprawdź ACK/NACK natychmiast.
 // Zwraca true, jeśli urządzenie NIE potwierdziło ACK (zajęte lub nieobecne).
 // Typowe użycie: odpytuj po zapisie AT24C256, aż układ będzie gotowy.
-bool    hal_i2c_is_busy(uint8_t address);
-bool    hal_i2c_is_busy_bus(uint8_t bus, uint8_t address);
+bool    hal_i2c_is_busy(hal_i2c_address_t address);
+bool    hal_i2c_is_busy_bus(uint8_t bus, hal_i2c_address_t address);
 
 ```
 
@@ -326,15 +357,40 @@ zweryfikowane na platformie docelowej.
 **Odniesienie:** NXP UM10204, "I2C-bus specification and user manual",
 definiuje Standard-mode, Fast-mode, Fast-mode Plus i High-speed mode.
 
-**impl/rp2040:** Natywne `hardware/i2c.h` z Pico SDK na I2C0/I2C1 wraz z multipleksowaniem pinów `hardware/gpio.h`; mutex per-magistrala chroni wszystkie transakcje. Żądania zegara powyżej Fast-mode Plus są przycinane do 1 MHz, ponieważ I2C RP2040 nie implementuje Hs-mode. `hal_i2c_bus_clear()` używa odzyskiwania SCL/SDA na poziomie GPIO przed przywróceniem funkcji pinu I2C.
-**impl/stm32g474:** I2C v2 master na poziomie rejestrów na I2C1/I2C2. Oba kontrolery jawnie wybierają HSI16 jako swoje źródło zegara jądra, więc zwalidowane presety TIMINGR dla 16 MHz pozostają niezależne od zegara APB 170 MHz. Backend waliduje mapowania funkcji alternatywnych SDA/SCL, konfiguruje podciągnięcia GPIO w trybie open-drain, wspiera warstwy zegara HAL, obsługuje ścieżki write/read/write-read/is-busy na obu magistralach i wykonuje czyszczenie magistrali na poziomie GPIO z taktowaniem mikrosekundowym niezależnym od zegara przed init.
+**Adresowanie 10-bitowe (`HAL_ENABLE_I2C_10BIT`, opcjonalne):** Szerokość
+adresowania jest właściwością zainicjalizowanego kontrolera, nigdy
+pojedynczego wywołania ani pojedynczej wartości adresu: `hal_i2c_init()`/
+`hal_i2c_init_bus()` ustawiają magistralę w trybie 7-bitowym (`0x000..0x07F`),
+`hal_i2c_init_10bit()`/`hal_i2c_init_bus_10bit()` ustawiają tryb 10-bitowy
+(`0x000..0x3FF`); ta sama wartość liczbowa adresu jest interpretowana inaczej
+w zależności od tego, który wariant init skonfigurował magistralę, a
+kontroler nigdy nie miesza urządzeń 7- i 10-bitowych naraz. Każda dotychczasowa
+funkcja przyjmująca adres poszerzyła swój parametr z `uint8_t` na nowy
+`hal_i2c_address_t` (`uint16_t`) - świadoma, łamiąca zmiana typu; zwykłe
+miejsca wywołań przekazujące literał lub zmienną `uint8_t` nadal się
+kompilują bez zmian po przebudowie. `hal_i2c_scan()`/`hal_i2c_scan_bus()`
+pozostają wyłącznie 7-bitowe na zawsze i zwracają `HAL_EUNSUPPORTED` przy
+wywołaniu na magistrali 10-bitowej. Przełączenie magistrali między trybami
+wymaga jawnej ponownej inicjalizacji, która przechodzi normalny cykl
+zatrzymania/resetu i unieważnia stan związany z poprzednim trybem.
+
+**impl/rp2040:** Natywne `hardware/i2c.h` z Pico SDK na I2C0/I2C1 wraz z multipleksowaniem pinów `hardware/gpio.h`; mutex per-magistrala chroni wszystkie transakcje. Żądania zegara powyżej Fast-mode Plus są przycinane do 1 MHz, ponieważ I2C RP2040 nie implementuje Hs-mode. `hal_i2c_bus_clear()` używa odzyskiwania SCL/SDA na poziomie GPIO przed przywróceniem funkcji pinu I2C. Tryb 10-bitowy ustawia bit `IC_CON.IC_10BITADDR_MASTER` DesignWare na cały czas życia kontrolera przy init i używa dedykowanej niskopoziomowej ścieżki transferu FIFO/timeout (`IC_TAR` niesie pełny adres 10-bitowy; standardowe `i2c_write_timeout_us()`/`i2c_read_timeout_us()` z Pico SDK asertują adres 7-bitowy i nie mogą zostać ponownie użyte).
+**impl/stm32g474:** I2C v2 master na poziomie rejestrów na I2C1/I2C2. Oba kontrolery jawnie wybierają HSI16 jako swoje źródło zegara jądra, więc zwalidowane presety TIMINGR dla 16 MHz pozostają niezależne od zegara APB 170 MHz. Backend waliduje mapowania funkcji alternatywnych SDA/SCL, konfiguruje podciągnięcia GPIO w trybie open-drain, wspiera warstwy zegara HAL, obsługuje ścieżki write/read/write-read/is-busy na obu magistralach i wykonuje czyszczenie magistrali na poziomie GPIO z taktowaniem mikrosekundowym niezależnym od zegara przed init. Tryb 10-bitowy ustawia `CR2.ADD10` i wpisuje surowy adres 10-bitowy w `CR2.SADD[9:0]` (tryb 7-bitowy zachowuje dotychczasowe przesunięcie `SADD[7:1]`); `CR2.HEAD10R` celowo nigdy nie jest ustawiany, zgodnie z głównym Linux driverem `i2c-stm32f7` dla tego samego IP I2C v2, który zawsze wysyła kompletny nagłówek 10-bitowy w każdej fazie.
 **impl/esp32:** API master/controller ESP-IDF na I2C0/I2C1 z generowaną
 walidacją pinów płytki, wewnętrznymi podciągnięciami, buforowanymi
-uchwytami urządzeń 7-bitowych, timeoutem transferu/sondy 100 ms i resetem
+uchwytami urządzeń, timeoutem transferu/sondy 100 ms i resetem
 kontrolera po timeout. Zmiany zegara odrzucają buforowane uchwyty urządzeń,
 więc kolejne transfery odtwarzają je z nową szybkością. Czyszczenie
 magistrali na poziomie GPIO emituje do dziewięciu impulsów SCL i jest
-akceptowane tylko, gdy wybrany kontroler jest zdeinicjalizowany.
+akceptowane tylko, gdy wybrany kontroler jest zdeinicjalizowany. Tryb
+10-bitowy konfiguruje każdy buforowany uchwyt urządzenia z
+`I2C_ADDR_BIT_LEN_10`; bufor uchwytów urządzeń poszerza się z 128 do 1024
+wpisów tylko wtedy, gdy `HAL_ENABLE_I2C_10BIT` jest wkompilowane, więc buildy
+wyłącznie 7-bitowe zachowują mniejszy ślad pamięci. `i2c_master_probe()` z
+ESP-IDF zawsze sonduje jako adres 7-bitowy niezależnie od przekazanej
+wartości, więc `hal_i2c_is_busy_bus()` na magistrali 10-bitowej zastępuje
+prawdziwą sondę zero-bajtową odczytem 1 bajtu przez poprawnie
+skonfigurowany uchwyt urządzenia.
 **impl/.mock:** bufor pierścieniowy; wstrzykiwalny przez pomocnicze funkcje mock. Wstrzyknięte bajty RX są odczytywane kolejno przez transakcje request/read, co pozwala testom skryptować przepływy wielorejestrowe. `hal_i2c_end_transmission()` zwraca `HAL_I2C_ERROR_GENERIC`, gdy ustawiona jest flaga busy mocka, w przeciwnym razie `HAL_I2C_RESULT_OK`. `hal_i2c_bus_clear()` zwiększa wewnętrzny licznik (odpytaj przez `hal_mock_i2c_get_bus_clear_count()`); licznik resetuje się przy `hal_i2c_init()`.
 **Thread safety:** Backendy sprzętowe serializują API transferu wewnętrznym `hal_mutex_t` per-magistrala; użyj `hal_i2c_lock` / `hal_i2c_unlock`, aby rozszerzyć sekcje krytyczne wokół bezpośrednich wywołań magistrali backendu/zewnętrznej biblioteki. `hal_i2c_init*()` / `hal_i2c_deinit*()` rekonfigurują współdzielone obiekty magistrali i muszą być serializowane przez aplikację podczas setup/teardown. Backend mock nie synchronizuje jednoczesnego dostępu.
 
@@ -342,8 +398,12 @@ akceptowane tylko, gdy wybrany kontroler jest zdeinicjalizowany.
 ```c
 void    hal_mock_i2c_inject_rx(const uint8_t *data, int len);                    // wstępnie załaduj bufor odbiorczy na magistrali 0
 void    hal_mock_i2c_inject_rx_bus(uint8_t bus, const uint8_t *data, int len);   // wstępnie załaduj bufor odbiorczy na wybranej magistrali
-uint8_t hal_mock_i2c_get_last_addr(void);                                         // ostatni adres na magistrali 0
-uint8_t hal_mock_i2c_get_last_addr_bus(uint8_t bus);                              // ostatni adres na wybranej magistrali
+hal_i2c_address_t hal_mock_i2c_get_last_addr(void);                              // ostatni adres na magistrali 0
+hal_i2c_address_t hal_mock_i2c_get_last_addr_bus(uint8_t bus);                   // ostatni adres na wybranej magistrali
+#ifdef HAL_ENABLE_I2C_10BIT
+bool    hal_mock_i2c_is_10bit(void);                                             // true, jeśli magistrala 0 jest w trybie 10-bit
+bool    hal_mock_i2c_is_10bit_bus(uint8_t bus);                                  // true, jeśli wybrana magistrala jest w trybie 10-bit
+#endif
 int     hal_mock_i2c_get_lock_depth(void);                                        // bieżąca głębokość blokady na magistrali 0
 int     hal_mock_i2c_get_lock_depth_bus(uint8_t bus);                             // bieżąca głębokość blokady na wybranej magistrali
 int     hal_mock_i2c_get_read_byte_lock_depth(void);                              // głębokość blokady przechwycona w punkcie odczytu bajtu w hal_i2c_read_byte() na magistrali 0
