@@ -524,6 +524,34 @@ jh_enable_host_warnings(test_bluetooth_classic_hid_probe_logic ERRORS)
 add_test(NAME test_bluetooth_classic_hid_probe_logic
     COMMAND test_bluetooth_classic_hid_probe_logic)
 
+add_executable(test_bluetooth_gamepad_parser
+    test_bluetooth_gamepad_parser.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/bluetooth/jh_bluetooth_gamepad_parser.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/BTstack/src/btstack_hid_parser.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/BTstack/src/btstack_util.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
+)
+target_include_directories(test_bluetooth_gamepad_parser PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/bluetooth
+    ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/BTstack/src
+)
+target_compile_definitions(test_bluetooth_gamepad_parser PRIVATE
+    HAL_TARGET_MOCK=1
+    JH_BLUETOOTH_CLASSIC_HID_PROBE=1
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+    JH_ZERO2_FIXTURE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/hardware/bluetooth_gamepad/zero2_android_dinput.json"
+)
+target_link_options(test_bluetooth_gamepad_parser PRIVATE
+    "-Wl,--wrap=malloc"
+    "-Wl,--wrap=calloc"
+    "-Wl,--wrap=realloc"
+)
+jh_enable_host_warnings(test_bluetooth_gamepad_parser ERRORS)
+add_test(NAME test_bluetooth_gamepad_parser
+    COMMAND test_bluetooth_gamepad_parser)
+
 add_executable(test_network_backend
     test_network_backend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/core/jh_handle_pool.cpp

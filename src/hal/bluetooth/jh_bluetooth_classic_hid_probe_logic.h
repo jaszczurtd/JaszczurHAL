@@ -1,5 +1,7 @@
 #pragma once
 
+#include "jh_bluetooth_gamepad_parser.h"
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -47,8 +49,8 @@ bool jh_bluetooth_classic_hid_probe_logic_pnp_matches(uint16_t vendor_id,
 void jh_bluetooth_classic_hid_probe_logic_connected(
     jh_bluetooth_classic_hid_probe_logic_t *logic);
 uint16_t jh_bluetooth_classic_hid_probe_logic_report(
-    jh_bluetooth_classic_hid_probe_logic_t *logic, const uint8_t *report,
-    size_t report_length);
+    jh_bluetooth_classic_hid_probe_logic_t *logic,
+    const jh_bluetooth_gamepad_snapshot_t *snapshot, size_t report_length);
 void jh_bluetooth_classic_hid_probe_logic_disconnected(
     jh_bluetooth_classic_hid_probe_logic_t *logic);
 

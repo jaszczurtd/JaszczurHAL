@@ -53,42 +53,31 @@ void test_pnp_filter_requires_the_characterized_identity() {
 }
 
 void test_reports_cover_all_controls_and_disconnect_releases_active_state() {
-  static constexpr std::array<std::array<uint8_t, 12>, 12> kReports = {{
-      {0xa1u, 0x03u, 0x01u, 0x00u, 0x0fu, 0x7fu, 0x7fu, 0x7fu, 0x7fu, 0x88u,
-       0x01u, 0x00u},
-      {0xa1u, 0x03u, 0x02u, 0x00u, 0x0fu, 0x7fu, 0x7fu, 0x7fu, 0x7fu, 0x88u,
-       0x01u, 0x00u},
-      {0xa1u, 0x03u, 0x08u, 0x00u, 0x0fu, 0x7fu, 0x7fu, 0x7fu, 0x7fu, 0x87u,
-       0x01u, 0x00u},
-      {0xa1u, 0x03u, 0x10u, 0x00u, 0x0fu, 0x7fu, 0x7fu, 0x7fu, 0x7fu, 0x88u,
-       0x01u, 0x00u},
-      {0xa1u, 0x03u, 0x40u, 0x00u, 0x0fu, 0x7fu, 0x7fu, 0x7fu, 0x7fu, 0x88u,
-       0x01u, 0x00u},
-      {0xa1u, 0x03u, 0x80u, 0x00u, 0x0fu, 0x7fu, 0x7fu, 0x7fu, 0x7fu, 0x88u,
-       0x01u, 0x00u},
-      {0xa1u, 0x03u, 0x00u, 0x04u, 0x0fu, 0x7fu, 0x7fu, 0x7fu, 0x7fu, 0x88u,
-       0x01u, 0x00u},
-      {0xa1u, 0x03u, 0x00u, 0x08u, 0x0fu, 0x7fu, 0x7fu, 0x7fu, 0x7fu, 0x88u,
-       0x01u, 0x00u},
-      {0xa1u, 0x03u, 0x00u, 0x00u, 0x0fu, 0x7fu, 0x00u, 0x7fu, 0x7fu, 0x88u,
-       0x01u, 0x00u},
-      {0xa1u, 0x03u, 0x00u, 0x00u, 0x0fu, 0x7fu, 0xffu, 0x7fu, 0x7fu, 0x88u,
-       0x01u, 0x00u},
-      {0xa1u, 0x03u, 0x00u, 0x00u, 0x0fu, 0x00u, 0x7fu, 0x7fu, 0x7fu, 0x87u,
-       0x01u, 0x00u},
-      {0xa1u, 0x03u, 0x00u, 0x00u, 0x0fu, 0xffu, 0x7fu, 0x7fu, 0x7fu, 0x87u,
-       0x01u, 0x00u},
-  }};
+  std::array<jh_bluetooth_gamepad_snapshot_t, 12> snapshots{};
+  static constexpr std::array<uint32_t, 8> kButtons = {
+      UINT32_C(1) << 0u,  UINT32_C(1) << 1u,  UINT32_C(1) << 3u,
+      UINT32_C(1) << 4u,  UINT32_C(1) << 6u,  UINT32_C(1) << 7u,
+      UINT32_C(1) << 10u, UINT32_C(1) << 11u,
+  };
+  for (size_t index = 0u; index < snapshots.size(); ++index) {
+    snapshots[index].connected = true;
+  }
+  for (size_t index = 0u; index < kButtons.size(); ++index) {
+    snapshots[index].buttons = kButtons[index];
+  }
+  snapshots[8].axes[JH_BLUETOOTH_GAMEPAD_AXIS_Y] = INT16_MIN + 1;
+  snapshots[9].axes[JH_BLUETOOTH_GAMEPAD_AXIS_Y] = INT16_MAX;
+  snapshots[10].axes[JH_BLUETOOTH_GAMEPAD_AXIS_X] = INT16_MIN + 1;
+  snapshots[11].axes[JH_BLUETOOTH_GAMEPAD_AXIS_X] = INT16_MAX;
 
   jh_bluetooth_classic_hid_probe_logic_connected(&s_logic);
-  for (const auto &report : kReports) {
+  for (const auto &snapshot : snapshots) {
     TEST_ASSERT_NOT_EQUAL(0u, jh_bluetooth_classic_hid_probe_logic_report(
-                                  &s_logic, report.data(), report.size()));
+                                  &s_logic, &snapshot, 12u));
   }
   TEST_ASSERT_EQUAL_HEX16(JH_CLASSIC_HID_ALL_CONTROLS_MASK,
                           s_logic.seen_controls_mask);
-  TEST_ASSERT_EQUAL_UINT16(kReports.front().size(),
-                           s_logic.report_length_high_water);
+  TEST_ASSERT_EQUAL_UINT16(12u, s_logic.report_length_high_water);
   TEST_ASSERT_NOT_EQUAL(0u, s_logic.active_controls_mask);
 
   jh_bluetooth_classic_hid_probe_logic_disconnected(&s_logic);

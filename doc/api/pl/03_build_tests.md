@@ -210,7 +210,7 @@ Code co aplikacje i przechowują swoje artefakty poniżej `.build/hardware/`:
 | Stanowisko | Pokrycie |
 |---|---|
 | `tests/hardware/bluetooth_stage1` | Wewnętrzny, przed-API kontroler CYW43/BTstack, advertising, statyczny GATT oraz baza pamięciowa tylko-WiFi na Pico W i STM32G474/PIM730. |
-| `tests/hardware/bluetooth_gamepad` | Zanonimizowany deskryptor i raporty 8BitDo Zero 2 Android D-input oraz prywatna sonda buildu Classic HID Host dla Pico 2 W. |
+| `tests/hardware/bluetooth_gamepad` | Zanonimizowany deskryptor i raporty 8BitDo Zero 2 Android D-input oraz prywatna sonda parsera gamepada Classic HID Host dla Pico 2 W. |
 | `tests/hardware/bluetooth_observer` | Publiczne pasywne skanowanie Observer, ograniczona kolejka raportów oraz parsowanie BLE Teltonika/iBeacon/Eddystone na Pico W, Pico 2 W i STM32G474/PIM730. |
 | `tests/hardware/bluetooth_stream` | Publiczny cykl życia BLE i uwierzytelniona bramka Stream w różnych krotkach target/board/runtime, w tym ponowne łączenie, watchdog, ciągły ruch, nasycenie i negatywne przypadki bezpieczeństwa. |
 | `tests/hardware/rp_usb_cdc_echo` | Natywna enumeracja CDC TinyUSB, przeciwciśnienie (backpressure), ponowne łączenie i przepustowość |
@@ -773,6 +773,23 @@ mieć klasę peryferium, zapisaną nazwę, usługę Classic HID i zapisaną toż
 PnP. Prywatnego selectora nie wolno łączyć z publicznym BLE ani wcześniejszą
 sondą Etapu 1.
 
+Prywatny parser korzysta z deskryptora raportów HID zamiast offsetów bajtów
+Zero 2. Akceptuje kolekcje aplikacyjne Generic Desktop Game Pad i Joystick
+oraz normalizuje do 32 przycisków, dziewięć osi desktopowych i jeden hat switch
+do snapshotów w pamięci o stałym rozmiarze. Limity C6 wynoszą 256 bajtów
+deskryptora, 32 bajty raportu wejściowego i 16 snapshotów w kolejce. Nieznane
+usages są ignorowane; nieprawidłowe albo nadmiarowe deskryptory, skrócone albo
+nadmiarowe raporty, nieznane report ID, powtórzone mapowane usages i
+przepełnienie kolejki są widoczne w ograniczonej diagnostyce. Powtórzone
+raporty bez zmiany stanu nie dodają kolejnego snapshotu.
+
+`test_bluetooth_gamepad_parser` używa tego samego zanonimizowanego zapisu co
+sonda sprzętowa. Pokrywa zapisane raporty, układy pól wyprowadzone z
+deskryptora, idempotentne wejście, czyszczenie stanu przy reconnect,
+nieprawidłowe i skrócone dane, nieznane report ID i usages, powtórzone usages,
+przepełnienie kolejki oraz brak alokacji dynamicznej podczas działania
+parsera.
+
 Zbuduj wymagany obraz Pico 2 W:
 
 ```sh
@@ -801,13 +818,14 @@ połączenia oraz power-cycle, a następnie utrzymuje ciągłe połączenie prze
 minut. Podczas pierwszego reconnectu prosi o przytrzymanie wejścia, aby ścieżka
 disconnect mogła zwolnić aktywny stan.
 
-Weryfikator zapisuje `zero2_pico2w_c5_result.json`. Raport zawiera wersje
-targetu i bibliotek, czasy, liczniki transportu oraz maksymalne zajęcie pul.
-Nie może zawierać adresów Bluetooth, materiału link key, tożsamości hosta,
-nazwy portu szeregowego ani numeru seryjnego USB. ELF/map i lista symboli muszą
-również wykazać HID Host `ENABLE_CLASSIC`, klienta SDP, parser HID oraz
-pamięciową bazę link keys, jednocześnie wykluczając ATT, GATT, SM, RFCOMM,
-serwer SDP, HID Device i profile audio.
+Weryfikator zapisuje `zero2_pico2w_c6_result.json`; wcześniejszy wynik C5
+pozostaje punktem odniesienia sprzed integracji parsera. Raport C6 zawiera
+wersje targetu i bibliotek, czasy, liczniki transportu, diagnostykę parsera
+oraz maksymalne zajęcie pul. Nie może zawierać adresów Bluetooth, materiału
+link key, tożsamości hosta, nazwy portu szeregowego ani numeru seryjnego USB.
+ELF/map i lista symboli muszą również wykazać HID Host `ENABLE_CLASSIC`,
+klienta SDP, parser HID oraz pamięciową bazę link keys, jednocześnie
+wykluczając ATT, GATT, SM, RFCOMM, serwer SDP, HID Device i profile audio.
 
 ### Sprzętowy test Bluetooth Observer
 

@@ -157,6 +157,7 @@ for source in (
     "src/classic/hid_host.c",
     "src/classic/sdp_client.c",
     "src/classic/sdp_util.c",
+    "jh_bluetooth_gamepad_parser.c",
     "jh_bluetooth_classic_hid_memory_probe.c",
     "jh_bluetooth_classic_hid_probe_logic.c",
 ):
@@ -225,8 +226,9 @@ probe = (ROOT / "src" / "hal" / "bluetooth" / "jh_bluetooth_classic_hid_probe.c"
 for expected in (
     "hci_set_link_key_db(btstack_link_key_db_memory_instance())",
     "sdp_client_init();",
-    "btstack_hid_parser_init(&s_hid_parser",
     "hid_host_init(s_hid_descriptor, sizeof(s_hid_descriptor));",
+    "jh_bluetooth_gamepad_parser_configure(",
+    "jh_bluetooth_gamepad_parser_parse_input(",
     "hid_host_register_packet_handler(packet_handler);",
     "jh_btstack_host_acquire(",
     "JH_BLUETOOTH_HOST_PROFILE_CLASSIC_HID",
@@ -250,6 +252,12 @@ require(
     "gap_discoverable_control(1" not in probe,
     "C5 probe must not expose unsolicited page-scan pairing",
 )
+require(
+    "valid_zero2_report" not in probe
+    and "JH_ZERO2_REPORT_ID" not in probe
+    and "report[5]" not in probe,
+    "C6 probe still decodes model-specific report offsets",
+)
 start_body = probe.split(
     "hal_status_t jh_bluetooth_classic_hid_probe_start(void)", 1
 )[1].split("hal_status_t jh_bluetooth_classic_hid_probe_service(void)", 1)[0]
@@ -269,6 +277,23 @@ for expected in (
     "JH_CLASSIC_HID_EXPECTED_VERSION",
 ):
     require(expected in logic, f"C5 identity/window logic is missing {expected}")
+require(
+    "const jh_bluetooth_gamepad_snapshot_t *snapshot" in logic
+    and "report[" not in logic,
+    "C6 probe logic must consume the normalized snapshot",
+)
+
+gamepad_parser = (
+    ROOT / "src" / "hal" / "bluetooth" / "jh_bluetooth_gamepad_parser.h"
+).read_text(encoding="utf-8")
+for expected in (
+    "JH_BLUETOOTH_GAMEPAD_DESCRIPTOR_MAX = 256u",
+    "JH_BLUETOOTH_GAMEPAD_REPORT_MAX = 32u",
+    "JH_BLUETOOTH_GAMEPAD_QUEUE_CAPACITY = 16u",
+    "jh_bluetooth_gamepad_parser_parse_input(",
+    "jh_bluetooth_gamepad_parser_next(",
+):
+    require(expected in gamepad_parser, f"C6 parser is missing {expected}")
 
 memory_probe = (
     ROOT / "src" / "hal" / "bluetooth" / "jh_bluetooth_classic_hid_memory_probe.c"
@@ -294,6 +319,10 @@ for expected in (
     '"hostVerifierResumed"',
     "health_counter",
     '"gamepad": "unavailable"',
+    'DEFAULT_RESULT_PATH = Path(__file__).with_name("zero2_pico2w_c6_result.json")',
+    '"descriptorsRejected"',
+    '"droppedSnapshots"',
+    '"reportsRejected"',
 ):
     require(expected in verifier, f"C5 verifier is missing {expected}")
 require(
@@ -317,6 +346,37 @@ if result_path.exists():
     require(
         re.search(r"(?i)(?:[0-9a-f]{2}:){5}[0-9a-f]{2}", result_text) is None,
         "stored C5 result contains a Bluetooth device address",
+    )
+
+c6_result_path = FIXTURE_DIR / "zero2_pico2w_c6_result.json"
+if c6_result_path.exists():
+    c6_result_text = c6_result_path.read_text(encoding="utf-8")
+    c6_result = json.loads(c6_result_text)
+    require(c6_result["result"] == "pass", "stored C6 result is not a pass")
+    require(
+        c6_result["capture"] == capture_path.name
+        and c6_result["firmware"]["gamepad"] == "unavailable",
+        "stored C6 result is detached from the characterized fixture",
+    )
+    c6_parser = c6_result["parser"]
+    require(
+        c6_parser["descriptorLimit"] == 256
+        and c6_parser["reportLimit"] == 32
+        and c6_parser["queueCapacity"] == 16,
+        "stored C6 result does not use the frozen parser limits",
+    )
+    require(
+        c6_parser["descriptorsAccepted"] == 1
+        and c6_parser["reportsAccepted"] > 0
+        and c6_parser["descriptorsRejected"] == 0
+        and c6_parser["reportsRejected"] == 0
+        and c6_parser["droppedSnapshots"] == 0,
+        "stored C6 result reports a parser failure",
+    )
+    require(
+        re.search(r"(?i)(?:[0-9a-f]{2}:){5}[0-9a-f]{2}", c6_result_text)
+        is None,
+        "stored C6 result contains a Bluetooth device address",
     )
 
 manifest = json.loads(

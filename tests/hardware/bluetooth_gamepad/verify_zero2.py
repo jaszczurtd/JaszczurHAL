@@ -14,7 +14,7 @@ import serial
 
 
 FIXTURE_PATH = Path(__file__).with_name("zero2_android_dinput.json")
-DEFAULT_RESULT_PATH = Path(__file__).with_name("zero2_pico2w_c5_result.json")
+DEFAULT_RESULT_PATH = Path(__file__).with_name("zero2_pico2w_c6_result.json")
 SNAPSHOT_PREFIX = "JHBT5-SNAPSHOT "
 ACK_PREFIX = "JHBT5-ACK "
 ALL_CONTROLS_MASK = 0x0FFF
@@ -104,6 +104,28 @@ def validate_live_health(snapshot: Snapshot) -> None:
         current, high_water, capacity, failures = map(int, values)
         if current > capacity or high_water > capacity or failures != 0:
             raise RuntimeError(f"BTstack pool {name} is unhealthy: {values}")
+    parser = dict(snapshot["parser"])
+    expected_limits = {
+        "descriptorLimit": 256,
+        "queueCapacity": 16,
+        "reportLimit": 32,
+    }
+    for name, expected in expected_limits.items():
+        if int(parser[name]) != expected:
+            raise RuntimeError(
+                f"gamepad parser {name} changed: {parser[name]} != {expected}"
+            )
+    for name in (
+        "descriptorsRejected",
+        "droppedSnapshots",
+        "reportsRejected",
+        "truncatedReports",
+        "unknownReportIds",
+    ):
+        if int(parser[name]) != 0:
+            raise RuntimeError(f"gamepad parser {name} is nonzero: {parser[name]}")
+    if int(parser["queueHighWater"]) > int(parser["queueCapacity"]):
+        raise RuntimeError(f"gamepad parser queue is unhealthy: {parser}")
 
 
 def counter(snapshot: Snapshot, name: str) -> int:
@@ -116,11 +138,13 @@ def health_counter(snapshot: Snapshot, name: str) -> int:
 
 
 def connected_and_characterized(snapshot: Snapshot) -> bool:
+    parser = dict(snapshot["parser"])
     return (
         bool(snapshot["connected"])
         and bool(snapshot["descriptorAvailable"])
         and bool(snapshot["descriptorMatchesCapture"])
         and int(snapshot["protocol"]) in (1, 2)
+        and int(parser["descriptorsAccepted"]) == 1
     )
 
 
@@ -270,6 +294,11 @@ def selected_counters(snapshot: Snapshot) -> dict[str, int]:
         "tx",
     )
     return {name: health_counter(snapshot, name) for name in names}
+
+
+def parser_report(snapshot: Snapshot) -> dict[str, int]:
+    parser = dict(snapshot["parser"])
+    return {name: int(value) for name, value in parser.items()}
 
 
 def run_gate(probe: Probe, fixture: Snapshot) -> Snapshot:
@@ -439,7 +468,7 @@ def resume_stability_gate(probe: Probe, fixture: Snapshot) -> Snapshot:
             raise RuntimeError(f"cannot resume after nonzero {name}")
 
     print(
-        "Resuming the uninterrupted C5 scenario at the 30-minute connected "
+        "Resuming the uninterrupted C6 scenario at the 30-minute connected "
         "interval. Exercise the controls periodically and leave the pad "
         "powered on.",
         flush=True,
@@ -490,6 +519,7 @@ def build_report(snapshot: Snapshot) -> Snapshot:
             "timings": timings,
         },
         "resources": pool_report(snapshot),
+        "parser": parser_report(snapshot),
         "counters": selected_counters(snapshot),
         "result": "pass",
     }
@@ -550,5 +580,5 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except (OSError, RuntimeError, TimeoutError, serial.SerialException) as exc:
-        print(f"C5 FAIL: {exc}", file=sys.stderr)
+        print(f"C6 FAIL: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc

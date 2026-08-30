@@ -49,6 +49,11 @@ All notable changes to this project will be documented in this file.
   profile initialization, and a sanitized 8BitDo Zero 2 descriptor/report
   fixture. The probe keeps Classic out of the public HAL surface and rejects
   mixed Classic/BLE or non-CYW43 builds.
+- Added a fixed-memory, descriptor-driven private gamepad parser for Generic
+  Desktop Game Pad and Joystick collections. It normalizes buttons, axes and
+  hat input, suppresses unchanged snapshots, reports bounded queue and reject
+  diagnostics, and is covered by the captured Zero 2 reports plus malformed,
+  truncated, unknown-ID, duplicate-usage, reconnect and overflow host cases.
 - Moved `doc/datasheets/` to the private `context-providers` context repo
   (`context_JaszczurHAL/datasheets/`). Datasheets are reference material for
   development, not part of the shipped API documentation; the public `doc/`

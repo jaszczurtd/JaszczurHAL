@@ -201,7 +201,7 @@ applications and keep their artifacts below `.build/hardware/`:
 | Fixture | Coverage |
 |---|---|
 | `tests/hardware/bluetooth_stage1` | Internal pre-API CYW43/BTstack controller, advertising, static GATT and WiFi-only memory baseline on Pico W and STM32G474/PIM730. |
-| `tests/hardware/bluetooth_gamepad` | Sanitized 8BitDo Zero 2 Android D-input descriptor/report capture and the private Classic HID Host build probe for Pico 2 W. |
+| `tests/hardware/bluetooth_gamepad` | Sanitized 8BitDo Zero 2 Android D-input descriptor/report capture and the private Classic HID Host gamepad parser probe for Pico 2 W. |
 | `tests/hardware/bluetooth_observer` | Public passive Observer scan, bounded report queue and Teltonika/iBeacon/Eddystone BLE parsing on Pico W, Pico 2 W and STM32G474/PIM730. |
 | `tests/hardware/bluetooth_stream` | Public BLE lifecycle and authenticated Stream gate across target/board/runtime tuples, including reconnect, watchdog, sustained traffic, saturation and negative security cases. |
 | `tests/hardware/rp_usb_cdc_echo` | Native TinyUSB CDC enumeration, backpressure, reconnect and throughput |
@@ -744,6 +744,22 @@ have the peripheral device class, the captured name, a Classic HID service,
 and the captured PnP identity. The private selector must not be combined with
 public BLE or the earlier Stage 1 probe.
 
+The private parser consumes the HID report descriptor instead of Zero 2 byte
+offsets. It accepts Generic Desktop Game Pad and Joystick application
+collections and normalizes up to 32 buttons, nine desktop axes, and one hat
+switch into fixed-memory snapshots. The C6 limits are 256 descriptor bytes,
+32 bytes per input report, and 16 queued snapshots. Unknown usages are ignored;
+malformed or oversized descriptors, truncated or oversized reports, unknown
+report IDs, duplicate mapped usages, and queue overflow are reported through
+bounded diagnostics. Repeated reports that do not change the state do not add
+another snapshot.
+
+`test_bluetooth_gamepad_parser` uses the same sanitized capture as the hardware
+probe. It covers the captured reports, descriptor-driven layouts, idempotent
+input, reconnect state clearing, malformed/truncated input, unknown report IDs
+and usages, duplicate usages, queue overflow, and the absence of dynamic
+allocation during parser operation.
+
 Build the required Pico 2 W image:
 
 ```sh
@@ -771,13 +787,14 @@ all controls, runs the disconnect/reconnect and power-cycle cases, and keeps a
 continuous connected interval for 30 minutes. During the first reconnect it
 asks for a held control so the disconnect path can release active input.
 
-The verifier writes `zero2_pico2w_c5_result.json`. The report contains
-target/library versions, durations, transport counters, and pool high-water
-marks. It must not contain Bluetooth addresses, link-key material, host
-identity, a serial port name, or a USB serial number. The ELF/map and a symbol
-listing must also show `ENABLE_CLASSIC` HID Host, SDP client, HID parser, and
-the memory link-key database while excluding ATT, GATT, SM, RFCOMM, SDP
-server, HID Device, and audio profiles.
+The verifier writes `zero2_pico2w_c6_result.json`; the earlier C5 result remains
+the baseline from before parser integration. The C6 report contains
+target/library versions, durations, transport counters, parser diagnostics,
+and pool high-water marks. It must not contain Bluetooth addresses, link-key
+material, host identity, a serial port name, or a USB serial number. The
+ELF/map and a symbol listing must also show `ENABLE_CLASSIC` HID Host, SDP
+client, HID parser, and the memory link-key database while excluding ATT,
+GATT, SM, RFCOMM, SDP server, HID Device, and audio profiles.
 
 ### Bluetooth Observer hardware probe
 

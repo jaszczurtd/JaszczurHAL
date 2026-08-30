@@ -2,7 +2,6 @@
 
 #include "bluetooth_sdp.h"
 #include "btstack_event.h"
-#include "btstack_hid_parser.h"
 #include "btstack_version.h"
 #include "classic/btstack_link_key_db_memory.h"
 #include "classic/hid_host.h"
@@ -14,6 +13,7 @@
 #include "hci.h"
 #include "jh_bluetooth_classic_hid_lifecycle.h"
 #include "jh_bluetooth_classic_hid_probe_logic.h"
+#include "jh_bluetooth_gamepad_parser.h"
 #include "jh_btstack_hci_transport_cyw43.h"
 #include "jh_btstack_host.h"
 #include "l2cap.h"
@@ -24,7 +24,6 @@
 extern void sdp_parser_init_service_search(void);
 
 enum {
-  JH_CLASSIC_HID_DESCRIPTOR_CAPACITY = 512u,
   JH_CLASSIC_HID_INQUIRY_DURATION_1280_MS = 8u,
   JH_CLASSIC_HID_SDP_SETTLE_MS = 1000u,
   JH_CLASS_OF_DEVICE_MAJOR_MASK = 0x1f00u,
@@ -34,8 +33,8 @@ enum {
 
 static const uint32_t JH_CLASSIC_HID_CAPTURE_DESCRIPTOR_HASH = 0xe51f7bbeu;
 
-static uint8_t s_hid_descriptor[JH_CLASSIC_HID_DESCRIPTOR_CAPACITY];
-static btstack_hid_parser_t s_hid_parser;
+static uint8_t s_hid_descriptor[JH_BLUETOOTH_GAMEPAD_DESCRIPTOR_MAX];
+static jh_bluetooth_gamepad_parser_t s_gamepad_parser;
 static btstack_packet_callback_registration_t s_hci_events;
 static jh_bluetooth_classic_hid_lifecycle_t s_lifecycle;
 static jh_bluetooth_classic_hid_probe_logic_t s_logic;
@@ -70,6 +69,46 @@ static void sync_logic_snapshot(void) {
   s_snapshot.active_controls_mask = s_logic.active_controls_mask;
   s_snapshot.seen_controls_mask = s_logic.seen_controls_mask;
   s_snapshot.report_length_high_water = s_logic.report_length_high_water;
+  jh_bluetooth_gamepad_parser_diagnostics(&s_gamepad_parser,
+                                          &s_snapshot.parser);
+  s_snapshot.invalid_reports = s_snapshot.parser.reports_rejected;
+}
+
+static void drain_gamepad_queue(void) {
+  jh_bluetooth_gamepad_snapshot_t snapshot;
+  hal_status_t status = HAL_OK;
+  do {
+    status = jh_bluetooth_gamepad_parser_next(&s_gamepad_parser, &snapshot);
+  } while (status == HAL_OK || status == HAL_EOVERFLOW);
+}
+
+static hal_status_t gamepad_connection_opened(void) {
+  jh_bluetooth_gamepad_snapshot_t snapshot;
+  const hal_status_t snapshot_status =
+      jh_bluetooth_gamepad_parser_snapshot(&s_gamepad_parser, &snapshot);
+  if (snapshot_status != HAL_OK) {
+    return snapshot_status;
+  }
+  if (snapshot.connected) {
+    return HAL_OK;
+  }
+  const hal_status_t status =
+      jh_bluetooth_gamepad_parser_connection_opened(&s_gamepad_parser);
+  if (status == HAL_OK) {
+    drain_gamepad_queue();
+  }
+  return status;
+}
+
+static void gamepad_connection_closed(void) {
+  jh_bluetooth_gamepad_snapshot_t snapshot;
+  if (jh_bluetooth_gamepad_parser_snapshot(&s_gamepad_parser, &snapshot) ==
+          HAL_OK &&
+      snapshot.connected &&
+      jh_bluetooth_gamepad_parser_connection_closed(&s_gamepad_parser) ==
+          HAL_OK) {
+    drain_gamepad_queue();
+  }
 }
 
 static uint32_t fnv1a32(const uint8_t *data, size_t length) {
@@ -205,6 +244,10 @@ static void start_identity_sdp_query(void) {
 
 static void finalize_hid_connection(void) {
   jh_bluetooth_classic_hid_probe_logic_connected(&s_logic);
+  const hal_status_t parser_status = gamepad_connection_opened();
+  if (parser_status != HAL_OK && parser_status != HAL_EUNINIT) {
+    s_snapshot.last_status = parser_status;
+  }
   sync_logic_snapshot();
   s_snapshot.phase = JH_CLASSIC_HID_PHASE_CONNECTED;
   if (s_snapshot.protocol == JH_CLASSIC_HID_PROTOCOL_UNKNOWN) {
@@ -378,15 +421,11 @@ set_pairing_request(jh_bluetooth_classic_hid_pairing_method_t method,
   ++s_snapshot.pairing_requests;
 }
 
-static bool valid_zero2_report(const uint8_t *report, uint16_t length) {
-  if (report == NULL || length == 0u) {
-    return false;
+static void hid_input_payload(const uint8_t **report, uint16_t *length) {
+  if (*report != NULL && *length > 0u && (*report)[0] == 0xa1u) {
+    ++*report;
+    --*length;
   }
-  if (report[0] == 0xa1u) {
-    ++report;
-    --length;
-  }
-  return length >= 8u && report[0] == 0x03u;
 }
 
 static void handle_hid_event(const uint8_t *packet) {
@@ -459,6 +498,9 @@ static void handle_hid_event(const uint8_t *packet) {
         const uint8_t protocol_status = hid_host_send_set_protocol_mode(
             s_hid_cid, HID_PROTOCOL_MODE_REPORT);
         s_snapshot.last_btstack_status = protocol_status;
+      } else {
+        s_snapshot.last_status = HAL_EPROTO;
+        reject_connected_candidate();
       }
       break;
     }
@@ -476,16 +518,48 @@ static void handle_hid_event(const uint8_t *packet) {
     s_snapshot.descriptor_matches_capture =
         descriptor_length == JH_CLASSIC_HID_CAPTURE_DESCRIPTOR_LENGTH &&
         s_snapshot.descriptor_hash == JH_CLASSIC_HID_CAPTURE_DESCRIPTOR_HASH;
+    if (!s_snapshot.descriptor_matches_capture) {
+      s_snapshot.last_status = HAL_EPROTO;
+      reject_connected_candidate();
+      break;
+    }
+    if (!s_gamepad_parser.configured) {
+      const hal_status_t parser_status = jh_bluetooth_gamepad_parser_configure(
+          &s_gamepad_parser, descriptor, descriptor_length);
+      s_snapshot.last_status = parser_status;
+      if (parser_status != HAL_OK) {
+        reject_connected_candidate();
+        break;
+      }
+    }
+    const hal_status_t parser_status = gamepad_connection_opened();
+    if (parser_status != HAL_OK) {
+      s_snapshot.last_status = parser_status;
+      reject_connected_candidate();
+    }
     break;
   }
   case HID_SUBEVENT_REPORT: {
     const uint8_t *report = hid_subevent_report_get_report(packet);
-    const uint16_t length = hid_subevent_report_get_report_len(packet);
-    if (!valid_zero2_report(report, length)) {
-      ++s_snapshot.invalid_reports;
+    uint16_t length = hid_subevent_report_get_report_len(packet);
+    const uint16_t transport_length = length;
+    hid_input_payload(&report, &length);
+    const hal_status_t parser_status = jh_bluetooth_gamepad_parser_parse_input(
+        &s_gamepad_parser, report, length);
+    if (parser_status != HAL_OK) {
+      s_snapshot.last_status = parser_status;
+      sync_logic_snapshot();
       break;
     }
-    (void)jh_bluetooth_classic_hid_probe_logic_report(&s_logic, report, length);
+    jh_bluetooth_gamepad_snapshot_t snapshot;
+    if (jh_bluetooth_gamepad_parser_snapshot(&s_gamepad_parser, &snapshot) !=
+        HAL_OK) {
+      s_snapshot.last_status = HAL_EINTERNAL;
+      break;
+    }
+    (void)jh_bluetooth_classic_hid_probe_logic_report(&s_logic, &snapshot,
+                                                      transport_length);
+    drain_gamepad_queue();
     sync_logic_snapshot();
     break;
   }
@@ -504,6 +578,7 @@ static void handle_hid_event(const uint8_t *packet) {
       s_connected_accumulated_ms += hal_millis() - s_connected_since_ms;
       ++s_snapshot.disconnections;
     }
+    gamepad_connection_closed();
     jh_bluetooth_classic_hid_probe_logic_disconnected(&s_logic);
     sync_logic_snapshot();
     s_snapshot.descriptor_available = false;
@@ -617,8 +692,6 @@ static void sdp_client_stop(void *context) {
 
 static hal_status_t hid_profile_start(void *context) {
   (void)context;
-  btstack_hid_parser_init(&s_hid_parser, NULL, 0u, HID_REPORT_TYPE_INPUT, NULL,
-                          0u);
   hid_host_init(s_hid_descriptor, sizeof(s_hid_descriptor));
   return HAL_OK;
 }
@@ -694,6 +767,7 @@ static hal_status_t profile_service(void *context) {
 static void profile_invalidated(void *context, uint32_t generation) {
   (void)context;
   (void)generation;
+  gamepad_connection_closed();
   jh_bluetooth_classic_hid_probe_logic_disconnected(&s_logic);
   sync_logic_snapshot();
   s_snapshot.controller_ready = false;
@@ -729,6 +803,7 @@ hal_status_t jh_bluetooth_classic_hid_probe_start(void) {
   s_connect_pending = false;
   s_identity_validated = false;
   reset_candidate();
+  jh_bluetooth_gamepad_parser_init(&s_gamepad_parser);
   jh_bluetooth_classic_hid_probe_logic_reset(&s_logic);
   jh_bluetooth_classic_hid_memory_probe_reset();
   s_snapshot.phase = JH_CLASSIC_HID_PHASE_IDLE;
