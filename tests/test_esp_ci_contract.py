@@ -73,7 +73,8 @@ def require_esp_cache(body: str, context: str) -> None:
         "uses: actions/cache@v5",
         "third_party/esp-idf",
         "~/.espressif",
-        "hashFiles('third_party/esp_idf_version.conf')",
+        "hashFiles('third_party/esp_idf_version.conf', "
+        "'security/esp_idf_tools.json')",
     ):
         require(fragment in body, f"{context} ESP-IDF cache is missing {fragment!r}")
     require(

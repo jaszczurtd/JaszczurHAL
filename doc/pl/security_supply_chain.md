@@ -111,7 +111,14 @@ wymagania ESP-IDF. Pozycje Python obejmują esptool, zarządzanie komponentami,
 monitor, core dump, Kconfig, generowanie partycji NVS, analizę rozmiaru,
 diagnostykę, panic decoder, binding Pythona dla Clang oraz narzędzia GDB dla
 FreeRTOS. Ogólne, przechodnie pakiety Python pozostają własnością wymagań
-środowiska upstream i nie są duplikowane w tym snapshocie.
+środowiska upstream i nie są duplikowane w tym snapshotcie.
+Menedżer komponentów sprawdza każdą wymienioną dystrybucję Pythona po
+uruchomieniu instalatora ESP-IDF. Jeżeli zmienny plik ograniczeń upstream
+wybierze inną zgodną wersję, konfiguracja ponownie narzuca dokładne,
+zweryfikowane wersje w ramach tych ograniczeń, zanim dopuści build. Klucz cache
+ESP-IDF w CI uwzględnia zarówno pin frameworka, jak i ten snapshot, dzięki czemu
+zatwierdzona zmiana narzędzia tworzy nowe środowisko zamiast używać nieaktualnych
+pakietów.
 `scripts/generate_sbom.py` rozwija snapshot bezpośrednio do komponentów
 CycloneDX o zakresie developerskim, uwzględniając zweryfikowaną licencję SPDX
 każdego narzędzia. Narzędzia nie są kopiowane do

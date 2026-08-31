@@ -2,10 +2,10 @@
 
 #if !HAL_TARGET_IS_MOCK && defined(HAL_ENABLE_BLUETOOTH_GAMEPAD)
 
+#include <string.h>
+
 #include "jh_bluetooth_classic_hid_probe.h"
 #include "jh_gamepad_backend.h"
-
-#include <string.h>
 
 _Static_assert((unsigned)HAL_GAMEPAD_AXIS_COUNT ==
                    (unsigned)JH_BLUETOOTH_GAMEPAD_AXIS_COUNT,
@@ -13,16 +13,6 @@ _Static_assert((unsigned)HAL_GAMEPAD_AXIS_COUNT ==
 _Static_assert((unsigned)HAL_GAMEPAD_SNAPSHOT_QUEUE_DEPTH ==
                    (unsigned)JH_BLUETOOTH_GAMEPAD_QUEUE_CAPACITY,
                "public and parser queue depths must match");
-
-static void copy_snapshot(const jh_bluetooth_gamepad_snapshot_t *source,
-                          hal_gamepad_snapshot_t *destination) {
-  destination->generation = source->generation;
-  destination->buttons = source->buttons;
-  memcpy(destination->axes, source->axes, sizeof(destination->axes));
-  destination->axes_present = source->axes_present;
-  destination->dpad = source->dpad;
-  destination->connected = source->connected;
-}
 
 static hal_gamepad_state_t
 public_state(const jh_bluetooth_classic_hid_probe_snapshot_t *snapshot) {
@@ -107,7 +97,7 @@ static hal_status_t backend_snapshot(void *context,
   const hal_status_t status =
       jh_bluetooth_classic_hid_probe_gamepad_snapshot(&snapshot);
   if (status == HAL_OK) {
-    copy_snapshot(&snapshot, out_snapshot);
+    jh_gamepad_copy_snapshot(&snapshot, out_snapshot);
   }
   return status;
 }
@@ -122,7 +112,7 @@ backend_snapshot_next(void *context, hal_gamepad_snapshot_t *out_snapshot) {
   const hal_status_t status =
       jh_bluetooth_classic_hid_probe_gamepad_next(&snapshot);
   if (status == HAL_OK) {
-    copy_snapshot(&snapshot, out_snapshot);
+    jh_gamepad_copy_snapshot(&snapshot, out_snapshot);
   }
   return status;
 }

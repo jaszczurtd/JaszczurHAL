@@ -31,7 +31,7 @@ jobs:
           path: |
             third_party/esp-idf
             ~/.espressif
-          key: esp-idf-${{ runner.os }}-${{ hashFiles('third_party/esp_idf_version.conf') }}
+          key: esp-idf-${{ runner.os }}-${{ hashFiles('third_party/esp_idf_version.conf', 'security/esp_idf_tools.json') }}
 
       - name: Cache authenticated Windows tools
         uses: actions/cache@v5
@@ -459,7 +459,7 @@ jobs:
           path: |
             third_party/esp-idf
             ~/.espressif
-          key: esp-idf-${{ runner.os }}-${{ hashFiles('third_party/esp_idf_version.conf') }}
+          key: esp-idf-${{ runner.os }}-${{ hashFiles('third_party/esp_idf_version.conf', 'security/esp_idf_tools.json') }}
 
       - name: Verify release metadata and tag ancestry
         run: |

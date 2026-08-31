@@ -325,21 +325,22 @@ obecność znanego urządzenia i diagnostykę ograniczonej kolejki.
 Publiczne stany to `UNINITIALIZED`, `STARTING`, `READY`, `DISCOVERING`,
 `CONNECTING`, `CONNECTED` i `FAILED`. Krytyczna awaria kontrolera lub transportu
 przenosi profil do `FAILED`. `hal_gamepad_close()` zatrzymuje profil i
-unieważnia jego uchwyt.
+czyści wybrane urządzenie oraz unieważnia jego uchwyt.
 
 ### Parowanie i reconnect
 
 Parowanie jest sterowane przez aplikację i ograniczone w czasie. Gdy profil
 osiągnie `READY`, wywołaj `hal_gamepad_pairing_open()`, aby rozpocząć okno
-wykrywania. Kiedy `hal_gamepad_info_t::pairing_pending` stanie się prawdziwe,
+wykrywania. Jest to dozwolone także wtedy, gdy istnieje znane urządzenie, co
+pozwala aplikacji je zastąpić. Kiedy
+`hal_gamepad_info_t::pairing_pending` stanie się prawdziwe,
 aplikacja może wywołać `hal_gamepad_pairing_authorize()` i zaakceptować Just
 Works albo legacy PIN `0000`. Nieobsługiwane przepływy z passkey są odrzucane.
 Zaakceptowany adres wskazuje znane urządzenie używane przez
-`hal_gamepad_reconnect()` podczas bieżącego uruchomienia firmware.
-Przechowywanie link key zależy od stosu. Zachowanie tożsamości wybranej przez
-HAL po resecie watchdogiem lub zimnym starcie nie wchodzi w zakres tego
-wydania, dlatego aplikacja musi być gotowa ponownie otworzyć okno parowania po
-restarcie.
+`hal_gamepad_reconnect()` podczas bieżącej otwartej sesji profilu.
+Przechowywanie link key zależy od stosu. Zamknięcie profilu lub restart
+firmware czyści tożsamość wybraną przez HAL, dlatego aplikacja musi być gotowa
+ponownie otworzyć okno parowania.
 
 Otwarcie okna parowania jest jawną decyzją autoryzacyjną. Produkt powinien je
 udostępnić dopiero po lokalnej akcji użytkownika i nie powinien traktować nazwy
@@ -350,7 +351,8 @@ dowodu tożsamości użytkownika.
 
 Parser raportów HID nie zależy od BTstack ani ESP-IDF. Waliduje ograniczony
 deskryptor raportów i zasila ten sam znormalizowany model snapshotu na każdym
-backendzie.
+backendzie. Poprawne długie elementy HID z nieobsługiwanymi tagami są pomijane;
+ucięty długi element powoduje odrzucenie deskryptora.
 
 `hal_gamepad_snapshot_t` zawiera generację połączenia, 32-bitową maskę
 przycisków, dziewięć osi Generic Desktop, maskę obecności osi, maskę kierunku
@@ -366,6 +368,10 @@ Jeśli utracono stany pośrednie, najpierw zwraca `HAL_EOVERFLOW`; wywołaj funk
 ponownie, aby dostać najnowszą zachowaną sekwencję. Połączenie i rozłączenie też
 tworzą snapshoty, a snapshot rozłączenia zeruje wszystkie wejścia, dzięki czemu
 aplikacja nie zachowa wciśniętego elementu po utracie linku.
+`hal_gamepad_disconnect()` jedynie przyjmuje żądanie, a zakończenie jest
+asynchroniczne. Aplikacja musi obserwować stan lub snapshoty i nie może zależeć
+od tego, czy backend zakończy operację przed następnym
+`hal_gamepad_poll()`, czy w jego trakcie.
 
 ```c
 hal_gamepad_t gamepad = NULL;
@@ -392,8 +398,10 @@ void service_gamepad(void) {
 
 Deterministyczny backend mock pozwala wstrzyknąć gotowość, żądanie parowania,
 połączenie, snapshoty wejść, rozłączenie, przepełnienie kolejki i błędy
-transportu. Kompletny konsument C oraz wariant buildu BLE+Classic znajdują się
-w [`examples/29_bluetooth_gamepad`](../../../examples/29_bluetooth_gamepad/).
+transportu. Żądane rozłączenie realizuje podczas `hal_gamepad_poll()`, aby jego
+timing był deterministyczny. Kompletny konsument C oraz wariant buildu
+BLE+Classic znajdują się w
+[`examples/29_bluetooth_gamepad`](../../../examples/29_bluetooth_gamepad/).
 
 ## JH BLE Stream v1
 

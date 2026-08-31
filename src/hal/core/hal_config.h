@@ -147,6 +147,10 @@
 #endif
 #endif
 
+#if defined(HAL_ENABLE_BLE_STREAM) && HAL_TARGET_IS_ESP32_S3
+#error "HAL_ENABLE_BLE_STREAM is not supported by the ESP32-S3 NimBLE backend"
+#endif
+
 #if defined(HAL_ENABLE_BLUETOOTH_CLASSIC)
 #if !HAL_BOARD_HAS_BLUETOOTH_CLASSIC_CONTROLLER
 #error                                                                         \

@@ -29,6 +29,7 @@ enum {
   JH_HID_ITEM_TYPE_MAIN = 0u,
   JH_HID_ITEM_TYPE_GLOBAL = 1u,
   JH_HID_ITEM_TYPE_LOCAL = 2u,
+  JH_HID_ITEM_TYPE_RESERVED = 3u,
   JH_HID_MAIN_INPUT = 8u,
   JH_HID_MAIN_COLLECTION = 10u,
   JH_HID_MAIN_END_COLLECTION = 12u,
@@ -140,34 +141,45 @@ get_report_layout(jh_bluetooth_gamepad_parser_t *parser, uint16_t report_id) {
 static bool next_item(const uint8_t *descriptor, uint16_t descriptor_length,
                       uint16_t *position, jh_hid_item_t *out_item) {
   static const uint8_t sizes[4] = {0u, 1u, 2u, 4u};
-  if (*position >= descriptor_length) {
-    return false;
-  }
-  const uint8_t prefix = descriptor[(*position)++];
-  if (prefix == UINT8_C(0xfe)) {
-    return false;
-  }
-  const uint8_t data_size = sizes[prefix & 0x03u];
-  if ((uint32_t)*position + data_size > descriptor_length) {
-    return false;
-  }
-  uint32_t value = 0u;
-  for (uint8_t index = 0u; index < data_size; ++index) {
-    value |= (uint32_t)descriptor[(*position)++] << (index * 8u);
-  }
-  int32_t signed_value = (int32_t)value;
-  if (data_size > 0u && data_size < 4u) {
-    const uint8_t bit_count = (uint8_t)(data_size * 8u);
-    const uint32_t sign_bit = UINT32_C(1) << (bit_count - 1u);
-    if ((value & sign_bit) != 0u) {
-      signed_value = (int32_t)(value | ~(sign_bit - 1u));
+  while (*position < descriptor_length) {
+    const uint8_t prefix = descriptor[(*position)++];
+    if (prefix == UINT8_C(0xfe)) {
+      if ((uint32_t)*position + 2u > descriptor_length) {
+        return false;
+      }
+      const uint8_t data_size = descriptor[(*position)++];
+      ++*position; /* Long-item tag. */
+      if ((uint32_t)*position + data_size > descriptor_length) {
+        return false;
+      }
+      *position = (uint16_t)(*position + data_size);
+      continue;
     }
+    const uint8_t data_size = sizes[prefix & 0x03u];
+    if ((uint32_t)*position + data_size > descriptor_length) {
+      return false;
+    }
+    uint32_t value = 0u;
+    for (uint8_t index = 0u; index < data_size; ++index) {
+      value |= (uint32_t)descriptor[(*position)++] << (index * 8u);
+    }
+    int32_t signed_value = (int32_t)value;
+    if (data_size > 0u && data_size < 4u) {
+      const uint8_t bit_count = (uint8_t)(data_size * 8u);
+      const uint32_t sign_bit = UINT32_C(1) << (bit_count - 1u);
+      if ((value & sign_bit) != 0u) {
+        signed_value = (int32_t)(value | ~(sign_bit - 1u));
+      }
+    }
+    out_item->value = value;
+    out_item->signed_value = signed_value;
+    out_item->data_size = data_size;
+    out_item->type = (uint8_t)((prefix >> 2u) & 0x03u);
+    out_item->tag = (uint8_t)(prefix >> 4u);
+    return true;
   }
-  out_item->value = value;
-  out_item->signed_value = signed_value;
-  out_item->data_size = data_size;
-  out_item->type = (uint8_t)((prefix >> 2u) & 0x03u);
-  out_item->tag = (uint8_t)(prefix >> 4u);
+  memset(out_item, 0, sizeof(*out_item));
+  out_item->type = JH_HID_ITEM_TYPE_RESERVED;
   return true;
 }
 
@@ -322,9 +334,10 @@ static hal_status_t collect_input_fields(jh_bluetooth_gamepad_parser_t *parser,
   return HAL_OK;
 }
 
-static hal_status_t parse_descriptor(jh_bluetooth_gamepad_parser_t *parser,
-                                     const uint8_t *descriptor,
-                                     uint16_t descriptor_length) {
+static hal_status_t
+parse_descriptor(jh_bluetooth_gamepad_parser_t *parser,
+                 const uint8_t *descriptor, uint16_t descriptor_length,
+                 jh_bluetooth_gamepad_reject_reason_t *out_reject_reason) {
   jh_hid_globals_t globals = {
       .logical_minimum = 0,
       .logical_maximum = 0,
@@ -343,6 +356,7 @@ static hal_status_t parse_descriptor(jh_bluetooth_gamepad_parser_t *parser,
   bool input_without_id = false;
   bool input_with_id = false;
   reset_locals(&locals);
+  *out_reject_reason = JH_BLUETOOTH_GAMEPAD_REJECT_DESCRIPTOR_MALFORMED;
 
   while (position < descriptor_length) {
     jh_hid_item_t item;
@@ -430,7 +444,10 @@ static hal_status_t parse_descriptor(jh_bluetooth_gamepad_parser_t *parser,
         return HAL_EOVERFLOW;
       }
       uint32_t usage = 0u;
-      const bool have_usage = local_usage_at(&locals, 0u, &usage);
+      const bool have_usage =
+          locals.usage_count > 0u
+              ? (usage = locals.usages[locals.usage_count - 1u], true)
+              : local_usage_at(&locals, 0u, &usage);
       const bool parent_accepted =
           collection_depth > 0u && accepted_collections[collection_depth - 1u];
       const bool this_accepted =
@@ -458,6 +475,7 @@ static hal_status_t parse_descriptor(jh_bluetooth_gamepad_parser_t *parser,
       jh_bluetooth_gamepad_report_layout_t *layout =
           get_report_layout(parser, globals.report_id);
       if (layout == NULL) {
+        *out_reject_reason = JH_BLUETOOTH_GAMEPAD_REJECT_TOO_MANY_REPORT_IDS;
         return HAL_EOVERFLOW;
       }
       const uint32_t item_bits =
@@ -481,6 +499,11 @@ static hal_status_t parse_descriptor(jh_bluetooth_gamepad_parser_t *parser,
     }
     reset_locals(&locals);
     if (main_status != HAL_OK) {
+      if (main_status == HAL_EOVERFLOW) {
+        *out_reject_reason = JH_BLUETOOTH_GAMEPAD_REJECT_TOO_MANY_FIELDS;
+      } else if (main_status == HAL_EEXIST) {
+        *out_reject_reason = JH_BLUETOOTH_GAMEPAD_REJECT_DUPLICATE_USAGE;
+      }
       return main_status;
     }
   }
@@ -488,6 +511,7 @@ static hal_status_t parse_descriptor(jh_bluetooth_gamepad_parser_t *parser,
     return HAL_EPROTO;
   }
   if (!found_gamepad || parser->field_count == 0u) {
+    *out_reject_reason = JH_BLUETOOTH_GAMEPAD_REJECT_UNSUPPORTED_COLLECTION;
     return HAL_EUNSUPPORTED;
   }
   return parser->report_layout_count == 0u ? HAL_EPROTO : HAL_OK;
@@ -512,23 +536,12 @@ jh_bluetooth_gamepad_parser_configure(jh_bluetooth_gamepad_parser_t *parser,
                              JH_BLUETOOTH_GAMEPAD_REJECT_DESCRIPTOR_TOO_LARGE);
   }
 
-  const hal_status_t descriptor_status =
-      parse_descriptor(parser, descriptor, (uint16_t)descriptor_length);
+  jh_bluetooth_gamepad_reject_reason_t reject_reason =
+      JH_BLUETOOTH_GAMEPAD_REJECT_DESCRIPTOR_MALFORMED;
+  const hal_status_t descriptor_status = parse_descriptor(
+      parser, descriptor, (uint16_t)descriptor_length, &reject_reason);
   if (descriptor_status != HAL_OK) {
-    const jh_bluetooth_gamepad_reject_reason_t reason =
-        descriptor_status == HAL_EUNSUPPORTED
-            ? JH_BLUETOOTH_GAMEPAD_REJECT_UNSUPPORTED_COLLECTION
-        : descriptor_status == HAL_EOVERFLOW &&
-                parser->report_layout_count >=
-                    JH_BLUETOOTH_GAMEPAD_REPORT_ID_CAPACITY
-            ? JH_BLUETOOTH_GAMEPAD_REJECT_TOO_MANY_REPORT_IDS
-        : descriptor_status == HAL_EOVERFLOW &&
-                parser->field_count >= JH_BLUETOOTH_GAMEPAD_FIELD_CAPACITY
-            ? JH_BLUETOOTH_GAMEPAD_REJECT_TOO_MANY_FIELDS
-        : descriptor_status == HAL_EEXIST
-            ? JH_BLUETOOTH_GAMEPAD_REJECT_DUPLICATE_USAGE
-            : JH_BLUETOOTH_GAMEPAD_REJECT_DESCRIPTOR_MALFORMED;
-    return reject_descriptor(parser, descriptor_status, reason);
+    return reject_descriptor(parser, descriptor_status, reject_reason);
   }
 
   parser->configured = true;

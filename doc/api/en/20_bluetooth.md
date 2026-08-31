@@ -311,19 +311,21 @@ bounded-queue diagnostics.
 The supported public states are `UNINITIALIZED`, `STARTING`, `READY`,
 `DISCOVERING`, `CONNECTING`, `CONNECTED`, and `FAILED`. A fatal controller or
 transport error moves the profile to `FAILED`. `hal_gamepad_close()` stops the
-profile and invalidates its handle.
+profile, clears the selected device, and invalidates its handle.
 
 ### Pairing and reconnect
 
 Pairing is application-controlled and bounded. Once the profile reaches
-`READY`, call `hal_gamepad_pairing_open()` to start its discovery window. When
+`READY`, call `hal_gamepad_pairing_open()` to start its discovery window. This
+is also allowed when a known device exists and lets the application replace it.
+When
 `hal_gamepad_info_t::pairing_pending` becomes true, the application may call
 `hal_gamepad_pairing_authorize()` to accept Just Works or the legacy PIN
 `0000`. Unsupported passkey flows are rejected. The accepted address identifies
-the known device used by `hal_gamepad_reconnect()` during the current firmware
-runtime. Link-key storage is stack-specific. Persisting the HAL-selected
-identity across a watchdog reset or cold boot is not part of this release, so
-an application must be prepared to open a new pairing window after restart.
+the known device used by `hal_gamepad_reconnect()` during the current open
+profile session. Link-key storage is stack-specific. Closing the profile or
+restarting firmware clears the HAL-selected identity, so an application must
+be prepared to open a new pairing window afterward.
 
 Opening a pairing window is a deliberate authorization action. Products
 should expose it only after local user input and should not treat a device
@@ -334,7 +336,8 @@ user identity.
 
 The HID report parser does not depend on BTstack or ESP-IDF. It validates a
 bounded report descriptor and feeds the same normalized snapshot model on
-every backend.
+every backend. Well-formed HID long items with unsupported tags are skipped;
+truncated long items reject the descriptor.
 
 `hal_gamepad_snapshot_t` contains a connection generation, a 32-bit button
 mask, nine generic-desktop axes, an axis-presence mask, a D-pad direction mask,
@@ -350,6 +353,9 @@ If intermediate changes were dropped, it first returns `HAL_EOVERFLOW`; call
 again to receive the newest retained sequence. Connection and disconnection
 also produce snapshots, and the disconnection snapshot clears every input so
 an application cannot retain a pressed control after a lost link.
+`hal_gamepad_disconnect()` only accepts the request; completion is asynchronous.
+Applications must observe state or snapshots and must not depend on whether a
+backend completes before or during the next `hal_gamepad_poll()`.
 
 ```c
 hal_gamepad_t gamepad = NULL;
@@ -376,7 +382,9 @@ void service_gamepad(void) {
 
 The deterministic mock backend can inject readiness, a pairing request,
 connection, input snapshots, disconnection, queue overflow, and transport
-errors. The complete C consumer and BLE+Classic build variant are in
+errors. It advances a requested disconnect during `hal_gamepad_poll()` to keep
+that timing deterministic. The complete C consumer and BLE+Classic build
+variant are in
 [`examples/29_bluetooth_gamepad`](../../../examples/29_bluetooth_gamepad/).
 
 ## JH BLE Stream v1

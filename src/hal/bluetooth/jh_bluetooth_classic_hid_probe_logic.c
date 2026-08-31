@@ -2,11 +2,7 @@
 
 #include <string.h>
 
-enum {
-  JH_CLASS_OF_DEVICE_MAJOR_MASK = 0x1f00u,
-  JH_CLASS_OF_DEVICE_MAJOR_PERIPHERAL = 0x0500u,
-  JH_ZERO2_AXIS_DIGITAL_THRESHOLD = 30000,
-};
+enum { JH_ZERO2_AXIS_DIGITAL_THRESHOLD = 30000 };
 
 static bool deadline_reached(uint32_t now_ms, uint32_t deadline_ms) {
   return (int32_t)(now_ms - deadline_ms) >= 0;
@@ -44,19 +40,14 @@ void jh_bluetooth_classic_hid_probe_logic_close_discovery(
 
 bool jh_bluetooth_classic_hid_probe_logic_candidate_matches(
     uint32_t class_of_device, const uint8_t *name, size_t name_length) {
-  static const char expected_name[] = JH_CLASSIC_HID_EXPECTED_NAME;
-  return (class_of_device & JH_CLASS_OF_DEVICE_MAJOR_MASK) ==
-             JH_CLASS_OF_DEVICE_MAJOR_PERIPHERAL &&
-         name != NULL && name_length == sizeof(expected_name) - 1u &&
-         memcmp(name, expected_name, sizeof(expected_name) - 1u) == 0;
+  return jh_bluetooth_gamepad_candidate_matches(class_of_device, name,
+                                                name_length);
 }
 
 bool jh_bluetooth_classic_hid_probe_logic_pnp_matches(uint16_t vendor_id,
                                                       uint16_t product_id,
                                                       uint16_t version) {
-  return vendor_id == JH_CLASSIC_HID_EXPECTED_VENDOR_ID &&
-         product_id == JH_CLASSIC_HID_EXPECTED_PRODUCT_ID &&
-         version == JH_CLASSIC_HID_EXPECTED_VERSION;
+  return jh_bluetooth_gamepad_pnp_matches(vendor_id, product_id, version);
 }
 
 void jh_bluetooth_classic_hid_probe_logic_connected(
