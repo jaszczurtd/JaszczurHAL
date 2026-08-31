@@ -110,8 +110,10 @@ function(jh_add_stm32g474_firmware TARGET)
         "${_jh_src}/hal/bluetooth/hal_ble.cpp"
         "${_jh_src}/hal/bluetooth/hal_ble_commands.cpp"
         "${_jh_src}/hal/bluetooth/hal_ble_stream.cpp"
+        ${_jh_build_effects_PORTABLE_SOURCES}
         "${_jh_src}/hal_app_entry.cpp"
     )
+    list(REMOVE_DUPLICATES _hal_common)
     # Base portable utils. SmartTimers/cJSON are already covered by the thematic
     # common-source inventory above.
     # multicoreWatchdog is kept (some consumers use it); --gc-sections strips it

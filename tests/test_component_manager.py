@@ -381,7 +381,7 @@ class TrackedContractTests(unittest.TestCase):
                     "7101770dc6db2667b3c477cc31365dd1acd6db4e",
                 "ESP_IDF_VERSION": "6.0.2",
                 "ESP_IDF_DIR": "third_party/esp-idf",
-                "ESP_IDF_TARGETS": "esp32s3",
+                "ESP_IDF_TARGETS": "esp32,esp32s3",
             },
         )
         spec = manager.GIT_COMPONENTS["esp-idf"]
@@ -417,9 +417,9 @@ class TrackedContractTests(unittest.TestCase):
         commands = [call.args[0] for call in run.call_args_list]
         installer = (
             "cmd.exe", "/d", "/s", "/c", str(directory / "install.bat"),
-            "esp32s3",
+            "esp32,esp32s3",
         ) if sys.platform == "win32" else (
-            "bash", str(directory / "install.sh"), "esp32s3",
+            "bash", str(directory / "install.sh"), "esp32,esp32s3",
         )
         self.assertEqual(installer, commands[0])
         self.assertEqual("check", commands[1][-1])

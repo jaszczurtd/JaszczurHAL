@@ -1044,12 +1044,15 @@ def validate_board(
                 programming,
                 "programming metadata for an ESP-IDF board",
             )
-        if programming["transport"] != "usb-serial-jtag":
+        if programming["transport"] not in {
+            "usb-serial-jtag",
+            "usb-uart-bridge",
+        }:
             fail(
                 path,
                 "$.programming.transport",
                 programming["transport"],
-                "usb-serial-jtag",
+                "usb-serial-jtag or usb-uart-bridge",
             )
         usb = exact_fields(
             path,
@@ -1070,13 +1073,18 @@ def validate_board(
                     usb[field],
                     "a 16-bit USB identifier",
                 )
+        expected_control = (
+            {"reset": "usb-serial-jtag-control-lines", "boot": "usb-serial-jtag-control-lines"}
+            if programming["transport"] == "usb-serial-jtag"
+            else {"reset": "dtr-rts-en", "boot": "dtr-rts-io0"}
+        )
         for field in ("reset", "boot"):
-            if programming[field] != "usb-serial-jtag-control-lines":
+            if programming[field] != expected_control[field]:
                 fail(
                     path,
                     f"$.programming.{field}",
                     programming[field],
-                    "usb-serial-jtag-control-lines",
+                    expected_control[field],
                 )
     component_ids = validate_components(
         path, "$.components", board["components"], build["provider"]

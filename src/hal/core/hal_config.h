@@ -137,12 +137,25 @@
 #undef JH_HAL_FEATURE_VERBOSE_REPORT_DEFERRED
 
 #if defined(HAL_ENABLE_BLE)
-#if !HAL_BOARD_HAS_BLUETOOTH_CONTROLLER
-#error "HAL_ENABLE_BLE requires a board profile with a Bluetooth controller"
+#if !HAL_BOARD_HAS_BLUETOOTH_LE_CONTROLLER
+#error "HAL_ENABLE_BLE requires a board profile with a Bluetooth LE controller"
 #endif
 #if !(HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_RP2350_ARM ||                      \
-      HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK)
-#error "HAL_ENABLE_BLE is supported on RP2040, RP2350 ARM, STM32G474, and mock"
+      HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_ESP32_S3 || HAL_TARGET_IS_MOCK)
+#error                                                                         \
+    "HAL_ENABLE_BLE is supported on RP2040, RP2350 ARM, STM32G474, ESP32-S3, and mock"
+#endif
+#endif
+
+#if defined(HAL_ENABLE_BLUETOOTH_CLASSIC)
+#if !HAL_BOARD_HAS_BLUETOOTH_CLASSIC_CONTROLLER
+#error                                                                         \
+    "HAL_ENABLE_BLUETOOTH_CLASSIC requires a board profile with a Bluetooth Classic controller"
+#endif
+#if !(HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_RP2350_ARM ||                      \
+      HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_ESP32 || HAL_TARGET_IS_MOCK)
+#error                                                                         \
+    "HAL_ENABLE_BLUETOOTH_CLASSIC is supported on RP2040, RP2350 ARM, STM32G474, ESP32, and mock"
 #endif
 #endif
 

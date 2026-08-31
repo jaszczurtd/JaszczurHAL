@@ -1,12 +1,15 @@
-# Bluetooth Low Energy Peripheral and Observer API
+# Bluetooth Low Energy and Classic HID gamepad API
 
 *Also available in [Polish](../pl/20_bluetooth.md).*
 
 > **Part of [JaszczurHAL API Reference](../../en/JaszczurHAL_API.md)**
 
-The `hal_ble` module is an opt-in Bluetooth Low Energy Peripheral and passive
-Observer API. Define `HAL_ENABLE_BLE` and include `hal/bluetooth/hal_ble.h` or
-the umbrella `JaszczurHAL.h` header.
+The Bluetooth modules are opt-in. `HAL_ENABLE_BLE` exposes the Low Energy
+Peripheral and passive Observer API through `hal/bluetooth/hal_ble.h`.
+`HAL_ENABLE_BLUETOOTH_GAMEPAD` exposes one Bluetooth Classic HID gamepad
+through `hal/bluetooth/hal_gamepad.h` and automatically enables
+`HAL_ENABLE_BLUETOOTH_CLASSIC`. Both are also available from the umbrella
+`JaszczurHAL.h` header.
 
 The current release provides one Peripheral connection, connectable legacy
 advertising, passive legacy scanning, copied advertising reports, AD structure
@@ -20,21 +23,31 @@ Stream payload to the shared command router; it does not add a GATT client.
 
 ## Supported profiles
 
-| Target | Board | Radio | Validation |
-|---|---|---|---|
-| `rp2040` | `picow` | onboard CYW43439 | Observer and bare-metal/FreeRTOS Stream hardware gates passed |
-| `rp2350-arm` | `pico2w` | onboard CYW43439 | Observer, bare-metal/FreeRTOS Stream, and active Stream+WiFi/MQTT coexistence gates passed |
-| `rp2040` | `pico-rm2` | external PIM730/RM2 CYW43439 over PIO | build-supported; dedicated hardware gate pending |
-| `stm32g474` | `nucleo-g474re-pim730` | external PIM730/RM2 CYW43439 over gSPI | Peripheral and Observer gates plus full bare-metal/FreeRTOS Stream display-load gates, including IWDG reset, passed |
-| `mock` | `host-mock` | deterministic test backend | host tests |
+| API | Target | Board | Radio/host | Validation |
+|---|---|---|---|---|
+| BLE | `rp2040` | `picow` | onboard CYW43439 with BTstack | Observer and bare-metal/FreeRTOS Stream hardware gates passed |
+| BLE | `rp2350-arm` | `pico2w` | onboard CYW43439 with BTstack | Observer, bare-metal/FreeRTOS Stream, and active Stream+WiFi/MQTT coexistence gates passed |
+| BLE | `rp2040` | `pico-rm2` | external PIM730/RM2 CYW43439 over PIO | build-supported; dedicated hardware gate pending |
+| BLE | `stm32g474` | `nucleo-g474re-pim730` | external PIM730/RM2 CYW43439 over gSPI | Peripheral and Observer gates plus full bare-metal/FreeRTOS Stream display-load gates passed |
+| BLE | `esp32s3` | `waveshare-esp32-s3-zero` | integrated LE controller with ESP-IDF NimBLE | complete compile/link fixture; radio hardware gate pending |
+| Classic gamepad | `rp2040` / `rp2350-arm` / `stm32g474` | Bluetooth-capable profiles above | CYW43439 with BTstack HID Host | Zero 2 hardware gates passed on `pico2w`; other listed boards are build-tested |
+| Classic gamepad | `esp32` | `esp32-devkitc-v4` | integrated BR/EDR controller with ESP-IDF Bluedroid and ESP HID Host | complete compile/link fixture; radio hardware gate pending |
+| BLE and Classic gamepad | `mock` | `host-mock` | deterministic test backends | host tests |
 
 The RP2350 backend supports Pico 2 W only with the `rp2350-arm` target. Pico 2
 W with `rp2350-riscv` is unsupported because the CYW43 Bluetooth transport is
-not enabled for that target. `HAL_ENABLE_BLE` is rejected at compile time on
-unsupported targets and on profiles without a Bluetooth controller. Runtime
-capability checks use
-`HAL_BOARD_CAP_BLUETOOTH_CONTROLLER` and additionally require
-`HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND` for an external module.
+not enabled for that target. `HAL_ENABLE_BLE` and
+`HAL_ENABLE_BLUETOOTH_CLASSIC` are rejected at compile time when their exact
+transport is unavailable. Runtime checks distinguish
+`HAL_BOARD_CAP_BLUETOOTH_LE_CONTROLLER` from
+`HAL_BOARD_CAP_BLUETOOTH_CLASSIC_CONTROLLER`; the older generic Bluetooth bit
+remains available for compatibility. External modules additionally require
+`HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND`.
+
+ESP32-S3 currently supports the base BLE Peripheral/Observer API, but not
+`HAL_ENABLE_BLE_STREAM`, a GATT client, or Classic HID. The original ESP32
+currently supports the Classic gamepad profile, but does not enable the public
+BLE API. These are deliberate target boundaries, not runtime fallbacks.
 
 ## Lifecycle and polling
 
@@ -86,15 +99,15 @@ extern "C" void app_task0(void) {
 }
 ```
 
-`hal_ble_initialize()` starts the shared CYW43 radio owner and returns when
+`hal_ble_initialize()` starts the selected target backend and returns when
 startup has been accepted. Readiness is asynchronous and is reported by
 `HAL_BLE_EVENT_CONTROLLER_READY`. Initialization and deinitialization are
 idempotent after success. Deinitialization invalidates every connection and
 advertising handle, clears the event queue, and removes the callback.
 
 Call `hal_ble_poll()` frequently from one task or cooperative loop. It services
-the controller and then dispatches callbacks outside the shared WiFi/Bluetooth
-radio lock. Calling `hal_ble_poll()`, changing the callback, or deinitializing
+the controller and then dispatches callbacks outside the backend's radio
+lock. Calling `hal_ble_poll()`, changing the callback, or deinitializing
 recursively from a callback returns `HAL_EBUSY`; read-only queries are allowed.
 
 ## Events
@@ -242,8 +255,28 @@ deinitialization, or a controller failure. Passing a stale handle returns
 `HAL_ENOENT`.
 
 `hal_ble_disconnect()` queues a local disconnect. Completion arrives as
-`HAL_BLE_EVENT_DISCONNECTED`. `hal_ble_get_mtu()` returns 23 until BTstack
-reports a negotiated value through `HAL_BLE_EVENT_MTU_UPDATED`.
+`HAL_BLE_EVENT_DISCONNECTED`. `hal_ble_get_mtu()` returns 23 until the selected
+stack reports a negotiated value through `HAL_BLE_EVENT_MTU_UPDATED`.
+
+## ESP-IDF backend behavior
+
+ESP32-S3 uses NimBLE for the base LE API. ESP-IDF callbacks copy addresses,
+advertising payloads, connection state, and MTU changes into bounded HAL
+queues. Application callbacks still run only from `hal_ble_poll()` and never
+from an ESP-IDF event task.
+
+The original ESP32 uses Bluedroid plus `esp_hidh` for the Classic gamepad. GAP
+inquiry accepts only the validated Android D-input identity named
+`8BitDo Zero 2 gamepad` with the gamepad device class. A completed HID open is
+then checked for VID `0x2dc8`, PID `0x3230`, one report map, and a descriptor
+accepted by the target-independent parser. PIN `0000` and SSP confirmation are
+held until the application calls `hal_gamepad_pairing_authorize()`.
+
+Both ESP backends share one idempotent NVS initializer with the network
+backend. An incompatible or full NVS partition returns `HAL_ECONFIG`; the HAL
+does not erase application storage automatically. The HAL parser, event
+queues, and snapshots have fixed capacity. ESP-IDF's NimBLE, Bluedroid, event
+loop, and HID Host components may allocate their own internal objects.
 
 ## Status and failure model
 
@@ -265,6 +298,86 @@ addresses, current handles, generation, last status, MTU, scan state, pending
 report count, and both drop counters. A fatal controller or transport error moves the subsystem to
 `HAL_BLE_STATE_FAILED`, invalidates its handles, stops scanning, and advances
 the generation.
+
+## Bluetooth Classic HID gamepad
+
+The gamepad API owns one Classic HID host profile and returns one opaque
+`hal_gamepad_t`. `hal_gamepad_open()` starts the profile asynchronously;
+`hal_gamepad_poll()` must then run frequently from one task or cooperative
+loop. `hal_gamepad_get_info()` reports the public state, last status, current
+connection generation, pairing flags, whether a known device is stored, and
+bounded-queue diagnostics.
+
+The supported public states are `UNINITIALIZED`, `STARTING`, `READY`,
+`DISCOVERING`, `CONNECTING`, `CONNECTED`, and `FAILED`. A fatal controller or
+transport error moves the profile to `FAILED`. `hal_gamepad_close()` stops the
+profile and invalidates its handle.
+
+### Pairing and reconnect
+
+Pairing is application-controlled and bounded. Once the profile reaches
+`READY`, call `hal_gamepad_pairing_open()` to start its discovery window. When
+`hal_gamepad_info_t::pairing_pending` becomes true, the application may call
+`hal_gamepad_pairing_authorize()` to accept Just Works or the legacy PIN
+`0000`. Unsupported passkey flows are rejected. The accepted address identifies
+the known device used by `hal_gamepad_reconnect()` during the current firmware
+runtime. Link-key storage is stack-specific. Persisting the HAL-selected
+identity across a watchdog reset or cold boot is not part of this release, so
+an application must be prepared to open a new pairing window after restart.
+
+Opening a pairing window is a deliberate authorization action. Products
+should expose it only after local user input and should not treat a device
+name, Bluetooth address, or an unauthenticated Just Works exchange as proof of
+user identity.
+
+### Normalized snapshots
+
+The HID report parser does not depend on BTstack or ESP-IDF. It validates a
+bounded report descriptor and feeds the same normalized snapshot model on
+every backend.
+
+`hal_gamepad_snapshot_t` contains a connection generation, a 32-bit button
+mask, nine generic-desktop axes, an axis-presence mask, a D-pad direction mask,
+and the connection state. Button bit 0 represents HID Button 1. Axes are
+normalized to `-32767..32767` and indexed by `HAL_GAMEPAD_AXIS_*`; unsupported
+axes have their bit clear in `axes_present`. The D-pad combines
+`HAL_GAMEPAD_DPAD_UP`, `RIGHT`, `DOWN`, and `LEFT`.
+
+`hal_gamepad_snapshot()` reads the latest state without consuming it.
+`hal_gamepad_snapshot_next()` pops changes from the fixed
+`HAL_GAMEPAD_SNAPSHOT_QUEUE_DEPTH` queue. It returns `HAL_EAGAIN` when empty.
+If intermediate changes were dropped, it first returns `HAL_EOVERFLOW`; call
+again to receive the newest retained sequence. Connection and disconnection
+also produce snapshots, and the disconnection snapshot clears every input so
+an application cannot retain a pressed control after a lost link.
+
+```c
+hal_gamepad_t gamepad = NULL;
+
+void service_gamepad(void) {
+  hal_status_t status = hal_gamepad_poll(gamepad);
+  if (status != HAL_OK && status != HAL_EOVERFLOW) {
+    return;
+  }
+
+  for (;;) {
+    hal_gamepad_snapshot_t snapshot = {0};
+    status = hal_gamepad_snapshot_next(gamepad, &snapshot);
+    if (status == HAL_EOVERFLOW) {
+      continue;
+    }
+    if (status != HAL_OK) {
+      break;
+    }
+    /* Consume buttons, axes and D-pad state. */
+  }
+}
+```
+
+The deterministic mock backend can inject readiness, a pairing request,
+connection, input snapshots, disconnection, queue overflow, and transport
+errors. The complete C consumer and BLE+Classic build variant are in
+[`examples/29_bluetooth_gamepad`](../../../examples/29_bluetooth_gamepad/).
 
 ## JH BLE Stream v1
 
@@ -452,12 +565,15 @@ not needed.
 public session identifier, directional counters, authentication failures,
 replay rejections and queue depth for diagnostics.
 
-## WiFi coexistence and ownership
+## Bluetooth coexistence and ownership
 
-BLE and WiFi share one CYW43 controller, transport, radio runtime, and service
-lock. Applications must not link Pico SDK `pico_cyw43_arch` or
-`pico_btstack_cyw43` alongside this backend. BLE callbacks are deferred until
-after radio servicing, so application code never runs under that lock.
+BLE, Bluetooth Classic, and WiFi share one CYW43 controller, transport, radio
+runtime, and service lock. Applications must not link Pico SDK
+`pico_cyw43_arch` or `pico_btstack_cyw43` alongside this backend. BLE callbacks
+are deferred until after radio servicing, so application code never runs under
+that lock. BLE-only, Classic-only, and combined BLE+Classic images use the same
+reference-counted Bluetooth host. Active gamepad+BLE coexistence on hardware is
+not yet a release gate.
 
 The 2026-08-25 Pico 2 W active coexistence gate kept an authenticated Stream
 connection active while MQTT traffic forced a WiFi disconnect and reconnect.
@@ -473,7 +589,7 @@ delta was 5794 echoes at 9.66 Hz, with zero stagnant one-second summaries.
 
 ## License and distribution boundary
 
-BLE firmware links BlueKitchen BTstack from the exact revision recorded in
+Bluetooth firmware links BlueKitchen BTstack from the exact revision recorded in
 `third_party/btstack_version.conf`. Two distinct license texts are tracked:
 
 - the standard BlueKitchen
@@ -496,11 +612,14 @@ The applicable grant depends on the physical product and its distribution.
 Review the complete tracked license texts and satisfy the conditions of the
 grant relied upon; uses outside them may require a separate BlueKitchen
 license. This section is a technical inventory and is not legal advice. These
-conditions apply to BLE-enabled artifacts, not to JaszczurHAL builds that do
-not compile BTstack.
+conditions apply to BTstack-enabled artifacts, not to JaszczurHAL builds that
+do not compile BTstack.
 
 See the buildable [`26_ble_stream` example](../../../examples/26_ble_stream/) for
 the complete Peripheral startup and advertising flow plus an authenticated
 stream consumer. The multi-target
 [`bluetooth_stream` hardware gate](03_build_tests.md#jh-ble-stream-v1-hardware-gate)
 drives the complete protocol from an independent BlueZ client.
+
+See [`29_bluetooth_gamepad`](../../../examples/29_bluetooth_gamepad/) for the
+Classic HID snapshot flow and its combined BLE+Classic build variant.

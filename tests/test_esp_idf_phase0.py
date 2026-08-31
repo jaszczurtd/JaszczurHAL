@@ -182,6 +182,78 @@ class ProjectModelTests(unittest.TestCase):
                 ["HAL_ENABLE_FREERTOS", "HAL_ENABLE_UART"],
             )
 
+    def test_original_esp32_gamepad_selects_bluedroid_hid_inputs(self) -> None:
+        project = ROOT / "tests/fixtures/esp32_gamepad"
+        model = esp_idf.resolve_build_model(
+            ROOT,
+            project,
+            target="esp32",
+            board="esp32-devkitc-v4",
+            project_name="esp32_gamepad",
+            requested_sources=[],
+            features=[],
+            definitions=[],
+        )
+        self.assertEqual(
+            model["resolvedFeatures"],
+            [
+                "HAL_ENABLE_BLUETOOTH_CLASSIC",
+                "HAL_ENABLE_BLUETOOTH_GAMEPAD",
+                "HAL_ENABLE_FREERTOS",
+            ],
+        )
+        self.assertTrue(
+            {
+                "src/hal/bluetooth/hal_gamepad.cpp",
+                "src/hal/bluetooth/jh_bluetooth_gamepad_parser.c",
+                "src/hal/impl/esp32/jh_esp32_nvs_runtime.cpp",
+                "src/hal/impl/esp32/jh_gamepad_bluedroid_backend.c",
+            }.issubset(model["integrationSources"])
+        )
+        self.assertTrue(
+            {"bt", "esp_hid", "nvs_flash"}.issubset(
+                model["privateComponentDependencies"]
+            )
+        )
+        defaults = esp_idf._render_sdkconfig_defaults(model)
+        for symbol in (
+            "CONFIG_BT_BLUEDROID_ENABLED=y",
+            "CONFIG_BT_CLASSIC_ENABLED=y",
+            "CONFIG_BT_HID_HOST_ENABLED=y",
+            "CONFIG_BTDM_CTRL_MODE_BR_EDR_ONLY=y",
+        ):
+            self.assertIn(symbol, defaults)
+
+    def test_esp32_bluetooth_transport_boundaries_are_enforced(self) -> None:
+        project = ROOT / "tests/fixtures/esp32_gamepad"
+        with self.assertRaisesRegex(
+            esp_idf.EspIdfError, r"\[JH-CFG-UNSUPPORTED\].*HAL_ENABLE_BLE"
+        ):
+            esp_idf.resolve_build_model(
+                ROOT,
+                project,
+                target="esp32",
+                board="esp32-devkitc-v4",
+                project_name="esp32_gamepad",
+                requested_sources=[],
+                features=["HAL_ENABLE_BLE"],
+                definitions=[],
+            )
+        with self.assertRaisesRegex(
+            esp_idf.EspIdfError,
+            r"\[JH-CFG-UNSUPPORTED\].*HAL_ENABLE_BLUETOOTH_GAMEPAD",
+        ):
+            esp_idf.resolve_build_model(
+                ROOT,
+                ROOT / "tests/fixtures/esp32s3_phase3",
+                target="esp32s3",
+                board="waveshare-esp32-s3-zero",
+                project_name="esp32s3_phase3",
+                requested_sources=[],
+                features=["HAL_ENABLE_BLUETOOTH_GAMEPAD"],
+                definitions=[],
+            )
+
     def test_build_output_defaults_below_project_dot_build(self) -> None:
         with tempfile.TemporaryDirectory(prefix="jh-esp-root-") as text:
             root = Path(text)

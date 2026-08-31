@@ -74,6 +74,15 @@ ESP_IDF_BASE_SOURCES = (
     "src/hal/impl/esp32/jh_esp32_ledc.cpp",
 )
 ESP_IDF_TARGET_SOURCES = {
+    "HAL_ENABLE_BLE": (
+        "src/hal/impl/esp32/jh_esp32_nvs_runtime.cpp",
+        "src/hal/impl/esp32/jh_ble_nimble_backend.c",
+    ),
+    "HAL_ENABLE_BLUETOOTH_GAMEPAD": (
+        "src/hal/bluetooth/jh_bluetooth_gamepad_parser.c",
+        "src/hal/impl/esp32/jh_esp32_nvs_runtime.cpp",
+        "src/hal/impl/esp32/jh_gamepad_bluedroid_backend.c",
+    ),
     "HAL_ENABLE_I2C": (
         "src/hal/impl/esp32/hal_i2c.cpp",
     ),
@@ -81,6 +90,7 @@ ESP_IDF_TARGET_SOURCES = {
         "src/hal/impl/esp32/hal_i2c_slave.cpp",
     ),
     "HAL_ENABLE_NETWORK_CORE": (
+        "src/hal/impl/esp32/jh_esp32_nvs_runtime.cpp",
         "src/hal/impl/esp32/esp32_network_backend.cpp",
     ),
     "HAL_ENABLE_OTA": (
@@ -133,6 +143,8 @@ ESP_IDF_BASE_PRIVATE_COMPONENT_DEPENDENCIES = (
     "vfs",
 )
 ESP_IDF_FEATURE_COMPONENT_DEPENDENCIES = {
+    "HAL_ENABLE_BLE": ("bt", "nvs_flash"),
+    "HAL_ENABLE_BLUETOOTH_GAMEPAD": ("bt", "esp_hid", "nvs_flash"),
     "HAL_ENABLE_I2C": ("esp_driver_i2c",),
     "HAL_ENABLE_I2C_SLAVE": ("esp_driver_i2c",),
     "HAL_ENABLE_NETWORK_CORE": (
@@ -160,6 +172,7 @@ GENERATED_BOARD_CONTRACT_INPUTS = (
     "jh_link_contract_reference.c",
 )
 IDF_TARGET_COMPILER_TOOLS = {
+    "esp32": "xtensa-esp-elf",
     "esp32s3": "xtensa-esp-elf",
 }
 
@@ -1203,6 +1216,8 @@ def _render_sdkconfig_defaults(model: Mapping[str, Any]) -> str:
     ]
     if model["idfTarget"] == "esp32s3":
         lines.append("CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y")
+    elif model["idfTarget"] == "esp32":
+        lines.append("CONFIG_ESP_CONSOLE_UART_DEFAULT=y")
     if "HAL_ENABLE_NETWORK_CORE" in model["resolvedFeatures"]:
         # Four HAL TCP sockets, two listeners and four UDP sockets must not
         # consume the entire lwIP descriptor pool; services such as DNS,
@@ -1213,6 +1228,29 @@ def _render_sdkconfig_defaults(model: Mapping[str, Any]) -> str:
             (
                 "CONFIG_LWIP_MAX_SOCKETS=16",
                 "CONFIG_LWIP_TCPIP_CORE_LOCKING=y",
+            )
+        )
+    if "HAL_ENABLE_BLE" in model["resolvedFeatures"]:
+        lines.extend(
+            (
+                "CONFIG_BT_ENABLED=y",
+                "CONFIG_BT_NIMBLE_ENABLED=y",
+                "CONFIG_BT_NIMBLE_ROLE_CENTRAL=y",
+                "CONFIG_BT_NIMBLE_ROLE_PERIPHERAL=y",
+                "CONFIG_BT_NIMBLE_ROLE_BROADCASTER=y",
+                "CONFIG_BT_NIMBLE_ROLE_OBSERVER=y",
+                "CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1",
+            )
+        )
+    if "HAL_ENABLE_BLUETOOTH_GAMEPAD" in model["resolvedFeatures"]:
+        lines.extend(
+            (
+                "CONFIG_BT_ENABLED=y",
+                "CONFIG_BT_BLUEDROID_ENABLED=y",
+                "CONFIG_BT_CLASSIC_ENABLED=y",
+                "CONFIG_BT_HID_ENABLED=y",
+                "CONFIG_BT_HID_HOST_ENABLED=y",
+                "CONFIG_BTDM_CTRL_MODE_BR_EDR_ONLY=y",
             )
         )
     if "HAL_ENABLE_OTA" in model["resolvedFeatures"]:

@@ -422,6 +422,38 @@
         "rp2040",
         "stm32g474"
       ]
+    },
+    {
+      "dir": "29_bluetooth_gamepad",
+      "targets": [
+        "rp2040",
+        "rp2350-arm",
+        "stm32g474"
+      ],
+      "expandRpTargets": false,
+      "gateTargets": [
+        "rp2040"
+      ],
+      "board": "picow",
+      "stm32Board": "nucleo-g474re-pim730",
+      "variants": [
+        {
+          "id": "ble",
+          "module": "29_bluetooth_gamepad_ble",
+          "targets": [
+            "rp2040",
+            "rp2350-arm",
+            "stm32g474"
+          ],
+          "gateTargets": [
+            "rp2040"
+          ],
+          "extraDefines": [
+            "HAL_ENABLE_BLE=1",
+            "HAL_GAMEPAD_EXAMPLE_ENABLE_BLE=1"
+          ]
+        }
+      ]
     }
   ]
 }

@@ -20,8 +20,8 @@ function(jh_feature_build_dependency_enabled OUT_VAR DEPENDENCY)
 endfunction()
 
 # Resolve feature-owned sources and managed dependency manifests. Portable
-# sources remain separately available for selective build systems such as
-# ESP-IDF; broad source inventories must not append them a second time.
+# sources remain separate so selective inventories can append them directly;
+# broad inventories can merge them and remove duplicate paths.
 function(jh_collect_feature_build_effects PREFIX)
     cmake_parse_arguments(JH_EFFECT "" "ROOT" "FEATURES" ${ARGN})
     if(NOT JH_EFFECT_ROOT)

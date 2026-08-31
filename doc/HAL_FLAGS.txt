@@ -36,6 +36,12 @@ router. `HAL_ENABLE_NET_COMMANDS` adds the HTTP/WebSocket text/JSON adapter and
 also propagates the router. BLE Stream selected alone remains a general byte
 stream.
 
+Bluetooth uses separate public profile flags. `HAL_ENABLE_BLE` selects the Low
+Energy Peripheral/Observer API. `HAL_ENABLE_BLUETOOTH_GAMEPAD` selects the
+Classic HID gamepad API and propagates `HAL_ENABLE_BLUETOOTH_CLASSIC`. BLE and
+Classic profiles can be enabled together on the supported CYW43 board profiles
+and share one reference-counted host runtime.
+
 Use the shared generator runner after changing the feature or board registry:
 
     python3 scripts/sync_generated.py --write

@@ -149,7 +149,9 @@ list(APPEND STM32_SHARED_SOURCES
 list(APPEND STM32_IMPL_SOURCES ${STM32_SHARED_SOURCES})
 list(APPEND STM32_IMPL_SOURCES
     ${_jh_stm32_build_effects_FEATURE_SOURCES}
+    ${_jh_stm32_build_effects_PORTABLE_SOURCES}
     ${_jh_stm32_build_effects_DEPENDENCY_SOURCES})
+list(REMOVE_DUPLICATES STM32_IMPL_SOURCES)
 
 # ── Common entry source ─────────────────────────────────────────────────────
 set(HAL_COMMON_SOURCES
@@ -239,12 +241,15 @@ if(_jh_stm32_has_cyw43_gspi)
         HAL_ENABLE_BLE ${_jh_stm32_selection_defines})
     jh_cmake_defines_contain(_jh_stm32_has_ble_stream
         HAL_ENABLE_BLE_STREAM ${_jh_stm32_selection_defines})
+    jh_cmake_defines_contain(_jh_stm32_has_gamepad
+        HAL_ENABLE_BLUETOOTH_GAMEPAD ${_jh_stm32_selection_defines})
     jh_cmake_defines_contain(_jh_stm32_has_ota
         HAL_ENABLE_OTA ${_jh_stm32_selection_defines})
     jh_target_enable_cyw43_feature_stack(JaszczurHAL
         LWIP "${_jh_stm32_has_cyw43_lwip}"
         OTA "${_jh_stm32_has_ota}"
         BLUETOOTH_STAGE1 "${_jh_stm32_has_bluetooth_stage1}"
+        GAMEPAD "${_jh_stm32_has_gamepad}"
         BLE "${_jh_stm32_has_ble}"
         BLE_STREAM "${_jh_stm32_has_ble_stream}")
 endif()

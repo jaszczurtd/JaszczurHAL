@@ -92,6 +92,7 @@ Target abbreviations used below are `R0` = `rp2040`, `RA` = `rp2350-arm`,
 | `26_ble_stream` | BLE Peripheral lifecycle, authenticated JH BLE Stream v1, and command-router adapter | R0, RA, S | R0, RA, S | `commands` and `commands-freertos` on R0, RA, S; gate on R0 |
 | `27_lora_point_to_point` | Raw SX1262 ping/pong plus fragmented command-router request/response over `hal_lora_link` | R0, S | R0, S | `probe`, `responder`, `link` and `link-responder` on R0, S; manual hardware variants `sf7` and `responder-sf7` |
 | `28_serial_commands` | Framed Serial Session dispatch through an independent command router | R0, RA, RV, S | R0, S | - |
+| `29_bluetooth_gamepad` | Bluetooth Classic HID pairing, reconnect and normalized gamepad snapshots | R0, RA, S | R0 | `ble` on R0, RA, S; gate on R0 |
 
 RP-family network builds use `picow` for RP2040 and `pico2w` for RP2350 ARM.
 RP2350 RISC-V configurations that require CYW43 are unsupported. STM32G474

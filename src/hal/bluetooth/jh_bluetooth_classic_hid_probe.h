@@ -102,6 +102,12 @@ hal_status_t jh_bluetooth_classic_hid_probe_authorize_pairing(void);
 hal_status_t jh_bluetooth_classic_hid_probe_reconnect(void);
 hal_status_t jh_bluetooth_classic_hid_probe_disconnect(void);
 hal_status_t jh_bluetooth_classic_hid_probe_stop(void);
+void jh_bluetooth_classic_hid_probe_retain_gamepad_queue(bool retain);
+hal_status_t jh_bluetooth_classic_hid_probe_gamepad_snapshot(
+    jh_bluetooth_gamepad_snapshot_t *out_snapshot);
+hal_status_t jh_bluetooth_classic_hid_probe_gamepad_next(
+    jh_bluetooth_gamepad_snapshot_t *out_snapshot);
+size_t jh_bluetooth_classic_hid_probe_gamepad_pending(void);
 void jh_bluetooth_classic_hid_probe_snapshot(
     jh_bluetooth_classic_hid_probe_snapshot_t *out_snapshot);
 const char *jh_bluetooth_classic_hid_probe_btstack_version(void);

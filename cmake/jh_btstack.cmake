@@ -41,7 +41,6 @@ function(_jh_target_enable_btstack TARGET_NAME MODE)
         "${_jh_btstack_root}/src/ble/sm.c")
     set(_jh_btstack_classic_hid_sources
         "${_jh_btstack_root}/src/btstack_hid.c"
-        "${_jh_btstack_root}/src/btstack_hid_parser.c"
         "${_jh_btstack_root}/src/classic/btstack_link_key_db_memory.c"
         "${_jh_btstack_root}/src/classic/hid_host.c"
         "${_jh_btstack_root}/src/classic/sdp_client.c"
@@ -55,6 +54,12 @@ function(_jh_target_enable_btstack TARGET_NAME MODE)
         "${_jh_bluetooth_root}/jh_btstack_chipset_cyw43.c"
         "${_jh_bluetooth_root}/jh_btstack_hci_transport_cyw43.c"
         "${_jh_bluetooth_root}/jh_btstack_run_loop.c")
+    set(_jh_jh_classic_hid_sources
+        "${_jh_bluetooth_root}/jh_bluetooth_gamepad_parser.c"
+        "${_jh_bluetooth_root}/jh_bluetooth_classic_hid_lifecycle.c"
+        "${_jh_bluetooth_root}/jh_bluetooth_classic_hid_memory_probe.c"
+        "${_jh_bluetooth_root}/jh_bluetooth_classic_hid_probe_logic.c"
+        "${_jh_bluetooth_root}/jh_bluetooth_classic_hid_probe.c")
     if(MODE STREQUAL "STAGE1")
         set(_jh_mode_upstream_sources ${_jh_btstack_ble_sources})
         set(_jh_mode_jh_sources
@@ -81,18 +86,46 @@ function(_jh_target_enable_btstack TARGET_NAME MODE)
         else()
             set(_jh_gatt_source "${_jh_bluetooth_root}/jh_ble_peripheral.gatt")
         endif()
-    elseif(MODE STREQUAL "CLASSIC_HID")
+    elseif(MODE STREQUAL "CLASSIC_HID" OR MODE STREQUAL "PUBLIC_GAMEPAD")
         set(_jh_mode_upstream_sources ${_jh_btstack_classic_hid_sources})
-        set(_jh_mode_jh_sources
-            "${_jh_bluetooth_root}/jh_bluetooth_gamepad_parser.c"
-            "${_jh_bluetooth_root}/jh_bluetooth_classic_hid_lifecycle.c"
-            "${_jh_bluetooth_root}/jh_bluetooth_classic_hid_memory_probe.c"
-            "${_jh_bluetooth_root}/jh_bluetooth_classic_hid_probe_logic.c"
-            "${_jh_bluetooth_root}/jh_bluetooth_classic_hid_probe.c")
+        set(_jh_mode_jh_sources ${_jh_jh_classic_hid_sources})
         set(_jh_mode_definitions
             ENABLE_CLASSIC=1
+            ENABLE_SDP_EXTRA_QUERIES=1)
+        if(MODE STREQUAL "CLASSIC_HID")
+            list(APPEND _jh_mode_definitions
+                JH_BLUETOOTH_CLASSIC_HID_PROBE=1)
+        else()
+            list(APPEND _jh_mode_jh_sources
+                "${_jh_bluetooth_root}/jh_gamepad_btstack_backend.c")
+            list(APPEND _jh_mode_definitions
+                JH_BLUETOOTH_PUBLIC_GAMEPAD=1)
+        endif()
+    elseif(MODE STREQUAL "PUBLIC_GAMEPAD_BLE" OR
+           MODE STREQUAL "PUBLIC_GAMEPAD_BLE_STREAM")
+        set(_jh_mode_upstream_sources
+            ${_jh_btstack_ble_sources}
+            ${_jh_btstack_classic_hid_sources})
+        set(_jh_mode_jh_sources
+            "${_jh_bluetooth_root}/jh_ble_btstack_backend.c"
+            ${_jh_jh_classic_hid_sources}
+            "${_jh_bluetooth_root}/jh_gamepad_btstack_backend.c")
+        set(_jh_gatt_header "jh_ble_peripheral_gatt.h")
+        set(_jh_mode_definitions
+            ENABLE_BLE=1
+            ENABLE_CLASSIC=1
+            ENABLE_LE_CENTRAL=1
             ENABLE_SDP_EXTRA_QUERIES=1
-            JH_BLUETOOTH_CLASSIC_HID_PROBE=1)
+            JH_BLUETOOTH_PUBLIC_BLE=1
+            JH_BLUETOOTH_PUBLIC_GAMEPAD=1)
+        if(MODE STREQUAL "PUBLIC_GAMEPAD_BLE_STREAM")
+            list(APPEND _jh_mode_jh_sources
+                "${_jh_bluetooth_root}/jh_ble_stream_session.c")
+            set(_jh_gatt_source "${_jh_bluetooth_root}/jh_ble_stream.gatt")
+            list(APPEND _jh_mode_definitions JH_BLUETOOTH_BLE_STREAM=1)
+        else()
+            set(_jh_gatt_source "${_jh_bluetooth_root}/jh_ble_peripheral.gatt")
+        endif()
     else()
         message(FATAL_ERROR "Unknown JaszczurHAL BTstack mode: ${MODE}")
     endif()
@@ -144,7 +177,7 @@ function(_jh_target_enable_btstack TARGET_NAME MODE)
         HAVE_BTSTACK_CONFIG_H=1
         JH_BLUETOOTH_BTSTACK=1
         ${_jh_mode_definitions})
-    if(MODE STREQUAL "CLASSIC_HID")
+    if(MODE STREQUAL "CLASSIC_HID" OR MODE MATCHES "PUBLIC_GAMEPAD")
         # The BTstack sources are compiled into the static HAL target, while
         # GNU --wrap is evaluated only by the final firmware link. Propagate
         # these options to that link so the probe sees real pool activity.
@@ -179,4 +212,16 @@ endfunction()
 
 function(jh_target_enable_btstack_classic_hid TARGET_NAME)
     _jh_target_enable_btstack(${TARGET_NAME} CLASSIC_HID)
+endfunction()
+
+function(jh_target_enable_btstack_gamepad TARGET_NAME)
+    _jh_target_enable_btstack(${TARGET_NAME} PUBLIC_GAMEPAD)
+endfunction()
+
+function(jh_target_enable_btstack_gamepad_ble TARGET_NAME)
+    _jh_target_enable_btstack(${TARGET_NAME} PUBLIC_GAMEPAD_BLE)
+endfunction()
+
+function(jh_target_enable_btstack_gamepad_ble_stream TARGET_NAME)
+    _jh_target_enable_btstack(${TARGET_NAME} PUBLIC_GAMEPAD_BLE_STREAM)
 endfunction()

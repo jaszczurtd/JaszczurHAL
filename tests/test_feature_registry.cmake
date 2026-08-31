@@ -19,12 +19,16 @@ if(NOT _digest_length EQUAL 64)
 endif()
 
 list(LENGTH JH_HAL_FEATURE_SYMBOLS _symbol_count)
-if(NOT _symbol_count EQUAL 108)
-    message(FATAL_ERROR "Expected 108 registered symbols, got ${_symbol_count}")
+if(NOT _symbol_count EQUAL 110)
+    message(FATAL_ERROR "Expected 110 registered symbols, got ${_symbol_count}")
 endif()
 if(NOT "${JH_HAL_FEATURE_DERIVED_SYMBOLS}" STREQUAL
-       "HAL_ENABLE_NETWORK_CORE")
+       "HAL_ENABLE_BLUETOOTH_CLASSIC;HAL_ENABLE_NETWORK_CORE")
     message(FATAL_ERROR "Unexpected derived feature set")
+endif()
+if(NOT "${JH_HAL_FEATURE_HAL_ENABLE_BLUETOOTH_GAMEPAD_IMPLIES}" STREQUAL
+       "HAL_ENABLE_BLUETOOTH_CLASSIC")
+    message(FATAL_ERROR "Bluetooth gamepad dependency table drifted")
 endif()
 if(NOT "${JH_HAL_FEATURE_HAL_ENABLE_MQTT_IMPLIES}" STREQUAL
        "HAL_ENABLE_NETWORK_CORE;HAL_ENABLE_TCP;HAL_ENABLE_WIFI")
@@ -64,7 +68,8 @@ if(NOT "${JH_HAL_FEATURE_HAL_ENABLE_TLS_BUILD_EFFECT_DEPENDENCIES}" STREQUAL
 endif()
 jh_hal_resolve_build_effects(
     _effect_sources _portable_sources _effect_dependencies
-    HAL_ENABLE_BLE_COMMANDS HAL_ENABLE_LITTLEFS HAL_ENABLE_MQTT
+    HAL_ENABLE_BLE_COMMANDS HAL_ENABLE_BLUETOOTH_GAMEPAD
+    HAL_ENABLE_LITTLEFS HAL_ENABLE_MQTT
     HAL_ENABLE_SERIAL_COMMANDS HAL_ENABLE_TLS HAL_ENABLE_UNITY)
 if(NOT "${_effect_dependencies}" STREQUAL "bearssl;littlefs")
     message(FATAL_ERROR "Resolved managed build dependencies drifted")
@@ -77,6 +82,11 @@ list(FIND _portable_sources
     "src/hal/bluetooth/hal_ble_commands.cpp" _ble_commands_source_index)
 if(_ble_commands_source_index EQUAL -1)
     message(FATAL_ERROR "BLE command portable source effect is missing")
+endif()
+list(FIND _portable_sources
+    "src/hal/bluetooth/hal_gamepad.cpp" _gamepad_source_index)
+if(_gamepad_source_index EQUAL -1)
+    message(FATAL_ERROR "Bluetooth gamepad portable source effect is missing")
 endif()
 list(FIND _portable_sources
     "src/hal/serial/hal_serial_commands.cpp" _serial_commands_source_index)
@@ -106,6 +116,16 @@ if(NOT "${_ble_commands_requested}" STREQUAL "HAL_ENABLE_BLE_COMMANDS" OR
        "HAL_ENABLE_BLE;HAL_ENABLE_BLE_COMMANDS;HAL_ENABLE_BLE_STREAM;HAL_ENABLE_COMMAND_ROUTER;HAL_ENABLE_CRYPTO")
     message(FATAL_ERROR
         "Unexpected BLE command feature set: ${_ble_commands_resolved}")
+endif()
+
+jh_hal_resolve_features(_gamepad_requested _gamepad_resolved
+    HAL_ENABLE_BLUETOOTH_GAMEPAD)
+if(NOT "${_gamepad_requested}" STREQUAL
+       "HAL_ENABLE_BLUETOOTH_GAMEPAD" OR
+   NOT "${_gamepad_resolved}" STREQUAL
+       "HAL_ENABLE_BLUETOOTH_CLASSIC;HAL_ENABLE_BLUETOOTH_GAMEPAD")
+    message(FATAL_ERROR
+        "Unexpected Bluetooth gamepad feature set: ${_gamepad_resolved}")
 endif()
 
 jh_hal_resolve_features(_serial_commands_requested _serial_commands_resolved

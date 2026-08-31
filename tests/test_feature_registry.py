@@ -201,6 +201,7 @@ def preprocess_feature_set(
         "rp2350-arm": "HAL_TARGET_RP2350_ARM",
         "rp2350-riscv": "HAL_TARGET_RP2350_RISCV",
         "stm32g474": "HAL_TARGET_STM32G474",
+        "esp32": "HAL_TARGET_ESP32",
         "esp32s3": "HAL_TARGET_ESP32_S3",
     }
     target_macro = target_macros.get(target, "HAL_TARGET_MOCK")
@@ -503,6 +504,15 @@ def check_production_feature_facade(compiler: str) -> None:
         "hal_config.h did not expose generated BLE Stream closure",
     )
 
+    gamepad = preprocess_hal_config_features(
+        compiler, ("HAL_TARGET_MOCK=1", "HAL_ENABLE_BLUETOOTH_GAMEPAD=1")
+    )
+    require(
+        {"HAL_ENABLE_BLUETOOTH_GAMEPAD", "HAL_ENABLE_BLUETOOTH_CLASSIC"}
+        <= gamepad,
+        "hal_config.h did not expose the Bluetooth gamepad closure",
+    )
+
     sx126x = preprocess_hal_config_features(
         compiler, ("HAL_TARGET_MOCK=1", "HAL_ENABLE_SX126X=1")
     )
@@ -767,7 +777,7 @@ TEST_ROOT.mkdir(parents=True)
 )
 
 model = generate_hal_features.load_registry(CONFIG)
-require(len(model.features) == 108, "feature registry symbol count drifted")
+require(len(model.features) == 110, "feature registry symbol count drifted")
 catalog_text = (ROOT / "doc/api/en/02_module_flags.md").read_text(encoding="utf-8")
 catalog_features = set(
     re.findall(
@@ -786,17 +796,22 @@ require(
     f"unknown={sorted(catalog_features - public_features)}",
 )
 require(
-    sum(bool(feature.implies) for feature in model.features.values()) == 69,
+    sum(bool(feature.implies) for feature in model.features.values()) == 70,
     "feature registry implies-source count drifted",
 )
 require(
-    sum(len(feature.implies) for feature in model.features.values()) == 127,
+    sum(len(feature.implies) for feature in model.features.values()) == 128,
     "feature registry direct-edge count drifted",
 )
 require(
     model.features["HAL_ENABLE_BLE_COMMANDS"].implies
     == ("HAL_ENABLE_BLE_STREAM", "HAL_ENABLE_COMMAND_ROUTER"),
     "BLE command adapter dependencies drifted",
+)
+require(
+    model.features["HAL_ENABLE_BLUETOOTH_GAMEPAD"].implies
+    == ("HAL_ENABLE_BLUETOOTH_CLASSIC",),
+    "Bluetooth gamepad dependency drifted",
 )
 require(
     model.features["HAL_ENABLE_SERIAL_COMMANDS"].implies
@@ -829,6 +844,7 @@ require(
 )
 effect_features = (
     "HAL_ENABLE_BLE_COMMANDS",
+    "HAL_ENABLE_BLUETOOTH_GAMEPAD",
     "HAL_ENABLE_LITTLEFS",
     "HAL_ENABLE_MQTT",
     "HAL_ENABLE_SX126X",
@@ -849,6 +865,7 @@ require(
 )
 require(
     "src/hal/bluetooth/hal_ble_commands.cpp" in portable_sources
+    and "src/hal/bluetooth/hal_gamepad.cpp" in portable_sources
     and "src/hal/serial/hal_serial_commands.cpp" in portable_sources
     and "src/hal/network/mqtt/hal_mqtt.cpp" in portable_sources
     and "src/hal/network/tls/hal_tls.cpp" in portable_sources,
@@ -929,8 +946,8 @@ for facade in facade_provider_checks:
     )
 require(
     len(re.findall(r"^#error(?:\s|$)", hal_config_text, flags=re.MULTILINE))
-    == 70,
-    "hal_config.h retained validation inventory drifted from 70 #error checks",
+    == 72,
+    "hal_config.h retained validation inventory drifted from 72 #error checks",
 )
 
 checked = run_generator("--check")
@@ -983,6 +1000,10 @@ require(
     "missing BLE command closure",
 )
 require("Resolved implications of HAL_ENABLE_BLE_STREAM" in header, "missing BLE closure")
+require(
+    "Resolved implications of HAL_ENABLE_BLUETOOTH_GAMEPAD" in header,
+    "missing Bluetooth gamepad closure",
+)
 require("#define HAL_ENABLE_CRYPTO 1" in header, "missing BLE crypto implication")
 require("Resolved implications of HAL_ENABLE_MQTT" in header, "missing MQTT closure")
 require("[JH-CFG-DERIVED]" in header, "derived header rule missing")
@@ -1692,12 +1713,25 @@ phase3_fixture_records = [
     for record in root_effective_report["configurations"]
     if record["project"] == "tests/fixtures/esp32s3_phase3"
 ]
+esp32_gamepad_fixture_records = [
+    record
+    for record in root_effective_report["configurations"]
+    if record["project"] == "tests/fixtures/esp32_gamepad"
+]
 require(
     len(phase3_fixture_records) == 1
     and phase3_fixture_records[0]["target"] == "esp32s3"
     and phase3_fixture_records[0]["board"] == "waveshare-esp32-s3-zero"
     and "HAL_ENABLE_FREERTOS" in phase3_fixture_records[0]["resolvedFeatures"],
     "the ESP32-S3 Phase 3 fixture lost its tracked target/board contract",
+)
+require(
+    len(esp32_gamepad_fixture_records) == 1
+    and esp32_gamepad_fixture_records[0]["target"] == "esp32"
+    and esp32_gamepad_fixture_records[0]["board"] == "esp32-devkitc-v4"
+    and "HAL_ENABLE_BLUETOOTH_GAMEPAD"
+    in esp32_gamepad_fixture_records[0]["resolvedFeatures"],
+    "the ESP32 gamepad fixture lost its tracked target/board selection",
 )
 require(
     "vscode/examples" not in root_effective_projects,

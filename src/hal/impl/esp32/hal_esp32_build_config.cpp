@@ -9,11 +9,13 @@
 #include "jh_board_config.h"
 #include "sdkconfig.h"
 
-#if !HAL_TARGET_IS_ESP32_S3
-#error "JaszczurHAL: the ESP32-S3 recipe selected a different exact target."
+#if !HAL_TARGET_IS_ESP32_FAMILY
+#error "JaszczurHAL: the ESP-IDF recipe selected a non-ESP32 target."
 #endif
 
-#if !defined(CONFIG_IDF_TARGET_ESP32S3)
+#if HAL_TARGET_IS_ESP32 && !defined(CONFIG_IDF_TARGET_ESP32)
+#error "JaszczurHAL: IDF_TARGET must match the generated ESP32 target."
+#elif HAL_TARGET_IS_ESP32_S3 && !defined(CONFIG_IDF_TARGET_ESP32S3)
 #error "JaszczurHAL: IDF_TARGET must match the generated ESP32-S3 target."
 #endif
 

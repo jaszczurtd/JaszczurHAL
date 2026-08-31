@@ -38,8 +38,8 @@ that owns them:
 - `featureSources` lists sources that every build must add when the feature is
   active, such as Unity or PubSubClient;
 - `portableSources` lists target-independent implementations consumed by
-  selective build systems; broad source inventories use the list for
-  validation without adding the files twice;
+  selective build systems; broad source inventories merge the list and remove
+  duplicate paths;
 - `dependencies` selects an existing managed source manifest. Supported names
   are `bearssl`, `littlefs`, and `sx126x`.
 

@@ -1,5 +1,5 @@
 #include "hal/bluetooth/hal_ble.h"
-#include "hal/bluetooth/jh_ble_runtime.h"
+#include "hal/bluetooth/jh_bluetooth_runtime.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "hal/system/jh_board_runtime.h"
 #include "utils/unity.h"
@@ -117,6 +117,8 @@ void setUp(void) {
   hal_mock_ble_reset();
   TEST_ASSERT_EQUAL_INT(HAL_OK, jh_board_runtime_set_inactive(
                                     HAL_BOARD_CAP_BLUETOOTH_CONTROLLER));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_board_runtime_set_inactive(
+                                    HAL_BOARD_CAP_BLUETOOTH_LE_CONTROLLER));
 }
 
 void tearDown(void) {
@@ -151,8 +153,9 @@ void test_lifecycle_ready_address_and_capability(void) {
   TEST_ASSERT_EQUAL_STRING("28:CD:C1:14:90:F8", text);
   TEST_ASSERT_EQUAL_INT(
       HAL_EINVAL, hal_ble_format_address(&local, text, sizeof(text) - 1u));
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_board_require_capabilities(
-                                    jh_ble_required_board_capabilities()));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_board_require_capabilities(
+                            jh_bluetooth_required_le_board_capabilities()));
 
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_deinitialize());
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_deinitialize());

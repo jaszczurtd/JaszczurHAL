@@ -19,7 +19,7 @@
     "reservations": { "status-led": { "pins": [{ "domain": "soc-gpio", "id": 16 }], "owner": "board.status-led", "strength": "soft", "reason": "On-board addressable LED data input." } },
     "aliases": { "status-led-data": { "endpoint": { "domain": "soc-gpio", "id": 16 } } }
   },
-  "capabilities": { "usb-device": { "present": true }, "cyw43": { "present": false }, "native-wifi": { "present": false }, "external-radio-frontend": { "present": false }, "bluetooth-controller": { "present": false }, "sx1262-radio": { "present": false } },
+  "capabilities": { "usb-device": { "present": true }, "cyw43": { "present": false }, "native-wifi": { "present": false }, "external-radio-frontend": { "present": false }, "bluetooth-controller": { "present": false }, "bluetooth-le-controller": { "present": false }, "bluetooth-classic-controller": { "present": false }, "sx1262-radio": { "present": false } },
   "devices": { "statusLed": { "kind": "addressable", "endpoint": { "domain": "soc-gpio", "id": 16 }, "protocol": "ws2812", "pixelOrder": { "source": "project", "value": null, "allowed": ["RGB", "GRB"] } } },
   "peripherals": { "defaultsSource": "pico-sdk" },
   "components": {}

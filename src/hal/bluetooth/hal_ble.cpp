@@ -3,7 +3,7 @@
 #ifdef HAL_ENABLE_BLE
 
 #include "hal/bluetooth/jh_ble_backend.h"
-#include "hal/bluetooth/jh_ble_runtime.h"
+#include "hal/bluetooth/jh_bluetooth_runtime.h"
 #include "hal/system/hal_sync.h"
 #ifdef HAL_ENABLE_BLE_STREAM
 #include "hal/bluetooth/jh_ble_stream_runtime.h"
@@ -320,9 +320,9 @@ void backend_event(void *, const jh_ble_backend_event_t *backend_event) {
 #endif
 
   if (publish_available) {
-    (void)jh_board_runtime_set_available(HAL_BOARD_CAP_BLUETOOTH_CONTROLLER);
+    jh_bluetooth_publish_available(HAL_BOARD_CAP_BLUETOOTH_LE_CONTROLLER);
   } else if (publish_failed) {
-    (void)jh_board_runtime_set_failed(HAL_BOARD_CAP_BLUETOOTH_CONTROLLER);
+    jh_bluetooth_publish_failed(HAL_BOARD_CAP_BLUETOOTH_LE_CONTROLLER);
   }
 }
 
@@ -407,7 +407,7 @@ hal_status_t hal_ble_initialize(void) {
   if (mutex == nullptr) {
     return HAL_ENOMEM;
   }
-  const hal_status_t hardware_status = jh_ble_require_hardware();
+  const hal_status_t hardware_status = jh_bluetooth_require_le_hardware();
   if (hardware_status != HAL_OK) {
     return hardware_status;
   }
@@ -465,7 +465,7 @@ hal_status_t hal_ble_initialize(void) {
   s_ble.last_status = status;
   hal_mutex_unlock(mutex);
   if (status == HAL_EHW || status == HAL_EIO) {
-    (void)jh_board_runtime_set_failed(HAL_BOARD_CAP_BLUETOOTH_CONTROLLER);
+    jh_bluetooth_publish_failed(HAL_BOARD_CAP_BLUETOOTH_LE_CONTROLLER);
   }
   return status;
 }
@@ -514,9 +514,11 @@ hal_status_t hal_ble_deinitialize(void) {
 #ifdef HAL_ENABLE_BLE_STREAM
   jh_ble_stream_on_link_lost(generation);
 #endif
-  (void)(status == HAL_OK
-             ? jh_board_runtime_set_inactive(HAL_BOARD_CAP_BLUETOOTH_CONTROLLER)
-             : jh_board_runtime_set_failed(HAL_BOARD_CAP_BLUETOOTH_CONTROLLER));
+  if (status == HAL_OK) {
+    jh_bluetooth_publish_inactive(HAL_BOARD_CAP_BLUETOOTH_LE_CONTROLLER);
+  } else {
+    jh_bluetooth_publish_failed(HAL_BOARD_CAP_BLUETOOTH_LE_CONTROLLER);
+  }
   return status;
 }
 
@@ -579,7 +581,7 @@ hal_status_t hal_ble_poll(void) {
   }
 #endif
   if (status == HAL_EHW || status == HAL_EIO) {
-    (void)jh_board_runtime_set_failed(HAL_BOARD_CAP_BLUETOOTH_CONTROLLER);
+    jh_bluetooth_publish_failed(HAL_BOARD_CAP_BLUETOOTH_LE_CONTROLLER);
   }
   if (status != HAL_OK) {
     return status;

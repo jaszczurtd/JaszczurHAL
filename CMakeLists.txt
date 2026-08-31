@@ -104,6 +104,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/bluetooth/hal_ble.cpp
     ${SRC}/hal/bluetooth/hal_ble_commands.cpp
     ${SRC}/hal/bluetooth/hal_ble_stream.cpp
+    ${SRC}/hal/bluetooth/hal_gamepad.cpp
     ${SRC}/hal/core/hal_config.cpp
     ${SRC}/hal/commands/hal_command_router.cpp
     ${SRC}/hal/commands/hal_command_wire.cpp
@@ -249,6 +250,7 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_BLE
     HAL_ENABLE_BLE_COMMANDS
     HAL_ENABLE_BLE_STREAM
+    HAL_ENABLE_BLUETOOTH_GAMEPAD
     HAL_ENABLE_COMMAND_ROUTER
     HAL_ENABLE_SERIAL_COMMANDS
     HAL_ENABLE_SX126X       # propagates HAL_ENABLE_LORA + HAL_ENABLE_SPI

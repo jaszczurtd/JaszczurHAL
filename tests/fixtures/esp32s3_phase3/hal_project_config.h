@@ -5,6 +5,7 @@
  * to the separately tracked Phase 3.5 verification campaign. */
 #define HAL_ENABLE_APP_TASK1 1
 #define HAL_ENABLE_BSD_SOCKETS 1
+#define HAL_ENABLE_BLE 1
 #define HAL_ENABLE_HTTP_CLIENT 1
 #define HAL_ENABLE_HTTP_FILES 1
 #define HAL_ENABLE_HTTP_SERVER 1

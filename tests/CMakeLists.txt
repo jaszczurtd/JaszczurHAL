@@ -69,6 +69,24 @@ target_include_directories(test_hal_config_headers_cpp PRIVATE
 jh_enable_host_warnings(test_hal_config_headers_cpp ERRORS)
 add_test(NAME test_hal_config_headers_cpp COMMAND test_hal_config_headers_cpp)
 
+add_executable(test_hal_gamepad_header_c test_hal_gamepad_header.c)
+target_compile_definitions(test_hal_gamepad_header_c PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_BLUETOOTH_GAMEPAD=1)
+target_include_directories(test_hal_gamepad_header_c PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+jh_enable_host_warnings(test_hal_gamepad_header_c ERRORS)
+add_test(NAME test_hal_gamepad_header_c COMMAND test_hal_gamepad_header_c)
+
+add_executable(test_hal_gamepad_header_cpp test_hal_gamepad_header.cpp)
+target_compile_definitions(test_hal_gamepad_header_cpp PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_BLUETOOTH_GAMEPAD=1)
+target_include_directories(test_hal_gamepad_header_cpp PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+jh_enable_host_warnings(test_hal_gamepad_header_cpp ERRORS)
+add_test(NAME test_hal_gamepad_header_cpp COMMAND test_hal_gamepad_header_cpp)
+
 add_executable(test_hal_lora_radio_header_c test_hal_lora_radio_header_c.c)
 target_compile_definitions(test_hal_lora_radio_header_c PRIVATE
     HAL_TARGET_MOCK=1
@@ -527,23 +545,12 @@ add_test(NAME test_bluetooth_classic_hid_probe_logic
 add_executable(test_bluetooth_gamepad_parser
     test_bluetooth_gamepad_parser.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/bluetooth/jh_bluetooth_gamepad_parser.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/BTstack/src/btstack_hid_parser.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/BTstack/src/btstack_util.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
 )
 target_include_directories(test_bluetooth_gamepad_parser PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../src
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/bluetooth
-    ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/BTstack/src
 )
-if(JH_ENABLE_SANITIZERS)
-    # BTstack v1.6.2 promotes a uint16_t vendor usage page to signed int before
-    # shifting it into a 32-bit usage value. Preserve every other sanitizer
-    # check while isolating this upstream shift-base diagnostic to its source.
-    set_property(
-        SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/BTstack/src/btstack_hid_parser.c
-        APPEND PROPERTY COMPILE_OPTIONS -fno-sanitize=shift-base)
-endif()
 target_compile_definitions(test_bluetooth_gamepad_parser PRIVATE
     HAL_TARGET_MOCK=1
     JH_BLUETOOTH_CLASSIC_HID_PROBE=1
@@ -1583,6 +1590,7 @@ add_hal_test(test_hal_wifi)
 add_hal_test(test_hal_ble)
 add_hal_test(test_hal_ble_stream)
 add_hal_test(test_hal_ble_commands)
+add_hal_test(test_hal_gamepad)
 add_hal_test(test_hal_littlefs)
 add_executable(test_jh_littlefs_lfs_provider
     test_jh_littlefs_lfs_provider.cpp

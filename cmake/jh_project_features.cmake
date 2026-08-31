@@ -38,7 +38,9 @@ function(jh_all_features_for_target OUT_VAR TARGET_NAME)
         list(REMOVE_ITEM _jh_all_features
             HAL_ENABLE_BLE
             HAL_ENABLE_BLE_COMMANDS
-            HAL_ENABLE_BLE_STREAM)
+            HAL_ENABLE_BLE_STREAM
+            HAL_ENABLE_BLUETOOTH_CLASSIC
+            HAL_ENABLE_BLUETOOTH_GAMEPAD)
     endif()
     if(TARGET_NAME STREQUAL "rp2350-riscv")
         # Native OTA is not implemented for the Hazard3 RISC-V port.

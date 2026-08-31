@@ -14,7 +14,7 @@ The tracked supply-chain surface includes:
   cJSON, LodePNG, TJpg_Decoder, FatFs, Unity, lwIP, littlefs, BTstack, the
   Semtech SX126x driver, FreeRTOS-Kernel, Pico SDK, and ESP-IDF,
 - the exact binary and Python development tools selected by the pinned ESP-IDF
-  tool registry for `esp32s3`,
+  tool registry for `esp32` and `esp32s3`,
 - adapted upstream code where local changes may affect security behavior.
 
 The inventory does not replace per-product firmware analysis. Downstream
@@ -98,7 +98,8 @@ reviewable diffs.
 ## ESP-IDF tool provenance
 
 `third_party/esp_idf_version.conf` pins ESP-IDF v6.0.2 to one commit and selects
-`esp32s3`. `security/esp_idf_tools.json` records the matching official tool set:
+`esp32` and `esp32s3`. `security/esp_idf_tools.json` records the matching
+official tool set:
 Xtensa GDB/GCC, the companion RISC-V GCC bundle, ESP32 ULP tools, Espressif
 OpenOCD, ROM ELF data, and eleven first-party Python tools declared directly by
 ESP-IDF's core requirements. Those Python entries cover esptool, component

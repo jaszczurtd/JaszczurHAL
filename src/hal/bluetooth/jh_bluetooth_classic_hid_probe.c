@@ -55,6 +55,7 @@ static bool s_hid_record_found;
 static bool s_identity_validated;
 static bool s_reconnect_pending;
 static bool s_connect_pending;
+static bool s_retain_gamepad_queue;
 
 static void start_inquiry_cycle(void);
 static void start_identity_sdp_query(void);
@@ -75,6 +76,9 @@ static void sync_logic_snapshot(void) {
 }
 
 static void drain_gamepad_queue(void) {
+  if (s_retain_gamepad_queue) {
+    return;
+  }
   jh_bluetooth_gamepad_snapshot_t snapshot;
   hal_status_t status = HAL_OK;
   do {
@@ -924,6 +928,27 @@ hal_status_t jh_bluetooth_classic_hid_probe_stop(void) {
   s_snapshot.last_status = status;
   s_snapshot.phase = JH_CLASSIC_HID_PHASE_IDLE;
   return status;
+}
+
+void jh_bluetooth_classic_hid_probe_retain_gamepad_queue(bool retain) {
+  s_retain_gamepad_queue = retain;
+  if (!retain) {
+    drain_gamepad_queue();
+  }
+}
+
+hal_status_t jh_bluetooth_classic_hid_probe_gamepad_snapshot(
+    jh_bluetooth_gamepad_snapshot_t *out_snapshot) {
+  return jh_bluetooth_gamepad_parser_snapshot(&s_gamepad_parser, out_snapshot);
+}
+
+hal_status_t jh_bluetooth_classic_hid_probe_gamepad_next(
+    jh_bluetooth_gamepad_snapshot_t *out_snapshot) {
+  return jh_bluetooth_gamepad_parser_next(&s_gamepad_parser, out_snapshot);
+}
+
+size_t jh_bluetooth_classic_hid_probe_gamepad_pending(void) {
+  return s_gamepad_parser.queue_count;
 }
 
 void jh_bluetooth_classic_hid_probe_snapshot(

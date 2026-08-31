@@ -38,7 +38,7 @@
       "uart0-tx": { "endpoint": { "domain": "soc-gpio", "id": 43 } }
     }
   },
-  "capabilities": { "usb-device": { "present": true }, "cyw43": { "present": false }, "native-wifi": { "present": true }, "external-radio-frontend": { "present": false }, "bluetooth-controller": { "present": true }, "sx1262-radio": { "present": false } },
+  "capabilities": { "usb-device": { "present": true }, "cyw43": { "present": false }, "native-wifi": { "present": true }, "external-radio-frontend": { "present": false }, "bluetooth-controller": { "present": true }, "bluetooth-le-controller": { "present": true }, "bluetooth-classic-controller": { "present": false }, "sx1262-radio": { "present": false } },
   "devices": {
     "bootButton": { "kind": "gpio", "endpoint": { "domain": "soc-gpio", "id": 0 }, "activeLevel": "low" },
     "statusLed": { "kind": "addressable", "endpoint": { "domain": "soc-gpio", "id": 21 }, "protocol": "ws2812", "pixelOrder": { "source": "project", "value": null, "allowed": ["RGB", "GRB"] } }

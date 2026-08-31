@@ -460,7 +460,7 @@ ukierunkowane dokumenty:
 | 17 | [cJSON](../api/pl/17_cJSON.md) | Zarządzane `cJSON` / `cJSON_Utils`, wzorce include, zasady własności, parsowanie, wypisywanie, przykłady JSON Pointer/Patch/Merge Patch |
 | 18 | [LodePNG](../api/pl/18_LodePNG.md) | Zarządzany `LodePNG`, wzorce include, profil wbudowany, własność pamięci, skrypt zasobów PNG/Base64 i przykłady RGB565 |
 | 19 | [JPEG](../api/pl/19_JPEG.md) | Zarządzany rdzeń `TJpgDec`, profil wbudowany, własność pamięci, skrypt zasobów JPEG/Base64 i przykłady RGB565 |
-| 20 | [Bluetooth Low Energy](../api/pl/20_bluetooth.md) | Cykl życia Peripheral i Observer, advertising i skanowanie, zdarzenia połączenia, ATT MTU, uwierzytelniony Stream, kolejki o ustalonej pojemności, wsparcie płytek, koegzystencja oraz granica dystrybucji BTstack |
+| 20 | [Bluetooth](../api/pl/20_bluetooth.md) | Cykl życia BLE Peripheral/Observer i gamepada Classic HID, parowanie, reconnect, znormalizowane snapshoty, uwierzytelniony Stream, ograniczone kolejki, wsparcie płytek, koegzystencja oraz granica dystrybucji BTstack |
 | 21 | [Surowe radio LoRa](../api/pl/21_lora.md) | Zwalidowane profile SX1262 oraz eksperymentalne, wyłącznie programowe SX1261/SX1276/SX1278, asynchroniczne TX/RX/CAD, bieżące RSSI, capabilities, callbacki, diagnostyka i time-on-air |
 | 22 | [Niezawodne łącze LoRa](../api/pl/22_lora_link.md) | 16-bitowe adresowanie, sekwencje wiadomości, ACK/retry, tłumienie duplikatów, fragmentacja oraz opcjonalne ChaCha20-Poly1305 na `hal_lora_radio` |
 | 23 | [Routing poleceń](../api/pl/23_commands.md) | Neutralna względem transportu rejestracja handlerów i polityka, ograniczone wiadomości przewodowe żądanie/odpowiedź/zdarzenie, kompatybilność sieciowa, adaptery ramkowanego portu szeregowego, niezawodnego LoRa i uwierzytelnionego BLE Stream |
@@ -474,6 +474,7 @@ ukierunkowane dokumenty:
 | `hal_adc` | [GPIO, ADC i PWM](../api/pl/05_gpio_adc_pwm.md) |
 | `hal_bh1750` | [Czujniki](../api/pl/11_sensors.md) |
 | `hal_ble` | [Bluetooth Low Energy](../api/pl/20_bluetooth.md) |
+| `hal_gamepad` | [Gamepad Bluetooth Classic HID](../api/pl/20_bluetooth.md#gamepad-bluetooth-classic-hid) |
 | `hal_adp5360` | [Czujniki](../api/pl/11_sensors.md) |
 | `hal_bits` | [Timery i system](../api/pl/06_timers_system.md) |
 | `hal_can` | [CAN i wyświetlacz](../api/pl/10_can_display.md) |
