@@ -152,7 +152,6 @@ for source_set in (
     require(source_set in btstack_cmake, f"BTstack source set is missing {source_set}")
 for source in (
     "src/btstack_hid.c",
-    "src/btstack_hid_parser.c",
     "src/classic/btstack_link_key_db_memory.c",
     "src/classic/hid_host.c",
     "src/classic/sdp_client.c",
@@ -162,6 +161,10 @@ for source in (
     "jh_bluetooth_classic_hid_probe_logic.c",
 ):
     require(source in btstack_cmake, f"Classic HID source set is missing {source}")
+require(
+    "src/btstack_hid_parser.c" not in btstack_cmake,
+    "the platform-neutral gamepad parser still depends on BTstack HID parsing",
+)
 for forbidden in (
     "src/classic/rfcomm.c",
     "src/classic/sdp_server.c",
@@ -212,11 +215,11 @@ rp_cmake = (ROOT / "cmake" / "jh_rp_native_sdk.cmake").read_text(
 )
 require(
     "jh_target_enable_btstack_classic_hid" in cyw43_cmake
-    and "JH_BLUETOOTH_CLASSIC_HID_PROBE cannot be combined with BLE" in cyw43_cmake,
+    and "The private Classic HID probe cannot use a public profile" in cyw43_cmake,
     "CYW43 selector does not isolate the Classic HID mode",
 )
 require(
-    "JH_BLUETOOTH_CLASSIC_HID_PROBE requires a CYW43 network backend" in rp_cmake,
+    "Bluetooth Classic HID requires a CYW43 network backend" in rp_cmake,
     "RP build does not reject Classic HID on a board without CYW43",
 )
 

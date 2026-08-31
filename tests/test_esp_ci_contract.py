@@ -53,6 +53,21 @@ def require_real_esp_build(body: str, context: str) -> None:
     )
 
 
+def require_gamepad_esp_build(body: str, context: str) -> None:
+    require(
+        re.search(r"build_esp_idf\.py[\"']?\s+build", body) is not None,
+        f"{context} does not invoke the production ESP-IDF build action",
+    )
+    for fragment in (
+        "--project",
+        "tests/fixtures/esp32_gamepad",
+        "--target esp32",
+        "--board esp32-devkitc-v4",
+        "--clean",
+    ):
+        require(fragment in body, f"{context} is missing {fragment!r}")
+
+
 def require_esp_cache(body: str, context: str) -> None:
     for fragment in (
         "uses: actions/cache@v5",
@@ -238,6 +253,53 @@ require(
 require(
     '"${LOG_ROOT}/jh_esp32s3_phase3.log"' in gate8,
     "Gate 8 ESP-IDF command is not captured below .build/gate/logs",
+)
+
+linux_gamepad_build = workflow_step(
+    linux, "Build ESP32 Classic gamepad fixture with pinned ESP-IDF"
+)
+require_gamepad_esp_build(linux_gamepad_build, "Linux gamepad build")
+for fragment in (
+    "id: esp32_gamepad_build",
+    "build_exit=0",
+    "|| build_exit=$?",
+    "jh_esp_idf_failure.txt",
+    'tail -n 300 "${output}/build.log"',
+    'exit "${build_exit}"',
+):
+    require(
+        fragment in linux_gamepad_build,
+        f"Linux gamepad failure output is missing {fragment!r}",
+    )
+require(
+    "linux-esp32-gamepad" in workflow_step(
+        linux, "Upload ESP32 Classic gamepad build artifacts"
+    ),
+    "Linux gamepad artifacts have no stable upload name",
+)
+require(
+    "steps.esp32_gamepad_build.outcome == 'failure'"
+    in workflow_step(
+        linux, "Upload ESP32 Classic gamepad failure diagnostics"
+    ),
+    "Linux gamepad failure upload is not tied to its build step",
+)
+
+gate8_gamepad = gate8.split(
+    'info "Building the ESP32 Classic gamepad fixture with pinned ESP-IDF..."',
+    1,
+)[1].split(
+    'pass "ESP32 Classic gamepad fixture produced a validated ESP-IDF build."',
+    1,
+)[0]
+require_gamepad_esp_build(gate8_gamepad, "runalltests.sh Gate 8 gamepad")
+require(
+    '"${GATE_BUILD_ROOT}/esp-idf/esp32-gamepad"' in gate8,
+    "Gate 8 ESP32 gamepad output is not below .build/gate",
+)
+require(
+    '"${LOG_ROOT}/jh_esp32_gamepad.log"' in gate8,
+    "Gate 8 ESP32 gamepad command is not captured below .build/gate/logs",
 )
 
 print("ESP32-S3 Phase 3 CI and local gate integration verified")

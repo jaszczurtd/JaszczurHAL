@@ -13,6 +13,7 @@
  *     HAL_TARGET_RP2350_ARM
  *     HAL_TARGET_RP2350_RISCV
  *     HAL_TARGET_STM32G474
+ *     HAL_TARGET_ESP32
  *     HAL_TARGET_ESP32_S3
  *     HAL_TARGET_MOCK
  *
@@ -25,7 +26,8 @@
 /* 1. Auto-detect the exact target when none was selected. */
 #if !defined(HAL_TARGET_RP2040) && !defined(HAL_TARGET_RP2350_ARM) &&          \
     !defined(HAL_TARGET_RP2350_RISCV) && !defined(HAL_TARGET_STM32G474) &&     \
-    !defined(HAL_TARGET_ESP32_S3) && !defined(HAL_TARGET_MOCK)
+    !defined(HAL_TARGET_ESP32) && !defined(HAL_TARGET_ESP32_S3) &&             \
+    !defined(HAL_TARGET_MOCK)
 
 #if defined(PICO_RP2350)
 #if defined(__riscv)
@@ -40,6 +42,8 @@
 #define HAL_TARGET_RP2040 1
 #elif defined(STM32G474xx) || defined(STM32G4)
 #define HAL_TARGET_STM32G474 1
+#elif defined(CONFIG_IDF_TARGET_ESP32)
+#define HAL_TARGET_ESP32 1
 #elif defined(CONFIG_IDF_TARGET_ESP32S3)
 #define HAL_TARGET_ESP32_S3 1
 #elif !defined(__arm__) && !defined(__thumb__) && !defined(__riscv)
@@ -82,6 +86,12 @@
 #define HAL_TARGET_IS_ESP32_S3 0
 #endif
 
+#if defined(HAL_TARGET_ESP32)
+#define HAL_TARGET_IS_ESP32 1
+#else
+#define HAL_TARGET_IS_ESP32 0
+#endif
+
 #if defined(HAL_TARGET_MOCK)
 #define HAL_TARGET_IS_MOCK 1
 #else
@@ -91,9 +101,9 @@
 /* 3. Enforce exactly one exact target. */
 #if (HAL_TARGET_IS_RP2040 + HAL_TARGET_IS_RP2350_ARM +                         \
      HAL_TARGET_IS_RP2350_RISCV + HAL_TARGET_IS_STM32G474 +                    \
-     HAL_TARGET_IS_ESP32_S3 + HAL_TARGET_IS_MOCK) != 1
+     HAL_TARGET_IS_ESP32 + HAL_TARGET_IS_ESP32_S3 + HAL_TARGET_IS_MOCK) != 1
 #error                                                                         \
-    "JaszczurHAL: exactly one HAL_TARGET_* must be selected (RP2040 / RP2350_ARM / RP2350_RISCV / STM32G474 / ESP32_S3 / MOCK)."
+    "JaszczurHAL: exactly one HAL_TARGET_* must be selected (RP2040 / RP2350_ARM / RP2350_RISCV / STM32G474 / ESP32 / ESP32_S3 / MOCK)."
 #endif
 
 /* 4. Derived family and ISA selectors. */
@@ -104,7 +114,7 @@
 #define HAL_TARGET_IS_RP 0
 #endif
 
-#if HAL_TARGET_IS_ESP32_S3
+#if HAL_TARGET_IS_ESP32 || HAL_TARGET_IS_ESP32_S3
 #define HAL_TARGET_IS_ESP32_FAMILY 1
 #else
 #define HAL_TARGET_IS_ESP32_FAMILY 0
@@ -131,6 +141,8 @@
 #define HAL_TARGET_NAME "rp2350-riscv"
 #elif HAL_TARGET_IS_STM32G474
 #define HAL_TARGET_NAME "stm32g474"
+#elif HAL_TARGET_IS_ESP32
+#define HAL_TARGET_NAME "esp32"
 #elif HAL_TARGET_IS_ESP32_S3
 #define HAL_TARGET_NAME "esp32s3"
 #else

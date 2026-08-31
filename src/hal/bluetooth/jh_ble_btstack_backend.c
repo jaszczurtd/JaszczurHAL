@@ -2,9 +2,16 @@
 
 #if defined(JH_BLUETOOTH_PUBLIC_BLE)
 
-#include "btstack.h"
+#include "ble/att_server.h"
+#include "ble/sm.h"
+#include "bluetooth.h"
+#include "btstack_defines.h"
+#include "btstack_event.h"
+#include "btstack_util.h"
+#include "gap.h"
 #include "hal/core/hal_mutex_once.h"
 #include "hal/system/hal_sync.h"
+#include "hci.h"
 #include "jh_ble_peripheral_gatt.h"
 #include "jh_ble_stream_session.h"
 #include "jh_btstack_hci_transport_cyw43.h"

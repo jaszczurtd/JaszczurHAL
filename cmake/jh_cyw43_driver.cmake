@@ -163,17 +163,19 @@ endfunction()
 # ownership of provider detection and pass resolved boolean inputs here.
 function(jh_target_enable_cyw43_feature_stack TARGET_NAME)
     cmake_parse_arguments(JH_CYW43_FEATURE ""
-        "LWIP;OTA;BLUETOOTH_STAGE1;BLUETOOTH_CLASSIC_HID;BLE;BLE_STREAM" "" ${ARGN})
+        "LWIP;OTA;BLUETOOTH_STAGE1;BLUETOOTH_CLASSIC_HID;GAMEPAD;BLE;BLE_STREAM" "" ${ARGN})
     if(JH_CYW43_FEATURE_BLUETOOTH_STAGE1 AND
        (JH_CYW43_FEATURE_BLUETOOTH_CLASSIC_HID OR
+        JH_CYW43_FEATURE_GAMEPAD OR
         JH_CYW43_FEATURE_BLE OR JH_CYW43_FEATURE_BLE_STREAM))
         message(FATAL_ERROR
-            "Select exactly one private Bluetooth probe or public BLE mode")
+            "The private Bluetooth stage-1 probe cannot use a public profile")
     endif()
     if(JH_CYW43_FEATURE_BLUETOOTH_CLASSIC_HID AND
-       (JH_CYW43_FEATURE_BLE OR JH_CYW43_FEATURE_BLE_STREAM))
+       (JH_CYW43_FEATURE_GAMEPAD OR JH_CYW43_FEATURE_BLE OR
+        JH_CYW43_FEATURE_BLE_STREAM))
         message(FATAL_ERROR
-            "JH_BLUETOOTH_CLASSIC_HID_PROBE cannot be combined with BLE")
+            "The private Classic HID probe cannot use a public profile")
     endif()
 
     set(_jh_cyw43_options)
@@ -185,6 +187,7 @@ function(jh_target_enable_cyw43_feature_stack TARGET_NAME)
     endif()
     if(JH_CYW43_FEATURE_BLUETOOTH_STAGE1 OR
        JH_CYW43_FEATURE_BLUETOOTH_CLASSIC_HID OR
+       JH_CYW43_FEATURE_GAMEPAD OR
        JH_CYW43_FEATURE_BLE OR JH_CYW43_FEATURE_BLE_STREAM)
         list(APPEND _jh_cyw43_options BLUETOOTH)
     endif()
@@ -194,6 +197,12 @@ function(jh_target_enable_cyw43_feature_stack TARGET_NAME)
         jh_target_enable_btstack_stage1(${TARGET_NAME})
     elseif(JH_CYW43_FEATURE_BLUETOOTH_CLASSIC_HID)
         jh_target_enable_btstack_classic_hid(${TARGET_NAME})
+    elseif(JH_CYW43_FEATURE_GAMEPAD AND JH_CYW43_FEATURE_BLE_STREAM)
+        jh_target_enable_btstack_gamepad_ble_stream(${TARGET_NAME})
+    elseif(JH_CYW43_FEATURE_GAMEPAD AND JH_CYW43_FEATURE_BLE)
+        jh_target_enable_btstack_gamepad_ble(${TARGET_NAME})
+    elseif(JH_CYW43_FEATURE_GAMEPAD)
+        jh_target_enable_btstack_gamepad(${TARGET_NAME})
     elseif(JH_CYW43_FEATURE_BLE_STREAM)
         jh_target_enable_btstack_ble_stream(${TARGET_NAME})
     elseif(JH_CYW43_FEATURE_BLE)

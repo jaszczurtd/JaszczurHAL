@@ -52,8 +52,8 @@ podłączy.
 
 Projekty RP i STM32 wybierają `toolchain: "cmake"` i wskazują
 `cmake.sourceDir` na `libraries/JaszczurHAL/cmake/jh_firmware_project`.
-`JH_PROJECT_DIR` identyfikuje katalog aplikacji. Projekty ESP32-S3 wybierają
-`toolchain: "esp-idf"`; ich wpis w rejestrze targetów dostarcza produkcyjny
+`JH_PROJECT_DIR` identyfikuje katalog aplikacji. Projekty ESP32 i ESP32-S3
+wybierają `toolchain: "esp-idf"`; ich wpis w rejestrze targetów dostarcza produkcyjny
 runner oraz ścieżkę manifestu artefaktów. Współdzielony punkt wejścia wybiera
 providera bez konieczności lokalnej receptury CMake dla projektu.
 
@@ -105,10 +105,11 @@ zgody.
 - **Stan lokalny**: ignorowany przez git `.vscode/jaszczurhal.local.json`,
   zawierający wybrany przez dewelopera target, płytkę i port szeregowy.
 - **Target**: stabilny identyfikator buildu: `rp2040`, `rp2350-arm`,
-  `rp2350-riscv`, `stm32g474`, `esp32s3` lub `mock`.
+  `rp2350-riscv`, `stm32g474`, `esp32`, `esp32s3` lub `mock`.
 - **Płytka (board)**: stabilny identyfikator fizycznego profilu, taki jak
   `pico`, `picow`, `pico2`, `pico2w`, `pico-rm2`, `rp2040-zero`,
-  `rp2040-plus-4mb`, `nucleo-g474re` lub `waveshare-esp32-s3-zero`.
+  `rp2040-plus-4mb`, `nucleo-g474re`, `esp32-devkitc-v4` lub
+  `waveshare-esp32-s3-zero`.
 - **Rejestr płytek**: wygenerowany widok narzędziowy `boards/targets/*.json`,
   `boards/profiles/*.json` oraz `boards/capabilities.json`.
 - **`JH_TARGET` / `JH_BOARD`**: wartości cache CMake wybierane przez
@@ -164,6 +165,7 @@ targetu i wariant po zastosowaniu wszystkich nakładek manifestu.
 | `rp2350-arm` | Cortex-M33 | `pico2` | ELF/BIN/HEX/UF2/MAP | zweryfikowane CDC do BOOTSEL lub bezpośredni BOOTSEL |
 | `rp2350-riscv` | Hazard3 RISC-V | `pico2` | ELF/BIN/HEX/UF2/MAP | zweryfikowane CDC do BOOTSEL lub bezpośredni BOOTSEL |
 | `stm32g474` | Cortex-M4F | `nucleo-g474re` | ELF/BIN/HEX/MAP | OpenOCD |
+| `esp32` | dwurdzeniowy Xtensa LX6 | `esp32-devkitc-v4` | ELF/MAP plus obrazy BIN bootloadera, tabeli partycji i aplikacji | flashowanie ESP-IDF przez zweryfikowany mostek USB-UART |
 | `esp32s3` | dwurdzeniowy Xtensa LX7 | `waveshare-esp32-s3-zero` | ELF/MAP plus obrazy BIN bootloadera, tabeli partycji i aplikacji | flashowanie ESP-IDF przez zweryfikowany USB Serial/JTAG |
 | `mock` | host | `host-mock` | plik wykonywalny/biblioteka hosta | brak |
 
@@ -331,12 +333,17 @@ odrzucane.
 Deskryptor `esp32s3` wspiera wymagany przez target `HAL_ENABLE_FREERTOS`,
 dostarczony zestaw flag peryferiów Fazy 2 oraz flagi sieci/usług Fazy 3. Ten
 zestaw obejmuje APP_TASK1, UART, kontroler/target I2C, SPI, PWM_FREQ,
-RGB_LED, PCNT, STACK_GUARD, WiFi, TCP/UDP, gniazda BSD, TLS, klienta/serwer
+RGB_LED, PCNT, STACK_GUARD, BLE, WiFi, TCP/UDP, gniazda BSD, TLS, klienta/serwer
 HTTP/pliki, serwer WebSocket, MQTT, czas, OTA oraz WireGuard. Proste PWM oraz
 podstawowe źródła systemu/synchronizacji/GPIO/ADC/portu szeregowego/timera
 należą do jego komponentu bazowego. Produkcyjny runner odrzuca żądaną
 funkcję lub dowolną zależność, która rozwiązuje się poza dozwoloną listą
 deskryptora, z `[JH-CFG-UNSUPPORTED]`.
+
+Początkowy deskryptor `esp32` jest celowo węższy. Obsługuje wymagany runtime
+FreeRTOS i `HAL_ENABLE_BLUETOOTH_GAMEPAD`, które wybiera Bluedroid, BR/EDR oraz
+ESP HID Host. Funkcje dostarczone tylko na ESP32-S3, w tym publiczne API BLE,
+są odrzucane podczas kontroli wstępnej.
 
 Dla `firmware_entry.h` w konwencji Fiesta, `FIESTA_ENABLE_CORE1=1` musi być
 sparowane z `HAL_ENABLE_APP_TASK1` w `hal_project_config.h` lub innym

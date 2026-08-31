@@ -45,7 +45,9 @@ void test_board_info_reports_profile_and_declared_capabilities(void) {
   TEST_ASSERT_EQUAL_INT(HAL_BOARD_RP_PICO_W, info.profile);
   TEST_ASSERT_EQUAL_STRING("picow", info.name);
   TEST_ASSERT_EQUAL_UINT32(HAL_BOARD_CAP_USB_DEVICE | HAL_BOARD_CAP_CYW43 |
-                               HAL_BOARD_CAP_BLUETOOTH_CONTROLLER,
+                               HAL_BOARD_CAP_BLUETOOTH_CONTROLLER |
+                               HAL_BOARD_CAP_BLUETOOTH_LE_CONTROLLER |
+                               HAL_BOARD_CAP_BLUETOOTH_CLASSIC_CONTROLLER,
                            info.declared);
   TEST_ASSERT_EQUAL_UINT32(0u, info.available);
   TEST_ASSERT_EQUAL_UINT32(0u, info.failed);

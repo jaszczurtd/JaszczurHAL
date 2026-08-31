@@ -581,6 +581,64 @@ jobs:
           if-no-files-found: warn
           include-hidden-files: true
 
+      - name: Build ESP32 Classic gamepad fixture with pinned ESP-IDF
+        id: esp32_gamepad_build
+        run: |
+          output="${GITHUB_WORKSPACE}/.build/ci/esp-idf/esp32-gamepad"
+          build_exit=0
+          python3 scripts/build_esp_idf.py build \
+            --project tests/fixtures/esp32_gamepad \
+            --target esp32 \
+            --board esp32-devkitc-v4 \
+            --output "${output}" \
+            --clean || build_exit=$?
+          if (( build_exit != 0 )); then
+            if [[ -f "${output}/build.log" ]]; then
+              echo 'Last 300 lines of the ESP-IDF build log:'
+              tail -n 300 "${output}/build.log"
+            fi
+            echo 'ESP-IDF failure diagnostic:'
+            if [[ -f "${output}/jh_esp_idf_failure.txt" ]]; then
+              sed -n '1,120p' "${output}/jh_esp_idf_failure.txt"
+            else
+              echo "Missing failure diagnostic: ${output}/jh_esp_idf_failure.txt" >&2
+            fi
+            exit "${build_exit}"
+          fi
+
+      - name: Upload ESP32 Classic gamepad build artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-esp32-gamepad
+          path: |
+            .build/ci/esp-idf/esp32-gamepad/jh_esp_idf_artifacts.json
+            .build/ci/esp-idf/esp32-gamepad/build.log
+            .build/ci/esp-idf/esp32-gamepad/bootloader/bootloader.bin
+            .build/ci/esp-idf/esp32-gamepad/partition_table/partition-table.bin
+            .build/ci/esp-idf/esp32-gamepad/esp32_gamepad.bin
+          if-no-files-found: error
+          include-hidden-files: true
+
+      - name: Upload ESP32 Classic gamepad failure diagnostics
+        if: >-
+          ${{ failure() && !cancelled() &&
+          steps.esp32_gamepad_build.outcome == 'failure' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-esp32-gamepad-failure
+          path: |
+            .build/ci/esp-idf/esp32-gamepad/jh_esp_idf_failure.txt
+            .build/ci/esp-idf/esp32-gamepad/build.log
+            .build/ci/esp-idf/esp32-gamepad/generated/jaszczurhal/
+            .build/ci/esp-idf/esp32-gamepad/CMakeCache.txt
+            .build/ci/esp-idf/esp32-gamepad/CMakeFiles/CMakeConfigureLog.yaml
+            .build/ci/esp-idf/esp32-gamepad/project_description.json
+            .build/ci/esp-idf/esp32-gamepad/compile_commands.json
+            .build/ci/esp-idf/esp32-gamepad/flasher_args.json
+            .build/ci/esp-idf/esp32-gamepad/sdkconfig
+          if-no-files-found: warn
+          include-hidden-files: true
+
   # ── Sanitizer and parser fuzz gate ─────────────────────────────────────────
   sanitizer-fuzz:
     runs-on: ubuntu-latest

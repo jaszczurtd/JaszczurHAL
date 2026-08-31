@@ -88,17 +88,26 @@ require(
 
 validated = run("--validate-only")
 require(
-    validated.stdout.strip() == "validated 6 targets and 14 boards",
+    validated.stdout.strip() == "validated 7 targets and 15 boards",
     "unexpected validated registry size",
 )
 require(
     run("--list", "targets").stdout.splitlines()
-    == ["esp32s3", "mock", "rp2040", "rp2350-arm", "rp2350-riscv", "stm32g474"],
+    == [
+        "esp32",
+        "esp32s3",
+        "mock",
+        "rp2040",
+        "rp2350-arm",
+        "rp2350-riscv",
+        "stm32g474",
+    ],
     "target list is not deterministic",
 )
 require(
     run("--list", "boards").stdout.splitlines()
     == [
+        "esp32-devkitc-v4",
         "host-mock",
         "nucleo-g474re",
         "nucleo-g474re-core1262-hf",
@@ -376,6 +385,7 @@ require(
     esp32_target["supportedFeatures"]
     == [
         "HAL_ENABLE_APP_TASK1",
+        "HAL_ENABLE_BLE",
         "HAL_ENABLE_BSD_SOCKETS",
         "HAL_ENABLE_CRC",
         "HAL_ENABLE_CRYPTO",
@@ -404,6 +414,47 @@ require(
         "HAL_ENABLE_WIREGUARD",
     ],
     "ESP32-S3 Phase 3 feature boundary changed",
+)
+
+esp32_classic_output = TEST_ROOT / "generated/esp32"
+run(
+    "--target",
+    "esp32",
+    "--board",
+    "esp32-devkitc-v4",
+    "--output-dir",
+    str(esp32_classic_output),
+)
+esp32_classic_resolved = load(
+    esp32_classic_output / "jh_board_resolved.json"
+)
+esp32_classic_config = (
+    esp32_classic_output / "jh_board_config.h"
+).read_text(encoding="utf-8")
+require(
+    esp32_classic_resolved["idfTarget"] == "esp32",
+    "original ESP32 target mapping changed",
+)
+require(
+    esp32_classic_resolved["resolvedFeatures"] == ["HAL_ENABLE_FREERTOS"],
+    "original ESP32 must require FreeRTOS",
+)
+require(
+    '#define HAL_TARGET_DESCRIPTOR_ID "esp32"' in esp32_classic_config
+    and "#define HAL_BOARD_HAS_BLUETOOTH_CLASSIC_CONTROLLER 1"
+    in esp32_classic_config
+    and "#define HAL_BOARD_HAS_BLUETOOTH_LE_CONTROLLER 1"
+    in esp32_classic_config,
+    "original ESP32 Bluetooth capabilities were not generated",
+)
+require(
+    load(BOARDS / "targets/esp32.json")["supportedFeatures"]
+    == [
+        "HAL_ENABLE_BLUETOOTH_CLASSIC",
+        "HAL_ENABLE_BLUETOOTH_GAMEPAD",
+        "HAL_ENABLE_FREERTOS",
+    ],
+    "original ESP32 feature boundary changed",
 )
 for expected in (
     '#define HAL_TARGET_DESCRIPTOR_ID "esp32s3"',

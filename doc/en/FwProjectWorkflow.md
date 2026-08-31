@@ -50,7 +50,7 @@ on-board ST-Link can recover a running target before GDB attaches.
 
 RP and STM32 projects select `toolchain: "cmake"` and point `cmake.sourceDir`
 at `libraries/JaszczurHAL/cmake/jh_firmware_project`. `JH_PROJECT_DIR`
-identifies the application directory. ESP32-S3 projects select
+identifies the application directory. ESP32 and ESP32-S3 projects select
 `toolchain: "esp-idf"`; their target registry entry supplies the production
 runner and artifact-manifest path. The shared entrypoint selects the provider
 without requiring a project-local CMake recipe.
@@ -101,10 +101,10 @@ Automation can use `--install --yes` after obtaining consent.
 - **Local state**: gitignored `.vscode/jaszczurhal.local.json`, containing a
   developer's selected target, board, and serial port.
 - **Target**: stable build ID: `rp2040`, `rp2350-arm`, `rp2350-riscv`,
-  `stm32g474`, `esp32s3`, or `mock`.
+  `stm32g474`, `esp32`, `esp32s3`, or `mock`.
 - **Board**: stable physical profile ID such as `pico`, `picow`, `pico2`,
   `pico2w`, `pico-rm2`, `rp2040-zero`, `rp2040-plus-4mb`,
-  `nucleo-g474re`, or `waveshare-esp32-s3-zero`.
+  `nucleo-g474re`, `esp32-devkitc-v4`, or `waveshare-esp32-s3-zero`.
 - **Board registry**: generated tooling view of `boards/targets/*.json`,
   `boards/profiles/*.json`, and `boards/capabilities.json`.
 - **`JH_TARGET` / `JH_BOARD`**: CMake cache values selected by the dispatcher
@@ -157,6 +157,7 @@ variant after all manifest overlays have been applied.
 | `rp2350-arm` | Cortex-M33 | `pico2` | ELF/BIN/HEX/UF2/MAP | verified CDC to BOOTSEL, or direct BOOTSEL |
 | `rp2350-riscv` | Hazard3 RISC-V | `pico2` | ELF/BIN/HEX/UF2/MAP | verified CDC to BOOTSEL, or direct BOOTSEL |
 | `stm32g474` | Cortex-M4F | `nucleo-g474re` | ELF/BIN/HEX/MAP | OpenOCD |
+| `esp32` | dual-core Xtensa LX6 | `esp32-devkitc-v4` | ELF/MAP plus bootloader, partition-table, and application BIN images | ESP-IDF flash through the verified USB-UART bridge |
 | `esp32s3` | dual-core Xtensa LX7 | `waveshare-esp32-s3-zero` | ELF/MAP plus bootloader, partition-table, and application BIN images | ESP-IDF flash through verified USB Serial/JTAG |
 | `mock` | host | `host-mock` | host executable/library | none |
 
@@ -319,11 +320,16 @@ and CMake generator expressions are rejected.
 The `esp32s3` descriptor supports target-required `HAL_ENABLE_FREERTOS`, the
 delivered Phase 2 peripheral flags, and the Phase 3 network/service flags. The
 set includes APP_TASK1, UART, I2C controller/target, SPI, PWM_FREQ, RGB_LED,
-PCNT, STACK_GUARD, WiFi, TCP/UDP, BSD sockets, TLS, HTTP client/server/files,
-WebSocket server, MQTT, time, OTA, and WireGuard. Simple PWM and the core
+PCNT, STACK_GUARD, BLE, WiFi, TCP/UDP, BSD sockets, TLS, HTTP
+client/server/files, WebSocket server, MQTT, time, OTA, and WireGuard. Simple PWM and the core
 system/synchronization/GPIO/ADC/serial/timer sources belong to its baseline
 component. The production runner rejects a requested feature or any dependency
 that resolves outside the descriptor allowlist with `[JH-CFG-UNSUPPORTED]`.
+
+The initial `esp32` descriptor is intentionally narrower. It supports the
+required FreeRTOS runtime and `HAL_ENABLE_BLUETOOTH_GAMEPAD`, which selects
+Bluedroid, BR/EDR, and ESP HID Host. Features delivered only on ESP32-S3,
+including the public BLE API, are rejected during preflight.
 
 For a Fiesta-convention `firmware_entry.h`, `FIESTA_ENABLE_CORE1=1` must be
 paired with `HAL_ENABLE_APP_TASK1` in `hal_project_config.h` or another normal

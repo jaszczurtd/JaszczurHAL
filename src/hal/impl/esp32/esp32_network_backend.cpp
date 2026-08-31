@@ -13,6 +13,7 @@
 #include "hal/system/hal_sync.h"
 #include "hal/system/jh_board_runtime.h"
 #include "jh_esp32_network.h"
+#include "jh_esp32_nvs_runtime.h"
 #include "jh_esp32_status.h"
 
 #include <esp_event.h>
@@ -29,7 +30,6 @@
 #include <lwip/netifapi.h>
 #include <lwip/sockets.h>
 #include <lwip/tcpip.h>
-#include <nvs_flash.h>
 #include <ping/ping_sock.h>
 
 #include <limits.h>
@@ -394,15 +394,6 @@ hal_status_t teardown_wifi_locked(void) {
   return HAL_OK;
 }
 
-hal_status_t initialize_nvs(void) {
-  const esp_err_t status = nvs_flash_init();
-  if (status == ESP_ERR_NVS_NO_FREE_PAGES ||
-      status == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-    return HAL_ECONFIG;
-  }
-  return jh_esp32_status_from_esp_err(status);
-}
-
 hal_status_t initialize_wifi_locked(void) {
   if (s_wifi_driver_initialized && s_station_started &&
       s_station_netif != nullptr && s_station_attached &&
@@ -417,7 +408,7 @@ hal_status_t initialize_wifi_locked(void) {
     return HAL_EBUSY;
   }
 
-  hal_status_t status = initialize_nvs();
+  hal_status_t status = jh_esp32_nvs_initialize();
   if (status != HAL_OK) {
     return status;
   }

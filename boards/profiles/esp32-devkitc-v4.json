@@ -1,0 +1,46 @@
+{
+  "$schema": "../board.schema.json",
+  "schemaVersion": 1,
+  "kind": "board",
+  "id": "esp32-devkitc-v4",
+  "displayName": "Espressif ESP32-DevKitC V4",
+  "description": "ESP32-WROOM-32E development board with 4 MB flash and a CP210x USB-to-UART bridge.",
+  "status": "experimental",
+  "compatibleTargets": ["esp32"],
+  "build": { "provider": "esp-idf" },
+  "hal": { "profileId": 15, "selector": "HAL_BOARD_PROFILE_ESP32_DEVKITC_V4", "legacySelectors": [], "autoDetectSelectors": [] },
+  "memory": {
+    "flash": { "source": "sdk", "expectedBytes": 4194304 }
+  },
+  "programming": {
+    "transport": "usb-uart-bridge",
+    "usb": { "vid": 4292, "pid": 60000 },
+    "reset": "dtr-rts-en",
+    "boot": "dtr-rts-io0"
+  },
+  "gpio": {
+    "exposedPins": { "values": [0, 1, 2, 3, 4, 5, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 25, 26, 27, 32, 33, 34, 35, 36, 39] },
+    "connectors": {
+      "headers": { "pins": [{ "domain": "soc-gpio", "id": 0 }, { "domain": "soc-gpio", "id": 1 }, { "domain": "soc-gpio", "id": 2 }, { "domain": "soc-gpio", "id": 3 }, { "domain": "soc-gpio", "id": 4 }, { "domain": "soc-gpio", "id": 5 }, { "domain": "soc-gpio", "id": 12 }, { "domain": "soc-gpio", "id": 13 }, { "domain": "soc-gpio", "id": 14 }, { "domain": "soc-gpio", "id": 15 }, { "domain": "soc-gpio", "id": 16 }, { "domain": "soc-gpio", "id": 17 }, { "domain": "soc-gpio", "id": 18 }, { "domain": "soc-gpio", "id": 19 }, { "domain": "soc-gpio", "id": 21 }, { "domain": "soc-gpio", "id": 22 }, { "domain": "soc-gpio", "id": 23 }, { "domain": "soc-gpio", "id": 25 }, { "domain": "soc-gpio", "id": 26 }, { "domain": "soc-gpio", "id": 27 }, { "domain": "soc-gpio", "id": 32 }, { "domain": "soc-gpio", "id": 33 }, { "domain": "soc-gpio", "id": 34 }, { "domain": "soc-gpio", "id": 35 }, { "domain": "soc-gpio", "id": 36 }, { "domain": "soc-gpio", "id": 39 }] }
+    },
+    "reservations": {
+      "boot-button": { "pins": [{ "domain": "soc-gpio", "id": 0 }], "owner": "board.boot-button", "strength": "soft", "reason": "BOOT button and download-mode strapping input." },
+      "status-led": { "pins": [{ "domain": "soc-gpio", "id": 2 }], "owner": "board.status-led", "strength": "soft", "reason": "On-board status LED on Espressif DevKitC V4." },
+      "uart0": { "pins": [{ "domain": "soc-gpio", "id": 1 }, { "domain": "soc-gpio", "id": 3 }], "owner": "console.uart0", "strength": "soft", "reason": "Default ESP-IDF UART console through the USB-to-UART bridge." },
+      "module-flash": { "pins": [{ "domain": "soc-gpio", "id": 6 }, { "domain": "soc-gpio", "id": 7 }, { "domain": "soc-gpio", "id": 8 }, { "domain": "soc-gpio", "id": 9 }, { "domain": "soc-gpio", "id": 10 }, { "domain": "soc-gpio", "id": 11 }], "owner": "module.flash", "strength": "hard", "reason": "Connected internally to the module SPI flash." }
+    },
+    "aliases": {
+      "boot-button": { "endpoint": { "domain": "soc-gpio", "id": 0 } },
+      "status-led": { "endpoint": { "domain": "soc-gpio", "id": 2 } },
+      "uart0-rx": { "endpoint": { "domain": "soc-gpio", "id": 3 } },
+      "uart0-tx": { "endpoint": { "domain": "soc-gpio", "id": 1 } }
+    }
+  },
+  "capabilities": { "usb-device": { "present": false }, "cyw43": { "present": false }, "native-wifi": { "present": true }, "external-radio-frontend": { "present": false }, "bluetooth-controller": { "present": true }, "bluetooth-le-controller": { "present": true }, "bluetooth-classic-controller": { "present": true }, "sx1262-radio": { "present": false } },
+  "devices": {
+    "bootButton": { "kind": "gpio", "endpoint": { "domain": "soc-gpio", "id": 0 }, "activeLevel": "low" },
+    "statusLed": { "kind": "gpio", "endpoint": { "domain": "soc-gpio", "id": 2 }, "activeLevel": "high" }
+  },
+  "peripherals": { "defaultsSource": "esp-idf" },
+  "components": {}
+}

@@ -1,12 +1,15 @@
-# API Bluetooth Low Energy dla ról Peripheral i Observer
+# API Bluetooth Low Energy i gamepada Classic HID
 
 *Dostępne również [po angielsku](../en/20_bluetooth.md).*
 
 > **Część [Dokumentacji API JaszczurHAL](../../pl/JaszczurHAL_API.md)**
 
-Moduł `hal_ble` jest opcjonalnym (opt-in) API Bluetooth Low Energy dla roli
-Peripheral oraz pasywnej roli Observer. Zdefiniuj `HAL_ENABLE_BLE` i dołącz
-`hal/bluetooth/hal_ble.h` lub zbiorczy nagłówek `JaszczurHAL.h`.
+Moduły Bluetooth są opcjonalne. `HAL_ENABLE_BLE` udostępnia API Bluetooth Low
+Energy dla ról Peripheral i pasywnego Observera przez
+`hal/bluetooth/hal_ble.h`. `HAL_ENABLE_BLUETOOTH_GAMEPAD` udostępnia jeden
+gamepad Bluetooth Classic HID przez `hal/bluetooth/hal_gamepad.h` i
+automatycznie włącza `HAL_ENABLE_BLUETOOTH_CLASSIC`. Oba API są również
+dostępne ze zbiorczego nagłówka `JaszczurHAL.h`.
 
 Bieżące wydanie dostarcza jedno połączenie Peripheral, klasyczne (legacy)
 advertising z możliwością połączenia, pasywne, klasyczne skanowanie
@@ -22,21 +25,31 @@ klienta GATT.
 
 ## Obsługiwane profile
 
-| Target | Płytka | Radio | Walidacja |
-|---|---|---|---|
-| `rp2040` | `picow` | wbudowany CYW43439 | Bramki sprzętowe Observer oraz Stream bare-metal/FreeRTOS przeszły |
-| `rp2350-arm` | `pico2w` | wbudowany CYW43439 | Bramki Observer, Stream bare-metal/FreeRTOS oraz aktywnej koegzystencji Stream+WiFi/MQTT przeszły |
-| `rp2040` | `pico-rm2` | zewnętrzny CYW43439 PIM730/RM2 przez PIO | obsługiwane na etapie buildu; dedykowana bramka sprzętowa oczekująca |
-| `stm32g474` | `nucleo-g474re-pim730` | zewnętrzny CYW43439 PIM730/RM2 przez gSPI | Bramki Peripheral i Observer oraz pełne bramki obciążeniowe Stream bare-metal/FreeRTOS z wyświetlaczem, w tym reset IWDG, przeszły |
-| `mock` | `host-mock` | deterministyczny backend testowy | testy hosta |
+| API | Target | Płytka | Radio/host | Walidacja |
+|---|---|---|---|---|
+| BLE | `rp2040` | `picow` | wbudowany CYW43439 z BTstack | Bramki sprzętowe Observer oraz Stream bare-metal/FreeRTOS przeszły |
+| BLE | `rp2350-arm` | `pico2w` | wbudowany CYW43439 z BTstack | Bramki Observer, Stream bare-metal/FreeRTOS oraz aktywnej koegzystencji Stream+WiFi/MQTT przeszły |
+| BLE | `rp2040` | `pico-rm2` | zewnętrzny CYW43439 PIM730/RM2 przez PIO | obsługiwane na etapie buildu; dedykowana bramka sprzętowa oczekująca |
+| BLE | `stm32g474` | `nucleo-g474re-pim730` | zewnętrzny CYW43439 PIM730/RM2 przez gSPI | Bramki Peripheral i Observer oraz pełne bramki obciążeniowe Stream bare-metal/FreeRTOS z wyświetlaczem przeszły |
+| BLE | `esp32s3` | `waveshare-esp32-s3-zero` | zintegrowany kontroler LE z ESP-IDF NimBLE | kompletna bramka buildu i linkowania; bramka radiowa na sprzęcie oczekuje |
+| Gamepad Classic | `rp2040` / `rp2350-arm` / `stm32g474` | profile Bluetooth wymienione wyżej | CYW43439 z hostem HID BTstack | bramki sprzętowe Zero 2 przeszły na `pico2w`; pozostałe płytki przeszły bramki buildu |
+| Gamepad Classic | `esp32` | `esp32-devkitc-v4` | zintegrowany kontroler BR/EDR z ESP-IDF Bluedroid i ESP HID Host | kompletna bramka buildu i linkowania; bramka radiowa na sprzęcie oczekuje |
+| BLE i gamepad Classic | `mock` | `host-mock` | deterministyczne backendy testowe | testy hosta |
 
 Backend RP2350 obsługuje wyłącznie Pico 2 W z targetem `rp2350-arm`. Pico 2 W
 z `rp2350-riscv` jest nieobsługiwane, ponieważ transport Bluetooth CYW43 nie
-jest włączony dla tego targetu. `HAL_ENABLE_BLE` jest odrzucane w czasie
-buildu na nieobsługiwanych targetach oraz na profilach bez kontrolera
-Bluetooth. Sprawdzenia capabilities w runtime używają
-`HAL_BOARD_CAP_BLUETOOTH_CONTROLLER` i dodatkowo wymagają
-`HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND` dla modułu zewnętrznego.
+jest włączony dla tego targetu. `HAL_ENABLE_BLE` i
+`HAL_ENABLE_BLUETOOTH_CLASSIC` są odrzucane podczas buildu, gdy ich
+konkretny transport jest niedostępny. Sprawdzenia możliwości w runtime
+rozróżniają `HAL_BOARD_CAP_BLUETOOTH_LE_CONTROLLER` i
+`HAL_BOARD_CAP_BLUETOOTH_CLASSIC_CONTROLLER`; starszy ogólny bit Bluetooth
+pozostaje dostępny dla zgodności. Moduły zewnętrzne wymagają dodatkowo
+`HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND`.
+
+ESP32-S3 obsługuje obecnie bazowe API BLE Peripheral/Observer, ale nie
+`HAL_ENABLE_BLE_STREAM`, klienta GATT ani Classic HID. Oryginalny ESP32
+obsługuje obecnie profil gamepada Classic, ale nie włącza publicznego API BLE.
+Są to jawne granice targetów, a nie ścieżki zastępcze wybierane w runtime.
 
 ## Cykl życia i odpytywanie
 
@@ -88,16 +101,16 @@ extern "C" void app_task0(void) {
 }
 ```
 
-`hal_ble_initialize()` uruchamia współdzielonego właściciela radia CYW43 i
-zwraca sterowanie, gdy start zostanie zaakceptowany. Gotowość jest
+`hal_ble_initialize()` uruchamia backend wybranego targetu i zwraca sterowanie,
+gdy start zostanie zaakceptowany. Gotowość jest
 asynchroniczna i jest raportowana przez `HAL_BLE_EVENT_CONTROLLER_READY`.
 Inicjalizacja i deinicjalizacja są idempotentne po sukcesie. Deinicjalizacja
 unieważnia każdy uchwyt połączenia i advertisingu, czyści kolejkę zdarzeń
 oraz usuwa callback.
 
 Wywołuj `hal_ble_poll()` często z jednego zadania lub pętli kooperacyjnej.
-Obsługuje kontrolera, a następnie dysponuje callbackami poza współdzieloną
-blokadą radiową WiFi/Bluetooth. Wywołanie `hal_ble_poll()`, zmiana callbacku
+Obsługuje kontroler, a następnie wywołuje callbacki poza blokadą radiową
+backendu. Wywołanie `hal_ble_poll()`, zmiana callbacku
 lub deinicjalizacja rekurencyjnie z callbacku zwraca `HAL_EBUSY`; zapytania
 tylko do odczytu są dozwolone.
 
@@ -255,8 +268,29 @@ nieaktualnego uchwytu zwraca `HAL_ENOENT`.
 
 `hal_ble_disconnect()` kolejkuje lokalne rozłączenie. Zakończenie
 nadchodzi jako `HAL_BLE_EVENT_DISCONNECTED`. `hal_ble_get_mtu()` zwraca 23,
-dopóki BTstack nie zaraportuje wynegocjowanej wartości przez
+dopóki wybrany stos nie zaraportuje wynegocjowanej wartości przez
 `HAL_BLE_EVENT_MTU_UPDATED`.
+
+## Zachowanie backendów ESP-IDF
+
+ESP32-S3 używa NimBLE dla bazowego API LE. Callbacki ESP-IDF kopiują adresy,
+ładunki advertisingu, stan połączenia i zmiany MTU do ograniczonych kolejek
+HAL. Callbacki aplikacji nadal są wywoływane wyłącznie z `hal_ble_poll()`, a
+nigdy z zadania zdarzeń ESP-IDF.
+
+Oryginalny ESP32 używa Bluedroid i `esp_hidh` dla gamepada Classic. Wyszukiwanie
+GAP przyjmuje wyłącznie zwalidowaną tożsamość Android D-input o nazwie
+`8BitDo Zero 2 gamepad` i klasie urządzenia gamepad. Po otwarciu HID backend
+sprawdza VID `0x2dc8`, PID `0x3230`, pojedynczą mapę raportów oraz deskryptor
+zaakceptowany przez parser niezależny od targetu. PIN `0000` i potwierdzenie
+SSP pozostają wstrzymane, dopóki aplikacja nie wywoła
+`hal_gamepad_pairing_authorize()`.
+
+Oba backendy ESP współdzielą z backendem sieciowym jeden idempotentny
+inicjalizator NVS. Niezgodna albo pełna partycja NVS powoduje zwrot
+`HAL_ECONFIG`; HAL nie kasuje automatycznie pamięci aplikacji. Parser HAL,
+kolejki zdarzeń i snapshoty mają stałą pojemność. Wewnętrzne obiekty NimBLE,
+Bluedroid, pętli zdarzeń i hosta HID w ESP-IDF mogą używać alokacji dynamicznej.
 
 ## Model statusu i niepowodzeń
 
@@ -278,6 +312,88 @@ bieżące uchwyty, generację, ostatni status, MTU, stan skanowania, liczbę
 oczekujących raportów oraz oba liczniki odrzuceń. Krytyczny błąd kontrolera
 lub transportu przenosi podsystem do stanu `HAL_BLE_STATE_FAILED`,
 unieważnia jego uchwyty, zatrzymuje skanowanie i przesuwa generację.
+
+## Gamepad Bluetooth Classic HID
+
+API gamepada posiada jeden profil hosta Classic HID i zwraca jeden
+nieprzezroczysty `hal_gamepad_t`. `hal_gamepad_open()` rozpoczyna profil
+asynchronicznie; następnie `hal_gamepad_poll()` musi być często wywoływane z
+jednego taska lub pętli kooperacyjnej. `hal_gamepad_get_info()` raportuje stan
+publiczny, ostatni status, bieżącą generację połączenia, flagi parowania,
+obecność znanego urządzenia i diagnostykę ograniczonej kolejki.
+
+Publiczne stany to `UNINITIALIZED`, `STARTING`, `READY`, `DISCOVERING`,
+`CONNECTING`, `CONNECTED` i `FAILED`. Krytyczna awaria kontrolera lub transportu
+przenosi profil do `FAILED`. `hal_gamepad_close()` zatrzymuje profil i
+unieważnia jego uchwyt.
+
+### Parowanie i reconnect
+
+Parowanie jest sterowane przez aplikację i ograniczone w czasie. Gdy profil
+osiągnie `READY`, wywołaj `hal_gamepad_pairing_open()`, aby rozpocząć okno
+wykrywania. Kiedy `hal_gamepad_info_t::pairing_pending` stanie się prawdziwe,
+aplikacja może wywołać `hal_gamepad_pairing_authorize()` i zaakceptować Just
+Works albo legacy PIN `0000`. Nieobsługiwane przepływy z passkey są odrzucane.
+Zaakceptowany adres wskazuje znane urządzenie używane przez
+`hal_gamepad_reconnect()` podczas bieżącego uruchomienia firmware.
+Przechowywanie link key zależy od stosu. Zachowanie tożsamości wybranej przez
+HAL po resecie watchdogiem lub zimnym starcie nie wchodzi w zakres tego
+wydania, dlatego aplikacja musi być gotowa ponownie otworzyć okno parowania po
+restarcie.
+
+Otwarcie okna parowania jest jawną decyzją autoryzacyjną. Produkt powinien je
+udostępnić dopiero po lokalnej akcji użytkownika i nie powinien traktować nazwy
+urządzenia, adresu Bluetooth ani nieuwierzytelnionej wymiany Just Works jako
+dowodu tożsamości użytkownika.
+
+### Znormalizowane snapshoty
+
+Parser raportów HID nie zależy od BTstack ani ESP-IDF. Waliduje ograniczony
+deskryptor raportów i zasila ten sam znormalizowany model snapshotu na każdym
+backendzie.
+
+`hal_gamepad_snapshot_t` zawiera generację połączenia, 32-bitową maskę
+przycisków, dziewięć osi Generic Desktop, maskę obecności osi, maskę kierunku
+D-pada i stan połączenia. Bit przycisku 0 odpowiada HID Button 1. Osie są
+normalizowane do `-32767..32767` i indeksowane przez `HAL_GAMEPAD_AXIS_*`; dla
+nieobsługiwanych osi bit w `axes_present` jest wyzerowany. D-pad łączy
+`HAL_GAMEPAD_DPAD_UP`, `RIGHT`, `DOWN` i `LEFT`.
+
+`hal_gamepad_snapshot()` odczytuje najnowszy stan bez zużywania go.
+`hal_gamepad_snapshot_next()` pobiera zmiany z kolejki o stałym rozmiarze
+`HAL_GAMEPAD_SNAPSHOT_QUEUE_DEPTH`. Zwraca `HAL_EAGAIN`, gdy kolejka jest pusta.
+Jeśli utracono stany pośrednie, najpierw zwraca `HAL_EOVERFLOW`; wywołaj funkcję
+ponownie, aby dostać najnowszą zachowaną sekwencję. Połączenie i rozłączenie też
+tworzą snapshoty, a snapshot rozłączenia zeruje wszystkie wejścia, dzięki czemu
+aplikacja nie zachowa wciśniętego elementu po utracie linku.
+
+```c
+hal_gamepad_t gamepad = NULL;
+
+void service_gamepad(void) {
+  hal_status_t status = hal_gamepad_poll(gamepad);
+  if (status != HAL_OK && status != HAL_EOVERFLOW) {
+    return;
+  }
+
+  for (;;) {
+    hal_gamepad_snapshot_t snapshot = {0};
+    status = hal_gamepad_snapshot_next(gamepad, &snapshot);
+    if (status == HAL_EOVERFLOW) {
+      continue;
+    }
+    if (status != HAL_OK) {
+      break;
+    }
+    /* Obsłuż przyciski, osie i stan D-pada. */
+  }
+}
+```
+
+Deterministyczny backend mock pozwala wstrzyknąć gotowość, żądanie parowania,
+połączenie, snapshoty wejść, rozłączenie, przepełnienie kolejki i błędy
+transportu. Kompletny konsument C oraz wariant buildu BLE+Classic znajdują się
+w [`examples/29_bluetooth_gamepad`](../../../examples/29_bluetooth_gamepad/).
 
 ## JH BLE Stream v1
 
@@ -477,13 +593,15 @@ publiczny identyfikator sesji, liczniki kierunkowe, niepowodzenia
 uwierzytelniania, odrzucenia powtórek (replay) oraz głębokość kolejki na
 potrzeby diagnostyki.
 
-## Koegzystencja i własność WiFi
+## Koegzystencja i własność Bluetooth
 
-BLE i WiFi współdzielą jeden kontroler CYW43, transport, stan runtime radia
-oraz blokadę usługi. Aplikacje nie mogą linkować Pico
-SDK `pico_cyw43_arch` ani `pico_btstack_cyw43` obok tego backendu. Callbacki
-BLE są odraczane do momentu po obsłudze radia, więc kod aplikacji nigdy nie
-działa pod tą blokadą.
+BLE, Bluetooth Classic i WiFi współdzielą jeden kontroler CYW43, transport,
+stan runtime radia oraz blokadę usługi. Aplikacje nie mogą linkować Pico SDK
+`pico_cyw43_arch` ani `pico_btstack_cyw43` obok tego backendu. Callbacki BLE są
+odraczane do momentu po obsłudze radia, więc kod aplikacji nigdy nie działa pod
+tą blokadą. Obrazy BLE-only, Classic-only i połączone BLE+Classic używają tego
+samego hosta Bluetooth z licznikami referencji. Aktywna koegzystencja
+gamepad+BLE na sprzęcie nie jest jeszcze bramką wydania.
 
 Bramka aktywnej koegzystencji Pico 2 W z 2026-08-25 utrzymała
 uwierzytelnione połączenie Stream aktywne, podczas gdy ruch MQTT wymuszał
@@ -503,7 +621,7 @@ przy 9,66 Hz, z zerową liczbą stagnujących podsumowań jednosekundowych.
 
 ## Granica licencji i dystrybucji
 
-Firmware BLE linkuje BlueKitchen BTstack z dokładnej wersji zapisanej w
+Firmware Bluetooth linkuje BlueKitchen BTstack z dokładnej wersji zapisanej w
 `third_party/btstack_version.conf`. Śledzone są dwa odrębne teksty
 licencyjne:
 
@@ -530,11 +648,14 @@ Właściwa licencja zależy od fizycznego produktu i jego dystrybucji.
 Przejrzyj kompletne, śledzone teksty licencyjne i spełnij warunki licencji,
 na którą się powołujesz; zastosowania wykraczające poza nie mogą wymagać
 osobnej licencji BlueKitchen. Ta sekcja jest inwentarzem technicznym, a nie
-poradą prawną. Te warunki dotyczą artefaktów z włączonym BLE, a nie buildu
-JaszczurHAL, które nie kompilują BTstack.
+poradą prawną. Te warunki dotyczą artefaktów z włączonym BTstack, a nie buildu
+JaszczurHAL, które go nie kompilują.
 
 Zobacz kompilowalny [przykład `26_ble_stream`](../../../examples/26_ble_stream/)
 po kompletny przepływ startu Peripheral i advertisingu wraz z
 uwierzytelnionym odbiorcą strumienia. Wieloplatformowa
 [bramka sprzętowa `bluetooth_stream`](03_build_tests.md#bramka-sprzętowa-jh-ble-stream-v1)
 prowadzi kompletny protokół z niezależnego klienta BlueZ.
+
+[Przykład `29_bluetooth_gamepad`](../../../examples/29_bluetooth_gamepad/)
+pokazuje przepływ snapshotów Classic HID i wariant buildu BLE+Classic.

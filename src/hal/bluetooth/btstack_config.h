@@ -2,28 +2,41 @@
 #define JASZCZURHAL_BTSTACK_CONFIG_H
 
 #if defined(JH_BLUETOOTH_CLASSIC_HID_PROBE) &&                                 \
-    (defined(JH_BLUETOOTH_STAGE1_PROBE) || defined(JH_BLUETOOTH_PUBLIC_BLE))
+    (defined(JH_BLUETOOTH_STAGE1_PROBE) || defined(JH_BLUETOOTH_PUBLIC_BLE) || \
+     defined(JH_BLUETOOTH_PUBLIC_GAMEPAD))
 #error "Classic HID probe cannot be combined with a BLE mode"
 #endif
 
-#if defined(JH_BLUETOOTH_CLASSIC_HID_PROBE)
+#if defined(JH_BLUETOOTH_CLASSIC_HID_PROBE) ||                                 \
+    defined(JH_BLUETOOTH_PUBLIC_GAMEPAD)
 #define MAX_NR_HID_HOST_CONNECTIONS 1
 #define MAX_NR_BTSTACK_LINK_KEY_DB_MEMORY_ENTRIES 1
+#endif
+
+#if defined(JH_BLUETOOTH_PUBLIC_GAMEPAD) && defined(JH_BLUETOOTH_PUBLIC_BLE)
+#define ENABLE_LE_PERIPHERAL
+#define ENABLE_SOFTWARE_AES128
+#define MAX_NR_L2CAP_CHANNELS 5
+#define MAX_NR_L2CAP_SERVICES 3
+#define MAX_NR_HCI_CONNECTIONS 2
+#elif defined(JH_BLUETOOTH_CLASSIC_HID_PROBE) ||                               \
+    defined(JH_BLUETOOTH_PUBLIC_GAMEPAD)
 #define MAX_NR_L2CAP_CHANNELS 3
 #define MAX_NR_L2CAP_SERVICES 2
+#define MAX_NR_HCI_CONNECTIONS 1
 #else
 /* BLE Peripheral sizing validated by the hardware gates. */
 #define ENABLE_LE_PERIPHERAL
 #define ENABLE_SOFTWARE_AES128
 #define MAX_NR_L2CAP_CHANNELS 2
 #define MAX_NR_L2CAP_SERVICES 1
+#define MAX_NR_HCI_CONNECTIONS 1
 #endif
 
 #define HCI_OUTGOING_PRE_BUFFER_SIZE 4
 #define HCI_ACL_PAYLOAD_SIZE (1024 + 4)
 #define HCI_ACL_CHUNK_SIZE_ALIGNMENT 4
 
-#define MAX_NR_HCI_CONNECTIONS 1
 #define MAX_NR_GATT_CLIENTS 0
 #define MAX_NR_SM_LOOKUP_ENTRIES 1
 #define MAX_NR_WHITELIST_ENTRIES 1

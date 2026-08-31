@@ -28,6 +28,9 @@
 #ifdef HAL_ENABLE_BLE_COMMANDS
 #include "hal/bluetooth/hal_ble_commands.h"
 #endif
+#ifdef HAL_ENABLE_BLUETOOTH_GAMEPAD
+#include "hal/bluetooth/hal_gamepad.h"
+#endif
 #ifdef HAL_ENABLE_LORA
 #include "hal/radio/hal_lora_radio.h"
 #endif

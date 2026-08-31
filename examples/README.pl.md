@@ -91,6 +91,7 @@ Skróty targetów w tabeli: `R0` = `rp2040`, `RA` = `rp2350-arm`, `RV` =
 | `26_ble_stream` | Lifecycle BLE Peripheral, uwierzytelniony JH BLE Stream v1 i adapter routera poleceń | R0, RA, S | R0, RA, S | `commands` i `commands-freertos` na R0, RA, S; gate na R0 |
 | `27_lora_point_to_point` | Surowy ping/pong SX1262 oraz pofragmentowane żądanie/odpowiedź routera przez `hal_lora_link` | R0, S | R0, S | `probe`, `responder`, `link` i `link-responder` na R0, S; ręczne warianty sprzętowe `sf7` i `responder-sf7` |
 | `28_serial_commands` | Dispatch ramkowanej Serial Session przez niezależny router poleceń | R0, RA, RV, S | R0, S | - |
+| `29_bluetooth_gamepad` | Parowanie Bluetooth Classic HID, reconnect i znormalizowane snapshoty gamepada | R0, RA, S | R0 | `ble` na R0, RA, S; gate na R0 |
 
 Buildy sieciowe rodziny RP używają `picow` dla RP2040 i `pico2w` dla RP2350
 ARM. Konfiguracje RP2350 RISC-V wymagające CYW43 nie są wspierane. Projekty

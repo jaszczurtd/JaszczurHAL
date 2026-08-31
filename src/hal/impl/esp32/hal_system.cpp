@@ -10,7 +10,9 @@
 #include "jh_esp32_fault.h"
 #include "jh_esp32_status.h"
 
+#if HAL_TARGET_IS_ESP32_S3
 #include <driver/temperature_sensor.h>
+#endif
 #include <esp_clk_tree.h>
 #include <esp_heap_caps.h>
 #include <esp_mac.h>
@@ -35,8 +37,10 @@ namespace {
 
 hal_mutex_t s_watchdog_mutex;
 esp_task_wdt_user_handle_t s_watchdog_user;
+#if HAL_TARGET_IS_ESP32_S3
 hal_mutex_t s_temperature_mutex;
 temperature_sensor_handle_t s_temperature_sensor;
+#endif
 
 uint32_t size_to_u32(size_t value) {
   return value > (size_t)UINT32_MAX ? UINT32_MAX : (uint32_t)value;
@@ -109,6 +113,7 @@ hal_reset_reason_t reset_reason_from_esp(esp_reset_reason_t reason) {
 }
 
 hal_status_t temperature_sensor_get(float *out_celsius) {
+#if HAL_TARGET_IS_ESP32_S3
   hal_mutex_t mutex = jh_hal_mutex_create_once(&s_temperature_mutex);
   if (mutex == nullptr) {
     return HAL_ENOMEM;
@@ -138,6 +143,10 @@ hal_status_t temperature_sensor_get(float *out_celsius) {
       temperature_sensor_get_celsius(s_temperature_sensor, out_celsius);
   hal_mutex_unlock(mutex);
   return jh_esp32_status_from_esp_err(result);
+#else
+  (void)out_celsius;
+  return HAL_EUNSUPPORTED;
+#endif
 }
 
 } // namespace
@@ -312,12 +321,16 @@ float hal_read_chip_temp(void) {
 }
 
 hal_status_t hal_enter_bootloader(void) {
+#if HAL_TARGET_IS_ESP32_S3
   if (ets_efuse_download_modes_disabled()) {
     return HAL_EUNSUPPORTED;
   }
   REG_WRITE(RTC_CNTL_OPTION1_REG, RTC_CNTL_FORCE_DOWNLOAD_BOOT);
   esp_restart();
   return HAL_OK;
+#else
+  return HAL_EUNSUPPORTED;
+#endif
 }
 
 hal_status_t hal_get_device_uid(uint8_t uid[HAL_DEVICE_UID_BYTES]) {

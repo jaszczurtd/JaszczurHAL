@@ -13,8 +13,8 @@ podatności stosowany w JaszczurHAL.
 - przypięte zewnętrzne checkouty obsługiwane przez aktualizator komponentów,
   w tym BearSSL, cJSON, LodePNG, TJpg_Decoder, FatFs, Unity, lwIP, littlefs,
   BTstack, driver Semtech SX126x, FreeRTOS-Kernel, Pico SDK i ESP-IDF,
-- dokładne wersje narzędzi binarnych i narzędzi Python wybrane dla `esp32s3`
-  przez przypięty rejestr narzędzi ESP-IDF,
+- dokładne wersje narzędzi binarnych i narzędzi Python wybrane dla `esp32` i
+  `esp32s3` przez przypięty rejestr narzędzi ESP-IDF,
 - zaadaptowany kod upstream, w którym lokalne zmiany mogą wpływać na
   bezpieczeństwo.
 
@@ -103,8 +103,8 @@ wygenerowanie powinno tworzyć mały i łatwy do przejrzenia diff.
 ## Pochodzenie narzędzi ESP-IDF
 
 `third_party/esp_idf_version.conf` przypina ESP-IDF v6.0.2 do jednego commita i
-wybiera `esp32s3`. Plik `security/esp_idf_tools.json` zapisuje odpowiadający mu
-oficjalny zestaw narzędzi: Xtensa GDB/GCC, dodatkowy pakiet RISC-V GCC,
+wybiera `esp32` oraz `esp32s3`. Plik `security/esp_idf_tools.json` zapisuje
+odpowiadający im oficjalny zestaw narzędzi: Xtensa GDB/GCC, dodatkowy pakiet RISC-V GCC,
 narzędzia ESP32 ULP, Espressif OpenOCD, dane ROM ELF oraz jedenaście narzędzi
 Python dostarczanych przez producenta i wskazanych bezpośrednio przez główne
 wymagania ESP-IDF. Pozycje Python obejmują esptool, zarządzanie komponentami,

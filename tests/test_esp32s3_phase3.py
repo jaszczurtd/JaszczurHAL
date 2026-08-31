@@ -47,6 +47,7 @@ def resolve_model(repo_root: Path, project: Path) -> dict:
 
 EXPECTED_RESOLVED = [
     "HAL_ENABLE_APP_TASK1",
+    "HAL_ENABLE_BLE",
     "HAL_ENABLE_BSD_SOCKETS",
     "HAL_ENABLE_CRC",
     "HAL_ENABLE_CRYPTO",

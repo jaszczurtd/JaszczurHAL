@@ -3,6 +3,7 @@
  * through the final linker without touching hardware in CI. */
 
 #include "hal/analog/hal_pcnt.h"
+#include "hal/bluetooth/hal_ble.h"
 #include "hal/gpio/hal_pwm.h"
 #include "hal/gpio/hal_pwm_freq.h"
 #include "hal/gpio/hal_rgb_led.h"
@@ -159,6 +160,26 @@ void jh_phase3_link_probe(void) {
   if (!s_run_link_probe) {
     return;
   }
+
+  hal_ble_info_t ble_info = {};
+  hal_ble_address_t ble_address = {};
+  hal_ble_advertising_config_t advertising = {};
+  hal_ble_advertising_handle_t advertising_handle = HAL_BLE_INVALID_HANDLE;
+  hal_ble_scan_config_t scan = {};
+  hal_ble_advertising_report_t scan_report = {};
+  hal_ble_event_t ble_event = {};
+  (void)hal_ble_initialize();
+  (void)hal_ble_poll();
+  (void)hal_ble_get_info(&ble_info);
+  (void)hal_ble_get_local_address(&ble_address);
+  (void)hal_ble_advertising_start(&advertising, &advertising_handle);
+  (void)hal_ble_advertising_stop(advertising_handle);
+  (void)hal_ble_scan_start(&scan);
+  (void)hal_ble_scan_report_next(&scan_report);
+  (void)hal_ble_scan_stop();
+  (void)hal_ble_event_next(&ble_event);
+  (void)hal_ble_set_event_callback(nullptr, nullptr);
+  (void)hal_ble_deinitialize();
 
   hal_i2c_slave_init(8u, 9u, 0x42u);
   hal_i2c_slave_reg_write8(0u, 0x12u);

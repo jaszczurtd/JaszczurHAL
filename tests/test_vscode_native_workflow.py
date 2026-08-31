@@ -343,8 +343,8 @@ registered_names = {
 }
 examples_dispatcher.validate_example_registry()
 require(
-    len(examples_dispatcher.EXAMPLES) == 28 and len(registered_names) == 28,
-    "dispatcher registry must contain exactly 28 active examples",
+    len(examples_dispatcher.EXAMPLES) == 29 and len(registered_names) == 29,
+    "dispatcher registry must contain exactly 29 active examples",
 )
 require(
     registered_names == manifest_example_names,
@@ -456,35 +456,35 @@ for example_dir in example_dirs:
 require(
     example_counts
     == {
-        "rp2040": 27,
-        "rp2350-arm": 26,
+        "rp2040": 28,
+        "rp2350-arm": 27,
         "rp2350-riscv": 22,
-        "stm32g474": 26,
+        "stm32g474": 27,
     },
     f"declared example target matrix changed without review: {example_counts}",
 )
 require(
     full_configuration_counts
     == {
-        "rp2040": 37,
-        "rp2350-arm": 30,
+        "rp2040": 39,
+        "rp2350-arm": 32,
         "rp2350-riscv": 23,
-        "stm32g474": 36,
+        "stm32g474": 38,
     }
-    and sum(full_configuration_counts.values()) == 126,
-    "full example build matrix must contain exactly 126 configurations: "
+    and sum(full_configuration_counts.values()) == 132,
+    "full example build matrix must contain exactly 132 configurations: "
     f"{full_configuration_counts}",
 )
 require(
     gate_configuration_counts
     == {
-        "rp2040": 35,
+        "rp2040": 37,
         "rp2350-arm": 1,
         "rp2350-riscv": 0,
         "stm32g474": 31,
     }
-    and sum(gate_configuration_counts.values()) == 67,
-    "example gate matrix must contain exactly 67 configurations: "
+    and sum(gate_configuration_counts.values()) == 69,
+    "example gate matrix must contain exactly 69 configurations: "
     f"{gate_configuration_counts}",
 )
 required_feature_surface = {
@@ -495,6 +495,8 @@ required_feature_surface = {
     "HAL_ENABLE_BLE",
     "HAL_ENABLE_BLE_COMMANDS",
     "HAL_ENABLE_BLE_STREAM",
+    "HAL_ENABLE_BLUETOOTH_CLASSIC",
+    "HAL_ENABLE_BLUETOOTH_GAMEPAD",
     "HAL_ENABLE_BSD_SOCKETS",
     "HAL_ENABLE_CJSON",
     "HAL_ENABLE_CRYPTO",

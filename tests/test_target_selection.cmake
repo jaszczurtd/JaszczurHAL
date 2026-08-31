@@ -79,6 +79,9 @@ set(_rp2350_riscv
 set(_esp32s3
     -DJH_EXPECT_ESP32_S3=1 -DJH_EXPECT_ESP32_FAMILY=1
     -DJH_EXPECT_NAME_ESP32S3=1)
+set(_esp32
+    -DJH_EXPECT_ESP32=1 -DJH_EXPECT_ESP32_FAMILY=1
+    -DJH_EXPECT_NAME_ESP32=1)
 
 check_target(explicit_rp2040 TRUE ""
     -DHAL_TARGET_RP2040=1 ${_rp2040})
@@ -91,6 +94,8 @@ check_target(explicit_stm32 TRUE ""
     -DJH_EXPECT_NAME_STM32G474=1)
 check_target(explicit_esp32s3 TRUE ""
     -DHAL_TARGET_ESP32_S3=1 ${_esp32s3})
+check_target(explicit_esp32 TRUE ""
+    -DHAL_TARGET_ESP32=1 ${_esp32})
 check_target(explicit_mock TRUE ""
     -DHAL_TARGET_MOCK=1 -DJH_EXPECT_MOCK=1 -DJH_EXPECT_NAME_MOCK=1)
 
@@ -104,6 +109,8 @@ check_target(autodetect_host_mock TRUE ""
     -DJH_EXPECT_MOCK=1 -DJH_EXPECT_NAME_MOCK=1)
 check_target(autodetect_esp32s3 TRUE ""
     -DCONFIG_IDF_TARGET_ESP32S3=1 ${_esp32s3})
+check_target(autodetect_esp32 TRUE ""
+    -DCONFIG_IDF_TARGET_ESP32=1 ${_esp32})
 
 check_target(ambiguous_rp2350_isa FALSE "target ISA is ambiguous"
     -DPICO_RP2350=1)
@@ -120,6 +127,8 @@ write_project_config(rp2350_riscv HAL_TARGET_RP2350_RISCV
     HAL_BOARD_PROFILE_RP_PICO_2)
 write_project_config(stm32 HAL_TARGET_STM32G474
     HAL_BOARD_PROFILE_STM32G474_GENERIC)
+write_project_config(esp32 HAL_TARGET_ESP32
+    HAL_BOARD_PROFILE_ESP32_DEVKITC_V4)
 write_project_config(mock HAL_TARGET_MOCK HAL_BOARD_PROFILE_HOST_MOCK)
 
 check_project_target(project_rp2040 "${rp2040_CONFIG_DIR}" TRUE ""
@@ -132,6 +141,8 @@ check_project_target(project_rp2350_riscv "${rp2350_riscv_CONFIG_DIR}" TRUE ""
 check_project_target(project_stm32 "${stm32_CONFIG_DIR}" TRUE ""
     -D__arm__=1 -DJH_EXPECT_BOARD_ID=HAL_BOARD_STM32G474_GENERIC
     -DJH_EXPECT_STM32G474=1 -DJH_EXPECT_NAME_STM32G474=1)
+check_project_target(project_esp32 "${esp32_CONFIG_DIR}" TRUE ""
+    -DJH_EXPECT_BOARD_ID=HAL_BOARD_ESP32_DEVKITC_V4 ${_esp32})
 check_project_target(project_mock "${mock_CONFIG_DIR}" TRUE ""
     -DJH_EXPECT_BOARD_ID=HAL_BOARD_HOST_MOCK
     -DJH_EXPECT_MOCK=1 -DJH_EXPECT_NAME_MOCK=1)

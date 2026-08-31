@@ -1,6 +1,9 @@
 #pragma once
 
 #include "hal/bluetooth/hal_ble.h"
+#ifdef HAL_ENABLE_BLUETOOTH_GAMEPAD
+#include "hal/bluetooth/hal_gamepad.h"
+#endif
 #include "hal/gpio/hal_gpio.h"
 #include "hal/network/hal_net.h"
 #include "hal/system/hal_system.h"
@@ -54,6 +57,20 @@ size_t hal_mock_ble_stream_notify_count(void);
 hal_status_t hal_mock_ble_get_stream_published(uint8_t *out_version,
                                                uint16_t *out_capabilities);
 #endif
+#endif
+
+#ifdef HAL_ENABLE_BLUETOOTH_GAMEPAD
+// ── Bluetooth gamepad ───────────────────────────────────────────────────────
+void hal_mock_gamepad_reset(void);
+void hal_mock_gamepad_runtime_full_reset(void);
+hal_status_t hal_mock_gamepad_inject_ready(bool known_device);
+hal_status_t hal_mock_gamepad_inject_pairing_request(void);
+hal_status_t hal_mock_gamepad_inject_connect(void);
+hal_status_t
+hal_mock_gamepad_inject_snapshot(const hal_gamepad_snapshot_t *snapshot);
+hal_status_t hal_mock_gamepad_inject_disconnect(void);
+hal_status_t hal_mock_gamepad_inject_transport_error(hal_status_t status);
+void hal_mock_gamepad_set_service_status(hal_status_t status);
 #endif
 
 // ── Secure random ────────────────────────────────────────────────────────────

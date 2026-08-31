@@ -3,7 +3,7 @@
   "espIdf": {
     "version": "6.0.2",
     "commit": "7101770dc6db2667b3c477cc31365dd1acd6db4e",
-    "targets": ["esp32s3"],
+    "targets": ["esp32", "esp32s3"],
     "toolsJsonSha256": "b403c25dc0c841dece4ac45abfa0a131f55ccae72db6be86ee36e3e69557f0e4",
     "pythonRequirementsPath": "tools/requirements/requirements.core.txt",
     "pythonToolsScope": "Espressif-maintained ESP-IDF tools declared directly by the core requirements; general-purpose third-party Python dependencies are tracked by their upstream environment lock rather than duplicated here."
@@ -33,7 +33,7 @@
       "license": "GPL-3.0-or-later",
       "supplier": "Espressif Systems and GNU contributors",
       "upstream": "https://github.com/espressif/binutils-gdb",
-      "notes": "Official ESP-IDF debugger bundle selected by the pinned tools manifest for ESP32-S3 development."
+      "notes": "Official ESP-IDF debugger bundle selected by the pinned tools manifest for ESP32 and ESP32-S3 development."
     },
     {
       "name": "xtensa-esp-elf",
@@ -43,7 +43,7 @@
       "license": "GPL-3.0-or-later WITH GCC-exception-3.1",
       "supplier": "Espressif Systems and GNU contributors",
       "upstream": "https://github.com/espressif/crosstool-NG",
-      "notes": "Official compiler bundle used to build the ESP32-S3 firmware; the build manifest records the executable's actual version output."
+      "notes": "Official compiler bundle used to build ESP32 and ESP32-S3 firmware; the build manifest records the executable's actual version output."
     },
     {
       "name": "riscv32-esp-elf",
@@ -53,7 +53,7 @@
       "license": "GPL-3.0-or-later WITH GCC-exception-3.1",
       "supplier": "Espressif Systems and GNU contributors",
       "upstream": "https://github.com/espressif/crosstool-NG",
-      "notes": "Official companion toolchain installed by ESP-IDF's esp32s3 tool set and retained in the development inventory."
+      "notes": "Official companion toolchain installed by the selected ESP-IDF target tool sets and retained in the development inventory."
     },
     {
       "name": "esp32ulp-elf",

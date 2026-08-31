@@ -145,7 +145,9 @@ jh_collect_feature_build_effects(_jh_native_build_effects
 jh_collect_rp_hal_sources(JH_RP_HAL_SOURCES "${SRC}" EXCLUDE_APP_ENTRY)
 list(APPEND JH_RP_HAL_SOURCES
     ${_jh_native_build_effects_FEATURE_SOURCES}
+    ${_jh_native_build_effects_PORTABLE_SOURCES}
     ${_jh_native_build_effects_DEPENDENCY_SOURCES})
+list(REMOVE_DUPLICATES JH_RP_HAL_SOURCES)
 add_library(JaszczurHAL STATIC ${JH_RP_HAL_SOURCES})
 if(_jh_native_build_effects_SX126X_SOURCES)
     set_source_files_properties(${_jh_native_build_effects_SX126X_SOURCES}
@@ -291,9 +293,11 @@ target_link_libraries(JaszczurHAL PUBLIC tinyusb_device)
 jh_hal_define_enabled(_jh_native_cyw43_backend HAL_NETWORK_BACKEND_CYW43)
 jh_hal_define_enabled(_jh_native_bluetooth_classic_hid
     JH_BLUETOOTH_CLASSIC_HID_PROBE)
-if(_jh_native_bluetooth_classic_hid AND NOT _jh_native_cyw43_backend)
+jh_hal_define_enabled(_jh_native_gamepad HAL_ENABLE_BLUETOOTH_GAMEPAD)
+if((_jh_native_bluetooth_classic_hid OR _jh_native_gamepad) AND
+   NOT _jh_native_cyw43_backend)
     message(FATAL_ERROR
-        "JH_BLUETOOTH_CLASSIC_HID_PROBE requires a CYW43 network backend")
+        "Bluetooth Classic HID requires a CYW43 network backend")
 endif()
 if(_jh_native_cyw43_backend)
     jh_hal_define_enabled(_jh_native_bluetooth_stage1
@@ -305,6 +309,7 @@ if(_jh_native_cyw43_backend)
         OTA "${_jh_native_ota}"
         BLUETOOTH_STAGE1 "${_jh_native_bluetooth_stage1}"
         BLUETOOTH_CLASSIC_HID "${_jh_native_bluetooth_classic_hid}"
+        GAMEPAD "${_jh_native_gamepad}"
         BLE "${_jh_native_ble}"
         BLE_STREAM "${_jh_native_ble_stream}")
 elseif(_jh_pico_board_has_cyw43)

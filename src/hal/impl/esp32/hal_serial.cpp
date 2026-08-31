@@ -6,8 +6,10 @@
 #include "hal/debug/jh_serial_port.h"
 #include "hal/system/hal_sync.h"
 
+#if HAL_TARGET_IS_ESP32_S3
 #include <driver/usb_serial_jtag.h>
 #include <driver/usb_serial_jtag_vfs.h>
+#endif
 #include <sdkconfig.h>
 
 #include <fcntl.h>
@@ -16,16 +18,21 @@
 #include <stdint.h>
 #include <unistd.h>
 
-#if !defined(CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG) ||                            \
-    !CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
+#if HAL_TARGET_IS_ESP32_S3 && (!defined(CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG) || \
+                               !CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG)
 #error "JaszczurHAL: ESP32 serial requires the USB Serial/JTAG console VFS."
+#elif HAL_TARGET_IS_ESP32 && (!defined(CONFIG_ESP_CONSOLE_UART_DEFAULT) ||     \
+                              !CONFIG_ESP_CONSOLE_UART_DEFAULT)
+#error "JaszczurHAL: ESP32 serial requires the default UART console VFS."
 #endif
 
 namespace {
 
 constexpr size_t kRxCapacity = 256u;
+#if HAL_TARGET_IS_ESP32_S3
 constexpr uint32_t kDriverTxCapacity = 512u;
 constexpr uint32_t kDriverRxCapacity = 1024u;
+#endif
 
 hal_mutex_t s_control_mutex;
 hal_mutex_t s_rx_mutex;
@@ -47,6 +54,7 @@ bool ensure_started(void) {
 
   hal_mutex_lock(mutex);
   if (!__atomic_load_n(&s_started, __ATOMIC_ACQUIRE)) {
+#if HAL_TARGET_IS_ESP32_S3
     esp_err_t driver_result = ESP_OK;
     if (!usb_serial_jtag_is_driver_installed()) {
       usb_serial_jtag_driver_config_t config = {
@@ -72,6 +80,9 @@ bool ensure_started(void) {
 
     const int flags =
         driver_result == ESP_OK ? fcntl(STDIN_FILENO, F_GETFL, 0) : -1;
+#else
+    const int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
+#endif
     const int nonblocking_result =
         flags >= 0 ? fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK) : -1;
     if (nonblocking_result >= 0) {

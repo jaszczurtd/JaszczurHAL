@@ -570,6 +570,17 @@ run_logged "${LOG_ROOT}/jh_esp32s3_phase3.log" \
         --clean
 pass "ESP32-S3 Phase 3 fixture produced a validated multi-image ESP-IDF build."
 
+info "Building the ESP32 Classic gamepad fixture with pinned ESP-IDF..."
+ESP32_GAMEPAD_BUILD_DIR="${GATE_BUILD_ROOT}/esp-idf/esp32-gamepad"
+run_logged "${LOG_ROOT}/jh_esp32_gamepad.log" \
+    "${SCRIPT_DIR}/scripts/build_esp_idf.py" build \
+        --project "${SCRIPT_DIR}/tests/fixtures/esp32_gamepad" \
+        --target esp32 \
+        --board esp32-devkitc-v4 \
+        --output "${ESP32_GAMEPAD_BUILD_DIR}" \
+        --clean
+pass "ESP32 Classic gamepad fixture produced a validated ESP-IDF build."
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 9: Examples build
 # ═══════════════════════════════════════════════════════════════════════════════

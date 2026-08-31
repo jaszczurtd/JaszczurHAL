@@ -220,7 +220,7 @@
       "properties": [
         {
           "name": "jaszczurhal:notes",
-          "value": "Official ESP-IDF debugger bundle selected by the pinned tools manifest for ESP32-S3 development."
+          "value": "Official ESP-IDF debugger bundle selected by the pinned tools manifest for ESP32 and ESP32-S3 development."
         },
         {
           "name": "jaszczurhal:paths",
@@ -262,7 +262,7 @@
       "properties": [
         {
           "name": "jaszczurhal:notes",
-          "value": "Official compiler bundle used to build the ESP32-S3 firmware; the build manifest records the executable's actual version output."
+          "value": "Official compiler bundle used to build ESP32 and ESP32-S3 firmware; the build manifest records the executable's actual version output."
         },
         {
           "name": "jaszczurhal:paths",
@@ -304,7 +304,7 @@
       "properties": [
         {
           "name": "jaszczurhal:notes",
-          "value": "Official companion toolchain installed by ESP-IDF's esp32s3 tool set and retained in the development inventory."
+          "value": "Official companion toolchain installed by the selected ESP-IDF target tool sets and retained in the development inventory."
         },
         {
           "name": "jaszczurhal:paths",
@@ -1875,5 +1875,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:c23aa601-3212-bde9-04ee-6b75dff0d075"
+  "serialNumber": "urn:uuid:6910031a-5966-5147-0f05-cefeb70441dd"
 }

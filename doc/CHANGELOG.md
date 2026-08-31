@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-30
 
+- Added the opt-in public `hal_gamepad` API for one Bluetooth Classic HID
+  gamepad with explicit pairing authorization, current-runtime known-device
+  reconnect, normalized copied input snapshots, bounded overflow diagnostics,
+  disconnect input release, a deterministic mock, and a C example with a
+  combined BLE+Classic variant. The GAMEPAD feature propagates
+  BLUETOOTH_CLASSIC and selects either the shared CYW43/BTstack host or the
+  original-ESP32 Bluedroid/ESP HID Host backend.
+- Added exact LE and Classic controller capabilities, base NimBLE
+  Peripheral/Observer support on ESP32-S3, and an experimental original-ESP32
+  DevKitC V4 target for the validated 8BitDo Zero 2 Classic gamepad identity.
+  Both ESP-IDF paths share an idempotent NVS initializer that never erases
+  application storage automatically and are covered by compile/link fixtures
+  in both CI and the full local gate.
+- Replaced the gamepad parser's dependency on the BTstack HID parser with a
+  bounded target-independent implementation. This keeps normalization shared
+  between BTstack and ESP-IDF and removes the external signed-shift undefined
+  behavior previously exposed only by the sanitizer CI job.
+- Made native RP and STM32 build inventories consume feature-registry portable
+  sources with duplicate removal. A portable source declared only by a feature
+  now reaches the produced target library even when its thematic directory is
+  otherwise excluded from the broad source scan.
 - Added one shared Clang ASan/UBSan/libFuzzer runner used by both GitHub CI and
   the mandatory local `runalltests.sh` gate. Local full validation now executes
   the instrumented host suite and parser fuzz smoke checks instead of leaving
