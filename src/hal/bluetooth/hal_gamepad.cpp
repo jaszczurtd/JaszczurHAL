@@ -7,9 +7,7 @@
 #include "hal/core/hal_mutex_once.h"
 #include "hal/system/hal_sync.h"
 
-struct hal_gamepad_impl_s {
-  uint32_t generation;
-};
+struct hal_gamepad_impl_s {};
 
 namespace {
 
@@ -17,7 +15,6 @@ struct gamepad_runtime_t {
   hal_mutex_t mutex;
   const jh_gamepad_backend_t *backend;
   hal_gamepad_impl_t handle;
-  uint32_t generation;
   bool opened;
   bool operation_active;
 };
@@ -28,14 +25,8 @@ hal_mutex_t runtime_mutex(void) {
   return jh_hal_mutex_create_once(&s_gamepad.mutex);
 }
 
-uint32_t next_generation(uint32_t generation) {
-  ++generation;
-  return generation == 0u ? 1u : generation;
-}
-
 bool handle_valid_locked(hal_gamepad_t gamepad) {
-  return gamepad == &s_gamepad.handle && s_gamepad.opened &&
-         gamepad->generation == s_gamepad.generation;
+  return gamepad == &s_gamepad.handle && s_gamepad.opened;
 }
 
 template <typename Operation>
@@ -108,8 +99,6 @@ hal_status_t hal_gamepad_open(hal_gamepad_t *out_gamepad) {
   hal_mutex_lock(mutex);
   s_gamepad.operation_active = false;
   if (status == HAL_OK) {
-    s_gamepad.generation = next_generation(s_gamepad.generation);
-    s_gamepad.handle.generation = s_gamepad.generation;
     s_gamepad.opened = true;
     *out_gamepad = &s_gamepad.handle;
   } else {
@@ -131,8 +120,6 @@ hal_status_t hal_gamepad_close(hal_gamepad_t gamepad) {
     hal_mutex_lock(mutex);
     s_gamepad.opened = false;
     s_gamepad.backend = nullptr;
-    s_gamepad.generation = next_generation(s_gamepad.generation);
-    s_gamepad.handle.generation = 0u;
     hal_mutex_unlock(mutex);
     if (status == HAL_OK) {
       jh_bluetooth_publish_inactive(HAL_BOARD_CAP_BLUETOOTH_CLASSIC_CONTROLLER);
@@ -219,8 +206,6 @@ void hal_mock_gamepad_runtime_full_reset(void) {
   }
   hal_mutex_lock(mutex);
   s_gamepad.backend = nullptr;
-  s_gamepad.handle.generation = 0u;
-  s_gamepad.generation = 0u;
   s_gamepad.opened = false;
   s_gamepad.operation_active = false;
   hal_mutex_unlock(mutex);

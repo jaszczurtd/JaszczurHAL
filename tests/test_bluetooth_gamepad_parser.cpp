@@ -247,6 +247,84 @@ void test_unknown_usage_is_ignored_without_rejecting_descriptor() {
   TEST_ASSERT_EQUAL_UINT32(1u, diagnostics.ignored_usages);
 }
 
+void test_long_items_are_skipped_and_malformed_long_items_are_rejected() {
+  static constexpr std::array<uint8_t, 26> kDescriptor = {
+      0x05u, 0x01u, 0x09u, 0x05u, 0xa1u, 0x01u, 0xfeu, 0x02u, 0x7fu,
+      0xaau, 0xbbu, 0x15u, 0x00u, 0x25u, 0x01u, 0x75u, 0x01u, 0x95u,
+      0x01u, 0x05u, 0x09u, 0x09u, 0x01u, 0x81u, 0x02u, 0xc0u,
+  };
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        jh_bluetooth_gamepad_parser_configure(
+                            &s_parser, kDescriptor.data(), kDescriptor.size()));
+  TEST_ASSERT_EQUAL_UINT8(1u, s_parser.field_count);
+
+  static constexpr std::array<uint8_t, 10> kTruncatedLongItem = {
+      0x05u, 0x01u, 0x09u, 0x05u, 0xa1u, 0x01u, 0xfeu, 0x03u, 0x7fu, 0xaau,
+  };
+  TEST_ASSERT_EQUAL_INT(HAL_EPROTO, jh_bluetooth_gamepad_parser_configure(
+                                        &s_parser, kTruncatedLongItem.data(),
+                                        kTruncatedLongItem.size()));
+  TEST_ASSERT_EQUAL_INT(JH_BLUETOOTH_GAMEPAD_REJECT_DESCRIPTOR_MALFORMED,
+                        s_parser.diagnostics.last_reject_reason);
+}
+
+void test_application_collection_uses_last_declared_usage() {
+  static constexpr std::array<uint8_t, 22> kLastUsageGamepad = {
+      0x05u, 0x01u, 0x09u, 0x02u, 0x09u, 0x05u, 0xa1u, 0x01u,
+      0x15u, 0x00u, 0x25u, 0x01u, 0x75u, 0x01u, 0x95u, 0x01u,
+      0x05u, 0x09u, 0x09u, 0x01u, 0x81u, 0x02u,
+  };
+  std::array<uint8_t, kLastUsageGamepad.size() + 1u> accepted{};
+  std::copy(kLastUsageGamepad.begin(), kLastUsageGamepad.end(),
+            accepted.begin());
+  accepted.back() = 0xc0u;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, jh_bluetooth_gamepad_parser_configure(&s_parser, accepted.data(),
+                                                    accepted.size()));
+
+  auto rejected = accepted;
+  rejected[3] = 0x05u;
+  rejected[5] = 0x02u;
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED,
+                        jh_bluetooth_gamepad_parser_configure(
+                            &s_parser, rejected.data(), rejected.size()));
+  TEST_ASSERT_EQUAL_INT(JH_BLUETOOTH_GAMEPAD_REJECT_UNSUPPORTED_COLLECTION,
+                        s_parser.diagnostics.last_reject_reason);
+}
+
+void test_descriptor_overflow_reports_the_originating_limit() {
+  std::vector<uint8_t> descriptor = {
+      0x05u, 0x01u, 0x09u, 0x05u, 0xa1u, 0x01u,
+  };
+  for (uint8_t report_id = 1u;
+       report_id <= JH_BLUETOOTH_GAMEPAD_REPORT_ID_CAPACITY; ++report_id) {
+    const std::array<uint8_t, 8> layout = {
+        0x85u, report_id, 0x75u, 0x01u, 0x95u, 0x01u, 0x81u, 0x03u,
+    };
+    descriptor.insert(descriptor.end(), layout.begin(), layout.end());
+  }
+  for (uint8_t depth = 0u; depth < 8u; ++depth) {
+    descriptor.push_back(0xa1u);
+    descriptor.push_back(0x00u);
+  }
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW,
+                        jh_bluetooth_gamepad_parser_configure(
+                            &s_parser, descriptor.data(), descriptor.size()));
+  TEST_ASSERT_EQUAL_INT(JH_BLUETOOTH_GAMEPAD_REJECT_DESCRIPTOR_MALFORMED,
+                        s_parser.diagnostics.last_reject_reason);
+
+  descriptor.resize(6u + JH_BLUETOOTH_GAMEPAD_REPORT_ID_CAPACITY * 8u);
+  const std::array<uint8_t, 8> ninth_layout = {
+      0x85u, 0x09u, 0x75u, 0x01u, 0x95u, 0x01u, 0x81u, 0x03u,
+  };
+  descriptor.insert(descriptor.end(), ninth_layout.begin(), ninth_layout.end());
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW,
+                        jh_bluetooth_gamepad_parser_configure(
+                            &s_parser, descriptor.data(), descriptor.size()));
+  TEST_ASSERT_EQUAL_INT(JH_BLUETOOTH_GAMEPAD_REJECT_TOO_MANY_REPORT_IDS,
+                        s_parser.diagnostics.last_reject_reason);
+}
+
 void test_descriptor_rejects_malformed_oversize_and_duplicate_usage() {
   auto truncated = s_descriptor;
   truncated.pop_back();
@@ -485,6 +563,9 @@ int main() {
   RUN_TEST(test_repeated_report_is_idempotent);
   RUN_TEST(test_hat_switch_normalizes_all_directions_and_null_state);
   RUN_TEST(test_unknown_usage_is_ignored_without_rejecting_descriptor);
+  RUN_TEST(test_long_items_are_skipped_and_malformed_long_items_are_rejected);
+  RUN_TEST(test_application_collection_uses_last_declared_usage);
+  RUN_TEST(test_descriptor_overflow_reports_the_originating_limit);
   RUN_TEST(test_descriptor_rejects_malformed_oversize_and_duplicate_usage);
   RUN_TEST(
       test_reports_reject_truncation_unknown_id_and_oversize_without_state_change);

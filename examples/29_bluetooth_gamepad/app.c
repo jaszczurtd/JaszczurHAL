@@ -107,6 +107,9 @@ static void handleState(const hal_gamepad_info_t *info) {
   if (info->state != HAL_GAMEPAD_STATE_READY) {
     return;
   }
+  if (!info->known_device && !info->pairing_window_open) {
+    s_pairingOpened = false;
+  }
   if (info->known_device && !s_reconnectStarted) {
     const hal_status_t status = hal_gamepad_reconnect(s_gamepad);
     if (status == HAL_OK) {

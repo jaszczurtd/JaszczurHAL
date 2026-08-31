@@ -4,9 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-30
 
+- Made ESP-IDF Python tooling reproducible across fresh and cached machines.
+  Setup now reconciles every reviewed direct tool version after the upstream
+  installer runs, and CI cache keys include the reviewed tool snapshot. This
+  prevents a compatible upstream release such as `esp-coredump` 1.17.0 from
+  silently replacing the reviewed 1.16.0 environment and failing provenance
+  validation only after a complete firmware build.
+- Aligned Bluetooth gamepad lifecycle behavior across BTstack, Bluedroid and
+  mock: profile start clears the selected identity, known-device pairing can be
+  reopened, reconnect preserves parser generations and queue diagnostics, and
+  rejected Bluedroid devices have one close owner. NimBLE now translates local
+  own-address modes separately from peer address types and reads shared address
+  state under its critical section. The HID parser again skips valid long items,
+  uses the last Collection usage, and retains the originating overflow reason.
 - Added the opt-in public `hal_gamepad` API for one Bluetooth Classic HID
-  gamepad with explicit pairing authorization, current-runtime known-device
-  reconnect, normalized copied input snapshots, bounded overflow diagnostics,
+  gamepad with explicit pairing authorization, known-device reconnect within
+  one open profile session, normalized copied input snapshots,
+  bounded overflow diagnostics,
   disconnect input release, a deterministic mock, and a C example with a
   combined BLE+Classic variant. The GAMEPAD feature propagates
   BLUETOOTH_CLASSIC and selects either the shared CYW43/BTstack host or the

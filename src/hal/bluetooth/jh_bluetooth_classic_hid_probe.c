@@ -41,6 +41,7 @@ static jh_bluetooth_classic_hid_probe_logic_t s_logic;
 static jh_bluetooth_classic_hid_probe_snapshot_t s_snapshot;
 static jh_bluetooth_host_reference_t s_host_reference;
 static bd_addr_t s_candidate_address;
+static bd_addr_t s_known_address;
 static bd_addr_t s_pairing_address;
 static uint8_t s_candidate_page_scan_mode;
 static uint16_t s_candidate_clock_offset;
@@ -124,8 +125,7 @@ static uint32_t fnv1a32(const uint8_t *data, size_t length) {
 }
 
 static bool address_is_known(const bd_addr_t address) {
-  return s_snapshot.known_device &&
-         bd_addr_cmp(address, s_candidate_address) == 0;
+  return s_snapshot.known_device && bd_addr_cmp(address, s_known_address) == 0;
 }
 
 static void reset_candidate(void) {
@@ -268,6 +268,7 @@ static void finalize_hid_connection(void) {
 static void reject_connected_candidate(void) {
   ++s_snapshot.identity_rejections;
   s_snapshot.known_device = false;
+  memset(s_known_address, 0, sizeof(s_known_address));
   s_identity_validated = false;
   if (s_hid_cid != 0u) {
     hid_host_disconnect(s_hid_cid);
@@ -301,6 +302,7 @@ static void pnp_service_search_packet_handler(uint8_t packet_type,
     ++s_snapshot.pnp_identity_matches;
     s_identity_validated = true;
     s_snapshot.known_device = true;
+    memcpy(s_known_address, s_candidate_address, sizeof(s_known_address));
     jh_bluetooth_classic_hid_probe_logic_close_discovery(&s_logic);
     sync_logic_snapshot();
     s_connect_at_ms = hal_millis() + JH_CLASSIC_HID_SDP_SETTLE_MS;
@@ -442,6 +444,7 @@ static void handle_hid_event(const uint8_t *packet) {
         hid_subevent_incoming_connection_get_hid_cid(packet);
     if (address_is_known(address) && s_identity_validated &&
         s_snapshot.connections > 0u && !s_logic.connected &&
+        !s_logic.discovery_open &&
         s_snapshot.phase != JH_CLASSIC_HID_PHASE_CONNECTING) {
       const uint8_t status =
           hid_host_accept_connection(hid_cid, HID_PROTOCOL_MODE_BOOT);
@@ -798,6 +801,7 @@ hal_status_t jh_bluetooth_classic_hid_probe_start(void) {
   memset(&s_lifecycle, 0, sizeof(s_lifecycle));
   memset(&s_host_reference, 0, sizeof(s_host_reference));
   memset(s_hid_descriptor, 0, sizeof(s_hid_descriptor));
+  memset(s_known_address, 0, sizeof(s_known_address));
   memset(s_pairing_address, 0, sizeof(s_pairing_address));
   s_hid_cid = 0u;
   s_connected_since_ms = 0u;
@@ -860,7 +864,9 @@ hal_status_t jh_bluetooth_classic_hid_probe_open_pairing_window(void) {
       !s_snapshot.profile_ready) {
     return HAL_EUNINIT;
   }
-  if (s_snapshot.phase != JH_CLASSIC_HID_PHASE_READY || s_connect_pending) {
+  if ((s_snapshot.phase != JH_CLASSIC_HID_PHASE_READY &&
+       s_snapshot.phase != JH_CLASSIC_HID_PHASE_KNOWN_IDLE) ||
+      s_connect_pending) {
     return HAL_ESTATE;
   }
   if (!jh_bluetooth_classic_hid_probe_logic_open_discovery(&s_logic,
@@ -907,6 +913,8 @@ hal_status_t jh_bluetooth_classic_hid_probe_reconnect(void) {
       s_logic.discovery_open) {
     return HAL_ESTATE;
   }
+  memcpy(s_candidate_address, s_known_address, sizeof(s_candidate_address));
+  s_candidate_available = true;
   return connect_candidate(true);
 }
 

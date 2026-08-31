@@ -48,6 +48,12 @@ PIN_FILE = ARCHIVE_PIN_FILE
 MANIFEST_FILE = ARCHIVE_MANIFEST_FILE
 VERSION_STAMP = COMPONENT_VERSION_STAMP
 EXCLUSIONS_FILE = ARCHIVE_EXCLUSIONS_FILE
+ESP_IDF_TOOL_SNAPSHOT = Path("security/esp_idf_tools.json")
+
+_PYTHON_DISTRIBUTION_VERSION_QUERY = (
+    "import importlib.metadata as metadata, sys; "
+    "print(metadata.version(sys.argv[1]))"
+)
 
 
 class ComponentError(RuntimeError):
@@ -676,6 +682,150 @@ def _version_esp_idf(directory: Path, expected: str) -> None:
         )
 
 
+def _esp_idf_python_tool_pins(repo_root: Path) -> tuple[tuple[str, str], ...]:
+    path = repo_root / ESP_IDF_TOOL_SNAPSHOT
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ComponentError(
+            f"Cannot read ESP-IDF tool snapshot {path}: {error}"
+        ) from error
+    entries = document.get("pythonTools") if isinstance(document, dict) else None
+    if not isinstance(entries, list) or not entries:
+        raise ComponentError(f"ESP-IDF tool snapshot has no pythonTools: {path}")
+    pins: list[tuple[str, str]] = []
+    observed: set[str] = set()
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            raise ComponentError(
+                f"Invalid ESP-IDF Python tool at {path}:pythonTools[{index}]"
+            )
+        name = entry.get("name")
+        version = entry.get("version")
+        if (
+            not isinstance(name, str)
+            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name) is None
+            or not isinstance(version, str)
+            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.+!_-]*", version) is None
+        ):
+            raise ComponentError(
+                f"Invalid ESP-IDF Python tool pin at "
+                f"{path}:pythonTools[{index}]"
+            )
+        normalized = name.casefold().replace("_", "-")
+        if normalized in observed:
+            raise ComponentError(
+                f"Duplicate ESP-IDF Python tool pin {name!r} in {path}"
+            )
+        observed.add(normalized)
+        pins.append((name, version))
+    return tuple(pins)
+
+
+def _esp_idf_python_environment(config: dict[str, str]) -> tuple[Path, Path]:
+    version = config.get("ESP_IDF_VERSION", "")
+    match = re.fullmatch(r"(\d+)\.(\d+)\.\d+", version)
+    if match is None:
+        raise ComponentError(f"Invalid ESP_IDF_VERSION: {version!r}")
+    tools_root = Path(
+        os.environ.get("IDF_TOOLS_PATH", str(Path.home() / ".espressif"))
+    ).expanduser()
+    environment_root = os.environ.get("IDF_PYTHON_ENV_PATH")
+    if environment_root:
+        python_root = Path(environment_root).expanduser()
+    else:
+        python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+        idf_series = f"{match.group(1)}.{match.group(2)}"
+        python_root = (
+            tools_root
+            / "python_env"
+            / f"idf{idf_series}_py{python_version}_env"
+        )
+    executable = (
+        python_root / "Scripts/python.exe"
+        if sys.platform == "win32"
+        else python_root / "bin/python"
+    )
+    constraints = tools_root / (
+        f"espidf.constraints.v{match.group(1)}.{match.group(2)}.txt"
+    )
+    return executable, constraints
+
+
+def _query_esp_idf_python_tools(
+    python: Path, names: Sequence[str]
+) -> dict[str, str]:
+    versions: dict[str, str] = {}
+    for name in names:
+        completed = _run(
+            (
+                str(python),
+                "-c",
+                _PYTHON_DISTRIBUTION_VERSION_QUERY,
+                name,
+            ),
+            check=False,
+        )
+        version = completed.stdout.strip()
+        if completed.returncode == 0 and version:
+            versions[name] = version
+    return versions
+
+
+def _esp_idf_python_tool_drift(
+    pins: Sequence[tuple[str, str]], versions: dict[str, str]
+) -> list[str]:
+    return [
+        f"{name}: expected {expected}, found {versions.get(name, 'missing')}"
+        for name, expected in pins
+        if versions.get(name) != expected
+    ]
+
+
+def _synchronize_esp_idf_python_tools(
+    repo_root: Path, config: dict[str, str], *, verify_only: bool
+) -> None:
+    pins = _esp_idf_python_tool_pins(repo_root)
+    python, constraints = _esp_idf_python_environment(config)
+    names = [name for name, _version in pins]
+    versions = _query_esp_idf_python_tools(python, names)
+    drift = _esp_idf_python_tool_drift(pins, versions)
+    if not drift:
+        ok("ESP-IDF Python tools match the reviewed snapshot.")
+        return
+    if verify_only:
+        raise ComponentError(
+            "ESP-IDF Python tool version drift: " + "; ".join(drift)
+        )
+    if not constraints.is_file():
+        raise ComponentError(
+            f"ESP-IDF Python constraints file is missing: {constraints}"
+        )
+    info("Synchronizing exact ESP-IDF Python tool versions...")
+    requirements = [f"{name}=={version}" for name, version in pins]
+    _run(
+        (
+            str(python),
+            "-m",
+            "pip",
+            "install",
+            "--disable-pip-version-check",
+            "--no-warn-script-location",
+            "--upgrade",
+            "--constraint",
+            str(constraints),
+            *requirements,
+        )
+    )
+    versions = _query_esp_idf_python_tools(python, names)
+    drift = _esp_idf_python_tool_drift(pins, versions)
+    if drift:
+        raise ComponentError(
+            "ESP-IDF Python tool synchronization failed: " + "; ".join(drift)
+        )
+    ok("ESP-IDF Python tools synchronized with the reviewed snapshot.")
+
+
 def ensure_esp_idf_tools(
     repo_root: Path,
     directory: Path,
@@ -708,6 +858,9 @@ def ensure_esp_idf_tools(
     )
     _run((*base_command, "check"), cwd=directory)
     _run((*base_command, "check-python-dependencies"), cwd=directory)
+    _synchronize_esp_idf_python_tools(
+        repo_root, config, verify_only=verify_only
+    )
     ok(f"ESP-IDF tools ready for {targets}: {directory}")
     info(f"Activate them in the current shell with: . {directory / 'export.sh'}")
 

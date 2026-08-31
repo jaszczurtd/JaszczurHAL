@@ -561,6 +561,11 @@ def check_production_feature_facade(compiler: str) -> None:
     )
     require_hal_config_failure(
         compiler,
+        ("HAL_TARGET_ESP32_S3=1", "HAL_ENABLE_BLE_STREAM=1"),
+        "HAL_ENABLE_BLE_STREAM is not supported by the ESP32-S3 NimBLE backend",
+    )
+    require_hal_config_failure(
+        compiler,
         (
             "HAL_TARGET_MOCK=1",
             "HAL_ENABLE_SX126X=1",
@@ -946,8 +951,8 @@ for facade in facade_provider_checks:
     )
 require(
     len(re.findall(r"^#error(?:\s|$)", hal_config_text, flags=re.MULTILINE))
-    == 72,
-    "hal_config.h retained validation inventory drifted from 72 #error checks",
+    == 73,
+    "hal_config.h retained validation inventory drifted from 73 #error checks",
 )
 
 checked = run_generator("--check")

@@ -1,12 +1,26 @@
 #pragma once
 
 #include "hal/bluetooth/hal_gamepad.h"
+#include "hal/bluetooth/jh_bluetooth_gamepad_parser.h"
 
 #ifdef HAL_ENABLE_BLUETOOTH_GAMEPAD
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+static inline void
+jh_gamepad_copy_snapshot(const jh_bluetooth_gamepad_snapshot_t *source,
+                         hal_gamepad_snapshot_t *destination) {
+  destination->generation = source->generation;
+  destination->buttons = source->buttons;
+  for (size_t index = 0u; index < HAL_GAMEPAD_AXIS_COUNT; ++index) {
+    destination->axes[index] = source->axes[index];
+  }
+  destination->axes_present = source->axes_present;
+  destination->dpad = source->dpad;
+  destination->connected = source->connected;
+}
 
 typedef struct {
   void *context;

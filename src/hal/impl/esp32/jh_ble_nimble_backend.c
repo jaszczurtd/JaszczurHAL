@@ -2,10 +2,6 @@
 
 #if HAL_TARGET_IS_ESP32_S3 && defined(HAL_ENABLE_BLE)
 
-#ifdef HAL_ENABLE_BLE_STREAM
-#error "The ESP32-S3 NimBLE backend does not yet provide HAL_ENABLE_BLE_STREAM"
-#endif
-
 #include "hal/bluetooth/jh_ble_backend.h"
 #include "hal/impl/esp32/jh_esp32_nvs_runtime.h"
 
@@ -69,6 +65,43 @@ static hal_ble_address_type_t address_type(uint8_t type) {
   default:
     return HAL_BLE_ADDRESS_UNKNOWN;
   }
+}
+
+static hal_ble_address_type_t own_address_type(uint8_t type) {
+  switch (type) {
+  case BLE_OWN_ADDR_PUBLIC:
+    return HAL_BLE_ADDRESS_PUBLIC;
+  case BLE_OWN_ADDR_RANDOM:
+    return HAL_BLE_ADDRESS_RANDOM;
+  case BLE_OWN_ADDR_RPA_PUBLIC_DEFAULT:
+    return HAL_BLE_ADDRESS_PUBLIC_IDENTITY;
+  case BLE_OWN_ADDR_RPA_RANDOM_DEFAULT:
+    return HAL_BLE_ADDRESS_RANDOM_IDENTITY;
+  default:
+    return HAL_BLE_ADDRESS_UNKNOWN;
+  }
+}
+
+static bool identity_address_type(uint8_t own_type, uint8_t *out_type) {
+  switch (own_type) {
+  case BLE_OWN_ADDR_PUBLIC:
+  case BLE_OWN_ADDR_RPA_PUBLIC_DEFAULT:
+    *out_type = BLE_ADDR_PUBLIC;
+    return true;
+  case BLE_OWN_ADDR_RANDOM:
+  case BLE_OWN_ADDR_RPA_RANDOM_DEFAULT:
+    *out_type = BLE_ADDR_RANDOM;
+    return true;
+  default:
+    return false;
+  }
+}
+
+static uint8_t current_own_address_type(void) {
+  portENTER_CRITICAL(&s_backend_mux);
+  const uint8_t type = s_backend.own_address_type;
+  portEXIT_CRITICAL(&s_backend_mux);
+  return type;
 }
 
 static hal_ble_address_t address_from_nimble(const ble_addr_t *address) {
@@ -225,7 +258,12 @@ static void host_sync(void) {
     status = ble_hs_id_infer_auto(0, &own_type);
   }
   if (status == 0) {
-    status = ble_hs_id_copy_addr(own_type, bytes, NULL);
+    uint8_t peer_type = BLE_ADDR_PUBLIC;
+    if (!identity_address_type(own_type, &peer_type)) {
+      status = BLE_HS_EINVAL;
+    } else {
+      status = ble_hs_id_copy_addr(peer_type, bytes, NULL);
+    }
   }
   if (status != 0) {
     host_reset(status);
@@ -240,7 +278,7 @@ static void host_sync(void) {
   event.type = JH_BLE_BACKEND_EVENT_READY;
   event.status = HAL_OK;
   memcpy(event.address.bytes, bytes, sizeof(bytes));
-  event.address.type = address_type(own_type);
+  event.address.type = own_address_type(own_type);
   emit_event(&event);
 }
 
@@ -344,7 +382,7 @@ backend_advertising_start(void *context,
   parameters.disc_mode = BLE_GAP_DISC_MODE_GEN;
   parameters.itvl_min = config->interval_min;
   parameters.itvl_max = config->interval_max;
-  status = ble_gap_adv_start(s_backend.own_address_type, NULL, BLE_HS_FOREVER,
+  status = ble_gap_adv_start(current_own_address_type(), NULL, BLE_HS_FOREVER,
                              &parameters, gap_event, NULL);
   if (status != 0) {
     return status_from_nimble(status);
@@ -389,7 +427,7 @@ static hal_status_t backend_scan_start(void *context,
   parameters.window = config->window;
   parameters.passive = 1u;
   parameters.filter_duplicates = config->filter_duplicates ? 1u : 0u;
-  const int status = ble_gap_disc(s_backend.own_address_type, BLE_HS_FOREVER,
+  const int status = ble_gap_disc(current_own_address_type(), BLE_HS_FOREVER,
                                   &parameters, gap_event, NULL);
   if (status != 0) {
     return status_from_nimble(status);

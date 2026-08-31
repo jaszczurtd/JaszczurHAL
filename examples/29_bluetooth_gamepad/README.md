@@ -32,9 +32,10 @@ vscode/entry/jh-vscode build \
 
 On first boot, put the gamepad into pairing mode. The example opens a bounded
 discovery window and authorizes a pending Just Works or legacy PIN `0000`
-request. The accepted address can be reconnected during the same firmware
-runtime. The application must be prepared to reopen pairing after a restart;
-persistent HAL device selection is not part of this release.
+request. If a window expires without selecting a device, the example opens a
+new one. The accepted address can be reconnected until the profile is closed.
+The application must reopen pairing after closing the profile or restarting
+firmware; persistent HAL device selection is not part of this release.
 
 ## Snapshot model
 

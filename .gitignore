@@ -43,6 +43,10 @@ tests/hardware/*/.vscode/*
 !tests/fixtures/esp32s3_phase3/.vscode/
 tests/fixtures/esp32s3_phase3/.vscode/*
 !tests/fixtures/esp32s3_phase3/.vscode/jaszczurhal.project.json
+# Keep the Classic gamepad compile fixture's target/board selection tracked.
+!tests/fixtures/esp32_gamepad/.vscode/
+tests/fixtures/esp32_gamepad/.vscode/*
+!tests/fixtures/esp32_gamepad/.vscode/jaszczurhal.project.json
 .idea/
 .codex
 *.swp

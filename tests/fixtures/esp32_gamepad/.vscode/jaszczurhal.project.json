@@ -1,0 +1,8 @@
+{
+  "$schema": "../../../../vscode/schema/jh_vscode_project.schema.json",
+  "schemaVersion": 1,
+  "project": "ESP32 Classic gamepad compile fixture",
+  "module": "esp32_gamepad",
+  "target": "esp32",
+  "board": "esp32-devkitc-v4"
+}

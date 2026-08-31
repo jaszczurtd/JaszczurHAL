@@ -272,14 +272,34 @@ require(
 logic = (
     ROOT / "src" / "hal" / "bluetooth" / "jh_bluetooth_classic_hid_probe_logic.c"
 ).read_text(encoding="utf-8")
+require(
+    "JH_CLASSIC_HID_DISCOVERY_WINDOW_MS" in logic,
+    "C5 discovery-window logic lost its bounded duration",
+)
+require(
+    "s_known_address" in probe
+    and "memcpy(s_candidate_address, s_known_address" in probe,
+    "C5 known-device reconnect lost its stable address",
+)
+pairing_open_body = probe.split(
+    "hal_status_t jh_bluetooth_classic_hid_probe_open_pairing_window(void)", 1
+)[1].split(
+    "hal_status_t jh_bluetooth_classic_hid_probe_authorize_pairing(void)", 1
+)[0]
+require(
+    "JH_CLASSIC_HID_PHASE_KNOWN_IDLE" in pairing_open_body,
+    "C5 pairing no longer permits replacing a known device",
+)
+identity = (
+    ROOT / "src" / "hal" / "bluetooth" / "jh_bluetooth_gamepad_identity.h"
+).read_text(encoding="utf-8")
 for expected in (
-    "JH_CLASSIC_HID_DISCOVERY_WINDOW_MS",
-    "JH_CLASSIC_HID_EXPECTED_NAME",
-    "JH_CLASSIC_HID_EXPECTED_VENDOR_ID",
-    "JH_CLASSIC_HID_EXPECTED_PRODUCT_ID",
-    "JH_CLASSIC_HID_EXPECTED_VERSION",
+    "JH_BLUETOOTH_GAMEPAD_EXPECTED_NAME",
+    "JH_BLUETOOTH_GAMEPAD_EXPECTED_VENDOR_ID",
+    "JH_BLUETOOTH_GAMEPAD_EXPECTED_PRODUCT_ID",
+    "JH_BLUETOOTH_GAMEPAD_EXPECTED_VERSION",
 ):
-    require(expected in logic, f"C5 identity/window logic is missing {expected}")
+    require(expected in identity, f"shared gamepad identity is missing {expected}")
 require(
     "const jh_bluetooth_gamepad_snapshot_t *snapshot" in logic
     and "report[" not in logic,

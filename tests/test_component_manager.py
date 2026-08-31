@@ -409,7 +409,10 @@ class TrackedContractTests(unittest.TestCase):
     def test_esp_idf_tools_install_and_verify_official_environment(self) -> None:
         directory = ROOT / "third_party/esp-idf"
         completed = subprocess.CompletedProcess([], 0, "", "")
-        with mock.patch.object(manager, "_run", return_value=completed) as run:
+        with (
+            mock.patch.object(manager, "_run", return_value=completed) as run,
+            mock.patch.object(manager, "_synchronize_esp_idf_python_tools"),
+        ):
             manager.ensure_esp_idf_tools(
                 ROOT, directory, verify_only=False
             )
@@ -425,7 +428,10 @@ class TrackedContractTests(unittest.TestCase):
         self.assertEqual("check", commands[1][-1])
         self.assertEqual("check-python-dependencies", commands[2][-1])
 
-        with mock.patch.object(manager, "_run", return_value=completed) as run:
+        with (
+            mock.patch.object(manager, "_run", return_value=completed) as run,
+            mock.patch.object(manager, "_synchronize_esp_idf_python_tools"),
+        ):
             manager.ensure_esp_idf_tools(
                 ROOT, directory, verify_only=True
             )
@@ -433,6 +439,76 @@ class TrackedContractTests(unittest.TestCase):
             ["check", "check-python-dependencies"],
             [call.args[0][-1] for call in run.call_args_list],
         )
+
+    def test_esp_idf_python_tools_are_pinned_by_reviewed_snapshot(self) -> None:
+        pins = dict(manager._esp_idf_python_tool_pins(ROOT))
+        self.assertEqual(pins["esp-coredump"], "1.16.0")
+        self.assertEqual(pins["esptool"], "5.3.1")
+        self.assertEqual(len(pins), 11)
+
+    def test_esp_idf_python_tool_drift_is_rejected_in_verify_mode(self) -> None:
+        pins = (("esp-coredump", "1.16.0"), ("esptool", "5.3.1"))
+        with (
+            mock.patch.object(
+                manager, "_esp_idf_python_tool_pins", return_value=pins
+            ),
+            mock.patch.object(
+                manager,
+                "_esp_idf_python_environment",
+                return_value=(Path("python"), Path("constraints.txt")),
+            ),
+            mock.patch.object(
+                manager,
+                "_query_esp_idf_python_tools",
+                return_value={"esp-coredump": "1.17.0", "esptool": "5.3.1"},
+            ),
+        ):
+            with self.assertRaisesRegex(
+                manager.ComponentError,
+                r"esp-coredump: expected 1\.16\.0, found 1\.17\.0",
+            ):
+                manager._synchronize_esp_idf_python_tools(
+                    ROOT, {"ESP_IDF_VERSION": "6.0.2"}, verify_only=True
+                )
+
+    def test_esp_idf_python_tool_drift_is_repaired_after_install(self) -> None:
+        pins = (("esp-coredump", "1.16.0"), ("esptool", "5.3.1"))
+        with tempfile.TemporaryDirectory(prefix="jh-idf-python-pins-") as text:
+            temporary = Path(text)
+            constraints = temporary / "espidf.constraints.v6.0.txt"
+            constraints.write_text("esp-coredump~=1.14\n", encoding="utf-8")
+            versions = (
+                {"esp-coredump": "1.17.0", "esptool": "5.3.1"},
+                {"esp-coredump": "1.16.0", "esptool": "5.3.1"},
+            )
+            with (
+                mock.patch.object(
+                    manager, "_esp_idf_python_tool_pins", return_value=pins
+                ),
+                mock.patch.object(
+                    manager,
+                    "_esp_idf_python_environment",
+                    return_value=(temporary / "python", constraints),
+                ),
+                mock.patch.object(
+                    manager,
+                    "_query_esp_idf_python_tools",
+                    side_effect=versions,
+                ),
+                mock.patch.object(
+                    manager,
+                    "_run",
+                    return_value=subprocess.CompletedProcess([], 0, "", ""),
+                ) as run,
+            ):
+                manager._synchronize_esp_idf_python_tools(
+                    ROOT, {"ESP_IDF_VERSION": "6.0.2"}, verify_only=False
+                )
+
+        command = run.call_args.args[0]
+        self.assertIn("--constraint", command)
+        self.assertIn("esp-coredump==1.16.0", command)
+        self.assertIn("esptool==5.3.1", command)
 
     def test_recursive_submodule_sync_is_verified(self) -> None:
         directory = Path("esp-idf")

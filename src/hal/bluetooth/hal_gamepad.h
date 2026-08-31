@@ -94,7 +94,7 @@ typedef hal_gamepad_impl_t *hal_gamepad_t;
 /** Initialize the Bluetooth gamepad profile and return its handle. */
 hal_status_t hal_gamepad_open(hal_gamepad_t *out_gamepad);
 
-/** Stop the profile and invalidate the handle. Passing NULL is invalid. */
+/** Stop the profile, clear its selected device, and invalidate the handle. */
 hal_status_t hal_gamepad_close(hal_gamepad_t gamepad);
 
 /** Service Bluetooth transport and profile state without blocking. */
@@ -115,7 +115,7 @@ hal_status_t hal_gamepad_snapshot(hal_gamepad_t gamepad,
 hal_status_t hal_gamepad_snapshot_next(hal_gamepad_t gamepad,
                                        hal_gamepad_snapshot_t *out_snapshot);
 
-/** Open the bounded discovery and pairing window. */
+/** Open the bounded pairing window, including to replace a known device. */
 hal_status_t hal_gamepad_pairing_open(hal_gamepad_t gamepad);
 
 /** Authorize a pending Just Works or legacy PIN 0000 request. */
@@ -124,7 +124,7 @@ hal_status_t hal_gamepad_pairing_authorize(hal_gamepad_t gamepad);
 /** Reconnect the previously paired gamepad. */
 hal_status_t hal_gamepad_reconnect(hal_gamepad_t gamepad);
 
-/** Disconnect the active gamepad link. */
+/** Request asynchronous disconnection of the active gamepad link. */
 hal_status_t hal_gamepad_disconnect(hal_gamepad_t gamepad);
 
 #ifdef __cplusplus

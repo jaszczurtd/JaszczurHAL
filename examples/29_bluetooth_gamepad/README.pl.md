@@ -33,10 +33,11 @@ vscode/entry/jh-vscode build \
 
 Przy pierwszym uruchomieniu włącz tryb parowania gamepada. Przykład otwiera
 ograniczone okno wykrywania i zatwierdza oczekujące żądanie Just Works albo
-legacy PIN `0000`. Zaakceptowany adres może być użyty do reconnectu podczas
-tego samego uruchomienia firmware. Aplikacja musi być gotowa ponownie otworzyć
-parowanie po restarcie; trwały wybór urządzenia przez HAL nie wchodzi w zakres
-tego wydania.
+legacy PIN `0000`. Jeśli okno wygaśnie bez wybrania urządzenia, przykład otwiera
+nowe. Zaakceptowany adres może być użyty do reconnectu do czasu zamknięcia
+profilu. Po zamknięciu profilu lub restarcie firmware aplikacja musi ponownie
+otworzyć parowanie; trwały wybór urządzenia przez HAL nie wchodzi w zakres tego
+wydania.
 
 ## Model snapshotu
 
