@@ -721,6 +721,7 @@ jobs:
           ./scripts/ensure_unity.sh --force
           ./scripts/ensure_lwip.sh --force
           ./scripts/ensure_littlefs.sh --force
+          ./scripts/ensure_btstack.sh --force
           ./scripts/ensure_sx126x.sh --force
 
       - name: Install analyzers
