@@ -88,6 +88,14 @@ for dependency in ("ensure_btstack.sh --force", "ensure_freertos_kernel.sh --for
         f"the memcheck job does not prepare {dependency.split()[0]}",
     )
 
+static_analysis_job = ci_workflow.split("\n  static-analysis:\n", 1)[1].split(
+    "\n  security-scan:\n", 1
+)[0]
+require(
+    "ensure_btstack.sh --force" in static_analysis_job,
+    "the static-analysis job does not prepare BTstack",
+)
+
 windows_tooling_job = ci_workflow.split("\n  windows-tooling:\n", 1)[1].split(
     "\n  windows-firmware:\n", 1
 )[0]
