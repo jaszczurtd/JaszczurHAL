@@ -123,22 +123,24 @@ synchronizację. `--check-generated` weryfikuje te same dane wyjściowe bez
 naprawiania rozjazdu; CI używa tego bardziej rygorystycznego trybu przez
 `scripts/sync_generated.py --check`.
 
-Uruchamia kompletny zestaw bramek jakości (8 bramek, w kolejności):
+Uruchamia kompletny zestaw bramek jakości (9 bramek, w kolejności):
 1. Sprawdzenie obecności narzędzi
 2. Testy jednostkowe hosta/mock (`.build/gate/host/` + ctest, w tym FreeRTOS POSIX)
-3. Bezpieczeństwo pamięci (Valgrind memcheck na wszystkich natywnych plikach wykonywalnych testów C/C++)
-4. Analiza statyczna: cppcheck
-5. Analiza statyczna: clang-tidy (bazy danych buildu hosta + STM32 poniżej
+3. Testy Clang ASan/UBSan i ograniczone kontrole libFuzzer przez ten sam runner,
+   którego używa CI
+4. Bezpieczeństwo pamięci (Valgrind memcheck na wszystkich natywnych plikach wykonywalnych testów C/C++)
+5. Analiza statyczna: cppcheck
+6. Analiza statyczna: clang-tidy (bazy danych buildu hosta + STM32 poniżej
    `.build/gate/`)
-6. Wykrywanie duplikatów PMD CPD w obrębie własnych implementacji C/C++ oraz
+7. Wykrywanie duplikatów PMD CPD w obrębie własnych implementacji C/C++ oraz
    skryptów Python
-7. Buildy docelowe (STM32G474 plus sondy startowe/rdzenia Pico SDK
+8. Buildy docelowe (STM32G474 plus sondy startowe/rdzenia Pico SDK
    RP2040/RP2350 ARM/RP2350 RISC-V, profile funkcjonalne RP, sześć
    reprezentatywnych buildów ELF/BIN/UF2 `01_core_runtime`/`18_freertos_suite`
    oraz jeden czysty build
    `tests/fixtures/esp32s3_phase3` z przypiętym ESP-IDF i zwalidowanym
    manifestem multi-image)
-8. Buildy przykładów (macierz `gateTargets` wyprowadzona z dispatchera
+9. Buildy przykładów (macierz `gateTargets` wyprowadzona z dispatchera
    plus dedykowane stanowiska target/runtime)
 
 Kończy działanie z niezerowym kodem przy pierwszym błędzie; logi rejestrują
@@ -1471,7 +1473,7 @@ fazy 3.5.
 |---|---|
 | `tests/fixtures/esp32s3_phase3` | Projekt ESP-IDF ograniczony do buildu, wybierający każdy backend ESP32-S3 dostarczony przez fazę 3. Sprawdza rozwiązywanie funkcjonalności/źródeł/zależności, build, linkowanie, generowanie partycji `two-ota-large` oraz publikację artefaktów. |
 
-CI oraz lokalna bramka 7 budują ten fixture. Udany build nie
+CI oraz lokalna bramka 8 budują ten fixture. Udany build nie
 ustanawia zachowania runtime WiFi/socket/TLS/usług/OTA/WireGuard ani nowo
 ukończonego zachowania peryferiów fazy 2; te wymagają osobnej kampanii
 weryfikacji sprzętowej, cyklu życia i bezpieczeństwa negatywnego.

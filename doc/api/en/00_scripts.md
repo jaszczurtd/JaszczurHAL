@@ -20,7 +20,8 @@ document and the code disagree.
 | Verify dependencies without changing them | `./third_party/update_components.sh --verify-only` | Checks all managed component versions, commits, required files, PMD archive state, built picotool, and the RISC-V toolchain stamp. |
 | Refresh all tracked generated files | `python3 scripts/sync_generated.py --write` | Runs the feature, board, example, root VS Code, and SBOM generators and lists every file changed during synchronization. |
 | Verify all tracked generated files | `python3 scripts/sync_generated.py --check` | Runs every generator in read-only verification mode and fails on missing or stale output. |
-| Run the complete repository gate | `./runalltests.sh` | Cleans managed gate outputs and runs tests, Valgrind, static analysis, CPD, target builds, and example builds. |
+| Run the complete repository gate | `./runalltests.sh` | Cleans managed gate outputs and runs tests, Clang ASan/UBSan/libFuzzer checks, Valgrind, static analysis, CPD, target builds, and example builds. |
+| Run the sanitizer/fuzz gate | `scripts/run_sanitizer_fuzz.sh` | Recreates a Clang-instrumented host build, runs all tests under ASan/UBSan, and smoke-fuzzes the network parsers. |
 | Operate a firmware project | `vscode/entry/jh-vscode <action> --project <dir>` on Unix or `vscode/entry/jh-vscode.cmd ...` on Windows | Provides the stable build, upload, monitor, board-selection, IntelliSense, and clean CLI used by VS Code projects. |
 | Build or flash an ESP-IDF project | `python3 scripts/build_esp_idf.py <action> --project <dir>` | Runs the `build`, `artifacts`, or `flash` action; resolves the ESP target/board metadata; prepares the pinned SDK on demand; and validates the relocatable multi-image manifest. |
 | Build checked-in examples | `scripts/examples_dispatcher.py build --target <target>` | Builds example manifests through the same `jh-vscode` and CMake dispatcher used by firmware projects. |
@@ -75,8 +76,9 @@ workflow entrypoints.
 One-time, idempotent setup for Debian/Ubuntu-like systems. It:
 
 - removes the repository `.build/` tree before setup;
-- installs compiler, CMake, Ninja, Python, Java, Valgrind, clang-tidy, cppcheck,
-  OpenOCD, `gdb-multiarch`, serial, libusb, and other host packages;
+- installs compilers, CMake, Ninja, Python, Java, Valgrind, Clang sanitizer and
+  fuzz tooling, clang-tidy, cppcheck, OpenOCD, `gdb-multiarch`, serial, libusb,
+  and other host packages;
 - invokes `third_party/update_components.sh`;
 - installs `osv-scanner` and `cve-bin-tool`;
 - installs a udev rule for RP2040/RP2350 BOOTSEL/picotool USB access and the
@@ -164,7 +166,7 @@ directory layout.
 
 ### `runalltests.sh`
 
-The complete local quality gate. Before running its eight gates, it invokes
+The complete local quality gate. Before running its nine gates, it invokes
 `scripts/sync_generated.py --write` for tracked feature, board, example, root
 VS Code, and SBOM projections. A local run therefore repairs deterministic
 generated drift and prints the changed-artifact list again in its final
@@ -175,20 +177,22 @@ are:
 
 1. required tools and managed-component verification;
 2. host tests, including the optional FreeRTOS POSIX suite;
-3. Valgrind memcheck;
-4. cppcheck;
-5. clang-tidy for host/shared code and the STM32 backend, using both the
+3. Clang ASan/UBSan tests and libFuzzer smoke checks through the same runner
+   used by CI;
+4. Valgrind memcheck;
+5. cppcheck;
+6. clang-tidy for host/shared code and the STM32 backend, using both the
    `JH_STM32_HOST_SANITY` host-compiler database and the real ARM database;
-6. PMD CPD duplicate detection across owned C/C++ implementations and Python
+7. PMD CPD duplicate detection across owned C/C++ implementations and Python
    scripts;
-7. STM32, RP2040/RP2350, native FreeRTOS, RP feature-profile, and clean
+8. STM32, RP2040/RP2350, native FreeRTOS, RP feature-profile, and clean
    ESP32-S3/ESP-IDF builds with artifact validation;
-8. every declared RP example, native parity fixture builds, and STM32
+9. every declared RP example, native parity fixture builds, and STM32
    examples.
 
 The script removes only its managed `.build/gate`, `.build/examples`, and
 `.build/tests` trees at startup. It exits on the first failed gate.
-Gate 3 runs every directly registered native C/C++ test executable labelled
+Gate 4 runs every directly registered native C/C++ test executable labelled
 `memcheck`. `MEMCHECK_REQUIRED_TESTS` remains a required critical subset and
 prevents those suites from silently leaving the selection. Python, CMake, and
 shell driver tests are excluded: wrapping their parent interpreter would
@@ -196,6 +200,16 @@ measure that host tool rather than cross-compiled firmware or child processes.
 The Valgrind configuration uses fair thread scheduling so the native FreeRTOS
 POSIX scheduler tests are included without stalling. CTest progress is streamed
 unfiltered to both the terminal and `.build/gate/logs/jh_memcheck.log`.
+
+### `scripts/run_sanitizer_fuzz.sh`
+
+The shared Linux sanitizer runner used by local Gate 3 and the CI
+`sanitizer-fuzz` job. It resolves an unversioned or versioned Clang toolchain,
+recreates a build below `.build/`, enables ASan, UBSan and libFuzzer, runs the
+complete host CTest suite with leak detection and fail-fast undefined-behavior
+reporting, then executes bounded smoke runs for the HTTP, WebSocket and
+multipart fuzz targets. `--build-dir`, `--jobs`, and `--fuzz-runs` select its
+managed output and workload; `--check-tools` only verifies Clang availability.
 
 ### `vscode/entry/jh-vscode` and `jh-vscode.cmd`
 

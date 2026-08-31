@@ -219,25 +219,25 @@ require(
     "ESP-IDF must not be added to the static-library matrix",
 )
 
-gate7 = QUALITY_GATE.split("# GATE 7:", 1)[1].split("# GATE 8:", 1)[0]
-gate7_esp = gate7.split(
+gate8 = QUALITY_GATE.split("# GATE 8:", 1)[1].split("# GATE 9:", 1)[0]
+gate8_esp = gate8.split(
     'info "Building the ESP32-S3 Phase 3 fixture with pinned ESP-IDF..."', 1
 )[1].split(
     'pass "ESP32-S3 Phase 3 fixture produced a validated multi-image ESP-IDF build."',
     1,
 )[0]
-require_real_esp_build(gate7_esp, "runalltests.sh Gate 7")
+require_real_esp_build(gate8_esp, "runalltests.sh Gate 8")
 require(
-    "--jobs" not in gate7_esp,
-    "Gate 7 passes the removed --jobs option to build_esp_idf.py",
+    "--jobs" not in gate8_esp,
+    "Gate 8 passes the removed --jobs option to build_esp_idf.py",
 )
 require(
-    '"${GATE_BUILD_ROOT}/esp-idf/esp32s3-phase3"' in gate7,
-    "Gate 7 ESP-IDF output is not below .build/gate",
+    '"${GATE_BUILD_ROOT}/esp-idf/esp32s3-phase3"' in gate8,
+    "Gate 8 ESP-IDF output is not below .build/gate",
 )
 require(
-    '"${LOG_ROOT}/jh_esp32s3_phase3.log"' in gate7,
-    "Gate 7 ESP-IDF command is not captured below .build/gate/logs",
+    '"${LOG_ROOT}/jh_esp32s3_phase3.log"' in gate8,
+    "Gate 8 ESP-IDF command is not captured below .build/gate/logs",
 )
 
 print("ESP32-S3 Phase 3 CI and local gate integration verified")

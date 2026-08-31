@@ -35,7 +35,7 @@ platformą i działają wbrew celowi przenośności JaszczurHAL.
 | Ochrona stosu | Niezależne opt-iny zapewniają synchroniczne strażniki granic stosu Pico SDK/MPU/ESP-IDF oraz kanarki ramki `-fstack-protector-strong` GCC/Clang tam, gdzie są wspierane; buildy FreeRTOS mogą dodatkowo sprawdzać granice stosu zadań. | [hal_system.h](../../src/hal/system/hal_system.h), [flagi modułów](../api/pl/02_module_flags.md) |
 | Projekty firmware oparte na dispatcherze | Wspólny workflow VS Code/CMake dla generowanych projektów, przeniesionych modułów downstream i przykładów w repozytorium, z wyborem targetu/płytki i osobnym cache CMake dla każdego targetu. | [FwProjectWorkflow.md](FwProjectWorkflow.md) |
 | Buildy bibliotek statycznych | Dedykowane przepływy CMake/pomocnicze dla oficjalnych buildów RP na Pico SDK i STM32G474; przepływ RP dodatkowo weryfikuje generowanie ELF/BIN/UF2 i symbole wejścia aplikacji. | [build RP](../../rp_native_lib/), [build STM32](../../stm32_lib/) |
-| Bramka walidacji | Pełna lokalna bramka dla testów jednostkowych, Valgrind, analizy statycznej, buildów targetów RP/STM, fixture'a wieloobrazowego buildu ESP-IDF `esp32s3_phase3` oraz przykładów. | [runalltests.sh](../../runalltests.sh) |
+| Bramka walidacji | Pełna lokalna bramka dla testów jednostkowych, kontroli Clang ASan/UBSan/libFuzzer, Valgrind, analizy statycznej, buildów targetów RP/STM, fixture'a wieloobrazowego buildu ESP-IDF `esp32s3_phase3` oraz przykładów. | [runalltests.sh](../../runalltests.sh) |
 
 ## Rdzeń HAL
 

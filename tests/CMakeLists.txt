@@ -536,6 +536,14 @@ target_include_directories(test_bluetooth_gamepad_parser PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/bluetooth
     ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/BTstack/src
 )
+if(JH_ENABLE_SANITIZERS)
+    # BTstack v1.6.2 promotes a uint16_t vendor usage page to signed int before
+    # shifting it into a 32-bit usage value. Preserve every other sanitizer
+    # check while isolating this upstream shift-base diagnostic to its source.
+    set_property(
+        SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/BTstack/src/btstack_hid_parser.c
+        APPEND PROPERTY COMPILE_OPTIONS -fno-sanitize=shift-base)
+endif()
 target_compile_definitions(test_bluetooth_gamepad_parser PRIVATE
     HAL_TARGET_MOCK=1
     JH_BLUETOOTH_CLASSIC_HID_PROBE=1

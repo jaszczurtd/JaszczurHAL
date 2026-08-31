@@ -8,12 +8,13 @@
 # Gates (in order):
 #   1. Tool presence check
 #   2. Host unit tests (cmake + ctest, including FreeRTOS POSIX)
-#   3. Memory safety (Valgrind memcheck)
-#   4. Static analysis: cppcheck (all own code)
-#   5. Static analysis: clang-tidy (host + stm32 compile databases)
-#   6. Duplicate detection: PMD CPD (owned C/C++ and Python sources)
-#   7. Target builds (STM32 + native Pico SDK matrix + ESP-IDF)
-#   8. Examples build (native RP + STM32G474)
+#   3. Clang ASan/UBSan tests and parser fuzz smoke checks
+#   4. Memory safety (Valgrind memcheck)
+#   5. Static analysis: cppcheck (all own code)
+#   6. Static analysis: clang-tidy (host + stm32 compile databases)
+#   7. Duplicate detection: PMD CPD (owned C/C++ and Python sources)
+#   8. Target builds (STM32 + native Pico SDK matrix + ESP-IDF)
+#   9. Examples build (native RP + STM32G474)
 #
 # Usage:
 #   ./runalltests.sh                   # run everything and refresh generated files
@@ -128,7 +129,7 @@ fi
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 1: Tool presence check
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 1/8: Checking required tools"
+header "Gate 1/9: Checking required tools"
 
 REQUIRED_TOOLS=(
     cmake ninja g++ gcc make
@@ -152,6 +153,11 @@ if [[ "$missing" -ne 0 ]]; then
 fi
 pass "All required tools present."
 
+if ! "${SCRIPT_DIR}/scripts/run_sanitizer_fuzz.sh" --check-tools; then
+    fail "Clang sanitizer tools are missing. Run ./runmefirst.sh."
+    exit 1
+fi
+
 info "Verifying pinned third-party components..."
 "${SCRIPT_DIR}/third_party/update_components.sh" --verify-only
 pass "Pinned third-party components are ready."
@@ -159,7 +165,7 @@ pass "Pinned third-party components are ready."
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 2: Host unit tests
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 2/8: Host unit tests (build + ctest + FreeRTOS POSIX)"
+header "Gate 2/9: Host unit tests (build + ctest + FreeRTOS POSIX)"
 
 BUILD_DIR="${GATE_BUILD_ROOT}/host"
 rm -rf "${BUILD_DIR}"
@@ -178,9 +184,20 @@ ctest --test-dir "${BUILD_DIR}" --output-on-failure
 pass "All unit tests passed."
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# GATE 3: Valgrind memcheck
+# GATE 3: Clang sanitizers and parser fuzz smoke checks
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 3/8: Memory safety (Valgrind memcheck)"
+header "Gate 3/9: Clang ASan/UBSan and parser fuzz smoke checks"
+
+run_logged "${LOG_ROOT}/jh_sanitizer_fuzz.log" \
+    "${SCRIPT_DIR}/scripts/run_sanitizer_fuzz.sh" \
+        --build-dir "${GATE_BUILD_ROOT}/sanitizer-fuzz" \
+        --jobs "${JOBS}"
+pass "Clang ASan/UBSan and parser fuzz gate passed."
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# GATE 4: Valgrind memcheck
+# ═══════════════════════════════════════════════════════════════════════════════
+header "Gate 4/9: Memory safety (Valgrind memcheck)"
 
 MEMCHECK_REQUIRED_TESTS=(
     test_lwip_raw_engines
@@ -240,9 +257,9 @@ fi
 pass "No memory defects found."
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# GATE 4: cppcheck (all own code)
+# GATE 5: cppcheck (all own code)
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 4/8: Static analysis - cppcheck"
+header "Gate 5/9: Static analysis - cppcheck"
 
 info "Scanning src/ (vendored code excluded)..."
 cppcheck --enable=warning,performance,portability \
@@ -259,9 +276,9 @@ cppcheck --enable=warning,performance,portability \
 pass "cppcheck: no issues found."
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# GATE 5: clang-tidy (host + stm32)
+# GATE 6: clang-tidy (host + stm32)
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 5/8: Static analysis - clang-tidy"
+header "Gate 6/9: Static analysis - clang-tidy"
 
 # Generate STM32 compile database
 BUILD_STM32="${GATE_BUILD_ROOT}/stm32-host"
@@ -333,9 +350,9 @@ fi
 pass "clang-tidy: no issues found."
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# GATE 6: PMD CPD duplicate detection
+# GATE 7: PMD CPD duplicate detection
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 6/8: Duplicate detection - PMD CPD"
+header "Gate 7/9: Duplicate detection - PMD CPD"
 
 info "Scanning owned C/C++ implementations and Python scripts for duplication..."
 run_logged "${LOG_ROOT}/jh_cpd.log" \
@@ -343,12 +360,12 @@ run_logged "${LOG_ROOT}/jh_cpd.log" \
 pass "PMD CPD found zero C/C++ groups >= 100 or Python groups >= 50 tokens."
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# GATE 7: Target builds
+# GATE 8: Target builds
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 7/8: Target builds (STM32 + native Pico SDK + ESP-IDF)"
+header "Gate 8/9: Target builds (STM32 + native Pico SDK + ESP-IDF)"
 
 info "Verifying libJaszczurHAL.a (STM32G474 backend, host compiler)..."
-# Already built above in gate 5 - just verify artifact exists
+# Already built above in gate 6 - just verify artifact exists
 if [[ -f "${BUILD_STM32}/libJaszczurHAL.a" ]]; then
     SIZE=$(stat --printf="%s" "${BUILD_STM32}/libJaszczurHAL.a" 2>/dev/null || stat -f "%z" "${BUILD_STM32}/libJaszczurHAL.a" 2>/dev/null || echo "?")
     pass "libJaszczurHAL.a built successfully (${SIZE} bytes)"
@@ -554,15 +571,15 @@ run_logged "${LOG_ROOT}/jh_esp32s3_phase3.log" \
 pass "ESP32-S3 Phase 3 fixture produced a validated multi-image ESP-IDF build."
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# GATE 8: Examples build
+# GATE 9: Examples build
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 8/8: Consolidated examples (representative RP + STM32G474)"
+header "Gate 9/9: Consolidated examples (representative RP + STM32G474)"
 
 info "Building the RP2040 example gate set..."
 run_logged "${LOG_ROOT}/jh_examples_rp2040_native_build.log" \
     "${SCRIPT_DIR}/scripts/examples_dispatcher.py" build \
         --target rp2040 --gate --jobs "${JOBS}"
-pass "RP2040 example gate set built successfully; Gate 7 covers both RP2350 ISAs."
+pass "RP2040 example gate set built successfully; Gate 8 covers both RP2350 ISAs."
 
 info "Building native RP USB-multicore and SDLogger parity fixtures..."
 run_logged "${LOG_ROOT}/jh_rp_native_parity_fixtures.log" \
@@ -586,6 +603,7 @@ echo -e "${BOLD}═════════════════════�
 echo ""
 echo "  Unit tests:       PASS"
 echo "  FreeRTOS POSIX:   PASS"
+echo "  ASan/UBSan/fuzz:  PASS"
 echo "  Valgrind:         PASS"
 echo "  cppcheck:         PASS"
 echo "  clang-tidy:       PASS"

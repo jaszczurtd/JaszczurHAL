@@ -55,10 +55,11 @@ sudo apt-get install -y openocd gdb-multiarch python3-serial psmisc libusb-1.0-0
 "${SCRIPT_DIR}/third_party/update_components.sh"
 
 # Quality-gate tooling - memory safety (valgrind / `ctest -T memcheck`) and
-# static analysis (clang-tidy + cppcheck; clang-tools provides run-clang-tidy;
-# PMD CPD itself is installed by the managed component updater above).
+# dynamic analysis (Clang ASan/UBSan/libFuzzer), static analysis (clang-tidy +
+# cppcheck; clang-tools provides run-clang-tidy; PMD CPD itself is installed by
+# the managed component updater above).
 # See README "Continuous integration and quality gates".
-sudo apt-get install -y valgrind clang-tidy cppcheck clang-tools clang-format
+sudo apt-get install -y valgrind clang clang-tidy cppcheck clang-tools clang-format
 
 # Security/SBOM tooling. `generate_sbom.py` only needs Python stdlib, but the
 # vulnerability check wrapper uses osv-scanner for source/vendored dependency
@@ -157,7 +158,7 @@ tool_exists() {
   command -v "$1" >/dev/null 2>&1 || [ -x "${HOME}/.local/bin/$1" ]
 }
 
-for tool in cmake ninja g++ gcc make git python3 ip java valgrind clang-tidy cppcheck \
+for tool in cmake ninja g++ gcc make git python3 ip java valgrind clang clang-tidy cppcheck \
             run-clang-tidy clang-format osv-scanner cve-bin-tool \
             arm-none-eabi-gcc arm-none-eabi-g++ arm-none-eabi-ar \
             arm-none-eabi-ranlib arm-none-eabi-objcopy arm-none-eabi-objdump \

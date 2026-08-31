@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-30
 
+- Added one shared Clang ASan/UBSan/libFuzzer runner used by both GitHub CI and
+  the mandatory local `runalltests.sh` gate. Local full validation now executes
+  the instrumented host suite and parser fuzz smoke checks instead of leaving
+  that coverage exclusive to CI.
 - Consolidated `hal_littlefs` lifecycle, validation, mounted state, locking,
   progress configuration, path helpers and size reporting into one
   target-independent facade used by RP, STM32G474 and mock. Native targets now
