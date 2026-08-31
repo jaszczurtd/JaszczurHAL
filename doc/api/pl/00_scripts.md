@@ -21,7 +21,8 @@ rozstrzygające, gdy ten dokument i kod są ze sobą niezgodne.
 | Weryfikacja zależności bez ich zmiany | `./third_party/update_components.sh --verify-only` | Sprawdza wersje wszystkich zarządzanych komponentów, commity, wymagane pliki, stan archiwum PMD, zbudowany picotool oraz stempel łańcucha narzędzi RISC-V. |
 | Odświeżenie wszystkich śledzonych plików generowanych | `python3 scripts/sync_generated.py --write` | Uruchamia generatory funkcji, płytek, przykładów, głównego VS Code oraz SBOM i wypisuje każdy plik zmieniony podczas synchronizacji. |
 | Weryfikacja wszystkich śledzonych plików generowanych | `python3 scripts/sync_generated.py --check` | Uruchamia każdy generator w trybie weryfikacji tylko do odczytu i kończy się niepowodzeniem przy brakującym lub nieaktualnym wyjściu. |
-| Uruchomienie pełnej bramki repozytorium | `./runalltests.sh` | Czyści katalogi robocze bramki i uruchamia testy, Valgrind, analizę statyczną, CPD, buildy targetów oraz buildy przykładów. |
+| Uruchomienie pełnej bramki repozytorium | `./runalltests.sh` | Czyści katalogi robocze bramki i uruchamia testy, kontrole Clang ASan/UBSan/libFuzzer, Valgrind, analizę statyczną, CPD, buildy targetów oraz buildy przykładów. |
+| Uruchomienie bramki sanitizerów/fuzz | `scripts/run_sanitizer_fuzz.sh` | Odtwarza build hosta instrumentowany przez Clang, uruchamia wszystkie testy pod ASan/UBSan i wykonuje krótkie fuzzowanie parserów sieciowych. |
 | Obsługa projektu firmware | `vscode/entry/jh-vscode <action> --project <dir>` w Uniksie lub `vscode/entry/jh-vscode.cmd ...` w Windows | Dostarcza stabilny CLI buildu, wgrywania, monitorowania, wyboru płytki, IntelliSense oraz czyszczenia używany przez projekty VS Code. |
 | Build lub flashowanie projektu ESP-IDF | `python3 scripts/build_esp_idf.py <action> --project <dir>` | Uruchamia akcję `build`, `artifacts` lub `flash`; ustala metadane targetu/płytki ESP; przygotowuje na żądanie przypięty SDK oraz waliduje relokowalny manifest wieloobrazowy. |
 | Build przykładów przechowywanych w repozytorium | `scripts/examples_dispatcher.py build --target <target>` | Kompiluje manifesty przykładów przez tego samego dispatchera `jh-vscode` i CMake, który jest używany przez projekty firmware. |
@@ -80,9 +81,9 @@ Jednorazowa, idempotentna konfiguracja dla systemów podobnych do
 Debian/Ubuntu. Skrypt:
 
 - usuwa drzewo `.build/` repozytorium przed konfiguracją;
-- instaluje kompilator, CMake, Ninja, Python, Java, Valgrind, clang-tidy,
-  cppcheck, OpenOCD, `gdb-multiarch`, obsługę portu szeregowego, libusb oraz
-  inne pakiety hosta;
+- instaluje kompilatory, CMake, Ninja, Python, Java, Valgrind, narzędzia Clang
+  do sanitizerów i fuzzowania, clang-tidy, cppcheck, OpenOCD,
+  `gdb-multiarch`, obsługę portu szeregowego, libusb oraz inne pakiety hosta;
 - wywołuje `third_party/update_components.sh`;
 - instaluje `osv-scanner` oraz `cve-bin-tool`;
 - instaluje regułę udev dla dostępu USB BOOTSEL/picotool do RP2040/RP2350
@@ -179,7 +180,7 @@ układ przypięć i katalogów.
 
 ### `runalltests.sh`
 
-Kompletna, lokalna bramka jakości. Przed uruchomieniem swoich ośmiu bramek,
+Kompletna, lokalna bramka jakości. Przed uruchomieniem swoich dziewięciu bramek,
 wywołuje `scripts/sync_generated.py --write` dla śledzonych projekcji
 funkcji, płytek, przykładów, głównego VS Code oraz SBOM. Lokalne
 uruchomienie naprawia więc deterministyczny dryf plików generowanych i
@@ -191,22 +192,24 @@ lista generatorów jest utrzymywana w jednym miejscu. `-j N`, `--jobs N` oraz
 
 1. weryfikacja wymaganych narzędzi i zarządzanych komponentów;
 2. testy hosta, w tym opcjonalny zestaw FreeRTOS POSIX;
-3. Valgrind memcheck;
-4. cppcheck;
-5. clang-tidy dla kodu hosta/współdzielonego oraz backendu STM32, używający
+3. testy Clang ASan/UBSan i krótkie kontrole libFuzzer przez ten sam runner,
+   którego używa CI;
+4. Valgrind memcheck;
+5. cppcheck;
+6. clang-tidy dla kodu hosta/współdzielonego oraz backendu STM32, używający
    zarówno bazy danych `JH_STM32_HOST_SANITY` kompilatora hosta, jak i
    prawdziwej bazy danych ARM;
-6. wykrywanie duplikatów PMD CPD w implementacjach C/C++, których właścicielem
+7. wykrywanie duplikatów PMD CPD w implementacjach C/C++, których właścicielem
    jest repozytorium, oraz w skryptach Python;
-7. buildy STM32, RP2040/RP2350, natywnego FreeRTOS, profilu funkcji RP
+8. buildy STM32, RP2040/RP2350, natywnego FreeRTOS, profilu funkcji RP
    oraz czyste buildy ESP32-S3/ESP-IDF z walidacją artefaktów;
-8. każdy zadeklarowany przykład RP, buildy natywnych testów parytetu
+9. każdy zadeklarowany przykład RP, buildy natywnych testów parytetu
    oraz przykłady STM32.
 
 Skrypt na starcie usuwa tylko swoje zarządzane drzewa `.build/gate`,
 `.build/examples` oraz `.build/tests`. Kończy działanie przy pierwszej
 nieudanej bramce.
-Bramka 3 uruchamia każdy bezpośrednio zarejestrowany, natywny plik
+Bramka 4 uruchamia każdy bezpośrednio zarejestrowany, natywny plik
 wykonywalny testu C/C++ oznaczony jako `memcheck`. `MEMCHECK_REQUIRED_TESTS`
 pozostaje wymaganym, krytycznym podzbiorem i zapobiega ciszemu wypadnięciu
 tych zestawów z selekcji. Testy driverów Python, CMake i shell są
@@ -216,6 +219,17 @@ Konfiguracja Valgrind używa sprawiedliwego (fair) planowania wątków, dzięki
 czemu natywne testy planisty FreeRTOS POSIX są uwzględnione bez zawieszania
 się. Postęp CTest jest strumieniowany bez filtrowania zarówno do terminala,
 jak i do `.build/gate/logs/jh_memcheck.log`.
+
+### `scripts/run_sanitizer_fuzz.sh`
+
+Wspólny linuksowy runner sanitizerów używany przez lokalną Bramkę 3 oraz job CI
+`sanitizer-fuzz`. Wyszukuje niewersjonowany lub wersjonowany toolchain Clang,
+odtwarza build poniżej `.build/`, włącza ASan, UBSan i libFuzzer, uruchamia
+kompletny zestaw CTest hosta z wykrywaniem wycieków i natychmiastowym
+zatrzymaniem po wykryciu niezdefiniowanego zachowania, a następnie wykonuje
+ograniczone kontrole fuzz dla targetów HTTP, WebSocket i multipart.
+`--build-dir`, `--jobs` oraz `--fuzz-runs` wybierają zarządzane wyjście i
+obciążenie; `--check-tools` tylko sprawdza dostępność Clanga.
 
 ### `vscode/entry/jh-vscode` oraz `jh-vscode.cmd`
 

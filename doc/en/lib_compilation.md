@@ -399,7 +399,7 @@ python3 scripts/build_esp_idf.py flash \
 ```
 
 `tests/fixtures/esp32s3_phase3` is the compile/link fixture used by CI and
-Gate 7. It selects every ESP32-S3 backend delivered through Phase 3 and proves
+Gate 8. It selects every ESP32-S3 backend delivered through Phase 3 and proves
 feature resolution, component selection, compilation, linking, partition
 generation, and artifact publication. It is not a runtime hardware fixture.
 

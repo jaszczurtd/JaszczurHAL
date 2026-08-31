@@ -122,21 +122,23 @@ lists files changed by that synchronization in the final summary.
 `--check-generated` verifies the same output without repairing drift; CI uses
 this stricter mode through `scripts/sync_generated.py --check`.
 
-Runs the complete quality-gate suite (8 gates, in order):
+Runs the complete quality-gate suite (9 gates, in order):
 1. Tool-presence check
 2. Host/mock unit tests (`.build/gate/host/` + ctest, incl. FreeRTOS POSIX)
-3. Memory safety (Valgrind memcheck on all native C/C++ test executables)
-4. Static analysis: cppcheck
-5. Static analysis: clang-tidy (host + STM32 compile databases below
+3. Clang ASan/UBSan tests and bounded libFuzzer smoke checks through the same
+   runner used by CI
+4. Memory safety (Valgrind memcheck on all native C/C++ test executables)
+5. Static analysis: cppcheck
+6. Static analysis: clang-tidy (host + STM32 compile databases below
    `.build/gate/`)
-6. PMD CPD duplicate detection across owned C/C++ implementations and Python
+7. PMD CPD duplicate detection across owned C/C++ implementations and Python
    scripts
-7. Target builds (STM32G474 plus Pico SDK RP2040/RP2350 ARM/RP2350 RISC-V
+8. Target builds (STM32G474 plus Pico SDK RP2040/RP2350 ARM/RP2350 RISC-V
    entry/core probes, RP feature profiles, six representative
    `01_core_runtime`/`18_freertos_suite` ELF/BIN/UF2 builds, and one clean
    compile-only `tests/fixtures/esp32s3_phase3` build with the pinned ESP-IDF
    and validated multi-image manifest)
-8. Examples build (the dispatcher-derived `gateTargets` matrix plus dedicated
+9. Examples build (the dispatcher-derived `gateTargets` matrix plus dedicated
    target/runtime fixtures)
 
 Exits non-zero on the first failure; logs capture any warnings/errors.
@@ -1403,7 +1405,7 @@ retained-fault recovery also remain in the Phase 3.5 hardware campaign.
 |---|---|
 | `tests/fixtures/esp32s3_phase3` | Compile-only ESP-IDF project selecting every ESP32-S3 backend delivered through Phase 3. It checks feature/source/dependency resolution, compilation, linking, `two-ota-large` partition generation, and artifact publication. |
 
-CI and local Gate 7 build this fixture. A passing build does not establish
+CI and local Gate 8 build this fixture. A passing build does not establish
 runtime WiFi/socket/TLS/service/OTA/WireGuard behavior or the newly completed
 Phase 2 peripheral behavior; those require a separate hardware, lifecycle, and
 negative-security verification campaign.

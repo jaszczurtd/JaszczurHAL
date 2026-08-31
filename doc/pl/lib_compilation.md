@@ -420,7 +420,7 @@ python3 scripts/build_esp_idf.py flash \
 ```
 
 `tests/fixtures/esp32s3_phase3` to fixture buildu/konsolidacji
-używany przez CI oraz Bramkę 7. Wybiera każdy backend ESP32-S3 dostarczony
+używany przez CI oraz Bramkę 8. Wybiera każdy backend ESP32-S3 dostarczony
 przez Fazę 3 i dowodzi rozwiązywania funkcji, wyboru komponentów,
 buildu, linkowania, generowania partycji i publikacji artefaktów. Nie
 jest to sprzętowy fixture do testu działania.

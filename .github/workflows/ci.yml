@@ -612,33 +612,10 @@ jobs:
           ./scripts/ensure_sx126x.sh --force
           ./scripts/ensure_freertos_kernel.sh --force
 
-      - name: Configure ASan, UBSan and libFuzzer
-        env:
-          CC: clang
-          CXX: clang++
+      - name: Run ASan, UBSan and libFuzzer gate
         run: >-
-          cmake -B .build/ci/sanitizer-fuzz
-          -DJH_ENABLE_SANITIZERS=ON
-          -DJH_ENABLE_FUZZING=ON
-
-      - name: Build instrumented tests and fuzzers
-        run: cmake --build .build/ci/sanitizer-fuzz --parallel
-
-      - name: Run instrumented tests
-        env:
-          ASAN_OPTIONS: detect_leaks=1:strict_string_checks=1
-          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-        run: ctest --test-dir .build/ci/sanitizer-fuzz --output-on-failure
-
-      - name: Smoke fuzz network parsers
-        env:
-          ASAN_OPTIONS: detect_leaks=1:strict_string_checks=1
-          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-        run: |
-          for target in fuzz_http_server fuzz_websocket fuzz_http_multipart; do
-            ".build/ci/sanitizer-fuzz/tests/${target}" \
-              -runs=2000 -max_len=1024
-          done
+          ./scripts/run_sanitizer_fuzz.sh
+          --build-dir .build/ci/sanitizer-fuzz
 
   # ── Valgrind memcheck gate ─────────────────────────────────────────────────
   # Runs the host unit-test suite under Valgrind to catch memory defects

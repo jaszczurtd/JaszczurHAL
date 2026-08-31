@@ -212,8 +212,8 @@ require(
     'scripts/run_cpd.py --output-dir "${GATE_BUILD_ROOT}/cpd"' in quality_gate,
     "runalltests.sh does not keep CPD reports below .build/gate",
 )
-memcheck_gate = quality_gate.split('header "Gate 3/8', 1)[1].split(
-    'header "Gate 4/8', 1
+memcheck_gate = quality_gate.split('header "Gate 4/9', 1)[1].split(
+    'header "Gate 5/9', 1
 )[0]
 require(
     'ctest --test-dir "${BUILD_DIR}" -N' in memcheck_gate
@@ -275,6 +275,20 @@ for duplicated_generator in (
 require(
     "/tmp/jh_" not in quality_gate,
     "runalltests.sh still writes logs outside .build",
+)
+
+sanitizer_runner = (ROOT / "scripts" / "run_sanitizer_fuzz.sh").read_text(
+    encoding="utf-8"
+)
+require(
+    '"${REPO_ROOT}/.build/"*' in sanitizer_runner
+    and 'cmake -E remove_directory "${BUILD_DIR}"' in sanitizer_runner,
+    "sanitizer runner does not constrain its clean build below .build",
+)
+require(
+    '"${GATE_BUILD_ROOT}/sanitizer-fuzz"' in quality_gate
+    and '"${LOG_ROOT}/jh_sanitizer_fuzz.log"' in quality_gate,
+    "runalltests.sh sanitizer outputs are not below .build/gate",
 )
 
 helper = ROOT / "scripts" / "lib" / "build_artifacts.sh"

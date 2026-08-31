@@ -10,6 +10,10 @@ import sys
 
 ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).parents[1]
 WORKFLOW = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+LOCAL_GATE = (ROOT / "runalltests.sh").read_text(encoding="utf-8")
+SANITIZER_RUNNER = (ROOT / "scripts" / "run_sanitizer_fuzz.sh").read_text(
+    encoding="utf-8"
+)
 
 for obsolete_action in ("actions/checkout@v5", "actions/cache@v4"):
     if obsolete_action in WORKFLOW:
@@ -83,6 +87,46 @@ if "scripts/check_sbom.sh" in job("security-scan"):
     )
 if "needs: test" not in job("security-scan"):
     raise AssertionError("security CI must consume the SBOM verified by the test job")
+
+sanitizer_job = job("sanitizer-fuzz")
+shared_sanitizer_command = "./scripts/run_sanitizer_fuzz.sh"
+if sanitizer_job.count(shared_sanitizer_command) != 1:
+    raise AssertionError("sanitizer CI does not use the shared sanitizer runner once")
+local_sanitizer_command = '"${SCRIPT_DIR}/scripts/run_sanitizer_fuzz.sh"'
+if LOCAL_GATE.count(local_sanitizer_command) != 2:
+    raise AssertionError(
+        "the full local flow must check and execute the shared sanitizer runner"
+    )
+local_sanitizer_gate = LOCAL_GATE.split('header "Gate 3/9', 1)[1].split(
+    'header "Gate 4/9', 1
+)[0]
+if (
+    local_sanitizer_command not in local_sanitizer_gate
+    or '"${GATE_BUILD_ROOT}/sanitizer-fuzz"' not in local_sanitizer_gate
+    or "--check-tools" in local_sanitizer_gate
+):
+    raise AssertionError("local Gate 3 does not execute the shared sanitizer runner")
+for duplicated_fragment in (
+    "-DJH_ENABLE_SANITIZERS=ON",
+    "-DJH_ENABLE_FUZZING=ON",
+    "UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1",
+    "-runs=2000",
+):
+    if duplicated_fragment in sanitizer_job:
+        raise AssertionError(
+            f"sanitizer CI duplicates shared runner configuration: {duplicated_fragment}"
+        )
+for required_fragment in (
+    "-DJH_ENABLE_SANITIZERS=ON",
+    "-DJH_ENABLE_FUZZING=ON",
+    "UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1",
+    "ASAN_OPTIONS=detect_leaks=1:strict_string_checks=1",
+    "fuzz_http_server fuzz_websocket fuzz_http_multipart",
+):
+    if required_fragment not in SANITIZER_RUNNER:
+        raise AssertionError(
+            f"shared sanitizer runner is missing: {required_fragment}"
+        )
 
 windows_tooling = job("windows-tooling")
 if "'tests/test_vscode_library_workspace.py'" not in windows_tooling:

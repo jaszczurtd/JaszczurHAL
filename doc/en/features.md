@@ -34,7 +34,7 @@ the portability goal of JaszczurHAL.
 | Stack protection | Independent opt-ins provide synchronous Pico SDK/MPU/ESP-IDF stack-boundary guards and GCC/Clang `-fstack-protector-strong` frame canaries where supported; FreeRTOS builds can also check task-stack boundaries. | [hal_system.h](../../src/hal/system/hal_system.h), [module flags](../api/en/02_module_flags.md) |
 | Dispatcher-backed firmware projects | Shared VS Code/CMake workflow for generated projects, migrated downstream modules and checked-in examples, with target/board selection and per-target CMake cache isolation. | [FwProjectWorkflow.md](FwProjectWorkflow.md) |
 | Static library builds | Dedicated CMake/helper flows for official Pico SDK RP and STM32G474 builds; the RP flow also verifies ELF/BIN/UF2 generation and application-entry symbols. | [RP build](../../rp_native_lib/), [STM32 build](../../stm32_lib/) |
-| Validation gate | Full local gate for unit tests, Valgrind, static analysis, RP/STM target builds, the compile-only `esp32s3_phase3` ESP-IDF multi-image fixture, and examples. | [runalltests.sh](../../runalltests.sh) |
+| Validation gate | Full local gate for unit tests, Clang ASan/UBSan/libFuzzer checks, Valgrind, static analysis, RP/STM target builds, the compile-only `esp32s3_phase3` ESP-IDF multi-image fixture, and examples. | [runalltests.sh](../../runalltests.sh) |
 
 ## Core HAL
 

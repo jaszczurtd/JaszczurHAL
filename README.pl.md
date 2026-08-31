@@ -212,7 +212,8 @@ i linkowanie zainstalowanego pakietu nie wymaga Pythona.
 ./runalltests.sh
 ```
 
-Obejmuje testy jednostkowe hosta (z pokryciem FreeRTOS POSIX), Valgrind
+Obejmuje testy jednostkowe hosta (z pokryciem FreeRTOS POSIX), Clang
+ASan/UBSan/libFuzzer, Valgrind
 memcheck, analizę statyczną, kontrole duplikatów i dokumentacji oraz macierze
 buildów targetów/firmware. Stanowiska testowe sprzętu są udokumentowane
 i wykonywane osobno. Pełna

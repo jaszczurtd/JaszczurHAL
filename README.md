@@ -194,9 +194,10 @@ Python.
 ./runalltests.sh
 ```
 
-It covers host unit tests (with FreeRTOS POSIX coverage), Valgrind memcheck,
-static analysis, duplicate and documentation checks, and target/firmware build
-matrices. Physical hardware fixtures are documented and executed separately.
+It covers host unit tests (with FreeRTOS POSIX coverage), Clang
+ASan/UBSan/libFuzzer checks, Valgrind memcheck, static analysis, duplicate and
+documentation checks, and target/firmware build matrices. Physical hardware
+fixtures are documented and executed separately.
 The complete
 test architecture, requirements, configuration, extension rules, fixture
 procedures, and recorded results are in
