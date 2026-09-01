@@ -85,7 +85,8 @@ hal_status_t hal_eeprom_init(hal_eeprom_type_t type, uint16_t size,
   const jh_eeprom_provider_ops_t *provider = jh_eeprom_provider_get_ops(type);
   if (provider == nullptr || provider->initialize == nullptr ||
       provider->read == nullptr || provider->write == nullptr ||
-      provider->commit == nullptr || provider->reset == nullptr) {
+      provider->commit == nullptr || provider->replace_region == nullptr ||
+      provider->reset == nullptr) {
     s_provider = nullptr;
     s_size = 0u;
     hal_mutex_unlock(mutex);
@@ -232,6 +233,24 @@ hal_status_t hal_eeprom_commit(void) {
       s_provider != nullptr
           ? s_provider->commit(s_progress_callback, s_progress_ctx)
           : HAL_EUNINIT;
+  hal_mutex_unlock(mutex);
+  return status;
+}
+
+hal_status_t jh_eeprom_replace_region(uint16_t addr, const uint8_t *data,
+                                      uint16_t len, uint16_t publish_size) {
+  if (data == nullptr || len == 0u || publish_size == 0u ||
+      publish_size >= len) {
+    return HAL_EINVAL;
+  }
+  hal_mutex_t mutex = eeprom_mutex();
+  hal_mutex_lock(mutex);
+  const hal_status_t range = range_status(addr, len);
+  const hal_status_t status =
+      range == HAL_OK
+          ? s_provider->replace_region(addr, data, len, publish_size,
+                                       s_progress_callback, s_progress_ctx)
+          : range;
   hal_mutex_unlock(mutex);
   return status;
 }

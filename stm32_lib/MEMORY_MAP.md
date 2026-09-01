@@ -38,7 +38,9 @@ Effective default map:
 | `HAL_LITTLEFS_FLASH` | empty by default | 0 KB | Optional LittleFS reservation |
 | `HAL_EEPROM_FLASH` | `0x0807F000` - `0x08080000` | 4 KB | Flash-backed EEPROM / KV reservation |
 
-The EEPROM reservation is the last 4 KB of flash, currently two 2 KB pages. By
+The EEPROM reservation is the last 4 KB of flash, currently two 2 KB pages.
+`hal_kv` assigns one page to each bank, replaces only the inactive page and
+programs its publication prefix after the verified body. By
 default no flash is reserved for LittleFS, so enabling `HAL_ENABLE_LITTLEFS`
 must be paired with a non-zero `HAL_STM32_FLASH_LITTLEFS_SIZE` at compile and
 link time. The STM32 CMake helpers automatically reserve 64 KB when
@@ -59,8 +61,8 @@ reserved pages. Application code is linked only into `FLASH`, so the EEPROM
 pages are not available for normal `.text` / `.rodata`.
 
 If `HAL_STM32_FLASH_EEPROM_SIZE` or `HAL_STM32_FLASH_LITTLEFS_SIZE` is changed,
-keep the C compile definition and linker value in sync. EEPROM size must be at
-least one page. LittleFS size may be zero, or at least two pages. Both sizes
+keep the C compile definition and linker value in sync. EEPROM/KV storage must
+contain at least two pages. LittleFS size may be zero, or at least two pages. Both sizes
 must be multiples of `HAL_STM32_FLASH_PAGE_SIZE`; the linker asserts these
 constraints.
 

@@ -90,7 +90,9 @@ flash. For `HAL_EEPROM_AT24C256`, writes are committed synchronously to the
 chip in page-sized chunks; `hal_eeprom_commit()` is a no-op.
 
 **Native RP implementation:** `HAL_EEPROM_FLASH` uses the final
-`HAL_RP_FLASH_EEPROM_SIZE` bytes of physical flash (4096 bytes by default).
+`HAL_RP_FLASH_EEPROM_SIZE` bytes of physical flash. The raw EEPROM default is
+4096 bytes; enabling `HAL_ENABLE_KV` through the native CMake flow raises the
+default to 8192 bytes so each KV bank owns a separate 4096-byte erase sector.
 Writes update a RAM mirror. A dirty commit performs the complete
 partition erase and program inside one `jh_rp_flash_transaction_execute()`
 operation, so core 1, interrupts, DMA and TinyUSB follow the same safety policy
@@ -238,10 +240,17 @@ if (hal_eeprom_read_byte_ex(10, &value) == HAL_OK) {
 
 ## `hal_kv` - Key-value storage on EEPROM  *(optional - `HAL_ENABLE_KV`)*
 
-Thread-safe append-only KV/record storage on top of `hal_eeprom`.
-Uses dual-bank layout with CRC16-protected headers and records.
-Automatic garbage-collection (GC) compacts live records into the alternate bank
-when the active bank runs out of space.
+Thread-safe, power-loss-safe KV/record storage on top of `hal_eeprom`. The
+caller-selected range is divided into two equal banks. Mutations are staged in
+RAM, the complete inactive bank body is written and verified, and its
+generation header is published last. Startup validates the header, body and
+every record in both banks, then selects the newest complete generation. A
+partial newer write can therefore never hide the previous complete bank.
+
+This state machine is target-independent. RP, STM32G474, AT24C256 and the mock
+use the same `hal_kv` implementation; providers only implement physical region
+replacement and last-step publication. A future ESP32 storage provider gets
+the same behavior without client-side KV changes.
 
 ```c
 #include <hal/storage/hal_kv.h>
@@ -266,7 +275,15 @@ hal_status_t hal_kv_set_auto_commit(bool enabled);
 bool hal_kv_commit(void);
 ```
 
-- **Dependencies:** `hal_eeprom`, `hal_sync`, `hal_serial`.
+- **Dependencies:** `hal_eeprom`, `hal_crc`, `hal_sync`, `hal_serial`.
+
+**Geometry:** each bank must be an independent storage region. The native RP
+default is 8192 bytes total (two 4096-byte sectors); STM32G474 uses 4096 bytes
+total (two 2048-byte pages). Byte-addressable EEPROM providers use two
+non-overlapping logical ranges. `HAL_KV_PUBLISH_SIZE` reserves the prefix
+written last (256 bytes by default), while `HAL_KV_MAX_BANK_SIZE` bounds the
+static RAM staging buffer. Custom flash sizes must split into two erase-aligned
+banks.
 
 **Thread safety:** Thread-safe and multicore-safe. An internal singleton mutex
 created with the HAL atomic create-once helper protects all operations.
@@ -275,9 +292,16 @@ created with the HAL atomic create-once helper protects all operations.
 **Deduplication:** `hal_kv_set_u32` / `hal_kv_set_blob` skip the EEPROM write when the
 value is unchanged, avoiding unnecessary flash wear.
 
-**Commit policy:** auto-commit is enabled by default (historical behavior).
-Use `hal_kv_set_auto_commit(false)` to defer physical EEPROM/flash commit and
-coalesce multiple writes, then flush once with `hal_kv_commit()`.
+**Commit policy:** auto-commit is enabled by default. Every changed value then
+publishes one complete inactive bank. Use `hal_kv_set_auto_commit(false)` to
+stage several logical changes and publish them together with
+`hal_kv_commit()`. A failed publication remains retryable and does not activate
+the destination bank in the running process.
+
+**On-storage format:** this implementation writes format version 2. It does not
+interpret the older append-in-place version 1 layout; deployments that already
+contain version 1 data need an application migration or a deliberate storage
+reset during the update.
 
 **Example: key-value storage with integers and blobs**
 ```c
@@ -287,10 +311,10 @@ coalesce multiple writes, then flush once with `hal_kv_commit()`.
 
 void example_kv(void) {
     // Initialize EEPROM first, then KV store
-    hal_eeprom_init(HAL_EEPROM_FLASH, 4096, 0);
+    hal_eeprom_init(HAL_EEPROM_FLASH, 0, 0);
 
-    // KV storage uses dual-bank layout starting at address 0, 2KB per bank
-    hal_kv_init(0, 4096);
+    // Use the complete native reservation: 8KB on RP, 4KB on STM32G474.
+    hal_kv_init(0, hal_eeprom_size());
 
     // Store a 32-bit unsigned integer with key 1
     hal_kv_set_u32(1, 42);

@@ -904,6 +904,16 @@ void hal_mock_eeprom_clear_write_count(void);
 void hal_mock_eeprom_set_io_status(hal_status_t status);
 /** Override only EEPROM commit results; pass HAL_OK to restore success. */
 void hal_mock_eeprom_set_commit_status(hal_status_t status);
+typedef enum {
+  HAL_MOCK_EEPROM_REPLACE_FAIL_NONE = 0,
+  HAL_MOCK_EEPROM_REPLACE_FAIL_AFTER_INVALIDATE,
+  HAL_MOCK_EEPROM_REPLACE_FAIL_AFTER_BODY,
+  HAL_MOCK_EEPROM_REPLACE_FAIL_AFTER_VERIFY,
+  HAL_MOCK_EEPROM_REPLACE_FAIL_AFTER_PUBLISH,
+} hal_mock_eeprom_replace_fail_phase_t;
+/** Inject a power-loss-style failure into region replacement. */
+void hal_mock_eeprom_set_replace_fail_phase(
+    hal_mock_eeprom_replace_fail_phase_t phase);
 /** @brief Reset all mock EEPROM state (memory, type, committed flag) to
  * defaults. */
 void hal_mock_eeprom_reset(void);

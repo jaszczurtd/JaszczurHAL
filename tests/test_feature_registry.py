@@ -805,7 +805,7 @@ require(
     "feature registry implies-source count drifted",
 )
 require(
-    sum(len(feature.implies) for feature in model.features.values()) == 128,
+    sum(len(feature.implies) for feature in model.features.values()) == 129,
     "feature registry direct-edge count drifted",
 )
 require(
@@ -817,6 +817,11 @@ require(
     model.features["HAL_ENABLE_BLUETOOTH_GAMEPAD"].implies
     == ("HAL_ENABLE_BLUETOOTH_CLASSIC",),
     "Bluetooth gamepad dependency drifted",
+)
+require(
+    model.features["HAL_ENABLE_KV"].implies
+    == ("HAL_ENABLE_CRC", "HAL_ENABLE_EEPROM"),
+    "KV integrity/storage dependencies drifted",
 )
 require(
     model.features["HAL_ENABLE_SERIAL_COMMANDS"].implies
@@ -1660,7 +1665,7 @@ require(
 require(
     standalone_header_record["requestedFeatures"] == ["HAL_ENABLE_KV"]
     and standalone_header_record["resolvedFeatures"]
-    == ["HAL_ENABLE_EEPROM", "HAL_ENABLE_KV"],
+    == ["HAL_ENABLE_CRC", "HAL_ENABLE_EEPROM", "HAL_ENABLE_KV"],
     "a standalone header was not resolved as a direct context",
 )
 require(

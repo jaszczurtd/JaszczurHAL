@@ -9,7 +9,7 @@ extern "C" {
 
 /**
  * @file hal_kv.h
- * @brief Thread-safe append-only KV/record storage on top of hal_eeprom.
+ * @brief Thread-safe, power-loss-safe KV storage on top of hal_eeprom.
  */
 
 #include "hal/core/hal_status.h"
@@ -28,8 +28,16 @@ typedef struct {
 /**
  * @brief Initialize KV storage inside a selected EEPROM address range.
  *
- * Storage uses two banks within [base_addr, base_addr + size_bytes) and keeps
- * records append-only with periodic compaction (GC).
+ * Storage splits [base_addr, base_addr + size_bytes) into two equal banks.
+ * A mutation is assembled in RAM and replaces the inactive bank; its
+ * publication header is written only after the complete bank body has been
+ * written and verified. Startup validates both complete banks and selects the
+ * newest valid generation.
+ *
+ * Flash-backed banks must start and end on independently erasable boundaries.
+ * RP builds therefore reserve at least two 4096-byte sectors, while the
+ * STM32G474 default uses two 2048-byte pages. Non-flash providers expose the
+ * same publication behavior over two non-overlapping logical regions.
  */
 bool hal_kv_init(uint16_t base_addr, uint16_t size_bytes);
 
@@ -53,7 +61,7 @@ bool hal_kv_get_blob(uint16_t key, uint8_t *out, uint16_t out_size,
 /** @brief Delete key from store. */
 bool hal_kv_delete(uint16_t key);
 
-/** @brief Force compaction into the alternate bank. */
+/** @brief Compact live records and publish them in the alternate bank. */
 bool hal_kv_gc(void);
 
 /** @brief Return runtime statistics of active KV bank. */
@@ -62,12 +70,10 @@ bool hal_kv_get_stats(hal_kv_stats_t *out_stats);
 /**
  * @brief Switch the KV store between auto-commit and deferred-commit modes.
  *
- * By default the store auto-commits to underlying EEPROM/flash after every
- * write (set_u32/set_blob/delete/gc) -- this preserves the historical
- * behaviour but, on RP2040 emulated EEPROM, every commit erases and re-flashes
- * a full sector. Switching to deferred mode (`enabled = false`) lets a caller
- * coalesce several writes into a single flash commit by calling
- * hal_kv_commit() at the end of the batch.
+ * By default every logical mutation publishes one complete inactive bank.
+ * Switching to deferred mode (`enabled = false`) lets a caller coalesce
+ * several mutations into one bank publication by calling hal_kv_commit() at
+ * the end of the batch.
  *
  * Mode change itself does NOT flush pending writes; call hal_kv_commit()
  * explicitly if needed before disabling deferred mode.
@@ -80,8 +86,8 @@ hal_status_t hal_kv_set_auto_commit(bool enabled);
 /**
  * @brief Flush pending writes to non-volatile storage.
  *
- * In auto-commit mode this is a no-op (returns true). In deferred mode it
- * issues a single hal_eeprom_commit() if any dirty writes are pending.
+ * Publishes the staged image when dirty. This also retries a publication that
+ * previously failed in auto-commit mode.
  *
  * @return true on success or if nothing was dirty.
  */

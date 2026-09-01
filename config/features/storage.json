@@ -6,7 +6,7 @@
     "HAL_ENABLE_EEPROM": {},
     "HAL_ENABLE_FAT": {},
     "HAL_ENABLE_KV": {
-      "implies": ["HAL_ENABLE_EEPROM"]
+      "implies": ["HAL_ENABLE_CRC", "HAL_ENABLE_EEPROM"]
     },
     "HAL_ENABLE_LITTLEFS": {
       "buildEffects": {
