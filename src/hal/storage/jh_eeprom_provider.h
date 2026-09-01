@@ -28,6 +28,10 @@ typedef struct {
   hal_status_t (*write)(uint16_t addr, const uint8_t *data, uint16_t len,
                         hal_eeprom_progress_callback_t progress, void *ctx);
   hal_status_t (*commit)(hal_eeprom_progress_callback_t progress, void *ctx);
+  hal_status_t (*replace_region)(uint16_t addr, const uint8_t *data,
+                                 uint16_t len, uint16_t publish_size,
+                                 hal_eeprom_progress_callback_t progress,
+                                 void *ctx);
   hal_status_t (*reset)(hal_eeprom_progress_callback_t progress, void *ctx);
 } jh_eeprom_provider_ops_t;
 
@@ -43,7 +47,16 @@ typedef struct {
   hal_status_t (*store)(void *context, const uint8_t *mirror,
                         uint16_t storage_size,
                         hal_eeprom_progress_callback_t progress, void *ctx);
+  hal_status_t (*replace_region)(void *context, uint16_t addr,
+                                 const uint8_t *data, uint16_t len,
+                                 uint16_t publish_size,
+                                 hal_eeprom_progress_callback_t progress,
+                                 void *ctx);
 } jh_eeprom_flash_backend_t;
+
+/** Replace one independent storage region and publish its prefix last. */
+hal_status_t jh_eeprom_replace_region(uint16_t addr, const uint8_t *data,
+                                      uint16_t len, uint16_t publish_size);
 
 /** Return the target-selected provider for a public EEPROM type. */
 const jh_eeprom_provider_ops_t *

@@ -91,6 +91,25 @@ hal_status_t commit(hal_eeprom_progress_callback_t progress, void *ctx) {
   return status;
 }
 
+hal_status_t replace_region(uint16_t addr, const uint8_t *data, uint16_t len,
+                            uint16_t publish_size,
+                            hal_eeprom_progress_callback_t progress,
+                            void *ctx) {
+  if (!s_ready || s_backend->replace_region == nullptr) {
+    return s_ready ? HAL_EUNSUPPORTED : HAL_EUNINIT;
+  }
+  if (data == nullptr || publish_size == 0u || publish_size >= len ||
+      addr > s_storage_size || len > s_storage_size - addr) {
+    return HAL_EINVAL;
+  }
+  const hal_status_t status = s_backend->replace_region(
+      s_backend->context, addr, data, len, publish_size, progress, ctx);
+  if (status == HAL_OK) {
+    memcpy(s_backend->mirror + addr, data, len);
+  }
+  return status;
+}
+
 hal_status_t reset(hal_eeprom_progress_callback_t progress, void *ctx) {
   if (!s_ready) {
     return HAL_EUNINIT;
@@ -102,8 +121,8 @@ hal_status_t reset(hal_eeprom_progress_callback_t progress, void *ctx) {
   return commit(progress, ctx);
 }
 
-const jh_eeprom_provider_ops_t kProvider = {initialize, read_bytes, write_bytes,
-                                            commit, reset};
+const jh_eeprom_provider_ops_t kProvider = {
+    initialize, read_bytes, write_bytes, commit, replace_region, reset};
 
 } // namespace
 

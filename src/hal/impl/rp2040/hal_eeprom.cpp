@@ -53,6 +53,21 @@ hal_status_t store(void *context, const uint8_t *mirror, uint16_t storage_size,
   return status;
 }
 
+hal_status_t replace_region(void *context, uint16_t addr, const uint8_t *data,
+                            uint16_t len, uint16_t publish_size,
+                            hal_eeprom_progress_callback_t progress,
+                            void *ctx) {
+  (void)context;
+  if ((uint32_t)addr + len > s_partition.size) {
+    return HAL_EOVERFLOW;
+  }
+  notify(progress, ctx);
+  const hal_status_t status = jh_rp_flash_storage_replace_published(
+      &s_partition, addr, data, len, publish_size);
+  notify(progress, ctx);
+  return status;
+}
+
 const jh_eeprom_flash_backend_t kFlashBackend = {HAL_EEPROM_FLASH,
                                                  s_mirror,
                                                  sizeof(s_mirror),
@@ -60,7 +75,8 @@ const jh_eeprom_flash_backend_t kFlashBackend = {HAL_EEPROM_FLASH,
                                                  false,
                                                  nullptr,
                                                  load,
-                                                 store};
+                                                 store,
+                                                 replace_region};
 
 } // namespace
 

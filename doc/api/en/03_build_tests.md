@@ -210,6 +210,7 @@ applications and keep their artifacts below `.build/hardware/`:
 | `tests/hardware/rp_usb_multicore` | Concurrent CDC producers on both RP cores, record integrity, completeness and affinity in bare-metal/FreeRTOS |
 | `tests/hardware/rp_freertos_smp` | Scheduler, both cores, mutex/delay, heap and USB under FreeRTOS SMP |
 | `tests/hardware/rp_flash_transaction` | Flash coordinator sequencing, rejection paths, erase/program and recovery |
+| `tests/hardware/rp_kv_power_loss` | Dual-bank KV recovery after interruption following erase, body write, verification and publication |
 | `tests/hardware/rp_storage` | EEPROM commit/persistence, LittleFS format/remount and cross-reset mounting |
 | `tests/hardware/rp_sdlogger` | Physical SPI SD mount, deterministic append, flush/close, reset/remount, content and EEPROM log-counter persistence |
 | `tests/hardware/rp_ota` | Discovery, authentication, transfer, trial/confirm, rollback and USB/network recovery |
@@ -389,6 +390,42 @@ Run the verifier:
 python3 tests/hardware/rp_flash_transaction/verify_flash_transaction.py \
   --port /dev/serial/by-id/<device>
 ```
+
+### RP KV power-loss hardware probe
+
+`tests/hardware/rp_kv_power_loss` enables a build-only fault-injection hook in
+the native flash provider. It interrupts inactive-bank replacement after
+invalidation, body programming, body verification, or publication. After each
+case the fixture reloads the EEPROM mirror from physical flash, just as a new
+boot would, and asks shared `hal_kv` to select a bank. The first three cases
+must recover the previous value; the late error after complete publication
+must recover the new value. A deferred two-key commit is checked as well.
+
+The probe erases and owns the complete native EEPROM/KV reservation. Do not run
+it on a board whose persistent tail must be preserved. The fault-injection
+define is fixture-only and must not be used by application firmware.
+
+Build and upload with the regular workflow:
+
+```sh
+vscode/entry/jh-vscode build \
+  --project tests/hardware/rp_kv_power_loss \
+  --target rp2040 --board pico
+vscode/entry/jh-vscode upload \
+  --project tests/hardware/rp_kv_power_loss \
+  --target rp2040 --board pico \
+  --port /dev/serial/by-id/<device>
+```
+
+Run the verifier:
+
+```sh
+python3 tests/hardware/rp_kv_power_loss/verify_kv_power_loss.py \
+  --port /dev/serial/by-id/<device> --target rp2040
+```
+
+Use `--target rp2350-arm --board pico2` for Pico 2 and pass the same target to
+the verifier. Physical RP2040 and RP2350 ARM runs passed on 2026-09-02.
 
 ### RP native storage hardware probe
 

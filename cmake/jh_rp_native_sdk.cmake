@@ -30,6 +30,7 @@ jh_managed_framework_include_dirs(_jh_native_framework_include_dirs)
 jh_managed_framework_configure_sources()
 
 jh_hal_define_enabled(_jh_native_eeprom HAL_ENABLE_EEPROM)
+jh_hal_define_enabled(_jh_native_kv HAL_ENABLE_KV)
 jh_hal_define_enabled(_jh_native_internal_rtc HAL_ENABLE_INTERNAL_RTC)
 jh_feature_build_dependency_enabled(_jh_native_littlefs littlefs
     FEATURES ${JH_RESOLVED_FEATURES})
@@ -45,7 +46,11 @@ jh_hal_define_value(_jh_native_eeprom_size HAL_RP_FLASH_EEPROM_SIZE)
 jh_hal_define_value(_jh_native_littlefs_size HAL_RP_FLASH_LITTLEFS_SIZE)
 
 if(NOT _jh_native_eeprom_size)
-    set(_jh_native_eeprom_size 4096)
+    if(_jh_native_kv)
+        set(_jh_native_eeprom_size 8192)
+    else()
+        set(_jh_native_eeprom_size 4096)
+    endif()
 endif()
 if(_jh_native_littlefs AND NOT _jh_native_littlefs_size)
     set(_jh_native_littlefs_size 65536)
@@ -120,6 +125,22 @@ foreach(_storage_size IN ITEMS
             "(4096 bytes)")
     endif()
 endforeach()
+if(_jh_native_kv)
+    if(_jh_native_eeprom_reservation LESS 8192)
+        message(FATAL_ERROR
+            "HAL_ENABLE_KV requires at least two RP flash sectors "
+            "(HAL_RP_FLASH_EEPROM_SIZE >= 8192)")
+    endif()
+    math(EXPR _jh_native_kv_bank_size
+        "${_jh_native_eeprom_reservation} / 2")
+    math(EXPR _jh_native_kv_bank_remainder
+        "${_jh_native_kv_bank_size} % 4096")
+    if(NOT _jh_native_kv_bank_remainder EQUAL 0)
+        message(FATAL_ERROR
+            "Each KV bank must contain complete RP flash sectors; "
+            "HAL_RP_FLASH_EEPROM_SIZE / 2 must be a multiple of 4096")
+    endif()
+endif()
 if(_jh_native_ota)
     foreach(_ota_value IN ITEMS
             _jh_native_ota_boot_size

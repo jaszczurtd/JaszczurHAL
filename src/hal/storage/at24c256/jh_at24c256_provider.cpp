@@ -156,6 +156,67 @@ hal_status_t commit(hal_eeprom_progress_callback_t progress, void *ctx) {
   return HAL_OK;
 }
 
+hal_status_t verify_region(uint16_t addr, const uint8_t *expected,
+                           uint16_t len) {
+  uint8_t chunk[32];
+  uint16_t checked = 0u;
+  while (checked < len) {
+    uint16_t size = static_cast<uint16_t>(len - checked);
+    if (size > sizeof(chunk)) {
+      size = sizeof(chunk);
+    }
+    const hal_status_t status =
+        read_bytes(static_cast<uint16_t>(addr + checked), chunk, size);
+    if (status != HAL_OK) {
+      return status;
+    }
+    if (memcmp(chunk, expected + checked, size) != 0) {
+      return HAL_EIO;
+    }
+    checked = static_cast<uint16_t>(checked + size);
+  }
+  return HAL_OK;
+}
+
+hal_status_t replace_region(uint16_t addr, const uint8_t *data, uint16_t len,
+                            uint16_t publish_size,
+                            hal_eeprom_progress_callback_t progress,
+                            void *ctx) {
+  if (data == nullptr || publish_size == 0u || publish_size >= len ||
+      static_cast<uint32_t>(addr) + len > kDeviceSize) {
+    return HAL_EINVAL;
+  }
+
+  uint8_t invalid[HAL_AT24C256_PAGE_SIZE] = {};
+  uint16_t invalidated = 0u;
+  while (invalidated < publish_size) {
+    uint16_t size = static_cast<uint16_t>(publish_size - invalidated);
+    if (size > sizeof(invalid)) {
+      size = sizeof(invalid);
+    }
+    const hal_status_t status =
+        write_bytes(static_cast<uint16_t>(addr + invalidated), invalid, size,
+                    progress, ctx);
+    if (status != HAL_OK) {
+      return status;
+    }
+    invalidated = static_cast<uint16_t>(invalidated + size);
+  }
+
+  const uint16_t body_size = static_cast<uint16_t>(len - publish_size);
+  hal_status_t status =
+      write_bytes(static_cast<uint16_t>(addr + publish_size),
+                  data + publish_size, body_size, progress, ctx);
+  if (status == HAL_OK) {
+    status = verify_region(static_cast<uint16_t>(addr + publish_size),
+                           data + publish_size, body_size);
+  }
+  if (status == HAL_OK) {
+    status = write_bytes(addr, data, publish_size, progress, ctx);
+  }
+  return status == HAL_OK ? verify_region(addr, data, len) : status;
+}
+
 hal_status_t reset(hal_eeprom_progress_callback_t progress, void *ctx) {
   uint8_t zeros[HAL_AT24C256_PAGE_SIZE] = {};
   for (uint32_t addr = 0u; addr < kDeviceSize; addr += HAL_AT24C256_PAGE_SIZE) {
@@ -172,8 +233,8 @@ hal_status_t reset(hal_eeprom_progress_callback_t progress, void *ctx) {
   return HAL_OK;
 }
 
-const jh_eeprom_provider_ops_t kProvider = {initialize, provider_read,
-                                            provider_write, commit, reset};
+const jh_eeprom_provider_ops_t kProvider = {
+    initialize, provider_read, provider_write, commit, replace_region, reset};
 
 } // namespace
 

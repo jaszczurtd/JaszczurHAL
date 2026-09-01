@@ -43,6 +43,25 @@ hal_status_t
 jh_rp_flash_storage_replace(const jh_rp_flash_partition_t *partition,
                             const void *data, size_t size);
 
+hal_status_t
+jh_rp_flash_storage_replace_published(const jh_rp_flash_partition_t *partition,
+                                      uint32_t offset, const void *data,
+                                      size_t size, size_t publish_size);
+
+#ifdef JH_RP_FLASH_FAULT_INJECTION
+typedef enum {
+  JH_RP_FLASH_REPLACE_FAIL_NONE = 0,
+  JH_RP_FLASH_REPLACE_FAIL_AFTER_INVALIDATE,
+  JH_RP_FLASH_REPLACE_FAIL_AFTER_BODY,
+  JH_RP_FLASH_REPLACE_FAIL_AFTER_VERIFY,
+  JH_RP_FLASH_REPLACE_FAIL_AFTER_PUBLISH,
+} jh_rp_flash_replace_fail_phase_t;
+
+/** Test fixture hook; never enable in production firmware. */
+void jh_rp_flash_storage_set_replace_fail_phase(
+    jh_rp_flash_replace_fail_phase_t phase);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

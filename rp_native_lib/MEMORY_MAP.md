@@ -15,10 +15,14 @@ low address                                      physical flash end
 | firmware | LittleFS when enabled | EEPROM/KV when enabled |
 ```
 
-- `HAL_RP_FLASH_EEPROM_SIZE` defaults to 4096 bytes.
+- `HAL_RP_FLASH_EEPROM_SIZE` defaults to 4096 bytes for raw EEPROM and 8192
+  bytes when `HAL_ENABLE_KV` is enabled through the native CMake flow.
 - `HAL_RP_FLASH_LITTLEFS_SIZE` defaults to 65536 bytes when LittleFS is
   enabled through the official CMake flow.
 - Both reservations are multiples of the 4096-byte erase sector.
+- KV requires at least two sectors and each half of its selected range must be
+  sector-aligned. The two default 4096-byte banks can therefore be erased and
+  replaced independently.
 - Enabling LittleFS reserves the EEPROM tail as well, which keeps the
   filesystem start stable when EEPROM/KV is enabled later.
 

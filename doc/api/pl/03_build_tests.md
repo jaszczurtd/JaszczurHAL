@@ -225,6 +225,7 @@ co aplikacje i zapisują artefakty w `.build/hardware/`:
 | `tests/hardware/rp_usb_multicore` | Równoległe zadania generujące dane CDC na obu rdzeniach RP, integralność i kompletność danych oraz przypisanie rekordów do właściwego producenta w trybach bare metal i FreeRTOS |
 | `tests/hardware/rp_freertos_smp` | Scheduler, oba rdzenie, mutex/opóźnienie, sterta i USB pod FreeRTOS SMP |
 | `tests/hardware/rp_flash_transaction` | Sekwencjonowanie koordynatora flash, ścieżki odrzucenia, kasowanie/programowanie i odzyskiwanie |
+| `tests/hardware/rp_kv_power_loss` | Odzyskiwanie dwóch banków KV po przerwaniu po kasowaniu, zapisie treści, weryfikacji i publikacji |
 | `tests/hardware/rp_storage` | Trwały zapis w EEPROM, formatowanie i ponowne montowanie LittleFS oraz montowanie po resecie |
 | `tests/hardware/rp_sdlogger` | Fizyczne montowanie karty SD przez SPI, deterministyczne dopisywanie, opróżnianie bufora i zamykanie pliku, reset, ponowne montowanie, zawartość pliku i trwałość licznika logów w EEPROM |
 | `tests/hardware/rp_ota` | Odkrywanie, uwierzytelnianie, transfer, próba/potwierdzenie, wycofanie (rollback) i odzyskiwanie USB/sieci |
@@ -411,6 +412,43 @@ Uruchom weryfikator:
 python3 tests/hardware/rp_flash_transaction/verify_flash_transaction.py \
   --port /dev/serial/by-id/<device>
 ```
+
+### Sprzętowy test utraty zasilania podczas zapisu KV na RP
+
+`tests/hardware/rp_kv_power_loss` włącza przeznaczony wyłącznie dla stanowiska
+mechanizm fault injection w natywnym providerze flash. Przerywa on wymianę
+nieaktywnego banku po unieważnieniu, zapisie treści, jej weryfikacji albo
+publikacji. Po każdym przypadku stanowisko ponownie ładuje kopię EEPROM z
+fizycznej pamięci flash, tak jak podczas nowego uruchomienia, po czym wspólny
+`hal_kv` wybiera bank. Pierwsze trzy przypadki muszą odzyskać poprzednią
+wartość, a późny błąd po kompletnej publikacji - nową. Test obejmuje także
+odroczony commit dwóch kluczy.
+
+Stanowisko kasuje i przejmuje całą natywną rezerwację EEPROM/KV. Nie uruchamiaj
+go na płytce, której trwałe dane z końca flash muszą zostać zachowane.
+Przełącznika fault injection nie wolno używać w firmware aplikacji.
+
+Zbuduj i wgraj przez zwykły workflow:
+
+```sh
+vscode/entry/jh-vscode build \
+  --project tests/hardware/rp_kv_power_loss \
+  --target rp2040 --board pico
+vscode/entry/jh-vscode upload \
+  --project tests/hardware/rp_kv_power_loss \
+  --target rp2040 --board pico \
+  --port /dev/serial/by-id/<device>
+```
+
+Uruchom weryfikator:
+
+```sh
+python3 tests/hardware/rp_kv_power_loss/verify_kv_power_loss.py \
+  --port /dev/serial/by-id/<device> --target rp2040
+```
+
+Dla Pico 2 użyj `--target rp2350-arm --board pico2` i przekaż ten sam target
+weryfikatorowi. Fizyczne testy RP2040 oraz RP2350 ARM przeszły 2026-09-02.
 
 ### Sprzętowy test natywnego magazynu danych na RP
 

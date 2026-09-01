@@ -46,6 +46,9 @@ set(_littlefs_cmake "${JH_ROOT}/cmake/jh_littlefs.cmake")
 set(_flash_probe "${JH_ROOT}/tests/hardware/rp_flash_transaction/app.c")
 set(_flash_verifier
     "${JH_ROOT}/tests/hardware/rp_flash_transaction/verify_flash_transaction.py")
+set(_kv_probe "${JH_ROOT}/tests/hardware/rp_kv_power_loss/app.c")
+set(_kv_verifier
+    "${JH_ROOT}/tests/hardware/rp_kv_power_loss/verify_kv_power_loss.py")
 set(_usb_descriptors
     "${JH_ROOT}/src/hal/impl/rp2040/drivers/usb/rp_usb_descriptors.c")
 set(_tusb_config
@@ -82,7 +85,8 @@ foreach(_file IN ITEMS
         "${_rp_littlefs}" "${_shared_littlefs}"
         "${_littlefs_provider_header}" "${_littlefs_provider}"
         "${_littlefs_core}" "${_littlefs_cmake}"
-        "${_flash_probe}" "${_flash_verifier}"
+        "${_flash_probe}" "${_flash_verifier}" "${_kv_probe}"
+        "${_kv_verifier}"
         "${_usb_descriptors}" "${_tusb_config}"
         "${_serial_impl}" "${_freertos_cmake}" "${_freertos_config}"
         "${_freertos_hooks}" "${_freertos_riscv_tick}" "${_freertos_probe}"
@@ -123,6 +127,8 @@ file(READ "${_littlefs_provider}" _littlefs_provider_text)
 file(READ "${_littlefs_core}" _littlefs_core_text)
 file(READ "${_flash_probe}" _flash_probe_text)
 file(READ "${_flash_verifier}" _flash_verifier_text)
+file(READ "${_kv_probe}" _kv_probe_text)
+file(READ "${_kv_verifier}" _kv_verifier_text)
 file(READ "${_usb_descriptors}" _usb_descriptors_text)
 file(READ "${_tusb_config}" _tusb_config_text)
 file(READ "${_serial_impl}" _serial_impl_text)
@@ -229,6 +235,7 @@ foreach(_storage_contract IN ITEMS
         "jh_rp_flash_storage_program"
         "jh_rp_flash_storage_erase"
         "jh_rp_flash_storage_replace"
+        "jh_rp_flash_storage_replace_published"
         "jh_rp_flash_transaction_execute"
         "flash_range_erase"
         "flash_range_program"
@@ -239,6 +246,23 @@ foreach(_storage_contract IN ITEMS
     if(_storage_at EQUAL -1)
         message(FATAL_ERROR
             "Native RP flash storage contract is missing: ${_storage_contract}")
+    endif()
+endforeach()
+
+foreach(_kv_probe_contract IN ITEMS
+        "JH_RP_FLASH_REPLACE_FAIL_AFTER_INVALIDATE"
+        "JH_RP_FLASH_REPLACE_FAIL_AFTER_BODY"
+        "JH_RP_FLASH_REPLACE_FAIL_AFTER_VERIFY"
+        "JH_RP_FLASH_REPLACE_FAIL_AFTER_PUBLISH"
+        "hal_eeprom_init"
+        "hal_kv_init_ex"
+        "JHKV2"
+        "\"status\": \"pass\"")
+    string(FIND "${_kv_probe_text}\n${_kv_verifier_text}"
+        "${_kv_probe_contract}" _kv_probe_at)
+    if(_kv_probe_at EQUAL -1)
+        message(FATAL_ERROR
+            "Native RP KV hardware probe is missing: ${_kv_probe_contract}")
     endif()
 endforeach()
 

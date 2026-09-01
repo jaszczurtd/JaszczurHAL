@@ -10,8 +10,8 @@
 void setUp(void) {
   hal_mock_serial_reset();
   hal_mock_eeprom_reset();
-  hal_eeprom_init(HAL_EEPROM_FLASH, 1024, 0x50);
-  TEST_ASSERT_TRUE(hal_kv_init(0, 512));
+  hal_eeprom_init(HAL_EEPROM_FLASH, 8192, 0x50);
+  TEST_ASSERT_TRUE(hal_kv_init(0, 8192));
 }
 
 void tearDown(void) {
@@ -27,7 +27,7 @@ void test_set_get_u32_and_reinit(void) {
   TEST_ASSERT_TRUE(hal_kv_get_u32(100, &out));
   TEST_ASSERT_EQUAL_HEX32(0x12345678u, out);
 
-  TEST_ASSERT_TRUE(hal_kv_init(0, 512));
+  TEST_ASSERT_TRUE(hal_kv_init(0, 8192));
   out = 0;
   TEST_ASSERT_TRUE(hal_kv_get_u32(100, &out));
   TEST_ASSERT_EQUAL_HEX32(0x12345678u, out);
@@ -163,15 +163,76 @@ void test_ex_initialization_and_capacity_errors(void) {
   TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_kv_set_u32_ex(1u, 1u));
   TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_kv_commit_ex());
 
-  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW, hal_kv_init_ex(900u, 512u));
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW, hal_kv_init_ex(1024u, 8192u));
   hal_mock_eeprom_reset();
-  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_kv_init_ex(0u, 512u));
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_kv_init_ex(0u, 8192u));
 }
 
 void test_ex_blob_too_large_reports_overflow(void) {
-  uint8_t payload[256] = {};
+  uint8_t payload[HAL_KV_MAX_BANK_SIZE] = {};
   TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW,
                         hal_kv_set_blob_ex(777u, payload, sizeof(payload)));
+}
+
+void test_deferred_commit_publishes_one_complete_bank(void) {
+  hal_mock_eeprom_clear_write_count();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_auto_commit(false));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_u32_ex(801u, 11u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_u32_ex(802u, 22u));
+  TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_eeprom_get_write_count());
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_commit_ex());
+  TEST_ASSERT_EQUAL_UINT32(HAL_KV_MAX_BANK_SIZE + HAL_KV_PUBLISH_SIZE,
+                           hal_mock_eeprom_get_write_count());
+
+  hal_mock_kv_full_reset();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_init_ex(0u, 8192u));
+  uint32_t first = 0u;
+  uint32_t second = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_u32_ex(801u, &first));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_u32_ex(802u, &second));
+  TEST_ASSERT_EQUAL_UINT32(11u, first);
+  TEST_ASSERT_EQUAL_UINT32(22u, second);
+}
+
+void test_interrupted_publication_keeps_previous_bank(void) {
+  const hal_mock_eeprom_replace_fail_phase_t phases[] = {
+      HAL_MOCK_EEPROM_REPLACE_FAIL_AFTER_INVALIDATE,
+      HAL_MOCK_EEPROM_REPLACE_FAIL_AFTER_BODY,
+      HAL_MOCK_EEPROM_REPLACE_FAIL_AFTER_VERIFY,
+  };
+  for (const hal_mock_eeprom_replace_fail_phase_t phase : phases) {
+    hal_mock_kv_full_reset();
+    hal_mock_eeprom_reset();
+    TEST_ASSERT_EQUAL_INT(HAL_OK,
+                          hal_eeprom_init(HAL_EEPROM_FLASH, 8192u, 0x50u));
+    TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_init_ex(0u, 8192u));
+    TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_u32_ex(901u, 100u));
+
+    hal_mock_eeprom_set_replace_fail_phase(phase);
+    TEST_ASSERT_EQUAL_INT(HAL_EIO, hal_kv_set_u32_ex(901u, 200u));
+
+    hal_mock_kv_full_reset();
+    hal_mock_eeprom_set_replace_fail_phase(HAL_MOCK_EEPROM_REPLACE_FAIL_NONE);
+    TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_init_ex(0u, 8192u));
+    uint32_t value = 0u;
+    TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_u32_ex(901u, &value));
+    TEST_ASSERT_EQUAL_UINT32(100u, value);
+  }
+}
+
+void test_completed_bank_is_recovered_after_late_error(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_u32_ex(902u, 100u));
+  hal_mock_eeprom_set_replace_fail_phase(
+      HAL_MOCK_EEPROM_REPLACE_FAIL_AFTER_PUBLISH);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, hal_kv_set_u32_ex(902u, 200u));
+
+  hal_mock_kv_full_reset();
+  hal_mock_eeprom_set_replace_fail_phase(HAL_MOCK_EEPROM_REPLACE_FAIL_NONE);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_init_ex(0u, 8192u));
+  uint32_t value = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_u32_ex(902u, &value));
+  TEST_ASSERT_EQUAL_UINT32(200u, value);
 }
 
 int main(void) {
@@ -186,5 +247,8 @@ int main(void) {
   RUN_TEST(test_ex_stats_and_commit_status);
   RUN_TEST(test_ex_initialization_and_capacity_errors);
   RUN_TEST(test_ex_blob_too_large_reports_overflow);
+  RUN_TEST(test_deferred_commit_publishes_one_complete_bank);
+  RUN_TEST(test_interrupted_publication_keeps_previous_bank);
+  RUN_TEST(test_completed_bank_is_recovered_after_late_error);
   return UNITY_END();
 }

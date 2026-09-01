@@ -94,8 +94,10 @@ zapisów, aby utrwalić je we flash. Dla `HAL_EEPROM_AT24C256` dane są
 zapisywane synchronicznie do układu, stronami; `hal_eeprom_commit()` nic wtedy nie robi.
 
 **Implementacja RP:** `HAL_EEPROM_FLASH` używa ostatnich
-`HAL_RP_FLASH_EEPROM_SIZE` bajtów fizycznej pamięci flash (domyślnie 4096
-bajtów). Zapisy aktualizują kopię w RAM. Utrwalenie zmienionego stanu
+`HAL_RP_FLASH_EEPROM_SIZE` bajtów fizycznej pamięci flash. Dla samego EEPROM
+wartość domyślna wynosi 4096 bajtów. Włączenie `HAL_ENABLE_KV` przez natywny
+CMake zwiększa ją do 8192 bajtów, aby każdy bank KV miał osobny sektor kasowania
+o rozmiarze 4096 bajtów. Zapisy aktualizują kopię w RAM. Utrwalenie zmienionego stanu
 wykonuje pełne kasowanie i programowanie partycji w jednej operacji
 `jh_rp_flash_transaction_execute()`, więc rdzeń 1, przerwania, DMA i
 TinyUSB podlegają tej samej polityce bezpieczeństwa co każda inna natywna
@@ -245,11 +247,18 @@ if (hal_eeprom_read_byte_ex(10, &value) == HAL_OK) {
 
 ## `hal_kv` - przechowywanie klucz-wartość na EEPROM  *(opcjonalny - `HAL_ENABLE_KV`)*
 
-Thread-safe magazyn rekordów KV oparty na `hal_eeprom`, do którego dane są
-wyłącznie dopisywane (append-only). Używa układu dwóch banków (dual-bank) z
-nagłówkami i rekordami chronionymi CRC16. Automatyczne odśmiecanie (garbage
-collection, GC) kompaktuje aktualne rekordy do drugiego banku, gdy
-aktywnemu bankowi zabraknie miejsca.
+Thread-safe, odporny na utratę zasilania magazyn rekordów KV oparty na
+`hal_eeprom`. Zakres wybrany przez klienta jest dzielony na dwa równe banki.
+Zmiany powstają najpierw w RAM. Provider zapisuje i sprawdza całą treść
+nieaktywnego banku, a nagłówek z generacją publikuje na końcu. Podczas startu
+sprawdzane są nagłówki, treść i każdy rekord obu banków; wybierana jest
+najnowsza kompletna generacja. Częściowy nowszy zapis nie może więc ukryć
+poprzedniego kompletnego banku.
+
+Ten automat stanów jest niezależny od targetu. RP, STM32G474, AT24C256 i mock
+korzystają z tej samej implementacji `hal_kv`; providery realizują wyłącznie
+fizyczną wymianę regionu i publikację w ostatnim kroku. Przyszły provider
+storage dla ESP32 otrzyma to samo zachowanie bez zmian KV po stronie klienta.
 
 ```c
 #include <hal/storage/hal_kv.h>
@@ -274,7 +283,15 @@ hal_status_t hal_kv_set_auto_commit(bool enabled);
 bool hal_kv_commit(void);
 ```
 
-- **Zależności:** `hal_eeprom`, `hal_sync`, `hal_serial`.
+- **Zależności:** `hal_eeprom`, `hal_crc`, `hal_sync`, `hal_serial`.
+
+**Geometria:** Każdy bank musi być niezależnym regionem storage. Domyślna
+rezerwacja RP ma łącznie 8192 bajty (dwa sektory po 4096), a STM32G474 używa
+4096 bajtów (dwie strony po 2048). Providery EEPROM używają dwóch
+nienakładających się zakresów logicznych. `HAL_KV_PUBLISH_SIZE` określa prefiks
+zapisywany na końcu (domyślnie 256 bajtów), a `HAL_KV_MAX_BANK_SIZE` ogranicza
+statyczny bufor roboczy w RAM. Niestandardowy rozmiar flash musi dzielić się na
+dwa banki wyrównane do granic kasowania.
 
 **Thread safety:** API jest thread-safe i może być używane z wielu rdzeni. Wszystkie
 operacje chroni mutex singletona utworzony przez atomowy mechanizm jednokrotnej
@@ -285,10 +302,16 @@ po `hal_eeprom_init()`.
 danych do EEPROM, jeśli wartość się nie zmieniła. Ogranicza to niepotrzebne zużycie
 pamięci flash.
 
-**Automatyczny `commit`:** Automatyczne utrwalanie zmian jest domyślnie włączone, zgodnie
-z dotychczasowym zachowaniem. `hal_kv_set_auto_commit(false)` pozwala odłożyć fizyczny
-zapis do EEPROM lub flash i połączyć kilka zmian. Utrwal je potem jednym wywołaniem
-`hal_kv_commit()`.
+**Automatyczny `commit`:** Automatyczne utrwalanie zmian jest domyślnie
+włączone. Każda zmieniona wartość publikuje wtedy cały nieaktywny bank.
+`hal_kv_set_auto_commit(false)` pozwala przygotować kilka zmian i opublikować
+je razem przez `hal_kv_commit()`. Nieudana publikacja może zostać ponowiona i
+nie aktywuje banku docelowego w działającym procesie.
+
+**Format w storage:** Ta implementacja zapisuje format w wersji 2. Nie
+interpretuje starszego układu wersji 1, który dopisywał dane w miejscu.
+Wdrożenie zawierające już dane wersji 1 wymaga migracji w aplikacji albo
+świadomego resetu storage podczas aktualizacji.
 
 **Przykład: przechowywanie klucz-wartość z liczbami całkowitymi i blobami**
 ```c
@@ -298,10 +321,10 @@ zapis do EEPROM lub flash i połączyć kilka zmian. Utrwal je potem jednym wywo
 
 void example_kv(void) {
     // Najpierw inicjalizuje EEPROM, potem magazyn KV
-    hal_eeprom_init(HAL_EEPROM_FLASH, 4096, 0);
+    hal_eeprom_init(HAL_EEPROM_FLASH, 0, 0);
 
-    // Magazyn KV używa układu dual-bank zaczynającego się pod adresem 0, 2KB na bank
-    hal_kv_init(0, 4096);
+    // Cała rezerwacja natywna: 8KB na RP albo 4KB na STM32G474.
+    hal_kv_init(0, hal_eeprom_size());
 
     // Zapisuje 32-bitową liczbę całkowitą bez znaku pod kluczem 1
     hal_kv_set_u32(1, 42);
