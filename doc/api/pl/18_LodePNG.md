@@ -4,24 +4,28 @@
 
 > **Część [Dokumentacji API JaszczurHAL](../../pl/JaszczurHAL_API.md)**
 
-Zakres dokumentu: zarządzany `LodePNG` włączany przez `HAL_ENABLE_PNG` oraz
-pomocnicze funkcje Base64 dla PNG włączane przez `HAL_ENABLE_PNG_AS_BASE64`.
+Zakres dokumentu: biblioteka `LodePNG` dostarczana z JaszczurHAL i włączana
+przez `HAL_ENABLE_PNG` oraz funkcje pomocnicze do obsługi PNG w formacie Base64,
+włączane przez `HAL_ENABLE_PNG_AS_BASE64`.
 
-`LodePNG` to samodzielny koder/dekoder PNG pobierany do katalogu
-`third_party/lodepng` w commicie przypiętym w pliku
-`third_party/lodepng_version.conf`. Cienkie wrappery integracyjne w
-`src/hal/codecs/lodepng/` dołączają źródło upstream tylko przy `HAL_ENABLE_PNG` i
-udostępniają API oparte na pamięci poprzez istniejącą ścieżkę dołączania.
+`LodePNG` to samodzielna biblioteka do kodowania i dekodowania PNG. Jej źródła
+są pobierane do `third_party/lodepng` w commicie wskazanym przez
+`third_party/lodepng_version.conf`. Warstwa integracyjna w
+`src/hal/codecs/lodepng/` kompiluje źródła upstreamu tylko przy włączonym
+`HAL_ENABLE_PNG` i udostępnia API operujące na pamięci pod dotychczasową
+ścieżką nagłówka.
 
-Zarządzana wersja: `LodePNG` 20260119 z forka `jaszczurtd/lodepng`.
+Wersja dostarczana z projektem: `LodePNG` 20260119 z repozytorium
+`jaszczurtd/lodepng`.
 
-Śledzony wrapper zachowuje ABI C, gdy źródło jest kompilowane jako C++. GCC 15
-dla RP2350 RISC-V kompiluje to źródło z `-fno-inline`, aby uniknąć fałszywie
-pozytywnego wyniku optymalizatora międzyproceduralnego, zachowując przy tym
-pełną politykę ostrzeżeń. Zarządzany checkout pozostaje niezmieniony.
+Warstwa integracyjna przechowywana w repozytorium zachowuje ABI C również
+wtedy, gdy źródło jest kompilowane jako C++. W przypadku RP2350 RISC-V
+kompilator GCC 15 używa dla tego pliku opcji `-fno-inline`. Pozwala to uniknąć
+fałszywego ostrzeżenia optymalizatora międzyproceduralnego bez wyłączania
+pozostałych ostrzeżeń. Pobrane źródła biblioteki pozostają niezmienione.
 
-Autor/licencja: upstreamowy `LodePNG` jest autorstwa Lode Vandevenne i
-rozpowszechniany na licencji zlib.
+Autor/licencja: autorem projektu upstream `LodePNG` jest Lode Vandevenne.
+Biblioteka jest udostępniana na licencji zlib.
 
 ## Włączanie
 
@@ -45,10 +49,10 @@ Dla zasobów PNG zakodowanych w Base64 włącz zamiast tego flagę pomocniczą:
 `HAL_ENABLE_PNG_AS_BASE64` propaguje zarówno `HAL_ENABLE_CRYPTO`, jak i
 `HAL_ENABLE_PNG`, więc dekoder Base64 i LodePNG są kompilowane razem.
 
-Plik źródłowy jest częścią współdzielonej listy źródeł frameworka, ale jego
-zawartość kompiluje się do niczego, dopóki nie zostanie zdefiniowana flaga
-`HAL_ENABLE_PNG`. Publiczny nagłówek jest również zabezpieczony, więc kod
-korzystający z symboli `lodepng_*` musi być kompilowany z tą samą flagą.
+Plik należy do wspólnej listy źródeł frameworka, lecz bez `HAL_ENABLE_PNG`
+powstaje z niego pusta jednostka translacji. Publiczny nagłówek jest
+zabezpieczony tą samą flagą, dlatego musi być ona aktywna także podczas
+kompilowania kodu korzystającego z symboli `lodepng_*`.
 
 ## Dołączanie
 
@@ -58,32 +62,32 @@ Bezpośrednie dołączenie, bezpieczne zarówno z C, jak i C++:
 #include <hal/codecs/lodepng/lodepng.h>
 ```
 
-Dla plików C++ korzystających już z agregatora narzędzi, `tools.h` również
-udostępnia LodePNG, gdy zdefiniowano `HAL_ENABLE_PNG`:
+Jeżeli plik C++ korzysta już ze zbiorczego nagłówka narzędziowego, może uzyskać
+dostęp do LodePNG przez `tools.h`. Wymaga to `HAL_ENABLE_PNG`:
 
 ```c
 #include <tools.h>
 ```
 
-`tools_c.h` nie eksportuje ponownie samego LodePNG, ale udostępnia pomocnicze
-funkcje Base64 PNG JaszczurHAL z `tools_api.h`, gdy zdefiniowano
-`HAL_ENABLE_PNG_AS_BASE64`.
+`tools_c.h` nie udostępnia bezpośrednio API LodePNG. Przy włączonym
+`HAL_ENABLE_PNG_AS_BASE64` dołącza natomiast z `tools_api.h` funkcje pomocnicze
+JaszczurHAL obsługujące PNG zakodowane w Base64.
 
-## Profil wbudowany
+## Konfiguracja dla systemów wbudowanych
 
-Domyślnie JaszczurHAL zachowuje upstreamowe API C oparte na pamięci i
+Domyślnie JaszczurHAL zachowuje API C upstreamu operujące na pamięci i
 wyłącza:
 
-- `LODEPNG_COMPILE_DISK` - brak pomocników `FILE` / dysku.
-- `LODEPNG_COMPILE_CPP` - brak wrappera `std::vector` / `std::string`.
+- `LODEPNG_COMPILE_DISK` - bez funkcji obsługujących `FILE` i pliki na dysku.
+- `LODEPNG_COMPILE_CPP` - bez interfejsu C++ opartego na `std::vector` i `std::string`.
 
-Jeśli aplikacja rzeczywiście potrzebuje tych opcjonalnych sekcji upstream,
+Jeśli aplikacja rzeczywiście potrzebuje tych opcjonalnych sekcji biblioteki,
 zdefiniuj `HAL_LODEPNG_ENABLE_DISK` lub `HAL_LODEPNG_ENABLE_CPP` przed
 dołączeniem `hal/codecs/lodepng/lodepng.h`.
 
-Zwykłe upstreamowe flagi `LODEPNG_NO_COMPILE_*` nadal działają do dalszego
-przycinania, na przykład wyłączenia kodera lub dekodera w mocno ograniczonym
-buildzie.
+Standardowe flagi LodePNG `LODEPNG_NO_COMPILE_*` pozwalają dalej ograniczać
+zakres kompilowanego kodu, na przykład wyłączyć koder lub dekoder w buildzie
+przeznaczonym dla urządzenia z bardzo ograniczoną pamięcią.
 
 ## Zakres API
 
@@ -91,35 +95,37 @@ buildzie.
 |---|---|
 | Dekodowanie | `lodepng_decode_memory`, `lodepng_decode32`, `lodepng_decode24` |
 | Kodowanie | `lodepng_encode_memory`, `lodepng_encode32`, `lodepng_encode24` |
-| Stan zaawansowany | `lodepng_state_init`, `lodepng_state_cleanup`, `lodepng_decode`, `lodepng_encode` |
-| Pomocnicy koloru | `lodepng_color_mode_init`, `lodepng_color_mode_cleanup`, `lodepng_get_raw_size` |
+| Rozszerzona konfiguracja | `lodepng_state_init`, `lodepng_state_cleanup`, `lodepng_decode`, `lodepng_encode` |
+| Obsługa formatów koloru | `lodepng_color_mode_init`, `lodepng_color_mode_cleanup`, `lodepng_get_raw_size` |
 | Błędy | `lodepng_error_text` |
-| Pomocnicy Base64 | `pngBase64DecodedSize`, `pngBase64Decode32`, `pngBase64DecodeRgb565` |
+| Obsługa Base64 | `pngBase64DecodedSize`, `pngBase64Decode32`, `pngBase64DecodeRgb565` |
 
-## Własność pamięci
+## Zarządzanie pamięcią
 
-Proste funkcje kodowania/dekodowania alokują bufory wyjściowe za pomocą
-alokatora LodePNG. Przy domyślnym profilu alokatora zwalniaj zwrócone bufory
-za pomocą `free(ptr)`.
+Proste funkcje kodowania i dekodowania przydzielają bufory wyjściowe przez
+alokator LodePNG. Przy domyślnej konfiguracji zwalniaj je za pomocą
+`free(ptr)`.
 
 Najważniejsze reguły:
 
-- `lodepng_decode32()` i `lodepng_decode24()` alokują surowy bufor pikseli.
+- `lodepng_decode32()` i `lodepng_decode24()` przydzielają bufor samych pikseli.
 - `lodepng_encode32()` i `lodepng_encode24()` alokują bufor bajtów PNG.
-- `pngBase64DecodedSize()` waliduje Base64 i zwraca dokładną liczbę bajtów
-  zdekodowanego PNG, bez zapisywania zdekodowanych bajtów.
+- `pngBase64DecodedSize()` sprawdza poprawność Base64 i zwraca dokładny rozmiar
+  PNG po dekodowaniu, ale nie zapisuje zdekodowanych danych.
 - `pngBase64Decode32()` dekoduje Base64 do bufora roboczego PNG dostarczonego
-  przez wywołującego, a następnie alokuje wyjście RGBA8888 za pomocą LodePNG.
-- `pngBase64DecodeRgb565()` używa tego samego bufora roboczego PNG
-  dostarczonego przez wywołującego, alokuje tymczasowy bufor RGBA8888 za
-  pomocą LodePNG, konwertuje go do wyjściowego RGB565 dostarczonego przez
-  wywołującego, a następnie zwalnia tymczasowy bufor RGBA8888.
-- `lodepng_state_init()` musi być sparowane z `lodepng_state_cleanup()`.
-- Niestandardowa alokacja może być dostarczona za pomocą upstreamowej flagi
-  `LODEPNG_NO_COMPILE_ALLOCATORS` oraz zewnętrznych definicji
-  `lodepng_malloc`, `lodepng_realloc`, `lodepng_free`.
+  przez wywołującego, a następnie przez LodePNG przydziela bufor wyjściowy
+  RGBA8888.
+- `pngBase64DecodeRgb565()` używa tego samego bufora roboczego PNG. Za pomocą
+  LodePNG przydziela tymczasowy bufor RGBA8888, konwertuje obraz do bufora
+  wyjściowego RGB565 dostarczonego przez wywołującego, po czym zwalnia bufor
+  tymczasowy.
+- Każdemu wywołaniu `lodepng_state_init()` musi odpowiadać
+  `lodepng_state_cleanup()`.
+- Własny alokator można zastosować przez ustawienie flagi LodePNG
+  `LODEPNG_NO_COMPILE_ALLOCATORS` i dostarczenie definicji funkcji
+  `lodepng_malloc`, `lodepng_realloc` oraz `lodepng_free`.
 
-## Przykład: Dekodowanie do RGB565
+## Przykład: dekodowanie do RGB565
 
 ```c
 #include <tools_c.h>
@@ -148,7 +154,7 @@ static bool decode_icon_rgb565(const unsigned char *png,
 }
 ```
 
-## Przykład: Dekodowanie PNG zakodowanego w Base64
+## Przykład: dekodowanie PNG zakodowanego w Base64
 
 ```c
 #include <tools_c.h>
@@ -187,7 +193,7 @@ static bool decode_base64_icon_rgb565(const char *png_base64,
 ## Skrypt zasobów: PNG do Base64
 
 Użyj `scripts/image_to_base64.py`, aby przekształcić plik PNG w łańcuch
-znaków C, który można osadzić w firmware i zdekodować przy pomocy
+znaków C, który można osadzić w firmware i zdekodować przy włączonym
 `HAL_ENABLE_PNG_AS_BASE64`.
 
 Wypisz wygenerowaną deklarację C na konsolę:
@@ -209,7 +215,7 @@ Zapisz wygenerowany tekst do pliku:
 ./scripts/image_to_base64.py icon.png --output icon_base64.txt
 ```
 
-`--otput` jest akceptowane jako alias zgodności dla tej samej opcji. Użyj
+`--otput` jest akceptowane jako alias zachowany dla zgodności. Użyj
 `--name`, aby wybrać nazwę zmiennej C:
 
 ```bash
@@ -218,15 +224,15 @@ Zapisz wygenerowany tekst do pliku:
 
 ## Przykład: Base64 PNG do ILI9341
 
-`examples/07_display_media` pokazuje pełną ścieżkę wyświetlania:
+`examples/07_display_media` pokazuje cały proces wyświetlania obrazu:
 
-1. `pngBase64DecodedSize()` oblicza dokładną liczbę bajtów zdekodowanego PNG.
-2. Tekst Base64 jest dekodowany do dokładnie dopasowanego rozmiarem bufora
-   roboczego PNG.
-3. `lodepng_inspect()` waliduje wymiary obrazu przed pełnym dekodowaniem
+1. `pngBase64DecodedSize()` oblicza dokładny rozmiar PNG po dekodowaniu Base64.
+2. Tekst Base64 jest dekodowany do bufora roboczego o dokładnie wyliczonym
+   rozmiarze.
+3. `lodepng_inspect()` sprawdza wymiary obrazu przed pełnym dekodowaniem
    RGBA.
 4. Obrazy większe niż `hal_display_get_width()` / `hal_display_get_height()`
    są odrzucane.
-5. `lodepng_decode32()` tworzy RGBA8888.
+5. `lodepng_decode32()` dekoduje obraz do RGBA8888.
 6. `rgba8888ToRgb565()` konwertuje obraz do RGB565.
 7. `hal_display_draw_rgb_bitmap()` rysuje obraz na wyświetlaczu ILI9341.

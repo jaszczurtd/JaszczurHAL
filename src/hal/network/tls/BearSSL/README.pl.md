@@ -1,5 +1,5 @@
 # Integracja BearSSL
 
-Ten katalog zawiera provider TLS i adaptery transportu JaszczurHAL.
-Niezmieniony checkout upstream BearSSL jest zarządzany osobno w
-`third_party/BearSSL` według `third_party/bearssl_version.conf`.
+Ten katalog zawiera provider TLS JaszczurHAL i adaptery transportowe.
+Niezmieniona kopia źródeł BearSSL jest utrzymywana osobno w
+`third_party/BearSSL`, w wersji zapisanej w `third_party/bearssl_version.conf`.

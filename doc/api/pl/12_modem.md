@@ -6,11 +6,12 @@
 
 Obejmuje: `hal_modem_at`, `hal_simcom_a76xx`.
 
-## `hal_modem_at` - ogólny silnik poleceń AT  *(fasada - `HAL_ENABLE_CELLULAR_MODEM`)*
+## `hal_modem_at` - ogólny silnik poleceń AT  *(wspólne API - `HAL_ENABLE_CELLULAR_MODEM`)*
 
-Warstwa transportowa stosu modemu komórkowego. Jest właścicielem UART, bufora odbioru
-i stanu protokołu. Rozruch specyficzny dla providera, maszyna stanów i gramatyka poleceń
-znajdują się w driverach specyficznych dla rodziny (obecnie: `hal_simcom_a76xx`).
+Warstwa transportowa stosu modemu komórkowego zarządza UART-em, buforem odbiorczym i
+stanem protokołu. Sekwencje uruchamiania, maszyna stanów i składnia poleceń właściwe dla
+producenta znajdują się w driverach poszczególnych rodzin, obecnie w
+`hal_simcom_a76xx`.
 
 ```c
 #include <hal/modem/hal_modem_at.h>
@@ -67,29 +68,31 @@ void hal_modem_at_set_tick_callback(hal_modem_at_t h,
 void hal_modem_at_sleep_ms(hal_modem_at_t h, uint32_t ms);
 ```
 
-**Backend:** pojedyncza implementacja (`src/hal/modem/hal_modem_at.cpp`) współdzielona
-między targetami sprzętowymi i mockiem - opiera się w całości na `hal_uart` i `hal_millis`
-+ `hal_mutex`.
-**Thread safety:** każdy uchwyt serializuje dostęp wewnętrznie poprzez mutex
-per-instancja. Bezpieczne do wywoływania z wielu wątków/rdzeni.
-**Współpraca z watchdogiem:** każda wewnętrzna pętla odpytywania (send,
-send_with_data, listen_until) oraz każde oczekiwanie wyższego poziomu zbudowane na
-silniku (np. `hal_simcom_a76xx_wait_*`, impulsy zasilania) wywołuje callback tick
-zarejestrowany przez `hal_modem_at_set_tick_callback()` co najmniej co ~20 ms.
-Zarejestruj tick, który wywołuje `hal_watchdog_feed()` (i opcjonalnie odświeża diodę
-statusu), aby utrzymać watchdog aplikacji przy życiu podczas długich sekwencji
-rozruchu modemu.
+- **Backend:** Wszystkie targety sprzętowe i mock korzystają z jednej implementacji
+  `src/hal/modem/hal_modem_at.cpp`, opartej wyłącznie na `hal_uart`, `hal_millis` i
+  `hal_mutex`.
+
+**Thread safety:** Każdy uchwyt ma własny mutex serializujący dostęp. API można bezpiecznie
+wywoływać z wielu wątków lub rdzeni.
+
+- **Współpraca z watchdogiem:** każda wewnętrzna pętla odpytywania (send,
+  send_with_data, listen_until) oraz każde oczekiwanie wyższego poziomu zbudowane na
+  silniku, na przykład `hal_simcom_a76xx_wait_*` i impulsy zasilania, wywołuje
+  callback ticku zarejestrowany przez `hal_modem_at_set_tick_callback()` co
+  najmniej co ~20 ms. Zarejestruj callback, który wywołuje `hal_watchdog_feed()`
+  (i opcjonalnie odświeża diodę statusu), aby regularnie odświeżać watchdog
+  aplikacji podczas długich sekwencji rozruchu modemu.
 
 ---
 
 ## `hal_simcom_a76xx` - driver modemu SimCom A76xx  *(opcjonalny - `HAL_ENABLE_A7670`)*
 
-Driver wysokiego poziomu dla modemów z rodziny SimCom A76xx (A7670E/SA/G,
-A7672E/S, A7608, ...). Zbudowany na `hal_modem_at`. Zapewnia sterowanie zasilaniem,
-synchronizację rozruchu, uruchomienie SIM/sieci, dołączenie PDP, pobieranie czasu
-sieciowego, przybliżone pobieranie lokalizacji komórkowej (LBS), pobieranie namiaru
-GNSS (fix) oraz pełnego klienta MQTT (**publikacja i subskrypcja**) na bazie rodziny
-poleceń `CMQTT*`.
+Driver wysokiego poziomu dla modemów z rodziny SimCom A76xx (A7670E/SA/G, A7672E/S,
+A7608, ...), zbudowany na `hal_modem_at`. Steruje zasilaniem i synchronizuje rozruch,
+uruchamia kartę SIM i rejestrację w sieci, zestawia kontekst PDP oraz pobiera czas
+sieciowy, przybliżoną lokalizację na podstawie sieci komórkowej (LBS) i pozycję GNSS.
+Udostępnia też kompletnego klienta MQTT z publikacją i subskrypcją, opartego na
+poleceniach `CMQTT*`.
 
 ```c
 #include <hal/modem/hal_simcom_a76xx.h>
@@ -185,7 +188,7 @@ hal_modem_at_t      hal_simcom_a76xx_get_at(hal_simcom_a76xx_t h);
    Ustaw pwr_pin = -1 (i steruj GPIO z kodu aplikacji), gdy płytka
    używa odwróconej polaryzacji, wymaga bardziej rozbudowanej sekwencji
    zasilania lub uruchamiasz testy jednostkowe ze skryptem UART. W takim
-   przypadku oba poniższe pomocniki stają się operacjami pustymi (no-op).
+   przypadku oba poniższe helpery nic nie robią (no-op).
 
    hard_reset() to sekwencja SimCom PWRKEY "wymuś wyłączenie, a następnie włączenie"
    (dwa impulsy + odstępy 5 s); dla płytek bramkowanych przekaźnikiem zwykle
@@ -248,18 +251,18 @@ int  hal_simcom_a76xx_mqtt_poll(hal_simcom_a76xx_t h);
 bool hal_simcom_a76xx_mqtt_is_connected(hal_simcom_a76xx_t h, int client_index);
 ```
 
-Pomocnicy GNSS normalizują popularne warianty odpowiedzi SimCom:
+Helpery GNSS ujednolicają popularne warianty odpowiedzi SimCom:
 `+CGNSSINFO`, `+CGNSINF` i `+CGPSINFO`. `hal_simcom_a76xx_get_gnss_location()`
-najpierw upewnia się, że GNSS jest zasilone, a następnie odpytuje o namiar (fix). Zwraca
-`HAL_SIMCOM_A76XX_NOT_READY`, gdy modem odpowiada pomyślnie, ale nie ma jeszcze namiaru,
-na przykład `+CGNSSINFO: ,,,,,,,,`. Dla kształtu A7670E
+najpierw upewnia się, że GNSS jest włączony, a następnie odpytuje o pozycję. Zwraca
+`HAL_SIMCOM_A76XX_NOT_READY`, gdy modem odpowiada poprawnie, ale nie wyznaczył jeszcze pozycji,
+na przykład `+CGNSSINFO: ,,,,,,,,`. W wariancie odpowiedzi A7670E
 `+CGNSSINFO: <fix>,<sat_count>,...` pojedyncza liczba satelitów jest raportowana zarówno
 jako `satellites_used`, jak i `satellites_view`.
 
-**Potok subskrypcji MQTT:** przychodzące komunikaty docierają jako sekwencja czterech URC
+**Odbiór subskrypcji MQTT:** Przychodzące komunikaty docierają jako sekwencja czterech URC
 (`+CMQTTRXSTART:` / `+CMQTTRXTOPIC:` / `+CMQTTRXPAYLOAD:` / `+CMQTTRXEND:`) przeplatanych
-z samymi liniami tematu i ładunku. Driver składa komunikat wewnętrznie z powrotem w
-całość; aplikacja otrzymuje pojedyncze wywołanie `hal_simcom_a76xx_mqtt_message_cb_t`
+z osobnymi liniami tematu i payloadu. Driver składa je z powrotem w jeden komunikat, a
+aplikacja otrzymuje pojedyncze wywołanie `hal_simcom_a76xx_mqtt_message_cb_t`
 z wnętrza `hal_simcom_a76xx_mqtt_poll()`.
 
 `+CMQTTCONNECT: <client>,<result>` jest dekodowane przez driver. Nieudane połączenia
@@ -269,7 +272,7 @@ generują czytelną diagnostykę konsolową, na przykład:
 ERROR! [SIMCOM][MQTT] connect failed: socket connect failed (client=0, code=3)
 ```
 
-Pomyślne połączenia są również potwierdzane po surowej odpowiedzi modemu:
+Po bezpośredniej odpowiedzi modemu logowane jest również udane połączenie:
 
 ```text
 [SIMCOM][MQTT] connected successfully (client=0, code=0)
@@ -281,8 +284,8 @@ do celów diagnostyki aplikacji. Wynik `3` oznacza niepowodzenie połączenia gn
 uwierzytelnieniem MQTT; błędna nazwa użytkownika/hasło to `30`, odrzucona autoryzacja to
 `31`, a niepowodzenie handshake'u TLS to `32`.
 
-**Thread safety:** każdy uchwyt serializuje się na leżącym u podstaw mutexie
-`hal_modem_at`. Bezpieczne do wywoływania z wielu wątków/rdzeni.
+**Thread safety:** Dostęp przez każdy uchwyt jest serializowany mutexem
+`hal_modem_at`. API można bezpiecznie wywoływać z wielu wątków lub rdzeni.
 
 ---
 

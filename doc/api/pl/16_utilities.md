@@ -4,9 +4,10 @@
 
 > **Część [Dokumentacji API JaszczurHAL](../../pl/JaszczurHAL_API.md)**
 
-Obejmuje: `hal_soft_timer`, `hal_pid_controller`, `tools.h/cpp`, `SmartTimers`, `pidController`, `multicoreWatchdog`, `draw7Segment`.
+Obejmuje: `hal_soft_timer`, `hal_pid_controller`, `tools.h/cpp`, `SmartTimers`,
+`pidController`, `multicoreWatchdog`, `draw7Segment`.
 
-## `hal_soft_timer` - opakowanie C nad `SmartTimers`
+## `hal_soft_timer` - interfejs C dla `SmartTimers`
 
 ```c
 #include <hal/timers/hal_soft_timer.h>
@@ -39,13 +40,25 @@ bool hal_soft_timer_tick_table(const hal_soft_timer_table_entry_t *table,
                                uint32_t count);
 ```
 
-**Przeznaczenie:** pozwala modułom w stylu C korzystać z funkcjonalności timera bez bezpośredniego powiązania z klasą `SmartTimers`.
-**Implementacja:** wewnętrznie deleguje do `SmartTimers` (ta sama semantyka runtime).
-**Thread safety:** Thread-safe i wielordzeniowo (dziedziczy ochronę mutexem per-instancja z `SmartTimers`).
-**Pomocnicze funkcje tablicowe:** `hal_soft_timer_setup_table(...)` tworzy/konfiguruje timery na podstawie tablicy deskryptorów i opcjonalnie wywołuje `idle_cb` oraz opóźnienie między wpisami. `hal_soft_timer_tick_table(...)` odpytuje (tick) wszystkie wpisy z tej samej tablicy.
-**Reguły walidacji:** funkcje pomocnicze do tablic walidują `table != NULL` oraz `count > 0`. Dla nieprawidłowych danych wejściowych logują przez `hal_derr(...)` i zwracają `false`.
+- **Przeznaczenie:** pozwala modułom napisanym w C korzystać z timerów bez
+  bezpośredniej zależności od klasy `SmartTimers`.
+- **Implementacja:** korzysta wewnętrznie z `SmartTimers`, więc w runtime działa
+  tak samo jak ta klasa.
 
-**Przykład: cykliczny callback z opakowaniem C**
+**Thread safety:** Metody można bezpiecznie wywoływać z wielu wątków i rdzeni.
+Każdą instancję chroni mutex utworzony przez `SmartTimers`.
+
+- **Funkcje obsługujące tablicę timerów:** `hal_soft_timer_setup_table(...)`
+  tworzy i konfiguruje timery na podstawie tablicy deskryptorów. Opcjonalnie
+  wywołuje `idle_cb` i wprowadza opóźnienie między kolejnymi wpisami.
+  `hal_soft_timer_tick_table(...)` wykonuje `tick` dla wszystkich wpisów z tej
+  samej tablicy.
+- **Walidacja:** obie funkcje wymagają `table != NULL` oraz `count > 0`.
+  Dla nieprawidłowych argumentów zapisują błąd przez `hal_derr(...)`
+  i zwracają `false`.
+
+**Przykład: cykliczna funkcja zwrotna przez interfejs C**
+
 ```c
 #include <hal/timers/hal_soft_timer.h>
 
@@ -73,7 +86,7 @@ void app_task0(void) {
 
 ---
 
-## `hal_pid_controller` - opakowanie C nad `pidController`
+## `hal_pid_controller` - interfejs C dla `pidController`
 
 ```c
 #include <hal/control/hal_pid_controller.h>
@@ -108,18 +121,29 @@ bool  hal_pid_controller_is_error_stable(hal_pid_controller_t controller, float 
 bool  hal_pid_controller_is_oscillating(hal_pid_controller_t controller, float current_error, int window_size);
 ```
 
-**Przeznaczenie:** udostępnia sterowanie PID poprzez funkcje C i nieprzezroczyste uchwyty (handles), umożliwiając stopniową migrację z użycia opartego na klasach.
-**Implementacja:** wewnętrznie deleguje do `PIDController` (ta sama semantyka runtime).
-**Thread safety:** Not thread-safe. Używaj jednej instancji kontrolera na jedną pętlę sterowania albo serializuj dostęp samodzielnie.
+- **Przeznaczenie:** udostępnia regulator PID jako funkcje C operujące na
+  uchwytach ukrywających szczegóły implementacji. Pozwala dzięki temu stopniowo
+  przechodzić z API opartego na klasach.
+- **Implementacja:** korzysta wewnętrznie z `PIDController`, więc w runtime
+  działa tak samo jak ta klasa.
 
-**Anti-windup:** dwa uzupełniające się mechanizmy:
-1. **Twarde ograniczenie całki (hard clamp)** - `setMaxIntegral()` / `hal_pid_controller_set_max_integral()` ogranicza `|integral|`.
-2. **Anti-windup przez clamping** - akumulacja całki jest pomijana, gdy wyjście
-   jest nasycone w kierunku uchybu (tj. wyjście ≥ max i uchyb > 0,
-   lub wyjście ≤ min i uchyb < 0). Zapobiega to nawijaniu się całki (windup)
-   przy granicach wyjścia bez konieczności ręcznego strojenia limitu całki.
+**Thread safety:** Regulator nie synchronizuje dostępu. Każda pętla sterowania
+powinna mieć własną instancję; dostęp współbieżny trzeba zabezpieczyć po stronie
+aplikacji.
+
+**Ochrona przed nasyceniem całki (anti-windup):** regulator stosuje dwa
+uzupełniające się mechanizmy:
+
+1. **Sztywne ograniczenie całki** - `setMaxIntegral()` /
+   `hal_pid_controller_set_max_integral()` ogranicza `|integral|`.
+2. **Wstrzymanie całkowania przy nasyceniu** - regulator nie zwiększa całki,
+   gdy wyjście osiągnęło ograniczenie w kierunku uchybu (tj. wyjście ≥ max
+   i uchyb > 0 albo wyjście ≤ min i uchyb < 0). Zapobiega to dalszemu
+   narastaniu całki po osiągnięciu limitu wyjścia bez konieczności ręcznego
+   dobierania jej ograniczenia.
 
 **Przykład: sterowanie prędkością silnika**
+
 ```c
 #include <hal/control/hal_pid_controller.h>
 
@@ -157,28 +181,30 @@ void app_task0(void) {
 
 ## Narzędzia wyższego poziomu (tools.h / tools.cpp)
 
-Lokalizacja fizyczna: podstawowe funkcje pomocnicze narzędziowe znajdują się w `src/utils/*`;
-wspólne narzędzia frameworku, takie jak SmartTimers, znajdują się w swojej domenie pod `src/hal/timers/*`.
+Podstawowe funkcje pomocnicze znajdują się w `src/utils/*`. Wspólne narzędzia
+frameworka, takie jak SmartTimers, są umieszczone w katalogu swojej domeny,
+na przykład `src/hal/timers/*`.
 
-Zalecane opcje dołączania:
+Zalecane sposoby dołączania nagłówków:
+
 - `#include <tools.h>` (nagłówek agregujący w `src/`)
 - `#include <tools_c.h>` (deklaracje narzędziowe kompatybilne z C, z `src/`)
-- bezpośrednie dołączenie ze ścieżki komponentu, na przykład
+- bezpośrednie dołączenie nagłówka komponentu, na przykład
   `#include <hal/timers/smart_timers/SmartTimers.h>`
 
-Narzędzia wewnętrznie zależą od HAL.
+Ich implementacje korzystają z HAL.
 
 ### Funkcje pomocnicze do manipulacji bitami (`hal_bits`)
 
-Aliasy bitowe są definiowane z ochroną `#ifndef`, dzięki czemu aplikacja może
-dostarczyć własne, równoważne definicje przed dołączeniem tego nagłówka.
+Każdą definicję aliasu bitowego chroni `#ifndef`, dzięki czemu aplikacja może
+dostarczyć własną, równoważną definicję przed dołączeniem tego nagłówka.
 
 ```c
 #include <hal/core/hal_bits.h>
 
 #define is_set(x, mask)      // true, gdy dowolny bit z maski jest ustawiony w x
-#define set_bit(var, mask)   // OR maski w var
-#define clr_bit(var, mask)   // AND ~maski w var
+#define set_bit(var, mask)   // ustaw bity wskazane przez maskę w var
+#define clr_bit(var, mask)   // wyczyść bity wskazane przez maskę w var
 
 // Warianty operujące na indeksie bitu (utrwalone nazwy publiczne)
 #define bitSet(var, bit)     // ustaw bit o numerze 'bit' w var
@@ -191,8 +217,9 @@ dostarczyć własne, równoważne definicje przed dołączeniem tego nagłówka.
 
 ```
 
-Unikaj przekazywania wyrażeń z efektami ubocznymi (na przykład `i++` lub wywołań funkcji
-modyfikujących stan), ponieważ argumenty makra mogą zostać obliczone więcej niż raz.
+Unikaj przekazywania wyrażeń z efektami ubocznymi (na przykład `i++` lub
+wywołań funkcji modyfikujących stan), ponieważ argumenty makra mogą zostać
+obliczone więcej niż raz.
 
 ### Funkcje
 
@@ -260,13 +287,14 @@ int   getRandomEverySomeMillis(uint32_t time, int maxValue);
 float getRandomFloatEverySomeMillis(uint32_t time, float maxValue);
 ```
 
-Powyższe cztery przestarzałe funkcje pomocnicze do obsługi czasu są wyłącznie
-wrapperami kompatybilności. Ich implementacje delegują bezpośrednio do
+Powyższe cztery starsze funkcje pomocnicze do obsługi czasu służą wyłącznie
+do zachowania zgodności. Wywołują one bezpośrednio
 `hal_time_is_daylight_saving_time()`, `hal_time_adjust_cet_cest()`,
-`hal_time_is_in_range()` oraz `hal_time_extract_minutes()` odpowiednio. Nowy
-kod powinien dołączać `<hal/time/hal_time.h>` i wywoływać API HAL bezpośrednio; zobacz
+`hal_time_is_in_range()` oraz `hal_time_extract_minutes()` w tej kolejności.
+Nowy kod powinien dołączać `<hal/time/hal_time.h>` i wywoływać API HAL
+bezpośrednio; zobacz
 [Funkcje pomocnicze kalendarza oraz opcjonalny czas systemowy/NTP](15_connectivity.md)
-w kwestii semantyki granic, walidacji i przewijania (rollover).
+na temat zachowania na granicach zakresów, walidacji i zawijania wartości.
 
 ---
 
@@ -276,14 +304,18 @@ w kwestii semantyki granic, walidacji i przewijania (rollover).
 #include <hal/security/hal_crc.h>
 ```
 
-Niezależne od backendu, beztablicowe sumy kontrolne CRC dla integralności danych (**nie**
-kryptografia - do hashowania/HMAC zobacz [`hal_crypto`](07_crypto.md)). Opcjonalne, włączane przez
-`HAL_ENABLE_CRC`; włączenie `HAL_ENABLE_ONEWIRE` (lub `HAL_ENABLE_DS18B20`) również
-włącza tę funkcję, ponieważ ścieżka 1-Wire potrzebuje CRC do walidacji ROM/scratchpad. CRC
-to rodzina parametryzowana szerokością, wielomianem, wartością początkową, odbiciem bitów i końcowym XOR-em,
-dlatego każda procedura jest nazwana po konkretnym wariancie, który oblicza - celowo
-nie ma niekwalifikowanego `hal_crc16`, który po cichu wiązałby się z jednym
-wielomianem.
+Moduł udostępnia niewymagające tablic funkcje CRC, niezależne od backendu.
+Służą one do kontroli integralności danych, **nie** do zastosowań
+kryptograficznych; funkcje skrótu i HMAC opisano w
+[`hal_crypto`](07_crypto.md). Moduł jest opcjonalny i włącza go
+`HAL_ENABLE_CRC`. Włączenie `HAL_ENABLE_ONEWIRE` lub
+`HAL_ENABLE_DS18B20` także aktywuje CRC, ponieważ komunikacja 1-Wire wymaga
+weryfikacji ROM-u i scratchpada.
+
+Wariant CRC określają szerokość, wielomian, wartość początkowa, odbicie bitów
+i końcowa operacja XOR. Nazwa każdej funkcji wskazuje więc dokładnie obliczany
+wariant. Celowo nie ma ogólnej funkcji `hal_crc16`, która niejawnie narzucałaby
+jeden wielomian.
 
 ### Funkcje
 
@@ -296,17 +328,19 @@ uint16_t hal_crc16_ccitt(const uint8_t *data, size_t len, uint16_t crc); // CRC-
 uint32_t hal_crc32(const uint8_t *data, size_t len);        // CRC-32/ISO-HDLC (zlib/Ethernet)
 ```
 
-- Ziarno (seed) `crc` pozwala `hal_crc16_*` kontynuować obliczenia nad podzielonym buforem; przekaż `0`
-  dla wariantu Maxim oraz `HAL_CRC16_CCITT_INIT` (`0xFFFF`) dla CCITT, aby zacząć
-  od nowa. `hal_crc8_maxim` i `hal_crc32` są jednorazowe (one-shot).
-- `hal_crc16_maxim_check` odtwarza konwencję magistrali 1-Wire, w której urządzenia
-  transmitują CRC-16 zanegowane bitowo (dawne `hal_onewire_check_crc16`).
-- Katalogowe wartości kontrolne dla `"123456789"`: CRC-8/MAXIM `0xA1`,
+- Wartość początkowa `crc` pozwala funkcjom `hal_crc16_*` kontynuować obliczenia
+  dla kolejnych części bufora. Aby rozpocząć nowe obliczenie, przekaż `0` dla
+  wariantu Maxim albo `HAL_CRC16_CCITT_INIT` (`0xFFFF`) dla CCITT.
+  `hal_crc8_maxim` i `hal_crc32` obliczają CRC jednorazowo dla całego bufora.
+- `hal_crc16_maxim_check` odtwarza sposób transmisji używany przez urządzenia
+  1-Wire, które przesyłają CRC-16 zanegowane bitowo (dawne
+  `hal_onewire_check_crc16`).
+- Referencyjne wartości kontrolne dla `"123456789"`: CRC-8/MAXIM `0xA1`,
   CRC-16/CCITT-FALSE `0x29B1`, CRC-32 `0xCBF43926` - potwierdzone przez
   `tests/test_hal_crc.cpp`.
 
-Dodanie nowego wariantu (np. `hal_crc16_ccitt`, `hal_crc32c`) jest dodatkiem samodzielnym w tym miejscu; nigdy nie
-narusza istniejących wpisów.
+Nowy wariant, na przykład `hal_crc16_ccitt` lub `hal_crc32c`, można dodać
+niezależnie, bez zmieniania istniejących funkcji.
 
 ---
 
@@ -342,14 +376,18 @@ timer.restart();
 timer.abort();
 ```
 
-**Uwaga:** Makra `SECOND`, `SECS()`, `MINS()`, `HOURS()` są zdefiniowane w `hal/system/hal_system.h`
-(dołączanym automatycznie przez `hal/timers/smart_timers/SmartTimers.h`).
-**Thread safety:** Z założenia thread-safe i bezpieczne wielordzeniowo. Każda
-instancja od razu (eagerly) tworzy własny `hal_mutex_t`, który serializuje
-wszystkie wywołania metod. Callbacki przekazane do `begin()` są wywoływane
-poza muteksem, aby zapobiec deadlockowi.
+> **Uwaga:** Makra `SECOND`, `SECS()`, `MINS()`, `HOURS()` są zdefiniowane w
+> `hal/system/hal_system.h`
+> (dołączanym automatycznie przez `hal/timers/smart_timers/SmartTimers.h`).
+
+**Thread safety:** Po utworzeniu obiektu wszystkie metody można bezpiecznie
+wywoływać z wielu wątków i rdzeni. Każda instancja od razu tworzy własny
+`hal_mutex_t`, który chroni wywołania metod. Funkcje zwrotne przekazane do
+`begin()` są wywoływane poza sekcją chronioną mutexem, aby nie powodować
+deadlocka.
 
 **Przykład: tabela wielu timerów**
+
 ```c
 #include <hal/timers/smart_timers/SmartTimers.h>
 
@@ -409,7 +447,7 @@ enum Direction { FORWARD, BACKWARD };
 PIDController pid(float kp, float ki, float kd, float mi);
 PIDController pid;  // konstruktor domyślny - wszystkie wzmocnienia 0, limity niezainicjalizowane
 
-// Ustawiacze/pobieracze strojenia
+// Zmiana i odczyt parametrów regulatora
 pid.setKp(kp);  pid.getKp();
 pid.setKi(ki);  pid.getKi();
 pid.setKd(kd);  pid.getKd();
@@ -439,9 +477,11 @@ pid.reset();
 template<typename T> T pid_clamp(T v, T lo, T hi);
 ```
 
-**Thread safety:** Not thread-safe. Każda instancja `PIDController` powinna być używana z jednego rdzenia/wątku.
+**Thread safety:** `PIDController` nie synchronizuje dostępu. Każda instancja
+powinna być używana tylko z jednego rdzenia lub wątku.
 
 **Przykład: regulacja temperatury (styl klasy C++)**
+
 ```cpp
 #include <utils/pidController.h>
 
@@ -517,15 +557,19 @@ bool isEnvironmentStarted(void);
 // Zaplanuj natychmiastowy reset systemu
 void triggerSystemReset(void);
 
-// Nakarm watchdog sprzętowy (opakowuje hal_watchdog_feed; bezpieczne do wywołania przed setupWatchdog)
+// Nakarm watchdog sprzętowy (wywołuje hal_watchdog_feed; można użyć przed setupWatchdog)
 void watchdog_feed(void);
 ```
 
-**impl:** `hal_watchdog_enable` / `hal_watchdog_feed` / `hal_watchdog_caused_reboot`.
-**Uwaga:** Wewnętrzny timer korzysta z `SmartTimers` i jest chroniony mutexem HAL, aby zapobiec
-podwójnemu wywołaniu przy równoczesnych wywołaniach `updateWatchdogCore0/1`.
+- **Implementacja:** `hal_watchdog_enable` / `hal_watchdog_feed` /
+  `hal_watchdog_caused_reboot`.
+
+> **Uwaga:** Wewnętrzny timer korzysta z `SmartTimers` i jest chroniony mutexem
+> HAL, aby nie wywołać funkcji zwrotnej dwukrotnie po równoczesnym wywołaniu
+> `updateWatchdogCore0/1`.
 
 **Przykład: watchdog dwurdzeniowy**
+
 ```c
 #include <utils/multicoreWatchdog.h>
 
@@ -592,15 +636,20 @@ void draw7SegString(const char* str, int x, int y, int digitWidth, int digitHeig
 int get7SegStringWidth(const char* str, int digitWidth, float thickness);
 ```
 
-**Obsługiwane znaki:** `0`-`9`, hex `A`-`F`, spacja, `+`, `-`, `.`, `:`, `%`, `^`.
+**Obsługiwane znaki:** `0`-`9`, szesnastkowe `A`-`F`, spacja, `+`, `-`, `.`,
+`:`, `%`, `^`.
 
 Znaki mają proporcjonalne szerokości: `1` i spacja są węższe, `^` nieco szerszy.
 
-**Zależności:** wyłącznie `hal_display.h`. Interfejs nie używa typów specyficznych dla platformy; wszystkie parametry tekstowe to `const char*`.
+**Zależności:** wyłącznie `hal_display.h`. Interfejs nie używa typów
+specyficznych dla platformy; wszystkie parametry tekstowe to `const char*`.
 
-**Thread safety:** Thread-safe, gdy `hal_display` jest thread-safe (backend z rodziny RP). Deleguje całe rysowanie do funkcji `hal_display_*`, które są chronione mutexem.
+**Thread safety:** Funkcje można bezpiecznie wywoływać współbieżnie, jeśli
+pozwala na to `hal_display` (dotyczy backendów z rodziny RP). Rysowanie odbywa
+się przez funkcje `hal_display_*`, których stan jest chroniony mutexem.
 
 **Przykład: wyświetlacz zegara cyfrowego**
+
 ```c
 #include <utils/draw7Segment.h>
 #include <hal/display/hal_display.h>
@@ -637,6 +686,7 @@ void app_task0(void) {
 ```
 
 **Przykład: licznik na diodzie LED statusu**
+
 ```c
 #include <utils/draw7Segment.h>
 #include <hal/gpio/hal_gpio.h>

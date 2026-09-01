@@ -461,7 +461,9 @@ directional counter; the next poll or can-send event retries it. The BTstack
 notification itself is issued only by the shared CYW43 radio service while it
 owns the radio lock. Stream keeps at most one backend-accepted notification in
 flight, and `pending_tx` includes that notification in addition to locally
-queued payloads. Before accepting a new `HELLO`, Stream discards a notification
+queued payloads.
+
+Before accepting a new `HELLO`, Stream discards a notification
 that is still staged in the backend. If local submission or its completion
 callback is already in progress, the `HELLO` is refused with `HAL_EBUSY` and
 the current session remains available for a retry. Any other discard failure
@@ -588,7 +590,9 @@ connection active while MQTT traffic forced a WiFi disconnect and reconnect.
 Both bare-metal and FreeRTOS sustained 10.00 BLE echoes/s for more than 607 s
 with zero loss. Bare-metal completed 6079/6079 echoes (94.7 ms mean, 249.0 ms
 maximum latency); FreeRTOS completed 6077/6077 (93.7 ms mean, 204.1 ms
-maximum). Each run carried 34 BLE echoes through the WiFi reconnect window,
+maximum).
+
+Each run carried 34 BLE echoes through the WiFi reconnect window,
 re-established WiFi and MQTT, retained both radio-runtime references, and
 reported no BLE, Stream, MQTT, HCI, queue, or event errors. The measured
 maximum BLE poll time was 4.768 ms bare-metal and 5.618 ms FreeRTOS. The final

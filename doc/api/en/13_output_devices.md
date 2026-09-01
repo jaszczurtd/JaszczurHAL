@@ -70,15 +70,16 @@ counts/types or colours return `HAL_EINVAL`, colour writes before init return
 failures return `HAL_EIO`. `hal_rgb_led_init_ex()` keeps its historical name
 because `_ex` already denotes the explicit pixel-type variant.
 
-**impl/rp2040:** shared `hal/gpio/neopixel/jh_neopixel.*` core + RP2040 PIO transport (`hal/gpio/neopixel/rp2040_pio.h`).
-**impl/stm32g474:** shared `hal/gpio/neopixel/jh_neopixel.*` core + cycle-timed GPIO transport in `impl/stm32g474/hal_rgb_led.cpp`.
-**impl/esp32:** shared NeoPixel core + ESP-IDF RMT TX channel and bytes encoder.
-The transport supports the public 800 kHz pixel formats, waits for queued
-transmission completion, and applies the reset/latch interval before returning.
-Reinitialization disables and deletes the previous RMT channel before deleting
-its encoder. A failed delete keeps the corresponding live handle for the next
-teardown attempt; handles are cleared only after ESP-IDF confirms deletion.
-**impl/.mock:** records init parameters, pixel type, brightness and last colour; injectable via mock helpers.
+- **impl/rp2040:** shared `hal/gpio/neopixel/jh_neopixel.*` core + RP2040 PIO transport (`hal/gpio/neopixel/rp2040_pio.h`).
+- **impl/stm32g474:** shared `hal/gpio/neopixel/jh_neopixel.*` core + cycle-timed GPIO transport in `impl/stm32g474/hal_rgb_led.cpp`.
+- **impl/esp32:** shared NeoPixel core + ESP-IDF RMT TX channel and bytes encoder.
+  The transport supports the public 800 kHz pixel formats, waits for queued
+  transmission completion, and applies the reset/latch interval before returning.
+  Reinitialization disables and deletes the previous RMT channel before deleting
+  its encoder. A failed delete keeps the corresponding live handle for the next
+  teardown attempt; handles are cleared only after ESP-IDF confirms deletion.
+- **impl/.mock:** records init parameters, pixel type, brightness and last colour; injectable via mock helpers.
+
 **Thread safety:** RP2040, STM32G474, and ESP32-S3 backends are thread-safe for
 HAL calls. A HAL mutex serializes singleton strip state and transport access.
 Mock backend is unsynchronized and intended for single-threaded tests.

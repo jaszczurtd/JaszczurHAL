@@ -1,19 +1,21 @@
 # 12 - Skaner I2C i sprzętowa weryfikacja STM32G474
 
-Sprawdza rzeczywisty backend `hal_i2c` na Nucleo-G474RE przez skanowanie
-magistrali I2C i wypisywanie każdego adresu odpowiadającego ACK. Pozwala
-potwierdzić na sprzęcie działanie bare-metal I2C1 master.
+Przykład sprawdza rzeczywistą implementację `hal_i2c` na Nucleo-G474RE: skanuje
+magistralę I2C i wypisuje każdy adres, który odpowie sygnałem ACK. Pozwala w ten
+sposób potwierdzić na sprzęcie działanie I2C1 jako kontrolera magistrali w
+trybie bare metal.
 
 - **I2C1**: SCL = **PB8**, SDA = **PB9** (złącze rozszerzeń NUCLEO: D15 = SCL, D14 = SDA)
-- standard mode 100 kHz; TIMINGR używa jawnie wybranego zegara kernel HSI16 i
+- tryb standardowy 100 kHz; TIMINGR używa jawnie wybranego zegara HSI16 i
   pozostaje niezależny od SYSCLK/PCLK1
-- używa `hal_i2c_scan()` i przekazuje `hal_watchdog_feed` jako callback każdej
-  próby; formatowanie i powtarzanie co dwie sekundy pozostają w aplikacji
+- używa `hal_i2c_scan()` i przekazuje `hal_watchdog_feed` jako funkcję zwrotną
+  wywoływaną przy każdej próbie; formatowanie i powtarzanie skanowania co dwie
+  sekundy pozostają w aplikacji
 - konsola: USART2 / ST-Link Virtual COM Port, **115200 8N1**
 
-Trasa I2C1 została fizycznie sprawdzona na NUCLEO-G474RE z modułami PCF8563
-(`0x51`) i DS3231 (`0x68`). Skaner używa 100 kHz; ta sama trasa PB9/PB8 jest
-sprawdzana przy 400 kHz przez `examples/16_rtc_backends`.
+Połączenie I2C1 zostało fizycznie sprawdzone na NUCLEO-G474RE z modułami
+PCF8563 (`0x51`) i DS3231 (`0x68`). Skaner używa 100 kHz; to samo połączenie
+PB9/PB8 jest sprawdzane przy 400 kHz przez `examples/16_rtc_backends`.
 
 ## Połączenia sprzętowe
 
@@ -41,10 +43,10 @@ Dla modułu DS3231 ze złączem `+ D C NC -` użyj:
 | `NC` | Pozostaw niepodłączony |
 | `-` | `GND` |
 
-Zasil moduł napięciem 3,3 V, aby jego rezystory podciągające I2C również
-kończyły się na 3,3 V.
+Zasil moduł napięciem 3,3 V, aby jego rezystory podciągające I2C również były
+podłączone do 3,3 V.
 
-## Build i wgrywanie (Linux Mint / Debian-like)
+## Kompilacja i wgrywanie (Linux Mint oraz systemy oparte na Debianie)
 
 ```bash
 sudo apt update
@@ -85,15 +87,16 @@ obsługę START / adres / ACK / STOP.
 
 | Objaw | Prawdopodobna przyczyna |
 |---|---|
-| `(no devices found)` w każdej rundzie | Brak lub zbyt słabe podciągnięcia; zamienione SDA/SCL; brak zasilania urządzenia; niewłaściwy zakres adresów |
+| `(no devices found)` przy każdym skanowaniu | Brak lub zbyt słabe podciągnięcia; zamienione SDA/SCL; brak zasilania urządzenia; niewłaściwy zakres adresów |
 | **Każdy** adres 0x08..0x77 zgłasza urządzenie | SDA zwarte do masy albo bez podciągnięcia; nie są to prawdziwe ACK |
 | Brak danych w konsoli mimo zasilania | Zły port lub baud albo terminal otwarty przed resetem; naciśnij czarny RESET B2 |
 | `st-info --probe` niczego nie znajduje | Użyj portu USB CN1 ST-LINK; sprawdź `dmesg \| tail` pod kątem `ttyACM0` |
-| Znaleziony adres jest przesunięty o jeden | To adresy 7-bitowe; część datasheetów podaje przesuniętą postać 8-bitową |
+| Znaleziony adres jest przesunięty o jeden | To adresy 7-bitowe; część dokumentacji układów podaje przesuniętą postać 8-bitową |
 
 ## Uwagi
 
-- Ten fixture sprawdza bus 0 = I2C1. Backend STM32G474 obsługuje też bus 1 =
-  I2C2 z prawidłową parą alternatywnych funkcji SDA/SCL.
-- I2C1 i I2C2 jawnie wybierają HSI16 jako zegar kernel. Presety TIMINGR 16 MHz
-  pozostają poprawne po zmianie SYSCLK lub zegara APB.
+- To stanowisko testowe sprawdza magistralę 0, czyli I2C1. Implementacja dla
+  STM32G474 obsługuje też magistralę 1, czyli I2C2, z prawidłową parą
+  alternatywnych funkcji SDA/SCL.
+- I2C1 i I2C2 jawnie wybierają HSI16 jako źródło zegara. Ustawienia TIMINGR dla
+  16 MHz pozostają poprawne po zmianie SYSCLK lub zegara APB.

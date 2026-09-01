@@ -1,7 +1,6 @@
 # JaszczurHAL Examples
 
-The `examples/` tree contains consolidated dispatcher-backed firmware projects.
-Each project has its own
+The `examples/` tree contains a set of simple projects that demonstrate the core capabilities of JaszczurHAL. Each project has its own
 generated `.vscode/jaszczurhal.project.json`; opening that directory directly
 in VS Code exposes the same Build, Upload, Serial Monitor, Clean, Config Dump,
 OTA, and board-selection tasks as a standalone firmware project.
@@ -11,53 +10,8 @@ project coverage, supported targets, default-gate targets, board profiles,
 variants, sources, and feature definitions. Generated manifests are consumed
 by `vscode/entry/jh-vscode` and `cmake/jh_firmware_project`.
 
-## Matrix and gate policy
-
-A configuration is one base project or project variant built for one target.
-The dispatcher registry derives the complete supported and default-gate
-matrices. Inspect the current result instead of maintaining a second count:
-
-```bash
-scripts/examples_dispatcher.py list
-```
-
-Gate 6 also builds representative core-runtime and FreeRTOS firmware through
-the direct native path for each RP toolchain/architecture.
-
-Generated manifests distinguish two target lists:
-
-- `example.targets` contains every target on which a base project is supported;
-- `example.gateTargets` is a validated subset selected by the default examples
-  gate. Unless a registry entry overrides it, generation selects supported
-  `rp2040` and `stm32g474` targets.
-
-Variants have their own `targets` and `gateTargets`. A target absent from
-`targets` is unsupported; a target present in `targets` but absent from
-`gateTargets` remains available for the full matrix without extending the
-default gate.
-
-`scripts/examples_dispatcher.py build` without `--gate` builds every supported
-base/variant configuration for the requested target. Adding `--gate` restricts
-the run to configurations whose `gateTargets` contain that target:
-
-```bash
-# Complete matrix for one target.
-scripts/examples_dispatcher.py build --target rp2350-arm --jobs "$(nproc)"
-
-# Default examples gate for each supported target.
-scripts/examples_dispatcher.py build \
-  --target rp2040 --gate --jobs "$(nproc)"
-scripts/examples_dispatcher.py build \
-  --target rp2350-arm --gate --jobs "$(nproc)"
-scripts/examples_dispatcher.py build \
-  --target stm32g474 --gate --jobs "$(nproc)"
-```
-
 ## Project catalog
 
-The registry describes only the current projects. Consolidated projects keep
-related behaviors in one firmware image or in a small set of explicit variants
-instead of recompiling the complete HAL for every individual demonstration.
 
 Target abbreviations used below are `R0` = `rp2040`, `RA` = `rp2350-arm`,
 `RV` = `rp2350-riscv`, and `S` = `stm32g474`.
@@ -106,11 +60,13 @@ and belong to separate physical radio pairs. The `probe` variant validates
 capabilities, calibration, current RSSI and CAD without transmitting. The base
 and `responder` variants use SF9/10 dBm, while `sf7` and `responder-sf7` provide
 the deterministic SF7/6 dBm hardware-test pair.
+
 The `link` and `link-responder` variants exchange a correlated binary 500-byte
 `echo` command and response through the shared command router. Both directions
 exercise addressing, request identifiers, three-fragment reassembly, duplicate
 suppression and retransmission. The handler route also allows the implemented
 `BLE_STREAM` source without adding BLE transport code to this example.
+
 SX1261, SX1276 and SX1278 remain experimental software-only integrations and
 do not add example board profiles or claim physical support for this fixture.
 

@@ -195,12 +195,16 @@ On Windows, CMake caches and compiler dependency files live below the short
 bootstrap `BuildRoot`, grouped by a stable project-path hash and target/board.
 Final ELF, BIN, HEX, UF2, MAP, OTA, and patched compile-database files remain
 under the project's declared `buildDir`. `refresh-intellisense` reads the raw
-database from the short CMake tree and writes its stable project copy. Each
+database from the short CMake tree and writes its stable project copy.
+
+Each
 successful build also refreshes artifacts from the selected target tree, so a
 Ninja no-op after a target switch cannot leave another target's firmware in
 `buildDir`. Starting a new build removes the uploadable stable artifact set;
 if configuration or compilation fails, a previous target image cannot remain
-available for a later upload. `clean` removes both managed locations after
+available for a later upload.
+
+`clean` removes both managed locations after
 applying the normal path-safety checks.
 
 ESP-IDF projects use their declared `buildDir` directly instead of the short
@@ -306,10 +310,12 @@ The native launcher, shared build runtime, generated VS Code task override,
 line-ending policy, component manager, host bootstrap, four-family CMake
 firmware matrix, COM/BOOTSEL upload paths, OTA firewall backend, debug-tool
 discovery, portable socket-header gate, production ESP32-S3 ESP-IDF
-build/flash/monitor, and Windows CI are available. Full POSIX socket,
-FreeRTOS POSIX, and Bash-driven BearSSL integration tests remain explicitly
+build/flash/monitor, and Windows CI are available.
+
+Full POSIX socket, FreeRTOS POSIX, and Bash-driven BearSSL integration tests remain explicitly
 Linux-only. The native Windows OTA callback, trial confirmation, and automatic
-rollback have been validated on Pico 2 W over a trusted `Private` LAN. OTA
-hardware requires local fixture credentials; hardware debug additionally
+rollback have been validated on Pico 2 W over a trusted `Private` LAN.
+
+OTA hardware requires local fixture credentials; hardware debug additionally
 requires a connected SWD probe. The Fiesta desktop SerialConfigurator remains
 a Linux application and is outside the native Windows firmware-workflow scope.

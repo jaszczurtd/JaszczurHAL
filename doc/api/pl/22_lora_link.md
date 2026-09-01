@@ -4,20 +4,23 @@
 
 > **Część [dokumentacji API JaszczurHAL](../../pl/JaszczurHAL_API.md)**
 
-`hal_lora_link` jest niewielką, prywatną warstwą komunikacji point-to-point nad
-jednym skonfigurowanym uchwytem [`hal_lora_radio`](21_lora.md). Dodaje
-adresowanie 16-bitowe, 32-bitowe sekwencje wiadomości, potwierdzenia,
-ograniczoną liczbę ponowień całej wiadomości, eliminowanie duplikatów i
-przezroczystą fragmentację. Opcjonalny ChaCha20-Poly1305 zapewnia poufność i
-uwierzytelnianie każdego fragmentu danych oraz uwierzytelnia potwierdzenia.
+`hal_lora_link` to niewielka warstwa bezpośredniej wymiany wiadomości
+przeznaczona dla JaszczurHAL. Działa nad jednym skonfigurowanym uchwytem
+[`hal_lora_radio`](21_lora.md). Dodaje adresowanie 16-bitowe, 32-bitowe numery
+sekwencyjne wiadomości, potwierdzenia, ograniczoną liczbę ponowień całej
+wiadomości, usuwanie duplikatów i automatyczną fragmentację. Opcjonalny
+ChaCha20-Poly1305 szyfruje i uwierzytelnia każdy fragment danych oraz
+uwierzytelnia potwierdzenia.
 
-Ten protokół jest specyficzny dla JaszczurHAL. Nie jest LoRaWAN, nie ma
-certyfikacji LoRa Alliance, nie jest routowalny ani zgodny z bramkami LoRaWAN.
-Aplikacja odpowiada za zgodne z prawem częstotliwość, moc, airtime i duty cycle.
+Jest to protokół właściwy dla JaszczurHAL. Nie jest zgodny z LoRaWAN ani
+certyfikowany przez LoRa Alliance, nie zapewnia routingu i nie współpracuje
+z bramkami LoRaWAN. Aplikacja odpowiada za zgodny z przepisami dobór
+częstotliwości, mocy, czasu transmisji i współczynnika zajętości pasma
+(duty cycle).
 
 ## Włączanie modułu
 
-Wybierz łącze oraz dokładnie jednego providera surowej komunikacji radiowej:
+Włącz łącze oraz obsługę dokładnie jednej rodziny układów radiowych:
 
 ```c
 #pragma once
@@ -26,26 +29,26 @@ Wybierz łącze oraz dokładnie jednego providera surowej komunikacji radiowej:
 #define HAL_ENABLE_LORA_LINK
 ```
 
-`HAL_ENABLE_LORA_LINK` propaguje `HAL_ENABLE_LORA` i `HAL_ENABLE_CRC`.
-Wybrany provider SX126x lub SX127x propaguje `HAL_ENABLE_SPI`. Jeśli używasz
+`HAL_ENABLE_LORA_LINK` automatycznie włącza `HAL_ENABLE_LORA` i `HAL_ENABLE_CRC`.
+Wybrana rodzina SX126x lub SX127x włącza również `HAL_ENABLE_SPI`. Jeśli używasz
 `HAL_LORA_LINK_SECURITY_CHACHA20_POLY1305`, zdefiniuj również
 `HAL_ENABLE_CRYPTO`.
 
-Przed dołączeniem `hal_config.h` można ustawić następujące ograniczenia czasu
-buildu:
+Przed dołączeniem `hal_config.h` można ustawić następujące limity kompilacyjne:
 
-| Makro | Domyślnie | Poprawny zakres | Przeznaczenie |
+| Makro | Domyślnie | Dozwolony zakres | Przeznaczenie |
 |---|---:|---:|---|
-| `HAL_LORA_LINK_MAX_INSTANCES` | 2 | 1..255 | Statyczne sloty łączy oznaczone generacją |
-| `HAL_LORA_LINK_MAX_MESSAGE_SIZE` | 1024 | 1..4096 | Należące do łącza bufory kopiowanych wiadomości TX i RX |
-| `HAL_LORA_LINK_MAX_PEERS` | 8 | 1..32 | Liczba okien eliminowania duplikatów źródło/sesja przechowywanych przez łącze |
+| `HAL_LORA_LINK_MAX_INSTANCES` | 2 | 1..255 | Liczba miejsc w statycznej puli uchwytów oznaczonych numerem generacji |
+| `HAL_LORA_LINK_MAX_MESSAGE_SIZE` | 1024 | 1..4096 | Rozmiar wewnętrznych buforów na kopie wiadomości TX i RX |
+| `HAL_LORA_LINK_MAX_PEERS` | 8 | 1..32 | Liczba przechowywanych okien wykrywania duplikatów dla par źródło/sesja |
 
 Każde łącze ma również dwa 255-bajtowe bufory robocze ramek. Po utworzeniu
-muteksu dla uchwytu żadna operacja protokołu nie alokuje pamięci z heapu.
+mutexu uchwytu żadna operacja protokołu nie przydziela pamięci na stercie.
 
 ## Cykl życia
 
-Najpierw utwórz i skonfiguruj surowe radio, a następnie dołącz łącze:
+Najpierw utwórz i skonfiguruj radio przez jego niskopoziomowe API, a następnie
+dołącz łącze:
 
 ```c
 hal_lora_link_t link = NULL;
@@ -58,28 +61,31 @@ if (status != HAL_OK) {
 }
 ```
 
-Lokalny adres zero jest zarezerwowany, a `0xFFFF` oznacza broadcast. Niezerowy
-identyfikator sesji rozróżnia restarty tego samego adresu. Musi być nowy dla
-każdej sesji adresu/klucza. Gdy szyfrowanie jest włączone, użyj wartości
-losowej kryptograficznie albo trwałego, monotonicznego licznika uruchomień;
-nigdy nie wyprowadzaj jej wyłącznie z przewidywalnego zegara uptime.
+Lokalny adres zero jest zarezerwowany, a `0xFFFF` oznacza adres rozgłoszeniowy.
+Niezerowy identyfikator sesji pozwala rozróżnić kolejne uruchomienia urządzenia
+o tym samym adresie. Każda sesja dla danej pary adresu i klucza musi otrzymać
+nowy identyfikator. Przy włączonym szyfrowaniu użyj wartości wygenerowanej
+przez kryptograficznie bezpieczne źródło losowe albo trwałego, monotonicznego
+licznika uruchomień. Nie wyprowadzaj jej wyłącznie z przewidywalnego czasu
+działania urządzenia.
 
-Łącze przejmuje wyłączną kontrolę operacyjną nad radiem, usuwa jego callback
-surowych zdarzeń i rozpoczyna ciągły odbiór. Wywołujący musi utrzymywać radio
-przy życiu, ale do powrotu `hal_lora_link_destroy()` nie może wykonywać surowych
-operacji TX, RX, CAD, sleep ani kalibracji. Zniszczenie łącza anuluje aktywne
-I/O radia, zeruje skopiowany klucz i pozostawia radio w stanie standby; nie
-niszczy uchwytu radia.
+Po dołączeniu łącze jako jedyne steruje radiem: wyrejestrowuje funkcję zwrotną
+zdarzeń niskopoziomowego API i rozpoczyna ciągły odbiór. Wywołujący musi
+zachować uchwyt radia, ale do zakończenia `hal_lora_link_destroy()` nie może
+bezpośrednio uruchamiać TX, RX, CAD, sleep ani kalibracji. Zniszczenie łącza
+anuluje aktywne operacje I/O radia, zeruje kopię klucza i pozostawia radio
+w stanie standby. Sam uchwyt radia nie jest niszczony.
 
-Nieprzezroczyste uchwyty łączy mają znacznik generacji. Nieaktualny uchwyt
-zwraca `HAL_EUNINIT`, a próba utworzenia więcej niż
-`HAL_LORA_LINK_MAX_INSTANCES` łączy zwraca `HAL_ENOMEM`.
+Nieprzezroczyste uchwyty łączy zawierają numer generacji. Użycie nieaktualnego
+uchwytu powoduje zwrócenie `HAL_EUNINIT`, a próba utworzenia większej liczby
+łączy niż `HAL_LORA_LINK_MAX_INSTANCES` kończy się błędem `HAL_ENOMEM`.
 
 ## Wysyłanie i odbieranie
 
 `hal_lora_link_send_start()` kopiuje całą wiadomość, rozpoczyna transmisję
-pierwszego fragmentu i wraca. Wywołuj `hal_lora_link_process()` regularnie z
-jednej głównej pętli lub taska FreeRTOS będącego właścicielem:
+pierwszego fragmentu i kończy działanie. Wywołuj `hal_lora_link_process()`
+regularnie z jednej głównej pętli albo z jednego zadania FreeRTOS
+odpowiedzialnego za obsługę łącza:
 
 ```c
 static const uint8_t message[] = "acknowledged telemetry";
@@ -97,15 +103,16 @@ while (status == HAL_OK || status == HAL_EAGAIN || status == HAL_IGNORED) {
 }
 ```
 
-Port zdefiniowany przez aplikację jest przenoszony bez zmian. Unicast może być
-potwierdzany lub niepotwierdzany; broadcast musi być niepotwierdzany. Łącze
-może przechowywać jednocześnie tylko jedną wiadomość wysyłaną przez aplikację i
-jedną kompletną wiadomość odebraną.
+Numer portu zdefiniowany przez aplikację jest przesyłany bez zmian. Wiadomość
+do jednego odbiorcy (unicast) może wymagać potwierdzenia lub nie, natomiast
+transmisja rozgłoszeniowa musi odbywać się bez potwierdzenia. Łącze może
+przechowywać jednocześnie tylko jedną wiadomość wysyłaną przez aplikację
+i jedną kompletną wiadomość odebraną.
 
-`hal_lora_link_receive()` kopiuje i zużywa oczekującą kompletną wiadomość.
-`HAL_EAGAIN` oznacza, że żadna wiadomość nie jest gotowa. Jeśli bufor
+`hal_lora_link_receive()` kopiuje oczekującą kompletną wiadomość i usuwa ją
+z kolejki. `HAL_EAGAIN` oznacza, że żadna wiadomość nie jest gotowa. Jeśli bufor
 wywołującego jest za mały, funkcja zwraca `HAL_EOVERFLOW`, podaje wymagany
-rozmiar i mimo to zużywa wiadomość.
+rozmiar i mimo to usuwa wiadomość z kolejki.
 
 ```c
 uint8_t buffer[HAL_LORA_LINK_MAX_MESSAGE_SIZE];
@@ -118,18 +125,19 @@ if (status == HAL_OK) {
 }
 ```
 
-`hal_lora_link_cancel()` zatrzymuje wyłącznie aktywne wysyłanie aplikacji i
-wznawia ciągły odbiór. Snapshoty stanu, statusu wysyłania i diagnostyki są
-chronione muteksem uchwytu i można je odczytywać z innego taska. Cała maszyna
-stanów `process()` nadal musi mieć jednego logicznego właściciela.
+`hal_lora_link_cancel()` zatrzymuje wyłącznie aktywną transmisję zleconą przez
+aplikację i wznawia ciągły odbiór. Stan łącza, stan wysyłania oraz diagnostyka
+są odczytywane jako spójne kopie chronione mutexem uchwytu, dlatego można je
+sprawdzać z innego zadania. Samą maszynę stanów `process()` może jednak
+obsługiwać tylko jedno zadanie lub jedna pętla.
 
 ## Adapter poleceń
 
 `HAL_ENABLE_LORA_COMMANDS` dodaje adapter
 [`hal_lora_commands`](23_commands.md#reliable-lora-adapter) oraz propaguje
-`HAL_ENABLE_COMMAND_ROUTER` i `HAL_ENABLE_LORA_LINK`. Koduje ograniczone
-wiadomości żądań, odpowiedzi i zdarzeń na jednym porcie łącza zdefiniowanym
-przez aplikację:
+`HAL_ENABLE_COMMAND_ROUTER` i `HAL_ENABLE_LORA_LINK`. Adapter koduje wiadomości
+żądań, odpowiedzi i zdarzeń o ograniczonym rozmiarze na jednym porcie łącza
+zdefiniowanym przez aplikację:
 
 ```c
 hal_lora_commands_config_t commands_config =
@@ -145,48 +153,51 @@ if (status == HAL_OK) {
 }
 ```
 
-Przed dołączeniem adaptera łącze musi już odbierać. Adapter staje się wtedy
-jedynym właścicielem przetwarzania i odbioru: wywołuj
-`hal_lora_commands_process()` zamiast dwóch odpowiadających mu funkcji łącza.
-Przychodzące żądania są synchronicznie przekazywane do skonfigurowanego routera,
-a odpowiedzi wysyłane automatycznie. Odpowiedzi i zdarzenia widoczne dla
-aplikacji odbiera się przez `hal_lora_commands_receive()`.
+Przed dołączeniem adaptera łącze musi już działać w trybie odbioru. Od tego
+momentu tylko adapter może wywoływać funkcje przetwarzania i odbioru łącza:
+używaj `hal_lora_commands_process()` zamiast dwóch odpowiadających im funkcji
+łącza. Przychodzące żądania są synchronicznie przekazywane do skonfigurowanego
+routera, a odpowiedzi wysyłane automatycznie. Odpowiedzi i zdarzenia
+przeznaczone dla aplikacji odbiera się przez `hal_lora_commands_receive()`.
 
-Łącza plaintext nie zgłaszają flag bezpieczeństwa poleceń. Łącze używające
-`HAL_LORA_LINK_SECURITY_CHACHA20_POLY1305` zgłasza dostarczenie uwierzytelnione,
-zaszyfrowane, chronione integralnościowo i przed replayem, dzięki czemu polityki
-routera mogą odrzucać słabiej chronione żądania. Handler otrzymuje adres źródła,
-sesję i kompletne metadane łącza bez wiązania logiki polecenia z providerem
-radia.
+Łącza przesyłające dane jawne nie ustawiają flag bezpieczeństwa poleceń. Łącze
+korzystające z `HAL_LORA_LINK_SECURITY_CHACHA20_POLY1305` oznacza wiadomość jako
+uwierzytelnioną, zaszyfrowaną oraz chronioną przed zmianą i powtórzeniem.
+Reguły routera mogą dzięki temu odrzucać słabiej chronione żądania. Funkcja
+obsługi otrzymuje adres źródłowy, identyfikator sesji i kompletne metadane
+łącza, a jej logika nie zależy od wybranej rodziny radia.
 
 ## Niezawodność i fragmentacja
 
-Domyślna polityka czeka 1500 ms na jedno potwierdzenie po wysłaniu kompletnej
-wiadomości, stosuje backoff 200 ms i ponawia całą niezmienną wiadomość do trzech
-razy. Konfiguracja może ograniczyć timeout potwierdzenia, liczbę ponowień,
-backoff i czas życia niepełnej rekonstrukcji. `attempts` obejmuje pierwszą
-transmisję i jest wystarczająco szerokie, aby zgłosić wszystkie 256 prób
-dozwolonych przez 8-bitowe pole `max_retries`. Wyczerpanie prób kończy wysyłanie
-wynikiem `HAL_ETIMEOUT`.
+Domyślnie łącze czeka 1500 ms na potwierdzenie po wysłaniu całej wiadomości.
+Przed kolejną próbą odczekuje 200 ms i może ponowić całą, niezmienioną
+wiadomość maksymalnie trzy razy. W konfiguracji można ustawić limit czasu
+oczekiwania na potwierdzenie, liczbę ponowień, odstęp między próbami oraz czas
+przechowywania niekompletnie złożonej wiadomości. Pole `attempts` uwzględnia
+pierwszą transmisję i ma zakres wystarczający do zapisania wszystkich 256 prób
+dopuszczanych przez 8-bitowe `max_retries`. Po ich wyczerpaniu
+wysyłanie kończy się statusem `HAL_ETIMEOUT`.
 
 Wersjonowany nagłówek o długości 25 bajtów pozostawia 230 bajtów na
 niechroniony fragment albo 214 bajtów, gdy dołączony jest 16-bajtowy tag AEAD.
 Wiadomość jest dzielona na najwyżej 32 fragmenty. Odbiornik sprawdza
-zadeklarowaną strukturę i rekonstruuje wyłącznie fragmenty o zgodnym źródle,
-targetu, sesji, sekwencji, porcie i tożsamości wiadomości. Wiadomości plaintext
+zadeklarowany układ i łączy wyłącznie fragmenty o zgodnym adresie źródłowym
+i docelowym, identyfikatorze sesji, numerze sekwencyjnym, porcie oraz
+identyfikatorze wiadomości. Wiadomości przesyłane bez szyfrowania
 zawierają jedno CRC-32 całej wiadomości; wykrywa ono przypadkowe uszkodzenie,
 ale nie zapewnia uwierzytelniania.
 
-Po pełnej rekonstrukcji odbiornik zapisuje sekwencję źródła/sesji w przesuwnym
-oknie 32 wiadomości. Ponowiona wiadomość nie jest dostarczana drugi raz, ale jej
-ostatni fragment wywołuje kolejne potwierdzenie, co umożliwia odzyskanie po
-utracie ACK. Okna wykraczające poza skonfigurowaną tablicę peerów są usuwane
-według zasady least recently used.
+Po złożeniu całej wiadomości odbiornik zapisuje jej numer sekwencyjny
+w 32-elementowym przesuwającym się oknie przypisanym do źródła i sesji. Ponowiona
+wiadomość nie jest dostarczana drugi raz, ale jej ostatni fragment powoduje
+ponowne wysłanie potwierdzenia. Pozwala to zakończyć transmisję po utracie ACK.
+Gdy brakuje miejsca w skonfigurowanej tablicy urządzeń, zgodnie z zasadą LRU
+usuwane jest najdłużej nieużywane okno.
 
 ## Opcjonalna ochrona kryptograficzna
 
-Przy włączonym `HAL_ENABLE_CRYPTO` ustaw jeden 32-bajtowy klucz współdzielony i
-wybierz AEAD:
+Przy włączonym `HAL_ENABLE_CRYPTO` ustaw jeden 32-bajtowy klucz współdzielony
+(PSK) i wybierz AEAD:
 
 ```c
 uint8_t provisioned_key[HAL_LORA_LINK_CRYPTO_KEY_BYTES];
@@ -200,29 +211,36 @@ config.key_length = sizeof(provisioned_key);
 status = hal_lora_link_create(&config, &link);
 ```
 
-Klucz jest kopiowany do pamięci należącej do łącza. Nonce łączy sesję nadawcy,
-adres źródłowy, sekwencję, indeks fragmentu i typ ramki. Dlatego ta sama
-kombinacja klucza, adresu i sesji nie może zostać użyta ponownie, a szyfrowane
+Klucz jest kopiowany do wewnętrznego bufora łącza. Wartość nonce składa się
+z sesji nadawcy, adresu źródłowego, sekwencji, indeksu fragmentu i typu ramki.
+Dlatego ta sama kombinacja klucza, adresu i sesji nie może zostać użyta
+ponownie, a szyfrowane
 łącze odmawia wysyłania po wyczerpaniu 32-bitowej przestrzeni sekwencji.
-Ponowienia używają dokładnie tej samej tożsamości wiadomości, a więc tej samej
-uwierzytelnionej ramki; nigdy nie szyfrują innym plaintextem przy tym nonce.
+Ponowienia zachowują identyfikator wiadomości, a więc wysyłają ponownie tę samą
+uwierzytelnioną ramkę. Ten sam nonce nigdy nie służy do zaszyfrowania różnych
+danych jawnych.
 
-AEAD uwierzytelnia cały nagłówek, ciphertext i potwierdzenia. Nie ukrywa
+AEAD uwierzytelnia cały nagłówek, szyfrogram i potwierdzenia. Nie ukrywa
 adresów, identyfikatorów sesji, sekwencji, rozmiarów ani liczby fragmentów.
-Provisioning i rotacja kluczy oraz trwałe zarządzanie sesją pozostają
-odpowiedzialnością aplikacji. Łącze plaintext odrzuca ramki szyfrowane, a łącze
-szyfrowane odrzuca ramki plaintext lub nieuwierzytelnione.
+Aplikacja odpowiada za bezpieczne dostarczanie i rotację kluczy oraz trwałe
+zarządzanie sesją. Łącze bez szyfrowania odrzuca ramki szyfrowane, a łącze
+szyfrowane odrzuca ramki niezaszyfrowane lub nieuwierzytelnione.
 
 ## Diagnostyka i przykład
 
-`hal_lora_link_get_diagnostics()` zwraca sumy wiadomości i ramek,
-potwierdzenia, retransmisje, duplikaty, błędy formatu, uwierzytelniania i
-integralności, odrzucenia i timeouty rekonstrukcji, odrzucenia kolejki, timeouty
-wysyłania, anulowania oraz ostatnio obserwowane adresy i parametry RF.
+`hal_lora_link_get_diagnostics()` zwraca łączną liczbę wiadomości, ramek,
+potwierdzeń, retransmisji i duplikatów. Zawiera też liczniki błędów formatu,
+uwierzytelniania i integralności, porzuconych prób składania wiadomości i
+przekroczeń ich limitu czasu, przepełnień kolejki, przekroczeń limitu czasu
+wysyłania oraz anulowań. Oprócz tego podaje
+ostatnio zaobserwowane adresy i parametry RF.
 
 `examples/27_lora_point_to_point` udostępnia warianty `link` i
-`link-responder`. Wymieniają one skorelowane, 500-bajtowe żądanie polecenia i
-odpowiedź przez `hal_lora_commands`, wymuszając po trzy fragmenty w obu
-kierunkach na tych samych fixture'ach SX1262 co przykład surowego radia.
-Przykład celowo używa plaintextu; produkt powinien włączać AEAD dopiero po
-opracowaniu rzeczywistego provisioningu kluczy i strategii unikalnych sesji.
+`link-responder`. Wymieniają one przez `hal_lora_commands` powiązane
+identyfikatorem żądanie komendy i odpowiedź, obie o rozmiarze 500 bajtów.
+Wymusza to po trzy fragmenty w obu
+kierunkach na tych samych stanowiskach SX1262 co przykład niskopoziomowego API
+radia.
+
+Przykład celowo nie używa szyfrowania. Produkt powinien włączać AEAD dopiero po
+opracowaniu bezpiecznego sposobu dostarczania kluczy i strategii unikalnych sesji.

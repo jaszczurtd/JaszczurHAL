@@ -63,26 +63,27 @@ hal_status_t hal_rgb_led_set_color(hal_rgb_led_color_t color);
 hal_status_t hal_rgb_led_off(void);
 ```
 
-Historycznie `void` operacje init, koloru i off zwracają teraz status w tym
-samym miejscu. Dotychczasowi wywołujący mogą nadal ignorować wynik.
+Funkcje inicjalizacji, ustawiania koloru i wyłączania, które wcześniej zwracały
+`void`, zwracają teraz status. Dotychczasowy kod może nadal ignorować wynik.
 Nieprawidłowa liczba/typ pikseli lub kolory zwracają `HAL_EINVAL`, zapisy
 koloru przed inicjalizacją zwracają `HAL_EUNINIT`, błędy alokacji/zasobów
 zwracają `HAL_ENOMEM`, a błędy transportu zwracają `HAL_EIO`.
-`hal_rgb_led_init_ex()` zachowuje swoją historyczną nazwę, ponieważ `_ex` już
+`hal_rgb_led_init_ex()` zachowuje dotychczasową nazwę, ponieważ `_ex` już
 oznacza wariant z jawnym typem pikseli.
 
-**impl/rp2040:** wspólny rdzeń `hal/gpio/neopixel/jh_neopixel.*` + transport PIO RP2040 (`hal/gpio/neopixel/rp2040_pio.h`).
-**impl/stm32g474:** wspólny rdzeń `hal/gpio/neopixel/jh_neopixel.*` + transport GPIO synchronizowany cyklami w `impl/stm32g474/hal_rgb_led.cpp`.
-**impl/esp32:** wspólny rdzeń NeoPixel + kanał TX RMT ESP-IDF i koder bajtów.
-Transport obsługuje publiczne formaty pikseli 800 kHz, oczekuje na
-zakolejkowane zakończenie transmisji i przed zwróceniem sterowania stosuje
-interwał resetu/zatrzasku (latch). Ponowna inicjalizacja wyłącza i usuwa
-poprzedni kanał RMT przed usunięciem jego kodera. Nieudane usunięcie zachowuje
-odpowiedni żywy uchwyt na potrzeby kolejnej próby zwolnienia zasobów;
-uchwyty są czyszczone dopiero po potwierdzeniu usunięcia przez ESP-IDF.
-**impl/.mock:** rejestruje parametry inicjalizacji, typ pikseli, jasność i ostatni kolor; wstrzykiwalny przez pomocnicze funkcje mocka.
-**Thread safety:** backendy RP2040, STM32G474 i ESP32-S3 są thread-safe
-dla wywołań HAL. Mutex HAL serializuje stan singletona paska diod i
+- **impl/rp2040:** wspólny rdzeń `hal/gpio/neopixel/jh_neopixel.*` + transport PIO RP2040 (`hal/gpio/neopixel/rp2040_pio.h`).
+- **impl/stm32g474:** wspólny rdzeń `hal/gpio/neopixel/jh_neopixel.*` + transport GPIO synchronizowany cyklami w `impl/stm32g474/hal_rgb_led.cpp`.
+- **impl/esp32:** wspólny rdzeń NeoPixel + kanał TX RMT ESP-IDF i koder bajtów.
+  Transport obsługuje publiczne formaty pikseli 800 kHz, oczekuje na
+  zakolejkowane zakończenie transmisji i przed zwróceniem sterowania stosuje
+  interwał resetu/zatrzasku (latch). Ponowna inicjalizacja wyłącza i usuwa
+  poprzedni kanał RMT przed usunięciem jego kodera. Jeśli usuwanie się nie powiedzie,
+  odpowiedni uchwyt pozostaje dostępny do kolejnej próby zwolnienia zasobów;
+  uchwyty są czyszczone dopiero po potwierdzeniu usunięcia przez ESP-IDF.
+- **impl/.mock:** zapisuje parametry inicjalizacji, typ pikseli, jasność i ostatni kolor; helpery mocka pozwalają sterować jego zachowaniem w testach.
+
+**Thread safety:** Na RP2040, STM32G474 i ESP32-S3 wywołania HAL są thread-safe. Mutex HAL
+chroni stan singletona paska diod i
 dostęp do transportu. Backend mock jest niezsynchronizowany i przeznaczony do
 testów jednowątkowych.
 
@@ -120,21 +121,20 @@ uint32_t hal_digipot_e2e_resistance(hal_digipot_t h);
 hal_digipot_mode_t hal_digipot_mode(hal_digipot_t h);
 ```
 
-`hal_digipot_init_ex()` raportuje nieprawidłową konfigurację (`HAL_EINVAL`),
+`hal_digipot_init_ex()` zwraca `HAL_EINVAL` dla nieprawidłowej konfiguracji,
 wyczerpanie puli statycznej (`HAL_ENOMEM`) oraz błędy inicjalizacji
-chipa/magistrali (`HAL_EBUS`). `hal_digipot_set_resistance_ex()` raportuje
+układu lub magistrali (`HAL_EBUS`). `hal_digipot_set_resistance_ex()` zwraca
 nieprawidłowe uchwyty (`HAL_EUNINIT`), nieprawidłową rezystancję/tryb
 (`HAL_EINVAL`), błędy I2C (`HAL_EBUS`) oraz niezgodności odczytu zwrotnego
 (read-back) MCP401x (`HAL_EIO`). Dotychczasowe wrappery `hal_digipot_init()`
 i `hal_digipot_set_resistance()` pozostają dla kompatybilności źródłowej.
 
-**wspólna implementacja tematyczna:** `hal_digipot.cpp` zarządza pulą
-uchwytów, walidacją, wyborem backendu i muteksem per instancja; logika transakcji
-specyficzna dla chipów MCP401x/MAX5395 znajduje się w `hal/analog/digipot/`.
+**Wspólna implementacja modułu:** `hal_digipot.cpp` zarządza pulą uchwytów, sprawdza
+argumenty, wybiera backend i utrzymuje osobny mutex każdej instancji. Obsługa transakcji
+właściwa dla układów MCP401x/MAX5395 znajduje się w `hal/analog/digipot/`.
 
-**Thread safety:** operacje runtime są serializowane per
-instancja, a każda transakcja z chipem korzysta z pomocniczych funkcji HAL
-I2C.
+**Thread safety:** Operacje w runtime są serializowane osobno dla każdej instancji, a
+każda transakcja z układem korzysta z helperów HAL I2C.
 
 ---
 
@@ -215,28 +215,28 @@ bool hal_pga2311_raw_to_gain_half_db(uint8_t code, int16_t *out_half_db);
 ```
 
 **Uwagi dotyczące zachowania:**
-- `HAL_ENABLE_PGA2311` włącza (gains) `HAL_ENABLE_SPI` poprzez generowany
+- `HAL_ENABLE_PGA2311` automatycznie włącza `HAL_ENABLE_SPI` poprzez generowany
   rejestr funkcji, dołączany przez `hal_config.h`.
-- Moduł nie wywołuje `hal_spi_init()`; aplikacja jest właścicielem
-  konfiguracji pinów magistrali SPI.
+- Moduł nie wywołuje `hal_spi_init()`; piny magistrali SPI konfiguruje aplikacja.
 - Status inicjalizacji rozróżnia nieprawidłową konfigurację (`HAL_EINVAL`),
   wyczerpanie puli statycznej lub mutexów (`HAL_ENOMEM`) oraz przekazywane
   dalej błędy konfiguracji/zapisu SPI.
-- Ustawiacze statusu i funkcje konwersji zwracają `HAL_EINVAL` dla
+- Funkcje ustawiające i konwertujące, które zwracają status, zgłaszają `HAL_EINVAL` dla
   nieprawidłowych uchwytów, wskaźników wyjściowych lub zakresów wzmocnienia
-  oraz przekazują dalej błędy transportu SPI. Istniejące API na uchwytach/
-  `bool` to wrappery kompatybilności.
+  oraz przekazują dalej błędy transportu SPI. Istniejące funkcje zwracające uchwyt lub
+  `bool` pozostają wrapperami zgodności.
 - Przy `mute_pin == HAL_PGA2311_MUTE_PIN_NONE` wyciszenie jest emulowane
   programowo poprzez zapis `HAL_PGA2311_CODE_MUTE` do obu kanałów i
   przywrócenie zbuforowanych kodów docelowych przy wyłączeniu wyciszenia.
 - Przy skonfigurowanym sprzętowym pinie mute wyciszenie przełącza wyłącznie
   GPIO i nie wysyła dodatkowych ramek SPI.
 
-**wspólna implementacja tematyczna:** `hal/audio/pga2311/pga2311_driver.*` (transport HAL SPI/GPIO)
-plus fasada `hal_pga2311.cpp` ze statyczną pulą uchwytów i mutexem per-instancja.
+**Wspólna implementacja modułu:** `hal/audio/pga2311/pga2311_driver.*` obsługuje
+transport przez HAL SPI/GPIO. Plik `hal_pga2311.cpp` udostępnia publiczne API, statyczną
+pulę uchwytów oraz osobny mutex każdej instancji.
 
-**Thread safety:** mutex per-instancja serializuje wywołania API;
-transakcje SPI są opakowane w `hal_spi_lock()` / `hal_spi_unlock()`.
+**Thread safety:** Osobny mutex każdej instancji serializuje wywołania API, a transakcje
+SPI są otoczone `hal_spi_lock()` / `hal_spi_unlock()`.
 
 ---
 
@@ -259,19 +259,19 @@ if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
 ```
 
 `MFRC522_SPI` używa transakcji HAL SPI i sterowania GPIO chip-select.
-`MFRC522_I2C` używa transakcji zapisu/odczytu HAL I2C. Aplikacja nadal jest
-właścicielem konfiguracji pinów magistrali poprzez `hal_spi_init()` lub
+`MFRC522_I2C` używa transakcji zapisu/odczytu HAL I2C. Aplikacja nadal konfiguruje piny
+magistrali przez `hal_spi_init()` lub
 `hal_i2c_init_bus()`.
 
 Port zachowuje logikę protokołu MFRC522 pochodzącą z linii driverów
 MFRC522-spi-i2c-uart-async / Miguela Balboi, jednocześnie zastępując
 wywołania transportu i czasowania prymitywami JaszczurHAL.
-`StatusCodeToHalStatus()` mapuje wyniki specyficzne dla drivera na
-współdzielone wartości `hal_status_t`.
+`StatusCodeToHalStatus()` przekształca wyniki specyficzne dla drivera na wspólne wartości
+`hal_status_t`.
 
-**Thread safety:** transakcje rejestrów SPI i I2C używają blokad
-magistrali HAL. Driver alokuje mutex HAL per-instancja na potrzeby
-przyszłego szerszego sekwencjonowania; tworzenie i niszczenie pozostają
+**Thread safety:** Transakcje rejestrów SPI i I2C korzystają z blokad magistrali HAL.
+Driver przydziela osobny mutex HAL każdej instancji, aby w przyszłości umożliwić
+szerszą serializację operacji; tworzenie i niszczenie pozostają
 operacjami cyklu życia z jednym właścicielem.
 
 Przykład: `examples/22_rfid_nfc`.
@@ -296,11 +296,11 @@ if (nfc.getFirmwareVersion(&firmware) == HAL_OK) {
 ```
 
 `PN532_SPI` używa transakcji HAL SPI i sterowania GPIO chip-select.
-`PN532_I2C` jest dostępny, gdy włączone jest `HAL_ENABLE_I2C`, i używa
-bezpośrednich transakcji odczytu/zapisu HAL I2C wraz z bajtem gotowości
-(ready byte) PN532. `PN532_UART` jest dostępny, gdy włączone jest
-`HAL_ENABLE_UART`, i używa odczytów opartych na limicie czasu na API HAL
-UART. Aplikacja jest właścicielem konfiguracji pinów magistrali poprzez
+`PN532_I2C` jest dostępny, gdy włączona jest flaga `HAL_ENABLE_I2C`, i używa
+bezpośrednich transakcji odczytu/zapisu HAL I2C wraz z bajtem gotowości PN532.
+`PN532_UART` jest dostępny, gdy włączona jest flaga
+`HAL_ENABLE_UART`, i używa odczytów z limitem czasu udostępnianych przez API
+HAL UART. Piny magistrali konfiguruje aplikacja przez
 `hal_spi_init()`, `hal_i2c_init_bus()` lub `hal_uart_create()`/
 `hal_uart_begin()`.
 
@@ -310,8 +310,8 @@ funkcje pomocnicze wymiany MIFARE, jednocześnie zastępując wywołania
 transportu i czasowania prymitywami JaszczurHAL. Publiczne operacje PN532
 zwracają `hal_status_t`.
 
-**Thread safety:** publiczne operacje PN532 są serializowane
-mutexem HAL per-instancja, tworzonym przez `jh_hal_mutex_create_once()`.
+**Thread safety:** Publiczne operacje PN532 chroni osobny mutex HAL każdej instancji,
+tworzony przez `jh_hal_mutex_create_once()`.
 Transporty SPI i I2C również używają blokad magistrali HAL dla transakcji
 fizycznych. Tworzenie i niszczenie pozostają operacjami cyklu życia z jednym
 właścicielem.
@@ -365,39 +365,37 @@ Wspólna grupa prostych driverów I/O obejmuje obecnie:
 - `hal_mcp23017`: ekspander GPIO MCP23017 przez I2C. Tryby działania
   odzwierciedlają warianty wtyczki grblHAL: 8 wejść/8 wyjść, 16 wyjść lub
   16 wejść. Inwersja wejść, podciąganie (pull-up) i konfiguracja rejestru
-  przerwań MCP są udostępnione poprzez API z `hal_status_t`.
+  przerwań MCP są dostępne przez funkcje zwracające `hal_status_t`.
 - `hal_pca9654e`: ekspander wyłącznie wyjściowy PCA9654E przez I2C.
   Inicjalizacja zapisuje sekwencję rejestru drivera źródłowego: wszystkie
   piny jako wyjścia, brak inwersji, wyjścia w stanie niskim.
 - `hal_pcf8574`: quasi-dwukierunkowy ekspander GPIO PCF8574 przez I2C.
-  Driver przechowuje zatrzask (latch) wyjścia lokalnie, zapisuje pełny
+  Driver przechowuje lokalnie ostatnią wartość wyjść, zapisuje pełny
   8-bitowy port w jednej transakcji i odczytuje bieżący stan portu jako
   jeden bajt.
 - `hal_hc595`: od jednego do czterech połączonych łańcuchowo rejestrów
   przesuwnych 74HC595 przez HAL SPI oraz pin zatrzasku/chip-select GPIO.
-  Bajty są przesuwane od najwyższego rejestru, zgodnie ze driverem
+  Bajty są przesuwane od najwyższego rejestru, zgodnie z driverem
   źródłowym.
 - `hal_mcp4725`: 12-bitowy DAC MCP4725 przez I2C. Inicjalizacja może wysłać
   sekwencję resetu/wybudzenia general-call, odczytuje bieżącą wartość DAC
   zapisaną w EEPROM i wykonuje aktualizacje DAC w trybie fast-mode.
 
-Przepływ transakcji jest oparty na działających driverach wtyczek grblHAL
-autorstwa Terje Io i wykorzystuje w całości prymitywy I2C/SPI/GPIO/czasowania/
-statusu/synchronizacji JaszczurHAL.
+Przebieg transakcji oparto na działających driverach wtyczek grblHAL autorstwa Terje Io.
+Implementacja korzysta wyłącznie z funkcji I2C, SPI, GPIO, czasu, statusów i synchronizacji
+JaszczurHAL.
 
-Każdy prosty driver I/O udostępnia funkcje `_ex` dla transakcji, które mogą
-zawieść, i zachowuje dotychczasowe wywołania zwracające `bool`/wartość jako
-cienkie wrappery kompatybilności. Nieprawidłowe wskaźniki urządzenia, piny,
-tryby lub wskaźniki wyjściowe zwracają `HAL_EINVAL`; użycie przed pomyślną
-inicjalizacją zwraca `HAL_EUNINIT`; błąd alokacji mutexu zwraca `HAL_ENOMEM`;
-a błędy transakcji I2C/SPI/GPIO zwracają `HAL_EBUS` lub `HAL_EIO` w
-zależności od operacji backendu. Kompatybilne odczyty zwracające wartość
-zachowują swój historyczny kształt "zero przy błędzie"; używaj form `_ex`,
-gdy wywołujący musi odróżnić zerowe dane od błędu.
+Każdy prosty driver I/O udostępnia warianty `_ex` transakcji, które mogą zakończyć się
+błędem. Dotychczasowe funkcje zwracające `bool` lub wartość pozostają wrapperami
+zgodności. Nieprawidłowy wskaźnik urządzenia lub wyniku, pin albo tryb powoduje zwrócenie
+`HAL_EINVAL`; użycie przed poprawną inicjalizacją - `HAL_EUNINIT`; błąd utworzenia mutexu
+- `HAL_ENOMEM`; a błąd transakcji I2C, SPI lub GPIO - `HAL_EBUS` albo `HAL_EIO`, zależnie
+od operacji backendu. Dotychczasowe funkcje odczytu nadal zwracają zero po błędzie. Użyj
+wariantu `_ex`, jeśli trzeba odróżnić poprawny zerowy wynik od niepowodzenia.
 
-**Thread safety:** każda instancja urządzenia posiada własny mutex
-HAL, a transakcje magistrali używają leżących u podstaw blokad HAL I2C/SPI.
-Wywołania cyklu życia pozostają z jednym właścicielem.
+**Thread safety:** Każda instancja urządzenia ma własny mutex HAL, a transakcje korzystają
+z blokad magistral HAL I2C/SPI. Za operacje cyklu życia powinien odpowiadać jeden
+wywołujący.
 
 Przykład: `examples/23_io_pmic`.
 

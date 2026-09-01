@@ -118,30 +118,31 @@ cancel every low-level alarm associated with that pool, then ensure all of its
 callbacks have returned. External synchronization with other callers alone is
 not sufficient; pool destruction from an alarm callback/ISR is unsupported.
 
-**Layer model:** use low-level alarms for minimal ISR scheduling; use managed timers when you need start/stop/pause/resume/status semantics and periodic behavior.
-**Error model:** `_ex` functions return detailed `hal_timer_result_t` diagnostics (`INVALID_ARG`, `TIME_PASSED`, `POOL_FULL`, `NO_RESOURCE`, etc.) while legacy non-`_ex` variants preserve `HAL_ALARM_INVALID` compatibility.
-**impl/rp2040:** Pico SDK alarm pools (`pico/time.h`) and callback scheduling
-(`alarm_pool_add_alarm_in_us`, cancel APIs). `add_alarm_in_us()` outcomes `<= 0`
-are treated as invalid and mapped to explicit result codes in `_ex`. A stable
-dispatch record bridges the SDK allocation/publication window across cores;
-stale cancellation markers are cleared before publishing a reused Pico alarm
-ID, whose per-slot sequence repeats after 32767 allocations.
-**impl/stm32g474:** TIM6 runs as a 1 MHz one-shot alarm scheduler derived from
-the explicit 170 MHz APB1 timer-kernel clock. Long delays are chunked across
-16-bit TIM6 periods, callback return values greater than zero reschedule the
-same alarm, and software pools provide the same public pool/cancel behavior as
-RP2040.
-**impl/esp32:** one 1 MHz ESP-IDF GPTimer backs the default logical alarm pool,
-which holds up to 16 simultaneous alarms by default. Positive callback return
-values reschedule the same alarm. `hal_timer_pool_create()` selects one of four
-target selector slots, while `hal_timer_pool_create_auto()` claims the first
-available slot; each successful pool owns a separate 1 MHz GPTimer and a
-caller-sized logical alarm array. Creation returns `NULL` when the selector,
-memory, or GPTimer resource is unavailable. Destroy first disarms, stops,
-disables, and deletes the GPTimer; if ESP-IDF rejects teardown, the context and
-selector remain retained instead of freeing callback state that an ISR could
-still reference. Managed timers work over either the default or a dedicated
-pool through the shared managed-timer layer.
+- **Layer model:** use low-level alarms for minimal ISR scheduling; use managed timers when you need start/stop/pause/resume/status semantics and periodic behavior.
+- **Error model:** `_ex` functions return detailed `hal_timer_result_t` diagnostics (`INVALID_ARG`, `TIME_PASSED`, `POOL_FULL`, `NO_RESOURCE`, etc.) while legacy non-`_ex` variants preserve `HAL_ALARM_INVALID` compatibility.
+- **impl/rp2040:** Pico SDK alarm pools (`pico/time.h`) and callback scheduling
+  (`alarm_pool_add_alarm_in_us`, cancel APIs). `add_alarm_in_us()` outcomes `<= 0`
+  are treated as invalid and mapped to explicit result codes in `_ex`. A stable
+  dispatch record bridges the SDK allocation/publication window across cores;
+  stale cancellation markers are cleared before publishing a reused Pico alarm
+  ID, whose per-slot sequence repeats after 32767 allocations.
+- **impl/stm32g474:** TIM6 runs as a 1 MHz one-shot alarm scheduler derived from
+  the explicit 170 MHz APB1 timer-kernel clock. Long delays are chunked across
+  16-bit TIM6 periods, callback return values greater than zero reschedule the
+  same alarm, and software pools provide the same public pool/cancel behavior as
+  RP2040.
+- **impl/esp32:** one 1 MHz ESP-IDF GPTimer backs the default logical alarm pool,
+  which holds up to 16 simultaneous alarms by default. Positive callback return
+  values reschedule the same alarm. `hal_timer_pool_create()` selects one of four
+  target selector slots, while `hal_timer_pool_create_auto()` claims the first
+  available slot; each successful pool owns a separate 1 MHz GPTimer and a
+  caller-sized logical alarm array. Creation returns `NULL` when the selector,
+  memory, or GPTimer resource is unavailable. Destroy first disarms, stops,
+  disables, and deletes the GPTimer; if ESP-IDF rejects teardown, the context and
+  selector remain retained instead of freeing callback state that an ISR could
+  still reference. Managed timers work over either the default or a dedicated
+  pool through the shared managed-timer layer.
+
 **Thread safety:** The RP-family and ESP32-S3 backends are thread-safe and
 multicore-safe for scheduling/canceling and managed-timer state transitions.
 STM32G474 protects its alarm slot scheduler with short PRIMASK critical
@@ -405,50 +406,51 @@ only when the interval elapsed. `*_now` variants fetch `now_ms` internally via
 `hal_millis()`. `hal_millis_interval_call*()` invokes a callback (when non-NULL)
 after a successful elapsed check and returns `true` for that iteration.
 
-**impl/rp2040:** `hal_millis()` uses
-`to_ms_since_boot(get_absolute_time())`; `hal_micros()` and
-`hal_micros64()` use `time_us_64()`. The SoC bindings for watchdog, idle,
-heap reporting, chip temperature, BOOTSEL reset, device identity, ISR
-detection, and other runtime system services live in
-`src/hal/impl/rp2040/drivers/rp2040/rp2040_system.{h,cpp}`. Reset-reason
-decode and ARM HardFault capture live in `rp2040_fault.{h,cpp}`. In FreeRTOS
-builds, millisecond delay yields only from valid task context; pre-scheduler,
-ISR, and HAL-critical paths use bounded SDK waits. Microsecond delay always
-uses `busy_wait_us()`. The architecture snapshot combines generated target and
-board facts with flash reservations from the selected linker layout and
-FreeRTOS heap capacity when that runtime is active. The watchdog reset bit is
-latched before application entry so enabling the watchdog later cannot erase
-the previous-boot result.
-**impl/stm32g474:** Startup derives a 170 MHz SYSCLK from HSI16 through the PLL
-and runs AHB, APB1, and APB2 without a prescaler. SysTick (bare metal) or the
-committed FreeRTOS tick (RTOS builds) advances a double-buffered 64-bit
-millisecond epoch. Bare-metal reads add the current SysTick microsecond
-fraction and account for a pending rollover. Consequently `hal_micros()` keeps
-its compatibility 32-bit wrap while `hal_micros64()` remains monotonic across
-that boundary. DWT fallback delays, watchdog, idle, chip temperature, device
-identity, ISR detection, and other runtime system services are split between
-`src/hal/impl/stm32g474/port/system_stm32g474.c` and
-`src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_system.{h,cpp}`.
-FreeRTOS task-context delay yields to the scheduler; pre-scheduler, ISR, and
-critical paths use DWT waits. The architecture snapshot combines generated
-target and board capacities with heap, stack, EEPROM, and LittleFS spans from
-the selected runtime and linker layout, and reports 170 MHz for both CPU and
-the primary peripheral clock. The hardware watchdog uses IWDG with the 32 kHz
-nominal LSI clock, selects the shortest fitting prescaler, and accepts timeouts
-from 1 through 32768 ms. `pause_on_debug` controls the DBGMCU IWDG freeze bit.
-Watchdog reset classification uses the boot-latched `RCC_CSR_IWDGRSTF` flag.
-**impl/esp32:** `esp_timer_get_time()` supplies monotonic microsecond time;
-`hal_delay_ms()` uses `vTaskDelay()` only in legal scheduler task context and
-busy-waits before the scheduler, in ISR context, or inside a HAL critical
-section. System services use ESP-IDF task watchdog, heap, clock-tree,
-temperature-sensor, reset-reason, running-partition, and eFuse-MAC APIs. The
-architecture snapshot combines generated flash/PSRAM/CPU facts with live
-clock, partition, and heap values. `pause_on_debug` is accepted by the watchdog
-API but has no per-TWDT runtime mapping; ESP32 debugger control remains with
-OpenOCD. `hal_enter_bootloader()` requests the ROM download boot mode and
-restarts the chip; it returns `HAL_EUNSUPPORTED` when eFuse policy disables
-download modes.
-**impl/.mock:** time driven by mock helpers; `hal_watchdog_caused_reboot`, `hal_get_free_heap`, chip temperature, and the device UID are injectable. `hal_enter_bootloader()` sets an observable flag instead of rebooting. `hal_in_isr()` returns the value set by `hal_mock_set_in_isr(bool)`.
+- **impl/rp2040:** `hal_millis()` uses
+  `to_ms_since_boot(get_absolute_time())`; `hal_micros()` and
+  `hal_micros64()` use `time_us_64()`. The SoC bindings for watchdog, idle,
+  heap reporting, chip temperature, BOOTSEL reset, device identity, ISR
+  detection, and other runtime system services live in
+  `src/hal/impl/rp2040/drivers/rp2040/rp2040_system.{h,cpp}`. Reset-reason
+  decode and ARM HardFault capture live in `rp2040_fault.{h,cpp}`. In FreeRTOS
+  builds, millisecond delay yields only from valid task context; pre-scheduler,
+  ISR, and HAL-critical paths use bounded SDK waits. Microsecond delay always
+  uses `busy_wait_us()`. The architecture snapshot combines generated target and
+  board facts with flash reservations from the selected linker layout and
+  FreeRTOS heap capacity when that runtime is active. The watchdog reset bit is
+  latched before application entry so enabling the watchdog later cannot erase
+  the previous-boot result.
+- **impl/stm32g474:** Startup derives a 170 MHz SYSCLK from HSI16 through the PLL
+  and runs AHB, APB1, and APB2 without a prescaler. SysTick (bare metal) or the
+  committed FreeRTOS tick (RTOS builds) advances a double-buffered 64-bit
+  millisecond epoch. Bare-metal reads add the current SysTick microsecond
+  fraction and account for a pending rollover. Consequently `hal_micros()` keeps
+  its compatibility 32-bit wrap while `hal_micros64()` remains monotonic across
+  that boundary. DWT fallback delays, watchdog, idle, chip temperature, device
+  identity, ISR detection, and other runtime system services are split between
+  `src/hal/impl/stm32g474/port/system_stm32g474.c` and
+  `src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_system.{h,cpp}`.
+  FreeRTOS task-context delay yields to the scheduler; pre-scheduler, ISR, and
+  critical paths use DWT waits. The architecture snapshot combines generated
+  target and board capacities with heap, stack, EEPROM, and LittleFS spans from
+  the selected runtime and linker layout, and reports 170 MHz for both CPU and
+  the primary peripheral clock. The hardware watchdog uses IWDG with the 32 kHz
+  nominal LSI clock, selects the shortest fitting prescaler, and accepts timeouts
+  from 1 through 32768 ms. `pause_on_debug` controls the DBGMCU IWDG freeze bit.
+  Watchdog reset classification uses the boot-latched `RCC_CSR_IWDGRSTF` flag.
+- **impl/esp32:** `esp_timer_get_time()` supplies monotonic microsecond time;
+  `hal_delay_ms()` uses `vTaskDelay()` only in legal scheduler task context and
+  busy-waits before the scheduler, in ISR context, or inside a HAL critical
+  section. System services use ESP-IDF task watchdog, heap, clock-tree,
+  temperature-sensor, reset-reason, running-partition, and eFuse-MAC APIs. The
+  architecture snapshot combines generated flash/PSRAM/CPU facts with live
+  clock, partition, and heap values. `pause_on_debug` is accepted by the watchdog
+  API but has no per-TWDT runtime mapping; ESP32 debugger control remains with
+  OpenOCD. `hal_enter_bootloader()` requests the ROM download boot mode and
+  restarts the chip; it returns `HAL_EUNSUPPORTED` when eFuse policy disables
+  download modes.
+- **impl/.mock:** time driven by mock helpers; `hal_watchdog_caused_reboot`, `hal_get_free_heap`, chip temperature, and the device UID are injectable. `hal_enter_bootloader()` sets an observable flag instead of rebooting. `hal_in_isr()` returns the value set by `hal_mock_set_in_isr(bool)`.
+
 **Thread safety:** RP-family and ESP32-S3 time/watchdog APIs are safe to call
 from both cores. STM32G474 watchdog feeds are atomic register writes; callers
 must serialize watchdog reconfiguration. In RP, STM32G474, and ESP32-S3
@@ -457,11 +459,13 @@ FreeRTOS modes,
 the calling task only in legal task context and busy-waits in
 pre-scheduler/ISR/HAL-critical contexts; `hal_delay_us()` blocks only the
 calling core. Mock state is intended for single-threaded tests.
-**Note:** `COUNTOF(arr)` works only with statically-allocated arrays (not pointers).
-**Note:** `NONULL(x)` is a null-pointer guard for functions that use a shared
-`error:` cleanup path. Uses `NULL` (safe in both C and C++ translation units).
-If `x == NULL`, it performs `goto error;`. The surrounding function must define
-an `error:` label.
+
+> **Note:** `COUNTOF(arr)` works only with statically-allocated arrays (not pointers).
+
+> **Note:** `NONULL(x)` is a null-pointer guard for functions that use a shared
+> `error:` cleanup path. Uses `NULL` (safe in both C and C++ translation units).
+> If `x == NULL`, it performs `goto error;`. The surrounding function must define
+> an `error:` label.
 
 ### Examples
 
@@ -788,11 +792,14 @@ handler switches to a per-core emergency stack, captures the available fault
 state into scratch with a `'JHD'` signature, then triggers
 `watchdog_reboot(0, 0, 0)`. A retained overflow flag takes precedence over the
 generic fault marker, so the next boot reports
-`HAL_RESET_REASON_STACK_OVERFLOW`. RP2350 ARM uses the architectural `STKOF`
+`HAL_RESET_REASON_STACK_OVERFLOW`.
+
+RP2350 ARM uses the architectural `STKOF`
 status. RP2040 has no CFSR/MMFAR, so attribution of an MPU fault to the stack
 guard uses a deliberately narrow exception-frame proximity heuristic. RP2350
 RISC-V switches stacks in the top-level trap and decodes the faulting memory
 instruction because Hazard3 does not provide a fault address in `mtval`.
+
 With `HAL_ENABLE_STACK_GUARD`, CMake sets `PICO_USE_STACK_GUARDS=1`: Pico SDK
 uses its RP2040 MPU guard and its RP2350 architecture-specific stack-limit/PMP
 implementation for every started core.
@@ -804,11 +811,13 @@ even though the RISC-V entry stub is in SRAM, the complete classifier/reset
 path is not wholly SRAM-resident. This does not weaken the hardware guard in
 normal execution, but applications must not rely on a retained record from a
 fault inside an XIP-disabled flash operation.
+
 `HAL_RESET_REASON_BROWNOUT` is not reported by
 silicon (POR and BOR share one flag) - `hal_last_boot_was_brownout()` is a
 heuristic that returns true when the silicon reported POR but the retained
 alive marker survived (suggesting V<sub>DD</sub> dipped below the BOR
 threshold without losing scratch).
+
 **impl/stm32g474:** Implemented behind the same dispatch pattern as the RP
 family. Reset reason is classified from `RCC->CSR`; captured state is taken
 from the retained Cortex-M4 exception record. With `HAL_ENABLE_STACK_GUARD`,
@@ -829,8 +838,9 @@ version, and checksum in RTC no-init memory before delegating to the previous
 ESP-IDF handler. The next boot validates and consumes the record;
 `hal_get_last_fault_ex()` exposes the portable PC/LR/PSR subset and returns
 `HAL_ENOENT` when no valid record exists. Brownout detection uses the silicon
-reset reason directly, and `hal_alive_mark()` remains a no-op. A failed
-cross-core IPC installation leaves initialization incomplete, so a later
+reset reason directly, and `hal_alive_mark()` remains a no-op.
+
+A failed cross-core IPC installation leaves initialization incomplete, so a later
 `hal_fault_subsystem_init()` retries the missing core instead of publishing a
 partially installed state. With
 `HAL_ENABLE_STACK_GUARD`, the generated ESP-IDF configuration enables the
@@ -843,12 +853,17 @@ behavior still require hardware validation.
 
 After a stack violation the HAL does not return to application code: stack data
 and return addresses are no longer trustworthy. The retained record is written
-first and reset is mandatory. The emergency path then attempts the bounded
+first and reset is mandatory.
+
+The emergency path then attempts the bounded
 message `STACK OVERFLOW; resetting` on an already-active hardware UART and
-skips it when no idle panic-safe UART is available. The default RP console is
+skips it when no idle panic-safe UART is available.
+
+The default RP console is
 USB CDC, which is intentionally not touched from fault context, so RP shows the
 live message only when the application has an idle hardware UART active. The
 full record is consumed only after reboot through the normal diagnostics path.
+
 **impl/.mock:** All state is injectable; see the mock helpers below. The
 mock `hal_fault_subsystem_init()` does NOT reset the staged reset-reason /
 fault-info so tests can pre-populate state and observe behaviour across an
@@ -1004,7 +1019,8 @@ remains available through `hal_power_get_last_wake_ex()`.
 #define clr_bit_v(reg, mask) ...
 ```
 
-**Note:** All helpers are macros (type-width independent). Avoid passing expressions with side effects (`i++`, stateful function calls), because arguments may be evaluated more than once. `bitSet/bitClear/bitRead` remain guarded with `#ifndef` so existing definitions take precedence.
+> **Note:** All helpers are macros (type-width independent). Avoid passing expressions with side effects (`i++`, stateful function calls), because arguments may be evaluated more than once. `bitSet/bitClear/bitRead` remain guarded with `#ifndef` so existing definitions take precedence.
+
 **Thread safety:** Stateless helpers; thread-safe by themselves. When multiple contexts touch the same variable/register, synchronization is the caller's responsibility.
 
 ---
@@ -1131,13 +1147,15 @@ void example_register_bits(void) {
 #define hal_map(x, in_min, in_max, out_min, out_max) ...
 ```
 
-**Note:** Macros are available in both C and C++ and are re-exported via
-`hal/system/hal_system.h`. `hal_constrain` is also re-exported as `pid_clamp` for
-backward compatibility.
-Macro arguments may be evaluated more than once, so avoid side effects in
-arguments (for example `i++` or function calls that modify state).
-**Note:** `hal_map` returns `out_min` when `in_min == in_max` to avoid
-integer division by zero. This matches the behaviour of `mapfloat()`.
+> **Note:** Macros are available in both C and C++ and are re-exported via
+> `hal/system/hal_system.h`. `hal_constrain` is also re-exported as `pid_clamp` for
+> backward compatibility.
+> Macro arguments may be evaluated more than once, so avoid side effects in
+> arguments (for example `i++` or function calls that modify state).
+
+> **Note:** `hal_map` returns `out_min` when `in_min == in_max` to avoid
+> integer division by zero. This matches the behaviour of `mapfloat()`.
+
 **Thread safety:** Thread-safe. Helpers are pure expressions (no shared state).
 
 ### Examples

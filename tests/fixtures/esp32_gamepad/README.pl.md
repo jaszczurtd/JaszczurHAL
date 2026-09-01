@@ -1,8 +1,9 @@
-# Fixture buildu/linkowania gamepada Classic na ESP32
+# Projekt testowy kompilacji i linkowania gamepada Classic na ESP32
 
-To stanowisko bez testu sprzętowego wybiera profil gamepada Bluetooth Classic
-HID na oryginalnym targetcie ESP32. Sprawdza rozwiązywanie funkcji, zależności
-Bluedroid i HID Host, build, linkowanie oraz generowanie artefaktów.
+Ten projekt, który nie wykonuje testów sprzętowych, wybiera profil gamepada
+Bluetooth Classic HID na oryginalnym targecie ESP32. Sprawdza wybór funkcji,
+zależności Bluedroid i HID Host, kompilację, linkowanie oraz generowanie
+artefaktów.
 
 Nie weryfikuje zachowania radia ani parowania z fizycznym kontrolerem.
 

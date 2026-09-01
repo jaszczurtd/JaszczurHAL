@@ -48,8 +48,11 @@ command, callback TCP port, image size, image MD5, and independent 16-byte
 device and client nonces. The device pins authentication to the invitation's
 UDP address and source port and calls back to the same IPv4 address; the host
 uses a connected UDP socket and requires the TCP peer to match its selected UDP
-peer. Both nonce generators use the platform secure-random provider. Strict
-ASCII parsing rejects ambiguous whitespace, embedded NULs, numeric aliases,
+peer.
+
+Both nonce generators use the platform secure-random provider.
+
+Strict ASCII parsing rejects ambiguous whitespace, embedded NULs, numeric aliases,
 malformed lengths and extra fields. A non-empty host password cannot fall back
 to direct `OK`, legacy `AUTH`, or legacy `200` authentication. Mutex-allocation
 failure leaves each target service stopped instead of entering an unlocked
@@ -107,12 +110,14 @@ management, monitor, core-dump, Kconfig, NVS partition generation, size,
 diagnostic, panic-decoder, Clang Python-binding, and FreeRTOS GDB tooling.
 General-purpose transitive Python packages remain owned by the upstream
 environment requirements rather than being duplicated in this snapshot.
+
 The component manager verifies every listed Python distribution after the
 upstream ESP-IDF installer runs. If a mutable upstream constraint selects a
 different compatible release, setup reapplies the reviewed exact versions
 under that constraint before a build may proceed. CI keys the ESP-IDF cache by
 both the framework pin and this snapshot, so a reviewed tool change creates a
 new environment instead of reusing stale packages.
+
 `scripts/generate_sbom.py` expands the snapshot directly into development-scope
 CycloneDX components, including each tool's own reviewed SPDX license. The tool
 entries are not copied into `security/third_party.json`, which remains the

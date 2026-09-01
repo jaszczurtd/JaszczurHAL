@@ -119,8 +119,8 @@ typedef struct {
 } hal_can_config_t;
 
 // Wartość domyślna zależy od włączonych backendów. Jeśli włączono kilka,
-// MCP2515 posiada domyślną konfigurację zgodności, następnie MCP251XFD, a
-// dalej STM32G474 FDCAN.
+// domyślna konfiguracja zgodności pochodzi najpierw z MCP2515, potem
+// z MCP251XFD, a na końcu ze STM32G474 FDCAN.
 // MCP2515: magistrala SPI 0, pin CS 0, 500 kbps / kryształ 8 MHz.
 // MCP251XFD: magistrala SPI 0, pin CS 0, arbitraż 500 kbit/s, dane 2 Mbit/s.
 // STM32G474 FDCAN: PA11/PA12, arbitraż 500 kbit/s, dane 2 Mbit/s.
@@ -197,81 +197,84 @@ bool hal_can_frame_matches_filter(const hal_can_frame_t *frame,
 uint8_t hal_can_encode_temp_i8(float temp_c);
 ```
 
-**wspólna implementacja tematyczna:** Pliki `hal_can.cpp` specyficzne dla targetu są właścicielem fasady
-CAN, cyklu życia uchwytu, mutexowania i dispatchu backendu. Operacje
-specyficzne dla MCP2515 znajdują się w
-`hal/can/mcp2515/hal_can_mcp2515.*`, wspierane przez driver
-rejestrów/SPI MCP2515 dostępny wyłącznie w HAL, w
-`hal/can/mcp2515/mcp2515_driver.*`. Operacje MCP251XFD
-znajdują się w `hal/can/mcp251xfd/hal_can_mcp251xfd.*`, wspierane przez
-driver pollingowy rejestrów/SPI dostępny wyłącznie w HAL, w
-`hal/can/mcp251xfd/mcp251xfd_driver.*`.
-Natywne operacje FDCAN dla STM32G474 znajdują się w
-`impl/stm32g474/hal_can_stm32g474_fdcan.*` i programują bezpośrednio rejestry
-FDCAN1 oraz stały układ pamięci komunikatów (message RAM) STM32G4.
-**Wybór backendu:** API CAN przyjmuje `hal_can_config_t`. Włącz
-`HAL_ENABLE_MCP2515` dla klasycznego backendu MCP2515 lub
-`HAL_ENABLE_MCP251XFD` dla wsparcia CAN FD w MCP2517FD/MCP2518FD. Obie flagi
-kontrolerów zewnętrznych dołączają fasadę CAN oraz zależność SPI. Włącz
-`HAL_ENABLE_STM32G474_FDCAN` dla natywnego FDCAN1 na STM32G474; ta flaga
-dołącza wyłącznie fasadę CAN i jest odrzucana podczas buildu na innych
-targetach. Sama flaga `HAL_ENABLE_CAN` nie dołącza już SPI samodzielnie i jest
-traktowana jako flaga fasady wymagająca backendu.
-**Thread safety:** Thread-safe i wielordzeniowo. Każdy kanał
-ma mutex `hal_mutex_t` przypisany do instancji. `hal_can_receive()` trzyma
-blokadę przez cały czas sprawdzania dostępności i odczytu ramki, eliminując
-race conditions TOCTOU.
-**API CAN FD:** `hal_can_frame_t`, `hal_can_send_frame()`,
-`hal_can_receive_frame()` oraz pomocnicy DLC są niezależni od backendu.
-MCP2515 to klasyczny kontroler CAN 2.0, więc odrzuca ramki z
-`HAL_CAN_FRAME_FD`, `HAL_CAN_FRAME_BRS` lub `HAL_CAN_FRAME_ESI`. MCP251XFD
-akceptuje ramki CAN FD, gdy `cfg.mcp251xfd.enable_fd=true`; STM32G474 FDCAN
-akceptuje je, gdy `cfg.stm32g474_fdcan.enable_fd=true`. Ustaw
-`HAL_CAN_MODE_FD` dla trybu FD/mieszanego na uchwytach zdolnych do FD. Użyj
-`HAL_CAN_FRAME_EXTENDED` dla 29-bitowych ID i `HAL_CAN_FRAME_RTR` dla ramek
-zdalnych (remote frames).
-**Tryby i diagnostyka:** Nowe uchwyty są domyślnie uruchomione.
-`hal_can_stop()` przełącza kontroler w tryb nieuczestniczący/konfiguracyjny,
-a `hal_can_start()` ponownie stosuje zapamiętany tryb. MCP2515 obsługuje
-flagi trybu normalnego, loopback, listen-only, sleep i one-shot. MCP251XFD
-obsługuje dodatkowo `HAL_CAN_MODE_FD` na uchwytach zdolnych do FD; STM32G474
-FDCAN obsługuje tryb FD, loopback, listen-only, one-shot oraz przejścia
-sleep/konfiguracja przez CCCR/TEST.
-API stanu/liczników błędów mapuje rejestry kontrolera backendu na
-`hal_can_state_t` i `hal_can_error_counters_t`.
-**Filtry:** `hal_can_set_filter()` programuje jeden slot id/maska.
-`HAL_CAN_MAX_FILTERS` (6) to *minimalna* liczba sprzętowych filtrów akceptacji
-gwarantowana przez każdy backend, więc jest to przenośna liczba slotów, na
-której można polegać. MCP2515 mapuje je na swoje sześć filtrów sprzętowych;
-MCP251XFD i STM32G474 FDCAN mapują je na pierwsze sześć sprzętowych obiektów
-filtrów kierowanych do RX FIFO 0 (i mogą mieć więcej w sprzęcie).
-`hal_can_set_std_filters()` pozostaje wygodnym pomocnikiem dla dwóch
-dokładnych 11-bitowych ID. Zaprogramowanie filtra MCP2515 czyści też tryb
-odbioru dowolnego (receive-any) na obu sprzętowych buforach odbiorczych, więc
-niepasujące ramki są odrzucane, zanim zajmą którykolwiek bufor.
-`hal_can_create_with_retry()` ponawia inicjalizację do `max_retries + 1` prób
-i może automatycznie podłączyć handler IRQ, gdy `int_pin != HAL_CAN_NO_INT_PIN`.
-`hal_can_process_all()` wielokrotnie wywołuje `hal_can_receive()` i przekazuje
-dalej tylko ramki z `id != 0` i `len > 0`.
-`hal_can_encode_temp_i8()` to mały, wspólny pomocnik formatu ramki dla
-1-bajtowych pól temperatury ze znakiem w ramkach CAN. Obcina wejściową
-wartość float w stronę zera, saturuje do zakresu `int8_t` i zwraca
-odpowiadający bajt payloadu w zapisie uzupełnienia do dwóch.
+- **Wspólna implementacja modułu:** Pliki `hal_can.cpp` właściwe dla poszczególnych
+  targetów zawierają publiczną warstwę CAN, zarządzają cyklem życia uchwytów i mutexami
+  oraz kierują wywołania do backendu. Operacje specyficzne dla MCP2515 znajdują się w
+  `hal/can/mcp2515/hal_can_mcp2515.*` i korzystają z dostępnego wyłącznie w HAL
+  drivera rejestrów/SPI MCP2515 z `hal/can/mcp2515/mcp2515_driver.*`.
+  Operacje MCP251XFD znajdują się w `hal/can/mcp251xfd/hal_can_mcp251xfd.*`
+  i korzystają z dostępnego wyłącznie w HAL pollingowego drivera rejestrów/SPI
+  z `hal/can/mcp251xfd/mcp251xfd_driver.*`.
+  Natywne operacje FDCAN dla STM32G474 znajdują się w
+  `impl/stm32g474/hal_can_stm32g474_fdcan.*` i programują bezpośrednio rejestry
+  FDCAN1 oraz stały układ pamięci komunikatów (message RAM) STM32G4.
+- **Wybór backendu:** API CAN przyjmuje `hal_can_config_t`. Włącz
+  `HAL_ENABLE_MCP2515` dla klasycznego backendu MCP2515 lub
+  `HAL_ENABLE_MCP251XFD` dla wsparcia CAN FD w MCP2517FD/MCP2518FD. Obie flagi
+  kontrolerów zewnętrznych dołączają publiczną warstwę CAN oraz zależność SPI. Włącz
+  `HAL_ENABLE_STM32G474_FDCAN` dla natywnego FDCAN1 na STM32G474; ta flaga
+  dołącza wyłącznie publiczną warstwę CAN i powoduje błąd buildu na innych
+  targetach. Sama flaga `HAL_ENABLE_CAN` nie dołącza już SPI: włącza wspólne API
+  i wymaga wskazania backendu.
+
+**Thread safety:** API jest thread-safe i może być używane z wielu rdzeni. Każdy kanał
+ma własny mutex `hal_mutex_t`. `hal_can_receive()` utrzymuje blokadę od sprawdzenia
+dostępności do zakończenia odczytu ramki, co eliminuje race condition typu TOCTOU.
+
+- **API CAN FD:** `hal_can_frame_t`, `hal_can_send_frame()`,
+  `hal_can_receive_frame()` oraz pomocnicy DLC są niezależni od backendu.
+  MCP2515 to klasyczny kontroler CAN 2.0, więc odrzuca ramki z
+  `HAL_CAN_FRAME_FD`, `HAL_CAN_FRAME_BRS` lub `HAL_CAN_FRAME_ESI`. MCP251XFD
+  akceptuje ramki CAN FD, gdy `cfg.mcp251xfd.enable_fd=true`; STM32G474 FDCAN
+  akceptuje je, gdy `cfg.stm32g474_fdcan.enable_fd=true`. Ustaw
+  `HAL_CAN_MODE_FD` dla trybu FD lub mieszanego na uchwytach obsługujących FD. Użyj
+  `HAL_CAN_FRAME_EXTENDED` dla 29-bitowych ID i `HAL_CAN_FRAME_RTR` dla ramek
+  zdalnych (remote frames).
+- **Tryby i diagnostyka:** Nowe uchwyty są domyślnie uruchomione.
+  `hal_can_stop()` przełącza kontroler w tryb nieuczestniczący/konfiguracyjny,
+  a `hal_can_start()` ponownie stosuje zapamiętany tryb. MCP2515 obsługuje
+  flagi trybu normalnego, loopback, listen-only, sleep i one-shot. MCP251XFD
+  obsługuje dodatkowo `HAL_CAN_MODE_FD` na uchwytach z obsługą FD; STM32G474
+  FDCAN obsługuje tryb FD, loopback, listen-only i one-shot oraz przejścia do
+  trybów sleep i konfiguracji za pośrednictwem CCCR/TEST.
+  API stanu i liczników błędów przekształca zawartość rejestrów kontrolera do
+  `hal_can_state_t` i `hal_can_error_counters_t`.
+- **Filtry:** `hal_can_set_filter()` programuje jeden slot id/maska.
+  `HAL_CAN_MAX_FILTERS` (6) to *minimalna* liczba sprzętowych filtrów akceptacji
+  gwarantowana przez każdy backend, a zatem liczba slotów, na której może polegać
+  przenośny kod. W MCP2515 odpowiadają one sześciu filtrom sprzętowym. MCP251XFD
+  i STM32G474 FDCAN używają pierwszych sześciu sprzętowych obiektów filtrów
+  kierowanych do RX FIFO 0, choć sprzęt może udostępniać ich więcej.
+  `hal_can_set_std_filters()` pozostaje wygodnym pomocnikiem dla dwóch
+  dokładnych 11-bitowych ID. Zaprogramowanie filtra MCP2515 czyści też tryb
+  odbioru dowolnego (receive-any) na obu sprzętowych buforach odbiorczych, więc
+  niepasujące ramki są odrzucane, zanim zajmą którykolwiek bufor.
+  `hal_can_create_with_retry()` ponawia inicjalizację do `max_retries + 1` prób
+  i może automatycznie podłączyć handler IRQ, gdy `int_pin != HAL_CAN_NO_INT_PIN`.
+  `hal_can_process_all()` wielokrotnie wywołuje `hal_can_receive()` i przekazuje
+  dalej tylko ramki z `id != 0` i `len > 0`.
+  `hal_can_encode_temp_i8()` to niewielki helper wspólnego formatu danych dla
+  jednobajtowych pól temperatury ze znakiem w ramkach CAN. Obcina wejściową
+  wartość typu `float` w stronę zera, nasyca ją do zakresu `int8_t` i zwraca
+  odpowiadający bajt payloadu w zapisie uzupełnienia do dwóch.
 
 **Tryb TX one-shot:** `hal_can_create()` domyślnie włącza tryb one-shot MCP2515
 (`CANCTRL.OSM = 1`) po inicjalizacji. Można go wyłączyć poprzez
 `cfg.mcp2515.one_shot_tx`. W trybie one-shot, gdy wysłana ramka nie otrzyma
 ACK (np. brak innego węzła na magistrali), sprzęt natychmiast zwalnia bufor
-TX zamiast retransmitować w nieskończoność. Zapobiega to głodzeniu bufora TX:
+TX zamiast retransmitować w nieskończoność. Zapobiega to wyczerpaniu buforów TX:
 bez one-shot już 3 kolejne ramki bez ACK trwale blokują wszystkie 3 bufory
 TX, powodując, że każde kolejne `hal_can_send()` zawodzi z
-`CAN_GETTXBFTIMEOUT`. Dla aplikacji z okresowym rozgłaszaniem (gdzie świeże
-dane są i tak wysyłane przy następnym takcie timera) one-shot nie ma
-praktycznych wad - pojedyncza utracona ramka jest zastępowana kolejną
-aktualizacją. Publikatory typu "tylko zmiana" muszą zamiast tego ponawiać
-nieudane wysłanie, dodać okresowy heartbeat lub wyłączyć `one_shot_tx`; w
-przeciwnym razie jedna utracona ramka może pozostawić odbiorcę z
-nieaktualnymi danymi. Gdy magistrala jest sprawna, a wszyscy odbiorcy
+`CAN_GETTXBFTIMEOUT`.
+
+Dla aplikacji z okresowym rozgłaszaniem, w których świeże dane i tak zostaną
+wysłane przy następnym tyknięciu timera, one-shot nie ma praktycznych wad -
+pojedynczą utraconą ramkę zastąpi kolejna aktualizacja. Nadawcy wysyłający dane
+tylko po zmianie muszą natomiast ponawiać nieudane wysłanie, dodać okresowy
+heartbeat albo wyłączyć `one_shot_tx`. W przeciwnym razie jedna utracona ramka
+może pozostawić u odbiorcy nieaktualne dane.
+
+Gdy magistrala jest sprawna, a wszyscy odbiorcy
 obecni, zachowanie one-shot jest identyczne jak w trybie normalnym:
 pierwsza próba się udaje i ponowienie nie jest potrzebne. W trybie one-shot
 brak ACK, utrata arbitrażu, przerwana transmisja lub błąd magistrali są
@@ -284,11 +287,11 @@ późniejsza próba się powiedzie.
 
 ## `hal_hd44780` - wyświetlacz znakowy LCD HD44780  *(opcjonalny - `HAL_ENABLE_HD44780`)*
 
-Driver równoległego znakowego LCD dla modułów kompatybilnych z HD44780.
-Obsługuje te same tryby transferu GPIO 4-bitowy i 8-bitowy co oryginalna
+Driver równoległych wyświetlaczy znakowych LCD zgodnych z HD44780.
+Obsługuje te same 4- i 8-bitowe tryby transferu GPIO co oryginalna
 biblioteka LiquidCrystal, wraz z opcjonalnym `RW`, niestandardowymi znakami
 CGRAM, sterowaniem kursorem/wyświetlaczem, przewijaniem, autoscrollem oraz
-nadpisywaniem przesunięcia wiersza.
+konfigurowalnymi przesunięciami wierszy.
 
 ```cpp
 #include <hal/display/hal_hd44780.h>
@@ -315,20 +318,21 @@ lcd.createChar(0, glyph);
 lcd.write((uint8_t)0);
 ```
 
-**wspólna implementacja tematyczna:** `hal/display/hd44780/hd44780.*`,
-wykorzystywana ponownie przez RP2040, STM32G474 i testy hosta. Driver
-korzysta z HAL GPIO, `hal_delay_us()` oraz mutexu `hal_mutex_t` instancji.
-**Zakres klasy display:** To driver znakowego LCD, a nie fasada bitmapowa
-`hal_display`. Użyj `hal_display` do grafiki TFT/OLED przez SPI.
-**Czasowanie:** Opóźnienia inicjalizacji, czyszczenia/home, impulsu enable i
-ustalania się (settle) komendy odpowiadają sprawdzonej sekwencji HD44780: 50 ms
-oczekiwania na zasilanie, próby inicjalizacji 4,5 ms/150 us, 2 ms opóźnienia
-czyszczenia/home oraz fazy impulsu enable 1/1/100 us.
-**Thread safety:** Publiczne metody serializują każdą instancję
-`HD44780` mutexem HAL, więc zadania wielordzeniowe i FreeRTOS nie mogą
-przeplatać sekwencji GPIO komend/danych dla tego samego wyświetlacza.
-Wywołania nie są bezpieczne w ISR, ponieważ `hal_mutex_lock` nie jest
-bezpieczny w ISR.
+- **Wspólna implementacja modułu:** `hal/display/hd44780/hd44780.*` jest używana
+  przez RP2040, STM32G474 oraz testy hostowe. Driver
+  korzysta z HAL GPIO, `hal_delay_us()` oraz mutexu `hal_mutex_t` instancji.
+- **Zakres klasy:** Jest to driver znakowego LCD. Do grafiki bitmapowej na
+  wyświetlaczach TFT/OLED przez SPI służy `hal_display`.
+- **Czasowanie:** Opóźnienia inicjalizacji, czyszczenia/home, impulsu enable i
+  wykonania komendy odpowiadają sprawdzonej sekwencji HD44780: 50 ms
+  oczekiwania na zasilanie, próby inicjalizacji 4,5 ms/150 us, 2 ms opóźnienia
+  czyszczenia/home oraz fazy impulsu enable 1/1/100 us.
+
+**Thread safety:** Każda instancja `HD44780` ma mutex HAL chroniący metody publiczne.
+Dzięki temu zadania działające na wielu rdzeniach lub pod FreeRTOS nie mogą przeplatać
+sekwencji komend i danych GPIO kierowanych do tego samego wyświetlacza.
+API nie jest przeznaczone do wywoływania z ISR, ponieważ `hal_mutex_lock`
+nie jest ISR-safe.
 
 ---
 
@@ -494,7 +498,7 @@ hal_status_t hal_display_init_uc81xx_ex(
 // Konfiguruje wymiary, rotację, kolejność kolorów. Musi być wywołane po init().
 bool hal_display_configure(int width, int height, uint8_t rotation, bool invert, bool bgr);
 
-// Ponownie wysyła sekwencję inicjalizacji rejestrów backendu, gdy wybrany driver ją wspiera.
+// Ponownie wysyła sekwencję inicjalizacji rejestrów backendu, gdy wybrany driver ją obsługuje.
 hal_status_t hal_display_soft_init(int delay_ms);
 hal_status_t hal_display_suspend_ex(void);
 hal_status_t hal_display_resume_ex(void);
@@ -573,29 +577,29 @@ int  hal_display_prepare_text_v(char *display_txt, size_t display_txt_size,
                                 const char *format, va_list args);
 ```
 
-**Kolory:** RGB565 `uint16_t`. Użyj predefiniowanych stałych (`HAL_COLOR_BLACK`, `HAL_COLOR_WHITE`, `HAL_COLOR_RED`, ...)
-lub selektora `HAL_COLOR(name)`, na przykład `HAL_COLOR(ORANGE)`.
-**Pomocnicy trybu wyświetlacza:** `HAL_DISPLAY_ROTATION_*`, `HAL_DISPLAY_ROTATION(deg)`,
-`HAL_DISPLAY_INVERT_ON/OFF`, `HAL_DISPLAY_COLOR_ORDER_RGB/BGR`.
-**Możliwości i surowe bufory:** Odpytaj aktywny backend przez
-`hal_display_get_capabilities_ex()`, a następnie używaj wyłącznie
-zgłoszonych formatów i wyrównań z `hal_display_write_raw_ex()`. `pitch`
-podawany jest w pikselach. Backendy TFT i RGB OLED (oraz mock) akceptują
-`pitch > width`: każdy wiersz źródłowy jest przesyłany osobno w ramach
-jednego okna adresowania, więc bufor wywołującego musi zawierać realne
-bajty tylko do `width` pikseli ostatniego wiersza -- końcowy padding poza
-tym miejscem nie musi być podparty pamięcią. Backendy page-tiled albo
-rekonfigurujące profil panelu przy każdym wywołaniu nadal wymagają
-`pitch == width` i w przeciwnym razie zwracają `HAL_EUNSUPPORTED`: ST7567
-zawsze (jeden bajt koduje 8 ułożonych w stos wierszy pikseli, więc nie ma
-granicy bajtowej per pojedynczy wiersz), SSD16xx przy rotacji 0/180 (tiling
-zmienia kierunek wraz z rotacją) oraz UC81xx (jego wywołanie zapisu za
-każdym razem ponownie nakłada profil panelu, więc podział na wiersze
-powielałby ten efekt uboczny raz na wiersz). ST7567 akceptuje
-`MONO01`/`MONO10`, zgłasza `HAL_DISPLAY_SCREEN_INFO_MONO_VTILED`
-i wymaga, aby `y` oraz `height` były wyrównane do 8 pikseli. Użyj
-`hal_display_set_pixel_format_ex()` przed zmianą polaryzacji monochromatycznej
-ST7567.
+- **Kolory:** RGB565 `uint16_t`. Użyj predefiniowanych stałych (`HAL_COLOR_BLACK`, `HAL_COLOR_WHITE`, `HAL_COLOR_RED`, ...)
+  lub selektora `HAL_COLOR(name)`, na przykład `HAL_COLOR(ORANGE)`.
+- **Pomocnicy trybu wyświetlacza:** `HAL_DISPLAY_ROTATION_*`, `HAL_DISPLAY_ROTATION(deg)`,
+  `HAL_DISPLAY_INVERT_ON/OFF`, `HAL_DISPLAY_COLOR_ORDER_RGB/BGR`.
+- **Obsługiwane formaty i bezpośredni zapis bufora:** Pobierz właściwości aktywnego
+  backendu przez `hal_display_get_capabilities_ex()`, a w
+  `hal_display_write_raw_ex()` używaj wyłącznie zadeklarowanych formatów i wyrównań.
+  `pitch` jest podawany w pikselach. Backendy TFT i RGB OLED oraz mock akceptują
+  `pitch > width`: każdy wiersz źródłowy jest przesyłany osobno w ramach
+  jednego okna adresowania, więc bufor wywołującego musi zawierać dane tylko
+  do `width` pikseli ostatniego wiersza - pamięć nie musi obejmować paddingu
+  występującego za nimi. Backendy o układzie stronicowym albo
+  rekonfigurujące profil panelu przy każdym wywołaniu nadal wymagają
+  `pitch == width` i w przeciwnym razie zwracają `HAL_EUNSUPPORTED`: ST7567
+  zawsze, ponieważ jeden bajt koduje osiem pionowo ułożonych pikseli, więc
+  poszczególne wiersze pikseli nie mają własnych granic bajtowych; SSD16xx
+  przy rotacji 0/180, ponieważ rotacja zmienia kierunek układu; oraz UC81xx,
+  ponieważ każde wywołanie zapisu ponownie stosuje profil panelu, a podział
+  danych na wiersze powtarzałby ten efekt dla każdego z nich.
+  ST7567 akceptuje `MONO01`/`MONO10`, zwraca `HAL_DISPLAY_SCREEN_INFO_MONO_VTILED`
+  i wymaga, aby `y` oraz `height` były wyrównane do 8 pikseli. Użyj
+  `hal_display_set_pixel_format_ex()` przed zmianą polaryzacji monochromatycznej
+  ST7567.
 
 **E-papier SSD16xx / UC81xx:** Włącz `HAL_ENABLE_SSD16XX` lub
 `HAL_ENABLE_UC81XX`; obie flagi dodają DISPLAY i SPI. Wspólny transport
@@ -607,19 +611,20 @@ rotacjach 0/180. UC81xx używa poziomego pakowania MSB-first i wymaga, aby
 `x` oraz `width` były wyrównane do 8 pikseli. Oba akceptują wyłącznie
 `MONO10`.
 
-Ustaw `frame_incomplete=true` przy ładowaniu jednego lub więcej obszarów bez
-natychmiastowej aktualizacji panelu. Zakończ partię wywołaniem
-`hal_display_flush_ex()`; odłożone zapisy używają pełnego odświeżenia, dzięki
-czemu stary/nowy RAM kontrolera pozostaje spójny bez przechowywania buforów
-wywołującego przez fasadę. Przy `frame_incomplete=false` skonfigurowany
-profil częściowy jest wybierany przed zapisem obszaru i odświeżeniem. Cykl
-można również wybrać jawnie za pomocą
+Ustaw `frame_incomplete=true`, aby załadować jeden lub więcej obszarów bez
+natychmiastowego odświeżania panelu. Zakończ serię wywołaniem
+`hal_display_flush_ex()`. Odłożone zapisy korzystają z pełnego odświeżenia,
+dzięki czemu stara i nowa pamięć obrazu kontrolera pozostają spójne, a wspólna
+warstwa nie musi zachowywać buforów przekazanych przez wywołującego. Przy
+`frame_incomplete=false` skonfigurowany profil częściowy jest wybierany przed
+zapisem obszaru i jego odświeżeniem. Cykl można również wybrać jawnie za pomocą
 `hal_display_epd_refresh_ex(HAL_DISPLAY_EPD_REFRESH_FULL/PARTIAL)`; żądanie
 odświeżenia częściowego dla oczekującej partii pełnego odświeżenia zwraca
 `HAL_ESTATE`, natomiast brakujący profil częściowy zwraca
-`HAL_EUNSUPPORTED`. Bajty LUT/profilu to dane providera panelu, a ich
-tablice muszą pozostać poprawne, dopóki backend jest aktywny; nie ponownie
-używaj LUT tylko dlatego, że dwa moduły zawierają ten sam kontroler.
+`HAL_EUNSUPPORTED`. Bajty LUT i profilu pochodzą od producenta panelu, a
+zawierające je tablice muszą pozostać dostępne przez cały runtime backendu.
+Nie używaj tej samej LUT tylko dlatego, że dwa moduły zawierają ten sam
+kontroler.
 
 ```c
 hal_display_ssd16xx_config_t cfg = {0};
@@ -643,42 +648,44 @@ if (status == HAL_OK) {
     status = hal_display_write_raw_ex(0, 0, &frame, framebuffer);
 }
 ```
-**Strumieniowanie TFT:** Backendy TFT trybu bezpośredniego (immediate-mode)
-obsługują jawną sekwencję strumieniowania dla dużych ciągłych aktualizacji:
-`hal_display_begin_write(x, y, w, h)`, jeden lub więcej zapisów pikseli, a
-następnie `hal_display_end_write()`. `hal_display_write_pixels_fast()`
-przyjmuje natywne słowa `uint16_t` RGB565 i zamienia je wewnętrznie na
-kolejność bajtów kontrolera; `hal_display_write_pixels_be()` przyjmuje już
-big-endianowe bajty RGB565; `hal_display_write_pixels_dma()` to blokujący
-pomocnik strumienia bajtów zdolny do DMA.
-Wariant asynchroniczny,
-`hal_display_write_pixels_dma_async_start()` / `_busy()` / `_wait()`, mapuje
-się na `hal_spi_write_dma_async_*()` dla driverów ILI9341 i ST77xx. Gdy
-backend jest rzeczywiście asynchroniczny, utrzymuj `pixels_be` poprawne i
-trzymaj otwarty strumień zapisu wyświetlacza aż do zakończenia `_wait()`.
-`hal_display_end_write()` czeka na aktywne asynchroniczne DMA pikseli przed
-zamknięciem transakcji TFT.
-**Uwagi ST77xx/GC9A01:** `HAL_DISPLAY_ST7735`, `HAL_DISPLAY_ST7789`,
-`HAL_DISPLAY_ST7796S` i `HAL_DISPLAY_GC9A01` współdzielą backend w stylu
-ST77xx. `JH_ST77XX_SPI_DEFAULT_HZ` można nadpisać przed dołączeniem/budowaniem
-drivera, aby dostroić domyślny zegar SPI TFT dla danej płytki. ST7796S
-zachowuje swoje udokumentowane domyślne ustawienia zorientowane na BGR bez
-wymuszania odwróconych komend inwersji. GC9A01 używa lokalnej sekwencji
-komend Zephyr GC9x01x i domyślnie ustawia 240x240. SSD1331/SSD135x to
-backendy RGB565 w trybie bezpośrednim i obsługują surowe zapisy, klasyczne
-strumieniowanie oraz prymitywy GFX. Ich orientacja surowa/GFX jest obecnie
-wyłącznie natywna. ST7567 jest celowo surowym backendem stronicowym
-(page backend); możliwości nie zgłaszają dla niego klasycznego GFX,
-strumieniowania ani DMA.
-**impl/rp2040:** Korzysta ze wspólnego stosu HAL display. ILI9341 i ST77xx
-używają wspólnych driverów HAL SPI/GPIO; OLED-y z rodziny SSD1306
-używają wspólnego drivera HAL I2C/SPI; geometria, bitmapy i renderowanie
-tekstu działają przez wspólny silnik `jh_gfx`.
-**impl/stm32g474:** Korzysta z tego samego wspólnego stosu HAL display co RP2040.
-**impl/.mock:** deterministyczny mock hosta z inspekcjonowalnym stanem do testów.
-**Thread safety:** Backendy sprzętowe serializują operacje
-wyświetlacza wewnętrznym `hal_mutex_t`. Podczas strumieniowania TFT mutex
-pozostaje przetrzymany między `hal_display_begin_write()` a
+
+- **Strumieniowanie TFT:** Backendy TFT działające w trybie bezpośrednim
+  obsługują jawną sekwencję strumieniowania dużych, ciągłych obszarów:
+  `hal_display_begin_write(x, y, w, h)`, jeden lub więcej zapisów pikseli, a
+  następnie `hal_display_end_write()`. `hal_display_write_pixels_fast()`
+  przyjmuje natywne słowa `uint16_t` RGB565 i zamienia je wewnętrznie na
+  kolejność bajtów kontrolera; `hal_display_write_pixels_be()` przyjmuje już
+  bajty RGB565 w kolejności big-endian; `hal_display_write_pixels_dma()` jest blokującym
+  helperem zapisu strumienia przez DMA.
+  Wariant asynchroniczny,
+  `hal_display_write_pixels_dma_async_start()` / `_busy()` / `_wait()`, korzysta z
+  `hal_spi_write_dma_async_*()` w driverach ILI9341 i ST77xx. Gdy backend rzeczywiście
+  działa asynchronicznie, bufor `pixels_be` musi pozostać dostępny i niezmieniony, a
+  strumień zapisu wyświetlacza otwarty do zakończenia `_wait()`.
+  `hal_display_end_write()` czeka na aktywne asynchroniczne DMA pikseli przed
+  zamknięciem transakcji TFT.
+- **Uwagi ST77xx/GC9A01:** `HAL_DISPLAY_ST7735`, `HAL_DISPLAY_ST7789`,
+  `HAL_DISPLAY_ST7796S` i `HAL_DISPLAY_GC9A01` korzystają ze wspólnego backendu
+  zgodnego z rodziną ST77xx. `JH_ST77XX_SPI_DEFAULT_HZ` można nadpisać przed
+  dołączeniem lub buildem drivera, aby dostroić domyślny zegar SPI TFT dla
+  danej płytki. ST7796S zachowuje udokumentowane domyślne ustawienia w kolejności
+  BGR bez wymuszania zamienionych komend inwersji. GC9A01 używa lokalnej sekwencji
+  komend Zephyr GC9x01x i domyślnie ustawia 240x240. SSD1331/SSD135x to
+  backendy RGB565 w trybie bezpośrednim. Obsługują bezpośredni zapis bufora, dotychczasowe
+  strumieniowanie oraz prymitywy GFX. Bezpośredni zapis i GFX obsługują obecnie wyłącznie
+  natywną orientację. ST7567 celowo udostępnia tylko bezpośredni, stronicowy zapis;
+  jego właściwości nie deklarują dotychczasowego GFX,
+  strumieniowania ani DMA.
+- **impl/rp2040:** Korzysta ze wspólnego stosu HAL display. ILI9341 i ST77xx
+  używają wspólnych driverów HAL SPI/GPIO; OLED-y z rodziny SSD1306
+  używają wspólnego drivera HAL I2C/SPI; geometria, bitmapy i renderowanie
+  tekstu działają przez wspólny silnik `jh_gfx`.
+- **impl/stm32g474:** Korzysta z tego samego wspólnego stosu HAL display co RP2040.
+- **impl/.mock:** deterministyczny mock hosta, którego stan można sprawdzać w testach.
+
+**Thread safety:** Backendy sprzętowe chronią operacje wyświetlacza wewnętrznym
+`hal_mutex_t`. Podczas strumieniowania TFT mutex pozostaje zablokowany między
+`hal_display_begin_write()` a
 `hal_display_end_write()`, w tym podczas oczekiwania na asynchroniczne DMA.
 Backend mock jest niezsynchronizowany i przeznaczony do testów jednowątkowych.
 
@@ -696,18 +703,16 @@ void         hal_mock_display_get_last_fill_rect(int *x, int *y, int *w, int *h,
 void         hal_mock_display_get_last_bitmap(int *x, int *y, uint16_t **data, int *w, int *h);
 ```
 
-**API oparte na statusie (status-first):** walidacja statusu i mapowanie
-błędów żyją w mocku oraz wspólnych backendach sprzętowych. Historyczne
-funkcje `bool` są cienkimi wrapperami zgodności nad operacjami `_ex`
-zwracającymi status. Historyczne `void` inicjalizacja i soft-init zwracają
-teraz `hal_status_t` w tym samym miejscu; istniejący wywołujący nadal mogą
-ignorować wynik. Gettery zwracające wartość zachowują swoją oryginalną
-sygnaturę i udostępniają typowane błędy przez warianty `_ex` z parametrem
-wyjściowym.
+**API zwracające status:** mock i wspólne backendy sprzętowe sprawdzają argumenty oraz
+przekształcają błędy na `hal_status_t`. Dotychczasowe funkcje `bool` pozostają wrapperami
+zgodności wywołującymi operacje `_ex`. Funkcje inicjalizacji i soft-init, które wcześniej
+zwracały `void`, teraz w tym samym miejscu zwracają `hal_status_t`; istniejący kod może
+nadal ignorować wynik. Gettery zwracające wartość zachowują pierwotną sygnaturę, a ich
+warianty `_ex` przekazują dokładny błąd i zapisują wynik przez parametr wyjściowy.
 
-Backend może zgłosić `HAL_EINVAL`, `HAL_EUNINIT`, `HAL_EUNSUPPORTED`,
-`HAL_ESTATE`, `HAL_EBUSY`, `HAL_EOVERFLOW` i `HAL_EIO` bez zwijania ich do
-starszego wyniku typu boolowskiego.
+Backend może zwrócić `HAL_EINVAL`, `HAL_EUNINIT`, `HAL_EUNSUPPORTED`, `HAL_ESTATE`,
+`HAL_EBUSY`, `HAL_EOVERFLOW` lub `HAL_EIO` bez sprowadzania tych informacji do dawnego
+wyniku typu `bool`.
 
 ```c
 // Konfiguracja + rysowanie z typowaną diagnostyką
@@ -730,12 +735,13 @@ if (hal_display_begin_write_ex(0, 0, 240, 320) == HAL_OK) {
 ```
 
 Uwaga dotycząca nazewnictwa: ponieważ `hal_display_init_ssd1306_i2c_ex()` już
-istnieje (inicjalizator wybierający magistralę), punkt wejścia statusu dla
-SSD1306 to `hal_display_init_ssd1306_i2c_status_ex()`. Dla nowej pracy z
-rodziną OLED preferuj `hal_display_init_ssd1306_family_ex()`: wybiera
+istnieje jako inicjalizator wybierający magistralę, funkcją zwracającą status
+dla SSD1306 jest `hal_display_init_ssd1306_i2c_status_ex()`. W nowym kodzie dla
+rodziny OLED preferuj `hal_display_init_ssd1306_family_ex()`: wybiera
 kontroler, transport I2C/SPI, przesunięcia segmentu/strony/wyświetlacza,
-orientację sprzętową oraz zachowanie referencji prądowej wariantu w jednej
-strukturze konfiguracyjnej zwracającej status. `HAL_ENABLE_SSD1306` nadal
+orientację sprzętową oraz właściwy dla danego wariantu sposób ustawiania prądu
+odniesienia w jednej strukturze konfiguracyjnej zwracającej status.
+`HAL_ENABLE_SSD1306` nadal
 automatycznie włącza I2C dla historycznego pomocnika; transport SPI OLED
 wymaga też `HAL_ENABLE_SPI`.
 

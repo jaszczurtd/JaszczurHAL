@@ -68,18 +68,20 @@ void hal_modem_at_set_tick_callback(hal_modem_at_t h,
 void hal_modem_at_sleep_ms(hal_modem_at_t h, uint32_t ms);
 ```
 
-**Backend:** single implementation (`src/hal/modem/hal_modem_at.cpp`) shared
-between hardware and mock targets - sits entirely on `hal_uart` +
-`hal_millis` + `hal_mutex`.
+- **Backend:** single implementation (`src/hal/modem/hal_modem_at.cpp`) shared
+  between hardware and mock targets - sits entirely on `hal_uart` +
+  `hal_millis` + `hal_mutex`.
+
 **Thread safety:** every handle serialises access internally via a
 per-instance mutex. Safe to call from multiple threads/cores.
-**Watchdog cooperation:** every internal poll loop (send,
-send_with_data, listen_until) and every higher-level wait built on top
-of the engine (e.g. `hal_simcom_a76xx_wait_*`, power pulses) invokes
-the tick callback registered with `hal_modem_at_set_tick_callback()`
-at least every ~20 ms. Register a tick that calls
-`hal_watchdog_feed()` (and optionally refreshes a status LED) to keep
-the application watchdog alive across long modem bring-up sequences.
+
+- **Watchdog cooperation:** every internal poll loop (send,
+  send_with_data, listen_until) and every higher-level wait built on top
+  of the engine (e.g. `hal_simcom_a76xx_wait_*`, power pulses) invokes
+  the tick callback registered with `hal_modem_at_set_tick_callback()`
+  at least every ~20 ms. Register a tick that calls
+  `hal_watchdog_feed()` (and optionally refreshes a status LED) to keep
+  the application watchdog alive across long modem bring-up sequences.
 
 ---
 

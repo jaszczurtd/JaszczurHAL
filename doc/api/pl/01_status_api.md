@@ -4,40 +4,40 @@
 
 > **Część [Dokumentacji API JaszczurHAL](../../pl/JaszczurHAL_API.md)**
 
-Obejmuje: `hal_status_t`, funkcje pomocnicze statusu w
+Opisuje `hal_status_t`, funkcje pomocnicze do obsługi statusów z
 [`hal_status.h`](../../../src/hal/core/hal_status.h), migrację istniejących funkcji
-do wariantów zwracających status oraz towarzyszące funkcje `_ex` używane przez
-zmigrowane moduły.
+do wariantów zwracających status oraz funkcje `_ex` używane w modułach, które
+przeszły taką migrację.
 
 ## Dlaczego istnieje
 
-Historyczne API HAL zgłasza wyniki jako `bool` (sukces/porażka), licznik
-`int`/`size_t`, uchwyt (`NULL` w razie błędu) lub zwykłe `void`. Te kształty mówią
-*że* coś się nie powiodło, ale nie *dlaczego*. `hal_status_t` dodaje jeden,
-jednolity typ wyniku, dzięki czemu wywołujący mogą rozgałęziać się na podstawie
-przyczyny - nieprawidłowy argument, niezainicjalizowany backend, błąd magistrali,
-brak obiektu, przepełnienie - bez wymyślania osobnej konwencji błędów dla
-każdego modułu.
+Starsze API HAL przekazuje wynik jako `bool` (sukces/porażka), licznik typu
+`int`/`size_t`, uchwyt (`NULL` w razie błędu) albo zwykłe `void`. Takie wartości
+informują, *że wystąpił* błąd, ale nie podają jego przyczyny. `hal_status_t`
+wprowadza jeden, wspólny typ wyniku. Kod wywołujący może dzięki temu rozróżnić
+nieprawidłowy argument, niezainicjalizowany backend, błąd magistrali, brak
+obiektu czy przepełnienie, bez tworzenia osobnej konwencji błędów dla każdego
+modułu.
 
-Migracja jest **status-first**. Funkcja zwracająca status odpowiada za
-walidację, wykonanie w backendzie i mapowanie błędów. Historyczne API typu
-`bool`, wartość lub uchwyt pozostaje jako cienki wrapper kompatybilności i
-zyskuje towarzyszącą funkcję `_ex` tam, gdzie to potrzebne. Historyczna
-funkcja `void`, która może zakończyć się błędem, zaczyna bezpośrednio zwracać `hal_status_t`, co
-pozostaje kompatybilne źródłowo z wywołującymi, którzy ignorują wynik;
-zbędne adaptery `_ex` są usuwane. Dzięki temu unika się funkcji statusu, które
-mogłyby jedynie zgadywać po wywołaniu tracącego informacje starego wrappera.
+Podstawą migracji jest **funkcja zwracająca status**. To ona sprawdza
+argumenty, wywołuje backend i odwzorowuje błędy. Starsza funkcja zwracająca
+`bool`, wartość albo uchwyt pozostaje prostym adapterem zgodności, a w razie
+potrzeby otrzymuje odpowiednik `_ex`. Starsza funkcja `void`, która może się
+nie powieść, zaczyna bezpośrednio zwracać `hal_status_t`. Wywołania ignorujące
+wynik nadal kompilują się bez zmian, a zbędne adaptery `_ex` są usuwane. Dzięki
+temu funkcja statusowa nie musi odgadywać przyczyny błędu po wywołaniu starego
+API, które tę informację traci.
 
 ## Kody statusów
 
-Wartości `hal_status_t` są dodatnie przy sukcesie i ujemne przy porażce, więc
-`status == HAL_OK` sprawdza sukces, a `status < 0` (lub `hal_status_is_error()`)
-sprawdza ogólną porażkę.
+Wartości `hal_status_t` są dodatnie po powodzeniu i ujemne po wystąpieniu błędu.
+Powodzenie można więc sprawdzić przez `status == HAL_OK`, a dowolny błąd przez
+`status < 0` lub `hal_status_is_error()`.
 
 | Kod | Znaczenie |
 |---|---|
 | `HAL_OK` | Operacja zakończona pomyślnie. |
-| `HAL_NONE` | Brak statusu / niezainicjalizowany / stan nieprawidłowy (wartość `0`). |
+| `HAL_NONE` | Brak statusu / stan niezainicjalizowany / stan nieprawidłowy (wartość `0`). |
 | `HAL_EINVAL` | Nieprawidłowy argument lub nieobsługiwana wartość parametru. |
 | `HAL_EBUSY` | Zasób lub magistrala są zajęte. |
 | `HAL_ETIMEOUT` | Timeout operacji. |
@@ -59,11 +59,11 @@ sprawdza ogólną porażkę.
 | `HAL_ECONFIG` | Błąd konfiguracji (nieprawidłowe ustawienie/brakująca zależność). |
 | `HAL_ESTATE` | Nieprawidłowy stan dla żądanej operacji. |
 | `HAL_EUNINIT` | Operacja na niezainicjalizowanym obiekcie/podsystemie. |
-| `HAL_EDEPRECATED` | Operacja jest przestarzała (deprecated). |
+| `HAL_EDEPRECATED` | Operacja jest przestarzała. |
 | `HAL_EUNKNOWN` | Nieznany błąd. |
 
 Nazwy używają prefiksu `HAL_` zamiast nazw `errno` z POSIX, aby uniknąć
-kolizji z `errno.h` oraz warstwą kompatybilności BSD sockets.
+kolizji z `errno.h` oraz warstwą zgodności z gniazdami BSD.
 
 ## Funkcje pomocnicze
 
@@ -90,18 +90,20 @@ if (hal_status_is_error(st)) {
 
 ## Konwencja nazewnictwa i migracji statusów
 
-Nowe zawodne API zwracają bezpośrednio `hal_status_t`. Podczas migracji o tym,
-czy oryginalna nazwa może stać się API statusu, czy potrzebuje towarzyszącej
-funkcji `_ex`, decyduje historyczny kształt zwracanej wartości:
+Nowe funkcje, które mogą się nie powieść, zwracają bezpośrednio
+`hal_status_t`. Podczas migracji dotychczasowy typ wyniku decyduje, czy
+oryginalna nazwa może zostać użyta dla funkcji statusowej, czy potrzebny jest
+odpowiednik `_ex`:
 
-- Historyczna funkcja `void`, która może zakończyć się błędem, zaczyna
+- Starsza funkcja `void`, która może zakończyć się błędem, zaczyna
   bezpośrednio zwracać `hal_status_t`.
-  Istniejący wywołujący mogą nadal ignorować zwracaną wartość, a zbędny
-  adapter `_ex` nie jest zachowywany. Przykłady obejmują `hal_eeprom_commit()`,
+  Dotychczasowy kod może nadal ignorować zwracaną wartość, a zbędny
+  adapter `_ex` nie jest utrzymywany. Dotyczy to między innymi
+  `hal_eeprom_commit()`,
   `hal_display_init()`, `hal_dac_write()` i `hal_i2c_init()`.
 
-- Historyczna funkcja `bool` pozostaje cienkim wrapperem kompatybilności,
-  ponieważ ujemne błędy `hal_status_t` są prawdziwe (truthy) w C. Sąsiadująca
+- Starsza funkcja `bool` pozostaje prostym adapterem zgodności,
+  ponieważ ujemne błędy `hal_status_t` są w C traktowane jako prawda. Sąsiadująca
   z nią funkcja `_ex` odpowiada za walidację i wykonanie.
 
 - Funkcje pomocnicze **zwracające wartość** udostępniają swój wynik przez
@@ -112,8 +114,8 @@ funkcji `_ex`, decyduje historyczny kształt zwracanej wartości:
   hal_status_t st = hal_display_get_width_ex(&w); // _ex: status + wartość w *w
   ```
 
-- Inicjalizatory **zwracające uchwyt** produkują uchwyt przez parametr
-  wyjściowy i mapują wynik `NULL` na kod błędu:
+- Inicjalizatory **zwracające uchwyt** zapisują go w parametrze wyjściowym,
+  a wynik `NULL` zamieniają na kod błędu:
 
   ```c
   hal_rtc_t rtc = NULL;
@@ -127,14 +129,15 @@ funkcji `_ex`, decyduje historyczny kształt zwracanej wartości:
   `hal_display_init_ssd1306_i2c_status_ex()` (starsze, wybierające magistralę
   `hal_display_init_ssd1306_i2c_ex()`).
 
-- **Czyste zapytania o stan**, które nie mogą się nie powieść (na przykład
-  `hal_littlefs_is_mounted()`, `hal_spi_write_dma_async_busy()`), raportują
-  stan, a nie wynik zawodnej operacji, więc nie zachowują formy `_ex`.
+- **Proste zapytania o stan**, które nie mogą się nie powieść (na przykład
+  `hal_littlefs_is_mounted()`, `hal_spi_write_dma_async_busy()`), zwracają stan,
+  a nie wynik operacji, która może się nie powieść, dlatego nie mają wariantu
+  `_ex`.
 
 ## Gdzie udokumentowane są warianty statusu
 
-Funkcje statusu i ich wrappery kompatybilności są udokumentowane **w linii,
-obok siebie** w odpowiednich sekcjach referencji modułów, wraz z przykładami:
+Funkcje statusowe i ich adaptery zgodności są opisane **obok siebie** w
+odpowiednich sekcjach dokumentacji modułów, wraz z przykładami:
 
 | Obszar | Sekcja |
 |---|---|
@@ -148,13 +151,13 @@ obok siebie** w odpowiednich sekcjach referencji modułów, wraz z przykładami:
 
 ## Wytyczne migracji
 
-- Nowy kod powinien preferować funkcję zwracającą status: albo główną
+- W nowym kodzie należy używać przede wszystkim funkcji zwracającej status:
+  albo głównej
   funkcję zwracającą `hal_status_t`, albo jej towarzyszącą funkcję `_ex`,
   gdy starsza sygnatura wartości/uchwytu/`bool` musi pozostać dostępna.
-- Traktuj `hal_status_is_error(st)` jako ogólną bramkę porażki; rozgałęziaj
-  się na konkretne kody tylko tam, gdzie na ich podstawie podejmujesz działanie.
-- Resztkowa porażka, której starsze `bool` nie potrafi rozróżnić, jest
-  mapowana na najbardziej reprezentatywny kod dla danego modułu (udokumentowany
-  w nagłówku i sekcji każdego modułu). Ścieżki statusu odpowiadają za
-  walidację, wykonanie w backendzie i mapowanie błędów; nie mogą być
-  adapterami wywołującymi starszy wrapper.
+- Traktuj `hal_status_is_error(st)` jako ogólny warunek wykrywania błędu.
+  Sprawdzaj konkretny kod tylko wtedy, gdy wpływa on na dalsze działanie.
+- Błąd, którego starsza funkcja `bool` nie potrafi rozróżnić, jest odwzorowywany
+  na kod najlepiej pasujący do danego modułu. Kod ten jest opisany w nagłówku i
+  sekcji modułu. Funkcja statusowa odpowiada za walidację, wywołanie backendu i
+  odwzorowanie błędów; nie może być adapterem wywołującym starszą funkcję.

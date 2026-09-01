@@ -209,12 +209,13 @@ allocation failure returns `HAL_ENOMEM`, a missing/non-matching sensor returns
 polling before the conversion deadline returns `HAL_EAGAIN`, polling while idle
 returns `HAL_ESTATE`, and scratchpad/CRC/decode failure returns `HAL_EPROTO`.
 
-**impl/rp2040 + impl/stm32g474:** Both use the shared HAL-only
-`src/hal/onewire/` implementation. The backend performs DS18B20
-presence/address probing, scratchpad CRC verification, resolution writes,
-non-blocking conversion scheduling with `hal_micros64()`, and temperature decode
-over the shared 1-Wire bit-bang transport.
-**impl/.mock:** deterministic conversion state machine driven by mock time (`hal_mock_set_micros` / `hal_mock_advance_micros`), with injected presence/CRC/temperature.
+- **impl/rp2040 + impl/stm32g474:** Both use the shared HAL-only
+  `src/hal/onewire/` implementation. The backend performs DS18B20
+  presence/address probing, scratchpad CRC verification, resolution writes,
+  non-blocking conversion scheduling with `hal_micros64()`, and temperature decode
+  over the shared 1-Wire bit-bang transport.
+- **impl/.mock:** deterministic conversion state machine driven by mock time (`hal_mock_set_micros` / `hal_mock_advance_micros`), with injected presence/CRC/temperature.
+
 **Thread safety:** Hardware backends use a per-handle mutex. Create/destroy
 should still follow the project-wide single-core init/deinit policy. Mock
 backend is intended for single-threaded tests.
@@ -291,8 +292,9 @@ signed 16-bit temperature fields with 0.1 unit resolution.
 `HAL_EINVAL` error reporting; `hal_dht_get_sample()` is the compatibility
 wrapper. The scalar cached getters keep their value-returning fallback shape.
 
-**impl/rp2040 + impl/stm32g474 + impl/.mock:** all use
-`hal/temperature/dht/hal_dht.cpp` over HAL GPIO/system/sync primitives.
+- **impl/rp2040 + impl/stm32g474 + impl/.mock:** all use
+  `hal/temperature/dht/hal_dht.cpp` over HAL GPIO/system/sync primitives.
+
 **Thread safety:** handle creation uses a singleton pool mutex created with
 `jh_hal_mutex_create_once`; each handle has its own mutex for read/get/deinit.
 The timing-critical frame read masks interrupts only for the short DHT
@@ -336,9 +338,10 @@ returns lux as `raw / 1.2f` through `out_lux`; failed reads return `HAL_EBUS`
 and set the output to `-1.0f`. The legacy `hal_bh1750_init()` and
 `hal_bh1750_light()` wrappers preserve the original `bool` / `-1.0f` behavior.
 
-**shared thematic implementation:** `hal/sensors/bh1750/hal_bh1750.cpp` is used by RP2040,
-STM32G474, and mock tests. The default address is `0x5C` to preserve the source
-driver constructor default; boards with ADDR tied low should set `0x23`.
+- **shared thematic implementation:** `hal/sensors/bh1750/hal_bh1750.cpp` is used by RP2040,
+  STM32G474, and mock tests. The default address is `0x5C` to preserve the source
+  driver constructor default; boards with ADDR tied low should set `0x23`.
+
 **Thread safety:** per-instance mutex serializes driver calls; I2C byte reads
 use `hal_i2c_read_bytes_bus()` so request and sample copy stay inside the bus
 mutex.
@@ -466,8 +469,9 @@ transaction failures return `HAL_EBUS`, and invalid arguments return
 `hal_tsc2007_get_point()` returns `{x, y, z1}` or `{0, 0, 0}` when the sample
 is rejected.
 
-**shared thematic implementation:** `hal/input/tsc2007/tsc2007.cpp` is used by RP2040,
-STM32G474, and mock tests over HAL I2C and HAL system timing.
+- **shared thematic implementation:** `hal/input/tsc2007/tsc2007.cpp` is used by RP2040,
+  STM32G474, and mock tests over HAL I2C and HAL system timing.
+
 **Thread safety:** per-instance mutex serializes public driver calls and is
 created with the shared create-once helper, so first access is safe under
 FreeRTOS/RP2040 multicore. `hal_tsc2007_deinit()` should not run concurrently
@@ -562,10 +566,11 @@ interrupt status when the FIFO is empty. The I2C 16-bit register read path is
 dispatched only through I2C; this avoids the fall-through transport bug present
 in the source import.
 
-**shared thematic implementation:** `hal/input/stmpe610/stmpe610.cpp` is used by RP2040,
-STM32G474, and mock tests. I2C uses HAL bus-selecting transfers; hardware SPI
-uses HAL SPI transactions plus a caller-provided CS pin; soft SPI bit-bangs
-MSB-first over HAL GPIO.
+- **shared thematic implementation:** `hal/input/stmpe610/stmpe610.cpp` is used by RP2040,
+  STM32G474, and mock tests. I2C uses HAL bus-selecting transfers; hardware SPI
+  uses HAL SPI transactions plus a caller-provided CS pin; soft SPI bit-bangs
+  MSB-first over HAL GPIO.
+
 **Thread safety:** per-instance mutex serializes public driver calls and is
 created with the shared create-once helper, so first access is safe under
 FreeRTOS/RP2040 multicore. Hardware SPI transactions additionally lock the HAL
@@ -629,13 +634,14 @@ interrupt with the edge mode used by the selected protocol, and uses
 frames. `hal_irsmall_decoder_data_available()` copies and clears one decoded
 frame; `hal_irsmall_decoder_has_data()` clears pending data without copying it.
 
-**shared thematic implementation:** `hal/input/irsmall_decoder/irsmall_decoder.cpp` is used by
-RP2040, STM32G474, and mock tests over HAL GPIO interrupts and HAL system
-timing. The shared implementation keeps the source timing thresholds and repeat
-suppression behavior; NEC extended address bytes are assembled explicitly to
-avoid type-punned reads. The RC5 frame decoder uses the transition-table state
-machine from the existing RP2040-tested `RC5` driver, with shared
-`key_held` reporting applied after a valid frame is decoded.
+- **shared thematic implementation:** `hal/input/irsmall_decoder/irsmall_decoder.cpp` is used by
+  RP2040, STM32G474, and mock tests over HAL GPIO interrupts and HAL system
+  timing. The shared implementation keeps the source timing thresholds and repeat
+  suppression behavior; NEC extended address bytes are assembled explicitly to
+  avoid type-punned reads. The RC5 frame decoder uses the transition-table state
+  machine from the existing RP2040-tested `RC5` driver, with shared
+  `key_held` reporting applied after a valid frame is decoded.
+
 **Thread safety:** public calls are serialized by an instance mutex created
 with the shared create-once helper. ISR-shared timestamp/state reads use short
 critical sections for timeout/reset paths. Up to
@@ -939,7 +945,8 @@ int16_t hal_ext_adc_read(uint8_t channel);
 float   hal_ext_adc_read_scaled(uint8_t channel);
 ```
 
-**shared thematic implementation:** HAL-only ADS1X15/ADS1115 driver over HAL I2C, used by RP2040 and STM32G474.
+- **shared thematic implementation:** HAL-only ADS1X15/ADS1115 driver over HAL I2C, used by RP2040 and STM32G474.
+
 **Thread safety:** RP2040/STM32G474: thread-safe and multicore-safe where the backend mutex implementation provides it. A dedicated internal `hal_mutex_t` serializes ADC channel selection and range access; HAL I2C transactions protect the bus. `hal_ext_adc_init()` / `hal_ext_adc_init_bus()` modify global singleton state and should be called during init. Mock backend does not synchronize concurrent access.
 
 **Mock helpers:**

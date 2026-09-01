@@ -58,27 +58,39 @@ BANNED_PROSE_RE = re.compile(
     r"\b(?:canonical|glue|contracts?|kanonicz\w*|klej\w*|kontrakt\w*)\b",
     re.IGNORECASE,
 )
-POLISH_STYLE_PATTERNS = (
-    (re.compile(r"\bkompilacj\w*|\bkompilacyj\w*", re.IGNORECASE), "build"),
-    (re.compile(r"\bdyspozytor\w*", re.IGNORECASE), "dispatcher"),
-    (re.compile(r"\bsterownik\w*", re.IGNORECASE), "driver"),
-    (re.compile(r"\bdostawc\w*", re.IGNORECASE), "provider"),
-    (re.compile(r"\bprzepływ\w*\s+pracy\b", re.IGNORECASE), "workflow"),
+# Catch characteristic translation calques without prescribing whether a natural
+# Polish term or an established English term should be used.  That choice is
+# contextual: for example, both "kompilacja" and "build" can be correct, while
+# literal phrases such as "migawka architektury" are not.
+POLISH_CALQUE_PATTERNS = (
     (
-        re.compile(r"środowisk\w*\s+uruchomieniow\w*", re.IGNORECASE),
-        "runtime",
+        re.compile(r"\bprzesuw\w*\s+(?:\S+\s+){0,3}epok\w*", re.IGNORECASE),
+        "bezpośredni opis aktualizacji czasu",
     ),
-    (re.compile(r"\bw czasie (?:działania|wykonania)\b", re.IGNORECASE), "runtime"),
-    (re.compile(r"\bzakleszcz\w*", re.IGNORECASE), "deadlock"),
+    (
+        re.compile(r"\bmigawk\w*\s+architektur\w*", re.IGNORECASE),
+        "informacje o architekturze",
+    ),
+    (
+        re.compile(r"\bzatwierdzon\w*\s+(?:tick|takt\w*)", re.IGNORECASE),
+        "tick dostarczany przez FreeRTOS",
+    ),
+    (
+        re.compile(r"\bopóźnieni\w*\s+zapasow\w*", re.IGNORECASE),
+        "mechanizm rezerwowy opóźnień",
+    ),
     (
         re.compile(
-            r"(?:bezpieczn\w*\s+wątk\w*|bezpieczeństw\w*\s+wątk\w*)",
+            r"\bprzypięt\w*\s+(?:wersj|rewizj|kop|zależnoś|komponent|"
+            r"rejestr|framework|toolchain|narzędz)\w*",
             re.IGNORECASE,
         ),
-        "thread safety/thread-safe",
+        "dokładnie określoną wersję lub rewizję",
     ),
-    (re.compile(r"mechanizm\w*\s+zapasow\w*", re.IGNORECASE), "fallback"),
-    (re.compile(r"\baddytyw\w*", re.IGNORECASE), "natural Polish wording"),
+    (
+        re.compile(r"\bwspółlokowan\w*", re.IGNORECASE),
+        "informację, że elementy znajdują się razem",
+    ),
 )
 
 
@@ -117,11 +129,12 @@ def _check_pair(
         if match:
             failures.append(f"{relative}: banned prose term: {match.group(0)}")
 
-    for pattern, preferred in POLISH_STYLE_PATTERNS:
+    for pattern, preferred in POLISH_CALQUE_PATTERNS:
         match = pattern.search(pl_prose)
         if match:
             failures.append(
-                f"{pl_relative}: avoid '{match.group(0)}'; prefer {preferred}"
+                f"{pl_relative}: unnatural Polish phrase '{match.group(0)}'; "
+                f"prefer {preferred}"
             )
 
     en_length = len(en_text.strip())

@@ -1,7 +1,7 @@
 # 22 - Czytniki RFID i NFC
 
-Ten skonsolidowany projekt sprawdza drivery MFRC522 i PN532 na wspólnej
-magistrali SPI. Każdy kontroler ma własne piny chip-select i reset oraz jest
+Ten zbiorczy projekt sprawdza sterowniki MFRC522 i PN532 na wspólnej
+magistrali SPI. Każdy kontroler ma własne piny wyboru układu i resetu oraz jest
 inicjalizowany niezależnie, dlatego brak jednego czytnika nie wyłącza drugiej
 ścieżki.
 

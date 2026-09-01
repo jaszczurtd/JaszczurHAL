@@ -6,97 +6,99 @@
 
 ## Selektywne włączanie modułów (`HAL_ENABLE_*`)
 
-JaszczurHAL wykorzystuje model **opt-in**: domyślnie *żaden* opcjonalny moduł
-nie jest kompilowany. Aby użyć modułu, zdefiniuj jego flagę
+JaszczurHAL działa w modelu **opt-in**: domyślnie *żaden* moduł opcjonalny nie
+jest kompilowany. Aby użyć modułu, zdefiniuj jego flagę
 `HAL_ENABLE_<MODULE>` (w `hal_project_config.h` lub przez `-D`). Włączenie
 flagi dołącza:
 
 * **deklaracje API** w odpowiadającym nagłówku (w przeciwnym razie plik
   kompiluje się do pustej jednostki translacji, a wywołania jego funkcji
-  zgłaszają jasny błąd buildu);
-* **implementację** .cpp (oraz dołączone drivery firm trzecich, od których
-  zależy - wszystkie `#include` są bramkowane);
+  powodują jednoznaczny błąd kompilacji);
+* **implementację** `.cpp` oraz potrzebne drivery firm trzecich - wszystkie
+  odpowiednie dyrektywy `#include` są warunkowe;
 * wpis w **nagłówku zbiorczym** `hal/hal.h`.
 
 Wyłączone moduły kosztują zero kodu i RAM-u i nie dołączają swoich zależności
 firm trzecich do buildu targetu.
 
-Flagi funkcji wykorzystują semantykę obecności (presence semantics).
-Wspierane definicje projektu to `#define HAL_ENABLE_X` oraz
+Flagi modułów działają według obecności symbolu. Obsługiwane definicje projektu
+to `#define HAL_ENABLE_X` oraz
 `#define HAL_ENABLE_X 1`. Nie używaj `#define HAL_ENABLE_X 0`: produkcyjny
 preprocesor nadal sprawdza `#ifdef HAL_ENABLE_X`, więc symbol pozostaje
-włączony. Wspierane generowanie płytek, pomocnicy CMake, skrypty biblioteki
-statycznej oraz `jh-vscode` odrzucają `=0` i inne jawne wartości z
-`[JH-CFG-VALUE]`. Dowolne bezpośrednie wywołania kompilatora zachowują
-semantykę obecności preprocesora. Lint rejestru funkcji zgłasza również
-nieznane lub wyprowadzone (derived) symbole. W danych wejściowych typu lista
-definicji każdy wpis `HAL_ENABLE_*` musi być samodzielnym prostym tokenem
-oddzielonym średnikami. Białe znaki nie oddzielają wielu definicji funkcji, a
-wyrażenia generatora CMake są odrzucane.
+włączony. Generatory płytek, funkcje CMake, skrypty bibliotek statycznych i
+`jh-vscode` odrzucają `=0` oraz inne jawne wartości, zgłaszając
+`[JH-CFG-VALUE]`. Bezpośrednie wywołanie kompilatora nadal stosuje zwykłe
+reguły preprocesora. Linter rejestru zgłasza także symbole nieznane lub
+wyprowadzane automatycznie. Gdy definicje są przekazywane jako lista, każdy
+wpis `HAL_ENABLE_*` musi być osobnym, prostym tokenem, a wpisy należy
+rozdzielać średnikami. Same białe znaki nie rozdzielają definicji. Wyrażenia
+generatora CMake są odrzucane.
 
-Deklaratywny rejestr pod `config/features/` jest produkcyjnym źródłem grafu
-funkcji. `hal_config.h` dołącza jego wygenerowany nagłówek C, natomiast CMake,
-metadane płytki/łącza oraz `jh-vscode` używają wygenerowanego resolvera i
-jego wynik `requestedFeatures` / `resolvedFeatures`.
+Deklaratywny rejestr w `config/features/` jest miarodajnym źródłem grafu zależności
+modułów. `hal_config.h` dołącza wygenerowany z niego nagłówek C. CMake,
+metadane płytki i linkowania oraz `jh-vscode` używają natomiast wygenerowanego
+mechanizmu rozwiązywania zależności i zwracanych przez niego wartości
+`requestedFeatures` oraz
+`resolvedFeatures`.
 
 ### Dostępne flagi
 
-Ta sekcja jest utrzymywanym publicznym katalogiem flag `HAL_ENABLE_*`
-wybieranych przez użytkownika. Test parzystości rejestru zapobiega jej
-rozjechaniu się z `config/features/`; wewnętrzne wyprowadzone symbole są
-celowo pominięte. `hal_config.h` pozostaje publiczną fasadą konfiguracji i
-zachowuje reguły kontekstowe spoza rejestru v1. `doc/HAL_FLAGS.txt`
-dostarcza zwięzłego podsumowania tekstowego.
+Ta sekcja zawiera utrzymywany publicznie wykaz flag `HAL_ENABLE_*`, które może
+wybrać użytkownik. Test zgodności z rejestrem zapobiega rozbieżnościom względem
+`config/features/`; wewnętrzne symbole wyprowadzane automatycznie są celowo
+pominięte. `hal_config.h` pozostaje publicznym punktem konfiguracji i zawiera
+reguły zależne od kontekstu, których nie opisuje rejestr v1. Krótsze
+podsumowanie znajduje się w `doc/HAL_FLAGS.txt`.
 
 Flagi wejścia aplikacji są oddzielone od opcjonalnych modułów HAL:
 
 | Flaga | Efekt |
 |---|---|
-| `HAL_ENABLE_APP_TASK1` | Dysponuje opcjonalnym `app_task1()` ze ścieżki wejścia dostarczanej przez HAL. Bare RP uruchamia rdzeń 1; RP FreeRTOS tworzy zadanie przypięte do rdzenia 1. STM32G474 FreeRTOS tworzy drugie zadanie aplikacji. ESP32-S3 tworzy je domyślnie na rdzeniu 1 i akceptuje prawidłowe `HAL_FREERTOS_TASK1_CORE` lub `-1` oznaczające brak przypisania. Pozostaw niezdefiniowane dla aplikacji jednopętlowych/jednozadaniowych. |
+| `HAL_ENABLE_APP_TASK1` | Uruchamia opcjonalną funkcję `app_task1()` przez punkt wejścia dostarczany przez HAL. RP bare metal uruchamia rdzeń 1, a RP z FreeRTOS tworzy zadanie przypięte do rdzenia 1. FreeRTOS na STM32G474 tworzy drugie zadanie aplikacji. ESP32-S3 domyślnie uruchamia je na rdzeniu 1; `HAL_FREERTOS_TASK1_CORE` może wskazać prawidłowy rdzeń albo `-1`, czyli brak przypisania. W aplikacji z jedną pętlą lub jednym zadaniem pozostaw flagę niezdefiniowaną. |
 
 Integracja FreeRTOS jest również jawnym opt-in, ale nie jest modułem HAL:
 
 | Flaga | Efekt |
 |---|---|
-| `HAL_ENABLE_FREERTOS` | Włącza FreeRTOS dla wybranego targetu. Buildy RP używają przypiętego kernela oraz portów SMP dla RP2040, RP2350 ARM i RP2350 RISC-V; HAL uruchamia scheduler i przypina zadania aplikacji do odpowiadających im rdzeni. STM32G474 używa przypiętego portu Cortex-M4F. `hal_mutex_*`, `hal_delay_ms()`, `hal_idle()` oraz raportowanie runtime wybierają ścieżki świadome FreeRTOS. Ta flaga nie dodaje publicznego API `hal_rtos_*` i sama w sobie nie czyni każdego modułu HAL thread-safe. |
+| `HAL_ENABLE_FREERTOS` | Włącza FreeRTOS dla wybranego targetu. Buildy RP korzystają z kernela i portów SMP w wersjach wskazanych przez repozytorium dla RP2040, RP2350 ARM oraz RP2350 RISC-V; HAL uruchamia kernel i przypisuje zadania aplikacji do odpowiednich rdzeni. STM32G474 używa wskazanej w repozytorium wersji portu Cortex-M4F. Funkcje `hal_mutex_*`, `hal_delay_ms()`, `hal_idle()` oraz diagnostyka runtime dostosowują działanie do FreeRTOS. Flaga nie dodaje publicznego API `hal_rtos_*` i sama nie zapewnia thread safety we wszystkich modułach HAL. |
 
-Ochrona stosu wykorzystuje dwa niezależne opt-iny:
+Ochronę stosu włączają dwie niezależne opcje:
 
 | Flaga | Efekt |
 |---|---|
-| `HAL_ENABLE_STACK_GUARD` | Włącza synchroniczną sprzętową ochronę natywnych stosów systemowych RP2040/RP2350, głównego stosu STM32G474 oraz punktów obserwacyjnych końca stosu zadania ESP32-S3 dostarczanych przez ESP-IDF. Buildy FreeRTOS dodatkowo włączają sprawdzanie przepełnienia stosu zadania kernela. Niezależne od targetu API `hal_stack_guard_init_ex()` raportuje, czy ochrona jest aktywna; okresowe odpytywanie nie jest konieczne. |
-| `HAL_ENABLE_STACK_PROTECTOR` | Włącza instrumentację GCC/Clang `-fstack-protector-strong` dla źródeł HAL i aplikacji we wspieranych recepturach firmware RP i STM32G474. Niezgodność kanarka (canary) wykorzystuje zachowaną dla targetu ścieżkę resetu przy przepełnieniu stosu. Jest niezależna od `HAL_ENABLE_STACK_GUARD`. |
+| `HAL_ENABLE_STACK_GUARD` | Włącza synchroniczną ochronę sprzętową natywnych stosów systemowych RP2040/RP2350 i głównego stosu STM32G474, a na ESP32-S3 punkty kontrolne końca stosów zadań udostępniane przez ESP-IDF. Buildy FreeRTOS dodatkowo sprawdzają przepełnienie stosów zadań kernela. Niezależne od targetu API `hal_stack_guard_init_ex()` zwraca informację, czy ochrona jest aktywna; nie trzeba go okresowo odpytywać. |
+| `HAL_ENABLE_STACK_PROTECTOR` | Włącza opcję GCC/Clang `-fstack-protector-strong` dla źródeł HAL i aplikacji w obsługiwanych buildach firmware RP oraz STM32G474. Wykrycie nieprawidłowego kanarka uruchamia mechanizm resetu po przepełnieniu stosu właściwy dla danego targetu, a informacja o zdarzeniu jest zachowywana do następnego startu. Flaga działa niezależnie od `HAL_ENABLE_STACK_GUARD`. |
 
-| Flaga | Nagłówek | Implementacja | Wciągane zależności firm trzecich |
+| Flaga | Nagłówek | Implementacja | Dołączane zależności firm trzecich |
 |---|---|---|---|
-| `HAL_ENABLE_COMMAND_ROUTER` | `hal_command_router.h`, `hal_command_wire.h` | `hal/commands/hal_command_router.cpp` + `hal/commands/hal_command_wire.cpp` | Rejestr handlerów niezależny od transportu, polityka źródła/bezpieczeństwa, ograniczone odpowiedzi oraz wersjonowane binarne wiadomości żądanie/odpowiedź/zdarzenie; zobacz [API komend](23_commands.md) |
-| `HAL_ENABLE_SERIAL_COMMANDS` | `hal_serial_commands.h` | `hal/serial/hal_serial_commands.cpp` | Synchroniczny dispatch routera TEXT/JSON dla aktywnych ramkowanych sesji szeregowych, z opcjonalnym formatterem odpowiedzi i fallbackiem prefiksu (propaguje COMMAND_ROUTER); zobacz [API komend](23_commands.md#adapter-ramkowanej-sesji-szeregowej-framed-serial-session) |
-| `HAL_ENABLE_BLE` | `hal_ble.h` | `hal_ble.cpp` + `hal/bluetooth/*` | BLE Peripheral oraz pasywny Observer poprzez przypięty BTstack i kontroler CYW43; wspierane na RP2040 Pico W/Pico+RM2, RP2350 ARM Pico 2 W, STM32G474+PIM730/RM2 oraz mock. RP2350 RISC-V nie jest wspierany. Odpowiedni standardowy grant licencyjny BTstack lub grant ograniczony do produktów Raspberry Pi jest opisany w [API Bluetooth](20_bluetooth.md#license-and-distribution-boundary). |
-| `HAL_ENABLE_BLUETOOTH_GAMEPAD` | `hal_gamepad.h` | `hal/bluetooth/hal_gamepad.cpp` + backend Classic HID | Jeden nieblokujący gamepad Classic HID z jawnym parowaniem/reconnect, znormalizowanymi kopiowanymi snapshotami, ograniczoną diagnostyką przepełnienia i deterministycznym mockiem (propaguje BLUETOOTH_CLASSIC); zobacz [API Bluetooth](20_bluetooth.md#gamepad-bluetooth-classic-hid) |
+| `HAL_ENABLE_COMMAND_ROUTER` | `hal_command_router.h`, `hal_command_wire.h` | `hal/commands/hal_command_router.cpp` + `hal/commands/hal_command_wire.cpp` | Niezależny od transportu rejestr funkcji obsługi, polityka źródła i bezpieczeństwa, odpowiedzi o ograniczonym rozmiarze oraz wersjonowane binarne komunikaty żądania, odpowiedzi i zdarzenia; zobacz [API komend](23_commands.md) |
+| `HAL_ENABLE_SERIAL_COMMANDS` | `hal_serial_commands.h` | `hal/serial/hal_serial_commands.cpp` | Synchroniczne przekazywanie komend TEXT/JSON do routera w aktywnych sesjach szeregowych z ramkowaniem, opcjonalnym formatowaniem odpowiedzi i prefiksem zapasowym (propaguje COMMAND_ROUTER); zobacz [API komend](23_commands.md#adapter-ramkowanej-sesji-szeregowej-framed-serial-session) |
+| `HAL_ENABLE_BLE` | `hal_ble.h` | `hal_ble.cpp` + `hal/bluetooth/*` | BLE Peripheral oraz pasywny Observer przez BTstack w wersji wskazanej przez repozytorium i kontroler CYW43; obsługiwane na RP2040 Pico W/Pico+RM2, RP2350 ARM Pico 2 W, STM32G474+PIM730/RM2 oraz mock. RP2350 RISC-V nie jest obsługiwany. Odpowiedni standardowy grant licencyjny BTstack lub grant ograniczony do produktów Raspberry Pi jest opisany w [API Bluetooth](20_bluetooth.md#license-and-distribution-boundary). |
+| `HAL_ENABLE_BLUETOOTH_GAMEPAD` | `hal_gamepad.h` | `hal/bluetooth/hal_gamepad.cpp` + backend Classic HID | Jeden nieblokujący gamepad Classic HID z jawnym parowaniem i ponownym łączeniem, znormalizowanymi kopiami bieżącego stanu, diagnostyką przepełnienia o ograniczonym rozmiarze i deterministycznym mockiem (propaguje BLUETOOTH_CLASSIC); zobacz [API Bluetooth](20_bluetooth.md#gamepad-bluetooth-classic-hid) |
 | `HAL_ENABLE_BLE_COMMANDS` | `hal_ble_commands.h` | `hal/bluetooth/hal_ble_commands.cpp` | Dwukierunkowe żądania, automatyczne odpowiedzi i zdarzenia przez jedną uwierzytelnioną sesję BLE Stream pozostającą pod wyłączną kontrolą adaptera (propaguje BLE_STREAM + COMMAND_ROUTER); zobacz [API komend](23_commands.md#authenticated-ble-stream-adapter) |
 | `HAL_ENABLE_BLE_STREAM` | `hal_ble_stream.h` | `hal_ble_stream.cpp` + `hal/bluetooth/*` | Uwierzytelniony, ograniczony, ramkowany strumień bajtów przez BLE (propaguje BLE + CRYPTO) |
-| `HAL_ENABLE_LORA` | `hal_lora_radio.h` | `hal_lora_radio.cpp` | Neutralny względem providera cykl życia surowego LoRa, presety modemu, blokujący TX, odpytujący RX, diagnostyka, stan zasilania i czas nadawania w eterze (time-on-air); wymaga dokładnie jednego providera |
+| `HAL_ENABLE_LORA` | `hal_lora_radio.h` | `hal_lora_radio.cpp` | Niezależna od providera obsługa bezpośredniego dostępu do radia LoRa: inicjalizacja i zamykanie, gotowe konfiguracje modemu, blokujący TX, RX przez polling, diagnostyka, stan zasilania i czas transmisji; wymaga dokładnie jednego providera |
 | `HAL_ENABLE_LORA_LINK` | `hal_lora_link.h` | `hal_lora_link.cpp` + `jh_lora_link_frame.cpp` | Niezawodne prywatne wiadomości z adresowaniem, sekwencjami, ACK/retry, tłumieniem duplikatów i fragmentacją (propaguje LORA + CRC); opcjonalne AEAD wymaga CRYPTO; zobacz [API łącza LoRa](22_lora_link.md) |
 | `HAL_ENABLE_LORA_COMMANDS` | `hal_lora_commands.h` | `hal/radio/hal_lora_commands.cpp` | Żądania, automatyczne odpowiedzi i zdarzenia przez jedno niezawodne łącze LoRa pozostające pod wyłączną kontrolą adaptera (propaguje COMMAND_ROUTER + LORA_LINK); zobacz [API komend](23_commands.md) |
-| `HAL_ENABLE_SX126X` | `hal_lora_radio.h` | `hal_lora_radio.cpp` + `hal/radio/sx126x/*` + przypięty driver Semtech | SX1262 oraz eksperymentalny, wyłącznie programowy provider SX1261 przez HAL SPI/GPIO (propaguje LORA + SPI); zobacz [API radia LoRa](21_lora.md) |
+| `HAL_ENABLE_SX126X` | `hal_lora_radio.h` | `hal_lora_radio.cpp` + `hal/radio/sx126x/*` + driver Semtech w wersji wskazanej przez repozytorium | SX1262 oraz eksperymentalny, wyłącznie programowy provider SX1261 przez HAL SPI/GPIO (propaguje LORA + SPI); zobacz [API radia LoRa](21_lora.md) |
 | `HAL_ENABLE_SX127X` | `hal_lora_radio.h` | `hal_lora_radio.cpp` + `hal/radio/sx127x/*` | Eksperymentalny, wyłącznie programowy provider SX1276/SX1278 przez HAL SPI/GPIO (propaguje LORA + SPI i jest w konflikcie z SX126X); zobacz [API radia LoRa](21_lora.md) |
 | `HAL_ENABLE_WIFI` | `hal_wifi.h` | `hal_wifi.cpp` | Backend CYW43/lwIP lub natywny ESP-IDF WiFi/`esp_netif`/lwIP wybierany przez konfigurację targetu/płytki |
-| `HAL_ENABLE_TIME` | opcjonalne deklaracje w `hal_time.h` | współdzielony zegar runtime + mostek libc targetu | Funkcje pomocnicze ustawiania/statusu runtime oraz WiFi NTP (propaguje UDP + WIFI); czyste funkcje pomocnicze kalendarza/zakresu pozostają bezwarunkowe |
+| `HAL_ENABLE_TIME` | opcjonalne deklaracje w `hal_time.h` | wspólny zegar runtime + adapter libc targetu | Funkcje ustawiające czas systemowy i odczytujące jego stan oraz WiFi NTP (propaguje UDP + WIFI); proste funkcje kalendarza i przedziałów czasu są zawsze dostępne |
 | `HAL_ENABLE_MQTT` | `hal_mqtt.h` | `hal_mqtt.cpp` | PubSubClient przez HAL TCP lub BearSSL TLS (propaguje TCP + WIFI) |
 | `HAL_ENABLE_UDP` | `hal_udp.h` | `hal_udp.cpp` | Transport UDP oparty na uchwytach (propaguje WIFI) |
-| `HAL_ENABLE_TCP` | `hal_tcp.h` | `hal_tcp.cpp` | Transport TCP klient/listener (propaguje WIFI) |
+| `HAL_ENABLE_TCP` | `hal_tcp.h` | `hal_tcp.cpp` | Transport klienta i serwera nasłuchującego TCP (propaguje WIFI) |
 | `HAL_ENABLE_HTTP_SERVER` | `hal_http_server.h` | `hal/network/http/hal_http_server.cpp` | Mały, sterowany odpytywaniem serwer HTTP/1.1 w formie jawnego tekstu przez HAL TCP (propaguje TCP + WIFI); brak API serwera HTTPS |
-| `HAL_ENABLE_HTTP_FILES` | `hal_http_files.h` | `hal/network/http/hal_http_files.cpp` | Serwowanie plików oparte na callbackach, ETag oraz funkcje pomocnicze uploadu przez trasy HAL HTTP (propaguje HTTP_SERVER + TCP + WIFI) |
+| `HAL_ENABLE_HTTP_FILES` | `hal_http_files.h` | `hal/network/http/hal_http_files.cpp` | Serwowanie plików oparte na callbackach i ETag oraz funkcje pomocnicze do wysyłania plików przez trasy HAL HTTP (propaguje HTTP_SERVER + TCP + WIFI) |
 | `HAL_ENABLE_WEBSOCKET` | `hal_websocket.h` | `hal/network/websocket/hal_websocket.cpp` | Mały, sterowany odpytywaniem serwer WebSocket w formie jawnego tekstu przez HAL TCP (propaguje TCP + WIFI); brak WSS ani API klienta WebSocket |
-| `HAL_ENABLE_NET_CONSOLE` | `hal_net_console.h` | `hal/network/net_console/hal_net_console.cpp` | Chroniony hasłem mirror serial/debug oraz strumień komend przez HAL TCP (propaguje TCP + WIFI) |
+| `HAL_ENABLE_NET_CONSOLE` | `hal_net_console.h` | `hal/network/net_console/hal_net_console.cpp` | Chronione hasłem przekazywanie wyjścia serial/debug oraz strumień komend przez HAL TCP (propaguje TCP + WIFI) |
 | `HAL_ENABLE_NET_COMMANDS` | `hal_net_commands.h` | `hal/network/net_commands/hal_net_commands.cpp` | Adapter text/JSON HTTP i WebSocket oparty na cJSON, działający na współdzielonym domyślnym routerze (propaguje COMMAND_ROUTER + HTTP_SERVER + WEBSOCKET + CJSON + TCP + WIFI) |
-| `HAL_ENABLE_NOTIFY` | `hal_notify.h` | `hal/network/notify/hal_notify.cpp` | Fasada delegująca powiadomienia do backendu, z uchwytami kanałów weryfikowanymi wg generacji |
+| `HAL_ENABLE_NOTIFY` | `hal_notify.h` | `hal/network/notify/hal_notify.cpp` | Fasada przekazująca powiadomienia do backendu; uchwyty kanałów są sprawdzane przy użyciu numeru generacji |
 | `HAL_ENABLE_NOTIFY_TELEGRAM` | `hal_notify.h` | `hal/network/notify/hal_notify_telegram.cpp` | Backend Telegram Bot API przez `hal_http_client`; publiczne dostarczanie Telegram używa HTTPS, natomiast niestandardowe hosty HTTP mogą być użyte do wdrożeń lokalnych/proxy (propaguje NOTIFY + HTTP_CLIENT + TLS + CJSON + TCP + WIFI) |
 | `HAL_ENABLE_BSD_SOCKETS` | `sys/socket.h`, `netinet/in.h`, `arpa/inet.h`, `netdb.h`, `fcntl.h`, `sys/select.h`, `unistd.h` | `hal/network/adapters/bsd/hal_bsd_sockets.cpp` | Publiczny adapter BSD/POSIX przez HAL UDP/TCP, w tym `getaddrinfo()` (propaguje UDP + TCP + WIFI); pozostaje użyteczny z TLS i bez niego |
 | `HAL_ENABLE_TLS` | `hal_tls.h` | `hal/network/tls/hal_tls.cpp` + `hal/network/tls/BearSSL/*` | Klient BearSSL TLS przez natywny HAL TCP (propaguje TCP + WIFI); nie wymusza gniazd BSD, a opcjonalny transport BearSSL BSD utrzymuje dostępność TLS-over-BSD |
 | `HAL_ENABLE_HTTP_CLIENT` | `hal_http_client.h` | `hal/network/http/hal_http_client.cpp` | Ograniczony jednorazowy klient HTTP/1.1 przez HAL TCP z transportem HTTPS, gdy wybrany jest TLS (propaguje TCP + WIFI) |
 | `HAL_ENABLE_OTA` | `hal_ota.h` | `hal_ota.cpp` specyficzny dla targetu + współdzielony protokół OTA | Natywna usługa aktualizacji UDP/TCP z wykrywaniem, opcjonalnym wyzwaniem hasłem, rozruchem próbnym, potwierdzeniem i wycofaniem (rollback). RP używa podpisanego silnika kontener/zamiana (swap) JaszczurHAL; ESP32-S3 przygotowuje surowy obraz aplikacji ESP poprzez partycje OTA ESP-IDF (propaguje WIFI + UDP + TCP + CRYPTO + CRC). |
-| `HAL_ENABLE_WIREGUARD` | `hal_wireguard.h` | `hal/network/wireguard/hal_wireguard.cpp` + port rozszerzenia lwIP specyficzny dla targetu | Dołączony WireGuard poprzez stos lwIP hosta zgłaszający swoje capabilities, w tym ESP32-S3 (propaguje UDP + WIFI) |
+| `HAL_ENABLE_WIREGUARD` | `hal_wireguard.h` | `hal/network/wireguard/hal_wireguard.cpp` + port rozszerzenia lwIP specyficzny dla targetu | Dołączony WireGuard działający przez stos lwIP targetu, który udostępnia wymagane funkcje; obsługiwany również na ESP32-S3 (propaguje UDP + WIFI) |
 | `HAL_ENABLE_EEPROM` | `hal_eeprom.h` | `hal_eeprom.cpp` | Emulacja EEPROM we flashu targetu; AT24C256 przez HAL I2C, gdy wybrane |
 | `HAL_ENABLE_KV` | `hal_kv.h` | `hal_kv.cpp` | *(propaguje EEPROM)* |
 | `HAL_ENABLE_LITTLEFS` | `hal_littlefs.h` | `hal/storage/hal_littlefs.cpp` + wspólny provider littlefs + provider targetu/mocka | Jedna fasada cyklu życia/blokowania/ścieżek/statystyk; natywny RP używa `HAL_RP_FLASH_LITTLEFS_SIZE`, STM32G474 używa `HAL_STM32_FLASH_LITTLEFS_SIZE` |
@@ -116,7 +118,7 @@ Ochrona stosu wykorzystuje dwa niezależne opt-iny:
 | `HAL_ENABLE_PCF8563` | `hal_rtc.h` | `hal_rtc.cpp` | Backend PCF8563 (propaguje RTC + I2C) |
 | `HAL_ENABLE_DS3231` | `hal_rtc.h` | `hal_rtc.cpp` | Backend DS3231 (propaguje RTC + I2C) |
 | `HAL_ENABLE_INTERNAL_RTC` | `hal_rtc.h` | provider RTC specyficzny dla targetu | Natywny dla targetu backend RTC dla STM32G474 oraz RP2040/RP2350 (propaguje RTC; bez I2C) |
-| `HAL_ENABLE_POWER_MANAGEMENT` | `hal_power.h` | `hal_power.cpp` specyficzny dla targetu | API Sleep/deep-sleep/power-down sterowane capabilities (propaguje INTERNAL_RTC + RTC); zobacz [Timery i system](06_timers_system.md#halpower-low-power-transitions-optional-halenablepowermanagement) |
+| `HAL_ENABLE_POWER_MANAGEMENT` | `hal_power.h` | `hal_power.cpp` specyficzny dla targetu | API stanów sleep/deep-sleep/power-down dostępnych zależnie od funkcji obsługiwanych przez target (propaguje INTERNAL_RTC + RTC); zobacz [Timery i system](06_timers_system.md#halpower-low-power-transitions-optional-halenablepowermanagement) |
 | `HAL_ENABLE_THERMOCOUPLE` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | *(wymaga backendu MCP9600 lub MAX6675)* |
 | `HAL_ENABLE_MCP9600` | `hal_thermocouple.h` + `hal/temperature/mcp9600/mcp9600_driver.h` | `hal_thermocouple.cpp` + `hal/temperature/mcp9600/mcp9600_driver.cpp` | współdzielony driver MCP9600/MCP9601 wyłącznie HAL (propaguje THERMOCOUPLE + I2C) |
 | `HAL_ENABLE_MAX6675` | `hal_thermocouple.h` + `hal/temperature/max6675/max6675_driver.h` | `hal_thermocouple.cpp` + `hal/temperature/max6675/max6675_driver.cpp` | współdzielony driver bit-bang MAX6675 wyłącznie HAL (propaguje THERMOCOUPLE) |
@@ -131,7 +133,7 @@ Ochrona stosu wykorzystuje dwa niezależne opt-iny:
 | `HAL_ENABLE_ONEWIRE` | `hal_onewire.h` + `hal/onewire/onewire_driver.h` | `hal/onewire/hal_onewire.cpp` + `hal/onewire/onewire_driver.cpp` | współdzielony driver bit-bang 1-Wire wyłącznie HAL (propaguje CRC) |
 | `HAL_ENABLE_EXTERNAL_ADC` | `hal_external_adc.h` + `hal/analog/ads1x15/ads1x15_driver.h` | `hal/analog/ads1x15/hal_external_adc_ads1x15.cpp` + `hal/analog/ads1x15/ads1x15_driver.cpp` | współdzielony driver ADS1X15/ADS1115 wyłącznie HAL (propaguje I2C) |
 | `HAL_ENABLE_GPS` | `hal_gps.h` | `hal_gps.cpp` + `hal/gps/` | przenośna fasada oraz silnik NMEA (RP2040 + STM32G474); wymaga transportu: SWSERIAL lub UART |
-| `HAL_ENABLE_DIGIPOT` | `hal_digipot.h` + `hal/analog/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `hal/analog/digipot/*.cpp` | fasada/pula/dispatch; wymaga backendu MCP401X lub MAX5395 |
+| `HAL_ENABLE_DIGIPOT` | `hal_digipot.h` + `hal/analog/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `hal/analog/digipot/*.cpp` | fasada, pula i mechanizm wyboru backendu; wymaga backendu MCP401X lub MAX5395 |
 | `HAL_ENABLE_MCP401X` | `hal_digipot.h` + `hal/analog/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `hal/analog/digipot/digipot_mcp401x.cpp` | współdzielony driver HAL I2C MCP4017/4018/4019 (propaguje DIGIPOT + I2C) |
 | `HAL_ENABLE_MAX5395` | `hal_digipot.h` + `hal/analog/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `hal/analog/digipot/digipot_max5395.cpp` | współdzielony driver HAL I2C MAX5395 (propaguje DIGIPOT + I2C) |
 | `HAL_ENABLE_PGA2311` | `hal_pga2311.h` + `hal/audio/pga2311/pga2311_driver.h` | `hal_pga2311.cpp` + `hal/audio/pga2311/pga2311_driver.cpp` | współdzielony driver regulacji głośności stereo PGA2311 przez HAL SPI/GPIO (propaguje SPI) |
@@ -145,7 +147,7 @@ Ochrona stosu wykorzystuje dwa niezależne opt-iny:
 | `HAL_ENABLE_DACLESS` | `hal_dacless.h` + `hal/audio/dacless/dacless.h` | `hal/audio/dacless/dacless.cpp` | Współdzielony silnik audio PWM DACless z callbackami blokowymi/próbkowymi oraz próbkowaniem ADC (propaguje DMA_PWM_AUDIO + PWM_FREQ) |
 | `HAL_ENABLE_DMA_PWM_AUDIO` | `hal_dma_pwm_audio.h` | `hal_dma_pwm_audio.cpp` | Funkcja pomocnicza DMA audio PWM taktowana timerem, wykorzystywana przez DACless |
 | `HAL_ENABLE_PWM_FREQ` | `hal_pwm_freq.h` | `hal_pwm_freq.cpp` | RP2040 hardware/pwm, STM32G474 TIM PWM lub ESP32-S3 LEDC |
-| `HAL_ENABLE_DAC` | `hal_dac.h` | `hal_dac.cpp` specyficzny dla targetu | Fasada capability prawdziwego DAC; STM32G474 udostępnia wyjście sprzętowe, natomiast RP2040 zgłasza tę capability jako niewspieraną |
+| `HAL_ENABLE_DAC` | `hal_dac.h` | `hal_dac.cpp` specyficzny dla targetu | Fasada sprzętowego DAC; STM32G474 udostępnia rzeczywiste wyjście, natomiast RP2040 zgłasza brak tej możliwości |
 | `HAL_ENABLE_PCNT` | `hal_pcnt.h` | `hal_pcnt.cpp` specyficzny dla targetu | Fasada licznika impulsów dla targetów RP2040, STM32G474, ESP32-S3 PCNT oraz mock |
 | `HAL_ENABLE_RGB_LED` | `hal_rgb_led.h` + `hal/gpio/neopixel/jh_neopixel.h` | `hal_rgb_led.cpp` + `hal/gpio/neopixel/jh_neopixel.cpp` | Współdzielony rdzeń NeoPixel + transport targetu (RP2040 PIO / STM32 GPIO taktowane cyklami / ESP32-S3 RMT) |
 | `HAL_ENABLE_HD44780` | `hal_hd44780.h` + `hal/display/hd44780/hd44780.h` | `hal/display/hd44780/hd44780.cpp` | Równoległy znakowy LCD kompatybilny z HD44780 przez HAL GPIO/taktowanie systemowe |
@@ -166,8 +168,8 @@ Ochrona stosu wykorzystuje dwa niezależne opt-iny:
 | `HAL_ENABLE_CRC` | `hal_crc.h` | `hal_crc.cpp` | generyczne sumy kontrolne CRC-8/16/32 dla integralności (włączane automatycznie przez ONEWIRE/DS18B20) |
 | `HAL_ENABLE_CELLULAR_MODEM` | `hal_modem_at.h` | `hal_modem_at.cpp` | *(fasada - wymaga backendu rodziny modemów, np. `HAL_ENABLE_A7670`)* |
 | `HAL_ENABLE_A7670` | `hal_simcom_a76xx.h` | `hal_simcom_a76xx.cpp` | Driver rodziny SimCom A76xx (propaguje CELLULAR_MODEM + UART) |
-| `HAL_ENABLE_CJSON` | `hal/codecs/cjson/cJSON.h`, `hal/codecs/cjson/cJSON_Utils.h` (`tools.h` z C++) | `hal/codecs/cjson/cJSON.c`, `hal/codecs/cjson/cJSON_Utils.c` | zarządzany checkout cJSON ze śledzonymi wrapperami |
-| `HAL_ENABLE_PNG` | `hal/codecs/lodepng/lodepng.h` (`tools.h` z C++) | `hal/codecs/lodepng/lodepng.cpp` | zarządzany checkout LodePNG ze śledzonym wrapperem profilu embedded |
+| `HAL_ENABLE_CJSON` | `hal/codecs/cjson/cJSON.h`, `hal/codecs/cjson/cJSON_Utils.h` (`tools.h` z C++) | `hal/codecs/cjson/cJSON.c`, `hal/codecs/cjson/cJSON_Utils.c` | zarządzany checkout cJSON z wersjonowanymi adapterami |
+| `HAL_ENABLE_PNG` | `hal/codecs/lodepng/lodepng.h` (`tools.h` z C++) | `hal/codecs/lodepng/lodepng.cpp` | zarządzany checkout LodePNG z wersjonowanym adapterem profilu dla systemów wbudowanych |
 | `HAL_ENABLE_PNG_AS_BASE64` | Funkcje pomocnicze `utils/tools_api.h` + `hal/codecs/lodepng/lodepng.h` + `hal_crypto.h` | `utils/tools.cpp` + `hal/codecs/lodepng/lodepng.cpp` + `hal_crypto.cpp` | Funkcje pomocnicze dekodowania PNG zakodowanego w Base64 (propaguje CRYPTO + PNG) |
 | `HAL_ENABLE_JPEG` | `hal/codecs/jpeg/tjpgd.h` (`tools.h` z C++) | `hal/codecs/jpeg/tjpgd.c` + `utils/tools.cpp` | zarządzany rdzeń TJpgDec z wejściem z pamięci i wyjściem RGB565 |
 | `HAL_ENABLE_JPEG_AS_BASE64` | Funkcje pomocnicze `utils/tools_api.h` + `hal/codecs/jpeg/tjpgd.h` + `hal_crypto.h` | `utils/tools.cpp` + `hal/codecs/jpeg/tjpgd.c` + `hal_crypto.cpp` | Funkcje pomocnicze dekodowania JPEG zakodowanego w Base64 (propaguje CRYPTO + JPEG) |
@@ -177,24 +179,24 @@ Ochrona stosu wykorzystuje dwa niezależne opt-iny:
 
 | Flaga | Efekt |
 |---|---|
-| `HAL_DISABLE_ASSERTS` | Kompiluje każdy `HAL_ASSERT()` do no-op. Asserty są domyślnie WŁĄCZONE. Odzwierciedla standardową konwencję `NDEBUG`. |
+| `HAL_DISABLE_ASSERTS` | Zastępuje każdy `HAL_ASSERT()` operacją pustą. Asercje są domyślnie WŁĄCZONE. Odzwierciedla standardową konwencję `NDEBUG`. |
 
-### Generowane rozwiązywanie funkcji
+### Generowane rozwiązywanie zależności modułów
 
-Resolver rejestru utrzymuje bezpośrednie żądania i ich domknięcie (closure)
-oddzielnie:
+Mechanizm rozwiązywania zależności przechowuje osobno moduły żądane
+bezpośrednio oraz pełny zbiór wynikający z ich zależności:
 
-* `requestedFeatures` zawiera znormalizowane, bezpośrednie żądania zebrane z
-  efektywnych danych wejściowych projektu i buildu;
-* `resolvedFeatures` dodaje przechodnie domknięcie `implies` rejestru.
-  Produkcyjny wybór źródeł/zależności oraz hash funkcji płytki/łącza używają
-  tego zestawu.
+* `requestedFeatures` zawiera znormalizowane flagi żądane bezpośrednio w
+  ostatecznej konfiguracji projektu i buildu;
+* `resolvedFeatures` rozszerza je o wszystkie przechodnie zależności `implies`
+  zapisane w rejestrze. Ten zbiór służy do wyboru źródeł i zależności oraz do
+  obliczania skrótu zestawu modułów płytki i linkowania.
 
-Kompilator otrzymuje żądane definicje funkcji. Wygenerowany nagłówek
-`src/hal/generated/jh_hal_features.h` materializuje to samo domknięcie
-rejestru dla preprocessingu C i C++. Poniższe podsumowanie pokazuje publiczne
-implikacje funkcji; wewnętrzne krawędzie do wyprowadzonego symbolu
-`HAL_ENABLE_NETWORK_CORE` są pominięte:
+Kompilator otrzymuje bezpośrednio żądane definicje. Wygenerowany nagłówek
+`src/hal/generated/jh_hal_features.h` wprowadza ten sam pełny zbiór zależności
+dla preprocesora C i C++. Poniższe zestawienie pokazuje publiczne zależności.
+Pominięto zależności wewnętrzne prowadzące do automatycznie wyprowadzanego
+symbolu `HAL_ENABLE_NETWORK_CORE`:
 
 ```
 HAL_ENABLE_KV          -> HAL_ENABLE_EEPROM
@@ -265,34 +267,34 @@ HAL_ENABLE_PNG_AS_BASE64 -> HAL_ENABLE_CRYPTO + HAL_ENABLE_PNG
 HAL_ENABLE_JPEG_AS_BASE64 -> HAL_ENABLE_CRYPTO + HAL_ENABLE_JPEG
 ```
 
-Musisz włączyć jedynie moduł **liścia (leaf)**, którego faktycznie używasz;
-wszystko powyżej w hierarchii jest dołączane automatycznie.
+Włącz tylko moduł końcowy, którego faktycznie używasz. Wszystkie jego
+zależności zostaną dodane automatycznie.
 
-### Reguły zachowane poza rejestrem funkcji v1
+### Reguły zachowane poza rejestrem modułów v1
 
 `hal_config.h` pozostaje publiczną fasadą konfiguracji dla reguł
 kontekstowych, których rejestr v1 nie potrafi wyrazić:
 
 | Kategoria | Utrzymane zachowanie |
 |---|---|
-| Warunkowa propagacja funkcji | `HAL_ENABLE_EEPROM` z `HAL_EEPROM_TYPE == EEPROM_TYPE_AT24C256` dodaje `HAL_ENABLE_I2C`. `HAL_ENABLE_GPS` dodaje `HAL_ENABLE_UART` tylko wtedy, gdy nie wybrano ani UART, ani SWSERIAL. |
-| Reguły providera i wyboru | Konfiguracja sieci wybiera dokładnie jeden backend i sprawdza jego wymagane możliwości (capabilities). Fasady walidują providerów dla RTC, modemu komórkowego, termopary, CAN, cyfrowego potencjometru, transportu GPS, wyświetlacza i TFT. |
-| Reguły targetu i płytki | Wsparcie kontrolera/targetu/płytki BLE, ograniczenia magistrali/stosu/profilu/pinów CYW43 oraz targetu/płytki, ograniczenia targetu/toolchainu/nagłówka FreeRTOS oraz reguła FDCAN wyłącznie dla STM32G474 pozostają kontekstowe. |
-| Wartości domyślne, parametry strojenia, układ i zakresy | Zależne od targetu wartości domyślne EEPROM, układ regionów storage/OTA, wartości domyślne pinów/zegara/kraju CYW43, rozmiary pul, limity backlogu i TLS, a także pozostałe domyślne wartości strojenia i sprawdzenia zakresów pozostają w fasadzie. |
+| Warunkowa propagacja modułów | `HAL_ENABLE_EEPROM` z `HAL_EEPROM_TYPE == EEPROM_TYPE_AT24C256` dodaje `HAL_ENABLE_I2C`. `HAL_ENABLE_GPS` dodaje `HAL_ENABLE_UART` tylko wtedy, gdy nie wybrano ani UART, ani SWSERIAL. |
+| Reguły providera i wyboru | Konfiguracja sieci wybiera dokładnie jeden backend i sprawdza, czy udostępnia wymagane funkcje. Fasady sprawdzają wybór providera dla RTC, modemu komórkowego, termopary, CAN, potencjometru cyfrowego, transportu GPS, wyświetlacza i TFT. |
+| Reguły targetu i płytki | W `hal_config.h` pozostają zależne od kontekstu reguły obsługi kontrolera, targetu i płytki dla BLE; ograniczenia magistrali, stosu, profilu, pinów, targetu i płytki dla CYW43; ograniczenia targetu, toolchainu i nagłówka FreeRTOS; a także dostępność FDCAN wyłącznie na STM32G474. |
+| Wartości domyślne, parametry strojenia, układ i zakresy | Fasada nadal ustala zależne od targetu wartości domyślne EEPROM i układ obszarów pamięci masowej/OTA, domyślne piny, zegar i kraj CYW43, rozmiary pul, limity kolejki oczekujących połączeń i TLS oraz pozostałe parametry i kontrole zakresów. |
 
-Te zachowane sekcje zawierają produkcyjną diagnostykę czasu buildu, która
-zależy od kontekstu targetu, providera, płytki lub parametrów strojenia.
+Te sekcje zawierają diagnostykę wykonywaną podczas buildu, zależną od targetu,
+providera, płytki i parametrów konfiguracyjnych.
 
-`resolvedFeatures` rejestru oraz jego hash funkcji opisują domknięcie
-rejestru v1. Nie dopisują dwóch powyższych wyników propagacji kontekstowej.
-Żądanie wyłącznie GPS może zatem zakończyć preprocessing z
-`HAL_ENABLE_UART`, a EEPROM AT24 może zakończyć z `HAL_ENABLE_I2C`, mimo że
-te dodatki są nieobecne w `resolvedFeatures` i hashu funkcji.
+`resolvedFeatures` i skrót zestawu modułów opisują pełny zbiór wynikający z rejestru
+v1. Nie uwzględniają dwóch opisanych wyżej zależności kontekstowych. Dlatego
+konfiguracja żądająca wyłącznie GPS może po przetworzeniu zawierać
+`HAL_ENABLE_UART`, a konfiguracja EEPROM AT24 - `HAL_ENABLE_I2C`, mimo że
+tych dodatków nie ma w `resolvedFeatures` ani w skrócie zestawu modułów.
 
 Przy `HAL_CONFIG_VERBOSE` wygenerowany nagłówek sprawdza każdy zarejestrowany
-symbol `HAL_ENABLE_*` i `HAL_DISABLE_*`. Raport jest emitowany po zachowanej
-propagacji warunkowej, więc jego wyjście `#pragma message` opisuje finalny
-stan preprocesora, łącznie z kontekstowymi dodatkami I2C lub UART.
+symbol `HAL_ENABLE_*` i `HAL_DISABLE_*`. Komunikat powstaje po zastosowaniu
+zależności warunkowych, dlatego `#pragma message` pokazuje ostateczny stan
+preprocesora, łącznie z dodanym kontekstowo I2C lub UART.
 
 ### Przekazywanie flag - zalecane: `hal_project_config.h`
 
@@ -318,15 +320,18 @@ moduły, których używasz:
 #define HAL_ENABLE_PWM_FREQ
 ```
 
-Ścieżka wyboru targetu wykrywa go przez `__has_include("hal_project_config.h")`
-przed automatycznym wykryciem targetu. Utrzymuj nagłówek wyłącznie jako zbiór
-makr i unikaj include'ów lub warunków opartych na wyprowadzonych makrach
-`HAL_TARGET_IS_*` i `HAL_BOARD_IS_*`, które są rozwiązywane później. Definicje
-funkcji używane do wyboru źródeł muszą być bezwarunkowe: `#define HAL_ENABLE_X`
-lub `#define HAL_ENABLE_X 1`; jedyną wspieraną formą warunkową jest strażnik
+Kod wybierający target sprawdza obecność pliku przez
+`__has_include("hal_project_config.h")` przed automatycznym wykrywaniem targetu.
+W nagłówku umieszczaj wyłącznie makra. Nie dodawaj plików nagłówkowych ani
+warunków opartych na wyprowadzanych później makrach
+`HAL_TARGET_IS_*` i `HAL_BOARD_IS_*`, które są rozwiązywane później. Flagi
+używane do wyboru źródeł muszą być definiowane bezwarunkowo:
+`#define HAL_ENABLE_X`
+lub `#define HAL_ENABLE_X 1`; jedyną obsługiwaną formą warunkową jest strażnik
 `#ifndef HAL_ENABLE_X` dla tego samego symbolu. Nie umieszczaj definicji
-funkcji pod żadnym innym `#if`/`#ifdef`, w tym pod surowymi lub wyprowadzonymi
-gałęziami target/board, ponieważ wczesny kolektor odczytuje plik tekstowo.
+flag pod żadnym innym `#if`/`#ifdef`, także w gałęziach zależnych bezpośrednio
+lub pośrednio od targetu czy płytki, ponieważ wczesny etap konfiguracji
+odczytuje ten plik jako tekst.
 
 ### Flaga dostępności FreeRTOS
 
@@ -342,71 +347,72 @@ dołączać natywne nagłówki FreeRTOS:
 
 Reguły targetu:
 
-Bezpośrednie ścieżki dispatchera/CMake zarówno dla natywnego RP, jak i
-STM32G474, wywołują automatycznie `scripts/component_manager.py component
-freertos --enable`, gdy wybrany jest FreeRTOS. Jawne tryby pomocnicze
-biblioteki statycznej najpierw wywołują `scripts/ensure_freertos_kernel.sh`:
+Mechanizm buildu i CMake dla natywnego RP oraz STM32G474 automatycznie wywołują
+`scripts/component_manager.py component freertos --enable`, gdy wybrano
+FreeRTOS. Jawne tryby skryptów budujących biblioteki statyczne najpierw
+uruchamiają `scripts/ensure_freertos_kernel.sh`:
 `--freertos` dla RP i STM32G474 oraz jawne `-D HAL_ENABLE_FREERTOS` dla
-STM32G474. Wrapper deleguje do tego samego managera. Jeśli funkcja pochodzi
-wyłącznie z `hal_project_config.h` (lub z RP `-D`), fallback CMake
-nadal przygotowuje kernel. Zewnętrzny `JH_FREERTOS_KERNEL_DIR` jest
+STM32G474. Adapter korzysta z tego samego menedżera. Jeśli flaga pochodzi
+wyłącznie z `hal_project_config.h` albo z `-D` na RP, CMake mimo to
+przygotowuje kernel. Zewnętrzny `JH_FREERTOS_KERNEL_DIR` jest
 weryfikowany i nigdy nie jest zastępowany.
 
 - Natywny RP2040/RP2350: użyj `./scripts/build_rp_native_lib.sh --freertos`
   lub wybierz `examples/18_freertos_suite` przez zwykły target VS Code.
-  CMake wybiera przypięty port SMP dla RP2040, RP2350 ARM_NTZ lub RP2350
-  RISC-V, linkuje `heap_4`, tworzy `app_task0()` przypięte do rdzenia 0 oraz
+  CMake wybiera port SMP w wersji wskazanej przez repozytorium dla RP2040,
+  RP2350 ARM_NTZ lub RP2350 RISC-V, linkuje `heap_4`, tworzy `app_task0()`
+  przypięte do rdzenia 0 oraz
   opcjonalne `app_task1()` przypięte do rdzenia 1, po czym uruchamia
-  scheduler. Natywny USB jest obsługiwany przez dedykowane zadanie przypięte
-  do rdzenia 0. Stanowisko sprzętowe pod `tests/hardware/rp_freertos_smp`
-  weryfikuje oba przypisania, mutexy międzyrdzeniowe, stan schedulera/sterty
-  oraz przeciwciśnienie (backpressure) CDC.
-- STM32G474: użyj przypiętej zależności `third_party/FreeRTOS-Kernel` z
-  `third_party/freertos_core_version.conf` lub przekaż
+  kernel FreeRTOS. Natywny USB jest obsługiwany przez dedykowane zadanie przypięte
+  do rdzenia 0. Test sprzętowy w `tests/hardware/rp_freertos_smp`
+  weryfikuje oba przypisania, mutexy międzyrdzeniowe, stan planisty/sterty
+  oraz obsługę przeciążenia CDC.
+- STM32G474: użyj zależności `third_party/FreeRTOS-Kernel` w wersji wskazanej
+  w `third_party/freertos_core_version.conf` lub przekaż
   `-DJH_FREERTOS_KERNEL_DIR=/path/to/FreeRTOS-Kernel`. Buildy CMake STM32
   kompilują jawną listę źródeł kernela Cortex-M4F, dołączają docelowy
-  `FreeRTOSConfig.h`, używają `heap_4.c` i pozwalają portowi FreeRTOS przejąć
-  na własność SVC/PendSV/SysTick. W trybie FreeRTOS `hal_mutex_*` na STM32
-  używa mutexów FreeRTOS, `hal_delay_ms()` używa `vTaskDelay()` z poprawnego
-  kontekstu zadania, a `hal_idle()` oddaje sterowanie schedulerowi z
-  poprawnego kontekstu zadania. Gdy dodatkowo zdefiniowane jest
+  `FreeRTOSConfig.h`, używają `heap_4.c` i powierzają portowi FreeRTOS obsługę
+  SVC/PendSV/SysTick. W trybie FreeRTOS `hal_mutex_*` na STM32
+  używa mutexów FreeRTOS. `hal_delay_ms()` wywołuje `vTaskDelay()`, a
+  `hal_idle()` oddaje sterowanie planiście, pod warunkiem że funkcje zostały
+  wywołane z właściwego kontekstu zadania. Gdy dodatkowo zdefiniowane jest
   `HAL_PROVIDE_APP_ENTRY`, HAL wywołuje `app_start()`, tworzy zadanie
   FreeRTOS `app_task0()`, tworzy `app_task1()` tylko wtedy, gdy zdefiniowane
   jest `HAL_ENABLE_APP_TASK1`, a następnie wywołuje `vTaskStartScheduler()`.
-- ESP32-S3: używa schedulera FreeRTOS już uruchomionego przez przypięty
-  ESP-IDF. `app_main()` wywołuje `app_start()`, domyślnie tworzy
+- ESP32-S3: używa planisty FreeRTOS uruchomionego już przez ESP-IDF w wersji
+  wskazanej przez repozytorium. `app_main()` wywołuje `app_start()` i domyślnie tworzy
   `app_task0()` na rdzeniu 0, opcjonalnie tworzy `app_task1()` na rdzeniu 1 i
   wraca do ESP-IDF. Target wymaga `HAL_ENABLE_FREERTOS`.
   `HAL_FREERTOS_TASK0_CORE` oraz `HAL_FREERTOS_TASK1_CORE` akceptują docelowy
   rdzeń lub `-1` oznaczające brak przypisania.
-- Host/mock: `HAL_ENABLE_FREERTOS` nie jest wspierane przez zwykły backend
+- Host/mock: `HAL_ENABLE_FREERTOS` nie jest obsługiwane przez zwykły backend
   mock. CI używa opcjonalnego buildu hosta `JH_ENABLE_FREERTOS_POSIX_TESTS`
-  do skompilowania portu GCC/Posix kernela FreeRTOS, uruchomienia
-  prawdziwego schedulera jako pthreadów oraz przećwiczenia ścieżek
-  `HAL_ENABLE_FREERTOS` host-stub STM32G474 w `ctest`.
+  do skompilowania portu GCC/POSIX kernela FreeRTOS, uruchomienia rzeczywistego
+  planisty na wątkach pthread i sprawdzenia w `ctest` kodu STM32G474
+  kompilowanego na hoście z `HAL_ENABLE_FREERTOS`.
 
 Domyślne wartości zadania wejściowego natywnego FreeRTOS dostarczanego przez
 HAL:
 
 | Makro | Domyślnie | Jednostka / znaczenie |
 |---|---|---|
-| `HAL_FREERTOS_CORE_COUNT` | `2` | Liczba rdzeni schedulera natywnego RP; dozwolone wartości to `1` i `2`. Build jednordzeniowy nie może włączać `HAL_ENABLE_APP_TASK1`. |
+| `HAL_FREERTOS_CORE_COUNT` | `2` | Liczba rdzeni planisty natywnego RP; dozwolone wartości to `1` i `2`. Build jednordzeniowy nie może włączać `HAL_ENABLE_APP_TASK1`. |
 | `HAL_FREERTOS_TASK0_STACK` | `512` | Słowa stosu FreeRTOS dla `app_task0()` |
 | `HAL_FREERTOS_TASK1_STACK` | `512` | Słowa stosu FreeRTOS dla `app_task1()` |
 | `HAL_FREERTOS_TASK0_PRIORITY` | `tskIDLE_PRIORITY + 1` | Priorytet FreeRTOS dla `app_task0()` |
 | `HAL_FREERTOS_TASK1_PRIORITY` | `tskIDLE_PRIORITY + 1` | Priorytet FreeRTOS dla `app_task1()` |
 | `HAL_FREERTOS_HEAP_SIZE` | `164 * 1024` | Rozmiar puli `heap_4` RP w bajtach |
-| `HAL_USB_FREERTOS_TASK_STACK` | `512` | Stos workera USB rdzenia 0 RP w słowach FreeRTOS |
-| `HAL_USB_FREERTOS_TASK_PRIORITY` | `tskIDLE_PRIORITY + 2` | Priorytet workera USB rdzenia 0 RP |
+| `HAL_USB_FREERTOS_TASK_STACK` | `512` | Stos zadania USB rdzenia 0 RP w słowach FreeRTOS |
+| `HAL_USB_FREERTOS_TASK_PRIORITY` | `tskIDLE_PRIORITY + 2` | Priorytet zadania USB rdzenia 0 RP |
 
-ESP32-S3 nadpisuje oba domyślne rozmiary stosu aplikacji na `3072` bajtów
-głębokości stosu ESP-IDF i dodaje domyślne wartości rdzenia
-`HAL_FREERTOS_TASK0_CORE=0` oraz `HAL_FREERTOS_TASK1_CORE=1`. Priorytety
-zadań aplikacji zachowują współdzielone domyślne wartości
+ESP32-S3 zmienia oba domyślne rozmiary stosu aplikacji na `3072` bajty, zgodnie
+z jednostką używaną przez ESP-IDF, i ustawia domyślne wartości rdzenia
+`HAL_FREERTOS_TASK0_CORE=0` oraz `HAL_FREERTOS_TASK1_CORE=1`. Zadania aplikacji
+nadal używają wspólnych domyślnych priorytetów
 `tskIDLE_PRIORITY + 1`.
 
-STM32G474 używa puli `heap_4` o rozmiarze 24 KiB ze swojego lokalnego dla
-targetu `FreeRTOSConfig.h`. Stosy zadań aplikacji używają tych samych
+STM32G474 używa puli `heap_4` o rozmiarze 24 KiB z pliku
+`FreeRTOSConfig.h` właściwego dla tego targetu. Stosy zadań aplikacji używają tych samych
 domyślnych 512 słów; `_Min_Stack_Size` linkera pozostaje rezerwacją stosu
 rozruchu/wyjątków.
 
@@ -418,20 +424,19 @@ Nadpisania rozmiaru stosu platformy:
 | `HAL_RP_CORE0_STACK_SIZE` | `0x800` | Bajty mapowane na `PICO_STACK_SIZE` dla dowolnego natywnego targetu RP |
 | `HAL_RP_CORE1_STACK_SIZE` | `HAL_RP_CORE0_STACK_SIZE` / `0x800` | Bajty mapowane na `PICO_CORE1_STACK_SIZE` dla dowolnego natywnego targetu RP |
 
-Uwaga o thread safety: tryby FreeRTOS RP2040, STM32G474 i
-ESP32-S3 dostarczają prymitywy mutex/delay/idle, natomiast
-`hal_critical_section_*` używa twardego mechanizmu krytycznego przerwań
-targetu dla kodu wrażliwego na czas. ESP32-S3 dodatkowo serializuje oba
-rdzenie za pomocą współdzielonego `portMUX_TYPE`. Implementacja zawiera
-atomowe fallbacki create-once dla mutexów singletonowych/per-
-magistrala oraz utwardza ścieżkę callbacku I2C-slave na RP2040. Kontekst
-callbacku timera oraz pozostałe wyjątki per-moduł wymagają dedykowanych
-audytów na poziomie modułu, zanim udokumentowane zostaną silniejsze
-gwarancje thread safety.
+**Wielowątkowość:** tryby FreeRTOS na RP2040, STM32G474 i ESP32-S3 udostępniają
+mechanizmy mutexów, opóźnień i bezczynności. Dla kodu wrażliwego na czas
+`hal_critical_section_*` korzysta bezpośrednio z mechanizmu sekcji krytycznej
+przerwań danego targetu. ESP32-S3 dodatkowo synchronizuje oba rdzenie za pomocą
+wspólnego `portMUX_TYPE`. Implementacja ma zapasowy, atomowy mechanizm
+jednokrotnego tworzenia mutexów singletonów i magistral oraz zabezpiecza callback
+I2C slave na RP2040. Kontekst callbacku timera i wyjątki właściwe dla
+poszczególnych modułów wymagają osobnej analizy, zanim będzie można zadeklarować
+silniejsze gwarancje thread safety.
 
-Workflow projektu VS Code dodaje ścieżkę include projektu automatycznie
-przez wspólny dispatcher. Wygenerowane projekty powinny używać zadań
-`Project: Build` oraz `Project: Select board` emitowanych przez `jh-vscode`.
+Konfiguracja projektu VS Code automatycznie dodaje ścieżkę nagłówków projektu
+przez wspólny mechanizm buildu. Wygenerowane projekty powinny używać zadań
+`Project: Build` i `Project: Select board` tworzonych przez `jh-vscode`.
 
 ### Alternatywa: flagi `-D` w linii poleceń
 
@@ -445,12 +450,12 @@ przez wspólny dispatcher. Wygenerowane projekty powinny używać zadań
   -D HAL_ENABLE_I2C
 ```
 
-### Moduły rdzeniowe (bez flagi wyłączającej)
+### Moduły podstawowe (bez flagi wyłączającej)
 
 | Moduł | Przeznaczenie |
 |---|---|
 | `hal_gpio` | Odczyt / zapis / przerwania GPIO |
-| `hal_adc` | ADC na chipie |
+| `hal_adc` | ADC wbudowany w układ |
 | `hal_pwm` | Podstawowy PWM w stylu analogWrite |
 | `hal_timer` | Niskopoziomowe alarmy jednorazowe plus zarządzane timery (okresowe/jednorazowe tworzenie/start/stop/pauza/wznowienie/zapytanie) |
 | `hal_system` | millis / delay / watchdog / idle + niezależne od typu `hal_constrain` / `hal_map` + `COUNTOF(arr)` |
@@ -460,23 +465,23 @@ przez wspólny dispatcher. Wygenerowane projekty powinny używać zadań
 | `hal_spi` | Inicjalizacja magistrali SPI |
 | `hal_math` | niezależne od typu makra `hal_constrain` / `hal_map` |
 
-`hal_crypto` jest opt-in przez `HAL_ENABLE_CRYPTO` (nie jest częścią zawsze
-włączonego zestawu rdzeniowego).
+`hal_crypto` jest włączany opcjonalnie przez `HAL_ENABLE_CRYPTO` i nie należy
+do zestawu dostępnego bezwarunkowo.
 
-### Własność zależności
+### Zarządzanie zależnościami
 
 Opcjonalne integracje firm trzecich wykorzystywane przez moduły HAL są
 wybierane przez CMake. Funkcje pomocnicze specyficzne dla targetu RP
 znajdują się pod `src/hal/impl/rp2040/drivers/rp2040/`. Przenośne nagłówki,
-fasady, drivery urządzeń i silniki wielokrotnego użytku są umieszczone
+fasady, drivery urządzeń i kod wielokrotnego użytku są umieszczone
 tematycznie pod `src/hal/<domain>/`. `src/hal/impl/` jest zarezerwowane dla
 backendów `.mock`, `rp2040` i `stm32g474`.
 
-Faktycznie skompilowane zależności są kontrolowane przez zestaw modułów:
+Zestaw włączonych modułów decyduje, które zależności zostaną skompilowane:
 
-- włączone moduły (`HAL_ENABLE_*`) dołączają swoje backendy firm trzecich
-- moduły pozostawione wyłączone (domyślnie) wykompilowują zarówno
-  deklaracje, jak i szczegóły implementacji
+- włączone moduły (`HAL_ENABLE_*`) dołączają swoje backendy firm trzecich;
+- moduły pozostawione wyłączone (ustawienie domyślne) nie udostępniają
+  deklaracji ani nie dołączają implementacji do buildu.
 
 \* `HAL_ENABLE_TIME` włącza współdzielony zegar runtime, status, NTP
 oraz API czasu lokalnego. Z `HAL_ENABLE_RTC` może przywracać stan z RTC i

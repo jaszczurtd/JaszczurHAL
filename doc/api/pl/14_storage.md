@@ -6,13 +6,13 @@
 
 Obejmuje: `hal_eeprom`, `hal_kv`, `hal_littlefs`, `hal_sdlogger`.
 
-Układy pamięci flash wewnętrznej rezerwują regiony aplikacji, OTA, LittleFS
-i EEPROM w czasie konsolidacji (link time). Operacje kasowania/programowania
-RP współdzielą koordynator transakcji flash, który zabezpiecza drugi rdzeń,
+Regiony aplikacji, OTA, LittleFS i EEPROM w wewnętrznej pamięci flash są rezerwowane
+podczas linkowania. Na RP operacje kasowania i programowania korzystają ze
+wspólnego koordynatora transakcji flash, który zabezpiecza drugi rdzeń,
 wstrzymuje pracę USB, odrzuca aktywne konflikty DMA, maskuje lokalne
-przerwania i przywraca stan runtime na wyjściu. STM32G474
-używa rezerwacji linkera wyrównanych do stron oraz swojej docelowej usługi
-flash. Zobacz [mapę pamięci RP](../../../rp_native_lib/MEMORY_MAP.md) oraz
+przerwania, a po zakończeniu przywraca poprzedni stan runtime. STM32G474
+używa rezerwacji linkera wyrównanych do stron oraz usługi flash właściwej dla
+tego targetu. Zobacz [mapę pamięci RP](../../../rp_native_lib/MEMORY_MAP.md) oraz
 [mapę pamięci STM32G474](../../../stm32_lib/MEMORY_MAP.md).
 
 ## `hal_eeprom` - ujednolicony EEPROM  *(opcjonalny - `HAL_ENABLE_EEPROM`)*
@@ -20,11 +20,10 @@ flash. Zobacz [mapę pamięci RP](../../../rp_native_lib/MEMORY_MAP.md) oraz
 Jednolite API dla trwałego, adresowanego bajtowo przechowywania danych.
 Backend jest wybierany w runtime przez `hal_eeprom_init()`.
 
-Publiczne API, przycinanie zakresu (range clipping), kodowanie liczb
-całkowitych, blokady, własność callbacków i wybór providera znajdują się w
-jednej fasadzie niezależnej od targetu. Jeden przenośny provider AT24C256
-korzysta z HAL I2C; providerzy flash RP, flash STM32G474 i pamięci hosta
-zawierają wyłącznie swoje mechanizmy przechowywania.
+Wspólne, niezależne od targetu API odpowiada za ograniczanie operacji do dostępnego
+zakresu, kodowanie liczb całkowitych, blokady, zarządzanie callbackiem i wybór backendu.
+Przenośna obsługa AT24C256 korzysta z HAL I2C. Backendy flash RP, flash STM32G474 oraz
+pamięci hosta zawierają tylko mechanizmy właściwe dla danego nośnika.
 
 `HAL_EEPROM_FLASH` oznacza "użyj natywnej dla targetu emulacji EEPROM na
 wewnętrznej pamięci flash" i jest przenośnym selektorem dla firmware'u RP
@@ -73,7 +72,7 @@ hal_status_t hal_eeprom_write_bytes(uint16_t addr, const uint8_t *data,
 hal_status_t hal_eeprom_read_bytes(uint16_t addr, uint8_t *out, uint16_t len);
 
 // Zapisuje buforowane dane do pamięci nieulotnej.
-// HAL_EEPROM_FLASH / natywny flash: zapisuje lustro RAM do flash.
+// HAL_EEPROM_FLASH / natywny flash: zapisuje kopię z RAM do flash.
 // HAL_EEPROM_AT24C256: brak działania (no-op).
 hal_status_t hal_eeprom_commit(void);
 
@@ -88,25 +87,26 @@ uint16_t hal_eeprom_size(void);
 `hal_eeprom_read_int` używają kolejności **little-endian** (LSB pod
 najniższym adresem).
 
-**Semantyka zatwierdzania (commit):** Dla backendów opartych na flash,
+**Zapisywanie zmian (`commit`):** W backendach opartych na flash
 `hal_eeprom_write_byte`, `hal_eeprom_write_int` i `hal_eeprom_write_bytes`
 najpierw aktualizują bufor RAM. Wywołaj `hal_eeprom_commit()` raz po grupie
-zapisów, aby utrwalić je we flash. Dla `HAL_EEPROM_AT24C256` zapisy są
-zatwierdzane synchronicznie na układzie w porcjach wielkości strony;
-`hal_eeprom_commit()` jest wtedy no-opem.
+zapisów, aby utrwalić je we flash. Dla `HAL_EEPROM_AT24C256` dane są
+zapisywane synchronicznie do układu, stronami; `hal_eeprom_commit()` nic wtedy nie robi.
 
-**Natywna implementacja RP:** `HAL_EEPROM_FLASH` używa ostatnich
+**Implementacja RP:** `HAL_EEPROM_FLASH` używa ostatnich
 `HAL_RP_FLASH_EEPROM_SIZE` bajtów fizycznej pamięci flash (domyślnie 4096
-bajtów). Zapisy aktualizują lustro RAM. Zatwierdzenie "brudnego" stanu
+bajtów). Zapisy aktualizują kopię w RAM. Utrwalenie zmienionego stanu
 wykonuje pełne kasowanie i programowanie partycji w jednej operacji
 `jh_rp_flash_transaction_execute()`, więc rdzeń 1, przerwania, DMA i
 TinyUSB podlegają tej samej polityce bezpieczeństwa co każda inna natywna
-mutacja flash. Wygenerowany region linkera wyklucza rezerwację z firmware'u.
+modyfikacja flash. Wygenerowany region linkera zapobiega zajęciu tej
+rezerwacji przez obraz firmware'u.
 
 **Implementacja STM32G474:** `HAL_EEPROM_FLASH` i `HAL_EEPROM_STM32_FLASH`
 używają ostatnich stron wewnętrznej pamięci flash zarezerwowanych przez
-skrypt linkera STM32. Domyślna rezerwacja to `HAL_STM32_FLASH_EEPROM_SIZE =
-4096` bajtów, przy `HAL_STM32_FLASH_PAGE_SIZE = 2048` bajtów. Zmniejsza to
+skrypt linkera STM32. Domyślna rezerwacja ma
+`HAL_STM32_FLASH_EEPROM_SIZE = 4096` bajtów, a rozmiar strony
+`HAL_STM32_FLASH_PAGE_SIZE = 2048` bajtów. Zmniejsza to
 pamięć flash dostępną dla kodu aplikacji o 4 KB. Jeśli rozmiar rezerwacji
 zostanie zmieniony, utrzymuj synchronizację definicji buildu i symbolu
 linkera oraz użyj wielokrotności rozmiaru strony flash STM32.
@@ -115,32 +115,31 @@ Linker STM32 obsługuje też osobną rezerwację LittleFS przed EEPROM. Utrzymuj
 `HAL_STM32_FLASH_EEPROM_SIZE` i `HAL_STM32_FLASH_LITTLEFS_SIZE`
 nienakładające się; EEPROM/KV i LittleFS nie współdzielą stron.
 
-**Implementacja AT24C256:** jeden provider niezależny od targetu steruje
+**Implementacja AT24C256:** jedna implementacja niezależna od targetu steruje
 zewnętrznym układem poprzez prymitywy `hal_i2c_*` na obu targetach
-sprzętowych. Zapisy są dzielone na granicach stron po 64 bajty i odpytywane
-o ACK z ograniczonym czasowo timeoutem (`HAL_AT24C256_WRITE_TIMEOUT_US`,
+sprzętowych. Zapisy są dzielone na granicach stron po 64 bajty, a układ jest
+odpytywany o ACK z timeoutem (`HAL_AT24C256_WRITE_TIMEOUT_US`,
 domyślnie 20000 us). Zapisy poza zakresem są przycinane; odczyty poza
 zakresem zwracają bajty wypełnione zerami. Adres I2C AT24C256 to
 `EEPROM_I2C_ADDRESS` (domyślnie `0x50`, zdefiniowane w `hal_config.h`), o
 ile do `hal_eeprom_init()` nie przekazano jawnego adresu.
 
-**Postęp długich operacji:** EEPROM nigdy niejawnie nie karmi watchdoga.
+**Postęp długich operacji:** EEPROM nigdy nie karmi watchdoga automatycznie.
 Użyj `hal_eeprom_set_progress_callback()` przed długimi zapisami, resetem
-lub operacjami zatwierdzania flash, jeśli aplikacja chce nakarmić własny
+lub operacjami zatwierdzania flash, jeśli aplikacja chce odświeżać własny
 watchdog lub raportować postęp. Pełny reset AT24C256 dotyka 512 stron i
 może zająć kilka sekund.
 
-**impl/.mock:** ta sama publiczna fasada rozdziela wywołania do providera
-w pamięci (`MOCK_EEPROM_BUF_SIZE`, domyślnie 32768); mock nie powiela
-zachowania `hal_eeprom_*`.
+**impl/.mock:** Wspólne API kieruje wywołania do backendu przechowującego dane w pamięci
+(`MOCK_EEPROM_BUF_SIZE`, domyślnie 32768). Mock nie powiela obsługi
+`hal_eeprom_*`.
 
-**Thread safety:** Thread-safe i wielordzeniowo dla obu
-rodzin backendów. Wspólny mutex fasady chroni wybór providera, aktywny
-rozmiar, callbacki, przycinanie zakresu i każdą operację.
-`HAL_EEPROM_AT24C256` transfery używają dodatkowo mutexu magistrali
-`hal_i2c`, podczas gdy natywni providerzy flash zachowują własną
-platformową koordynację flash. Skonfiguruj raportowanie postępu przed
-dostępem współbieżnym; callback działa pod mutexem fasady i nie może
+**Thread safety:** Obie rodziny backendów są thread-safe i mogą działać na wielu rdzeniach.
+Wspólny mutex chroni wybór backendu, aktywny rozmiar, callbacki, ograniczanie zakresu i
+każdą operację. Transfery `HAL_EEPROM_AT24C256` dodatkowo używają mutexu magistrali
+`hal_i2c`, a natywne backendy flash stosują mechanizm koordynacji właściwy dla targetu.
+Callback postępu należy skonfigurować przed rozpoczęciem współbieżnego dostępu. Jest
+wywoływany pod wspólnym mutexem i nie może
 ponownie wejść do `hal_eeprom_*`.
 
 ### Pomocnicy mock
@@ -215,18 +214,16 @@ void example_eeprom(void) {
 ```
 
 **API zwracające status** (zobacz [Status API](01_status_api.md)):
-`hal_eeprom` jest **modułem referencyjnym** dla zmienionej migracji statusu.
-Historycznie `void` punkty wejścia (`init`, `write_byte`, `write_int`,
+`hal_eeprom` jest **modułem wzorcowym** dla migracji na funkcje zwracające status.
+Punkty wejścia, które wcześniej zwracały `void` (`init`, `write_byte`, `write_int`,
 `write_bytes`, `read_bytes`, `commit`, `reset`, `set_progress_callback`)
-**teraz zwracają `hal_status_t` bezpośrednio** - jest to zgodne źródłowo,
-więc istniejący wywołujący, którzy ignorują wartość zwracaną, pozostają
-niezmienieni, a nowy kod może ją sprawdzać. Na backendzie AT24C256
-przywraca to rzeczywiste błędy I2C (`HAL_EIO`), które stare API `void`
-odrzucało. Trzy gettery zwracające wartość zachowują swoją sygnaturę i
-zyskują towarzyszące warianty `_ex` (`hal_eeprom_read_byte_ex`,
-`hal_eeprom_read_int_ex`, `hal_eeprom_size_ex`), które raportują wartość
-przez parametr wyjściowy. Dostęp poza zakresem nadal przycina dokładnie
-jak wcześniej; nowy status po prostu zgłasza to jako `HAL_EOVERFLOW`.
+**teraz zwracają bezpośrednio `hal_status_t`**. Zmiana zachowuje zgodność źródłową:
+istniejący kod nadal może ignorować wynik, a nowy może go sprawdzać. Backend AT24C256
+przekazuje dzięki temu rzeczywiste błędy I2C (`HAL_EIO`), które dawne API `void` traciło.
+Trzy gettery zwracające wartość zachowują sygnatury i mają dodatkowe warianty `_ex`:
+`hal_eeprom_read_byte_ex`, `hal_eeprom_read_int_ex` oraz `hal_eeprom_size_ex`. Warianty te
+zapisują wynik przez parametr wyjściowy. Operacja wykraczająca poza zakres nadal jest
+przycinana tak samo jak wcześniej, ale dodatkowo zwraca `HAL_EOVERFLOW`.
 
 ```c
 hal_eeprom_init(HAL_EEPROM_FLASH, 512, 0);   // zwraca HAL_OK / HAL_EINVAL
@@ -248,10 +245,10 @@ if (hal_eeprom_read_byte_ex(10, &value) == HAL_OK) {
 
 ## `hal_kv` - przechowywanie klucz-wartość na EEPROM  *(opcjonalny - `HAL_ENABLE_KV`)*
 
-Thread-safe, dopisywane wyłącznie (append-only) przechowywanie
-rekordów KV na bazie `hal_eeprom`. Używa układu dwóch banków (dual-bank) z
+Thread-safe magazyn rekordów KV oparty na `hal_eeprom`, do którego dane są
+wyłącznie dopisywane (append-only). Używa układu dwóch banków (dual-bank) z
 nagłówkami i rekordami chronionymi CRC16. Automatyczne odśmiecanie (garbage
-collection, GC) kompaktuje żywe rekordy do banku alternatywnego, gdy
+collection, GC) kompaktuje aktualne rekordy do drugiego banku, gdy
 aktywnemu bankowi zabraknie miejsca.
 
 ```c
@@ -277,20 +274,21 @@ hal_status_t hal_kv_set_auto_commit(bool enabled);
 bool hal_kv_commit(void);
 ```
 
-**Zależności:** `hal_eeprom`, `hal_sync`, `hal_serial`.
-**Thread safety:** Thread-safe i wielordzeniowo. Wewnętrzny
-mutex singletonowy, utworzony przy pomocy atomowego pomocnika HAL
-create-once, chroni wszystkie operacje. `hal_kv_init()` musi być wywołane
+- **Zależności:** `hal_eeprom`, `hal_sync`, `hal_serial`.
+
+**Thread safety:** API jest thread-safe i może być używane z wielu rdzeni. Wszystkie
+operacje chroni mutex singletona utworzony przez atomowy mechanizm jednokrotnej
+inicjalizacji HAL. `hal_kv_init()` musi być wywołane
 po `hal_eeprom_init()`.
 
-**Deduplikacja:** `hal_kv_set_u32` / `hal_kv_set_blob` pomijają zapis do
-EEPROM, gdy wartość jest niezmieniona, unikając niepotrzebnego zużycia
-(wear) pamięci flash.
+**Pomijanie niezmienionych danych:** `hal_kv_set_u32` i `hal_kv_set_blob` nie zapisują
+danych do EEPROM, jeśli wartość się nie zmieniła. Ogranicza to niepotrzebne zużycie
+pamięci flash.
 
-**Polityka zatwierdzania (commit):** auto-commit jest domyślnie włączony
-(zachowanie historyczne). Użyj `hal_kv_set_auto_commit(false)`, aby odłożyć
-fizyczne zatwierdzenie EEPROM/flash i połączyć wiele zapisów, a następnie
-opróżnij je jednorazowo przez `hal_kv_commit()`.
+**Automatyczny `commit`:** Automatyczne utrwalanie zmian jest domyślnie włączone, zgodnie
+z dotychczasowym zachowaniem. `hal_kv_set_auto_commit(false)` pozwala odłożyć fizyczny
+zapis do EEPROM lub flash i połączyć kilka zmian. Utrwal je potem jednym wywołaniem
+`hal_kv_commit()`.
 
 **Przykład: przechowywanie klucz-wartość z liczbami całkowitymi i blobami**
 ```c
@@ -364,13 +362,12 @@ void example_kv(void) {
 }
 ```
 
-**Status API:** operacje `_ex` są właścicielami walidacji i wejścia/wyjścia
-EEPROM; powyższe historyczne funkcje bool to cienkie wrappery zgodności.
-Historycznie `void` funkcja `hal_kv_set_auto_commit()` teraz zwraca
-bezpośrednio `hal_status_t`. Brak trafienia przy odczycie mapuje się na
-`HAL_ENOENT`, użycie przed udaną inicjalizacją na `HAL_EUNINIT`, nieprawidłowy
-zakres EEPROM na `HAL_EOVERFLOW`, niewystarczająca pojemność banku na
-`HAL_ENOMEM`, a leżące u podstaw błędy EEPROM są propagowane.
+**Status API:** Warianty `_ex` sprawdzają argumenty i wykonują operacje EEPROM;
+dotychczasowe funkcje `bool` pozostają wrapperami zgodności. Funkcja
+`hal_kv_set_auto_commit()`, która wcześniej zwracała `void`, teraz zwraca bezpośrednio
+`hal_status_t`. Brak klucza podczas odczytu odpowiada `HAL_ENOENT`, użycie przed poprawną
+inicjalizacją - `HAL_EUNINIT`, nieprawidłowy zakres EEPROM - `HAL_EOVERFLOW`, a zbyt mała
+pojemność banku - `HAL_ENOMEM`. Błędy zwracane przez EEPROM są przekazywane bez zmian.
 `hal_kv_get_blob_ex()` zgłasza zbyt mały bufor wywołującego jako
 `HAL_EOVERFLOW` z wymaganą długością w `*out_len`.
 
@@ -392,8 +389,8 @@ default:            break;
 
 ## `hal_littlefs` - pomocnicy cyklu życia LittleFS  *(opt-in - `HAL_ENABLE_LITTLEFS`)*
 
-Thread-safe, niezależna od targetu fasada cyklu życia LittleFS, pomocników
-ścieżek i zapytań o rozmiar systemu plików.
+Thread-safe, niezależne od targetu API do zarządzania cyklem życia LittleFS,
+operacji na ścieżkach i odczytu rozmiaru systemu plików.
 
 ```c
 #include <hal/storage/hal_littlefs.h>
@@ -424,32 +421,32 @@ size_t       hal_littlefs_used_bytes(void);
 - `hal_littlefs_begin_ex()` montuje system plików i jest idempotentne, gdy jest
   on już zamontowany.
 - `hal_littlefs_end()` jest idempotentne przy odmontowanym systemie. Zawsze
-  czyści stan zamontowania fasady, także gdy provider zgłosi błąd unmount.
+  czyści zapisany stan montowania, także gdy backend zgłosi błąd odmontowania.
 - Formatowanie jest destrukcyjne. Udane `hal_littlefs_format_ex()` pozostawia
   system plików odmontowany; zamontuj go jawnie przed użyciem API ścieżek lub
   rozmiaru.
-- Jeśli unmount albo format zawiedzie, gdy system plików był zamontowany,
-  fasada wykonuje jedną próbę best-effort remount i zwraca pierwotny błąd.
-  `hal_littlefs_is_mounted()` informuje, czy remount się powiódł. Jeśli próba
-  formatowania zawiedzie po rozpoczęciu mutacji flash, dane mogą być już
-  częściowo zmienione i ich zachowanie nie jest gwarantowane.
+- Jeśli odmontowanie albo formatowanie nie powiedzie się przy zamontowanym systemie plików, API
+  podejmuje jedną próbę ponownego montowania i zwraca pierwotny błąd.
+  `hal_littlefs_is_mounted()` informuje, czy ponowne zamontowanie się powiodło. Jeśli próba
+  formatowania zawiedzie po rozpoczęciu modyfikowania flash, dane mogą być już
+  częściowo zmienione i nie ma gwarancji ich zachowania.
 - Pomocnicy ścieżek wymagają zamontowanego systemu plików i walidują niepuste ścieżki.
 - Wyjście zapytania o rozmiar jest zerowane przed zwróceniem błędu.
 - Publiczne API HAL obecnie udostępnia wyłącznie cykl życia, usuwanie/istnienie
   ścieżki oraz statystyki rozmiaru. Nie zapewnia przenośnych wrapperów
   otwierania/odczytu/zapisu plików.
 
-`hal_littlefs.cpp` jest właścicielem publicznego API, stanu zamontowania,
-walidacji, blokowania i wyboru providera dla każdego targetu, w tym mocka.
-Jeden wspólny provider littlefs v2 obsługuje mount, unmount, format, operacje
-ścieżek i statystyki systemu plików. Backendy sprzętowe dostarczają wyłącznie
-geometrię oraz sprawdzone operacje read/program/erase/sync; mock dostarcza
-wstrzykiwalne wyniki providera.
+`hal_littlefs.cpp` zawiera publiczne API, przechowuje stan montowania, sprawdza argumenty,
+zarządza blokadą i wybiera backend dla każdego targetu, w tym mocka. Jedna wspólna
+implementacja littlefs v2 obsługuje montowanie, odmontowywanie, formatowanie,
+operacje na ścieżkach i statystyki systemu plików. Backendy sprzętowe dostarczają
+jedynie geometrię oraz sprawdzone operacje odczytu, programowania, kasowania
+i synchronizacji. Mock pozwala ustawiać ich wyniki w testach.
 
-**Natywna implementacja RP:** używa przypiętego komponentu upstream
-checkoutu littlefs v2.11.3 pod `third_party/littlefs/` oraz wewnętrznej
+**Natywna implementacja RP:** używa upstreamowej wersji littlefs v2.11.3
+umieszczonej w `third_party/littlefs/` oraz wewnętrznej
 partycji flash kontrolowanej przez `HAL_RP_FLASH_LITTLEFS_SIZE`. Natywna
-receptura CMake rezerwuje 64 KiB, gdy `HAL_ENABLE_LITTLEFS` jest włączone
+konfiguracja CMake rezerwuje 64 KiB, gdy `HAL_ENABLE_LITTLEFS` jest włączone
 bez jawnego rozmiaru. Niezerowa rezerwacja musi zawierać co najmniej dwa
 sektory kasowania po 4096 bajtów. Partycja znajduje się bezpośrednio przed
 ostatnim 4 KiB sektorem EEPROM. Każda 256-bajtowa operacja programowania i
@@ -457,8 +454,8 @@ ostatnim 4 KiB sektorem EEPROM. Każda 256-bajtowa operacja programowania i
 transakcji flash RP; odczyty używają mapowania XIP. Linker uniemożliwia
 obrazowi firmware'u nakładanie się na którąkolwiek z partycji.
 
-**Implementacja STM32G474:** używa tego samego zarządzanego checkoutu
-littlefs pod `third_party/littlefs/` oraz wewnętrznej rezerwacji flash STM32
+**Implementacja STM32G474:** używa tego samego utrzymywanego w repozytorium
+checkoutu littlefs z `third_party/littlefs/` oraz wewnętrznej rezerwacji flash STM32
 udostępnianej przez skrypt linkera. `HAL_STM32_FLASH_LITTLEFS_SIZE`
 kontroluje rozmiar rezerwacji i musi być wielokrotnością
 `HAL_STM32_FLASH_PAGE_SIZE` (2048 bajtów). Rozmiar może wynosić zero, gdy
@@ -469,29 +466,30 @@ Pomocnicy CMake dla STM32 automatycznie rezerwują 64 KB, gdy
 jawnego rozmiaru.
 
 Rozmiar bloku kasowania LittleFS to jedna strona flash STM32; granularność
-programowania to jedno podwójne słowo (doubleword, 8 bajtów) STM32. Mutacje
-flash EEPROM/KV i LittleFS współdzielą jeden mutex flash STM32, więc ich
+programowania to jedno podwójne słowo STM32 (doubleword, 8 bajtów). Operacje
+modyfikujące flash EEPROM/KV i LittleFS współdzielą jeden mutex flash STM32, więc ich
 sekwencje erase/program nie mogą się nakładać.
-`hal_littlefs_total_bytes_ex()` raportuje zarezerwowany rozmiar partycji po
-zamontowaniu. `hal_littlefs_used_bytes_ex()` raportuje przydzielone bloki
-littlefs pomnożone przez rozmiar bloku kasowania targetu.
+Po zamontowaniu `hal_littlefs_total_bytes_ex()` zwraca zarezerwowany rozmiar partycji, a
+`hal_littlefs_used_bytes_ex()` - liczbę przydzielonych bloków
+LittleFS pomnożoną przez rozmiar bloku kasowania targetu.
 
-LittleFS nigdy niejawnie nie karmi watchdoga. Użyj
+LittleFS nigdy nie odświeża watchdoga automatycznie. Użyj
 `hal_littlefs_set_progress_callback()` przed długimi operacjami, takimi jak
-formatowanie lub duże serie odśmiecania (garbage-collection)/zapisu, jeśli
-aplikacja chce nakarmić własny watchdog lub raportować postęp. Skonfiguruj
-callback przed dostępem współbieżnym. Działa on pod mutexem wspólnej fasady i
+formatowanie lub duże serie operacji odśmiecania (garbage collection, GC)
+i zapisu, jeśli aplikacja chce odświeżać własny watchdog lub raportować postęp.
+Skonfiguruj callback przed rozpoczęciem współbieżnego dostępu. Jest on wywoływany
+pod wspólnym mutexem i
 nie może wywoływać żadnego API `hal_littlefs_*`, w tym settera callbacku ani
 `hal_littlefs_is_mounted()`. Na targetach sprzętowych platformowa koordynacja
-flash jest już zwolniona, gdy callback jest wykonywany. Liczba wywołań na
-operację zależy od wybranego backendu. Callback może zostać wywołany podczas
+flash jest już zwolniona, gdy callback jest wykonywany. Liczba wywołań dla
+pojedynczej operacji zależy od wybranego backendu. Callback może zostać wywołany podczas
 operacji, która później zgłosi błąd; o powodzeniu informuje status zwrotny
 operacji.
 
 **Przykład: montowanie z jawnym opt-inem destrukcyjnego formatowania**
 
 Przekaż `true` wyłącznie wtedy, gdy wymazanie zarezerwowanej partycji jest
-dopuszczalne. Sam błąd mount nie rozróżnia pustego nośnika od uszkodzenia lub
+dopuszczalne. Sam błąd montowania nie rozróżnia pustego nośnika od uszkodzenia lub
 przejściowego błędu I/O.
 
 ```c
@@ -537,12 +535,13 @@ void example_littlefs(bool allow_destructive_format) {
 }
 ```
 
-**Mock provider:** deterministyczny provider z wstrzykiwalnymi wynikami
-mount/unmount/format, obecnością ścieżki i statystykami rozmiaru wolumenu.
-Reset czyści również provider i stan zamontowania wspólnej fasady.
+**Backend mock:** Deterministyczny backend pozwala ustawić wyniki montowania,
+odmontowywania i formatowania,
+obecność ścieżki oraz statystyki rozmiaru wolumenu. Reset czyści zarówno stan backendu,
+jak i zapisany stan montowania wspólnego API.
 
-**Thread safety:** wszystkie targety używają tego samego mutexu singletonowego
-fasady do serializacji wywołań publicznych. Mock nadal służy do
+**Thread safety:** Na wszystkich targetach publiczne wywołania serializuje ten sam mutex
+singletona. Mock służy do
 deterministycznych testów, a nie do symulacji współbieżności sprzętowej.
 
 **Pomocnicy mock:**
@@ -558,16 +557,16 @@ void hal_mock_littlefs_set_used_bytes(size_t used_bytes);
 void hal_mock_littlefs_set_exists(const char *path, bool exists);
 ```
 
-**Status API:** operacje `_ex` dla cyklu życia, ścieżek i rozmiaru są
-właścicielami walidacji i wejścia/wyjścia backendu; historyczne funkcje
-bool/wartościowe to cienkie wrappery zgodności. Historycznie `void` setter
-callbacku i funkcja odmontowania teraz zwracają bezpośrednio
-`hal_status_t`. Zwykłe zapytanie o stan `hal_littlefs_is_mounted()` nie ma
-formy `_ex`. Nieprawidłowa ścieżka/wyjście mapuje się na `HAL_EINVAL`,
-użycie podczas odmontowania na `HAL_EUNINIT`, brakująca ścieżka na
-`HAL_ENOENT`, brak providera albo nieprawidłowa/pusta geometria partycji na
-`HAL_ECONFIG`, błąd alokacji mutexu na `HAL_ENOMEM`, przepełnienie rozmiaru na
-`HAL_EOVERFLOW`, a błędy littlefs/surowego storage na `HAL_EIO`.
+**Status API:** Warianty `_ex` cyklu życia, operacji na ścieżkach i odczytu rozmiaru
+sprawdzają argumenty oraz wykonują operacje backendu. Dotychczasowe funkcje zwracające
+`bool` lub wartość pozostają wrapperami zgodności. Setter callbacku i funkcja odmontowania,
+które wcześniej zwracały `void`, teraz zwracają bezpośrednio `hal_status_t`. Zwykłe
+zapytanie `hal_littlefs_is_mounted()` nie ma wariantu `_ex`. Nieprawidłowa ścieżka albo
+wskaźnik wyjściowy powoduje zwrócenie `HAL_EINVAL`; operacja wymagająca zamontowanego
+systemu - `HAL_EUNINIT`; brak ścieżki - `HAL_ENOENT`; brak backendu lub nieprawidłowa albo
+pusta geometria partycji - `HAL_ECONFIG`; błąd utworzenia mutexu - `HAL_ENOMEM`;
+przepełnienie rozmiaru - `HAL_EOVERFLOW`; a błędy littlefs lub bezpośredniej obsługi
+nośnika - `HAL_EIO`.
 
 ```c
 hal_status_t st = hal_littlefs_exists_ex("/config.json");
@@ -582,9 +581,9 @@ hal_littlefs_used_bytes_ex(&used);   // HAL_EUNINIT (used=0) podczas odmontowani
 
 ## `hal_sdlogger` - logger karty SD  *(opt-in - `HAL_ENABLE_SDLOGGER`)*
 
-Okresowy logger karty SD wraz z loggerem raportów awaryjnych (crash). Moduł
+Okresowy logger karty SD wraz z loggerem raportów awarii (crash). Moduł
 przechowuje liczniki plików log/crash w `hal_eeprom` i zapisuje pliki
-poprzez wspólną warstwę FatFs SD-over-SPI, więc jego włączenie dołącza
+poprzez wspólną warstwę FatFs SD-over-SPI, dlatego jego włączenie automatycznie włącza
 `HAL_ENABLE_FAT`, `HAL_ENABLE_EEPROM` i `HAL_ENABLE_SPI`.
 
 ```c
@@ -621,12 +620,12 @@ HAL_SDLOGGER_SPI_BUS            0u
 - Aplikacja musi zainicjalizować piny wybranej magistrali SPI przez
   `hal_spi_init()` przed wywołaniem `hal_sdlogger_init()` lub
   `hal_sdlogger_crash_init()`.
-- `hal_sdlogger_init(cs)` otwiera `logNNNNN.txt` i zwiększa licznik logów w
-  EEPROM; `hal_sdlogger_init_ex(cs)` to forma zwracająca status, a
-  starsza funkcja `bool` jest cienkim wrapperem.
+- `hal_sdlogger_init(cs)` otwiera `logNNNNN.txt` i zwiększa licznik logów w EEPROM.
+  `hal_sdlogger_init_ex(cs)` jest wariantem zwracającym status, a dawna funkcja `bool`
+  pozostaje wrapperem zgodności.
 - `hal_sdlogger_append()` buforuje linie i opróżnia bufor co
-  `HAL_SDLOGGER_WRITE_INTERVAL_MS`; `hal_sdlogger_close()` opróżnia resztki.
-  Te funkcje teraz zwracają `hal_status_t`, więc starsi wywołujący nadal
+  `HAL_SDLOGGER_WRITE_INTERVAL_MS`; `hal_sdlogger_close()` zapisuje pozostałe dane.
+  Te funkcje zwracają teraz `hal_status_t`, więc dotychczasowy kod nadal
   mogą ignorować wynik, a nowy kod może sprawdzać niepowodzenia.
 - `hal_sdlogger_crash_init(add_to_name, cs)` otwiera `wdNNNNNN.txt` i
   zapisuje w nim opcjonalny tag awarii wraz z odpowiadającą nazwą pliku
@@ -636,13 +635,13 @@ HAL_SDLOGGER_SPI_BUS            0u
   pomyślnym otwarciu pliku docelowego.
 - `hal_sdlogger_crash_append()` i `hal_sdlogger_crash_report()` opróżniają
   wpisy awaryjne natychmiast.
-- Mapowanie statusu: niepowodzenie montowania SD zwraca `HAL_EBUS`; zapisy
-  plików, opróżnienia, zamknięcia i niepowodzenia aktualizacji EEPROM
-  zwracają status backendu lub `HAL_EIO`; append/close przed init zwracają
+- Mapowanie statusu: niepowodzenie montowania SD zwraca `HAL_EBUS`; błędy
+  zapisu i opróżniania plików, zamknięcia oraz aktualizacji EEPROM
+  zwracają status backendu lub `HAL_EIO`; `append`/`close` przed `init` zwracają
   `HAL_EUNINIT`; zbyt duża zbuforowana linia logu zwraca `HAL_EOVERFLOW`;
   `hal_sdlogger_crash_report(NULL)` zwraca `HAL_EINVAL`.
 
-Możliwy do zbudowania przykład: `examples/10_storage`.
+Przykład do zbudowania: `examples/10_storage`.
 
 **Przykład: okresowe logowanie na kartę SD**
 ```c
@@ -730,17 +729,21 @@ void watchdog_reboot_handler(void) {
 ```
 
 ---
-**hal/storage/filesystem:** pomocnicy plików SD oraz przenośna implementacja
-loggera SD używana przez RP2040 i STM32G474. Niezmieniony rdzeń FatFs R0.16
-jest ładowany z checkoutu dokładnego commitu projektowego mirrora
-`jaszczurtd/ff16` w `third_party/FatFs`; śledzone wrappery udostępniają
-bramkę funkcji oraz projektowy plik `ffconf.h`.
-**impl/.mock:** deterministyczny test double z wstrzykiwalnymi wynikami
-SD/otwarcia, przechwyconymi nazwami plików/treścią, licznikami opróżnień
-i flagami zamknięcia.
-**Thread safety:** wspólny backend serializuje publiczne wywołania
-singletonowym `hal_mutex_t`; init/close nadal powinny być traktowane jako
-praca cyklu życia jednordzeniowa.
+
+- **hal/storage/filesystem:** Funkcje pomocnicze do obsługi plików na karcie SD
+  oraz przenośna implementacja loggera używana na RP2040 i STM32G474.
+  Niezmieniony rdzeń FatFs R0.16 pochodzi z kopii repozytorium utrzymywanej w
+  projekcie jako `jaszczurtd/ff16`; w `third_party/FatFs` znajduje się dokładnie
+  określony commit tego kodu.
+  Utrzymywane w projekcie wrappery udostępniają potrzebny zestaw funkcji i plik
+  `ffconf.h`.
+- **impl/.mock:** Deterministyczna implementacja testowa z ustawianymi wynikami
+  inicjalizacji SD i otwierania plików. Przechwytuje nazwy plików i treść oraz udostępnia
+  liczniki wywołań `flush` i flagi zamknięcia.
+
+**Thread safety:** Wspólna implementacja serializuje publiczne wywołania przez
+singletonowy `hal_mutex_t`. Operacje init/close nadal należy wykonywać jako część cyklu
+życia zarządzanego z jednego rdzenia.
 
 **Pomocnicy mock:**
 ```c

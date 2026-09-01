@@ -103,6 +103,7 @@ resolves CMake, Ninja, GNU Arm, GNU RISC-V, OpenOCD, and picotool. Compatible
 system tools are reused unless `-Force` is selected. A system OpenOCD is reused
 only when its required interface and target scripts can also be resolved;
 otherwise setup falls back to the authenticated managed archive.
+
 It records the verified executable set, managed Python, and short build root in
 `.build/windows/host-environment.json` for the shared firmware runtime. Editor
 mode also preserves and updates the standard VS Code user `settings.json` with
@@ -219,10 +220,14 @@ preserves the CLI arguments and exit-code behavior. Firmware configuration uses
 Ninja by default, passes the active Python interpreter, exports compile
 commands, and resolves platform picotool/toolchain paths. Native Windows CMake
 trees use the bootstrap's short build root while final artifacts keep their
-manifest paths. `debug-tools` reports the verified OpenOCD, Arm-capable GDB,
+manifest paths.
+
+`debug-tools` reports the verified OpenOCD, Arm-capable GDB,
 scripts root, and target configuration used by Cortex-Debug. Generated Linux
 settings select `gdb-multiarch`; Windows uses the bootstrap-managed GNU Arm
-GDB. Actions, options, device
+GDB.
+
+Actions, options, device
 safeguards, and monitor behavior are documented only in
 [JaszczurHAL VS Code Entry](../../../vscode/README.md). Manifest, source-discovery,
 target, board, cache, and artifact semantics belong to
@@ -584,7 +589,9 @@ checks constraints and active duplicate requests after layer precedence has
 been applied. A standard `.vscode/jaszczurhal.project.json` creates the declared
 axes; an unpaired `hal_project_config.h` with at least one HAL feature request
 creates one axis-free direct context. Standalone headers without requests and
-reference manifests remain raw-lint-only inputs. `--resolution-output <path>`
+reference manifests remain raw-lint-only inputs.
+
+`--resolution-output <path>`
 writes deterministic
 `requestedFeatures`, `resolvedFeatures`, closure digests, and direct-request
 provenance for each effective configuration. The registry test freezes the
@@ -598,9 +605,13 @@ section reports every active registered feature after the remaining
 configuration rules run. The generated CMake resolver supplies the same
 closure to RP and STM32G474 source and dependency selection. The ESP-IDF runner
 also resolves that closure, then enforces the target's `supportedFeatures`
-allowlist before its controlled minimal component graph is configured. Board
+allowlist before its controlled minimal component graph is configured.
+
+Board
 generation uses the resolved set for `featureHash` and the link signature, while
-retaining the direct set as `requestedFeatures`. `jh-vscode` resolves the registry after
+retaining the direct set as `requestedFeatures`.
+
+`jh-vscode` resolves the registry after
 manifest profile and variant overlays, exposes the result through
 `featureResolution`, and uses the resolved set for preflight and OTA decisions
 while passing direct requests to CMake.
