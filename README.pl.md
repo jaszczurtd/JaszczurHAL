@@ -321,7 +321,6 @@ Główna dokumentacja:
 - Workflow projektu firmware: [FwProjectWorkflow.md](doc/pl/FwProjectWorkflow.md)
 - Natywny workflow OTA: [OTAWorkflow.md](doc/pl/OTAWorkflow.md)
 - Profile targetów i płytek: [boards_profiles_howto.md](doc/pl/boards_profiles_howto.md)
-- Changelog (tylko po angielsku): [CHANGELOG.md](doc/CHANGELOG.md)
 - Podsumowanie flag buildu: [HAL_FLAGS](doc/HAL_FLAGS.txt)
 - Przewodnik buildu linkowalnej biblioteki statycznej: [lib_compilation.md](doc/pl/lib_compilation.md)
 - Workflow firmware w VS Code: [vscode/README.md](vscode/README.md)

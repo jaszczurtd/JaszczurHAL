@@ -24,19 +24,6 @@ def project_version(root: Path) -> str:
     return match.group(1)
 
 
-def changelog_version(root: Path) -> str:
-    text = (root / "doc/CHANGELOG.md").read_text(encoding="utf-8")
-    match = re.search(
-        r"^## \[((?:\d+\.){2}\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)\]"
-        r" - \d{4}-\d{2}-\d{2}$",
-        text,
-        re.MULTILINE,
-    )
-    if not match:
-        raise ReleaseError("doc/CHANGELOG.md has no dated release heading")
-    return match.group(1)
-
-
 def sbom_version(root: Path) -> str:
     sbom = json.loads((root / "security/sbom.cdx.json").read_text(encoding="utf-8"))
     try:
@@ -54,7 +41,6 @@ def git(root: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
 def check(root: Path, tag: str = "", release_ref: str = "") -> str:
     version = project_version(root)
     observed = {
-        "doc/CHANGELOG.md": changelog_version(root),
         "security/sbom.cdx.json": sbom_version(root),
     }
     for source, value in observed.items():

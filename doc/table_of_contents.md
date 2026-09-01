@@ -14,7 +14,6 @@
 - [Native OTA workflow](en/OTAWorkflow.md)
 - [Security supply chain](en/security_supply_chain.md)
 - [Module flags quick reference](HAL_FLAGS.txt)
-- [Changelog](CHANGELOG.md) (English only)
 
 ## API chapters
 

@@ -86,7 +86,7 @@ rollback i odzyskiwanie opisano w dokumencie
 | `SECURITY.md` | Zasady zgłaszania, triage, klasyfikacji ważności i utrzymania. |
 | `scripts/generate_sbom.py` | Generator SBOM działający offline i używający wyłącznie biblioteki standardowej Pythona. |
 | `scripts/sync_generated.py` | Wspólny mechanizm odświeżania i weryfikacji tylko do odczytu wszystkich śledzonych artefaktów generowanych, w tym SBOM. |
-| `scripts/check_release_metadata.py` | Bramka release'u sprawdzająca VERSION, changelog, SBOM, nazwę taga i pochodzenie z głównej gałęzi. |
+| `scripts/check_release_metadata.py` | Bramka release'u sprawdzająca VERSION, SBOM, nazwę taga i pochodzenie z głównej gałęzi. |
 | `scripts/check_vulnerabilities.sh` | Opcjonalny wrapper skanerów do lokalnego sprawdzania podatności. |
 
 ## Generowanie SBOM
@@ -195,8 +195,8 @@ Zasady obsługi znalezisk:
 
 ## Bramka release'u
 
-Przed utworzeniem taga release'u sprawdź, czy `VERSION`, pierwszy datowany wpis
-w changelogu i wersja projektu w SBOM są zgodne:
+Przed utworzeniem taga release'u sprawdź, czy `VERSION` i wersja projektu w
+SBOM są zgodne:
 
 ```bash
 python3 scripts/check_release_metadata.py
@@ -227,7 +227,6 @@ pozostaje opcjonalną bramką lokalną dostępną przez
 6. Uruchom testy właściwe dla zmienionego modułu i odpowiedniego targetu.
 7. Jeśli aktualizacja naprawia lub ocenia CVE, dodaj wpis do
    `security/vulnerability_log.md` zawierający CVSS, dotknięte flagi i decyzję.
-8. Wspomnij o zmianach związanych z bezpieczeństwem w `doc/CHANGELOG.md`.
 
 ## Zasady oceny podatności
 

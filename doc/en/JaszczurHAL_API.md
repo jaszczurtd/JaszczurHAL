@@ -78,7 +78,6 @@ scripts/
 runalltests.sh              # full local validation gate
 runmefirst.sh               # one-time local toolchain setup
 doc/
-  CHANGELOG.md              # project changelog (English only, out of translation scope)
   HAL_FLAGS.txt             # shared HAL_ENABLE_* flag summary
   table_of_contents.md      # English documentation index
   table_of_contents.pl.md   # Polish documentation index

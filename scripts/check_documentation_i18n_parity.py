@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Validate the layout and structural parity of English/Polish documentation.
 
-`doc/CHANGELOG.md` is explicitly out of translation scope. `doc/HAL_FLAGS.txt`
-has no Polish counterpart by design (flag identifiers, not prose).
+`doc/HAL_FLAGS.txt` has no Polish counterpart by design (flag identifiers, not
+prose).
 """
 
 from __future__ import annotations
@@ -43,7 +43,6 @@ PROJECT_README_FILES = (
 )
 
 DOC_ROOT_FILES = {
-    "CHANGELOG.md",
     "HAL_FLAGS.txt",
     "table_of_contents.md",
     "table_of_contents.pl.md",
