@@ -141,7 +141,8 @@ Runs the complete quality-gate suite (9 gates, in order):
 9. Examples build (the dispatcher-derived `gateTargets` matrix plus dedicated
    target/runtime fixtures)
 
-Exits non-zero on the first failure; logs capture any warnings/errors.
+Exits non-zero on the first failure; logs capture warnings/errors from both
+standard output and standard error.
 The Valgrind gate selects every directly registered native C/C++ test executable
 through the CTest `memcheck` label. `MEMCHECK_REQUIRED_TESTS` in
 `runalltests.sh` is a critical subset checked before execution, not the complete

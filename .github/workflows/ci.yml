@@ -795,7 +795,7 @@ jobs:
               --output-compile-db "$TIDY_HOST_BUILD/compile_commands.json"
           )
           test "${#TIDY_HOST_FILES[@]}" -gt 0
-          run-clang-tidy -p "$TIDY_HOST_BUILD" -quiet "${TIDY_HOST_FILES[@]}" \
+          run-clang-tidy -p "$TIDY_HOST_BUILD" -quiet "${TIDY_HOST_FILES[@]}" 2>&1 \
             | tee .build/ci/static-analysis/tidy_host.log
           TIDY_STM32_BUILD=.build/ci/static-stm32/clang_tidy_db
           mapfile -t TIDY_STM32_FILES < <(
@@ -803,9 +803,9 @@ jobs:
               --output-compile-db "$TIDY_STM32_BUILD/compile_commands.json"
           )
           test "${#TIDY_STM32_FILES[@]}" -gt 0
-          run-clang-tidy -p "$TIDY_STM32_BUILD" -quiet "${TIDY_STM32_FILES[@]}" \
+          run-clang-tidy -p "$TIDY_STM32_BUILD" -quiet "${TIDY_STM32_FILES[@]}" 2>&1 \
             | tee .build/ci/static-analysis/tidy_stm32.log
-          if grep -qE ' (warning|error):' \
+          if grep -qE ':[0-9]+:[0-9]+: (warning|error):' \
             .build/ci/static-analysis/tidy_host.log \
             .build/ci/static-analysis/tidy_stm32.log; then
             echo "::error::clang-tidy reported findings (see logs above)"
