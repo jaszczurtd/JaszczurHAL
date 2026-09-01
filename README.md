@@ -297,7 +297,6 @@ Primary docs:
 - Firmware project workflow: [FwProjectWorkflow.md](doc/en/FwProjectWorkflow.md)
 - Native OTA workflow: [OTAWorkflow.md](doc/en/OTAWorkflow.md)
 - Target and board profiles: [boards_profiles_howto.md](doc/en/boards_profiles_howto.md)
-- Changelog (English only): [CHANGELOG.md](doc/CHANGELOG.md)
 - Build-time flags summary: [HAL_FLAGS](doc/HAL_FLAGS.txt)
 - Linkable static library build guide: [lib_compilation.md](doc/en/lib_compilation.md)
 - VS Code firmware workflow: [vscode/README.md](vscode/README.md)

@@ -883,9 +883,9 @@ Sprawdza układ dwujęzycznej dokumentacji oraz każdą parę angielską/polską
 w `doc/en/`, `doc/pl/`, `doc/api/en/` i `doc/api/pl/`, a także główne pliki
 README i spisy dokumentacji. Odrzuca brakujące lub osierocone pliki,
 placeholdery tłumaczeń, niewiarygodne różnice rozmiaru oraz rozbieżną strukturę
-nagłówków, bloków kodu i symboli HAL/JH. `doc/CHANGELOG.md` i
-`doc/HAL_FLAGS.txt` są celowo współdzielone i pozostają nieprzetłumaczone.
-Zestaw testów CTest hosta rejestruje ten test jako
+nagłówków, bloków kodu i symboli HAL/JH. `doc/HAL_FLAGS.txt` jest celowo
+współdzielony i pozostaje nieprzetłumaczony. Zestaw testów CTest hosta
+rejestruje ten test jako
 `test_documentation_i18n_parity`. Nagłówek angielskiego głównego README
 dotyczący wymowy nazwy jest specyficzny dla tego języka i nie wymaga pustego
 odpowiednika w polskiej wersji.

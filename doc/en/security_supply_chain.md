@@ -80,7 +80,7 @@ and recovery are documented in
 | `SECURITY.md` | Reporting, triage, severity and maintenance policy. |
 | `scripts/generate_sbom.py` | Offline SBOM generator using only Python standard library. |
 | `scripts/sync_generated.py` | Shared refresh and read-only verification runner for all tracked generated artifacts, including the SBOM. |
-| `scripts/check_release_metadata.py` | Release gate for VERSION, changelog, SBOM, tag name and mainline ancestry. |
+| `scripts/check_release_metadata.py` | Release gate for VERSION, SBOM, tag name and mainline ancestry. |
 | `scripts/check_vulnerabilities.sh` | Optional scanner wrapper for local vulnerability checks. |
 
 ## Generate the SBOM
@@ -188,8 +188,8 @@ Policy for findings:
 
 ## Release gate
 
-Before creating a release tag, verify that `VERSION`, the first dated changelog
-entry, and the SBOM project version agree:
+Before creating a release tag, verify that `VERSION` and the SBOM project
+version agree:
 
 ```bash
 python3 scripts/check_release_metadata.py
@@ -218,7 +218,6 @@ optional local gate through `-DJH_ENABLE_THREAD_SANITIZER=ON`.
 6. Run focused tests for the affected module and the relevant build target.
 7. If the update fixes or assesses a CVE, add an entry to
    `security/vulnerability_log.md` with CVSS, affected flags and decision.
-8. Mention security-relevant updates in `doc/CHANGELOG.md`.
 
 ## Vulnerability assessment rules
 

@@ -14,7 +14,6 @@
 - [Natywny workflow OTA](pl/OTAWorkflow.md)
 - [Bezpieczeństwo łańcucha dostaw](pl/security_supply_chain.md)
 - [Skrócony opis flag modułów](HAL_FLAGS.txt)
-- [Historia zmian](CHANGELOG.md) (tylko po angielsku)
 
 ## Rozdziały API
 

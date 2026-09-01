@@ -813,8 +813,8 @@ Validates the bilingual documentation layout and every English/Polish pair
 under `doc/en/`, `doc/pl/`, `doc/api/en/`, and `doc/api/pl/`, together with the
 root READMEs and documentation indexes. It rejects missing or orphaned files,
 translation placeholders, implausible size differences, and mismatched heading,
-code-fence, or HAL/JH symbol structure. `doc/CHANGELOG.md` and
-`doc/HAL_FLAGS.txt` are intentionally shared and remain untranslated. The host
+code-fence, or HAL/JH symbol structure. `doc/HAL_FLAGS.txt` is intentionally
+shared and remains untranslated. The host
 CTest suite registers the check as `test_documentation_i18n_parity`. The root
 English README pronunciation heading is language-specific and does not require
 an empty Polish counterpart.

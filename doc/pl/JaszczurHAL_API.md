@@ -79,7 +79,6 @@ scripts/
 runalltests.sh              # pełna lokalna brama walidacyjna
 runmefirst.sh                # jednorazowa lokalna konfiguracja toolchainu
 doc/
-  CHANGELOG.md              # dziennik zmian projektu (tylko angielski, poza zakresem tłumaczenia)
   HAL_FLAGS.txt             # wspólne podsumowanie flag HAL_ENABLE_*
   table_of_contents.md      # angielski spis treści dokumentacji
   table_of_contents.pl.md   # polski spis treści dokumentacji
