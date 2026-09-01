@@ -39,11 +39,13 @@ bool hal_soft_timer_tick_table(const hal_soft_timer_table_entry_t *table,
                                uint32_t count);
 ```
 
-**Purpose:** lets C-style modules consume timer functionality without direct `SmartTimers` class coupling.
-**Implementation:** delegates to `SmartTimers` internally (same runtime semantics).
+- **Purpose:** lets C-style modules consume timer functionality without direct `SmartTimers` class coupling.
+- **Implementation:** delegates to `SmartTimers` internally (same runtime semantics).
+
 **Thread safety:** Thread-safe and multicore-safe (inherits `SmartTimers` per-instance mutex protection).
-**Table helpers:** `hal_soft_timer_setup_table(...)` creates/configures timers from a descriptor array and optionally calls `idle_cb` + inter-entry delay. `hal_soft_timer_tick_table(...)` ticks all entries from the same array.
-**Validation rules:** table helpers validate `table != NULL` and `count > 0`. For invalid input they log via `hal_derr(...)` and return `false`.
+
+- **Table helpers:** `hal_soft_timer_setup_table(...)` creates/configures timers from a descriptor array and optionally calls `idle_cb` + inter-entry delay. `hal_soft_timer_tick_table(...)` ticks all entries from the same array.
+- **Validation rules:** table helpers validate `table != NULL` and `count > 0`. For invalid input they log via `hal_derr(...)` and return `false`.
 
 **Example: periodic callback with C wrapper**
 ```c
@@ -108,8 +110,9 @@ bool  hal_pid_controller_is_error_stable(hal_pid_controller_t controller, float 
 bool  hal_pid_controller_is_oscillating(hal_pid_controller_t controller, float current_error, int window_size);
 ```
 
-**Purpose:** exposes PID control through C functions and opaque handles, enabling incremental migration from class-based usage.
-**Implementation:** delegates to `PIDController` internally (same runtime semantics).
+- **Purpose:** exposes PID control through C functions and opaque handles, enabling incremental migration from class-based usage.
+- **Implementation:** delegates to `PIDController` internally (same runtime semantics).
+
 **Thread safety:** Not thread-safe. Use one controller instance per control loop or serialize externally.
 
 **Anti-windup:** two complementary mechanisms:
@@ -342,8 +345,9 @@ timer.restart();
 timer.abort();
 ```
 
-**Note:** `SECOND`, `SECS()`, `MINS()`, `HOURS()` macros are defined in `hal/system/hal_system.h`
-(included automatically by `hal/timers/smart_timers/SmartTimers.h`).
+> **Note:** `SECOND`, `SECS()`, `MINS()`, `HOURS()` macros are defined in `hal/system/hal_system.h`
+> (included automatically by `hal/timers/smart_timers/SmartTimers.h`).
+
 **Thread safety:** Thread-safe and multicore-safe after construction. Each instance eagerly creates a per-instance `hal_mutex_t` that serializes all method calls. Callbacks passed to `begin()` are invoked outside the mutex to prevent deadlock.
 
 **Example: multi-timer table**
@@ -518,9 +522,10 @@ void triggerSystemReset(void);
 void watchdog_feed(void);
 ```
 
-**impl:** `hal_watchdog_enable` / `hal_watchdog_feed` / `hal_watchdog_caused_reboot`.
-**Note:** The internal timer uses `SmartTimers` and is guarded by a HAL mutex to prevent
-double-fire from concurrent `updateWatchdogCore0/1` calls.
+- **impl:** `hal_watchdog_enable` / `hal_watchdog_feed` / `hal_watchdog_caused_reboot`.
+
+> **Note:** The internal timer uses `SmartTimers` and is guarded by a HAL mutex to prevent
+> double-fire from concurrent `updateWatchdogCore0/1` calls.
 
 **Example: dual-core watchdog**
 ```c

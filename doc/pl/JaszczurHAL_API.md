@@ -2,29 +2,18 @@
 
 *Dostępne również [po angielsku](../en/JaszczurHAL_API.md).*
 
-Sprzętowa warstwa abstrakcji (Hardware Abstraction Layer) dla projektów embedded.
-Backend RP2040/RP2350 kompiluje się względem oficjalnego Pico SDK. STM32G474 jest
-dostępny jako backend bare-metal lub FreeRTOS z natywnym wsparciem peryferiów
-i współdzielonym stosem driverów. ESP32-S3 zapewnia dokładną tożsamość
-targetu/płytki, wejście aplikacji ESP-IDF oraz walidację zgodności buildu,
-a także zestaw backendów rdzenia/peryferiów i natywny graf
-łączności WiFi/lwIP. Jego API sieciowe obejmuje klientów TLS i HTTPS
-oraz serwery HTTP i WebSocket bez szyfrowania; nie zdefiniowano publicznego API
-serwera TLS, serwera HTTPS, WSS ani klienta WebSocket. Publiczne API HAL
-widziane przez aplikację pozostaje stabilne między targetami.
-
+Warstwa abstrakcji sprzętowej (Hardware Abstraction Layer) dla systemów
+wbudowanych.
 Ten dokument zawiera szczegółową dokumentację API.
-Główny [README.pl.md](../../README.pl.md) celowo pozostaje zwięzły i odsyła
-tutaj po pełny opis zachowania i gwarancji.
 
 **Autor:** Marcin 'Jaszczur' Kielesiński
 
-**Repozytorium:** `git@github.com:jaszczurtd/JaszczurHAL.git`
-**Główny katalog include:** `libraries/JaszczurHAL/src/` (zarejestrowany w `otherLibrariesFolders`)
+- **Repozytorium:** `git@github.com:jaszczurtd/JaszczurHAL.git`
+- **Główny katalog nagłówków:** `libraries/JaszczurHAL/src/` (zarejestrowany w `otherLibrariesFolders`)
 
 ---
 
-## Publiczny include
+## Publiczny nagłówek
 
 Użyj:
 
@@ -32,20 +21,20 @@ Użyj:
 #include <JaszczurHAL.h>
 ```
 
-Nagłówek wewnętrzny może być używany do zaawansowanych/wewnętrznych zastosowań.
+W kodzie wewnętrznym lub wymagającym bezpośredniego dostępu do HAL można użyć:
 
 ```cpp
 #include <hal/hal.h>
 ```
 
-Dostępne są też includes zawierające wyłącznie narzędzia:
+Dostępne są także nagłówki zawierające wyłącznie narzędzia:
 
 ```cpp
-#include <tools.h>    // C++ utility aggregator
+#include <tools.h>    // zbiorczy nagłówek narzędzi C++
 ```
 
 ```c
-#include <tools_c.h>  // C-compatible utility API
+#include <tools_c.h>  // API narzędzi zgodne z C
 ```
 
 ---
@@ -53,30 +42,30 @@ Dostępne są też includes zawierające wyłącznie narzędzia:
 ## Struktura biblioteki
 
 ```text
-CMakeLists.txt              # build testów host/mock
+CMakeLists.txt              # kompilacja testów hosta i backendu mock
 VERSION                     # wersja projektu
-.build/                     # ignorowany katalog główny zarządzanych artefaktów buildu
+.build/                     # ignorowany katalog wszystkich zarządzanych artefaktów kompilacji
 boards/                     # deskryptory targetów, płytek i możliwości
 config/                     # deklaratywny rejestr funkcji HAL i schemat
-rp_native_lib/               # build biblioteki statycznej RP2040/RP2350 na Pico SDK
+rp_native_lib/               # kompilacja biblioteki statycznej RP2040/RP2350 na Pico SDK
   MEMORY_MAP.md              # układ natywnego firmware/pamięci/OTA dla RP
 cmake/
   esp-idf/                  # kontrolowana natywna receptura komponentu ESP-IDF
-  generated/                # wygenerowany produkcyjny resolver funkcji CMake
+  generated/                # wygenerowany mechanizm wyboru funkcji dla CMake
   jh_rp_native_sdk.cmake    # współdzielona integracja CMake biblioteki/firmware RP
-  targets/                  # receptury targetów dispatchera VS Code
+  targets/                  # konfiguracje targetów dla narzędzia VS Code
 stm32_lib/                  # CMake biblioteki statycznej STM32G474, toolchain, skrypt linkera
 scripts/
-  # Zobacz doc/api/pl/00_scripts.md, aby uzyskać pełny opis skryptów obsługi repozytorium.
-  build_rp_native_lib.sh    # pomocnik buildu RP ELF/BIN/UF2
+  # Pełny opis skryptów obsługi repozytorium: doc/api/pl/00_scripts.md
+  build_rp_native_lib.sh    # skrypt kompilacji RP ELF/BIN/UF2
   build_stm32_lib.sh        # pomocnik biblioteki statycznej STM32G474
-  build_esp_idf.py          # runner buildu/artefaktów/flashowania projektu ESP-IDF
+  build_esp_idf.py          # kompilowanie i flashowanie projektu ESP-IDF, obsługa artefaktów
   check_documentation_links.py # lokalna walidacja linków/kotwic Markdown
-  ensure_*.sh               # ukierunkowane pomocniki pobierania/weryfikacji przypiętych komponentów
+  ensure_*.sh               # wyspecjalizowane skrypty pobierania i weryfikacji komponentów
   generate_sbom.py          # generator SBOM CycloneDX
   generate_hal_features.py  # walidacja, generowanie i lint rejestru funkcji
-  check_vulnerabilities.sh  # opcjonalny lokalny wrapper skanera podatności
-runalltests.sh              # pełna lokalna brama walidacyjna
+  check_vulnerabilities.sh  # opcjonalny lokalny adapter skanera podatności
+runalltests.sh              # pełny zestaw lokalnych kontroli
 runmefirst.sh                # jednorazowa lokalna konfiguracja toolchainu
 doc/
   HAL_FLAGS.txt             # wspólne podsumowanie flag HAL_ENABLE_*
@@ -84,10 +73,10 @@ doc/
   table_of_contents.pl.md   # polski spis treści dokumentacji
   en/                       # angielska dokumentacja referencyjna
     features.md             # macierz funkcji wysokiego poziomu
-    JaszczurHAL_API.md      # szczegółowe API/referencja
-    FwProjectWorkflow.md    # workflow projektu firmware oparty na dispatcherze
-    OTAWorkflow.md          # natywny build/wgrywanie/odzyskiwanie OTA dla RP/ESP
-    lib_compilation.md      # przewodnik buildu biblioteki statycznej
+    JaszczurHAL_API.md      # szczegółowy opis API
+    FwProjectWorkflow.md    # praca z projektem firmware
+    OTAWorkflow.md          # natywna kompilacja, wgrywanie i odzyskiwanie OTA dla RP/ESP
+    lib_compilation.md      # przewodnik po kompilacji biblioteki statycznej
     security_supply_chain.md  # proces SBOM i śledzenia podatności
     boards_profiles_howto.md
     windows_setup.md
@@ -95,227 +84,244 @@ doc/
     features.md             # macierz funkcji wysokiego poziomu
   api/
     en/                     # podzielone rozdziały API (angielski)
-      00_scripts.md          # kluczowa architektura procesów i orkiestracji
+      00_scripts.md          # główna dokumentacja procesów i orkiestracji
     pl/                     # podzielone rozdziały API (polski)
 examples/                   # przykłady dla rodziny RP i STM32G474
-vscode/                     # współdzielone wejście jh-vscode, schemat, dokumentacja, generator
-  entry/                    # launchery dla Unix, Windows i publiczny launcher Pythona
+vscode/                     # wspólny punkt wejścia jh-vscode, schemat, dokumentacja, generator
+  entry/                    # skrypty startowe dla Uniksa, Windows i publiczny skrypt Pythona
   tools/create-vscode-example.py # samodzielny generator projektu firmware VS Code
-  tools/manage_vscode_extensions.py # konfiguracja rozszerzeń po weryfikacji/zgodzie
+  tools/manage_vscode_extensions.py # konfiguracja rozszerzeń po weryfikacji i uzyskaniu zgody
 security/
   third_party.json          # inwentarz komponentów firm trzecich
-  esp_idf_tools.json        # zweryfikowany zrzut narzędzi targetu ESP-IDF
+  esp_idf_tools.json        # zweryfikowany wykaz narzędzi targetu ESP-IDF
   sbom.cdx.json             # wygenerowany SBOM CycloneDX
   vulnerability_log.md      # dziennik oceny CVE/CVSS i poprawek
 src/
   JaszczurHAL.h              # główny publiczny include
-  hal_app_entry.cpp          # opcjonalny przenośny wrapper wejścia aplikacji
-  libConfig.h                # include dla wstecznej kompatybilności
-  tools.h, tools_c.h         # agregatory narzędziowe (C++ / C)
-  arpa/, netinet/, sys/      # nagłówki kompatybilności socketów host/embedded
-  hal/                       # nagłówek zbiorczy HAL + tematyczne domeny współdzielone
+  hal_app_entry.cpp          # opcjonalny przenośny adapter punktu wejścia aplikacji
+  libConfig.h                # nagłówek zgodności wstecznej
+  tools.h, tools_c.h         # zbiorcze nagłówki narzędzi (C++ / C)
+  arpa/, netinet/, sys/      # nagłówki zgodności gniazd hosta i systemów wbudowanych
+  hal/                       # zbiorczy nagłówek HAL i wspólne moduły tematyczne
     hal.h                    # include zbiorczy wyłącznie dla HAL
-    commands/                # router poleceń neutralny względem transportu i komunikaty przewodowe
+    commands/                # router poleceń niezależny od transportu i format wiadomości
     core/                    # konfiguracja, status, asercje, kompatybilność
     bluetooth/               # publiczne API BLE, fasada i współdzielone wsparcie BTstack
     i2c/, spi/, serial/      # API magistrali i portu szeregowego ze wspólnymi implementacjami
-    time/, rtc/, power/      # czas zegarowy, wybudzanie RTC i zarządzanie zasilaniem
+    time/, rtc/, power/      # czas rzeczywisty, wybudzanie RTC i zarządzanie zasilaniem
     timers/                  # API timerów sprzętowych, rozszerzonych, programowych i SmartTimers
     temperature/             # DHT, DS18B20, MAX6675 i MCP9600
-    network/                 # rdzeń TCP/UDP/Wi-Fi i współdzielony runtime sieci
-      http/, mqtt/, ota/    # współlokowane publiczne API i implementacje
-      tls/, wireguard/      # bezpieczne transporty i silniki wielokrotnego użytku
+    network/                 # rdzeń TCP/UDP/Wi-Fi i wspólny kod obsługi sieci
+      http/, mqtt/, ota/    # publiczne API wraz z implementacjami
+      tls/, wireguard/      # bezpieczne transporty i wspólne implementacje protokołów
       websocket/            # publiczne API i implementacja WebSocket
       net_console/          # publiczne API i implementacja zdalnej konsoli
       net_commands/         # adapter poleceń HTTP/WebSocket
       cyw43/, lwip/         # integracja radia i stosu IP
-    radio/                  # surowe LoRa, niezawodne łącze i adapter poleceń
-    storage/                # EEPROM, KV, logger SD, system plików, pomocniki flash
-    display/, gpio/         # drivery zorientowane na wyświetlacz/GFX i GPIO
-    analog/, audio/, can/   # dodatkowe tematyczne domeny API i driverów
-    generated/              # wygenerowane produkcyjne domknięcie/raport funkcji C
+    radio/                  # niskopoziomowe LoRa, niezawodne łącze i adapter poleceń
+    storage/                # EEPROM, KV, rejestrator SD, system plików, obsługa pamięci flash
+    display/, gpio/         # sterowniki wyświetlaczy/GFX i GPIO
+    analog/, audio/, can/   # dodatkowe tematyczne domeny API i sterowników
+    generated/              # wygenerowane domknięcie funkcji C i raport produkcyjny
     impl/
-      .mock/                # deterministyczny backend host/testowy
-      rp2040/               # backend rodziny RP
-        drivers/flash/      # natywny koordynator flash RP i partycje pamięci
+      .mock/                # deterministyczna implementacja testowa na hoście
+      rp2040/               # implementacja rodziny RP
+        drivers/flash/      # koordynacja dostępu do pamięci flash RP i jej partycje
         drivers/rp2040/     # usługi SoC RP2040 (awarie/system)
         drivers/usb/        # natywna konfiguracja/deskryptory TinyUSB CDC
         freertos/           # natywny FreeRTOSConfig i hooki RP
-        frameworks/         # integracje frameworków specyficzne dla RP
-      stm32g474/            # backend STM32G474
+        frameworks/         # integracje bibliotek specyficzne dla RP
+      stm32g474/            # implementacja STM32G474
         drivers/
           stm32g474/        # usługi SoC STM32G474 (awarie/system)
         freertos/           # FreeRTOSConfig i hooki STM32
-        port/               # startup, SystemInit, niskopoziomowe wsparcie dla linkera
+        port/               # uruchamianie, SystemInit i funkcje wymagane przez linker
   utils/                    # narzędzia, PID, watchdog, pomocniki rysowania, integracja Unity
-tests/                       # testy jednostkowe host (CMake + Unity)
+tests/                       # testy jednostkowe hosta (CMake + Unity)
   freertos_posix/           # opcjonalne testy schedulera FreeRTOS POSIX po stronie hosta
-  hardware/                 # śledzone źródła/manifesty fixture RP i weryfikatory hosta
-third_party/                # śledzone przypięcia + ignorowane zarządzane instalacje komponentów
-  update_components.sh      # synchronizuje każdy komponent do jego śledzonego przypięcia
-  *_version.conf             # śledzone definicje wersji źródeł/narzędzi/toolchainu
-  littlefs/                 # ignorowany przypięty checkout systemu plików upstream
+  hardware/                 # stanowiska RP: źródła, manifesty i programy weryfikujące
+third_party/                # definicje wersji oraz pomijane przez Git instalacje komponentów
+  update_components.sh      # synchronizuje komponenty z wersjami zapisanymi w repozytorium
+  *_version.conf             # wersje źródeł, narzędzi i toolchainów
+  littlefs/                 # ignorowana kopia zewnętrznego systemu plików w ustalonej wersji
 ```
 
-Kod niezależny od targetu jest współlokowany ze swoim publicznym API w
+Kod niezależny od targetu znajduje się razem ze swoim publicznym API w
 odpowiednim katalogu `src/hal/<domena>/`. Domena może zawierać publiczne
 nagłówki `hal_*.h`, wspólne fasady, prywatne pomocniki `jh_*`, podkatalogi
-driverów urządzeń i silniki wielokrotnego użytku. Dzięki temu deklaracje
+sterowników urządzeń i wspólne mechanizmy. Dzięki temu deklaracje
 i implementacje mają jedną tematyczną hierarchię. `src/hal/impl/` jest
 zarezerwowany dla portów i backendów specyficznych dla targetu; przenośny kod
 domenowy musi zależeć wyłącznie od API na poziomie HAL.
 
-### Rozwiązywanie funkcji podczas buildu
+### Wyznaczanie zestawu funkcji podczas kompilacji
 
-Wersjonowany rejestr w `config/features/` generuje produkcyjne resolvery C
-i CMake. `hal_config.h` dołącza domknięcie C, natomiast buildy CMake dla RP
-i STM32G474 używają go do wyboru źródeł i zależności. Runner ESP-IDF rozwiązuje
-ten sam graf żądań, odrzuca funkcje spoza listy dozwolonych deskryptora
-targetu i wybiera obsługiwany graf źródeł bazowych, peryferyjnych i
-sieciowych. Zapisuje żądane i rozwiązane funkcje razem z pochodzeniem płytki
-i linkowania.
+Wersjonowany rejestr w `config/features/` generuje produkcyjny kod, który
+wyznacza funkcje dla C i CMake. `hal_config.h` dołącza wygenerowane dla C
+domknięcie zależności, natomiast konfiguracje CMake dla RP i STM32G474 używają
+go do wyboru źródeł i zależności. Skrypt ESP-IDF przetwarza ten sam zestaw żądań
+i zależności, odrzuca funkcje spoza listy dozwolonej przez deskryptor targetu
+oraz wybiera obsługiwane źródła podstawowe, peryferyjne i sieciowe. Zapisuje
+funkcje żądane i wynikowe wraz z informacjami o pochodzeniu danych płytki i
+konfiguracji linkowania.
 Generator płytek zapisuje zarówno `requestedFeatures`, jak i
-`resolvedFeatures`; jego hash funkcji i sygnatura linkowania używają zbioru
-rozwiązanego. `jh-vscode` rozwiązuje aktywny profil i wariant do tego samego
-domknięcia i publikuje skrót rejestru, skrót domknięcia oraz pochodzenie
-żądań poprzez `config-dump`.
+`resolvedFeatures`; skrót zestawu funkcji i sygnatura linkowania są obliczane
+ze zbioru po rozwiązaniu zależności. `jh-vscode` wyznacza dla aktywnego profilu
+i wariantu to samo domknięcie. Polecenie `config-dump` podaje skrót rejestru,
+skrót domknięcia oraz pochodzenie żądań.
 
-Warunkowe wartości domyślne, wybory providerów, sprawdzenia możliwości płytki
+Warunkowe wartości domyślne, wybory implementacji, sprawdzenia możliwości płytki
 oraz ograniczenia targetu pozostają w `hal_config.h`. `HAL_CONFIG_VERBOSE`
-aktywuje wygenerowany raport każdej aktywnej zarejestrowanej flagi. CI
-traktuje dryf rejestru oraz lint surowych/efektywnych funkcji jako błędy.
+aktywuje wygenerowany raport obejmujący każdą aktywną flagę z rejestru. CI
+traktuje niezgodność wygenerowanych plików z rejestrem oraz błędy kontroli
+bezpośredniej i wynikowej konfiguracji funkcji jako niepowodzenie.
 Zainstalowane pakiety RP i STM32G474 zawierają wygenerowane nagłówki
-funkcji/płytki, JSON rozwiązania, nagłówek sygnatury linkowania oraz źródło
-referencyjne. Dzięki temu projekty wywołujące kompilator bezpośrednio mogą
-zbudować i zlinkować ustalony pakiet bez uruchamiania Pythona.
+funkcji i płytki, plik JSON z wynikiem, nagłówek sygnatury linkowania oraz
+referencyjny plik źródłowy. Dzięki temu projekty wywołujące kompilator
+bezpośrednio mogą zbudować i zlinkować ustalony pakiet bez uruchamiania Pythona.
 
-- `CMakeLists.txt` - build testów host/mock w katalogu głównym repozytorium.
-- `rp_native_lib/` - oficjalna biblioteka statyczna Pico SDK i sondy firmware.
-- `stm32_lib/` - CMake biblioteki statycznej STM32G474, plik toolchainu i skrypt linkera.
+- `CMakeLists.txt` - kompilacja testów hosta i backendu mock w katalogu głównym
+  repozytorium.
+- `rp_native_lib/` - oficjalna biblioteka statyczna Pico SDK i testowe obrazy
+  firmware.
+- `stm32_lib/` - CMake biblioteki statycznej STM32G474, plik toolchainu i skrypt
+  linkera.
 - `scripts/build_rp_native_lib.sh` - pomocnik biblioteki statycznej RP2040/RP2350
-  i opcjonalnych sond firmware, w tym tryb `--library-only` generujący
-  wyłącznie archiwum oraz opcjonalną, przypiętą macierz FreeRTOS SMP.
+  i opcjonalnych testowych obrazów firmware, w tym tryb `--library-only`
+  generujący wyłącznie archiwum oraz opcjonalną macierz testową dla FreeRTOS
+  SMP w ustalonej wersji.
 - `scripts/build_stm32_lib.sh` - pomocnik biblioteki statycznej STM32G474.
-- `scripts/build_esp_idf.py` - produkcyjny pomocnik buildu projektu
+- `scripts/build_esp_idf.py` - produkcyjny skrypt kompilacji projektu
   ESP-IDF, walidacji artefaktów i flashowania z relokowalnym manifestem
   wieloobrazowym.
 - `third_party/update_components.sh` - synchronizuje BearSSL, cJSON, LodePNG,
-  TJpgDec, FatFs, Unity, lwIP, littlefs, BTstack, driver Semtech SX126x,
+  TJpgDec, FatFs, Unity, lwIP, littlefs, BTstack, sterownik Semtech SX126x,
   FreeRTOS, Pico SDK, picotool, PMD CPD oraz toolchain RISC-V dla RP2350
-  z ich śledzonymi przypięciami `third_party/*_version.conf`. ESP-IDF jest
-  przygotowywane na żądanie przez swój produkcyjny runner lub dedykowaną
-  komendę ensure.
+  z wersjami zapisanymi w `third_party/*_version.conf`. Środowisko ESP-IDF jest
+  przygotowywane na żądanie przez skrypt produkcyjny lub wyspecjalizowane
+  polecenie `ensure`.
 - `scripts/generate_sbom.py` - deterministyczny generator SBOM CycloneDX
   z trybem `--check` tylko do odczytu.
-- `scripts/check_sbom.sh` - wrapper kompatybilności dla ukierunkowanego
-  sprawdzania SBOM; współdzielony runner artefaktów generowanych odpowiada
-  za synchronizację w całym repozytorium.
-- `scripts/check_vulnerabilities.sh` - opcjonalny lokalny wrapper skanera
+- `scripts/check_sbom.sh` - zgodny wstecznie skrypt do sprawdzania samego SBOM;
+  za synchronizację całego repozytorium odpowiada wspólny mechanizm obsługi
+  artefaktów generowanych.
+- `scripts/check_vulnerabilities.sh` - opcjonalny lokalny adapter skanera
   podatności, który regeneruje SBOM i uruchamia dostępne skanery zależności
-  źródłowych/dołączonych (vendored).
-- `doc/api/pl/00_scripts.md` - kluczowy opis architektury operacyjnej
-  skryptów obsługi repozytorium, punktów wejścia orkiestracji, opcji,
-  artefaktów i relacji między nimi.
-- `runalltests.sh` - pełna lokalna brama walidacyjna.
+  pobieranych ze źródeł oraz dołączonych do repozytorium.
+- `doc/api/pl/00_scripts.md` - główny opis działania skryptów obsługi
+  repozytorium, punktów wejścia orkiestracji, opcji, artefaktów i relacji
+  między nimi.
+- `runalltests.sh` - pełny zestaw lokalnych kontroli.
 - `runmefirst.sh` - jednorazowa lokalna konfiguracja toolchainu.
-- `doc/pl/FwProjectWorkflow.md` - workflow projektu firmware oparty
-  na dispatcherze: model manifestu, wybór targetu/płytki, wykrywanie źródeł,
-  wgrywanie, build debug, katalogi buildu i pliki
-  generowane.
+- `doc/pl/FwProjectWorkflow.md` - praca z projektem firmware: model
+  manifestu, wybór targetu i płytki, wykrywanie źródeł, wgrywanie,
+  kompilacja debugowa, katalogi kompilacji i pliki generowane.
 - `doc/pl/boards_profiles_howto.md` - deklaratywne deskryptory targetu/płytki,
-  generowana konfiguracja, biblioteki statyczne świadome płytki oraz
-  procedura dodawania fizycznej płytki.
+  generowana konfiguracja, biblioteki statyczne uwzględniające wybraną płytkę
+  oraz procedura dodawania fizycznej płytki.
 - `doc/pl/OTAWorkflow.md` - wymagania natywnego OTA dla RP i ESP32-S3: integracja
   firmware, artefakty specyficzne dla targetu, wgrywanie z VS Code, zapora
-  sieciowa, potwierdzenie próbne, wycofanie (rollback) i odzyskiwanie.
-- `SECURITY.md` - zgłaszanie podatności, triaż i polityka utrzymania.
-- `security/third_party.json` - ręcznie utrzymywany inwentarz komponentów firm trzecich.
+  sieciowa, potwierdzenie próbne, wycofanie aktualizacji i odzyskiwanie.
+- `SECURITY.md` - zgłaszanie i wstępna ocena podatności oraz polityka
+  utrzymania.
+- `security/third_party.json` - ręcznie utrzymywany inwentarz komponentów firm
+  trzecich.
 - `security/sbom.cdx.json` - wygenerowany SBOM CycloneDX.
-- `security/vulnerability_log.md` - dziennik oceny CVE/CVSS i decyzji o poprawkach.
-- `src/JaszczurHAL.h` - zbiorczy include dla modułów HAL i narzędziowych.
+- `security/vulnerability_log.md` - dziennik oceny CVE/CVSS i decyzji
+  o poprawkach.
+- `src/JaszczurHAL.h` - zbiorczy nagłówek modułów HAL i narzędzi.
 - `doc/HAL_FLAGS.txt` - zwięzłe podsumowanie flag `HAL_ENABLE_*`.
-- `src/libConfig.h` - przekierowanie dla wstecznej kompatybilności do `hal/core/hal_config.h`.
-- `src/tools.h` - agregator narzędziowy C++.
+- `src/libConfig.h` - zgodne wstecznie przekierowanie do
+  `hal/core/hal_config.h`.
+- `src/tools.h` - zbiorczy nagłówek narzędzi C++.
 - `src/tools_c.h` - deklaracje narzędziowe kompatybilne z C.
-- `src/hal/hal.h` - include zbiorczy wyłącznie dla HAL.
-- `src/hal/core/hal_config.h` - fasada kompatybilności dla wyboru funkcji
-  podczas buildu, propagacji zależności i konfiguracji projektu.
+- `src/hal/hal.h` - zbiorczy nagłówek samego HAL.
+- `src/hal/core/hal_config.h` - zgodna wstecznie fasada wyboru funkcji
+  podczas kompilacji, propagacji zależności i konfiguracji projektu.
 - `src/hal/core/hal_runtime_config.h` oraz `src/hal/core/hal_config.cpp` - API
-  i implementacja konfiguracji limitów puli w runtime.
+  i implementacja konfiguracji limitów puli w czasie działania.
 - `src/hal/core/hal_assert.h` oraz `src/hal/core/hal_assert.cpp` - przenośne
-  API asercji i implementacja obsługi błędów świadoma targetu.
+  API asercji i obsługa błędów dostosowana do targetu.
 - `src/hal/core/hal_compat.h` - pomocnicze makra `PROGMEM`, `F()`, `hal_min()`
   i `hal_max()` zapewniające kompatybilność źródłową.
 - `src/hal/<domain>/hal_*.h` - publiczne interfejsy modułów HAL pogrupowane
   tematycznie, np. GPIO, magistrale, port szeregowy, bezpieczeństwo, czujniki,
   pamięć masowa, wyświetlacz i sieć.
-- `src/hal/can/hal_can_util.cpp`, `src/hal/security/hal_crypto.cpp`, `src/hal/security/hal_crc.cpp`, `src/hal/gps/hal_gps.cpp`, `src/hal/storage/hal_kv.cpp`, `src/hal/audio/hal_pga2311.cpp`, `src/hal/rtc/hal_rtc.cpp`, `src/hal/timers/hal_soft_timer.cpp`, `src/hal/control/hal_pid_controller.cpp` - współdzielone implementacje wrapperów i fasad HAL.
-- `src/hal/time/hal_time_ntp.cpp` oraz `src/hal/storage/hal_eeprom.cpp` -
-  współdzielona, thread-safe integracja zegara ściennego/NTP/RTC oraz
-  fasady EEPROM z wyborem providera; przenośny kod providera AT24C256 i
-  buforowanego flash pozostaje obok API EEPROM, natomiast katalogi targetów
-  dostarczają wyłącznie fizyczne mechanizmy flash.
+- `src/hal/can/hal_can_util.cpp`, `src/hal/security/hal_crypto.cpp`,
+  `src/hal/security/hal_crc.cpp`, `src/hal/gps/hal_gps.cpp`,
+  `src/hal/storage/hal_kv.cpp`, `src/hal/audio/hal_pga2311.cpp`,
+  `src/hal/rtc/hal_rtc.cpp`, `src/hal/timers/hal_soft_timer.cpp`,
+  `src/hal/control/hal_pid_controller.cpp` - wspólne implementacje adapterów
+  i fasad HAL.
+- `src/hal/time/hal_time_ntp.cpp` oraz `src/hal/storage/hal_eeprom.cpp` - wspólna,
+  bezpieczna wątkowo obsługa czasu systemowego, NTP i RTC oraz fasada EEPROM
+  z wyborem implementacji. Przenośny kod AT24C256 i buforowanej pamięci flash
+  pozostaje obok API EEPROM, natomiast katalogi targetów dostarczają wyłącznie
+  fizyczne mechanizmy obsługi flasha.
 - `src/hal/serial/hal_uart_config.h` - stałe konfiguracyjne i pomocniki UART.
 - `src/hal/core/hal_status.h` - współdzielone kody wyniku `hal_status_t` dla
   nowych publicznych API.
-- `src/hal/system/hal_board.h` oraz `src/hal/system/hal_board.cpp` - tożsamość
-  profilu płytki, fakty fizyczne podczas buildu oraz thread-safe
-  stan capabilities w runtime.
-- `src/hal/impl/rp2040/` - backend rodziny RP.
-- `src/hal/impl/stm32g474/` - backend STM32G474 (rzeczywiste domeny rdzenia na poziomie rejestrów; pozostałe moduły w toku).
-- `src/hal/impl/.mock/` - deterministyczny backend testowy na hosta.
+- `src/hal/system/hal_board.h` oraz `src/hal/system/hal_board.cpp` - identyfikacja
+  profilu płytki, dane sprzętowe ustalone podczas kompilacji oraz stan
+  dostępności funkcji sprzętowych w czasie działania, przechowywany w sposób
+  bezpieczny wątkowo.
+- `src/hal/impl/rp2040/` - implementacja rodziny RP.
+- `src/hal/impl/stm32g474/` - implementacja STM32G474 (działające, rejestrowe
+  implementacje modułów podstawowych; pozostałe moduły są w toku).
+- `src/hal/impl/.mock/` - deterministyczna implementacja testowa na hoście.
 - `src/hal/<domain>/` - publiczne nagłówki i implementacje niezależne od
-  backendu w jednym tematycznym katalogu; przykłady to `bluetooth/`,
+  targetu w jednym tematycznym katalogu; przykłady to `bluetooth/`,
   `network/`, `time/`, `timers/`, `temperature/`, `i2c/`, `spi/`, `display/`
   i `storage/`.
-- `src/hal/impl/rp2040/drivers/` - dołączone niskopoziomowe drivery firm trzecich wykorzystywane przez opcjonalne moduły HAL.
-- `src/hal/impl/rp2040/drivers/rp2040/` - drivery specyficzne dla SoC: `rp2040_fault.{h,cpp}` (przechwytywanie HardFault, strażnik stosu, zatrzask powodu resetu) oraz `rp2040_system.{h,cpp}` (watchdog, wejście USB-boot, temperatura na chipie, wolna pamięć sterty, unikalny identyfikator płytki, podpowiedź stanu bezczynności).
-- `src/hal/impl/stm32g474/drivers/stm32g474/` - drivery specyficzne dla SoC: `stm32g474_fault.{h,cpp}` (klasyfikacja powodu resetu, zachowane przekazanie informacji o awarii, strażnik stosu) oraz `stm32g474_system.{h,cpp}` (czas, opóźnienie, watchdog, temperatura, UID, pomocniki bezczynności / wrażliwe na ISR).
+- `src/hal/impl/rp2040/drivers/` - dołączone niskopoziomowe sterowniki firm
+  trzecich, używane przez opcjonalne moduły HAL.
+- `src/hal/impl/rp2040/drivers/rp2040/` - sterowniki specyficzne dla SoC:
+  `rp2040_fault.{h,cpp}` (przechwytywanie HardFault, strażnik stosu,
+  zapisywanie przyczyny resetu) oraz `rp2040_system.{h,cpp}` (watchdog, wejście
+  USB-boot, temperatura układu, wolna pamięć sterty, unikalny identyfikator
+  płytki i obsługa stanu bezczynności).
+- `src/hal/impl/stm32g474/drivers/stm32g474/` - sterowniki specyficzne dla SoC:
+  `stm32g474_fault.{h,cpp}` (klasyfikacja przyczyny resetu, przechowywanie
+  informacji o awarii do następnego uruchomienia i strażnik stosu) oraz
+  `stm32g474_system.{h,cpp}` (czas, opóźnienia, watchdog, temperatura, UID
+  i funkcje bezczynności uwzględniające kontekst ISR).
 - `src/hal/network/mqtt/PubSubClient/` oraz
   `src/hal/network/wireguard/core/` - dołączone silniki sieciowe neutralne
   względem targetu.
 - `src/utils/` - narzędzia wyższego poziomu: `tools`, `pidController`, `multicoreWatchdog`, `draw7Segment` oraz zarządzana integracja Unity.
-
-`JaszczurHAL.h` jest obecnym głównym publicznym include i powinien być
-domyślnym include w kodzie projektu. `hal/hal.h` pozostaje dostępny jako
-agregator wyłącznie HAL, ale nie jest głównym include eksportowanym przez
-obecne metadane biblioteki.
 
 ---
 
 ## Mapy pamięci
 
 Uwagi dotyczące układu pamięci specyficznego dla targetu znajdują się obok
-wsparcia buildu dla każdego backendu:
+obsługi kompilacji dla każdej implementacji:
 
 - [Mapa pamięci RP](../../rp_native_lib/MEMORY_MAP.md) - układy linkera dla
-  aplikacji i OTA, trwałe regiony flash, SRAM, sterta i stosy.
+  aplikacji i OTA, obszary pamięci flash z trwałymi danymi, SRAM, sterta
+  i stosy.
 - [Mapa pamięci STM32G474](../../stm32_lib/MEMORY_MAP.md) - regiony linkera
   bare-metal, zarezerwowane strony flash EEPROM/KV, sekcje RAM, sterta i stos.
 
 ---
 
-## Zakres dokumentacji
+## Sugerowana kolejność czytania dokumentacji
 
-Zalecany podział odpowiedzialności:
-
-- [00_scripts.md](../api/pl/00_scripts.md): kluczowa część dokumentacji
-  JaszczurHAL, która wyjaśnia, jak konfiguracja, zarządzanie zależnościami,
-  buildy, przykłady, walidacja, narzędzia bezpieczeństwa i orkiestracja
-  VS Code współdziałają ze sobą; przeczytaj, aby zrozumieć, jak biblioteka
-  działa jako kompletny system deweloperski
-- [FwProjectWorkflow.md](FwProjectWorkflow.md): workflow projektu firmware
-  oparty na dispatcherze, obejmujący manifest, target, źródła, build
+- [00_scripts.md](../api/pl/00_scripts.md): główna dokumentacja działania
+  JaszczurHAL. Wyjaśnia współdziałanie konfiguracji, zarządzania
+  zależnościami, kompilacji, przykładów, walidacji, narzędzi bezpieczeństwa
+  i orkiestracji VS Code
+- [FwProjectWorkflow.md](FwProjectWorkflow.md): obsługa projektów firmware
+  przez wspólny mechanizm sterujący, obejmująca manifest, target, źródła,
+  kompilację
   i wgrywanie
-- [OTAWorkflow.md](OTAWorkflow.md): natywna konfiguracja OTA dla RP
-  i ESP32-S3, provisioning, wgrywanie, sieć/zapora, potwierdzenie, wycofanie
-  i odzyskiwanie
-- `doc/pl/JaszczurHAL_API.md`: układ modułów, uwagi migracyjne, szczegóły
-  publicznego API, odniesienie do flag funkcji
+- [OTAWorkflow.md](OTAWorkflow.md): natywna konfiguracja OTA dla RP i ESP32-S3,
+  przygotowanie urządzenia, wgrywanie, konfigurację sieci i zapory,
+  potwierdzenie, wycofanie aktualizacji i odzyskiwanie
 
-Każdy dokument jest właścicielem szczegółów w swoim przypisanym zakresie.
-Pozostałe powinny dostarczać krótki kontekst i odsyłać do tego właściciela
-zamiast powtarzać polecenia, interfejsy czy przykłady konfiguracji.
+Każdy dokument szczegółowo opisuje własny zakres. Pozostałe powinny jedynie
+nakreślać kontekst i odsyłać do dokumentu źródłowego, zamiast powtarzać
+polecenia, interfejsy lub przykłady konfiguracji.
 
 ---
 
@@ -325,8 +331,8 @@ Repozytorium zawiera zarówno sam HAL, jak i zestaw modułów narzędziowych.
 
 ### Publiczne API HAL
 
-Są to interfejsy zorientowane na przenośność, mające na celu oddzielenie
-logiki aplikacji od wywołań SDK specyficznych dla płytki:
+Te interfejsy oddzielają przenośną logikę aplikacji od wywołań SDK właściwych
+dla konkretnej płytki:
 
 - rdzeń i system: `hal_config`, `hal_status`, `hal_bits`, `hal_math`,
   `hal_board`, `hal_system`, `hal_power`, `hal_sync`, `hal_timer`,
@@ -341,13 +347,13 @@ logiki aplikacji od wywołań SDK specyficznych dla płytki:
   `hal_http_files`, `hal_websocket`, `hal_net_console`, `hal_net_commands`,
   `hal_notify`, `hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time`,
   `hal_ble` i `hal_ble_stream`
-- `hal_command_router` i `hal_command_wire` dla neutralnej względem
-  transportu polityki poleceń, dispatchu i ograniczonych wiadomości
-  binarnych
-- `hal_lora_radio` dla niezależnej od providera surowej obsługi LoRa
-  z providerami z rodzin SX126x i SX127x
+- `hal_command_router` i `hal_command_wire` do niezależnego od transportu
+  kierowania poleceń, egzekwowania reguł i obsługi binarnych wiadomości
+  o ograniczonym rozmiarze
+- `hal_lora_radio` do niskopoziomowej obsługi LoRa niezależnej od implementacji,
+  z obsługą rodzin SX126x i SX127x
 - `hal_lora_link` dla adresowanych, potwierdzanych, fragmentowanych
-  prywatnych wiadomości przez jedno surowe radio LoRa, z opcjonalnym
+  prywatnych wiadomości przesyłanych przez pojedyncze radio LoRa, z opcjonalnym
   uwierzytelnionym szyfrowaniem
 - `hal_lora_commands` dla żądań poleceń, odpowiedzi i zdarzeń przez jedno
   niezawodne łącze LoRa, którego adapter używa na wyłączność
@@ -361,7 +367,7 @@ logiki aplikacji od wywołań SDK specyficznych dla płytki:
   daty/czasu gregoriańskiego na epokę, korekty CET/CEST, sprawdzeń
   przedziałów otwartych z jednej strony oraz ekstrakcji minut; opcjonalne
   API NTP/czasu lokalnego pozostają sterowane flagami
-- opcjonalny hook znacznika czasu dla logowania błędów poprzez
+- opcjonalny hook znacznika czasu dla logowania błędów, ustawiany funkcją
   `hal_debug_set_timestamp_hook(...)`
 
 ### Moduły pomocnicze / narzędziowe
@@ -374,55 +380,58 @@ Są to wygodne dodatki, ale same w sobie nie stanowią granicy przenośności:
 - `multicoreWatchdog`
 - `draw7Segment`
 
-Projektując nowy kod aplikacji, preferuj poleganie w pierwszej kolejności na
-warstwie HAL. Moduły pomocnicze są użytecznymi elementami składowymi, ale
-koncepcyjnie nie powinny zastępować granicy HAL.
+W nowym kodzie aplikacji korzystaj przede wszystkim z warstwy HAL. Moduły
+pomocnicze są przydatnymi elementami składowymi, ale nie powinny zastępować
+granicy wyznaczonej przez HAL.
 
 ---
 
-## Profile płytek i capabilities runtime
+## Profile płytek i możliwości dostępne w czasie działania
 
 `HAL_TARGET_*` identyfikuje MCU i architekturę (ISA). `JH_BOARD` wybiera
-fizyczny profil z `boards/profiles/`; generator emituje odpowiedni selektor
+fizyczny profil z `boards/profiles/`; generator tworzy odpowiedni selektor
 `HAL_BOARD_PROFILE_*` oraz konfigurację targetu. Deskryptory płytek są
-autorytatywnym inwentarzem profili. Wypisz bieżące identyfikatory poleceniem:
+miarodajnym wykazem profili. Wypisz bieżące identyfikatory poleceniem:
 
 ```bash
 python3 scripts/generate_board_config.py --boards-root boards --list boards
 ```
 
-Komponent ESP32-S3 używa wygenerowanych danych targetu/płytki oraz metadanych
-linkowania i buduje publiczną fasadę runtime `hal_board`. Stan capability
-jest zarządzany przez moduł, który za nią odpowiada: zadeklarowana capability
-pozostaje `HAL_BOARD_CAP_INACTIVE`, dopóki moduł nie opublikuje stanu
-dostępnego lub błędnego.
+Komponent ESP32-S3 korzysta z wygenerowanych danych targetu i płytki oraz
+metadanych linkowania, aby udostępnić publiczne API `hal_board` w czasie
+działania.
+Moduł odpowiedzialny za daną możliwość aktualizuje jej stan. Możliwość
+zadeklarowana przez płytkę pozostaje w stanie `HAL_BOARD_CAP_INACTIVE`, dopóki
+moduł nie zgłosi jej dostępności albo błędu.
 
-`HAL_BOARD_DECLARED_CAPABILITIES` opisuje zamontowany sprzęt podczas buildu.
-Na targetach zawierających fasadę runtime użytkownicy
+Podczas kompilacji `HAL_BOARD_DECLARED_CAPABILITIES` opisuje sprzęt zamontowany
+na płytce. Na targetach udostępniających tę fasadę użytkownicy
 powinni odpytywać `hal_board_get_info()` lub
 `hal_board_get_capability_state()`, a następnie używać
-`hal_board_require_capabilities()` przed operacjami wymagającymi jednej lub
-więcej z: `HAL_BOARD_CAP_USB_DEVICE`, `HAL_BOARD_CAP_CYW43`,
-`HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND`, `HAL_BOARD_CAP_SX1262_RADIO`
-i `HAL_BOARD_CAP_BLUETOOTH_CONTROLLER`, lub `HAL_BOARD_CAP_NATIVE_WIFI`.
-Zadeklarowana capability jest początkowo `HAL_BOARD_CAP_INACTIVE`; odpowiedni
-moduł przenosi ją do stanu `AVAILABLE` lub `FAILED`. Provider RP CYW43
-publikuje te przejścia podczas inicjalizacji i deinicjalizacji.
+`hal_board_require_capabilities()` przed operacjami wymagającymi dowolnej
+kombinacji możliwości: `HAL_BOARD_CAP_USB_DEVICE`, `HAL_BOARD_CAP_CYW43`,
+`HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND`, `HAL_BOARD_CAP_SX1262_RADIO`,
+`HAL_BOARD_CAP_BLUETOOTH_CONTROLLER` lub `HAL_BOARD_CAP_NATIVE_WIFI`.
+Każda zadeklarowana możliwość ma początkowo stan `HAL_BOARD_CAP_INACTIVE`.
+Odpowiedni moduł zmienia go na `AVAILABLE` albo `FAILED`. Implementacja CYW43
+na RP
+aktualizuje te stany podczas inicjalizacji i deinicjalizacji.
 
-`hal/system/hal_board.h` definiuje stabilny enum profili, maskę bitową
-capabilities, stany runtime, typ migawki oraz funkcje odpytujące.
+`hal/system/hal_board.h` definiuje stabilny typ wyliczeniowy profili, maskę
+bitową możliwości, stany dostępne w czasie działania, strukturę z informacjami
+o płytce oraz funkcje odczytujące te dane.
 Wygenerowany `src/hal/generated/jh_board_registry.h` mapuje każdy profil
 rejestru na tę publiczną tożsamość, bez utrzymywania tu drugiej, ręcznie
 pisanej listy profili.
 
-`hal_board_require_capabilities()` zwraca `HAL_OK`, gdy każda żądana
-możliwość jest dostępna, `HAL_EUNSUPPORTED`, gdy płytka jej nie deklaruje,
-`HAL_EUNINIT`, dopóki zadeklarowana możliwość jest wciąż nieaktywna, oraz
-`HAL_EHW`, gdy jej właściciel zgłosił błąd:
+`hal_board_require_capabilities()` zwraca `HAL_OK`, gdy wszystkie żądane
+możliwości są dostępne; `HAL_EUNSUPPORTED`, gdy płytka nie deklaruje którejś
+z nich; `HAL_EUNINIT`, dopóki choć jedna zadeklarowana możliwość pozostaje
+nieaktywna; oraz `HAL_EHW`, gdy odpowiedzialny za nią moduł zgłosił błąd:
 
 ```c
 if (hal_status_is_ok(hal_board_require_capabilities(HAL_BOARD_CAP_CYW43))) {
-    /* radio paths are safe to use on this board */
+    /* Na tej płytce można bezpiecznie używać radia. */
 }
 ```
 
@@ -430,39 +439,39 @@ if (hal_status_is_ok(hal_board_require_capabilities(HAL_BOARD_CAP_CYW43))) {
 
 ## Sekcje dokumentacji API
 
-Kompletna dokumentacja referencyjna jest podzielona na następujące,
-ukierunkowane dokumenty:
+Kompletna dokumentacja referencyjna jest podzielona na następujące dokumenty
+tematyczne:
 
 | # | Plik | Zawartość |
 |---|------|----------|
-| 0 | [Skrypty obsługi repozytorium i orkiestracja](../api/pl/00_scripts.md) | Kluczowa architektura operacyjna: konfiguracja stacji roboczej, zarządzane zależności, punkty wejścia buildu, przykłady, walidacja, narzędzia bezpieczeństwa, integracja VS Code, własność artefaktów oraz relacje między tymi procesami |
-| 1 | [Przewodnik buildu biblioteki](lib_compilation.md) | Build dla wszystkich targetów, generowane metadane płytki, pomocniki bibliotek statycznych, warianty FreeRTOS oraz integracja firmware |
-| P | [Workflow projektu firmware](FwProjectWorkflow.md) | Projekty firmware VS Code oparte na dispatcherze: model manifestu, wybór targetu/płytki, wykrywanie źródeł, układ cache CMake per target, wgrywanie, build debug oraz pliki generowane |
-| O | [Natywny workflow OTA](OTAWorkflow.md) | Konfiguracja projektu/firmware OTA specyficzna dla targetu RP i ESP32-S3, artefakty, pierwsze flashowanie, integracja VS Code, zapora sieciowa, potwierdzenie, rollback, odzyskiwanie oraz granica bezpieczeństwa |
-| 2 | [Flagi modułów i konfiguracja](../api/pl/02_module_flags.md) | Flagi opt-in `HAL_ENABLE_*`, propagacja zależności, wybór FreeRTOS, nadpisania rozmiaru stosu oraz moduły rdzeniowe |
-| A | [Status API](../api/pl/01_status_api.md) | Fundamentalne, przekrojowe: kody wyniku `hal_status_t`, bezpośrednia zmiana operacji `void` mogących zakończyć się błędem, warianty `_ex` dla zachowanych API zwracających wartość/uchwyt/`bool`, formy z parametrem wyjściowym oraz fallback przy kolizji. |
-| 3 | [Zależności buildu, testy i stanowiska testowe sprzętu](../api/pl/03_build_tests.md) | Architektura testów i źródła prawdy, zależności, wykonanie host/CI, pełny inwentarz zestawów testów, zasady rozszerzania, sterowanie czasem mock oraz scentralizowane procedury i wyniki testów sprzętowych |
-| 4 | [Bezpieczeństwo wielordzeniowe i drivery](../api/pl/04_multicore_drivers_migration.md) | Zasady inicjalizacji/działania wielordzeniowego, inwentarz dołączonych driverów i licencji, hook znacznika czasu logowania, pomocnik konwersji czasu, przegląd przykładów, pokrycie testami host oraz mapowanie na przenośne API |
-| S | [Bezpieczeństwo łańcucha dostaw](security_supply_chain.md) | Inwentarz komponentów firm trzecich, generowanie SBOM CycloneDX, skanowanie podatności oraz workflow oceny CVE/CVSS |
+| 0 | [Skrypty obsługi repozytorium i orkiestracja](../api/pl/00_scripts.md) | Kluczowa architektura operacyjna: konfiguracja stacji roboczej, zarządzane zależności, punkty wejścia kompilacji, przykłady, walidacja, narzędzia bezpieczeństwa, integracja VS Code, zarządzanie artefaktami oraz relacje między tymi procesami |
+| 1 | [Przewodnik po kompilacji biblioteki](lib_compilation.md) | Kompilacja dla wszystkich targetów, generowane metadane płytki, skrypty bibliotek statycznych, warianty FreeRTOS oraz integracja firmware |
+| P | [Praca z projektem firmware](FwProjectWorkflow.md) | Projekty firmware VS Code obsługiwane przez wspólny mechanizm sterujący: model manifestu, wybór targetu i płytki, wykrywanie źródeł, osobny cache CMake dla każdego targetu, wgrywanie, kompilacja debugowa oraz pliki generowane |
+| O | [Natywne aktualizacje OTA](OTAWorkflow.md) | Konfiguracja projektu i firmware OTA właściwa dla RP i ESP32-S3, artefakty, pierwsze flashowanie, integracja VS Code, zapora sieciowa, potwierdzenie, wycofanie aktualizacji, odzyskiwanie oraz granica bezpieczeństwa |
+| 2 | [Flagi modułów i konfiguracja](../api/pl/02_module_flags.md) | Jawnie włączane flagi `HAL_ENABLE_*`, propagacja zależności, wybór FreeRTOS, nadpisania rozmiaru stosu oraz moduły rdzeniowe |
+| A | [API kodów statusu](../api/pl/01_status_api.md) | Podstawowe zasady wspólne dla modułów: kody wyniku `hal_status_t`, zastępowanie dotychczasowych operacji `void`, które mogą się nie powieść, wersjami zwracającymi status, warianty `_ex` dla zachowanych API zwracających wartość, uchwyt lub `bool`, formy z parametrem wyjściowym oraz alternatywne nazwy na wypadek kolizji. |
+| 3 | [Zależności kompilacji, testy i stanowiska sprzętowe](../api/pl/03_build_tests.md) | Architektura testów i miarodajne źródła, zależności, wykonanie na hoście i w CI, pełny wykaz zestawów testów, zasady rozszerzania, sterowanie czasem w implementacji mock oraz scentralizowane procedury i wyniki testów sprzętowych |
+| 4 | [Bezpieczeństwo wielordzeniowe i sterowniki](../api/pl/04_multicore_drivers_migration.md) | Zasady inicjalizacji i działania wielordzeniowego, wykaz dołączonych sterowników i licencji, funkcja znacznika czasu logowania, konwersja czasu, przegląd przykładów, pokrycie testami na hoście oraz mapowanie na przenośne API |
+| S | [Bezpieczeństwo łańcucha dostaw](security_supply_chain.md) | Wykaz komponentów firm trzecich, generowanie SBOM CycloneDX, skanowanie podatności oraz proces oceny CVE/CVSS |
 | 5 | [GPIO, ADC i PWM](../api/pl/05_gpio_adc_pwm.md) | `hal_gpio`, `hal_pwm`, `hal_dac`, `hal_pcnt`, `hal_pwm_freq`, `hal_dacless`, `hal_adc` |
-| 6 | [Timery i system](../api/pl/06_timers_system.md) | `hal_timer` (alarmy + zarządzane timery), `hal_system` (millis/watchdog/diagnostyka awarii/UID), `hal_power` (przejścia Sleep/deep-sleep/power-down), `hal_bits`, `hal_compiler` (przenośne atrybuty i wbudowane funkcje), `hal_math` |
+| 6 | [Timery i system](../api/pl/06_timers_system.md) | `hal_timer` (alarmy i zarządzane timery), `hal_system` (czas w milisekundach, watchdog, diagnostyka awarii i UID), `hal_power` (uśpienie, głębokie uśpienie i wyłączenie zasilania), `hal_bits`, `hal_compiler` (przenośne atrybuty i funkcje wbudowane), `hal_math` |
 | 7 | [Kryptografia](../api/pl/07_crypto.md) | `hal_crypto` - Base64, MD5, SHA-256, HMAC-SHA256, ChaCha20, ChaCha20-Poly1305 |
-| 8 | [Synchronizacja, USB, port szeregowy, ramkowanie i uwierzytelnianie](../api/pl/08_sync_serial.md) | `hal_sync` (mutex/sekcja krytyczna), `hal_usb` (cykl życia USB i CDC oparty na statusie), `hal_serial` (jeden rdzeń serializowany po TX, z portami transportu dobieranymi w czasie linkowania, strumieniowym formatowaniem debug, logowaniem odroczonym z ISR i ogranicznikiem szybkości), `hal_serial_session` (ramkowany protokół SC), `hal_serial_commands` (adapter routera tekstowego), `hal_serial_frame` (kodek przewodowy), `hal_sc_auth` (wyzwanie/odpowiedź HMAC) |
-| 9 | [Magistrale komunikacyjne](../api/pl/09_buses.md) | `hal_spi` (transfer `_ex` oparty na statusie i pomocniki DMA), `hal_i2c` (API mastera oparte na statusie, ograniczony skaner z callbackiem watchdoga, pomocniki jednorazowe i czyszczenie magistrali), `hal_i2c_slave` (mapa rejestrów), `hal_uart`, `hal_swserial`, `hal_onewire` |
-| 10 | [Magistrala CAN i wyświetlacz](../api/pl/10_can_display.md) | `hal_can` (CAN wybierany przez backend: klasyczny CAN MCP2515, CAN FD MCP251XFD oraz natywny FDCAN STM32G474), `hal_display` (fasada TFT/OLED/LCD/EPD oparta na statusie, zapisy surowe, odświeżanie EPD, prymitywy GFX, strumieniowanie, tekst i czcionki) |
-| 11 | [Czujniki](../api/pl/11_sensors.md) | `hal_thermocouple` (jedna fasada MCP9600/MAX6675/mock z wyborem providera), `hal_ds18b20` (tryb nieblokujący), `hal_dht` (DHT11/DHT22), `hal_bh1750` (natężenie światła otoczenia), `hal_adp5360` (PMIC - ładowarka/fuel-gauge/regulatory), `hal_mcp3221` (12-bitowy ADC I2C), `hal_rtc` (providerzy PCF8563/DS3231/wewnętrzny AON i wybudzanie względne), `hal_external_adc` (ADS1115), `hal_gps` (NMEA, automatyczne wykrywanie ramkowania) |
+| 8 | [Synchronizacja, USB, port szeregowy, ramkowanie i uwierzytelnianie](../api/pl/08_sync_serial.md) | `hal_sync` (muteks i sekcja krytyczna), `hal_usb` (cykl życia USB i CDC oparty na statusie), `hal_serial` (jeden moduł szeregujący TX, transport wybierany podczas linkowania, strumieniowe formatowanie diagnostyki, logowanie odroczone z ISR i ograniczanie częstotliwości), `hal_serial_session` (ramkowany protokół SC), `hal_serial_commands` (adapter routera tekstowego), `hal_serial_frame` (kodek wiadomości), `hal_sc_auth` (wyzwanie i odpowiedź HMAC) |
+| 9 | [Magistrale komunikacyjne](../api/pl/09_buses.md) | `hal_spi` (transfer `_ex` zwracający status i obsługa DMA), `hal_i2c` (API kontrolera zwracające status, ograniczony skaner z funkcją zwrotną watchdoga, operacje jednorazowe i czyszczenie magistrali), `hal_i2c_slave` (mapa rejestrów), `hal_uart`, `hal_swserial`, `hal_onewire` |
+| 10 | [Magistrala CAN i wyświetlacz](../api/pl/10_can_display.md) | `hal_can` (wybór klasycznego CAN MCP2515, CAN FD MCP251XFD lub natywnego FDCAN STM32G474), `hal_display` (fasada TFT/OLED/LCD/EPD zwracająca status, bezpośredni zapis pikseli, odświeżanie EPD, prymitywy GFX, strumieniowanie, tekst i czcionki) |
+| 11 | [Czujniki](../api/pl/11_sensors.md) | `hal_thermocouple` (jedna fasada wybierająca MCP9600, MAX6675 lub implementację mock), `hal_ds18b20` (tryb nieblokujący), `hal_dht` (DHT11/DHT22), `hal_bh1750` (natężenie światła otoczenia), `hal_adp5360` (PMIC: ładowarka, pomiar poziomu baterii i regulatory), `hal_mcp3221` (12-bitowy ADC I2C), `hal_rtc` (PCF8563, DS3231, wewnętrzny AON i wybudzanie względne), `hal_external_adc` (ADS1115), `hal_gps` (NMEA, automatyczne wykrywanie ramkowania) |
 | 12 | [Modem komórkowy](../api/pl/12_modem.md) | `hal_modem_at` (silnik AT, URC, współpraca z watchdogiem), `hal_simcom_a76xx` (A7670/A7672 - zasilanie, rozruch, SIM, PDP, LBS, GNSS, subskrypcja MQTT) |
-| 13 | [Urządzenia wyjściowe](../api/pl/13_output_devices.md) | `hal_rgb_led` (NeoPixel, transport PIO/GPIO), `hal_digipot` (cyfrowe potencjometry I2C MCP401x/MAX5395), `hal_pga2311` (driver głośności stereo), `hal_mcp23017`/`hal_pca9654e`/`hal_pcf8574` (ekspandery GPIO/wyjść I2C), `hal_hc595` (ekspander wyjść SPI z rejestrem przesuwnym), `hal_mcp4725` (12-bitowy DAC I2C), `hal_mfrc522`/`hal_pn532` (czytniki RFID/NFC), `hal_math` (constrain, map, roundToN) |
-| 14 | [Pamięć masowa](../api/pl/14_storage.md) | `hal_eeprom` (flash targetu / AT24C256), `hal_kv` (magazyn KV tylko do dopisywania z GC), `hal_littlefs` (pomocniki montowania/formatowania LittleFS), `hal_sdlogger` (buforowany logger karty SD i reporter awarii) |
+| 13 | [Urządzenia wyjściowe](../api/pl/13_output_devices.md) | `hal_rgb_led` (NeoPixel, transport PIO/GPIO), `hal_digipot` (cyfrowe potencjometry I2C MCP401x/MAX5395), `hal_pga2311` (sterownik głośności stereo), `hal_mcp23017`/`hal_pca9654e`/`hal_pcf8574` (ekspandery GPIO/wyjść I2C), `hal_hc595` (ekspander wyjść SPI z rejestrem przesuwnym), `hal_mcp4725` (12-bitowy DAC I2C), `hal_mfrc522`/`hal_pn532` (czytniki RFID/NFC), `hal_math` (constrain, map, roundToN) |
+| 14 | [Pamięć masowa](../api/pl/14_storage.md) | `hal_eeprom` (pamięć flash targetu lub AT24C256), `hal_kv` (magazyn KV tylko do dopisywania z odśmiecaniem), `hal_littlefs` (montowanie i formatowanie LittleFS), `hal_sdlogger` (buforowany rejestrator na karcie SD i zapis awarii) |
 | 15 | [Łączność sieciowa](../api/pl/15_connectivity.md) | API `_ex` zwracające status dla `hal_wifi`, resolvera, `hal_udp`, `hal_tcp`, `hal_tls`, `hal_mqtt` i `hal_wireguard`; `hal_http_server`, `hal_http_files`, `hal_websocket`, `hal_net_console`, `hal_net_commands`, `hal_notify`, niezależny adapter gniazd BSD z `getaddrinfo()` i opcjonalnym transportem TLS, `hal_ota`, zawsze dostępne pomocniki kalendarzowe `hal_time` oraz opcjonalny NTP/czas lokalny |
-| 16 | [Narzędzia](../api/pl/16_utilities.md) | `hal_soft_timer` (wrapper C nad SmartTimers), `hal_pid_controller` (wrapper C nad pidController), `hal_crc` (uniwersalne sumy kontrolne CRC-8/16/32), funkcje pomocnicze `tools.h/cpp`, `SmartTimers`, `pidController`, `multicoreWatchdog`, `draw7Segment` |
-| 17 | [cJSON](../api/pl/17_cJSON.md) | Zarządzane `cJSON` / `cJSON_Utils`, wzorce include, zasady własności, parsowanie, wypisywanie, przykłady JSON Pointer/Patch/Merge Patch |
-| 18 | [LodePNG](../api/pl/18_LodePNG.md) | Zarządzany `LodePNG`, wzorce include, profil wbudowany, własność pamięci, skrypt zasobów PNG/Base64 i przykłady RGB565 |
-| 19 | [JPEG](../api/pl/19_JPEG.md) | Zarządzany rdzeń `TJpgDec`, profil wbudowany, własność pamięci, skrypt zasobów JPEG/Base64 i przykłady RGB565 |
-| 20 | [Bluetooth](../api/pl/20_bluetooth.md) | Cykl życia BLE Peripheral/Observer i gamepada Classic HID, parowanie, reconnect, znormalizowane snapshoty, uwierzytelniony Stream, ograniczone kolejki, wsparcie płytek, koegzystencja oraz granica dystrybucji BTstack |
-| 21 | [Surowe radio LoRa](../api/pl/21_lora.md) | Zwalidowane profile SX1262 oraz eksperymentalne, wyłącznie programowe SX1261/SX1276/SX1278, asynchroniczne TX/RX/CAD, bieżące RSSI, capabilities, callbacki, diagnostyka i time-on-air |
-| 22 | [Niezawodne łącze LoRa](../api/pl/22_lora_link.md) | 16-bitowe adresowanie, sekwencje wiadomości, ACK/retry, tłumienie duplikatów, fragmentacja oraz opcjonalne ChaCha20-Poly1305 na `hal_lora_radio` |
-| 23 | [Routing poleceń](../api/pl/23_commands.md) | Neutralna względem transportu rejestracja handlerów i polityka, ograniczone wiadomości przewodowe żądanie/odpowiedź/zdarzenie, kompatybilność sieciowa, adaptery ramkowanego portu szeregowego, niezawodnego LoRa i uwierzytelnionego BLE Stream |
+| 16 | [Narzędzia](../api/pl/16_utilities.md) | `hal_soft_timer` (adapter C do SmartTimers), `hal_pid_controller` (adapter C do pidController), `hal_crc` (uniwersalne sumy kontrolne CRC-8/16/32), funkcje pomocnicze `tools.h/cpp`, `SmartTimers`, `pidController`, `multicoreWatchdog`, `draw7Segment` |
+| 17 | [cJSON](../api/pl/17_cJSON.md) | Zarządzane `cJSON` / `cJSON_Utils`, sposoby dołączania nagłówków, reguły zarządzania obiektami i pamięcią, parsowanie, wypisywanie, przykłady JSON Pointer/Patch/Merge Patch |
+| 18 | [LodePNG](../api/pl/18_LodePNG.md) | Zarządzany `LodePNG`, sposoby dołączania nagłówków, profil dla systemów wbudowanych, zasady zarządzania pamięcią, skrypt zasobów PNG/Base64 i przykłady RGB565 |
+| 19 | [JPEG](../api/pl/19_JPEG.md) | Zarządzany rdzeń `TJpgDec`, profil dla systemów wbudowanych, zasady zarządzania pamięcią, skrypt zasobów JPEG/Base64 i przykłady RGB565 |
+| 20 | [Bluetooth](../api/pl/20_bluetooth.md) | Cykl życia BLE Peripheral/Observer i gamepada Classic HID, parowanie, ponowne łączenie, znormalizowane struktury stanu, uwierzytelniony Stream, kolejki o ograniczonym rozmiarze, obsługa płytek, współdzielenie radia oraz zasady dystrybucji BTstack |
+| 21 | [Niskopoziomowe API radia LoRa](../api/pl/21_lora.md) | Zweryfikowane profile SX1262 oraz eksperymentalne, wyłącznie programowe integracje SX1261/SX1276/SX1278, asynchroniczne TX/RX/CAD, bieżące RSSI, obsługiwane funkcje, funkcje zwrotne, diagnostyka i czas transmisji |
+| 22 | [Niezawodne łącze LoRa](../api/pl/22_lora_link.md) | 16-bitowe adresowanie, numery sekwencyjne wiadomości, ACK i ponawianie, tłumienie duplikatów, fragmentacja oraz opcjonalne ChaCha20-Poly1305 na `hal_lora_radio` |
+| 23 | [Kierowanie poleceń](../api/pl/23_commands.md) | Niezależna od transportu rejestracja procedur obsługi i reguł, binarne komunikaty żądania, odpowiedzi i zdarzenia o ograniczonym rozmiarze, zgodność z warstwą sieciową oraz adaptery ramkowanego portu szeregowego, niezawodnego LoRa i uwierzytelnionego BLE Stream |
 
 ---
 
@@ -477,7 +486,7 @@ ukierunkowane dokumenty:
 | `hal_adp5360` | [Czujniki](../api/pl/11_sensors.md) |
 | `hal_bits` | [Timery i system](../api/pl/06_timers_system.md) |
 | `hal_can` | [CAN i wyświetlacz](../api/pl/10_can_display.md) |
-| `hal_command_router` / `hal_command_wire` | [Routing poleceń](../api/pl/23_commands.md) |
+| `hal_command_router` / `hal_command_wire` | [Kierowanie poleceń](../api/pl/23_commands.md) |
 | `hal_crc` | [Narzędzia](../api/pl/16_utilities.md) |
 | `hal_crypto` | [Kryptografia](../api/pl/07_crypto.md) |
 | `cJSON` / `cJSON_Utils` | [cJSON](../api/pl/17_cJSON.md) |
@@ -495,9 +504,9 @@ ukierunkowane dokumenty:
 | `hal_i2c` / `hal_i2c_slave` | [Magistrale komunikacyjne](../api/pl/09_buses.md) |
 | `hal_kv` | [Pamięć masowa](../api/pl/14_storage.md) |
 | `hal_littlefs` | [Pamięć masowa](../api/pl/14_storage.md) |
-| `hal_lora_radio` | [Surowe radio LoRa](../api/pl/21_lora.md) |
+| `hal_lora_radio` | [Niskopoziomowe API radia LoRa](../api/pl/21_lora.md) |
 | `hal_lora_link` | [Niezawodne łącze LoRa](../api/pl/22_lora_link.md) |
-| `hal_lora_commands` | [Routing poleceń](../api/pl/23_commands.md) |
+| `hal_lora_commands` | [Kierowanie poleceń](../api/pl/23_commands.md) |
 | `hal_math` | [Timery i system](../api/pl/06_timers_system.md) / [Urządzenia wyjściowe](../api/pl/13_output_devices.md) |
 | `hal_mcp23017` | [Urządzenia wyjściowe](../api/pl/13_output_devices.md) |
 | `hal_mcp3221` | [Czujniki](../api/pl/11_sensors.md) |
@@ -519,7 +528,7 @@ ukierunkowane dokumenty:
 | `hal_sc_auth` | [Synchronizacja, port szeregowy, ramkowanie](../api/pl/08_sync_serial.md) |
 | `hal_sdlogger` | [Pamięć masowa](../api/pl/14_storage.md) |
 | `hal_serial` | [Synchronizacja, port szeregowy, ramkowanie](../api/pl/08_sync_serial.md) |
-| `hal_serial_commands` | [Routing poleceń](../api/pl/23_commands.md#adapter-ramkowanej-sesji-szeregowej-framed-serial-session) |
+| `hal_serial_commands` | [Kierowanie poleceń](../api/pl/23_commands.md#adapter-ramkowanej-sesji-szeregowej-framed-serial-session) |
 | `hal_serial_frame` | [Synchronizacja, port szeregowy, ramkowanie](../api/pl/08_sync_serial.md) |
 | `hal_serial_session` | [Synchronizacja, port szeregowy, ramkowanie](../api/pl/08_sync_serial.md) |
 | `hal_simcom_a76xx` | [Modem komórkowy](../api/pl/12_modem.md) |

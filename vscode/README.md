@@ -315,11 +315,14 @@ RP2350 Arm, and STM32G474 with explicit OpenOCD configuration files, while the
 extension resolves GDB from its configured Arm toolchain path. Select the
 matching target and board with `Project: Select board` before starting a
 profile because the shared Debug pre-launch task builds the active selection.
+
 RP profiles use `interface/cmsis-dap.cfg` plus the matching RP target script. A
 Pico in BOOTSEL remains only the target, so OpenOCD needs a separate
 CMSIS-DAP/Picoprobe connected to its SWD pins. The STM32G474 profile uses the
 NUCLEO-G474RE's on-board ST-Link through `board/st_nucleo_g4.cfg`, connects
-under hardware reset, and requires no external probe wiring. Generated RP
+under hardware reset, and requires no external probe wiring.
+
+Generated RP
 profiles also set a validated adapter speed explicitly: 5 MHz for RP2040 and
 2 MHz for RP2350. Without that setting, OpenOCD falls back to 100 kHz and
 RP2350 flash discovery can exceed GDB's default remote timeout on Windows.

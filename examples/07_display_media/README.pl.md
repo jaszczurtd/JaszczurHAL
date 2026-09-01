@@ -1,18 +1,18 @@
 # 07 - Wyświetlacz i media
 
 Ten przykład łączy demonstracje grafiki ILI9341 i zasobów firmware, które
-wcześniej wymagały pięciu osobnych buildów.
+wcześniej wymagały pięciu osobnych kompilacji.
 
 | Poprzedni przykład | Zakres w tym projekcie |
 |---|---|
 | `09_display_tft` | Inicjalizacja ILI9341, tekst, linie, prostokąty, prostokąty zaokrąglone i okręgi. |
 | `36_lodePNG` | Obraz RGBA 2x2 jest kodowany do PNG, dekodowany, kodowany Base64, ponownie dekodowany i konwertowany do RGB565. |
 | `37_lodePNG_ili9341_base64` | Osadzony PNG Base64 jest sprawdzany, dekodowany, konwertowany do RGB565 i rysowany na TFT. |
-| `40_jpeg` | Osadzony baseline JPEG jest dekodowany przez ścieżkę bezpośrednią i helper Base64. |
+| `40_jpeg` | Osadzony obraz JPEG w profilu podstawowym jest dekodowany bezpośrednio oraz za pomocą funkcji pomocniczej Base64. |
 | `41_jpeg_ili931_base64` | Zdekodowane piksele JPEG RGB565 są rysowane na TFT. |
 
 Zarządzana integracja JPEG używa TJpgDec i obsługuje wyłącznie dekodowanie.
-Kodowanie PNG zapewnia LodePNG.
+Za kodowanie PNG odpowiada LodePNG.
 
 Włączone funkcje:
 
@@ -29,7 +29,7 @@ Aplikacja używa magistrali SPI 0.
 Tabela używa oznaczeń złączy nadrukowanych na PCB NUCLEO-G474RE. Najpierw
 podano złącze ST morpho, a tam, gdzie jest dostępne, również elektrycznie
 równoważny pin Arduino Uno V3. Orientacja i numeracja odpowiadają rysunkowi 18 i
-tabeli 16 w [instrukcji boardu STM32G4 Nucleo-64 (UM2505)](https://www.st.com/resource/en/user_manual/um2505-stm32g4-nucleo64-boards-mb1367-stmicroelectronics.pdf).
+tabeli 16 w [instrukcji płytki STM32G4 Nucleo-64 (UM2505)](https://www.st.com/resource/en/user_manual/um2505-stm32g4-nucleo64-boards-mb1367-stmicroelectronics.pdf).
 
 | Sygnał modułu ILI9341 | Sygnał STM32G474RE | Złącze ST morpho | Alternatywa Arduino Uno V3 |
 |---|---|---|---|
@@ -47,7 +47,8 @@ Przykład tylko zapisuje do wyświetlacza, dlatego `MISO` / `SDO` może pozosta�
 niepodłączone. Sygnały SPI i sterujące są zgrupowane na `CN10`; odpowiedniki
 Arduino to standardowe piny SPI oraz `D10`, `D9` i `D8`. `PA5` jest też
 połączony z LED-em użytkownika `LD2`, który może migotać podczas transmisji SPI.
-GPIO używa logiki 3,3 V; nie podłączaj do niego wyjścia logicznego 5 V. Jeżeli
+Sygnały GPIO pracują z poziomami logicznymi 3,3 V; nie podłączaj do nich wyjścia
+logicznego 5 V. Jeżeli
 moduł ma własny regulator lub rezystor podświetlenia, postępuj zgodnie ze
 schematem modułu i nie omijaj tych elementów.
 
@@ -55,25 +56,26 @@ schematem modułu i nie omijaj tych elementów.
 
 Targety RP używają GPIO 17 jako `CS`, GPIO 20 jako `DC` i GPIO 21 jako `RESET`.
 Połącz linie zegara i danych SPI panelu z pinami magistrali SPI 0 wybranymi przez
-backend targetu.
+implementację danego targetu.
 
 ## Weryfikacja zegara STM32G474
 
-Ścieżka NUCLEO-G474RE została sprawdzona sprzętowo z drzewem zegarów backendu
-HSI16/PLL 170 MHz. SPI1 jest taktowane przez PCLK2 170 MHz; przykład żąda
+Wariant dla NUCLEO-G474RE został sprawdzony sprzętowo z konfiguracją zegarów
+backendu HSI16/PLL 170 MHz. SPI1 jest taktowane przez PCLK2 170 MHz; przykład żąda
 24 MHz, a preskaler sprzętowy wybiera 21,25 MHz (`170 MHz / 8`) zamiast 8 MHz
 osiąganych przy wcześniejszym starcie wyłącznie z HSI16.
 
-Dla tego samego firmware i podłączonego ILI9341 pomiar DWT od wejścia do
-`app_start()` wraz z pierwszym wywołaniem `app_task0()` poprawił się z
-1,338830 s do 0,838869 s. Jest to pełny pomiar inicjalizacji, mediów i
-wyświetlacza, a nie czysty benchmark przepustowości SPI.
+Dla tego samego firmware i podłączonego ILI9341 czas zmierzony przez DWT - od
+wejścia do `app_start()` do zakończenia pierwszego wywołania `app_task0()` -
+skrócił się z 1,338830 s do 0,838869 s. Pomiar obejmuje całą inicjalizację,
+obsługę mediów i wyświetlacza, a nie wyłącznie przepustowość SPI.
 
 ## Limity pamięci
 
-Zasoby firmware są ograniczone do 4096 zakodowanych bajtów i 64 x 64
+Zasoby firmware są ograniczone do 4096 bajtów zakodowanych danych i 64 x 64
 zdekodowanych pikseli. Wszystkie obliczenia rozmiaru są sprawdzane przed
 alokacją. Dekodowanie PNG używa tymczasowej alokacji RGBA8888 i wspólnego bufora
 RGB565 8 KiB; JPEG ponownie wykorzystuje ten sam bufor RGB565. Limity pozwalają
 zmieścić przykład w RAM STM32G474 i celowo odrzucają zasoby pełnoekranowe.
-Większe aplikacje powinny stosować kafelki, streaming lub zewnętrzny RAM.
+Większe aplikacje powinny przetwarzać obraz kafelkami lub strumieniowo albo
+korzystać z zewnętrznej pamięci RAM.

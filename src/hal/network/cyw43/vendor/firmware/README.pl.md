@@ -1,11 +1,11 @@
 Firmware układu WiFi CYW43xx
 ============================
 
-Ten katalog zawiera binarne poprawki firmware, które muszą zostać wgrane do
+Ten katalog zawiera bloby z poprawkami firmware, które muszą zostać wgrane do
 układu CYW43xx, aby działał prawidłowo.
 
-Firmware WiFi jest dopełniany do 512 bajtów, po czym dołączany jest CLM. Tak
-powstaje połączony plik binarny.
+Firmware WiFi jest uzupełniany do wielokrotności 512 bajtów, po czym dołączany
+jest CLM. Tak powstaje jeden scalony plik binarny.
 
 Przykład:
 
@@ -15,15 +15,15 @@ Przykład:
 
 Plik binarny jest następnie przekształcany w nagłówek, na przykład przez
 `xxd -i 43439A0-7.95.49.00.combined`. Makra `CYW43_WIFI_FW_LEN` i
-`CYW43_CLM_LEN` określają niedopełniony rozmiar oryginalnych plików firmware w
-bajtach.
+`CYW43_CLM_LEN` określają w bajtach rozmiar oryginalnych plików firmware przed
+dopełnieniem.
 
 Firmware Bluetooth dla 43439, stosowanego między innymi w Raspberry Pi Pico W,
 jest dostępny jako statyczna tablica w `cyw43_btfw_43439.h` i ma następujący
 format:
 
-    1 bajt: liczba znaków wersji wraz z terminatorem null
-    n bajtów: zakończony zerem ciąg wersji
+    1 bajt: liczba znaków w ciągu wersji wraz z terminatorem zerowym
+    n bajtów: ciąg wersji zakończony bajtem zerowym
     1 bajt: liczba kolejnych rekordów
 
     Każdy rekord ma format:

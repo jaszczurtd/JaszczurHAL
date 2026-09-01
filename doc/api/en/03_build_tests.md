@@ -694,11 +694,15 @@ on-board CYW43439 and enumerated as `JaszczurHAL RP` over USB. On both boards
 the probe reached controller-ready and connectable advertising states, BlueZ
 resolved the static GATT service, characteristic read and write passed, and the
 peripheral accepted a disconnect followed by a fresh connection and GATT read.
-The matched `wifi-only` images also reported `HAL_OK`. Initial STM32 ATT
+The matched `wifi-only` images also reported `HAL_OK`.
+
+Initial STM32 ATT
 discovery exposed a missing Security Manager initialization; the probe now
 initializes `sm_init()` before `att_server_init()`. Connection lifecycle is
 observed through one HCI event registration so each physical link is counted
-once. The final image restored to each board is the `bluetooth` variant. The
+once.
+
+The final image restored to each board is the `bluetooth` variant. The
 Pico W connection run recorded no drain-budget hits. The STM32 probe recorded
 two bounded drain hits during controller initialization and then remained
 stable with `HAL_OK` transport status.
@@ -1030,8 +1034,10 @@ unattended MCU-reset interruption test; it does not remove VBUS physically.
 
 The earlier Pico W FreeRTOS image used a 512-word task stack and reset during
 the first authenticated handshake. Increasing the fixture stack to 1024 words
-removed that reset, but a subsequent run lost the BLE link during reconnects
-and another sustained only 8.06 Hz. The Stream backend had left the connection
+removed that reset.
+
+But a subsequent run lost the BLE link during reconnects and another sustained only
+8.06 Hz. The Stream backend had left the connection
 interval entirely to the central, making the sequential authenticated
 request/notification round trip too slow on RP2040 FreeRTOS. After the
 peripheral began requesting a 15 ms interval with zero peripheral latency, the

@@ -18,19 +18,19 @@ void        hal_mutex_unlock(hal_mutex_t mutex);
 void        hal_mutex_destroy(hal_mutex_t mutex);
 ```
 
-**impl/rp2040:** pico SDK `mutex_t` in normal RP2040 builds; FreeRTOS mutex (`xSemaphoreCreateMutex`) in `HAL_ENABLE_FREERTOS + __FREERTOS` builds. Both are non-recursive and synchronize core0/core1 task callers.
-**impl/stm32g474:** single-core atomic spinlock in non-FreeRTOS builds; FreeRTOS mutex (`xSemaphoreCreateMutex`) in `HAL_ENABLE_FREERTOS` builds. Both are non-recursive.
-**impl/esp32:** ESP-IDF FreeRTOS mutex (`xSemaphoreCreateMutex`), non-recursive
-and task-context only.
-**impl/.mock:** `std::mutex`.
-**FreeRTOS note:** `hal_mutex_*` is FreeRTOS-aware on RP2040/RP2350 and
-STM32G474 when `HAL_ENABLE_FREERTOS` selects the pinned kernel, and on ESP32-S3
-through the scheduler supplied by pinned ESP-IDF.
-`hal_mutex_*` remains task-context only; it is not an ISR API.
-Singleton/bus module mutexes use an internal atomic create-once helper where a
-defensive lazy fallback is still needed.
-`hal_mutex_try_lock()` never waits. Bare-metal interrupt workers may use it;
-FreeRTOS backends return `false` when it is called from interrupt context.
+- **impl/rp2040:** pico SDK `mutex_t` in normal RP2040 builds; FreeRTOS mutex (`xSemaphoreCreateMutex`) in `HAL_ENABLE_FREERTOS + __FREERTOS` builds. Both are non-recursive and synchronize core0/core1 task callers.
+- **impl/stm32g474:** single-core atomic spinlock in non-FreeRTOS builds; FreeRTOS mutex (`xSemaphoreCreateMutex`) in `HAL_ENABLE_FREERTOS` builds. Both are non-recursive.
+- **impl/esp32:** ESP-IDF FreeRTOS mutex (`xSemaphoreCreateMutex`), non-recursive
+  and task-context only.
+- **impl/.mock:** `std::mutex`.
+- **FreeRTOS note:** `hal_mutex_*` is FreeRTOS-aware on RP2040/RP2350 and
+  STM32G474 when `HAL_ENABLE_FREERTOS` selects the pinned kernel, and on ESP32-S3
+  through the scheduler supplied by pinned ESP-IDF.
+  `hal_mutex_*` remains task-context only; it is not an ISR API.
+  Singleton/bus module mutexes use an internal atomic create-once helper where a
+  defensive lazy fallback is still needed.
+  `hal_mutex_try_lock()` never waits. Bare-metal interrupt workers may use it;
+  FreeRTOS backends return `false` when it is called from interrupt context.
 
 ### Macros (tools.h)
 
@@ -48,17 +48,18 @@ void hal_critical_section_enter(void);  // save and disable interrupts
 void hal_critical_section_exit(void);   // restore prior interrupt state
 ```
 
-**impl/rp2040:** nesting-safe, per-core `save_and_disable_interrupts()` /
-`restore_interrupts()` (pico SDK), including FreeRTOS builds.
-**impl/stm32g474:** nesting-safe PRIMASK full interrupt mask, including
-FreeRTOS builds.
-**impl/esp32:** nesting-safe ESP-IDF `portMUX_TYPE` critical section shared by
-both cores, with per-core depth tracking.
-**impl/.mock:** no-ops.
-**Note:** This uses each target's hard interrupt-critical mechanism for short
-timing-sensitive or ISR-shared sections. ESP32-S3 also serializes both cores
-with its shared portMUX; RP2040 masks only the calling core. It is not a
-FreeRTOS scheduler lock; use `hal_mutex_t` for task mutual exclusion.
+- **impl/rp2040:** nesting-safe, per-core `save_and_disable_interrupts()` /
+  `restore_interrupts()` (pico SDK), including FreeRTOS builds.
+- **impl/stm32g474:** nesting-safe PRIMASK full interrupt mask, including
+  FreeRTOS builds.
+- **impl/esp32:** nesting-safe ESP-IDF `portMUX_TYPE` critical section shared by
+  both cores, with per-core depth tracking.
+- **impl/.mock:** no-ops.
+
+> **Note:** This uses each target's hard interrupt-critical mechanism for short
+> timing-sensitive or ISR-shared sections. ESP32-S3 also serializes both cores
+> with its shared portMUX; RP2040 masks only the calling core. It is not a
+> FreeRTOS scheduler lock; use `hal_mutex_t` for task mutual exclusion.
 
 ### Examples
 

@@ -4,18 +4,19 @@
 
 > **Część [Dokumentacji API JaszczurHAL](../../pl/JaszczurHAL_API.md)**
 
-Obejmuje: zarządzane `cJSON` i `cJSON_Utils` włączane przez `HAL_ENABLE_CJSON`.
+Obejmuje: dostarczane z JaszczurHAL biblioteki `cJSON` i `cJSON_Utils`,
+włączane przez `HAL_ENABLE_CJSON`.
 
-`cJSON` to niewielki parser/generator JSON w C, pobierany do
-`third_party/cJSON` w commicie przypiętym przez
-`third_party/cjson_version.conf`. Cienkie wrappery integracyjne w
-`src/hal/codecs/cjson/` dołączają nagłówki i źródła upstream tylko przy
-`HAL_ENABLE_CJSON`, zachowując publiczną ścieżkę include.
+`cJSON` to niewielka biblioteka C do parsowania i generowania JSON-u.
+Jej źródła są pobierane do `third_party/cJSON` w commicie wskazanym przez
+`third_party/cjson_version.conf`. Warstwa integracyjna w
+`src/hal/codecs/cjson/` włącza nagłówki i źródła upstreamu tylko wtedy, gdy
+zdefiniowano `HAL_ENABLE_CJSON`, a publiczna ścieżka dołączania pozostaje stała.
 
-Zarządzana wersja: `cJSON` 1.7.18.
+Wersja dostarczana z projektem: `cJSON` 1.7.18.
 
-Autor/licencja: `cJSON` upstream jest autorstwa Dave'a Gamble'a i
-współtwórców i jest dystrybuowany na licencji MIT.
+Autor/licencja: projekt `cJSON` jest rozwijany przez Dave'a
+Gamble'a i współtwórców oraz udostępniany na licencji MIT.
 
 ## Włączenie
 
@@ -27,10 +28,10 @@ Włącz moduł w `hal_project_config.h` lub definicją kompilatora:
 #define HAL_ENABLE_CJSON
 ```
 
-Pliki źródłowe są częścią wspólnej listy źródeł frameworku, ale ich
-zawartość kompiluje się do niczego, dopóki nie zdefiniowano
-`HAL_ENABLE_CJSON`. Publiczne nagłówki są również bramkowane, więc kod
-używający symboli `cJSON_*` musi być kompilowany z tą samą flagą.
+Pliki należą do wspólnej listy źródeł frameworka, lecz bez
+`HAL_ENABLE_CJSON` powstają z nich puste jednostki translacji. Publiczne
+nagłówki są zabezpieczone tą samą flagą, dlatego musi być ona aktywna także
+podczas kompilowania kodu korzystającego z symboli `cJSON_*`.
 
 ## Dołączanie
 
@@ -41,19 +42,19 @@ Bezpośrednie dołączenie, bezpieczne zarówno z C, jak i z C++:
 #include <hal/codecs/cjson/cJSON_Utils.h>
 ```
 
-Dla plików C++ korzystających już z agregatora narzędziowego, `tools.h`
-również udostępnia cJSON, gdy zdefiniowano `HAL_ENABLE_CJSON`:
+Jeżeli plik C++ korzysta już ze zbiorczego nagłówka narzędziowego, może
+uzyskać dostęp do cJSON przez `tools.h`. Wymaga to `HAL_ENABLE_CJSON`:
 
 ```c
 #include <tools.h>
 ```
 
-`tools.h` dołącza klasy narzędziowe C++, więc w plikach `.c` preferuj
-bezpośrednie dołączenia z frameworku. `tools_c.h` nie re-eksportuje cJSON.
+`tools.h` dołącza także klasy narzędziowe C++, dlatego w plikach `.c` należy
+korzystać bezpośrednio z nagłówków frameworku. `tools_c.h` nie udostępnia cJSON.
 
-`JaszczurHAL.h` dołącza parasol HAL, a nie agregator narzędziowy, więc tam,
-gdzie cJSON jest używany bezpośrednio, dołączaj nagłówki frameworku lub
-`tools.h` z plików C++.
+`JaszczurHAL.h` dołącza zbiorczy nagłówek HAL, ale nie `tools.h`. Kod, który
+bezpośrednio korzysta z cJSON, musi więc dołączyć nagłówki frameworku albo,
+w przypadku C++, `tools.h`.
 
 ## Zakres API
 
@@ -66,59 +67,63 @@ Podstawowe API `cJSON`:
 | Tworzenie | `cJSON_CreateObject`, `cJSON_CreateArray`, `cJSON_CreateString`, `cJSON_CreateNumber`, `cJSON_CreateBool`, `cJSON_CreateNull` |
 | Dodawanie | `cJSON_AddStringToObject`, `cJSON_AddNumberToObject`, `cJSON_AddBoolToObject`, `cJSON_AddArrayToObject`, `cJSON_AddObjectToObject`, `cJSON_AddItemToArray`, `cJSON_AddItemToObject` |
 | Aktualizacja | `cJSON_SetNumberValue`, `cJSON_SetValuestring`, `cJSON_ReplaceItemInObjectCaseSensitive`, `cJSON_DeleteItemFromObjectCaseSensitive` |
-| Wypisywanie | `cJSON_Print`, `cJSON_PrintUnformatted`, `cJSON_PrintBuffered`, `cJSON_PrintPreallocated` |
+| Generowanie tekstu | `cJSON_Print`, `cJSON_PrintUnformatted`, `cJSON_PrintBuffered`, `cJSON_PrintPreallocated` |
 | Zwalnianie | `cJSON_Delete`, `cJSON_free` |
 
 `cJSON_Utils` dodaje pomocników dla JSON Pointer, JSON Patch, JSON Merge
 Patch oraz sortowania obiektów:
 
-| Funkcja | Funkcje |
+| Obszar | Funkcje |
 |---|---|
 | JSON Pointer (RFC 6901) | `cJSONUtils_GetPointer`, `cJSONUtils_GetPointerCaseSensitive` |
 | JSON Patch (RFC 6902) | `cJSONUtils_ApplyPatches`, `cJSONUtils_GeneratePatches`, `cJSONUtils_AddPatchToArray` |
 | JSON Merge Patch (RFC 7386) | `cJSONUtils_MergePatch`, `cJSONUtils_GenerateMergePatch` |
 | Sortowanie / ścieżki | `cJSONUtils_SortObject`, `cJSONUtils_FindPointerFromObjectTo` |
 
-## Własność pamięci
+## Zarządzanie pamięcią
 
 cJSON domyślnie wykorzystuje alokację dynamiczną.
 
 Najważniejsze zasady:
 
-- `cJSON_Parse*()` zwraca drzewo będące własnością wywołującego. Zwolnij je
-  przez `cJSON_Delete(root)`.
-- `cJSON_Create*()` zwraca element będący własnością wywołującego, dopóki
-  nie zostanie dodany do tablicy/obiektu. Po `cJSON_AddItemToArray()` lub
-  `cJSON_AddItemToObject()` właścicielem elementu jest rodzic.
+- Drzewo zwrócone przez `cJSON_Parse*()` trzeba zwolnić przez
+  `cJSON_Delete(root)`.
+- Element zwrócony przez `cJSON_Create*()` trzeba zwolnić samodzielnie, dopóki
+  nie zostanie dodany do tablicy lub obiektu. Po wywołaniu
+  `cJSON_AddItemToArray()` albo `cJSON_AddItemToObject()` zostanie zwolniony
+  razem z elementem nadrzędnym.
 - `cJSON_AddStringToObject()` i podobne funkcje pomocnicze tworzą i
-  dołączają nowe dziecko. Jego właścicielem jest obiekt nadrzędny.
+  dołączają nowy element podrzędny, za który od tego momentu odpowiada obiekt
+  nadrzędny.
 - Funkcje `cJSON_Print*()` zwracające `char *` alokują tekst. Zwolnij go
   przez `cJSON_free(text)`.
-- `cJSON_PrintPreallocated()` zapisuje do bufora dostarczonego przez
-  wywołującego. Wywołujący jest właścicielem bufora i musi zapewnić nieco
-  dodatkowego miejsca; upstream zaleca zaalokowanie około 5 bajtów więcej
-  niż oczekiwane wyjście.
+- `cJSON_PrintPreallocated()` zapisuje dane do bufora dostarczonego przez
+  wywołującego i nie przejmuje zarządzania jego pamięcią. Bufor musi mieć
+  niewielki zapas; dokumentacja biblioteki zaleca około 5 bajtów więcej niż
+  przewidywany rozmiar wyniku.
 - `cJSONUtils_MergePatch(target, patch)` może zwrócić inny wskaźnik niż
-  `target`. Zawsze przypisuj zwróconą wartość z powrotem do swojego
-  wskaźnika korzenia (root).
+  `target`. Zawsze przypisuj zwróconą wartość z powrotem do wskaźnika korzenia
+  drzewa.
 
-Niestandardowe hooki alokacji można zainstalować przez `cJSON_InitHooks()`.
-Zrób to raz, przy starcie, zanim zostaną utworzone jakiekolwiek obiekty
-JSON. Hooki są globalnym stanem procesu, a nie stanem per-dokument.
+Niestandardowe funkcje alokatora można zarejestrować przez
+`cJSON_InitHooks()`. Należy to zrobić raz podczas uruchamiania programu,
+zanim powstaną jakiekolwiek obiekty JSON. Hooki obowiązują w całym procesie,
+nie tylko w pojedynczym dokumencie.
 
 ## Thread safety
 
-Dokumenty cJSON są niezależne, dopóki każde zadanie/rdzeń jest właścicielem
-własnego drzewa lub zewnętrzne blokowanie chroni współdzielone drzewa.
-JaszczurHAL nie dodaje mutexu wokół operacji cJSON.
+Dokumenty cJSON można przetwarzać niezależnie, jeśli każde zadanie lub rdzeń
+korzysta z własnego drzewa. Dostęp do drzewa współdzielonego trzeba
+synchronizować po stronie aplikacji; JaszczurHAL nie chroni operacji cJSON
+mutexem.
 
-Ważny współdzielony/globalny stan:
+Uważaj na następujący stan globalny:
 
-- `cJSON_InitHooks()` zmienia globalne hooki alokatora. Wywołaj ją raz
-  podczas startu, zanim rozpocznie się współbieżne użycie JSON.
-- `cJSON_GetErrorPtr()` odczytuje stan błędu parsera. W kodzie współbieżnym
-  preferuj `cJSON_ParseWithOpts(..., &end, ...)`, ponieważ zwraca wskaźnik
-  końca parsowania/błędu przez pamięć będącą własnością wywołującego.
+- `cJSON_InitHooks()` zmienia globalne funkcje alokatora. Wywołaj ją raz
+  podczas uruchamiania programu, przed rozpoczęciem współbieżnej pracy z JSON-em.
+- `cJSON_GetErrorPtr()` odczytuje współdzielony stan błędu parsera. W kodzie
+  współbieżnym lepiej użyć `cJSON_ParseWithOpts(..., &end, ...)`, które zapisuje
+  pozycję końca danych lub błędu we wskaźniku dostarczonym przez wywołującego.
 
 ## Przykład: parsowanie konfiguracji
 
@@ -174,8 +179,8 @@ Wejście:
 
 ## Przykład: budowanie i wypisywanie JSON
 
-Użyj `cJSON_PrintPreallocated()`, gdy wyjście ma ograniczony rozmiar, a
-chcesz uniknąć alokowania bufora wypisywania.
+Użyj `cJSON_PrintPreallocated()`, gdy znasz maksymalny rozmiar wyniku i chcesz
+uniknąć dynamicznego przydzielania bufora na generowany tekst.
 
 ```c
 #include <hal/codecs/cjson/cJSON.h>
@@ -222,10 +227,10 @@ if (text != NULL) {
 
 ## Przykład: budowanie JSON z NONULL
 
-`NONULL(x)` to pomocnik JaszczurHAL z `hal_system.h`, a nie API cJSON. Jest
-przydatny w zwięzłych budowniczych (builderach), które używają jednej
-etykiety porządkującej `error:`. Jeśli `x` daje w wyniku `NULL`, makro
-skacze do tej etykiety.
+`NONULL(x)` to makro pomocnicze JaszczurHAL z `hal_system.h`, a nie część API
+cJSON. Przydaje się w krótkich funkcjach budujących JSON, które zwalniają
+wszystkie zasoby w jednym miejscu oznaczonym etykietą `error:`. Jeżeli wynikiem
+`x` jest `NULL`, makro przechodzi bezpośrednio do tej etykiety.
 
 Ten wzorzec dobrze współgra z pomocnikami `cJSON_Add*ToObject()` i
 `cJSON_PrintUnformatted()`, ponieważ oba zwracają wskaźniki, które muszą
@@ -267,9 +272,10 @@ error:
 }
 ```
 
-Zwrócony `char *` jest własnością wywołującego. Zwolnij go przez
-`cJSON_free(json)` po wysłaniu lub zapisaniu. Zwrócenie `NULL` oznacza, że
-alokacja zawiodła podczas tworzenia drzewa lub wypisywania końcowego JSON.
+Za zwolnienie zwróconego `char *` odpowiada wywołujący. Po wysłaniu lub
+zapisaniu danych użyj `cJSON_free(json)`. Wynik `NULL` oznacza, że podczas
+tworzenia drzewa albo generowania końcowego JSON-u nie udało się przydzielić
+pamięci.
 
 ## Przykład: JSON Pointer i Merge Patch
 
@@ -305,47 +311,47 @@ static bool update_uart_config(cJSON **root_inout) {
 }
 ```
 
-JSON Pointer wykorzystuje ścieżki rozdzielane `/`. Dla kluczy obiektów
-zawierających `~` lub `/`, ucieknij je jako `~0` i `~1`.
+JSON Pointer używa ścieżek rozdzielanych znakiem `/`. W nazwach kluczy znaki
+`~` i `/` trzeba zakodować odpowiednio jako `~0` i `~1`.
 
 ## Uwagi dotyczące systemów wbudowanych
 
-- Zawsze sprawdzaj zwracane wskaźniki pod kątem `NULL`; niepowodzenie
-  alokacji to normalny tryb awarii w systemach wbudowanych.
+- Zawsze sprawdzaj, czy zwrócony wskaźnik nie jest równy `NULL`. Kod dla
+  systemu wbudowanego musi poprawnie obsłużyć brak pamięci.
 - Preferuj `cJSON_GetObjectItemCaseSensitive()` podczas parsowania danych
-  konfiguracyjnych. Unika to zaskakujących dopasowań kluczy różniących się
+  konfiguracyjnych. Zapobiega to dopasowaniu klucza zapisanego z inną
   wielkością liter.
-- Liczby są przechowywane jako `double` plus cache liczby całkowitej.
-  Rzutuj świadomie na granicy swojej aplikacji.
-- Utrzymuj dokumenty małe. Parsowanie i wypisywanie alokują pamięć
-  proporcjonalną do drzewa JSON i tekstu wyjściowego.
-- Preferuj `cJSON_PrintPreallocated()` dla wiadomości telemetrii/statusu ze
-  znaną górną granicą.
-- `cJSON_Minify()` modyfikuje swój bufor wejściowy w miejscu; nie
-  przekazuj literałów łańcuchowych ani buforów wspieranych przez
-  flash/ROM.
-- Domyślny `CJSON_NESTING_LIMIT` wynosi 1000. Dla małych MCU rozważ jego
-  obniżenie definicją buildu, jeśli niezaufany JSON może docierać
-  spoza urządzenia.
-- Generowanie łatek (patch) `cJSON_Utils` może sortować i mutować obiekty
-  wejściowe, zgodnie z uwagami upstream. Jeśli oryginalna
-  kolejność/zawartość musi pozostać nietknięta, najpierw zduplikuj
-  dokumenty.
+- Liczby są przechowywane jako `double`; dodatkowo zachowywana jest ich
+  podręczna wartość całkowita. Przy przepisywaniu ich do typów aplikacji
+  wykonuj jawne rzutowanie.
+- Ograniczaj rozmiar dokumentów JSON. Parser i generator tekstu przydzielają
+  pamięć proporcjonalnie do drzewa JSON oraz wyniku.
+- Preferuj `cJSON_PrintPreallocated()` dla wiadomości telemetrycznych i
+  statusowych o znanym maksymalnym rozmiarze.
+- `cJSON_Minify()` modyfikuje bufor wejściowy w miejscu. Nie przekazuj do niej
+  literałów tekstowych ani buforów znajdujących się w pamięci flash lub ROM.
+- Domyślny `CJSON_NESTING_LIMIT` wynosi 1000. W przypadku małych MCU warto
+  obniżyć go za pomocą definicji kompilatora, jeśli urządzenie może otrzymywać
+  niezaufane dane JSON.
+- Podczas generowania JSON Patch `cJSON_Utils` może sortować i modyfikować
+  obiekty wejściowe, zgodnie z dokumentacją biblioteki. Jeśli ich kolejność
+  i treść mają pozostać bez zmian, najpierw utwórz kopie dokumentów.
 
 ## Przechowywanie i transport
 
-Samo cJSON działa wyłącznie w RAM. Utrwalaj lub przenoś tekst przez
-odpowiedni moduł HAL:
+Samo cJSON działa wyłącznie w RAM-ie. Do zapisania lub przesłania tekstu użyj
+odpowiedniego modułu HAL:
 
 - Użyj `hal_littlefs` dla plików JSON na LittleFS RP2040.
 - Użyj `hal_kv` dla małych skalarnych wartości konfiguracyjnych, gdzie
   tekst JSON nie jest konieczny.
-- Użyj transportów `hal_serial`, `hal_uart`, MQTT, UDP lub modemu, aby
-  wysłać wypisany JSON.
+- Użyj `hal_serial`, `hal_uart`, MQTT, UDP lub modemu, aby wysłać wygenerowany
+  tekst JSON.
 
 ## Autor i licencja
 
-Zarządzane źródła cJSON/cJSON_Utils pochodzą z upstreamowego `cJSON`,
-autorstwa Dave'a Gamble'a i współtwórców, dystrybuowanego na licencji MIT.
-Checkout zachowuje upstreamowy plik `third_party/cJSON/LICENSE`; dokładny
-commit jest zapisany w `third_party/cjson_version.conf`.
+Źródła cJSON/cJSON_Utils dostarczane z projektem pochodzą z projektu upstream
+`cJSON`, którego autorami są Dave Gamble i współtwórcy. Biblioteka jest
+udostępniana na licencji MIT. Repozytorium zawiera oryginalny plik
+`third_party/cJSON/LICENSE`, a dokładny commit zapisano w
+`third_party/cjson_version.conf`.

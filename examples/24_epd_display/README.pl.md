@@ -1,7 +1,7 @@
 # 24 - Wyświetlacz e-paper SSD1681
 
 Ten przykład obsługuje monochromatyczny panel SSD1681 200 x 200 przez wspólny
-backend EPD SPI/GPIO i publiczne API surowego zapisu `hal_display`.
+sterownik EPD korzystający z SPI/GPIO oraz niskopoziomowe API zapisu `hal_display`.
 
 | Sygnał | Rodzina RP | NUCLEO-G474RE | Złącze Nucleo |
 | --- | --- | --- | --- |
@@ -14,6 +14,8 @@ backend EPD SPI/GPIO i publiczne API surowego zapisu `hal_display`.
 | BUSY | GP22 | PA8 | pin 23 CN10 / D7 |
 
 Przykład celowo pozostawia profile przebiegów puste, więc kontroler używa
-przebiegu OTP z domyślną temperaturą drivera 25 C. Produkty powinny dostarczać
-profile LUT pełnego i częściowego odświeżania producenta panelu, jeśli wymaga
-tego moduł wyświetlacza lub jego zakres temperatur.
+przebiegu OTP z przyjętą przez driver domyślną temperaturą 25°C. W rozwiązaniu
+produkcyjnym
+należy dostarczyć profile LUT pełnego i częściowego odświeżania zalecane przez
+producenta panelu, jeśli wymaga tego moduł wyświetlacza lub jego zakres
+temperatur.

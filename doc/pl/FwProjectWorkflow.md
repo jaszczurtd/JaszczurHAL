@@ -1,17 +1,19 @@
-# Workflow projektu firmware
+# Praca z projektem firmware
 
 *Dostępne również [po angielsku](../en/FwProjectWorkflow.md).*
 
-Ten dokument definiuje model projektu firmware oparty na dispatcherze, używany
-przez projekty JaszczurHAL i śledzone przykłady. Obejmuje śledzony manifest,
-rozwiązywanie targetu i płytki, wykrywanie źródeł projektu, pliki generowane,
-własność cache oraz integrację build/upload.
+Ten dokument opisuje model projektu firmware oparty na wspólnym mechanizmie
+obsługi wielu targetów. Korzystają z niego projekty JaszczurHAL i przykłady
+przechowywane w repozytorium. Opis obejmuje śledzony manifest, wybór targetu i
+płytki, wykrywanie źródeł projektu, pliki generowane, reguły przypisywania cache
+oraz integrację buildu i wgrywania firmware'u.
 
-Akcje CLI i zabezpieczenia urządzenia opisuje
-[JaszczurHAL VS Code Entry](../../vscode/README.md), pola deskryptora i
-generowane metadane - [Profile targetów i płytek](boards_profiles_howto.md), a
-ścieżki aktualizacji sieciowej właściwe dla targetu -
-[Natywny workflow OTA](OTAWorkflow.md).
+Akcje CLI i zabezpieczenia urządzenia opisano w dokumencie
+[Punkt wejścia JaszczurHAL dla VS Code](../../vscode/README.pl.md). Pola
+deskryptora i generowane metadane przedstawiono w
+[Profilach targetów i płytek](boards_profiles_howto.md), a ścieżki aktualizacji
+sieciowej właściwe dla targetu - w dokumencie
+[Natywna aktualizacja OTA](OTAWorkflow.md).
 
 ## Układ projektu
 
@@ -30,32 +32,35 @@ my-device/
     extensions.json
 ```
 
-`extensions.json` rekomenduje rozszerzenia, od których zależą pliki projektu:
-`ms-vscode.cpptools` po IntelliSense, `ms-vscode.cmake-tools` jako
+Plik `extensions.json` zawiera listę zalecanych rozszerzeń, od których zależą
+pliki projektu:
+`ms-vscode.cpptools` do IntelliSense, `ms-vscode.cmake-tools` jako
 `C_Cpp.default.configurationProvider` ustawiony w `settings.json`,
-`marus25.cortex-debug` po konfigurację debugowania w `launch.json` oraz
-`ms-vscode.vscode-serial-monitor` obok akcji monitora `jh-vscode`.
+`marus25.cortex-debug` do konfiguracji debugowania w `launch.json` oraz
+`ms-vscode.vscode-serial-monitor` używane razem z akcjami monitora
+`jh-vscode`.
 VS Code proponuje instalację brakujących pozycji przy otwarciu folderu.
 
-Wygenerowane pliki `launch.json` dostarczają jawne skrypty interfejsu i
-targetu OpenOCD. Na Windows uruchom `jh-vscode debug-tools
---project <path> --json` i ustaw zgłoszony plik wykonywalny OpenOCD oraz
-katalog toolchainu Arm w ustawieniach użytkownika Cortex-Debug; rozszerzenie
-rozwiązuje GDB z tego katalogu. Te lokalne dla maszyny ścieżki pozostają poza
-śledzonymi plikami projektu.
+Wygenerowane pliki `launch.json` wskazują konkretne skrypty interfejsu i
+targetu OpenOCD. W Windows uruchom
+`jh-vscode debug-tools --project <path> --json`, a następnie ustaw wskazany
+plik wykonywalny OpenOCD oraz katalog toolchainu Arm w ustawieniach użytkownika
+Cortex-Debug. Rozszerzenie odnajdzie GDB w tym katalogu. Te ścieżki, właściwe
+dla danego komputera, nie trafiają do śledzonych plików projektu.
 
 Na hostach Linux typu Debian/Ubuntu `runmefirst.sh` instaluje `gdb-multiarch`,
 a wygenerowane ustawienia wybierają go przez `cortex-debug.gdbPath.linux`.
-Profil STM32G474 używa `board/st_nucleo_g4.cfg` z connect-under-reset, dzięki
-czemu wbudowany ST-Link może odzyskać działający target, zanim GDB się
-podłączy.
+Profil STM32G474 używa `board/st_nucleo_g4.cfg` z opcją connect-under-reset.
+Dzięki temu wbudowany ST-Link może przejąć kontrolę nad działającym targetem,
+zanim połączy się GDB.
 
 Projekty RP i STM32 wybierają `toolchain: "cmake"` i wskazują
 `cmake.sourceDir` na `libraries/JaszczurHAL/cmake/jh_firmware_project`.
-`JH_PROJECT_DIR` identyfikuje katalog aplikacji. Projekty ESP32 i ESP32-S3
-wybierają `toolchain: "esp-idf"`; ich wpis w rejestrze targetów dostarcza produkcyjny
-runner oraz ścieżkę manifestu artefaktów. Współdzielony punkt wejścia wybiera
-providera bez konieczności lokalnej receptury CMake dla projektu.
+`JH_PROJECT_DIR` wskazuje katalog aplikacji. Projekty ESP32 i ESP32-S3
+wybierają `toolchain: "esp-idf"`; wpis targetu w rejestrze wskazuje produkcyjny
+skrypt obsługi oraz ścieżkę manifestu artefaktów. Wspólny punkt wejścia wybiera
+właściwy system budowania, dzięki czemu projekt nie potrzebuje własnej
+konfiguracji CMake.
 
 Wygeneruj działający samodzielny projekt poleceniem:
 
@@ -64,30 +69,32 @@ libraries/JaszczurHAL/vscode/tools/create-vscode-example.py \
   --output my-device --target rp2040 --board pico
 ```
 
-Wygenerowany `tasks.json` zawiera wybór płytki w GUI i terminalu, wgrywanie i
-wykrywanie OTA oraz `Project: Sync board picker`. Zadanie synchronizacji
-uruchamia się przy `folderOpen`, odczytuje bieżący rejestr płytek JaszczurHAL
-i aktualizuje śledzone opcje GUI tylko wtedy, gdy się zmieniły. To samo
-zadanie tworzy lub naprawia wygenerowane profile debuggera RP2040, RP2350 ARM
-oraz STM32G474/ST-Link w `launch.json`, używając artefaktu ELF z manifestu i
-zachowując konfiguracje należące do projektu użytkownika. VS Code wymaga zaufanego
-workspace'u i może poprosić o jednorazową zgodę na zadania automatyczne.
-Zadanie terminala `Project: Select board` zawsze odczytuje rejestr w chwili
-wywołania.
-Każde wygenerowane zadanie używa `jaszczurhal.vscodeEntry` na Unix oraz
-nadpisania platformy `jaszczurhal.vscodeEntryWindows` na Windows. Oba
-ustawienia wybierają sąsiadujące launchery `jh-vscode` i `jh-vscode.cmd`,
-które wykonują jeden współdzielony runtime Pythona.
+Wygenerowany `tasks.json` umożliwia wybór płytki z GUI lub terminala, wgrywanie
+i wykrywanie OTA oraz uruchomienie `Project: Sync board picker`. Zadanie
+synchronizacji uruchamia się przy `folderOpen`, odczytuje bieżący rejestr
+płytek JaszczurHAL i aktualizuje śledzone opcje GUI tylko wtedy, gdy się
+zmieniły. Tworzy też lub naprawia wygenerowane profile debuggera RP2040,
+RP2350 ARM oraz STM32G474/ST-Link w `launch.json`. Korzysta przy tym z
+artefaktu ELF wskazanego w manifeście i zachowuje konfiguracje dodane przez
+użytkownika. VS Code wymaga oznaczenia obszaru roboczego jako zaufanego i
+może poprosić o jednorazową zgodę na automatyczne uruchamianie zadań.
 
-Sprawdź lub wygeneruj ponownie każdy śledzony artefakt repozytorium, w tym
-współdzielone snippety i projekty przykładowe przechowywane w repozytorium:
+Zadanie terminala `Project: Select board` zawsze odczytuje rejestr w chwili
+wywołania. Każde wygenerowane zadanie używa `jaszczurhal.vscodeEntry` w
+systemach Unix oraz ustawienia `jaszczurhal.vscodeEntryWindows` zastępującego
+je w Windows. Oba ustawienia wybierają znajdujące się obok skrypty
+`jh-vscode` i `jh-vscode.cmd`, które korzystają z tego samego runtime Pythona.
+
+Sprawdź wszystkie artefakty przechowywane w repozytorium lub wygeneruj je
+ponownie. Dotyczy to także wspólnych fragmentów konfiguracji i projektów
+przykładowych:
 
 ```bash
 python3 scripts/sync_generated.py --check
 python3 scripts/sync_generated.py --write
 ```
 
-Rekomendowane rozszerzenia można sprawdzić bez zmiany profilu VS Code:
+Zalecane rozszerzenia można sprawdzić bez zmiany profilu VS Code:
 
 ```bash
 python3 vscode/tools/manage_vscode_extensions.py
@@ -110,70 +117,75 @@ zgody.
   `pico`, `picow`, `pico2`, `pico2w`, `pico-rm2`, `rp2040-zero`,
   `rp2040-plus-4mb`, `nucleo-g474re`, `esp32-devkitc-v4` lub
   `waveshare-esp32-s3-zero`.
-- **Rejestr płytek**: wygenerowany widok narzędziowy `boards/targets/*.json`,
+- **Rejestr płytek**: wygenerowany zestaw danych dla narzędzi:
+  `boards/targets/*.json`,
   `boards/profiles/*.json` oraz `boards/capabilities.json`.
-- **`JH_TARGET` / `JH_BOARD`**: wartości cache CMake wybierane przez
-  dispatcher przed importem SDK/toolchainu.
-- **`HAL_TARGET_*`**: selektor backendu HAL podczas buildu, generowany
-  lub wnioskowany z rozwiązanego targetu buildu.
+- **`JH_TARGET` / `JH_BOARD`**: wartości w cache CMake wybierane przez wspólną
+  konfigurację przed importem SDK/toolchainu.
+- **`HAL_TARGET_*`**: selektor backendu HAL używany podczas kompilacji, generowany
+  lub ustalany na podstawie wybranego targetu buildu.
 
-## Rozwiązywanie targetu i konfiguracji
+<a id="rozwiązywanie-targetu-i-konfiguracji"></a>
+
+## Wybór targetu i konfiguracji
 
 Aktywna para target/płytka jest wybierana w tej kolejności:
 
-1. nadpisania wywołania, takie jak `--target rp2040 --board picow`;
+1. opcje przekazane przy wywołaniu, takie jak
+   `--target rp2040 --board picow`;
 2. `.vscode/jaszczurhal.local.json`;
 3. śledzony manifest `target` i `board`;
 4. domyślna wartość rejestru `rp2040/pico`.
 
-Efektywna konfiguracja jest następnie scalana od niższego do wyższego
+Konfiguracja wynikowa jest następnie scalana od niższego do wyższego
 priorytetu:
 
 1. domyślne wartości rejestru targetu i płytki;
 2. bazowy manifest;
 3. aktywna nakładka `targetProfiles.<target>`;
-4. rozwiązane `JH_TARGET` i `JH_BOARD`;
-5. opcje specyficzne dla akcji, takie jak `--port`, `--host`, `--verbose` i
+4. ustalone wartości `JH_TARGET` i `JH_BOARD`;
+5. opcje właściwe dla danej akcji, takie jak `--port`, `--host`, `--verbose` i
    `--allow-unverified-port`.
 
-`.vscode/settings.json` dostarcza ścieżki lokalne dla edytora i preferencje
-wyświetlania. Stabilna tożsamość, cache buildu, układ źródeł, profile
-targetu, artefakty i ustawienia OTA należą do manifestu. Samodzielne projekty
+`.vscode/settings.json` zawiera lokalne ścieżki edytora i ustawienia
+wyświetlania. Manifest określa stabilną tożsamość projektu, cache buildu,
+układ źródeł, profile targetu, artefakty i ustawienia OTA. Samodzielne projekty
 wygenerowane przez `create-vscode-example.py` dodatkowo kopiują początkowy
-cache dispatchera do `cmake.configureSettings`, dzięki czemu VS Code CMake
-Tools może skonfigurować współdzielony dispatcher bez przechodzenia przez
+cache wspólnej konfiguracji do `cmake.configureSettings`. Dzięki temu VS Code
+CMake Tools może skonfigurować projekt dla wielu targetów bez pośrednictwa
 `jh-vscode`.
 
-Sprawdź kompletny rozwiązany widok przed diagnozowaniem buildu lub
-wgrywania:
+Przed diagnozowaniem buildu lub wgrywania sprawdź pełny widok konfiguracji po
+rozstrzygnięciu wszystkich wartości:
 
 ```bash
 ../libraries/JaszczurHAL/vscode/entry/jh-vscode \
   config-dump --project "$PWD"
 ```
 
-Zrzut zawiera obiekt `featureResolution` z `registryDigest`,
+Wynik zawiera obiekt `featureResolution` z `registryDigest`,
 `requestedFeatures`, `resolvedFeatures`, `resolvedFeaturesDigest` oraz
-`provenance` dla każdego żądania. Ten widok odzwierciedla aktywny profil
-targetu i wariant po zastosowaniu wszystkich nakładek manifestu.
+informację `provenance` o pochodzeniu każdego żądanego wpisu. Ten widok
+odzwierciedla aktywny profil targetu i wariant po zastosowaniu wszystkich
+nakładek manifestu.
 
 ## Macierz targetów
 
 | Target | ISA | Domyślna płytka | Format firmware'u | Wgrywanie |
 |---|---|---|---|---|
-| `rp2040` | Cortex-M0+ | `pico` | ELF/BIN/HEX/UF2/MAP | zweryfikowane CDC do BOOTSEL lub bezpośredni BOOTSEL |
-| `rp2350-arm` | Cortex-M33 | `pico2` | ELF/BIN/HEX/UF2/MAP | zweryfikowane CDC do BOOTSEL lub bezpośredni BOOTSEL |
-| `rp2350-riscv` | Hazard3 RISC-V | `pico2` | ELF/BIN/HEX/UF2/MAP | zweryfikowane CDC do BOOTSEL lub bezpośredni BOOTSEL |
+| `rp2040` | Cortex-M0+ | `pico` | ELF/BIN/HEX/UF2/MAP | weryfikacja tożsamości przez CDC, następnie BOOTSEL; albo bezpośredni BOOTSEL |
+| `rp2350-arm` | Cortex-M33 | `pico2` | ELF/BIN/HEX/UF2/MAP | weryfikacja tożsamości przez CDC, następnie BOOTSEL; albo bezpośredni BOOTSEL |
+| `rp2350-riscv` | Hazard3 RISC-V | `pico2` | ELF/BIN/HEX/UF2/MAP | weryfikacja tożsamości przez CDC, następnie BOOTSEL; albo bezpośredni BOOTSEL |
 | `stm32g474` | Cortex-M4F | `nucleo-g474re` | ELF/BIN/HEX/MAP | OpenOCD |
 | `esp32` | dwurdzeniowy Xtensa LX6 | `esp32-devkitc-v4` | ELF/MAP plus obrazy BIN bootloadera, tabeli partycji i aplikacji | flashowanie ESP-IDF przez zweryfikowany mostek USB-UART |
-| `esp32s3` | dwurdzeniowy Xtensa LX7 | `waveshare-esp32-s3-zero` | ELF/MAP plus obrazy BIN bootloadera, tabeli partycji i aplikacji | flashowanie ESP-IDF przez zweryfikowany USB Serial/JTAG |
+| `esp32s3` | dwurdzeniowy Xtensa LX7 | `waveshare-esp32-s3-zero` | ELF/MAP plus obrazy BIN bootloadera, tabeli partycji i aplikacji | flashowanie ESP-IDF przez zweryfikowany interfejs USB Serial/JTAG |
 | `mock` | host | `host-mock` | plik wykonywalny/biblioteka hosta | brak |
 
-Rejestr płytek waliduje zgodność targetu, dostarczając informacje o
-providera platformy, fizyczne fakty o flash/PSRAM, domenę GPIO, komponenty
-płytki, możliwości, tożsamość programatora oraz domyślne ustawienia
-wgrywania. Nieznane pary target/płytka kończą się błędem, zanim uruchomi się
-kompilator.
+Rejestr płytek sprawdza zgodność z targetem i podaje informacje o platformie z
+pola `provider`, parametrach fizycznej pamięci flash i PSRAM, domenie GPIO,
+komponentach i możliwościach płytki, tożsamości programatora oraz domyślnych
+ustawieniach wgrywania. Nieznana para target/płytka powoduje błąd, zanim
+uruchomi się kompilator.
 
 ## Minimalny manifest
 
@@ -202,15 +214,15 @@ kompilator.
 }
 ```
 
-Build firmware używa Ninja, chyba że `cmake.generator` jawnie wybiera
-inny generator CMake. Runtime zawsze włącza bazę danych
-buildu i przekazuje swój bieżący interpreter Pythona do CMake. Natywny
-Windows utrzymuje drzewo robocze CMake poniżej krótkiego katalogu głównego
-zapisanego przez `runmefirst.ps1`; `buildDir` z manifestu pozostaje stabilną
-lokalizacją dla finalnych artefaktów i `compile_commands_patched.json`.
+Do buildu firmware'u używany jest Ninja, chyba że `cmake.generator` jawnie
+wybiera inny generator CMake. Runtime zawsze generuje bazę poleceń kompilacji i
+przekazuje CMake używany interpreter Pythona. W natywnym środowisku Windows drzewo
+robocze CMake znajduje się pod krótką ścieżką zapisaną przez
+`runmefirst.ps1`; `buildDir` z manifestu pozostaje stałą lokalizacją artefaktów
+wynikowych i pliku `compile_commands_patched.json`.
 
-Trzymaj wspólne wartości w bazowym manifeście, a zmiany specyficzne dla
-targetu wyrażaj jako małe nakładki:
+Trzymaj wspólne wartości w bazowym manifeście, a zmiany dotyczące
+poszczególnych targetów wprowadzaj w niewielkich nakładkach:
 
 ```json
 {
@@ -227,11 +239,11 @@ targetu wyrażaj jako małe nakładki:
 }
 ```
 
-Rozwiązane wartości rejestru zawsze przypinają finalne `JH_TARGET` i
-`JH_BOARD`.
+Wartości ustalone na podstawie rejestru są zawsze zapisywane jako ostateczne
+`JH_TARGET` i `JH_BOARD`.
 
-Projekt ESP32-S3 używa mniejszej, specyficznej dla providera postaci
-manifestu:
+Projekt ESP32-S3 używa uproszczonej postaci manifestu właściwej dla tego
+systemu budowania:
 
 ```json
 {
@@ -244,14 +256,15 @@ manifestu:
 }
 ```
 
-Rejestr targetu/płytki dodaje runner, manifest artefaktów, strategię
-wgrywania, wymaganą funkcję FreeRTOS oraz dokładną tożsamość programatora
-`303a:1001`. Nie kopiuj tych faktów do manifestu projektu.
+Rejestr targetu i płytki uzupełnia konfigurację o skrypt obsługi, manifest
+artefaktów, strategię wgrywania, wymaganą funkcję FreeRTOS oraz dokładny
+identyfikator programatora `303a:1001`. Nie kopiuj tych informacji do manifestu
+projektu.
 
 ## Dodawanie plików źródłowych projektu
 
-Współdzielony projekt CMake automatycznie wykrywa `*.c`, `*.cpp`, `*.h` i
-`*.hpp` bezpośrednio pod `JH_PROJECT_DIR`.
+Wspólny projekt CMake automatycznie wykrywa `*.c`, `*.cpp`, `*.h` i
+`*.hpp` bezpośrednio w `JH_PROJECT_DIR`.
 
 ```text
 tracker/
@@ -276,7 +289,7 @@ Projekty z podkatalogami źródłowymi deklarują kompletną listę:
 `JH_PROJECT_SOURCES` to lista rozdzielona średnikami, względna wobec
 `JH_PROJECT_DIR`. Zastępuje ona wykrywanie w katalogu głównym.
 
-Dodatkowe pliki współdzielone można dołączyć przez `JH_EXTRA_SOURCES`:
+Dodatkowe wspólne pliki można dołączyć przez `JH_EXTRA_SOURCES`:
 
 ```json
 {
@@ -288,16 +301,18 @@ Dodatkowe pliki współdzielone można dołączyć przez `JH_EXTRA_SOURCES`:
 }
 ```
 
-Dispatcher normalizuje i usuwa duplikaty z rozwiązanych ścieżek.
+Mechanizm wspólnego projektu CMake normalizuje wyznaczone ścieżki i usuwa ich
+duplikaty.
 
-Runner ESP-IDF wykrywa źródła C, C++ i asemblera bezpośrednio pod katalogiem
-projektu oraz rekurencyjnie pod `src/`. Bezpośrednie wywołania runnera mogą
-zastąpić wykrywanie powtarzalnymi argumentami `--source <relative-path>`.
-Wszystkie ścieżki źródłowe muszą pozostać wewnątrz projektu.
+Skrypt obsługi ESP-IDF wykrywa źródła C, C++ i asemblera bezpośrednio w
+katalogu projektu oraz rekurencyjnie w `src/`. Przy jego bezpośrednim wywołaniu
+automatyczne wykrywanie można zastąpić wielokrotnie przekazywanym argumentem
+`--source <relative-path>`. Wszystkie ścieżki źródłowe muszą pozostać wewnątrz
+projektu.
 
 ## Konfiguracja funkcji i runtime
 
-Flagi funkcji należące do projektu żyją w `hal_project_config.h`:
+Flagi funkcji projektu znajdują się w `hal_project_config.h`:
 
 ```c
 #pragma once
@@ -320,128 +335,135 @@ CI:
 }
 ```
 
-Żądania funkcji akceptują `HAL_ENABLE_X` i `HAL_ENABLE_X=1`. Dispatcher i
-`jh-vscode` odrzucają `HAL_ENABLE_X=0` oraz inne jawne wartości z
-`[JH-CFG-VALUE]` po rozwiązaniu aktywnego profilu targetu i wariantu
-przykładu. Pomiń symbol funkcji, aby ją wyłączyć. Wartości nie będące
-funkcjami, takie jak `APP_DIAGNOSTICS=0`, zachowują swoją normalną semantykę
-wartości. W wejściach listy definicji każda pozycja `HAL_ENABLE_*` musi być
-samodzielnym, prostym tokenem rozdzielonym średnikami. Białe znaki nie
-rozdzielają wielu definicji funkcji, a wyrażenia generatora CMake są
+Funkcje można włączać za pomocą zapisu `HAL_ENABLE_X` lub
+`HAL_ENABLE_X=1`. Po wybraniu aktywnego profilu targetu i wariantu przykładu
+wspólny mechanizm konfiguracji oraz `jh-vscode` odrzucają `HAL_ENABLE_X=0` i
+inne jawnie podane wartości, zgłaszając `[JH-CFG-VALUE]`. Aby wyłączyć funkcję,
+pomiń jej symbol.
+Zwykłe parametry, takie jak `APP_DIAGNOSTICS=0`, zachowują standardową
+semantykę wartości. W listach definicji każdy wpis `HAL_ENABLE_*` musi być
+osobnym, prostym tokenem, a kolejne wpisy trzeba rozdzielać średnikami. Białe
+znaki nie rozdzielają definicji funkcji, a wyrażenia generatora CMake są
 odrzucane.
 
-Deskryptor `esp32s3` wspiera wymagany przez target `HAL_ENABLE_FREERTOS`,
-dostarczony zestaw flag peryferiów Fazy 2 oraz flagi sieci/usług Fazy 3. Ten
-zestaw obejmuje APP_TASK1, UART, kontroler/target I2C, SPI, PWM_FREQ,
-RGB_LED, PCNT, STACK_GUARD, BLE, WiFi, TCP/UDP, gniazda BSD, TLS, klienta/serwer
-HTTP/pliki, serwer WebSocket, MQTT, czas, OTA oraz WireGuard. Proste PWM oraz
-podstawowe źródła systemu/synchronizacji/GPIO/ADC/portu szeregowego/timera
-należą do jego komponentu bazowego. Produkcyjny runner odrzuca żądaną
-funkcję lub dowolną zależność, która rozwiązuje się poza dozwoloną listą
-deskryptora, z `[JH-CFG-UNSUPPORTED]`.
+Deskryptor `esp32s3` obsługuje wymagane przez target
+`HAL_ENABLE_FREERTOS`, zaimplementowane w fazie 2 flagi peryferiów oraz flagi
+sieci i usług z fazy 3. Zestaw obejmuje APP_TASK1, UART, tryby I2C controller
+i target, SPI, PWM_FREQ, RGB_LED, PCNT, STACK_GUARD, BLE, WiFi, TCP/UDP,
+gniazda BSD, TLS, klienta i serwer HTTP, obsługę plików HTTP, serwer WebSocket,
+MQTT, czas, OTA oraz WireGuard. Prosty PWM oraz źródła systemu,
+synchronizacji, GPIO, ADC, portu szeregowego i timera są zawsze częścią bazowej
+konfiguracji targetu. Jeśli żądana funkcja lub którakolwiek z jej zależności
+nie znajduje się na liście dozwolonej przez deskryptor, produkcyjne narzędzie
+odrzuca konfigurację i zgłasza `[JH-CFG-UNSUPPORTED]`.
 
 Początkowy deskryptor `esp32` jest celowo węższy. Obsługuje wymagany runtime
 FreeRTOS i `HAL_ENABLE_BLUETOOTH_GAMEPAD`, które wybiera Bluedroid, BR/EDR oraz
-ESP HID Host. Funkcje dostarczone tylko na ESP32-S3, w tym publiczne API BLE,
+ESP HID Host. Funkcje dostępne tylko na ESP32-S3, w tym publiczne API BLE,
 są odrzucane podczas kontroli wstępnej.
 
-Dla `firmware_entry.h` w konwencji Fiesta, `FIESTA_ENABLE_CORE1=1` musi być
-sparowane z `HAL_ENABLE_APP_TASK1` w `hal_project_config.h` lub innym
-normalnym wejściem funkcji. Zachowuje to identyczny wygenerowany adapter
-wejścia, żądane/rozwiązane zestawy funkcji oraz sygnaturę linkowania.
+Dla pliku `firmware_entry.h` zgodnego z konwencją Fiesta ustawieniu
+`FIESTA_ENABLE_CORE1=1` musi towarzyszyć `HAL_ENABLE_APP_TASK1` w
+`hal_project_config.h` lub w innym standardowym źródle konfiguracji funkcji.
+Dzięki temu wygenerowany adapter punktu wejścia, zestaw funkcji wskazanych
+bezpośrednio, zestaw po rozwiązaniu zależności oraz sygnatura linkowania są
+identyczne.
 
-Rejestr funkcji oblicza jedno niezależne od targetu przechodnie domknięcie
-dla wszystkich ścieżek produkcyjnych. Wygenerowany nagłówek C definiuje
-implikowane makra funkcji, CMake używa rozwiązanego zestawu do wyboru
-źródeł i zależności, a generowanie płytki używa go dla `featureHash` i
-sygnatury linkowania. `jh-vscode` używa tego samego domknięcia dla
-preflightu i kwalifikowalności OTA, zachowując bezpośrednie żądania
-przekazane do CMake. Zdefiniuj `HAL_CONFIG_VERBOSE`, aby podczas buildu
-wygenerować raport każdej aktywnej zarejestrowanej funkcji.
+Rejestr funkcji wyznacza jedno, niezależne od targetu domknięcie przechodnie dla
+wszystkich produkcyjnych mechanizmów korzystających z konfiguracji.
+Wygenerowany nagłówek C definiuje makra funkcji wynikające z zależności, a CMake
+używa wyznaczonego zestawu do wyboru źródeł i zależności. Generator konfiguracji
+płytki używa go do obliczenia `featureHash` i sygnatury linkowania. `jh-vscode` korzysta z tego
+samego domknięcia podczas kontroli wstępnej i sprawdzania dostępności OTA,
+zachowując bezpośrednie żądania przekazane do CMake. Zdefiniuj
+`HAL_CONFIG_VERBOSE`, aby podczas buildu wygenerować raport zawierający
+wszystkie aktywne, zarejestrowane funkcje.
 
-Reguły, których wyniki zależą od parametrów strojenia, wyboru providera,
-możliwości płytki lub aktywnego targetu, pozostają w `hal_config.h`.
-Obejmują one implikację I2C przez typ EEPROM, domyślny transport GPS,
-walidację backendu/providera, sprawdzenia możliwości płytki oraz ograniczenia
-specyficzne dla targetu.
+Reguły, których wyniki zależą od parametrów strojenia, wyboru systemu budowania,
+możliwości płytki lub aktywnego targetu, pozostają w `hal_config.h`. Obejmują
+one automatyczne włączenie I2C wynikające z wybranego typu EEPROM, domyślny
+transport GPS, sprawdzanie zgodności backendu z systemem budowania i możliwości
+płytki oraz ograniczenia właściwe dla targetu.
 
-Build ładuje `hal_project_config.h` przed automatycznym wykrywaniem
-targetu oraz przed istnieniem pochodnych selektorów targetu/płytki. Trzymaj
-ten plik wyłącznie makrowo: może definiować surowe `HAL_TARGET_*`,
+Build ładuje `hal_project_config.h` przed automatycznym wykrywaniem targetu i
+utworzeniem pochodnych selektorów targetu i płytki. W pliku umieszczaj
+wyłącznie makra. Może on bezpośrednio definiować `HAL_TARGET_*`,
 `HAL_BOARD_PROFILE_*`, `HAL_ENABLE_*` i makra strojenia, ale nie może
 dołączać nagłówków JaszczurHAL ani rozgałęziać się na `HAL_TARGET_IS_*` /
-`HAL_BOARD_IS_*`. Definicje funkcji używane do wyboru źródeł muszą być
-bezwarunkowym `#define HAL_ENABLE_X` lub `#define HAL_ENABLE_X 1`; jedyną
-wspieraną formą warunkową jest strażnik `#ifndef HAL_ENABLE_X` na tym samym
-symbolu. Nie umieszczaj definicji funkcji pod żadnym innym `#if`/`#ifdef`,
-w tym pod surowymi lub pochodnymi rozgałęzieniami targetu/płytki, ponieważ
-wczesny kolektor odczytuje plik tekstowo.
+`HAL_BOARD_IS_*`. Definicje funkcji używane do wyboru źródeł muszą mieć
+bezwarunkową postać `#define HAL_ENABLE_X` lub `#define HAL_ENABLE_X 1`.
+Jedynym obsługiwanym wyjątkiem jest warunek `#ifndef HAL_ENABLE_X` odnoszący
+się do tego samego symbolu. Nie umieszczaj definicji funkcji pod żadnym innym
+`#if`/`#ifdef`, w tym pod bezpośrednimi lub pochodnymi warunkami targetu i
+płytki, ponieważ na wczesnym etapie plik jest analizowany jako tekst.
 
-Fizyczny wybór płytki pozostaje w `target` i `board`. Okablowanie aplikacji,
-tożsamość USB, sekrety, polityka partycji i wybór funkcji pozostają własnością
-projektu.
+Fizyczny wybór płytki pozostaje w polach `target` i `board`. Projekt określa
+natomiast okablowanie aplikacji, tożsamość USB, sekrety, politykę partycji i
+wybór funkcji.
 
 <a id="katalogi-budowania-i-pliki-generowane"></a>
 
 ## Katalogi buildu i pliki generowane
 
 Zewnętrzne projekty firmware używają `${project}/.build`. Przykłady
-przechowywane w repozytorium i sprzętowe stanowiska testowe używają katalogu głównego
-JaszczurHAL dla stabilnych artefaktów:
+przechowywane w repozytorium i sprzętowe stanowiska testowe zapisują artefakty
+w stałych lokalizacjach względem katalogu głównego JaszczurHAL:
 
 ```text
 .build/examples/<example>/
 .build/hardware/<fixture>/
 ```
 
-Na Unix każdy cache CMake projektu jest izolowany według targetu i płytki
-poniżej `cmakeBuildDir` z manifestu:
+W systemach Unix cache CMake każdego projektu jest izolowany według targetu i
+płytki w katalogu `cmakeBuildDir` wskazanym w manifeście:
 
 ```text
 <cmakeBuildDir>/<target>/<board>/
 ```
 
-Zapobiega to współdzieleniu jednego cache przez toolchainy, platformy
-providera, generowane nagłówki płytki i układy linkera. Natywny Windows
-zamiast tego używa krótkiego katalogu głównego bootstrapu:
+Zapobiega to współdzieleniu jednego cache przez różne toolchainy, platformy
+systemów budowania, wygenerowane nagłówki płytki i układy linkera. Natywne środowisko
+Windows używa zamiast tego krótkiej ścieżki przygotowanej przez skrypt
+inicjalizacyjny:
 
 ```text
 <BuildRoot>/<project-name>-<path-hash>/cmake/<target>/<board>/
 ```
 
-Surowy `compile_commands.json` podąża za tym drzewem CMake. Środowisko
-runtime zapisuje `compile_commands_patched.json` do stabilnego
-`buildDir` z manifestu i odświeża artefakty firmware'u wybranego targetu po
-każdym buildzie, w tym no-op Ninja po przełączeniu między wcześniej
-skonfigurowanymi targetami.
+Pierwotny `compile_commands.json` znajduje się w odpowiednim drzewie CMake.
+Narzędzie zapisuje dostosowany `compile_commands_patched.json` w stabilnym
+`buildDir` z manifestu i po każdym buildzie odświeża artefakty firmware'u
+wybranego targetu. Dotyczy to również sytuacji, gdy po przełączeniu między
+wcześniej skonfigurowanymi targetami Ninja nie ma nic do przebudowania.
 
-`jh-vscode` śledzi klucze cache należące do manifestu w
-`.jh-vscode-cache-keys.json`. Usunięty klucz jest cofany przy następnej
-konfiguracji. Gdy zmienia się żądany katalog źródłowy CMake, nieaktualny
-cache znajdujący się wewnątrz zarządzanego katalogu głównego artefaktów jest
-odtwarzany.
+`jh-vscode` zapisuje w `.jh-vscode-cache-keys.json` klucze cache zarządzane
+przez manifest. Jeśli klucz zniknie z manifestu, przy następnej konfiguracji
+jest usuwany z cache. Gdy zmienia się żądany katalog źródłowy CMake,
+nieaktualny cache znajdujący się w zarządzanym katalogu artefaktów jest
+tworzony od nowa.
 
 Projekty ESP-IDF używają `buildDir` bezpośrednio jako drzewa buildu IDF;
-musi ono pozostać poniżej katalogu głównego `.build` projektu lub
-repozytorium JaszczurHAL. Produkcyjny runner posiada wygenerowaną
-konfigurację projektu i konfigurację SDK wewnątrz tego drzewa i nigdy nie
-zapisuje drugiego rejestru płytek.
+musi ono znajdować się w katalogu `.build` projektu albo repozytorium
+JaszczurHAL lub w jego podkatalogu. Produkcyjne narzędzie zarządza wygenerowaną
+konfiguracją projektu i SDK wewnątrz tego drzewa i nigdy nie zapisuje drugiego
+rejestru płytek.
 
-Generowane wyjścia obejmują:
+Generowane pliki obejmują:
 
-- rozwiązane jednostki translacji CMake/nagłówka/JSON płytki oraz sygnatury
-  linkowania;
-- surowy `compile_commands.json` w drzewie CMake oraz stabilny
+- pliki CMake, nagłówki i JSON wygenerowane dla płytki oraz jednostki
+  translacji z sygnaturą linkowania;
+- pierwotny `compile_commands.json` w drzewie CMake oraz stabilny
   `compile_commands_patched.json` w `buildDir`;
 - `.vscode/c_cpp_properties.json`;
 - artefakty targetu ELF/BIN/HEX/UF2/MAP lub ELF/BIN/HEX/MAP;
 - dla ESP-IDF: `jh_esp_idf_artifacts.json`, ELF/MAP/BIN aplikacji, obrazy
   bootloadera i tabeli partycji, `sdkconfig`, log buildu, wygenerowane
-  metadane płytki/linkowania, pochodzenie toolchainu oraz surową bazę danych
-  buildu;
-- kontener OTA i połączony (merged) UF2 odzyskiwania, gdy OTA jest włączone.
+  metadane płytki i linkowania, informację o źródle toolchainu oraz pierwotną
+  bazę poleceń kompilacji;
+- kontener OTA i scalony plik UF2 do odzyskiwania, gdy OTA jest włączone.
 
-Śledzona konfiguracja pozostaje w manifeście i `hal_project_config.h`.
+Konfigurację śledzoną w Git nadal przechowuj w manifeście i
+`hal_project_config.h`.
 
 ## Akcje buildu i wgrywania
 
@@ -452,31 +474,35 @@ Generowane wyjścia obejmują:
 ../libraries/JaszczurHAL/vscode/entry/jh-vscode clean --project "$PWD"
 ```
 
-`Project: Upload` wybiera strategię wgrywania z rejestru. Targety RP używają
-zweryfikowanego tożsamością USB CDC, a następnie BOOTSEL/UF2, gdy firmware
-działa; pusta płytka używa `Project: Upload (UF2 / BOOTSEL)`. STM32G474
-deleguje do targetu wgrywania OpenOCD. ESP32-S3 wykonuje zwalidowany
-build produkcyjny, sprawdza każdą ścieżkę w manifeście wieloobrazowym i
-przekazuje zweryfikowany port szeregowy do akcji flashowania ESP-IDF. Jego
-profil płytki dostarcza USB VID/PID `303a:1001`; zerowa, nieaktualna,
-niezgodna lub wiele pasujących urządzeń kończy się niepowodzeniem w trybie
-fail-closed. `--allow-unverified-port` to jawna furtka awaryjna i musi być
-sparowana z `--port`.
+`Project: Upload` wybiera strategię wgrywania z rejestru. Gdy na płytce RP
+działa firmware, narzędzie najpierw weryfikuje tożsamość urządzenia przez USB
+CDC, a następnie przechodzi do BOOTSEL i wgrywa UF2. W przypadku
+niezaprogramowanej płytki
+użyj `Project: Upload (UF2 / BOOTSEL)`. Dla STM32G474 operacja jest
+przekazywana do targetu OpenOCD odpowiedzialnego za wgrywanie. Dla ESP32-S3
+wykonywany jest sprawdzony build produkcyjny; narzędzie sprawdza każdą ścieżkę
+w manifeście wieloobrazowym i przekazuje zweryfikowany port szeregowy do akcji
+flashowania ESP-IDF. Profil tej płytki podaje USB VID/PID `303a:1001`. Brak
+urządzenia, nieaktualna ścieżka, niezgodna tożsamość albo kilka pasujących
+urządzeń powodują bezpieczne przerwanie operacji. Opcja
+`--allow-unverified-port`
+jawnie omija tę kontrolę i musi występować razem z `--port`.
 
-Wgrywanie zwalnia trwały monitor szeregowy projektu i pozwala mu ponownie
-połączyć się po enumeracji. Niejednoznaczne wolumeny BOOTSEL lub tożsamości
-szeregowe zatrzymują akcję.
+Wgrywanie zwalnia port zajęty przez stale działający monitor szeregowy projektu
+i pozwala mu połączyć się ponownie, gdy urządzenie znów zgłosi interfejs USB.
+Jeśli nie można jednoznacznie wybrać woluminu BOOTSEL lub urządzenia na
+podstawie jego tożsamości szeregowej, operacja zostaje przerwana.
 
-Dla ESP32-S3 `Project: Serial Monitor` podąża za jedyną płytką pasującą do
-tożsamości programatora z rejestru, gdy żaden jawny port nie jest przypięty.
-`Project: Refresh IntelliSense` zużywa polecenia buildu Xtensa emitowane
-przez ESP-IDF bez podstawiania trybu IntelliSense dla Arm. `build-debug` oraz
-zarządzane profile Cortex-Debug nie są dostarczane dla ESP32-S3.
+Dla ESP32-S3 zadanie `Project: Serial Monitor` wybiera jedyną płytkę pasującą
+do identyfikatora programatora z rejestru, jeśli nie wskazano jawnie portu.
+`Project: Refresh IntelliSense` korzysta z poleceń kompilacji Xtensa wygenerowanych
+przez ESP-IDF i nie zastępuje ich trybem IntelliSense dla Arm. `build-debug`
+oraz zarządzane profile Cortex-Debug nie są dostarczane dla ESP32-S3.
 
 ## Konfiguracja manifestu OTA
 
 Dla projektów CMake RP manifest publikuje wygenerowany kontener i jego
-metadane buildu obok współdzielonych ustawień punktu końcowego OTA:
+metadane buildu wraz ze wspólnymi ustawieniami punktu końcowego OTA:
 
 ```json
 {
@@ -499,36 +525,39 @@ metadane buildu obok współdzielonych ustawień punktu końcowego OTA:
 }
 ```
 
-Projekty ESP-IDF pomijają specyficzne dla RP wpisy `cmake` i
-`artifacts.ota`. Ich manifest buildu produkcyjnego identyfikuje surowy
-plik BIN aplikacji; powyższy obiekt `ota` pozostaje współdzieloną
-konfiguracją punktu końcowego hosta i uwierzytelniania.
+Projekty ESP-IDF pomijają właściwe wyłącznie dla RP wpisy `cmake` i
+`artifacts.ota`. Ich manifest buildu produkcyjnego wskazuje binarny obraz
+aplikacji. Powyższy obiekt `ota` pozostaje wspólną konfiguracją punktu
+końcowego hosta i uwierzytelniania.
 
-`ota.broadcast` wybiera cel odkrywania UDP. `ota.host` przypina adres
-urządzenia. `ota.listenPort` wybiera nasłuchiwacz callbacku TCP hosta;
-domyślnie to `8266`, więc odpowiada trwałej regule zapory ograniczonej do
-LAN, przygotowanej przez `runmefirst.sh`. Jawne zero prosi o port
-efemeryczny. `ota.passwordEnv` trzyma sekret hosta poza śledzonym
-manifestem.
+`ota.broadcast` określa adres docelowy wyszukiwania przez UDP, a `ota.host`
+ustawia stały adres urządzenia. `ota.listenPort` wybiera port, na którym host
+nasłuchuje połączenia zwrotnego TCP. Domyślna wartość `8266` odpowiada trwałej
+regule zapory ograniczonej do sieci LAN, przygotowanej przez `runmefirst.sh`.
+Wartość `0` wybiera port efemeryczny. `ota.passwordEnv` przechowuje sekret
+hosta poza śledzonym manifestem.
 
 Nazwa hosta urządzenia, port UDP i hasło muszą odpowiadać konfiguracji
-firmware'u. Zobacz [Natywny workflow OTA](OTAWorkflow.md), aby poznać
-specyficzne dla targetu artefakty, provisioning, zadania, uwierzytelnianie,
-reguły zapory hosta, potwierdzenie próbne, rollback i odzyskiwanie.
-Wgrywanie RP podpisuje wygenerowany kontener JaszczurHAL; wgrywanie ESP-IDF
-waliduje produkcyjny manifest artefaktów i przesyła jego surowy plik BIN
-aplikacji bez konwertowania go do formatu kontenera RP.
+firmware'u. Dokument [Natywna aktualizacja OTA](OTAWorkflow.md) opisuje artefakty
+właściwe dla targetu, początkowe przygotowanie urządzenia, zadania,
+uwierzytelnianie, reguły zapory hosta, potwierdzanie rozruchu próbnego,
+automatyczne przywracanie poprzedniej wersji i odzyskiwanie. Podczas wgrywania
+na RP narzędzie podpisuje wygenerowany kontener JaszczurHAL. W przypadku
+ESP-IDF sprawdzany jest produkcyjny manifest
+artefaktów, po czym wskazany w nim binarny obraz aplikacji zostaje przesłany
+bez konwertowania do formatu kontenera RP.
 
 ## Przykłady i warianty
 
 Manifesty przykładów mogą deklarować `example.targets` i
 `example.variants`. Warianty mogą nadpisywać nazwę modułu, źródła, definicje
-funkcji, wspierane targety oraz wpisy cache CMake.
+funkcji, obsługiwane targety oraz wpisy cache CMake.
 
 ```bash
 scripts/examples_dispatcher.py list
 scripts/examples_dispatcher.py build --target rp2040 --example 01_core_runtime
 ```
 
-Wygenerowane manifesty przykładów są wejściami buildu używanymi przez
-bramkę jakości. Zobacz [Przykłady JaszczurHAL](../../examples/README.md).
+Wygenerowane manifesty przykładów stanowią dane wejściowe buildu, z których
+korzysta bramka jakości. Zobacz
+[Przykłady JaszczurHAL](../../examples/README.pl.md).

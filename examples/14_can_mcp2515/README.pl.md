@@ -1,15 +1,18 @@
 # 14 - MCP2515 CAN
 
-Przenośny przykład MCP2515 dla RP2040 i STM32G474.
+Jest to przenośny przykład użycia MCP2515 na RP2040 i STM32G474.
 
 Działanie:
-- inicjalizuje magistralę SPI 0
-- inicjalizuje jeden kontroler MCP2515 na skonfigurowanym pinie CS
-- co sekundę wysyła ramkę heartbeat z CAN ID `0x321`
-- odpytuje RX i wypisuje odebrane ramki na wyjście serial
 
-Przykład używa wyłącznie pollingu i nie wymaga pinu przerwania.
-Włącza backend MCP2515 przez `HAL_ENABLE_MCP2515`, co dołącza ogólną fasadę CAN
+- inicjalizuje magistralę SPI 0;
+- inicjalizuje jeden kontroler MCP2515 na skonfigurowanym pinie CS;
+- co sekundę wysyła ramkę sygnalizującą działanie urządzenia, o identyfikatorze
+  CAN `0x321`;
+- cyklicznie sprawdza kolejkę odbiorczą i wypisuje odebrane ramki przez port
+  szeregowy.
+
+Przykład cyklicznie odpytuje kontroler i nie wymaga pinu przerwania.
+Włącza obsługę MCP2515 przez `HAL_ENABLE_MCP2515`, co dołącza ogólną fasadę CAN
 oraz zależność SPI.
 
 ## Połączenia

@@ -77,26 +77,27 @@ while the previous one is active. Backends without asynchronous DMA perform the
 write inside `_async_start()`, report `_async_busy() == false`, and let
 `_async_wait()` return immediately.
 
-**impl/rp2040:** Native Pico SDK `hardware/spi.h` on SPI0/SPI1 plus `hardware/gpio.h` pin muxing. `hal_spi_write_dma_async_start()` uses SPI TX DMA for MSB-first byte streams and returns before the bus is idle; `hal_spi_end_transaction()` / `hal_spi_deinit()` wait for any active async TX DMA before closing the transaction or releasing the channel.
-**impl/stm32g474:** register-level SPI1/SPI2 master, 8-bit full-duplex,
-software NSS, polling transfer, AF5 pin setup and interrupt-driven TX DMA.
-SPI1 is sourced from the 170 MHz PCLK2 and SPI2 from the 170 MHz PCLK1; the
-backend selects the fastest power-of-two prescaler that does not exceed the
-requested clock.
-Default pins: SPI bus 0 = PA6/PA7/PA5, bus 1 = PB14/PB15/PB13. SPI1 TX
-reserves DMA1 Channel7 and SPI2 TX reserves DMA1 Channel8; the corresponding
-DMAMUX requests and DMA interrupts chain buffers larger than the 65,535-byte
-hardware counter limit. Async start returns before the bus is idle, while
-transaction end and deinit wait for completion. Buffers in CPU-only CCM SRAM
-use the synchronous polling path because DMA1 cannot access that memory.
-**impl/esp32:** ESP-IDF SPI master on SPI2/SPI3 for HAL bus 0/1. Board and
-target masks validate MISO/MOSI/SCK pins; chip select stays under the portable
-`hal_spi_device` GPIO layer. The bus requests an automatic IDF DMA channel and
-falls back to a non-DMA bus if unavailable. HAL asynchronous DMA uses the
-documented synchronous fallback: `_async_start()` completes the write before
-returning, `_async_busy()` is always false, and `_async_wait()` returns
-immediately. Transfers are chunked to 64 bytes.
-**impl/.mock:** stores init/settings, lock depth, scripted RX bytes and TX log for tests.
+- **impl/rp2040:** Native Pico SDK `hardware/spi.h` on SPI0/SPI1 plus `hardware/gpio.h` pin muxing. `hal_spi_write_dma_async_start()` uses SPI TX DMA for MSB-first byte streams and returns before the bus is idle; `hal_spi_end_transaction()` / `hal_spi_deinit()` wait for any active async TX DMA before closing the transaction or releasing the channel.
+- **impl/stm32g474:** register-level SPI1/SPI2 master, 8-bit full-duplex,
+  software NSS, polling transfer, AF5 pin setup and interrupt-driven TX DMA.
+  SPI1 is sourced from the 170 MHz PCLK2 and SPI2 from the 170 MHz PCLK1; the
+  backend selects the fastest power-of-two prescaler that does not exceed the
+  requested clock.
+  Default pins: SPI bus 0 = PA6/PA7/PA5, bus 1 = PB14/PB15/PB13. SPI1 TX
+  reserves DMA1 Channel7 and SPI2 TX reserves DMA1 Channel8; the corresponding
+  DMAMUX requests and DMA interrupts chain buffers larger than the 65,535-byte
+  hardware counter limit. Async start returns before the bus is idle, while
+  transaction end and deinit wait for completion. Buffers in CPU-only CCM SRAM
+  use the synchronous polling path because DMA1 cannot access that memory.
+- **impl/esp32:** ESP-IDF SPI master on SPI2/SPI3 for HAL bus 0/1. Board and
+  target masks validate MISO/MOSI/SCK pins; chip select stays under the portable
+  `hal_spi_device` GPIO layer. The bus requests an automatic IDF DMA channel and
+  falls back to a non-DMA bus if unavailable. HAL asynchronous DMA uses the
+  documented synchronous fallback: `_async_start()` completes the write before
+  returning, `_async_busy()` is always false, and `_async_wait()` returns
+  immediately. Transfers are chunked to 64 bytes.
+- **impl/.mock:** stores init/settings, lock depth, scripted RX bytes and TX log for tests.
+
 **Thread safety:** `hal_spi_begin_transaction()` applies bus settings but does not lock. Use `hal_spi_lock()` / `hal_spi_unlock()` around multi-step driver operations on shared buses. Treat async DMA lifetime as part of the same transaction/critical section: keep chip-select and bus ownership valid until `_async_wait()` completes.
 
 ---
@@ -347,31 +348,36 @@ address value: `hal_i2c_init()`/`hal_i2c_init_bus()` put a bus in 7-bit mode
 (`0x000..0x07F`), `hal_i2c_init_10bit()`/`hal_i2c_init_bus_10bit()` put it in
 10-bit mode (`0x000..0x3FF`); the same numeric address is interpreted
 differently depending on which init variant configured the bus, and a
-controller never mixes 7-bit and 10-bit devices at once. Every existing
+controller never mixes 7-bit and 10-bit devices at once.
+
+Every existing
 address-taking function widened its parameter from `uint8_t` to the new
 `hal_i2c_address_t` (`uint16_t`) - a deliberate breaking type change; ordinary
 call sites passing a `uint8_t` literal or variable keep compiling unchanged
-after a rebuild. `hal_i2c_scan()`/`hal_i2c_scan_bus()` remain 7-bit-only
+after a rebuild.
+
+`hal_i2c_scan()`/`hal_i2c_scan_bus()` remain 7-bit-only
 forever and return `HAL_EUNSUPPORTED` when called against a 10-bit bus.
 Switching a bus between modes requires an explicit re-init, which runs the
 normal stop/reset cycle and invalidates state tied to the previous mode.
 
-**impl/rp2040:** Native Pico SDK `hardware/i2c.h` on I2C0/I2C1 plus `hardware/gpio.h` pin muxing; per-bus mutex guards all transactions. Clock requests above Fast-mode Plus are clamped to 1 MHz because RP2040 I2C does not implement Hs-mode. `hal_i2c_bus_clear()` uses GPIO-level SCL/SDA recovery before restoring the I2C pin function. 10-bit mode sets the DesignWare `IC_CON.IC_10BITADDR_MASTER` bit for the controller's lifetime at init and uses a dedicated low-level FIFO/timeout transfer path (`IC_TAR` carries the full 10-bit address; the stock Pico SDK's `i2c_write_timeout_us()`/`i2c_read_timeout_us()` hard-assert a 7-bit address and cannot be reused).
-**impl/stm32g474:** Register-level I2C v2 master on I2C1/I2C2. Both controllers explicitly select HSI16 as their kernel source, so the validated 16 MHz TIMINGR presets remain independent of the 170 MHz APB clock. The backend validates SDA/SCL alternate-function mappings, configures GPIO open-drain pull-ups, supports the HAL clock tiers, handles write/read/write-read/is-busy paths on both buses, and performs GPIO-level bus clear with clock-independent microsecond pacing before init. 10-bit mode sets `CR2.ADD10` and puts the raw 10-bit address in `CR2.SADD[9:0]` (7-bit mode keeps the existing `SADD[7:1]` shift); `CR2.HEAD10R` is deliberately never set, matching the mainline Linux `i2c-stm32f7` driver for the same I2C v2 IP, which always sends the complete 10-bit header on every phase.
-**impl/esp32:** ESP-IDF's master/controller API on I2C0/I2C1 with
-generated board-pin validation, internal pull-ups, cached device handles,
-a 100 ms transfer/probe timeout, and controller reset after a timeout. Clock
-changes drop cached device handles so subsequent transfers recreate them with
-the new rate. GPIO-level bus clear emits up to nine SCL pulses and is accepted
-only while the selected controller is deinitialized. 10-bit mode configures
-each cached device handle with `I2C_ADDR_BIT_LEN_10`; the device-handle cache
-widens from 128 to 1024 entries only when `HAL_ENABLE_I2C_10BIT` is compiled
-in, so 7-bit-only builds keep the smaller footprint. ESP-IDF's
-`i2c_master_probe()` always probes as a 7-bit address regardless of the value
-passed in, so `hal_i2c_is_busy_bus()` on a 10-bit bus substitutes a 1-byte
-read through the correctly configured device handle instead of a true
-zero-byte probe.
-**impl/.mock:** ring buffer; injectable via mock helpers. Injected RX bytes are consumed sequentially by request/read transactions, which lets tests script multi-register flows. `hal_i2c_end_transmission()` returns `HAL_I2C_ERROR_GENERIC` when the mock busy flag is set, `HAL_I2C_RESULT_OK` otherwise. `hal_i2c_bus_clear()` increments an internal counter (query via `hal_mock_i2c_get_bus_clear_count()`); counter resets on `hal_i2c_init()`.
+- **impl/rp2040:** Native Pico SDK `hardware/i2c.h` on I2C0/I2C1 plus `hardware/gpio.h` pin muxing; per-bus mutex guards all transactions. Clock requests above Fast-mode Plus are clamped to 1 MHz because RP2040 I2C does not implement Hs-mode. `hal_i2c_bus_clear()` uses GPIO-level SCL/SDA recovery before restoring the I2C pin function. 10-bit mode sets the DesignWare `IC_CON.IC_10BITADDR_MASTER` bit for the controller's lifetime at init and uses a dedicated low-level FIFO/timeout transfer path (`IC_TAR` carries the full 10-bit address; the stock Pico SDK's `i2c_write_timeout_us()`/`i2c_read_timeout_us()` hard-assert a 7-bit address and cannot be reused).
+- **impl/stm32g474:** Register-level I2C v2 master on I2C1/I2C2. Both controllers explicitly select HSI16 as their kernel source, so the validated 16 MHz TIMINGR presets remain independent of the 170 MHz APB clock. The backend validates SDA/SCL alternate-function mappings, configures GPIO open-drain pull-ups, supports the HAL clock tiers, handles write/read/write-read/is-busy paths on both buses, and performs GPIO-level bus clear with clock-independent microsecond pacing before init. 10-bit mode sets `CR2.ADD10` and puts the raw 10-bit address in `CR2.SADD[9:0]` (7-bit mode keeps the existing `SADD[7:1]` shift); `CR2.HEAD10R` is deliberately never set, matching the mainline Linux `i2c-stm32f7` driver for the same I2C v2 IP, which always sends the complete 10-bit header on every phase.
+- **impl/esp32:** ESP-IDF's master/controller API on I2C0/I2C1 with
+  generated board-pin validation, internal pull-ups, cached device handles,
+  a 100 ms transfer/probe timeout, and controller reset after a timeout. Clock
+  changes drop cached device handles so subsequent transfers recreate them with
+  the new rate. GPIO-level bus clear emits up to nine SCL pulses and is accepted
+  only while the selected controller is deinitialized. 10-bit mode configures
+  each cached device handle with `I2C_ADDR_BIT_LEN_10`; the device-handle cache
+  widens from 128 to 1024 entries only when `HAL_ENABLE_I2C_10BIT` is compiled
+  in, so 7-bit-only builds keep the smaller footprint. ESP-IDF's
+  `i2c_master_probe()` always probes as a 7-bit address regardless of the value
+  passed in, so `hal_i2c_is_busy_bus()` on a 10-bit bus substitutes a 1-byte
+  read through the correctly configured device handle instead of a true
+  zero-byte probe.
+- **impl/.mock:** ring buffer; injectable via mock helpers. Injected RX bytes are consumed sequentially by request/read transactions, which lets tests script multi-register flows. `hal_i2c_end_transmission()` returns `HAL_I2C_ERROR_GENERIC` when the mock busy flag is set, `HAL_I2C_RESULT_OK` otherwise. `hal_i2c_bus_clear()` increments an internal counter (query via `hal_mock_i2c_get_bus_clear_count()`); counter resets on `hal_i2c_init()`.
+
 **Thread safety:** Hardware backends serialize transfer APIs with an internal per-bus `hal_mutex_t`; use `hal_i2c_lock` / `hal_i2c_unlock` to extend critical regions around direct third-party/backend bus calls. `hal_i2c_init*()` / `hal_i2c_deinit*()` reconfigure shared bus objects and must be serialized by the application during setup/teardown. Mock backend does not synchronize concurrent access.
 
 **Mock helpers:**
@@ -514,21 +520,22 @@ trigger `HAL_ASSERT` in checked builds.
 2. Master reads N bytes - slave responds with `regs[ptr], regs[ptr+1], ...`
 3. Master writes: `[reg_address, data0, data1, ...]` - sets pointer, then writes data sequentially
 
-**impl/rp2040:** Native Pico SDK `hardware/i2c.h` peripheral mode on I2C0/I2C1 plus `hardware/irq.h` event handling. RX FIFO, read-request, START and STOP/TX-abort interrupts drive the register-map protocol directly.
-**impl/stm32g474:** Register-level I2C v2 target mode on I2C1/I2C2. The backend selects HSI16 as the kernel clock and configures SDA/SCL alternate functions, own-address match, conservative `TIMINGR`, RX/TX/ADDR/STOP/NACK/error interrupts, TXDR flush on NACK/STOP, and serves the same register-map protocol from I2C EV/ER IRQ handlers.
-**impl/esp32:** ESP-IDF I2C target devices on controller 0/1. Receive/request
-callbacks keep ISR work bounded and signal one FreeRTOS worker per active bus;
-the worker resets the TX FIFO or writes a register-map snapshot through the
-official target-mode driver. A new register-pointer write resets stale queued
-TX data before the next snapshot. Partial queue acceptance advances only the
-producer cursor portion that ESP-IDF accepted; the remaining queued bytes carry
-the wire-level cursor across STOP. An intervening pointer write is protected by
-a generation check. This backend's transaction counter records
-completed writes and accepted read-service requests. Deinit first closes ISR
-event admission, unregisters callbacks, drains the worker, destroys the driver
-to form the interrupt-lifetime barrier, and only then deletes worker
-synchronization objects.
-**impl/.mock:** direct register-map access; simulation helpers for master write/read.
+- **impl/rp2040:** Native Pico SDK `hardware/i2c.h` peripheral mode on I2C0/I2C1 plus `hardware/irq.h` event handling. RX FIFO, read-request, START and STOP/TX-abort interrupts drive the register-map protocol directly.
+- **impl/stm32g474:** Register-level I2C v2 target mode on I2C1/I2C2. The backend selects HSI16 as the kernel clock and configures SDA/SCL alternate functions, own-address match, conservative `TIMINGR`, RX/TX/ADDR/STOP/NACK/error interrupts, TXDR flush on NACK/STOP, and serves the same register-map protocol from I2C EV/ER IRQ handlers.
+- **impl/esp32:** ESP-IDF I2C target devices on controller 0/1. Receive/request
+  callbacks keep ISR work bounded and signal one FreeRTOS worker per active bus;
+  the worker resets the TX FIFO or writes a register-map snapshot through the
+  official target-mode driver. A new register-pointer write resets stale queued
+  TX data before the next snapshot. Partial queue acceptance advances only the
+  producer cursor portion that ESP-IDF accepted; the remaining queued bytes carry
+  the wire-level cursor across STOP. An intervening pointer write is protected by
+  a generation check. This backend's transaction counter records
+  completed writes and accepted read-service requests. Deinit first closes ISR
+  event admission, unregisters callbacks, drains the worker, destroys the driver
+  to form the interrupt-lifetime barrier, and only then deletes worker
+  synchronization objects.
+- **impl/.mock:** direct register-map access; simulation helpers for master write/read.
+
 **Thread safety:** `reg_write*` / `reg_read*` are thread-safe for normal task/core callers on hardware backends. The register map is protected by a short backend-local lock shared with bus callbacks/ISRs, so handlers do not take HAL mutexes in FreeRTOS builds. `init` / `deinit` must be serialized by the application during setup/teardown. Mock backend does not synchronize concurrent access.
 
 **Mock helpers:**
@@ -684,29 +691,30 @@ former `void` + `_ex` pair). The `bool`/value operations (`set_rx`, `set_tx`,
 `read`, `write`, `println`, `get_error_counters`) keep their compatibility
 signatures and each has an adjacent `_ex` status variant.
 
-**impl/rp2040:** RP2040 SDK UART (`uart0` / `uart1`) with interrupt-driven RX.
-`hal_uart_begin()` installs and enables `UARTx_IRQ` in the calling core's NVIC,
-so that core becomes the UART RX IRQ's implicit owner. Repeating
-`hal_uart_begin()` and calling `hal_uart_destroy()` must occur on the same core
-that performed the successful begin. The current UART API does not record an
-owner for diagnostics and does not return `HAL_ESTATE` for a wrong-core
-lifecycle call; cross-core serialization by itself does not change that IRQ
-affinity requirement. In FreeRTOS/SMP builds, perform UART lifecycle operations
-from a task pinned to the intended core and do not migrate that task while the
-UART is active.
-**impl/stm32g474:** register-level USART1/USART2 using their respective
-170 MHz PCLK2/PCLK1 sources and a polled RX drain; counts ORE, PE, FE, NE, and
-explicit LIN-break flags when reported by USART_ISR.
-**impl/esp32:** HAL ports 1/2 map to ESP-IDF UART1/UART2; UART0 remains reserved
-from this HAL surface. Each active handle owns a 512-byte IDF RX buffer and a
-32-entry event queue used to accumulate overrun, buffer-overflow, break,
-framing, and parity counters. Public I/O is serialized by a per-instance mutex.
-The core that successfully calls `hal_uart_begin()` owns lifecycle teardown;
-wrong-core rebegin reports `HAL_ESTATE`, while wrong-core destroy asserts and
-leaves the handle active. Pin reassignment is accepted only before begin unless
-the pin value is unchanged.
-**impl/.mock:** ring buffer plus last-write capture; injectable via mock helpers.
-**Error counters:** cumulative since `hal_uart_begin()`; mock reset also clears them.
+- **impl/rp2040:** RP2040 SDK UART (`uart0` / `uart1`) with interrupt-driven RX.
+  `hal_uart_begin()` installs and enables `UARTx_IRQ` in the calling core's NVIC,
+  so that core becomes the UART RX IRQ's implicit owner. Repeating
+  `hal_uart_begin()` and calling `hal_uart_destroy()` must occur on the same core
+  that performed the successful begin. The current UART API does not record an
+  owner for diagnostics and does not return `HAL_ESTATE` for a wrong-core
+  lifecycle call; cross-core serialization by itself does not change that IRQ
+  affinity requirement. In FreeRTOS/SMP builds, perform UART lifecycle operations
+  from a task pinned to the intended core and do not migrate that task while the
+  UART is active.
+- **impl/stm32g474:** register-level USART1/USART2 using their respective
+  170 MHz PCLK2/PCLK1 sources and a polled RX drain; counts ORE, PE, FE, NE, and
+  explicit LIN-break flags when reported by USART_ISR.
+- **impl/esp32:** HAL ports 1/2 map to ESP-IDF UART1/UART2; UART0 remains reserved
+  from this HAL surface. Each active handle owns a 512-byte IDF RX buffer and a
+  32-entry event queue used to accumulate overrun, buffer-overflow, break,
+  framing, and parity counters. Public I/O is serialized by a per-instance mutex.
+  The core that successfully calls `hal_uart_begin()` owns lifecycle teardown;
+  wrong-core rebegin reports `HAL_ESTATE`, while wrong-core destroy asserts and
+  leaves the handle active. Pin reassignment is accepted only before begin unless
+  the pin value is unchanged.
+- **impl/.mock:** ring buffer plus last-write capture; injectable via mock helpers.
+- **Error counters:** cumulative since `hal_uart_begin()`; mock reset also clears them.
+
 **Thread safety:** Portable callers should still serialize lifecycle and shared
 handle use. ESP32-S3 serializes runtime I/O per instance, but that lock does not
 replace its same-core lifecycle rule. RP2040 remains caller-serialized and its
@@ -766,11 +774,12 @@ bool    hal_onewire_search(hal_onewire_t h, uint8_t out_rom[8],
 > (`hal_crc8_maxim`, `hal_crc16_maxim`, `hal_crc16_maxim_check`). See
 > [Utilities -> `hal_crc`](16_utilities.md).
 
-**impl/rp2040 + impl/stm32g474:** Both delegate to the same shared driver. The
-driver uses HAL GPIO input/output switching, `hal_delay_us()` slot timing and
-HAL critical sections around timing-sensitive sub-slots. An external 1-Wire
-pull-up is still expected, matching the original OneWire electrical model.
-**impl/.mock:** Scripted presence/read/search responses.
+- **impl/rp2040 + impl/stm32g474:** Both delegate to the same shared driver. The
+  driver uses HAL GPIO input/output switching, `hal_delay_us()` slot timing and
+  HAL critical sections around timing-sensitive sub-slots. An external 1-Wire
+  pull-up is still expected, matching the original OneWire electrical model.
+- **impl/.mock:** Scripted presence/read/search responses.
+
 **Thread safety:** Hardware builds use a per-handle mutex and a shared bus
 mutex around public operations. DS18B20 uses its own low-level driver instance
 so multi-step scratchpad transactions remain atomic under the DS18B20 mutex.

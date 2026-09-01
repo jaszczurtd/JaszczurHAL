@@ -192,61 +192,67 @@ bool hal_can_frame_matches_filter(const hal_can_frame_t *frame,
 uint8_t hal_can_encode_temp_i8(float temp_c);
 ```
 
-**shared thematic implementation:** Target `hal_can.cpp` files own the CAN facade, handle lifetime,
-mutexing and backend dispatch. MCP2515-specific operations live in
-`hal/can/mcp2515/hal_can_mcp2515.*`, backed by the HAL-only MCP2515
-register/SPI driver in `hal/can/mcp2515/mcp2515_driver.*`. MCP251XFD
-operations live in `hal/can/mcp251xfd/hal_can_mcp251xfd.*`, backed by the
-HAL-only polling register/SPI driver in `hal/can/mcp251xfd/mcp251xfd_driver.*`.
-STM32G474 native FDCAN operations live in
-`impl/stm32g474/hal_can_stm32g474_fdcan.*` and program FDCAN1 registers plus
-the fixed STM32G4 message RAM layout directly.
-**Backend selection:** The CAN API takes `hal_can_config_t`. Enable
-`HAL_ENABLE_MCP2515` for the classic MCP2515 backend or
-`HAL_ENABLE_MCP251XFD` for MCP2517FD/MCP2518FD CAN FD support. Both external
-controller flags pull in the CAN facade plus SPI dependency. Enable
-`HAL_ENABLE_STM32G474_FDCAN` for native FDCAN1 on STM32G474; this flag pulls in
-only the CAN facade and is compile-time rejected on other targets. Plain
-`HAL_ENABLE_CAN` no longer propagates SPI by itself and is treated as a facade
-flag that requires a backend.
+- **shared thematic implementation:** Target `hal_can.cpp` files own the CAN facade, handle lifetime,
+  mutexing and backend dispatch. MCP2515-specific operations live in
+  `hal/can/mcp2515/hal_can_mcp2515.*`, backed by the HAL-only MCP2515
+  register/SPI driver in `hal/can/mcp2515/mcp2515_driver.*`. MCP251XFD
+  operations live in `hal/can/mcp251xfd/hal_can_mcp251xfd.*`, backed by the
+  HAL-only polling register/SPI driver in `hal/can/mcp251xfd/mcp251xfd_driver.*`.
+  STM32G474 native FDCAN operations live in
+  `impl/stm32g474/hal_can_stm32g474_fdcan.*` and program FDCAN1 registers plus
+  the fixed STM32G4 message RAM layout directly.
+- **Backend selection:** The CAN API takes `hal_can_config_t`. Enable
+  `HAL_ENABLE_MCP2515` for the classic MCP2515 backend or
+  `HAL_ENABLE_MCP251XFD` for MCP2517FD/MCP2518FD CAN FD support. Both external
+  controller flags pull in the CAN facade plus SPI dependency. Enable
+  `HAL_ENABLE_STM32G474_FDCAN` for native FDCAN1 on STM32G474; this flag pulls in
+  only the CAN facade and is compile-time rejected on other targets. Plain
+  `HAL_ENABLE_CAN` no longer propagates SPI by itself and is treated as a facade
+  flag that requires a backend.
+
 **Thread safety:** Thread-safe and multicore-safe. Each channel has a per-instance `hal_mutex_t`. `hal_can_receive()` holds the lock across the availability check and frame read, eliminating TOCTOU races.
-**CAN FD API:** `hal_can_frame_t`, `hal_can_send_frame()`,
-`hal_can_receive_frame()`, and the DLC helpers are backend-agnostic. MCP2515 is
-a classic CAN 2.0 controller, so it rejects frames with `HAL_CAN_FRAME_FD`,
-`HAL_CAN_FRAME_BRS`, or `HAL_CAN_FRAME_ESI`. MCP251XFD accepts CAN FD frames
-when `cfg.mcp251xfd.enable_fd=true`; STM32G474 FDCAN accepts them when
-`cfg.stm32g474_fdcan.enable_fd=true`. Set `HAL_CAN_MODE_FD` for FD/mixed
-operation on FD-capable handles. Use `HAL_CAN_FRAME_EXTENDED` for 29-bit IDs and
-`HAL_CAN_FRAME_RTR` for remote frames.
-**Modes and diagnostics:** New handles are started by default.
-`hal_can_stop()` puts the controller into a non-participating/configuration
-mode and `hal_can_start()` reapplies the stored mode. MCP2515 supports normal,
-loopback, listen-only, sleep and one-shot mode flags. MCP251XFD also supports
-`HAL_CAN_MODE_FD` on FD-capable handles; STM32G474 FDCAN supports FD, loopback,
-listen-only, one-shot and sleep/configuration transitions through CCCR/TEST.
-State/error-counter APIs map backend controller registers into
-`hal_can_state_t` and `hal_can_error_counters_t`.
-**Filters:** `hal_can_set_filter()` programs one id/mask slot. `HAL_CAN_MAX_FILTERS`
-(6) is the *minimum* number of hardware acceptance filters every backend
-guarantees, so it is the portable slot count to rely on. MCP2515 maps them onto
-its six hardware filters; MCP251XFD and STM32G474 FDCAN map them onto the first
-six hardware filter objects routed to RX FIFO 0 (and may have more in hardware). `hal_can_set_std_filters()` remains a
-convenience helper for two exact 11-bit IDs. Programming an MCP2515 filter also
-clears receive-any mode on both hardware RX buffers so unmatched frames are
-rejected before consuming either buffer.
-`hal_can_create_with_retry()` retries init up to `max_retries + 1` attempts and can auto-attach an IRQ handler when `int_pin != HAL_CAN_NO_INT_PIN`.
-`hal_can_process_all()` repeatedly calls `hal_can_receive()` and forwards only frames with `id != 0` and `len > 0`.
-`hal_can_encode_temp_i8()` is a small shared wire-format helper for signed 1-byte temperature fields on CAN frames. It truncates the float input toward zero, saturates to `int8_t` range, and returns the matching two's complement payload byte.
+
+- **CAN FD API:** `hal_can_frame_t`, `hal_can_send_frame()`,
+  `hal_can_receive_frame()`, and the DLC helpers are backend-agnostic. MCP2515 is
+  a classic CAN 2.0 controller, so it rejects frames with `HAL_CAN_FRAME_FD`,
+  `HAL_CAN_FRAME_BRS`, or `HAL_CAN_FRAME_ESI`. MCP251XFD accepts CAN FD frames
+  when `cfg.mcp251xfd.enable_fd=true`; STM32G474 FDCAN accepts them when
+  `cfg.stm32g474_fdcan.enable_fd=true`. Set `HAL_CAN_MODE_FD` for FD/mixed
+  operation on FD-capable handles. Use `HAL_CAN_FRAME_EXTENDED` for 29-bit IDs and
+  `HAL_CAN_FRAME_RTR` for remote frames.
+- **Modes and diagnostics:** New handles are started by default.
+  `hal_can_stop()` puts the controller into a non-participating/configuration
+  mode and `hal_can_start()` reapplies the stored mode. MCP2515 supports normal,
+  loopback, listen-only, sleep and one-shot mode flags. MCP251XFD also supports
+  `HAL_CAN_MODE_FD` on FD-capable handles; STM32G474 FDCAN supports FD, loopback,
+  listen-only, one-shot and sleep/configuration transitions through CCCR/TEST.
+  State/error-counter APIs map backend controller registers into
+  `hal_can_state_t` and `hal_can_error_counters_t`.
+- **Filters:** `hal_can_set_filter()` programs one id/mask slot. `HAL_CAN_MAX_FILTERS`
+  (6) is the *minimum* number of hardware acceptance filters every backend
+  guarantees, so it is the portable slot count to rely on. MCP2515 maps them onto
+  its six hardware filters; MCP251XFD and STM32G474 FDCAN map them onto the first
+  six hardware filter objects routed to RX FIFO 0 (and may have more in hardware). `hal_can_set_std_filters()` remains a
+  convenience helper for two exact 11-bit IDs. Programming an MCP2515 filter also
+  clears receive-any mode on both hardware RX buffers so unmatched frames are
+  rejected before consuming either buffer.
+  `hal_can_create_with_retry()` retries init up to `max_retries + 1` attempts and can auto-attach an IRQ handler when `int_pin != HAL_CAN_NO_INT_PIN`.
+  `hal_can_process_all()` repeatedly calls `hal_can_receive()` and forwards only frames with `id != 0` and `len > 0`.
+  `hal_can_encode_temp_i8()` is a small shared wire-format helper for signed 1-byte temperature fields on CAN frames. It truncates the float input toward zero, saturates to `int8_t` range, and returns the matching two's complement payload byte.
 
 **One-shot TX mode:** `hal_can_create()` enables MCP2515 one-shot mode (`CANCTRL.OSM = 1`) by default
 after initialisation. It can be disabled through `cfg.mcp2515.one_shot_tx`. In one-shot mode, when a transmitted frame receives no ACK (e.g. no other node on the bus),
 the hardware frees the TX buffer immediately instead of retransmitting indefinitely. This prevents TX buffer
 starvation: without one-shot, just 3 consecutive un-ACK'd frames permanently block all 3 TX buffers, making
-every subsequent `hal_can_send()` fail with `CAN_GETTXBFTIMEOUT`. For periodic broadcast applications (where
-fresh data is sent on the next timer tick anyway) one-shot has no practical downside - an individual lost frame
+every subsequent `hal_can_send()` fail with `CAN_GETTXBFTIMEOUT`.
+
+For periodic broadcast applications (where fresh data is sent on the next
+timer tick anyway) one-shot has no practical downside - an individual lost frame
 is replaced by the next update. Change-only publishers must instead retry a
 failed send, add a periodic heartbeat, or disable `one_shot_tx`; otherwise one
-lost frame can leave the receiver stale. When the bus is healthy and all receivers are present, one-shot behaviour is
+lost frame can leave the receiver stale.
+
+When the bus is healthy and all receivers are present, one-shot behaviour is
 identical to normal mode: the first attempt succeeds and no retry is needed. In
 one-shot mode, a missing ACK, lost arbitration, an aborted transmission, or a
 bus error is reported by `hal_can_send()` as `false` and logged via
@@ -287,14 +293,15 @@ lcd.createChar(0, glyph);
 lcd.write((uint8_t)0);
 ```
 
-**shared thematic implementation:** `hal/display/hd44780/hd44780.*`, reused by RP2040,
-STM32G474 and host tests. The driver uses HAL GPIO, `hal_delay_us()` and an
-instance `hal_mutex_t`.
-**Display class scope:** This is a character LCD driver, not the bitmap
-`hal_display` facade. Use `hal_display` for SPI TFT/OLED graphics.
-**Timing:** The init, clear/home, enable-pulse and command-settle delays match
-the proven HD44780 sequence: 50 ms power-on wait, 4.5 ms/150 us init retries,
-2 ms clear/home delay and 1/1/100 us enable pulse phases.
+- **shared thematic implementation:** `hal/display/hd44780/hd44780.*`, reused by RP2040,
+  STM32G474 and host tests. The driver uses HAL GPIO, `hal_delay_us()` and an
+  instance `hal_mutex_t`.
+- **Display class scope:** This is a character LCD driver, not the bitmap
+  `hal_display` facade. Use `hal_display` for SPI TFT/OLED graphics.
+- **Timing:** The init, clear/home, enable-pulse and command-settle delays match
+  the proven HD44780 sequence: 50 ms power-on wait, 4.5 ms/150 us init retries,
+  2 ms clear/home delay and 1/1/100 us enable pulse phases.
+
 **Thread safety:** Public methods serialize each `HD44780` instance with a HAL
 mutex, so multicore and FreeRTOS tasks cannot interleave command/data GPIO
 sequences for the same display. Calls are not ISR-safe because `hal_mutex_lock`
@@ -543,26 +550,26 @@ int  hal_display_prepare_text_v(char *display_txt, size_t display_txt_size,
                                 const char *format, va_list args);
 ```
 
-**Colors:** RGB565 `uint16_t`. Use predefined constants (`HAL_COLOR_BLACK`, `HAL_COLOR_WHITE`, `HAL_COLOR_RED`, ...)
-or `HAL_COLOR(name)` selector, for example `HAL_COLOR(ORANGE)`.
-**Display mode helpers:** `HAL_DISPLAY_ROTATION_*`, `HAL_DISPLAY_ROTATION(deg)`,
-`HAL_DISPLAY_INVERT_ON/OFF`, `HAL_DISPLAY_COLOR_ORDER_RGB/BGR`.
-**Capabilities and raw buffers:** Query the active backend with
-`hal_display_get_capabilities_ex()`, then use only advertised formats and
-alignments with `hal_display_write_raw_ex()`. `pitch` is in pixels. TFT and
-RGB OLED backends (and the mock) accept `pitch > width`: each source row is
-streamed separately inside one addressing window, so the caller's buffer
-only needs real bytes up to the last row's `width` pixels -- trailing
-padding past that does not need to be backed by memory. Page-tiled or
-per-call-reconfiguring backends still require `pitch == width` and return
-`HAL_EUNSUPPORTED` otherwise: ST7567 always (a byte encodes 8 stacked pixel
-rows, so there is no per-pixel-row boundary), SSD16xx at rotation 0/180
-(tiling flips with rotation), and UC81xx (its write call re-applies the
-panel profile on every invocation, so splitting it per row would replay
-that side effect once per row). ST7567 accepts `MONO01`/`MONO10`, reports
-`HAL_DISPLAY_SCREEN_INFO_MONO_VTILED`, and requires `y` and `height` aligned
-to 8 pixels. Use `hal_display_set_pixel_format_ex()` before changing the
-ST7567 monochrome polarity.
+- **Colors:** RGB565 `uint16_t`. Use predefined constants (`HAL_COLOR_BLACK`, `HAL_COLOR_WHITE`, `HAL_COLOR_RED`, ...)
+  or `HAL_COLOR(name)` selector, for example `HAL_COLOR(ORANGE)`.
+- **Display mode helpers:** `HAL_DISPLAY_ROTATION_*`, `HAL_DISPLAY_ROTATION(deg)`,
+  `HAL_DISPLAY_INVERT_ON/OFF`, `HAL_DISPLAY_COLOR_ORDER_RGB/BGR`.
+- **Capabilities and raw buffers:** Query the active backend with
+  `hal_display_get_capabilities_ex()`, then use only advertised formats and
+  alignments with `hal_display_write_raw_ex()`. `pitch` is in pixels. TFT and
+  RGB OLED backends (and the mock) accept `pitch > width`: each source row is
+  streamed separately inside one addressing window, so the caller's buffer
+  only needs real bytes up to the last row's `width` pixels -- trailing
+  padding past that does not need to be backed by memory. Page-tiled or
+  per-call-reconfiguring backends still require `pitch == width` and return
+  `HAL_EUNSUPPORTED` otherwise: ST7567 always (a byte encodes 8 stacked pixel
+  rows, so there is no per-pixel-row boundary), SSD16xx at rotation 0/180
+  (tiling flips with rotation), and UC81xx (its write call re-applies the
+  panel profile on every invocation, so splitting it per row would replay
+  that side effect once per row). ST7567 accepts `MONO01`/`MONO10`, reports
+  `HAL_DISPLAY_SCREEN_INFO_MONO_VTILED`, and requires `y` and `height` aligned
+  to 8 pixels. Use `hal_display_set_pixel_format_ex()` before changing the
+  ST7567 monochrome polarity.
 
 **SSD16xx / UC81xx e-paper:** Enable `HAL_ENABLE_SSD16XX` or
 `HAL_ENABLE_UC81XX`; both flags add DISPLAY and SPI. The shared transport uses
@@ -607,35 +614,37 @@ if (status == HAL_OK) {
     status = hal_display_write_raw_ex(0, 0, &frame, framebuffer);
 }
 ```
-**TFT streaming:** Immediate-mode TFT backends support an explicit streaming
-sequence for large contiguous updates:
-`hal_display_begin_write(x, y, w, h)`, one or more pixel writes, then
-`hal_display_end_write()`. `hal_display_write_pixels_fast()` accepts native
-`uint16_t` RGB565 words and swaps them to controller byte order internally;
-`hal_display_write_pixels_be()` accepts already big-endian RGB565 bytes;
-`hal_display_write_pixels_dma()` is the blocking DMA-capable byte-stream helper.
-The asynchronous variant,
-`hal_display_write_pixels_dma_async_start()` / `_busy()` / `_wait()`, maps to
-`hal_spi_write_dma_async_*()` for ILI9341 and ST77xx drivers. When the backend
-is truly asynchronous, keep `pixels_be` valid and keep the display write stream
-open until `_wait()` completes. `hal_display_end_write()` waits for any active
-async pixel DMA before closing the TFT transaction.
-**ST77xx/GC9A01 notes:** `HAL_DISPLAY_ST7735`, `HAL_DISPLAY_ST7789`,
-`HAL_DISPLAY_ST7796S`, and `HAL_DISPLAY_GC9A01` share the ST77xx-style backend.
-`JH_ST77XX_SPI_DEFAULT_HZ` can be overridden before including/building the
-driver to tune the default TFT SPI clock for a board. ST7796S keeps its
-documented BGR-oriented defaults without forcing swapped inversion commands.
-GC9A01 uses the local Zephyr GC9x01x command sequence and defaults to 240x240.
-SSD1331/SSD135x are immediate RGB565 backends and support raw writes, legacy
-streaming and GFX primitives. Their raw/GFX orientation is currently native
-only. ST7567 is intentionally a raw page backend; capabilities do not advertise
-legacy GFX, streaming or DMA for it.
-**impl/rp2040:** Uses the shared HAL display stack. ILI9341 and ST77xx use
-shared HAL SPI/GPIO drivers; SSD1306-family OLEDs use the shared HAL I2C/SPI
-driver; geometry, bitmap, and text rendering run through the shared `jh_gfx`
-engine.
-**impl/stm32g474:** Uses the same shared HAL display stack as RP2040.
-**impl/.mock:** deterministic host mock with inspectable state for tests.
+
+- **TFT streaming:** Immediate-mode TFT backends support an explicit streaming
+  sequence for large contiguous updates:
+  `hal_display_begin_write(x, y, w, h)`, one or more pixel writes, then
+  `hal_display_end_write()`. `hal_display_write_pixels_fast()` accepts native
+  `uint16_t` RGB565 words and swaps them to controller byte order internally;
+  `hal_display_write_pixels_be()` accepts already big-endian RGB565 bytes;
+  `hal_display_write_pixels_dma()` is the blocking DMA-capable byte-stream helper.
+  The asynchronous variant,
+  `hal_display_write_pixels_dma_async_start()` / `_busy()` / `_wait()`, maps to
+  `hal_spi_write_dma_async_*()` for ILI9341 and ST77xx drivers. When the backend
+  is truly asynchronous, keep `pixels_be` valid and keep the display write stream
+  open until `_wait()` completes. `hal_display_end_write()` waits for any active
+  async pixel DMA before closing the TFT transaction.
+- **ST77xx/GC9A01 notes:** `HAL_DISPLAY_ST7735`, `HAL_DISPLAY_ST7789`,
+  `HAL_DISPLAY_ST7796S`, and `HAL_DISPLAY_GC9A01` share the ST77xx-style backend.
+  `JH_ST77XX_SPI_DEFAULT_HZ` can be overridden before including/building the
+  driver to tune the default TFT SPI clock for a board. ST7796S keeps its
+  documented BGR-oriented defaults without forcing swapped inversion commands.
+  GC9A01 uses the local Zephyr GC9x01x command sequence and defaults to 240x240.
+  SSD1331/SSD135x are immediate RGB565 backends and support raw writes, legacy
+  streaming and GFX primitives. Their raw/GFX orientation is currently native
+  only. ST7567 is intentionally a raw page backend; capabilities do not advertise
+  legacy GFX, streaming or DMA for it.
+- **impl/rp2040:** Uses the shared HAL display stack. ILI9341 and ST77xx use
+  shared HAL SPI/GPIO drivers; SSD1306-family OLEDs use the shared HAL I2C/SPI
+  driver; geometry, bitmap, and text rendering run through the shared `jh_gfx`
+  engine.
+- **impl/stm32g474:** Uses the same shared HAL display stack as RP2040.
+- **impl/.mock:** deterministic host mock with inspectable state for tests.
+
 **Thread safety:** Hardware backends serialize display operations with an internal `hal_mutex_t`. During TFT streaming the mutex stays held between `hal_display_begin_write()` and `hal_display_end_write()`, including any async DMA wait. Mock backend is unsynchronized and intended for single-threaded tests.
 
 **Mock helpers:**

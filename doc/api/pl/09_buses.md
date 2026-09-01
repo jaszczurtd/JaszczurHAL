@@ -4,14 +4,15 @@
 
 > **Część [Dokumentacji API JaszczurHAL](../../pl/JaszczurHAL_API.md)**
 
-Obejmuje: `hal_spi`, `hal_spi_device`, `hal_i2c`, `hal_i2c_slave`, `hal_uart`, `hal_swserial`, `hal_onewire`.
+Obejmuje: `hal_spi`, `hal_spi_device`, `hal_i2c`, `hal_i2c_slave`, `hal_uart`,
+`hal_swserial`, `hal_onewire`.
 
 ## `hal_spi` - magistrala SPI i API transferu
 
 ```c
 #include <hal/spi/hal_spi.h>
 
-// Dotychczasowe zawodne operacje zwracające void teraz w ich miejsce zwracają status.
+// Operacje, które mogą się nie udać, zwracają teraz status zamiast void.
 hal_status_t hal_spi_init(uint8_t bus, uint8_t rx_pin, uint8_t tx_pin,
                           uint8_t sck_pin);
 hal_status_t hal_spi_begin_transaction(
@@ -23,7 +24,7 @@ hal_status_t hal_spi_transfer_txrx(uint8_t bus, const uint8_t *tx,
                                    uint8_t *rx, size_t len);
 hal_status_t hal_spi_write(uint8_t bus, const uint8_t *data, size_t len);
 
-// API zgodności value/bool zachowują towarzyszące warianty _ex zwracające status.
+// Funkcjom zgodności zwracającym wartość lub bool odpowiadają warianty _ex ze statusem.
 hal_status_t hal_spi_transfer_ex(uint8_t bus, uint8_t data,
                                  uint8_t *out_received);
 hal_status_t hal_spi_transfer16_ex(uint8_t bus, uint16_t data,
@@ -34,7 +35,7 @@ hal_status_t hal_spi_write_dma_async_start_ex(uint8_t bus,
 hal_status_t hal_spi_write_dma_async_wait_ex(uint8_t bus);
 
 // Skonfiguruj piny i uruchom magistralę SPI w trybie master.
-// magistrale 0/1 mapują się na RP SPI0/1, STM32G474 SPI1/2 lub ESP32-S3 SPI2/3.
+// Magistrale 0/1 odpowiadają RP SPI0/1, STM32G474 SPI1/2 lub ESP32-S3 SPI2/3.
 void hal_spi_deinit(uint8_t bus);
 
 // Opcjonalna synchronizacja runtime dla współdzielonych magistrali SPI.
@@ -54,61 +55,74 @@ bool     hal_spi_write_dma_async_busy(uint8_t bus);
 bool     hal_spi_write_dma_async_wait(uint8_t bus);
 ```
 
-Wspierane są tylko wartości magistrali 0 i 1. Operacje zwracające status
-raportują `HAL_EINVAL` dla innych wartości; niskopoziomowe pomocnicze
-funkcje synchronizacji i sprzątania zachowują swoje asercje z buildów
-kontrolowanych (checked-build).
+Obsługiwane są tylko magistrale 0 i 1. Dla innych wartości funkcje statusowe
+zwracają `HAL_EINVAL`. Niskopoziomowe funkcje synchronizacji i zwalniania
+zasobów nadal wywołują asercję w buildach z włączonymi kontrolami.
 
-API raportuje `HAL_EINVAL` dla nieprawidłowych magistrali, ustawień,
-wskaźników wyjściowych i niepustych buforów NULL; start asynchronicznego
-DMA raportuje `HAL_EBUSY`, gdy transfer jest już aktywny. Operacje na
-buforze o zerowej długości kończą się powodzeniem bez wymagania bufora.
-Ścieżki pollingu i oczekiwania DMA dla STM32G474 dodatkowo raportują
-`HAL_ETIMEOUT`, a jej ścieżka DMA raportuje `HAL_EIO` przy błędzie
-transferu. Blokujące wywołania SDK dla RP2040 raportują `HAL_EIO`, jeśli
-przenoszą mniej elementów niż zażądano. Backendy ujawniają tylko te błędy,
-które potrafią uczciwie rozróżnić.
+API zwraca `HAL_EINVAL` dla nieprawidłowej magistrali, ustawień lub wskaźnika
+wyjściowego, a także dla wskaźnika `NULL` przy niezerowym rozmiarze bufora.
+Próba uruchomienia asynchronicznego DMA podczas aktywnego transferu zwraca
+`HAL_EBUSY`. Operacje o zerowej długości kończą się powodzeniem i nie wymagają
+bufora.
+Na STM32G474 polling oraz oczekiwanie na DMA mogą dodatkowo zwrócić
+`HAL_ETIMEOUT`, a błąd transferu DMA powoduje zwrot `HAL_EIO`. Blokujące
+wywołania SDK na RP2040 zwracają `HAL_EIO`, jeśli przesłały mniej elementów,
+niż żądano. Każdy backend zwraca tylko błędy, które potrafi wiarygodnie
+rozpoznać.
 
-**Zapisy DMA:** `hal_spi_write_dma()` to blokujący wrapper wygody: uruchamia
-najszybszą dostępną ścieżkę zapisu backendu i zwraca sterowanie dopiero po
-tym, jak bufor został zaakceptowany/przesłany zgodnie z tym backendem.
-Trio `hal_spi_write_dma_async_*()` udostępnia formę nieblokującą tam, gdzie
-backend ją wspiera. Po udanym `_async_start()` wywołujący musi utrzymać
-bufor `data` żywy i niezmieniony do momentu, gdy `_async_busy()` stanie się
-false lub `_async_wait()` zwróci sterowanie, i nie może rozpoczynać drugiego
+**Zapisy DMA:** `hal_spi_write_dma()` jest wygodnym wariantem blokującym. Uruchamia
+najszybszy mechanizm zapisu dostępny w backendzie i wraca dopiero wtedy, gdy backend
+przyjmie lub prześle bufor. Funkcje `hal_spi_write_dma_async_*()` udostępniają wariant
+nieblokujący, jeśli backend go obsługuje. Po udanym `_async_start()` bufor `data` musi
+pozostać dostępny i niezmieniony, dopóki `_async_busy()` nie zwróci `false` albo nie
+zakończy się `_async_wait()`. Nie wolno też rozpoczynać drugiego
 asynchronicznego zapisu na tej samej magistrali, dopóki poprzedni jest
 aktywny. Backendy bez asynchronicznego DMA wykonują zapis wewnątrz
-`_async_start()`, raportują `_async_busy() == false`, a `_async_wait()`
+`_async_start()`, zwracają `_async_busy() == false`, a `_async_wait()`
 zwraca sterowanie natychmiast.
 
-**impl/rp2040:** Natywne `hardware/spi.h` z Pico SDK na SPI0/SPI1 wraz z multipleksowaniem pinów `hardware/gpio.h`. `hal_spi_write_dma_async_start()` używa TX DMA SPI dla strumieni bajtów MSB-first i zwraca sterowanie, zanim magistrala jest bezczynna; `hal_spi_end_transaction()` / `hal_spi_deinit()` czekają na dowolne aktywne asynchroniczne TX DMA przed zamknięciem transakcji lub zwolnieniem kanału.
-**impl/stm32g474:** SPI1/SPI2 master na poziomie rejestrów, 8-bitowy
-full-duplex, programowe NSS, transfer w trybie pollingu, konfiguracja pinów
-AF5 i sterowany przerwaniami TX DMA. SPI1 jest zasilane z 170 MHz PCLK2, a
-SPI2 z 170 MHz PCLK1; backend wybiera najszybszy preskaler będący potęgą
-dwójki, który nie przekracza żądanego zegara.
-Domyślne piny: magistrala SPI 0 = PA6/PA7/PA5, magistrala 1 = PB14/PB15/PB13.
-TX SPI1 rezerwuje DMA1 Channel7, a TX SPI2 rezerwuje DMA1 Channel8;
-odpowiadające żądania DMAMUX i przerwania DMA łączą w łańcuch bufory
-większe niż limit sprzętowego licznika 65 535 bajtów. Start asynchroniczny
-zwraca sterowanie, zanim magistrala jest bezczynna, podczas gdy zakończenie
-transakcji i deinit czekają na zakończenie. Bufory w SRAM CCM dostępnym
-tylko dla CPU używają synchronicznej ścieżki pollingu, ponieważ DMA1 nie ma
-dostępu do tej pamięci.
-**impl/esp32:** ESP-IDF SPI master na SPI2/SPI3 dla magistrali HAL 0/1.
-Maski płytki i targetu walidują piny MISO/MOSI/SCK; chip select pozostaje pod
-przenośną warstwą GPIO `hal_spi_device`. Magistrala żąda automatycznego
-kanału DMA IDF i wraca do magistrali bez DMA, jeśli jest niedostępny.
-Asynchroniczne DMA HAL używa udokumentowanego synchronicznego fallbacku:
-`_async_start()` kończy zapis przed powrotem, `_async_busy()` jest zawsze
-false, a `_async_wait()` zwraca sterowanie natychmiast. Transfery są
-dzielone na fragmenty po 64 bajty.
-**impl/.mock:** przechowuje init/ustawienia, głębokość blokady, skryptowane bajty RX i log TX dla testów.
-**Thread safety:** `hal_spi_begin_transaction()` stosuje ustawienia magistrali, ale nie blokuje. Użyj `hal_spi_lock()` / `hal_spi_unlock()` wokół wieloetapowych operacji drivera na współdzielonych magistralach. Traktuj czas życia asynchronicznego DMA jako część tej samej transakcji/sekcji krytycznej: utrzymuj chip-select i posiadanie magistrali ważne do zakończenia `_async_wait()`.
+- **impl/rp2040:** natywne `hardware/spi.h` z Pico SDK na SPI0/SPI1 wraz
+  z konfiguracją funkcji pinów przez `hardware/gpio.h`.
+  `hal_spi_write_dma_async_start()` używa SPI TX DMA dla strumieni bajtów
+  w kolejności MSB-first i wraca, zanim magistrala przejdzie w stan
+  bezczynności. Przed zakończeniem transakcji lub zwolnieniem kanału
+  `hal_spi_end_transaction()` i `hal_spi_deinit()` czekają na zakończenie
+  aktywnego asynchronicznego TX DMA.
+- **impl/stm32g474:** SPI1/SPI2 master na poziomie rejestrów, 8-bitowy
+  full-duplex, programowe NSS, transfer w trybie pollingu, konfiguracja pinów
+  AF5 i sterowany przerwaniami TX DMA. SPI1 jest zasilane z 170 MHz PCLK2, a
+  SPI2 z 170 MHz PCLK1; backend wybiera najszybszy preskaler będący potęgą
+  dwójki, który nie przekracza żądanego zegara.
+  Domyślne piny: magistrala SPI 0 = PA6/PA7/PA5, magistrala 1 = PB14/PB15/PB13.
+  TX SPI1 rezerwuje DMA1 Channel7, a TX SPI2 rezerwuje DMA1 Channel8.
+  Odpowiadające im żądania DMAMUX i przerwania DMA pozwalają dzielić bufory większe
+  niż limit sprzętowego licznika 65 535 bajtów na kolejne transfery.
+  Wywołanie asynchroniczne
+  zwraca sterowanie, zanim magistrala stanie się bezczynna, natomiast zakończenie
+  transakcji i deinit czekają na zakończenie. Bufory w SRAM CCM dostępnym
+  tylko dla CPU używają synchronicznej ścieżki pollingu, ponieważ DMA1 nie ma
+  dostępu do tej pamięci.
+- **impl/esp32:** ESP-IDF SPI master na SPI2/SPI3 dla magistrali HAL 0/1.
+  Maski płytki i targetu walidują piny MISO/MOSI/SCK; chip select pozostaje pod
+  przenośną warstwą GPIO `hal_spi_device`. Magistrala żąda automatycznego
+  kanału DMA IDF i przechodzi na pracę bez DMA, jeśli kanał jest niedostępny.
+  API asynchronicznego DMA w HAL używa udokumentowanego synchronicznego fallbacku:
+  `_async_start()` kończy zapis przed powrotem, `_async_busy()` jest zawsze
+  `false`, a `_async_wait()` zwraca sterowanie natychmiast. Transfery są
+  dzielone na fragmenty po 64 bajty.
+- **impl/.mock:** przechowuje stan inicjalizacji i ustawienia, głębokość
+  blokady, zaprogramowane bajty RX oraz log TX używany w testach.
+
+**Thread safety:** `hal_spi_begin_transaction()` ustawia parametry magistrali,
+ale jej nie blokuje. Wieloetapowe operacje drivera na wspólnej
+magistrali należy otoczyć wywołaniami `hal_spi_lock()` i `hal_spi_unlock()`.
+Asynchroniczny transfer DMA należy do tej samej transakcji i sekcji krytycznej:
+chip-select musi pozostać aktywny, a magistrala zablokowana aż do zakończenia
+`_async_wait()`.
 
 ---
 
-## `hal_spi_device` - neutralny względem targetu deskryptor urządzenia SPI
+## `hal_spi_device` - przenośny deskryptor urządzenia SPI
 
 ```c
 #include <hal/spi/hal_spi_device.h>
@@ -125,18 +139,21 @@ hal_spi_device_operation_t operations[] = {
 status = hal_spi_device_transaction(&device, operations, 2u);
 ```
 
-Deskryptor wiąże jedną magistralę, aktywny-niski pin chip-select oraz
-efektywne ustawienia SPI. `HAL_SPI_DEVICE_CS_NONE` wybiera urządzenie bez
-CS zarządzanego przez HAL. Inicjalizacja konfiguruje podłączony pin CS jako
-nieaktywne wyjście wysokie. Deskryptory są neutralne względem targetu i
-używają istniejących backendowych API SPI/GPIO. `hal_spi_device_acquire()`
-i `hal_spi_device_release()` udostępniają ręczny cykl życia w stylu
-status-first dla stanowych transferów. `hal_spi_device_transaction()`
-wykonuje bufory READ, WRITE, TRANSFER i TRANSFER_IN_PLACE w ramach jednej
-akwizycji. `hal_spi_device_finish()` gwarantuje zwolnienie po ręcznym
-we/wy i zachowuje błąd operacji ponad późniejszy błąd zakończenia. Gdy
-akwizycja się powiedzie, wszystkie ścieżki transakcji wywołują zakończenie
-backendu, dezaktywują CS i odblokowują magistralę.
+Deskryptor wiąże magistralę, pin chip-select aktywny stanem niskim oraz
+rzeczywiście używane ustawienia SPI. `HAL_SPI_DEVICE_CS_NONE` oznacza
+urządzenie bez sygnału CS zarządzanego przez HAL. Podczas inicjalizacji pin CS
+jest konfigurowany jako nieaktywne wyjście w stanie wysokim. Deskryptor jest
+niezależny od platformy i korzysta z istniejących API backendów SPI i GPIO.
+Funkcje `hal_spi_device_acquire()` i `hal_spi_device_release()` pozwalają
+ręcznie zarządzać wieloetapowym transferem i zwracają status każdej operacji.
+`hal_spi_device_transaction()` wykonuje operacje READ, WRITE, TRANSFER
+i TRANSFER_IN_PLACE w ramach jednego przejęcia magistrali.
+
+Po ręcznej operacji wejścia/wyjścia `hal_spi_device_finish()` zawsze zwalnia
+zasoby. Jeśli wcześniej wystąpił błąd operacji, późniejszy błąd kończenia go
+nie zastępuje. Po udanym przejęciu magistrali każda droga zakończenia
+transakcji wywołuje funkcję kończącą backendu, dezaktywuje CS i odblokowuje
+magistralę.
 
 ---
 
@@ -171,7 +188,7 @@ typedef enum {
 #define HAL_I2C_ERROR_OTHER         3u
 #define HAL_I2C_ERROR_TIMEOUT       4u
 
-// Dotychczasowe zawodne operacje zwracające void teraz w ich miejsce zwracają status.
+// Operacje, które mogą się nie udać, zwracają teraz status zamiast void.
 hal_status_t hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin,
                           uint32_t clock_hz);
 hal_status_t hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin,
@@ -211,7 +228,7 @@ hal_status_t hal_i2c_scan_bus(uint8_t bus, uint8_t *addresses,
                               size_t capacity, size_t *outFound,
                               hal_i2c_scan_callback_t callback);
 
-// Towarzysze statusowe dla dotychczasowych operacji zwracających value/bool.
+// Warianty statusowe dotychczasowych operacji zwracających wartość lub bool.
 hal_status_t hal_i2c_end_transmission_ex(void);
 hal_status_t hal_i2c_end_transmission_bus_ex(uint8_t bus);
 hal_status_t hal_i2c_write_byte_ex(hal_i2c_address_t address, uint8_t data,
@@ -238,8 +255,8 @@ hal_status_t hal_i2c_request_from_bus_ex(uint8_t bus, hal_i2c_address_t address,
 void    hal_i2c_deinit(void);
 void    hal_i2c_deinit_bus(uint8_t bus);
 
-// Ręczne lock/unlock - użyj przy owijaniu zewnętrznej biblioteki, która wywołuje
-// obiekt magistrali natywny dla backendu bezpośrednio.
+// Ręczne lock/unlock - użyj z biblioteką zewnętrzną, która bezpośrednio
+// korzysta z natywnego obiektu magistrali backendu.
 void    hal_i2c_lock(void);
 void    hal_i2c_unlock(void);
 void    hal_i2c_lock_bus(uint8_t bus);
@@ -306,24 +323,24 @@ bool    hal_i2c_is_busy_bus(uint8_t bus, hal_i2c_address_t address);
 
 ```
 
-Wspierane są tylko wartości magistrali 0 i 1. Inne wartości są błędami
-programisty i wywołują `HAL_ASSERT` w buildach kontrolowanych.
+Obsługiwane są tylko wartości magistrali 0 i 1. Inne wartości są błędami
+programisty i wywołują `HAL_ASSERT` w buildach z włączonymi kontrolami.
 
-Warianty `_ex` zwracają `HAL_OK` przy powodzeniu i diagnostykę
-`hal_status_t` dla nowego kodu. Nieprawidłowe magistrale lub bufory zwracają
-`HAL_EINVAL`; użycie niezainicjalizowanej magistrali zwraca `HAL_EUNINIT`
-tam, gdzie backend potrafi to wykryć; odziedziczony `HAL_I2C_ERROR_TIMEOUT`
-mapuje się na `HAL_ETIMEOUT`, ogólne błędy NACK/magistrali mapują się na
-`HAL_EBUS`, a niesprecyzowane błędy backendu mapują się na `HAL_EIO`.
-Istniejące wrappery zachowują swoje kształty zwracanych wartości `void`,
-`uint8_t` i `bool` dla zgodności źródłowej.
+Warianty `_ex` zwracają `HAL_OK` przy powodzeniu, a w pozostałych przypadkach
+przekazują nowemu kodowi dokładniejszą diagnostykę przez `hal_status_t`.
+Nieprawidłowa magistrala lub bufor powoduje zwrot `HAL_EINVAL`. Jeśli backend
+potrafi wykryć użycie niezainicjalizowanej magistrali, zwraca `HAL_EUNINIT`.
+Dotychczasowy `HAL_I2C_ERROR_TIMEOUT` odpowiada `HAL_ETIMEOUT`, ogólny błąd
+NACK lub magistrali - `HAL_EBUS`, a pozostałe błędy backendu - `HAL_EIO`.
+Dla zgodności źródłowej dotychczasowe funkcje nadal zwracają `void`, `uint8_t`
+lub `bool`.
 
-`hal_i2c_scan()` zastępuje stary pomocnik `i2cScanner()` z `tools.cpp`.
-Skanuje jednorazowo zamiast posiadać nieskończoną pętlę print/delay, pomija
-zarezerwowane adresy 7-bitowe, nie ma zależności od serial, wspiera oba
-kontrolery, raportuje przepełnienie bufora jako `HAL_EOVERFLOW` i utrzymuje
-jawną obsługę watchdoga przez swój opcjonalny callback. Aplikacje same
-zarządzają prezentacją i harmonogramowaniem:
+`hal_i2c_scan()` zastępuje dawny helper `i2cScanner()` z `tools.cpp`.
+Wykonuje pojedynczy skan zamiast nieskończonej pętli print/delay, pomija
+zarezerwowane adresy 7-bitowe, nie zależy od wyjścia szeregowego i działa na
+obu kontrolerach. Gdy bufor wynikowy jest za mały, zwraca `HAL_EOVERFLOW`.
+Opcjonalny callback pozwala aplikacji jawnie odświeżać watchdog. To aplikacja
+odpowiada za prezentację wyników i harmonogram skanowania:
 
 ```c
 uint8_t addresses[HAL_I2C_SCAN_ADDRESS_COUNT];
@@ -333,26 +350,26 @@ hal_status_t status =
                  hal_watchdog_feed);
 ```
 
-**Zachowanie init:** `hal_i2c_init*()` tworzy mutex per-magistrala,
-konfiguruje SDA/SCL, zegar i uruchamia kontroler backendu; nadal powinien
-być wywoływany podczas setup, przed normalnym ruchem I2C. Wywołania w
-czasie działania zachowują atomowy fallback tworzenia-przy-pierwszym-użyciu
-do defensywnego użycia przed init. Użyj
-`hal_i2c_set_clock()` / `hal_i2c_set_clock_bus()`, aby przestroić już
-skonfigurowaną magistralę, zachowując zmianę wewnątrz mutexu magistrali HAL.
+**Inicjalizacja:** `hal_i2c_init*()` tworzy mutex magistrali, konfiguruje
+SDA/SCL i zegar oraz uruchamia kontroler backendu. Funkcję należy wywołać
+podczas konfiguracji, przed rozpoczęciem zwykłej komunikacji I2C. Jeżeli API
+zostanie użyte wcześniej, mechanizm fallback tworzy mutex atomowo przy
+pierwszym wywołaniu. Do zmiany częstotliwości skonfigurowanej magistrali służą
+`hal_i2c_set_clock()` i `hal_i2c_set_clock_bus()`. Zmiana odbywa się pod
+ochroną mutexu HAL tej magistrali.
 
-**Tryby zegara:** Nazwane stałe zegara mapują się na tryby specyfikacji
+**Tryby zegara:** Nazwane stałe zegara odpowiadają trybom ze specyfikacji
 magistrali I2C: Standard-mode (100 kHz), Fast-mode (400 kHz), Fast-mode
 Plus / Fm+ (1 MHz) i High-speed mode / Hs-mode (3,4 MHz). 1 MHz i 3,4 MHz to
 rzeczywiste przypadki użycia: Fm+ jest powszechne dla szybszych peryferiów
 na poziomie płytki i buforów magistrali, podczas gdy Hs-mode występuje w
 czujnikach o wysokiej szybkości, takich jak niektóre czujniki środowiskowe
-Bosch i czujniki ruchu ST. Zawsze sprawdź kontroler, trasowanie płytki,
+Bosch i czujniki ruchu ST. Zawsze sprawdź kontroler, prowadzenie ścieżek na płytce,
 podciągnięcia (pull-up), pojemność magistrali i arkusz danych każdego
 urządzenia przed wyborem tych prędkości. W szczególności Hs-mode ma
-wymagania protokołu/czasowania wykraczające poza samo wpisanie większej
-wartości zegara, więc wsparcie backendu/kontrolera musi zostać
-zweryfikowane na platformie docelowej.
+wymagania dotyczące protokołu i czasów sygnałów, których nie spełni samo ustawienie
+wyższej częstotliwości. Przed użyciem trzeba więc sprawdzić, czy dany backend i kontroler
+obsługują ten tryb na wybranej platformie.
 
 **Odniesienie:** NXP UM10204, "I2C-bus specification and user manual",
 definiuje Standard-mode, Fast-mode, Fast-mode Plus i High-speed mode.
@@ -362,37 +379,78 @@ adresowania jest właściwością zainicjalizowanego kontrolera, nigdy
 pojedynczego wywołania ani pojedynczej wartości adresu: `hal_i2c_init()`/
 `hal_i2c_init_bus()` ustawiają magistralę w trybie 7-bitowym (`0x000..0x07F`),
 `hal_i2c_init_10bit()`/`hal_i2c_init_bus_10bit()` ustawiają tryb 10-bitowy
-(`0x000..0x3FF`); ta sama wartość liczbowa adresu jest interpretowana inaczej
-w zależności od tego, który wariant init skonfigurował magistralę, a
-kontroler nigdy nie miesza urządzeń 7- i 10-bitowych naraz. Każda dotychczasowa
-funkcja przyjmująca adres poszerzyła swój parametr z `uint8_t` na nowy
-`hal_i2c_address_t` (`uint16_t`) - świadoma, łamiąca zmiana typu; zwykłe
-miejsca wywołań przekazujące literał lub zmienną `uint8_t` nadal się
-kompilują bez zmian po przebudowie. `hal_i2c_scan()`/`hal_i2c_scan_bus()`
-pozostają wyłącznie 7-bitowe na zawsze i zwracają `HAL_EUNSUPPORTED` przy
-wywołaniu na magistrali 10-bitowej. Przełączenie magistrali między trybami
+(`0x000..0x3FF`). Ta sama wartość liczbowa adresu jest interpretowana inaczej
+w zależności od użytego wariantu inicjalizacji, a
+kontroler nigdy nie miesza urządzeń 7- i 10-bitowych naraz.
+
+We wszystkich dotychczasowych funkcjach przyjmujących adres typ parametru
+zmieniono z `uint8_t` na nowy `hal_i2c_address_t` (`uint16_t`). Jest to
+świadoma niezgodność na poziomie typu. Typowe wywołania przekazujące literał
+lub zmienną `uint8_t` po ponownym buildzie nadal nie wymagają zmian w kodzie.
+
+`hal_i2c_scan()` i `hal_i2c_scan_bus()` zawsze obsługują wyłącznie adresy
+7-bitowe. Wywołane na magistrali 10-bitowej zwracają `HAL_EUNSUPPORTED`.
+Przełączenie magistrali między trybami
 wymaga jawnej ponownej inicjalizacji, która przechodzi normalny cykl
 zatrzymania/resetu i unieważnia stan związany z poprzednim trybem.
 
-**impl/rp2040:** Natywne `hardware/i2c.h` z Pico SDK na I2C0/I2C1 wraz z multipleksowaniem pinów `hardware/gpio.h`; mutex per-magistrala chroni wszystkie transakcje. Żądania zegara powyżej Fast-mode Plus są przycinane do 1 MHz, ponieważ I2C RP2040 nie implementuje Hs-mode. `hal_i2c_bus_clear()` używa odzyskiwania SCL/SDA na poziomie GPIO przed przywróceniem funkcji pinu I2C. Tryb 10-bitowy ustawia bit `IC_CON.IC_10BITADDR_MASTER` DesignWare na cały czas życia kontrolera przy init i używa dedykowanej niskopoziomowej ścieżki transferu FIFO/timeout (`IC_TAR` niesie pełny adres 10-bitowy; standardowe `i2c_write_timeout_us()`/`i2c_read_timeout_us()` z Pico SDK asertują adres 7-bitowy i nie mogą zostać ponownie użyte).
-**impl/stm32g474:** I2C v2 master na poziomie rejestrów na I2C1/I2C2. Oba kontrolery jawnie wybierają HSI16 jako swoje źródło zegara jądra, więc zwalidowane presety TIMINGR dla 16 MHz pozostają niezależne od zegara APB 170 MHz. Backend waliduje mapowania funkcji alternatywnych SDA/SCL, konfiguruje podciągnięcia GPIO w trybie open-drain, wspiera warstwy zegara HAL, obsługuje ścieżki write/read/write-read/is-busy na obu magistralach i wykonuje czyszczenie magistrali na poziomie GPIO z taktowaniem mikrosekundowym niezależnym od zegara przed init. Tryb 10-bitowy ustawia `CR2.ADD10` i wpisuje surowy adres 10-bitowy w `CR2.SADD[9:0]` (tryb 7-bitowy zachowuje dotychczasowe przesunięcie `SADD[7:1]`); `CR2.HEAD10R` celowo nigdy nie jest ustawiany, zgodnie z głównym Linux driverem `i2c-stm32f7` dla tego samego IP I2C v2, który zawsze wysyła kompletny nagłówek 10-bitowy w każdej fazie.
-**impl/esp32:** API master/controller ESP-IDF na I2C0/I2C1 z generowaną
-walidacją pinów płytki, wewnętrznymi podciągnięciami, buforowanymi
-uchwytami urządzeń, timeoutem transferu/sondy 100 ms i resetem
-kontrolera po timeout. Zmiany zegara odrzucają buforowane uchwyty urządzeń,
-więc kolejne transfery odtwarzają je z nową szybkością. Czyszczenie
-magistrali na poziomie GPIO emituje do dziewięciu impulsów SCL i jest
-akceptowane tylko, gdy wybrany kontroler jest zdeinicjalizowany. Tryb
-10-bitowy konfiguruje każdy buforowany uchwyt urządzenia z
-`I2C_ADDR_BIT_LEN_10`; bufor uchwytów urządzeń poszerza się z 128 do 1024
-wpisów tylko wtedy, gdy `HAL_ENABLE_I2C_10BIT` jest wkompilowane, więc buildy
-wyłącznie 7-bitowe zachowują mniejszy ślad pamięci. `i2c_master_probe()` z
-ESP-IDF zawsze sonduje jako adres 7-bitowy niezależnie od przekazanej
-wartości, więc `hal_i2c_is_busy_bus()` na magistrali 10-bitowej zastępuje
-prawdziwą sondę zero-bajtową odczytem 1 bajtu przez poprawnie
-skonfigurowany uchwyt urządzenia.
-**impl/.mock:** bufor pierścieniowy; wstrzykiwalny przez pomocnicze funkcje mock. Wstrzyknięte bajty RX są odczytywane kolejno przez transakcje request/read, co pozwala testom skryptować przepływy wielorejestrowe. `hal_i2c_end_transmission()` zwraca `HAL_I2C_ERROR_GENERIC`, gdy ustawiona jest flaga busy mocka, w przeciwnym razie `HAL_I2C_RESULT_OK`. `hal_i2c_bus_clear()` zwiększa wewnętrzny licznik (odpytaj przez `hal_mock_i2c_get_bus_clear_count()`); licznik resetuje się przy `hal_i2c_init()`.
-**Thread safety:** Backendy sprzętowe serializują API transferu wewnętrznym `hal_mutex_t` per-magistrala; użyj `hal_i2c_lock` / `hal_i2c_unlock`, aby rozszerzyć sekcje krytyczne wokół bezpośrednich wywołań magistrali backendu/zewnętrznej biblioteki. `hal_i2c_init*()` / `hal_i2c_deinit*()` rekonfigurują współdzielone obiekty magistrali i muszą być serializowane przez aplikację podczas setup/teardown. Backend mock nie synchronizuje jednoczesnego dostępu.
+- **impl/rp2040:** natywne `hardware/i2c.h` z Pico SDK obsługuje I2C0/I2C1,
+  a `hardware/gpio.h` konfiguruje funkcje pinów. Każda magistrala ma własny
+  mutex chroniący wszystkie transakcje. Żądana częstotliwość powyżej
+  Fast-mode Plus jest ograniczana do 1 MHz, ponieważ kontroler I2C w RP2040
+  nie obsługuje Hs-mode. Przed przywróceniem pinom funkcji I2C
+  `hal_i2c_bus_clear()` próbuje odblokować linie SCL/SDA w trybie GPIO.
+  W trybie 10-bitowym inicjalizacja ustawia bit DesignWare
+  `IC_CON.IC_10BITADDR_MASTER`, który pozostaje aktywny przez cały runtime
+  kontrolera. Transfer korzysta wtedy z osobnej, niskopoziomowej obsługi FIFO
+  i timeoutu. Rejestr `IC_TAR` zawiera pełny adres 10-bitowy. Nie można użyć
+  standardowych funkcji Pico SDK `i2c_write_timeout_us()` ani
+  `i2c_read_timeout_us()`, ponieważ wymagają adresu 7-bitowego.
+- **impl/stm32g474:** kontroler I2C v2 na I2C1/I2C2 działa w trybie master
+  i jest obsługiwany bezpośrednio przez rejestry. Oba kontrolery wybierają
+  HSI16 jako źródło zegara, dlatego sprawdzone ustawienia `TIMINGR` dla 16 MHz
+  nie zależą od zegara APB 170 MHz. Backend sprawdza funkcje alternatywne pinów
+  SDA/SCL i konfiguruje je jako open-drain z podciągnięciem. Na obu
+  magistralach obsługuje wszystkie poziomy częstotliwości HAL oraz operacje
+  zapisu, odczytu, zapisu z odczytem i sprawdzania zajętości. Przed
+  inicjalizacją może również odblokować magistralę w trybie GPIO, używając
+  mikrosekundowych opóźnień niezależnych od częstotliwości zegara.
+  Tryb 10-bitowy ustawia `CR2.ADD10` i zapisuje adres bez przesunięcia
+  w `CR2.SADD[9:0]`; tryb 7-bitowy zachowuje dotychczasowe przesunięcie do
+  `SADD[7:1]`. Bit `CR2.HEAD10R` celowo pozostaje wyzerowany. Driver
+  `i2c-stm32f7` z mainline kernela Linux działa tak samo dla tego kontrolera
+  I2C v2: w każdej fazie wysyła pełny nagłówek 10-bitowy.
+- **impl/esp32:** API master/controller ESP-IDF na I2C0/I2C1 z generowaną
+  walidacją pinów płytki, wewnętrznymi podciągnięciami, buforowanymi
+  uchwytami urządzeń, timeoutem transferu/sondy 100 ms i resetem
+  kontrolera po wystąpieniu timeoutu. Zmiany zegara odrzucają buforowane uchwyty urządzeń,
+  więc kolejne transfery odtwarzają je z nową szybkością. Czyszczenie
+  magistrali na poziomie GPIO generuje do dziewięciu impulsów SCL i jest
+  akceptowane tylko, gdy wybrany kontroler jest zdeinicjalizowany. Tryb
+  10-bitowy konfiguruje każdy buforowany uchwyt urządzenia z
+  `I2C_ADDR_BIT_LEN_10`; bufor uchwytów urządzeń poszerza się z 128 do 1024
+  wpisów tylko wtedy, gdy włączono `HAL_ENABLE_I2C_10BIT`, więc buildy
+  wyłącznie 7-bitowe zajmują mniej pamięci. `i2c_master_probe()` z
+  ESP-IDF zawsze sonduje jako adres 7-bitowy niezależnie od przekazanej
+  wartości. Dlatego na magistrali 10-bitowej `hal_i2c_is_busy_bus()` zamiast
+  prawdziwej, zero-bajtowej sondy wykonuje odczyt jednego bajtu przez poprawnie
+  skonfigurowany uchwyt urządzenia.
+- **impl/.mock:** bufor pierścieniowy z funkcjami do podawania danych w testach.
+  Kolejne transakcje `request`/`read` pobierają po kolei bajty RX, co pozwala testowi
+  odtworzyć sekwencję operacji na wielu rejestrach.
+  `hal_i2c_end_transmission()` zwraca `HAL_I2C_ERROR_GENERIC`, gdy
+  w implementacji testowej ustawiono flagę zajętości, a w przeciwnym razie
+  `HAL_I2C_RESULT_OK`. `hal_i2c_bus_clear()` zwiększa wewnętrzny licznik
+  dostępny przez `hal_mock_i2c_get_bus_clear_count()`, natomiast
+  `hal_i2c_init()` go zeruje.
+
+**Thread safety:** Backendy sprzętowe chronią transfery wewnętrznym
+`hal_mutex_t` przypisanym do magistrali. Użyj `hal_i2c_lock()`
+i `hal_i2c_unlock()`, jeśli sekcja krytyczna ma objąć również bezpośrednie
+wywołania backendu lub zewnętrznej biblioteki. `hal_i2c_init*()`
+i `hal_i2c_deinit*()` rekonfigurują wspólny obiekt magistrali, dlatego podczas
+konfiguracji i zwalniania zasobów aplikacja musi serializować te wywołania.
+Implementacja testowa nie synchronizuje dostępu współbieżnego.
 
 **Pomocnicy mock:**
 ```c
@@ -420,11 +478,11 @@ uint32_t hal_mock_i2c_get_bus_clear_count_bus(uint8_t bus);                     
 
 **Przykład - ekspander I/O 8-bitowy PCF8574 z użyciem pomocników jednorazowych:**
 
-PCF8574 jest adresowany jednorazowo i nie ma layoutu rejestrów: pojedynczy
-bajt zapisu steruje wszystkimi 8 zatrzaskami wyjściowymi; pojedynczy bajt
-odczytu zwraca bieżącą wartość portu. Użycie `hal_i2c_write_byte()` i
-`hal_i2c_read_byte()` utrzymuje kod drivera wolny od jawnych sekwencji
-begin/write/end lub request/read.
+PCF8574 nie ma mapy rejestrów, więc w transakcji podaje się tylko jego adres
+I2C. Pojedynczy bajt zapisu steruje wszystkimi 8 zatrzaskami wyjściowymi,
+a pojedynczy bajt odczytu zwraca bieżącą wartość portu. Dzięki
+`hal_i2c_write_byte()` i `hal_i2c_read_byte()` driver nie musi jawnie wykonywać
+sekwencji begin/write/end ani request/read.
 
 ```c
 #include <hal/i2c/hal_i2c.h>
@@ -462,11 +520,12 @@ bool pcf8574_read_pin(uint8_t pin) {
 }
 ```
 
-Uwaga: pomocnicy polegają na *wewnętrznym* mutexie HAL per-magistrala, który
-obejmuje pojedynczą parę begin/end. Kod, który przeplata write-then-read z
-inną wieloetapową transakcją na tej samej magistrali (np. ustaw wskaźnik
-rejestru -> zażądaj N bajtów), musi dodatkowo zserializować obie sekwencje
-własnym mutexem wywołującego, ponieważ mutex HAL jest zwalniany przy
+Uwaga: helpery korzystają z *wewnętrznego* mutexu HAL osobnego dla każdej
+magistrali, który obejmuje pojedynczą sekwencję `begin`/`end`. Kod, który
+przeplata zapis i następujący po nim odczyt z inną wieloetapową transakcją na
+tej samej magistrali (np. ustaw wskaźnik rejestru -> odczytaj N bajtów), musi
+dodatkowo zserializować obie sekwencje
+mutexem należącym do kodu wywołującego, ponieważ mutex HAL jest zwalniany przy
 każdym `end_transmission`.
 
 ---
@@ -475,20 +534,22 @@ każdym `end_transmission`.
 
 Udostępnia mapę rejestrów o stałym rozmiarze w trybie slave I2C. Zdalny
 master zapisuje jednobajtowy wskaźnik rejestru, a następnie odczytuje N
-bajtów zaczynając od tego adresu. Wskaźnik przesuwa się dla każdego bajtu
-taktowanego przez mastera i przetrwa warunki STOP, więc późniejszy goły
-odczyt kontynuuje od ostatniej pozycji. Odczyty muszą pozostać w granicach
-skonfigurowanej mapy rejestrów.
+bajtów od wskazanego adresu. Wskaźnik przesuwa się z każdym bajtem taktowanym
+przez mastera i zachowuje wartość po warunku STOP. Późniejszy odczyt bez
+poprzedzającego zapisu adresu jest więc kontynuowany od ostatniej pozycji.
+Odczyt nie może wyjść poza skonfigurowaną mapę rejestrów.
 
-API targetu ESP-IDF udostępnia bajty zaakceptowane do jego FIFO/bufora
-pierścieniowego TX, ale nie to, ile bajtów kontroler wytaktował. Backend
-ESP32 używa więc programowego kursora producenta dla pierwszego rejestru
-jeszcze niezaakceptowanego przez ESP-IDF. Nieprzetaktowane bajty pozostają
-w FIFO/buforze pierścieniowym przez STOP, zachowując kursor na poziomie
-linii (wire-level). Nowy zapis wskaźnika rejestru czyści ten oczekujący
-sufiks i kolejkuje świeży zrzut od wybranego rejestru. Lokalne wywołania
-`reg_write*()` nie zmieniają bajtów już zakolejkowanych; wybierz rejestr
-ponownie, aby je odświeżyć.
+API trybu target w ESP-IDF podaje liczbę bajtów przyjętych do FIFO lub bufora
+pierścieniowego TX, ale nie informuje, ile z nich kontroler rzeczywiście
+wysłał przez magistralę. Backend ESP32 przechowuje więc programowy wskaźnik
+pierwszego rejestru, którego danych ESP-IDF jeszcze nie przyjęło. Bajty
+oczekujące na wysłanie pozostają w FIFO lub buforze pierścieniowym także po
+warunku STOP, dlatego pozycja widziana na magistrali się nie zmienia.
+
+Zapis nowego wskaźnika rejestru usuwa oczekującą końcówkę i kolejkuje aktualne
+dane od wybranego rejestru. Lokalne wywołania `reg_write*()` nie zmieniają
+bajtów już umieszczonych w kolejce. Aby je odświeżyć, master musi ponownie
+wybrać rejestr.
 
 Jest to niezależne od modułu I2C master (`hal_i2c`) - oba mogą być
 wyłączane/włączane osobno, ale nie mogą jednocześnie współdzielić tej samej
@@ -532,32 +593,51 @@ uint32_t hal_i2c_slave_get_transaction_count(void);
 uint32_t hal_i2c_slave_get_transaction_count_bus(uint8_t bus);
 ```
 
-Wspierane są tylko wartości magistrali 0 i 1. Inne wartości są błędami
-programisty i wywołują `HAL_ASSERT` w buildach kontrolowanych.
+Obsługiwane są tylko wartości magistrali 0 i 1. Inne wartości są błędami
+programisty i wywołują `HAL_ASSERT` w buildach z włączonymi kontrolami.
 
 **Protokół mapy rejestrów (I2C):**
-1. Master zapisuje: `[reg_address]` - ustawia wskaźnik rejestru
-2. Master odczytuje N bajtów - slave odpowiada `regs[ptr], regs[ptr+1], ...`
-3. Master zapisuje: `[reg_address, data0, data1, ...]` - ustawia wskaźnik, następnie zapisuje dane sekwencyjnie
+1. Master zapisuje `[reg_address]`, ustawiając wskaźnik rejestru.
+2. Master odczytuje N bajtów, a slave odpowiada
+   `regs[ptr], regs[ptr+1], ...`.
+3. Master zapisuje `[reg_address, data0, data1, ...]`, ustawiając wskaźnik,
+   a następnie kolejno zapisując dane.
 
-**impl/rp2040:** Natywny tryb peryferyjny `hardware/i2c.h` z Pico SDK na I2C0/I2C1 wraz z obsługą zdarzeń `hardware/irq.h`. Przerwania RX FIFO, read-request, START i STOP/TX-abort sterują bezpośrednio protokołem mapy rejestrów.
-**impl/stm32g474:** Tryb target I2C v2 na poziomie rejestrów na I2C1/I2C2. Backend wybiera HSI16 jako zegar jądra i konfiguruje funkcje alternatywne SDA/SCL, dopasowanie własnego adresu, konserwatywny `TIMINGR`, przerwania RX/TX/ADDR/STOP/NACK/error, opróżnianie TXDR przy NACK/STOP i obsługuje ten sam protokół mapy rejestrów z handlerów przerwań I2C EV/ER.
-**impl/esp32:** Docelowe urządzenia ESP-IDF I2C na kontrolerze 0/1.
-Callbacki receive/request utrzymują pracę ISR w ograniczonym czasie i
-sygnalizują jednemu wątkowi roboczemu FreeRTOS na aktywną magistralę;
-wątek roboczy resetuje FIFO TX lub zapisuje zrzut mapy rejestrów przez
-oficjalny driver trybu target. Nowy zapis wskaźnika rejestru resetuje
-nieaktualne zakolejkowane dane TX przed kolejnym zrzutem. Częściowa
-akceptacja kolejki przesuwa tylko tę część kursora producenta, którą
-zaakceptował ESP-IDF; pozostałe zakolejkowane bajty niosą kursor na
-poziomie linii przez STOP. Przerywający zapis wskaźnika jest chroniony
-przez sprawdzenie generacji. Ten backend liczy w liczniku transakcji
-zakończone zapisy i zaakceptowane żądania obsługi odczytu. Deinit najpierw
-zamyka dopuszczanie zdarzeń ISR, wyrejestrowuje callbacki, opróżnia wątek
-roboczy, niszczy driver, tworząc barierę czasu życia przerwań, i dopiero
-wtedy usuwa obiekty synchronizacji wątku roboczego.
-**impl/.mock:** bezpośredni dostęp do mapy rejestrów; pomocnicy symulacji dla zapisu/odczytu mastera.
-**Thread safety:** `reg_write*` / `reg_read*` są thread-safe dla normalnych wywołujących z poziomu zadania/rdzenia na backendach sprzętowych. Mapa rejestrów jest chroniona krótką blokadą lokalną dla backendu współdzieloną z callbackami magistrali/ISR, więc handlery nie przejmują mutexów HAL w buildach FreeRTOS. `init` / `deinit` muszą być serializowane przez aplikację podczas setup/teardown. Backend mock nie synchronizuje jednoczesnego dostępu.
+- **impl/rp2040:** natywny tryb peryferyjny `hardware/i2c.h` z Pico SDK na
+  I2C0/I2C1 wraz z obsługą zdarzeń przez `hardware/irq.h`. Przerwania RX FIFO,
+  read-request, START i STOP/TX-abort bezpośrednio sterują protokołem mapy
+  rejestrów.
+- **impl/stm32g474:** tryb target kontrolera I2C v2 na I2C1/I2C2 jest
+  obsługiwany bezpośrednio przez rejestry. Backend wybiera HSI16 jako źródło
+  zegara, konfiguruje funkcje alternatywne SDA/SCL, własny adres oraz
+  zachowawcze ustawienie `TIMINGR`. Włącza przerwania RX, TX, ADDR, STOP, NACK
+  i błędów oraz opróżnia TXDR po NACK lub STOP. Protokół mapy
+  rejestrów wykonują handlery przerwań I2C EV/ER.
+- **impl/esp32:** urządzenia I2C w trybie target obsługiwane przez ESP-IDF na
+  kontrolerze 0/1. Callbacki `receive`/`request` wykonują w ISR tylko ograniczony
+  zakres pracy i sygnalizują po jednym wątku FreeRTOS dla każdej aktywnej
+  magistrali. Wątek resetuje FIFO
+  TX albo zapisuje bieżącą zawartość mapy rejestrów przez oficjalny driver
+  trybu target. Zapis nowego wskaźnika rejestru usuwa nieaktualne dane TX
+  z kolejki przed dodaniem kolejnego zestawu. Jeśli ESP-IDF przyjmie tylko
+  część danych, programowy wskaźnik przesuwa się o liczbę przyjętych bajtów;
+  pozycja pozostałych nie zmienia się nawet po STOP. Sprawdzenie numeru
+  generacji zabezpiecza ten stan przed równoczesnym zapisem nowego wskaźnika.
+  Licznik transakcji obejmuje zakończone zapisy i przyjęte żądania odczytu.
+  Podczas deinicjalizacji backend najpierw przestaje przyjmować zdarzenia
+  z ISR, wyrejestrowuje callbacki i czeka na zakończenie pracy wątku. Następnie
+  usuwa driver, zamykając okres, w którym mogą nadejść przerwania. Dopiero
+  wtedy zwalnia obiekty synchronizacji wątku.
+- **impl/.mock:** udostępnia bezpośredni dostęp do mapy rejestrów oraz funkcje
+  symulujące zapis i odczyt mastera.
+
+**Thread safety:** W backendach sprzętowych `reg_write*()`
+i `reg_read*()` można bezpiecznie wywoływać z różnych zadań lub rdzeni. Mapę
+rejestrów chroni krótko utrzymywana blokada backendu, używana również przez
+callbacki magistrali i ISR. Dzięki temu handlery w buildach FreeRTOS nie
+przejmują mutexów HAL. Podczas konfiguracji i zwalniania zasobów aplikacja
+musi serializować `init` oraz `deinit`. Implementacja testowa nie synchronizuje
+dostępu współbieżnego.
 
 **Pomocnicy mock:**
 ```c
@@ -626,22 +706,21 @@ hal_status_t hal_swserial_flush(hal_swserial_t h);  // blokuje do zakończenia T
 void hal_swserial_destroy(hal_swserial_t h);
 ```
 
-Nowy kod powinien preferować formy statusowe. `create_ex()` raportuje
+Nowy kod powinien preferować warianty zwracające status. `create_ex()` zwraca
 `HAL_EINVAL` dla nieprawidłowych/nakładających się pinów i `HAL_ENOMEM`,
 gdy instancja lub natywne zasoby PIO/DMA są wyczerpane. Zmiany pinów po
-`begin()` raportują `HAL_ESTATE`; we/wy przed `begin()` raportuje
-`HAL_EUNINIT`; pusty `read_ex()` raportuje `HAL_EAGAIN`. Zapis `write_ex()`
-o zerowej długości jest ważny nawet ze wskaźnikiem data równym NULL.
+`begin()` zwracają `HAL_ESTATE`; operacja we/wy przed `begin()` zwraca
+`HAL_EUNINIT`, a pusty `read_ex()` - `HAL_EAGAIN`. Zapis `write_ex()`
+o zerowej długości jest ważny nawet ze wskaźnikiem `data` równym `NULL`.
 Opcjonalny `out_written` z `println_ex()` liczy tylko bajty payloadu, bez
 CRLF, aby zachować historyczną wartość zwracaną.
 
 `begin()` i `flush()` historycznie zwracały `void`; teraz zwracają
 bezpośrednio `hal_status_t`, więc istniejący wywołujący mogą nadal
-ignorować wynik. Funkcje zwracające uchwyt, bool i wartość pozostają
-wrapperami zgodności nad sąsiadującymi implementacjami statusowymi.
-`available()` pozostaje tanim getterem odpytującym (0 dla nieprawidłowego
-lub nieuruchomionego uchwytu), a `destroy()` pozostaje niezawodnym
-sprzątaniem.
+ignorować wynik. Funkcje zwracające uchwyt, `bool` lub inną wartość pozostają
+warstwą zgodności wywołującą odpowiednie funkcje statusowe. `available()`
+jest lekkim getterem stanu opartym na odpytywaniu i zwraca 0 dla nieprawidłowego lub
+nieuruchomionego uchwytu. `destroy()` zawsze kończy się powodzeniem.
 
 ```c
 hal_swserial_t port = NULL;
@@ -656,13 +735,20 @@ if (st == HAL_OK && hal_swserial_read_ex(port, &byte) == HAL_OK) {
 }
 ```
 
-**impl/rp2040:** natywny backend Pico SDK. Dwie maszyny stanów PIO wykonują taktowanie bitów RX i TX, a DMA przenosi zakończone ramki RX do bufora cyklicznego. Nie wykonuje callbacku GPIO trwającego jeden bajt, pętli opóźniającej ani sekcji krytycznej. Każdy uchwyt wymaga dwóch wolnych maszyn stanów PIO i jednego wolnego kanału DMA; programy PIO są współdzielone między uchwytami na bloku PIO.
+**impl/rp2040:** natywny backend Pico SDK. Dwie maszyny stanów PIO taktują
+bity RX i TX, a DMA przenosi odebrane ramki do bufora cyklicznego. Backend nie
+używa callbacku GPIO trwającego przez cały bajt, pętli opóźniającej ani sekcji
+krytycznej. Każdy uchwyt wymaga dwóch wolnych maszyn stanów PIO i jednego
+wolnego kanału DMA. Programy PIO są wspólne dla uchwytów korzystających z tego
+samego bloku PIO.
 
-**impl/stm32g474 / impl/.mock:** współdzielony backend GPIO/taktowania/synchronizacji HAL. Mock udostępnia też deterministyczne pomocniki RX/TX dla testów hosta.
+**impl/stm32g474 / impl/.mock:** wspólna implementacja oparta na GPIO,
+pomiarze czasu i synchronizacji HAL. Wariant testowy udostępnia również
+deterministyczne funkcje RX/TX używane w testach hostowych.
 
-Publiczne operacje są serializowane przez mutex HAL per-instancja.
-Create/destroy powinny stosować się do polityki serializacji setup/teardown
-obowiązującej w całym projekcie.
+Publiczne operacje są serializowane przez osobny mutex HAL każdej instancji.
+Wywołania `create` i `destroy` należy serializować zgodnie z przyjętą
+w projekcie zasadą konfiguracji i zwalniania zasobów.
 
 **Pomocnicy mock:**
 ```c
@@ -709,36 +795,47 @@ bool hal_uart_get_error_counters(hal_uart_t h,
 void hal_uart_destroy(hal_uart_t h);
 ```
 
-`hal_uart_begin()` i `hal_uart_flush()` są status-first (zastąpiły dawną
-parę `void` + `_ex`). Operacje `bool`/wartościowe (`set_rx`, `set_tx`,
-`read`, `write`, `println`, `get_error_counters`) zachowują swoje
-sygnatury zgodności i każda ma sąsiadujący wariant statusowy `_ex`.
+`hal_uart_begin()` i `hal_uart_flush()` zwracają status; zastąpiły dawną parę
+`void` + `_ex`. Funkcje zwracające `bool` lub wartość (`set_rx`, `set_tx`, `read`,
+`write`, `println`, `get_error_counters`) zachowują dotychczasowe sygnatury.
+Każdej odpowiada wariant `_ex` zwracający status.
 
-**impl/rp2040:** UART SDK RP2040 (`uart0` / `uart1`) ze sterowanym
-przerwaniami RX. `hal_uart_begin()` instaluje i włącza `UARTx_IRQ` w NVIC
-wywołującego rdzenia, więc ten rdzeń staje się domyślnym właścicielem
-przerwania RX UART. Powtórne `hal_uart_begin()` oraz wywołanie
-`hal_uart_destroy()` muszą wystąpić na tym samym rdzeniu, który wykonał
-udane begin. Obecne API UART nie zapisuje właściciela do celów
-diagnostycznych i nie zwraca `HAL_ESTATE` dla wywołania cyklu życia z
-niewłaściwego rdzenia; sama serializacja międzyrdzeniowa nie zmienia tego
-wymogu przypisania przerwania. W buildach FreeRTOS/SMP wykonuj operacje
-cyklu życia UART z zadania przypiętego do zamierzonego rdzenia i nie
-migruj tego zadania, gdy UART jest aktywny.
-**impl/stm32g474:** USART1/USART2 na poziomie rejestrów, korzystające z odpowiednich źródeł 170 MHz PCLK2/PCLK1, oraz odpytywane drenowanie RX; liczy ORE, PE, FE, NE i jawne flagi LIN-break, gdy są raportowane przez USART_ISR.
-**impl/esp32:** Porty HAL 1/2 mapują się na ESP-IDF UART1/UART2; UART0
-pozostaje zarezerwowane poza tym API HAL. Każdy aktywny uchwyt
-posiada 512-bajtowy bufor RX IDF i 32-wpisową kolejkę zdarzeń używaną do
-akumulowania liczników overrun, przepełnienia bufora, break, framing i
-parity. Publiczne we/wy jest serializowane mutexem per-instancja. Rdzeń,
-który pomyślnie wywołuje `hal_uart_begin()`, jest właścicielem sprzątania
-cyklu życia; ponowne begin z niewłaściwego rdzenia raportuje `HAL_ESTATE`,
-podczas gdy destroy z niewłaściwego rdzenia wywołuje asercję i pozostawia
-uchwyt aktywny. Przypisanie pinów jest akceptowane tylko przed begin,
-chyba że wartość pinu jest niezmieniona.
-**impl/.mock:** bufor pierścieniowy plus przechwytywanie ostatniego zapisu; wstrzykiwalny przez pomocnicze funkcje mock.
-**Liczniki błędów:** kumulatywne od `hal_uart_begin()`; reset mocka też je czyści.
-**Thread safety:** Przenośni wywołujący nadal powinni serializować cykl życia i współdzielone użycie uchwytu. ESP32-S3 serializuje operacje wejścia/wyjścia per instancja w runtime, ale ta blokada nie zastępuje reguły tego samego rdzenia dla cyklu życia. RP2040 pozostaje serializowany przez wywołującego, a jego reguła tego samego rdzenia dla cyklu życia również obowiązuje.
+- **impl/rp2040:** UART SDK RP2040 (`uart0` / `uart1`) ze sterowanym
+  przerwaniami RX. `hal_uart_begin()` instaluje i włącza `UARTx_IRQ` w NVIC
+  rdzenia wywołującego, dlatego przerwanie RX UART zostaje do niego przypisane.
+  Powtórne `hal_uart_begin()` oraz wywołanie
+  `hal_uart_destroy()` muszą wystąpić na tym samym rdzeniu, który wykonał
+  udane `begin()`. Obecne API UART nie zapisuje numeru tego rdzenia do celów
+  diagnostycznych i nie zwraca `HAL_ESTATE` dla operacji cyklu życia wykonanej z
+  niewłaściwego rdzenia; sama serializacja międzyrdzeniowa nie zmienia tego
+  wymogu przypisania przerwania. W buildach FreeRTOS/SMP wykonuj operacje
+  cyklu życia UART z zadania przypiętego do zamierzonego rdzenia i nie
+  migruj tego zadania, gdy UART jest aktywny.
+- **impl/stm32g474:** USART1/USART2 są obsługiwane bezpośrednio przez rejestry
+  i taktowane odpowiednio z PCLK2/PCLK1 170 MHz. Dane RX są odbierane przez
+  polling. Backend zlicza ORE, PE, FE i NE oraz jawne flagi LIN-break, jeśli
+  udostępnia je `USART_ISR`.
+- **impl/esp32:** Porty HAL 1/2 odpowiadają ESP-IDF UART1/UART2; UART0
+  pozostaje zarezerwowany poza tym API HAL. Każdy aktywny uchwyt
+  posiada 512-bajtowy bufor RX IDF i 32-wpisową kolejkę zdarzeń używaną do
+  zliczania błędów overrun i przepełnienia bufora, sygnałów break oraz błędów
+  ramkowania i parzystości.
+  Publiczne operacje wejścia/wyjścia chroni osobny mutex każdej instancji.
+  Rdzeń, który pomyślnie wywoła `hal_uart_begin()`, musi także wykonywać
+  operacje kończące cykl życia. Ponowne `begin()` z innego rdzenia zwraca
+  `HAL_ESTATE`, natomiast `destroy()` wywołane z innego rdzenia powoduje
+  asercję i pozostawia uchwyt aktywny. Piny można zmieniać tylko przed
+  `begin()`, chyba że nowa wartość pinu jest taka sama jak dotychczasowa.
+- **impl/.mock:** bufor pierścieniowy i rejestrowanie ostatniego zapisu;
+  funkcje testowe pozwalają podawać dane wejściowe.
+- **Liczniki błędów:** kumulatywne od `hal_uart_begin()`; reset mocka też je czyści.
+
+**Thread safety:** Kod przenośny powinien serializować operacje cyklu
+życia oraz wspólny dostęp do uchwytu. Na ESP32-S3 operacje wejścia/wyjścia
+w runtime chroni osobny mutex każdej instancji. Nadal jednak wszystkie
+operacje cyklu życia muszą być wykonywane na tym samym rdzeniu. Na RP2040 za
+serializację odpowiada wywołujący; tam również obowiązuje reguła jednego
+rdzenia dla całego cyklu życia.
 
 **Pomocnicy mock:**
 ```c
@@ -758,10 +855,11 @@ void        hal_mock_uart_set_write_callback(hal_uart_t h,
 
 ## `hal_onewire` - magistrala 1-Wire  *(opcjonalnie - `HAL_ENABLE_ONEWIRE`)*
 
-Thread-safe wrapper dla jednej magistrali 1-Wire związanej z
-pojedynczym pinem GPIO. Buildy sprzętowe używają współdzielonego drivera
-bit-bang tylko-HAL w `src/hal/onewire/`; backend mock utrzymuje
-deterministyczne skryptowane odpowiedzi dla testów hosta.
+Warstwa thread-safe do obsługi pojedynczej magistrali 1-Wire podłączonej do
+jednego pinu GPIO. Buildy sprzętowe korzystają ze
+wspólnego drivera bit-bang opartego wyłącznie na HAL, znajdującego się
+w `src/hal/onewire/`. Implementacja testowa udostępnia deterministyczne,
+programowalne odpowiedzi do testów hostowych.
 
 ```c
 #include <hal/onewire/hal_onewire.h>
@@ -789,21 +887,23 @@ bool    hal_onewire_search(hal_onewire_t h, uint8_t out_rom[8],
                            bool search_mode);
 ```
 
-> **Pomocniki CRC przeniesione.** Rutyny Dallas/Maxim CRC-8 i CRC-16, które
-> kiedyś żyły tutaj, są teraz ogólne i żyją w `hal_crc.h`
+> **Helpery CRC przeniesiono.** Rutyny Dallas/Maxim CRC-8 i CRC-16 znajdowały
+> się wcześniej tutaj, ale są teraz ogólnymi helperami w `hal_crc.h`
 > (`hal_crc8_maxim`, `hal_crc16_maxim`, `hal_crc16_maxim_check`). Zobacz
 > [Narzędzia -> `hal_crc`](16_utilities.md).
 
-**impl/rp2040 + impl/stm32g474:** Oba delegują do tego samego
-współdzielonego drivera. Driver używa przełączania wejście/wyjście
-HAL GPIO, taktowania slotów `hal_delay_us()` i sekcji krytycznych HAL
-wokół wrażliwych na czas pod-slotów. Zewnętrzne podciągnięcie 1-Wire jest
-nadal oczekiwane, zgodnie z oryginalnym modelem elektrycznym OneWire.
-**impl/.mock:** Skryptowane odpowiedzi obecności/odczytu/wyszukiwania.
-**Thread safety:** Buildy sprzętowe używają mutexu per-uchwyt i
-współdzielonego mutexu magistrali wokół operacji publicznych. DS18B20
-używa własnej niskopoziomowej instancji drivera, więc wieloetapowe
-transakcje scratchpad pozostają atomowe pod mutexem DS18B20.
+- **impl/rp2040 + impl/stm32g474:** oba korzystają z tego samego drivera.
+  Implementacja przełącza GPIO HAL między wejściem i wyjściem, odmierza sloty
+  przez `hal_delay_us()` i używa sekcji krytycznych HAL wokół części slotu,
+  które wymagają precyzyjnego czasu. Zgodnie z modelem elektrycznym OneWire
+  magistrala nadal wymaga zewnętrznego rezystora podciągającego.
+- **impl/.mock:** programowalne odpowiedzi wykrywania obecności, odczytu
+  i wyszukiwania.
+
+**Thread safety:** Buildy sprzętowe chronią operacje publiczne
+mutexem każdego uchwytu oraz wspólnym mutexem magistrali. DS18B20 używa
+własnej niskopoziomowej instancji drivera, dlatego wieloetapowe transakcje
+scratchpad pozostają atomowe pod ochroną mutexu DS18B20.
 
 ---
 

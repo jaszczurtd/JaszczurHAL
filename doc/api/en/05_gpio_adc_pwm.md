@@ -76,6 +76,7 @@ atomically records that core as the pin's interrupt owner. Reconfiguration and
 from either core. A detached pin returns `HAL_ENOENT` and writes
 `HAL_GPIO_IRQ_CORE_NONE`. The legacy attach wrapper binds the IRQ to its current
 caller core, while the legacy detach wrapper asserts if ownership is violated.
+
 On the single-core STM32G474 backend the only valid caller/owner is core 0.
 ESP32-S3 allocates one ESP-IDF GPIO ISR service for all HAL GPIO callbacks on
 the core that performs the first successful attach. Consequently every active
@@ -83,6 +84,7 @@ HAL GPIO interrupt must use that same owner core until the last callback is
 detached and the service is released. A different owner reports `HAL_ESTATE`.
 The status APIs are intended for initialization/task diagnostics, not ISR
 context.
+
 This explicit ownership API covers GPIO interrupts only. Peripheral IRQs have
 their own backend requirements. In particular, the RP2040 hardware-UART RX IRQ is
 currently bound implicitly to the core that calls `hal_uart_begin()`; GPS
@@ -93,6 +95,7 @@ reconfiguration and retains the handle when its compatibility destroy operation
 is called from another core. See
 the [`hal_uart` bus documentation](09_buses.md) and
 [`hal_gps` sensor documentation](11_sensors.md).
+
 RP2040 SoftwareSerial instead receives through PIO/DMA and does not install a
 CPU RX interrupt.
 
@@ -400,18 +403,19 @@ int  hal_adc_read(uint8_t pin);
 Default resolution is 12 bits (consistent across RP2040, STM32G474, ESP32-S3,
 and mock backends).
 
-**impl/rp2040:** native pico-sdk `hardware/adc.h` (`adc_init`, `adc_gpio_init`,
-`adc_select_input`, `adc_read`). Valid ADC pins are GPIO 26-29 (channels 0-3);
-the 12-bit hardware sample is rescaled to the configured resolution.
-**impl/stm32g474:** ADC1 single-ended regular conversions with lazy regulator
-startup, calibration, and pin-to-channel validation. ADC12 is synchronously
-clocked from HCLK/4, or 42.5 MHz with the current 170 MHz clock tree.
-**impl/esp32:** ESP-IDF ADC oneshot conversion with lazy unit/channel setup and
-12 dB attenuation. Only ADC-capable pins that are exposed or soft-reserved by
-the generated board profile are accepted. The 12-bit hardware result is scaled
-to the configured 1..16-bit range; an invalid pin or conversion failure returns
-the compatibility value `0`.
-**impl/.mock:** injectable per-pin values via `hal_mock_adc_inject(pin, value)`.
+- **impl/rp2040:** native pico-sdk `hardware/adc.h` (`adc_init`, `adc_gpio_init`,
+  `adc_select_input`, `adc_read`). Valid ADC pins are GPIO 26-29 (channels 0-3);
+  the 12-bit hardware sample is rescaled to the configured resolution.
+- **impl/stm32g474:** ADC1 single-ended regular conversions with lazy regulator
+  startup, calibration, and pin-to-channel validation. ADC12 is synchronously
+  clocked from HCLK/4, or 42.5 MHz with the current 170 MHz clock tree.
+- **impl/esp32:** ESP-IDF ADC oneshot conversion with lazy unit/channel setup and
+  12 dB attenuation. Only ADC-capable pins that are exposed or soft-reserved by
+  the generated board profile are accepted. The 12-bit hardware result is scaled
+  to the configured 1..16-bit range; an invalid pin or conversion failure returns
+  the compatibility value `0`.
+- **impl/.mock:** injectable per-pin values via `hal_mock_adc_inject(pin, value)`.
+
 **Thread safety:** Thread-safe and multicore-safe. An internal mutex protects
 the shared ADC state on RP2040, STM32G474, and ESP32-S3, so concurrent reads are
 serialized automatically.

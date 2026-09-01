@@ -6,12 +6,11 @@
 
 ## `hal_crypto` - Base64, MD5, SHA-256 / HMAC-SHA256, ChaCha20, ChaCha20-Poly1305  *(opcjonalny - `HAL_ENABLE_CRYPTO`)*
 
-Ten moduł jest **opcjonalny**. Zdefiniuj `HAL_ENABLE_CRYPTO` w
-`hal_project_config.h` (lub za pomocą `-D`), aby go wkompilować. Bez tej
-flagi poniższy nagłówek rozwija się do pustki, `hal_crypto.cpp` staje się
-pustą jednostką translacji, a każdy wywołujący te funkcje pomocnicze
-kończy się błędem braku referencji (undefined reference) na etapie
-konsolidacji.
+Ten moduł jest **opcjonalny**. Aby dodać go do buildu, zdefiniuj
+`HAL_ENABLE_CRYPTO` w `hal_project_config.h` albo za pomocą `-D`. Bez tej
+flagi poniższy nagłówek nie udostępnia żadnych deklaracji, a
+`hal_crypto.cpp` jest pustą jednostką translacji. Próba wywołania którejkolwiek
+z tych funkcji kończy się na etapie linkowania błędem `undefined reference`.
 
 ```c
 #include <hal/security/hal_crypto.h>
@@ -106,34 +105,35 @@ bool hal_hmac_sha256_hex(const uint8_t *key, size_t key_len,
 - Base64 jest ściśle zgodny z RFC 4648 (`A-Z a-z 0-9 + /` oraz dopełnienie
   `=`), bez tolerancji na białe znaki.
 - `hal_md5_hex(...)` oraz `hal_sha256_hex(...)` / `hal_hmac_sha256_hex(...)`
-  zwracają szesnastkowe znaki małymi literami.
+  zwracają zapis szesnastkowy małymi literami.
 - `hal_chacha20_xor(...)` obsługuje przetwarzanie w miejscu
   (`output == input`).
 - `hal_chacha20_poly1305_decrypt(...)` weryfikuje znacznik (tag) przed
   odszyfrowaniem i zwraca `false` w przypadku niezgodności.
-- Ścieżki ChaCha20 / Poly1305 są delegowane do wspólnego backendu
+- Operacje ChaCha20 / Poly1305 wykonuje wspólny backend
   `hal/network/wireguard/core/crypto`, dzięki czemu HAL i WireGuard korzystają
-  z tej samej, jednoźródłowej implementacji prymitywów kryptograficznych.
-- Dla ChaCha20/AEAD nonce musi być unikalny dla każdego klucza; ponowne użycie
-  nonce łamie bezpieczeństwo.
+  z jednej implementacji tych algorytmów kryptograficznych.
+- Dla ChaCha20/AEAD wartość nonce musi być unikalna dla każdego klucza;
+  ponowne użycie tej samej wartości łamie bezpieczeństwo.
 - `hal_hmac_sha256(...)` jest zgodny z RFC 2104 - klucze dłuższe niż rozmiar
   bloku (64 B) są wstępnie haszowane; krótsze klucze są dopełniane zerami.
-- API `_ex` dla SHA-256 obsługuje strumieniowe przetwarzanie o ograniczonym
-  zużyciu pamięci. `final_ex` unieważnia kontekst; wywołania update/final
-  przed inicjalizacją lub po finalizacji zwracają `HAL_ESTATE`.
-- SHA-256 / HMAC-SHA256 są zwalidowane na wektorach testowych FIPS 180-2 i
-  RFC 4231 i pozostają bitowo stabilne względem towarzyszących implementacji
-  lustrzanych po stronie hosta (na przykład `sc_sha256.c`).
+- API `_ex` dla SHA-256 pozwala przetwarzać dane strumieniowo przy ograniczonym
+  zużyciu pamięci. `final_ex` unieważnia kontekst. Wywołanie `update_ex` lub
+  `final_ex` przed inicjalizacją albo po zakończeniu obliczeń zwraca
+  `HAL_ESTATE`.
+- Wyniki SHA-256 / HMAC-SHA256 są sprawdzane przy użyciu wektorów testowych
+  FIPS 180-2 i RFC 4231. Są również identyczne bitowo z wynikami odpowiadających
+  im implementacji hostowych, na przykład `sc_sha256.c`.
 
-**Uwaga dotycząca bezpieczeństwa:** MD5 jest udostępniony ze względu na
-zgodność z dziedziczonymi sumami kontrolnymi oraz odciskami niezwiązanymi z
-bezpieczeństwem. Nie należy używać MD5 tam, gdzie wymagana jest odporność na
-kolizje. Do wszelkich nowych potrzeb w zakresie integralności lub
-uwierzytelniania preferuj SHA-256 / HMAC-SHA256.
+**Uwaga dotycząca bezpieczeństwa:** MD5 jest dostępny wyłącznie ze względu na
+zgodność ze starszymi sumami kontrolnymi i identyfikatorami, które nie służą do
+zabezpieczania danych. Nie używaj MD5 tam, gdzie jest wymagana odporność na
+kolizje. W nowych mechanizmach sprawdzania integralności i uwierzytelniania
+stosuj SHA-256 / HMAC-SHA256.
 
-**Thread safety:** Implementacja bezstanowa; bezpieczna do użycia
-wielordzeniowego, gdy bufory dostarczone przez wywołującego nie nakładają się
-w sposób niezamierzony między wątkami.
+**Wielowątkowość:** Implementacja nie przechowuje stanu i może być bezpiecznie
+używana na wielu rdzeniach, o ile bufory przekazane przez kod wywołujący nie
+nakładają się przypadkowo między wątkami.
 
 ---
 

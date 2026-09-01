@@ -3,23 +3,12 @@
 *Also available in [Polish](../pl/JaszczurHAL_API.md).*
 
 Hardware Abstraction Layer for embedded projects.
-The RP2040/RP2350 backend builds against the official Pico SDK. STM32G474 is
-available as a bare-metal or FreeRTOS backend with native peripheral support
-and the shared driver stack. ESP32-S3 provides exact target/board identity,
-ESP-IDF application entry and build-compatibility validation plus the delivered
-core/peripheral backend set and native WiFi/lwIP connectivity graph. Its
-network surface includes TLS and HTTPS clients plus plaintext HTTP and
-WebSocket servers; no public TLS server, HTTPS server, WSS, or WebSocket-client
-API is defined. The application-facing HAL API stays stable across targets.
-
 This document is the established, detailed API reference.
-The top-level [README.md](../../README.md) intentionally stays concise and links
-here for full behavior and guarantees.
 
 **Author:** Marcin 'Jaszczur' Kielesiński
 
-**Repository:** `git@github.com:jaszczurtd/JaszczurHAL.git`
-**Include root:** `libraries/JaszczurHAL/src/` (registered in `otherLibrariesFolders`)
+- **Repository:** `git@github.com:jaszczurtd/JaszczurHAL.git`
+- **Include root:** `libraries/JaszczurHAL/src/` (registered in `otherLibrariesFolders`)
 
 ---
 
@@ -264,11 +253,6 @@ link the fixed package without invoking Python.
   `src/hal/network/wireguard/core/` - bundled target-neutral network engines.
 - `src/utils/` - higher-level utilities: `tools`, `pidController`, `multicoreWatchdog`, `draw7Segment`, and managed Unity integration.
 
-`JaszczurHAL.h` is the current top-level public include and should be the
-default include in project code. `hal/hal.h` remains available as a HAL-only
-aggregator, but it is not the primary include exported by the current library
-metadata.
-
 ---
 
 ## Memory maps
@@ -283,9 +267,7 @@ backend:
 
 ---
 
-## Documentation scope
-
-Recommended split of responsibilities:
+## Suggested documentation readings order
 
 - [00_scripts.md](../api/en/00_scripts.md): an essential part of the JaszczurHAL
   documentation that explains how setup, dependency management, builds,
@@ -296,7 +278,6 @@ Recommended split of responsibilities:
   project workflow, including manifest/target/source/build/upload behavior
 - [OTAWorkflow.md](OTAWorkflow.md): native RP and ESP32-S3 OTA configuration,
   provisioning, upload, network/firewall, confirmation, rollback, and recovery
-- `doc/en/JaszczurHAL_API.md`: module layout, migration notes, public API details, feature-flag reference
 
 Each document owns the details in its assigned scope. The others should provide
 short context and link to that owner instead of repeating commands, interfaces,

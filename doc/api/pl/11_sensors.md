@@ -8,14 +8,14 @@ Obejmuje: `hal_thermocouple`, `hal_ds18b20`, `hal_dht`, `hal_bh1750`, `hal_adp53
 
 ## `hal_thermocouple` - Wzmacniacz termopary  *(opcjonalny - `HAL_ENABLE_THERMOCOUPLE`)*
 
-Obsługuje MCP9600/MCP9601 (współdzielony driver HAL I2C) oraz MAX6675
-(współdzielony bit-bang SPI po HAL GPIO). Jedna fasada niezależna od targetu
-zarządza statyczną pulą uchwytów, walidacją, blokadami per instancja oraz
-doborem operacji na podstawie capabilities układu. Dzięki temu providerzy
-sprzętowi i deterministyczny provider mock hosta korzystają z
-tego samego publicznego cyklu życia. Funkcje niedostępne dla wybranego chipu
-zwracają `HAL_EUNSUPPORTED`; historyczne wrappery zwracające wartość zwracają
-bezpieczną wartość domyślną (`NAN` / `0` / `false`) i wypisują błąd.
+Moduł obsługuje MCP9600/MCP9601 przez wspólny driver HAL I2C oraz MAX6675 przez
+wspólną programową obsługę SPI opartą na HAL GPIO. Publiczne API jest niezależne od
+targetu. Zarządza statyczną pulą uchwytów, sprawdza argumenty, utrzymuje osobną blokadę
+każdej instancji i dobiera operacje dostępne w danym układzie. Backendy sprzętowe i
+deterministyczny mock hosta korzystają dzięki temu z tego samego cyklu życia. Funkcje
+niedostępne dla wybranego układu zwracają `HAL_EUNSUPPORTED`. Dotychczasowe wrappery
+zwracające wartość zapisują błąd w logu i zwracają bezpieczną wartość domyślną:
+`NAN`, `0` lub `false`.
 
 ```c
 #include <hal/temperature/hal_thermocouple.h>
@@ -137,30 +137,28 @@ cfg.bus.i2c.i2c_addr = 0x67;
 hal_thermocouple_t sensor = hal_thermocouple_init(&cfg);
 ```
 
-Niezainicjalizowane `i2c_bus` może wybrać nieprawidłowy lub niezamierzony
-kontroler. Backendy natywne walidują indeks magistrali, a inicjalizacja wtedy
-zawodzi. Dotyczy to również migracji kodu, który wcześniej polegał na
-permisywnych wartościach domyślnych I2C.
+Niezainicjalizowane pole `i2c_bus` może wskazać niewłaściwy kontroler. Backendy sprzętowe
+sprawdzają numer magistrali i w takim przypadku inicjalizacja kończy się błędem. Należy
+o tym pamiętać również przy przenoszeniu kodu, który wcześniej korzystał z łagodniejszych
+wartości domyślnych I2C.
 
-Wspólna fasada wybiera providera sprzętowego na RP2040/RP2350 oraz STM32G474;
-ten provider deleguje operacje MCP9600/MCP9601 i MAX6675 do tych samych
-przenośnych driverów dostępnych wyłącznie w HAL. Provider hosta zachowuje
-deterministyczne wstrzykiwanie przez `hal_mock_thermocouple_*()` bez
-posiadania drugiej fasady.
+Wspólne API wybiera właściwy backend sprzętowy na RP2040/RP2350 lub STM32G474. Backend
+korzysta z tych samych przenośnych driverów MCP9600/MCP9601 i MAX6675 należących do HAL.
+W testach hostowych funkcje `hal_mock_thermocouple_*()` pozwalają deterministycznie
+ustawić wyniki bez tworzenia osobnej kopii publicznego API.
 
-**Thread safety:** Thread-safe i wielordzeniowo. Przydział
-z puli jest chroniony sekcją krytyczną. Każda żyjąca instancja posiada własny
-`hal_mutex_t`; odczyt, konfiguracja, wstrzykiwanie mock oraz deinicjalizacja
-są serializowane przez ten mutex.
+**Thread safety:** API jest thread-safe i może być używane z wielu rdzeni. Sekcja krytyczna
+chroni przydział z puli, a każda aktywna instancja ma własny `hal_mutex_t`. Mutex
+serializuje odczyty, konfigurację, ustawianie wyników mocka oraz deinicjalizację.
 
 ---
 
 ## `hal_ds18b20` - cyfrowy czujnik temperatury DS18B20  *(opcjonalny - `HAL_ENABLE_DS18B20`)*
 
-Nieblokujący workflow czujnika:
+Nieblokująca obsługa czujnika:
 
 1. `hal_ds18b20_request()` rozpoczyna konwersję.
-2. `hal_ds18b20_poll()` przesuwa maszynę stanów.
+2. `hal_ds18b20_poll()` wykonuje kolejny krok maszyny stanów.
 3. `hal_ds18b20_take_latest()` odczytuje próbkę z pamięci podręcznej (`fresh=true` tylko raz dla każdej nowej próbki).
 
 ```c
@@ -199,11 +197,11 @@ hal_status_t  hal_ds18b20_take_latest_ex(hal_ds18b20_t h, float *temp_c,
                                          bool *fresh);
 ```
 
-`hal_ds18b20_init()` zachowuje historyczny kształt zwracający uchwyt; użyj
-`hal_ds18b20_init_ex()`, gdy wywołujący potrzebuje przyczyny niepowodzenia.
-Historyczne funkcje `bool` są cienkimi wrapperami nad ich formami `_ex`.
-Historyczne wywołania cyklu życia/maszyny stanów typu `void` zwracają teraz
-`hal_status_t`; wywołujący, którzy ignorują wynik, nadal się kompilują.
+`hal_ds18b20_init()` zachowuje dotychczasową sygnaturę zwracającą uchwyt. Użyj
+`hal_ds18b20_init_ex()`, jeśli kod potrzebuje dokładnej przyczyny niepowodzenia. Dawne
+funkcje `bool` są wrapperami wywołującymi odpowiednie warianty `_ex`. Operacje cyklu
+życia i maszyny stanów, które wcześniej zwracały `void`, zwracają teraz `hal_status_t`;
+istniejący kod ignorujący wynik nadal się kompiluje.
 
 Mapowanie statusów: nieprawidłowe argumenty zwracają `HAL_EINVAL`,
 niepowodzenie przydziału z puli uchwytów lub mutexu zwraca `HAL_ENOMEM`,
@@ -213,14 +211,14 @@ konwersji zwraca `HAL_EAGAIN`, odpytywanie w stanie bezczynności zwraca
 `HAL_ESTATE`, a niepowodzenie scratchpada/CRC/dekodowania zwraca
 `HAL_EPROTO`.
 
-**impl/rp2040 + impl/stm32g474:** Oba wykorzystują wspólną implementację
-`src/hal/onewire/` dostępną wyłącznie w HAL. Backend wykonuje sondowanie
-obecności/adresu DS18B20, weryfikację CRC scratchpada, zapisy rozdzielczości,
-nieblokujące planowanie konwersji za pomocą `hal_micros64()` oraz dekodowanie
-temperatury poprzez wspólny transport bit-bang 1-Wire.
-**impl/.mock:** deterministyczna maszyna stanów konwersji sterowana czasem
-mock (`hal_mock_set_micros` / `hal_mock_advance_micros`), z wstrzykiwaną
-obecnością/CRC/temperaturą.
+- **impl/rp2040 + impl/stm32g474:** Oba korzystają z implementacji
+  `src/hal/onewire/` należącej do HAL. Backend wykrywa obecność i adres DS18B20,
+  sprawdza CRC scratchpada, zapisuje rozdzielczość i planuje nieblokujące konwersje za
+  pomocą `hal_micros64()`. Temperaturę dekoduje przez wspólną programową obsługę 1-Wire.
+- **impl/.mock:** deterministyczna maszyna stanów konwersji sterowana czasem mocka
+  (`hal_mock_set_micros` / `hal_mock_advance_micros`). Test może ustawić obecność
+  czujnika, poprawność CRC i temperaturę.
+
 **Thread safety:** Backendy sprzętowe używają mutexu per-uchwyt.
 Tworzenie/niszczenie powinno nadal przestrzegać projektowej polityki
 init/deinit jednordzeniowego. Backend mock jest przeznaczony do testów
@@ -279,16 +277,16 @@ hal_status_t     hal_dht_get_sample_ex(hal_dht_t h, hal_dht_sample_t *out);
 bool             hal_dht_get_sample(hal_dht_t h, hal_dht_sample_t *out);
 ```
 
-`hal_dht_init_ex()` to inicjalizator zwracający status i raportuje
-nieprawidłową konfigurację jako `HAL_EINVAL`, a wyczerpanie puli/mutexu jako
-`HAL_ENOMEM`; `hal_dht_init()` zachowuje historyczny kształt zwracający
-uchwyt. `hal_dht_read_ex()` wykonuje impuls startowy DHT i odczyt 40-bitowej
-ramki, waliduje sumę kontrolną i aktualizuje zbuforowaną próbkę tylko przy
-powodzeniu. Zwraca `HAL_EUNINIT` dla nieprawidłowego uchwytu, `HAL_ETIMEOUT`
-dla brakującej odpowiedzi/czasowania zbocza oraz `HAL_EPROTO` dla
-niezgodności sumy kontrolnej; `hal_dht_read()` to historyczny wrapper `bool`.
+`hal_dht_init_ex()` zwraca `HAL_EINVAL` dla nieprawidłowej konfiguracji, a
+`HAL_ENOMEM` po wyczerpaniu puli lub nieudanym utworzeniu mutexu. `hal_dht_init()`
+zachowuje dotychczasową sygnaturę zwracającą uchwyt. `hal_dht_read_ex()` generuje impuls
+startowy DHT i odczytuje 40-bitową ramkę. Próbka w pamięci podręcznej jest aktualizowana
+tylko po poprawnym sprawdzeniu sumy kontrolnej. Nieprawidłowy uchwyt powoduje zwrócenie
+`HAL_EUNINIT`, brak odpowiedzi lub błędny czas zbocza - `HAL_ETIMEOUT`, a niezgodna suma
+kontrolna - `HAL_EPROTO`. `hal_dht_read()` pozostaje wrapperem zgodności zwracającym
+`bool`.
 
-Implementacja zachowuje przepływ czasowy Bonezegei DHT: 250 ms ustalania
+Implementacja zachowuje sekwencję czasową Bonezegei DHT: 250 ms ustalania
 stanu wysokiego w bezczynności, 18 ms impuls startowy hosta w stanie niskim,
 40 us zwolnienia, czasowanie odpowiedzi 80/80 us oraz dyskryminator bitu
 30 us. Ramki DHT11 są dekodowane jako bajty całkowitej wilgotności i
@@ -296,17 +294,18 @@ dziesiętnej temperatury; ramki DHT22 wykorzystują natywne 16-bitowe pole
 wilgotności oraz 16-bitowe ze znakiem pole temperatury z rozdzielczością 0,1
 jednostki.
 
-`hal_dht_get_sample_ex()` kopiuje zbuforowaną próbkę z raportowaniem błędów
-`HAL_EUNINIT` / `HAL_EINVAL`; `hal_dht_get_sample()` to wrapper zgodności.
-Skalarne gettery z pamięci podręcznej zachowują swój historyczny kształt
-zwracania wartości z bezpiecznym fallbackiem.
+`hal_dht_get_sample_ex()` kopiuje próbkę z pamięci podręcznej i może zwrócić
+`HAL_EUNINIT` lub `HAL_EINVAL`; `hal_dht_get_sample()` pozostaje wrapperem zgodności.
+Skalarne gettery zachowują dotychczasowe sygnatury i w razie błędu zwracają bezpieczną
+wartość domyślną.
 
-**impl/rp2040 + impl/stm32g474 + impl/.mock:** wszystkie wykorzystują
-`hal/temperature/dht/hal_dht.cpp` po prymitywach HAL GPIO/system/sync.
-**Thread safety:** tworzenie uchwytu używa mutexu singletonowej puli
-utworzonego przez `jh_hal_mutex_create_once`; każdy uchwyt ma własny mutex
-dla odczytu/pobierania/deinicjalizacji. Odczyt ramki krytyczny czasowo
-maskuje przerwania tylko na czas krótkiego okna bit-bang DHT.
+- **impl/rp2040 + impl/stm32g474 + impl/.mock:** wszystkie wykorzystują
+  `hal/temperature/dht/hal_dht.cpp`, korzystając z prymitywów HAL GPIO/system/sync.
+
+**Thread safety:** Pulę uchwytów chroni mutex utworzony jednokrotnie przez
+`jh_hal_mutex_create_once`. Każdy uchwyt ma też osobny mutex dla odczytu, pobierania
+próbki i deinicjalizacji. Podczas wymagającego precyzyjnego czasu odczytu ramki
+przerwania są maskowane tylko na krótkie okno programowej obsługi DHT.
 
 ---
 
@@ -339,21 +338,22 @@ hal_status_t hal_bh1750_light_ex(hal_bh1750_t *dev, float *out_lux);
 float hal_bh1750_light(hal_bh1750_t *dev);
 ```
 
-`hal_bh1750_init_ex()` wysyła komendę `0x10` (tryb ciągły o wysokiej
-rozdzielczości - H-resolution), czeka 180 ms na pierwszy pomiar i zwraca
-`HAL_OK` tylko, gdy urządzenie potwierdzi (ACK) komendę. `hal_bh1750_light_ex()`
-odczytuje dokładnie dwa bajty i zwraca lux jako `raw / 1.2f` przez
-`out_lux`; nieudane odczyty zwracają `HAL_EBUS` i ustawiają wyjście na
+`hal_bh1750_init_ex()` wysyła komendę `0x10` (ciągły tryb H-resolution),
+czeka 180 ms na pierwszy pomiar i zwraca `HAL_OK` tylko, gdy urządzenie
+potwierdzi (ACK) komendę. `hal_bh1750_light_ex()` odczytuje dokładnie dwa
+bajty i przez `out_lux` zwraca natężenie oświetlenia w luksach, obliczone jako
+`raw / 1.2f`; nieudane odczyty zwracają `HAL_EBUS` i ustawiają wyjście na
 `-1.0f`. Historyczne wrappery `hal_bh1750_init()` i `hal_bh1750_light()`
 zachowują oryginalne zachowanie `bool` / `-1.0f`.
 
-**wspólna implementacja tematyczna:** `hal/sensors/bh1750/hal_bh1750.cpp` jest
-używana przez RP2040, STM32G474 oraz testy mock. Domyślny adres to `0x5C`,
-aby zachować domyślną wartość konstruktora drivera źródłowego; płytki z
-ADDR podpiętym do masy powinny ustawić `0x23`.
-**Thread safety:** mutex per-instancja serializuje wywołania
-drivera; odczyty bajtów I2C używają `hal_i2c_read_bytes_bus()`, więc
-żądanie i kopiowanie próbki pozostają wewnątrz mutexu magistrali.
+- **Wspólna implementacja modułu:** `hal/sensors/bh1750/hal_bh1750.cpp` jest używana
+  na RP2040 i STM32G474 oraz w testach z mockiem. Domyślny adres to `0x5C`,
+  aby zachować domyślną wartość konstruktora drivera źródłowego; płytki z
+  ADDR podpiętym do masy powinny ustawić `0x23`.
+
+**Thread safety:** Osobny mutex każdej instancji serializuje wywołania drivera. Odczyt
+bajtów przez `hal_i2c_read_bytes_bus()` utrzymuje mutex magistrali zarówno podczas
+żądania, jak i kopiowania próbki.
 
 ---
 
@@ -393,20 +393,20 @@ opcje nadzorczego resetu/watchdoga, czyści rejestry statusu przerwań i
 opcjonalnie stosuje sekcje konfiguracyjne ładowarki, fuel-gauge, BUCK i
 BUCK-BOOST z `hal_adp5360_config_t`.
 
-API runtime udostępnia zachowanie pochodzące z Zephyr jako wywołania
-`hal_status_t`: tryb wysyłkowy (shipment mode), reset programowy/sprzętowy,
-sterowanie online/status/kondycją/prądem ładowarki, odczyty i zapisy
-SOC/napięcia/pojemności/alarmu fuel-gauge oraz sterowanie
-napięciem/prądem/trybem/włączeniem/aktywnym rozładowaniem regulatora.
-Niskopoziomowi pomocnicy `hal_adp5360_reg_read/write/burst/update()` są
-publiczni na potrzeby uruchamiania płytki (bring-up) i diagnostyki.
+API runtime udostępnia operacje oparte na rozwiązaniach z Zephyra jako funkcje
+zwracające `hal_status_t`: tryb wysyłkowy (shipment mode), reset programowy
+i sprzętowy, sterowanie obecnością zasilania, statusem, kondycją oraz prądem
+ładowarki, odczyt i zapis SOC, napięcia, pojemności oraz alarmu fuel-gauge,
+a także sterowanie napięciem, prądem, trybem, włączeniem i aktywnym
+rozładowaniem regulatora.
+Niskopoziomowe helpery `hal_adp5360_reg_read/write/burst/update()` są publiczne, aby
+ułatwić uruchamianie nowej płytki i diagnostykę.
 
-**wspólna implementacja tematyczna:** `hal/power/adp5360/hal_adp5360.cpp` jest
-używana przez RP2040, STM32G474 oraz testy mock. Wykorzystuje prymitywy HAL
-I2C/GPIO/czasu oraz mutex per-urządzenie utworzony przez
-`jh_hal_mutex_create_once()`, więc driver jest bezpieczny do wywoływania z
-kontekstów zadań wielordzeniowych/FreeRTOS, gdy leżący u podstaw backend HAL
-I2C jest zainicjalizowany.
+**Wspólna implementacja modułu:** `hal/power/adp5360/hal_adp5360.cpp` jest używana
+na RP2040 i STM32G474 oraz w testach z mockiem. Korzysta z I2C, GPIO i funkcji czasu HAL.
+Każde urządzenie ma mutex tworzony przez `jh_hal_mutex_create_once()`, dlatego po
+zainicjalizowaniu backendu HAL I2C driver może być bezpiecznie wywoływany z zadań
+FreeRTOS i z wielu rdzeni.
 
 Obecny zakres celowo nie obejmuje rejestracji callbacków przerwań GPIO w
 stylu Zephyr dla pinów ADP5360 INT/PGOOD/reset-status.
@@ -463,30 +463,30 @@ bool hal_tsc2007_read_touch(hal_tsc2007_t *dev, uint16_t *x, uint16_t *y,
 hal_tsc2007_point_t hal_tsc2007_get_point(hal_tsc2007_t *dev);
 ```
 
-`hal_tsc2007_init_ex()` sonduje adres 7-bitowy i wysyła tę samą początkową
-komendę `MEASURE_TEMP0` / `POWERDOWN_IRQON` / 12-bitową co driver
-źródłowy. `hal_tsc2007_command_ex()` buduje bajt komendy jako
+`hal_tsc2007_init_ex()` sonduje adres 7-bitowy i wysyła początkową 12-bitową
+komendę `MEASURE_TEMP0` / `POWERDOWN_IRQON`, taką samą jak driver źródłowy.
+`hal_tsc2007_command_ex()` buduje bajt komendy jako
 `(function << 4) | (power << 2) | (resolution << 1)`, czeka 500 us,
-odczytuje dokładnie dwa bajty i zwraca 12-bitową wartość zdekodowaną z
-górnych bitów odpowiedzi przez `out_value`. Historyczny wrapper
+odczytuje dokładnie dwa bajty i zapisuje w `out_value` 12-bitową wartość zdekodowaną z
+górnych bitów odpowiedzi. Dotychczasowy wrapper
 `hal_tsc2007_command()` nadal zwraca `0` przy niepowodzeniu.
 
 `hal_tsc2007_read_touch_ex()` wykonuje ustaloną sekwencję: `Z1`, `Z2`, `X`,
-`Y`, duplikat `X`, duplikat `Y`, a następnie `MEASURE_TEMP0` z power-down.
-Próbka X/Y jest akceptowana tylko wtedy, gdy zduplikowane pomiary mieszczą
+`Y`, ponownie `X` i `Y`, a następnie `MEASURE_TEMP0` z power-down.
+Próbka X/Y jest akceptowana tylko wtedy, gdy oba pomiary mieszczą
 się w granicach `HAL_TSC2007_STABILITY_THRESHOLD`, a żadna z zaakceptowanych
 współrzędnych nie jest równa `HAL_TSC2007_TOUCH_INVALID`. Odrzucone próbki
 zwracają `HAL_ENOENT`, niepowodzenia transakcji I2C zwracają `HAL_EBUS`, a
-nieprawidłowe argumenty zwracają `HAL_EINVAL`. `hal_tsc2007_read_touch()`
-zachowuje historyczny kształt `bool`, a `hal_tsc2007_get_point()` zwraca
+nieprawidłowe argumenty zwracają `HAL_EINVAL`. `hal_tsc2007_read_touch()` zachowuje
+sygnaturę zwracającą `bool`, a `hal_tsc2007_get_point()` zwraca
 `{x, y, z1}` lub `{0, 0, 0}`, gdy próbka jest odrzucona.
 
-**wspólna implementacja tematyczna:** `hal/input/tsc2007/tsc2007.cpp` jest
-używana przez RP2040, STM32G474 oraz testy mock po HAL I2C i czasowaniu
-systemowym HAL.
-**Thread safety:** mutex per-instancja serializuje publiczne
-wywołania drivera i jest tworzony wspólnym pomocnikiem create-once, więc
-pierwszy dostęp jest bezpieczny pod FreeRTOS/wielordzeniowością RP2040.
+- **Wspólna implementacja modułu:** `hal/input/tsc2007/tsc2007.cpp` jest używana na
+  RP2040 i STM32G474 oraz w testach z mockiem. Korzysta z I2C i funkcji czasu HAL.
+
+**Thread safety:** Osobny mutex każdej instancji serializuje publiczne wywołania drivera.
+Jest tworzony przez wspólny mechanizm jednokrotnej inicjalizacji, dzięki czemu pierwszy
+dostęp jest bezpieczny pod FreeRTOS i na wielordzeniowym RP2040.
 `hal_tsc2007_deinit()` nie powinno być wywoływane współbieżnie z innymi
 operacjami na tej samej instancji.
 
@@ -556,39 +556,37 @@ hal_status_t hal_stmpe610_write_register8(hal_stmpe610_t *dev, uint8_t reg,
                                           uint8_t value);
 ```
 
-`hal_stmpe610_init_ex()` sonduje ID chipu `0x0811`, zachowuje oryginalny
-fallback do trybu 1 sprzętowego SPI, gdy tryb 0 nie odpowiada, a następnie
+`hal_stmpe610_init_ex()` sprawdza ID układu `0x0811`. Jeśli układ nie odpowiada w trybie 0
+sprzętowego SPI, funkcja zachowuje dotychczasowy fallback do trybu 1. Następnie
 wykonuje ustaloną sekwencję konfiguracji kontrolera dotyku: soft reset,
-10 ms oczekiwania, odczyty rejestrów typu flush, włączenie TSC, włączenie
+10 ms oczekiwania, odczyty opróżniające rejestry, włączenie TSC, włączenie
 przerwania dotyku, konfigurację czasowania ADC/TSC, próg/reset FIFO, prąd
-sterujący 50 mA i czyszczenie statusu przerwań. Raportuje błędne
-argumenty/konfigurację jako `HAL_EINVAL`, niepowodzenie alokacji jako
-`HAL_ENOMEM`, a niezgodność ID chipu jako `HAL_ENOENT`; `hal_stmpe610_init()`
-pozostaje historycznym wrapperem `bool`.
+sterujący 50 mA i czyści status przerwań. Nieprawidłowe argumenty lub konfiguracja
+powodują zwrócenie `HAL_EINVAL`, błąd alokacji - `HAL_ENOMEM`, a niezgodne ID układu -
+`HAL_ENOENT`. `hal_stmpe610_init()` pozostaje wrapperem zgodności zwracającym `bool`.
 
 `hal_stmpe610_read_data_ex()` odczytuje cztery bajty z portu danych FIFO i
 dekoduje 12-bitowe X/Y oraz 8-bitowe ciśnienie, zwracając `HAL_EUNINIT` dla
 niezainicjalizowanej instancji i `HAL_EINVAL` dla błędnych wskaźników
 wyjściowych. `hal_stmpe610_read_data()` bezpośrednio zwraca status; wywołujący,
 którzy dotąd ignorowali poprzedni wynik `void`, mogą nadal go ignorować.
-`hal_stmpe610_read_register8_ex()` i `hal_stmpe610_read_register16_ex()`
-raportują niepowodzenia odczytu rejestru przez parametry wyjściowe, podczas
-gdy historyczne wrappery zwracające wartość zachowują swój dawny kształt
-zero-przy-niepowodzeniu. `hal_stmpe610_write_register8()` zwraca status w
-miejscu.
+`hal_stmpe610_read_register8_ex()` i `hal_stmpe610_read_register16_ex()` zwracają status,
+a odczytaną wartość zapisują przez parametr wyjściowy. Dotychczasowe wrappery zwracające
+wartość nadal zwracają zero po błędzie. `hal_stmpe610_write_register8()` zwraca status
+bezpośrednio.
 `hal_stmpe610_get_point()` opróżnia FIFO, zwraca ostatnią próbkę i czyści
-status przerwań, gdy FIFO jest puste. Ścieżka 16-bitowego odczytu rejestru
-I2C jest kierowana wyłącznie przez I2C; unika to błędu przepadania
-(fall-through) transportu obecnego w imporcie źródłowym.
+status przerwań, gdy FIFO jest puste. Odczyt 16-bitowego rejestru przez I2C zawsze
+pozostaje w obsłudze I2C. Eliminuje to błąd z kodu źródłowego, w którym wykonanie mogło
+przejść dalej do obsługi innego transportu.
 
-**wspólna implementacja tematyczna:** `hal/input/stmpe610/stmpe610.cpp` jest
-używana przez RP2040, STM32G474 oraz testy mock. I2C używa transferów HAL z
-wyborem magistrali; sprzętowe SPI używa transakcji HAL SPI plus pinu CS
-dostarczonego przez wywołującego; miękkie SPI (soft SPI) wykonuje bit-bang
-MSB-first po HAL GPIO.
-**Thread safety:** mutex per-instancja serializuje publiczne
-wywołania drivera i jest tworzony wspólnym pomocnikiem create-once, więc
-pierwszy dostęp jest bezpieczny pod FreeRTOS/wielordzeniowością RP2040.
+- **Wspólna implementacja modułu:** `hal/input/stmpe610/stmpe610.cpp` jest używana na
+  RP2040 i STM32G474 oraz w testach z mockiem. I2C korzysta z transferów HAL z
+  wyborem magistrali; sprzętowe SPI używa transakcji HAL SPI plus pinu CS
+  dostarczonego przez wywołującego; programowe SPI przesyła dane MSB-first przez HAL GPIO.
+
+**Thread safety:** Osobny mutex każdej instancji serializuje publiczne wywołania drivera.
+Jest tworzony przez wspólny mechanizm jednokrotnej inicjalizacji, dzięki czemu pierwszy
+dostęp jest bezpieczny pod FreeRTOS i na wielordzeniowym RP2040.
 Transakcje sprzętowego SPI dodatkowo blokują magistralę HAL SPI, gdy CS jest
 aktywne. `hal_stmpe610_deinit()` nie powinno być wywoływane współbieżnie z
 innymi operacjami na tej samej instancji.
@@ -643,37 +641,35 @@ bool hal_irsmall_decoder_data_available(hal_irsmall_decoder_t *dev,
 bool hal_irsmall_decoder_has_data(hal_irsmall_decoder_t *dev);
 ```
 
-`hal_irsmall_decoder_init()` konfiguruje wejście jako pull-up, podłącza
-przerwanie GPIO z trybem zbocza używanym przez wybrany protokół i
-wykorzystuje interwały `hal_micros()` do dekodowania ramek NEC, NEC
+`hal_irsmall_decoder_init()` konfiguruje wejście z podciągnięciem, podłącza przerwanie
+GPIO dla zbocza wymaganego przez wybrany protokół i na podstawie odstępów mierzonych przez
+`hal_micros()` dekoduje ramki NEC, NEC
 extended, RC5, Sony SIRC 12/15/20-bit, Sony SIRC triple-frame, Samsung
 20-bit oraz Samsung 32-bit. `hal_irsmall_decoder_data_available()` kopiuje i
 czyści jedną zdekodowaną ramkę; `hal_irsmall_decoder_has_data()` czyści
 oczekujące dane bez ich kopiowania.
 
-**wspólna implementacja tematyczna:** `hal/input/irsmall_decoder/irsmall_decoder.cpp`
-jest używana przez RP2040, STM32G474 oraz testy mock po przerwaniach HAL
-GPIO i czasowaniu systemowym HAL. Wspólna implementacja zachowuje progi
-czasowe oraz zachowanie tłumienia powtórzeń (repeat suppression) ze źródła;
-bajty adresu rozszerzonego NEC są składane jawnie, aby uniknąć odczytów
-type-punned. Dekoder ramek RC5 wykorzystuje maszynę stanów tabeli przejść ze
-sprawdzonego na RP2040 drivera `RC5`, ze wspólnym raportowaniem
-`key_held` stosowanym po zdekodowaniu poprawnej ramki.
-**Thread safety:** publiczne wywołania są serializowane mutexem
-instancji utworzonym wspólnym pomocnikiem create-once. Odczyty znacznika
-czasu/stanu współdzielone z ISR używają krótkich sekcji krytycznych dla
-ścieżek timeout/reset. W tym samym czasie może być podłączonych do
+- **Wspólna implementacja modułu:** `hal/input/irsmall_decoder/irsmall_decoder.cpp`
+  jest używana na RP2040 i STM32G474 oraz w testach z mockiem. Korzysta z przerwań GPIO
+  i funkcji czasu HAL. Implementacja zachowuje progi
+  czasowe oraz zachowanie tłumienia powtórzeń (repeat suppression) ze źródła;
+  bajty rozszerzonego adresu NEC są składane jawnie, bez odczytu danych przez wskaźnik
+  innego typu. Dekoder RC5 korzysta z tablicowej maszyny stanów ze sprawdzonego na RP2040
+  drivera `RC5`. Po poprawnym zdekodowaniu ramki ustawia wspólne pole `key_held`.
+
+**Thread safety:** Publiczne wywołania chroni mutex instancji tworzony przez wspólny
+mechanizm jednokrotnej inicjalizacji. Odczyt czasu i stanu współdzielonego z ISR korzysta
+z krótkich sekcji krytycznych podczas obsługi timeoutu i resetu. Jednocześnie może działać do
 `HAL_IRSMALL_DECODER_MAX_INSTANCES` instancji.
 
 ---
 
 ## `hal_rtc` - zegar czasu rzeczywistego  *(opcjonalny - `HAL_ENABLE_RTC`)*
 
-Abstrakcja RTC oparta na uchwytach. Backendy obejmują PCF8563 i DS3231 po
-I2C, RTC domeny podtrzymywanej (backup-domain) STM32G474 oraz zawsze
-aktywny (always-on) timer RP2040/RP2350. API jest neutralne względem
-providera i udostępnia generyczne sterowanie alarmem/timerem/wyjściem
-zegarowym, diagnostykę źródła oraz zdarzenia/IRQ.
+API RTC oparte na uchwytach obsługuje PCF8563 i DS3231 przez I2C, RTC z domeny
+podtrzymywanej STM32G474 oraz stale działający timer RP2040/RP2350. Publiczne funkcje nie
+zależą od wybranego backendu. Udostępniają wspólne sterowanie alarmem, timerem i wyjściem
+zegarowym, a także diagnostykę źródła zegara oraz zdarzenia i IRQ.
 
 ```c
 #include <hal/rtc/hal_rtc.h>
@@ -814,88 +810,88 @@ bool hal_rtc_set_epoch(hal_rtc_t h, uint64_t epoch);
 bool hal_rtc_get_temperature(hal_rtc_t h, float *out_temperature_c);
 ```
 
-**Architektura:** `src/hal/rtc/hal_rtc.cpp` jest jedyną publiczną fasadą.
-Jest właścicielem statycznej puli uchwytów, walidacji
-konfiguracji/daty/alarmu, blokowania per-uchwyt, konwersji epoki,
-propagacji statusu oraz historycznych wrapperów `bool`/uchwyt. Wewnętrzne
-operacje providera oddzielają ten cykl życia od zachowania backendu:
+**Architektura:** Całe publiczne API znajduje się w `src/hal/rtc/hal_rtc.cpp`. Ten plik
+zarządza statyczną pulą uchwytów i osobnymi blokadami każdego z nich, sprawdza
+konfigurację, daty i alarmy, przelicza czas uniksowy oraz przekazuje statusy błędów.
+Zawiera też dotychczasowe wrappery zwracające `bool` lub uchwyt. Wewnętrzny interfejs
+backendu oddziela ten wspólny cykl życia od obsługi konkretnego układu:
 
-- **PCF8563:** bezpośredni dostęp do rejestrów przez wspólnego providera I2C
-  (data-czas, integralność zegara/bit VL, pola alarmu, tryb+licznik timera,
-  tryb CLKOUT, maska włączenia przerwań i odczytywane-i-czyszczone flagi
-  zdarzeń).
-- **DS3231:** wspólny przenośny driver przez wspólnego providera I2C z
-  data-czasem, obsługą integralności zegara OSF, mapowaniem alarmu/IRQ
-  wykorzystującym Alarm2, temperaturą oraz częściowym mapowaniem CLKOUT
+- **PCF8563:** bezpośredni dostęp do rejestrów przez wspólną obsługę I2C
+  (data i czas, integralność zegara/bit VL, pola alarmu, tryb i licznik timera,
+  tryb CLKOUT, maska włączenia przerwań oraz flagi zdarzeń odczytywane
+  i zerowane podczas jednej operacji).
+- **DS3231:** wspólny przenośny driver korzystający z I2C. Obsługuje datę i czas,
+  sprawdzanie poprawności zegara przez OSF, alarm i IRQ oparte na Alarm2, temperaturę
+  oraz część trybów CLKOUT
   (`1 Hz`, `1,024 kHz`, `32,768 kHz`). Zapisy daty aktualizują pełny
   kalendarz i czyszczą OSF dopiero po udanym dostępie I2C; wyłączenie CLKOUT
-  pozostawia włączone podtrzymywane bateryjnie śledzenie czasu. Niepowodzenia
-  I2C providera propagują jako `HAL_EIO`. Funkcje timera oraz
+  nie wyłącza podtrzymywanego bateryjnie odmierzania czasu. Błędy operacji I2C
+  są zwracane jako `HAL_EIO`. Funkcje timera oraz
   `HAL_RTC_CLKOUT_32_HZ` nie są obsługiwane.
-- **Wewnętrzny RTC STM32G474:** kalendarz domeny podtrzymywanej (backup
-  domain) na poziomie rejestrów, wykorzystujący LSE lub LSI, zachowywaną
-  integralność czasu, odpytywanie Alarmu A i dostarczanie IRQ przez linię
-  EXTI 18, jednorazowy względny timer wybudzania przez linię EXTI 20 / IRQ 3
-  oraz tryby wyjścia kalibracyjnego wyłączony/1 Hz. Względne wartości
-  timeout są zaokrąglane w górę do pełnych sekund i akceptują wartości do
-  65 536 sekund. Obsługuje lata 2000..2099. Temperatura, generyczny timer
+- **Wewnętrzny RTC STM32G474:** kalendarz w domenie podtrzymywanej, obsługiwany
+  bezpośrednio przez rejestry i taktowany z LSE lub LSI. Backend zachowuje informację o
+  poprawności czasu, pozwala odpytywać Alarm A i kieruje jego IRQ przez linię EXTI 18.
+  Udostępnia też jednorazowy względny timer wybudzania przez EXTI 20 / IRQ 3 oraz
+  wyłączone albo 1-hercowe wyjście kalibracyjne. Względne timeouty są zaokrąglane w górę
+  do pełnych sekund i mogą wynosić do 65 536 sekund. Obsługuje lata
+  2000..2099. Temperatura, ogólny timer
   odliczający oraz pozostałe częstotliwości CLKOUT zwracają
   `HAL_EUNSUPPORTED`; dzień i dzień tygodnia nie mogą być wybrane
   jednocześnie w jednym dopasowaniu Alarmu A.
-- **Wewnętrzny RTC RP2040/RP2350:** provider Pico SDK `pico_aon_timer`.
+- **Wewnętrzny RTC RP2040/RP2350:** implementacja Pico SDK `pico_aon_timer`.
   RP2040 wykorzystuje swój sprzętowy kalendarzowy RTC; RP2350 wykorzystuje
-  liniowy zawsze aktywny timer Powman. Backend obsługuje zapytania o
-  datę/czas, epokę, integralność oraz źródło i raportuje
+  stale działający liniowy timer Powman. Backend pozwala odczytać datę i czas, czas
+  uniksowy, stan poprawności zegara i jego źródło. Jako źródło zwraca
   `HAL_RTC_CLOCK_SOURCE_AON`. Jego względny alarm wybudzenia zaokrągla do
   rozdzielczości sprzętu (jedna sekunda na RP2040 i jedna milisekunda na
-  RP2350) i może żądać trasowania wybudzenia niskiego poboru mocy.
-  Generyczne alarmy kalendarzowe, timery odliczające, temperatura oraz
+  RP2350) i może żądać skonfigurowania ścieżki wybudzania w trybie niskiego
+  poboru mocy. Ogólne alarmy kalendarzowe, timery odliczające, temperatura oraz
   aktywne tryby CLKOUT zwracają `HAL_EUNSUPPORTED`.
-- **Provider mock:** stan w pamięci z deterministycznym wstrzykiwaniem do
-  testów jednostkowych; nie zawiera fasady, walidacji, kalendarza, puli ani
-  kopii mutexu.
+- **Backend mock:** przechowuje stan w pamięci i pozwala deterministycznie ustawiać go w
+  testach jednostkowych. Nie powiela publicznego API, walidacji, obliczeń kalendarza, puli
+  ani mutexów.
 
-Względne wybudzenie jest operacją providera natywną dla targetu. Uzbrojenie
-zastępuje każde poprzednie zdarzenie względne na tym samym wewnętrznym RTC,
-raportuje żądany i zaokrąglony timeout przez `hal_rtc_wakeup_get_state_ex()`
-i zachowuje się jako jednorazowe na granicy HAL. `hal_rtc_get_and_clear_flags_ex()`
-odczytuje i czyści oczekującą flagę `HAL_RTC_FLAG_WAKEUP`; anulowanie również ją
-czyści. Zewnętrzni providerzy I2C zwracają `HAL_EUNSUPPORTED`.
-`HAL_RTC_WAKEUP_LOW_POWER` żąda trasowania backendu potrzebnego przez
-głębszy stan, ale nie powoduje wejścia w ten stan.
+Względne wybudzanie jest realizowane przez backend właściwy dla targetu. Uzbrojenie
+nowego zdarzenia zastępuje poprzednie zdarzenie względne w tym samym wewnętrznym RTC.
+`hal_rtc_wakeup_get_state_ex()` podaje zarówno żądany timeout, jak i wartość zaokrągloną
+do możliwości sprzętu. Z punktu widzenia HAL zdarzenie jest jednorazowe.
+`hal_rtc_get_and_clear_flags_ex()` odczytuje i zeruje oczekującą flagę
+`HAL_RTC_FLAG_WAKEUP`; anulowanie również ją zeruje. Zewnętrzne układy RTC na I2C
+zwracają dla tej funkcji `HAL_EUNSUPPORTED`. `HAL_RTC_WAKEUP_LOW_POWER` żąda od backendu
+skonfigurowania linii wybudzenia wymaganej przez głębszy stan zasilania, ale sam nie
+wprowadza MCU w ten stan.
 
-Fasada i providerzy chipów wykorzystują wspólny rdzeń kalendarza
-gregoriańskiego, który odrzuca niemożliwe daty, takie jak 31 kwietnia oraz
+Wspólne API i backendy układów korzystają z jednego modułu kalendarza gregoriańskiego.
+Odrzuca on nieistniejące daty, takie jak 31 kwietnia oraz
 29 lutego w roku nieprzestępnym. Konwersja uniksowa akceptuje daty od
-1970-01-01 do 2099-12-31 i raportuje `HAL_EOVERFLOW` poza tym zakresem.
-Sprzętowy kalendarz STM32G474 zawęża akceptowany zakres do 2000-01-01 -
+1970-01-01 do 2099-12-31 i zwraca `HAL_EOVERFLOW` poza tym zakresem.
+Sprzętowy kalendarz STM32G474 zawęża akceptowany zakres do 2000-01-01-
 2099-12-31. Liniowa konwersja RP2350 akceptuje daty od epoki uniksowej do
 2099-12-31.
 
-Dla wewnętrznego backendu STM32G474, `HAL_RTC_CLOCK_SOURCE_AUTO` zachowuje
-już wybrane, obsługiwane źródło LSE/LSI w domenie podtrzymywanej. Na świeżej
-domenie czeka na LSE i wykorzystuje LSI jako ograniczony w czasie fallback.
+Dla wewnętrznego RTC STM32G474 ustawienie `HAL_RTC_CLOCK_SOURCE_AUTO` nie zmienia
+obsługiwanego źródła LSE lub LSI, jeśli zostało już zapisane w domenie podtrzymywanej.
+Przy pierwszej konfiguracji backend czeka na LSE przez określony czas, a w razie jego
+braku przechodzi na LSI.
 Jawne żądania `LSE` i `LSI` nigdy nie resetują domeny podtrzymywanej;
 żądanie sprzeczne z zachowanym źródłem zwraca `HAL_EBUSY`. `HSE_DIV32`
 należy do przenośnej enumeracji źródeł, ale nie jest obsługiwane przez
-obecnego providera STM32G474. Targety RP akceptują `AUTO` lub `AON`; oba
-rozwiązują się do `AON` bez I2C.
+obecny backend STM32G474. Targety RP akceptują `AUTO` lub `AON`; oba wybory oznaczają
+`AON` i nie korzystają z I2C.
 
-Provider STM32G474 rezerwuje rejestr podtrzymywany (backup) TAMP nr 31 dla
-swojego znacznika ważności zegara `JHRT`. Nadpisz
-`HAL_STM32_RTC_BACKUP_REGISTER_INDEX`, gdy aplikacja jest właścicielem tego
-rejestru. `HAL_STM32_RTC_LSE_STARTUP_TIMEOUT_MS` oraz
-`HAL_STM32_RTC_LSI_STARTUP_TIMEOUT_MS` konfigurują oczekiwania na oscylator.
+Backend STM32G474 rezerwuje rejestr podtrzymywany TAMP nr 31 na znacznik poprawności
+zegara `JHRT`. Jeśli aplikacja używa tego rejestru, ustaw inny numer przez
+`HAL_STM32_RTC_BACKUP_REGISTER_INDEX`. `HAL_STM32_RTC_LSE_STARTUP_TIMEOUT_MS` oraz
+`HAL_STM32_RTC_LSI_STARTUP_TIMEOUT_MS` określają limity czasu oczekiwania na oscylator.
 API względnego wybudzenia konfiguruje wyłącznie źródło RTC; nigdy nie
-zmienia stanu zasilania MCU. Użyj oddzielnie bramkowanego API `hal_power`
+zmienia stanu zasilania MCU. Użyj osobno włączanego API `hal_power`
 dla pełnego przejścia Sleep/STOP/Standby.
 
-Provider RP pozostawia działający zegar AON nietkniętym przy
-deinicjalizacji i przywraca go po resecie, gdy sprzęt nadal raportuje
-działający, możliwy do zdekodowania kalendarz. Płytki RP nie mają zasilania
-RTC podtrzymywanego baterią, więc jest to zachowanie ciepłego resetu (warm
-reset), gdy zasilanie pozostaje dostępne, a nie gwarantowane śledzenie
-czasu w przypadku utraty zasilania. Ustawienie pierwszej ważnej daty
+Backend RP nie zatrzymuje działającego zegara AON podczas deinicjalizacji. Po resecie
+przywraca jego stan, jeśli sprzęt nadal zawiera działający i poprawny kalendarz.
+Płytki RP nie mają podtrzymywanego baterią zasilania RTC, więc czas zostaje
+zachowany po warm resecie tylko wtedy, gdy zasilanie nie zostanie odłączone.
+Nie gwarantuje to odmierzania czasu po utracie zasilania. Ustawienie pierwszej poprawnej daty
 uruchamia timer AON.
 
 ```c
@@ -911,12 +907,11 @@ if (hal_rtc_init_ex(&cfg, &rtc) == HAL_OK) {
 }
 ```
 
-**Thread safety:** wspólna fasada serializuje każde wywołanie
-providera w runtime mutexem per uchwyt; ruch I2C jest dodatkowo
-chroniony mutexem magistrali `hal_i2c`. Tworzenie/niszczenie przestrzega
-projektowej polityki init/deinit jednordzeniowego. Każdy obsługiwany MCU
-udostępnia jeden wewnętrzny zasób RTC/AON, więc drugi jednoczesny uchwyt
-wewnętrzny zwraca `HAL_EBUSY`. Provider mock pozostaje przeznaczony do
+**Thread safety:** Każdy uchwyt ma mutex, który serializuje wywołania backendu w runtime.
+Operacje I2C są dodatkowo chronione mutexem magistrali `hal_i2c`. Tworzenie i niszczenie
+uchwytów podlega projektowej zasadzie wykonywania init/deinit na jednym rdzeniu. Każdy
+obsługiwany MCU udostępnia tylko jeden wewnętrzny zasób RTC/AON, dlatego próba utworzenia
+drugiego uchwytu wewnętrznego zwraca `HAL_EBUSY`. Mock jest przeznaczony do
 deterministycznych testów jednowątkowych.
 
 **Pomocnicy mock:**
@@ -927,21 +922,20 @@ void hal_mock_rtc_set_flags(hal_rtc_t h, uint8_t flags);
 void hal_mock_rtc_fire_wakeup(hal_rtc_t h);
 ```
 
-**Warianty `_ex` zwracające status:** każda operacja mogąca zakończyć się błędem
-uchwyt/`bool` powyżej ma dodatkowy odpowiednik `_ex` zwracający
-`hal_status_t` (zobacz [API statusów](01_status_api.md)). `hal_rtc_init_ex()`
-produkuje uchwyt przez parametr wyjściowy. `hal_rtc_deinit()` to niezawodne
-(infallible) czyszczenie, pozostaje `void` i celowo nie ma towarzyszącej
-funkcji `_ex`.
+**Warianty `_ex` zwracające status:** Każda z powyższych operacji zwracających uchwyt lub
+`bool`, która może zakończyć się błędem, ma dodatkowy wariant `_ex` zwracający
+`hal_status_t` (zobacz [API statusów](01_status_api.md)). `hal_rtc_init_ex()` zapisuje
+uchwyt przez parametr wyjściowy. `hal_rtc_deinit()` nie może się nie udać, dlatego nadal
+zwraca `void` i celowo nie ma wariantu `_ex`.
 
-Wspólna fasada raportuje nieprawidłowe argumenty lub konfigurację
-(`HAL_EINVAL`), wyczerpanie puli/mutexu (`HAL_ENOMEM`) oraz konwersję epoki
-uniksowej poza zakresem 1970..2099 (`HAL_EOVERFLOW`). Providerzy raportują
-nieobsługiwane chipy lub funkcje chipu (`HAL_EUNSUPPORTED`), konflikty
-zachowanego źródła (`HAL_EBUSY`), niekompatybilny zachowany kalendarz
-12-godzinny (`HAL_ECONFIG`), ograniczone czasowo oczekiwania na
-uruchomienie/rejestr (`HAL_ETIMEOUT`) oraz niepowodzenia backendu
-(`HAL_EIO`). Status inicjalizacji magistrali I2C jest propagowany bez zmian.
+Wspólne API zwraca `HAL_EINVAL` dla nieprawidłowych argumentów lub konfiguracji,
+`HAL_ENOMEM` po wyczerpaniu puli albo nieudanym utworzeniu mutexu oraz `HAL_EOVERFLOW`
+przy konwersji czasu uniksowego poza lata 1970..2099. Backendy zwracają
+`HAL_EUNSUPPORTED` dla nieobsługiwanego układu lub funkcji, `HAL_EBUSY` przy konflikcie
+z zapisanym źródłem zegara, `HAL_ECONFIG` dla zachowanego kalendarza w niezgodnym trybie
+12-godzinnym, `HAL_ETIMEOUT` po przekroczeniu limitu czasu uruchamiania lub operacji na
+rejestrze oraz `HAL_EIO` dla pozostałych błędów backendu. Status inicjalizacji magistrali
+I2C jest przekazywany bez zmian.
 
 ```c
 hal_rtc_t rtc = NULL;
@@ -981,20 +975,21 @@ int16_t hal_ext_adc_read(uint8_t channel);
 float   hal_ext_adc_read_scaled(uint8_t channel);
 ```
 
-**wspólna implementacja tematyczna:** driver ADS1X15/ADS1115 dostępny
-wyłącznie w HAL po HAL I2C, używany przez RP2040 i STM32G474.
-**Thread safety:** RP2040/STM32G474: thread-safe i
-wielordzeniowo tam, gdzie zapewnia to implementacja mutexu backendu.
-Dedykowany wewnętrzny `hal_mutex_t` serializuje wybór kanału ADC i dostęp do
-zakresu; transakcje HAL I2C chronią magistralę. `hal_ext_adc_init()` /
+- **Wspólna implementacja modułu:** Driver ADS1X15/ADS1115 należący do HAL korzysta
+  z HAL I2C i jest używany na RP2040 oraz STM32G474.
+
+**Thread safety:** Na RP2040 i STM32G474 API jest thread-safe oraz może być używane z wielu
+rdzeni, jeśli zapewnia to implementacja mutexu backendu. Osobny wewnętrzny `hal_mutex_t`
+serializuje wybór kanału ADC i dostęp do zakresu, a transakcje HAL I2C chronią magistralę.
+`hal_ext_adc_init()` i
 `hal_ext_adc_init_bus()` modyfikują globalny stan singletonowy i powinny być
 wywoływane podczas inicjalizacji. Backend mock nie synchronizuje
 współbieżnego dostępu.
 
 **Pomocnicy mock:**
 ```c
-void  hal_mock_ext_adc_inject_raw(uint8_t channel, int16_t value);   // wstrzykuje surowy wynik 16-bitowy dla kanału 0-3
-void  hal_mock_ext_adc_inject_scaled(uint8_t channel, float value);  // wstrzykuje przeskalowaną wartość float dla kanału 0-3
+void  hal_mock_ext_adc_inject_raw(uint8_t channel, int16_t value);   // ustawia surowy wynik 16-bitowy dla kanału 0-3
+void  hal_mock_ext_adc_inject_scaled(uint8_t channel, float value);  // ustawia przeskalowaną wartość float dla kanału 0-3
 float hal_mock_ext_adc_get_range(void);                               // zwraca adc_range ustawiony przez hal_ext_adc_init()
 ```
 
@@ -1002,10 +997,10 @@ float hal_mock_ext_adc_get_range(void);                               // zwraca 
 
 ## `hal_gps` - odbiornik GPS NMEA  *(opcjonalny - `HAL_ENABLE_GPS`)*
 
-Singletonowy podsystem GPS. Jedna fasada niezależna od targetu zasila
-przenośny wewnętrzny silnik NMEA z HAL UART lub SoftwareSerial, wybierany w
-czasie buildu. Mock obsługuje dokładne wstrzykiwanie pól oraz surowe
-wejście NMEA przez ten sam silnik i publiczne gettery.
+Podsystem GPS jest singletonem. Wspólne, niezależne od targetu API przekazuje dane z HAL
+UART lub SoftwareSerial do przenośnego parsera NMEA; transport jest wybierany podczas
+buildu. Mock korzysta z tego samego parsera i getterów. Pozwala ustawiać poszczególne pola
+oraz podawać bezpośrednio dane NMEA.
 
 **Automatyczne wykrywanie ramkowania SoftwareSerial:** Po odebraniu ~500
 znaków, jeśli każda ramka NMEA nie przeszła sumy kontrolnej, ścieżka
@@ -1016,25 +1011,26 @@ oraz klonowanymi płytkami NEO-6M, które są dostarczane jako 7N1.
 ```c
 #include <hal/gps/hal_gps.h>
 
-// Inicjalizuje podsystem GPS (pierwsze udane wywołanie sprzętowe zaczyna obowiązywać).
+// Inicjalizuje podsystem GPS (obowiązuje konfiguracja z pierwszego udanego
+// wywołania na sprzęcie).
 // config: format ramki UART - HAL_UART_CFG_8N1 (zalecana wartość domyślna) lub
 //         HAL_UART_CFG_7N1. Transport SoftwareSerial może wypróbować alternatywne
 //         ramkowanie po powtarzających się niepowodzeniach sumy kontrolnej.
 void hal_gps_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud, uint16_t config);
 
-// Tymczasowo zwalnia transport GPS, zachowując sparsowany fix.
+// Tymczasowo zwalnia transport GPS, zachowując zdekodowane dane pozycji.
 // Obie operacje są idempotentne i zwracają wynik hal_status_t.
 hal_status_t hal_gps_pause(void);
 hal_status_t hal_gps_resume(void);
 
-// Odsącza dostępne bajty szeregowe do parsera.
+// Przekazuje wszystkie dostępne bajty z portu szeregowego do parsera.
 // Musi być wywoływana często (zwykle w każdej iteracji pętli głównej), aby
 // przenosić zbuforowane dane transportu do parsera NMEA.
-// No-op w buildzie mock - użyj bezpośrednio pomocników wstrzykujących.
+// W buildzie mock nic nie robi - użyj bezpośrednio helperów ustawiających dane.
 void hal_gps_update(void);
 
 // Podaje jeden surowy bajt NMEA do parsera ręcznie (alternatywa dla hal_gps_update).
-// Testy mock mogą użyć tej ścieżki, aby przećwiczyć cały wspólny silnik.
+// Testy z mockiem mogą użyć tej funkcji, aby sprawdzić cały wspólny parser.
 void hal_gps_encode(char c);
 
 // Stan fix
@@ -1079,48 +1075,46 @@ uint32_t hal_gps_sentences_with_fix(void); // poprawne ramki zawierające fix lo
 int      hal_gps_serial_available(void);   // bajty oczekujące w buforze RX portu szeregowego
 ```
 
-**Architektura:** `src/hal/gps/hal_gps.cpp` jest jedyną fasadą transportu.
-Jest właścicielem inicjalizacji, odpytywania, fallbacku ramkowania
-SoftwareSerial, dostępności portu szeregowego oraz dokonywanego podczas
-buildu wyboru między `hal_uart` a `hal_swserial`. RP2040 i STM32G474
-wykorzystują ten sam plik, a tylko wybrany transport HAL dostarcza
-zachowanie specyficzne dla targetu.
+**Architektura:** Cała wspólna obsługa transportu znajduje się w
+`src/hal/gps/hal_gps.cpp`. Plik ten odpowiada za inicjalizację, polling, fallback formatu
+ramki SoftwareSerial, sprawdzanie dostępności portu oraz wybór `hal_uart` albo
+`hal_swserial` podczas buildu. RP2040 i STM32G474 używają tej samej implementacji;
+różnice między targetami pozostają w wybranym transporcie HAL.
 
-Wspólny `hal/gps/hal_gps_core.cpp` jest właścicielem mutexu, podawania
-bajtów, wieku fix, diagnostyki oraz każdego publicznego gettera danych
-wokół `gps_nmea_parser.cpp`. Logika parsera jest przeniesiona z TinyGPS++
-(LGPL), z obsługą GSA/GSV/GST opartą na układach pól minmea. Iniektory mock
-aktualizują stan deterministycznego silnika bez ponownej implementacji
-publicznych getterów.
+Wspólny `hal/gps/hal_gps_core.cpp` utrzymuje mutex, przekazuje bajty do
+`gps_nmea_parser.cpp`, oblicza wiek danych pozycji, zbiera diagnostykę i implementuje
+wszystkie publiczne gettery. Parser został przeniesiony z TinyGPS++ (LGPL), a obsługa
+GSA/GSV/GST opiera się na układzie pól z minmea. Helpery mocka aktualizują stan tego
+samego deterministycznego parsera i nie powielają getterów.
 
-**Thread safety:** jeden wewnętrzny `hal_mutex_t` chroni stan
-parsera, wstrzykiwanie mock, podawanie bajtów oraz wszystkie akcesory.
-Inicjalizacja pozostaje operacją init singletona na sprzęcie; inicjalizacja
-mock resetuje stan dla każdego testu. Pause i resume to operacje cyklu
-życia: wywołuj je z właściciela transportu i nie nakładaj ich na
-`hal_gps_update()`.
+**Thread safety:** Jeden wewnętrzny `hal_mutex_t` chroni stan parsera, ustawianie danych
+mocka, przekazywanie bajtów i wszystkie gettery. Na sprzęcie inicjalizacja
+singletona nadal odbywa się tylko raz; inicjalizacja mocka resetuje stan przed
+każdym testem. Wstrzymywanie i wznawianie pracy to operacje cyklu życia: należy
+wywoływać je z kodu zarządzającego transportem i nie wykonywać równocześnie
+z `hal_gps_update()`.
 
-**Transport RP2040 i powinowactwo rdzenia:**
+**Transport RP2040 i przypisanie do rdzenia:**
 
 - Z `HAL_GPS_TRANSPORT_SWSERIAL` odbiór działa w maszynach stanów PIO, a
-  DMA zapisuje surowy pierścień. Nie ma ISR RX GPS na żadnym z dwóch
-  rdzeni; `hal_gps_update()` opróżnia bufor obsługiwany przez DMA w
+  DMA zapisuje dane do surowego bufora pierścieniowego. Żaden z dwóch rdzeni
+  nie obsługuje ISR odbioru GPS; `hal_gps_update()` opróżnia bufor zasilany przez DMA w
   kontekście zadania wywołującego. `hal_gps_pause()` zatrzymuje to DMA i
   zwalnia transport PIO; `hal_gps_resume()` odtwarza go z zapisanymi
   pinami, prędkością transmisji i ramkowaniem.
-- Z `HAL_GPS_TRANSPORT_UART` `hal_gps_init()` wywołuje `hal_uart_begin()`.
-  Sprzętowe IRQ RX UART jest więc instalowane na, i niejawnie posiadane
-  przez, rdzeń wykonujący `hal_gps_init()`.
-- Obecne API GPS/UART nie udostępnia tego niejawnego właściciela UART i nie
+- Przy `HAL_GPS_TRANSPORT_UART` funkcja `hal_gps_init()` wywołuje `hal_uart_begin()`.
+  Sprzętowe IRQ RX UART zostaje zatem zainstalowane na rdzeniu, który wywołał
+  `hal_gps_init()`, i pozostaje do niego przypisane.
+- Obecne API GPS/UART nie udostępnia informacji o rdzeniu przypisanym do UART i nie
   waliduje rdzenia wywołującego. Inicjalizuj GPS/UART z zamierzonego rdzenia
-  i trzymaj reinicjalizację lub demontaż na tym samym rdzeniu. W kodzie
+  i wykonuj reinicjalizację lub deinicjalizację na tym samym rdzeniu. W kodzie
   FreeRTOS/SMP wywołuj `hal_gps_init()` z zadania usługi GPS po przypięciu
-  tego zadania do wybranego rdzenia; trzymanie `hal_gps_update()` w tym
-  samym zadaniu czyni całą własność transportu/parsowania jednoznaczną.
+  tego zadania do wybranego rdzenia. Wywoływanie `hal_gps_update()` z tego samego zadania
+  jasno określa, który kod zarządza transportem i parserem.
 
-Na przykład aplikacja, która przypisuje GPS do rdzenia 0, musi wywoływać
-zarówno `hal_gps_init()`, jak i regularne odpytywanie `hal_gps_update()` z
-zadania usługi rdzenia 0. Samo chronienie wywołań mutexem nie przenosi już
+Na przykład aplikacja, która przypisuje GPS do rdzenia 0, musi wywołać
+`hal_gps_init()` i regularnie wywoływać `hal_gps_update()` z zadania usługi
+działającego na rdzeniu 0. Samo chronienie wywołań mutexem nie przenosi już
 zainstalowanego IRQ UART RP2040 między rdzeniami.
 
 **Domyślna konfiguracja UART:**
@@ -1177,14 +1171,14 @@ if (status == HAL_OK) {
 ```
 
 Domyślna konfiguracja używa magistrali 0 i adresu
-`HAL_MCP3221_I2C_ADDR_DEFAULT` (`0x4D`, zgodnie z domyślną wartością wtyczki
-grblHAL `(0x9A >> 1)`). `hal_mcp3221_read_ex()` żąda dokładnie dwóch bajtów i
-dekoduje je jako surową wartość big-endian, zachowując zachowanie drivera
+`HAL_MCP3221_I2C_ADDR_DEFAULT` (`0x4D`, zgodnie z domyślną wartością wtyczki grblHAL
+`(0x9A >> 1)`). `hal_mcp3221_read_ex()` żąda dokładnie dwóch bajtów i dekoduje z nich
+nieprzetworzoną wartość w kolejności big-endian, zgodnie z zachowaniem drivera
 źródłowego.
 
-**Thread safety:** mutex per-instancja serializuje odczyty;
-transakcje I2C wykorzystują blokadę magistrali HAL I2C. Wywołania cyklu
-życia pozostają jednowłaścicielskie.
+**Thread safety:** Osobny mutex każdej instancji serializuje odczyty, a transakcje I2C
+korzystają z blokady magistrali HAL I2C. Za operacje cyklu życia powinien odpowiadać jeden
+wywołujący.
 
 Przykład: `examples/23_io_pmic`.
 

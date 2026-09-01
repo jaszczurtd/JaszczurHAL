@@ -1,15 +1,17 @@
-# Fixture build/link ESP32-S3 Phase 3
+# Projekt testowy kompilacji i linkowania ESP32-S3 - etap 3
 
-Ten fixture bez testu sprzętowego wybiera w jednym projekcie ESP-IDF wszystkie
-backendy ESP32-S3 zaimplementowane do Phase 3. CI i lokalny pełny gate używają
-go do sprawdzania rozwiązywania funkcji, wyboru źródeł i zależności, builda,
-linkowania, generowania partycji oraz artefaktów.
+Ten projekt, który nie wykonuje testów sprzętowych, wybiera w jednym projekcie
+ESP-IDF wszystkie implementacje ESP32-S3 ukończone do etapu 3, a także bazową
+implementację NimBLE Peripheral/Observer. CI i lokalna pełna bramka używają
+go do sprawdzania wyboru funkcji, źródeł i zależności, kompilacji, linkowania,
+generowania partycji oraz artefaktów.
 
-Nie jest to sprzętowy test akceptacyjny. Weryfikacja runtime WiFi, socketów,
-TLS, usług, OTA oraz peryferiów ukończonych w Phase 2 należy do Phase 3.5.
-Udany build tego fixture nie potwierdza ich działania na sprzęcie.
+Nie jest to sprzętowy test akceptacyjny. Działanie WiFi, gniazd, TLS, usług,
+OTA i radia BLE w czasie pracy oraz nowe peryferia ukończone w etapie 2
+sprawdzają osobne testy sprzętowe. Nie należy wnioskować o ich działaniu na
+podstawie samej kompilacji.
 
-Polecenie builda:
+Polecenie kompilacji:
 
 ```sh
 python3 scripts/build_esp_idf.py build \

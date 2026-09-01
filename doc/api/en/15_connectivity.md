@@ -349,12 +349,13 @@ hal_status_t hal_wifi_get_scan_result_ex(size_t index,
 const char *hal_wifi_encryption_to_string(hal_wifi_encryption_t encryption);
 ```
 
-**impl/rp2040:** JaszczurHAL-owned CYW43 driver and lwIP stack over PIO/gSPI.
-**impl/stm32g474:** the same CYW43/lwIP owner over the STM32G474 one-wire gSPI
-transport.
-**impl/esp32:** native ESP-IDF station lifecycle over NVS, `esp_netif`, the
-default event loop, `esp_wifi`, DHCP/DNS, scan, ping, and reconnect events.
-**impl/.mock:** state injection via mock helpers.
+- **impl/rp2040:** JaszczurHAL-owned CYW43 driver and lwIP stack over PIO/gSPI.
+- **impl/stm32g474:** the same CYW43/lwIP owner over the STM32G474 one-wire gSPI
+  transport.
+- **impl/esp32:** native ESP-IDF station lifecycle over NVS, `esp_netif`, the
+  default event loop, `esp_wifi`, DHCP/DNS, scan, ping, and reconnect events.
+- **impl/.mock:** state injection via mock helpers.
+
 **Thread safety:** The RP, STM32G474, and ESP32-S3 hardware backends serialize
 public HAL wrapper calls. Internal singleton mutexes protect provider state,
 network service progress, and stack access. The mock backend is a deterministic
@@ -502,12 +503,12 @@ connection close. Response bodies are copied without a terminator.
 `HAL_EOVERFLOW` reports the required body length when the caller buffer is too
 small. Chunked transfer encoding returns `HAL_EUNSUPPORTED`.
 
-**Implementation:** `hal/network/http/hal_http_client.cpp`.
-**Tests:** `test_hal_http_client` covers validation, fragmented response
-headers, response metadata, and bounded body copies.
-`test_hal_http_client_plaintext_compile` keeps the plaintext-only flag
-combination buildable. The verified HTTP/HTTPS client path is part of
-[`examples/18_freertos_suite`](../../../examples/18_freertos_suite/README.md).
+- **Implementation:** `hal/network/http/hal_http_client.cpp`.
+- **Tests:** `test_hal_http_client` covers validation, fragmented response
+  headers, response metadata, and bounded body copies.
+  `test_hal_http_client_plaintext_compile` keeps the plaintext-only flag
+  combination buildable. The verified HTTP/HTTPS client path is part of
+  [`examples/18_freertos_suite`](../../../examples/18_freertos_suite/README.md).
 
 ---
 
@@ -588,12 +589,12 @@ close status when closure is immediate. If another operation already holds the
 channel, close is deferred and its result is returned by that final operation
 when the operation itself otherwise succeeds.
 
-**Implementation:** `hal/network/notify/hal_notify.cpp` and
-`hal/network/notify/hal_notify_telegram.cpp`.
-**Tests:** `test_hal_notify` covers facade validation, fake-backend dispatch,
-handle lifetime and close errors, Telegram request JSON/prefixes, normalized
-public-host HTTP rejection, multipart delivery and rate-limit mapping.
-`test_hal_notify_c_compile` covers the C header interface.
+- **Implementation:** `hal/network/notify/hal_notify.cpp` and
+  `hal/network/notify/hal_notify_telegram.cpp`.
+- **Tests:** `test_hal_notify` covers facade validation, fake-backend dispatch,
+  handle lifetime and close errors, Telegram request JSON/prefixes, normalized
+  public-host HTTP rejection, multipart delivery and rate-limit mapping.
+  `test_hal_notify_c_compile` covers the C header interface.
 
 ---
 
@@ -722,9 +723,9 @@ Default static limits can be overridden before including HAL headers:
 #define HAL_HTTP_SERVER_DEFAULT_BACKLOG 2u
 ```
 
-**shared thematic implementation:** `hal/network/http/hal_http_server.cpp`.
-**impl/.mock:** covered through the mock TCP listener/socket backend and
-`test_hal_http_server`.
+- **shared thematic implementation:** `hal/network/http/hal_http_server.cpp`.
+- **impl/.mock:** covered through the mock TCP listener/socket backend and
+  `test_hal_http_server`.
 
 ---
 
@@ -874,8 +875,8 @@ Default static limits can be overridden before including HAL headers:
 #define HAL_HTTP_FILES_IO_BUFFER_SIZE 128u
 ```
 
-**shared thematic implementation:** `hal/network/http/hal_http_files.cpp`.
-**impl/.mock:** covered through mock HTTP/TCP and `test_hal_http_files`.
+- **shared thematic implementation:** `hal/network/http/hal_http_files.cpp`.
+- **impl/.mock:** covered through mock HTTP/TCP and `test_hal_http_files`.
 
 ---
 
@@ -991,9 +992,9 @@ Default static limits can be overridden before including HAL headers:
 #define HAL_WEBSOCKET_DEFAULT_BACKLOG 2u
 ```
 
-**shared thematic implementation:** `hal/network/websocket/hal_websocket.cpp`.
-**impl/.mock:** covered through the mock TCP listener/socket backend and
-`test_hal_websocket`.
+- **shared thematic implementation:** `hal/network/websocket/hal_websocket.cpp`.
+- **impl/.mock:** covered through the mock TCP listener/socket backend and
+  `test_hal_websocket`.
 
 ---
 
@@ -1092,9 +1093,9 @@ Default static limits can be overridden before including HAL headers:
 #define HAL_NET_CONSOLE_DEFAULT_BACKLOG 2u
 ```
 
-**shared thematic implementation:** `hal/network/net_console/hal_net_console.cpp`.
-**impl/.mock:** covered through the mock TCP listener/socket backend and
-`test_hal_net_console`.
+- **shared thematic implementation:** `hal/network/net_console/hal_net_console.cpp`.
+- **impl/.mock:** covered through the mock TCP listener/socket backend and
+  `test_hal_net_console`.
 
 ---
 
@@ -1297,9 +1298,9 @@ The previous `HAL_NET_COMMANDS_MAX_COMMANDS`, `HAL_NET_COMMANDS_NAME_MAX` and
 `HAL_NET_COMMANDS_RESPONSE_BUFFER_SIZE` spellings remain aliases of the shared
 router limits. If both forms are defined, their values must match.
 
-**shared thematic implementation:** `hal/network/net_commands/hal_net_commands.cpp`.
-**impl/.mock:** covered through mock HTTP/WebSocket TCP backends and
-`test_hal_net_commands`.
+- **shared thematic implementation:** `hal/network/net_commands/hal_net_commands.cpp`.
+- **impl/.mock:** covered through mock HTTP/WebSocket TCP backends and
+  `test_hal_net_commands`.
 
 ---
 
@@ -1390,12 +1391,13 @@ hal_status_t hal_ota_get_boot_info_ex(hal_ota_boot_info_t *out_info);
   `esp_ota_mark_app_valid_cancel_rollback()`. Calling it while stable is
   harmless.
 
-**impl/rp2040:** staging/applier implementation for RP2040 and RP2350.
-**impl/esp32:** native ESP-IDF OTA partitions and raw application images. The
-AUTH2 password is optional at the device API level; deployed systems must
-configure a non-empty secret and apply the ESP-IDF secure-boot/flash-encryption
-policy appropriate to their threat model.
-**impl/.mock:** deterministic event-injection test double.
+- **impl/rp2040:** staging/applier implementation for RP2040 and RP2350.
+- **impl/esp32:** native ESP-IDF OTA partitions and raw application images. The
+  AUTH2 password is optional at the device API level; deployed systems must
+  configure a non-empty secret and apply the ESP-IDF secure-boot/flash-encryption
+  policy appropriate to their threat model.
+- **impl/.mock:** deterministic event-injection test double.
+
 **Thread safety:** RP-family and ESP32-S3 backends are thread-safe and
 multicore-safe for public APIs. A singleton `hal_mutex_t` serializes all wrapper
 calls and callback dispatch is performed outside that lock. Lazy mutex
@@ -1493,12 +1495,13 @@ bool     hal_udp_end_packet(void);
 - When `hal_wireguard` is active, datagrams to destinations covered by the
   WireGuard route/AllowedIPs are carried through the encrypted tunnel.
 
-**impl/rp2040:** JaszczurHAL-owned lwIP raw UDP engine with a static socket
-pool.
-**impl/esp32:** bounded HAL handle pool over native ESP-IDF lwIP UDP sockets
-and `select()` readiness/timeouts.
-**impl/.mock:** deterministic multi-socket test double with injected inbound
-packets, captured outbound packet metadata and payload.
+- **impl/rp2040:** JaszczurHAL-owned lwIP raw UDP engine with a static socket
+  pool.
+- **impl/esp32:** bounded HAL handle pool over native ESP-IDF lwIP UDP sockets
+  and `select()` readiness/timeouts.
+- **impl/.mock:** deterministic multi-socket test double with injected inbound
+  packets, captured outbound packet metadata and payload.
+
 **Thread safety:** RP-family and ESP32-S3 backends are thread-safe and
 multicore-safe for public APIs. Backend-local mutexes protect their static UDP
 pools and stack operations.
@@ -1610,13 +1613,14 @@ void hal_tcp_listener_close(hal_tcp_listener_t listener);
 - When `hal_wireguard` is active, connections to destinations covered by the
   WireGuard route/AllowedIPs are carried through the encrypted tunnel.
 
-**impl/rp2040:** JaszczurHAL-owned lwIP raw TCP engine with static socket and
-listener pools.
-**impl/esp32:** bounded HAL handle pool over native ESP-IDF lwIP TCP sockets,
-including timed connect, bind/listen/accept, shutdown, and `select()` readiness.
-**impl/.mock:** deterministic client/listener test double with scripted
-connect result, injected RX bytes, captured TX payload, captured remote
-endpoint and per-listener pending-client queues.
+- **impl/rp2040:** JaszczurHAL-owned lwIP raw TCP engine with static socket and
+  listener pools.
+- **impl/esp32:** bounded HAL handle pool over native ESP-IDF lwIP TCP sockets,
+  including timed connect, bind/listen/accept, shutdown, and `select()` readiness.
+- **impl/.mock:** deterministic client/listener test double with scripted
+  connect result, injected RX bytes, captured TX payload, captured remote
+  endpoint and per-listener pending-client queues.
+
 **Thread safety:** RP-family and ESP32-S3 backends are thread-safe and
 multicore-safe for public APIs. Backend-local mutexes protect their static TCP
 pools and stack operations.
@@ -1856,16 +1860,16 @@ are stored in a table sized by `HAL_BSD_SOCKET_MAX_FDS`.
   cancellable waits should use `O_NONBLOCK` plus `select()` polling.
 - Unsupported flags/operations fail with `errno`.
 
-**shared thematic implementation:** `hal/network/adapters/bsd/hal_bsd_sockets.cpp`
-contains the fd-table adapter, address conversion helpers and `netdb.h`
-resolver support.
-**impl/esp32:** native ESP-IDF lwIP BSD headers and symbols; descriptor and
-option behavior follows the pinned ESP-IDF configuration rather than the
-shared adapter's fixed fd table.
-**impl/.mock tests:** `test_bsd_sockets` covers behavior and errno mapping;
-`test_bsd_sockets_c_compile` verifies simple C TCP/UDP client/server shapes,
-`getaddrinfo()` and `setsockopt()` compile and link against the compatibility
-headers.
+- **shared thematic implementation:** `hal/network/adapters/bsd/hal_bsd_sockets.cpp`
+  contains the fd-table adapter, address conversion helpers and `netdb.h`
+  resolver support.
+- **impl/esp32:** native ESP-IDF lwIP BSD headers and symbols; descriptor and
+  option behavior follows the pinned ESP-IDF configuration rather than the
+  shared adapter's fixed fd table.
+- **impl/.mock tests:** `test_bsd_sockets` covers behavior and errno mapping;
+  `test_bsd_sockets_c_compile` verifies simple C TCP/UDP client/server shapes,
+  `getaddrinfo()` and `setsockopt()` compile and link against the compatibility
+  headers.
 
 ---
 
@@ -1940,16 +1944,17 @@ bool hal_wireguard_kick_handshake_text(const char *probe_ip_text,
 - `hal_wireguard_kick_handshake(...)` triggers non-blocking handshake probe.
 - `hal_wireguard_kick_handshake_text(...)` parses dotted probe IP text and delegates to `hal_wireguard_kick_handshake(...)`.
 
-**shared thematic implementation:** bundled protocol/crypto engine plus a private lwIP-extension
-port used by capability-advertised host-stack backends.
-**impl/rp2040:** HAL-owned lwIP extension and secure platform hooks.
-**impl/stm32g474:** shared CYW43/lwIP underlay, hardware RNG entropy, and
-HAL-synchronized NTP time.
-**impl/esp32:** shared WireGuard engine over the native ESP-IDF lwIP underlay,
-with explicit stack locking/netif access, native resolver, secure ESP entropy,
-and synchronized libc time for TAI64N handshakes.
-**impl/.mock:** deterministic stateful test double with captured configuration,
-peer endpoint injection and handshake-trigger observability.
+- **shared thematic implementation:** bundled protocol/crypto engine plus a private lwIP-extension
+  port used by capability-advertised host-stack backends.
+- **impl/rp2040:** HAL-owned lwIP extension and secure platform hooks.
+- **impl/stm32g474:** shared CYW43/lwIP underlay, hardware RNG entropy, and
+  HAL-synchronized NTP time.
+- **impl/esp32:** shared WireGuard engine over the native ESP-IDF lwIP underlay,
+  with explicit stack locking/netif access, native resolver, secure ESP entropy,
+  and synchronized libc time for TAI64N handshakes.
+- **impl/.mock:** deterministic stateful test double with captured configuration,
+  peer endpoint injection and handshake-trigger observability.
+
 **Thread safety:** a singleton `hal_mutex_t` serializes all public wrapper
 calls; the selected backend serializes private lwIP stack access.
 
@@ -2037,10 +2042,11 @@ bool hal_mqtt_unsubscribe(const char *topic);
 - Inbound messages are copied to an internal buffer and delivered from
   `hal_mqtt_loop()` after releasing the internal mutex.
 
-**impl/rp2040/stm32g474/esp32:** bundled `PubSubClient`
-(`frameworks/PubSubClient`) over `hal_tcp` or the BearSSL `hal_tls` client.
-**impl/.mock:** deterministic stateful test double with injectable connect result,
-loop result and inbound messages.
+- **impl/rp2040/stm32g474/esp32:** bundled `PubSubClient`
+  (`frameworks/PubSubClient`) over `hal_tcp` or the BearSSL `hal_tls` client.
+- **impl/.mock:** deterministic stateful test double with injectable connect result,
+  loop result and inbound messages.
+
 **Thread safety:** A singleton `hal_mutex_t` serializes all MQTT client calls.
 Callbacks are delivered after the internal mutex is released.
 

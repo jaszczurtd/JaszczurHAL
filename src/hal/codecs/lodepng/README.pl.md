@@ -1,10 +1,12 @@
 # Integracja LodePNG
 
-Checkout upstream LodePNG jest zarządzany w `third_party/lodepng` według
-dokładnego commita z `third_party/lodepng_version.conf`. Pliki w tym katalogu
-zachowują ścieżkę include JaszczurHAL i domyślny profil operujący wyłącznie na
-pamięci. Wrapper udostępnia linkage C, a zarządzana implementacja jest budowana
-jako C++. Build RP2350 RISC-V stosuje ustawienie optymalizacji właściwe dla
-źródła bez modyfikowania zarządzanego checkoutu.
+Kopia źródeł LodePNG jest utrzymywana w `third_party/lodepng` na dokładnym
+commicie zapisanym w `third_party/lodepng_version.conf`. Pliki w tym katalogu
+zachowują ścieżkę nagłówka JaszczurHAL i domyślny profil działający wyłącznie w
+pamięci. Wrapper zapewnia wiązanie C dla kodu napisanego w C, natomiast
+implementacja utrzymywana przez projekt jest kompilowana jako C++. Build dla
+RP2350 RISC-V stosuje ustawienie optymalizatora dotyczące wyłącznie tego źródła,
+bez modyfikowania kopii utrzymywanej przez projekt.
 
-Zależność synchronizuje i weryfikuje `scripts/ensure_lodepng.sh`.
+Do synchronizacji lub weryfikacji tej zależności służy
+`scripts/ensure_lodepng.sh`.

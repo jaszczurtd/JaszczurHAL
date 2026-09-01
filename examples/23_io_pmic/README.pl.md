@@ -1,18 +1,18 @@
 # 23 - Zewnętrzne I/O, konwertery, PMIC i LED RGB
 
-Jeden build firmware sprawdza:
+Jeden obraz firmware sprawdza:
 
 - ekspandery GPIO I2C MCP23017, PCA9654E i PCF8574;
 - rejestr wyjściowy SPI 74HC595;
 - ADC MCP3221 i DAC MCP4725;
 - ładowarkę, miernik poziomu baterii i regulator ADP5360;
-- jednokanałowy adresowalny LED RGB.
+- adresowalną diodę RGB z jednym pikselem.
 
 Każde urządzenie I2C jest inicjalizowane niezależnie, dlatego niepełne
-stanowisko nadal sprawdza obecne drivery.
+stanowisko nadal sprawdza podłączone urządzenia i ich sterowniki.
 
-Trzy ekspandery GPIO, których adresy domyślnie by kolidowały, używają jawnie
-ustawionych adresów: MCP23017 `0x20`, PCA9654E `0x21` i PCF8574 `0x22`.
+Trzem ekspanderom GPIO, których domyślne adresy kolidowałyby ze sobą, jawnie
+przypisano różne adresy: MCP23017 `0x20`, PCA9654E `0x21` i PCF8574 `0x22`.
 Skonfiguruj odpowiednio piny adresowe każdego modułu.
 
 | Magistrala lub sygnał | Rodzina RP | STM32G474 |

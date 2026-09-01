@@ -4,44 +4,45 @@
 
 > **Część [Dokumentacji API JaszczurHAL](../../pl/JaszczurHAL_API.md)**
 
-Moduły Bluetooth są opcjonalne. `HAL_ENABLE_BLE` udostępnia API Bluetooth Low
-Energy dla ról Peripheral i pasywnego Observera przez
-`hal/bluetooth/hal_ble.h`. `HAL_ENABLE_BLUETOOTH_GAMEPAD` udostępnia jeden
-gamepad Bluetooth Classic HID przez `hal/bluetooth/hal_gamepad.h` i
-automatycznie włącza `HAL_ENABLE_BLUETOOTH_CLASSIC`. Oba API są również
-dostępne ze zbiorczego nagłówka `JaszczurHAL.h`.
+Moduły Bluetooth są opcjonalne. `HAL_ENABLE_BLE` udostępnia przez
+`hal/bluetooth/hal_ble.h` API Bluetooth Low Energy dla roli Peripheral oraz
+pasywnego Observera. `HAL_ENABLE_BLUETOOTH_GAMEPAD` udostępnia przez
+`hal/bluetooth/hal_gamepad.h` obsługę jednego gamepada Bluetooth Classic HID
+i automatycznie włącza `HAL_ENABLE_BLUETOOTH_CLASSIC`. Oba API są dostępne
+również przez zbiorczy nagłówek `JaszczurHAL.h`.
 
-Bieżące wydanie dostarcza jedno połączenie Peripheral, klasyczne (legacy)
-advertising z możliwością połączenia, pasywne, klasyczne skanowanie
-Observer, kopiowane raporty advertisingu, parsowanie struktur AD, zdarzenia
-kontrolera i połączenia, raportowanie ATT MTU oraz statyczną bazę danych
-GATT zawierającą obowiązkowe usługi GAP i GATT. Nie dostarcza jeszcze
-aktywnego skanowania ani żądań scan response, dowolnych charakterystyk
-aplikacji, klienta GATT, parowania ani bondingu. Opcjonalny profil
-`HAL_ENABLE_BLE_STREAM` dodaje jedną stałą, uwierzytelnioną usługę
-aplikacyjną wraz z jej ścieżką powiadomień. `HAL_ENABLE_BLE_COMMANDS`
-dedykuje ten ładunek Stream współdzielonemu routerowi poleceń; nie dodaje
-klienta GATT.
+Bieżące wydanie obsługuje jedno połączenie Peripheral, pakiety advertising
+typu legacy z możliwością połączenia oraz ich pasywne skanowanie w trybie
+Observer. Raporty advertising są kopiowane do kolejki, a struktury AD można
+parsować. API przekazuje zdarzenia kontrolera i połączenia, udostępnia ATT MTU
+oraz korzysta ze statycznej bazy GATT z obowiązkowymi usługami GAP i GATT.
+
+Nie ma jeszcze aktywnego skanowania ani wysyłania żądań Scan Response,
+dowolnie definiowanych charakterystyk aplikacji, klienta GATT, parowania czy
+bondingu. Opcjonalny profil `HAL_ENABLE_BLE_STREAM` dodaje jedną stałą,
+uwierzytelnioną usługę aplikacyjną z powiadomieniami. Flaga
+`HAL_ENABLE_BLE_COMMANDS` przeznacza dane tej usługi wyłącznie dla wspólnego
+routera poleceń; nie dodaje klienta GATT.
 
 ## Obsługiwane profile
 
 | API | Target | Płytka | Radio/host | Walidacja |
 |---|---|---|---|---|
-| BLE | `rp2040` | `picow` | wbudowany CYW43439 z BTstack | Bramki sprzętowe Observer oraz Stream bare-metal/FreeRTOS przeszły |
-| BLE | `rp2350-arm` | `pico2w` | wbudowany CYW43439 z BTstack | Bramki Observer, Stream bare-metal/FreeRTOS oraz aktywnej koegzystencji Stream+WiFi/MQTT przeszły |
-| BLE | `rp2040` | `pico-rm2` | zewnętrzny CYW43439 PIM730/RM2 przez PIO | obsługiwane na etapie buildu; dedykowana bramka sprzętowa oczekująca |
-| BLE | `stm32g474` | `nucleo-g474re-pim730` | zewnętrzny CYW43439 PIM730/RM2 przez gSPI | Bramki Peripheral i Observer oraz pełne bramki obciążeniowe Stream bare-metal/FreeRTOS z wyświetlaczem przeszły |
-| BLE | `esp32s3` | `waveshare-esp32-s3-zero` | zintegrowany kontroler LE z ESP-IDF NimBLE | kompletna bramka buildu i linkowania; bramka radiowa na sprzęcie oczekuje |
-| Gamepad Classic | `rp2040` / `rp2350-arm` / `stm32g474` | profile Bluetooth wymienione wyżej | CYW43439 z hostem HID BTstack | bramki sprzętowe Zero 2 przeszły na `pico2w`; pozostałe płytki przeszły bramki buildu |
-| Gamepad Classic | `esp32` | `esp32-devkitc-v4` | zintegrowany kontroler BR/EDR z ESP-IDF Bluedroid i ESP HID Host | kompletna bramka buildu i linkowania; bramka radiowa na sprzęcie oczekuje |
-| BLE i gamepad Classic | `mock` | `host-mock` | deterministyczne backendy testowe | testy hosta |
+| BLE | `rp2040` | `picow` | wbudowany CYW43439 z BTstack | zaliczone testy sprzętowe Observera oraz Stream w trybach bare metal i FreeRTOS |
+| BLE | `rp2350-arm` | `pico2w` | wbudowany CYW43439 z BTstack | zaliczone testy Observera, Stream w trybach bare metal i FreeRTOS oraz aktywnej współpracy Stream+WiFi/MQTT |
+| BLE | `rp2040` | `pico-rm2` | zewnętrzny CYW43439 PIM730/RM2 przez PIO | build potwierdza obsługę; dedykowany test sprzętowy oczekuje na wykonanie |
+| BLE | `stm32g474` | `nucleo-g474re-pim730` | zewnętrzny CYW43439 PIM730/RM2 przez gSPI | zaliczone testy Peripheral i Observer oraz pełne testy obciążeniowe Stream z wyświetlaczem w trybach bare metal i FreeRTOS |
+| BLE | `esp32s3` | `waveshare-esp32-s3-zero` | zintegrowany kontroler LE z ESP-IDF NimBLE | pełny test kompilacji i linkowania; test radia na sprzęcie oczekuje na wykonanie |
+| Gamepad Classic | `rp2040` / `rp2350-arm` / `stm32g474` | profile Bluetooth wymienione wyżej | CYW43439 z hostem HID BTstack | zaliczone testy sprzętowe Zero 2 na `pico2w`; dla pozostałych płytek sprawdzono build |
+| Gamepad Classic | `esp32` | `esp32-devkitc-v4` | zintegrowany kontroler BR/EDR z ESP-IDF Bluedroid i ESP HID Host | pełny test kompilacji i linkowania; test radia na sprzęcie oczekuje na wykonanie |
+| BLE i gamepad Classic | `mock` | `host-mock` | deterministyczne backendy do testów | testy hostowe |
 
 Backend RP2350 obsługuje wyłącznie Pico 2 W z targetem `rp2350-arm`. Pico 2 W
 z `rp2350-riscv` jest nieobsługiwane, ponieważ transport Bluetooth CYW43 nie
 jest włączony dla tego targetu. `HAL_ENABLE_BLE` i
-`HAL_ENABLE_BLUETOOTH_CLASSIC` są odrzucane podczas buildu, gdy ich
-konkretny transport jest niedostępny. Sprawdzenia możliwości w runtime
-rozróżniają `HAL_BOARD_CAP_BLUETOOTH_LE_CONTROLLER` i
+`HAL_ENABLE_BLUETOOTH_CLASSIC` powodują błąd buildu, gdy wymagany transport
+jest niedostępny. Sprawdzenia wykonywane w runtime rozróżniają
+`HAL_BOARD_CAP_BLUETOOTH_LE_CONTROLLER` i
 `HAL_BOARD_CAP_BLUETOOTH_CLASSIC_CONTROLLER`; starszy ogólny bit Bluetooth
 pozostaje dostępny dla zgodności. Moduły zewnętrzne wymagają dodatkowo
 `HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND`.
@@ -49,7 +50,8 @@ pozostaje dostępny dla zgodności. Moduły zewnętrzne wymagają dodatkowo
 ESP32-S3 obsługuje obecnie bazowe API BLE Peripheral/Observer, ale nie
 `HAL_ENABLE_BLE_STREAM`, klienta GATT ani Classic HID. Oryginalny ESP32
 obsługuje obecnie profil gamepada Classic, ale nie włącza publicznego API BLE.
-Są to jawne granice targetów, a nie ścieżki zastępcze wybierane w runtime.
+Są to jawne ograniczenia poszczególnych targetów, a nie fallbacki wybierane
+w runtime.
 
 ## Cykl życia i odpytywanie
 
@@ -101,23 +103,24 @@ extern "C" void app_task0(void) {
 }
 ```
 
-`hal_ble_initialize()` uruchamia backend wybranego targetu i zwraca sterowanie,
-gdy start zostanie zaakceptowany. Gotowość jest
-asynchroniczna i jest raportowana przez `HAL_BLE_EVENT_CONTROLLER_READY`.
-Inicjalizacja i deinicjalizacja są idempotentne po sukcesie. Deinicjalizacja
-unieważnia każdy uchwyt połączenia i advertisingu, czyści kolejkę zdarzeń
-oraz usuwa callback.
+`hal_ble_initialize()` uruchamia backend wybranego targetu i kończy działanie,
+gdy żądanie uruchomienia zostanie przyjęte. Kontroler staje się gotowy
+asynchronicznie, co sygnalizuje zdarzenie `HAL_BLE_EVENT_CONTROLLER_READY`.
+Po pomyślnym uruchomieniu kolejne wywołania inicjalizacji i deinicjalizacji są
+idempotentne.
+Deinicjalizacja unieważnia wszystkie uchwyty połączeń i advertisingu, czyści
+kolejkę zdarzeń oraz wyrejestrowuje funkcję zwrotną.
 
-Wywołuj `hal_ble_poll()` często z jednego zadania lub pętli kooperacyjnej.
-Obsługuje kontroler, a następnie wywołuje callbacki poza blokadą radiową
-backendu. Wywołanie `hal_ble_poll()`, zmiana callbacku
-lub deinicjalizacja rekurencyjnie z callbacku zwraca `HAL_EBUSY`; zapytania
-tylko do odczytu są dozwolone.
+Wywołuj `hal_ble_poll()` często z jednego zadania lub z pętli kooperacyjnej.
+Funkcja obsługuje kontroler, zwalnia blokadę radia backendu, a dopiero potem
+wywołuje funkcje zwrotne. Próba ponownego wywołania `hal_ble_poll()`, zmiany
+funkcji zwrotnej lub deinicjalizacji z jej poziomu kończy się `HAL_EBUSY`.
+Zapytania tylko do odczytu są dozwolone.
 
 ## Zdarzenia
 
-`HAL_BLE_EVENT_QUEUE_DEPTH` konfiguruje kopiowaną, ograniczoną kolejkę
-zdarzeń i domyślnie wynosi 8. Publiczne zdarzenia to:
+`HAL_BLE_EVENT_QUEUE_DEPTH` określa pojemność kolejki przechowującej kopie
+zdarzeń; domyślna wartość to 8. Publiczne zdarzenia to:
 
 - `HAL_BLE_EVENT_CONTROLLER_READY`;
 - `HAL_BLE_EVENT_ADVERTISING_STARTED` oraz
@@ -128,34 +131,35 @@ zdarzeń i domyślnie wynosi 8. Publiczne zdarzenia to:
   `HAL_BLE_EVENT_SCAN_REPORT_AVAILABLE`;
 - `HAL_BLE_EVENT_ERROR`.
 
-Wybierz jeden model odbioru: zarejestruj callback wywoływany przez
-`hal_ble_poll()`, lub zdejmuj zdarzenia przy pomocy `hal_ble_event_next()`.
-Oba pobierają zdarzenia z tej samej kolejki. `hal_ble_event_next()` zwraca `HAL_EAGAIN`,
-gdy jest pusta. Jeśli kolejka się zapełni, nowe zdarzenia są odrzucane,
-`hal_ble_info_t::dropped_events` wzrasta, a kolejne odpytanie raportuje
-`HAL_EOVERFLOW` bez zatrzymywania BLE.
+Wybierz jeden sposób odbierania zdarzeń: zarejestruj funkcję zwrotną wywoływaną
+przez `hal_ble_poll()` albo pobieraj je przez `hal_ble_event_next()`. Oba
+mechanizmy korzystają z tej samej kolejki. Gdy jest pusta,
+`hal_ble_event_next()` zwraca `HAL_EAGAIN`. Po zapełnieniu kolejki nowe
+zdarzenia są odrzucane, licznik
+`hal_ble_info_t::dropped_events` wzrasta, a następne wywołanie
+`hal_ble_poll()` zwraca `HAL_EOVERFLOW`. BLE nadal pozostaje aktywne.
 
-Zdarzenie gotowości nie ma adresu peera; wywołaj
+Zdarzenie gotowości nie zawiera adresu drugiej strony połączenia; wywołaj
 `hal_ble_get_local_address()` po jego otrzymaniu. Zdarzenie połączenia
-zawiera adres peera i nowy, nieprzezroczysty uchwyt połączenia. Zdarzenia
-MTU i rozłączenia odnoszą się do tego samego uchwytu.
+zawiera jej adres i nowy nieprzezroczysty uchwyt połączenia.
+Zdarzenia MTU i rozłączenia odnoszą się do tego samego uchwytu.
 
 ## Advertising
 
-`hal_ble_advertising_start()` kopiuje kompletną konfigurację przed
-zwróceniem sterowania. Klasyczny (legacy) ładunek musi zawierać od 1 do 31
-bajtów. Minimalny interwał musi mieścić się między `0x0020` a `0x4000`
+`hal_ble_advertising_start()` kopiuje całą konfigurację przed zakończeniem
+wywołania. Dane advertisingowe typu legacy muszą zawierać od 1 do 31 bajtów.
+Minimalny interwał musi mieścić się między `0x0020` a `0x4000`
 jednostek (od 20 ms do 10,24 s), a maksymalny musi być co najmniej równy
 minimalnemu i nie większy niż `0x4000`.
 
-`HAL_OK` oznacza, że żądanie zostało zaakceptowane. Poczekaj na
-`HAL_BLE_EVENT_ADVERTISING_STARTED` na potwierdzenie zakończenia.
-Advertising zażądany przed gotowością kontrolera rozpoczyna się, gdy
-kontroler stanie się gotowy. Udane połączenie wstrzymuje go, a rozłączenie
-uruchamia go ponownie, dopóki żądanie pozostaje aktywne. Zatrzymaj żądanie
-jego nieprzezroczystym uchwytem advertisingu. Nie składaj drugiego żądania
-startu po `HAL_BLE_EVENT_DISCONNECTED`; oryginalne żądanie jest już
-właścicielem automatycznego restartu.
+`HAL_OK` oznacza, że żądanie zostało przyjęte. Na potwierdzenie uruchomienia
+poczekaj na `HAL_BLE_EVENT_ADVERTISING_STARTED`.
+Jeśli advertising zostanie zlecony przed osiągnięciem gotowości przez kontroler,
+rozpocznie się później automatycznie. Udane połączenie wstrzymuje go, a rozłączenie
+uruchamia go ponownie, dopóki pierwotne żądanie pozostaje aktywne. Aby je
+zatrzymać, przekaż nieprzezroczysty uchwyt advertisingu. Po
+`HAL_BLE_EVENT_DISCONNECTED` nie wysyłaj kolejnego żądania uruchomienia;
+automatyczne wznowienie wynika już z pierwotnego żądania.
 
 ## Pasywne skanowanie Observer
 
@@ -164,37 +168,38 @@ duplikatów. Obie wartości czasowe używają jednostek Bluetooth 0,625 ms i
 muszą mieścić się między `HAL_BLE_SCAN_INTERVAL_MIN` a
 `HAL_BLE_SCAN_INTERVAL_MAX`; okno nie może przekraczać interwału. `HAL_OK`
 oznacza, że żądanie zostało zaakceptowane. Poczekaj na
-`HAL_BLE_EVENT_SCAN_STARTED` na potwierdzenie zakończenia.
+`HAL_BLE_EVENT_SCAN_STARTED`, które potwierdza uruchomienie skanowania.
 
-Skanowanie jest pasywne i odbiera wyłącznie klasyczne (legacy) pakiety
-advertisingu. Nie wysyła żądań scan, nie inicjuje połączeń, nie paruje ani
-nie eksponuje klienta GATT. Początkowe wydanie Observer utrzymuje też
-skanowanie jako wzajemnie wykluczające się ze advertisingiem i połączeniem
-Peripheral; konfliktujące żądania startu zwracają `HAL_EBUSY`.
+Skanowanie jest pasywne i odbiera wyłącznie pakiety advertising typu legacy.
+Nie wysyła pakietów Scan Request, nie inicjuje połączeń, nie paruje i nie udostępnia
+klienta GATT. W obecnej implementacji Observera skanowanie nie może działać
+jednocześnie z advertisingiem ani połączeniem Peripheral. Sprzeczne żądania
+uruchomienia zwracają `HAL_EBUSY`.
 
-Raporty są kopiowane do osobnej, o stałym rozmiarze kolejki konfigurowanej
-przez `HAL_BLE_SCAN_REPORT_QUEUE_DEPTH`, która domyślnie wynosi 8. Zdarzenie
+Raporty są kopiowane do osobnej kolejki o stałej pojemności, określanej przez
+`HAL_BLE_SCAN_REPORT_QUEUE_DEPTH`; domyślna wartość to 8. Zdarzenie
 `HAL_BLE_EVENT_SCAN_REPORT_AVAILABLE` oznacza, że co najmniej jeden raport
-można odczytać przy pomocy `hal_ble_scan_report_next()`. Opróżnij wszystkie
+można odczytać za pomocą `hal_ble_scan_report_next()`. Opróżnij wszystkie
 dostępne raporty po tym zdarzeniu. Wywołanie zwraca `HAL_EAGAIN`, gdy
-kolejka jest pusta. Jeśli raporty zostały odrzucone, najpierw zwraca
-`HAL_EOVERFLOW`, aby potwierdzić utratę; wywołaj ponownie, aby odczytać
-najstarszy zachowany raport. Liczniki skumulowane i oczekujące są dostępne
-przez `hal_ble_info_t`.
+kolejka jest pusta. Jeśli część raportów została odrzucona, funkcja najpierw
+zwraca `HAL_EOVERFLOW`, informując o utracie danych. Wywołaj ją ponownie, aby
+odczytać najstarszy raport pozostały w kolejce. `hal_ble_info_t` zawiera łączną
+liczbę utraconych raportów oraz liczbę zgłoszeń utraty oczekujących na
+potwierdzenie przez aplikację.
 
-Każdy raport zawiera skopiowany adres, RSSI, klasyczny (legacy) typ
-zdarzenia oraz do 31 bajtów ładunku. `hal_ble_advertising_field_next()`
-iteruje po poprzedzonych długością strukturach AD bez alokacji. Zacznij od
-przesunięcia zero; `HAL_EAGAIN` oznacza koniec, a `HAL_EIO` odrzuca
-zniekształcone wejście. Zwrócone dane pola wskazują na raport i pozostają
-ważne, dopóki obiekt tego raportu istnieje.
+Każdy raport zawiera własną kopię adresu, RSSI, typ zdarzenia zgodny z formatem
+legacy oraz do 31 bajtów danych. `hal_ble_advertising_field_next()` pozwala bez
+alokowania pamięci przejść kolejno przez struktury AD poprzedzone długością.
+Zacznij od przesunięcia równego zero. `HAL_EAGAIN` oznacza koniec danych, a `HAL_EIO`
+sygnalizuje nieprawidłowy format wejścia. Dane zwróconego pola znajdują się
+w obiekcie raportu i pozostają ważne przez cały czas jego istnienia.
 
 ### Przykład Observer
 
-Poniższa pętla uruchamia pasywne skanowanie 60 ms/30 ms i opróżnia każdy
-zachowany raport. Zastąp `consume_ad_field()` obsługą specyficzną dla
-aplikacji dla typów AD takich jak kompletna nazwa lokalna (`0x09`) lub dane
-producenta (`0xff`).
+Poniższa pętla uruchamia pasywne skanowanie z interwałem 60 ms i oknem 30 ms,
+a następnie odczytuje wszystkie raporty pozostałe w kolejce. Zastąp
+`consume_ad_field()` kodem aplikacji obsługującym potrzebne typy AD, na
+przykład pełną nazwę lokalną (`0x09`) lub dane producenta (`0xff`).
 
 ```cpp
 static void consume_ad_field(const hal_ble_advertising_report_t &report,
@@ -261,36 +266,38 @@ extern "C" void app_task0(void) {
 
 ## Połączenia i MTU
 
-Obsługiwane jest tylko jedno połączenie Peripheral. Uchwyty połączenia i
-advertisingu są niezerowe, nieprzezroczyste i nieważne po ich zdarzeniu
-terminalnym, deinicjalizacji lub awarii kontrolera. Przekazanie
-nieaktualnego uchwytu zwraca `HAL_ENOENT`.
+Obsługiwane jest tylko jedno połączenie Peripheral. Uchwyty połączenia
+i advertisingu są niezerowe i nieprzezroczyste. Tracą ważność po zdarzeniu
+kończącym ich cykl życia, po deinicjalizacji oraz po awarii kontrolera.
+Przekazanie nieaktualnego uchwytu powoduje zwrócenie `HAL_ENOENT`.
 
-`hal_ble_disconnect()` kolejkuje lokalne rozłączenie. Zakończenie
-nadchodzi jako `HAL_BLE_EVENT_DISCONNECTED`. `hal_ble_get_mtu()` zwraca 23,
-dopóki wybrany stos nie zaraportuje wynegocjowanej wartości przez
-`HAL_BLE_EVENT_MTU_UPDATED`.
+`hal_ble_disconnect()` umieszcza w kolejce żądanie lokalnego rozłączenia.
+Jego zakończenie sygnalizuje `HAL_BLE_EVENT_DISCONNECTED`.
+`hal_ble_get_mtu()` zwraca 23 do czasu, aż wybrany stos przekaże wynegocjowaną
+wartość w zdarzeniu `HAL_BLE_EVENT_MTU_UPDATED`.
 
 ## Zachowanie backendów ESP-IDF
 
-ESP32-S3 używa NimBLE dla bazowego API LE. Callbacki ESP-IDF kopiują adresy,
-ładunki advertisingu, stan połączenia i zmiany MTU do ograniczonych kolejek
-HAL. Callbacki aplikacji nadal są wywoływane wyłącznie z `hal_ble_poll()`, a
-nigdy z zadania zdarzeń ESP-IDF.
+ESP32-S3 używa NimBLE do implementacji podstawowego API LE. Funkcje zwrotne
+ESP-IDF kopiują adresy, dane advertisingowe, stan połączenia i zmiany MTU do
+kolejek HAL o stałej pojemności. Funkcje zwrotne aplikacji nadal są wywoływane
+wyłącznie z `hal_ble_poll()`, a nigdy z zadania zdarzeń ESP-IDF.
 
-Oryginalny ESP32 używa Bluedroid i `esp_hidh` dla gamepada Classic. Wyszukiwanie
-GAP przyjmuje wyłącznie zwalidowaną tożsamość Android D-input o nazwie
-`8BitDo Zero 2 gamepad` i klasie urządzenia gamepad. Po otwarciu HID backend
-sprawdza VID `0x2dc8`, PID `0x3230`, pojedynczą mapę raportów oraz deskryptor
+Oryginalny ESP32 używa Bluedroid i `esp_hidh` do obsługi gamepada Classic.
+Wyszukiwanie GAP akceptuje wyłącznie zweryfikowaną tożsamość trybu Android
+D-input: nazwę `8BitDo Zero 2 gamepad` i klasę urządzenia typu gamepad. Po
+otwarciu połączenia HID backend sprawdza VID `0x2dc8`, PID `0x3230`, pojedynczą
+mapę raportów oraz deskryptor
 zaakceptowany przez parser niezależny od targetu. PIN `0000` i potwierdzenie
-SSP pozostają wstrzymane, dopóki aplikacja nie wywoła
+SSP nie są akceptowane, dopóki aplikacja nie wywoła
 `hal_gamepad_pairing_authorize()`.
 
-Oba backendy ESP współdzielą z backendem sieciowym jeden idempotentny
-inicjalizator NVS. Niezgodna albo pełna partycja NVS powoduje zwrot
-`HAL_ECONFIG`; HAL nie kasuje automatycznie pamięci aplikacji. Parser HAL,
-kolejki zdarzeń i snapshoty mają stałą pojemność. Wewnętrzne obiekty NimBLE,
-Bluedroid, pętli zdarzeń i hosta HID w ESP-IDF mogą używać alokacji dynamicznej.
+Oba backendy ESP oraz backend sieciowy korzystają z jednego wspólnego,
+idempotentnego inicjalizatora NVS. Niezgodna lub pełna partycja NVS powoduje
+zwrócenie `HAL_ECONFIG`; HAL nie usuwa automatycznie danych aplikacji. Parser
+HAL, kolejki zdarzeń i kolejka stanów gamepada mają stałą pojemność. NimBLE,
+Bluedroid, pętla zdarzeń i host HID z ESP-IDF mogą wewnętrznie przydzielać
+pamięć dynamicznie.
 
 ## Model statusu i niepowodzeń
 
@@ -300,78 +307,84 @@ API używa `hal_status_t` wszędzie. Typowe wyniki to:
 |---|---|
 | `HAL_OK` | synchroniczne zapytanie powiodło się lub polecenie asynchroniczne zostało zaakceptowane |
 | `HAL_EUNINIT` | BLE nie zostało zainicjalizowane |
-| `HAL_EAGAIN` | dane gotowości/zdarzenia nie są jeszcze dostępne |
-| `HAL_EBUSY` | konfliktujące żądanie lub rekurencja callbacku/odpytywania |
+| `HAL_EAGAIN` | informacja o gotowości lub dane zdarzenia nie są jeszcze dostępne |
+| `HAL_EBUSY` | żądania są ze sobą sprzeczne albo funkcja zwrotna próbuje ponownie uruchomić odpytywanie |
 | `HAL_ENOENT` | nieaktualny lub nieznany nieprzezroczysty uchwyt |
 | `HAL_EOVERFLOW` | ograniczona kolejka zdarzeń lub raportów skanowania odrzuciła dane |
 | `HAL_EUNSUPPORTED` | wybrana płytka nie ma wymaganego sprzętu radiowego |
 | `HAL_EHW` / `HAL_EIO` | awaria kontrolera lub transportu |
 
-Użyj `hal_ble_get_info()` po spójną migawkę stanu, adresy lokalny i peera,
-bieżące uchwyty, generację, ostatni status, MTU, stan skanowania, liczbę
-oczekujących raportów oraz oba liczniki odrzuceń. Krytyczny błąd kontrolera
-lub transportu przenosi podsystem do stanu `HAL_BLE_STATE_FAILED`,
-unieważnia jego uchwyty, zatrzymuje skanowanie i przesuwa generację.
+`hal_ble_get_info()` zwraca spójny zestaw informacji o stanie podsystemu:
+adres lokalny i adres drugiej strony połączenia, bieżące uchwyty, numer
+generacji, ostatni status,
+MTU, stan skanowania, liczbę oczekujących raportów oraz oba liczniki odrzuceń.
+Krytyczny błąd kontrolera lub transportu przenosi podsystem do
+`HAL_BLE_STATE_FAILED`, unieważnia jego uchwyty, zatrzymuje skanowanie
+i zwiększa numer generacji.
 
 ## Gamepad Bluetooth Classic HID
 
-API gamepada posiada jeden profil hosta Classic HID i zwraca jeden
-nieprzezroczysty `hal_gamepad_t`. `hal_gamepad_open()` rozpoczyna profil
-asynchronicznie; następnie `hal_gamepad_poll()` musi być często wywoływane z
-jednego taska lub pętli kooperacyjnej. `hal_gamepad_get_info()` raportuje stan
-publiczny, ostatni status, bieżącą generację połączenia, flagi parowania,
-obecność znanego urządzenia i diagnostykę ograniczonej kolejki.
+API gamepada obsługuje jeden profil hosta Classic HID i zwraca jeden
+nieprzezroczysty uchwyt `hal_gamepad_t`. `hal_gamepad_open()` uruchamia profil
+asynchronicznie. Od tego momentu trzeba często wywoływać `hal_gamepad_poll()`
+z jednego zadania lub z pętli kooperacyjnej. `hal_gamepad_get_info()` zwraca
+stan publiczny, ostatni status, bieżący numer generacji połączenia, flagi
+parowania, informację o zapisanym urządzeniu oraz dane diagnostyczne kolejki
+o ograniczonej pojemności.
 
 Publiczne stany to `UNINITIALIZED`, `STARTING`, `READY`, `DISCOVERING`,
 `CONNECTING`, `CONNECTED` i `FAILED`. Krytyczna awaria kontrolera lub transportu
 przenosi profil do `FAILED`. `hal_gamepad_close()` zatrzymuje profil i
 czyści wybrane urządzenie oraz unieważnia jego uchwyt.
 
-### Parowanie i reconnect
+### Parowanie i ponowne łączenie
 
-Parowanie jest sterowane przez aplikację i ograniczone w czasie. Gdy profil
-osiągnie `READY`, wywołaj `hal_gamepad_pairing_open()`, aby rozpocząć okno
+Parowanie jest sterowane przez aplikację i ma ograniczony czas trwania. Gdy
+profil osiągnie `READY`, wywołaj `hal_gamepad_pairing_open()`, aby rozpocząć okno
 wykrywania. Jest to dozwolone także wtedy, gdy istnieje znane urządzenie, co
 pozwala aplikacji je zastąpić. Kiedy
-`hal_gamepad_info_t::pairing_pending` stanie się prawdziwe,
-aplikacja może wywołać `hal_gamepad_pairing_authorize()` i zaakceptować Just
-Works albo legacy PIN `0000`. Nieobsługiwane przepływy z passkey są odrzucane.
-Zaakceptowany adres wskazuje znane urządzenie używane przez
-`hal_gamepad_reconnect()` podczas bieżącej otwartej sesji profilu.
-Przechowywanie link key zależy od stosu. Zamknięcie profilu lub restart
-firmware czyści tożsamość wybraną przez HAL, dlatego aplikacja musi być gotowa
-ponownie otworzyć okno parowania.
+`hal_gamepad_info_t::pairing_pending` zostanie ustawione, aplikacja może wywołać
+`hal_gamepad_pairing_authorize()` i zaakceptować Just Works albo legacy PIN
+`0000`. Nieobsługiwane procedury wymagające passkey są odrzucane.
+Zaakceptowany adres identyfikuje urządzenie, z którym
+`hal_gamepad_reconnect()` łączy się w bieżącej sesji otwartego profilu.
+Sposób przechowywania klucza połączenia (ang. `link key`) zależy od stosu.
+Zamknięcie profilu lub ponowne uruchomienie firmware usuwa tożsamość wybraną
+przez HAL, dlatego aplikacja musi być przygotowana na ponowne otwarcie okna
+parowania.
 
 Otwarcie okna parowania jest jawną decyzją autoryzacyjną. Produkt powinien je
 udostępnić dopiero po lokalnej akcji użytkownika i nie powinien traktować nazwy
 urządzenia, adresu Bluetooth ani nieuwierzytelnionej wymiany Just Works jako
 dowodu tożsamości użytkownika.
 
-### Znormalizowane snapshoty
+### Znormalizowany stan wejść
 
-Parser raportów HID nie zależy od BTstack ani ESP-IDF. Waliduje ograniczony
-deskryptor raportów i zasila ten sam znormalizowany model snapshotu na każdym
-backendzie. Poprawne długie elementy HID z nieobsługiwanymi tagami są pomijane;
-ucięty długi element powoduje odrzucenie deskryptora.
+Parser raportów HID nie zależy od BTstack ani ESP-IDF. Sprawdza deskryptor
+raportów o ograniczonym rozmiarze i na każdym backendzie wypełnia ten sam
+znormalizowany model stanu wejść. Poprawnie zapisane długie elementy HID
+z nieobsługiwanymi tagami są pomijane; ucięty długi element powoduje
+odrzucenie deskryptora.
 
 `hal_gamepad_snapshot_t` zawiera generację połączenia, 32-bitową maskę
 przycisków, dziewięć osi Generic Desktop, maskę obecności osi, maskę kierunku
 D-pada i stan połączenia. Bit przycisku 0 odpowiada HID Button 1. Osie są
 normalizowane do `-32767..32767` i indeksowane przez `HAL_GAMEPAD_AXIS_*`; dla
-nieobsługiwanych osi bit w `axes_present` jest wyzerowany. D-pad łączy
-`HAL_GAMEPAD_DPAD_UP`, `RIGHT`, `DOWN` i `LEFT`.
+nieobsługiwanych osi bit w `axes_present` jest wyzerowany. Maska D-pada jest
+kombinacją `HAL_GAMEPAD_DPAD_UP`, `RIGHT`, `DOWN` i `LEFT`.
 
-`hal_gamepad_snapshot()` odczytuje najnowszy stan bez zużywania go.
+`hal_gamepad_snapshot()` odczytuje najnowszy stan bez usuwania go.
 `hal_gamepad_snapshot_next()` pobiera zmiany z kolejki o stałym rozmiarze
 `HAL_GAMEPAD_SNAPSHOT_QUEUE_DEPTH`. Zwraca `HAL_EAGAIN`, gdy kolejka jest pusta.
 Jeśli utracono stany pośrednie, najpierw zwraca `HAL_EOVERFLOW`; wywołaj funkcję
-ponownie, aby dostać najnowszą zachowaną sekwencję. Połączenie i rozłączenie też
-tworzą snapshoty, a snapshot rozłączenia zeruje wszystkie wejścia, dzięki czemu
-aplikacja nie zachowa wciśniętego elementu po utracie linku.
+ponownie, aby pobrać najnowszy zachowany stan. Połączenie i rozłączenie również
+dodają stan do kolejki. Stan utworzony po rozłączeniu zeruje wszystkie wejścia,
+dzięki czemu po utracie połączenia aplikacja nie traktuje żadnego elementu jako
+nadal wciśniętego.
 `hal_gamepad_disconnect()` jedynie przyjmuje żądanie, a zakończenie jest
-asynchroniczne. Aplikacja musi obserwować stan lub snapshoty i nie może zależeć
-od tego, czy backend zakończy operację przed następnym
-`hal_gamepad_poll()`, czy w jego trakcie.
+asynchroniczne. Aplikacja musi sprawdzać stan profilu lub kolejne rekordy stanu
+wejść. Nie może zakładać, czy backend zakończy operację przed następnym
+wywołaniem `hal_gamepad_poll()`, czy podczas niego.
 
 ```c
 hal_gamepad_t gamepad = NULL;
@@ -396,31 +409,32 @@ void service_gamepad(void) {
 }
 ```
 
-Deterministyczny backend mock pozwala wstrzyknąć gotowość, żądanie parowania,
-połączenie, snapshoty wejść, rozłączenie, przepełnienie kolejki i błędy
-transportu. Żądane rozłączenie realizuje podczas `hal_gamepad_poll()`, aby jego
-timing był deterministyczny. Kompletny konsument C oraz wariant buildu
-BLE+Classic znajdują się w
+Deterministyczny backend mock pozwala w testach zasymulować gotowość, żądanie
+parowania, połączenie, stany wejść, rozłączenie, przepełnienie kolejki i błędy
+transportu. Żądanie rozłączenia przetwarza podczas `hal_gamepad_poll()`, dzięki
+czemu moment jego wykonania jest deterministyczny. Kompletny przykład w C oraz
+wariant buildu BLE+Classic znajdują się w
 [`examples/29_bluetooth_gamepad`](../../../examples/29_bluetooth_gamepad/).
 
 ## JH BLE Stream v1
 
-`HAL_ENABLE_BLE_STREAM` dodaje `hal_ble_stream.h`, ograniczony strumień
-bajtów przenoszony przez jedną statyczną usługę GATT. Flaga włącza
+`HAL_ENABLE_BLE_STREAM` dodaje `hal_ble_stream.h`: strumień bajtów z buforami
+o stałej pojemności, przenoszony przez jedną statyczną usługę GATT. Flaga włącza
 `HAL_ENABLE_BLE` oraz `HAL_ENABLE_CRYPTO`.
 
-BLE Stream pozostaje ogólnym, aplikacyjnym strumieniem bajtów, gdy jest
-wybrany samodzielnie. Osobny moduł
+Włączony samodzielnie BLE Stream pozostaje ogólnym strumieniem bajtów dla
+aplikacji. Osobny moduł
 [`hal_ble_commands`](23_commands.md#uwierzytelniony-adapter-ble-stream)
-fragmentuje współdzielony, binarny format poleceń na uwierzytelnione
-ładunki Stream i dysponuje żądania przez `hal_command_router`.
+dzieli wiadomości wspólnego binarnego formatu poleceń na fragmenty i przesyła
+je jako uwierzytelnione dane Stream, a żądania przekazuje do
+`hal_command_router`.
 `HAL_ENABLE_BLE_STREAM` nie włącza tego zachowania ani routera;
-`HAL_ENABLE_BLE_COMMANDS` włącza obie te zależności i daje adapterowi
-poleceń wyłączną własność operacji wysyłania/odbierania ładunku Stream.
+`HAL_ENABLE_BLE_COMMANDS` włącza obie zależności i sprawia, że tylko adapter
+poleceń może wysyłać oraz odbierać dane Stream.
 
-Nagłówek jest jedynym źródłem prawdy dla UUID-ów usługi, układu ramki oraz
-bitów możliwości. Zmiana którejkolwiek z tych wartości podnosi wersję
-profilu.
+Nagłówek jest jedynym źródłem definicji UUID-ów usługi, układu ramki oraz bitów
+opisujących obsługiwane funkcje. Zmiana którejkolwiek z tych wartości wymaga
+podniesienia wersji profilu.
 
 | Element | UUID |
 |---|---|
@@ -428,85 +442,89 @@ profilu.
 | RX (write, write-without-response) | `B7CE0002-3C13-4FE2-801F-D71BDAB1369B` |
 | TX (notify) | `B7CE0003-3C13-4FE2-801F-D71BDAB1369B` |
 | Wersja protokołu (read) | `B7CE0004-3C13-4FE2-801F-D71BDAB1369B` |
-| Możliwości (read) | `B7CE0005-3C13-4FE2-801F-D71BDAB1369B` |
+| Obsługiwane funkcje (read) | `B7CE0005-3C13-4FE2-801F-D71BDAB1369B` |
 
 ### Model bezpieczeństwa
 
-Klient bez sesji odczytuje wersję protokołu, maskę bitową możliwości i nic
-więcej. Każda wymiana ładunku wymaga wzajemnie uwierzytelnionej sesji
-opartej na sekrecie właściwym dla urządzenia, o długości co najmniej 256
-bitów, dostarczanym poza pasmem (out of band).
+Klient bez sesji odczytuje wersję protokołu, bitową maskę obsługiwanych funkcji
+i nic więcej. Każda wymiana danych wymaga wzajemnie uwierzytelnionej sesji
+opartej na unikalnym sekrecie urządzenia o długości co najmniej 256 bitów,
+dostarczonym poza pasmem.
 
-Handshake wiąże transkrypt zbudowany z nazwy profilu, wersji protokołu,
-obu zestawów możliwości, identyfikatora sesji oraz dwóch losowych nonce.
-Cztery osobne domeny HMAC-SHA256 wytwarzają dowód urządzenia, dowód klienta
-oraz dwa kierunkowe klucze sesji. Ramki `DATA` są chronione przy pomocy
-ChaCha20-Poly1305; kierunek i ściśle rosnący licznik wchodzą zarówno do
-nonce, jak i do danych powiązanych (associated data). Liczniki są kolejne:
-odbiorca akceptuje wyłącznie dokładnie poprzednią wartość plus jeden, więc
-powtórka (replay), zmniejszenie lub luka w przód zamyka sesję.
+Procedura uzgadniania sesji obejmuje transkrypt zawierający nazwę profilu,
+wersję protokołu, oba zestawy obsługiwanych funkcji, identyfikator sesji oraz
+dwie losowe wartości nonce. Cztery odrębne domeny HMAC-SHA256 służą do
+utworzenia dowodu urządzenia, dowodu klienta i dwóch kierunkowych kluczy sesji.
+Ramki `DATA` chroni ChaCha20-Poly1305. Kierunek transmisji oraz ściśle rosnący
+licznik są częścią zarówno wartości nonce, jak i danych uwierzytelnianych
+(associated data). Odbiorca akceptuje tylko licznik większy o jeden od
+poprzedniego. Powtórzenie wartości, jej
+zmniejszenie albo przeskok do przodu powoduje zamknięcie sesji.
 
-Sesje zawodzą w sposób zamknięty (fail closed). Błędny dowód, sfałszowany
-tag, powtórzony lub zmniejszony licznik, licznik bliski przepełnienia,
-niepowodzenie entropii, rozłączenie, zmiana generacji kontrolera, anulowanie
-subskrypcji oraz timeout bezczynności - wszystkie te zdarzenia zamykają
-sesję i zerują jej kierunkowe klucze. Powtarzające się niepowodzenia
-uwierzytelniania przenoszą profil w ograniczone okno backoffu, podczas
-którego handshake'i są odrzucane. Rotacja lub wyczyszczenie sekretu
-unieważnia każdą sesję zbudowaną na poprzednim sekrecie.
+Każdy błąd bezwarunkowo zamyka sesję. Dzieje się tak po otrzymaniu błędnego
+dowodu lub sfałszowanego tagu, powtórzeniu albo
+zmniejszeniu licznika, zbliżeniu licznika do przepełnienia, błędzie źródła
+entropii, rozłączeniu, zmianie generacji kontrolera, anulowaniu subskrypcji
+lub upływie timeoutu bezczynności. Klucze kierunkowe są wtedy zerowane.
+Po kolejnych błędach uwierzytelniania profil na ograniczony czas wstrzymuje
+próby uwierzytelnienia (backoff) i odrzuca nowe próby uzgodnienia sesji. Zmiana
+lub usunięcie sekretu unieważnia wszystkie sesje utworzone przy użyciu jego
+poprzedniej wartości.
 
-BLE Stream współdzieli niezależne od targetu prymitywy
-`jh_secure_random_bytes()`, `jh_secure_zeroize()` oraz
-`jh_constant_time_compare()` z Serial Session. Bufory dowodu, nonce,
-transkryptu, kluczy kierunkowych oraz zakolejkowanego jawnego tekstu są
-czyszczone na ich ścieżkach terminalnych; nie istnieje żadna lokalna dla BLE
-implementacja zerowania ani porównania tagów.
+BLE Stream i Serial Session korzystają z tych samych, niezależnych od targetu
+funkcji `jh_secure_random_bytes()`, `jh_secure_zeroize()` oraz
+`jh_constant_time_compare()`. Bufory dowodów, nonce, transkryptu, kluczy
+kierunkowych oraz oczekujących danych jawnych są czyszczone zawsze, gdy
+kończy się ich użycie. BLE nie ma osobnej implementacji zerowania pamięci ani
+porównywania tagów.
 
-Adres urządzenia oraz parowanie na poziomie warstwy łącza nie stanowią
-autoryzacji. `Just Works` szyfruje łącze bez ochrony przed atakiem MITM,
-dlatego operacje produktowe zależą od sesji aplikacyjnej, a nie wyłącznie od
-łącza BLE.
+Adres urządzenia ani parowanie na poziomie warstwy łącza nie stanowią
+autoryzacji. `Just Works` szyfruje połączenie, lecz nie chroni przed atakiem
+MITM. Operacje wymagające autoryzacji muszą więc opierać się na sesji
+aplikacyjnej, a nie tylko na połączeniu BLE.
 
 ### ATT MTU
 
-Jedna ramka podróżuje w pojedynczym zapisie lub powiadomieniu. Handshake
-wymaga co najmniej `HAL_BLE_STREAM_MIN_ATT_MTU`, a ładunek o pełnym
-rozmiarze wymaga `HAL_BLE_STREAM_FULL_PAYLOAD_ATT_MTU`. Obserwuj
-`HAL_BLE_EVENT_MTU_UPDATED` i utrzymuj ładunki w granicach tego, co przenosi
-wynegocjowane MTU. Wysyłka, która nie mieści się w bieżącym MTU, zwraca
-`HAL_EOVERFLOW` bez zamykania uwierzytelnionej sesji.
+Każda ramka jest przesyłana w pojedynczym zapisie lub powiadomieniu. Procedura
+uzgadniania sesji wymaga co najmniej `HAL_BLE_STREAM_MIN_ATT_MTU`, a ramka
+z danymi o pełnym rozmiarze wymaga `HAL_BLE_STREAM_FULL_PAYLOAD_ATT_MTU`.
+Obserwuj `HAL_BLE_EVENT_MTU_UPDATED` i nie wysyłaj danych większych niż pozwala
+wynegocjowane MTU. Próba wysłania danych, które nie mieszczą się w bieżącym
+MTU, zwraca `HAL_EOVERFLOW` bez zamykania uwierzytelnionej sesji.
 
-Odpowiedzi handshake oraz ładunki aplikacyjne używają ograniczonych,
-oczekujących slotów. `HAL_EAGAIN` od kontrolera zachowuje ramkę i nie
-zużywa jej licznika kierunkowego; kolejne odpytanie lub zdarzenie
-gotowości do wysyłki (can-send) ponawia ją. Samo powiadomienie BTstack jest
-wydawane wyłącznie przez współdzieloną usługę radiową CYW43, gdy jest ona
-właścicielem blokady radiowej. Stream utrzymuje w locie co najwyżej jedno
-powiadomienie zaakceptowane przez backend, a `pending_tx` obejmuje to
-powiadomienie oprócz lokalnie zakolejkowanych ładunków. Przed
-zaakceptowaniem nowego `HELLO`, Stream odrzuca powiadomienie, które nadal
-oczekuje w backendzie. Jeśli lokalne przesłanie lub jego callback zakończenia
-jest już w trakcie, `HELLO` jest odrzucane z `HAL_EBUSY`, a bieżąca sesja
-pozostaje dostępna do ponowienia. Każde inne niepowodzenie odrzucenia
-zamyka sesję bez wysłania `HELLO_ACK`. Zapobiega to sytuacji, w której
-ponowne uzgodnienie kluczy (rekey) w ramach tego samego łącza wyprzedziłoby
-dane z poprzedniej sesji.
+Odpowiedzi procedury uzgadniania i dane aplikacji oczekują w buforach o stałej
+liczbie miejsc. Jeśli kontroler zwróci `HAL_EAGAIN`, ramka pozostaje w buforze,
+a jej licznik kierunkowy nie jest zwiększany. Wysyłka jest ponawiana podczas
+następnego odpytywania lub po zdarzeniu can-send. Powiadomienie BTstack wysyła
+wyłącznie wspólna usługa radia CYW43, gdy ma założoną blokadę radia.
+Stream może mieć najwyżej jedno powiadomienie przyjęte przez backend i nadal
+oczekujące na zakończenie. `pending_tx` obejmuje zarówno to powiadomienie,
+jak i dane oczekujące w lokalnej kolejce.
 
-Inicjalizacja i deinicjalizacja Stream serializują operacje publikacji i
-wycofania publikacji usługi. Współbieżne wywołanie cyklu życia zwraca
-`HAL_EBUSY`; nieudana publikacja cofa stan Stream do
+Przed przyjęciem nowego `HELLO` Stream usuwa powiadomienie, które nadal czeka
+w backendzie. Jeżeli trwa właśnie lokalna operacja wysyłania lub funkcja
+zwrotna informująca o jej zakończeniu, `HELLO` jest odrzucane z `HAL_EBUSY`.
+Bieżąca sesja pozostaje aktywna i można ponowić żądanie. Każdy inny błąd
+podczas usuwania powiadomienia zamyka sesję bez wysłania `HELLO_ACK`. Dzięki
+temu ponowne
+uzgodnienie kluczy w ramach tego samego połączenia nie spowoduje, że dane
+z poprzedniej sesji zostaną wysłane już po danych nowej sesji.
+
+Inicjalizacja i deinicjalizacja Stream synchronizują rejestrowanie i usuwanie
+usługi GATT. Współbieżne wywołanie funkcji cyklu życia zwraca `HAL_EBUSY`.
+Jeśli nie uda się zarejestrować usługi, stan Stream wraca do
 `HAL_BLE_STREAM_STATE_UNINITIALIZED`.
 
 ### Przykład Stream
 
-Zainicjalizuj podsystem BLE od pierwszej iteracji zadania aplikacji,
-zainstaluj unikalny, przypisany (provisioned) sekret, a następnie obsługuj
-obie warstwy z tego samego zadania. Na targetach FreeRTOS `app_start()`
-uruchamia się przed planistą i nie może uruchamiać CYW43. Advertising
-używa przepływu Peripheral pokazanego powyżej; stała usługa Stream pojawia
-się w jego bazie danych GATT automatycznie. Zadanie Stream wymaga co
-najmniej budżetu stosu 1024 słów zwalidowanego sprzętowo, używanego przez
-przykład i fixture sprzętowy.
+Zainicjalizuj podsystem BLE w pierwszej iteracji zadania aplikacji, ustaw
+unikalny sekret nadany wcześniej podczas konfiguracji urządzenia, a następnie
+obsługuj obie warstwy z tego samego zadania. Na targetach FreeRTOS
+`app_start()` uruchamia się przed schedulerem i nie może uruchamiać CYW43.
+Advertising konfiguruje się tak, jak w pokazanym wyżej przykładzie Peripheral.
+Stała usługa Stream jest automatycznie dodawana do bazy danych GATT. Zadanie
+Stream wymaga stosu o rozmiarze co najmniej 1024 słów. Rozmiar ten zweryfikowano
+na sprzęcie i zastosowano w przykładzie oraz teście sprzętowym.
 
 ```c
 hal_status_t start_stream(const uint8_t *device_secret, size_t secret_length) {
@@ -583,55 +601,61 @@ void service_stream(void) {
 }
 ```
 
-Przykład zachowuje co najwyżej jedno echo po `HAL_EAGAIN` i ponawia je
-przed usunięciem kolejnego ładunku RX. Rozłączenie lub jakikolwiek inny
-błąd wysyłki odrzuca to oczekujące echo, więc dane ze starej sesji nie mogą
-trafić do nowej.
+Po otrzymaniu `HAL_EAGAIN` przykład przechowuje najwyżej jedno echo i ponawia
+jego wysłanie przed pobraniem kolejnych danych RX. Rozłączenie lub każdy
+inny błąd wysyłania usuwa oczekujące echo, dzięki czemu dane ze starej sesji
+nie trafią do nowej.
 
-`hal_ble_stream_receive_ex()` ma to samo zachowanie kolejki i przepełnienia,
-zwracając dodatkowo niezmienne pochodzenie dla zdjętego ładunku DATA:
-generację Stream, publiczny identyfikator sesji handshake oraz
-uwierzytelniony licznik kierunkowy. Adaptery Stream używają tego, aby
-zapobiec łączeniu fragmentów z różnych sesji lub zakresów liczników.
-Oryginalne `hal_ble_stream_receive()` pozostaje formą wygodną, gdy te
-metadane nie są potrzebne.
+`hal_ble_stream_receive_ex()` zachowuje się tak samo w przypadku pustej lub
+przepełnionej kolejki, a dodatkowo zwraca niezmienne informacje o pochodzeniu
+pobranych danych `DATA`: numer generacji Stream, publiczny identyfikator sesji
+uzgadniania oraz uwierzytelniony licznik kierunkowy. Adaptery Stream korzystają
+z tych danych, aby nie łączyć fragmentów pochodzących z różnych sesji lub
+zakresów liczników. Gdy metadane nie są potrzebne, można użyć prostszej funkcji
+`hal_ble_stream_receive()`.
 
-`hal_ble_stream_get_info()` raportuje stan, wynegocjowane możliwości,
+`hal_ble_stream_get_info()` zwraca stan, wynegocjowany zestaw funkcji,
 publiczny identyfikator sesji, liczniki kierunkowe, niepowodzenia
-uwierzytelniania, odrzucenia powtórek (replay) oraz głębokość kolejki na
-potrzeby diagnostyki.
+uwierzytelniania, odrzucone próby ponownego użycia ramek oraz liczbę elementów
+kolejki.
 
-## Koegzystencja i własność Bluetooth
+## Współdzielenie kontrolera Bluetooth
 
-BLE, Bluetooth Classic i WiFi współdzielą jeden kontroler CYW43, transport,
-stan runtime radia oraz blokadę usługi. Aplikacje nie mogą linkować Pico SDK
-`pico_cyw43_arch` ani `pico_btstack_cyw43` obok tego backendu. Callbacki BLE są
-odraczane do momentu po obsłudze radia, więc kod aplikacji nigdy nie działa pod
-tą blokadą. Obrazy BLE-only, Classic-only i połączone BLE+Classic używają tego
-samego hosta Bluetooth z licznikami referencji. Aktywna koegzystencja
-gamepad+BLE na sprzęcie nie jest jeszcze bramką wydania.
+BLE, Bluetooth Classic i WiFi korzystają z jednego kontrolera CYW43,
+transportu, runtime radia oraz blokady usługi. Aplikacja nie może być linkowana
+jednocześnie z modułami Pico SDK `pico_cyw43_arch` lub `pico_btstack_cyw43`
+i tym backendem. Funkcje zwrotne BLE są wywoływane dopiero po zakończeniu
+obsługi radia, dlatego kod aplikacji nigdy nie działa z założoną blokadą.
+Firmware korzystający tylko z BLE, tylko
+z Classic albo z obu trybów używa tej samej instancji hosta Bluetooth,
+zarządzanej licznikiem referencji. Aktywna współpraca gamepada i BLE na
+sprzęcie nie jest jeszcze kryterium wydania.
 
-Bramka aktywnej koegzystencji Pico 2 W z 2026-08-25 utrzymała
-uwierzytelnione połączenie Stream aktywne, podczas gdy ruch MQTT wymuszał
-rozłączenie i ponowne połączenie WiFi. Zarówno bare-metal, jak i FreeRTOS
-utrzymały 10,00 echa BLE/s przez ponad 607 s bez żadnej straty. Bare-metal
-ukończył 6079/6079 ech (średnie opóźnienie 94,7 ms, maksymalne 249,0 ms);
-FreeRTOS ukończył 6077/6077 (średnie 93,7 ms, maksymalne 204,1 ms). Każde
-uruchomienie przeniosło 34 echa BLE przez okno ponownego połączenia WiFi,
-odtworzyło WiFi i MQTT, zachowało obie referencje runtime
-radia i nie zaraportowało żadnych błędów BLE, Stream, MQTT, HCI, kolejki ani
-zdarzeń. Zmierzony maksymalny czas odpytywania BLE wyniósł 4,768 ms dla
-bare-metal i 5,618 ms dla FreeRTOS. Finalne powtórzenie FreeRTOS użyło
-wzmocnionej wyroczni postępu MQTT: jej delta obserwacji wyniosła 5794 echa
-przy 9,66 Hz, z zerową liczbą stagnujących podsumowań jednosekundowych.
+Test aktywnej współpracy na Pico 2 W z 2026-08-25 utrzymał
+uwierzytelnione połączenie Stream, podczas gdy ruch MQTT wymuszał
+rozłączenie i ponowne połączenie WiFi. Zarówno bare metal, jak i FreeRTOS
+utrzymały tempo 10,00 komunikatów echo BLE na sekundę przez ponad 607 s bez
+żadnej straty. Tryb bare metal ukończył 6079/6079 ech (średnie opóźnienie
+94,7 ms, maksymalne 249,0 ms);
+FreeRTOS ukończył 6077/6077 (średnie 93,7 ms, maksymalne 204,1 ms).
+
+W każdym uruchomieniu podczas ponownego łączenia z WiFi przesłano 34 echa BLE,
+po czym przywrócono połączenia WiFi i MQTT. Odwołania obu modułów do runtime
+radia pozostały aktywne, a test nie wykrył błędów BLE, Stream, MQTT, HCI,
+kolejki ani zdarzeń. Maksymalny zmierzony czas jednego wywołania
+`hal_ble_poll()` wyniósł
+4,768 ms w trybie bare metal i 5,618 ms z FreeRTOS. W ostatnim powtórzeniu
+FreeRTOS zastosowano bardziej rygorystyczne kryterium kontroli postępu MQTT.
+W czasie obserwacji zarejestrowano dodatkowe 5794 echa przy częstotliwości
+9,66 Hz, bez żadnego jednosekundowego podsumowania wskazującego brak postępu.
 
 <a id="license-and-distribution-boundary"></a>
 
 ## Granica licencji i dystrybucji
 
-Firmware Bluetooth linkuje BlueKitchen BTstack z dokładnej wersji zapisanej w
-`third_party/btstack_version.conf`. Śledzone są dwa odrębne teksty
-licencyjne:
+Firmware z obsługą Bluetooth jest linkowany z BlueKitchen BTstack w dokładnej
+wersji zapisanej w `third_party/btstack_version.conf`. Repozytorium zawiera
+dwa odrębne teksty licencyjne:
 
 - standardowa licencja BlueKitchen
   [`third_party/LICENSE.BTstack`](../../../third_party/LICENSE.BTstack)
@@ -642,28 +666,30 @@ licencyjne:
   określony w tym tekście;
 - osobna licencja Raspberry Pi
   [`src/hal/bluetooth/LICENSE.RP`](../../../src/hal/bluetooth/LICENSE.RP)
-  stosuje się do `Customer`, zdefiniowanego jako nabywca wymienionego
-  `Product`. Zezwala temu Customerowi na użycie, modyfikację, integrację i
-  dystrybucję BTstack wyłącznie z zdefiniowanymi `Products` lub `Customer
-  Products`. Wymienione Products to Pico W, Pico WH, Pico 2 W, Pico 2 WH
-  oraz RM2; Customer Products to produkty wytwarzane lub dystrybuowane
-  przez Customerów, które używają tych Products lub są od nich pochodne.
+  ma zastosowanie do `Customer`, zdefiniowanego jako nabywca wymienionego
+  `Product`. Zezwala takiemu podmiotowi `Customer` na użycie, modyfikację,
+  integrację i dystrybucję BTstack wyłącznie z określonymi `Products` lub
+  `Customer Products`. Wymienione Products to Pico W, Pico WH, Pico 2 W,
+  Pico 2 WH oraz RM2; `Customer Products` to produkty wytwarzane lub
+  dystrybuowane przez podmioty określone jako `Customer`, które używają tych
+  `Products` lub są od nich pochodne.
   Jest to licencja ograniczona do konkretnych produktów, a nie ogólne
   zezwolenie dla każdej płytki lub urządzenia zawierającego kontroler
   CYW43.
 
 Właściwa licencja zależy od fizycznego produktu i jego dystrybucji.
-Przejrzyj kompletne, śledzone teksty licencyjne i spełnij warunki licencji,
-na którą się powołujesz; zastosowania wykraczające poza nie mogą wymagać
-osobnej licencji BlueKitchen. Ta sekcja jest inwentarzem technicznym, a nie
-poradą prawną. Te warunki dotyczą artefaktów z włączonym BTstack, a nie buildu
-JaszczurHAL, które go nie kompilują.
+Przeczytaj kompletne teksty licencyjne znajdujące się w repozytorium i spełnij
+warunki licencji, na którą się powołujesz. Zastosowania wykraczające poza jej
+zakres mogą wymagać osobnej licencji BlueKitchen. Ta sekcja jest technicznym
+podsumowaniem, a nie poradą prawną. Warunki dotyczą firmware i innych plików
+wynikowych zawierających BTstack, a nie buildów JaszczurHAL, które go nie
+kompilują.
 
-Zobacz kompilowalny [przykład `26_ble_stream`](../../../examples/26_ble_stream/)
-po kompletny przepływ startu Peripheral i advertisingu wraz z
-uwierzytelnionym odbiorcą strumienia. Wieloplatformowa
-[bramka sprzętowa `bluetooth_stream`](03_build_tests.md#bramka-sprzętowa-jh-ble-stream-v1)
-prowadzi kompletny protokół z niezależnego klienta BlueZ.
+Można zbudować [przykład `26_ble_stream`](../../../examples/26_ble_stream/),
+który pokazuje pełne uruchomienie Peripheral i advertisingu wraz
+z uwierzytelnionym odbiorcą strumienia. Wieloplatformowy
+[test sprzętowy `bluetooth_stream`](03_build_tests.md#bramka-sprzętowa-jh-ble-stream-v1)
+wykonuje cały protokół przy użyciu niezależnego klienta BlueZ.
 
 [Przykład `29_bluetooth_gamepad`](../../../examples/29_bluetooth_gamepad/)
-pokazuje przepływ snapshotów Classic HID i wariant buildu BLE+Classic.
+pokazuje obsługę stanów wejść Classic HID i wariant buildu BLE+Classic.

@@ -1,12 +1,15 @@
 # Integracja TJpgDec
 
-Checkout `jaszczurtd/TJpg_Decoder` jest zarządzany w
-`third_party/TJpg_Decoder` według dokładnego commita z
+Kopia źródeł `jaszczurtd/TJpg_Decoder` jest utrzymywana w
+`third_party/TJpg_Decoder` na dokładnym commicie zapisanym w
 `third_party/jpeg_version.conf`.
 
-Build obejmuje wyłącznie niezależny od targetu rdzeń Tiny JPEG Decompressor.
-Śledzone pliki `tjpgd.c` i `tjpgd.h` włączają go przez `HAL_ENABLE_JPEG`, a
+Kompilacja obejmuje wyłącznie rdzeń Tiny JPEG Decompressor, który jest
+niezależny od targetu.
+Pliki `tjpgd.c` i `tjpgd.h` przechowywane w repozytorium włączają go przez
+`HAL_ENABLE_JPEG`, a
 adaptacja wejścia z pamięci i wyjścia RGB565 znajduje się w
 `src/utils/tools.cpp`.
 
-Zależność synchronizuje i weryfikuje `scripts/ensure_jpeg.sh`.
+Do synchronizacji lub weryfikacji tej zależności służy
+`scripts/ensure_jpeg.sh`.

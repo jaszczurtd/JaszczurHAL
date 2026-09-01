@@ -1,15 +1,16 @@
-# 28 - Router poleceń serial
+# 28 - Router poleceń portu szeregowego
 
-Minimalna aplikacja ramkowanej Serial Session używająca niezależnego
+Jest to minimalna aplikacja ramkowanej Serial Session, która używa niezależnego
 `hal_command_router`. Rejestruje `echo` i `info`, ogranicza obie trasy do
-`HAL_COMMAND_SOURCE_SERIAL_SESSION` i dołącza `hal_serial_commands` do
-domyślnego endpointu serial targetu.
+`HAL_COMMAND_SOURCE_SERIAL_SESSION` oraz dołącza `hal_serial_commands` do
+domyślnego punktu końcowego portu szeregowego danego targetu.
 
 Projekt jest oddzielony od przykładu GPS/UART, ponieważ nie wymaga zewnętrznego
-odbiornika ani UART należącego do aplikacji. Na boardach RP można go obsłużyć
-przez USB CDC; pozostałe targety używają wybranego endpointu `hal_serial`.
+odbiornika ani portu UART zarezerwowanego przez aplikację. Na płytkach RP można
+go obsłużyć przez USB CDC; pozostałe targety używają wybranego punktu końcowego
+`hal_serial`.
 
-## Build
+## Kompilacja
 
 ```bash
 ./scripts/examples_dispatcher.py build \
@@ -19,17 +20,18 @@ przez USB CDC; pozostałe targety używają wybranego endpointu `hal_serial`.
 ```
 
 Projekt obsługuje też generowane konfiguracje RP2350 ARM i RISC-V. Pojedynczą
-konfigurację zbudujesz przez entrypoint VS Code:
+konfigurację zbudujesz przez punkt wejścia VS Code:
 
 ```bash
 vscode/entry/jh-vscode build \
   --project examples/28_serial_commands --target rp2040 --board pico
 ```
 
-## Wymiana serial
+## Wymiana danych przez port szeregowy
 
-Otwórz endpoint serial targetu i wysyłaj każde żądanie zakończone znakiem nowej
-linii. CRC obejmuje bajty między `$` i `*`, zgodnie z `hal_serial_frame.h`.
+Otwórz punkt końcowy portu szeregowego targetu i wysyłaj każde żądanie
+zakończone znakiem nowej linii. CRC obejmuje bajty między `$` i `*`, zgodnie z
+`hal_serial_frame.h`.
 
 Najpierw aktywuj sesję:
 
@@ -38,7 +40,7 @@ $SC,1,HELLO*0F
 ```
 
 Odpowiedź zawiera moduł, protokół, wygenerowany identyfikator sesji, wersję
-firmware, identyfikator builda i UID urządzenia. Zachowuje numer sekwencji `1`.
+firmware, identyfikator kompilacji i UID urządzenia. Zachowuje numer sekwencji `1`.
 
 Przekaż echo przez router:
 
@@ -47,13 +49,13 @@ $SC,2,echo hello router*5B
 $SC,2,hello router*08
 ```
 
-Odczytaj metadane żądania i uptime targetu:
+Odczytaj metadane żądania i czas działania targetu:
 
 ```text
 $SC,3,info*74
 ```
 
-Dynamiczna odpowiedź ma następujący payload:
+Dynamiczna odpowiedź zawiera następujące dane:
 
 ```text
 source=SERIAL_SESSION request=3 session=<id> uptime_ms=<value>
@@ -71,10 +73,13 @@ tras docierają do routera i są zwracane przez adapter jako `ERR HAL_ENOENT`.
 
 ## Co pokazuje przykład
 
-- tworzenie i zachowywanie niezależnego routera;
-- rejestrowanie kopiowanych definicji tras bez zastępowania istniejącej nazwy;
-- ograniczanie handlerów do żądań Serial Session;
-- dołączanie stanu sesji i adaptera należącego do wywołującego;
+- tworzenie i utrzymywanie niezależnego routera;
+- rejestrowanie definicji tras kopiowanych przez router bez zastępowania wpisu
+  o istniejącej nazwie;
+- ograniczanie procedur obsługi do żądań Serial Session;
+- dołączanie stanu sesji i adaptera, których cyklem życia zarządza kod
+  wywołujący;
 - zwracanie treści tekstowych z zachowaniem sekwencji żądania;
-- odczyt niezależnych od transportu metadanych żądania wewnątrz handlera;
-- zwalnianie adaptera przed zniszczeniem routera podczas rollbacku startu.
+- odczyt niezależnych od transportu metadanych żądania wewnątrz procedury obsługi;
+- zwalnianie adaptera przed zniszczeniem routera podczas wycofywania zmian po
+  nieudanym uruchomieniu.
