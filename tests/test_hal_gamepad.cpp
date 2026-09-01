@@ -95,6 +95,19 @@ void test_pairing_window_authorization_and_reconnect(void) {
   TEST_ASSERT_EQUAL_INT(HAL_GAMEPAD_STATE_CONNECTING, info.state);
 }
 
+void test_reopen_keeps_closed_handle_invalid(void) {
+  open_ready(false);
+  const hal_gamepad_t stale = s_gamepad;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_close(s_gamepad));
+  s_gamepad = nullptr;
+
+  open_ready(false);
+  TEST_ASSERT_NOT_EQUAL(stale, s_gamepad);
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_gamepad_poll(stale));
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_gamepad_close(stale));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_poll(s_gamepad));
+}
+
 void test_known_device_can_be_replaced_and_is_cleared_by_close(void) {
   open_ready(true);
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_pairing_open(s_gamepad));
@@ -199,6 +212,7 @@ int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_open_ready_info_and_single_handle);
   RUN_TEST(test_pairing_window_authorization_and_reconnect);
+  RUN_TEST(test_reopen_keeps_closed_handle_invalid);
   RUN_TEST(test_known_device_can_be_replaced_and_is_cleared_by_close);
   RUN_TEST(test_connect_snapshot_and_disconnect_release);
   RUN_TEST(test_queue_overflow_is_reported_and_latest_state_is_retained);

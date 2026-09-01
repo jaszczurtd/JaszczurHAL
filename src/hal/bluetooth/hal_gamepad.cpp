@@ -5,17 +5,19 @@
 #include "hal/bluetooth/jh_bluetooth_runtime.h"
 #include "hal/bluetooth/jh_gamepad_backend.h"
 #include "hal/core/hal_mutex_once.h"
+#include "hal/core/jh_handle_pool.h"
 #include "hal/system/hal_sync.h"
 
-struct hal_gamepad_impl_s {};
+#define JH_GAMEPAD_HANDLE_KIND 14u
 
 namespace {
 
 struct gamepad_runtime_t {
   hal_mutex_t mutex;
   const jh_gamepad_backend_t *backend;
-  hal_gamepad_impl_t handle;
-  bool opened;
+  jh_handle_pool_t handle_pool;
+  jh_handle_slot_t handle_slot;
+  bool handle_pool_initialized;
   bool operation_active;
 };
 
@@ -25,8 +27,38 @@ hal_mutex_t runtime_mutex(void) {
   return jh_hal_mutex_create_once(&s_gamepad.mutex);
 }
 
+hal_status_t ensure_handle_pool_locked(void) {
+  if (s_gamepad.handle_pool_initialized) {
+    return HAL_OK;
+  }
+  const hal_status_t status =
+      jh_handle_pool_init(&s_gamepad.handle_pool, &s_gamepad.handle_slot, 1u,
+                          JH_GAMEPAD_HANDLE_KIND);
+  s_gamepad.handle_pool_initialized = status == HAL_OK;
+  return status;
+}
+
 bool handle_valid_locked(hal_gamepad_t gamepad) {
-  return gamepad == &s_gamepad.handle && s_gamepad.opened;
+  if (!s_gamepad.handle_pool_initialized || s_gamepad.backend == nullptr) {
+    return false;
+  }
+  void *runtime = nullptr;
+  return jh_handle_resolve(&s_gamepad.handle_pool, gamepad, &runtime,
+                           nullptr) == HAL_OK &&
+         runtime == &s_gamepad;
+}
+
+hal_status_t release_handle_locked(const void *handle) {
+  void *runtime = nullptr;
+  hal_status_t status =
+      jh_handle_release(&s_gamepad.handle_pool, handle, &runtime);
+  if (status == HAL_OK && runtime != &s_gamepad) {
+    status = HAL_ESTATE;
+  }
+  if (status != HAL_OK) {
+    jh_handle_invalidate_all(&s_gamepad.handle_pool);
+  }
+  return status;
 }
 
 template <typename Operation>
@@ -86,22 +118,33 @@ hal_status_t hal_gamepad_open(hal_gamepad_t *out_gamepad) {
     return HAL_ENOMEM;
   }
   hal_mutex_lock(mutex);
-  if (s_gamepad.opened || s_gamepad.operation_active) {
+  if (s_gamepad.backend != nullptr || s_gamepad.operation_active) {
     hal_mutex_unlock(mutex);
     return HAL_EBUSY;
+  }
+  hal_status_t status = ensure_handle_pool_locked();
+  if (status != HAL_OK) {
+    hal_mutex_unlock(mutex);
+    return status;
+  }
+  void *handle = nullptr;
+  status = jh_handle_allocate(&s_gamepad.handle_pool, &s_gamepad, &handle);
+  if (status != HAL_OK) {
+    hal_mutex_unlock(mutex);
+    return status;
   }
   s_gamepad.operation_active = true;
   s_gamepad.backend = backend;
   hal_mutex_unlock(mutex);
 
-  const hal_status_t status = backend->start(backend->context);
+  status = backend->start(backend->context);
 
   hal_mutex_lock(mutex);
   s_gamepad.operation_active = false;
   if (status == HAL_OK) {
-    s_gamepad.opened = true;
-    *out_gamepad = &s_gamepad.handle;
+    *out_gamepad = static_cast<hal_gamepad_t>(handle);
   } else {
+    (void)release_handle_locked(handle);
     s_gamepad.backend = nullptr;
   }
   hal_mutex_unlock(mutex);
@@ -114,13 +157,15 @@ hal_status_t hal_gamepad_open(hal_gamepad_t *out_gamepad) {
 }
 
 hal_status_t hal_gamepad_close(hal_gamepad_t gamepad) {
-  return run_operation(gamepad, [](const jh_gamepad_backend_t *backend) {
-    const hal_status_t status = backend->stop(backend->context);
+  return run_operation(gamepad, [gamepad](const jh_gamepad_backend_t *backend) {
+    const hal_status_t backend_status = backend->stop(backend->context);
     hal_mutex_t mutex = runtime_mutex();
     hal_mutex_lock(mutex);
-    s_gamepad.opened = false;
+    const hal_status_t release_status = release_handle_locked(gamepad);
     s_gamepad.backend = nullptr;
     hal_mutex_unlock(mutex);
+    const hal_status_t status =
+        backend_status != HAL_OK ? backend_status : release_status;
     if (status == HAL_OK) {
       jh_bluetooth_publish_inactive(HAL_BOARD_CAP_BLUETOOTH_CLASSIC_CONTROLLER);
     } else {
@@ -205,8 +250,10 @@ void hal_mock_gamepad_runtime_full_reset(void) {
     return;
   }
   hal_mutex_lock(mutex);
+  if (s_gamepad.handle_pool_initialized) {
+    jh_handle_invalidate_all(&s_gamepad.handle_pool);
+  }
   s_gamepad.backend = nullptr;
-  s_gamepad.opened = false;
   s_gamepad.operation_active = false;
   hal_mutex_unlock(mutex);
 }
