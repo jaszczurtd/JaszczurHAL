@@ -88,6 +88,31 @@ if "scripts/check_sbom.sh" in job("security-scan"):
 if "needs: test" not in job("security-scan"):
     raise AssertionError("security CI must consume the SBOM verified by the test job")
 
+
+def require_tidy_stderr_capture(recipe: str, recipe_name: str) -> None:
+    commands = [
+        line
+        for line in recipe.splitlines()
+        if line.lstrip().startswith("run-clang-tidy ")
+    ]
+    if len(commands) != 2:
+        raise AssertionError(
+            f"{recipe_name} must run clang-tidy exactly twice; got {len(commands)}"
+        )
+    if any("2>&1" not in command for command in commands):
+        raise AssertionError(
+            f"{recipe_name} does not capture clang-tidy standard error"
+        )
+    diagnostic_pattern = ":[0-9]+:[0-9]+: (warning|error):"
+    if diagnostic_pattern not in recipe:
+        raise AssertionError(
+            f"{recipe_name} does not reject concrete clang-tidy diagnostics"
+        )
+
+
+require_tidy_stderr_capture(LOCAL_GATE, "runalltests.sh")
+require_tidy_stderr_capture(job("static-analysis"), "static-analysis CI job")
+
 sanitizer_job = job("sanitizer-fuzz")
 shared_sanitizer_command = "./scripts/run_sanitizer_fuzz.sh"
 if sanitizer_job.count(shared_sanitizer_command) != 1:

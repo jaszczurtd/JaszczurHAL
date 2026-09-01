@@ -148,7 +148,8 @@ Uruchamia dziewięć etapów kontroli jakości w następującej kolejności:
    plus dedykowane stanowiska target/runtime)
 
 Kończy działanie z niezerowym kodem przy pierwszym błędzie; logi rejestrują
-wszelkie ostrzeżenia/błędy. Bramka Valgrind wybiera każdy bezpośrednio
+wszelkie ostrzeżenia/błędy zarówno ze standardowego wyjścia, jak i ze
+standardowego wyjścia błędów. Bramka Valgrind wybiera każdy bezpośrednio
 zarejestrowany natywny plik wykonywalny testu C/C++ przez etykietę CTest
 `memcheck`. `MEMCHECK_REQUIRED_TESTS` w `runalltests.sh` to krytyczny podzbiór
 sprawdzany przed wykonaniem, ale nie jest pełną listą. Testy Python, CMake i

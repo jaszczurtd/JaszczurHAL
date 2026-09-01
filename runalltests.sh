@@ -319,7 +319,7 @@ if [[ "${#TIDY_HOST_FILES[@]}" -eq 0 ]]; then
     fail "clang-tidy host file list is empty"
     exit 1
 fi
-run-clang-tidy -p "${TIDY_HOST_BUILD}" -quiet "${TIDY_HOST_FILES[@]}" \
+run-clang-tidy -p "${TIDY_HOST_BUILD}" -quiet "${TIDY_HOST_FILES[@]}" 2>&1 \
     | tee "${LOG_ROOT}/jh_tidy_host.log"
 pass "clang-tidy host pass complete."
 
@@ -333,7 +333,7 @@ if [[ "${#TIDY_STM32_FILES[@]}" -eq 0 ]]; then
     fail "clang-tidy STM32 file list is empty"
     exit 1
 fi
-run-clang-tidy -p "${TIDY_STM32_BUILD}" -quiet "${TIDY_STM32_FILES[@]}" \
+run-clang-tidy -p "${TIDY_STM32_BUILD}" -quiet "${TIDY_STM32_FILES[@]}" 2>&1 \
     | tee "${LOG_ROOT}/jh_tidy_stm32.log"
 pass "clang-tidy STM32 pass complete."
 
