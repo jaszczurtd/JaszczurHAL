@@ -9,6 +9,7 @@
 namespace {
 
 constexpr uint16_t kBondKey = 900u;
+jh_gamepad_bond_kv_context_t s_context{};
 
 hal_gamepad_bond_blob_t make_blob(uint8_t fill) {
   hal_gamepad_bond_blob_t blob{};
@@ -24,6 +25,7 @@ void setUp(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK,
                         hal_eeprom_init(HAL_EEPROM_FLASH, 8192u, 0x50u));
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_init_ex(0u, 8192u));
+  s_context = {};
 }
 
 void tearDown(void) {
@@ -33,14 +35,14 @@ void tearDown(void) {
 
 void test_load_reports_no_bond_before_any_store(void) {
   const hal_gamepad_bond_provider_t provider =
-      jh_gamepad_bond_kv_provider(kBondKey);
+      jh_gamepad_bond_kv_provider(&s_context, kBondKey);
   hal_gamepad_bond_blob_t blob{};
   TEST_ASSERT_EQUAL_INT(HAL_ENOENT, provider.load(provider.context, &blob));
 }
 
 void test_store_then_load_round_trips_the_blob(void) {
   const hal_gamepad_bond_provider_t provider =
-      jh_gamepad_bond_kv_provider(kBondKey);
+      jh_gamepad_bond_kv_provider(&s_context, kBondKey);
   const hal_gamepad_bond_blob_t stored = make_blob(0x5Au);
   TEST_ASSERT_EQUAL_INT(HAL_OK, provider.store(provider.context, &stored));
 
@@ -52,7 +54,7 @@ void test_store_then_load_round_trips_the_blob(void) {
 
 void test_store_replaces_previous_blob(void) {
   const hal_gamepad_bond_provider_t provider =
-      jh_gamepad_bond_kv_provider(kBondKey);
+      jh_gamepad_bond_kv_provider(&s_context, kBondKey);
   const hal_gamepad_bond_blob_t first = make_blob(0x11u);
   TEST_ASSERT_EQUAL_INT(HAL_OK, provider.store(provider.context, &first));
   const hal_gamepad_bond_blob_t second = make_blob(0x22u);
@@ -66,7 +68,7 @@ void test_store_replaces_previous_blob(void) {
 
 void test_erase_removes_the_blob_and_is_idempotent(void) {
   const hal_gamepad_bond_provider_t provider =
-      jh_gamepad_bond_kv_provider(kBondKey);
+      jh_gamepad_bond_kv_provider(&s_context, kBondKey);
   const hal_gamepad_bond_blob_t stored = make_blob(0x33u);
   TEST_ASSERT_EQUAL_INT(HAL_OK, provider.store(provider.context, &stored));
 
@@ -79,10 +81,12 @@ void test_erase_removes_the_blob_and_is_idempotent(void) {
 }
 
 void test_different_keys_do_not_collide(void) {
+  jh_gamepad_bond_kv_context_t context_a{};
+  jh_gamepad_bond_kv_context_t context_b{};
   const hal_gamepad_bond_provider_t provider_a =
-      jh_gamepad_bond_kv_provider(kBondKey);
+      jh_gamepad_bond_kv_provider(&context_a, kBondKey);
   const hal_gamepad_bond_provider_t provider_b =
-      jh_gamepad_bond_kv_provider((uint16_t)(kBondKey + 1u));
+      jh_gamepad_bond_kv_provider(&context_b, (uint16_t)(kBondKey + 1u));
   const hal_gamepad_bond_blob_t stored_a = make_blob(0xAAu);
   TEST_ASSERT_EQUAL_INT(HAL_OK,
                         provider_a.store(provider_a.context, &stored_a));
@@ -97,6 +101,15 @@ void test_different_keys_do_not_collide(void) {
                                 sizeof(stored_a.bytes));
 }
 
+void test_null_context_returns_an_empty_provider(void) {
+  const hal_gamepad_bond_provider_t provider =
+      jh_gamepad_bond_kv_provider(nullptr, kBondKey);
+  TEST_ASSERT_NULL(provider.context);
+  TEST_ASSERT_NULL(provider.load);
+  TEST_ASSERT_NULL(provider.store);
+  TEST_ASSERT_NULL(provider.erase);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_load_reports_no_bond_before_any_store);
@@ -104,5 +117,6 @@ int main(void) {
   RUN_TEST(test_store_replaces_previous_blob);
   RUN_TEST(test_erase_removes_the_blob_and_is_idempotent);
   RUN_TEST(test_different_keys_do_not_collide);
+  RUN_TEST(test_null_context_returns_an_empty_provider);
   return UNITY_END();
 }

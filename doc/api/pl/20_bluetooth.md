@@ -372,8 +372,9 @@ zachowuje dotychczasowe zachowanie tylko-w-RAM. hal_gamepad odpowiada za
 #include <hal/bluetooth/jh_gamepad_bond_kv_provider.h>
 
 hal_gamepad_t gamepad;
+jh_gamepad_bond_kv_context_t bond_context;
 const hal_gamepad_bond_provider_t provider =
-    jh_gamepad_bond_kv_provider(MY_BOND_KV_KEY); // gotowy adapter na hal_kv
+    jh_gamepad_bond_kv_provider(&bond_context, MY_BOND_KV_KEY);
 hal_gamepad_open_ex(&gamepad, &provider);
 ```
 
@@ -384,6 +385,7 @@ adapter nad `hal_kv_set_blob_ex()`/`get_blob_ex()`/`delete_ex()`; konsument,
 który chce innego trwałego nośnika, implementuje bezpośrednio trzy funkcje
 providera. `hal_kv_init_ex()` musi się już powieść przed użyciem providera i
 pozostać zainicjalizowane tak długo, jak długo profil gamepada jest otwarty.
+Należący do wywołującego `bond_context` musi być ważny przez ten sam czas.
 
 Nowy peer trafia do bond bloba dopiero po pełnej akceptacji -- lokalnej
 autoryzacji parowania, dopasowanej tożsamości, przyjętym deskryptorze
