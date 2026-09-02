@@ -1618,7 +1618,7 @@
         },
         {
           "name": "jaszczurhal:notes",
-          "value": "WireGuard-ESP32-derived protocol engine imported from the 0.1.8 JaszczurHAL fork commit and adapted with target-neutral lwIP extension relation."
+          "value": "WireGuard-ESP32-derived protocol engine imported from the 0.1.8 JaszczurHAL fork commit and adapted to use the target-neutral lwIP extension."
         },
         {
           "name": "jaszczurhal:feature_flags",
@@ -1875,5 +1875,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:6910031a-5966-5147-0f05-cefeb70441dd"
+  "serialNumber": "urn:uuid:c9b94289-b1f9-99f7-ca04-83c2f009992c"
 }

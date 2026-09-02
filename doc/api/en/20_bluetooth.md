@@ -381,7 +381,7 @@ given). A subsequent `hal_gamepad_pairing_open()` starts a fresh pairing.
 - **impl (BTstack, RP2040/RP2350/STM32G474+PIM730):** the link key is read
   from `HCI_EVENT_LINK_KEY_NOTIFICATION` and staged in bounded RAM by
   `jh_bluetooth_classic_hid_probe_logic.c`'s pure bond-gate tracking (host
-  tested); the BTstack-facing adhesive in `jh_bluetooth_classic_hid_probe.c`
+  tested); the BTstack adapter in `jh_bluetooth_classic_hid_probe.c`
   reinstalls a loaded bond via `btstack_link_key_db_memory_instance()` and
   flushes a ready bond after `jh_btstack_host_service()` returns each poll.
 - **impl (ESP32, Bluedroid):** Bluedroid persists bonded devices itself via

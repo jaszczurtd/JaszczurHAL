@@ -232,6 +232,9 @@ tests_cmake = (ROOT / "tests" / "CMakeLists.txt").read_text(encoding="utf-8")
 generated_runner = (ROOT / "scripts" / "sync_generated.py").read_text(
     encoding="utf-8"
 )
+pre_commit_hook = (ROOT / ".githooks" / "pre-commit").read_text(
+    encoding="utf-8"
+)
 require(
     "DIRECTORY PROPERTY TESTS" in tests_cmake
     and "DIRECTORY PROPERTY BUILDSYSTEM_TARGETS" in tests_cmake
@@ -258,6 +261,13 @@ require(
     '("scripts/generate_sbom.py",)' in generated_runner
     and '("scripts/generate_sbom.py", "--check")' in generated_runner,
     "shared generated-artifact runner does not refresh and verify the SBOM",
+)
+require(
+    "if ! python3 scripts/sync_generated.py --check; then" in pre_commit_hook
+    and "python3 scripts/sync_generated.py --write" in pre_commit_hook
+    and "Commit blocked: generated artifacts are missing or stale."
+    in pre_commit_hook,
+    "pre-commit hook does not block stale generated artifacts with repair guidance",
 )
 for duplicated_generator in (
     "scripts/generate_hal_features.py --write",

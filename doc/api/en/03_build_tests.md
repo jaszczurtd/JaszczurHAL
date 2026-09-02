@@ -112,6 +112,11 @@ Configures your local environment for the first time:
 - Sets up build directories and initial CMake configuration
 - Run this once when cloning the repository or after environment changes
 
+The pre-commit hook normalizes and formats staged files, then verifies all
+tracked generated artifacts. If any output is missing or stale, it blocks the
+commit and asks you to run `python3 scripts/sync_generated.py --write`, review
+the changes, and stage them before retrying.
+
 **`runalltests.sh`** - Full validation gate
 ```bash
 ./runalltests.sh
