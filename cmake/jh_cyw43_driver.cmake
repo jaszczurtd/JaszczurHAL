@@ -11,7 +11,7 @@ function(jh_cyw43_source_manifest OUT_SOURCES OUT_INCLUDES)
     set(_jh_cyw43_vendor "${_jh_cyw43_root}/vendor")
     # The ctrl layer (cyw43_init/cyw43_ensure_up/cyw43_gpio_set) is required for
     # every CYW43 bring-up, including the no-lwIP LED-only path; only the lwIP
-    # glue is gated by JH_CYW43_LWIP.
+    # adhesive is gated by JH_CYW43_LWIP.
     set(_jh_cyw43_sources
         "${_jh_cyw43_vendor}/src/cyw43_ll.c.upstream"
         "${_jh_cyw43_vendor}/src/cyw43_spi.c.upstream"

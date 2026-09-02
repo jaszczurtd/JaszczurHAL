@@ -105,6 +105,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/bluetooth/hal_ble_commands.cpp
     ${SRC}/hal/bluetooth/hal_ble_stream.cpp
     ${SRC}/hal/bluetooth/hal_gamepad.cpp
+    ${SRC}/hal/bluetooth/jh_gamepad_bond_kv_provider.c
     ${SRC}/hal/core/hal_config.cpp
     ${SRC}/hal/commands/hal_command_router.cpp
     ${SRC}/hal/commands/hal_command_wire.cpp

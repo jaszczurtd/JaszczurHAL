@@ -95,12 +95,19 @@ bool backend_valid(const jh_gamepad_backend_t *backend) {
          backend->snapshot_next != nullptr &&
          backend->pairing_open != nullptr &&
          backend->pairing_authorize != nullptr &&
-         backend->reconnect != nullptr && backend->disconnect != nullptr;
+         backend->reconnect != nullptr && backend->disconnect != nullptr &&
+         backend->forget != nullptr;
 }
 
 } // namespace
 
 hal_status_t hal_gamepad_open(hal_gamepad_t *out_gamepad) {
+  return hal_gamepad_open_ex(out_gamepad, nullptr);
+}
+
+hal_status_t
+hal_gamepad_open_ex(hal_gamepad_t *out_gamepad,
+                    const hal_gamepad_bond_provider_t *bond_provider) {
   if (out_gamepad == nullptr) {
     return HAL_EINVAL;
   }
@@ -137,7 +144,7 @@ hal_status_t hal_gamepad_open(hal_gamepad_t *out_gamepad) {
   s_gamepad.backend = backend;
   hal_mutex_unlock(mutex);
 
-  status = backend->start(backend->context);
+  status = backend->start(backend->context, bond_provider);
 
   hal_mutex_lock(mutex);
   s_gamepad.operation_active = false;
@@ -240,6 +247,12 @@ hal_status_t hal_gamepad_reconnect(hal_gamepad_t gamepad) {
 hal_status_t hal_gamepad_disconnect(hal_gamepad_t gamepad) {
   return run_operation(gamepad, [](const jh_gamepad_backend_t *backend) {
     return backend->disconnect(backend->context);
+  });
+}
+
+hal_status_t hal_gamepad_forget(hal_gamepad_t gamepad) {
+  return run_operation(gamepad, [](const jh_gamepad_backend_t *backend) {
+    return backend->forget(backend->context);
   });
 }
 

@@ -50,6 +50,7 @@ typedef struct {
   bool pairing_authorized;
   bool candidate_available;
   bool known_device;
+  const hal_gamepad_bond_provider_t *bond_provider;
 } jh_gamepad_bluedroid_backend_t;
 
 static jh_gamepad_bluedroid_backend_t s_backend;
@@ -521,8 +522,16 @@ static hal_status_t initialize_stack(void) {
   return HAL_OK;
 }
 
-static hal_status_t backend_start(void *context) {
+static hal_status_t
+backend_start(void *context, const hal_gamepad_bond_provider_t *bond_provider) {
   (void)context;
+  /* Bluedroid persists bonded devices itself via NVS (unlike BTstack's
+   * RAM-only link key db on RP/STM32), so this backend does not need a
+   * hal_gamepad bond provider to survive a reboot; the parameter is accepted
+   * for vtable compatibility only. backend_forget() below still routes
+   * factory reset through the caller's provider when one is given, so a
+   * consumer that wants a single code path across backends can still pass
+   * one. */
   if (!backend_lock()) {
     return HAL_ENOMEM;
   }
@@ -538,6 +547,7 @@ static hal_status_t backend_start(void *context) {
   memset(s_backend.candidate_address, 0, sizeof(s_backend.candidate_address));
   memset(s_backend.known_address, 0, sizeof(s_backend.known_address));
   memset(s_backend.pairing_address, 0, sizeof(s_backend.pairing_address));
+  s_backend.bond_provider = bond_provider;
   s_backend.started = true;
   s_backend.state = HAL_GAMEPAD_STATE_STARTING;
   s_backend.last_status = HAL_NONE;
@@ -802,6 +812,43 @@ static hal_status_t backend_disconnect(void *context) {
   return status_from_esp(esp_hidh_dev_close(device));
 }
 
+static hal_status_t backend_forget(void *context) {
+  (void)context;
+  if (!backend_lock()) {
+    return HAL_ENOMEM;
+  }
+  if (!s_backend.started) {
+    backend_unlock();
+    return HAL_EUNINIT;
+  }
+  esp_hidh_dev_t *device = s_backend.device;
+  uint8_t address[JH_GAMEPAD_ADDRESS_LENGTH];
+  memcpy(address, s_backend.known_address, sizeof(address));
+  const bool had_known_device = s_backend.known_device;
+  memset(s_backend.known_address, 0, sizeof(s_backend.known_address));
+  s_backend.known_device = false;
+  const hal_gamepad_bond_provider_t *bond_provider = s_backend.bond_provider;
+  backend_unlock();
+
+  if (device != NULL) {
+    (void)esp_hidh_dev_close(device);
+  }
+  /* Bluedroid owns this bond's persistence via NVS; removing it here is the
+   * native equivalent of a provider's erase(). */
+  hal_status_t status = HAL_OK;
+  if (had_known_device) {
+    status = status_from_esp(esp_bt_gap_remove_bond_device(address));
+  }
+  if (bond_provider != NULL && bond_provider->erase != NULL) {
+    const hal_status_t erase_status =
+        bond_provider->erase(bond_provider->context);
+    if (status == HAL_OK) {
+      status = erase_status;
+    }
+  }
+  return status;
+}
+
 static const jh_gamepad_backend_t s_gamepad_backend = {
     .context = NULL,
     .start = backend_start,
@@ -814,6 +861,7 @@ static const jh_gamepad_backend_t s_gamepad_backend = {
     .pairing_authorize = backend_pairing_authorize,
     .reconnect = backend_reconnect,
     .disconnect = backend_disconnect,
+    .forget = backend_forget,
 };
 
 const jh_gamepad_backend_t *jh_gamepad_backend_instance(void) {

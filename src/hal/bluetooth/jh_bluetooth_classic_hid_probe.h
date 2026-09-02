@@ -1,5 +1,6 @@
 #pragma once
 
+#include "hal/bluetooth/hal_gamepad.h"
 #include "hal/core/hal_status.h"
 #include "jh_bluetooth_classic_hid_memory_probe.h"
 #include "jh_bluetooth_gamepad_parser.h"
@@ -95,12 +96,15 @@ typedef struct {
   bool descriptor_matches_capture;
 } jh_bluetooth_classic_hid_probe_snapshot_t;
 
-hal_status_t jh_bluetooth_classic_hid_probe_start(void);
+hal_status_t jh_bluetooth_classic_hid_probe_start(
+    const hal_gamepad_bond_provider_t *bond_provider);
 hal_status_t jh_bluetooth_classic_hid_probe_service(void);
 hal_status_t jh_bluetooth_classic_hid_probe_open_pairing_window(void);
 hal_status_t jh_bluetooth_classic_hid_probe_authorize_pairing(void);
 hal_status_t jh_bluetooth_classic_hid_probe_reconnect(void);
 hal_status_t jh_bluetooth_classic_hid_probe_disconnect(void);
+/** Factory reset: forget the bonded peer (see hal_gamepad_forget()). */
+hal_status_t jh_bluetooth_classic_hid_probe_forget(void);
 hal_status_t jh_bluetooth_classic_hid_probe_stop(void);
 void jh_bluetooth_classic_hid_probe_retain_gamepad_queue(bool retain);
 hal_status_t jh_bluetooth_classic_hid_probe_gamepad_snapshot(

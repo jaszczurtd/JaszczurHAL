@@ -24,7 +24,8 @@ jh_gamepad_copy_snapshot(const jh_bluetooth_gamepad_snapshot_t *source,
 
 typedef struct {
   void *context;
-  hal_status_t (*start)(void *context);
+  hal_status_t (*start)(void *context,
+                        const hal_gamepad_bond_provider_t *bond_provider);
   hal_status_t (*stop)(void *context);
   hal_status_t (*service)(void *context);
   hal_status_t (*get_info)(void *context, hal_gamepad_info_t *out_info);
@@ -35,6 +36,7 @@ typedef struct {
   hal_status_t (*pairing_authorize)(void *context);
   hal_status_t (*reconnect)(void *context);
   hal_status_t (*disconnect)(void *context);
+  hal_status_t (*forget)(void *context);
 } jh_gamepad_backend_t;
 
 const jh_gamepad_backend_t *jh_gamepad_backend_instance(void);

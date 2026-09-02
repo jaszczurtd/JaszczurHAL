@@ -56,6 +56,14 @@ void jh_bluetooth_classic_hid_probe_logic_connected(
     logic->connected = true;
     logic->discovery_open = false;
     logic->active_controls_mask = 0u;
+    /* A fresh HID connection needs a fresh descriptor accept and, if a new
+     * pairing/link-key exchange happens on it, a fresh link key -- but
+     * identity_validated (SDP/PnP, established before this connection)
+     * carries over. */
+    logic->descriptor_accepted = false;
+    logic->link_key_received = false;
+    logic->bond_consumed = false;
+    memset(&logic->pending_bond, 0, sizeof(logic->pending_bond));
   }
 }
 
@@ -121,4 +129,62 @@ void jh_bluetooth_classic_hid_probe_logic_disconnected(
   }
   logic->active_controls_mask = 0u;
   logic->connected = false;
+}
+
+void jh_bluetooth_classic_hid_probe_logic_reset_bond_progress(
+    jh_bluetooth_classic_hid_probe_logic_t *logic) {
+  if (logic == NULL) {
+    return;
+  }
+  logic->identity_validated = false;
+  logic->descriptor_accepted = false;
+  logic->link_key_received = false;
+  logic->bond_consumed = false;
+  memset(&logic->pending_bond, 0, sizeof(logic->pending_bond));
+}
+
+void jh_bluetooth_classic_hid_probe_logic_identity_validated(
+    jh_bluetooth_classic_hid_probe_logic_t *logic) {
+  if (logic != NULL) {
+    logic->identity_validated = true;
+  }
+}
+
+void jh_bluetooth_classic_hid_probe_logic_descriptor_accepted(
+    jh_bluetooth_classic_hid_probe_logic_t *logic) {
+  if (logic != NULL) {
+    logic->descriptor_accepted = true;
+  }
+}
+
+void jh_bluetooth_classic_hid_probe_logic_link_key_received(
+    jh_bluetooth_classic_hid_probe_logic_t *logic, const uint8_t *bd_addr,
+    const uint8_t *link_key, uint8_t link_key_type) {
+  if (logic == NULL || bd_addr == NULL || link_key == NULL) {
+    return;
+  }
+  memcpy(logic->pending_bond.bd_addr, bd_addr,
+         sizeof(logic->pending_bond.bd_addr));
+  memcpy(logic->pending_bond.link_key, link_key,
+         sizeof(logic->pending_bond.link_key));
+  logic->pending_bond.link_key_type = link_key_type;
+  logic->link_key_received = true;
+  logic->bond_consumed = false;
+}
+
+bool jh_bluetooth_classic_hid_probe_logic_bond_ready(
+    const jh_bluetooth_classic_hid_probe_logic_t *logic) {
+  return logic != NULL && logic->identity_validated &&
+         logic->descriptor_accepted && logic->reports > 0u &&
+         logic->link_key_received && !logic->bond_consumed;
+}
+
+const jh_gamepad_bond_identity_t *
+jh_bluetooth_classic_hid_probe_logic_take_pending_bond(
+    jh_bluetooth_classic_hid_probe_logic_t *logic) {
+  if (!jh_bluetooth_classic_hid_probe_logic_bond_ready(logic)) {
+    return NULL;
+  }
+  logic->bond_consumed = true;
+  return &logic->pending_bond;
 }

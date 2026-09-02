@@ -22,6 +22,10 @@ struct mock_gamepad_t {
   bool started;
   bool overflow_pending;
   bool disconnect_pending;
+  const hal_gamepad_bond_provider_t *bond_provider;
+  uint32_t bond_store_calls;
+  uint32_t bond_erase_calls;
+  hal_status_t last_bond_store_status;
 };
 
 mock_gamepad_t s_mock{};
@@ -56,7 +60,8 @@ void release_connection(hal_status_t status) {
       status == HAL_OK ? HAL_GAMEPAD_STATE_READY : HAL_GAMEPAD_STATE_FAILED;
 }
 
-hal_status_t mock_start(void *) {
+hal_status_t mock_start(void *,
+                        const hal_gamepad_bond_provider_t *bond_provider) {
   if (s_mock.started) {
     return HAL_EBUSY;
   }
@@ -65,6 +70,13 @@ hal_status_t mock_start(void *) {
   s_mock.service_status = HAL_OK;
   s_mock.info.state = HAL_GAMEPAD_STATE_STARTING;
   s_mock.info.last_status = HAL_NONE;
+  s_mock.bond_provider = bond_provider;
+  if (bond_provider != nullptr && bond_provider->load != nullptr) {
+    hal_gamepad_bond_blob_t blob{};
+    const hal_status_t load_status =
+        bond_provider->load(bond_provider->context, &blob);
+    s_mock.info.known_device = load_status == HAL_OK;
+  }
   return HAL_OK;
 }
 
@@ -187,6 +199,25 @@ hal_status_t mock_disconnect(void *) {
   return HAL_OK;
 }
 
+hal_status_t mock_forget(void *) {
+  if (!s_mock.started) {
+    return HAL_EUNINIT;
+  }
+  if (s_mock.current.connected) {
+    release_connection(HAL_OK);
+  }
+  s_mock.info.known_device = false;
+  s_mock.info.pairing_window_open = false;
+  s_mock.info.pairing_pending = false;
+  s_mock.disconnect_pending = false;
+  if (s_mock.bond_provider == nullptr ||
+      s_mock.bond_provider->erase == nullptr) {
+    return HAL_OK;
+  }
+  ++s_mock.bond_erase_calls;
+  return s_mock.bond_provider->erase(s_mock.bond_provider->context);
+}
+
 const jh_gamepad_backend_t s_backend = {
     .context = nullptr,
     .start = mock_start,
@@ -199,6 +230,7 @@ const jh_gamepad_backend_t s_backend = {
     .pairing_authorize = mock_pairing_authorize,
     .reconnect = mock_reconnect,
     .disconnect = mock_disconnect,
+    .forget = mock_forget,
 };
 
 } // namespace
@@ -287,6 +319,38 @@ hal_status_t hal_mock_gamepad_inject_transport_error(hal_status_t status) {
 
 void hal_mock_gamepad_set_service_status(hal_status_t status) {
   s_mock.service_status = status;
+}
+
+hal_status_t hal_mock_gamepad_inject_bond_store(void) {
+  if (!s_mock.started) {
+    return HAL_EUNINIT;
+  }
+  if (s_mock.bond_provider == nullptr ||
+      s_mock.bond_provider->store == nullptr) {
+    return HAL_EUNSUPPORTED;
+  }
+  hal_gamepad_bond_blob_t blob{};
+  memset(blob.bytes, 0xAB, sizeof(blob.bytes));
+  const hal_status_t status =
+      s_mock.bond_provider->store(s_mock.bond_provider->context, &blob);
+  ++s_mock.bond_store_calls;
+  s_mock.last_bond_store_status = status;
+  if (status == HAL_OK) {
+    s_mock.info.known_device = true;
+  }
+  return status;
+}
+
+uint32_t hal_mock_gamepad_bond_store_calls(void) {
+  return s_mock.bond_store_calls;
+}
+
+uint32_t hal_mock_gamepad_bond_erase_calls(void) {
+  return s_mock.bond_erase_calls;
+}
+
+hal_status_t hal_mock_gamepad_last_bond_store_status(void) {
+  return s_mock.last_bond_store_status;
 }
 
 #endif /* HAL_TARGET_IS_MOCK && HAL_ENABLE_BLUETOOTH_GAMEPAD */

@@ -59,6 +59,7 @@ function(_jh_target_enable_btstack TARGET_NAME MODE)
         "${_jh_bluetooth_root}/jh_bluetooth_classic_hid_lifecycle.c"
         "${_jh_bluetooth_root}/jh_bluetooth_classic_hid_memory_probe.c"
         "${_jh_bluetooth_root}/jh_bluetooth_classic_hid_probe_logic.c"
+        "${_jh_bluetooth_root}/jh_gamepad_bond_codec.c"
         "${_jh_bluetooth_root}/jh_bluetooth_classic_hid_probe.c")
     if(MODE STREQUAL "STAGE1")
         set(_jh_mode_upstream_sources ${_jh_btstack_ble_sources})

@@ -347,16 +347,75 @@ pozwala aplikacji je zastąpić. Kiedy
 `hal_gamepad_pairing_authorize()` i zaakceptować Just Works albo legacy PIN
 `0000`. Nieobsługiwane procedury wymagające passkey są odrzucane.
 Zaakceptowany adres identyfikuje urządzenie, z którym
-`hal_gamepad_reconnect()` łączy się w bieżącej sesji otwartego profilu.
-Sposób przechowywania klucza połączenia (ang. `link key`) zależy od stosu.
-Zamknięcie profilu lub ponowne uruchomienie firmware usuwa tożsamość wybraną
-przez HAL, dlatego aplikacja musi być przygotowana na ponowne otwarcie okna
-parowania.
+`hal_gamepad_reconnect()` łączy się w bieżącej sesji otwartego profilu. Bez
+providera bondingu (patrz niżej) klucz połączenia (`link key`) trzymany jest
+tylko w RAM stosu: zamknięcie profilu lub ponowne uruchomienie firmware usuwa
+tożsamość wybraną przez HAL, dlatego aplikacja musi być przygotowana na
+ponowne otwarcie okna parowania.
 
 Otwarcie okna parowania jest jawną decyzją autoryzacyjną. Produkt powinien je
 udostępnić dopiero po lokalnej akcji użytkownika i nie powinien traktować nazwy
 urządzenia, adresu Bluetooth ani nieuwierzytelnionej wymiany Just Works jako
 dowodu tożsamości użytkownika.
+
+### Trwały bonding
+
+`hal_gamepad_open_ex(&handle, bond_provider)` przyjmuje opcjonalny
+`hal_gamepad_bond_provider_t` -- funkcje `load()`/`store()`/`erase()` nad
+nieprzezroczystym, stałej wielkości `hal_gamepad_bond_blob_t`.
+`hal_gamepad_open()` jest równoważne `hal_gamepad_open_ex(&handle, NULL)` i
+zachowuje dotychczasowe zachowanie tylko-w-RAM. hal_gamepad odpowiada za
+*semantykę* bondingu; nie wybiera fizycznego storage:
+
+```c
+#include <hal/bluetooth/hal_gamepad.h>
+#include <hal/bluetooth/jh_gamepad_bond_kv_provider.h>
+
+hal_gamepad_t gamepad;
+const hal_gamepad_bond_provider_t provider =
+    jh_gamepad_bond_kv_provider(MY_BOND_KV_KEY); // gotowy adapter na hal_kv
+hal_gamepad_open_ex(&gamepad, &provider);
+```
+
+`jh_gamepad_bond_kv_provider()` (zadeklarowany w
+`hal/bluetooth/jh_gamepad_bond_kv_provider.h`, aktywny gdy włączone są
+zarówno `HAL_ENABLE_BLUETOOTH_GAMEPAD`, jak i `HAL_ENABLE_KV`) to gotowy
+adapter nad `hal_kv_set_blob_ex()`/`get_blob_ex()`/`delete_ex()`; konsument,
+który chce innego trwałego nośnika, implementuje bezpośrednio trzy funkcje
+providera. `hal_kv_init_ex()` musi się już powieść przed użyciem providera i
+pozostać zainicjalizowane tak długo, jak długo profil gamepada jest otwarty.
+
+Nowy peer trafia do bond bloba dopiero po pełnej akceptacji -- lokalnej
+autoryzacji parowania, dopasowanej tożsamości, przyjętym deskryptorze
+raportów, co najmniej jednym raporcie HID (dowód, że łącze faktycznie
+przesyła dane) i przechwyconym kluczu połączenia. Do tego momentu
+dotychczasowy bond, jeśli istnieje, pozostaje aktywny. `store()`/`erase()` są
+wołane wyłącznie z `hal_gamepad_poll()`, po powrocie backendu z dowolnego
+callbacka stosu Bluetooth i po zwolnieniu radio locka -- nigdy z wnętrza
+callbacka stosu ani pod lockiem. Przy `hal_gamepad_open_ex()` zapisany blob
+jest walidowany (magic, wersja formatu, CRC oraz reguły weryfikacji peera
+wpisane w działający firmware) zanim jego klucz połączenia zostanie
+zainstalowany w kontrolerze; strukturalnie niepoprawny blob albo taki, który
+powstał pod starymi regułami, jest traktowany dokładnie jak "brak bondingu",
+a nie jak zaufany.
+
+`hal_gamepad_forget()` to punkt wejścia dla factory reset: rozłącza aktywne
+łącze, czyści znanego peera w kontrolerze i w RAM oraz usuwa zapisany blob
+przez provider bondingu (no-op, gdy providera nie podano). Kolejne
+`hal_gamepad_pairing_open()` rozpoczyna świeże parowanie.
+
+- **impl (BTstack, RP2040/RP2350/STM32G474+PIM730):** klucz połączenia jest
+  odczytywany z `HCI_EVENT_LINK_KEY_NOTIFICATION` i buforowany w ograniczonym
+  RAM przez czystą logikę bramki bondingu w
+  `jh_bluetooth_classic_hid_probe_logic.c` (testowaną hostowo); warstwa
+  łącząca się z BTstack w `jh_bluetooth_classic_hid_probe.c` instaluje
+  wczytany bond przez `btstack_link_key_db_memory_instance()` i publikuje
+  gotowy bond po każdym powrocie z `jh_btstack_host_service()`.
+- **impl (ESP32, Bluedroid):** Bluedroid sam trwale zapisuje sparowane
+  urządzenia w NVS, więc na tym backendzie provider bondingu nie jest
+  potrzebny do trwałości; `hal_gamepad_forget()` nadal usuwa bond przez
+  `esp_bt_gap_remove_bond_device()`, a jeśli podano provider, woła też jego
+  `erase()`.
 
 ### Znormalizowany stan wejść
 

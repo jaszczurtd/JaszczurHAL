@@ -1,4 +1,4 @@
-/* Portable adaptation of Pico SDK's BSD-3-Clause CYW43 chipset glue. */
+/* Portable adaptation of Pico SDK's BSD-3-Clause CYW43 chipset adhesive. */
 #include "jh_btstack_chipset_cyw43.h"
 
 #include "btstack_util.h"
