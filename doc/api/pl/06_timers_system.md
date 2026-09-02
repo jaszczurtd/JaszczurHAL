@@ -457,6 +457,17 @@ jest równy `NULL`, i zwraca `true` dla bieżącego obiegu pętli.
   podzielone między
   `src/hal/impl/stm32g474/port/system_stm32g474.c` oraz
   `src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_system.{h,cpp}`.
+  Odczyt temperatury układu korzysta z wewnętrznego kanału ADC1 VSENSE
+  (IN16), kompensowanego względem kanału VREFINT (IN18) oraz fabrycznych
+  bajtów kalibracyjnych `TS_CAL1`/`TS_CAL2`/`VREFINT_CAL` z pamięci
+  systemowej -- stosunek VREFINT eliminuje wpływ rzeczywistego VDDA, więc
+  odczyt pozostaje dokładny nawet gdy zasilanie różni się od 3,0 V, przy
+  którym fabrycznie zapisano bajty kalibracyjne. Obsługa ADC1 (inicjalizacja,
+  rozdzielczość, włączanie/wyłączanie kanałów wewnętrznych) znajduje się w
+  `src/hal/impl/stm32g474/stm32g474_adc_shared.{h,cpp}` i jest współdzielona z
+  backendem `hal_adc` dla pinów zewnętrznych. Buildy hostowe (host-sanity)
+  zwracają `HAL_EUNSUPPORTED` -- na hoście nie ma ani pamięci OTP, ani ADC1
+  do odczytu.
   W kontekście zadania FreeRTOS funkcja opóźniająca oddaje sterowanie
   planiście. Przed jego uruchomieniem, w ISR i w sekcjach krytycznych
   stosowane jest aktywne oczekiwanie oparte na DWT. Informacje o konfiguracji

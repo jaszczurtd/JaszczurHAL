@@ -68,8 +68,30 @@ uint32_t stm32g474_system_heap_total_bytes(void);
 /** @brief Free runtime newlib heap in bytes. */
 uint32_t stm32g474_system_get_free_heap(void);
 
-/** @brief On-die temperature in °C. Stub returns 0.0f. */
-float stm32g474_system_read_chip_temp(void);
+/** @brief Read the on-die temperature via the ADC1 internal VSENSE channel
+ *  (IN16), compensated against the VREFINT channel (IN18) and the factory
+ *  TS_CAL1/TS_CAL2/VREFINT_CAL bytes from system memory (RM0440 "Vbat,
+ *  temperature sensor and VrefInt channel").
+ *  @param out_celsius Destination for the measured die temperature.
+ *  @return HAL_OK on success, HAL_EINVAL when @p out_celsius is NULL, or
+ *          HAL_EUNSUPPORTED on host-sanity builds (no OTP/ADC to read). */
+hal_status_t stm32g474_system_read_chip_temp_ex(float *out_celsius);
+
+/** @brief Two-point VREFINT-ratio-compensated die-temperature interpolation.
+ *  Pure math extracted from @ref stm32g474_system_read_chip_temp_ex so it is
+ *  testable on host without real ADC/OTP access.
+ *  @param ts_raw        Raw ADC1 code from the VSENSE channel (IN16).
+ *  @param vref_raw      Raw ADC1 code from the VREFINT channel (IN18).
+ *  @param ts_cal1       Factory TS_CAL1 byte (raw code at 30 degC).
+ *  @param ts_cal2       Factory TS_CAL2 byte (raw code at 130 degC).
+ *  @param vrefint_cal   Factory VREFINT_CAL byte (raw code at 30 degC).
+ *  @return Interpolated temperature in degrees Celsius. Returns 0.0f when
+ *          @p vref_raw or (ts_cal2 - ts_cal1) is zero (degenerate input). */
+float stm32g474_system_calc_chip_temp_celsius(uint16_t ts_raw,
+                                              uint16_t vref_raw,
+                                              uint16_t ts_cal1,
+                                              uint16_t ts_cal2,
+                                              uint16_t vrefint_cal);
 
 /** @brief Jump to the STM32 system bootloader. Stub: no-op. */
 void stm32g474_system_enter_bootloader(void);

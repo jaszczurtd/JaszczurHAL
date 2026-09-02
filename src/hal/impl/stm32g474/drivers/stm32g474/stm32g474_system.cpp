@@ -14,6 +14,10 @@
 
 #include <string.h>
 
+#ifdef JH_STM32G474_HW
+#include "../../stm32g474_adc_shared.h"
+#endif
+
 #if defined(HAL_ENABLE_FREERTOS) && !defined(JH_STM32G474_HW)
 #include <FreeRTOS.h>
 #include <task.h>
@@ -73,7 +77,6 @@ bool g_watchdog_pause_on_debug = false;
 uint32_t g_watchdog_prescaler = 0u;
 uint32_t g_watchdog_reload = 0u;
 #endif
-float g_chip_temp_c = 0.0f;
 
 #if defined(HAL_ENABLE_FREERTOS) && !defined(JH_STM32G474_HW)
 static bool host_freertos_scheduler_has_ticks(void) {
@@ -310,7 +313,48 @@ uint32_t stm32g474_system_get_free_heap(void) {
 #endif
 }
 
-float stm32g474_system_read_chip_temp(void) { return g_chip_temp_c; }
+float stm32g474_system_calc_chip_temp_celsius(uint16_t ts_raw,
+                                              uint16_t vref_raw,
+                                              uint16_t ts_cal1,
+                                              uint16_t ts_cal2,
+                                              uint16_t vrefint_cal) {
+  if (vref_raw == 0u || ts_cal2 == ts_cal1) {
+    return 0.0f;
+  }
+
+  /* Scale the raw TS code to what it would read at the calibration voltage
+   * (VDDA = 3.0V): both TS and VREFINT codes are proportional to 1/VDDA, so
+   * their ratio cancels the actual (possibly non-3.0V) supply voltage out.
+   * This is the standard ST two-point + VREFINT-ratio formula (RM0440 /
+   * AN3964-style), and is what makes this reading immune to the "assumed
+   * fixed reference voltage" accuracy problem the uncalibrated RP2040/RP2350
+   * sensor has. */
+  const float ts_data = (float)ts_raw * (float)vrefint_cal / (float)vref_raw;
+  const float slope_c_per_code =
+      (float)(STM32_TS_CAL2_TEMP_C - STM32_TS_CAL1_TEMP_C) /
+      (float)(ts_cal2 - ts_cal1);
+  return slope_c_per_code * (ts_data - (float)ts_cal1) +
+         (float)STM32_TS_CAL1_TEMP_C;
+}
+
+hal_status_t stm32g474_system_read_chip_temp_ex(float *out_celsius) {
+  if (out_celsius == nullptr) {
+    return HAL_EINVAL;
+  }
+#ifdef JH_STM32G474_HW
+  const uint16_t ts_raw = stm32g474_adc_read_temp_sensor_raw();
+  const uint16_t vref_raw = stm32g474_adc_read_vrefint_raw();
+  const uint16_t ts_cal1 = JH_REG16(STM32_TS_CAL1_ADDR);
+  const uint16_t ts_cal2 = JH_REG16(STM32_TS_CAL2_ADDR);
+  const uint16_t vrefint_cal = JH_REG16(STM32_VREFINT_CAL_ADDR);
+  *out_celsius = stm32g474_system_calc_chip_temp_celsius(
+      ts_raw, vref_raw, ts_cal1, ts_cal2, vrefint_cal);
+  return HAL_OK;
+#else
+  /* Host-sanity builds have no OTP calibration bytes or ADC1 to read. */
+  return HAL_EUNSUPPORTED;
+#endif
+}
 
 void stm32g474_system_enter_bootloader(void) {
   /* STM32G474 TODO: deinit + jump to STM32 system bootloader. */
