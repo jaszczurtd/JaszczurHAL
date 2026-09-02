@@ -347,8 +347,9 @@ physical storage:
 #include <hal/bluetooth/jh_gamepad_bond_kv_provider.h>
 
 hal_gamepad_t gamepad;
+jh_gamepad_bond_kv_context_t bond_context;
 const hal_gamepad_bond_provider_t provider =
-    jh_gamepad_bond_kv_provider(MY_BOND_KV_KEY); // ready-made hal_kv adapter
+    jh_gamepad_bond_kv_provider(&bond_context, MY_BOND_KV_KEY);
 hal_gamepad_open_ex(&gamepad, &provider);
 ```
 
@@ -359,7 +360,8 @@ adapter over `hal_kv_set_blob_ex()`/`get_blob_ex()`/`delete_ex()`; a consumer
 that wants a different persistent medium implements the three-function
 provider directly instead. `hal_kv_init_ex()` must already have succeeded
 before the provider is used and must stay initialized for as long as the
-gamepad profile is open.
+gamepad profile is open. The caller-owned `bond_context` must remain valid for
+the same lifetime.
 
 A new peer reaches the bond blob only after full acceptance -- local pairing
 authorization, matched identity, an accepted report descriptor, at least one

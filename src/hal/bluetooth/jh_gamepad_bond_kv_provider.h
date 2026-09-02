@@ -10,6 +10,11 @@
 extern "C" {
 #endif
 
+/** Caller-owned state used by the KV-backed bond provider callbacks. */
+typedef struct {
+  uint16_t key;
+} jh_gamepad_bond_kv_context_t;
+
 /**
  * @brief Build a hal_gamepad bond provider backed by hal_kv.
  *
@@ -22,11 +27,16 @@ extern "C" {
  * succeeded before this provider is used, and stay initialized for as long
  * as the gamepad profile is open.
  *
- * @param key KV key reserved for the bond blob; must not collide with any
- *            other key the application stores.
- * @return A provider ready to pass to hal_gamepad_open_ex().
+ * @param context Caller-owned storage that must remain valid for as long as
+ *                the returned provider can be used.
+ * @param key     KV key reserved for the bond blob; must not collide with any
+ *                other key the application stores.
+ * @return A provider ready to pass to hal_gamepad_open_ex(), or a
+ *         zero-initialized provider when @p context is NULL.
  */
-hal_gamepad_bond_provider_t jh_gamepad_bond_kv_provider(uint16_t key);
+hal_gamepad_bond_provider_t
+jh_gamepad_bond_kv_provider(jh_gamepad_bond_kv_context_t *context,
+                            uint16_t key);
 
 #ifdef __cplusplus
 }
