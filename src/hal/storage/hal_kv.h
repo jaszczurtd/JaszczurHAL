@@ -93,6 +93,66 @@ hal_status_t hal_kv_set_auto_commit(bool enabled);
  */
 bool hal_kv_commit(void);
 
+/**
+ * @brief Switch KV reads between RAM-cache (default) and read-through modes.
+ *
+ * The active bank is fully cached in RAM after hal_kv_init_ex() and after
+ * every publish, so by default hal_kv_get_u32()/hal_kv_get_blob() never touch
+ * the backing EEPROM: they are fast and immune to spurious media errors, but
+ * a storage fault that develops *after* init (not caught at init or at the
+ * next write) is invisible to a plain get.
+ *
+ * Enabling read-through (`enabled = true`) makes every get additionally
+ * re-read the record's bytes live from the backing EEPROM before returning,
+ * at the cost of one EEPROM read per get. A live medium fault then surfaces
+ * as a real hal_status_t error from the get call instead of being served
+ * from the (still valid) RAM copy. Callers that gate writes or other
+ * decisions on "is storage currently healthy" should enable this; callers
+ * that only care about the last successfully published generation should
+ * leave it at the default.
+ *
+ * The mode is a KV-wide setting, not per-call; it persists across
+ * hal_kv_init_ex() the same way hal_kv_set_auto_commit() does.
+ *
+ * @param enabled true to read-verify against EEPROM on every get, false
+ *                (default) to serve purely from the RAM cache.
+ * @return HAL_OK, or HAL_ENOMEM if the module mutex cannot be created.
+ */
+hal_status_t hal_kv_set_read_through(bool enabled);
+
+/**
+ * @brief Check whether a candidate address holds a structurally valid KV
+ *        bank header, without initializing or otherwise touching the active
+ *        KV instance.
+ *
+ * Reads and validates only the publish header (magic, version, sizes, and
+ * the header's own CRC) at @p bank_addr; it does not validate the bank body
+ * and does not require hal_kv_init_ex() to have been called. Intended for
+ * callers that must choose between multiple candidate base addresses (for
+ * example detecting a bank left behind at a previous storage location by an
+ * older firmware version) before calling hal_kv_init_ex() on the winner.
+ *
+ * This is the supported alternative to a caller hand-decoding hal_kv's
+ * on-disk header layout: that layout is a private implementation detail and
+ * may change between versions (it did between format versions 1 and 2).
+ *
+ * @param bank_addr   EEPROM address of the candidate bank.
+ * @param bank_size   Expected bank size in bytes; a header whose own
+ *                    recorded bank_size differs is reported absent.
+ * @param out_present Set to true when a structurally valid header is found
+ *                    at @p bank_addr, false otherwise (including on a read
+ *                    error, in which case the return status explains why).
+ * @return HAL_OK when the check completed (regardless of the outcome in
+ *         @p out_present), HAL_EINVAL for a NULL @p out_present or a
+ *         @p bank_size too small to hold a header, or an EEPROM I/O status.
+ */
+hal_status_t hal_kv_bank_looks_present_ex(uint16_t bank_addr,
+                                          uint16_t bank_size,
+                                          bool *out_present);
+
+/** @brief Compatibility wrapper over hal_kv_bank_looks_present_ex(). */
+bool hal_kv_bank_looks_present(uint16_t bank_addr, uint16_t bank_size);
+
 /* ---- Status-returning APIs ---------------------------------------------- */
 /*
  * Status-returning KV APIs own validation and EEPROM I/O. The historical bool
