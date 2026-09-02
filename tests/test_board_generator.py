@@ -452,6 +452,7 @@ require(
     == [
         "HAL_ENABLE_BLUETOOTH_CLASSIC",
         "HAL_ENABLE_BLUETOOTH_GAMEPAD",
+        "HAL_ENABLE_CRC",
         "HAL_ENABLE_FREERTOS",
     ],
     "original ESP32 feature boundary changed",

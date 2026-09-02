@@ -805,7 +805,7 @@ require(
     "feature registry implies-source count drifted",
 )
 require(
-    sum(len(feature.implies) for feature in model.features.values()) == 129,
+    sum(len(feature.implies) for feature in model.features.values()) == 130,
     "feature registry direct-edge count drifted",
 )
 require(
@@ -815,7 +815,7 @@ require(
 )
 require(
     model.features["HAL_ENABLE_BLUETOOTH_GAMEPAD"].implies
-    == ("HAL_ENABLE_BLUETOOTH_CLASSIC",),
+    == ("HAL_ENABLE_BLUETOOTH_CLASSIC", "HAL_ENABLE_CRC"),
     "Bluetooth gamepad dependency drifted",
 )
 require(

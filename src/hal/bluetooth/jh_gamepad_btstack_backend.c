@@ -41,10 +41,12 @@ public_state(const jh_bluetooth_classic_hid_probe_snapshot_t *snapshot) {
   }
 }
 
-static hal_status_t backend_start(void *context) {
+static hal_status_t
+backend_start(void *context, const hal_gamepad_bond_provider_t *bond_provider) {
   (void)context;
   jh_bluetooth_classic_hid_probe_retain_gamepad_queue(true);
-  const hal_status_t status = jh_bluetooth_classic_hid_probe_start();
+  const hal_status_t status =
+      jh_bluetooth_classic_hid_probe_start(bond_provider);
   if (status != HAL_OK) {
     jh_bluetooth_classic_hid_probe_retain_gamepad_queue(false);
   }
@@ -137,6 +139,11 @@ static hal_status_t backend_disconnect(void *context) {
   return jh_bluetooth_classic_hid_probe_disconnect();
 }
 
+static hal_status_t backend_forget(void *context) {
+  (void)context;
+  return jh_bluetooth_classic_hid_probe_forget();
+}
+
 static const jh_gamepad_backend_t s_backend = {
     .context = NULL,
     .start = backend_start,
@@ -149,6 +156,7 @@ static const jh_gamepad_backend_t s_backend = {
     .pairing_authorize = backend_pairing_authorize,
     .reconnect = backend_reconnect,
     .disconnect = backend_disconnect,
+    .forget = backend_forget,
 };
 
 const jh_gamepad_backend_t *jh_gamepad_backend_instance(void) {

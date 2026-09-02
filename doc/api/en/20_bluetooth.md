@@ -323,14 +323,72 @@ When
 `hal_gamepad_pairing_authorize()` to accept Just Works or the legacy PIN
 `0000`. Unsupported passkey flows are rejected. The accepted address identifies
 the known device used by `hal_gamepad_reconnect()` during the current open
-profile session. Link-key storage is stack-specific. Closing the profile or
-restarting firmware clears the HAL-selected identity, so an application must
-be prepared to open a new pairing window afterward.
+profile session. Without a bond provider (see below), link-key storage is
+stack-specific RAM: closing the profile or restarting firmware clears the
+HAL-selected identity, so the application must be prepared to open a new
+pairing window afterward.
 
 Opening a pairing window is a deliberate authorization action. Products
 should expose it only after local user input and should not treat a device
 name, Bluetooth address, or an unauthenticated Just Works exchange as proof of
 user identity.
+
+### Persistent bonding
+
+`hal_gamepad_open_ex(&handle, bond_provider)` accepts an optional
+`hal_gamepad_bond_provider_t` -- `load()`/`store()`/`erase()` hooks over an
+opaque, fixed-size `hal_gamepad_bond_blob_t`. `hal_gamepad_open()` is
+equivalent to `hal_gamepad_open_ex(&handle, NULL)` and keeps the prior
+RAM-only behavior. hal_gamepad owns bonding *semantics*; it does not choose
+physical storage:
+
+```c
+#include <hal/bluetooth/hal_gamepad.h>
+#include <hal/bluetooth/jh_gamepad_bond_kv_provider.h>
+
+hal_gamepad_t gamepad;
+const hal_gamepad_bond_provider_t provider =
+    jh_gamepad_bond_kv_provider(MY_BOND_KV_KEY); // ready-made hal_kv adapter
+hal_gamepad_open_ex(&gamepad, &provider);
+```
+
+`jh_gamepad_bond_kv_provider()` (declared in
+`hal/bluetooth/jh_gamepad_bond_kv_provider.h`, active when both
+`HAL_ENABLE_BLUETOOTH_GAMEPAD` and `HAL_ENABLE_KV` are enabled) is a ready
+adapter over `hal_kv_set_blob_ex()`/`get_blob_ex()`/`delete_ex()`; a consumer
+that wants a different persistent medium implements the three-function
+provider directly instead. `hal_kv_init_ex()` must already have succeeded
+before the provider is used and must stay initialized for as long as the
+gamepad profile is open.
+
+A new peer reaches the bond blob only after full acceptance -- local pairing
+authorization, matched identity, an accepted report descriptor, at least one
+HID report (proof the link is genuinely flowing data), and a captured link
+key. Until then the previous bond, if any, stays active. `store()`/`erase()`
+are called only from `hal_gamepad_poll()`, after the backend has returned from
+any Bluetooth stack callback and released the radio lock -- never from inside
+a stack callback or while a lock is held. At `hal_gamepad_open_ex()`, a stored
+blob is validated (magic, format version, CRC, and the peer-verification
+rules baked into the running firmware) before its link key is reinstalled
+into the controller; a structurally invalid or stale-rules blob is treated
+exactly like "no bond" rather than trusted.
+
+`hal_gamepad_forget()` is the factory-reset entry point: it disconnects any
+active link, clears the known peer from the controller and from RAM, and
+erases the persisted blob through the bond provider (a no-op when none was
+given). A subsequent `hal_gamepad_pairing_open()` starts a fresh pairing.
+
+- **impl (BTstack, RP2040/RP2350/STM32G474+PIM730):** the link key is read
+  from `HCI_EVENT_LINK_KEY_NOTIFICATION` and staged in bounded RAM by
+  `jh_bluetooth_classic_hid_probe_logic.c`'s pure bond-gate tracking (host
+  tested); the BTstack-facing adhesive in `jh_bluetooth_classic_hid_probe.c`
+  reinstalls a loaded bond via `btstack_link_key_db_memory_instance()` and
+  flushes a ready bond after `jh_btstack_host_service()` returns each poll.
+- **impl (ESP32, Bluedroid):** Bluedroid persists bonded devices itself via
+  NVS, so a bond provider is not required for persistence on this backend;
+  `hal_gamepad_forget()` still removes the bond through
+  `esp_bt_gap_remove_bond_device()` and, if a provider was given, also calls
+  its `erase()`.
 
 ### Normalized snapshots
 

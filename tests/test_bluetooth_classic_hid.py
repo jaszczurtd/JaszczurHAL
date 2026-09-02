@@ -262,7 +262,7 @@ require(
     "C6 probe still decodes model-specific report offsets",
 )
 start_body = probe.split(
-    "hal_status_t jh_bluetooth_classic_hid_probe_start(void)", 1
+    "hal_status_t jh_bluetooth_classic_hid_probe_start(", 1
 )[1].split("hal_status_t jh_bluetooth_classic_hid_probe_service(void)", 1)[0]
 require(
     "start_inquiry_cycle" not in start_body and "gap_inquiry_start" not in start_body,

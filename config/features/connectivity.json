@@ -26,9 +26,12 @@
     },
     "HAL_ENABLE_BLUETOOTH_GAMEPAD": {
       "buildEffects": {
-        "portableSources": ["src/hal/bluetooth/hal_gamepad.cpp"]
+        "portableSources": [
+          "src/hal/bluetooth/hal_gamepad.cpp",
+          "src/hal/bluetooth/jh_gamepad_bond_kv_provider.c"
+        ]
       },
-      "implies": ["HAL_ENABLE_BLUETOOTH_CLASSIC"]
+      "implies": ["HAL_ENABLE_BLUETOOTH_CLASSIC", "HAL_ENABLE_CRC"]
     },
     "HAL_ENABLE_BSD_SOCKETS": {
       "implies": [

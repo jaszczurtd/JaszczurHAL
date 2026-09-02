@@ -30,6 +30,45 @@ hal_gamepad_snapshot_t active_snapshot(uint32_t buttons, int16_t x) {
   return snapshot;
 }
 
+hal_gamepad_bond_blob_t s_fake_storage{};
+bool s_fake_has_bond = false;
+uint32_t s_fake_load_calls = 0u;
+
+hal_status_t fake_bond_load(void *, hal_gamepad_bond_blob_t *out_blob) {
+  ++s_fake_load_calls;
+  if (!s_fake_has_bond) {
+    return HAL_ENOENT;
+  }
+  *out_blob = s_fake_storage;
+  return HAL_OK;
+}
+
+hal_status_t fake_bond_store(void *, const hal_gamepad_bond_blob_t *blob) {
+  s_fake_storage = *blob;
+  s_fake_has_bond = true;
+  return HAL_OK;
+}
+
+hal_status_t fake_bond_erase(void *) {
+  s_fake_has_bond = false;
+  return HAL_OK;
+}
+
+hal_gamepad_bond_provider_t fake_provider(void) {
+  hal_gamepad_bond_provider_t provider{};
+  provider.context = nullptr;
+  provider.load = fake_bond_load;
+  provider.store = fake_bond_store;
+  provider.erase = fake_bond_erase;
+  return provider;
+}
+
+void reset_fake_provider(void) {
+  s_fake_has_bond = false;
+  s_fake_load_calls = 0u;
+  memset(&s_fake_storage, 0, sizeof(s_fake_storage));
+}
+
 } // namespace
 
 void setUp(void) {
@@ -39,6 +78,7 @@ void setUp(void) {
   s_gamepad = nullptr;
   hal_mock_gamepad_reset();
   hal_mock_gamepad_runtime_full_reset();
+  reset_fake_provider();
 }
 
 void tearDown(void) {
@@ -208,6 +248,72 @@ void test_transport_error_releases_inputs_and_fails_runtime(void) {
   TEST_ASSERT_EQUAL_HEX32(0u, snapshot.buttons);
 }
 
+void test_open_ex_with_provider_loads_existing_bond(void) {
+  s_fake_has_bond = true;
+  const hal_gamepad_bond_provider_t provider = fake_provider();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_open_ex(&s_gamepad, &provider));
+  TEST_ASSERT_EQUAL_UINT32(1u, s_fake_load_calls);
+  hal_gamepad_info_t info{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_get_info(s_gamepad, &info));
+  TEST_ASSERT_TRUE(info.known_device);
+}
+
+void test_open_ex_with_provider_and_no_stored_bond_leaves_unknown(void) {
+  const hal_gamepad_bond_provider_t provider = fake_provider();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_open_ex(&s_gamepad, &provider));
+  TEST_ASSERT_EQUAL_UINT32(1u, s_fake_load_calls);
+  hal_gamepad_info_t info{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_get_info(s_gamepad, &info));
+  TEST_ASSERT_FALSE(info.known_device);
+}
+
+void test_bond_store_persists_through_provider(void) {
+  const hal_gamepad_bond_provider_t provider = fake_provider();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_open_ex(&s_gamepad, &provider));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_gamepad_inject_ready(false));
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_gamepad_inject_bond_store());
+  TEST_ASSERT_EQUAL_UINT32(1u, hal_mock_gamepad_bond_store_calls());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_gamepad_last_bond_store_status());
+  TEST_ASSERT_TRUE(s_fake_has_bond);
+
+  hal_gamepad_info_t info{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_get_info(s_gamepad, &info));
+  TEST_ASSERT_TRUE(info.known_device);
+}
+
+void test_bond_store_without_provider_reports_unsupported(void) {
+  open_ready();
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, hal_mock_gamepad_inject_bond_store());
+}
+
+void test_forget_erases_bond_disconnects_and_clears_known_device(void) {
+  s_fake_has_bond = true;
+  const hal_gamepad_bond_provider_t provider = fake_provider();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_open_ex(&s_gamepad, &provider));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_gamepad_inject_ready(true));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_gamepad_inject_connect());
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_forget(s_gamepad));
+  TEST_ASSERT_EQUAL_UINT32(1u, hal_mock_gamepad_bond_erase_calls());
+  TEST_ASSERT_FALSE(s_fake_has_bond);
+
+  hal_gamepad_info_t info{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_get_info(s_gamepad, &info));
+  TEST_ASSERT_FALSE(info.known_device);
+  hal_gamepad_snapshot_t snapshot{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_snapshot(s_gamepad, &snapshot));
+  TEST_ASSERT_FALSE(snapshot.connected);
+}
+
+void test_forget_without_provider_still_clears_ram_state(void) {
+  open_ready(true);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_forget(s_gamepad));
+  hal_gamepad_info_t info{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_get_info(s_gamepad, &info));
+  TEST_ASSERT_FALSE(info.known_device);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_open_ready_info_and_single_handle);
@@ -217,5 +323,11 @@ int main(void) {
   RUN_TEST(test_connect_snapshot_and_disconnect_release);
   RUN_TEST(test_queue_overflow_is_reported_and_latest_state_is_retained);
   RUN_TEST(test_transport_error_releases_inputs_and_fails_runtime);
+  RUN_TEST(test_open_ex_with_provider_loads_existing_bond);
+  RUN_TEST(test_open_ex_with_provider_and_no_stored_bond_leaves_unknown);
+  RUN_TEST(test_bond_store_persists_through_provider);
+  RUN_TEST(test_bond_store_without_provider_reports_unsupported);
+  RUN_TEST(test_forget_erases_bond_disconnects_and_clears_known_device);
+  RUN_TEST(test_forget_without_provider_still_clears_ram_state);
   return UNITY_END();
 }

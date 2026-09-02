@@ -91,8 +91,73 @@ typedef struct {
 typedef struct hal_gamepad_impl_s hal_gamepad_impl_t;
 typedef hal_gamepad_impl_t *hal_gamepad_t;
 
-/** Initialize the Bluetooth gamepad profile and return its handle. */
+enum {
+  /** Fixed size of the opaque, versioned and CRC-protected bond blob a
+   *  provider persists and returns as-is; it never needs to interpret the
+   *  contents. */
+  HAL_GAMEPAD_BOND_BLOB_SIZE = 38u,
+};
+
+/** @brief Opaque on-wire encoding of the bonded peer's identity (BD_ADDR,
+ *  link key and its type, format version, peer-verification-rules id,
+ *  sequence number, and integrity CRC). A provider stores and loads these
+ *  bytes verbatim; hal_gamepad owns encoding/decoding and validation. */
+typedef struct {
+  uint8_t bytes[HAL_GAMEPAD_BOND_BLOB_SIZE];
+} hal_gamepad_bond_blob_t;
+
+/**
+ * @brief Load the persisted bond blob, if any.
+ * @return HAL_OK with *out_blob filled when a bond is stored, HAL_ENOENT
+ *         when none is stored yet, or an I/O status on failure.
+ */
+typedef hal_status_t (*hal_gamepad_bond_load_fn)(
+    void *context, hal_gamepad_bond_blob_t *out_blob);
+
+/** @brief Persist the given bond blob, replacing any previous one. */
+typedef hal_status_t (*hal_gamepad_bond_store_fn)(
+    void *context, const hal_gamepad_bond_blob_t *blob);
+
+/** @brief Remove any persisted bond blob (factory reset / replace pad). */
+typedef hal_status_t (*hal_gamepad_bond_erase_fn)(void *context);
+
+/**
+ * @brief Optional persistence hooks for the gamepad's bonded-peer identity.
+ *
+ * hal_gamepad owns bonding *semantics* -- what is trusted and when it is
+ * written or discarded -- but not physical storage; pass a provider backed
+ * by hal_kv, an external EEPROM, or any other persistent medium. Passing
+ * NULL to hal_gamepad_open_ex() (or calling hal_gamepad_open()) keeps
+ * bonding RAM-only for the current runtime, matching prior behavior.
+ *
+ * store() and erase() are called only from hal_gamepad_poll(), after the
+ * backend has returned from any Bluetooth stack callback and released the
+ * radio lock -- never from inside a stack callback or while a lock is held.
+ * All three functions must tolerate being called from application/task
+ * context only (never from an ISR).
+ */
+typedef struct {
+  void *context;
+  hal_gamepad_bond_load_fn load;
+  hal_gamepad_bond_store_fn store;
+  hal_gamepad_bond_erase_fn erase;
+} hal_gamepad_bond_provider_t;
+
+/** Initialize the Bluetooth gamepad profile and return its handle.
+ *  Equivalent to hal_gamepad_open_ex(out_gamepad, NULL). */
 hal_status_t hal_gamepad_open(hal_gamepad_t *out_gamepad);
+
+/**
+ * Initialize the Bluetooth gamepad profile with an optional bond provider.
+ *
+ * @param bond_provider NULL for RAM-only bonding (cleared on close/restart),
+ *        or a provider to persist the bonded peer across reboots. When
+ *        given, its load() is consulted once during open() to restore a
+ *        previously bonded peer's link key into the controller.
+ */
+hal_status_t
+hal_gamepad_open_ex(hal_gamepad_t *out_gamepad,
+                    const hal_gamepad_bond_provider_t *bond_provider);
 
 /** Stop the profile, clear its selected device, and invalidate the handle. */
 hal_status_t hal_gamepad_close(hal_gamepad_t gamepad);
@@ -126,6 +191,20 @@ hal_status_t hal_gamepad_reconnect(hal_gamepad_t gamepad);
 
 /** Request asynchronous disconnection of the active gamepad link. */
 hal_status_t hal_gamepad_disconnect(hal_gamepad_t gamepad);
+
+/**
+ * @brief Factory reset: forget the bonded peer.
+ *
+ * Disconnects any active link, clears the known peer from the controller's
+ * link key database and from RAM, and -- when a bond provider was passed to
+ * hal_gamepad_open_ex() -- erases the persisted bond blob. A subsequent
+ * hal_gamepad_pairing_open() starts a fresh pairing; reconnect is refused
+ * until a new peer is bonded.
+ *
+ * @return HAL_OK on success, or the provider's erase() status on failure
+ *         (RAM/controller state is still cleared even when erase() fails).
+ */
+hal_status_t hal_gamepad_forget(hal_gamepad_t gamepad);
 
 #ifdef __cplusplus
 }

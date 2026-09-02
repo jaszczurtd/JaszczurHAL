@@ -71,6 +71,13 @@ hal_mock_gamepad_inject_snapshot(const hal_gamepad_snapshot_t *snapshot);
 hal_status_t hal_mock_gamepad_inject_disconnect(void);
 hal_status_t hal_mock_gamepad_inject_transport_error(hal_status_t status);
 void hal_mock_gamepad_set_service_status(hal_status_t status);
+/** Simulate the probe deciding a bond is ready to persist: calls the bond
+ *  provider's store() (given to hal_gamepad_open_ex()), if any. Returns
+ *  HAL_EUNSUPPORTED if no provider was given. */
+hal_status_t hal_mock_gamepad_inject_bond_store(void);
+uint32_t hal_mock_gamepad_bond_store_calls(void);
+uint32_t hal_mock_gamepad_bond_erase_calls(void);
+hal_status_t hal_mock_gamepad_last_bond_store_status(void);
 #endif
 
 // ── Secure random ────────────────────────────────────────────────────────────

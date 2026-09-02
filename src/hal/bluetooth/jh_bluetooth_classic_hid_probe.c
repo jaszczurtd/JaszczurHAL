@@ -56,6 +56,8 @@ static bool s_hid_record_found;
 static bool s_identity_validated;
 static bool s_reconnect_pending;
 static bool s_connect_pending;
+static const hal_gamepad_bond_provider_t *s_bond_provider;
+static uint32_t s_bond_sequence;
 static bool s_retain_gamepad_queue;
 
 static void start_inquiry_cycle(void);
@@ -270,6 +272,7 @@ static void reject_connected_candidate(void) {
   s_snapshot.known_device = false;
   memset(s_known_address, 0, sizeof(s_known_address));
   s_identity_validated = false;
+  jh_bluetooth_classic_hid_probe_logic_reset_bond_progress(&s_logic);
   if (s_hid_cid != 0u) {
     hid_host_disconnect(s_hid_cid);
   }
@@ -301,6 +304,7 @@ static void pnp_service_search_packet_handler(uint8_t packet_type,
     }
     ++s_snapshot.pnp_identity_matches;
     s_identity_validated = true;
+    jh_bluetooth_classic_hid_probe_logic_identity_validated(&s_logic);
     s_snapshot.known_device = true;
     memcpy(s_known_address, s_candidate_address, sizeof(s_known_address));
     jh_bluetooth_classic_hid_probe_logic_close_discovery(&s_logic);
@@ -543,7 +547,9 @@ static void handle_hid_event(const uint8_t *packet) {
     if (parser_status != HAL_OK) {
       s_snapshot.last_status = parser_status;
       reject_connected_candidate();
+      break;
     }
+    jh_bluetooth_classic_hid_probe_logic_descriptor_accepted(&s_logic);
     break;
   }
   case HID_SUBEVENT_REPORT: {
@@ -664,9 +670,27 @@ static void packet_handler(uint8_t packet_type, uint16_t channel,
       ++s_snapshot.authentication_failures;
     }
     break;
-  case HCI_EVENT_LINK_KEY_NOTIFICATION:
+  case HCI_EVENT_LINK_KEY_NOTIFICATION: {
     ++s_snapshot.link_keys_stored;
+    /* Raw layout (no generated accessor for this event): bd_addr at [2..7]
+     * (shared with LINK_KEY_REQUEST), link key at [8..23], type at [24]. See
+     * BTstack's own hci.c HCI_EVENT_LINK_KEY_NOTIFICATION handling. Mirror
+     * its CVE-2020-26555 guard: ignore an all-zero key. */
+    bool key_is_null = true;
+    for (size_t i = 0u; i < 16u; ++i) {
+      if (packet[8u + i] != 0u) {
+        key_is_null = false;
+        break;
+      }
+    }
+    if (!key_is_null) {
+      bd_addr_t notified_address;
+      hci_event_link_key_request_get_bd_addr(packet, notified_address);
+      jh_bluetooth_classic_hid_probe_logic_link_key_received(
+          &s_logic, notified_address, &packet[8], packet[24]);
+    }
     break;
+  }
   case HCI_EVENT_HID_META:
     handle_hid_event(packet);
     break;
@@ -793,7 +817,38 @@ static const jh_bluetooth_host_profile_ops_t s_profile_ops = {
     .invalidated = profile_invalidated,
 };
 
-hal_status_t jh_bluetooth_classic_hid_probe_start(void) {
+/* Restore a previously bonded peer from the provider, if any, and reinstall
+ * its link key into the controller's (RAM-only) link key database. Called
+ * once at start(), from application context -- never from a stack callback,
+ * never under the radio lock. */
+static void restore_bond_from_provider(void) {
+  if (s_bond_provider == NULL || s_bond_provider->load == NULL) {
+    return;
+  }
+  hal_gamepad_bond_blob_t blob;
+  const hal_status_t load_status =
+      s_bond_provider->load(s_bond_provider->context, &blob);
+  if (load_status != HAL_OK) {
+    /* HAL_ENOENT (nothing stored yet) or an I/O error: no known device. */
+    return;
+  }
+  jh_gamepad_bond_identity_t identity;
+  uint32_t sequence = 0u;
+  if (jh_gamepad_bond_decode(&blob, &identity, &sequence) != HAL_OK) {
+    /* Structurally invalid, or written under stale verification rules:
+     * treat exactly like "no bond" rather than trusting a mismatched peer. */
+    return;
+  }
+  memcpy(s_known_address, identity.bd_addr, sizeof(s_known_address));
+  btstack_link_key_db_memory_instance()->put_link_key(
+      s_known_address, identity.link_key,
+      (link_key_type_t)identity.link_key_type);
+  s_snapshot.known_device = true;
+  s_bond_sequence = sequence;
+}
+
+hal_status_t jh_bluetooth_classic_hid_probe_start(
+    const hal_gamepad_bond_provider_t *bond_provider) {
   if (s_snapshot.started) {
     return HAL_ESTATE;
   }
@@ -810,6 +865,8 @@ hal_status_t jh_bluetooth_classic_hid_probe_start(void) {
   s_reconnect_pending = false;
   s_connect_pending = false;
   s_identity_validated = false;
+  s_bond_provider = bond_provider;
+  s_bond_sequence = 0u;
   reset_candidate();
   jh_bluetooth_gamepad_parser_init(&s_gamepad_parser);
   jh_bluetooth_classic_hid_probe_logic_reset(&s_logic);
@@ -819,7 +876,36 @@ hal_status_t jh_bluetooth_classic_hid_probe_start(void) {
       JH_BLUETOOTH_HOST_PROFILE_CLASSIC_HID, &s_profile_ops, &s_host_reference);
   s_snapshot.started = status == HAL_OK;
   s_snapshot.last_status = status;
+  if (status == HAL_OK) {
+    restore_bond_from_provider();
+  }
   return status;
+}
+
+/* Encode and persist a bond staged by the stack callbacks, if one became
+ * ready to commit. Called only from service(), after jh_btstack_host_service
+ * has returned -- i.e. outside any stack callback and after the radio lock
+ * has been released */
+static void flush_pending_bond(void) {
+  const jh_gamepad_bond_identity_t *identity =
+      jh_bluetooth_classic_hid_probe_logic_take_pending_bond(&s_logic);
+  if (identity == NULL) {
+    return;
+  }
+  /* Track the newly bonded peer in RAM regardless of persistence -- this may
+   * be replacing a different, previously known device. */
+  memcpy(s_known_address, identity->bd_addr, sizeof(s_known_address));
+  s_snapshot.known_device = true;
+  if (s_bond_provider == NULL || s_bond_provider->store == NULL) {
+    return;
+  }
+  hal_gamepad_bond_blob_t blob;
+  if (jh_gamepad_bond_encode(identity, s_bond_sequence + 1u, &blob) != HAL_OK) {
+    return;
+  }
+  if (s_bond_provider->store(s_bond_provider->context, &blob) == HAL_OK) {
+    ++s_bond_sequence;
+  }
 }
 
 hal_status_t jh_bluetooth_classic_hid_probe_service(void) {
@@ -828,6 +914,7 @@ hal_status_t jh_bluetooth_classic_hid_probe_service(void) {
   }
   const hal_status_t status = jh_btstack_host_service(&s_host_reference);
   s_snapshot.last_status = status;
+  flush_pending_bond();
 
   const uint32_t now = hal_millis();
   if (s_connect_pending && (int32_t)(now - s_connect_at_ms) >= 0) {
@@ -924,6 +1011,28 @@ hal_status_t jh_bluetooth_classic_hid_probe_disconnect(void) {
   }
   hid_host_disconnect(s_hid_cid);
   return HAL_OK;
+}
+
+hal_status_t jh_bluetooth_classic_hid_probe_forget(void) {
+  if (!s_snapshot.started) {
+    return HAL_EUNINIT;
+  }
+  if (s_logic.connected && s_hid_cid != 0u) {
+    hid_host_disconnect(s_hid_cid);
+  }
+  bd_addr_t forgotten_address;
+  memcpy(forgotten_address, s_known_address, sizeof(forgotten_address));
+  memset(s_known_address, 0, sizeof(s_known_address));
+  s_snapshot.known_device = false;
+  s_identity_validated = false;
+  s_bond_sequence = 0u;
+  jh_bluetooth_classic_hid_probe_logic_reset_bond_progress(&s_logic);
+  btstack_link_key_db_memory_instance()->delete_link_key(forgotten_address);
+
+  if (s_bond_provider == NULL || s_bond_provider->erase == NULL) {
+    return HAL_OK;
+  }
+  return s_bond_provider->erase(s_bond_provider->context);
 }
 
 hal_status_t jh_bluetooth_classic_hid_probe_stop(void) {

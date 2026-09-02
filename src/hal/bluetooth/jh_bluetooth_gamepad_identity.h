@@ -11,6 +11,11 @@ enum {
   JH_BLUETOOTH_GAMEPAD_EXPECTED_VERSION = 0x0100u,
   JH_BLUETOOTH_GAMEPAD_CLASS_OF_DEVICE_MAJOR_MASK = 0x1f00u,
   JH_BLUETOOTH_GAMEPAD_CLASS_OF_DEVICE_MAJOR_PERIPHERAL = 0x0500u,
+  /** Bumped whenever the expected name/vendor/product/version tuple above
+   * (or the accepted descriptor hash in jh_bluetooth_classic_hid_probe.c)
+   * changes, so a bond blob written under a previous peer-verification
+   * policy is recognized as stale and discarded rather than trusted. */
+  JH_BLUETOOTH_GAMEPAD_BOND_RULES_ID = 1u,
 };
 
 #define JH_BLUETOOTH_GAMEPAD_EXPECTED_NAME "8BitDo Zero 2 gamepad"
