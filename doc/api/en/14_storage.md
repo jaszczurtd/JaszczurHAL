@@ -273,6 +273,10 @@ bool hal_kv_gc(void);
 bool hal_kv_get_stats(hal_kv_stats_t *out_stats);
 hal_status_t hal_kv_set_auto_commit(bool enabled);
 bool hal_kv_commit(void);
+hal_status_t hal_kv_set_read_through(bool enabled);
+hal_status_t hal_kv_bank_looks_present_ex(uint16_t bank_addr, uint16_t bank_size,
+                                          bool *out_present);
+bool hal_kv_bank_looks_present(uint16_t bank_addr, uint16_t bank_size);
 ```
 
 - **Dependencies:** `hal_eeprom`, `hal_crc`, `hal_sync`, `hal_serial`.
@@ -301,7 +305,26 @@ the destination bank in the running process.
 **On-storage format:** this implementation writes format version 2. It does not
 interpret the older append-in-place version 1 layout; deployments that already
 contain version 1 data need an application migration or a deliberate storage
-reset during the update.
+reset during the update. The header layout (magic, version, sizes, per-field
+offsets) is a private implementation detail and has already changed once
+(version 1 to 2) -- a caller that needs to detect a bank at a candidate
+address before deciding where to `hal_kv_init_ex()` must use
+`hal_kv_bank_looks_present()`/`hal_kv_bank_looks_present_ex()` rather than
+hand-decoding the header; that is exactly what those two exist for.
+
+**Read modes:** by default `hal_kv_get_u32()`/`hal_kv_get_blob()` are served
+from the active bank's full in-RAM copy (populated at `hal_kv_init_ex()` and
+refreshed on every publish) and never touch the backing EEPROM, so they are
+fast and immune to spurious media glitches -- but a storage fault that
+develops *after* init is invisible to a plain get. Call
+`hal_kv_set_read_through(true)` to make every get additionally re-read the
+record live from EEPROM (one extra EEPROM read per get) so a live medium
+fault surfaces as a real `hal_status_t` error instead of being served from
+the (still valid) cache. This is a KV-wide mode, not per-call, and persists
+across `hal_kv_init_ex()` like `hal_kv_set_auto_commit()` does. Enable it when
+a caller gates decisions (for example blocking writes) on "is storage
+currently healthy right now"; leave it at the default when only the last
+successfully published generation matters.
 
 **Example: key-value storage with integers and blobs**
 ```c

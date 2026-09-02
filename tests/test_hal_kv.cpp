@@ -235,6 +235,62 @@ void test_completed_bank_is_recovered_after_late_error(void) {
   TEST_ASSERT_EQUAL_UINT32(200u, value);
 }
 
+void test_bank_looks_present_detects_active_and_absent_banks(void) {
+  /* Fresh init publishes the first generation to bank 0; bank 1 stays
+   * erased/0xFF until something writes it. */
+  TEST_ASSERT_TRUE(hal_kv_bank_looks_present(0u, 4096u));
+  TEST_ASSERT_FALSE(hal_kv_bank_looks_present(4096u, 4096u));
+
+  bool present = true;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_kv_bank_looks_present_ex(4096u, 4096u, &present));
+  TEST_ASSERT_FALSE(present);
+
+  /* A real header at the wrong expected size must report absent too. */
+  TEST_ASSERT_FALSE(hal_kv_bank_looks_present(0u, 2048u));
+
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_kv_bank_looks_present_ex(0u, 4096u, nullptr));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_kv_bank_looks_present_ex(0u, 4u, &present));
+}
+
+void test_read_through_surfaces_live_eeprom_fault(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_u32_ex(950u, 42u));
+  const uint8_t blobData[] = {9, 8, 7, 6};
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_kv_set_blob_ex(951u, blobData, sizeof(blobData)));
+
+  hal_mock_eeprom_set_io_status(HAL_EIO);
+
+  /* Default mode: served from the RAM cache, blind to the live fault. */
+  uint32_t cached = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_u32_ex(950u, &cached));
+  TEST_ASSERT_EQUAL_UINT32(42u, cached);
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_read_through(true));
+
+  uint32_t verified = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, hal_kv_get_u32_ex(950u, &verified));
+  uint8_t blobOut[sizeof(blobData)] = {0};
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EIO, hal_kv_get_blob_ex(951u, blobOut, sizeof(blobOut), nullptr));
+  /* A length-only query (out == NULL) never touches EEPROM, matching
+   * hal_kv_get_blob_ex()'s cached-mode contract. */
+  uint16_t length = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_blob_ex(951u, nullptr, 0u, &length));
+  TEST_ASSERT_EQUAL_UINT16((uint16_t)sizeof(blobData), length);
+
+  hal_mock_eeprom_set_io_status(HAL_OK);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_u32_ex(950u, &verified));
+  TEST_ASSERT_EQUAL_UINT32(42u, verified);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_kv_get_blob_ex(951u, blobOut, sizeof(blobOut), nullptr));
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(blobData, blobOut, sizeof(blobData));
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_read_through(false));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_set_get_u32_and_reinit);
@@ -250,5 +306,7 @@ int main(void) {
   RUN_TEST(test_deferred_commit_publishes_one_complete_bank);
   RUN_TEST(test_interrupted_publication_keeps_previous_bank);
   RUN_TEST(test_completed_bank_is_recovered_after_late_error);
+  RUN_TEST(test_bank_looks_present_detects_active_and_absent_banks);
+  RUN_TEST(test_read_through_surfaces_live_eeprom_fault);
   return UNITY_END();
 }

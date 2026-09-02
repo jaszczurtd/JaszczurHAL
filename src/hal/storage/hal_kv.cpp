@@ -79,6 +79,7 @@ struct kv_bank_meta_t {
 static hal_mutex_t s_kv_mutex = nullptr;
 static bool s_ready = false;
 static bool s_auto_commit = true;
+static bool s_read_through = false;
 static bool s_dirty = false;
 static uint16_t s_base = 0u;
 static uint16_t s_bank_size = 0u;
@@ -203,26 +204,45 @@ static uint16_t record_header_crc(const kv_rec_hdr_t &header) {
   return crc16(raw, KV_REC_HDR_SIZE - sizeof(uint16_t));
 }
 
+/* Validate only the publish header (magic/version/self CRC), independent of
+ * any body bytes. Shared by validate_bank_buffer() (which checks the full
+ * active-bank RAM copy) and hal_kv_bank_looks_present_ex() (which peeks at
+ * an arbitrary candidate address without touching global KV state). */
+static bool validate_bank_header(const uint8_t raw[KV_BANK_HDR_SIZE],
+                                 uint16_t expected_bank_size,
+                                 kv_bank_hdr_t *out_header) {
+  const kv_bank_hdr_t header = decode_bank_header(raw);
+  if (header.magic != KV_BANK_MAGIC || header.version != KV_BANK_VERSION ||
+      header.header_size != KV_BANK_HDR_SIZE ||
+      header.bank_size != expected_bank_size ||
+      header.used_offset < KV_PUBLISH_SIZE ||
+      header.used_offset > expected_bank_size) {
+    return false;
+  }
+
+  uint8_t raw_without_crc[KV_BANK_HDR_SIZE] = {};
+  kv_bank_hdr_t header_without_crc = header;
+  header_without_crc.header_crc = 0u;
+  encode_bank_header(raw_without_crc, header_without_crc);
+  if (crc16(raw_without_crc, KV_BANK_HDR_SIZE - sizeof(uint16_t)) !=
+      header.header_crc) {
+    return false;
+  }
+
+  if (out_header != nullptr) {
+    *out_header = header;
+  }
+  return true;
+}
+
 static bool validate_bank_buffer(kv_bank_meta_t *out_meta) {
   if (out_meta == nullptr) {
     return false;
   }
   *out_meta = {};
 
-  const kv_bank_hdr_t header = decode_bank_header(s_bank);
-  if (header.magic != KV_BANK_MAGIC || header.version != KV_BANK_VERSION ||
-      header.header_size != KV_BANK_HDR_SIZE ||
-      header.bank_size != s_bank_size || header.used_offset < KV_PUBLISH_SIZE ||
-      header.used_offset > s_bank_size) {
-    return false;
-  }
-
-  uint8_t raw_header[KV_BANK_HDR_SIZE] = {};
-  kv_bank_hdr_t header_without_crc = header;
-  header_without_crc.header_crc = 0u;
-  encode_bank_header(raw_header, header_without_crc);
-  if (crc16(raw_header, KV_BANK_HDR_SIZE - sizeof(uint16_t)) !=
-      header.header_crc) {
+  kv_bank_hdr_t header = {};
+  if (!validate_bank_header(s_bank, s_bank_size, &header)) {
     return false;
   }
 
@@ -692,6 +712,18 @@ hal_status_t hal_kv_get_u32_ex(uint16_t key, uint32_t *out_value) {
     hal_mutex_unlock(s_kv_mutex);
     return HAL_ENOENT;
   }
+  if (s_read_through) {
+    uint8_t raw[sizeof(uint32_t)] = {};
+    const uint16_t addr = static_cast<uint16_t>(bank_base(s_active_bank) +
+                                                s_index[index].payload_offset);
+    const hal_status_t status = hal_eeprom_read_bytes(addr, raw, sizeof(raw));
+    hal_mutex_unlock(s_kv_mutex);
+    if (hal_status_is_error(status)) {
+      return status;
+    }
+    *out_value = read_u32(raw);
+    return HAL_OK;
+  }
   *out_value = read_u32(s_bank + s_index[index].payload_offset);
   hal_mutex_unlock(s_kv_mutex);
   return HAL_OK;
@@ -751,6 +783,16 @@ hal_status_t hal_kv_get_blob_ex(uint16_t key, uint8_t *out, uint16_t out_size,
   if (out_size < s_index[index].len) {
     hal_mutex_unlock(s_kv_mutex);
     return HAL_EOVERFLOW;
+  }
+  if (s_read_through) {
+    hal_status_t status = HAL_OK;
+    if (s_index[index].len > 0u) {
+      const uint16_t addr = static_cast<uint16_t>(
+          bank_base(s_active_bank) + s_index[index].payload_offset);
+      status = hal_eeprom_read_bytes(addr, out, s_index[index].len);
+    }
+    hal_mutex_unlock(s_kv_mutex);
+    return status;
   }
   if (s_index[index].len > 0u) {
     memcpy(out, s_bank + s_index[index].payload_offset, s_index[index].len);
@@ -837,6 +879,44 @@ hal_status_t hal_kv_set_auto_commit(bool enabled) {
   return HAL_OK;
 }
 
+hal_status_t hal_kv_set_read_through(bool enabled) {
+  kv_ensure_mutex();
+  if (s_kv_mutex == nullptr) {
+    return HAL_ENOMEM;
+  }
+  hal_mutex_lock(s_kv_mutex);
+  s_read_through = enabled;
+  hal_mutex_unlock(s_kv_mutex);
+  return HAL_OK;
+}
+
+hal_status_t hal_kv_bank_looks_present_ex(uint16_t bank_addr,
+                                          uint16_t bank_size,
+                                          bool *out_present) {
+  if (out_present == nullptr) {
+    return HAL_EINVAL;
+  }
+  *out_present = false;
+  if (bank_size < KV_PUBLISH_SIZE) {
+    return HAL_EINVAL;
+  }
+
+  uint8_t header_raw[KV_BANK_HDR_SIZE] = {};
+  const hal_status_t status =
+      hal_eeprom_read_bytes(bank_addr, header_raw, KV_BANK_HDR_SIZE);
+  if (hal_status_is_error(status)) {
+    return status;
+  }
+  *out_present = validate_bank_header(header_raw, bank_size, nullptr);
+  return HAL_OK;
+}
+
+bool hal_kv_bank_looks_present(uint16_t bank_addr, uint16_t bank_size) {
+  bool present = false;
+  (void)hal_kv_bank_looks_present_ex(bank_addr, bank_size, &present);
+  return present;
+}
+
 hal_status_t hal_kv_commit_ex(void) {
   kv_ensure_mutex();
   if (s_kv_mutex == nullptr) {
@@ -856,6 +936,7 @@ void hal_mock_kv_full_reset(void) {
     hal_mutex_lock(s_kv_mutex);
     reset_runtime_state_locked();
     s_auto_commit = true;
+    s_read_through = false;
     hal_mutex_unlock(s_kv_mutex);
     hal_mutex_destroy(s_kv_mutex);
     s_kv_mutex = nullptr;

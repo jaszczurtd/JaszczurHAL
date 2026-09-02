@@ -281,6 +281,10 @@ bool hal_kv_gc(void);
 bool hal_kv_get_stats(hal_kv_stats_t *out_stats);
 hal_status_t hal_kv_set_auto_commit(bool enabled);
 bool hal_kv_commit(void);
+hal_status_t hal_kv_set_read_through(bool enabled);
+hal_status_t hal_kv_bank_looks_present_ex(uint16_t bank_addr, uint16_t bank_size,
+                                          bool *out_present);
+bool hal_kv_bank_looks_present(uint16_t bank_addr, uint16_t bank_size);
 ```
 
 - **Zależności:** `hal_eeprom`, `hal_crc`, `hal_sync`, `hal_serial`.
@@ -311,7 +315,26 @@ nie aktywuje banku docelowego w działającym procesie.
 **Format w storage:** Ta implementacja zapisuje format w wersji 2. Nie
 interpretuje starszego układu wersji 1, który dopisywał dane w miejscu.
 Wdrożenie zawierające już dane wersji 1 wymaga migracji w aplikacji albo
-świadomego resetu storage podczas aktualizacji.
+świadomego resetu storage podczas aktualizacji. Układ nagłówka (magic, wersja,
+rozmiary, offsety poszczególnych pól) to prywatny szczegół implementacji i już
+raz się zmienił (wersja 1 na 2) -- wywołujący, który przed wywołaniem
+`hal_kv_init_ex()` musi wykryć bank pod kandydującym adresem, powinien użyć
+`hal_kv_bank_looks_present()`/`hal_kv_bank_looks_present_ex()`, a nie ręcznie
+dekodować nagłówek -- po to te dwie funkcje istnieją.
+
+**Tryby odczytu:** domyślnie `hal_kv_get_u32()`/`hal_kv_get_blob()` są
+serwowane z pełnej kopii aktywnego banku trzymanej w RAM (uzupełnianej przy
+`hal_kv_init_ex()` i po każdej publikacji) i nigdy nie dotykają EEPROM -- są
+więc szybkie i odporne na przejściowe usterki nośnika, ale awaria storage,
+która pojawi się *po* inicjalizacji, jest niewidoczna dla zwykłego odczytu.
+Wywołanie `hal_kv_set_read_through(true)` sprawia, że każdy odczyt dodatkowo
+czyta rekord na żywo z EEPROM (jeden dodatkowy odczyt EEPROM na wywołanie), więc
+żywa awaria nośnika ujawnia się jako realny błąd `hal_status_t`, zamiast być
+zamaskowana przez wciąż poprawny cache. To ustawienie dotyczy całego KV, nie
+pojedynczego wywołania, i przetrwa `hal_kv_init_ex()` tak samo jak
+`hal_kv_set_auto_commit()`. Włącz je, gdy wywołujący uzależnia decyzje (np.
+blokadę zapisów) od tego, czy storage jest *aktualnie* zdrowy; zostaw wartość
+domyślną, gdy liczy się tylko ostatnia poprawnie opublikowana generacja.
 
 **Przykład: przechowywanie klucz-wartość z liczbami całkowitymi i blobami**
 ```c
