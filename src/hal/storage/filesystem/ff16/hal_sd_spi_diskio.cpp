@@ -1,5 +1,5 @@
 /*
- * FatFs disk I/O adhesive for SD cards on SPI.
+ * FatFs disk I/O adapter for SPI-connected SD cards.
  *
  * The SD command sequence and token handling follow the SdFat SdSpiCard flow.
  * The transport uses hal_spi, hal_gpio and hal_system.

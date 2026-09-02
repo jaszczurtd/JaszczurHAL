@@ -2,8 +2,9 @@
 
 /*
  * HAL-only MCP251XFD driver inspired by the Zephyr MCP251XFD register model.
- * The implementation intentionally avoids Zephyr device/devicetree/IRQ adhesive
- * and exposes only the polling operations needed by JaszczurHAL's CAN facade.
+ * The implementation intentionally avoids depending on Zephyr device,
+ * devicetree, and IRQ infrastructure and exposes only the polling operations
+ * needed by JaszczurHAL's CAN facade.
  *
  * SPDX-License-Identifier: Apache-2.0
  */

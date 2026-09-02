@@ -115,6 +115,12 @@ Przygotowuje lokalne środowisko:
 
 Uruchom go po sklonowaniu repozytorium oraz po zmianie środowiska.
 
+Hook pre-commit normalizuje i formatuje pliki dodane do commita, a następnie
+sprawdza wszystkie wersjonowane artefakty generowane. Jeśli któregoś brakuje
+albo jest nieaktualny, blokuje commit i prosi o uruchomienie
+`python3 scripts/sync_generated.py --write`, przejrzenie zmian oraz dodanie ich
+do commita przed kolejną próbą.
+
 **`runalltests.sh`** - pełna kontrola jakości
 ```bash
 ./runalltests.sh
