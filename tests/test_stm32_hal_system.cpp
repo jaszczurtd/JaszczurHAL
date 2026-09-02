@@ -228,10 +228,50 @@ void test_stm32_stack_guard_api_detects_runtime_corruption(void) {
 
 void test_stm32_system_status_reports_unsupported_services(void) {
   float temperature = 123.0f;
+  /* Host-sanity build: no OTP calibration bytes / ADC1 to read from. */
   TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, hal_read_chip_temp_ex(&temperature));
   TEST_ASSERT_FLOAT_WITHIN(0.0001f, 123.0f, temperature);
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_read_chip_temp_ex(NULL));
   TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, hal_enter_bootloader());
+}
+
+void test_stm32_chip_temp_calc_matches_calibration_points_exactly(void) {
+  /* ts_raw == ts_cal1 and vref_raw == vrefint_cal (no VDDA drift) must land
+   * exactly on the 30 degC factory calibration point, and likewise for
+   * ts_cal2 at 130 degC. */
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 30.0f,
+                           stm32g474_system_calc_chip_temp_celsius(
+                               1000u, 1500u, 1000u, 1500u, 1500u));
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 130.0f,
+                           stm32g474_system_calc_chip_temp_celsius(
+                               1500u, 1500u, 1000u, 1500u, 1500u));
+}
+
+void test_stm32_chip_temp_calc_interpolates_midpoint(void) {
+  /* Halfway between TS_CAL1 and TS_CAL2 codes -> halfway between 30 and
+   * 130 degC. */
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 80.0f,
+                           stm32g474_system_calc_chip_temp_celsius(
+                               1250u, 2000u, 1000u, 1500u, 2000u));
+}
+
+void test_stm32_chip_temp_calc_compensates_vrefint_drift(void) {
+  /* Same raw TS code, but VREFINT now reads higher than its calibration
+   * value -- as it would if VDDA sagged below the 3.0V the factory bytes
+   * were captured at. The VREFINT ratio must scale TS_DATA down and report
+   * a lower temperature than the naive (uncompensated) reading would. */
+  const float compensated = stm32g474_system_calc_chip_temp_celsius(
+      1250u, 2200u, 1000u, 1500u, 2000u);
+  const float naive = stm32g474_system_calc_chip_temp_celsius(
+      1250u, 2000u, 1000u, 1500u, 2000u);
+  TEST_ASSERT_LESS_THAN_FLOAT(naive, compensated);
+}
+
+void test_stm32_chip_temp_calc_rejects_degenerate_input(void) {
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, stm32g474_system_calc_chip_temp_celsius(
+                                    1000u, 0u, 1000u, 1500u, 1500u));
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, stm32g474_system_calc_chip_temp_celsius(
+                                    1000u, 1500u, 1000u, 1000u, 1500u));
 }
 
 void test_stm32_watchdog_rejects_out_of_range_timeouts(void) {
@@ -358,6 +398,10 @@ int main(void) {
   RUN_TEST(test_stm32_stack_guard_api_reports_active_protection);
   RUN_TEST(test_stm32_stack_guard_api_detects_runtime_corruption);
   RUN_TEST(test_stm32_system_status_reports_unsupported_services);
+  RUN_TEST(test_stm32_chip_temp_calc_matches_calibration_points_exactly);
+  RUN_TEST(test_stm32_chip_temp_calc_interpolates_midpoint);
+  RUN_TEST(test_stm32_chip_temp_calc_compensates_vrefint_drift);
+  RUN_TEST(test_stm32_chip_temp_calc_rejects_degenerate_input);
   RUN_TEST(test_stm32_watchdog_rejects_out_of_range_timeouts);
   RUN_TEST(test_stm32_watchdog_programs_shortest_fitting_prescaler);
   RUN_TEST(test_stm32_watchdog_rounds_up_and_accepts_max_timeout);

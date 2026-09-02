@@ -430,6 +430,15 @@ after a successful elapsed check and returns `true` for that iteration.
   identity, ISR detection, and other runtime system services are split between
   `src/hal/impl/stm32g474/port/system_stm32g474.c` and
   `src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_system.{h,cpp}`.
+  Chip temperature reads the ADC1 internal VSENSE channel (IN16), compensates
+  it against the VREFINT channel (IN18), and applies the factory
+  `TS_CAL1`/`TS_CAL2`/`VREFINT_CAL` bytes from system memory -- the VREFINT
+  ratio cancels out the actual VDDA, so the reading stays accurate even when
+  the supply differs from the 3.0V the calibration bytes were captured at.
+  The ADC1 plumbing (init, resolution, internal-channel enable/disable) lives
+  in `src/hal/impl/stm32g474/stm32g474_adc_shared.{h,cpp}`, shared with the
+  external-pin `hal_adc` backend. Host-sanity builds report
+  `HAL_EUNSUPPORTED`: there is no OTP or ADC1 to read on the host.
   FreeRTOS task-context delay yields to the scheduler; pre-scheduler, ISR, and
   critical paths use DWT waits. The architecture snapshot combines generated
   target and board capacities with heap, stack, EEPROM, and LittleFS spans from

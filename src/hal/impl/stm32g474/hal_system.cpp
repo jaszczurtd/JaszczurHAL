@@ -148,10 +148,7 @@ bool hal_in_isr(void) { return stm32g474_system_in_isr(); }
 uint32_t hal_get_free_heap(void) { return stm32g474_system_get_free_heap(); }
 
 hal_status_t hal_read_chip_temp_ex(float *out_celsius) {
-  if (out_celsius == nullptr) {
-    return HAL_EINVAL;
-  }
-  return HAL_EUNSUPPORTED;
+  return stm32g474_system_read_chip_temp_ex(out_celsius);
 }
 
 float hal_read_chip_temp(void) {

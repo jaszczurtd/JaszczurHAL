@@ -22,6 +22,8 @@
 
 #define JH_REG8(addr)                                                          \
   (*(volatile uint8_t *)(addr)) /* NOLINT(performance-no-int-to-ptr) */
+#define JH_REG16(addr)                                                         \
+  (*(volatile uint16_t *)(addr)) /* NOLINT(performance-no-int-to-ptr) */
 #define JH_REG32(addr)                                                         \
   (*(volatile uint32_t *)(addr)) /* NOLINT(performance-no-int-to-ptr) */
 
@@ -247,9 +249,33 @@
 #define ADC_CCR_CKMODE_MASK (0x3u << 16)
 #define ADC_CCR_CKMODE_HCLK_DIV4 (0x3u << 16)
 
+/* Common CCR internal-path enable bits (RM0440 "ADC common control
+ * register"). Cross-checked against the ST community forum (bit names for
+ * G4: VREFEN/VSENSESEL/VBATEN) and libopencm3's adc_common_v2.h (same IP,
+ * bit positions 22/23/24 -- that header calls bit 23 TSEN, RM0440 calls it
+ * VSENSESEL; same bit). Pending on-silicon validation like the rest of this
+ * ADC section. */
+#define ADC_CCR_VREFEN (1u << 22)
+#define ADC_CCR_VSENSESEL (1u << 23)
+
+/* ADC1 internal channel numbers (RM0440 "Vbat, temperature sensor and
+ * VrefInt channel"): IN16 = on-die temperature sensor, IN18 = VREFINT.
+ * Neither is reachable through jh_stm32g474_adc1_channel_for_pin() -- they
+ * have no GPIO. */
+#define ADC_CHANNEL_VSENSE 16u
+#define ADC_CHANNEL_VREFINT 18u
+
 /* SMPR 3-bit sample-time code: 0b110 = 247.5 ADC clock cycles (safe for
- * higher-impedance sources during bring-up). */
+ * higher-impedance sources during bring-up). At the CKMODE_HCLK_DIV4 kernel
+ * clock (42.5 MHz) this is ~5.8us, above the >=5us minimum RM0440 requires
+ * when sampling the temperature sensor or VREFINT. */
 #define ADC_SMP_247CYCLES 0x6u
+
+/* Internal-channel buffer startup wait (RM0440 "TS characteristics":
+ * tSTART-RUN <= 15us in Run mode, i.e. enable/sample/disable -- not the
+ * ~120us continuous-mode figure, since this driver never leaves VSENSESEL/
+ * VREFEN enabled between reads). Rounded up for margin. */
+#define ADC_INTERNAL_CHANNEL_STARTUP_US 20u
 
 /* Busy-poll bound for one conversion (matches the I2C backend's style). */
 #define ADC_POLL_TIMEOUT 200000u
@@ -832,3 +858,14 @@
 
 /* ── Device electronic signature ─────────────────────────────────────────── */
 #define STM32_UID_BASE 0x1FFF7590u /* 96-bit unique device ID (3 words) */
+
+/* Factory ADC calibration bytes (datasheet DS12288 Rev 6, Table 5 "Temperature
+ * sensor calibration values" and Table 6 "Internal voltage reference
+ * calibration values"). Each is a 16-bit right-aligned raw 12-bit ADC code,
+ * captured by ST at VDDA = VREF+ = 3.0V +-10mV. TS_CAL1/TS_CAL2 are acquired
+ * at 30 degC/130 degC respectively; VREFINT_CAL at 30 degC. */
+#define STM32_TS_CAL1_ADDR 0x1FFF75A8u
+#define STM32_VREFINT_CAL_ADDR 0x1FFF75AAu
+#define STM32_TS_CAL2_ADDR 0x1FFF75CAu
+#define STM32_TS_CAL1_TEMP_C 30
+#define STM32_TS_CAL2_TEMP_C 130
