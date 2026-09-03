@@ -199,6 +199,7 @@ class ProjectModelTests(unittest.TestCase):
             [
                 "HAL_ENABLE_BLUETOOTH_CLASSIC",
                 "HAL_ENABLE_BLUETOOTH_GAMEPAD",
+                "HAL_ENABLE_BLUETOOTH_HID_HOST",
                 "HAL_ENABLE_CRC",
                 "HAL_ENABLE_FREERTOS",
             ],
@@ -206,9 +207,12 @@ class ProjectModelTests(unittest.TestCase):
         self.assertTrue(
             {
                 "src/hal/bluetooth/hal_gamepad.cpp",
+                "src/hal/bluetooth/hal_bluetooth_classic.cpp",
+                "src/hal/bluetooth/hal_bluetooth_hid_host.cpp",
+                "src/hal/bluetooth/jh_bluetooth_classic_bond_codec.c",
                 "src/hal/bluetooth/jh_bluetooth_gamepad_parser.c",
                 "src/hal/impl/esp32/jh_esp32_nvs_runtime.cpp",
-                "src/hal/impl/esp32/jh_gamepad_bluedroid_backend.c",
+                "src/hal/impl/esp32/jh_bluetooth_classic_bluedroid_backend.c",
             }.issubset(model["integrationSources"])
         )
         self.assertTrue(

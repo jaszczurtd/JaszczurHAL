@@ -69,7 +69,9 @@ Stack protection uses two independent opt-ins:
 | `HAL_ENABLE_COMMAND_ROUTER` | `hal_command_router.h`, `hal_command_wire.h` | `hal/commands/hal_command_router.cpp` + `hal/commands/hal_command_wire.cpp` | Transport-neutral handler registry, source/security policy, bounded responses and versioned binary request/response/event messages; see the [command API](23_commands.md) |
 | `HAL_ENABLE_SERIAL_COMMANDS` | `hal_serial_commands.h` | `hal/serial/hal_serial_commands.cpp` | Synchronous TEXT/JSON router dispatch for active framed serial sessions, with optional response formatter and prefix fallback (propagates COMMAND_ROUTER); see the [command API](23_commands.md#framed-serial-session-adapter) |
 | `HAL_ENABLE_BLE` | `hal_ble.h` | `hal_ble.cpp` + `hal/bluetooth/*` | BLE Peripheral and passive Observer over the pinned BTstack and CYW43 controller; supported on RP2040 Pico W/Pico+RM2, RP2350 ARM Pico 2 W, STM32G474+PIM730/RM2, and mock. RP2350 RISC-V is unsupported. The applicable standard or Raspberry Pi product-scoped BTstack grant is described in the [Bluetooth API](20_bluetooth.md#license-and-distribution-boundary). |
-| `HAL_ENABLE_BLUETOOTH_GAMEPAD` | `hal_gamepad.h` | `hal/bluetooth/hal_gamepad.cpp` + Classic HID backend | One nonblocking Classic HID gamepad with explicit pairing/reconnect, normalized copied snapshots, bounded overflow diagnostics and a deterministic mock (propagates BLUETOOTH_CLASSIC); see the [Bluetooth API](20_bluetooth.md#bluetooth-classic-hid-gamepad) |
+| `HAL_ENABLE_BLUETOOTH_CLASSIC` | `hal_bluetooth_classic.h` | shared manager, bond codec/provider + target backend | Nonblocking Classic inquiry, copied results, SDP, explicit pairing and indexed peer storage (propagates CRC); see the [Bluetooth API](20_bluetooth.md#bluetooth-classic-manager-and-hid-profiles) |
+| `HAL_ENABLE_BLUETOOTH_HID_HOST` | `hal_bluetooth_hid_host.h` | generic HID profile + target HID support | One raw Classic HID Host connection with copied descriptor and bounded Input/Output/Feature reports (propagates BLUETOOTH_CLASSIC) |
+| `HAL_ENABLE_BLUETOOTH_GAMEPAD` | `hal_gamepad.h` | HID gamepad adapter and parser | One nonblocking Classic HID gamepad with explicit pairing/reconnect, normalized copied snapshots and bounded diagnostics (propagates BLUETOOTH_HID_HOST); see the [Bluetooth API](20_bluetooth.md#gamepad-adapter) |
 | `HAL_ENABLE_BLE_COMMANDS` | `hal_ble_commands.h` | `hal/bluetooth/hal_ble_commands.cpp` | Bidirectional requests, automatic dispatched responses and events over one exclusively consumed authenticated BLE Stream session (propagates BLE_STREAM + COMMAND_ROUTER); see the [command API](23_commands.md#authenticated-ble-stream-adapter) |
 | `HAL_ENABLE_BLE_STREAM` | `hal_ble_stream.h` | `hal_ble_stream.cpp` + `hal/bluetooth/*` | Authenticated bounded framed byte stream over BLE (propagates BLE + CRYPTO) |
 | `HAL_ENABLE_LORA` | `hal_lora_radio.h` | `hal_lora_radio.cpp` | Provider-neutral raw LoRa lifecycle, modem presets, blocking TX, polling RX, diagnostics, power state and time-on-air; requires exactly one provider |
@@ -197,7 +199,8 @@ HAL_ENABLE_SDLOGGER    -> HAL_ENABLE_FAT + HAL_ENABLE_EEPROM + HAL_ENABLE_SPI
 HAL_ENABLE_BLE_COMMANDS -> HAL_ENABLE_BLE_STREAM + HAL_ENABLE_COMMAND_ROUTER ->
                            HAL_ENABLE_BLE + HAL_ENABLE_CRYPTO
 HAL_ENABLE_BLE_STREAM  -> HAL_ENABLE_BLE + HAL_ENABLE_CRYPTO
-HAL_ENABLE_BLUETOOTH_GAMEPAD -> HAL_ENABLE_BLUETOOTH_CLASSIC
+HAL_ENABLE_BLUETOOTH_GAMEPAD -> HAL_ENABLE_BLUETOOTH_HID_HOST ->
+                                HAL_ENABLE_BLUETOOTH_CLASSIC -> HAL_ENABLE_CRC
 HAL_ENABLE_SERIAL_COMMANDS -> HAL_ENABLE_COMMAND_ROUTER
 HAL_ENABLE_LORA_COMMANDS -> HAL_ENABLE_COMMAND_ROUTER + HAL_ENABLE_LORA_LINK ->
                             HAL_ENABLE_LORA + HAL_ENABLE_CRC

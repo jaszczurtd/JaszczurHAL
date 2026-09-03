@@ -12,6 +12,7 @@
  * types. Operations are nonblocking; call hal_gamepad_poll() regularly.
  */
 
+#include "hal/bluetooth/hal_bluetooth_classic.h"
 #include "hal/core/hal_status.h"
 
 #include <stdbool.h>
@@ -95,16 +96,13 @@ enum {
   /** Fixed size of the opaque, versioned and CRC-protected bond blob a
    *  provider persists and returns as-is; it never needs to interpret the
    *  contents. */
-  HAL_GAMEPAD_BOND_BLOB_SIZE = 38u,
+  HAL_GAMEPAD_BOND_BLOB_SIZE = HAL_BLUETOOTH_CLASSIC_BOND_BLOB_SIZE,
 };
 
-/** @brief Opaque on-wire encoding of the bonded peer's identity (BD_ADDR,
- *  link key and its type, format version, peer-verification-rules id,
- *  sequence number, and integrity CRC). A provider stores and loads these
- *  bytes verbatim; hal_gamepad owns encoding/decoding and validation. */
-typedef struct {
-  uint8_t bytes[HAL_GAMEPAD_BOND_BLOB_SIZE];
-} hal_gamepad_bond_blob_t;
+/** @brief Compatibility alias for the Classic manager's opaque bond record.
+ *  A provider stores and loads these bytes verbatim; the shared Classic
+ *  manager owns encoding, validation and the only persisted link-key copy. */
+typedef hal_bluetooth_classic_bond_blob_t hal_gamepad_bond_blob_t;
 
 /**
  * @brief Load the persisted bond blob, if any.
@@ -124,11 +122,12 @@ typedef hal_status_t (*hal_gamepad_bond_erase_fn)(void *context);
 /**
  * @brief Optional persistence hooks for the gamepad's bonded-peer identity.
  *
- * hal_gamepad owns bonding *semantics* -- what is trusted and when it is
- * written or discarded -- but not physical storage; pass a provider backed
- * by hal_kv, an external EEPROM, or any other persistent medium. Passing
- * NULL to hal_gamepad_open_ex() (or calling hal_gamepad_open()) keeps
- * bonding RAM-only for the current runtime, matching prior behavior.
+ * This is the legacy one-slot adapter for the indexed Classic bond provider.
+ * The gamepad adapter decides when a peer has passed its profile checks; the
+ * shared Classic manager owns record encoding, link keys and persistence
+ * timing. Pass a provider backed by hal_kv, an external EEPROM, or another
+ * persistent medium. Passing NULL to hal_gamepad_open_ex() (or calling
+ * hal_gamepad_open()) keeps bonding RAM-only for the current runtime.
  *
  * store() and erase() are called only from hal_gamepad_poll(), after the
  * backend has returned from any Bluetooth stack callback and released the

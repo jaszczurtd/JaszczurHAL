@@ -210,6 +210,8 @@ applications and keep their artifacts below `.build/hardware/`:
 |---|---|
 | `tests/hardware/bluetooth_stage1` | Internal pre-API CYW43/BTstack controller, advertising, static GATT and WiFi-only memory baseline on Pico W and STM32G474/PIM730. |
 | `tests/hardware/bluetooth_gamepad` | Sanitized 8BitDo Zero 2 Android D-input descriptor/report capture and the private Classic HID Host gamepad parser probe for Pico 2 W. |
+| `tests/hardware/bluetooth_classic_hid_device` | Private Pico W Classic HID mouse used to validate the public generic HID Host on a second Pico radio. |
+| `tests/hardware/bluetooth_classic_hci_trace` | Private privacy-preserving raw HCI inquiry trace and CYW43 transport/clock diagnostics for Pico W and Pico 2 W. |
 | `tests/hardware/bluetooth_observer` | Public passive Observer scan, bounded report queue and Teltonika/iBeacon/Eddystone BLE parsing on Pico W, Pico 2 W and STM32G474/PIM730. |
 | `tests/hardware/bluetooth_stream` | Public BLE lifecycle and authenticated Stream gate across target/board/runtime tuples, including reconnect, watchdog, sustained traffic, saturation and negative security cases. |
 | `tests/hardware/rp_usb_cdc_echo` | Native TinyUSB CDC enumeration, backpressure, reconnect and throughput |
@@ -776,6 +778,123 @@ STM32 Bluetooth image be programmed through the Nucleo ST-Link. Record the
 periodic `JHBT1` status before testing discovery, connection, characteristic
 read/write, disconnect/reconnect, and the WiFi-only regression. The Pico W
 on-board-radio run follows as the second hardware profile.
+
+### Bluetooth Classic manager hardware probe
+
+The public `classic-scan` variant of example 29 is the generic Classic
+hardware probe. It uses only `HAL_ENABLE_BLUETOOTH_CLASSIC`, assigns volatile
+indexes to observed devices, and deliberately omits Bluetooth addresses and
+link-key material from its log. Build, upload, and open its serial console:
+
+```sh
+vscode/entry/jh-vscode build \
+  --project examples/29_bluetooth_gamepad \
+  --target rp2350-arm --board pico2w --variant classic-scan
+vscode/entry/jh-vscode upload \
+  --project examples/29_bluetooth_gamepad \
+  --target rp2350-arm --board pico2w --variant classic-scan \
+  --port /dev/ttyACM0
+```
+
+After the initial inquiry and serialized SDP queries, use `PAIR n`, approve a
+reported request with `AUTHORIZE`, publish the validated peer with `SAVE n`,
+and inspect `INFO`. `FORGET n` must return the peer count to zero. `SCAN`
+followed by `STOP` verifies explicit inquiry cancellation. The console uses
+RAM-only storage; persistence across reset belongs to the separate bonding
+gate.
+
+On 2026-09-03, a Pico 2 W running the `rp2350-arm` image detected an XY-BT
+Audio/Video device that was not a gamepad. Its copied Class of Device was
+`0x340404`, and serialized SDP resolved PnP, Serial Port, and Audio Sink
+(`0x16`). Just Works authorization succeeded. Saving, forgetting, and
+pairing again changed the peer count `0 -> 1 -> 0 -> 1`. A restart with an
+empty manager RAM followed by another pairing also succeeded. Testing exposed
+and fixed a BTstack timing edge: a second SDP query could begin before the
+client became ready or could complete synchronously. The backend now retries
+the busy client without blocking and treats synchronous completion as success;
+two consecutive device queries passed on the same hardware.
+
+This result closes the non-gamepad Classic-manager part of the C8.5 hardware
+gate. It does not claim an audio data profile or persistent bonding.
+
+### Bluetooth Classic raw HCI inquiry diagnostics
+
+`tests/hardware/bluetooth_classic_hci_trace` records BTstack HCI commands and
+events before the public manager parses them. The same fixture builds for Pico
+W RP2040 and Pico 2 W RP2350 ARM. It also reports HCI transport counters and
+the measured CYW43 gSPI clock. Bluetooth addresses are masked, unknown command
+payloads and ACL bodies are hidden, and Extended Inquiry Result is retained
+only through its RSSI byte; its EIR data body is redacted.
+
+```sh
+vscode/entry/jh-vscode build \
+  --project tests/hardware/bluetooth_classic_hci_trace \
+  --target rp2040 --board picow
+vscode/entry/jh-vscode build \
+  --project tests/hardware/bluetooth_classic_hci_trace \
+  --target rp2350-arm --board pico2w
+```
+
+Use `SCAN` for one ten-second scan or `SCAN30` for three consecutive inquiry
+cycles, then issue `INFO` and `DUMP`. `STOP` exercises cancellation and `RESET`
+discards buffered records. This fixture uses private diagnostic interfaces and
+is not part of the public HAL API.
+
+On 2026-09-03, comparative traces showed identical successful 21-command
+controller initialization on both boards: HCI/LMP 5.2, manufacturer `0x0131`,
+subversion `0x2310`, and matching supported-command, feature, and buffer-size
+responses. Both sent the same GIAC Inquiry command and reported no ACL traffic,
+dropped trace records, or HCI transport drain-budget hits. Pico W produced no
+Inquiry Result over repeated 30-second runs, whereas Pico 2 W reported XY-BT
+with Class of Device `0x340404` and RSSI between approximately -85 and -94 dBm.
+
+Three discriminating checks isolated the observation:
+
+- halving only the Pico W gSPI clock to 15.625 MHz did not change the result;
+- Pico W immediately discovered a nearby Pico 2 W Classic HID fixture at
+  approximately -84 to -85 dBm, and the reverse link was approximately -86 to
+  -88 dBm, proving that both Classic radios and the inquiry path work;
+- an independent Pico W image using the stock Pico SDK `pico_btstack_cyw43`
+  transport also completed seven inquiry cycles without detecting XY-BT.
+
+The evidence rules out the public result parser, scan deadline, custom HCI
+transport, and gSPI rate. It does not show that RP2040 is unable to discover
+XY-BT in general. The supported conclusion is that this particular Pico W,
+antenna geometry, and RF environment placed the already weak XY-BT inquiry
+response below its reception threshold. The backend now explicitly requests
+Extended Inquiry Result mode so successful scans expose EIR names and RSSI for
+future diagnosis.
+
+### Bluetooth Classic non-gamepad HID Host hardware probe
+
+`tests/hardware/bluetooth_classic_hid_device` is a private, test-only BTstack
+HID Device fixture. A Pico W advertises a standards-based Classic HID mouse
+with a Generic Desktop descriptor and emits alternating relative-motion input
+reports. This is not a public HID-device API. Build the RP2040 fixture and the
+public `hid-host` example for the RP2350 ARM host:
+
+```sh
+vscode/entry/jh-vscode build \
+  --project tests/hardware/bluetooth_classic_hid_device \
+  --target rp2040 --board picow
+vscode/entry/jh-vscode build \
+  --project examples/29_bluetooth_gamepad \
+  --target rp2350-arm --board pico2w --variant hid-host
+```
+
+Flash each image only to its designated board. `INFO` on the fixture must show
+`controller=1`. On the host, use `SCAN`, approve the pending Just Works request
+with `AUTHORIZE`, then use `INFO`. Acceptance requires
+`JHC85-HID-PASS`, `descriptor=1`, `input=1`, and `saved=1`; the fixture must
+show `hid=1` and a non-zero report count. Neither console prints Bluetooth
+addresses or link keys.
+
+On 2026-09-03, the Pico 2 W host copied the 50-byte mouse descriptor from a
+Pico W, received repeated three-byte input reports, and published the validated
+peer after explicit host-side authorization. The fixture confirmed the HID
+channel and report transmission. This closes the non-gamepad HID
+descriptor/report part of C8.5. Both sides use volatile link-key storage, so
+the result does not claim persistence across reset.
 
 ### Bluetooth Classic HID gamepad probe
 

@@ -99,7 +99,3 @@ hal_status_t
 jh_btstack_host_service(const jh_bluetooth_host_reference_t *reference) {
   return jh_bluetooth_host_runtime_service(reference);
 }
-
-void jh_btstack_host_snapshot(jh_bluetooth_host_snapshot_t *out_snapshot) {
-  jh_bluetooth_host_runtime_snapshot(&s_runtime, out_snapshot);
-}

@@ -19,15 +19,19 @@ if(NOT _digest_length EQUAL 64)
 endif()
 
 list(LENGTH JH_HAL_FEATURE_SYMBOLS _symbol_count)
-if(NOT _symbol_count EQUAL 110)
-    message(FATAL_ERROR "Expected 110 registered symbols, got ${_symbol_count}")
+if(NOT _symbol_count EQUAL 111)
+    message(FATAL_ERROR "Expected 111 registered symbols, got ${_symbol_count}")
 endif()
 if(NOT "${JH_HAL_FEATURE_DERIVED_SYMBOLS}" STREQUAL
-       "HAL_ENABLE_BLUETOOTH_CLASSIC;HAL_ENABLE_NETWORK_CORE")
+       "HAL_ENABLE_NETWORK_CORE")
     message(FATAL_ERROR "Unexpected derived feature set")
 endif()
 if(NOT "${JH_HAL_FEATURE_HAL_ENABLE_BLUETOOTH_GAMEPAD_IMPLIES}" STREQUAL
-       "HAL_ENABLE_BLUETOOTH_CLASSIC;HAL_ENABLE_CRC")
+       "HAL_ENABLE_BLUETOOTH_HID_HOST" OR
+   NOT "${JH_HAL_FEATURE_HAL_ENABLE_BLUETOOTH_GAMEPAD_TRANSITIVE_IMPLIES}" STREQUAL
+       "HAL_ENABLE_BLUETOOTH_CLASSIC;HAL_ENABLE_BLUETOOTH_HID_HOST;HAL_ENABLE_CRC" OR
+   NOT "${JH_HAL_FEATURE_HAL_ENABLE_BLUETOOTH_HID_HOST_IMPLIES}" STREQUAL
+       "HAL_ENABLE_BLUETOOTH_CLASSIC")
     message(FATAL_ERROR "Bluetooth gamepad dependency table drifted")
 endif()
 if(NOT "${JH_HAL_FEATURE_HAL_ENABLE_MQTT_IMPLIES}" STREQUAL
@@ -123,7 +127,7 @@ jh_hal_resolve_features(_gamepad_requested _gamepad_resolved
 if(NOT "${_gamepad_requested}" STREQUAL
        "HAL_ENABLE_BLUETOOTH_GAMEPAD" OR
    NOT "${_gamepad_resolved}" STREQUAL
-       "HAL_ENABLE_BLUETOOTH_CLASSIC;HAL_ENABLE_BLUETOOTH_GAMEPAD;HAL_ENABLE_CRC")
+       "HAL_ENABLE_BLUETOOTH_CLASSIC;HAL_ENABLE_BLUETOOTH_GAMEPAD;HAL_ENABLE_BLUETOOTH_HID_HOST;HAL_ENABLE_CRC")
     message(FATAL_ERROR
         "Unexpected Bluetooth gamepad feature set: ${_gamepad_resolved}")
 endif()

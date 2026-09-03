@@ -508,7 +508,11 @@ def check_production_feature_facade(compiler: str) -> None:
         compiler, ("HAL_TARGET_MOCK=1", "HAL_ENABLE_BLUETOOTH_GAMEPAD=1")
     )
     require(
-        {"HAL_ENABLE_BLUETOOTH_GAMEPAD", "HAL_ENABLE_BLUETOOTH_CLASSIC"}
+        {
+            "HAL_ENABLE_BLUETOOTH_GAMEPAD",
+            "HAL_ENABLE_BLUETOOTH_HID_HOST",
+            "HAL_ENABLE_BLUETOOTH_CLASSIC",
+        }
         <= gamepad,
         "hal_config.h did not expose the Bluetooth gamepad closure",
     )
@@ -782,7 +786,7 @@ TEST_ROOT.mkdir(parents=True)
 )
 
 model = generate_hal_features.load_registry(CONFIG)
-require(len(model.features) == 110, "feature registry symbol count drifted")
+require(len(model.features) == 111, "feature registry symbol count drifted")
 catalog_text = (ROOT / "doc/api/en/02_module_flags.md").read_text(encoding="utf-8")
 catalog_features = set(
     re.findall(
@@ -801,11 +805,11 @@ require(
     f"unknown={sorted(catalog_features - public_features)}",
 )
 require(
-    sum(bool(feature.implies) for feature in model.features.values()) == 70,
+    sum(bool(feature.implies) for feature in model.features.values()) == 72,
     "feature registry implies-source count drifted",
 )
 require(
-    sum(len(feature.implies) for feature in model.features.values()) == 130,
+    sum(len(feature.implies) for feature in model.features.values()) == 131,
     "feature registry direct-edge count drifted",
 )
 require(
@@ -815,8 +819,13 @@ require(
 )
 require(
     model.features["HAL_ENABLE_BLUETOOTH_GAMEPAD"].implies
-    == ("HAL_ENABLE_BLUETOOTH_CLASSIC", "HAL_ENABLE_CRC"),
+    == ("HAL_ENABLE_BLUETOOTH_HID_HOST",),
     "Bluetooth gamepad dependency drifted",
+)
+require(
+    model.features["HAL_ENABLE_BLUETOOTH_HID_HOST"].implies
+    == ("HAL_ENABLE_BLUETOOTH_CLASSIC",),
+    "Bluetooth HID Host dependency drifted",
 )
 require(
     model.features["HAL_ENABLE_KV"].implies

@@ -1,4 +1,4 @@
-# Bluetooth Low Energy and Classic HID gamepad API
+# Bluetooth Low Energy and Classic APIs
 
 *Also available in [Polish](../pl/20_bluetooth.md).*
 
@@ -6,10 +6,11 @@
 
 The Bluetooth modules are opt-in. `HAL_ENABLE_BLE` exposes the Low Energy
 Peripheral and passive Observer API through `hal/bluetooth/hal_ble.h`.
-`HAL_ENABLE_BLUETOOTH_GAMEPAD` exposes one Bluetooth Classic HID gamepad
-through `hal/bluetooth/hal_gamepad.h` and automatically enables
-`HAL_ENABLE_BLUETOOTH_CLASSIC`. Both are also available from the umbrella
-`JaszczurHAL.h` header.
+`HAL_ENABLE_BLUETOOTH_CLASSIC` exposes discovery, pairing, SDP and bonded-peer
+management. `HAL_ENABLE_BLUETOOTH_HID_HOST` adds raw Classic HID descriptors
+and reports; `HAL_ENABLE_BLUETOOTH_GAMEPAD` adds the normalized gamepad adapter.
+The dependencies are gamepad -> HID Host -> Classic. All public APIs are also
+available from the umbrella `JaszczurHAL.h` header.
 
 The current release provides one Peripheral connection, connectable legacy
 advertising, passive legacy scanning, copied advertising reports, AD structure
@@ -30,9 +31,9 @@ Stream payload to the shared command router; it does not add a GATT client.
 | BLE | `rp2040` | `pico-rm2` | external PIM730/RM2 CYW43439 over PIO | build-supported; dedicated hardware gate pending |
 | BLE | `stm32g474` | `nucleo-g474re-pim730` | external PIM730/RM2 CYW43439 over gSPI | Peripheral and Observer gates plus full bare-metal/FreeRTOS Stream display-load gates passed |
 | BLE | `esp32s3` | `waveshare-esp32-s3-zero` | integrated LE controller with ESP-IDF NimBLE | complete compile/link fixture; radio hardware gate pending |
-| Classic gamepad | `rp2040` / `rp2350-arm` / `stm32g474` | Bluetooth-capable profiles above | CYW43439 with BTstack HID Host | Zero 2 hardware gates passed on `pico2w`; other listed boards are build-tested |
-| Classic gamepad | `esp32` | `esp32-devkitc-v4` | integrated BR/EDR controller with ESP-IDF Bluedroid and ESP HID Host | complete compile/link fixture; radio hardware gate pending |
-| BLE and Classic gamepad | `mock` | `host-mock` | deterministic test backends | host tests |
+| Classic / HID Host / gamepad | `rp2040` / `rp2350-arm` / `stm32g474` | Bluetooth-capable profiles above | CYW43439 with BTstack | Zero 2 gamepad and generic Classic XY-BT gates passed on `pico2w`; a Pico W mouse fixture also passed the non-gamepad HID descriptor/report gate against the Pico 2 W host |
+| Classic / HID Host / gamepad | `esp32` | `esp32-devkitc-v4` | integrated BR/EDR controller with ESP-IDF Bluedroid and ESP HID Host | complete compile/link fixture; generic radio hardware gate pending |
+| BLE and Classic profiles | `mock` | `host-mock` | deterministic test backends | Classic, non-gamepad HID and gamepad host tests |
 
 The RP2350 backend supports Pico 2 W only with the `rp2350-arm` target. Pico 2
 W with `rp2350-riscv` is unsupported because the CYW43 Bluetooth transport is
@@ -45,9 +46,9 @@ remains available for compatibility. External modules additionally require
 `HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND`.
 
 ESP32-S3 currently supports the base BLE Peripheral/Observer API, but not
-`HAL_ENABLE_BLE_STREAM`, a GATT client, or Classic HID. The original ESP32
-currently supports the Classic gamepad profile, but does not enable the public
-BLE API. These are deliberate target boundaries, not runtime fallbacks.
+`HAL_ENABLE_BLE_STREAM`, a GATT client, or Classic. The original ESP32 supports
+the Classic manager, HID Host and gamepad adapter, but does not enable the
+public BLE API. These are deliberate target boundaries, not runtime fallbacks.
 
 ## Lifecycle and polling
 
@@ -265,12 +266,12 @@ advertising payloads, connection state, and MTU changes into bounded HAL
 queues. Application callbacks still run only from `hal_ble_poll()` and never
 from an ESP-IDF event task.
 
-The original ESP32 uses Bluedroid plus `esp_hidh` for the Classic gamepad. GAP
-inquiry accepts only the validated Android D-input identity named
-`8BitDo Zero 2 gamepad` with the gamepad device class. A completed HID open is
-then checked for VID `0x2dc8`, PID `0x3230`, one report map, and a descriptor
-accepted by the target-independent parser. PIN `0000` and SSP confirmation are
-held until the application calls `hal_gamepad_pairing_authorize()`.
+The original ESP32 uses Bluedroid for generic Classic inquiry, SDP, pairing and
+native bond removal, plus `esp_hidh` when HID Host is selected. The shared
+backend does not filter names, Class of Device, VID/PID, report descriptors or
+report contents. The gamepad adapter alone applies its device policy and
+descriptor parser. PIN `0000` and SSP confirmation remain pending until the
+application explicitly authorizes or rejects the request.
 
 Both ESP backends share one idempotent NVS initializer with the network
 backend. An incompatible or full NVS partition returns `HAL_ECONFIG`; the HAL
@@ -299,9 +300,66 @@ report count, and both drop counters. A fatal controller or transport error move
 `HAL_BLE_STATE_FAILED`, invalidates its handles, stops scanning, and advances
 the generation.
 
-## Bluetooth Classic HID gamepad
+## Bluetooth Classic manager and HID profiles
 
-The gamepad API owns one Classic HID host profile and returns one opaque
+### Classic manager
+
+`HAL_ENABLE_BLUETOOTH_CLASSIC` adds `hal_bluetooth_classic.h`. Open one opaque
+manager, call `hal_bluetooth_classic_poll()` frequently, and close every
+attached profile before closing the manager. Inquiry results are copied into a
+bounded queue and contain BD_ADDR, bounded name, Class of Device, optional
+RSSI, and an SDP service bit mask. `hal_bluetooth_classic_sdp_query()` updates
+a discovered peer through the same queue. `HAL_EOVERFLOW` acknowledges dropped
+results; call again to drain retained entries.
+
+Pairing is explicit. `hal_bluetooth_classic_pair()` starts bonding where the
+backend supports a profile-independent request. A pending Just Works, PIN or
+passkey request is visible in `hal_bluetooth_classic_info_t`; the application
+must call `hal_bluetooth_classic_pairing_authorize()` or
+`hal_bluetooth_classic_pairing_reject()`. Authorization must follow a trusted
+local gesture. A name, address or unauthenticated exchange is not user identity.
+
+`hal_bluetooth_classic_open_ex()` accepts an indexed
+`hal_bluetooth_classic_bond_provider_t`. Each opaque record contains one peer,
+format version, profile verification-rules identifier, sequence, link-key type,
+one link key and CRC. The manager is the only owner of link-key persistence.
+Providers store records unchanged and can use any medium. The optional
+`jh_bluetooth_classic_bond_kv_provider()` maps consecutive slots to consecutive
+`hal_kv` keys. Invalid records are ignored during restore. A profile calls
+`hal_bluetooth_classic_peer_save()` only after it has validated the peer and
+flowing data; the manager commits it later from `poll()`, outside stack
+callbacks. Peers can be enumerated or forgotten by address.
+
+On BTstack/CYW43, link keys are copied from the HCI notification and restored
+to the bounded BTstack database. Bluedroid keeps actual link keys in its own
+NVS and does not expose them; therefore portable provider storage returns
+`HAL_EUNSUPPORTED` on original ESP32, while RAM enumeration/native reconnect
+and `hal_bluetooth_classic_peer_forget()` remain available. A generic
+`hal_bluetooth_classic_pair()` is also unsupported there; connecting the
+selected profile starts authentication.
+
+### Generic HID Host
+
+`HAL_ENABLE_BLUETOOTH_HID_HOST` adds `hal_bluetooth_hid_host.h` and implies the
+Classic manager. One HID Host handle attaches to an open manager and supports
+one active HID connection. It exposes a copied report descriptor plus a
+bounded queue of raw Input, Output and Feature reports without interpreting a
+device class. Applications can send Output/Feature reports and request
+Input/Feature reports. Device selection and descriptor validation belong to
+the consuming application or profile adapter. Closing HID disconnects an
+active link but leaves its Classic manager open.
+
+The deterministic mock can inject Classic readiness, inquiry/SDP results,
+pairing, link keys, generic descriptors and raw reports. Host tests include a
+mouse descriptor to prove that the shared HID path contains no gamepad filter.
+The `classic-scan` and `hid-host` variants of
+[`examples/29_bluetooth_gamepad`](../../../examples/29_bluetooth_gamepad/)
+compile these layers without `HAL_ENABLE_BLUETOOTH_GAMEPAD`.
+
+### Gamepad adapter
+
+The gamepad API is an adapter over the Classic manager and generic HID Host. It
+owns those handles internally and returns one opaque
 `hal_gamepad_t`. `hal_gamepad_open()` starts the profile asynchronously;
 `hal_gamepad_poll()` must then run frequently from one task or cooperative
 loop. `hal_gamepad_get_info()` reports the public state, last status, current
@@ -313,7 +371,7 @@ The supported public states are `UNINITIALIZED`, `STARTING`, `READY`,
 transport error moves the profile to `FAILED`. `hal_gamepad_close()` stops the
 profile, clears the selected device, and invalidates its handle.
 
-### Pairing and reconnect
+#### Pairing and reconnect
 
 Pairing is application-controlled and bounded. Once the profile reaches
 `READY`, call `hal_gamepad_pairing_open()` to start its discovery window. This
@@ -333,14 +391,15 @@ should expose it only after local user input and should not treat a device
 name, Bluetooth address, or an unauthenticated Just Works exchange as proof of
 user identity.
 
-### Persistent bonding
+#### Persistent bonding
 
 `hal_gamepad_open_ex(&handle, bond_provider)` accepts an optional
 `hal_gamepad_bond_provider_t` -- `load()`/`store()`/`erase()` hooks over an
 opaque, fixed-size `hal_gamepad_bond_blob_t`. `hal_gamepad_open()` is
 equivalent to `hal_gamepad_open_ex(&handle, NULL)` and keeps the prior
-RAM-only behavior. hal_gamepad owns bonding *semantics*; it does not choose
-physical storage:
+RAM-only behavior. This legacy one-slot provider is bridged into the indexed
+Classic manager; the gamepad decides when its profile checks pass, while the
+manager owns encoding, link keys and persistence timing:
 
 ```c
 #include <hal/bluetooth/hal_gamepad.h>
@@ -363,7 +422,8 @@ before the provider is used and must stay initialized for as long as the
 gamepad profile is open. The caller-owned `bond_context` must remain valid for
 the same lifetime.
 
-A new peer reaches the bond blob only after full acceptance -- local pairing
+A new gamepad peer reaches the common Classic bond record only after full
+acceptance -- local pairing
 authorization, matched identity, an accepted report descriptor, at least one
 HID report (proof the link is genuinely flowing data), and a captured link
 key. Until then the previous bond, if any, stays active. `store()`/`erase()`
@@ -380,19 +440,11 @@ active link, clears the known peer from the controller and from RAM, and
 erases the persisted blob through the bond provider (a no-op when none was
 given). A subsequent `hal_gamepad_pairing_open()` starts a fresh pairing.
 
-- **impl (BTstack, RP2040/RP2350/STM32G474+PIM730):** the link key is read
-  from `HCI_EVENT_LINK_KEY_NOTIFICATION` and staged in bounded RAM by
-  `jh_bluetooth_classic_hid_probe_logic.c`'s pure bond-gate tracking (host
-  tested); the BTstack adapter in `jh_bluetooth_classic_hid_probe.c`
-  reinstalls a loaded bond via `btstack_link_key_db_memory_instance()` and
-  flushes a ready bond after `jh_btstack_host_service()` returns each poll.
-- **impl (ESP32, Bluedroid):** Bluedroid persists bonded devices itself via
-  NVS, so a bond provider is not required for persistence on this backend;
-  `hal_gamepad_forget()` still removes the bond through
-  `esp_bt_gap_remove_bond_device()` and, if a provider was given, also calls
-  its `erase()`.
+Backend-specific link-key behavior is described under the Classic manager
+above. `hal_gamepad_forget()` delegates native bond removal and provider erase
+to that manager.
 
-### Normalized snapshots
+#### Normalized snapshots
 
 The HID report parser does not depend on BTstack or ESP-IDF. It validates a
 bounded report descriptor and feeds the same normalized snapshot model on
@@ -440,11 +492,9 @@ void service_gamepad(void) {
 }
 ```
 
-The deterministic mock backend can inject readiness, a pairing request,
-connection, input snapshots, disconnection, queue overflow, and transport
-errors. It advances a requested disconnect during `hal_gamepad_poll()` to keep
-that timing deterministic. The complete C consumer and BLE+Classic build
-variant are in
+The deterministic mock supports both normalized compatibility injection and
+the complete raw Classic -> HID -> parser path. The complete C consumer,
+isolated Classic/HID variants, and BLE+Classic build variant are in
 [`examples/29_bluetooth_gamepad`](../../../examples/29_bluetooth_gamepad/).
 
 ## JH BLE Stream v1

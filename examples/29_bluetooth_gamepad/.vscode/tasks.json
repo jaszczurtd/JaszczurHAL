@@ -332,6 +332,42 @@
             "problemMatcher": []
         },
         {
+            "label": "Project: Build variant: classic-scan",
+            "detail": "Compile example variant classic-scan",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "build",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "classic-scan"
+            ],
+            "group": "build",
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Project: Build variant: hid-host",
+            "detail": "Compile example variant hid-host",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "build",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "hid-host"
+            ],
+            "group": "build",
+            "problemMatcher": "$gcc"
+        },
+        {
             "label": "Project: Build variant: ble",
             "detail": "Compile example variant ble",
             "type": "shell",

@@ -314,8 +314,15 @@ target_link_libraries(JaszczurHAL PUBLIC tinyusb_device)
 jh_hal_define_enabled(_jh_native_cyw43_backend HAL_NETWORK_BACKEND_CYW43)
 jh_hal_define_enabled(_jh_native_bluetooth_classic_hid
     JH_BLUETOOTH_CLASSIC_HID_PROBE)
-jh_hal_define_enabled(_jh_native_gamepad HAL_ENABLE_BLUETOOTH_GAMEPAD)
-if((_jh_native_bluetooth_classic_hid OR _jh_native_gamepad) AND
+set(_jh_native_bluetooth_classic_hid_device_fixture FALSE)
+if(JH_BLUETOOTH_CLASSIC_HID_DEVICE_FIXTURE)
+    set(_jh_native_bluetooth_classic_hid_device_fixture TRUE)
+endif()
+jh_hal_define_enabled(_jh_native_bluetooth_classic HAL_ENABLE_BLUETOOTH_CLASSIC)
+jh_hal_define_enabled(_jh_native_bluetooth_hid_host HAL_ENABLE_BLUETOOTH_HID_HOST)
+if((_jh_native_bluetooth_classic_hid OR
+    _jh_native_bluetooth_classic_hid_device_fixture OR
+    _jh_native_bluetooth_classic) AND
    NOT _jh_native_cyw43_backend)
     message(FATAL_ERROR
         "Bluetooth Classic HID requires a CYW43 network backend")
@@ -330,7 +337,10 @@ if(_jh_native_cyw43_backend)
         OTA "${_jh_native_ota}"
         BLUETOOTH_STAGE1 "${_jh_native_bluetooth_stage1}"
         BLUETOOTH_CLASSIC_HID "${_jh_native_bluetooth_classic_hid}"
-        GAMEPAD "${_jh_native_gamepad}"
+        BLUETOOTH_CLASSIC_HID_DEVICE_FIXTURE
+            "${_jh_native_bluetooth_classic_hid_device_fixture}"
+        CLASSIC "${_jh_native_bluetooth_classic}"
+        HID_HOST "${_jh_native_bluetooth_hid_host}"
         BLE "${_jh_native_ble}"
         BLE_STREAM "${_jh_native_ble_stream}")
 elseif(_jh_pico_board_has_cyw43)

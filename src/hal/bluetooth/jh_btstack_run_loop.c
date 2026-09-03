@@ -62,10 +62,3 @@ void jh_btstack_run_loop_invalidate(void *context, uint32_t generation) {
   s_snapshot.poll_pending = false;
   s_snapshot.last_status = HAL_EHW;
 }
-
-void jh_btstack_run_loop_snapshot(
-    jh_btstack_run_loop_snapshot_t *out_snapshot) {
-  if (out_snapshot != NULL) {
-    *out_snapshot = s_snapshot;
-  }
-}

@@ -4,6 +4,7 @@
 #include "hal/core/hal_status.h"
 #include "jh_bluetooth_classic_hid_memory_probe.h"
 #include "jh_bluetooth_gamepad_parser.h"
+#include "jh_gamepad_bond_codec.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -103,15 +104,6 @@ hal_status_t jh_bluetooth_classic_hid_probe_open_pairing_window(void);
 hal_status_t jh_bluetooth_classic_hid_probe_authorize_pairing(void);
 hal_status_t jh_bluetooth_classic_hid_probe_reconnect(void);
 hal_status_t jh_bluetooth_classic_hid_probe_disconnect(void);
-/** Factory reset: forget the bonded peer (see hal_gamepad_forget()). */
-hal_status_t jh_bluetooth_classic_hid_probe_forget(void);
-hal_status_t jh_bluetooth_classic_hid_probe_stop(void);
-void jh_bluetooth_classic_hid_probe_retain_gamepad_queue(bool retain);
-hal_status_t jh_bluetooth_classic_hid_probe_gamepad_snapshot(
-    jh_bluetooth_gamepad_snapshot_t *out_snapshot);
-hal_status_t jh_bluetooth_classic_hid_probe_gamepad_next(
-    jh_bluetooth_gamepad_snapshot_t *out_snapshot);
-size_t jh_bluetooth_classic_hid_probe_gamepad_pending(void);
 void jh_bluetooth_classic_hid_probe_snapshot(
     jh_bluetooth_classic_hid_probe_snapshot_t *out_snapshot);
 const char *jh_bluetooth_classic_hid_probe_btstack_version(void);

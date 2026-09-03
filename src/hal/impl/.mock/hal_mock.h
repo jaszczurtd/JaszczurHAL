@@ -1,6 +1,12 @@
 #pragma once
 
 #include "hal/bluetooth/hal_ble.h"
+#ifdef HAL_ENABLE_BLUETOOTH_CLASSIC
+#include "hal/bluetooth/hal_bluetooth_classic.h"
+#endif
+#ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
+#include "hal/bluetooth/hal_bluetooth_hid_host.h"
+#endif
 #ifdef HAL_ENABLE_BLUETOOTH_GAMEPAD
 #include "hal/bluetooth/hal_gamepad.h"
 #endif
@@ -56,6 +62,45 @@ hal_status_t hal_mock_ble_get_stream_frame(uint8_t *out_frame, size_t capacity,
 size_t hal_mock_ble_stream_notify_count(void);
 hal_status_t hal_mock_ble_get_stream_published(uint8_t *out_version,
                                                uint16_t *out_capabilities);
+#endif
+#endif
+
+#ifdef HAL_ENABLE_BLUETOOTH_CLASSIC
+// ── Bluetooth Classic ────────────────────────────────────────────────────
+void hal_mock_bluetooth_classic_reset(void);
+#ifdef __cplusplus
+extern "C" {
+#endif
+void hal_mock_bluetooth_classic_runtime_full_reset(void);
+#ifdef __cplusplus
+}
+#endif
+hal_status_t hal_mock_bluetooth_classic_inject_ready(void);
+hal_status_t hal_mock_bluetooth_classic_inject_scan_result(
+    const hal_bluetooth_classic_scan_result_t *result);
+hal_status_t hal_mock_bluetooth_classic_inject_pairing_request(
+    const hal_bluetooth_classic_address_t *address,
+    hal_bluetooth_classic_pairing_method_t method);
+hal_status_t hal_mock_bluetooth_classic_inject_link_key(
+    const hal_bluetooth_classic_address_t *address, const uint8_t link_key[16],
+    uint8_t link_key_type);
+hal_status_t hal_mock_bluetooth_classic_inject_error(hal_status_t status,
+                                                     bool fatal);
+#ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
+#ifdef __cplusplus
+extern "C" {
+#endif
+void hal_mock_bluetooth_hid_runtime_full_reset(void);
+#ifdef __cplusplus
+}
+#endif
+hal_status_t hal_mock_bluetooth_hid_inject_connected(
+    const hal_bluetooth_classic_address_t *address);
+hal_status_t hal_mock_bluetooth_hid_inject_descriptor(const uint8_t *descriptor,
+                                                      size_t length);
+hal_status_t
+hal_mock_bluetooth_hid_inject_report(const hal_bluetooth_hid_report_t *report);
+hal_status_t hal_mock_bluetooth_hid_inject_disconnected(hal_status_t status);
 #endif
 #endif
 

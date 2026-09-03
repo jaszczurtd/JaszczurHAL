@@ -115,8 +115,10 @@ if(_stm32_has_cyw43_gspi)
         HAL_ENABLE_BLE ${_feature_defines})
     jh_cmake_defines_contain(_stm32_has_ble_stream
         HAL_ENABLE_BLE_STREAM ${_feature_defines})
-    jh_cmake_defines_contain(_stm32_has_gamepad
-        HAL_ENABLE_BLUETOOTH_GAMEPAD ${_feature_defines})
+    jh_cmake_defines_contain(_stm32_has_bluetooth_classic
+        HAL_ENABLE_BLUETOOTH_CLASSIC ${_feature_defines})
+    jh_cmake_defines_contain(_stm32_has_bluetooth_hid_host
+        HAL_ENABLE_BLUETOOTH_HID_HOST ${_feature_defines})
     jh_cmake_defines_contain(_stm32_has_ota
         HAL_ENABLE_OTA ${_feature_defines})
     jh_target_enable_cyw43_feature_stack(firmware
@@ -124,7 +126,8 @@ if(_stm32_has_cyw43_gspi)
         OTA "${_stm32_has_ota}"
         BLUETOOTH_STAGE1 "${_stm32_has_bluetooth_stage1}"
         BLUETOOTH_CLASSIC_HID "${_stm32_has_bluetooth_classic_hid}"
-        GAMEPAD "${_stm32_has_gamepad}"
+        CLASSIC "${_stm32_has_bluetooth_classic}"
+        HID_HOST "${_stm32_has_bluetooth_hid_host}"
         BLE "${_stm32_has_ble}"
         BLE_STREAM "${_stm32_has_ble_stream}")
 endif()

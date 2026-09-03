@@ -74,7 +74,9 @@ Ochronę stosu włączają dwie niezależne opcje:
 | `HAL_ENABLE_COMMAND_ROUTER` | `hal_command_router.h`, `hal_command_wire.h` | `hal/commands/hal_command_router.cpp` + `hal/commands/hal_command_wire.cpp` | Niezależny od transportu rejestr funkcji obsługi, polityka źródła i bezpieczeństwa, odpowiedzi o ograniczonym rozmiarze oraz wersjonowane binarne komunikaty żądania, odpowiedzi i zdarzenia; zobacz [API komend](23_commands.md) |
 | `HAL_ENABLE_SERIAL_COMMANDS` | `hal_serial_commands.h` | `hal/serial/hal_serial_commands.cpp` | Synchroniczne przekazywanie komend TEXT/JSON do routera w aktywnych sesjach szeregowych z ramkowaniem, opcjonalnym formatowaniem odpowiedzi i prefiksem zapasowym (propaguje COMMAND_ROUTER); zobacz [API komend](23_commands.md#adapter-ramkowanej-sesji-szeregowej-framed-serial-session) |
 | `HAL_ENABLE_BLE` | `hal_ble.h` | `hal_ble.cpp` + `hal/bluetooth/*` | BLE Peripheral oraz pasywny Observer przez BTstack w wersji wskazanej przez repozytorium i kontroler CYW43; obsługiwane na RP2040 Pico W/Pico+RM2, RP2350 ARM Pico 2 W, STM32G474+PIM730/RM2 oraz mock. RP2350 RISC-V nie jest obsługiwany. Odpowiedni standardowy grant licencyjny BTstack lub grant ograniczony do produktów Raspberry Pi jest opisany w [API Bluetooth](20_bluetooth.md#license-and-distribution-boundary). |
-| `HAL_ENABLE_BLUETOOTH_GAMEPAD` | `hal_gamepad.h` | `hal/bluetooth/hal_gamepad.cpp` + backend Classic HID | Jeden nieblokujący gamepad Classic HID z jawnym parowaniem i ponownym łączeniem, znormalizowanymi kopiami bieżącego stanu, diagnostyką przepełnienia o ograniczonym rozmiarze i deterministycznym mockiem (propaguje BLUETOOTH_CLASSIC); zobacz [API Bluetooth](20_bluetooth.md#gamepad-bluetooth-classic-hid) |
+| `HAL_ENABLE_BLUETOOTH_CLASSIC` | `hal_bluetooth_classic.h` | wspólny manager, kodek/provider bondingu + backend targetu | Nieblokujące inquiry Classic, kopiowane wyniki, SDP, jawne parowanie i indeksowany zapis peerów (propaguje CRC); zobacz [API Bluetooth](20_bluetooth.md#manager-bluetooth-classic-i-profile-hid) |
+| `HAL_ENABLE_BLUETOOTH_HID_HOST` | `hal_bluetooth_hid_host.h` | ogólny profil HID + obsługa targetu | Jedno surowe połączenie Classic HID Host ze skopiowanym deskryptorem i ograniczonymi raportami Input/Output/Feature (propaguje BLUETOOTH_CLASSIC) |
+| `HAL_ENABLE_BLUETOOTH_GAMEPAD` | `hal_gamepad.h` | adapter i parser gamepada HID | Jeden nieblokujący gamepad Classic HID z jawnym parowaniem i reconnectem, znormalizowanymi kopiami stanu i ograniczoną diagnostyką (propaguje BLUETOOTH_HID_HOST); zobacz [API Bluetooth](20_bluetooth.md#adapter-gamepada) |
 | `HAL_ENABLE_BLE_COMMANDS` | `hal_ble_commands.h` | `hal/bluetooth/hal_ble_commands.cpp` | Dwukierunkowe żądania, automatyczne odpowiedzi i zdarzenia przez jedną uwierzytelnioną sesję BLE Stream pozostającą pod wyłączną kontrolą adaptera (propaguje BLE_STREAM + COMMAND_ROUTER); zobacz [API komend](23_commands.md#authenticated-ble-stream-adapter) |
 | `HAL_ENABLE_BLE_STREAM` | `hal_ble_stream.h` | `hal_ble_stream.cpp` + `hal/bluetooth/*` | Uwierzytelniony, ograniczony, ramkowany strumień bajtów przez BLE (propaguje BLE + CRYPTO) |
 | `HAL_ENABLE_LORA` | `hal_lora_radio.h` | `hal_lora_radio.cpp` | Niezależna od providera obsługa bezpośredniego dostępu do radia LoRa: inicjalizacja i zamykanie, gotowe konfiguracje modemu, blokujący TX, RX przez polling, diagnostyka, stan zasilania i czas transmisji; wymaga dokładnie jednego providera |
@@ -204,7 +206,8 @@ HAL_ENABLE_SDLOGGER    -> HAL_ENABLE_FAT + HAL_ENABLE_EEPROM + HAL_ENABLE_SPI
 HAL_ENABLE_BLE_COMMANDS -> HAL_ENABLE_BLE_STREAM + HAL_ENABLE_COMMAND_ROUTER ->
                            HAL_ENABLE_BLE + HAL_ENABLE_CRYPTO
 HAL_ENABLE_BLE_STREAM  -> HAL_ENABLE_BLE + HAL_ENABLE_CRYPTO
-HAL_ENABLE_BLUETOOTH_GAMEPAD -> HAL_ENABLE_BLUETOOTH_CLASSIC
+HAL_ENABLE_BLUETOOTH_GAMEPAD -> HAL_ENABLE_BLUETOOTH_HID_HOST ->
+                                HAL_ENABLE_BLUETOOTH_CLASSIC -> HAL_ENABLE_CRC
 HAL_ENABLE_SERIAL_COMMANDS -> HAL_ENABLE_COMMAND_ROUTER
 HAL_ENABLE_LORA_COMMANDS -> HAL_ENABLE_COMMAND_ROUTER + HAL_ENABLE_LORA_LINK ->
                             HAL_ENABLE_LORA + HAL_ENABLE_CRC

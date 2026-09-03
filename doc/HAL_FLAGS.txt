@@ -37,8 +37,10 @@ also propagates the router. BLE Stream selected alone remains a general byte
 stream.
 
 Bluetooth uses separate public profile flags. `HAL_ENABLE_BLE` selects the Low
-Energy Peripheral/Observer API. `HAL_ENABLE_BLUETOOTH_GAMEPAD` selects the
-Classic HID gamepad API and propagates `HAL_ENABLE_BLUETOOTH_CLASSIC`. BLE and
+Energy Peripheral/Observer API. `HAL_ENABLE_BLUETOOTH_CLASSIC` selects the
+public Classic manager, `HAL_ENABLE_BLUETOOTH_HID_HOST` adds raw HID, and
+`HAL_ENABLE_BLUETOOTH_GAMEPAD` adds the normalized adapter. Gamepad implies
+HID Host, which implies Classic. BLE and
 Classic profiles can be enabled together on the supported CYW43 board profiles
 and share one reference-counted host runtime.
 

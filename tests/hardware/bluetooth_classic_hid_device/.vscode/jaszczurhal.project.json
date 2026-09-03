@@ -1,0 +1,36 @@
+{
+    "$schema": "../../../../vscode/schema/jh_vscode_project.schema.json",
+    "project": "JaszczurHAL hardware tests",
+    "module": "bluetooth_classic_hid_device",
+    "example": {
+        "targets": [
+            "rp2040",
+            "rp2350-arm"
+        ],
+        "boards": {
+            "rp2040": "picow",
+            "rp2350-arm": "pico2w"
+        }
+    },
+    "toolchain": "cmake",
+    "target": "rp2040",
+    "board": "picow",
+    "buildDir": "${jhRoot}/.build/hardware/bluetooth_classic_hid_device",
+    "cmakeBuildDir": "${buildDir}/cmake",
+    "cmake": {
+        "sourceDir": "${project}/../../../cmake/jh_firmware_project",
+        "cache": {
+            "JH_ARTIFACT_DIR": "${buildDir}",
+            "JH_PROJECT_DIR": "${project}",
+            "JH_MODULE_NAME": "bluetooth_classic_hid_device",
+            "JH_PROJECT_SOURCES": "app.c",
+            "JH_PROJECT_RECIPE": "${project}/recipe.cmake"
+        }
+    },
+    "artifacts": {
+        "elf": "${buildDir}/firmware.elf",
+        "uf2": "${buildDir}/firmware.uf2",
+        "map": "${buildDir}/firmware.map",
+        "compileCommands": "${buildDir}/compile_commands_patched.json"
+    }
+}

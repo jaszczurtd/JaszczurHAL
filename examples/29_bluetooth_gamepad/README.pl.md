@@ -1,9 +1,11 @@
 # 29 - Gamepad Bluetooth
 
-Jest to przykład gamepada Bluetooth Classic HID korzystający z publicznego,
-niezależnego od stosu API odczytu stanu. Bazowy obraz uruchamia tylko profil
-Classic. Wariant `ble` dodatkowo inicjalizuje i odpytuje BLE, aby skompilować
-oraz uruchomić oba profile z użyciem wspólnej obsługi kontrolera.
+Projekt pokazuje trzy publiczne warstwy Bluetooth Classic. Bazowy obraz używa
+niezależnego od stosu adaptera gamepada ze znormalizowanym stanem. Wariant
+`classic-scan` buduje tylko manager i wypisuje skopiowane wyniki inquiry/SDP.
+Wariant `hid-host` łączy się z dowolną wykrytą usługą HID i udostępnia
+skopiowany deskryptor oraz surowe raporty bez założeń o gamepadzie. Wariant
+`ble` dodaje BLE do obrazu gamepada, aby sprawdzić wspólny runtime kontrolera.
 
 ## Kompilacja i uruchomienie
 
@@ -23,21 +25,52 @@ oryginalnego ESP32 ma osobne stanowisko do testowania kompilacji i linkowania w
 `tests/fixtures/esp32_gamepad`; nie przeszła jeszcze sprzętowego testu
 łączności radiowej.
 
-Tylko wariant łączący BLE i Classic można zbudować poleceniem:
+Izolowane warstwy publiczne albo wariant BLE + Classic można zbudować tak:
 
 ```bash
+vscode/entry/jh-vscode build \
+  --project examples/29_bluetooth_gamepad \
+  --target rp2040 --board picow --variant classic-scan
+vscode/entry/jh-vscode build \
+  --project examples/29_bluetooth_gamepad \
+  --target rp2040 --board picow --variant hid-host
 vscode/entry/jh-vscode build \
   --project examples/29_bluetooth_gamepad \
   --target rp2040 --board picow --variant ble
 ```
 
+Konsola szeregowa wariantu `classic-scan` nadaje każdemu wykrytemu adresowi
+ulotny indeks i nie wypisuje samego adresu. Po uruchomieniu wykonuje jedno
+inquiry, a po jego zakończeniu kolejno obsługuje oczekujące zapytania SDP.
+Dostępne polecenia:
+
+- `SCAN` i `STOP` sterują dziesięciosekundowym oknem inquiry;
+- `SDP n` powtarza wykrywanie usług peera `n`;
+- `PAIR n`, a następnie `AUTHORIZE` albo `REJECT`, realizuje jawną lokalną
+  decyzję o parowaniu;
+- `SAVE n` publikuje uwierzytelnionego peera po walidacji właściwej dla
+  aplikacji, a `FORGET n` go usuwa;
+- `INFO` wypisuje stan, pairing, liczniki ograniczonej kolejki i liczbę
+  peerów.
+
+Przykład otwiera manager bez trwałego providera, dlatego zapisani peerzy
+pozostają ważni tylko do restartu. Aplikacja produkcyjna musi zastąpić
+szeregowe polecenie `AUTHORIZE` zaufanym lokalnym gestem i wywoływać `SAVE`
+dopiero po zweryfikowaniu peera przez swój profil.
+
 Przy pierwszym uruchomieniu włącz tryb parowania gamepada. Przykład otwiera
 okno wykrywania o ograniczonym czasie i zatwierdza oczekujące żądanie Just Works
 albo starszy PIN `0000`. Jeśli okno wygaśnie bez wybrania urządzenia, przykład
-otwiera nowe. Zaakceptowany adres może służyć do ponownego łączenia do czasu zamknięcia
-profilu. Po zamknięciu profilu lub restarcie firmware aplikacja musi ponownie
-otworzyć parowanie; trwały wybór urządzenia przez HAL nie wchodzi w zakres tego
-wydania.
+otwiera nowe. Zaakceptowany adres może służyć do ponownego łączenia do czasu
+zamknięcia profilu. Provider przekazany do `hal_gamepad_open_ex()` zachowuje go
+po restarcie; zgodnościowy provider gamepada jest jednoslotowym adapterem
+indeksowanego managera Classic.
+
+Ogólny wariant HID celowo odrzuca parowanie, dopóki
+`localPairingConsent()` nie zostanie połączone z zaufanym lokalnym gestem. Po
+lokalnej autoryzacji, skopiowaniu deskryptora i otrzymaniu raportu Input prosi
+manager Classic o zapis peera. Przykład jest więc domyślnie bezpieczny, a
+jednocześnie pokazuje pełną granicę polityki.
 
 ## Model stanu wejścia
 
@@ -53,10 +86,10 @@ stan. Rekordy stanu generowane przy połączeniu i rozłączeniu ustawiają lub
 zerują wszystkie wejścia, więc aplikacja nie zachowa wciśniętego przycisku po
 utracie połączenia.
 
-Przykład pokazuje inicjalizację po uruchomieniu planisty, parowanie,
+Przykład bazowy pokazuje inicjalizację po uruchomieniu planisty, parowanie,
 autoryzację, ponowne łączenie, diagnostykę stanów, obsługę przepełnienia oraz
 opróżnianie kolejki stanów. Wariant `ble` celowo nie ogłasza usługi BLE; jedynie
 potwierdza, że oba publiczne profile uzyskują dostęp do tej samej instancji hosta
-CYW43/BTstack, odpytują ją i zwalniają. Nie jest dostępny na żadnym targecie
-ESP: ESP32-S3 udostępnia bazowe BLE bez Classic HID, a
-oryginalny ESP32 udostępnia gamepad Classic bez publicznego API BLE.
+CYW43/BTstack, odpytują ją i zwalniają. Implementację Classic/HID dla
+oryginalnego ESP32 obejmuje osobny test kompilacji i linkowania ESP-IDF;
+dispatcher natywnych przykładów nie obsługuje jeszcze targetów ESP.

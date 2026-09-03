@@ -466,25 +466,25 @@ require(
 require(
     full_configuration_counts
     == {
-        "rp2040": 39,
-        "rp2350-arm": 32,
+        "rp2040": 41,
+        "rp2350-arm": 34,
         "rp2350-riscv": 23,
-        "stm32g474": 38,
+        "stm32g474": 40,
     }
-    and sum(full_configuration_counts.values()) == 132,
-    "full example build matrix must contain exactly 132 configurations: "
+    and sum(full_configuration_counts.values()) == 138,
+    "full example build matrix must contain exactly 138 configurations: "
     f"{full_configuration_counts}",
 )
 require(
     gate_configuration_counts
     == {
-        "rp2040": 37,
+        "rp2040": 39,
         "rp2350-arm": 1,
         "rp2350-riscv": 0,
         "stm32g474": 31,
     }
-    and sum(gate_configuration_counts.values()) == 69,
-    "example gate matrix must contain exactly 69 configurations: "
+    and sum(gate_configuration_counts.values()) == 71,
+    "example gate matrix must contain exactly 71 configurations: "
     f"{gate_configuration_counts}",
 )
 required_feature_surface = {
@@ -497,6 +497,7 @@ required_feature_surface = {
     "HAL_ENABLE_BLE_STREAM",
     "HAL_ENABLE_BLUETOOTH_CLASSIC",
     "HAL_ENABLE_BLUETOOTH_GAMEPAD",
+    "HAL_ENABLE_BLUETOOTH_HID_HOST",
     "HAL_ENABLE_BSD_SOCKETS",
     "HAL_ENABLE_CJSON",
     "HAL_ENABLE_CRYPTO",

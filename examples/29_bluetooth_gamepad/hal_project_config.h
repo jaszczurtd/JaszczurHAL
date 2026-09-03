@@ -1,3 +1,3 @@
 #pragma once
 
-#define HAL_ENABLE_BLUETOOTH_GAMEPAD
+/* Feature selection lives in the example manifest so variants stay isolated. */

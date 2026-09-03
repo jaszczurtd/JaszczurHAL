@@ -1,17 +1,36 @@
 #pragma once
 
 #include "hal/bluetooth/hal_gamepad.h"
+#include "hal/bluetooth/jh_bluetooth_classic_bond_codec.h"
 #include "hal/core/hal_status.h"
 
 #include <stdint.h>
+
+#ifndef HAL_ENABLE_BLUETOOTH_GAMEPAD
+enum {
+  HAL_GAMEPAD_BOND_BLOB_SIZE = HAL_BLUETOOTH_CLASSIC_BOND_BLOB_SIZE,
+};
+typedef hal_bluetooth_classic_bond_blob_t hal_gamepad_bond_blob_t;
+typedef hal_status_t (*hal_gamepad_bond_load_fn)(
+    void *context, hal_gamepad_bond_blob_t *out_blob);
+typedef hal_status_t (*hal_gamepad_bond_store_fn)(
+    void *context, const hal_gamepad_bond_blob_t *blob);
+typedef hal_status_t (*hal_gamepad_bond_erase_fn)(void *context);
+typedef struct {
+  void *context;
+  hal_gamepad_bond_load_fn load;
+  hal_gamepad_bond_store_fn store;
+  hal_gamepad_bond_erase_fn erase;
+} hal_gamepad_bond_provider_t;
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 enum {
-  JH_GAMEPAD_BOND_ADDR_LEN = 6u,
-  JH_GAMEPAD_BOND_LINK_KEY_LEN = 16u,
+  JH_GAMEPAD_BOND_ADDR_LEN = HAL_BLUETOOTH_CLASSIC_ADDRESS_LEN,
+  JH_GAMEPAD_BOND_LINK_KEY_LEN = JH_BLUETOOTH_CLASSIC_LINK_KEY_LEN,
 };
 
 /** @brief Decoded bonded-peer identity: BD_ADDR + BR/EDR link key + type. */

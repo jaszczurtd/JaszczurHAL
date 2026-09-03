@@ -30,7 +30,6 @@
   }
 #endif
 
-static inline int16_t jh_min16(int16_t a, int16_t b) { return a < b ? a : b; }
 static inline int16_t jh_abs16(int16_t v) { return v < 0 ? -v : v; }
 
 template <typename Pixel>
