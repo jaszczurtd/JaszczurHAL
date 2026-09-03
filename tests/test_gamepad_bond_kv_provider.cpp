@@ -1,3 +1,4 @@
+#include "hal/bluetooth/jh_bluetooth_classic_bond_kv_provider.h"
 #include "hal/bluetooth/jh_gamepad_bond_kv_provider.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "hal/storage/hal_eeprom.h"
@@ -110,6 +111,27 @@ void test_null_context_returns_an_empty_provider(void) {
   TEST_ASSERT_NULL(provider.erase);
 }
 
+void test_classic_provider_keeps_indexed_peer_slots_independent(void) {
+  jh_bluetooth_classic_bond_kv_context_t context{};
+  const hal_bluetooth_classic_bond_provider_t provider =
+      jh_bluetooth_classic_bond_kv_provider(&context, kBondKey, 2u);
+  TEST_ASSERT_EQUAL_UINT(2u, provider.capacity);
+
+  const hal_bluetooth_classic_bond_blob_t first = make_blob(0x41u);
+  const hal_bluetooth_classic_bond_blob_t second = make_blob(0x82u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, provider.store(provider.context, 0u, &first));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, provider.store(provider.context, 1u, &second));
+
+  hal_bluetooth_classic_bond_blob_t loaded{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, provider.load(provider.context, 0u, &loaded));
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(first.bytes, loaded.bytes, sizeof(first.bytes));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, provider.load(provider.context, 1u, &loaded));
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(second.bytes, loaded.bytes,
+                                sizeof(second.bytes));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        provider.load(provider.context, 2u, &loaded));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_load_reports_no_bond_before_any_store);
@@ -118,5 +140,6 @@ int main(void) {
   RUN_TEST(test_erase_removes_the_blob_and_is_idempotent);
   RUN_TEST(test_different_keys_do_not_collide);
   RUN_TEST(test_null_context_returns_an_empty_provider);
+  RUN_TEST(test_classic_provider_keeps_indexed_peer_slots_independent);
   return UNITY_END();
 }

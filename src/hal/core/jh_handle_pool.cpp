@@ -7,7 +7,7 @@
  * Low bits carry a one-based slot and kind; upper bits carry a generation.
  * They are compared and decoded only and are never dereferenced. */
 #define JH_HANDLE_SLOT_BITS 8u
-#define JH_HANDLE_KIND_BITS 4u
+#define JH_HANDLE_KIND_BITS 5u
 #define JH_HANDLE_SLOT_MASK ((((uintptr_t)1u) << JH_HANDLE_SLOT_BITS) - 1u)
 #define JH_HANDLE_KIND_MASK ((((uintptr_t)1u) << JH_HANDLE_KIND_BITS) - 1u)
 #define JH_HANDLE_GENERATION_SHIFT (JH_HANDLE_SLOT_BITS + JH_HANDLE_KIND_BITS)

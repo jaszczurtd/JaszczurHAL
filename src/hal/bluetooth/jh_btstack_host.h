@@ -13,7 +13,6 @@ jh_btstack_host_acquire(jh_bluetooth_host_profile_t profile,
 hal_status_t jh_btstack_host_release(jh_bluetooth_host_reference_t *reference);
 hal_status_t
 jh_btstack_host_service(const jh_bluetooth_host_reference_t *reference);
-void jh_btstack_host_snapshot(jh_bluetooth_host_snapshot_t *out_snapshot);
 
 #ifdef __cplusplus
 }

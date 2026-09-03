@@ -436,7 +436,49 @@
       ],
       "board": "picow",
       "stm32Board": "nucleo-g474re-pim730",
+      "extraDefines": [
+        "HAL_ENABLE_BLUETOOTH_GAMEPAD=1"
+      ],
+      "sources": [
+        "app.c"
+      ],
       "variants": [
+        {
+          "id": "classic-scan",
+          "module": "29_bluetooth_classic_scan",
+          "sources": [
+            "classic_scan_app.c"
+          ],
+          "targets": [
+            "rp2040",
+            "rp2350-arm",
+            "stm32g474"
+          ],
+          "gateTargets": [
+            "rp2040"
+          ],
+          "extraDefines": [
+            "HAL_ENABLE_BLUETOOTH_CLASSIC=1"
+          ]
+        },
+        {
+          "id": "hid-host",
+          "module": "29_bluetooth_hid_host",
+          "sources": [
+            "hid_host_app.c"
+          ],
+          "targets": [
+            "rp2040",
+            "rp2350-arm",
+            "stm32g474"
+          ],
+          "gateTargets": [
+            "rp2040"
+          ],
+          "extraDefines": [
+            "HAL_ENABLE_BLUETOOTH_HID_HOST=1"
+          ]
+        },
         {
           "id": "ble",
           "module": "29_bluetooth_gamepad_ble",
@@ -450,6 +492,7 @@
           ],
           "extraDefines": [
             "HAL_ENABLE_BLE=1",
+            "HAL_ENABLE_BLUETOOTH_GAMEPAD=1",
             "HAL_GAMEPAD_EXAMPLE_ENABLE_BLE=1"
           ]
         }

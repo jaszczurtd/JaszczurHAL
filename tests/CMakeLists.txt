@@ -87,6 +87,24 @@ target_include_directories(test_hal_gamepad_header_cpp PRIVATE
 jh_enable_host_warnings(test_hal_gamepad_header_cpp ERRORS)
 add_test(NAME test_hal_gamepad_header_cpp COMMAND test_hal_gamepad_header_cpp)
 
+add_executable(test_hal_bluetooth_headers_c test_hal_bluetooth_headers.c)
+target_compile_definitions(test_hal_bluetooth_headers_c PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_BLUETOOTH_HID_HOST=1)
+target_include_directories(test_hal_bluetooth_headers_c PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+jh_enable_host_warnings(test_hal_bluetooth_headers_c ERRORS)
+add_test(NAME test_hal_bluetooth_headers_c COMMAND test_hal_bluetooth_headers_c)
+
+add_executable(test_hal_bluetooth_headers_cpp test_hal_bluetooth_headers.cpp)
+target_compile_definitions(test_hal_bluetooth_headers_cpp PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_BLUETOOTH_HID_HOST=1)
+target_include_directories(test_hal_bluetooth_headers_cpp PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+jh_enable_host_warnings(test_hal_bluetooth_headers_cpp ERRORS)
+add_test(NAME test_hal_bluetooth_headers_cpp COMMAND test_hal_bluetooth_headers_cpp)
+
 add_executable(test_hal_lora_radio_header_c test_hal_lora_radio_header_c.c)
 target_compile_definitions(test_hal_lora_radio_header_c PRIVATE
     HAL_TARGET_MOCK=1
@@ -528,6 +546,7 @@ add_test(NAME test_bluetooth_classic_hid_lifecycle
 add_executable(test_bluetooth_classic_hid_probe_logic
     test_bluetooth_classic_hid_probe_logic.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/bluetooth/jh_bluetooth_classic_hid_probe_logic.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/bluetooth/jh_bluetooth_classic_bond_codec.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/bluetooth/jh_gamepad_bond_codec.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/security/hal_crc.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
@@ -548,6 +567,7 @@ add_test(NAME test_bluetooth_classic_hid_probe_logic
 
 add_executable(test_gamepad_bond_codec
     test_gamepad_bond_codec.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/bluetooth/jh_bluetooth_classic_bond_codec.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/bluetooth/jh_gamepad_bond_codec.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/security/hal_crc.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
@@ -837,6 +857,11 @@ add_test(NAME test_bluetooth_stage1
 add_test(NAME test_bluetooth_classic_hid
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_bluetooth_classic_hid.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_bluetooth_classic_hci_trace
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_bluetooth_classic_hci_trace.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
 add_test(NAME test_component_manager
@@ -1613,6 +1638,8 @@ add_hal_test(test_hal_wifi)
 add_hal_test(test_hal_ble)
 add_hal_test(test_hal_ble_stream)
 add_hal_test(test_hal_ble_commands)
+add_hal_test(test_hal_bluetooth_classic)
+add_hal_test(test_hal_bluetooth_hid_host)
 add_hal_test(test_hal_gamepad)
 add_hal_test(test_hal_littlefs)
 add_executable(test_jh_littlefs_lfs_provider

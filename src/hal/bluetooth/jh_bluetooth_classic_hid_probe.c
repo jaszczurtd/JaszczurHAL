@@ -58,7 +58,6 @@ static bool s_reconnect_pending;
 static bool s_connect_pending;
 static const hal_gamepad_bond_provider_t *s_bond_provider;
 static uint32_t s_bond_sequence;
-static bool s_retain_gamepad_queue;
 
 static void start_inquiry_cycle(void);
 static void start_identity_sdp_query(void);
@@ -79,9 +78,6 @@ static void sync_logic_snapshot(void) {
 }
 
 static void drain_gamepad_queue(void) {
-  if (s_retain_gamepad_queue) {
-    return;
-  }
   jh_bluetooth_gamepad_snapshot_t snapshot;
   hal_status_t status = HAL_OK;
   do {
@@ -1011,61 +1007,6 @@ hal_status_t jh_bluetooth_classic_hid_probe_disconnect(void) {
   }
   hid_host_disconnect(s_hid_cid);
   return HAL_OK;
-}
-
-hal_status_t jh_bluetooth_classic_hid_probe_forget(void) {
-  if (!s_snapshot.started) {
-    return HAL_EUNINIT;
-  }
-  if (s_logic.connected && s_hid_cid != 0u) {
-    hid_host_disconnect(s_hid_cid);
-  }
-  bd_addr_t forgotten_address;
-  memcpy(forgotten_address, s_known_address, sizeof(forgotten_address));
-  memset(s_known_address, 0, sizeof(s_known_address));
-  s_snapshot.known_device = false;
-  s_identity_validated = false;
-  s_bond_sequence = 0u;
-  jh_bluetooth_classic_hid_probe_logic_reset_bond_progress(&s_logic);
-  btstack_link_key_db_memory_instance()->delete_link_key(forgotten_address);
-
-  if (s_bond_provider == NULL || s_bond_provider->erase == NULL) {
-    return HAL_OK;
-  }
-  return s_bond_provider->erase(s_bond_provider->context);
-}
-
-hal_status_t jh_bluetooth_classic_hid_probe_stop(void) {
-  if (!s_snapshot.started) {
-    return HAL_EUNINIT;
-  }
-  const hal_status_t status = jh_btstack_host_release(&s_host_reference);
-  s_snapshot.started = false;
-  s_connect_pending = false;
-  s_snapshot.last_status = status;
-  s_snapshot.phase = JH_CLASSIC_HID_PHASE_IDLE;
-  return status;
-}
-
-void jh_bluetooth_classic_hid_probe_retain_gamepad_queue(bool retain) {
-  s_retain_gamepad_queue = retain;
-  if (!retain) {
-    drain_gamepad_queue();
-  }
-}
-
-hal_status_t jh_bluetooth_classic_hid_probe_gamepad_snapshot(
-    jh_bluetooth_gamepad_snapshot_t *out_snapshot) {
-  return jh_bluetooth_gamepad_parser_snapshot(&s_gamepad_parser, out_snapshot);
-}
-
-hal_status_t jh_bluetooth_classic_hid_probe_gamepad_next(
-    jh_bluetooth_gamepad_snapshot_t *out_snapshot) {
-  return jh_bluetooth_gamepad_parser_next(&s_gamepad_parser, out_snapshot);
-}
-
-size_t jh_bluetooth_classic_hid_probe_gamepad_pending(void) {
-  return s_gamepad_parser.queue_count;
 }
 
 void jh_bluetooth_classic_hid_probe_snapshot(

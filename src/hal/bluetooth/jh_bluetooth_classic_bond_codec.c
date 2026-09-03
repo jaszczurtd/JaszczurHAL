@@ -1,0 +1,97 @@
+#include "jh_bluetooth_classic_bond_codec.h"
+
+#include "hal/security/hal_crc.h"
+
+#include <string.h>
+
+enum {
+  JH_CLASSIC_BOND_MAGIC_OFFSET = 0,
+  JH_CLASSIC_BOND_VERSION_OFFSET = 4,
+  JH_CLASSIC_BOND_RESERVED_OFFSET = 5,
+  JH_CLASSIC_BOND_PROFILE_ID_OFFSET = 6,
+  JH_CLASSIC_BOND_ADDR_OFFSET = 8,
+  JH_CLASSIC_BOND_LINK_KEY_OFFSET = 14,
+  JH_CLASSIC_BOND_LINK_KEY_TYPE_OFFSET = 30,
+  JH_CLASSIC_BOND_RESERVED2_OFFSET = 31,
+  JH_CLASSIC_BOND_SEQUENCE_OFFSET = 32,
+  JH_CLASSIC_BOND_CRC_OFFSET = 36,
+  JH_CLASSIC_BOND_CRC_COVERED_BYTES = 36,
+};
+
+/* "JHCB" (JaszczurHAL Classic Bond), little-endian. */
+static const uint32_t JH_CLASSIC_BOND_MAGIC = UINT32_C(0x4243484A);
+/* Legacy gamepad records used "JHGB" with the same byte layout. */
+static const uint32_t JH_GAMEPAD_BOND_LEGACY_MAGIC = UINT32_C(0x4247484A);
+static const uint8_t JH_CLASSIC_BOND_VERSION = 1u;
+
+static void write_u16(uint8_t *raw, uint16_t value) {
+  raw[0] = (uint8_t)(value & 0xFFu);
+  raw[1] = (uint8_t)((value >> 8u) & 0xFFu);
+}
+
+static void write_u32(uint8_t *raw, uint32_t value) {
+  raw[0] = (uint8_t)(value & 0xFFu);
+  raw[1] = (uint8_t)((value >> 8u) & 0xFFu);
+  raw[2] = (uint8_t)((value >> 16u) & 0xFFu);
+  raw[3] = (uint8_t)((value >> 24u) & 0xFFu);
+}
+
+static uint16_t read_u16(const uint8_t *raw) {
+  return (uint16_t)raw[0] | (uint16_t)((uint16_t)raw[1] << 8u);
+}
+
+static uint32_t read_u32(const uint8_t *raw) {
+  return (uint32_t)raw[0] | ((uint32_t)raw[1] << 8u) |
+         ((uint32_t)raw[2] << 16u) | ((uint32_t)raw[3] << 24u);
+}
+
+hal_status_t jh_bluetooth_classic_bond_encode(
+    const jh_bluetooth_classic_bond_identity_t *identity,
+    hal_bluetooth_classic_bond_blob_t *out_blob) {
+  if (identity == NULL || out_blob == NULL || identity->profile_id == 0u) {
+    return HAL_EINVAL;
+  }
+  uint8_t *raw = out_blob->bytes;
+  memset(raw, 0, sizeof(out_blob->bytes));
+  write_u32(raw + JH_CLASSIC_BOND_MAGIC_OFFSET, JH_CLASSIC_BOND_MAGIC);
+  raw[JH_CLASSIC_BOND_VERSION_OFFSET] = JH_CLASSIC_BOND_VERSION;
+  write_u16(raw + JH_CLASSIC_BOND_PROFILE_ID_OFFSET, identity->profile_id);
+  memcpy(raw + JH_CLASSIC_BOND_ADDR_OFFSET, identity->address.bytes,
+         HAL_BLUETOOTH_CLASSIC_ADDRESS_LEN);
+  memcpy(raw + JH_CLASSIC_BOND_LINK_KEY_OFFSET, identity->link_key,
+         JH_BLUETOOTH_CLASSIC_LINK_KEY_LEN);
+  raw[JH_CLASSIC_BOND_LINK_KEY_TYPE_OFFSET] = identity->link_key_type;
+  write_u32(raw + JH_CLASSIC_BOND_SEQUENCE_OFFSET, identity->sequence);
+  write_u16(raw + JH_CLASSIC_BOND_CRC_OFFSET,
+            hal_crc16_ccitt(raw, JH_CLASSIC_BOND_CRC_COVERED_BYTES,
+                            HAL_CRC16_CCITT_INIT));
+  return HAL_OK;
+}
+
+hal_status_t jh_bluetooth_classic_bond_decode(
+    const hal_bluetooth_classic_bond_blob_t *blob,
+    jh_bluetooth_classic_bond_identity_t *out_identity) {
+  if (blob == NULL || out_identity == NULL) {
+    return HAL_EINVAL;
+  }
+  const uint8_t *raw = blob->bytes;
+  const uint32_t magic = read_u32(raw + JH_CLASSIC_BOND_MAGIC_OFFSET);
+  const uint16_t stored_crc = read_u16(raw + JH_CLASSIC_BOND_CRC_OFFSET);
+  if ((magic != JH_CLASSIC_BOND_MAGIC &&
+       magic != JH_GAMEPAD_BOND_LEGACY_MAGIC) ||
+      raw[JH_CLASSIC_BOND_VERSION_OFFSET] != JH_CLASSIC_BOND_VERSION ||
+      read_u16(raw + JH_CLASSIC_BOND_PROFILE_ID_OFFSET) == 0u ||
+      stored_crc != hal_crc16_ccitt(raw, JH_CLASSIC_BOND_CRC_COVERED_BYTES,
+                                    HAL_CRC16_CCITT_INIT)) {
+    return HAL_EPROTO;
+  }
+  memset(out_identity, 0, sizeof(*out_identity));
+  out_identity->profile_id = read_u16(raw + JH_CLASSIC_BOND_PROFILE_ID_OFFSET);
+  memcpy(out_identity->address.bytes, raw + JH_CLASSIC_BOND_ADDR_OFFSET,
+         HAL_BLUETOOTH_CLASSIC_ADDRESS_LEN);
+  memcpy(out_identity->link_key, raw + JH_CLASSIC_BOND_LINK_KEY_OFFSET,
+         JH_BLUETOOTH_CLASSIC_LINK_KEY_LEN);
+  out_identity->link_key_type = raw[JH_CLASSIC_BOND_LINK_KEY_TYPE_OFFSET];
+  out_identity->sequence = read_u32(raw + JH_CLASSIC_BOND_SEQUENCE_OFFSET);
+  return HAL_OK;
+}

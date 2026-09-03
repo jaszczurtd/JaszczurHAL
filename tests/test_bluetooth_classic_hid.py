@@ -147,7 +147,9 @@ btstack_cmake = (ROOT / "cmake" / "jh_btstack.cmake").read_text(encoding="utf-8"
 for source_set in (
     "_jh_btstack_base_sources",
     "_jh_btstack_ble_sources",
-    "_jh_btstack_classic_hid_sources",
+    "_jh_btstack_classic_sources",
+    "_jh_btstack_hid_host_sources",
+    "_jh_btstack_hid_device_sources",
 ):
     require(source_set in btstack_cmake, f"BTstack source set is missing {source_set}")
 for source in (
@@ -162,13 +164,14 @@ for source in (
 ):
     require(source in btstack_cmake, f"Classic HID source set is missing {source}")
 require(
-    "src/btstack_hid_parser.c" not in btstack_cmake,
-    "the platform-neutral gamepad parser still depends on BTstack HID parsing",
+    "src/btstack_hid_parser.c" in btstack_cmake
+    and "src/classic/hid_device.c" in btstack_cmake
+    and "src/classic/sdp_server.c" in btstack_cmake
+    and 'MODE STREQUAL "CLASSIC_HID_DEVICE_FIXTURE"' in btstack_cmake,
+    "the private non-gamepad HID Device fixture sources are incomplete",
 )
 for forbidden in (
     "src/classic/rfcomm.c",
-    "src/classic/sdp_server.c",
-    "src/classic/hid_device.c",
     "src/classic/a2dp",
     "src/classic/avrcp",
     "src/classic/hfp",

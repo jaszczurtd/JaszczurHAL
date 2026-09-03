@@ -12,9 +12,12 @@ extern "C" {
 
 typedef enum {
   JH_BLUETOOTH_HOST_PROFILE_BLE = 0,
-  JH_BLUETOOTH_HOST_PROFILE_CLASSIC_HID,
+  JH_BLUETOOTH_HOST_PROFILE_CLASSIC,
   JH_BLUETOOTH_HOST_PROFILE_COUNT,
 } jh_bluetooth_host_profile_t;
+
+/* Private C5/C6 fixture compatibility. */
+#define JH_BLUETOOTH_HOST_PROFILE_CLASSIC_HID JH_BLUETOOTH_HOST_PROFILE_CLASSIC
 
 typedef struct {
   void *context;

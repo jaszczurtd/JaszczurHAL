@@ -28,6 +28,12 @@
 #ifdef HAL_ENABLE_BLE_COMMANDS
 #include "hal/bluetooth/hal_ble_commands.h"
 #endif
+#ifdef HAL_ENABLE_BLUETOOTH_CLASSIC
+#include "hal/bluetooth/hal_bluetooth_classic.h"
+#endif
+#ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
+#include "hal/bluetooth/hal_bluetooth_hid_host.h"
+#endif
 #ifdef HAL_ENABLE_BLUETOOTH_GAMEPAD
 #include "hal/bluetooth/hal_gamepad.h"
 #endif

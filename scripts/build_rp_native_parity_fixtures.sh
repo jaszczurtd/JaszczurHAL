@@ -14,8 +14,9 @@ Usage:
   scripts/build_rp_native_parity_fixtures.sh [--jobs N]
 
 Builds rp_usb_multicore and rp_sdlogger for RP2040, RP2350 ARM and RP2350
-RISC-V in bare-metal and FreeRTOS variants. Artifacts stay below
-.build/hardware/.
+RISC-V in bare-metal and FreeRTOS variants. It also builds the private
+Bluetooth Classic HID Device and HCI trace fixtures for RP2040 Pico W and
+RP2350 ARM Pico 2 W. Artifacts stay below .build/hardware/.
 USAGE
 }
 
@@ -63,5 +64,24 @@ for fixture in "${fixtures[@]}"; do
             --target "${target}" --board "${board}"
         "${JH_VSCODE}" build --project "${project}" \
             --target "${target}" --board "${board}" --variant freertos
+    done
+done
+
+bluetooth_selections=(
+    "rp2040 picow"
+    "rp2350-arm pico2w"
+)
+bluetooth_fixtures=(
+    "bluetooth_classic_hid_device"
+    "bluetooth_classic_hci_trace"
+)
+
+for fixture in "${bluetooth_fixtures[@]}"; do
+    project="${REPO_ROOT}/tests/hardware/${fixture}"
+    "${JH_VSCODE}" clean --project "${project}"
+    for selection in "${bluetooth_selections[@]}"; do
+        read -r target board <<<"${selection}"
+        "${JH_VSCODE}" build --project "${project}" \
+            --target "${target}" --board "${board}"
     done
 done

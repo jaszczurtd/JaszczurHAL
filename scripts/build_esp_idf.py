@@ -78,11 +78,11 @@ ESP_IDF_TARGET_SOURCES = {
         "src/hal/impl/esp32/jh_esp32_nvs_runtime.cpp",
         "src/hal/impl/esp32/jh_ble_nimble_backend.c",
     ),
-    "HAL_ENABLE_BLUETOOTH_GAMEPAD": (
-        "src/hal/bluetooth/jh_bluetooth_gamepad_parser.c",
+    "HAL_ENABLE_BLUETOOTH_CLASSIC": (
         "src/hal/impl/esp32/jh_esp32_nvs_runtime.cpp",
-        "src/hal/impl/esp32/jh_gamepad_bluedroid_backend.c",
+        "src/hal/impl/esp32/jh_bluetooth_classic_bluedroid_backend.c",
     ),
+    "HAL_ENABLE_BLUETOOTH_HID_HOST": (),
     "HAL_ENABLE_I2C": (
         "src/hal/impl/esp32/hal_i2c.cpp",
     ),
@@ -144,7 +144,8 @@ ESP_IDF_BASE_PRIVATE_COMPONENT_DEPENDENCIES = (
 )
 ESP_IDF_FEATURE_COMPONENT_DEPENDENCIES = {
     "HAL_ENABLE_BLE": ("bt", "nvs_flash"),
-    "HAL_ENABLE_BLUETOOTH_GAMEPAD": ("bt", "esp_hid", "nvs_flash"),
+    "HAL_ENABLE_BLUETOOTH_CLASSIC": ("bt", "nvs_flash"),
+    "HAL_ENABLE_BLUETOOTH_HID_HOST": ("esp_hid",),
     "HAL_ENABLE_I2C": ("esp_driver_i2c",),
     "HAL_ENABLE_I2C_SLAVE": ("esp_driver_i2c",),
     "HAL_ENABLE_NETWORK_CORE": (
@@ -1242,15 +1243,20 @@ def _render_sdkconfig_defaults(model: Mapping[str, Any]) -> str:
                 "CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1",
             )
         )
-    if "HAL_ENABLE_BLUETOOTH_GAMEPAD" in model["resolvedFeatures"]:
+    if "HAL_ENABLE_BLUETOOTH_CLASSIC" in model["resolvedFeatures"]:
         lines.extend(
             (
                 "CONFIG_BT_ENABLED=y",
                 "CONFIG_BT_BLUEDROID_ENABLED=y",
                 "CONFIG_BT_CLASSIC_ENABLED=y",
+                "CONFIG_BTDM_CTRL_MODE_BR_EDR_ONLY=y",
+            )
+        )
+    if "HAL_ENABLE_BLUETOOTH_HID_HOST" in model["resolvedFeatures"]:
+        lines.extend(
+            (
                 "CONFIG_BT_HID_ENABLED=y",
                 "CONFIG_BT_HID_HOST_ENABLED=y",
-                "CONFIG_BTDM_CTRL_MODE_BR_EDR_ONLY=y",
             )
         )
     if "HAL_ENABLE_OTA" in model["resolvedFeatures"]:

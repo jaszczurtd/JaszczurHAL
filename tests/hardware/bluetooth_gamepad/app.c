@@ -215,7 +215,7 @@ static void service_commands(void) {
 
 void app_start(void) {
   debugInit();
-  s_start_status = jh_bluetooth_classic_hid_probe_start();
+  s_start_status = jh_bluetooth_classic_hid_probe_start(NULL);
   report_snapshot();
 }
 

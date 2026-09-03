@@ -40,6 +40,7 @@ function(jh_all_features_for_target OUT_VAR TARGET_NAME)
             HAL_ENABLE_BLE_COMMANDS
             HAL_ENABLE_BLE_STREAM
             HAL_ENABLE_BLUETOOTH_CLASSIC
+            HAL_ENABLE_BLUETOOTH_HID_HOST
             HAL_ENABLE_BLUETOOTH_GAMEPAD)
     endif()
     if(TARGET_NAME STREQUAL "rp2350-riscv")

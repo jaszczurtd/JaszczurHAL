@@ -21,17 +21,32 @@
       "implies": ["HAL_ENABLE_BLE", "HAL_ENABLE_CRYPTO"]
     },
     "HAL_ENABLE_BLUETOOTH_CLASSIC": {
-      "kind": "derived",
-      "note": "Classic host foundation selected by public Classic profiles."
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/bluetooth/hal_bluetooth_classic.cpp",
+          "src/hal/bluetooth/jh_bluetooth_classic_bond_codec.c",
+          "src/hal/bluetooth/jh_bluetooth_classic_bond_kv_provider.c"
+        ]
+      },
+      "implies": ["HAL_ENABLE_CRC"]
+    },
+    "HAL_ENABLE_BLUETOOTH_HID_HOST": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/bluetooth/hal_bluetooth_hid_host.cpp"
+        ]
+      },
+      "implies": ["HAL_ENABLE_BLUETOOTH_CLASSIC"]
     },
     "HAL_ENABLE_BLUETOOTH_GAMEPAD": {
       "buildEffects": {
         "portableSources": [
           "src/hal/bluetooth/hal_gamepad.cpp",
+          "src/hal/bluetooth/jh_bluetooth_gamepad_parser.c",
           "src/hal/bluetooth/jh_gamepad_bond_kv_provider.c"
         ]
       },
-      "implies": ["HAL_ENABLE_BLUETOOTH_CLASSIC", "HAL_ENABLE_CRC"]
+      "implies": ["HAL_ENABLE_BLUETOOTH_HID_HOST"]
     },
     "HAL_ENABLE_BSD_SOCKETS": {
       "implies": [
