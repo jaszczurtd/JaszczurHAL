@@ -2,6 +2,7 @@
 
 #ifdef HAL_ENABLE_BLUETOOTH_CLASSIC
 
+#include "hal/bluetooth/jh_bluetooth_classic_address.h"
 #include "hal/bluetooth/jh_bluetooth_classic_backend.h"
 #include "hal/bluetooth/jh_bluetooth_classic_bond_codec.h"
 #include "hal/bluetooth/jh_bluetooth_classic_runtime.h"
@@ -63,16 +64,6 @@ classic_runtime_t s_classic{};
 
 hal_mutex_t runtime_mutex() {
   return jh_hal_mutex_create_once(&s_classic.mutex);
-}
-
-bool address_equal(const hal_bluetooth_classic_address_t &left,
-                   const hal_bluetooth_classic_address_t &right) {
-  return memcmp(left.bytes, right.bytes, sizeof(left.bytes)) == 0;
-}
-
-bool address_zero(const hal_bluetooth_classic_address_t &address) {
-  const hal_bluetooth_classic_address_t zero{};
-  return address_equal(address, zero);
 }
 
 hal_status_t ensure_handle_pool_locked() {
@@ -141,7 +132,8 @@ size_t peer_count_locked() {
 
 peer_slot_t *find_peer_locked(const hal_bluetooth_classic_address_t &address) {
   for (peer_slot_t &slot : s_classic.peers) {
-    if (slot.used && address_equal(slot.identity.address, address)) {
+    if (slot.used &&
+        jh_bluetooth_classic_address_equal(&slot.identity.address, &address)) {
       return &slot;
     }
   }
@@ -164,7 +156,8 @@ select_peer_slot_locked(const hal_bluetooth_classic_address_t &address,
   peer_slot_t *oldest = nullptr;
   for (size_t index = 0u; index < HAL_BLUETOOTH_CLASSIC_MAX_PEERS; ++index) {
     peer_slot_t &slot = s_classic.peers[index];
-    if (slot.used && address_equal(slot.identity.address, address)) {
+    if (slot.used &&
+        jh_bluetooth_classic_address_equal(&slot.identity.address, &address)) {
       *out_index = slot.storage_index;
       return &slot;
     }
@@ -406,8 +399,8 @@ hal_status_t flush_pending_peer(hal_bluetooth_classic_t classic) {
   }
   s_classic.operation_active = true;
   if (!s_classic.pending_key_valid || !s_classic.pending_save_valid ||
-      !address_equal(s_classic.pending_key.address,
-                     s_classic.pending_save_address)) {
+      !jh_bluetooth_classic_address_equal(&s_classic.pending_key.address,
+                                          &s_classic.pending_save_address)) {
     s_classic.operation_active = false;
     hal_mutex_unlock(s_classic.mutex);
     return HAL_OK;
@@ -745,7 +738,7 @@ hal_status_t hal_bluetooth_classic_scan_result_next(
 hal_status_t hal_bluetooth_classic_sdp_query(
     hal_bluetooth_classic_t classic,
     const hal_bluetooth_classic_address_t *address) {
-  if (address == nullptr || address_zero(*address)) {
+  if (address == nullptr || jh_bluetooth_classic_address_is_zero(address)) {
     return HAL_EINVAL;
   }
   return run_backend_operation(
@@ -757,7 +750,7 @@ hal_status_t hal_bluetooth_classic_sdp_query(
 hal_status_t
 hal_bluetooth_classic_pair(hal_bluetooth_classic_t classic,
                            const hal_bluetooth_classic_address_t *address) {
-  if (address == nullptr || address_zero(*address)) {
+  if (address == nullptr || jh_bluetooth_classic_address_is_zero(address)) {
     return HAL_EINVAL;
   }
   return run_backend_operation(
@@ -819,7 +812,8 @@ hal_status_t
 hal_bluetooth_classic_peer_save(hal_bluetooth_classic_t classic,
                                 const hal_bluetooth_classic_address_t *address,
                                 uint16_t profile_id) {
-  if (address == nullptr || address_zero(*address) || profile_id == 0u) {
+  if (address == nullptr || jh_bluetooth_classic_address_is_zero(address) ||
+      profile_id == 0u) {
     return HAL_EINVAL;
   }
   hal_mutex_t mutex = runtime_mutex();
@@ -836,7 +830,8 @@ hal_bluetooth_classic_peer_save(hal_bluetooth_classic_t classic,
     return HAL_EBUSY;
   }
   if (!s_classic.approved_pairing_valid ||
-      !address_equal(s_classic.approved_pairing_address, *address)) {
+      !jh_bluetooth_classic_address_equal(&s_classic.approved_pairing_address,
+                                          address)) {
     hal_mutex_unlock(mutex);
     return HAL_EAUTH;
   }
@@ -897,7 +892,7 @@ hal_bluetooth_classic_peer_get(hal_bluetooth_classic_t classic, size_t index,
 hal_status_t hal_bluetooth_classic_peer_forget(
     hal_bluetooth_classic_t classic,
     const hal_bluetooth_classic_address_t *address) {
-  if (address == nullptr || address_zero(*address)) {
+  if (address == nullptr || jh_bluetooth_classic_address_is_zero(address)) {
     return HAL_EINVAL;
   }
   hal_mutex_t mutex = runtime_mutex();
@@ -1031,7 +1026,7 @@ jh_bluetooth_classic_hid_get_info(hal_bluetooth_classic_t classic,
 hal_status_t jh_bluetooth_classic_hid_connect(
     hal_bluetooth_classic_t classic,
     const hal_bluetooth_classic_address_t *address) {
-  if (address == nullptr || address_zero(*address)) {
+  if (address == nullptr || jh_bluetooth_classic_address_is_zero(address)) {
     return HAL_EINVAL;
   }
   hal_mutex_t mutex = runtime_mutex();

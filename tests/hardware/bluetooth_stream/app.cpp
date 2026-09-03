@@ -560,7 +560,7 @@ void report_summary(void) {
 extern "C" void app_start(void) {
   hal_fault_subsystem_init();
   s_boot_reason = hal_get_reset_reason();
-  debugInit();
+  hal_debug_init_default();
 }
 
 extern "C" void app_task0(void) {

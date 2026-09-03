@@ -1,6 +1,7 @@
 #ifndef JH_DISPLAY_SPI_TRANSPORT_H
 #define JH_DISPLAY_SPI_TRANSPORT_H
 
+#include "hal/core/jh_endian.h"
 #include "hal/gpio/hal_gpio.h"
 #include "hal/spi/hal_spi.h"
 #include "hal/spi/hal_spi_device.h"
@@ -69,8 +70,7 @@ typedef bool (*jh_display_write_command_fn)(void *ctx, uint8_t command,
                                             uint8_t data_len);
 
 static inline void jh_display_put_u16_be(uint8_t *out, uint16_t value) {
-  out[0] = (uint8_t)(value >> 8u);
-  out[1] = (uint8_t)value;
+  jh_store_be16(out, value);
 }
 
 static inline bool
@@ -121,7 +121,7 @@ static inline bool jh_display_spi_write_pixels(hal_spi_device_t *device,
   hal_gpio_write(jh_display_pin_u8(dc_pin), true);
   while (count > 0u && hal_status_is_ok(status)) {
     const size_t pixel_count =
-        count < sizeof(chunk) / 2u ? count : sizeof(chunk) / 2u;
+        count < COUNTOF(chunk) / 2u ? count : COUNTOF(chunk) / 2u;
     for (size_t i = 0u; i < pixel_count; ++i) {
       jh_display_put_u16_be(&chunk[i * 2u], pixels[i]);
     }
@@ -180,7 +180,7 @@ static inline bool jh_display_spi_fill_color(hal_spi_device_t *device,
   }
   while (pixel_count > 0u) {
     const size_t count =
-        pixel_count < sizeof(chunk) / 2u ? pixel_count : sizeof(chunk) / 2u;
+        pixel_count < COUNTOF(chunk) / 2u ? pixel_count : COUNTOF(chunk) / 2u;
     if (!jh_display_spi_write_dma_or_fallback(device->bus, chunk, count * 2u)) {
       return false;
     }

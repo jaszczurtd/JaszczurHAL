@@ -1,6 +1,7 @@
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_STM32G474
 
+#include "hal/core/jh_resolution.h"
 #include "hal/gpio/hal_pwm.h"
 #include "hal_pwm_stm32g474.h"
 
@@ -8,25 +9,17 @@ static uint8_t s_resolution = 8u;
 
 static constexpr uint32_t kDefaultPwmFrequencyHz = 1000u;
 
-static uint8_t clamp_resolution(uint8_t bits) {
-  if (bits < 1u) {
-    HAL_ASSERT(false, "hal_pwm_set_resolution: resolution is below 1 bit");
-    return 1u;
-  }
-  if (bits > 16u) {
-    HAL_ASSERT(false, "hal_pwm_set_resolution: resolution is above 16 bits");
-    return 16u;
-  }
-  return bits;
-}
-
 static uint32_t period_ticks_for_resolution(uint8_t bits) {
-  bits = clamp_resolution(bits);
+  bits = jh_resolution_clamp_1_16(
+      bits, "hal_pwm_set_resolution: resolution is below 1 bit",
+      "hal_pwm_set_resolution: resolution is above 16 bits");
   return 1u << bits;
 }
 
 void hal_pwm_set_resolution(uint8_t bits) {
-  s_resolution = clamp_resolution(bits);
+  s_resolution = jh_resolution_clamp_1_16(
+      bits, "hal_pwm_set_resolution: resolution is below 1 bit",
+      "hal_pwm_set_resolution: resolution is above 16 bits");
 }
 
 bool hal_pwm_is_pin_supported(uint8_t pin) {

@@ -4,10 +4,10 @@
 #include <hal/gpio/hal_gpio.h>
 #include <hal/modem/hal_modem_at.h>
 #include <hal/modem/hal_simcom_a76xx.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/serial/hal_uart.h>
 #include <hal/system/hal_system.h>
 #include <string.h>
-#include <tools_c.h>
 
 static const uint8_t PIN_MODEM_TX = 4;
 static const uint8_t PIN_MODEM_RX = 5;
@@ -158,7 +158,7 @@ static bool mqttPublish(const char *topic, const char *payload) {
 }
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   modemPowerInit();
 
   if (!modemInit()) {
@@ -194,7 +194,7 @@ void app_task0(void) {
 #else /* HAL_ENABLE_A7670 not defined */
 
 #include <hal/core/hal_app.h>
-#include <tools_c.h>
+#include <hal/serial/hal_serial.h>
 
 void app_start(void) { derr("Enable HAL_ENABLE_A7670 to build this example"); }
 

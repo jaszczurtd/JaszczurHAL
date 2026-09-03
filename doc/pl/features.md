@@ -50,7 +50,7 @@ platformą i działają wbrew celowi przenośności JaszczurHAL.
 | Zarządzanie niskim poborem mocy | Dostępność poszczególnych trybów zależy od możliwości płytki. API obejmuje uśpienie CPU, tryby STOP0, STOP1 i Standby STM32G474, rozpoznawanie wybudzenia przez RTC, przywracanie zegara, funkcje zwrotne oraz kompensację czasu monotonicznego przy przejściach synchronizowanych z RTC. | [hal_power.h](../../src/hal/power/hal_power.h), [API zasilania](../api/pl/06_timers_system.md#halpower-przejścia-niskiego-poboru-mocy-opcjonalny-halenablepowermanagement) |
 | Synchronizacja | Muteksy i sekcje krytyczne z implementacjami specyficznymi dla targetu. | [hal_sync.h](../../src/hal/system/hal_sync.h) |
 | Timery programowe | Lekkie kooperacyjne timery programowe. | [hal_soft_timer.h](../../src/hal/timers/hal_soft_timer.h) |
-| Prymitywy narzędziowe | Pomocnicze funkcje bitowe i matematyczne, sterowanie PID, obsługa watchdoga oraz ogólne API narzędziowe. | [tools.h](../../src/tools.h), [utils](../../src/utils/) |
+| Prymitywy narzędziowe | Helpery tablic, endian, matematyki, tekstu, ADC/NTC, pikseli, obrazów, sieci i czasu oraz obsługa PID i watchdoga. | [Rdzeń HAL](../../src/hal/core/), [Moduły HAL](../../src/hal/), [Warstwa zgodności](../../src/utils/) |
 
 ## Komunikacja i łączność
 

@@ -1,10 +1,11 @@
 #include <hal/audio/hal_dacless.h>
 #include <hal/audio/hal_pga2311.h>
 #include <hal/core/hal_app.h>
+#include <hal/core/hal_array.h>
 #include <hal/core/hal_target.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/spi/hal_spi.h>
 #include <hal/system/hal_system.h>
-#include <tools.h>
 
 #include <new>
 #include <stdint.h>
@@ -97,7 +98,7 @@ static void start_dacless(void) {
 }
 
 extern "C" void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   deb("=== JaszczurHAL audio output: PGA2311 + DACless PWM ===");
   start_pga2311();
   start_dacless();
@@ -115,8 +116,7 @@ extern "C" void app_task0(void) {
     (void)hal_pga2311_set_gain_half_db_ex(s_pga, gain, gain);
     deb("PGA2311 gain=%d.%u dB", (int)(gain / 2),
         (unsigned)((gain < 0 ? -gain : gain) & 1) * 5u);
-    s_gain_index =
-        (s_gain_index + 1u) % (sizeof(kGainHalfDb) / sizeof(kGainHalfDb[0]));
+    s_gain_index = (s_gain_index + 1u) % COUNTOF(kGainHalfDb);
   }
 
   if ((uint32_t)(now - s_last_report_ms) >= 500u) {

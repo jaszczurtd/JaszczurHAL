@@ -2,10 +2,10 @@
 #include <hal/core/hal_target.h>
 #include <hal/i2c/hal_i2c.h>
 #include <hal/sensors/hal_bh1750.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
 #include <hal/temperature/hal_dht.h>
 #include <hal/temperature/hal_ds18b20.h>
-#include <tools_c.h>
 
 #if HAL_TARGET_IS_RP
 #define SENSOR_I2C_SDA_PIN 4u
@@ -139,7 +139,7 @@ static void service_ds18b20(uint32_t now) {
 }
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   deb("");
   deb("=== JaszczurHAL sensor hub ===");
 

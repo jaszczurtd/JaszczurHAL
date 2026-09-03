@@ -1,6 +1,7 @@
 #include "jh_ota_image.h"
 
 #include "hal/core/hal_target.h"
+#include "hal/core/jh_endian.h"
 #include "hal/security/hal_crc.h"
 #include "hal/security/hal_crypto.h"
 
@@ -14,27 +15,6 @@ constexpr uint8_t kImageMagic[8] = {'J', 'H', 'O', 'T', 'A', '1', '\r', '\n'};
 constexpr uint8_t kStateMagic[8] = {'J', 'H', 'O', 'T', 'A', 'S', 'T', '1'};
 constexpr size_t kImageCrcOffset = JH_OTA_IMAGE_HEADER_SIZE - sizeof(uint32_t);
 constexpr size_t kStateCrcOffset = JH_OTA_STATE_RECORD_SIZE - sizeof(uint32_t);
-
-void put_u16(uint8_t *output, uint16_t value) {
-  output[0] = (uint8_t)value;
-  output[1] = (uint8_t)(value >> 8);
-}
-
-void put_u32(uint8_t *output, uint32_t value) {
-  output[0] = (uint8_t)value;
-  output[1] = (uint8_t)(value >> 8);
-  output[2] = (uint8_t)(value >> 16);
-  output[3] = (uint8_t)(value >> 24);
-}
-
-uint16_t get_u16(const uint8_t *input) {
-  return (uint16_t)((uint16_t)input[0] | ((uint16_t)input[1] << 8));
-}
-
-uint32_t get_u32(const uint8_t *input) {
-  return (uint32_t)input[0] | ((uint32_t)input[1] << 8) |
-         ((uint32_t)input[2] << 16) | ((uint32_t)input[3] << 24);
-}
 
 bool text_valid(const char *text) {
   return text != nullptr &&
@@ -84,17 +64,17 @@ jh_ota_image_manifest_encode(const jh_ota_image_manifest_t *manifest,
   }
   memset(out, 0, JH_OTA_IMAGE_HEADER_SIZE);
   memcpy(out, kImageMagic, sizeof(kImageMagic));
-  put_u16(&out[8], JH_OTA_IMAGE_VERSION);
-  put_u16(&out[10], JH_OTA_IMAGE_HEADER_SIZE);
-  put_u16(&out[12], (uint16_t)manifest->target);
-  put_u16(&out[14], manifest->flags);
-  put_u32(&out[16], manifest->program_offset);
-  put_u32(&out[20], manifest->payload_size);
-  put_u32(&out[24], manifest->generation);
+  jh_store_le16(&out[8], JH_OTA_IMAGE_VERSION);
+  jh_store_le16(&out[10], JH_OTA_IMAGE_HEADER_SIZE);
+  jh_store_le16(&out[12], (uint16_t)manifest->target);
+  jh_store_le16(&out[14], manifest->flags);
+  jh_store_le32(&out[16], manifest->program_offset);
+  jh_store_le32(&out[20], manifest->payload_size);
+  jh_store_le32(&out[24], manifest->generation);
   memcpy(&out[32], manifest->sha256, sizeof(manifest->sha256));
   memcpy(&out[64], manifest->version, sizeof(manifest->version));
   memcpy(&out[96], manifest->signature, sizeof(manifest->signature));
-  put_u32(&out[kImageCrcOffset], hal_crc32(out, kImageCrcOffset));
+  jh_store_le32(&out[kImageCrcOffset], hal_crc32(out, kImageCrcOffset));
   return HAL_OK;
 }
 
@@ -105,19 +85,19 @@ jh_ota_image_manifest_decode(const uint8_t raw[JH_OTA_IMAGE_HEADER_SIZE],
     return HAL_EINVAL;
   }
   if (memcmp(raw, kImageMagic, sizeof(kImageMagic)) != 0 ||
-      get_u16(&raw[8]) != JH_OTA_IMAGE_VERSION ||
-      get_u16(&raw[10]) != JH_OTA_IMAGE_HEADER_SIZE ||
+      jh_load_le16(&raw[8]) != JH_OTA_IMAGE_VERSION ||
+      jh_load_le16(&raw[10]) != JH_OTA_IMAGE_HEADER_SIZE ||
       memchr(&raw[64], '\0', JH_OTA_VERSION_TEXT_SIZE) == nullptr ||
-      get_u32(&raw[kImageCrcOffset]) != hal_crc32(raw, kImageCrcOffset)) {
+      jh_load_le32(&raw[kImageCrcOffset]) != hal_crc32(raw, kImageCrcOffset)) {
     return HAL_EPROTO;
   }
 
   jh_ota_image_manifest_t manifest = {};
-  manifest.target = (jh_ota_target_t)get_u16(&raw[12]);
-  manifest.flags = get_u16(&raw[14]);
-  manifest.program_offset = get_u32(&raw[16]);
-  manifest.payload_size = get_u32(&raw[20]);
-  manifest.generation = get_u32(&raw[24]);
+  manifest.target = (jh_ota_target_t)jh_load_le16(&raw[12]);
+  manifest.flags = jh_load_le16(&raw[14]);
+  manifest.program_offset = jh_load_le32(&raw[16]);
+  manifest.payload_size = jh_load_le32(&raw[20]);
+  manifest.generation = jh_load_le32(&raw[24]);
   memcpy(manifest.sha256, &raw[32], sizeof(manifest.sha256));
   memcpy(manifest.version, &raw[64], sizeof(manifest.version));
   memcpy(manifest.signature, &raw[96], sizeof(manifest.signature));
@@ -182,21 +162,21 @@ hal_status_t jh_ota_boot_state_encode(const jh_ota_boot_state_t *state,
   }
   memset(out, 0, JH_OTA_STATE_RECORD_SIZE);
   memcpy(out, kStateMagic, sizeof(kStateMagic));
-  put_u16(&out[8], JH_OTA_STATE_VERSION);
-  put_u16(&out[10], JH_OTA_STATE_RECORD_SIZE);
-  put_u32(&out[12], state->sequence);
+  jh_store_le16(&out[8], JH_OTA_STATE_VERSION);
+  jh_store_le16(&out[10], JH_OTA_STATE_RECORD_SIZE);
+  jh_store_le32(&out[12], state->sequence);
   out[16] = (uint8_t)state->mode;
   out[17] = state->attempts;
   out[18] = state->max_attempts;
-  put_u32(&out[20], state->program_size);
-  put_u32(&out[24], state->staging_size);
-  put_u32(&out[28], state->program_generation);
-  put_u32(&out[32], state->staging_generation);
+  jh_store_le32(&out[20], state->program_size);
+  jh_store_le32(&out[24], state->staging_size);
+  jh_store_le32(&out[28], state->program_generation);
+  jh_store_le32(&out[32], state->staging_generation);
   memcpy(&out[36], state->program_sha256, sizeof(state->program_sha256));
   memcpy(&out[68], state->staging_sha256, sizeof(state->staging_sha256));
   memcpy(&out[100], state->program_version, sizeof(state->program_version));
   memcpy(&out[132], state->staging_version, sizeof(state->staging_version));
-  put_u32(&out[kStateCrcOffset], hal_crc32(out, kStateCrcOffset));
+  jh_store_le32(&out[kStateCrcOffset], hal_crc32(out, kStateCrcOffset));
   return HAL_OK;
 }
 
@@ -207,21 +187,21 @@ jh_ota_boot_state_decode(const uint8_t raw[JH_OTA_STATE_RECORD_SIZE],
     return HAL_EINVAL;
   }
   if (memcmp(raw, kStateMagic, sizeof(kStateMagic)) != 0 ||
-      get_u16(&raw[8]) != JH_OTA_STATE_VERSION ||
-      get_u16(&raw[10]) != JH_OTA_STATE_RECORD_SIZE ||
-      get_u32(&raw[kStateCrcOffset]) != hal_crc32(raw, kStateCrcOffset)) {
+      jh_load_le16(&raw[8]) != JH_OTA_STATE_VERSION ||
+      jh_load_le16(&raw[10]) != JH_OTA_STATE_RECORD_SIZE ||
+      jh_load_le32(&raw[kStateCrcOffset]) != hal_crc32(raw, kStateCrcOffset)) {
     return HAL_EPROTO;
   }
 
   jh_ota_boot_state_t state = {};
-  state.sequence = get_u32(&raw[12]);
+  state.sequence = jh_load_le32(&raw[12]);
   state.mode = (jh_ota_boot_mode_t)raw[16];
   state.attempts = raw[17];
   state.max_attempts = raw[18];
-  state.program_size = get_u32(&raw[20]);
-  state.staging_size = get_u32(&raw[24]);
-  state.program_generation = get_u32(&raw[28]);
-  state.staging_generation = get_u32(&raw[32]);
+  state.program_size = jh_load_le32(&raw[20]);
+  state.staging_size = jh_load_le32(&raw[24]);
+  state.program_generation = jh_load_le32(&raw[28]);
+  state.staging_generation = jh_load_le32(&raw[32]);
   memcpy(state.program_sha256, &raw[36], sizeof(state.program_sha256));
   memcpy(state.staging_sha256, &raw[68], sizeof(state.staging_sha256));
   memcpy(state.program_version, &raw[100], sizeof(state.program_version));

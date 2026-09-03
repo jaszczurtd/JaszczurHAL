@@ -170,6 +170,17 @@ void hal_debug_init(uint32_t baud, const hal_debug_rate_limit_t *cfg = 0);
 void hal_debug_init(uint32_t baud, const hal_debug_rate_limit_t *cfg);
 #endif
 
+/** @brief Initialise debug output with HAL_DEBUG_DEFAULT_BAUD and defaults. */
+void hal_debug_init_default(void);
+
+/**
+ * @brief Set a module prefix followed by a colon.
+ *
+ * The module name is truncated when needed to fit HAL_DEBUG_PREFIX_SIZE.
+ * A NULL argument leaves the current prefix unchanged.
+ */
+void hal_debug_set_module_prefix(const char *module_name);
+
 /**
  * @brief Check whether the debug subsystem has been initialised.
  * @return true if hal_debug_init() has been called (explicitly or via lazy
@@ -233,6 +244,17 @@ void hal_derr_limited(const char *source, const char *format, ...);
  * @param maxBytes Maximum number of bytes to display (clamped to 1..48).
  */
 void hal_deb_hex(const char *prefix, const uint8_t *buf, int len, int maxBytes);
+
+/* Established short spellings used by firmware. */
+#ifndef deb
+#define deb hal_deb
+#endif
+#ifndef derr
+#define derr hal_derr
+#endif
+#ifndef derr_limited
+#define derr_limited hal_derr_limited
+#endif
 
 /**
  * @brief Flush debug records that were captured from interrupt context.

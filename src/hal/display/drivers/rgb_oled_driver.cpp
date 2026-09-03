@@ -65,9 +65,6 @@
 
 #define RGB_OLED_PIXEL_CHUNK_BYTES 512u
 
-static bool pin_is_connected(int16_t pin) { return pin >= 0 && pin <= 255; }
-static uint8_t pin_to_u8(int16_t pin) { return (uint8_t)pin; }
-
 static uint32_t normalized_clock(const jh_rgb_oled_config_t *config) {
   return (config != NULL && config->clock_hz != 0u)
              ? config->clock_hz
@@ -82,7 +79,7 @@ static uint8_t normalized_spi_mode(const jh_rgb_oled_config_t *config) {
 
 static bool command_write(jh_rgb_oled_t *dev, uint8_t command,
                           const uint8_t *data, uint8_t len) {
-  if (dev == NULL || !pin_is_connected(dev->config.dc_pin)) {
+  if (dev == NULL || !jh_display_pin_connected(dev->config.dc_pin)) {
     return false;
   }
   hal_status_t status = hal_spi_device_acquire(&dev->spi_device);
@@ -90,7 +87,7 @@ static bool command_write(jh_rgb_oled_t *dev, uint8_t command,
     return false;
   }
 
-  hal_gpio_write(pin_to_u8(dev->config.dc_pin), false);
+  hal_gpio_write(jh_display_pin_u8(dev->config.dc_pin), false);
   status = hal_spi_write(dev->spi_device.bus, &command, 1u);
   if (hal_status_is_ok(status) && data != NULL && len > 0u) {
     if (dev->config.controller == JH_RGB_OLED_SSD1331) {
@@ -98,7 +95,7 @@ static bool command_write(jh_rgb_oled_t *dev, uint8_t command,
         status = hal_spi_write(dev->spi_device.bus, &data[i], 1u);
       }
     } else {
-      hal_gpio_write(pin_to_u8(dev->config.dc_pin), true);
+      hal_gpio_write(jh_display_pin_u8(dev->config.dc_pin), true);
       status = hal_spi_write(dev->spi_device.bus, data, len);
     }
   }
@@ -246,7 +243,8 @@ static bool init_ssd135x(jh_rgb_oled_t *dev) {
 }
 
 bool jh_rgb_oled_init(jh_rgb_oled_t *dev, const jh_rgb_oled_config_t *config) {
-  if (dev == NULL || config == NULL || !pin_is_connected(config->dc_pin)) {
+  if (dev == NULL || config == NULL ||
+      !jh_display_pin_connected(config->dc_pin)) {
     return false;
   }
   memset(dev, 0, sizeof(*dev));
@@ -378,7 +376,7 @@ bool jh_rgb_oled_begin_write(jh_rgb_oled_t *dev, uint16_t x, uint16_t y,
   if (hal_status_is_error(hal_spi_device_acquire(&dev->spi_device))) {
     return false;
   }
-  hal_gpio_write(pin_to_u8(dev->config.dc_pin), true);
+  hal_gpio_write(jh_display_pin_u8(dev->config.dc_pin), true);
   dev->write_active = true;
   return true;
 }
@@ -402,11 +400,6 @@ bool jh_rgb_oled_write_pixels_be(jh_rgb_oled_t *dev, const uint8_t *pixels_be,
   return hal_status_is_error(status) ? abort_write(dev, status) : true;
 }
 
-static void put_u16_be(uint8_t *out, uint16_t value) {
-  out[0] = (uint8_t)(value >> 8);
-  out[1] = (uint8_t)value;
-}
-
 bool jh_rgb_oled_write_pixels_fast(jh_rgb_oled_t *dev, const uint16_t *pixels,
                                    size_t count) {
   if (dev == NULL || !dev->write_active || (pixels == NULL && count > 0u)) {
@@ -415,9 +408,9 @@ bool jh_rgb_oled_write_pixels_fast(jh_rgb_oled_t *dev, const uint16_t *pixels,
   uint8_t chunk[RGB_OLED_PIXEL_CHUNK_BYTES];
   while (count > 0u) {
     const size_t pixel_count =
-        count < (sizeof(chunk) / 2u) ? count : (sizeof(chunk) / 2u);
+        count < (COUNTOF(chunk) / 2u) ? count : (COUNTOF(chunk) / 2u);
     for (size_t i = 0u; i < pixel_count; ++i) {
-      put_u16_be(&chunk[i * 2u], pixels[i]);
+      jh_display_put_u16_be(&chunk[i * 2u], pixels[i]);
     }
     if (!jh_rgb_oled_write_pixels_be(dev, chunk, pixel_count * 2u)) {
       return false;
@@ -443,14 +436,14 @@ bool jh_rgb_oled_fill_rect(jh_rgb_oled_t *dev, uint16_t x, uint16_t y,
     return false;
   }
   uint8_t chunk[RGB_OLED_PIXEL_CHUNK_BYTES];
-  for (size_t i = 0u; i < sizeof(chunk); i += 2u) {
-    put_u16_be(&chunk[i], color);
+  for (size_t i = 0u; i < COUNTOF(chunk); i += 2u) {
+    jh_display_put_u16_be(&chunk[i], color);
   }
   size_t remaining = (size_t)w * (size_t)h;
   bool ok = true;
   while (remaining > 0u) {
     const size_t pixels =
-        remaining < (sizeof(chunk) / 2u) ? remaining : (sizeof(chunk) / 2u);
+        remaining < (COUNTOF(chunk) / 2u) ? remaining : (COUNTOF(chunk) / 2u);
     ok = jh_rgb_oled_write_pixels_be(dev, chunk, pixels * 2u);
     if (!ok) {
       break;

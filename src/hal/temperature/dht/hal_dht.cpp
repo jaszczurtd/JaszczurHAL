@@ -16,6 +16,7 @@
 
 #include "hal/core/hal_mutex_once.h"
 #include "hal/core/hal_status.h"
+#include "hal/core/jh_endian.h"
 #include "hal/gpio/hal_gpio.h"
 #include "hal/system/hal_sync.h"
 #include "hal/system/hal_system.h"
@@ -60,7 +61,7 @@ static hal_status_t wait_while_level(uint8_t pin, bool level,
                                      uint32_t timeout_us) {
   const uint32_t start = hal_micros();
   while (hal_gpio_read(pin) == level) {
-    if ((uint32_t)(hal_micros() - start) >= timeout_us) {
+    if (hal_elapsed_u32(hal_micros(), start, timeout_us)) {
       return HAL_ETIMEOUT;
     }
   }
@@ -78,9 +79,8 @@ static bool sample_bit_high_after_low_pulse(uint8_t pin) {
 static void decode_frame_locked(hal_dht_t h,
                                 const uint8_t frame[DHT_DATA_BYTES]) {
   if (h->sensor == HAL_DHT_SENSOR_DHT22) {
-    const uint16_t humidity_raw =
-        (uint16_t)(((uint16_t)frame[0] << 8u) | frame[1]);
-    const uint16_t temp_raw = (uint16_t)(((uint16_t)frame[2] << 8u) | frame[3]);
+    const uint16_t humidity_raw = jh_load_be16(&frame[0]);
+    const uint16_t temp_raw = jh_load_be16(&frame[2]);
     const uint16_t temp_magnitude = (uint16_t)(temp_raw & 0x7fffu);
 
     h->humidity = (float)humidity_raw / 10.0f;

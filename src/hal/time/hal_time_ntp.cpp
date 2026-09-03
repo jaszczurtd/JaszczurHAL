@@ -493,7 +493,7 @@ hal_status_t ntp_service() {
     }
   }
 
-  if (static_cast<uint32_t>(hal_millis() - request.started) < kNtpTimeoutMs) {
+  if (!hal_millis_deadline_expired(request.started, kNtpTimeoutMs)) {
     service_leave();
     return HAL_OK;
   }

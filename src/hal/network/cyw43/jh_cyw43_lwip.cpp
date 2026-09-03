@@ -86,10 +86,6 @@ hal_status_t status_from_cyw43(int status) {
   return HAL_EIO;
 }
 
-bool deadline_expired(uint32_t start_ms, uint32_t timeout_ms) {
-  return (uint32_t)(hal_millis() - start_ms) >= timeout_ms;
-}
-
 void dns_found(const char *, const ip_addr_t *address, void *argument) {
   auto *slot = static_cast<dns_slot_t *>(argument);
   if (slot == nullptr || !slot->occupied) {
@@ -222,7 +218,7 @@ extern "C" hal_status_t jh_cyw43_lwip_join(const char *ssid,
   }
 
   const uint32_t started = hal_millis();
-  while (!deadline_expired(started, timeout_ms)) {
+  while (!hal_millis_deadline_expired(started, timeout_ms)) {
     const hal_status_t service_status = jh_cyw43_lwip_service();
     if (service_status != HAL_OK) {
       return service_status;
@@ -283,7 +279,7 @@ extern "C" hal_status_t jh_cyw43_lwip_resolve_ipv4(const char *hostname,
   }
 
   const uint32_t started = hal_millis();
-  while (!deadline_expired(started, timeout_ms)) {
+  while (!hal_millis_deadline_expired(started, timeout_ms)) {
     const hal_status_t service_status = jh_cyw43_lwip_service();
     if (service_status != HAL_OK) {
       return service_status;
@@ -355,7 +351,7 @@ extern "C" hal_status_t jh_cyw43_lwip_ping_ipv4(uint32_t address,
   hal_status_t status = status_from_lwip(send_status);
   const uint32_t started = hal_millis();
   if (send_status == ERR_OK) {
-    while (!deadline_expired(started, timeout_ms)) {
+    while (!hal_millis_deadline_expired(started, timeout_ms)) {
       const hal_status_t service_status = jh_cyw43_lwip_service();
       if (service_status != HAL_OK) {
         status = service_status;
@@ -398,7 +394,7 @@ extern "C" hal_status_t jh_cyw43_lwip_leave(void) {
     const uint32_t started = hal_millis();
     while (cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA) ==
                CYW43_LINK_UP &&
-           !deadline_expired(started, 1000u)) {
+           !hal_millis_deadline_expired(started, 1000u)) {
       (void)jh_cyw43_lwip_service();
       hal_delay_ms(1u);
     }

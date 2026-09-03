@@ -49,7 +49,7 @@ the portability goal of JaszczurHAL.
 | Low-power management | Capability-driven CPU Sleep, STM32G474 STOP0/STOP1/Standby, RTC wake classification, clock restoration, callbacks, and monotonic-time compensation for RTC-timed transitions. | [hal_power.h](../../src/hal/power/hal_power.h), [power API](../api/en/06_timers_system.md#halpower-low-power-transitions-optional-halenablepowermanagement) |
 | Synchronization | Mutexes and critical sections with target-specific implementations. | [hal_sync.h](../../src/hal/system/hal_sync.h) |
 | Soft timers | Lightweight cooperative software timers. | [hal_soft_timer.h](../../src/hal/timers/hal_soft_timer.h) |
-| Utility primitives | Bit helpers, math helpers, PID control, watchdog support and common utility APIs. | [tools.h](../../src/tools.h), [utils](../../src/utils/) |
+| Utility primitives | Array, endian, math, text, ADC/NTC, pixel, image, network and time helpers, plus PID and watchdog support. | [HAL core](../../src/hal/core/), [HAL modules](../../src/hal/), [compatibility utils](../../src/utils/) |
 
 ## Communication and connectivity
 

@@ -241,8 +241,8 @@ static hal_status_t call_entropy(jh_tls_operation_t *operation, void *buffer,
 }
 
 static bool operation_timed_out(const jh_tls_client_context_t *client) {
-  return (uint32_t)(hal_millis() - client->operation_started_ms) >=
-         client->config.operation_timeout_ms;
+  return hal_millis_deadline_expired(client->operation_started_ms,
+                                     client->config.operation_timeout_ms);
 }
 
 static hal_status_t fail_client(jh_tls_client_context_t *client,

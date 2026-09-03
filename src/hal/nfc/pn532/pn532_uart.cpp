@@ -82,7 +82,7 @@ hal_status_t PN532_UART::readByte(uint8_t *value, uint16_t timeout_ms) {
   }
 
   const uint32_t start = hal_millis();
-  while ((uint32_t)(hal_millis() - start) < timeout_ms) {
+  while (!hal_millis_deadline_expired(start, timeout_ms)) {
     int read = hal_uart_read(_uart);
     if (read >= 0) {
       *value = (uint8_t)read;

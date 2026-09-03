@@ -7,9 +7,9 @@
 #include <hal/core/hal_target.h>
 #include <hal/nfc/hal_mfrc522.h>
 #include <hal/nfc/hal_pn532.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/spi/hal_spi.h>
 #include <hal/system/hal_system.h>
-#include <tools.h>
 
 #include <cstdio>
 #include <new>
@@ -112,7 +112,7 @@ static void poll_pn532(void) {
 }
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   deb("");
   deb("=== JaszczurHAL RFID + NFC example ===");
   hal_spi_init(0u, EXAMPLE_SPI_MISO, EXAMPLE_SPI_MOSI, EXAMPLE_SPI_SCK);

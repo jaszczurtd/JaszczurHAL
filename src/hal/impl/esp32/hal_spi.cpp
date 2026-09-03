@@ -2,6 +2,7 @@
 #if HAL_TARGET_IS_ESP32_S3
 
 #include "hal/core/hal_config.h"
+#include "hal/core/jh_endian.h"
 #ifdef HAL_ENABLE_SPI
 
 #include "hal/core/hal_mutex_once.h"
@@ -359,17 +360,18 @@ hal_status_t jh_hal_spi_transfer16_provider(uint8_t bus, uint16_t data,
   }
 
   const bool lsb_first = s_spi[index].settings.bit_order == HAL_SPI_LSBFIRST;
-  uint8_t tx[2] = {
-      lsb_first ? (uint8_t)data : (uint8_t)(data >> 8u),
-      lsb_first ? (uint8_t)(data >> 8u) : (uint8_t)data,
-  };
+  uint8_t tx[2];
+  if (lsb_first) {
+    jh_store_le16(tx, data);
+  } else {
+    jh_store_be16(tx, data);
+  }
   uint8_t rx[2] = {};
   status = spi_transfer_chunks(index, tx, rx, sizeof(tx));
   if (hal_status_is_error(status)) {
     return status;
   }
-  *out_received = lsb_first ? (uint16_t)(rx[0] | ((uint16_t)rx[1] << 8u))
-                            : (uint16_t)(((uint16_t)rx[0] << 8u) | rx[1]);
+  *out_received = lsb_first ? jh_load_le16(rx) : jh_load_be16(rx);
   return HAL_OK;
 }
 

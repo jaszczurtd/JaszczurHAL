@@ -1,5 +1,5 @@
 #include "gps_nmea_parser.h"
-#include "utils/tools_api.h"
+#include "hal/gps/hal_gps_nmea_utils.h"
 
 #include <ctype.h>  /* isdigit */
 #include <math.h>   /* sqrt */
@@ -118,30 +118,30 @@ static void decode_term(gps_nmea_t *p) {
   case SENT_RMC:
     switch (n) {
     case 1:
-      p->new_time = (uint32_t)parse_decimal(t);
+      p->new_time = (uint32_t)hal_gps_nmea_decimal_x100(t);
       break;
     case 2:
       p->sentence_has_fix = (t[0] == 'A');
       break;
     case 3:
-      parse_degrees(t, &p->new_lat.deg, &p->new_lat.billionths);
+      hal_gps_nmea_degrees(t, &p->new_lat.deg, &p->new_lat.billionths);
       p->new_lat.negative = false;
       break;
     case 4:
       p->new_lat.negative = (t[0] == 'S');
       break;
     case 5:
-      parse_degrees(t, &p->new_lng.deg, &p->new_lng.billionths);
+      hal_gps_nmea_degrees(t, &p->new_lng.deg, &p->new_lng.billionths);
       p->new_lng.negative = false;
       break;
     case 6:
       p->new_lng.negative = (t[0] == 'W');
       break;
     case 7:
-      p->new_speed = parse_decimal(t);
+      p->new_speed = hal_gps_nmea_decimal_x100(t);
       break;
     case 8:
-      p->new_course = parse_decimal(t);
+      p->new_course = hal_gps_nmea_decimal_x100(t);
       break;
     case 9:
       p->new_date = (uint32_t)atol(t);
@@ -153,17 +153,17 @@ static void decode_term(gps_nmea_t *p) {
   case SENT_GGA:
     switch (n) {
     case 1:
-      p->new_time = (uint32_t)parse_decimal(t);
+      p->new_time = (uint32_t)hal_gps_nmea_decimal_x100(t);
       break;
     case 2:
-      parse_degrees(t, &p->new_lat.deg, &p->new_lat.billionths);
+      hal_gps_nmea_degrees(t, &p->new_lat.deg, &p->new_lat.billionths);
       p->new_lat.negative = false;
       break;
     case 3:
       p->new_lat.negative = (t[0] == 'S');
       break;
     case 4:
-      parse_degrees(t, &p->new_lng.deg, &p->new_lng.billionths);
+      hal_gps_nmea_degrees(t, &p->new_lng.deg, &p->new_lng.billionths);
       p->new_lng.negative = false;
       break;
     case 5:
@@ -177,10 +177,10 @@ static void decode_term(gps_nmea_t *p) {
       p->new_sats_used = (uint32_t)atol(t);
       break;
     case 8:
-      p->new_hdop = parse_decimal(t);
+      p->new_hdop = hal_gps_nmea_decimal_x100(t);
       break;
     case 9:
-      p->new_altitude = parse_decimal(t);
+      p->new_altitude = hal_gps_nmea_decimal_x100(t);
       break;
     default:
       break;
@@ -192,13 +192,13 @@ static void decode_term(gps_nmea_t *p) {
       p->new_fix_mode = (uint8_t)atol(t);
       break;
     case 15:
-      p->new_pdop = parse_decimal(t);
+      p->new_pdop = hal_gps_nmea_decimal_x100(t);
       break;
     case 16:
-      p->new_hdop = parse_decimal(t);
+      p->new_hdop = hal_gps_nmea_decimal_x100(t);
       break;
     case 17:
-      p->new_vdop = parse_decimal(t);
+      p->new_vdop = hal_gps_nmea_decimal_x100(t);
       break;
     default:
       break;
@@ -210,9 +210,9 @@ static void decode_term(gps_nmea_t *p) {
     break;
   case SENT_GST:
     if (n == 3)
-      p->new_gst_smaj = parse_decimal(t);
+      p->new_gst_smaj = hal_gps_nmea_decimal_x100(t);
     else if (n == 4)
-      p->new_gst_smin = parse_decimal(t);
+      p->new_gst_smin = hal_gps_nmea_decimal_x100(t);
     break;
   default:
     break;
@@ -223,8 +223,8 @@ static void decode_term(gps_nmea_t *p) {
  */
 static bool end_of_term(gps_nmea_t *p) {
   if (p->is_checksum_term) {
-    uint8_t checksum =
-        (uint8_t)(16 * from_hex(p->term[0]) + from_hex(p->term[1]));
+    uint8_t checksum = (uint8_t)(16 * hal_gps_nmea_hex_value(p->term[0]) +
+                                 hal_gps_nmea_hex_value(p->term[1]));
     if (checksum == p->parity) {
       commit_sentence(p);
       return true;

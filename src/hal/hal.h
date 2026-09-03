@@ -12,8 +12,11 @@
 
 #pragma once
 
+#include "hal/core/hal_array.h"
 #include "hal/core/hal_bits.h"
 #include "hal/core/hal_config.h"
+#include "hal/core/hal_text.h"
+#include "hal/core/jh_endian.h"
 #ifdef HAL_ENABLE_COMMAND_ROUTER
 #include "hal/commands/hal_command_router.h"
 #include "hal/commands/hal_command_wire.h"
@@ -57,6 +60,7 @@
 #include "hal/gpio/hal_pwm_freq.h"
 #endif
 #include "hal/analog/hal_adc.h"
+#include "hal/analog/hal_adc_utils.h"
 #ifdef HAL_ENABLE_DAC
 #include "hal/analog/hal_dac.h"
 #endif
@@ -76,6 +80,7 @@
 #ifdef HAL_ENABLE_SERIAL_COMMANDS
 #include "hal/serial/hal_serial_commands.h"
 #endif
+#include "hal/system/hal_periodic_random.h"
 #include "hal/system/hal_sync.h"
 #include "hal/system/hal_system.h"
 #include "hal/time/hal_time.h"
@@ -138,12 +143,15 @@
 #ifdef HAL_ENABLE_DISPLAY
 #include "hal/display/hal_display.h"
 #endif
+#include "hal/codecs/hal_image.h"
+#include "hal/display/hal_pixel.h"
 #ifdef HAL_ENABLE_HD44780
 #include "hal/display/hal_hd44780.h"
 #endif
 #ifdef HAL_ENABLE_WIFI
 #include "hal/network/hal_wifi.h"
 #endif
+#include "hal/network/hal_network_utils.h"
 #ifdef HAL_ENABLE_LITTLEFS
 #include "hal/storage/hal_littlefs.h"
 #endif
@@ -207,6 +215,7 @@
 #ifdef HAL_ENABLE_DHT
 #include "hal/temperature/hal_dht.h"
 #endif
+#include "hal/temperature/hal_ntc.h"
 #ifdef HAL_ENABLE_BH1750
 #include "hal/sensors/hal_bh1750.h"
 #endif
@@ -228,6 +237,7 @@
 #ifdef HAL_ENABLE_GPS
 #include "hal/gps/hal_gps.h"
 #endif
+#include "hal/gps/hal_gps_nmea_utils.h"
 #ifdef HAL_ENABLE_EEPROM
 #include "hal/storage/hal_eeprom.h"
 #endif

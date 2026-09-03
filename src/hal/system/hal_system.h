@@ -21,8 +21,10 @@
  *   - Type-conversion macros: @ref SECS, @ref MINS, @ref HOURS.
  */
 
+#include "hal/core/hal_array.h"
 #include "hal/core/hal_math.h"
 #include "hal/core/hal_status.h"
+#include "hal/core/jh_endian.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -47,16 +49,6 @@ extern "C" {
 
 /** @brief Convert hours to milliseconds. */
 #define HOURS(t) (MINS(t) * 60UL)
-
-/**
- * @def COUNTOF(arr)
- * @brief Number of elements in a statically-allocated array.
- * @note Works only for real arrays. Passing a pointer yields an incorrect
- * result.
- */
-#ifndef COUNTOF
-#define COUNTOF(arr) (sizeof(arr) / sizeof((arr)[0]))
-#endif
 
 /** @brief Ownership/topology of the active IP and socket stack. */
 typedef enum {
@@ -127,10 +119,7 @@ static inline hal_status_t hal_u32_to_bytes_be(uint32_t val, uint8_t *buf) {
   if (buf == NULL) {
     return HAL_EINVAL;
   }
-  buf[0] = (uint8_t)(val >> 24);
-  buf[1] = (uint8_t)(val >> 16);
-  buf[2] = (uint8_t)(val >> 8);
-  buf[3] = (uint8_t)(val);
+  jh_store_be32(buf, val);
   return HAL_OK;
 }
 
@@ -139,6 +128,23 @@ static inline hal_status_t hal_u32_to_bytes_be(uint32_t val, uint8_t *buf) {
  * @return Millisecond counter (wraps after ~49 days).
  */
 uint32_t hal_millis(void);
+
+/**
+ * @brief Check whether an unsigned 32-bit interval has elapsed.
+ *
+ * The subtraction is wrap-safe as long as intervals do not exceed half of
+ * the counter range.
+ */
+static inline bool hal_elapsed_u32(uint32_t now, uint32_t started,
+                                   uint32_t interval) {
+  return (uint32_t)(now - started) >= interval;
+}
+
+/** @brief Check a millisecond deadline against the current system tick. */
+static inline bool hal_millis_deadline_expired(uint32_t started,
+                                               uint32_t timeout_ms) {
+  return hal_elapsed_u32(hal_millis(), started, timeout_ms);
+}
 
 /** @brief Callback signature used by millis interval helpers. */
 typedef void (*hal_millis_interval_callback_t)(void *user_data);
@@ -166,7 +172,7 @@ static inline bool hal_millis_interval_elapsed(uint32_t now_ms,
   if (last_ms == NULL || interval_ms == 0u) {
     return false;
   }
-  if ((uint32_t)(now_ms - *last_ms) < interval_ms) {
+  if (!hal_elapsed_u32(now_ms, *last_ms, interval_ms)) {
     return false;
   }
   *last_ms = now_ms;

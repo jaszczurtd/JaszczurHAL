@@ -57,7 +57,7 @@ static void service_commands(void) {
 }
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   s_status = jh_c85_hid_device_start();
   deb("JHC85-DEVICE start: %s", hal_status_to_string(s_status));
   deb("JHC85-DEVICE command: INFO");

@@ -3,9 +3,10 @@
 #ifdef HAL_ENABLE_NOTIFY_TELEGRAM
 
 #include "hal/codecs/cjson/cJSON.h"
+#include "hal/core/hal_array.h"
 #include "hal/network/http/hal_http_client.h"
+#include "hal/serial/hal_serial.h"
 #include "hal/system/hal_system.h"
-#include "utils/tools_api.h"
 
 #include <limits.h>
 #include <stdio.h>
@@ -487,7 +488,7 @@ static hal_status_t telegram_send_part(jh_notify_telegram_state_t *state,
   request.method = "POST";
   request.path = path;
   request.headers = headers;
-  request.header_count = sizeof(headers) / sizeof(headers[0]);
+  request.header_count = COUNTOF(headers);
   request.body = json;
   request.body_length = strlen(json);
   request.timeout_ms = timeout_ms;
@@ -605,11 +606,12 @@ static hal_status_t telegram_send(void *state_ptr,
       break;
     }
 
-    const uint32_t elapsed_ms = (uint32_t)(hal_millis() - started_ms);
-    if (elapsed_ms >= message->timeout_ms) {
+    const uint32_t now_ms = hal_millis();
+    if (hal_elapsed_u32(now_ms, started_ms, message->timeout_ms)) {
       status = HAL_ETIMEOUT;
       break;
     }
+    const uint32_t elapsed_ms = now_ms - started_ms;
     status = telegram_send_part(state, message, path, text,
                                 message->timeout_ms - elapsed_ms, receipt);
     if (status != HAL_OK) {

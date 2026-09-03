@@ -16,8 +16,7 @@ void MFRC522_SPI::PCD_WriteRegister(MFRC522::PCD_Register reg, byte count,
       {HAL_SPI_DEVICE_OP_WRITE, &address, NULL, 1u},
       {HAL_SPI_DEVICE_OP_WRITE, values, NULL, count},
   };
-  (void)hal_spi_device_transaction(&_device, operations,
-                                   sizeof(operations) / sizeof(operations[0]));
+  (void)hal_spi_device_transaction(&_device, operations, COUNTOF(operations));
 }
 
 byte MFRC522_SPI::PCD_ReadRegister(MFRC522::PCD_Register reg) {
@@ -27,8 +26,7 @@ byte MFRC522_SPI::PCD_ReadRegister(MFRC522::PCD_Register reg) {
       {HAL_SPI_DEVICE_OP_WRITE, &address, NULL, 1u},
       {HAL_SPI_DEVICE_OP_TRANSFER_IN_PLACE, NULL, &value, 1u},
   };
-  (void)hal_spi_device_transaction(&_device, operations,
-                                   sizeof(operations) / sizeof(operations[0]));
+  (void)hal_spi_device_transaction(&_device, operations, COUNTOF(operations));
   return value;
 }
 

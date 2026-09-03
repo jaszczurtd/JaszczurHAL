@@ -6,6 +6,8 @@
 
 #ifdef HAL_ENABLE_SSD16XX
 
+#include "hal/core/jh_endian.h"
+
 #include <string.h>
 
 #define SSD16XX_CMD_GDO_CTRL 0x01u
@@ -80,11 +82,11 @@ static hal_status_t command_u8(jh_ssd16xx_t *dev, uint8_t cmd, uint8_t value) {
 }
 
 static size_t push_coord(uint8_t *out, uint16_t value, uint8_t bits) {
-  out[0] = (uint8_t)(value & 0xFFu);
   if (bits == 16u) {
-    out[1] = (uint8_t)(value >> 8u);
+    jh_store_le16(out, value);
     return 2u;
   }
+  out[0] = (uint8_t)value;
   return 1u;
 }
 

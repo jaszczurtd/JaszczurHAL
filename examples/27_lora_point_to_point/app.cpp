@@ -7,10 +7,10 @@
 #include <hal/core/hal_status.h>
 #include <hal/gpio/hal_gpio.h>
 #include <hal/radio/hal_lora_radio.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/spi/hal_spi.h>
 #include <hal/system/hal_board.h>
 #include <hal/system/hal_system.h>
-#include <tools.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -359,7 +359,7 @@ void initiator_handle_event(const hal_lora_radio_event_t &event) {
 } // namespace
 
 extern "C" void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   status_led_initialize();
 #ifdef HAL_LORA_EXAMPLE_PROBE_ONLY
   deb("=== JaszczurHAL LoRa wiring probe (no RF transmit) ===");

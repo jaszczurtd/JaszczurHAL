@@ -1,11 +1,14 @@
 #include "media_assets.h"
 
+#include <hal/codecs/hal_image.h>
 #include <hal/codecs/lodepng/lodepng.h>
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
 #include <hal/display/hal_display.h>
+#include <hal/display/hal_pixel.h>
+#include <hal/security/hal_crypto.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
-#include <tools.h>
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -113,9 +116,9 @@ static bool png_memory_round_trip(void) {
   const bool base64_ok =
       hal_base64_encode(png, png_size, base64, base64_capacity,
                         &base64_length) &&
-      pngBase64DecodeRgb565(base64, base64_length, png_work, png_size,
-                            base64_pixels, 4u, &base64_width, &base64_height,
-                            &png_error) &&
+      hal_image_png_base64_decode_rgb565(
+          base64, base64_length, png_work, png_size, base64_pixels, 4u,
+          &base64_width, &base64_height, &png_error) &&
       base64_width == 2u && base64_height == 2u;
 
   if (base64_ok) {
@@ -140,8 +143,8 @@ static bool decode_png_asset(unsigned *out_width, unsigned *out_height) {
   *out_height = 0u;
 
   size_t png_size = 0u;
-  if (!pngBase64DecodedSize(kMediaPngBase64, sizeof(kMediaPngBase64) - 1u,
-                            &png_size) ||
+  if (!hal_image_png_base64_decoded_size(
+          kMediaPngBase64, sizeof(kMediaPngBase64) - 1u, &png_size) ||
       png_size == 0u || png_size > kMediaMaxEncodedBytes) {
     derr("PNG asset size rejected");
     return false;
@@ -186,7 +189,9 @@ static bool decode_png_asset(unsigned *out_width, unsigned *out_height) {
       lodepng_decode32(&rgba, &width, &height, png, png_size);
   free(png);
   if (decode_error != 0u || rgba == NULL || width != inspected_width ||
-      height != inspected_height || !rgba8888ToRgb565(rgba, s_rgb565, pixels)) {
+      height != inspected_height ||
+      hal_pixel_rgba8888_buffer_to_rgb565_ex(rgba, s_rgb565, pixels) !=
+          HAL_OK) {
     derr("PNG asset decode failed: %u", decode_error);
     free(rgba);
     return false;
@@ -207,8 +212,8 @@ static bool decode_jpeg_asset(unsigned *out_width, unsigned *out_height) {
   *out_height = 0u;
 
   size_t jpeg_size = 0u;
-  if (!jpegBase64DecodedSize(kMediaJpegBase64, sizeof(kMediaJpegBase64) - 1u,
-                             &jpeg_size) ||
+  if (!hal_image_jpeg_base64_decoded_size(
+          kMediaJpegBase64, sizeof(kMediaJpegBase64) - 1u, &jpeg_size) ||
       jpeg_size == 0u || jpeg_size > kMediaMaxEncodedBytes) {
     derr("JPEG asset size rejected");
     return false;
@@ -227,8 +232,9 @@ static bool decode_jpeg_asset(unsigned *out_width, unsigned *out_height) {
       hal_base64_decode(kMediaJpegBase64, sizeof(kMediaJpegBase64) - 1u, jpeg,
                         jpeg_size, &decoded_size) &&
       decoded_size == jpeg_size &&
-      jpegDecodeRgb565(jpeg, decoded_size, s_rgb565, kMediaMaxPixels,
-                       &direct_width, &direct_height);
+      hal_image_jpeg_decode_rgb565(jpeg, decoded_size, s_rgb565,
+                                   kMediaMaxPixels, &direct_width,
+                                   &direct_height);
 
   size_t direct_pixels = 0u;
   if (!direct_ok ||
@@ -242,7 +248,7 @@ static bool decode_jpeg_asset(unsigned *out_width, unsigned *out_height) {
   memset(s_rgb565, 0, sizeof(s_rgb565));
   unsigned width = 0u;
   unsigned height = 0u;
-  const bool helper_ok = jpegBase64DecodeRgb565(
+  const bool helper_ok = hal_image_jpeg_base64_decode_rgb565(
       kMediaJpegBase64, sizeof(kMediaJpegBase64) - 1u, jpeg, jpeg_size,
       s_rgb565, kMediaMaxPixels, &width, &height);
   free(jpeg);
@@ -308,7 +314,7 @@ static void draw_media_result(const char *name, bool decoded, int x, int y,
 }
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   hal_deb_set_prefix("MEDIA");
 
   const bool round_trip_ok = png_memory_round_trip();

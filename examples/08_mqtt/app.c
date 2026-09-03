@@ -1,9 +1,9 @@
 #include <hal/core/hal_app.h>
 #include <hal/network/hal_wifi.h>
 #include <hal/network/mqtt/hal_mqtt.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
 #include <stdio.h>
-#include <tools_c.h>
 
 static const char *WIFI_SSID = "your-ssid";
 static const char *WIFI_PASSWORD = "your-password";
@@ -90,7 +90,7 @@ static void publishTelemetry(void) {
 }
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   hal_mqtt_set_server(MQTT_HOST, MQTT_PORT);
   hal_mqtt_set_callback(onMqttMessage, NULL);
   hal_mqtt_set_keepalive(30);

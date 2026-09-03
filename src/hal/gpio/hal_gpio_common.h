@@ -3,6 +3,14 @@
 
 #include "hal/gpio/hal_gpio.h"
 
+static inline bool jh_hal_gpio_mode_valid(hal_gpio_mode_t mode) {
+  return mode >= HAL_GPIO_INPUT && mode <= HAL_GPIO_OUTPUT_OPEN_DRAIN_HIGH;
+}
+
+static inline bool jh_hal_gpio_irq_mode_valid(hal_gpio_irq_mode_t mode) {
+  return mode >= HAL_GPIO_IRQ_FALLING && mode <= HAL_GPIO_IRQ_CHANGE;
+}
+
 template <typename PinValidator>
 static bool jh_hal_gpio_store_mode(uint8_t pin, hal_gpio_mode_t mode,
                                    bool *state, hal_gpio_mode_t *stored_mode,
@@ -11,7 +19,7 @@ static bool jh_hal_gpio_store_mode(uint8_t pin, hal_gpio_mode_t mode,
     HAL_ASSERT(false, "hal_gpio_set_mode: invalid pin");
     return false;
   }
-  if (mode < HAL_GPIO_INPUT || mode > HAL_GPIO_OUTPUT_OPEN_DRAIN_HIGH) {
+  if (!jh_hal_gpio_mode_valid(mode)) {
     HAL_ASSERT(false, "hal_gpio_set_mode: invalid mode");
     return false;
   }

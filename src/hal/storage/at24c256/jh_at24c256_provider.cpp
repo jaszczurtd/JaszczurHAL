@@ -2,6 +2,7 @@
 
 #ifdef HAL_ENABLE_EEPROM
 
+#include "hal/core/jh_endian.h"
 #include "hal/storage/jh_eeprom_provider.h"
 
 #ifdef HAL_ENABLE_I2C
@@ -63,9 +64,10 @@ hal_status_t write_page(uint16_t addr, const uint8_t *data, uint8_t len,
   }
 
   hal_i2c_begin_transmission(s_i2c_addr);
-  bool queued = hal_i2c_write(static_cast<uint8_t>(addr >> 8u)) == 1u;
-  queued = queued &&
-           hal_i2c_write(static_cast<uint8_t>(addr & UINT16_C(0x00ff))) == 1u;
+  uint8_t address[2];
+  jh_store_be16(address, addr);
+  bool queued = hal_i2c_write(address[0]) == 1u;
+  queued = queued && hal_i2c_write(address[1]) == 1u;
   for (uint8_t i = 0u; queued && i < len; ++i) {
     queued = hal_i2c_write(data[i]) == 1u;
   }
@@ -126,8 +128,8 @@ hal_status_t read_bytes(uint16_t addr, uint8_t *out, uint16_t len) {
   while (len > 0u) {
     const uint8_t chunk =
         len > UINT8_MAX ? UINT8_MAX : static_cast<uint8_t>(len);
-    const uint8_t address[2] = {static_cast<uint8_t>(addr >> 8u),
-                                static_cast<uint8_t>(addr & UINT16_C(0x00ff))};
+    uint8_t address[2];
+    jh_store_be16(address, addr);
     if (hal_i2c_write_read_ex(s_i2c_addr, address, sizeof(address), out,
                               chunk) != HAL_OK) {
       return HAL_EIO;

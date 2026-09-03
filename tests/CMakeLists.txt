@@ -1090,6 +1090,12 @@ add_test(NAME test_calendar_architecture
         -P ${CMAKE_CURRENT_SOURCE_DIR}/test_calendar_architecture.cmake
 )
 
+add_test(NAME test_utility_architecture
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_utility_architecture.cmake
+)
+
 add_test(NAME test_time_ntp_architecture
     COMMAND ${CMAKE_COMMAND}
         -DJH_ROOT=${CMAKE_SOURCE_DIR}
@@ -1842,8 +1848,7 @@ add_executable(test_gps_nmea_parser
 target_link_libraries(test_gps_nmea_parser PRIVATE hal_mock)
 add_test(NAME test_gps_nmea_parser COMMAND test_gps_nmea_parser)
 
-# tools.cpp is linked once through hal_mock for direct utility tests and shared
-# consumers such as the GPS parser.
+# Compatibility names are linked through their thematic HAL modules.
 add_executable(test_tools
     test_tools.cpp
 )

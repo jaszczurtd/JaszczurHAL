@@ -32,7 +32,7 @@ void        hal_mutex_destroy(hal_mutex_t mutex);
   `hal_mutex_try_lock()` never waits. Bare-metal interrupt workers may use it;
   FreeRTOS backends return `false` when it is called from interrupt context.
 
-### Macros (tools.h)
+### Legacy mutex macros (`tools.h`)
 
 ```c
 m_mutex_def(name)            // static hal_mutex_t name = NULL
@@ -273,7 +273,7 @@ before the first debug print, it is invoked automatically with `HAL_DEBUG_DEFAUL
 (default 9600, overridable via `-D`). The lazy init path and singleton mutex
 publication are atomically gated on RP2040/RP2350, STM32G474, ESP32-S3, and
 mock, so two tasks or cores do not concurrently reset the debug state or leak
-competing mutex allocations. Calling `debugInit()` is no longer mandatory.
+competing mutex allocations. Calling `hal_debug_init_default()` is no longer mandatory.
 
 `hal_derr_limited()` reuses the same lazy init and applies global rate-limit config per
 error source tag (`source`) so errors from different modules do not suppress each other.
@@ -357,18 +357,19 @@ Limiter implementation details:
 - when `HAL_DEBUG_RATE_LIMIT_SOURCES_MAX` is exhausted, new sources are grouped into
     an internal `overflow` bucket instead of reusing unrelated source state
 
-**Debug helpers in `tools.h` / `tools_c.h`:**
+**Public debug helpers in `hal/serial/hal_serial.h`:**
 ```c
-void  debugInit(void);                          // wrapper around hal_debug_init(HAL_DEBUG_DEFAULT_BAUD)
-void  setDebugPrefixWithColon(const char *moduleName); // appends ':' and forwards to hal_deb_set_prefix()
+void hal_debug_init_default(void);
+void hal_debug_set_module_prefix(const char *module_name);
 
 #define deb            hal_deb
 #define derr           hal_derr
 #define derr_limited   hal_derr_limited
-#define setDebugPrefix hal_deb_set_prefix
 ```
 
-`setDebugPrefixWithColon(...)` truncates the module name if needed so the
+The short `deb` and `derr` names are stable, supported public aliases; they are
+not scheduled for removal. `hal_debug_set_module_prefix(...)` truncates the
+module name if needed so the
 generated `<module>:` prefix always fits inside `HAL_DEBUG_PREFIX_SIZE`.
 
 The architecture and concurrency behavior is covered by

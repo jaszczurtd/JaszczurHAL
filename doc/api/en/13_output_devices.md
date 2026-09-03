@@ -16,11 +16,10 @@ Covers: `hal_rgb_led`, `hal_digipot`, `hal_pga2311`, `hal_mcp23017`, `hal_pca965
 #define hal_constrain(v, lo, hi) ...
 #define hal_map(x, in_min, in_max, out_min, out_max) ...
 
-static inline float roundToN(float v, int n);
-/* Backward-compatible alias: hal_roundToN(v, n) */
+static inline float hal_math_round_to_n(float v, int n);
 ```
 
-`roundToN` rounds to `n` decimal places (`n < 0` -> `0`, `n > 6` -> `6`).
+`hal_math_round_to_n` rounds to `n` decimal places (`n < 0` -> `0`, `n > 6` -> `6`).
 Half values are rounded away from zero.
 
 ---

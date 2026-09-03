@@ -6,6 +6,7 @@
 
 #ifdef HAL_ENABLE_UC81XX
 
+#include "hal/core/jh_endian.h"
 #include "hal/system/hal_system.h"
 
 #include <string.h>
@@ -97,14 +98,11 @@ static hal_status_t set_resolution(jh_uc81xx_t *dev) {
     len = 2u;
   } else if (dev->config.controller == JH_UC81XX_UC8151D) {
     data[0] = (uint8_t)dev->config.width;
-    data[1] = (uint8_t)(dev->config.height >> 8u);
-    data[2] = (uint8_t)dev->config.height;
+    jh_store_be16(&data[1], dev->config.height);
     len = 3u;
   } else {
-    data[0] = (uint8_t)(dev->config.width >> 8u);
-    data[1] = (uint8_t)dev->config.width;
-    data[2] = (uint8_t)(dev->config.height >> 8u);
-    data[3] = (uint8_t)dev->config.height;
+    jh_store_be16(&data[0], dev->config.width);
+    jh_store_be16(&data[2], dev->config.height);
     len = 4u;
   }
   return command(dev, UC81XX_CMD_TRES, data, len);
@@ -197,7 +195,7 @@ static hal_status_t set_profile(jh_uc81xx_t *dev,
               {UC81XX_CMD_LUTWK, &profile->lut_white_to_black},
               {UC81XX_CMD_LUTKK, &profile->lut_black_to_black},
               {UC81XX_CMD_LUTBD, &profile->lut_border}};
-  for (size_t i = 0u; i < sizeof(luts) / sizeof(luts[0]); ++i) {
+  for (size_t i = 0u; i < COUNTOF(luts); ++i) {
     status = command_bytes(dev, luts[i].command, luts[i].bytes);
     if (hal_status_is_error(status)) {
       return status;
@@ -237,21 +235,15 @@ static hal_status_t set_partial_window(jh_uc81xx_t *dev, uint16_t x, uint16_t y,
   } else if (dev->config.controller == JH_UC81XX_UC8151D) {
     data[0] = (uint8_t)x;
     data[1] = (uint8_t)x_end;
-    data[2] = (uint8_t)(y >> 8u);
-    data[3] = (uint8_t)y;
-    data[4] = (uint8_t)(y_end >> 8u);
-    data[5] = (uint8_t)y_end;
+    jh_store_be16(&data[2], y);
+    jh_store_be16(&data[4], y_end);
     data[6] = UC81XX_PTL_SCAN;
     len = 7u;
   } else {
-    data[0] = (uint8_t)(x >> 8u);
-    data[1] = (uint8_t)x;
-    data[2] = (uint8_t)(x_end >> 8u);
-    data[3] = (uint8_t)x_end;
-    data[4] = (uint8_t)(y >> 8u);
-    data[5] = (uint8_t)y;
-    data[6] = (uint8_t)(y_end >> 8u);
-    data[7] = (uint8_t)y_end;
+    jh_store_be16(&data[0], x);
+    jh_store_be16(&data[2], x_end);
+    jh_store_be16(&data[4], y);
+    jh_store_be16(&data[6], y_end);
     data[8] = UC81XX_PTL_SCAN;
     len = 9u;
   }

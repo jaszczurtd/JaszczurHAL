@@ -1163,7 +1163,7 @@ void example_register_bits(void) {
 > arguments (for example `i++` or function calls that modify state).
 
 > **Note:** `hal_map` returns `out_min` when `in_min == in_max` to avoid
-> integer division by zero. This matches the behaviour of `mapfloat()`.
+> integer division by zero. This matches the behaviour of `hal_math_map_f32()`.
 
 **Thread safety:** Thread-safe. Helpers are pure expressions (no shared state).
 

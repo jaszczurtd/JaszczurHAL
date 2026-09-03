@@ -1,5 +1,7 @@
 #include "jh_cyw43_gspi_transport.h"
 
+#include "hal/core/jh_endian.h"
+
 #include <limits.h>
 #include <string.h>
 
@@ -34,13 +36,6 @@ void put_boot_word(uint8_t output[4], uint32_t value) {
 uint32_t get_boot_word(const uint8_t input[4]) {
   return (uint32_t)input[1] | ((uint32_t)input[0] << 8u) |
          ((uint32_t)input[3] << 16u) | ((uint32_t)input[2] << 24u);
-}
-
-void put_le32(uint8_t output[4], uint32_t value) {
-  output[0] = (uint8_t)value;
-  output[1] = (uint8_t)(value >> 8u);
-  output[2] = (uint8_t)(value >> 16u);
-  output[3] = (uint8_t)(value >> 24u);
 }
 
 void host_wake_callback(void *callback_context) {
@@ -250,8 +245,8 @@ extern "C" hal_status_t jh_cyw43_gspi_read(jh_cyw43_gspi_transport_t *transport,
   const size_t padding = function == kBackplaneFunction
                              ? JH_CYW43_GSPI_BACKPLANE_READ_PADDING
                              : 0u;
-  put_le32(transport->transfer_buffer,
-           pack_command(false, true, function, address, (uint32_t)length));
+  jh_store_le32(transport->transfer_buffer,
+                pack_command(false, true, function, address, (uint32_t)length));
   const hal_status_t status =
       jh_cyw43_gspi_transfer(transport, transport->transfer_buffer, 4u,
                              transport->read_buffer, aligned_length + padding);
@@ -269,8 +264,8 @@ jh_cyw43_gspi_write(jh_cyw43_gspi_transport_t *transport, uint32_t function,
     return HAL_EINVAL;
   }
   const size_t aligned_length = (length + 3u) & ~3u;
-  put_le32(transport->transfer_buffer,
-           pack_command(true, true, function, address, (uint32_t)length));
+  jh_store_le32(transport->transfer_buffer,
+                pack_command(true, true, function, address, (uint32_t)length));
   memcpy(&transport->transfer_buffer[4], source, length);
   if (aligned_length != length) {
     memset(&transport->transfer_buffer[4u + length], 0,

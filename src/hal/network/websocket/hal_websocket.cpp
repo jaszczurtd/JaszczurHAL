@@ -4,6 +4,7 @@
 
 #ifdef HAL_ENABLE_WEBSOCKET
 
+#include "hal/core/jh_endian.h"
 #include "hal/network/hal_tcp.h"
 #include "hal/system/hal_system.h"
 
@@ -56,22 +57,10 @@ static uint32_t rotl32(uint32_t value, uint8_t bits) {
   return (value << bits) | (value >> (32u - bits));
 }
 
-static uint32_t read_be32(const uint8_t *p) {
-  return ((uint32_t)p[0] << 24u) | ((uint32_t)p[1] << 16u) |
-         ((uint32_t)p[2] << 8u) | (uint32_t)p[3];
-}
-
-static void write_be32(uint8_t *p, uint32_t value) {
-  p[0] = (uint8_t)(value >> 24u);
-  p[1] = (uint8_t)(value >> 16u);
-  p[2] = (uint8_t)(value >> 8u);
-  p[3] = (uint8_t)value;
-}
-
 static void ws_sha1_transform(ws_sha1_t *ctx, const uint8_t block[64]) {
   uint32_t w[80];
   for (size_t i = 0u; i < 16u; ++i) {
-    w[i] = read_be32(block + (i * 4u));
+    w[i] = jh_load_be32(block + (i * 4u));
   }
   for (size_t i = 16u; i < 80u; ++i) {
     w[i] = rotl32(w[i - 3u] ^ w[i - 8u] ^ w[i - 14u] ^ w[i - 16u], 1u);
@@ -158,13 +147,11 @@ static void ws_sha1_final(ws_sha1_t *ctx, uint8_t digest[20]) {
   }
 
   uint8_t len_be[8];
-  for (size_t i = 0u; i < sizeof(len_be); ++i) {
-    len_be[7u - i] = (uint8_t)(original_bit_len >> (i * 8u));
-  }
+  jh_store_be64(len_be, original_bit_len);
   ws_sha1_update(ctx, len_be, sizeof(len_be));
 
   for (size_t i = 0u; i < 5u; ++i) {
-    write_be32(digest + (i * 4u), ctx->state[i]);
+    jh_store_be32(digest + (i * 4u), ctx->state[i]);
   }
 }
 
@@ -413,8 +400,8 @@ static hal_status_t send_frame(hal_tcp_socket_t socket, uint8_t opcode,
     packet[pos++] = (uint8_t)len;
   } else if (len <= 65535u) {
     packet[pos++] = 126u;
-    packet[pos++] = (uint8_t)(len >> 8u);
-    packet[pos++] = (uint8_t)len;
+    jh_store_be16(&packet[pos], (uint16_t)len);
+    pos += 2u;
   } else {
     return HAL_EOVERFLOW;
   }
@@ -429,7 +416,8 @@ static hal_status_t send_frame(hal_tcp_socket_t socket, uint8_t opcode,
 }
 
 static void send_close_frame(ws_client_t *client, uint16_t code) {
-  uint8_t payload[2] = {(uint8_t)(code >> 8u), (uint8_t)code};
+  uint8_t payload[2];
+  jh_store_be16(payload, code);
   if (client->socket && hal_tcp_socket_is_connected(client->socket)) {
     send_frame(client->socket, WS_OPCODE_CLOSE, payload, sizeof(payload));
   }
@@ -458,7 +446,7 @@ static bool parse_frame(ws_client_t *client) {
     if (client->frame_len < 4u) {
       return false;
     }
-    payload_len = ((uint64_t)client->frame[2] << 8u) | client->frame[3];
+    payload_len = jh_load_be16(&client->frame[2]);
     pos = 4u;
   } else if (payload_len == 127u) {
     send_close_frame(client, WS_CLOSE_TOO_BIG);
@@ -514,7 +502,7 @@ static bool parse_frame(ws_client_t *client) {
     }
     uint16_t code = WS_CLOSE_NORMAL;
     if (payload_len >= 2u) {
-      code = ((uint16_t)payload[0] << 8u) | payload[1];
+      code = jh_load_be16(payload);
     }
     send_close_frame(client, code);
     clear_client(client, code, true);
@@ -590,17 +578,19 @@ static void poll_handshake_client(ws_client_t *client) {
 
   if (client->state == WS_CLIENT_HANDSHAKE) {
     const uint32_t now_ms = hal_millis();
-    const bool first_byte_timeout = client->request_len == 0u &&
-                                    HAL_WEBSOCKET_FIRST_BYTE_TIMEOUT_MS > 0u &&
-                                    (uint32_t)(now_ms - client->accepted_ms) >=
-                                        HAL_WEBSOCKET_FIRST_BYTE_TIMEOUT_MS;
-    const bool handshake_timeout = HAL_WEBSOCKET_HANDSHAKE_TIMEOUT_MS > 0u &&
-                                   (uint32_t)(now_ms - client->accepted_ms) >=
-                                       HAL_WEBSOCKET_HANDSHAKE_TIMEOUT_MS;
-    const bool idle_timeout = client->request_len > 0u &&
-                              HAL_WEBSOCKET_HANDSHAKE_IDLE_TIMEOUT_MS > 0u &&
-                              (uint32_t)(now_ms - client->last_activity_ms) >=
-                                  HAL_WEBSOCKET_HANDSHAKE_IDLE_TIMEOUT_MS;
+    const bool first_byte_timeout =
+        client->request_len == 0u && HAL_WEBSOCKET_FIRST_BYTE_TIMEOUT_MS > 0u &&
+        hal_elapsed_u32(now_ms, client->accepted_ms,
+                        HAL_WEBSOCKET_FIRST_BYTE_TIMEOUT_MS);
+    const bool handshake_timeout =
+        HAL_WEBSOCKET_HANDSHAKE_TIMEOUT_MS > 0u &&
+        hal_elapsed_u32(now_ms, client->accepted_ms,
+                        HAL_WEBSOCKET_HANDSHAKE_TIMEOUT_MS);
+    const bool idle_timeout =
+        client->request_len > 0u &&
+        HAL_WEBSOCKET_HANDSHAKE_IDLE_TIMEOUT_MS > 0u &&
+        hal_elapsed_u32(now_ms, client->last_activity_ms,
+                        HAL_WEBSOCKET_HANDSHAKE_IDLE_TIMEOUT_MS);
     if (first_byte_timeout || handshake_timeout || idle_timeout) {
       send_http_error(client->socket, "408 Request Timeout");
       clear_client(client, WS_CLOSE_PROTOCOL_ERROR, false);

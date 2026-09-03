@@ -741,8 +741,8 @@ extern "C" void jh_ble_stream_on_poll(void) {
   if (s_stream.initialized && !s_stream.operation_active) {
     (void)backoff_active_locked();
     if (s_stream.state == HAL_BLE_STREAM_STATE_AUTHENTICATED &&
-        (uint32_t)(hal_millis() - s_stream.last_activity_ms) >=
-            s_stream.idle_timeout_ms) {
+        hal_millis_deadline_expired(s_stream.last_activity_ms,
+                                    s_stream.idle_timeout_ms)) {
       s_stream.last_status = HAL_ETIMEOUT;
       close_session_locked();
     }

@@ -13,6 +13,7 @@
 #include "ff.h"
 #include "hal_sd_spi_diskio.h"
 
+#include "hal/core/jh_endian.h"
 #include "hal/gpio/hal_gpio.h"
 #include "hal/spi/hal_spi.h"
 #include "hal/system/hal_system.h"
@@ -88,10 +89,6 @@ static hal_spi_settings_t sd_spi_settings(uint32_t clock_hz) {
   return settings;
 }
 
-static bool sd_elapsed(uint32_t start_ms, uint32_t timeout_ms) {
-  return (uint32_t)(hal_millis() - start_ms) >= timeout_ms;
-}
-
 static void sd_select(void) { hal_gpio_write(s_sd.cs_pin, false); }
 
 static void sd_unselect(void) { hal_gpio_write(s_sd.cs_pin, true); }
@@ -133,7 +130,7 @@ static bool sd_wait_ready(uint32_t timeout_ms) {
     if (sd_spi_rx() == 0xFFu) {
       return true;
     }
-  } while (!sd_elapsed(start, timeout_ms));
+  } while (!hal_millis_deadline_expired(start, timeout_ms));
   return false;
 }
 
@@ -143,10 +140,11 @@ static uint8_t sd_command(uint8_t cmd, uint32_t arg) {
   }
 
   sd_spi_tx((uint8_t)(0x40u | cmd));
-  sd_spi_tx((uint8_t)(arg >> 24));
-  sd_spi_tx((uint8_t)(arg >> 16));
-  sd_spi_tx((uint8_t)(arg >> 8));
-  sd_spi_tx((uint8_t)arg);
+  uint8_t argument[4];
+  jh_store_be32(argument, arg);
+  for (size_t index = 0u; index < COUNTOF(argument); ++index) {
+    sd_spi_tx(argument[index]);
+  }
 
   if (cmd == SD_CMD0) {
     sd_spi_tx(0x95u);
@@ -185,7 +183,8 @@ static bool sd_read_data(uint8_t *dst, size_t len) {
       (void)sd_spi_rx();
       return true;
     }
-  } while (token == 0xFFu && !sd_elapsed(start, SD_READ_TIMEOUT_MS));
+  } while (token == 0xFFu &&
+           !hal_millis_deadline_expired(start, SD_READ_TIMEOUT_MS));
   return false;
 }
 
@@ -265,7 +264,7 @@ static bool sd_card_init(void) {
     if (response == SD_R1_IDLE_STATE) {
       break;
     }
-  } while (!sd_elapsed(start, SD_INIT_TIMEOUT_MS));
+  } while (!hal_millis_deadline_expired(start, SD_INIT_TIMEOUT_MS));
 
   if (response != SD_R1_IDLE_STATE) {
     sd_stop_transaction();
@@ -292,7 +291,7 @@ static bool sd_card_init(void) {
     if (response == SD_R1_READY_STATE) {
       break;
     }
-  } while (!sd_elapsed(start, SD_INIT_TIMEOUT_MS));
+  } while (!hal_millis_deadline_expired(start, SD_INIT_TIMEOUT_MS));
 
   if (response != SD_R1_READY_STATE) {
     sd_stop_transaction();

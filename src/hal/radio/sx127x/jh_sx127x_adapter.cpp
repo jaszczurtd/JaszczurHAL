@@ -2,6 +2,7 @@
 
 #ifdef HAL_ENABLE_SX127X
 
+#include "hal/core/jh_endian.h"
 #include "hal/gpio/hal_gpio.h"
 #include "hal/radio/jh_lora_modem.h"
 #include "hal/spi/hal_spi.h"
@@ -397,9 +398,8 @@ static hal_status_t sx127x_configure(jh_lora_radio_context_t *context) {
     status = jh_sx127x_write_register(context, JH_SX127X_REG_MODEM_CONFIG_3,
                                       modem_config_3);
   }
-  const uint8_t preamble[] = {
-      static_cast<uint8_t>(context->modem.preamble_symbols >> 8u),
-      static_cast<uint8_t>(context->modem.preamble_symbols)};
+  uint8_t preamble[2];
+  jh_store_be16(preamble, context->modem.preamble_symbols);
   if (status == HAL_OK) {
     status = write_buffer(context, JH_SX127X_REG_PREAMBLE_MSB, preamble,
                           sizeof(preamble));
@@ -544,17 +544,17 @@ sx127x_channel_activity_detect_start(jh_lora_radio_context_t *context,
 
 static bool operation_timed_out(const jh_lora_radio_context_t *context) {
   if (context->state == HAL_LORA_RADIO_STATE_TX) {
-    return (uint32_t)(hal_millis() - context->transmit_started_ms) >=
-           context->transmit_timeout_ms;
+    return hal_millis_deadline_expired(context->transmit_started_ms,
+                                       context->transmit_timeout_ms);
   }
   if (context->state == HAL_LORA_RADIO_STATE_RX &&
       !context->receive_continuous) {
-    return (uint32_t)(hal_millis() - context->receive_started_ms) >=
-           context->receive_timeout_ms;
+    return hal_millis_deadline_expired(context->receive_started_ms,
+                                       context->receive_timeout_ms);
   }
   return context->state == HAL_LORA_RADIO_STATE_CAD &&
-         (uint32_t)(hal_millis() - context->channel_activity_started_ms) >=
-             context->channel_activity_timeout_ms;
+         hal_millis_deadline_expired(context->channel_activity_started_ms,
+                                     context->channel_activity_timeout_ms);
 }
 
 static hal_status_t read_received_packet(jh_lora_radio_context_t *context) {

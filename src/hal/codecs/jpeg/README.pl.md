@@ -9,7 +9,7 @@ niezależny od targetu.
 Pliki `tjpgd.c` i `tjpgd.h` przechowywane w repozytorium włączają go przez
 `HAL_ENABLE_JPEG`, a
 adaptacja wejścia z pamięci i wyjścia RGB565 znajduje się w
-`src/utils/tools.cpp`.
+`src/hal/codecs/hal_image.cpp`.
 
 Do synchronizacji lub weryfikacji tej zależności służy
 `scripts/ensure_jpeg.sh`.

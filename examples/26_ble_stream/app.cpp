@@ -12,7 +12,7 @@
  */
 
 #include <JaszczurHAL.h>
-#include <tools.h>
+#include <hal/serial/hal_serial.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -526,7 +526,7 @@ hal_status_t initialize_runtime(void) {
 } // namespace
 
 extern "C" void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
 #if defined(HAL_BLE_STREAM_EXAMPLE_COMMANDS)
   deb("JHBC1 BLE command-router Peripheral");
 #else

@@ -153,10 +153,6 @@ static const uint8_t s_initcmd[] = {0xEFu,
                                     0x80u,
                                     0x00u};
 
-static bool pin_is_connected(int16_t pin) { return pin >= 0 && pin <= 255; }
-
-static uint8_t pin_to_u8(int16_t pin) { return (uint8_t)pin; }
-
 static uint32_t normalized_clock(const jh_ili9341_config_t *config) {
   return (config != NULL && config->clock_hz != 0u) ? config->clock_hz
                                                     : JH_ILI9341_SPI_DEFAULT_HZ;
@@ -204,7 +200,8 @@ static bool write_command(jh_ili9341_t *dev, uint8_t command,
 }
 
 bool jh_ili9341_init(jh_ili9341_t *dev, const jh_ili9341_config_t *config) {
-  if (dev == NULL || config == NULL || !pin_is_connected(config->dc_pin)) {
+  if (dev == NULL || config == NULL ||
+      !jh_display_pin_connected(config->dc_pin)) {
     return false;
   }
 
@@ -219,7 +216,7 @@ bool jh_ili9341_init(jh_ili9341_t *dev, const jh_ili9341_config_t *config) {
                             dev->config.rst_pin, &settings, 100u, 200u)) {
     return false;
   }
-  if (!pin_is_connected(dev->config.rst_pin)) {
+  if (!jh_display_pin_connected(dev->config.rst_pin)) {
     if (!write_command(dev, ILI9341_SWRESET, NULL, 0u)) {
       return false;
     }
@@ -319,7 +316,7 @@ bool jh_ili9341_begin_write(jh_ili9341_t *dev, uint16_t x, uint16_t y,
   if (hal_status_is_error(hal_spi_device_acquire(&dev->spi_device))) {
     return false;
   }
-  hal_gpio_write(pin_to_u8(dev->config.dc_pin), true);
+  hal_gpio_write(jh_display_pin_u8(dev->config.dc_pin), true);
   dev->write_active = true;
   return true;
 }
@@ -379,7 +376,7 @@ bool jh_ili9341_write_pixels_fast(jh_ili9341_t *dev, const uint16_t *pixels,
   uint8_t chunk[ILI9341_PIXEL_CHUNK_BYTES];
   while (count > 0u) {
     const size_t pixel_count =
-        (count < (sizeof(chunk) / 2u)) ? count : (sizeof(chunk) / 2u);
+        (count < (COUNTOF(chunk) / 2u)) ? count : (COUNTOF(chunk) / 2u);
     for (size_t i = 0u; i < pixel_count; ++i) {
       jh_display_put_u16_be(&chunk[i * 2u], pixels[i]);
     }

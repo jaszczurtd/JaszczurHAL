@@ -67,10 +67,6 @@ void operation_end(void) {
   hal_mutex_unlock(s_operation_mutex);
 }
 
-bool deadline_expired(uint32_t started, uint32_t timeout_ms) {
-  return (uint32_t)(hal_millis() - started) >= timeout_ms;
-}
-
 void copy_ipv4(uint32_t address, uint8_t out[HAL_NET_IPV4_ADDR_LEN]) {
   ip4_addr_t value{};
   value.addr = address;
@@ -419,7 +415,8 @@ hal_status_t jh_rp2040_cyw43_provider_scan(uint32_t timeout_ms,
     const uint32_t started = hal_millis();
     while (status == HAL_OK && cyw43_wifi_scan_active(&cyw43_state)) {
       status = jh_cyw43_lwip_service();
-      if (status == HAL_OK && deadline_expired(started, timeout_ms)) {
+      if (status == HAL_OK &&
+          hal_millis_deadline_expired(started, timeout_ms)) {
         status = HAL_ETIMEOUT;
       }
       if (status == HAL_OK) {

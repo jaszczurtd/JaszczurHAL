@@ -1614,7 +1614,8 @@ include `"utils/unity.h"` and use the repository-local `unity_config.h`. Run
 pinned checkout. Outside the test/support build, Unity is inactive unless
 `HAL_ENABLE_UNITY` is explicitly enabled.
 
-`tools.cpp` is covered by `test_tools` using HAL mocks.
+The thematic utility modules and their compatibility wrappers are covered by
+`test_tools` using HAL mocks.
 `multicoreWatchdog.cpp` is covered by `test_multicoreWatchdog` using a local
 logger-close stub plus HAL mocks.
 `utils/draw7Segment.cpp` has no platform dependencies
@@ -1803,7 +1804,7 @@ is intentionally not a second exhaustive test registry.
 | `test_SmartTimers` | `tick`, callback firing, `abort`, `restart` (core behavior used by `hal_soft_timer_*`) |
 | `test_pidController` | P output, output clamping, integral reset, stability detection (core behavior used by `hal_pid_controller_*`) |
 | `test_multicoreWatchdog` | dual-core liveness gating, external reset path, pre-setup no-op safety |
-| `test_tools` | utility coverage from `tools.cpp` using HAL mocks, including `debugInit`, `setDebugPrefixWithColon`, numeric/string helpers, HAL-delegating legacy time wrappers, and buffer-safe formatting helpers |
+| `test_tools` | thematic utility and compatibility coverage using HAL mocks, including debug aliases, status-returning numeric/string/ADC/NTC/pixel helpers, endian conversion, wrap-safe periodic random state, legacy time wrappers, and bounded formatting |
 | `test_hal_critical_section` | critical-section nesting and interrupt-state restoration behavior |
 | `test_hal_dac` | DAC init compatibility plus status-first raw/millivolt writes, channel/range/uninitialised validation and unsupported-target reporting |
 | `test_hal_digipot` | MCP401x/MAX5395 facade init/set behavior, range validation and status mapping |

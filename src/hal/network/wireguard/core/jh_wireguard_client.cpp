@@ -278,7 +278,7 @@ bool JHWireGuardClient::kick_handshake(const uint8_t probe_ip[4],
   if (jh_lwip_extension_monotonic_ms(extension, &now) != HAL_OK) {
     return false;
   }
-  if (has_kicked_ && (uint32_t)(now - last_kick_ms_) < min_interval_ms) {
+  if (has_kicked_ && !hal_elapsed_u32(now, last_kick_ms_, min_interval_ms)) {
     return true;
   }
 

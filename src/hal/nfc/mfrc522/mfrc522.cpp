@@ -7,6 +7,7 @@
 
 #include "mfrc522.h"
 #include "hal/core/hal_mutex_once.h"
+#include "hal/core/jh_endian.h"
 #include "hal/system/hal_system.h"
 
 #include <cstring>
@@ -691,8 +692,9 @@ MFRC522::StatusCode MFRC522::PICC_Select(
   // uid2	uid3 		 7 bytes		1 CT uid0	uid1
   // uid2 						2
   // uid3	uid4	uid5	uid6 		10 bytes		1
-  // CT		uid0	uid1	uid2 						2			CT uid3	uid4	uid5
-  // 3			uid6	uid7	uid8	uid9
+  // CT		uid0	uid1	uid2
+  // 2			CT uid3	uid4	uid5 3			uid6	uid7
+  // uid8	uid9
 
   // Sanity checks
   if (validBits > 80) {
@@ -1243,8 +1245,7 @@ MFRC522::StatusCode MFRC522::MIFARE_GetValue(byte blockAddr, int32_t *value) {
   status = MIFARE_Read(blockAddr, buffer, &size);
   if (status == STATUS_OK) {
     // Extract the value
-    *value = (int32_t(buffer[3]) << 24) | (int32_t(buffer[2]) << 16) |
-             (int32_t(buffer[1]) << 8) | int32_t(buffer[0]);
+    *value = (int32_t)jh_load_le32(buffer);
   }
   return status;
 } // End MIFARE_GetValue()
@@ -1264,10 +1265,8 @@ MFRC522::StatusCode MFRC522::MIFARE_SetValue(byte blockAddr, int32_t value) {
   byte buffer[18];
 
   // Translate the int32_t into 4 bytes; repeated 2x in value block
-  buffer[0] = buffer[8] = (value & 0xFF);
-  buffer[1] = buffer[9] = (value & 0xFF00) >> 8;
-  buffer[2] = buffer[10] = (value & 0xFF0000) >> 16;
-  buffer[3] = buffer[11] = (value & 0xFF000000) >> 24;
+  jh_store_le32(&buffer[0], (uint32_t)value);
+  memcpy(&buffer[8], &buffer[0], sizeof(uint32_t));
   // Inverse 4 bytes also found in value block
   buffer[4] = ~buffer[0];
   buffer[5] = ~buffer[1];

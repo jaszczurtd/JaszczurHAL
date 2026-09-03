@@ -44,8 +44,7 @@ void SmartTimers::tick() {
   }
 
   uint32_t actualTime = hal_millis();
-  uint32_t deltaTime = actualTime - _lastTime;
-  if (deltaTime >= _time) {
+  if (hal_elapsed_u32(actualTime, _lastTime, _time)) {
     void (*cb)(void) = clb;
     _lastTime = actualTime;
     hal_mutex_unlock(_mutex);
@@ -77,8 +76,7 @@ bool SmartTimers::available() {
   }
 
   uint32_t actualTime = hal_millis();
-  uint32_t deltaTime = actualTime - _lastTime;
-  bool result = (deltaTime >= _time);
+  bool result = hal_elapsed_u32(actualTime, _lastTime, _time);
   hal_mutex_unlock(_mutex);
   return result;
 }
@@ -99,8 +97,8 @@ uint32_t SmartTimers::time() {
   }
 
   uint32_t actualTime = hal_millis();
-  uint32_t deltaTime = actualTime - _lastTime;
-  uint32_t result = (deltaTime >= _time) ? 0 : (_time - deltaTime);
+  const bool elapsed = hal_elapsed_u32(actualTime, _lastTime, _time);
+  uint32_t result = elapsed ? 0 : (_time - (actualTime - _lastTime));
   hal_mutex_unlock(_mutex);
   return result;
 }

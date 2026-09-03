@@ -1,6 +1,7 @@
 #pragma once
 
 #include "hal/core/hal_status.h"
+#include "hal/core/jh_endian.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -23,10 +24,8 @@ jh_icmp_echo_reply_parse(const uint8_t *packet, size_t packet_size,
     return HAL_EPROTO;
   }
   const uint8_t *icmp = packet + ip_header_size;
-  const uint16_t reply_identifier =
-      (uint16_t)(((uint16_t)icmp[4] << 8u) | icmp[5]);
-  const uint16_t reply_sequence =
-      (uint16_t)(((uint16_t)icmp[6] << 8u) | icmp[7]);
+  const uint16_t reply_identifier = jh_load_be16(&icmp[4]);
+  const uint16_t reply_sequence = jh_load_be16(&icmp[6]);
   if (icmp[0] != 0u || icmp[1] != 0u || reply_identifier != identifier ||
       reply_sequence != sequence) {
     return HAL_ENOENT;

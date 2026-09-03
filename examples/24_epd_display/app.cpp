@@ -5,7 +5,7 @@
 
 #include <JaszczurHAL.h>
 #include <hal/core/hal_app.h>
-#include <tools.h>
+#include <hal/serial/hal_serial.h>
 
 #include <string.h>
 
@@ -51,7 +51,7 @@ static void make_test_pattern(void) {
 }
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   deb("=== JaszczurHAL SSD1681 EPD example ===");
 
   hal_status_t status =

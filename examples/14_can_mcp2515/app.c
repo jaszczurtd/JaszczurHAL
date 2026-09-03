@@ -6,9 +6,9 @@
 #include <hal/can/hal_can.h>
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/spi/hal_spi.h>
 #include <hal/system/hal_system.h>
-#include <tools_c.h>
 
 #if HAL_TARGET_IS_RP
 #define EXAMPLE_SPI_MISO 16u
@@ -31,7 +31,7 @@ static hal_can_t s_can = NULL;
 static uint32_t s_counter = 0u;
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   deb("");
   deb("=== JaszczurHAL MCP2515 CAN example ===");
   deb("Initialising SPI bus and MCP2515 on CS pin...");

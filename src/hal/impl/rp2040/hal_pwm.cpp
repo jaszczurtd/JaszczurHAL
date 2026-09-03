@@ -1,6 +1,7 @@
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_RP
 #include "hal/core/hal_mutex_once.h"
+#include "hal/core/jh_resolution.h"
 #include "hal/gpio/hal_pwm.h"
 #include "hal/system/hal_sync.h"
 
@@ -23,18 +24,6 @@ static void pwm_ensure_mutex(void) {
 }
 
 static bool pwm_pin_valid(uint8_t pin) { return pin < NUM_BANK0_GPIOS; }
-
-static uint8_t clamp_resolution(uint8_t bits) {
-  if (bits < 1u) {
-    HAL_ASSERT(false, "hal_pwm_set_resolution: resolution is below 1 bit");
-    return 1u;
-  }
-  if (bits > 16u) {
-    HAL_ASSERT(false, "hal_pwm_set_resolution: resolution is above 16 bits");
-    return 16u;
-  }
-  return bits;
-}
 
 static uint32_t max_value_for_resolution(void) {
   return (1u << s_resolution_bits) - 1u;
@@ -86,7 +75,9 @@ static void pwm_configure_slice(uint slice, uint32_t wrap) {
 void hal_pwm_set_resolution(uint8_t bits) {
   pwm_ensure_mutex();
   hal_mutex_lock(s_pwm_mutex);
-  s_resolution_bits = clamp_resolution(bits);
+  s_resolution_bits = jh_resolution_clamp_1_16(
+      bits, "hal_pwm_set_resolution: resolution is below 1 bit",
+      "hal_pwm_set_resolution: resolution is above 16 bits");
   hal_mutex_unlock(s_pwm_mutex);
 }
 

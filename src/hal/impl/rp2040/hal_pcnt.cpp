@@ -4,6 +4,7 @@
 #ifdef HAL_ENABLE_PCNT
 
 #include "hal/analog/hal_pcnt.h"
+#include "hal/analog/hal_pcnt_common.h"
 #include "hal/gpio/hal_gpio.h"
 #include "hal/system/hal_sync.h"
 
@@ -38,18 +39,13 @@ static hal_gpio_irq_mode_t to_irq_mode(hal_pcnt_edge_t edge) {
   }
 }
 
-static bool edge_valid(hal_pcnt_edge_t edge) {
-  return edge == HAL_PCNT_EDGE_RISING || edge == HAL_PCNT_EDGE_FALLING ||
-         edge == HAL_PCNT_EDGE_BOTH;
-}
-
 bool hal_pcnt_is_supported(void) { return true; }
 
 uint8_t hal_pcnt_channel_count(void) { return RP2040_PCNT_CHANNELS; }
 
 hal_status_t hal_pcnt_init_ex(uint8_t channel, uint8_t pin,
                               hal_pcnt_edge_t edge) {
-  if (channel >= RP2040_PCNT_CHANNELS || !edge_valid(edge)) {
+  if (channel >= RP2040_PCNT_CHANNELS || !jh_hal_pcnt_edge_valid(edge)) {
     return HAL_EINVAL;
   }
   s_count[channel] = 0u;

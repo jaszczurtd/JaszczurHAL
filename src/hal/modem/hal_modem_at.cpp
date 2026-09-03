@@ -342,7 +342,7 @@ hal_modem_at_result_t hal_modem_at_send(hal_modem_at_t h, const char *cmd,
       res = HAL_MODEM_AT_ERROR;
       break;
     }
-    if ((hal_millis() - start) >= timeout_ms)
+    if (hal_millis_deadline_expired(start, timeout_ms))
       break;
     engine_poll_sleep(h);
   }
@@ -364,7 +364,7 @@ hal_modem_at_result_t hal_modem_at_send(hal_modem_at_t h, const char *cmd,
   if (res == HAL_MODEM_AT_OK && expected) {
     const uint32_t TAIL_GRACE_MS = 200u;
     uint32_t tail_start = hal_millis();
-    while ((hal_millis() - tail_start) < TAIL_GRACE_MS) {
+    while (!hal_millis_deadline_expired(tail_start, TAIL_GRACE_MS)) {
       (void)drain_uart(h);
       if (buf_contains(h->cfg.rx_buf, h->rx_len, "\r\nOK\r\n") ||
           buf_contains(h->cfg.rx_buf, h->rx_len, "\r\nERROR\r\n") ||
@@ -409,7 +409,8 @@ hal_modem_at_result_t hal_modem_at_send_with_data(
      before we entered the wait loop), short-circuit immediately. */
   uint32_t start = hal_millis();
   bool got_prompt = (strchr(h->cfg.rx_buf, '>') != NULL);
-  while (!got_prompt && (hal_millis() - start) < prompt_timeout_ms) {
+  while (!got_prompt &&
+         !hal_millis_deadline_expired(start, prompt_timeout_ms)) {
     while (hal_uart_available(h->cfg.uart) > 0) {
       int b = hal_uart_read(h->cfg.uart);
       if (b < 0)
@@ -448,7 +449,7 @@ hal_modem_at_result_t hal_modem_at_send_with_data(
       res = HAL_MODEM_AT_ERROR;
       break;
     }
-    if ((hal_millis() - start) >= resp_timeout_ms)
+    if (hal_millis_deadline_expired(start, resp_timeout_ms))
       break;
     engine_poll_sleep(h);
   }
@@ -493,17 +494,18 @@ listen_until_quiet(hal_modem_at_t h, hal_modem_at_ready_cb_t ready, void *user,
         }
       }
     }
-    if (ready_seen && (now - last_byte_ms) >= h->cfg.quiet_window_ms) {
+    if (ready_seen &&
+        hal_elapsed_u32(now, last_byte_ms, h->cfg.quiet_window_ms)) {
       res = HAL_MODEM_AT_OK;
       break;
     }
     const uint32_t quiet_reference = preserve_buffer ? last_byte_ms : start;
     if (!ready && consumed == 0 &&
-        (now - quiet_reference) >= h->cfg.quiet_window_ms) {
+        hal_elapsed_u32(now, quiet_reference, h->cfg.quiet_window_ms)) {
       res = HAL_MODEM_AT_OK;
       break;
     }
-    if ((now - start) >= total_timeout_ms) {
+    if (hal_elapsed_u32(now, start, total_timeout_ms)) {
       break;
     }
     engine_poll_sleep(h);
@@ -642,9 +644,10 @@ void hal_modem_at_sleep_ms(hal_modem_at_t h, uint32_t ms) {
   uint32_t start = hal_millis();
   for (;;) {
     h->tick_cb(h->tick_user);
-    uint32_t elapsed = hal_millis() - start;
-    if (elapsed >= ms)
+    const uint32_t now = hal_millis();
+    if (hal_elapsed_u32(now, start, ms))
       break;
+    const uint32_t elapsed = now - start;
     uint32_t remain = ms - elapsed;
     hal_delay_ms(remain > 20u ? 20u : remain);
   }

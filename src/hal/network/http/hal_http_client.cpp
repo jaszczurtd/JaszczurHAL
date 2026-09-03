@@ -43,7 +43,7 @@ static hal_status_t stream_close(jh_http_stream_t *stream,
     hal_status_t status = hal_tls_client_shutdown_ex(stream->tls);
     const uint32_t started = hal_millis();
     while (status == HAL_EAGAIN &&
-           (uint32_t)(hal_millis() - started) < timeout_ms) {
+           !hal_millis_deadline_expired(started, timeout_ms)) {
       status = hal_tls_client_poll_ex(stream->tls);
       if (status == HAL_EAGAIN) {
         hal_idle();
@@ -67,7 +67,7 @@ static hal_status_t stream_close(jh_http_stream_t *stream,
 static hal_status_t wait_tls_connected(hal_tls_client_t client,
                                        uint32_t timeout_ms) {
   const uint32_t started = hal_millis();
-  while ((uint32_t)(hal_millis() - started) < timeout_ms) {
+  while (!hal_millis_deadline_expired(started, timeout_ms)) {
     hal_tls_state_t state = HAL_TLS_STATE_FAILED;
     hal_status_t status = hal_tls_client_get_state_ex(client, &state);
     if (status != HAL_OK) {
@@ -165,7 +165,7 @@ static hal_status_t stream_write_all(jh_http_stream_t *stream,
     if (status != HAL_OK && status != HAL_EAGAIN) {
       return status;
     }
-    if ((uint32_t)(hal_millis() - started) >= timeout_ms) {
+    if (hal_millis_deadline_expired(started, timeout_ms)) {
       return HAL_ETIMEOUT;
     }
     if (offset < length) {
@@ -360,7 +360,7 @@ hal_http_client_perform_ex(const hal_http_client_request_t *request,
   bool closed = false;
   const uint32_t started = hal_millis();
   while (status == HAL_OK && !closed &&
-         (uint32_t)(hal_millis() - started) < request->timeout_ms) {
+         !hal_millis_deadline_expired(started, request->timeout_ms)) {
     uint8_t *const chunk = buffers->chunk;
     size_t received = 0u;
     status =

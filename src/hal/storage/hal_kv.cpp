@@ -4,6 +4,7 @@
 #include "hal/storage/hal_kv.h"
 
 #include "hal/core/hal_mutex_once.h"
+#include "hal/core/jh_endian.h"
 #include "hal/security/hal_crc.h"
 #include "hal/serial/hal_serial.h"
 #include "hal/storage/hal_eeprom.h"
@@ -95,29 +96,6 @@ static void kv_ensure_mutex(void) {
   (void)jh_hal_mutex_create_once(&s_kv_mutex);
 }
 
-static uint16_t read_u16(const uint8_t *raw) {
-  return static_cast<uint16_t>(raw[0]) |
-         static_cast<uint16_t>(static_cast<uint16_t>(raw[1]) << 8u);
-}
-
-static uint32_t read_u32(const uint8_t *raw) {
-  return static_cast<uint32_t>(raw[0]) | (static_cast<uint32_t>(raw[1]) << 8u) |
-         (static_cast<uint32_t>(raw[2]) << 16u) |
-         (static_cast<uint32_t>(raw[3]) << 24u);
-}
-
-static void write_u16(uint8_t *raw, uint16_t value) {
-  raw[0] = static_cast<uint8_t>(value & 0xFFu);
-  raw[1] = static_cast<uint8_t>((value >> 8u) & 0xFFu);
-}
-
-static void write_u32(uint8_t *raw, uint32_t value) {
-  raw[0] = static_cast<uint8_t>(value & 0xFFu);
-  raw[1] = static_cast<uint8_t>((value >> 8u) & 0xFFu);
-  raw[2] = static_cast<uint8_t>((value >> 16u) & 0xFFu);
-  raw[3] = static_cast<uint8_t>((value >> 24u) & 0xFFu);
-}
-
 static uint16_t crc16(const uint8_t *data, uint16_t len) {
   return hal_crc16_ccitt(data, len, HAL_CRC16_CCITT_INIT);
 }
@@ -142,57 +120,57 @@ static bool record_type_valid(uint8_t type, uint16_t len) {
 
 static void encode_bank_header(uint8_t raw[KV_BANK_HDR_SIZE],
                                const kv_bank_hdr_t &header) {
-  write_u32(raw + 0u, header.magic);
+  jh_store_le32(raw + 0u, header.magic);
   raw[4] = header.version;
   raw[5] = header.reserved;
-  write_u16(raw + 6u, header.header_size);
-  write_u32(raw + 8u, header.generation);
-  write_u16(raw + 12u, header.used_offset);
-  write_u16(raw + 14u, header.bank_size);
-  write_u16(raw + 16u, header.record_count);
-  write_u16(raw + 18u, header.body_crc);
-  write_u16(raw + 20u, header.reserved2);
-  write_u16(raw + 22u, header.header_crc);
+  jh_store_le16(raw + 6u, header.header_size);
+  jh_store_le32(raw + 8u, header.generation);
+  jh_store_le16(raw + 12u, header.used_offset);
+  jh_store_le16(raw + 14u, header.bank_size);
+  jh_store_le16(raw + 16u, header.record_count);
+  jh_store_le16(raw + 18u, header.body_crc);
+  jh_store_le16(raw + 20u, header.reserved2);
+  jh_store_le16(raw + 22u, header.header_crc);
 }
 
 static kv_bank_hdr_t decode_bank_header(const uint8_t *raw) {
   kv_bank_hdr_t header = {};
-  header.magic = read_u32(raw + 0u);
+  header.magic = jh_load_le32(raw + 0u);
   header.version = raw[4];
   header.reserved = raw[5];
-  header.header_size = read_u16(raw + 6u);
-  header.generation = read_u32(raw + 8u);
-  header.used_offset = read_u16(raw + 12u);
-  header.bank_size = read_u16(raw + 14u);
-  header.record_count = read_u16(raw + 16u);
-  header.body_crc = read_u16(raw + 18u);
-  header.reserved2 = read_u16(raw + 20u);
-  header.header_crc = read_u16(raw + 22u);
+  header.header_size = jh_load_le16(raw + 6u);
+  header.generation = jh_load_le32(raw + 8u);
+  header.used_offset = jh_load_le16(raw + 12u);
+  header.bank_size = jh_load_le16(raw + 14u);
+  header.record_count = jh_load_le16(raw + 16u);
+  header.body_crc = jh_load_le16(raw + 18u);
+  header.reserved2 = jh_load_le16(raw + 20u);
+  header.header_crc = jh_load_le16(raw + 22u);
   return header;
 }
 
 static void encode_record_header(uint8_t raw[KV_REC_HDR_SIZE],
                                  const kv_rec_hdr_t &header) {
-  write_u16(raw + 0u, header.magic);
-  write_u16(raw + 2u, header.key);
+  jh_store_le16(raw + 0u, header.magic);
+  jh_store_le16(raw + 2u, header.key);
   raw[4] = header.type;
   raw[5] = header.flags;
-  write_u16(raw + 6u, header.len);
-  write_u32(raw + 8u, header.seq);
-  write_u16(raw + 12u, header.payload_crc);
-  write_u16(raw + 14u, header.header_crc);
+  jh_store_le16(raw + 6u, header.len);
+  jh_store_le32(raw + 8u, header.seq);
+  jh_store_le16(raw + 12u, header.payload_crc);
+  jh_store_le16(raw + 14u, header.header_crc);
 }
 
 static kv_rec_hdr_t decode_record_header(const uint8_t *raw) {
   kv_rec_hdr_t header = {};
-  header.magic = read_u16(raw + 0u);
-  header.key = read_u16(raw + 2u);
+  header.magic = jh_load_le16(raw + 0u);
+  header.key = jh_load_le16(raw + 2u);
   header.type = raw[4];
   header.flags = raw[5];
-  header.len = read_u16(raw + 6u);
-  header.seq = read_u32(raw + 8u);
-  header.payload_crc = read_u16(raw + 12u);
-  header.header_crc = read_u16(raw + 14u);
+  header.len = jh_load_le16(raw + 6u);
+  header.seq = jh_load_le32(raw + 8u);
+  header.payload_crc = jh_load_le16(raw + 12u);
+  header.header_crc = jh_load_le16(raw + 14u);
   return header;
 }
 
@@ -276,7 +254,7 @@ static bool validate_bank_buffer(kv_bank_meta_t *out_meta) {
     }
     const uint16_t footer_offset =
         static_cast<uint16_t>(payload_offset + record.len);
-    if (read_u16(s_bank + footer_offset) != KV_REC_FOOTER) {
+    if (jh_load_le16(s_bank + footer_offset) != KV_REC_FOOTER) {
       return false;
     }
     offset = static_cast<uint16_t>(offset + total);
@@ -425,7 +403,7 @@ static hal_status_t append_record_locked(uint16_t key, uint8_t type,
   if (len > 0u) {
     memcpy(s_bank + payload_offset, data, len);
   }
-  write_u16(s_bank + payload_offset + len, KV_REC_FOOTER);
+  jh_store_le16(s_bank + payload_offset + len, KV_REC_FOOTER);
   s_used_offset = static_cast<uint16_t>(s_used_offset + total);
   s_record_count++;
   return HAL_OK;
@@ -467,7 +445,7 @@ static hal_status_t compact_locked(void) {
     record.payload_crc = crc16(s_bank + destination_payload, entry.len);
     record.header_crc = record_header_crc(record);
     encode_record_header(s_bank + destination, record);
-    write_u16(s_bank + destination_payload + entry.len, KV_REC_FOOTER);
+    jh_store_le16(s_bank + destination_payload + entry.len, KV_REC_FOOTER);
     entry.payload_offset = destination_payload;
     destination = static_cast<uint16_t>(destination + record_size(entry.len));
   }
@@ -674,7 +652,7 @@ bool hal_kv_init(uint16_t base_addr, uint16_t size_bytes) {
 
 hal_status_t hal_kv_set_u32_ex(uint16_t key, uint32_t value) {
   uint8_t raw[sizeof(uint32_t)] = {};
-  write_u32(raw, value);
+  jh_store_le32(raw, value);
   kv_ensure_mutex();
   if (s_kv_mutex == nullptr) {
     return HAL_ENOMEM;
@@ -721,10 +699,10 @@ hal_status_t hal_kv_get_u32_ex(uint16_t key, uint32_t *out_value) {
     if (hal_status_is_error(status)) {
       return status;
     }
-    *out_value = read_u32(raw);
+    *out_value = jh_load_le32(raw);
     return HAL_OK;
   }
-  *out_value = read_u32(s_bank + s_index[index].payload_offset);
+  *out_value = jh_load_le32(s_bank + s_index[index].payload_offset);
   hal_mutex_unlock(s_kv_mutex);
   return HAL_OK;
 }

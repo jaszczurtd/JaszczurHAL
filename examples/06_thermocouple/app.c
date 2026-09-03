@@ -1,9 +1,9 @@
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
 #include <hal/i2c/hal_i2c.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
 #include <hal/temperature/hal_thermocouple.h>
-#include <tools_c.h>
 
 #if HAL_TARGET_IS_STM32G474
 #define EXAMPLE_PIN(port, pin) ((uint8_t)(((port) * 16u) + (pin)))
@@ -31,7 +31,7 @@ static hal_thermocouple_t max6675 = NULL;
 static uint32_t last_report_ms = 0;
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
 
 #if defined(HAL_ENABLE_MCP9600)
   hal_thermocouple_config_t mcp_cfg = {};

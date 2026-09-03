@@ -399,10 +399,6 @@ static const gc9a01_reg_t s_gc9a01_panel_regs[] = {
     {0xE8u, 1u, {0x34u}},
 };
 
-static bool pin_is_connected(int16_t pin) { return pin >= 0 && pin <= 255; }
-
-static uint8_t pin_to_u8(int16_t pin) { return (uint8_t)pin; }
-
 static uint32_t normalized_clock(const jh_st77xx_config_t *config) {
   return (config != NULL && config->clock_hz != 0u) ? config->clock_hz
                                                     : JH_ST77XX_SPI_DEFAULT_HZ;
@@ -511,17 +507,14 @@ bool jh_st77xx_run_gc9a01_init_sequence(const jh_st77xx_command_io_t *io) {
       !io->write_command(io->ctx, GC9A01_INREGEN2, NULL, 0u)) {
     return false;
   }
-  for (size_t i = 0u;
-       i < sizeof(s_gc9a01_default_init) / sizeof(s_gc9a01_default_init[0]);
-       ++i) {
+  for (size_t i = 0u; i < COUNTOF(s_gc9a01_default_init); ++i) {
     if (!io->write_command(io->ctx, s_gc9a01_default_init[i].command,
                            s_gc9a01_default_init[i].data,
                            s_gc9a01_default_init[i].len)) {
       return false;
     }
   }
-  for (size_t i = 0u;
-       i < sizeof(s_gc9a01_panel_regs) / sizeof(s_gc9a01_panel_regs[0]); ++i) {
+  for (size_t i = 0u; i < COUNTOF(s_gc9a01_panel_regs); ++i) {
     if (!io->write_command(io->ctx, s_gc9a01_panel_regs[i].command,
                            s_gc9a01_panel_regs[i].data,
                            s_gc9a01_panel_regs[i].len)) {
@@ -681,7 +674,8 @@ static bool setup_pins_and_reset(jh_st77xx_t *dev) {
 }
 
 bool jh_st77xx_init(jh_st77xx_t *dev, const jh_st77xx_config_t *config) {
-  if (dev == NULL || config == NULL || !pin_is_connected(config->dc_pin)) {
+  if (dev == NULL || config == NULL ||
+      !jh_display_pin_connected(config->dc_pin)) {
     return false;
   }
 
@@ -913,7 +907,7 @@ bool jh_st77xx_begin_write(jh_st77xx_t *dev, uint16_t x, uint16_t y, uint16_t w,
   if (hal_status_is_error(hal_spi_device_acquire(&dev->spi_device))) {
     return false;
   }
-  hal_gpio_write(pin_to_u8(dev->config.dc_pin), true);
+  hal_gpio_write(jh_display_pin_u8(dev->config.dc_pin), true);
   dev->write_active = true;
   return true;
 }
@@ -973,7 +967,7 @@ bool jh_st77xx_write_pixels_fast(jh_st77xx_t *dev, const uint16_t *pixels,
   uint8_t chunk[ST77XX_PIXEL_CHUNK_BYTES];
   while (count > 0u) {
     const size_t pixel_count =
-        (count < (sizeof(chunk) / 2u)) ? count : (sizeof(chunk) / 2u);
+        (count < (COUNTOF(chunk) / 2u)) ? count : (COUNTOF(chunk) / 2u);
     for (size_t i = 0u; i < pixel_count; ++i) {
       jh_display_put_u16_be(&chunk[i * 2u], pixels[i]);
     }

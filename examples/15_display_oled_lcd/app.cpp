@@ -12,8 +12,8 @@
 #include <hal/display/hal_display.h>
 #include <hal/display/hal_hd44780.h>
 #include <hal/i2c/hal_i2c.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
-#include <tools.h>
 
 #include <new>
 
@@ -71,7 +71,7 @@ static void update_oled(uint32_t seconds) {
 }
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   deb("");
   deb("=== JaszczurHAL OLED + LCD example ===");
 

@@ -119,7 +119,6 @@ function(jh_add_stm32g474_firmware TARGET)
     # multicoreWatchdog is kept (some consumers use it); --gc-sections strips it
     # when unused.
     set(_utils
-        "${_jh_src}/utils/tools.cpp"
         "${_jh_src}/utils/pidController.cpp"
         "${_jh_src}/utils/draw7Segment.cpp"
         "${_jh_src}/utils/multicoreWatchdog.cpp"

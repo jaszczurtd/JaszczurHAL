@@ -191,7 +191,7 @@ bool jh_neopixel_can_show(jh_neopixel_t *strip) {
   if (strip->end_time_us > now) {
     strip->end_time_us = now;
   }
-  return (uint32_t)(now - strip->end_time_us) >= 300u;
+  return hal_elapsed_u32(now, strip->end_time_us, 300u);
 }
 
 bool jh_neopixel_show(jh_neopixel_t *strip, jh_neopixel_write_fn writer,

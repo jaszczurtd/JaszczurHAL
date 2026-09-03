@@ -201,8 +201,8 @@ static hal_status_t mock_process(jh_lora_radio_context_t *context,
       state->pending_cad_ready = false;
       return HAL_OK;
     }
-    if ((uint32_t)(hal_millis() - context->channel_activity_started_ms) >=
-        context->channel_activity_timeout_ms) {
+    if (hal_millis_deadline_expired(context->channel_activity_started_ms,
+                                    context->channel_activity_timeout_ms)) {
       *out_events = JH_LORA_PROVIDER_EVENT_TIMEOUT;
       return HAL_OK;
     }
@@ -232,8 +232,8 @@ static hal_status_t mock_process(jh_lora_radio_context_t *context,
     return HAL_OK;
   }
   if (!context->receive_continuous &&
-      (uint32_t)(hal_millis() - context->receive_started_ms) >=
-          context->receive_timeout_ms) {
+      hal_millis_deadline_expired(context->receive_started_ms,
+                                  context->receive_timeout_ms)) {
     *out_events = JH_LORA_PROVIDER_EVENT_TIMEOUT;
     return HAL_OK;
   }

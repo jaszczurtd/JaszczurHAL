@@ -47,7 +47,7 @@ symbols must be compiled with the same flag.
 For the C or C++ RGB565 helpers, include:
 
 ```c
-#include <tools_c.h>
+#include <hal/codecs/hal_image.h>
 ```
 
 The managed TJpgDec C API is available through:
@@ -56,7 +56,8 @@ The managed TJpgDec C API is available through:
 #include <hal/codecs/jpeg/tjpgd.h>
 ```
 
-`tools.h` also exposes that header when `HAL_ENABLE_JPEG` is defined.
+The compatibility utility headers retain the historical unprefixed aliases;
+new code should use the `hal_image_*` names.
 
 ## Embedded Profile
 
@@ -78,19 +79,19 @@ if needed, should be implemented through JaszczurHAL storage APIs.
 
 | Category | Functions |
 |---|---|
-| RGB565 helper | `jpegDecodeRgb565` |
-| Base64 helpers | `jpegBase64DecodedSize`, `jpegBase64DecodeRgb565` |
+| RGB565 helper | `hal_image_jpeg_decode_rgb565` |
+| Base64 helpers | `hal_image_jpeg_base64_decoded_size`, `hal_image_jpeg_base64_decode_rgb565` |
 | Raw decoder | `jd_prepare`, `jd_decomp` |
 
 ## Memory Ownership
 
 The high-level helpers use caller-provided input and output buffers:
 
-- `jpegDecodeRgb565()` reads JPEG bytes from memory and writes RGB565 pixels to
+- `hal_image_jpeg_decode_rgb565()` reads JPEG bytes from memory and writes RGB565 pixels to
   a caller-provided output buffer.
-- `jpegBase64DecodedSize()` validates Base64 and reports the exact decoded JPEG
+- `hal_image_jpeg_base64_decoded_size()` validates Base64 and reports the exact decoded JPEG
   byte count without writing decoded bytes.
-- `jpegBase64DecodeRgb565()` decodes Base64 into a caller-provided JPEG work
+- `hal_image_jpeg_base64_decode_rgb565()` decodes Base64 into a caller-provided JPEG work
   buffer, then decodes the JPEG into a caller-provided RGB565 output buffer.
 - The RGB565 output buffer must hold at least `width * height` pixels.
 - The decoder adapter allocates and releases its 3500-byte TJpgDec workspace
@@ -101,7 +102,7 @@ The high-level helpers use caller-provided input and output buffers:
 ## Example: Decode JPEG Bytes To RGB565
 
 ```c
-#include <tools_c.h>
+#include <hal/codecs/hal_image.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -112,7 +113,7 @@ static bool decode_jpeg_rgb565(const uint8_t *jpeg,
                                size_t rgb565_pixels,
                                unsigned *width,
                                unsigned *height) {
-    return jpegDecodeRgb565(jpeg, jpeg_size,
+    return hal_image_jpeg_decode_rgb565(jpeg, jpeg_size,
                             rgb565, rgb565_pixels,
                             width, height);
 }
@@ -121,7 +122,7 @@ static bool decode_jpeg_rgb565(const uint8_t *jpeg,
 ## Example: Decode Base64 JPEG
 
 ```c
-#include <tools_c.h>
+#include <hal/codecs/hal_image.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -134,7 +135,7 @@ static bool decode_base64_jpeg_rgb565(const char *jpeg_base64,
                                       unsigned *width,
                                       unsigned *height) {
     size_t jpeg_work_size = 0;
-    if (!jpegBase64DecodedSize(jpeg_base64, jpeg_base64_len,
+    if (!hal_image_jpeg_base64_decoded_size(jpeg_base64, jpeg_base64_len,
                                &jpeg_work_size) ||
         jpeg_work_size == 0) {
         return false;
@@ -145,7 +146,7 @@ static bool decode_base64_jpeg_rgb565(const char *jpeg_base64,
         return false;
     }
 
-    bool ok = jpegBase64DecodeRgb565(jpeg_base64, jpeg_base64_len,
+    bool ok = hal_image_jpeg_base64_decode_rgb565(jpeg_base64, jpeg_base64_len,
                                      jpeg_work, jpeg_work_size,
                                      rgb565, rgb565_pixels,
                                      width, height);
@@ -189,9 +190,9 @@ Write generated text to a file:
 
 `examples/07_display_media` shows the complete display path:
 
-1. `jpegBase64DecodedSize()` calculates the exact decoded JPEG byte count.
+1. `hal_image_jpeg_base64_decoded_size()` calculates the exact decoded JPEG byte count.
 2. Base64 text is decoded to an exactly sized JPEG work buffer.
-3. `jpegBase64DecodeRgb565()` decodes the baseline JPEG directly to RGB565.
+3. `hal_image_jpeg_base64_decode_rgb565()` decodes the baseline JPEG directly to RGB565.
 4. Images larger than `hal_display_get_width()` / `hal_display_get_height()`
    are rejected by the example before drawing.
 5. `hal_display_draw_rgb_bitmap()` draws the RGB565 image on ILI9341.

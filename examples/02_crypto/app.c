@@ -1,7 +1,7 @@
 #include <hal/core/hal_app.h>
 #include <hal/security/hal_crypto.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
-#include <tools_c.h>
 
 static const uint8_t key[HAL_CHACHA20_KEY_BYTES] = {};
 static const uint8_t nonce[HAL_CHACHA20_NONCE_BYTES] = {};
@@ -21,7 +21,7 @@ static void demoCrypto(void) {
 }
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   demoCrypto();
 }
 

@@ -4,6 +4,7 @@
 #include "hal/core/hal_config.h"
 #include "hal/core/hal_mutex_once.h"
 #include "hal/gpio/hal_gpio.h"
+#include "hal/gpio/hal_gpio_common.h"
 #include "hal/system/hal_sync.h"
 #include "jh_esp32_gpio.h"
 #include "jh_esp32_status.h"
@@ -28,19 +29,11 @@ uint8_t s_service_owner_core = HAL_GPIO_IRQ_CORE_NONE;
 size_t s_attached_count = 0u;
 hal_irq_priority_t s_irq_priority = HAL_IRQ_PRIORITY_DEFAULT;
 
-bool gpio_mode_valid(hal_gpio_mode_t mode) {
-  return mode >= HAL_GPIO_INPUT && mode <= HAL_GPIO_OUTPUT_OPEN_DRAIN_HIGH;
-}
-
 bool gpio_mode_is_output(hal_gpio_mode_t mode) {
   return mode == HAL_GPIO_OUTPUT || mode == HAL_GPIO_OUTPUT_LOW ||
          mode == HAL_GPIO_OUTPUT_HIGH || mode == HAL_GPIO_OUTPUT_OPEN_DRAIN ||
          mode == HAL_GPIO_OUTPUT_OPEN_DRAIN_LOW ||
          mode == HAL_GPIO_OUTPUT_OPEN_DRAIN_HIGH;
-}
-
-bool gpio_irq_mode_valid(hal_gpio_irq_mode_t mode) {
-  return mode >= HAL_GPIO_IRQ_FALLING && mode <= HAL_GPIO_IRQ_CHANGE;
 }
 
 gpio_int_type_t gpio_irq_type(hal_gpio_irq_mode_t mode) {
@@ -117,7 +110,7 @@ void hal_gpio_set_mode(uint8_t pin, hal_gpio_mode_t mode) {
     HAL_ASSERT(false, "hal_gpio_set_mode: inaccessible or invalid board pin");
     return;
   }
-  if (!gpio_mode_valid(mode)) {
+  if (!jh_hal_gpio_mode_valid(mode)) {
     HAL_ASSERT(false, "hal_gpio_set_mode: invalid mode");
     return;
   }
@@ -214,7 +207,7 @@ hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin, void (*callback)(void),
                                           hal_gpio_irq_mode_t mode,
                                           uint8_t owner_core) {
   if (!jh_esp32_gpio_pin_valid(pin) || callback == nullptr ||
-      !gpio_irq_mode_valid(mode) || owner_core >= HAL_TARGET_CPU_CORES) {
+      !jh_hal_gpio_irq_mode_valid(mode) || owner_core >= HAL_TARGET_CPU_CORES) {
     return HAL_EINVAL;
   }
   if (xPortInIsrContext() != pdFALSE) {

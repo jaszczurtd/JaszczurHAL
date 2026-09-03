@@ -16,6 +16,7 @@
 #include "hal/input/hal_irsmall_decoder.h"
 
 #include "hal/core/hal_mutex_once.h"
+#include "hal/core/jh_endian.h"
 #include "hal/system/hal_system.h"
 
 #include <stddef.h>
@@ -264,11 +265,12 @@ static void irsmall_decode_nec(hal_irsmall_decoder_t *dev, uint32_t duration) {
       } else if (fsm->bit_count == 32u) {
         if (irsmall_byte32(signal, 2u) ==
             (uint8_t)~irsmall_byte32(signal, 3u)) {
-          const uint16_t addr =
-              extended
-                  ? (uint16_t)(irsmall_byte32(signal, 0u) |
-                               ((uint16_t)irsmall_byte32(signal, 1u) << 8u))
-                  : irsmall_byte32(signal, 0u);
+          uint16_t addr = irsmall_byte32(signal, 0u);
+          if (extended) {
+            const uint8_t address_bytes[] = {irsmall_byte32(signal, 0u),
+                                             irsmall_byte32(signal, 1u)};
+            addr = jh_load_le16(address_bytes);
+          }
           irsmall_publish(dev, addr, irsmall_byte32(signal, 2u), 0u, false,
                           32u);
           fsm->possibly_held = true;
@@ -291,7 +293,8 @@ static void irsmall_decode_rc5_finish(hal_irsmall_decoder_t *dev) {
   const bool toggle = (signal & 0x0800u) != 0u;
 
   if (fsm->last_bit_time != 0u &&
-      ((uint32_t)(dev->previous_time - fsm->last_bit_time) < rpt_period_max) &&
+      !hal_elapsed_u32(dev->previous_time, fsm->last_bit_time,
+                       rpt_period_max) &&
       (fsm->prev_toggle == toggle)) {
     if (fsm->repeat_count < rpt_count) {
       fsm->repeat_count++;
@@ -765,8 +768,8 @@ static void irsmall_check_timeout(hal_irsmall_decoder_t *dev) {
   prev = dev->previous_time;
   hal_critical_section_exit();
 
-  if ((uint32_t)(hal_micros() - prev) >=
-      hal_irsmall_decoder_timeout_us(dev->cfg.protocol)) {
+  if (hal_elapsed_u32(hal_micros(), prev,
+                      hal_irsmall_decoder_timeout_us(dev->cfg.protocol))) {
     irsmall_reset_isr_state(dev, hal_micros());
   }
 }

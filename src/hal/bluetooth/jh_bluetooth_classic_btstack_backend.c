@@ -4,6 +4,7 @@
 #if !HAL_TARGET_IS_MOCK && defined(HAL_ENABLE_BLUETOOTH_CLASSIC) &&            \
     defined(JH_BLUETOOTH_BTSTACK)
 
+#include "hal/bluetooth/jh_bluetooth_classic_address.h"
 #include "hal/bluetooth/jh_bluetooth_classic_backend.h"
 
 #include "bluetooth_sdp.h"
@@ -87,13 +88,6 @@ static const uint32_t s_sdp_service_bits[JH_CLASSIC_SDP_SERVICE_COUNT] = {
     HAL_BLUETOOTH_CLASSIC_SERVICE_AUDIO_SINK,
 };
 
-static bool address_equal(const hal_bluetooth_classic_address_t *left,
-                          const hal_bluetooth_classic_address_t *right) {
-  return left != NULL && right != NULL &&
-         memcmp(left->bytes, right->bytes, HAL_BLUETOOTH_CLASSIC_ADDRESS_LEN) ==
-             0;
-}
-
 static void emit(const jh_bluetooth_classic_backend_event_t *event) {
   if (s_backend.started && s_backend.event_handler != NULL && event != NULL) {
     s_backend.event_handler(s_backend.event_context, event);
@@ -116,7 +110,8 @@ static jh_classic_scan_cache_entry_t *
 scan_cache_find(const hal_bluetooth_classic_address_t *address) {
   for (size_t index = 0u; index < JH_CLASSIC_SCAN_CACHE_DEPTH; ++index) {
     jh_classic_scan_cache_entry_t *entry = &s_backend.scan_cache[index];
-    if (entry->used && address_equal(&entry->result.address, address)) {
+    if (entry->used &&
+        jh_bluetooth_classic_address_equal(&entry->result.address, address)) {
       return entry;
     }
   }
@@ -145,7 +140,8 @@ scan_cache_store(const hal_bluetooth_classic_scan_result_t *result) {
 static bool peer_restored(const hal_bluetooth_classic_address_t *address) {
   for (size_t index = 0u; index < HAL_BLUETOOTH_CLASSIC_MAX_PEERS; ++index) {
     if (s_backend.restored_peer_used[index] &&
-        address_equal(&s_backend.restored_peers[index], address)) {
+        jh_bluetooth_classic_address_equal(&s_backend.restored_peers[index],
+                                           address)) {
       return true;
     }
   }
@@ -270,11 +266,12 @@ static void sdp_query_next(void) {
 
 static bool address_is_active(const hal_bluetooth_classic_address_t *address) {
 #ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
-  if (address_equal(address, &s_backend.hid_address)) {
+  if (jh_bluetooth_classic_address_equal(address, &s_backend.hid_address)) {
     return true;
   }
 #endif
-  return address_equal(address, &s_backend.pairing_address);
+  return jh_bluetooth_classic_address_equal(address,
+                                            &s_backend.pairing_address);
 }
 
 static void set_pairing_request(const hal_bluetooth_classic_address_t *address,
@@ -729,7 +726,8 @@ backend_peer_restore(void *context,
   size_t free_index = HAL_BLUETOOTH_CLASSIC_MAX_PEERS;
   for (size_t index = 0u; index < HAL_BLUETOOTH_CLASSIC_MAX_PEERS; ++index) {
     if (s_backend.restored_peer_used[index] &&
-        address_equal(&s_backend.restored_peers[index], address)) {
+        jh_bluetooth_classic_address_equal(&s_backend.restored_peers[index],
+                                           address)) {
       free_index = index;
       break;
     }
@@ -764,7 +762,8 @@ backend_peer_forget(void *context,
   btstack_link_key_db_memory_instance()->delete_link_key(native_address);
   for (size_t index = 0u; index < HAL_BLUETOOTH_CLASSIC_MAX_PEERS; ++index) {
     if (s_backend.restored_peer_used[index] &&
-        address_equal(&s_backend.restored_peers[index], address)) {
+        jh_bluetooth_classic_address_equal(&s_backend.restored_peers[index],
+                                           address)) {
       s_backend.restored_peer_used[index] = false;
       memset(&s_backend.restored_peers[index], 0,
              sizeof(s_backend.restored_peers[index]));

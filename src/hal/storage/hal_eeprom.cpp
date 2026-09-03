@@ -3,6 +3,7 @@
 #ifdef HAL_ENABLE_EEPROM
 
 #include "hal/core/hal_mutex_once.h"
+#include "hal/core/jh_endian.h"
 #include "hal/storage/hal_eeprom.h"
 #include "hal/storage/jh_eeprom_provider.h"
 #include "hal/system/hal_sync.h"
@@ -66,10 +67,7 @@ hal_status_t read_clipped(uint16_t addr, uint8_t *out, uint16_t len) {
 }
 
 int32_t decode_int(const uint8_t raw[4]) {
-  return static_cast<int32_t>(static_cast<uint32_t>(raw[0]) |
-                              (static_cast<uint32_t>(raw[1]) << 8u) |
-                              (static_cast<uint32_t>(raw[2]) << 16u) |
-                              (static_cast<uint32_t>(raw[3]) << 24u));
+  return static_cast<int32_t>(jh_load_le32(raw));
 }
 
 } // namespace
@@ -151,12 +149,8 @@ hal_status_t hal_eeprom_read_byte_ex(uint16_t addr, uint8_t *out_val) {
 }
 
 hal_status_t hal_eeprom_write_int(uint16_t addr, int32_t val) {
-  const uint8_t raw[4] = {
-      static_cast<uint8_t>((val >> 0) & 0xff),
-      static_cast<uint8_t>((val >> 8) & 0xff),
-      static_cast<uint8_t>((val >> 16) & 0xff),
-      static_cast<uint8_t>((val >> 24) & 0xff),
-  };
+  uint8_t raw[4];
+  jh_store_le32(raw, static_cast<uint32_t>(val));
   hal_mutex_t mutex = eeprom_mutex();
   hal_mutex_lock(mutex);
   const hal_status_t range = range_status(addr, sizeof(raw));

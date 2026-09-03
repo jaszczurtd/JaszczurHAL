@@ -172,9 +172,9 @@ Ochronę stosu włączają dwie niezależne opcje:
 | `HAL_ENABLE_A7670` | `hal_simcom_a76xx.h` | `hal_simcom_a76xx.cpp` | Driver rodziny SimCom A76xx (propaguje CELLULAR_MODEM + UART) |
 | `HAL_ENABLE_CJSON` | `hal/codecs/cjson/cJSON.h`, `hal/codecs/cjson/cJSON_Utils.h` (`tools.h` z C++) | `hal/codecs/cjson/cJSON.c`, `hal/codecs/cjson/cJSON_Utils.c` | zarządzany checkout cJSON z wersjonowanymi adapterami |
 | `HAL_ENABLE_PNG` | `hal/codecs/lodepng/lodepng.h` (`tools.h` z C++) | `hal/codecs/lodepng/lodepng.cpp` | zarządzany checkout LodePNG z wersjonowanym adapterem profilu dla systemów wbudowanych |
-| `HAL_ENABLE_PNG_AS_BASE64` | Funkcje pomocnicze `utils/tools_api.h` + `hal/codecs/lodepng/lodepng.h` + `hal_crypto.h` | `utils/tools.cpp` + `hal/codecs/lodepng/lodepng.cpp` + `hal_crypto.cpp` | Funkcje pomocnicze dekodowania PNG zakodowanego w Base64 (propaguje CRYPTO + PNG) |
-| `HAL_ENABLE_JPEG` | `hal/codecs/jpeg/tjpgd.h` (`tools.h` z C++) | `hal/codecs/jpeg/tjpgd.c` + `utils/tools.cpp` | zarządzany rdzeń TJpgDec z wejściem z pamięci i wyjściem RGB565 |
-| `HAL_ENABLE_JPEG_AS_BASE64` | Funkcje pomocnicze `utils/tools_api.h` + `hal/codecs/jpeg/tjpgd.h` + `hal_crypto.h` | `utils/tools.cpp` + `hal/codecs/jpeg/tjpgd.c` + `hal_crypto.cpp` | Funkcje pomocnicze dekodowania JPEG zakodowanego w Base64 (propaguje CRYPTO + JPEG) |
+| `HAL_ENABLE_PNG_AS_BASE64` | `hal/codecs/hal_image.h` + `hal/codecs/lodepng/lodepng.h` + `hal_crypto.h` | `hal/codecs/hal_image.cpp` + `hal/codecs/lodepng/lodepng.cpp` + `hal_crypto.cpp` | Funkcje pomocnicze dekodowania PNG zakodowanego w Base64 (propaguje CRYPTO + PNG) |
+| `HAL_ENABLE_JPEG` | `hal/codecs/hal_image.h` + `hal/codecs/jpeg/tjpgd.h` | `hal/codecs/hal_image.cpp` + `hal/codecs/jpeg/tjpgd.c` | zarządzany rdzeń TJpgDec z wejściem z pamięci i wyjściem RGB565 |
+| `HAL_ENABLE_JPEG_AS_BASE64` | `hal/codecs/hal_image.h` + `hal/codecs/jpeg/tjpgd.h` + `hal_crypto.h` | `hal/codecs/hal_image.cpp` + `hal/codecs/jpeg/tjpgd.c` + `hal_crypto.cpp` | Funkcje pomocnicze dekodowania JPEG zakodowanego w Base64 (propaguje CRYPTO + JPEG) |
 | `HAL_ENABLE_UNITY` | nagłówki/źródła narzędziowe | `utils/unity.*` | zarządzany framework Unity |
 
 ### Flaga opt-out
@@ -489,7 +489,8 @@ Zestaw włączonych modułów decyduje, które zależności zostaną skompilowan
 \* `HAL_ENABLE_TIME` włącza współdzielony zegar runtime, status, NTP
 oraz API czasu lokalnego. Z `HAL_ENABLE_RTC` może przywracać stan z RTC i
 zapisywać zwalidowane wyniki NTP. Czyste funkcje pomocnicze
-`hal_time_from_components(...)`, `hal_time_is_daylight_saving_time(...)`,
+`hal_get_seconds()`, `hal_time_from_components(...)`,
+`hal_time_is_daylight_saving_time(...)`,
 `hal_time_adjust_cet_cest(...)`, `hal_time_is_in_range(...)` oraz
 `hal_time_extract_minutes(...)` pozostają dostępne bezwarunkowo, bez
 zależności sieciowej.

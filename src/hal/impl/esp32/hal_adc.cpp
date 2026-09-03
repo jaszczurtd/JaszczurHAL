@@ -5,7 +5,9 @@
 
 #include "hal/analog/hal_adc.h"
 #include "hal/core/hal_mutex_once.h"
+#include "hal/core/jh_resolution.h"
 #include "hal/system/hal_sync.h"
+#include "jh_esp32_gpio.h"
 
 #include <esp_adc/adc_oneshot.h>
 
@@ -16,35 +18,19 @@ namespace {
 
 constexpr uint8_t kEsp32AdcHardwareBits = SOC_ADC_RTC_MAX_BITWIDTH;
 constexpr uint8_t kDefaultResolutionBits = 12u;
-constexpr uint8_t kMinimumResolutionBits = 1u;
-constexpr uint8_t kMaximumResolutionBits = 16u;
-
 hal_mutex_t s_adc_mutex = nullptr;
 adc_oneshot_unit_handle_t s_units[SOC_ADC_PERIPH_NUM] = {};
 uint32_t s_configured_channels[SOC_ADC_PERIPH_NUM] = {};
 uint8_t s_resolution_bits = kDefaultResolutionBits;
 
-bool pin_in_mask(uint8_t pin, uint64_t mask) {
-  return pin < 64u && (mask & (UINT64_C(1) << pin)) != 0u;
-}
-
 bool adc_pin_available(uint8_t pin) {
   const bool board_accessible =
-      pin_in_mask(pin, HAL_BOARD_GPIO_EXPOSED_MASK) ||
-      pin_in_mask(pin, HAL_BOARD_GPIO_SOFT_RESERVED_MASK);
-  return pin_in_mask(pin, HAL_TARGET_GPIO_VALID_MASK) &&
-         pin_in_mask(pin, HAL_TARGET_GPIO_ADC_MASK) && board_accessible &&
-         !pin_in_mask(pin, HAL_BOARD_GPIO_HARD_RESERVED_MASK);
-}
-
-uint8_t clamp_resolution(uint8_t bits) {
-  if (bits < kMinimumResolutionBits) {
-    return kMinimumResolutionBits;
-  }
-  if (bits > kMaximumResolutionBits) {
-    return kMaximumResolutionBits;
-  }
-  return bits;
+      jh_esp32_mask_has_pin(HAL_BOARD_GPIO_EXPOSED_MASK, pin) ||
+      jh_esp32_mask_has_pin(HAL_BOARD_GPIO_SOFT_RESERVED_MASK, pin);
+  return jh_esp32_mask_has_pin(HAL_TARGET_GPIO_VALID_MASK, pin) &&
+         jh_esp32_mask_has_pin(HAL_TARGET_GPIO_ADC_MASK, pin) &&
+         board_accessible &&
+         !jh_esp32_mask_has_pin(HAL_BOARD_GPIO_HARD_RESERVED_MASK, pin);
 }
 
 hal_mutex_t adc_mutex() { return jh_hal_mutex_create_once(&s_adc_mutex); }
@@ -105,7 +91,7 @@ void hal_adc_set_resolution(uint8_t bits) {
     return;
   }
   hal_mutex_lock(mutex);
-  s_resolution_bits = clamp_resolution(bits);
+  s_resolution_bits = jh_resolution_clamp_1_16(bits, nullptr, nullptr);
   hal_mutex_unlock(mutex);
 }
 

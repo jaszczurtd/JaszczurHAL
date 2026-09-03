@@ -12,9 +12,9 @@
 #include <hal/radio/hal_lora_link.h>
 #include <hal/radio/hal_lora_radio.h>
 #include <hal/security/hal_crc.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/spi/hal_spi.h>
 #include <hal/system/hal_system.h>
-#include <tools.h>
 
 #include <stdint.h>
 #include <string.h>
@@ -275,7 +275,7 @@ void check_response_timeout(void) {
 } // namespace
 
 extern "C" void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
 
   hal_lora_radio_config_t hardware = {};
   hal_status_t status = hal_lora_radio_config_from_board(&hardware);

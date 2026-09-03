@@ -1,6 +1,7 @@
 
 #include "multicoreWatchdog.h"
 #include "hal/core/hal_mutex_once.h"
+#include "hal/serial/hal_serial.h"
 #include "hal/timers/smart_timers/SmartTimers.h"
 #include <hal/hal.h>
 #ifdef HAL_ENABLE_SDLOGGER

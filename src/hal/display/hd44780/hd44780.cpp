@@ -243,7 +243,7 @@ void HD44780::setCursor(uint8_t col, uint8_t row) {
 }
 
 void HD44780::setCursorUnlocked(uint8_t col, uint8_t row) {
-  const size_t max_lines = sizeof(_row_offsets) / sizeof(*_row_offsets);
+  const size_t max_lines = COUNTOF(_row_offsets);
   if (row >= max_lines) {
     row = (uint8_t)(max_lines - 1u);
   }

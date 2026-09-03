@@ -1,10 +1,10 @@
 #include <hal/core/hal_app.h>
+#include <hal/core/hal_array.h>
 #include <hal/display/hal_display.h>
 #include <hal/i2c/hal_i2c.h>
 #include <hal/rtc/hal_rtc.h>
 #include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
-#include <tools.h>
 #include <utils/draw7Segment.h>
 
 #include <cstring>
@@ -54,7 +54,7 @@ bool datetime_before(const hal_rtc_datetime_t &left,
       right.year, right.month,  right.day,
       right.hour, right.minute, right.second,
   };
-  for (size_t i = 0u; i < sizeof(left_fields) / sizeof(left_fields[0]); ++i) {
+  for (size_t i = 0u; i < COUNTOF(left_fields); ++i) {
     if (left_fields[i] != right_fields[i]) {
       return left_fields[i] < right_fields[i];
     }
@@ -183,7 +183,7 @@ bool initialize_rtc() {
 } // namespace
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   hal_serial_set_flush(true);
   deb("=== DS3231 battery-retention clock ===");
 

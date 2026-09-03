@@ -6,9 +6,9 @@
  * @brief C++ utility surface for JaszczurHAL.
  *
  * This header exposes:
- * - shared C/C++ API declarations from @ref tools_api.h,
+ * - HAL utility domains aggregated by @ref tools_api.h,
  * - shared macro/constants from @ref tools_common_defs.h,
- * - and legacy utility declarations implemented on top of HAL.
+ * - and SmartTimers.
  */
 
 #include "libConfig.h"

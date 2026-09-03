@@ -89,6 +89,13 @@ bool hal_time_is_in_range(long now, long start, long end);
  */
 void hal_time_extract_minutes(long time_in_minutes, int *hours, int *minutes);
 
+/**
+ * @brief Return rounded monotonic uptime in seconds.
+ *
+ * This preserves the established `(hal_millis() + 500) / 1000` behaviour.
+ */
+unsigned long hal_get_seconds(void);
+
 #ifdef HAL_ENABLE_TIME
 
 /** @brief Origin of the currently active runtime wall clock. */

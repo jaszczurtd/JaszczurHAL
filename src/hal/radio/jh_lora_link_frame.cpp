@@ -2,6 +2,8 @@
 
 #ifdef HAL_ENABLE_LORA_LINK
 
+#include "hal/core/jh_endian.h"
+
 #ifdef HAL_ENABLE_CRYPTO
 #include "hal/security/hal_crypto.h"
 #endif
@@ -14,27 +16,6 @@
 #define JH_LORA_LINK_FRAME_FLAGS                                               \
   (JH_LORA_LINK_FRAME_FLAG_ACK_REQUEST | JH_LORA_LINK_FRAME_FLAG_ACK |         \
    JH_LORA_LINK_FRAME_FLAG_ENCRYPTED)
-
-static void put_u16(uint8_t *out, uint16_t value) {
-  out[0] = (uint8_t)(value >> 8u);
-  out[1] = (uint8_t)value;
-}
-
-static void put_u32(uint8_t *out, uint32_t value) {
-  out[0] = (uint8_t)(value >> 24u);
-  out[1] = (uint8_t)(value >> 16u);
-  out[2] = (uint8_t)(value >> 8u);
-  out[3] = (uint8_t)value;
-}
-
-static uint16_t get_u16(const uint8_t *input) {
-  return (uint16_t)(((uint16_t)input[0] << 8u) | input[1]);
-}
-
-static uint32_t get_u32(const uint8_t *input) {
-  return ((uint32_t)input[0] << 24u) | ((uint32_t)input[1] << 16u) |
-         ((uint32_t)input[2] << 8u) | input[3];
-}
 
 static bool is_ack(const jh_lora_link_frame_header_t *header) {
   return (header->flags & JH_LORA_LINK_FRAME_FLAG_ACK) != 0u;
@@ -57,28 +38,28 @@ static void encode_header(const jh_lora_link_frame_header_t *header,
   out[2] = JH_LORA_LINK_PROTOCOL_VERSION;
   out[3] = header->flags;
   out[4] = header->port;
-  put_u16(&out[5], header->source);
-  put_u16(&out[7], header->destination);
-  put_u32(&out[9], header->session_id);
-  put_u32(&out[13], header->sequence);
+  jh_store_be16(&out[5], header->source);
+  jh_store_be16(&out[7], header->destination);
+  jh_store_be32(&out[9], header->session_id);
+  jh_store_be32(&out[13], header->sequence);
   out[17] = header->fragment_index;
   out[18] = header->fragment_count;
-  put_u16(&out[19], header->message_length);
-  put_u32(&out[21], header->integrity);
+  jh_store_be16(&out[19], header->message_length);
+  jh_store_be32(&out[21], header->integrity);
 }
 
 static void decode_header(const uint8_t *input,
                           jh_lora_link_frame_header_t *out) {
   out->flags = input[3];
   out->port = input[4];
-  out->source = get_u16(&input[5]);
-  out->destination = get_u16(&input[7]);
-  out->session_id = get_u32(&input[9]);
-  out->sequence = get_u32(&input[13]);
+  out->source = jh_load_be16(&input[5]);
+  out->destination = jh_load_be16(&input[7]);
+  out->session_id = jh_load_be32(&input[9]);
+  out->sequence = jh_load_be32(&input[13]);
   out->fragment_index = input[17];
   out->fragment_count = input[18];
-  out->message_length = get_u16(&input[19]);
-  out->integrity = get_u32(&input[21]);
+  out->message_length = jh_load_be16(&input[19]);
+  out->integrity = jh_load_be32(&input[21]);
 }
 
 static bool header_common_valid(const jh_lora_link_frame_header_t *header) {
@@ -126,9 +107,9 @@ static bool payload_shape_valid(const jh_lora_link_frame_header_t *header,
 #ifdef HAL_ENABLE_CRYPTO
 static void build_nonce(const jh_lora_link_frame_header_t *header,
                         uint8_t nonce[HAL_CHACHA20_NONCE_BYTES]) {
-  put_u32(&nonce[0], header->session_id);
-  put_u16(&nonce[4], header->source);
-  put_u32(&nonce[6], header->sequence);
+  jh_store_be32(&nonce[0], header->session_id);
+  jh_store_be16(&nonce[4], header->source);
+  jh_store_be32(&nonce[6], header->sequence);
   nonce[10] = header->fragment_index;
   nonce[11] = is_ack(header) ? 1u : 0u;
 }

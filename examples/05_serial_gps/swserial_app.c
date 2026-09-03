@@ -1,10 +1,10 @@
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
 #include <hal/gps/hal_gps.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/serial/hal_swserial.h>
 #include <hal/system/hal_system.h>
 #include <stdio.h>
-#include <tools_c.h>
 
 #if !HAL_TARGET_IS_RP
 #error "The software-serial GPS variant is supported only on RP targets"
@@ -109,7 +109,7 @@ static void report_gps(uint32_t now) {
 }
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   deb("");
   deb("=== JaszczurHAL software serial and GPS ===");
 

@@ -59,7 +59,7 @@ bool config_valid(const jh_rp2040_cyw43_gspi_config_t *config) {
 }
 
 bool deadline_expired(uint32_t started_us) {
-  return (uint32_t)(hal_micros() - started_us) >= kTransferTimeoutUs;
+  return hal_elapsed_u32(hal_micros(), started_us, kTransferTimeoutUs);
 }
 
 void stop_comms(rp2040_gspi_context_t *context) {

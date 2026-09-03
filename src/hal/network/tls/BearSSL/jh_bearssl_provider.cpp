@@ -3,6 +3,8 @@
 
 #ifdef HAL_ENABLE_TLS
 
+#include "hal/core/jh_endian.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -127,9 +129,8 @@ jh_bearssl_verify_server_key_pin(const jh_bearssl_client_t *provider,
     br_sha256_update(&hash, key->key.rsa.e, key->key.rsa.elen);
   } else if (key->key_type == BR_KEYTYPE_EC) {
     const uint32_t curve = (uint32_t)key->key.ec.curve;
-    const uint8_t curve_be[4] = {(uint8_t)(curve >> 24u),
-                                 (uint8_t)(curve >> 16u),
-                                 (uint8_t)(curve >> 8u), (uint8_t)curve};
+    uint8_t curve_be[4];
+    jh_store_be32(curve_be, curve);
     br_sha256_update(&hash, curve_be, sizeof(curve_be));
     br_sha256_update(&hash, key->key.ec.q, key->key.ec.qlen);
   } else {

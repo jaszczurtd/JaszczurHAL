@@ -2079,6 +2079,7 @@ uint16_t    hal_mock_mqtt_get_socket_timeout(void);
 #include <hal/time/hal_time.h>
 
 // Always available; no network dependency.
+unsigned long hal_get_seconds(void);
 uint32_t hal_time_from_components(int year, int month, int day,
                                   int hour, int minute, int second);
 bool     hal_time_is_daylight_saving_time(int year, int month, int day);
@@ -2120,11 +2121,13 @@ hal_status_t hal_time_attach_rtc_ex(hal_rtc_t rtc, uint32_t policy_flags);
 hal_status_t hal_time_detach_rtc_ex(void);
 ```
 
-The pure helpers use the shared proleptic-Gregorian calendar core. Component
+`hal_get_seconds()` returns monotonic uptime rounded with
+`(hal_millis() + 500) / 1000`. The calendar helpers use the shared
+proleptic-Gregorian core. Component
 conversion accepts dates from the Unix epoch through the last second
-representable by `uint32_t`; its compatibility return value is `0` for both an
-error and the valid epoch start. The CET/CEST helper uses the date-only legacy
-policy: daylight saving starts on the last Sunday in March (inclusive) and ends
+representable by `uint32_t`; its return value is `0` for both an error and the
+valid epoch start. The CET/CEST helper uses a date-only policy: daylight saving
+starts on the last Sunday in March (inclusive) and ends
 on the last Sunday in October (exclusive), with each transition taking effect
 at 00:00 because no time-of-day argument is available. Invalid dates are
 rejected, and adjustment normalizes day/month/year rollover.

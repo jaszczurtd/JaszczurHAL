@@ -1,5 +1,7 @@
 #include "jh_bluetooth_hci_transport.h"
 
+#include "hal/core/jh_endian.h"
+
 #include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -34,7 +36,7 @@ static void record_received_packet(jh_bluetooth_hci_transport_t *transport,
       packet[0] != JH_HCI_EVENT_COMMAND_COMPLETE) {
     return;
   }
-  const uint16_t opcode = (uint16_t)packet[3] | ((uint16_t)packet[4] << 8u);
+  const uint16_t opcode = jh_load_le16(&packet[3]);
   if (opcode == JH_HCI_OPCODE_HOST_BUFFER_SIZE) {
     transport->snapshot.host_buffer_size_status = packet[5];
   } else if (opcode == JH_HCI_OPCODE_SET_CONTROLLER_TO_HOST_FLOW_CONTROL) {

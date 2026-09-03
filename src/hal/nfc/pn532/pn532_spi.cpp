@@ -79,6 +79,5 @@ hal_status_t PN532_SPI::transferFrame(uint8_t command, const uint8_t *tx,
       {HAL_SPI_DEVICE_OP_WRITE, tx, NULL, tx_len},
       {HAL_SPI_DEVICE_OP_TRANSFER_IN_PLACE, NULL, rx, rx_len},
   };
-  return hal_spi_device_transaction(&_device, operations,
-                                    sizeof(operations) / sizeof(operations[0]));
+  return hal_spi_device_transaction(&_device, operations, COUNTOF(operations));
 }

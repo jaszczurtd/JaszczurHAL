@@ -39,9 +39,6 @@
 #define ST7567_LINE_SCROLL 0x40u
 #define ST7567_RESET 0xE2u
 
-static bool pin_is_connected(int16_t pin) { return pin >= 0 && pin <= 255; }
-static uint8_t pin_to_u8(int16_t pin) { return (uint8_t)pin; }
-
 static uint32_t normalized_clock(const jh_st7567_config_t *config) {
   if (config == NULL || config->clock_hz == 0u) {
     return config != NULL && config->bus_type == JH_ST7567_BUS_SPI
@@ -73,14 +70,14 @@ static bool i2c_write_control(const jh_st7567_t *dev, uint8_t control,
 static bool spi_write_control(jh_st7567_t *dev, bool command,
                               const uint8_t *data, size_t len) {
   if (dev == NULL || data == NULL || len == 0u ||
-      !pin_is_connected(dev->config.spi_dc_pin)) {
+      !jh_display_pin_connected(dev->config.spi_dc_pin)) {
     return false;
   }
   hal_status_t status = hal_spi_device_acquire(&dev->spi_device);
   if (hal_status_is_error(status)) {
     return false;
   }
-  hal_gpio_write(pin_to_u8(dev->config.spi_dc_pin), !command);
+  hal_gpio_write(jh_display_pin_u8(dev->config.spi_dc_pin), !command);
   status = hal_spi_write(dev->spi_device.bus, data, len);
   return hal_status_is_ok(hal_spi_device_finish(&dev->spi_device, status));
 }
@@ -101,7 +98,7 @@ static bool write_data(jh_st7567_t *dev, const uint8_t *data, size_t len) {
 
 static bool setup_bus_and_pins(jh_st7567_t *dev) {
   if (dev->config.bus_type == JH_ST7567_BUS_SPI) {
-    if (!pin_is_connected(dev->config.spi_dc_pin)) {
+    if (!jh_display_pin_connected(dev->config.spi_dc_pin)) {
       return false;
     }
     const hal_spi_settings_t settings = {dev->config.clock_hz, HAL_SPI_MSBFIRST,
@@ -114,8 +111,8 @@ static bool setup_bus_and_pins(jh_st7567_t *dev) {
   } else {
     (void)hal_i2c_set_clock_bus(dev->config.bus, dev->config.clock_hz);
   }
-  if (pin_is_connected(dev->config.rst_pin)) {
-    const uint8_t rst = pin_to_u8(dev->config.rst_pin);
+  if (jh_display_pin_connected(dev->config.rst_pin)) {
+    const uint8_t rst = jh_display_pin_u8(dev->config.rst_pin);
     hal_gpio_set_mode(rst, HAL_GPIO_OUTPUT);
     hal_gpio_write(rst, true);
     hal_delay_ms(1u);

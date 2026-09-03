@@ -440,15 +440,16 @@ extern "C" void hal_net_console_poll(void) {
       const bool first_byte_timeout =
           client->auth_len == 0u &&
           HAL_NET_CONSOLE_AUTH_FIRST_BYTE_TIMEOUT_MS > 0u &&
-          (uint32_t)(now_ms - client->accepted_ms) >=
-              HAL_NET_CONSOLE_AUTH_FIRST_BYTE_TIMEOUT_MS;
-      const bool auth_timeout = HAL_NET_CONSOLE_AUTH_TIMEOUT_MS > 0u &&
-                                (uint32_t)(now_ms - client->accepted_ms) >=
-                                    HAL_NET_CONSOLE_AUTH_TIMEOUT_MS;
-      const bool idle_timeout = client->auth_len > 0u &&
-                                HAL_NET_CONSOLE_AUTH_IDLE_TIMEOUT_MS > 0u &&
-                                (uint32_t)(now_ms - client->last_activity_ms) >=
-                                    HAL_NET_CONSOLE_AUTH_IDLE_TIMEOUT_MS;
+          hal_elapsed_u32(now_ms, client->accepted_ms,
+                          HAL_NET_CONSOLE_AUTH_FIRST_BYTE_TIMEOUT_MS);
+      const bool auth_timeout =
+          HAL_NET_CONSOLE_AUTH_TIMEOUT_MS > 0u &&
+          hal_elapsed_u32(now_ms, client->accepted_ms,
+                          HAL_NET_CONSOLE_AUTH_TIMEOUT_MS);
+      const bool idle_timeout =
+          client->auth_len > 0u && HAL_NET_CONSOLE_AUTH_IDLE_TIMEOUT_MS > 0u &&
+          hal_elapsed_u32(now_ms, client->last_activity_ms,
+                          HAL_NET_CONSOLE_AUTH_IDLE_TIMEOUT_MS);
       if (first_byte_timeout || auth_timeout || idle_timeout) {
         close_client(client, true);
         continue;

@@ -210,7 +210,6 @@ function(jh_collect_rp_hal_sources OUT_VAR SRC_DIR)
     endif()
 
     set(_utility_sources
-        "${SRC_DIR}/utils/tools.cpp"
         "${SRC_DIR}/utils/multicoreWatchdog.cpp"
         "${SRC_DIR}/utils/draw7Segment.cpp"
         "${SRC_DIR}/utils/pidController.cpp"

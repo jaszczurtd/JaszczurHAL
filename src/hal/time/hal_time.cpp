@@ -1,5 +1,6 @@
 #include "hal/time/hal_time.h"
 
+#include "hal/system/hal_system.h"
 #include "hal/time/jh_calendar.h"
 
 uint32_t hal_time_from_components(int year, int month, int day, int hour,
@@ -134,4 +135,8 @@ void hal_time_extract_minutes(long time_in_minutes, int *hours, int *minutes) {
   if (minutes != nullptr) {
     *minutes = (int)(time_in_minutes % 60);
   }
+}
+
+unsigned long hal_get_seconds(void) {
+  return (unsigned long)((hal_millis() + 500u) / 1000u);
 }

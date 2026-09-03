@@ -255,7 +255,7 @@ hal_status_t hal_tcp_socket_connect_ex(hal_tcp_socket_t socket,
       return status;
     }
     if (timeout_ms != HAL_NET_TIMEOUT_FOREVER &&
-        (uint32_t)(hal_millis() - start_ms) >= timeout_ms) {
+        hal_millis_deadline_expired(start_ms, timeout_ms)) {
       hal_mutex_lock(s_tcp_mutex);
       const hal_status_t context_status =
           jh_rp2040_cyw43_provider_lwip_begin(false);
@@ -394,7 +394,7 @@ hal_status_t hal_tcp_socket_recv_ex(hal_tcp_socket_t socket, void *buffer,
       return HAL_OK;
     }
     if (timeout_ms != HAL_NET_TIMEOUT_FOREVER &&
-        (uint32_t)(hal_millis() - start_ms) >= timeout_ms) {
+        hal_millis_deadline_expired(start_ms, timeout_ms)) {
       return HAL_OK;
     }
 
@@ -703,7 +703,7 @@ hal_status_t hal_tcp_listener_accept_ex(hal_tcp_listener_t listener,
     }
     if (timeout_ms == 0u ||
         (timeout_ms != HAL_NET_TIMEOUT_FOREVER &&
-         (uint32_t)(hal_millis() - start_ms) >= timeout_ms)) {
+         hal_millis_deadline_expired(start_ms, timeout_ms))) {
       return HAL_EAGAIN;
     }
     hal_idle();

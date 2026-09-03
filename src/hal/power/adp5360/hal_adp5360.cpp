@@ -15,6 +15,7 @@
 #include "hal/power/hal_adp5360.h"
 
 #include "hal/core/hal_mutex_once.h"
+#include "hal/core/jh_endian.h"
 #include "hal/gpio/hal_gpio.h"
 #include "hal/i2c/hal_i2c.h"
 #include "hal/system/hal_system.h"
@@ -233,22 +234,20 @@ static const adp5360_range_t range_buckboost_i[] = {
     {100000, 100000, 0x0u, 0x7u},
 };
 
-#define ARRAY_COUNT(a) ((uint8_t)(sizeof(a) / sizeof((a)[0])))
-
 static const adp5360_reg_desc_t desc_buck = {ADP5360_REG_BUCK_CFG,
                                              ADP5360_REG_BUCK_OUTPUT,
                                              range_buck_v,
-                                             ARRAY_COUNT(range_buck_v),
+                                             (uint8_t)COUNTOF(range_buck_v),
                                              range_buck_i,
-                                             ARRAY_COUNT(range_buck_i),
+                                             (uint8_t)COUNTOF(range_buck_i),
                                              false};
 static const adp5360_reg_desc_t desc_buckboost = {
     ADP5360_REG_BUCKBST_CFG,
     ADP5360_REG_BUCKBST_OUTPUT,
     range_buckboost_v,
-    ARRAY_COUNT(range_buckboost_v),
+    (uint8_t)COUNTOF(range_buckboost_v),
     range_buckboost_i,
-    ARRAY_COUNT(range_buckboost_i),
+    (uint8_t)COUNTOF(range_buckboost_i),
     true};
 
 static uint8_t bit_shift(uint8_t mask) {
@@ -498,13 +497,13 @@ static hal_status_t init_charger_unlocked(hal_adp5360_t *dev) {
   dev->charger_i_term_ua =
       (uint32_t)clamp_i32((int32_t)c->i_term_ua, 5000, 32500);
 
-  st = range_index(range_v_bus_adaptive, ARRAY_COUNT(range_v_bus_adaptive),
+  st = range_index(range_v_bus_adaptive, (uint8_t)COUNTOF(range_v_bus_adaptive),
                    (int32_t)dev->charger_v_adpichg_uv, &idx);
   if (st != HAL_OK)
     return st;
   val |= field_prep(ADP5360_VADPICHG_MASK, idx);
   val |= field_prep(ADP5360_VSYS_5V_MASK, c->vsys_5v);
-  st = range_index(range_v_bus_i_limit, ARRAY_COUNT(range_v_bus_i_limit),
+  st = range_index(range_v_bus_i_limit, (uint8_t)COUNTOF(range_v_bus_i_limit),
                    (int32_t)dev->charger_i_input_limit_ua, &idx);
   if (st != HAL_OK)
     return st;
@@ -514,13 +513,13 @@ static hal_status_t init_charger_unlocked(hal_adp5360_t *dev) {
     return st;
 
   val = 0u;
-  st = range_index(range_v_term, ARRAY_COUNT(range_v_term),
+  st = range_index(range_v_term, (uint8_t)COUNTOF(range_v_term),
                    (int32_t)clamp_i32((int32_t)c->v_term_uv, 3560000, 4660000),
                    &idx);
   if (st != HAL_OK)
     return st;
   val |= field_prep(ADP5360_VTERM_MASK, idx);
-  st = range_index(range_i_trickle, ARRAY_COUNT(range_i_trickle),
+  st = range_index(range_i_trickle, (uint8_t)COUNTOF(range_i_trickle),
                    (int32_t)dev->charger_i_trickle_ua, &idx);
   if (st != HAL_OK)
     return st;
@@ -530,12 +529,12 @@ static hal_status_t init_charger_unlocked(hal_adp5360_t *dev) {
     return st;
 
   val = 0u;
-  st = range_index(range_i_term, ARRAY_COUNT(range_i_term),
+  st = range_index(range_i_term, (uint8_t)COUNTOF(range_i_term),
                    (int32_t)dev->charger_i_term_ua, &idx);
   if (st != HAL_OK)
     return st;
   val |= field_prep(ADP5360_IEND_MASK, idx);
-  st = range_index(range_i_fast, ARRAY_COUNT(range_i_fast),
+  st = range_index(range_i_fast, (uint8_t)COUNTOF(range_i_fast),
                    (int32_t)dev->charger_i_fast_ua, &idx);
   if (st != HAL_OK)
     return st;
@@ -546,12 +545,12 @@ static hal_status_t init_charger_unlocked(hal_adp5360_t *dev) {
 
   val = field_prep(ADP5360_VTRK_DEAD_MASK, c->v_trickle_dead_idx) |
         field_prep(ADP5360_DIS_RECHARGE_MASK, c->disable_recharge);
-  st = range_index(range_v_recharge, ARRAY_COUNT(range_v_recharge),
+  st = range_index(range_v_recharge, (uint8_t)COUNTOF(range_v_recharge),
                    clamp_i32((int32_t)c->v_recharge_uv, 120000, 240000), &idx);
   if (st != HAL_OK)
     return st;
   val |= field_prep(ADP5360_VRCH_MASK, idx);
-  st = range_index(range_v_weak, ARRAY_COUNT(range_v_weak),
+  st = range_index(range_v_weak, (uint8_t)COUNTOF(range_v_weak),
                    clamp_i32((int32_t)c->v_weak_uv, 2700000, 3400000), &idx);
   if (st != HAL_OK)
     return st;
@@ -616,7 +615,7 @@ static hal_status_t init_charger_unlocked(hal_adp5360_t *dev) {
     return st;
 
   st = range_index(
-      range_v_bat_discharge, ARRAY_COUNT(range_v_bat_discharge),
+      range_v_bat_discharge, (uint8_t)COUNTOF(range_v_bat_discharge),
       clamp_i32((int32_t)c->battery_undervoltage_uv, 2050000, 2800000), &idx);
   if (st != HAL_OK)
     return st;
@@ -630,7 +629,7 @@ static hal_status_t init_charger_unlocked(hal_adp5360_t *dev) {
     return st;
 
   st = range_index(
-      range_i_bat_discharge, ARRAY_COUNT(range_i_bat_discharge),
+      range_i_bat_discharge, (uint8_t)COUNTOF(range_i_bat_discharge),
       clamp_i32((int32_t)c->battery_discharge_overcurrent_ua, 50000, 600000),
       &idx);
   if (st != HAL_OK)
@@ -643,7 +642,7 @@ static hal_status_t init_charger_unlocked(hal_adp5360_t *dev) {
     return st;
 
   st = range_index(
-      range_v_bat_charge_ov, ARRAY_COUNT(range_v_bat_charge_ov),
+      range_v_bat_charge_ov, (uint8_t)COUNTOF(range_v_bat_charge_ov),
       clamp_i32((int32_t)c->battery_charge_overvoltage_uv, 3550000, 4800000),
       &idx);
   if (st != HAL_OK)
@@ -658,7 +657,7 @@ static hal_status_t init_charger_unlocked(hal_adp5360_t *dev) {
     return st;
 
   st = range_index(
-      range_i_bat_charge, ARRAY_COUNT(range_i_bat_charge),
+      range_i_bat_charge, (uint8_t)COUNTOF(range_i_bat_charge),
       clamp_i32((int32_t)c->battery_charge_overcurrent_ua, 25000, 400000),
       &idx);
   if (st != HAL_OK)
@@ -680,7 +679,7 @@ static hal_status_t init_fuel_gauge_unlocked(hal_adp5360_t *dev) {
   for (uint8_t i = 0; i < 10u; ++i) {
     uint16_t idx = 0u;
     hal_status_t st =
-        range_window_index(range_v_soc, ARRAY_COUNT(range_v_soc),
+        range_window_index(range_v_soc, (uint8_t)COUNTOF(range_v_soc),
                            clamp_i32((int32_t)curve_mv[i], 2500, 4540),
                            clamp_i32((int32_t)curve_mv[i], 2500, 4540), &idx);
     if (st != HAL_OK || idx > 0xFFu) {
@@ -1079,7 +1078,7 @@ hal_status_t hal_adp5360_charger_set_fast_current(hal_adp5360_t *dev,
     return HAL_EINVAL;
   ua = (uint32_t)clamp_i32((int32_t)ua, 10000, 320000);
   WITH_DEV_LOCK(dev, {
-    _st = set_range_field(dev, range_i_fast, ARRAY_COUNT(range_i_fast),
+    _st = set_range_field(dev, range_i_fast, (uint8_t)COUNTOF(range_i_fast),
                           ADP5360_REG_CHARGER_CURR_CFG, ADP5360_ICHG_MASK, ua);
     if (_st == HAL_OK)
       dev->charger_i_fast_ua = ua;
@@ -1092,8 +1091,9 @@ hal_status_t hal_adp5360_charger_set_trickle_current(hal_adp5360_t *dev,
     return HAL_EINVAL;
   ua = (uint32_t)clamp_i32((int32_t)ua, 1000, 10000);
   WITH_DEV_LOCK(dev, {
-    _st = set_range_field(dev, range_i_trickle, ARRAY_COUNT(range_i_trickle),
-                          ADP5360_REG_CHARGER_TERM_CFG, ADP5360_ITRK_MASK, ua);
+    _st =
+        set_range_field(dev, range_i_trickle, (uint8_t)COUNTOF(range_i_trickle),
+                        ADP5360_REG_CHARGER_TERM_CFG, ADP5360_ITRK_MASK, ua);
     if (_st == HAL_OK)
       dev->charger_i_trickle_ua = ua;
   });
@@ -1105,7 +1105,7 @@ hal_status_t hal_adp5360_charger_set_termination_current(hal_adp5360_t *dev,
     return HAL_EINVAL;
   ua = (uint32_t)clamp_i32((int32_t)ua, 5000, 32500);
   WITH_DEV_LOCK(dev, {
-    _st = set_range_field(dev, range_i_term, ARRAY_COUNT(range_i_term),
+    _st = set_range_field(dev, range_i_term, (uint8_t)COUNTOF(range_i_term),
                           ADP5360_REG_CHARGER_CURR_CFG, ADP5360_IEND_MASK, ua);
     if (_st == HAL_OK)
       dev->charger_i_term_ua = ua;
@@ -1119,7 +1119,7 @@ hal_status_t hal_adp5360_charger_set_input_current_limit(hal_adp5360_t *dev,
   ua = (uint32_t)clamp_i32((int32_t)ua, 50000, 500000);
   WITH_DEV_LOCK(dev, {
     _st = set_range_field(dev, range_v_bus_i_limit,
-                          ARRAY_COUNT(range_v_bus_i_limit),
+                          (uint8_t)COUNTOF(range_v_bus_i_limit),
                           ADP5360_REG_CHARGER_VBUS_ILIM, ADP5360_ILIM_MASK, ua);
     if (_st == HAL_OK)
       dev->charger_i_input_limit_ua = ua;
@@ -1133,7 +1133,7 @@ hal_status_t hal_adp5360_charger_set_input_voltage_limit(hal_adp5360_t *dev,
   uv = (uint32_t)clamp_i32((int32_t)uv, 4400000, 4900000);
   WITH_DEV_LOCK(dev, {
     _st = set_range_field(
-        dev, range_v_bus_adaptive, ARRAY_COUNT(range_v_bus_adaptive),
+        dev, range_v_bus_adaptive, (uint8_t)COUNTOF(range_v_bus_adaptive),
         ADP5360_REG_CHARGER_VBUS_ILIM, ADP5360_VADPICHG_MASK, uv);
     if (_st == HAL_OK)
       dev->charger_v_adpichg_uv = uv;
@@ -1168,8 +1168,7 @@ hal_status_t hal_adp5360_fuel_gauge_get_cycle_count(hal_adp5360_t *dev,
     uint8_t b[2] = {};
     _st = reg_burst_read_unlocked(dev, ADP5360_REG_BAT_SOC_ACM_H, b, 2u);
     if (_st == HAL_OK)
-      *out_count =
-          (uint16_t)((((uint16_t)b[0] << 8) | b[1]) >> ADP5360_FG_SOC_SHIFT);
+      *out_count = (uint16_t)(jh_load_be16(b) >> ADP5360_FG_SOC_SHIFT);
   });
 }
 
@@ -1181,9 +1180,8 @@ hal_status_t hal_adp5360_fuel_gauge_get_voltage_uv(hal_adp5360_t *dev,
     uint8_t b[2] = {};
     _st = reg_burst_read_unlocked(dev, ADP5360_REG_VBAT_READ_H, b, 2u);
     if (_st == HAL_OK)
-      *out_uv =
-          (uint32_t)((((uint16_t)b[0] << 8) | b[1]) >> ADP5360_FG_VBAT_SHIFT) *
-          ADP5360_FG_MV_TO_UV;
+      *out_uv = (uint32_t)(jh_load_be16(b) >> ADP5360_FG_VBAT_SHIFT) *
+                ADP5360_FG_MV_TO_UV;
   });
 }
 
@@ -1246,7 +1244,7 @@ hal_adp5360_fuel_gauge_get_thermistor_voltage_uv(hal_adp5360_t *dev,
     uint8_t b[2] = {};
     _st = reg_burst_read_unlocked(dev, ADP5360_REG_V_THERM, b, 2u);
     if (_st == HAL_OK)
-      *out_uv = (uint32_t)(((uint16_t)b[1] << 8) | b[0]) * 1000u;
+      *out_uv = (uint32_t)jh_load_le16(b) * 1000u;
   });
 }
 

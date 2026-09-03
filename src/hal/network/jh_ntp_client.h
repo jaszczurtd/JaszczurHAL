@@ -1,6 +1,7 @@
 #pragma once
 
 #include "hal/core/hal_status.h"
+#include "hal/core/jh_endian.h"
 #include "hal/network/hal_net.h"
 
 #include <stddef.h>
@@ -13,18 +14,6 @@
 #endif
 #define JH_NTP_PORT HAL_TIME_NTP_PORT
 
-static inline void jh_ntp_write_u64_be(uint8_t *output, uint64_t value) {
-  size_t index;
-  for (index = 0u; index < 8u; ++index) {
-    output[index] = (uint8_t)(value >> (56u - (index * 8u)));
-  }
-}
-
-static inline uint32_t jh_ntp_read_u32_be(const uint8_t *bytes) {
-  return ((uint32_t)bytes[0] << 24u) | ((uint32_t)bytes[1] << 16u) |
-         ((uint32_t)bytes[2] << 8u) | (uint32_t)bytes[3];
-}
-
 static inline hal_status_t
 jh_ntp_prepare_request(uint8_t request[JH_NTP_PACKET_SIZE], uint64_t token) {
   if (request == NULL || token == 0u) {
@@ -32,7 +21,7 @@ jh_ntp_prepare_request(uint8_t request[JH_NTP_PACKET_SIZE], uint64_t token) {
   }
   memset(request, 0, JH_NTP_PACKET_SIZE);
   request[0] = 0x23u; /* Leap=0, version=4, client mode. */
-  jh_ntp_write_u64_be(&request[40], token);
+  jh_store_be64(&request[40], token);
   return HAL_OK;
 }
 
@@ -69,8 +58,8 @@ static inline hal_status_t jh_ntp_validate_response(
     return HAL_EPROTO;
   }
 
-  *out_ntp_seconds = jh_ntp_read_u32_be(&response[40]);
-  *out_ntp_fraction = jh_ntp_read_u32_be(&response[44]);
+  *out_ntp_seconds = jh_load_be32(&response[40]);
+  *out_ntp_fraction = jh_load_be32(&response[44]);
   if (*out_ntp_seconds == 0u && *out_ntp_fraction == 0u) {
     *out_ntp_seconds = 0u;
     *out_ntp_fraction = 0u;

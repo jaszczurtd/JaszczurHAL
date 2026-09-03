@@ -3,6 +3,7 @@
 
 #include "mcp251xfd_driver.h"
 
+#include "hal/core/jh_endian.h"
 #include "hal/serial/hal_serial.h"
 #include "hal/system/hal_system.h"
 
@@ -87,18 +88,6 @@
 #define MCP251XFD_FLTOBJ_EXIDE (1u << 30)
 #define MCP251XFD_FLTMASK_MIDE (1u << 30)
 #define MCP251XFD_FLTCON_FLTEN (1u << 7)
-
-static uint32_t le32_read(const uint8_t *p) {
-  return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) |
-         ((uint32_t)p[3] << 24);
-}
-
-static void le32_write(uint8_t *p, uint32_t v) {
-  p[0] = (uint8_t)v;
-  p[1] = (uint8_t)(v >> 8);
-  p[2] = (uint8_t)(v >> 16);
-  p[3] = (uint8_t)(v >> 24);
-}
 
 static uint32_t encode_id(uint32_t id, uint8_t flags) {
   if ((flags & HAL_CAN_FRAME_EXTENDED) != 0u) {
@@ -185,8 +174,8 @@ void JHMCP251XFD::unlock_driver_() { hal_mutex_unlock(m_driver_mutex); }
 
 void JHMCP251XFD::reset_() {
   spi_begin_();
-  hal_spi_transfer(m_spi_bus, (uint8_t)(MCP251XFD_SPI_RESET >> 8));
-  hal_spi_transfer(m_spi_bus, (uint8_t)MCP251XFD_SPI_RESET);
+  hal_spi_transfer(m_spi_bus, jh_u16_msb(MCP251XFD_SPI_RESET));
+  hal_spi_transfer(m_spi_bus, jh_u16_lsb(MCP251XFD_SPI_RESET));
   spi_end_();
   hal_delay_ms(5u);
 }
@@ -196,21 +185,21 @@ uint32_t JHMCP251XFD::read_reg_(uint16_t addr) {
   const uint16_t cmd =
       (uint16_t)(MCP251XFD_SPI_READ | (addr & MCP251XFD_SPI_ADDR_MASK));
   spi_begin_();
-  hal_spi_transfer(m_spi_bus, (uint8_t)(cmd >> 8));
-  hal_spi_transfer(m_spi_bus, (uint8_t)cmd);
+  hal_spi_transfer(m_spi_bus, jh_u16_msb(cmd));
+  hal_spi_transfer(m_spi_bus, jh_u16_lsb(cmd));
   hal_spi_transfer_txrx(m_spi_bus, NULL, rx, sizeof(rx));
   spi_end_();
-  return le32_read(rx);
+  return jh_load_le32(rx);
 }
 
 void JHMCP251XFD::write_reg_(uint16_t addr, uint32_t value) {
   uint8_t tx[4];
-  le32_write(tx, value);
+  jh_store_le32(tx, value);
   const uint16_t cmd =
       (uint16_t)(MCP251XFD_SPI_WRITE | (addr & MCP251XFD_SPI_ADDR_MASK));
   spi_begin_();
-  hal_spi_transfer(m_spi_bus, (uint8_t)(cmd >> 8));
-  hal_spi_transfer(m_spi_bus, (uint8_t)cmd);
+  hal_spi_transfer(m_spi_bus, jh_u16_msb(cmd));
+  hal_spi_transfer(m_spi_bus, jh_u16_lsb(cmd));
   hal_spi_write(m_spi_bus, tx, sizeof(tx));
   spi_end_();
 }
@@ -226,8 +215,8 @@ void JHMCP251XFD::read_ram_(uint16_t addr, uint8_t *data, uint16_t len) {
   const uint16_t cmd =
       (uint16_t)(MCP251XFD_SPI_READ | (addr & MCP251XFD_SPI_ADDR_MASK));
   spi_begin_();
-  hal_spi_transfer(m_spi_bus, (uint8_t)(cmd >> 8));
-  hal_spi_transfer(m_spi_bus, (uint8_t)cmd);
+  hal_spi_transfer(m_spi_bus, jh_u16_msb(cmd));
+  hal_spi_transfer(m_spi_bus, jh_u16_lsb(cmd));
   hal_spi_transfer_txrx(m_spi_bus, NULL, data, len);
   spi_end_();
 }
@@ -239,8 +228,8 @@ void JHMCP251XFD::write_ram_(uint16_t addr, const uint8_t *data, uint16_t len) {
   const uint16_t cmd =
       (uint16_t)(MCP251XFD_SPI_WRITE | (addr & MCP251XFD_SPI_ADDR_MASK));
   spi_begin_();
-  hal_spi_transfer(m_spi_bus, (uint8_t)(cmd >> 8));
-  hal_spi_transfer(m_spi_bus, (uint8_t)cmd);
+  hal_spi_transfer(m_spi_bus, jh_u16_msb(cmd));
+  hal_spi_transfer(m_spi_bus, jh_u16_lsb(cmd));
   hal_spi_write(m_spi_bus, data, len);
   spi_end_();
 }
@@ -392,7 +381,7 @@ bool JHMCP251XFD::send_frame(const hal_can_frame_t *frame) {
   }
 
   uint8_t obj[72] = {};
-  le32_write(&obj[0], encode_id(frame->id, frame->flags));
+  jh_store_le32(&obj[0], encode_id(frame->id, frame->flags));
   uint32_t flags = frame->dlc & 0x0Fu;
   if ((frame->flags & HAL_CAN_FRAME_EXTENDED) != 0u)
     flags |= MCP251XFD_OBJ_FLAGS_IDE;
@@ -404,7 +393,7 @@ bool JHMCP251XFD::send_frame(const hal_can_frame_t *frame) {
     flags |= MCP251XFD_OBJ_FLAGS_BRS;
   if ((frame->flags & HAL_CAN_FRAME_ESI) != 0u)
     flags |= MCP251XFD_OBJ_FLAGS_ESI;
-  le32_write(&obj[4], flags);
+  jh_store_le32(&obj[4], flags);
   if ((frame->flags & HAL_CAN_FRAME_RTR) == 0u && frame->len > 0u) {
     memcpy(&obj[8], frame->data, frame->len);
   }
@@ -457,8 +446,8 @@ bool JHMCP251XFD::receive_frame(hal_can_frame_t *frame) {
   unlock_driver_();
 
   memset(frame, 0, sizeof(*frame));
-  const uint32_t raw_id = le32_read(&obj[0]);
-  const uint32_t raw_flags = le32_read(&obj[4]);
+  const uint32_t raw_id = jh_load_le32(&obj[0]);
+  const uint32_t raw_flags = jh_load_le32(&obj[4]);
   frame->flags = 0u;
   frame->id = decode_id(raw_id, raw_flags, &frame->flags);
   if ((raw_flags & MCP251XFD_OBJ_FLAGS_RTR) != 0u)

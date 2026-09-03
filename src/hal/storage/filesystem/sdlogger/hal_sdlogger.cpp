@@ -151,8 +151,8 @@ hal_status_t hal_sdlogger_append(const char *data) {
   }
 
   const uint32_t now = hal_millis();
-  if ((uint32_t)(now - s_last_write_time) >=
-      (uint32_t)HAL_SDLOGGER_WRITE_INTERVAL_MS) {
+  if (hal_elapsed_u32(now, s_last_write_time,
+                      (uint32_t)HAL_SDLOGGER_WRITE_INTERVAL_MS)) {
     s_last_write_time = now;
     status = flush_log_buffer_locked();
   }

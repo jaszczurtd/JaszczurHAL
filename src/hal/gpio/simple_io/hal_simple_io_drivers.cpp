@@ -18,6 +18,7 @@
 
 #include "hal/core/hal_mutex_once.h"
 #include "hal/core/hal_status.h"
+#include "hal/core/jh_endian.h"
 #include "hal/gpio/hal_gpio.h"
 #include "hal/i2c/hal_i2c.h"
 #include "hal/spi/hal_spi.h"
@@ -112,7 +113,8 @@ static uint16_t mcp23017_mask_for_count(uint8_t count) {
 
 static hal_status_t mcp23017_write_reg(uint8_t bus, uint8_t addr, uint8_t reg,
                                        uint16_t value, uint8_t width) {
-  uint8_t data[3] = {reg, (uint8_t)(value & 0xFFu), (uint8_t)(value >> 8)};
+  uint8_t data[3] = {reg, 0u, 0u};
+  jh_store_le16(&data[1], value);
   return i2c_write_bytes(bus, addr, data, (width == 2u) ? 3u : 2u);
 }
 
@@ -125,7 +127,7 @@ static hal_status_t mcp23017_read_reg(uint8_t bus, uint8_t addr, uint8_t reg,
   if (!hal_i2c_write_read_bus(bus, addr, &reg, 1u, rx, width)) {
     return HAL_EBUS;
   }
-  *out_value = (uint16_t)rx[0] | ((uint16_t)rx[1] << 8);
+  *out_value = jh_load_le16(rx);
   return HAL_OK;
 }
 
@@ -1000,7 +1002,7 @@ hal_status_t hal_mcp3221_read_ex(hal_mcp3221_t *dev, uint16_t *out_value) {
   const hal_status_t status = status_from_i2c(hal_i2c_read_bytes_bus(
       dev->cfg.i2c_bus, dev->cfg.i2c_addr, data, sizeof(data)));
   if (status == HAL_OK) {
-    dev->value = (uint16_t)(((uint16_t)data[0] << 8) | data[1]);
+    dev->value = jh_load_be16(data);
     *out_value = dev->value;
   }
   hal_mutex_unlock(dev->mutex);
@@ -1057,7 +1059,7 @@ hal_status_t hal_mcp4725_init_ex(hal_mcp4725_t *dev,
         dev->cfg.i2c_bus, dev->cfg.i2c_addr, data, sizeof(data)));
   }
   if (status == HAL_OK) {
-    dev->value = (uint16_t)((((uint16_t)data[1] << 8) | data[2]) >> 4);
+    dev->value = (uint16_t)(jh_load_be16(&data[1]) >> 4u);
     dev->initialized = true;
   }
   hal_mutex_unlock(dev->mutex);

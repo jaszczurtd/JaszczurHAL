@@ -2,7 +2,6 @@
 #include <hal/core/hal_app.h>
 #include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
-#include <tools_c.h>
 
 #include <stddef.h>
 #include <stdint.h>
@@ -230,7 +229,7 @@ static void servicePendingSdp(const hal_bluetooth_classic_info_t *info) {
 }
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   deb("JaszczurHAL generic Bluetooth Classic scan example");
   deb("Commands: SCAN, STOP, SDP n, PAIR n, AUTHORIZE, REJECT, SAVE n, "
       "FORGET n, INFO");
