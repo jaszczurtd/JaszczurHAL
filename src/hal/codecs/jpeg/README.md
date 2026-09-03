@@ -6,6 +6,6 @@ The `jaszczurtd/TJpg_Decoder` checkout is managed at
 
 Only its target-neutral Tiny JPEG Decompressor core is compiled. The tracked
 `tjpgd.c` and `tjpgd.h` files gate that core with `HAL_ENABLE_JPEG`; memory input
-and RGB565 output adaptation lives in `src/utils/tools.cpp`.
+and RGB565 output adaptation lives in `src/hal/codecs/hal_image.cpp`.
 
 Synchronize or verify the dependency with `scripts/ensure_jpeg.sh`.

@@ -42,6 +42,7 @@
 
 #include "mcp9600_driver.h"
 
+#include "hal/core/jh_endian.h"
 #include "hal/i2c/hal_i2c.h"
 
 #include <math.h>
@@ -174,7 +175,7 @@ float hal_mcp9600_read_thermocouple(hal_mcp9600_t *dev) {
 
   hal_mutex_unlock(dev->mutex);
 
-  int16_t therm = (int16_t)(((uint16_t)raw[0] << 8) | raw[1]);
+  int16_t therm = (int16_t)jh_load_be16(raw);
   return (float)therm * 0.0625f;
 }
 
@@ -199,7 +200,7 @@ float hal_mcp9600_read_ambient(hal_mcp9600_t *dev) {
 
   hal_mutex_unlock(dev->mutex);
 
-  int16_t cold = (int16_t)(((uint16_t)raw[0] << 8) | raw[1]);
+  int16_t cold = (int16_t)jh_load_be16(raw);
   return (float)cold * 0.0625f;
 }
 
@@ -378,7 +379,7 @@ float hal_mcp9600_get_alert_temperature(hal_mcp9600_t *dev, uint8_t alert) {
     return NAN;
   }
 
-  int16_t therm = (int16_t)(((uint16_t)raw[0] << 8) | raw[1]);
+  int16_t therm = (int16_t)jh_load_be16(raw);
   return (float)therm * 0.0625f;
 }
 
@@ -389,10 +390,8 @@ void hal_mcp9600_set_alert_temperature(hal_mcp9600_t *dev, uint8_t alert,
   }
 
   int16_t therm = (int16_t)(temp / 0.0625f);
-  uint8_t raw[2] = {
-      (uint8_t)((therm >> 8) & 0xFF),
-      (uint8_t)(therm & 0xFF),
-  };
+  uint8_t raw[2];
+  jh_store_be16(raw, (uint16_t)therm);
 
   hal_mutex_lock(dev->mutex);
   (void)mcp9600_write_register(

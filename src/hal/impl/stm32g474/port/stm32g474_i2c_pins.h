@@ -1,6 +1,8 @@
 #ifndef JH_STM32G474_I2C_PINS_H
 #define JH_STM32G474_I2C_PINS_H
 
+#include "hal/core/hal_array.h"
+
 #include "stm32g474_regs.h"
 
 #include <stddef.h>
@@ -31,8 +33,7 @@ static const jh_stm32g474_i2c_pin_af_t kJhStm32g474I2cPins[] = {
 
 static inline bool jh_stm32g474_i2c_find_af(uint8_t controller, bool is_sda,
                                             uint8_t pin, uint8_t *out_af) {
-  for (size_t i = 0u;
-       i < sizeof(kJhStm32g474I2cPins) / sizeof(kJhStm32g474I2cPins[0]); ++i) {
+  for (size_t i = 0u; i < COUNTOF(kJhStm32g474I2cPins); ++i) {
     const jh_stm32g474_i2c_pin_af_t *entry = &kJhStm32g474I2cPins[i];
     if (entry->controller == controller && entry->is_sda == is_sda &&
         entry->pin == pin) {

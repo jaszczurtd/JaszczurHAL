@@ -167,9 +167,9 @@ Stack protection uses two independent opt-ins:
 | `HAL_ENABLE_A7670` | `hal_simcom_a76xx.h` | `hal_simcom_a76xx.cpp` | SimCom A76xx-family driver (propagates CELLULAR_MODEM + UART) |
 | `HAL_ENABLE_CJSON` | `hal/codecs/cjson/cJSON.h`, `hal/codecs/cjson/cJSON_Utils.h` (`tools.h` from C++) | `hal/codecs/cjson/cJSON.c`, `hal/codecs/cjson/cJSON_Utils.c` | managed cJSON checkout with tracked wrappers |
 | `HAL_ENABLE_PNG` | `hal/codecs/lodepng/lodepng.h` (`tools.h` from C++) | `hal/codecs/lodepng/lodepng.cpp` | managed LodePNG checkout with a tracked embedded-profile wrapper |
-| `HAL_ENABLE_PNG_AS_BASE64` | `utils/tools_api.h` helpers + `hal/codecs/lodepng/lodepng.h` + `hal_crypto.h` | `utils/tools.cpp` + `hal/codecs/lodepng/lodepng.cpp` + `hal_crypto.cpp` | Base64-encoded PNG decode helpers (propagates CRYPTO + PNG) |
-| `HAL_ENABLE_JPEG` | `hal/codecs/jpeg/tjpgd.h` (`tools.h` from C++) | `hal/codecs/jpeg/tjpgd.c` + `utils/tools.cpp` | managed TJpgDec core with memory input and RGB565 output |
-| `HAL_ENABLE_JPEG_AS_BASE64` | `utils/tools_api.h` helpers + `hal/codecs/jpeg/tjpgd.h` + `hal_crypto.h` | `utils/tools.cpp` + `hal/codecs/jpeg/tjpgd.c` + `hal_crypto.cpp` | Base64-encoded JPEG decode helpers (propagates CRYPTO + JPEG) |
+| `HAL_ENABLE_PNG_AS_BASE64` | `hal/codecs/hal_image.h` + `hal/codecs/lodepng/lodepng.h` + `hal_crypto.h` | `hal/codecs/hal_image.cpp` + `hal/codecs/lodepng/lodepng.cpp` + `hal_crypto.cpp` | Base64-encoded PNG decode helpers (propagates CRYPTO + PNG) |
+| `HAL_ENABLE_JPEG` | `hal/codecs/hal_image.h` + `hal/codecs/jpeg/tjpgd.h` | `hal/codecs/hal_image.cpp` + `hal/codecs/jpeg/tjpgd.c` | managed TJpgDec core with memory input and RGB565 output |
+| `HAL_ENABLE_JPEG_AS_BASE64` | `hal/codecs/hal_image.h` + `hal/codecs/jpeg/tjpgd.h` + `hal_crypto.h` | `hal/codecs/hal_image.cpp` + `hal/codecs/jpeg/tjpgd.c` + `hal_crypto.cpp` | Base64-encoded JPEG decode helpers (propagates CRYPTO + JPEG) |
 | `HAL_ENABLE_UNITY` | utility headers/sources | `utils/unity.*` | managed Unity framework |
 
 ### Opt-out flag
@@ -468,7 +468,8 @@ Actual compiled dependencies are controlled by the module set:
 \* `HAL_ENABLE_TIME` enables the shared runtime clock, status, NTP, and
 local-time APIs. With `HAL_ENABLE_RTC`, it can restore from RTC and persist
 validated NTP results. The pure
-`hal_time_from_components(...)`, `hal_time_is_daylight_saving_time(...)`,
+`hal_get_seconds()`, `hal_time_from_components(...)`,
+`hal_time_is_daylight_saving_time(...)`,
 `hal_time_adjust_cet_cest(...)`, `hal_time_is_in_range(...)`, and
 `hal_time_extract_minutes(...)` helpers remain available unconditionally with
 no network dependency.

@@ -1,8 +1,8 @@
 #include <hal/core/hal_app.h>
 #include <hal/network/hal_wifi.h>
 #include <hal/network/ota/hal_ota.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
-#include <tools_c.h>
 
 static const char *WIFI_SSID = "your-ssid";
 static const char *WIFI_PASSWORD = "your-password";
@@ -33,7 +33,7 @@ static void connect_wifi(void) {
 }
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   hal_ota_set_hostname(OTA_HOSTNAME);
   hal_ota_set_port(OTA_PORT);
   hal_ota_set_password(OTA_PASSWORD);

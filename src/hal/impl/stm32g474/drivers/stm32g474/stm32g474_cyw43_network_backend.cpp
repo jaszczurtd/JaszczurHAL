@@ -77,7 +77,7 @@ void ensure_mutexes(void) {
 
 bool deadline_expired(uint32_t started, uint32_t timeout_ms) {
   return timeout_ms != HAL_NET_TIMEOUT_FOREVER &&
-         (uint32_t)(hal_millis() - started) >= timeout_ms;
+         hal_millis_deadline_expired(started, timeout_ms);
 }
 
 hal_status_t service_initialize(void);

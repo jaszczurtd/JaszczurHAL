@@ -3,8 +3,8 @@
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
 #include <hal/i2c/hal_i2c.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
-#include <tools_c.h>
 
 #if HAL_TARGET_IS_RP
 #define INTERNAL_ADC_PIN_0 26u
@@ -93,7 +93,7 @@ static void report_ads1115(uint32_t now) {
 }
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   deb("");
   deb("=== JaszczurHAL ADC ===");
 

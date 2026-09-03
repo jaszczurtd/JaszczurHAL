@@ -131,7 +131,7 @@ void report_summary(void) {
 } // namespace
 
 extern "C" void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   s_status = hal_ble_initialize();
   if (s_status != HAL_OK) {
     report_summary();

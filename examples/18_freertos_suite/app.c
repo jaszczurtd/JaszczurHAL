@@ -8,7 +8,6 @@
 #include <hal/serial/hal_serial.h>
 #include <hal/system/hal_sync.h>
 #include <hal/system/hal_system.h>
-#include <tools_c.h>
 
 #if !defined(HAL_ENABLE_FREERTOS)
 #error "18_freertos_suite requires HAL_ENABLE_FREERTOS"
@@ -95,7 +94,7 @@ static void smoke_table_worker(void *arg) {
 }
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   hal_gpio_set_mode(HAL_LED_BUILTIN, HAL_GPIO_OUTPUT);
 
   s_smoke_mutex = hal_mutex_create();

@@ -3,6 +3,7 @@
 
 #if HAL_TARGET_IS_ESP32 && defined(HAL_ENABLE_BLUETOOTH_CLASSIC)
 
+#include "hal/bluetooth/jh_bluetooth_classic_address.h"
 #include "hal/bluetooth/jh_bluetooth_classic_backend.h"
 #include "hal/core/hal_mutex_once.h"
 #include "hal/impl/esp32/jh_esp32_nvs_runtime.h"
@@ -63,13 +64,6 @@ static void backend_unlock(void) { hal_mutex_unlock(s_backend.mutex); }
 
 static hal_status_t status_from_esp(esp_err_t status) {
   return jh_esp32_status_from_esp_err_with_fallback(status, HAL_EIO);
-}
-
-static bool address_equal(const hal_bluetooth_classic_address_t *left,
-                          const hal_bluetooth_classic_address_t *right) {
-  return left != NULL && right != NULL &&
-         memcmp(left->bytes, right->bytes, HAL_BLUETOOTH_CLASSIC_ADDRESS_LEN) ==
-             0;
 }
 
 static void emit(const jh_bluetooth_classic_backend_event_t *event) {
@@ -177,11 +171,11 @@ static uint32_t service_bit(const esp_bt_uuid_t *uuid) {
 
 static bool
 pairing_address_allowed(const hal_bluetooth_classic_address_t *address) {
-  if (address_equal(address, &s_backend.pairing_address)) {
+  if (jh_bluetooth_classic_address_equal(address, &s_backend.pairing_address)) {
     return true;
   }
 #ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
-  return address_equal(address, &s_backend.hid_address);
+  return jh_bluetooth_classic_address_equal(address, &s_backend.hid_address);
 #else
   return false;
 #endif

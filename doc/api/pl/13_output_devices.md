@@ -16,11 +16,10 @@ Obejmuje: `hal_rgb_led`, `hal_digipot`, `hal_pga2311`, `hal_mcp23017`, `hal_pca9
 #define hal_constrain(v, lo, hi) ...
 #define hal_map(x, in_min, in_max, out_min, out_max) ...
 
-static inline float roundToN(float v, int n);
-/* Alias kompatybilności wstecznej: hal_roundToN(v, n) */
+static inline float hal_math_round_to_n(float v, int n);
 ```
 
-`roundToN` zaokrągla do `n` miejsc po przecinku (`n < 0` -> `0`, `n > 6` -> `6`).
+`hal_math_round_to_n` zaokrągla do `n` miejsc po przecinku (`n < 0` -> `0`, `n > 6` -> `6`).
 Wartości połówkowe są zaokrąglane w kierunku od zera.
 
 ---

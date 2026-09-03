@@ -52,9 +52,6 @@
 /* Maximum payload bytes per I2C transmission (Wire-compatible chunking). */
 #define SSD1306_I2C_CHUNK 16u
 
-static bool pin_is_connected(int16_t pin) { return pin >= 0 && pin <= 255; }
-static uint8_t pin_to_u8(int16_t pin) { return (uint8_t)pin; }
-
 static bool controller_valid(jh_ssd1306_controller_t controller) {
   return controller >= JH_SSD1306_CONTROLLER_SSD1306 &&
          controller <= JH_SSD1306_CONTROLLER_CH1115;
@@ -151,7 +148,7 @@ static bool spi_write_control(jh_ssd1306_t *dev, bool command,
   (void)len;
   return false;
 #else
-  if (dev == NULL || !pin_is_connected(dev->config.spi_dc_pin) ||
+  if (dev == NULL || !jh_display_pin_connected(dev->config.spi_dc_pin) ||
       (bytes == NULL && len > 0u)) {
     return false;
   }
@@ -160,7 +157,7 @@ static bool spi_write_control(jh_ssd1306_t *dev, bool command,
   if (hal_status_is_error(status)) {
     return false;
   }
-  hal_gpio_write(pin_to_u8(dev->config.spi_dc_pin), !command);
+  hal_gpio_write(jh_display_pin_u8(dev->config.spi_dc_pin), !command);
   if (len > 0u) {
     status = hal_spi_write(dev->spi_device.bus, bytes, len);
   }
@@ -193,7 +190,7 @@ static bool setup_bus_and_pins(jh_ssd1306_t *dev) {
 #ifndef HAL_ENABLE_SPI
     return false;
 #else
-    if (!pin_is_connected(dev->config.spi_dc_pin)) {
+    if (!jh_display_pin_connected(dev->config.spi_dc_pin)) {
       return false;
     }
     const hal_spi_settings_t settings = {dev->config.clock_hz, HAL_SPI_MSBFIRST,
@@ -209,10 +206,10 @@ static bool setup_bus_and_pins(jh_ssd1306_t *dev) {
 }
 
 static bool reset_panel(const jh_ssd1306_t *dev) {
-  if (!pin_is_connected(dev->config.rst_pin)) {
+  if (!jh_display_pin_connected(dev->config.rst_pin)) {
     return true;
   }
-  const uint8_t rst = pin_to_u8(dev->config.rst_pin);
+  const uint8_t rst = jh_display_pin_u8(dev->config.rst_pin);
   hal_gpio_set_mode(rst, HAL_GPIO_OUTPUT);
   hal_gpio_write(rst, true);
   hal_delay_ms(1u);

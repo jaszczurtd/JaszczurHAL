@@ -6,9 +6,15 @@
  * @brief Sensor/math utility defaults and compatibility aliases.
  */
 
+/* The HAL headers own the defaults; these names remain compatibility aliases.
+ */
+#include "hal/analog/hal_adc_utils.h"
+#include "hal/core/hal_math.h"
+#include "hal/temperature/hal_ntc.h"
+
 /** @brief Default ADC resolution in bits used by helper conversions. */
 #ifndef HAL_TOOLS_ADC_BITS
-#define HAL_TOOLS_ADC_BITS 12
+#define HAL_TOOLS_ADC_BITS HAL_ADC_UTIL_DEFAULT_BITS
 #endif
 
 /** @brief Default ADC maximum value based on resolution. */
@@ -18,22 +24,22 @@
 
 /** @brief Default averaging window size for ADC smoothing helpers. */
 #ifndef HAL_TOOLS_NUMSAMPLES
-#define HAL_TOOLS_NUMSAMPLES 4
+#define HAL_TOOLS_NUMSAMPLES HAL_ADC_UTIL_DEFAULT_SAMPLES
 #endif
 
 /** @brief Default rolling-table size for temperature averaging helpers. */
 #ifndef HAL_TOOLS_TEMPERATURE_TABLES_SIZE
-#define HAL_TOOLS_TEMPERATURE_TABLES_SIZE 5
+#define HAL_TOOLS_TEMPERATURE_TABLES_SIZE HAL_MATH_ROLLING_AVERAGE_DEFAULT_SIZE
 #endif
 
 /** @brief Default NTC beta coefficient for thermistor calculations. */
 #ifndef HAL_TOOLS_BCOEFFICIENT
-#define HAL_TOOLS_BCOEFFICIENT 3600
+#define HAL_TOOLS_BCOEFFICIENT HAL_NTC_DEFAULT_BETA
 #endif
 
 /** @brief Default nominal temperature (deg C) for thermistor model. */
 #ifndef HAL_TOOLS_TEMPERATURENOMINAL
-#define HAL_TOOLS_TEMPERATURENOMINAL 21
+#define HAL_TOOLS_TEMPERATURENOMINAL HAL_NTC_DEFAULT_NOMINAL_C
 #endif
 
 /* Backward-compatible aliases used by legacy code. */

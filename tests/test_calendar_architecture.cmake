@@ -31,17 +31,30 @@ foreach(_consumer IN LISTS _consumers)
     endif()
 endforeach()
 
-set(_tools_source "${JH_ROOT}/src/utils/tools.cpp")
-file(READ "${_tools_source}" _tools_contents)
-set(_tools_wrapper_patterns
-    "bool[ \t\r\n]+isDaylightSavingTime\\([^)]*\\)[ \t\r\n]*\\{[ \t\r\n]*return[ \t\r\n]+hal_time_is_daylight_saving_time\\([^;]*;[ \t\r\n]*\\}"
-    "void[ \t\r\n]+adjustTime\\([^)]*\\)[ \t\r\n]*\\{[ \t\r\n]*hal_time_adjust_cet_cest\\([^;]*;[ \t\r\n]*\\}"
-    "bool[ \t\r\n]+is_time_in_range\\([^)]*\\)[ \t\r\n]*\\{[ \t\r\n]*return[ \t\r\n]+hal_time_is_in_range\\([^;]*;[ \t\r\n]*\\}"
-    "void[ \t\r\n]+extract_time\\([^)]*\\)[ \t\r\n]*\\{[ \t\r\n]*hal_time_extract_minutes\\([^;]*;[ \t\r\n]*\\}")
-foreach(_pattern IN LISTS _tools_wrapper_patterns)
-    if(NOT _tools_contents MATCHES "${_pattern}")
-        message(FATAL_ERROR
-            "Legacy tools time helper is not a HAL-only wrapper")
+set(_removed_tools_source "${JH_ROOT}/src/utils/tools.cpp")
+if(EXISTS "${_removed_tools_source}")
+    message(FATAL_ERROR "Legacy tools.cpp returned")
+endif()
+file(READ "${_public_time}" _public_time_contents)
+foreach(_required_api IN ITEMS
+        hal_get_seconds
+        hal_time_is_daylight_saving_time
+        hal_time_adjust_cet_cest
+        hal_time_is_in_range
+        hal_time_extract_minutes)
+    if(NOT _public_time_contents MATCHES "${_required_api}[ \t\r\n]*\\(")
+        message(FATAL_ERROR "hal_time lost ${_required_api}")
+    endif()
+endforeach()
+
+foreach(_removed_api IN ITEMS
+        getSeconds
+        isDaylightSavingTime
+        adjustTime
+        is_time_in_range
+        extract_time)
+    if(_public_time_contents MATCHES "${_removed_api}[ \t\r\n]*\\(")
+        message(FATAL_ERROR "Old time helper returned: ${_removed_api}")
     endif()
 endforeach()
 

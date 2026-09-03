@@ -1,6 +1,7 @@
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_STM32G474
 
+#include "hal/core/hal_array.h"
 #include "hal_pwm_stm32g474.h"
 #include "port/stm32g474_gpio_af.h"
 #include "port/stm32g474_regs.h"
@@ -62,7 +63,7 @@ struct TimerState {
 static TimerState s_timer_state[PWM_TIMER_COUNT] = {};
 
 static const PwmPinMap *find_pin(uint8_t pin) {
-  for (size_t i = 0; i < sizeof(kPinMap) / sizeof(kPinMap[0]); i++) {
+  for (size_t i = 0; i < COUNTOF(kPinMap); i++) {
     if (kPinMap[i].pin == pin) {
       return &kPinMap[i];
     }

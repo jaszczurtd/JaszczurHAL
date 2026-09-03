@@ -40,7 +40,7 @@ void        hal_mutex_destroy(hal_mutex_t mutex);
   przerwań w trybie bare metal; backendy FreeRTOS zwracają `false`, gdy funkcja
   zostanie wywołana z kontekstu przerwania.
 
-### Makra (tools.h)
+### Starsze makra mutexów (`tools.h`)
 
 ```c
 m_mutex_def(name)            // static hal_mutex_t name = NULL
@@ -296,7 +296,7 @@ możliwością nadpisania przez `-D`). Na RP2040/RP2350, STM32G474, ESP32-S3
 i w implementacji testowej zarówno inicjalizacja, jak i udostępnienie mutexu
 singletonu są chronione atomowo. Dwa zadania lub rdzenie nie zresetują więc
 równocześnie stanu debug ani nie utworzą konkurencyjnych instancji mutexu,
-z których jedna zostałaby porzucona. Jawne wywołanie `debugInit()` nie jest już
+z których jedna zostałaby porzucona. Jawne wywołanie `hal_debug_init_default()` nie jest już
 obowiązkowe.
 
 `hal_derr_limited()` korzysta z tego samego mechanizmu inicjalizacji. Globalna
@@ -392,18 +392,19 @@ Szczegóły implementacji limitera:
 - po wyczerpaniu `HAL_DEBUG_RATE_LIMIT_SOURCES_MAX` nowe źródła trafiają do
   wspólnej puli `overflow`, zamiast przejmować stan niezwiązanego źródła.
 
-**Pomocnicy debug w `tools.h` / `tools_c.h`:**
+**Publiczne helpery debug w `hal/serial/hal_serial.h`:**
 ```c
-void  debugInit(void);                          // wrapper wokół hal_debug_init(HAL_DEBUG_DEFAULT_BAUD)
-void  setDebugPrefixWithColon(const char *moduleName); // dopisuje ':' i przekazuje do hal_deb_set_prefix()
+void hal_debug_init_default(void);
+void hal_debug_set_module_prefix(const char *module_name);
 
 #define deb            hal_deb
 #define derr           hal_derr
 #define derr_limited   hal_derr_limited
-#define setDebugPrefix hal_deb_set_prefix
 ```
 
-`setDebugPrefixWithColon(...)` w razie potrzeby przycina nazwę modułu, tak aby
+Krótkie nazwy `deb` i `derr` są stabilnymi, wspieranymi aliasami publicznymi;
+nie są przeznaczone do usunięcia. `hal_debug_set_module_prefix(...)` w razie
+potrzeby przycina nazwę modułu, tak aby
 wygenerowany prefiks `<module>:` zawsze mieścił się w `HAL_DEBUG_PREFIX_SIZE`.
 
 Architekturę i zachowanie współbieżne sprawdzają `test_serial_architecture`,

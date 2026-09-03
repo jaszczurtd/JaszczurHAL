@@ -1,3 +1,4 @@
+#include "hal/core/jh_resolution.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "hal/system/hal_system.h"
 #include "utils/unity.h"
@@ -140,13 +141,14 @@ void test_map_equal_in_range_returns_out_min(void) {
 }
 
 void test_round_to_n_two_decimals(void) {
-  TEST_ASSERT_FLOAT_WITHIN(0.0001f, 12.35f, hal_roundToN(12.345f, 2));
-  TEST_ASSERT_FLOAT_WITHIN(0.0001f, -12.35f, hal_roundToN(-12.345f, 2));
+  TEST_ASSERT_FLOAT_WITHIN(0.0001f, 12.35f, hal_math_round_to_n(12.345f, 2));
+  TEST_ASSERT_FLOAT_WITHIN(0.0001f, -12.35f, hal_math_round_to_n(-12.345f, 2));
 }
 
 void test_round_to_n_clamps_precision_and_negative_n(void) {
-  TEST_ASSERT_FLOAT_WITHIN(0.0001f, 12.0f, hal_roundToN(12.49f, -5));
-  TEST_ASSERT_FLOAT_WITHIN(0.000001f, 1.123457f, hal_roundToN(1.1234567f, 9));
+  TEST_ASSERT_FLOAT_WITHIN(0.0001f, 12.0f, hal_math_round_to_n(12.49f, -5));
+  TEST_ASSERT_FLOAT_WITHIN(0.000001f, 1.123457f,
+                           hal_math_round_to_n(1.1234567f, 9));
 }
 
 void test_nonull_macro_accepts_non_null(void) {
@@ -286,6 +288,59 @@ void test_countof_returns_static_array_size(void) {
   TEST_ASSERT_EQUAL_UINT32(3u, (uint32_t)COUNTOF(word));
 }
 
+void test_endian_helpers_load_and_store_unaligned_values(void) {
+  uint8_t bytes[18] = {0u};
+
+  jh_store_le16(&bytes[1], 0x1234u);
+  jh_store_le32(&bytes[3], 0x89ABCDEFu);
+  jh_store_le64(&bytes[7], UINT64_C(0x0123456789ABCDEF));
+  TEST_ASSERT_EQUAL_HEX16(0x1234u, jh_load_le16(&bytes[1]));
+  TEST_ASSERT_EQUAL_HEX32(0x89ABCDEFu, jh_load_le32(&bytes[3]));
+  TEST_ASSERT_EQUAL_HEX64(UINT64_C(0x0123456789ABCDEF),
+                          jh_load_le64(&bytes[7]));
+
+  jh_store_be16(&bytes[1], 0x1234u);
+  jh_store_be32(&bytes[3], 0x89ABCDEFu);
+  jh_store_be64(&bytes[7], UINT64_C(0x0123456789ABCDEF));
+  TEST_ASSERT_EQUAL_HEX16(0x1234u, jh_load_be16(&bytes[1]));
+  TEST_ASSERT_EQUAL_HEX32(0x89ABCDEFu, jh_load_be32(&bytes[3]));
+  TEST_ASSERT_EQUAL_HEX64(UINT64_C(0x0123456789ABCDEF),
+                          jh_load_be64(&bytes[7]));
+}
+
+void test_endian_helpers_swap_integer_bytes(void) {
+  TEST_ASSERT_EQUAL_HEX16(0x3412u, jh_bswap16(0x1234u));
+  TEST_ASSERT_EQUAL_HEX32(0xEFCDAB89u, jh_bswap32(0x89ABCDEFu));
+  TEST_ASSERT_EQUAL_HEX64(UINT64_C(0xEFCDAB8967452301),
+                          jh_bswap64(UINT64_C(0x0123456789ABCDEF)));
+}
+
+void test_resolution_clamp_preserves_valid_values_and_bounds(void) {
+  TEST_ASSERT_EQUAL_UINT8(1u, jh_resolution_clamp_1_16(0u, NULL, NULL));
+  TEST_ASSERT_EQUAL_UINT8(1u, jh_resolution_clamp_1_16(1u, NULL, NULL));
+  TEST_ASSERT_EQUAL_UINT8(12u, jh_resolution_clamp_1_16(12u, NULL, NULL));
+  TEST_ASSERT_EQUAL_UINT8(16u, jh_resolution_clamp_1_16(16u, NULL, NULL));
+  TEST_ASSERT_EQUAL_UINT8(16u, jh_resolution_clamp_1_16(17u, NULL, NULL));
+}
+
+void test_elapsed_u32_handles_boundaries_and_wrap(void) {
+  TEST_ASSERT_TRUE(hal_elapsed_u32(10u, 10u, 0u));
+  TEST_ASSERT_FALSE(hal_elapsed_u32(1099u, 1000u, 100u));
+  TEST_ASSERT_TRUE(hal_elapsed_u32(1100u, 1000u, 100u));
+  TEST_ASSERT_FALSE(hal_elapsed_u32(0x00000002u, 0xFFFFFFFAu, 10u));
+  TEST_ASSERT_TRUE(hal_elapsed_u32(0x00000004u, 0xFFFFFFFAu, 10u));
+}
+
+void test_millis_deadline_expired_uses_hal_millis(void) {
+  hal_mock_set_millis(249u);
+  TEST_ASSERT_FALSE(hal_millis_deadline_expired(200u, 50u));
+  hal_mock_set_millis(250u);
+  TEST_ASSERT_TRUE(hal_millis_deadline_expired(200u, 50u));
+
+  hal_mock_set_millis(3u);
+  TEST_ASSERT_TRUE(hal_millis_deadline_expired(0xFFFFFFFEu, 5u));
+}
+
 void test_millis_interval_elapsed_matches_canonical_pattern(void) {
   uint32_t last = 1000u;
 
@@ -385,6 +440,11 @@ int main(void) {
   RUN_TEST(test_get_device_uid_hex_rejects_small_buffer);
   RUN_TEST(test_get_device_uid_hex_null_buffer_is_safe);
   RUN_TEST(test_countof_returns_static_array_size);
+  RUN_TEST(test_endian_helpers_load_and_store_unaligned_values);
+  RUN_TEST(test_endian_helpers_swap_integer_bytes);
+  RUN_TEST(test_resolution_clamp_preserves_valid_values_and_bounds);
+  RUN_TEST(test_elapsed_u32_handles_boundaries_and_wrap);
+  RUN_TEST(test_millis_deadline_expired_uses_hal_millis);
   RUN_TEST(test_millis_interval_elapsed_matches_canonical_pattern);
   RUN_TEST(test_millis_interval_elapsed_is_wrap_safe);
   RUN_TEST(test_millis_interval_elapsed_now_uses_hal_millis);

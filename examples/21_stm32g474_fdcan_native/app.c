@@ -6,8 +6,8 @@
 #include <hal/can/hal_can.h>
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
-#include <tools_c.h>
 
 #if !HAL_TARGET_IS_STM32G474
 #error "21_stm32g474_fdcan_native is only supported on HAL_TARGET_STM32G474"
@@ -26,7 +26,7 @@ static void log_rx_frame(const hal_can_frame_t *frame) {
 }
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   deb("");
   deb("=== JaszczurHAL STM32G474 native FDCAN example ===");
   deb("Initialising FDCAN1 on PA11/PA12...");

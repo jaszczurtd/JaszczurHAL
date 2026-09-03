@@ -11,12 +11,12 @@
  */
 
 #include "libConfig.h"
+#include "tools_common_defs.h"
 #include <stdbool.h>
 #include <stdint.h>
-#include "tools_common_defs.h"
-#include "tools_api.h"
 
-/** @brief Number of diagnostic counter values passed to the watchdog callback. */
+/** @brief Number of diagnostic counter values passed to the watchdog callback.
+ */
 #define WATCHDOG_VALUES_AMOUNT 4
 
 #ifdef __cplusplus
@@ -44,7 +44,7 @@ extern "C" {
  * @return true if the system was rebooted by the watchdog (useful for
  *         post-reboot recovery logic), false on a clean boot.
  */
-bool setupWatchdog(void(*function)(int *values, int size), unsigned int time);
+bool setupWatchdog(void (*function)(int *values, int size), unsigned int time);
 
 /**
  * @brief Must be called periodically from core 0 to signal liveness.
@@ -68,7 +68,8 @@ void setStartedCore1(void);
 
 /**
  * @brief Check whether both cores have been started.
- * @return true if both setStartedCore0() and setStartedCore1() have been called.
+ * @return true if both setStartedCore0() and setStartedCore1() have been
+ * called.
  */
 bool isEnvironmentStarted(void);
 

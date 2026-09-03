@@ -3,6 +3,7 @@
 
 #include "hal/core/hal_config.h"
 #include "hal/core/hal_mutex_once.h"
+#include "hal/core/jh_resolution.h"
 #include "hal/gpio/hal_pwm.h"
 #include "hal/system/hal_sync.h"
 #include "jh_esp32_gpio.h"
@@ -21,18 +22,6 @@ jh_esp32_ledc_channel_t *s_channels[SOC_GPIO_PIN_COUNT] = {};
 
 hal_mutex_t pwm_mutex(void) { return jh_hal_mutex_create_once(&s_mutex); }
 
-uint8_t clamp_resolution(uint8_t bits) {
-  if (bits < 1u) {
-    HAL_ASSERT(false, "hal_pwm_set_resolution: resolution is below 1 bit");
-    return 1u;
-  }
-  if (bits > 16u) {
-    HAL_ASSERT(false, "hal_pwm_set_resolution: resolution is above 16 bits");
-    return 16u;
-  }
-  return bits;
-}
-
 uint32_t resolution_max(uint8_t bits) {
   return (UINT32_C(1) << bits) - UINT32_C(1);
 }
@@ -45,7 +34,9 @@ void hal_pwm_set_resolution(uint8_t bits) {
     return;
   }
   hal_mutex_lock(mutex);
-  const uint8_t next = clamp_resolution(bits);
+  const uint8_t next = jh_resolution_clamp_1_16(
+      bits, "hal_pwm_set_resolution: resolution is below 1 bit",
+      "hal_pwm_set_resolution: resolution is above 16 bits");
   bool released = true;
   if (next != s_resolution_bits) {
     for (jh_esp32_ledc_channel_t *&channel : s_channels) {

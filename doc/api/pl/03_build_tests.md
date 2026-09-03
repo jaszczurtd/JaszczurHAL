@@ -1728,7 +1728,8 @@ repozytorium. Poza buildem
 testowym Unity pozostaje nieaktywne, chyba że jawnie włączono
 `HAL_ENABLE_UNITY`.
 
-Plik `tools.cpp` sprawdza `test_tools` z użyciem mocków HAL.
+Tematyczne moduły narzędziowe i ich adaptery zgodnościowe sprawdza
+`test_tools` z użyciem mocków HAL.
 Plik `multicoreWatchdog.cpp` sprawdza `test_multicoreWatchdog` z użyciem
 lokalnej zaślepki zamknięcia loggera i mocków HAL.
 `utils/draw7Segment.cpp` nie ma zależności platformowych
@@ -1918,7 +1919,7 @@ testów.
 | `test_SmartTimers` | `tick`, wywołanie callbacku, `abort`, `restart` (zachowanie rdzenia używane przez `hal_soft_timer_*`) |
 | `test_pidController` | wyjście P, ograniczanie wyjścia, reset całkowania, wykrywanie stabilności (zachowanie rdzenia używane przez `hal_pid_controller_*`) |
 | `test_multicoreWatchdog` | wymaganie oznak aktywności obu rdzeni, reset zewnętrzny oraz bezpieczne pomijanie operacji przed inicjalizacją |
-| `test_tools` | pokrycie narzędzi z `tools.cpp` przy użyciu mocków HAL, w tym `debugInit`, `setDebugPrefixWithColon`, funkcje pomocnicze do obsługi liczb i łańcuchów znaków, starsze adaptery czasu przekazujące operacje do HAL oraz funkcje formatujące bez ryzyka przepełnienia bufora |
+| `test_tools` | pokrycie modułów tematycznych i zgodności przy użyciu mocków HAL, w tym aliasów debug, zwracających status helperów liczb/tekstu/ADC/NTC/pikseli, konwersji endian, odpornego na zawijanie czasu stanu losowego, starszych adapterów czasu i ograniczonego formatowania |
 | `test_hal_critical_section` | zagnieżdżanie sekcji krytycznej i zachowanie przywracania stanu przerwań |
 | `test_hal_dac` | zgodność inicjalizacji DAC oraz zapisy surowych wartości i napięcia w miliwoltach zwracające status, walidacja kanału, zakresu i stanu niezainicjalizowania oraz raportowanie nieobsługiwanego układu docelowego |
 | `test_hal_digipot` | zachowanie init/set fasady MCP401x/MAX5395, walidacja zakresu i mapowanie statusu |

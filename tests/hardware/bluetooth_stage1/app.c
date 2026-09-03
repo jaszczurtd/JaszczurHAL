@@ -36,7 +36,7 @@ static void report_status(void) {
 }
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   s_start_status = jh_bluetooth_stage1_start();
   report_status();
 }

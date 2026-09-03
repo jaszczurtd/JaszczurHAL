@@ -3,7 +3,6 @@
 #include <hal/core/hal_app.h>
 #include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
-#include <tools_c.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -212,7 +211,7 @@ static void saveValidatedPeer(void) {
 }
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   deb("JaszczurHAL generic Bluetooth Classic HID Host example");
   deb("Commands: SCAN, AUTHORIZE, REJECT, INFO");
 }

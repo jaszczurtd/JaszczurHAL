@@ -51,7 +51,7 @@ static const char kBase64JpegImage[] =
 
 void test_jpeg_base64_decode_rgb565(void) {
   size_t jpeg_size = 0u;
-  TEST_ASSERT_TRUE(jpegBase64DecodedSize(
+  TEST_ASSERT_TRUE(hal_image_jpeg_base64_decoded_size(
       kBase64JpegImage, sizeof(kBase64JpegImage) - 1u, &jpeg_size));
   TEST_ASSERT_EQUAL_UINT(954u, jpeg_size);
 
@@ -61,7 +61,7 @@ void test_jpeg_base64_decode_rgb565(void) {
   unsigned short rgb565[24u * 24u] = {};
   unsigned width = 0u;
   unsigned height = 0u;
-  TEST_ASSERT_TRUE(jpegBase64DecodeRgb565(
+  TEST_ASSERT_TRUE(hal_image_jpeg_base64_decode_rgb565(
       kBase64JpegImage, sizeof(kBase64JpegImage) - 1u, jpeg_work, jpeg_size,
       rgb565, 24u * 24u, &width, &height));
   TEST_ASSERT_EQUAL_UINT(24u, width);
@@ -73,7 +73,7 @@ void test_jpeg_base64_decode_rgb565(void) {
 
 void test_jpeg_decode_rejects_too_small_output(void) {
   size_t jpeg_size = 0u;
-  TEST_ASSERT_TRUE(jpegBase64DecodedSize(
+  TEST_ASSERT_TRUE(hal_image_jpeg_base64_decoded_size(
       kBase64JpegImage, sizeof(kBase64JpegImage) - 1u, &jpeg_size));
 
   uint8_t *jpeg_work = (uint8_t *)malloc(jpeg_size);
@@ -87,8 +87,8 @@ void test_jpeg_decode_rejects_too_small_output(void) {
   unsigned short rgb565[4] = {};
   unsigned width = 123u;
   unsigned height = 456u;
-  TEST_ASSERT_FALSE(
-      jpegDecodeRgb565(jpeg_work, decoded_size, rgb565, 4u, &width, &height));
+  TEST_ASSERT_FALSE(hal_image_jpeg_decode_rgb565(jpeg_work, decoded_size,
+                                                 rgb565, 4u, &width, &height));
   TEST_ASSERT_EQUAL_UINT(0u, width);
   TEST_ASSERT_EQUAL_UINT(0u, height);
 
@@ -101,8 +101,8 @@ void test_jpeg_decode_rejects_invalid_input(void) {
   unsigned width = 123u;
   unsigned height = 456u;
 
-  TEST_ASSERT_FALSE(jpegDecodeRgb565(invalid_jpeg, sizeof(invalid_jpeg), rgb565,
-                                     4u, &width, &height));
+  TEST_ASSERT_FALSE(hal_image_jpeg_decode_rgb565(
+      invalid_jpeg, sizeof(invalid_jpeg), rgb565, 4u, &width, &height));
   TEST_ASSERT_EQUAL_UINT(0u, width);
   TEST_ASSERT_EQUAL_UINT(0u, height);
 }

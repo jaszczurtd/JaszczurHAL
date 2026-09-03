@@ -504,8 +504,8 @@ void receive_transfer_locked() {
   }
   if (received == 0u) {
     if (!hal_tcp_socket_is_connected(s_ota.tcp) ||
-        static_cast<uint32_t>(hal_millis() - s_ota.last_activity_ms) >=
-            kReceiveTimeoutMs) {
+        hal_millis_deadline_expired(s_ota.last_activity_ms,
+                                    kReceiveTimeoutMs)) {
       transfer_fail_locked(HAL_OTA_ERROR_RECEIVE, nullptr);
     }
     return;
@@ -814,8 +814,8 @@ void hal_ota_handle(void) {
   } else if (s_ota.state == ServiceState::kReceive) {
     receive_transfer_locked();
   } else if (s_ota.state == ServiceState::kWaitAuth &&
-             static_cast<uint32_t>(hal_millis() - s_ota.last_activity_ms) >=
-                 kConnectTimeoutMs) {
+             hal_millis_deadline_expired(s_ota.last_activity_ms,
+                                         kConnectTimeoutMs)) {
     transfer_fail_locked(HAL_OTA_ERROR_AUTH, "Authentication Timeout");
   }
   hal_mutex_unlock(s_ota.mutex);

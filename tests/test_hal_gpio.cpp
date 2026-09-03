@@ -1,4 +1,5 @@
 #include "hal/gpio/hal_gpio.h"
+#include "hal/gpio/hal_gpio_common.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "utils/unity.h"
 
@@ -11,6 +12,23 @@ static uint8_t s_gpio_irq_core_seen;
 static void gpio_irq_hit(void) {
   s_gpio_irq_hits++;
   s_gpio_irq_core_seen = hal_mock_gpio_get_current_core();
+}
+
+void test_common_gpio_validators_match_public_enum_ranges(void) {
+  for (int mode = HAL_GPIO_INPUT; mode <= HAL_GPIO_OUTPUT_OPEN_DRAIN_HIGH;
+       ++mode) {
+    TEST_ASSERT_TRUE(jh_hal_gpio_mode_valid((hal_gpio_mode_t)mode));
+  }
+  TEST_ASSERT_FALSE(jh_hal_gpio_mode_valid((hal_gpio_mode_t)-1));
+  TEST_ASSERT_FALSE(jh_hal_gpio_mode_valid(
+      (hal_gpio_mode_t)(HAL_GPIO_OUTPUT_OPEN_DRAIN_HIGH + 1)));
+
+  for (int mode = HAL_GPIO_IRQ_FALLING; mode <= HAL_GPIO_IRQ_CHANGE; ++mode) {
+    TEST_ASSERT_TRUE(jh_hal_gpio_irq_mode_valid((hal_gpio_irq_mode_t)mode));
+  }
+  TEST_ASSERT_FALSE(jh_hal_gpio_irq_mode_valid((hal_gpio_irq_mode_t)-1));
+  TEST_ASSERT_FALSE(jh_hal_gpio_irq_mode_valid(
+      (hal_gpio_irq_mode_t)(HAL_GPIO_IRQ_CHANGE + 1)));
 }
 
 void test_set_mode_output(void) {
@@ -204,6 +222,7 @@ void test_legacy_attach_records_current_core_owner(void) {
 
 int main(void) {
   UNITY_BEGIN();
+  RUN_TEST(test_common_gpio_validators_match_public_enum_ranges);
   RUN_TEST(test_set_mode_output);
   RUN_TEST(test_set_mode_input);
   RUN_TEST(test_set_mode_input_pulldown);

@@ -26,7 +26,7 @@
 #endif
 
 static bool io_timed_out(const jh_bearssl_bsd_io_t *io, uint32_t started_ms) {
-  return (uint32_t)(hal_millis() - started_ms) >= io->timeout_ms;
+  return hal_millis_deadline_expired(started_ms, io->timeout_ms);
 }
 
 static bool io_cancelled(jh_bearssl_bsd_io_t *io) {

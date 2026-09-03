@@ -338,7 +338,7 @@ static void drainScanResults(void) {
 }
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   hci_dump_init(&s_hciDump);
   hci_dump_enable_packet_log(true);
   deb("JaszczurHAL private Bluetooth Classic HCI trace");

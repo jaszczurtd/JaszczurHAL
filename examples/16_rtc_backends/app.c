@@ -5,7 +5,6 @@
 #include <hal/rtc/hal_rtc.h>
 #include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
-#include <tools_c.h>
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -359,7 +358,7 @@ static void exercise_power_states(void) {
 }
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   hal_serial_set_flush(true);
   deb("=== JaszczurHAL RTC backends ===");
   hal_power_result_t boot_wake = {0};

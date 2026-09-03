@@ -781,16 +781,16 @@ static hal_status_t sx126x_process(jh_lora_radio_context_t *context,
   *out_events = JH_LORA_PROVIDER_EVENT_NONE;
   const uint32_t now = hal_millis();
   const bool tx_timeout = context->state == HAL_LORA_RADIO_STATE_TX &&
-                          (uint32_t)(now - context->transmit_started_ms) >=
-                              context->transmit_timeout_ms;
+                          hal_elapsed_u32(now, context->transmit_started_ms,
+                                          context->transmit_timeout_ms);
   const bool rx_timeout = context->state == HAL_LORA_RADIO_STATE_RX &&
                           !context->receive_continuous &&
-                          (uint32_t)(now - context->receive_started_ms) >=
-                              context->receive_timeout_ms;
+                          hal_elapsed_u32(now, context->receive_started_ms,
+                                          context->receive_timeout_ms);
   const bool cad_timeout =
       context->state == HAL_LORA_RADIO_STATE_CAD &&
-      (uint32_t)(now - context->channel_activity_started_ms) >=
-          context->channel_activity_timeout_ms;
+      hal_elapsed_u32(now, context->channel_activity_started_ms,
+                      context->channel_activity_timeout_ms);
   if (!s_dio1_pending &&
       !hal_gpio_read(context->config.hardware.sx126x.dio1_pin) && !tx_timeout &&
       !rx_timeout && !cad_timeout) {

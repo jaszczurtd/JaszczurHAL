@@ -542,11 +542,12 @@ static hal_status_t start_ack_wait(jh_lora_link_context_t *context) {
 }
 
 static hal_status_t restart_ack_wait(jh_lora_link_context_t *context) {
-  const uint32_t elapsed =
-      (uint32_t)(hal_millis() - context->acknowledgement_started_ms);
-  if (elapsed >= context->config.acknowledgement_timeout_ms) {
+  const uint32_t now = hal_millis();
+  if (hal_elapsed_u32(now, context->acknowledgement_started_ms,
+                      context->config.acknowledgement_timeout_ms)) {
     return HAL_ETIMEOUT;
   }
+  const uint32_t elapsed = now - context->acknowledgement_started_ms;
   return hal_lora_radio_receive_start(
       context->config.radio,
       context->config.acknowledgement_timeout_ms - elapsed);
@@ -961,8 +962,8 @@ static hal_status_t process_receive(jh_lora_link_context_t *context) {
 
 static void expire_reassembly(jh_lora_link_context_t *context) {
   if (context->reassembly.active &&
-      (uint32_t)(hal_millis() - context->reassembly.started_ms) >=
-          context->config.reassembly_timeout_ms) {
+      hal_millis_deadline_expired(context->reassembly.started_ms,
+                                  context->config.reassembly_timeout_ms)) {
     context->reassembly.active = false;
     ++context->diagnostics.reassembly_timeouts;
   }
@@ -987,8 +988,8 @@ hal_status_t hal_lora_link_process(hal_lora_link_t link) {
     status = process_ack_wait(context);
     break;
   case HAL_LORA_LINK_STATE_RETRY_WAIT:
-    if ((uint32_t)(hal_millis() - context->retry_started_ms) >=
-        context->config.retry_backoff_ms) {
+    if (hal_millis_deadline_expired(context->retry_started_ms,
+                                    context->config.retry_backoff_ms)) {
       status = start_data_fragment(context);
       if (status != HAL_OK) {
         status = finish_send(context, status);

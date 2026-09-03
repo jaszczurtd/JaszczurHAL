@@ -404,8 +404,8 @@ static void receive_transfer_no_lock(void) {
 
   if (received == 0u) {
     if (!hal_tcp_socket_is_connected(s_ota.tcp) ||
-        (uint32_t)(hal_millis() - s_ota.last_activity_ms) >=
-            HAL_OTA_RECEIVE_TIMEOUT_MS) {
+        hal_millis_deadline_expired(s_ota.last_activity_ms,
+                                    HAL_OTA_RECEIVE_TIMEOUT_MS)) {
       transfer_fail_no_lock(HAL_OTA_ERROR_RECEIVE, nullptr);
     }
     return;
@@ -677,8 +677,8 @@ void hal_ota_handle(void) {
   } else if (s_ota.state == HAL_OTA_STATE_RECEIVE) {
     receive_transfer_no_lock();
   } else if (s_ota.state == HAL_OTA_STATE_WAIT_AUTH &&
-             (uint32_t)(hal_millis() - s_ota.last_activity_ms) >=
-                 HAL_OTA_CONNECT_TIMEOUT_MS) {
+             hal_millis_deadline_expired(s_ota.last_activity_ms,
+                                         HAL_OTA_CONNECT_TIMEOUT_MS)) {
     transfer_fail_no_lock(HAL_OTA_ERROR_AUTH, "Authentication Timeout");
   }
   hal_mutex_unlock(s_ota.mutex);

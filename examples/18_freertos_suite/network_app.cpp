@@ -49,6 +49,7 @@
 #include <hal/codecs/cjson/cJSON.h>
 #include <hal/codecs/cjson/cJSON_Utils.h>
 #include <hal/core/hal_app.h>
+#include <hal/core/hal_array.h>
 #include <hal/gpio/hal_gpio.h>
 #include <hal/network/hal_wifi.h>
 #include <hal/network/http/hal_http_client.h>
@@ -62,7 +63,6 @@
 #include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
 #include <hal/time/hal_time.h>
-#include <tools_c.h>
 
 #if HAL_HTTP_SERVER_MAX_ROUTES < 7u
 #error "network suite requires at least seven HTTP routes"
@@ -1113,7 +1113,7 @@ static void http_client_worker(void *arg) {
 } // namespace
 
 extern "C" void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   hal_deb_set_prefix("18_freertos_suite");
   hal_gpio_set_mode(HAL_LED_BUILTIN, HAL_GPIO_OUTPUT);
 

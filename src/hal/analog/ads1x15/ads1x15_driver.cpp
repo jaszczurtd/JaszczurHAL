@@ -37,6 +37,8 @@
 
 #include "ads1x15_driver.h"
 
+#include "hal/core/jh_endian.h"
+
 #include "hal/i2c/hal_i2c.h"
 #include "hal/system/hal_system.h"
 
@@ -393,7 +395,8 @@ void ADS1X15::_requestADC(uint16_t readmode) {
 }
 
 bool ADS1X15::_writeRegister(uint8_t address, uint8_t reg, uint16_t value) {
-  uint8_t data[3] = {reg, (uint8_t)(value >> 8), (uint8_t)(value & 0xFF)};
+  uint8_t data[3] = {reg, 0u, 0u};
+  jh_store_be16(&data[1], value);
 
   hal_i2c_begin_transmission_bus(_i2cBus, address);
   bool ok = true;
@@ -414,7 +417,7 @@ bool ADS1X15::_writeRegister(uint8_t address, uint8_t reg, uint16_t value) {
 uint16_t ADS1X15::_readRegister(uint8_t address, uint8_t reg) {
   uint8_t raw[2] = {0, 0};
   if (hal_i2c_write_read_bus(_i2cBus, address, &reg, 1u, raw, 2u)) {
-    return (uint16_t)(((uint16_t)raw[0] << 8) | raw[1]);
+    return jh_load_be16(raw);
   }
   _error = ADS1X15_ERROR_I2C;
   return 0x0000;

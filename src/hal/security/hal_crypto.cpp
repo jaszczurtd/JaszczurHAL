@@ -2,6 +2,8 @@
 
 #ifdef HAL_ENABLE_CRYPTO
 
+#include "hal/core/jh_endian.h"
+
 #include <limits.h>
 #include <string.h>
 
@@ -521,8 +523,7 @@ inline void sha256_compress(Sha256Ctx &ctx,
   uint32_t w[64];
   for (size_t i = 0u; i < 16u; ++i) {
     const size_t base = i * 4u;
-    w[i] = ((uint32_t)block[base] << 24) | ((uint32_t)block[base + 1u] << 16) |
-           ((uint32_t)block[base + 2u] << 8) | (uint32_t)block[base + 3u];
+    w[i] = jh_load_be32(&block[base]);
   }
   for (size_t i = 16u; i < 64u; ++i) {
     const uint32_t s0 =
@@ -612,17 +613,11 @@ inline void sha256_final(Sha256Ctx &ctx,
   }
 
   uint8_t length_be[8];
-  for (size_t i = 0u; i < 8u; ++i) {
-    length_be[i] = (uint8_t)(bit_count >> (56u - i * 8u));
-  }
+  jh_store_be64(length_be, bit_count);
   sha256_update(ctx, length_be, sizeof(length_be));
 
   for (size_t i = 0u; i < 8u; ++i) {
-    const uint32_t v = ctx.state[i];
-    out_digest[i * 4u] = (uint8_t)(v >> 24);
-    out_digest[i * 4u + 1u] = (uint8_t)(v >> 16);
-    out_digest[i * 4u + 2u] = (uint8_t)(v >> 8);
-    out_digest[i * 4u + 3u] = (uint8_t)v;
+    jh_store_be32(&out_digest[i * 4u], ctx.state[i]);
   }
   ctx.initialized = false;
 }

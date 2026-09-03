@@ -31,14 +31,6 @@ static inline uint32_t exti_line_mask(uint32_t line) { return 1u << line; }
 
 static bool gpio_pin_valid(uint8_t pin) { return pin_port(pin) <= 6u; }
 
-static bool gpio_mode_valid(hal_gpio_mode_t mode) {
-  return mode >= HAL_GPIO_INPUT && mode <= HAL_GPIO_OUTPUT_OPEN_DRAIN_HIGH;
-}
-
-static bool gpio_irq_mode_valid(hal_gpio_irq_mode_t mode) {
-  return mode >= HAL_GPIO_IRQ_FALLING && mode <= HAL_GPIO_IRQ_CHANGE;
-}
-
 static inline uint8_t nvic_prio_from_hal(hal_irq_priority_t priority) {
   switch (priority) {
   case HAL_IRQ_PRIORITY_HIGHEST:
@@ -110,7 +102,7 @@ void hal_gpio_set_mode(uint8_t pin, hal_gpio_mode_t mode) {
     HAL_ASSERT(false, "hal_gpio_set_mode: invalid pin");
     return;
   }
-  if (!gpio_mode_valid(mode)) {
+  if (!jh_hal_gpio_mode_valid(mode)) {
     HAL_ASSERT(false, "hal_gpio_set_mode: invalid mode");
     return;
   }
@@ -194,7 +186,7 @@ hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin, void (*callback)(void),
   if (callback == nullptr) {
     return HAL_EINVAL;
   }
-  if (!gpio_irq_mode_valid(mode)) {
+  if (!jh_hal_gpio_irq_mode_valid(mode)) {
     return HAL_EINVAL;
   }
   if (owner_core > 1u) {
@@ -334,10 +326,6 @@ static hal_irq_priority_t s_gpio_irq_priority = HAL_IRQ_PRIORITY_DEFAULT;
 static bool gpio_pin_valid(uint8_t pin) { return pin < 128u; }
 static uint8_t pin_num(uint8_t pin) { return (uint8_t)(pin & 0x0Fu); }
 
-static bool gpio_irq_mode_valid(hal_gpio_irq_mode_t mode) {
-  return mode >= HAL_GPIO_IRQ_FALLING && mode <= HAL_GPIO_IRQ_CHANGE;
-}
-
 void hal_gpio_set_mode(uint8_t pin, hal_gpio_mode_t mode) {
   (void)jh_hal_gpio_store_mode(pin, mode, s_state, s_mode, gpio_pin_valid);
 }
@@ -368,7 +356,7 @@ hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin, void (*callback)(void),
   if (callback == nullptr) {
     return HAL_EINVAL;
   }
-  if (!gpio_irq_mode_valid(mode)) {
+  if (!jh_hal_gpio_irq_mode_valid(mode)) {
     return HAL_EINVAL;
   }
   if (owner_core > 1u) {

@@ -1,6 +1,8 @@
 #ifndef JASZCZURHAL_CYW43_CONFIGPORT_H
 #define JASZCZURHAL_CYW43_CONFIGPORT_H
 
+#include "hal/core/hal_array.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -11,7 +13,7 @@
 #ifndef MIN
 #define MIN(a, b) ((a) <= (b) ? (a) : (b))
 #endif
-#define CYW43_ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
+#define CYW43_ARRAY_SIZE(a) COUNTOF(a)
 
 #define CYW43_USE_SPI (1)
 #if defined(HAL_CYW43_STACK_LWIP)

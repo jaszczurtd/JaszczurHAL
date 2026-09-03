@@ -634,15 +634,16 @@ void hal_http_server_poll(void) {
     const bool first_byte_timeout =
         client->request_len == 0u &&
         HAL_HTTP_SERVER_FIRST_BYTE_TIMEOUT_MS > 0u &&
-        (uint32_t)(now_ms - client->accepted_ms) >=
-            HAL_HTTP_SERVER_FIRST_BYTE_TIMEOUT_MS;
-    const bool request_timeout = HAL_HTTP_SERVER_REQUEST_TIMEOUT_MS > 0u &&
-                                 (uint32_t)(now_ms - client->accepted_ms) >=
-                                     HAL_HTTP_SERVER_REQUEST_TIMEOUT_MS;
+        hal_elapsed_u32(now_ms, client->accepted_ms,
+                        HAL_HTTP_SERVER_FIRST_BYTE_TIMEOUT_MS);
+    const bool request_timeout =
+        HAL_HTTP_SERVER_REQUEST_TIMEOUT_MS > 0u &&
+        hal_elapsed_u32(now_ms, client->accepted_ms,
+                        HAL_HTTP_SERVER_REQUEST_TIMEOUT_MS);
     const bool idle_timeout = client->request_len > 0u &&
                               HAL_HTTP_SERVER_IDLE_TIMEOUT_MS > 0u &&
-                              (uint32_t)(now_ms - client->last_activity_ms) >=
-                                  HAL_HTTP_SERVER_IDLE_TIMEOUT_MS;
+                              hal_elapsed_u32(now_ms, client->last_activity_ms,
+                                              HAL_HTTP_SERVER_IDLE_TIMEOUT_MS);
     if (first_byte_timeout || request_timeout || idle_timeout) {
       send_text_error_and_close(client, 408u, "Request Timeout",
                                 "Request Timeout\n");

@@ -2,6 +2,7 @@
 
 #ifdef HAL_ENABLE_BLE_STREAM
 
+#include "hal/core/jh_endian.h"
 #include "hal/security/hal_crypto.h"
 #include "hal/security/jh_secure_random.h"
 
@@ -20,29 +21,6 @@ enum {
    HAL_BLE_STREAM_SESSION_ID_LEN + (2u * HAL_BLE_STREAM_NONCE_LEN))
 
 #define JH_BLE_STREAM_AAD_LEN (4u + HAL_BLE_STREAM_AEAD_COUNTER_LEN)
-
-static void store_u16_le(uint8_t *out, uint16_t value) {
-  out[0] = (uint8_t)(value & 0xFFu);
-  out[1] = (uint8_t)((value >> 8) & 0xFFu);
-}
-
-static uint16_t load_u16_le(const uint8_t *in) {
-  return (uint16_t)((uint16_t)in[0] | ((uint16_t)in[1] << 8));
-}
-
-static void store_u64_le(uint8_t *out, uint64_t value) {
-  for (size_t index = 0u; index < 8u; ++index) {
-    out[index] = (uint8_t)((value >> (index * 8u)) & 0xFFu);
-  }
-}
-
-static uint64_t load_u64_le(const uint8_t *in) {
-  uint64_t value = 0u;
-  for (size_t index = 0u; index < 8u; ++index) {
-    value |= ((uint64_t)in[index]) << (index * 8u);
-  }
-  return value;
-}
 
 static bool bytes_are_all_zero(const uint8_t *data, size_t length) {
   uint8_t combined = 0u;
@@ -70,9 +48,9 @@ static void build_transcript(const jh_ble_stream_session_t *session,
   }
   offset += HAL_BLE_STREAM_PROFILE_NAME_LEN;
   out[offset++] = HAL_BLE_STREAM_PROTOCOL_VERSION;
-  store_u16_le(&out[offset], session->local_capabilities);
+  jh_store_le16(&out[offset], session->local_capabilities);
   offset += 2u;
-  store_u16_le(&out[offset], session->peer_capabilities);
+  jh_store_le16(&out[offset], session->peer_capabilities);
   offset += 2u;
   memcpy(&out[offset], session->session_id, HAL_BLE_STREAM_SESSION_ID_LEN);
   offset += HAL_BLE_STREAM_SESSION_ID_LEN;
@@ -97,7 +75,7 @@ static void build_nonce(jh_ble_stream_direction_t direction, uint64_t counter,
   out[1] = HAL_BLE_STREAM_PROTOCOL_VERSION;
   out[2] = 0u;
   out[3] = 0u;
-  store_u64_le(&out[4], counter);
+  jh_store_le64(&out[4], counter);
 }
 
 static void build_aad(uint8_t frame_type, uint8_t flags,
@@ -107,7 +85,7 @@ static void build_aad(uint8_t frame_type, uint8_t flags,
   out[1] = frame_type;
   out[2] = (uint8_t)direction;
   out[3] = flags;
-  store_u64_le(&out[4], counter);
+  jh_store_le64(&out[4], counter);
 }
 
 static size_t write_header(uint8_t *frame, uint8_t type, uint8_t flags,
@@ -180,7 +158,7 @@ static hal_status_t handle_hello(jh_ble_stream_session_t *session,
   }
 
   jh_ble_stream_session_reset(session);
-  session->peer_capabilities = load_u16_le(body);
+  session->peer_capabilities = jh_load_le16(body);
   memcpy(session->client_nonce, &body[2], HAL_BLE_STREAM_NONCE_LEN);
 
   /* Device nonce and session id must be unpredictable; without entropy the
@@ -208,7 +186,7 @@ static hal_status_t handle_hello(jh_ble_stream_session_t *session,
       write_header(result->response, JH_BLE_STREAM_FRAME_HELLO_ACK, 0u,
                    2u + HAL_BLE_STREAM_SESSION_ID_LEN +
                        HAL_BLE_STREAM_NONCE_LEN + HAL_BLE_STREAM_PROOF_LEN);
-  store_u16_le(&result->response[offset], session->local_capabilities);
+  jh_store_le16(&result->response[offset], session->local_capabilities);
   offset += 2u;
   memcpy(&result->response[offset], session->session_id,
          HAL_BLE_STREAM_SESSION_ID_LEN);
@@ -287,7 +265,7 @@ static hal_status_t handle_data(jh_ble_stream_session_t *session, uint8_t flags,
     return HAL_EPROTO;
   }
 
-  const uint64_t counter = load_u64_le(body);
+  const uint64_t counter = jh_load_le64(body);
   /* Every authenticated frame consumes exactly one counter value. */
   if (counter == UINT64_MAX || session->rx_counter == (UINT64_MAX - 1u)) {
     close_with(result, HAL_BLE_STREAM_CLOSE_COUNTER_EXHAUSTED);
@@ -392,7 +370,7 @@ hal_status_t jh_ble_stream_session_build_data(jh_ble_stream_session_t *session,
   const uint64_t counter = session->tx_counter + 1u;
   size_t offset =
       write_header(out_frame, JH_BLE_STREAM_FRAME_DATA, 0u, body_length);
-  store_u64_le(&out_frame[offset], counter);
+  jh_store_le64(&out_frame[offset], counter);
   offset += HAL_BLE_STREAM_AEAD_COUNTER_LEN;
 
   uint8_t nonce[HAL_CHACHA20_NONCE_BYTES];

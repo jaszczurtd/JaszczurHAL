@@ -1,7 +1,7 @@
 #include <hal/bluetooth/hal_gamepad.h>
 #include <hal/core/hal_app.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
-#include <tools_c.h>
 
 #if defined(HAL_GAMEPAD_EXAMPLE_ENABLE_BLE)
 #include <hal/bluetooth/hal_ble.h>
@@ -129,7 +129,7 @@ static void handleState(const hal_gamepad_info_t *info) {
 }
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   deb("JaszczurHAL Bluetooth Classic gamepad example");
 #if defined(HAL_GAMEPAD_EXAMPLE_ENABLE_BLE)
   deb("BLE and Bluetooth Classic share one controller runtime");

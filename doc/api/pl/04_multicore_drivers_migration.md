@@ -207,9 +207,8 @@ z `tools.cpp`:
 - `hal_time_extract_minutes(...)` rozbija liczbę minut, z opcjonalnymi
   wyjściami
 
-Dotychczasowe funkcje pomocnicze `isDaylightSavingTime()`, `adjustTime()`,
-`is_time_in_range()` oraz `extract_time()` pozostają zgodnymi źródłowo
-adapterami i nie zawierają własnej logiki kalendarza ani przedziałów.
+Są to publiczne implementacje modułu `hal_time`; biblioteka nie eksportuje
+drugiego zestawu aliasów funkcji pomocniczych.
 
 ---
 

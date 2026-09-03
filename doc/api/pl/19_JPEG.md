@@ -52,7 +52,7 @@ z funkcji pomocniczych `jpeg*`.
 Dla funkcji pomocniczych RGB565 w C lub C++ dołącz:
 
 ```c
-#include <tools_c.h>
+#include <hal/codecs/hal_image.h>
 ```
 
 API C biblioteki TJpgDec dostarczanej z projektem jest dostępne przez:
@@ -61,8 +61,8 @@ API C biblioteki TJpgDec dostarczanej z projektem jest dostępne przez:
 #include <hal/codecs/jpeg/tjpgd.h>
 ```
 
-`tools.h` udostępnia ten nagłówek również wtedy, gdy zdefiniowano
-`HAL_ENABLE_JPEG`.
+Zgodnościowe nagłówki narzędziowe zachowują historyczne aliasy bez prefiksu;
+nowy kod powinien używać nazw `hal_image_*`.
 
 ## Konfiguracja dla systemów wbudowanych
 
@@ -87,8 +87,8 @@ masowej JaszczurHAL.
 
 | Kategoria | Funkcje |
 |---|---|
-| Funkcja pomocnicza RGB565 | `jpegDecodeRgb565` |
-| Funkcje pomocnicze Base64 | `jpegBase64DecodedSize`, `jpegBase64DecodeRgb565` |
+| Funkcja pomocnicza RGB565 | `hal_image_jpeg_decode_rgb565` |
+| Funkcje pomocnicze Base64 | `hal_image_jpeg_base64_decoded_size`, `hal_image_jpeg_base64_decode_rgb565` |
 | Bezpośrednie API dekodera | `jd_prepare`, `jd_decomp` |
 
 ## Zarządzanie pamięcią
@@ -96,11 +96,11 @@ masowej JaszczurHAL.
 Funkcje pomocnicze wysokiego poziomu korzystają z buforów wejściowych i
 wyjściowych dostarczonych przez wywołującego:
 
-- `jpegDecodeRgb565()` odczytuje bajty JPEG z pamięci i zapisuje piksele
+- `hal_image_jpeg_decode_rgb565()` odczytuje bajty JPEG z pamięci i zapisuje piksele
   RGB565 do bufora wyjściowego dostarczonego przez wywołującego.
-- `jpegBase64DecodedSize()` sprawdza poprawność Base64 i zwraca dokładny rozmiar
+- `hal_image_jpeg_base64_decoded_size()` sprawdza poprawność Base64 i zwraca dokładny rozmiar
   JPEG po dekodowaniu, ale nie zapisuje zdekodowanych danych.
-- `jpegBase64DecodeRgb565()` dekoduje Base64 do bufora roboczego JPEG
+- `hal_image_jpeg_base64_decode_rgb565()` dekoduje Base64 do bufora roboczego JPEG
   dostarczonego przez wywołującego, a następnie dekoduje JPEG do bufora
   wyjściowego RGB565 dostarczonego przez wywołującego.
 - Bufor wyjściowy RGB565 musi pomieścić co najmniej `width * height` pikseli.
@@ -113,7 +113,7 @@ wyjściowych dostarczonych przez wywołującego:
 ## Przykład: dekodowanie bajtów JPEG do RGB565
 
 ```c
-#include <tools_c.h>
+#include <hal/codecs/hal_image.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -124,7 +124,7 @@ static bool decode_jpeg_rgb565(const uint8_t *jpeg,
                                size_t rgb565_pixels,
                                unsigned *width,
                                unsigned *height) {
-    return jpegDecodeRgb565(jpeg, jpeg_size,
+    return hal_image_jpeg_decode_rgb565(jpeg, jpeg_size,
                             rgb565, rgb565_pixels,
                             width, height);
 }
@@ -133,7 +133,7 @@ static bool decode_jpeg_rgb565(const uint8_t *jpeg,
 ## Przykład: dekodowanie JPEG zakodowanego w Base64
 
 ```c
-#include <tools_c.h>
+#include <hal/codecs/hal_image.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -146,7 +146,7 @@ static bool decode_base64_jpeg_rgb565(const char *jpeg_base64,
                                       unsigned *width,
                                       unsigned *height) {
     size_t jpeg_work_size = 0;
-    if (!jpegBase64DecodedSize(jpeg_base64, jpeg_base64_len,
+    if (!hal_image_jpeg_base64_decoded_size(jpeg_base64, jpeg_base64_len,
                                &jpeg_work_size) ||
         jpeg_work_size == 0) {
         return false;
@@ -157,7 +157,7 @@ static bool decode_base64_jpeg_rgb565(const char *jpeg_base64,
         return false;
     }
 
-    bool ok = jpegBase64DecodeRgb565(jpeg_base64, jpeg_base64_len,
+    bool ok = hal_image_jpeg_base64_decode_rgb565(jpeg_base64, jpeg_base64_len,
                                      jpeg_work, jpeg_work_size,
                                      rgb565, rgb565_pixels,
                                      width, height);
@@ -202,11 +202,11 @@ Zapisz wygenerowany tekst do pliku:
 
 `examples/07_display_media` pokazuje cały proces wyświetlania obrazu:
 
-1. `jpegBase64DecodedSize()` oblicza dokładny rozmiar JPEG po dekodowaniu
+1. `hal_image_jpeg_base64_decoded_size()` oblicza dokładny rozmiar JPEG po dekodowaniu
    Base64.
 2. Tekst Base64 jest dekodowany do bufora roboczego o dokładnie wyliczonym
    rozmiarze.
-3. `jpegBase64DecodeRgb565()` dekoduje obraz JPEG typu baseline bezpośrednio
+3. `hal_image_jpeg_base64_decode_rgb565()` dekoduje obraz JPEG typu baseline bezpośrednio
    do RGB565.
 4. Obrazy większe niż `hal_display_get_width()` / `hal_display_get_height()`
    są odrzucane przez przykład przed rysowaniem.

@@ -1,6 +1,7 @@
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_RP
 #include "hal/gpio/hal_gpio.h"
+#include "hal/gpio/hal_gpio_common.h"
 #if HAL_BOARD_HAS_CYW43 && defined(HAL_LED_BUILTIN)
 #include "drivers/rp2040/rp2040_cyw43.h"
 #endif
@@ -57,14 +58,6 @@ static bool cyw43_gpio_read(uint8_t pin) {
   (void)pin;
   return false;
 #endif
-}
-
-static bool gpio_mode_valid(hal_gpio_mode_t mode) {
-  return mode >= HAL_GPIO_INPUT && mode <= HAL_GPIO_OUTPUT_OPEN_DRAIN_HIGH;
-}
-
-static bool gpio_irq_mode_valid(hal_gpio_irq_mode_t mode) {
-  return mode >= HAL_GPIO_IRQ_FALLING && mode <= HAL_GPIO_IRQ_CHANGE;
 }
 
 static void set_input_mode(uint8_t pin) {
@@ -128,7 +121,7 @@ void hal_gpio_set_mode(uint8_t pin, hal_gpio_mode_t mode) {
     HAL_ASSERT(false, "hal_gpio_set_mode: invalid pin");
     return;
   }
-  if (!gpio_mode_valid(mode)) {
+  if (!jh_hal_gpio_mode_valid(mode)) {
     HAL_ASSERT(false, "hal_gpio_set_mode: invalid mode");
     return;
   }
@@ -232,7 +225,7 @@ hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin, void (*callback)(void),
   if (callback == nullptr) {
     return HAL_EINVAL;
   }
-  if (!gpio_irq_mode_valid(mode)) {
+  if (!jh_hal_gpio_irq_mode_valid(mode)) {
     return HAL_EINVAL;
   }
   if (owner_core > 1u) {

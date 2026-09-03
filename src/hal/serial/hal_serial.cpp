@@ -348,6 +348,28 @@ void hal_debug_init(uint32_t baud, const hal_debug_rate_limit_t *cfg) {
   __atomic_store_n(&s_debug_initialized, true, __ATOMIC_RELEASE);
 }
 
+void hal_debug_init_default(void) {
+  hal_debug_init(HAL_DEBUG_DEFAULT_BAUD, nullptr);
+}
+
+void hal_debug_set_module_prefix(const char *module_name) {
+  char prefix[HAL_DEBUG_PREFIX_SIZE] = {};
+  size_t prefix_len = 0u;
+
+  if (module_name == nullptr) {
+    return;
+  }
+
+  while (prefix_len < (sizeof(prefix) - 2u) &&
+         module_name[prefix_len] != '\0') {
+    prefix[prefix_len] = module_name[prefix_len];
+    ++prefix_len;
+  }
+  prefix[prefix_len++] = ':';
+  prefix[prefix_len] = '\0';
+  hal_deb_set_prefix(prefix);
+}
+
 bool hal_deb_is_initialized(void) {
   return __atomic_load_n(&s_debug_initialized, __ATOMIC_ACQUIRE);
 }
@@ -361,9 +383,11 @@ bool hal_debug_is_muted(void) {
 }
 
 void hal_deb_set_prefix(const char *prefix) {
-  if (prefix != NULL && strlen(prefix) > 0 &&
-      strlen(prefix) < HAL_DEBUG_PREFIX_SIZE) {
-    strncpy(s_prefix, prefix, HAL_DEBUG_PREFIX_SIZE - 1);
+  if (prefix != NULL) {
+    const size_t length = strlen(prefix);
+    if (length > 0u && length < sizeof(s_prefix)) {
+      memcpy(s_prefix, prefix, length + 1u);
+    }
   }
 }
 
@@ -465,7 +489,7 @@ void hal_derr_limited(const char *source, const char *format, ...) {
   const bool can_emit_full =
       (slot->full_printed < s_rate_limit_cfg.full_logs_limit) &&
       (slot->full_printed == 0u ||
-       (now - slot->last_full_ms) >= s_rate_limit_cfg.min_gap_ms);
+       hal_elapsed_u32(now, slot->last_full_ms, s_rate_limit_cfg.min_gap_ms));
 
   if (can_emit_full) {
     hal_mutex_lock(s_derr_mutex);
@@ -510,7 +534,8 @@ void hal_derr_limited(const char *source, const char *format, ...) {
   }
 
   if (s_rate_limit_cfg.summary_every_ms > 0u &&
-      (now - slot->last_summary_ms) >= s_rate_limit_cfg.summary_every_ms &&
+      hal_elapsed_u32(now, slot->last_summary_ms,
+                      s_rate_limit_cfg.summary_every_ms) &&
       slot->suppressed_since_summary > 0u) {
     hal_derr("[%s] suppressed %lu repeated errors in last %lu ms",
              slot->source[0] ? slot->source : "global",

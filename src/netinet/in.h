@@ -16,6 +16,8 @@
 
 #elif defined(HAL_ENABLE_BSD_SOCKETS)
 
+#include "hal/core/jh_endian.h"
+
 #include <stdint.h>
 #include <sys/socket.h>
 
@@ -85,15 +87,6 @@ struct sockaddr_in6 {
   }
 #endif
 
-static inline uint16_t hal_bsd_bswap16(uint16_t value) {
-  return (uint16_t)((uint16_t)(value << 8u) | (uint16_t)(value >> 8u));
-}
-
-static inline uint32_t hal_bsd_bswap32(uint32_t value) {
-  return ((value & 0x000000FFUL) << 24u) | ((value & 0x0000FF00UL) << 8u) |
-         ((value & 0x00FF0000UL) >> 8u) | ((value & 0xFF000000UL) >> 24u);
-}
-
 #if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                \
     (__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
 #define HAL_BSD_SOCKET_NEEDS_SWAP 0
@@ -104,7 +97,7 @@ static inline uint32_t hal_bsd_bswap32(uint32_t value) {
 #ifndef htons
 static inline uint16_t htons(uint16_t hostshort) {
 #if HAL_BSD_SOCKET_NEEDS_SWAP
-  return hal_bsd_bswap16(hostshort);
+  return jh_bswap16(hostshort);
 #else
   return hostshort;
 #endif
@@ -118,7 +111,7 @@ static inline uint16_t ntohs(uint16_t netshort) { return htons(netshort); }
 #ifndef htonl
 static inline uint32_t htonl(uint32_t hostlong) {
 #if HAL_BSD_SOCKET_NEEDS_SWAP
-  return hal_bsd_bswap32(hostlong);
+  return jh_bswap32(hostlong);
 #else
   return hostlong;
 #endif

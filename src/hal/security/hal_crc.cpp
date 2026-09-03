@@ -2,6 +2,8 @@
 
 #ifdef HAL_ENABLE_CRC
 
+#include "hal/core/jh_endian.h"
+
 /*
  * Table-free reference implementations. Each routine is the standard bitwise
  * form of its catalog variant; correctness is pinned by the "123456789" check
@@ -63,7 +65,7 @@ bool hal_crc16_maxim_check(const uint8_t *data, size_t len,
   }
 
   crc = (uint16_t)~hal_crc16_maxim(data, len, crc);
-  return ((crc & 0xFFu) == inverted_crc[0]) && ((crc >> 8u) == inverted_crc[1]);
+  return crc == jh_load_le16(inverted_crc);
 }
 
 uint16_t hal_crc16_ccitt(const uint8_t *data, size_t len, uint16_t crc) {

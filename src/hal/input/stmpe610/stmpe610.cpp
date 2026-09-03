@@ -7,6 +7,7 @@
 #if defined(HAL_ENABLE_STMPE610)
 
 #include "hal/core/hal_mutex_once.h"
+#include "hal/core/jh_endian.h"
 #include "hal/gpio/hal_gpio.h"
 #include "hal/i2c/hal_i2c.h"
 #include "hal/input/hal_stmpe610.h"
@@ -277,7 +278,8 @@ static hal_status_t stmpe610_read16_unlocked(hal_stmpe610_t *dev, uint8_t reg,
     return status;
   }
 
-  *out_value = (uint16_t)(((uint16_t)high << 8u) | low);
+  const uint8_t bytes[] = {high, low};
+  *out_value = jh_load_be16(bytes);
   return HAL_OK;
 }
 
@@ -326,7 +328,8 @@ static hal_status_t stmpe610_get_version_unlocked(hal_stmpe610_t *dev,
     return status;
   }
 
-  *out_version = (uint16_t)(((uint16_t)high << 8u) | low);
+  const uint8_t bytes[] = {high, low};
+  *out_version = jh_load_be16(bytes);
   return HAL_OK;
 }
 

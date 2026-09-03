@@ -544,8 +544,8 @@ hal_status_t check_partial_timeout(jh_ble_commands_context_t *context) {
   if (context->receive_length == 0u) {
     return HAL_OK;
   }
-  if ((uint32_t)(hal_millis() - context->partial_frame_started_ms) <
-      context->config.partial_frame_timeout_ms) {
+  if (!hal_millis_deadline_expired(context->partial_frame_started_ms,
+                                   context->config.partial_frame_timeout_ms)) {
     return HAL_OK;
   }
   size_t frame_length = 0u;

@@ -1265,7 +1265,7 @@ void example_register_bits(void) {
 
 > **Uwaga:** `hal_map` zwraca `out_min`, gdy `in_min == in_max`, aby uniknąć
 > dzielenia całkowitoliczbowego przez zero. Odpowiada to zachowaniu
-> `mapfloat()`.
+> `hal_math_map_f32()`.
 
 **Wielowątkowość:** Funkcje pomocnicze są czystymi wyrażeniami i nie korzystają
 ze współdzielonego stanu, dlatego są bezpieczne dla wielu wątków.

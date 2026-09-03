@@ -4,6 +4,7 @@
 #ifdef HAL_ENABLE_PCNT
 
 #include "hal/analog/hal_pcnt.h"
+#include "hal/analog/hal_pcnt_common.h"
 #include "hal_mock.h"
 
 #define MOCK_PCNT_CHANNELS 4
@@ -13,18 +14,13 @@ static bool s_init[MOCK_PCNT_CHANNELS] = {};
 static hal_pcnt_edge_t s_edge[MOCK_PCNT_CHANNELS] = {};
 static uint8_t s_pin[MOCK_PCNT_CHANNELS] = {};
 
-static bool edge_valid(hal_pcnt_edge_t edge) {
-  return edge == HAL_PCNT_EDGE_RISING || edge == HAL_PCNT_EDGE_FALLING ||
-         edge == HAL_PCNT_EDGE_BOTH;
-}
-
 bool hal_pcnt_is_supported(void) { return true; }
 
 uint8_t hal_pcnt_channel_count(void) { return MOCK_PCNT_CHANNELS; }
 
 hal_status_t hal_pcnt_init_ex(uint8_t channel, uint8_t pin,
                               hal_pcnt_edge_t edge) {
-  if (channel >= MOCK_PCNT_CHANNELS || !edge_valid(edge)) {
+  if (channel >= MOCK_PCNT_CHANNELS || !jh_hal_pcnt_edge_valid(edge)) {
     return HAL_EINVAL;
   }
   s_init[channel] = true;

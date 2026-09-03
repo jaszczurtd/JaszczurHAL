@@ -2210,6 +2210,7 @@ uint16_t    hal_mock_mqtt_get_socket_timeout(void);
 #include <hal/time/hal_time.h>
 
 // Zawsze dostępne; brak zależności sieciowej.
+unsigned long hal_get_seconds(void);
 uint32_t hal_time_from_components(int year, int month, int day,
                                   int hour, int minute, int second);
 bool     hal_time_is_daylight_saving_time(int year, int month, int day);
@@ -2251,12 +2252,13 @@ hal_status_t hal_time_attach_rtc_ex(hal_rtc_t rtc, uint32_t policy_flags);
 hal_status_t hal_time_detach_rtc_ex(void);
 ```
 
-Funkcje pomocnicze bez efektów ubocznych korzystają ze wspólnego rdzenia
-proleptycznego kalendarza gregoriańskiego. Konwersja składowych przyjmuje daty
+`hal_get_seconds()` zwraca monotoniczny czas działania zaokrąglony według
+`(hal_millis() + 500) / 1000`. Funkcje kalendarza korzystają ze wspólnego
+rdzenia proleptycznego kalendarza gregoriańskiego. Konwersja składowych przyjmuje daty
 od początku epoki Unix do ostatniej sekundy możliwej do przedstawienia przez
-`uint32_t`. Ze względu na zgodność zwraca `0` zarówno dla błędu, jak i dla
-poprawnego początku epoki. Funkcja CET/CEST zachowuje starszą politykę opartą
-wyłącznie na dacie: czas letni zaczyna się w ostatnią niedzielę marca
+`uint32_t`. Zwraca `0` zarówno dla błędu, jak i dla poprawnego początku epoki.
+Funkcja CET/CEST stosuje politykę opartą wyłącznie na dacie: czas letni
+zaczyna się w ostatnią niedzielę marca
 (włącznie), a kończy w ostatnią niedzielę października (wyłącznie). Obie
 zmiany następują o 00:00, ponieważ funkcja nie otrzymuje informacji o porze
 dnia. Nieprawidłowe daty są odrzucane, a korekta normalizuje przejście między

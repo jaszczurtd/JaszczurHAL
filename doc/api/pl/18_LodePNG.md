@@ -59,19 +59,12 @@ kompilowania kodu korzystającego z symboli `lodepng_*`.
 Bezpośrednie dołączenie, bezpieczne zarówno z C, jak i C++:
 
 ```c
+#include <hal/codecs/hal_image.h>          // adaptery pamięci/Base64 HAL
 #include <hal/codecs/lodepng/lodepng.h>
 ```
 
-Jeżeli plik C++ korzysta już ze zbiorczego nagłówka narzędziowego, może uzyskać
-dostęp do LodePNG przez `tools.h`. Wymaga to `HAL_ENABLE_PNG`:
-
-```c
-#include <tools.h>
-```
-
-`tools_c.h` nie udostępnia bezpośrednio API LodePNG. Przy włączonym
-`HAL_ENABLE_PNG_AS_BASE64` dołącza natomiast z `tools_api.h` funkcje pomocnicze
-JaszczurHAL obsługujące PNG zakodowane w Base64.
+Zgodnościowe nagłówki narzędziowe nadal udostępniają historyczne aliasy bez
+prefiksu. Nowy kod powinien używać nazw `hal_image_*`.
 
 ## Konfiguracja dla systemów wbudowanych
 
@@ -98,7 +91,7 @@ przeznaczonym dla urządzenia z bardzo ograniczoną pamięcią.
 | Rozszerzona konfiguracja | `lodepng_state_init`, `lodepng_state_cleanup`, `lodepng_decode`, `lodepng_encode` |
 | Obsługa formatów koloru | `lodepng_color_mode_init`, `lodepng_color_mode_cleanup`, `lodepng_get_raw_size` |
 | Błędy | `lodepng_error_text` |
-| Obsługa Base64 | `pngBase64DecodedSize`, `pngBase64Decode32`, `pngBase64DecodeRgb565` |
+| Obsługa Base64 | `hal_image_png_base64_decoded_size`, `hal_image_png_base64_decode_rgba8888`, `hal_image_png_base64_decode_rgb565` |
 
 ## Zarządzanie pamięcią
 
@@ -110,12 +103,12 @@ Najważniejsze reguły:
 
 - `lodepng_decode32()` i `lodepng_decode24()` przydzielają bufor samych pikseli.
 - `lodepng_encode32()` i `lodepng_encode24()` alokują bufor bajtów PNG.
-- `pngBase64DecodedSize()` sprawdza poprawność Base64 i zwraca dokładny rozmiar
+- `hal_image_png_base64_decoded_size()` sprawdza poprawność Base64 i zwraca dokładny rozmiar
   PNG po dekodowaniu, ale nie zapisuje zdekodowanych danych.
-- `pngBase64Decode32()` dekoduje Base64 do bufora roboczego PNG dostarczonego
+- `hal_image_png_base64_decode_rgba8888()` dekoduje Base64 do bufora roboczego PNG dostarczonego
   przez wywołującego, a następnie przez LodePNG przydziela bufor wyjściowy
   RGBA8888.
-- `pngBase64DecodeRgb565()` używa tego samego bufora roboczego PNG. Za pomocą
+- `hal_image_png_base64_decode_rgb565()` używa tego samego bufora roboczego PNG. Za pomocą
   LodePNG przydziela tymczasowy bufor RGBA8888, konwertuje obraz do bufora
   wyjściowego RGB565 dostarczonego przez wywołującego, po czym zwalnia bufor
   tymczasowy.
@@ -128,8 +121,9 @@ Najważniejsze reguły:
 ## Przykład: dekodowanie do RGB565
 
 ```c
-#include <tools_c.h>
+#include <hal/codecs/hal_image.h>
 #include <hal/codecs/lodepng/lodepng.h>
+#include <hal/display/hal_pixel.h>
 #include <stdbool.h>
 #include <stdlib.h>
 
@@ -147,7 +141,8 @@ static bool decode_icon_rgb565(const unsigned char *png,
 
     size_t pixels = (size_t)(*width) * (size_t)(*height);
     bool ok = pixels <= rgb565_pixels &&
-              rgba8888ToRgb565(rgba, rgb565, pixels);
+              hal_pixel_rgba8888_buffer_to_rgb565_ex(
+                  rgba, rgb565, pixels) == HAL_OK;
 
     free(rgba);
     return ok;
@@ -157,7 +152,7 @@ static bool decode_icon_rgb565(const unsigned char *png,
 ## Przykład: dekodowanie PNG zakodowanego w Base64
 
 ```c
-#include <tools_c.h>
+#include <hal/codecs/hal_image.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -171,7 +166,7 @@ static bool decode_base64_icon_rgb565(const char *png_base64,
                                       unsigned *height) {
     unsigned png_error = 0;
     size_t png_work_size = 0;
-    if (!pngBase64DecodedSize(png_base64, png_base64_len, &png_work_size) ||
+    if (!hal_image_png_base64_decoded_size(png_base64, png_base64_len, &png_work_size) ||
         png_work_size == 0) {
         return false;
     }
@@ -181,7 +176,7 @@ static bool decode_base64_icon_rgb565(const char *png_base64,
         return false;
     }
 
-    bool ok = pngBase64DecodeRgb565(png_base64, png_base64_len,
+    bool ok = hal_image_png_base64_decode_rgb565(png_base64, png_base64_len,
                                     png_work, png_work_size,
                                     rgb565, rgb565_pixels,
                                     width, height, &png_error);
@@ -226,7 +221,7 @@ Zapisz wygenerowany tekst do pliku:
 
 `examples/07_display_media` pokazuje cały proces wyświetlania obrazu:
 
-1. `pngBase64DecodedSize()` oblicza dokładny rozmiar PNG po dekodowaniu Base64.
+1. `hal_image_png_base64_decoded_size()` oblicza dokładny rozmiar PNG po dekodowaniu Base64.
 2. Tekst Base64 jest dekodowany do bufora roboczego o dokładnie wyliczonym
    rozmiarze.
 3. `lodepng_inspect()` sprawdza wymiary obrazu przed pełnym dekodowaniem
@@ -234,5 +229,5 @@ Zapisz wygenerowany tekst do pliku:
 4. Obrazy większe niż `hal_display_get_width()` / `hal_display_get_height()`
    są odrzucane.
 5. `lodepng_decode32()` dekoduje obraz do RGBA8888.
-6. `rgba8888ToRgb565()` konwertuje obraz do RGB565.
+6. `hal_pixel_rgba8888_buffer_to_rgb565_ex()` konwertuje obraz do RGB565.
 7. `hal_display_draw_rgb_bitmap()` rysuje obraz na wyświetlaczu ILI9341.

@@ -1,8 +1,8 @@
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
 #include <hal/i2c/hal_i2c_slave.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
-#include <tools_c.h>
 
 #if HAL_TARGET_IS_STM32G474
 #define EXAMPLE_PIN(port, pin) ((uint8_t)(((port) * 16u) + (pin)))
@@ -24,7 +24,7 @@ static uint32_t last_update_ms = 0;
 static uint16_t counter = 0;
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
 
   hal_i2c_slave_init(I2C_SLAVE_SDA_PIN, I2C_SLAVE_SCL_PIN, I2C_SLAVE_ADDR);
   hal_i2c_slave_reg_write8(REG_STATUS, 0xA5);

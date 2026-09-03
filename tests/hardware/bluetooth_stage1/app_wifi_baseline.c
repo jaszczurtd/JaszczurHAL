@@ -12,7 +12,7 @@ static hal_status_t s_status = HAL_NONE;
 static uint32_t s_last_report_ms;
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   s_status = hal_wifi_set_mode_ex(HAL_WIFI_MODE_STA);
 }
 

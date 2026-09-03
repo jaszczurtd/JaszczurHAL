@@ -3,6 +3,7 @@
 #ifdef HAL_ENABLE_COMMAND_ROUTER
 
 #include "hal/commands/jh_command_router_internal.h"
+#include "hal/core/jh_endian.h"
 
 #include <limits.h>
 #include <string.h>
@@ -48,27 +49,6 @@ static hal_status_t validate_message(const hal_command_message_t *message,
   return HAL_OK;
 }
 
-static void write_u16_be(uint8_t *output, uint16_t value) {
-  output[0] = (uint8_t)(value >> 8u);
-  output[1] = (uint8_t)value;
-}
-
-static void write_u32_be(uint8_t *output, uint32_t value) {
-  output[0] = (uint8_t)(value >> 24u);
-  output[1] = (uint8_t)(value >> 16u);
-  output[2] = (uint8_t)(value >> 8u);
-  output[3] = (uint8_t)value;
-}
-
-static uint16_t read_u16_be(const uint8_t *input) {
-  return (uint16_t)(((uint16_t)input[0] << 8u) | (uint16_t)input[1]);
-}
-
-static uint32_t read_u32_be(const uint8_t *input) {
-  return ((uint32_t)input[0] << 24u) | ((uint32_t)input[1] << 16u) |
-         ((uint32_t)input[2] << 8u) | (uint32_t)input[3];
-}
-
 hal_status_t hal_command_message_frame_size(const uint8_t *data,
                                             size_t available_length,
                                             size_t *out_frame_length) {
@@ -87,13 +67,13 @@ hal_status_t hal_command_message_frame_size(const uint8_t *data,
   const hal_command_message_type_t type = (hal_command_message_type_t)data[3];
   const hal_command_encoding_t encoding = (hal_command_encoding_t)data[4];
   const size_t name_length = data[5];
-  const uint32_t request_id = read_u32_be(data + 8u);
-  const uint16_t raw_status = read_u16_be(data + 12u);
+  const uint32_t request_id = jh_load_be32(data + 8u);
+  const uint16_t raw_status = jh_load_be16(data + 12u);
   const int32_t signed_status = raw_status <= INT16_MAX
                                     ? (int32_t)raw_status
                                     : (int32_t)raw_status - 65536;
   const hal_status_t status = (hal_status_t)signed_status;
-  const size_t payload_length = read_u16_be(data + 14u);
+  const size_t payload_length = jh_load_be16(data + 14u);
 
   if (!message_type_valid(type) || !jh_command_encoding_valid(encoding) ||
       !message_status_valid(status) ||
@@ -142,9 +122,9 @@ hal_status_t hal_command_message_encode(const hal_command_message_t *message,
   output[5] = (uint8_t)name_length;
   output[6] = 0u;
   output[7] = 0u;
-  write_u32_be(output + 8u, message->request_id);
-  write_u16_be(output + 12u, (uint16_t)(int16_t)message->status);
-  write_u16_be(output + 14u, (uint16_t)message->payload_length);
+  jh_store_be32(output + 8u, message->request_id);
+  jh_store_be16(output + 12u, (uint16_t)(int16_t)message->status);
+  jh_store_be16(output + 14u, (uint16_t)message->payload_length);
   if (name_length > 0u) {
     memcpy(output + HAL_COMMAND_WIRE_HEADER_SIZE, message->name, name_length);
   }
@@ -171,13 +151,13 @@ hal_status_t hal_command_message_decode(const uint8_t *data, size_t length,
   out_message->type = (hal_command_message_type_t)data[3];
   out_message->encoding = (hal_command_encoding_t)data[4];
   const size_t name_length = data[5];
-  out_message->request_id = read_u32_be(data + 8u);
-  const uint16_t raw_status = read_u16_be(data + 12u);
+  out_message->request_id = jh_load_be32(data + 8u);
+  const uint16_t raw_status = jh_load_be16(data + 12u);
   const int32_t signed_status = raw_status <= INT16_MAX
                                     ? (int32_t)raw_status
                                     : (int32_t)raw_status - 65536;
   out_message->status = (hal_status_t)signed_status;
-  out_message->payload_length = read_u16_be(data + 14u);
+  out_message->payload_length = jh_load_be16(data + 14u);
 
   const size_t expected =
       HAL_COMMAND_WIRE_HEADER_SIZE + name_length + out_message->payload_length;

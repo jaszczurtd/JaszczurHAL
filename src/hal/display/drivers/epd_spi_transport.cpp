@@ -1,4 +1,5 @@
 #include "epd_spi_transport.h"
+#include "display_spi_transport.h"
 
 /* SPDX-License-Identifier: Apache-2.0 */
 
@@ -12,9 +13,6 @@
 #include "hal/system/hal_system.h"
 
 #include <string.h>
-
-static bool pin_is_connected(int16_t pin) { return pin >= 0 && pin <= 255; }
-static uint8_t pin_to_u8(int16_t pin) { return (uint8_t)pin; }
 
 static uint32_t normalized_clock(const jh_epd_spi_config_t *config) {
   return config->clock_hz == 0u ? JH_EPD_DEFAULT_SPI_HZ : config->clock_hz;
@@ -39,14 +37,14 @@ static hal_status_t begin_transaction(jh_epd_spi_t *transport) {
 
 static hal_status_t write_command_prefix(jh_epd_spi_t *transport,
                                          uint8_t command) {
-  hal_gpio_write(pin_to_u8(transport->config.dc_pin), false);
+  hal_gpio_write(jh_display_pin_u8(transport->config.dc_pin), false);
   return hal_spi_write(transport->spi_device.bus, &command, 1u);
 }
 
 hal_status_t jh_epd_spi_init(jh_epd_spi_t *transport,
                              const jh_epd_spi_config_t *config) {
   if (transport == NULL || config == NULL ||
-      !pin_is_connected(config->dc_pin)) {
+      !jh_display_pin_connected(config->dc_pin)) {
     return HAL_EINVAL;
   }
   memset(transport, 0, sizeof(*transport));
@@ -57,22 +55,22 @@ hal_status_t jh_epd_spi_init(jh_epd_spi_t *transport,
 
   const hal_spi_settings_t settings = {
       transport->config.clock_hz, HAL_SPI_MSBFIRST, transport->config.spi_mode};
-  const uint8_t cs_pin = pin_is_connected(config->cs_pin)
-                             ? pin_to_u8(config->cs_pin)
+  const uint8_t cs_pin = jh_display_pin_connected(config->cs_pin)
+                             ? jh_display_pin_u8(config->cs_pin)
                              : HAL_SPI_DEVICE_CS_NONE;
   hal_status_t status = hal_spi_device_init(
       &transport->spi_device, transport->config.bus, cs_pin, &settings);
   if (hal_status_is_error(status)) {
     return status;
   }
-  hal_gpio_set_mode(pin_to_u8(config->dc_pin), HAL_GPIO_OUTPUT);
-  hal_gpio_write(pin_to_u8(config->dc_pin), true);
-  if (pin_is_connected(config->rst_pin)) {
-    hal_gpio_set_mode(pin_to_u8(config->rst_pin), HAL_GPIO_OUTPUT);
-    hal_gpio_write(pin_to_u8(config->rst_pin), true);
+  hal_gpio_set_mode(jh_display_pin_u8(config->dc_pin), HAL_GPIO_OUTPUT);
+  hal_gpio_write(jh_display_pin_u8(config->dc_pin), true);
+  if (jh_display_pin_connected(config->rst_pin)) {
+    hal_gpio_set_mode(jh_display_pin_u8(config->rst_pin), HAL_GPIO_OUTPUT);
+    hal_gpio_write(jh_display_pin_u8(config->rst_pin), true);
   }
-  if (pin_is_connected(config->busy_pin)) {
-    hal_gpio_set_mode(pin_to_u8(config->busy_pin), HAL_GPIO_INPUT);
+  if (jh_display_pin_connected(config->busy_pin)) {
+    hal_gpio_set_mode(jh_display_pin_u8(config->busy_pin), HAL_GPIO_INPUT);
   }
   transport->initialized = true;
   return HAL_OK;
@@ -83,10 +81,10 @@ hal_status_t jh_epd_spi_reset(jh_epd_spi_t *transport,
   if (transport == NULL || !transport->initialized) {
     return HAL_EUNINIT;
   }
-  if (!pin_is_connected(transport->config.rst_pin)) {
+  if (!jh_display_pin_connected(transport->config.rst_pin)) {
     return jh_epd_spi_wait_idle(transport);
   }
-  const uint8_t rst = pin_to_u8(transport->config.rst_pin);
+  const uint8_t rst = jh_display_pin_u8(transport->config.rst_pin);
   const uint32_t delay_ms = pulse_delay_ms == 0u ? 1u : pulse_delay_ms;
   hal_gpio_write(rst, true);
   hal_delay_ms(delay_ms);
@@ -101,14 +99,14 @@ hal_status_t jh_epd_spi_wait_idle(jh_epd_spi_t *transport) {
   if (transport == NULL || !transport->initialized) {
     return HAL_EUNINIT;
   }
-  if (!pin_is_connected(transport->config.busy_pin)) {
+  if (!jh_display_pin_connected(transport->config.busy_pin)) {
     return HAL_OK;
   }
   const uint32_t started = hal_millis();
-  const uint8_t busy_pin = pin_to_u8(transport->config.busy_pin);
+  const uint8_t busy_pin = jh_display_pin_u8(transport->config.busy_pin);
   while (hal_gpio_read(busy_pin) == transport->config.busy_active_high) {
-    if ((uint32_t)(hal_millis() - started) >=
-        transport->config.busy_timeout_ms) {
+    if (hal_millis_deadline_expired(started,
+                                    transport->config.busy_timeout_ms)) {
       return HAL_ETIMEOUT;
     }
     hal_delay_ms(1u);
@@ -129,7 +127,7 @@ hal_status_t jh_epd_spi_command(jh_epd_spi_t *transport, uint8_t command,
   }
   status = write_command_prefix(transport, command);
   if (hal_status_is_ok(status) && len > 0u) {
-    hal_gpio_write(pin_to_u8(transport->config.dc_pin), true);
+    hal_gpio_write(jh_display_pin_u8(transport->config.dc_pin), true);
     status = hal_spi_write(transport->spi_device.bus, data, len);
   }
   return hal_spi_device_finish(&transport->spi_device, status);
@@ -149,9 +147,9 @@ hal_status_t jh_epd_spi_command_pattern(jh_epd_spi_t *transport,
   if (hal_status_is_ok(status)) {
     uint8_t chunk[64];
     memset(chunk, pattern, sizeof(chunk));
-    hal_gpio_write(pin_to_u8(transport->config.dc_pin), true);
+    hal_gpio_write(jh_display_pin_u8(transport->config.dc_pin), true);
     while (len > 0u && hal_status_is_ok(status)) {
-      const size_t write_len = len < sizeof(chunk) ? len : sizeof(chunk);
+      const size_t write_len = len < COUNTOF(chunk) ? len : COUNTOF(chunk);
       status = hal_spi_write(transport->spi_device.bus, chunk, write_len);
       len -= write_len;
     }

@@ -4,6 +4,7 @@
 #include "hal/core/hal_config.h"
 #ifdef HAL_ENABLE_I2C_SLAVE
 
+#include "hal/core/jh_endian.h"
 #include "hal/i2c/hal_i2c_slave.h"
 #include "hal/system/hal_sync.h"
 
@@ -288,8 +289,7 @@ void hal_i2c_slave_reg_write16_bus(uint8_t bus, uint8_t reg, uint16_t value) {
   }
   i2c_slave_state_t *st = slave_state(bus);
   slave_lock();
-  st->regs[reg] = (uint8_t)(value >> 8);
-  st->regs[reg + 1] = (uint8_t)(value & 0xFF);
+  jh_store_be16(&st->regs[reg], value);
   slave_unlock();
 }
 
@@ -318,7 +318,7 @@ uint16_t hal_i2c_slave_reg_read16_bus(uint8_t bus, uint8_t reg) {
   }
   i2c_slave_state_t *st = slave_state(bus);
   slave_lock();
-  uint16_t value = ((uint16_t)st->regs[reg] << 8) | (uint16_t)st->regs[reg + 1];
+  uint16_t value = jh_load_be16(&st->regs[reg]);
   slave_unlock();
   return value;
 }

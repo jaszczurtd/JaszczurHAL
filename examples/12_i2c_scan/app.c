@@ -11,11 +11,11 @@
 
 #include <hal/core/hal_app.h>
 #include <hal/i2c/hal_i2c.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
-#include <tools_c.h>
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   deb("");
   deb("=== JaszczurHAL G474 I2C scanner ===");
   deb("I2C1: SCL=PB8, SDA=PB9 (external pull-ups to 3V3 required)");

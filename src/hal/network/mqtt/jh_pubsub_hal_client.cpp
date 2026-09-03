@@ -185,7 +185,7 @@ size_t JHPubSubHalClient::write(const uint8_t *buffer, size_t size) {
       stop();
       return total_sent;
     }
-    if ((uint32_t)(hal_millis() - started_ms) >= write_timeout_ms) {
+    if (hal_millis_deadline_expired(started_ms, write_timeout_ms)) {
       stop();
       return total_sent;
     }
@@ -267,7 +267,7 @@ void JHPubSubHalClient::stop() {
     hal_status_t status = hal_tls_client_shutdown_ex(tls_client_);
     const uint32_t started_ms = hal_millis();
     while (status == HAL_EAGAIN &&
-           (uint32_t)(hal_millis() - started_ms) < timeout_ms()) {
+           !hal_millis_deadline_expired(started_ms, timeout_ms())) {
       status = hal_tls_client_poll_ex(tls_client_);
       if (status == HAL_EAGAIN) {
         hal_idle();
@@ -324,7 +324,7 @@ void JHPubSubHalClient::disable_tls() {
 
 hal_status_t JHPubSubHalClient::wait_for_tls_connection() {
   const uint32_t started_ms = hal_millis();
-  while ((uint32_t)(hal_millis() - started_ms) < timeout_ms()) {
+  while (!hal_millis_deadline_expired(started_ms, timeout_ms())) {
     hal_tls_state_t state = HAL_TLS_STATE_FAILED;
     hal_status_t status = hal_tls_client_get_state_ex(tls_client_, &state);
     if (status != HAL_OK) {

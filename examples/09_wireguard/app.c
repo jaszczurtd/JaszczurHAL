@@ -1,8 +1,8 @@
 #include <hal/core/hal_app.h>
 #include <hal/network/hal_wifi.h>
 #include <hal/network/wireguard/hal_wireguard.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
-#include <tools_c.h>
 
 static const char *WIFI_SSID = "your-ssid";
 static const char *WIFI_PASSWORD = "your-password";
@@ -74,7 +74,7 @@ static void serviceWireGuard(void) {
   }
 }
 
-void app_start(void) { debugInit(); }
+void app_start(void) { hal_debug_init_default(); }
 
 void app_task0(void) {
   connectWifi();

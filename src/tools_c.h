@@ -2,11 +2,11 @@
 
 /**
  * @file tools_c.h
- * @brief Transitional C-style compatibility umbrella for ECU modules.
+ * @brief Transitional C-style utility umbrella for ECU modules.
  *
- * This header lives in JaszczurHAL to keep compatibility concerns in HAL,
- * not in project-local ECU code. It exposes the HAL headers and legacy tools
- * declarations used by ECU modules currently migrated to `.c` sources.
+ * This header exposes HAL modules and shared utility definitions used by ECU
+ * modules currently migrated to `.c` sources. Function declarations remain
+ * owned by their domain headers.
  */
 
 #ifdef __cplusplus

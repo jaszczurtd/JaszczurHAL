@@ -164,7 +164,7 @@ class CpdGateTests(unittest.TestCase):
                 "src/hal/impl/.mock/a.cpp": 200,
                 "src/hal/impl/rp2040/a.cpp": 400,
                 "src/hal/time/a.cpp": 100,
-                "src/utils/tools.cpp": 100,
+                "src/utils/a.cpp": 100,
             },
         )
         coverage = {item.scope: item for item in cpd.duplicate_coverage(report)}

@@ -8,6 +8,7 @@
 #include "hal/impl/esp32/jh_esp32_status.h"
 #include "hal/serial/hal_uart.h"
 #include "hal/system/hal_sync.h"
+#include "jh_esp32_gpio.h"
 
 #include <driver/gpio.h>
 #include <driver/uart.h>
@@ -50,16 +51,13 @@ namespace {
 hal_uart_impl_t s_pool[HAL_UART_MAX_INSTANCES] = {};
 hal_mutex_t s_pool_mutex = nullptr;
 
-bool pin_in_mask(uint8_t pin, uint64_t mask) {
-  return pin < 64u && (mask & (UINT64_C(1) << pin)) != 0u;
-}
-
 bool board_pin_available(uint8_t pin) {
   const bool board_accessible =
-      pin_in_mask(pin, HAL_BOARD_GPIO_EXPOSED_MASK) ||
-      pin_in_mask(pin, HAL_BOARD_GPIO_SOFT_RESERVED_MASK);
-  return pin_in_mask(pin, HAL_TARGET_GPIO_VALID_MASK) && board_accessible &&
-         !pin_in_mask(pin, HAL_BOARD_GPIO_HARD_RESERVED_MASK);
+      jh_esp32_mask_has_pin(HAL_BOARD_GPIO_EXPOSED_MASK, pin) ||
+      jh_esp32_mask_has_pin(HAL_BOARD_GPIO_SOFT_RESERVED_MASK, pin);
+  return jh_esp32_mask_has_pin(HAL_TARGET_GPIO_VALID_MASK, pin) &&
+         board_accessible &&
+         !jh_esp32_mask_has_pin(HAL_BOARD_GPIO_HARD_RESERVED_MASK, pin);
 }
 
 bool uart_rx_pin_valid(uint8_t pin) {
@@ -68,7 +66,7 @@ bool uart_rx_pin_valid(uint8_t pin) {
 
 bool uart_tx_pin_valid(uint8_t pin) {
   return board_pin_available(pin) &&
-         !pin_in_mask(pin, HAL_TARGET_GPIO_INPUT_ONLY_MASK) &&
+         !jh_esp32_mask_has_pin(HAL_TARGET_GPIO_INPUT_ONLY_MASK, pin) &&
          GPIO_IS_VALID_OUTPUT_GPIO((int)pin);
 }
 

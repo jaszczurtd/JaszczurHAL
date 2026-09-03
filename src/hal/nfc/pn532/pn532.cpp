@@ -1,5 +1,7 @@
 #include "pn532.h"
 
+#include "hal/core/jh_endian.h"
+
 #include "hal/core/hal_mutex_once.h"
 #include "hal/system/hal_system.h"
 
@@ -86,9 +88,7 @@ hal_status_t PN532::getFirmwareVersion(uint32_t *version) {
     status = readResponse(PN532_COMMAND_GETFIRMWAREVERSION, _packetbuffer,
                           &response_len, 12, PN532_DEFAULT_TIMEOUT_MS);
     if (status == HAL_OK) {
-      *version = ((uint32_t)_packetbuffer[7] << 24) |
-                 ((uint32_t)_packetbuffer[8] << 16) |
-                 ((uint32_t)_packetbuffer[9] << 8) | _packetbuffer[10];
+      *version = jh_load_be32(&_packetbuffer[7]);
     }
   }
   unlock();
@@ -137,7 +137,7 @@ hal_status_t PN532::waitReady(uint16_t timeout_ms) {
   }
 
   const uint32_t start = hal_millis();
-  while ((uint32_t)(hal_millis() - start) < timeout_ms) {
+  while (!hal_millis_deadline_expired(start, timeout_ms)) {
     bool ready = false;
     hal_status_t status = _dev->isReady(&ready);
     if (status != HAL_OK) {

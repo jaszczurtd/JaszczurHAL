@@ -3,6 +3,7 @@
 
 #include "hal/core/hal_config.h"
 #include "hal/core/hal_mutex_once.h"
+#include "hal/core/jh_endian.h"
 #include "hal/spi/hal_spi.h"
 #include "hal/spi/hal_spi_internal.h"
 #include "hal/spi/hal_spi_settings.h"
@@ -527,29 +528,30 @@ hal_status_t jh_hal_spi_transfer16_provider(uint8_t bus, uint16_t data,
       return status;
     }
   }
-  uint16_t in = 0u;
-  uint8_t first = 0u;
-  uint8_t second = 0u;
+  uint8_t tx[2];
+  uint8_t rx[2] = {};
   hal_status_t status;
   if (s_spi[idx].settings.bit_order == HAL_SPI_LSBFIRST) {
-    status = hal_spi_transfer_ex(idx, (uint8_t)(data & 0xFFu), &first);
+    jh_store_le16(tx, data);
+    status = hal_spi_transfer_ex(idx, tx[0], &rx[0]);
     if (hal_status_is_error(status)) {
       return status;
     }
-    status = hal_spi_transfer_ex(idx, (uint8_t)(data >> 8), &second);
-    in = (uint16_t)(first | ((uint16_t)second << 8));
+    status = hal_spi_transfer_ex(idx, tx[1], &rx[1]);
   } else {
-    status = hal_spi_transfer_ex(idx, (uint8_t)(data >> 8), &first);
+    jh_store_be16(tx, data);
+    status = hal_spi_transfer_ex(idx, tx[0], &rx[0]);
     if (hal_status_is_error(status)) {
       return status;
     }
-    status = hal_spi_transfer_ex(idx, (uint8_t)(data & 0xFFu), &second);
-    in = (uint16_t)(((uint16_t)first << 8) | second);
+    status = hal_spi_transfer_ex(idx, tx[1], &rx[1]);
   }
   if (hal_status_is_error(status)) {
     return status;
   }
-  *out_received = in;
+  *out_received = s_spi[idx].settings.bit_order == HAL_SPI_LSBFIRST
+                      ? jh_load_le16(rx)
+                      : jh_load_be16(rx);
   return HAL_OK;
 }
 
@@ -635,7 +637,7 @@ hal_status_t hal_spi_write_dma_async_wait_ex(uint8_t bus) {
       observed_remaining = st->dma_tx_remaining;
       block_started_us = hal_micros();
       timeout_us = spi_dma_block_timeout_us(st);
-    } else if ((uint32_t)(hal_micros() - block_started_us) >= timeout_us) {
+    } else if (hal_elapsed_u32(hal_micros(), block_started_us, timeout_us)) {
       spi_dma_stop_if_stalled(idx, observed_remaining);
     }
   }

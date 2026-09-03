@@ -1,5 +1,6 @@
 #include "utils/unity.h"
 
+#include "hal/display/drivers/display_spi_transport.h"
 #include "hal/display/drivers/ili9341_driver.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "support/display_spi_test_helpers.h"
@@ -23,6 +24,14 @@ void setUp(void) {
 }
 
 void tearDown(void) {}
+
+void test_shared_display_pin_helpers_preserve_connected_range(void) {
+  TEST_ASSERT_FALSE(jh_display_pin_connected(-1));
+  TEST_ASSERT_TRUE(jh_display_pin_connected(0));
+  TEST_ASSERT_TRUE(jh_display_pin_connected(255));
+  TEST_ASSERT_FALSE(jh_display_pin_connected(256));
+  TEST_ASSERT_EQUAL_UINT8(255u, jh_display_pin_u8(255));
+}
 
 void test_init_sends_ili9341_sequence_over_hal_spi(void) {
   jh_ili9341_t dev = {};
@@ -112,6 +121,7 @@ void test_stream_dma_failure_aborts_and_releases_device(void) {
 
 int main(void) {
   UNITY_BEGIN();
+  RUN_TEST(test_shared_display_pin_helpers_preserve_connected_range);
   RUN_TEST(test_init_sends_ili9341_sequence_over_hal_spi);
   RUN_TEST(test_set_rotation_writes_madctl_and_updates_dimensions);
   RUN_TEST(test_addr_window_and_bitmap_write_big_endian_pixels);

@@ -506,12 +506,12 @@ metadata, and credentials according to
 APP_CPP_TEMPLATE = """#include <JaszczurHAL.h>
 #include <hal/core/hal_app.h>
 #include <hal/gpio/hal_gpio.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
-#include <utils/tools_api.h>
 
 extern "C" void app_start(void) {
-    debugInit();
-    setDebugPrefixWithColon("@@MODULE@@");
+    hal_debug_init_default();
+    hal_debug_set_module_prefix("@@MODULE@@");
     hal_gpio_set_mode(HAL_LED_BUILTIN, HAL_GPIO_OUTPUT);
     hal_deb("JaszczurHAL VS Code example started");
 }

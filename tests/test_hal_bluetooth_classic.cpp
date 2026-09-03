@@ -1,4 +1,5 @@
 #include "hal/bluetooth/hal_bluetooth_classic.h"
+#include "hal/bluetooth/jh_bluetooth_classic_address.h"
 #include "hal/bluetooth/jh_bluetooth_classic_bond_codec.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "utils/unity.h"
@@ -228,6 +229,21 @@ void test_address_format_is_stable(void) {
                                         &peer, text, sizeof(text) - 1u));
 }
 
+void test_address_helpers_compare_values_and_reject_null(void) {
+  const auto first = address(0x11u);
+  const auto same = address(0x11u);
+  const auto different = address(0x22u);
+  const hal_bluetooth_classic_address_t zero{};
+
+  TEST_ASSERT_TRUE(jh_bluetooth_classic_address_equal(&first, &same));
+  TEST_ASSERT_FALSE(jh_bluetooth_classic_address_equal(&first, &different));
+  TEST_ASSERT_FALSE(jh_bluetooth_classic_address_equal(&first, nullptr));
+  TEST_ASSERT_FALSE(jh_bluetooth_classic_address_equal(nullptr, &same));
+  TEST_ASSERT_TRUE(jh_bluetooth_classic_address_is_zero(&zero));
+  TEST_ASSERT_FALSE(jh_bluetooth_classic_address_is_zero(&first));
+  TEST_ASSERT_FALSE(jh_bluetooth_classic_address_is_zero(nullptr));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_lifecycle_is_independent_from_gamepad);
@@ -235,5 +251,6 @@ int main(void) {
   RUN_TEST(test_pairing_can_be_authorized_or_rejected_explicitly);
   RUN_TEST(test_indexed_bond_provider_owns_one_link_key_copy_per_peer);
   RUN_TEST(test_address_format_is_stable);
+  RUN_TEST(test_address_helpers_compare_values_and_reject_null);
   return UNITY_END();
 }

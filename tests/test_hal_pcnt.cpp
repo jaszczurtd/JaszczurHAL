@@ -1,4 +1,5 @@
 #include "hal/analog/hal_pcnt.h"
+#include "hal/analog/hal_pcnt_common.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "utils/unity.h"
 
@@ -8,6 +9,14 @@ void setUp(void) {
   hal_pcnt_init(1, 11, HAL_PCNT_EDGE_BOTH);
 }
 void tearDown(void) {}
+
+void test_common_edge_validator_accepts_only_supported_edges(void) {
+  TEST_ASSERT_TRUE(jh_hal_pcnt_edge_valid(HAL_PCNT_EDGE_RISING));
+  TEST_ASSERT_TRUE(jh_hal_pcnt_edge_valid(HAL_PCNT_EDGE_FALLING));
+  TEST_ASSERT_TRUE(jh_hal_pcnt_edge_valid(HAL_PCNT_EDGE_BOTH));
+  TEST_ASSERT_FALSE(jh_hal_pcnt_edge_valid((hal_pcnt_edge_t)-1));
+  TEST_ASSERT_FALSE(jh_hal_pcnt_edge_valid((hal_pcnt_edge_t)99));
+}
 
 void test_supported_and_channel_count(void) {
   TEST_ASSERT_TRUE(hal_pcnt_is_supported());
@@ -80,6 +89,7 @@ void test_status_api_reports_invalid_arguments(void) {
 
 int main(void) {
   UNITY_BEGIN();
+  RUN_TEST(test_common_edge_validator_accepts_only_supported_edges);
   RUN_TEST(test_supported_and_channel_count);
   RUN_TEST(test_init_valid_and_invalid);
   RUN_TEST(test_init_records_pin_and_edge);

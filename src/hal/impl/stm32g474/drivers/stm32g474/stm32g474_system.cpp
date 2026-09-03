@@ -9,6 +9,9 @@
 
 #include "stm32g474_system.h"
 
+#include "hal/core/hal_array.h"
+#include "hal/core/jh_endian.h"
+
 #include "../../port/stm32g474_regs.h"
 #include "stm32g474_fault.h"
 
@@ -131,8 +134,7 @@ static bool watchdog_compute_config(uint32_t ms, WatchdogConfig *out) {
     return false;
   }
 
-  for (uint32_t code = 0u;
-       code < (sizeof(kPrescalers) / sizeof(kPrescalers[0])); ++code) {
+  for (uint32_t code = 0u; code < COUNTOF(kPrescalers); ++code) {
     const uint64_t numerator = (uint64_t)ms * kLsiHz;
     const uint64_t denominator = (uint64_t)1000u * kPrescalers[code];
     const uint64_t ticks = (numerator + denominator - 1u) / denominator;
@@ -371,14 +373,8 @@ void stm32g474_system_get_device_uid(uint8_t *uid) {
   const uint32_t w2 = JH_REG32(STM32_UID_BASE + 8u);
   const uint32_t lo = w0 ^ w2;
   const uint32_t hi = w1 ^ w2;
-  uid[0] = (uint8_t)(lo >> 0);
-  uid[1] = (uint8_t)(lo >> 8);
-  uid[2] = (uint8_t)(lo >> 16);
-  uid[3] = (uint8_t)(lo >> 24);
-  uid[4] = (uint8_t)(hi >> 0);
-  uid[5] = (uint8_t)(hi >> 8);
-  uid[6] = (uint8_t)(hi >> 16);
-  uid[7] = (uint8_t)(hi >> 24);
+  jh_store_le32(&uid[0], lo);
+  jh_store_le32(&uid[4], hi);
 #else
   memcpy(uid, g_device_uid, 8u);
 #endif

@@ -4,7 +4,9 @@
 
 > **Part of [JaszczurHAL API Reference](../../en/JaszczurHAL_API.md)**
 
-Covers: `hal_soft_timer`, `hal_pid_controller`, `tools.h/cpp`, `SmartTimers`, `pidController`, `multicoreWatchdog`, `draw7Segment`.
+Covers: thematic HAL helpers, the compatibility utility headers,
+`hal_soft_timer`, `hal_pid_controller`, `SmartTimers`, `pidController`,
+`multicoreWatchdog`, and `draw7Segment`.
 
 ## `hal_soft_timer` - C wrapper over `SmartTimers`
 
@@ -158,18 +160,39 @@ void app_task0(void) {
 
 ---
 
-## Higher-level utilities (tools.h / tools.cpp)
+## Thematic utility modules
 
-Physical location: core utility helpers live in `src/utils/*`; shared framework
-utilities such as SmartTimers live with their domain under `src/hal/timers/*`.
+The former miscellaneous implementation has been split by responsibility. New
+code includes the owning HAL header and uses the prefixed API. `tools.h`,
+`tools_c.h`, and `utils/tools_api.h` remain include aggregators without their
+own function declarations. There is no `tools.cpp` implementation unit.
 
 Recommended include options:
-- `#include <tools.h>` (aggregator include in `src/`)
-- `#include <tools_c.h>` (C-compatible utility declarations from `src/`)
-- direct include from the component path, for example
-  `#include <hal/timers/smart_timers/SmartTimers.h>`
 
-Utilities depend on HAL internally.
+- `#include <JaszczurHAL.h>` for the stable public aggregate;
+- a direct domain header for narrow dependencies;
+- `#include <tools.h>` or `#include <tools_c.h>` only while maintaining legacy
+  code.
+
+| Domain | Header | Primary API |
+|---|---|---|
+| Arrays | `hal/core/hal_array.h` | `COUNTOF()` |
+| Integer serialization/endian | `hal/core/jh_endian.h` | `jh_load_*`, `jh_store_*`, `jh_bswap*`, `MSB()`, `LSB()` |
+| Numeric/signal helpers | `hal/core/hal_math.h` | `hal_math_*` |
+| Bounded text helpers | `hal/core/hal_text.h` | `hal_text_*` |
+| NMEA scalar parsing | `hal/gps/hal_gps_nmea_utils.h` | `hal_gps_nmea_*` |
+| ADC sampling/conversion | `hal/analog/hal_adc_utils.h` | `hal_adc_*_ex` |
+| NTC conversion | `hal/temperature/hal_ntc.h` | `hal_ntc_*_ex` |
+| Pixels | `hal/display/hal_pixel.h` | `hal_pixel_*` |
+| PNG/JPEG memory adapters | `hal/codecs/hal_image.h` | `hal_image_*` |
+| MAC/WiFi scan helpers | `hal/network/hal_network_utils.h` | `hal_network_*` |
+| Calendar and elapsed time | `hal/time/hal_time.h` | `hal_time_*` |
+| Periodically refreshed random values | `hal/system/hal_periodic_random.h` | `hal_periodic_random_*_ex` |
+
+The `_ex` functions return `hal_status_t`, use explicit output buffers/state,
+and validate arguments. ADC behavior such as sample count, dummy read, delay,
+and transfer correction is selected through `hal_adc_average_config_t` rather
+than hidden project-wide behavior.
 
 ### Bit-manipulation helpers (`hal_bits`)
 
@@ -197,77 +220,94 @@ equivalent definitions before including the header.
 Avoid passing expressions with side effects (for example `i++` or function calls
 that modify state), because macro arguments may be evaluated more than once.
 
-### Functions
+### Public utility functions
+
+Utility function names follow their owning HAL domain. `tools.h`, `tools_c.h`,
+and `tools_api.h` only aggregate these headers; they do not publish a second
+set of function names.
 
 ```c
-void  debugInit(void);                  // optional - hal_deb() lazy-inits automatically
-void  setDebugPrefixWithColon(const char *moduleName); // builds "<module>:" within HAL_DEBUG_PREFIX_SIZE and forwards to hal_deb_set_prefix
-void  floatToDec(float val, int *hi, int *lo);
-float decToFloat(int hi, int lo);
-float adcToVolt(int adc, float r1, float r2);
-float ntcToTemp(int tpin, int thermistor, int r);
-float steinhart(float val, float thermistor, int r, bool characteristic);
-int   percentToGivenVal(float percent, int maxWidth);
-int   percentFrom(int givenVal, int maxVal);
-float getAverageValueFrom(int tpin);  // includes dummy read (RP2040 ADC mux cross-talk fix)
-float filter(float alpha, float input, float previous_output);
-float filterValue(float currentValue, float newValue, float alpha);
-int   adcCompe(int x);
-float getAverageForTable(int *idx, int *overall, float val, float *table);
-int   getAverageFrom(int *table, int size);
-int   getMinimumFrom(int *table, int size);
-int   getHalfwayBetweenMinMax(int *array, int n);
-float mapfloat(float x, float in_min, float in_max, float out_min, float out_max);
-static inline uint32_t float_to_u32(float f);   // bitcast float -> uint32_t (memcpy)
-static inline float    u32_to_float(uint32_t u); // bitcast uint32_t -> float (memcpy)
-unsigned long getSeconds(void);
-bool  isDaylightSavingTime(int year, int month, int day);
-void  adjustTime(int *year, int *month, int *day, int *hour, int *minute);
-bool  is_time_in_range(long now, long start, long end);
-void  extract_time(long timeInMinutes, int *hours, int *minutes);
-unsigned short byteArrayToWord(unsigned char *bytes);
-void     wordToByteArray(unsigned short word, unsigned char *bytes);
+void  hal_debug_init_default(void);                  // optional - hal_deb() lazy-inits automatically
+void  hal_debug_set_module_prefix(const char *moduleName); // builds "<module>:" within HAL_DEBUG_PREFIX_SIZE and forwards to hal_deb_set_prefix
+void  hal_math_split_decimal_tenths(float val, int *hi, int *lo);
+float hal_math_join_decimal_tenths(int hi, int lo);
+float hal_adc_raw_to_voltage(int adc, float r1, float r2);
+float hal_ntc_read_temperature(uint8_t pin, int nominalResistance, int seriesResistance);
+float hal_ntc_steinhart(float ratio, float nominalResistance, int resistance, bool characteristic);
+int   hal_math_percent_to_value(float percent, int maxWidth);
+int   hal_math_percent_from_value(int givenVal, int maxVal);
+float hal_adc_read_average(int tpin);  // includes dummy read (RP2040 ADC mux cross-talk fix)
+float hal_math_low_pass(float alpha, float input, float previous_output);
+float hal_math_blend(float currentValue, float newValue, float alpha);
+int   hal_adc_compensate_rp2040_12bit(int x);
+float hal_math_rolling_average_default_f32(int *idx, int *overall, float val, float *table);
+int   hal_math_nonnegative_average_i32(int *table, int size);
+int   hal_math_min_i32(int *table, int size);
+int   hal_math_midpoint_min_max_i32(int *array, int n);
+float hal_math_map_f32(float x, float in_min, float in_max, float out_min, float out_max);
+static inline uint32_t hal_math_float_to_u32(float f);   // bitcast float -> uint32_t (memcpy)
+static inline float    hal_math_u32_to_float(uint32_t u); // bitcast uint32_t -> float (memcpy)
+unsigned long hal_get_seconds(void);
+bool  hal_time_is_daylight_saving_time(int year, int month, int day);
+void  hal_time_adjust_cet_cest(int *year, int *month, int *day, int *hour, int *minute);
+bool  hal_time_is_in_range(long now, long start, long end);
+void  hal_time_extract_minutes(long timeInMinutes, int *hours, int *minutes);
+uint16_t jh_load_be16(const uint8_t *bytes);
+void     jh_store_be16(uint8_t *bytes, uint16_t word);
 uint8_t  MSB(unsigned short value);
 uint8_t  LSB(unsigned short value);
-int      MsbLsbToInt(uint8_t msb, uint8_t lsb);
-float rroundf(float val);
-float roundfWithPrecisionTo(float value, int precision);
-char *printBinaryAndSize(int number, char *buf, size_t bufSize);  // writes binary string into buf
-bool  concatStrings(char *dest, size_t destSize, const char *src1, const char *src2); // false on NULL args or too-small dest
-bool  isValidString(const char *s, int maxBufSize);
-char  hexToChar(char high, char low);
-void  urlDecode(const char *src, char *dst);
-void  removeSpaces(char *str);
-bool  startsWith(const char *str, const char *prefix);
-void  remove_non_ascii(const char *input, char *output, size_t outputSize);  // replaces UTF-8 with ASCII
-void  hal_pack_field_pad(uint8_t *buf, const char *str, int width, uint8_t pad);
-void  hal_pack_field(uint8_t *buf, const char *str, int width); // zero padding
-unsigned short rgbToRgb565(unsigned char r, unsigned char g, unsigned char b);
-bool rgb888ToRgb565(const unsigned char *rgb, unsigned short *rgb565, size_t pixelCount);
-bool rgba8888ToRgb565(const unsigned char *rgba, unsigned short *rgb565, size_t pixelCount); // ignores alpha
-bool pngBase64DecodedSize(const char *base64, size_t base64Len,
+int      jh_u16_from_bytes(uint8_t msb, uint8_t lsb);
+float hal_math_round_tenth(float val);
+float hal_math_round_precision(float value, int precision);
+char *hal_text_format_binary_int(int number, char *buf, size_t bufSize);  // writes binary string into buf
+bool  hal_text_concat(char *dest, size_t destSize, const char *src1, const char *src2); // false on NULL args or too-small dest
+bool  hal_text_is_printable(const char *s, int maxBufSize);
+char  hal_text_hex_pair_to_byte(char high, char low);
+void  hal_text_url_decode(const char *src, char *dst);
+void  hal_text_remove_whitespace(char *str);
+bool  hal_text_starts_with(const char *str, const char *prefix);
+int   hal_text_parse_number(const char **text);
+void  hal_text_transliterate_ascii(const char *input, char *output, size_t outputSize);  // replaces UTF-8 with ASCII
+void  hal_text_pack_field_pad(uint8_t *buf, const char *str, int width, uint8_t pad);
+void  hal_text_pack_field(uint8_t *buf, const char *str, int width); // zero padding
+unsigned short hal_pixel_rgb888_to_rgb565(unsigned char r, unsigned char g, unsigned char b);
+hal_status_t hal_pixel_rgb888_buffer_to_rgb565_ex(const uint8_t *rgb, uint16_t *rgb565, size_t pixelCount);
+hal_status_t hal_pixel_rgba8888_buffer_to_rgb565_ex(const uint8_t *rgba, uint16_t *rgb565, size_t pixelCount); // ignores alpha
+bool hal_image_png_base64_decoded_size(const char *base64, size_t base64Len,
                           size_t *pngSize); // requires HAL_ENABLE_PNG_AS_BASE64
-bool pngBase64Decode32(unsigned char **rgba, unsigned *width, unsigned *height,
+bool hal_image_png_base64_decode_rgba8888(unsigned char **rgba, unsigned *width, unsigned *height,
                        const char *base64, size_t base64Len,
                        uint8_t *pngWork, size_t pngWorkSize,
                        unsigned *pngError); // requires HAL_ENABLE_PNG_AS_BASE64
-bool pngBase64DecodeRgb565(const char *base64, size_t base64Len,
+bool hal_image_png_base64_decode_rgb565(const char *base64, size_t base64Len,
                            uint8_t *pngWork, size_t pngWorkSize,
                            unsigned short *rgb565, size_t rgb565Pixels,
                            unsigned *width, unsigned *height,
                            unsigned *pngError); // requires HAL_ENABLE_PNG_AS_BASE64
-const char *macToString(uint8_t mac[6], char *buf, size_t bufSize);
-const char *encToString(uint8_t enc);       // HAL WiFi encryption label
-bool  scanNetworks(const char *networkToFind);  // requires HAL_ENABLE_WIFI
-int   getRandomEverySomeMillis(uint32_t time, int maxValue);
-float getRandomFloatEverySomeMillis(uint32_t time, float maxValue);
+bool hal_image_jpeg_decode_rgb565(const uint8_t *jpeg, size_t jpegSize,
+                                  uint16_t *rgb565, size_t rgb565Pixels,
+                                  unsigned *width, unsigned *height);
+bool hal_image_jpeg_base64_decoded_size(const char *base64, size_t base64Len,
+                                        size_t *jpegSize);
+bool hal_image_jpeg_base64_decode_rgb565(const char *base64, size_t base64Len,
+                                         uint8_t *jpegWork, size_t jpegWorkSize,
+                                         uint16_t *rgb565, size_t rgb565Pixels,
+                                         unsigned *width, unsigned *height);
+int     hal_gps_nmea_hex_value(char value);
+int32_t hal_gps_nmea_decimal_x100(const char *text);
+void    hal_gps_nmea_degrees(const char *text, int16_t *degrees,
+                             uint32_t *billionths);
+hal_status_t hal_network_format_mac_ex(const uint8_t mac[6], char *buf, size_t bufSize);
+const char *hal_wifi_encryption_to_string(uint8_t enc);       // HAL WiFi encryption label
+bool  hal_wifi_scan_for_ssid(const char *networkToFind);  // requires HAL_ENABLE_WIFI
+int   hal_periodic_random_int_get(uint32_t time, int maxValue);
+float hal_periodic_random_float_get(uint32_t time, float maxValue);
 ```
 
-The four legacy time helpers above are compatibility wrappers only. Their
-implementations delegate directly to
+The time helpers are declared in `<hal/time/hal_time.h>` and implemented in
+`hal_time.cpp`: `hal_get_seconds()`,
 `hal_time_is_daylight_saving_time()`, `hal_time_adjust_cet_cest()`,
-`hal_time_is_in_range()`, and `hal_time_extract_minutes()` respectively. New
-code should include `<hal/time/hal_time.h>` and call the HAL API directly; see
+`hal_time_is_in_range()`, and `hal_time_extract_minutes()`. See
 [Calendar helpers and optional system time/NTP](15_connectivity.md)
 for boundary, validation, and rollover semantics.
 

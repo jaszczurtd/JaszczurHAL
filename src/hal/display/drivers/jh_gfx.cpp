@@ -13,22 +13,14 @@
 
 #include "jh_gfx.h"
 
+#include "hal/core/jh_endian.h"
+
 #include <stdlib.h>
 #include <string.h>
+#include <utility>
 
 // ---- Built-in 5x7 font (classic fixed-space bitmap) -------------------------
 #include "jh_gfx_glcdfont.h"
-
-// ---- Helpers ----------------------------------------------------------------
-
-#ifndef _jh_swap_int16
-#define _jh_swap_int16(a, b)                                                   \
-  {                                                                            \
-    int16_t t = (a);                                                           \
-    (a) = (b);                                                                 \
-    (b) = t;                                                                   \
-  }
-#endif
 
 static inline int16_t jh_abs16(int16_t v) { return v < 0 ? -v : v; }
 
@@ -93,12 +85,12 @@ void JHGfx::writeLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1,
                       uint16_t color) {
   int16_t steep = jh_abs16(y1 - y0) > jh_abs16(x1 - x0);
   if (steep) {
-    _jh_swap_int16(x0, y0);
-    _jh_swap_int16(x1, y1);
+    std::swap(x0, y0);
+    std::swap(x1, y1);
   }
   if (x0 > x1) {
-    _jh_swap_int16(x0, x1);
-    _jh_swap_int16(y0, y1);
+    std::swap(x0, x1);
+    std::swap(y0, y1);
   }
 
   int16_t dx = x1 - x0;
@@ -151,11 +143,11 @@ void JHGfx::drawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1,
                      uint16_t color) {
   if (x0 == x1) {
     if (y0 > y1)
-      _jh_swap_int16(y0, y1);
+      std::swap(y0, y1);
     drawFastVLine(x0, y0, y1 - y0 + 1, color);
   } else if (y0 == y1) {
     if (x0 > x1)
-      _jh_swap_int16(x0, x1);
+      std::swap(x0, x1);
     drawFastHLine(x0, y0, x1 - x0 + 1, color);
   } else {
     startWrite();
@@ -359,16 +351,16 @@ void JHGfx::fillTriangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1,
   int16_t a, b, y, last;
 
   if (y0 > y1) {
-    _jh_swap_int16(y0, y1);
-    _jh_swap_int16(x0, x1);
+    std::swap(y0, y1);
+    std::swap(x0, x1);
   }
   if (y1 > y2) {
-    _jh_swap_int16(y2, y1);
-    _jh_swap_int16(x2, x1);
+    std::swap(y2, y1);
+    std::swap(x2, x1);
   }
   if (y0 > y1) {
-    _jh_swap_int16(y0, y1);
-    _jh_swap_int16(x0, x1);
+    std::swap(y0, y1);
+    std::swap(x0, x1);
   }
 
   startWrite();
@@ -402,7 +394,7 @@ void JHGfx::fillTriangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1,
     sa += dx01;
     sb += dx02;
     if (a > b)
-      _jh_swap_int16(a, b);
+      std::swap(a, b);
     writeFastHLine(a, y, b - a + 1, color);
   }
 
@@ -418,7 +410,7 @@ void JHGfx::fillTriangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1,
       sa += dx12;
       sb += dx02;
       if (a > b)
-        _jh_swap_int16(a, b);
+        std::swap(a, b);
       writeFastHLine(a, y, b - a + 1, color);
     }
   }
@@ -1155,7 +1147,7 @@ void JHGfxCanvas16::byteSwap(void) {
     return;
   uint32_t n = (uint32_t)WIDTH * HEIGHT;
   for (uint32_t i = 0; i < n; i++) {
-    buffer[i] = (buffer[i] >> 8) | (buffer[i] << 8);
+    buffer[i] = jh_bswap16(buffer[i]);
   }
 }
 

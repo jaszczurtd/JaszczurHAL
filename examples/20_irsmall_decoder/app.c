@@ -1,8 +1,8 @@
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
 #include <hal/input/hal_irsmall_decoder.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
-#include <tools_c.h>
 
 #include <stdint.h>
 
@@ -17,7 +17,7 @@ static const uint8_t IR_INPUT_PIN = 16u;
 #endif
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
 
   hal_irsmall_decoder_config_t cfg = hal_irsmall_decoder_default_config(
       IR_INPUT_PIN, HAL_IRSMALL_PROTOCOL_NEC);

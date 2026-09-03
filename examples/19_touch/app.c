@@ -8,8 +8,8 @@
 #include <hal/i2c/hal_i2c.h>
 #include <hal/input/hal_stmpe610.h>
 #include <hal/input/hal_tsc2007.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
-#include <tools_c.h>
 
 #include <stdint.h>
 
@@ -29,7 +29,7 @@ static bool s_stmpe610_ready = false;
 static uint32_t s_last_read_ms = 0u;
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   deb("");
   deb("=== JaszczurHAL touch controllers ===");
 

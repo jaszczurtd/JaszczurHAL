@@ -3,6 +3,7 @@
 #ifdef HAL_ENABLE_BLUETOOTH_GAMEPAD
 
 #include "hal/bluetooth/hal_bluetooth_hid_host.h"
+#include "hal/bluetooth/jh_bluetooth_classic_address.h"
 #include "hal/bluetooth/jh_bluetooth_gamepad_identity.h"
 #include "hal/bluetooth/jh_bluetooth_gamepad_parser.h"
 #include "hal/core/hal_mutex_once.h"
@@ -50,11 +51,6 @@ gamepad_runtime_t s_gamepad{};
 
 hal_mutex_t runtime_mutex() {
   return jh_hal_mutex_create_once(&s_gamepad.mutex);
-}
-
-bool address_equal(const hal_bluetooth_classic_address_t &left,
-                   const hal_bluetooth_classic_address_t &right) {
-  return memcmp(left.bytes, right.bytes, sizeof(left.bytes)) == 0;
 }
 
 hal_status_t ensure_handle_pool_locked() {
@@ -245,8 +241,8 @@ select_scan_result(hal_bluetooth_classic_t classic,
     return hal_bluetooth_classic_sdp_query(classic, &result.address);
   }
 
-  const bool is_selected =
-      selected && address_equal(selected_address, result.address);
+  const bool is_selected = selected && jh_bluetooth_classic_address_equal(
+                                           &selected_address, &result.address);
   if (!is_selected) {
     return HAL_OK;
   }

@@ -5,6 +5,7 @@
 #ifdef HAL_ENABLE_PCNT
 
 #include "hal/analog/hal_pcnt.h"
+#include "hal/analog/hal_pcnt_common.h"
 #include "hal/core/hal_mutex_once.h"
 #include "hal/system/hal_sync.h"
 #include "jh_esp32_gpio.h"
@@ -31,11 +32,6 @@ hal_mutex_t s_mutex;
 counter_slot_t s_counters[kChannelCount] = {};
 
 hal_mutex_t counter_mutex(void) { return jh_hal_mutex_create_once(&s_mutex); }
-
-bool edge_valid(hal_pcnt_edge_t edge) {
-  return edge == HAL_PCNT_EDGE_RISING || edge == HAL_PCNT_EDGE_FALLING ||
-         edge == HAL_PCNT_EDGE_BOTH;
-}
 
 esp_err_t release_counter(counter_slot_t &counter) {
   if (counter.unit != nullptr && counter.started) {
@@ -117,7 +113,7 @@ uint8_t hal_pcnt_channel_count(void) { return kChannelCount; }
 hal_status_t hal_pcnt_init_ex(uint8_t logical_channel, uint8_t pin,
                               hal_pcnt_edge_t edge) {
   if (logical_channel >= kChannelCount || !jh_esp32_gpio_pin_valid(pin) ||
-      !edge_valid(edge)) {
+      !jh_hal_pcnt_edge_valid(edge)) {
     return HAL_EINVAL;
   }
   hal_mutex_t mutex = counter_mutex();

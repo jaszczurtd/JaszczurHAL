@@ -99,8 +99,14 @@ file(GLOB MOCK_SOURCES ${SRC}/hal/impl/.mock/*.cpp)
 # Excluded sources are compiled by dedicated tests when they need local stubs or
 # extra fixtures.
 set(UTIL_SOURCES
+    ${SRC}/hal/analog/hal_adc_utils.cpp
+    ${SRC}/hal/codecs/hal_image.cpp
     ${SRC}/hal/core/hal_assert.cpp
+    ${SRC}/hal/core/hal_math.cpp
+    ${SRC}/hal/core/hal_text.cpp
+    ${SRC}/hal/core/jh_endian.cpp
     ${SRC}/hal/system/hal_board.cpp
+    ${SRC}/hal/system/hal_periodic_random.cpp
     ${SRC}/hal/bluetooth/hal_ble.cpp
     ${SRC}/hal/bluetooth/hal_ble_commands.cpp
     ${SRC}/hal/bluetooth/hal_ble_stream.cpp
@@ -123,6 +129,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/serial/hal_serial_session.cpp
     ${SRC}/hal/time/hal_time.cpp
     ${SRC}/hal/time/hal_time_ntp.cpp
+    ${SRC}/hal/temperature/hal_ntc.cpp
     ${SRC}/hal/temperature/hal_thermocouple.cpp
     ${SRC}/hal/radio/hal_lora_radio.cpp
     ${SRC}/hal/radio/hal_lora_link.cpp
@@ -131,6 +138,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/radio/jh_lora_modem.cpp
     ${SRC}/hal/spi/hal_spi_device.cpp
     ${SRC}/hal/network/hal_network_status.cpp
+    ${SRC}/hal/network/hal_network_utils.cpp
     ${SRC}/hal/network/tls/hal_tls.cpp
     ${SRC}/hal/bluetooth/jh_ble_stream_session.c
     ${SRC}/hal/core/jh_handle_pool.cpp
@@ -138,6 +146,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/security/jh_secure_random.cpp
     ${SRC}/hal/i2c/hal_i2c.cpp
     ${SRC}/hal/display/hal_display.cpp
+    ${SRC}/hal/display/hal_pixel.cpp
     ${SRC}/hal/storage/hal_sdlogger.cpp
     ${SRC}/hal/storage/hal_eeprom.cpp
     ${SRC}/hal/storage/hal_littlefs.cpp
@@ -160,6 +169,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/network/tls/BearSSL/jh_bearssl_hal_tcp_io.cpp
     ${SRC}/hal/network/tls/BearSSL/jh_bearssl_provider.cpp
     ${SRC}/hal/gps/gps_nmea_parser.cpp
+    ${SRC}/hal/gps/hal_gps_nmea_utils.cpp
     ${SRC}/hal/gps/hal_gps_core.cpp
     ${SRC}/hal/network/http/hal_http_server.cpp
     ${SRC}/hal/network/http/hal_http_files.cpp
@@ -209,7 +219,6 @@ set(UTIL_SOURCES
     ${SRC}/hal/timers/hal_timer_ext.cpp
     ${SRC}/hal/timers/hal_soft_timer.cpp
     ${SRC}/hal/timers/smart_timers/SmartTimers.cpp
-    ${SRC}/utils/tools.cpp
     ${SRC}/utils/pidController.cpp
     ${SRC}/hal/codecs/cjson/cJSON.c
     ${SRC}/hal/codecs/cjson/cJSON_Utils.c

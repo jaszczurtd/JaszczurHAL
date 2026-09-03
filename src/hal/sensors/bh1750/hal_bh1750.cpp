@@ -14,6 +14,7 @@
 
 #include "hal/sensors/hal_bh1750.h"
 
+#include "hal/core/jh_endian.h"
 #include "hal/i2c/hal_i2c.h"
 #include "hal/system/hal_system.h"
 
@@ -103,7 +104,7 @@ hal_status_t hal_bh1750_light_ex(hal_bh1750_t *dev, float *out_lux) {
     return HAL_EBUS;
   }
 
-  const uint16_t raw = (uint16_t)(((uint16_t)data[0] << 8) | data[1]);
+  const uint16_t raw = jh_load_be16(data);
   *out_lux = (float)raw / 1.2f;
   return HAL_OK;
 }

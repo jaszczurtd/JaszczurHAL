@@ -9,6 +9,7 @@
 #if defined(HAL_ENABLE_MQTT)
 
 #include "PubSubClient.h"
+#include "hal/core/jh_endian.h"
 #include "hal/network/hal_net.h"
 #include "hal/system/hal_system.h"
 
@@ -119,8 +120,8 @@ boolean PubSubClient::connect(const char *id, const char *user,
       }
       this->buffer[length++] = v;
 
-      this->buffer[length++] = ((this->keepAlive) >> 8);
-      this->buffer[length++] = ((this->keepAlive) & 0xFF);
+      jh_store_be16(&this->buffer[length], this->keepAlive);
+      length += 2u;
 
       CHECK_STRING_LENGTH(length, id)
       length = writeString(id, this->buffer, length);
@@ -281,8 +282,8 @@ boolean PubSubClient::loop() {
         uint8_t type = this->buffer[0] & 0xF0;
         if (type == MQTTPUBLISH) {
           if (callback) {
-            uint16_t tl = (this->buffer[llen + 1] << 8) +
-                          this->buffer[llen + 2]; /* topic length in bytes */
+            uint16_t tl = jh_load_be16(
+                &this->buffer[llen + 1]); /* topic length in bytes */
             memmove(this->buffer + llen + 2, this->buffer + llen + 3,
                     tl); /* move topic inside buffer 1 byte to front */
             this->buffer[llen + 2 + tl] =
@@ -290,15 +291,13 @@ boolean PubSubClient::loop() {
             char *topic = (char *)this->buffer + llen + 2;
             // msgId only present for QOS>0
             if ((this->buffer[0] & 0x06) == MQTTQOS1) {
-              msgId = (this->buffer[llen + 3 + tl] << 8) +
-                      this->buffer[llen + 3 + tl + 1];
+              msgId = jh_load_be16(&this->buffer[llen + 3 + tl]);
               payload = this->buffer + llen + 3 + tl + 2;
               callback(topic, payload, len - llen - 3 - tl - 2);
 
               this->buffer[0] = MQTTPUBACK;
               this->buffer[1] = 2;
-              this->buffer[2] = (msgId >> 8);
-              this->buffer[3] = (msgId & 0xFF);
+              jh_store_be16(&this->buffer[2], msgId);
               _client->write(this->buffer, 4);
               lastOutActivity = t;
 
@@ -530,8 +529,8 @@ boolean PubSubClient::subscribe(const char *topic, uint8_t qos) {
     if (nextMsgId == 0) {
       nextMsgId = 1;
     }
-    this->buffer[length++] = (nextMsgId >> 8);
-    this->buffer[length++] = (nextMsgId & 0xFF);
+    jh_store_be16(&this->buffer[length], nextMsgId);
+    length += 2u;
     length = writeString((char *)topic, this->buffer, length);
     this->buffer[length++] = qos;
     return write(MQTTSUBSCRIBE | MQTTQOS1, this->buffer,
@@ -555,8 +554,8 @@ boolean PubSubClient::unsubscribe(const char *topic) {
     if (nextMsgId == 0) {
       nextMsgId = 1;
     }
-    this->buffer[length++] = (nextMsgId >> 8);
-    this->buffer[length++] = (nextMsgId & 0xFF);
+    jh_store_be16(&this->buffer[length], nextMsgId);
+    length += 2u;
     length = writeString(topic, this->buffer, length);
     return write(MQTTUNSUBSCRIBE | MQTTQOS1, this->buffer,
                  length - MQTT_MAX_HEADER_SIZE);
@@ -583,8 +582,7 @@ uint16_t PubSubClient::writeString(const char *string, uint8_t *buf,
     buf[pos++] = *idp++;
     i++;
   }
-  buf[pos - i - 2] = (i >> 8);
-  buf[pos - i - 1] = (i & 0xFF);
+  jh_store_be16(&buf[pos - i - 2u], i);
   return pos;
 }
 

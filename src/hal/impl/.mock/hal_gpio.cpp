@@ -27,10 +27,6 @@ static size_t s_trace_count = 0u;
 
 static bool gpio_pin_valid(uint8_t pin) { return pin < MOCK_GPIO_MAX_PINS; }
 
-static bool gpio_irq_mode_valid(hal_gpio_irq_mode_t mode) {
-  return mode >= HAL_GPIO_IRQ_FALLING && mode <= HAL_GPIO_IRQ_CHANGE;
-}
-
 static bool gpio_mode_is_output(hal_gpio_mode_t mode) {
   return mode == HAL_GPIO_OUTPUT || mode == HAL_GPIO_OUTPUT_LOW ||
          mode == HAL_GPIO_OUTPUT_HIGH || mode == HAL_GPIO_OUTPUT_OPEN_DRAIN ||
@@ -102,7 +98,7 @@ hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin, void (*callback)(void),
   if (callback == NULL) {
     return HAL_EINVAL;
   }
-  if (!gpio_irq_mode_valid(mode)) {
+  if (!jh_hal_gpio_irq_mode_valid(mode)) {
     return HAL_EINVAL;
   }
   if (owner_core >= MOCK_GPIO_CORE_COUNT) {

@@ -1,5 +1,6 @@
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_MOCK
+#include "hal/core/jh_resolution.h"
 #include "hal/gpio/hal_pwm.h"
 #include "hal_mock.h"
 
@@ -8,24 +9,14 @@ static uint32_t s_values[64] = {};
 
 static bool pwm_pin_valid(uint8_t pin) { return pin < 64u; }
 
-static uint8_t clamp_resolution(uint8_t bits) {
-  if (bits < 1u) {
-    HAL_ASSERT(false, "hal_pwm_set_resolution: resolution is below 1 bit");
-    return 1u;
-  }
-  if (bits > 16u) {
-    HAL_ASSERT(false, "hal_pwm_set_resolution: resolution is above 16 bits");
-    return 16u;
-  }
-  return bits;
-}
-
 static uint32_t max_value_for_resolution(void) {
   return (1u << s_resolution) - 1u;
 }
 
 void hal_pwm_set_resolution(uint8_t bits) {
-  s_resolution = clamp_resolution(bits);
+  s_resolution = jh_resolution_clamp_1_16(
+      bits, "hal_pwm_set_resolution: resolution is below 1 bit",
+      "hal_pwm_set_resolution: resolution is above 16 bits");
 }
 
 bool hal_pwm_is_pin_supported(uint8_t pin) { return pwm_pin_valid(pin); }

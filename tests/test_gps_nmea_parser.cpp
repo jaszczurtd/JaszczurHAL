@@ -78,7 +78,7 @@ void test_gsv_satellites_in_view(void) {
 
 void test_gst_horizontal_accuracy(void) {
   /* semi-major (term 3) and semi-minor (term 4) -> sqrt(maj^2 + min^2).
-   * parse_decimal keeps 2 decimals: 0.023->0.02, 0.020->0.02. */
+   * hal_gps_nmea_decimal_x100 keeps 2 decimals: 0.023->0.02, 0.020->0.02. */
   TEST_ASSERT_TRUE(
       feed("GPGST,172814.0,0.006,0.023,0.020,273.6,0.023,0.020,0.031"));
   TEST_ASSERT_TRUE(fabs((gps_nmea_horizontal_accuracy_m(&p)) - (0.02828)) <

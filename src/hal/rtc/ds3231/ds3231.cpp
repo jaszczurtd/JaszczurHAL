@@ -12,6 +12,8 @@
 
 #include "ds3231.h"
 
+#include "hal/core/hal_array.h"
+#include "hal/core/jh_endian.h"
 #include "hal/i2c/hal_i2c.h"
 #include "hal/time/jh_calendar.h"
 
@@ -259,7 +261,7 @@ hal_status_t DS3231::adjustEx(const DateTime &dt) {
       decToBcd((byte)(dt.year() - 2000u)),
   };
 
-  if (!writeBytes(0x00u, data, (uint8_t)(sizeof(data) / sizeof(data[0])))) {
+  if (!writeBytes(0x00u, data, (uint8_t)COUNTOF(data))) {
     return HAL_EIO;
   }
 
@@ -352,7 +354,7 @@ hal_status_t DS3231::getTemperatureEx(float *out_temperature_c) {
     return HAL_EIO;
   }
 
-  const int16_t itemp = (int16_t)((buffer[0] << 8) | (buffer[1] & 0xC0u));
+  const int16_t itemp = (int16_t)(jh_load_be16(buffer) & UINT16_C(0xFFC0));
   *out_temperature_c = (float)itemp / 256.0f;
   return HAL_OK;
 }

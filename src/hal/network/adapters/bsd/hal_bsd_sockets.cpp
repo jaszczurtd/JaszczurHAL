@@ -16,6 +16,7 @@
 
 #include "hal/core/hal_mutex_once.h"
 #include "hal/core/hal_target.h"
+#include "hal/core/jh_endian.h"
 #include "hal/network/hal_net.h"
 #include "hal/network/hal_tcp.h"
 #include "hal/network/hal_udp.h"
@@ -198,23 +199,17 @@ static bool file_status_flags_supported(int flags) {
 }
 
 static uint32_t endpoint_addr_to_host_u32(const hal_net_endpoint_t *endpoint) {
-  return ((uint32_t)endpoint->addr[0] << 24u) |
-         ((uint32_t)endpoint->addr[1] << 16u) |
-         ((uint32_t)endpoint->addr[2] << 8u) | (uint32_t)endpoint->addr[3];
+  return jh_load_be32(endpoint->addr);
 }
 
 static void endpoint_addr_from_host_u32(hal_net_endpoint_t *endpoint,
                                         uint32_t host_addr) {
-  endpoint->addr[0] = (uint8_t)((host_addr >> 24u) & 0xFFu);
-  endpoint->addr[1] = (uint8_t)((host_addr >> 16u) & 0xFFu);
-  endpoint->addr[2] = (uint8_t)((host_addr >> 8u) & 0xFFu);
-  endpoint->addr[3] = (uint8_t)(host_addr & 0xFFu);
+  jh_store_be32(endpoint->addr, host_addr);
 }
 
 static uint32_t
 ipv4_addr_to_host_u32(const uint8_t addr[HAL_NET_IPV4_ADDR_LEN]) {
-  return ((uint32_t)addr[0] << 24u) | ((uint32_t)addr[1] << 16u) |
-         ((uint32_t)addr[2] << 8u) | (uint32_t)addr[3];
+  return jh_load_be32(addr);
 }
 
 static bool sockaddr_to_endpoint(const struct sockaddr *addr, socklen_t addrlen,
@@ -687,9 +682,7 @@ in_addr_t inet_addr(const char *cp) {
     return INADDR_NONE;
   }
 
-  const uint32_t host_addr = ((uint32_t)octets[0] << 24u) |
-                             ((uint32_t)octets[1] << 16u) |
-                             ((uint32_t)octets[2] << 8u) | (uint32_t)octets[3];
+  const uint32_t host_addr = jh_load_be32(octets);
   return htonl(host_addr);
 }
 
@@ -717,9 +710,7 @@ int inet_pton(int af, const char *src, void *dst) {
     return 0;
   }
 
-  const uint32_t host_addr = ((uint32_t)octets[0] << 24u) |
-                             ((uint32_t)octets[1] << 16u) |
-                             ((uint32_t)octets[2] << 8u) | (uint32_t)octets[3];
+  const uint32_t host_addr = jh_load_be32(octets);
   const in_addr_t net_addr = htonl(host_addr);
   memcpy(dst, &net_addr, sizeof(net_addr));
   return 1;
@@ -746,10 +737,11 @@ const char *inet_ntop(int af, const void *src, char *dst, socklen_t size) {
   in_addr_t net_addr = 0u;
   memcpy(&net_addr, src, sizeof(net_addr));
   const uint32_t host_addr = ntohl(net_addr);
-  const int written = snprintf(
-      dst, (size_t)size, "%u.%u.%u.%u", (unsigned)((host_addr >> 24u) & 0xFFu),
-      (unsigned)((host_addr >> 16u) & 0xFFu),
-      (unsigned)((host_addr >> 8u) & 0xFFu), (unsigned)(host_addr & 0xFFu));
+  uint8_t octets[HAL_NET_IPV4_ADDR_LEN];
+  jh_store_be32(octets, host_addr);
+  const int written =
+      snprintf(dst, (size_t)size, "%u.%u.%u.%u", (unsigned)octets[0],
+               (unsigned)octets[1], (unsigned)octets[2], (unsigned)octets[3]);
   if (written < 0 || (socklen_t)written >= size) {
     errno = ENOSPC;
     return NULL;
@@ -1809,7 +1801,7 @@ int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
     if (timeout_ms == 0u && !wait_forever) {
       return 0;
     }
-    if (!wait_forever && (uint32_t)(hal_millis() - start_ms) >= timeout_ms) {
+    if (!wait_forever && hal_millis_deadline_expired(start_ms, timeout_ms)) {
       return 0;
     }
 

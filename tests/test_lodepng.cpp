@@ -89,9 +89,9 @@ void test_pngBase64Decode32_decodes_rgba_memory(void) {
   unsigned width = 0u;
   unsigned height = 0u;
   unsigned png_error = 1234u;
-  TEST_ASSERT_TRUE(pngBase64Decode32(&decoded, &width, &height, fixture.base64,
-                                     fixture.base64_len, fixture.png_work,
-                                     fixture.png_size, &png_error));
+  TEST_ASSERT_TRUE(hal_image_png_base64_decode_rgba8888(
+      &decoded, &width, &height, fixture.base64, fixture.base64_len,
+      fixture.png_work, fixture.png_size, &png_error));
   TEST_ASSERT_EQUAL_UINT(0u, png_error);
   TEST_ASSERT_EQUAL_UINT(2u, width);
   TEST_ASSERT_EQUAL_UINT(2u, height);
@@ -107,11 +107,12 @@ void test_pngBase64DecodedSize_reports_exact_png_size(void) {
   png_base64_fixture_create(&fixture);
 
   size_t decoded_size = 0u;
-  TEST_ASSERT_TRUE(
-      pngBase64DecodedSize(fixture.base64, fixture.base64_len, &decoded_size));
+  TEST_ASSERT_TRUE(hal_image_png_base64_decoded_size(
+      fixture.base64, fixture.base64_len, &decoded_size));
   TEST_ASSERT_EQUAL_UINT32((uint32_t)fixture.png_size, (uint32_t)decoded_size);
 
-  TEST_ASSERT_FALSE(pngBase64DecodedSize("AA*A", 4u, &decoded_size));
+  TEST_ASSERT_FALSE(
+      hal_image_png_base64_decoded_size("AA*A", 4u, &decoded_size));
   TEST_ASSERT_EQUAL_UINT32(0u, (uint32_t)decoded_size);
 
   png_base64_fixture_destroy(&fixture);
@@ -125,7 +126,7 @@ void test_pngBase64DecodeRgb565_decodes_to_rgb565(void) {
   unsigned width = 0u;
   unsigned height = 0u;
   unsigned png_error = 1234u;
-  TEST_ASSERT_TRUE(pngBase64DecodeRgb565(
+  TEST_ASSERT_TRUE(hal_image_png_base64_decode_rgb565(
       fixture.base64, fixture.base64_len, fixture.png_work, fixture.png_size,
       rgb565, 4u, &width, &height, &png_error));
   TEST_ASSERT_EQUAL_UINT(0u, png_error);
@@ -147,7 +148,7 @@ void test_pngBase64DecodeRgb565_rejects_small_output_buffer(void) {
   unsigned width = 0u;
   unsigned height = 0u;
   unsigned png_error = 1234u;
-  TEST_ASSERT_FALSE(pngBase64DecodeRgb565(
+  TEST_ASSERT_FALSE(hal_image_png_base64_decode_rgb565(
       fixture.base64, fixture.base64_len, fixture.png_work, fixture.png_size,
       rgb565, 3u, &width, &height, &png_error));
   TEST_ASSERT_EQUAL_UINT(0u, png_error);
@@ -164,8 +165,9 @@ void test_pngBase64Decode32_rejects_invalid_base64_before_png_decode(void) {
   unsigned height = 9u;
   unsigned png_error = 1234u;
 
-  TEST_ASSERT_FALSE(pngBase64Decode32(&decoded, &width, &height, "AA*A", 4u,
-                                      png_work, sizeof(png_work), &png_error));
+  TEST_ASSERT_FALSE(hal_image_png_base64_decode_rgba8888(
+      &decoded, &width, &height, "AA*A", 4u, png_work, sizeof(png_work),
+      &png_error));
   TEST_ASSERT_NULL(decoded);
   TEST_ASSERT_EQUAL_UINT(0u, width);
   TEST_ASSERT_EQUAL_UINT(0u, height);

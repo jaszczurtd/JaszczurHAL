@@ -1,5 +1,6 @@
 #pragma once
 
+#include "hal/core/jh_endian.h"
 #include "hal/network/hal_net.h"
 
 #include <stdbool.h>
@@ -81,8 +82,8 @@ static inline bool jh_net_parse_ipv6_groups(const char *begin, const char *end,
       if (!jh_net_parse_ipv4_literal(ipv4_text, ipv4)) {
         return false;
       }
-      out_words[count++] = (uint16_t)(((uint16_t)ipv4[0] << 8u) | ipv4[1]);
-      out_words[count++] = (uint16_t)(((uint16_t)ipv4[2] << 8u) | ipv4[3]);
+      out_words[count++] = jh_load_be16(&ipv4[0]);
+      out_words[count++] = jh_load_be16(&ipv4[2]);
       cursor = group_end;
       continue;
     }
@@ -182,8 +183,7 @@ jh_net_parse_ipv6_literal(const char *src,
     memcpy(words + (8u - right_count), right, right_count * sizeof(right[0]));
   }
   for (size_t index = 0u; index < 8u; ++index) {
-    out_addr[index * 2u] = (uint8_t)(words[index] >> 8u);
-    out_addr[index * 2u + 1u] = (uint8_t)(words[index] & 0xffu);
+    jh_store_be16(&out_addr[index * 2u], words[index]);
   }
   if (out_scope_id) {
     *out_scope_id = scope_id;
@@ -199,8 +199,7 @@ static inline bool jh_net_format_ipv6(const uint8_t addr[HAL_NET_IPV6_ADDR_LEN],
 
   uint16_t words[8] = {};
   for (size_t index = 0u; index < 8u; ++index) {
-    words[index] =
-        (uint16_t)(((uint16_t)addr[index * 2u] << 8u) | addr[index * 2u + 1u]);
+    words[index] = jh_load_be16(&addr[index * 2u]);
   }
 
   size_t best_start = 8u;

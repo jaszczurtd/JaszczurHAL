@@ -193,9 +193,8 @@ algorithms:
 - `hal_time_is_in_range(...)` checks a half-open `[start, end)` interval
 - `hal_time_extract_minutes(...)` splits a minute count with optional outputs
 
-The established `isDaylightSavingTime()`, `adjustTime()`,
-`is_time_in_range()`, and `extract_time()` utilities remain source-compatible
-wrappers and contain no calendar or interval logic.
+These functions are the public implementations in `hal_time`; no second set of
+utility aliases is exported.
 
 ---
 

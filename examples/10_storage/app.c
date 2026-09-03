@@ -1,5 +1,6 @@
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/spi/hal_spi.h>
 #include <hal/storage/hal_eeprom.h>
 #include <hal/storage/hal_kv.h>
@@ -8,7 +9,6 @@
 #include <hal/system/hal_system.h>
 #include <stdio.h>
 #include <string.h>
-#include <tools_c.h>
 
 #if HAL_TARGET_IS_RP
 #define SD_MISO_PIN 16u
@@ -298,7 +298,7 @@ static void service_sdlogger(uint32_t now) {
 }
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   deb("");
   deb("=== JaszczurHAL storage ===");
 

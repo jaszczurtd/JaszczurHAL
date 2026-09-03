@@ -91,7 +91,7 @@ static bool rtc_wait_clock_ready(volatile uint32_t *reg, uint32_t mask,
       return true;
     }
     hal_delay_ms(1u);
-  } while ((uint32_t)(hal_millis() - started) < timeout_ms);
+  } while (!hal_millis_deadline_expired(started, timeout_ms));
   return (*reg & mask) == mask;
 }
 

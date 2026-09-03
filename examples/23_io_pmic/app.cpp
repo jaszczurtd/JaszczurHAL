@@ -6,6 +6,7 @@
 #include <hal/analog/hal_mcp3221.h>
 #include <hal/analog/hal_mcp4725.h>
 #include <hal/core/hal_app.h>
+#include <hal/core/hal_array.h>
 #include <hal/core/hal_status.h>
 #include <hal/core/hal_target.h>
 #include <hal/gpio/hal_hc595.h>
@@ -15,9 +16,9 @@
 #include <hal/gpio/hal_rgb_led.h>
 #include <hal/i2c/hal_i2c.h>
 #include <hal/power/hal_adp5360.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/spi/hal_spi.h>
 #include <hal/system/hal_system.h>
-#include <tools.h>
 
 #if HAL_TARGET_IS_RP
 #define EXAMPLE_I2C_SDA 4u
@@ -121,7 +122,7 @@ static void init_i2c_devices(void) {
 }
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   deb("");
   deb("=== JaszczurHAL external I/O + PMIC example ===");
 
@@ -221,7 +222,7 @@ void app_task0(void) {
   const uint8_t pattern = on ? 0x55u : 0xaau;
   exercise_io_devices(on, pattern);
 
-  const size_t color_count = sizeof(COLORS) / sizeof(COLORS[0]);
+  const size_t color_count = COUNTOF(COLORS);
   const hal_rgb_led_color_t color = COLORS[s_step % color_count];
   if (s_rgb_ready) {
     const hal_status_t status = hal_rgb_led_set_color(color);

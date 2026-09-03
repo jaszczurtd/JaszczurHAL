@@ -1,9 +1,10 @@
 #include <hal/core/hal_app.h>
+#include <hal/core/hal_array.h>
 #include <hal/gpio/hal_gpio.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
 #include <hal/timers/hal_soft_timer.h>
 #include <hal/timers/hal_timer.h>
-#include <tools.h>
 #include <utils/pidController.h>
 
 #include <stdint.h>
@@ -110,7 +111,7 @@ static void report_runtime(void) {
 }
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   hal_deb_set_prefix("CORE");
   hal_gpio_set_mode(HAL_LED_BUILTIN, HAL_GPIO_OUTPUT);
   hal_gpio_write(HAL_LED_BUILTIN, false);
@@ -119,9 +120,8 @@ void app_start(void) {
   s_pid.setTf(0.05f);
   s_pid.reset();
 
-  if (!hal_soft_timer_setup_table(
-          s_soft_timers, sizeof(s_soft_timers) / sizeof(s_soft_timers[0]),
-          hal_watchdog_feed, 2u)) {
+  if (!hal_soft_timer_setup_table(s_soft_timers, COUNTOF(s_soft_timers),
+                                  hal_watchdog_feed, 2u)) {
     derr("soft-timer table setup failed");
   }
 

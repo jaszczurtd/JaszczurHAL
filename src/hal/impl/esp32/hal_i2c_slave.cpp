@@ -5,6 +5,7 @@
 #ifdef HAL_ENABLE_I2C_SLAVE
 
 #include "hal/core/hal_mutex_once.h"
+#include "hal/core/jh_endian.h"
 #include "hal/i2c/hal_i2c_slave.h"
 #include "hal/system/hal_sync.h"
 #include "jh_esp32_gpio.h"
@@ -354,8 +355,7 @@ void hal_i2c_slave_reg_write16_bus(uint8_t bus, uint8_t reg, uint16_t value) {
     return;
   }
   portENTER_CRITICAL_SAFE(&s_register_lock);
-  state.registers[reg] = (uint8_t)(value >> 8u);
-  state.registers[(uint16_t)reg + 1u] = (uint8_t)value;
+  jh_store_be16(&state.registers[reg], value);
   portEXIT_CRITICAL_SAFE(&s_register_lock);
 }
 
@@ -384,8 +384,7 @@ uint16_t hal_i2c_slave_reg_read16_bus(uint8_t bus, uint8_t reg) {
     return 0u;
   }
   portENTER_CRITICAL_SAFE(&s_register_lock);
-  const uint16_t value = ((uint16_t)state.registers[reg] << 8u) |
-                         state.registers[(uint16_t)reg + 1u];
+  const uint16_t value = jh_load_be16(&state.registers[reg]);
   portEXIT_CRITICAL_SAFE(&s_register_lock);
   return value;
 }

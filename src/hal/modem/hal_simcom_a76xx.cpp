@@ -172,7 +172,7 @@ const char *hal_simcom_a76xx_mqtt_result_string(int result_code) {
       "server disconnect failed",
   };
 
-  const size_t result_count = sizeof(result_text) / sizeof(result_text[0]);
+  const size_t result_count = COUNTOF(result_text);
   if (result_code < 0 || (size_t)result_code >= result_count)
     return "unknown MQTT result";
   return result_text[result_code];
@@ -954,9 +954,9 @@ static bool boot_ready(const char *buf, size_t len, void *user) {
 
   if (st->saw_done)
     return true;
-  if (st->saw_ready && (hal_millis() - st->ready_at_ms) >= 2000u)
+  if (st->saw_ready && hal_millis_deadline_expired(st->ready_at_ms, 2000u))
     return true;
-  if (st->saw_any && (hal_millis() - st->last_rx_ms) >= 3000u)
+  if (st->saw_any && hal_millis_deadline_expired(st->last_rx_ms, 3000u))
     return true;
   return false;
 }
@@ -1009,7 +1009,7 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_wait_sim_ready(hal_simcom_a76xx_t h,
       return HAL_SIMCOM_A76XX_OK;
     }
     hal_modem_at_sleep_ms(h->at, 1000u);
-  } while ((hal_millis() - start) < timeout_ms);
+  } while (!hal_millis_deadline_expired(start, timeout_ms));
   return HAL_SIMCOM_A76XX_TIMEOUT;
 }
 
@@ -1027,7 +1027,7 @@ hal_simcom_a76xx_wait_network_registered(hal_simcom_a76xx_t h,
       }
     }
     hal_modem_at_sleep_ms(h->at, 2000u);
-  } while ((hal_millis() - start) < timeout_ms);
+  } while (!hal_millis_deadline_expired(start, timeout_ms));
   return HAL_SIMCOM_A76XX_TIMEOUT;
 }
 
@@ -1186,7 +1186,7 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_gnss_power_on(hal_simcom_a76xx_t h,
     per_cmd_timeout = 3000u;
 
   hal_simcom_a76xx_result_t last = HAL_SIMCOM_A76XX_ERROR;
-  for (size_t i = 0u; i < sizeof(power_cmds) / sizeof(power_cmds[0]); ++i) {
+  for (size_t i = 0u; i < COUNTOF(power_cmds); ++i) {
     hal_modem_at_result_t r =
         hal_modem_at_send(h->at, power_cmds[i], NULL, per_cmd_timeout);
     last = map_at(r);
@@ -1232,7 +1232,7 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_get_gnss_location(
     per_query_timeout = 3000u;
 
   hal_simcom_a76xx_result_t last = HAL_SIMCOM_A76XX_ERROR;
-  for (size_t i = 0u; i < sizeof(queries) / sizeof(queries[0]); ++i) {
+  for (size_t i = 0u; i < COUNTOF(queries); ++i) {
     hal_modem_at_result_t r = hal_modem_at_send(
         h->at, queries[i].cmd, queries[i].prefix, per_query_timeout);
     last = map_at(r);

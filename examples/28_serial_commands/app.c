@@ -1,10 +1,10 @@
 #include <hal/commands/hal_command_router.h>
 #include <hal/core/hal_app.h>
+#include <hal/serial/hal_serial.h>
 #include <hal/serial/hal_serial_commands.h>
 #include <hal/serial/hal_serial_session.h>
 #include <hal/system/hal_system.h>
 #include <stdio.h>
-#include <tools_c.h>
 
 static hal_command_router_t s_router = NULL;
 static hal_serial_session_t s_session;
@@ -92,7 +92,7 @@ static void failStart(const char *stage, hal_status_t status) {
 }
 
 void app_start(void) {
-  debugInit();
+  hal_debug_init_default();
   deb("");
   deb("=== JaszczurHAL Serial command router ===");
 
