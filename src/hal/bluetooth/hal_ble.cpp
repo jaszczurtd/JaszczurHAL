@@ -11,7 +11,6 @@
 #include "hal/core/hal_mutex_once.h"
 #include "hal/system/jh_board_runtime.h"
 
-#include <stdio.h>
 #include <string.h>
 
 namespace {
@@ -650,13 +649,7 @@ hal_status_t hal_ble_format_address(const hal_ble_address_t *address, char *out,
       out_size < HAL_BLE_ADDRESS_TEXT_SIZE) {
     return HAL_EINVAL;
   }
-  const int written =
-      snprintf(out, out_size, "%02X:%02X:%02X:%02X:%02X:%02X",
-               (unsigned)address->bytes[0], (unsigned)address->bytes[1],
-               (unsigned)address->bytes[2], (unsigned)address->bytes[3],
-               (unsigned)address->bytes[4], (unsigned)address->bytes[5]);
-  return written == (int)(HAL_BLE_ADDRESS_TEXT_SIZE - 1u) ? HAL_OK
-                                                          : HAL_EOVERFLOW;
+  return hal_text_format_mac_ex(address->bytes, out, out_size);
 }
 
 hal_status_t

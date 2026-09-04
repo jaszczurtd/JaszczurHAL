@@ -965,6 +965,7 @@ function(add_network_board_runtime_test NAME BOARD_DEFINE TEST_DEFINE)
         ${SRC_DIR}/hal/network/hal_tcp.cpp
         ${SRC_DIR}/hal/network/hal_udp.cpp
         ${SRC_DIR}/hal/network/hal_wifi.cpp
+        ${SRC_DIR}/hal/core/hal_text.cpp
         ${SRC_DIR}/hal/core/jh_handle_pool.cpp
         ${SRC_DIR}/hal/network/jh_network_backend.cpp
         ${SRC_DIR}/hal/network/jh_network_handle_pool.cpp

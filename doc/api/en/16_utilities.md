@@ -194,6 +194,11 @@ and validate arguments. ADC behavior such as sample count, dummy read, delay,
 and transfer correction is selected through `hal_adc_average_config_t` rather
 than hidden project-wide behavior.
 
+`hal_text_format_mac_ex()` formats any six-byte hardware address as uppercase
+`XX:XX:XX:XX:XX:XX`. The destination needs
+`HAL_TEXT_MAC_STRING_SIZE` bytes. `hal_network_format_mac_ex()` remains the
+network-facing compatibility entry point and delegates to this helper.
+
 ### Bit-manipulation helpers (`hal_bits`)
 
 Bit aliases are defined with `#ifndef` guards so an application may provide
@@ -305,6 +310,8 @@ uint8_t  jh_u16_lsb(uint16_t value);
 uint8_t  MSB(unsigned short value);
 uint8_t  LSB(unsigned short value);
 uint16_t jh_u16_from_bytes(uint8_t msb, uint8_t lsb);
+hal_status_t hal_text_format_mac_ex(const uint8_t mac[6], char *buffer,
+                                    size_t buffer_size);
 char *hal_text_format_binary_int(int value, char *buffer, size_t buffer_size);
 hal_status_t hal_text_concat_ex(char *destination, size_t destination_size,
                                  const char *first, const char *second);

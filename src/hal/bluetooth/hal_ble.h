@@ -16,6 +16,7 @@
  */
 
 #include "hal/core/hal_status.h"
+#include "hal/core/hal_text.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -26,7 +27,7 @@ extern "C" {
 #endif
 
 #define HAL_BLE_ADDRESS_LEN 6u
-#define HAL_BLE_ADDRESS_TEXT_SIZE 18u
+#define HAL_BLE_ADDRESS_TEXT_SIZE HAL_TEXT_MAC_STRING_SIZE
 #define HAL_BLE_LEGACY_ADV_MAX_DATA_LEN 31u
 #define HAL_BLE_DEFAULT_ATT_MTU 23u
 #define HAL_BLE_INVALID_HANDLE UINT32_C(0)
@@ -136,6 +137,12 @@ typedef struct {
   uint8_t disconnect_reason;
 } hal_ble_event_t;
 
+/**
+ * @brief Receive one event while hal_ble_poll() is outside the radio lock.
+ * @param event Borrowed event valid only for the duration of the callback;
+ * never NULL.
+ * @param context Value registered by hal_ble_set_event_callback(); may be NULL.
+ */
 typedef void (*hal_ble_event_callback_t)(const hal_ble_event_t *event,
                                          void *context);
 
@@ -156,67 +163,149 @@ typedef struct {
   hal_ble_address_t peer_address;
 } hal_ble_info_t;
 
-/** Initialize the BLE host and controller. Idempotent after a successful call.
+/**
+ * @brief Initialize the BLE host and controller.
+ * @return HAL_OK on success or when already initialized; HAL_ENOMEM when the
+ * runtime lock cannot be created, HAL_EBUSY during another lifecycle change,
+ * HAL_ECONFIG for an incomplete backend, or a controller startup error.
  */
 hal_status_t hal_ble_initialize(void);
 
-/** Stop BLE and invalidate all connection and advertising handles. */
+/**
+ * @brief Stop BLE and invalidate all connection and advertising handles.
+ * @return HAL_OK on success, HAL_EUNINIT before initialization, HAL_EBUSY
+ * during another operation, or a controller shutdown error.
+ */
 hal_status_t hal_ble_deinitialize(void);
 
-/** Service the controller and dispatch queued callbacks outside the radio lock.
+/**
+ * @brief Service the controller and dispatch callbacks outside the radio lock.
+ * @return HAL_OK on success, HAL_EUNINIT before initialization, HAL_EBUSY
+ * during a lifecycle operation, or a controller service error.
  */
 hal_status_t hal_ble_poll(void);
 
-/** Read a consistent subsystem snapshot. */
+/**
+ * @brief Read a consistent subsystem snapshot.
+ * @param out_info Receives the snapshot; must not be NULL.
+ * @return HAL_OK, HAL_EINVAL for a NULL output, HAL_EUNINIT before
+ * initialization, or HAL_ENOMEM when the runtime lock cannot be created.
+ */
 hal_status_t hal_ble_get_info(hal_ble_info_t *out_info);
 
-/** Read the local controller address after the ready event. */
+/**
+ * @brief Read the local controller address after the ready event.
+ * @param out_address Receives the address; must not be NULL.
+ * @return HAL_OK, HAL_EINVAL for a NULL output, HAL_EUNINIT before
+ * initialization, HAL_EAGAIN while starting, HAL_EHW after startup failure,
+ * or HAL_ENOMEM when the runtime lock cannot be created.
+ */
 hal_status_t hal_ble_get_local_address(hal_ble_address_t *out_address);
 
-/** Format an address as XX:XX:XX:XX:XX:XX including the trailing NUL. */
+/**
+ * @brief Format an address as `XX:XX:XX:XX:XX:XX`.
+ * @param address Address to format; must not be NULL.
+ * @param out Destination buffer; must not be NULL.
+ * @param out_size Capacity including the terminator; at least
+ * HAL_BLE_ADDRESS_TEXT_SIZE bytes.
+ * @return HAL_OK, HAL_EINVAL for invalid input, or a formatting error.
+ */
 hal_status_t hal_ble_format_address(const hal_ble_address_t *address, char *out,
                                     size_t out_size);
 
-/** Queue connectable legacy advertising with a copied 31-byte payload. */
+/**
+ * @brief Queue connectable legacy advertising with a copied payload.
+ * @param config Advertising intervals and at most
+ * HAL_BLE_LEGACY_ADV_MAX_DATA_LEN bytes; must not be NULL.
+ * @param out_handle Receives the new handle; must not be NULL.
+ * @return HAL_OK when queued; HAL_EINVAL for invalid input, HAL_EUNINIT before
+ * initialization, HAL_EBUSY during another operation, or HAL_ESTATE when the
+ * current BLE state cannot advertise.
+ */
 hal_status_t
 hal_ble_advertising_start(const hal_ble_advertising_config_t *config,
                           hal_ble_advertising_handle_t *out_handle);
 
-/** Stop the active or pending advertising request. */
+/**
+ * @brief Stop the active or pending advertising request.
+ * @param advertising Handle returned by hal_ble_advertising_start().
+ * @return HAL_OK when queued; HAL_EINVAL for an invalid handle,
+ * HAL_EUNINIT before initialization, HAL_EBUSY during another operation, or
+ * HAL_ESTATE when advertising is not active.
+ */
 hal_status_t hal_ble_advertising_stop(hal_ble_advertising_handle_t advertising);
 
-/** Queue disconnection of the current Peripheral link. */
+/**
+ * @brief Queue disconnection of the current Peripheral link.
+ * @param connection Current connection handle.
+ * @return HAL_OK when queued; HAL_EINVAL for an invalid handle,
+ * HAL_EUNINIT before initialization, HAL_EBUSY during another operation, or
+ * HAL_ESTATE when no matching connection is active.
+ */
 hal_status_t hal_ble_disconnect(hal_ble_connection_handle_t connection);
 
-/** Read the negotiated ATT MTU for the current connection. */
+/**
+ * @brief Read the negotiated ATT MTU for the current connection.
+ * @param connection Current connection handle.
+ * @param out_mtu Receives the MTU; must not be NULL.
+ * @return HAL_OK, HAL_EINVAL for invalid input, HAL_EUNINIT before
+ * initialization, or HAL_ESTATE when the connection is not active.
+ */
 hal_status_t hal_ble_get_mtu(hal_ble_connection_handle_t connection,
                              uint16_t *out_mtu);
 
-/** Start passive legacy scanning. Advertising and connections must be idle. */
+/**
+ * @brief Start passive legacy scanning.
+ * @param config Scan interval, window and duplicate policy; must not be NULL.
+ * @return HAL_OK when queued; HAL_EINVAL for invalid timing, HAL_EUNINIT
+ * before initialization, HAL_EBUSY during another operation, or HAL_ESTATE
+ * while advertising, connected or already scanning.
+ */
 hal_status_t hal_ble_scan_start(const hal_ble_scan_config_t *config);
 
-/** Stop active or pending passive scanning. */
+/**
+ * @brief Stop active or pending passive scanning.
+ * @return HAL_OK when queued, HAL_EUNINIT before initialization, HAL_EBUSY
+ * during another operation, or HAL_ESTATE when scanning is not active.
+ */
 hal_status_t hal_ble_scan_stop(void);
 
 /**
- * Pop one copied scan report. HAL_EOVERFLOW acknowledges dropped reports;
- * call again to receive the oldest retained report.
+ * @brief Pop one copied scan report.
+ * @param out_report Receives the oldest retained report; must not be NULL.
+ * @return HAL_OK, HAL_EINVAL for a NULL output, HAL_EUNINIT before
+ * initialization, HAL_EAGAIN when empty, or HAL_EOVERFLOW once after reports
+ * were dropped. Call again after HAL_EOVERFLOW to receive retained data.
  */
 hal_status_t hal_ble_scan_report_next(hal_ble_advertising_report_t *out_report);
 
 /**
- * Parse the next length-prefixed AD field from a copied report. Start with an
- * offset of zero. HAL_EAGAIN means end of payload and HAL_EIO malformed data.
+ * @brief Parse the next length-prefixed AD field from a copied report.
+ * @param report Copied report to parse; must not be NULL.
+ * @param offset In/out byte offset; initialize to zero.
+ * @param out_field Receives a borrowed view into @p report; must not be NULL.
+ * @return HAL_OK, HAL_EINVAL for invalid pointers or offset, HAL_EAGAIN at the
+ * end of the payload, or HAL_EIO for malformed AD data.
  */
 hal_status_t
 hal_ble_advertising_field_next(const hal_ble_advertising_report_t *report,
                                size_t *offset,
                                hal_ble_advertising_field_t *out_field);
 
-/** Pop one copied event, or return HAL_EAGAIN when the queue is empty. */
+/**
+ * @brief Pop one copied event.
+ * @param out_event Receives the oldest event; must not be NULL.
+ * @return HAL_OK, HAL_EINVAL for a NULL output, HAL_EUNINIT before
+ * initialization, HAL_EAGAIN when empty, or HAL_EOVERFLOW once after drops.
+ */
 hal_status_t hal_ble_event_next(hal_ble_event_t *out_event);
 
-/** Register one callback drained by hal_ble_poll(), or pass NULL to disable it.
+/**
+ * @brief Register the callback drained by hal_ble_poll().
+ * @param callback Callback to register, or NULL to disable callbacks.
+ * @param context Opaque value passed to @p callback; may be NULL.
+ * @return HAL_OK, HAL_EUNINIT before initialization, or HAL_ENOMEM when the
+ * runtime lock cannot be created.
  */
 hal_status_t hal_ble_set_event_callback(hal_ble_event_callback_t callback,
                                         void *context);

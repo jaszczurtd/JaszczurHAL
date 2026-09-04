@@ -1,6 +1,42 @@
 include_guard(GLOBAL)
 
-function(_jh_target_enable_btstack TARGET_NAME MODE)
+function(_jh_target_enable_btstack TARGET_NAME)
+    cmake_parse_arguments(JH_BTSTACK
+        "STAGE1;CLASSIC_HID;CLASSIC_HID_DEVICE_FIXTURE;BLE;BLE_STREAM;CLASSIC;HID_HOST"
+        "" "" ${ARGN})
+    if(JH_BTSTACK_UNPARSED_ARGUMENTS)
+        message(FATAL_ERROR
+            "Unknown JaszczurHAL BTstack arguments: "
+            "${JH_BTSTACK_UNPARSED_ARGUMENTS}")
+    endif()
+
+    set(_jh_private_mode_count 0)
+    foreach(_jh_private_mode IN ITEMS
+            STAGE1 CLASSIC_HID CLASSIC_HID_DEVICE_FIXTURE)
+        if(JH_BTSTACK_${_jh_private_mode})
+            math(EXPR _jh_private_mode_count "${_jh_private_mode_count} + 1")
+        endif()
+    endforeach()
+    if(_jh_private_mode_count GREATER 1)
+        message(FATAL_ERROR "BTstack private modes are mutually exclusive")
+    endif()
+    if(_jh_private_mode_count GREATER 0 AND
+       (JH_BTSTACK_BLE OR JH_BTSTACK_BLE_STREAM OR JH_BTSTACK_CLASSIC OR
+        JH_BTSTACK_HID_HOST))
+        message(FATAL_ERROR
+            "A BTstack private mode cannot use public profile arguments")
+    endif()
+    if(JH_BTSTACK_BLE_STREAM)
+        set(JH_BTSTACK_BLE TRUE)
+    endif()
+    if(JH_BTSTACK_HID_HOST)
+        set(JH_BTSTACK_CLASSIC TRUE)
+    endif()
+    if(_jh_private_mode_count EQUAL 0 AND
+       NOT JH_BTSTACK_BLE AND NOT JH_BTSTACK_CLASSIC)
+        message(FATAL_ERROR "BTstack requires at least one profile")
+    endif()
+
     set(_jh_btstack_root "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../third_party/BTstack")
     set(_jh_bluetooth_root
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/hal/bluetooth")
@@ -73,7 +109,7 @@ function(_jh_target_enable_btstack TARGET_NAME MODE)
         "${_jh_bluetooth_root}/jh_bluetooth_classic_hid_probe.c")
     set(_jh_jh_public_classic_sources
         "${_jh_bluetooth_root}/jh_bluetooth_classic_btstack_backend.c")
-    if(MODE STREQUAL "STAGE1")
+    if(JH_BTSTACK_STAGE1)
         set(_jh_mode_upstream_sources ${_jh_btstack_ble_sources})
         set(_jh_mode_jh_sources
             "${_jh_bluetooth_root}/jh_bluetooth_stage1_probe.c")
@@ -82,107 +118,61 @@ function(_jh_target_enable_btstack TARGET_NAME MODE)
         set(_jh_mode_definitions
             ENABLE_BLE=1
             JH_BLUETOOTH_STAGE1_PROBE=1)
-    elseif(MODE STREQUAL "PUBLIC" OR MODE STREQUAL "PUBLIC_STREAM")
-        set(_jh_mode_upstream_sources ${_jh_btstack_ble_sources})
-        set(_jh_mode_jh_sources
-            "${_jh_bluetooth_root}/jh_ble_btstack_backend.c")
-        set(_jh_gatt_header "jh_ble_peripheral_gatt.h")
-        set(_jh_mode_definitions
-            ENABLE_BLE=1
-            JH_BLUETOOTH_PUBLIC_BLE=1
-            ENABLE_LE_CENTRAL=1)
-        if(MODE STREQUAL "PUBLIC_STREAM")
-            list(APPEND _jh_mode_jh_sources
-                "${_jh_bluetooth_root}/jh_ble_stream_session.c")
-            set(_jh_gatt_source "${_jh_bluetooth_root}/jh_ble_stream.gatt")
-            list(APPEND _jh_mode_definitions JH_BLUETOOTH_BLE_STREAM=1)
-        else()
-            set(_jh_gatt_source "${_jh_bluetooth_root}/jh_ble_peripheral.gatt")
-        endif()
-    elseif(MODE STREQUAL "CLASSIC_HID" OR MODE STREQUAL "PUBLIC_HID_HOST")
+    elseif(JH_BTSTACK_CLASSIC_HID)
         set(_jh_mode_upstream_sources
             ${_jh_btstack_classic_sources}
             ${_jh_btstack_hid_host_sources})
+        set(_jh_mode_jh_sources ${_jh_jh_classic_hid_sources})
         set(_jh_mode_definitions
             ENABLE_CLASSIC=1
-            ENABLE_SDP_EXTRA_QUERIES=1)
-        if(MODE STREQUAL "CLASSIC_HID")
-            set(_jh_mode_jh_sources ${_jh_jh_classic_hid_sources})
-            list(APPEND _jh_mode_definitions
-                HAL_ENABLE_CRC=1
-                JH_BLUETOOTH_CLASSIC_HID_PROBE=1)
-        else()
-            set(_jh_mode_jh_sources ${_jh_jh_public_classic_sources})
-            list(APPEND _jh_mode_definitions
-                JH_BLUETOOTH_PUBLIC_CLASSIC=1
-                JH_BLUETOOTH_PUBLIC_HID_HOST=1)
-        endif()
-    elseif(MODE STREQUAL "CLASSIC_HID_DEVICE_FIXTURE")
+            ENABLE_SDP_EXTRA_QUERIES=1
+            HAL_ENABLE_CRC=1
+            JH_BLUETOOTH_CLASSIC_HID_PROBE=1)
+    elseif(JH_BTSTACK_CLASSIC_HID_DEVICE_FIXTURE)
         set(_jh_mode_upstream_sources
             ${_jh_btstack_classic_sources}
             ${_jh_btstack_hid_device_sources})
         set(_jh_mode_definitions
             ENABLE_CLASSIC=1
             JH_BLUETOOTH_CLASSIC_HID_DEVICE_FIXTURE=1)
-    elseif(MODE STREQUAL "PUBLIC_CLASSIC")
-        set(_jh_mode_upstream_sources ${_jh_btstack_classic_sources})
-        set(_jh_mode_jh_sources ${_jh_jh_public_classic_sources})
-        set(_jh_mode_definitions
-            ENABLE_CLASSIC=1
-            ENABLE_SDP_EXTRA_QUERIES=1
-            JH_BLUETOOTH_PUBLIC_CLASSIC=1)
-    elseif(MODE STREQUAL "PUBLIC_CLASSIC_BLE" OR
-           MODE STREQUAL "PUBLIC_CLASSIC_BLE_STREAM")
-        set(_jh_mode_upstream_sources
-            ${_jh_btstack_ble_sources}
-            ${_jh_btstack_classic_sources})
-        set(_jh_mode_jh_sources
-            "${_jh_bluetooth_root}/jh_ble_btstack_backend.c"
-            ${_jh_jh_public_classic_sources})
-        set(_jh_gatt_header "jh_ble_peripheral_gatt.h")
-        set(_jh_mode_definitions
-            ENABLE_BLE=1
-            ENABLE_CLASSIC=1
-            ENABLE_LE_CENTRAL=1
-            ENABLE_SDP_EXTRA_QUERIES=1
-            JH_BLUETOOTH_PUBLIC_BLE=1
-            JH_BLUETOOTH_PUBLIC_CLASSIC=1)
-        if(MODE STREQUAL "PUBLIC_CLASSIC_BLE_STREAM")
-            list(APPEND _jh_mode_jh_sources
-                "${_jh_bluetooth_root}/jh_ble_stream_session.c")
-            set(_jh_gatt_source "${_jh_bluetooth_root}/jh_ble_stream.gatt")
-            list(APPEND _jh_mode_definitions JH_BLUETOOTH_BLE_STREAM=1)
-        else()
-            set(_jh_gatt_source "${_jh_bluetooth_root}/jh_ble_peripheral.gatt")
-        endif()
-    elseif(MODE STREQUAL "PUBLIC_HID_HOST_BLE" OR
-           MODE STREQUAL "PUBLIC_HID_HOST_BLE_STREAM")
-        set(_jh_mode_upstream_sources
-            ${_jh_btstack_ble_sources}
-            ${_jh_btstack_classic_sources}
-            ${_jh_btstack_hid_host_sources})
-        set(_jh_mode_jh_sources
-            "${_jh_bluetooth_root}/jh_ble_btstack_backend.c"
-            ${_jh_jh_public_classic_sources})
-        set(_jh_gatt_header "jh_ble_peripheral_gatt.h")
-        set(_jh_mode_definitions
-            ENABLE_BLE=1
-            ENABLE_CLASSIC=1
-            ENABLE_LE_CENTRAL=1
-            ENABLE_SDP_EXTRA_QUERIES=1
-            JH_BLUETOOTH_PUBLIC_BLE=1
-            JH_BLUETOOTH_PUBLIC_CLASSIC=1
-            JH_BLUETOOTH_PUBLIC_HID_HOST=1)
-        if(MODE STREQUAL "PUBLIC_HID_HOST_BLE_STREAM")
-            list(APPEND _jh_mode_jh_sources
-                "${_jh_bluetooth_root}/jh_ble_stream_session.c")
-            set(_jh_gatt_source "${_jh_bluetooth_root}/jh_ble_stream.gatt")
-            list(APPEND _jh_mode_definitions JH_BLUETOOTH_BLE_STREAM=1)
-        else()
-            set(_jh_gatt_source "${_jh_bluetooth_root}/jh_ble_peripheral.gatt")
-        endif()
     else()
-        message(FATAL_ERROR "Unknown JaszczurHAL BTstack mode: ${MODE}")
+        if(JH_BTSTACK_BLE)
+            list(APPEND _jh_mode_upstream_sources ${_jh_btstack_ble_sources})
+            list(APPEND _jh_mode_jh_sources
+                "${_jh_bluetooth_root}/jh_ble_btstack_backend.c")
+            set(_jh_gatt_header "jh_ble_peripheral_gatt.h")
+            list(APPEND _jh_mode_definitions
+                ENABLE_BLE=1
+                ENABLE_LE_CENTRAL=1
+                JH_BLUETOOTH_PUBLIC_BLE=1)
+            if(JH_BTSTACK_BLE_STREAM)
+                list(APPEND _jh_mode_jh_sources
+                    "${_jh_bluetooth_root}/jh_ble_stream_session.c")
+                set(_jh_gatt_source
+                    "${_jh_bluetooth_root}/jh_ble_stream.gatt")
+                list(APPEND _jh_mode_definitions
+                    JH_BLUETOOTH_BLE_STREAM=1)
+            else()
+                set(_jh_gatt_source
+                    "${_jh_bluetooth_root}/jh_ble_peripheral.gatt")
+            endif()
+        endif()
+        if(JH_BTSTACK_CLASSIC)
+            list(APPEND _jh_mode_upstream_sources
+                ${_jh_btstack_classic_sources})
+            list(APPEND _jh_mode_jh_sources
+                ${_jh_jh_public_classic_sources})
+            list(APPEND _jh_mode_definitions
+                ENABLE_CLASSIC=1
+                ENABLE_SDP_EXTRA_QUERIES=1
+                JH_BLUETOOTH_PUBLIC_CLASSIC=1)
+        endif()
+        if(JH_BTSTACK_HID_HOST)
+            list(APPEND _jh_mode_upstream_sources
+                ${_jh_btstack_hid_host_sources})
+            list(APPEND _jh_mode_definitions
+                JH_BLUETOOTH_PUBLIC_HID_HOST=1)
+        endif()
     endif()
     set(_jh_btstack_upstream_sources
         ${_jh_btstack_base_sources}
@@ -230,7 +220,7 @@ function(_jh_target_enable_btstack TARGET_NAME MODE)
         HAVE_BTSTACK_CONFIG_H=1
         JH_BLUETOOTH_BTSTACK=1
         ${_jh_mode_definitions})
-    if(MODE STREQUAL "CLASSIC_HID")
+    if(JH_BTSTACK_CLASSIC_HID)
         # The BTstack sources are compiled into the static HAL target, while
         # GNU --wrap is evaluated only by the final firmware link. Propagate
         # these options to that link so the probe sees real pool activity.
@@ -255,14 +245,6 @@ function(jh_target_enable_btstack_stage1 TARGET_NAME)
     _jh_target_enable_btstack(${TARGET_NAME} STAGE1)
 endfunction()
 
-function(jh_target_enable_btstack_ble TARGET_NAME)
-    _jh_target_enable_btstack(${TARGET_NAME} PUBLIC)
-endfunction()
-
-function(jh_target_enable_btstack_ble_stream TARGET_NAME)
-    _jh_target_enable_btstack(${TARGET_NAME} PUBLIC_STREAM)
-endfunction()
-
 function(jh_target_enable_btstack_classic_hid TARGET_NAME)
     _jh_target_enable_btstack(${TARGET_NAME} CLASSIC_HID)
 endfunction()
@@ -271,26 +253,6 @@ function(jh_target_enable_btstack_classic_hid_device_fixture TARGET_NAME)
     _jh_target_enable_btstack(${TARGET_NAME} CLASSIC_HID_DEVICE_FIXTURE)
 endfunction()
 
-function(jh_target_enable_btstack_classic TARGET_NAME)
-    _jh_target_enable_btstack(${TARGET_NAME} PUBLIC_CLASSIC)
-endfunction()
-
-function(jh_target_enable_btstack_classic_ble TARGET_NAME)
-    _jh_target_enable_btstack(${TARGET_NAME} PUBLIC_CLASSIC_BLE)
-endfunction()
-
-function(jh_target_enable_btstack_classic_ble_stream TARGET_NAME)
-    _jh_target_enable_btstack(${TARGET_NAME} PUBLIC_CLASSIC_BLE_STREAM)
-endfunction()
-
-function(jh_target_enable_btstack_hid_host TARGET_NAME)
-    _jh_target_enable_btstack(${TARGET_NAME} PUBLIC_HID_HOST)
-endfunction()
-
-function(jh_target_enable_btstack_hid_host_ble TARGET_NAME)
-    _jh_target_enable_btstack(${TARGET_NAME} PUBLIC_HID_HOST_BLE)
-endfunction()
-
-function(jh_target_enable_btstack_hid_host_ble_stream TARGET_NAME)
-    _jh_target_enable_btstack(${TARGET_NAME} PUBLIC_HID_HOST_BLE_STREAM)
+function(jh_target_enable_btstack_profiles TARGET_NAME)
+    _jh_target_enable_btstack(${TARGET_NAME} ${ARGN})
 endfunction()

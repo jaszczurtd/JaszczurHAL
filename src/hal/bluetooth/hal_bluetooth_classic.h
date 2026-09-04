@@ -14,6 +14,7 @@
  */
 
 #include "hal/core/hal_status.h"
+#include "hal/core/hal_text.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -24,7 +25,7 @@ extern "C" {
 #endif
 
 #define HAL_BLUETOOTH_CLASSIC_ADDRESS_LEN 6u
-#define HAL_BLUETOOTH_CLASSIC_ADDRESS_TEXT_SIZE 18u
+#define HAL_BLUETOOTH_CLASSIC_ADDRESS_TEXT_SIZE HAL_TEXT_MAC_STRING_SIZE
 #define HAL_BLUETOOTH_CLASSIC_NAME_MAX_LEN 63u
 #define HAL_BLUETOOTH_CLASSIC_BOND_BLOB_SIZE 38u
 
@@ -91,15 +92,33 @@ typedef struct {
   uint8_t bytes[HAL_BLUETOOTH_CLASSIC_BOND_BLOB_SIZE];
 } hal_bluetooth_classic_bond_blob_t;
 
-/** Load a record slot, or return HAL_ENOENT when the slot is empty. */
+/**
+ * @brief Load one bonded-peer record.
+ * @param context Provider context; may be NULL when supported by the provider.
+ * @param index Slot index smaller than the provider capacity.
+ * @param out_blob Receives the opaque record; must not be NULL.
+ * @return HAL_OK, HAL_ENOENT for an empty slot, or a provider error.
+ */
 typedef hal_status_t (*hal_bluetooth_classic_bond_load_fn)(
     void *context, size_t index, hal_bluetooth_classic_bond_blob_t *out_blob);
 
-/** Store a complete record in the selected slot. */
+/**
+ * @brief Store one complete bonded-peer record.
+ * @param context Provider context; may be NULL when supported by the provider.
+ * @param index Slot index smaller than the provider capacity.
+ * @param blob Opaque record to store atomically; must not be NULL.
+ * @return HAL_OK or a provider error. Failure must preserve the previously
+ * published record.
+ */
 typedef hal_status_t (*hal_bluetooth_classic_bond_store_fn)(
     void *context, size_t index, const hal_bluetooth_classic_bond_blob_t *blob);
 
-/** Erase one record slot. An already empty slot should return HAL_OK. */
+/**
+ * @brief Erase one bonded-peer record.
+ * @param context Provider context; may be NULL when supported by the provider.
+ * @param index Slot index smaller than the provider capacity.
+ * @return HAL_OK, including for an empty slot, or a provider error.
+ */
 typedef hal_status_t (*hal_bluetooth_classic_bond_erase_fn)(void *context,
                                                             size_t index);
 
@@ -134,52 +153,130 @@ typedef struct {
 typedef struct hal_bluetooth_classic_impl_s hal_bluetooth_classic_impl_t;
 typedef hal_bluetooth_classic_impl_t *hal_bluetooth_classic_t;
 
-/** Open the Classic manager with RAM-only peer storage. */
+/**
+ * @brief Open the Classic manager with RAM-only peer storage.
+ * @param out_classic Receives the manager handle and is cleared on entry; must
+ * not be NULL.
+ * @return HAL_OK, HAL_EINVAL for a NULL output, HAL_EBUSY when already open,
+ * HAL_ENOMEM for runtime allocation failure, HAL_ECONFIG for an incomplete
+ * backend, HAL_EUNSUPPORTED without Classic hardware, or a startup error.
+ */
 hal_status_t hal_bluetooth_classic_open(hal_bluetooth_classic_t *out_classic);
 
-/** Open the Classic manager and restore records from an optional provider. */
+/**
+ * @brief Open the Classic manager and restore records from a provider.
+ * @param out_classic Receives the manager handle and is cleared on entry; must
+ * not be NULL.
+ * @param bond_provider Optional provider copied by the manager; NULL selects
+ * RAM-only storage. Capacity must be within HAL_BLUETOOTH_CLASSIC_MAX_PEERS
+ * and all callbacks must be present.
+ * @return The same statuses as hal_bluetooth_classic_open(), HAL_EINVAL for an
+ * invalid provider, or an error returned while loading/restoring records.
+ */
 hal_status_t hal_bluetooth_classic_open_ex(
     hal_bluetooth_classic_t *out_classic,
     const hal_bluetooth_classic_bond_provider_t *bond_provider);
 
-/** Close the manager. Active profile handles must be closed first. */
+/**
+ * @brief Close the manager and erase in-memory link-key copies.
+ * @param classic Live manager handle.
+ * @return HAL_OK, HAL_EUNINIT for an invalid or stale handle, HAL_EBUSY while
+ * a profile remains attached, HAL_ENOMEM when the runtime lock cannot be
+ * created, or a backend shutdown error.
+ */
 hal_status_t hal_bluetooth_classic_close(hal_bluetooth_classic_t classic);
 
-/** Service the controller and commit pending peer records outside callbacks. */
+/**
+ * @brief Service the controller and commit pending peers outside callbacks.
+ * @param classic Live manager handle.
+ * @return HAL_OK, HAL_EUNINIT for an invalid handle, HAL_EBUSY during another
+ * operation, HAL_EOVERFLOW when no peer slot is available, a provider error,
+ * or a backend service/restore error.
+ */
 hal_status_t hal_bluetooth_classic_poll(hal_bluetooth_classic_t classic);
 
-/** Read manager state and bounded-queue diagnostics. */
+/**
+ * @brief Read manager state and bounded-queue diagnostics.
+ * @param classic Live manager handle.
+ * @param out_info Receives the snapshot; must not be NULL.
+ * @return HAL_OK, HAL_EINVAL for a NULL output, HAL_EUNINIT for an invalid
+ * handle, HAL_EBUSY during another operation, or HAL_ENOMEM.
+ */
 hal_status_t
 hal_bluetooth_classic_get_info(hal_bluetooth_classic_t classic,
                                hal_bluetooth_classic_info_t *out_info);
 
-/** Start a bounded inquiry window. duration_ms must be in 1..120000. */
+/**
+ * @brief Start a bounded inquiry window.
+ * @param classic Live manager handle.
+ * @param duration_ms Inquiry duration from 1 through 120000 milliseconds.
+ * @return HAL_OK when queued; HAL_EINVAL for invalid duration, HAL_EUNINIT for
+ * an invalid handle, HAL_EBUSY during another operation, HAL_ESTATE unless the
+ * manager is ready and idle, or a backend error.
+ */
 hal_status_t hal_bluetooth_classic_scan_start(hal_bluetooth_classic_t classic,
                                               uint32_t duration_ms);
 
-/** Stop the active inquiry window. */
+/**
+ * @brief Stop the active inquiry window.
+ * @param classic Live manager handle.
+ * @return HAL_OK when queued; HAL_EUNINIT for an invalid handle, HAL_EBUSY
+ * during another operation, HAL_ESTATE when no scan is active, or a backend
+ * error.
+ */
 hal_status_t hal_bluetooth_classic_scan_stop(hal_bluetooth_classic_t classic);
 
-/** Pop one copied inquiry/SDP result. */
+/**
+ * @brief Pop one copied inquiry/SDP result.
+ * @param classic Live manager handle.
+ * @param out_result Receives the oldest retained result; must not be NULL.
+ * @return HAL_OK, HAL_EINVAL for a NULL output, HAL_EUNINIT for an invalid
+ * handle, HAL_EAGAIN when empty, HAL_EOVERFLOW once after dropped results, or
+ * HAL_ENOMEM.
+ */
 hal_status_t hal_bluetooth_classic_scan_result_next(
     hal_bluetooth_classic_t classic,
     hal_bluetooth_classic_scan_result_t *out_result);
 
-/** Resolve the supported SDP service classes for one discovered address. */
+/**
+ * @brief Resolve supported SDP service classes for a discovered address.
+ * @param classic Live manager handle.
+ * @param address Nonzero peer address; must not be NULL.
+ * @return HAL_OK when queued; HAL_EINVAL for invalid input, HAL_EUNINIT for an
+ * invalid handle, HAL_EBUSY during another operation, or a backend error.
+ */
 hal_status_t
 hal_bluetooth_classic_sdp_query(hal_bluetooth_classic_t classic,
                                 const hal_bluetooth_classic_address_t *address);
 
-/** Start dedicated bonding with a discovered peer. */
+/**
+ * @brief Start dedicated bonding with a discovered peer.
+ * @param classic Live manager handle.
+ * @param address Nonzero peer address; must not be NULL.
+ * @return HAL_OK when queued; HAL_EINVAL for invalid input, HAL_EUNINIT for an
+ * invalid handle, HAL_EBUSY during another operation, or a backend error.
+ */
 hal_status_t
 hal_bluetooth_classic_pair(hal_bluetooth_classic_t classic,
                            const hal_bluetooth_classic_address_t *address);
 
-/** Approve the current pairing request. PIN pairing uses "0000". */
+/**
+ * @brief Approve the current pairing request; PIN pairing uses `0000`.
+ * @param classic Live manager handle.
+ * @return HAL_OK when queued, HAL_EUNINIT for an invalid handle, HAL_ESTATE
+ * without a pending request, HAL_EBUSY during another operation, HAL_ENOMEM,
+ * or a backend error.
+ */
 hal_status_t
 hal_bluetooth_classic_pairing_authorize(hal_bluetooth_classic_t classic);
 
-/** Reject the current pairing request. */
+/**
+ * @brief Reject the current pairing request.
+ * @param classic Live manager handle.
+ * @return HAL_OK when queued, HAL_EUNINIT for an invalid handle, HAL_ESTATE
+ * without a pending request, HAL_EBUSY during another operation, HAL_ENOMEM,
+ * or a backend error.
+ */
 hal_status_t
 hal_bluetooth_classic_pairing_reject(hal_bluetooth_classic_t classic);
 
@@ -189,17 +286,40 @@ hal_bluetooth_classic_pairing_reject(hal_bluetooth_classic_t classic);
  * the only persisted copy of the link key. Re-saving an already known peer
  * with the same profile_id is an idempotent no-op and does not require a new
  * pairing authorization.
+ *
+ * @param classic Live manager handle.
+ * @param address Nonzero authenticated peer address; must not be NULL.
+ * @param profile_id Nonzero identifier owned by the validating profile.
+ * @return HAL_OK when staged or already saved; HAL_EINVAL for invalid input,
+ * HAL_EUNINIT for an invalid handle, HAL_EBUSY during another operation,
+ * HAL_EAUTH without local authorization, or HAL_ENOMEM.
  */
 hal_status_t
 hal_bluetooth_classic_peer_save(hal_bluetooth_classic_t classic,
                                 const hal_bluetooth_classic_address_t *address,
                                 uint16_t profile_id);
 
-/** Return the number of restored or newly saved peers. */
+/**
+ * @brief Return the number of restored or newly saved peers.
+ * @param classic Live manager handle.
+ * @param out_count Receives a value up to HAL_BLUETOOTH_CLASSIC_MAX_PEERS;
+ * must not be NULL.
+ * @return HAL_OK, HAL_EINVAL for a NULL output, HAL_EUNINIT for an invalid
+ * handle, or HAL_ENOMEM.
+ */
 hal_status_t hal_bluetooth_classic_peer_count(hal_bluetooth_classic_t classic,
                                               size_t *out_count);
 
-/** Copy one peer by its dense runtime index. */
+/**
+ * @brief Copy one peer by its dense runtime index.
+ * @param classic Live manager handle.
+ * @param index Dense index smaller than the value returned by
+ * hal_bluetooth_classic_peer_count().
+ * @param out_peer Receives public peer metadata without the link key; must not
+ * be NULL.
+ * @return HAL_OK, HAL_EINVAL for a NULL output, HAL_ENOENT for an out-of-range
+ * index, HAL_EUNINIT for an invalid handle, or HAL_ENOMEM.
+ */
 hal_status_t
 hal_bluetooth_classic_peer_get(hal_bluetooth_classic_t classic, size_t index,
                                hal_bluetooth_classic_peer_t *out_peer);
@@ -210,12 +330,25 @@ hal_bluetooth_classic_peer_get(hal_bluetooth_classic_t classic, size_t index,
  * Persistent storage is erased first. If that operation fails, the runtime
  * peer remains available so the caller can retry without allowing the bond to
  * reappear unexpectedly after a restart.
+ *
+ * @param classic Live manager handle.
+ * @param address Nonzero saved peer address; must not be NULL.
+ * @return HAL_OK, HAL_EINVAL for invalid input, HAL_ENOENT for an unknown
+ * peer, HAL_EUNINIT for an invalid handle, HAL_EBUSY during another operation,
+ * HAL_ENOMEM, or a provider/backend erase error.
  */
 hal_status_t hal_bluetooth_classic_peer_forget(
     hal_bluetooth_classic_t classic,
     const hal_bluetooth_classic_address_t *address);
 
-/** Format an address as XX:XX:XX:XX:XX:XX including the trailing NUL. */
+/**
+ * @brief Format an address as `XX:XX:XX:XX:XX:XX`.
+ * @param address Address to format; must not be NULL.
+ * @param out Destination buffer; must not be NULL.
+ * @param out_size Capacity including the terminator; at least
+ * HAL_BLUETOOTH_CLASSIC_ADDRESS_TEXT_SIZE bytes.
+ * @return HAL_OK, HAL_EINVAL for invalid input, or a formatting error.
+ */
 hal_status_t hal_bluetooth_classic_format_address(
     const hal_bluetooth_classic_address_t *address, char *out, size_t out_size);
 

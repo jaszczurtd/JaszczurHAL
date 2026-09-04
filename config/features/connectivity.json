@@ -25,7 +25,8 @@
         "portableSources": [
           "src/hal/bluetooth/hal_bluetooth_classic.cpp",
           "src/hal/bluetooth/jh_bluetooth_classic_bond_codec.c",
-          "src/hal/bluetooth/jh_bluetooth_classic_bond_kv_provider.c"
+          "src/hal/bluetooth/jh_bluetooth_classic_bond_kv_provider.c",
+          "src/hal/security/jh_secure_random.cpp"
         ]
       },
       "implies": ["HAL_ENABLE_CRC"]

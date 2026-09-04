@@ -102,7 +102,11 @@ typedef struct {
   hal_status_t last_error;
 } hal_ble_commands_diagnostics_t;
 
-/** @brief Return defaults for the process-wide BLE Stream. */
+/**
+ * @brief Return defaults for the process-wide BLE Stream adapter.
+ * @return A configuration using the default router, request identifier 1 and
+ * HAL_BLE_COMMANDS_PARTIAL_FRAME_TIMEOUT_MS.
+ */
 hal_ble_commands_config_t hal_ble_commands_config_defaults(void);
 
 /**
@@ -110,6 +114,14 @@ hal_ble_commands_config_t hal_ble_commands_config_defaults(void);
  *
  * Only one adapter may consume the process-wide Stream. The Stream may be idle
  * at creation time; command traffic becomes available after authentication.
+ *
+ * @param config Router and timeout configuration; must not be NULL and is
+ * copied. A NULL router selects the process-wide default router.
+ * @param out_commands Receives the opaque handle and is cleared on entry; must
+ * not be NULL.
+ * @return HAL_OK, HAL_EINVAL for invalid input, HAL_EUNINIT when BLE Stream is
+ * stopped, HAL_EBUSY when the singleton is allocated, HAL_ENOMEM when a mutex
+ * cannot be created, or a router/handle allocation error.
  */
 hal_status_t hal_ble_commands_create(const hal_ble_commands_config_t *config,
                                      hal_ble_commands_t *out_commands);
@@ -119,6 +131,10 @@ hal_status_t hal_ble_commands_create(const hal_ble_commands_config_t *config,
  *
  * Pending wire data and unread application messages must first be processed or
  * consumed. A successful call invalidates the handle.
+ *
+ * @param commands Handle returned by hal_ble_commands_create().
+ * @return HAL_OK, HAL_EUNINIT for an invalid or stale handle, HAL_EBUSY while
+ * work or Stream traffic remains pending, or a synchronization error.
  */
 hal_status_t hal_ble_commands_destroy(hal_ble_commands_t commands);
 
@@ -127,6 +143,18 @@ hal_status_t hal_ble_commands_destroy(hal_ble_commands_t commands);
  *
  * The identifier advances when the bounded wire message is accepted by the
  * adapter. Delivery is completed incrementally by hal_ble_commands_process().
+ *
+ * @param commands Live adapter handle.
+ * @param command Null-terminated command name; must not be NULL or empty.
+ * @param encoding Payload encoding supported by hal_command_wire.
+ * @param arguments Optional payload; may be NULL only when
+ * @p arguments_length is zero.
+ * @param arguments_length Payload length bounded by the command-wire maximum.
+ * @param out_request_id Receives the allocated nonzero identifier and is
+ * cleared on entry; must not be NULL.
+ * @return HAL_OK when queued; HAL_EINVAL for invalid input, HAL_EAUTH without
+ * an authenticated session, HAL_EBUSY while another message is pending, or a
+ * framing, synchronization or handle error.
  */
 hal_status_t hal_ble_commands_request_start(hal_ble_commands_t commands,
                                             const char *command,
@@ -135,7 +163,18 @@ hal_status_t hal_ble_commands_request_start(hal_ble_commands_t commands,
                                             size_t arguments_length,
                                             uint32_t *out_request_id);
 
-/** @brief Queue one copied event for the authenticated peer. */
+/**
+ * @brief Queue one copied event for the authenticated peer.
+ * @param commands Live adapter handle.
+ * @param event Null-terminated event name; must not be NULL or empty.
+ * @param encoding Payload encoding supported by hal_command_wire.
+ * @param payload Optional payload; may be NULL only when @p payload_length is
+ * zero.
+ * @param payload_length Payload length bounded by the command-wire maximum.
+ * @return HAL_OK when queued; HAL_EINVAL for invalid input, HAL_EAUTH without
+ * an authenticated session, HAL_EBUSY while another message is pending, or a
+ * framing, synchronization or handle error.
+ */
 hal_status_t hal_ble_commands_event_start(hal_ble_commands_t commands,
                                           const char *event,
                                           hal_command_encoding_t encoding,
@@ -148,24 +187,47 @@ hal_status_t hal_ble_commands_event_start(hal_ble_commands_t commands,
  * Call hal_ble_poll() separately to service controller and Stream I/O. Each
  * call performs bounded work: at most one outgoing and one incoming Stream
  * chunk, plus at most one synchronous command dispatch.
+ *
+ * @param commands Live adapter handle.
+ * @return HAL_OK after progress, HAL_EAGAIN when idle, HAL_EBUSY on reentry,
+ * HAL_EAUTH when the session is unavailable for queued traffic, HAL_ETIMEOUT
+ * for an incomplete frame, or a Stream, framing, dispatch or handle error.
  */
 hal_status_t hal_ble_commands_process(hal_ble_commands_t commands);
 
 /**
  * @brief Copy and consume one received RESPONSE or EVENT.
  *
- * HAL_EAGAIN means no application-visible message is queued.
+ * @param commands Live adapter handle.
+ * @param out_message Receives the message and is cleared on entry; must not be
+ * NULL.
+ * @param out_peer_info Optional authenticated peer metadata; may be NULL.
+ * @return HAL_OK, HAL_EINVAL for a NULL message output, HAL_EAGAIN when no
+ * application-visible message is queued, or a synchronization/handle error.
  */
 hal_status_t
 hal_ble_commands_receive(hal_ble_commands_t commands,
                          hal_command_message_t *out_message,
                          hal_ble_commands_peer_info_t *out_peer_info);
 
-/** @brief Copy a current adapter and Stream snapshot. */
+/**
+ * @brief Copy a current adapter and Stream snapshot.
+ * @param commands Live adapter handle.
+ * @param out_info Receives the snapshot and is cleared on entry; must not be
+ * NULL.
+ * @return HAL_OK, HAL_EINVAL for a NULL output, or a Stream,
+ * synchronization or handle error.
+ */
 hal_status_t hal_ble_commands_get_info(hal_ble_commands_t commands,
                                        hal_ble_commands_info_t *out_info);
 
-/** @brief Copy per-adapter counters. */
+/**
+ * @brief Copy per-adapter counters.
+ * @param commands Live adapter handle.
+ * @param out_diagnostics Receives the counters; must not be NULL.
+ * @return HAL_OK, HAL_EINVAL for a NULL output, or a synchronization/handle
+ * error.
+ */
 hal_status_t hal_ble_commands_get_diagnostics(
     hal_ble_commands_t commands,
     hal_ble_commands_diagnostics_t *out_diagnostics);

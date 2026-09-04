@@ -4,6 +4,7 @@
                                  defined(HAL_NETWORK_BACKEND_ESP_IDF))
 
 #include "hal/core/hal_mutex_once.h"
+#include "hal/core/hal_text.h"
 #include "hal/network/hal_net.h"
 #include "hal/network/hal_wifi.h"
 #include "hal/network/jh_network_backend.h"
@@ -386,11 +387,7 @@ hal_status_t hal_wifi_get_mac_ex(char *out, size_t out_size) {
   if (status != HAL_OK) {
     return status;
   }
-  const int written =
-      snprintf(out, out_size, "%02X:%02X:%02X:%02X:%02X:%02X", (unsigned)mac[0],
-               (unsigned)mac[1], (unsigned)mac[2], (unsigned)mac[3],
-               (unsigned)mac[4], (unsigned)mac[5]);
-  return written >= 0 && (size_t)written < out_size ? HAL_OK : HAL_EOVERFLOW;
+  return hal_text_format_mac_ex(mac, out, out_size);
 }
 
 bool hal_wifi_get_mac(char *out, size_t out_size) {

@@ -180,48 +180,92 @@ typedef struct {
 } hal_ble_stream_payload_info_t;
 
 /**
- * Publish the service and reset session state. Requires an initialized
- * hal_ble subsystem. Idempotent after a successful call. A concurrent Stream
- * lifecycle transition returns HAL_EBUSY.
+ * @brief Publish the service and reset session state.
+ * @param config Capabilities and idle timeout; must not be NULL and is copied.
+ * @return HAL_OK on success or when already initialized; HAL_EINVAL for a
+ * NULL config, HAL_EUNINIT when BLE is stopped, HAL_ESTATE when BLE is not
+ * ready, HAL_EBUSY during another lifecycle change, HAL_EUNSUPPORTED for an
+ * incomplete backend, or a service publication error.
  */
 hal_status_t hal_ble_stream_initialize(const hal_ble_stream_config_t *config);
 
-/** Close any session, unpublish the stream and zero all key material.
- * A concurrent Stream lifecycle transition returns HAL_EBUSY.
+/**
+ * @brief Close the session, unpublish the stream and zero all key material.
+ * @return HAL_OK on success or when already stopped, HAL_EBUSY during another
+ * lifecycle change, HAL_ENOMEM when the runtime lock cannot be created, or a
+ * service unpublication error.
  */
 hal_status_t hal_ble_stream_deinitialize(void);
 
 /**
- * Install the per-device secret used for mutual proofs and session keys.
- * The caller keeps ownership; the copy is zeroed on deinitialize or clear.
+ * @brief Install the per-device secret used for proofs and session keys.
+ * @param secret Secret bytes copied by the profile; must not be NULL.
+ * @param length Length from HAL_BLE_STREAM_SECRET_MIN_LEN through
+ * HAL_BLE_STREAM_SECRET_MAX_LEN.
+ * @return HAL_OK, HAL_EINVAL for invalid input, HAL_EUNINIT before profile
+ * initialization, HAL_EBUSY during a lifecycle change, or HAL_ENOMEM.
+ * The stored copy is zeroed on deinitialize, clear or replacement.
  */
 hal_status_t hal_ble_stream_set_secret(const uint8_t *secret, size_t length);
 
-/** Zero the stored secret. Commissioning stays refused until a new secret. */
+/**
+ * @brief Zero the stored secret and close the active session.
+ * @return HAL_OK, HAL_EUNINIT before profile initialization, HAL_EBUSY during
+ * a lifecycle change, or HAL_ENOMEM. Authentication remains unavailable until
+ * a new secret is installed.
+ */
 hal_status_t hal_ble_stream_clear_secret(void);
 
 /**
- * Queue one authenticated payload for notification. HAL_EAGAIN reports
- * backpressure and HAL_EAUTH an unauthenticated session.
+ * @brief Queue one authenticated payload for notification.
+ * @param data Payload copied into the bounded transmit queue; must not be NULL.
+ * @param length Payload length from 1 through HAL_BLE_STREAM_MAX_PAYLOAD.
+ * @return HAL_OK when accepted; HAL_EINVAL for invalid input, HAL_EUNINIT
+ * before initialization, HAL_EAUTH without an authenticated session,
+ * HAL_EOVERFLOW when the ATT MTU is too small, HAL_EAGAIN on backpressure,
+ * HAL_EBUSY during a lifecycle change, or a backend error.
  */
 hal_status_t hal_ble_stream_send(const void *data, size_t length);
 
 /**
- * Pop one decrypted payload. HAL_EAGAIN means the queue is empty and
- * HAL_EOVERFLOW acknowledges dropped frames.
+ * @brief Pop one decrypted payload.
+ * @param out Destination buffer; must not be NULL.
+ * @param capacity Destination capacity in bytes; must be nonzero.
+ * @param out_length Receives the copied length and is set to zero on entry;
+ * must not be NULL.
+ * @return HAL_OK, HAL_EINVAL for invalid output, HAL_EUNINIT before
+ * initialization, HAL_EAGAIN when empty, HAL_EOVERFLOW for dropped frames or
+ * a short destination, HAL_EBUSY during a lifecycle change, or HAL_ENOMEM.
  */
 hal_status_t hal_ble_stream_receive(void *out, size_t capacity,
                                     size_t *out_length);
 
-/** @brief Pop one payload together with its immutable session metadata. */
+/**
+ * @brief Pop one payload together with immutable session metadata.
+ * @param out Destination buffer; must not be NULL.
+ * @param capacity Destination capacity in bytes; must be nonzero.
+ * @param out_length Receives the copied length; must not be NULL.
+ * @param out_payload_info Optional metadata output; may be NULL.
+ * @return The same statuses as hal_ble_stream_receive().
+ */
 hal_status_t
 hal_ble_stream_receive_ex(void *out, size_t capacity, size_t *out_length,
                           hal_ble_stream_payload_info_t *out_payload_info);
 
-/** Read a consistent stream snapshot. */
+/**
+ * @brief Read a consistent stream snapshot.
+ * @param out_info Receives the snapshot; must not be NULL.
+ * @return HAL_OK, HAL_EINVAL for a NULL output, or HAL_ENOMEM when the runtime
+ * lock cannot be created. The uninitialized state is a valid snapshot.
+ */
 hal_status_t hal_ble_stream_get_info(hal_ble_stream_info_t *out_info);
 
-/** Close the active session locally and zero its directional keys. */
+/**
+ * @brief Close the active session and zero its directional keys.
+ * @param reason Reason recorded in the session diagnostics.
+ * @return HAL_OK, HAL_EUNINIT before profile initialization, HAL_EBUSY during
+ * a lifecycle change, or HAL_ENOMEM. Closing an idle profile is allowed.
+ */
 hal_status_t hal_ble_stream_close_session(hal_ble_stream_close_reason_t reason);
 
 #ifdef __cplusplus
