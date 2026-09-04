@@ -60,7 +60,8 @@ float hal_ntc_steinhart(float divider_ratio, float nominal_resistance,
 float hal_ntc_read_temperature(uint8_t pin, int nominal_resistance,
                                int series_resistance) {
   const hal_adc_average_config_t adc_config = {
-      pin,  (uint16_t)HAL_ADC_UTIL_DEFAULT_SAMPLES, 10u,
+      pin,  (uint16_t)HAL_ADC_UTIL_DEFAULT_SAMPLES,
+      10u, // delay 10us between samples
       true, hal_adc_compensate_rp2040_12bit,
   };
   const hal_ntc_beta_config_t ntc_config = {

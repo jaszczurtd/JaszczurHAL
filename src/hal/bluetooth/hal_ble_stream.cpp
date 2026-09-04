@@ -6,6 +6,7 @@
 #include "hal/bluetooth/jh_ble_stream_runtime.h"
 #include "hal/bluetooth/jh_ble_stream_session.h"
 #include "hal/core/hal_mutex_once.h"
+#include "hal/core/jh_endian.h"
 #include "hal/security/jh_secure_random.h"
 #include "hal/system/hal_sync.h"
 #include "hal/system/hal_system.h"
@@ -119,11 +120,9 @@ uint64_t active_session_id_locked(void) {
   if (s_stream.state != HAL_BLE_STREAM_STATE_AUTHENTICATED) {
     return 0u;
   }
-  uint64_t value = 0u;
-  for (size_t index = 0u; index < HAL_BLE_STREAM_SESSION_ID_LEN; ++index) {
-    value |= (uint64_t)s_stream.session.session_id[index] << (index * 8u);
-  }
-  return value;
+  static_assert(HAL_BLE_STREAM_SESSION_ID_LEN == sizeof(uint64_t),
+                "BLE Stream session ID must remain 64-bit");
+  return jh_load_le64(s_stream.session.session_id);
 }
 
 bool active_session_matches_locked(uint32_t expected_generation,

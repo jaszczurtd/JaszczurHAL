@@ -19,14 +19,8 @@ nieprawidłowy argument, niezainicjalizowany backend, błąd magistrali, brak
 obiektu czy przepełnienie, bez tworzenia osobnej konwencji błędów dla każdego
 modułu.
 
-Podstawą migracji jest **funkcja zwracająca status**. To ona sprawdza
-argumenty, wywołuje backend i odwzorowuje błędy. Starsza funkcja zwracająca
-`bool`, wartość albo uchwyt pozostaje prostym adapterem zgodności, a w razie
-potrzeby otrzymuje odpowiednik `_ex`. Starsza funkcja `void`, która może się
-nie powieść, zaczyna bezpośrednio zwracać `hal_status_t`. Wywołania ignorujące
-wynik nadal kompilują się bez zmian, a zbędne adaptery `_ex` są usuwane. Dzięki
-temu funkcja statusowa nie musi odgadywać przyczyny błędu po wywołaniu starego
-API, które tę informację traci.
+Obecne podejście do tego problemu to **funkcja zwracająca status**. To ona sprawdza
+argumenty, wywołuje backend i odwzorowuje błędy.
 
 ## Kody statusów
 

@@ -177,7 +177,11 @@ int hal_wifi_scan_networks(void);
  */
 bool hal_wifi_get_scan_result(size_t index, hal_wifi_scan_result_t *out);
 
-/** @brief Convert a HAL WiFi encryption value to a short printable label. */
+/**
+ * @brief Convert a HAL WiFi encryption value to a short printable label.
+ * @param encryption Encryption mode to describe.
+ * @return Pointer to a static label, or `"UNKNOWN"` for an unrecognized value.
+ */
 const char *hal_wifi_encryption_to_string(hal_wifi_encryption_t encryption);
 
 #ifdef __cplusplus

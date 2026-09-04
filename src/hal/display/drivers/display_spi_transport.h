@@ -10,10 +10,20 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/**
+ * @brief Check whether a signed display pin value identifies a GPIO.
+ * @param pin Signed pin value; negative values mean not connected.
+ * @return true when @p pin fits in `uint8_t`.
+ */
 static inline bool jh_display_pin_connected(int16_t pin) {
   return pin >= 0 && pin <= UINT8_MAX;
 }
 
+/**
+ * @brief Convert a previously validated display pin to the HAL GPIO type.
+ * @param pin Value accepted by jh_display_pin_connected().
+ * @return GPIO pin number.
+ */
 static inline uint8_t jh_display_pin_u8(int16_t pin) { return (uint8_t)pin; }
 
 static inline bool jh_display_spi_setup(hal_spi_device_t *device, uint8_t bus,
@@ -69,6 +79,11 @@ typedef bool (*jh_display_write_command_fn)(void *ctx, uint8_t command,
                                             const uint8_t *data,
                                             uint8_t data_len);
 
+/**
+ * @brief Store a 16-bit display value in big-endian byte order.
+ * @param out Pointer to two writable bytes.
+ * @param value Host-order value.
+ */
 static inline void jh_display_put_u16_be(uint8_t *out, uint16_t value) {
   jh_store_be16(out, value);
 }

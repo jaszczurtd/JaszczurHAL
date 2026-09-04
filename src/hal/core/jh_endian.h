@@ -15,10 +15,20 @@
 extern "C" {
 #endif
 
+/**
+ * @brief Reverse the byte order of a 16-bit integer.
+ * @param value Input value.
+ * @return Byte-swapped value.
+ */
 static inline uint16_t jh_bswap16(uint16_t value) {
   return (uint16_t)((uint16_t)(value << 8u) | (uint16_t)(value >> 8u));
 }
 
+/**
+ * @brief Reverse the byte order of a 32-bit integer.
+ * @param value Input value.
+ * @return Byte-swapped value.
+ */
 static inline uint32_t jh_bswap32(uint32_t value) {
   return ((value & UINT32_C(0x000000FF)) << 24u) |
          ((value & UINT32_C(0x0000FF00)) << 8u) |
@@ -26,6 +36,11 @@ static inline uint32_t jh_bswap32(uint32_t value) {
          ((value & UINT32_C(0xFF000000)) >> 24u);
 }
 
+/**
+ * @brief Reverse the byte order of a 64-bit integer.
+ * @param value Input value.
+ * @return Byte-swapped value.
+ */
 static inline uint64_t jh_bswap64(uint64_t value) {
   return ((value & UINT64_C(0x00000000000000FF)) << 56u) |
          ((value & UINT64_C(0x000000000000FF00)) << 40u) |
@@ -37,33 +52,66 @@ static inline uint64_t jh_bswap64(uint64_t value) {
          ((value & UINT64_C(0xFF00000000000000)) >> 56u);
 }
 
-/** @brief Return the most significant byte of a 16-bit value. */
+/**
+ * @brief Return the most significant byte of a 16-bit value.
+ * @param value Input value.
+ * @return Bits 15..8.
+ */
 static inline uint8_t jh_u16_msb(uint16_t value) {
   return (uint8_t)(value >> 8u);
 }
 
-/** @brief Return the least significant byte of a 16-bit value. */
+/**
+ * @brief Return the least significant byte of a 16-bit value.
+ * @param value Input value.
+ * @return Bits 7..0.
+ */
 static inline uint8_t jh_u16_lsb(uint16_t value) { return (uint8_t)value; }
 
+/**
+ * @brief Load an unaligned little-endian 16-bit integer.
+ * @param input Pointer to at least two bytes.
+ * @return Decoded host-order value.
+ */
 static inline uint16_t jh_load_le16(const uint8_t *input) {
   return (uint16_t)input[0] | (uint16_t)((uint16_t)input[1] << 8u);
 }
 
+/**
+ * @brief Load an unaligned little-endian 32-bit integer.
+ * @param input Pointer to at least four bytes.
+ * @return Decoded host-order value.
+ */
 static inline uint32_t jh_load_le32(const uint8_t *input) {
   return (uint32_t)input[0] | ((uint32_t)input[1] << 8u) |
          ((uint32_t)input[2] << 16u) | ((uint32_t)input[3] << 24u);
 }
 
+/**
+ * @brief Load an unaligned little-endian 64-bit integer.
+ * @param input Pointer to at least eight bytes.
+ * @return Decoded host-order value.
+ */
 static inline uint64_t jh_load_le64(const uint8_t *input) {
   return (uint64_t)jh_load_le32(input) |
          ((uint64_t)jh_load_le32(input + 4u) << 32u);
 }
 
+/**
+ * @brief Store a 16-bit integer in little-endian byte order.
+ * @param output Pointer to at least two writable bytes.
+ * @param value Host-order value to encode.
+ */
 static inline void jh_store_le16(uint8_t *output, uint16_t value) {
   output[0] = (uint8_t)value;
   output[1] = (uint8_t)(value >> 8u);
 }
 
+/**
+ * @brief Store a 32-bit integer in little-endian byte order.
+ * @param output Pointer to at least four writable bytes.
+ * @param value Host-order value to encode.
+ */
 static inline void jh_store_le32(uint8_t *output, uint32_t value) {
   output[0] = (uint8_t)value;
   output[1] = (uint8_t)(value >> 8u);
@@ -71,36 +119,71 @@ static inline void jh_store_le32(uint8_t *output, uint32_t value) {
   output[3] = (uint8_t)(value >> 24u);
 }
 
+/**
+ * @brief Store a 64-bit integer in little-endian byte order.
+ * @param output Pointer to at least eight writable bytes.
+ * @param value Host-order value to encode.
+ */
 static inline void jh_store_le64(uint8_t *output, uint64_t value) {
   jh_store_le32(output, (uint32_t)value);
   jh_store_le32(output + 4u, (uint32_t)(value >> 32u));
 }
 
+/**
+ * @brief Load an unaligned big-endian 16-bit integer.
+ * @param input Pointer to at least two bytes.
+ * @return Decoded host-order value.
+ */
 static inline uint16_t jh_load_be16(const uint8_t *input) {
   return (uint16_t)((uint16_t)input[0] << 8u) | (uint16_t)input[1];
 }
 
-/** @brief Build a 16-bit value from explicit most/least significant bytes. */
+/**
+ * @brief Build a 16-bit value from explicit significant bytes.
+ * @param msb Most significant byte.
+ * @param lsb Least significant byte.
+ * @return Combined host-order value.
+ */
 static inline uint16_t jh_u16_from_bytes(uint8_t msb, uint8_t lsb) {
   const uint8_t bytes[] = {msb, lsb};
   return jh_load_be16(bytes);
 }
 
+/**
+ * @brief Load an unaligned big-endian 32-bit integer.
+ * @param input Pointer to at least four bytes.
+ * @return Decoded host-order value.
+ */
 static inline uint32_t jh_load_be32(const uint8_t *input) {
   return ((uint32_t)input[0] << 24u) | ((uint32_t)input[1] << 16u) |
          ((uint32_t)input[2] << 8u) | (uint32_t)input[3];
 }
 
+/**
+ * @brief Load an unaligned big-endian 64-bit integer.
+ * @param input Pointer to at least eight bytes.
+ * @return Decoded host-order value.
+ */
 static inline uint64_t jh_load_be64(const uint8_t *input) {
   return ((uint64_t)jh_load_be32(input) << 32u) |
          (uint64_t)jh_load_be32(input + 4u);
 }
 
+/**
+ * @brief Store a 16-bit integer in big-endian byte order.
+ * @param output Pointer to at least two writable bytes.
+ * @param value Host-order value to encode.
+ */
 static inline void jh_store_be16(uint8_t *output, uint16_t value) {
   output[0] = (uint8_t)(value >> 8u);
   output[1] = (uint8_t)value;
 }
 
+/**
+ * @brief Store a 32-bit integer in big-endian byte order.
+ * @param output Pointer to at least four writable bytes.
+ * @param value Host-order value to encode.
+ */
 static inline void jh_store_be32(uint8_t *output, uint32_t value) {
   output[0] = (uint8_t)(value >> 24u);
   output[1] = (uint8_t)(value >> 16u);
@@ -108,6 +191,11 @@ static inline void jh_store_be32(uint8_t *output, uint32_t value) {
   output[3] = (uint8_t)value;
 }
 
+/**
+ * @brief Store a 64-bit integer in big-endian byte order.
+ * @param output Pointer to at least eight writable bytes.
+ * @param value Host-order value to encode.
+ */
 static inline void jh_store_be64(uint8_t *output, uint64_t value) {
   jh_store_be32(output, (uint32_t)(value >> 32u));
   jh_store_be32(output + 4u, (uint32_t)value);
@@ -115,7 +203,17 @@ static inline void jh_store_be64(uint8_t *output, uint64_t value) {
 
 /** @name Source-compatible 16-bit helpers */
 /** @{ */
+/**
+ * @brief Linkable form of MSB().
+ * @param value Input value; only its least significant 16 bits are used.
+ * @return Bits 15..8 of @p value.
+ */
 uint8_t(MSB)(unsigned short value);
+/**
+ * @brief Linkable form of LSB().
+ * @param value Input value; only its least significant 16 bits are used.
+ * @return Bits 7..0 of @p value.
+ */
 uint8_t(LSB)(unsigned short value);
 /** @} */
 
@@ -123,12 +221,22 @@ uint8_t(LSB)(unsigned short value);
 }
 #endif
 
-/* Public compatibility names used by existing firmware. Inline functions make
- * each macro argument evaluate exactly once. */
+/**
+ * @def MSB(value)
+ * @brief Return the most significant byte of a 16-bit value.
+ * @param value Integer expression converted to `uint16_t` and evaluated once.
+ * @return Bits 15..8 of @p value.
+ */
 #ifndef MSB
 #define MSB(value) jh_u16_msb((uint16_t)(value))
 #endif
 
+/**
+ * @def LSB(value)
+ * @brief Return the least significant byte of a 16-bit value.
+ * @param value Integer expression converted to `uint16_t` and evaluated once.
+ * @return Bits 7..0 of @p value.
+ */
 #ifndef LSB
 #define LSB(value) jh_u16_lsb((uint16_t)(value))
 #endif

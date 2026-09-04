@@ -134,13 +134,23 @@ uint32_t hal_millis(void);
  *
  * The subtraction is wrap-safe as long as intervals do not exceed half of
  * the counter range.
+ *
+ * @param now Current counter value.
+ * @param started Counter value captured at the start.
+ * @param interval Required elapsed ticks.
+ * @return true when at least @p interval ticks have elapsed.
  */
 static inline bool hal_elapsed_u32(uint32_t now, uint32_t started,
                                    uint32_t interval) {
   return (uint32_t)(now - started) >= interval;
 }
 
-/** @brief Check a millisecond deadline against the current system tick. */
+/**
+ * @brief Check a millisecond deadline against the current system tick.
+ * @param started Value of hal_millis() captured at the start.
+ * @param timeout_ms Required elapsed milliseconds.
+ * @return true when the timeout has expired.
+ */
 static inline bool hal_millis_deadline_expired(uint32_t started,
                                                uint32_t timeout_ms) {
   return hal_elapsed_u32(hal_millis(), started, timeout_ms);

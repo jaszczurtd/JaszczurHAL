@@ -178,6 +178,9 @@ void hal_debug_init_default(void);
  *
  * The module name is truncated when needed to fit HAL_DEBUG_PREFIX_SIZE.
  * A NULL argument leaves the current prefix unchanged.
+ *
+ * @param module_name Module name to install, or NULL to retain the current
+ * prefix.
  */
 void hal_debug_set_module_prefix(const char *module_name);
 
