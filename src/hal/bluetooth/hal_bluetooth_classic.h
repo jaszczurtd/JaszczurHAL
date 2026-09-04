@@ -186,7 +186,9 @@ hal_bluetooth_classic_pairing_reject(hal_bluetooth_classic_t classic);
 /**
  * Save a paired peer after its profile has validated the connection.
  * profile_id identifies the profile's verification rules. The manager owns
- * the only persisted copy of the link key.
+ * the only persisted copy of the link key. Re-saving an already known peer
+ * with the same profile_id is an idempotent no-op and does not require a new
+ * pairing authorization.
  */
 hal_status_t
 hal_bluetooth_classic_peer_save(hal_bluetooth_classic_t classic,
@@ -202,7 +204,13 @@ hal_status_t
 hal_bluetooth_classic_peer_get(hal_bluetooth_classic_t classic, size_t index,
                                hal_bluetooth_classic_peer_t *out_peer);
 
-/** Forget one peer in RAM, the controller and persistent storage. */
+/**
+ * Forget one peer in RAM, the controller and persistent storage.
+ *
+ * Persistent storage is erased first. If that operation fails, the runtime
+ * peer remains available so the caller can retry without allowing the bond to
+ * reappear unexpectedly after a restart.
+ */
 hal_status_t hal_bluetooth_classic_peer_forget(
     hal_bluetooth_classic_t classic,
     const hal_bluetooth_classic_address_t *address);

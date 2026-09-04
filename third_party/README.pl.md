@@ -40,7 +40,7 @@ aktualizujący.
 | Unity | `unity_version.conf` | `Unity/` | Framework testów uruchamianych na hoście i targetach |
 | lwIP | `lwip_version.conf` | `lwip/` | Stos TCP/IP używany przez integrację CYW43 w JaszczurHAL |
 | littlefs | `littlefs_version.conf` | `littlefs/` | Rdzeń systemu plików używany przez wspólny provider, test integracyjny na hoście oraz natywną pamięć masową RP i STM32G474 |
-| BTstack | `btstack_version.conf` | `BTstack/` | Stos hosta BLE używany przez integrację Bluetooth CYW43 |
+| BTstack | `btstack_version.conf` | `BTstack/` | Stos hosta BLE i Classic używany przez integrację Bluetooth CYW43 |
 | Sterownik Semtech SX126x | `sx126x_driver_version.conf` | `sx126x_driver/` | Przenośny sterownik poleceń SX1261/SX1262 dla implementacji LoRa |
 | FreeRTOS-Kernel | `freertos_core_version.conf` | `FreeRTOS-Kernel/` | Jądro FreeRTOS dla natywnego RP SMP i STM32G474 |
 | Pico SDK | `pico_sdk_version.conf` | `pico-sdk/` | Natywne SDK dla RP2040/RP2350 |
@@ -76,6 +76,9 @@ Submoduły Pico SDK wymagane przez natywne kompilacje wymieniono w
 `PICO_SDK_SUBMODULES` w pliku `pico_sdk_version.conf`. JaszczurHAL celowo używa
 osobnej kopii `lwip/` w wersji ustalonej przez projekt zamiast submodułu lwIP
 z SDK.
+BTstack jest kompilowany bezpośrednio z dokładnej rewizji utrzymywanego przez
+projekt forka `jaszczurtd/btstack`, zapisanej w `btstack_version.conf`;
+JaszczurHAL nie nakłada lokalnych patchy na źródła podczas konfiguracji.
 
 Zewnętrzne kopie FreeRTOS i Pico SDK można wskazać za pomocą udokumentowanych
 zmiennych `JH_FREERTOS_KERNEL_DIR`, `JH_PICO_SDK_DIR` oraz opcji ścieżek w

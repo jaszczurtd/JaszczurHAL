@@ -20,5 +20,7 @@ Rekordy `JHHCI` zachowują surowe bajty komendy Inquiry oraz zdarzeń Inquiry
 Complete, Inquiry Result i Inquiry Result with RSSI. Dla Extended Inquiry Result
 zachowują wyłącznie metadane do pola RSSI; treść EIR jest ukrywana, ponieważ
 może zawierać nazwy i dowolne dane producenta. Adresy Bluetooth są zawsze
-maskowane. Pozostałe komendy i zdarzenia HCI zachowują tylko bezpieczny nagłówek
-potrzebny do porównania sekwencji.
+maskowane. `JHHCI-PEER` podaje długość reklamowanego pola nazwy, długość tekstu
+do pierwszego NUL i skrót FNV-1a, co pozwala diagnozować padding i tożsamość bez
+drukowania nazwy. Pozostałe komendy i zdarzenia HCI zachowują tylko bezpieczny
+nagłówek potrzebny do porównania sekwencji.

@@ -13,6 +13,7 @@
 #include "classic/sdp_client.h"
 #include "classic/sdp_util.h"
 #include "gap.h"
+#include "hal/serial/hal_serial.h"
 #include "hal/system/hal_system.h"
 #include "hci.h"
 #include "jh_btstack_host.h"
@@ -30,6 +31,8 @@ enum {
   JH_CLASSIC_INQUIRY_DURATION_1280_MS = 8u,
   JH_CLASSIC_SCAN_CACHE_DEPTH = HAL_BLUETOOTH_CLASSIC_SCAN_QUEUE_DEPTH,
   JH_CLASSIC_SDP_SERVICE_COUNT = 5u,
+  JH_CLASSIC_HID_REPORT_TRACE_LIMIT = 32u,
+  JH_CLASSIC_HID_INCOMING_ACL_TIMEOUT_MS = 10000u,
 };
 
 typedef struct {
@@ -64,9 +67,20 @@ typedef struct {
 #ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
   uint8_t hid_descriptor[HAL_BLUETOOTH_HID_DESCRIPTOR_MAX_LEN];
   hal_bluetooth_classic_address_t hid_address;
+  hal_bluetooth_classic_address_t hid_incoming_address;
   uint16_t hid_cid;
+  hci_con_handle_t hid_con_handle;
+  uint32_t hid_incoming_started_ms;
   hal_bluetooth_hid_report_type_t requested_report_type;
+  uint32_t last_hid_report_hash;
+  uint16_t last_hid_report_length;
+  uint8_t hid_report_trace_count;
   bool hid_connected;
+  bool hid_outgoing;
+  bool hid_incoming_acl_pending;
+  bool hid_acl_disconnect_pending;
+  bool last_hid_report_valid;
+  bool hid_report_trace_suppressed;
 #endif
 } jh_classic_btstack_t;
 
@@ -106,6 +120,79 @@ static hal_status_t status_from_btstack(int status) {
   return status == ERROR_CODE_SUCCESS ? HAL_OK : HAL_EIO;
 }
 
+static hal_status_t hid_connection_status_from_btstack(uint8_t status) {
+  switch (status) {
+  case ERROR_CODE_SUCCESS:
+    return HAL_OK;
+  case ERROR_CODE_AUTHENTICATION_FAILURE:
+  case ERROR_CODE_PIN_OR_KEY_MISSING:
+  case ERROR_CODE_CONNECTION_REJECTED_DUE_TO_SECURITY_REASONS:
+  case ERROR_CODE_REPEATED_ATTEMPTS:
+  case ERROR_CODE_PAIRING_NOT_ALLOWED:
+  case ERROR_CODE_CONNECTION_TERMINATED_DUE_TO_MIC_FAILURE:
+    return HAL_EAUTH;
+  case ERROR_CODE_PAGE_TIMEOUT:
+  case ERROR_CODE_CONNECTION_TIMEOUT:
+  case ERROR_CODE_CONNECTION_ACCEPT_TIMEOUT_EXCEEDED:
+    return HAL_ETIMEOUT;
+  case ERROR_CODE_MEMORY_CAPACITY_EXCEEDED:
+  case ERROR_CODE_CONNECTION_LIMIT_EXCEEDED:
+  case ERROR_CODE_CONNECTION_REJECTED_DUE_TO_LIMITED_RESOURCES:
+  case ERROR_CODE_ACL_CONNECTION_ALREADY_EXISTS:
+    return HAL_EBUSY;
+  case ERROR_CODE_UNSUPPORTED_FEATURE_OR_PARAMETER_VALUE:
+    return HAL_EUNSUPPORTED;
+  default:
+    return HAL_EIO;
+  }
+}
+
+#ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
+static uint32_t fnv1a32(const uint8_t *data, size_t length) {
+  uint32_t hash = UINT32_C(2166136261);
+  for (size_t index = 0u; index < length; ++index) {
+    hash ^= data[index];
+    hash *= UINT32_C(16777619);
+  }
+  return hash;
+}
+
+static void trace_hid_report(const uint8_t *data, size_t length) {
+  const uint32_t hash = fnv1a32(data, length);
+  if (s_backend.last_hid_report_valid &&
+      s_backend.last_hid_report_length == length &&
+      s_backend.last_hid_report_hash == hash) {
+    return;
+  }
+  s_backend.last_hid_report_hash = hash;
+  s_backend.last_hid_report_length = (uint16_t)length;
+  s_backend.last_hid_report_valid = true;
+  if (s_backend.hid_report_trace_count >= JH_CLASSIC_HID_REPORT_TRACE_LIMIT) {
+    if (!s_backend.hid_report_trace_suppressed) {
+      hal_deb("Bluetooth Classic HID report trace limit reached");
+      s_backend.hid_report_trace_suppressed = true;
+    }
+    return;
+  }
+  static const char digits[] = "0123456789ABCDEF";
+  char prefix[3u * 16u + 1u];
+  const size_t shown = length < 16u ? length : 16u;
+  size_t cursor = 0u;
+  for (size_t index = 0u; index < shown; ++index) {
+    if (index != 0u) {
+      prefix[cursor++] = ' ';
+    }
+    prefix[cursor++] = digits[data[index] >> 4u];
+    prefix[cursor++] = digits[data[index] & 0x0fu];
+  }
+  prefix[cursor] = '\0';
+  hal_deb("Bluetooth Classic HID report len=%u hash=0x%08lx data=%s%s",
+          (unsigned int)length, (unsigned long)hash, prefix,
+          length > shown ? " ..." : "");
+  ++s_backend.hid_report_trace_count;
+}
+#endif
+
 static jh_classic_scan_cache_entry_t *
 scan_cache_find(const hal_bluetooth_classic_address_t *address) {
   for (size_t index = 0u; index < JH_CLASSIC_SCAN_CACHE_DEPTH; ++index) {
@@ -136,7 +223,6 @@ scan_cache_store(const hal_bluetooth_classic_scan_result_t *result) {
   entry->used = true;
 }
 
-#ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
 static bool peer_restored(const hal_bluetooth_classic_address_t *address) {
   for (size_t index = 0u; index < HAL_BLUETOOTH_CLASSIC_MAX_PEERS; ++index) {
     if (s_backend.restored_peer_used[index] &&
@@ -147,7 +233,6 @@ static bool peer_restored(const hal_bluetooth_classic_address_t *address) {
   }
   return false;
 }
-#endif
 
 static void
 emit_scan_result(const hal_bluetooth_classic_scan_result_t *result) {
@@ -200,6 +285,10 @@ static void handle_inquiry_result(const uint8_t *packet) {
     result.name[copied] = '\0';
     result.name_length = (uint8_t)copied;
   }
+  hal_deb("Bluetooth Classic inquiry class=0x%06lx rssi=%d valid=%u "
+          "name_length=%u",
+          (unsigned long)result.class_of_device, (int)result.rssi,
+          result.rssi_valid ? 1u : 0u, (unsigned int)result.name_length);
   scan_cache_store(&result);
   emit_scan_result(&result);
 }
@@ -218,14 +307,18 @@ static void sdp_packet_handler(uint8_t packet_type, uint16_t channel,
   case SDP_EVENT_QUERY_SERVICE_RECORD_HANDLE:
     s_backend.sdp_match = true;
     break;
-  case SDP_EVENT_QUERY_COMPLETE:
-    if (sdp_event_query_complete_get_status(packet) == ERROR_CODE_SUCCESS &&
-        s_backend.sdp_match) {
+  case SDP_EVENT_QUERY_COMPLETE: {
+    const uint8_t status = sdp_event_query_complete_get_status(packet);
+    hal_deb("Bluetooth Classic SDP uuid=0x%04x status=0x%02x matched=%u",
+            (unsigned int)s_sdp_uuids[s_backend.sdp_service_index],
+            (unsigned int)status, s_backend.sdp_match ? 1u : 0u);
+    if (status == ERROR_CODE_SUCCESS && s_backend.sdp_match) {
       s_backend.sdp_services |= s_sdp_service_bits[s_backend.sdp_service_index];
     }
     ++s_backend.sdp_service_index;
     sdp_query_next();
     break;
+  }
   default:
     break;
   }
@@ -246,6 +339,9 @@ static void sdp_query_next(void) {
       sdp_client_service_search(sdp_packet_handler, s_backend.sdp_address.bytes,
                                 sdp_service_search_pattern_for_uuid16(
                                     s_sdp_uuids[s_backend.sdp_service_index]));
+  hal_deb("Bluetooth Classic SDP start uuid=0x%04x status=0x%02x",
+          (unsigned int)s_sdp_uuids[s_backend.sdp_service_index],
+          (unsigned int)status);
   if (status == SDP_QUERY_BUSY) {
     s_backend.sdp_retry_pending = true;
     s_backend.sdp_retry_after_ms = hal_millis() + 50u;
@@ -313,24 +409,83 @@ static void emit_hid_report(hal_bluetooth_hid_report_type_t type,
   emit(&event);
 }
 
+static void disconnect_hid_acl(void) {
+  if (s_backend.hid_con_handle == HCI_CON_HANDLE_INVALID) {
+    return;
+  }
+  const uint8_t status = gap_disconnect(s_backend.hid_con_handle);
+  s_backend.hid_acl_disconnect_pending =
+      status == ERROR_CODE_SUCCESS || status == ERROR_CODE_COMMAND_DISALLOWED;
+  hal_deb("Bluetooth Classic HID ACL disconnect handle=0x%04x "
+          "status=0x%02x pending=%u",
+          (unsigned int)s_backend.hid_con_handle, (unsigned int)status,
+          s_backend.hid_acl_disconnect_pending ? 1u : 0u);
+  if (!s_backend.hid_acl_disconnect_pending) {
+    s_backend.hid_con_handle = HCI_CON_HANDLE_INVALID;
+  }
+}
+
+static void
+mark_hid_incoming_acl(const hal_bluetooth_classic_address_t *address) {
+  if (address == NULL) {
+    return;
+  }
+  if (s_backend.hid_incoming_acl_pending &&
+      jh_bluetooth_classic_address_equal(address,
+                                         &s_backend.hid_incoming_address)) {
+    return;
+  }
+  s_backend.hid_incoming_address = *address;
+  s_backend.hid_incoming_started_ms = hal_millis();
+  s_backend.hid_incoming_acl_pending = true;
+  jh_bluetooth_classic_backend_event_t event = {0};
+  event.type = JH_BLUETOOTH_CLASSIC_EVENT_HID_CONNECTING;
+  event.status = HAL_OK;
+  event.address = *address;
+  emit(&event);
+  hal_deb("Bluetooth Classic HID incoming ACL pending");
+}
+
 static void handle_hid_event(const uint8_t *packet) {
-  switch (hci_event_hid_meta_get_subevent_code(packet)) {
+  const uint8_t subevent = hci_event_hid_meta_get_subevent_code(packet);
+  if (subevent != HID_SUBEVENT_REPORT) {
+    hal_deb("Bluetooth Classic HID subevent=0x%02x", (unsigned int)subevent);
+  }
+  switch (subevent) {
   case HID_SUBEVENT_INCOMING_CONNECTION: {
     jh_bluetooth_classic_backend_event_t event = {0};
     hid_subevent_incoming_connection_get_address(packet, event.address.bytes);
     const uint16_t hid_cid =
         hid_subevent_incoming_connection_get_hid_cid(packet);
-    if (peer_restored(&event.address) && !s_backend.hid_connected &&
-        s_backend.hid_cid == 0u) {
+    const bool restored = peer_restored(&event.address);
+    hal_deb("Bluetooth Classic HID incoming restored=%u connected=%u "
+            "active_cid=%u incoming_cid=%u",
+            restored ? 1u : 0u, s_backend.hid_connected ? 1u : 0u,
+            (unsigned int)s_backend.hid_cid, (unsigned int)hid_cid);
+    if (restored && !s_backend.hid_connected && s_backend.hid_cid == 0u &&
+        !s_backend.hid_acl_disconnect_pending) {
       const uint8_t status =
-          hid_host_accept_connection(hid_cid, HID_PROTOCOL_MODE_BOOT);
+          hid_host_accept_connection(hid_cid, HID_PROTOCOL_MODE_REPORT);
       if (status == ERROR_CODE_SUCCESS) {
         s_backend.hid_cid = hid_cid;
         s_backend.hid_address = event.address;
+        s_backend.hid_outgoing = false;
+        s_backend.hid_incoming_acl_pending = false;
+        s_backend.hid_con_handle =
+            hid_subevent_incoming_connection_get_handle(packet);
+        event.type = JH_BLUETOOTH_CLASSIC_EVENT_HID_CONNECTING;
+        event.status = HAL_OK;
+        emit(&event);
+        hal_deb("Bluetooth Classic HID incoming accepted cid=%u",
+                (unsigned int)hid_cid);
         break;
       }
+      hal_deb("Bluetooth Classic HID incoming accept status=0x%02x",
+              (unsigned int)status);
     }
     (void)hid_host_decline_connection(hid_cid);
+    hal_deb("Bluetooth Classic HID incoming declined cid=%u",
+            (unsigned int)hid_cid);
     break;
   }
   case HID_SUBEVENT_CONNECTION_OPENED: {
@@ -338,17 +493,39 @@ static void handle_hid_event(const uint8_t *packet) {
     const uint8_t status = hid_subevent_connection_opened_get_status(packet);
     if (status != ERROR_CODE_SUCCESS || hid_cid != s_backend.hid_cid) {
       if (hid_cid == s_backend.hid_cid) {
+        const hal_status_t mapped = hid_connection_status_from_btstack(status);
+        hal_deb("Bluetooth Classic HID connection status=0x%02x (%s)",
+                (unsigned int)status, hal_status_to_string(mapped));
+        jh_bluetooth_classic_backend_event_t event = {0};
+        event.type = JH_BLUETOOTH_CLASSIC_EVENT_HID_DISCONNECTED;
+        event.status = mapped;
+        event.address = s_backend.hid_address;
+        s_backend.hid_connected = false;
+        s_backend.hid_outgoing = false;
         s_backend.hid_cid = 0u;
-        jh_bluetooth_classic_backend_event_t error = {0};
-        error.type = JH_BLUETOOTH_CLASSIC_EVENT_ERROR;
-        error.status = HAL_EIO;
-        emit(&error);
+        if (s_backend.hid_incoming_acl_pending) {
+          s_backend.hid_address = s_backend.hid_incoming_address;
+          hal_deb("Bluetooth Classic HID outgoing collision yielded to "
+                  "incoming ACL");
+          break;
+        }
+        memset(&s_backend.hid_address, 0, sizeof(s_backend.hid_address));
+        disconnect_hid_acl();
+        emit(&event);
       }
       break;
     }
     hid_subevent_connection_opened_get_bd_addr(packet,
                                                s_backend.hid_address.bytes);
     s_backend.hid_connected = true;
+    s_backend.hid_outgoing = false;
+    s_backend.hid_incoming_acl_pending = false;
+    s_backend.hid_con_handle =
+        hid_subevent_connection_opened_get_con_handle(packet);
+    s_backend.hid_acl_disconnect_pending = false;
+    s_backend.last_hid_report_valid = false;
+    s_backend.hid_report_trace_count = 0u;
+    s_backend.hid_report_trace_suppressed = false;
     jh_bluetooth_classic_backend_event_t event = {0};
     event.type = JH_BLUETOOTH_CLASSIC_EVENT_HID_CONNECTED;
     event.status = HAL_OK;
@@ -373,6 +550,8 @@ static void handle_hid_event(const uint8_t *packet) {
       break;
     }
     memcpy(s_backend.hid_descriptor, descriptor, length);
+    hal_deb("Bluetooth Classic HID descriptor len=%u hash=0x%08lx",
+            (unsigned int)length, (unsigned long)fnv1a32(descriptor, length));
     jh_bluetooth_classic_backend_event_t event = {0};
     event.type = JH_BLUETOOTH_CLASSIC_EVENT_HID_DESCRIPTOR;
     event.status = HAL_OK;
@@ -391,6 +570,7 @@ static void handle_hid_event(const uint8_t *packet) {
       ++report;
       --length;
     }
+    trace_hid_report(report, length);
     emit_hid_report(HAL_BLUETOOTH_HID_REPORT_INPUT, report, length);
     break;
   }
@@ -409,8 +589,12 @@ static void handle_hid_event(const uint8_t *packet) {
     event.status = HAL_OK;
     event.address = s_backend.hid_address;
     s_backend.hid_connected = false;
+    s_backend.hid_outgoing = false;
+    s_backend.hid_incoming_acl_pending = false;
+    s_backend.last_hid_report_valid = false;
     s_backend.hid_cid = 0u;
     memset(&s_backend.hid_address, 0, sizeof(s_backend.hid_address));
+    disconnect_hid_acl();
     emit(&event);
     break;
   }
@@ -443,6 +627,7 @@ static void packet_handler(uint8_t packet_type, uint16_t channel,
     }
     break;
   case GAP_EVENT_INQUIRY_COMPLETE:
+    hal_deb("Bluetooth Classic HCI inquiry complete");
     if (s_backend.scan_active) {
       if ((int32_t)(hal_millis() - s_backend.scan_deadline_ms) >= 0) {
         finish_scan(HAL_OK);
@@ -451,32 +636,107 @@ static void packet_handler(uint8_t packet_type, uint16_t channel,
       }
     }
     break;
+  case HCI_EVENT_CONNECTION_REQUEST:
+    hci_event_connection_request_get_bd_addr(packet, address.bytes);
+    hal_deb(
+        "Bluetooth Classic HCI connection request class=0x%06lx "
+        "link=0x%02x known=%u",
+        (unsigned long)hci_event_connection_request_get_class_of_device(packet),
+        (unsigned int)hci_event_connection_request_get_link_type(packet),
+        peer_restored(&address) ? 1u : 0u);
+#ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
+    if (hci_event_connection_request_get_link_type(packet) ==
+            HCI_LINK_TYPE_ACL &&
+        !s_backend.hid_connected && peer_restored(&address)) {
+      mark_hid_incoming_acl(&address);
+    }
+#endif
+    break;
+  case HCI_EVENT_CONNECTION_COMPLETE: {
+    hci_event_connection_complete_get_bd_addr(packet, address.bytes);
+    const uint8_t status = hci_event_connection_complete_get_status(packet);
+    const hci_con_handle_t handle =
+        hci_event_connection_complete_get_connection_handle(packet);
+    hal_deb("Bluetooth Classic HCI connection complete status=0x%02x "
+            "handle=0x%04x link=0x%02x encrypted=%u known=%u",
+            (unsigned int)status, (unsigned int)handle,
+            (unsigned int)hci_event_connection_complete_get_link_type(packet),
+            (unsigned int)hci_event_connection_complete_get_encryption_enabled(
+                packet),
+            peer_restored(&address) ? 1u : 0u);
+#ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
+    if (status == ERROR_CODE_SUCCESS &&
+        (jh_bluetooth_classic_address_equal(&address, &s_backend.hid_address) ||
+         (s_backend.hid_incoming_acl_pending &&
+          jh_bluetooth_classic_address_equal(
+              &address, &s_backend.hid_incoming_address)))) {
+      s_backend.hid_con_handle = handle;
+    }
+#endif
+    break;
+  }
+  case HCI_EVENT_DISCONNECTION_COMPLETE: {
+    const hci_con_handle_t handle =
+        hci_event_disconnection_complete_get_connection_handle(packet);
+    hal_deb("Bluetooth Classic HCI disconnection complete status=0x%02x "
+            "handle=0x%04x reason=0x%02x",
+            (unsigned int)hci_event_disconnection_complete_get_status(packet),
+            (unsigned int)handle,
+            (unsigned int)hci_event_disconnection_complete_get_reason(packet));
+#ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
+    if (handle == s_backend.hid_con_handle) {
+      s_backend.hid_con_handle = HCI_CON_HANDLE_INVALID;
+      s_backend.hid_acl_disconnect_pending = false;
+    }
+#endif
+    break;
+  }
+  case HCI_EVENT_COMMAND_STATUS: {
+    const uint16_t opcode = hci_event_command_status_get_command_opcode(packet);
+    if (opcode == HCI_OPCODE_HCI_CREATE_CONNECTION ||
+        opcode == HCI_OPCODE_HCI_DISCONNECT ||
+        opcode == HCI_OPCODE_HCI_ACCEPT_CONNECTION_REQUEST) {
+      hal_deb("Bluetooth Classic HCI command status opcode=0x%04x "
+              "status=0x%02x",
+              (unsigned int)opcode,
+              (unsigned int)hci_event_command_status_get_status(packet));
+    }
+    break;
+  }
   case HCI_EVENT_USER_CONFIRMATION_REQUEST:
+    hal_deb("Bluetooth Classic HCI pairing request method=just-works");
     hci_event_user_confirmation_request_get_bd_addr(packet, address.bytes);
     set_pairing_request(&address, HAL_BLUETOOTH_CLASSIC_PAIRING_JUST_WORKS);
     break;
   case HCI_EVENT_PIN_CODE_REQUEST:
+    hal_deb("Bluetooth Classic HCI pairing request method=legacy-pin");
     hci_event_pin_code_request_get_bd_addr(packet, address.bytes);
     set_pairing_request(&address, HAL_BLUETOOTH_CLASSIC_PAIRING_PIN);
     break;
   case HCI_EVENT_USER_PASSKEY_REQUEST:
+    hal_deb("Bluetooth Classic HCI pairing request method=passkey");
     hci_event_user_passkey_request_get_bd_addr(packet, address.bytes);
     set_pairing_request(&address, HAL_BLUETOOTH_CLASSIC_PAIRING_PASSKEY);
     (void)gap_ssp_passkey_negative(address.bytes);
     break;
   case HCI_EVENT_AUTHENTICATION_COMPLETE: {
+    const uint8_t raw_status =
+        hci_event_authentication_complete_get_status(packet);
+    hal_deb(
+        "Bluetooth Classic authentication status=0x%02x (%s)",
+        (unsigned int)raw_status,
+        hal_status_to_string(hid_connection_status_from_btstack(raw_status)));
     jh_bluetooth_classic_backend_event_t event = {0};
     event.type = JH_BLUETOOTH_CLASSIC_EVENT_AUTHENTICATION;
-    event.status = hci_event_authentication_complete_get_status(packet) ==
-                           ERROR_CODE_SUCCESS
-                       ? HAL_OK
-                       : HAL_EAUTH;
+    event.status = hid_connection_status_from_btstack(raw_status);
     event.address = s_backend.pairing_address;
     s_backend.pairing_pending = false;
     emit(&event);
     break;
   }
   case HCI_EVENT_LINK_KEY_NOTIFICATION: {
+    hal_deb("Bluetooth Classic HCI link-key notification type=0x%02x",
+            (unsigned int)packet[24]);
     bool key_is_null = true;
     for (size_t index = 0u; index < 16u; ++index) {
       key_is_null = key_is_null && packet[8u + index] == 0u;
@@ -546,6 +806,21 @@ static void profile_stop(void *context) {
 
 static hal_status_t profile_service(void *context) {
   (void)context;
+#ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
+  if (s_backend.hid_incoming_acl_pending && !s_backend.hid_connected &&
+      s_backend.hid_cid == 0u &&
+      hal_millis_deadline_expired(s_backend.hid_incoming_started_ms,
+                                  JH_CLASSIC_HID_INCOMING_ACL_TIMEOUT_MS)) {
+    jh_bluetooth_classic_backend_event_t event = {0};
+    event.type = JH_BLUETOOTH_CLASSIC_EVENT_HID_DISCONNECTED;
+    event.status = HAL_ETIMEOUT;
+    event.address = s_backend.hid_incoming_address;
+    s_backend.hid_incoming_acl_pending = false;
+    memset(&s_backend.hid_address, 0, sizeof(s_backend.hid_address));
+    hal_deb("Bluetooth Classic HID incoming ACL timed out");
+    emit(&event);
+  }
+#endif
   return HAL_OK;
 }
 
@@ -579,6 +854,9 @@ backend_start(void *context,
     return HAL_EBUSY;
   }
   memset(&s_backend, 0, sizeof(s_backend));
+#ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
+  s_backend.hid_con_handle = HCI_CON_HANDLE_INVALID;
+#endif
   s_backend.event_handler = event_handler;
   s_backend.event_context = event_context;
   const hal_status_t status =
@@ -747,6 +1025,7 @@ backend_peer_restore(void *context,
       native_address, native_key, (link_key_type_t)link_key_type);
   s_backend.restored_peers[free_index] = *address;
   s_backend.restored_peer_used[free_index] = true;
+  hal_deb("Bluetooth Classic peer restored slot=%u", (unsigned int)free_index);
   return HAL_OK;
 }
 
@@ -780,20 +1059,31 @@ backend_hid_connect(void *context,
   if (!s_backend.started || !s_backend.controller_ready) {
     return HAL_EUNINIT;
   }
-  if (address == NULL || s_backend.hid_cid != 0u || s_backend.sdp_active) {
-    return address == NULL ? HAL_EINVAL : HAL_ESTATE;
+  if (address == NULL || s_backend.hid_cid != 0u || s_backend.sdp_active ||
+      s_backend.hid_incoming_acl_pending ||
+      s_backend.hid_acl_disconnect_pending) {
+    return address == NULL ? HAL_EINVAL
+                           : (s_backend.hid_incoming_acl_pending ||
+                                      s_backend.hid_acl_disconnect_pending
+                                  ? HAL_EBUSY
+                                  : HAL_ESTATE);
   }
   uint16_t hid_cid = 0u;
   bd_addr_t native_address;
   memcpy(native_address, address->bytes, sizeof(native_address));
-  const uint8_t status = hid_host_connect(
-      native_address, HID_PROTOCOL_MODE_REPORT_WITH_FALLBACK_TO_BOOT, &hid_cid);
+  const uint8_t status =
+      hid_host_connect(native_address, HID_PROTOCOL_MODE_REPORT, &hid_cid);
   if (status != ERROR_CODE_SUCCESS) {
-    return HAL_EIO;
+    hal_deb("Bluetooth Classic HID connect rejected status=0x%02x",
+            (unsigned int)status);
+    return hid_connection_status_from_btstack(status);
   }
+  hal_deb("Bluetooth Classic HID connect started cid=%u",
+          (unsigned int)hid_cid);
   s_backend.hid_address = *address;
   s_backend.pairing_address = *address;
   s_backend.hid_cid = hid_cid;
+  s_backend.hid_outgoing = true;
   return HAL_OK;
 }
 

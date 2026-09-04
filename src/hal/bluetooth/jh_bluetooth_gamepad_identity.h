@@ -23,10 +23,19 @@ enum {
 static inline bool jh_bluetooth_gamepad_candidate_matches(
     uint32_t class_of_device, const uint8_t *name, size_t name_length) {
   static const char expected_name[] = JH_BLUETOOTH_GAMEPAD_EXPECTED_NAME;
-  return (class_of_device & JH_BLUETOOTH_GAMEPAD_CLASS_OF_DEVICE_MAJOR_MASK) ==
-             JH_BLUETOOTH_GAMEPAD_CLASS_OF_DEVICE_MAJOR_PERIPHERAL &&
-         name != NULL && name_length == sizeof(expected_name) - 1u &&
-         memcmp(name, expected_name, sizeof(expected_name) - 1u) == 0;
+  const size_t expected_length = sizeof(expected_name) - 1u;
+  if ((class_of_device & JH_BLUETOOTH_GAMEPAD_CLASS_OF_DEVICE_MAJOR_MASK) !=
+          JH_BLUETOOTH_GAMEPAD_CLASS_OF_DEVICE_MAJOR_PERIPHERAL ||
+      name == NULL || name_length < expected_length ||
+      memcmp(name, expected_name, expected_length) != 0) {
+    return false;
+  }
+  for (size_t index = expected_length; index < name_length; ++index) {
+    if (name[index] != 0u) {
+      return false;
+    }
+  }
+  return true;
 }
 
 static inline bool jh_bluetooth_gamepad_product_matches(uint16_t vendor_id,

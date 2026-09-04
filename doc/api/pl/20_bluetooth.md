@@ -468,6 +468,9 @@ a nie jak zaufany.
 łącze, czyści znanego peera w kontrolerze i w RAM oraz usuwa zapisany blob
 przez provider bondingu (no-op, gdy providera nie podano). Kolejne
 `hal_gamepad_pairing_open()` rozpoczyna świeże parowanie.
+Manager najpierw usuwa rekord z trwałego storage, a dopiero potem zapomina
+peera w runtime. Jeśli provider zwróci błąd, peer pozostaje znany, dzięki czemu
+aplikacja może ponowić factory reset, a stary bond nie wróci po restarcie.
 
 Zachowanie link keys poszczególnych backendów opisuje sekcja managera Classic.
 `hal_gamepad_forget()` deleguje do niego usunięcie natywnego bondingu i rekordu
@@ -767,9 +770,10 @@ W czasie obserwacji zarejestrowano dodatkowe 5794 echa przy częstotliwości
 
 ## Granica licencji i dystrybucji
 
-Firmware z obsługą Bluetooth jest linkowany z BlueKitchen BTstack w dokładnej
-wersji zapisanej w `third_party/btstack_version.conf`. Repozytorium zawiera
-dwa odrębne teksty licencyjne:
+Firmware z obsługą Bluetooth jest linkowany z utrzymywanego przez projekt
+forka BlueKitchen BTstack w dokładnej wersji zapisanej w
+`third_party/btstack_version.conf`. JaszczurHAL nie nakłada lokalnych patchy na
+źródła. Repozytorium zawiera dwa odrębne teksty licencyjne:
 
 - standardowa licencja BlueKitchen
   [`third_party/LICENSE.BTstack`](../../../third_party/LICENSE.BTstack)

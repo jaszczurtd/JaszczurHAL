@@ -313,6 +313,25 @@ static void serviceCommands(void) {
   }
 }
 
+static size_t
+nameTextLength(const hal_bluetooth_classic_scan_result_t *result) {
+  size_t length = 0u;
+  while (length < result->name_length && result->name[length] != '\0') {
+    ++length;
+  }
+  return length;
+}
+
+static uint32_t nameHash(const hal_bluetooth_classic_scan_result_t *result,
+                         size_t textLength) {
+  uint32_t hash = 2166136261u;
+  for (size_t index = 0u; index < textLength; ++index) {
+    hash ^= (uint8_t)result->name[index];
+    hash *= 16777619u;
+  }
+  return hash;
+}
+
 static void drainScanResults(void) {
   for (;;) {
     hal_bluetooth_classic_scan_result_t result = {0};
@@ -329,10 +348,13 @@ static void drainScanResults(void) {
       derr("JHHCI-PEER status=%s", hal_status_to_string(status));
       return;
     }
+    const size_t textLength = nameTextLength(&result);
     deb("JHHCI-PEER class=0x%06lX services=0x%02lX resolved=%u "
-        "nameLength=%u rssiValid=%u rssi=%d",
+        "nameLength=%u nameTextLength=%u nameHash=0x%08lX "
+        "rssiValid=%u rssi=%d",
         (unsigned long)result.class_of_device, (unsigned long)result.services,
         result.services_resolved ? 1u : 0u, (unsigned)result.name_length,
+        (unsigned)textLength, (unsigned long)nameHash(&result, textLength),
         result.rssi_valid ? 1u : 0u, result.rssi_valid ? (int)result.rssi : 0);
   }
 }

@@ -13,6 +13,8 @@ hal_bluetooth_classic_bond_blob_t s_records[2]{};
 bool s_record_used[2]{};
 uint32_t s_store_calls = 0u;
 uint32_t s_erase_calls = 0u;
+hal_status_t s_store_status = HAL_OK;
+hal_status_t s_erase_status = HAL_OK;
 
 hal_bluetooth_classic_address_t address(uint8_t tail) {
   hal_bluetooth_classic_address_t value{
@@ -37,9 +39,12 @@ hal_status_t store_record(void *, size_t index,
   if (index >= 2u || blob == nullptr) {
     return HAL_EINVAL;
   }
+  ++s_store_calls;
+  if (s_store_status != HAL_OK) {
+    return s_store_status;
+  }
   s_records[index] = *blob;
   s_record_used[index] = true;
-  ++s_store_calls;
   return HAL_OK;
 }
 
@@ -47,9 +52,12 @@ hal_status_t erase_record(void *, size_t index) {
   if (index >= 2u) {
     return HAL_EINVAL;
   }
+  ++s_erase_calls;
+  if (s_erase_status != HAL_OK) {
+    return s_erase_status;
+  }
   memset(&s_records[index], 0, sizeof(s_records[index]));
   s_record_used[index] = false;
-  ++s_erase_calls;
   return HAL_OK;
 }
 
@@ -91,6 +99,8 @@ void setUp(void) {
   memset(s_record_used, 0, sizeof(s_record_used));
   s_store_calls = 0u;
   s_erase_calls = 0u;
+  s_store_status = HAL_OK;
+  s_erase_status = HAL_OK;
 }
 
 void tearDown(void) {
@@ -219,6 +229,145 @@ void test_indexed_bond_provider_owns_one_link_key_copy_per_peer(void) {
   TEST_ASSERT_FALSE(s_record_used[0]);
 }
 
+void test_failed_persistent_erase_keeps_peer_available_for_retry(void) {
+  const auto bond_provider = provider();
+  open_ready(&bond_provider);
+  const auto peer = address(0x33u);
+  const uint8_t link_key[16] = {3u};
+
+  authorize(peer);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_mock_bluetooth_classic_inject_link_key(&peer, link_key, 4u));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_bluetooth_classic_peer_save(s_classic, &peer, 0x1003u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_bluetooth_classic_poll(s_classic));
+
+  s_erase_status = HAL_EIO;
+  TEST_ASSERT_EQUAL_INT(HAL_EIO,
+                        hal_bluetooth_classic_peer_forget(s_classic, &peer));
+  size_t count = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_bluetooth_classic_peer_count(s_classic, &count));
+  TEST_ASSERT_EQUAL_UINT(1u, count);
+  TEST_ASSERT_TRUE(s_record_used[0]);
+
+  s_erase_status = HAL_OK;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_bluetooth_classic_peer_forget(s_classic, &peer));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_bluetooth_classic_peer_count(s_classic, &count));
+  TEST_ASSERT_EQUAL_UINT(0u, count);
+  TEST_ASSERT_FALSE(s_record_used[0]);
+  TEST_ASSERT_EQUAL_UINT32(2u, s_erase_calls);
+}
+
+void test_failed_persistent_store_keeps_pairing_available_for_retry(void) {
+  const auto bond_provider = provider();
+  open_ready(&bond_provider);
+  const auto peer = address(0x44u);
+  const uint8_t link_key[16] = {4u};
+
+  authorize(peer);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_mock_bluetooth_classic_inject_link_key(&peer, link_key, 5u));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_bluetooth_classic_peer_save(s_classic, &peer, 0x1004u));
+
+  s_store_status = HAL_EBUSY;
+  TEST_ASSERT_EQUAL_INT(HAL_EBUSY, hal_bluetooth_classic_poll(s_classic));
+  TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_bluetooth_classic_peer_restore_calls());
+  size_t count = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_bluetooth_classic_peer_count(s_classic, &count));
+  TEST_ASSERT_EQUAL_UINT(0u, count);
+  TEST_ASSERT_FALSE(s_record_used[0]);
+
+  s_store_status = HAL_OK;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_bluetooth_classic_poll(s_classic));
+  TEST_ASSERT_EQUAL_UINT32(1u, hal_mock_bluetooth_classic_peer_restore_calls());
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_bluetooth_classic_peer_count(s_classic, &count));
+  TEST_ASSERT_EQUAL_UINT(1u, count);
+  TEST_ASSERT_TRUE(s_record_used[0]);
+  TEST_ASSERT_EQUAL_UINT32(2u, s_store_calls);
+
+  jh_bluetooth_classic_bond_identity_t decoded{};
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, jh_bluetooth_classic_bond_decode(&s_records[0], &decoded));
+  TEST_ASSERT_EQUAL_UINT32(1u, decoded.sequence);
+  TEST_ASSERT_EQUAL_UINT16(0x1004u, decoded.profile_id);
+}
+
+void test_volatile_saved_peer_is_restored_to_backend(void) {
+  open_ready();
+  const auto peer = address(0x45u);
+  const uint8_t link_key[16] = {4u, 5u};
+
+  authorize(peer);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_mock_bluetooth_classic_inject_link_key(&peer, link_key, 5u));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_bluetooth_classic_peer_save(s_classic, &peer, 0x1045u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_bluetooth_classic_poll(s_classic));
+  TEST_ASSERT_EQUAL_UINT32(1u, hal_mock_bluetooth_classic_peer_restore_calls());
+  size_t count = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_bluetooth_classic_peer_count(s_classic, &count));
+  TEST_ASSERT_EQUAL_UINT(1u, count);
+}
+
+void test_known_peer_save_is_idempotent_without_new_authorization(void) {
+  const auto bond_provider = provider();
+  open_ready(&bond_provider);
+  const auto peer = address(0x46u);
+  const uint8_t link_key[16] = {4u, 6u};
+
+  authorize(peer);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_mock_bluetooth_classic_inject_link_key(&peer, link_key, 5u));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_bluetooth_classic_peer_save(s_classic, &peer, 0x1046u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_bluetooth_classic_poll(s_classic));
+  TEST_ASSERT_EQUAL_UINT32(1u, s_store_calls);
+
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_bluetooth_classic_peer_save(s_classic, &peer, 0x1046u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_bluetooth_classic_poll(s_classic));
+  TEST_ASSERT_EQUAL_UINT32(1u, s_store_calls);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EAUTH, hal_bluetooth_classic_peer_save(s_classic, &peer, 0x2046u));
+}
+
+void test_failed_backend_restore_keeps_saved_pairing_available_for_retry(void) {
+  const auto bond_provider = provider();
+  open_ready(&bond_provider);
+  const auto peer = address(0x55u);
+  const uint8_t link_key[16] = {5u};
+
+  authorize(peer);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_mock_bluetooth_classic_inject_link_key(&peer, link_key, 4u));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_bluetooth_classic_peer_save(s_classic, &peer, 0x1005u));
+
+  hal_mock_bluetooth_classic_set_peer_restore_status(HAL_EIO);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, hal_bluetooth_classic_poll(s_classic));
+  TEST_ASSERT_EQUAL_UINT32(1u, s_store_calls);
+  TEST_ASSERT_EQUAL_UINT32(1u, hal_mock_bluetooth_classic_peer_restore_calls());
+  size_t count = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_bluetooth_classic_peer_count(s_classic, &count));
+  TEST_ASSERT_EQUAL_UINT(0u, count);
+
+  hal_mock_bluetooth_classic_set_peer_restore_status(HAL_OK);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_bluetooth_classic_poll(s_classic));
+  TEST_ASSERT_EQUAL_UINT32(2u, s_store_calls);
+  TEST_ASSERT_EQUAL_UINT32(2u, hal_mock_bluetooth_classic_peer_restore_calls());
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_bluetooth_classic_peer_count(s_classic, &count));
+  TEST_ASSERT_EQUAL_UINT(1u, count);
+}
+
 void test_address_format_is_stable(void) {
   char text[HAL_BLUETOOTH_CLASSIC_ADDRESS_TEXT_SIZE]{};
   const auto peer = address(0xf8u);
@@ -250,6 +399,11 @@ int main(void) {
   RUN_TEST(test_scan_results_are_bounded_and_copied);
   RUN_TEST(test_pairing_can_be_authorized_or_rejected_explicitly);
   RUN_TEST(test_indexed_bond_provider_owns_one_link_key_copy_per_peer);
+  RUN_TEST(test_failed_persistent_store_keeps_pairing_available_for_retry);
+  RUN_TEST(test_volatile_saved_peer_is_restored_to_backend);
+  RUN_TEST(test_known_peer_save_is_idempotent_without_new_authorization);
+  RUN_TEST(test_failed_backend_restore_keeps_saved_pairing_available_for_retry);
+  RUN_TEST(test_failed_persistent_erase_keeps_peer_available_for_retry);
   RUN_TEST(test_address_format_is_stable);
   RUN_TEST(test_address_helpers_compare_values_and_reject_null);
   return UNITY_END();

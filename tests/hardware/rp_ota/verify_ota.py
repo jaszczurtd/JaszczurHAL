@@ -179,6 +179,7 @@ def state_identity(status: dict[str, int | str]) -> dict[str, int | str]:
             "staging_generation",
             "program_version",
             "staging_version",
+            "kv_count",
         )
     }
 
@@ -192,6 +193,19 @@ def gspi_clock(status: dict[str, int | str]) -> dict[str, int | str]:
         "dividerFrac8": status["gspi_div_frac8"],
         "program": status["gspi_program"],
     }
+
+
+def validate_storage(status: dict[str, int | str], allow_format: bool) -> None:
+    if (
+        status["kv_status"] != HAL_OK
+        or int(status["kv_count"]) < 1
+        or status["littlefs"] != HAL_OK
+        or status["storage_total"] != 65536
+        or status["littlefs_format"] not in (0, 1)
+    ):
+        raise RuntimeError(f"persistent storage coexistence failed: {status}")
+    if not allow_format and status["littlefs_format"] != 0:
+        raise RuntimeError(f"LittleFS was reformatted after reboot: {status}")
 
 
 def ota_password(env_name: str) -> str:
@@ -263,6 +277,7 @@ def main() -> int:
         or ready["runtime"] != args.runtime
     ):
         raise RuntimeError(f"unexpected fixture identity: {ready}")
+    validate_storage(ready, allow_format=True)
     if (
         ready["gspi_status"] != HAL_OK
         or ready["gspi_target"] != args.expected_gspi_hz
@@ -282,6 +297,11 @@ def main() -> int:
                     "runtime": args.runtime,
                     "ipv4": ready["ipv4"],
                     "gspiClock": gspi_clock(ready),
+                    "storage": {
+                        "kvBootCount": ready["kv_count"],
+                        "littlefsBytes": ready["storage_total"],
+                        "startupFormat": ready["littlefs_format"],
+                    },
                     "status": "pass",
                 },
                 indent=2,
@@ -371,6 +391,7 @@ def main() -> int:
         and status["program_generation"] == generation_a
         and status["program_version"] == "hw-A",
     )
+    validate_storage(trial_a, allow_format=False)
     confirm(args.port, args.timeout)
     stable_a = wait_for_status(
         args.port,
@@ -379,6 +400,7 @@ def main() -> int:
         and status["program_generation"] == generation_a
         and status["program_version"] == "hw-A",
     )
+    validate_storage(stable_a, allow_format=False)
 
     device = wait_for_device(
         runtime,
@@ -397,6 +419,7 @@ def main() -> int:
         and status["program_generation"] == generation_b
         and status["program_version"] == "hw-B",
     )
+    validate_storage(trial_b, allow_format=False)
 
     rollback_boots = []
     for _ in range(int(trial_b["max"]) + 2):
@@ -406,6 +429,7 @@ def main() -> int:
             args.timeout,
             lambda value: value["state"] == HAL_OK,
         )
+        validate_storage(status, allow_format=False)
         rollback_boots.append(state_identity(status))
         if status["mode"] == BOOT_STABLE:
             break
@@ -416,6 +440,7 @@ def main() -> int:
         or rolled_back["program_version"] != "hw-A"
         or rolled_back["staging_generation"] != generation_b
         or rolled_back["staging_version"] != "hw-B"
+        or int(rolled_back["kv_count"]) <= int(ready["kv_count"])
     ):
         raise RuntimeError(f"automatic rollback failed: {rolled_back}")
 

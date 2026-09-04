@@ -58,13 +58,13 @@
     },
     {
       "name": "BTstack",
-      "version": "v1.6.2-1-g501e6d2b8",
-      "commit": "501e6d2b86e6c92bfb9c390bcf55709938e25ac1",
+      "version": "0cfae0eb5",
+      "commit": "0cfae0eb5aa61650924168b368c5ea93b4b363e4",
       "type": "library",
       "scope": "optional",
       "supplier": "BlueKitchen GmbH",
       "licenses": ["LicenseRef-BTstack-NonCommercial OR LicenseRef-BTstack-RaspberryPi-Products"],
-      "purl": "pkg:github/bluekitchen/btstack@501e6d2b86e6c92bfb9c390bcf55709938e25ac1",
+      "purl": "pkg:github/jaszczurtd/btstack@0cfae0eb5aa61650924168b368c5ea93b4b363e4",
       "paths": [
         "third_party/BTstack",
         "third_party/btstack_version.conf",
@@ -72,9 +72,9 @@
         "src/hal/bluetooth/LICENSE.RP",
         "src/hal/bluetooth"
       ],
-      "upstream": "https://github.com/bluekitchen/btstack",
-      "feature_flags": ["HAL_ENABLE_BLE"],
-      "notes": "Exact Pico SDK-selected revision. The standard BlueKitchen grant is limited to personal, non-commercial use and imposes notice conditions. A separate Raspberry Pi grant permits a Customer to use and distribute BTstack only with the Products and Customer Products defined in src/hal/bluetooth/LICENSE.RP; it is not a general CYW43 permission. The applicable grant and notice obligations depend on the hardware and distribution."
+      "upstream": "https://github.com/jaszczurtd/btstack",
+      "feature_flags": ["HAL_ENABLE_BLE", "HAL_ENABLE_BLUETOOTH_CLASSIC"],
+      "notes": "Exact revision of the project-maintained BlueKitchen BTstack fork, including the reviewed Classic incoming/outgoing connection collision fix. JaszczurHAL compiles it directly without local source patches. The standard BlueKitchen grant is limited to personal, non-commercial use and imposes notice conditions. A separate Raspberry Pi grant permits a Customer to use and distribute BTstack only with the Products and Customer Products defined in src/hal/bluetooth/LICENSE.RP; it is not a general CYW43 permission. The applicable grant and notice obligations depend on the hardware and distribution."
     },
     {
       "name": "Semtech SX126x driver",

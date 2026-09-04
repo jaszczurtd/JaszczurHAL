@@ -200,8 +200,11 @@ hal_status_t hal_gamepad_disconnect(hal_gamepad_t gamepad);
  * hal_gamepad_pairing_open() starts a fresh pairing; reconnect is refused
  * until a new peer is bonded.
  *
- * @return HAL_OK on success, or the provider's erase() status on failure
- *         (RAM/controller state is still cleared even when erase() fails).
+ * @return HAL_OK on success, HAL_EBUSY when another gamepad or Classic
+ *         operation is active, or the provider's erase() status on failure.
+ *         HAL_EBUSY can be retried. A provider failure keeps the known peer
+ *         available for a later retry; the active HID session and input state
+ *         are still cleared.
  */
 hal_status_t hal_gamepad_forget(hal_gamepad_t gamepad);
 

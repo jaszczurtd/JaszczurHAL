@@ -178,9 +178,8 @@ static void start_remote_name_query(void) {
 
 static hal_status_t connect_candidate(bool reconnect) {
   uint16_t hid_cid = 0u;
-  const uint8_t status = hid_host_connect(
-      s_candidate_address, HID_PROTOCOL_MODE_REPORT_WITH_FALLBACK_TO_BOOT,
-      &hid_cid);
+  const uint8_t status =
+      hid_host_connect(s_candidate_address, HID_PROTOCOL_MODE_REPORT, &hid_cid);
   s_snapshot.last_btstack_status = status;
   if (status != ERROR_CODE_SUCCESS) {
     ++s_snapshot.connection_failures;

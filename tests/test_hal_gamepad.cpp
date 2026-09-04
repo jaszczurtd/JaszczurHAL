@@ -22,6 +22,60 @@ void drain_snapshots(void) {
   }
 }
 
+hal_bluetooth_classic_scan_result_t
+zero2_scan_result(size_t name_length = 21u) {
+  hal_bluetooth_classic_scan_result_t gamepad{};
+  gamepad.address.bytes[0] = 0x10u;
+  gamepad.address.bytes[5] = 0x60u;
+  gamepad.class_of_device = 0x0508u;
+  memcpy(gamepad.name, "8BitDo Zero 2 gamepad", 21u);
+  gamepad.name_length = name_length;
+  return gamepad;
+}
+
+void inject_gamepad_discovery(
+    const hal_bluetooth_classic_scan_result_t &candidate, uint32_t services) {
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_mock_bluetooth_classic_inject_scan_result(&candidate));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_poll(s_gamepad));
+
+  hal_bluetooth_classic_scan_result_t resolved = candidate;
+  resolved.services_resolved = true;
+  resolved.services = services;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_mock_bluetooth_classic_inject_scan_result(&resolved));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_poll(s_gamepad));
+}
+
+void inject_hid_input(const hal_bluetooth_classic_address_t &address) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_mock_bluetooth_hid_inject_connected(&address));
+  static constexpr uint8_t descriptor[] = {
+      0x05u, 0x01u, 0x09u, 0x05u, 0xa1u, 0x01u, 0x15u,
+      0x00u, 0x25u, 0x01u, 0x75u, 0x01u, 0x95u, 0x01u,
+      0x05u, 0x09u, 0x09u, 0x01u, 0x81u, 0x02u, 0xc0u,
+  };
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_bluetooth_hid_inject_descriptor(
+                                    descriptor, sizeof(descriptor)));
+  hal_bluetooth_hid_report_t report{};
+  report.type = HAL_BLUETOOTH_HID_REPORT_INPUT;
+  report.length = 1u;
+  report.data[0] = 1u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_bluetooth_hid_inject_report(&report));
+}
+
+void authorize_and_inject_hid_input(
+    const hal_bluetooth_classic_address_t &address) {
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_mock_bluetooth_classic_inject_pairing_request(
+                  &address, HAL_BLUETOOTH_CLASSIC_PAIRING_JUST_WORKS));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_pairing_authorize(s_gamepad));
+  const uint8_t key[16] = {0x5au};
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_mock_bluetooth_classic_inject_link_key(&address, key, 4u));
+  inject_hid_input(address);
+}
+
 hal_gamepad_snapshot_t active_snapshot(uint32_t buttons, int16_t x) {
   hal_gamepad_snapshot_t snapshot{};
   snapshot.buttons = buttons;
@@ -35,6 +89,8 @@ hal_gamepad_snapshot_t active_snapshot(uint32_t buttons, int16_t x) {
 hal_gamepad_bond_blob_t s_fake_storage{};
 bool s_fake_has_bond = false;
 uint32_t s_fake_load_calls = 0u;
+uint32_t s_fake_store_calls = 0u;
+hal_status_t s_fake_store_status = HAL_OK;
 
 hal_status_t fake_bond_load(void *, hal_gamepad_bond_blob_t *out_blob) {
   ++s_fake_load_calls;
@@ -46,6 +102,10 @@ hal_status_t fake_bond_load(void *, hal_gamepad_bond_blob_t *out_blob) {
 }
 
 hal_status_t fake_bond_store(void *, const hal_gamepad_bond_blob_t *blob) {
+  ++s_fake_store_calls;
+  if (s_fake_store_status != HAL_OK) {
+    return s_fake_store_status;
+  }
   s_fake_storage = *blob;
   s_fake_has_bond = true;
   return HAL_OK;
@@ -68,6 +128,8 @@ hal_gamepad_bond_provider_t fake_provider(void) {
 void reset_fake_provider(void) {
   s_fake_has_bond = false;
   s_fake_load_calls = 0u;
+  s_fake_store_calls = 0u;
+  s_fake_store_status = HAL_OK;
   memset(&s_fake_storage, 0, sizeof(s_fake_storage));
 }
 
@@ -349,46 +411,23 @@ void test_adapter_filters_candidates_then_parses_generic_hid_input(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_get_info(s_gamepad, &info));
   TEST_ASSERT_EQUAL_INT(HAL_GAMEPAD_STATE_DISCOVERING, info.state);
 
-  hal_bluetooth_classic_scan_result_t gamepad{};
-  gamepad.address.bytes[0] = 0x10u;
-  gamepad.address.bytes[5] = 0x60u;
-  gamepad.class_of_device = 0x0508u;
-  memcpy(gamepad.name, "8BitDo Zero 2 gamepad", 21u);
-  gamepad.name_length = 21u;
-  TEST_ASSERT_EQUAL_INT(
-      HAL_OK, hal_mock_bluetooth_classic_inject_scan_result(&gamepad));
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_poll(s_gamepad));
+  const hal_bluetooth_classic_scan_result_t gamepad = zero2_scan_result(31u);
+  inject_gamepad_discovery(gamepad, HAL_BLUETOOTH_CLASSIC_SERVICE_HID |
+                                        HAL_BLUETOOTH_CLASSIC_SERVICE_PNP);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_get_info(s_gamepad, &info));
+  TEST_ASSERT_EQUAL_INT(HAL_GAMEPAD_STATE_DISCOVERING, info.state);
 
-  gamepad.services_resolved = true;
-  gamepad.services =
-      HAL_BLUETOOTH_CLASSIC_SERVICE_HID | HAL_BLUETOOTH_CLASSIC_SERVICE_PNP;
-  TEST_ASSERT_EQUAL_INT(
-      HAL_OK, hal_mock_bluetooth_classic_inject_scan_result(&gamepad));
+  hal_mock_advance_millis(999u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_poll(s_gamepad));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_get_info(s_gamepad, &info));
+  TEST_ASSERT_EQUAL_INT(HAL_GAMEPAD_STATE_DISCOVERING, info.state);
+
+  hal_mock_advance_millis(1u);
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_poll(s_gamepad));
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_get_info(s_gamepad, &info));
   TEST_ASSERT_EQUAL_INT(HAL_GAMEPAD_STATE_CONNECTING, info.state);
 
-  TEST_ASSERT_EQUAL_INT(
-      HAL_OK, hal_mock_bluetooth_classic_inject_pairing_request(
-                  &gamepad.address, HAL_BLUETOOTH_CLASSIC_PAIRING_JUST_WORKS));
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_pairing_authorize(s_gamepad));
-  const uint8_t key[16] = {0x5au};
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_bluetooth_classic_inject_link_key(
-                                    &gamepad.address, key, 4u));
-  TEST_ASSERT_EQUAL_INT(
-      HAL_OK, hal_mock_bluetooth_hid_inject_connected(&gamepad.address));
-  const uint8_t descriptor[] = {
-      0x05u, 0x01u, 0x09u, 0x05u, 0xa1u, 0x01u, 0x15u,
-      0x00u, 0x25u, 0x01u, 0x75u, 0x01u, 0x95u, 0x01u,
-      0x05u, 0x09u, 0x09u, 0x01u, 0x81u, 0x02u, 0xc0u,
-  };
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_bluetooth_hid_inject_descriptor(
-                                    descriptor, sizeof(descriptor)));
-  hal_bluetooth_hid_report_t report{};
-  report.type = HAL_BLUETOOTH_HID_REPORT_INPUT;
-  report.length = 1u;
-  report.data[0] = 1u;
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_bluetooth_hid_inject_report(&report));
+  authorize_and_inject_hid_input(gamepad.address);
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_poll(s_gamepad));
 
   hal_gamepad_snapshot_t snapshot{};
@@ -401,6 +440,145 @@ void test_adapter_filters_candidates_then_parses_generic_hid_input(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_get_info(s_gamepad, &info));
   TEST_ASSERT_TRUE(info.known_device);
   TEST_ASSERT_EQUAL_INT(HAL_GAMEPAD_STATE_CONNECTED, info.state);
+}
+
+void test_adapter_keeps_hid_input_alive_while_bond_store_is_busy(void) {
+  const hal_gamepad_bond_provider_t provider = fake_provider();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_open_ex(&s_gamepad, &provider));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_gamepad_inject_ready(false));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_pairing_open(s_gamepad));
+
+  const hal_bluetooth_classic_scan_result_t gamepad = zero2_scan_result();
+  inject_gamepad_discovery(gamepad, HAL_BLUETOOTH_CLASSIC_SERVICE_HID |
+                                        HAL_BLUETOOTH_CLASSIC_SERVICE_PNP);
+  hal_mock_advance_millis(1000u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_poll(s_gamepad));
+
+  authorize_and_inject_hid_input(gamepad.address);
+
+  s_fake_store_status = HAL_EBUSY;
+  TEST_ASSERT_EQUAL_INT(HAL_EBUSY, hal_gamepad_poll(s_gamepad));
+  TEST_ASSERT_EQUAL_UINT32(1u, s_fake_store_calls);
+  hal_gamepad_info_t info{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_get_info(s_gamepad, &info));
+  TEST_ASSERT_EQUAL_INT(HAL_GAMEPAD_STATE_CONNECTED, info.state);
+
+  hal_gamepad_snapshot_t snapshot{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_gamepad_snapshot_next(s_gamepad, &snapshot));
+  TEST_ASSERT_TRUE(snapshot.connected);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_gamepad_snapshot_next(s_gamepad, &snapshot));
+  TEST_ASSERT_EQUAL_HEX32(1u, snapshot.buttons);
+
+  s_fake_store_status = HAL_OK;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_poll(s_gamepad));
+  TEST_ASSERT_EQUAL_UINT32(2u, s_fake_store_calls);
+  TEST_ASSERT_TRUE(s_fake_has_bond);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_get_info(s_gamepad, &info));
+  TEST_ASSERT_TRUE(info.known_device);
+  TEST_ASSERT_EQUAL_INT(HAL_GAMEPAD_STATE_CONNECTED, info.state);
+}
+
+void test_adapter_restarts_discovery_after_hid_connection_failure(void) {
+  open_ready(false);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_pairing_open(s_gamepad));
+
+  const hal_bluetooth_classic_scan_result_t gamepad = zero2_scan_result();
+  inject_gamepad_discovery(gamepad, HAL_BLUETOOTH_CLASSIC_SERVICE_HID |
+                                        HAL_BLUETOOTH_CLASSIC_SERVICE_PNP);
+  hal_mock_advance_millis(1000u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_poll(s_gamepad));
+
+  hal_gamepad_info_t info{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_get_info(s_gamepad, &info));
+  TEST_ASSERT_EQUAL_INT(HAL_GAMEPAD_STATE_CONNECTING, info.state);
+  TEST_ASSERT_TRUE(info.pairing_window_open);
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_mock_bluetooth_hid_inject_disconnected(HAL_EAUTH));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_poll(s_gamepad));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_get_info(s_gamepad, &info));
+  TEST_ASSERT_EQUAL_INT(HAL_GAMEPAD_STATE_DISCOVERING, info.state);
+  TEST_ASSERT_TRUE(info.pairing_window_open);
+  TEST_ASSERT_EQUAL_INT(HAL_EAUTH, info.last_status);
+}
+
+void test_failed_known_peer_reconnect_preserves_failure_status(void) {
+  open_ready(true);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_reconnect(s_gamepad));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_mock_bluetooth_hid_inject_disconnected(HAL_EBUSY));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_poll(s_gamepad));
+
+  hal_gamepad_info_t info{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_get_info(s_gamepad, &info));
+  TEST_ASSERT_EQUAL_INT(HAL_GAMEPAD_STATE_READY, info.state);
+  TEST_ASSERT_TRUE(info.known_device);
+  TEST_ASSERT_EQUAL_INT(HAL_EBUSY, info.last_status);
+}
+
+void test_incoming_connection_waiting_for_descriptor_is_connecting(void) {
+  open_ready(true);
+  const hal_bluetooth_classic_address_t peer = {
+      {0xe4u, 0x17u, 0xd8u, 0x2fu, 0x57u, 0x13u}};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_bluetooth_hid_inject_connected(&peer));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_poll(s_gamepad));
+
+  hal_gamepad_info_t info{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_get_info(s_gamepad, &info));
+  TEST_ASSERT_EQUAL_INT(HAL_GAMEPAD_STATE_CONNECTING, info.state);
+  TEST_ASSERT_TRUE(info.known_device);
+}
+
+void test_incoming_connection_is_connecting_before_hid_channels_open(void) {
+  open_ready(true);
+  const hal_bluetooth_classic_address_t peer = {
+      {0xe4u, 0x17u, 0xd8u, 0x2fu, 0x57u, 0x13u}};
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_mock_bluetooth_hid_inject_connecting(&peer));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_poll(s_gamepad));
+
+  hal_gamepad_info_t info{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_get_info(s_gamepad, &info));
+  TEST_ASSERT_EQUAL_INT(HAL_GAMEPAD_STATE_CONNECTING, info.state);
+  TEST_ASSERT_TRUE(info.known_device);
+}
+
+void test_known_incoming_connection_accepts_input_without_reauthorization(
+    void) {
+  open_ready(true);
+  drain_snapshots();
+  const hal_bluetooth_classic_address_t peer = {
+      {0x10u, 0x20u, 0x30u, 0x40u, 0x50u, 0x60u}};
+  inject_hid_input(peer);
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_poll(s_gamepad));
+  hal_gamepad_info_t info{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_get_info(s_gamepad, &info));
+  TEST_ASSERT_EQUAL_INT(HAL_GAMEPAD_STATE_CONNECTED, info.state);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, info.last_status);
+  hal_gamepad_snapshot_t snapshot{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_gamepad_snapshot_next(s_gamepad, &snapshot));
+  TEST_ASSERT_TRUE(snapshot.connected);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_gamepad_snapshot_next(s_gamepad, &snapshot));
+  TEST_ASSERT_EQUAL_HEX32(1u, snapshot.buttons);
+}
+
+void test_adapter_restarts_discovery_after_incomplete_service_result(void) {
+  open_ready(false);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_pairing_open(s_gamepad));
+
+  const hal_bluetooth_classic_scan_result_t gamepad = zero2_scan_result();
+  inject_gamepad_discovery(gamepad, HAL_BLUETOOTH_CLASSIC_SERVICE_HID);
+
+  hal_gamepad_info_t info{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_get_info(s_gamepad, &info));
+  TEST_ASSERT_EQUAL_INT(HAL_GAMEPAD_STATE_DISCOVERING, info.state);
+  TEST_ASSERT_TRUE(info.pairing_window_open);
+  TEST_ASSERT_EQUAL_INT(HAL_EPROTO, info.last_status);
 }
 
 int main(void) {
@@ -420,5 +598,13 @@ int main(void) {
   RUN_TEST(test_forget_erases_bond_disconnects_and_clears_known_device);
   RUN_TEST(test_forget_without_provider_still_clears_ram_state);
   RUN_TEST(test_adapter_filters_candidates_then_parses_generic_hid_input);
+  RUN_TEST(test_adapter_keeps_hid_input_alive_while_bond_store_is_busy);
+  RUN_TEST(test_adapter_restarts_discovery_after_hid_connection_failure);
+  RUN_TEST(test_failed_known_peer_reconnect_preserves_failure_status);
+  RUN_TEST(test_incoming_connection_waiting_for_descriptor_is_connecting);
+  RUN_TEST(test_incoming_connection_is_connecting_before_hid_channels_open);
+  RUN_TEST(
+      test_known_incoming_connection_accepts_input_without_reauthorization);
+  RUN_TEST(test_adapter_restarts_discovery_after_incomplete_service_result);
   return UNITY_END();
 }

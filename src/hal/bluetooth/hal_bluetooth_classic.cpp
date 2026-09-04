@@ -10,6 +10,7 @@
 #include "hal/core/hal_mutex_once.h"
 #include "hal/core/hal_target.h"
 #include "hal/core/jh_handle_pool.h"
+#include "hal/serial/hal_serial.h"
 #include "hal/system/hal_sync.h"
 
 #include <stdio.h>
@@ -265,6 +266,14 @@ void backend_event(void *, const jh_bluetooth_classic_backend_event_t *event) {
     s_classic.pending_key_valid = true;
     break;
 #ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
+  case JH_BLUETOOTH_CLASSIC_EVENT_HID_CONNECTING:
+    if (s_classic.hid_attached &&
+        s_classic.hid_info.state != HAL_BLUETOOTH_HID_STATE_CONNECTED) {
+      s_classic.hid_info.state = HAL_BLUETOOTH_HID_STATE_CONNECTING;
+      s_classic.hid_info.last_status = HAL_OK;
+      s_classic.hid_info.peer_address = event->address;
+    }
+    break;
   case JH_BLUETOOTH_CLASSIC_EVENT_HID_CONNECTED:
     if (s_classic.hid_attached) {
       s_classic.hid_info.state = HAL_BLUETOOTH_HID_STATE_CONNECTED;
@@ -344,6 +353,8 @@ hal_status_t restore_provider_records() {
     hal_bluetooth_classic_bond_blob_t blob{};
     hal_status_t status =
         s_classic.provider.load(s_classic.provider.context, index, &blob);
+    hal_deb("hal_bluetooth_classic: bond load slot=%u status=%s",
+            (unsigned int)index, hal_status_to_string(status));
     if (status == HAL_ENOENT) {
       continue;
     }
@@ -353,6 +364,8 @@ hal_status_t restore_provider_records() {
     jh_bluetooth_classic_bond_identity_t identity{};
     status = jh_bluetooth_classic_bond_decode(&blob, &identity);
     if (status != HAL_OK) {
+      hal_deb("hal_bluetooth_classic: bond decode slot=%u status=%s",
+              (unsigned int)index, hal_status_to_string(status));
       continue;
     }
     hal_mutex_lock(s_classic.mutex);
@@ -407,9 +420,9 @@ hal_status_t flush_pending_peer(hal_bluetooth_classic_t classic) {
   }
   jh_bluetooth_classic_bond_identity_t identity = s_classic.pending_key;
   identity.profile_id = s_classic.pending_profile_id;
-  identity.sequence = ++s_classic.next_sequence;
+  identity.sequence = s_classic.next_sequence + 1u;
   if (identity.sequence == 0u) {
-    identity.sequence = ++s_classic.next_sequence;
+    identity.sequence = 1u;
   }
   size_t storage_index = 0u;
   peer_slot_t *slot = select_peer_slot_locked(identity.address, &storage_index);
@@ -420,6 +433,7 @@ hal_status_t flush_pending_peer(hal_bluetooth_classic_t classic) {
   }
   const bool provider_enabled = s_classic.provider_enabled;
   const hal_bluetooth_classic_bond_provider_t provider = s_classic.provider;
+  const jh_bluetooth_classic_backend_t *backend = s_classic.backend;
   hal_mutex_unlock(s_classic.mutex);
 
   hal_status_t status = HAL_OK;
@@ -439,19 +453,24 @@ hal_status_t flush_pending_peer(hal_bluetooth_classic_t classic) {
       status = provider.store(provider.context, storage_index, &blob);
     }
   }
+  if (status == HAL_OK) {
+    status = backend->peer_restore(backend->context, &identity.address,
+                                   identity.link_key, identity.link_key_type);
+  }
 
   hal_mutex_lock(s_classic.mutex);
   if (status == HAL_OK) {
+    s_classic.next_sequence = identity.sequence;
     slot->identity = identity;
     slot->storage_index = storage_index;
     slot->used = true;
     s_classic.info.peer_count = peer_count_locked();
+    s_classic.pending_key_valid = false;
+    s_classic.pending_save_valid = false;
+    s_classic.approved_pairing_valid = false;
   } else {
     s_classic.info.last_status = status;
   }
-  s_classic.pending_key_valid = false;
-  s_classic.pending_save_valid = false;
-  s_classic.approved_pairing_valid = false;
   s_classic.operation_active = false;
   hal_mutex_unlock(s_classic.mutex);
   return status;
@@ -832,6 +851,11 @@ hal_bluetooth_classic_peer_save(hal_bluetooth_classic_t classic,
   if (!s_classic.approved_pairing_valid ||
       !jh_bluetooth_classic_address_equal(&s_classic.approved_pairing_address,
                                           address)) {
+    const peer_slot_t *existing = find_peer_locked(*address);
+    if (existing != nullptr && existing->identity.profile_id == profile_id) {
+      hal_mutex_unlock(mutex);
+      return HAL_OK;
+    }
     hal_mutex_unlock(mutex);
     return HAL_EAUTH;
   }
@@ -919,20 +943,27 @@ hal_status_t hal_bluetooth_classic_peer_forget(
   const bool provider_enabled = s_classic.provider_enabled;
   const hal_bluetooth_classic_bond_provider_t provider = s_classic.provider;
   const jh_bluetooth_classic_backend_t *backend = s_classic.backend;
+  hal_mutex_unlock(mutex);
+
+  if (provider_enabled) {
+    const hal_status_t status = provider.erase(provider.context, storage_index);
+    if (status != HAL_OK) {
+      hal_mutex_lock(mutex);
+      s_classic.info.last_status = status;
+      s_classic.operation_active = false;
+      hal_mutex_unlock(mutex);
+      return status;
+    }
+  }
+
+  const hal_status_t status = backend->peer_forget(backend->context, address);
+  hal_mutex_lock(mutex);
   slot->used = false;
   memset(&slot->identity, 0, sizeof(slot->identity));
   s_classic.info.peer_count = peer_count_locked();
-  hal_mutex_unlock(mutex);
-
-  hal_status_t status = backend->peer_forget(backend->context, address);
-  if (provider_enabled) {
-    const hal_status_t erase_status =
-        provider.erase(provider.context, storage_index);
-    if (status == HAL_OK) {
-      status = erase_status;
-    }
+  if (status != HAL_OK) {
+    s_classic.info.last_status = status;
   }
-  hal_mutex_lock(mutex);
   s_classic.operation_active = false;
   hal_mutex_unlock(mutex);
   return status;

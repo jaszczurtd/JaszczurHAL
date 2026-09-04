@@ -439,6 +439,9 @@ exactly like "no bond" rather than trusted.
 active link, clears the known peer from the controller and from RAM, and
 erases the persisted blob through the bond provider (a no-op when none was
 given). A subsequent `hal_gamepad_pairing_open()` starts a fresh pairing.
+Persistent storage is erased before the manager drops its runtime peer. If
+the provider reports an error, the peer remains known so the application can
+retry the factory reset and the old bond cannot silently return after reboot.
 
 Backend-specific link-key behavior is described under the Classic manager
 above. `hal_gamepad_forget()` delegates native bond removal and provider erase
@@ -711,8 +714,10 @@ delta was 5794 echoes at 9.66 Hz, with zero stagnant one-second summaries.
 
 ## License and distribution boundary
 
-Bluetooth firmware links BlueKitchen BTstack from the exact revision recorded in
-`third_party/btstack_version.conf`. Two distinct license texts are tracked:
+Bluetooth firmware links the project-maintained fork of BlueKitchen BTstack
+from the exact revision recorded in `third_party/btstack_version.conf`.
+JaszczurHAL applies no local source patches. Two distinct license texts are
+tracked:
 
 - the standard BlueKitchen
   [`third_party/LICENSE.BTstack`](../../../third_party/LICENSE.BTstack) grant

@@ -9,11 +9,21 @@ try:
 except ImportError:  # pragma: no cover - exercised by dependency diagnostics
     _serial = None
 
+try:
+    import termios as _termios
+except ImportError:  # pragma: no cover - unavailable on native Windows
+    _termios = None
+
 
 def serial_error_types() -> tuple[type[BaseException], ...]:
-    if _serial is None:
-        return (OSError,)
-    return (OSError, _serial.SerialException)
+    errors: list[type[BaseException]] = [OSError]
+    if _serial is not None:
+        errors.append(_serial.SerialException)
+    if _termios is not None and not any(
+        issubclass(_termios.error, error) for error in errors
+    ):
+        errors.append(_termios.error)
+    return tuple(errors)
 
 
 def open_serial_port(

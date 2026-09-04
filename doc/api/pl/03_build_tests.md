@@ -237,7 +237,7 @@ co aplikacje i zapisują artefakty w `.build/hardware/`:
 | `tests/hardware/rp_kv_power_loss` | Odzyskiwanie dwóch banków KV po przerwaniu po kasowaniu, zapisie treści, weryfikacji i publikacji |
 | `tests/hardware/rp_storage` | Trwały zapis w EEPROM, formatowanie i ponowne montowanie LittleFS oraz montowanie po resecie |
 | `tests/hardware/rp_sdlogger` | Fizyczne montowanie karty SD przez SPI, deterministyczne dopisywanie, opróżnianie bufora i zamykanie pliku, reset, ponowne montowanie, zawartość pliku i trwałość licznika logów w EEPROM |
-| `tests/hardware/rp_ota` | Odkrywanie, uwierzytelnianie, transfer, próba/potwierdzenie, wycofanie (rollback) i odzyskiwanie USB/sieci |
+| `tests/hardware/rp_ota` | Odkrywanie, uwierzytelnianie, transfer, próba/potwierdzenie, wycofanie (rollback), współpraca trwałego storage i odzyskiwanie USB/sieci |
 | `tests/hardware/lora_sx1262` | Inicjalizacja dwóch urządzeń SX1262, dwukierunkowe surowe pakiety, cykl życia niezawodnego łącza oraz fragmentowane transakcje żądanie/odpowiedź routera poleceń na parach zintegrowanych LF lub zewnętrznych HF |
 | `tests/hardware/esp32s3_phase1` | Tożsamość targetu/płytki ESP32-S3 Fazy 1, generowana sygnatura linkowania, model układu/liczba rdzeni, fizyczny flash, zainicjalizowany Quad PSRAM oraz powtarzane bicie serca `app_task0()` FreeRTOS nad natywnym USB Serial/JTAG. |
 | `tests/hardware/esp32s3_phase2` | Sonda runtime Fazy 2 ESP32-S3 dla obu zadań aplikacji, system/sync, GPIO/IRQ, ADC, USB Serial/JTAG TX/RX, sprzętowy UART, skanowanie mastera I2C, ścieżka transferu mastera SPI, callbacki timera z dedykowanej puli oraz włączona konfiguracja stack-guard FreeRTOS. |
@@ -537,10 +537,12 @@ fragment końcowy.
 `tests/hardware/rp_ota` weryfikuje odkrywanie i uwierzytelnianie OTA,
 potwierdzany transfer fragment po fragmencie, próbny rozruch (trial boot),
 jawne potwierdzenie, drugą niepotwierdzoną próbę, automatyczne wycofanie
-(rollback) oraz odzyskiwanie sieci/USB po każdym restarcie. Obsługuje
-Pico W/RP2040 oraz Pico 2 W/RP2350 ARM w buildach bare-metal i FreeRTOS,
-a także zwykłego Pico/RP2040 podłączonego do bezprzewodowego modułu
-PIM730/RM2.
+(rollback) oraz odzyskiwanie sieci/USB po każdym restarcie. Ten sam fixture
+zwiększa licznik rozruchów w dwubankowym `hal_kv` i montuje osobną partycję
+LittleFS, potwierdzając zachowanie obu użytkowników trwałego storage podczas
+zmian obszarów programu, stagingu i sterowania OTA. Obsługuje Pico W/RP2040
+oraz Pico 2 W/RP2350 ARM w buildach bare-metal i FreeRTOS, a także zwykłego
+Pico/RP2040 podłączonego do bezprzewodowego modułu PIM730/RM2.
 
 Skopiuj lokalny szablon sekretu i zastąp wszystkie wartości. Wynikowy
 nagłówek jest ignorowany przez Git:
@@ -634,7 +636,8 @@ między nimi. Pico W i Pico+PIM730 współdzielą nazwę hosta RP2040; gdy oba s
 zasilone, przekaż adres IP wybranego urządzenia do `--broadcast`. Odpowiedź
 statusu CDC zawiera i weryfikator sprawdza profil płytki, aktualny adres
 IPv4, target, runtime i stan rozruchu OTA, plus aktywne `clk_sys`, żądaną i
-efektywną szybkość gSPI, dzielnik 16,8 oraz wybrany program timingu PIO.
+efektywną szybkość gSPI, dzielnik 16,8, wybrany program timingu PIO, licznik
+rozruchów w KV oraz stan montowania/formatowania LittleFS.
 Weryfikator tworzy podpisane kontenery A/B poniżej `.build/hardware/rp_ota`
 i pozostawia urządzenie w stabilnym obrazie A po udowodnieniu wycofania z
 obrazu B.

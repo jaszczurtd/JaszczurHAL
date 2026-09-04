@@ -103,7 +103,7 @@ static void dma_irq1_handler(void) {
 
   for (uint8_t i = 0u; i < HAL_DMA_PWM_AUDIO_MAX_CHANNELS; ++i) {
     hal_dma_pwm_audio_impl_t *audio = &s_pool[i];
-    if (!audio->in_use || !audio->running) {
+    if (!audio->in_use || !audio->running || audio->paused) {
       continue;
     }
 
@@ -247,6 +247,28 @@ static void configure_adc_dma(hal_dma_pwm_audio_impl_t *audio) {
                         &audio->adc_write_addr, 1u, false);
 }
 
+static void reset_dma_transfers(hal_dma_pwm_audio_impl_t *audio) {
+  const uint32_t pwm_mask =
+      (1u << (uint)audio->dma_a) | (1u << (uint)audio->dma_b);
+  dma_hw->ints1 = pwm_mask;
+  dma_channel_set_read_addr((uint)audio->dma_a, audio->buffer_a, false);
+  dma_channel_set_trans_count((uint)audio->dma_a, audio->block_size, false);
+  dma_channel_set_read_addr((uint)audio->dma_b, audio->buffer_b, false);
+  dma_channel_set_trans_count((uint)audio->dma_b, audio->block_size, false);
+
+  if (audio->adc_count == 0u) {
+    return;
+  }
+  adc_fifo_drain();
+  dma_channel_set_write_addr((uint)audio->dma_adc_sample,
+                             (void *)audio->adc_buffer, false);
+  dma_channel_set_trans_count((uint)audio->dma_adc_sample, audio->adc_count,
+                              false);
+  dma_channel_set_read_addr((uint)audio->dma_adc_control,
+                            &audio->adc_write_addr, false);
+  dma_channel_set_trans_count((uint)audio->dma_adc_control, 1u, false);
+}
+
 hal_status_t hal_dma_pwm_audio_create_ex(const hal_dma_pwm_audio_config_t *cfg,
                                          hal_dma_pwm_audio_t *out_audio) {
   if (out_audio == nullptr) {
@@ -315,6 +337,7 @@ hal_status_t hal_dma_pwm_audio_start_ex(hal_dma_pwm_audio_t audio) {
     return audio == nullptr ? HAL_EINVAL : HAL_ESTATE;
   }
 
+  reset_dma_transfers(audio);
   if (audio->adc_count > 0u) {
     dma_channel_start((uint)audio->dma_adc_sample);
     dma_channel_start((uint)audio->dma_adc_control);
@@ -349,7 +372,9 @@ hal_status_t hal_dma_pwm_audio_stop(hal_dma_pwm_audio_t audio) {
   if (audio->adc_count > 0u) {
     adc_run(false);
   }
+  dma_hw->ints1 = (1u << (uint)audio->dma_a) | (1u << (uint)audio->dma_b);
   audio->running = false;
+  audio->paused = false;
   return HAL_OK;
 }
 
@@ -359,8 +384,20 @@ hal_status_t hal_dma_pwm_audio_pause(hal_dma_pwm_audio_t audio,
     return audio == nullptr ? HAL_EINVAL : HAL_ESTATE;
   }
   audio->idle_value = idle_value;
-  pwm_set_gpio_level(audio->pwm_pin, idle_value);
   pwm_set_enabled(audio->pwm_slice, false);
+  dma_channel_abort((uint)audio->dma_a);
+  dma_channel_abort((uint)audio->dma_b);
+  if (audio->dma_adc_sample >= 0) {
+    dma_channel_abort((uint)audio->dma_adc_sample);
+  }
+  if (audio->dma_adc_control >= 0) {
+    dma_channel_abort((uint)audio->dma_adc_control);
+  }
+  if (audio->adc_count > 0u) {
+    adc_run(false);
+  }
+  dma_hw->ints1 = (1u << (uint)audio->dma_a) | (1u << (uint)audio->dma_b);
+  pwm_set_gpio_level(audio->pwm_pin, idle_value);
   audio->paused = true;
   return HAL_OK;
 }
@@ -369,9 +406,16 @@ hal_status_t hal_dma_pwm_audio_resume(hal_dma_pwm_audio_t audio) {
   if (audio == nullptr || !audio->in_use) {
     return audio == nullptr ? HAL_EINVAL : HAL_ESTATE;
   }
+  reset_dma_transfers(audio);
+  if (audio->adc_count > 0u) {
+    dma_channel_start((uint)audio->dma_adc_sample);
+    dma_channel_start((uint)audio->dma_adc_control);
+    adc_run(true);
+  }
   audio->paused = false;
   audio->running = true;
   pwm_set_enabled(audio->pwm_slice, true);
+  dma_channel_start((uint)audio->dma_a);
   return HAL_OK;
 }
 
