@@ -3,6 +3,7 @@
 /** @file Formatting and scan helpers shared by network applications. */
 
 #include "hal/core/hal_status.h"
+#include "hal/core/hal_text.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -13,7 +14,7 @@ extern "C" {
 #endif
 
 /** Bytes required for a terminated `XX:XX:XX:XX:XX:XX` string. */
-#define HAL_NETWORK_MAC_STRING_SIZE 18u
+#define HAL_NETWORK_MAC_STRING_SIZE HAL_TEXT_MAC_STRING_SIZE
 
 /**
  * @brief Format a six-byte MAC address using uppercase hexadecimal digits.

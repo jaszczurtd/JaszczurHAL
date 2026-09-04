@@ -3,7 +3,7 @@ include_guard(GLOBAL)
 
 set(JH_HAL_FEATURE_SCHEMA_VERSION 1)
 set(JH_HAL_FEATURE_GENERATOR_VERSION 2)
-set(JH_HAL_FEATURE_REGISTRY_DIGEST "91888f1d2516b9c5c4617e32f1be54e1feb49426f9c520dd10b8806f84d448e3")
+set(JH_HAL_FEATURE_REGISTRY_DIGEST "81df569693b3c092505f6bf2d9b5bb76af2eac8894cde3cf8276acca827c6606")
 set(JH_HAL_FEATURE_SCHEMA_DIGEST "2c12d1033fd2d687c9cf3905c9ca9d67c41241930fc3cb7c31f9f2b3e7812e07")
 
 set(JH_HAL_FEATURE_SYMBOLS
@@ -228,6 +228,7 @@ set(JH_HAL_FEATURE_HAL_ENABLE_BLUETOOTH_CLASSIC_BUILD_EFFECT_PORTABLE_SOURCES
     "src/hal/bluetooth/hal_bluetooth_classic.cpp"
     "src/hal/bluetooth/jh_bluetooth_classic_bond_codec.c"
     "src/hal/bluetooth/jh_bluetooth_classic_bond_kv_provider.c"
+    "src/hal/security/jh_secure_random.cpp"
 )
 
 set(JH_HAL_FEATURE_HAL_ENABLE_BLUETOOTH_GAMEPAD_DOMAIN "connectivity")

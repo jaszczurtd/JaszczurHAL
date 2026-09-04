@@ -12,6 +12,21 @@
 extern "C" {
 #endif
 
+/** Bytes required for a terminated `XX:XX:XX:XX:XX:XX` string. */
+#define HAL_TEXT_MAC_STRING_SIZE 18u
+
+/**
+ * @brief Format six bytes as an uppercase colon-separated MAC address.
+ * @param mac Six input bytes in display order; must not be NULL.
+ * @param buffer Destination buffer; must not be NULL.
+ * @param buffer_size Destination capacity including the terminator.
+ * @return HAL_OK, HAL_EINVAL for a NULL pointer, HAL_EOVERFLOW when the
+ * destination is shorter than HAL_TEXT_MAC_STRING_SIZE, or HAL_EIO if the
+ * formatter does not produce exactly 17 characters.
+ */
+hal_status_t hal_text_format_mac_ex(const uint8_t mac[6], char *buffer,
+                                    size_t buffer_size);
+
 /**
  * @brief Format an integer as an 8-, 16-, or 32-bit binary string.
  *

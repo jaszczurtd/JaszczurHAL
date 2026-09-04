@@ -8,21 +8,11 @@
 #include "hal/network/hal_wifi.h"
 #endif
 
-#include <stdio.h>
 #include <string.h>
 
 hal_status_t hal_network_format_mac_ex(const uint8_t mac[6], char *buffer,
                                        size_t buffer_size) {
-  if (mac == nullptr || buffer == nullptr) {
-    return HAL_EINVAL;
-  }
-  if (buffer_size < HAL_NETWORK_MAC_STRING_SIZE) {
-    return HAL_EOVERFLOW;
-  }
-  const int written =
-      snprintf(buffer, buffer_size, "%02X:%02X:%02X:%02X:%02X:%02X", mac[0],
-               mac[1], mac[2], mac[3], mac[4], mac[5]);
-  return written == 17 ? HAL_OK : HAL_EIO;
+  return hal_text_format_mac_ex(mac, buffer, buffer_size);
 }
 
 hal_status_t hal_wifi_scan_for_ssid_ex(const char *ssid_prefix,

@@ -480,8 +480,23 @@ void test_rgb565_buffer_converters_reject_null(void) {
                         hal_pixel_rgba8888_buffer_to_rgb565_ex(rgb, NULL, 1));
 }
 
-/* ── hal_network_format_mac
+/* ── MAC address formatting
  * ───────────────────────────────────────────────────────── */
+
+void test_hal_text_format_mac(void) {
+  const uint8_t mac[6] = {0x00, 0x12, 0x34, 0xAB, 0xCD, 0xEF};
+  char buf[HAL_TEXT_MAC_STRING_SIZE] = {};
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_text_format_mac_ex(mac, buf, sizeof(buf)));
+  TEST_ASSERT_EQUAL_STRING("00:12:34:AB:CD:EF", buf);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EOVERFLOW,
+      hal_text_format_mac_ex(mac, buf, HAL_TEXT_MAC_STRING_SIZE - 1u));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_text_format_mac_ex(NULL, buf, sizeof(buf)));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_text_format_mac_ex(mac, NULL, sizeof(buf)));
+}
 
 void test_hal_network_format_mac(void) {
   uint8_t mac[6] = {0x11, 0x22, 0x33, 0xAA, 0xBB, 0xCC};
@@ -1104,6 +1119,7 @@ int main(void) {
   RUN_TEST(test_hal_pixel_rgba8888_buffer_to_rgb565_buffer_ignores_alpha);
   RUN_TEST(test_rgb565_buffer_converters_reject_null);
 
+  RUN_TEST(test_hal_text_format_mac);
   RUN_TEST(test_hal_network_format_mac);
   RUN_TEST(test_hal_wifi_scan_for_ssid_uses_hal_wifi_scan_results);
 

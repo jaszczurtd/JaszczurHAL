@@ -122,6 +122,9 @@ accepted = scratch / "with-flag"
 rejected = scratch / "without-flag"
 project_config = scratch / "project-config"
 project_features = scratch / "project-features"
+classic_features = scratch / "classic-features"
+invalid_cyw43_keyword_source = scratch / "invalid-cyw43-keyword-source"
+invalid_cyw43_keyword_build = scratch / "invalid-cyw43-keyword-build"
 invalid_unity = scratch / "invalid-unity"
 invalid_unity_list = scratch / "invalid-unity-list"
 direct_unity = scratch / "direct-unity"
@@ -226,6 +229,86 @@ try:
             any(source.endswith(suffix) for source in compiled_sources),
             f"project-header feature did not select STM32 source: {suffix}",
         )
+
+    classic_feature_configure = subprocess.run(
+        [
+            cmake,
+            "-S",
+            str(ROOT / "stm32_lib"),
+            "-B",
+            str(classic_features),
+            HOST_SANITY_FLAG,
+            "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+            "-DJH_BOARD=nucleo-g474re-pim730",
+            "-DEXTRA_HAL_DEFINES=HAL_ENABLE_BLUETOOTH_GAMEPAD",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    require(
+        classic_feature_configure.returncode == 0,
+        "Classic STM32 static-library configure failed:\n"
+        f"{classic_feature_configure.stdout}\n"
+        f"{classic_feature_configure.stderr}",
+    )
+    classic_commands = json.loads(
+        (classic_features / "compile_commands.json").read_text(encoding="utf-8")
+    )
+    classic_sources = {
+        Path(str(entry["file"])).resolve().as_posix()
+        for entry in classic_commands
+    }
+    for suffix in (
+        "/src/hal/bluetooth/jh_bluetooth_classic_btstack_backend.c",
+        "/third_party/BTstack/src/classic/hid_host.c",
+        "/cybt_shared_bus.c",
+        "/cybt_shared_bus_driver.c",
+    ):
+        require(
+            any(source.endswith(suffix) for source in classic_sources),
+            f"Classic feature did not select STM32 source: {suffix}",
+        )
+    classic_command_text = "\n".join(
+        str(entry.get("command") or " ".join(entry.get("arguments", [])))
+        for entry in classic_commands
+    )
+    require(
+        "JH_CYW43_BLUETOOTH=1" in classic_command_text,
+        "Classic STM32 static library does not enable CYW43 Bluetooth firmware",
+    )
+
+    invalid_cyw43_keyword_source.mkdir(parents=True)
+    invalid_cyw43_keyword_cmake = """\
+cmake_minimum_required(VERSION 3.16)
+project(jh_invalid_cyw43_keyword NONE)
+include("@HELPER@")
+jh_target_enable_cyw43_feature_stack(probe GAMEPAD TRUE)
+""".replace(
+        "@HELPER@", (ROOT / "cmake/jh_cyw43_driver.cmake").as_posix()
+    )
+    (invalid_cyw43_keyword_source / "CMakeLists.txt").write_text(
+        invalid_cyw43_keyword_cmake, encoding="utf-8"
+    )
+    invalid_cyw43_keyword = subprocess.run(
+        [
+            cmake,
+            "-S",
+            str(invalid_cyw43_keyword_source),
+            "-B",
+            str(invalid_cyw43_keyword_build),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    require(
+        invalid_cyw43_keyword.returncode != 0
+        and "Unknown CYW43 feature-stack arguments" in invalid_cyw43_keyword.stderr
+        and "GAMEPAD" in invalid_cyw43_keyword.stderr,
+        "CYW43 feature-stack helper accepted an unknown keyword:\n"
+        f"{invalid_cyw43_keyword.stdout}\n{invalid_cyw43_keyword.stderr}",
+    )
 
     invalid_unity_configure = subprocess.run(
         [

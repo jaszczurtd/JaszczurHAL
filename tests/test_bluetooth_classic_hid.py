@@ -191,9 +191,17 @@ require(
     and source_has_fragment(btstack_cmake, "src/classic/hid_device.c")
     and source_has_fragment(btstack_cmake, "src/classic/sdp_server.c")
     and source_has_fragment(
-        btstack_cmake, 'MODE STREQUAL "CLASSIC_HID_DEVICE_FIXTURE"'
+        btstack_cmake, "elseif(JH_BTSTACK_CLASSIC_HID_DEVICE_FIXTURE)"
     ),
     "the private non-gamepad HID Device fixture sources are incomplete",
+)
+require(
+    source_has_fragment(btstack_cmake, "if(JH_BTSTACK_BLE)")
+    and source_has_fragment(btstack_cmake, "if(JH_BTSTACK_CLASSIC)")
+    and source_has_fragment(btstack_cmake, "if(JH_BTSTACK_HID_HOST)")
+    and not source_has_fragment(btstack_cmake, "PUBLIC_CLASSIC_BLE")
+    and not source_has_fragment(btstack_cmake, "PUBLIC_HID_HOST_BLE"),
+    "public BTstack profiles are not composed from independent feature flags",
 )
 for forbidden in (
     "src/classic/rfcomm.c",
@@ -263,10 +271,27 @@ cyw43_cmake = (ROOT / "cmake" / "jh_cyw43_driver.cmake").read_text(
 rp_cmake = (ROOT / "cmake" / "jh_rp_native_sdk.cmake").read_text(
     encoding="utf-8"
 )
+stm32_static_cmake = (ROOT / "stm32_lib" / "CMakeLists.txt").read_text(
+    encoding="utf-8"
+)
 require(
     source_has_fragment(cyw43_cmake, "jh_target_enable_btstack_classic_hid")
     and "The private Classic HID probe cannot use a public profile" in cyw43_cmake,
     "CYW43 selector does not isolate the Classic HID mode",
+)
+require(
+    "JH_CYW43_FEATURE_UNPARSED_ARGUMENTS" in cyw43_cmake
+    and "Unknown CYW43 feature-stack arguments" in cyw43_cmake,
+    "CYW43 feature selection does not reject unknown arguments",
+)
+require(
+    source_has_fragment(
+        stm32_static_cmake,
+        'CLASSIC "${_jh_stm32_has_bluetooth_classic}" '
+        'HID_HOST "${_jh_stm32_has_bluetooth_hid_host}"',
+    )
+    and not source_has_fragment(stm32_static_cmake, "GAMEPAD"),
+    "STM32 static library does not pass resolved Classic and HID Host features",
 )
 require(
     "Bluetooth Classic HID requires a CYW43 network backend" in rp_cmake,
@@ -328,6 +353,26 @@ require(
 logic = (
     ROOT / "src" / "hal" / "bluetooth" / "jh_bluetooth_classic_hid_probe_logic.c"
 ).read_text(encoding="utf-8")
+classic_facade = (
+    ROOT / "src" / "hal" / "bluetooth" / "hal_bluetooth_classic.cpp"
+).read_text(encoding="utf-8")
+require(
+    source_has_fragment(
+        classic_facade,
+        "return hal_text_format_mac_ex(address->bytes, out, out_size)",
+    ),
+    "Classic address formatting does not use the shared text helper",
+)
+for sensitive_copy in (
+    "jh_secure_zeroize(&blob, sizeof(blob))",
+    "jh_secure_zeroize(&identity, sizeof(identity))",
+    "jh_secure_zeroize(&s_classic.pending_key, sizeof(s_classic.pending_key))",
+    "jh_secure_zeroize(&slot->identity, sizeof(slot->identity))",
+):
+    require(
+        source_has_fragment(classic_facade, sensitive_copy),
+        f"Classic bonding does not erase sensitive copy: {sensitive_copy}",
+    )
 require(
     source_has_fragment(logic, "JH_CLASSIC_HID_DISCOVERY_WINDOW_MS"),
     "C5 discovery-window logic lost its bounded duration",

@@ -1,6 +1,7 @@
 #include "hal/core/hal_text.h"
 
 #include <ctype.h>
+#include <stdio.h>
 #include <string.h>
 
 namespace {
@@ -69,6 +70,20 @@ char transliterated_polish(unsigned char first, unsigned char second) {
 }
 
 } // namespace
+
+hal_status_t hal_text_format_mac_ex(const uint8_t mac[6], char *buffer,
+                                    size_t buffer_size) {
+  if (mac == nullptr || buffer == nullptr) {
+    return HAL_EINVAL;
+  }
+  if (buffer_size < HAL_TEXT_MAC_STRING_SIZE) {
+    return HAL_EOVERFLOW;
+  }
+  const int written =
+      snprintf(buffer, buffer_size, "%02X:%02X:%02X:%02X:%02X:%02X", mac[0],
+               mac[1], mac[2], mac[3], mac[4], mac[5]);
+  return written == (int)(HAL_TEXT_MAC_STRING_SIZE - 1u) ? HAL_OK : HAL_EIO;
+}
 
 char *hal_text_format_binary_int(int value, char *buffer, size_t buffer_size) {
   if (buffer == nullptr || buffer_size == 0u) {

@@ -215,6 +215,11 @@ walidują argumenty. Zachowanie ADC, takie jak liczba próbek, pusty odczyt,
 opóźnienie i korekcja charakterystyki, wybiera
 `hal_adc_average_config_t`, a nie ukryte ustawienia ogólne projektu.
 
+`hal_text_format_mac_ex()` zapisuje dowolny sześciobajtowy adres sprzętowy jako
+`XX:XX:XX:XX:XX:XX` z wielkimi literami. Bufor docelowy musi mieć
+`HAL_TEXT_MAC_STRING_SIZE` bajtów. Sieciowy punkt zgodności
+`hal_network_format_mac_ex()` pozostaje dostępny i wywołuje ten helper.
+
 ### Funkcje pomocnicze do manipulacji bitami (`hal_bits`)
 
 Każdą definicję aliasu bitowego chroni `#ifndef`, dzięki czemu aplikacja może
@@ -327,6 +332,8 @@ uint8_t  jh_u16_lsb(uint16_t value);
 uint8_t  MSB(unsigned short value);
 uint8_t  LSB(unsigned short value);
 uint16_t jh_u16_from_bytes(uint8_t msb, uint8_t lsb);
+hal_status_t hal_text_format_mac_ex(const uint8_t mac[6], char *buffer,
+                                    size_t buffer_size);
 char *hal_text_format_binary_int(int value, char *buffer, size_t buffer_size);
 hal_status_t hal_text_concat_ex(char *destination, size_t destination_size,
                                  const char *first, const char *second);
