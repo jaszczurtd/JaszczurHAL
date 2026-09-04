@@ -5,13 +5,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import re
 import subprocess
 import sys
 
 
 ROOT = Path(sys.argv[1]).resolve()
-BTSTACK_REF = "501e6d2b86e6c92bfb9c390bcf55709938e25ac1"
+BTSTACK_REPO = "https://github.com/jaszczurtd/btstack.git"
+BTSTACK_REF = "0cfae0eb5aa61650924168b368c5ea93b4b363e4"
 
 
 def require(condition: bool, message: str) -> None:
@@ -21,22 +21,23 @@ def require(condition: bool, message: str) -> None:
 
 pin = (ROOT / "third_party/btstack_version.conf").read_text(encoding="utf-8")
 require(
-    f"BTSTACK_REF={BTSTACK_REF}" in pin,
-    "BTstack does not match the revision selected by Pico SDK 2.2.0",
+    f"BTSTACK_REPO={BTSTACK_REPO}" in pin
+    and f"BTSTACK_REF={BTSTACK_REF}" in pin,
+    "BTstack does not match the reviewed JaszczurHAL fork revision",
 )
 
-pico_sdk = ROOT / "third_party/pico-sdk"
-if pico_sdk.is_dir():
-    gitlink = subprocess.run(
-        ["git", "ls-tree", "HEAD", "lib/btstack"],
-        cwd=pico_sdk,
+btstack = ROOT / "third_party/BTstack"
+if btstack.is_dir():
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=btstack,
         check=True,
         capture_output=True,
         text=True,
     ).stdout.strip()
     require(
-        re.search(rf"\b{BTSTACK_REF}\tlib/btstack$", gitlink) is not None,
-        "managed BTstack pin differs from the pinned Pico SDK gitlink",
+        head == BTSTACK_REF,
+        "managed BTstack checkout differs from the reviewed fork revision",
     )
 
 btstack_cmake = (ROOT / "cmake/jh_btstack.cmake").read_text(encoding="utf-8")

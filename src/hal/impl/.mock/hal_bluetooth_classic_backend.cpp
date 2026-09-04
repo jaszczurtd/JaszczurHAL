@@ -15,10 +15,13 @@ struct mock_classic_t {
   void *event_context;
   hal_bluetooth_classic_address_t hid_address;
   hal_status_t service_status;
+  hal_status_t peer_restore_status;
+  uint32_t peer_restore_calls;
   bool started;
   bool scanning;
   bool pairing_pending;
 #ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
+  bool hid_connecting;
   bool hid_connected;
 #endif
 };
@@ -40,6 +43,7 @@ hal_status_t mock_start(void *,
   memset(&s_mock, 0, sizeof(s_mock));
   s_mock.started = true;
   s_mock.service_status = HAL_OK;
+  s_mock.peer_restore_status = HAL_OK;
   s_mock.event_handler = event_handler;
   s_mock.event_context = event_context;
   return HAL_OK;
@@ -52,6 +56,7 @@ hal_status_t mock_stop(void *) {
   s_mock.started = false;
   s_mock.scanning = false;
 #ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
+  s_mock.hid_connecting = false;
   s_mock.hid_connected = false;
 #endif
   return HAL_OK;
@@ -119,7 +124,11 @@ hal_status_t mock_peer_restore(void *,
   if (!s_mock.started) {
     return HAL_EUNINIT;
   }
-  return address == nullptr || link_key == nullptr ? HAL_EINVAL : HAL_OK;
+  if (address == nullptr || link_key == nullptr) {
+    return HAL_EINVAL;
+  }
+  ++s_mock.peer_restore_calls;
+  return s_mock.peer_restore_status;
 }
 
 hal_status_t mock_peer_forget(void *,
@@ -134,10 +143,11 @@ hal_status_t mock_hid_connect(void *,
   if (!s_mock.started) {
     return HAL_EUNINIT;
   }
-  if (address == nullptr || s_mock.hid_connected) {
+  if (address == nullptr || s_mock.hid_connecting || s_mock.hid_connected) {
     return address == nullptr ? HAL_EINVAL : HAL_ESTATE;
   }
   s_mock.hid_address = *address;
+  s_mock.hid_connecting = true;
   return HAL_OK;
 }
 
@@ -145,9 +155,10 @@ hal_status_t mock_hid_disconnect(void *) {
   if (!s_mock.started) {
     return HAL_EUNINIT;
   }
-  if (!s_mock.hid_connected) {
+  if (!s_mock.hid_connecting && !s_mock.hid_connected) {
     return HAL_ESTATE;
   }
+  s_mock.hid_connecting = false;
   s_mock.hid_connected = false;
   jh_bluetooth_classic_backend_event_t event{};
   event.type = JH_BLUETOOTH_CLASSIC_EVENT_HID_DISCONNECTED;
@@ -203,6 +214,14 @@ jh_bluetooth_classic_backend_instance(void) {
 
 void hal_mock_bluetooth_classic_reset(void) {
   memset(&s_mock, 0, sizeof(s_mock));
+}
+
+void hal_mock_bluetooth_classic_set_peer_restore_status(hal_status_t status) {
+  s_mock.peer_restore_status = status;
+}
+
+uint32_t hal_mock_bluetooth_classic_peer_restore_calls(void) {
+  return s_mock.peer_restore_calls;
 }
 
 hal_status_t hal_mock_bluetooth_classic_inject_ready(void) {
@@ -271,6 +290,24 @@ hal_status_t hal_mock_bluetooth_classic_inject_link_key(
 }
 
 #ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
+hal_status_t hal_mock_bluetooth_hid_inject_connecting(
+    const hal_bluetooth_classic_address_t *address) {
+  if (address == nullptr) {
+    return HAL_EINVAL;
+  }
+  if (!s_mock.started || s_mock.hid_connecting || s_mock.hid_connected) {
+    return !s_mock.started ? HAL_EUNINIT : HAL_ESTATE;
+  }
+  s_mock.hid_address = *address;
+  s_mock.hid_connecting = true;
+  jh_bluetooth_classic_backend_event_t event{};
+  event.type = JH_BLUETOOTH_CLASSIC_EVENT_HID_CONNECTING;
+  event.status = HAL_OK;
+  event.address = *address;
+  emit(event);
+  return HAL_OK;
+}
+
 hal_status_t hal_mock_bluetooth_hid_inject_connected(
     const hal_bluetooth_classic_address_t *address) {
   if (address == nullptr) {
@@ -280,6 +317,7 @@ hal_status_t hal_mock_bluetooth_hid_inject_connected(
     return !s_mock.started ? HAL_EUNINIT : HAL_ESTATE;
   }
   s_mock.hid_address = *address;
+  s_mock.hid_connecting = false;
   s_mock.hid_connected = true;
   jh_bluetooth_classic_backend_event_t event{};
   event.type = JH_BLUETOOTH_CLASSIC_EVENT_HID_CONNECTED;
@@ -326,9 +364,10 @@ hal_mock_bluetooth_hid_inject_report(const hal_bluetooth_hid_report_t *report) {
 }
 
 hal_status_t hal_mock_bluetooth_hid_inject_disconnected(hal_status_t status) {
-  if (!s_mock.started || !s_mock.hid_connected) {
+  if (!s_mock.started || (!s_mock.hid_connecting && !s_mock.hid_connected)) {
     return !s_mock.started ? HAL_EUNINIT : HAL_ESTATE;
   }
+  s_mock.hid_connecting = false;
   s_mock.hid_connected = false;
   jh_bluetooth_classic_backend_event_t event{};
   event.type = JH_BLUETOOTH_CLASSIC_EVENT_HID_DISCONNECTED;

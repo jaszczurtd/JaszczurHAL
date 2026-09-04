@@ -930,9 +930,9 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:btstack@v1.6.2-1-g501e6d2b8",
+      "bom-ref": "pkg:btstack@0cfae0eb5",
       "name": "BTstack",
-      "version": "v1.6.2-1-g501e6d2b8",
+      "version": "0cfae0eb5",
       "scope": "optional",
       "licenses": [
         {
@@ -942,11 +942,11 @@
       "supplier": {
         "name": "BlueKitchen GmbH"
       },
-      "purl": "pkg:github/bluekitchen/btstack@501e6d2b86e6c92bfb9c390bcf55709938e25ac1",
+      "purl": "pkg:github/jaszczurtd/btstack@0cfae0eb5aa61650924168b368c5ea93b4b363e4",
       "externalReferences": [
         {
           "type": "website",
-          "url": "https://github.com/bluekitchen/btstack"
+          "url": "https://github.com/jaszczurtd/btstack"
         },
         {
           "type": "other",
@@ -977,15 +977,15 @@
       "properties": [
         {
           "name": "jaszczurhal:commit",
-          "value": "501e6d2b86e6c92bfb9c390bcf55709938e25ac1"
+          "value": "0cfae0eb5aa61650924168b368c5ea93b4b363e4"
         },
         {
           "name": "jaszczurhal:notes",
-          "value": "Exact Pico SDK-selected revision. The standard BlueKitchen grant is limited to personal, non-commercial use and imposes notice conditions. A separate Raspberry Pi grant permits a Customer to use and distribute BTstack only with the Products and Customer Products defined in src/hal/bluetooth/LICENSE.RP; it is not a general CYW43 permission. The applicable grant and notice obligations depend on the hardware and distribution."
+          "value": "Exact revision of the project-maintained BlueKitchen BTstack fork, including the reviewed Classic incoming/outgoing connection collision fix. JaszczurHAL compiles it directly without local source patches. The standard BlueKitchen grant is limited to personal, non-commercial use and imposes notice conditions. A separate Raspberry Pi grant permits a Customer to use and distribute BTstack only with the Products and Customer Products defined in src/hal/bluetooth/LICENSE.RP; it is not a general CYW43 permission. The applicable grant and notice obligations depend on the hardware and distribution."
         },
         {
           "name": "jaszczurhal:feature_flags",
-          "value": "HAL_ENABLE_BLE"
+          "value": "HAL_ENABLE_BLE,HAL_ENABLE_BLUETOOTH_CLASSIC"
         },
         {
           "name": "jaszczurhal:paths",
@@ -1875,5 +1875,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:c9b94289-b1f9-99f7-ca04-83c2f009992c"
+  "serialNumber": "urn:uuid:40147f2c-9d57-dca2-24f8-3eb606100698"
 }

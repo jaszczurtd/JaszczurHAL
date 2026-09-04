@@ -144,6 +144,21 @@ require(
 )
 
 btstack_cmake = (ROOT / "cmake" / "jh_btstack.cmake").read_text(encoding="utf-8")
+btstack_hci = (ROOT / "third_party" / "BTstack" / "src" / "hci.c").read_text(
+    encoding="utf-8"
+)
+require(
+    "incoming_classic_collision" in btstack_hci
+    and "RECEIVED_CONNECTION_REQUEST" in btstack_hci
+    and "ACCEPTED_CONNECTION_REQUEST" in btstack_hci,
+    "pinned BTstack fork lacks the Classic connection collision fix",
+)
+require(
+    '"${_jh_btstack_root}/src/hci.c"' in btstack_cmake
+    and "_jh_btstack_patch" not in btstack_cmake
+    and "git apply" not in btstack_cmake,
+    "BTstack must be compiled directly from the pinned fork without local patches",
+)
 for source_set in (
     "_jh_btstack_base_sources",
     "_jh_btstack_ble_sources",
@@ -177,6 +192,21 @@ for forbidden in (
     "src/classic/hfp",
 ):
     require(forbidden not in btstack_cmake, f"minimal build includes {forbidden}")
+
+public_backend = (
+    ROOT / "src" / "hal" / "bluetooth" / "jh_bluetooth_classic_btstack_backend.c"
+).read_text(encoding="utf-8")
+require(
+    "Bluetooth Classic HCI connection request class=0x%06lx " in public_backend
+    and "link=0x%02x known=%u" in public_backend
+    and "connection complete status=0x%02x " in public_backend
+    and "handle=0x%04x link=0x%02x encrypted=%u known=%u" in public_backend,
+    "public Classic HCI diagnostics are missing sanitized connection context",
+)
+require(
+    "addr=%" not in public_backend and "bd_addr_to_str" not in public_backend,
+    "public Classic HCI diagnostics expose a full Bluetooth address",
+)
 require(
     "ENABLE_CLASSIC=1" in btstack_cmake
     and "ENABLE_SDP_EXTRA_QUERIES=1" in btstack_cmake
@@ -244,7 +274,7 @@ for expected in (
     "sdp_parser_init_service_search();",
     "BLUETOOTH_SERVICE_CLASS_HUMAN_INTERFACE_DEVICE_SERVICE",
     "BLUETOOTH_SERVICE_CLASS_PNP_INFORMATION",
-    "HID_PROTOCOL_MODE_REPORT_WITH_FALLBACK_TO_BOOT",
+    "hid_host_connect(\n      s_candidate_address, HID_PROTOCOL_MODE_REPORT",
     "hid_host_accept_connection(hid_cid, HID_PROTOCOL_MODE_BOOT)",
     "hid_host_send_set_protocol_mode(",
     "s_snapshot.descriptor_matches_capture",

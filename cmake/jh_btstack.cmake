@@ -9,6 +9,9 @@ function(_jh_target_enable_btstack TARGET_NAME MODE)
             "Pinned BTstack is missing; run scripts/ensure_btstack.sh")
     endif()
 
+    set(_jh_generated_dir
+        "${CMAKE_CURRENT_BINARY_DIR}/jh_btstack/${TARGET_NAME}")
+
     set(_jh_btstack_base_sources
         "${_jh_btstack_root}/src/ad_parser.c"
         "${_jh_btstack_root}/src/btstack_linked_list.c"
@@ -195,8 +198,6 @@ function(_jh_target_enable_btstack TARGET_NAME MODE)
         endif()
     endforeach()
 
-    set(_jh_generated_dir
-        "${CMAKE_CURRENT_BINARY_DIR}/jh_btstack/${TARGET_NAME}")
     file(MAKE_DIRECTORY "${_jh_generated_dir}")
     if(_jh_gatt_source)
         find_package(Python3 COMPONENTS Interpreter REQUIRED)

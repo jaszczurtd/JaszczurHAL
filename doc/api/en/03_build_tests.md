@@ -221,7 +221,7 @@ applications and keep their artifacts below `.build/hardware/`:
 | `tests/hardware/rp_kv_power_loss` | Dual-bank KV recovery after interruption following erase, body write, verification and publication |
 | `tests/hardware/rp_storage` | EEPROM commit/persistence, LittleFS format/remount and cross-reset mounting |
 | `tests/hardware/rp_sdlogger` | Physical SPI SD mount, deterministic append, flush/close, reset/remount, content and EEPROM log-counter persistence |
-| `tests/hardware/rp_ota` | Discovery, authentication, transfer, trial/confirm, rollback and USB/network recovery |
+| `tests/hardware/rp_ota` | Discovery, authentication, transfer, trial/confirm, rollback, persistent-storage coexistence and USB/network recovery |
 | `tests/hardware/lora_sx1262` | Two-device SX1262 initialization, bidirectional raw packets, reliable-link lifecycle, and fragmented command-router request/response transactions on integrated LF or external HF pairs |
 | `tests/hardware/esp32s3_phase1` | Phase 1 ESP32-S3 target/board identity, generated link signature, chip/core count, physical flash, initialized Quad PSRAM, and a repeated FreeRTOS `app_task0()` heartbeat over native USB Serial/JTAG. |
 | `tests/hardware/esp32s3_phase2` | ESP32-S3 Phase 2 runtime probe for both application tasks, system/sync, GPIO/IRQ, ADC, USB Serial/JTAG TX/RX, hardware UART, I2C master scan, SPI master transfer path, dedicated-pool timer callbacks, and enabled FreeRTOS stack-guard configuration. |
@@ -509,9 +509,12 @@ with the same name exists, it validates the newly appended deterministic tail.
 `tests/hardware/rp_ota` validates OTA discovery and authentication,
 acknowledged chunk-by-chunk transfer, trial boot, explicit confirmation, a
 second unconfirmed trial, automatic rollback, and network/USB recovery after
-each reboot. It supports Pico W/RP2040 and Pico 2 W/RP2350 ARM in bare-metal
-and FreeRTOS builds, plus an ordinary Pico/RP2040 connected to a PIM730/RM2
-wireless breakout.
+each reboot. The same fixture increments a boot counter in two-bank `hal_kv`
+and mounts a separate LittleFS partition, proving that both persistent users
+remain intact while OTA program, staging and control regions change. It
+supports Pico W/RP2040 and Pico 2 W/RP2350 ARM in bare-metal and FreeRTOS
+builds, plus an ordinary Pico/RP2040 connected to a PIM730/RM2 wireless
+breakout.
 
 Copy the local secret template and replace all values. The resulting header is
 ignored by Git:
@@ -602,7 +605,8 @@ them. Pico W and Pico+PIM730 share the RP2040 hostname; when both are powered,
 pass the selected device's IP to `--broadcast`. The CDC status response
 includes and the verifier checks the board profile, current IPv4 address,
 target, runtime and OTA boot state, plus the live `clk_sys`, requested and
-effective gSPI rates, 16.8 divider and selected PIO timing program. The
+effective gSPI rates, 16.8 divider, selected PIO timing program, KV boot count
+and LittleFS mount/format state. The
 verifier creates signed A/B containers below `.build/hardware/rp_ota` and
 leaves the device in stable image A after proving rollback from image B.
 

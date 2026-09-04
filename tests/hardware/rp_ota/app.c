@@ -4,6 +4,9 @@
 #include <hal/impl/rp2040/drivers/rp2040/rp2040_cyw43_gspi.h>
 #include <hal/network/hal_wifi.h>
 #include <hal/network/ota/hal_ota.h>
+#include <hal/storage/hal_eeprom.h>
+#include <hal/storage/hal_kv.h>
+#include <hal/storage/hal_littlefs.h>
 #include <hal/system/hal_board.h>
 #include <hal/system/hal_system.h>
 #include <hal/usb/hal_usb.h>
@@ -34,6 +37,8 @@
 #define JH_OTA_TEST_PORT 8266u
 #endif
 
+#define JH_OTA_TEST_KV_BOOT_COUNT_KEY 0x1904u
+
 #if HAL_TARGET_IS_RP2040
 #define JH_OTA_TEST_HOSTNAME "jh-ota-rp2040"
 #elif HAL_TARGET_IS_RP2350_ARM
@@ -56,6 +61,10 @@ static uint32_t s_last_connect_ms;
 static uint32_t s_ota_errors;
 static hal_ota_error_t s_last_ota_error;
 static hal_status_t s_wifi_begin_status = HAL_NONE;
+static hal_status_t s_kv_status = HAL_NONE;
+static hal_status_t s_littlefs_status = HAL_NONE;
+static uint32_t s_kv_boot_count;
+static bool s_littlefs_formatted;
 
 static bool configuration_available(void) {
   return sizeof(JH_OTA_TEST_WIFI_SSID) > 1u &&
@@ -112,7 +121,8 @@ static void prepare_status(void) {
       "staging_generation=%lu program_version=%.*s staging_version=%.*s "
       "errors=%lu last_error=%d gspi_status=%d clk_sys=%lu "
       "gspi_target=%lu gspi_actual=%lu gspi_div_int=%u gspi_div_frac8=%u "
-      "gspi_program=%u\n",
+      "gspi_program=%u kv_status=%d kv_count=%lu littlefs=%d "
+      "littlefs_format=%u storage_total=%lu\n",
       HAL_TARGET_NAME, HAL_BOARD_PROFILE_NAME, JH_OTA_TEST_RUNTIME, local_ip,
       configuration_available() ? 1u : 0u, hal_wifi_is_connected() ? 1u : 0u,
       s_ota_started ? 1u : 0u, (int)s_wifi_begin_status, (int)wifi_state_status,
@@ -126,7 +136,10 @@ static void prepare_status(void) {
       (unsigned long)gspi_clock.target_gspi_hz,
       (unsigned long)gspi_clock.actual_gspi_hz,
       (unsigned)gspi_clock.divider_int, (unsigned)gspi_clock.divider_frac8,
-      (unsigned)gspi_clock.program);
+      (unsigned)gspi_clock.program, (int)s_kv_status,
+      (unsigned long)s_kv_boot_count, (int)s_littlefs_status,
+      s_littlefs_formatted ? 1u : 0u,
+      (unsigned long)hal_littlefs_total_bytes());
   set_response_length(length);
 }
 
@@ -163,6 +176,34 @@ static void service_usb(void) {
 }
 
 void app_start(void) {
+  s_kv_status = hal_eeprom_init(HAL_EEPROM_FLASH, 0u, 0u);
+  if (s_kv_status == HAL_OK) {
+    s_kv_status = hal_kv_init_ex(0u, hal_eeprom_size());
+  }
+  if (s_kv_status == HAL_OK) {
+    const hal_status_t load_status =
+        hal_kv_get_u32_ex(JH_OTA_TEST_KV_BOOT_COUNT_KEY, &s_kv_boot_count);
+    if (load_status == HAL_ENOENT) {
+      s_kv_boot_count = 0u;
+    } else if (load_status != HAL_OK) {
+      s_kv_status = load_status;
+    }
+  }
+  if (s_kv_status == HAL_OK) {
+    s_kv_boot_count = s_kv_boot_count == UINT32_MAX ? 1u : s_kv_boot_count + 1u;
+    s_kv_status =
+        hal_kv_set_u32_ex(JH_OTA_TEST_KV_BOOT_COUNT_KEY, s_kv_boot_count);
+  }
+
+  s_littlefs_status = hal_littlefs_begin_ex();
+  if (s_littlefs_status != HAL_OK) {
+    s_littlefs_formatted = true;
+    s_littlefs_status = hal_littlefs_format_ex();
+    if (s_littlefs_status == HAL_OK) {
+      s_littlefs_status = hal_littlefs_begin_ex();
+    }
+  }
+
   if (!configuration_available()) {
     return;
   }

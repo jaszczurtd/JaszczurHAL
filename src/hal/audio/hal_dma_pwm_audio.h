@@ -52,8 +52,16 @@ hal_dma_pwm_audio_create(const hal_dma_pwm_audio_config_t *cfg);
 hal_status_t hal_dma_pwm_audio_start_ex(hal_dma_pwm_audio_t audio);
 bool hal_dma_pwm_audio_start(hal_dma_pwm_audio_t audio);
 hal_status_t hal_dma_pwm_audio_stop(hal_dma_pwm_audio_t audio);
+/**
+ * @brief Quiesce the audio DMA channels and drive the configured PWM idle.
+ *
+ * A successful pause guarantees that this audio instance has no active DMA
+ * transfer. This lets the application enter a target-specific flash safe zone
+ * before calling @ref hal_dma_pwm_audio_resume.
+ */
 hal_status_t hal_dma_pwm_audio_pause(hal_dma_pwm_audio_t audio,
                                      uint16_t idle_value);
+/** @brief Restart a paused audio stream from the beginning of both buffers. */
 hal_status_t hal_dma_pwm_audio_resume(hal_dma_pwm_audio_t audio);
 void hal_dma_pwm_audio_destroy(hal_dma_pwm_audio_t audio);
 bool hal_dma_pwm_audio_is_running(hal_dma_pwm_audio_t audio);

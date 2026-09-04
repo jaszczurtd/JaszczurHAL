@@ -9,7 +9,9 @@
 #include "hal/core/hal_mutex_once.h"
 #include "hal/core/hal_target.h"
 #include "hal/core/jh_handle_pool.h"
+#include "hal/serial/hal_serial.h"
 #include "hal/system/hal_sync.h"
+#include "hal/system/hal_system.h"
 #if HAL_TARGET_IS_MOCK
 #include "hal/impl/.mock/hal_mock.h"
 #endif
@@ -18,6 +20,7 @@
 
 #define JH_GAMEPAD_HANDLE_KIND 14u
 #define JH_GAMEPAD_PAIRING_WINDOW_MS 120000u
+#define JH_GAMEPAD_SDP_SETTLE_MS 1000u
 
 namespace {
 
@@ -37,9 +40,13 @@ struct gamepad_runtime_t {
   bool operation_active;
   bool legacy_provider_enabled;
   bool selected_valid;
+  bool connect_pending;
+  bool connection_attempt_active;
   bool parser_connected;
   bool input_validated;
   bool peer_save_requested;
+  uint32_t connect_settle_started_ms;
+  uint32_t pairing_window_started_ms;
 #if HAL_TARGET_IS_MOCK
   uint32_t mock_bond_store_calls;
   uint32_t mock_bond_erase_calls;
@@ -209,6 +216,41 @@ void close_parser_locked(hal_status_t status) {
   }
 }
 
+hal_status_t restart_pairing_discovery(hal_bluetooth_classic_t classic,
+                                       hal_status_t attempt_status) {
+  hal_mutex_lock(s_gamepad.mutex);
+  const bool pairing_window_open = s_gamepad.info.pairing_window_open;
+  const uint32_t pairing_started = s_gamepad.pairing_window_started_ms;
+  s_gamepad.selected_valid = false;
+  s_gamepad.connect_pending = false;
+  s_gamepad.connection_attempt_active = false;
+  s_gamepad.info.last_status = attempt_status;
+  hal_mutex_unlock(s_gamepad.mutex);
+
+  if (!pairing_window_open) {
+    return attempt_status;
+  }
+  const uint32_t elapsed = hal_millis() - pairing_started;
+  if (elapsed >= JH_GAMEPAD_PAIRING_WINDOW_MS) {
+    hal_mutex_lock(s_gamepad.mutex);
+    s_gamepad.info.pairing_window_open = false;
+    hal_mutex_unlock(s_gamepad.mutex);
+    return HAL_ETIMEOUT;
+  }
+  const hal_status_t status = hal_bluetooth_classic_scan_start(
+      classic, JH_GAMEPAD_PAIRING_WINDOW_MS - elapsed);
+  hal_deb("hal_gamepad: retry discovery cause=%s elapsed_ms=%lu status=%s",
+          hal_status_to_string(attempt_status), (unsigned long)elapsed,
+          hal_status_to_string(status));
+  if (status != HAL_OK) {
+    hal_mutex_lock(s_gamepad.mutex);
+    s_gamepad.info.pairing_window_open = false;
+    s_gamepad.info.last_status = status;
+    hal_mutex_unlock(s_gamepad.mutex);
+  }
+  return status;
+}
+
 hal_status_t
 select_scan_result(hal_bluetooth_classic_t classic,
                    hal_bluetooth_hid_host_t hid,
@@ -230,6 +272,9 @@ select_scan_result(hal_bluetooth_classic_t classic,
     s_gamepad.selected_address = result.address;
     s_gamepad.selected_valid = true;
     hal_mutex_unlock(s_gamepad.mutex);
+    hal_deb("hal_gamepad: candidate accepted class=0x%06lx name_length=%u",
+            (unsigned long)result.class_of_device,
+            (unsigned int)result.name_length);
     hal_bluetooth_classic_info_t info{};
     if (hal_bluetooth_classic_get_info(classic, &info) == HAL_OK &&
         info.scan_active) {
@@ -248,22 +293,17 @@ select_scan_result(hal_bluetooth_classic_t classic,
   }
   const uint32_t required =
       HAL_BLUETOOTH_CLASSIC_SERVICE_HID | HAL_BLUETOOTH_CLASSIC_SERVICE_PNP;
+  hal_deb("hal_gamepad: candidate SDP services=0x%08lx required=0x%08lx",
+          (unsigned long)result.services, (unsigned long)required);
   if ((result.services & required) != required) {
-    hal_mutex_lock(s_gamepad.mutex);
-    s_gamepad.selected_valid = false;
-    s_gamepad.info.pairing_window_open = false;
-    s_gamepad.info.last_status = HAL_EPROTO;
-    hal_mutex_unlock(s_gamepad.mutex);
-    return HAL_EPROTO;
+    return restart_pairing_discovery(classic, HAL_EPROTO);
   }
-  const hal_status_t status =
-      hal_bluetooth_hid_host_connect(hid, &result.address);
-  if (status == HAL_OK) {
-    hal_mutex_lock(s_gamepad.mutex);
-    s_gamepad.info.pairing_window_open = false;
-    hal_mutex_unlock(s_gamepad.mutex);
-  }
-  return status;
+  (void)hid;
+  hal_mutex_lock(s_gamepad.mutex);
+  s_gamepad.connect_pending = true;
+  s_gamepad.connect_settle_started_ms = hal_millis();
+  hal_mutex_unlock(s_gamepad.mutex);
+  return HAL_OK;
 }
 
 hal_status_t process_scan_results(hal_bluetooth_classic_t classic,
@@ -285,6 +325,29 @@ hal_status_t process_scan_results(hal_bluetooth_classic_t classic,
   }
 }
 
+hal_status_t connect_selected_after_sdp_settle(hal_bluetooth_classic_t classic,
+                                               hal_bluetooth_hid_host_t hid) {
+  hal_mutex_lock(s_gamepad.mutex);
+  if (!s_gamepad.connect_pending ||
+      !hal_millis_deadline_expired(s_gamepad.connect_settle_started_ms,
+                                   JH_GAMEPAD_SDP_SETTLE_MS)) {
+    hal_mutex_unlock(s_gamepad.mutex);
+    return HAL_OK;
+  }
+  const hal_bluetooth_classic_address_t address = s_gamepad.selected_address;
+  s_gamepad.connect_pending = false;
+  hal_mutex_unlock(s_gamepad.mutex);
+
+  const hal_status_t status = hal_bluetooth_hid_host_connect(hid, &address);
+  hal_mutex_lock(s_gamepad.mutex);
+  if (status == HAL_OK) {
+    s_gamepad.connection_attempt_active = true;
+    hal_deb("hal_gamepad: HID connection attempt started");
+  }
+  hal_mutex_unlock(s_gamepad.mutex);
+  return status == HAL_OK ? HAL_OK : restart_pairing_discovery(classic, status);
+}
+
 hal_status_t open_parser_from_descriptor(hal_bluetooth_hid_host_t hid) {
   uint8_t descriptor[HAL_BLUETOOTH_HID_DESCRIPTOR_MAX_LEN]{};
   size_t descriptor_length = 0u;
@@ -293,10 +356,14 @@ hal_status_t open_parser_from_descriptor(hal_bluetooth_hid_host_t hid) {
   if (descriptor_status != HAL_OK) {
     return descriptor_status;
   }
+  hal_deb("hal_gamepad: configuring HID descriptor length=%u",
+          (unsigned int)descriptor_length);
   hal_mutex_lock(s_gamepad.mutex);
+  const uint32_t previous_generation = s_gamepad.parser.current.generation;
   hal_status_t status = jh_bluetooth_gamepad_parser_configure(
       &s_gamepad.parser, descriptor, descriptor_length);
   if (status == HAL_OK) {
+    s_gamepad.parser.current.generation = previous_generation;
     status = jh_bluetooth_gamepad_parser_connection_opened(&s_gamepad.parser);
   }
   s_gamepad.parser_connected = status == HAL_OK;
@@ -331,6 +398,7 @@ hal_status_t process_hid(hal_bluetooth_classic_t classic,
       return status;
     }
     hal_mutex_lock(s_gamepad.mutex);
+    s_gamepad.connection_attempt_active = false;
     s_gamepad.info.pairing_window_open = false;
     hal_mutex_unlock(s_gamepad.mutex);
   } else if (hid_info.state != HAL_BLUETOOTH_HID_STATE_CONNECTED &&
@@ -338,6 +406,21 @@ hal_status_t process_hid(hal_bluetooth_classic_t classic,
     hal_mutex_lock(s_gamepad.mutex);
     close_parser_locked(hid_info.last_status);
     hal_mutex_unlock(s_gamepad.mutex);
+  }
+
+  if (hid_info.state == HAL_BLUETOOTH_HID_STATE_READY) {
+    hal_mutex_lock(s_gamepad.mutex);
+    const bool connection_attempt_active = s_gamepad.connection_attempt_active;
+    const bool retry_discovery = s_gamepad.connection_attempt_active &&
+                                 s_gamepad.info.pairing_window_open;
+    if (connection_attempt_active && !retry_discovery) {
+      s_gamepad.connection_attempt_active = false;
+    }
+    hal_mutex_unlock(s_gamepad.mutex);
+
+    if (retry_discovery) {
+      return restart_pairing_discovery(classic, hid_info.last_status);
+    }
   }
 
   if (hid_info.state != HAL_BLUETOOTH_HID_STATE_CONNECTED) {
@@ -383,7 +466,6 @@ hal_status_t process_hid(hal_bluetooth_classic_t classic,
   if (validated_now) {
     hal_mutex_lock(s_gamepad.mutex);
     const bool save_needed = !s_gamepad.peer_save_requested;
-    s_gamepad.peer_save_requested = true;
     hal_mutex_unlock(s_gamepad.mutex);
     if (save_needed) {
       const hal_status_t save_status = hal_bluetooth_classic_peer_save(
@@ -391,6 +473,9 @@ hal_status_t process_hid(hal_bluetooth_classic_t classic,
       if (save_status != HAL_OK) {
         return save_status;
       }
+      hal_mutex_lock(s_gamepad.mutex);
+      s_gamepad.peer_save_requested = true;
+      hal_mutex_unlock(s_gamepad.mutex);
       const hal_status_t flush_status = hal_bluetooth_classic_poll(classic);
       if (flush_status != HAL_OK) {
         return flush_status;
@@ -411,6 +496,8 @@ void refresh_info(hal_bluetooth_classic_t classic, hal_bluetooth_hid_host_t hid,
   const bool known = matching_saved_peer(classic, nullptr);
 
   hal_mutex_lock(s_gamepad.mutex);
+  const bool candidate_in_progress =
+      s_gamepad.selected_valid || s_gamepad.connect_pending;
   jh_bluetooth_gamepad_parser_diagnostics_t diagnostics{};
   jh_bluetooth_gamepad_parser_diagnostics(&s_gamepad.parser, &diagnostics);
   s_gamepad.info.known_device = known;
@@ -419,7 +506,8 @@ void refresh_info(hal_bluetooth_classic_t classic, hal_bluetooth_hid_host_t hid,
   s_gamepad.info.generation = s_gamepad.parser.current.generation;
   s_gamepad.info.dropped_snapshots = diagnostics.dropped_snapshots;
   s_gamepad.info.pending_snapshots = s_gamepad.parser.queue_count;
-  if (poll_status != HAL_OK && poll_status != HAL_EOVERFLOW) {
+  if (poll_status != HAL_OK && poll_status != HAL_EOVERFLOW &&
+      poll_status != HAL_EBUSY && poll_status != HAL_EAGAIN) {
     s_gamepad.info.state = HAL_GAMEPAD_STATE_FAILED;
     s_gamepad.info.last_status = poll_status;
   } else if (classic_status != HAL_OK || hid_status != HAL_OK) {
@@ -439,17 +527,21 @@ void refresh_info(hal_bluetooth_classic_t classic, hal_bluetooth_hid_host_t hid,
              s_gamepad.parser_connected) {
     s_gamepad.info.state = HAL_GAMEPAD_STATE_CONNECTED;
     s_gamepad.info.last_status = HAL_OK;
-  } else if (hid_info.state == HAL_BLUETOOTH_HID_STATE_CONNECTING) {
+  } else if (hid_info.state == HAL_BLUETOOTH_HID_STATE_CONNECTING ||
+             hid_info.state == HAL_BLUETOOTH_HID_STATE_CONNECTED) {
     s_gamepad.info.state = HAL_GAMEPAD_STATE_CONNECTING;
   } else if (classic_info.scan_active || s_gamepad.info.pairing_window_open) {
     s_gamepad.info.state = HAL_GAMEPAD_STATE_DISCOVERING;
-    if (!classic_info.scan_active && !classic_info.pairing_pending) {
+    if (!classic_info.scan_active && !classic_info.pairing_pending &&
+        !candidate_in_progress) {
       s_gamepad.info.pairing_window_open = false;
       s_gamepad.info.state = HAL_GAMEPAD_STATE_READY;
     }
   } else {
     s_gamepad.info.state = HAL_GAMEPAD_STATE_READY;
-    if (poll_status == HAL_OK) {
+    if (hid_info.last_status != HAL_OK && hid_info.last_status != HAL_NONE) {
+      s_gamepad.info.last_status = hid_info.last_status;
+    } else if (poll_status == HAL_OK) {
       s_gamepad.info.last_status = HAL_OK;
     }
   }
@@ -462,13 +554,18 @@ hal_status_t service_adapter(hal_bluetooth_classic_t classic,
   if (status == HAL_OK) {
     status = process_scan_results(classic, hid);
   }
-  if (status == HAL_OK || status == HAL_EOVERFLOW) {
+  if (status == HAL_OK) {
+    status = connect_selected_after_sdp_settle(classic, hid);
+  }
+  if (status == HAL_OK || status == HAL_EOVERFLOW || status == HAL_EBUSY ||
+      status == HAL_EAGAIN) {
     const hal_status_t hid_process_status = process_hid(classic, hid);
     if (status == HAL_OK || hid_process_status != HAL_OK) {
       status = hid_process_status;
     }
   }
-  if (status != HAL_OK && status != HAL_EOVERFLOW) {
+  if (status != HAL_OK && status != HAL_EOVERFLOW && status != HAL_EBUSY &&
+      status != HAL_EAGAIN) {
     hal_mutex_lock(s_gamepad.mutex);
     close_parser_locked(status);
     hal_mutex_unlock(s_gamepad.mutex);
@@ -533,9 +630,12 @@ hal_gamepad_open_ex(hal_gamepad_t *out_gamepad,
   s_gamepad.operation_active = true;
   s_gamepad.public_handle = static_cast<hal_gamepad_t>(handle);
   s_gamepad.selected_valid = false;
+  s_gamepad.connect_pending = false;
+  s_gamepad.connection_attempt_active = false;
   s_gamepad.parser_connected = false;
   s_gamepad.input_validated = false;
   s_gamepad.peer_save_requested = false;
+  s_gamepad.connect_settle_started_ms = 0u;
   s_gamepad.info.state = HAL_GAMEPAD_STATE_STARTING;
   s_gamepad.info.last_status = HAL_NONE;
 #if HAL_TARGET_IS_MOCK
@@ -612,6 +712,8 @@ hal_status_t hal_gamepad_close(hal_gamepad_t gamepad) {
   s_gamepad.info.state = HAL_GAMEPAD_STATE_UNINITIALIZED;
   s_gamepad.info.pairing_window_open = false;
   s_gamepad.info.pairing_pending = false;
+  s_gamepad.connect_pending = false;
+  s_gamepad.connection_attempt_active = false;
   if (status == HAL_OK) {
     status = release_status;
   }
@@ -702,7 +804,10 @@ hal_status_t hal_gamepad_pairing_open(hal_gamepad_t gamepad) {
     if (status == HAL_OK) {
       hal_mutex_lock(s_gamepad.mutex);
       s_gamepad.info.pairing_window_open = true;
+      s_gamepad.pairing_window_started_ms = hal_millis();
       s_gamepad.selected_valid = false;
+      s_gamepad.connect_pending = false;
+      s_gamepad.connection_attempt_active = false;
       hal_mutex_unlock(s_gamepad.mutex);
     }
     return status;
@@ -723,7 +828,14 @@ hal_status_t hal_gamepad_reconnect(hal_gamepad_t gamepad) {
     if (!matching_saved_peer(classic, &peer)) {
       return HAL_ESTATE;
     }
-    return hal_bluetooth_hid_host_connect(hid, &peer.address);
+    const hal_status_t status =
+        hal_bluetooth_hid_host_connect(hid, &peer.address);
+    if (status == HAL_OK) {
+      hal_mutex_lock(s_gamepad.mutex);
+      s_gamepad.connection_attempt_active = true;
+      hal_mutex_unlock(s_gamepad.mutex);
+    }
+    return status;
   });
 }
 
@@ -755,6 +867,8 @@ hal_status_t hal_gamepad_forget(hal_gamepad_t gamepad) {
     hal_mutex_lock(s_gamepad.mutex);
     close_parser_locked(HAL_OK);
     s_gamepad.selected_valid = false;
+    s_gamepad.connect_pending = false;
+    s_gamepad.connection_attempt_active = false;
     s_gamepad.info.pairing_window_open = false;
     hal_mutex_unlock(s_gamepad.mutex);
     hal_bluetooth_classic_peer_t peer{};

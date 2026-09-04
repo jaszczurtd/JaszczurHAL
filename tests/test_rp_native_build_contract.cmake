@@ -441,6 +441,12 @@ foreach(_ota_hardware_contract IN ITEMS
         "rollbackBoots"
         "HAL_ENABLE_FREERTOS"
         "HAL_FREERTOS_TASK0_STACK 2048u"
+        "HAL_ENABLE_KV"
+        "HAL_ENABLE_LITTLEFS"
+        "hal_kv_set_u32_ex"
+        "hal_littlefs_begin_ex"
+        "kv_count"
+        "storage_total"
         "passwordEnv")
     string(FIND
         "${_ota_probe_text}\n${_ota_verifier_text}\n${_ota_manifest_text}\n${_ota_config_text}"

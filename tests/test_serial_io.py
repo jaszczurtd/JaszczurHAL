@@ -41,10 +41,11 @@ class SerialIoTests(unittest.TestCase):
     def test_error_tuple_is_host_independent(self) -> None:
         fake_module = SimpleNamespace(SerialException=FakeSerialException)
         with mock.patch.object(serial_io, "_serial", fake_module):
-            self.assertEqual(
-                serial_io.serial_error_types(),
-                (OSError, FakeSerialException),
-            )
+            errors = serial_io.serial_error_types()
+        self.assertIn(OSError, errors)
+        self.assertIn(FakeSerialException, errors)
+        if serial_io._termios is not None:
+            self.assertIn(serial_io._termios.error, errors)
 
     def test_missing_pyserial_has_clear_error(self) -> None:
         with mock.patch.object(serial_io, "_serial", None):

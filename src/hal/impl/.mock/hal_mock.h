@@ -68,6 +68,8 @@ hal_status_t hal_mock_ble_get_stream_published(uint8_t *out_version,
 #ifdef HAL_ENABLE_BLUETOOTH_CLASSIC
 // ── Bluetooth Classic ────────────────────────────────────────────────────
 void hal_mock_bluetooth_classic_reset(void);
+void hal_mock_bluetooth_classic_set_peer_restore_status(hal_status_t status);
+uint32_t hal_mock_bluetooth_classic_peer_restore_calls(void);
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -94,6 +96,8 @@ void hal_mock_bluetooth_hid_runtime_full_reset(void);
 #ifdef __cplusplus
 }
 #endif
+hal_status_t hal_mock_bluetooth_hid_inject_connecting(
+    const hal_bluetooth_classic_address_t *address);
 hal_status_t hal_mock_bluetooth_hid_inject_connected(
     const hal_bluetooth_classic_address_t *address);
 hal_status_t hal_mock_bluetooth_hid_inject_descriptor(const uint8_t *descriptor,

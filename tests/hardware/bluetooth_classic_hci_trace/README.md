@@ -20,5 +20,7 @@ The `JHHCI` records retain the raw Inquiry command, Inquiry Complete, Inquiry
 Result, and Inquiry Result with RSSI bytes. For Extended Inquiry Result they
 retain only metadata through RSSI; the EIR data body is redacted because it can
 contain names and arbitrary manufacturer data. Bluetooth addresses are always
-masked. Other HCI commands and events retain only the non-sensitive header
-needed to compare the command/event sequence.
+masked. `JHHCI-PEER` reports both the advertised name-field length and its
+NUL-terminated text length plus an FNV-1a hash, allowing padding and identity
+diagnosis without printing the name. Other HCI commands and events retain only
+the non-sensitive header needed to compare the command/event sequence.

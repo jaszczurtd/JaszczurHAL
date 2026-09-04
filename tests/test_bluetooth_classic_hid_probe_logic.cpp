@@ -32,7 +32,7 @@ void test_discovery_deadline_handles_millisecond_wrap() {
       &s_logic, deadline));
 }
 
-void test_candidate_filter_requires_peripheral_class_and_exact_name() {
+void test_candidate_filter_requires_peripheral_class_and_exact_name_text() {
   static constexpr char kName[] = JH_CLASSIC_HID_EXPECTED_NAME;
   TEST_ASSERT_TRUE(jh_bluetooth_classic_hid_probe_logic_candidate_matches(
       0x002508u, reinterpret_cast<const uint8_t *>(kName), sizeof(kName) - 1u));
@@ -41,6 +41,14 @@ void test_candidate_filter_requires_peripheral_class_and_exact_name() {
   TEST_ASSERT_FALSE(jh_bluetooth_classic_hid_probe_logic_candidate_matches(
       0x002508u, reinterpret_cast<const uint8_t *>("Pro Controller"),
       sizeof("Pro Controller") - 1u));
+
+  std::array<uint8_t, 31> nul_padded_name{};
+  memcpy(nul_padded_name.data(), kName, sizeof(kName) - 1u);
+  TEST_ASSERT_TRUE(jh_bluetooth_classic_hid_probe_logic_candidate_matches(
+      0x002508u, nul_padded_name.data(), nul_padded_name.size()));
+  nul_padded_name.back() = '!';
+  TEST_ASSERT_FALSE(jh_bluetooth_classic_hid_probe_logic_candidate_matches(
+      0x002508u, nul_padded_name.data(), nul_padded_name.size()));
 }
 
 void test_pnp_filter_requires_the_characterized_identity() {
@@ -180,7 +188,7 @@ int main() {
   UNITY_BEGIN();
   RUN_TEST(test_discovery_requires_explicit_open_and_expires_after_120_seconds);
   RUN_TEST(test_discovery_deadline_handles_millisecond_wrap);
-  RUN_TEST(test_candidate_filter_requires_peripheral_class_and_exact_name);
+  RUN_TEST(test_candidate_filter_requires_peripheral_class_and_exact_name_text);
   RUN_TEST(test_pnp_filter_requires_the_characterized_identity);
   RUN_TEST(
       test_reports_cover_all_controls_and_disconnect_releases_active_state);
