@@ -849,6 +849,10 @@ add_test(NAME test_component_management
         ${CMAKE_CURRENT_SOURCE_DIR}/test_component_management.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
+add_test(NAME test_source_assertions
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_source_assertions.py
+)
 add_test(NAME test_bluetooth_stage1
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_bluetooth_stage1.py

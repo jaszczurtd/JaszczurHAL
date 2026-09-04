@@ -8,6 +8,8 @@ from pathlib import Path
 import subprocess
 import sys
 
+from source_assertions import source_fragment_position, source_has_fragment
+
 
 ROOT = Path(sys.argv[1]).resolve()
 BTSTACK_REPO = "https://github.com/jaszczurtd/btstack.git"
@@ -47,30 +49,33 @@ stm32_cmake = (ROOT / "cmake/targets/stm32g474.cmake").read_text(
     encoding="utf-8"
 )
 for forbidden in ("pico_cyw43_arch", "pico_btstack_cyw43"):
-    require(forbidden not in btstack_cmake, f"Stage 1 links forbidden {forbidden}")
+    require(
+        not source_has_fragment(btstack_cmake, forbidden),
+        f"Stage 1 links forbidden {forbidden}",
+    )
 require(
-    "jh_target_enable_btstack_stage1" in btstack_cmake
-    and "ENABLE_BLE=1" in btstack_cmake
-    and "jh_bluetooth_host_runtime.c" in btstack_cmake
-    and "jh_btstack_host.c" in btstack_cmake
-    and "jh_bluetooth_hci_transport.c" in btstack_cmake
-    and "jh_btstack_run_loop.c" in btstack_cmake,
+    source_has_fragment(btstack_cmake, "jh_target_enable_btstack_stage1")
+    and source_has_fragment(btstack_cmake, "ENABLE_BLE = 1")
+    and source_has_fragment(btstack_cmake, "jh_bluetooth_host_runtime.c")
+    and source_has_fragment(btstack_cmake, "jh_btstack_host.c")
+    and source_has_fragment(btstack_cmake, "jh_bluetooth_hci_transport.c")
+    and source_has_fragment(btstack_cmake, "jh_btstack_run_loop.c"),
     "Bluetooth integration does not own the JH transport and run loop",
 )
 require(
-    "BLUETOOTH" in cyw43_cmake
-    and "cybt_shared_bus.c.upstream" in cyw43_cmake
-    and "cybt_shared_bus_driver.c.upstream" in cyw43_cmake,
+    source_has_fragment(cyw43_cmake, "BLUETOOTH")
+    and source_has_fragment(cyw43_cmake, "cybt_shared_bus.c.upstream")
+    and source_has_fragment(cyw43_cmake, "cybt_shared_bus_driver.c.upstream"),
     "CYW43 shared-bus sources are not gated by Bluetooth",
 )
 for recipe, text in (("RP", rp_cmake), ("STM32", stm32_cmake)):
     require(
-        "JH_BLUETOOTH_STAGE1_PROBE" in text
-        and "jh_target_enable_cyw43_feature_stack" in text,
+        source_has_fragment(text, "JH_BLUETOOTH_STAGE1_PROBE")
+        and source_has_fragment(text, "jh_target_enable_cyw43_feature_stack"),
         f"{recipe} recipe does not conditionally integrate the private probe",
     )
 require(
-    "jh_target_enable_btstack_stage1" in cyw43_cmake,
+    source_has_fragment(cyw43_cmake, "jh_target_enable_btstack_stage1"),
     "the shared CYW43 feature helper does not select the Stage 1 BTstack mode",
 )
 
@@ -83,13 +88,20 @@ for expected in (
     "MAX_NR_CONTROLLER_ACL_BUFFERS 3",
     "ENABLE_HCI_CONTROLLER_TO_HOST_FLOW_CONTROL",
 ):
-    require(expected in config, f"bounded BTstack config is missing {expected}")
+    require(
+        source_has_fragment(config, expected),
+        f"bounded BTstack config is missing {expected}",
+    )
 for forbidden in ("ENABLE_LE_CENTRAL", "ENABLE_MESH"):
-    require(forbidden not in config, f"Stage 1 unexpectedly enables {forbidden}")
+    require(
+        not source_has_fragment(config, forbidden),
+        f"Stage 1 unexpectedly enables {forbidden}",
+    )
 require(
-    "#if defined(JH_BLUETOOTH_CLASSIC_HID_PROBE)" in config
-    and "#else\n/* BLE Peripheral sizing validated by the hardware gates. */"
-    in config,
+    source_has_fragment(config, "#if defined(JH_BLUETOOTH_CLASSIC_HID_PROBE)")
+    and source_has_fragment(
+        config, "#else /* BLE Peripheral sizing validated by the hardware gates. */"
+    ),
     "Classic sizing is not isolated from the Stage 1 BLE configuration",
 )
 
@@ -102,7 +114,10 @@ shared_bus = "\n".join(
     )
 )
 for forbidden in ("assert(", "panic(", "cyw43_malloc", "cyw43_free"):
-    require(forbidden not in shared_bus, f"shared bus retains fatal/dynamic path {forbidden}")
+    require(
+        not source_has_fragment(shared_bus, forbidden),
+        f"shared bus retains fatal/dynamic path {forbidden}",
+    )
 
 transport_adapter = (
     ROOT
@@ -115,11 +130,13 @@ transport_header = (
     ROOT / "src/hal/bluetooth/jh_bluetooth_hci_transport.h"
 ).read_text(encoding="utf-8")
 require(
-    "length != 0u && length < JH_BLUETOOTH_HCI_FRAME_HEADER_SIZE" in transport,
+    source_has_fragment(
+        transport, "length != 0u && length < JH_BLUETOOTH_HCI_FRAME_HEADER_SIZE"
+    ),
     "HCI transport does not reject truncated CYW43 packet headers",
 )
 require(
-    "JH_BLUETOOTH_HCI_SERVICE_BUDGET 8u" in transport_header,
+    source_has_fragment(transport_header, "JH_BLUETOOTH_HCI_SERVICE_BUDGET 8u"),
     "HCI receive drain is no longer bounded",
 )
 for diagnostic in (
@@ -131,17 +148,19 @@ for diagnostic in (
     "JH_HCI_OPCODE_SET_CONTROLLER_TO_HOST_FLOW_CONTROL",
 ):
     require(
-        diagnostic in transport,
+        source_has_fragment(transport, diagnostic),
         f"shared HCI transport diagnostics are missing {diagnostic}",
     )
 require(
-    "cyw43_bluetooth_hci_" not in transport,
+    not source_has_fragment(transport, "cyw43_bluetooth_hci_"),
     "host-testable HCI core directly depends on CYW43",
 )
 require(
-    "jh_bluetooth_controller_backend()" in transport_adapter
-    and "jh_btstack_run_loop_notify()" in transport_adapter
-    and "btstack_run_loop_poll_data_sources_from_irq" not in transport_adapter,
+    source_has_fragment(transport_adapter, "jh_bluetooth_controller_backend()")
+    and source_has_fragment(transport_adapter, "jh_btstack_run_loop_notify()")
+    and not source_has_fragment(
+        transport_adapter, "btstack_run_loop_poll_data_sources_from_irq"
+    ),
     "BTstack adapter bypasses the target controller or JH run loop",
 )
 
@@ -154,7 +173,10 @@ for operation in (
     "cyw43_bluetooth_hci_write",
     "jh_cyw43_port_get_mac",
 ):
-    require(operation in controller, f"CYW43 controller omits {operation}")
+    require(
+        source_has_fragment(controller, operation),
+        f"CYW43 controller omits {operation}",
+    )
 
 for backend in (
     ROOT
@@ -164,8 +186,10 @@ for backend in (
 ):
     backend_text = backend.read_text(encoding="utf-8")
     require(
-        "jh_bluetooth_controller_backend" in backend_text
-        and "jh_bluetooth_controller_cyw43_instance" in backend_text,
+        source_has_fragment(backend_text, "jh_bluetooth_controller_backend")
+        and source_has_fragment(
+            backend_text, "jh_bluetooth_controller_cyw43_instance"
+        ),
         f"{backend.name} does not bind the private Bluetooth controller boundary",
     )
 
@@ -173,8 +197,8 @@ run_loop = (
     ROOT / "src/hal/bluetooth/jh_btstack_run_loop.c"
 ).read_text(encoding="utf-8")
 require(
-    "jh_btstack_run_loop_service_once" in run_loop
-    and "btstack_run_loop_embedded_execute_once" in run_loop,
+    source_has_fragment(run_loop, "jh_btstack_run_loop_service_once")
+    and source_has_fragment(run_loop, "btstack_run_loop_embedded_execute_once"),
     "JH run loop lacks an explicit service-once boundary",
 )
 
@@ -182,27 +206,29 @@ probe = (
     ROOT / "src/hal/bluetooth/jh_bluetooth_stage1_probe.c"
 ).read_text(encoding="utf-8")
 require(
-    "hci_subevent_le_connection_complete_get_status(packet)" in probe,
+    source_has_fragment(probe, "hci_subevent_le_connection_complete_get_status(packet)"),
     "Stage 1 reports failed LE connection events as successful connections",
 )
 require(
-    "hci_event_disconnection_complete_get_reason(packet)" in probe,
+    source_has_fragment(probe, "hci_event_disconnection_complete_get_reason(packet)"),
     "Stage 1 does not preserve the HCI disconnect reason",
 )
 require(
-    probe.index("sm_init();") < probe.index("att_server_init("),
+    source_fragment_position(probe, "sm_init();")
+    < source_fragment_position(probe, "att_server_init("),
     "Stage 1 must initialize the Security Manager before the ATT server",
 )
 require(
-    "att_server_register_packet_handler(packet_handler);" not in probe,
+    not source_has_fragment(probe, "att_server_register_packet_handler(packet_handler);"),
     "Stage 1 must not receive connection events through the deprecated ATT forwarder",
 )
 require(
-    "jh_btstack_host_acquire(" in probe and "jh_btstack_host_service(" in probe,
+    source_has_fragment(probe, "jh_btstack_host_acquire(")
+    and source_has_fragment(probe, "jh_btstack_host_service("),
     "Stage 1 probe bypasses the shared Bluetooth host runtime",
 )
 require(
-    "btstack_run_loop_embedded_execute_once" not in probe,
+    not source_has_fragment(probe, "btstack_run_loop_embedded_execute_once"),
     "Stage 1 probe bypasses the JH-owned run loop",
 )
 
@@ -215,7 +241,10 @@ for expected in (
     "next_generation",
     "controller_invalidated",
 ):
-    require(expected in host_runtime, f"shared host runtime is missing {expected}")
+    require(
+        source_has_fragment(host_runtime, expected),
+        f"shared host runtime is missing {expected}",
+    )
 
 host_runtime_test = (
     ROOT / "tests/test_bluetooth_host_runtime.cpp"
@@ -226,7 +255,10 @@ for expected in (
     "test_failed_second_profile_does_not_reset_the_running_host",
     "test_invalidation_makes_handles_stale_and_allows_clean_restart",
 ):
-    require(expected in host_runtime_test, f"host lifecycle coverage is missing {expected}")
+    require(
+        source_has_fragment(host_runtime_test, expected),
+        f"host lifecycle coverage is missing {expected}",
+    )
 
 radio_facade = (
     ROOT
@@ -238,7 +270,7 @@ for transition in (
     "jh_board_runtime_set_inactive(kCyw43Capabilities)",
 ):
     require(
-        transition in radio_facade,
+        source_has_fragment(radio_facade, transition),
         f"shared CYW43 lifecycle is missing board transition {transition}",
     )
 
@@ -248,7 +280,9 @@ for backend in (
     / "src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_cyw43_platform.cpp",
 ):
     require(
-        "jh_cyw43_radio_backend_runtime" in backend.read_text(encoding="utf-8"),
+        source_has_fragment(
+            backend.read_text(encoding="utf-8"), "jh_cyw43_radio_backend_runtime"
+        ),
         f"{backend.name} does not expose the shared CYW43 owner",
     )
 
@@ -257,9 +291,9 @@ lwip_service = (
     / "src/hal/network/cyw43/jh_cyw43_lwip.cpp"
 ).read_text(encoding="utf-8")
 require(
-    lwip_service.index("jh_cyw43_driver_service(&host_wake)")
-    < lwip_service.index("jh_cyw43_radio_service_clients()")
-    < lwip_service.index("sys_check_timeouts();"),
+    source_fragment_position(lwip_service, "jh_cyw43_driver_service(&host_wake)")
+    < source_fragment_position(lwip_service, "jh_cyw43_radio_service_clients()")
+    < source_fragment_position(lwip_service, "sys_check_timeouts();"),
     "shared CYW43 service order must be driver, client stacks, then lwIP timers",
 )
 
@@ -271,7 +305,10 @@ for expected in (
     "test_malformed_and_failed_reads_propagate_hal_status",
     "test_packet_handler_cannot_reenter_transport_service",
 ):
-    require(expected in host_test, f"fake HCI coverage is missing {expected}")
+    require(
+        source_has_fragment(host_test, expected),
+        f"fake HCI coverage is missing {expected}",
+    )
 
 manifest = json.loads(
     (
@@ -308,6 +345,6 @@ require(
 
 public_hal = (ROOT / "src/hal/hal.h").read_text(encoding="utf-8")
 require(
-    "jh_bluetooth_stage1_probe" not in public_hal,
+    not source_has_fragment(public_hal, "jh_bluetooth_stage1_probe"),
     "private Stage 1 probe leaked into the public HAL umbrella",
 )

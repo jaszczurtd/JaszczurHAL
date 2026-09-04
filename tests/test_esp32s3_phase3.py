@@ -13,6 +13,8 @@ import tempfile
 import unittest
 from unittest import mock
 
+from source_assertions import source_fragment_position, source_has_fragment, source_section
+
 
 ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -169,8 +171,8 @@ class Phase3RegistryAndBuildTests(unittest.TestCase):
         component = (
             ROOT / "cmake/esp-idf/components/jh_bearssl/CMakeLists.txt"
         ).read_text(encoding="utf-8")
-        self.assertIn("jh_bearssl_source_manifest", component)
-        self.assertIn("idf_component_register", component)
+        self.assertTrue(source_has_fragment(component, "jh_bearssl_source_manifest"))
+        self.assertTrue(source_has_fragment(component, "idf_component_register"))
 
         wireguard_sources, _, _ = esp_idf.resolve_component_build_inputs(
             [
@@ -189,8 +191,8 @@ class Phase3RegistryAndBuildTests(unittest.TestCase):
         source = (ROOT / "src/hal/impl/esp32/hal_ota.cpp").read_text(
             encoding="utf-8"
         )
-        self.assertNotIn(
-            "(void)jh_hal_mutex_create_once(&s_ota.mutex)", source
+        self.assertFalse(
+            source_has_fragment(source, "(void)jh_hal_mutex_create_once(&s_ota.mutex)")
         )
         self.assertRegex(
             source,
@@ -215,9 +217,12 @@ class Phase3RegistryAndBuildTests(unittest.TestCase):
             "hal_status_t hal_ota_get_boot_info_ex(hal_ota_boot_info_t *out_info)": "return HAL_ENOMEM;",
         }
         for signature, failure_return in guarded_returns.items():
-            start = source.index(signature)
-            guard = source.index("if (!ensure_mutex())", start, start + 600)
-            self.assertIn(failure_return, source[guard : guard + 100], signature)
+            function = source[source_fragment_position(source, signature) :]
+            guard = source_fragment_position(function, "if (!ensure_mutex())")
+            self.assertTrue(
+                source_has_fragment(function[guard : guard + 100], failure_return),
+                signature,
+            )
 
     def test_sdkconfig_enforces_network_ota_and_stack_contracts(self) -> None:
         defaults = esp_idf._render_sdkconfig_defaults(resolve_model(ROOT, FIXTURE))
@@ -235,20 +240,28 @@ class Phase3RegistryAndBuildTests(unittest.TestCase):
         stack_guard = (
             ROOT / "src/hal/impl/esp32/hal_system.cpp"
         ).read_text(encoding="utf-8")
-        self.assertIn("CONFIG_FREERTOS_CHECK_STACKOVERFLOW_CANARY", stack_guard)
-        self.assertIn("CONFIG_FREERTOS_WATCHPOINT_END_OF_STACK", stack_guard)
+        self.assertTrue(
+            source_has_fragment(stack_guard, "CONFIG_FREERTOS_CHECK_STACKOVERFLOW_CANARY")
+        )
+        self.assertTrue(
+            source_has_fragment(stack_guard, "CONFIG_FREERTOS_WATCHPOINT_END_OF_STACK")
+        )
 
     def test_default_timer_handle_has_release_acquire_publication(self) -> None:
         timer_backend = (
             ROOT / "src/hal/impl/esp32/hal_timer.cpp"
         ).read_text(encoding="utf-8")
-        self.assertIn(
-            "__atomic_load_n(&s_default_pool.timer, __ATOMIC_ACQUIRE)",
-            timer_backend,
+        self.assertTrue(
+            source_has_fragment(
+                timer_backend,
+                "__atomic_load_n(&s_default_pool.timer, __ATOMIC_ACQUIRE)",
+            )
         )
-        self.assertIn(
-            "__atomic_store_n(&pool.timer, timer, __ATOMIC_RELEASE)",
-            timer_backend,
+        self.assertTrue(
+            source_has_fragment(
+                timer_backend,
+                "__atomic_store_n(&pool.timer, timer, __ATOMIC_RELEASE)",
+            )
         )
 
     def test_managed_timer_cross_context_fields_use_atomic_helpers(self) -> None:
@@ -277,52 +290,62 @@ class Phase3RegistryAndBuildTests(unittest.TestCase):
         )
         for relative in sources:
             source = (ROOT / relative).read_text(encoding="utf-8")
-            self.assertNotIn("(void)jh_hal_mutex_create_once", source, relative)
-            self.assertIn("HAL_ENOMEM", source, relative)
+            self.assertFalse(
+                source_has_fragment(source, "(void)jh_hal_mutex_create_once"), relative
+            )
+            self.assertTrue(source_has_fragment(source, "HAL_ENOMEM"), relative)
 
     def test_rp_timer_uses_stable_dispatch_before_managed_callback(self) -> None:
         source = (ROOT / "src/hal/impl/rp2040/hal_timer.cpp").read_text(
             encoding="utf-8"
         )
-        self.assertIn("timer_dispatch_callback", source)
-        self.assertIn("cancelled_id", source)
-        self.assertIn("entry->firing", source)
-        self.assertIn("__get_current_exception() == 0u", source)
+        self.assertTrue(source_has_fragment(source, "timer_dispatch_callback"))
+        self.assertTrue(source_has_fragment(source, "cancelled_id"))
+        self.assertTrue(source_has_fragment(source, "entry->firing"))
+        self.assertTrue(source_has_fragment(source, "__get_current_exception() == 0u"))
 
     def test_rp_timer_reused_id_cannot_match_stale_cancellation(self) -> None:
         source = (ROOT / "src/hal/impl/rp2040/hal_timer.cpp").read_text(
             encoding="utf-8"
         )
-        add_start = source.index("hal_timer_pool_add_alarm_us_ex(")
-        add_end = source.index("bool hal_timer_pool_cancel_alarm(", add_start)
-        add_alarm = source[add_start:add_end]
-        publish_begin = add_alarm.index(
-            "__atomic_add_fetch(&dispatch->publishing"
+        add_alarm = source_section(
+            source,
+            "hal_timer_pool_add_alarm_us_ex(",
+            "bool hal_timer_pool_cancel_alarm(",
         )
-        sdk_add = add_alarm.index("alarm_pool_add_alarm_in_us(")
-        clear_cancellation = add_alarm.index(
-            "__atomic_store_n(&entry.cancelled_id, HAL_ALARM_INVALID"
+        publish_begin = source_fragment_position(
+            add_alarm, "__atomic_add_fetch(&dispatch->publishing"
         )
-        publish_id = add_alarm.index("__atomic_store_n(&entry.active_id")
-        publish_end = add_alarm.index(
-            "__atomic_sub_fetch(&dispatch->publishing", publish_id
+        sdk_add = source_fragment_position(add_alarm, "alarm_pool_add_alarm_in_us(")
+        clear_cancellation = source_fragment_position(
+            add_alarm, "__atomic_store_n(&entry.cancelled_id, HAL_ALARM_INVALID"
+        )
+        publish_id = source_fragment_position(
+            add_alarm, "__atomic_store_n(&entry.active_id"
+        )
+        publish_end = source_fragment_position(
+            add_alarm, "__atomic_sub_fetch(&dispatch->publishing", publish_id
         )
         self.assertLess(publish_begin, sdk_add)
         self.assertLess(sdk_add, clear_cancellation)
         self.assertLess(clear_cancellation, publish_id)
         self.assertLess(publish_id, publish_end)
 
-        callback_start = source.index("static int64_t timer_dispatch_callback(")
-        callback_end = source.index("static inline void timer_store_result(")
-        callback = source[callback_start:callback_end]
-        self.assertIn("__atomic_load_n(&dispatch->publishing", callback)
-        self.assertIn("publishing != 0u ||", callback)
+        callback = source_section(
+            source,
+            "static int64_t timer_dispatch_callback(",
+            "static inline void timer_store_result(",
+        )
+        self.assertTrue(
+            source_has_fragment(callback, "__atomic_load_n(&dispatch->publishing")
+        )
+        self.assertTrue(source_has_fragment(callback, "publishing != 0u ||"))
 
     def test_wifi_underlay_transition_is_transactional(self) -> None:
         facade = (ROOT / "src/hal/network/hal_wifi.cpp").read_text(
             encoding="utf-8"
         )
-        self.assertIn("quiesce_persistent_services", facade)
+        self.assertTrue(source_has_fragment(facade, "quiesce_persistent_services"))
         self.assertRegex(
             facade,
             re.compile(
@@ -336,8 +359,12 @@ class Phase3RegistryAndBuildTests(unittest.TestCase):
         backend = (
             ROOT / "src/hal/impl/esp32/esp32_network_backend.cpp"
         ).read_text(encoding="utf-8")
-        attach = backend.index("esp_netif_attach_wifi_station(s_station_netif)")
-        published = backend.index("s_station_attached = true", attach)
+        attach = source_fragment_position(
+            backend, "esp_netif_attach_wifi_station(s_station_netif)"
+        )
+        published = source_fragment_position(
+            backend, "s_station_attached = true", attach
+        )
         self.assertLess(attach, published)
 
     def test_tls_dependency_is_synchronized_only_when_selected(self) -> None:

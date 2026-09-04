@@ -8,6 +8,8 @@ from pathlib import Path
 import re
 import sys
 
+from source_assertions import source_has_fragment, source_section
+
 
 ROOT = Path(sys.argv[1]).resolve()
 FIXTURE_DIR = ROOT / "tests" / "hardware" / "bluetooth_gamepad"
@@ -148,15 +150,15 @@ btstack_hci = (ROOT / "third_party" / "BTstack" / "src" / "hci.c").read_text(
     encoding="utf-8"
 )
 require(
-    "incoming_classic_collision" in btstack_hci
-    and "RECEIVED_CONNECTION_REQUEST" in btstack_hci
-    and "ACCEPTED_CONNECTION_REQUEST" in btstack_hci,
+    source_has_fragment(btstack_hci, "incoming_classic_collision")
+    and source_has_fragment(btstack_hci, "RECEIVED_CONNECTION_REQUEST")
+    and source_has_fragment(btstack_hci, "ACCEPTED_CONNECTION_REQUEST"),
     "pinned BTstack fork lacks the Classic connection collision fix",
 )
 require(
-    '"${_jh_btstack_root}/src/hci.c"' in btstack_cmake
-    and "_jh_btstack_patch" not in btstack_cmake
-    and "git apply" not in btstack_cmake,
+    source_has_fragment(btstack_cmake, '"${_jh_btstack_root}/src/hci.c"')
+    and not source_has_fragment(btstack_cmake, "_jh_btstack_patch")
+    and not source_has_fragment(btstack_cmake, "git apply"),
     "BTstack must be compiled directly from the pinned fork without local patches",
 )
 for source_set in (
@@ -166,7 +168,10 @@ for source_set in (
     "_jh_btstack_hid_host_sources",
     "_jh_btstack_hid_device_sources",
 ):
-    require(source_set in btstack_cmake, f"BTstack source set is missing {source_set}")
+    require(
+        source_has_fragment(btstack_cmake, source_set),
+        f"BTstack source set is missing {source_set}",
+    )
 for source in (
     "src/btstack_hid.c",
     "src/classic/btstack_link_key_db_memory.c",
@@ -177,12 +182,17 @@ for source in (
     "jh_bluetooth_classic_hid_memory_probe.c",
     "jh_bluetooth_classic_hid_probe_logic.c",
 ):
-    require(source in btstack_cmake, f"Classic HID source set is missing {source}")
+    require(
+        source_has_fragment(btstack_cmake, source),
+        f"Classic HID source set is missing {source}",
+    )
 require(
-    "src/btstack_hid_parser.c" in btstack_cmake
-    and "src/classic/hid_device.c" in btstack_cmake
-    and "src/classic/sdp_server.c" in btstack_cmake
-    and 'MODE STREQUAL "CLASSIC_HID_DEVICE_FIXTURE"' in btstack_cmake,
+    source_has_fragment(btstack_cmake, "src/btstack_hid_parser.c")
+    and source_has_fragment(btstack_cmake, "src/classic/hid_device.c")
+    and source_has_fragment(btstack_cmake, "src/classic/sdp_server.c")
+    and source_has_fragment(
+        btstack_cmake, 'MODE STREQUAL "CLASSIC_HID_DEVICE_FIXTURE"'
+    ),
     "the private non-gamepad HID Device fixture sources are incomplete",
 )
 for forbidden in (
@@ -191,7 +201,10 @@ for forbidden in (
     "src/classic/avrcp",
     "src/classic/hfp",
 ):
-    require(forbidden not in btstack_cmake, f"minimal build includes {forbidden}")
+    require(
+        not source_has_fragment(btstack_cmake, forbidden),
+        f"minimal build includes {forbidden}",
+    )
 
 public_backend = (
     ROOT / "src" / "hal" / "bluetooth" / "jh_bluetooth_classic_btstack_backend.c"
@@ -204,13 +217,14 @@ require(
     "public Classic HCI diagnostics are missing sanitized connection context",
 )
 require(
-    "addr=%" not in public_backend and "bd_addr_to_str" not in public_backend,
+    "addr=%" not in public_backend
+    and not source_has_fragment(public_backend, "bd_addr_to_str"),
     "public Classic HCI diagnostics expose a full Bluetooth address",
 )
 require(
-    "ENABLE_CLASSIC=1" in btstack_cmake
-    and "ENABLE_SDP_EXTRA_QUERIES=1" in btstack_cmake
-    and "JH_BLUETOOTH_CLASSIC_HID_PROBE=1" in btstack_cmake,
+    source_has_fragment(btstack_cmake, "ENABLE_CLASSIC = 1")
+    and source_has_fragment(btstack_cmake, "ENABLE_SDP_EXTRA_QUERIES = 1")
+    and source_has_fragment(btstack_cmake, "JH_BLUETOOTH_CLASSIC_HID_PROBE = 1"),
     "Classic HID mode definitions are missing",
 )
 for wrapped_pool_function in (
@@ -220,7 +234,7 @@ for wrapped_pool_function in (
     "btstack_memory_hid_host_connection_get",
 ):
     require(
-        f"--wrap={wrapped_pool_function}" in btstack_cmake,
+        source_has_fragment(btstack_cmake, f"--wrap={wrapped_pool_function}"),
         f"Classic HID memory probe does not wrap {wrapped_pool_function}",
     )
 
@@ -234,7 +248,10 @@ for expected in (
     "MAX_NR_L2CAP_CHANNELS 3",
     "MAX_NR_L2CAP_SERVICES 2",
 ):
-    require(expected in config, f"Classic HID pool is missing {expected}")
+    require(
+        source_has_fragment(config, expected),
+        f"Classic HID pool is missing {expected}",
+    )
 require(
     "Classic HID probe cannot be combined with a BLE mode" in config,
     "btstack_config.h does not reject mixed Classic/BLE modes",
@@ -247,7 +264,7 @@ rp_cmake = (ROOT / "cmake" / "jh_rp_native_sdk.cmake").read_text(
     encoding="utf-8"
 )
 require(
-    "jh_target_enable_btstack_classic_hid" in cyw43_cmake
+    source_has_fragment(cyw43_cmake, "jh_target_enable_btstack_classic_hid")
     and "The private Classic HID probe cannot use a public profile" in cyw43_cmake,
     "CYW43 selector does not isolate the Classic HID mode",
 )
@@ -274,7 +291,7 @@ for expected in (
     "sdp_parser_init_service_search();",
     "BLUETOOTH_SERVICE_CLASS_HUMAN_INTERFACE_DEVICE_SERVICE",
     "BLUETOOTH_SERVICE_CLASS_PNP_INFORMATION",
-    "hid_host_connect(\n      s_candidate_address, HID_PROTOCOL_MODE_REPORT",
+    "hid_host_connect(s_candidate_address, HID_PROTOCOL_MODE_REPORT, &hid_cid)",
     "hid_host_accept_connection(hid_cid, HID_PROTOCOL_MODE_BOOT)",
     "hid_host_send_set_protocol_mode(",
     "s_snapshot.descriptor_matches_capture",
@@ -283,22 +300,28 @@ for expected in (
     "gap_pin_code_response(",
     "jh_bluetooth_classic_hid_probe_logic_disconnected(&s_logic)",
 ):
-    require(expected in probe, f"Classic HID probe is missing {expected}")
+    require(
+        source_has_fragment(probe, expected),
+        f"Classic HID probe is missing {expected}",
+    )
 require(
-    "gap_discoverable_control(1" not in probe,
+    not source_has_fragment(probe, "gap_discoverable_control(1"),
     "C5 probe must not expose unsolicited page-scan pairing",
 )
 require(
-    "valid_zero2_report" not in probe
-    and "JH_ZERO2_REPORT_ID" not in probe
-    and "report[5]" not in probe,
+    not source_has_fragment(probe, "valid_zero2_report")
+    and not source_has_fragment(probe, "JH_ZERO2_REPORT_ID")
+    and not source_has_fragment(probe, "report[5]"),
     "C6 probe still decodes model-specific report offsets",
 )
-start_body = probe.split(
-    "hal_status_t jh_bluetooth_classic_hid_probe_start(", 1
-)[1].split("hal_status_t jh_bluetooth_classic_hid_probe_service(void)", 1)[0]
+start_body = source_section(
+    probe,
+    "hal_status_t jh_bluetooth_classic_hid_probe_start(",
+    "hal_status_t jh_bluetooth_classic_hid_probe_service(void)",
+)
 require(
-    "start_inquiry_cycle" not in start_body and "gap_inquiry_start" not in start_body,
+    not source_has_fragment(start_body, "start_inquiry_cycle")
+    and not source_has_fragment(start_body, "gap_inquiry_start"),
     "C5 probe opens discovery during startup instead of waiting for a command",
 )
 
@@ -306,21 +329,21 @@ logic = (
     ROOT / "src" / "hal" / "bluetooth" / "jh_bluetooth_classic_hid_probe_logic.c"
 ).read_text(encoding="utf-8")
 require(
-    "JH_CLASSIC_HID_DISCOVERY_WINDOW_MS" in logic,
+    source_has_fragment(logic, "JH_CLASSIC_HID_DISCOVERY_WINDOW_MS"),
     "C5 discovery-window logic lost its bounded duration",
 )
 require(
-    "s_known_address" in probe
-    and "memcpy(s_candidate_address, s_known_address" in probe,
+    source_has_fragment(probe, "s_known_address")
+    and source_has_fragment(probe, "memcpy(s_candidate_address, s_known_address"),
     "C5 known-device reconnect lost its stable address",
 )
-pairing_open_body = probe.split(
-    "hal_status_t jh_bluetooth_classic_hid_probe_open_pairing_window(void)", 1
-)[1].split(
-    "hal_status_t jh_bluetooth_classic_hid_probe_authorize_pairing(void)", 1
-)[0]
+pairing_open_body = source_section(
+    probe,
+    "hal_status_t jh_bluetooth_classic_hid_probe_open_pairing_window(void)",
+    "hal_status_t jh_bluetooth_classic_hid_probe_authorize_pairing(void)",
+)
 require(
-    "JH_CLASSIC_HID_PHASE_KNOWN_IDLE" in pairing_open_body,
+    source_has_fragment(pairing_open_body, "JH_CLASSIC_HID_PHASE_KNOWN_IDLE"),
     "C5 pairing no longer permits replacing a known device",
 )
 identity = (
@@ -332,10 +355,13 @@ for expected in (
     "JH_BLUETOOTH_GAMEPAD_EXPECTED_PRODUCT_ID",
     "JH_BLUETOOTH_GAMEPAD_EXPECTED_VERSION",
 ):
-    require(expected in identity, f"shared gamepad identity is missing {expected}")
+    require(
+        source_has_fragment(identity, expected),
+        f"shared gamepad identity is missing {expected}",
+    )
 require(
-    "const jh_bluetooth_gamepad_snapshot_t *snapshot" in logic
-    and "report[" not in logic,
+    source_has_fragment(logic, "const jh_bluetooth_gamepad_snapshot_t *snapshot")
+    and not source_has_fragment(logic, "report["),
     "C6 probe logic must consume the normalized snapshot",
 )
 
@@ -349,13 +375,17 @@ for expected in (
     "jh_bluetooth_gamepad_parser_parse_input(",
     "jh_bluetooth_gamepad_parser_next(",
 ):
-    require(expected in gamepad_parser, f"C6 parser is missing {expected}")
+    require(
+        source_has_fragment(gamepad_parser, expected),
+        f"C6 parser is missing {expected}",
+    )
 
 memory_probe = (
     ROOT / "src" / "hal" / "bluetooth" / "jh_bluetooth_classic_hid_memory_probe.c"
 ).read_text(encoding="utf-8")
 require(
-    "allocation_failures" in memory_probe and "high_water" in memory_probe,
+    source_has_fragment(memory_probe, "allocation_failures")
+    and source_has_fragment(memory_probe, "high_water"),
     "C5 memory probe does not record pool failures and high-water marks",
 )
 
@@ -370,7 +400,6 @@ for expected in (
     'probe.command("DISCOVER")',
     'probe.command("AUTHORIZE")',
     'probe.command("DISCONNECT")',
-    "known-pad reconnect in cycle",
     '"--resume-stability"',
     '"hostVerifierResumed"',
     "health_counter",
@@ -380,7 +409,14 @@ for expected in (
     '"droppedSnapshots"',
     '"reportsRejected"',
 ):
-    require(expected in verifier, f"C5 verifier is missing {expected}")
+    require(
+        source_has_fragment(verifier, expected),
+        f"C5 verifier is missing {expected}",
+    )
+require(
+    "known-pad reconnect in cycle" in verifier,
+    "C5 verifier is missing known-pad reconnect in cycle",
+)
 require(
     all(
         secret not in verifier
@@ -454,6 +490,6 @@ require(
 
 public_hal = (ROOT / "src" / "hal" / "hal.h").read_text(encoding="utf-8")
 require(
-    "jh_bluetooth_classic_hid" not in public_hal,
+    not source_has_fragment(public_hal, "jh_bluetooth_classic_hid"),
     "private Classic HID probe leaked into the public HAL umbrella",
 )

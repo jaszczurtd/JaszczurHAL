@@ -8,6 +8,8 @@ from pathlib import Path
 import re
 import sys
 
+from source_assertions import source_has_fragment
+
 
 ROOT = Path(sys.argv[1]).resolve()
 FIXTURE = ROOT / "tests" / "hardware" / "bluetooth_classic_hci_trace"
@@ -39,7 +41,7 @@ backend = (
     ROOT / "src" / "hal" / "bluetooth" / "jh_bluetooth_classic_btstack_backend.c"
 ).read_text(encoding="utf-8")
 require(
-    "hci_set_inquiry_mode(INQUIRY_MODE_RSSI_AND_EIR);" in backend,
+    source_has_fragment(backend, "hci_set_inquiry_mode(INQUIRY_MODE_RSSI_AND_EIR);"),
     "Classic backend no longer requests inquiry RSSI and EIR data",
 )
 
@@ -52,7 +54,10 @@ for expected in (
     "jh_rp2040_cyw43_gspi_get_clock(&clock);",
     "inquiryAddressByte(record, index)",
 ):
-    require(expected in trace, f"HCI trace fixture is missing {expected}")
+    require(
+        source_has_fragment(trace, expected),
+        f"HCI trace fixture is missing {expected}",
+    )
 require(
     re.search(
         r"case TRACE_HCI_EVENT_EXTENDED_INQUIRY_RESULT:\s*"
@@ -64,7 +69,7 @@ require(
     "Extended Inquiry Result must redact its EIR body after RSSI",
 )
 require(
-    "case 0xfc01u" not in trace.lower(),
+    not source_has_fragment(trace.lower(), "case 0xfc01u"),
     "vendor Write BD_ADDR command must not expose its payload",
 )
 require(
