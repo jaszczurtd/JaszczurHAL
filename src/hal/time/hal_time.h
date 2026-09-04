@@ -33,6 +33,12 @@ extern "C" {
  *
  * Dates after the last value representable by uint32_t are rejected.
  *
+ * @param year Gregorian year.
+ * @param month Gregorian month in range 1..12.
+ * @param day Actual day in the selected month.
+ * @param hour Hour in range 0..23.
+ * @param minute Minute in range 0..59.
+ * @param second Second in range 0..59.
  * @return Unix epoch seconds, or 0 when components are invalid or overflow the
  * 32-bit result. Unix epoch 0 is also a valid result for 1970-01-01 00:00:00.
  */
@@ -73,6 +79,9 @@ void hal_time_adjust_cet_cest(int *year, int *month, int *day, int *hour,
 
 /**
  * @brief Check whether a value belongs to a half-open interval.
+ * @param now Value to test.
+ * @param start Inclusive interval start.
+ * @param end Exclusive interval end.
  * @return true exactly when @p now is in [@p start, @p end).
  */
 bool hal_time_is_in_range(long now, long start, long end);
@@ -93,6 +102,7 @@ void hal_time_extract_minutes(long time_in_minutes, int *hours, int *minutes);
  * @brief Return rounded monotonic uptime in seconds.
  *
  * This preserves the established `(hal_millis() + 500) / 1000` behaviour.
+ * @return Monotonic uptime rounded to the nearest second.
  */
 unsigned long hal_get_seconds(void);
 
@@ -138,11 +148,20 @@ typedef struct {
  * This is the single setter used by RTC bootstrap, NTP, and target libc
  * adapters. @p micros must be below one million and @p source must not be
  * HAL_TIME_SOURCE_UNSET.
+ *
+ * @param unix_time Seconds since the Unix epoch.
+ * @param micros Fractional microseconds in range 0..999999.
+ * @param source Origin assigned to the new wall-clock value.
+ * @return HAL_OK, HAL_EINVAL for invalid input, or a backend error.
  */
 hal_status_t hal_time_set_unix_ex(uint64_t unix_time, uint32_t micros,
                                   hal_time_source_t source);
 
-/** @brief Read one coherent wall-clock and synchronization snapshot. */
+/**
+ * @brief Read one coherent wall-clock and synchronization snapshot.
+ * @param out_status Receives the current service state.
+ * @return HAL_OK, or HAL_EINVAL for a NULL output.
+ */
 hal_status_t hal_time_get_status_ex(hal_time_status_t *out_status);
 
 /**
@@ -164,7 +183,12 @@ bool hal_time_set_timezone(const char *tz);
 bool hal_time_sync_ntp(const char *primary_server,
                        const char *secondary_server);
 
-/** @brief Status-returning form of hal_time_sync_ntp(). */
+/**
+ * @brief Start NTP synchronization and return a detailed status.
+ * @param primary_server Primary NTP server hostname.
+ * @param secondary_server Optional secondary hostname.
+ * @return HAL_OK when accepted, or a validation/service error.
+ */
 hal_status_t hal_time_sync_ntp_ex(const char *primary_server,
                                   const char *secondary_server);
 
@@ -211,10 +235,17 @@ bool hal_time_format_local(char *out, size_t out_size, const char *format);
  * Once attachment succeeds, restore failures are also reported through that
  * field while this function returns HAL_OK and keeps the RTC available for a
  * later NTP write.
+ *
+ * @param rtc Initialized RTC handle retained by the caller.
+ * @param policy_flags Bitwise combination of HAL_TIME_RTC_* policies.
+ * @return HAL_OK, or a validation, state, locking, or RTC error.
  */
 hal_status_t hal_time_attach_rtc_ex(hal_rtc_t rtc, uint32_t policy_flags);
 
-/** @brief Detach the current RTC without deinitializing its handle. */
+/**
+ * @brief Detach the current RTC without deinitializing its handle.
+ * @return HAL_OK, HAL_EUNINIT when none is attached, or a locking error.
+ */
 hal_status_t hal_time_detach_rtc_ex(void);
 #endif
 

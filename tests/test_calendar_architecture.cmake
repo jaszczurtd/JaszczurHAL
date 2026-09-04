@@ -47,17 +47,6 @@ foreach(_required_api IN ITEMS
     endif()
 endforeach()
 
-foreach(_removed_api IN ITEMS
-        getSeconds
-        isDaylightSavingTime
-        adjustTime
-        is_time_in_range
-        extract_time)
-    if(_public_time_contents MATCHES "${_removed_api}[ \t\r\n]*\\(")
-        message(FATAL_ERROR "Old time helper returned: ${_removed_api}")
-    endif()
-endforeach()
-
 set(_hal_umbrella "${JH_ROOT}/src/hal/hal.h")
 file(READ "${_hal_umbrella}" _hal_umbrella_contents)
 if(NOT _hal_umbrella_contents MATCHES

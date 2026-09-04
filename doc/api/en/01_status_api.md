@@ -17,13 +17,7 @@ uniform result type so callers can branch on the cause - invalid argument,
 uninitialised backend, bus error, not-found, overflow - without inventing a
 per-module error convention.
 
-The migration is **status-first**. The status-returning function owns
-validation, backend execution and error mapping. A historical `bool`, value or
-handle API remains as a thin compatibility wrapper and gains an `_ex` companion
-where needed. A fallible historical `void` function changes in place to return
-`hal_status_t`, which remains source-compatible with callers that ignore the
-result; redundant `_ex` adapters are removed. This avoids status functions that
-can only guess after calling an information-losing legacy wrapper.
+The current approach to this problem is **status-first**. The status-returning function owns validation, backend execution and error mapping.
 
 ## Status codes
 

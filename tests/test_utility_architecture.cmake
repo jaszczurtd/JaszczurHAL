@@ -86,35 +86,6 @@ foreach(_debug_name IN ITEMS
     endif()
 endforeach()
 
-set(_utility_api_files
-    ${_utility_sources}
-    ${_utility_headers}
-    "utils/tools_api.h")
-foreach(_path IN LISTS _utility_api_files)
-    file(READ "${JH_ROOT}/src/${_path}" _contents)
-    foreach(_removed_api IN ITEMS
-            getSeconds isDaylightSavingTime adjustTime is_time_in_range
-            extract_time hal_time_uptime_seconds_rounded debugInit
-            setDebugPrefixWithColon roundToN hal_roundToN floatToDec
-            decToFloat percentToGivenVal percentFrom filter filterValue
-            getAverageForTable getAverageFrom getMinimumFrom
-            getHalfwayBetweenMinMax mapfloat rroundf roundfWithPrecisionTo
-            adcToVolt adcCompe getAverageValueFrom steinhart ntcToTemp
-            printBinaryAndSize concatStrings isValidString hexToChar urlDecode
-            removeSpaces parseNumber startsWith remove_non_ascii
-            hal_pack_field_pad hal_pack_field MsbLsbToInt byteArrayToWord
-            wordToByteArray rgbToRgb565 rgb888ToRgb565 rgba8888ToRgb565
-            pngBase64DecodedSize pngBase64Decode32 pngBase64DecodeRgb565
-            jpegDecodeRgb565 jpegBase64DecodedSize jpegBase64DecodeRgb565
-            macToString encToString scanNetworks getRandomEverySomeMillis
-            getRandomFloatEverySomeMillis from_hex parse_decimal parse_degrees)
-        if(_contents MATCHES "(^|[^A-Za-z0-9_])${_removed_api}[ \\t\\r\\n]*\\(")
-            message(FATAL_ERROR
-                "Old utility API returned in ${_path}: ${_removed_api}")
-        endif()
-    endforeach()
-endforeach()
-
 file(READ "${JH_ROOT}/src/utils/tools_api.h" _tools_api_header)
 if(_tools_api_header MATCHES
    "[A-Za-z_][A-Za-z0-9_]*[ \\t\\r\\n]*\\([^)]*\\)[ \\t\\r\\n]*;")

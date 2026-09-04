@@ -206,9 +206,9 @@ Zalecane sposoby dołączania nagłówków:
 | Konwersja NTC | `hal/temperature/hal_ntc.h` | `hal_ntc_*_ex` |
 | Piksele | `hal/display/hal_pixel.h` | `hal_pixel_*` |
 | Adaptery PNG/JPEG w pamięci | `hal/codecs/hal_image.h` | `hal_image_*` |
-| MAC i skanowanie WiFi | `hal/network/hal_network_utils.h` | `hal_network_*` |
-| Kalendarz i upływ czasu | `hal/time/hal_time.h` | `hal_time_*` |
-| Okresowo odświeżane wartości losowe | `hal/system/hal_periodic_random.h` | `hal_periodic_random_*_ex` |
+| MAC i skanowanie WiFi | `hal/network/hal_network_utils.h` | `hal_network_*`, `hal_wifi_scan_*` |
+| Kalendarz i upływ czasu | `hal/time/hal_time.h` | `hal_time_*`, `hal_get_seconds()` |
+| Okresowo odświeżane wartości losowe | `hal/system/hal_periodic_random.h` | `hal_periodic_random_*` |
 
 Funkcje `_ex` zwracają `hal_status_t`, używają jawnych buforów/stanu i
 walidują argumenty. Zachowanie ADC, takie jak liczba próbek, pusty odczyt,
@@ -249,82 +249,164 @@ i `tools_api.h` jedynie zbierają właściwe nagłówki i nie publikują drugieg
 zestawu nazw funkcji.
 
 ```c
-void  hal_debug_init_default(void);                  // opcjonalne - hal_deb() inicjalizuje się leniwie automatycznie
-void  hal_debug_set_module_prefix(const char *moduleName); // buduje "<module>:" w granicach HAL_DEBUG_PREFIX_SIZE i przekazuje do hal_deb_set_prefix
-void  hal_math_split_decimal_tenths(float val, int *hi, int *lo);
-float hal_math_join_decimal_tenths(int hi, int lo);
-float hal_adc_raw_to_voltage(int adc, float r1, float r2);
-float hal_ntc_read_temperature(uint8_t pin, int nominalResistance, int seriesResistance);
-float hal_ntc_steinhart(float ratio, float nominalResistance, int resistance, bool characteristic);
-int   hal_math_percent_to_value(float percent, int maxWidth);
-int   hal_math_percent_from_value(int givenVal, int maxVal);
-float hal_adc_read_average(int tpin);  // zawiera odczyt "na pusto" (poprawka na przesłuch multipleksera ADC RP2040)
+void hal_debug_init_default(void);
+void hal_debug_set_module_prefix(const char *module_name);
+
+static inline float hal_math_round_to_n(float value, int decimals);
+void  hal_math_split_decimal_tenths(float value, int *whole, int *tenths);
+float hal_math_join_decimal_tenths(int whole, int tenths);
+int   hal_math_percent_to_value(float percent, int maximum);
+int   hal_math_percent_from_value(int value, int maximum);
 float hal_math_low_pass(float alpha, float input, float previous_output);
-float hal_math_blend(float currentValue, float newValue, float alpha);
-int   hal_adc_compensate_rp2040_12bit(int x);
-float hal_math_rolling_average_default_f32(int *idx, int *overall, float val, float *table);
-int   hal_math_nonnegative_average_i32(int *table, int size);
-int   hal_math_min_i32(int *table, int size);
-int   hal_math_midpoint_min_max_i32(int *array, int n);
-float hal_math_map_f32(float x, float in_min, float in_max, float out_min, float out_max);
-static inline uint32_t hal_math_float_to_u32(float f);   // bitcast float -> uint32_t (memcpy)
-static inline float    hal_math_u32_to_float(uint32_t u); // bitcast uint32_t -> float (memcpy)
+float hal_math_blend(float current_value, float new_value, float alpha);
+hal_status_t hal_math_rolling_average_f32_ex(size_t *index, size_t *count,
+                                              float value, float *table,
+                                              size_t table_count,
+                                              float *out_average);
+hal_status_t hal_math_average_i32_ex(const int *values, size_t count,
+                                      int *out_average);
+hal_status_t hal_math_min_i32_ex(const int *values, size_t count,
+                                  int *out_minimum);
+hal_status_t hal_math_midpoint_min_max_i32_ex(const int *values, size_t count,
+                                               int *out_midpoint);
+float hal_math_rolling_average_default_f32(int *index, int *count,
+                                            float value, float *table);
+int   hal_math_nonnegative_average_i32(const int *values, int count);
+int   hal_math_min_i32(const int *values, int count);
+int   hal_math_midpoint_min_max_i32(const int *values, int count);
+float hal_math_map_f32(float value, float input_min, float input_max,
+                       float output_min, float output_max);
+float hal_math_round_tenth(float value);
+float hal_math_round_precision(float value, int precision);
+static inline uint32_t hal_math_float_to_u32(float value);
+static inline float    hal_math_u32_to_float(uint32_t value);
+
+hal_status_t hal_adc_raw_to_voltage_ex(int raw, float reference_voltage,
+                                        uint8_t resolution_bits,
+                                        float high_side_resistance,
+                                        float low_side_resistance,
+                                        float *out_voltage);
+int hal_adc_compensate_rp2040_12bit(int sample);
+hal_status_t hal_adc_read_average_ex(const hal_adc_average_config_t *config,
+                                      float *out_average);
+float hal_adc_raw_to_voltage(int raw, float high_side_resistance,
+                             float low_side_resistance);
+float hal_adc_read_average(uint8_t pin);
+hal_status_t hal_ntc_temperature_from_adc_ex(
+    float adc_average, float adc_full_scale,
+    const hal_ntc_beta_config_t *config, float *out_celsius);
+hal_status_t hal_ntc_read_temperature_ex(
+    const hal_adc_average_config_t *adc_config, float adc_full_scale,
+    const hal_ntc_beta_config_t *ntc_config, float *out_celsius);
+float hal_ntc_steinhart(float divider_ratio, float nominal_resistance,
+                        int resistance, bool characteristic);
+float hal_ntc_read_temperature(uint8_t pin, int nominal_resistance,
+                               int series_resistance);
 unsigned long hal_get_seconds(void);
 bool  hal_time_is_daylight_saving_time(int year, int month, int day);
 void  hal_time_adjust_cet_cest(int *year, int *month, int *day, int *hour, int *minute);
 bool  hal_time_is_in_range(long now, long start, long end);
-void  hal_time_extract_minutes(long timeInMinutes, int *hours, int *minutes);
-uint16_t jh_load_be16(const uint8_t *bytes);
-void     jh_store_be16(uint8_t *bytes, uint16_t word);
+void  hal_time_extract_minutes(long time_in_minutes, int *hours, int *minutes);
+uint16_t jh_load_le16(const uint8_t *input);
+uint32_t jh_load_le32(const uint8_t *input);
+uint64_t jh_load_le64(const uint8_t *input);
+void jh_store_le16(uint8_t *output, uint16_t value);
+void jh_store_le32(uint8_t *output, uint32_t value);
+void jh_store_le64(uint8_t *output, uint64_t value);
+uint16_t jh_load_be16(const uint8_t *input);
+uint32_t jh_load_be32(const uint8_t *input);
+uint64_t jh_load_be64(const uint8_t *input);
+void jh_store_be16(uint8_t *output, uint16_t value);
+void jh_store_be32(uint8_t *output, uint32_t value);
+void jh_store_be64(uint8_t *output, uint64_t value);
+uint16_t jh_bswap16(uint16_t value);
+uint32_t jh_bswap32(uint32_t value);
+uint64_t jh_bswap64(uint64_t value);
+uint8_t  jh_u16_msb(uint16_t value);
+uint8_t  jh_u16_lsb(uint16_t value);
 uint8_t  MSB(unsigned short value);
 uint8_t  LSB(unsigned short value);
-int      jh_u16_from_bytes(uint8_t msb, uint8_t lsb);
-float hal_math_round_tenth(float val);
-float hal_math_round_precision(float value, int precision);
-char *hal_text_format_binary_int(int number, char *buf, size_t bufSize);  // zapisuje ciąg binarny do buf
-bool  hal_text_concat(char *dest, size_t destSize, const char *src1, const char *src2); // false przy argumentach NULL lub zbyt małym dest
-bool  hal_text_is_printable(const char *s, int maxBufSize);
-char  hal_text_hex_pair_to_byte(char high, char low);
-void  hal_text_url_decode(const char *src, char *dst);
-void  hal_text_remove_whitespace(char *str);
-bool  hal_text_starts_with(const char *str, const char *prefix);
+uint16_t jh_u16_from_bytes(uint8_t msb, uint8_t lsb);
+char *hal_text_format_binary_int(int value, char *buffer, size_t buffer_size);
+hal_status_t hal_text_concat_ex(char *destination, size_t destination_size,
+                                 const char *first, const char *second);
+bool hal_text_concat(char *destination, size_t destination_size,
+                     const char *first, const char *second);
+bool hal_text_is_printable(const char *text, size_t maximum_size);
+hal_status_t hal_text_hex_pair_to_byte_ex(char high, char low,
+                                           uint8_t *out_value);
+uint8_t hal_text_hex_pair_to_byte(char high, char low);
+hal_status_t hal_text_url_decode_ex(const char *source, char *destination,
+                                     size_t destination_size,
+                                     size_t *out_length);
+void  hal_text_url_decode(const char *source, char *destination);
+void  hal_text_remove_whitespace(char *text);
+bool  hal_text_starts_with(const char *text, const char *prefix);
 int   hal_text_parse_number(const char **text);
-void  hal_text_transliterate_ascii(const char *input, char *output, size_t outputSize);  // zastępuje UTF-8 znakami ASCII
-void  hal_text_pack_field_pad(uint8_t *buf, const char *str, int width, uint8_t pad);
-void  hal_text_pack_field(uint8_t *buf, const char *str, int width); // dopełnienie zerami
-unsigned short hal_pixel_rgb888_to_rgb565(unsigned char r, unsigned char g, unsigned char b);
-hal_status_t hal_pixel_rgb888_buffer_to_rgb565_ex(const uint8_t *rgb, uint16_t *rgb565, size_t pixelCount);
-hal_status_t hal_pixel_rgba8888_buffer_to_rgb565_ex(const uint8_t *rgba, uint16_t *rgb565, size_t pixelCount); // ignoruje kanał alfa
-bool hal_image_png_base64_decoded_size(const char *base64, size_t base64Len,
-                          size_t *pngSize); // wymaga HAL_ENABLE_PNG_AS_BASE64
-bool hal_image_png_base64_decode_rgba8888(unsigned char **rgba, unsigned *width, unsigned *height,
-                       const char *base64, size_t base64Len,
-                       uint8_t *pngWork, size_t pngWorkSize,
-                       unsigned *pngError); // wymaga HAL_ENABLE_PNG_AS_BASE64
-bool hal_image_png_base64_decode_rgb565(const char *base64, size_t base64Len,
-                           uint8_t *pngWork, size_t pngWorkSize,
-                           unsigned short *rgb565, size_t rgb565Pixels,
-                           unsigned *width, unsigned *height,
-                           unsigned *pngError); // wymaga HAL_ENABLE_PNG_AS_BASE64
-bool hal_image_jpeg_decode_rgb565(const uint8_t *jpeg, size_t jpegSize,
-                                  uint16_t *rgb565, size_t rgb565Pixels,
+hal_status_t hal_text_transliterate_ascii_ex(const char *input, char *output,
+                                              size_t output_size);
+void hal_text_transliterate_ascii(const char *input, char *output,
+                                  size_t output_size);
+hal_status_t hal_text_pack_field_ex(uint8_t *buffer, size_t width,
+                                     const char *text, uint8_t padding);
+void hal_text_pack_field_pad(uint8_t *buffer, const char *text, int width,
+                             uint8_t padding);
+void hal_text_pack_field(uint8_t *buffer, const char *text, int width);
+uint16_t hal_pixel_rgb888_to_rgb565(uint8_t red, uint8_t green, uint8_t blue);
+hal_status_t hal_pixel_rgb888_buffer_to_rgb565_ex(const uint8_t *rgb,
+                                                   uint16_t *rgb565,
+                                                   size_t pixel_count);
+hal_status_t hal_pixel_rgba8888_buffer_to_rgb565_ex(const uint8_t *rgba,
+                                                     uint16_t *rgb565,
+                                                     size_t pixel_count);
+bool hal_image_png_base64_decoded_size(const char *base64, size_t base64_len,
+                                        size_t *png_size);
+bool hal_image_png_base64_decode_rgba8888(
+    uint8_t **rgba, unsigned *width, unsigned *height, const char *base64,
+    size_t base64_len, uint8_t *png_work, size_t png_work_size,
+    unsigned *png_error);
+bool hal_image_png_base64_decode_rgb565(
+    const char *base64, size_t base64_len, uint8_t *png_work,
+    size_t png_work_size, uint16_t *rgb565, size_t rgb565_pixels,
+    unsigned *width, unsigned *height, unsigned *png_error);
+bool hal_image_jpeg_decode_rgb565(const uint8_t *jpeg, size_t jpeg_size,
+                                  uint16_t *rgb565, size_t rgb565_pixels,
                                   unsigned *width, unsigned *height);
-bool hal_image_jpeg_base64_decoded_size(const char *base64, size_t base64Len,
-                                        size_t *jpegSize);
-bool hal_image_jpeg_base64_decode_rgb565(const char *base64, size_t base64Len,
-                                         uint8_t *jpegWork, size_t jpegWorkSize,
-                                         uint16_t *rgb565, size_t rgb565Pixels,
+bool hal_image_jpeg_base64_decoded_size(const char *base64, size_t base64_len,
+                                        size_t *jpeg_size);
+bool hal_image_jpeg_base64_decode_rgb565(const char *base64, size_t base64_len,
+                                         uint8_t *jpeg_work,
+                                         size_t jpeg_work_size,
+                                         uint16_t *rgb565, size_t rgb565_pixels,
                                          unsigned *width, unsigned *height);
 int     hal_gps_nmea_hex_value(char value);
 int32_t hal_gps_nmea_decimal_x100(const char *text);
 void    hal_gps_nmea_degrees(const char *text, int16_t *degrees,
                              uint32_t *billionths);
-hal_status_t hal_network_format_mac_ex(const uint8_t mac[6], char *buf, size_t bufSize);
-const char *hal_wifi_encryption_to_string(uint8_t enc);       // etykieta szyfrowania WiFi HAL
-bool  hal_wifi_scan_for_ssid(const char *networkToFind);  // wymaga HAL_ENABLE_WIFI
-int   hal_periodic_random_int_get(uint32_t time, int maxValue);
-float hal_periodic_random_float_get(uint32_t time, float maxValue);
+hal_status_t hal_network_format_mac_ex(const uint8_t mac[6], char *buffer,
+                                        size_t buffer_size);
+const char *hal_wifi_encryption_to_string(hal_wifi_encryption_t encryption);
+hal_status_t hal_wifi_scan_for_ssid_ex(const char *ssid_prefix,
+                                        bool log_results, bool *out_found);
+bool hal_wifi_scan_for_ssid(const char *ssid_prefix);
+void hal_periodic_random_int_init(hal_periodic_random_int_t *random,
+                                  uint32_t seed);
+void hal_periodic_random_float_init(hal_periodic_random_float_t *random,
+                                    uint32_t seed);
+hal_status_t hal_periodic_random_int_get_ex(hal_periodic_random_int_t *random,
+                                             uint32_t now_ms,
+                                             uint32_t interval_ms,
+                                             int maximum, int *out_value);
+hal_status_t hal_periodic_random_float_get_ex(
+    hal_periodic_random_float_t *random, uint32_t now_ms, uint32_t interval_ms,
+    float maximum, float *out_value);
+int   hal_periodic_random_int_get(uint32_t interval_ms, int maximum);
+float hal_periodic_random_float_get(uint32_t interval_ms, float maximum);
 ```
+
+Nagłówki domen opisują parametry, jednostki, opcjonalne wyjścia, zachowanie na
+granicach i błędy każdej funkcji. Jeśli dostępny jest wariant `_ex`, warto go
+wybrać, gdy kod potrzebuje dokładnego statusu albo jawnie przekazywanego stanu.
 
 Funkcje czasu deklaruje `<hal/time/hal_time.h>`, a implementuje
 `hal_time.cpp`: `hal_get_seconds()`, `hal_time_is_daylight_saving_time()`,
