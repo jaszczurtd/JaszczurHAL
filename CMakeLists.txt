@@ -111,7 +111,10 @@ set(UTIL_SOURCES
     ${SRC}/hal/bluetooth/hal_ble_commands.cpp
     ${SRC}/hal/bluetooth/hal_ble_stream.cpp
     ${SRC}/hal/bluetooth/hal_bluetooth_classic.cpp
+    ${SRC}/hal/bluetooth/hal_bluetooth_a2dp_sink.cpp
+    ${SRC}/hal/bluetooth/hal_bluetooth_avrcp_target.cpp
     ${SRC}/hal/bluetooth/hal_bluetooth_hid_host.cpp
+    ${SRC}/hal/bluetooth/jh_bluetooth_a2dp_sbc.c
     ${SRC}/hal/bluetooth/hal_gamepad.cpp
     ${SRC}/hal/bluetooth/jh_bluetooth_classic_bond_codec.c
     ${SRC}/hal/bluetooth/jh_bluetooth_classic_bond_kv_provider.c
@@ -266,6 +269,8 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_BLE_COMMANDS
     HAL_ENABLE_BLE_STREAM
     HAL_ENABLE_BLUETOOTH_GAMEPAD
+    HAL_ENABLE_BLUETOOTH_A2DP_SINK
+    HAL_ENABLE_BLUETOOTH_AVRCP_TARGET
     HAL_ENABLE_COMMAND_ROUTER
     HAL_ENABLE_SERIAL_COMMANDS
     HAL_ENABLE_SX126X       # propagates HAL_ENABLE_LORA + HAL_ENABLE_SPI

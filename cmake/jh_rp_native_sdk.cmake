@@ -320,6 +320,10 @@ if(JH_BLUETOOTH_CLASSIC_HID_DEVICE_FIXTURE)
 endif()
 jh_hal_define_enabled(_jh_native_bluetooth_classic HAL_ENABLE_BLUETOOTH_CLASSIC)
 jh_hal_define_enabled(_jh_native_bluetooth_hid_host HAL_ENABLE_BLUETOOTH_HID_HOST)
+jh_hal_define_enabled(_jh_native_bluetooth_a2dp_sink
+    HAL_ENABLE_BLUETOOTH_A2DP_SINK)
+jh_hal_define_enabled(_jh_native_bluetooth_avrcp_target
+    HAL_ENABLE_BLUETOOTH_AVRCP_TARGET)
 if((_jh_native_bluetooth_classic_hid OR
     _jh_native_bluetooth_classic_hid_device_fixture OR
     _jh_native_bluetooth_classic) AND
@@ -341,6 +345,8 @@ if(_jh_native_cyw43_backend)
             "${_jh_native_bluetooth_classic_hid_device_fixture}"
         CLASSIC "${_jh_native_bluetooth_classic}"
         HID_HOST "${_jh_native_bluetooth_hid_host}"
+        A2DP_SINK "${_jh_native_bluetooth_a2dp_sink}"
+        AVRCP_TARGET "${_jh_native_bluetooth_avrcp_target}"
         BLE "${_jh_native_ble}"
         BLE_STREAM "${_jh_native_ble_stream}")
 elseif(_jh_pico_board_has_cyw43)

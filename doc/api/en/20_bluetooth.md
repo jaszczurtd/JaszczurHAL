@@ -9,8 +9,11 @@ Peripheral and passive Observer API through `hal/bluetooth/hal_ble.h`.
 `HAL_ENABLE_BLUETOOTH_CLASSIC` exposes discovery, pairing, SDP and bonded-peer
 management. `HAL_ENABLE_BLUETOOTH_HID_HOST` adds raw Classic HID descriptors
 and reports; `HAL_ENABLE_BLUETOOTH_GAMEPAD` adds the normalized gamepad adapter.
-The dependencies are gamepad -> HID Host -> Classic. All public APIs are also
-available from the umbrella `JaszczurHAL.h` header.
+`HAL_ENABLE_BLUETOOTH_A2DP_SINK` adds SBC audio reception, while
+`HAL_ENABLE_BLUETOOTH_AVRCP_TARGET` adds absolute-volume control. The profile
+dependencies are gamepad -> HID Host -> Classic and AVRCP Target -> A2DP Sink
+-> Classic. All public APIs are also available from the umbrella
+`JaszczurHAL.h` header.
 
 The current release provides one Peripheral connection, connectable legacy
 advertising, passive legacy scanning, copied advertising reports, AD structure
@@ -33,6 +36,7 @@ Stream payload to the shared command router; it does not add a GATT client.
 | BLE | `esp32s3` | `waveshare-esp32-s3-zero` | integrated LE controller with ESP-IDF NimBLE | complete compile/link fixture; radio hardware gate pending |
 | Classic / HID Host / gamepad | `rp2040` / `rp2350-arm` / `stm32g474` | Bluetooth-capable profiles above | CYW43439 with BTstack | Zero 2 gamepad and generic Classic XY-BT gates passed on `pico2w`; a Pico W mouse fixture also passed the non-gamepad HID descriptor/report gate against the Pico 2 W host |
 | Classic / HID Host / gamepad | `esp32` | `esp32-devkitc-v4` | integrated BR/EDR controller with ESP-IDF Bluedroid and ESP HID Host | complete compile/link fixture; generic radio hardware gate pending |
+| A2DP Sink / AVRCP Target | `rp2040` / `rp2350-arm` | `picow` / `pico2w` | onboard CYW43439 with BTstack and Bluedroid SBC decoder | build-supported with deterministic host codec/runtime coverage; end-to-end source and audio-output acceptance is required per product |
 | BLE and Classic profiles | `mock` | `host-mock` | deterministic test backends | Classic, non-gamepad HID and gamepad host tests |
 
 The RP2350 backend supports Pico 2 W only with the `rp2350-arm` target. Pico 2
@@ -300,7 +304,7 @@ report count, and both drop counters. A fatal controller or transport error move
 `HAL_BLE_STATE_FAILED`, invalidates its handles, stops scanning, and advances
 the generation.
 
-## Bluetooth Classic manager and HID profiles
+## Bluetooth Classic manager and profiles
 
 ### Classic manager
 
@@ -318,6 +322,14 @@ passkey request is visible in `hal_bluetooth_classic_info_t`; the application
 must call `hal_bluetooth_classic_pairing_authorize()` or
 `hal_bluetooth_classic_pairing_reject()`. Authorization must follow a trusted
 local gesture. A name, address or unauthenticated exchange is not user identity.
+
+An incoming profile can instead use
+`hal_bluetooth_classic_pairing_window_open()`. During this bounded window the
+device is connectable and discoverable, and an application may authorize the
+reported pairing request. After expiry it remains connectable for restored
+peers, becomes non-discoverable, and rejects unknown pairing attempts. Set the
+shared local name and 24-bit Class of Device with
+`hal_bluetooth_classic_set_identity()` before opening the window.
 
 `hal_bluetooth_classic_open_ex()` accepts an indexed
 `hal_bluetooth_classic_bond_provider_t`. Each opaque record contains one peer,
@@ -337,6 +349,46 @@ NVS and does not expose them; therefore portable provider storage returns
 and `hal_bluetooth_classic_peer_forget()` remain available. A generic
 `hal_bluetooth_classic_pair()` is also unsupported there; connecting the
 selected profile starts authentication.
+
+`hal_bluetooth_classic_peer_forget_all()` is the shared factory-reset entry
+point for multi-profile products. For each peer it erases the provider slot
+before removing the corresponding native bond; a storage failure leaves that
+peer's runtime state intact so the reset can be retried.
+
+### A2DP Sink and AVRCP Target
+
+`HAL_ENABLE_BLUETOOTH_A2DP_SINK` adds `hal_bluetooth_a2dp_sink.h` and implies
+the Classic manager. One Sink attaches to one open manager and accepts SBC at
+44.1 or 48 kHz in mono, stereo, or joint-stereo mode. The public API contains
+no BTstack or audio-driver types. It yields signed 16-bit interleaved PCM in
+the negotiated channel count, or saturating mono when configured with
+`HAL_BLUETOOTH_A2DP_OUTPUT_MONO`.
+
+Stack callbacks only copy complete media packets into a bounded queue. Call
+`hal_bluetooth_classic_poll()` to service the shared controller, then drain
+`hal_bluetooth_a2dp_sink_poll()` until it returns `HAL_EAGAIN`. Parsing, SBC
+decoding, software volume, downmixing and small clock corrections all run in
+that poll context. `hal_bluetooth_a2dp_sink_pcm_next()` applies a fixed
+prebuffer after stream start and after an underrun. The application owns the
+physical output and should move returned PCM into its own ready buffers; a DMA
+interrupt should only select a ready buffer or silence.
+
+`hal_bluetooth_a2dp_sink_info_t` exposes stream format and state, packet loss,
+bounded packet/PCM queue levels and high-water marks, drops, corrupt frames,
+PCM overflow/underrun counts and current clock correction. Queue pressure
+never causes an unbounded allocation. A new peer is committed to the shared
+Classic bond provider only after local pairing authorization, a captured link
+key and the first successfully decoded SBC frame. Its profile identifier is
+`HAL_BLUETOOTH_A2DP_SINK_PROFILE_ID`.
+
+`HAL_ENABLE_BLUETOOTH_AVRCP_TARGET` adds
+`hal_bluetooth_avrcp_target.h` and implies A2DP Sink. The minimal Target
+accepts Controller absolute-volume changes from 0 through 127, coalesces a
+pending change to the newest value, and can report the current local value to
+a subscribed Controller. It shares the A2DP/Classic connection and bond; it
+never creates another stored key. Close AVRCP first, then A2DP, then Classic.
+The complete C consumer and PWM/DMA output adapter are in
+[`examples/30_bluetooth_speaker`](../../../examples/30_bluetooth_speaker/).
 
 ### Generic HID Host
 
@@ -716,7 +768,7 @@ delta was 5794 echoes at 9.66 Hz, with zero stagnant one-second summaries.
 
 Bluetooth firmware links the project-maintained fork of BlueKitchen BTstack
 from the exact revision recorded in `third_party/btstack_version.conf`.
-JaszczurHAL applies no local source patches. Two distinct license texts are
+JaszczurHAL applies no local source patches. Three relevant license texts are
 tracked:
 
 - the standard BlueKitchen
@@ -733,7 +785,12 @@ tracked:
   Pico W, Pico WH, Pico 2 W, Pico 2 WH, and RM2; Customer Products are products
   manufactured or distributed by Customers which use or are derived from
   those Products. This is a product-scoped grant, not a general permission for
-  every board or device containing a CYW43 controller.
+  every board or device containing a CYW43 controller;
+- the Bluedroid SBC decoder bundled with BTstack retains Apache-2.0 copyright
+  notices from Android Open Source Project, Broadcom, and Open Interface. The
+  complete tracked text is
+  [`third_party/LICENSE.BLUEDROID-SBC`](../../../third_party/LICENSE.BLUEDROID-SBC),
+  and the codec is inventoried separately in the generated SBOM.
 
 The applicable grant depends on the physical product and its distribution.
 Review the complete tracked license texts and satisfy the conditions of the
@@ -750,3 +807,7 @@ drives the complete protocol from an independent BlueZ client.
 
 See [`29_bluetooth_gamepad`](../../../examples/29_bluetooth_gamepad/) for the
 Classic HID snapshot flow and its combined BLE+Classic build variant.
+
+See [`30_bluetooth_speaker`](../../../examples/30_bluetooth_speaker/) for the
+A2DP Sink lifecycle, bounded pairing policy, shared bond, optional AVRCP
+absolute volume, diagnostics, and DMA PWM output adapter.

@@ -31,6 +31,23 @@
       },
       "implies": ["HAL_ENABLE_CRC"]
     },
+    "HAL_ENABLE_BLUETOOTH_A2DP_SINK": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/bluetooth/hal_bluetooth_a2dp_sink.cpp",
+          "src/hal/bluetooth/jh_bluetooth_a2dp_sbc.c"
+        ]
+      },
+      "implies": ["HAL_ENABLE_BLUETOOTH_CLASSIC"]
+    },
+    "HAL_ENABLE_BLUETOOTH_AVRCP_TARGET": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/bluetooth/hal_bluetooth_avrcp_target.cpp"
+        ]
+      },
+      "implies": ["HAL_ENABLE_BLUETOOTH_A2DP_SINK"]
+    },
     "HAL_ENABLE_BLUETOOTH_HID_HOST": {
       "buildEffects": {
         "portableSources": [

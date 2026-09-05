@@ -7,6 +7,7 @@
 #include "hal/bluetooth/jh_bluetooth_classic_address.h"
 #include "hal/bluetooth/jh_bluetooth_classic_backend.h"
 
+#include "bluetooth_psm.h"
 #include "bluetooth_sdp.h"
 #include "btstack_event.h"
 #include "classic/btstack_link_key_db_memory.h"
@@ -20,6 +21,15 @@
 #include "l2cap.h"
 #ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
 #include "classic/hid_host.h"
+#endif
+#ifdef HAL_ENABLE_BLUETOOTH_A2DP_SINK
+#include "classic/a2dp_sink.h"
+#include "classic/btstack_sbc_bluedroid.h"
+#include "classic/sdp_server.h"
+#endif
+#ifdef HAL_ENABLE_BLUETOOTH_AVRCP_TARGET
+#include "classic/avrcp.h"
+#include "classic/avrcp_target.h"
 #endif
 
 #include <stddef.h>
@@ -46,6 +56,7 @@ typedef struct {
   btstack_packet_callback_registration_t hci_events;
   jh_bluetooth_host_reference_t host_reference;
   jh_classic_scan_cache_entry_t scan_cache[JH_CLASSIC_SCAN_CACHE_DEPTH];
+  char local_name[HAL_BLUETOOTH_CLASSIC_NAME_MAX_LEN + 1u];
   hal_bluetooth_classic_address_t pairing_address;
   hal_bluetooth_classic_pairing_method_t pairing_method;
   hal_bluetooth_classic_address_t sdp_address;
@@ -64,6 +75,8 @@ typedef struct {
   bool sdp_match;
   bool sdp_retry_pending;
   bool pairing_pending;
+  bool pairing_allowed;
+  bool sdp_server_initialized;
 #ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
   uint8_t hid_descriptor[HAL_BLUETOOTH_HID_DESCRIPTOR_MAX_LEN];
   hal_bluetooth_classic_address_t hid_address;
@@ -81,6 +94,33 @@ typedef struct {
   bool hid_acl_disconnect_pending;
   bool last_hid_report_valid;
   bool hid_report_trace_suppressed;
+#endif
+#ifdef HAL_ENABLE_BLUETOOTH_A2DP_SINK
+  btstack_sbc_decoder_bluedroid_t sbc_decoder_context;
+  const btstack_sbc_decoder_t *sbc_decoder;
+  hal_bluetooth_a2dp_sbc_format_t a2dp_format;
+  hal_bluetooth_classic_address_t a2dp_address;
+  uint8_t a2dp_codec_configuration[4];
+  uint8_t a2dp_sdp_record[160];
+  int16_t decoded_pcm[128u * 2u];
+  uint32_t a2dp_sdp_handle;
+  uint16_t a2dp_cid;
+  size_t decoded_pcm_frames;
+  uint32_t decoded_pcm_sample_rate_hz;
+  uint8_t a2dp_local_seid;
+  uint8_t decoded_pcm_channels;
+  bool a2dp_attached;
+  bool a2dp_streaming;
+  bool a2dp_format_valid;
+  bool decoded_pcm_pending;
+#endif
+#ifdef HAL_ENABLE_BLUETOOTH_AVRCP_TARGET
+  hal_bluetooth_classic_address_t avrcp_address;
+  uint8_t avrcp_sdp_record[160];
+  uint32_t avrcp_sdp_handle;
+  uint16_t avrcp_cid;
+  uint8_t avrcp_volume;
+  bool avrcp_attached;
 #endif
 } jh_classic_btstack_t;
 
@@ -361,8 +401,16 @@ static void sdp_query_next(void) {
 }
 
 static bool address_is_active(const hal_bluetooth_classic_address_t *address) {
+  if (s_backend.pairing_allowed || peer_restored(address)) {
+    return true;
+  }
 #ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
   if (jh_bluetooth_classic_address_equal(address, &s_backend.hid_address)) {
+    return true;
+  }
+#endif
+#ifdef HAL_ENABLE_BLUETOOTH_A2DP_SINK
+  if (jh_bluetooth_classic_address_equal(address, &s_backend.a2dp_address)) {
     return true;
   }
 #endif
@@ -370,10 +418,10 @@ static bool address_is_active(const hal_bluetooth_classic_address_t *address) {
                                             &s_backend.pairing_address);
 }
 
-static void set_pairing_request(const hal_bluetooth_classic_address_t *address,
+static bool set_pairing_request(const hal_bluetooth_classic_address_t *address,
                                 hal_bluetooth_classic_pairing_method_t method) {
   if (!address_is_active(address)) {
-    return;
+    return false;
   }
   s_backend.pairing_address = *address;
   s_backend.pairing_method = method;
@@ -384,6 +432,7 @@ static void set_pairing_request(const hal_bluetooth_classic_address_t *address,
   event.address = *address;
   event.pairing_method = method;
   emit(&event);
+  return true;
 }
 
 #ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
@@ -706,19 +755,40 @@ static void packet_handler(uint8_t packet_type, uint16_t channel,
   case HCI_EVENT_USER_CONFIRMATION_REQUEST:
     hal_deb("Bluetooth Classic HCI pairing request method=just-works");
     hci_event_user_confirmation_request_get_bd_addr(packet, address.bytes);
-    set_pairing_request(&address, HAL_BLUETOOTH_CLASSIC_PAIRING_JUST_WORKS);
+    if (!set_pairing_request(&address,
+                             HAL_BLUETOOTH_CLASSIC_PAIRING_JUST_WORKS)) {
+      (void)gap_ssp_confirmation_negative(address.bytes);
+    }
     break;
   case HCI_EVENT_PIN_CODE_REQUEST:
     hal_deb("Bluetooth Classic HCI pairing request method=legacy-pin");
     hci_event_pin_code_request_get_bd_addr(packet, address.bytes);
-    set_pairing_request(&address, HAL_BLUETOOTH_CLASSIC_PAIRING_PIN);
+    if (!set_pairing_request(&address, HAL_BLUETOOTH_CLASSIC_PAIRING_PIN)) {
+      (void)gap_pin_code_negative(address.bytes);
+    }
     break;
   case HCI_EVENT_USER_PASSKEY_REQUEST:
     hal_deb("Bluetooth Classic HCI pairing request method=passkey");
     hci_event_user_passkey_request_get_bd_addr(packet, address.bytes);
-    set_pairing_request(&address, HAL_BLUETOOTH_CLASSIC_PAIRING_PASSKEY);
+    (void)set_pairing_request(&address, HAL_BLUETOOTH_CLASSIC_PAIRING_PASSKEY);
     (void)gap_ssp_passkey_negative(address.bytes);
     break;
+  case HCI_EVENT_SIMPLE_PAIRING_COMPLETE: {
+    const uint8_t raw_status =
+        hci_event_simple_pairing_complete_get_status(packet);
+    hci_event_simple_pairing_complete_get_bd_addr(packet, address.bytes);
+    hal_deb(
+        "Bluetooth Classic simple pairing status=0x%02x (%s)",
+        (unsigned int)raw_status,
+        hal_status_to_string(hid_connection_status_from_btstack(raw_status)));
+    jh_bluetooth_classic_backend_event_t event = {0};
+    event.type = JH_BLUETOOTH_CLASSIC_EVENT_AUTHENTICATION;
+    event.status = hid_connection_status_from_btstack(raw_status);
+    event.address = address;
+    s_backend.pairing_pending = false;
+    emit(&event);
+    break;
+  }
   case HCI_EVENT_AUTHENTICATION_COMPLETE: {
     const uint8_t raw_status =
         hci_event_authentication_complete_get_status(packet);
@@ -762,6 +832,332 @@ static void packet_handler(uint8_t packet_type, uint16_t channel,
   }
 }
 
+#if defined(HAL_ENABLE_BLUETOOTH_A2DP_SINK) ||                                 \
+    defined(HAL_ENABLE_BLUETOOTH_AVRCP_TARGET)
+static void ensure_sdp_server(void) {
+  if (!s_backend.sdp_server_initialized) {
+    sdp_init();
+    s_backend.sdp_server_initialized = true;
+  }
+}
+
+static void deinit_sdp_server_if_unused(void) {
+  bool profile_active = false;
+#ifdef HAL_ENABLE_BLUETOOTH_A2DP_SINK
+  profile_active = profile_active || s_backend.a2dp_attached;
+#endif
+#ifdef HAL_ENABLE_BLUETOOTH_AVRCP_TARGET
+  profile_active = profile_active || s_backend.avrcp_attached;
+#endif
+  if (s_backend.sdp_server_initialized && !profile_active) {
+    (void)l2cap_unregister_service(BLUETOOTH_PSM_SDP);
+    sdp_deinit();
+    s_backend.sdp_server_initialized = false;
+  }
+}
+#endif
+
+#ifdef HAL_ENABLE_BLUETOOTH_A2DP_SINK
+static const uint8_t s_a2dp_sbc_capabilities[] = {
+    (uint8_t)(((AVDTP_SBC_48000 | AVDTP_SBC_44100) << 4u) |
+              AVDTP_SBC_JOINT_STEREO | AVDTP_SBC_STEREO | AVDTP_SBC_MONO),
+    (uint8_t)(((AVDTP_SBC_BLOCK_LENGTH_16 | AVDTP_SBC_BLOCK_LENGTH_12 |
+                AVDTP_SBC_BLOCK_LENGTH_8 | AVDTP_SBC_BLOCK_LENGTH_4)
+               << 4u) |
+              ((AVDTP_SBC_SUBBANDS_8 | AVDTP_SBC_SUBBANDS_4) << 2u) |
+              AVDTP_SBC_ALLOCATION_METHOD_LOUDNESS |
+              AVDTP_SBC_ALLOCATION_METHOD_SNR),
+    2u,
+    53u,
+};
+
+static void a2dp_emit(jh_bluetooth_classic_backend_event_type_t type,
+                      hal_status_t status) {
+  jh_bluetooth_classic_backend_event_t event = {0};
+  event.type = type;
+  event.status = status;
+  event.address = s_backend.a2dp_address;
+  emit(&event);
+}
+
+static void a2dp_pcm_handler(int16_t *data, int frames, int channels,
+                             int sample_rate, void *context) {
+  (void)context;
+  if (data == NULL || frames <= 0 || frames > 128 ||
+      (channels != 1 && channels != 2) ||
+      (sample_rate != 44100 && sample_rate != 48000)) {
+    s_backend.decoded_pcm_pending = false;
+    return;
+  }
+  memcpy(s_backend.decoded_pcm, data,
+         (size_t)frames * (size_t)channels * sizeof(s_backend.decoded_pcm[0]));
+  s_backend.decoded_pcm_frames = (size_t)frames;
+  s_backend.decoded_pcm_channels = (uint8_t)channels;
+  s_backend.decoded_pcm_sample_rate_hz = (uint32_t)sample_rate;
+  s_backend.decoded_pcm_pending = true;
+}
+
+static void a2dp_media_handler(uint8_t local_seid, uint8_t *packet,
+                               uint16_t size) {
+  if (!s_backend.a2dp_attached || local_seid != s_backend.a2dp_local_seid ||
+      packet == NULL || size == 0u) {
+    return;
+  }
+  jh_bluetooth_classic_backend_event_t event = {0};
+  event.type = JH_BLUETOOTH_CLASSIC_EVENT_A2DP_MEDIA;
+  event.status = HAL_OK;
+  event.address = s_backend.a2dp_address;
+  event.media_data = packet;
+  event.media_length = size;
+  emit(&event);
+}
+
+static void a2dp_packet_handler(uint8_t packet_type, uint16_t channel,
+                                uint8_t *packet, uint16_t size) {
+  (void)channel;
+  (void)size;
+  if (packet_type != HCI_EVENT_PACKET || packet == NULL ||
+      hci_event_packet_get_type(packet) != HCI_EVENT_A2DP_META) {
+    return;
+  }
+  switch (hci_event_a2dp_meta_get_subevent_code(packet)) {
+  case A2DP_SUBEVENT_SIGNALING_MEDIA_CODEC_SBC_CONFIGURATION: {
+    hal_bluetooth_a2dp_sbc_format_t format = {0};
+    format.sample_rate_hz =
+        a2dp_subevent_signaling_media_codec_sbc_configuration_get_sampling_frequency(
+            packet);
+    format.channels =
+        a2dp_subevent_signaling_media_codec_sbc_configuration_get_num_channels(
+            packet);
+    format.block_length =
+        a2dp_subevent_signaling_media_codec_sbc_configuration_get_block_length(
+            packet);
+    format.subbands =
+        a2dp_subevent_signaling_media_codec_sbc_configuration_get_subbands(
+            packet);
+    format.min_bitpool =
+        a2dp_subevent_signaling_media_codec_sbc_configuration_get_min_bitpool_value(
+            packet);
+    format.max_bitpool =
+        a2dp_subevent_signaling_media_codec_sbc_configuration_get_max_bitpool_value(
+            packet);
+    const uint8_t mode =
+        a2dp_subevent_signaling_media_codec_sbc_configuration_get_channel_mode(
+            packet);
+    hal_status_t status = HAL_OK;
+    switch (mode) {
+    case AVDTP_CHANNEL_MODE_MONO:
+      format.channel_mode = HAL_BLUETOOTH_A2DP_CHANNEL_MONO;
+      break;
+    case AVDTP_CHANNEL_MODE_STEREO:
+      format.channel_mode = HAL_BLUETOOTH_A2DP_CHANNEL_STEREO;
+      break;
+    case AVDTP_CHANNEL_MODE_JOINT_STEREO:
+      format.channel_mode = HAL_BLUETOOTH_A2DP_CHANNEL_JOINT_STEREO;
+      break;
+    default:
+      status = HAL_EUNSUPPORTED;
+      break;
+    }
+    if ((format.sample_rate_hz != 44100u && format.sample_rate_hz != 48000u) ||
+        (format.channels != 1u && format.channels != 2u) ||
+        (format.block_length != 4u && format.block_length != 8u &&
+         format.block_length != 12u && format.block_length != 16u) ||
+        (format.subbands != 4u && format.subbands != 8u) ||
+        format.min_bitpool < 2u || format.max_bitpool > 53u ||
+        format.min_bitpool > format.max_bitpool) {
+      status = HAL_EUNSUPPORTED;
+    }
+    s_backend.a2dp_format = format;
+    s_backend.a2dp_format_valid = status == HAL_OK;
+    jh_bluetooth_classic_backend_event_t event = {0};
+    event.type = JH_BLUETOOTH_CLASSIC_EVENT_A2DP_FORMAT;
+    event.status = status;
+    event.address = s_backend.a2dp_address;
+    event.a2dp_format = format;
+    emit(&event);
+    break;
+  }
+  case A2DP_SUBEVENT_SIGNALING_MEDIA_CODEC_OTHER_CONFIGURATION:
+    s_backend.a2dp_format_valid = false;
+    a2dp_emit(JH_BLUETOOTH_CLASSIC_EVENT_A2DP_FORMAT, HAL_EUNSUPPORTED);
+    break;
+  case A2DP_SUBEVENT_STREAM_ESTABLISHED: {
+    const uint8_t native_status =
+        a2dp_subevent_stream_established_get_status(packet);
+    if (native_status != ERROR_CODE_SUCCESS) {
+      a2dp_emit(JH_BLUETOOTH_CLASSIC_EVENT_A2DP_DISCONNECTED,
+                status_from_btstack(native_status));
+      break;
+    }
+    a2dp_subevent_stream_established_get_bd_addr(packet,
+                                                 s_backend.a2dp_address.bytes);
+    s_backend.a2dp_cid = a2dp_subevent_stream_established_get_a2dp_cid(packet);
+    s_backend.a2dp_local_seid =
+        a2dp_subevent_stream_established_get_local_seid(packet);
+    s_backend.pairing_address = s_backend.a2dp_address;
+    a2dp_emit(JH_BLUETOOTH_CLASSIC_EVENT_A2DP_CONNECTED, HAL_OK);
+    break;
+  }
+  case A2DP_SUBEVENT_STREAM_STARTED:
+    if (!s_backend.a2dp_format_valid || s_backend.sbc_decoder == NULL) {
+      a2dp_emit(JH_BLUETOOTH_CLASSIC_EVENT_ERROR, HAL_ESTATE);
+      break;
+    }
+    s_backend.sbc_decoder->configure(&s_backend.sbc_decoder_context,
+                                     SBC_MODE_STANDARD, a2dp_pcm_handler, NULL);
+    s_backend.a2dp_streaming = true;
+    s_backend.decoded_pcm_pending = false;
+    a2dp_emit(JH_BLUETOOTH_CLASSIC_EVENT_A2DP_STARTED, HAL_OK);
+    break;
+  case A2DP_SUBEVENT_STREAM_SUSPENDED:
+    s_backend.a2dp_streaming = false;
+    s_backend.decoded_pcm_pending = false;
+    a2dp_emit(JH_BLUETOOTH_CLASSIC_EVENT_A2DP_SUSPENDED, HAL_OK);
+    break;
+  case A2DP_SUBEVENT_STREAM_STOPPED:
+  case A2DP_SUBEVENT_STREAM_RELEASED:
+    s_backend.a2dp_streaming = false;
+    s_backend.decoded_pcm_pending = false;
+    a2dp_emit(JH_BLUETOOTH_CLASSIC_EVENT_A2DP_STOPPED, HAL_OK);
+    break;
+  case A2DP_SUBEVENT_SIGNALING_CONNECTION_RELEASED:
+    s_backend.a2dp_streaming = false;
+    s_backend.a2dp_cid = 0u;
+    s_backend.a2dp_format_valid = false;
+    s_backend.decoded_pcm_pending = false;
+    a2dp_emit(JH_BLUETOOTH_CLASSIC_EVENT_A2DP_DISCONNECTED, HAL_OK);
+    memset(&s_backend.a2dp_address, 0, sizeof(s_backend.a2dp_address));
+    break;
+  default:
+    break;
+  }
+}
+#endif
+
+#ifdef HAL_ENABLE_BLUETOOTH_AVRCP_TARGET
+static void avrcp_controller_packet_handler(uint8_t packet_type,
+                                            uint16_t channel, uint8_t *packet,
+                                            uint16_t size) {
+  (void)packet_type;
+  (void)channel;
+  (void)packet;
+  (void)size;
+}
+
+static void avrcp_connection_packet_handler(uint8_t packet_type,
+                                            uint16_t channel, uint8_t *packet,
+                                            uint16_t size) {
+  (void)channel;
+  (void)size;
+  if (packet_type != HCI_EVENT_PACKET || packet == NULL ||
+      hci_event_packet_get_type(packet) != HCI_EVENT_AVRCP_META) {
+    return;
+  }
+  jh_bluetooth_classic_backend_event_t event = {0};
+  switch (hci_event_avrcp_meta_get_subevent_code(packet)) {
+  case AVRCP_SUBEVENT_CONNECTION_ESTABLISHED: {
+    const uint8_t native_status =
+        avrcp_subevent_connection_established_get_status(packet);
+    if (native_status != ERROR_CODE_SUCCESS) {
+      event.type = JH_BLUETOOTH_CLASSIC_EVENT_AVRCP_DISCONNECTED;
+      event.status = status_from_btstack(native_status);
+      emit(&event);
+      return;
+    }
+    s_backend.avrcp_cid =
+        avrcp_subevent_connection_established_get_avrcp_cid(packet);
+    avrcp_subevent_connection_established_get_bd_addr(
+        packet, s_backend.avrcp_address.bytes);
+    hal_deb("Bluetooth Classic AVRCP connected cid=0x%04x",
+            (unsigned int)s_backend.avrcp_cid);
+    (void)avrcp_target_support_event(s_backend.avrcp_cid,
+                                     AVRCP_NOTIFICATION_EVENT_VOLUME_CHANGED);
+    event.type = JH_BLUETOOTH_CLASSIC_EVENT_AVRCP_CONNECTED;
+    event.status = HAL_OK;
+    event.address = s_backend.avrcp_address;
+    emit(&event);
+    (void)avrcp_target_volume_changed(s_backend.avrcp_cid,
+                                      s_backend.avrcp_volume);
+    break;
+  }
+  case AVRCP_SUBEVENT_CONNECTION_RELEASED:
+    hal_deb("Bluetooth Classic AVRCP disconnected cid=0x%04x",
+            (unsigned int)s_backend.avrcp_cid);
+    event.type = JH_BLUETOOTH_CLASSIC_EVENT_AVRCP_DISCONNECTED;
+    event.status = HAL_OK;
+    event.address = s_backend.avrcp_address;
+    s_backend.avrcp_cid = 0u;
+    emit(&event);
+    memset(&s_backend.avrcp_address, 0, sizeof(s_backend.avrcp_address));
+    break;
+  default:
+    break;
+  }
+}
+
+static void avrcp_target_packet_handler(uint8_t packet_type, uint16_t channel,
+                                        uint8_t *packet, uint16_t size) {
+  (void)channel;
+  (void)size;
+  if (packet_type != HCI_EVENT_PACKET || packet == NULL ||
+      hci_event_packet_get_type(packet) != HCI_EVENT_AVRCP_META ||
+      hci_event_avrcp_meta_get_subevent_code(packet) !=
+          AVRCP_SUBEVENT_NOTIFICATION_VOLUME_CHANGED) {
+    return;
+  }
+  const uint8_t volume =
+      avrcp_subevent_notification_volume_changed_get_absolute_volume(packet) &
+      UINT8_C(0x7f);
+  const uint16_t cid =
+      avrcp_subevent_notification_volume_changed_get_avrcp_cid(packet);
+  hal_deb("Bluetooth Classic AVRCP volume=%u cid=0x%04x", (unsigned int)volume,
+          (unsigned int)cid);
+  (void)avrcp_target_adjust_absolute_volume(cid, volume);
+  s_backend.avrcp_volume = volume;
+  jh_bluetooth_classic_backend_event_t event = {0};
+  event.type = JH_BLUETOOTH_CLASSIC_EVENT_AVRCP_VOLUME;
+  event.status = HAL_OK;
+  event.address = s_backend.avrcp_address;
+  event.absolute_volume = volume;
+  emit(&event);
+}
+#endif
+
+static hal_status_t
+backend_identity_set(void *context,
+                     const hal_bluetooth_classic_identity_t *identity) {
+  (void)context;
+  if (!s_backend.started || identity == NULL) {
+    return !s_backend.started ? HAL_EUNINIT : HAL_EINVAL;
+  }
+  memcpy(s_backend.local_name, identity->name, sizeof(s_backend.local_name));
+  gap_set_local_name(s_backend.local_name);
+  gap_set_class_of_device(identity->class_of_device);
+  gap_set_allow_role_switch(true);
+  return HAL_OK;
+}
+
+static hal_status_t backend_visibility_set(void *context, bool connectable,
+                                           bool discoverable,
+                                           bool pairing_allowed) {
+  (void)context;
+  if (!s_backend.started) {
+    return HAL_EUNINIT;
+  }
+  s_backend.pairing_allowed = pairing_allowed;
+  gap_connectable_control(connectable ? 1u : 0u);
+  gap_discoverable_control(discoverable ? 1u : 0u);
+  return HAL_OK;
+}
+
+#ifdef HAL_ENABLE_BLUETOOTH_A2DP_SINK
+static hal_status_t backend_a2dp_detach(void *context);
+#endif
+#ifdef HAL_ENABLE_BLUETOOTH_AVRCP_TARGET
+static hal_status_t backend_avrcp_detach(void *context);
+#endif
+
 static hal_status_t profile_start(void *context) {
   (void)context;
   hci_set_link_key_db(btstack_link_key_db_memory_instance());
@@ -782,6 +1178,9 @@ static hal_status_t profile_start(void *context) {
   gap_ssp_set_authentication_requirement(
       SSP_IO_AUTHREQ_MITM_PROTECTION_NOT_REQUIRED_DEDICATED_BONDING);
   gap_ssp_set_auto_accept(0);
+  gap_connectable_control(1u);
+  gap_discoverable_control(0u);
+  s_backend.pairing_allowed = false;
   return HAL_OK;
 }
 
@@ -791,6 +1190,16 @@ static void profile_stop(void *context) {
     (void)gap_inquiry_stop();
   }
   hci_remove_event_handler(&s_backend.hci_events);
+#ifdef HAL_ENABLE_BLUETOOTH_AVRCP_TARGET
+  if (s_backend.avrcp_attached) {
+    (void)backend_avrcp_detach(NULL);
+  }
+#endif
+#ifdef HAL_ENABLE_BLUETOOTH_A2DP_SINK
+  if (s_backend.a2dp_attached) {
+    (void)backend_a2dp_detach(NULL);
+  }
+#endif
 #ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
   hid_host_register_packet_handler(NULL);
   (void)l2cap_unregister_service(PSM_HID_INTERRUPT);
@@ -1051,6 +1460,177 @@ backend_peer_forget(void *context,
   return HAL_OK;
 }
 
+#ifdef HAL_ENABLE_BLUETOOTH_A2DP_SINK
+static hal_status_t backend_a2dp_attach(void *context) {
+  (void)context;
+  if (!s_backend.started || s_backend.a2dp_attached) {
+    return !s_backend.started ? HAL_EUNINIT : HAL_EBUSY;
+  }
+  ensure_sdp_server();
+  a2dp_sink_init();
+  a2dp_sink_register_packet_handler(a2dp_packet_handler);
+  a2dp_sink_register_media_handler(a2dp_media_handler);
+  avdtp_stream_endpoint_t *endpoint = a2dp_sink_create_stream_endpoint(
+      AVDTP_AUDIO, AVDTP_CODEC_SBC, s_a2dp_sbc_capabilities,
+      sizeof(s_a2dp_sbc_capabilities), s_backend.a2dp_codec_configuration,
+      sizeof(s_backend.a2dp_codec_configuration));
+  if (endpoint == NULL) {
+    (void)l2cap_unregister_service(BLUETOOTH_PSM_AVDTP);
+    a2dp_sink_deinit();
+    deinit_sdp_server_if_unused();
+    return HAL_ENOMEM;
+  }
+  s_backend.a2dp_local_seid = avdtp_stream_endpoint_seid(endpoint);
+  s_backend.sbc_decoder = btstack_sbc_decoder_bluedroid_init_instance(
+      &s_backend.sbc_decoder_context);
+  if (s_backend.sbc_decoder == NULL) {
+    (void)l2cap_unregister_service(BLUETOOTH_PSM_AVDTP);
+    a2dp_sink_deinit();
+    deinit_sdp_server_if_unused();
+    return HAL_ECONFIG;
+  }
+  s_backend.a2dp_sdp_handle = sdp_create_service_record_handle();
+  memset(s_backend.a2dp_sdp_record, 0, sizeof(s_backend.a2dp_sdp_record));
+  a2dp_sink_create_sdp_record(
+      s_backend.a2dp_sdp_record, s_backend.a2dp_sdp_handle,
+      AVDTP_SINK_FEATURE_MASK_SPEAKER, "JaszczurHAL Speaker", "JaszczurHAL");
+  if (de_get_len(s_backend.a2dp_sdp_record) >
+          sizeof(s_backend.a2dp_sdp_record) ||
+      sdp_register_service(s_backend.a2dp_sdp_record) != ERROR_CODE_SUCCESS) {
+    (void)l2cap_unregister_service(BLUETOOTH_PSM_AVDTP);
+    a2dp_sink_deinit();
+    deinit_sdp_server_if_unused();
+    return HAL_ECONFIG;
+  }
+  s_backend.a2dp_attached = true;
+  s_backend.a2dp_streaming = false;
+  return HAL_OK;
+}
+
+static hal_status_t backend_a2dp_detach(void *context) {
+  (void)context;
+  if (!s_backend.started || !s_backend.a2dp_attached) {
+    return HAL_EUNINIT;
+  }
+  if (s_backend.a2dp_cid != 0u) {
+    (void)a2dp_sink_disconnect(s_backend.a2dp_cid);
+  }
+  sdp_unregister_service(s_backend.a2dp_sdp_handle);
+  (void)l2cap_unregister_service(BLUETOOTH_PSM_AVDTP);
+  a2dp_sink_deinit();
+  s_backend.a2dp_attached = false;
+  s_backend.a2dp_streaming = false;
+  s_backend.a2dp_format_valid = false;
+  s_backend.a2dp_cid = 0u;
+  s_backend.a2dp_sdp_handle = 0u;
+  s_backend.sbc_decoder = NULL;
+  s_backend.decoded_pcm_pending = false;
+  deinit_sdp_server_if_unused();
+  return HAL_OK;
+}
+
+static hal_status_t backend_a2dp_decode(void *context, const uint8_t *data,
+                                        size_t length) {
+  (void)context;
+  if (!s_backend.started || !s_backend.a2dp_attached ||
+      !s_backend.a2dp_streaming || s_backend.sbc_decoder == NULL) {
+    return !s_backend.started ? HAL_EUNINIT : HAL_ESTATE;
+  }
+  if (data == NULL || length == 0u || length > UINT16_MAX) {
+    return HAL_EINVAL;
+  }
+  const int good_before = s_backend.sbc_decoder_context.good_frames_nr;
+  s_backend.decoded_pcm_pending = false;
+  s_backend.sbc_decoder->decode_signed_16(&s_backend.sbc_decoder_context, 0u,
+                                          data, (uint16_t)length);
+  if (!s_backend.decoded_pcm_pending ||
+      s_backend.sbc_decoder_context.good_frames_nr <= good_before) {
+    s_backend.decoded_pcm_pending = false;
+    return HAL_EPROTO;
+  }
+  jh_bluetooth_classic_backend_event_t event = {0};
+  event.type = JH_BLUETOOTH_CLASSIC_EVENT_A2DP_PCM;
+  event.status = HAL_OK;
+  event.address = s_backend.a2dp_address;
+  event.pcm_data = s_backend.decoded_pcm;
+  event.pcm_frames = s_backend.decoded_pcm_frames;
+  event.pcm_channels = s_backend.decoded_pcm_channels;
+  event.pcm_sample_rate_hz = s_backend.decoded_pcm_sample_rate_hz;
+  emit(&event);
+  s_backend.decoded_pcm_pending = false;
+  return HAL_OK;
+}
+#endif
+
+#ifdef HAL_ENABLE_BLUETOOTH_AVRCP_TARGET
+static hal_status_t backend_avrcp_attach(void *context,
+                                         uint8_t initial_volume) {
+  (void)context;
+  if (!s_backend.started || s_backend.avrcp_attached) {
+    return !s_backend.started ? HAL_EUNINIT : HAL_EBUSY;
+  }
+  ensure_sdp_server();
+  avrcp_init();
+  avrcp_register_controller_packet_handler(avrcp_controller_packet_handler);
+  avrcp_target_init();
+  avrcp_register_packet_handler(avrcp_connection_packet_handler);
+  avrcp_target_register_packet_handler(avrcp_target_packet_handler);
+  s_backend.avrcp_sdp_handle = sdp_create_service_record_handle();
+  memset(s_backend.avrcp_sdp_record, 0, sizeof(s_backend.avrcp_sdp_record));
+  const uint16_t features =
+      (uint16_t)(1u
+                 << AVRCP_TARGET_SUPPORTED_FEATURE_CATEGORY_MONITOR_OR_AMPLIFIER);
+  avrcp_target_create_sdp_record(s_backend.avrcp_sdp_record,
+                                 s_backend.avrcp_sdp_handle, features,
+                                 "JaszczurHAL Volume", "JaszczurHAL");
+  if (de_get_len(s_backend.avrcp_sdp_record) >
+          sizeof(s_backend.avrcp_sdp_record) ||
+      sdp_register_service(s_backend.avrcp_sdp_record) != ERROR_CODE_SUCCESS) {
+    (void)l2cap_unregister_service(BLUETOOTH_PSM_AVCTP);
+    avrcp_target_deinit();
+    avrcp_deinit();
+    deinit_sdp_server_if_unused();
+    return HAL_ECONFIG;
+  }
+  s_backend.avrcp_volume = initial_volume;
+  s_backend.avrcp_attached = true;
+  return HAL_OK;
+}
+
+static hal_status_t backend_avrcp_detach(void *context) {
+  (void)context;
+  if (!s_backend.started || !s_backend.avrcp_attached) {
+    return HAL_EUNINIT;
+  }
+  if (s_backend.avrcp_cid != 0u) {
+    (void)avrcp_disconnect(s_backend.avrcp_cid);
+  }
+  sdp_unregister_service(s_backend.avrcp_sdp_handle);
+  (void)l2cap_unregister_service(BLUETOOTH_PSM_AVCTP);
+  avrcp_target_deinit();
+  avrcp_deinit();
+  s_backend.avrcp_attached = false;
+  s_backend.avrcp_cid = 0u;
+  s_backend.avrcp_sdp_handle = 0u;
+  deinit_sdp_server_if_unused();
+  return HAL_OK;
+}
+
+static hal_status_t backend_avrcp_volume_set(void *context,
+                                             uint8_t absolute_volume) {
+  (void)context;
+  if (!s_backend.started || !s_backend.avrcp_attached) {
+    return !s_backend.started ? HAL_EUNINIT : HAL_ESTATE;
+  }
+  s_backend.avrcp_volume = absolute_volume;
+  if (s_backend.avrcp_cid == 0u) {
+    return HAL_OK;
+  }
+  return status_from_btstack(
+      avrcp_target_volume_changed(s_backend.avrcp_cid, absolute_volume));
+}
+#endif
+
 #ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
 static hal_status_t
 backend_hid_connect(void *context,
@@ -1140,11 +1720,23 @@ static const jh_bluetooth_classic_backend_t s_backend_ops = {
     .pairing_reply = backend_pairing_reply,
     .peer_restore = backend_peer_restore,
     .peer_forget = backend_peer_forget,
+    .identity_set = backend_identity_set,
+    .visibility_set = backend_visibility_set,
 #ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
     .hid_connect = backend_hid_connect,
     .hid_disconnect = backend_hid_disconnect,
     .hid_report_send = backend_hid_report_send,
     .hid_report_request = backend_hid_report_request,
+#endif
+#ifdef HAL_ENABLE_BLUETOOTH_A2DP_SINK
+    .a2dp_attach = backend_a2dp_attach,
+    .a2dp_detach = backend_a2dp_detach,
+    .a2dp_decode = backend_a2dp_decode,
+#endif
+#ifdef HAL_ENABLE_BLUETOOTH_AVRCP_TARGET
+    .avrcp_attach = backend_avrcp_attach,
+    .avrcp_detach = backend_avrcp_detach,
+    .avrcp_volume_set = backend_avrcp_volume_set,
 #endif
 };
 

@@ -39,6 +39,7 @@ entry point.
 | lwIP | `lwip_version.conf` | `lwip/` | TCP/IP stack used by the JaszczurHAL CYW43 integration |
 | littlefs | `littlefs_version.conf` | `littlefs/` | Filesystem core used by the shared provider, host integration test, and native RP/STM32G474 storage |
 | BTstack | `btstack_version.conf` | `BTstack/` | BLE and Classic host stack used by the CYW43 Bluetooth integration |
+| Bluedroid SBC codec | BTstack pin | `BTstack/3rd-party/bluedroid/` | Apache-2.0 SBC decoder used by A2DP Sink; encoder used by host fixtures only |
 | Semtech SX126x driver | `sx126x_driver_version.conf` | `sx126x_driver/` | Portable SX1261/SX1262 command driver for the LoRa provider |
 | FreeRTOS-Kernel | `freertos_core_version.conf` | `FreeRTOS-Kernel/` | Native RP SMP and STM32G474 FreeRTOS kernel |
 | Pico SDK | `pico_sdk_version.conf` | `pico-sdk/` | Native RP2040/RP2350 SDK |
@@ -69,7 +70,9 @@ The Pico SDK submodules required by native builds are listed in
 the separately pinned `lwip/` checkout instead of the SDK's lwIP submodule.
 BTstack is compiled directly from the exact revision of the project-maintained
 `jaszczurtd/btstack` fork recorded in `btstack_version.conf`; JaszczurHAL does
-not apply local source patches during configuration.
+not apply local source patches during configuration. Its bundled Bluedroid SBC
+sources retain Apache-2.0 notices; the tracked license copy is
+`LICENSE.BLUEDROID-SBC` and the component is listed separately in the SBOM.
 
 External FreeRTOS or Pico SDK checkouts can still be selected through the
 documented `JH_FREERTOS_KERNEL_DIR`, `JH_PICO_SDK_DIR`, and helper-script path

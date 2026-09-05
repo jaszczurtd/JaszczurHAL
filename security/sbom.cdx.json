@@ -981,15 +981,62 @@
         },
         {
           "name": "jaszczurhal:notes",
-          "value": "Exact revision of the project-maintained BlueKitchen BTstack fork, including the reviewed Classic incoming/outgoing connection collision fix. JaszczurHAL compiles it directly without local source patches. The standard BlueKitchen grant is limited to personal, non-commercial use and imposes notice conditions. A separate Raspberry Pi grant permits a Customer to use and distribute BTstack only with the Products and Customer Products defined in src/hal/bluetooth/LICENSE.RP; it is not a general CYW43 permission. The applicable grant and notice obligations depend on the hardware and distribution."
+          "value": "Exact revision of the project-maintained BlueKitchen BTstack fork, including the reviewed Classic incoming/outgoing connection collision fix. JaszczurHAL compiles it directly without local source patches. The standard BlueKitchen grant is limited to personal, non-commercial use and imposes notice conditions. A separate Raspberry Pi grant permits a Customer to use and distribute BTstack only with the Products and Customer Products defined in src/hal/bluetooth/LICENSE.RP; it is not a general CYW43 permission. The applicable grant and notice obligations depend on the hardware and distribution. The separately inventoried Bluedroid SBC codec bundled in this revision retains Apache-2.0 terms."
         },
         {
           "name": "jaszczurhal:feature_flags",
-          "value": "HAL_ENABLE_BLE,HAL_ENABLE_BLUETOOTH_CLASSIC"
+          "value": "HAL_ENABLE_BLE,HAL_ENABLE_BLUETOOTH_CLASSIC,HAL_ENABLE_BLUETOOTH_A2DP_SINK,HAL_ENABLE_BLUETOOTH_AVRCP_TARGET"
         },
         {
           "name": "jaszczurhal:paths",
           "value": "third_party/BTstack,third_party/btstack_version.conf,third_party/LICENSE.BTstack,src/hal/bluetooth/LICENSE.RP,src/hal/bluetooth"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:bluedroid-sbc-codec@BTstack-0cfae0eb5",
+      "name": "Bluedroid SBC codec",
+      "version": "BTstack-0cfae0eb5",
+      "scope": "optional",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Android Open Source Project and Broadcom contributors"
+      },
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://android.googlesource.com/platform/system/bt/"
+        },
+        {
+          "type": "other",
+          "url": "third_party/BTstack/3rd-party/bluedroid",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/LICENSE.BLUEDROID-SBC",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "SBC decoder sources bundled with the pinned BTstack fork. Source headers retain Android Open Source Project, Broadcom and Open Interface copyright notices. The A2DP host fixture also compiles the bundled encoder to produce deterministic decoder vectors; firmware includes the decoder only."
+        },
+        {
+          "name": "jaszczurhal:feature_flags",
+          "value": "HAL_ENABLE_BLUETOOTH_A2DP_SINK"
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "third_party/BTstack/3rd-party/bluedroid,third_party/LICENSE.BLUEDROID-SBC"
         }
       ]
     },
@@ -1875,5 +1922,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:40147f2c-9d57-dca2-24f8-3eb606100698"
+  "serialNumber": "urn:uuid:beca28a7-3af3-26ce-0701-8b721f33468d"
 }

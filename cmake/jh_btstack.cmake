@@ -2,7 +2,7 @@ include_guard(GLOBAL)
 
 function(_jh_target_enable_btstack TARGET_NAME)
     cmake_parse_arguments(JH_BTSTACK
-        "STAGE1;CLASSIC_HID;CLASSIC_HID_DEVICE_FIXTURE;BLE;BLE_STREAM;CLASSIC;HID_HOST"
+        "STAGE1;CLASSIC_HID;CLASSIC_HID_DEVICE_FIXTURE;BLE;BLE_STREAM;CLASSIC;HID_HOST;A2DP_SINK;AVRCP_TARGET"
         "" "" ${ARGN})
     if(JH_BTSTACK_UNPARSED_ARGUMENTS)
         message(FATAL_ERROR
@@ -22,7 +22,8 @@ function(_jh_target_enable_btstack TARGET_NAME)
     endif()
     if(_jh_private_mode_count GREATER 0 AND
        (JH_BTSTACK_BLE OR JH_BTSTACK_BLE_STREAM OR JH_BTSTACK_CLASSIC OR
-        JH_BTSTACK_HID_HOST))
+        JH_BTSTACK_HID_HOST OR JH_BTSTACK_A2DP_SINK OR
+        JH_BTSTACK_AVRCP_TARGET))
         message(FATAL_ERROR
             "A BTstack private mode cannot use public profile arguments")
     endif()
@@ -30,6 +31,12 @@ function(_jh_target_enable_btstack TARGET_NAME)
         set(JH_BTSTACK_BLE TRUE)
     endif()
     if(JH_BTSTACK_HID_HOST)
+        set(JH_BTSTACK_CLASSIC TRUE)
+    endif()
+    if(JH_BTSTACK_AVRCP_TARGET)
+        set(JH_BTSTACK_A2DP_SINK TRUE)
+    endif()
+    if(JH_BTSTACK_A2DP_SINK)
         set(JH_BTSTACK_CLASSIC TRUE)
     endif()
     if(_jh_private_mode_count EQUAL 0 AND
@@ -90,6 +97,34 @@ function(_jh_target_enable_btstack TARGET_NAME)
         "${_jh_btstack_root}/src/btstack_hid_parser.c"
         "${_jh_btstack_root}/src/classic/hid_device.c"
         "${_jh_btstack_root}/src/classic/sdp_server.c")
+    set(_jh_btstack_a2dp_sink_sources
+        "${_jh_btstack_root}/src/classic/a2dp.c"
+        "${_jh_btstack_root}/src/classic/a2dp_sink.c"
+        "${_jh_btstack_root}/src/classic/avdtp.c"
+        "${_jh_btstack_root}/src/classic/avdtp_acceptor.c"
+        "${_jh_btstack_root}/src/classic/avdtp_initiator.c"
+        "${_jh_btstack_root}/src/classic/avdtp_sink.c"
+        "${_jh_btstack_root}/src/classic/avdtp_util.c"
+        "${_jh_btstack_root}/src/classic/btstack_sbc_bluedroid.c"
+        "${_jh_btstack_root}/src/classic/btstack_sbc_plc.c"
+        "${_jh_btstack_root}/src/classic/sdp_server.c"
+        "${_jh_btstack_root}/3rd-party/bluedroid/decoder/srce/alloc.c"
+        "${_jh_btstack_root}/3rd-party/bluedroid/decoder/srce/bitalloc.c"
+        "${_jh_btstack_root}/3rd-party/bluedroid/decoder/srce/bitalloc-sbc.c"
+        "${_jh_btstack_root}/3rd-party/bluedroid/decoder/srce/bitstream-decode.c"
+        "${_jh_btstack_root}/3rd-party/bluedroid/decoder/srce/decoder-oina.c"
+        "${_jh_btstack_root}/3rd-party/bluedroid/decoder/srce/decoder-private.c"
+        "${_jh_btstack_root}/3rd-party/bluedroid/decoder/srce/decoder-sbc.c"
+        "${_jh_btstack_root}/3rd-party/bluedroid/decoder/srce/dequant.c"
+        "${_jh_btstack_root}/3rd-party/bluedroid/decoder/srce/framing.c"
+        "${_jh_btstack_root}/3rd-party/bluedroid/decoder/srce/framing-sbc.c"
+        "${_jh_btstack_root}/3rd-party/bluedroid/decoder/srce/oi_codec_version.c"
+        "${_jh_btstack_root}/3rd-party/bluedroid/decoder/srce/synthesis-sbc.c"
+        "${_jh_btstack_root}/3rd-party/bluedroid/decoder/srce/synthesis-dct8.c"
+        "${_jh_btstack_root}/3rd-party/bluedroid/decoder/srce/synthesis-8-generated.c")
+    set(_jh_btstack_avrcp_target_sources
+        "${_jh_btstack_root}/src/classic/avrcp.c"
+        "${_jh_btstack_root}/src/classic/avrcp_target.c")
     set(_jh_jh_base_sources
         "${_jh_bluetooth_root}/jh_bluetooth_controller_cyw43.c"
         "${_jh_bluetooth_root}/jh_bluetooth_host_runtime.c"
@@ -173,6 +208,20 @@ function(_jh_target_enable_btstack TARGET_NAME)
             list(APPEND _jh_mode_definitions
                 JH_BLUETOOTH_PUBLIC_HID_HOST=1)
         endif()
+        if(JH_BTSTACK_A2DP_SINK)
+            list(APPEND _jh_mode_upstream_sources
+                ${_jh_btstack_a2dp_sink_sources})
+            list(APPEND _jh_mode_jh_sources
+                "${_jh_bluetooth_root}/jh_bluetooth_a2dp_memory_probe.c")
+            list(APPEND _jh_mode_definitions
+                JH_BLUETOOTH_PUBLIC_A2DP_SINK=1)
+        endif()
+        if(JH_BTSTACK_AVRCP_TARGET)
+            list(APPEND _jh_mode_upstream_sources
+                ${_jh_btstack_avrcp_target_sources})
+            list(APPEND _jh_mode_definitions
+                JH_BLUETOOTH_PUBLIC_AVRCP_TARGET=1)
+        endif()
     endif()
     set(_jh_btstack_upstream_sources
         ${_jh_btstack_base_sources}
@@ -214,6 +263,8 @@ function(_jh_target_enable_btstack TARGET_NAME)
         "${_jh_btstack_root}"
         "${_jh_btstack_root}/src"
         "${_jh_btstack_root}/platform/embedded"
+        "${_jh_btstack_root}/3rd-party/bluedroid/decoder/include"
+        "${_jh_btstack_root}/3rd-party/bluedroid/encoder/include"
         "${_jh_btstack_root}/3rd-party/micro-ecc"
         "${_jh_btstack_root}/3rd-party/rijndael")
     target_compile_definitions(${TARGET_NAME} PRIVATE
@@ -233,6 +284,25 @@ function(_jh_target_enable_btstack TARGET_NAME)
             "-Wl,--wrap=btstack_memory_btstack_link_key_db_memory_entry_free"
             "-Wl,--wrap=btstack_memory_hid_host_connection_get"
             "-Wl,--wrap=btstack_memory_hid_host_connection_free")
+    endif()
+    if(JH_BTSTACK_A2DP_SINK)
+        target_link_options(${TARGET_NAME} PUBLIC
+            "-Wl,--wrap=btstack_memory_hci_connection_get"
+            "-Wl,--wrap=btstack_memory_hci_connection_free"
+            "-Wl,--wrap=btstack_memory_l2cap_service_get"
+            "-Wl,--wrap=btstack_memory_l2cap_service_free"
+            "-Wl,--wrap=btstack_memory_l2cap_channel_get"
+            "-Wl,--wrap=btstack_memory_l2cap_channel_free"
+            "-Wl,--wrap=btstack_memory_btstack_link_key_db_memory_entry_get"
+            "-Wl,--wrap=btstack_memory_btstack_link_key_db_memory_entry_free"
+            "-Wl,--wrap=btstack_memory_service_record_item_get"
+            "-Wl,--wrap=btstack_memory_service_record_item_free"
+            "-Wl,--wrap=btstack_memory_avdtp_stream_endpoint_get"
+            "-Wl,--wrap=btstack_memory_avdtp_stream_endpoint_free"
+            "-Wl,--wrap=btstack_memory_avdtp_connection_get"
+            "-Wl,--wrap=btstack_memory_avdtp_connection_free"
+            "-Wl,--wrap=btstack_memory_avrcp_connection_get"
+            "-Wl,--wrap=btstack_memory_avrcp_connection_free")
     endif()
     # Keep compatibility suppressions scoped to pinned upstream code.  The JH
     # port and probe remain subject to the target's complete warning policy.

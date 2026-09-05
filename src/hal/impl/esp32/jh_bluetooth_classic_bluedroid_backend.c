@@ -12,6 +12,7 @@
 #include "hal/system/hal_system.h"
 
 #include <esp_bt.h>
+#include <esp_bt_device.h>
 #include <esp_bt_main.h>
 #include <esp_gap_bt_api.h>
 #ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
@@ -540,6 +541,40 @@ static hal_status_t backend_service(void *context) {
   return s_backend.started ? HAL_OK : HAL_EUNINIT;
 }
 
+static hal_status_t
+backend_identity_set(void *context,
+                     const hal_bluetooth_classic_identity_t *identity) {
+  (void)context;
+  if (!s_backend.started || identity == NULL) {
+    return !s_backend.started ? HAL_EUNINIT : HAL_EINVAL;
+  }
+  esp_err_t status = esp_bt_gap_set_device_name(identity->name);
+  if (status != ESP_OK) {
+    return status_from_esp(status);
+  }
+  const esp_bt_cod_t cod = {
+      .major = (identity->class_of_device >> 8u) & 0x1fu,
+      .minor = (identity->class_of_device >> 2u) & 0x3fu,
+      .service = (identity->class_of_device >> 13u) & 0x7ffu,
+  };
+  return status_from_esp(esp_bt_gap_set_cod(cod, ESP_BT_SET_COD_ALL));
+}
+
+static hal_status_t backend_visibility_set(void *context, bool connectable,
+                                           bool discoverable,
+                                           bool pairing_allowed) {
+  (void)context;
+  (void)pairing_allowed;
+  if (!s_backend.started) {
+    return HAL_EUNINIT;
+  }
+  const esp_bt_connection_mode_t connection =
+      connectable ? ESP_BT_CONNECTABLE : ESP_BT_NON_CONNECTABLE;
+  const esp_bt_discovery_mode_t discovery =
+      discoverable ? ESP_BT_GENERAL_DISCOVERABLE : ESP_BT_NON_DISCOVERABLE;
+  return status_from_esp(esp_bt_gap_set_scan_mode(connection, discovery));
+}
+
 static hal_status_t backend_scan_start(void *context, uint32_t duration_ms) {
   (void)context;
   if (!backend_lock()) {
@@ -721,6 +756,8 @@ static const jh_bluetooth_classic_backend_t s_backend_ops = {
     .start = backend_start,
     .stop = backend_stop,
     .service = backend_service,
+    .identity_set = backend_identity_set,
+    .visibility_set = backend_visibility_set,
     .scan_start = backend_scan_start,
     .scan_stop = backend_scan_stop,
     .sdp_query = backend_sdp_query,

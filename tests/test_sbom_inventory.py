@@ -65,6 +65,13 @@ class SbomInventoryTests(unittest.TestCase):
             components["Semtech SX126x driver"]["paths"],
         )
         self.assertEqual(
+            ["Apache-2.0"], components["Bluedroid SBC codec"]["licenses"]
+        )
+        self.assertIn(
+            "third_party/LICENSE.BLUEDROID-SBC",
+            components["Bluedroid SBC codec"]["paths"],
+        )
+        self.assertEqual(
             "7.26.0", components["PMD Copy/Paste Detector"]["version"]
         )
         self.assertEqual(
@@ -212,6 +219,16 @@ class SbomInventoryTests(unittest.TestCase):
         }
         self.assertIn("third_party/LICENSE.BTstack", btstack_paths)
         self.assertIn("src/hal/bluetooth/LICENSE.RP", btstack_paths)
+        bluedroid = components["Bluedroid SBC codec"]
+        self.assertEqual(
+            "Apache-2.0", bluedroid["licenses"][0]["license"]["id"]
+        )
+        bluedroid_paths = {
+            ref["url"]
+            for ref in bluedroid["externalReferences"]
+            if ref["type"] == "other"
+        }
+        self.assertIn("third_party/LICENSE.BLUEDROID-SBC", bluedroid_paths)
         expected_tools = {
             item["name"]: generate_sbom.make_component(item)
             for item in generate_sbom.esp_idf_tool_components(

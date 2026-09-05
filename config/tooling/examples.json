@@ -497,6 +497,47 @@
           ]
         }
       ]
+    },
+    {
+      "dir": "30_bluetooth_speaker",
+      "targets": [
+        "rp2040",
+        "rp2350-arm"
+      ],
+      "expandRpTargets": false,
+      "gateTargets": [
+        "rp2040",
+        "rp2350-arm"
+      ],
+      "board": "picow",
+      "sources": [
+        "app.c"
+      ],
+      "variants": [
+        {
+          "id": "avrcp",
+          "module": "30_bluetooth_speaker_avrcp",
+          "gateTargets": [
+            "rp2040",
+            "rp2350-arm"
+          ],
+          "extraDefines": [
+            "HAL_ENABLE_BLUETOOTH_AVRCP_TARGET=1"
+          ]
+        },
+        {
+          "id": "ble-a2dp",
+          "module": "30_bluetooth_speaker_ble_a2dp",
+          "gateTargets": [
+            "rp2040",
+            "rp2350-arm"
+          ],
+          "extraDefines": [
+            "HAL_ENABLE_BLE=1",
+            "HAL_SPEAKER_EXAMPLE_ENABLE_BLE=1"
+          ]
+        }
+      ]
     }
   ]
 }

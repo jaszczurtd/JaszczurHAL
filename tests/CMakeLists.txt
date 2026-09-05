@@ -90,7 +90,8 @@ add_test(NAME test_hal_gamepad_header_cpp COMMAND test_hal_gamepad_header_cpp)
 add_executable(test_hal_bluetooth_headers_c test_hal_bluetooth_headers.c)
 target_compile_definitions(test_hal_bluetooth_headers_c PRIVATE
     HAL_TARGET_MOCK=1
-    HAL_ENABLE_BLUETOOTH_HID_HOST=1)
+    HAL_ENABLE_BLUETOOTH_HID_HOST=1
+    HAL_ENABLE_BLUETOOTH_AVRCP_TARGET=1)
 target_include_directories(test_hal_bluetooth_headers_c PRIVATE
     ${CMAKE_SOURCE_DIR}/src)
 jh_enable_host_warnings(test_hal_bluetooth_headers_c ERRORS)
@@ -99,7 +100,8 @@ add_test(NAME test_hal_bluetooth_headers_c COMMAND test_hal_bluetooth_headers_c)
 add_executable(test_hal_bluetooth_headers_cpp test_hal_bluetooth_headers.cpp)
 target_compile_definitions(test_hal_bluetooth_headers_cpp PRIVATE
     HAL_TARGET_MOCK=1
-    HAL_ENABLE_BLUETOOTH_HID_HOST=1)
+    HAL_ENABLE_BLUETOOTH_HID_HOST=1
+    HAL_ENABLE_BLUETOOTH_AVRCP_TARGET=1)
 target_include_directories(test_hal_bluetooth_headers_cpp PRIVATE
     ${CMAKE_SOURCE_DIR}/src)
 jh_enable_host_warnings(test_hal_bluetooth_headers_cpp ERRORS)
@@ -1651,6 +1653,55 @@ add_hal_test(test_hal_ble_stream)
 add_hal_test(test_hal_ble_commands)
 add_hal_test(test_hal_bluetooth_classic)
 add_hal_test(test_hal_bluetooth_hid_host)
+add_hal_test(test_bluetooth_a2dp_sbc)
+add_hal_test(test_hal_bluetooth_a2dp_sink)
+set(JH_BTSTACK_SBC_FIXTURE_SOURCES
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/src/btstack_util.c
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/src/classic/btstack_sbc_bluedroid.c
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/src/classic/btstack_sbc_plc.c
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/3rd-party/bluedroid/encoder/srce/sbc_analysis.c
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/3rd-party/bluedroid/encoder/srce/sbc_dct.c
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/3rd-party/bluedroid/encoder/srce/sbc_dct_coeffs.c
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/3rd-party/bluedroid/encoder/srce/sbc_enc_bit_alloc_mono.c
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/3rd-party/bluedroid/encoder/srce/sbc_enc_bit_alloc_ste.c
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/3rd-party/bluedroid/encoder/srce/sbc_enc_coeffs.c
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/3rd-party/bluedroid/encoder/srce/sbc_encoder.c
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/3rd-party/bluedroid/encoder/srce/sbc_packing.c
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/3rd-party/bluedroid/decoder/srce/alloc.c
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/3rd-party/bluedroid/decoder/srce/bitalloc.c
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/3rd-party/bluedroid/decoder/srce/bitalloc-sbc.c
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/3rd-party/bluedroid/decoder/srce/bitstream-decode.c
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/3rd-party/bluedroid/decoder/srce/decoder-oina.c
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/3rd-party/bluedroid/decoder/srce/decoder-private.c
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/3rd-party/bluedroid/decoder/srce/decoder-sbc.c
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/3rd-party/bluedroid/decoder/srce/dequant.c
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/3rd-party/bluedroid/decoder/srce/framing.c
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/3rd-party/bluedroid/decoder/srce/framing-sbc.c
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/3rd-party/bluedroid/decoder/srce/oi_codec_version.c
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/3rd-party/bluedroid/decoder/srce/synthesis-sbc.c
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/3rd-party/bluedroid/decoder/srce/synthesis-dct8.c
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/3rd-party/bluedroid/decoder/srce/synthesis-8-generated.c)
+add_executable(test_bluetooth_a2dp_sbc_fixtures
+    test_bluetooth_a2dp_sbc_fixtures.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/bluetooth/jh_bluetooth_a2dp_sbc.c
+    ${CMAKE_SOURCE_DIR}/src/utils/unity.c
+    ${JH_BTSTACK_SBC_FIXTURE_SOURCES})
+target_compile_definitions(test_bluetooth_a2dp_sbc_fixtures PRIVATE
+    HAVE_BTSTACK_CONFIG_H=1
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_UNITY=1
+    HAL_ENABLE_BLUETOOTH_A2DP_SINK=1)
+target_include_directories(test_bluetooth_a2dp_sbc_fixtures PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/hal/bluetooth
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/src
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/3rd-party/bluedroid/encoder/include
+    ${CMAKE_SOURCE_DIR}/third_party/BTstack/3rd-party/bluedroid/decoder/include)
+set_source_files_properties(${JH_BTSTACK_SBC_FIXTURE_SOURCES} PROPERTIES
+    COMPILE_OPTIONS "${JH_HOST_THIRD_PARTY_WARNING_OPTIONS}")
+jh_enable_host_warnings(test_bluetooth_a2dp_sbc_fixtures ERRORS)
+add_test(NAME test_bluetooth_a2dp_sbc_fixtures
+    COMMAND test_bluetooth_a2dp_sbc_fixtures)
 add_hal_test(test_hal_gamepad)
 add_hal_test(test_hal_littlefs)
 add_executable(test_jh_littlefs_lfs_provider

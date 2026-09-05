@@ -119,6 +119,10 @@ if(_stm32_has_cyw43_gspi)
         HAL_ENABLE_BLUETOOTH_CLASSIC ${_feature_defines})
     jh_cmake_defines_contain(_stm32_has_bluetooth_hid_host
         HAL_ENABLE_BLUETOOTH_HID_HOST ${_feature_defines})
+    jh_cmake_defines_contain(_stm32_has_bluetooth_a2dp_sink
+        HAL_ENABLE_BLUETOOTH_A2DP_SINK ${_feature_defines})
+    jh_cmake_defines_contain(_stm32_has_bluetooth_avrcp_target
+        HAL_ENABLE_BLUETOOTH_AVRCP_TARGET ${_feature_defines})
     jh_cmake_defines_contain(_stm32_has_ota
         HAL_ENABLE_OTA ${_feature_defines})
     jh_target_enable_cyw43_feature_stack(firmware
@@ -128,6 +132,8 @@ if(_stm32_has_cyw43_gspi)
         BLUETOOTH_CLASSIC_HID "${_stm32_has_bluetooth_classic_hid}"
         CLASSIC "${_stm32_has_bluetooth_classic}"
         HID_HOST "${_stm32_has_bluetooth_hid_host}"
+        A2DP_SINK "${_stm32_has_bluetooth_a2dp_sink}"
+        AVRCP_TARGET "${_stm32_has_bluetooth_avrcp_target}"
         BLE "${_stm32_has_ble}"
         BLE_STREAM "${_stm32_has_ble_stream}")
 endif()

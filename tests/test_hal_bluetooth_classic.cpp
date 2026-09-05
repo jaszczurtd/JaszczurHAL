@@ -101,6 +101,7 @@ void setUp(void) {
   s_erase_calls = 0u;
   s_store_status = HAL_OK;
   s_erase_status = HAL_OK;
+  hal_mock_set_millis(0u);
 }
 
 void tearDown(void) {
@@ -393,6 +394,40 @@ void test_address_helpers_compare_values_and_reject_null(void) {
   TEST_ASSERT_FALSE(jh_bluetooth_classic_address_is_zero(nullptr));
 }
 
+void test_identity_and_pairing_window_are_bounded(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_bluetooth_classic_open(&s_classic));
+  hal_bluetooth_classic_identity_t identity{};
+  memcpy(identity.name, "Jaszczur speaker", sizeof("Jaszczur speaker"));
+  identity.class_of_device = 0x200414u;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_bluetooth_classic_set_identity(s_classic, &identity));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_ESTATE, hal_bluetooth_classic_pairing_window_open(s_classic, 60000u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_bluetooth_classic_inject_ready());
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL, hal_bluetooth_classic_pairing_window_open(s_classic, 999u));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_bluetooth_classic_pairing_window_open(s_classic, 60000u));
+  hal_bluetooth_classic_info_t info{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_bluetooth_classic_get_info(s_classic, &info));
+  TEST_ASSERT_TRUE(info.pairing_window_open);
+  hal_mock_advance_millis(59999u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_bluetooth_classic_poll(s_classic));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_bluetooth_classic_get_info(s_classic, &info));
+  TEST_ASSERT_TRUE(info.pairing_window_open);
+  hal_mock_advance_millis(1u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_bluetooth_classic_poll(s_classic));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_bluetooth_classic_get_info(s_classic, &info));
+  TEST_ASSERT_FALSE(info.pairing_window_open);
+
+  memset(identity.name, 'X', sizeof(identity.name));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL, hal_bluetooth_classic_set_identity(s_classic, &identity));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_lifecycle_is_independent_from_gamepad);
@@ -406,5 +441,6 @@ int main(void) {
   RUN_TEST(test_failed_persistent_erase_keeps_peer_available_for_retry);
   RUN_TEST(test_address_format_is_stable);
   RUN_TEST(test_address_helpers_compare_values_and_reject_null);
+  RUN_TEST(test_identity_and_pairing_window_are_bounded);
   return UNITY_END();
 }
