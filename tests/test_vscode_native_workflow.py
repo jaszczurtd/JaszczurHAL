@@ -343,8 +343,8 @@ registered_names = {
 }
 examples_dispatcher.validate_example_registry()
 require(
-    len(examples_dispatcher.EXAMPLES) == 29 and len(registered_names) == 29,
-    "dispatcher registry must contain exactly 29 active examples",
+    len(examples_dispatcher.EXAMPLES) == 30 and len(registered_names) == 30,
+    "dispatcher registry must contain exactly 30 active examples",
 )
 require(
     registered_names == manifest_example_names,
@@ -456,8 +456,8 @@ for example_dir in example_dirs:
 require(
     example_counts
     == {
-        "rp2040": 28,
-        "rp2350-arm": 27,
+        "rp2040": 29,
+        "rp2350-arm": 28,
         "rp2350-riscv": 22,
         "stm32g474": 27,
     },
@@ -466,25 +466,25 @@ require(
 require(
     full_configuration_counts
     == {
-        "rp2040": 41,
-        "rp2350-arm": 34,
+        "rp2040": 44,
+        "rp2350-arm": 37,
         "rp2350-riscv": 23,
         "stm32g474": 40,
     }
-    and sum(full_configuration_counts.values()) == 138,
-    "full example build matrix must contain exactly 138 configurations: "
+    and sum(full_configuration_counts.values()) == 144,
+    "full example build matrix must contain exactly 144 configurations: "
     f"{full_configuration_counts}",
 )
 require(
     gate_configuration_counts
     == {
-        "rp2040": 39,
-        "rp2350-arm": 1,
+        "rp2040": 42,
+        "rp2350-arm": 4,
         "rp2350-riscv": 0,
         "stm32g474": 31,
     }
-    and sum(gate_configuration_counts.values()) == 71,
-    "example gate matrix must contain exactly 71 configurations: "
+    and sum(gate_configuration_counts.values()) == 77,
+    "example gate matrix must contain exactly 77 configurations: "
     f"{gate_configuration_counts}",
 )
 required_feature_surface = {
@@ -495,6 +495,8 @@ required_feature_surface = {
     "HAL_ENABLE_BLE",
     "HAL_ENABLE_BLE_COMMANDS",
     "HAL_ENABLE_BLE_STREAM",
+    "HAL_ENABLE_BLUETOOTH_A2DP_SINK",
+    "HAL_ENABLE_BLUETOOTH_AVRCP_TARGET",
     "HAL_ENABLE_BLUETOOTH_CLASSIC",
     "HAL_ENABLE_BLUETOOTH_GAMEPAD",
     "HAL_ENABLE_BLUETOOTH_HID_HOST",

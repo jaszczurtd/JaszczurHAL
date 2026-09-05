@@ -4,6 +4,9 @@
 #ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
 #include "hal/bluetooth/hal_bluetooth_hid_host.h"
 #endif
+#ifdef HAL_ENABLE_BLUETOOTH_A2DP_SINK
+#include "hal/bluetooth/hal_bluetooth_a2dp_sink.h"
+#endif
 #include "hal/core/hal_status.h"
 
 #include <stdbool.h>
@@ -28,6 +31,21 @@ typedef enum {
   JH_BLUETOOTH_CLASSIC_EVENT_HID_REPORT,
   JH_BLUETOOTH_CLASSIC_EVENT_HID_DISCONNECTED,
 #endif
+#ifdef HAL_ENABLE_BLUETOOTH_A2DP_SINK
+  JH_BLUETOOTH_CLASSIC_EVENT_A2DP_CONNECTED,
+  JH_BLUETOOTH_CLASSIC_EVENT_A2DP_FORMAT,
+  JH_BLUETOOTH_CLASSIC_EVENT_A2DP_STARTED,
+  JH_BLUETOOTH_CLASSIC_EVENT_A2DP_SUSPENDED,
+  JH_BLUETOOTH_CLASSIC_EVENT_A2DP_STOPPED,
+  JH_BLUETOOTH_CLASSIC_EVENT_A2DP_DISCONNECTED,
+  JH_BLUETOOTH_CLASSIC_EVENT_A2DP_MEDIA,
+  JH_BLUETOOTH_CLASSIC_EVENT_A2DP_PCM,
+#endif
+#ifdef HAL_ENABLE_BLUETOOTH_AVRCP_TARGET
+  JH_BLUETOOTH_CLASSIC_EVENT_AVRCP_CONNECTED,
+  JH_BLUETOOTH_CLASSIC_EVENT_AVRCP_DISCONNECTED,
+  JH_BLUETOOTH_CLASSIC_EVENT_AVRCP_VOLUME,
+#endif
   JH_BLUETOOTH_CLASSIC_EVENT_ERROR,
 } jh_bluetooth_classic_backend_event_type_t;
 
@@ -44,6 +62,18 @@ typedef struct {
   uint8_t descriptor[HAL_BLUETOOTH_HID_DESCRIPTOR_MAX_LEN];
   size_t descriptor_length;
   hal_bluetooth_hid_report_t hid_report;
+#endif
+#ifdef HAL_ENABLE_BLUETOOTH_A2DP_SINK
+  hal_bluetooth_a2dp_sbc_format_t a2dp_format;
+  const uint8_t *media_data;
+  size_t media_length;
+  const int16_t *pcm_data;
+  size_t pcm_frames;
+  uint8_t pcm_channels;
+  uint32_t pcm_sample_rate_hz;
+#endif
+#ifdef HAL_ENABLE_BLUETOOTH_AVRCP_TARGET
+  uint8_t absolute_volume;
 #endif
 } jh_bluetooth_classic_backend_event_t;
 
@@ -70,6 +100,10 @@ typedef struct {
                                uint8_t link_key_type);
   hal_status_t (*peer_forget)(void *context,
                               const hal_bluetooth_classic_address_t *address);
+  hal_status_t (*identity_set)(
+      void *context, const hal_bluetooth_classic_identity_t *identity);
+  hal_status_t (*visibility_set)(void *context, bool connectable,
+                                 bool discoverable, bool pairing_allowed);
 #ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
   hal_status_t (*hid_connect)(void *context,
                               const hal_bluetooth_classic_address_t *address);
@@ -79,6 +113,17 @@ typedef struct {
   hal_status_t (*hid_report_request)(void *context,
                                      hal_bluetooth_hid_report_type_t type,
                                      uint8_t report_id);
+#endif
+#ifdef HAL_ENABLE_BLUETOOTH_A2DP_SINK
+  hal_status_t (*a2dp_attach)(void *context);
+  hal_status_t (*a2dp_detach)(void *context);
+  hal_status_t (*a2dp_decode)(void *context, const uint8_t *data,
+                              size_t length);
+#endif
+#ifdef HAL_ENABLE_BLUETOOTH_AVRCP_TARGET
+  hal_status_t (*avrcp_attach)(void *context, uint8_t initial_volume);
+  hal_status_t (*avrcp_detach)(void *context);
+  hal_status_t (*avrcp_volume_set)(void *context, uint8_t absolute_volume);
 #endif
 } jh_bluetooth_classic_backend_t;
 

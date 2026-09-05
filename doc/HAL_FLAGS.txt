@@ -40,9 +40,11 @@ Bluetooth uses separate public profile flags. `HAL_ENABLE_BLE` selects the Low
 Energy Peripheral/Observer API. `HAL_ENABLE_BLUETOOTH_CLASSIC` selects the
 public Classic manager, `HAL_ENABLE_BLUETOOTH_HID_HOST` adds raw HID, and
 `HAL_ENABLE_BLUETOOTH_GAMEPAD` adds the normalized adapter. Gamepad implies
-HID Host, which implies Classic. BLE and
-Classic profiles can be enabled together on the supported CYW43 board profiles
-and share one reference-counted host runtime.
+HID Host, which implies Classic. `HAL_ENABLE_BLUETOOTH_A2DP_SINK` adds SBC
+audio reception and signed PCM output. `HAL_ENABLE_BLUETOOTH_AVRCP_TARGET`
+adds absolute-volume control and implies A2DP Sink, which implies Classic. BLE
+and Classic profiles can be enabled together on the supported CYW43 board
+profiles and share one reference-counted host runtime.
 
 Use the shared generator runner after changing the feature or board registry:
 

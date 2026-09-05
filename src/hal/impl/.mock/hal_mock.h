@@ -7,6 +7,12 @@
 #ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
 #include "hal/bluetooth/hal_bluetooth_hid_host.h"
 #endif
+#ifdef HAL_ENABLE_BLUETOOTH_A2DP_SINK
+#include "hal/bluetooth/hal_bluetooth_a2dp_sink.h"
+#endif
+#ifdef HAL_ENABLE_BLUETOOTH_AVRCP_TARGET
+#include "hal/bluetooth/hal_bluetooth_avrcp_target.h"
+#endif
 #ifdef HAL_ENABLE_BLUETOOTH_GAMEPAD
 #include "hal/bluetooth/hal_gamepad.h"
 #endif
@@ -105,6 +111,34 @@ hal_status_t hal_mock_bluetooth_hid_inject_descriptor(const uint8_t *descriptor,
 hal_status_t
 hal_mock_bluetooth_hid_inject_report(const hal_bluetooth_hid_report_t *report);
 hal_status_t hal_mock_bluetooth_hid_inject_disconnected(hal_status_t status);
+#endif
+#ifdef HAL_ENABLE_BLUETOOTH_A2DP_SINK
+#ifdef __cplusplus
+extern "C" {
+#endif
+void hal_mock_bluetooth_a2dp_runtime_full_reset(void);
+#ifdef HAL_ENABLE_BLUETOOTH_AVRCP_TARGET
+void hal_mock_bluetooth_avrcp_runtime_full_reset(void);
+#endif
+#ifdef __cplusplus
+}
+#endif
+hal_status_t hal_mock_bluetooth_a2dp_inject_connected(
+    const hal_bluetooth_classic_address_t *address);
+hal_status_t hal_mock_bluetooth_a2dp_inject_format(
+    const hal_bluetooth_a2dp_sbc_format_t *format);
+hal_status_t hal_mock_bluetooth_a2dp_inject_started(void);
+hal_status_t hal_mock_bluetooth_a2dp_inject_media(const uint8_t *data,
+                                                  size_t length);
+hal_status_t hal_mock_bluetooth_a2dp_inject_suspended(void);
+hal_status_t hal_mock_bluetooth_a2dp_inject_stopped(void);
+hal_status_t hal_mock_bluetooth_a2dp_inject_disconnected(hal_status_t status);
+#ifdef HAL_ENABLE_BLUETOOTH_AVRCP_TARGET
+hal_status_t hal_mock_bluetooth_avrcp_inject_connected(
+    const hal_bluetooth_classic_address_t *address);
+hal_status_t hal_mock_bluetooth_avrcp_inject_volume(uint8_t volume);
+hal_status_t hal_mock_bluetooth_avrcp_inject_disconnected(void);
+#endif
 #endif
 #endif
 

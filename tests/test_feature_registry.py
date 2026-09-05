@@ -786,7 +786,7 @@ TEST_ROOT.mkdir(parents=True)
 )
 
 model = generate_hal_features.load_registry(CONFIG)
-require(len(model.features) == 111, "feature registry symbol count drifted")
+require(len(model.features) == 113, "feature registry symbol count drifted")
 catalog_text = (ROOT / "doc/api/en/02_module_flags.md").read_text(encoding="utf-8")
 catalog_features = set(
     re.findall(
@@ -805,11 +805,11 @@ require(
     f"unknown={sorted(catalog_features - public_features)}",
 )
 require(
-    sum(bool(feature.implies) for feature in model.features.values()) == 72,
+    sum(bool(feature.implies) for feature in model.features.values()) == 74,
     "feature registry implies-source count drifted",
 )
 require(
-    sum(len(feature.implies) for feature in model.features.values()) == 131,
+    sum(len(feature.implies) for feature in model.features.values()) == 133,
     "feature registry direct-edge count drifted",
 )
 require(
@@ -965,8 +965,8 @@ for facade in facade_provider_checks:
     )
 require(
     len(re.findall(r"^#error(?:\s|$)", hal_config_text, flags=re.MULTILINE))
-    == 73,
-    "hal_config.h retained validation inventory drifted from 73 #error checks",
+    == 75,
+    "hal_config.h retained validation inventory drifted from 75 #error checks",
 )
 
 checked = run_generator("--check")

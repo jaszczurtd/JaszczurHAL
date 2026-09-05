@@ -177,6 +177,18 @@
 #endif
 #endif
 
+#if defined(HAL_ENABLE_BLUETOOTH_A2DP_SINK) &&                                 \
+    !(HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_RP2350_ARM || HAL_TARGET_IS_MOCK)
+#error                                                                         \
+    "HAL_ENABLE_BLUETOOTH_A2DP_SINK is supported on RP2040, RP2350 ARM, and mock"
+#endif
+
+#if defined(HAL_ENABLE_BLUETOOTH_AVRCP_TARGET) &&                              \
+    !(HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_RP2350_ARM || HAL_TARGET_IS_MOCK)
+#error                                                                         \
+    "HAL_ENABLE_BLUETOOTH_AVRCP_TARGET is supported on RP2040, RP2350 ARM, and mock"
+#endif
+
 /* -- Network backend transport configuration --------------------------- */
 #if defined(HAL_CYW43_BUS_PICO_PIO) && defined(HAL_CYW43_BUS_STM32_GSPI)
 #error "JaszczurHAL CYW43 requires exactly one transport"

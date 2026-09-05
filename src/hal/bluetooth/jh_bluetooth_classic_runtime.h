@@ -12,6 +12,23 @@ extern "C" {
 
 bool jh_bluetooth_classic_handle_valid(hal_bluetooth_classic_t classic);
 
+#ifdef HAL_ENABLE_BLUETOOTH_A2DP_SINK
+hal_status_t jh_bluetooth_classic_a2dp_attach(hal_bluetooth_classic_t classic);
+hal_status_t jh_bluetooth_classic_a2dp_detach(hal_bluetooth_classic_t classic);
+hal_status_t jh_bluetooth_classic_a2dp_decode(hal_bluetooth_classic_t classic,
+                                              const uint8_t *data,
+                                              size_t length);
+#endif
+
+#ifdef HAL_ENABLE_BLUETOOTH_AVRCP_TARGET
+hal_status_t jh_bluetooth_classic_avrcp_attach(hal_bluetooth_classic_t classic,
+                                               uint8_t initial_volume);
+hal_status_t jh_bluetooth_classic_avrcp_detach(hal_bluetooth_classic_t classic);
+hal_status_t
+jh_bluetooth_classic_avrcp_volume_set(hal_bluetooth_classic_t classic,
+                                      uint8_t absolute_volume);
+#endif
+
 #ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
 hal_status_t jh_bluetooth_classic_hid_attach(hal_bluetooth_classic_t classic);
 hal_status_t jh_bluetooth_classic_hid_detach(hal_bluetooth_classic_t classic);

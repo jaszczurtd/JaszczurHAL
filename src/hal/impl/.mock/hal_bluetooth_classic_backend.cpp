@@ -4,6 +4,9 @@
 #if HAL_TARGET_IS_MOCK && defined(HAL_ENABLE_BLUETOOTH_CLASSIC)
 
 #include "hal/bluetooth/jh_bluetooth_classic_backend.h"
+#ifdef HAL_ENABLE_BLUETOOTH_A2DP_SINK
+#include "hal/bluetooth/jh_bluetooth_a2dp_sbc.h"
+#endif
 #include "hal/impl/.mock/hal_mock.h"
 
 #include <string.h>
@@ -20,9 +23,24 @@ struct mock_classic_t {
   bool started;
   bool scanning;
   bool pairing_pending;
+  bool connectable;
+  bool discoverable;
+  bool pairing_allowed;
 #ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
   bool hid_connecting;
   bool hid_connected;
+#endif
+#ifdef HAL_ENABLE_BLUETOOTH_A2DP_SINK
+  hal_bluetooth_a2dp_sbc_format_t a2dp_format;
+  hal_bluetooth_classic_address_t a2dp_address;
+  bool a2dp_attached;
+  bool a2dp_streaming;
+#endif
+#ifdef HAL_ENABLE_BLUETOOTH_AVRCP_TARGET
+  hal_bluetooth_classic_address_t avrcp_address;
+  uint8_t avrcp_volume;
+  bool avrcp_attached;
+  bool avrcp_connected;
 #endif
 };
 
@@ -137,6 +155,23 @@ hal_status_t mock_peer_forget(void *,
                          : (address == nullptr ? HAL_EINVAL : HAL_OK);
 }
 
+hal_status_t
+mock_identity_set(void *, const hal_bluetooth_classic_identity_t *identity) {
+  return !s_mock.started ? HAL_EUNINIT
+                         : (identity == nullptr ? HAL_EINVAL : HAL_OK);
+}
+
+hal_status_t mock_visibility_set(void *, bool connectable, bool discoverable,
+                                 bool pairing_allowed) {
+  if (!s_mock.started) {
+    return HAL_EUNINIT;
+  }
+  s_mock.connectable = connectable;
+  s_mock.discoverable = discoverable;
+  s_mock.pairing_allowed = pairing_allowed;
+  return HAL_OK;
+}
+
 #ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
 hal_status_t mock_hid_connect(void *,
                               const hal_bluetooth_classic_address_t *address) {
@@ -185,6 +220,79 @@ hal_status_t mock_hid_report_request(void *, hal_bluetooth_hid_report_type_t,
 }
 #endif
 
+#ifdef HAL_ENABLE_BLUETOOTH_A2DP_SINK
+hal_status_t mock_a2dp_attach(void *) {
+  if (!s_mock.started || s_mock.a2dp_attached) {
+    return !s_mock.started ? HAL_EUNINIT : HAL_EBUSY;
+  }
+  s_mock.a2dp_attached = true;
+  return HAL_OK;
+}
+
+hal_status_t mock_a2dp_detach(void *) {
+  if (!s_mock.started || !s_mock.a2dp_attached) {
+    return HAL_EUNINIT;
+  }
+  s_mock.a2dp_attached = false;
+  s_mock.a2dp_streaming = false;
+  return HAL_OK;
+}
+
+hal_status_t mock_a2dp_decode(void *, const uint8_t *data, size_t length) {
+  if (!s_mock.started || !s_mock.a2dp_attached || !s_mock.a2dp_streaming) {
+    return !s_mock.started ? HAL_EUNINIT : HAL_ESTATE;
+  }
+  jh_bluetooth_a2dp_sbc_frame_t frame{};
+  hal_status_t status = jh_bluetooth_a2dp_sbc_frame_parse(data, length, &frame);
+  if (status != HAL_OK) {
+    return status;
+  }
+  int16_t pcm[128u * 2u]{};
+  for (size_t index = 0u; index < frame.pcm_frames; ++index) {
+    pcm[index * 2u] = (int16_t)(1000 + (int16_t)index);
+    pcm[index * 2u + 1u] = (int16_t)(-500 - (int16_t)index);
+  }
+  jh_bluetooth_classic_backend_event_t event{};
+  event.type = JH_BLUETOOTH_CLASSIC_EVENT_A2DP_PCM;
+  event.status = HAL_OK;
+  event.address = s_mock.a2dp_address;
+  event.pcm_data = pcm;
+  event.pcm_frames = frame.pcm_frames;
+  event.pcm_channels = 2u;
+  event.pcm_sample_rate_hz = frame.format.sample_rate_hz;
+  emit(event);
+  return HAL_OK;
+}
+#endif
+
+#ifdef HAL_ENABLE_BLUETOOTH_AVRCP_TARGET
+hal_status_t mock_avrcp_attach(void *, uint8_t initial_volume) {
+  if (!s_mock.started || s_mock.avrcp_attached) {
+    return !s_mock.started ? HAL_EUNINIT : HAL_EBUSY;
+  }
+  s_mock.avrcp_attached = true;
+  s_mock.avrcp_volume = initial_volume;
+  return HAL_OK;
+}
+
+hal_status_t mock_avrcp_detach(void *) {
+  if (!s_mock.started || !s_mock.avrcp_attached) {
+    return HAL_EUNINIT;
+  }
+  s_mock.avrcp_attached = false;
+  s_mock.avrcp_connected = false;
+  return HAL_OK;
+}
+
+hal_status_t mock_avrcp_volume_set(void *, uint8_t absolute_volume) {
+  if (!s_mock.started || !s_mock.avrcp_attached) {
+    return !s_mock.started ? HAL_EUNINIT : HAL_ESTATE;
+  }
+  s_mock.avrcp_volume = absolute_volume;
+  return HAL_OK;
+}
+#endif
+
 const jh_bluetooth_classic_backend_t s_backend = {
     .context = nullptr,
     .start = mock_start,
@@ -197,11 +305,23 @@ const jh_bluetooth_classic_backend_t s_backend = {
     .pairing_reply = mock_pairing_reply,
     .peer_restore = mock_peer_restore,
     .peer_forget = mock_peer_forget,
+    .identity_set = mock_identity_set,
+    .visibility_set = mock_visibility_set,
 #ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
     .hid_connect = mock_hid_connect,
     .hid_disconnect = mock_hid_disconnect,
     .hid_report_send = mock_hid_report_send,
     .hid_report_request = mock_hid_report_request,
+#endif
+#ifdef HAL_ENABLE_BLUETOOTH_A2DP_SINK
+    .a2dp_attach = mock_a2dp_attach,
+    .a2dp_detach = mock_a2dp_detach,
+    .a2dp_decode = mock_a2dp_decode,
+#endif
+#ifdef HAL_ENABLE_BLUETOOTH_AVRCP_TARGET
+    .avrcp_attach = mock_avrcp_attach,
+    .avrcp_detach = mock_avrcp_detach,
+    .avrcp_volume_set = mock_avrcp_volume_set,
 #endif
 };
 
@@ -373,6 +493,160 @@ hal_status_t hal_mock_bluetooth_hid_inject_disconnected(hal_status_t status) {
   event.type = JH_BLUETOOTH_CLASSIC_EVENT_HID_DISCONNECTED;
   event.status = status;
   event.address = s_mock.hid_address;
+  emit(event);
+  return HAL_OK;
+}
+#endif
+
+#ifdef HAL_ENABLE_BLUETOOTH_A2DP_SINK
+hal_status_t hal_mock_bluetooth_a2dp_inject_connected(
+    const hal_bluetooth_classic_address_t *address) {
+  if (address == nullptr) {
+    return HAL_EINVAL;
+  }
+  if (!s_mock.started || !s_mock.a2dp_attached) {
+    return !s_mock.started ? HAL_EUNINIT : HAL_ESTATE;
+  }
+  s_mock.a2dp_address = *address;
+  jh_bluetooth_classic_backend_event_t event{};
+  event.type = JH_BLUETOOTH_CLASSIC_EVENT_A2DP_CONNECTED;
+  event.status = HAL_OK;
+  event.address = *address;
+  emit(event);
+  return HAL_OK;
+}
+
+hal_status_t hal_mock_bluetooth_a2dp_inject_format(
+    const hal_bluetooth_a2dp_sbc_format_t *format) {
+  if (format == nullptr) {
+    return HAL_EINVAL;
+  }
+  if (!s_mock.started || !s_mock.a2dp_attached) {
+    return !s_mock.started ? HAL_EUNINIT : HAL_ESTATE;
+  }
+  s_mock.a2dp_format = *format;
+  jh_bluetooth_classic_backend_event_t event{};
+  event.type = JH_BLUETOOTH_CLASSIC_EVENT_A2DP_FORMAT;
+  event.status = HAL_OK;
+  event.address = s_mock.a2dp_address;
+  event.a2dp_format = *format;
+  emit(event);
+  return HAL_OK;
+}
+
+hal_status_t hal_mock_bluetooth_a2dp_inject_started(void) {
+  if (!s_mock.started || !s_mock.a2dp_attached || s_mock.a2dp_streaming) {
+    return !s_mock.started ? HAL_EUNINIT : HAL_ESTATE;
+  }
+  s_mock.a2dp_streaming = true;
+  jh_bluetooth_classic_backend_event_t event{};
+  event.type = JH_BLUETOOTH_CLASSIC_EVENT_A2DP_STARTED;
+  event.status = HAL_OK;
+  event.address = s_mock.a2dp_address;
+  emit(event);
+  return HAL_OK;
+}
+
+hal_status_t hal_mock_bluetooth_a2dp_inject_media(const uint8_t *data,
+                                                  size_t length) {
+  if (data == nullptr || length == 0u) {
+    return HAL_EINVAL;
+  }
+  if (!s_mock.started || !s_mock.a2dp_streaming) {
+    return !s_mock.started ? HAL_EUNINIT : HAL_ESTATE;
+  }
+  jh_bluetooth_classic_backend_event_t event{};
+  event.type = JH_BLUETOOTH_CLASSIC_EVENT_A2DP_MEDIA;
+  event.status = HAL_OK;
+  event.address = s_mock.a2dp_address;
+  event.media_data = data;
+  event.media_length = length;
+  emit(event);
+  return HAL_OK;
+}
+
+static hal_status_t
+mock_a2dp_transition(jh_bluetooth_classic_backend_event_type_t type,
+                     bool streaming) {
+  if (!s_mock.started || !s_mock.a2dp_attached) {
+    return !s_mock.started ? HAL_EUNINIT : HAL_ESTATE;
+  }
+  s_mock.a2dp_streaming = streaming;
+  jh_bluetooth_classic_backend_event_t event{};
+  event.type = type;
+  event.status = HAL_OK;
+  event.address = s_mock.a2dp_address;
+  emit(event);
+  return HAL_OK;
+}
+
+hal_status_t hal_mock_bluetooth_a2dp_inject_suspended(void) {
+  return mock_a2dp_transition(JH_BLUETOOTH_CLASSIC_EVENT_A2DP_SUSPENDED, false);
+}
+
+hal_status_t hal_mock_bluetooth_a2dp_inject_stopped(void) {
+  return mock_a2dp_transition(JH_BLUETOOTH_CLASSIC_EVENT_A2DP_STOPPED, false);
+}
+
+hal_status_t hal_mock_bluetooth_a2dp_inject_disconnected(hal_status_t status) {
+  if (!s_mock.started || !s_mock.a2dp_attached) {
+    return !s_mock.started ? HAL_EUNINIT : HAL_ESTATE;
+  }
+  s_mock.a2dp_streaming = false;
+  jh_bluetooth_classic_backend_event_t event{};
+  event.type = JH_BLUETOOTH_CLASSIC_EVENT_A2DP_DISCONNECTED;
+  event.status = status;
+  event.address = s_mock.a2dp_address;
+  emit(event);
+  return HAL_OK;
+}
+#endif
+
+#ifdef HAL_ENABLE_BLUETOOTH_AVRCP_TARGET
+hal_status_t hal_mock_bluetooth_avrcp_inject_connected(
+    const hal_bluetooth_classic_address_t *address) {
+  if (address == nullptr) {
+    return HAL_EINVAL;
+  }
+  if (!s_mock.started || !s_mock.avrcp_attached) {
+    return !s_mock.started ? HAL_EUNINIT : HAL_ESTATE;
+  }
+  s_mock.avrcp_connected = true;
+  s_mock.avrcp_address = *address;
+  jh_bluetooth_classic_backend_event_t event{};
+  event.type = JH_BLUETOOTH_CLASSIC_EVENT_AVRCP_CONNECTED;
+  event.status = HAL_OK;
+  event.address = *address;
+  emit(event);
+  return HAL_OK;
+}
+
+hal_status_t hal_mock_bluetooth_avrcp_inject_volume(uint8_t volume) {
+  if (volume > 127u) {
+    return HAL_EINVAL;
+  }
+  if (!s_mock.started || !s_mock.avrcp_connected) {
+    return !s_mock.started ? HAL_EUNINIT : HAL_ESTATE;
+  }
+  s_mock.avrcp_volume = volume;
+  jh_bluetooth_classic_backend_event_t event{};
+  event.type = JH_BLUETOOTH_CLASSIC_EVENT_AVRCP_VOLUME;
+  event.status = HAL_OK;
+  event.address = s_mock.avrcp_address;
+  event.absolute_volume = volume;
+  emit(event);
+  return HAL_OK;
+}
+
+hal_status_t hal_mock_bluetooth_avrcp_inject_disconnected(void) {
+  if (!s_mock.started || !s_mock.avrcp_connected) {
+    return !s_mock.started ? HAL_EUNINIT : HAL_ESTATE;
+  }
+  s_mock.avrcp_connected = false;
+  jh_bluetooth_classic_backend_event_t event{};
+  event.type = JH_BLUETOOTH_CLASSIC_EVENT_AVRCP_DISCONNECTED;
+  event.status = HAL_OK;
+  event.address = s_mock.avrcp_address;
   emit(event);
   return HAL_OK;
 }

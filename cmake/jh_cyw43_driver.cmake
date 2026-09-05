@@ -163,7 +163,7 @@ endfunction()
 # ownership of provider detection and pass resolved boolean inputs here.
 function(jh_target_enable_cyw43_feature_stack TARGET_NAME)
     cmake_parse_arguments(JH_CYW43_FEATURE ""
-        "LWIP;OTA;BLUETOOTH_STAGE1;BLUETOOTH_CLASSIC_HID;BLUETOOTH_CLASSIC_HID_DEVICE_FIXTURE;CLASSIC;HID_HOST;BLE;BLE_STREAM" "" ${ARGN})
+        "LWIP;OTA;BLUETOOTH_STAGE1;BLUETOOTH_CLASSIC_HID;BLUETOOTH_CLASSIC_HID_DEVICE_FIXTURE;CLASSIC;HID_HOST;A2DP_SINK;AVRCP_TARGET;BLE;BLE_STREAM" "" ${ARGN})
     if(JH_CYW43_FEATURE_UNPARSED_ARGUMENTS)
         message(FATAL_ERROR
             "Unknown CYW43 feature-stack arguments: "
@@ -177,7 +177,8 @@ function(jh_target_enable_cyw43_feature_stack TARGET_NAME)
     if(JH_CYW43_FEATURE_BLUETOOTH_STAGE1 AND
        (JH_CYW43_FEATURE_BLUETOOTH_CLASSIC_HID OR
         JH_CYW43_FEATURE_CLASSIC OR
-        JH_CYW43_FEATURE_HID_HOST OR
+        JH_CYW43_FEATURE_HID_HOST OR JH_CYW43_FEATURE_A2DP_SINK OR
+        JH_CYW43_FEATURE_AVRCP_TARGET OR
         JH_CYW43_FEATURE_BLE OR JH_CYW43_FEATURE_BLE_STREAM))
         message(FATAL_ERROR
             "The private Bluetooth stage-1 probe cannot use a public profile")
@@ -185,6 +186,7 @@ function(jh_target_enable_cyw43_feature_stack TARGET_NAME)
     if(JH_CYW43_FEATURE_BLUETOOTH_CLASSIC_HID AND
        (JH_CYW43_FEATURE_BLUETOOTH_CLASSIC_HID_DEVICE_FIXTURE OR
         JH_CYW43_FEATURE_CLASSIC OR JH_CYW43_FEATURE_HID_HOST OR
+        JH_CYW43_FEATURE_A2DP_SINK OR JH_CYW43_FEATURE_AVRCP_TARGET OR
         JH_CYW43_FEATURE_BLE OR
         JH_CYW43_FEATURE_BLE_STREAM))
         message(FATAL_ERROR
@@ -193,6 +195,7 @@ function(jh_target_enable_cyw43_feature_stack TARGET_NAME)
     if(JH_CYW43_FEATURE_BLUETOOTH_CLASSIC_HID_DEVICE_FIXTURE AND
        (JH_CYW43_FEATURE_BLUETOOTH_STAGE1 OR
         JH_CYW43_FEATURE_CLASSIC OR JH_CYW43_FEATURE_HID_HOST OR
+        JH_CYW43_FEATURE_A2DP_SINK OR JH_CYW43_FEATURE_AVRCP_TARGET OR
         JH_CYW43_FEATURE_BLE OR JH_CYW43_FEATURE_BLE_STREAM))
         message(FATAL_ERROR
             "The Classic HID device fixture cannot use another Bluetooth profile")
@@ -210,6 +213,8 @@ function(jh_target_enable_cyw43_feature_stack TARGET_NAME)
        JH_CYW43_FEATURE_BLUETOOTH_CLASSIC_HID_DEVICE_FIXTURE OR
        JH_CYW43_FEATURE_CLASSIC OR
        JH_CYW43_FEATURE_HID_HOST OR
+       JH_CYW43_FEATURE_A2DP_SINK OR
+       JH_CYW43_FEATURE_AVRCP_TARGET OR
        JH_CYW43_FEATURE_BLE OR JH_CYW43_FEATURE_BLE_STREAM)
         list(APPEND _jh_cyw43_options BLUETOOTH)
     endif()
@@ -223,7 +228,8 @@ function(jh_target_enable_cyw43_feature_stack TARGET_NAME)
         jh_target_enable_btstack_classic_hid_device_fixture(${TARGET_NAME})
     else()
         set(_jh_btstack_profiles)
-        foreach(_jh_profile IN ITEMS BLE BLE_STREAM CLASSIC HID_HOST)
+        foreach(_jh_profile IN ITEMS
+                BLE BLE_STREAM CLASSIC HID_HOST A2DP_SINK AVRCP_TARGET)
             if(JH_CYW43_FEATURE_${_jh_profile})
                 list(APPEND _jh_btstack_profiles ${_jh_profile})
             endif()

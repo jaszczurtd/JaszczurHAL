@@ -330,6 +330,7 @@ expected_registry_names = [
     "27_lora_point_to_point",
     "28_serial_commands",
     "29_bluetooth_gamepad",
+    "30_bluetooth_speaker",
 ]
 active_example_names = sorted(
     path.parent.parent.name
@@ -339,8 +340,8 @@ active_example_names = sorted(
 )
 require(
     registry_names == expected_registry_names
-    and len(set(registry_names)) == 29,
-    "example registry must contain the ordered 01..29 active catalog",
+    and len(set(registry_names)) == 30,
+    "example registry must contain the ordered 01..30 active catalog",
 )
 
 full_configuration_counts = {
@@ -389,23 +390,23 @@ for entry in examples_dispatcher.EXAMPLES:
 require(
     full_configuration_counts
     == {
-        "rp2040": 41,
-        "rp2350-arm": 34,
+        "rp2040": 44,
+        "rp2350-arm": 37,
         "rp2350-riscv": 23,
         "stm32g474": 40,
     }
-    and sum(full_configuration_counts.values()) == 138,
+    and sum(full_configuration_counts.values()) == 144,
     f"full dispatcher matrix changed: {full_configuration_counts}",
 )
 require(
     gate_configuration_counts
     == {
-        "rp2040": 39,
-        "rp2350-arm": 1,
+        "rp2040": 42,
+        "rp2350-arm": 4,
         "rp2350-riscv": 0,
         "stm32g474": 31,
     }
-    and sum(gate_configuration_counts.values()) == 71,
+    and sum(gate_configuration_counts.values()) == 77,
     f"dispatcher gate matrix changed: {gate_configuration_counts}",
 )
 
@@ -548,7 +549,7 @@ require(
     not examples_dispatcher.generated_file_mismatches(),
     "checked-in example VS Code files are outside the generator drift gate",
 )
-require(len(examples_dispatcher.EXAMPLES) == 29, "example registry size changed unexpectedly")
+require(len(examples_dispatcher.EXAMPLES) == 30, "example registry size changed unexpectedly")
 for entry in examples_dispatcher.EXAMPLES:
     vscode_dir = ROOT / "examples" / str(entry["dir"]) / ".vscode"
     tasks = load_json(vscode_dir / "tasks.json")

@@ -167,6 +167,8 @@ for source_set in (
     "_jh_btstack_classic_sources",
     "_jh_btstack_hid_host_sources",
     "_jh_btstack_hid_device_sources",
+    "_jh_btstack_a2dp_sink_sources",
+    "_jh_btstack_avrcp_target_sources",
 ):
     require(
         source_has_fragment(btstack_cmake, source_set),
@@ -203,6 +205,17 @@ require(
     and not source_has_fragment(btstack_cmake, "PUBLIC_HID_HOST_BLE"),
     "public BTstack profiles are not composed from independent feature flags",
 )
+minimal_classic_sources = source_section(
+    btstack_cmake,
+    "set(_jh_btstack_classic_sources",
+    "set(_jh_btstack_hid_host_sources",
+)
+minimal_hid_host_sources = source_section(
+    btstack_cmake,
+    "set(_jh_btstack_hid_host_sources",
+    "set(_jh_btstack_hid_device_sources",
+)
+minimal_classic_hid_sources = minimal_classic_sources + minimal_hid_host_sources
 for forbidden in (
     "src/classic/rfcomm.c",
     "src/classic/a2dp",
@@ -210,9 +223,25 @@ for forbidden in (
     "src/classic/hfp",
 ):
     require(
-        not source_has_fragment(btstack_cmake, forbidden),
+        not source_has_fragment(minimal_classic_hid_sources, forbidden),
         f"minimal build includes {forbidden}",
     )
+
+minimal_avrcp_target_sources = source_section(
+    btstack_cmake,
+    "set(_jh_btstack_avrcp_target_sources",
+    "set(_jh_jh_base_sources",
+)
+require(
+    source_has_fragment(minimal_avrcp_target_sources, "src/classic/avrcp.c")
+    and source_has_fragment(
+        minimal_avrcp_target_sources, "src/classic/avrcp_target.c"
+    )
+    and not source_has_fragment(
+        minimal_avrcp_target_sources, "src/classic/avrcp_controller.c"
+    ),
+    "minimal AVRCP Target build includes an unused Controller role",
+)
 
 public_backend = (
     ROOT / "src" / "hal" / "bluetooth" / "jh_bluetooth_classic_btstack_backend.c"
@@ -246,8 +275,31 @@ for wrapped_pool_function in (
         f"Classic HID memory probe does not wrap {wrapped_pool_function}",
     )
 
+require(
+    source_has_fragment(btstack_cmake, "jh_bluetooth_a2dp_memory_probe.c"),
+    "A2DP build is missing BTstack pool high-water instrumentation",
+)
+for wrapped_pool_function in (
+    "btstack_memory_hci_connection_get",
+    "btstack_memory_l2cap_service_get",
+    "btstack_memory_l2cap_channel_get",
+    "btstack_memory_btstack_link_key_db_memory_entry_get",
+    "btstack_memory_service_record_item_get",
+    "btstack_memory_avdtp_stream_endpoint_get",
+    "btstack_memory_avdtp_connection_get",
+    "btstack_memory_avrcp_connection_get",
+):
+    require(
+        source_has_fragment(btstack_cmake, f"--wrap={wrapped_pool_function}"),
+        f"A2DP memory probe does not wrap {wrapped_pool_function}",
+    )
+
 config = (ROOT / "src" / "hal" / "bluetooth" / "btstack_config.h").read_text(
     encoding="utf-8"
+)
+require(
+    source_has_fragment(config, '#include "hal/core/hal_project_config_hook.h"'),
+    "public BTstack pools do not use the configured Classic peer capacity",
 )
 for expected in (
     "MAX_NR_HCI_CONNECTIONS 1",
@@ -537,4 +589,30 @@ public_hal = (ROOT / "src" / "hal" / "hal.h").read_text(encoding="utf-8")
 require(
     not source_has_fragment(public_hal, "jh_bluetooth_classic_hid"),
     "private Classic HID probe leaked into the public HAL umbrella",
+)
+
+speaker_example = (
+    ROOT / "examples" / "30_bluetooth_speaker" / "app.c"
+).read_text(encoding="utf-8")
+require(
+    source_has_fragment(
+        speaker_example,
+        "SPEAKER_CLASS_OF_DEVICE = 0x240414u",
+    )
+    and source_has_fragment(
+        speaker_example,
+        "identity.class_of_device = SPEAKER_CLASS_OF_DEVICE",
+    ),
+    "Bluetooth speaker must advertise the Audio/Rendering Loudspeaker class",
+)
+require(
+    source_has_fragment(
+        speaker_example,
+        "a2dp.decoded_frames != s_pairing_decoded_frames",
+    )
+    and not source_has_fragment(
+        speaker_example,
+        "if (info.peer_count != 0u && info.pairing_window_open) {",
+    ),
+    "manual replacement pairing must remain open until valid audio",
 )

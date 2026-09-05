@@ -34,6 +34,12 @@
 #ifdef HAL_ENABLE_BLUETOOTH_CLASSIC
 #include "hal/bluetooth/hal_bluetooth_classic.h"
 #endif
+#ifdef HAL_ENABLE_BLUETOOTH_A2DP_SINK
+#include "hal/bluetooth/hal_bluetooth_a2dp_sink.h"
+#endif
+#ifdef HAL_ENABLE_BLUETOOTH_AVRCP_TARGET
+#include "hal/bluetooth/hal_bluetooth_avrcp_target.h"
+#endif
 #ifdef HAL_ENABLE_BLUETOOTH_HID_HOST
 #include "hal/bluetooth/hal_bluetooth_hid_host.h"
 #endif

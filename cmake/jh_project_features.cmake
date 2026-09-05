@@ -32,6 +32,10 @@ function(jh_all_features_for_target OUT_VAR TARGET_NAME)
 
     if(NOT TARGET_NAME STREQUAL "stm32g474")
         list(REMOVE_ITEM _jh_all_features HAL_ENABLE_STM32G474_FDCAN)
+    else()
+        list(REMOVE_ITEM _jh_all_features
+            HAL_ENABLE_BLUETOOTH_A2DP_SINK
+            HAL_ENABLE_BLUETOOTH_AVRCP_TARGET)
     endif()
     if(TARGET_NAME STREQUAL "rp2350-riscv")
         # BTstack and the CYW43 BLE backend are not enabled for Hazard3.
@@ -40,6 +44,8 @@ function(jh_all_features_for_target OUT_VAR TARGET_NAME)
             HAL_ENABLE_BLE_COMMANDS
             HAL_ENABLE_BLE_STREAM
             HAL_ENABLE_BLUETOOTH_CLASSIC
+            HAL_ENABLE_BLUETOOTH_A2DP_SINK
+            HAL_ENABLE_BLUETOOTH_AVRCP_TARGET
             HAL_ENABLE_BLUETOOTH_HID_HOST
             HAL_ENABLE_BLUETOOTH_GAMEPAD)
     endif()

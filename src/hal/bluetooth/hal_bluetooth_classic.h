@@ -84,6 +84,13 @@ typedef struct {
   bool services_resolved;
 } hal_bluetooth_classic_scan_result_t;
 
+/** Local Bluetooth Classic identity copied by the manager. */
+typedef struct {
+  char name[HAL_BLUETOOTH_CLASSIC_NAME_MAX_LEN + 1u];
+  /** 24-bit Bluetooth Class of Device value. */
+  uint32_t class_of_device;
+} hal_bluetooth_classic_identity_t;
+
 /**
  * Opaque, versioned and CRC-protected bonded-peer record. Providers store
  * these bytes unchanged and never inspect link keys.
@@ -146,6 +153,7 @@ typedef struct {
   size_t peer_count;
   bool scan_active;
   bool pairing_pending;
+  bool pairing_window_open;
   hal_bluetooth_classic_pairing_method_t pairing_method;
   hal_bluetooth_classic_address_t pairing_address;
 } hal_bluetooth_classic_info_t;
@@ -194,6 +202,47 @@ hal_status_t hal_bluetooth_classic_close(hal_bluetooth_classic_t classic);
  * or a backend service/restore error.
  */
 hal_status_t hal_bluetooth_classic_poll(hal_bluetooth_classic_t classic);
+
+/**
+ * @brief Configure the shared local name and Class of Device.
+ * @param classic Live manager handle.
+ * @param identity Identity copied before the backend call; must not be NULL.
+ * The name must be nonempty and terminated within
+ * HAL_BLUETOOTH_CLASSIC_NAME_MAX_LEN bytes. Only the low 24 bits of
+ * class_of_device may be set.
+ * @return HAL_OK, HAL_EINVAL for invalid identity, HAL_EUNINIT for an invalid
+ * handle, HAL_EBUSY during another operation, HAL_ENOMEM, or a backend error.
+ */
+hal_status_t hal_bluetooth_classic_set_identity(
+    hal_bluetooth_classic_t classic,
+    const hal_bluetooth_classic_identity_t *identity);
+
+/**
+ * @brief Open a bounded incoming pairing and inquiry window.
+ *
+ * The radio remains connectable after the window so restored peers can
+ * reconnect, but it stops being discoverable and rejects pairing by unknown
+ * peers when the deadline expires.
+ *
+ * @param classic Live manager handle.
+ * @param duration_ms Window duration from 1000 through 300000 milliseconds.
+ * @return HAL_OK, HAL_EINVAL for an invalid duration, HAL_EUNINIT for an
+ * invalid handle, HAL_ESTATE until the manager is ready, HAL_EBUSY when a
+ * window is already open or during another operation, HAL_ENOMEM, or a
+ * backend error.
+ */
+hal_status_t
+hal_bluetooth_classic_pairing_window_open(hal_bluetooth_classic_t classic,
+                                          uint32_t duration_ms);
+
+/**
+ * @brief Close the pairing window while retaining known-peer reconnects.
+ * @param classic Live manager handle.
+ * @return HAL_OK, HAL_EUNINIT for an invalid handle, HAL_ESTATE when no window
+ * is open, HAL_EBUSY during another operation, HAL_ENOMEM, or a backend error.
+ */
+hal_status_t
+hal_bluetooth_classic_pairing_window_close(hal_bluetooth_classic_t classic);
 
 /**
  * @brief Read manager state and bounded-queue diagnostics.
@@ -340,6 +389,21 @@ hal_bluetooth_classic_peer_get(hal_bluetooth_classic_t classic, size_t index,
 hal_status_t hal_bluetooth_classic_peer_forget(
     hal_bluetooth_classic_t classic,
     const hal_bluetooth_classic_address_t *address);
+
+/**
+ * @brief Forget every peer and close the current pairing window.
+ *
+ * Erasure stops on the first provider/backend error. Records already erased
+ * stay erased and the remaining records can be retried. A new pairing window
+ * is never opened automatically.
+ *
+ * @param classic Live manager handle.
+ * @return HAL_OK when all records are gone, HAL_EUNINIT for an invalid handle,
+ * HAL_EBUSY during another operation, HAL_ENOMEM, or the first erase/backend
+ * error.
+ */
+hal_status_t
+hal_bluetooth_classic_peer_forget_all(hal_bluetooth_classic_t classic);
 
 /**
  * @brief Format an address as `XX:XX:XX:XX:XX:XX`.
