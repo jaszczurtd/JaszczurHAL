@@ -31,25 +31,39 @@ extern "C" {
 
 /** Profile label bound into every transcript. */
 #define HAL_BLE_STREAM_PROFILE_NAME "JH BLE Stream"
+/** Profile-label length in bytes, excluding the terminator. */
 #define HAL_BLE_STREAM_PROFILE_NAME_LEN 13u
+/** Protocol version returned by the version characteristic. */
 #define HAL_BLE_STREAM_PROTOCOL_VERSION 1u
 
-/* Service and characteristic UUIDs. Assigned once for profile version 1. */
+/** Service UUID assigned to JH BLE Stream version 1. */
 #define HAL_BLE_STREAM_SERVICE_UUID "B7CE0001-3C13-4FE2-801F-D71BDAB1369B"
+/** Write characteristic UUID for framed client-to-device traffic. */
 #define HAL_BLE_STREAM_RX_UUID "B7CE0002-3C13-4FE2-801F-D71BDAB1369B"
+/** Notify characteristic UUID for framed device-to-client traffic. */
 #define HAL_BLE_STREAM_TX_UUID "B7CE0003-3C13-4FE2-801F-D71BDAB1369B"
+/** Read characteristic UUID for the protocol version. */
 #define HAL_BLE_STREAM_VERSION_UUID "B7CE0004-3C13-4FE2-801F-D71BDAB1369B"
+/** Read characteristic UUID for the supported capability bits. */
 #define HAL_BLE_STREAM_CAPABILITIES_UUID "B7CE0005-3C13-4FE2-801F-D71BDAB1369B"
 
-/* Frame layout: version | type | flags | payload_len | payload. */
+/** Size of the version, type, flags, and payload-length fields in bytes. */
 #define HAL_BLE_STREAM_FRAME_HEADER_LEN 4u
+/** Minimum accepted per-device secret length in bytes. */
 #define HAL_BLE_STREAM_SECRET_MIN_LEN 32u
+/** Maximum accepted per-device secret length in bytes. */
 #define HAL_BLE_STREAM_SECRET_MAX_LEN 64u
+/** Length of each handshake nonce in bytes. */
 #define HAL_BLE_STREAM_NONCE_LEN 32u
+/** Length of the public handshake session identifier in bytes. */
 #define HAL_BLE_STREAM_SESSION_ID_LEN 8u
+/** Length of each HMAC-SHA256 handshake proof in bytes. */
 #define HAL_BLE_STREAM_PROOF_LEN 32u
+/** Length of each derived directional session key in bytes. */
 #define HAL_BLE_STREAM_SESSION_KEY_LEN 32u
+/** Length of the ChaCha20-Poly1305 authentication tag in bytes. */
 #define HAL_BLE_STREAM_AEAD_TAG_LEN 16u
+/** Length of the authenticated directional frame counter in bytes. */
 #define HAL_BLE_STREAM_AEAD_COUNTER_LEN 8u
 
 /** Largest plaintext payload carried by one DATA frame. */
@@ -58,10 +72,12 @@ extern "C" {
 #endif
 
 #ifndef HAL_BLE_STREAM_RX_QUEUE_DEPTH
+/** Number of decrypted receive payloads retained before overflow. */
 #define HAL_BLE_STREAM_RX_QUEUE_DEPTH 4u
 #endif
 
 #ifndef HAL_BLE_STREAM_TX_QUEUE_DEPTH
+/** Number of outgoing payloads retained before backpressure. */
 #define HAL_BLE_STREAM_TX_QUEUE_DEPTH 4u
 #endif
 
@@ -71,6 +87,7 @@ extern "C" {
 #endif
 
 #ifndef HAL_BLE_STREAM_AUTH_BACKOFF_MS
+/** Authentication backoff duration after the attempt limit, in milliseconds. */
 #define HAL_BLE_STREAM_AUTH_BACKOFF_MS 30000u
 #endif
 
@@ -88,6 +105,7 @@ extern "C" {
   (HAL_BLE_STREAM_AEAD_COUNTER_LEN + HAL_BLE_STREAM_MAX_PAYLOAD +              \
    HAL_BLE_STREAM_AEAD_TAG_LEN)
 
+/** Largest complete encoded frame in bytes. */
 #define HAL_BLE_STREAM_MAX_FRAME_LEN                                           \
   (HAL_BLE_STREAM_FRAME_HEADER_LEN + HAL_BLE_STREAM_MAX_FRAME_BODY)
 
@@ -120,6 +138,7 @@ typedef enum {
   HAL_BLE_STREAM_CAP_CONFIG_WRITE = 0x0008u
 } hal_ble_stream_capability_t;
 
+/** Published service, subscription, handshake, and session state. */
 typedef enum {
   HAL_BLE_STREAM_STATE_UNINITIALIZED = 0,
   HAL_BLE_STREAM_STATE_IDLE,        /**< Service published, no subscriber. */
@@ -131,6 +150,7 @@ typedef enum {
                                 */
 } hal_ble_stream_state_t;
 
+/** Reason recorded when an authenticated session is closed. */
 typedef enum {
   HAL_BLE_STREAM_CLOSE_CLIENT_REQUEST = 0,
   HAL_BLE_STREAM_CLOSE_DISCONNECTED,
@@ -143,6 +163,7 @@ typedef enum {
   HAL_BLE_STREAM_CLOSE_LOCAL_REQUEST
 } hal_ble_stream_close_reason_t;
 
+/** Service capabilities and authenticated-session timeout configuration. */
 typedef struct {
   /** Capabilities advertised to the client and bound into the transcript. */
   uint16_t capabilities;
@@ -150,6 +171,7 @@ typedef struct {
   uint32_t idle_timeout_ms;
 } hal_ble_stream_config_t;
 
+/** Session state, counters, queue depth, and authentication diagnostics. */
 typedef struct {
   hal_ble_stream_state_t state;
   hal_status_t last_status;

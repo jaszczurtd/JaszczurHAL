@@ -2,13 +2,13 @@
 
 Ten przykład tylko dla RP zamienia Pico W lub Pico 2 W w odbiornik Bluetooth
 Classic A2DP o nazwie `JaszczurHAL Speaker`. Odbiera SBC 44,1 lub 48 kHz w
-trybie mono, stereo albo joint stereo, miksuje dźwięk do podpisanego PCM mono i
+trybie mono, stereo albo joint stereo, miksuje dźwięk do PCM mono ze znakiem i
 podaje go na taktowane timerem wyjście PWM z DMA. Wariant bazowy zawiera tylko
-A2DP, `avrcp` dodaje bezwzględną regulację głośności, a `ble-a2dp` sprawdza
-współistnienie BLE oraz Classic/A2DP na wspólnym kontrolerze CYW43. Adapter
+A2DP, `avrcp` dodaje bezwzględną regulację głośności, a `ble-a2dp` łączy BLE i
+Classic/A2DP w jednym buildzie dla wspólnego kontrolera CYW43. Adapter
 wyjścia buforuje wstępnie około 171-186 ms PCM i uzupełnia bufor w kierunku
 około 213-232 ms, zależnie od wynegocjowanej częstotliwości próbkowania, aby
-pochłaniać jitter źródła i toru radiowego. Przykład rezerwuje 4 KiB stosu dla
+kompensować jitter źródła i toru radiowego. Przykład rezerwuje 4 KiB stosu dla
 aktywnego rdzenia 0, ponieważ pomiar ścieżek SBC i bondingu w pamięci flash
 wykazał wyczerpanie bezpiecznego zapasu domyślnego stosu 2 KiB.
 
@@ -76,7 +76,7 @@ pierwszej poprawnej ramce SBC z nowego połączenia. `WATCHDOG` celowo przestaje
 obsługiwać czterosekundowy watchdog, co pozwala sprawdzić reconnect po
 rzeczywistym resecie watchdoga; kolejny boot raportuje zapamiętaną przyczynę
 resetu. `INFO` podaje format strumienia,
-utracone pakiety, odrzucone/uszkodzone ramki, high-water marks ograniczonych
+utracone pakiety, odrzucone/uszkodzone ramki, maksymalne zajęcie ograniczonych
 kolejek i pul BTstack, użycie stosu, korekcję zegara, użycie i underruny DMA,
 straty adaptera oraz timing CPU dla kontekstu `poll`. Diagnostyka nigdy nie
 wypisuje adresu Bluetooth, link key ani treści audio.

@@ -5,10 +5,10 @@ generated `.vscode/jaszczurhal.project.json`; opening that directory directly
 in VS Code exposes the same Build, Upload, Serial Monitor, Clean, Config Dump,
 OTA, and board-selection tasks as a standalone firmware project.
 
-The registry in `scripts/examples_dispatcher.py` is the source of truth for
-project coverage, supported targets, default-gate targets, board profiles,
-variants, sources, and feature definitions. Generated manifests are consumed
-by `vscode/entry/jh-vscode` and `cmake/jh_firmware_project`.
+The versioned registry in `config/tooling/examples.json` defines project
+coverage, supported targets, default-gate targets, board profiles, variants,
+sources, and features. `scripts/examples_dispatcher.py` consumes it and emits
+the manifests used by `vscode/entry/jh-vscode` and `cmake/jh_firmware_project`.
 
 ## Project catalog
 
@@ -47,6 +47,7 @@ Target abbreviations used below are `R0` = `rp2040`, `RA` = `rp2350-arm`,
 | `27_lora_point_to_point` | Raw SX1262 ping/pong plus fragmented command-router request/response over `hal_lora_link` | R0, S | R0, S | `probe`, `responder`, `link` and `link-responder` on R0, S; manual hardware variants `sf7` and `responder-sf7` |
 | `28_serial_commands` | Framed Serial Session dispatch through an independent command router | R0, RA, RV, S | R0, S | - |
 | `29_bluetooth_gamepad` | Classic discovery, raw HID Host, and normalized gamepad adapter | R0, RA, S | R0 | `classic-scan`, `hid-host`, and `ble` on R0, RA, S; gate on R0 |
+| `30_bluetooth_speaker` | A2DP Sink with PWM audio output, optional AVRCP, and a BLE coexistence build | R0, RA | R0, RA | `avrcp` and `ble-a2dp` on R0, RA; both in gate |
 
 RP-family network builds use `picow` for RP2040 and `pico2w` for RP2350 ARM.
 RP2350 RISC-V configurations that require CYW43 are unsupported. STM32G474

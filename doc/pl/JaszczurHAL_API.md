@@ -468,7 +468,7 @@ tematyczne:
 | 17 | [cJSON](../api/pl/17_cJSON.md) | Zarządzane `cJSON` / `cJSON_Utils`, sposoby dołączania nagłówków, reguły zarządzania obiektami i pamięcią, parsowanie, wypisywanie, przykłady JSON Pointer/Patch/Merge Patch |
 | 18 | [LodePNG](../api/pl/18_LodePNG.md) | Zarządzany `LodePNG`, sposoby dołączania nagłówków, profil dla systemów wbudowanych, zasady zarządzania pamięcią, skrypt zasobów PNG/Base64 i przykłady RGB565 |
 | 19 | [JPEG](../api/pl/19_JPEG.md) | Zarządzany rdzeń `TJpgDec`, profil dla systemów wbudowanych, zasady zarządzania pamięcią, skrypt zasobów JPEG/Base64 i przykłady RGB565 |
-| 20 | [Bluetooth](../api/pl/20_bluetooth.md) | BLE Peripheral/Observer, wykrywanie/parowanie/peerzy Classic, surowy HID Host, adapter gamepada, uwierzytelniony Stream, ograniczone kolejki, obsługa płytek, współdzielenie radia i zasady dystrybucji BTstack |
+| 20 | [Bluetooth](../api/pl/20_bluetooth.md) | BLE Peripheral/Observer, wykrywanie, parowanie i zapisane urządzenia Classic, surowy HID Host, adapter gamepada, A2DP Sink, AVRCP Target, uwierzytelniony Stream, ograniczone kolejki, obsługa płytek, współdzielenie radia i zasady dystrybucji BTstack |
 | 21 | [Niskopoziomowe API radia LoRa](../api/pl/21_lora.md) | Zweryfikowane profile SX1262 oraz eksperymentalne, wyłącznie programowe integracje SX1261/SX1276/SX1278, asynchroniczne TX/RX/CAD, bieżące RSSI, obsługiwane funkcje, funkcje zwrotne, diagnostyka i czas transmisji |
 | 22 | [Niezawodne łącze LoRa](../api/pl/22_lora_link.md) | 16-bitowe adresowanie, numery sekwencyjne wiadomości, ACK i ponawianie, tłumienie duplikatów, fragmentacja oraz opcjonalne ChaCha20-Poly1305 na `hal_lora_radio` |
 | 23 | [Kierowanie poleceń](../api/pl/23_commands.md) | Niezależna od transportu rejestracja procedur obsługi i reguł, binarne komunikaty żądania, odpowiedzi i zdarzenia o ograniczonym rozmiarze, zgodność z warstwą sieciową oraz adaptery ramkowanego portu szeregowego, niezawodnego LoRa i uwierzytelnionego BLE Stream |
@@ -482,9 +482,13 @@ tematyczne:
 | `hal_adc` | [GPIO, ADC i PWM](../api/pl/05_gpio_adc_pwm.md) |
 | `hal_bh1750` | [Czujniki](../api/pl/11_sensors.md) |
 | `hal_ble` | [Bluetooth Low Energy](../api/pl/20_bluetooth.md) |
+| `hal_ble_stream` | [JH BLE Stream v1](../api/pl/20_bluetooth.md#jh-ble-stream-v1) |
+| `hal_ble_commands` | [Uwierzytelniony adapter BLE Stream](../api/pl/23_commands.md#uwierzytelniony-adapter-ble-stream) |
 | `hal_bluetooth_classic` | [Manager Bluetooth Classic](../api/pl/20_bluetooth.md#manager-classic) |
 | `hal_bluetooth_hid_host` | [Ogólny Classic HID Host](../api/pl/20_bluetooth.md#ogólny-hid-host) |
 | `hal_gamepad` | [Adapter gamepada Bluetooth](../api/pl/20_bluetooth.md#adapter-gamepada) |
+| `hal_bluetooth_a2dp_sink` | [A2DP Sink](../api/pl/20_bluetooth.md#a2dp-sink-i-avrcp-target) |
+| `hal_bluetooth_avrcp_target` | [AVRCP Target](../api/pl/20_bluetooth.md#a2dp-sink-i-avrcp-target) |
 | `hal_adp5360` | [Czujniki](../api/pl/11_sensors.md) |
 | `hal_bits` | [Timery i system](../api/pl/06_timers_system.md) |
 | `hal_can` | [CAN i wyświetlacz](../api/pl/10_can_display.md) |

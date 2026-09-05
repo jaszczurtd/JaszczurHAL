@@ -54,7 +54,7 @@ niskopoziomowych.
 
 Są też mniejsze (ale nietrywialne) projekty, na przykład:
 
-* https://github.com/jaszczurtd/doomConsole (port gry Doom z dźwiękiem, wyświetlaczem TFT i obsługą Gamepada Bluetooth 8BitDo)
+* https://github.com/jaszczurtd/doomConsole (port gry Doom z dźwiękiem, wyświetlaczem TFT i obsługą gamepada Bluetooth 8BitDo)
 * https://github.com/jaszczurtd/Ford-Mondeo-MK-DPF-Tracker (urządzenie śledzące cykle regeneracji DPF)
 * https://github.com/jaszczurtd/lights-timer (zdalne sterowanie oświetleniem akwarium za pomocą aplikacji na Androida)
 

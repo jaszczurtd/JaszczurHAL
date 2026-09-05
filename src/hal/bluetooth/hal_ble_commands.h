@@ -25,6 +25,7 @@ extern "C" {
 #endif
 
 #ifndef HAL_BLE_COMMANDS_PARTIAL_FRAME_TIMEOUT_MS
+/** Default lifetime of an incomplete command-wire frame in milliseconds. */
 #define HAL_BLE_COMMANDS_PARTIAL_FRAME_TIMEOUT_MS 5000u
 #endif
 

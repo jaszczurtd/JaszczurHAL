@@ -6,10 +6,11 @@ podstawowy możliwości biblioteki JaszczurHAL. Każdy projekt ma własny wygene
 zadania `Build`, `Upload`, `Serial Monitor`, `Clean`, `Config Dump`, `OTA` i
 wyboru płytki, tak samo jak w samodzielnym projekcie firmware.
 
-Rejestr w `scripts/examples_dispatcher.py` jest nadrzędnym opisem projektów,
-obsługiwanych targetów, targetów objętych domyślną bramką, profili płytek,
-wariantów, źródeł i definicji funkcji. Wygenerowane manifesty wykorzystują
-`vscode/entry/jh-vscode` oraz `cmake/jh_firmware_project`.
+Wersjonowany rejestr `config/tooling/examples.json` opisuje projekty,
+obsługiwane targety, targety objęte domyślną bramką, profile płytek, warianty,
+źródła i funkcje. `scripts/examples_dispatcher.py` odczytuje ten rejestr i
+generuje manifesty używane przez `vscode/entry/jh-vscode` oraz
+`cmake/jh_firmware_project`.
 
 ## Katalog projektów
 
@@ -47,6 +48,7 @@ Skróty targetów w tabeli: `R0` = `rp2040`, `RA` = `rp2350-arm`, `RV` =
 | `27_lora_point_to_point` | Niskopoziomowy ping/pong SX1262 oraz pofragmentowane żądanie i odpowiedź routera przez `hal_lora_link` | R0, S | R0, S | `probe`, `responder`, `link` i `link-responder` na R0, S; ręczne warianty sprzętowe `sf7` i `responder-sf7` |
 | `28_serial_commands` | Kierowanie poleceń ramkowanej Serial Session przez niezależny router | R0, RA, RV, S | R0, S | - |
 | `29_bluetooth_gamepad` | Wykrywanie Classic, surowy HID Host i adapter normalizujący gamepad | R0, RA, S | R0 | `classic-scan`, `hid-host` i `ble` na R0, RA, S; bramka na R0 |
+| `30_bluetooth_speaker` | A2DP Sink z wyjściem audio PWM, opcjonalnym AVRCP i wspólnym buildem BLE+Classic | R0, RA | R0, RA | `avrcp` i `ble-a2dp` na R0, RA; oba w bramce |
 
 Kompilacje sieciowe dla rodziny RP używają `picow` z RP2040 i `pico2w` z RP2350
 ARM. Konfiguracje RP2350 RISC-V wymagające CYW43 nie są obsługiwane. Projekty

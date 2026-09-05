@@ -37,7 +37,7 @@
 - [17 - cJSON](api/en/17_cJSON.md)
 - [18 - LodePNG](api/en/18_LodePNG.md)
 - [19 - JPEG](api/en/19_JPEG.md)
-- [20 - Bluetooth Low Energy Peripheral and Observer API](api/en/20_bluetooth.md)
+- [20 - Bluetooth Low Energy and Classic APIs](api/en/20_bluetooth.md)
 - [21 - Raw LoRa radio API](api/en/21_lora.md)
 - [22 - Reliable LoRa link API](api/en/22_lora_link.md)
 - [23 - Transport-neutral command routing](api/en/23_commands.md)

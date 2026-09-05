@@ -53,8 +53,8 @@ Dostępne polecenia:
 - `INFO` wypisuje stan, pairing, liczniki ograniczonej kolejki i liczbę
   peerów.
 
-Przykład otwiera manager bez trwałego providera, dlatego zapisani peerzy
-pozostają ważni tylko do restartu. Aplikacja produkcyjna musi zastąpić
+Przykład otwiera manager bez trwałego providera, dlatego zapisane urządzenia
+pozostają ważne tylko do restartu. Aplikacja produkcyjna musi zastąpić
 szeregowe polecenie `AUTHORIZE` zaufanym lokalnym gestem i wywoływać `SAVE`
 dopiero po zweryfikowaniu peera przez swój profil.
 
@@ -96,10 +96,11 @@ opróżnianie kolejki stanów. Wariant `ble` dodaje pasywny Observer BLE do prof
 gamepada Classic. Podczas startu zwalnia i ponownie uzyskuje każdy profil,
 podczas gdy drugi utrzymuje wspólny host CYW43/BTstack. Polecenia `INFO`,
 `BLE_START`, `BLE_STOP` i `DISCONNECT` sprawdzają równoczesne skanowanie oraz
-ponowne łączenie HID. Okresowa diagnostyka podaje użycie stosu, high-water i
-błędy alokacji pul HCI/L2CAP/link-key/HID oraz ruch transportu HCI i trafienia
-limitu drain. Buildy RP rezerwują zmierzony stos core 0 o rozmiarze 4 KiB dla
-tej rozbudowanej ścieżki diagnostycznej. Wariant używa klucza KV `0xd001`, więc
+ponowne łączenie HID. Okresowa diagnostyka podaje użycie stosu, maksymalne
+zajęcie i błędy alokacji pul HCI/L2CAP/link-key/HID, ruch transportu HCI oraz
+trafienia limitu drain. Buildy RP rezerwują zmierzony stos core 0 o rozmiarze
+4 KiB dla tej rozbudowanej ścieżki diagnostycznej. Wariant używa klucza KV
+`0xd001`, więc
 jego bond gamepada pozostaje zgodny z obrazem regresji sprzętowej doomConsole.
 Nie ogłasza usługi BLE.
 

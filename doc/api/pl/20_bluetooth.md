@@ -34,16 +34,17 @@ routera poleceń; nie dodaje klienta GATT.
 | API | Target | Płytka | Radio/host | Walidacja |
 |---|---|---|---|---|
 | BLE | `rp2040` | `picow` | wbudowany CYW43439 z BTstack | zaliczone testy sprzętowe Observera oraz Stream w trybach bare metal i FreeRTOS |
-| BLE | `rp2350-arm` | `pico2w` | wbudowany CYW43439 z BTstack | zaliczone testy Observera, Stream w trybach bare metal i FreeRTOS oraz aktywnej współpracy Stream+WiFi/MQTT |
+| BLE | `rp2350-arm` | `pico2w` | wbudowany CYW43439 z BTstack | zaliczone bramki Observera, Stream i aktywnego współistnienia Stream+WiFi/MQTT |
 | BLE | `rp2040` | `pico-rm2` | zewnętrzny CYW43439 PIM730/RM2 przez PIO | build potwierdza obsługę; dedykowany test sprzętowy oczekuje na wykonanie |
 | BLE | `stm32g474` | `nucleo-g474re-pim730` | zewnętrzny CYW43439 PIM730/RM2 przez gSPI | zaliczone testy Peripheral i Observer oraz pełne testy obciążeniowe Stream z wyświetlaczem w trybach bare metal i FreeRTOS |
 | BLE | `esp32s3` | `waveshare-esp32-s3-zero` | zintegrowany kontroler LE z ESP-IDF NimBLE | pełny test kompilacji i linkowania; test radia na sprzęcie oczekuje na wykonanie |
-| Classic / HID Host / gamepad | `rp2350-arm` | `pico2w` | wbudowany CYW43439 z BTstack | walidacja sprzętowa z jednym 8BitDo Zero 2 model 80EH w trybie Android D-input; ogólny Classic z XY-BT oraz fixture myszy na Pico W zaliczyły także odpowiednie bramki managera i surowego HID z tym hostem |
+| Classic / HID Host / gamepad | `rp2350-arm` | `pico2w` | wbudowany CYW43439 z BTstack | zaliczone bramki sprzętowe managera, surowego HID i gamepada |
 | Classic / HID Host / gamepad | `rp2040` / `stm32g474` | `picow` / `pico-rm2` / `nucleo-g474re-pim730` | CYW43439 z BTstack | obsługa potwierdzona buildem; te hosty nie przeszły dedykowanej sprzętowej bramki HID/gamepada |
 | Classic / HID Host / gamepad | `esp32` | `esp32-devkitc-v4` | zintegrowany kontroler BR/EDR z ESP-IDF Bluedroid i ESP HID Host | pełny test kompilacji i linkowania; ogólna bramka radia na sprzęcie oczekuje |
-| A2DP Sink / AVRCP Target | `rp2040` | `picow` | wbudowany CYW43439 z BTstack i dekoderem SBC Bluedroid | walidacja sprzętowa ze źródłem Android, SBC stereo 44,1 kHz, filtrowanym i wzmacnianym wyjściem PWM GP6, pause/resume/stop, absolute volume i reconnectem z bondem po watchdogu oraz cold boocie |
-| A2DP Sink / AVRCP Target | `rp2350-arm` | `pico2w` | wbudowany CYW43439 z BTstack i dekoderem SBC Bluedroid | walidacja sprzętowa ze źródłem BlueZ i SBC stereo 48 kHz przez ponad 30 minut, w tym pause/resume/stop, absolute volume i reconnect; produkt nadal musi sprawdzić wybrane fizyczne wyjście audio |
-| BLE i profile Classic | `mock` | `host-mock` | deterministyczne backendy testowe | testy hostowe Classic, HID innej klasy i gamepada |
+| BLE + Classic HID/gamepad | `rp2350-arm` | `pico2w` | wspólny wbudowany CYW43439 z BTstack | pasywny Observer i połączony gamepad zaliczyły aktywną bramkę współistnienia, wraz z rozłączeniem i ponownym połączeniem HID podczas ciągłego skanowania |
+| A2DP Sink / AVRCP Target | `rp2040` | `picow` | wbudowany CYW43439 z BTstack i dekoderem SBC Bluedroid | zaliczone bramki sprzętowe A2DP/AVRCP, wyjścia PWM i ponownego połączenia z bondem |
+| A2DP Sink / AVRCP Target | `rp2350-arm` | `pico2w` | wbudowany CYW43439 z BTstack i dekoderem SBC Bluedroid | zaliczone bramki sprzętowe A2DP/AVRCP i ponownego połączenia; produkt nadal musi sprawdzić wybrane fizyczne wyjście audio |
+| BLE i profile Classic | `mock` | `host-mock` | deterministyczne backendy testowe | regresja hostowa BLE, Classic, HID, gamepada, A2DP i AVRCP |
 
 Backend RP2350 obsługuje wyłącznie Pico 2 W z targetem `rp2350-arm`. Pico 2 W
 z `rp2350-riscv` jest nieobsługiwane, ponieważ transport Bluetooth CYW43 nie
@@ -401,7 +402,7 @@ powinna przenosić PCM do własnych gotowych buforów; przerwanie DMA powinno ty
 wybrać gotowy bufor albo ciszę.
 
 `hal_bluetooth_a2dp_sink_info_t` podaje format i stan strumienia, straty
-pakietów, poziomy i high-water marks ograniczonych kolejek pakietów/PCM,
+pakietów, bieżące oraz maksymalne zajęcie ograniczonych kolejek pakietów/PCM,
 odrzucenia, uszkodzone ramki, przepełnienia/underruny PCM oraz bieżącą korektę
 zegara. Nacisk na kolejkę nigdy nie powoduje nieograniczonej alokacji. Nowy peer
 jest zapisywany przez wspólnego providera bondingu Classic dopiero po lokalnej
@@ -473,14 +474,10 @@ udostępnić dopiero po lokalnej akcji użytkownika i nie powinien traktować na
 urządzenia, adresu Bluetooth ani nieuwierzytelnionej wymiany Just Works jako
 dowodu tożsamości użytkownika.
 
-Sprzętowo zweryfikowaną kombinacją gamepada jest jeden 8BitDo Zero 2 model 80EH
-w trybie Android D-input na `rp2350-arm:pico2w`. Uruchom ten tryb przez
-`B+Start`, a następnie przytrzymaj `Select`, aż dioda parowania zacznie migać,
-gdy okno parowania aplikacji jest otwarte. Późniejszy reconnect używa zwykłego
-włączenia przyciskiem `Start` i nie otwiera ponownie pairingu. Tryby Switch i
-macOS tego kontrolera reklamują osobne tożsamości Bluetooth i nie należą do tej
-deklaracji wsparcia. Inne gamepady, tryby Zero 2 i płytki z HID wymagają
-osobnej bramki deskryptora, raportów, reconnectu i zasobów.
+Bramka sprzętowa `rp2350-arm:pico2w` obejmuje jeden profil gamepada D-input,
+w tym analizę deskryptora, raporty, bonding i reconnect. Inne profile gamepadów
+i płytki z HID wymagają osobnej walidacji deskryptora, raportów, reconnectu oraz
+zasobów.
 
 #### Trwały bonding
 
@@ -807,28 +804,15 @@ transportu, runtime radia oraz blokady usługi. Aplikacja nie może być linkowa
 jednocześnie z modułami Pico SDK `pico_cyw43_arch` lub `pico_btstack_cyw43`
 i tym backendem. Funkcje zwrotne BLE są wywoływane dopiero po zakończeniu
 obsługi radia, dlatego kod aplikacji nigdy nie działa z założoną blokadą.
-Firmware korzystający tylko z BLE, tylko
-z Classic albo z obu trybów używa tej samej instancji hosta Bluetooth,
-zarządzanej licznikiem referencji. Aktywna współpraca gamepada i BLE na
-sprzęcie nie jest jeszcze kryterium wydania.
+Firmware korzystający tylko z BLE, tylko z Classic albo z obu trybów używa tej
+samej instancji hosta Bluetooth, zarządzanej licznikiem referencji.
 
-Test aktywnej współpracy na Pico 2 W z 2026-08-25 utrzymał
-uwierzytelnione połączenie Stream, podczas gdy ruch MQTT wymuszał
-rozłączenie i ponowne połączenie WiFi. Zarówno bare metal, jak i FreeRTOS
-utrzymały tempo 10,00 komunikatów echo BLE na sekundę przez ponad 607 s bez
-żadnej straty. Tryb bare metal ukończył 6079/6079 ech (średnie opóźnienie
-94,7 ms, maksymalne 249,0 ms);
-FreeRTOS ukończył 6077/6077 (średnie 93,7 ms, maksymalne 204,1 ms).
-
-W każdym uruchomieniu podczas ponownego łączenia z WiFi przesłano 34 echa BLE,
-po czym przywrócono połączenia WiFi i MQTT. Odwołania obu modułów do runtime
-radia pozostały aktywne, a test nie wykrył błędów BLE, Stream, MQTT, HCI,
-kolejki ani zdarzeń. Maksymalny zmierzony czas jednego wywołania
-`hal_ble_poll()` wyniósł
-4,768 ms w trybie bare metal i 5,618 ms z FreeRTOS. W ostatnim powtórzeniu
-FreeRTOS zastosowano bardziej rygorystyczne kryterium kontroli postępu MQTT.
-W czasie obserwacji zarejestrowano dodatkowe 5794 echa przy częstotliwości
-9,66 Hz, bez żadnego jednosekundowego podsumowania wskazującego brak postępu.
+Aktywna bramka współistnienia na Pico 2 W obejmuje pasywnego Observera BLE i
+połączony gamepad Classic HID. Sprawdza też rozłączenie i ponowne połączenie HID
+bez zatrzymywania skanowania BLE. Bramka uwierzytelnionego BLE Stream z
+WiFi/MQTT obejmuje rozłączenie i ponowne połączenie WiFi w buildach bare metal
+i FreeRTOS. Wspólny obraz BLE+A2DP jest sprawdzany podczas kompilacji; aktywny
+dźwięk nie należy jeszcze do sprzętowej bramki współistnienia.
 
 <a id="license-and-distribution-boundary"></a>
 

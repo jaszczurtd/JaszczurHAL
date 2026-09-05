@@ -26,21 +26,32 @@
 extern "C" {
 #endif
 
+/** Size of a BLE device address in bytes. */
 #define HAL_BLE_ADDRESS_LEN 6u
+/** Buffer size required for a formatted BLE address and terminator. */
 #define HAL_BLE_ADDRESS_TEXT_SIZE HAL_TEXT_MAC_STRING_SIZE
+/** Maximum legacy advertising or scan-response payload size in bytes. */
 #define HAL_BLE_LEGACY_ADV_MAX_DATA_LEN 31u
+/** Default ATT MTU in bytes before negotiation. */
 #define HAL_BLE_DEFAULT_ATT_MTU 23u
+/** Sentinel value that never identifies a connection or advertising set. */
 #define HAL_BLE_INVALID_HANDLE UINT32_C(0)
+/** Minimum legacy advertising interval in 0.625 ms units. */
 #define HAL_BLE_ADVERTISING_INTERVAL_MIN 0x0020u
+/** Maximum legacy advertising interval in 0.625 ms units. */
 #define HAL_BLE_ADVERTISING_INTERVAL_MAX 0x4000u
+/** Minimum passive scan interval/window in 0.625 ms units. */
 #define HAL_BLE_SCAN_INTERVAL_MIN 0x0004u
+/** Maximum passive scan interval/window in 0.625 ms units. */
 #define HAL_BLE_SCAN_INTERVAL_MAX 0x4000u
 
 #ifndef HAL_BLE_EVENT_QUEUE_DEPTH
+/** Number of copied BLE events retained before overflow. */
 #define HAL_BLE_EVENT_QUEUE_DEPTH 8u
 #endif
 
 #ifndef HAL_BLE_SCAN_REPORT_QUEUE_DEPTH
+/** Number of copied advertising reports retained before overflow. */
 #define HAL_BLE_SCAN_REPORT_QUEUE_DEPTH 8u
 #endif
 
@@ -52,9 +63,12 @@ extern "C" {
 #error "HAL_BLE_SCAN_REPORT_QUEUE_DEPTH must be at least 2"
 #endif
 
+/** Opaque, generation-checked handle for one Peripheral connection. */
 typedef uint32_t hal_ble_connection_handle_t;
+/** Opaque, generation-checked handle for the legacy advertising request. */
 typedef uint32_t hal_ble_advertising_handle_t;
 
+/** Address category reported by the controller. */
 typedef enum {
   HAL_BLE_ADDRESS_PUBLIC = 0,
   HAL_BLE_ADDRESS_RANDOM = 1,
@@ -63,11 +77,13 @@ typedef enum {
   HAL_BLE_ADDRESS_UNKNOWN = 255
 } hal_ble_address_type_t;
 
+/** BLE device address in stack-independent byte order with its category. */
 typedef struct {
   uint8_t bytes[HAL_BLE_ADDRESS_LEN];
   hal_ble_address_type_t type;
 } hal_ble_address_t;
 
+/** BLE subsystem lifecycle and active-role state. */
 typedef enum {
   HAL_BLE_STATE_UNINITIALIZED = 0,
   HAL_BLE_STATE_STARTING,
@@ -78,19 +94,22 @@ typedef enum {
   HAL_BLE_STATE_FAILED
 } hal_ble_state_t;
 
+/** Connectable legacy advertising parameters and copied payload. */
 typedef struct {
-  uint16_t interval_min;
-  uint16_t interval_max;
+  uint16_t interval_min; /**< Minimum interval in 0.625 ms units. */
+  uint16_t interval_max; /**< Maximum interval in 0.625 ms units. */
   uint8_t data_length;
   uint8_t data[HAL_BLE_LEGACY_ADV_MAX_DATA_LEN];
 } hal_ble_advertising_config_t;
 
+/** Passive legacy scan timing and duplicate-filter policy. */
 typedef struct {
-  uint16_t interval;
-  uint16_t window;
+  uint16_t interval; /**< Scan interval in 0.625 ms units. */
+  uint16_t window;   /**< Scan window in 0.625 ms units. */
   bool filter_duplicates;
 } hal_ble_scan_config_t;
 
+/** Legacy advertising PDU category attached to a scan report. */
 typedef enum {
   HAL_BLE_ADV_EVENT_CONNECTABLE_UNDIRECTED = 0,
   HAL_BLE_ADV_EVENT_CONNECTABLE_DIRECTED = 1,
@@ -100,6 +119,7 @@ typedef enum {
   HAL_BLE_ADV_EVENT_UNKNOWN = 255
 } hal_ble_advertising_event_type_t;
 
+/** One copied legacy advertising or scan-response report. */
 typedef struct {
   hal_ble_address_t address;
   hal_ble_advertising_event_type_t event_type;
@@ -108,12 +128,14 @@ typedef struct {
   uint8_t data[HAL_BLE_LEGACY_ADV_MAX_DATA_LEN];
 } hal_ble_advertising_report_t;
 
+/** Borrowed view of one parsed advertising-data field. */
 typedef struct {
   uint8_t type;
   uint8_t data_length;
   const uint8_t *data;
 } hal_ble_advertising_field_t;
 
+/** Asynchronous BLE lifecycle and queue event category. */
 typedef enum {
   HAL_BLE_EVENT_CONTROLLER_READY = 0,
   HAL_BLE_EVENT_ADVERTISING_STARTED,
@@ -127,6 +149,7 @@ typedef enum {
   HAL_BLE_EVENT_SCAN_REPORT_AVAILABLE
 } hal_ble_event_type_t;
 
+/** One copied BLE event with connection and peer metadata when applicable. */
 typedef struct {
   hal_ble_event_type_t type;
   hal_status_t status;
@@ -146,6 +169,7 @@ typedef struct {
 typedef void (*hal_ble_event_callback_t)(const hal_ble_event_t *event,
                                          void *context);
 
+/** BLE subsystem state, active handles, and bounded-queue diagnostics. */
 typedef struct {
   hal_ble_state_t state;
   hal_status_t last_status;

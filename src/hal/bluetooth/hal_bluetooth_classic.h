@@ -24,16 +24,22 @@
 extern "C" {
 #endif
 
+/** Size of a Bluetooth device address in bytes. */
 #define HAL_BLUETOOTH_CLASSIC_ADDRESS_LEN 6u
+/** Buffer size required for a formatted Bluetooth address and terminator. */
 #define HAL_BLUETOOTH_CLASSIC_ADDRESS_TEXT_SIZE HAL_TEXT_MAC_STRING_SIZE
+/** Maximum local or remote friendly-name length, excluding the terminator. */
 #define HAL_BLUETOOTH_CLASSIC_NAME_MAX_LEN 63u
+/** Size of the opaque serialized bond record in bytes. */
 #define HAL_BLUETOOTH_CLASSIC_BOND_BLOB_SIZE 38u
 
 #ifndef HAL_BLUETOOTH_CLASSIC_SCAN_QUEUE_DEPTH
+/** Number of copied inquiry results retained by the manager. */
 #define HAL_BLUETOOTH_CLASSIC_SCAN_QUEUE_DEPTH 8u
 #endif
 
 #ifndef HAL_BLUETOOTH_CLASSIC_MAX_PEERS
+/** Maximum number of bonded peers retained by one manager. */
 #define HAL_BLUETOOTH_CLASSIC_MAX_PEERS 4u
 #endif
 
@@ -45,10 +51,12 @@ extern "C" {
 #error "HAL_BLUETOOTH_CLASSIC_MAX_PEERS must be at least 1"
 #endif
 
+/** Bluetooth device address in stack-independent byte order. */
 typedef struct {
   uint8_t bytes[HAL_BLUETOOTH_CLASSIC_ADDRESS_LEN];
 } hal_bluetooth_classic_address_t;
 
+/** Bluetooth Classic manager lifecycle state. */
 typedef enum {
   HAL_BLUETOOTH_CLASSIC_STATE_UNINITIALIZED = 0,
   HAL_BLUETOOTH_CLASSIC_STATE_STARTING,
@@ -57,6 +65,7 @@ typedef enum {
   HAL_BLUETOOTH_CLASSIC_STATE_FAILED,
 } hal_bluetooth_classic_state_t;
 
+/** Authentication method requested for the pending pairing operation. */
 typedef enum {
   HAL_BLUETOOTH_CLASSIC_PAIRING_NONE = 0,
   HAL_BLUETOOTH_CLASSIC_PAIRING_JUST_WORKS,
@@ -64,6 +73,7 @@ typedef enum {
   HAL_BLUETOOTH_CLASSIC_PAIRING_PASSKEY,
 } hal_bluetooth_classic_pairing_method_t;
 
+/** Bit flags for service classes resolved through SDP. */
 typedef enum {
   HAL_BLUETOOTH_CLASSIC_SERVICE_NONE = 0u,
   HAL_BLUETOOTH_CLASSIC_SERVICE_HID = (1u << 0),
@@ -73,6 +83,7 @@ typedef enum {
   HAL_BLUETOOTH_CLASSIC_SERVICE_AUDIO_SINK = (1u << 4),
 } hal_bluetooth_classic_service_t;
 
+/** Copied inquiry result with optional name, RSSI, and resolved services. */
 typedef struct {
   hal_bluetooth_classic_address_t address;
   char name[HAL_BLUETOOTH_CLASSIC_NAME_MAX_LEN + 1u];
@@ -84,7 +95,7 @@ typedef struct {
   bool services_resolved;
 } hal_bluetooth_classic_scan_result_t;
 
-/** Local Bluetooth Classic identity copied by the manager. */
+/** Local Bluetooth Classic name and Class of Device copied by the manager. */
 typedef struct {
   char name[HAL_BLUETOOTH_CLASSIC_NAME_MAX_LEN + 1u];
   /** 24-bit Bluetooth Class of Device value. */
@@ -92,8 +103,9 @@ typedef struct {
 } hal_bluetooth_classic_identity_t;
 
 /**
- * Opaque, versioned and CRC-protected bonded-peer record. Providers store
- * these bytes unchanged and never inspect link keys.
+ * @brief Opaque, versioned and CRC-protected bonded-peer record.
+ *
+ * Providers store these bytes unchanged and never inspect link keys.
  */
 typedef struct {
   uint8_t bytes[HAL_BLUETOOTH_CLASSIC_BOND_BLOB_SIZE];
@@ -129,6 +141,7 @@ typedef hal_status_t (*hal_bluetooth_classic_bond_store_fn)(
 typedef hal_status_t (*hal_bluetooth_classic_bond_erase_fn)(void *context,
                                                             size_t index);
 
+/** Persistent-storage adapter for indexed bonded-peer records. */
 typedef struct {
   void *context;
   size_t capacity;
@@ -137,6 +150,7 @@ typedef struct {
   hal_bluetooth_classic_bond_erase_fn erase;
 } hal_bluetooth_classic_bond_provider_t;
 
+/** Public metadata for one saved peer; never contains link-key material. */
 typedef struct {
   hal_bluetooth_classic_address_t address;
   uint32_t sequence;
@@ -144,6 +158,7 @@ typedef struct {
   size_t storage_index;
 } hal_bluetooth_classic_peer_t;
 
+/** Manager state, pairing state, and bounded-queue diagnostics. */
 typedef struct {
   hal_bluetooth_classic_state_t state;
   hal_status_t last_status;
@@ -158,7 +173,9 @@ typedef struct {
   hal_bluetooth_classic_address_t pairing_address;
 } hal_bluetooth_classic_info_t;
 
+/** Incomplete implementation type for the opaque manager handle. */
 typedef struct hal_bluetooth_classic_impl_s hal_bluetooth_classic_impl_t;
+/** Opaque handle for the process-wide Bluetooth Classic manager. */
 typedef hal_bluetooth_classic_impl_t *hal_bluetooth_classic_t;
 
 /**
@@ -330,7 +347,8 @@ hal_status_t
 hal_bluetooth_classic_pairing_reject(hal_bluetooth_classic_t classic);
 
 /**
- * Save a paired peer after its profile has validated the connection.
+ * @brief Save a paired peer after its profile has validated the connection.
+ *
  * profile_id identifies the profile's verification rules. The manager owns
  * the only persisted copy of the link key. Re-saving an already known peer
  * with the same profile_id is an idempotent no-op and does not require a new
@@ -374,7 +392,7 @@ hal_bluetooth_classic_peer_get(hal_bluetooth_classic_t classic, size_t index,
                                hal_bluetooth_classic_peer_t *out_peer);
 
 /**
- * Forget one peer in RAM, the controller and persistent storage.
+ * @brief Forget one peer in RAM, the controller and persistent storage.
  *
  * Persistent storage is erased first. If that operation fails, the runtime
  * peer remains available so the caller can retry without allowing the bond to

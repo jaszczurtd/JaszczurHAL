@@ -46,7 +46,7 @@ It is my private retrofit/automotive-kind project built from several tightly int
 
 There are also smaller (but not trivial) projects, for example:
 
-* https://github.com/jaszczurtd/doomConsole (port of Doom game with sound, TFT display, and 8BitD0 Bluetooth gamepad)
+* https://github.com/jaszczurtd/doomConsole (port of Doom game with sound, TFT display, and 8BitDo Bluetooth gamepad)
 * https://github.com/jaszczurtd/Ford-Mondeo-MK-DPF-Tracker (DPF regeneration cycles tracking device)
 * https://github.com/jaszczurtd/lights-timer (Remote management of aquarium lighting using an Android application)
 
