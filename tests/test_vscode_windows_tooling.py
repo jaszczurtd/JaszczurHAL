@@ -554,6 +554,8 @@ for entry in examples_dispatcher.EXAMPLES:
     vscode_dir = ROOT / "examples" / str(entry["dir"]) / ".vscode"
     tasks = load_json(vscode_dir / "tasks.json")
     settings = load_json(vscode_dir / "settings.json")
+    target, board = examples_dispatcher.default_target_board(entry)
+    build_dir = f"${{workspaceFolder}}/../../.build/examples/{entry['dir']}"
     launch_path = vscode_dir / "launch.json"
     launch_text = launch_path.read_text(encoding="utf-8")
     require_launch_contract(
@@ -575,6 +577,57 @@ for entry in examples_dispatcher.EXAMPLES:
         f"checked-in example {entry['dir']} omits Linux Arm GDB selection",
     )
     require(
+        settings.get("cmake.generator") == "Ninja",
+        f"checked-in example {entry['dir']} omits the CMake Tools generator",
+    )
+    require(
+        settings.get("cmake.buildDirectory")
+        == f"{build_dir}/cmake-tools/{target}-{board}",
+        f"checked-in example {entry['dir']} does not isolate the CMake Tools cache",
+    )
+    configure_settings = settings.get("cmake.configureSettings")
+    require(
+        isinstance(configure_settings, dict),
+        f"checked-in example {entry['dir']} omits CMake Tools configure settings",
+    )
+    required_settings = {
+        "JH_ROOT": "${workspaceFolder}/../..",
+        "JH_PROJECT_DIR": "${workspaceFolder}",
+        "JH_MODULE_NAME": str(entry.get("module") or entry["dir"]),
+        "JH_TARGET": target,
+        "JH_BOARD": board,
+        "JH_ARTIFACT_DIR": build_dir,
+    }
+    for key, expected in required_settings.items():
+        require(
+            configure_settings.get(key) == expected,
+            f"checked-in example {entry['dir']} has incorrect {key} for CMake Tools",
+        )
+    if target.startswith("rp"):
+        require(
+            configure_settings.get("PICO_SDK_PATH")
+            == "${workspaceFolder}/../../third_party/pico-sdk",
+            f"checked-in example {entry['dir']} omits PICO_SDK_PATH for CMake Tools",
+        )
+    elif target == "stm32g474":
+        require(
+            configure_settings.get("CMAKE_TOOLCHAIN_FILE")
+            == "${workspaceFolder}/../../stm32_lib/toolchain_stm32g474.cmake",
+            f"checked-in example {entry['dir']} omits the STM32 toolchain for CMake Tools",
+        )
+    if entry.get("sources"):
+        require(
+            configure_settings.get("JH_PROJECT_SOURCES")
+            == ";".join(str(item) for item in entry["sources"]),
+            f"checked-in example {entry['dir']} omits project sources for CMake Tools",
+        )
+    if entry.get("extraDefines"):
+        require(
+            configure_settings.get("JH_EXTRA_DEFINES")
+            == ";".join(str(item) for item in entry["extraDefines"]),
+            f"checked-in example {entry['dir']} omits compile definitions for CMake Tools",
+        )
+    require(
         "${config:cortex-debug." not in launch_text,
         f"checked-in example {entry['dir']} requires private Cortex-Debug settings",
     )
@@ -588,6 +641,16 @@ require(
 require(
     reference_settings["cortex-debug.gdbPath.linux"] == "gdb-multiarch",
     "checked-in VS Code settings omit Linux Arm GDB selection",
+)
+require(
+    reference_settings["cmake.configureSettings"]["JH_PROJECT_DIR"]
+    == "${workspaceFolder}",
+    "checked-in VS Code settings omit JH_PROJECT_DIR for CMake Tools",
+)
+require(
+    reference_settings["cmake.configureSettings"]["PICO_SDK_PATH"]
+    == "${workspaceFolder}/../../libraries/JaszczurHAL/third_party/pico-sdk",
+    "checked-in VS Code settings omit PICO_SDK_PATH for CMake Tools",
 )
 require_launch_contract(
     load_json(ROOT / "vscode" / "examples" / "launch.json"),

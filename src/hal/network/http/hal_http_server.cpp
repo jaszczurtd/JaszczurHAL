@@ -39,6 +39,11 @@ typedef struct {
   hal_net_endpoint_t remote;
   char request[HAL_HTTP_SERVER_REQUEST_BUFFER_SIZE];
   size_t request_len;
+  char response[HAL_HTTP_SERVER_RESPONSE_HEADER_SIZE +
+                HAL_HTTP_SERVER_RESPONSE_BUFFER_SIZE];
+  size_t response_len;
+  size_t response_sent;
+  uint32_t response_started_ms;
   uint32_t accepted_ms;
   uint32_t last_activity_ms;
 } hal_http_client_t;
@@ -72,7 +77,6 @@ static void clear_client(hal_http_client_t *client) {
   client->remote.family = HAL_NET_AF_UNSPEC;
 }
 
-#define send_all jh_http_send_all
 #define append_header jh_http_append_text
 #define lower_ascii jh_http_lower_ascii
 #define str_ieq jh_http_str_ieq
@@ -110,71 +114,97 @@ static bool append_uint(char *out, size_t out_size, size_t *pos,
   return true;
 }
 
-static bool send_response(hal_tcp_socket_t socket,
-                          const hal_http_response_t *response,
-                          bool suppress_body) {
-  char header[HAL_HTTP_SERVER_RESPONSE_HEADER_SIZE];
+static bool prepare_response(hal_http_client_t *client,
+                             const hal_http_response_t *response,
+                             bool suppress_body) {
+  char *header = client->response;
+  const size_t header_size = HAL_HTTP_SERVER_RESPONSE_HEADER_SIZE;
   size_t pos = 0u;
 
-  if (!append_header(header, sizeof(header), &pos, "HTTP/1.1 ") ||
-      !append_uint(header, sizeof(header), &pos, response->status_code) ||
-      !append_header(header, sizeof(header), &pos, " ") ||
-      !append_header(header, sizeof(header), &pos, response->reason) ||
-      !append_header(header, sizeof(header), &pos, "\r\nContent-Type: ") ||
-      !append_header(header, sizeof(header), &pos, response->content_type) ||
-      !append_header(header, sizeof(header), &pos, "\r\nContent-Length: ") ||
-      !append_uint(header, sizeof(header), &pos,
-                   (uint32_t)response->body_len)) {
+  if (!append_header(header, header_size, &pos, "HTTP/1.1 ") ||
+      !append_uint(header, header_size, &pos, response->status_code) ||
+      !append_header(header, header_size, &pos, " ") ||
+      !append_header(header, header_size, &pos, response->reason) ||
+      !append_header(header, header_size, &pos, "\r\nContent-Type: ") ||
+      !append_header(header, header_size, &pos, response->content_type) ||
+      !append_header(header, header_size, &pos, "\r\nContent-Length: ") ||
+      !append_uint(header, header_size, &pos, (uint32_t)response->body_len)) {
     return false;
   }
 
   for (size_t i = 0u; i < response->header_count; ++i) {
-    if (!append_header(header, sizeof(header), &pos, "\r\n") ||
-        !append_header(header, sizeof(header), &pos,
-                       response->headers[i].name) ||
-        !append_header(header, sizeof(header), &pos, ": ") ||
-        !append_header(header, sizeof(header), &pos,
-                       response->headers[i].value)) {
+    if (!append_header(header, header_size, &pos, "\r\n") ||
+        !append_header(header, header_size, &pos, response->headers[i].name) ||
+        !append_header(header, header_size, &pos, ": ") ||
+        !append_header(header, header_size, &pos, response->headers[i].value)) {
       return false;
     }
   }
 
-  if (!append_header(header, sizeof(header), &pos,
+  if (!append_header(header, header_size, &pos,
                      "\r\nConnection: close\r\n\r\n")) {
     return false;
   }
 
   const size_t body_len = suppress_body ? 0u : response->body_len;
-  char packet[sizeof(header) + HAL_HTTP_SERVER_RESPONSE_BUFFER_SIZE];
-  if (pos + body_len <= sizeof(packet)) {
-    memcpy(packet, header, pos);
-    if (body_len > 0u) {
-      memcpy(packet + pos, response->body, body_len);
-    }
-    return send_all(socket, packet, pos + body_len);
+  if (body_len > 0u) {
+    memcpy(client->response + pos, response->body, body_len);
   }
-
-  if (!send_all(socket, header, pos)) {
-    return false;
-  }
-  return body_len == 0u || send_all(socket, response->body, body_len);
+  client->response_len = pos + body_len;
+  client->response_sent = 0u;
+  client->response_started_ms = hal_millis();
+  client->last_activity_ms = client->response_started_ms;
+  return true;
 }
 
-static void send_response_and_close(hal_http_client_t *client,
-                                    const hal_http_response_t *response,
-                                    bool suppress_body) {
-  send_response(client->socket, response, suppress_body);
-  clear_client(client);
+static void poll_response(hal_http_client_t *client) {
+  const uint32_t now_ms = hal_millis();
+  if ((HAL_HTTP_SERVER_RESPONSE_TIMEOUT_MS > 0u &&
+       hal_elapsed_u32(now_ms, client->response_started_ms,
+                       HAL_HTTP_SERVER_RESPONSE_TIMEOUT_MS)) ||
+      (HAL_HTTP_SERVER_IDLE_TIMEOUT_MS > 0u &&
+       hal_elapsed_u32(now_ms, client->last_activity_ms,
+                       HAL_HTTP_SERVER_IDLE_TIMEOUT_MS))) {
+    clear_client(client);
+    return;
+  }
+
+  const size_t remaining = client->response_len - client->response_sent;
+  size_t sent = 0u;
+  const hal_status_t status = hal_tcp_socket_send_ex(
+      client->socket, client->response + client->response_sent, remaining,
+      &sent);
+  if (sent > remaining || (status != HAL_OK && status != HAL_EAGAIN)) {
+    clear_client(client);
+    return;
+  }
+  client->response_sent += sent;
+  if (sent > 0u) {
+    client->last_activity_ms = hal_millis();
+  }
+  if (client->response_sent == client->response_len) {
+    clear_client(client);
+  }
 }
 
-static void send_text_error_and_close(hal_http_client_t *client,
+static void start_response(hal_http_client_t *client,
+                           const hal_http_response_t *response,
+                           bool suppress_body) {
+  if (!prepare_response(client, response, suppress_body)) {
+    clear_client(client);
+    return;
+  }
+  poll_response(client);
+}
+
+static void start_text_error_response(hal_http_client_t *client,
                                       uint16_t status_code, const char *reason,
                                       const char *body) {
   hal_http_response_t response;
   reset_response(&response);
   hal_http_response_set_status(&response, status_code, reason);
   hal_http_response_write_str(&response, body);
-  send_response_and_close(client, &response, false);
+  start_response(client, &response, false);
 }
 
 static char *find_crlf(char *s) {
@@ -389,7 +419,7 @@ static void process_request(hal_http_client_t *client, size_t body_len) {
 
   char *request_line_end = find_crlf(client->request);
   if (!request_line_end) {
-    send_text_error_and_close(client, 400u, "Bad Request", "Bad Request\n");
+    start_text_error_response(client, 400u, "Bad Request", "Bad Request\n");
     return;
   }
 
@@ -397,13 +427,13 @@ static void process_request(hal_http_client_t *client, size_t body_len) {
   char *method_s = client->request;
   char *target = strchr(method_s, ' ');
   if (!target) {
-    send_text_error_and_close(client, 400u, "Bad Request", "Bad Request\n");
+    start_text_error_response(client, 400u, "Bad Request", "Bad Request\n");
     return;
   }
   *target++ = '\0';
   char *version = strchr(target, ' ');
   if (!version) {
-    send_text_error_and_close(client, 400u, "Bad Request", "Bad Request\n");
+    start_text_error_response(client, 400u, "Bad Request", "Bad Request\n");
     return;
   }
   *version++ = '\0';
@@ -427,7 +457,7 @@ static void process_request(hal_http_client_t *client, size_t body_len) {
 
   if (method == HAL_HTTP_METHOD_UNKNOWN || strncmp(version, "HTTP/", 5) != 0 ||
       target[0] != '/') {
-    send_text_error_and_close(client, 400u, "Bad Request", "Bad Request\n");
+    start_text_error_response(client, 400u, "Bad Request", "Bad Request\n");
     return;
   }
 
@@ -452,7 +482,7 @@ static void process_request(hal_http_client_t *client, size_t body_len) {
     hal_http_response_write_str(&response, "Internal Server Error\n");
   }
 
-  send_response_and_close(client, &response, method == HAL_HTTP_METHOD_HEAD);
+  start_response(client, &response, method == HAL_HTTP_METHOD_HEAD);
 }
 
 static hal_status_t route_common(hal_http_method_t method, const char *path,
@@ -592,6 +622,11 @@ void hal_http_server_poll(void) {
       continue;
     }
 
+    if (client->response_len > 0u) {
+      poll_response(client);
+      continue;
+    }
+
     if (hal_tcp_socket_can_recv(client->socket) &&
         client->request_len + 1u < sizeof(client->request)) {
       int rc = hal_tcp_socket_recv(
@@ -609,7 +644,7 @@ void hal_http_server_poll(void) {
     }
 
     if (client->request_len + 1u >= sizeof(client->request)) {
-      send_text_error_and_close(client, 413u, "Payload Too Large",
+      start_text_error_response(client, 413u, "Payload Too Large",
                                 "Payload Too Large\n");
       continue;
     }
@@ -617,11 +652,11 @@ void hal_http_server_poll(void) {
     size_t content_len = 0u;
     http_request_state_t state = request_state(client, &content_len);
     if (state == HTTP_REQUEST_BAD) {
-      send_text_error_and_close(client, 400u, "Bad Request", "Bad Request\n");
+      start_text_error_response(client, 400u, "Bad Request", "Bad Request\n");
       continue;
     }
     if (state == HTTP_REQUEST_TOO_LARGE) {
-      send_text_error_and_close(client, 413u, "Payload Too Large",
+      start_text_error_response(client, 413u, "Payload Too Large",
                                 "Payload Too Large\n");
       continue;
     }
@@ -645,7 +680,7 @@ void hal_http_server_poll(void) {
                               hal_elapsed_u32(now_ms, client->last_activity_ms,
                                               HAL_HTTP_SERVER_IDLE_TIMEOUT_MS);
     if (first_byte_timeout || request_timeout || idle_timeout) {
-      send_text_error_and_close(client, 408u, "Request Timeout",
+      start_text_error_response(client, 408u, "Request Timeout",
                                 "Request Timeout\n");
     }
   }

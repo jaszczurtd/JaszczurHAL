@@ -67,10 +67,12 @@ typedef struct {
   uint32_t scan_deadline_ms;
   uint32_t sdp_retry_after_ms;
   uint32_t sdp_services;
+  hal_status_t scan_stop_status;
   uint8_t sdp_service_index;
   bool started;
   bool controller_ready;
   bool scan_active;
+  bool scan_stop_pending;
   bool sdp_active;
   bool sdp_match;
   bool sdp_retry_pending;
@@ -296,13 +298,25 @@ static void start_inquiry(void) {
   }
 }
 
+static void complete_scan_stop(void) {
+  if (!s_backend.scan_stop_pending) {
+    return;
+  }
+  const hal_status_t status = s_backend.scan_stop_status;
+  s_backend.scan_stop_pending = false;
+  emit_simple(JH_BLUETOOTH_CLASSIC_EVENT_SCAN_STOPPED, status);
+}
+
 static void finish_scan(hal_status_t status) {
   if (!s_backend.scan_active) {
     return;
   }
   s_backend.scan_active = false;
-  (void)gap_inquiry_stop();
-  emit_simple(JH_BLUETOOTH_CLASSIC_EVENT_SCAN_STOPPED, status);
+  s_backend.scan_stop_pending = true;
+  s_backend.scan_stop_status = status;
+  if (gap_inquiry_stop() != ERROR_CODE_SUCCESS) {
+    complete_scan_stop();
+  }
 }
 
 static void handle_inquiry_result(const uint8_t *packet) {
@@ -677,9 +691,12 @@ static void packet_handler(uint8_t packet_type, uint16_t channel,
     break;
   case GAP_EVENT_INQUIRY_COMPLETE:
     hal_deb("Bluetooth Classic HCI inquiry complete");
-    if (s_backend.scan_active) {
+    if (s_backend.scan_stop_pending) {
+      complete_scan_stop();
+    } else if (s_backend.scan_active) {
       if ((int32_t)(hal_millis() - s_backend.scan_deadline_ms) >= 0) {
-        finish_scan(HAL_OK);
+        s_backend.scan_active = false;
+        emit_simple(JH_BLUETOOTH_CLASSIC_EVENT_SCAN_STOPPED, HAL_OK);
       } else {
         start_inquiry();
       }
@@ -1210,6 +1227,7 @@ static void profile_stop(void *context) {
   hci_set_link_key_db(NULL);
   s_backend.controller_ready = false;
   s_backend.scan_active = false;
+  s_backend.scan_stop_pending = false;
   s_backend.sdp_active = false;
 }
 
@@ -1238,6 +1256,7 @@ static void profile_invalidated(void *context, uint32_t generation) {
   (void)generation;
   s_backend.controller_ready = false;
   s_backend.scan_active = false;
+  s_backend.scan_stop_pending = false;
   s_backend.sdp_active = false;
   jh_bluetooth_classic_backend_event_t event = {0};
   event.type = JH_BLUETOOTH_CLASSIC_EVENT_ERROR;
@@ -1310,7 +1329,8 @@ static hal_status_t backend_scan_start(void *context, uint32_t duration_ms) {
   if (!s_backend.started || !s_backend.controller_ready) {
     return HAL_EUNINIT;
   }
-  if (s_backend.scan_active || s_backend.sdp_active) {
+  if (s_backend.scan_active || s_backend.scan_stop_pending ||
+      s_backend.sdp_active) {
     return HAL_ESTATE;
   }
   memset(s_backend.scan_cache, 0, sizeof(s_backend.scan_cache));

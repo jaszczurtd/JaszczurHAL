@@ -57,6 +57,14 @@ the shared link key with the A2DP profile identifier. AVRCP never stores a
 second key. Known phones can reconnect while the device remains
 non-discoverable.
 
+On Android, open the system's new-device pairing screen during that window,
+select `JaszczurHAL Speaker`, accept the Just Works request, and start media
+playback. The `rp2040:picow` hardware gate used an Android source with the
+filtered and amplified GP6 output. The `rp2350-arm:pico2w` runtime gate used a
+BlueZ source; products using that board must still validate their selected
+physical audio output. Other sources and output stages require their own
+end-to-end acceptance.
+
 The serial commands are `INFO`, `PAIR`, `RESET`, and `WATCHDOG`. `PAIR` opens
 another bounded window. `RESET` removes the persisted bond and keeps pairing
 closed until an explicit `PAIR` command or a restart with empty storage.

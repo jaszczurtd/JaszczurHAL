@@ -221,9 +221,12 @@ targetów, na przykład
 `${project}/../../libraries/JaszczurHAL/cmake/jh_firmware_project`, a katalog
 modułu przekazują jako `JH_PROJECT_DIR`. Ustawienie `cmake.generator` pozwala
 jawnie wybrać generator. Samodzielne projekty utworzone przez
-`tools/create-vscode-example.py` zapisują też początkowy cache tej konfiguracji
-w `.vscode/settings.json` jako `cmake.configureSettings`, dzięki czemu CMake
-Tools w VS Code może skonfigurować ją bezpośrednio.
+`tools/create-vscode-example.py` oraz przykłady zapisane w repozytorium zapisują
+też początkowy cache tej konfiguracji w `.vscode/settings.json` jako
+`cmake.configureSettings`, dzięki czemu CMake Tools w VS Code może skonfigurować
+ją bezpośrednio po otwarciu katalogu projektu. Osobny `cmake.buildDirectory`
+oddziela tę automatyczną konfigurację od buildów uruchamianych przez zadania
+`jh-vscode`.
 
 W natywnym środowisku Windows używane są zweryfikowane narzędzia i krótki
 katalog bazowy buildów przygotowane przez `runmefirst.ps1`. Cache CMake

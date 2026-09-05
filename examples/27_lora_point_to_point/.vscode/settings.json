@@ -9,7 +9,17 @@
     "C_Cpp.default.compileCommands": "${workspaceFolder}/../../.build/examples/27_lora_point_to_point/compile_commands_patched.json",
     "C_Cpp.errorSquiggles": "enabled",
     "cmake.sourceDirectory": "${workspaceFolder}/../../cmake/jh_firmware_project",
-    "cmake.buildDirectory": "${workspaceFolder}/../../.build/examples/27_lora_point_to_point/cmake",
+    "cmake.buildDirectory": "${workspaceFolder}/../../.build/examples/27_lora_point_to_point/cmake-tools/rp2040-pico-core1262-hf",
+    "cmake.generator": "Ninja",
+    "cmake.configureSettings": {
+        "JH_TARGET": "rp2040",
+        "PICO_SDK_PATH": "${workspaceFolder}/../../third_party/pico-sdk",
+        "JH_BOARD": "pico-core1262-hf",
+        "JH_ARTIFACT_DIR": "${workspaceFolder}/../../.build/examples/27_lora_point_to_point",
+        "JH_PROJECT_DIR": "${workspaceFolder}",
+        "JH_MODULE_NAME": "27_lora_point_to_point",
+        "JH_ROOT": "${workspaceFolder}/../.."
+    },
     "files.exclude": {
         "**/.build": true
     },

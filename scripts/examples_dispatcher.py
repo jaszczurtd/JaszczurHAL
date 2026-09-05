@@ -199,9 +199,15 @@ def manifest_for(entry: dict[str, Any]) -> dict[str, Any]:
     return manifest
 
 
-def settings_for(name: str) -> dict[str, Any]:
-    from vscode_task_config import vscode_entry_settings
+def settings_for(entry: dict[str, Any]) -> dict[str, Any]:
+    from vscode_task_config import (
+        cmake_tools_configure_settings,
+        vscode_entry_settings,
+    )
 
+    name = str(entry["dir"])
+    module = str(entry.get("module") or name)
+    target, board = default_target_board(entry)
     build_dir = f"${{workspaceFolder}}/../../.build/examples/{name}"
     return {
         "jaszczurhal.buildDir": build_dir,
@@ -212,7 +218,17 @@ def settings_for(name: str) -> dict[str, Any]:
         "C_Cpp.default.compileCommands": f"{build_dir}/compile_commands_patched.json",
         "C_Cpp.errorSquiggles": "enabled",
         "cmake.sourceDirectory": "${workspaceFolder}/../../cmake/jh_firmware_project",
-        "cmake.buildDirectory": f"{build_dir}/cmake",
+        "cmake.buildDirectory": f"{build_dir}/cmake-tools/{target}-{board}",
+        "cmake.generator": "Ninja",
+        "cmake.configureSettings": cmake_tools_configure_settings(
+            target_registry(),
+            target=target,
+            board=board,
+            module=module,
+            jh_root_ref="${workspaceFolder}/../..",
+            build_ref=build_dir,
+            project_cache=example_cache(entry, module),
+        ),
         "files.exclude": {"**/.build": True},
         "search.exclude": {"**/.build": True},
     }
@@ -249,8 +265,12 @@ def keybindings_for() -> list[dict[str, str]]:
 
 
 def reference_settings() -> dict[str, Any]:
-    from vscode_task_config import vscode_entry_settings
+    from vscode_task_config import (
+        cmake_tools_configure_settings,
+        vscode_entry_settings,
+    )
 
+    jh_root = "${workspaceFolder}/../../libraries/JaszczurHAL"
     return {
         "jaszczurhal.root": "../../libraries/JaszczurHAL",
         **vscode_entry_settings(
@@ -266,7 +286,19 @@ def reference_settings() -> dict[str, Any]:
         "cmake.sourceDirectory": (
             "${workspaceFolder}/../../libraries/JaszczurHAL/cmake/jh_firmware_project"
         ),
-        "cmake.buildDirectory": "${workspaceFolder}/.build/cmake",
+        "cmake.buildDirectory": "${workspaceFolder}/.build/cmake-tools/rp2040-pico",
+        "cmake.generator": "Ninja",
+        "cmake.configureSettings": cmake_tools_configure_settings(
+            target_registry(),
+            target="rp2040",
+            board="pico",
+            module="firmware",
+            jh_root_ref=jh_root,
+            project_cache={
+                "JH_PROJECT_DIR": "${project}",
+                "JH_MODULE_NAME": "firmware",
+            },
+        ),
         "files.exclude": {"**/.build": True},
         "search.exclude": {"**/.build": True},
     }
@@ -291,7 +323,7 @@ def example_vscode_files(entry: dict[str, Any]) -> dict[str, Any]:
     variants = entry.get("variants") if isinstance(entry.get("variants"), list) else []
     return {
         "jaszczurhal.project.json": manifest_for(entry),
-        "settings.json": settings_for(str(entry["dir"])),
+        "settings.json": settings_for(entry),
         "tasks.json": base_tasks(target, board, variants),
         "launch.json": launch_for(str(entry["dir"])),
         "keybindings.reference.json": keybindings_for(),

@@ -216,7 +216,7 @@ hal_status_t jh_lwip_tcp_socket_send(jh_lwip_tcp_socket_t *socket,
       (length > 0u && data == nullptr)) {
     return HAL_EINVAL;
   }
-  if (!jh_lwip_tcp_socket_can_send(socket)) {
+  if (socket->pcb == nullptr || socket->state != JH_LWIP_TCP_CONNECTED) {
     return HAL_ESTATE;
   }
   if (length == 0u) {
@@ -237,6 +237,9 @@ hal_status_t jh_lwip_tcp_socket_send(jh_lwip_tcp_socket_t *socket,
 
   const err_t write_status =
       tcp_write(socket->pcb, data, (uint16_t)write_length, TCP_WRITE_FLAG_COPY);
+  if (write_status == ERR_MEM || write_status == ERR_BUF) {
+    return HAL_EAGAIN;
+  }
   if (write_status != ERR_OK) {
     return jh_lwip_status_to_hal(write_status);
   }

@@ -20,6 +20,7 @@ struct mock_classic_t {
   hal_status_t service_status;
   hal_status_t peer_restore_status;
   uint32_t peer_restore_calls;
+  uint32_t sdp_query_calls;
   bool started;
   bool scanning;
   bool pairing_pending;
@@ -112,8 +113,11 @@ hal_status_t mock_scan_stop(void *) {
 
 hal_status_t mock_sdp_query(void *,
                             const hal_bluetooth_classic_address_t *address) {
-  return !s_mock.started ? HAL_EUNINIT
-                         : (address == nullptr ? HAL_EINVAL : HAL_OK);
+  if (!s_mock.started || address == nullptr) {
+    return !s_mock.started ? HAL_EUNINIT : HAL_EINVAL;
+  }
+  ++s_mock.sdp_query_calls;
+  return HAL_OK;
 }
 
 hal_status_t mock_pair(void *, const hal_bluetooth_classic_address_t *address) {
@@ -342,6 +346,10 @@ void hal_mock_bluetooth_classic_set_peer_restore_status(hal_status_t status) {
 
 uint32_t hal_mock_bluetooth_classic_peer_restore_calls(void) {
   return s_mock.peer_restore_calls;
+}
+
+uint32_t hal_mock_bluetooth_classic_sdp_query_calls(void) {
+  return s_mock.sdp_query_calls;
 }
 
 hal_status_t hal_mock_bluetooth_classic_inject_ready(void) {

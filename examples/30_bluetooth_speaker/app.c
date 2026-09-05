@@ -80,6 +80,8 @@ static bool s_boot_watchdog;
 static bool s_ble_initialized;
 #endif
 
+static const char *s_device_name = "JaszczurHAL Speaker";
+
 static void stack_probe_start(void) {
   volatile uint8_t marker = 0u;
   const uintptr_t bottom =
@@ -510,7 +512,7 @@ static hal_status_t initialize_speaker(void) {
     return status;
   }
   hal_bluetooth_classic_identity_t identity = {0};
-  memcpy(identity.name, "JaszczurHAL Speaker", sizeof("JaszczurHAL Speaker"));
+  memcpy(identity.name, s_device_name, strlen(s_device_name) + 1);
   /* Audio + Rendering service classes, Audio/Video major class and the
    * Loudspeaker minor class. Android uses Rendering when matching A2DP sinks.
    */

@@ -96,7 +96,8 @@ static hal_status_t jh_buffered_response_write(Response *response,
   if (response == nullptr || (len > 0u && data == nullptr)) {
     return HAL_EINVAL;
   }
-  if (response->body_len + len >= sizeof(response->body)) {
+  if (response->body_len >= sizeof(response->body) ||
+      len >= sizeof(response->body) - response->body_len) {
     response->overflow = true;
     return HAL_EOVERFLOW;
   }

@@ -67,6 +67,7 @@
                 "extraDefines": [
                     "HAL_ENABLE_BLE=1",
                     "HAL_ENABLE_BLUETOOTH_GAMEPAD=1",
+                    "HAL_ENABLE_KV=1",
                     "HAL_GAMEPAD_EXAMPLE_ENABLE_BLE=1"
                 ]
             }

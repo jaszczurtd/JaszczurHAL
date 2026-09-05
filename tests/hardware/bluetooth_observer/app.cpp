@@ -1,4 +1,5 @@
 #include <JaszczurHAL.h>
+#include <hal/serial/hal_serial.h>
 #include <tools.h>
 
 #include <string.h>
@@ -15,6 +16,7 @@ constexpr uint16_t kEddystoneServiceUuid = 0xfeaau;
 constexpr uint8_t kIBeaconType = 0x02u;
 constexpr uint8_t kIBeaconLength = 0x15u;
 constexpr uint32_t kSummaryPeriodMs = 1000u;
+constexpr size_t kCommandCapacity = 16u;
 
 static hal_status_t s_status = HAL_NONE;
 static uint32_t s_last_summary_ms;
@@ -22,6 +24,12 @@ static uint32_t s_reports;
 static uint32_t s_teltonika_reports;
 static uint32_t s_ibeacon_reports;
 static uint32_t s_eddystone_reports;
+static uint32_t s_open_count;
+static uint32_t s_reopen_count;
+static char s_command[kCommandCapacity];
+static size_t s_command_length;
+
+hal_status_t start_scan(void);
 
 uint16_t little_endian_u16(const uint8_t *data) {
   return (uint16_t)data[0] | (uint16_t)((uint16_t)data[1] << 8u);
@@ -119,38 +127,104 @@ void report_summary(void) {
   hal_ble_info_t info{};
   const hal_status_t info_status = hal_ble_get_info(&info);
   deb("JHBL4A status=%s info=%s state=%u scan=%u reports=%lu teltonika=%lu "
-      "ibeacon=%lu eddystone=%lu pending=%lu dropped=%lu",
+      "ibeacon=%lu eddystone=%lu pending=%lu dropped=%lu opens=%lu "
+      "reopens=%lu",
       hal_status_to_string(s_status), hal_status_to_string(info_status),
       (unsigned)info.state, info.scan_requested ? 1u : 0u,
       (unsigned long)s_reports, (unsigned long)s_teltonika_reports,
       (unsigned long)s_ibeacon_reports, (unsigned long)s_eddystone_reports,
       (unsigned long)info.pending_scan_reports,
-      (unsigned long)info.dropped_scan_reports);
+      (unsigned long)info.dropped_scan_reports, (unsigned long)s_open_count,
+      (unsigned long)s_reopen_count);
+}
+
+hal_status_t start_scan(void) {
+  hal_ble_scan_config_t config{};
+  config.interval = kScanInterval60Ms;
+  config.window = kScanWindow60Ms;
+  config.filter_duplicates = true;
+  return hal_ble_scan_start(&config);
+}
+
+hal_status_t open_observer(void) {
+  hal_status_t status = hal_ble_initialize();
+  if (status != HAL_OK) {
+    return status;
+  }
+  status = hal_ble_set_event_callback(on_ble_event, nullptr);
+  if (status != HAL_OK) {
+    (void)hal_ble_deinitialize();
+    return status;
+  }
+  status = start_scan();
+  if (status != HAL_OK) {
+    (void)hal_ble_deinitialize();
+    return status;
+  }
+  ++s_open_count;
+  return HAL_OK;
+}
+
+void handle_command(void) {
+  hal_status_t status = HAL_EINVAL;
+  bool replaces_runtime_status = false;
+  if (strcmp(s_command, "START") == 0) {
+    status = start_scan();
+  } else if (strcmp(s_command, "STOP") == 0) {
+    status = hal_ble_scan_stop();
+  } else if (strcmp(s_command, "REOPEN") == 0) {
+    replaces_runtime_status = true;
+    status = hal_ble_deinitialize();
+    if (status == HAL_OK) {
+      status = open_observer();
+      if (status == HAL_OK) {
+        ++s_reopen_count;
+      }
+    }
+  } else if (strcmp(s_command, "INFO") == 0) {
+    report_summary();
+    status = HAL_OK;
+  }
+  if (replaces_runtime_status) {
+    s_status = status;
+  }
+  deb("JHBL4A command=%s status=%s", s_command, hal_status_to_string(status));
+}
+
+void poll_commands(void) {
+  while (hal_serial_available() > 0) {
+    const int value = hal_serial_read();
+    if (value < 0) {
+      return;
+    }
+    if (value == '\r' || value == '\n') {
+      if (s_command_length != 0u) {
+        s_command[s_command_length] = '\0';
+        handle_command();
+        s_command_length = 0u;
+      }
+      continue;
+    }
+    if (s_command_length + 1u >= sizeof(s_command)) {
+      s_command_length = 0u;
+      derr("JHBL4A command overflow");
+      continue;
+    }
+    s_command[s_command_length++] = (char)value;
+  }
 }
 
 } // namespace
 
 extern "C" void app_start(void) {
   hal_debug_init_default();
-  s_status = hal_ble_initialize();
-  if (s_status != HAL_OK) {
-    report_summary();
-    return;
-  }
-  s_status = hal_ble_set_event_callback(on_ble_event, nullptr);
-  if (s_status != HAL_OK) {
-    report_summary();
-    return;
-  }
-  hal_ble_scan_config_t config{};
-  config.interval = kScanInterval60Ms;
-  config.window = kScanWindow60Ms;
-  config.filter_duplicates = true;
-  s_status = hal_ble_scan_start(&config);
+  s_status = open_observer();
+  deb("JHBL4A commands=START,STOP,REOPEN,INFO");
   report_summary();
 }
 
 extern "C" void app_task0(void) {
+  poll_commands();
   if (s_status == HAL_OK) {
     const hal_status_t status = hal_ble_poll();
     if (status != HAL_OK && status != HAL_EOVERFLOW) {

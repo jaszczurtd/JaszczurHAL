@@ -205,6 +205,10 @@ function(_jh_target_enable_btstack TARGET_NAME)
         if(JH_BTSTACK_HID_HOST)
             list(APPEND _jh_mode_upstream_sources
                 ${_jh_btstack_hid_host_sources})
+            if(NOT JH_BTSTACK_A2DP_SINK)
+                list(APPEND _jh_mode_jh_sources
+                    "${_jh_bluetooth_root}/jh_bluetooth_classic_hid_memory_probe.c")
+            endif()
             list(APPEND _jh_mode_definitions
                 JH_BLUETOOTH_PUBLIC_HID_HOST=1)
         endif()
@@ -276,6 +280,21 @@ function(_jh_target_enable_btstack TARGET_NAME)
         # GNU --wrap is evaluated only by the final firmware link. Propagate
         # these options to that link so the probe sees real pool activity.
         target_link_options(${TARGET_NAME} PUBLIC
+            "-Wl,--wrap=btstack_memory_hci_connection_get"
+            "-Wl,--wrap=btstack_memory_hci_connection_free"
+            "-Wl,--wrap=btstack_memory_l2cap_service_get"
+            "-Wl,--wrap=btstack_memory_l2cap_service_free"
+            "-Wl,--wrap=btstack_memory_l2cap_channel_get"
+            "-Wl,--wrap=btstack_memory_l2cap_channel_free"
+            "-Wl,--wrap=btstack_memory_btstack_link_key_db_memory_entry_get"
+            "-Wl,--wrap=btstack_memory_btstack_link_key_db_memory_entry_free"
+            "-Wl,--wrap=btstack_memory_hid_host_connection_get"
+            "-Wl,--wrap=btstack_memory_hid_host_connection_free")
+    endif()
+    if(JH_BTSTACK_HID_HOST AND NOT JH_BTSTACK_A2DP_SINK)
+        target_link_options(${TARGET_NAME} PUBLIC
+            "-Wl,--wrap=btstack_memory_hci_connection_get"
+            "-Wl,--wrap=btstack_memory_hci_connection_free"
             "-Wl,--wrap=btstack_memory_l2cap_service_get"
             "-Wl,--wrap=btstack_memory_l2cap_service_free"
             "-Wl,--wrap=btstack_memory_l2cap_channel_get"

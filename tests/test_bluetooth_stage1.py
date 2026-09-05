@@ -13,7 +13,7 @@ from source_assertions import source_fragment_position, source_has_fragment
 
 ROOT = Path(sys.argv[1]).resolve()
 BTSTACK_REPO = "https://github.com/jaszczurtd/btstack.git"
-BTSTACK_REF = "0cfae0eb5aa61650924168b368c5ea93b4b363e4"
+BTSTACK_REF = "6c27e47476f17e46190def9043a3e60b1178f044"
 
 
 def require(condition: bool, message: str) -> None:

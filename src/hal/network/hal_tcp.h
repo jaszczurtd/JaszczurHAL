@@ -35,6 +35,17 @@ hal_status_t hal_tcp_socket_open_ex(hal_tcp_socket_t *out_socket);
 hal_status_t hal_tcp_socket_connect_ex(hal_tcp_socket_t socket,
                                        const hal_net_endpoint_t *remote,
                                        uint32_t timeout_ms);
+/**
+ * @brief Attempt to enqueue bytes on a connected TCP socket.
+ * @param socket Connected socket handle; must not be NULL.
+ * @param data Bytes to enqueue; may be NULL only when @p len is zero.
+ * @param len Number of bytes offered; a successful write may be partial.
+ * @param out_sent Required accepted-byte count, initialized to zero. Bytes
+ *                 accepted before a later output error are still reported.
+ * @return HAL_OK on success, HAL_EAGAIN when send capacity is temporarily
+ *         exhausted, or another HAL error. Resume after the accepted bytes;
+ *         readiness can be checked with hal_tcp_socket_can_send().
+ */
 hal_status_t hal_tcp_socket_send_ex(hal_tcp_socket_t socket, const void *data,
                                     size_t len, size_t *out_sent);
 hal_status_t hal_tcp_socket_recv_ex(hal_tcp_socket_t socket, void *buffer,

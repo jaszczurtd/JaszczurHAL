@@ -102,6 +102,78 @@ def vscode_workspace_path(path: Path, workspace_dir: Path) -> str:
     return f"${{workspaceFolder}}/{relative_text}"
 
 
+def cmake_tools_cache_value(
+    value: Any,
+    *,
+    jh_root_ref: str,
+    project_ref: str,
+    build_ref: str,
+) -> Any:
+    """Translate project-manifest variables for VS Code CMake Tools."""
+    if not isinstance(value, str):
+        return value
+    return (
+        value.replace("${jhRoot}", jh_root_ref)
+        .replace("${project}", project_ref)
+        .replace("${projectDir}", project_ref)
+        .replace("${workspaceFolder}", project_ref)
+        .replace("${buildDir}", build_ref)
+    )
+
+
+def target_board_cache(
+    registry: dict[str, dict[str, Any]],
+    target: str,
+    board: str,
+) -> dict[str, Any]:
+    """Return the merged target and board cache defaults from the registry."""
+    target_desc = registry.get(target) or {}
+    cache: dict[str, Any] = dict(target_desc.get("cache") or {})
+    for board_desc in target_desc.get("boards") or []:
+        if isinstance(board_desc, dict) and board_desc.get("id") == board:
+            cache.update(board_desc.get("cache") or {})
+            break
+    return cache
+
+
+def cmake_tools_configure_settings(
+    registry: dict[str, dict[str, Any]],
+    *,
+    target: str,
+    board: str,
+    module: str,
+    jh_root_ref: str,
+    project_ref: str = "${workspaceFolder}",
+    build_ref: str = "${workspaceFolder}/.build",
+    project_cache: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build the initial dispatcher cache consumed directly by CMake Tools."""
+
+    def translate(cache: dict[str, Any]) -> dict[str, Any]:
+        return {
+            key: cmake_tools_cache_value(
+                value,
+                jh_root_ref=jh_root_ref,
+                project_ref=project_ref,
+                build_ref=build_ref,
+            )
+            for key, value in cache.items()
+        }
+
+    settings = translate(target_board_cache(registry, target, board))
+    settings.update(translate(project_cache or {}))
+    settings.update(
+        {
+            "JH_ROOT": jh_root_ref,
+            "JH_PROJECT_DIR": project_ref,
+            "JH_MODULE_NAME": module,
+            "JH_TARGET": target,
+            "JH_BOARD": board,
+        }
+    )
+    return settings
+
+
 def vscode_launch_executable(
     manifest: dict[str, Any],
     *,

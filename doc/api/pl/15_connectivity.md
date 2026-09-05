@@ -767,7 +767,23 @@ Domyślne limity statyczne można nadpisać przed dołączeniem nagłówków HAL
 #define HAL_HTTP_SERVER_MAX_RESPONSE_HEADERS 8u
 #define HAL_HTTP_SERVER_RESPONSE_HEADER_SIZE 512u
 #define HAL_HTTP_SERVER_DEFAULT_BACKLOG 2u
+#define HAL_HTTP_SERVER_RESPONSE_TIMEOUT_MS 15000u
+#define HAL_HTTP_SERVER_IDLE_TIMEOUT_MS 5000u
 ```
+
+Każdy klient ma bufor odpowiedzi o rozmiarze `HAL_HTTP_SERVER_RESPONSE_HEADER_SIZE`
+plus `HAL_HTTP_SERVER_RESPONSE_BUFFER_SIZE` (domyślnie 1536 bajtów). Handler
+wykonuje się raz; `hal_http_server_poll()` podejmuje jedną próbę zapisu na klienta
+i w kolejnych wywołaniach wznawia częściowe zapisy lub operacje zakończone
+`HAL_EAGAIN`. Oczekiwanie na miejsce w TCP nie zatrzymuje obsługi pozostałych
+klientów. Połączenie zamyka się po przyjęciu całej odpowiedzi przez TCP, przy
+błędzie transportu albo po upływie timeoutu odpowiedzi lub bezczynności. Oba
+timeouty są liczone od przygotowania odpowiedzi; postęp wysyłania zeruje tylko
+czas bezczynności. Wartość zero wyłącza dany limit.
+
+`hal_http_response_write()` rezerwuje jeden bajt na końcowe NUL i odrzuca zbyt
+duże długości, w tym wartości bliskie `SIZE_MAX`, zwracając `HAL_EOVERFLOW`.
+Odrzucony zapis pozostawia dotychczasową treść i jej długość bez zmian.
 
 - **Wspólna implementacja modułu:** `hal/network/http/hal_http_server.cpp`.
 - **impl/.mock:** `test_hal_http_server` korzysta z testowego backendu
@@ -1672,6 +1688,10 @@ void hal_tcp_listener_close(hal_tcp_listener_t listener);
   `HAL_NET_TIMEOUT_FOREVER` wybiera odbiór blokujący bez ustalonego limitu czasu.
 - `hal_tcp_socket_send(...)` zwraca liczbę zaakceptowanych bajtów lub `<0`
   w przypadku błędu.
+- `hal_tcp_socket_send_ex(...)` pozwala odróżnić chwilowo pełny bufor nadawczy
+  (`HAL_EAGAIN`) od błędów połączenia. Zapisy mogą być częściowe; wznawiaj je
+  po `out_sent` zaakceptowanych bajtach. Wspólny backend lwIP zwraca też
+  `HAL_EAGAIN`, gdy `tcp_write()` chwilowo nie ma pamięci na kolejkę.
 - `hal_tcp_socket_recv(...)` zwraca liczbę odczytanych bajtów, `0` po upływie
   timeoutu, przy braku danych lub po zamknięciu połączenia przez peera, albo
   wartość `<0` dla nieprawidłowego uchwytu lub argumentu.

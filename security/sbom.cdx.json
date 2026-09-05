@@ -930,9 +930,9 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:btstack@0cfae0eb5",
+      "bom-ref": "pkg:btstack@6c27e47476",
       "name": "BTstack",
-      "version": "0cfae0eb5",
+      "version": "6c27e47476",
       "scope": "optional",
       "licenses": [
         {
@@ -942,7 +942,7 @@
       "supplier": {
         "name": "BlueKitchen GmbH"
       },
-      "purl": "pkg:github/jaszczurtd/btstack@0cfae0eb5aa61650924168b368c5ea93b4b363e4",
+      "purl": "pkg:github/jaszczurtd/btstack@6c27e47476f17e46190def9043a3e60b1178f044",
       "externalReferences": [
         {
           "type": "website",
@@ -977,11 +977,11 @@
       "properties": [
         {
           "name": "jaszczurhal:commit",
-          "value": "0cfae0eb5aa61650924168b368c5ea93b4b363e4"
+          "value": "6c27e47476f17e46190def9043a3e60b1178f044"
         },
         {
           "name": "jaszczurhal:notes",
-          "value": "Exact revision of the project-maintained BlueKitchen BTstack fork, including the reviewed Classic incoming/outgoing connection collision fix. JaszczurHAL compiles it directly without local source patches. The standard BlueKitchen grant is limited to personal, non-commercial use and imposes notice conditions. A separate Raspberry Pi grant permits a Customer to use and distribute BTstack only with the Products and Customer Products defined in src/hal/bluetooth/LICENSE.RP; it is not a general CYW43 permission. The applicable grant and notice obligations depend on the hardware and distribution. The separately inventoried Bluedroid SBC codec bundled in this revision retains Apache-2.0 terms."
+          "value": "Exact revision of the project-maintained BlueKitchen BTstack fork, including the reviewed Classic incoming/outgoing connection collision fix and BlueDroid SBC undefined-behavior hardening. JaszczurHAL compiles it directly without local source patches. The standard BlueKitchen grant is limited to personal, non-commercial use and imposes notice conditions. A separate Raspberry Pi grant permits a Customer to use and distribute BTstack only with the Products and Customer Products defined in src/hal/bluetooth/LICENSE.RP; it is not a general CYW43 permission. The applicable grant and notice obligations depend on the hardware and distribution. The separately inventoried Bluedroid SBC codec bundled in this revision retains Apache-2.0 terms."
         },
         {
           "name": "jaszczurhal:feature_flags",
@@ -995,9 +995,9 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:bluedroid-sbc-codec@BTstack-0cfae0eb5",
+      "bom-ref": "pkg:bluedroid-sbc-codec@BTstack-6c27e47476",
       "name": "Bluedroid SBC codec",
-      "version": "BTstack-0cfae0eb5",
+      "version": "BTstack-6c27e47476",
       "scope": "optional",
       "licenses": [
         {
@@ -1922,5 +1922,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:beca28a7-3af3-26ce-0701-8b721f33468d"
+  "serialNumber": "urn:uuid:4ad7d38b-170b-9c89-d2f7-66afd1fa894e"
 }
