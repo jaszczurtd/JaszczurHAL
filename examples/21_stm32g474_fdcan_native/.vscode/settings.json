@@ -9,7 +9,17 @@
     "C_Cpp.default.compileCommands": "${workspaceFolder}/../../.build/examples/21_stm32g474_fdcan_native/compile_commands_patched.json",
     "C_Cpp.errorSquiggles": "enabled",
     "cmake.sourceDirectory": "${workspaceFolder}/../../cmake/jh_firmware_project",
-    "cmake.buildDirectory": "${workspaceFolder}/../../.build/examples/21_stm32g474_fdcan_native/cmake",
+    "cmake.buildDirectory": "${workspaceFolder}/../../.build/examples/21_stm32g474_fdcan_native/cmake-tools/stm32g474-nucleo-g474re",
+    "cmake.generator": "Ninja",
+    "cmake.configureSettings": {
+        "JH_TARGET": "stm32g474",
+        "CMAKE_TOOLCHAIN_FILE": "${workspaceFolder}/../../stm32_lib/toolchain_stm32g474.cmake",
+        "JH_BOARD": "nucleo-g474re",
+        "JH_ARTIFACT_DIR": "${workspaceFolder}/../../.build/examples/21_stm32g474_fdcan_native",
+        "JH_PROJECT_DIR": "${workspaceFolder}",
+        "JH_MODULE_NAME": "21_stm32g474_fdcan_native",
+        "JH_ROOT": "${workspaceFolder}/../.."
+    },
     "files.exclude": {
         "**/.build": true
     },

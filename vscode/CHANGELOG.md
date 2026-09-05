@@ -2,9 +2,9 @@
 
 ## 0.1.0 - Unreleased
 
-- Make standalone generated projects pass the initial dispatcher cache through
-  `cmake.configureSettings` so VS Code CMake Tools can configure the shared
-  firmware dispatcher directly.
+- Make standalone generated projects and checked-in repository examples pass
+  the initial dispatcher cache through `cmake.configureSettings` so VS Code
+  CMake Tools can configure the shared firmware dispatcher directly.
 - Extend `sync-board-picker` to create, update, and repair the managed RP2040,
   RP2350 ARM, and STM32G474 Cortex-Debug profiles while preserving custom
   consumer configurations and migrating legacy JaszczurHAL profile names.

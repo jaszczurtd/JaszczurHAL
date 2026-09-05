@@ -9,7 +9,17 @@
     "C_Cpp.default.compileCommands": "${workspaceFolder}/../../.build/examples/09_wireguard/compile_commands_patched.json",
     "C_Cpp.errorSquiggles": "enabled",
     "cmake.sourceDirectory": "${workspaceFolder}/../../cmake/jh_firmware_project",
-    "cmake.buildDirectory": "${workspaceFolder}/../../.build/examples/09_wireguard/cmake",
+    "cmake.buildDirectory": "${workspaceFolder}/../../.build/examples/09_wireguard/cmake-tools/rp2040-picow",
+    "cmake.generator": "Ninja",
+    "cmake.configureSettings": {
+        "JH_TARGET": "rp2040",
+        "PICO_SDK_PATH": "${workspaceFolder}/../../third_party/pico-sdk",
+        "JH_BOARD": "picow",
+        "JH_ARTIFACT_DIR": "${workspaceFolder}/../../.build/examples/09_wireguard",
+        "JH_PROJECT_DIR": "${workspaceFolder}",
+        "JH_MODULE_NAME": "09_wireguard",
+        "JH_ROOT": "${workspaceFolder}/../.."
+    },
     "files.exclude": {
         "**/.build": true
     },

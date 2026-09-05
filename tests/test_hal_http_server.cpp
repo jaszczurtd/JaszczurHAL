@@ -6,6 +6,7 @@
 #include <string.h>
 
 static bool s_seen_handler;
+static unsigned s_handler_calls;
 static char s_seen_path[32];
 static char s_seen_query[32];
 static char s_seen_body[64];
@@ -20,6 +21,7 @@ void setUp(void) {
   hal_http_server_stop();
   hal_http_server_clear_routes();
   s_seen_handler = false;
+  s_handler_calls = 0u;
   s_seen_path[0] = '\0';
   s_seen_query[0] = '\0';
   s_seen_body[0] = '\0';
@@ -38,6 +40,7 @@ static hal_status_t hello_handler(const hal_http_request_t *request,
   (void)request;
   (void)user;
   s_seen_handler = true;
+  ++s_handler_calls;
   TEST_ASSERT_EQUAL_INT(
       HAL_OK, hal_http_response_set_content_type(response, "text/plain"));
   return hal_http_response_write_str(response, "hello\n");
@@ -295,6 +298,178 @@ void test_incomplete_clients_time_out_and_release_slots(void) {
   TEST_ASSERT_TRUE(s_seen_handler);
 }
 
+static size_t finish_response(hal_tcp_socket_t socket, char *out,
+                              size_t capacity, size_t chunk_size) {
+  size_t used = 0u;
+  while (hal_tcp_socket_is_connected(socket)) {
+    TEST_ASSERT_LESS_THAN(capacity - 1u, used);
+    TEST_ASSERT_EQUAL_INT(HAL_OK,
+                          hal_mock_tcp_set_send_capacity(socket, chunk_size));
+    hal_http_server_poll();
+    const size_t sent = hal_mock_tcp_get_last_tx_len(socket);
+    TEST_ASSERT_GREATER_THAN(0u, sent);
+    TEST_ASSERT_LESS_OR_EQUAL(chunk_size, sent);
+    TEST_ASSERT_LESS_THAN(capacity - used, sent);
+    memcpy(out + used, hal_mock_tcp_get_last_tx_payload(socket), sent);
+    used += sent;
+  }
+  out[used] = '\0';
+  return used;
+}
+
+static hal_tcp_socket_t start_blocked_response(const char *request) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_http_server_route(HAL_HTTP_METHOD_GET, "/hello",
+                                              hello_handler, NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_http_server_route(HAL_HTTP_METHOD_HEAD, "/hello",
+                                              hello_handler, NULL));
+  hal_tcp_socket_t socket = accept_http_client(8092u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_tcp_set_send_capacity(socket, 0u));
+  inject_http_request(socket, request);
+  TEST_ASSERT_TRUE(hal_tcp_socket_is_connected(socket));
+  TEST_ASSERT_EQUAL_UINT(0u, hal_mock_tcp_get_last_tx_len(socket));
+  return socket;
+}
+
+void test_response_resumes_partial_writes_without_repeating_handler(void) {
+  hal_tcp_socket_t socket =
+      start_blocked_response("GET /hello HTTP/1.1\r\nHost: unit\r\n\r\n");
+  for (unsigned i = 0u; i < 3u; ++i) {
+    hal_http_server_poll();
+    TEST_ASSERT_TRUE(hal_tcp_socket_is_connected(socket));
+    TEST_ASSERT_EQUAL_UINT(0u, hal_mock_tcp_get_last_tx_len(socket));
+  }
+  char response[256];
+  finish_response(socket, response, sizeof(response), 3u);
+  TEST_ASSERT_EQUAL_STRING("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n"
+                           "Content-Length: 6\r\nConnection: close\r\n\r\n"
+                           "hello\n",
+                           response);
+  TEST_ASSERT_EQUAL_UINT(1u, s_handler_calls);
+}
+
+void test_blocked_response_does_not_delay_another_client(void) {
+  hal_tcp_socket_t blocked =
+      start_blocked_response("GET /hello HTTP/1.1\r\nHost: unit\r\n\r\n");
+  hal_tcp_socket_t ready =
+      send_http_request(8092u, "GET /hello HTTP/1.1\r\nHost: unit\r\n\r\n");
+  TEST_ASSERT_TRUE(hal_tcp_socket_is_connected(blocked));
+  TEST_ASSERT_FALSE(hal_tcp_socket_is_connected(ready));
+  assert_response_contains(ready, "\r\n\r\nhello\n");
+  TEST_ASSERT_EQUAL_UINT(2u, s_handler_calls);
+}
+
+void test_partial_head_and_error_responses_keep_their_framing(void) {
+  hal_tcp_socket_t socket =
+      start_blocked_response("HEAD /hello HTTP/1.1\r\nHost: unit\r\n\r\n");
+  char response[256];
+  finish_response(socket, response, sizeof(response), 7u);
+  TEST_ASSERT_EQUAL_STRING("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n"
+                           "Content-Length: 6\r\nConnection: close\r\n\r\n",
+                           response);
+
+  socket = start_blocked_response(
+      "POST /hello HTTP/1.1\r\nContent-Length: invalid\r\n\r\n");
+  finish_response(socket, response, sizeof(response), 11u);
+  TEST_ASSERT_EQUAL_STRING("HTTP/1.1 400 Bad Request\r\n"
+                           "Content-Type: text/plain\r\nContent-Length: 12\r\n"
+                           "Connection: close\r\n\r\nBad Request\n",
+                           response);
+  TEST_ASSERT_EQUAL_UINT(1u, s_handler_calls);
+}
+
+void test_send_failure_and_stop_release_pending_responses(void) {
+  hal_tcp_socket_t socket =
+      start_blocked_response("GET /hello HTTP/1.1\r\nHost: unit\r\n\r\n");
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_tcp_set_send_status(socket, HAL_EIO));
+  hal_http_server_poll();
+  TEST_ASSERT_FALSE(hal_tcp_socket_is_connected(socket));
+
+  socket = start_blocked_response("GET /hello HTTP/1.1\r\nHost: unit\r\n\r\n");
+  hal_http_server_stop();
+  TEST_ASSERT_FALSE(hal_tcp_socket_is_connected(socket));
+  socket = send_http_request(8092u, "GET /missing HTTP/1.1\r\n\r\n");
+  assert_response_contains(socket, "HTTP/1.1 404 Not Found\r\n");
+  TEST_ASSERT_EQUAL_UINT(2u, s_handler_calls);
+}
+
+void test_response_idle_timeout_wraps_and_progress_refreshes_it(void) {
+  hal_mock_set_millis(UINT32_MAX - 100u);
+  hal_tcp_socket_t socket =
+      start_blocked_response("GET /hello HTTP/1.1\r\nHost: unit\r\n\r\n");
+  hal_mock_advance_millis(HAL_HTTP_SERVER_IDLE_TIMEOUT_MS - 1u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_tcp_set_send_capacity(socket, 1u));
+  hal_http_server_poll();
+  TEST_ASSERT_TRUE(hal_tcp_socket_is_connected(socket));
+  TEST_ASSERT_EQUAL_UINT(1u, hal_mock_tcp_get_last_tx_len(socket));
+  hal_mock_advance_millis(HAL_HTTP_SERVER_IDLE_TIMEOUT_MS - 1u);
+  hal_http_server_poll();
+  TEST_ASSERT_TRUE(hal_tcp_socket_is_connected(socket));
+  hal_mock_advance_millis(1u);
+  hal_http_server_poll();
+  TEST_ASSERT_FALSE(hal_tcp_socket_is_connected(socket));
+}
+
+void test_response_total_timeout_applies_despite_send_progress(void) {
+  hal_tcp_socket_t socket =
+      start_blocked_response("GET /hello HTTP/1.1\r\nHost: unit\r\n\r\n");
+  uint32_t elapsed = 0u;
+  while (elapsed + HAL_HTTP_SERVER_IDLE_TIMEOUT_MS <
+         HAL_HTTP_SERVER_RESPONSE_TIMEOUT_MS) {
+    hal_mock_advance_millis(HAL_HTTP_SERVER_IDLE_TIMEOUT_MS - 1u);
+    elapsed += HAL_HTTP_SERVER_IDLE_TIMEOUT_MS - 1u;
+    TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_tcp_set_send_capacity(socket, 1u));
+    hal_http_server_poll();
+    TEST_ASSERT_TRUE(hal_tcp_socket_is_connected(socket));
+  }
+  hal_mock_advance_millis(HAL_HTTP_SERVER_RESPONSE_TIMEOUT_MS - elapsed - 1u);
+  hal_http_server_poll();
+  TEST_ASSERT_TRUE(hal_tcp_socket_is_connected(socket));
+  hal_mock_advance_millis(1u);
+  hal_http_server_poll();
+  TEST_ASSERT_FALSE(hal_tcp_socket_is_connected(socket));
+}
+
+static hal_status_t boundary_handler(const hal_http_request_t *,
+                                     hal_http_response_t *response, void *) {
+  char body[HAL_HTTP_SERVER_RESPONSE_BUFFER_SIZE - 2u];
+  memset(body, 'a', sizeof(body));
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW,
+                        hal_http_response_write(response, body, SIZE_MAX));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_http_response_write_str(response, "x"));
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW,
+                        hal_http_response_write(response, body, SIZE_MAX));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_http_response_write(response, NULL, 0u));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_http_response_write(response, NULL, 1u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_http_response_write(response, body, sizeof(body)));
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW,
+                        hal_http_response_write(response, body, 1u));
+  return hal_http_response_write(response, NULL, 0u);
+}
+
+void test_body_boundary_and_size_overflow_preserve_accepted_bytes(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_http_server_route(HAL_HTTP_METHOD_GET, "/boundary",
+                                              boundary_handler, NULL));
+  hal_tcp_socket_t socket =
+      start_blocked_response("GET /boundary HTTP/1.1\r\n\r\n");
+  char response[HAL_HTTP_SERVER_RESPONSE_HEADER_SIZE +
+                HAL_HTTP_SERVER_RESPONSE_BUFFER_SIZE];
+  finish_response(socket, response, sizeof(response), 127u);
+  const char *body = strstr(response, "\r\n\r\n");
+  TEST_ASSERT_NOT_NULL(body);
+  body += 4u;
+  TEST_ASSERT_EQUAL_size_t(HAL_HTTP_SERVER_RESPONSE_BUFFER_SIZE - 1u,
+                           strlen(body));
+  TEST_ASSERT_EQUAL_CHAR('x', body[0]);
+  for (size_t i = 1u; i < HAL_HTTP_SERVER_RESPONSE_BUFFER_SIZE - 1u; ++i) {
+    TEST_ASSERT_EQUAL_CHAR('a', body[i]);
+  }
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_get_route_sends_ok_response);
@@ -308,5 +483,12 @@ int main(void) {
   RUN_TEST(test_ambiguous_request_framing_is_rejected);
   RUN_TEST(test_route_owns_path_and_rejects_overlong_path);
   RUN_TEST(test_incomplete_clients_time_out_and_release_slots);
+  RUN_TEST(test_response_resumes_partial_writes_without_repeating_handler);
+  RUN_TEST(test_blocked_response_does_not_delay_another_client);
+  RUN_TEST(test_partial_head_and_error_responses_keep_their_framing);
+  RUN_TEST(test_send_failure_and_stop_release_pending_responses);
+  RUN_TEST(test_response_idle_timeout_wraps_and_progress_refreshes_it);
+  RUN_TEST(test_response_total_timeout_applies_despite_send_progress);
+  RUN_TEST(test_body_boundary_and_size_overflow_preserve_accepted_bytes);
   return UNITY_END();
 }

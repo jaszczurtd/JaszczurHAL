@@ -76,7 +76,8 @@ static void report_snapshot(void) {
       "\"transport\":{\"rx\":%lu,\"rxEvents\":%lu,\"rxAcl\":%lu,"
       "\"tx\":%lu,\"txCommands\":%lu,\"txAcl\":%lu,"
       "\"drainBudgetHits\":%lu},"
-      "\"pools\":{\"l2capServices\":[%u,%u,%u,%u],"
+      "\"pools\":{\"hciConnections\":[%u,%u,%u,%u],"
+      "\"l2capServices\":[%u,%u,%u,%u],"
       "\"l2capChannels\":[%u,%u,%u,%u],\"linkKeys\":[%u,%u,%u,%u],"
       "\"hidConnections\":[%u,%u,%u,%u]}}",
       HAL_TARGET_NAME, HAL_BOARD_PROFILE_NAME,
@@ -147,6 +148,10 @@ static void report_snapshot(void) {
       (unsigned long)snapshot.tx_command_packets,
       (unsigned long)snapshot.tx_acl_packets,
       (unsigned long)snapshot.drain_budget_hits,
+      (unsigned)snapshot.pools.hci_connections.current,
+      (unsigned)snapshot.pools.hci_connections.high_water,
+      (unsigned)snapshot.pools.hci_connections.capacity,
+      (unsigned)snapshot.pools.hci_connections.allocation_failures,
       (unsigned)snapshot.pools.l2cap_services.current,
       (unsigned)snapshot.pools.l2cap_services.high_water,
       (unsigned)snapshot.pools.l2cap_services.capacity,

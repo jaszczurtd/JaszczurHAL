@@ -259,6 +259,15 @@ require(
     "public Classic HCI diagnostics expose a full Bluetooth address",
 )
 require(
+    source_has_fragment(public_backend, "bool scan_stop_pending;")
+    and source_has_fragment(public_backend, "s_backend.scan_stop_pending = true;")
+    and source_has_fragment(
+        public_backend,
+        "if (s_backend.scan_stop_pending) { complete_scan_stop();",
+    ),
+    "Classic inquiry stop does not wait for BTstack completion before reuse",
+)
+require(
     source_has_fragment(btstack_cmake, "ENABLE_CLASSIC = 1")
     and source_has_fragment(btstack_cmake, "ENABLE_SDP_EXTRA_QUERIES = 1")
     and source_has_fragment(btstack_cmake, "JH_BLUETOOTH_CLASSIC_HID_PROBE = 1"),
@@ -482,8 +491,18 @@ memory_probe = (
 ).read_text(encoding="utf-8")
 require(
     source_has_fragment(memory_probe, "allocation_failures")
-    and source_has_fragment(memory_probe, "high_water"),
+    and source_has_fragment(memory_probe, "high_water")
+    and source_has_fragment(memory_probe, "hci_connections"),
     "C5 memory probe does not record pool failures and high-water marks",
+)
+require(
+    source_has_fragment(
+        btstack_cmake, "if(JH_BTSTACK_HID_HOST AND NOT JH_BTSTACK_A2DP_SINK)"
+    )
+    and source_has_fragment(
+        btstack_cmake, '"-Wl,--wrap=btstack_memory_hci_connection_get"'
+    ),
+    "public HID builds do not enable the C10 pool high-water instrumentation",
 )
 
 verifier_path = FIXTURE_DIR / "verify_zero2.py"
@@ -594,6 +613,37 @@ require(
 speaker_example = (
     ROOT / "examples" / "30_bluetooth_speaker" / "app.c"
 ).read_text(encoding="utf-8")
+gamepad_example = (
+    ROOT / "examples" / "29_bluetooth_gamepad" / "app.c"
+).read_text(encoding="utf-8")
+require(
+    source_has_fragment(gamepad_example, "if (!info->pairing_pending)")
+    and source_has_fragment(gamepad_example, "else if (!s_pairingReplySent)")
+    and source_has_fragment(gamepad_example, "s_pairingReplySent = true"),
+    "Bluetooth gamepad example must authorize each pairing request only once",
+)
+require(
+    source_has_fragment(gamepad_example, "RECONNECT_RETRY_MS = 250u")
+    and source_has_fragment(
+        gamepad_example,
+        "hal_elapsed_u32(now, s_reconnectAttemptMs, RECONNECT_RETRY_MS)",
+    )
+    and source_has_fragment(gamepad_example, "status != HAL_EBUSY")
+    and source_has_fragment(gamepad_example, "status != HAL_EAGAIN"),
+    "Bluetooth gamepad example must rate-limit transient reconnect retries",
+)
+require(
+    source_has_fragment(
+        gamepad_example,
+        """
+        if (info->state != HAL_GAMEPAD_STATE_READY) {
+          return;
+        }
+        s_reconnectStarted = false;
+        """,
+    ),
+    "Bluetooth gamepad example must retry after a failed outgoing connection",
+)
 require(
     source_has_fragment(
         speaker_example,

@@ -56,13 +56,17 @@ remain valid only until restart. A production application must replace the
 serial `AUTHORIZE` command with a trusted local gesture and call `SAVE`
 only after its profile has validated the peer.
 
-On first boot, put the gamepad into pairing mode. The example opens a bounded
-discovery window and authorizes a pending Just Works or legacy PIN `0000`
-request. If a window expires without selecting a device, the example opens a
-new one. The accepted address can be reconnected until the profile is closed.
-Passing a bond provider to `hal_gamepad_open_ex()` preserves it across
-restarts; the compatibility provider is a one-slot adapter over the indexed
-Classic manager.
+On first boot, start the hardware-validated 8BitDo Zero 2 model 80EH in Android
+D-input mode with `B+Start`, then hold `Select` until its pairing LED flashes.
+The example opens a bounded discovery window and authorizes a pending Just
+Works or legacy PIN `0000` request. If a window expires without selecting a
+device, the example opens a new one. After a bond is stored, use the normal
+`Start` power-on path for reconnect; do not put the controller back into
+pairing mode. Passing a bond provider to `hal_gamepad_open_ex()` preserves the
+accepted address across restarts; the compatibility provider is a one-slot
+adapter over the indexed Classic manager. Only this controller, mode, and the
+`rp2350-arm:pico2w` host have passed the complete gamepad hardware gate; other
+combinations require separate validation.
 
 The generic HID variant deliberately rejects pairing until
 `localPairingConsent()` is connected to a trusted local gesture. After local
@@ -84,8 +88,17 @@ retain a pressed button after a lost link.
 
 The base example demonstrates initialization after scheduler start, pairing,
 authorization, reconnect, state diagnostics, overflow handling and snapshot
-draining. The `ble` variant deliberately does not advertise a BLE service; it
-only proves that both public profiles acquire, poll and release the same
-CYW43/BTstack host. The original ESP32 Classic/HID implementation is covered by
-an ESP-IDF compile/link fixture; ESP targets are not yet supported by the
-native example dispatcher.
+draining. The `ble` variant adds a passive BLE Observer to the Classic gamepad
+profile. At startup it releases and reacquires each profile while the other
+one keeps the shared CYW43/BTstack host alive. Its `INFO`, `BLE_START`,
+`BLE_STOP`, and `DISCONNECT` commands exercise concurrent scanning and HID
+reconnection. Periodic diagnostics report stack use, HCI/L2CAP/link-key/HID
+pool high-water and allocation failures, plus HCI transport traffic and drain
+budget hits. RP builds reserve a measured 4 KiB core-0 stack for this verbose
+diagnostic path. The variant uses KV key `0xd001` so its gamepad bond remains
+compatible with the doomConsole hardware regression image. It does not
+advertise a BLE service.
+
+The original ESP32 Classic/HID implementation is covered by an ESP-IDF
+compile/link fixture; ESP targets are not yet supported by the native example
+dispatcher.

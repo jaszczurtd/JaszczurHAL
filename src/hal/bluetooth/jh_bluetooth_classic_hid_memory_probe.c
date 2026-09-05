@@ -24,19 +24,24 @@ static void allocation_result(jh_bluetooth_classic_hid_pool_snapshot_t *pool,
   }
 }
 
-static void allocation_freed(jh_bluetooth_classic_hid_pool_snapshot_t *pool) {
-  if (pool->current > 0u) {
+static void allocation_freed(jh_bluetooth_classic_hid_pool_snapshot_t *pool,
+                             const void *allocation) {
+  if (allocation != NULL && pool->current > 0u) {
     --pool->current;
   }
 }
 
 void jh_bluetooth_classic_hid_memory_probe_reset(void) {
   memset(&s_snapshot, 0, sizeof(s_snapshot));
+  s_snapshot.hci_connections.capacity = MAX_NR_HCI_CONNECTIONS;
   s_snapshot.l2cap_services.capacity = MAX_NR_L2CAP_SERVICES;
   s_snapshot.l2cap_channels.capacity = MAX_NR_L2CAP_CHANNELS;
   s_snapshot.link_keys.capacity = MAX_NR_BTSTACK_LINK_KEY_DB_MEMORY_ENTRIES;
   s_snapshot.hid_connections.capacity = MAX_NR_HID_HOST_CONNECTIONS;
 }
+
+hci_connection_t *__real_btstack_memory_hci_connection_get(void);
+void __real_btstack_memory_hci_connection_free(hci_connection_t *connection);
 
 void jh_bluetooth_classic_hid_memory_probe_snapshot(
     jh_bluetooth_classic_hid_memory_snapshot_t *out_snapshot) {
@@ -57,6 +62,17 @@ hid_host_connection_t *__real_btstack_memory_hid_host_connection_get(void);
 void __real_btstack_memory_hid_host_connection_free(
     hid_host_connection_t *connection);
 
+hci_connection_t *__wrap_btstack_memory_hci_connection_get(void) {
+  hci_connection_t *connection = __real_btstack_memory_hci_connection_get();
+  allocation_result(&s_snapshot.hci_connections, connection);
+  return connection;
+}
+
+void __wrap_btstack_memory_hci_connection_free(hci_connection_t *connection) {
+  allocation_freed(&s_snapshot.hci_connections, connection);
+  __real_btstack_memory_hci_connection_free(connection);
+}
+
 l2cap_service_t *__wrap_btstack_memory_l2cap_service_get(void) {
   l2cap_service_t *service = __real_btstack_memory_l2cap_service_get();
   allocation_result(&s_snapshot.l2cap_services, service);
@@ -64,7 +80,7 @@ l2cap_service_t *__wrap_btstack_memory_l2cap_service_get(void) {
 }
 
 void __wrap_btstack_memory_l2cap_service_free(l2cap_service_t *service) {
-  allocation_freed(&s_snapshot.l2cap_services);
+  allocation_freed(&s_snapshot.l2cap_services, service);
   __real_btstack_memory_l2cap_service_free(service);
 }
 
@@ -75,7 +91,7 @@ l2cap_channel_t *__wrap_btstack_memory_l2cap_channel_get(void) {
 }
 
 void __wrap_btstack_memory_l2cap_channel_free(l2cap_channel_t *channel) {
-  allocation_freed(&s_snapshot.l2cap_channels);
+  allocation_freed(&s_snapshot.l2cap_channels, channel);
   __real_btstack_memory_l2cap_channel_free(channel);
 }
 
@@ -89,7 +105,7 @@ __wrap_btstack_memory_btstack_link_key_db_memory_entry_get(void) {
 
 void __wrap_btstack_memory_btstack_link_key_db_memory_entry_free(
     btstack_link_key_db_memory_entry_t *entry) {
-  allocation_freed(&s_snapshot.link_keys);
+  allocation_freed(&s_snapshot.link_keys, entry);
   __real_btstack_memory_btstack_link_key_db_memory_entry_free(entry);
 }
 
@@ -102,6 +118,6 @@ hid_host_connection_t *__wrap_btstack_memory_hid_host_connection_get(void) {
 
 void __wrap_btstack_memory_hid_host_connection_free(
     hid_host_connection_t *connection) {
-  allocation_freed(&s_snapshot.hid_connections);
+  allocation_freed(&s_snapshot.hid_connections, connection);
   __real_btstack_memory_hid_host_connection_free(connection);
 }

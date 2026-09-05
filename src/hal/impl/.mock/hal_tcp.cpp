@@ -26,6 +26,8 @@ struct hal_tcp_socket_impl_t {
 
   uint8_t tx_payload[MOCK_TCP_PAYLOAD_BUF_SIZE];
   uint16_t tx_len;
+  size_t send_capacity;
+  hal_status_t send_status;
 };
 
 struct hal_tcp_listener_impl_t {
@@ -75,6 +77,8 @@ static uint8_t capped_backlog(uint8_t backlog) {
 
 static void reset_socket(hal_tcp_socket_impl_t *socket) {
   memset(socket, 0, sizeof(*socket));
+  socket->send_capacity = SIZE_MAX;
+  socket->send_status = HAL_OK;
   reset_endpoint(&socket->remote_endpoint);
 }
 
@@ -246,8 +250,20 @@ hal_status_t hal_tcp_socket_send_ex(hal_tcp_socket_t socket, const void *data,
     hal_derr("hal_tcp_socket_send: socket is not connected");
     return HAL_ESTATE;
   }
+  if (len == 0u) {
+    return HAL_OK;
+  }
+  if (socket->send_status != HAL_OK) {
+    return socket->send_status;
+  }
+  if (socket->send_capacity == 0u) {
+    return HAL_EAGAIN;
+  }
 
   size_t to_copy = len;
+  if (to_copy > socket->send_capacity) {
+    to_copy = socket->send_capacity;
+  }
   if (to_copy > MOCK_TCP_PAYLOAD_BUF_SIZE) {
     to_copy = MOCK_TCP_PAYLOAD_BUF_SIZE;
   }
@@ -256,6 +272,9 @@ hal_status_t hal_tcp_socket_send_ex(hal_tcp_socket_t socket, const void *data,
     memcpy(socket->tx_payload, data, to_copy);
   }
   socket->tx_len = (uint16_t)to_copy;
+  if (socket->send_capacity != SIZE_MAX) {
+    socket->send_capacity -= to_copy;
+  }
 
   *out_sent = to_copy;
   return HAL_OK;
@@ -266,6 +285,24 @@ int hal_tcp_socket_send(hal_tcp_socket_t socket, const void *data, size_t len) {
   return hal_status_is_ok(hal_tcp_socket_send_ex(socket, data, len, &sent))
              ? (int)sent
              : -1;
+}
+
+hal_status_t hal_mock_tcp_set_send_capacity(hal_tcp_socket_t socket,
+                                            size_t capacity) {
+  if (!is_valid_socket(socket)) {
+    return HAL_EINVAL;
+  }
+  socket->send_capacity = capacity;
+  return HAL_OK;
+}
+
+hal_status_t hal_mock_tcp_set_send_status(hal_tcp_socket_t socket,
+                                          hal_status_t status) {
+  if (!is_valid_socket(socket)) {
+    return HAL_EINVAL;
+  }
+  socket->send_status = status;
+  return HAL_OK;
 }
 
 hal_status_t hal_tcp_socket_recv_ex(hal_tcp_socket_t socket, void *buffer,
@@ -318,7 +355,8 @@ bool hal_tcp_socket_can_recv(hal_tcp_socket_t socket) {
 }
 
 bool hal_tcp_socket_can_send(hal_tcp_socket_t socket) {
-  return is_valid_socket(socket) && socket->connected;
+  return is_valid_socket(socket) && socket->connected &&
+         socket->send_capacity > 0u && socket->send_status == HAL_OK;
 }
 
 bool hal_tcp_socket_is_connected(hal_tcp_socket_t socket) {

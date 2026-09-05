@@ -9,7 +9,16 @@
     "C_Cpp.default.compileCommands": "${workspaceFolder}/.build/compile_commands_patched.json",
     "C_Cpp.errorSquiggles": "enabled",
     "cmake.sourceDirectory": "${workspaceFolder}/../../libraries/JaszczurHAL/cmake/jh_firmware_project",
-    "cmake.buildDirectory": "${workspaceFolder}/.build/cmake",
+    "cmake.buildDirectory": "${workspaceFolder}/.build/cmake-tools/rp2040-pico",
+    "cmake.generator": "Ninja",
+    "cmake.configureSettings": {
+        "JH_TARGET": "rp2040",
+        "PICO_SDK_PATH": "${workspaceFolder}/../../libraries/JaszczurHAL/third_party/pico-sdk",
+        "JH_BOARD": "pico",
+        "JH_PROJECT_DIR": "${workspaceFolder}",
+        "JH_MODULE_NAME": "firmware",
+        "JH_ROOT": "${workspaceFolder}/../../libraries/JaszczurHAL"
+    },
     "files.exclude": {
         "**/.build": true
     },

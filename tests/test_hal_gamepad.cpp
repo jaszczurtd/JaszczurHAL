@@ -581,6 +581,41 @@ void test_adapter_restarts_discovery_after_incomplete_service_result(void) {
   TEST_ASSERT_EQUAL_INT(HAL_EPROTO, info.last_status);
 }
 
+void test_adapter_coalesces_duplicate_candidates_and_delays_failed_sdp_retry(
+    void) {
+  open_ready(false);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_pairing_open(s_gamepad));
+
+  const hal_bluetooth_classic_scan_result_t gamepad = zero2_scan_result();
+  for (size_t index = 0u; index < 4u; ++index) {
+    TEST_ASSERT_EQUAL_INT(
+        HAL_OK, hal_mock_bluetooth_classic_inject_scan_result(&gamepad));
+  }
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_poll(s_gamepad));
+  TEST_ASSERT_EQUAL_UINT32(1u, hal_mock_bluetooth_classic_sdp_query_calls());
+
+  hal_bluetooth_classic_scan_result_t incomplete = gamepad;
+  incomplete.services_resolved = true;
+  incomplete.services = HAL_BLUETOOTH_CLASSIC_SERVICE_HID;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_mock_bluetooth_classic_inject_scan_result(&incomplete));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_poll(s_gamepad));
+  TEST_ASSERT_EQUAL_UINT32(1u, hal_mock_bluetooth_classic_sdp_query_calls());
+
+  hal_mock_advance_millis(999u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_poll(s_gamepad));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_ESTATE, hal_mock_bluetooth_classic_inject_scan_result(&gamepad));
+  TEST_ASSERT_EQUAL_UINT32(1u, hal_mock_bluetooth_classic_sdp_query_calls());
+
+  hal_mock_advance_millis(1u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_poll(s_gamepad));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_mock_bluetooth_classic_inject_scan_result(&gamepad));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gamepad_poll(s_gamepad));
+  TEST_ASSERT_EQUAL_UINT32(2u, hal_mock_bluetooth_classic_sdp_query_calls());
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_open_ready_info_and_single_handle);
@@ -606,5 +641,7 @@ int main(void) {
   RUN_TEST(
       test_known_incoming_connection_accepts_input_without_reauthorization);
   RUN_TEST(test_adapter_restarts_discovery_after_incomplete_service_result);
+  RUN_TEST(
+      test_adapter_coalesces_duplicate_candidates_and_delays_failed_sdp_retry);
   return UNITY_END();
 }

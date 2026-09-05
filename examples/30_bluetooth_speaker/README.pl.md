@@ -59,6 +59,14 @@ klucz połączenia z identyfikatorem profilu A2DP. AVRCP nie zapisuje drugiego
 klucza. Znany telefon może łączyć się ponownie, gdy urządzenie pozostaje
 niewidoczne dla nowych urządzeń.
 
+W Androidzie podczas tego okna otwórz systemowy ekran parowania nowego
+urządzenia, wybierz `JaszczurHAL Speaker`, zaakceptuj Just Works i uruchom
+odtwarzanie multimediów. Bramka sprzętowa `rp2040:picow` używała źródła Android
+oraz filtrowanego i wzmacnianego wyjścia GP6. Bramka runtime
+`rp2350-arm:pico2w` używała źródła BlueZ; produkt na tej płytce nadal musi
+sprawdzić wybrane fizyczne wyjście audio. Inne źródła i tory wyjściowe wymagają
+własnego testu end-to-end.
+
 Dostępne komendy szeregowe to `INFO`, `PAIR`, `RESET` i `WATCHDOG`. `PAIR`
 otwiera kolejne ograniczone czasowo okno. `RESET` usuwa trwały bond i
 pozostawia parowanie zamknięte do jawnej komendy `PAIR` albo restartu z pustym

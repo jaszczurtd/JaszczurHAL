@@ -76,6 +76,8 @@ hal_status_t hal_mock_ble_get_stream_published(uint8_t *out_version,
 void hal_mock_bluetooth_classic_reset(void);
 void hal_mock_bluetooth_classic_set_peer_restore_status(hal_status_t status);
 uint32_t hal_mock_bluetooth_classic_peer_restore_calls(void);
+/** @brief Return the number of SDP queries issued since the last mock reset. */
+uint32_t hal_mock_bluetooth_classic_sdp_query_calls(void);
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -703,6 +705,24 @@ void hal_mock_tcp_reset(void);
 /** @brief Control result returned by hal_tcp_socket_connect() (default: true).
  */
 void hal_mock_tcp_set_connect_result(bool result);
+/**
+ * @brief Set the remaining mock TCP send capacity in bytes.
+ * @param socket Live mock socket; NULL or closed sockets are rejected.
+ * @param capacity Bytes accepted before HAL_EAGAIN; SIZE_MAX means unlimited
+ *                 (the default). Call again to simulate newly available space.
+ * @return HAL_OK or HAL_EINVAL for an invalid socket.
+ */
+hal_status_t hal_mock_tcp_set_send_capacity(hal_tcp_socket_t socket,
+                                            size_t capacity);
+/**
+ * @brief Set a mock TCP send result without accepting any bytes on failure.
+ * @param socket Live mock socket; NULL or closed sockets are rejected.
+ * @param status HAL_OK restores normal sending; another status persists until
+ *               replaced or the socket is reset. Zero-length sends succeed.
+ * @return HAL_OK or HAL_EINVAL for an invalid socket.
+ */
+hal_status_t hal_mock_tcp_set_send_status(hal_tcp_socket_t socket,
+                                          hal_status_t status);
 /** @brief Return the most recently allocated TCP socket. */
 hal_tcp_socket_t hal_mock_tcp_get_last_opened_socket(void);
 /** @brief Inject inbound bytes into a specific mock TCP socket. */

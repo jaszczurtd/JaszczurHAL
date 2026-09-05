@@ -58,13 +58,17 @@ pozostają ważni tylko do restartu. Aplikacja produkcyjna musi zastąpić
 szeregowe polecenie `AUTHORIZE` zaufanym lokalnym gestem i wywoływać `SAVE`
 dopiero po zweryfikowaniu peera przez swój profil.
 
-Przy pierwszym uruchomieniu włącz tryb parowania gamepada. Przykład otwiera
-okno wykrywania o ograniczonym czasie i zatwierdza oczekujące żądanie Just Works
-albo starszy PIN `0000`. Jeśli okno wygaśnie bez wybrania urządzenia, przykład
-otwiera nowe. Zaakceptowany adres może służyć do ponownego łączenia do czasu
-zamknięcia profilu. Provider przekazany do `hal_gamepad_open_ex()` zachowuje go
-po restarcie; zgodnościowy provider gamepada jest jednoslotowym adapterem
-indeksowanego managera Classic.
+Przy pierwszym uruchomieniu włącz sprzętowo zweryfikowany 8BitDo Zero 2 model
+80EH w trybie Android D-input przez `B+Start`, a następnie przytrzymaj `Select`,
+aż dioda parowania zacznie migać. Przykład otwiera okno wykrywania o ograniczonym
+czasie i zatwierdza oczekujące żądanie Just Works albo starszy PIN `0000`. Jeśli
+okno wygaśnie bez wybrania urządzenia, przykład otwiera nowe. Po zapisaniu bondu
+używaj do reconnectu zwykłego włączenia przyciskiem `Start`; nie przełączaj pada
+ponownie w tryb parowania. Provider przekazany do `hal_gamepad_open_ex()`
+zachowuje zaakceptowany adres po restarcie; zgodnościowy provider gamepada jest
+jednoslotowym adapterem indeksowanego managera Classic. Pełną bramkę sprzętową
+gamepada zaliczyła wyłącznie ta kombinacja kontrolera, trybu i hosta
+`rp2350-arm:pico2w`; inne kombinacje wymagają osobnej walidacji.
 
 Ogólny wariant HID celowo odrzuca parowanie, dopóki
 `localPairingConsent()` nie zostanie połączone z zaufanym lokalnym gestem. Po
@@ -88,8 +92,17 @@ utracie połączenia.
 
 Przykład bazowy pokazuje inicjalizację po uruchomieniu planisty, parowanie,
 autoryzację, ponowne łączenie, diagnostykę stanów, obsługę przepełnienia oraz
-opróżnianie kolejki stanów. Wariant `ble` celowo nie ogłasza usługi BLE; jedynie
-potwierdza, że oba publiczne profile uzyskują dostęp do tej samej instancji hosta
-CYW43/BTstack, odpytują ją i zwalniają. Implementację Classic/HID dla
-oryginalnego ESP32 obejmuje osobny test kompilacji i linkowania ESP-IDF;
-dispatcher natywnych przykładów nie obsługuje jeszcze targetów ESP.
+opróżnianie kolejki stanów. Wariant `ble` dodaje pasywny Observer BLE do profilu
+gamepada Classic. Podczas startu zwalnia i ponownie uzyskuje każdy profil,
+podczas gdy drugi utrzymuje wspólny host CYW43/BTstack. Polecenia `INFO`,
+`BLE_START`, `BLE_STOP` i `DISCONNECT` sprawdzają równoczesne skanowanie oraz
+ponowne łączenie HID. Okresowa diagnostyka podaje użycie stosu, high-water i
+błędy alokacji pul HCI/L2CAP/link-key/HID oraz ruch transportu HCI i trafienia
+limitu drain. Buildy RP rezerwują zmierzony stos core 0 o rozmiarze 4 KiB dla
+tej rozbudowanej ścieżki diagnostycznej. Wariant używa klucza KV `0xd001`, więc
+jego bond gamepada pozostaje zgodny z obrazem regresji sprzętowej doomConsole.
+Nie ogłasza usługi BLE.
+
+Implementację Classic/HID dla oryginalnego ESP32 obejmuje osobny test
+kompilacji i linkowania ESP-IDF; dispatcher natywnych przykładów nie obsługuje
+jeszcze targetów ESP.

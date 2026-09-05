@@ -1,4 +1,5 @@
 #include "fakes/lwip_fake.h"
+#include "hal/core/hal_array.h"
 #include "hal/network/jh_lwip_tcp.h"
 #include "hal/network/jh_lwip_udp.h"
 #include "utils/unity.h"
@@ -288,6 +289,39 @@ void test_tcp_partial_send_and_output_error(void) {
   jh_lwip_tcp_socket_close(&socket);
 }
 
+void test_tcp_send_backpressure_preserves_connection_and_allows_retry(void) {
+  jh_lwip_tcp_socket_t socket;
+  tcp_pcb *pcb = open_connected_tcp(&socket);
+  TEST_ASSERT_NOT_NULL(pcb);
+  pcb->send_buffer = 0u;
+  size_t sent = 99u;
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN,
+                        jh_lwip_tcp_socket_send(&socket, "data", 4u, &sent));
+  TEST_ASSERT_EQUAL_size_t(0u, sent);
+  TEST_ASSERT_TRUE(jh_lwip_tcp_socket_is_connected(&socket));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        jh_lwip_tcp_socket_send(&socket, nullptr, 0u, &sent));
+
+  pcb->send_buffer = 4u;
+  const err_t resource_errors[] = {ERR_MEM, ERR_BUF};
+  for (size_t i = 0u; i < COUNTOF(resource_errors); ++i) {
+    lwip_fake_tcp_set_write_status(resource_errors[i]);
+    TEST_ASSERT_EQUAL_INT(HAL_EAGAIN,
+                          jh_lwip_tcp_socket_send(&socket, "data", 4u, &sent));
+    TEST_ASSERT_EQUAL_size_t(0u, sent);
+    TEST_ASSERT_TRUE(jh_lwip_tcp_socket_is_connected(&socket));
+  }
+  lwip_fake_tcp_set_write_status(ERR_OK);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        jh_lwip_tcp_socket_send(&socket, "data", 4u, &sent));
+  TEST_ASSERT_EQUAL_size_t(4u, sent);
+  TEST_ASSERT_EQUAL_MEMORY("data", lwip_fake_tcp_last_write_data(), 4u);
+  jh_lwip_tcp_socket_close(&socket);
+  TEST_ASSERT_EQUAL_INT(HAL_ESTATE,
+                        jh_lwip_tcp_socket_send(&socket, "data", 4u, &sent));
+  TEST_ASSERT_EQUAL_size_t(0u, sent);
+}
+
 void test_tcp_fragmented_receive_and_window_acknowledgement(void) {
   jh_lwip_tcp_socket_t socket;
   tcp_pcb *pcb = open_connected_tcp(&socket);
@@ -558,6 +592,7 @@ int main(void) {
   RUN_TEST(test_udp_packet_builder_overflow_and_close_cleanup);
   RUN_TEST(test_tcp_connect_success_and_failure_states);
   RUN_TEST(test_tcp_partial_send_and_output_error);
+  RUN_TEST(test_tcp_send_backpressure_preserves_connection_and_allows_retry);
   RUN_TEST(test_tcp_fragmented_receive_and_window_acknowledgement);
   RUN_TEST(test_tcp_fin_keeps_buffered_data_readable);
   RUN_TEST(test_tcp_error_callback_invalidates_pcb);

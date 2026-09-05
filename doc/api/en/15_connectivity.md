@@ -721,7 +721,22 @@ Default static limits can be overridden before including HAL headers:
 #define HAL_HTTP_SERVER_MAX_RESPONSE_HEADERS 8u
 #define HAL_HTTP_SERVER_RESPONSE_HEADER_SIZE 512u
 #define HAL_HTTP_SERVER_DEFAULT_BACKLOG 2u
+#define HAL_HTTP_SERVER_RESPONSE_TIMEOUT_MS 15000u
+#define HAL_HTTP_SERVER_IDLE_TIMEOUT_MS 5000u
 ```
+
+Each client owns a response buffer sized as `HAL_HTTP_SERVER_RESPONSE_HEADER_SIZE`
+plus `HAL_HTTP_SERVER_RESPONSE_BUFFER_SIZE` (1536 bytes by default). The handler
+runs once; `hal_http_server_poll()` attempts one write per client and resumes
+partial writes or `HAL_EAGAIN` on later calls. Other clients continue to be
+serviced while a response waits for TCP capacity. The connection closes when
+TCP has accepted all response bytes, on a transport error, or after the response
+or idle timeout. Both timeouts start when the response is prepared; send progress
+resets only the idle timeout. Setting a timeout to zero disables that limit.
+
+`hal_http_response_write()` reserves one byte for a trailing NUL and rejects
+oversized lengths, including values near `SIZE_MAX`, with `HAL_EOVERFLOW`.
+Rejected writes leave the existing body and its length unchanged.
 
 - **shared thematic implementation:** `hal/network/http/hal_http_server.cpp`.
 - **impl/.mock:** covered through the mock TCP listener/socket backend and
@@ -1586,6 +1601,10 @@ void hal_tcp_listener_close(hal_tcp_listener_t listener);
   `HAL_NET_TIMEOUT_FOREVER` requests a blocking receive without a fixed
   deadline.
 - `hal_tcp_socket_send(...)` returns the accepted byte count or `<0` on error.
+- Use `hal_tcp_socket_send_ex(...)` to distinguish temporary send-buffer
+  exhaustion (`HAL_EAGAIN`) from connection errors. Writes may be partial;
+  resume after `out_sent` bytes. The shared lwIP backend also returns
+  `HAL_EAGAIN` when `tcp_write()` temporarily lacks queue memory.
 - `hal_tcp_socket_recv(...)` returns bytes read, `0` on timeout/no data/peer
   close, or `<0` for invalid handles/arguments.
 - `hal_tcp_socket_can_recv(...)` and `hal_tcp_socket_can_send(...)` are

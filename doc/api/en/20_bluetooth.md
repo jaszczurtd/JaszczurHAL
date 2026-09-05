@@ -34,9 +34,11 @@ Stream payload to the shared command router; it does not add a GATT client.
 | BLE | `rp2040` | `pico-rm2` | external PIM730/RM2 CYW43439 over PIO | build-supported; dedicated hardware gate pending |
 | BLE | `stm32g474` | `nucleo-g474re-pim730` | external PIM730/RM2 CYW43439 over gSPI | Peripheral and Observer gates plus full bare-metal/FreeRTOS Stream display-load gates passed |
 | BLE | `esp32s3` | `waveshare-esp32-s3-zero` | integrated LE controller with ESP-IDF NimBLE | complete compile/link fixture; radio hardware gate pending |
-| Classic / HID Host / gamepad | `rp2040` / `rp2350-arm` / `stm32g474` | Bluetooth-capable profiles above | CYW43439 with BTstack | Zero 2 gamepad and generic Classic XY-BT gates passed on `pico2w`; a Pico W mouse fixture also passed the non-gamepad HID descriptor/report gate against the Pico 2 W host |
+| Classic / HID Host / gamepad | `rp2350-arm` | `pico2w` | onboard CYW43439 with BTstack | hardware-validated with one 8BitDo Zero 2 model 80EH in Android D-input mode; generic Classic XY-BT and a Pico W mouse fixture also passed their respective manager and raw HID gates against this host |
+| Classic / HID Host / gamepad | `rp2040` / `stm32g474` | `picow` / `pico-rm2` / `nucleo-g474re-pim730` | CYW43439 with BTstack | build-supported; a dedicated HID/gamepad radio gate has not been passed on these hosts |
 | Classic / HID Host / gamepad | `esp32` | `esp32-devkitc-v4` | integrated BR/EDR controller with ESP-IDF Bluedroid and ESP HID Host | complete compile/link fixture; generic radio hardware gate pending |
-| A2DP Sink / AVRCP Target | `rp2040` / `rp2350-arm` | `picow` / `pico2w` | onboard CYW43439 with BTstack and Bluedroid SBC decoder | build-supported with deterministic host codec/runtime coverage; end-to-end source and audio-output acceptance is required per product |
+| A2DP Sink / AVRCP Target | `rp2040` | `picow` | onboard CYW43439 with BTstack and Bluedroid SBC decoder | hardware-validated with an Android source, 44.1 kHz stereo SBC, filtered/amplified GP6 PWM output, pause/resume/stop, absolute volume, and bonded reconnect after watchdog and cold boot |
+| A2DP Sink / AVRCP Target | `rp2350-arm` | `pico2w` | onboard CYW43439 with BTstack and Bluedroid SBC decoder | hardware-validated with a BlueZ source at 48 kHz stereo for more than 30 minutes, including pause/resume/stop, absolute volume, and reconnect; a product must still validate its selected physical audio output |
 | BLE and Classic profiles | `mock` | `host-mock` | deterministic test backends | Classic, non-gamepad HID and gamepad host tests |
 
 The RP2350 backend supports Pico 2 W only with the `rp2350-arm` target. Pico 2
@@ -442,6 +444,15 @@ Opening a pairing window is a deliberate authorization action. Products
 should expose it only after local user input and should not treat a device
 name, Bluetooth address, or an unauthenticated Just Works exchange as proof of
 user identity.
+
+The hardware-validated gamepad combination is one 8BitDo Zero 2 model 80EH in
+Android D-input mode on `rp2350-arm:pico2w`. Start that mode with `B+Start`,
+then hold `Select` until the pairing LED flashes while the application pairing
+window is open. Later reconnects use the normal `Start` power-on path and do
+not reopen pairing. The controller's Switch and macOS modes advertise separate
+Bluetooth identities and are not part of this support declaration. Other
+gamepads, Zero 2 modes, and HID-capable boards require their own descriptor,
+report, reconnect, and resource gate.
 
 #### Persistent bonding
 

@@ -49,65 +49,6 @@ def variable_path(variable: str, reference: str) -> str:
     return f"${{{variable}}}/{reference}"
 
 
-def cmake_tools_cache_value(
-    value: Any,
-    *,
-    jh_root_ref: str,
-    project_ref: str,
-    build_ref: str,
-) -> Any:
-    if not isinstance(value, str):
-        return value
-    return (
-        value.replace("${jhRoot}", jh_root_ref)
-        .replace("${project}", project_ref)
-        .replace("${projectDir}", project_ref)
-        .replace("${workspaceFolder}", project_ref)
-        .replace("${buildDir}", build_ref)
-    )
-
-
-def target_board_cache(registry: dict[str, dict], target: str, board: str) -> dict[str, Any]:
-    target_desc = registry.get(target) or {}
-    cache: dict[str, Any] = dict(target_desc.get("cache") or {})
-    for board_desc in target_desc.get("boards") or []:
-        if isinstance(board_desc, dict) and board_desc.get("id") == board:
-            cache.update(board_desc.get("cache") or {})
-            break
-    return cache
-
-
-def cmake_tools_configure_settings(
-    registry: dict[str, dict],
-    *,
-    target: str,
-    board: str,
-    module: str,
-    jh_root_ref: str,
-    project_ref: str = "${workspaceFolder}",
-    build_ref: str = "${workspaceFolder}/.build",
-) -> dict[str, Any]:
-    settings = {
-        key: cmake_tools_cache_value(
-            value,
-            jh_root_ref=jh_root_ref,
-            project_ref=project_ref,
-            build_ref=build_ref,
-        )
-        for key, value in target_board_cache(registry, target, board).items()
-    }
-    settings.update(
-        {
-            "JH_ROOT": jh_root_ref,
-            "JH_PROJECT_DIR": project_ref,
-            "JH_MODULE_NAME": module,
-            "JH_TARGET": target,
-            "JH_BOARD": board,
-        }
-    )
-    return settings
-
-
 def schema_reference(from_dir: Path, to_path: Path) -> str:
     reference = relpath(from_dir, to_path)
     if Path(reference).is_absolute():
@@ -219,6 +160,7 @@ def build_files(
     registry = load_target_registry(jh_root)
     target, board = resolve_target_board(registry, target, board)
     from vscode_task_config import (
+        cmake_tools_configure_settings,
         cortex_debug_launch_document,
         project_tasks_document,
         vscode_entry_settings,

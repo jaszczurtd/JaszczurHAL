@@ -14,6 +14,7 @@ typedef struct {
 } jh_bluetooth_classic_hid_pool_snapshot_t;
 
 typedef struct {
+  jh_bluetooth_classic_hid_pool_snapshot_t hci_connections;
   jh_bluetooth_classic_hid_pool_snapshot_t l2cap_services;
   jh_bluetooth_classic_hid_pool_snapshot_t l2cap_channels;
   jh_bluetooth_classic_hid_pool_snapshot_t link_keys;

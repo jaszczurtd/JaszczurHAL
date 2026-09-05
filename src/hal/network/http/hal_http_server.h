@@ -22,7 +22,8 @@ extern "C" {
  * The server intentionally keeps the public API independent of any concrete
  * TCP/IP stack. It accepts one request per connection, dispatches an exact
  * method/path route, sends a buffered response with Content-Length and closes
- * the connection.
+ * the connection once the complete response is accepted by TCP. Partial writes
+ * and temporary send-buffer exhaustion are resumed by subsequent poll calls.
  */
 
 #ifndef HAL_HTTP_SERVER_MAX_ROUTES
@@ -79,6 +80,11 @@ extern "C" {
 
 #ifndef HAL_HTTP_SERVER_IDLE_TIMEOUT_MS
 #define HAL_HTTP_SERVER_IDLE_TIMEOUT_MS 5000u
+#endif
+
+/** @brief Maximum response transmission time in milliseconds; 0 disables it. */
+#ifndef HAL_HTTP_SERVER_RESPONSE_TIMEOUT_MS
+#define HAL_HTTP_SERVER_RESPONSE_TIMEOUT_MS 15000u
 #endif
 
 #if HAL_HTTP_SERVER_ROUTE_PATH_MAX < 2
@@ -151,7 +157,10 @@ bool hal_http_server_is_running(void);
  * @brief Service accepts and active clients.
  *
  * Call regularly from the application loop. The function is non-blocking and
- * handles at most a small amount of work per call.
+ * attempts at most one response write per client per call. Each handler runs
+ * once per request. Pending responses are copied into per-client storage and
+ * closed after HAL_HTTP_SERVER_RESPONSE_TIMEOUT_MS, or after
+ * HAL_HTTP_SERVER_IDLE_TIMEOUT_MS without send progress; 0 disables each limit.
  */
 void hal_http_server_poll(void);
 
@@ -168,7 +177,15 @@ hal_status_t hal_http_response_set_content_type(hal_http_response_t *response,
 hal_status_t hal_http_response_set_header(hal_http_response_t *response,
                                           const char *name, const char *value);
 
-/** @brief Append raw response body bytes. */
+/**
+ * @brief Append raw response body bytes, reserving one byte for a trailing NUL.
+ * @param response Response supplied to the route handler; must not be NULL.
+ * @param data Bytes to copy; may be NULL only when @p len is zero.
+ * @param len Number of bytes to append.
+ * @return HAL_OK on success, HAL_EINVAL for invalid pointers, or HAL_EOVERFLOW
+ *         if the body would exceed HAL_HTTP_SERVER_RESPONSE_BUFFER_SIZE - 1.
+ *         Rejected writes leave existing body bytes and length unchanged.
+ */
 hal_status_t hal_http_response_write(hal_http_response_t *response,
                                      const void *data, size_t len);
 
