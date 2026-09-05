@@ -5,5 +5,5 @@ Pełne wymagania, procedurę, kryteria akceptacji i zapisane wyniki zawiera
 
 Komendy szeregowe `STOP`, `START`, `REOPEN` i `INFO` sprawdzają zatrzymanie i
 ponowne uruchomienie skanowania, pełne ponowne uzyskanie profilu BLE bez resetu
-kontrolera oraz ograniczoną diagnostykę. Próba regresyjna C10 musi odebrać
-kolejny poprawny raport zarówno po `START`, jak i po `REOPEN`.
+kontrolera oraz ograniczoną diagnostykę. Test regresji współistnienia musi
+odebrać kolejny poprawny raport zarówno po `START`, jak i po `REOPEN`.

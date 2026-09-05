@@ -418,7 +418,7 @@ The complete reference is split across the following focused documents:
 | 17 | [cJSON](../api/en/17_cJSON.md) | Managed `cJSON` / `cJSON_Utils`, include patterns, ownership rules, parsing, printing, JSON Pointer/Patch/Merge Patch examples |
 | 18 | [LodePNG](../api/en/18_LodePNG.md) | Managed `LodePNG`, include patterns, embedded profile, memory ownership, PNG/Base64 asset script and RGB565 examples |
 | 19 | [JPEG](../api/en/19_JPEG.md) | Managed `TJpgDec` core, embedded profile, memory ownership, JPEG/Base64 asset script and RGB565 examples |
-| 20 | [Bluetooth](../api/en/20_bluetooth.md) | BLE Peripheral/Observer, Classic discovery/pairing/peers, raw HID Host, normalized gamepad adapter, authenticated Stream, bounded queues, board support, coexistence, and BTstack distribution boundary |
+| 20 | [Bluetooth](../api/en/20_bluetooth.md) | BLE Peripheral/Observer, Classic discovery/pairing/peers, raw HID Host, normalized gamepad adapter, A2DP Sink, AVRCP Target, authenticated Stream, bounded queues, board support, coexistence, and BTstack distribution boundary |
 | 21 | [Raw LoRa radio](../api/en/21_lora.md) | Validated SX1262 profiles plus experimental software-only SX1261/SX1276/SX1278, asynchronous TX/RX/CAD, current RSSI, capabilities, callbacks, diagnostics and time-on-air |
 | 22 | [Reliable LoRa link](../api/en/22_lora_link.md) | 16-bit addressing, message sequences, ACK/retry, duplicate suppression, fragmentation and optional ChaCha20-Poly1305 over `hal_lora_radio` |
 | 23 | [Command routing](../api/en/23_commands.md) | Transport-neutral handler registration and policy, bounded request/response/event wire messages, network compatibility, framed serial, reliable LoRa and authenticated BLE Stream adapters |
@@ -432,9 +432,13 @@ The complete reference is split across the following focused documents:
 | `hal_adc` | [GPIO, ADC and PWM](../api/en/05_gpio_adc_pwm.md) |
 | `hal_bh1750` | [Sensors](../api/en/11_sensors.md) |
 | `hal_ble` | [Bluetooth Low Energy](../api/en/20_bluetooth.md) |
+| `hal_ble_stream` | [JH BLE Stream v1](../api/en/20_bluetooth.md#jh-ble-stream-v1) |
+| `hal_ble_commands` | [Authenticated BLE Stream adapter](../api/en/23_commands.md#authenticated-ble-stream-adapter) |
 | `hal_bluetooth_classic` | [Bluetooth Classic manager](../api/en/20_bluetooth.md#classic-manager) |
 | `hal_bluetooth_hid_host` | [Generic Classic HID Host](../api/en/20_bluetooth.md#generic-hid-host) |
 | `hal_gamepad` | [Bluetooth gamepad adapter](../api/en/20_bluetooth.md#gamepad-adapter) |
+| `hal_bluetooth_a2dp_sink` | [A2DP Sink](../api/en/20_bluetooth.md#a2dp-sink-and-avrcp-target) |
+| `hal_bluetooth_avrcp_target` | [AVRCP Target](../api/en/20_bluetooth.md#a2dp-sink-and-avrcp-target) |
 | `hal_adp5360` | [Sensors](../api/en/11_sensors.md) |
 | `hal_bits` | [Timers and system](../api/en/06_timers_system.md) |
 | `hal_can` | [CAN and display](../api/en/10_can_display.md) |

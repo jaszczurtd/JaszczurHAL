@@ -32,6 +32,7 @@ enum {
   HAL_GAMEPAD_SNAPSHOT_QUEUE_DEPTH = 16u,
 };
 
+/** Generic Desktop axis slots exposed in normalized snapshots. */
 typedef enum {
   HAL_GAMEPAD_AXIS_X = 0,
   HAL_GAMEPAD_AXIS_Y,
@@ -44,6 +45,7 @@ typedef enum {
   HAL_GAMEPAD_AXIS_WHEEL,
 } hal_gamepad_axis_t;
 
+/** Direction bits used by hal_gamepad_snapshot_t::dpad. */
 typedef enum {
   HAL_GAMEPAD_DPAD_NONE = 0u,
   HAL_GAMEPAD_DPAD_UP = (1u << 0),
@@ -52,6 +54,7 @@ typedef enum {
   HAL_GAMEPAD_DPAD_LEFT = (1u << 3),
 } hal_gamepad_dpad_t;
 
+/** Gamepad adapter lifecycle and connection state. */
 typedef enum {
   HAL_GAMEPAD_STATE_UNINITIALIZED = 0,
   HAL_GAMEPAD_STATE_STARTING,
@@ -62,6 +65,7 @@ typedef enum {
   HAL_GAMEPAD_STATE_FAILED,
 } hal_gamepad_state_t;
 
+/** Latest normalized gamepad inputs or one queued state change. */
 typedef struct {
   /** Changes whenever a new HID connection is established. */
   uint32_t generation;
@@ -77,6 +81,7 @@ typedef struct {
   bool connected;
 } hal_gamepad_snapshot_t;
 
+/** Adapter state, pairing state, and bounded-queue diagnostics. */
 typedef struct {
   hal_gamepad_state_t state;
   hal_status_t last_status;
@@ -88,8 +93,9 @@ typedef struct {
   bool known_device;
 } hal_gamepad_info_t;
 
-/** @brief Opaque handle for the single Bluetooth gamepad profile. */
+/** @brief Incomplete implementation type for the opaque gamepad handle. */
 typedef struct hal_gamepad_impl_s hal_gamepad_impl_t;
+/** @brief Opaque handle for the single Bluetooth gamepad profile. */
 typedef hal_gamepad_impl_t *hal_gamepad_t;
 
 enum {
@@ -106,17 +112,28 @@ typedef hal_bluetooth_classic_bond_blob_t hal_gamepad_bond_blob_t;
 
 /**
  * @brief Load the persisted bond blob, if any.
+ * @param context Provider context; may be NULL when supported by the provider.
+ * @param out_blob Receives the opaque record; must not be NULL.
  * @return HAL_OK with *out_blob filled when a bond is stored, HAL_ENOENT
- *         when none is stored yet, or an I/O status on failure.
+ * when none is stored yet, or an I/O status on failure.
  */
 typedef hal_status_t (*hal_gamepad_bond_load_fn)(
     void *context, hal_gamepad_bond_blob_t *out_blob);
 
-/** @brief Persist the given bond blob, replacing any previous one. */
+/**
+ * @brief Persist a complete bond blob, replacing any previous one.
+ * @param context Provider context; may be NULL when supported by the provider.
+ * @param blob Opaque record to store atomically; must not be NULL.
+ * @return HAL_OK or an I/O status. Failure must preserve the previous record.
+ */
 typedef hal_status_t (*hal_gamepad_bond_store_fn)(
     void *context, const hal_gamepad_bond_blob_t *blob);
 
-/** @brief Remove any persisted bond blob (factory reset / replace pad). */
+/**
+ * @brief Remove any persisted bond blob.
+ * @param context Provider context; may be NULL when supported by the provider.
+ * @return HAL_OK, including when no record exists, or an I/O status.
+ */
 typedef hal_status_t (*hal_gamepad_bond_erase_fn)(void *context);
 
 /**
@@ -142,53 +159,117 @@ typedef struct {
   hal_gamepad_bond_erase_fn erase;
 } hal_gamepad_bond_provider_t;
 
-/** Initialize the Bluetooth gamepad profile and return its handle.
- *  Equivalent to hal_gamepad_open_ex(out_gamepad, NULL). */
+/**
+ * @brief Open the Bluetooth gamepad profile with RAM-only bonding.
+ * @param out_gamepad Receives the handle and is cleared on entry; must not be
+ * NULL.
+ * @return The same statuses as hal_gamepad_open_ex().
+ */
 hal_status_t hal_gamepad_open(hal_gamepad_t *out_gamepad);
 
 /**
- * Initialize the Bluetooth gamepad profile with an optional bond provider.
+ * @brief Open the Bluetooth gamepad profile with optional persistent bonding.
  *
+ * @param out_gamepad Receives the handle and is cleared on entry; must not be
+ * NULL.
  * @param bond_provider NULL for RAM-only bonding (cleared on close/restart),
- *        or a provider to persist the bonded peer across reboots. When
- *        given, its load() is consulted once during open() to restore a
- *        previously bonded peer's link key into the controller.
+ * or a complete provider copied during open. Its load function is called once
+ * to restore a previously bonded peer.
+ * @return HAL_OK, HAL_EINVAL for invalid input, HAL_EBUSY when already open,
+ * HAL_ENOMEM for runtime allocation failure, or a Classic/HID/provider startup
+ * error.
  */
 hal_status_t
 hal_gamepad_open_ex(hal_gamepad_t *out_gamepad,
                     const hal_gamepad_bond_provider_t *bond_provider);
 
-/** Stop the profile, clear its selected device, and invalidate the handle. */
+/**
+ * @brief Stop the profile, clear its selected device, and invalidate its
+ * handle.
+ * @param gamepad Live gamepad handle.
+ * @return HAL_OK, HAL_EUNINIT for an invalid or stale handle, HAL_EBUSY during
+ * another operation, HAL_ENOMEM, or a Classic/HID shutdown error.
+ */
 hal_status_t hal_gamepad_close(hal_gamepad_t gamepad);
 
-/** Service Bluetooth transport and profile state without blocking. */
+/**
+ * @brief Service Bluetooth transport and profile state without blocking.
+ * @param gamepad Live gamepad handle.
+ * @return HAL_OK, HAL_EUNINIT for an invalid handle, HAL_EBUSY during another
+ * operation, HAL_EAGAIN while awaiting input, HAL_EOVERFLOW after lost queued
+ * state, HAL_ENOMEM, or a Classic/HID/parser error.
+ */
 hal_status_t hal_gamepad_poll(hal_gamepad_t gamepad);
 
-/** Read profile state and bounded-queue diagnostics. */
+/**
+ * @brief Read profile state and bounded-queue diagnostics.
+ * @param gamepad Live gamepad handle.
+ * @param out_info Receives a snapshot; must not be NULL.
+ * @return HAL_OK, HAL_EINVAL for a NULL output, HAL_EUNINIT for an invalid
+ * handle, HAL_EBUSY during another operation, or HAL_ENOMEM.
+ */
 hal_status_t hal_gamepad_get_info(hal_gamepad_t gamepad,
                                   hal_gamepad_info_t *out_info);
 
-/** Read the latest normalized state without consuming the queue. */
+/**
+ * @brief Read the latest normalized state without consuming the queue.
+ * @param gamepad Live gamepad handle.
+ * @param out_snapshot Receives the latest state; must not be NULL.
+ * @return HAL_OK, HAL_EINVAL for a NULL output, HAL_EUNINIT for an invalid
+ * handle, HAL_EAGAIN before a state is available, HAL_EBUSY, or HAL_ENOMEM.
+ */
 hal_status_t hal_gamepad_snapshot(hal_gamepad_t gamepad,
                                   hal_gamepad_snapshot_t *out_snapshot);
 
 /**
- * Pop one normalized state change. HAL_EOVERFLOW acknowledges lost snapshots;
+ * @brief Pop one normalized state change.
+ *
+ * HAL_EOVERFLOW acknowledges lost snapshots;
  * call again to receive the newest retained sequence.
+ *
+ * @param gamepad Live gamepad handle.
+ * @param out_snapshot Receives the oldest retained state; must not be NULL.
+ * @return HAL_OK, HAL_EINVAL for a NULL output, HAL_EUNINIT for an invalid
+ * handle, HAL_EAGAIN when empty, HAL_EOVERFLOW after lost snapshots,
+ * HAL_EBUSY, or HAL_ENOMEM.
  */
 hal_status_t hal_gamepad_snapshot_next(hal_gamepad_t gamepad,
                                        hal_gamepad_snapshot_t *out_snapshot);
 
-/** Open the bounded pairing window, including to replace a known device. */
+/**
+ * @brief Open the two-minute pairing window, including device replacement.
+ * @param gamepad Live gamepad handle.
+ * @return HAL_OK, HAL_EUNINIT for an invalid handle, HAL_ESTATE unless the
+ * adapter is ready and idle, HAL_EBUSY during another operation, HAL_ENOMEM,
+ * or a Classic scan error.
+ */
 hal_status_t hal_gamepad_pairing_open(hal_gamepad_t gamepad);
 
-/** Authorize a pending Just Works or legacy PIN 0000 request. */
+/**
+ * @brief Authorize a pending Just Works or legacy PIN 0000 request.
+ * @param gamepad Live gamepad handle.
+ * @return HAL_OK, HAL_EUNINIT for an invalid handle, HAL_ESTATE without a
+ * pending request, HAL_EBUSY during another operation, HAL_ENOMEM, or a
+ * Classic pairing error.
+ */
 hal_status_t hal_gamepad_pairing_authorize(hal_gamepad_t gamepad);
 
-/** Reconnect the previously paired gamepad. */
+/**
+ * @brief Start reconnection to the previously paired gamepad.
+ * @param gamepad Live gamepad handle.
+ * @return HAL_OK when queued, HAL_EUNINIT for an invalid handle, HAL_ESTATE
+ * without a saved peer or unless HID is ready, HAL_EBUSY during another
+ * operation, HAL_ENOMEM, or a HID connection error.
+ */
 hal_status_t hal_gamepad_reconnect(hal_gamepad_t gamepad);
 
-/** Request asynchronous disconnection of the active gamepad link. */
+/**
+ * @brief Request asynchronous disconnection of the active gamepad link.
+ * @param gamepad Live gamepad handle.
+ * @return HAL_OK when queued, HAL_EUNINIT for an invalid handle, HAL_ESTATE
+ * without an active link, HAL_EBUSY during another operation, HAL_ENOMEM, or a
+ * HID disconnection error.
+ */
 hal_status_t hal_gamepad_disconnect(hal_gamepad_t gamepad);
 
 /**
@@ -200,11 +281,12 @@ hal_status_t hal_gamepad_disconnect(hal_gamepad_t gamepad);
  * hal_gamepad_pairing_open() starts a fresh pairing; reconnect is refused
  * until a new peer is bonded.
  *
+ * @param gamepad Live gamepad handle.
  * @return HAL_OK on success, HAL_EBUSY when another gamepad or Classic
- *         operation is active, or the provider's erase() status on failure.
- *         HAL_EBUSY can be retried. A provider failure keeps the known peer
- *         available for a later retry; the active HID session and input state
- *         are still cleared.
+ * operation is active, HAL_EUNINIT for an invalid handle, HAL_ENOMEM, or the
+ * provider's erase status. HAL_EBUSY can be retried. A provider failure keeps
+ * the known peer available for a later retry; the active HID session and input
+ * state are still cleared.
  */
 hal_status_t hal_gamepad_forget(hal_gamepad_t gamepad);
 

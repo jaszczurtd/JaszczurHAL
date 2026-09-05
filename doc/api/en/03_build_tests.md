@@ -968,6 +968,57 @@ ELF/map and a symbol listing must also show `ENABLE_CLASSIC` HID Host, SDP
 client, HID parser, and the memory link-key database while excluding ATT,
 GATT, SM, RFCOMM, SDP server, HID Device, and audio profiles.
 
+### BLE and Classic gamepad coexistence gate
+
+The public `ble` variant of example 29 runs a passive BLE Observer beside the
+Classic HID/gamepad profile on the shared CYW43 host:
+
+```sh
+vscode/entry/jh-vscode build \
+  --project examples/29_bluetooth_gamepad \
+  --target rp2350-arm --board pico2w --variant ble
+vscode/entry/jh-vscode upload \
+  --project examples/29_bluetooth_gamepad \
+  --target rp2350-arm --board pico2w --variant ble \
+  --port /dev/ttyACM0
+```
+
+Follow the pairing procedure in the
+[example README](../../../examples/29_bluetooth_gamepad/README.md). Acceptance
+requires valid gamepad input while BLE reports continue, successful
+`BLE_STOP`/`BLE_START`, and HID disconnect/reconnect without stopping BLE.
+`INFO` must retain both radio-runtime users and must not report HCI transport,
+fixed-pool allocation, or queue errors.
+
+### A2DP Sink and AVRCP Target hardware gate
+
+Example 30 is the public A2DP/AVRCP hardware exercise for Pico W and Pico 2 W:
+
+```sh
+vscode/entry/jh-vscode build \
+  --project examples/30_bluetooth_speaker \
+  --target rp2040 --board picow --variant avrcp
+vscode/entry/jh-vscode upload \
+  --project examples/30_bluetooth_speaker \
+  --target rp2040 --board picow --variant avrcp \
+  --port /dev/ttyACM0
+vscode/entry/jh-vscode build \
+  --project examples/30_bluetooth_speaker \
+  --target rp2350-arm --board pico2w --variant avrcp
+vscode/entry/jh-vscode upload \
+  --project examples/30_bluetooth_speaker \
+  --target rp2350-arm --board pico2w --variant avrcp \
+  --port /dev/ttyACM0
+```
+
+Follow the wiring, pairing, and serial-command procedure in the
+[example README](../../../examples/30_bluetooth_speaker/README.md). Acceptance
+requires clean SBC playback, pause/resume/stop, AVRCP absolute volume, bonded
+reconnect after restart, a separate watchdog-reset reconnect, and no queue,
+pool, DMA, or timing failure. The physical output stage remains a product-level
+check. The `ble-a2dp` variant is part of the compile gate; active audio+BLE
+coexistence is not yet a hardware requirement.
+
 ### Bluetooth Observer hardware probe
 
 `tests/hardware/bluetooth_observer` validates the passive BLE Observer API on
@@ -996,6 +1047,10 @@ Successful output uses the `JHBL4A` prefix. Record at least one Teltonika EYE
 Beacon report on each board, the total and dropped report counters, and the
 ELF/map memory summary. The test remains passive: scan responses, GATT client,
 connections, pairing, and bonding are outside this probe.
+
+Use `STOP`, `START`, `REOPEN`, and `INFO` to verify scan restart, full BLE
+profile reacquisition without a controller reset, and bounded diagnostics. A
+valid report must arrive after both `START` and `REOPEN`.
 
 RP2350 RISC-V is unsupported because its CYW43 Bluetooth transport is not
 enabled.
@@ -1162,17 +1217,12 @@ GLib plus the `cryptography` package.
 | STM32G474 + RM2/PIM730 + ILI9341, bare-metal | 50/50 | 2910 messages / 300.1 s (9.70 Hz) | HOST PASS, including IWDG reset |
 | STM32G474 + RM2/PIM730 + ILI9341, FreeRTOS | 50/50 | 2930 messages / 300.0 s (9.77 Hz) | HOST PASS, including IWDG reset |
 
-The STM32G474 display-load runs on 2026-08-25 used the `display` and
-`display-freertos` variants with the PIM730 on PB12-PB15 and the ILI9341 on
-SPI1. Both passed lifecycle restart, an unattended IWDG reset, 50 authenticated
-reconnects, the five-minute stream, saturation with four retained and eight
-dropped frames plus one reported overflow, and all negative security/recovery
-cases with 62 unique handshakes. The IWDG step changed reset reason `2 -> 4`
-and boot identifier
-`7cb8c0cf4bc622a8 -> 5e78009fc6d2fb2b` in bare-metal and
-`927f820a16299332 -> 5f2cd64b89ba00fc` in FreeRTOS while retaining address
-`28:CD:C1:19:18:19`. Mean/max sustained-stream latency was 103.1/331.1 ms for
-bare-metal and 102.4/313.1 ms for FreeRTOS.
+The STM32G474 display-load runs used the `display` and `display-freertos`
+variants with the PIM730 on PB12-PB15 and the ILI9341 on SPI1. Both passed
+lifecycle restart, an unattended IWDG reset, authenticated reconnects, the
+sustained stream, saturation, and all negative security/recovery cases. The
+reset reason and per-boot identifier changed while the local BLE address
+remained stable.
 
 Earlier pre-watchdog reruns reached exactly 3000 messages in 300.0 seconds in
 both runtimes. An initial bare-metal run that redrew all nine LCD rows every
@@ -1181,11 +1231,9 @@ acceptance threshold. Retaining unchanged rows removed that avoidable load
 while RX/TX and uptime continued to refresh once per second.
 
 After the per-boot oracle was added, a complete Pico 2 W bare-metal rerun again
-passed 50/50 reconnects and 3000 messages in 300.0 s (10.00 Hz), plus
-saturation and all security cases. Its watchdog step changed reset reason
-`3 -> 4` and boot identifier
-`cb3ef2a0b00439b4 -> bc75beed8bfd5cf1` while retaining address
-`2C:CF:67:BB:40:2E`.
+passed reconnect, sustained-stream, saturation, and security checks. Its
+watchdog step changed the reset reason and per-boot identifier while retaining
+the local BLE address.
 
 The recorded passing runs completed the public lifecycle restart, retained the
 local address across the reset test, changed reset reason from `3` to watchdog

@@ -23,10 +23,13 @@
 extern "C" {
 #endif
 
+/** Maximum copied HID report-descriptor size in bytes. */
 #define HAL_BLUETOOTH_HID_DESCRIPTOR_MAX_LEN 256u
+/** Maximum copied HID report payload size in bytes. */
 #define HAL_BLUETOOTH_HID_REPORT_MAX_LEN 32u
 
 #ifndef HAL_BLUETOOTH_HID_REPORT_QUEUE_DEPTH
+/** Number of copied HID reports retained before overflow. */
 #define HAL_BLUETOOTH_HID_REPORT_QUEUE_DEPTH 16u
 #endif
 
@@ -34,6 +37,7 @@ extern "C" {
 #error "HAL_BLUETOOTH_HID_REPORT_QUEUE_DEPTH must be at least 2"
 #endif
 
+/** HID Host profile lifecycle and connection state. */
 typedef enum {
   HAL_BLUETOOTH_HID_STATE_CLOSED = 0,
   HAL_BLUETOOTH_HID_STATE_READY,
@@ -42,12 +46,14 @@ typedef enum {
   HAL_BLUETOOTH_HID_STATE_FAILED,
 } hal_bluetooth_hid_state_t;
 
+/** HID report direction/type encoded by the report transaction. */
 typedef enum {
   HAL_BLUETOOTH_HID_REPORT_INPUT = 1,
   HAL_BLUETOOTH_HID_REPORT_OUTPUT = 2,
   HAL_BLUETOOTH_HID_REPORT_FEATURE = 3,
 } hal_bluetooth_hid_report_type_t;
 
+/** One copied, bounded HID report. */
 typedef struct {
   hal_bluetooth_hid_report_type_t type;
   uint8_t report_id;
@@ -55,6 +61,7 @@ typedef struct {
   uint8_t data[HAL_BLUETOOTH_HID_REPORT_MAX_LEN];
 } hal_bluetooth_hid_report_t;
 
+/** HID connection, descriptor, and report-queue diagnostics. */
 typedef struct {
   hal_bluetooth_hid_state_t state;
   hal_status_t last_status;
@@ -66,7 +73,9 @@ typedef struct {
   bool descriptor_available;
 } hal_bluetooth_hid_info_t;
 
+/** Incomplete implementation type for the opaque HID Host handle. */
 typedef struct hal_bluetooth_hid_host_impl_s hal_bluetooth_hid_host_impl_t;
+/** Opaque handle for one HID Host profile attached to a Classic manager. */
 typedef hal_bluetooth_hid_host_impl_t *hal_bluetooth_hid_host_t;
 
 /**

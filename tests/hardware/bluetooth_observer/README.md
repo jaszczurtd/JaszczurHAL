@@ -6,5 +6,5 @@ are maintained in the
 
 The serial commands `STOP`, `START`, `REOPEN`, and `INFO` exercise scan
 shutdown/startup, full BLE profile reacquisition without a controller reset,
-and bounded diagnostics. A C10 regression run must receive another valid
+and bounded diagnostics. The coexistence regression must receive another valid
 report after both `START` and `REOPEN`.

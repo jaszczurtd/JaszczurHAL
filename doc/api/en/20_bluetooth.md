@@ -30,16 +30,17 @@ Stream payload to the shared command router; it does not add a GATT client.
 | API | Target | Board | Radio/host | Validation |
 |---|---|---|---|---|
 | BLE | `rp2040` | `picow` | onboard CYW43439 with BTstack | Observer and bare-metal/FreeRTOS Stream hardware gates passed |
-| BLE | `rp2350-arm` | `pico2w` | onboard CYW43439 with BTstack | Observer, bare-metal/FreeRTOS Stream, and active Stream+WiFi/MQTT coexistence gates passed |
+| BLE | `rp2350-arm` | `pico2w` | onboard CYW43439 with BTstack | Observer, Stream, and active Stream+WiFi/MQTT hardware gates passed |
 | BLE | `rp2040` | `pico-rm2` | external PIM730/RM2 CYW43439 over PIO | build-supported; dedicated hardware gate pending |
 | BLE | `stm32g474` | `nucleo-g474re-pim730` | external PIM730/RM2 CYW43439 over gSPI | Peripheral and Observer gates plus full bare-metal/FreeRTOS Stream display-load gates passed |
 | BLE | `esp32s3` | `waveshare-esp32-s3-zero` | integrated LE controller with ESP-IDF NimBLE | complete compile/link fixture; radio hardware gate pending |
-| Classic / HID Host / gamepad | `rp2350-arm` | `pico2w` | onboard CYW43439 with BTstack | hardware-validated with one 8BitDo Zero 2 model 80EH in Android D-input mode; generic Classic XY-BT and a Pico W mouse fixture also passed their respective manager and raw HID gates against this host |
+| Classic / HID Host / gamepad | `rp2350-arm` | `pico2w` | onboard CYW43439 with BTstack | manager, raw HID, and gamepad hardware gates passed |
 | Classic / HID Host / gamepad | `rp2040` / `stm32g474` | `picow` / `pico-rm2` / `nucleo-g474re-pim730` | CYW43439 with BTstack | build-supported; a dedicated HID/gamepad radio gate has not been passed on these hosts |
 | Classic / HID Host / gamepad | `esp32` | `esp32-devkitc-v4` | integrated BR/EDR controller with ESP-IDF Bluedroid and ESP HID Host | complete compile/link fixture; generic radio hardware gate pending |
-| A2DP Sink / AVRCP Target | `rp2040` | `picow` | onboard CYW43439 with BTstack and Bluedroid SBC decoder | hardware-validated with an Android source, 44.1 kHz stereo SBC, filtered/amplified GP6 PWM output, pause/resume/stop, absolute volume, and bonded reconnect after watchdog and cold boot |
-| A2DP Sink / AVRCP Target | `rp2350-arm` | `pico2w` | onboard CYW43439 with BTstack and Bluedroid SBC decoder | hardware-validated with a BlueZ source at 48 kHz stereo for more than 30 minutes, including pause/resume/stop, absolute volume, and reconnect; a product must still validate its selected physical audio output |
-| BLE and Classic profiles | `mock` | `host-mock` | deterministic test backends | Classic, non-gamepad HID and gamepad host tests |
+| BLE + Classic HID/gamepad | `rp2350-arm` | `pico2w` | shared onboard CYW43439 with BTstack | passive Observer and a connected gamepad passed the active coexistence gate, including HID disconnect/reconnect while scanning continued |
+| A2DP Sink / AVRCP Target | `rp2040` | `picow` | onboard CYW43439 with BTstack and Bluedroid SBC decoder | A2DP/AVRCP, PWM output, and bonded-reconnect hardware gates passed |
+| A2DP Sink / AVRCP Target | `rp2350-arm` | `pico2w` | onboard CYW43439 with BTstack and Bluedroid SBC decoder | A2DP/AVRCP and reconnect hardware gates passed; a product must still validate its selected physical audio output |
+| BLE and Classic profiles | `mock` | `host-mock` | deterministic test backends | BLE, Classic, HID, gamepad, A2DP, and AVRCP host regression coverage |
 
 The RP2350 backend supports Pico 2 W only with the `rp2350-arm` target. Pico 2
 W with `rp2350-riscv` is unsupported because the CYW43 Bluetooth transport is
@@ -445,14 +446,10 @@ should expose it only after local user input and should not treat a device
 name, Bluetooth address, or an unauthenticated Just Works exchange as proof of
 user identity.
 
-The hardware-validated gamepad combination is one 8BitDo Zero 2 model 80EH in
-Android D-input mode on `rp2350-arm:pico2w`. Start that mode with `B+Start`,
-then hold `Select` until the pairing LED flashes while the application pairing
-window is open. Later reconnects use the normal `Start` power-on path and do
-not reopen pairing. The controller's Switch and macOS modes advertise separate
-Bluetooth identities and are not part of this support declaration. Other
-gamepads, Zero 2 modes, and HID-capable boards require their own descriptor,
-report, reconnect, and resource gate.
+The `rp2350-arm:pico2w` hardware gate covers one D-input gamepad profile,
+including descriptor parsing, reports, bonding, and reconnect. Other gamepad
+profiles and HID-capable boards require their own descriptor, report,
+reconnect, and resource validation.
 
 #### Persistent bonding
 
@@ -758,22 +755,14 @@ runtime, and service lock. Applications must not link Pico SDK
 `pico_cyw43_arch` or `pico_btstack_cyw43` alongside this backend. BLE callbacks
 are deferred until after radio servicing, so application code never runs under
 that lock. BLE-only, Classic-only, and combined BLE+Classic images use the same
-reference-counted Bluetooth host. Active gamepad+BLE coexistence on hardware is
-not yet a release gate.
+reference-counted Bluetooth host.
 
-The 2026-08-25 Pico 2 W active coexistence gate kept an authenticated Stream
-connection active while MQTT traffic forced a WiFi disconnect and reconnect.
-Both bare-metal and FreeRTOS sustained 10.00 BLE echoes/s for more than 607 s
-with zero loss. Bare-metal completed 6079/6079 echoes (94.7 ms mean, 249.0 ms
-maximum latency); FreeRTOS completed 6077/6077 (93.7 ms mean, 204.1 ms
-maximum).
-
-Each run carried 34 BLE echoes through the WiFi reconnect window,
-re-established WiFi and MQTT, retained both radio-runtime references, and
-reported no BLE, Stream, MQTT, HCI, queue, or event errors. The measured
-maximum BLE poll time was 4.768 ms bare-metal and 5.618 ms FreeRTOS. The final
-FreeRTOS rerun used the strengthened MQTT-progress oracle: its observation
-delta was 5794 echoes at 9.66 Hz, with zero stagnant one-second summaries.
+The active Pico 2 W coexistence gate covers passive BLE observation alongside
+a connected Classic HID gamepad. It also covers HID disconnect and reconnect
+while BLE scanning continues. The authenticated BLE Stream + WiFi/MQTT gate
+covers WiFi disconnect and reconnect in both bare-metal and FreeRTOS builds.
+The combined BLE+A2DP image is build-validated; active audio coexistence is not
+yet a hardware gate.
 
 ## License and distribution boundary
 

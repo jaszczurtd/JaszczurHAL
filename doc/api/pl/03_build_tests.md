@@ -1024,8 +1024,61 @@ oraz maksymalne zajęcie pul. Nie może zawierać adresów Bluetooth, materiału
 link key, tożsamości hosta, nazwy portu szeregowego ani numeru seryjnego USB.
 Pliki ELF/map i lista symboli muszą również potwierdzać obecność HID Host
 `ENABLE_CLASSIC`, klienta SDP, parsera HID oraz przechowywanej w pamięci bazy
-kluczy połączeń, a jednocześnie
-wykluczając ATT, GATT, SM, RFCOMM, serwer SDP, HID Device i profile audio.
+kluczy połączeń, a także brak ATT, GATT, SM, RFCOMM, serwera SDP, HID Device i
+profili audio.
+
+### Bramka współistnienia BLE i gamepada Classic
+
+Publiczny wariant `ble` przykładu 29 uruchamia pasywnego Observera BLE obok
+profilu Classic HID/gamepad na wspólnym hoście CYW43:
+
+```sh
+vscode/entry/jh-vscode build \
+  --project examples/29_bluetooth_gamepad \
+  --target rp2350-arm --board pico2w --variant ble
+vscode/entry/jh-vscode upload \
+  --project examples/29_bluetooth_gamepad \
+  --target rp2350-arm --board pico2w --variant ble \
+  --port /dev/ttyACM0
+```
+
+Wykonaj parowanie zgodnie z
+[README przykładu](../../../examples/29_bluetooth_gamepad/README.pl.md).
+Warunkiem zaliczenia są poprawne dane z gamepada podczas ciągłego odbioru
+raportów BLE, prawidłowe wykonanie `BLE_STOP`/`BLE_START` oraz rozłączenie i
+ponowne połączenie HID bez zatrzymywania BLE. `INFO` musi zachować obu
+użytkowników runtime radia i nie może zgłaszać błędów transportu HCI, alokacji
+ze stałych pul ani kolejek.
+
+### Bramka sprzętowa A2DP Sink i AVRCP Target
+
+Przykład 30 służy do sprzętowego sprawdzania A2DP/AVRCP na Pico W i Pico 2 W:
+
+```sh
+vscode/entry/jh-vscode build \
+  --project examples/30_bluetooth_speaker \
+  --target rp2040 --board picow --variant avrcp
+vscode/entry/jh-vscode upload \
+  --project examples/30_bluetooth_speaker \
+  --target rp2040 --board picow --variant avrcp \
+  --port /dev/ttyACM0
+vscode/entry/jh-vscode build \
+  --project examples/30_bluetooth_speaker \
+  --target rp2350-arm --board pico2w --variant avrcp
+vscode/entry/jh-vscode upload \
+  --project examples/30_bluetooth_speaker \
+  --target rp2350-arm --board pico2w --variant avrcp \
+  --port /dev/ttyACM0
+```
+
+Wykonaj okablowanie, parowanie i komendy szeregowe opisane w
+[README przykładu](../../../examples/30_bluetooth_speaker/README.pl.md).
+Warunkiem zaliczenia są czysty dźwięk SBC, pause/resume/stop, bezwzględna
+regulacja głośności AVRCP, reconnect z bondem po restarcie, osobna próba
+reconnectu po resecie watchdogiem oraz brak błędów kolejek, pul, DMA i czasu
+obsługi. Fizyczny tor wyjściowy wymaga osobnej walidacji w produkcie. Wariant
+`ble-a2dp` należy do bramki kompilacji; aktywny dźwięk+BLE nie jest jeszcze
+wymaganiem sprzętowym.
 
 ### Sprzętowy test Bluetooth Observer
 
@@ -1056,6 +1109,11 @@ Teltonika EYE Beacon na każdej płytce, całkowite i odrzucone liczniki
 raportów oraz podsumowanie pamięci ELF/map. Test pozostaje pasywny:
 odpowiedzi skanowania, klient GATT, połączenia, parowanie i bonding są poza
 zakresem tego testu.
+
+Komendy `STOP`, `START`, `REOPEN` i `INFO` sprawdzają ponowne uruchomienie
+skanowania, pełne ponowne uzyskanie profilu BLE bez resetu kontrolera oraz
+ograniczoną diagnostykę. Poprawny raport musi nadejść zarówno po `START`, jak i
+po `REOPEN`.
 
 RP2350 RISC-V jest nieobsługiwane, ponieważ jego transport Bluetooth CYW43
 nie jest włączony.
@@ -1233,18 +1291,12 @@ GLib oraz pakietu `cryptography`.
 | STM32G474 + RM2/PIM730 + ILI9341, bare-metal | 50/50 | 2910 wiadomości / 300,1 s (9,70 Hz) | HOST PASS, w tym reset IWDG |
 | STM32G474 + RM2/PIM730 + ILI9341, FreeRTOS | 50/50 | 2930 wiadomości / 300,0 s (9,77 Hz) | HOST PASS, w tym reset IWDG |
 
-Przebiegi obciążeniowe wyświetlacza STM32G474 z 2026-08-25 użyły wariantów
-`display` i `display-freertos` z PIM730 na PB12-PB15 oraz ILI9341 na SPI1.
-Oba przeszły restart cyklu życia, niepilnowany reset IWDG, 50 uwierzytelnionych
-ponownych połączeń, pięciominutowy strumień, nasycenie z czterema
-zachowanymi i ośmioma odrzuconymi ramkami plus jednym zgłoszonym
-przepełnieniem, oraz wszystkie negatywne przypadki bezpieczeństwa/odzyskiwania
-z 62 unikatowymi próbami uzgodnienia sesji. Krok IWDG zmienił powód resetu `2 -> 4` oraz
-identyfikator rozruchu
-`7cb8c0cf4bc622a8 -> 5e78009fc6d2fb2b` w bare-metal oraz
-`927f820a16299332 -> 5f2cd64b89ba00fc` w FreeRTOS, zachowując adres
-`28:CD:C1:19:18:19`. Średnie/maksymalne opóźnienie ciągłego strumienia
-wyniosło 103,1/331,1 ms dla bare-metal i 102,4/313,1 ms dla FreeRTOS.
+Testy z wyświetlaczem na STM32G474 użyły wariantów `display` i
+`display-freertos` z PIM730 na PB12-PB15 oraz ILI9341 na SPI1. Oba przeszły
+restart cyklu życia, samoczynny reset IWDG, ponowne połączenia, ciągły
+strumień, nasycenie oraz wszystkie negatywne przypadki bezpieczeństwa i
+odzyskiwania. Powód resetu i identyfikator rozruchu zmieniły się, a lokalny
+adres BLE pozostał bez zmian.
 
 Wcześniejsze przebiegi sprzed watchdoga osiągnęły dokładnie 3000 wiadomości
 w 300,0 sekundy w obu runtime. Wstępny przebieg bare-metal, który
@@ -1254,12 +1306,9 @@ Zachowanie niezmienionych wierszy usunęło to unikalne obciążenie, podczas
 gdy RX/TX i czas działania nadal odświeżały się raz na sekundę.
 
 Po dodaniu kontroli identyfikatora każdego rozruchu pełny test bare-metal na
-Pico 2 W ponownie zaliczył 50/50 ponownych połączeń, przesłał 3000 wiadomości
-w 300,0 s (10,00 Hz), a także przeszedł próbę nasycenia i wszystkie przypadki
-bezpieczeństwa. Krok z watchdogiem zmienił powód resetu `3 -> 4` oraz
-identyfikator rozruchu
-`cb3ef2a0b00439b4 -> bc75beed8bfd5cf1`, zachowując adres
-`2C:CF:67:BB:40:2E`.
+Pico 2 W ponownie zaliczył sprawdzenia reconnectu, ciągłego strumienia,
+nasycenia i bezpieczeństwa. Krok z watchdogiem zmienił powód resetu oraz
+identyfikator rozruchu, a lokalny adres BLE pozostał bez zmian.
 
 Zarejestrowane udane testy wykonały publiczną procedurę restartu cyklu życia,
 zachowały lokalny adres podczas resetu, zmieniły powód resetu z `3` na kod

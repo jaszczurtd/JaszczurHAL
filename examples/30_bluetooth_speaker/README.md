@@ -4,12 +4,12 @@ This RP-only example turns a Pico W or Pico 2 W into a Bluetooth Classic A2DP
 Sink named `JaszczurHAL Speaker`. It accepts SBC at 44.1 or 48 kHz in mono,
 stereo, or joint-stereo mode, downmixes to signed mono PCM, and feeds a
 timer-paced DMA PWM output. The base build is A2DP-only; the `avrcp` variant
-adds absolute volume, and `ble-a2dp` proves BLE and Classic/A2DP coexist on the
-shared CYW43 controller. The output adapter prebuffers roughly 171-186 ms and
-refills toward roughly 213-232 ms, depending on the negotiated sample rate, to
-absorb source and RF jitter. The example reserves 4 KiB for the active core-0
-stack after measured SBC and flash-backed bonding paths exhausted the safe
-margin of the 2 KiB default.
+adds absolute volume, and `ble-a2dp` builds BLE and Classic/A2DP together on
+the shared CYW43 controller. The output adapter prebuffers roughly 171-186 ms
+and refills toward roughly 213-232 ms, depending on the negotiated sample rate,
+to absorb source and RF jitter. The example reserves 4 KiB for the active
+core-0 stack after measured SBC and flash-backed bonding paths exhausted the
+safe margin of the 2 KiB default.
 
 The inquiry identity uses Class of Device `0x240414`: Audio and Rendering
 service classes, Audio/Video major class, and Loudspeaker minor class. The
