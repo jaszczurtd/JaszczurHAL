@@ -1,3 +1,9 @@
+/*
+ * Read external and internal RTCs, configure alarms, and test timed wake-up.
+ * Keep a valid clock value. Seed the fixed test date only when the RTC reports
+ * an invalid time or its initial calendar cannot be read.
+ */
+
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
 #include <hal/i2c/hal_i2c.h>
@@ -14,7 +20,7 @@
 #define EXAMPLE_I2C_SCL 5u
 #define INTERNAL_RTC_NAME "RP AON"
 #else
-/* STM32 pin id = port * 16 + pin: PB9/PB8. */
+/* STM32 pin numbers use port * 16 + pin; these values select PB9 and PB8. */
 #define EXAMPLE_I2C_SDA 25u
 #define EXAMPLE_I2C_SCL 24u
 #define INTERNAL_RTC_NAME "STM32 internal"

@@ -1,3 +1,8 @@
+/*
+ * Blink the board LED, print system diagnostics, and run a simulated PID loop.
+ * Software timers schedule the work; a separate timer counts 250 ms intervals.
+ */
+
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_array.h>
 #include <hal/gpio/hal_gpio.h>
@@ -30,7 +35,7 @@ static void blink_tick(void) {
 }
 
 static void pid_tick(void) {
-  /* Convert hal_millis() deltas to seconds before every controller update. */
+  /* The PID update takes seconds; hal_millis() measures milliseconds. */
   s_pid.updatePIDtime(1000.0f);
   s_pid_error = kPidSetpoint - s_process_value;
   s_pid_output = s_pid.updatePIDcontroller(s_pid_error);

@@ -1,12 +1,11 @@
 # 15 - OLED and character LCD
 
-This project exercises both portable display paths:
+This example displays data on an SSD1306 128×64 OLED and an HD44780-compatible
+16×2 character LCD. The OLED uses I2C and the buffered `hal_display` API.
+The LCD uses four-bit GPIO mode; connect its `RW` pin to GND.
 
-- SSD1306 128x64 OLED over I2C and the shared buffered `hal_display` API;
-- HD44780-compatible 16x2 LCD in four-bit GPIO mode (`RW` tied to GND).
-
-The devices are initialized independently, so either one may be omitted from
-the bench setup. The firmware still compiles both drivers in every gate build.
+The displays are initialized independently. Either one can be omitted,
+although each build still includes both drivers.
 
 | Signal | RP family | STM32G474 |
 | --- | --- | --- |
@@ -14,5 +13,6 @@ the bench setup. The firmware still compiles both drivers in every gate build.
 | LCD RS / E | GP12 / GP11 | PC0 / PC1 |
 | LCD D4..D7 | GP10..GP7 | PC2..PC5 |
 
-Build with `../../vscode/entry/jh-vscode build --project . --target rp2040`
-or select another supported target from the generated project manifest.
+Run `../../vscode/entry/jh-vscode build --project . --target rp2040`
+from this example's directory. Other available targets are listed in the
+generated project configuration.

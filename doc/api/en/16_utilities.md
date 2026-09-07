@@ -1,14 +1,18 @@
-# Utilities
+<a id="utilities"></a>
+
+# Timers, controllers, and utility functions
 
 *Also available in [Polish](../pl/16_utilities.md).*
 
 > **Part of [JaszczurHAL API Reference](../../en/JaszczurHAL_API.md)**
 
-Covers: thematic HAL helpers, the compatibility utility headers,
-`hal_soft_timer`, `hal_pid_controller`, `SmartTimers`, `pidController`,
-`multicoreWatchdog`, and `draw7Segment`.
+This chapter covers software timers, PID control, CRC calculations, dual-core watchdog supervision, and seven-segment-style drawing. It also maps the headers for text, array, bit, and numeric operations.
 
-## `hal_soft_timer` - C wrapper over `SmartTimers`
+<a id="hal_soft_timer---c-wrapper-over-smarttimers"></a>
+
+## `hal_soft_timer` - software timers in C
+
+Run periodic callbacks from C. The timer uses `SmartTimers`; the application advances it through the module API.
 
 ```c
 #include <hal/timers/hal_soft_timer.h>
@@ -77,7 +81,11 @@ void app_task0(void) {
 
 ---
 
-## `hal_pid_controller` - C wrapper over `pidController`
+<a id="hal_pid_controller---c-wrapper-over-pidcontroller"></a>
+
+## `hal_pid_controller` - PID controller in C
+
+Calculate a control output with a PID controller, output limits, and integral anti-windup. The C API uses handles without exposing the C++ class.
 
 ```c
 #include <hal/control/hal_pid_controller.h>
@@ -160,19 +168,17 @@ void app_task0(void) {
 
 ---
 
-## Thematic utility modules
+<a id="thematic-utility-modules"></a>
 
-The former miscellaneous implementation has been split by responsibility. New
-code includes the owning HAL header and uses the prefixed API. `tools.h`,
-`tools_c.h`, and `utils/tools_api.h` remain include aggregators without their
-own function declarations. There is no `tools.cpp` implementation unit.
+## Utility functions by purpose
 
-Recommended include options:
+New code should include the header for the operation it needs and use that module's prefixed HAL functions. `tools.h`, `tools_c.h`, and `utils/tools_api.h` remain compatibility umbrella headers; they do not declare their own functions. The old `tools.cpp` implementation has been removed.
 
-- `#include <JaszczurHAL.h>` for the stable public aggregate;
-- a direct domain header for narrow dependencies;
-- `#include <tools.h>` or `#include <tools_c.h>` only while maintaining legacy
-  code.
+Choosing a header:
+
+- `#include <JaszczurHAL.h>` - the stable public umbrella header.
+- A specific module header - for a narrow dependency.
+- `#include <tools.h>` or `#include <tools_c.h>` - when maintaining legacy code.
 
 | Domain | Header | Primary API |
 |---|---|---|
@@ -189,15 +195,9 @@ Recommended include options:
 | Calendar and elapsed time | `hal/time/hal_time.h` | `hal_time_*`, `hal_get_seconds()` |
 | Periodically refreshed random values | `hal/system/hal_periodic_random.h` | `hal_periodic_random_*` |
 
-The `_ex` functions return `hal_status_t`, use explicit output buffers/state,
-and validate arguments. ADC behavior such as sample count, dummy read, delay,
-and transfer correction is selected through `hal_adc_average_config_t` rather
-than hidden project-wide behavior.
+The `_ex` variants return `hal_status_t`, validate arguments, and use explicitly supplied buffers and state. `hal_adc_average_config_t` selects ADC sample count, dummy-read behavior, delay, and characteristic correction rather than hidden project-wide settings.
 
-`hal_text_format_mac_ex()` formats any six-byte hardware address as uppercase
-`XX:XX:XX:XX:XX:XX`. The destination needs
-`HAL_TEXT_MAC_STRING_SIZE` bytes. `hal_network_format_mac_ex()` remains the
-network-facing compatibility entry point and delegates to this helper.
+`hal_text_format_mac_ex()` formats a six-byte hardware address as uppercase `XX:XX:XX:XX:XX:XX`. The destination must hold `HAL_TEXT_MAC_STRING_SIZE` bytes. The compatibility function `hal_network_format_mac_ex()` remains available and delegates to the same operation.
 
 ### Bit-manipulation helpers (`hal_bits`)
 
@@ -402,7 +402,11 @@ for boundary, validation, and rollover semantics.
 
 ---
 
+<a id="hal_crc---crc-checksums"></a>
+
 ## `hal_crc` - CRC checksums
+
+Calculate checksums to detect data errors. Select the function matching the exact CRC variant required by the protocol. CRC does not provide authentication.
 
 ```c
 #include <hal/security/hal_crc.h>
@@ -442,7 +446,11 @@ addition here; it never disturbs the existing entries.
 
 ---
 
-## SmartTimers
+<a id="smarttimers"></a>
+
+## `SmartTimers` - software timers in C++
+
+Schedule callbacks through timer objects. The application calls `tick` regularly; table-based functions can service several timers together.
 
 ```c
 #include <hal/timers/smart_timers/SmartTimers.h>
@@ -525,7 +533,11 @@ void app_task0(void) {
 
 ---
 
-## pidController
+<a id="pidcontroller"></a>
+
+## `pidController` - PID controller in C++
+
+Use the `PIDController` class for C++ control loops. Each loop should have a separate instance.
 
 ```c
 #include <utils/pidController.h>
@@ -620,7 +632,11 @@ extern "C" void app_task0(void) {
 
 ---
 
-## multicoreWatchdog
+<a id="multicorewatchdog"></a>
+
+## `multicoreWatchdog` - dual-core watchdog
+
+Monitor core progress through a shared watchdog. The application reports progress from each core through its corresponding update function.
 
 ```c
 #include <utils/multicoreWatchdog.h>
@@ -705,7 +721,11 @@ void app_task1(void) {
 
 ---
 
-## draw7Segment - 7-segment style display rendering
+<a id="draw7segment---7-segment-style-display-rendering"></a>
+
+## `draw7Segment` - seven-segment-style digits and text
+
+Draw digits and selected characters through `hal_display`, for example for clocks and counters.
 
 ```c
 #include <utils/draw7Segment.h>

@@ -1,16 +1,12 @@
-# Firmware Project Workflow
+<a id="firmware-project-workflow"></a>
+
+# Working with firmware projects
 
 *Also available in [Polish](../pl/FwProjectWorkflow.md).*
 
-This document defines the dispatcher-backed firmware project model used by
-JaszczurHAL projects and checked-in examples. It covers the tracked manifest,
-target and board resolution, project source discovery, generated files, cache
-ownership, and build/upload integration.
+This chapter explains how to create, configure, build, and upload firmware projects using JaszczurHAL. The same workflow applies to user projects and checked-in examples. It covers the version-controlled manifest, target and board selection, source files, generated outputs, and separate CMake caches for each configuration.
 
-Use [JaszczurHAL VS Code Entry](../../vscode/README.md) for CLI actions and device
-safeguards, [Target and board profiles](boards_profiles_howto.md) for descriptor
-fields and generated metadata, and [Native OTA Workflow](OTAWorkflow.md) for
-the target-specific network-update paths.
+For CLI actions and device checks before upload, see [JaszczurHAL VS Code Entry](../../vscode/README.md). For descriptor fields and generated metadata, see [Target and board profiles](boards_profiles_howto.md). Network updates are covered in [Native OTA Workflow](OTAWorkflow.md).
 
 ## Project layout
 
@@ -36,24 +32,14 @@ my-device/
 `ms-vscode.vscode-serial-monitor` alongside the `jh-vscode` monitor actions.
 VS Code offers to install missing entries when the folder is opened.
 
-Generated launch files provide explicit OpenOCD interface and target scripts.
-On Windows, run `jh-vscode debug-tools
---project <path> --json` and set the reported OpenOCD executable plus Arm
-toolchain directory in the Cortex-Debug user settings; the extension resolves
-GDB from that directory. These machine-local paths stay out of tracked project
-files.
+Generated `launch.json` files specify the OpenOCD interface and target scripts. On Windows, run `jh-vscode debug-tools --project <path> --json`, then set the reported OpenOCD executable and Arm toolchain directory in the Cortex-Debug user settings. The extension locates GDB in that directory. These machine-specific paths are not stored in version-controlled project files.
 
 On Debian/Ubuntu-like Linux hosts, `runmefirst.sh` installs `gdb-multiarch` and
 generated settings select it through `cortex-debug.gdbPath.linux`. The
 STM32G474 profile uses `board/st_nucleo_g4.cfg` with connect-under-reset so the
 on-board ST-Link can recover a running target before GDB attaches.
 
-RP and STM32 projects select `toolchain: "cmake"` and point `cmake.sourceDir`
-at `libraries/JaszczurHAL/cmake/jh_firmware_project`. `JH_PROJECT_DIR`
-identifies the application directory. ESP32 and ESP32-S3 projects select
-`toolchain: "esp-idf"`; their target registry entry supplies the production
-runner and artifact-manifest path. The shared entrypoint selects the provider
-without requiring a project-local CMake recipe.
+For RP and STM32, set `toolchain: "cmake"` and point `cmake.sourceDir` to `libraries/JaszczurHAL/cmake/jh_firmware_project`. `JH_PROJECT_DIR` identifies the application directory. For ESP32 and ESP32-S3, select `toolchain: "esp-idf"`; the target registry supplies the build runner and artifact-manifest path. The shared tool selects the appropriate build system, so no project-local CMake configuration is needed.
 
 Generate a working standalone project with:
 
@@ -62,22 +48,11 @@ libraries/JaszczurHAL/vscode/tools/create-vscode-example.py \
   --output my-device --target rp2040 --board pico
 ```
 
-Generated `tasks.json` contains GUI and terminal board selection, OTA upload
-and discovery, and `Project: Sync board picker`. The synchronization task runs
-on `folderOpen`, reads the current JaszczurHAL board registry, and updates the
-tracked GUI options only when they changed. The same task creates or repairs
-the generated RP2040, RP2350 ARM, and STM32G474/ST-Link debugger profiles in
-`launch.json`, using the manifest ELF artifact while preserving configurations
-owned by the consumer. VS Code requires a trusted workspace and may request
-one-time approval for automatic tasks. The terminal `Project: Select board`
-task always reads the registry at invocation time.
-Every generated task uses `jaszczurhal.vscodeEntry` on Unix and the
-`jaszczurhal.vscodeEntryWindows` platform override on Windows. The two settings
-select the adjacent `jh-vscode` and `jh-vscode.cmd` launchers, which execute one
-shared Python runtime.
+Generated `tasks.json` provides GUI and terminal board selection, OTA discovery and upload, and `Project: Sync board picker`. The synchronization task runs on `folderOpen`, reads the current board registry, and updates the version-controlled GUI choices only when needed. It also creates or repairs RP2040, RP2350 ARM, and STM32G474/ST-Link debugger profiles in `launch.json`, using the manifest's ELF file and preserving user-added configurations. VS Code requires a trusted workspace and may request one-time approval for automatic tasks.
 
-Check or regenerate every tracked repository artifact, including the shared
-snippets and checked-in example projects, with:
+The terminal task `Project: Select board` reads the registry each time it runs. Generated tasks use `jaszczurhal.vscodeEntry` on Unix and the `jaszczurhal.vscodeEntryWindows` override on Windows. These settings select the adjacent `jh-vscode` and `jh-vscode.cmd` launchers, which run the same Python code.
+
+To check or regenerate version-controlled generated files, including shared configuration snippets and example projects, run:
 
 ```bash
 python3 scripts/sync_generated.py --check
@@ -112,16 +87,18 @@ Automation can use `--install --yes` after obtaining consent.
 - **`HAL_TARGET_*`**: compile-time HAL backend selector generated or inferred
   from the resolved build target.
 
-## Target and configuration resolution
+<a id="target-and-configuration-resolution"></a>
 
-The active target/board pair is selected in this order:
+## Selecting the target and configuration
+
+The target and board are selected in the following order, from highest priority:
 
 1. invocation overrides such as `--target rp2040 --board picow`;
 2. `.vscode/jaszczurhal.local.json`;
 3. tracked manifest `target` and `board`;
 4. registry default `rp2040/pico`.
 
-The effective configuration then merges from low to high precedence:
+Settings are then merged in this order. Later values override earlier ones:
 
 1. target and board registry defaults;
 2. base manifest;
@@ -130,26 +107,20 @@ The effective configuration then merges from low to high precedence:
 5. action-specific options such as `--port`, `--host`, `--verbose`, and
    `--allow-unverified-port`.
 
-`.vscode/settings.json` supplies editor-local paths and display preferences.
-Stable identity, build cache, source layout, target profiles, artifacts, and
-OTA settings belong in the manifest. Standalone projects generated by
-`create-vscode-example.py` additionally copy the initial dispatcher cache into
-`cmake.configureSettings` so VS Code CMake Tools can configure the shared
-dispatcher without going through `jh-vscode`.
+`.vscode/settings.json` contains editor paths and display preferences. Store project identity, build directories, source layout, target profiles, artifacts, and OTA settings in the manifest. Standalone projects created by `create-vscode-example.py` also copy the initial shared build settings to `cmake.configureSettings`, allowing CMake Tools to configure the project without calling `jh-vscode`.
 
-Inspect the complete resolved view before diagnosing a build or upload:
+Before diagnosing a build or upload problem, inspect the complete configuration after all settings have been merged:
 
 ```bash
 ../libraries/JaszczurHAL/vscode/entry/jh-vscode \
   config-dump --project "$PWD"
 ```
 
-The dump includes a `featureResolution` object with `registryDigest`,
-`requestedFeatures`, `resolvedFeatures`, `resolvedFeaturesDigest`, and
-per-request `provenance`. This view reflects the active target profile and
-variant after all manifest overlays have been applied.
+The output includes `featureResolution`, with `registryDigest`, `requestedFeatures`, `resolvedFeatures`, `resolvedFeaturesDigest`, and `provenance`. The last field identifies the source of each requested setting. The result accounts for the active target profile, variant, and all manifest overlays.
 
-## Target matrix
+<a id="target-matrix"></a>
+
+## Supported targets
 
 | Target | ISA | Default board | Firmware format | Upload |
 |---|---|---|---|---|
@@ -161,10 +132,7 @@ variant after all manifest overlays have been applied.
 | `esp32s3` | dual-core Xtensa LX7 | `waveshare-esp32-s3-zero` | ELF/MAP plus bootloader, partition-table, and application BIN images | ESP-IDF flash through verified USB Serial/JTAG |
 | `mock` | host | `host-mock` | host executable/library | none |
 
-The board registry validates target compatibility and supplies provider
-platform, physical flash/PSRAM facts, GPIO domain, board components,
-capabilities, programmer identity, and upload defaults. Unknown target/board
-pairs fail before the compiler runs.
+The board registry checks whether the board is compatible with the target. It also supplies the provider platform, physical flash and PSRAM parameters, GPIO domain, board components and capabilities, programmer identity, and upload defaults. An unknown target/board pair fails before the compiler starts.
 
 ## Minimal manifest
 
@@ -193,15 +161,9 @@ pairs fail before the compiler runs.
 }
 ```
 
-Firmware builds use Ninja unless `cmake.generator` selects another CMake
-generator explicitly. The runtime always enables the compile database and
-passes its current Python interpreter to CMake. Native Windows keeps the CMake
-working tree below the short root recorded by `runmefirst.ps1`; the manifest's
-`buildDir` remains the stable location for final artifacts and
-`compile_commands_patched.json`.
+Ninja is the default build generator; select another one explicitly with `cmake.generator`. The tool always enables the compilation database and passes its Python interpreter to CMake. On native Windows, the CMake working tree is placed under the short path recorded by `runmefirst.ps1`. The manifest's `buildDir` remains the stable location for final artifacts and `compile_commands_patched.json`.
 
-Keep common values in the base manifest and express target-specific changes as
-small overlays:
+Store common settings in the base manifest and target-specific differences in small overlays:
 
 ```json
 {
@@ -233,9 +195,7 @@ An ESP32-S3 project uses the smaller provider-specific manifest shape:
 }
 ```
 
-The target/board registry adds the runner, artifact manifest, upload strategy,
-required FreeRTOS feature, and exact `303a:1001` programmer identity. Do not
-copy those facts into the project manifest.
+The target and board registry supplies the build runner, artifact manifest, upload method, required FreeRTOS feature, and programmer identity `303a:1001`. Do not duplicate these settings in the project manifest.
 
 ## Adding project source files
 
@@ -250,7 +210,7 @@ tracker/
   gps_filter.h
 ```
 
-Projects with source subdirectories declare the complete list:
+For sources in subdirectories, provide the complete list:
 
 ```json
 {
@@ -262,8 +222,7 @@ Projects with source subdirectories declare the complete list:
 }
 ```
 
-`JH_PROJECT_SOURCES` is a semicolon-separated list relative to
-`JH_PROJECT_DIR`. It replaces root discovery.
+`JH_PROJECT_SOURCES` is a semicolon-separated list of paths relative to `JH_PROJECT_DIR`. Providing it replaces automatic discovery in the project root.
 
 Additional shared files can be appended with `JH_EXTRA_SOURCES`:
 
@@ -277,16 +236,15 @@ Additional shared files can be appended with `JH_EXTRA_SOURCES`:
 }
 ```
 
-The dispatcher normalizes and de-duplicates resolved paths.
+The shared CMake configuration normalizes paths and removes duplicates.
 
-The ESP-IDF runner discovers C, C++, and assembly sources directly under the
-project directory and recursively below `src/`. Direct runner calls may replace
-discovery with repeatable `--source <relative-path>` arguments. All source
-paths must remain inside the project.
+The ESP-IDF runner discovers C, C++, and assembly files in the project root and recursively under `src/`. When invoking the runner directly, repeated `--source <relative-path>` arguments can replace automatic discovery. Every source path must stay within the project.
 
-## Feature and runtime configuration
+<a id="feature-and-runtime-configuration"></a>
 
-Project-owned feature flags live in `hal_project_config.h`:
+## Selecting features and the runtime
+
+Put project feature flags in `hal_project_config.h`:
 
 ```c
 #pragma once
@@ -308,66 +266,31 @@ Project-owned feature flags live in `hal_project_config.h`:
 }
 ```
 
-Feature requests accept `HAL_ENABLE_X` and `HAL_ENABLE_X=1`. The dispatcher
-and `jh-vscode` reject `HAL_ENABLE_X=0` and other explicit values with
-`[JH-CFG-VALUE]` after resolving the active target profile and example variant.
-Omit a feature symbol to disable it. Non-feature tunables such as
-`APP_DIAGNOSTICS=0` keep their normal value semantics. In definition-list
-inputs, every `HAL_ENABLE_*` entry must be a standalone simple token separated
-with semicolons. Whitespace does not separate multiple feature definitions,
-and CMake generator expressions are rejected.
+Enable a feature with `HAL_ENABLE_X` or `HAL_ENABLE_X=1`. After selecting the active target profile and example variant, the shared build configuration and `jh-vscode` reject `HAL_ENABLE_X=0` and other explicit values with `[JH-CFG-VALUE]`. To disable a feature, omit its symbol.
 
-The `esp32s3` descriptor supports target-required `HAL_ENABLE_FREERTOS`, the
-delivered Phase 2 peripheral flags, and the Phase 3 network/service flags. The
-set includes APP_TASK1, UART, I2C controller/target, SPI, PWM_FREQ, RGB_LED,
-PCNT, STACK_GUARD, BLE, WiFi, TCP/UDP, BSD sockets, TLS, HTTP
-client/server/files, WebSocket server, MQTT, time, OTA, and WireGuard. Simple PWM and the core
-system/synchronization/GPIO/ADC/serial/timer sources belong to its baseline
-component. The production runner rejects a requested feature or any dependency
-that resolves outside the descriptor allowlist with `[JH-CFG-UNSUPPORTED]`.
+This rule does not apply to ordinary parameters such as `APP_DIAGNOSTICS=0`. In definition lists, each `HAL_ENABLE_*` entry must be a separate, simple token, and entries must be separated by semicolons. Whitespace is not a separator. CMake generator expressions are not supported.
 
-The initial `esp32` descriptor is intentionally narrower. It supports the
-required FreeRTOS runtime and `HAL_ENABLE_BLUETOOTH_GAMEPAD`, which selects
-Bluedroid, BR/EDR, and ESP HID Host. Features delivered only on ESP32-S3,
-including the public BLE API, are rejected during preflight.
+The `esp32s3` descriptor requires `HAL_ENABLE_FREERTOS` and supports the peripheral and network/service features described as Phases 2 and 3. These include APP_TASK1, UART, I2C controller/target, SPI, PWM_FREQ, RGB_LED, PCNT, STACK_GUARD, BLE, WiFi, TCP/UDP, BSD sockets, TLS, HTTP client/server/files, WebSocket server, MQTT, time, OTA, and WireGuard.
 
-For a Fiesta-convention `firmware_entry.h`, `FIESTA_ENABLE_CORE1=1` must be
-paired with `HAL_ENABLE_APP_TASK1` in `hal_project_config.h` or another normal
-feature input. This keeps the generated entry adapter, requested/resolved
-feature sets, and link signature identical.
+The baseline always includes simple PWM and core system, synchronization, GPIO, ADC, serial, and timer sources. Requesting a feature or dependency outside the descriptor's allowlist fails with `[JH-CFG-UNSUPPORTED]`.
 
-The feature registry computes one target-independent transitive closure for
-all production consumers. The generated C header defines implied feature
-macros, CMake uses the resolved set for source and dependency selection, and
-board generation uses it for `featureHash` and the link signature. `jh-vscode`
-uses the same closure for preflight and OTA eligibility while preserving the
-direct requests passed to CMake. Define `HAL_CONFIG_VERBOSE` to emit the
-generated report of every active registered feature during compilation.
+The initial `esp32` descriptor deliberately supports fewer features. It includes the required FreeRTOS runtime and `HAL_ENABLE_BLUETOOTH_GAMEPAD`, which selects Bluedroid, BR/EDR, and ESP HID Host. Features available only on ESP32-S3, including the public BLE API, are rejected during preflight.
 
-Rules whose results depend on tunables, provider choice, board capabilities,
-or the active target remain in `hal_config.h`. These include the EEPROM-type
-I2C implication, the GPS transport default, backend/provider validation, board
-capability checks, and target-specific constraints.
+With a Fiesta-convention `firmware_entry.h`, setting `FIESTA_ENABLE_CORE1=1` also requires `HAL_ENABLE_APP_TASK1` in `hal_project_config.h` or another standard feature-configuration input. This keeps the generated entry adapter, requested and resolved feature sets, and link signature consistent.
 
-The build loads `hal_project_config.h` before target auto-detection and before
-derived target/board selectors exist. Keep that file macro-only: it may define
-raw `HAL_TARGET_*`, `HAL_BOARD_PROFILE_*`, `HAL_ENABLE_*`, and tuning macros,
-but it must not include JaszczurHAL headers or branch on `HAL_TARGET_IS_*` /
-`HAL_BOARD_IS_*`. Feature definitions used for source selection must be
-unconditional `#define HAL_ENABLE_X` or `#define HAL_ENABLE_X 1`; the only
-supported conditional form is a same-symbol `#ifndef HAL_ENABLE_X` guard. Do
-not place feature definitions under any other `#if`/`#ifdef`, including raw or
-derived target/board branches, because the early collector reads the file
-textually.
+The feature registry resolves all transitive dependencies consistently across targets and tools. The generated C header defines the implied macros, CMake selects sources and dependencies, and the board generator calculates `featureHash` and the link signature from the same result. `jh-vscode` uses that result for preflight and OTA eligibility while passing the original feature requests to CMake. Define `HAL_CONFIG_VERBOSE` to print a report of all active registered features during compilation.
 
-Physical board selection remains in `target` and `board`. Application wiring,
-USB identity, secrets, partition policy, and feature selection remain
-project-owned.
+Rules that depend on configuration parameters, the build provider, board capabilities, or the selected target remain in `hal_config.h`. These include enabling I2C for the selected EEPROM type, choosing the default GPS transport, validating backend/provider compatibility, checking board capabilities, and applying target-specific limits.
+
+`hal_project_config.h` is read before target auto-detection and before derived target and board macros exist. Keep it macro-only: it may directly define `HAL_TARGET_*`, `HAL_BOARD_PROFILE_*`, `HAL_ENABLE_*`, and tuning parameters. Do not include JaszczurHAL headers or condition its contents on `HAL_TARGET_IS_*` / `HAL_BOARD_IS_*`.
+
+Feature definitions used for source selection must be unconditional `#define HAL_ENABLE_X` or `#define HAL_ENABLE_X 1`. The only supported exception is a same-symbol `#ifndef HAL_ENABLE_X` guard. No other `#if`/`#ifdef`, including raw or derived target/board conditions, is supported: at this stage, the tool reads the file text rather than preprocessor output.
+
+Select the physical platform and board through `target` and `board`. The project defines application wiring, USB identity, secrets, partition policy, and enabled features.
 
 ## Build directories and generated files
 
-External firmware projects own `${project}/.build`. Checked-in examples and
-hardware fixtures use the JaszczurHAL root for stable artifacts:
+External firmware projects store outputs in `${project}/.build`. Checked-in examples and hardware test configurations use stable locations relative to the JaszczurHAL root:
 
 ```text
 .build/examples/<example>/
@@ -381,28 +304,17 @@ manifest `cmakeBuildDir`:
 <cmakeBuildDir>/<target>/<board>/
 ```
 
-This prevents toolchains, provider platforms, board-generated headers, and
-linker layouts from sharing one cache. Native Windows instead uses the short
-bootstrap root:
+This keeps toolchains, build-provider platforms, generated board headers, and linker layouts from sharing one cache. Native Windows instead uses the short path prepared during setup:
 
 ```text
 <BuildRoot>/<project-name>-<path-hash>/cmake/<target>/<board>/
 ```
 
-The raw `compile_commands.json` follows that CMake tree. The runtime writes
-`compile_commands_patched.json` to the stable manifest `buildDir` and refreshes
-the selected target's firmware artifacts after every build, including a Ninja
-no-op after switching between previously configured targets.
+The original `compile_commands.json` resides in the relevant CMake tree. The tool writes the adjusted `compile_commands_patched.json` to the stable `buildDir` and refreshes the selected target's firmware artifacts after every build. This also happens when switching back to a previously configured target and Ninja has nothing to rebuild.
 
-`jh-vscode` tracks manifest-owned cache keys in
-`.jh-vscode-cache-keys.json`. A removed key is unset on the next configure.
-When the requested CMake source directory changes, a stale cache located
-inside the managed artifact root is recreated.
+`jh-vscode` records manifest-managed cache keys in `.jh-vscode-cache-keys.json`. Removing a key from the manifest removes it from the cache on the next configure. Changing the CMake source directory recreates a stale cache if that cache is inside the managed artifact directory.
 
-ESP-IDF projects use `buildDir` directly as the IDF build tree; it must remain
-below either the project or JaszczurHAL repository `.build` root. The production
-runner owns the generated project configuration and SDK configuration inside
-that tree and never writes a second board registry.
+For ESP-IDF projects, `buildDir` is the IDF build tree itself. It must be inside the project's or JaszczurHAL repository's `.build` directory, or one of their subdirectories. The runner manages generated project and SDK settings there without creating a second board registry.
 
 Generated outputs include:
 
@@ -427,30 +339,17 @@ Tracked configuration remains in the manifest and `hal_project_config.h`.
 ../libraries/JaszczurHAL/vscode/entry/jh-vscode clean --project "$PWD"
 ```
 
-`Project: Upload` selects the registry upload strategy. RP targets use
-identity-verified USB CDC followed by BOOTSEL/UF2 when firmware is running; a
-blank board uses `Project: Upload (UF2 / BOOTSEL)`. STM32G474 delegates to the
-OpenOCD upload target. ESP32-S3 performs a validated production build,
-checks every path in the multi-image manifest, and passes the verified serial
-port to the ESP-IDF flash action. Its board profile supplies USB VID/PID
-`303a:1001`; zero, stale, mismatching, or multiple matching devices fail closed.
-`--allow-unverified-port` is an explicit escape hatch and must be paired with
-`--port`.
+`Project: Upload` selects the upload method from the registry. On RP with running firmware, it verifies the device over USB CDC, switches to BOOTSEL, and uploads the UF2. For a blank board, use `Project: Upload (UF2 / BOOTSEL)`. STM32G474 invokes the OpenOCD upload target.
 
-Upload releases the project's persistent serial monitor and lets it reconnect
-after enumeration. Ambiguous BOOTSEL volumes or serial identities stop the
-action.
+On ESP32-S3, the tool performs a validated build, checks every path in the multi-image manifest, and passes the verified serial port to ESP-IDF flashing. The board profile specifies VID/PID `303a:1001`. A missing device, stale path, mismatched identity, or multiple matches stops the operation. `--allow-unverified-port` explicitly bypasses the port check and requires `--port`.
 
-For ESP32-S3, `Project: Serial Monitor` follows the single board matching the
-registry programmer identity when no explicit port is pinned. `Project:
-Refresh IntelliSense` consumes the Xtensa compile commands emitted by ESP-IDF
-without substituting an Arm IntelliSense mode. `build-debug` and managed
-Cortex-Debug profiles are not provided for ESP32-S3.
+During upload, the tool releases the port held by the project's persistent serial monitor. The monitor can reconnect when the device enumerates again. An ambiguous BOOTSEL volume or serial identity stops the operation.
+
+On ESP32-S3, `Project: Serial Monitor` selects the single device matching the registry's programmer identity unless a port is specified explicitly. `Project: Refresh IntelliSense` uses the Xtensa compilation commands generated by ESP-IDF, without substituting an Arm mode. `build-debug` and managed Cortex-Debug profiles are not provided for ESP32-S3.
 
 ## OTA manifest configuration
 
-For RP CMake projects, the manifest publishes the generated container and its
-build metadata alongside the shared OTA endpoint settings:
+For RP projects built with CMake, the manifest identifies the generated OTA container and build metadata alongside the shared connection settings:
 
 ```json
 {
@@ -473,22 +372,11 @@ build metadata alongside the shared OTA endpoint settings:
 }
 ```
 
-ESP-IDF projects omit the RP-specific `cmake` and `artifacts.ota` entries. Their
-production build manifest identifies the raw application BIN; the `ota` object
-above remains the shared host endpoint and authentication configuration.
+ESP-IDF projects do not use the RP-specific `cmake` and `artifacts.ota` entries. Their build manifest identifies the raw application BIN. The `ota` object above still configures host-side addresses, ports, and authentication.
 
-`ota.broadcast` selects the UDP discovery destination. `ota.host` pins a
-device address. `ota.listenPort` selects the host TCP callback listener; it
-defaults to `8266` so it matches the persistent LAN-scoped firewall rule
-prepared by `runmefirst.sh`. An explicit zero requests an ephemeral port.
-`ota.passwordEnv` keeps the host secret outside the tracked manifest.
+`ota.broadcast` specifies the UDP discovery destination, while `ota.host` selects a fixed device address. `ota.listenPort` is the host port for the reverse TCP connection. Its default, `8266`, matches the persistent LAN-scoped firewall rule created by `runmefirst.sh`; `0` requests an ephemeral port. `ota.passwordEnv` keeps the secret in an environment variable rather than the version-controlled manifest.
 
-The device hostname, UDP port, and password must match firmware configuration.
-See [Native OTA Workflow](OTAWorkflow.md) for target-specific artifacts,
-provisioning, tasks, authentication, host firewall rules, trial confirmation,
-rollback, and recovery. RP uploads sign the generated JaszczurHAL container;
-ESP-IDF uploads validate the production artifact manifest and transfer its raw
-application BIN without converting it into the RP container format.
+The device hostname, UDP port, and password must match the firmware configuration. [Native OTA Workflow](OTAWorkflow.md) covers platform-specific artifacts, initial programming, tasks, authentication, the host firewall, trial-boot confirmation, rollback, and recovery. For RP updates, the uploader signs the JaszczurHAL container. For ESP-IDF, it validates the build manifest and sends the specified raw application image without converting it to the RP container format.
 
 ## Examples and variants
 
@@ -501,5 +389,4 @@ scripts/examples_dispatcher.py list
 scripts/examples_dispatcher.py build --target rp2040 --example 01_core_runtime
 ```
 
-The generated example manifests are the build inputs used by the quality gate.
-See [JaszczurHAL Examples](../../examples/README.md).
+The validation suite uses generated example manifests as build inputs. See [JaszczurHAL Examples](../../examples/README.md).

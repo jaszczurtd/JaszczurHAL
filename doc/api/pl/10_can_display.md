@@ -1,12 +1,18 @@
-# Magistrala CAN i wyświetlacz
+<a id="magistrala-can-i-wyświetlacz"></a>
+
+# CAN i wyświetlacze
 
 *Dostępne również [po angielsku](../en/10_can_display.md).*
 
 > **Część [Dokumentacji API JaszczurHAL](../../pl/JaszczurHAL_API.md)**
 
-Obejmuje: `hal_can`, `hal_hd44780`, `hal_display`.
+Rozdział opisuje komunikację CAN, obsługę wyświetlaczy znakowych HD44780 oraz rysowanie i przesyłanie obrazu do wyświetlaczy graficznych.
 
-## `hal_can` - magistrala CAN  *(opcjonalny - `HAL_ENABLE_CAN`, backendy `HAL_ENABLE_MCP2515` / `HAL_ENABLE_MCP251XFD` / `HAL_ENABLE_STM32G474_FDCAN`)*
+<a id="hal_can---magistrala-can--opcjonalny---hal_enable_can-backendy-hal_enable_mcp2515--hal_enable_mcp251xfd--hal_enable_stm32g474_fdcan"></a>
+
+## `hal_can` - komunikacja CAN i CAN FD  *(opcjonalny - `HAL_ENABLE_CAN`, backendy `HAL_ENABLE_MCP2515` / `HAL_ENABLE_MCP251XFD` / `HAL_ENABLE_STM32G474_FDCAN`)*
+
+Wysyłanie i odbiór ramek CAN przez kontroler MCP2515, MCP251XFD lub wewnętrzny FDCAN STM32G474. Obsługa CAN FD zależy od kontrolera i jego konfiguracji; MCP2515 obsługuje wyłącznie klasyczny CAN.
 
 ```c
 #include <hal/can/hal_can.h>
@@ -198,12 +204,12 @@ uint8_t hal_can_encode_temp_i8(float temp_c);
 ```
 
 - **Wspólna implementacja modułu:** Pliki `hal_can.cpp` właściwe dla poszczególnych
-  targetów zawierają publiczną warstwę CAN, zarządzają cyklem życia uchwytów i mutexami
+  targetów zawierają publiczną warstwę CAN, zarządzają cyklem życia uchwytów i muteksami
   oraz kierują wywołania do backendu. Operacje specyficzne dla MCP2515 znajdują się w
   `hal/can/mcp2515/hal_can_mcp2515.*` i korzystają z dostępnego wyłącznie w HAL
-  drivera rejestrów/SPI MCP2515 z `hal/can/mcp2515/mcp2515_driver.*`.
+  sterownika rejestrów/SPI MCP2515 z `hal/can/mcp2515/mcp2515_driver.*`.
   Operacje MCP251XFD znajdują się w `hal/can/mcp251xfd/hal_can_mcp251xfd.*`
-  i korzystają z dostępnego wyłącznie w HAL pollingowego drivera rejestrów/SPI
+  i korzystają z dostępnego wyłącznie w HAL pollingowego sterownika rejestrów/SPI
   z `hal/can/mcp251xfd/mcp251xfd_driver.*`.
   Natywne operacje FDCAN dla STM32G474 znajdują się w
   `impl/stm32g474/hal_can_stm32g474_fdcan.*` i programują bezpośrednio rejestry
@@ -213,13 +219,11 @@ uint8_t hal_can_encode_temp_i8(float temp_c);
   `HAL_ENABLE_MCP251XFD` dla wsparcia CAN FD w MCP2517FD/MCP2518FD. Obie flagi
   kontrolerów zewnętrznych dołączają publiczną warstwę CAN oraz zależność SPI. Włącz
   `HAL_ENABLE_STM32G474_FDCAN` dla natywnego FDCAN1 na STM32G474; ta flaga
-  dołącza wyłącznie publiczną warstwę CAN i powoduje błąd buildu na innych
+  dołącza wyłącznie publiczną warstwę CAN i powoduje błąd kompilacji na innych
   targetach. Sama flaga `HAL_ENABLE_CAN` nie dołącza już SPI: włącza wspólne API
   i wymaga wskazania backendu.
 
-**Thread safety:** API jest thread-safe i może być używane z wielu rdzeni. Każdy kanał
-ma własny mutex `hal_mutex_t`. `hal_can_receive()` utrzymuje blokadę od sprawdzenia
-dostępności do zakończenia odczytu ramki, co eliminuje race condition typu TOCTOU.
+**Współbieżność:** Każdy kanał ma własny `hal_mutex_t`, dlatego API może być wywoływane z wielu zadań i rdzeni. `hal_can_receive()` utrzymuje blokadę od sprawdzenia dostępności ramki do zakończenia jej odczytu. Inne zadanie nie może więc odebrać tej ramki pomiędzy sprawdzeniem a odczytem.
 
 - **API CAN FD:** `hal_can_frame_t`, `hal_can_send_frame()`,
   `hal_can_receive_frame()` oraz pomocnicy DLC są niezależni od backendu.
@@ -245,7 +249,7 @@ dostępności do zakończenia odczytu ramki, co eliminuje race condition typu TO
   przenośny kod. W MCP2515 odpowiadają one sześciu filtrom sprzętowym. MCP251XFD
   i STM32G474 FDCAN używają pierwszych sześciu sprzętowych obiektów filtrów
   kierowanych do RX FIFO 0, choć sprzęt może udostępniać ich więcej.
-  `hal_can_set_std_filters()` pozostaje wygodnym pomocnikiem dla dwóch
+  `hal_can_set_std_filters()` pozostaje funkcją pomocniczą dla dwóch
   dokładnych 11-bitowych ID. Zaprogramowanie filtra MCP2515 czyści też tryb
   odbioru dowolnego (receive-any) na obu sprzętowych buforach odbiorczych, więc
   niepasujące ramki są odrzucane, zanim zajmą którykolwiek bufor.
@@ -253,7 +257,7 @@ dostępności do zakończenia odczytu ramki, co eliminuje race condition typu TO
   i może automatycznie podłączyć handler IRQ, gdy `int_pin != HAL_CAN_NO_INT_PIN`.
   `hal_can_process_all()` wielokrotnie wywołuje `hal_can_receive()` i przekazuje
   dalej tylko ramki z `id != 0` i `len > 0`.
-  `hal_can_encode_temp_i8()` to niewielki helper wspólnego formatu danych dla
+  `hal_can_encode_temp_i8()` to funkcja pomocnicza wspólnego formatu danych dla
   jednobajtowych pól temperatury ze znakiem w ramkach CAN. Obcina wejściową
   wartość typu `float` w stronę zera, nasyca ją do zakresu `int8_t` i zwraca
   odpowiadający bajt payloadu w zapisie uzupełnienia do dwóch.
@@ -267,31 +271,17 @@ bez one-shot już 3 kolejne ramki bez ACK trwale blokują wszystkie 3 bufory
 TX, powodując, że każde kolejne `hal_can_send()` zawodzi z
 `CAN_GETTXBFTIMEOUT`.
 
-Dla aplikacji z okresowym rozgłaszaniem, w których świeże dane i tak zostaną
-wysłane przy następnym tyknięciu timera, one-shot nie ma praktycznych wad -
-pojedynczą utraconą ramkę zastąpi kolejna aktualizacja. Nadawcy wysyłający dane
-tylko po zmianie muszą natomiast ponawiać nieudane wysłanie, dodać okresowy
-heartbeat albo wyłączyć `one_shot_tx`. W przeciwnym razie jedna utracona ramka
-może pozostawić u odbiorcy nieaktualne dane.
+Tryb one-shot jest przydatny przy okresowym rozgłaszaniu, gdy kolejna aktualizacja może zastąpić utraconą ramkę. Nie gwarantuje jednak dostarczenia każdej aktualizacji. Jeśli aplikacja wysyła dane tylko po zmianie, powinna ponawiać nieudaną transmisję, okresowo wysyłać aktualny stan albo wyłączyć `one_shot_tx`; inaczej odbiorca może pozostać z nieaktualnymi danymi.
 
-Gdy magistrala jest sprawna, a wszyscy odbiorcy
-obecni, zachowanie one-shot jest identyczne jak w trybie normalnym:
-pierwsza próba się udaje i ponowienie nie jest potrzebne. W trybie one-shot
-brak ACK, utrata arbitrażu, przerwana transmisja lub błąd magistrali są
-zgłaszane przez `hal_can_send()` jako `false` i logowane przez
-`hal_derr_limited("can", ...)`, aby uniknąć zalewania portu szeregowego.
-Tryb normalny kontynuuje retransmisję sprzętową i zgłasza sukces, gdy
-późniejsza próba się powiedzie.
+Jeżeli pierwsza próba transmisji się powiedzie, tryb one-shot i tryb normalny dają ten sam wynik - ponowienie nie jest potrzebne. W trybie one-shot brak ACK, utrata arbitrażu, przerwanie transmisji lub błąd magistrali powodują zwrócenie `false` przez `hal_can_send()`. Błąd jest logowany przez `hal_derr_limited("can", ...)`, aby ograniczyć liczbę komunikatów na porcie szeregowym. Tryb normalny kontynuuje sprzętowe ponawianie transmisji i zgłasza sukces, gdy kolejna próba się powiedzie.
 
 ---
 
-## `hal_hd44780` - wyświetlacz znakowy LCD HD44780  *(opcjonalny - `HAL_ENABLE_HD44780`)*
+<a id="hal_hd44780---wyświetlacz-znakowy-lcd-hd44780--opcjonalny---hal_enable_hd44780"></a>
 
-Driver równoległych wyświetlaczy znakowych LCD zgodnych z HD44780.
-Obsługuje te same 4- i 8-bitowe tryby transferu GPIO co oryginalna
-biblioteka LiquidCrystal, wraz z opcjonalnym `RW`, niestandardowymi znakami
-CGRAM, sterowaniem kursorem/wyświetlaczem, przewijaniem, autoscrollem oraz
-konfigurowalnymi przesunięciami wierszy.
+## `hal_hd44780` - wyświetlacze znakowe LCD  *(opcjonalny - `HAL_ENABLE_HD44780`)*
+
+Wyświetlanie tekstu na równoległych LCD zgodnych z HD44780. Sterownik obsługuje 4- i 8-bitową transmisję przez GPIO, opcjonalną linię `RW`, własne znaki w CGRAM, kursor, włączanie i wyłączanie wyświetlania, przewijanie ręczne i automatyczne oraz konfigurowalne przesunięcia wierszy. Zakres funkcji odpowiada oryginalnej bibliotece LiquidCrystal.
 
 ```cpp
 #include <hal/display/hal_hd44780.h>
@@ -319,24 +309,22 @@ lcd.write((uint8_t)0);
 ```
 
 - **Wspólna implementacja modułu:** `hal/display/hd44780/hd44780.*` jest używana
-  przez RP2040, STM32G474 oraz testy hostowe. Driver
-  korzysta z HAL GPIO, `hal_delay_us()` oraz mutexu `hal_mutex_t` instancji.
-- **Zakres klasy:** Jest to driver znakowego LCD. Do grafiki bitmapowej na
+  przez RP2040, STM32G474 oraz testy hostowe. Sterownik
+  korzysta z HAL GPIO, `hal_delay_us()` oraz muteksu `hal_mutex_t` instancji.
+- **Zakres klasy:** Jest to sterownik znakowego LCD. Do grafiki bitmapowej na
   wyświetlaczach TFT/OLED przez SPI służy `hal_display`.
 - **Czasowanie:** Opóźnienia inicjalizacji, czyszczenia/home, impulsu enable i
   wykonania komendy odpowiadają sprawdzonej sekwencji HD44780: 50 ms
   oczekiwania na zasilanie, próby inicjalizacji 4,5 ms/150 us, 2 ms opóźnienia
   czyszczenia/home oraz fazy impulsu enable 1/1/100 us.
 
-**Thread safety:** Każda instancja `HD44780` ma mutex HAL chroniący metody publiczne.
-Dzięki temu zadania działające na wielu rdzeniach lub pod FreeRTOS nie mogą przeplatać
-sekwencji komend i danych GPIO kierowanych do tego samego wyświetlacza.
-API nie jest przeznaczone do wywoływania z ISR, ponieważ `hal_mutex_lock`
-nie jest ISR-safe.
+**Współbieżność:** Muteks każdej instancji `HD44780` chroni jej metody publiczne przed przeplataniem komend i danych GPIO przez inne zadania lub rdzenie. Dotyczy to również pracy z FreeRTOS. Nie wywołuj API z przerwania: `hal_mutex_lock` nie obsługuje tego kontekstu.
 
 ---
 
-## `hal_display` - wyświetlacz TFT / OLED / LCD / EPD  *(opcjonalny - `HAL_ENABLE_DISPLAY`)*
+<a id="hal_display---wyświetlacz-tft--oled--lcd--epd--opcjonalny---hal_enable_display"></a>
+
+## `hal_display` - wyświetlacze graficzne  *(opcjonalny - `HAL_ENABLE_DISPLAY`)*
 
 Obsługuje wyświetlacze TFT SPI (ILI9341, ST7789, ST7735, ST7796S, GC9A01),
 OLED RGB SSD1331/SSD135x, OLED z rodziny SSD1306 (`SSD1306`, `SSD1309`,
@@ -656,10 +644,10 @@ if (status == HAL_OK) {
   przyjmuje natywne słowa `uint16_t` RGB565 i zamienia je wewnętrznie na
   kolejność bajtów kontrolera; `hal_display_write_pixels_be()` przyjmuje już
   bajty RGB565 w kolejności big-endian; `hal_display_write_pixels_dma()` jest blokującym
-  helperem zapisu strumienia przez DMA.
+  funkcją zapisu strumienia przez DMA.
   Wariant asynchroniczny,
   `hal_display_write_pixels_dma_async_start()` / `_busy()` / `_wait()`, korzysta z
-  `hal_spi_write_dma_async_*()` w driverach ILI9341 i ST77xx. Gdy backend rzeczywiście
+  `hal_spi_write_dma_async_*()` w sterownikach ILI9341 i ST77xx. Gdy backend rzeczywiście
   działa asynchronicznie, bufor `pixels_be` musi pozostać dostępny i niezmieniony, a
   strumień zapisu wyświetlacza otwarty do zakończenia `_wait()`.
   `hal_display_end_write()` czeka na aktywne asynchroniczne DMA pikseli przed
@@ -667,7 +655,7 @@ if (status == HAL_OK) {
 - **Uwagi ST77xx/GC9A01:** `HAL_DISPLAY_ST7735`, `HAL_DISPLAY_ST7789`,
   `HAL_DISPLAY_ST7796S` i `HAL_DISPLAY_GC9A01` korzystają ze wspólnego backendu
   zgodnego z rodziną ST77xx. `JH_ST77XX_SPI_DEFAULT_HZ` można nadpisać przed
-  dołączeniem lub buildem drivera, aby dostroić domyślny zegar SPI TFT dla
+  dołączeniem lub kompilacją sterownika, aby dostroić domyślny zegar SPI TFT dla
   danej płytki. ST7796S zachowuje udokumentowane domyślne ustawienia w kolejności
   BGR bez wymuszania zamienionych komend inwersji. GC9A01 używa lokalnej sekwencji
   komend Zephyr GC9x01x i domyślnie ustawia 240x240. SSD1331/SSD135x to
@@ -677,19 +665,19 @@ if (status == HAL_OK) {
   jego właściwości nie deklarują dotychczasowego GFX,
   strumieniowania ani DMA.
 - **impl/rp2040:** Korzysta ze wspólnego stosu HAL display. ILI9341 i ST77xx
-  używają wspólnych driverów HAL SPI/GPIO; OLED-y z rodziny SSD1306
-  używają wspólnego drivera HAL I2C/SPI; geometria, bitmapy i renderowanie
+  używają wspólnych sterowników HAL SPI/GPIO; OLED-y z rodziny SSD1306
+  używają wspólnego sterownika HAL I2C/SPI; geometria, bitmapy i renderowanie
   tekstu działają przez wspólny silnik `jh_gfx`.
 - **impl/stm32g474:** Korzysta z tego samego wspólnego stosu HAL display co RP2040.
 - **impl/.mock:** deterministyczny mock hosta, którego stan można sprawdzać w testach.
 
-**Thread safety:** Backendy sprzętowe chronią operacje wyświetlacza wewnętrznym
-`hal_mutex_t`. Podczas strumieniowania TFT mutex pozostaje zablokowany między
+**Współbieżność:** Backendy sprzętowe chronią operacje wyświetlacza wewnętrznym
+`hal_mutex_t`. Podczas strumieniowania TFT muteks pozostaje zablokowany między
 `hal_display_begin_write()` a
 `hal_display_end_write()`, w tym podczas oczekiwania na asynchroniczne DMA.
 Backend mock jest niezsynchronizowany i przeznaczony do testów jednowątkowych.
 
-**Pomocnicy mock:**
+**Funkcje testowe implementacji mock:**
 ```c
 void         hal_mock_display_reset(void);
 void         hal_mock_display_fail_next_io(void);
@@ -742,7 +730,7 @@ kontroler, transport I2C/SPI, przesunięcia segmentu/strony/wyświetlacza,
 orientację sprzętową oraz właściwy dla danego wariantu sposób ustawiania prądu
 odniesienia w jednej strukturze konfiguracyjnej zwracającej status.
 `HAL_ENABLE_SSD1306` nadal
-automatycznie włącza I2C dla historycznego pomocnika; transport SPI OLED
+automatycznie włącza I2C dla wcześniejszej funkcji pomocniczej; transport SPI OLED
 wymaga też `HAL_ENABLE_SPI`.
 
 ---

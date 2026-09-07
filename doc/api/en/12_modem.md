@@ -4,14 +4,13 @@
 
 > **Part of [JaszczurHAL API Reference](../../en/JaszczurHAL_API.md)**
 
-Covers: `hal_modem_at`, `hal_simcom_a76xx`.
+This chapter covers AT command exchange and SimCom A76xx operation: startup, network registration, location data, and MQTT communication.
 
-## `hal_modem_at` - Generic AT-command engine  *(facade - `HAL_ENABLE_CELLULAR_MODEM`)*
+<a id="hal_modem_at---generic-at-command-engine--facade---hal_enable_cellular_modem"></a>
 
-Transport-level layer of the cellular-modem stack. Owns a UART, the
-receive buffer and the protocol state. Vendor-specific bring-up,
-state-machine and command grammar live in family-specific drivers
-(today: `hal_simcom_a76xx`).
+## `hal_modem_at` - AT command exchange  *(facade - `HAL_ENABLE_CELLULAR_MODEM`)*
+
+Send AT commands, receive responses, and wait for modem notifications over UART. The module manages the port, receive buffer, and exchange state. A separate modem-family driver handles startup sequences and vendor-specific commands; the current implementation is `hal_simcom_a76xx`.
 
 ```c
 #include <hal/modem/hal_modem_at.h>
@@ -75,24 +74,15 @@ void hal_modem_at_sleep_ms(hal_modem_at_t h, uint32_t ms);
 **Thread safety:** every handle serialises access internally via a
 per-instance mutex. Safe to call from multiple threads/cores.
 
-- **Watchdog cooperation:** every internal poll loop (send,
-  send_with_data, listen_until) and every higher-level wait built on top
-  of the engine (e.g. `hal_simcom_a76xx_wait_*`, power pulses) invokes
-  the tick callback registered with `hal_modem_at_set_tick_callback()`
-  at least every ~20 ms. Register a tick that calls
-  `hal_watchdog_feed()` (and optionally refreshes a status LED) to keep
-  the application watchdog alive across long modem bring-up sequences.
+**Watchdog servicing:** Register a function with `hal_modem_at_set_tick_callback()` to service the watchdog during long modem operations. Each internal wait loop (`send`, `send_with_data`, `listen_until`) and each higher-level wait built on it, including `hal_simcom_a76xx_wait_*` and power pulses, invokes the callback at least once every approximately 20 ms. The callback can call `hal_watchdog_feed()` and optionally update a status LED.
 
 ---
 
-## `hal_simcom_a76xx` - SimCom A76xx modem driver  *(optional - `HAL_ENABLE_A7670`)*
+<a id="hal_simcom_a76xx---simcom-a76xx-modem-driver--optional---hal_enable_a7670"></a>
 
-High-level driver for SimCom A76xx-family modems (A7670E/SA/G, A7672E/S,
-A7608, ...). Built on top of `hal_modem_at`. Provides power control,
-boot synchronisation, SIM/network bring-up, PDP attach, network-time
-retrieval, coarse cellular location retrieval (LBS), GNSS fix retrieval, and
-a full MQTT client (**publish and subscribe**) on top of the `CMQTT*`
-command family.
+## `hal_simcom_a76xx` - SimCom A76xx modem support  *(optional - `HAL_ENABLE_A7670`)*
+
+Operate SimCom A76xx modems (A7670E/SA/G, A7672E/S, A7608, and other variants in the family) through `hal_modem_at`. The module controls power and startup, initializes the SIM, registers with the network, and establishes a PDP context. It can retrieve network time, an approximate cellular-network location (LBS), and a GNSS position. Its MQTT client uses `CMQTT*` commands for publishing and subscriptions.
 
 ```c
 #include <hal/modem/hal_simcom_a76xx.h>
@@ -259,12 +249,7 @@ fix yet, for example `+CGNSSINFO: ,,,,,,,,`. For the A7670E
 `+CGNSSINFO: <fix>,<sat_count>,...` shape, the single satellite count is
 reported as both `satellites_used` and `satellites_view`.
 
-**MQTT subscribe pipeline:** incoming messages arrive as a four-URC
-sequence (`+CMQTTRXSTART:` / `+CMQTTRXTOPIC:` / `+CMQTTRXPAYLOAD:` /
-`+CMQTTRXEND:`) interleaved with the bare topic and payload lines. The
-driver reassembles the message internally; the application receives
-a single `hal_simcom_a76xx_mqtt_message_cb_t` invocation from inside
-`hal_simcom_a76xx_mqtt_poll()`.
+**Receiving MQTT messages:** The modem reports a message through four URCs (`+CMQTTRXSTART:` / `+CMQTTRXTOPIC:` / `+CMQTTRXPAYLOAD:` / `+CMQTTRXEND:`), interleaved with separate topic and payload lines. The driver assembles them into one message and invokes `hal_simcom_a76xx_mqtt_message_cb_t` from `hal_simcom_a76xx_mqtt_poll()`.
 
 `+CMQTTCONNECT: <client>,<result>` is decoded by the driver. Failed
 connections produce a readable console diagnostic, for example:

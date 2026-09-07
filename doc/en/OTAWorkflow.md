@@ -1,32 +1,29 @@
-# Native OTA Workflow
+<a id="native-ota-workflow"></a>
+
+# Updating firmware over OTA
 
 *Also available in [Polish](../pl/OTAWorkflow.md).*
 
-This document is the complete operational specification for native JaszczurHAL OTA:
-target-specific project and firmware configuration, build artifacts, first
-installation, VS Code integration, network flow, host firewall rules, trial
-confirmation, rollback, recovery, and security boundaries.
+This guide covers native JaszczurHAL OTA from project configuration and first installation to VS Code uploads, firewall setup, trial-boot confirmation, rollback, and recovery. It explains the RP and ESP32-S3 requirements separately and identifies the security limitations of each implementation.
 
-The general dispatcher-backed project model remains in
-[Firmware Project Workflow](FwProjectWorkflow.md). The public API is documented
-under [`hal_ota`](../api/en/15_connectivity.md). The RP reference implementation is
-[`examples/25_ota`](../../examples/25_ota/README.md).
+For project configuration, target selection, and command handling, see [Firmware Project Workflow](FwProjectWorkflow.md). Public functions are documented under [`hal_ota`](../api/en/15_connectivity.md). The RP integration example is [`examples/25_ota`](../../examples/25_ota/README.md).
 
-## Support Matrix
+<a id="support-matrix"></a>
 
-| Target | Uploaded image | Activation model | Verification state |
+## Supported platforms and validation status
+
+| Target | Uploaded image | Activation method | Validation status |
 |---|---|---|---|
-| `rp2040`, `rp2350-arm` | Signed JaszczurHAL `.ota` container | HAL-owned program/staging swap, trial confirmation and rollback | Hardware validated on Pico W, Pico 2 W and Pico+PIM730/RM2 |
-| `esp32s3` | Raw ESP-IDF application BIN selected from the validated build manifest | ESP-IDF `two-ota-large` app partitions, pending-verify trial, confirmation and rollback | Implementation and compile/link complete; hardware/lifecycle/security-negative validation pending |
+| `rp2040`, `rp2350-arm` | Signed JaszczurHAL `.ota` container | HAL swaps the program and staging slots, starts a trial boot, and restores the previous image if necessary | Hardware validated on Pico W, Pico 2 W, and Pico+PIM730/RM2 |
+| `esp32s3` | ESP-IDF application BIN selected from a validated build manifest | ESP-IDF `two-ota-large` partitions; pending-verification trial boot, confirmation, and rollback | Implementation is complete and passes compilation and linking. Hardware validation, full update-lifecycle testing, and negative security testing are still pending |
 
-The transport protocol and public callbacks are shared. The RP container and
-ESP application image are different artifacts and are never converted into one
-another.
+Both platforms use the same transport protocol and public callbacks. Their image formats differ: the RP container and ESP-IDF application BIN are neither interchangeable nor converted into one another.
 
-## Shared AUTH2 Transport Authentication
+<a id="shared-auth2-transport-authentication"></a>
 
-With a configured non-empty password, the device and host use the fail-closed
-`AUTH2` exchange:
+## Transport authentication with AUTH2
+
+With a non-empty password configured, the device and host perform the `AUTH2` exchange. Any error stops authentication rather than allowing the connection:
 
 1. The host sends `0 <tcp-port> <image-size> <image-md5>` from one connected
    UDP socket. The device records that socket's IPv4 address and source port.
@@ -119,13 +116,7 @@ hal_ota_handle();
 hal_status_t confirm_status = hal_ota_confirm_boot_ex();
 ```
 
-`Project: Upload (OTA)` or `jh-vscode upload-ota` performs a production build,
-requires `HAL_ENABLE_OTA` in the resolved feature set, validates the relocatable
-ESP-IDF artifact manifest, and checks the application BIN size and SHA-256
-against its flash-image record. It then transfers those raw application bytes;
-it does not sign or wrap them as an RP `.ota` container. Discovery, fixed
-`ota.host`, `listenPort`, `passwordEnv`, and firewall behavior use the shared
-host workflow described below.
+`Project: Upload (OTA)` and `jh-vscode upload-ota` perform a production build and require `HAL_ENABLE_OTA` in the resolved feature set. The tool validates the relocatable ESP-IDF artifact manifest and checks the application BIN size and SHA-256 against its flash-image entry. It sends only the application bytes: it does not sign them or wrap them in the `.ota` container used by RP. Discovery, a fixed `ota.host`, `listenPort`, `passwordEnv`, and firewall configuration use the shared host workflow described below.
 
 The device writes the inactive OTA application partition with `esp_ota_*`,
 checks the transferred-image MD5 and ESP-IDF application validation, selects
@@ -142,18 +133,11 @@ Boot V2, flash encryption, anti-rollback policy, protected keys, and recovery
 procedures are separate production controls. Standard upload and tests must not
 program irreversible eFuses.
 
-Serial/JTAG flashing of the complete validated manifest remains the recovery
-path when WiFi, the new application, or OTA metadata is unusable. The current
-ESP32-S3 OTA implementation has compile/link coverage only; trial/confirm/
-rollback, interrupted transfers, invalid image/authentication/transfer cases,
-and recovery still require physical verification.
+If WiFi, the new application, or OTA metadata prevents recovery over the network, reprogram the device through serial or JTAG using a complete, validated manifest. ESP32-S3 OTA has so far been checked through compilation and linking only. Trial boot and confirmation, rollback, interrupted transfers, invalid images, authentication and transfer failures, and recovery still require hardware validation.
 
 ## RP Workflow
 
-Native RP OTA is supported by the official Pico SDK targets `rp2040` and
-`rp2350-arm`. The complete WiFi path has been validated on Pico W, Pico 2 W,
-and an ordinary Pico with a PIM730/RM2 add-on, in both bare-metal and FreeRTOS
-builds.
+Native OTA supports the Pico SDK targets `rp2040` and `rp2350-arm`. The complete WiFi update workflow has been tested on Pico W, Pico 2 W, and Pico with a PIM730/RM2 module in both bare-metal and FreeRTOS configurations.
 
 The native workflow has four distinct stages:
 
@@ -176,9 +160,7 @@ application can make BOOTSEL program an incomplete image.
 
 ## RP Project Manifest
 
-Enable OTA in `.vscode/jaszczurhal.project.json`, publish the generated
-artifact paths, and define the host-side discovery and authentication
-settings:
+Enable OTA in `.vscode/jaszczurhal.project.json`. Specify the output files and the discovery and authentication settings used by the host:
 
 ```json
 {
@@ -217,7 +199,7 @@ project defines when adding OTA, for example
 `"HAL_ENABLE_OTA;HAL_ENABLE_FREERTOS"`. `HAL_ENABLE_OTA` automatically enables
 the required WiFi, UDP, TCP, crypto, and CRC modules.
 
-The build metadata has the following format:
+Image metadata and output paths:
 
 | Setting | Meaning |
 |---|---|
@@ -244,7 +226,9 @@ matches the active dispatcher target. When more than one matching device is
 visible, use interactive selection or a fixed `ota.host`; automation must not
 guess.
 
-## RP Device-Side Secret And Configuration
+<a id="rp-device-side-secret-and-configuration"></a>
+
+## RP device password and configuration
 
 The password exists on both sides of the workflow:
 
@@ -304,14 +288,13 @@ code .
 The value of `passwordEnv` is the variable name only; do not write
 `"${TRACKER_OTA_PASSWORD}"` in the manifest.
 
-## RP Firmware Integration
+<a id="rp-firmware-integration"></a>
 
-Configure hostname, UDP port, password, and optional callbacks before starting
-the OTA service. Start the service only after the network is usable, call
-`hal_ota_handle()` frequently, and confirm a trial only after all
-product-specific readiness checks pass.
+## Adding OTA to RP firmware
 
-The following skeleton shows the complete application-side control flow:
+Set the hostname, UDP port, password, and optional callbacks before starting OTA. Start the service after the network connection is available, then call `hal_ota_handle()` regularly. Confirm a trial boot only after every product readiness check has passed.
+
+The following example shows initialization, ongoing service handling, and boot confirmation:
 
 ```c
 #include <hal/core/hal_app.h>
@@ -425,10 +408,11 @@ uses 2048 FreeRTOS stack words, or 8 KiB on RP:
 Measure the final product's high-water mark rather than assuming this value is
 universally sufficient.
 
-## RP Build Artifacts And First Installation
+<a id="rp-build-artifacts-and-first-installation"></a>
 
-Inspect the resolved target, board, paths, and OTA settings before the first
-build:
+## RP output files and first installation
+
+Before the first build, inspect the target, board, paths, and OTA settings selected by the complete project configuration:
 
 ```bash
 ../libraries/JaszczurHAL/vscode/entry/jh-vscode \
@@ -442,7 +426,7 @@ Build from the firmware project directory:
   build --project "$PWD"
 ```
 
-An OTA-enabled native RP build produces:
+An RP build with OTA enabled produces these files:
 
 | Artifact | Purpose |
 |---|---|
@@ -547,7 +531,7 @@ the override explicitly:
 `--variant` applies only when the manifest declares that variant. For example,
 a declared `freertos` variant is selected with `--variant freertos`.
 
-## RP VS Code Tasks And Keyboard Shortcuts
+## RP VS Code tasks and keyboard shortcuts
 
 Generated projects contain these maintained tasks:
 
@@ -564,7 +548,7 @@ Migrated projects should copy the current task definitions from
 `${config:jaszczurhal.vscodeEntry}`, so `.vscode/settings.json` must point that
 setting at the project's JaszczurHAL checkout.
 
-The corresponding reference shortcuts are:
+Suggested key bindings:
 
 | Shortcut | Task |
 |---|---|
@@ -601,7 +585,7 @@ JaszczurHAL library itself, with firmware-project shortcuts.
 
 ## RP Network Flow And Host Firewall
 
-The OTA data connection is intentionally reversed:
+For the OTA data transfer, the device initiates the connection to the host:
 
 1. The host sends discovery, invitation, and authentication packets over UDP
    to the device's configured OTA port, normally `8266`.
@@ -750,12 +734,11 @@ If broadcast discovery is blocked but the address is known, use `ota.host`,
 `--host`, or a unicast `ota.broadcast` value. This avoids broadcast only; it
 does not remove the TCP callback firewall requirement.
 
-## RP Trial Confirmation, Rollback, And Recovery
+<a id="rp-trial-confirmation-rollback-and-recovery"></a>
 
-After a successful transfer, the boot applier swaps staging into the program
-slot and starts it in `HAL_OTA_BOOT_TRIAL`. Each unconfirmed boot increments
-the attempt counter. Once the stored limit is reached, the boot applier swaps
-the previous image back and starts it as stable.
+## RP trial boot, rollback, and recovery
+
+After a successful transfer, the installer swaps the staging and program slot contents and starts the new image in `HAL_OTA_BOOT_TRIAL`. Each unconfirmed boot increments the attempt count. Once the recorded limit is reached, the installer swaps the slots again and restores the previous image as stable.
 
 Call `hal_ota_confirm_boot_ex()` only after the new image has passed its
 startup criteria. Calling it while already stable is harmless. Use
@@ -775,7 +758,9 @@ Keep a USB recovery path:
   ranges.
 - Physical BOOTSEL access remains outside the OTA trust boundary.
 
-## RP Security Boundary
+<a id="rp-security-boundary"></a>
+
+## RP OTA protections and limitations
 
 The signed container authenticates its versioned header with HMAC-SHA256 and
 verifies payload SHA-256 plus header CRC before activation. The same password
@@ -795,7 +780,9 @@ staging is accepted; AUTH2 does not replace them.
 See [Security Supply Chain](security_supply_chain.md#native-ota-security-boundary)
 for the maintained security statement.
 
-## RP Troubleshooting Checklist
+<a id="rp-troubleshooting-checklist"></a>
+
+## Troubleshooting RP OTA
 
 If discovery or upload fails, check these in order:
 

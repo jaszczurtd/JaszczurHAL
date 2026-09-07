@@ -1,15 +1,20 @@
-# 17 - Audio output
+<a id="17---audio-output"></a>
 
-This project compiles and exercises both output paths:
+# 17 - Audio generation and volume control
 
-- PGA2311 stereo gain and mute control over SPI;
-- PWM audio generation with ADC-controlled frequency and the DMA-capable
-  DACless service path.
+This example generates audio on a PWM output and controls a PGA2311 stereo
+gain stage over SPI. An ADC reading sets the generated signal's frequency.
+The PGA2311 starts unmuted and the application then cycles through gain
+settings. It does not demonstrate toggling mute.
 
-Polling is a runtime DACless configuration (`DAClessConfig::useDma`), so it no
-longer consumes a second, functionally identical firmware build in the gate.
+The PWM output uses DACless. `DAClessConfig::useDma` selects DMA transfers or
+polling in the application configuration; it does not require a separate
+firmware build. `useDma` is set to `true` by default.
 
-RP targets use SPI0 on GP16/GP19/GP18 with CS GP17. NUCLEO-G474RE uses SPI1 on
-PA6/PA7/PA5 with CS PB6: CN10 pins 13/15/11/17, equivalent to
-D12/D11/D13/D10. Its PWM audio output moves to PB0 (CN7 pin 34 / A3), while
-the ADC input remains on PA0 (A0).
+| Signal | RP family | NUCLEO-G474RE |
+|---|---|---|
+| SPI MISO / MOSI / SCK | GP16 / GP19 / GP18 | PA6 / PA7 / PA5, CN10 pins 13 / 15 / 11 (D12 / D11 / D13) |
+| PGA2311 CS | GP17 | PB6, CN10 pin 17 (D10) |
+
+On NUCLEO-G474RE, PWM audio uses PB0 (CN7 pin 34 / A3), and the ADC input
+uses PA0 (A0). PWM and ADC pin assignments for other targets are in `app.cpp`.

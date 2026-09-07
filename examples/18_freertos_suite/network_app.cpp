@@ -1,3 +1,10 @@
+/*
+ * Run HTTP, WebSocket, file, and command services alongside BSD and HTTP
+ * clients. HTTPS requires an application-supplied CA certificate and
+ * synchronized time. Telegram support is compiled in, but this application
+ * sends no notifications.
+ */
+
 #include <hal/core/hal_config.h>
 #include <hal/core/hal_target.h>
 

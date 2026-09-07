@@ -1,6 +1,9 @@
 /**
  * @file app.cpp
- * @brief Combined external I/O, converter, PMIC and RGB LED example.
+ * @brief Use GPIO expanders, ADC/DAC converters, an ADP5360, and an RGB LED.
+ *
+ * I2C devices are initialized independently, so missing modules do not prevent
+ * the application from using the devices that are present.
  */
 
 #include <hal/analog/hal_mcp3221.h>
@@ -29,7 +32,8 @@
 #define EXAMPLE_HC595_CS 17u
 #define EXAMPLE_RGB_PIN 22u
 #elif HAL_TARGET_IS_STM32G474
-/* STM32 pin id = port * 16 + pin: PB9/PB8, SPI1, PB6 and PA8. */
+/* STM32 pin numbers use port * 16 + pin: I2C uses PB9/PB8,
+ * SPI1 uses PA6/PA7/PA5 with CS on PB6, and RGB data uses PA8. */
 #define EXAMPLE_I2C_SDA 25u
 #define EXAMPLE_I2C_SCL 24u
 #define EXAMPLE_SPI_MISO 6u

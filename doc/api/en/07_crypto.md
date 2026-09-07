@@ -6,11 +6,11 @@
 
 ## `hal_crypto` - Base64, MD5, SHA-256 / HMAC-SHA256, ChaCha20, ChaCha20-Poly1305  *(opt-in - `HAL_ENABLE_CRYPTO`)*
 
-This module is **opt-in**. Define `HAL_ENABLE_CRYPTO` in
-`hal_project_config.h` (or via `-D`) to compile it in. Without the
-flag the header below expands to nothing, `hal_crypto.cpp` becomes an
-empty translation unit, and any caller of these helpers fails at link
-time with an undefined-reference error.
+Encode data as Base64, compute hashes and HMACs, or encrypt data with ChaCha20 or ChaCha20-Poly1305. Base64 is a data representation, not a security mechanism. Select the algorithm for the use case and follow its key and nonce requirements.
+
+Enable the module with `HAL_ENABLE_CRYPTO` in `hal_project_config.h` or through `-D`. Without the flag, the header exposes no declarations and `hal_crypto.cpp` is an empty translation unit. The functions are then unavailable to callers and the linker.
+
+Linking code that refers to missing definitions may produce an `undefined reference` error.
 
 ```c
 #include <hal/security/hal_crypto.h>
@@ -114,9 +114,9 @@ bool hal_hmac_sha256_hex(const uint8_t *key, size_t key_len,
   finalization return `HAL_ESTATE`.
 - SHA-256 / HMAC-SHA256 are validated against FIPS 180-2 and RFC 4231 vectors and stay bit-stable with companion host-side mirror implementations (for example `sc_sha256.c`).
 
-**Security note:** MD5 is provided for legacy checksum compatibility and non-security fingerprints. Do not use MD5 where collision resistance is required. Prefer SHA-256 / HMAC-SHA256 for any new integrity or authentication need.
+**Security:** MD5 is retained for legacy checksums and identifiers that do not require collision resistance. Do not use it where collision resistance is needed. Use SHA-256 and HMAC-SHA256 for new integrity and authentication mechanisms, respectively.
 
-**Thread safety:** Stateless implementation; safe for multicore use when caller-provided buffers do not alias across threads unexpectedly.
+**Concurrency:** The implementation has no shared internal state. Calls from different cores are safe provided that threads do not concurrently modify the same application-supplied buffers or contexts.
 
 ---
 
@@ -152,7 +152,7 @@ void example_base64(void) {
 }
 ```
 
-**Example: MD5 hash (legacy checksum)**
+**Example: MD5 for a legacy checksum format**
 ```c
 #include <hal/security/hal_crypto.h>
 #include <string.h>

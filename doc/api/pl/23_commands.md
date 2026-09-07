@@ -1,17 +1,14 @@
-# Router komend niezależny od transportu
+<a id="router-komend-niezależny-od-transportu"></a>
+
+# Polecenia aplikacji niezależne od transportu
 
 *Dostępne również [po angielsku](../en/23_commands.md).*
 
 > **Część [Dokumentacji API JaszczurHAL](../../pl/JaszczurHAL_API.md)**
 
-Podsystem komend oddziela rejestrację i wykonywanie komend od transportu,
-którym dociera żądanie. `hal_command_router` przechowuje nazwane handlery wraz
-z regułami dotyczącymi źródła i wymaganych zabezpieczeń. `hal_command_wire`
-definiuje binarny format wiadomości o ograniczonym rozmiarze, przeznaczony dla
-adapterów pakietowych i strumieniowych. Dostępne są adaptery HTTP/WebSocket
-zachowujące zgodność z `hal_net_commands`, ramkowane sesje szeregowe
-w `hal_serial_commands`, niezawodny transport LoRa w `hal_lora_commands` oraz
-uwierzytelniony BLE Stream w `hal_ble_commands`.
+Zarejestruj polecenie raz i udostępnij je przez różne kanały komunikacji. `hal_command_router` dobiera funkcję obsługi według nazwy, sprawdza dozwolone źródło i wymagane zabezpieczenia, a następnie wykonuje żądanie. `hal_command_wire` określa binarny format wiadomości o ograniczonym rozmiarze.
+
+Dostępne adaptery obsługują HTTP/WebSocket przez zgodne API `hal_net_commands`, sesję szeregową przez `hal_serial_commands`, łącze LoRa z potwierdzeniami przez `hal_lora_commands` i uwierzytelniony BLE Stream przez `hal_ble_commands`.
 
 ## Włączanie modułów
 
@@ -51,20 +48,17 @@ Włącz adapter LoRa razem z obsługą jednej rodziny układów radiowych:
 `HAL_ENABLE_NET_COMMANDS` również włącza router, zachowując przy tym swoje
 zależności od HTTP, WebSocket, cJSON, TCP i WiFi.
 
-## Router
+<a id="router"></a>
+
+## Rejestracja i wykonywanie poleceń
 
 ```c
 #include <hal/commands/hal_command_router.h>
 ```
 
-Żądanie zawiera argumenty o dowolnej postaci binarnej, informację o kodowaniu,
-wskaźniki do nazwy komendy i kontekstu źródła oraz identyfikatory żądania,
-węzła zdalnego i sesji. Router nie przejmuje pamięci nazwy ani kontekstu. Maski
-źródła i zabezpieczeń pozwalają ograniczyć handler do wybranych punktów
-wejścia. Router sprawdza je przed synchronicznym wywołaniem handlera.
+Żądanie zawiera argumenty binarne i ich kodowanie, nazwę polecenia, kontekst źródła oraz identyfikatory żądania, urządzenia zdalnego i sesji. Router nie przejmuje pamięci nazwy ani kontekstu. Przed synchronicznym uruchomieniem funkcji obsługi sprawdza maski dozwolonych źródeł i wymaganych zabezpieczeń.
 
-Adaptery transportowe korzystają ze wspólnego routera domyślnego. Aplikacja
-może utworzyć niezależny router, jeśli potrzebuje osobnego zestawu handlerów.
+Adaptery transportowe domyślnie korzystają ze wspólnego routera. Utwórz osobną instancję, gdy potrzebujesz niezależnego zestawu poleceń.
 
 ```c
 static hal_status_t echo_command(const hal_command_request_t *request,
@@ -112,9 +106,7 @@ Rejestracja oraz sprawdzanie danych identyfikujących wpis odbywają się atomow
 pod blokadą routera. Między sprawdzeniem a zmianą wpisu inny wątek nie może
 więc zmienić jego stanu.
 
-Router nie synchronizuje wykonywania handlerów. Ten sam handler może działać
-równocześnie w kilku zadaniach lub adapterach transportowych, dlatego aplikacja
-musi synchronizować dostęp do wspólnego stanu wskazywanego przez `user`.
+**Współbieżność funkcji obsługi:** Router nie szereguje ich wykonania. Ta sama funkcja może działać równocześnie w kilku zadaniach lub adapterach, dlatego aplikacja musi chronić współdzielony stan wskazywany przez `user`.
 
 `hal_command_response_write()` i `hal_command_response_write_str()` dopisują
 dane do bufora odpowiedzi o stałym rozmiarze. Funkcja pomocnicza ustawiająca
@@ -146,13 +138,11 @@ hal_command_response_t response;
 status = hal_command_router_dispatch(router, &request, &response);
 ```
 
-Zdefiniowane źródła to wywołania bezpośrednie, HTTP, WebSocket, Serial
-Session, niezawodny LoRa oraz BLE Stream. Adapter ustawia flagi bezpieczeństwa
-opisujące uwierzytelnienie, szyfrowanie, integralność i ochronę przed
-powtórzeniem (replay). Router wymaga wskazanych bitów, ale sam nie
-zabezpiecza transportu.
+Źródłem żądania może być wywołanie bezpośrednie, HTTP, WebSocket, Serial Session, łącze LoRa lub BLE Stream. Adapter deklaruje flagami uwierzytelnienie, szyfrowanie, integralność i ochronę przed powtórzeniem (replay). Router sprawdza wymagane flagi, ale sam nie zabezpiecza transmisji.
 
-## Format transmisyjny wiadomości
+<a id="format-transmisyjny-wiadomości"></a>
+
+## Binarny format wiadomości
 
 ```c
 #include <hal/commands/hal_command_wire.h>
@@ -223,15 +213,15 @@ bajty zachowaj do następnego wywołania.
 wewnętrznego bufora adaptera. Format transmisyjny nie dodaje szyfrowania ani
 uwierzytelnienia; odpowiada za nie adapter transportowy.
 
-## Adapter ramkowanej sesji szeregowej (Framed Serial Session)
+<a id="adapter-ramkowanej-sesji-szeregowej-framed-serial-session"></a>
+
+## Polecenia przez sesję szeregową
 
 ```c
 #include <hal/serial/hal_serial_commands.h>
 ```
 
-Zainicjalizuj `hal_serial_session`, zarejestruj handlery w routerze pod ich
-dotychczasowymi nazwami SC, a następnie dołącz jeden adapter przechowywany
-przez wywołującego:
+Zainicjalizuj `hal_serial_session`, zarejestruj w routerze funkcje obsługi pod dotychczasowymi nazwami SC i dołącz jeden adapter, którego pamięcią zarządza aplikacja:
 
 ```c
 static hal_serial_session_t session;
@@ -309,15 +299,15 @@ sesji jest usuwana tylko wtedy, gdy nadal jest zarejestrowana przez ten adapter.
 
 <a id="reliable-lora-adapter"></a>
 
-## Niezawodny adapter LoRa
+<a id="niezawodny-adapter-lora"></a>
+
+## Polecenia przez łącze LoRa
 
 ```c
 #include <hal/radio/hal_lora_commands.h>
 ```
 
-Najpierw utwórz i zainicjalizuj radio przez niskopoziomowe API, a następnie
-niezawodne łącze. Podczas dołączania adaptera łącze musi być w trybie odbioru.
-Ustawienie pola `router` konfiguracji na `NULL` wybiera wspólny router domyślny.
+Utwórz i skonfiguruj radio oraz łącze LoRa. Przed dołączeniem adaptera łącze musi odbierać dane. Pole `router` równe `NULL` wybiera wspólny router domyślny.
 
 ```c
 hal_lora_commands_config_t config =
@@ -369,14 +359,11 @@ if (process_status == HAL_OK || process_status == HAL_EAGAIN ||
 }
 ```
 
-Gdy kolejka nie zawiera odpowiedzi ani zdarzenia,
-`hal_lora_commands_receive()` zwraca `HAL_EAGAIN` i niczego z niej nie usuwa.
-Po pomyślnym zniszczeniu adaptera każde wywołanie API ze starym uchwytem
-zwraca `HAL_EUNINIT`.
+`hal_lora_commands_receive()` zwraca `HAL_EAGAIN`, gdy nie ma odpowiedzi ani zdarzenia do odczytu; nie usuwa wtedy niczego z kolejki. Po poprawnym zniszczeniu adaptera wywołanie API ze starym uchwytem zwraca `HAL_EUNINIT`.
 
 `hal_lora_commands_process()` można wywoływać tylko z jednego kontekstu
 wykonania. Wywołanie współbieżne lub ponowne przed zakończeniem poprzedniego
-zwraca `HAL_EBUSY`. Przed uruchomieniem handlera adapter zwalnia swój mutex.
+zwraca `HAL_EBUSY`. Przed uruchomieniem handlera adapter zwalnia swój muteks.
 Handler może dzięki temu bezpiecznie sprawdzić stan adaptera, odebrać już
 zakolejkowaną wiadomość dla
 aplikacji albo spróbować wysłać żądanie lub zdarzenie. Próba wysyłki w czasie,
@@ -390,12 +377,7 @@ buforze adaptera. Kontynuuj wywoływanie `hal_lora_commands_process()`, aby
 ponowić wysyłkę. Adapter i łącze kopiują dane do buforów o stałej pojemności.
 Router i łącze muszą pozostać dostępne przez cały czas działania adaptera.
 
-Zniszczenie adaptera zwraca `HAL_EBUSY`, jeśli trwa przetwarzanie, router
-przetwarza żądanie, odpowiedź oczekuje na wysłanie, aplikacja nie odebrała
-wiadomości albo łącze nie wróciło jeszcze do trybu odbioru. Przed ponowną próbą
-kontynuuj przetwarzanie i odbierz wiadomości z kolejki. Kontekst operacji
-rozpoczętej przez API pozostaje ważny aż do zwrócenia wyniku. Numer generacji
-uchwytu zapobiega pomyleniu zniszczonego adaptera z utworzonym później.
+Próba zniszczenia adaptera zwraca `HAL_EBUSY`, jeśli trwa przetwarzanie lub wykonywanie polecenia, odpowiedź czeka na wysłanie, aplikacja nie odebrała wiadomości albo łącze nie wróciło do odbioru. Kontynuuj przetwarzanie i odbierz oczekujące wiadomości przed ponowną próbą.
 
 Szyfrowane łącze LoRa ustawia wszystkie flagi bezpieczeństwa komend, natomiast
 łącze przesyłające dane jawne nie ustawia żadnej. Handler może więc wymagać
@@ -410,15 +392,15 @@ i odrzuceń.
 
 <a id="authenticated-ble-stream-adapter"></a>
 
-## Uwierzytelniony adapter BLE Stream
+<a id="uwierzytelniony-adapter-ble-stream"></a>
+
+## Polecenia przez uwierzytelniony BLE Stream
 
 ```c
 #include <hal/bluetooth/hal_ble_commands.h>
 ```
 
-Zainicjalizuj `hal_ble`, zarejestruj usługę `hal_ble_stream` i ustaw jej sekret,
-a następnie dołącz jeden adapter komend. Aplikacja nadal musi odpytywać
-kontrolera i obsługiwać advertising:
+Zainicjalizuj `hal_ble`, udostępnij usługę `hal_ble_stream`, ustaw jej sekret i dołącz jeden adapter poleceń. Nadal samodzielnie obsługuj kontroler oraz rozgłaszanie:
 
 ```c
 hal_ble_commands_config_t config = hal_ble_commands_config_defaults();
@@ -468,9 +450,7 @@ napływania danych, zachowuje bajty znajdujące się za kompletną wiadomością
 i podczas jednego wywołania `process()` przekazuje do routera najwyżej jedno
 żądanie.
 
-Przychodzące żądania są synchronicznie przekazywane do routera, a odpowiedzi
-wysyłane automatycznie. Odpowiedzi i zdarzenia można skopiować przez
-`hal_ble_commands_receive()`:
+Adapter synchronicznie przekazuje przychodzące żądania do routera i automatycznie wysyła odpowiedzi. Odpowiedzi oraz zdarzenia przeznaczone dla aplikacji odczytuj przez `hal_ble_commands_receive()`:
 
 ```c
 hal_command_message_t message;
@@ -514,7 +494,9 @@ dane zakodowanej wiadomości, router przetwarza żądanie albo aplikacja nie
 odebrała wiadomości. Użycie nieaktualnego uchwytu powoduje zwrócenie
 `HAL_EUNINIT`.
 
-## Kompatybilność sieciowa
+<a id="kompatybilność-sieciowa"></a>
+
+## Zgodność z dotychczasowym API sieciowym
 
 `hal_net_commands` zachowuje dotychczasowe API dla tekstu/JSON, cJSON, HTTP
 i WebSocket, ale rejestruje i wykonuje komendy przez wspólny router domyślny.
@@ -528,19 +510,13 @@ serializację wartości `args` albo `params`. Dla źródeł sieciowych identyfik
 Dotychczasowe funkcje zliczania i wyrejestrowywania działają na wspólnym
 zestawie handlerów.
 
-`hal_net_commands_clear()` czyści cały router domyślny i zwraca
-`hal_status_t`. Jeśli trwa wykonywanie dowolnej zarejestrowanej komendy,
-również dodanej przez inny adapter, funkcja zwraca `HAL_EBUSY` i nie zmienia
-zestawu handlerów.
+`hal_net_commands_clear()` czyści cały router domyślny, również wpisy innych adapterów. Zwraca `hal_status_t`. Jeśli wykonywane jest dowolne zarejestrowane polecenie, zwraca `HAL_EBUSY` i pozostawia zestaw bez zmian.
 
 Wspólna struktura odpowiedzi zachowuje dotychczasowe pola odpowiedzi sieciowej
 w niezmienionej kolejności, a na końcu dodaje niezależne od transportu pole
 `encoding`.
 
-`HAL_ENABLE_BLE_STREAM` sam w sobie pozostaje ogólnym uwierzytelnionym
-strumieniem bajtów i nie włącza routera. Wybierz `HAL_ENABLE_BLE_COMMANDS`
-tylko wtedy, gdy dane Stream są przeznaczone wyłącznie dla wiadomości
-w formacie komend.
+Samo `HAL_ENABLE_BLE_STREAM` udostępnia ogólny uwierzytelniony strumień bajtów, bez routera. Włącz `HAL_ENABLE_BLE_COMMANDS` tylko wtedy, gdy cały strumień ma służyć wiadomościom protokołu poleceń.
 
 ## Limity ustalane podczas kompilacji
 

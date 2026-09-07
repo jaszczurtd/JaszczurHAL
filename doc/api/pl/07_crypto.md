@@ -6,11 +6,11 @@
 
 ## `hal_crypto` - Base64, MD5, SHA-256 / HMAC-SHA256, ChaCha20, ChaCha20-Poly1305  *(opcjonalny - `HAL_ENABLE_CRYPTO`)*
 
-Ten moduł jest **opcjonalny**. Aby dodać go do buildu, zdefiniuj
-`HAL_ENABLE_CRYPTO` w `hal_project_config.h` albo za pomocą `-D`. Bez tej
-flagi poniższy nagłówek nie udostępnia żadnych deklaracji, a
-`hal_crypto.cpp` jest pustą jednostką translacji. Próba wywołania którejkolwiek
-z tych funkcji kończy się na etapie linkowania błędem `undefined reference`.
+Koduj dane w Base64, obliczaj skróty i HMAC albo szyfruj je algorytmem ChaCha20 lub ChaCha20-Poly1305. Base64 służy do reprezentacji danych, nie do ich ochrony. Dobierz algorytm do zastosowania i przestrzegaj wymagań dotyczących kluczy oraz wartości nonce.
+
+Włącz moduł przez `HAL_ENABLE_CRYPTO` w `hal_project_config.h` lub przez `-D`. Bez tej flagi nagłówek nie udostępnia deklaracji, a `hal_crypto.cpp` pozostaje pustą jednostką translacji. Funkcje nie są wtedy dostępne do użycia ani linkowania.
+
+Przy próbie linkowania kodu odwołującego się do brakujących definicji linker może zgłosić `undefined reference`.
 
 ```c
 #include <hal/security/hal_crypto.h>
@@ -125,15 +125,9 @@ bool hal_hmac_sha256_hex(const uint8_t *key, size_t key_len,
   FIPS 180-2 i RFC 4231. Są również identyczne bitowo z wynikami odpowiadających
   im implementacji hostowych, na przykład `sc_sha256.c`.
 
-**Uwaga dotycząca bezpieczeństwa:** MD5 jest dostępny wyłącznie ze względu na
-zgodność ze starszymi sumami kontrolnymi i identyfikatorami, które nie służą do
-zabezpieczania danych. Nie używaj MD5 tam, gdzie jest wymagana odporność na
-kolizje. W nowych mechanizmach sprawdzania integralności i uwierzytelniania
-stosuj SHA-256 / HMAC-SHA256.
+**Bezpieczeństwo:** MD5 pozostaje dostępny dla starszych sum kontrolnych i identyfikatorów, które nie wymagają odporności na kolizje. Nie używaj go tam, gdzie ta właściwość jest potrzebna. W nowych mechanizmach integralności i uwierzytelniania stosuj odpowiednio SHA-256 i HMAC-SHA256.
 
-**Wielowątkowość:** Implementacja nie przechowuje stanu i może być bezpiecznie
-używana na wielu rdzeniach, o ile bufory przekazane przez kod wywołujący nie
-nakładają się przypadkowo między wątkami.
+**Współbieżność:** Implementacja nie korzysta ze wspólnego stanu wewnętrznego. Wywołania na różnych rdzeniach są bezpieczne, pod warunkiem że wątki nie modyfikują jednocześnie tych samych buforów lub kontekstów przekazanych przez aplikację.
 
 ---
 
@@ -169,7 +163,7 @@ void example_base64(void) {
 }
 ```
 
-**Przykład: skrót MD5 (dziedziczona suma kontrolna)**
+**Przykład: MD5 do zgodności ze starszym formatem sumy kontrolnej**
 ```c
 #include <hal/security/hal_crypto.h>
 #include <string.h>

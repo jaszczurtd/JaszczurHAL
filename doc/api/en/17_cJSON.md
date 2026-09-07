@@ -1,22 +1,23 @@
-# cJSON
+<a id="cjson"></a>
+
+# JSON - parsing, creation, and modification
 
 *Also available in [Polish](../pl/17_cJSON.md).*
 
 > **Part of [JaszczurHAL API Reference](../../en/JaszczurHAL_API.md)**
 
-Covers: managed `cJSON` and `cJSON_Utils` enabled by `HAL_ENABLE_CJSON`.
+Parse, create, and modify JSON documents with `cJSON` and `cJSON_Utils`. JaszczurHAL supplies both libraries behind `HAL_ENABLE_CJSON`.
 
-`cJSON` is a small C JSON parser/generator fetched into `third_party/cJSON` at
-the commit pinned by `third_party/cjson_version.conf`. Thin integration wrappers
-in `src/hal/codecs/cjson/` gate the upstream headers and sources
-behind `HAL_ENABLE_CJSON` while preserving the public include path.
+`cJSON` provides a small C parser and generator for JSON. The project fetches its sources into `third_party/cJSON` at the commit specified by `third_party/cjson_version.conf`. Integration code in `src/hal/codecs/cjson/` compiles the original sources and exposes the headers only when `HAL_ENABLE_CJSON` is enabled, preserving the stable public include path.
 
 Managed version: `cJSON` 1.7.18.
 
 Author/license: upstream `cJSON` is authored by Dave Gamble and contributors
 and distributed under the MIT license.
 
-## Enable
+<a id="enable"></a>
+
+## Enabling the module
 
 Enable the module in `hal_project_config.h` or with a compiler definition:
 
@@ -31,29 +32,30 @@ compile to nothing unless `HAL_ENABLE_CJSON` is defined. The public headers are
 also guarded, so code that uses `cJSON_*` symbols must be compiled with the same
 flag.
 
-## Include
+<a id="include"></a>
 
-Direct include, safe from both C and C++:
+## Including the headers
+
+Include the headers directly from either C or C++:
 
 ```c
 #include <hal/codecs/cjson/cJSON.h>
 #include <hal/codecs/cjson/cJSON_Utils.h>
 ```
 
-For C++ files that already use the utility aggregator, `tools.h` also exposes
-cJSON when `HAL_ENABLE_CJSON` is defined:
+C++ files already using `tools.h` also receive access to cJSON through that header when `HAL_ENABLE_CJSON` is enabled:
 
 ```c
 #include <tools.h>
 ```
 
-`tools.h` includes C++ utility classes, so prefer the direct framework includes
-from `.c` files. `tools_c.h` does not re-export cJSON.
+In `.c` files, include the integration headers directly because `tools.h` also contains C++ classes. `tools_c.h` does not expose cJSON.
 
-`JaszczurHAL.h` includes the HAL umbrella, not the utility aggregator, so include
-the framework headers, or `tools.h` from C++ files, where cJSON is used directly.
+`JaszczurHAL.h` does not include `tools.h`, so the HAL umbrella alone does not expose cJSON. Include the integration headers directly or use `tools.h` from C++.
 
-## API Surface
+<a id="api-surface"></a>
+
+## Available operations
 
 Core `cJSON` API:
 
@@ -67,8 +69,7 @@ Core `cJSON` API:
 | Print | `cJSON_Print`, `cJSON_PrintUnformatted`, `cJSON_PrintBuffered`, `cJSON_PrintPreallocated` |
 | Free | `cJSON_Delete`, `cJSON_free` |
 
-`cJSON_Utils` adds helpers for JSON Pointer, JSON Patch, JSON Merge Patch, and
-object sorting:
+`cJSON_Utils` provides JSON Pointer, JSON Patch, JSON Merge Patch, and object-sorting operations:
 
 | Feature | Functions |
 |---|---|
@@ -77,11 +78,11 @@ object sorting:
 | JSON Merge Patch (RFC 7386) | `cJSONUtils_MergePatch`, `cJSONUtils_GenerateMergePatch` |
 | Sorting / paths | `cJSONUtils_SortObject`, `cJSONUtils_FindPointerFromObjectTo` |
 
-## Memory Ownership
+## Memory ownership
 
 cJSON uses dynamic allocation by default.
 
-Rules that matter most:
+Memory cleanup rules:
 
 - `cJSON_Parse*()` returns a tree owned by the caller. Free it with
   `cJSON_Delete(root)`.
@@ -98,17 +99,15 @@ Rules that matter most:
 - `cJSONUtils_MergePatch(target, patch)` may return a different pointer than
   `target`. Always assign the return value back to your root pointer.
 
-Custom allocation hooks can be installed with `cJSON_InitHooks()`. Do this once
-at startup, before any JSON objects are created. The hooks are global process
-state, not per-document state.
+Register custom allocation and deallocation functions with `cJSON_InitHooks()` once at startup, before creating any JSON object. The setting applies to the entire process, not to an individual document.
 
-## Thread Safety
+<a id="thread-safety"></a>
 
-cJSON documents are independent as long as each task/core owns its own tree or
-external locking protects shared trees. JaszczurHAL does not add a mutex around
-cJSON operations.
+## Concurrency
 
-Important shared/global state:
+Separate tasks or cores can process independent cJSON trees. If they share a tree, the application must synchronize access. JaszczurHAL does not add a mutex to cJSON operations.
+
+Also account for the library's global state:
 
 - `cJSON_InitHooks()` changes global allocator hooks. Call it once during
   startup, before concurrent JSON use.
@@ -116,7 +115,9 @@ Important shared/global state:
   `cJSON_ParseWithOpts(..., &end, ...)`, because it returns the parse end/error
   pointer through caller-owned storage.
 
-## Example: Parse Configuration
+<a id="example-parse-configuration"></a>
+
+## Example: parsing configuration
 
 ```c
 #include <hal/codecs/cjson/cJSON.h>
@@ -168,7 +169,9 @@ Input:
 {"ssid":"lab-net","sample_ms":1000,"enabled":true}
 ```
 
-## Example: Build And Print JSON
+<a id="example-build-and-print-json"></a>
+
+## Example: creating and serializing JSON
 
 Use `cJSON_PrintPreallocated()` when the output has a bounded size and you want
 to avoid allocating a print buffer.
@@ -215,14 +218,13 @@ if (text != NULL) {
 }
 ```
 
-## Example: Build JSON With NONULL
+<a id="example-build-json-with-nonull"></a>
 
-`NONULL(x)` is a JaszczurHAL helper from `hal_system.h`, not a cJSON API. It is
-useful for compact builders that use one `error:` cleanup label. If `x` evaluates
-to `NULL`, the macro jumps to that label.
+## Example: creating JSON with `NONULL` error handling
 
-This pattern works well with `cJSON_Add*ToObject()` helpers and
-`cJSON_PrintUnformatted()`, because both return pointers that must be checked.
+`NONULL(x)` is a JaszczurHAL macro from `hal_system.h`, not a cJSON function. If `x` is `NULL`, it jumps to the `error:` label. This lets a document-building function keep resource cleanup in one place.
+
+This pattern can be used with `cJSON_Add*ToObject()` and `cJSON_PrintUnformatted()`: both return pointers that must be checked.
 
 ```c
 #include <hal/codecs/cjson/cJSON.h>
@@ -264,7 +266,7 @@ The returned `char *` is owned by the caller. Free it with `cJSON_free(json)`
 after sending or storing it. A `NULL` return means allocation failed while
 creating the tree or printing the final JSON.
 
-## Example: JSON Pointer And Merge Patch
+## Example: JSON Pointer and Merge Patch
 
 ```c
 #include <hal/codecs/cjson/cJSON.h>
@@ -301,7 +303,9 @@ static bool update_uart_config(cJSON **root_inout) {
 JSON Pointer uses `/`-separated paths. For object keys containing `~` or `/`,
 escape them as `~0` and `~1`.
 
-## Embedded Notes
+<a id="embedded-notes"></a>
+
+## Embedded-system considerations
 
 - Always check returned pointers for `NULL`; allocation failure is a normal
   embedded failure mode.
@@ -322,10 +326,11 @@ escape them as `~0` and `~1`.
   upstream comments. Duplicate documents first if original ordering/content must
   remain untouched.
 
-## Storage And Transport
+<a id="storage-and-transport"></a>
 
-cJSON itself is RAM-only. Persist or move the text through the appropriate HAL
-module:
+## Storing and transmitting JSON
+
+cJSON processes data in RAM. Use an appropriate HAL module to persist or transmit the text:
 
 - Use `hal_littlefs` for JSON files on RP2040 LittleFS.
 - Use `hal_kv` for small scalar configuration values where JSON text is not
@@ -333,7 +338,7 @@ module:
 - Use `hal_serial`, `hal_uart`, MQTT, UDP, or modem transports to send printed
   JSON.
 
-## Author And License
+## Author and license
 
 The managed cJSON/cJSON_Utils sources are from upstream `cJSON`, authored by
 Dave Gamble and contributors, and distributed under the MIT license. The

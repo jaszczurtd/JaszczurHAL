@@ -1,11 +1,18 @@
-# 04 - Sensor hub
+<a id="04---sensor-hub"></a>
 
-This portable example services three independent sensors in one loop:
+# 04 - Temperature, humidity, and light sensors
 
-- BH1750 on I2C address `0x23`;
-- DHT11 on a GPIO data line;
-- DS18B20 through the non-blocking OneWire workflow.
+This example reads light levels from a BH1750, temperature and humidity from
+a DHT11, and temperature from a DS18B20. Each sensor is handled independently:
+a missing device is reported without stopping the others. DS18B20 conversions
+do not block the application loop while the measurement is in progress.
 
-An unavailable sensor is reported without stopping the other two. RP targets use
-I2C GP4/GP5, DHT GP14, and DS18B20 GP16. STM32G474 uses I2C1 PB9/PB8, DHT PA8,
-and DS18B20 PB0. I2C and OneWire devices require their normal external pull-ups.
+The BH1750 uses I2C address `0x23`. Connect the sensors as follows:
+
+| Signal | RP family | STM32G474 |
+|---|---|---|
+| BH1750 SDA / SCL | GP4 / GP5 | PB9 / PB8 (I2C1) |
+| DHT11 DATA | GP14 | PA8 |
+| DS18B20 DATA | GP16 | PB0 |
+
+I2C and OneWire lines require external pull-up resistors.

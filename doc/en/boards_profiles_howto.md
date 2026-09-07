@@ -11,24 +11,15 @@ JaszczurHAL selects hardware with two stable IDs:
 }
 ```
 
-A target identifies the MCU, ISA, toolchain, and build recipe. A board profile
-identifies a physical board, its flash, exposed and reserved pins, on-board
-devices, capabilities, and controlled build components. Application features
-remain opt-in through `HAL_ENABLE_*`; a hardware capability never enables a
-feature by itself.
+A target identifies the MCU, instruction-set architecture (ISA), toolchain, and build configuration. A board profile describes physical hardware: flash, exposed and reserved pins, on-board devices, capabilities, and build components. Application features must still be enabled through `HAL_ENABLE_*`. The presence of hardware does not enable its software support automatically.
 
-The current profile inventory comes from `boards/profiles/*.json`; list its
-stable IDs with
-`python3 scripts/generate_board_config.py --boards-root boards --list boards`.
-The ESP32-S3 target provides its delivered core/peripheral backend set and the
-Phase 3 native connectivity/service graph. The build generator validates target
-compatibility, flash size, pins, components, and feature rules before
-toolchain import. The same descriptors generate the source fallback, so board
-names and compile-time facts stay identical without a build-generated config.
+Available profiles are stored in `boards/profiles/*.json`. List their IDs with `python3 scripts/generate_board_config.py --boards-root boards --list boards`. ESP32-S3 provides the implemented core and peripheral modules and the network services described as Phase 3.
+
+Before importing the toolchain, the generator checks target compatibility, flash size, pins, components, and feature dependencies. It also generates a fallback configuration for direct source-level selection from the same descriptors. Board names and compile-time settings therefore remain consistent without a configuration generated for a particular build.
 
 ## Source files
 
-The versioned source of truth is `boards/`:
+Version-controlled source data is stored in `boards/`:
 
 - `targets/<id>.json` describes an MCU/ISA target;
 - `profiles/<id>.json` describes a physical board;
@@ -36,9 +27,7 @@ The versioned source of truth is `boards/`:
 - `board.schema.json` provides editor assistance only;
 - `scripts/generate_board_config.py` owns structural and semantic validation.
 
-Descriptor IDs use kebab-case and must match their filenames. Unknown fields,
-duplicate IDs, incompatible target/board pairs, invalid endpoints, unknown
-capabilities or components, and output outside `.build` are hard errors.
+Descriptor IDs must use kebab-case and match their filenames. Unknown fields, duplicate IDs, incompatible target/board pairs, invalid endpoints, unknown capabilities or components, and output outside `.build` all cause errors.
 
 ## Descriptor model
 
@@ -67,12 +56,7 @@ Target descriptors additionally define:
   production runners after transitive resolution. It must contain every
   required feature.
 
-The resolved `jh_board_config.h` projects target descriptors into
-`HAL_TARGET_*` facts and board descriptors into `HAL_BOARD_*` facts.
-`hal_system_get_current_architecture()` consumes those generated target facts
-instead of maintaining a second MCU/ISA/memory table in backend source. Total
-flash remains a board fact because boards for one target may carry different
-flash devices.
+Generated `jh_board_config.h` represents target data as `HAL_TARGET_*` macros and board data as `HAL_BOARD_*` macros. `hal_system_get_current_architecture()` uses this data, so implementations do not need a separate MCU, ISA, and memory table. Total flash size remains a board property because boards using the same MCU can carry different flash devices.
 
 Board descriptors additionally define:
 
@@ -118,20 +102,9 @@ GPIO endpoints use an explicit domain:
 STM32 endpoints use symbolic IDs such as `PA5`. GPIO supplied by another chip
 uses `component-gpio`, so it does not inflate the SoC GPIO namespace.
 
-Reservations are `hard` when an application cannot use the pin and `soft` when
-the pin has a board-owned function that an application can intentionally
-drive. Application wiring, partition layout, firmware-defined USB product
-identity, clock selection, secrets, and WS2812 pixel order do not belong in a
-board descriptor. A fixed USB identity of the board's programming transport is
-a physical board fact and belongs under `programming.usb`.
+A `hard` reservation prevents application use of a pin. A `soft` reservation assigns a board function while allowing the application to take control deliberately. The board descriptor does not define application wiring, partition layout, firmware-defined USB product identity, clock choice, secrets, or WS2812 color order. The programming interface's fixed USB identity is a hardware property and belongs in `programming.usb`.
 
-A composite profile must preserve the base board's physical devices, aliases,
-and public HAL definitions. Do not remove a built-in device such as
-`HAL_LED_BUILTIN` merely to reuse its pin for an attached module: the original
-device remains electrically connected and can load or toggle the shared line
-even when the overlap looks harmless. Select non-conflicting wiring instead.
-Intentional PCB rework, such as opening a solder bridge, requires a distinct
-profile whose description states the physical modification.
+A profile combining a base board with an add-on module must preserve the base board's physical devices, aliases, and public HAL definitions. Do not remove a device such as `HAL_LED_BUILTIN` merely to reuse its pin: the device remains electrically connected and may load or switch the shared line. Choose non-conflicting wiring instead. A PCB modification, such as opening a solder bridge, requires a separate profile that explicitly describes the modification.
 
 ## Board-owned devices
 
@@ -139,12 +112,7 @@ Every entry under `devices` uses a camelCase ID and declares a `kind`. Devices
 that own one line - `gpio`, `component-gpio`, and `addressable` - carry a single
 `endpoint`.
 
-A device wired across several pins on a bus uses `kind: "bus-device"` and names
-a `role` from the generator's device-role registry. The role declares which
-signals and which typed attributes the descriptor must supply, so a profile
-cannot ship a partially described device. This abridged shape illustrates the
-naming; use the complete tracked `rp2040-lora-lf` profile as the authoritative
-SX1262 example:
+A device using several bus signals has `kind: "bus-device"` and a `role` from the generator's role registry. The role specifies required signals and attribute types, preventing incomplete descriptions. The abbreviated example below illustrates the naming; the checked-in `rp2040-lora-lf` profile is the complete SX1262 reference:
 
 ```json
 "loraRadio": {
@@ -192,14 +160,9 @@ one `_IS_<VALUE>` flag per allowed value and a `_NAME` string; STM32 symbolic
 pins are encoded into the same integer pin IDs the HAL consumes. The full
 descriptor also reaches `jh_board_resolved.json` unchanged for tooling.
 
-Component IDs, providers, and exclusive slots come from the authoritative
-`config/tooling/board_components.json` model. The board generator consumes
-it directly and writes the CMake projection included by
-`cmake/jh_board_components.cmake`. Every official build validates the resolved
-component list against that registry: an unknown component, a component that
-does not match the build provider, or two components claiming the same
-exclusive slot fail the configure step. Recipes may condition source
-integration on the exported `JH_BOARD_COMPONENT_<ID>` flags.
+Component IDs, supported build providers, and mutually exclusive component groups are defined in `config/tooling/board_components.json`. The board generator reads that file and produces CMake data included by `cmake/jh_board_components.cmake`.
+
+Every official build checks the resolved component list. An unknown component, provider mismatch, or two components from the same exclusion group causes configuration to fail. Build scripts can select sources using the exported `JH_BOARD_COMPONENT_<ID>` flags.
 
 ## Generation
 
@@ -232,11 +195,7 @@ python3 scripts/sync_generated.py --write
 python3 scripts/sync_generated.py --check
 ```
 
-These commands materialize the public enum/capability registry and the complete
-fallback configuration directly from the descriptors, plus the CMake
-board-component registry from `config/tooling/board_components.json`. The
-tracked C header is the only physical `jh_board_registry.h`; per-build output
-never duplicates it.
+These commands generate the public profile enum, capability registry, and complete fallback configuration from the descriptors. They also generate the CMake component registry from `config/tooling/board_components.json`. The version-controlled header is the only copy of `jh_board_registry.h`; individual builds do not duplicate it.
 
 The deterministic output contains:
 
@@ -247,22 +206,15 @@ The deterministic output contains:
 - link-signature definition and reference translation units;
 - `generation.d`.
 
-Firmware never parses JSON. CMake runs the generator before importing Pico SDK
-and uses the generated provider platform and board. `hal_board.h` always uses
-the tracked registry, then consumes the build-generated board config when it is
-available or the tracked generated fallback otherwise.
-`jh_board_resolved.json` records the direct `requestedFeatures`, the transitive
-registry `resolvedFeatures`, their `featureProvenance`,
-`resolvedFeaturesDigest`, and the board/provider
-`boardCompileDefinitions`. The retained `features` field is an alias of
-`resolvedFeatures`. Generated CMake exports the same feature values as
-`JH_BOARD_REQUESTED_FEATURES`, `JH_BOARD_RESOLVED_FEATURES`, and
-`JH_BOARD_RESOLVED_FEATURES_DIGEST`, and exports the provider definitions as
-`JH_BOARD_COMPILE_DEFINITIONS`. `jh_board_config.h` materializes those provider
-definitions as preprocessor macros so a direct compiler consumer receives the
-same backend, bus, and pin configuration without running CMake or Python.
+Firmware does not parse JSON. CMake runs the generator before importing Pico SDK, then uses the generated platform and board settings. `hal_board.h` always uses the version-controlled registry. It reads the board configuration generated for the build when available, or the stored fallback otherwise.
 
-## Board-aware static libraries
+`jh_board_resolved.json` contains direct requests in `requestedFeatures`, the complete dependency-resolved set in `resolvedFeatures`, `featureProvenance`, `resolvedFeaturesDigest`, and board/provider definitions in `boardCompileDefinitions`. The `features` field remains an alias for `resolvedFeatures`.
+
+Generated CMake exports the same data as `JH_BOARD_REQUESTED_FEATURES`, `JH_BOARD_RESOLVED_FEATURES`, `JH_BOARD_RESOLVED_FEATURES_DIGEST`, and `JH_BOARD_COMPILE_DEFINITIONS`. `jh_board_config.h` exposes the definitions as preprocessor macros, giving direct compiler builds the same backend, bus, and pin configuration without CMake or Python.
+
+<a id="board-aware-static-libraries"></a>
+
+## Static libraries for each board
 
 Static libraries are separated by target and board:
 
@@ -319,9 +271,7 @@ Both fixtures passed no-transmit CAD/RSSI/calibration probes and bidirectional
 OTA tests, but remain experimental because jumper-wire assembly and one tested
 host of each type are not equivalent to a stable carrier design.
 
-Different Core1262 wiring uses the plain `pico` or `nucleo-g474re` profile and
-an explicit application descriptor. It must not select a composite profile
-whose fixed pin configuration does not match the physical assembly.
+For different Core1262 wiring, use the plain `pico` or `nucleo-g474re` profile with an explicit application descriptor. Do not select a composite profile whose fixed pin assignment differs from the physical assembly.
 
 The archive defines:
 
@@ -329,30 +279,17 @@ The archive defines:
 jh_board_contract_<target>_<board>_<featureHash>
 ```
 
-`featureHash` is the first 12 hexadecimal characters of SHA-256 over
-`hal.profileId` followed by the sorted registry `resolvedFeatures`, serialized
-as `HAL_ENABLE_*=1` or `HAL_DISABLE_*=1`. Bare feature names and `=1` therefore
-produce the same hash; the generator rejects `=0`, unknown features, derived
-feature requests, and other explicit feature values. Two different requested
-sets that produce the same closure have the same feature hash and link signature,
-while `requestedFeatures` still preserves their diagnostic difference.
+`featureHash` is the first 12 hexadecimal characters of SHA-256 calculated over `hal.profileId` followed by sorted `resolvedFeatures`, serialized as `HAL_ENABLE_*=1` or `HAL_DISABLE_*=1`. A bare feature name and the same name with `=1` produce the same hash. The generator rejects `=0`, unknown features, derived-feature requests, and other explicit values.
 
-Official firmware builds always compile the generated reference translation
-unit. Linking an archive for another target, board, or resolved feature set
-therefore fails with an undefined compatibility symbol. For GCC and Clang, the
-reference is rooted through a generated `constructor, used` function. The
-constructor array is retained by the supported linker scripts, so the signature
-remains effective when function/data sections and `--gc-sections` are enabled.
+Different request lists produce the same hash and link signature when they resolve to the same feature set. `requestedFeatures` still preserves the original requests for diagnostics.
 
-The archive and its generated headers are one unit. Never copy or link
-`libJaszczurHAL.a` without the matching `include/generated/` directory and
-link-signature reference translation unit.
+Official firmware builds always compile the generated translation unit that references the link signature. Using a library for a different target, board, or resolved feature set therefore fails with an undefined compatibility symbol.
 
-Two conditional compatibility rules remain outside the v1 registry closure:
-AT24C256 EEPROM can add I2C, and GPS can select UART when no serial transport
-was requested. They run in `hal_config.h` and do not participate in feature-hash
-equivalence. The hash compares the registry-resolved set, not every macro added
-later by those residual rules.
+GCC and Clang retain the reference through a generated function with `constructor, used` attributes. Supported linker scripts retain the constructor array, so the check remains active with function/data sections and `--gc-sections`.
+
+The static library and its generated headers form one package. Do not copy or link `libJaszczurHAL.a` without the matching `include/generated/` directory and link-signature reference translation unit.
+
+Two conditional compatibility rules remain outside the v1 registry's dependency set: AT24C256 EEPROM can enable I2C, and GPS can select UART when no serial transport is requested. These rules run in `hal_config.h` and do not affect feature-hash equivalence. The hash covers the registry-resolved features, not every macro added later.
 
 ## Installed package
 
@@ -363,7 +300,7 @@ cmake --install .build/static/<target>/<board> \
   --prefix .build/install/<target>/<board>
 ```
 
-The installed unit contains:
+The installed package contains:
 
 ```text
 include/
@@ -381,13 +318,7 @@ share/JaszczurHAL/generated/
   jh_board_resolved.json
 ```
 
-The rest of the public headers are installed below `include/` as usual. After
-installation, a matching compiler can compile project sources using the direct
-requests from `jh_board_resolved.json`; `hal_config.h` applies the tracked
-generated closure. Compile `jh_link_contract_reference.c` into the application
-and link it with the matching archive. This consumer compile/link path does not
-invoke Python. Target SDK libraries, startup files, linker scripts, and normal
-toolchain flags are still required by the selected platform.
+Other public headers are installed under `include/`. After installation, compile the application with the matching compiler and the direct requests in `jh_board_resolved.json`; `hal_config.h` applies the dependencies stored in the version-controlled generated files. Compile `jh_link_contract_reference.c` into the application and link with the matching library. This workflow does not require Python. The platform still requires its SDK libraries, startup files, linker scripts, and normal toolchain options.
 
 ## Adding RP2040-Zero
 

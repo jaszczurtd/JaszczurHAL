@@ -1,14 +1,13 @@
 /*
- * JH BLE Stream v1 consumer.
+ * Exchange data with a BLE client using JH BLE Stream v1.
  *
- * Advertises a connectable Peripheral, publishes the stream service and waits
- * for a client that proves knowledge of the per-device secret. Only an
- * authenticated session may exchange payloads; unauthenticated clients read
- * the protocol version and capabilities and nothing else.
+ * The device advertises a connectable Peripheral and exposes protocol version
+ * and capability information before authentication. Application payloads are
+ * accepted only after the client proves knowledge of the device secret.
  *
- * The secret below stands in for provisioning. A product derives it per device
- * and delivers it out of band, for example through a label QR code or an
- * authenticated USB channel.
+ * The embedded secret is for this example only. A deployed product needs a
+ * different secret for each device and a separate way to give it to the client,
+ * such as a label QR code or an authenticated USB connection.
  */
 
 #include <JaszczurHAL.h>
@@ -38,7 +37,7 @@ constexpr char kDeviceName[] = "JH Stream";
 constexpr uint32_t kTelemetryPeriodMs = 1000u;
 #endif
 
-/* Provisioning placeholder: replace with a per-device secret. */
+/* Example value only. Replace it with a secret unique to this device. */
 const uint8_t kDeviceSecret[HAL_BLE_STREAM_SECRET_MIN_LEN] = {
     0x8Fu, 0x2Cu, 0x51u, 0xE4u, 0xB7u, 0x0Du, 0x93u, 0xA6u, 0x14u, 0x7Bu, 0xC8u,
     0x35u, 0x6Eu, 0xF1u, 0x2Au, 0x59u, 0xD3u, 0x60u, 0x8Bu, 0x47u, 0xE2u, 0x1Cu,
@@ -482,6 +481,8 @@ void publish_telemetry(void) {
 
 #endif
 
+/* With FreeRTOS, initialize Bluetooth from app_task0 after the scheduler
+ * starts. */
 hal_status_t initialize_runtime(void) {
   hal_status_t status = hal_ble_initialize();
   if (status != HAL_OK) {

@@ -1,3 +1,10 @@
+/*
+ * Receive Bluetooth A2DP audio and play decoded mono samples through PWM and
+ * DMA. The example pairs during a limited window and saves the peer after valid
+ * SBC input. GP6 is a logic-level audio signal, not a direct loudspeaker
+ * output.
+ */
+
 #include <hal/audio/hal_dma_pwm_audio.h>
 #ifdef HAL_SPEAKER_EXAMPLE_ENABLE_BLE
 #include <hal/bluetooth/hal_ble.h>
@@ -513,9 +520,9 @@ static hal_status_t initialize_speaker(void) {
   }
   hal_bluetooth_classic_identity_t identity = {0};
   memcpy(identity.name, s_device_name, strlen(s_device_name) + 1);
-  /* Audio + Rendering service classes, Audio/Video major class and the
-   * Loudspeaker minor class. Android uses Rendering when matching A2DP sinks.
-   */
+  /* Identify the device as a loudspeaker in the Audio/Video class, with
+   * Audio and Rendering services. Android uses Rendering to recognize an
+   * A2DP audio receiver. */
   identity.class_of_device = SPEAKER_CLASS_OF_DEVICE;
   status = hal_bluetooth_classic_set_identity(s_classic, &identity);
   if (status != HAL_OK) {

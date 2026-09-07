@@ -4,14 +4,13 @@
 
 > **Część [Dokumentacji API JaszczurHAL](../../pl/JaszczurHAL_API.md)**
 
-Obejmuje: `hal_modem_at`, `hal_simcom_a76xx`.
+Rozdział opisuje wysyłanie poleceń AT oraz obsługę modemów SimCom A76xx: uruchamianie, połączenie z siecią, odczyt lokalizacji i komunikację MQTT.
 
-## `hal_modem_at` - ogólny silnik poleceń AT  *(wspólne API - `HAL_ENABLE_CELLULAR_MODEM`)*
+<a id="hal_modem_at---ogólny-silnik-poleceń-at--wspólne-api---hal_enable_cellular_modem"></a>
 
-Warstwa transportowa stosu modemu komórkowego zarządza UART-em, buforem odbiorczym i
-stanem protokołu. Sekwencje uruchamiania, maszyna stanów i składnia poleceń właściwe dla
-producenta znajdują się w driverach poszczególnych rodzin, obecnie w
-`hal_simcom_a76xx`.
+## `hal_modem_at` - wysyłanie poleceń AT  *(wspólne API - `HAL_ENABLE_CELLULAR_MODEM`)*
+
+Wysyłanie poleceń AT, odbiór odpowiedzi i oczekiwanie na komunikaty modemu przez UART. Moduł zarządza portem, buforem odbiorczym i stanem wymiany danych. Sekwencje uruchamiania oraz polecenia charakterystyczne dla producenta obsługuje osobny sterownik rodziny modemów - obecnie `hal_simcom_a76xx`.
 
 ```c
 #include <hal/modem/hal_modem_at.h>
@@ -72,27 +71,18 @@ void hal_modem_at_sleep_ms(hal_modem_at_t h, uint32_t ms);
   `src/hal/modem/hal_modem_at.cpp`, opartej wyłącznie na `hal_uart`, `hal_millis` i
   `hal_mutex`.
 
-**Thread safety:** Każdy uchwyt ma własny mutex serializujący dostęp. API można bezpiecznie
+**Współbieżność:** Każdy uchwyt ma własny muteks serializujący dostęp. API można bezpiecznie
 wywoływać z wielu wątków lub rdzeni.
 
-- **Współpraca z watchdogiem:** każda wewnętrzna pętla odpytywania (send,
-  send_with_data, listen_until) oraz każde oczekiwanie wyższego poziomu zbudowane na
-  silniku, na przykład `hal_simcom_a76xx_wait_*` i impulsy zasilania, wywołuje
-  callback ticku zarejestrowany przez `hal_modem_at_set_tick_callback()` co
-  najmniej co ~20 ms. Zarejestruj callback, który wywołuje `hal_watchdog_feed()`
-  (i opcjonalnie odświeża diodę statusu), aby regularnie odświeżać watchdog
-  aplikacji podczas długich sekwencji rozruchu modemu.
+**Współpraca z watchdogiem:** Zarejestruj funkcję przez `hal_modem_at_set_tick_callback()`, aby obsługiwać watchdog podczas długich operacji modemu. Każda wewnętrzna pętla oczekiwania (`send`, `send_with_data`, `listen_until`) oraz zbudowane na nich operacje, w tym `hal_simcom_a76xx_wait_*` i impulsy zasilania, wywołują ją co najmniej raz na około 20 ms. Funkcja może wywoływać `hal_watchdog_feed()` i opcjonalnie aktualizować diodę stanu.
 
 ---
 
-## `hal_simcom_a76xx` - driver modemu SimCom A76xx  *(opcjonalny - `HAL_ENABLE_A7670`)*
+<a id="hal_simcom_a76xx---driver-modemu-simcom-a76xx--opcjonalny---hal_enable_a7670"></a>
 
-Driver wysokiego poziomu dla modemów z rodziny SimCom A76xx (A7670E/SA/G, A7672E/S,
-A7608, ...), zbudowany na `hal_modem_at`. Steruje zasilaniem i synchronizuje rozruch,
-uruchamia kartę SIM i rejestrację w sieci, zestawia kontekst PDP oraz pobiera czas
-sieciowy, przybliżoną lokalizację na podstawie sieci komórkowej (LBS) i pozycję GNSS.
-Udostępnia też kompletnego klienta MQTT z publikacją i subskrypcją, opartego na
-poleceniach `CMQTT*`.
+## `hal_simcom_a76xx` - obsługa modemów SimCom A76xx  *(opcjonalny - `HAL_ENABLE_A7670`)*
+
+Obsługa modemów SimCom A76xx (A7670E/SA/G, A7672E/S, A7608 i innych wariantów tej rodziny) przez `hal_modem_at`. Moduł steruje zasilaniem i uruchamianiem modemu, inicjalizuje kartę SIM, rejestruje modem w sieci i zestawia kontekst PDP. Pozwala pobrać czas sieciowy, przybliżoną lokalizację z sieci komórkowej (LBS) i pozycję GNSS. Klient MQTT, korzystający z poleceń `CMQTT*`, obsługuje publikowanie i subskrypcje.
 
 ```c
 #include <hal/modem/hal_simcom_a76xx.h>
@@ -251,7 +241,7 @@ int  hal_simcom_a76xx_mqtt_poll(hal_simcom_a76xx_t h);
 bool hal_simcom_a76xx_mqtt_is_connected(hal_simcom_a76xx_t h, int client_index);
 ```
 
-Helpery GNSS ujednolicają popularne warianty odpowiedzi SimCom:
+Funkcje GNSS odczytują dane z kilku popularnych wariantów odpowiedzi modemów SimCom:
 `+CGNSSINFO`, `+CGNSINF` i `+CGPSINFO`. `hal_simcom_a76xx_get_gnss_location()`
 najpierw upewnia się, że GNSS jest włączony, a następnie odpytuje o pozycję. Zwraca
 `HAL_SIMCOM_A76XX_NOT_READY`, gdy modem odpowiada poprawnie, ale nie wyznaczył jeszcze pozycji,
@@ -259,13 +249,9 @@ na przykład `+CGNSSINFO: ,,,,,,,,`. W wariancie odpowiedzi A7670E
 `+CGNSSINFO: <fix>,<sat_count>,...` pojedyncza liczba satelitów jest raportowana zarówno
 jako `satellites_used`, jak i `satellites_view`.
 
-**Odbiór subskrypcji MQTT:** Przychodzące komunikaty docierają jako sekwencja czterech URC
-(`+CMQTTRXSTART:` / `+CMQTTRXTOPIC:` / `+CMQTTRXPAYLOAD:` / `+CMQTTRXEND:`) przeplatanych
-z osobnymi liniami tematu i payloadu. Driver składa je z powrotem w jeden komunikat, a
-aplikacja otrzymuje pojedyncze wywołanie `hal_simcom_a76xx_mqtt_message_cb_t`
-z wnętrza `hal_simcom_a76xx_mqtt_poll()`.
+**Odbiór wiadomości MQTT:** Modem zgłasza wiadomość w czterech komunikatach URC (`+CMQTTRXSTART:` / `+CMQTTRXTOPIC:` / `+CMQTTRXPAYLOAD:` / `+CMQTTRXEND:`), pomiędzy którymi przesyła osobne wiersze tematu i treści. Sterownik składa je w jedną wiadomość i wywołuje `hal_simcom_a76xx_mqtt_message_cb_t` podczas `hal_simcom_a76xx_mqtt_poll()`.
 
-`+CMQTTCONNECT: <client>,<result>` jest dekodowane przez driver. Nieudane połączenia
+`+CMQTTCONNECT: <client>,<result>` jest dekodowane przez sterownik. Nieudane połączenia
 generują czytelną diagnostykę konsolową, na przykład:
 
 ```text
@@ -284,7 +270,7 @@ do celów diagnostyki aplikacji. Wynik `3` oznacza niepowodzenie połączenia gn
 uwierzytelnieniem MQTT; błędna nazwa użytkownika/hasło to `30`, odrzucona autoryzacja to
 `31`, a niepowodzenie handshake'u TLS to `32`.
 
-**Thread safety:** Dostęp przez każdy uchwyt jest serializowany mutexem
+**Współbieżność:** Dostęp przez każdy uchwyt jest serializowany muteksem
 `hal_modem_at`. API można bezpiecznie wywoływać z wielu wątków lub rdzeni.
 
 ---

@@ -1,6 +1,10 @@
 /**
  * @file app.cpp
- * @brief Raw LoRa ping/pong example for board-declared SX1262 radios.
+ * @brief Exchange LoRa ping/pong packets using an SX1262 configured by the
+ * board profile.
+ *
+ * Build one initiator and one responder. The probe variant checks the radio
+ * without transmitting. See README.md for matching LF and HF hardware.
  */
 
 #include <hal/core/hal_app.h>
@@ -105,7 +109,8 @@ hal_lora_modem_config_t modem_config(const hal_lora_radio_config_t &hardware) {
   hal_lora_modem_config_t modem = hal_lora_default_eu868();
   modem.tx_power_dbm = 10;
   if (hardware.hardware.sx126x.max_frequency_hz < UINT32_C(800000000)) {
-    /* Deliberate LF hardware-test configuration, not a regulatory preset. */
+    /* Fixed LF test frequency; not a region-specific regulatory configuration.
+     */
     modem.frequency_hz = kLfTestFrequencyHz;
     modem.tx_power_dbm = 10;
   }
@@ -237,7 +242,8 @@ void responder_handle_event(const hal_lora_radio_event_t &event) {
   if (event.type == HAL_LORA_RADIO_EVENT_CANCELLED &&
       event.operation == HAL_LORA_OPERATION_KIND_RECEIVE &&
       s_responder_state == ResponderState::Transmitting) {
-    /* Continuous RX is deliberately cancelled before sending the reply. */
+    /* Stop continuous reception before switching the radio to transmit the
+     * reply. */
     return;
   }
   if (event.type == HAL_LORA_RADIO_EVENT_RX_READY &&

@@ -6,6 +6,8 @@
 
 ## `hal_gpio` - GPIO
 
+Konfiguruj piny cyfrowe, odczytuj i ustawiaj ich stan oraz rejestruj obsługę przerwań. Przy współdzieleniu pinów między rdzeniami uwzględnij zasady synchronizacji i przypisania IRQ opisane poniżej.
+
 ```c
 #include <hal/gpio/hal_gpio.h>
 
@@ -58,7 +60,7 @@ kontekście ISR. Nie wywołuj w nim `printf`, `malloc` ani żadnych funkcji
 blokujących.
 
 **Walidacja:** Nieprawidłowe argumenty przekazane do starszych operacji `void`
-wyzwalają `HAL_ASSERT` w buildach z włączonym sprawdzaniem. Operacje IRQ
+wyzwalają `HAL_ASSERT` w konfiguracjach z włączonym sprawdzaniem. Operacje IRQ
 zwracające status kończą się kodem `HAL_EINVAL` albo `HAL_EUNSUPPORTED` dla
 nieobsługiwanego backendu lub pinu i nie konfigurują sprzętu.
 
@@ -163,16 +165,9 @@ bool hal_pwm_is_pin_supported(uint8_t pin);
 void hal_pwm_write(uint8_t pin, uint32_t value);
 ```
 
-`hal_pwm` to proste, przenośne API PWM. Celowo udostępnia niewielki zestaw
-zachowań.
-Rozdzielczość wynosi od 1 do 16 bitów, `hal_pwm_write()` ogranicza wartości do
-bieżącego maksimum, a nieobsługiwane piny są ignorowane i wyzwalają `HAL_ASSERT`
-w buildach z włączonym sprawdzaniem. Przed dynamicznym wyborem pinu wywołaj
-`hal_pwm_is_pin_supported()`.
+`hal_pwm` pozwala ustawić wypełnienie PWM przez niewielkie, przenośne API. Obsługuje rozdzielczości 1-16 bitów, a `hal_pwm_write()` ogranicza zapisy do bieżącego maksimum. Nieobsługiwane piny są ignorowane i wyzwalają `HAL_ASSERT`, gdy kontrole są włączone. Przed wyborem pinu w czasie działania sprawdź `hal_pwm_is_pin_supported()`.
 
-Nie gwarantuje częstotliwości wybranej przez wywołującego ani niezależnej
-alokacji kanału. Użyj `hal_pwm_freq`, gdy liczy się częstotliwość, okres
-(`wrap`) oraz cykl życia kanału. Domyślna rozdzielczość to 8 bitów.
+Proste API nie gwarantuje częstotliwości wybranej przez aplikację ani niezależnego przydziału kanału. Do sterowania częstotliwością, okresem (`wrap`) i czasem życia kanału użyj `hal_pwm_freq`. Domyślna rozdzielczość `hal_pwm` wynosi 8 bitów.
 
 **impl/rp2040:** natywny Pico SDK `hardware/pwm.h` (`pwm_init`,
 `pwm_config_set_wrap`, `pwm_set_gpio_level`, `pwm_set_enabled`). Publiczny
@@ -211,7 +206,11 @@ inicjalizacji, a nie równolegle z zapisem.
 
 ---
 
-## `hal_dac` - Prawdziwe wyjście DAC *(opcjonalny - `HAL_ENABLE_DAC`)*
+<a id="hal_dac---prawdziwe-wyjście-dac-opcjonalny---hal_enable_dac"></a>
+
+## `hal_dac` - sprzętowe wyjście analogowe *(opcjonalne - `HAL_ENABLE_DAC`)*
+
+Ustawiaj napięcie wyjściowe przez sprzętowy przetwornik cyfrowo-analogowy. Moduł wymaga platformy z obsługiwanym DAC; nie zastępuje go emulacją PWM.
 
 ```c
 #include <hal/analog/hal_dac.h>
@@ -245,6 +244,8 @@ zapisanych wartości.
 ---
 
 ## `hal_pcnt` - Licznik impulsów / zboczy *(opcjonalny - `HAL_ENABLE_PCNT`)*
+
+Zliczaj impulsy lub zbocza na wejściu cyfrowym. API pozwala skonfigurować kanał, odczytać licznik i go wyzerować; sposób zliczania zależy od platformy.
 
 ```c
 #include <hal/analog/hal_pcnt.h>
@@ -291,7 +292,7 @@ impulsów w testach.
 
 ## `hal_pwm_freq` - PWM ze sterowaniem częstotliwością *(opcjonalny - `HAL_ENABLE_PWM_FREQ`)*
 
-Użyj tego zamiast `hal_pwm`, gdy potrzebujesz konkretnej częstotliwości PWM (np. 160 Hz, 300 Hz).
+Wybierz `hal_pwm_freq` zamiast `hal_pwm`, gdy potrzebujesz określonej częstotliwości, np. 160 Hz lub 300 Hz, i jawnego zarządzania kanałem.
 
 ```c
 #include <hal/gpio/hal_pwm_freq.h>
@@ -337,7 +338,7 @@ maksimum logicznego. Zapisy są ograniczane do tego maksimum. Operacja `stop`
 zachowuje uchwyt, a `destroy` zwalnia zasoby logiczne i LEDC. Wspólny alokator
 zapewnia dokładne 100% wypełnienia przez stan `idle-high` i ponownie uruchamia
 LEDC po zapisie wartości częściowej. Jeśli ESP-IDF odrzuci usunięcie kanału,
-uchwyt logiczny i kanał LEDC pozostają zarezerwowane do ponowienia próby. W buildach z
+uchwyt logiczny i kanał LEDC pozostają zarezerwowane do ponowienia próby. W konfiguracjach z
 włączonym sprawdzaniem nieudane `hal_pwm_freq_destroy()` wyzwala `HAL_ASSERT`.
 
 **impl/.mock:** przechowuje ostatnio zapisaną wartość, którą można odczytać
@@ -353,14 +354,18 @@ bool     hal_mock_pwm_freq_is_running(hal_pwm_freq_channel_t ch);
 
 **Wielowątkowość:** Backendy RP2040, STM32G474 i ESP32-S3 chronią
 `hal_pwm_freq_create()`, `hal_pwm_freq_write()`, `hal_pwm_freq_stop()` i
-`hal_pwm_freq_destroy()` wewnętrznym mutexem. Kod wywołujący nadal odpowiada
+`hal_pwm_freq_destroy()` wewnętrznym muteksem. Kod wywołujący nadal odpowiada
 za cykl życia uchwytu kanału i nie może używać go po
 `hal_pwm_freq_destroy()`. Backend mock nie zapewnia synchronizacji
 współbieżnego dostępu.
 
 ---
 
-## `DAClessAudio` - Silnik audio PWM *(opcjonalny - `HAL_ENABLE_DACLESS`)*
+<a id="daclessaudio---silnik-audio-pwm-opcjonalny---hal_enable_dacless"></a>
+
+## `DAClessAudio` - odtwarzanie audio przez PWM *(opcjonalne - `HAL_ENABLE_DACLESS`)*
+
+Odtwarzaj próbki audio przez wyjście PWM, z DMA lub okresową obsługą w pętli aplikacji. Moduł udostępnia funkcje zwrotne próbek i bloków oraz odczyt bufora ADC.
 
 ```cpp
 #include <hal/audio/hal_dacless.h>
@@ -397,7 +402,7 @@ uint16_t interpolate(uint16_t x, uint16_t y, uint16_t mu_scaled);
 ```
 
 `HAL_ENABLE_DACLESS` propaguje `HAL_ENABLE_DMA_PWM_AUDIO` i
-`HAL_ENABLE_PWM_FREQ`. Wspólny driver bazuje na silniku DACless autorstwa
+`HAL_ENABLE_PWM_FREQ`. Wspólny sterownik bazuje na silniku DACless autorstwa
 Briana Varrena. Zachowuje jego konfigurację, podwójnie buforowany przepływ
 bloków, callbacki próbek i bloków, bufor wyników ADC, globalne zmienne
 zgodności (`audio_rate`, `out_buf_ptr`, `adc_results_buf`) oraz działanie
@@ -410,34 +415,26 @@ próbkujące ADC. Na STM32G474 DMA aktualizacji TIM zapisuje aktywny rejestr CCR
 callbacki `half-transfer`/`transfer-complete` obsługują dwie połowy bufora
 audio, a ADC1 cyklicznie skanuje skonfigurowane piny przez DMA.
 
-`begin()` zwraca `true`, gdy backend PWM/DMA został utworzony i uruchomiony.
-Gdy zwraca `false`, instancja pozostaje zatrzymana i wyciszona; może się to
-zdarzyć, gdy backend targetu wyczerpał stały zasób sprzętowy.
+`begin()` zwraca `true` po utworzeniu i uruchomieniu obsługi PWM/DMA. Przy wyniku `false` instancja pozostaje zatrzymana i wyciszona. Jedną z możliwych przyczyn jest brak wolnego zasobu sprzętowego.
 
-Ustaw `cfg.useDma = false`, aby pracować kooperacyjnie. Wywołuj wtedy często
-`service()` z `app_task0()` albo zadania FreeRTOS. Funkcja zapisuje zaległe
-próbki przez `hal_pwm_freq_write()` i uzupełnia gotowy bufor za pomocą
-callbacku blokowego. Jeśli go nie ustawiono, używa callbacku próbkowego, a w
-ostateczności wpisuje ciszę odpowiadającą środkowi zakresu. Gdy `service()`
-zostanie wywołana z opóźnieniem, odtwarzanie przez polling nadrabia najwyżej
-`DACLESS_MAX_POLLING_CATCHUP_SAMPLES` próbek przed ponowną synchronizacją z
-bieżącym czasem. Callbacki są wywoływane poza mutexem instancji, więc mogą
-odczytywać `getADC()` bez ryzyka zakleszczenia.
+Aby obsługiwać odtwarzanie w pętli aplikacji, ustaw `cfg.useDma = false` i często wywołuj `service()` z `app_task0()` lub zadania FreeRTOS. Funkcja zapisuje zaległe próbki przez `hal_pwm_freq_write()` i uzupełnia gotowy bufor przez funkcję zwrotną bloku. Gdy jej nie podano, korzysta z funkcji zwrotnej próbki, a bez niej wpisuje ciszę odpowiadającą środkowi zakresu. Po spóźnionym wywołaniu nadrabia najwyżej `DACLESS_MAX_POLLING_CATCHUP_SAMPLES` próbek, po czym synchronizuje odtwarzanie z bieżącym czasem. Funkcje zwrotne działają poza muteksem instancji, więc mogą wywołać `getADC()` bez zakleszczenia.
 
 Domyślne piny ADC to GPIO 26..29 na RP2040 i w backendzie mock oraz PA0..PA3 na STM32G474
 (`port * 16 + pin`). Nadpisz `cfg.adcPins[]` dla niestandardowego
 okablowania.
 
 **Wielowątkowość:** Publiczne metody chronią stan każdej instancji osobnym
-mutexem HAL utworzonym przez `jh_hal_mutex_create_once`.
+muteksem HAL utworzonym przez `jh_hal_mutex_create_once`.
 Callbacki bufora DMA działają z poziomu przerwania DMA backendu i nie
-przejmują mutexu instancji. Rejestracja callbacków, `begin()`, `service()`,
+przejmują muteksu instancji. Rejestracja callbacków, `begin()`, `service()`,
 `mute()`, `unmute()` i `getADC()` są bezpieczne do wywołania z normalnego
 kontekstu zadania/rdzenia. Nie wywołuj `service()` z ISR.
 
 ---
 
 ## `hal_adc` - Wejście analogowe
+
+Odczytuj sygnały analogowe z obsługiwanych pinów ADC. Wynik jest skalowany do wybranej rozdzielczości; dostępne piny i sposób konwersji zależą od platformy.
 
 ```c
 #include <hal/analog/hal_adc.h>
@@ -468,7 +465,7 @@ STM32G474, ESP32-S3 i mock).
   `hal_mock_adc_inject(pin, value)`.
 
 **Wielowątkowość:** API może być bezpiecznie używane z wielu wątków i rdzeni.
-Wewnętrzny mutex chroni wspólny stan ADC na RP2040, STM32G474 i ESP32-S3,
+Wewnętrzny muteks chroni wspólny stan ADC na RP2040, STM32G474 i ESP32-S3,
 dlatego współbieżne odczyty są automatycznie wykonywane kolejno.
 
 ---

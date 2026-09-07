@@ -1,3 +1,8 @@
+/*
+ * Generate PWM audio with an ADC-controlled frequency and adjust PGA2311 gain.
+ * DACless uses DMA by default; polling mode must keep servicing the output.
+ */
+
 #include <hal/audio/hal_dacless.h>
 #include <hal/audio/hal_pga2311.h>
 #include <hal/core/hal_app.h>
@@ -19,7 +24,7 @@
 #define EXAMPLE_AUDIO_PWM 6u
 #define EXAMPLE_AUDIO_ADC 26u
 #elif HAL_TARGET_IS_STM32G474
-/* SPI1 uses the Nucleo D13/D12/D11/D10 pins; PB0 carries PWM audio. */
+/* SPI1 uses Nucleo D13/D12/D11/D10. PWM audio uses the separate PB0 pin. */
 #define EXAMPLE_PGA_BUS 0u
 #define EXAMPLE_PGA_MISO 6u
 #define EXAMPLE_PGA_MOSI 7u
@@ -126,7 +131,8 @@ extern "C" void app_task0(void) {
         (unsigned long)s_phase_increment);
   }
 
-  /* DMA refills buffers from its completion callback; polling must stay hot. */
+  /* DMA refills buffers in its completion callback, so this loop may wait.
+   * In polling mode, keep calling service() without adding a delay. */
   if (s_audio == nullptr || s_audio->isDmaActive()) {
     hal_delay_ms(1u);
   }

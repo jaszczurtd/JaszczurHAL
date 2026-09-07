@@ -4,23 +4,13 @@
 
 > **Part of [JaszczurHAL API Reference](../../en/JaszczurHAL_API.md)**
 
-Covers: `hal_wifi`, `hal_udp`, `hal_tcp`, `hal_http_server`,
-`hal_http_files`, `hal_websocket`, `hal_net_console`, `hal_net_commands`,
-`hal_notify`, `hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time`, and the
-optional `HAL_ENABLE_BSD_SOCKETS` compatibility adapter.
-Shared network types live in `hal_net.h`.
+This chapter covers WiFi connections, TCP/UDP, HTTP/HTTPS and MQTT clients, HTTP and WebSocket servers, notifications, a diagnostic console, OTA updates, and WireGuard. Shared network types are defined in `hal_net.h`; the optional `HAL_ENABLE_BSD_SOCKETS` adapter provides a subset of BSD/POSIX compatibility.
 
 ## Status-returning network API
 
-New code can use additive `_ex` operations returning `hal_status_t` across
-WiFi, resolver, TCP, UDP, MQTT and WireGuard. Existing APIs remain available
-unchanged. Operations which historically returned a count, accepted socket or
-peer state use an explicit output parameter, so converting to a status does not
-discard the original result.
+Use the `_ex` variants in new code to receive a precise `hal_status_t` result for WiFi, name resolution, TCP, UDP, MQTT, and WireGuard. The existing API remains available. Status variants return the operation result-such as a byte count, accepted socket, or peer state-through an explicit output parameter. This extends the API without requiring existing code to migrate.
 
-WiFi, resolver, TCP and UDP implement status handling directly in the mock and
-RP-family backends. Their historical `bool`, count and handle APIs are adjacent
-thin compatibility wrappers; they do not contain the real I/O path.
+The mock and RP-family implementations perform WiFi, name resolution, TCP, and UDP operations in the status-returning functions. Legacy boolean, numeric, and handle-returning functions call the corresponding status variant rather than maintaining separate I/O implementations.
 
 Representative entries include `hal_wifi_begin_station_ex()`,
 `hal_wifi_ping_status_ex()`, `hal_net_resolve_ipv4_ex()`,
@@ -31,7 +21,7 @@ Representative entries include `hal_wifi_begin_station_ex()`,
 `hal_notify_{open,send,poll,close}()` and
 `hal_wireguard_{begin,peer_up,kick_handshake}_ex()`.
 
-The complete additive status surface is:
+Available status-returning variants:
 
 ```c
 // WiFi and resolver
@@ -226,7 +216,7 @@ field is in host byte order; POSIX adapters perform their own `htons()` /
 - ESP32-S3 resolves through the native ESP-IDF lwIP `getaddrinfo()` path after
   the WiFi/`esp_netif` lifecycle reaches a usable state.
 
-**Mock resolver helpers:**
+**Mock name-resolution functions:**
 ```c
 void hal_mock_net_reset(void);
 bool hal_mock_net_set_dns_entry(const char *host, const char *ip);
@@ -251,7 +241,9 @@ source/dependency selection, compilation, linking, partitions, and artifacts;
 it does not prove runtime hardware, lifecycle, rollback, or negative-security
 behavior.
 
-## `hal_wifi` - WiFi  *(optional - `HAL_ENABLE_WIFI`)*
+<a id="hal_wifi---wifi--optional---hal_enable_wifi"></a>
+
+## `hal_wifi` - WiFi connections  *(optional - `HAL_ENABLE_WIFI`)*
 
 RP builds that need WiFi select a radio-capable profile: `picow`, `pico2w`, or
 `pico-rm2`. ESP32-S3 uses the native radio declared by its board profile.
@@ -383,8 +375,7 @@ bool        hal_mock_wifi_set_scan_result(size_t index,
 
 ### CYW43 backend configuration and lifecycle
 
-All hardware CYW43 builds select one facade backend, one bus, and the pinned
-lwIP stack:
+A CYW43 hardware configuration selects the shared API implementation, one bus, and its associated lwIP stack:
 
 ```c
 #define HAL_NETWORK_BACKEND_CYW43
@@ -460,11 +451,13 @@ target's SRAM budget.
 
 ---
 
-## `hal_http_client` - HTTP/HTTPS client  *(opt-in - `HAL_ENABLE_HTTP_CLIENT`)*
+<a id="halhttpclient-httphttps-client-opt-in-halenablehttpclient"></a>
 
-`hal_http_client` performs one bounded HTTP/1.1 request over HAL TCP or the
-verified BearSSL TLS client. The flag enables TCP and WiFi. Select
-`HAL_ENABLE_TLS` as well for HTTPS.
+<a id="hal_http_client---httphttps-client--opt-in---hal_enable_http_client"></a>
+
+## `hal_http_client` - HTTP and HTTPS requests  *(opt-in - `HAL_ENABLE_HTTP_CLIENT`)*
+
+Perform a single HTTP/1.1 request with a timeout. HTTP uses HAL TCP; HTTPS uses the certificate-verifying BearSSL TLS client. `HAL_ENABLE_HTTP_CLIENT` enables TCP and WiFi. HTTPS additionally requires `HAL_ENABLE_TLS`.
 
 ```c
 #include <hal/network/http/hal_http_client.h>
@@ -512,12 +505,13 @@ small. Chunked transfer encoding returns `HAL_EUNSUPPORTED`.
 
 ---
 
-## `hal_notify` - notifications  *(opt-in - `HAL_ENABLE_NOTIFY`)*
+<a id="halnotify-notifications-opt-in-halenablenotify"></a>
 
-`hal_notify` is a small notification facade with generation-checked channel
-handles and backend descriptors. The facade owns channel lifetime, default
-format/timeout resolution and per-channel serialization; concrete delivery
-backends own their protocol configuration.
+<a id="hal_notify---notifications--opt-in---hal_enable_notify"></a>
+
+## `hal_notify` - sending notifications  *(opt-in - `HAL_ENABLE_NOTIFY`)*
+
+Send notifications through configured channels. Each channel has a default format, timeout, and its own synchronization. Generation-tagged handles detect stale references. The shared implementation manages channel creation and closure, while the selected backend stores protocol-specific configuration.
 
 ```c
 #include <hal/network/notify/hal_notify.h>
@@ -598,14 +592,13 @@ when the operation itself otherwise succeeds.
 
 ---
 
-## `hal_http_server` - HTTP/1.1 server  *(opt-in - `HAL_ENABLE_HTTP_SERVER`)*
+<a id="hal_http_server---http11-server--opt-in---hal_enable_http_server"></a>
 
-Small poll-driven HTTP server implemented over the handle-based `hal_tcp`
-listener/socket API. Enabling `HAL_ENABLE_HTTP_SERVER` propagates
-`HAL_ENABLE_TCP`, which in turn propagates `HAL_ENABLE_WIFI` on current
-network-capable builds.
+## `hal_http_server` - handling HTTP requests  *(opt-in - `HAL_ENABLE_HTTP_SERVER`)*
 
-The first version is intentionally compact and deterministic:
+Handle HTTP/1.1 requests through registered routes without a dedicated server thread. The application calls the polling function regularly. The server uses `hal_tcp` sockets; `HAL_ENABLE_HTTP_SERVER` enables `HAL_ENABLE_TCP` and, in current network configurations, `HAL_ENABLE_WIFI`.
+
+Supported behavior:
 
 - exact method/path route matching,
 - one request per TCP connection,
@@ -744,11 +737,11 @@ Rejected writes leave the existing body and its length unchanged.
 
 ---
 
-## `hal_http_files` - file serving and upload  *(opt-in - `HAL_ENABLE_HTTP_FILES`)*
+<a id="hal_http_files---file-serving-and-upload--opt-in---hal_enable_http_files"></a>
 
-Small file adapter built on top of `hal_http_server`. Enabling
-`HAL_ENABLE_HTTP_FILES` also enables `HAL_ENABLE_HTTP_SERVER`, `HAL_ENABLE_TCP`
-and `HAL_ENABLE_WIFI`.
+## `hal_http_files` - HTTP file serving and uploads  *(opt-in - `HAL_ENABLE_HTTP_FILES`)*
+
+Serve and receive files through `hal_http_server`. The application supplies file operations, so the module does not require a particular filesystem. `HAL_ENABLE_HTTP_FILES` also enables `HAL_ENABLE_HTTP_SERVER`, `HAL_ENABLE_TCP`, and `HAL_ENABLE_WIFI`.
 
 The adapter is filesystem-neutral. It maps HTTP URLs to a mounted root and
 calls application/backend callbacks for `stat`, `read` and optional `write`.
@@ -895,15 +888,13 @@ Default static limits can be overridden before including HAL headers:
 
 ---
 
+<a id="hal_websocket---websocket-server--opt-in---hal_enable_websocket"></a>
+
 ## `hal_websocket` - WebSocket server  *(opt-in - `HAL_ENABLE_WEBSOCKET`)*
 
-Small poll-driven WebSocket server implemented directly over `hal_tcp`.
-Enabling `HAL_ENABLE_WEBSOCKET` propagates `HAL_ENABLE_TCP`, which in turn
-propagates `HAL_ENABLE_WIFI` on current connected builds.
+Accept WebSocket connections and exchange frames with clients. The server uses `hal_tcp` directly and requires regular polling. `HAL_ENABLE_WEBSOCKET` enables `HAL_ENABLE_TCP` and, in current network configurations, `HAL_ENABLE_WIFI`.
 
-The server accepts TCP clients, performs the HTTP Upgrade handshake for one
-configured path, then switches each accepted socket into WebSocket frame
-parsing. The first implementation is intentionally compact:
+After accepting a TCP connection, the server performs the HTTP Upgrade handshake for one configured path. It then reads WebSocket frames from that socket. Supported behavior includes:
 
 - RFC 6455 `Sec-WebSocket-Accept` handshake,
 - masked client frames and unmasked server frames,
@@ -1013,22 +1004,15 @@ Default static limits can be overridden before including HAL headers:
 
 ---
 
-## `hal_net_console` - TCP debug console  *(opt-in - `HAL_ENABLE_NET_CONSOLE`)*
+<a id="hal_net_console---tcp-debug-console--opt-in---hal_enable_net_console"></a>
 
-Password-protected TCP console implemented over the handle-based `hal_tcp`
-listener/socket API. Enabling `HAL_ENABLE_NET_CONSOLE` propagates
-`HAL_ENABLE_TCP`, which in turn propagates `HAL_ENABLE_WIFI` on connected
-builds.
+## `hal_net_console` - TCP diagnostic console  *(opt-in - `HAL_ENABLE_NET_CONSOLE`)*
 
-The console is a transport, not a replacement for the normal debug port:
-`hal_serial`, `deb` and `derr` still write to UART/USB, and authenticated TCP
-clients receive an additional copy. TCP input is available to firmware through
-a line callback and a polling RX buffer, so applications can expose a small
-command shell or diagnostics interface.
+Read logs and send commands remotely through a password-protected TCP console. The module uses `hal_tcp` sockets. `HAL_ENABLE_NET_CONSOLE` enables `HAL_ENABLE_TCP` and, in network configurations, `HAL_ENABLE_WIFI`.
 
-Security model: a non-empty password is required by the API, but the transport
-is plain TCP. Use it only on trusted networks or behind a secure tunnel/VPN
-when remote access matters.
+The console supplements the normal debug port rather than replacing it. `hal_serial`, `deb`, and `derr` still write to UART/USB; authenticated TCP clients receive a copy. The application receives network input through a per-line callback or a polled RX buffer and can use it for a command shell or diagnostic interface.
+
+**Security:** The API requires a non-empty password, but the connection is plain, unencrypted TCP. A password does not provide transport confidentiality. Use the console on a trusted network or through a secure tunnel or VPN.
 
 ```c
 #include <hal/network/net_console/hal_net_console.h>
@@ -1114,15 +1098,11 @@ Default static limits can be overridden before including HAL headers:
 
 ---
 
-## `hal_net_commands` - HTTP/WebSocket command layer  *(opt-in - `HAL_ENABLE_NET_COMMANDS`)*
+<a id="hal_net_commands---httpwebsocket-command-layer--opt-in---hal_enable_net_commands"></a>
 
-Text/JSON adapters for embedded WebUI control channels. The module parses HTTP
-and WebSocket input, dispatches it through the shared default
-[`hal_command_router`](23_commands.md), and formats the bounded response.
-Enabling `HAL_ENABLE_NET_COMMANDS` also enables
-`HAL_ENABLE_COMMAND_ROUTER`, `HAL_ENABLE_HTTP_SERVER`,
-`HAL_ENABLE_WEBSOCKET`, `HAL_ENABLE_CJSON`, `HAL_ENABLE_TCP` and
-`HAL_ENABLE_WIFI`.
+## `hal_net_commands` - commands over HTTP and WebSocket  *(opt-in - `HAL_ENABLE_NET_COMMANDS`)*
+
+Expose application commands over HTTP and WebSocket as text or JSON. The module parses a request, dispatches it to the shared default [`hal_command_router`](23_commands.md), and writes the response to a bounded buffer. `HAL_ENABLE_NET_COMMANDS` also enables `HAL_ENABLE_COMMAND_ROUTER`, `HAL_ENABLE_HTTP_SERVER`, `HAL_ENABLE_WEBSOCKET`, `HAL_ENABLE_CJSON`, `HAL_ENABLE_TCP`, and `HAL_ENABLE_WIFI`.
 
 Requests can be plain text:
 
@@ -1320,12 +1300,11 @@ router limits. If both forms are defined, their values must match.
 ---
 
 
-## `hal_ota` - firmware update with optional AUTH2  *(opt-in - `HAL_ENABLE_OTA`)*
+<a id="hal_ota---firmware-update-with-optional-auth2--opt-in---hal_enable_ota"></a>
 
-Thread-safe native OTA service over HAL UDP/TCP. RP and ESP32-S3 share the
-discovery, password-derived HMAC-SHA256 AUTH2 exchange, transfer, callbacks,
-and public boot-status behavior while retaining target-specific image and
-activation models.
+## `hal_ota` - firmware updates over the network  *(opt-in - `HAL_ENABLE_OTA`)*
+
+Receive firmware updates over HAL UDP/TCP, with optional AUTH2 authentication. RP and ESP32-S3 share discovery, data transfer, callbacks, and the public boot-state model. AUTH2 uses HMAC-SHA256 with a password-derived key. Image format and activation depend on the platform. The API synchronizes calls from multiple tasks.
 
 ```c
 #include <hal/network/ota/hal_ota.h>
@@ -1440,11 +1419,11 @@ available in [`examples/25_ota`](../../../examples/25_ota/).
 
 ---
 
-## `hal_udp` - UDP datagrams  *(opt-in - `HAL_ENABLE_UDP`)*
+<a id="hal_udp---udp-datagrams--opt-in---hal_enable_udp"></a>
 
-Handle-based UDP transport API for independent datagram sockets. The original
-single-socket `hal_udp_*` API remains available as a compatibility wrapper on a
-default UDP handle.
+## `hal_udp` - sending and receiving datagrams  *(opt-in - `HAL_ENABLE_UDP`)*
+
+Send and receive datagrams through independent, handle-based UDP sockets. The legacy single-socket `hal_udp_*` API remains available and uses a default handle.
 
 ```c
 #include <hal/network/hal_udp.h>
@@ -1551,10 +1530,11 @@ bool        hal_mock_udp_was_end_packet_called(void);
 
 ---
 
-## `hal_tcp` - TCP sockets and listeners  *(opt-in - `HAL_ENABLE_TCP`)*
+<a id="hal_tcp---tcp-sockets-and-listeners--opt-in---hal_enable_tcp"></a>
 
-Handle-based TCP transport API for outbound stream connections and inbound
-listener/server sockets.
+## `hal_tcp` - client and server connections  *(opt-in - `HAL_ENABLE_TCP`)*
+
+Establish TCP connections, transfer data, and accept incoming connections. The API distinguishes connected socket handles from listeners; accepted connections have their own handles.
 
 ```c
 #include <hal/network/hal_tcp.h>
@@ -1666,11 +1646,11 @@ uint8_t     hal_mock_tcp_listener_get_pending_count(hal_tcp_listener_t listener)
 
 ---
 
-## `hal_tls` - TLS client  *(opt-in - `HAL_ENABLE_TLS`)*
+<a id="hal_tls---tls-client--opt-in---hal_enable_tls"></a>
 
-`hal_tls` is a provider-neutral, generation-checked TLS client facade backed by
-the bundled BearSSL engine. Enabling it automatically enables TCP and WiFi, but
-does not enable or require the optional BSD sockets adapter.
+## `hal_tls` - encrypted client connections  *(opt-in - `HAL_ENABLE_TLS`)*
+
+Establish encrypted TLS client connections with server verification through BearSSL. The shared API is transport-independent and uses generation-tagged handles. Enabling the module also enables TCP and WiFi, but neither enables nor requires the BSD adapter.
 
 ```c
 #include <hal/network/tls/hal_tls.h>
@@ -1892,9 +1872,11 @@ are stored in a table sized by `HAL_BSD_SOCKET_MAX_FDS`.
 
 ---
 
-## `hal_wireguard` - WireGuard tunnel wrapper  *(opt-in - `HAL_ENABLE_WIREGUARD`)*
+<a id="hal_wireguard---wireguard-tunnel-wrapper--opt-in---hal_enable_wireguard"></a>
 
-Thread-safe facade over the shared WireGuard/lwIP engine.
+## `hal_wireguard` - WireGuard VPN tunnel  *(opt-in - `HAL_ENABLE_WIREGUARD`)*
+
+Configure a WireGuard tunnel and communicate with its peer through a shared interface backed by WireGuard/lwIP. The API synchronizes calls from multiple tasks.
 
 ```c
 #include <hal/network/wireguard/hal_wireguard.h>
@@ -1999,10 +1981,11 @@ uint32_t    hal_mock_wireguard_get_last_probe_min_interval_ms(void);
 
 ---
 
-## `hal_mqtt` - MQTT client  *(opt-in - `HAL_ENABLE_MQTT`)*
+<a id="hal_mqtt---mqtt-client--opt-in---hal_enable_mqtt"></a>
 
-Thread-safe MQTT wrapper around bundled PubSubClient with callback dispatch
-outside the internal mutex to avoid lock-order deadlocks in user handlers.
+## `hal_mqtt` - publishing and receiving MQTT messages  *(opt-in - `HAL_ENABLE_MQTT`)*
+
+Publish MQTT messages and receive subscribed topics through a client based on the bundled PubSubClient library. The API synchronizes concurrent calls. Application callbacks run outside the internal mutex to avoid lock-order deadlocks in user handlers.
 
 ```c
 #include <hal/network/mqtt/hal_mqtt.h>
@@ -2092,7 +2075,11 @@ uint16_t    hal_mock_mqtt_get_socket_timeout(void);
 
 ---
 
-## `hal_time` - Calendar helpers and optional system time/NTP
+<a id="hal_time---calendar-helpers-and-optional-system-timentp"></a>
+
+## `hal_time` - calendar, system time, and NTP
+
+Calendar calculations and an optional application wall clock, set manually, restored from an RTC, or synchronized through NTP. Device uptime and calendar time are distinct values; their ranges and synchronization rules are described below.
 
 ```c
 #include <hal/time/hal_time.h>

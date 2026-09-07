@@ -1,13 +1,14 @@
-# Bezpieczeństwo łańcucha dostaw
+<a id="bezpieczeństwo-łańcucha-dostaw"></a>
+
+# Bezpieczeństwo zależności i narzędzi
 
 *Dostępne również [po angielsku](../en/security_supply_chain.md).*
 
-Ten dokument opisuje podstawowy proces tworzenia SBOM oraz śledzenia
-podatności stosowany w JaszczurHAL.
+JaszczurHAL prowadzi wykaz zewnętrznych komponentów i narzędzi, generuje na jego podstawie SBOM oraz rejestruje ocenę wykrytych podatności. Ten rozdział wyjaśnia, jak odtworzyć te dane, sprawdzić ich aktualność i przygotować zmianę zależności do wydania.
 
 ## Zakres
 
-Ewidencja łańcucha dostaw obejmuje:
+Wykaz obejmuje:
 
 - źródła zewnętrznych komponentów dołączone do `src/`,
 - kopie zewnętrznych źródeł w ściśle określonych wersjach, obsługiwane przez
@@ -20,24 +21,15 @@ Ewidencja łańcucha dostaw obejmuje:
 - zaadaptowany kod projektów zewnętrznych, w którym lokalne zmiany mogą
   wpływać na bezpieczeństwo.
 
-Ten spis nie zastępuje analizy firmware konkretnego produktu. Projekty
-korzystające z biblioteki powinny generować lub zachowywać własny SBOM,
-ponieważ o tym, które opcjonalne moduły trafią do firmware, decydują aktywne
-flagi `HAL_ENABLE_*`.
+Wykaz repozytorium nie zastępuje analizy konkretnego produktu. Aplikacja powinna mieć własny SBOM: aktywne flagi `HAL_ENABLE_*` decydują o tym, które opcjonalne moduły rzeczywiście znajdą się w firmware.
 
 <a id="native-ota-security-boundary"></a>
 
-## Granica bezpieczeństwa natywnego OTA
+<a id="granica-bezpieczeństwa-natywnego-ota"></a>
 
-Natywne OTA dla RP uwierzytelnia wersjonowany nagłówek obrazu za pomocą
-HMAC-SHA256, a przed aktywacją weryfikuje SHA-256 danych obrazu i CRC nagłówka.
-Symetryczny klucz HMAC jest wyprowadzany z tego samego hasła aplikacji, którego
-używa uwierzytelnianie transportu. Każdy, kto zna to hasło, może przygotować
-akceptowany obraz. Produkty powinny więc używać unikalnego sekretu o wysokiej
-entropii, przekazywanego narzędziu obsługującemu projekty VS Code przez
-`ota.passwordEnv`,
-a nie
-hasła wpisanego bezpośrednio do pliku przechowywanego w repozytorium.
+## Zabezpieczenia i ograniczenia natywnego OTA
+
+Natywne OTA dla RP uwierzytelnia wersjonowany nagłówek obrazu za pomocą HMAC-SHA256. Przed aktywacją sprawdza również SHA-256 danych obrazu i CRC nagłówka. Symetryczny klucz HMAC jest wyprowadzany z tego samego hasła aplikacji, które służy do uwierzytelniania transportu. Każdy, kto zna hasło, może więc przygotować akceptowany obraz. W produkcie używaj unikalnego sekretu o wysokiej entropii i przekazuj go narzędziu obsługującemu projekty VS Code przez `ota.passwordEnv`, zamiast zapisywać hasło w pliku śledzonym przez Git.
 
 Ani transport, ani obraz nie są szyfrowane, więc ten mechanizm nie zapewnia
 poufności firmware. Metadane obrazu są uwierzytelniane, ale nie pełnią funkcji
@@ -52,35 +44,13 @@ zweryfikowany manifest artefaktów ESP-IDF. Host sprawdza rozmiar i SHA-256
 zapisane w manifeście, a urządzenie weryfikuje MD5 protokołu i przed wybraniem
 nieaktywnej partycji OTA uruchamia walidację obrazu ESP-IDF.
 
-Oba targety używają AUTH2, gdy firmware ma skonfigurowane niepuste hasło.
-Mechanizm oblicza HMAC-SHA256. Kluczem jest skrót MD5 hasła zapisany jako tekst
-ASCII z małymi literami szesnastkowymi. Podpis wiąże ze sobą polecenie, port
-zwrotnego
-połączenia TCP, rozmiar obrazu, jego MD5 oraz niezależne 16-bajtowe liczby
-jednorazowe (nonce) urządzenia i klienta. Urządzenie wiąże uwierzytelnienie
-z adresem IP i portem źródłowym pakietu zaproszenia UDP, a połączenie zwrotne
-kieruje do tego
-samego adresu IPv4. Host używa połączonego gniazda UDP i wymaga, aby adres
-drugiej strony połączenia TCP był zgodny z adresem wybranego partnera UDP.
+Obie platformy używają AUTH2, gdy firmware ma skonfigurowane niepuste hasło. AUTH2 oblicza HMAC-SHA256 z kluczem będącym skrótem MD5 hasła zapisanym jako tekst ASCII z małymi literami szesnastkowymi. Uwierzytelniane dane obejmują polecenie, port zwrotnego połączenia TCP, rozmiar i MD5 obrazu oraz niezależne, 16-bajtowe wartości jednorazowe (nonce) urządzenia i klienta. Urządzenie wiąże uwierzytelnienie z adresem IP i portem źródłowym zaproszenia UDP, a połączenie zwrotne nawiązuje z tym samym adresem IPv4. Host korzysta z połączonego gniazda UDP i akceptuje połączenie TCP tylko od adresu wybranego partnera UDP.
 
 Obie wartości nonce są generowane przez bezpieczny generator losowy platformy.
 
-Ścisłe parsowanie ASCII odrzuca niejednoznaczne białe znaki, osadzone znaki
-NUL, alternatywne zapisy liczb, nieprawidłowe długości i nadmiarowe pola.
-Niepuste hasło hosta wyklucza użycie bezpośredniego `OK`, starszego `AUTH` oraz
-starszego uwierzytelniania `200`. Po błędzie alokacji muteksu usługa na każdym
-z targetów pozostaje zatrzymana; niezabezpieczona ścieżka transportu nie jest
-uruchamiana.
+Parser ASCII odrzuca niejednoznaczne białe znaki, osadzone znaki NUL, alternatywne zapisy liczb, nieprawidłowe długości i nadmiarowe pola. Przy niepustym haśle host nie akceptuje bezpośredniego `OK`, starszego `AUTH` ani starszego uwierzytelniania `200`. Jeżeli alokacja muteksu się nie powiedzie, usługa pozostaje zatrzymana na obu platformach - nie uruchamia transportu bez wymaganej blokady.
 
-AUTH2 zapewnia symetryczne uwierzytelnianie hasłem, ale nie jest współczesnym
-mechanizmem podpisywania obrazów ani szyfrowaniem. Pominięcie hasła urządzenia
-lub ustawienie pustego ciągu wyłącza AUTH2. `ota.allowEmptyPassword=true`
-pozwala hostowi kontynuować wyłącznie w tym jawnie nieuwierzytelnionym trybie
-deweloperskim.
-Autentyczność produktu, poufność i ochrona przed instalacją starszej wersji
-na ESP32-S3 wymagają odpowiedniej konfiguracji ESP-IDF Secure Boot V2,
-szyfrowania pamięci flash, eFuse, chronionych kluczy i odzyskiwania. Zwykłe
-operacje wgrywania i testy nie włączają nieodwracalnych ustawień eFuse.
+AUTH2 zapewnia symetryczne uwierzytelnianie hasłem. Nie zastępuje współczesnego mechanizmu podpisywania obrazów i nie szyfruje transmisji. Brak hasła urządzenia lub puste hasło wyłącza AUTH2; `ota.allowEmptyPassword=true` pozwala hostowi kontynuować wyłącznie w tym jawnie nieuwierzytelnionym trybie deweloperskim. Na ESP32-S3 autentyczność firmware, poufność i ochrona przed instalacją starszej wersji wymagają odpowiedniej konfiguracji ESP-IDF Secure Boot V2, szyfrowania pamięci flash, eFuse, chronionych kluczy i odzyskiwania. Zwykłe wgrywanie i testy nie włączają nieodwracalnych ustawień eFuse.
 
 Miejsce przechowywania sekretów, zakres reguł zapory sieciowej, pierwszą
 instalację, wycofywanie aktualizacji i odzyskiwanie opisano w dokumencie
@@ -93,12 +63,12 @@ instalację, wycofywanie aktualizacji i odzyskiwanie opisano w dokumencie
 | `security/third_party.json` | Ręcznie utrzymywane, miarodajne źródło informacji o dołączonych komponentach i ich ściśle określonych wersjach. |
 | `security/third_party.schema.json` | Schemat JSON używany podczas przeglądu struktury spisu. |
 | `security/sbom.cdx.json` | Generowany SBOM CycloneDX dla repozytorium biblioteki. |
-| `security/esp_idf_tools.json` | Zweryfikowany wykaz dokładnych wersji narzędzi dla targetów ESP-IDF, ich licencji i projektów źródłowych, rewizji frameworka oraz skrótu `tools.json`. |
+| `security/esp_idf_tools.json` | Zweryfikowany wykaz dokładnych wersji narzędzi dla platform ESP-IDF, ich licencji i projektów źródłowych, rewizji frameworka oraz skrótu `tools.json`. |
 | `security/vulnerability_log.md` | Ręcznie utrzymywany rejestr oceny podatności i poprawek. |
 | `SECURITY.md` | Zasady zgłaszania, wstępnej oceny, klasyfikacji ważności i utrzymania. |
 | `scripts/generate_sbom.py` | Generator SBOM działający offline i używający wyłącznie biblioteki standardowej Pythona. |
 | `scripts/sync_generated.py` | Wspólny skrypt odświeżający wszystkie generowane artefakty przechowywane w repozytorium, w tym SBOM, i weryfikujący je w trybie tylko do odczytu. |
-| `scripts/check_release_metadata.py` | Bramka wydania sprawdzająca VERSION, SBOM, nazwę tagu i pochodzenie z głównej gałęzi. |
+| `scripts/check_release_metadata.py` | Kontrola zgodności VERSION, SBOM, nazwy tagu i przynależności commitu do historii głównej gałęzi. |
 | `scripts/check_vulnerabilities.sh` | Opcjonalny skrypt uruchamiający dostępne lokalnie skanery podatności. |
 
 ## Generowanie SBOM
@@ -107,12 +77,11 @@ instalację, wycofywanie aktualizacji i odzyskiwanie opisano w dokumencie
 python3 scripts/sync_generated.py --write
 ```
 
-Wspólny skrypt uruchamia generator SBOM, który odczytuje
-`security/third_party.json` i `security/esp_idf_tools.json`, po czym zapisuje
-`security/sbom.cdx.json`. Wynik jest deterministyczny, więc zwykłe ponowne
-wygenerowanie powinno powodować niewielkie i łatwe do przejrzenia zmiany.
+Skrypt uruchamia generator, który odczytuje `security/third_party.json` oraz `security/esp_idf_tools.json` i zapisuje `security/sbom.cdx.json`. Generowanie jest deterministyczne; przy niezmienionych danych wejściowych wynik powinien pozostać taki sam.
 
-## Pochodzenie narzędzi ESP-IDF
+<a id="pochodzenie-narzędzi-esp-idf"></a>
+
+## Wersje i pochodzenie narzędzi ESP-IDF
 
 `third_party/esp_idf_version.conf` wskazuje jeden dokładny commit ESP-IDF v6.0.2
 i wybiera `esp32` oraz `esp32s3`. Plik `security/esp_idf_tools.json` zapisuje
@@ -142,17 +111,7 @@ SPDX każdego narzędzia. Narzędzia nie są kopiowane do
 `security/third_party.json`, który pozostaje źródłem danych o frameworku i
 pozostałych zewnętrznych komponentach repozytorium.
 
-Każda produkcyjna kompilacja ESP-IDF generuje również
-`generated/jaszczurhal/jh_esp_idf_toolchain.json` i umieszcza go w
-`jh_esp_idf_artifacts.json`. Ten zapis konkretnej kompilacji zawiera faktycznie
-użyte wersje kompilatora, CMake, Ninja, interpretera Pythona używanego przez IDF
-i esptool oraz SHA-256
-pliku `tools.json` frameworka, bez bezwzględnych ścieżek z hosta. Manifest
-artefaktów osobno zapisuje dokładną rewizję ESP-IDF, skrót końcowego `sdkconfig`,
-profil, offset i skrót tablicy partycji oraz skrót każdego wgrywanego obrazu.
-Zweryfikowany wykaz określa narzędzia wybrane przez ustaloną wersję frameworka,
-natomiast manifest kompilacji wskazuje narzędzia, które rzeczywiście utworzyły
-dany firmware.
+Każda produkcyjna kompilacja ESP-IDF tworzy także `generated/jaszczurhal/jh_esp_idf_toolchain.json` i dołącza go do `jh_esp_idf_artifacts.json`. Zapis obejmuje faktycznie użyte wersje kompilatora, CMake, Ninja, interpretera Pythona dla IDF i esptool oraz SHA-256 pliku `tools.json`. Nie zawiera bezwzględnych ścieżek z hosta. Manifest artefaktów zapisuje osobno rewizję ESP-IDF, skrót końcowego `sdkconfig`, profil, offset i skrót tablicy partycji oraz skrót każdego wgrywanego obrazu. Wykaz narzędzi określa zatem zatwierdzony zestaw, a manifest kompilacji - zestaw, który rzeczywiście utworzył dany firmware.
 
 ## Sprawdzanie podatności
 
@@ -181,11 +140,7 @@ do opcjonalnej kontroli podatności na podstawie SBOM.
 python3 scripts/sync_generated.py --check
 ```
 
-Polecenie weryfikuje w trybie tylko do odczytu wszystkie generowane artefakty
-przechowywane w repozytorium, w tym tymczasowo wygenerowany plik SBOM
-porównywany
-z `security/sbom.cdx.json`. Skrypt `./scripts/check_sbom.sh` służy do osobnego
-sprawdzania SBOM i uruchamia tę samą kontrolę.
+Kontrola działa w trybie tylko do odczytu i obejmuje wszystkie śledzone pliki generowane. Tworzy między innymi tymczasowy SBOM i porównuje go z `security/sbom.cdx.json`. Polecenie `./scripts/check_sbom.sh` korzysta z tej samej kontroli, ale ogranicza jej zakres do SBOM.
 
 ## Polityka CI
 
@@ -198,13 +153,9 @@ generowane artefakty, w tym SBOM. Zadanie bezpieczeństwa:
 - uruchamia `osv-scanner` dla drzewa źródeł repozytorium,
 - uruchamia `cve-bin-tool` dla SBOM CycloneDX.
 
-Skanowanie jest celowo oddzielone od zadań kompilacji, testów i analizy
-statycznej.
-Błędy skanerów bezpieczeństwa można oceniać niezależnie od błędów
-kompilatora lub testów, a uruchomienia cykliczne wykrywają nowo opublikowane
-CVE nawet wtedy, gdy kod się nie zmienił.
+Skanowanie podatności jest oddzielone od kompilacji, testów i analizy statycznej. Pozwala to niezależnie diagnozować błędy skanera i błędy kodu. Uruchomienia cykliczne wykrywają również nowe CVE opublikowane od poprzedniego skanowania, nawet jeśli kod repozytorium się nie zmienił.
 
-Zasady obsługi znalezisk:
+Zasady postępowania z wynikami:
 
 - Podatności o ważności krytycznej i wysokiej blokują wydanie, chyba że
   zapisano decyzję `not_affected`.
@@ -214,7 +165,9 @@ Zasady obsługi znalezisk:
 - Wpisy dotyczące modułów włączanych opcjonalnie powinny wskazywać
   odpowiednie flagi `HAL_ENABLE_*` oraz obsługiwane targety.
 
-## Bramka wydania
+<a id="bramka-wydania"></a>
+
+## Kontrole przed wydaniem
 
 Przed utworzeniem tagu wydania sprawdź, czy `VERSION` i wersja projektu w
 SBOM są zgodne:
@@ -223,15 +176,7 @@ SBOM są zgodne:
 python3 scripts/check_release_metadata.py
 ```
 
-Utwórz odpowiadający tag dopiero po włączeniu commita wydania do `main`.
-CI uruchamiane po utworzeniu tagu dodatkowo sprawdza jego nazwę i potwierdza,
-że oznaczony
-commit jest przodkiem `origin/main`; tag z rozbieżnej gałęzi wydania zostaje
-odrzucony. CI uruchamia też na hoście kompletny zestaw testów pod ASan/UBSan
-oraz krótkie testy fuzzingowe parserów HTTP, WebSocket i wgrywania plików
-multipart.
-ThreadSanitizer pozostaje opcjonalną bramką lokalną dostępną przez
-`-DJH_ENABLE_THREAD_SANITIZER=ON`.
+Utwórz tag dopiero po włączeniu commitu wydania do `main`. CI uruchamiane przez tag sprawdza jego nazwę oraz to, czy wskazany commit jest przodkiem `origin/main`; odrzuca tag z rozbieżnej gałęzi wydania. CI na hoście uruchamia również pełny zestaw testów z ASan/UBSan oraz krótkie testy fuzzingowe parserów HTTP, WebSocket i przesyłania multipart. ThreadSanitizer jest opcjonalną kontrolą lokalną włączaną przez `-DJH_ENABLE_THREAD_SANITIZER=ON`.
 
 ## Aktualizowanie komponentu
 
@@ -252,9 +197,11 @@ ThreadSanitizer pozostaje opcjonalną bramką lokalną dostępną przez
    `security/vulnerability_log.md` zawierający CVSS, flagi, których dotyczy
    problem, i decyzję.
 
-## Zasady oceny podatności
+<a id="zasady-oceny-podatności"></a>
 
-Zacznij od spisu komponentów, a następnie oceń osiągalność podatnego kodu:
+## Ocena wpływu podatności
+
+Zacznij od wykazu komponentów, a następnie sprawdź, czy podatny kod jest obecny i osiągalny w obsługiwanej konfiguracji:
 
 - `not_affected`: podatny kod nie występuje, nie jest kompilowany albo nie jest
   osiągalny w obsługiwanej integracji HAL.

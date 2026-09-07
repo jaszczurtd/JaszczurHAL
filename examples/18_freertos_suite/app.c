@@ -1,3 +1,8 @@
+/*
+ * Exercise FreeRTOS application tasks, worker tasks, and shared-state locking.
+ * Both HAL mutexes and native FreeRTOS mutexes are used by the test.
+ */
+
 #include <FreeRTOS.h>
 #include <semphr.h>
 #include <task.h>

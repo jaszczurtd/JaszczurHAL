@@ -1,16 +1,8 @@
-# 01 - Core runtime
+<a id="01---core-runtime"></a>
 
-This portable example combines the small runtime demonstrations that used to
-live in five separate firmware projects.
+# 01 - Core system functions
 
-| Previous example | Coverage in this project |
-|---|---|
-| `01_blink` | The board LED toggles from a soft-timer callback. |
-| `02_debug_helper` | Startup reports the selected target, backend, MCU, CPU, RTOS, clocks, RAM, and flash. |
-| `03_soft_timer_table` | One table drives the LED and periodic PID updates. |
-| `17_pid_controller` | A simulated process is driven toward its setpoint and reports stability and oscillation. |
-| `19_timer_ext` | A repeating timer handle counts independent 250 ms ticks and reports its state and remaining time. |
+This example blinks the board LED, reports system diagnostics, uses software
+timers, and runs a PID controller against a simulated process. It needs only
+the board LED and a debug console, with no additional hardware.
 
-The application uses only core JaszczurHAL facilities, so it needs no
-`HAL_ENABLE_*` flags or external hardware beyond the board LED and debug
-console.

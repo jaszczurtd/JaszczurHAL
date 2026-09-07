@@ -1,3 +1,9 @@
+/*
+ * Read GPS data over hardware UART and run a separate RP-only serial echo test.
+ * STM32G474 reserves USART2 for the debug console, so it runs only the GPS
+ * part.
+ */
+
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
 #include <hal/gps/hal_gps.h>

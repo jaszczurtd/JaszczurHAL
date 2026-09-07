@@ -6,19 +6,13 @@
 
 ## Selective module inclusion (`HAL_ENABLE_*`)
 
-JaszczurHAL uses an **opt-in** model: by default *no* optional module is
-compiled. To use a module, define its `HAL_ENABLE_<MODULE>` flag (in
-`hal_project_config.h` or via `-D`). Enabling a flag pulls in:
+Optional modules are disabled by default. To use one, define `HAL_ENABLE_<MODULE>` in `hal_project_config.h` or pass it through `-D`. Enabling a module makes the following available:
 
-* the **API declarations** in the corresponding header (otherwise the file
-  compiles to an empty translation unit and calls to its functions raise a
-  clear compile-time error);
-* the **implementation** .cpp (and the bundled third-party drivers it
-  depends on - all `#include`s are gated);
-* the entry in the **umbrella header** `hal/hal.h`.
+* API declarations in the corresponding header. With the module disabled, its translation unit is empty and calls to unavailable functions produce a compilation error.
+* The `.cpp` implementation and required third-party drivers, included conditionally.
+* The corresponding entry in the `hal/hal.h` umbrella header.
 
-Modules that are disabled cost zero code and RAM and do not pull their
-third-party dependencies into the target build.
+A disabled module uses no code space or RAM and does not add its third-party dependencies to the firmware build.
 
 Feature flags use presence semantics. Supported project definitions are
 `#define HAL_ENABLE_X` and `#define HAL_ENABLE_X 1`. Do not use
@@ -32,10 +26,7 @@ also reports unknown or derived symbols. In definition-list inputs, every
 semicolons. Whitespace does not separate multiple feature definitions, and
 CMake generator expressions are rejected.
 
-The declarative registry under `config/features/` is the production source for
-the feature graph. `hal_config.h` includes its generated C header, while CMake,
-the board/link metadata and `jh-vscode` consume the generated resolver and its
-`requestedFeatures` / `resolvedFeatures` result.
+The registry in `config/features/` defines module dependencies and generates the C header included by `hal_config.h`. CMake, board and link metadata generation, and `jh-vscode` use the same rules and record the `requestedFeatures` and `resolvedFeatures` sets.
 
 ### Available flags
 
@@ -174,20 +165,22 @@ Stack protection uses two independent opt-ins:
 | `HAL_ENABLE_JPEG_AS_BASE64` | `hal/codecs/hal_image.h` + `hal/codecs/jpeg/tjpgd.h` + `hal_crypto.h` | `hal/codecs/hal_image.cpp` + `hal/codecs/jpeg/tjpgd.c` + `hal_crypto.cpp` | Base64-encoded JPEG decode helpers (propagates CRYPTO + JPEG) |
 | `HAL_ENABLE_UNITY` | utility headers/sources | `utils/unity.*` | managed Unity framework |
 
-### Opt-out flag
+<a id="opt-out-flag"></a>
+
+### Disabling assertions
 
 | Flag | Effect |
 |---|---|
 | `HAL_DISABLE_ASSERTS` | Compiles every `HAL_ASSERT()` to a no-op. Asserts are ON by default. Mirrors the standard `NDEBUG` convention. |
 
-### Generated feature resolution
+<a id="generated-feature-resolution"></a>
 
-The registry resolver keeps direct requests and their closure separate:
+### How the final module set is resolved
 
-* `requestedFeatures` contains normalized, direct requests collected from the
-  effective project and build inputs;
-* `resolvedFeatures` adds the transitive registry `implies` closure. Production
-  source/dependency selection and the board/link feature hash use this set.
+The configuration records directly requested modules separately from the complete set including their dependencies:
+
+* `requestedFeatures` contains normalized flags requested directly by the final project and build configuration.
+* `resolvedFeatures` adds all transitive `implies` dependencies from the registry. This set selects sources and libraries and determines the feature hash used by board and link metadata.
 
 The compiler receives the requested feature definitions. The generated
 `src/hal/generated/jh_hal_features.h` header materializes the same registry
@@ -267,13 +260,11 @@ HAL_ENABLE_PNG_AS_BASE64 -> HAL_ENABLE_CRYPTO + HAL_ENABLE_PNG
 HAL_ENABLE_JPEG_AS_BASE64 -> HAL_ENABLE_CRYPTO + HAL_ENABLE_JPEG
 ```
 
-You only need to enable the **leaf** module you actually use; everything
-upstream is pulled in for you.
+Enable the module your application needs. Its dependencies are added automatically.
 
 ### Rules retained outside feature registry v1
 
-`hal_config.h` remains the public configuration facade for contextual rules
-that registry v1 cannot express:
+Context-dependent rules that registry v1 cannot express remain in `hal_config.h`:
 
 | Category | Retained behavior |
 |---|---|
@@ -282,8 +273,7 @@ that registry v1 cannot express:
 | Target and board rules | Bluetooth controller/target/board support, CYW43 bus/stack/profile/pin and target/board constraints, FreeRTOS target/toolchain/header constraints, and the STM32G474-only FDCAN rule remain contextual. |
 | Defaults, tunables, layout and ranges | Target-dependent EEPROM defaults, storage/OTA region layout, CYW43 pin/clock/country defaults, pool sizes, backlog and TLS limits, plus the remaining tunable defaults and range checks stay in the facade. |
 
-These retained sections contain the production compile-time diagnostics that
-depend on target, provider, board, or tunable context.
+These rules validate the configuration at build time using the selected target, implementation, board, and project parameters.
 
 Registry `resolvedFeatures` and its feature hash describe the registry v1
 closure. They do not append the two contextual propagation results above. A
@@ -297,7 +287,9 @@ emitted after the retained conditional propagation, so its `#pragma message`
 output describes the final preprocessor state, including contextual I2C or
 UART additions.
 
-### Passing flags - recommended: `hal_project_config.h`
+<a id="passing-flags---recommended-hal_project_configh"></a>
+
+### Recommended: `hal_project_config.h`
 
 Create `hal_project_config.h` in your firmware project directory and enable the
 modules you use:
@@ -331,11 +323,11 @@ conditional form is a same-symbol `#ifndef HAL_ENABLE_X` guard. Do not put
 feature definitions under any other `#if`/`#ifdef`, including raw or derived
 target/board branches, because the early collector reads the file textually.
 
-### FreeRTOS availability flag
+<a id="freertos-availability-flag"></a>
 
-`HAL_ENABLE_FREERTOS` is a target/runtime integration flag rather than an
-optional module flag. It is intended for projects that want to include native
-FreeRTOS headers directly:
+### Enabling FreeRTOS integration
+
+`HAL_ENABLE_FREERTOS` selects FreeRTOS runtime integration rather than an ordinary optional module. Use it when the project needs native FreeRTOS headers:
 
 ```c
 #include <FreeRTOS.h>
@@ -343,7 +335,7 @@ FreeRTOS headers directly:
 #include <semphr.h>
 ```
 
-Target rules:
+Platform-specific rules:
 
 Direct dispatcher/CMake paths for both native RP and STM32G474 invoke
 `scripts/component_manager.py component freertos --enable` automatically when
@@ -383,7 +375,7 @@ from RP `-D`), the CMake fallback still prepares the kernel. An external
   FreeRTOS kernel GCC/Posix port, run a real scheduler as pthreads, and exercise
   the STM32G474 host-stub `HAL_ENABLE_FREERTOS` paths in `ctest`.
 
-HAL-provided native FreeRTOS entry task defaults:
+Default parameters for FreeRTOS application tasks created by HAL:
 
 | Macro | Default | Unit / meaning |
 |---|---|---|
@@ -422,11 +414,11 @@ RP2040 I2C-slave callback path. Timer callback context and remaining per-module
 exceptions require dedicated module-level audits before stronger thread-safety
 guarantees are documented.
 
-The VS Code project flow adds the project include path automatically through
-the shared dispatcher. Generated projects should use the `Project: Build` and
-`Project: Select board` tasks emitted by `jh-vscode`.
+The project tools add the application include directory automatically. In projects generated by `jh-vscode`, use `Project: Build` and `Project: Select board`.
 
-### Alternative: `-D` flags on the command line
+<a id="alternative--d-flags-on-the-command-line"></a>
+
+### Alternative: compiler `-D` definitions
 
 ```bash
 ./scripts/build_rp_native_lib.sh \
@@ -438,7 +430,9 @@ the shared dispatcher. Generated projects should use the `Project: Build` and
   -D HAL_ENABLE_I2C
 ```
 
-### Core modules (no disable flag)
+<a id="core-modules-no-disable-flag"></a>
+
+### Core modules that cannot be disabled
 
 | Module | Purpose |
 |---|---|
@@ -455,7 +449,9 @@ the shared dispatcher. Generated projects should use the `Project: Build` and
 
 `hal_crypto` is opt-in via `HAL_ENABLE_CRYPTO` (it is not part of the always-on core set).
 
-### Dependency ownership
+<a id="dependency-ownership"></a>
+
+### Managing dependencies
 
 Optional third-party integrations used by HAL modules are selected by CMake.
 Target-specific RP helpers live under

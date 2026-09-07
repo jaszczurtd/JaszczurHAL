@@ -1,3 +1,8 @@
+/*
+ * Read two internal ADC inputs and four ADS1115 channels.
+ * Internal measurements continue while the external converter is unavailable.
+ */
+
 #include <hal/analog/hal_adc.h>
 #include <hal/analog/hal_external_adc.h>
 #include <hal/core/hal_app.h>

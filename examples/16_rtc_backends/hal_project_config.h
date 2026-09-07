@@ -4,7 +4,8 @@
 #define HAL_DEBUG_DEFAULT_BAUD 115200u
 #endif
 
-/* Compile all runtime-selectable RTC providers in one firmware image. */
+/* Include every RTC driver used by the application; select the chip in its
+ * configuration. */
 #define HAL_ENABLE_RTC
 #define HAL_ENABLE_PCF8563
 #define HAL_ENABLE_DS3231

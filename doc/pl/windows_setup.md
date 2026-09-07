@@ -1,11 +1,10 @@
-# Natywna konfiguracja dla Windows
+<a id="natywna-konfiguracja-dla-windows"></a>
+
+# Przygotowanie środowiska Windows
 
 *Dostępne również [po angielsku](../en/windows_setup.md).*
 
-JaszczurHAL udostępnia skrypt inicjalizacyjny, który przygotowuje natywne
-środowisko Windows do tworzenia firmware'u. Instaluje ściśle określone wersje
-narzędzi bez użycia WSL, Git Bash, wingetu czy Chocolatey i bez globalnej
-instalacji toolchainu.
+Skrypt konfiguracyjny JaszczurHAL przygotowuje środowisko do tworzenia firmware bezpośrednio w Windows. Instaluje ustalone wersje narzędzi bez WSL, Git Bash, wingetu i Chocolatey; nie wymaga też globalnej instalacji zestawu narzędzi kompilacyjnych.
 
 Minimalna obsługiwana wersja systemu to Windows 10 1809 (build 17763) na
 platformie AMD64. Git for Windows oraz VS Code muszą być już zainstalowane,
@@ -13,7 +12,7 @@ aby można było pobrać i otworzyć repozytorium. Skrypt zarządza Pythonem,
 CMake, Ninja, GNU Arm Embedded, GNU RISC-V, OpenOCD, picotoolem, pyserial oraz
 zależnościami źródłowymi w ściśle określonych wersjach. Przy pierwszym użyciu
 narzędzie obsługujące ESP32-S3 przygotowuje ponadto dokładnie wskazany commit
-repozytorium ESP-IDF oraz jego oficjalne narzędzia dla targetu. Są one
+repozytorium ESP-IDF oraz jego oficjalne narzędzia dla wybranej platformy. Są one
 przechowywane w `third_party\esp-idf` oraz
 `%USERPROFILE%\.espressif`.
 Sprawdzenie kompletności GNU Arm obejmuje GDB, a ponowne wykorzystanie
@@ -22,35 +21,23 @@ używanych przez generowane konfiguracje debugowania.
 
 ## Ustawienia hosta
 
-Natywny build firmware'u wymaga włączenia obsługi długich ścieżek w dwóch
-miejscach:
+Kompilacja firmware bezpośrednio w Windows wymaga obsługi długich ścieżek w dwóch miejscach:
 
 - w Windows: `LongPathsEnabled=1` w kluczu
   `HKLM\SYSTEM\CurrentControlSet\Control\FileSystem`;
 - w Git: `core.longpaths=true`.
 
-Domyślna konfiguracja sprawdza oba ustawienia. Jeśli brakuje ustawienia Git,
-wypisuje polecenie potrzebne do jego wprowadzenia. Jawne użycie opcji
-`-ConfigureHost` pozwala skryptowi ustawić `core.longpaths`. Skrypt może zmienić
-wartość w rejestrze Windows tylko wtedy, gdy został uruchomiony z sesji
-PowerShell działającej już z uprawnieniami administratora. Nigdy sam nie
-podnosi uprawnień procesu.
+Skrypt domyślnie sprawdza oba ustawienia, ale ich nie zmienia. Gdy Git nie ma włączonej obsługi długich ścieżek, wyświetla potrzebne polecenie. Opcja `-ConfigureHost` zezwala na ustawienie `core.longpaths`. Zmiana rejestru Windows jest możliwa tylko wtedy, gdy skrypt uruchomiono w sesji PowerShell z uprawnieniami administratora. Skrypt sam nie podnosi uprawnień.
 
-Skanowanie przez oprogramowanie ochrony stacji końcowych może znacznie
-spowolnić build CMake/Ninja lub umieszczać nowe pliki `.exe`, `.elf` i `.uf2`
-w kwarantannie. Utrzymuj krótkie ścieżki do zarządzanych narzędzi i katalogów
-buildu. Jeśli pomiary wydajności albo zdarzenia kwarantanny wykażą taką
-potrzebę, poproś administratora lub zespół bezpieczeństwa o wyjątki ograniczone
-do niezbędnych katalogów.
+Oprogramowanie ochrony stacji roboczej może spowalniać kompilację CMake/Ninja lub przenosić nowe pliki `.exe`, `.elf` i `.uf2` do kwarantanny. Stosuj krótkie ścieżki do narzędzi i katalogów kompilacji. Jeżeli pomiary lub zgłoszenia kwarantanny potwierdzają problem, uzgodnij z administratorem albo zespołem bezpieczeństwa wyjątki ograniczone do niezbędnych katalogów.
 
 Skrypt inicjalizacyjny nie zmienia konfiguracji oprogramowania antymalware.
 
-## Konfiguracja
+<a id="konfiguracja"></a>
 
-Przechowuj kopię roboczą repozytorium na lokalnym woluminie Windows, takim jak
-`C:`. Uruchomienie natywnego skryptu inicjalizacyjnego przez ścieżkę UNC WSL
-(`\\wsl.localhost\...`) jest odrzucane, ponieważ Git for Windows nie może
-bezpiecznie zarządzać i aktualizować takiej kopii roboczej.
+## Instalacja i konfiguracja narzędzi
+
+Umieść kopię roboczą repozytorium na lokalnym woluminie Windows, np. `C:`. Skrypt odrzuca ścieżki UNC do WSL (`\\wsl.localhost\...`), ponieważ Git for Windows nie może bezpiecznie zarządzać taką kopią i jej aktualizować.
 
 Uruchom Windows PowerShell 5.1 lub nowszy z katalogu głównego repozytorium:
 
@@ -72,12 +59,7 @@ Zarządzana instalacja Pythona 3.12 znajduje się w katalogu narzędzi. Izolowan
 `.build\windows\venv`, gdzie znajduje je `jh-vscode.cmd` bez globalnej
 zmiany `PATH`.
 
-Skrypt inicjalizacyjny zapisuje też
-`.build\windows\host-environment.json`. Na podstawie tego pliku wspólny
-runtime wybiera zweryfikowane ścieżki do CMake, Ninja, GNU Arm, GNU RISC-V,
-OpenOCD, picotoola i Pythona, a także zarządzany katalog
-główny buildu. `-VerifyOnly` porównuje zapisany stan bajt po bajcie z bieżącą
-konfiguracją.
+Skrypt zapisuje konfigurację w `.build\windows\host-environment.json`. Narzędzia projektu odczytują stąd zweryfikowane ścieżki do CMake, Ninja, GNU Arm, GNU RISC-V, OpenOCD, picotoola i Pythona oraz główny katalog kompilacji. Opcja `-VerifyOnly` porównuje ten zapis bajt po bajcie z konfiguracją ustaloną podczas bieżącego sprawdzenia.
 
 Tryb edytora dodaje też wyznaczone ścieżki debuggera do standardowego profilu
 użytkownika VS Code jako `cortex-debug.openocdPath.windows` i
@@ -105,15 +87,9 @@ Przydatne tryby to:
 .\runmefirst.ps1 -FirmwareOnly
 ```
 
-`-VerifyOnly` nie może być łączony z żadną opcją wymagającą zgody. Brakujący,
-zmodyfikowany lub nieaktualny komponent powoduje niepowodzenie kontroli bez
-podejmowania próby naprawy.
+Opcji `-VerifyOnly` nie można łączyć z opcjami zezwalającymi na zmiany konfiguracji. Brakujący, zmodyfikowany lub nieaktualny komponent powoduje niepowodzenie kontroli; skrypt nie naprawia go w tym trybie.
 
-`-FirmwareOnly` zmienia wyłącznie klasyfikację pozycji na końcowej liście: VS
-Code i jego rozszerzenia pozostają opcjonalne, natomiast każdy warunek wstępny
-potrzebny do buildu firmware'u nadal jest wymagany. CI łączy ten tryb z
-`-ConfigureHost` podczas konfiguracji i używa go ponownie podczas przebiegu
-weryfikacji tylko do odczytu.
+Opcja `-FirmwareOnly` zmienia jedynie klasyfikację na końcowej liście komponentów. VS Code i rozszerzenia stają się opcjonalne, natomiast wszystkie narzędzia niezbędne do tworzenia firmware pozostają wymagane. CI łączy ten tryb z `-ConfigureHost` podczas konfiguracji i ponownie używa go przy kontroli bez wprowadzania zmian.
 
 Skrypt inicjalizacyjny korzysta ze zgodnych instalacji CMake, Ninja, GNU Arm i
 OpenOCD dostępnych w systemie, chyba że użyto `-Force`. Zarządzane archiwa są
@@ -126,11 +102,11 @@ lokalizacji. Niekompletny pakiet systemowy jest pomijany na rzecz zarządzanego
 archiwum. Ponowne uruchomienie konfiguracji pozostawia poprawne komponenty
 niezmienione.
 
-## Cortex-Debug i drivery sond
+<a id="cortex-debug-i-drivery-sond"></a>
 
-Skrypt inicjalizacyjny dla Windows konfiguruje Cortex-Debug na podstawie
-zweryfikowanych danych hosta. Aby zdiagnozować lub sprawdzić ścieżki wyznaczone
-dla danego projektu, użyj `debug-tools`:
+## Cortex-Debug i sterowniki sond
+
+Konfiguracja Cortex-Debug korzysta ze zweryfikowanych ścieżek zapisanych przez skrypt. Aby sprawdzić narzędzia wybrane dla konkretnego projektu, uruchom `debug-tools`:
 
 ```powershell
 .\vscode\entry\jh-vscode.cmd debug-tools `
@@ -163,24 +139,24 @@ może trwać dłużej niż domyślny timeout zdalnej komunikacji w GDB i
 zdesynchronizować początkową wymianę pakietów w Windows.
 
 Skrypt inicjalizacyjny sporządza listę podłączonych sond, ale nie instaluje,
-nie zastępuje ani nie zmienia powiązania (`rebind`) driverów USB w Windows.
+nie zastępuje ani nie zmienia powiązania (`rebind`) sterowników USB w Windows.
 Jeśli OpenOCD zgłasza brak pasującego urządzenia CMSIS-DAP, sprawdź najpierw
-fizyczne połączenie SWD i Menedżer urządzeń. Zmiana drivera to osobna czynność
+fizyczne połączenie SWD i Menedżer urządzeń. Zmiana sterownika to osobna czynność
 administracyjna: zidentyfikuj dokładny interfejs sondy, zapoznaj się z
 aktualnymi instrukcjami producenta sondy dla Windows i uzyskaj zgodę przed
-jej zmianą. Nie stosuj drivera USB do interfejsu pamięci masowej Pico
+jej zmianą. Nie stosuj sterownika USB do interfejsu pamięci masowej Pico
 BOOTSEL.
 
 Podstawowy test sprzętowy w natywnym środowisku Windows przeprowadzono z użyciem
 oficjalnej sondy Raspberry Pi Debug Probe z firmware'em 2.3.1 oraz Pico 2 W
 jako targetu RP2350 Arm. Podłącz `SWDIO` sondy do `SWDIO` targetu, `SWCLK`
 sondy do `SWCLK` targetu oraz połącz ich masy. Windows obsłużył sondę za pomocą
-drivera Microsoft WinUSB. Nie było potrzebne ani instalowanie drivera, ani
+sterownika Microsoft WinUSB. Nie było potrzebne ani instalowanie sterownika, ani
 zmiana jego powiązania (`rebind`). Zarządzany OpenOCD wykrył oba rdzenie
-Cortex-M33, a GDB z zarządzanej instalacji GNU Arm załadował obraz ELF z buildu
+Cortex-M33, a GDB z zarządzanej instalacji GNU Arm załadował obraz ELF z kompilacji
 Debug, zatrzymał się na `main`, wznowił wykonanie do `app_start` i odłączył się.
 Po końcowym `reset run` ponownie pojawił się port USB CDC aplikacji. W kolejnym
-teście DoomConsole również załadowano obraz ELF z buildu Debug i zatrzymano
+teście DoomConsole również załadowano obraz ELF z kompilacji Debug i zatrzymano
 wykonanie na `app_start` przy tych samych ustawieniach profilu uruchomieniowego.
 
 Podstawowy test sprzętowy STM32 przeprowadzono w Windows 10 LTSC z użyciem
@@ -188,7 +164,7 @@ NUCLEO-G474RE z wbudowanym ST-Linkiem V3J9M3 (`0483:374e`). Zarządzany OpenOCD
 `0.12.0+dev (2026-07-01-10:44)` wykrył Cortex-M4 r0p1, 512 KiB
 dwubankowej pamięci flash, sześć punktów przerwania (breakpointów) i cztery
 punkty obserwacji (watchpointy). GDB z zarządzanej instalacji GNU Arm wgrał
-reprezentatywny obraz `01_core_runtime` z buildu Debug, zatrzymał się najpierw
+reprezentatywny obraz `01_core_runtime` z kompilacji Debug, zatrzymał się najpierw
 na `main`, a potem na `app_start`, po czym poprawnie się odłączył i wykonał
 `reset run`. Dla tej płytki użyj wygenerowanego profilu
 `board/st_nucleo_g4.cfg`. Konfiguracja ograniczona do `interface/stlink.cfg` i
@@ -207,33 +183,17 @@ TLS 1.2 lub nowszego. Dzięki temu firmowe mechanizmy inspekcji TLS mogą dział
 bez wyłączania walidacji certyfikatów. Przed wypakowaniem każde pobrane
 archiwum musi nadal odpowiadać przypisanemu do niego skrótowi SHA-256.
 
-## Układ buildu firmware
+<a id="układ-buildu-firmware"></a>
 
-Do buildu firmware'u domyślnie używany jest Ninja zarówno w Windows, jak i w
-systemach Unix. Projekt może wybrać inny generator przez `cmake.generator` w
-`.vscode/jaszczurhal.project.json`. Runtime przekazuje
-swój aktualny zweryfikowany interpreter Pythona jako `Python3_EXECUTABLE`,
-włącza `CMAKE_EXPORT_COMPILE_COMMANDS` i każdą wyznaczoną ścieżkę do pliku
-wykonywalnego hosta przekazuje procesowi jako pojedynczy argument. Dzięki temu
-spacje i listy CMake rozdzielone średnikami pozostają nienaruszone.
+## Katalogi kompilacji i pliki wynikowe
 
-W Windows cache CMake i pliki zależności kompilatora znajdują się pod krótką
-ścieżką `BuildRoot` utworzoną przez skrypt inicjalizacyjny. Katalogi są
-pogrupowane według stabilnego skrótu ścieżki projektu oraz targetu i płytki.
-Końcowe pliki ELF, BIN, HEX, UF2, MAP i OTA oraz dostosowana baza poleceń
-buildu pozostają w zadeklarowanym `buildDir` projektu.
-`refresh-intellisense` odczytuje pierwotną bazę z krótkiego drzewa CMake i
-zapisuje jej stabilną kopię w projekcie.
+Domyślnym generatorem firmware w Windows i systemach Unix jest Ninja. Inny generator wybiera się przez `cmake.generator` w `.vscode/jaszczurhal.project.json`. Narzędzia projektu przekazują zweryfikowany interpreter jako `Python3_EXECUTABLE` i włączają `CMAKE_EXPORT_COMPILE_COMMANDS`. Każda ścieżka do programu jest przekazywana jako jeden argument procesu, dzięki czemu spacje w ścieżkach i listy CMake rozdzielane średnikami nie są błędnie dzielone.
 
-Każdy udany build odświeża też artefakty z wybranego drzewa targetu. Dzięki
-temu po zmianie targetu Ninja nie pozostawi w `buildDir` firmware'u
-poprzedniego targetu, nawet jeśli nie ma nic do przebudowania. Rozpoczęcie
-nowego buildu usuwa dotychczasowy zestaw artefaktów gotowych do wgrania. Jeśli
-konfiguracja lub build zawiedzie, poprzedni obraz targetu nie może pozostać
-dostępny do późniejszego wgrania.
+W Windows pliki pamięci podręcznej CMake i zależności kompilatora trafiają do krótkiego katalogu `BuildRoot` wybranego podczas konfiguracji. Podkatalogi są rozdzielone według stabilnego skrótu ścieżki projektu oraz platformy i płytki. Końcowe pliki ELF, BIN, HEX, UF2, MAP i OTA oraz dostosowana baza poleceń kompilacji pozostają w zadeklarowanym `buildDir`. Polecenie `refresh-intellisense` odczytuje bazę z krótkiego katalogu CMake i zapisuje jej kopię w stałej lokalizacji projektu.
 
-`clean` usuwa obie zarządzane lokalizacje po wykonaniu standardowych kontroli
-bezpieczeństwa ścieżek.
+Każda udana kompilacja odświeża pliki wynikowe dla wybranej platformy, także wtedy, gdy Ninja nie musi niczego przebudować. Po zmianie platformy w `buildDir` nie pozostaje więc firmware z poprzedniego wyboru. Rozpoczęcie nowej kompilacji usuwa zestaw plików przeznaczonych do wgrania; błąd konfiguracji lub kompilacji nie pozostawia starego obrazu, który można byłoby później omyłkowo wysłać do urządzenia.
+
+Polecenie `clean` usuwa oba zarządzane katalogi po sprawdzeniu bezpieczeństwa ścieżek.
 
 Projekty ESP-IDF używają zadeklarowanego `buildDir` bezpośrednio zamiast
 krótkiego drzewa cache CMake. Produkcyjne narzędzie nadal wymaga, aby katalog
@@ -243,18 +203,14 @@ Dzięki temu manifest oraz wybrane artefakty bootloadera, tabeli partycji,
 aplikacji, logu i konfiguracji można przekazywać przez CI w Windows bez
 osadzania bezwzględnych ścieżek zależnych od środowiska wykonawczego.
 
-Użyj natywnego PowerShell, aby zbudować projekt testowy sprawdzający build i
-linkowanie ESP32-S3 w fazie 3:
+Aby sprawdzić kompilację i linkowanie projektu testowego ESP32-S3 dla fazy 3, uruchom w PowerShell:
 
 ```powershell
 .\vscode\entry\jh-vscode.cmd build `
   --project .\tests\fixtures\esp32s3_phase3
 ```
 
-Ten projekt służy wyłącznie do sprawdzenia buildu; nie jest sprzętowym testem
-akceptacyjnym wgrywania ani monitorowania. Projekty urządzeń używają
-`list-ports`, `upload` i `monitor` z portem COM zgłoszonym przez interfejs USB
-Serial/JTAG płytki.
+Projekt ten sprawdza wyłącznie kompilację i linkowanie. Nie potwierdza działania wgrywania ani monitora na sprzęcie. Projekty urządzeń korzystają z `list-ports`, `upload` i `monitor` oraz z portu COM udostępnianego przez interfejs USB Serial/JTAG płytki.
 
 Wybrany rekord COM musi pasować do identyfikatora programatora `303a:1001` z
 rejestru płytek. Nieaktualny port, niezgodne VID/PID lub kilka automatycznie
@@ -262,39 +218,14 @@ wykrytych urządzeń powodują odrzucenie operacji. Przed wgraniem JaszczurHAL
 zwalnia port zajęty przez własny monitor i pozwala mu połączyć się ponownie po
 zresetowaniu płytki przez ESP-IDF. `--allow-unverified-port`
 jawnie wyłącza tę kontrolę dla świadomie wybranego `--port`; generowane
-zadania nie używają tej opcji. Buildy ESP32-S3 w konfiguracji Debug ani
+zadania nie używają tej opcji. Konfiguracje Debug dla ESP32-S3 ani
 zarządzane profile Cortex-Debug nie są dostarczane.
 
-GitHub Actions buduje wygenerowany projekt użytkownika ze ścieżki
-zawierającej spacje dla RP2040, RP2350 ARM, RP2350 RISC-V i STM32G474 na
-platformie Windows. Bramka sprawdza konfigurację Ninja, target CMake tworzący
-bibliotekę statyczną - tam, gdzie ma zastosowanie - reprezentatywny firmware,
-zadeklarowane artefakty, dostosowaną bazę poleceń buildu i ustawienia
-ostrzeżeń MSVC. Sprawdza również, czy testy hosta POSIX, FreeRTOS i BearSSL,
-które nie są zgodne z Windows, zostały jawnie oznaczone jako wyłączone.
-Zadanie MSVC buduje i uruchamia podstawowy test HAL CRC oraz przenośny interfejs
-nagłówka gniazd BSD z `/W4 /permissive- /WX`. Pełny adapter BSD eksportuje
-nazwy symboli POSIX i pozostaje testem przeznaczonym dla firmware'u lub hosta
-z Linuksem, zamiast udawać, że implementuje odmienne ABI Winsock. Natywna
-integracja BearSSL również pozostaje wyłącznie linuksowa, ponieważ jej
-środowisko testowe i transport używają Bash i gniazd POSIX.
+GitHub Actions kompiluje w Windows wygenerowaną aplikację ze ścieżki zawierającej spacje dla RP2040, RP2350 ARM, RP2350 RISC-V i STM32G474. Kontrola obejmuje konfigurację Ninja, cel CMake tworzący bibliotekę statyczną tam, gdzie ma to zastosowanie, przykładowy firmware, zadeklarowane pliki wynikowe, dostosowaną bazę poleceń kompilacji i ustawienia ostrzeżeń MSVC. Sprawdza też, czy niezgodne z Windows testy hosta POSIX, FreeRTOS i BearSSL są jawnie oznaczone jako wyłączone. Zadanie MSVC kompiluje i uruchamia podstawowy test HAL CRC oraz sprawdzenie przenośności nagłówka gniazd BSD z `/W4 /permissive- /WX`. Pełny adapter BSD eksportuje symbole POSIX, a nie ABI Winsock, dlatego jego testy są przeznaczone dla firmware lub hosta z Linuksem. Testy integracyjne BearSSL również wymagają Linuksa, ponieważ korzystają z Bash i gniazd POSIX.
 
-Istniejące zadanie `windows-tooling` umieszcza też w cache dokładnie wskazany
-commit ESP-IDF i oficjalne narzędzia, wykonuje czysty build produkcyjny
-projektu `tests/fixtures/esp32s3_phase3`, który sprawdza tylko build, oraz
-przesyła jego relokowalny manifest, log buildu, bootloader, tabelę
-partycji i obrazy aplikacji. Udany build CI nie potwierdza zachowania runtime
-na sprzęcie w fazie 3.
+Zadanie `windows-tooling` przechowuje w pamięci podręcznej ustaloną rewizję ESP-IDF i oficjalne narzędzia. Wykonuje czystą kompilację produkcyjną projektu `tests/fixtures/esp32s3_phase3`, a następnie publikuje manifest z przenośnymi ścieżkami, log kompilacji, bootloader, tablicę partycji i obrazy aplikacji. Powodzenie CI nie potwierdza działania funkcji fazy 3 na sprzęcie.
 
-To repozytorium nie definiuje profilu analizy statycznej dla Windows. Ani
-bieżący zestaw zarządzanych narzędzi dla Windows, ani ten host nie udostępniają
-`clang-tidy` ani `cppcheck`, a narzędzia MSVC Build Tools nie są komponentem
-zarządzanym przez skrypt inicjalizacyjny. Build MSVC z rygorystycznym zestawem
-ostrzeżeń pozostaje obowiązkowym testem jakości dla Windows. Profil analizy
-statycznej dodaj wyłącznie razem z uwierzytelnionym plikiem wykonywalnym
-analizatora o ściśle
-określonej wersji, aby wyniki lokalne i CI nie mogły niepostrzeżenie się
-rozjechać.
+Repozytorium nie definiuje profilu analizy statycznej dla Windows. Opisany zestaw zarządzanych narzędzi i środowisko hosta nie udostępniają `clang-tidy` ani `cppcheck`; MSVC Build Tools również nie są komponentem o wersji ustalanej przez skrypt konfiguracyjny. Obowiązkową kontrolą dla Windows pozostaje kompilacja MSVC z rygorystycznymi ostrzeżeniami. Profil analizy statycznej należy dodawać wraz ze zweryfikowanym plikiem wykonywalnym analizatora o ustalonej wersji, aby wyniki lokalne i wyniki CI pozostały porównywalne.
 
 ## Rozwiązywanie problemów
 
@@ -329,11 +260,11 @@ Typowe problemy i sposoby ich rozwiązania:
   wskaż właściwy zweryfikowany port COM.
 - Widoczne jest więcej niż jedno urządzenie BOOTSEL. Odłącz dodatkową
   płytkę lub przez `--bootsel-volume` wskaż właściwy katalog główny dysku bądź
-  GUID woluminu; runtime nadal weryfikuje jego etykietę i system plików FAT.
+  GUID woluminu; narzędzie nadal weryfikuje jego etykietę i system plików FAT.
 - Cortex-Debug nie może uruchomić OpenOCD ani GDB. Uruchom
   `debug-tools --json` dla wybranego projektu, potwierdź zgłoszone pliki,
-  a następnie sprawdź sondę i target w Menedżerze urządzeń. Zmiany
-  driverów pozostają osobną czynnością administracyjną.
+  a następnie sprawdź sondę i urządzenie docelowe w Menedżerze urządzeń. Zmiany
+  sterowników pozostają osobną czynnością administracyjną.
 - Wykrywanie urządzenia przez OTA działa, ale urządzenie nie może nawiązać
   połączenia zwrotnego z hostem. Utrzymuj aktywny profil sieciowy Windows jako
   `Private` i sprawdź regułę zapory o ograniczonym zakresie bez jej zmieniania:
@@ -349,15 +280,11 @@ zadań opisano w
 Odzyskiwanie OTA oraz diagnostykę rozruchu próbnego i przywracania poprzedniej
 wersji opisano w dokumencie [Natywna aktualizacja OTA](OTAWorkflow.md).
 
-## Obecny zakres wsparcia
+<a id="obecny-zakres-wsparcia"></a>
 
-Obsługiwane są: natywny skrypt uruchamiający i wspólny runtime buildu,
-generowane definicje zastępujące zadania VS Code, zasady zakończeń wierszy,
-menedżer komponentów oraz skrypt inicjalizacyjny hosta.
-Zakres obejmuje też macierz buildów firmware'u w CMake dla czterech rodzin,
-wgrywanie przez COM i BOOTSEL, backend zapory OTA, wykrywanie narzędzi
-debugowania, test przenośności nagłówka gniazd, produkcyjne operacje `build`,
-`upload` i `monitor` ESP32-S3 w ESP-IDF oraz CI w Windows.
+## Zakres obsługi
+
+Obsługa Windows obejmuje uruchamianie i kompilację projektów, generowane nadpisania zadań VS Code, zasady zakończeń wierszy, zarządzanie komponentami oraz konfigurację hosta. Dostępne są także kompilacje CMake dla czterech rodzin mikrokontrolerów, wgrywanie przez COM i BOOTSEL, konfiguracja zapory dla OTA, wykrywanie narzędzi debugowania, kontrola przenośności nagłówka gniazd, produkcyjne operacje ESP32-S3 `build`, `upload` i `monitor` w ESP-IDF oraz zadania CI w Windows.
 
 Pełne testy integracyjne gniazd POSIX, FreeRTOS POSIX oraz BearSSL sterowane
 przez Bash pozostają wyłącznie linuksowe. Mechanizm połączenia zwrotnego OTA w

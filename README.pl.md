@@ -6,114 +6,138 @@ Autor: Marcin 'Jaszczur' Kielesinski
 
 JaszczurHAL to warstwa abstrakcji sprzętowej (HAL) i biblioteka narzędziowa dla
 systemów wbudowanych opartych na RP2040, RP2350, STM32 i ESP32.
-Zacznij od [polskiego spisu dokumentacji](doc/table_of_contents.pl.md) albo
-zobacz [przegląd funkcjonalności](doc/pl/features.md), aby poznać zwięzły spis
-obsługiwanych modułów i funkcji.
+[Przegląd możliwości](doc/pl/features.md) pokazuje, jakie moduły i funkcje są
+dostępne. Pełną dokumentację znajdziesz w
+[polskim spisie treści](doc/table_of_contents.pl.md).
 
 ## Po co to powstało?
 
-Wiele projektów systemów wbudowanych zaczyna się od kodu pisanego w pośpiechu.
-Z czasem coraz trudniej je rozwijać, zwłaszcza gdy dostęp do sprzętu jest
-ściśle powiązany z logiką aplikacji albo sterowniki są przywiązane do
-konkretnego targetu sprzętowego.
+No właśnie - przecież jest już Arduino, które w pewnym sensie umożliwia tworzenie
+i kompilowanie tego samego kodu, szybko i prosto na wiele platform. Ale nie
+wchodząc zbyt głęboko w szczegóły - im bardziej zaawansowane projekty, tym
+bardziej dają się we znaki ograniczenia tej - mimo wszystko wartościowej
+platformy do nauki. Biblioteki Arduino są też bardzo nierówne - zaczynając od
+słabego kodu nadużywajacego `delay()`, po prawdziwe perełki funkcjonalne.
+Większość jednak ma podstawowy problem - wielowątkowość. No ale jest przecież
+Zephyr - profesjonalny framework, uznany w branży, obsługujący masę sprzętu,
+oferujący wielowątkowość jako standard. No ale nie obsługuje on zbyt dobrze mojej
+ulubionej rodziny MCU - RP2040/2350. Są też inne platformy i środowiska, z
+pewnością... Życia by nie starczyło by sprawdzić je wszystkie. Ale z pewnością ;)
+starczy by w pewnym sensie wynaleźć swoje własne koło, i zrobić wszystko "pod
+siebie" - z zachowaniem najwyższych standardów jakości (rygorystyczne bramki
+testowe, również na sprzęcie), i z wieloma innymi rzeczami, o których możesz
+przeczytać dalej, w dokumentacji projektu. :)
 
-JaszczurHAL wprowadza wyraźny podział odpowiedzialności:
+Spośród wielu funkcjonalności jakie oferuje JaszczurHAL, warto odnotować
+następujące:
 
-- warstwa aplikacji: przenośna logika,
-- warstwa HAL: spójne, przenośne API oddzielające szczegóły sprzętowe
-  od logiki aplikacji,
-- warstwa mock: deterministyczne testowanie po stronie hosta,
-- sterowniki wielokrotnego użytku, bezpieczne w środowisku wielowątkowym
-  i współdzielone przez wszystkie obsługiwane targety sprzętowe,
-- opcjonalne moduły włączane jawnie flagami kompilacji `HAL_ENABLE_*`,
-- opcjonalny stos łączności, bezpieczeństwa i pamięci masowej dla projektów
-  firmware z połączeniem sieciowym,
-- zestaw narzędzi do typowych zadań w systemach wbudowanych (timery, PID,
-  watchdog, funkcje pomocnicze),
-- w pełni funkcjonalna obsługa FreeRTOS (V11.3.0).
+- obsługę FreeRTOS (V11.3.0);
+- spójne API, które pozwala przenosić kod aplikacji między obsługiwanymi
+  platformami;
+- implementację testową (mock) do deterministycznych testów na komputerze;
+- sterowniki wspólne dla obsługiwanych platform, z zabezpieczeniami do pracy
+  wielowątkowej;
+- opcjonalne moduły włączane flagami kompilacji `HAL_ENABLE_*`;
+- obsługę łączności, zabezpieczeń i pamięci masowej, przydatną m.in.
+  w urządzeniach podłączonych do sieci;
+- narzędzia do typowych zadań: timery, regulator PID, watchdog i funkcje
+  pomocnicze.
 
-Kod aplikacji pozostaje przenośny pomiędzy obsługiwanymi targetami
-i środowiskami wykonawczymi.
+Jest oczywistym że nie da się zatrzeć wszystkich różnic między wszystkimi MCU,
+i stworzyć w pełni uniwersalnego API. Ale można ukryć zdecydowaną większość
+z tych różnic, i stworzyć stabilną i mocną podstawę, dzięki której sporo z tych
+różnic traci na znaczeniu. Nawet w czasach AI tłumaczącego kod między
+platformami stanowi to niezaprzeczlną wartość - bo tokeny też warto oszczędzać. ;)
 
-Projekt jest już bardzo użyteczny, ale wciąż zostało tu i ówdzie kilka
-obszarów wymagających dalszej pracy (WIP). Niestety, oprócz pracy nad projektem
-hobbystycznym,
-trzeba też jakoś zarabiać na życie - i znaleźć czas na samo życie. :)
+Projekt już sprawdza się w praktyce, choć niektóre obszary wciąż wymagają
+pracy (WIP). To projekt hobbystyczny - poza jego rozwijaniem trzeba jeszcze
+zarabiać na życie i znaleźć czas na samo życie. :)
 
 ## Czy to jest gdzieś faktycznie używane?
 
 Tak - w kilku moich bardziej wymagających projektach.
 
-Najbardziej widocznym przykładem JaszczurHAL w praktyce jest projekt Fiesta: https://github.com/jaszczurtd/Fiesta
+Dobrym przykładem jest
+[Fiesta](https://github.com/jaszczurtd/Fiesta), mój prywatny projekt modernizacji
+samochodu. Składa się z kilku ściśle zintegrowanych modułów. Najbardziej
+wymagający jest chyba moduł ECU: korzysta z JaszczurHAL na dwóch rdzeniach,
+steruje pompą wtryskową VP37, komunikuje się z resztą systemu przez CAN
+i obsługuje diagnostykę OBD oraz inne funkcje niskopoziomowe.
 
-To mój prywatny projekt modernizacji samochodu, złożony z kilku ściśle
-zintegrowanych modułów. Moduł ECU jest chyba najbardziej wymagający: używa
-JaszczurHAL w trybie dwurdzeniowym do sterowania pompą wtryskową VP37,
-komunikacji CAN z resztą systemu, diagnostyki OBD i innych funkcji
-niskopoziomowych.
+Są też mniejsze, ale nietrywialne projekty:
 
-Są też mniejsze (ale nietrywialne) projekty, na przykład:
-
-* https://github.com/jaszczurtd/doomConsole (port gry Doom z dźwiękiem, wyświetlaczem TFT i obsługą gamepada Bluetooth 8BitDo)
-* https://github.com/jaszczurtd/Ford-Mondeo-MK-DPF-Tracker (urządzenie śledzące cykle regeneracji DPF)
-* https://github.com/jaszczurtd/lights-timer (zdalne sterowanie oświetleniem akwarium za pomocą aplikacji na Androida)
+- [doomConsole](https://github.com/jaszczurtd/doomConsole) - port gry Doom
+  z dźwiękiem, wyświetlaczem TFT i obsługą gamepada Bluetooth 8BitDo;
+- [Ford-Mondeo-MK-DPF-Tracker](https://github.com/jaszczurtd/Ford-Mondeo-MK-DPF-Tracker)
+  - urządzenie śledzące cykle regeneracji filtra DPF;
+- [lights-timer](https://github.com/jaszczurtd/lights-timer) - sterowanie
+  oświetleniem akwarium za pomocą aplikacji na Androida.
 
 ## Szybki start
 
-Są dwa typowe punkty startowe:
+Aby poznać [API HAL](doc/pl/JaszczurHAL_API.md) i zobaczyć, jak ten sam kod
+działa na różnych platformach, zacznij od
+[gotowych przykładów](examples/README.pl.md).
 
-- Aby poznać [API HAL](doc/pl/JaszczurHAL_API.md), sposób przenoszenia kodu
-  i zakres obsługi poszczególnych platform, zacznij od gotowych przykładów:
-  [examples/README.pl.md](examples/README.pl.md).
-- Aby utworzyć nowy projekt firmware z możliwością wyboru targetu,
-  przeznaczony do codziennej pracy w VS Code, użyj generatora projektów:
+Aby rozpocząć własny projekt w VS Code, użyj generatora:
 
 ```bash
 libraries/JaszczurHAL/vscode/tools/create-vscode-example.py \
   --output your-example-project-name
 ```
 
-Wygenerowany projekt startuje na `rp2040/pico` (zmień to za pomocą
-`--target`/`--board` albo zadania `Project: Select board`) i ma gotowe do
-użycia zadania VS Code do kompilowania, wgrywania i monitorowania. Opcje
-generatora, pierwsze wgranie firmware na czystą płytkę oraz pełny opis zadań są
-udokumentowane w [vscode/README.pl.md](vscode/README.pl.md).
+Domyślnie projekt jest skonfigurowany dla `rp2040/pico`. Platformę i płytkę
+możesz zmienić opcjami `--target` i `--board` albo zadaniem
+`Project: Select board` w VS Code. Projekt zawiera gotowe zadania do
+kompilacji, wgrywania firmware i monitorowania portu szeregowego.
+
+Opcje generatora, pierwsze wgranie firmware na nową płytkę oraz opis wszystkich
+zadań znajdziesz w [instrukcji VS Code](vscode/README.pl.md).
 
 ## Przykłady
 
-Drzewo `examples/` zawiera przykładowe aplikacje, które pokazują współdziałanie
-powiązanych modułów HAL. Każdy przykład składa się z przenośnego pliku
-`app.c` lub `app.cpp` oraz pasującego pliku `hal_project_config.h`. Korzysta ze
-wspólnego interfejsu punktu wejścia: `app_start()`, `app_task0()` i opcjonalnie
-`app_task1()`. Na RP opcjonalne zadanie działa na drugim rdzeniu, a w trybie
-bare metal na STM32G474 jest wywoływane kooperacyjnie
-(`HAL_ENABLE_APP_TASK1`).
-ESP-IDF uruchamia `app_start()`, `app_task0()` oraz opcjonalnie `app_task1()` w
-ramach działającego już planisty FreeRTOS. ESP32-S3 domyślnie przypisuje zadania
-0 i 1 do rdzeni 0 i 1, ale to przypisanie można jawnie zmienić.
+Katalog `examples/` zawiera aplikacje pokazujące, jak używać powiązanych
+modułów HAL w jednym programie. Każdy przykład zawiera przenośny plik
+`app.c` lub `app.cpp` oraz konfigurację w `hal_project_config.h`.
 
-Macierz kompilacji, wymagania, lista targetów obsługiwanych przez poszczególne
-przykłady oraz zasada rozszerzania istniejącego projektu lub wariantu przed
-utworzeniem kolejnego katalogu są opisane w
-[examples/README.pl.md](examples/README.pl.md).
+Wszystkie przykłady korzystają z tych samych funkcji aplikacji:
+`app_start()`, `app_task0()` i opcjonalnej `app_task1()`, włączanej flagą
+`HAL_ENABLE_APP_TASK1`. Sposób ich uruchamiania zależy od platformy:
 
-## Obsługiwane targety i moduły (szybki przegląd)
+- Na RP `app_task1()` działa na drugim rdzeniu.
+- Na STM32G474 bez systemu operacyjnego (bare-metal) `app_task1()` jest
+  wywoływana kooperacyjnie, a nie na osobnym rdzeniu.
+- Na ESP32-S3 funkcje aplikacji działają pod kontrolą schedulera FreeRTOS
+  uruchomionego przez ESP-IDF. Domyślnie zadania 0 i 1 są przypisane
+  odpowiednio do rdzeni 0 i 1; to przypisanie można zmienić.
 
-Firmware dla RP2040 i RP2350 jest kompilowane bezpośrednio z oficjalnym Pico
-SDK. STM32G474 korzysta z implementacji bare metal i procesu linkowania
-dostarczonych przez repozytorium. Target ESP32-S3 jest oparty na ESP-IDF.
-FreeRTOS jest opcjonalny na RP i STM32G474, a wymagany przez runtime ESP-IDF.
-Backend mock służy do deterministycznej weryfikacji na hoście.
+Wymagania, zestawienia kompilacji i listę platform obsługiwanych przez każdy
+przykład znajdziesz w [opisie przykładów](examples/README.pl.md).
+Opisano tam również zasadę rozwijania istniejącego projektu lub jego wariantu,
+zanim powstanie kolejny katalog z przykładem.
 
-Zwięzły spis obsługiwanej funkcjonalności i modułów znajduje się w
-[przeglądzie funkcjonalności](doc/pl/features.md).
+<a id="obsługiwane-targety-i-moduły-szybki-przegląd"></a>
 
-## Wybór modułów (skrótowo)
+## Obsługiwane platformy
 
-JaszczurHAL używa modelu flag OPT-IN: domyślnie żaden moduł opcjonalny nie
-jest kompilowany. Aby włączyć moduły potrzebne w projekcie, zdefiniuj flagi
-`HAL_ENABLE_*` w lokalnym dla projektu pliku
-`hal_project_config.h`:
+RP2040 i RP2350 korzystają z oficjalnego Pico SDK. Dla STM32G474 repozytorium
+dostarcza implementację działającą bez systemu operacyjnego oraz konfigurację
+linkowania. ESP32-S3 korzysta z ESP-IDF.
+
+Na RP i STM32G474 można opcjonalnie włączyć FreeRTOS. Na ESP32-S3 jest on
+wymagany przez ESP-IDF. Implementacja mock służy do deterministycznych testów
+na komputerze, bez urządzenia docelowego.
+
+Dostępne moduły i funkcje opisuje
+[przegląd możliwości](doc/pl/features.md).
+
+<a id="wybór-modułów-skrótowo"></a>
+
+## Włączanie modułów
+
+Domyślnie moduły opcjonalne nie są kompilowane. Włącz tylko te, których
+potrzebuje aplikacja, definiując odpowiednie flagi `HAL_ENABLE_*` w pliku
+`hal_project_config.h` swojego projektu:
 
 ```c
 #pragma once
@@ -122,21 +146,24 @@ jest kompilowany. Aby włączyć moduły potrzebne w projekcie, zdefiniuj flagi
 #define HAL_ENABLE_GPS
 ```
 
-Projekt używa własnych mechanizmów walidacji, aby sprawdzić, czy dana flaga
-jest poprawna i obsługiwana oraz czy jej parametry są prawidłowe.
+Mechanizmy sprawdzające konfigurację wykrywają nieprawidłowe lub nieobsługiwane
+flagi oraz błędne wartości parametrów.
 
-Pełną macierz flag, zasady propagacji zależności i opcje `HAL_ENABLE_*`
-znajdziesz w:
+Dostępne flagi, ich parametry i zasady włączania zależności opisano w:
 
-- [JaszczurHAL_API.md](doc/pl/JaszczurHAL_API.md)
-- [doc/api/pl/02_module_flags.md](doc/api/pl/02_module_flags.md)
-- [doc/HAL_FLAGS.txt](doc/HAL_FLAGS.txt)
+- [dokumentacji API](doc/pl/JaszczurHAL_API.md);
+- [rozdziale o flagach modułów](doc/api/pl/02_module_flags.md);
+- [zestawieniu flag kompilacji](doc/HAL_FLAGS.txt).
 
-## Przykład wyboru targetu dla wielu platform
+<a id="przykład-wyboru-targetu-dla-wielu-platform"></a>
 
-Niezależnie od flag modułów JaszczurHAL wybiera dokładnie jeden backend
-sprzętowy poprzez `src/hal/core/hal_target.h`. Zdefiniuj jedną
-z poniższych flag w `hal_project_config.h` (lub przez `-D`):
+## Wybór platformy i płytki
+
+Niezależnie od wyboru modułów JaszczurHAL wybiera jedną implementację dla
+platformy docelowej. Odpowiada za to plik `src/hal/core/hal_target.h`.
+Zdefiniuj **dokładnie jedną** z poniższych flag w `hal_project_config.h`
+lub przekaż ją kompilatorowi przez `-D`. Poniższy blok przedstawia dostępne
+opcje, a nie gotową konfigurację:
 
 ```c
 #define HAL_TARGET_RP2040        // RP2040, Cortex-M0+
@@ -147,218 +174,270 @@ z poniższych flag w `hal_project_config.h` (lub przez `-D`):
 #define HAL_TARGET_MOCK          // deterministyczna implementacja testowa dla hosta
 ```
 
-Jeśli żadnej nie zdefiniujesz, target jest **wykrywany automatycznie** na
-podstawie toolchainu. Pliki backendów są kompilowane tylko dla wybranego
-targetu, więc nieużywane warianty nie zajmują pamięci programu.
+Jeżeli nie zdefiniujesz żadnej flagi, platforma zostanie **wykryta
+automatycznie** na podstawie używanego zestawu narzędzi kompilacyjnych.
+Kompilowane są tylko pliki implementacji dla wybranej platformy - nieużywane
+warianty nie zwiększają rozmiaru programu.
 
-Oficjalne kompilacje wybierają stabilny target i identyfikator płytki poprzez
-generowany rejestr płytek. Zobacz
-[Profile targetów i płytek](doc/pl/boards_profiles_howto.md).
-Zobacz też [FwProjectWorkflow.md](doc/pl/FwProjectWorkflow.md), aby poznać
-pełny model targetu/płytki/konfiguracji.
+Standardowe skrypty kompilacji korzystają z generowanego rejestru płytek
+oraz stałych identyfikatorów platform i płytek. Zasady wyboru opisano
+w [przewodniku po profilach platform i płytek](doc/pl/boards_profiles_howto.md).
+Pełne powiązania między platformą, płytką i konfiguracją wyjaśnia
+[instrukcja pracy z projektem firmware](doc/pl/FwProjectWorkflow.md).
 
-W praktyce nie musisz znać wewnętrznego działania logiki wyboru targetu.
-Wystarczy nacisnąć `Ctrl+Shift+Alt+1` w swoim projekcie i wybrać target z menu.
+W codziennej pracy w VS Code nie musisz znać szczegółów tego mechanizmu.
+Naciśnij `Ctrl+Shift+Alt+1` i wybierz platformę z menu.
+Pozostałe skróty znajdziesz w
+[zestawieniu skrótów klawiszowych](vscode/README.pl.md#skróty-klawiszowe-vs-code).
 
-Oto [pełna lista](vscode/README.pl.md#skróty-klawiszowe-vs-code) dostępnych
-skrótów klawiszowych VS Code.
+<a id="opcjonalny-freertos-opt-in"></a>
 
-## Opcjonalny FreeRTOS (opt-in)
+## Obsługa FreeRTOS
 
-Obsługę FreeRTOS włącza się jawną flagą kompilacji:
+Na RP i STM32G474 włącz FreeRTOS za pomocą flagi kompilacji:
 
 ```c
 #define HAL_ENABLE_FREERTOS
 ```
 
-Aplikacje używają bezpośrednio standardowych nagłówków i API projektu
-FreeRTOS na wszystkich obsługiwanych targetach.
+Na ESP32-S3 FreeRTOS jest wymagany przez ESP-IDF. Konfiguracja tej platformy
+dodaje `HAL_ENABLE_FREERTOS` jako wymaganą flagę.
 
-JaszczurHAL ukrywa szczegóły startu specyficzne dla targetu, takie jak
-uruchomienie planisty i opcjonalne rozmieszczenie zadań aplikacji. Targety
-RP używają FreeRTOS-Kernel w ustalonej wersji, z obsługą SMP, natomiast
-STM32G474 używa tego samego jądra z portem Cortex-M4F. ESP32-S3 używa instancji
-FreeRTOS dostarczonej przez ESP-IDF w ustalonej wersji; jego deskryptor targetu
-dodaje `HAL_ENABLE_FREERTOS` jako wymaganą flagę i obsługuje opcjonalne drugie
-zadanie aplikacji.
+Aplikacje korzystają bezpośrednio ze standardowych nagłówków i API FreeRTOS
+na wszystkich obsługiwanych platformach. JaszczurHAL zajmuje się uruchamianiem
+schedulera tam, gdzie jest to potrzebne, oraz opcjonalnym przypisaniem zadań
+aplikacji do rdzeni.
 
-Szczegółowe informacje o zarządzaniu wersją kernela, portach i wariantach
-kompilacji są dostępne w [lib_compilation.md](doc/pl/lib_compilation.md) oraz
-[doc/api/pl/04_multicore_drivers_migration.md](doc/api/pl/04_multicore_drivers_migration.md).
+RP korzysta z FreeRTOS-Kernel w wersji ustalonej w repozytorium, z obsługą SMP
+(pracy na wielu rdzeniach). STM32G474 używa tego samego jądra z portem
+Cortex-M4F. ESP32-S3 korzysta z FreeRTOS dostarczonego przez ustaloną wersję
+ESP-IDF i obsługuje opcjonalne drugie zadanie aplikacji.
 
-## Bezpieczeństwo wielowątkowe (przegląd)
+Wersje jądra, używane porty i warianty kompilacji opisano w
+[przewodniku po kompilacji biblioteki](doc/pl/lib_compilation.md) oraz
+[rozdziale o pracy wielordzeniowej i FreeRTOS](doc/api/pl/04_multicore_drivers_migration.md).
 
-Bezpieczeństwo wielowątkowe i obsługa wielu rdzeni należą do podstawowych
-założeń projektowych na wszystkich targetach. Zakłada się, że inicjalizacja
-i zamykanie (`init` / `create` / `destroy` / `deinit`) odbywają się na jednym
-rdzeniu. Muteksy współdzielonych instancji i poszczególnych magistral są
-tworzone atomowo dopiero przy pierwszym użyciu, z zabezpieczeniem przed
-wyścigiem. Backend mock służy do deterministycznych testów jednowątkowych,
-a opcjonalna flaga
-`JH_ENABLE_FREERTOS_POSIX_TESTS` rozszerza ten zestaw o testy schedulera
-FreeRTOS po stronie hosta.
+<a id="bezpieczeństwo-wielowątkowe-przegląd"></a>
 
-Szczegółowe sygnatury, dokładne gwarancje, zachowanie modułów, uwagi
-dotyczące poszczególnych implementacji i pokrycie testami znajdziesz w
-[JaszczurHAL_API.md](doc/pl/JaszczurHAL_API.md).
+## Praca wielowątkowa i wielordzeniowa
 
-## Kompilacja jako biblioteka statyczna (.a)
+JaszczurHAL jest projektowany z myślą o pracy wielu wątków i rdzeni.
+Inicjalizację i zwalnianie zasobów (`init` / `create` / `destroy` / `deinit`)
+wykonuj jednak na tym samym rdzeniu, na którym zostały stworzone.
+Muteksy wspólnych instancji modułów i poszczególnych magistral są tworzone atomowo przy
+pierwszym użyciu, z zabezpieczeniem przed wyścigiem podczas ich tworzenia.
 
-Kompletny przewodnik po kompilacji JaszczurHAL jako biblioteki statycznej
-(`libJaszczurHAL.a`), wraz z kompilacją przykładowych aplikacji oraz zasadami
-dotyczącymi rdzenia i punktu wejścia: [lib_compilation.md](doc/pl/lib_compilation.md).
-Zainstalowane pakiety RP i STM32G474 zawierają wygenerowane nagłówki cech
-i płytek, metadane wybranej płytki oraz referencyjny plik źródłowy do kontroli
-zgodności podczas linkowania, wymagany przez projekt korzystający bezpośrednio
-z kompilatora. Kompilacja i linkowanie zainstalowanego pakietu nie wymagają
-Pythona.
+Implementacja mock służy do deterministycznych testów jednowątkowych.
+Opcjonalna flaga `JH_ENABLE_FREERTOS_POSIX_TESTS` rozszerza je o testy
+schedulera FreeRTOS uruchamiane na komputerze.
 
-## Testy i bramki jakości
+Dokładne zasady współbieżnego dostępu, sygnatury funkcji, zachowanie modułów,
+różnice między implementacjami i zakres testów opisuje
+[dokumentacja API](doc/pl/JaszczurHAL_API.md).
+
+<a id="kompilacja-jako-biblioteka-statyczna-a"></a>
+
+## Kompilacja biblioteki statycznej (.a)
+
+JaszczurHAL można skompilować jako bibliotekę statyczną `libJaszczurHAL.a`.
+[Przewodnik po kompilacji](doc/pl/lib_compilation.md) opisuje jej budowanie,
+kompilację przykładowych aplikacji oraz podział na kod biblioteki i kod
+uruchamiający aplikację.
+
+Zainstalowane pakiety dla RP i STM32G474 zawierają wygenerowane nagłówki
+z konfiguracją funkcji i płytek, metadane wybranej płytki oraz plik źródłowy
+potrzebny do sprawdzenia zgodności podczas linkowania. Dzięki temu można
+korzystać z biblioteki bezpośrednio z kompilatora. Kompilacja i linkowanie
+już zainstalowanego pakietu nie wymagają Pythona.
+
+<a id="testy-i-bramki-jakości"></a>
+
+## Testy i kontrole jakości
+
+Aby uruchomić automatyczne testy i kontrole repozytorium, wykonaj:
 
 ```bash
 ./runalltests.sh
 ```
 
-Obejmuje testy jednostkowe hosta (z pokryciem FreeRTOS POSIX), kontrole
-Clang ASan/UBSan/libFuzzer, Valgrind memcheck, analizę statyczną, kontrole
-duplikatów i dokumentacji oraz macierze
-kompilacji dla targetów i firmware. Stanowiska testowe sprzętu są udokumentowane
-i wykonywane osobno. Pełna
-architektura testów, wymagania, konfiguracja, zasady rozszerzania, procedury
-stanowisk testowych i zarejestrowane wyniki znajdują się w
-[Zależności kompilacji, testy i stanowiska testowe sprzętu](doc/api/pl/03_build_tests.md).
-Szczegóły implementacji skryptu uruchamiającego i bramek jakości znajdziesz w
-[Skryptach obsługi repozytorium JaszczurHAL](doc/api/pl/00_scripts.md).
+Skrypt uruchamia testy jednostkowe na komputerze, w tym testy FreeRTOS POSIX,
+kontrole Clang ASan/UBSan/libFuzzer i Valgrind memcheck oraz analizę statyczną.
+Sprawdza również duplikaty kodu i dokumentację, a także kompiluje bibliotekę
+i firmware w zestawie konfiguracji dla obsługiwanych platform.
 
-## Bezpieczeństwo i SBOM
+Ten skrypt wymaga już zainstalowanego zestawu narzędzi i kompilatorów (standardowe
+paczki, dostępne zarówno dla linuxa jak i windows które można pobrać też samodzielnie).
+JaszczurHAL posiada już gotowy skrypt, który pobiera i instaluje wszystkie niezbędne
+zależności, w wersji zarówno dla windows jak i dla linuxa:
 
-JaszczurHAL utrzymuje lekki rejestr łańcucha dostaw oprogramowania dla
-dołączonych zależności o ściśle określonych wersjach:
+```bash
+./runmefirst.sh
+```
 
-- [SECURITY.md](SECURITY.md) - zgłaszanie i wstępna ocena podatności oraz polityka
-  utrzymania,
-- [doc/pl/security_supply_chain.md](doc/pl/security_supply_chain.md) - generowanie
-  SBOM, kontrole podatności i polityka `security-scan` w CI,
-- [security/third_party.json](security/third_party.json) - utrzymywany ręcznie
-  spis zależności zewnętrznych,
-- [security/sbom.cdx.json](security/sbom.cdx.json) - generowany SBOM w
-  formacie CycloneDX.
+windows:
 
-## Środowisko programistyczne VS Code
+```bash
+runmefirst.ps1
+```
 
-`vscode/` to obsługiwana warstwa integracji z VS Code dla projektów firmware
-korzystających z JaszczurHAL. Projekty wywołują stabilny punkt wejścia:
+Testy na rzeczywistym sprzęcie wykonuje się osobno, zgodnie z instrukcjami
+dla poszczególnych stanowisk.
+
+Wymagania, konfigurację, organizację i zasady rozszerzania testów, procedury
+sprzętowe oraz zapisane wyniki znajdziesz w
+[rozdziale o kompilacji i testach](doc/api/pl/03_build_tests.md).
+Działanie skryptów uruchamiających testy i kontrole opisuje
+[rozdział o skryptach repozytorium](doc/api/pl/00_scripts.md).
+
+<a id="bezpieczeństwo-i-sbom"></a>
+
+## Bezpieczeństwo zależności i narzędzi
+
+Projekt prowadzi wykaz używanych komponentów zewnętrznych i ich ustalonych
+wersji. Zawiera też instrukcje zgłaszania podatności, sprawdzania zależności
+i tworzenia SBOM, czyli zestawienia składników oprogramowania:
+
+- [Zgłaszanie podatności](SECURITY.md) - zasady zgłaszania i oceny podatności
+  oraz utrzymywania projektu.
+- [Bezpieczeństwo zależności i narzędzi](doc/pl/security_supply_chain.md) -
+  tworzenie SBOM, sprawdzanie podatności i zasady działania `security-scan`
+  w CI.
+- [Wykaz komponentów zewnętrznych](security/third_party.json) - lista
+  aktualizowana ręcznie.
+- [SBOM w formacie CycloneDX](security/sbom.cdx.json) - zestawienie generowane
+  na podstawie danych projektu.
+
+<a id="środowisko-programistyczne-vs-code"></a>
+
+## Praca w VS Code
+
+Narzędzia w katalogu `vscode/` pozwalają kompilować i wgrywać firmware oraz
+korzystać z monitora portu szeregowego w VS Code. Projekty wywołują je przez
+stały interfejs poleceń:
 
 ```text
 libraries/JaszczurHAL/vscode/entry/jh-vscode
 libraries/JaszczurHAL/vscode/entry/jh-vscode.cmd
 ```
 
-Punkt wejścia ustala konfigurację projektu oraz wybiera aktywny target i płytkę.
-Korzystając ze wspólnego mechanizmu sterującego, kompiluje projekty firmware
-oparte na CMake,
-wgrywa wynik przez port szeregowy po zweryfikowaniu tożsamości urządzenia
-i obsługuje wgrywanie RP2040 przez BOOTSEL/UF2. Operację programowania STM32
-przekazuje do OpenOCD, a kompilację i programowanie ESP32-S3 - do produkcyjnego
-skryptu ESP-IDF.
-Uruchamia też monitory portu szeregowego pozostające aktywne do zatrzymania oraz
-odświeża IntelliSense na
-podstawie bazy poleceń kompilacji wygenerowanej przez aktywny toolchain.
+Narzędzie odczytuje konfigurację projektu i wybiera aktywną platformę oraz
+płytkę. Przy kompilacji projektów CMake dobiera sposób budowania do wybranej
+platformy. Przed wgraniem przez port szeregowy sprawdza tożsamość urządzenia.
+Na RP2040 obsługuje także tryb BOOTSEL i pliki UF2. Programowanie STM32
+odbywa się przez OpenOCD, a kompilacja i wgrywanie dla ESP32-S3 - przez
+skrypt korzystający z ESP-IDF.
 
-- Interfejs CLI, etykiety zadań, skróty klawiszowe i generator projektów:
-  [vscode/README.pl.md](vscode/README.pl.md)
-- Kompletny model projektu i
-  [dodawanie plików źródłowych projektu](doc/pl/FwProjectWorkflow.md#dodawanie-plików-źródłowych-projektu):
-  [FwProjectWorkflow.md](doc/pl/FwProjectWorkflow.md)
-- Aktualizacje sieciowe dla natywnego RP i ESP32-S3, pierwsze wgranie i
-  granice bezpieczeństwa:
-  [OTAWorkflow.md](doc/pl/OTAWorkflow.md)
-- [Pełna lista skrótów klawiszowych](vscode/README.pl.md#skróty-klawiszowe-vs-code)
+Monitor portu szeregowego pozostaje aktywny do zatrzymania. IntelliSense jest
+odświeżany na podstawie bazy poleceń kompilacji z używanego zestawu narzędzi.
 
-Gdy sam katalog główny repozytorium JaszczurHAL zostanie otwarty w VS Code,
-konfiguracja `.vscode/` przechowywana w repozytorium udostępnia osobny zestaw
-zadań do pracy
-z biblioteką statyczną. Istniejące globalne skróty budują, instalują,
-czyszczą i odświeżają IntelliSense dla jednego profilu targetu i płytki,
-wybranego bezpośrednio ze wspólnego rejestru płytek. Artefakty
-pozostają poniżej `.build/vscode/library/`; szczegóły znajdziesz w
+Szczegółowe instrukcje:
+
+- [Konfiguracja VS Code](vscode/README.pl.md) - polecenia CLI, nazwy zadań,
+  skróty klawiszowe i generator projektów.
+- [Praca z projektem firmware](doc/pl/FwProjectWorkflow.md) - organizacja
+  i konfiguracja projektu, w tym
+  [dodawanie plików źródłowych](doc/pl/FwProjectWorkflow.md#dodawanie-plików-źródłowych-projektu).
+- [Aktualizacje OTA](doc/pl/OTAWorkflow.md) - aktualizacje przez sieć na RP
+  i ESP32-S3, pierwsze wgranie oraz zakres i ograniczenia zabezpieczeń.
+- [Pełna lista skrótów klawiszowych](vscode/README.pl.md#skróty-klawiszowe-vs-code).
+
+Po otwarciu katalogu głównego repozytorium JaszczurHAL w VS Code konfiguracja
+`.vscode/` udostępnia osobne zadania do pracy z biblioteką statyczną. Globalne
+skróty pozwalają ją kompilować i instalować, usuwać pliki kompilacji oraz
+odświeżać IntelliSense dla profilu platformy i płytki wybranego ze wspólnego
+rejestru. Pliki wynikowe trafiają do `.build/vscode/library/`.
+Szczegóły opisano w
 [przewodniku po kompilacji biblioteki](doc/pl/lib_compilation.md#workspace-repozytorium-i-vs-code).
 
 ## Debugowanie w VS Code
 
-Generowane profile Cortex-Debug obsługują RP2040 i RP2350 Arm przez SWD za
-pomocą Raspberry Pi Debug Probe albo Pico z firmware Debug Probe/Picoprobe.
-Projekty STM32G474 używają interfejsu ST-Link wbudowanego w płytkę
-NUCLEO-G474RE. Uruchomienie profilu Run and Debug w VS Code kompiluje i ładuje
-plik ELF w wersji debug za pomocą zarządzanego OpenOCD i GDB z obsługą Arm w
-Windows i Linuksie. Szczegóły okablowania i konfiguracji zawiera dokument
-[Natywna konfiguracja dla Windows](doc/pl/windows_setup.md).
+Generowane profile Cortex-Debug pozwalają debugować RP2040 i RP2350 Arm przez
+SWD. Potrzebna jest sonda Raspberry Pi Debug Probe albo Pico z firmware
+Debug Probe/Picoprobe. Dla STM32G474 używany jest ST-Link wbudowany w płytkę
+NUCLEO-G474RE.
 
-Zarówno w Linuksie, jak i w natywnym środowisku Windows VS Code obsługuje spójny
-proces tworzenia firmware dla targetów uwzględnionych w wydaniu. Dla RP i STM
-dostępne są
-opisane funkcje kompilacji, wgrywania, monitorowania, OTA i debugowania.
+Uruchomienie profilu w widoku Run and Debug kompiluje i wczytuje plik ELF
+w konfiguracji Debug. Narzędzia projektu dobierają OpenOCD i GDB z obsługą
+Arm w Windows i Linuksie. Sposób podłączenia sondy i konfigurację opisuje
+[instrukcja przygotowania środowiska Windows](doc/pl/windows_setup.md).
+
+Praca nad firmware w VS Code jest dostępna zarówno w Linuksie, jak
+i bezpośrednio w Windows. Zakres kompilacji, wgrywania, monitorowania,
+aktualizacji OTA i debugowania zależy od wybranej platformy RP lub STM
+i jest opisany w dokumentacji.
+
 Dla ESP32-S3 dostępne są kompilacja, wgrywanie przez port szeregowy, monitor,
-IntelliSense i OTA surowego obrazu aplikacji, ale bez zarządzanego profilu
-debugowania. Obsługa OTA dla tego targetu nadal wymaga opisanej wyżej walidacji
-sprzętowej
-fazy 3.5.
+IntelliSense i aktualizacja OTA z użyciem pliku BIN aplikacji. Nie ma jednak
+jeszcze profilu debugowania przygotowanego przez narzędzia projektu.
+Weryfikacja sprzętowa OTA (faza 3.5) również nie jest jeszcze zakończona; jej
+zakres opisuje [dokumentacja OTA](doc/pl/OTAWorkflow.md).
 
-Pełna bramka jakości repozytorium działa w Linuksie i obejmuje Valgrind, analizę
-statyczną oraz integracje hosta dostępne tylko na POSIX. Szczegóły konfiguracji,
-weryfikacji i jawne ograniczenia dotyczące wyłącznie Linuksa zawiera dokument
-[Natywna konfiguracja dla Windows](doc/pl/windows_setup.md).
+Pełny zestaw testów i kontroli repozytorium działa w Linuksie. Obejmuje
+Valgrind, analizę statyczną oraz testy integracyjne na komputerze wymagające
+POSIX. Konfigurację, sposób sprawdzenia środowiska i funkcje dostępne
+wyłącznie w Linuksie opisuje
+[instrukcja przygotowania środowiska Windows](doc/pl/windows_setup.md).
 
-## Zarządzane zależności
+<a id="zarządzane-zależności"></a>
 
-Dokładne wersje Pico SDK, ESP-IDF, picotool, PMD CPD, toolchainu RISC-V dla
-RP2350, FreeRTOS, BearSSL, cJSON, LodePNG, TJpgDec, FatFs, Unity, lwIP,
-littlefs, BTstack i sterownika Semtech SX126x są zapisane w
-`third_party/*_version.conf`:
+## Wersje zależności i aktualizacje
+
+Pliki `third_party/*_version.conf` określają używane wersje Pico SDK, ESP-IDF,
+picotool, PMD CPD, zestawu narzędzi RISC-V dla RP2350, FreeRTOS, BearSSL,
+cJSON, LodePNG, TJpgDec, FatFs, Unity, lwIP, littlefs, BTstack i sterownika
+Semtech SX126x.
+
+Do aktualizacji lub sprawdzenia komponentów służą polecenia:
 
 ```bash
 ./third_party/update_components.sh
 ./third_party/update_components.sh --verify-only
 ```
 
-Kompletna polityka komponentów, wraz z listą kontrolną aktualizacji (spis
-bezpieczeństwa, SBOM, kompilacje objęte zmianą i pełna bramka), jest
-udokumentowana w [third_party/README.pl.md](third_party/README.pl.md).
+Pierwsze polecenie aktualizuje komponenty zgodnie z wersjami ustalonymi
+w repozytorium. Drugie sprawdza je bez aktualizacji.
+
+Zasady zarządzania zależnościami opisuje
+[instrukcja komponentów zewnętrznych](third_party/README.pl.md).
+Zawiera również listę czynności przy aktualizacji: uzupełnienie wykazu
+komponentów i SBOM, sprawdzenie kompilacji, na które wpływa zmiana,
+oraz uruchomienie pełnego zestawu testów i kontroli.
 
 ## Dokumentacja
 
-Główna dokumentacja:
+Najważniejsze punkty odniesienia:
 
-- Pełny spis: [table_of_contents.pl.md](doc/table_of_contents.pl.md)
-- Przegląd funkcjonalności: [features.md](doc/pl/features.md)
-- Skrypty obsługi repozytorium i orkiestracja: [00_scripts.md](doc/api/pl/00_scripts.md)
-- Dokumentacja API: [JaszczurHAL_API.md](doc/pl/JaszczurHAL_API.md)
-- Praca z projektem firmware: [FwProjectWorkflow.md](doc/pl/FwProjectWorkflow.md)
-- Natywne aktualizacje OTA: [OTAWorkflow.md](doc/pl/OTAWorkflow.md)
-- Profile targetów i płytek: [boards_profiles_howto.md](doc/pl/boards_profiles_howto.md)
-- Podsumowanie flag kompilacji: [HAL_FLAGS](doc/HAL_FLAGS.txt)
-- Przewodnik po kompilacji biblioteki statycznej: [lib_compilation.md](doc/pl/lib_compilation.md)
-- Obsługa firmware w VS Code: [vscode/README.pl.md](vscode/README.pl.md)
+- [Pełny spis dokumentacji](doc/table_of_contents.pl.md).
+- [Przegląd możliwości](doc/pl/features.md).
+- [Skrypty obsługi repozytorium](doc/api/pl/00_scripts.md).
+- [Dokumentacja API](doc/pl/JaszczurHAL_API.md).
+- [Praca z projektem firmware](doc/pl/FwProjectWorkflow.md).
+- [Aktualizacje OTA](doc/pl/OTAWorkflow.md).
+- [Profile platform i płytek](doc/pl/boards_profiles_howto.md).
+- [Zestawienie flag kompilacji](doc/HAL_FLAGS.txt).
+- [Kompilacja biblioteki statycznej](doc/pl/lib_compilation.md).
+- [Praca z firmware w VS Code](vscode/README.pl.md).
 
 ## Uwagi i podziękowania
 
-- SmartTimers oparte jest na [Nettigo Timers](https://github.com/nettigo/Timers)
-  (forku [garthoff/Timers](https://github.com/garthoff/Timers)).
-- Framework testowy Unity korzysta z forka projektu w wersji wskazanej przez
-  [plik wersji Unity](third_party/unity_version.conf).
-- Wspólny stos wyświetlaczy (`src/hal/display/drivers/`) jest przenośną
-  reimplementacją opartą na HAL. Silnik GFX (`jh_gfx.*`) korzysta
-  z dostosowanych algorytmów renderowania zaczerpniętych z
-  [Adafruit GFX Library](https://github.com/adafruit/Adafruit-GFX-Library),
-  a sterowniki paneli (`ili9341_driver.*`, `st77xx_driver.*`,
-  `ssd1306_driver.*`) korzystają z dostosowanych sekwencji poleceń kontrolerów
-  zaczerpniętych z odpowiadających
-  im bibliotek Adafruit ILI9341 / ST7735-ST7789 / SSD1306 autorstwa Limor
-  Fried (Ladyada) dla Adafruit Industries (BSD-2-Clause). Maszyny stanów
-  i protokoły e-papieru SSD16xx oraz UC81xx oparto na logice sterowników Zephyr
-  (Apache-2.0-Clause). Informacje o pochodzeniu kodu i autorstwie poszczególnych
-  modułów znajdziesz w nagłówkach plików.
-- Dołączone, portowane lub lokalnie zaadaptowane komponenty zewnętrzne:
+- Moduł SmartTimers powstał na podstawie
+  [Nettigo Timers](https://github.com/nettigo/Timers), forka
+  [garthoff/Timers](https://github.com/garthoff/Timers).
+- Testy korzystają z forka Unity utrzymywanego przez projekt. Używaną wersję
+  wskazuje [plik wersji Unity](third_party/unity_version.conf).
+- Współdzielona obsługa wyświetlaczy (`src/hal/display/drivers/`) została
+  zaimplementowana na nowo jako przenośny kod korzystający z HAL. Moduł
+  graficzny GFX (`jh_gfx.*`) wykorzystuje dostosowane algorytmy rysowania z
+  [Adafruit GFX Library](https://github.com/adafruit/Adafruit-GFX-Library).
+  Sterowniki `ili9341_driver.*`, `st77xx_driver.*` i `ssd1306_driver.*`
+  wykorzystują dostosowane sekwencje poleceń z bibliotek Adafruit ILI9341,
+  ST7735-ST7789 i SSD1306 autorstwa Limor Fried (Ladyada) dla Adafruit
+  Industries (BSD-2-Clause). Obsługę protokołów i maszyny stanów
+  wyświetlaczy e-papierowych SSD16xx oraz UC81xx oparto na logice
+  sterowników Zephyr (Apache-2.0-Clause). Informacje o pochodzeniu kodu
+  i autorstwie poszczególnych modułów znajdują się w nagłówkach plików.
+- Dołączone, przeniesione na obsługiwane platformy lub dostosowane lokalnie
+  komponenty zewnętrzne:
   [plik wersji cJSON](third_party/cjson_version.conf),
   [plik wersji LodePNG](third_party/lodepng_version.conf),
   [plik wersji TJpgDec](third_party/jpeg_version.conf),
@@ -370,7 +449,7 @@ Główna dokumentacja:
   [plik wersji littlefs](third_party/littlefs_version.conf),
   [wersja sterownika Semtech SX126x](third_party/sx126x_driver_version.conf),
   [PubSubClient](src/hal/network/mqtt/PubSubClient/),
-  [wspólny silnik WireGuard/lwIP](src/hal/network/wireguard/core/),
+  [współdzielona implementacja WireGuard/lwIP](src/hal/network/wireguard/core/),
   [LiquidCrystal / HD44780](src/hal/display/hd44780/),
   [Brian Varren DACless](src/hal/audio/dacless/),
   [Seeed/Loovee MCP_CAN / MCP2515](src/hal/can/mcp2515/),
@@ -384,4 +463,4 @@ Główna dokumentacja:
   [Adafruit MCP9600](src/hal/temperature/mcp9600/),
   [ArtronShop BH1750](src/hal/sensors/bh1750/),
   [Eric Ayars / JeeLabs / RTClib-style DS3231](src/hal/rtc/ds3231/),
-  [IRsmallDecoder / RC5 decoder attribution](src/hal/input/irsmall_decoder/).
+  [IRsmallDecoder / autorstwo dekodera RC5](src/hal/input/irsmall_decoder/).

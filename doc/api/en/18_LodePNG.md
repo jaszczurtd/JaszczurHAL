@@ -1,18 +1,14 @@
-# LodePNG
+<a id="lodepng"></a>
+
+# PNG - image encoding and decoding
 
 *Also available in [Polish](../pl/18_LodePNG.md).*
 
 > **Part of [JaszczurHAL API Reference](../../en/JaszczurHAL_API.md)**
 
-Covers: managed `LodePNG` enabled by `HAL_ENABLE_PNG` and Base64 PNG helpers
-enabled by `HAL_ENABLE_PNG_AS_BASE64`.
+Encode and decode PNG images with the bundled `LodePNG` library (`HAL_ENABLE_PNG`). `HAL_ENABLE_PNG_AS_BASE64` additionally enables reading Base64-encoded PNG assets.
 
-`LodePNG` is a standalone PNG encoder/decoder fetched into
-`third_party/lodepng` at the commit pinned by
-`third_party/lodepng_version.conf`. Thin integration wrappers in
-`src/hal/codecs/lodepng/` gate the upstream source behind
-`HAL_ENABLE_PNG` and expose the memory-based API through the existing include
-path.
+By default, the API processes images in memory without file operations. LodePNG sources are fetched into `third_party/lodepng` at the commit specified by `third_party/lodepng_version.conf`. Integration code in `src/hal/codecs/lodepng/` compiles them when `HAL_ENABLE_PNG` is enabled and preserves the public header path.
 
 Managed version: `LodePNG` 20260119 from the `jaszczurtd/lodepng` fork.
 
@@ -24,7 +20,9 @@ policy. The managed checkout remains unchanged.
 Author/license: upstream `LodePNG` is authored by Lode Vandevenne and
 distributed under the zlib license.
 
-## Enable
+<a id="enable"></a>
+
+## Enabling the module
 
 Enable the module in `hal_project_config.h` or with a compiler definition:
 
@@ -34,7 +32,7 @@ Enable the module in `hal_project_config.h` or with a compiler definition:
 #define HAL_ENABLE_PNG
 ```
 
-For Base64-encoded PNG assets, enable the helper flag instead:
+For PNG assets stored as Base64, enable this flag instead:
 
 ```c
 #pragma once
@@ -42,41 +40,42 @@ For Base64-encoded PNG assets, enable the helper flag instead:
 #define HAL_ENABLE_PNG_AS_BASE64
 ```
 
-`HAL_ENABLE_PNG_AS_BASE64` propagates both `HAL_ENABLE_CRYPTO` and
-`HAL_ENABLE_PNG`, so the Base64 decoder and LodePNG are compiled together.
+`HAL_ENABLE_PNG_AS_BASE64` automatically enables `HAL_ENABLE_CRYPTO` and `HAL_ENABLE_PNG`, compiling the Base64 decoder and PNG support together.
 
 The source file is part of the shared framework source list, but its contents
 compile to nothing unless `HAL_ENABLE_PNG` is defined. The public header is also
 guarded, so code that uses `lodepng_*` symbols must be compiled with the same
 flag.
 
-## Include
+<a id="include"></a>
 
-Direct include, safe from both C and C++:
+## Including the headers
+
+Include the headers directly from C or C++:
 
 ```c
 #include <hal/codecs/hal_image.h>          // HAL memory/Base64 adapters
 #include <hal/codecs/lodepng/lodepng.h>
 ```
 
-The compatibility utility headers still expose the historical unprefixed
-aliases. New code should use the `hal_image_*` names.
+Compatibility headers retain the historical unprefixed aliases. Use the `hal_image_*` names in new code.
 
-## Embedded Profile
+<a id="embedded-profile"></a>
 
-By default JaszczurHAL keeps the upstream memory-based C API and disables:
+## Embedded-system configuration
+
+The default configuration retains the original memory-based C API but disables:
 
 - `LODEPNG_COMPILE_DISK` - no `FILE` / disk helpers.
 - `LODEPNG_COMPILE_CPP` - no `std::vector` / `std::string` wrapper.
 
-If an application really needs those upstream optional sections, define
-`HAL_LODEPNG_ENABLE_DISK` or `HAL_LODEPNG_ENABLE_CPP` before including
-`hal/codecs/lodepng/lodepng.h`.
+To enable optional file support or the C++ interface, define `HAL_LODEPNG_ENABLE_DISK` or `HAL_LODEPNG_ENABLE_CPP`, respectively, before including `hal/codecs/lodepng/lodepng.h`.
 
-The usual upstream `LODEPNG_NO_COMPILE_*` flags still work for further trimming,
-for example disabling the encoder or decoder in a tightly constrained build.
+LodePNG `LODEPNG_NO_COMPILE_*` flags can reduce the code size further, for example by disabling an unused encoder or decoder.
 
-## API Surface
+<a id="api-surface"></a>
+
+## Available operations
 
 Common memory APIs:
 
@@ -89,13 +88,11 @@ Common memory APIs:
 | Errors | `lodepng_error_text` |
 | Base64 helpers | `hal_image_png_base64_decoded_size`, `hal_image_png_base64_decode_rgba8888`, `hal_image_png_base64_decode_rgb565` |
 
-## Memory Ownership
+## Memory ownership
 
-The simple encode/decode functions allocate output buffers with LodePNG's
-allocator. With the default allocator profile, free returned buffers with
-`free(ptr)`.
+The simple encode and decode functions allocate their output buffers through the LodePNG allocator. With the default configuration, free these buffers with `free(ptr)`.
 
-Rules that matter most:
+Buffer usage rules:
 
 - `lodepng_decode32()` and `lodepng_decode24()` allocate a raw pixel buffer.
 - `lodepng_encode32()` and `lodepng_encode24()` allocate a PNG byte buffer.
@@ -110,7 +107,9 @@ Rules that matter most:
 - Custom allocation can be supplied with upstream `LODEPNG_NO_COMPILE_ALLOCATORS`
   and external `lodepng_malloc`, `lodepng_realloc`, `lodepng_free` definitions.
 
-## Example: Decode To RGB565
+<a id="example-decode-to-rgb565"></a>
+
+## Example: decoding to RGB565
 
 ```c
 #include <hal/codecs/hal_image.h>
@@ -141,7 +140,9 @@ static bool decode_icon_rgb565(const unsigned char *png,
 }
 ```
 
-## Example: Decode Base64 PNG
+<a id="example-decode-base64-png"></a>
+
+## Example: decoding Base64 PNG
 
 ```c
 #include <hal/codecs/hal_image.h>
@@ -177,12 +178,13 @@ static bool decode_base64_icon_rgb565(const char *png_base64,
 }
 ```
 
-## Asset Script: PNG To Base64
+<a id="asset-script-png-to-base64"></a>
 
-Use `scripts/image_to_base64.py` to turn a PNG file into a C string that can be
-embedded in firmware and decoded with `HAL_ENABLE_PNG_AS_BASE64`.
+## Preparing a Base64 PNG asset
 
-Print generated C declaration to the console:
+`scripts/image_to_base64.py` converts a PNG file to a C string declaration. Embed it in firmware and decode it with `HAL_ENABLE_PNG_AS_BASE64` enabled.
+
+Print the C declaration to the console:
 
 ```bash
 ./scripts/image_to_base64.py icon.png
@@ -195,7 +197,7 @@ static const char image[] =
     "...base64...";
 ```
 
-Write generated text to a file:
+Write the declaration to a file:
 
 ```bash
 ./scripts/image_to_base64.py icon.png --output icon_base64.txt
@@ -208,9 +210,11 @@ Write generated text to a file:
 ./scripts/image_to_base64.py icon.png --name kBase64PngImage
 ```
 
-## Example: Base64 PNG To ILI9341
+<a id="example-base64-png-to-ili9341"></a>
 
-`examples/07_display_media` shows the complete display path:
+## Example: displaying Base64 PNG on ILI9341
+
+The complete `examples/07_display_media` example shows how to prepare the data and display the image:
 
 1. `hal_image_png_base64_decoded_size()` calculates the exact decoded PNG byte count.
 2. Base64 text is decoded to an exactly sized PNG work buffer.

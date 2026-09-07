@@ -1,13 +1,22 @@
-# 29 - Gamepad Bluetooth
+<a id="29---gamepad-bluetooth"></a>
 
-Projekt pokazuje trzy publiczne warstwy Bluetooth Classic. Bazowy obraz używa
-niezależnego od stosu adaptera gamepada ze znormalizowanym stanem. Wariant
-`classic-scan` buduje tylko manager i wypisuje skopiowane wyniki inquiry/SDP.
-Wariant `hid-host` łączy się z dowolną wykrytą usługą HID i udostępnia
-skopiowany deskryptor oraz surowe raporty bez założeń o gamepadzie. Wariant
-`ble` dodaje BLE do obrazu gamepada, aby sprawdzić wspólny runtime kontrolera.
+# 29 - Obsługa gamepada i urządzeń HID przez Bluetooth
+
+Przykład odczytuje przyciski, osie i kierunki D-pada z gamepada Bluetooth
+Classic. Zwraca je we wspólnym formacie, bez udostępniania aplikacji typów
+BTstack. Dodatkowe warianty pozwalają wykrywać urządzenia i usługi Classic,
+odczytywać surowe raporty HID albo skanować BLE podczas pracy gamepada.
+
+| Wariant | Działanie |
+|---|---|
+| Podstawowy | Łączy gamepad, odczytuje stan wejść i zapisuje zaakceptowane urządzenie do ponownego połączenia po restarcie. |
+| `classic-scan` | Wykrywa urządzenia Classic i ich usługi za pomocą inquiry oraz SDP. |
+| `hid-host` | Łączy się z wykrytą usługą HID, kopiuje deskryptor i odbiera surowe raporty, bez interpretowania ich jako stanu gamepada. |
+| `ble` | Dodaje pasywne skanowanie BLE do obsługi gamepada Classic na wspólnym kontrolerze CYW43. |
 
 ## Kompilacja i uruchomienie
+
+Uruchom z głównego katalogu repozytorium:
 
 ```bash
 ./scripts/examples_dispatcher.py build --target rp2040 \
@@ -18,14 +27,11 @@ skopiowany deskryptor oraz surowe raporty bez założeń o gamepadzie. Wariant
   --example 29_bluetooth_gamepad
 ```
 
-Domyślne płytki to RP2040 `picow`, RP2350 ARM `pico2w` i STM32G474
-`nucleo-g474re-pim730`. RP2350 RISC-V nie jest obsługiwany, ponieważ transport
-Bluetooth CYW43 nie jest dla niego włączony. Implementacja Bluedroid
-oryginalnego ESP32 ma osobne stanowisko do testowania kompilacji i linkowania w
-`tests/fixtures/esp32_gamepad`; nie przeszła jeszcze sprzętowego testu
-łączności radiowej.
+Domyślne płytki to `picow` dla RP2040, `pico2w` dla RP2350 ARM oraz
+`nucleo-g474re-pim730` dla STM32G474. RP2350 RISC-V nie jest obsługiwany,
+ponieważ nie włączono dla niego komunikacji Bluetooth przez CYW43.
 
-Izolowane warstwy publiczne albo wariant BLE + Classic można zbudować tak:
+Wskazany wariant można zbudować osobno:
 
 ```bash
 vscode/entry/jh-vscode build \
@@ -39,71 +45,96 @@ vscode/entry/jh-vscode build \
   --target rp2040 --board picow --variant ble
 ```
 
-Konsola szeregowa wariantu `classic-scan` nadaje każdemu wykrytemu adresowi
-ulotny indeks i nie wypisuje samego adresu. Po uruchomieniu wykonuje jedno
-inquiry, a po jego zakończeniu kolejno obsługuje oczekujące zapytania SDP.
-Dostępne polecenia:
+Implementacja oparta na Bluedroid dla oryginalnego ESP32 ma osobny projekt
+sprawdzający kompilację i linkowanie: `tests/fixtures/esp32_gamepad`.
+Nie potwierdzono jeszcze jej działania radiowego na sprzęcie. Wspólny
+skrypt kompilacji przykładów nie obsługuje platform ESP.
 
-- `SCAN` i `STOP` sterują dziesięciosekundowym oknem inquiry;
-- `SDP n` powtarza wykrywanie usług peera `n`;
-- `PAIR n`, a następnie `AUTHORIZE` albo `REJECT`, realizuje jawną lokalną
-  decyzję o parowaniu;
-- `SAVE n` publikuje uwierzytelnionego peera po walidacji właściwej dla
-  aplikacji, a `FORGET n` go usuwa;
-- `INFO` wypisuje stan, pairing, liczniki ograniczonej kolejki i liczbę
-  peerów.
+## Parowanie gamepada
 
-Przykład otwiera manager bez trwałego providera, dlatego zapisane urządzenia
-pozostają ważne tylko do restartu. Aplikacja produkcyjna musi zastąpić
-szeregowe polecenie `AUTHORIZE` zaufanym lokalnym gestem i wywoływać `SAVE`
-dopiero po zweryfikowaniu peera przez swój profil.
+Sprzętowe testy całego przykładu wykonano dla 8BitDo Zero 2, model 80EH,
+w trybie Android D-input, połączonego z `rp2350-arm:pico2w`. Pozostałe
+modele, tryby i płytki wymagają osobnych testów.
 
-Przy pierwszym uruchomieniu włącz sprzętowo zweryfikowany 8BitDo Zero 2 model
-80EH w trybie Android D-input przez `B+Start`, a następnie przytrzymaj `Select`,
-aż dioda parowania zacznie migać. Przykład otwiera okno wykrywania o ograniczonym
-czasie i zatwierdza oczekujące żądanie Just Works albo starszy PIN `0000`. Jeśli
-okno wygaśnie bez wybrania urządzenia, przykład otwiera nowe. Po zapisaniu bondu
-używaj do reconnectu zwykłego włączenia przyciskiem `Start`; nie przełączaj pada
-ponownie w tryb parowania. Provider przekazany do `hal_gamepad_open_ex()`
-zachowuje zaakceptowany adres po restarcie; zgodnościowy provider gamepada jest
-jednoslotowym adapterem indeksowanego managera Classic. Pełną bramkę sprzętową
-gamepada zaliczyła wyłącznie ta kombinacja kontrolera, trybu i hosta
-`rp2350-arm:pico2w`; inne kombinacje wymagają osobnej walidacji.
+Przy pierwszym uruchomieniu włącz gamepad kombinacją `B+Start`, a następnie
+przytrzymaj `Select`, aż dioda parowania zacznie migać. Przykład otwiera
+ograniczone czasowo okno wykrywania i automatycznie zatwierdza oczekujące
+żądanie Just Works albo starszego parowania z PIN-em `0000`. Jeśli nie
+wybierze urządzenia przed upływem tego czasu, otwiera kolejne okno.
+**Automatyczna zgoda jest ustawieniem przykładu, a nie gotową polityką
+bezpiecznego parowania dla produktu.**
 
-Ogólny wariant HID celowo odrzuca parowanie, dopóki
-`localPairingConsent()` nie zostanie połączone z zaufanym lokalnym gestem. Po
-lokalnej autoryzacji, skopiowaniu deskryptora i otrzymaniu raportu Input prosi
-manager Classic o zapis peera. Przykład jest więc domyślnie bezpieczny, a
-jednocześnie pokazuje pełną granicę polityki.
+Po zapisaniu urządzenia włączaj gamepad zwykłym naciśnięciem `Start`.
+Nie uruchamiaj ponownie trybu parowania, gdy chcesz jedynie wznowić połączenie.
+Funkcje zapisu przekazane do `hal_gamepad_open_ex()` zachowują zaakceptowane
+urządzenie w pamięci nieulotnej. Interfejs zgodności gamepada udostępnia
+jedno miejsce na taki zapis, korzystając z indeksowanej listy urządzeń
+Bluetooth Classic. Klucz KV `0xd001` zachowuje zgodność z zapisem używanym
+przez obraz doomConsole do testów regresji na sprzęcie.
+
+## Wykrywanie urządzeń i usług
+
+Wariant `classic-scan` po starcie wykonuje dziesięciosekundowe wyszukiwanie
+inquiry. Po jego zakończeniu kolejno odpytuje urządzenia o usługi przez SDP.
+Każdemu wykrytemu urządzeniu nadaje tymczasowy indeks `n`; nie wypisuje
+adresów Bluetooth.
+
+| Polecenie | Działanie |
+|---|---|
+| `SCAN`, `STOP` | Rozpoczynają lub kończą okno wyszukiwania. |
+| `SDP n` | Ponawia wykrywanie usług urządzenia `n`. |
+| `PAIR n` | Rozpoczyna parowanie z urządzeniem `n`. |
+| `AUTHORIZE`, `REJECT` | Zatwierdzają lub odrzucają oczekujące żądanie parowania. |
+| `SAVE n`, `FORGET n` | Zlecają zapis lub usunięcie urządzenia `n`. |
+| `INFO` | Wyświetla stan, informacje o parowaniu, liczniki kolejki i liczbę urządzeń. |
+
+Ten wariant nie podłącza funkcji trwałego zapisu: zapisane urządzenia są
+pamiętane tylko do restartu. Polecenie `AUTHORIZE` służy do ręcznych testów.
+W docelowej aplikacji powiąż zgodę z zaufaną lokalną czynnością użytkownika,
+a zapis urządzenia dopuść dopiero po sprawdzeniu go zgodnie z wymaganiami
+profilu. Samo wykrycie urządzenia ani wywołanie `SAVE` nie zastępuje tej oceny.
+
+## Odbiór surowych raportów HID
+
+Wariant `hid-host` wybiera wykrytą usługę HID i udostępnia aplikacji kopię
+deskryptora oraz surowe raporty. Żądanie parowania pozostaje do decyzji
+operatora: konsola udostępnia `AUTHORIZE` i `REJECT`. Dodatkowe polecenia to
+`SCAN` i `INFO`. Samo wykrycie usługi nie zatwierdza parowania; w tej implementacji zgodę
+wydaje się poleceniem konsoli.
+
+Przykład prosi o zapis urządzenia dopiero po autoryzacji, skopiowaniu
+deskryptora i otrzymaniu raportu Input. Nie konfiguruje trwałego zapisu.
+Przed wykorzystaniem w produkcie zastąp testową autoryzację z konsoli
+zaufanym mechanizmem zgody i określ, jakie deskryptory oraz raporty aplikacja
+może zaakceptować.
 
 ## Model stanu wejścia
 
-`hal_gamepad_snapshot_next()` zwraca kolejne zmiany wejść bez udostępniania typów
-BTstack. Bit przycisku 0 oznacza HID Button 1, bit 1 oznacza HID Button 2 itd.
-Osie zgłaszane przez kontroler używają indeksów `HAL_GAMEPAD_AXIS_*` i są
-normalizowane do zakresu `-32767..32767`. D-pad jest maską kierunków
-`HAL_GAMEPAD_DPAD_*`.
+`hal_gamepad_snapshot_next()` zwraca kolejne zmiany stanu wejść. Bit 0
+przycisków oznacza HID Button 1, bit 1 oznacza HID Button 2 itd. Osie używają
+indeksów `HAL_GAMEPAD_AXIS_*` i zakresu `-32767..32767`. D-pad jest maską
+kierunków `HAL_GAMEPAD_DPAD_*`.
 
-Kolejka ma stałą pojemność. `HAL_EOVERFLOW` sygnalizuje utratę stanów
-pośrednich; kod wywołujący kontynuuje odbiór, aby otrzymać najnowszy zachowany
-stan. Rekordy stanu generowane przy połączeniu i rozłączeniu ustawiają lub
-zerują wszystkie wejścia, więc aplikacja nie zachowa wciśniętego przycisku po
-utracie połączenia.
+Kolejka ma stałą pojemność. `HAL_EOVERFLOW` oznacza utratę stanów pośrednich;
+aplikacja powinna kontynuować odczyt, aby dotrzeć do najnowszego zachowanego
+stanu. Rekordy połączenia i rozłączenia określają stan wszystkich wejść,
+w tym zerują go po utracie połączenia. Dzięki temu aplikacja nie pozostawia
+przycisku w stanie wciśniętym po odłączeniu gamepada.
 
-Przykład bazowy pokazuje inicjalizację po uruchomieniu planisty, parowanie,
-autoryzację, ponowne łączenie, diagnostykę stanów, obsługę przepełnienia oraz
-opróżnianie kolejki stanów. Wariant `ble` dodaje pasywny Observer BLE do profilu
-gamepada Classic. Podczas startu zwalnia i ponownie uzyskuje każdy profil,
-podczas gdy drugi utrzymuje wspólny host CYW43/BTstack. Polecenia `INFO`,
-`BLE_START`, `BLE_STOP` i `DISCONNECT` sprawdzają równoczesne skanowanie oraz
-ponowne łączenie HID. Okresowa diagnostyka podaje użycie stosu, maksymalne
-zajęcie i błędy alokacji pul HCI/L2CAP/link-key/HID, ruch transportu HCI oraz
-trafienia limitu drain. Buildy RP rezerwują zmierzony stos core 0 o rozmiarze
-4 KiB dla tej rozbudowanej ścieżki diagnostycznej. Wariant używa klucza KV
-`0xd001`, więc
-jego bond gamepada pozostaje zgodny z obrazem regresji sprzętowej doomConsole.
-Nie ogłasza usługi BLE.
+Inicjalizacja przy włączonym FreeRTOS następuje po uruchomieniu schedulera.
+Przykład pokazuje parowanie, autoryzację, ponowne łączenie, odbieranie zmian
+stanu oraz obsługę przepełnienia kolejki.
 
-Implementację Classic/HID dla oryginalnego ESP32 obejmuje osobny test
-kompilacji i linkowania ESP-IDF; dispatcher natywnych przykładów nie obsługuje
-jeszcze targetów ESP.
+## Równoczesna obsługa BLE i Classic
+
+Wariant `ble` skanuje pasywnie jako BLE Observer; nie ogłasza usługi BLE.
+Podczas startu zamyka i ponownie otwiera każdy profil, gdy drugi nadal
+korzysta ze wspólnego kontrolera CYW43 i stosu BTstack. Polecenia `INFO`,
+`BLE_START`, `BLE_STOP` oraz `DISCONNECT` służą do sprawdzenia skanowania
+BLE podczas pracy gamepada i ponownego łączenia HID.
+
+Diagnostyka podaje użycie stosu, maksymalne wykorzystanie pul
+HCI/L2CAP/link-key/HID, nieudane przydziały pamięci i ruch HCI. Liczy też
+przypadki osiągnięcia limitu liczby zdarzeń obsługiwanych w jednym przebiegu.
+Konfiguracje RP rezerwują 4 KiB stosu rdzenia 0, zgodnie z pomiarami dla
+rozbudowanej diagnostyki tego przykładu.

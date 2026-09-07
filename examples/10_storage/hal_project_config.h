@@ -6,8 +6,8 @@
 
 #define HAL_EEPROM_TYPE EEPROM_TYPE_FLASH
 
-/* Formatting is destructive and therefore requires an explicit project opt-in.
- */
+/* Formatting erases the LittleFS partition. Enable it only when data loss is
+ * acceptable. */
 #ifndef EXAMPLE_STORAGE_ALLOW_LITTLEFS_FORMAT
 #define EXAMPLE_STORAGE_ALLOW_LITTLEFS_FORMAT 0
 #endif

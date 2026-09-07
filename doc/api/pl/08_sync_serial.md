@@ -4,7 +4,11 @@
 
 > **Część [Dokumentacji API JaszczurHAL](../../pl/JaszczurHAL_API.md)**
 
-## `hal_sync` - mutex
+<a id="hal_sync---mutex"></a>
+
+## `hal_sync` - muteksy i sekcje krytyczne
+
+Synchronizacja dostępu do współdzielonych zasobów za pomocą muteksów oraz krótkich sekcji krytycznych. Wybór mechanizmu zależy od tego, czy kod działa w zadaniu, na innym rdzeniu, czy w obsłudze przerwania.
 
 ```c
 #include <hal/system/hal_sync.h>
@@ -18,14 +22,14 @@ void        hal_mutex_unlock(hal_mutex_t mutex);
 void        hal_mutex_destroy(hal_mutex_t mutex);
 ```
 
-- **impl/rp2040:** `mutex_t` z Pico SDK w zwykłych buildach RP2040 albo mutex
-  FreeRTOS (`xSemaphoreCreateMutex`) w buildach
+- **impl/rp2040:** `mutex_t` z Pico SDK w zwykłych konfiguracjach RP2040 albo muteks
+  FreeRTOS (`xSemaphoreCreateMutex`) w konfiguracjach
   `HAL_ENABLE_FREERTOS + __FREERTOS`. Oba warianty są nierekurencyjne
   i synchronizują zadania działające na rdzeniach 0 i 1.
-- **impl/stm32g474:** atomowy spinlock dla jednego rdzenia w buildach bez
-  FreeRTOS albo mutex FreeRTOS (`xSemaphoreCreateMutex`) w buildach
+- **impl/stm32g474:** atomowy spinlock dla jednego rdzenia w konfiguracjach bez
+  FreeRTOS albo muteks FreeRTOS (`xSemaphoreCreateMutex`) w konfiguracjach
   `HAL_ENABLE_FREERTOS`. Oba warianty są nierekurencyjne.
-- **impl/esp32:** mutex FreeRTOS z ESP-IDF (`xSemaphoreCreateMutex`), nierekurencyjny
+- **impl/esp32:** muteks FreeRTOS z ESP-IDF (`xSemaphoreCreateMutex`), nierekurencyjny
   i wyłącznie w kontekście zadania.
 - **impl/.mock:** `std::mutex`.
 - **Uwaga o FreeRTOS:** na RP2040/RP2350 i STM32G474 implementacja
@@ -33,14 +37,16 @@ void        hal_mutex_destroy(hal_mutex_t mutex);
   ustaloną w projekcie wersję kernela. Na ESP32-S3 używa schedulera
   dostarczanego przez wersję ESP-IDF określoną w zależnościach projektu.
   `hal_mutex_*` można wywoływać wyłącznie z kontekstu zadania; nie jest to API dla ISR.
-  Mutexy singletonów i magistral korzystają z wewnętrznego, atomowego mechanizmu
+  Muteksy singletonów i magistral korzystają z wewnętrznego, atomowego mechanizmu
   jednokrotnego tworzenia, jeśli nadal potrzebny jest defensywny fallback z
   inicjalizacją przy pierwszym użyciu.
   `hal_mutex_try_lock()` nigdy nie czeka. Mogą go używać procedury obsługi
   przerwań w trybie bare metal; backendy FreeRTOS zwracają `false`, gdy funkcja
   zostanie wywołana z kontekstu przerwania.
 
-### Starsze makra mutexów (`tools.h`)
+<a id="starsze-makra-mutexów-toolsh"></a>
+
+### Starsze makra muteksów (`tools.h`)
 
 ```c
 m_mutex_def(name)            // static hal_mutex_t name = NULL
@@ -58,9 +64,9 @@ void hal_critical_section_exit(void);   // przywróć poprzedni stan przerwań
 
 - **impl/rp2040:** bezpieczne przy zagnieżdżaniu i osobne dla każdego rdzenia
   `save_and_disable_interrupts()` / `restore_interrupts()` z Pico SDK, także
-  w buildach FreeRTOS.
+  w konfiguracjach FreeRTOS.
 - **impl/stm32g474:** bezpieczna przy zagnieżdżaniu pełna maska przerwań PRIMASK, łącznie z
-  buildami FreeRTOS.
+  konfiguracjami FreeRTOS.
 - **impl/esp32:** bezpieczna przy zagnieżdżaniu sekcja krytyczna `portMUX_TYPE`
   z ESP-IDF, wspólna dla obu rdzeni i ze śledzeniem głębokości osobno dla
   każdego z nich.
@@ -69,7 +75,7 @@ void hal_critical_section_exit(void);   // przywróć poprzedni stan przerwań
 > **Uwaga:** Ten mechanizm bezpośrednio maskuje przerwania i jest przeznaczony
 > do krótkich sekcji wrażliwych na czas lub współdzielonych z ISR. Na ESP32-S3
 > wspólny `portMUX` dodatkowo serializuje oba rdzenie, natomiast RP2040 maskuje
-> przerwania tylko na rdzeniu wywołującym. Nie jest to blokada planisty
+> przerwania tylko na rdzeniu wywołującym. Nie jest to blokada schedulera
 > FreeRTOS; do wzajemnego wykluczania zadań użyj `hal_mutex_t`.
 
 ### Przykłady
@@ -128,7 +134,11 @@ bool consume_alarm_flag(void) {
 
 ---
 
-## `hal_usb` - cykl życia urządzenia USB i CDC
+<a id="hal_usb---cykl-życia-urządzenia-usb-i-cdc"></a>
+
+## `hal_usb` - urządzenie USB i port CDC
+
+Uruchamianie i obsługa urządzenia USB, w tym portu szeregowego CDC na RP2040/RP2350. Dostępność pozostałych funkcji zależy od platformy.
 
 ```c
 #include <hal/usb/hal_usb.h>
@@ -151,7 +161,7 @@ hal_status_t hal_usb_set_bootloader_reset_hook(
 ```
 
 Natywny backend RP jako jedyny zarządza TinyUSB. Udostępnia deskryptory CDC i numer
-seryjny urządzenia. Obsługa na pierwszym planie jest chroniona mutexem, a praca w tle
+seryjny urządzenia. Obsługa na pierwszym planie jest chroniona muteksem, a praca w tle
 odbywa się przez IRQ lub timer o niskim priorytecie. Backend ogranicza oczekiwanie
 spowodowane zapełnieniem bufora TX i obsługuje reset do BOOTSEL wyzwalany sygnałem DTR
 przy 1200 bps. `hal_usb_init()` udostępnia w runtime informację, czy płytka obsługuje USB.
@@ -169,7 +179,11 @@ korzysta z opisanego poniżej VFS USB Serial/JTAG skonfigurowanego podczas start
 
 ---
 
-## `hal_serial` - wyjście szeregowe i debugowanie
+<a id="hal_serial---wyjście-szeregowe-i-debugowanie"></a>
+
+## `hal_serial` - komunikacja szeregowa i logowanie
+
+Wysyłanie komunikatów tekstowych i diagnostycznych przez port szeregowy. Moduł zapewnia formatowanie, synchronizację nadawania oraz odroczoną obsługę komunikatów zgłoszonych z przerwań.
 
 ```c
 #include <hal/serial/hal_serial.h>
@@ -216,35 +230,25 @@ void hal_debug_loop(void);  // opróżnij rekordy debug odroczone z ISR (wywołu
 
 ### Formatowanie debugowania w kontekście zadania
 
-W kontekście zadania `hal_deb()`, `hal_derr()` oraz ścieżka pełnego komunikatu
-`hal_derr_limited()` nie budują już całej sformatowanej linii logu w buforze
-o stałym rozmiarze `HAL_DEBUG_BUF_SIZE`. Wspólna implementacja wyjścia
-szeregowego i debugowania przesyła dane strumieniowo bezpośrednio do chronionej
-mutexem funkcji zapisującej w transporcie:
+W kontekście zadania `hal_deb()`, `hal_derr()` i pełne komunikaty `hal_derr_limited()` są formatowane strumieniowo. Nie wymagają bufora `HAL_DEBUG_BUF_SIZE` mieszczącego cały wiersz: fragmenty komunikatu trafiają bezpośrednio do funkcji zapisu transportu chronionej muteksem.
 
-- stałe fragmenty tekstu i dane `%s` są emitowane w częściach bez bufora
-  roboczego dla całej linii
-- konwersje liczbowe, zmiennoprzecinkowe i wskaźnikowe używają małego lokalnego bufora;
-  jeśli pojedynczy wynik się w nim nie mieści, tymczasowo używany jest bufor o dokładnie
-  wymaganym rozmiarze
-- prefiksy (`hal_deb_set_prefix()`, `ERROR!`, znaczniki czasu i tagi źródła limitu
-  szybkości) są emitowane jako oddzielne fragmenty strumienia pod tym samym mutexem TX,
-  więc logiczna linia logu nadal nie może przeplatać się z danymi od innego
-  nadawcy korzystającego z wyjścia szeregowego
+Stałe fragmenty tekstu i argumenty `%s` są wysyłane partiami, bez bufora mieszczącego cały wiersz. Konwersje liczb całkowitych, wartości zmiennoprzecinkowych i wskaźników korzystają z małego bufora lokalnego; gdy wynik się w nim nie mieści, tymczasowo przydzielany jest bufor o dokładnie wymaganym rozmiarze. Prefiksy - ustawione przez `hal_deb_set_prefix()`, znacznik `ERROR!`, czas i identyfikator źródła ogranicznika szybkości - są wysyłane jako osobne fragmenty pod tą samą blokadą TX. Inny nadawca korzystający z tego wyjścia szeregowego nie może wstawić danych w środek logicznego wiersza.
 
 `HAL_DEBUG_BUF_SIZE` nie ogranicza już długości logu zapisywanego z zadania.
-Parametr pozostaje dostępny dla zgodności wstecznej z helperami przechwytywania
+Parametr pozostaje dostępny dla zgodności wstecznej z funkcjami przechwytywania
 i odbioru danych w mocku.
 Rekordy odroczone z ISR są nadal celowo ograniczone przez `HAL_DEBUG_ISR_TEXT_MAX`,
 ponieważ ścieżka ISR nie może alokować, blokować ani korzystać z transportu
 szeregowego.
 
-### Logowanie debug odroczone z ISR
+<a id="logowanie-debug-odroczone-z-isr"></a>
+
+### Odroczone logowanie z przerwań:
 
 `hal_deb()`, `hal_derr()` i `hal_derr_limited()` można teraz wywoływać z
 kontekstu przerwania, ale mimo to **należy tego unikać**. Funkcje wykrywają ISR
 przez `hal_in_isr()`. W kodzie wykonywanym bezpośrednio w przerwaniu **nie**
-przejmują mutexu, **nie** przeprowadzają inicjalizacji przy pierwszym użyciu,
+przejmują muteksu, **nie** przeprowadzają inicjalizacji przy pierwszym użyciu,
 **nie** wywołują hooka znacznika czasu, **nie** przeszukują tabeli limitera
 szybkości i **nie** wykonują operacji wejścia/wyjścia UART.
 
@@ -257,7 +261,7 @@ umieszczany w tekście dodawanym do kolejki, ponieważ w ISR globalny limiter
 jest pomijany.
 
 `hal_debug_loop()` opróżnia pierścień z kontekstu zadania i emituje każdy
-rekord przez zwykłą, chronioną mutexem ścieżkę szeregową. Każda opróżniona linia jest
+rekord przez zwykłą, chronioną muteksem ścieżkę szeregową. Każda opróżniona linia jest
 opatrzona adnotacją `[ISR ts=<micros>]` (oryginalny czas zdarzenia, nie "teraz") i
 respektuje bieżący `hal_deb_set_prefix()` dla rekordów debug oraz standardowy znacznik
 `ERROR! ` dla rekordów błędów. Gdy producent przepełni pierścień, zwiększa wewnętrzny
@@ -274,9 +278,9 @@ ani `hal_derr()`. Przy wysyłaniu danych funkcja przechodzi tę samą inicjaliza
 przy pierwszym użyciu co `hal_deb()`. Ścieżki szybkiego wyjścia w ISR i po
 wyciszeniu opierają się natomiast wyłącznie na statycznych zmiennych
 wyzerowanych podczas startu. Wywołanie z ISR nie wykonuje żadnej operacji, dzięki czemu nie
-może ponownie wejść w opróżnianie kolejki chronione mutexem UART.
+może ponownie wejść w opróżnianie kolejki chronione muteksem UART.
 
-**Pomocnicy introspekcji pierścienia tylko dla mocka** (zadeklarowane w `hal_mock.h`):
+Funkcje do sprawdzania bufora pierścieniowego w testach mock są zadeklarowane w `hal_mock.h`:
 
 ```c
 size_t   hal_mock_debug_isr_used_slots(void);            // oczekujące rekordy
@@ -287,15 +291,17 @@ void     hal_mock_debug_isr_set_test_capacity(size_t);    // przełącz na mały
 void     hal_mock_debug_isr_restore_default_ring(void);   // przywróć pierścień produkcyjny
 ```
 
-### Leniwa inicjalizacja
+<a id="leniwa-inicjalizacja"></a>
+
+### Inicjalizacja przy pierwszym użyciu:
 
 `hal_deb()` i `hal_derr()` inicjalizują się przy pierwszym użyciu. Jeśli przed
 pierwszym komunikatem debug nie wywołano `hal_debug_init()`, funkcja zostanie
 uruchomiona automatycznie z `HAL_DEBUG_DEFAULT_BAUD` (domyślnie 9600, z
 możliwością nadpisania przez `-D`). Na RP2040/RP2350, STM32G474, ESP32-S3
-i w implementacji testowej zarówno inicjalizacja, jak i udostępnienie mutexu
+i w implementacji testowej zarówno inicjalizacja, jak i udostępnienie muteksu
 singletonu są chronione atomowo. Dwa zadania lub rdzenie nie zresetują więc
-równocześnie stanu debug ani nie utworzą konkurencyjnych instancji mutexu,
+równocześnie stanu debug ani nie utworzą konkurencyjnych instancji muteksu,
 z których jedna zostałaby porzucona. Jawne wywołanie `hal_debug_init_default()` nie jest już
 obowiązkowe.
 
@@ -303,9 +309,11 @@ obowiązkowe.
 konfiguracja limitu częstotliwości jest stosowana osobno dla każdego znacznika
 źródła błędu (`source`), aby błędy z różnych modułów nie tłumiły się wzajemnie.
 
-### Serializacja TX (R1.8)
+<a id="serializacja-tx-r18"></a>
 
-`hal_serial_print()` i `hal_serial_println()` przejmują wspólny, globalny mutex
+### Wspólna blokada nadawania (R1.8):
+
+`hal_serial_print()` i `hal_serial_println()` przejmują wspólny, globalny muteks
 TX na czas zapisu do konsoli debug. Port RP wybrany podczas linkowania zapisuje
 przez CDC modułu `hal_usb`, a ESP32-S3, STM32 i implementacja testowa korzystają
 z odpowiednich dla siebie transportów. Dzięki temu dane ze wszystkich źródeł
@@ -316,28 +324,27 @@ trafiających do tego samego łącza są wysyłane kolejno. Dotyczy to funkcji d
 Bez tej blokady `hal_deb` uruchomione na rdzeniu 1 RP2040 mogłoby wstawić
 swoje bajty w środek odpowiedzi sesji wysyłanej przez rdzeń 0. Utrata choćby
 jednego bajtu CDC naruszałaby wtedy CRC ramki `$SC,...*<crc>` i zmuszała hosta
-do ponowienia polecenia. Mutexy poszczególnych funkcji
+do ponowienia polecenia. Muteksy poszczególnych funkcji
 (`s_deb_mutex`, `s_derr_mutex`) serializują stan funkcji debug, ale same nie
 chronią transportu przed jednoczesnym zapisem z innych miejsc.
 
-Mutex TX jest tworzony przez ten sam atomowy mechanizm jednokrotnej
+Muteks TX jest tworzony przez ten sam atomowy mechanizm jednokrotnej
 inicjalizacji co blokady innych singletonów. Jeśli `hal_debug_init()` zostanie
-wywołane jawnie, mutex powstaje już podczas tej inicjalizacji. Jest więc
+wywołane jawnie, muteks powstaje już podczas tej inicjalizacji. Jest więc
 dostępny także dla komunikatów wysyłanych na bardzo wczesnym etapie rozruchu.
 Blokada TX jest zawsze przejmowana **wewnątrz** `s_deb_mutex`, `s_derr_mutex`
-lub `s_rl_mutex`, nigdy w odwrotnej kolejności. Dzięki temu deadlock jest
-niemożliwy.
+lub `s_rl_mutex`, nigdy w odwrotnej kolejności. Taka kolejność zapobiega zakleszczeniu wynikającemu z przejmowania tych blokad w odwrotnej kolejności.
 
-W backendach RP USB-CDC okres utrzymywania mutexu może dodatkowo objąć
+W backendach RP USB-CDC okres utrzymywania muteksu może dodatkowo objąć
 `hal_usb_cdc_flush()` po każdym `hal_serial_print()` /
 `hal_serial_println()`. Jest to domyślnie wyłączone i można to zmienić w runtime
 za pomocą `hal_serial_set_flush(bool enabled)`. Pętla zapisu RP2040
 samodzielnie uruchamia obsługę FIFO CDC, dlatego transmisja krótkich pakietów
 rozpoczyna się także bez tej opcji. Dodatkowy `flush` jest przeznaczony dla
-aplikacji, które chcą jeszcze raz odpytać transport przed zwolnieniem mutexu TX.
+aplikacji, które chcą jeszcze raz odpytać transport przed zwolnieniem muteksu TX.
 
 Ustawienie `hal_serial_set_flush(false)` pozostawia backend RP w trybie
-domyślnym. Dodatkowe odpytywanie i `flush` są wtedy pomijane, ale mutex TX
+domyślnym. Dodatkowe odpytywanie i `flush` są wtedy pomijane, ale muteks TX
 nadal chroni zapis. Nie wyłącza to ograniczonej liczby ponowień w pętli
 zapisu, gdy FIFO CDC jest pełne. Na ESP32-S3 włączenie tej opcji wywołuje
 `fsync(stdout)` dla konsoli VFS skonfigurowanej podczas startu. Na STM32G474
@@ -346,30 +353,24 @@ to przydatne przed zmianą zegara peryferiów przez STOP lub przed wyłączeniem
 konsoli przez aplikację. Implementacja testowa przyjmuje to ustawienie, ale
 nie symuluje zależności czasowych platformy docelowej.
 
-### Wspólna implementacja i porty transportowe wybierane podczas linkowania
+<a id="wspólna-implementacja-i-porty-transportowe-wybierane-podczas-linkowania"></a>
 
-Cała wspólna implementacja wyjścia szeregowego i debugowania znajduje się
-w `src/hal/serial/hal_serial.cpp`. Obejmuje publiczne funkcje obu API,
-formatowanie strumieniowe, prefiksy, hooki znacznika czasu, stan wyciszenia,
-sloty limitu częstotliwości, pierścień SPSC dla ISR, kopiowanie komunikatów do
-konsoli sieciowej, inicjalizację przy pierwszym użyciu oraz wszystkie wspólne
-mutexy. Wewnętrzny interfejs `jh_serial_port.h` jest wybierany podczas
-linkowania. Celowo udostępnia tylko operacje transportowe: uruchamianie
-i konfigurację, oznaczanie końca logicznego komunikatu, zapis i odczyt bajtu
-oraz właściwe dla platformy zakończenie linii i `flush`.
+### Wspólna implementacja i obsługa poszczególnych platform:
 
-Porty produkcyjne są celowo niewielkie:
+Plik `src/hal/serial/hal_serial.cpp` zawiera wspólną implementację wyjścia szeregowego i diagnostyki: publiczne funkcje API, formatowanie strumieniowe, prefiksy, funkcje dostarczające znacznik czasu, wyciszanie, ograniczanie częstotliwości komunikatów, pierścień SPSC dla ISR i przekazywanie logów do konsoli sieciowej. Odpowiada także za inicjalizację przy pierwszym użyciu i wspólne muteksy. Wybierany podczas linkowania interfejs `jh_serial_port.h` obsługuje wyłącznie transport: uruchomienie i konfigurację, granice logicznych komunikatów, zapis i odczyt bajtów oraz właściwe dla platformy zakończenia wierszy i `flush`.
+
+Obsługa portu na poszczególnych platformach:
 
 - `impl/rp2040/hal_serial.cpp` obsługuje uruchamianie USB CDC, TX/RX oraz
   opcjonalny `flush`;
 - `impl/esp32/hal_serial.cpp` ponownie wykorzystuje konsolę VFS USB Serial/JTAG
   skonfigurowaną podczas startu ESP-IDF. Korzysta z oficjalnego, buforowanego
   `usb_serial_jtag_driver`. Jeśli go brakuje, instaluje jedną instancję
-  drivera i nigdy nie rejestruje drugiego właściciela VFS. Argument `baud`
+  sterownika i nigdy nie rejestruje drugiego właściciela VFS. Argument `baud`
   ma znaczenie informacyjne. Odbiór jest nieblokujący i używa 256-bajtowego
   bufora HAL, a opcjonalny `flush` wywołuje `fsync(stdout)`;
 - `impl/stm32g474/hal_serial.cpp` obsługuje sprzętowy USART2 oraz `stdout`
-  hosta w buildach sprawdzających target; dla RX zwraca obecnie informację
+  hosta w konfiguracjach sprawdzających target; dla RX zwraca obecnie informację
   o braku obsługi;
 - `impl/.mock/hal_serial.cpp` deterministycznie przechwytuje ostatni komunikat
   i obserwuje `stdout`; pozwala też podawać binarne dane RX w testach.
@@ -380,19 +381,19 @@ natomiast ESP32-S3, hostowy wariant STM32 i implementacja testowa używają
 zakończenia linii.
 
 Ścieżka asercji RP korzysta z tego samego surowego transportu i kopiuje dane
-do konsoli sieciowej, ale nie przejmuje mutexu TX. Dzięki temu komunikat
-o błędzie krytycznym nie może zablokować się na mutexie utrzymywanym przez
+do konsoli sieciowej, ale nie przejmuje muteksu TX. Dzięki temu komunikat
+o błędzie krytycznym nie może zablokować się na muteksie utrzymywanym przez
 kontekst, w którym wystąpił błąd.
 
 Szczegóły implementacji limitera:
 
 - źródło jest dopasowywane na podstawie `hash + tekst źródła`, z dodatkowym
   sprawdzeniem zabezpieczającym przed kolizją;
-- stan limitera chroni wewnętrzny mutex, więc dostęp jest thread-safe;
+- stan ogranicznika szybkości chroni wewnętrzny muteks, więc równoczesne wywołania nie modyfikują go bez synchronizacji;
 - po wyczerpaniu `HAL_DEBUG_RATE_LIMIT_SOURCES_MAX` nowe źródła trafiają do
   wspólnej puli `overflow`, zamiast przejmować stan niezwiązanego źródła.
 
-**Publiczne helpery debug w `hal/serial/hal_serial.h`:**
+Publiczne funkcje diagnostyczne z `hal/serial/hal_serial.h`:
 ```c
 void hal_debug_init_default(void);
 void hal_debug_set_module_prefix(const char *module_name);
@@ -410,15 +411,17 @@ wygenerowany prefiks `<module>:` zawsze mieścił się w `HAL_DEBUG_PREFIX_SIZE`
 Architekturę i zachowanie współbieżne sprawdzają `test_serial_architecture`,
 `test_hal_serial` oraz test runtime'u FreeRTOS POSIX. Testy chronią przed
 ponownym wprowadzeniem osobnych implementacji rdzenia debug dla poszczególnych
-platform. Weryfikują też, czy mutex jest bezpiecznie udostępniany podczas inicjalizacji,
+platform. Weryfikują też, czy muteks jest bezpiecznie udostępniany podczas inicjalizacji,
 niepodzielność komunikatów, podsumowania przepełnień FIFO ISR, wyciszanie,
 zakończenia linii właściwe dla transportu oraz binarne RX implementacji
 testowej.
 
-### Polityka obsługi błędów
+<a id="polityka-obsługi-błędów"></a>
+
+### Błędy krytyczne a błędy obsługiwane podczas pracy:
 
 - `HAL_ASSERT(...)` jest używane dla krytycznych błędów programistycznych
-  w podstawowych mechanizmach, na przykład dla mutexu `NULL` podczas
+  w podstawowych mechanizmach, na przykład dla muteksu `NULL` podczas
   synchronizacji.
 - Przy niekrytycznym, nieprawidłowym użyciu API peryferiów w runtime walidacja
   zwraca błąd i zapisuje komunikat w logu, a program może działać dalej.
@@ -465,7 +468,13 @@ void app_loop(void) {
 
 ---
 
-## `hal_serial_session` - pomocnik ramkowanej sesji szeregowej
+<a id="halserialsession-pomocnik-ramkowanej-sesji-szeregowej"></a>
+
+<a id="hal_serial_session---pomocnik-ramkowanej-sesji-szeregowej"></a>
+
+## `hal_serial_session` - obsługa sesji szeregowej
+
+Obsługa żądań i odpowiedzi w ramkowanym protokole szeregowym. Sesja udostępnia identyfikację urządzenia przez `HELLO`, polecenia określone przez aplikację i opcjonalną obsługę AUTH. Ograniczenie opisanego schematu uwierzytelniania wyjaśniono w sekcji `hal_sc_auth`.
 
 ```c
 #include <hal/serial/hal_serial_session.h>
@@ -535,19 +544,15 @@ hal_status_t hal_serial_session_println_ex(hal_serial_session_t *session,
                                            const char *payload);
 ```
 
-Protokół łącza (w obu kierunkach):
+Format ramek jest taki sam w obu kierunkach:
 
     $SC,<seq>,<inner>*<crc8>\n
 
 Kodek ramki opisano w [`hal_serial_frame`](#halserialframe-pomocnicy-ramkowania-na-łączu).
 
-Wbudowane polecenie strukturalne, rozpoznawane zawsze:
-- `HELLO` - aktywuje sesję, generuje nowy `session_id` i wysyła odpowiedź z danymi
-  identyfikacyjnymi urządzenia.
+`HELLO` jest zawsze rozpoznawane. Rozpoczyna sesję, nadaje jej nowy `session_id` i zwraca dane identyfikacyjne urządzenia.
 
-Odpowiedź HELLO jest jedyną odpowiedzią o stałej strukturze. Każdy host
-analizuje ją w postaci
-`module=... proto=... session=... fw=... build=... uid=...`:
+Odpowiedź na `HELLO` ma stałą strukturę. Host odczytuje z niej pola `module=... proto=... session=... fw=... build=... uid=...`:
 
     OK HELLO module=<name> proto=1 session=<id> fw=<ver> build=<id> uid=<hex>
 
@@ -559,25 +564,18 @@ Polecenia sterowane słownikiem (R1.0 + R1.6 + R1.7):
   każdą sesję można poprawnie zamknąć niezależnie od tego, czy kod AUTH został
   skompilowany.
 - `cmd_auth_begin` - generuje świeże 16-bajtowe wyzwanie dla aktywnej sesji;
-  pomocnik formatuje wyzwanie przez `reply_auth_challenge_fmt` (musi
+  funkcja formatuje wyzwanie przez `reply_auth_challenge_fmt` (musi
   zawierać `%s` dla bajtów hex).
 - `cmd_auth_prove <64 hex chars>` - potwierdza, że host zna `K_device` dla
   tego UID. Wyniki przechodzą przez tokeny odpowiedzi słownika
   (`reply_auth_ok` przy sukcesie, jeden z rodziny `reply_auth_failed_*` przy
-  niepowodzeniu, `reply_not_ready_hello_required`, jeśli HELLO nie zostało jeszcze widziane).
+  niepowodzeniu, `reply_not_ready_hello_required`, jeśli HELLO nie zostało jeszcze odebrane).
 - `cmd_reboot_bootloader` - wymaga uwierzytelnienia. Po powodzeniu wysyła
   `reply_reboot_ok`, przez około 50 ms opróżnia bufory, a następnie przechodzi do ROM-u
   rozruchowego w trybie pamięci masowej BOOTSEL/UF2. Bez uwierzytelnienia wysyła
   `reply_not_authorized`.
 
-Od R1.6 te tokeny NIE są zapisane na sztywno w JaszczurHAL. Pochodzą z
-instancji `hal_serial_session_vocabulary_t` przekazanej przez projekt do
-`hal_serial_session_init_with_vocabulary`. Jeśli pole ma wartość `NULL` albo
-sesję zainicjalizowano przez klasyczne `hal_serial_session_init`, odpowiadające
-mu polecenie nie jest rozpoznawane. Wewnętrzny payload trafia wtedy do handlera
-nierozpoznanych linii. Słownik projektu Fiesta znajduje się w
-`Fiesta/src/common/scDefinitions/sc_session_vocabulary.h`
-(`fiesta_default_vocabulary`); zobacz poniższą sekcję o konfiguracji słownika.
+Od R1.6 nazwy tych poleceń i odpowiedzi nie są zapisane na stałe w JaszczurHAL. Aplikacja przekazuje je w `hal_serial_session_vocabulary_t` do `hal_serial_session_init_with_vocabulary`. Pole równe `NULL` wyłącza rozpoznawanie danego polecenia. Przy klasycznej inicjalizacji przez `hal_serial_session_init` te polecenia również nie są rozpoznawane, a treść ramki trafia do funkcji obsługującej nieznane polecenia. Przykładowy słownik projektu Fiesta znajduje się w `Fiesta/src/common/scDefinitions/sc_session_vocabulary.h` (`fiesta_default_vocabulary`).
 
 Nierozpoznane wewnętrzne payloady są obsługiwane następująco:
 - jeśli callback użytkownika jest zarejestrowany przez
@@ -593,13 +591,11 @@ Nierozpoznane wewnętrzne payloady są obsługiwane następująco:
   nadal jest ramkowana). Przy klasycznej inicjalizacji to pole jest NULL, więc nieznana linia
   jest po cichu porzucana - zarejestruj callback, aby ją obserwować.
 
-Dane wejściowe bez ramek są po cichu odrzucane. Nie ma ścieżki fallback dla
-zwykłego tekstu. Narzędzia hostowe muszą ramkować żądania; usunięcie dawnej
-obsługi zapobiega błędnemu rozpoznawaniu fragmentów logu jako poleceń.
+Dane bez ramek są odrzucane bez odpowiedzi. Protokół nie obsługuje już poleceń zapisanych zwykłym tekstem: host musi kodować każde żądanie w ramce. Dzięki temu fragmenty logów nie są interpretowane jako polecenia.
 
 Zasady przechowywania danych identyfikacyjnych:
 - `module_tag` nie może mieć wartości `NULL` i musi wskazywać tekst o statycznym
-  czasie życia (zwykle stałą modułu `MODULE_NAME` ustalaną podczas buildu).
+  czasie życia (zwykle stałą modułu `MODULE_NAME` ustalaną podczas kompilacji).
 - `fw_version` i `build_id` mogą podczas inicjalizacji mieć wartość `NULL` lub
   wskazywać pusty tekst; w takim przypadku oba przyjmują wartość `unknown`.
   W przeciwnym razie sesja przechowuje przekazane wskaźniki, które muszą
@@ -620,8 +616,8 @@ Ograniczenie wysyłania odpowiedzi:
   `hal_serial_session_current_request_seq()` zwraca aktywne
   `<seq>` wyłącznie podczas obsługi tego samego żądania.
 
-Uwierzytelnianie (Faza 3) - opcjonalne (opt-in):
-- Cała obsługa AUTH jest dołączana do buildu wyłącznie po zdefiniowaniu
+Opcjonalna obsługa AUTH (Faza 3):
+- Cała obsługa AUTH jest dołączana do kompilacji wyłącznie po zdefiniowaniu
   `HAL_ENABLE_CRYPTO`. Bez tej flagi struktura sesji nie zawiera pól uwierzytelniania,
   handlery AUTH nie są wywoływane, a
   `hal_serial_session_is_authenticated()` zawsze zwraca `false`. Pozostała
@@ -634,8 +630,8 @@ Uwierzytelnianie (Faza 3) - opcjonalne (opt-in):
   handlera nierozpoznanych linii.
 - Prymitywy soli i wyprowadzania klucza opisano w [`hal_sc_auth`](#halscauth-pomocnik-uzgadniania-uwierzytelniania-handshake-opt-in-halenablecrypto).
 - Handler AUTH_BEGIN wymaga aktywnej sesji, wcześniej potwierdzonej przez HELLO.
-  Każde nowe 16-bajtowe wyzwanie pobiera wyłącznie z providera
-  `jh_secure_random_bytes()` właściwego dla targetu. Jeśli bezpieczna entropia
+  Każde nowe 16-bajtowe wyzwanie pobiera wyłącznie z funkcji
+  `jh_secure_random_bytes()` właściwej dla platformy. Jeśli bezpieczna entropia
   jest niedostępna, handshake kończy się błędem zgodnie z zasadą fail-closed. Poprzedni stan
   uwierzytelnienia i oczekujące wyzwanie są wtedy czyszczone, a jeśli słownik zawiera
   `reply_auth_failed_entropy`, odpowiedź ta zostaje wysłana. Nie ma deterministycznego
@@ -650,7 +646,7 @@ Uwierzytelnianie (Faza 3) - opcjonalne (opt-in):
 - `auth_failures` zlicza nieudane próby `SC_AUTH_PROVE`; oparte na tym ograniczanie
   częstotliwości prób i czasowe blokady zaplanowano na Fazę 7.
 
-Konfiguracja słownika (R1.0 + R1.6 + R1.7):
+Nazwy poleceń i formaty odpowiedzi (R1.0 + R1.6 + R1.7):
 - Wejściowe tokeny poleceń (`cmd_bye`, `cmd_auth_begin`, `cmd_auth_prove`,
   `cmd_reboot_bootloader`) oraz payloady odpowiedzi są zapisane w
   `hal_serial_session_vocabulary_t`. Przekaż wypełnioną instancję do
@@ -711,11 +707,7 @@ void configSessionTick(void) {
 }
 ```
 
-Dla modułów obsługujących AUTH/REBOOT zamień init na
-`hal_serial_session_init_with_vocabulary(&s_session, MODULE_NAME,
-FW_VERSION, BUILD_ID, &my_vocab)`, gdzie `my_vocab` jest wypełnioną instancją
-`hal_serial_session_vocabulary_t` projektu. Zobacz sekcję
-"Konfiguracja słownika" poniżej.
+Aby włączyć AUTH/REBOOT, użyj `hal_serial_session_init_with_vocabulary(&s_session, MODULE_NAME, FW_VERSION, BUILD_ID, &my_vocab)`. Przekaż własną, wypełnioną strukturę `hal_serial_session_vocabulary_t` jako `my_vocab`; jej pola opisano wyżej w części dotyczącej konfiguracji słownika.
 
 Aplikacje udostępniające te payloady przez `hal_command_router` powinny
 dołączyć
@@ -807,7 +799,13 @@ void secure_sc_init(void) {
 
 ---
 
-## `hal_serial_frame` - pomocnicy ramkowania na łączu
+<a id="halserialframe-pomocnicy-ramkowania-na-łączu"></a>
+
+<a id="hal_serial_frame---pomocnicy-ramkowania-na-łączu"></a>
+
+## `hal_serial_frame` - kodowanie i odczyt ramek
+
+Kodowanie i odczyt ramek zawierających numer sekwencyjny, treść komunikatu i sumę kontrolną CRC-8. Tego samego formatu używa urządzenie i aplikacja hosta.
 
 ```c
 #include <hal/serial/hal_serial_frame.h>
@@ -830,7 +828,7 @@ bool    hal_serial_frame_decode(const char *line,
                                 size_t payload_out_size);
 ```
 
-Format ramki (w obu kierunkach):
+Format ramki:
 
     $SC,<seq>,<payload>*<crc8>\n
 
@@ -886,13 +884,19 @@ void inspect_line(const char *line) {
 
 ---
 
-## `hal_sc_auth` - pomocnik uzgadniania uwierzytelniania (handshake)  *(opt-in - `HAL_ENABLE_CRYPTO`)*
+<a id="halscauth-pomocnik-uzgadniania-uwierzytelniania-handshake-opt-in-halenablecrypto"></a>
+
+<a id="hal_sc_auth---pomocnik-uzgadniania-uwierzytelniania-handshake--opt-in---hal_enable_crypto"></a>
+
+## `hal_sc_auth` - obliczenia dla protokołu AUTH (`HAL_ENABLE_CRYPTO`)
+
+Obliczanie klucza urządzenia i odpowiedzi AUTH używanych przez sesję szeregową. Moduł wymaga `HAL_ENABLE_CRYPTO`. Samo udostępnienie tych obliczeń nie stanowi gwarancji bezpieczeństwa protokołu; zobacz ograniczenie opisane poniżej.
 
 Moduł jest włączany przez tę samą flagę `HAL_ENABLE_CRYPTO` co `hal_crypto`.
 Zależy od `hal_hmac_sha256`, dlatego włączenie uwierzytelniania bez obsługi
 kryptografii nie jest poprawną konfiguracją. Po wyłączeniu flagi
 `hal_serial_session` nadal działa, ale handlery AUTH i REBOOT nie są
-dołączane do buildu. Odpowiadające im tokeny poleceń nie zostaną wtedy rozpoznane
+dołączane do kompilacji. Odpowiadające im tokeny poleceń nie zostaną wtedy rozpoznane
 niezależnie od zawartości słownika, a
 `hal_serial_session_is_authenticated()` zwróci `false`.
 
@@ -922,7 +926,7 @@ bool hal_sc_auth_compute_response(
 bool hal_sc_auth_macs_equal(const uint8_t *a, const uint8_t *b, size_t len);
 ```
 
-Konstrukcje:
+Wyprowadzenie klucza i obliczenie odpowiedzi:
 
 - `K_device  = HMAC-SHA256(key=salt, message=uid_bytes)`
 - `response  = HMAC-SHA256(key=K_device, message=challenge || session_id_be32)`
@@ -935,22 +939,16 @@ bajtów, niezależnie od własnej kolejności bajtów.
 `jh_constant_time_compare`. Przed powrotem z funkcji `jh_secure_zeroize`
 zeruje bufory komunikatów uwierzytelniania oraz bufory wyjściowe po błędzie.
 
-Sól jest publiczną stałą ustalaną podczas buildu i wspólną dla całego
-projektu. Bezpieczeństwo schematu opiera się na połączeniu HMAC-SHA256
-z unikatowym UID urządzenia, **nie** na poufności soli. Traktowanie jej jako
-sekretu jedynie zaciemniałoby założenia projektu.
+**Ograniczenie opisanego schematu uwierzytelniania:** sól jest publiczną stałą projektu ustalaną podczas kompilacji, a UID urządzenia jest zwracany w odpowiedzi `HELLO`. Jeżeli są to jedyne dane wejściowe do wyprowadzenia `K_device`, każda osoba znająca te dane może obliczyć ten sam klucz. Zastosowanie HMAC-SHA256 nie zapewnia tajności klucza wyprowadzonego wyłącznie z publicznych danych. Powyższy opis nie uzasadnia więc gwarancji uwierzytelniania opartego na sekrecie. Przed użyciem produkcyjnym należy zweryfikować model bezpieczeństwa i rzeczywistą implementację; niniejsza redakcja nie zmienia algorytmu ani formatu protokołu.
 
-Jeśli stos hosta zawiera odpowiednik tego helpera, obie implementacje muszą
-pozostać zgodne. Po obu stronach należy testować wektory wyprowadzania klucza
-oraz MAC odpowiedzi. Ich porównanie pozwala wcześnie wykryć rozbieżności
-i uniknąć błędów AUTH_FAILED podczas integracji w runtime.
+Jeżeli aplikacja hosta zawiera własną implementację tych obliczeń, sprawdzaj po obu stronach te same wektory wyprowadzenia klucza i odpowiedzi MAC. Pozwala to wykryć różnice w kodowaniu danych, zanim spowodują błędy AUTH_FAILED podczas integracji.
 
 Sam handshake jest obsługiwany przez
 [`hal_serial_session`](#halserialsession-pomocnik-ramkowanej-sesji-szeregowej)
 za pośrednictwem pól `cmd_auth_begin` / `cmd_auth_prove` słownika
 (Fiesta nazywa je `SC_AUTH_BEGIN` / `SC_AUTH_PROVE`). Moduły odczytują
 stan uwierzytelnienia przez `hal_serial_session_is_authenticated(...)`
-i nie muszą wywoływać poniższych pomocników bezpośrednio.
+i nie muszą wywoływać poniższych funkcji bezpośrednio.
 
 ## Przykłady
 

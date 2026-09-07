@@ -1,33 +1,28 @@
-# 14 - MCP2515 CAN
+<a id="14---mcp2515-can"></a>
 
-Portable MCP2515 example for both RP2040 and STM32G474.
+# 14 - Sending and receiving CAN frames with MCP2515
 
-What it does:
-- initializes SPI bus 0
-- initializes one MCP2515 controller on the configured CS pin
-- sends one heartbeat frame per second with CAN ID `0x321`
-- polls RX and prints any received frames to serial output
+This example sends a CAN frame with ID `0x321` once per second and prints
+received frames to the serial console. The MCP2515 connects to SPI bus 0.
+The application polls for received data, so no interrupt pin is needed.
 
-This example uses polling only. No interrupt pin is required.
-It enables the MCP2515 backend with `HAL_ENABLE_MCP2515`, which pulls in the
-generic CAN facade and SPI dependency.
+`HAL_ENABLE_MCP2515` enables the driver and its CAN and SPI dependencies.
+The wiring below covers RP2040 and STM32G474.
+
+<a id="rp2040"></a>
+
+<a id="stm32g474"></a>
 
 ## Wiring
 
-### RP2040
+| MCP2515 signal | RP2040 | STM32G474 / NUCLEO-G474RE |
+|---|---|---|
+| MISO | GPIO16 | PA6, CN10 pin 13 / D12 |
+| MOSI | GPIO19 | PA7, CN10 pin 15 / D11 |
+| SCK | GPIO18 | PA5, CN10 pin 11 / D13 |
+| CS | GPIO17 | PB6, CN10 pin 17 / D10 |
 
-- MISO: GPIO16
-- MOSI: GPIO19
-- SCK: GPIO18
-- CS: GPIO17
-
-### STM32G474
-
-- MISO: PA6, CN10 pin 13 / D12
-- MOSI: PA7, CN10 pin 15 / D11
-- SCK: PA5, CN10 pin 11 / D13
-- CS: PB6, CN10 pin 17 / D10
-
-Use an MCP2515 board with a CAN transceiver and a properly terminated CAN bus.
-Because `hal_can_create()` enables one-shot TX, a missing ACK on an otherwise
-disconnected bus will make the send attempt fail instead of retrying forever.
+Use an MCP2515 module with a CAN transceiver and a terminated CAN bus.
+`hal_can_create()` enables one-shot transmission: a missing ACK causes the
+send attempt to fail rather than retry indefinitely. A controller on an
+otherwise disconnected bus will not receive that acknowledgement.

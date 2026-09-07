@@ -1,26 +1,25 @@
-# 21 - Natywna obsługa FDCAN w STM32G474
+<a id="21---natywna-obsługa-fdcan-w-stm32g474"></a>
 
-Jest to przykład CAN FD przeznaczony wyłącznie dla STM32G474. Korzysta z
-peryferium FDCAN1 włączanego przez `HAL_ENABLE_STM32G474_FDCAN`.
+# 21 - CAN FD z wbudowanym kontrolerem STM32G474
 
-Działanie:
+Przykład wysyła i odbiera ramki CAN FD przez wbudowany kontroler FDCAN1
+w STM32G474. Co sekundę nadaje ramkę o identyfikatorze `0x123`, a odebrane
+ramki odczytuje z FIFO0 i wypisuje w konsoli szeregowej.
 
-- konfiguruje FDCAN1 na PA11/PA12;
-- włącza CAN FD z arbitrażem 500 kbit/s i fazą danych 2 Mbit/s;
-- co sekundę wysyła ramkę kontrolną CAN FD o identyfikatorze `0x123`;
-- cyklicznie sprawdza kolejkę FIFO0 RX i wypisuje odebrane ramki przez port
-  szeregowy.
+Konfiguracja używa 500 kbit/s w fazie arbitrażu i 2 Mbit/s w fazie danych.
+Kontroler jest włączany flagą `HAL_ENABLE_STM32G474_FDCAN`; przykład jest
+przeznaczony wyłącznie dla STM32G474.
 
 ## Połączenia
 
-- PA11: FDCAN1_RX
-- PA12: FDCAN1_TX
-
-Połącz PA11/PA12 z transceiverem obsługującym CAN FD, nigdy bezpośrednio z
-magistralą. Użyj wspólnej masy i zwykłej terminacji CAN, zazwyczaj po 120 omów
-na obu końcach magistrali.
+PA11 to `FDCAN1_RX`, a PA12 to `FDCAN1_TX`. Podłącz je do transceivera
+obsługującego CAN FD, nigdy bezpośrednio do magistrali CAN.
+Połącz masy urządzeń i zastosuj terminację magistrali - zazwyczaj rezystor
+120 Ω na każdym z jej dwóch końców.
 
 ## Kompilacja
+
+Uruchom z katalogu tego przykładu:
 
 ```bash
 ../../vscode/entry/jh-vscode build --project . --target stm32g474

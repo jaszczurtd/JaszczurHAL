@@ -1,57 +1,65 @@
-# 16 - Implementacje RTC
+<a id="16---implementacje-rtc"></a>
 
-Projekt obejmuje przykłady PCF8563 i DS3231. Obie implementacje są kompilowane
-w jednym obrazie, a `hal_rtc_config_t::chip` wybiera właściwą w czasie
-działania. Brak jednego układu nie blokuje obsługi drugiego.
+# 16 - Zegary RTC, wybudzanie i podtrzymanie czasu
 
-Przykład obejmuje też uchwyty czasu kalendarzowego i czasu epoki, alarmy oraz
-wyjścia CLKOUT urządzeń zewnętrznych, timer odliczający PCF8563, czujnik
-temperatury DS3231 oraz wybudzanie po zadanym czasie za pomocą RTC właściwego
-dla targetu. Na targetach RP używa I2C0 na GP4/GP5, a na STM32G474 PB9/PB8.
+Przykład odczytuje datę i godzinę z PCF8563, DS3231 oraz wewnętrznego zegara
+mikrokontrolera. Pokazuje ustawianie alarmów i wyjścia CLKOUT, timer
+odliczający PCF8563, pomiar temperatury DS3231 oraz wybudzanie po zadanym
+czasie. Dla obsługujących to układów sprawdza też odczyt i zapis czasu
+w postaci znacznika epoch.
 
-Każdy zewnętrzny RTC jest odczytywany przed rozpoczęciem testu. Nowe urządzenie
-z utraconą integralnością zegara lub nieczytelnym kalendarzem fabrycznym
-otrzymuje deterministyczną wartość testową `2026-08-20 12:34:50`; istniejący
-poprawny zegar pozostaje bez zmian. Ścieżka PB9/PB8 STM32G474 została fizycznie
-sprawdzona przy 400 kHz z PCF8563 i DS3231.
+Sterowniki są kompilowane razem. Układ wybiera pole `hal_rtc_config_t::chip`,
+a brak jednego zewnętrznego RTC nie zatrzymuje obsługi drugiego. I2C 0 używa
+GP4/GP5 na płytkach RP i PB9/PB8 na STM32G474.
 
-Na STM32G474 przykład sprawdza dodatkowo wewnętrzny RTC MCU. Preferuje LSE, a z
-LSI korzysta tylko wtedy, gdy w domenie podtrzymywanej nie wybrano źródła
-zegara. Ustawia deterministyczną datę wyłącznie przy braku integralności zegara,
-po czym wyświetla zachowany czas i jego postęp co sekundę. Sekwencja trybów
-zasilania budzi MCU kolejno z CPU Sleep po dwóch sekundach, ze STOP0 po trzech
-i ze STOP1 po czterech. Po każdym przejściu wypisuje ustalony powód wybudzenia
-oraz czas, który upłynął według zegara monotonicznego. Wymuszone opróżnianie
-bufora portu szeregowego
-zapewnia, że każda linia diagnostyczna opuści USART2, zanim tryb STOP zmieni
-konfigurację zegarów. Kalendarz wewnętrzny obsługuje lata 2000..2099.
+Przed zmianą czasu aplikacja odczytuje stan zewnętrznego RTC. Zachowuje
+poprawny czas. Wartość testową `2026-08-20 12:34:50` wpisuje tylko wtedy,
+gdy układ zgłasza utratę poprawności czasu albo początkowej daty nie można
+odczytać. Nie jest to synchronizacja z bieżącą datą. Połączenie PB9/PB8
+sprawdzono wcześniej przy 400 kHz z PCF8563 i DS3231.
 
-Na RP2040 i RP2350 ten sam wewnętrzny uchwyt sprawdza timer AON Pico SDK i
-zwraca `HAL_RTC_CLOCK_SOURCE_AON`. RP2040 używa kalendarzowego RTC, a RP2350
-Powman. Przykład zachowuje działający zegar po miękkim resecie i ustawia go
-tylko przy braku integralności. Obecna implementacja oparta na Pico SDK sprawdza
-uśpienie CPU; tryby głębokiego uśpienia i wyłączenia zasilania są zgłaszane jako
-nieobsługiwane. Oczekiwanie wyłącznie na RTC nie kończy się wskutek innych
-aktywnych przerwań, takich jak ruch USB CDC, lecz dopiero po zgłoszeniu alarmu
-AON. Płytki Pico nie mają podtrzymania bateryjnego, więc czas AON nie przetrwa
-utraty zasilania.
+## Wewnętrzny RTC i uśpienie
 
-Zdefiniuj `HAL_EXAMPLE_RTC_POWER_DOWN_TEST=1`, aby ręcznie sprawdzić Standby na
-STM32G474. Ostatni krok celowo resetuje MCU po pięciu sekundach. Przy następnym
-starcie przykład odczytuje i czyści zachowany rekord wybudzenia, zamiast ponownie
-uruchamiać sekwencję trybów zasilania.
+**STM32G474.** Aplikacja odczytuje wewnętrzny RTC i pokazuje upływ kolejnych
+sekund. Jeśli domena podtrzymania ma już wybrane źródło zegara, zachowuje je.
+W przeciwnym razie preferuje LSE, a gdy jest niedostępne, używa LSI.
+Datę testową ustawia tylko wtedy, gdy zegar nie zgłasza jeszcze poprawnego
+czasu. Kalendarz obsługuje lata 2000-2099.
+
+Test uśpienia obejmuje wybudzenie z CPU Sleep po dwóch sekundach,
+STOP0 po trzech i STOP1 po czterech. Po każdej próbie aplikacja podaje
+przyczynę wybudzenia oraz czas zmierzony zegarem monotonicznym.
+Przed wejściem w STOP czeka na opróżnienie bufora USART2, aby komunikat
+został wysłany przed zmianą konfiguracji zegarów.
+
+**RP2040 i RP2350.** Aplikacja korzysta z timera AON Pico SDK, zgłaszanego
+jako `HAL_RTC_CLOCK_SOURCE_AON`. Na RP2040 jest on oparty na kalendarzowym
+RTC, a na RP2350 - na Powman. Działający zegar jest zachowywany po miękkim
+resecie; wartość początkowa jest ustawiana tylko przy braku poprawnego czasu.
+
+Implementacja Pico SDK użyta w tym przykładzie obsługuje CPU Sleep.
+Głębokie uśpienie i wyłączenie zasilania są zgłaszane jako nieobsługiwane.
+Przy żądaniu wybudzenia wyłącznie przez RTC inne przerwania, np. związane
+z USB CDC, nie kończą oczekiwania: aplikacja czeka na alarm AON.
+Płytki Pico nie mają podtrzymania bateryjnego zegara, więc nie należy
+oczekiwać zachowania czasu po odłączeniu zasilania.
+
+**Ręczny test Standby na STM32G474.** Ustaw
+`HAL_EXAMPLE_RTC_POWER_DOWN_TEST=1`. Końcowa próba wybudza układ resetem
+po pięciu sekundach. Przy następnym uruchomieniu aplikacja odczytuje i czyści
+zachowaną informację o wybudzeniu, zamiast powtarzać całą sekwencję uśpienia.
 
 ## Kompilacja i wybór źródła
 
-Uruchom poniższe polecenia z głównego katalogu JaszczurHAL. Metadane projektu
-wybierają dokładnie jedno źródło aplikacji dla każdej kompilacji:
+Uruchamiaj poniższe polecenia z głównego katalogu repozytorium. Każda
+konfiguracja wybiera dokładnie jeden plik aplikacji:
 
-| Wybór | Źródło aplikacji | Obsługiwane targety |
-| --- | --- | --- |
-| Projekt bazowy | `app.c` | Rodzina RP2040 i STM32G474 |
+| Wybór | Plik aplikacji | Platformy |
+|---|---|---|
+| Projekt podstawowy | `app.c` | RP2040, RP2350 ARM, RP2350 RISC-V, STM32G474 |
 | Wariant `display-clock` | `display_clock_app.cpp` | STM32G474 |
 
-Kompilacja bazowego przykładu STM32G474:
+Przykład podstawowy dla STM32G474:
 
 ```bash
 vscode/entry/jh-vscode build \
@@ -60,10 +68,10 @@ vscode/entry/jh-vscode build \
   --board nucleo-g474re
 ```
 
-Ustawia to `JH_PROJECT_SOURCES=app.c`. Obraz trafia do
+Kompilacja używa `JH_PROJECT_SOURCES=app.c`, a wynik zapisuje jako
 `.build/examples/16_rtc_backends/firmware.elf`.
 
-Kompilacja zegara z wyświetlaczem:
+Zegar z wyświetlaczem:
 
 ```bash
 vscode/entry/jh-vscode build \
@@ -73,26 +81,27 @@ vscode/entry/jh-vscode build \
   --variant display-clock
 ```
 
-W wariancie zamiast źródła bazowego używane jest
-`JH_PROJECT_SOURCES=display_clock_app.cpp`; włączane są także funkcje
-wyświetlacza ILI9341. Plik `app.c` nie jest kompilowany, więc dwie implementacje
-`app_start()` i `app_task0()` nie kolidują. Obraz trafia do
+Wariant ustawia `JH_PROJECT_SOURCES=display_clock_app.cpp` i włącza obsługę
+ILI9341. Nie dołącza `app.c`, więc definicje `app_start()` i `app_task0()`
+nie kolidują. Wynik znajduje się w
 `.build/examples/16_rtc_backends/variants/display-clock/firmware.elf`.
 
-W obu przypadkach `jh-vscode` konfiguruje wspólny projekt firmware CMake. CMake
-dodaje wybrane źródło aplikacji, kod startowy STM32, implementację STM32G474 oraz
-włączone sterowniki i narzędzia JaszczurHAL. Funkcja `main()` dostarczana przez
-HAL wywołuje raz `app_start()`, a następnie cyklicznie `app_task0()`.
+W obu przypadkach `jh-vscode` korzysta ze wspólnego projektu CMake.
+Do wybranego pliku aplikacji dołączane są kod startowy STM32, obsługa
+STM32G474 oraz włączone sterowniki i funkcje JaszczurHAL.
+Dostarczane przez HAL `main()` wywołuje `app_start()` raz,
+a następnie powtarza `app_task0()`.
 
-Te same konfiguracje można zbudować za pomocą wygenerowanych zadań VS Code
-`Project: Build` i `Project: Build variant: display-clock`. Przed uruchomieniem
-wariantu wyświetlacza wybierz `stm32g474:nucleo-g474re`.
+W VS Code odpowiadają temu zadania `Project: Build` oraz
+`Project: Build variant: display-clock`. Przed uruchomieniem wariantu
+z wyświetlaczem wybierz `stm32g474:nucleo-g474re`.
 
 ## Zegar STM32G474 podtrzymywany przez DS3231
 
-Ręczny wariant `display-clock` używa połączeń ILI9341 z
-`examples/07_display_media` oraz DS3231 na PB9/PB8. Wyświetla `HH:MM:SS` przez
-`draw7SegString()` pośrodku panelu w orientacji poziomej. Zbuduj lub wgraj go z
+Wariant `display-clock` wyświetla czas `HH:MM:SS` z DS3231 na środku ekranu
+ILI9341 w orientacji poziomej. Cyfry rysuje `draw7SegString()`.
+DS3231 podłącz do PB9/PB8, a ekran zgodnie z opisem
+`examples/07_display_media`. Przy kompilacji i wgrywaniu dodaj
 `--variant display-clock`.
 
 Kompilacja i wgranie przez ST-LINK/OpenOCD:
@@ -107,8 +116,8 @@ vscode/entry/jh-vscode upload \
   --allow-unverified-port
 ```
 
-Wbudowana wartość początkowa jest stosowana tylko wtedy, gdy DS3231 nadal
-zgłasza poprawną integralność zegara i zawiera starszą datę. Utrata integralności
-nigdy nie jest automatycznie nadpisywana: wyświetlacz pokazuje wtedy na czerwono
-`--:--:--`, dzięki czemu po przywróceniu zasilania widać nieudany test
-podtrzymania bateryjnego.
+W przeciwieństwie do przykładu podstawowego ten wariant nie naprawia
+niepoprawnego czasu automatycznie. Wpisuje wbudowaną datę początkową tylko
+wtedy, gdy DS3231 nadal zgłasza poprawny czas, ale zawiera starszą datę.
+Przy utracie poprawności czasu pokazuje czerwone `--:--:--`. Dzięki temu
+ponowne uruchomienie nie ukrywa nieudanego testu podtrzymania bateryjnego.

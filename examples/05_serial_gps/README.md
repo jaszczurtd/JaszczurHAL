@@ -1,18 +1,23 @@
-# 05 - Serial and GPS
+<a id="05---serial-and-gps"></a>
 
-This example combines GPS parsing with an independent serial echo path.
+# 05 - GPS reception and serial-port testing
 
-The default application uses hardware UART port 1 for a 9600-baud GPS. On RP
-targets it also uses hardware UART port 2 for a 115200-baud echo: the GPS uses
-RX/TX GPIO 1/0 and the echo uses GPIO 5/4. On STM32G474 the GPS uses USART1 on
-PA10/PA9; USART2 on PA3/PA2 remains exclusively owned by the debug/ST-Link VCP,
-so the second echo is intentionally RP-only.
+This example reads GPS data and services a separate serial port for transmit
+and receive tests. A disconnected GPS receiver or test-port loop does not
+stop the other service.
 
-The RP-only `swserial` variant uses software serial for both paths. Its GPS is
-on RX/TX GPIO 5/4 and its independent loopback/echo port is on GPIO 9/8. Build
-that variant with `EXAMPLE_SERIAL_GPS_USE_SWSERIAL=1` so the GPS backend also
-selects software serial.
+The base application uses hardware UARTs. The GPS runs at 9600 baud and the
+test port at 115200 baud.
 
-On RP targets, wire each echo TX pin back to its matching RX pin to exercise
-receive and transmit. A disconnected GPS or echo loop does not stop the other
-service.
+| Target | GPS: port, RX / TX | Test port: port, RX / TX |
+|---|---|---|
+| RP family | UART 1, GP1 / GP0 | UART 2, GP5 / GP4 |
+| STM32G474 | USART1, PA10 / PA9 | Not available; USART2 on PA3 / PA2 is reserved for the ST-Link VCP debug console. |
+
+The RP-only `swserial` variant implements both serial ports in software.
+It uses GP5/GP4 for GPS RX/TX and GP9/GP8 for test-port RX/TX.
+Its build configuration sets `EXAMPLE_SERIAL_GPS_USE_SWSERIAL=1` so the GPS
+module also uses software serial.
+
+For an RP loopback test, connect the test port's TX pin to its RX pin.
+Do not make this connection on the port attached to the GPS receiver.

@@ -4,7 +4,11 @@
 
 > **Part of [JaszczurHAL API Reference](../../en/JaszczurHAL_API.md)**
 
-## `hal_sync` - Mutex
+<a id="hal_sync---mutex"></a>
+
+## `hal_sync` - mutexes and critical sections
+
+Protect shared resources with mutexes or short critical sections. Choose the mechanism according to whether the caller runs in a task, on another core, or in an interrupt handler.
 
 ```c
 #include <hal/system/hal_sync.h>
@@ -117,7 +121,11 @@ bool consume_alarm_flag(void) {
 
 ---
 
-## `hal_usb` - USB device lifecycle and CDC
+<a id="hal_usb---usb-device-lifecycle-and-cdc"></a>
+
+## `hal_usb` - USB device and CDC port
+
+Start and service the USB device, including the CDC serial port on RP2040/RP2350. Availability of other operations depends on the platform.
 
 ```c
 #include <hal/usb/hal_usb.h>
@@ -157,7 +165,11 @@ startup-owned ESP-IDF USB Serial/JTAG VFS described below.
 
 ---
 
-## `hal_serial` - Serial & debug output
+<a id="hal_serial---serial--debug-output"></a>
+
+## `hal_serial` - serial communication and logging
+
+Send text and diagnostic messages over a serial port. The module provides formatting, serialized transmission, and deferred processing of messages submitted from interrupt handlers.
 
 ```c
 #include <hal/serial/hal_serial.h>
@@ -204,19 +216,9 @@ void hal_debug_loop(void);  // drain ISR-deferred debug records (call from main 
 
 ### Task-context debug formatting
 
-In task context, `hal_deb()`, `hal_derr()` and the full-message path of
-`hal_derr_limited()` no longer build the whole formatted log line in a fixed
-`HAL_DEBUG_BUF_SIZE` buffer. The shared serial/debug core streams output
-directly into the mutex-protected transport writer:
+In task context, `hal_deb()`, `hal_derr()`, and full messages from `hal_derr_limited()` use streaming formatting. They do not need a `HAL_DEBUG_BUF_SIZE` buffer for the entire line: message fragments go directly to the mutex-protected transport writer.
 
-- literal spans and `%s` payloads are emitted in chunks without a whole-line
-  staging buffer
-- numeric, floating-point and pointer conversions use a small per-conversion
-  local buffer, with a temporary exact-size fallback only when a single
-  conversion does not fit
-- prefixes (`hal_deb_set_prefix()`, `ERROR!`, timestamps and rate-limit source
-  tags) are emitted as separate stream fragments under the same TX mutex, so a
-  logical log line still cannot interleave with another serial emitter
+Literals and `%s` arguments are streamed in chunks without a buffer for the entire line. Integer, floating-point, and pointer conversions use a small local buffer; if a result does not fit, a temporary buffer of the exact required size is allocated. Prefixes - set with `hal_deb_set_prefix()`, the `ERROR!` marker, timestamps, and rate-limit source tags - are streamed separately under the same TX lock. Another sender using this serial output cannot interleave bytes within the logical line.
 
 `HAL_DEBUG_BUF_SIZE` is therefore not a task-log length limit anymore. It
 remains a compatibility sizing knob for mock capture/RX helpers. ISR-deferred
@@ -255,7 +257,7 @@ lazy init as `hal_deb()`, and the in-ISR / muted short-circuits use
 only zero-initialised statics. Calling it from ISR context is itself
 a no-op (prevents drain re-entry via the underlying UART mutex).
 
-**Mock-only ring introspection helpers** (declared in `hal_mock.h`):
+Mock-only functions for inspecting the ring buffer are declared in `hal_mock.h`:
 
 ```c
 size_t   hal_mock_debug_isr_used_slots(void);            // pending records
@@ -266,7 +268,9 @@ void     hal_mock_debug_isr_set_test_capacity(size_t);   // swap to a small test
 void     hal_mock_debug_isr_restore_default_ring(void);  // restore production ring
 ```
 
-### Lazy initialisation
+<a id="lazy-initialisation"></a>
+
+### Initialization on first use:
 
 `hal_deb()` and `hal_derr()` use **lazy init** - if `hal_debug_init()` has not been called
 before the first debug print, it is invoked automatically with `HAL_DEBUG_DEFAULT_BAUD`
@@ -278,7 +282,9 @@ competing mutex allocations. Calling `hal_debug_init_default()` is no longer man
 `hal_derr_limited()` reuses the same lazy init and applies global rate-limit config per
 error source tag (`source`) so errors from different modules do not suppress each other.
 
-### TX serialization (R1.8)
+<a id="tx-serialization-r18"></a>
+
+### Shared transmit lock (R1.8):
 
 `hal_serial_print()` and `hal_serial_println()` take the shared core's single
 global TX mutex around the underlying debug-console write path. The linked RP
@@ -302,7 +308,7 @@ other singleton module locks (or eagerly in `hal_debug_init()` when called
 explicitly), so callers that emit during very early bring-up still see a valid
 lock. It is strictly
 nested **inside** `s_deb_mutex` / `s_derr_mutex` / `s_rl_mutex`, never
-the other way around, so deadlock is impossible.
+the other way around. This prevents deadlocks caused by acquiring these locks in reverse order.
 
 On RP USB-CDC backends, the mutex window can additionally include an
 extra `hal_usb_cdc_flush()` after every `hal_serial_print()` /
@@ -321,16 +327,13 @@ message. This is useful before STOP changes the peripheral clock or an
 application disables the console. The mock backend accepts the setter without
 target timing semantics.
 
-### Shared core and link-time transport ports
+<a id="shared-core-and-link-time-transport-ports"></a>
 
-`src/hal/serial/hal_serial.cpp` is the only serial/debug core. It owns public serial
-and debug entry points, streamed formatting, prefixes, timestamp hooks, mute
-state, rate-limit slots, the ISR SPSC ring, net-console mirroring, lazy init and
-all common mutexes. The internal `jh_serial_port.h` interface is resolved at
-link time and deliberately exposes only transport operations: begin/configure,
-logical message boundary, byte write, target line ending/flush and byte RX.
+### Shared implementation and platform-specific I/O:
 
-The production ports are intentionally small:
+`src/hal/serial/hal_serial.cpp` contains the shared serial and diagnostic implementation: public API functions, streaming formatting, prefixes, timestamp hooks, muting, rate-limit slots, the ISR SPSC ring, and network-console forwarding. It also manages first-use initialization and the common mutexes. The link-time `jh_serial_port.h` interface handles transport only: startup and configuration, logical message boundaries, byte reads and writes, and platform-specific line endings and `flush` behavior.
+
+Platform-specific port implementations:
 
 - `impl/rp2040/hal_serial.cpp` owns USB CDC begin, TX/RX and optional flush;
 - `impl/esp32/hal_serial.cpp` reuses the ESP-IDF startup-owned USB Serial/JTAG
@@ -357,7 +360,7 @@ Limiter implementation details:
 - when `HAL_DEBUG_RATE_LIMIT_SOURCES_MAX` is exhausted, new sources are grouped into
     an internal `overflow` bucket instead of reusing unrelated source state
 
-**Public debug helpers in `hal/serial/hal_serial.h`:**
+Public diagnostic functions in `hal/serial/hal_serial.h`:
 ```c
 void hal_debug_init_default(void);
 void hal_debug_set_module_prefix(const char *module_name);
@@ -378,7 +381,9 @@ test. They prevent target-local debug cores from returning and exercise lazy
 mutex publication, complete message boundaries, ISR FIFO/overflow summaries,
 mute behavior, target line boundaries and mock binary RX.
 
-### Error Handling Policy
+<a id="error-handling-policy"></a>
+
+### Fatal errors and recoverable runtime errors:
 
 - `HAL_ASSERT(...)` is used for critical programming errors in core primitives
     (e.g. NULL mutex in sync paths).
@@ -427,7 +432,13 @@ void app_loop(void) {
 
 ---
 
-## `hal_serial_session` - Framed serial session helper
+<a id="halserialsession-framed-serial-session-helper"></a>
+
+<a id="hal_serial_session---framed-serial-session-helper"></a>
+
+## `hal_serial_session` - framed serial sessions
+
+Exchange requests and responses using the framed serial protocol. A session provides device identification through `HELLO`, application-defined commands, and optional AUTH handling. See `hal_sc_auth` for a limitation of the documented authentication scheme.
 
 ```c
 #include <hal/serial/hal_serial_session.h>
@@ -504,13 +515,9 @@ Wire protocol (both directions):
 See [`hal_serial_frame`](#halserialframe-wire-framing-helpers) for the
 frame codec.
 
-Built-in command (always recognised, structural):
-- `HELLO` - activates the session, mints a fresh `session_id`, and emits
-  the identity response.
+`HELLO` is always recognized. It starts a session, assigns a new `session_id`, and returns device identification data.
 
-The HELLO response is the only structurally-fixed reply (its
-`module=... proto=... session=... fw=... build=... uid=...` shape is
-parsed by every host):
+The `HELLO` response has a fixed structure. The host reads the fields `module=... proto=... session=... fw=... build=... uid=...`:
 
     OK HELLO module=<name> proto=1 session=<id> fw=<ver> build=<id> uid=<hex>
 
@@ -532,15 +539,7 @@ Vocabulary-driven commands (R1.0 + R1.6 + R1.7):
   (BOOTSEL/UF2 mass-storage mode); unauthenticated path emits
   `reply_not_authorized`.
 
-After R1.6 these tokens are NOT hard-coded in JaszczurHAL. They come from
-the `hal_serial_session_vocabulary_t` instance the project hands to
-`hal_serial_session_init_with_vocabulary`. Any field left NULL (or any
-session initialised with the classic `hal_serial_session_init`) makes
-the corresponding command unrecognised - the inner payload falls
-through to the unknown-line handler. The Fiesta dialect lives in
-`Fiesta/src/common/scDefinitions/sc_session_vocabulary.h`
-(`fiesta_default_vocabulary`); see the Vocabulary configuration section
-below.
+Since R1.6, JaszczurHAL no longer hard-codes these command and response strings. The application supplies a `hal_serial_session_vocabulary_t` to `hal_serial_session_init_with_vocabulary`. A `NULL` field disables recognition of that command. These commands are also unrecognized when using the classic `hal_serial_session_init`; the frame payload then reaches the unknown-command handler. Fiesta provides an example vocabulary in `Fiesta/src/common/scDefinitions/sc_session_vocabulary.h` (`fiesta_default_vocabulary`).
 
 Unrecognised inner payloads:
 - if a user callback is registered via
@@ -555,10 +554,7 @@ Unrecognised inner payloads:
   framed). With the classic init this field is NULL, so the unknown line
   is silently dropped - register the callback to observe it.
 
-Non-framed input is silently dropped - there is no plain-text
-fall-through. This is intentional: host-side tools are expected to
-frame requests, and removing the legacy path eliminates substring
-mismatches against debug-log lines.
+Unframed input is discarded without a response. Plain-text commands are no longer supported: the host must frame every request. This prevents log fragments from being mistaken for commands.
 
 Identity binding model:
 - `module_tag` must not be NULL and must reference a string with static
@@ -671,11 +667,7 @@ void configSessionTick(void) {
 }
 ```
 
-For AUTH/REBOOT-capable modules, swap the init for
-`hal_serial_session_init_with_vocabulary(&s_session, MODULE_NAME,
-FW_VERSION, BUILD_ID, &my_vocab)` where `my_vocab` is the project's
-populated `hal_serial_session_vocabulary_t` instance. See the
-"Vocabulary configuration" section below.
+To enable AUTH/REBOOT, use `hal_serial_session_init_with_vocabulary(&s_session, MODULE_NAME, FW_VERSION, BUILD_ID, &my_vocab)`. Supply your populated `hal_serial_session_vocabulary_t` as `my_vocab`; its fields are described in the vocabulary configuration section above.
 
 Applications that expose these payloads through `hal_command_router` should
 attach [`hal_serial_commands`](23_commands.md#framed-serial-session-adapter)
@@ -766,7 +758,13 @@ void secure_sc_init(void) {
 
 ---
 
-## `hal_serial_frame` - Wire framing helpers
+<a id="halserialframe-wire-framing-helpers"></a>
+
+<a id="hal_serial_frame---wire-framing-helpers"></a>
+
+## `hal_serial_frame` - frame encoding and decoding
+
+Encode and decode frames containing a sequence number, message payload, and CRC-8 checksum. Firmware and host applications use the same frame format.
 
 ```c
 #include <hal/serial/hal_serial_frame.h>
@@ -789,7 +787,7 @@ bool    hal_serial_frame_decode(const char *line,
                                 size_t payload_out_size);
 ```
 
-Frame format (both directions):
+Frame format:
 
     $SC,<seq>,<payload>*<crc8>\n
 
@@ -844,7 +842,13 @@ void inspect_line(const char *line) {
 
 ---
 
-## `hal_sc_auth` - Auth handshake helper  *(opt-in - `HAL_ENABLE_CRYPTO`)*
+<a id="halscauth-auth-handshake-helper-opt-in-halenablecrypto"></a>
+
+<a id="hal_sc_auth---auth-handshake-helper--opt-in---hal_enable_crypto"></a>
+
+## `hal_sc_auth` - AUTH protocol calculations (`HAL_ENABLE_CRYPTO`)
+
+Derive the device key and calculate the AUTH response used by the serial session. This module requires `HAL_ENABLE_CRYPTO`. These operations alone do not establish protocol security; see the limitation below.
 
 Pulled in by the same `HAL_ENABLE_CRYPTO` flag as `hal_crypto`. The
 module depends on `hal_hmac_sha256`, so enabling auth without crypto
@@ -880,7 +884,7 @@ bool hal_sc_auth_compute_response(
 bool hal_sc_auth_macs_equal(const uint8_t *a, const uint8_t *b, size_t len);
 ```
 
-Constructions:
+Key derivation and response calculation:
 
 - `K_device  = HMAC-SHA256(key=salt, message=uid_bytes)`
 - `response  = HMAC-SHA256(key=K_device, message=challenge || session_id_be32)`
@@ -893,15 +897,9 @@ endianness.
 `jh_constant_time_compare` implementation. Authentication message buffers and
 failed outputs are erased through `jh_secure_zeroize` before return.
 
-The salt is a public, project-wide compile-time constant. Secrecy of the
-scheme rests on HMAC-SHA256 + the per-device UID, **not** on salt
-secrecy. Treating the salt as confidential would only obscure design
-intent.
+**Limitation of the documented authentication scheme:** the salt is a public, project-wide compile-time constant, and the device UID is returned in the `HELLO` response. If these are the only inputs used to derive `K_device`, anyone who knows them can derive the same key. HMAC-SHA256 does not make a key secret when it is derived solely from public data. The description therefore does not establish secret-based authentication. Review the security model and the actual implementation before production use; this editorial revision does not change the algorithm or wire format.
 
-If your host stack carries a mirror copy of this helper, keep both
-sides synchronized and test key derivation + response MAC vectors on
-both sides. Cross-vector checks catch divergence early and avoid
-runtime AUTH_FAILED mismatches during integration.
+If the host has a separate implementation of these calculations, test identical key-derivation and response-MAC vectors on both sides. This catches encoding differences before they cause AUTH_FAILED errors during integration.
 
 The handshake itself is wired in
 [`hal_serial_session`](#halserialsession-framed-serial-session-helper)

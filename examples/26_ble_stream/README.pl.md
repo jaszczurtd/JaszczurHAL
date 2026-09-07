@@ -1,26 +1,27 @@
-# 26 - BLE Stream
+<a id="26---ble-stream"></a>
 
-Jest to przykład urządzenia działającego w roli BLE Peripheral i używającego
-protokołu JH BLE Stream v1. Pokazuje cykl rozgłaszania i obsługi połączenia oraz
-uwierzytelniony strumień danych.
+# 26 - Wymiana danych i poleceń przez BLE
 
-Aplikacja działa jako Peripheral przyjmujący połączenia. Udostępnia usługę
-strumienia i wymienia dane wyłącznie w obustronnie uwierzytelnionej sesji.
+Przykład udostępnia usługę JH BLE Stream v1 i wymienia dane z klientem po
+obustronnym uwierzytelnieniu. Płytka działa jako BLE Peripheral: ogłasza
+swoją obecność i przyjmuje połączenie od urządzenia Central.
 
-Urządzenie ogłasza się jako `JH Stream`, udostępnia każdemu klientowi wersję
-protokołu i bitową maskę obsługiwanych funkcji oraz odrzuca dane, dopóki klient
-nie udowodni znajomości sekretu właściwego dla urządzenia. Po uwierzytelnieniu co
-sekundę publikuje linię telemetrii, zachowuje najwyżej jedną próbkę do ponownego
-wysłania, gdy transmisję wstrzymuje pełny bufor TX, i loguje dane wysłane przez
-klienta.
+Wersja podstawowa jest widoczna jako `JH Stream`. Każdy klient może odczytać
+wersję protokołu i maskę obsługiwanych funkcji. Dane aplikacji są dostępne
+dopiero po potwierdzeniu znajomości sekretu urządzenia. Po uwierzytelnieniu
+aplikacja co sekundę wysyła linię telemetrii i wypisuje otrzymane dane
+w konsoli. Gdy nadawanie jest chwilowo niemożliwe, zachowuje najwyżej jedną
+próbkę do ponownej próby.
 
-Osobne warianty `commands` i `commands-freertos` ogłaszają się jako
-`JH Commands`. Przekazują `hal_ble_commands` wyłączną obsługę danych Stream,
-rejestrują procedury obsługi niezależne od transportu i wymieniają z
-uwierzytelnionym urządzeniem Central żądania, odpowiedzi oraz zdarzenia
-binarnego protokołu poleceń.
+Warianty `commands` i `commands-freertos` są widoczne jako `JH Commands`.
+Wymieniają z uwierzytelnionym klientem żądania, odpowiedzi i zdarzenia
+binarnego protokołu poleceń. Dane Stream obsługuje wtedy wyłącznie
+`hal_ble_commands`, a procedury wykonujące polecenia nie zależą od sposobu
+ich przesyłania.
 
 ## Kompilacja i uruchomienie
+
+Uruchom z głównego katalogu repozytorium:
 
 ```bash
 ./scripts/examples_dispatcher.py build --target rp2040 --example 26_ble_stream
@@ -28,9 +29,8 @@ binarnego protokołu poleceń.
 ./scripts/examples_dispatcher.py build --target stm32g474 --example 26_ble_stream
 ```
 
-Polecenie skryptu przykładów dla przykładu 26 buduje bazowy firmware i oba
-warianty poleceń. Aby zbudować tylko jeden wariant, użyj wspólnego punktu
-wejścia projektu:
+Dla tego projektu skrypt kompiluje wersję podstawową i oba warianty poleceń.
+Aby zbudować tylko wskazany wariant, użyj:
 
 ```bash
 vscode/entry/jh-vscode build --project examples/26_ble_stream \
@@ -39,9 +39,10 @@ vscode/entry/jh-vscode build --project examples/26_ble_stream \
   --target rp2040 --board picow --variant commands-freertos
 ```
 
-Domyślne profile to RP2040 `picow`, RP2350 ARM `pico2w` i STM32G474
-`nucleo-g474re-pim730`. RP2040 `pico-rm2` także obsługuje kompilację po jawnym
-wyborze płytki, ale dedykowana bramka sprzętowa nie jest jeszcze gotowa:
+Domyślne płytki to `picow` dla RP2040, `pico2w` dla RP2350 ARM oraz
+`nucleo-g474re-pim730` dla STM32G474. Można też jawnie wybrać `pico-rm2`
+dla RP2040; konfiguracja kompilacji jest dostępna, ale jej osobny test
+sprzętowy pozostaje do wykonania:
 
 ```bash
 vscode/entry/jh-vscode build \
@@ -49,48 +50,46 @@ vscode/entry/jh-vscode build \
   --target rp2040 --board pico-rm2
 ```
 
-RP2350 RISC-V nie jest obsługiwany, ponieważ transport Bluetooth CYW43 nie jest
-dla niego włączony.
+RP2350 RISC-V nie jest obsługiwany, ponieważ nie włączono dla niego
+komunikacji Bluetooth przez CYW43.
 
-Przykład odkłada inicjalizację CYW43/BLE do pierwszej iteracji `app_task0()`, po
-uruchomieniu planisty FreeRTOS. Konfiguracja projektu wybiera stos zadania o
-rozmiarze 1024 słów przy włączonym FreeRTOS; domyślne 512 słów nie wystarcza na
-uzgadnianie uwierzytelnionej sesji na sprzęcie RP.
+Inicjalizacja CYW43/BLE następuje przy pierwszym wywołaniu `app_task0()`.
+Przy włączonym FreeRTOS oznacza to uruchomienie jej po starcie schedulera.
+Konfiguracja rezerwuje wtedy 1024 słowa stosu zadania; domyślne 512 słów
+nie wystarczało do uzgodnienia uwierzytelnionej sesji na sprzęcie RP.
 
 ## Przygotowanie sekretu
 
-`kDeviceSecret` w [`app.cpp`](app.cpp) zawiera przykładowy sekret, dzięki czemu
-projekt działa bez dodatkowych kroków przygotowawczych. W produkcie należy go
-zastąpić co najmniej 256-bitową wartością właściwą dla urządzenia, przekazaną
-klientowi poza głównym kanałem komunikacji, na przykład w kodzie QR na etykiecie
-lub przez uwierzytelniony kanał USB. Nie należy współdzielić jednego sekretu
-między urządzeniami.
+`kDeviceSecret` w [`app.cpp`](app.cpp) jest wartością przykładową. W docelowym
+urządzeniu zastąp ją indywidualnym sekretem o długości co najmniej 256 bitów.
+Przekaż go klientowi innym kanałem, np. przez kod QR na etykiecie lub
+uwierzytelnione połączenie USB. Nie używaj tego samego sekretu we wszystkich
+urządzeniach.
 
-`hal_ble_stream_set_secret()` instaluje sekret,
-`hal_ble_stream_clear_secret()` wykonuje reset do ustawień fabrycznych, a
-instalacja nowego sekretu unieważnia sesje utworzone z poprzednim.
+`hal_ble_stream_set_secret()` ustawia sekret, a
+`hal_ble_stream_clear_secret()` go usuwa, np. podczas przywracania ustawień
+fabrycznych. Ustawienie nowego sekretu unieważnia sesję opartą na poprzednim.
 
 ## Strona klienta
 
-Klient kończy uzgadnianie sesji, wysyłając `HELLO`, sprawdzając dowód urządzenia
-w `HELLO_ACK` i odpowiadając `AUTH`. Oba dowody oraz dwa klucze - po jednym dla
-każdego kierunku - powstają z HMAC-SHA256 obliczanego na podstawie zapisu
-przebiegu uzgadniania. Obejmuje on nazwę profilu, wersję protokołu, zestawy
-funkcji obsługiwanych przez obie strony, identyfikator sesji i obie liczby
-jednorazowe. Ramki `DATA` używają
-ChaCha20-Poly1305 z osobnym licznikiem dla każdego kierunku. Układ ramki i
-wszystkie stałe znajdują się w
+Klient wysyła `HELLO`, sprawdza dowód znajomości sekretu otrzymany
+w `HELLO_ACK` i odpowiada komunikatem `AUTH`. Dowody obu stron oraz osobne
+klucze dla każdego kierunku transmisji są wyliczane za pomocą HMAC-SHA256.
+Obliczenia obejmują nazwę profilu, wersję protokołu, funkcje obu stron,
+identyfikator sesji i obie wartości nonce. Ramki `DATA` są zabezpieczane
+ChaCha20-Poly1305 i mają oddzielne liczniki dla obu kierunków.
+Format ramek i stałe definiuje
 [`hal_ble_stream.h`](../../src/hal/bluetooth/hal_ble_stream.h).
 
-Wynegocjowana wartość ATT MTU musi osiągnąć `HAL_BLE_STREAM_MIN_ATT_MTU`, aby
-uzgadnianie sesji zmieściło się w pojedynczym zapisie. Przykład zapisuje w logu
-zaobserwowane MTU.
+Przed uzgadnianiem sesji ATT MTU musi osiągnąć
+`HAL_BLE_STREAM_MIN_ATT_MTU`, aby komunikaty mieściły się w wymaganym
+zapisie. Przykład wypisuje uzgodnione MTU w diagnostyce.
 
-Warianty poleceń używają systemu Linux z BlueZ w roli Central. JaszczurHAL
-udostępnia obecnie role Peripheral i pasywnego Observer; druga płytka z tym przykładem
-również działa jako Peripheral. Krótki program weryfikujący wykonuje
-uzgadnianie po stronie klienta i dzieli binarne komunikaty poleceń zgodnie z
-wynegocjowanym MTU:
+Klientem wariantów poleceń jest Linux z BlueZ w roli Central. JaszczurHAL
+w opisanej integracji udostępnia Peripheral i pasywny Observer. Druga płytka
+z tym samym przykładem również jest Peripheral, więc nie zastępuje klienta.
+Program sprawdzający połączenie wykonuje uzgadnianie sesji i dzieli komunikaty
+poleceń zgodnie z MTU:
 
 ```bash
 python3 tests/hardware/bluetooth_stream/verify_commands.py \
@@ -98,32 +97,25 @@ python3 tests/hardware/bluetooth_stream/verify_commands.py \
   --target rp2040 --board picow --runtime baremetal
 ```
 
-Weryfikator obejmuje pofragmentowane binarne echo o rozmiarze 500 bajtów,
-informacje o użytej procedurze obsługi, metadane bezpieczeństwa, reguły źródła,
-nieznane polecenia, zdarzenie wychodzące, żądanie zainicjowane przez Peripheral
-oraz jedno ponowne połączenie. Dla obrazu `commands-freertos` użyj
+Test obejmuje 500-bajtowe binarne `echo` przesyłane we fragmentach,
+informacje o wywołanej procedurze i zabezpieczeniach, ograniczenia źródła
+poleceń, nieznane polecenia, wysłanie zdarzenia i żądania przez Peripheral
+oraz jedno ponowne połączenie. Dla `commands-freertos` użyj
 `--runtime freertos`.
 
 ## Co pokazuje przykład
 
-- inicjalizację kontrolera BLE, odczyt adresu, rozgłaszanie i reakcję na zdarzenia
-  połączenia;
-- publikowanie usługi z informacją o obsługiwanych funkcjach;
-- odrzucanie danych przesyłanych poza sesją;
-- odbieranie danych z jawnym sygnalizowaniem przepełnienia;
-- przechowywanie i ponowne wysłanie po `HAL_EAGAIN` jednej próbki telemetrii o
-  ograniczonym rozmiarze;
-- przechowywanie jednego żądania rozgłaszania, aby wznowić je automatycznie po
-  rozłączeniu.
+Wersja podstawowa uruchamia kontroler BLE, odczytuje jego adres, udostępnia
+usługę i obsługuje zdarzenia połączenia. Odbiera kolejne dane z kolejki,
+zgłasza przepełnienie i nie dopuszcza danych aplikacji poza sesją.
+Po `HAL_EAGAIN` ponawia wysłanie jednej zachowanej próbki telemetrii.
+Zachowuje też żądanie rozgłaszania, aby wznowić je po rozłączeniu.
 
-Warianty poleceń pokazują dodatkowo:
+Warianty poleceń rejestrują w routerze reguły określające dozwolone źródło
+żądań. Przetwarzają kolejne fragmenty wiadomości, obsługują odpowiedzi
+oraz pozwalają urządzeniu Peripheral wysłać własne zdarzenie i żądanie do
+Central. Adapter poleceń jest dołączany raz do wcześniej uruchomionego Stream.
 
-- dołączenie jednego adaptera poleceń do zainicjalizowanego, uwierzytelnionego
-  strumienia;
-- rejestrowanie we wspólnym routerze tras dostępnych wyłącznie przez BLE i
-  ograniczonych do wskazanego źródła;
-- przyrostowe przetwarzanie żądań przychodzących i automatycznych odpowiedzi;
-- wysyłanie zdarzenia i żądania z urządzenia Peripheral do urządzenia Central.
-
-Niezależną implementację klienta oraz wielotargetowy test stabilności i
-bezpieczeństwa opisuje [sprzętowa bramka `bluetooth_stream`](../../doc/api/pl/03_build_tests.md#bramka-sprzętowa-jh-ble-stream-v1).
+Niezależnego klienta oraz testy stabilności i bezpieczeństwa na kilku
+platformach opisują
+[testy sprzętowe `bluetooth_stream`](../../doc/api/pl/03_build_tests.md#bramka-sprzętowa-jh-ble-stream-v1).

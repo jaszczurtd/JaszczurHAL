@@ -1,3 +1,9 @@
+/*
+ * Handle framed echo and info commands through a Serial Session.
+ * The independent command router accepts these routes only from Serial Session.
+ * HELLO starts the protocol session; it is not proof of a client's identity.
+ */
+
 #include <hal/commands/hal_command_router.h>
 #include <hal/core/hal_app.h>
 #include <hal/serial/hal_serial.h>

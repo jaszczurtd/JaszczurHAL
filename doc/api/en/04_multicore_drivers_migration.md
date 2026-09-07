@@ -1,16 +1,18 @@
-# Multicore safety, drivers, and logging
+<a id="multicore-safety-drivers-and-logging"></a>
+
+# Concurrency, drivers, and logging
 
 *Also available in [Polish](../pl/04_multicore_drivers_migration.md).*
 
 > **Part of [JaszczurHAL API Reference](../../en/JaszczurHAL_API.md)**
 
-## Multicore safety policy
+<a id="multicore-safety-policy"></a>
 
-JaszczurHAL supports RP2040/RP2350 and ESP32-S3 dual-core systems, using both
-core 0 and core 1 where available. STM32G474 is supported as well, and general
-mutex protection is available through the FreeRTOS-enabled path.
+## Working with multiple cores and tasks
 
-The following design rules apply:
+JaszczurHAL supports both cores on RP2040/RP2350 and ESP32-S3. On the single-core STM32G474, mutex-based task synchronization is available in FreeRTOS configurations. Safe sharing depends on the initialization and access rules of each module.
+
+Follow these design rules:
 
 ### Portable application entry
 
@@ -23,12 +25,7 @@ dispatch begins only after core 0 finishes `app_start()`. This makes EEPROM/KV
 flash initialization safe during startup without exposing partially initialized
 application state to `app_task1()`.
 
-On RP FreeRTOS SMP, the same hooks become
-tasks pinned to cores 0 and 1. On STM32G474, bare-metal dispatch is cooperative
-in one super-loop, while FreeRTOS creates independent task0 and optional task1
-tasks. ESP-IDF already owns the scheduler; HAL creates task0 on core 0 by
-default and optional task1 on core 1, with explicit core overrides or `-1` for
-no affinity.
+In RP FreeRTOS SMP builds, the application functions run as tasks pinned to cores 0 and 1. On bare-metal STM32G474, both functions run cooperatively in one main loop; FreeRTOS instead creates independent `task0` and optional `task1` tasks. On ESP32-S3, ESP-IDF has already started the FreeRTOS scheduler. HAL creates `task0` on core 0 and optional `task1` on core 1 by default. Configuration may select another core or `-1` for no affinity.
 
 The coordinator serializes native flash mutations, makes the other core safe,
 pauses TinyUSB, rejects active DMA and XIP-resident operation state, masks local
@@ -37,25 +34,19 @@ the Pico SDK multicore helper in bare-metal firmware and its scheduler-aware
 helper under FreeRTOS SMP. Native EEPROM commits and all LittleFS program/erase
 callbacks use this shared transaction path exclusively.
 
-### Initialisation: single-core only
+<a id="initialisation-single-core-only"></a>
 
-All `*_init()`, `*_create()`, and `*_deinit()` / `*_destroy()` functions must be
-called from **one core only** (typically core 0 during `app_start()`). These
-functions allocate from static pools, configure hardware peripherals, and
-establish internal state.  They are **not** protected by mutexes because:
+### Initialize and release resources on one core
 
-- pool allocation is inherently single-shot (done once at boot),
-- hardware peripheral setup must complete before use,
-- adding mutex overhead to init paths provides no practical benefit when the
-  documented guarantee is respected.
+By default, call `*_init()`, `*_create()`, `*_deinit()`, and `*_destroy()` from one core. Complete initialization in `app_start()` on core 0 before allowing concurrent access. Do not assume that a general thread-safety statement also covers resource creation and destruction; check the documented rules for the specific module.
 
-### Runtime: concurrent hardware backends
+Preparing a resource may allocate a static-pool slot, configure hardware, and establish internal state. Complete these steps before using the resource. Before destroying it, stop users and callbacks as required by that API. A mutex alone does not solve object-lifetime management.
 
-After initialisation, most HAL runtime APIs support concurrent callers on
-RP2040/RP2350 dual-core firmware and on supported FreeRTOS builds, including
-STM32G474 and the delivered ESP32-S3 backend set. Each module documents its
-exact thread-safety guarantee in the per-module section below. The general
-pattern is:
+<a id="runtime-concurrent-hardware-backends"></a>
+
+### Concurrent calls after initialization
+
+After initialization, most HAL operations can be shared between RP2040/RP2350 cores and tasks in supported FreeRTOS configurations, including STM32G474 and the supplied ESP32-S3 implementations. This is not a guarantee for every function: check the module-specific restrictions. The synchronization mechanisms fall into these groups:
 
 - **Per-instance mutexes** protect handle-based APIs (`hal_can`, `hal_thermocouple`, `hal_rtc`, `SmartTimers`).
 - **Per-bus mutexes** protect shared communication buses (`hal_spi`, `hal_i2c`).
@@ -63,31 +54,25 @@ pattern is:
 - **Stateless helpers** (`hal_bits`, `hal_math`, pure `hal_time` helpers,
   `hal_crypto`, `hal_constrain`, `hal_map`) are inherently thread-safe.
 
-Singleton and per-bus mutexes use an internal atomic create-once fallback, so
-two FreeRTOS tasks or hardware cores cannot publish different locks for the
-same module. Module init/begin calls still remain the preferred place to create
-those locks before normal runtime sharing.
+Global-module and bus mutexes use atomic create-once initialization, so two tasks or cores cannot create different locks for the same resource. Prefer creating them during `init`/`begin`, before concurrent access starts.
 
-Modules documented as **"Not thread-safe"** (`hal_uart`, the optional
-`hal_time` NTP/system-time surface, `pidController`) must be serialized by the
-caller or used from a single core.
+`hal_uart` and `pidController` require application-level synchronization or use from a single core.
 
-### Mock backend
+**Verification required - system time and NTP:** the original overview also classified the optional `hal_time` API as not thread-safe, while the [network module reference](15_connectivity.md) describes mutex-protected snapshots and concurrent task/core access. This discrepancy cannot be resolved without checking the implementation. Confirm the actual synchronization rules before sharing this API.
 
-Mock implementations (`impl/.mock/`) are designed for deterministic
-single-threaded unit tests and do not provide hardware-equivalent cross-thread
-synchronization. The optional FreeRTOS POSIX runtime test separately exercises
-the scheduler, mutex, delay, and create-once integration on the host.
+<a id="mock-backend"></a>
+
+### Test implementation (mock)
+
+The implementations in `impl/.mock/` support deterministic, single-threaded unit tests. They do not reproduce the inter-thread synchronization of the hardware implementations. A separate optional FreeRTOS POSIX test checks scheduler, mutex, delay, and create-once behavior on the host.
 
 ---
 
-## Drivers and frameworks
+<a id="drivers-and-frameworks"></a>
 
-Bundled or ported low-level drivers live under `src/hal/impl/rp2040/drivers/`
-or the relevant thematic directory under `src/hal/`.
-Bundled high-level integration frameworks live under the relevant thematic
-directory under `src/hal/`. Target-specific support remains under `src/hal/impl/`.
-These sources are HAL-internal implementation details (not public API).
+## Drivers and external libraries
+
+Bundled or adapted low-level drivers live in `src/hal/impl/rp2040/drivers/` or the corresponding functional directory under `src/hal/`. Higher-level integrations are also grouped by function under `src/hal/`, while platform-specific code lives in `src/hal/impl/`. These are implementation details; applications should use public HAL APIs.
 
 ### Inventory, authors and license paths
 
@@ -133,9 +118,11 @@ font headers (e.g. `TomThumb.h`, `Tiny3x3a2pt7b.h`).
 
 ---
 
-## Logging timestamp hook
+<a id="logging-timestamp-hook"></a>
 
-The serial debug module supports optional timestamp prefixing for error logs.
+## Adding timestamps to logs
+
+Error messages written through serial debug can include a timestamp. An optional application callback supplies the timestamp text.
 
 API:
 
@@ -144,9 +131,8 @@ API:
 
 Behavior:
 
-- if hook returns `true` and writes non-empty text, `hal_derr()` /
-    `hal_derr_limited()` prepend `[`timestamp`]` before `ERROR! ...`
-- if hook is unset or returns `false`, logging behaves exactly as before
+- If the callback returns `true` and writes non-empty text, `hal_derr()` and `hal_derr_limited()` add the `` `[timestamp]` `` prefix before `ERROR! ...`.
+- Without a callback, or when it returns `false`, the log format is unchanged.
 
 Typical usage:
 
@@ -166,7 +152,9 @@ void app_start(void) {
 
 ---
 
-## Time conversion helper
+<a id="time-conversion-helper"></a>
+
+## Converting dates and times
 
 `hal_time_from_components(int year, int month, int day, int hour, int minute, int second)`
 converts date/time components to Unix epoch seconds.
@@ -177,11 +165,7 @@ Validation:
   Unix epoch beyond `UINT32_MAX`)
 - supports leap-year rules (including century exceptions)
 
-The compatibility API returns `0` both for errors and for the valid Unix epoch
-start. Internally, the shared `hal/time/jh_calendar` core uses
-`hal_status_t` and a 64-bit epoch so callers can distinguish those cases. The
-same core validates and converts RTC, PCF8563 and DS3231 dates on RP2040,
-STM32G474 and mock builds.
+The compatibility interface returns `0` for both an error and the valid start of the Unix epoch. Internally, `hal/time/jh_calendar` uses `hal_status_t` and a 64-bit epoch value to distinguish them. The same code validates and converts RTC, PCF8563, and DS3231 dates in RP2040, STM32G474, and mock builds.
 
 The always-available `hal_time` surface also owns the former `tools.cpp` time
 algorithms:
@@ -200,7 +184,7 @@ utility aliases is exported.
 
 ## Examples
 
-For quick-start usage examples, prefer the [examples](../../../examples) folder.
+Ready-to-use examples are available in [examples](../../../examples).
 
 Typical flows covered there:
 
@@ -211,14 +195,13 @@ Typical flows covered there:
 - DS18B20 request/poll/read non-blocking workflow
 - display initialisation
 
-This file keeps the lower-level API reference and portable API map.
+The individual module references describe each function in detail. The summary below helps identify the portable interface to use.
 
 ---
 
 ## Host-test coverage
 
-Host/mock tests are built via CMake and validate the desktop-facing mock
-backend together with selected utility modules.
+CMake builds the host tests, which check the mock implementation and selected utility modules. These tests do not replace validation on a device.
 
 Covered test targets include:
 
@@ -238,7 +221,7 @@ Covered test targets include:
 - `test_SmartTimers`, `test_pidController`, `test_multicoreWatchdog`, `test_tools`
 - `hal_soft_timer_*` and `hal_pid_controller_*` are thin wrappers over these utility cores.
 
-Build/run entry point:
+To build and run the tests, use:
 
 ```bash
 cmake -S . -B .build/host

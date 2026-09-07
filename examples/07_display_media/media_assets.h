@@ -1,3 +1,8 @@
+/*
+ * Small embedded images used by the display example.
+ * The strings hold Base64-encoded PNG and JPEG test images.
+ */
+
 #pragma once
 
 static const char kMediaPngBase64[] =

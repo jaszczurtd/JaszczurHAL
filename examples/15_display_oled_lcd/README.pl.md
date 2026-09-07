@@ -1,13 +1,11 @@
 # 15 - OLED i wyświetlacz znakowy LCD
 
-Projekt sprawdza obie przenośne ścieżki wyświetlania:
+Przykład wyświetla dane na OLED SSD1306 128×64 oraz na znakowym LCD 16×2
+zgodnym z HD44780. OLED korzysta z I2C i buforowanego API `hal_display`.
+LCD pracuje w trybie czterobitowym przez GPIO; jego pin `RW` połącz z GND.
 
-- OLED SSD1306 128x64 przez I2C i wspólne buforowane API `hal_display`;
-- zgodny z HD44780 LCD 16x2 w czterobitowym trybie GPIO (`RW` połączone z GND).
-
-Urządzenia są inicjalizowane niezależnie, więc przykład działa także wtedy, gdy
-jednego z nich nie ma na stanowisku. Każda kompilacja objęta bramką nadal
-zawiera oba sterowniki.
+Oba wyświetlacze są inicjalizowane niezależnie. Możesz podłączyć tylko jeden
+z nich, choć każda konfiguracja kompilacji obejmuje oba sterowniki.
 
 | Sygnał | Rodzina RP | STM32G474 |
 | --- | --- | --- |
@@ -15,5 +13,6 @@ zawiera oba sterowniki.
 | LCD RS / E | GP12 / GP11 | PC0 / PC1 |
 | LCD D4..D7 | GP10..GP7 | PC2..PC5 |
 
-Zbuduj przez `../../vscode/entry/jh-vscode build --project . --target rp2040`
-albo wybierz inny obsługiwany target z wygenerowanego manifestu projektu.
+Uruchom `../../vscode/entry/jh-vscode build --project . --target rp2040`
+z katalogu tego przykładu. Inne dostępne platformy są wymienione
+w wygenerowanym pliku konfiguracji projektu.

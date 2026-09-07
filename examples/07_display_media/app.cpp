@@ -1,3 +1,8 @@
+/*
+ * Draw shapes and embedded PNG/JPEG images on an ILI9341 display.
+ * Limit image sizes before allocating memory, and reuse the RGB565 buffer.
+ */
+
 #include "media_assets.h"
 
 #include <hal/codecs/hal_image.h>

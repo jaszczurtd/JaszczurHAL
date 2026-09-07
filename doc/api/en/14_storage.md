@@ -4,7 +4,7 @@
 
 > **Part of [JaszczurHAL API Reference](../../en/JaszczurHAL_API.md)**
 
-Covers: `hal_eeprom`, `hal_kv`, `hal_littlefs`, `hal_sdlogger`.
+This chapter covers persistent data through the EEPROM API, key-value storage, LittleFS, and SD card logging. Choose an interface that matches the data layout you need; each module describes its constraints and commit behavior.
 
 Internal-flash layouts reserve application, OTA, LittleFS, and EEPROM regions
 at link time. RP erase/program operations share the flash transaction
@@ -14,15 +14,13 @@ STM32G474 uses page-aligned linker reservations and its target flash service.
 See [RP memory map](../../../rp_native_lib/MEMORY_MAP.md) and
 [STM32G474 memory map](../../../stm32_lib/MEMORY_MAP.md).
 
-## `hal_eeprom` - Unified EEPROM  *(optional - `HAL_ENABLE_EEPROM`)*
+<a id="hal_eeprom---unified-eeprom--optional---hal_enable_eeprom"></a>
 
-Single API for persistent byte-addressable storage. The back-end is selected at
-runtime in `hal_eeprom_init()`.
+## `hal_eeprom` - byte-addressable persistent storage  *(optional - `HAL_ENABLE_EEPROM`)*
 
-The public API, range clipping, integer encoding, locking, callback ownership,
-and provider dispatch live in one target-independent facade. A single portable
-AT24C256 provider uses HAL I2C; the RP flash, STM32G474 flash, and host-memory
-providers contain only their storage mechanisms.
+Read and write persistent data at byte addresses. `hal_eeprom_init()` selects internal flash with EEPROM emulation or an external EEPROM at runtime. The selected medium determines when writes become persistent.
+
+The shared implementation checks operation bounds, encodes integers, protects access with a mutex, and manages the callback and medium selection. AT24C256 support uses HAL I2C. The RP flash, STM32G474 flash, and host-memory implementations provide only medium-specific operations.
 
 `HAL_EEPROM_FLASH` means "use the target-native internal flash EEPROM
 emulation" and is the portable selector for RP and STM32G474 firmware.
@@ -238,19 +236,15 @@ if (hal_eeprom_read_byte_ex(10, &value) == HAL_OK) {
 ---
 
 
-## `hal_kv` - Key-value storage on EEPROM  *(optional - `HAL_ENABLE_KV`)*
+<a id="hal_kv---key-value-storage-on-eeprom--optional---hal_enable_kv"></a>
 
-Thread-safe, power-loss-safe KV/record storage on top of `hal_eeprom`. The
-caller-selected range is divided into two equal banks. Mutations are staged in
-RAM, the complete inactive bank body is written and verified, and its
-generation header is published last. Startup validates the header, body and
-every record in both banks, then selects the newest complete generation. A
-partial newer write can therefore never hide the previous complete bank.
+## `hal_kv` - persistent key-value storage  *(optional - `HAL_ENABLE_KV`)*
 
-This state machine is target-independent. RP, STM32G474, AT24C256 and the mock
-use the same `hal_kv` implementation; providers only implement physical region
-replacement and last-step publication. A future ESP32 storage provider gets
-the same behavior without client-side KV changes.
+Store numbers and binary data by key, with synchronized access and recovery of the last complete write after power loss. The module uses `hal_eeprom`.
+
+The application-selected range is split into two equal banks. Changes are prepared in RAM, then the entire inactive bank is written and verified. Its header and generation number are written last. At startup, the module validates both headers, bank contents, and individual records, then selects the newest complete generation. An incomplete newer write therefore does not replace the previous complete bank.
+
+RP, STM32G474, AT24C256, and mock use the same `hal_kv` implementation. The storage-specific layer only replaces the physical region and performs the final bank publication. This separation allows ESP32 storage support to be added without changing the application-facing KV API; it does not imply that such support is already available.
 
 ```c
 #include <hal/storage/hal_kv.h>
@@ -281,13 +275,7 @@ bool hal_kv_bank_looks_present(uint16_t bank_addr, uint16_t bank_size);
 
 - **Dependencies:** `hal_eeprom`, `hal_crc`, `hal_sync`, `hal_serial`.
 
-**Geometry:** each bank must be an independent storage region. The native RP
-default is 8192 bytes total (two 4096-byte sectors); STM32G474 uses 4096 bytes
-total (two 2048-byte pages). Byte-addressable EEPROM providers use two
-non-overlapping logical ranges. `HAL_KV_PUBLISH_SIZE` reserves the prefix
-written last (256 bytes by default), while `HAL_KV_MAX_BANK_SIZE` bounds the
-static RAM staging buffer. Custom flash sizes must split into two erase-aligned
-banks.
+**Memory layout:** Each bank must occupy an independent region. The RP default reservation is 8192 bytes: two 4096-byte sectors. STM32G474 reserves 4096 bytes: two 2048-byte pages. EEPROM banks use two non-overlapping logical ranges. `HAL_KV_PUBLISH_SIZE` sets the size of the prefix written last (256 bytes by default), and `HAL_KV_MAX_BANK_SIZE` limits the static RAM work buffer. A custom flash area must split into two banks aligned to erase boundaries.
 
 **Thread safety:** Thread-safe and multicore-safe. An internal singleton mutex
 created with the HAL atomic create-once helper protects all operations.
@@ -296,37 +284,15 @@ created with the HAL atomic create-once helper protects all operations.
 **Deduplication:** `hal_kv_set_u32` / `hal_kv_set_blob` skip the EEPROM write when the
 value is unchanged, avoiding unnecessary flash wear.
 
-**Commit policy:** auto-commit is enabled by default. Every changed value then
-publishes one complete inactive bank. Use `hal_kv_set_auto_commit(false)` to
-stage several logical changes and publish them together with
-`hal_kv_commit()`. A failed publication remains retryable and does not activate
-the destination bank in the running process.
+**Automatic commit:** By default, each changed value writes and publishes the entire inactive bank. Call `hal_kv_set_auto_commit(false)` to prepare several changes in RAM, then write them together with `hal_kv_commit()`. A failed operation can be retried; it does not activate the target bank in the running application.
 
-**On-storage format:** this implementation writes format version 2. It does not
-interpret the older append-in-place version 1 layout; deployments that already
-contain version 1 data need an application migration or a deliberate storage
-reset during the update. The header layout (magic, version, sizes, per-field
-offsets) is a private implementation detail and has already changed once
-(version 1 to 2) -- a caller that needs to detect a bank at a candidate
-address before deciding where to `hal_kv_init_ex()` must use
-`hal_kv_bank_looks_present()`/`hal_kv_bank_looks_present_ex()` rather than
-hand-decoding the header; that is exactly what those two exist for.
+**Data format:** The implementation writes version 2 and does not read the older version 1 append-in-place layout. Updating a device containing version 1 data requires application-level migration or a deliberate data reset. The header layout-magic, version, sizes, and field offsets-is private and changed between versions 1 and 2. To check for a bank at a candidate address before `hal_kv_init_ex()`, use `hal_kv_bank_looks_present()` or `hal_kv_bank_looks_present_ex()` rather than decoding the header yourself.
 
-**Read modes:** by default `hal_kv_get_u32()`/`hal_kv_get_blob()` are served
-from the active bank's full in-RAM copy (populated at `hal_kv_init_ex()` and
-refreshed on every publish) and never touch the backing EEPROM, so they are
-fast and immune to spurious media glitches -- but a storage fault that
-develops *after* init is invisible to a plain get. Call
-`hal_kv_set_read_through(true)` to make every get additionally re-read the
-record live from EEPROM (one extra EEPROM read per get) so a live medium
-fault surfaces as a real `hal_status_t` error instead of being served from
-the (still valid) cache. This is a KV-wide mode, not per-call, and persists
-across `hal_kv_init_ex()` like `hal_kv_set_auto_commit()` does. Enable it when
-a caller gates decisions (for example blocking writes) on "is storage
-currently healthy right now"; leave it at the default when only the last
-successfully published generation matters.
+**Cached reads and medium checks:** By default, `hal_kv_get_u32()` and `hal_kv_get_blob()` read a full copy of the active bank from RAM. The copy is populated at `hal_kv_init_ex()` and after each bank publication. These calls do not access EEPROM, so transient medium failures do not affect the result. However, an ordinary read cannot detect a failure that occurs after initialization.
 
-**Example: key-value storage with integers and blobs**
+`hal_kv_set_read_through(true)` enables one additional EEPROM record read per call. A current medium failure then produces a `hal_status_t` error instead of being hidden by a valid RAM copy. This setting applies to the whole module and, like `hal_kv_set_auto_commit()`, survives `hal_kv_init_ex()`. Enable it when application decisions, such as disabling writes, depend on the medium being operational now. Keep the default when only the last successfully published generation matters.
+
+**Example: storing integers and binary values by key**
 ```c
 #include <hal/storage/hal_kv.h>
 #include <hal/storage/hal_eeprom.h>
@@ -423,10 +389,11 @@ default:            break;
 ---
 
 
-## `hal_littlefs` - LittleFS lifecycle helpers  *(opt-in - `HAL_ENABLE_LITTLEFS`)*
+<a id="hal_littlefs---littlefs-lifecycle-helpers--opt-in---hal_enable_littlefs"></a>
 
-Thread-safe, target-independent facade for LittleFS lifecycle, path helpers and
-filesystem size queries.
+## `hal_littlefs` - LittleFS operations  *(opt-in - `HAL_ENABLE_LITTLEFS`)*
+
+Mount, unmount, and format LittleFS, perform path operations, and query filesystem size. The API is shared across platforms and synchronizes concurrent calls.
 
 ```c
 #include <hal/storage/hal_littlefs.h>
@@ -470,11 +437,7 @@ size_t       hal_littlefs_used_bytes(void);
 - The public HAL API currently exposes lifecycle, path removal/existence and
   size stats only. It does not provide portable file open/read/write wrappers.
 
-`hal_littlefs.cpp` owns the public API, mounted state, validation, locking and
-provider dispatch for every target, including the mock. One shared littlefs v2
-provider owns mount, unmount, format, path and filesystem-stat operations.
-Hardware backends provide only geometry and checked read/program/erase/sync
-operations; the mock provides injectable provider results.
+`hal_littlefs.cpp` keeps the mount state, validates arguments, and protects the public API with a shared lock. One littlefs v2 implementation handles mounting, formatting, path operations, and statistics. Platform code provides medium geometry and checked read, program, erase, and sync operations. The mock lets tests control their results.
 
 **Native RP implementation:** uses the pinned upstream littlefs v2.11.3
 checkout under `third_party/littlefs/` and an internal flash partition
@@ -515,7 +478,7 @@ operation depends on the selected backend. A callback may run during an
 operation that later reports failure; use the operation's return status as the
 success result.
 
-**Example: mount with an explicit destructive-format opt-in**
+**Example: mounting with explicit permission to format**
 
 Pass `true` only when erasing the reserved partition is acceptable. A mount
 failure alone does not distinguish blank media from corruption or a transient
@@ -606,12 +569,11 @@ hal_littlefs_used_bytes_ex(&used);   // HAL_EUNINIT (used=0) while unmounted
 
 ---
 
-## `hal_sdlogger` - SD-card logger  *(opt-in - `HAL_ENABLE_SDLOGGER`)*
+<a id="hal_sdlogger---sd-card-logger--opt-in---hal_enable_sdlogger"></a>
 
-Periodic SD-card logger plus crash-report logger. The module stores log/crash
-file counters in `hal_eeprom` and writes files through the shared FatFs
-SD-over-SPI layer, so enabling it propagates `HAL_ENABLE_FAT`,
-`HAL_ENABLE_EEPROM`, and `HAL_ENABLE_SPI`.
+## `hal_sdlogger` - SD card logging  *(opt-in - `HAL_ENABLE_SDLOGGER`)*
+
+Write periodic logs and crash reports to an SD card. The module stores log/crash file counters in `hal_eeprom` and writes files through FatFs on an SPI-connected card. Enabling it also enables `HAL_ENABLE_FAT`, `HAL_ENABLE_EEPROM`, and `HAL_ENABLE_SPI`.
 
 ```c
 #include <hal/storage/hal_sdlogger.h>
@@ -668,7 +630,7 @@ HAL_SDLOGGER_SPI_BUS            0u
   returns `HAL_EOVERFLOW`; `hal_sdlogger_crash_report(NULL)` returns
   `HAL_EINVAL`.
 
-Buildable example: `examples/10_storage`.
+A complete example application is available in `examples/10_storage`.
 
 **Example: SD card periodic logging**
 ```c
@@ -718,7 +680,7 @@ void shutdown_logging(void) {
 }
 ```
 
-**Example: SD card crash logger**
+**Example: writing a crash report to an SD card**
 ```c
 #include <hal/storage/hal_sdlogger.h>
 #include <hal/storage/hal_eeprom.h>

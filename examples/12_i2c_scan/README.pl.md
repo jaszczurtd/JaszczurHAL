@@ -1,21 +1,29 @@
-# 12 - Skaner I2C i sprzętowa weryfikacja STM32G474
+<a id="12---skaner-i2c-i-sprzętowa-weryfikacja-stm32g474"></a>
 
-Przykład sprawdza rzeczywistą implementację `hal_i2c` na Nucleo-G474RE: skanuje
-magistralę I2C i wypisuje każdy adres, który odpowie sygnałem ACK. Pozwala w ten
-sposób potwierdzić na sprzęcie działanie I2C1 jako kontrolera magistrali w
-trybie bare metal.
+# 12 - Wykrywanie urządzeń I2C na STM32G474
 
-- **I2C1**: SCL = **PB8**, SDA = **PB9** (złącze rozszerzeń NUCLEO: D15 = SCL, D14 = SDA)
-- tryb standardowy 100 kHz; TIMINGR używa jawnie wybranego zegara HSI16 i
-  pozostaje niezależny od SYSCLK/PCLK1
-- używa `hal_i2c_scan()` i przekazuje `hal_watchdog_feed` jako funkcję zwrotną
-  wywoływaną przy każdej próbie; formatowanie i powtarzanie skanowania co dwie
-  sekundy pozostają w aplikacji
-- konsola: USART2 / ST-Link Virtual COM Port, **115200 8N1**
+Przykład skanuje adresy I2C `0x08`-`0x77` i wypisuje urządzenia odpowiadające
+sygnałem ACK. Służy do sprawdzenia połączeń i podstawowej komunikacji I2C1 na
+STMG474. Oczywiście po dostosowaniu połączeń będzie działał na reszcie
+wspieranych architektur.
 
-Połączenie I2C1 zostało fizycznie sprawdzone na NUCLEO-G474RE z modułami
-PCF8563 (`0x51`) i DS3231 (`0x68`). Skaner używa 100 kHz; to samo połączenie
-PB9/PB8 jest sprawdzane przy 400 kHz przez `examples/16_rtc_backends`.
+SCL jest na PB8 (D15), a SDA na PB9 (D14). Magistrala pracuje z częstotliwością
+100 kHz. Ustawienia TIMINGR korzystają z zegara HSI16 wybranego dla I2C,
+niezależnie od SYSCLK/PCLK1. Konsola używa USART2 przez ST-Link Virtual COM
+Port, z ustawieniem **115200 8N1**.
+
+Aplikacja wywołuje `hal_i2c_scan()` i przekazuje `hal_watchdog_feed`, aby
+obsłużyć watchdog przy każdej próbie. Po skanowaniu wypisuje wyniki i czeka
+dwie sekundy przed kolejnym odczytem.
+
+Połączenie PB9/PB8 sprawdzono wcześniej z PCF8563 (`0x51`) i DS3231 (`0x68`).
+Ten przykład używa 100 kHz; przykład `examples/16_rtc_backends` korzysta
+z tego samego połączenia przy 400 kHz.
+
+**Zakres konfiguracji:** manifest zawiera również platformy RP, ale
+`app.c` ma na stałe wpisane piny `25u`/`24u` i opis STM32G474. W STM32
+oznaczają one PB9/PB8. Przed uruchomieniem na RP sprawdź konfigurację pinów;
+sama obecność platformy w manifeście nie potwierdza działania tego połączenia.
 
 ## Połączenia sprzętowe
 
@@ -29,9 +37,9 @@ Nucleo-G474RE                 Urządzenie I2C (np. PCF8563 RTC, AT24C256, BME280
   GND ──────────────────────────── GND
 ```
 
-Zewnętrzne rezystory podciągające 2,2-10 kΩ do 3V3 są wymagane; wewnętrzne
-podciągnięcia STM32 są zbyt słabe dla niezawodnego I2C. Wiele modułów ma je już
-wbudowane.
+Zastosuj zewnętrzne rezystory podciągające 2,2-10 kΩ do 3V3. Wewnętrzne
+podciąganie STM32 nie zastępuje rezystorów wymaganych w tym połączeniu.
+Sprawdź, czy moduł nie ma ich już wbudowanych.
 
 Dla modułu DS3231 ze złączem `+ D C NC -` użyj:
 
@@ -43,8 +51,8 @@ Dla modułu DS3231 ze złączem `+ D C NC -` użyj:
 | `NC` | Pozostaw niepodłączony |
 | `-` | `GND` |
 
-Zasil moduł napięciem 3,3 V, aby jego rezystory podciągające I2C również były
-podłączone do 3,3 V.
+Zasil moduł napięciem 3,3 V, aby wbudowane rezystory I2C także podciągały
+linie do 3,3 V.
 
 ## Kompilacja i wgrywanie (Linux Mint oraz systemy oparte na Debianie)
 
@@ -63,12 +71,14 @@ st-flash --reset write \
 tio /dev/ttyACM0 -b 115200
 ```
 
-Alternatywa OpenOCD:
+Możesz też wgrać program przez OpenOCD:
 `vscode/entry/jh-vscode upload --project examples/12_i2c_scan --target stm32g474`.
 
-## Oczekiwane wyjście
+<a id="oczekiwane-wyjście"></a>
 
-Przy podłączonym RTC PCF8563 pod adresem `0x51`:
+## Przykładowy wynik
+
+Przy podłączonym PCF8563 pod adresem `0x51`:
 
 ```
 === JaszczurHAL G474 I2C scanner ===
@@ -80,23 +90,22 @@ scanning 0x08..0x77 ...
 ...
 ```
 
-Wypisane adresy muszą odpowiadać podłączonym urządzeniom. Potwierdza to pełną
-obsługę START / adres / ACK / STOP.
+Wykryte adresy powinny odpowiadać podłączonym urządzeniom. Wynik pokazuje,
+że urządzenie potwierdza adres podczas skanowania magistrali.
 
 ## Rozwiązywanie problemów
 
-| Objaw | Prawdopodobna przyczyna |
+| Objaw | Co sprawdzić |
 |---|---|
-| `(no devices found)` przy każdym skanowaniu | Brak lub zbyt słabe podciągnięcia; zamienione SDA/SCL; brak zasilania urządzenia; niewłaściwy zakres adresów |
-| **Każdy** adres 0x08..0x77 zgłasza urządzenie | SDA zwarte do masy albo bez podciągnięcia; nie są to prawdziwe ACK |
-| Brak danych w konsoli mimo zasilania | Zły port lub baud albo terminal otwarty przed resetem; naciśnij czarny RESET B2 |
-| `st-info --probe` niczego nie znajduje | Użyj portu USB CN1 ST-LINK; sprawdź `dmesg \| tail` pod kątem `ttyACM0` |
-| Znaleziony adres jest przesunięty o jeden | To adresy 7-bitowe; część dokumentacji układów podaje przesuniętą postać 8-bitową |
+| `(no devices found)` po każdym skanowaniu | Zasilanie modułu, rezystory podciągające, połączenia SDA/SCL i zakres adresów. |
+| Odpowiedź pod każdym adresem od `0x08` do `0x77` | SDA może być stale w stanie niskim, np. wskutek zwarcia lub braku podciągania. Nie traktuj takiego wyniku jako wykrycia urządzeń. |
+| Brak danych w konsoli | Sprawdź port i prędkość transmisji. Po otwarciu terminala naciśnij RESET B2, aby zobaczyć komunikaty startowe. |
+| `st-info --probe` nie wykrywa urządzenia | Sprawdź połączenie USB z CN1 ST-LINK. Komunikaty systemowe odczytasz przez `dmesg \| tail`; osobno sprawdź dostępność portu szeregowego. |
+| Adres różni się od wartości w dokumentacji układu | Skaner pokazuje adresy 7-bitowe. Część dokumentacji podaje adres przesunięty o jeden bit, z miejscem na bit odczytu/zapisu. |
 
 ## Uwagi
 
-- To stanowisko testowe sprawdza magistralę 0, czyli I2C1. Implementacja dla
-  STM32G474 obsługuje też magistralę 1, czyli I2C2, z prawidłową parą
-  alternatywnych funkcji SDA/SCL.
-- I2C1 i I2C2 jawnie wybierają HSI16 jako źródło zegara. Ustawienia TIMINGR dla
-  16 MHz pozostają poprawne po zmianie SYSCLK lub zegara APB.
+Przykład używa magistrali 0, czyli I2C1. Implementacja STM32G474 obsługuje
+również magistralę 1 (I2C2) po wybraniu zgodnej pary pinów SDA/SCL.
+Oba kontrolery wybierają HSI16 jako źródło zegara. Ustawienia TIMINGR dla
+16 MHz nie zależą wtedy od zmiany SYSCLK ani zegara APB.

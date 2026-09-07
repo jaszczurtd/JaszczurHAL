@@ -4,9 +4,13 @@
 
 > **Part of [JaszczurHAL API Reference](../../en/JaszczurHAL_API.md)**
 
-Covers: `hal_spi`, `hal_spi_device`, `hal_i2c`, `hal_i2c_slave`, `hal_uart`, `hal_swserial`, `hal_onewire`.
+This chapter covers data transfers over SPI, I2C, hardware and software UART, and 1-Wire. When sharing a bus, check the locking requirements, buffer lifetimes, and initialization rules.
 
-## `hal_spi` - SPI bus and transfer API
+<a id="hal_spi---spi-bus-and-transfer-api"></a>
+
+## `hal_spi` - SPI transfers
+
+Configure an SPI bus and exchange data using blocking transfers or, where supported, asynchronous DMA transfers.
 
 ```c
 #include <hal/spi/hal_spi.h>
@@ -54,9 +58,7 @@ bool     hal_spi_write_dma_async_busy(uint8_t bus);
 bool     hal_spi_write_dma_async_wait(uint8_t bus);
 ```
 
-Only bus values 0 and 1 are supported. Status-returning operations report
-`HAL_EINVAL` for other values; low-level synchronization and cleanup helpers
-retain their checked-build assertions.
+Bus identifiers are `0` and `1`. Status-returning functions report an invalid identifier as an error; other low-level calls may assert.
 
 The API reports `HAL_EINVAL` for invalid buses, settings, output pointers and
 non-empty NULL buffers; async DMA start reports `HAL_EBUSY` when a transfer is
@@ -102,7 +104,11 @@ write inside `_async_start()`, report `_async_busy() == false`, and let
 
 ---
 
-## `hal_spi_device` - target-neutral SPI device descriptor
+<a id="hal_spi_device---target-neutral-spi-device-descriptor"></a>
+
+## `hal_spi_device` - SPI device transactions
+
+Store the settings for an individual SPI device and perform transactions with bus locking and chip-select control. This allows devices with different settings to share a bus.
 
 ```c
 #include <hal/spi/hal_spi_device.h>
@@ -132,7 +138,11 @@ transaction paths call backend end, deassert CS and unlock the bus.
 
 ---
 
-## `hal_i2c` - I2C bus  *(optional - `HAL_ENABLE_I2C`)*
+<a id="hal_i2c---i2c-bus--optional---hal_enable_i2c"></a>
+
+## `hal_i2c` - I2C controller operations  *(optional - `HAL_ENABLE_I2C`)*
+
+Configure an I2C controller, read and write data, and scan for devices with 7-bit addresses. Addressing modes and achievable clock rates depend on the configuration and platform.
 
 ```c
 #include <hal/i2c/hal_i2c.h>
@@ -350,11 +360,7 @@ address value: `hal_i2c_init()`/`hal_i2c_init_bus()` put a bus in 7-bit mode
 differently depending on which init variant configured the bus, and a
 controller never mixes 7-bit and 10-bit devices at once.
 
-Every existing
-address-taking function widened its parameter from `uint8_t` to the new
-`hal_i2c_address_t` (`uint16_t`) - a deliberate breaking type change; ordinary
-call sites passing a `uint8_t` literal or variable keep compiling unchanged
-after a rebuild.
+The address argument changed from `uint8_t` to `hal_i2c_address_t` (`uint16_t`). Ordinary address literals remain compatible, but code that depends on the exact argument type needs adjustment.
 
 `hal_i2c_scan()`/`hal_i2c_scan_bus()` remain 7-bit-only
 forever and return `HAL_EUNSUPPORTED` when called against a 10-bit bus.
@@ -380,7 +386,7 @@ normal stop/reset cycle and invalidates state tied to the previous mode.
 
 **Thread safety:** Hardware backends serialize transfer APIs with an internal per-bus `hal_mutex_t`; use `hal_i2c_lock` / `hal_i2c_unlock` to extend critical regions around direct third-party/backend bus calls. `hal_i2c_init*()` / `hal_i2c_deinit*()` reconfigure shared bus objects and must be serialized by the application during setup/teardown. Mock backend does not synchronize concurrent access.
 
-**Mock helpers:**
+Mock controls and inspection functions:
 ```c
 void    hal_mock_i2c_inject_rx(const uint8_t *data, int len);                    // pre-load receive buffer on bus 0
 void    hal_mock_i2c_inject_rx_bus(uint8_t bus, const uint8_t *data, int len);   // pre-load receive buffer on selected bus
@@ -404,7 +410,7 @@ uint32_t hal_mock_i2c_get_bus_clear_count(void);                                
 uint32_t hal_mock_i2c_get_bus_clear_count_bus(uint8_t bus);                       // number of bus_clear calls on selected bus
 ```
 
-**Example - PCF8574 8-bit I/O expander using the one-shot helpers:**
+Example using single-operation read and write functions:
 
 PCF8574 is addressed once and has no register layout: a single write byte
 drives all 8 output latches; a single read byte returns the current port
@@ -455,7 +461,11 @@ mutex in addition, since the HAL mutex is released at each `end_transmission`.
 
 ---
 
-## `hal_i2c_slave` - I2C slave/target with register map  *(optional - `HAL_ENABLE_I2C_SLAVE`)*
+<a id="hal_i2c_slave---i2c-slavetarget-with-register-map--optional---hal_enable_i2c_slave"></a>
+
+## `hal_i2c_slave` - I2C peripheral register map  *(optional - `HAL_ENABLE_I2C_SLAVE`)*
+
+Expose a register map to an external I2C controller. The controller selects a register and then reads or writes consecutive bytes.
 
 Exposes a fixed-size register map over I2C slave mode. A remote master writes
 a one-byte register pointer, then reads N bytes starting from that address.
@@ -538,7 +548,7 @@ trigger `HAL_ASSERT` in checked builds.
 
 **Thread safety:** `reg_write*` / `reg_read*` are thread-safe for normal task/core callers on hardware backends. The register map is protected by a short backend-local lock shared with bus callbacks/ISRs, so handlers do not take HAL mutexes in FreeRTOS builds. `init` / `deinit` must be serialized by the application during setup/teardown. Mock backend does not synchronize concurrent access.
 
-**Mock helpers:**
+Mock test functions:
 ```c
 bool    hal_mock_i2c_slave_is_initialized(void);                                       // init state for bus 0
 bool    hal_mock_i2c_slave_is_initialized_bus(uint8_t bus);
@@ -556,7 +566,11 @@ int     hal_mock_i2c_slave_simulate_request_bus(uint8_t bus, uint8_t *out_buf, i
 
 ---
 
-## `hal_swserial` - Software UART  *(optional - `HAL_ENABLE_SWSERIAL`)*
+<a id="hal_swserial---software-uart--optional---hal_enable_swserial"></a>
+
+## `hal_swserial` - software serial port  *(optional - `HAL_ENABLE_SWSERIAL`)*
+
+Provide UART communication without using a hardware UART controller. RP2040/RP2350 use PIO and DMA; other platform implementations are described below.
 
 UART frame-format constants for `config` are defined in `hal/serial/hal_uart_config.h`.
 
@@ -572,7 +586,7 @@ HAL_UART_CFG_5O1  HAL_UART_CFG_6O1  HAL_UART_CFG_7O1  HAL_UART_CFG_8O1
 HAL_UART_CFG_5O2  HAL_UART_CFG_6O2  HAL_UART_CFG_7O2  HAL_UART_CFG_8O2
 ```
 
-The numeric values retain their established public values.
+Public configuration options have stable numeric values:
 
 ```c
 #include <hal/serial/hal_swserial.h>
@@ -650,7 +664,11 @@ const char *hal_mock_swserial_last_write(hal_swserial_t h);
 
 ---
 
-## `hal_uart` - Hardware UART  *(optional - `HAL_ENABLE_UART`)*
+<a id="hal_uart---hardware-uart--optional---hal_enable_uart"></a>
+
+## `hal_uart` - hardware serial port  *(optional - `HAL_ENABLE_UART`)*
+
+Configure a hardware UART and read or write data. Available ports, synchronization, and interrupt-core ownership depend on the platform.
 
 ```c
 #include <hal/serial/hal_uart.h>
@@ -736,7 +754,11 @@ void        hal_mock_uart_set_write_callback(hal_uart_t h,
 
 ---
 
-## `hal_onewire` - 1-Wire bus  *(optional - `HAL_ENABLE_ONEWIRE`)*
+<a id="hal_onewire---1-wire-bus--optional---hal_enable_onewire"></a>
+
+## `hal_onewire` - 1-Wire communication  *(optional - `HAL_ENABLE_ONEWIRE`)*
+
+Read and write a 1-Wire bus through a single GPIO pin. Hardware implementations require an external pull-up resistor; the mock implementation supports scripted responses for tests.
 
 Thread-safe wrapper for one 1-Wire bus bound to a single GPIO pin. Hardware
 builds use the shared HAL-only bit-bang driver in

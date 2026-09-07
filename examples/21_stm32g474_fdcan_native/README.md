@@ -1,24 +1,24 @@
-# 21 - STM32G474 native FDCAN
+<a id="21---stm32g474-native-fdcan"></a>
 
-STM32G474-only CAN FD example using the native FDCAN1 peripheral through
-`HAL_ENABLE_STM32G474_FDCAN`.
+# 21 - CAN FD with the STM32G474 built-in controller
 
-What it does:
-- configures FDCAN1 on PA11/PA12
-- enables CAN FD with 500 kbit/s arbitration and 2 Mbit/s data phase
-- sends one CAN FD heartbeat frame per second with CAN ID `0x123`
-- polls RX FIFO0 and prints received frames to serial output
+This example sends and receives CAN FD frames through the STM32G474 FDCAN1
+peripheral. It transmits a frame with ID `0x123` once per second, reads
+incoming frames from RX FIFO0, and prints them to the serial console.
+
+The arbitration rate is 500 kbit/s and the data-phase rate is 2 Mbit/s.
+`HAL_ENABLE_STM32G474_FDCAN` enables the controller. This example is for
+STM32G474 only.
 
 ## Wiring
 
-- PA11: FDCAN1_RX
-- PA12: FDCAN1_TX
-
-Connect PA11/PA12 to a CAN FD-capable transceiver, not directly to the bus.
-Use a common ground and normal CAN bus termination, typically 120 ohm at each
-end of the bus.
+PA11 is `FDCAN1_RX` and PA12 is `FDCAN1_TX`. Connect them to a CAN FD-capable
+transceiver, never directly to the CAN bus. Connect the devices' grounds and
+terminate the bus, typically with a 120 Ω resistor at each of its two ends.
 
 ## Build
+
+Run from this example's directory:
 
 ```bash
 ../../vscode/entry/jh-vscode build --project . --target stm32g474

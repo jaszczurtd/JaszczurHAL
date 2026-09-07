@@ -1,3 +1,8 @@
+/*
+ * Print temperatures from MCP9600 and MAX6675 thermocouple interfaces.
+ * The devices are initialized independently and read through the same HAL API.
+ */
+
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
 #include <hal/i2c/hal_i2c.h>

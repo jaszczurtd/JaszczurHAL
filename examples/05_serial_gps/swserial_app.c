@@ -1,3 +1,8 @@
+/*
+ * Read GPS data and run a separate loopback/echo test using software serial.
+ * This RP-only variant selects software serial for the GPS module as well.
+ */
+
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
 #include <hal/gps/hal_gps.h>

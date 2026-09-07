@@ -1,6 +1,10 @@
 /**
  * @file link_app.cpp
- * @brief Fragmented command-router round trip over a reliable LoRa link.
+ * @brief Send a 500-byte echo command over LoRa and check the matching
+ * response.
+ *
+ * hal_lora_link splits messages into fragments and handles retries. This
+ * example sends plaintext with CRC protection; it does not enable encryption.
  */
 
 #ifdef HAL_ENABLE_LORA_COMMANDS
@@ -65,7 +69,8 @@ hal_lora_modem_config_t modem_config(const hal_lora_radio_config_t &hardware) {
   hal_lora_modem_config_t modem = hal_lora_default_eu868();
   modem.tx_power_dbm = 10;
   if (hardware.hardware.sx126x.max_frequency_hz < UINT32_C(800000000)) {
-    /* Deliberate LF hardware-test configuration, not a regulatory preset. */
+    /* Fixed LF test frequency; not a region-specific regulatory configuration.
+     */
     modem.frequency_hz = kLfTestFrequencyHz;
   }
   return modem;

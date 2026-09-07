@@ -57,6 +57,8 @@ zgodności z gniazdami BSD.
 
 ## `hal_timer` - Alarmy sprzętowe
 
+Planuj jednorazowe alarmy lub korzystaj z timerów zarządzanych, które można uruchamiać, zatrzymywać, wstrzymywać i wznawiać. Przed wyborem API sprawdź kontekst funkcji zwrotnej i zasady zwalniania puli alarmów.
+
 ```c
 #include <hal/timers/hal_timer.h>
 
@@ -137,7 +139,7 @@ obsługiwane.
   drugiemu rdzeniowi. Przed ponownym użyciem identyfikatora alarmu Pico usuwane
   są nieaktualne znaczniki anulowania. Sekwencja przypisana do danego slotu
   powtarza się po 32767 alokacjach.
-- **impl/stm32g474:** TIM6 działa jako planista alarmów jednorazowych
+- **impl/stm32g474:** TIM6 obsługuje alarmy jednorazowe
   1 MHz, taktowany z jawnie określonego zegara timera APB1 o częstotliwości
   170 MHz. Długie opóźnienia są dzielone na fragmenty mieszczące się w
   16-bitowych okresach TIM6, wartości zwracane z callbacku większe od zera
@@ -303,6 +305,8 @@ void example_alarm_pool(void) {
 
 ## `hal_system` - Czas, watchdog i informacje systemowe
 
+Odczytuj czas od uruchomienia, wykonuj opóźnienia, obsługuj watchdog i pobieraj informacje o urządzeniu. Moduł udostępnia też diagnostykę resetu i awarii; część funkcji ma ograniczenia zależne od kontekstu wywołania.
+
 ```c
 #include <hal/system/hal_system.h>
 
@@ -405,7 +409,7 @@ całkowity i dostępny rozmiar RAM pochodzą bezpośrednio z wygenerowanego
 deskryptora targetu. Pojemność flash przeznaczonego na program pochodzi z
 deskryptora wybranej płytki. Wartości runtime, takie jak częstotliwości zegarów
 i ilość wolnego heapu, są pobierane z backendu. Pola tekstowe wskazują
-statyczne napisy przechowywane w danych wygenerowanych podczas buildu lub w
+statyczne napisy przechowywane w danych wygenerowanych podczas kompilacji lub w
 backendzie. Pola liczbowe mają wartość `0`, jeśli dana informacja
 nie dotyczy bieżącego targetu. API nie alokuje pamięci, dlatego kod wywołujący
 nie może zwalniać zwróconych napisów.
@@ -417,13 +421,7 @@ funkcje `hal_read_chip_temp()`, `hal_get_last_fault()` i
 `hal_stack_guard_init()` są adapterami zgodności wywołującymi odpowiednie
 warianty `_ex`.
 
-Funkcje interwału milisekundowego pozwalają wykonywać nieblokujące operacje
-okresowe w firmware opartym na pętli, bez uruchamiania timera sprzętowego.
-Sprawdzają warunek `now_ms - last_ms >= interval_ms`, który działa prawidłowo
-także po zawinięciu licznika, i aktualizują `last_ms` tylko po upływie
-interwału. Warianty `*_now` same pobierają `now_ms` przez `hal_millis()`.
-`hal_millis_interval_call*()` po upływie interwału wywołuje callback, jeśli nie
-jest równy `NULL`, i zwraca `true` dla bieżącego obiegu pętli.
+Funkcje interwałowe pozwalają uruchamiać czynności okresowo w pętli, bez blokującego oczekiwania i bez timera sprzętowego. Sprawdzają `now_ms - last_ms >= interval_ms`, także po zawinięciu licznika, i aktualizują `last_ms` dopiero po upływie interwału. Warianty `*_now` pobierają czas przez `hal_millis()`. `hal_millis_interval_call*()` wywołuje podaną funkcję zwrotną, o ile nie jest `NULL`, i zwraca `true` w tym obiegu pętli, w którym upłynął interwał.
 
 - **impl/rp2040:** `hal_millis()` używa `to_ms_since_boot(get_absolute_time())`,
   a `hal_micros()` i `hal_micros64()` - `time_us_64()`. Obsługa SoC dla
@@ -432,9 +430,9 @@ jest równy `NULL`, i zwraca `true` dla bieżącego obiegu pętli.
   znajduje się w
   `src/hal/impl/rp2040/drivers/rp2040/rp2040_system.{h,cpp}`. Przyczyna resetu
   jest dekodowana, a ARM HardFault przechwytywany w
-  `rp2040_fault.{h,cpp}`. W buildach FreeRTOS funkcja opóźniająca oddaje
+  `rp2040_fault.{h,cpp}`. W konfiguracjach FreeRTOS funkcja opóźniająca oddaje
   sterowanie tylko w prawidłowym kontekście zadania. Przed uruchomieniem
-  planisty, w ISR i na krytycznych ścieżkach HAL
+  schedulera, w ISR i na krytycznych ścieżkach HAL
   stosowane jest ograniczone aktywne oczekiwanie SDK. Opóźnienie
   mikrosekundowe zawsze używa `busy_wait_us()`. Informacje o konfiguracji
   systemu łączą wygenerowane dane targetu i płytki z obszarami flash
@@ -444,7 +442,7 @@ jest równy `NULL`, i zwraca `true` dla bieżącego obiegu pętli.
   przyczynie poprzedniego restartu.
 - **impl/stm32g474:** Podczas uruchamiania PLL generuje SYSCLK 170 MHz z HSI16.
   Magistrale AHB, APB1 i APB2 pracują bez preskalera. W trybie bare metal
-  64-bitowy licznik milisekund jest zwiększany przez SysTick. W buildach z
+  64-bitowy licznik milisekund jest zwiększany przez SysTick. W konfiguracjach z
   FreeRTOS każdy tick przekazany przez kernel zwiększa ten licznik. Stan
   licznika jest zapisywany w dwóch buforach. W trybie
   bare metal odczyt czasu uwzględnia bieżącą część mikrosekundową SysTick oraz
@@ -465,11 +463,11 @@ jest równy `NULL`, i zwraca `true` dla bieżącego obiegu pętli.
   którym fabrycznie zapisano bajty kalibracyjne. Obsługa ADC1 (inicjalizacja,
   rozdzielczość, włączanie/wyłączanie kanałów wewnętrznych) znajduje się w
   `src/hal/impl/stm32g474/stm32g474_adc_shared.{h,cpp}` i jest współdzielona z
-  backendem `hal_adc` dla pinów zewnętrznych. Buildy hostowe (host-sanity)
+  backendem `hal_adc` dla pinów zewnętrznych. Kompilacje hostowe (host-sanity)
   zwracają `HAL_EUNSUPPORTED` -- na hoście nie ma ani pamięci OTP, ani ADC1
   do odczytu.
   W kontekście zadania FreeRTOS funkcja opóźniająca oddaje sterowanie
-  planiście. Przed jego uruchomieniem, w ISR i w sekcjach krytycznych
+  schedulerze. Przed jego uruchomieniem, w ISR i w sekcjach krytycznych
   stosowane jest aktywne oczekiwanie oparte na DWT. Informacje o konfiguracji
   systemu łączą pojemności zapisane w deskryptorach targetu i płytki z
   zakresami heapu, stosu, EEPROM i LittleFS wynikającymi z wybranego runtime i
@@ -482,7 +480,7 @@ jest równy `NULL`, i zwraca `true` dla bieżącego obiegu pętli.
 - **impl/esp32:** `esp_timer_get_time()` zwraca monotoniczny czas w
   mikrosekundach. `hal_delay_ms()` używa `vTaskDelay()` tylko w prawidłowym
   kontekście zadania i wykonuje aktywne oczekiwanie przed
-  uruchomieniem planisty, w kontekście ISR lub wewnątrz sekcji krytycznej HAL.
+  uruchomieniem schedulera, w kontekście ISR lub wewnątrz sekcji krytycznej HAL.
   Usługi systemowe używają API ESP-IDF dla watchdoga zadań, sterty, drzewa
   zegarów, czujnika temperatury, przyczyny resetu, uruchomionej partycji oraz
   eFuse MAC. Informacje o konfiguracji systemu łączą wygenerowane dane o
@@ -499,14 +497,7 @@ jest równy `NULL`, i zwraca `true` dla bieżącego obiegu pętli.
   obserwowalną flagę zamiast wykonywać restart. `hal_in_isr()` zwraca wartość
   ustawioną przez `hal_mock_set_in_isr(bool)`.
 
-**Wielowątkowość:** API czasu i watchdoga w backendach z rodziny RP oraz ESP32-S3
-można bezpiecznie wywoływać z obu rdzeni. Karmienie watchdoga na STM32G474 to
-atomowe zapisy do rejestru; wywołujący muszą serializować rekonfigurację
-watchdoga. W trybach FreeRTOS na RP, STM32G474 oraz ESP32-S3 funkcja
-`hal_delay_ms()` korzysta z planisty tylko w prawidłowym kontekście i blokuje
-wyłącznie wywołujące ją zadanie. Przed uruchomieniem planisty, w ISR i w
-sekcjach krytycznych HAL stosuje aktywne oczekiwanie. `hal_delay_us()` blokuje
-tylko wywołujący rdzeń. Stan mocka jest przeznaczony do testów jednowątkowych.
+**Współbieżność:** Funkcje czasu i watchdoga na RP oraz ESP32-S3 można wywoływać z obu rdzeni. Na STM32G474 odświeżenie watchdoga jest atomowym zapisem rejestru, ale jego rekonfigurację musi synchronizować aplikacja. W FreeRTOS na RP, STM32G474 i ESP32-S3 `hal_delay_ms()` blokuje tylko zadanie wywołujące, o ile kontekst pozwala użyć schedulera. Przed jego uruchomieniem, w ISR i w sekcjach krytycznych HAL stosowane jest aktywne oczekiwanie. `hal_delay_us()` blokuje wywołujący rdzeń. Stan mocka jest przeznaczony do testów jednowątkowych.
 
 > **Uwaga:** `COUNTOF(arr)` działa wyłącznie z tablicami alokowanymi statycznie
 > (nie ze wskaźnikami).
@@ -953,7 +944,13 @@ void hal_mock_fault_diagnostics_reset(void);
 
 <a id="halpower-low-power-transitions-optional-halenablepowermanagement"></a>
 
-## `hal_power` - Przejścia niskiego poboru mocy *(opcjonalny - `HAL_ENABLE_POWER_MANAGEMENT`)*
+<a id="halpower-przejścia-niskiego-poboru-mocy-opcjonalny-halenablepowermanagement"></a>
+
+<a id="hal_power---przejścia-niskiego-poboru-mocy-opcjonalny---hal_enable_power_management"></a>
+
+## `hal_power` - usypianie i wybudzanie *(opcjonalne - `HAL_ENABLE_POWER_MANAGEMENT`)*
+
+Wprowadzaj procesor w obsługiwany tryb uśpienia i odczytuj przyczynę wybudzenia. Przed uśpieniem aplikacja musi przygotować własne peryferia; dostępne stany zależą od platformy i środowiska wykonawczego.
 
 API zasilania działa niezależnie od zarządzania urządzeniem RTC.
 `hal_rtc_wakeup_arm_ex()` może ustawić sprzętowe wybudzenie po określonym
@@ -1036,7 +1033,7 @@ wybudzenia zwraca `HAL_EUNSUPPORTED`.
 | STM32G474 bare metal | Cortex-M4 Sleep / WFI, polityka szybkiego wybudzenia | STOP0 dla szybkiego wybudzenia, STOP1 dla najniższego poboru mocy | Standby, polityka najniższego poboru mocy, wybudzenie RTC w stylu resetu |
 | RP2040/RP2350 bare metal | CPU WFI z RTC AON lub już włączonym przerwaniem | nieobsługiwane przy integracji z Pico SDK w wersji wskazanej przez repozytorium | nieobsługiwane przy integracji z Pico SDK w wersji wskazanej przez repozytorium |
 | Mock | deterministyczna symulacja wznowienia | deterministyczna symulacja wznowienia | deterministyczny wynik w stylu resetu; brak callbacku `resume` |
-| FreeRTOS | nieobsługiwane, dopóki zarządzanie zasilaniem nie zostanie zintegrowane z planistą i trybem tickless idle | nieobsługiwane | nieobsługiwane |
+| FreeRTOS | nieobsługiwane, dopóki zarządzanie zasilaniem nie zostanie zintegrowane z schedulerem i trybem tickless idle | nieobsługiwane | nieobsługiwane |
 
 `HAL_POWER_WAKE_SOURCE_INTERRUPT` oznacza źródło przerwania skonfigurowane już
 przez moduł, do którego należy, na przykład GPIO/EXTI. API
@@ -1086,6 +1083,8 @@ kończących się wznowieniem wykonywania, ponieważ ten sam wynik można późn
 
 ## `hal_bits` - Funkcje pomocnicze dla bitów
 
+Ustawiaj, kasuj i odczytuj bity za pomocą makr. Nie zapewniają one atomowego dostępu do współdzielonej zmiennej; potrzebną synchronizację musi zapewnić aplikacja.
+
 ```c
 #include <hal/core/hal_bits.h>
 
@@ -1112,6 +1111,8 @@ rejestru, kod wywołujący musi zapewnić synchronizację.
 ---
 
 ## `hal_compiler` - Atrybuty i funkcje wbudowane kompilatora
+
+Używaj wspólnych makr atrybutów i funkcji wbudowanych zamiast powielać warunki zależne od kompilatora. Nagłówek obejmuje obsługiwane warianty GNU, Clang i MSVC w zakresie opisanym poniżej.
 
 ```c
 #include <hal/core/hal_compiler.h>

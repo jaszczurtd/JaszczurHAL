@@ -6,6 +6,8 @@
 
 ## `hal_gpio` - GPIO
 
+Configure digital pins, read and write their state, and register interrupt handlers. When sharing pins between cores, follow the synchronization and IRQ-affinity rules below.
+
 ```c
 #include <hal/gpio/hal_gpio.h>
 
@@ -139,14 +141,9 @@ bool hal_pwm_is_pin_supported(uint8_t pin);
 void hal_pwm_write(uint8_t pin, uint32_t value);
 ```
 
-`hal_pwm` is the portable, simple PWM API. It has a deliberately small
-behavior: resolution is 1..16 bits, `hal_pwm_write()` clamps values above the
-current maximum, and unsupported pins trigger `HAL_ASSERT` in checked builds and
-are ignored. Use `hal_pwm_is_pin_supported()` before dynamic pin selection.
+`hal_pwm` provides a small, portable API for setting PWM duty cycle. It supports 1-16-bit resolution, and `hal_pwm_write()` clamps values to the current maximum. Unsupported pins are ignored and trigger `HAL_ASSERT` when checks are enabled. Use `hal_pwm_is_pin_supported()` before selecting a pin at runtime.
 
-It does not guarantee a caller-selected frequency or independent channel
-allocation. Use `hal_pwm_freq` when frequency, period/wrap value and channel
-lifetime matter. Default resolution is 8 bits.
+The simple API does not guarantee an application-selected frequency or independent channel allocation. Use `hal_pwm_freq` to control frequency, period (`wrap`), and channel lifetime. The default `hal_pwm` resolution is 8 bits.
 
 **impl/rp2040:** native pico-sdk `hardware/pwm.h` (`pwm_init`, `pwm_config_set_wrap`,
 `pwm_set_gpio_level`, `pwm_set_enabled`). The public duty range stays
@@ -179,7 +176,11 @@ pins sharing the same TIM channel are not independent. Call
 
 ---
 
-## `hal_dac` - True DAC output  *(optional - `HAL_ENABLE_DAC`)*
+<a id="hal_dac---true-dac-output--optional---hal_enable_dac"></a>
+
+## `hal_dac` - hardware analog output *(optional - `HAL_ENABLE_DAC`)*  *(optional - `HAL_ENABLE_DAC`)*
+
+Set an analog output through a hardware digital-to-analog converter. The module requires a supported hardware DAC; it does not substitute PWM emulation.
 
 ```c
 #include <hal/analog/hal_dac.h>
@@ -212,6 +213,8 @@ result.
 ---
 
 ## `hal_pcnt` - Pulse / edge counter  *(optional - `HAL_ENABLE_PCNT`)*
+
+Count pulses or edges on a digital input. The API configures a channel, reads its count, and resets it; the counting mechanism depends on the platform.
 
 ```c
 #include <hal/analog/hal_pcnt.h>
@@ -254,7 +257,7 @@ Reinitializing a logical channel tears down its previous PCNT unit first.
 
 ## `hal_pwm_freq` - PWM with frequency control  *(optional - `HAL_ENABLE_PWM_FREQ`)*
 
-Use this instead of `hal_pwm` when you need a specific PWM frequency (e.g. 160 Hz, 300 Hz).
+Choose `hal_pwm_freq` instead of `hal_pwm` when you need a specific frequency, such as 160 Hz or 300 Hz, and explicit channel management.
 
 ```c
 #include <hal/gpio/hal_pwm_freq.h>
@@ -317,7 +320,11 @@ backend does not provide concurrent-access synchronization.
 
 ---
 
-## `DAClessAudio` - PWM audio engine  *(optional - `HAL_ENABLE_DACLESS`)*
+<a id="daclessaudio---pwm-audio-engine--optional---hal_enable_dacless"></a>
+
+## `DAClessAudio` - audio playback through PWM *(optional - `HAL_ENABLE_DACLESS`)*  *(optional - `HAL_ENABLE_DACLESS`)*
+
+Play audio samples through PWM, using DMA or periodic servicing in the application loop. The module provides sample and block callbacks and access to the ADC result buffer.
 
 ```cpp
 #include <hal/audio/hal_dacless.h>
@@ -367,18 +374,9 @@ sample/control DMA flow. STM32G474 uses TIM update DMA into the active CCR
 register, circular half-transfer/transfer-complete callbacks for the two audio
 halves, and an ADC1 circular DMA scan for the configured ADC pins.
 
-`begin()` returns `true` when the PWM/DMA backend was created and started.
-When it returns `false`, the instance remains stopped and muted; this can happen
-when the target backend has exhausted a fixed hardware resource.
+`begin()` returns `true` once PWM/DMA has been created and started. On `false`, the instance remains stopped and muted. One possible cause is exhaustion of a fixed hardware resource.
 
-Set `cfg.useDma = false` to use the cooperative path: call `service()`
-frequently from `app_task0()` or a FreeRTOS task. It writes due samples through
-`hal_pwm_freq_write()`, refills the finished buffer through the block callback
-when present, otherwise through the sample callback, otherwise with midpoint
-silence. If `service()` is called late, polling playback catches up by at most
-`DACLESS_MAX_POLLING_CATCHUP_SAMPLES` samples before resynchronising to current
-time. Callbacks are invoked outside the instance mutex, so they may read
-`getADC()` without deadlocking.
+To service playback from the application loop, set `cfg.useDma = false` and call `service()` frequently from `app_task0()` or a FreeRTOS task. It writes pending samples through `hal_pwm_freq_write()` and refills a ready buffer through the block callback. Without that callback, it uses the sample callback; without either, it writes midpoint silence. A late call catches up by at most `DACLESS_MAX_POLLING_CATCHUP_SAMPLES` samples before resynchronizing with the current time. Callbacks run outside the instance mutex, so they can call `getADC()` without deadlocking.
 
 Default ADC pins are GPIO 26..29 on RP2040/mock and PA0..PA3 on STM32G474
 (`port * 16 + pin`). Override `cfg.adcPins[]` for custom wiring.
@@ -392,6 +390,8 @@ safe to call from normal task/core context. Do not call `service()` from an ISR.
 ---
 
 ## `hal_adc` - Analog input
+
+Read analog signals from supported ADC pins. Results are scaled to the selected resolution; available pins and conversion details depend on the platform.
 
 ```c
 #include <hal/analog/hal_adc.h>

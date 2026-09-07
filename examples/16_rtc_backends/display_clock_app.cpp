@@ -1,3 +1,9 @@
+/*
+ * Display DS3231 time on an ILI9341 and make a failed battery-backup test
+ * visible. A lost-clock indication is shown as --:--:-- rather than replaced
+ * with a date.
+ */
+
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_array.h>
 #include <hal/display/hal_display.h>
@@ -25,9 +31,9 @@ constexpr int kColonSlotWidth = 22;
 constexpr int kDigitHeight = 86;
 constexpr float kSegmentThickness = 6.0f;
 
-/* Approximate local wall time captured when this battery-retention fixture was
- * prepared. It advances the older valid test value once, but is never used to
- * hide a lost-integrity condition after battery removal. */
+/* Fixed local time recorded when the battery-backup test was prepared.
+ * Update an older valid clock once; never overwrite a lost-clock indication,
+ * because that would hide a failed battery-backup test. */
 constexpr hal_rtc_datetime_t kInitialTime = {
     .second = 0u,
     .minute = 20u,
@@ -86,10 +92,9 @@ void render_clock(const char *text, uint16_t color) {
     const int slot_width = colon ? kColonSlotWidth : kDigitSlotWidth;
     if (redraw_all || text[i] != s_previous_text[i]) {
       if (!redraw_all) {
-        /* The renderer gives '1' a proportional width. Erase the previous
-         * glyph at its exact drawing position before clearing the cell so no
-         * edge pixel can survive a transition between differently sized
-         * digits on the ILI9341. */
+        /* Digit '1' is narrower than the other digits. Erase the old glyph at
+         * its original position before clearing the cell, so changing digit
+         * widths cannot leave pixels behind on the ILI9341. */
         const char previous_character[] = {s_previous_text[i], '\0'};
         const int previous_width = get7SegStringWidth(
             previous_character, kDigitWidth, kSegmentThickness);
@@ -160,6 +165,8 @@ bool initialize_rtc() {
     return false;
   }
 
+  /* The validity check above must succeed before applying the fixed initial
+   * time. */
   if (datetime_before(value, kInitialTime)) {
     status = hal_rtc_set_datetime_ex(s_rtc, &kInitialTime);
     if (status != HAL_OK) {

@@ -1,19 +1,14 @@
-# Reliable LoRa link API
+<a id="reliable-lora-link-api"></a>
+
+# LoRa - messages, acknowledgements, and retries
 
 *Also available in [Polish](../pl/22_lora_link.md).*
 
 > **Part of [JaszczurHAL API Reference](../../en/JaszczurHAL_API.md)**
 
-`hal_lora_link` is a small private point-to-point messaging layer above one
-configured [`hal_lora_radio`](21_lora.md) handle. It adds 16-bit addressing,
-32-bit message sequences, acknowledgements, bounded whole-message retries,
-duplicate suppression and transparent fragmentation. Optional
-ChaCha20-Poly1305 gives every data fragment confidentiality and authentication,
-and authenticates acknowledgements.
+Exchange messages between LoRa devices with addressing, acknowledgements, and retries. `hal_lora_link` runs on one configured [`hal_lora_radio`](21_lora.md) handle. It provides 16-bit addresses, 32-bit sequence numbers, bounded whole-message retries, duplicate suppression, and automatic fragmentation. Optional ChaCha20-Poly1305 encrypts and authenticates each data fragment and authenticates acknowledgements.
 
-This protocol is specific to JaszczurHAL. It is not LoRaWAN, LoRa Alliance
-certified, routable, or interoperable with LoRaWAN gateways. Applications
-remain responsible for legal frequency, power, airtime and duty cycle.
+This is a JaszczurHAL-specific protocol, not LoRaWAN. It has no LoRa Alliance certification, routing, or interoperability with LoRaWAN gateways. The application is responsible for regulatory compliance when selecting frequency, power, airtime, and duty cycle.
 
 ## Enable the module
 
@@ -31,8 +26,7 @@ The selected SX126x or SX127x provider propagates `HAL_ENABLE_SPI`. Define
 `HAL_ENABLE_CRYPTO` as well when using
 `HAL_LORA_LINK_SECURITY_CHACHA20_POLY1305`.
 
-The following compile-time bounds are available before `hal_config.h` is
-included:
+Set these limits before including `hal_config.h`:
 
 | Macro | Default | Valid range | Purpose |
 |---|---:|---:|---|
@@ -40,12 +34,13 @@ included:
 | `HAL_LORA_LINK_MAX_MESSAGE_SIZE` | 1024 | 1..4096 | Per-link copied TX and RX message buffers |
 | `HAL_LORA_LINK_MAX_PEERS` | 8 | 1..32 | Source/session duplicate windows retained per link |
 
-Each link also owns two 255-byte frame work buffers. No protocol operation
-allocates from the heap after the per-handle mutex has been created.
+Each link also has two 255-byte frame work buffers. Once the handle mutex is created, protocol operations do not allocate heap memory.
 
-## Lifecycle
+<a id="lifecycle"></a>
 
-Create and configure the raw radio first, then attach a link:
+## Creating a link and owning the radio
+
+First create and configure the radio through the low-level API, then attach the link:
 
 ```c
 hal_lora_link_t link = NULL;
@@ -64,12 +59,7 @@ for every address/key session. Use a cryptographically random value or a
 persistent monotonic boot counter; never derive it only from a predictable
 uptime clock when encryption is enabled.
 
-The link takes exclusive operational ownership of the radio, clears its raw
-event callback and starts continuous receive. The caller must keep the radio
-alive but must not issue raw TX, RX, CAD, sleep or calibration calls until
-`hal_lora_link_destroy()` returns. Destroying the link cancels active radio I/O,
-zeroizes its copied key and leaves the radio in standby; it does not destroy
-the radio handle.
+An attached link takes exclusive control of the radio: it unregisters the low-level event callback and starts continuous reception. Retain the radio handle, but do not directly start TX, RX, CAD, sleep, or calibration until `hal_lora_link_destroy()` completes. Destroying the link cancels radio I/O, zeroizes its key copy, and leaves the radio in standby. It does not destroy the radio handle.
 
 Opaque link handles are generation-tagged. A stale handle returns
 `HAL_EUNINIT`, and creating more than `HAL_LORA_LINK_MAX_INSTANCES` links
@@ -77,9 +67,7 @@ returns `HAL_ENOMEM`.
 
 ## Sending and receiving
 
-`hal_lora_link_send_start()` copies the complete message, starts the first
-fragment and returns. Call `hal_lora_link_process()` regularly from one main
-loop or owning FreeRTOS task:
+`hal_lora_link_send_start()` copies the entire message, starts the first fragment, and returns without waiting for the whole transmission. Continue calling `hal_lora_link_process()` regularly from one main loop or one FreeRTOS task that owns the link:
 
 ```c
 static const uint8_t message[] = "acknowledged telemetry";
@@ -101,10 +89,7 @@ The application-defined port is carried unchanged. Unicast can be acknowledged
 or unacknowledged; broadcast must be unacknowledged. Only one application send
 and one completed receive message may be retained by a link at a time.
 
-`hal_lora_link_receive()` copies and consumes the queued complete message.
-`HAL_EAGAIN` means no message is ready. If the caller's buffer is too small it
-returns `HAL_EOVERFLOW`, reports the required length and still consumes the
-message.
+`hal_lora_link_receive()` copies a complete message and removes it from the queue. `HAL_EAGAIN` means no message is ready. **An undersized buffer also consumes the message:** the function returns `HAL_EOVERFLOW` and reports the required size.
 
 ```c
 uint8_t buffer[HAL_LORA_LINK_MAX_MESSAGE_SIZE];
@@ -117,12 +102,11 @@ if (status == HAL_OK) {
 }
 ```
 
-`hal_lora_link_cancel()` stops only an active application send and resumes
-continuous receive. State, send-status and diagnostics snapshots are protected
-by the handle mutex and may be queried from another task. The complete
-`process()` state machine must still have one logical owner.
+`hal_lora_link_cancel()` cancels only the application's active transmission and resumes continuous reception. Another task may query link state, transmission state, and diagnostics because those functions return coherent, mutex-protected snapshots. Only one task or loop may drive `process()` itself.
 
-## Command adapter
+<a id="command-adapter"></a>
+
+## Transporting application commands
 
 `HAL_ENABLE_LORA_COMMANDS` adds the
 [`hal_lora_commands`](23_commands.md#reliable-lora-adapter) adapter and
@@ -158,7 +142,9 @@ reject less protected requests. The handler receives the source address,
 session and complete link metadata without coupling its command logic to the
 radio provider.
 
-## Reliability and fragmentation
+<a id="reliability-and-fragmentation"></a>
+
+## Acknowledgements, retries, and reassembly
 
 The default policy waits 1500 ms for one acknowledgement after the complete
 message, backs off 200 ms and retries the whole immutable message up to three
@@ -181,7 +167,7 @@ Windows older than the configured peer table are evicted by least-recent use.
 
 ## Optional cryptographic protection
 
-With `HAL_ENABLE_CRYPTO`, install one 32-byte pre-shared key and select AEAD:
+To enable AEAD, define `HAL_ENABLE_CRYPTO`, supply a 32-byte pre-shared key (PSK), and select the security mode:
 
 ```c
 uint8_t provisioned_key[HAL_LORA_LINK_CRYPTO_KEY_BYTES];
@@ -208,7 +194,9 @@ provisioning, rotation and persistent session management remain application
 responsibilities. A plaintext link rejects encrypted frames, and an encrypted
 link rejects plaintext or unauthenticated frames.
 
-## Diagnostics and example
+<a id="diagnostics-and-example"></a>
+
+## Diagnostics and example application
 
 `hal_lora_link_get_diagnostics()` reports message/frame totals, ACKs,
 retransmissions, duplicates, malformed/authentication/integrity failures,

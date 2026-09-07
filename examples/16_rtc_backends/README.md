@@ -1,57 +1,62 @@
-# 16 - RTC backends
+<a id="16---rtc-backends"></a>
 
-This project covers PCF8563 and DS3231 examples. The providers are compiled
-into one image and selected at runtime through `hal_rtc_config_t::chip`.
-Missing external hardware is reported without preventing another RTC from
-running.
+# 16 - RTC clocks, timed wake-up, and battery backup
 
-The example also covers date/time and epoch-capable handles, alarms and CLKOUT
-for the external devices, the PCF8563 countdown timer, the DS3231 temperature
-sensor, and relative wake-up through the target-native RTC. It uses I2C0 on
-GP4/GP5 for RP targets and PB9/PB8 for STM32G474.
+This example reads date and time from PCF8563, DS3231, and the
+microcontroller's internal clock. It demonstrates alarms, CLKOUT, the
+PCF8563 countdown timer, the DS3231 temperature sensor, and timed wake-up.
+For devices that support it, it also reads and writes epoch timestamps.
 
-Each external RTC is read before the exercise begins. A fresh device with lost
-clock integrity or an unreadable factory calendar receives the deterministic
-`2026-08-20 12:34:50` test value; an already valid clock is retained. The
-STM32G474 PB9/PB8 path is physically validated at 400 kHz with both PCF8563 and
-DS3231.
+The drivers are compiled together. `hal_rtc_config_t::chip` selects the
+hardware, and an absent external RTC does not stop the other one. I2C bus 0
+uses GP4/GP5 on RP boards and PB9/PB8 on STM32G474.
 
-On STM32G474 it additionally exercises the MCU's internal RTC. The example
-prefers LSE and falls back to LSI only when the backup domain has no clock
-source selected. It seeds a deterministic date only when clock integrity is
-not yet established, then reports retained time and one-second progression.
-The power sequence wakes from CPU Sleep after two seconds, STOP0 after three
-seconds, and STOP1 after four seconds. It prints both the classified wake reason
-and monotonic elapsed time after every transition. Serial flushing is enabled
-so each diagnostic line has physically left USART2 before STOP changes the
-clock tree. The internal calendar supports 2000..2099.
+Before changing an external clock, the application reads its state and keeps
+an existing valid time. It writes the fixed test value `2026-08-20 12:34:50`
+only when clock integrity is lost or the initial calendar cannot be read.
+This does not synchronize the RTC with the current date. The PB9/PB8
+connection was previously tested at 400 kHz with both PCF8563 and DS3231.
 
-On RP2040 and RP2350 the same internal handle exercises the Pico SDK AON timer
-and reports `HAL_RTC_CLOCK_SOURCE_AON`. RP2040 uses its calendar RTC and RP2350
-uses Powman. The example preserves a running clock across warm resets and seeds
-it only when integrity is absent. The current Pico SDK backend exercises CPU
-Sleep; deep-sleep and power-down capabilities are reported as unsupported.
-An RTC-only request keeps waiting through unrelated enabled interrupts, such as
-USB CDC traffic, and completes only after the AON alarm becomes pending. Pico
-boards do not provide battery backup, so AON time is not expected to survive
-loss of power.
+## Internal RTC and sleep
 
-Define `HAL_EXAMPLE_RTC_POWER_DOWN_TEST=1` for a manual STM32G474 Standby test.
-That final step intentionally resets the MCU after five seconds. On the next
-boot the example reads and clears the retained wake record instead of entering
-the power sequence again.
+**STM32G474.** The application reads the internal RTC and reports one-second
+progression. It keeps a clock source already selected in the backup domain.
+Otherwise, it prefers LSE and falls back to LSI if needed. The fixed initial
+date is used only when valid clock state has not been established.
+The calendar supports years 2000-2099.
+
+The sleep test wakes from CPU Sleep after two seconds, STOP0 after three,
+and STOP1 after four. After each test, the application reports the wake
+reason and elapsed monotonic time. It flushes USART2 before entering STOP
+so diagnostic output leaves the device before the clocks change.
+
+**RP2040 and RP2350.** The application uses the Pico SDK AON timer, reported
+as `HAL_RTC_CLOCK_SOURCE_AON`. This uses the calendar RTC on RP2040 and
+Powman on RP2350. A running clock is preserved across warm resets; the
+initial value is written only when the clock is not valid.
+
+The Pico SDK implementation used here supports CPU Sleep. Deep sleep and
+power-down are reported as unsupported. An RTC-only wake request continues
+waiting through unrelated interrupts, such as USB CDC traffic, until the
+AON alarm is pending. Pico boards do not provide battery backup for this
+clock, so its time is not expected to survive removal of power.
+
+**Manual STM32G474 Standby test.** Set
+`HAL_EXAMPLE_RTC_POWER_DOWN_TEST=1`. The final test wakes the MCU through
+a reset after five seconds. On the next boot, the application reads and
+clears the retained wake record instead of repeating the sleep sequence.
 
 ## Build and source selection
 
-Run the following commands from the JaszczurHAL repository root. The project
-metadata selects exactly one application source for each build:
+Run the commands below from the repository root. Each configuration selects
+exactly one application source:
 
-| Selection | Application source | Supported targets |
-| --- | --- | --- |
-| Base project | `app.c` | RP2040 family and STM32G474 |
+| Selection | Application source | Targets |
+|---|---|---|
+| Base project | `app.c` | RP2040, RP2350 ARM, RP2350 RISC-V, STM32G474 |
 | `display-clock` variant | `display_clock_app.cpp` | STM32G474 |
 
-Build the base STM32G474 example with:
+Build the base STM32G474 example:
 
 ```bash
 vscode/entry/jh-vscode build \
@@ -60,10 +65,10 @@ vscode/entry/jh-vscode build \
   --board nucleo-g474re
 ```
 
-This sets `JH_PROJECT_SOURCES=app.c`. The resulting image is stored at
+This uses `JH_PROJECT_SOURCES=app.c` and writes the output to
 `.build/examples/16_rtc_backends/firmware.elf`.
 
-Build the display clock with:
+Build the display clock:
 
 ```bash
 vscode/entry/jh-vscode build \
@@ -73,29 +78,28 @@ vscode/entry/jh-vscode build \
   --variant display-clock
 ```
 
-The variant replaces the base source selection with
-`JH_PROJECT_SOURCES=display_clock_app.cpp` and enables the ILI9341 display
-features. It does not compile `app.c`, so the two implementations of
-`app_start()` and `app_task0()` cannot collide. Its image is stored at
+The variant sets `JH_PROJECT_SOURCES=display_clock_app.cpp` and enables
+ILI9341 support. It excludes `app.c`, avoiding duplicate definitions of
+`app_start()` and `app_task0()`. Its output is
 `.build/examples/16_rtc_backends/variants/display-clock/firmware.elf`.
 
-In both cases `jh-vscode` configures the shared firmware CMake project. CMake
-adds the selected application source, the STM32 startup code, the STM32G474
-backend, and the enabled JaszczurHAL drivers and utilities. The HAL-provided
-`main()` calls `app_start()` once and then calls `app_task0()` continuously.
+Both commands use the shared CMake firmware project through `jh-vscode`.
+CMake adds the selected application source, STM32 startup code, STM32G474
+support, and enabled JaszczurHAL drivers and utilities. The HAL-provided
+`main()` calls `app_start()` once and then repeatedly calls `app_task0()`.
 
-The generated VS Code tasks expose the same paths as `Project: Build` and
+In VS Code, use `Project: Build` or
 `Project: Build variant: display-clock`. Select `stm32g474:nucleo-g474re`
-before invoking the display variant.
+before building the display variant.
 
 ## STM32G474 DS3231 retention clock
 
-The manual `display-clock` variant uses the ILI9341 wiring from
-`examples/07_display_media` and the DS3231 on PB9/PB8. It renders `HH:MM:SS`
-with `draw7SegString()` in the center of a landscape display. Build or upload
-it with `--variant display-clock`.
+The `display-clock` variant displays DS3231 time as `HH:MM:SS` in the center
+of a landscape ILI9341 screen, using `draw7SegString()`. Connect the DS3231
+to PB9/PB8 and wire the display as described in `examples/07_display_media`.
+Add `--variant display-clock` when building or uploading.
 
-Build and flash it through ST-LINK/OpenOCD with:
+Build and upload through ST-LINK/OpenOCD:
 
 ```bash
 vscode/entry/jh-vscode upload \
@@ -107,7 +111,8 @@ vscode/entry/jh-vscode upload \
   --allow-unverified-port
 ```
 
-The embedded initial value is applied only when the DS3231 still reports valid
-clock integrity and contains an older date. A lost-integrity condition is never
-automatically overwritten: the display changes to a red `--:--:--`, making a
-failed battery-retention test visible after power is restored.
+Unlike the base example, this variant does not automatically replace invalid
+time. It applies its embedded initial date only when the DS3231 still reports
+valid clock state but holds an older date. If clock integrity is lost, it
+shows a red `--:--:--`. Restarting the application therefore does not hide
+a failed battery-backup test.

@@ -1,12 +1,18 @@
-# 04 - Zestaw czujników
+<a id="04---zestaw-czujników"></a>
 
-Ten przenośny przykład obsługuje w jednej pętli trzy niezależne czujniki:
+# 04 - Odczyt temperatury, wilgotności i oświetlenia
 
-- BH1750 pod adresem I2C `0x23`;
-- DHT11 na linii danych GPIO;
-- DS18B20 przez nieblokującą sekwencję komunikacji OneWire.
+Przykład odczytuje natężenie oświetlenia z BH1750, temperaturę i wilgotność
+z DHT11 oraz temperaturę z DS18B20. Obsługuje czujniki niezależnie: brak
+jednego z nich jest zgłaszany w diagnostyce, ale nie zatrzymuje pozostałych.
+Pomiar DS18B20 odbywa się bez blokowania pętli na czas konwersji.
 
-Brak jednego czujnika jest zgłaszany bez zatrzymywania pozostałych. Targety
-RP używają I2C GP4/GP5, DHT GP14 i DS18B20 GP16. STM32G474 używa I2C1 PB9/PB8,
-DHT PA8 i DS18B20 PB0. Urządzenia I2C i OneWire wymagają zwykłych zewnętrznych
-rezystorów podciągających.
+BH1750 używa adresu I2C `0x23`. Podłącz czujniki zgodnie z tabelą:
+
+| Sygnał | Rodzina RP | STM32G474 |
+|---|---|---|
+| BH1750 SDA / SCL | GP4 / GP5 | PB9 / PB8 (I2C1) |
+| DHT11 DATA | GP14 | PA8 |
+| DS18B20 DATA | GP16 | PB0 |
+
+Linie I2C i OneWire wymagają zewnętrznych rezystorów podciągających do zasilania.

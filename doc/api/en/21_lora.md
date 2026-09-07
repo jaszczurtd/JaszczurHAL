@@ -1,20 +1,18 @@
-# Raw LoRa radio API
+<a id="raw-lora-radio-api"></a>
+
+# LoRa - radio configuration and packet transfers
 
 *Also available in [Polish](../pl/21_lora.md).*
 
 > **Part of [JaszczurHAL API Reference](../../en/JaszczurHAL_API.md)**
 
-`hal_lora_radio` is the provider-neutral raw packet-radio facade. One selected
-family provider integrates SX1261/SX1262 through the pinned official Semtech
-SX126x driver or SX1276/SX1278 through the HAL-owned SX127x register driver.
-Both use only HAL SPI, GPIO, timing and mutex services and build for RP2040,
-RP2350 and STM32G474; the deterministic mock provides host tests.
+Send and receive LoRa packets through the shared `hal_lora_radio` API for SX1261/SX1262 and SX1276/SX1278 devices. The code can be built for RP2040, RP2350, and STM32G474; actual hardware-validation scope is listed below. A deterministic mock supports host tests.
 
-The API supports blocking and asynchronous transmit, asynchronous receive,
-DIO-driven task-context processing, channel activity detection (CAD), current
-RSSI reads, explicit calibration, capabilities, callbacks, cancellation and
-explicit operation states. Applications own hardware and modem descriptors.
-Each opaque handle owns its TX/RX packet buffers, state, mutex and diagnostics.
+SX1261/SX1262 use the official Semtech SX126x driver at the version pinned in the repository. SX1276/SX1278 use a register driver maintained in HAL. Both depend only on JaszczurHAL SPI, GPIO, timing, and synchronization services.
+
+The API provides blocking and asynchronous transmission, asynchronous reception, channel activity detection (CAD), instantaneous RSSI, explicit calibration, and capability and limit queries. Applications can receive events, inspect state, and cancel operations. DIO events are processed in task context rather than in the interrupt handler.
+
+The application supplies and retains hardware and modem descriptors. Each opaque handle has its own TX/RX buffers, state, mutex, and diagnostics.
 
 ## Enable the module
 
@@ -38,21 +36,13 @@ The following tunables are available before `hal_config.h` is included:
 | `HAL_LORA_SX126X_BUSY_TIMEOUT_MS` | 1000 | 1..60000 | Maximum wait for the SX126x BUSY line around a command |
 | `HAL_LORA_SX127X_RESET_SETTLE_MS` | 10 | 5..1000 | Delay after releasing SX127x reset before its version probe |
 
-## Model maturity
+<a id="model-maturity"></a>
 
-SX1262 is physically validated on the boards and fixtures described below.
-SX1261, SX1276 and SX1278 are `experimental`: their integration has passed
-deterministic host tests plus RP2040 and STM32G474 compile/link gates, but no
-physical radio was available. They deliberately add no board profile or
-runtime capability. Promotion requires a documented hardware test for the
-specific model.
+## Validation scope by chip
 
-The Semtech SX127x implementations available in LoRaMac-node and LoRa Basics
-Modem are coupled to their respective board, timer and stack layers. Pulling
-either complete stack solely for raw-radio register access would create an
-unnecessary dependency boundary. JaszczurHAL therefore owns the compact
-SX127x provider; it follows the public register interface and remains behind
-the same provider-neutral facade.
+SX1262 has been tested on the physical boards and fixtures listed below. SX1261, SX1276, and SX1278 remain `experimental`: they passed deterministic host tests and RP2040/STM32G474 compile-and-link checks, but not tests with a physical radio. They therefore have no board profiles or runtime capability claims. Changing this status requires a documented hardware test of the specific model.
+
+The Semtech SX127x drivers in LoRaMac-node and LoRa Basics Modem depend on those projects' board, timer, and stack layers. JaszczurHAL does not import an entire stack for direct radio access. It uses a small driver based on the published SX127x registers and exposes it through the same API as SX126x.
 
 ## Hardware ownership
 
@@ -64,11 +54,7 @@ descriptor. SX126x owns BUSY, DIO1 and its RF-switch/TCXO topology. SX127x has
 a separate descriptor for DIO0 through DIO2, optional RX/TX switch GPIOs,
 optional TCXO enable and RFO versus PA_BOOST selection.
 
-The SPI controller may be shared with other HAL devices. The provider attaches
-rising-edge interrupts during create; their ISR only records pending work.
-SPI commands and callbacks run later from task context. Destroying a radio
-detaches the family-specific DIO lines, returns the radio to a safe power state
-and releases its handle without deinitializing the shared bus.
+The SPI bus can be shared with other HAL devices. Radio creation registers rising-edge interrupts whose handlers only mark pending work. SPI commands and callbacks run later in task context. Destroying the radio detaches its DIO lines, puts the chip in a safe power state, and releases the handle without deinitializing the shared bus.
 
 ## Integrated board configuration
 
@@ -166,10 +152,11 @@ hardware.hardware.sx127x.min_tx_power_dbm = 2;
 hardware.hardware.sx127x.max_tx_power_dbm = 20;
 ```
 
-## Lifecycle and modem configuration
+<a id="lifecycle-and-modem-configuration"></a>
 
-The normal sequence is SPI initialization, create/probe, modem configure,
-packet operations and destroy:
+## Startup and modem configuration
+
+Prepare SPI, create a handle and probe the radio, configure the modem, then process packets. Release the radio when finished:
 
 ```c
 hal_lora_radio_t radio = NULL;
@@ -205,9 +192,7 @@ header, CRC, an eight-symbol preamble and 14 dBm:
 | `hal_lora_default_eu868()` | SF9 | Balanced link |
 | `hal_lora_default_long_range_eu868()` | SF12 | Longer airtime and link budget |
 
-These values are technical starting points. The application remains
-responsible for legal frequency, output power, antenna, bandwidth and duty
-cycle in its jurisdiction.
+These are technical starting configurations only. The application must choose frequency, output power, antenna, bandwidth, and duty cycle in accordance with local regulations.
 
 An LF device uses a deliberate raw configuration rather than a global preset:
 
@@ -232,8 +217,7 @@ Successful and timed-out operations return the handle to standby. A bus or
 device failure moves it to `HAL_LORA_RADIO_STATE_ERROR`; a successful
 `hal_lora_radio_configure()` can restore the configured standby state.
 
-The blocking function uses the same start/process state machine as asynchronous
-TX. It does not retain the caller's payload buffer.
+The blocking call drives the same state machine as asynchronous transmission with separate start and process functions. It copies the data rather than retaining the application's buffer pointer.
 
 ## Asynchronous operation and callbacks
 
@@ -285,10 +269,11 @@ call radio APIs. Passing a null callback clears registration.
 enters standby. Cancellation is explicit: power-state and destroy operations
 return `HAL_EBUSY` while a radio operation is active.
 
-## Polling receive
+<a id="polling-receive"></a>
 
-Start one bounded receive window, service provider IRQs and copy the completed
-packet:
+## Reception and polling
+
+Start reception with a timeout, process pending radio events regularly, and copy the completed packet:
 
 ```c
 status = hal_lora_radio_receive_start(radio, 1500u);
@@ -332,7 +317,9 @@ Receive results have the following meanings:
 `hal_lora_packet_info_t` reports packet RSSI, SNR, signal RSSI, receive
 timestamp and CRC validity.
 
-## Capabilities, current RSSI, CAD and calibration
+<a id="capabilities-current-rssi-cad-and-calibration"></a>
+
+## Capabilities, RSSI, CAD, and calibration
 
 `hal_lora_radio_get_capabilities()` reports provider-neutral hardware limits
 and optional operations. SX126x exposes continuous RX, CAD, current RSSI and
@@ -426,12 +413,11 @@ status = hal_lora_time_on_air(&modem, 32u, &airtime_ms);
 Use airtime when choosing an explicit TX timeout and when calculating legal
 duty-cycle behavior.
 
-## Concurrency and validation
+<a id="concurrency-and-validation"></a>
 
-Runtime calls serialize per handle. Lifecycle operations (`create` and
-`destroy`) follow the library-wide single-core/single-owner rule and must run on
-the core that owns the provider IRQ GPIOs. Packet buffers are copied before a
-start call returns. Callback dispatch never holds the handle mutex.
+## Concurrency and tests
+
+Each handle synchronizes its runtime calls independently. Run lifecycle operations (`create`, `destroy`) from one context and the same core that owns the radio's GPIO interrupts. A start function copies packet data before returning. Callbacks run without the handle lock.
 
 Host coverage lives in `test_hal_lora_radio_lifecycle`,
 `test_hal_lora_radio`, `test_hal_lora_sx127x`, `test_sx126x_adapter`,
