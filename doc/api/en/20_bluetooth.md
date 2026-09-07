@@ -1,31 +1,22 @@
-# Bluetooth Low Energy and Classic APIs
+<a id="bluetooth-low-energy-and-classic-apis"></a>
+
+# Bluetooth - BLE, audio, and HID devices
 
 *Also available in [Polish](../pl/20_bluetooth.md).*
 
 > **Part of [JaszczurHAL API Reference](../../en/JaszczurHAL_API.md)**
 
-The Bluetooth modules are opt-in. `HAL_ENABLE_BLE` exposes the Low Energy
-Peripheral and passive Observer API through `hal/bluetooth/hal_ble.h`.
-`HAL_ENABLE_BLUETOOTH_CLASSIC` exposes discovery, pairing, SDP and bonded-peer
-management. `HAL_ENABLE_BLUETOOTH_HID_HOST` adds raw Classic HID descriptors
-and reports; `HAL_ENABLE_BLUETOOTH_GAMEPAD` adds the normalized gamepad adapter.
-`HAL_ENABLE_BLUETOOTH_A2DP_SINK` adds SBC audio reception, while
-`HAL_ENABLE_BLUETOOTH_AVRCP_TARGET` adds absolute-volume control. The profile
-dependencies are gamepad -> HID Host -> Classic and AVRCP Target -> A2DP Sink
--> Classic. All public APIs are also available from the umbrella
-`JaszczurHAL.h` header.
+Bluetooth Low Energy and Bluetooth Classic support depend on the enabled modules and platform. `HAL_ENABLE_BLE` provides the Peripheral role and passive Observer scanning through `hal/bluetooth/hal_ble.h`. `HAL_ENABLE_BLUETOOTH_CLASSIC` enables device discovery, pairing, SDP, and bonded-device management. `HAL_ENABLE_BLUETOOTH_HID_HOST` exposes raw Classic HID descriptors and reports; `HAL_ENABLE_BLUETOOTH_GAMEPAD` converts them to a normalized gamepad state. `HAL_ENABLE_BLUETOOTH_A2DP_SINK` enables SBC audio reception, and `HAL_ENABLE_BLUETOOTH_AVRCP_TARGET` adds absolute volume control.
 
-The current release provides one Peripheral connection, connectable legacy
-advertising, passive legacy scanning, copied advertising reports, AD structure
-parsing, controller and connection events, ATT MTU reporting, and a static
-GATT database containing the mandatory GAP and GATT services. It does not yet
-provide active scanning or scan-response requests, arbitrary application
-characteristics, a GATT client, pairing, or bonding. The opt-in
-`HAL_ENABLE_BLE_STREAM` profile adds one fixed authenticated application
-service and its notification path. `HAL_ENABLE_BLE_COMMANDS` dedicates that
-Stream payload to the shared command router; it does not add a GATT client.
+Dependencies are enabled in the direction gamepad -> HID Host -> Classic and AVRCP Target -> A2DP Sink -> Classic. All interfaces are also available through `JaszczurHAL.h`.
 
-## Supported profiles
+The base BLE API supports one Peripheral connection, connectable legacy advertising, and passive Observer scanning. Advertising reports are copied to a queue, and the application can parse their AD structures. The API provides controller and connection events, ATT MTU reporting, and a static GATT database with mandatory GAP and GATT services.
+
+The base API does not support active scanning, Scan Response requests, arbitrary application characteristics, a GATT client, pairing, or bonding. `HAL_ENABLE_BLE_STREAM` adds one fixed application service with authentication and notifications. `HAL_ENABLE_BLE_COMMANDS` dedicates that service's data to the shared command router; it does not add a GATT client.
+
+<a id="supported-profiles"></a>
+
+## Platforms and validation scope
 
 | API | Target | Board | Radio/host | Validation |
 |---|---|---|---|---|
@@ -52,12 +43,11 @@ transport is unavailable. Runtime checks distinguish
 remains available for compatibility. External modules additionally require
 `HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND`.
 
-ESP32-S3 currently supports the base BLE Peripheral/Observer API, but not
-`HAL_ENABLE_BLE_STREAM`, a GATT client, or Classic. The original ESP32 supports
-the Classic manager, HID Host and gamepad adapter, but does not enable the
-public BLE API. These are deliberate target boundaries, not runtime fallbacks.
+ESP32-S3 supports the base BLE Peripheral/Observer API, but not `HAL_ENABLE_BLE_STREAM`, a GATT client, or Classic. The original ESP32 supports Classic management, HID Host, and the gamepad adapter, but not the public BLE API. These are platform availability limits, not runtime fallbacks.
 
-## Lifecycle and polling
+<a id="lifecycle-and-polling"></a>
+
+## Starting and servicing BLE
 
 ```cpp
 #include <JaszczurHAL.h>
@@ -107,18 +97,13 @@ extern "C" void app_task0(void) {
 }
 ```
 
-`hal_ble_initialize()` starts the selected target backend and returns when
-startup has been accepted. Readiness is asynchronous and is reported by
-`HAL_BLE_EVENT_CONTROLLER_READY`. Initialization and deinitialization are
-idempotent after success. Deinitialization invalidates every connection and
-advertising handle, clears the event queue, and removes the callback.
+`hal_ble_initialize()` starts the controller and returns when the request is accepted. Wait for `HAL_BLE_EVENT_CONTROLLER_READY` before treating it as ready. After successful startup, repeated initialization and deinitialization are idempotent. Deinitialization invalidates connection and advertising handles, clears the event queue, and unregisters the callback.
 
-Call `hal_ble_poll()` frequently from one task or cooperative loop. It services
-the controller and then dispatches callbacks outside the backend's radio
-lock. Calling `hal_ble_poll()`, changing the callback, or deinitializing
-recursively from a callback returns `HAL_EBUSY`; read-only queries are allowed.
+Call `hal_ble_poll()` frequently from one task or cooperative loop. It services the controller, releases the radio lock, then invokes application callbacks. Read-only queries are allowed from a callback. Re-entering `hal_ble_poll()`, changing the callback, or deinitializing returns `HAL_EBUSY` in that context.
 
-## Events
+<a id="events"></a>
+
+## Receiving events
 
 `HAL_BLE_EVENT_QUEUE_DEPTH` configures the copied, bounded event queue and
 defaults to 8. The public events are:
@@ -132,17 +117,15 @@ defaults to 8. The public events are:
   `HAL_BLE_EVENT_SCAN_REPORT_AVAILABLE`;
 - `HAL_BLE_EVENT_ERROR`.
 
-Choose one consumption model: register a callback drained by `hal_ble_poll()`,
-or pop events with `hal_ble_event_next()`. Both consume the same queue.
-`hal_ble_event_next()` returns `HAL_EAGAIN` when empty. If the queue fills, new
-events are dropped, `hal_ble_info_t::dropped_events` increases, and the next
-poll reports `HAL_EOVERFLOW` without stopping BLE.
+Receive events either through the callback invoked by `hal_ble_poll()` or by calling `hal_ble_event_next()` directly. Choose one method: both consume the same queue. `hal_ble_event_next()` returns `HAL_EAGAIN` when the queue is empty. When it is full, new events are dropped, `hal_ble_info_t::dropped_events` increases, and the next `hal_ble_poll()` returns `HAL_EOVERFLOW`. BLE remains active.
 
 The ready event has no peer address; call `hal_ble_get_local_address()` after
 it. A connected event contains the peer address and a new opaque connection
 handle. MTU and disconnected events refer to that same handle.
 
-## Advertising
+<a id="advertising"></a>
+
+## BLE advertising
 
 `hal_ble_advertising_start()` copies the complete configuration before
 returning. The legacy payload must contain 1 to 31 bytes. The minimum interval
@@ -157,7 +140,9 @@ request remains active. Stop the request with its opaque advertising handle.
 Do not submit a second start request after `HAL_BLE_EVENT_DISCONNECTED`; the
 original request already owns the automatic restart.
 
-## Passive Observer scanning
+<a id="passive-observer-scanning"></a>
+
+## Passive scanning (Observer)
 
 `hal_ble_scan_start()` accepts an interval, a window, and an optional duplicate
 filter. Both timing values use 0.625 ms Bluetooth units and must be between
@@ -286,9 +271,11 @@ does not erase application storage automatically. The HAL parser, event
 queues, and snapshots have fixed capacity. ESP-IDF's NimBLE, Bluedroid, event
 loop, and HID Host components may allocate their own internal objects.
 
-## Status and failure model
+<a id="status-and-failure-model"></a>
 
-The API uses `hal_status_t` throughout. Common results are:
+## Operation results and errors
+
+Operations return `hal_status_t`. Common results include:
 
 | Status | Meaning |
 |---|---|
@@ -307,13 +294,17 @@ report count, and both drop counters. A fatal controller or transport error move
 `HAL_BLE_STATE_FAILED`, invalidates its handles, stops scanning, and advances
 the generation.
 
-## Bluetooth Classic manager and profiles
+<a id="bluetooth-classic-manager-and-profiles"></a>
 
-### Classic manager
+## Bluetooth Classic: devices and profiles
 
-`HAL_ENABLE_BLUETOOTH_CLASSIC` adds `hal_bluetooth_classic.h`. Open one opaque
-manager, call `hal_bluetooth_classic_poll()` frequently, and close every
-attached profile before closing the manager. Inquiry results are copied into a
+<a id="classic-manager"></a>
+
+### Controller and device management
+
+`HAL_ENABLE_BLUETOOTH_CLASSIC` exposes `hal_bluetooth_classic.h`. One Classic manager owns the controller and attached profiles. Open it, call `hal_bluetooth_classic_poll()` regularly, and close all profiles before closing the manager.
+
+Inquiry results are copied into a
 bounded queue and contain BD_ADDR, bounded name, Class of Device, optional
 RSSI, and an SDP service bit mask. `hal_bluetooth_classic_sdp_query()` updates
 a discovered peer through the same queue. `HAL_EOVERFLOW` acknowledges dropped
@@ -360,21 +351,11 @@ peer's runtime state intact so the reset can be retried.
 
 ### A2DP Sink and AVRCP Target
 
-`HAL_ENABLE_BLUETOOTH_A2DP_SINK` adds `hal_bluetooth_a2dp_sink.h` and implies
-the Classic manager. One Sink attaches to one open manager and accepts SBC at
-44.1 or 48 kHz in mono, stereo, or joint-stereo mode. The public API contains
-no BTstack or audio-driver types. It yields signed 16-bit interleaved PCM in
-the negotiated channel count, or saturating mono when configured with
-`HAL_BLUETOOTH_A2DP_OUTPUT_MONO`.
+Enable A2DP Sink reception with `HAL_ENABLE_BLUETOOTH_A2DP_SINK`. The flag exposes `hal_bluetooth_a2dp_sink.h` and enables Classic management. One sink attaches to one open manager. It receives 44.1 or 48 kHz SBC in mono, stereo, or joint stereo and outputs interleaved signed 16-bit PCM with the negotiated channel count, or saturating mono when `HAL_BLUETOOTH_A2DP_OUTPUT_MONO` is selected. The API exposes neither BTstack types nor an audio-output driver.
 
-Stack callbacks only copy complete media packets into a bounded queue. Call
-`hal_bluetooth_classic_poll()` to service the shared controller, then drain
-`hal_bluetooth_a2dp_sink_poll()` until it returns `HAL_EAGAIN`. Parsing, SBC
-decoding, software volume, downmixing and small clock corrections all run in
-that poll context. `hal_bluetooth_a2dp_sink_pcm_next()` applies a fixed
-prebuffer after stream start and after an underrun. The application owns the
-physical output and should move returned PCM into its own ready buffers; a DMA
-interrupt should only select a ready buffer or silence.
+Stack callbacks only copy complete media packets to a bounded queue. First call `hal_bluetooth_classic_poll()`, then call `hal_bluetooth_a2dp_sink_poll()` until it returns `HAL_EAGAIN`. Parsing, SBC decoding, software volume, downmixing, and small clock corrections run in that context.
+
+`hal_bluetooth_a2dp_sink_pcm_next()` requires a fixed prebuffer after stream startup and after a PCM underrun. The application owns the physical audio output and should prepare its own PCM buffers in advance. The DMA interrupt should only select a ready buffer or silence.
 
 `hal_bluetooth_a2dp_sink_info_t` exposes stream format and state, packet loss,
 bounded packet/PCM queue levels and high-water marks, drops, corrupt frames,
@@ -384,25 +365,13 @@ Classic bond provider only after local pairing authorization, a captured link
 key and the first successfully decoded SBC frame. Its profile identifier is
 `HAL_BLUETOOTH_A2DP_SINK_PROFILE_ID`.
 
-`HAL_ENABLE_BLUETOOTH_AVRCP_TARGET` adds
-`hal_bluetooth_avrcp_target.h` and implies A2DP Sink. The minimal Target
-accepts Controller absolute-volume changes from 0 through 127, coalesces a
-pending change to the newest value, and can report the current local value to
-a subscribed Controller. It shares the A2DP/Classic connection and bond; it
-never creates another stored key. Close AVRCP first, then A2DP, then Classic.
-The complete C consumer and PWM/DMA output adapter are in
-[`examples/30_bluetooth_speaker`](../../../examples/30_bluetooth_speaker/).
+`HAL_ENABLE_BLUETOOTH_AVRCP_TARGET` exposes `hal_bluetooth_avrcp_target.h` and enables A2DP Sink. The AVRCP Target accepts absolute volume values from 0 to 127 from a Controller. A new pending value replaces the old one, and the local value can be reported to a subscribing Controller. The profile shares the A2DP/Classic connection and bond instead of creating a second key. Close resources in the order AVRCP, A2DP, Classic. A complete C application and PWM/DMA output adapter are provided in [`examples/30_bluetooth_speaker`](../../../examples/30_bluetooth_speaker/).
 
-### Generic HID Host
+<a id="generic-hid-host"></a>
 
-`HAL_ENABLE_BLUETOOTH_HID_HOST` adds `hal_bluetooth_hid_host.h` and implies the
-Classic manager. One HID Host handle attaches to an open manager and supports
-one active HID connection. It exposes a copied report descriptor plus a
-bounded queue of raw Input, Output and Feature reports without interpreting a
-device class. Applications can send Output/Feature reports and request
-Input/Feature reports. Device selection and descriptor validation belong to
-the consuming application or profile adapter. Closing HID disconnects an
-active link but leaves its Classic manager open.
+### Reading and sending HID reports
+
+`HAL_ENABLE_BLUETOOTH_HID_HOST` exposes `hal_bluetooth_hid_host.h` and enables Classic management. One HID Host handle attaches to an open manager and supports one active HID connection. The application receives a copied descriptor and a bounded queue of raw Input, Output, and Feature reports without an imposed device-class interpretation. It can send Output/Feature reports and request Input/Feature reports. The application or profile adapter selects the device and validates its descriptor. Closing HID disconnects the link but leaves the Classic manager open.
 
 The deterministic mock can inject Classic readiness, inquiry/SDP results,
 pairing, link keys, generic descriptors and raw reports. Host tests include a
@@ -411,7 +380,9 @@ The `classic-scan` and `hid-host` variants of
 [`examples/29_bluetooth_gamepad`](../../../examples/29_bluetooth_gamepad/)
 compile these layers without `HAL_ENABLE_BLUETOOTH_GAMEPAD`.
 
-### Gamepad adapter
+<a id="gamepad-adapter"></a>
+
+### Reading gamepad state
 
 The gamepad API is an adapter over the Classic manager and generic HID Host. It
 owns those handles internally and returns one opaque
@@ -495,19 +466,17 @@ rules baked into the running firmware) before its link key is reinstalled
 into the controller; a structurally invalid or stale-rules blob is treated
 exactly like "no bond" rather than trusted.
 
-`hal_gamepad_forget()` is the factory-reset entry point: it disconnects any
-active link, clears the known peer from the controller and from RAM, and
-erases the persisted blob through the bond provider (a no-op when none was
-given). A subsequent `hal_gamepad_pairing_open()` starts a fresh pairing.
-Persistent storage is erased before the manager drops its runtime peer. If
-the provider reports an error, the peer remains known so the application can
-retry the factory reset and the old bond cannot silently return after reboot.
+`hal_gamepad_forget()` removes a stored pairing: it disconnects the active link, clears the device in the controller and RAM, and removes the persistent record through the configured bond provider. Without a provider, that last step is a no-op. The next `hal_gamepad_pairing_open()` starts a new pairing.
+
+The persistent record is removed before the device is forgotten in the running application. If the storage operation fails, the device remains known. The application can therefore retry the reset instead of apparently removing a bond that would return after restart.
 
 Backend-specific link-key behavior is described under the Classic manager
 above. `hal_gamepad_forget()` delegates native bond removal and provider erase
 to that manager.
 
-#### Normalized snapshots
+<a id="normalized-snapshots"></a>
+
+#### Normalized button and axis state
 
 The HID report parser does not depend on BTstack or ESP-IDF. It validates a
 bounded report descriptor and feeds the same normalized snapshot model on
@@ -560,11 +529,11 @@ the complete raw Classic -> HID -> parser path. The complete C consumer,
 isolated Classic/HID variants, and BLE+Classic build variant are in
 [`examples/29_bluetooth_gamepad`](../../../examples/29_bluetooth_gamepad/).
 
-## JH BLE Stream v1
+<a id="jh-ble-stream-v1"></a>
 
-`HAL_ENABLE_BLE_STREAM` adds `hal_ble_stream.h`, a bounded byte stream carried
-by one static GATT service. The flag enables `HAL_ENABLE_BLE` and
-`HAL_ENABLE_CRYPTO`.
+## BLE Stream - authenticated application data
+
+Exchange application data through one fixed GATT service with bounded buffers. `HAL_ENABLE_BLE_STREAM` exposes `hal_ble_stream.h` and automatically enables `HAL_ENABLE_BLE` and `HAL_ENABLE_CRYPTO`. The protocol version is JH BLE Stream v1.
 
 BLE Stream remains a general application byte stream when selected alone. The
 separate [`hal_ble_commands`](23_commands.md#authenticated-ble-stream-adapter)
@@ -647,7 +616,9 @@ Stream initialization and deinitialization serialize service publish and
 unpublish operations. A concurrent lifecycle call returns `HAL_EBUSY`; failed
 publication rolls the Stream state back to `HAL_BLE_STREAM_STATE_UNINITIALIZED`.
 
-### Stream example
+<a id="stream-example"></a>
+
+### BLE Stream example
 
 Initialize the BLE subsystem from the first application-task iteration,
 install a unique provisioned secret, and then service both layers from that
@@ -732,9 +703,7 @@ void service_stream(void) {
 }
 ```
 
-The example retains at most one echo after `HAL_EAGAIN` and retries it before
-removing another RX payload. A disconnect or any other send error discards that
-pending echo so data from an old session cannot enter a new one.
+After `HAL_EAGAIN`, the example retains at most one echo response and retries it before receiving more data. A disconnect or other send failure discards the pending response so data from an old session cannot be sent in a new one.
 
 `hal_ble_stream_receive_ex()` has the same queue and overflow behavior while
 also returning immutable provenance for the popped DATA payload: Stream
@@ -748,7 +717,9 @@ not needed.
 public session identifier, directional counters, authentication failures,
 replay rejections and queue depth for diagnostics.
 
-## Bluetooth coexistence and ownership
+<a id="bluetooth-coexistence-and-ownership"></a>
+
+## Sharing the controller across BLE, Classic, and WiFi
 
 BLE, Bluetooth Classic, and WiFi share one CYW43 controller, transport, radio
 runtime, and service lock. Applications must not link Pico SDK
@@ -764,7 +735,9 @@ covers WiFi disconnect and reconnect in both bare-metal and FreeRTOS builds.
 The combined BLE+A2DP image is build-validated; active audio coexistence is not
 yet a hardware gate.
 
-## License and distribution boundary
+<a id="license-and-distribution-boundary"></a>
+
+## Licenses and distribution requirements
 
 Bluetooth firmware links the project-maintained fork of BlueKitchen BTstack
 from the exact revision recorded in `third_party/btstack_version.conf`.

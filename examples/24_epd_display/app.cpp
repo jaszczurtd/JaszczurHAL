@@ -1,6 +1,6 @@
 /**
  * @file app.cpp
- * @brief SSD1681 monochrome e-paper example using the raw display facade.
+ * @brief Draw a monochrome test pattern on an SSD1681 e-paper display.
  */
 
 #include <JaszczurHAL.h>
@@ -18,7 +18,7 @@
 #define EPD_RST 21
 #define EPD_BUSY 22
 #elif HAL_TARGET_IS_STM32G474
-/* STM32 pin id = port * 16 + pin: SPI1 PA6/PA7/PA5. */
+/* STM32 pin numbers use port * 16 + pin; SPI1 uses PA6/PA7/PA5. */
 #define EPD_SPI_MISO 6u
 #define EPD_SPI_MOSI 7u
 #define EPD_SPI_SCK 5u
@@ -74,7 +74,8 @@ void app_start(void) {
   config.width = EPD_WIDTH;
   config.height = EPD_HEIGHT;
   config.rotation = HAL_DISPLAY_ROTATION_0;
-  /* No LUT profile: use the controller OTP waveform at the default 25 C. */
+  /* Use the controller OTP refresh waveform and assume 25 C; no custom LUT is
+   * supplied. */
 
   status = hal_display_init_ssd16xx_ex(&config);
   if (status != HAL_OK) {

@@ -1,12 +1,21 @@
-# 13 - ADC
+<a id="13---adc"></a>
 
-Ten przykład odczytuje dwa wejścia wewnętrznego 12-bitowego ADC oraz wszystkie
-cztery kanały ADS1115 pod adresem I2C `0x48`. Odczyty wejść wewnętrznych są
-kontynuowane mimo braku zewnętrznego ADC, a inicjalizacja ADS1115 jest ponawiana
-co pięć sekund.
-Każdy kanał zewnętrzny sprawdza zarówno bezpośredni odczyt wartości ADC, jak i
-odczyt po przeskalowaniu, który dodatkowo zwraca status operacji.
+# 13 - Pomiary napięcia: ADC i ADS1115
 
-Targety RP używają GPIO 26/27 dla wewnętrznego ADC oraz GPIO 4/5 dla I2C
-SDA/SCL. STM32G474 używa PA0/PA1 dla wewnętrznego ADC i PB9/PB8 dla I2C.
-ADS1115 jest skonfigurowany na 0,1875 mV/LSB, czyli zakres ±6,144 V.
+Przykład odczytuje dwa wejścia wewnętrznego, 12-bitowego ADC oraz cztery
+kanały zewnętrznego przetwornika ADS1115 pod adresem I2C `0x48`.
+Dla ADS1115 pokazuje odczyt surowej wartości i napięcia po przeliczeniu;
+druga funkcja zwraca również status operacji.
+
+Brak ADS1115 nie zatrzymuje pomiarów wewnętrznego ADC. Aplikacja ponawia
+inicjalizację zewnętrznego przetwornika co pięć sekund.
+
+| Sygnał | Rodzina RP | STM32G474 |
+|---|---|---|
+| Wejścia wewnętrznego ADC | GP26 / GP27 | PA0 / PA1 |
+| ADS1115 SDA / SCL | GP4 / GP5 | PB9 / PB8 |
+
+ADS1115 ma ustawiony zakres ±6,144 V, któremu odpowiada 0,1875 mV/LSB.
+To ustawienie przelicznika ADC, nie informacja o dopuszczalnym napięciu na
+pinach. Przed podłączeniem sygnału sprawdź ograniczenia wejść i napięcie
+zasilania użytego układu.

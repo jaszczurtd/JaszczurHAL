@@ -1,3 +1,9 @@
+/*
+ * Discover Classic Bluetooth devices and query their services from the console.
+ * AUTHORIZE and REJECT make the local pairing decision. With no persistent
+ * storage provider, saved peers are kept only until restart.
+ */
+
 #include <hal/bluetooth/hal_bluetooth_classic.h>
 #include <hal/core/hal_app.h>
 #include <hal/serial/hal_serial.h>

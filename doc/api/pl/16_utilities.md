@@ -1,14 +1,18 @@
-# Narzędzia
+<a id="narzędzia"></a>
+
+# Timery, regulatory i funkcje narzędziowe
 
 *Dostępne również [po angielsku](../en/16_utilities.md).*
 
 > **Część [Dokumentacji API JaszczurHAL](../../pl/JaszczurHAL_API.md)**
 
-Obejmuje: tematyczne helpery HAL, zgodnościowe nagłówki narzędziowe,
-`hal_soft_timer`, `hal_pid_controller`, `SmartTimers`, `pidController`,
-`multicoreWatchdog` i `draw7Segment`.
+Rozdział opisuje timery programowe, regulator PID, obliczenia CRC, nadzór dwóch rdzeni i rysowanie znaków siedmiosegmentowych. Zawiera też mapę nagłówków z funkcjami obsługi tekstu, tablic, bitów i danych liczbowych.
 
-## `hal_soft_timer` - interfejs C dla `SmartTimers`
+<a id="hal_soft_timer---interfejs-c-dla-smarttimers"></a>
+
+## `hal_soft_timer` - timery programowe w C
+
+Uruchamianie okresowych funkcji zwrotnych z kodu C. Timer korzysta z `SmartTimers`; aplikacja obsługuje jego kolejne kroki przez API modułu.
 
 ```c
 #include <hal/timers/hal_soft_timer.h>
@@ -46,8 +50,8 @@ bool hal_soft_timer_tick_table(const hal_soft_timer_table_entry_t *table,
 - **Implementacja:** korzysta wewnętrznie z `SmartTimers`, więc w runtime działa
   tak samo jak ta klasa.
 
-**Thread safety:** Metody można bezpiecznie wywoływać z wielu wątków i rdzeni.
-Każdą instancję chroni mutex utworzony przez `SmartTimers`.
+**Współbieżność:** Metody można bezpiecznie wywoływać z wielu wątków i rdzeni.
+Każdą instancję chroni muteks utworzony przez `SmartTimers`.
 
 - **Funkcje obsługujące tablicę timerów:** `hal_soft_timer_setup_table(...)`
   tworzy i konfiguruje timery na podstawie tablicy deskryptorów. Opcjonalnie
@@ -87,7 +91,11 @@ void app_task0(void) {
 
 ---
 
-## `hal_pid_controller` - interfejs C dla `pidController`
+<a id="hal_pid_controller---interfejs-c-dla-pidcontroller"></a>
+
+## `hal_pid_controller` - regulator PID w C
+
+Obliczanie sygnału sterującego przez regulator PID z ograniczeniami wyjścia i ochroną przed nadmiernym narastaniem całki. API C korzysta z uchwytów, bez bezpośredniej zależności od klasy C++.
 
 ```c
 #include <hal/control/hal_pid_controller.h>
@@ -128,7 +136,7 @@ bool  hal_pid_controller_is_oscillating(hal_pid_controller_t controller, float c
 - **Implementacja:** korzysta wewnętrznie z `PIDController`, więc w runtime
   działa tak samo jak ta klasa.
 
-**Thread safety:** Regulator nie synchronizuje dostępu. Każda pętla sterowania
+**Współbieżność:** Regulator nie synchronizuje dostępu. Każda pętla sterowania
 powinna mieć własną instancję; dostęp współbieżny trzeba zabezpieczyć po stronie
 aplikacji.
 
@@ -180,20 +188,17 @@ void app_task0(void) {
 
 ---
 
-## Tematyczne moduły narzędziowe
+<a id="tematyczne-moduły-narzędziowe"></a>
 
-Dotychczasowa zbiorcza implementacja została rozdzielona według
-odpowiedzialności. Nowy kod dołącza nagłówek właściwej domeny HAL i korzysta z
-API z prefiksem. `tools.h`, `tools_c.h` oraz `utils/tools_api.h` pozostają
-agregatorami nagłówków bez własnych deklaracji funkcji. Nie istnieje już
-jednostka `tools.cpp`.
+## Funkcje narzędziowe według zastosowania
 
-Zalecane sposoby dołączania nagłówków:
+Nowy kod powinien dołączać nagłówek modułu odpowiadającego wykonywanej operacji i używać jego funkcji z prefiksem HAL. `tools.h`, `tools_c.h` oraz `utils/tools_api.h` pozostają nagłówkami zbiorczymi dla zgodności ze starszym kodem; nie deklarują własnych funkcji. Dawna implementacja `tools.cpp` została usunięta.
 
-- `#include <JaszczurHAL.h>` jako stabilny agregat publiczny;
-- bezpośredni nagłówek domeny dla wąskiej zależności;
-- `#include <tools.h>` albo `#include <tools_c.h>` tylko podczas utrzymywania
-  starszego kodu.
+Wybór nagłówka:
+
+- `#include <JaszczurHAL.h>` - stabilny nagłówek zbiorczy publicznego API.
+- Nagłówek konkretnego modułu - gdy potrzebny jest tylko wąski zestaw funkcji.
+- `#include <tools.h>` lub `#include <tools_c.h>` - przy utrzymywaniu starszego kodu.
 
 | Domena | Nagłówek | Główne API |
 |---|---|---|
@@ -210,15 +215,9 @@ Zalecane sposoby dołączania nagłówków:
 | Kalendarz i upływ czasu | `hal/time/hal_time.h` | `hal_time_*`, `hal_get_seconds()` |
 | Okresowo odświeżane wartości losowe | `hal/system/hal_periodic_random.h` | `hal_periodic_random_*` |
 
-Funkcje `_ex` zwracają `hal_status_t`, używają jawnych buforów/stanu i
-walidują argumenty. Zachowanie ADC, takie jak liczba próbek, pusty odczyt,
-opóźnienie i korekcja charakterystyki, wybiera
-`hal_adc_average_config_t`, a nie ukryte ustawienia ogólne projektu.
+Warianty `_ex` zwracają `hal_status_t`, sprawdzają argumenty i korzystają z buforów oraz stanu przekazanych jawnie. Liczbę próbek ADC, pusty odczyt, opóźnienie i korekcję charakterystyki wybiera `hal_adc_average_config_t`; nie zależą one od ukrytych ustawień całego projektu.
 
-`hal_text_format_mac_ex()` zapisuje dowolny sześciobajtowy adres sprzętowy jako
-`XX:XX:XX:XX:XX:XX` z wielkimi literami. Bufor docelowy musi mieć
-`HAL_TEXT_MAC_STRING_SIZE` bajtów. Sieciowy punkt zgodności
-`hal_network_format_mac_ex()` pozostaje dostępny i wywołuje ten helper.
+`hal_text_format_mac_ex()` zapisuje sześciobajtowy adres sprzętowy w formacie `XX:XX:XX:XX:XX:XX`, używając wielkich liter. Bufor musi mieścić `HAL_TEXT_MAC_STRING_SIZE` bajtów. Funkcja zgodności `hal_network_format_mac_ex()` pozostaje dostępna i wywołuje tę samą operację.
 
 ### Funkcje pomocnicze do manipulacji bitami (`hal_bits`)
 
@@ -249,9 +248,7 @@ obliczone więcej niż raz.
 
 ### Publiczne funkcje pomocnicze
 
-Nazwy funkcji wskazują moduł HAL, do którego należą. `tools.h`, `tools_c.h`
-i `tools_api.h` jedynie zbierają właściwe nagłówki i nie publikują drugiego
-zestawu nazw funkcji.
+Prefiks funkcji wskazuje moduł HAL, do którego należy. Nagłówki `tools.h`, `tools_c.h` i `tools_api.h` jedynie dołączają odpowiednie nagłówki modułów; nie tworzą drugiego zestawu nazw.
 
 ```c
 void hal_debug_init_default(void);
@@ -411,9 +408,7 @@ int   hal_periodic_random_int_get(uint32_t interval_ms, int maximum);
 float hal_periodic_random_float_get(uint32_t interval_ms, float maximum);
 ```
 
-Nagłówki domen opisują parametry, jednostki, opcjonalne wyjścia, zachowanie na
-granicach i błędy każdej funkcji. Jeśli dostępny jest wariant `_ex`, warto go
-wybrać, gdy kod potrzebuje dokładnego statusu albo jawnie przekazywanego stanu.
+Nagłówki modułów opisują parametry, jednostki, opcjonalne wyniki, wartości graniczne i błędy. Wybierz wariant `_ex`, gdy potrzebujesz dokładnego statusu lub jawnej kontroli stanu.
 
 Funkcje czasu deklaruje `<hal/time/hal_time.h>`, a implementuje
 `hal_time.cpp`: `hal_get_seconds()`, `hal_time_is_daylight_saving_time()`,
@@ -424,7 +419,11 @@ na temat zachowania na granicach zakresów, walidacji i zawijania wartości.
 
 ---
 
+<a id="hal_crc---sumy-kontrolne-crc"></a>
+
 ## `hal_crc` - sumy kontrolne CRC
+
+Obliczanie sum kontrolnych do wykrywania błędów danych. Wybierz funkcję odpowiadającą dokładnemu wariantowi CRC używanemu przez protokół. CRC nie zapewnia uwierzytelniania.
 
 ```c
 #include <hal/security/hal_crc.h>
@@ -470,7 +469,11 @@ niezależnie, bez zmieniania istniejących funkcji.
 
 ---
 
-## SmartTimers
+<a id="smarttimers"></a>
+
+## `SmartTimers` - timery programowe w C++
+
+Planowanie wywołań funkcji zwrotnych przez obiekty timerów. Aplikacja regularnie wykonuje `tick`; dostępne funkcje tabelaryczne pozwalają obsłużyć kilka timerów razem.
 
 ```c
 #include <hal/timers/smart_timers/SmartTimers.h>
@@ -506,11 +509,7 @@ timer.abort();
 > `hal/system/hal_system.h`
 > (dołączanym automatycznie przez `hal/timers/smart_timers/SmartTimers.h`).
 
-**Thread safety:** Po utworzeniu obiektu wszystkie metody można bezpiecznie
-wywoływać z wielu wątków i rdzeni. Każda instancja od razu tworzy własny
-`hal_mutex_t`, który chroni wywołania metod. Funkcje zwrotne przekazane do
-`begin()` są wywoływane poza sekcją chronioną mutexem, aby nie powodować
-deadlocka.
+**Współbieżność:** Po utworzeniu obiektu wszystkie metody można wywoływać z wielu wątków i rdzeni. Każda instancja od razu tworzy własny `hal_mutex_t`. Callbacki przekazane do `begin()` są wykonywane poza blokadą, aby uniknąć zakleszczenia przy ponownym wejściu do API.
 
 **Przykład: tabela wielu timerów**
 
@@ -559,7 +558,11 @@ void app_task0(void) {
 
 ---
 
-## pidController
+<a id="pidcontroller"></a>
+
+## `pidController` - regulator PID w C++
+
+Interfejs klasy `PIDController` dla pętli regulacji pisanych w C++. Każda pętla powinna korzystać z osobnej instancji.
 
 ```c
 #include <utils/pidController.h>
@@ -603,10 +606,10 @@ pid.reset();
 template<typename T> T pid_clamp(T v, T lo, T hi);
 ```
 
-**Thread safety:** `PIDController` nie synchronizuje dostępu. Każda instancja
+**Współbieżność:** `PIDController` nie synchronizuje dostępu. Każda instancja
 powinna być używana tylko z jednego rdzenia lub wątku.
 
-**Przykład: regulacja temperatury (styl klasy C++)**
+**Przykład: regulacja temperatury przez klasę C++**
 
 ```cpp
 #include <utils/pidController.h>
@@ -656,7 +659,11 @@ extern "C" void app_task0(void) {
 
 ---
 
-## multicoreWatchdog
+<a id="multicorewatchdog"></a>
+
+## `multicoreWatchdog` - nadzór pracy dwóch rdzeni
+
+Nadzorowanie pracy rdzeni za pomocą wspólnego watchdoga. Aplikacja zgłasza postęp każdego rdzenia przez odpowiadającą mu funkcję aktualizacji.
 
 ```c
 #include <utils/multicoreWatchdog.h>
@@ -690,7 +697,7 @@ void watchdog_feed(void);
 - **Implementacja:** `hal_watchdog_enable` / `hal_watchdog_feed` /
   `hal_watchdog_caused_reboot`.
 
-> **Uwaga:** Wewnętrzny timer korzysta z `SmartTimers` i jest chroniony mutexem
+> **Uwaga:** Wewnętrzny timer korzysta z `SmartTimers` i jest chroniony muteksem
 > HAL, aby nie wywołać funkcji zwrotnej dwukrotnie po równoczesnym wywołaniu
 > `updateWatchdogCore0/1`.
 
@@ -744,7 +751,11 @@ void app_task1(void) {
 
 ---
 
-## draw7Segment - renderowanie wyświetlacza w stylu 7-segmentowym
+<a id="draw7segment---renderowanie-wyświetlacza-w-stylu-7-segmentowym"></a>
+
+## `draw7Segment` - cyfry i tekst w stylu siedmiosegmentowym
+
+Rysowanie cyfr i wybranych znaków przez `hal_display`, na przykład do zegarów i liczników.
 
 ```c
 #include <utils/draw7Segment.h>
@@ -770,9 +781,9 @@ Znaki mają proporcjonalne szerokości: `1` i spacja są węższe, `^` nieco sze
 **Zależności:** wyłącznie `hal_display.h`. Interfejs nie używa typów
 specyficznych dla platformy; wszystkie parametry tekstowe to `const char*`.
 
-**Thread safety:** Funkcje można bezpiecznie wywoływać współbieżnie, jeśli
+**Współbieżność:** Funkcje można bezpiecznie wywoływać współbieżnie, jeśli
 pozwala na to `hal_display` (dotyczy backendów z rodziny RP). Rysowanie odbywa
-się przez funkcje `hal_display_*`, których stan jest chroniony mutexem.
+się przez funkcje `hal_display_*`, których stan jest chroniony muteksem.
 
 **Przykład: wyświetlacz zegara cyfrowego**
 

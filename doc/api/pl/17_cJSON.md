@@ -1,24 +1,23 @@
-# cJSON
+<a id="cjson"></a>
+
+# JSON - odczyt, tworzenie i modyfikacja dokumentów
 
 *Dostępne również [po angielsku](../en/17_cJSON.md).*
 
 > **Część [Dokumentacji API JaszczurHAL](../../pl/JaszczurHAL_API.md)**
 
-Obejmuje: dostarczane z JaszczurHAL biblioteki `cJSON` i `cJSON_Utils`,
-włączane przez `HAL_ENABLE_CJSON`.
+Odczyt, tworzenie i modyfikacja JSON-u przez biblioteki `cJSON` i `cJSON_Utils`. Obie są dostarczane z JaszczurHAL i włączane flagą `HAL_ENABLE_CJSON`.
 
-`cJSON` to niewielka biblioteka C do parsowania i generowania JSON-u.
-Jej źródła są pobierane do `third_party/cJSON` w commicie wskazanym przez
-`third_party/cjson_version.conf`. Warstwa integracyjna w
-`src/hal/codecs/cjson/` włącza nagłówki i źródła upstreamu tylko wtedy, gdy
-zdefiniowano `HAL_ENABLE_CJSON`, a publiczna ścieżka dołączania pozostaje stała.
+`cJSON` udostępnia niewielki parser i generator JSON-u w C. Projekt pobiera jego źródła do `third_party/cJSON`; dokładny commit określa `third_party/cjson_version.conf`. Integracja w `src/hal/codecs/cjson/` kompiluje oryginalne źródła i udostępnia nagłówki tylko przy włączonym `HAL_ENABLE_CJSON`, zachowując stałą publiczną ścieżkę dołączania.
 
 Wersja dostarczana z projektem: `cJSON` 1.7.18.
 
 Autor/licencja: projekt `cJSON` jest rozwijany przez Dave'a
 Gamble'a i współtwórców oraz udostępniany na licencji MIT.
 
-## Włączenie
+<a id="włączenie"></a>
+
+## Włączenie modułu
 
 Włącz moduł w `hal_project_config.h` lub definicją kompilatora:
 
@@ -33,30 +32,30 @@ Pliki należą do wspólnej listy źródeł frameworka, lecz bez
 nagłówki są zabezpieczone tą samą flagą, dlatego musi być ona aktywna także
 podczas kompilowania kodu korzystającego z symboli `cJSON_*`.
 
-## Dołączanie
+<a id="dołączanie"></a>
 
-Bezpośrednie dołączenie, bezpieczne zarówno z C, jak i z C++:
+## Dołączenie nagłówków
+
+Nagłówki można dołączać bezpośrednio w C i C++:
 
 ```c
 #include <hal/codecs/cjson/cJSON.h>
 #include <hal/codecs/cjson/cJSON_Utils.h>
 ```
 
-Jeżeli plik C++ korzysta już ze zbiorczego nagłówka narzędziowego, może
-uzyskać dostęp do cJSON przez `tools.h`. Wymaga to `HAL_ENABLE_CJSON`:
+Pliki C++, które już korzystają z `tools.h`, otrzymują przez ten nagłówek również dostęp do cJSON, pod warunkiem włączenia `HAL_ENABLE_CJSON`:
 
 ```c
 #include <tools.h>
 ```
 
-`tools.h` dołącza także klasy narzędziowe C++, dlatego w plikach `.c` należy
-korzystać bezpośrednio z nagłówków frameworku. `tools_c.h` nie udostępnia cJSON.
+W plikach `.c` dołączaj bezpośrednio nagłówki integracji, ponieważ `tools.h` zawiera również klasy C++. `tools_c.h` nie udostępnia cJSON.
 
-`JaszczurHAL.h` dołącza zbiorczy nagłówek HAL, ale nie `tools.h`. Kod, który
-bezpośrednio korzysta z cJSON, musi więc dołączyć nagłówki frameworku albo,
-w przypadku C++, `tools.h`.
+`JaszczurHAL.h` nie dołącza `tools.h`, dlatego samo użycie nagłówka zbiorczego HAL nie udostępnia cJSON. Dołącz nagłówki integracji bezpośrednio albo, w C++, użyj `tools.h`.
 
-## Zakres API
+<a id="zakres-api"></a>
+
+## Dostępne operacje
 
 Podstawowe API `cJSON`:
 
@@ -70,8 +69,7 @@ Podstawowe API `cJSON`:
 | Generowanie tekstu | `cJSON_Print`, `cJSON_PrintUnformatted`, `cJSON_PrintBuffered`, `cJSON_PrintPreallocated` |
 | Zwalnianie | `cJSON_Delete`, `cJSON_free` |
 
-`cJSON_Utils` dodaje pomocników dla JSON Pointer, JSON Patch, JSON Merge
-Patch oraz sortowania obiektów:
+`cJSON_Utils` udostępnia operacje JSON Pointer, JSON Patch i JSON Merge Patch oraz sortowanie obiektów:
 
 | Obszar | Funkcje |
 |---|---|
@@ -84,7 +82,7 @@ Patch oraz sortowania obiektów:
 
 cJSON domyślnie wykorzystuje alokację dynamiczną.
 
-Najważniejsze zasady:
+Zasady zwalniania pamięci:
 
 - Drzewo zwrócone przez `cJSON_Parse*()` trzeba zwolnić przez
   `cJSON_Delete(root)`.
@@ -105,19 +103,15 @@ Najważniejsze zasady:
   `target`. Zawsze przypisuj zwróconą wartość z powrotem do wskaźnika korzenia
   drzewa.
 
-Niestandardowe funkcje alokatora można zarejestrować przez
-`cJSON_InitHooks()`. Należy to zrobić raz podczas uruchamiania programu,
-zanim powstaną jakiekolwiek obiekty JSON. Hooki obowiązują w całym procesie,
-nie tylko w pojedynczym dokumencie.
+Własne funkcje przydzielania i zwalniania pamięci zarejestruj przez `cJSON_InitHooks()` raz, przy uruchamianiu programu, zanim powstanie pierwszy obiekt JSON. Ustawienie obowiązuje dla całego procesu, nie dla pojedynczego dokumentu.
 
-## Thread safety
+<a id="thread-safety"></a>
 
-Dokumenty cJSON można przetwarzać niezależnie, jeśli każde zadanie lub rdzeń
-korzysta z własnego drzewa. Dostęp do drzewa współdzielonego trzeba
-synchronizować po stronie aplikacji; JaszczurHAL nie chroni operacji cJSON
-mutexem.
+## Współbieżność
 
-Uważaj na następujący stan globalny:
+Oddzielne zadania lub rdzenie mogą przetwarzać niezależne drzewa cJSON. Jeśli współdzielą jedno drzewo, aplikacja musi synchronizować dostęp. JaszczurHAL nie dodaje muteksu do operacji cJSON.
+
+Dodatkowo uwzględnij stan globalny biblioteki:
 
 - `cJSON_InitHooks()` zmienia globalne funkcje alokatora. Wywołaj ją raz
   podczas uruchamiania programu, przed rozpoczęciem współbieżnej pracy z JSON-em.
@@ -177,7 +171,9 @@ Wejście:
 {"ssid":"lab-net","sample_ms":1000,"enabled":true}
 ```
 
-## Przykład: budowanie i wypisywanie JSON
+<a id="przykład-budowanie-i-wypisywanie-json"></a>
+
+## Przykład: tworzenie i serializacja JSON-u
 
 Użyj `cJSON_PrintPreallocated()`, gdy znasz maksymalny rozmiar wyniku i chcesz
 uniknąć dynamicznego przydzielania bufora na generowany tekst.
@@ -225,16 +221,13 @@ if (text != NULL) {
 }
 ```
 
-## Przykład: budowanie JSON z NONULL
+<a id="przykład-budowanie-json-z-nonull"></a>
 
-`NONULL(x)` to makro pomocnicze JaszczurHAL z `hal_system.h`, a nie część API
-cJSON. Przydaje się w krótkich funkcjach budujących JSON, które zwalniają
-wszystkie zasoby w jednym miejscu oznaczonym etykietą `error:`. Jeżeli wynikiem
-`x` jest `NULL`, makro przechodzi bezpośrednio do tej etykiety.
+## Przykład: tworzenie JSON-u z obsługą błędów przez `NONULL`
 
-Ten wzorzec dobrze współgra z pomocnikami `cJSON_Add*ToObject()` i
-`cJSON_PrintUnformatted()`, ponieważ oba zwracają wskaźniki, które muszą
-być sprawdzone.
+`NONULL(x)` to makro JaszczurHAL z `hal_system.h`, nie funkcja cJSON. Gdy `x` ma wartość `NULL`, makro przechodzi do etykiety `error:`. Pozwala to zebrać zwalnianie zasobów w jednym miejscu funkcji tworzącej dokument.
+
+Ten wzorzec można stosować z `cJSON_Add*ToObject()` oraz `cJSON_PrintUnformatted()`: obie grupy funkcji zwracają wskaźniki, które trzeba sprawdzić.
 
 ```c
 #include <hal/codecs/cjson/cJSON.h>
@@ -337,10 +330,11 @@ JSON Pointer używa ścieżek rozdzielanych znakiem `/`. W nazwach kluczy znaki
   obiekty wejściowe, zgodnie z dokumentacją biblioteki. Jeśli ich kolejność
   i treść mają pozostać bez zmian, najpierw utwórz kopie dokumentów.
 
-## Przechowywanie i transport
+<a id="przechowywanie-i-transport"></a>
 
-Samo cJSON działa wyłącznie w RAM-ie. Do zapisania lub przesłania tekstu użyj
-odpowiedniego modułu HAL:
+## Zapis i przesyłanie JSON-u
+
+cJSON przetwarza dane w RAM. Do utrwalenia lub przesłania tekstu użyj odpowiedniego modułu HAL:
 
 - Użyj `hal_littlefs` dla plików JSON na LittleFS RP2040.
 - Użyj `hal_kv` dla małych skalarnych wartości konfiguracyjnych, gdzie

@@ -1,26 +1,25 @@
-# 30 - Bluetooth speaker
+<a id="30---bluetooth-speaker"></a>
 
-This RP-only example turns a Pico W or Pico 2 W into a Bluetooth Classic A2DP
-Sink named `JaszczurHAL Speaker`. It accepts SBC at 44.1 or 48 kHz in mono,
-stereo, or joint-stereo mode, downmixes to signed mono PCM, and feeds a
-timer-paced DMA PWM output. The base build is A2DP-only; the `avrcp` variant
-adds absolute volume, and `ble-a2dp` builds BLE and Classic/A2DP together on
-the shared CYW43 controller. The output adapter prebuffers roughly 171-186 ms
-and refills toward roughly 213-232 ms, depending on the negotiated sample rate,
-to absorb source and RF jitter. The example reserves 4 KiB for the active
-core-0 stack after measured SBC and flash-backed bonding paths exhausted the
-safe margin of the 2 KiB default.
+# 30 - Bluetooth audio playback
 
-The inquiry identity uses Class of Device `0x240414`: Audio and Rendering
-service classes, Audio/Video major class, and Loudspeaker minor class. The
-Rendering bit is required for Android-compatible A2DP Sink classification.
+This example turns a Pico W or Pico 2 W into a Bluetooth Classic A2DP
+receiver named `JaszczurHAL Speaker`. It accepts SBC audio at 44.1 or 48 kHz
+in mono, stereo, or joint-stereo mode, decodes it to signed mono PCM, and
+plays it through PWM on GP6. A timer and DMA control sample delivery.
+
+The base version supports A2DP. The `avrcp` variant adds absolute volume
+control, while `ble-a2dp` compiles BLE and Classic/A2DP support together
+for the shared CYW43 controller. This example is available only for RP
+boards.
 
 ## Wiring
 
-The PWM output is **GP6**. Each signed PCM sample is converted to one of 256
-duty-cycle levels, so the PWM carrier follows the negotiated sample rate:
-44.1 or 48 kHz. Do not connect a passive speaker directly to the Pico. A
-minimal signal path is:
+**Do not connect a passive speaker directly to the Pico.** GP6 provides a
+signal for an amplifier; it cannot power a loudspeaker. Each PCM sample
+maps to one of 256 PWM duty-cycle levels. The PWM carrier is 44.1 or 48 kHz,
+matching the negotiated sample rate.
+
+A minimal connection to a powered amplifier is:
 
 ```text
 GP6 ---- 1 kOhm ----+---- powered amplifier high-impedance input
@@ -30,13 +29,15 @@ GP6 ---- 1 kOhm ----+---- powered amplifier high-impedance input
 GND ----------------+---- amplifier GND
 ```
 
-This first-order low-pass has a cutoff near 15.9 kHz. Use a properly designed
-second-order reconstruction filter when audio quality matters. AC-couple the
-filter output if the amplifier input does not tolerate the PWM midpoint DC
-bias. Power and size the amplifier for the attached loudspeaker; the Pico pin
-is only a logic-level source.
+The 1 kΩ/10 nF low-pass filter has a cutoff near 15.9 kHz. For better audio
+quality, use a properly designed second-order reconstruction filter.
+AC-couple the output if the amplifier cannot tolerate the DC bias from
+the PWM midpoint. Connect the grounds and choose amplifier power and
+supply ratings appropriate for the loudspeaker.
 
 ## Build
+
+Run from the repository root:
 
 ```bash
 ./scripts/examples_dispatcher.py build --target rp2040 \
@@ -50,39 +51,57 @@ vscode/entry/jh-vscode build --project examples/30_bluetooth_speaker \
   --target rp2350-arm --board pico2w --variant ble-a2dp
 ```
 
-On an empty bond store the firmware opens one 60-second discoverable pairing
-window and automatically accepts a pending Just Works/PIN request only during
-that window. Once the first valid SBC frame arrives, the Classic manager stores
-the shared link key with the A2DP profile identifier. AVRCP never stores a
-second key. Known phones can reconnect while the device remains
-non-discoverable.
+## Pair and play audio
 
-On Android, open the system's new-device pairing screen during that window,
-select `JaszczurHAL Speaker`, accept the Just Works request, and start media
-playback. The `rp2040:picow` hardware gate used an Android source with the
-filtered and amplified GP6 output. The `rp2350-arm:pico2w` runtime gate used a
-BlueZ source; products using that board must still validate their selected
-physical audio output. Other sources and output stages require their own
-end-to-end acceptance.
+With no stored device, the program opens one 60-second pairing window.
+Only during this window is it discoverable and willing to automatically
+accept a pending Just Works/PIN request. After receiving the first valid
+SBC frame, it stores the shared link key with the A2DP profile identifier.
+AVRCP uses the same key rather than storing another one. A known phone can
+subsequently reconnect while the receiver remains non-discoverable.
 
-The serial commands are `INFO`, `PAIR`, `RESET`, and `WATCHDOG`. `PAIR` opens
-another bounded window. `RESET` removes the persisted bond and keeps pairing
-closed until an explicit `PAIR` command or a restart with empty storage.
-Use `PAIR` after removing the speaker on a phone: the bounded replacement
-window remains open even while Pico retains the old bond, and closes after the
-replacement produces its first valid SBC frame.
-`WATCHDOG` deliberately stops servicing the four-second watchdog, allowing an
-actual watchdog-reset reconnect test; the next boot reports the latched reset
-reason. `INFO` reports stream format, packet loss, dropped/corrupt frames,
-bounded-queue and BTstack-pool high-water marks, stack use, clock correction,
-DMA use and underruns, adapter drops, and poll-context CPU timing. Diagnostics
-never print a Bluetooth address, link key, or audio contents.
+On Android, open the new-device pairing screen during this window. Select
+`JaszczurHAL Speaker`, accept the Just Works request, and start playback.
+Automatic approval is an example policy; choose an appropriate consent
+mechanism for the access requirements of a product.
 
-For hardware acceptance, verify pairing, audio start, pause/resume/stop,
-absolute volume with the `avrcp` image, at least 30 minutes of playback,
-reconnect after device and phone restarts, watchdog-free cold boot, and bond
-removal through `RESET`. Use `WATCHDOG` for the separate real-watchdog reboot
-and reconnect check.
+The device uses Class of Device `0x240414`: Audio and Rendering service
+classes, the Audio/Video major class, and the Loudspeaker minor class. The
+Rendering bit provides Android-compatible classification as an A2DP receiver.
 
-An XY-BT-Mini-class module cannot act as the test source: it is another A2DP
-Sink. Use a phone, computer, or a dedicated A2DP Source instead.
+## Serial commands
+
+| Command | Behavior |
+|---|---|
+| `INFO` | Print stream state and diagnostic counters. |
+| `PAIR` | Open another time-limited pairing window. |
+| `RESET` | Remove the stored bond without immediately reopening pairing. |
+| `WATCHDOG` | Stop servicing the watchdog deliberately, causing a reset after four seconds. |
+
+Use `PAIR` after removing the speaker from a phone's device list. This
+window allows replacement even if the Pico still holds the previous bond.
+It closes after the first valid SBC frame from the replacement connection.
+After `RESET`, pairing stays closed until `PAIR` or a restart with empty
+storage. `WATCHDOG` is for a separate reconnection test after a real
+watchdog reset; the next boot prints the retained reset reason.
+
+## Buffering and diagnostics
+
+Playback starts after roughly 171-186 ms of audio has been buffered. The
+output then refills toward roughly 213-232 ms. These values depend on the
+sample rate; buffering absorbs variations in source and radio delivery.
+The configuration reserves 4 KiB for the core-0 stack. Earlier measurements
+of SBC decoding and flash-backed bond storage found insufficient margin
+with the default 2 KiB.
+
+`INFO` reports the stream format, packet loss, dropped or corrupt frames,
+maximum queue and BTstack pool usage, and stack use. It also reports clock
+correction, DMA use and underruns, output-adapter drops, and CPU time spent
+in `poll`. Diagnostics do not print Bluetooth addresses, link keys, or
+audio contents.
+
+## Hardware test coverage
+
+The `rp2040:picow` test used an Android POCO M8 phone and a filtered, amplified GP6 pin
+output.
+

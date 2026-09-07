@@ -1,36 +1,30 @@
-# 14 - MCP2515 CAN
+<a id="14---mcp2515-can"></a>
 
-Jest to przenośny przykład użycia MCP2515 na RP2040 i STM32G474.
+# 14 - Wysyłanie i odbieranie ramek CAN przez MCP2515
 
-Działanie:
+Przykład co sekundę wysyła ramkę CAN o identyfikatorze `0x321` i wypisuje
+odebrane ramki w konsoli szeregowej. Kontroler MCP2515 jest podłączony do
+magistrali SPI 0. Aplikacja cyklicznie sprawdza odbiór, więc nie wymaga
+podłączenia pinu przerwania.
 
-- inicjalizuje magistralę SPI 0;
-- inicjalizuje jeden kontroler MCP2515 na skonfigurowanym pinie CS;
-- co sekundę wysyła ramkę sygnalizującą działanie urządzenia, o identyfikatorze
-  CAN `0x321`;
-- cyklicznie sprawdza kolejkę odbiorczą i wypisuje odebrane ramki przez port
-  szeregowy.
+Flaga `HAL_ENABLE_MCP2515` włącza sterownik oraz potrzebną obsługę CAN i SPI.
+Poniższe połączenia dotyczą RP2040 i STM32G474.
 
-Przykład cyklicznie odpytuje kontroler i nie wymaga pinu przerwania.
-Włącza obsługę MCP2515 przez `HAL_ENABLE_MCP2515`, co dołącza ogólną fasadę CAN
-oraz zależność SPI.
+<a id="rp2040"></a>
+
+<a id="stm32g474"></a>
 
 ## Połączenia
 
-### RP2040
+| Sygnał MCP2515 | RP2040 | STM32G474 / NUCLEO-G474RE |
+|---|---|---|
+| MISO | GPIO16 | PA6, pin 13 CN10 / D12 |
+| MOSI | GPIO19 | PA7, pin 15 CN10 / D11 |
+| SCK | GPIO18 | PA5, pin 11 CN10 / D13 |
+| CS | GPIO17 | PB6, pin 17 CN10 / D10 |
 
-- MISO: GPIO16
-- MOSI: GPIO19
-- SCK: GPIO18
-- CS: GPIO17
-
-### STM32G474
-
-- MISO: PA6, pin 13 CN10 / D12
-- MOSI: PA7, pin 15 CN10 / D11
-- SCK: PA5, pin 11 CN10 / D13
-- CS: PB6, pin 17 CN10 / D10
-
-Użyj modułu MCP2515 z transceiverem CAN i prawidłowo zakończonej magistrali CAN.
-Ponieważ `hal_can_create()` włącza jednorazową transmisję, brak ACK na odłączonej
-magistrali spowoduje błąd wysyłania zamiast nieskończonego ponawiania.
+Użyj modułu MCP2515 z transceiverem CAN i rezystorami terminującymi
+magistralę. `hal_can_create()` włącza tryb pojedynczej próby nadawania:
+brak potwierdzenia ACK powoduje błąd wysyłania, a nie nieograniczone
+ponawianie. Sam kontroler na odłączonej magistrali nie otrzyma takiego
+potwierdzenia.

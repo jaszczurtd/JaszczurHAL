@@ -1,3 +1,9 @@
+/*
+ * Start a WireGuard tunnel over WiFi and periodically check the peer
+ * connection. Replace the placeholder keys and addresses and configure the
+ * remote peer.
+ */
+
 #include <hal/core/hal_app.h>
 #include <hal/network/hal_wifi.h>
 #include <hal/network/wireguard/hal_wireguard.h>
@@ -46,6 +52,8 @@ static void startWireGuard(void) {
   tunnel_started = hal_wireguard_begin_advanced_text(
       WG_LOCAL_IP, WG_PRIVATE_KEY, WG_PEER_HOST, WG_PEER_PUBLIC_KEY,
       WG_PEER_PORT, WG_ALLOWED_IP, WG_ALLOWED_MASK);
+  /* Initialization does not prove the peer is connected; serviceWireGuard
+   * checks that. */
   if (tunnel_started) {
     deb("WireGuard: tunnel started");
   } else {

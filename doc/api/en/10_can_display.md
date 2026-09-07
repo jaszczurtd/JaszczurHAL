@@ -1,12 +1,18 @@
-# CAN bus and display
+<a id="can-bus-and-display"></a>
+
+# CAN and displays
 
 *Also available in [Polish](../pl/10_can_display.md).*
 
 > **Part of [JaszczurHAL API Reference](../../en/JaszczurHAL_API.md)**
 
-Covers: `hal_can`, `hal_hd44780`, `hal_display`.
+This chapter covers CAN communication, HD44780 character displays, and drawing or transferring images to graphics displays.
 
-## `hal_can` - CAN bus  *(optional - `HAL_ENABLE_CAN`, backends `HAL_ENABLE_MCP2515` / `HAL_ENABLE_MCP251XFD` / `HAL_ENABLE_STM32G474_FDCAN`)*
+<a id="hal_can---can-bus--optional---hal_enable_can-backends-hal_enable_mcp2515--hal_enable_mcp251xfd--hal_enable_stm32g474_fdcan"></a>
+
+## `hal_can` - CAN and CAN FD communication  *(optional - `HAL_ENABLE_CAN`, backends `HAL_ENABLE_MCP2515` / `HAL_ENABLE_MCP251XFD` / `HAL_ENABLE_STM32G474_FDCAN`)*
+
+Send and receive CAN frames through an MCP2515, MCP251XFD, or the STM32G474 internal FDCAN controller. CAN FD support depends on the controller and its configuration; MCP2515 supports classic CAN only.
 
 ```c
 #include <hal/can/hal_can.h>
@@ -210,7 +216,7 @@ uint8_t hal_can_encode_temp_i8(float temp_c);
   `HAL_ENABLE_CAN` no longer propagates SPI by itself and is treated as a facade
   flag that requires a backend.
 
-**Thread safety:** Thread-safe and multicore-safe. Each channel has a per-instance `hal_mutex_t`. `hal_can_receive()` holds the lock across the availability check and frame read, eliminating TOCTOU races.
+**Concurrency:** Each channel has its own `hal_mutex_t`, allowing calls from multiple tasks and cores. `hal_can_receive()` holds the lock from the availability check through the complete frame read, preventing another task from consuming the frame between those steps.
 
 - **CAN FD API:** `hal_can_frame_t`, `hal_can_send_frame()`,
   `hal_can_receive_frame()`, and the DLC helpers are backend-agnostic. MCP2515 is
@@ -246,27 +252,17 @@ the hardware frees the TX buffer immediately instead of retransmitting indefinit
 starvation: without one-shot, just 3 consecutive un-ACK'd frames permanently block all 3 TX buffers, making
 every subsequent `hal_can_send()` fail with `CAN_GETTXBFTIMEOUT`.
 
-For periodic broadcast applications (where fresh data is sent on the next
-timer tick anyway) one-shot has no practical downside - an individual lost frame
-is replaced by the next update. Change-only publishers must instead retry a
-failed send, add a periodic heartbeat, or disable `one_shot_tx`; otherwise one
-lost frame can leave the receiver stale.
+One-shot mode is useful for periodic broadcasts when a later update can replace a lost frame. It does not guarantee delivery of every update. Applications that transmit only when data changes should retry failed transmissions, periodically resend the current state, or disable `one_shot_tx`; otherwise the receiver may retain stale data.
 
-When the bus is healthy and all receivers are present, one-shot behaviour is
-identical to normal mode: the first attempt succeeds and no retry is needed. In
-one-shot mode, a missing ACK, lost arbitration, an aborted transmission, or a
-bus error is reported by `hal_can_send()` as `false` and logged via
-`hal_derr_limited("can", ...)` to avoid serial flooding. Normal mode continues
-hardware retransmission and reports success when a later attempt completes.
+When the first transmission attempt succeeds, one-shot and normal mode have the same result: no retry is needed. In one-shot mode, a missing ACK, lost arbitration, aborted transmission, or bus error makes `hal_can_send()` return `false`. The error is logged through `hal_derr_limited("can", ...)` to limit serial output. Normal mode continues hardware retransmission and reports success when a later attempt succeeds.
 
 ---
 
-## `hal_hd44780` - HD44780 character LCD  *(optional - `HAL_ENABLE_HD44780`)*
+<a id="hal_hd44780---hd44780-character-lcd--optional---hal_enable_hd44780"></a>
 
-Parallel character LCD driver for HD44780-compatible modules. It supports the
-same 4-bit and 8-bit GPIO transfer modes as the original LiquidCrystal library,
-including optional `RW`, custom CGRAM characters, cursor/display control,
-scrolling, autoscroll and row-offset overrides.
+## `hal_hd44780` - character LCDs  *(optional - `HAL_ENABLE_HD44780`)*
+
+Display text on parallel HD44780-compatible LCDs. The driver supports 4-bit and 8-bit GPIO transfers, an optional `RW` line, custom CGRAM characters, cursor and display control, manual and automatic scrolling, and configurable row offsets. Its feature set matches the original LiquidCrystal library.
 
 ```cpp
 #include <hal/display/hal_hd44780.h>
@@ -302,14 +298,13 @@ lcd.write((uint8_t)0);
   the proven HD44780 sequence: 50 ms power-on wait, 4.5 ms/150 us init retries,
   2 ms clear/home delay and 1/1/100 us enable pulse phases.
 
-**Thread safety:** Public methods serialize each `HD44780` instance with a HAL
-mutex, so multicore and FreeRTOS tasks cannot interleave command/data GPIO
-sequences for the same display. Calls are not ISR-safe because `hal_mutex_lock`
-is not ISR-safe.
+**Concurrency:** Each `HD44780` instance has a mutex protecting its public methods, so tasks or cores cannot interleave GPIO commands and data for that display. This also applies under FreeRTOS. Do not call this API from an interrupt handler: `hal_mutex_lock` does not support that context.
 
 ---
 
-## `hal_display` - TFT / OLED / LCD / EPD display  *(optional - `HAL_ENABLE_DISPLAY`)*
+<a id="hal_display---tft--oled--lcd--epd-display--optional---hal_enable_display"></a>
+
+## `hal_display` - graphics displays  *(optional - `HAL_ENABLE_DISPLAY`)*
 
 Supports SPI TFT displays (ILI9341, ST7789, ST7735, ST7796S, GC9A01),
 SSD1331/SSD135x RGB OLEDs, SSD1306-family OLEDs (`SSD1306`, `SSD1309`,
@@ -647,7 +642,7 @@ if (status == HAL_OK) {
 
 **Thread safety:** Hardware backends serialize display operations with an internal `hal_mutex_t`. During TFT streaming the mutex stays held between `hal_display_begin_write()` and `hal_display_end_write()`, including any async DMA wait. Mock backend is unsynchronized and intended for single-threaded tests.
 
-**Mock helpers:**
+**Mock test functions:**
 ```c
 void         hal_mock_display_reset(void);
 void         hal_mock_display_fail_next_io(void);

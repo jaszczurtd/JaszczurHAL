@@ -4,7 +4,7 @@
 #define HAL_DEBUG_DEFAULT_BAUD 115200u
 #endif
 
-/* Entry point is selected by the build system:
- * STM32 defines HAL_PROVIDE_APP_ENTRY. */
+/* The build enables HAL_PROVIDE_APP_ENTRY so HAL supplies the STM32 entry
+ * point. */
 
 #define HAL_ENABLE_STM32G474_FDCAN

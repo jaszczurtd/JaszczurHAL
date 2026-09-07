@@ -1,3 +1,9 @@
+/*
+ * Publish a counter and WiFi RSSI over MQTT and print incoming commands.
+ * Connection attempts are retried at intervals. Set the network credentials
+ * before use; this example does not configure MQTT authentication or TLS.
+ */
+
 #include <hal/core/hal_app.h>
 #include <hal/network/hal_wifi.h>
 #include <hal/network/mqtt/hal_mqtt.h>
@@ -23,6 +29,7 @@ static void onMqttMessage(const char *topic, const uint8_t *payload,
                           uint16_t length, void *user) {
   (void)user;
 
+  /* Bound console output and keep one byte for the string terminator. */
   char text[96] = {};
   const uint16_t copy_len =
       length < (sizeof(text) - 1u) ? length : (uint16_t)(sizeof(text) - 1u);

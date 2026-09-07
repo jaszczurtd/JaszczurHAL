@@ -4,6 +4,5 @@
 #define HAL_DEBUG_DEFAULT_BAUD 115200u
 #endif
 
-/* Entry point is selected by the build system:
- * RP and STM32 use the HAL-owned application entry point. */
+/* The build selects the HAL entry point for RP and STM32 applications. */
 #define HAL_ENABLE_A7670

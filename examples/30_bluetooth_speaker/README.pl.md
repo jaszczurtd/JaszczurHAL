@@ -1,27 +1,25 @@
-# 30 - Głośnik Bluetooth
+<a id="30---głośnik-bluetooth"></a>
 
-Ten przykład tylko dla RP zamienia Pico W lub Pico 2 W w odbiornik Bluetooth
-Classic A2DP o nazwie `JaszczurHAL Speaker`. Odbiera SBC 44,1 lub 48 kHz w
-trybie mono, stereo albo joint stereo, miksuje dźwięk do PCM mono ze znakiem i
-podaje go na taktowane timerem wyjście PWM z DMA. Wariant bazowy zawiera tylko
-A2DP, `avrcp` dodaje bezwzględną regulację głośności, a `ble-a2dp` łączy BLE i
-Classic/A2DP w jednym buildzie dla wspólnego kontrolera CYW43. Adapter
-wyjścia buforuje wstępnie około 171-186 ms PCM i uzupełnia bufor w kierunku
-około 213-232 ms, zależnie od wynegocjowanej częstotliwości próbkowania, aby
-kompensować jitter źródła i toru radiowego. Przykład rezerwuje 4 KiB stosu dla
-aktywnego rdzenia 0, ponieważ pomiar ścieżek SBC i bondingu w pamięci flash
-wykazał wyczerpanie bezpiecznego zapasu domyślnego stosu 2 KiB.
+# 30 - Odtwarzanie dźwięku przez Bluetooth
 
-Tożsamość inquiry używa Class of Device `0x240414`: klas usług Audio i
-Rendering, klasy głównej Audio/Video oraz klasy podrzędnej Loudspeaker. Bit
-Rendering jest wymagany do zgodnej z Androidem klasyfikacji A2DP Sink.
+Przykład zamienia Pico W lub Pico 2 W w odbiornik Bluetooth Classic A2DP
+widoczny jako `JaszczurHAL Speaker`. Odbiera dźwięk SBC z częstotliwością
+44,1 lub 48 kHz, w trybie mono, stereo albo joint stereo. Po dekodowaniu
+miksuje go do próbek PCM mono ze znakiem i odtwarza przez wyjście PWM na
+GP6. Przesyłaniem próbek sterują timer i DMA.
+
+Wersja podstawowa obsługuje A2DP. Wariant `avrcp` dodaje bezwzględną
+regulację głośności, a `ble-a2dp` kompiluje obsługę BLE i Classic/A2DP
+wspólnie dla kontrolera CYW43. Przykład jest dostępny tylko dla rodziny RP.
 
 ## Połączenie
 
-Wyjściem PWM jest **GP6**. Każda próbka PCM jest zamieniana na jeden z 256
-poziomów wypełnienia, więc częstotliwość nośna PWM odpowiada wynegocjowanej
-częstotliwości próbkowania: 44,1 albo 48 kHz. Nie podłączaj pasywnego głośnika
-bezpośrednio do Pico. Minimalny tor sygnałowy wygląda tak:
+**Nie podłączaj pasywnego głośnika bezpośrednio do Pico.** Wyjście GP6
+przekazuje sygnał do wzmacniacza, a nie zasila głośnik. Każda próbka PCM
+jest zamieniana na jeden z 256 poziomów wypełnienia PWM. Częstotliwość
+nośna wynosi 44,1 lub 48 kHz, zgodnie z częstotliwością próbkowania.
+
+Minimalne połączenie z aktywnym wzmacniaczem:
 
 ```text
 GP6 ---- 1 kOhm ----+---- wejście wysokoimpedancyjne aktywnego wzmacniacza
@@ -31,14 +29,17 @@ GP6 ---- 1 kOhm ----+---- wejście wysokoimpedancyjne aktywnego wzmacniacza
 GND ----------------+---- masa wzmacniacza
 ```
 
-Ten filtr dolnoprzepustowy pierwszego rzędu ma częstotliwość graniczną około
-15,9 kHz. Gdy ważna jest jakość dźwięku, zastosuj poprawnie zaprojektowany filtr
+Filtr dolnoprzepustowy 1 kΩ/10 nF ma częstotliwość graniczną około 15,9 kHz.
+Dla lepszej jakości dźwięku zastosuj poprawnie zaprojektowany filtr
 rekonstrukcyjny drugiego rzędu. Jeśli wejście wzmacniacza nie toleruje
-składowej stałej punktu środkowego PWM, dodaj kondensator separujący. Dobierz
-zasilanie i moc wzmacniacza do głośnika; pin Pico jest wyłącznie źródłem sygnału
-logicznego.
+składowej stałej wynikającej ze środkowego poziomu PWM, dodaj kondensator
+separujący. Połącz masy i dobierz zasilanie oraz moc wzmacniacza do głośnika.
 
-## Budowanie
+<a id="budowanie"></a>
+
+## Kompilacja
+
+Uruchom z głównego katalogu repozytorium:
 
 ```bash
 ./scripts/examples_dispatcher.py build --target rp2040 \
@@ -52,40 +53,63 @@ vscode/entry/jh-vscode build --project examples/30_bluetooth_speaker \
   --target rp2350-arm --board pico2w --variant ble-a2dp
 ```
 
-Przy pustym magazynie bondów firmware otwiera jedno 60-sekundowe okno
-widoczności i automatycznie zatwierdza żądanie Just Works/PIN wyłącznie podczas
-tego okna. Po pierwszej poprawnej ramce SBC menedżer Classic zapisuje wspólny
-klucz połączenia z identyfikatorem profilu A2DP. AVRCP nie zapisuje drugiego
-klucza. Znany telefon może łączyć się ponownie, gdy urządzenie pozostaje
-niewidoczne dla nowych urządzeń.
+## Parowanie i odtwarzanie
 
-W Androidzie podczas tego okna otwórz systemowy ekran parowania nowego
-urządzenia, wybierz `JaszczurHAL Speaker`, zaakceptuj Just Works i uruchom
-odtwarzanie multimediów. Bramka sprzętowa `rp2040:picow` używała źródła Android
-oraz filtrowanego i wzmacnianego wyjścia GP6. Bramka runtime
-`rp2350-arm:pico2w` używała źródła BlueZ; produkt na tej płytce nadal musi
-sprawdzić wybrane fizyczne wyjście audio. Inne źródła i tory wyjściowe wymagają
-własnego testu end-to-end.
+Gdy nie ma zapisanego urządzenia, program otwiera jedno 60-sekundowe okno
+parowania. Tylko w tym czasie jest wykrywalny i automatycznie zatwierdza
+oczekujące żądania Just Works/PIN. Po odebraniu pierwszej poprawnej ramki
+SBC zapisuje wspólny klucz połączenia z identyfikatorem profilu A2DP.
+AVRCP korzysta z tego samego klucza, zamiast zapisywać drugi. Znany telefon
+może później połączyć się ponownie, mimo że odbiornik nie jest wykrywalny
+dla nowych urządzeń.
 
-Dostępne komendy szeregowe to `INFO`, `PAIR`, `RESET` i `WATCHDOG`. `PAIR`
-otwiera kolejne ograniczone czasowo okno. `RESET` usuwa trwały bond i
-pozostawia parowanie zamknięte do jawnej komendy `PAIR` albo restartu z pustym
-magazynem. Użyj `PAIR` po usunięciu głośnika w telefonie: ograniczone okno
-wymiany pozostaje otwarte mimo zachowania starego bondu w Pico i zamyka się po
-pierwszej poprawnej ramce SBC z nowego połączenia. `WATCHDOG` celowo przestaje
-obsługiwać czterosekundowy watchdog, co pozwala sprawdzić reconnect po
-rzeczywistym resecie watchdoga; kolejny boot raportuje zapamiętaną przyczynę
-resetu. `INFO` podaje format strumienia,
-utracone pakiety, odrzucone/uszkodzone ramki, maksymalne zajęcie ograniczonych
-kolejek i pul BTstack, użycie stosu, korekcję zegara, użycie i underruny DMA,
-straty adaptera oraz timing CPU dla kontekstu `poll`. Diagnostyka nigdy nie
-wypisuje adresu Bluetooth, link key ani treści audio.
+Na telefonie z Androidem otwórz ekran parowania nowego urządzenia w ciągu
+tego okna. Wybierz `JaszczurHAL Speaker`, zaakceptuj żądanie Just Works
+i rozpocznij odtwarzanie. Automatyczna zgoda na parowanie służy temu
+przykładowi; w produkcie dobierz sposób zatwierdzania do wymagań dostępu.
 
-W teście sprzętowym sprawdź parowanie, start dźwięku, pauzę/wznowienie/stop,
-regulację głośności na obrazie `avrcp`, co najmniej 30 minut odtwarzania,
-ponowne łączenie po restarcie urządzenia i telefonu, zimny start bez zadziałania
-watchdoga oraz usunięcie bondu komendą `RESET`. Użyj `WATCHDOG` w osobnej
-próbie rzeczywistego resetu watchdogiem i ponownego połączenia.
+Urządzenie przedstawia się klasą Class of Device `0x240414`: usługami Audio
+i Rendering, klasą główną Audio/Video oraz klasą szczegółową Loudspeaker.
+Bit Rendering zapewnia klasyfikację odbiornika A2DP zgodną z Androidem.
 
-Moduł klasy XY-BT-Mini nie może być źródłem testowym: on również jest
-odbiornikiem A2DP. Użyj telefonu, komputera albo dedykowanego nadajnika A2DP.
+## Polecenia konsoli
+
+| Polecenie | Działanie |
+|---|---|
+| `INFO` | Wyświetla stan strumienia oraz liczniki diagnostyczne. |
+| `PAIR` | Otwiera kolejne ograniczone czasowo okno parowania. |
+| `RESET` | Usuwa zapisane dane parowania. Nie otwiera od razu kolejnego okna. |
+| `WATCHDOG` | Celowo przestaje obsługiwać watchdog, aby wymusić reset po czterech sekundach. |
+
+Użyj `PAIR`, gdy usuniesz głośnik z listy urządzeń telefonu. Okno pozwala
+zastąpić poprzednie dane parowania, nawet jeśli Pico nadal je pamięta.
+Zamyka się po pierwszej poprawnej ramce SBC z nowego połączenia.
+Po `RESET` parowanie pozostaje zamknięte do polecenia `PAIR` albo restartu
+z pustą pamięcią urządzeń. `WATCHDOG` służy do osobnego testu ponownego
+łączenia po rzeczywistym resecie; przy następnym uruchomieniu program
+wypisuje zapamiętaną przyczynę resetu.
+
+## Buforowanie i diagnostyka
+
+Przed rozpoczęciem odtwarzania program zbiera około 171-186 ms dźwięku.
+Następnie uzupełnia bufor do około 213-232 ms. Wartości zależą od
+częstotliwości próbkowania; bufor ogranicza wpływ nierównego tempa dostaw
+pakietów ze źródła i przez radio. Konfiguracja rezerwuje 4 KiB stosu
+rdzenia 0. Wcześniejsze pomiary dekodowania SBC i zapisu danych parowania
+do flash wykazały zbyt mały zapas przy domyślnych 2 KiB.
+
+`INFO` podaje format strumienia, straty pakietów, odrzucone lub uszkodzone
+ramki, maksymalne wykorzystanie kolejek i pul BTstack oraz użycie stosu.
+Obejmuje też korekcję zegara, wykorzystanie DMA, przypadki braku próbek
+do odtworzenia, straty w obsłudze wyjścia oraz czas pracy CPU w `poll`.
+Diagnostyka nie wypisuje adresów Bluetooth, kluczy połączenia ani treści
+przesyłanego dźwięku.
+
+## Zakres testów sprzętowych
+
+Test `rp2040:picow` obejmował telefon POCO M8 z Androidem oraz pin GP6 podłączony
+przez filtr do wzmacniacza. Dla `rp2350-arm:pico2w` sprawdzono działanie
+programu ze źródłem BlueZ; wybrane fizyczne wyjście audio wymaga nadal
+osobnej weryfikacji. Inne źródła i układy wyjściowe również trzeba
+sprawdzić jako kompletne połączenie.
+

@@ -1,10 +1,16 @@
-# Build dependencies, tests, and hardware fixtures
+<a id="build-dependencies-tests-and-hardware-fixtures"></a>
+
+# Building, automated tests, and hardware validation
 
 *Also available in [Polish](../pl/03_build_tests.md).*
 
 > **Part of [JaszczurHAL API Reference](../../en/JaszczurHAL_API.md)**
 
-## Dependencies (hardware build)
+This chapter covers build dependencies, tests that run on a workstation, and procedures for checking the library on physical devices. A successful build, a mock-based test, and a hardware test establish different things; none should be treated as a substitute for the others.
+
+<a id="dependencies-hardware-build"></a>
+
+## Dependencies for device builds
 
 | HAL module | External dependency |
 |---|---|
@@ -52,7 +58,9 @@
 | `tools` | HAL APIs |
 | `multicoreWatchdog` | internal `SmartTimers` + `hal_sync` mutex |
 
-## Dependencies (mock / PC build)
+<a id="dependencies-mock--pc-build"></a>
+
+## Dependencies for workstation tests
 
 All `impl/.mock/` files depend only on standard host headers such as
 `<cstdio>`, `<cstring>`, `<mutex>`, `<queue>`, and `<stdarg.h>`. No embedded
@@ -60,7 +68,9 @@ SDK is required.
 
 ---
 
-## Test system map and sources of truth
+<a id="test-system-map-and-sources-of-truth"></a>
+
+## Test organization and configuration
 
 | Test layer | Configuration source | Execution | Extension point |
 |---|---|---|---|
@@ -70,11 +80,7 @@ SDK is required.
 | Firmware compile fixtures | `tests/fixtures/<fixture>/.vscode/jaszczurhal.project.json` | `jh-vscode` or the target production runner | Extend the manifest target/board/variant matrix and its artifact-layout test. |
 | Physical hardware fixtures | `tests/hardware/<fixture>/` source, manifest, and verifier | Build/upload through `jh-vscode` or the target production runner, then run the verifier documented below | Add the firmware, explicit hardware matrix, host oracle, acceptance criteria, and a subsection in this document. |
 
-The executable files above are the source of truth when prose and behavior
-disagree. Each hardware fixture keeps only a short README link for local
-discovery. Complete operator instructions, wiring, requirements, and recorded
-acceptance results are centralized in the
-[Hardware fixtures](#hardware-fixtures) section below.
+If the description disagrees with test behavior, check the configuration and executable files listed above. Each fixture README links to the relevant documentation. Complete procedures, wiring, requirements, and recorded results are collected below under [Tests on physical devices](#hardware-fixtures).
 
 ---
 
@@ -93,13 +99,17 @@ cmake --build .build/host
 ctest --test-dir .build/host --output-on-failure
 ```
 
-## Repository quality gates
+<a id="repository-quality-gates"></a>
 
-### Quick start scripts
+## Repository validation
 
-Two convenience scripts in the repository root simplify local development:
+<a id="quick-start-scripts"></a>
 
-**`runmefirst.sh`** - One-time toolchain setup
+### Set up the workstation and run validation
+
+The repository root contains two main scripts:
+
+**`runmefirst.sh`** - workstation and toolchain setup
 ```bash
 ./runmefirst.sh
 ```
@@ -156,14 +166,9 @@ Valgrind thread scheduling keeps the native FreeRTOS POSIX scheduler tests in
 the selection. Live CTest/Valgrind progress is streamed to the terminal and
 `.build/gate/logs/jh_memcheck.log`.
 
-All repository-owned compilation output is kept below the single ignored
-`.build/` root. CMake script-mode compiler probes use `.build/tests/`; they do
-not emit `.o` files into the repository root.
+All build and test outputs go in the ignored `.build/` directory. CMake compiler probes run in script mode use `.build/tests/` and do not leave `.o` files in the repository root.
 
-The clang-tidy gate creates profile-specific analysis databases with one
-compile command per source file. This keeps facade tests that compile the same
-shared driver under several feature sets from triggering duplicate analyzer
-runs while normal target builds still compile every configured variant.
+The clang-tidy stage creates a separate compilation database for each profile, with one entry per source file. This avoids repeated analysis of a shared driver that API tests compile with several feature sets. Normal target builds still compile every configured variant.
 
 The CPD gate uses the authenticated PMD 7.26.0 distribution managed under
 `third_party/pmd`. It scans C/C++ implementation files rather than headers and
@@ -176,9 +181,11 @@ STM32G474, shared, remaining portable code, and Python scripts. XML reports and
 deterministic file lists are written below `.build/gate/cpd/`. CPD `PASS` means
 zero groups at the configured language-specific thresholds.
 
-This is the **recommended pre-commit validation** and **CI/CD test gate**. Run before pushing changes to catch cross-platform issues early.
+Run the full validation before committing and pushing changes. CI/CD uses the same checks.
 
-### Native Windows CI gate
+<a id="native-windows-ci-gate"></a>
+
+### Native Windows CI validation
 
 `.github/workflows/ci.yml` runs two native `windows-2025` gates in addition to
 the complete Linux quality gate:
@@ -201,10 +208,11 @@ remains in the Linux gate. Fiesta, DoomConsole, and Ford DPF Tracker own separat
 Windows firmware workflows, which provide consumer-specific integration
 coverage in addition to JaszczurHAL's generated-consumer fixture.
 
-## Hardware fixtures
+<a id="hardware-fixtures"></a>
 
-The repeatable physical-device probes use the same VS Code dispatcher as
-applications and keep their artifacts below `.build/hardware/`:
+## Tests on physical devices
+
+Device tests use the same VS Code tooling as user applications. Their outputs go in `.build/hardware/`:
 
 | Fixture | Coverage |
 |---|---|
@@ -226,12 +234,11 @@ applications and keep their artifacts below `.build/hardware/`:
 | `tests/hardware/esp32s3_phase1` | Phase 1 ESP32-S3 target/board identity, generated link signature, chip/core count, physical flash, initialized Quad PSRAM, and a repeated FreeRTOS `app_task0()` heartbeat over native USB Serial/JTAG. |
 | `tests/hardware/esp32s3_phase2` | ESP32-S3 Phase 2 runtime probe for both application tasks, system/sync, GPIO/IRQ, ADC, USB Serial/JTAG TX/RX, hardware UART, I2C master scan, SPI master transfer path, dedicated-pool timer callbacks, and enabled FreeRTOS stack-guard configuration. |
 
-The subsections below are the complete operator reference for each physical
-fixture. A successful firmware build is only a software result unless the
-fixture explicitly states otherwise; physical acceptance requires its host or
-visual oracle and the recorded PASS criteria.
+The following sections describe how to prepare and run each fixture. A successful build confirms that firmware was built, not that it works correctly on a device. Hardware acceptance requires running the procedure, passing the host verifier or the specified visual inspection, and meeting the documented PASS criteria.
 
-### RP USB CDC hardware probe
+<a id="rp-usb-cdc-hardware-probe"></a>
+
+### RP USB CDC hardware test
 
 `tests/hardware/rp_usb_cdc_echo` validates the native RP TinyUSB owner on a
 physical Pico or Pico 2, including the RP2350 ARM and RISC-V targets. The
@@ -300,7 +307,9 @@ The expected states are `suspended` and then `active`. Run
 `verify_cdc_echo.py` again after resume, then restore the original
 `autosuspend_delay_ms` and `control` values.
 
-### RP multicore USB hardware probe
+<a id="rp-multicore-usb-hardware-probe"></a>
+
+### RP multicore USB hardware test
 
 `tests/hardware/rp_usb_multicore` starts one CDC producer on each RP core. Both
 producers write 4096 independently numbered and checksummed records through
@@ -330,7 +339,9 @@ upload commands and use `--runtime freertos` for the FreeRTOS SMP run.
 The verifier's default `--records 4096` must match
 `JH_USB_MULTICORE_RECORDS` in the firmware build.
 
-### RP FreeRTOS SMP hardware probe
+<a id="rp-freertos-smp-hardware-probe"></a>
+
+### RP FreeRTOS SMP hardware test
 
 `tests/hardware/rp_freertos_smp` validates the pinned native FreeRTOS kernel on
 a physical Pico or Pico 2. It verifies scheduler startup, application task
@@ -360,7 +371,9 @@ Use `rp2350-arm` or `rp2350-riscv` with board `pico2` for Pico 2. When the
 device has no running CDC firmware yet, use `upload-uf2` while it is in
 BOOTSEL.
 
-### RP flash transaction hardware probe
+<a id="rp-flash-transaction-hardware-probe"></a>
+
+### RP flash transaction hardware test
 
 `tests/hardware/rp_flash_transaction` validates the native RP flash
 coordinator on a physical Pico or Pico 2. It runs RAM-resident operations from
@@ -399,7 +412,9 @@ python3 tests/hardware/rp_flash_transaction/verify_flash_transaction.py \
   --port /dev/serial/by-id/<device>
 ```
 
-### RP KV power-loss hardware probe
+<a id="rp-kv-power-loss-hardware-probe"></a>
+
+### RP KV power-loss hardware test
 
 `tests/hardware/rp_kv_power_loss` enables a build-only fault-injection hook in
 the native flash provider. It interrupts inactive-bank replacement after
@@ -435,7 +450,9 @@ python3 tests/hardware/rp_kv_power_loss/verify_kv_power_loss.py \
 Use `--target rp2350-arm --board pico2` for Pico 2 and pass the same target to
 the verifier. Physical RP2040 and RP2350 ARM runs passed on 2026-09-02.
 
-### RP native storage hardware probe
+<a id="rp-native-storage-hardware-probe"></a>
+
+### RP native storage hardware test
 
 `tests/hardware/rp_storage` validates native EEPROM and LittleFS on physical
 RP2040/RP2350 hardware. It commits an EEPROM boot counter, formats and remounts
@@ -463,7 +480,9 @@ python3 tests/hardware/rp_storage/verify_storage.py \
 
 Use `rp2350-arm` or `rp2350-riscv` with board `pico2` for Pico 2.
 
-### RP SDLogger hardware probe
+<a id="rp-sdlogger-hardware-probe"></a>
+
+### RP SDLogger hardware test
 
 `tests/hardware/rp_sdlogger` validates the shared SDLogger with a physical SPI
 SD card. It mounts the card, opens the EEPROM-numbered log, appends
@@ -504,7 +523,9 @@ upload commands and use `--runtime freertos` for the FreeRTOS run.
 The verifier is repeatable without formatting the card. If an old log file
 with the same name exists, it validates the newly appended deterministic tail.
 
-### Native RP OTA hardware probe
+<a id="native-rp-ota-hardware-probe"></a>
+
+### Native RP OTA hardware test
 
 `tests/hardware/rp_ota` validates OTA discovery and authentication,
 acknowledged chunk-by-chunk transfer, trial boot, explicit confirmation, a
@@ -668,7 +689,9 @@ This automated probe does not simulate loss of power during an in-progress
 flash swap. Power-cut validation requires a controlled power switch and is a
 separate destructive/recovery run.
 
-### Bluetooth Stage 1 hardware probe
+<a id="bluetooth-stage-1-hardware-probe"></a>
+
+### Bluetooth Stage 1 hardware test
 
 `tests/hardware/bluetooth_stage1` is an internal probe for the pre-API
 CYW43/BTstack integration. Its build matrix covers STM32G474 Nucleo + PIM730,
@@ -783,7 +806,9 @@ periodic `JHBT1` status before testing discovery, connection, characteristic
 read/write, disconnect/reconnect, and the WiFi-only regression. The Pico W
 on-board-radio run follows as the second hardware profile.
 
-### Bluetooth Classic manager hardware probe
+<a id="bluetooth-classic-manager-hardware-probe"></a>
+
+### Bluetooth Classic manager hardware test
 
 The public `classic-scan` variant of example 29 is the generic Classic
 hardware probe. It uses only `HAL_ENABLE_BLUETOOTH_CLASSIC`, assigns volatile
@@ -869,7 +894,9 @@ response below its reception threshold. The backend now explicitly requests
 Extended Inquiry Result mode so successful scans expose EIR names and RSSI for
 future diagnosis.
 
-### Bluetooth Classic non-gamepad HID Host hardware probe
+<a id="bluetooth-classic-non-gamepad-hid-host-hardware-probe"></a>
+
+### Bluetooth Classic non-gamepad HID Host hardware test
 
 `tests/hardware/bluetooth_classic_hid_device` is a private, test-only BTstack
 HID Device fixture. A Pico W advertises a standards-based Classic HID mouse
@@ -968,7 +995,9 @@ ELF/map and a symbol listing must also show `ENABLE_CLASSIC` HID Host, SDP
 client, HID parser, and the memory link-key database while excluding ATT,
 GATT, SM, RFCOMM, SDP server, HID Device, and audio profiles.
 
-### BLE and Classic gamepad coexistence gate
+<a id="ble-and-classic-gamepad-coexistence-gate"></a>
+
+### BLE and Classic gamepad coexistence validation
 
 The public `ble` variant of example 29 runs a passive BLE Observer beside the
 Classic HID/gamepad profile on the shared CYW43 host:
@@ -990,7 +1019,9 @@ requires valid gamepad input while BLE reports continue, successful
 `INFO` must retain both radio-runtime users and must not report HCI transport,
 fixed-pool allocation, or queue errors.
 
-### A2DP Sink and AVRCP Target hardware gate
+<a id="a2dp-sink-and-avrcp-target-hardware-gate"></a>
+
+### A2DP Sink and AVRCP Target hardware validation
 
 Example 30 is the public A2DP/AVRCP hardware exercise for Pico W and Pico 2 W:
 
@@ -1019,7 +1050,9 @@ pool, DMA, or timing failure. The physical output stage remains a product-level
 check. The `ble-a2dp` variant is part of the compile gate; active audio+BLE
 coexistence is not yet a hardware requirement.
 
-### Bluetooth Observer hardware probe
+<a id="bluetooth-observer-hardware-probe"></a>
+
+### Bluetooth Observer hardware test
 
 `tests/hardware/bluetooth_observer` validates the passive BLE Observer API on
 Raspberry Pi Pico W, Pico 2 W, and STM32G474 Nucleo with PIM730/RM2. It starts
@@ -1055,7 +1088,9 @@ valid report must arrive after both `START` and `REOPEN`.
 RP2350 RISC-V is unsupported because its CYW43 Bluetooth transport is not
 enabled.
 
-### JH BLE Stream v1 hardware gate
+<a id="jh-ble-stream-v1-hardware-gate"></a>
+
+### JH BLE Stream v1 hardware validation
 
 `tests/hardware/bluetooth_stream` validates the public BLE lifecycle and
 authenticated application stream on Raspberry Pi Pico W, Pico 2 W, RP2040
@@ -1308,7 +1343,9 @@ The embedded secret and its copy in `verify.py` are public test material. They
 must never be reused by a product. A product needs a unique random per-device
 secret delivered out of band and stored through its provisioning flow.
 
-### SX1262 raw LoRa hardware gate
+<a id="sx1262-raw-lora-hardware-gate"></a>
+
+### SX1262 raw LoRa hardware validation
 
 `tests/hardware/lora_sx1262` uses the buildable
 [`27_lora_point_to_point`](../../../examples/27_lora_point_to_point/) firmware and
@@ -1399,7 +1436,9 @@ matching variant family. Record module/antenna labels, exact wiring, firmware
 revision, distance, packet counts, loss, RSSI/SNR range and the verifier JSON
 in the private hardware report.
 
-### SX1262 command-router over LoRa hardware gate
+<a id="sx1262-command-router-over-lora-hardware-gate"></a>
+
+### SX1262 command-router over LoRa hardware validation
 
 The `link` and `link-responder` variants of
 [`27_lora_point_to_point`](../../../examples/27_lora_point_to_point/) attach
@@ -1457,7 +1496,9 @@ RSSI/SNR range and verifier JSON only in the private hardware report. The
 434.0 MHz fixture settings are technical test values; connect the LF antennas
 and follow the local spectrum, power and duty-cycle requirements.
 
-### ESP32-S3 Phase 1 hardware probe
+<a id="esp32-s3-phase-1-hardware-probe"></a>
+
+### ESP32-S3 Phase 1 hardware test
 
 `tests/hardware/esp32s3_phase1` closes the target, board, build, flash, and
 monitor plumbing for the Waveshare ESP32-S3-Zero SKU 25081. It intentionally
@@ -1535,7 +1576,9 @@ the Waveshare ESP32-S3-Zero SKU 25081. It does not extend support to the GPIO,
 serial, bus, networking, storage, or optional second-task surfaces assigned to
 Phase 2.
 
-### ESP32-S3 Phase 2 hardware probe
+<a id="esp32-s3-phase-2-hardware-probe"></a>
+
+### ESP32-S3 Phase 2 hardware test
 
 `tests/hardware/esp32s3_phase2` validates the Phase 2 peripheral HAL on the
 `waveshare-esp32-s3-zero` profile. It needs only the board's native USB cable;
@@ -1617,24 +1660,29 @@ but those checks have not been rerun on hardware. I2C target, PWM/PWM_FREQ,
 RMT/RGB, PCNT, download-boot entry, destructive stack/fault injection, and
 retained-fault recovery also remain in the Phase 3.5 hardware campaign.
 
-## Firmware compile/link fixtures
+<a id="firmware-compilelink-fixtures"></a>
 
-### ESP32-S3 compile/link fixture
+## Firmware compilation and linking checks
+
+<a id="esp32-s3-compilelink-fixture"></a>
+
+### ESP32-S3 compilation and linking
 
 | Fixture | Coverage |
 |---|---|
 | `tests/fixtures/esp32s3_phase3` | Compile-only ESP-IDF project selecting every ESP32-S3 backend delivered through Phase 3. It checks feature/source/dependency resolution, compilation, linking, `two-ota-large` partition generation, and artifact publication. |
 
-CI and local Gate 8 build this fixture. A passing build does not establish
-runtime WiFi/socket/TLS/service/OTA/WireGuard behavior or the newly completed
-Phase 2 peripheral behavior; those require a separate hardware, lifecycle, and
-negative-security verification campaign.
+CI and local validation stage 8 build this project. A successful build does not validate WiFi, sockets, TLS, services, OTA, or WireGuard at runtime, nor does it replace tests of the new Phase 2 peripherals. These areas need separate hardware, lifecycle, and negative security tests.
 
 ---
 
-## Host test architecture
+<a id="host-test-architecture"></a>
 
-### How it works
+## How workstation tests are built
+
+<a id="how-it-works"></a>
+
+### Test library and dependencies
 
 The CMake build at the project root compiles a static library `hal_mock` from:
 
@@ -1651,8 +1699,7 @@ source of truth.
 Each test executable in `tests/` links against `hal_mock` only, with no
 headers, no pico SDK, no hardware.
 
-The managed Unity 2.5.4 framework lives in `third_party/Unity/src`. The tracked
-JaszczurHAL integration consists of:
+Tests use Unity 2.5.4 in `third_party/Unity/src`. The version-controlled JaszczurHAL integration consists of:
 
 - `src/utils/unity.c`
 - `src/utils/unity.h`
@@ -1727,9 +1774,9 @@ Simple CMake registration:
 add_hal_test(test_my_module)
 ```
 
-This expects `tests/test_my_module.cpp` and links it with `hal_mock`.
+This expects `tests/test_my_module.cpp` and creates a test executable linked with `hal_mock`.
 
-When a test needs additional implementation files, create a dedicated target:
+Register a test that needs additional implementation files as a separate CMake target:
 
 ```cmake
 add_executable(test_my_driver
@@ -1747,17 +1794,17 @@ cmake --build .build/host --target test_my_module
 ctest --test-dir .build/host -R test_my_module --output-on-failure
 ```
 
-### Test suite guide
+<a id="test-suite-guide"></a>
 
-`tests/CMakeLists.txt` is the authoritative test inventory. Inspect the suite
-registered by the current checkout with:
+### Test suite coverage
+
+The complete test registry is in `tests/CMakeLists.txt`. To list the tests registered in the current checkout, run:
 
 ```bash
 ctest --test-dir .build/host -N
 ```
 
-The table below is a coverage guide for representative and grouped suites; it
-is intentionally not a second exhaustive test registry.
+The table summarizes representative suites and groups. It does not replace the complete CMake test registry.
 
 | Suite | What it covers |
 |---|---|
@@ -1900,7 +1947,9 @@ is intentionally not a second exhaustive test registry.
 3. Rebuild:
    `cmake --build .build/host && ctest --test-dir .build/host`.
 
-### Mock time control
+<a id="mock-time-control"></a>
+
+### Controlling time in mock-based tests
 
 SmartTimers and PIDController depend on `hal_millis()`.
 The mock clock starts at 0 and is driven by:

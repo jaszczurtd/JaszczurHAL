@@ -2,8 +2,7 @@
 
 *Also available in [Polish](../pl/JaszczurHAL_API.md).*
 
-Hardware Abstraction Layer for embedded projects.
-This document is the established, detailed API reference.
+JaszczurHAL provides a common hardware API for embedded applications. This guide explains the library layout, feature configuration, and how to find the reference for each module.
 
 **Author:** Marcin 'Jaszczur' Kielesiński
 
@@ -14,19 +13,19 @@ This document is the established, detailed API reference.
 
 ## Public include
 
-Use:
+Include the umbrella header in application code:
 
 ```cpp
 #include <JaszczurHAL.h>
 ```
 
-The internal header can be used for advanced/internal usage.
+For internal code or direct access to the HAL layer, include:
 
 ```cpp
 #include <hal/hal.h>
 ```
 
-Utility-only includes are also available:
+To use only the utility functions, include the appropriate utility header:
 
 ```cpp
 #include <tools.h>    // C++ utility aggregator
@@ -145,26 +144,11 @@ third_party/                # tracked pins + ignored managed component installs
   littlefs/                 # ignored pinned upstream filesystem checkout
 ```
 
-Target-independent code is co-located with its public API in the corresponding
-`src/hal/<domain>/` directory. A domain may contain public `hal_*.h` headers,
-common facades, private `jh_*` helpers, device-driver subdirectories, and
-reusable engines. This keeps one thematic hierarchy for both declarations and
-implementations. `src/hal/impl/` is reserved for target-specific ports and
-backends; portable domain code must depend only on HAL-level APIs.
+Portable code is grouped with its public API under `src/hal/<domain>/`. Each domain can contain public `hal_*.h` headers, shared implementations, private `jh_*` helpers, and device-driver subdirectories. `src/hal/impl/` is reserved for platform-specific implementations. Portable code must use HAL-level APIs rather than depend directly on those implementations.
 
 ### Compile-time feature resolution
 
-The versioned registry under `config/features/` generates the production C and
-CMake resolvers. `hal_config.h` includes the C closure, while RP and STM32G474
-CMake builds use it for source and dependency selection. The ESP-IDF runner
-resolves the same request graph, rejects features outside the target
-descriptor's allowlist, and selects the supported baseline, peripheral, and
-network source graph. It records requested and resolved features together with
-board and link provenance.
-The board generator records both `requestedFeatures` and `resolvedFeatures`;
-its feature hash and link signature use the resolved set. `jh-vscode` resolves
-the active profile and variant into the same closure and publishes the registry
-digest, closure digest, and request provenance through `config-dump`.
+The registry in `config/features/` defines the generated feature configuration for C and CMake. `hal_config.h` includes the C dependency-resolution header, and the RP and STM32G474 CMake builds use the resolved set to select sources and dependencies. The ESP-IDF runner applies the same rules, rejects features outside the target allowlist, and selects supported core, peripheral, and network sources. It records requested and resolved features with board and link provenance. The board generator stores both sets as `requestedFeatures` and `resolvedFeatures`; feature hashes and link signatures use the resolved set. `jh-vscode` resolves that same set for the active profile and variant. `config-dump` reports the registry and resolved-set digests and the origin of each feature request.
 
 Conditional defaults, provider choices, board capability checks, and target
 constraints remain in `hal_config.h`. `HAL_CONFIG_VERBOSE` activates the
@@ -257,8 +241,7 @@ link the fixed package without invoking Python.
 
 ## Memory maps
 
-Target-specific memory layout notes live next to the build support for each
-backend:
+Memory layouts are documented alongside each platform's build configuration:
 
 - [RP memory map](../../rp_native_lib/MEMORY_MAP.md) - application and OTA linker
   layouts, persistent flash regions, SRAM, heap, and stacks.
@@ -267,21 +250,15 @@ backend:
 
 ---
 
-## Suggested documentation readings order
+<a id="suggested-documentation-readings-order"></a>
 
-- [00_scripts.md](../api/en/00_scripts.md): an essential part of the JaszczurHAL
-  documentation that explains how setup, dependency management, builds,
-  examples, validation, security tooling, and VS Code orchestration work
-  together; read it to understand how the library operates as a complete
-  development system
-- [FwProjectWorkflow.md](FwProjectWorkflow.md): dispatcher-backed firmware
-  project workflow, including manifest/target/source/build/upload behavior
-- [OTAWorkflow.md](OTAWorkflow.md): native RP and ESP32-S3 OTA configuration,
-  provisioning, upload, network/firewall, confirmation, rollback, and recovery
+## Where to start
 
-Each document owns the details in its assigned scope. The others should provide
-short context and link to that owner instead of repeating commands, interfaces,
-or configuration examples.
+- [00_scripts.md](../api/en/00_scripts.md) explains which scripts prepare the environment, manage dependencies, build projects, and run checks, and how they integrate with VS Code.
+- [FwProjectWorkflow.md](FwProjectWorkflow.md) covers the manifest, target and source selection, compilation, and firmware upload.
+- [OTAWorkflow.md](OTAWorkflow.md) covers RP and ESP32-S3 OTA provisioning, network and firewall configuration, updates, boot confirmation, and recovery.
+
+Each guide contains the commands, interfaces, and configuration examples for its subject. Related guides provide context and links rather than duplicate those details.
 
 ---
 
@@ -291,8 +268,7 @@ The repository contains both the HAL itself and a set of utility modules.
 
 ### HAL public API
 
-These are the portability-oriented interfaces intended to decouple application
-logic from board-specific SDK calls:
+The public HAL interfaces separate application logic from platform-specific SDK calls:
 
 - core and system: `hal_config`, `hal_status`, `hal_bits`, `hal_math`,
   `hal_board`, `hal_system`, `hal_power`, `hal_sync`, `hal_timer`,
@@ -326,8 +302,7 @@ logic from board-specific SDK calls:
 
 ### Helper / utility modules
 
-These are convenient adjuncts, but they are not the portability boundary
-itself:
+Utility modules complement the HAL; they do not replace its hardware abstraction:
 
 - `tools`
 - `SmartTimers`
@@ -335,9 +310,7 @@ itself:
 - `multicoreWatchdog`
 - `draw7Segment`
 
-When designing new application code, prefer depending on the HAL layer first.
-Helper modules are useful building blocks, but they should not replace the HAL
-boundary conceptually.
+In new applications, use HAL APIs for hardware access. Use utility modules where they help, but do not treat them as a replacement for the portability layer.
 
 ---
 
@@ -352,11 +325,7 @@ are the authoritative profile inventory. List the current IDs with:
 python3 scripts/generate_board_config.py --boards-root boards --list boards
 ```
 
-The ESP32-S3 component consumes generated target/board facts and the link
-metadata and compiles the public `hal_board` runtime facade. Capability state
-still follows the shared owner model: a declared capability remains
-`HAL_BOARD_CAP_INACTIVE` until the module that owns it publishes an available
-or failed state.
+The ESP32-S3 component provides `hal_board` using generated target, board, and link metadata. A declared hardware capability remains `HAL_BOARD_CAP_INACTIVE` until the responsible module reports that it is available or has failed.
 
 `HAL_BOARD_DECLARED_CAPABILITIES` describes fitted hardware at compile time.
 On targets that build the runtime facade, users should query
@@ -370,10 +339,7 @@ A declared capability is initially
 `HAL_BOARD_CAP_INACTIVE`; its owner moves it to `AVAILABLE` or `FAILED`.
 The RP CYW43 provider publishes these transitions during init/deinit.
 
-`hal/system/hal_board.h` defines the stable profile enum, capability bitmask,
-runtime states, snapshot type, and query functions. The generated
-`src/hal/generated/jh_board_registry.h` maps every registry profile to that
-public identity without maintaining another hand-written profile list here.
+`hal/system/hal_board.h` defines stable profile identifiers, the capability bitmask, availability states, a board-information snapshot, and query functions. The generated `src/hal/generated/jh_board_registry.h` maps registry profiles to those public identifiers without requiring a second, manually maintained list.
 
 `hal_board_require_capabilities()` returns `HAL_OK` when every requested
 capability is available, `HAL_EUNSUPPORTED` when the board does not declare

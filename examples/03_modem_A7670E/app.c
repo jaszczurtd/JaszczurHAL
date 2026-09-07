@@ -1,3 +1,9 @@
+/*
+ * Connect a SIMCom A76xx modem to MQTT, publish telemetry, and receive
+ * commands. Set the APN, broker credentials, and modem certificate before
+ * running.
+ */
+
 #ifdef HAL_ENABLE_A7670
 
 #include <hal/core/hal_app.h>
@@ -50,6 +56,7 @@ static void onMqttMessage(int client_index, const char *topic,
   if ((strcmp(topic, MQTT_TOPIC_CMD) == 0) &&
       (payload_len == strlen("modem_reset")) &&
       (memcmp(payload, "modem_reset", payload_len) == 0)) {
+    /* Defer modem reinitialization until the main loop leaves the callback. */
     pending_modem_reset = true;
   }
 }
@@ -135,6 +142,7 @@ static bool mqttConnect(void) {
   mq.ssl.enabled = true;
   mq.ssl.ssl_context_id = 0;
   mq.ssl.ca_cert_name = SSL_CA_CERT;
+  /* Example TLS settings; review clock checks and SNI for the actual broker. */
   mq.ssl.ignore_local_time = true;
   mq.ssl.enable_sni = false;
   mq.ssl.sslversion = 4;
@@ -191,7 +199,8 @@ void app_task0(void) {
   }
 }
 
-#else /* HAL_ENABLE_A7670 not defined */
+#else /* Report the missing modem feature instead of starting the application. \
+       */
 
 #include <hal/core/hal_app.h>
 #include <hal/serial/hal_serial.h>

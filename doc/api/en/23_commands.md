@@ -1,17 +1,14 @@
-# Transport-neutral command routing
+<a id="transport-neutral-command-routing"></a>
+
+# Transport-independent application commands
 
 *Also available in [Polish](../pl/23_commands.md).*
 
 > **Part of [JaszczurHAL API Reference](../../en/JaszczurHAL_API.md)**
 
-The command subsystem separates command registration and dispatch from the
-transport that carries a request. `hal_command_router` owns named handlers and
-their source/security policy. `hal_command_wire` provides a bounded binary
-message format for packet and stream adapters. The implemented adapters are
-the HTTP/WebSocket compatibility layer in `hal_net_commands`, framed serial
-sessions in `hal_serial_commands`, the reliable LoRa adapter in
-`hal_lora_commands`, and the authenticated BLE Stream adapter in
-`hal_ble_commands`.
+Register a command once and expose it over different communication channels. `hal_command_router` selects its handler by name, checks the allowed source and required security, then executes the request. `hal_command_wire` defines a bounded binary message format.
+
+Available adapters support HTTP/WebSocket through the compatible `hal_net_commands` API, framed serial sessions through `hal_serial_commands`, reliable LoRa links through `hal_lora_commands`, and authenticated BLE Stream through `hal_ble_commands`.
 
 ## Enable the modules
 
@@ -50,19 +47,17 @@ Enable the LoRa adapter together with one radio provider:
 `HAL_ENABLE_NET_COMMANDS` also propagates the router while retaining its HTTP,
 WebSocket, cJSON, TCP and WiFi dependencies.
 
-## Router
+<a id="router"></a>
+
+## Registering and executing commands
 
 ```c
 #include <hal/commands/hal_command_router.h>
 ```
 
-A request contains binary-safe arguments, an encoding, a non-owning command
-name and source context, plus request, peer and session identifiers. Source and
-security masks let one handler accept only selected entry points. The router
-checks those masks before invoking the handler synchronously.
+A request contains binary arguments and their encoding, the command name, source context, and request, peer, and session identifiers. The router does not take ownership of the name or context. It checks allowed-source and required-security masks before invoking the handler synchronously.
 
-The process-wide default router is shared by transport adapters. Independent
-routers are available when an application needs an isolated handler set.
+Transport adapters use the shared default router. Create a separate instance when you need an independent command set.
 
 ```c
 static hal_status_t echo_command(const hal_command_request_t *request,
@@ -107,9 +102,7 @@ active matching handler returns `HAL_EBUSY`; an absent name returns
 lock, so startup, rollback and shutdown do not contain a check-then-change
 window.
 
-Dispatch does not serialize handler execution. The same handler can run
-concurrently when multiple tasks or transport adapters dispatch it, so shared
-`user` state must provide its own synchronization.
+**Handler concurrency:** The router does not serialize handler execution. The same handler may run concurrently in several tasks or adapters, so the application must protect shared state referenced by `user`.
 
 `hal_command_response_write()` and `hal_command_response_write_str()` append to
 the fixed response buffer. The encoding helper also selects the usual content
@@ -138,12 +131,11 @@ hal_command_response_t response;
 status = hal_command_router_dispatch(router, &request, &response);
 ```
 
-The defined sources are direct calls, HTTP, WebSocket, Serial Session, reliable
-LoRa and BLE Stream. Security flags describe authentication, encryption,
-integrity and replay protection reported by the adapter. The router enforces
-requested bits but does not perform transport security itself.
+A request may originate from a direct call, HTTP, WebSocket, Serial Session, a reliable LoRa link, or BLE Stream. The adapter reports authentication, encryption, integrity, and replay protection through security flags. The router checks the required flags but does not secure the transport itself.
 
-## Wire messages
+<a id="wire-messages"></a>
+
+## Binary message format
 
 ```c
 #include <hal/commands/hal_command_wire.h>
@@ -210,14 +202,15 @@ provides the compile-time upper bound for adapter-owned storage. The wire
 format does not add encryption or authentication; those properties belong to
 the transport adapter.
 
-## Framed Serial Session adapter
+<a id="framed-serial-session-adapter"></a>
+
+## Commands over framed serial sessions
 
 ```c
 #include <hal/serial/hal_serial_commands.h>
 ```
 
-Initialize `hal_serial_session`, register router handlers using their existing
-SC names, then attach one caller-owned adapter:
+Initialize `hal_serial_session`, register handlers under their existing SC command names, and attach one adapter whose storage is owned by the application:
 
 ```c
 static hal_serial_session_t session;
@@ -285,15 +278,15 @@ returns `HAL_EBUSY` during the inactive predicate, handler, formatter, fallback
 or response emit, and clears the session callback only when the adapter still
 owns it.
 
-## Reliable LoRa adapter
+<a id="reliable-lora-adapter"></a>
+
+## Commands over a reliable LoRa link
 
 ```c
 #include <hal/radio/hal_lora_commands.h>
 ```
 
-Create and initialize the raw radio and reliable link first. The link must be
-in its receiving state when the adapter is attached. A null router in the
-configuration selects the shared default router.
+Create and configure the radio and LoRa link. The link must be receiving before the adapter is attached. A `NULL` router selects the shared default router.
 
 ```c
 hal_lora_commands_config_t config =
@@ -342,9 +335,7 @@ if (process_status == HAL_OK || process_status == HAL_EAGAIN ||
 }
 ```
 
-`hal_lora_commands_receive()` returns `HAL_EAGAIN` without consuming anything
-when no response or event is queued. After successful destruction, a valid API
-call using the old handle returns `HAL_EUNINIT`.
+`hal_lora_commands_receive()` returns `HAL_EAGAIN` when no response or event is available, without consuming anything. After the adapter is successfully destroyed, an API call using its old handle returns `HAL_EUNINIT`.
 
 `hal_lora_commands_process()` has one logical owner. A concurrent or reentrant
 call returns `HAL_EBUSY`. The adapter releases its own mutex while invoking a
@@ -359,12 +350,7 @@ underlying link is busy with its transport acknowledgement. Continue calling
 `hal_lora_commands_process()` to retry it. The adapter and link use copied,
 bounded buffers and keep caller ownership of the router and link handles.
 
-Destroying an adapter returns `HAL_EBUSY` while processing or dispatch is
-active, a response is pending, an application message remains unread, or the
-underlying link has not returned to its receiving state. Continue processing
-and consume queued messages before retrying destruction. An operation that has
-already entered the API keeps its context alive until it returns, and a stale
-handle cannot alias a later adapter.
+Destroying the adapter returns `HAL_EBUSY` while processing or dispatch is active, a response awaits transmission, the application has an unread message, or the link has not resumed reception. Continue processing and consume pending messages before retrying.
 
 An encrypted LoRa link supplies all command security flags; a plaintext link
 supplies none. Handler policy can therefore require authenticated and
@@ -377,14 +363,15 @@ state, while
 `hal_lora_commands_get_diagnostics()` reports request, response, event,
 protocol, dispatch, retry and drop counters.
 
-## Authenticated BLE Stream adapter
+<a id="authenticated-ble-stream-adapter"></a>
+
+## Commands over authenticated BLE Stream
 
 ```c
 #include <hal/bluetooth/hal_ble_commands.h>
 ```
 
-Initialize `hal_ble`, publish and provision `hal_ble_stream`, then attach one
-command adapter. The application still owns controller polling and advertising:
+Initialize `hal_ble`, publish `hal_ble_stream`, provision its secret, and attach one command adapter. Continue servicing the controller and advertising from the application:
 
 ```c
 hal_ble_commands_config_t config = hal_ble_commands_config_defaults();
@@ -429,8 +416,7 @@ directional counter and the authentication tag. With an ATT MTU of at least
 uses `hal_command_message_frame_size()` incrementally, preserves bytes after a
 complete message and dispatches at most one request per process call.
 
-Incoming requests are dispatched synchronously and answered automatically.
-Responses and events are copied out with `hal_ble_commands_receive()`:
+The adapter dispatches incoming requests synchronously and sends their responses automatically. Read application responses and events through `hal_ble_commands_receive()`:
 
 ```c
 hal_command_message_t message;
@@ -465,7 +451,9 @@ application-visible response or event is queued. Destroying the adapter while
 wire data, dispatch or an unread message remains returns `HAL_EBUSY`; a stale
 handle returns `HAL_EUNINIT`.
 
-## Network compatibility
+<a id="network-compatibility"></a>
+
+## Compatibility with the existing network API
 
 `hal_net_commands` keeps its existing text/JSON, cJSON, HTTP and WebSocket API,
 but its registrations and executions use the shared default router. Its legacy
@@ -477,17 +465,12 @@ after the command name. JSON execution passes a compact serialization of the
 security flags are zero. The compatibility count and unregister operations act
 on that shared handler set.
 
-`hal_net_commands_clear()` clears the whole
-default router and returns `hal_status_t`; it returns `HAL_EBUSY` and leaves
-the set unchanged while any registered command, including one owned by
-another adapter on the shared default router, is mid-dispatch.
+`hal_net_commands_clear()` clears the entire default router, including registrations from other adapters. It returns `hal_status_t`. If any registered command is executing, it returns `HAL_EBUSY` and leaves the set unchanged.
 
 The shared response keeps the established network-response fields in their
 original order and appends its transport-neutral `encoding` field.
 
-`HAL_ENABLE_BLE_STREAM` by itself remains a general authenticated byte stream
-and does not enable the router. Select `HAL_ENABLE_BLE_COMMANDS` only when the
-Stream payload is dedicated to command-wire traffic.
+`HAL_ENABLE_BLE_STREAM` alone provides a general authenticated byte stream without a router. Enable `HAL_ENABLE_BLE_COMMANDS` only when the whole stream is dedicated to command-protocol messages.
 
 ## Compile-time bounds
 

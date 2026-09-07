@@ -1,3 +1,9 @@
+/*
+ * Expose status, a counter, and uptime through an I2C slave register map.
+ * The current counter and uptime fields overlap; see the warning in README.md
+ * before using the register layout in another application.
+ */
+
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
 #include <hal/i2c/hal_i2c_slave.h>
@@ -17,8 +23,8 @@
 
 static const uint8_t REG_STATUS = 0;
 static const uint8_t REG_COUNTER = 1;
-static const uint8_t REG_MILLIS_HI = 2;
-static const uint8_t REG_MILLIS_LO = 4;
+static const uint8_t REG_MILLIS_HI = 3;
+static const uint8_t REG_MILLIS_LO = 5;
 
 static uint32_t last_update_ms = 0;
 static uint16_t counter = 0;

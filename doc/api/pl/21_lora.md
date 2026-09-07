@@ -1,24 +1,18 @@
-# Niskopoziomowe API radia LoRa
+<a id="niskopoziomowe-api-radia-lora"></a>
+
+# LoRa - konfiguracja radia i wymiana pakietów
 
 *Dostępne również [po angielsku](../en/21_lora.md).*
 
 > **Część [dokumentacji API JaszczurHAL](../../pl/JaszczurHAL_API.md)**
 
-`hal_lora_radio` udostępnia wspólne API do niskopoziomowej komunikacji
-pakietowej, niezależne od wybranej rodziny układów. SX1261/SX1262 są obsługiwane
-przez oficjalny driver Semtech SX126x w wersji zapisanej w repozytorium,
-a SX1276/SX1278 - przez driver rejestrowy SX127x utrzymywany w HAL. Obie
-implementacje korzystają wyłącznie z usług HAL dla SPI, GPIO, pomiaru czasu
-i mutexów. Można je zbudować dla RP2040, RP2350 i STM32G474, a deterministyczny
-mock służy do testów hostowych.
+Wysyłanie i odbiór pakietów LoRa przez wspólne API `hal_lora_radio` dla układów SX1261/SX1262 oraz SX1276/SX1278. Kod można skompilować dla RP2040, RP2350 i STM32G474; zakres testów na rzeczywistym sprzęcie podano niżej. Deterministyczna implementacja mock służy do testów hostowych.
 
-API obsługuje blokującą i asynchroniczną transmisję, asynchroniczny odbiór,
-przetwarzanie zdarzeń DIO w kontekście zadania, wykrywanie aktywności kanału
-(CAD), odczyt bieżącego RSSI, jawną kalibrację, informacje o limitach i
-obsługiwanych funkcjach, funkcje zwrotne, anulowanie oraz jawne stany operacji.
-Aplikacja dostarcza i przechowuje deskryptory sprzętu oraz modemu. Każdy
-nieprzezroczysty uchwyt ma osobne bufory pakietów TX/RX, stan, mutex i dane
-diagnostyczne.
+SX1261/SX1262 korzystają z oficjalnego sterownika Semtech SX126x w wersji ustalonej w repozytorium. SX1276/SX1278 używają sterownika rejestrowego utrzymywanego w HAL. Obie implementacje zależą wyłącznie od usług SPI, GPIO, czasu i synchronizacji JaszczurHAL.
+
+API udostępnia blokujące i asynchroniczne nadawanie, asynchroniczny odbiór, wykrywanie aktywności kanału (CAD), bieżące RSSI, jawną kalibrację oraz informacje o limitach i dostępnych funkcjach. Aplikacja może odbierać zdarzenia, sprawdzać stan i anulować operacje. Obsługa zdarzeń DIO odbywa się w zadaniu, nie w przerwaniu.
+
+Aplikacja dostarcza i przechowuje deskryptory sprzętu i modemu. Każdy nieprzezroczysty uchwyt ma własne bufory TX/RX, stan, muteks i diagnostykę.
 
 ## Włączanie modułu
 
@@ -43,22 +37,13 @@ Przed dołączeniem `hal_config.h` można ustawić następujące parametry:
 | `HAL_LORA_SX126X_BUSY_TIMEOUT_MS` | 1000 | 1..60000 | Maksymalny czas oczekiwania na linię BUSY SX126x przy wykonywaniu polecenia |
 | `HAL_LORA_SX127X_RESET_SETTLE_MS` | 10 | 5..1000 | Opóźnienie od zwolnienia resetu SX127x do sprawdzenia jego wersji |
 
-## Dojrzałość modeli
+<a id="dojrzałość-modeli"></a>
 
-SX1262 został sprawdzony na fizycznych płytkach i stanowiskach opisanych niżej.
-SX1261, SX1276 i SX1278 mają status `experimental`: ich integracja przeszła
-deterministyczne testy hostowe oraz testy kompilacji i linkowania dla RP2040
-i STM32G474, ale nie była weryfikowana z fizycznym modułem radiowym. Modele te
-celowo nie mają profilu płytki ani informacji o dostępności funkcji w runtime.
-Zmiana ich statusu wymaga udokumentowanego testu sprzętowego
-konkretnego modelu.
+## Zakres weryfikacji poszczególnych układów
 
-Implementacje Semtech SX127x dostępne w LoRaMac-node i LoRa Basics Modem są
-powiązane z właściwymi im warstwami płytki, timerów i stosu. Dołączenie całego
-stosu wyłącznie po to, aby uzyskać bezpośredni dostęp do rejestrów radia,
-wprowadziłoby zbędną zależność. Dlatego JaszczurHAL zawiera niewielki provider
-SX127x oparty na publicznie opisanym interfejsie rejestrów. Jest on dostępny
-przez to samo wspólne API co provider SX126x.
+SX1262 sprawdzono na fizycznych płytkach i stanowiskach opisanych niżej. SX1261, SX1276 i SX1278 pozostają `experimental`: przeszły deterministyczne testy hostowe oraz kompilację i linkowanie dla RP2040 i STM32G474, lecz nie testy z fizycznym radiem. Nie mają zatem profili płytek ani informacji o dostępności funkcji podczas pracy. Zmiana tego statusu wymaga udokumentowanego testu sprzętowego konkretnego modelu.
+
+Sterowniki Semtech SX127x z LoRaMac-node i LoRa Basics Modem zależą od warstw płytki, timerów i stosu tych projektów. JaszczurHAL nie dołącza całego takiego stosu do bezpośredniej obsługi radia. Zamiast tego używa niewielkiego sterownika opartego na publicznie opisanych rejestrach SX127x, dostępnego przez to samo API co SX126x.
 
 ## Obsługa i współdzielenie sprzętu
 
@@ -71,12 +56,7 @@ SX126x są to BUSY, DIO1 i układ przełącznika RF/TCXO. SX127x ma osobny
 deskryptor dla DIO0-DIO2, opcjonalnych GPIO przełącznika RX/TX, opcjonalnego
 włączenia TCXO oraz wyboru RFO lub PA_BOOST.
 
-Kontroler SPI może być współdzielony z innymi urządzeniami HAL. Podczas
-tworzenia radia provider rejestruje przerwania zbocza narastającego; ISR
-zapisuje jedynie informację o oczekującej pracy. Polecenia SPI i funkcje zwrotne
-są wykonywane później w kontekście zadania. Zniszczenie radia odłącza linie DIO
-właściwe dla rodziny, przełącza radio w bezpieczny stan zasilania i zwalnia
-uchwyt bez deinicjalizowania współdzielonej magistrali.
+Magistralę SPI można współdzielić z innymi urządzeniami HAL. Tworzenie radia rejestruje przerwania zbocza narastającego, których obsługa tylko zaznacza oczekującą pracę. Polecenia SPI i callbacki są wykonywane później w zadaniu. Zniszczenie radia odłącza właściwe linie DIO, przełącza układ w bezpieczny stan zasilania i zwalnia uchwyt, ale nie wyłącza współdzielonej magistrali.
 
 ## Konfiguracja z profilu płytki
 
@@ -176,10 +156,11 @@ hardware.hardware.sx127x.min_tx_power_dbm = 2;
 hardware.hardware.sx127x.max_tx_power_dbm = 20;
 ```
 
-## Cykl życia i konfiguracja modemu
+<a id="cykl-życia-i-konfiguracja-modemu"></a>
 
-Typowa kolejność obejmuje inicjalizację SPI, utworzenie uchwytu i sprawdzenie
-radia, konfigurację modemu, obsługę pakietów, a na końcu zniszczenie radia:
+## Uruchamianie i konfiguracja modemu
+
+Przygotuj SPI, utwórz uchwyt i sprawdź radio, skonfiguruj modem, a następnie obsługuj pakiety. Na końcu zwolnij radio:
 
 ```c
 hal_lora_radio_t radio = NULL;
@@ -216,9 +197,7 @@ jawnego nagłówka, CRC, preambuły ośmiosymbolowej i mocy 14 dBm:
 | `hal_lora_default_eu868()` | SF9 | Zrównoważony zasięg |
 | `hal_lora_default_long_range_eu868()` | SF12 | Dłuższy czas transmisji i większy budżet łącza |
 
-Te wartości są jedynie technicznymi punktami wyjścia. Aplikacja odpowiada za
-dobór częstotliwości, mocy wyjściowej, anteny, szerokości pasma i duty cycle
-zgodnie z lokalnymi przepisami.
+To wyłącznie techniczne konfiguracje początkowe. Aplikacja musi dobrać częstotliwość, moc, antenę, szerokość pasma i współczynnik zajętości pasma (duty cycle) do lokalnych przepisów.
 
 Urządzenie LF wymaga jawnej konfiguracji zamiast jednej z gotowych konfiguracji:
 
@@ -245,15 +224,13 @@ magistrali albo urządzenia przełącza je do `HAL_LORA_RADIO_STATE_ERROR`.
 Pomyślne wywołanie `hal_lora_radio_configure()` może przywrócić skonfigurowany
 stan standby.
 
-Funkcja blokująca korzysta z tej samej maszyny stanów co asynchroniczne TX,
-obsługiwanej przez osobne funkcje uruchamiania i przetwarzania. Nie przechowuje
-wskaźnika do bufora danych przekazanego przez wywołującego.
+Wywołanie blokujące obsługuje tę samą maszynę stanów co asynchroniczna transmisja uruchamiana i przetwarzana osobnymi funkcjami. Kopiuje dane, więc nie zachowuje wskaźnika do bufora aplikacji.
 
 ## Operacje asynchroniczne i funkcje zwrotne
 
 `hal_lora_radio_transmit_start()` kopiuje dane, uruchamia radio i kończy
 działanie przed zakończeniem TX. Limit czasu jest obliczany na podstawie
-czasu transmisji pakietu i marginesu drivera. Wywołuj
+czasu transmisji pakietu i marginesu sterownika. Wywołuj
 `hal_lora_radio_process()` z `app_task0()` lub zadania FreeRTOS i
 odczytuj spójny stan operacji:
 
@@ -302,10 +279,11 @@ usuwa rejestrację.
 CAD i przełącza radio do standby. Anulowanie jest jawne: próba zmiany stanu
 zasilania lub zniszczenia radia zwraca `HAL_EBUSY`, gdy trwa inna operacja.
 
-## Odbiór przez polling
+<a id="odbiór-przez-polling"></a>
 
-Uruchom odbiór z określonym timeoutem, obsłuż przerwania providera i skopiuj
-odebrany pakiet:
+## Odbiór i okresowe odpytywanie
+
+Rozpocznij odbiór z limitem czasu, regularnie przetwarzaj oczekujące zdarzenia radia i skopiuj gotowy pakiet:
 
 ```c
 status = hal_lora_radio_receive_start(radio, 1500u);
@@ -350,7 +328,9 @@ Znaczenie wyników odbioru:
 `hal_lora_packet_info_t` zawiera RSSI pakietu, SNR, RSSI sygnału, znacznik czasu
 odbioru i informację o poprawności CRC.
 
-## Parametry i funkcje sprzętu, bieżący RSSI, CAD i kalibracja
+<a id="parametry-i-funkcje-sprzętu-bieżący-rssi-cad-i-kalibracja"></a>
+
+## Dostępne funkcje, RSSI, CAD i kalibracja
 
 `hal_lora_radio_get_capabilities()` zwraca limity sprzętowe i dostępne operacje
 opcjonalne w formie niezależnej od rodziny radia. SX126x obsługuje ciągły odbiór,
@@ -447,14 +427,11 @@ status = hal_lora_time_on_air(&modem, 32u, &airtime_ms);
 Obliczony czas transmisji wykorzystuj do dobierania jawnego timeoutu TX
 i obliczania duty cycle zgodnego z przepisami.
 
-## Współbieżność i walidacja
+<a id="współbieżność-i-walidacja"></a>
 
-Wywołania w runtime są synchronizowane osobno dla każdego uchwytu. Operacje
-cyklu życia (`create` i `destroy`) należy wykonywać z jednego kontekstu i na
-jednym rdzeniu - tym samym, który obsługuje przerwania GPIO providera. Bufory
-pakietów są kopiowane przed zakończeniem funkcji
-uruchamiającej operację. Funkcje zwrotne są wywoływane bez założonego mutexu
-uchwytu.
+## Współbieżność i testy
+
+Każdy uchwyt osobno synchronizuje wywołania wykonywane podczas pracy. Tworzenie i niszczenie (`create`, `destroy`) wykonuj z jednego kontekstu i tego samego rdzenia, który obsługuje przerwania GPIO radia. Funkcja rozpoczynająca operację kopiuje pakiet przed powrotem. Callbacki są wykonywane bez blokady uchwytu.
 
 Testy hosta znajdują się w `test_hal_lora_radio_lifecycle`,
 `test_hal_lora_radio`, `test_hal_lora_sx127x`, `test_sx126x_adapter`,

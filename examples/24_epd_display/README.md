@@ -1,7 +1,10 @@
-# 24 - SSD1681 e-paper display
+<a id="24---ssd1681-e-paper-display"></a>
 
-This example drives a 200 x 200 monochrome SSD1681 panel through the shared
-SPI/GPIO EPD backend and the public `hal_display` raw-write API.
+# 24 - Displaying an image on SSD1681 e-paper
+
+This example displays a monochrome image on a 200×200-pixel SSD1681 panel.
+It sends image data through the `hal_display` API; the driver uses SPI and
+GPIO control signals to operate the panel.
 
 | Signal | RP family | NUCLEO-G474RE | Nucleo connection |
 | --- | --- | --- | --- |
@@ -13,7 +16,7 @@ SPI/GPIO EPD backend and the public `hal_display` raw-write API.
 | RESET | GP21 | PA9 | CN10 pin 21 / D8 |
 | BUSY | GP22 | PA8 | CN10 pin 23 / D7 |
 
-The example intentionally leaves waveform profiles empty, so the controller
-uses its OTP waveform with the driver's default 25 C temperature value. Real
-products should provide panel-vendor full/partial LUT profiles when required by
-their display module and temperature range.
+The example supplies no custom refresh LUTs. The controller uses its OTP
+waveform, and the driver assumes a temperature of 25°C; this is not a measured
+panel temperature. Provide the panel manufacturer's full and partial refresh
+LUTs when required by the display module or operating temperature range.

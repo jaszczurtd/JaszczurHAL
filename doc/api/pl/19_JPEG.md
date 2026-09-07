@@ -1,26 +1,23 @@
-# JPEG
+<a id="jpeg"></a>
+
+# JPEG - dekodowanie obrazów
 
 *Dostępne również [po angielsku](../en/19_JPEG.md).*
 
 > **Część [Dokumentacji API JaszczurHAL](../../pl/JaszczurHAL_API.md)**
 
-Zakres dokumentu: biblioteka `TJpgDec` dostarczana z JaszczurHAL i włączana
-przez `HAL_ENABLE_JPEG` oraz funkcje pomocnicze do obsługi JPEG w formacie
-Base64, włączane przez `HAL_ENABLE_JPEG_AS_BASE64`.
+Dekodowanie obrazów JPEG do RGB565 przez dołączony `TJpgDec` (`HAL_ENABLE_JPEG`). Flaga `HAL_ENABLE_JPEG_AS_BASE64` dodatkowo udostępnia odczyt JPEG zapisanych jako Base64.
 
-Źródła z repozytorium `jaszczurtd/TJpg_Decoder` są pobierane do katalogu
-`third_party/TJpg_Decoder` w commicie wskazanym przez
-`third_party/jpeg_version.conf`. JaszczurHAL kompiluje wyłącznie napisany w C
-rdzeń Tiny JPEG Decompressor, który nie zależy od targetu. Pozostałe elementy
-tamtego repozytorium - interfejs Arduino, adaptery systemu plików i warstwa
-obsługi wyświetlacza - nie wchodzą w skład buildu.
+JaszczurHAL kompiluje przenośny rdzeń Tiny JPEG Decompressor napisany w C. Nie dołącza interfejsu Arduino, adapterów systemów plików ani obsługi wyświetlacza z repozytorium źródłowego. Źródła `jaszczurtd/TJpg_Decoder` są pobierane do `third_party/TJpg_Decoder`; dokładny commit określa `third_party/jpeg_version.conf`.
 
 Wersja dostarczana z projektem: `TJpg_Decoder` 1.1.0, w tym TJpgDec R0.03.
 Pobrane źródła zawierają warunki licencyjne dekodera ChaN oraz licencję
 FreeBSD Bodmera w `third_party/TJpg_Decoder/license.txt` i nagłówkach plików
 źródłowych.
 
-## Włączanie
+<a id="włączanie"></a>
+
+## Włączenie modułu
 
 Włącz moduł w pliku `hal_project_config.h` lub za pomocą definicji
 kompilatora:
@@ -31,7 +28,7 @@ kompilatora:
 #define HAL_ENABLE_JPEG
 ```
 
-Dla zasobów JPEG zakodowanych w Base64 włącz zamiast tego flagę pomocniczą:
+Aby korzystać z JPEG zapisanych jako Base64, włącz zamiast tego:
 
 ```c
 #pragma once
@@ -39,36 +36,34 @@ Dla zasobów JPEG zakodowanych w Base64 włącz zamiast tego flagę pomocniczą:
 #define HAL_ENABLE_JPEG_AS_BASE64
 ```
 
-`HAL_ENABLE_JPEG_AS_BASE64` propaguje zarówno `HAL_ENABLE_CRYPTO`, jak i
-`HAL_ENABLE_JPEG`.
+`HAL_ENABLE_JPEG_AS_BASE64` automatycznie włącza `HAL_ENABLE_CRYPTO` i `HAL_ENABLE_JPEG`.
 
 Bez `HAL_ENABLE_JPEG` kod źródłowy rdzenia i warstwa integracyjna przechowywana
 w repozytorium tworzą puste jednostki translacji. Ta sama flaga musi być
 aktywna podczas kompilowania kodu korzystającego bezpośrednio z rdzenia lub
 z funkcji pomocniczych `jpeg*`.
 
-## Dołączanie
+<a id="dołączanie"></a>
 
-Dla funkcji pomocniczych RGB565 w C lub C++ dołącz:
+## Dołączenie nagłówków
+
+Dla funkcji dekodujących do RGB565 w C lub C++ dołącz:
 
 ```c
 #include <hal/codecs/hal_image.h>
 ```
 
-API C biblioteki TJpgDec dostarczanej z projektem jest dostępne przez:
+Do bezpośredniego API C dekodera TJpgDec użyj:
 
 ```c
 #include <hal/codecs/jpeg/tjpgd.h>
 ```
 
-Zgodnościowe nagłówki narzędziowe zachowują historyczne aliasy bez prefiksu;
-nowy kod powinien używać nazw `hal_image_*`.
+Nagłówki zgodności zachowują dawne aliasy bez prefiksu. W nowym kodzie używaj nazw `hal_image_*`.
 
 ## Konfiguracja dla systemów wbudowanych
 
-JaszczurHAL przekazuje do TJpgDec skompresowane dane z pamięci, a prostokątne
-fragmenty zdekodowanego obrazu odbiera za pośrednictwem API funkcji zwrotnych
-TJpgDec. Tak skonfigurowany rdzeń:
+Dekoder pobiera skompresowany obraz z pamięci i przekazuje prostokątne fragmenty wyniku przez callbacki TJpgDec. Konfiguracja używana przez JaszczurHAL:
 
 - generuje piksele RGB565;
 - używa tymczasowego obszaru roboczego dekodera o rozmiarze 3500 bajtów;
@@ -79,11 +74,11 @@ TJpgDec. Tak skonfigurowany rdzeń:
 - pozwala dekodować obraz w skali 1:1, 1:2, 1:4 lub 1:8 przez bezpośrednie API
   TJpgDec.
 
-Funkcje wysokiego poziomu JaszczurHAL dekodują obecnie wyłącznie w skali 1:1.
-Jeśli aplikacja musi odczytywać obrazy z plików, powinna użyć API pamięci
-masowej JaszczurHAL.
+Funkcje wysokiego poziomu JaszczurHAL dekodują tylko w skali 1:1. Odczyt pliku należy wykonać osobno, przez API pamięci masowej HAL.
 
-## Zakres API
+<a id="zakres-api"></a>
+
+## Dostępne operacje
 
 | Kategoria | Funkcje |
 |---|---|
@@ -93,8 +88,7 @@ masowej JaszczurHAL.
 
 ## Zarządzanie pamięcią
 
-Funkcje pomocnicze wysokiego poziomu korzystają z buforów wejściowych i
-wyjściowych dostarczonych przez wywołującego:
+Dla funkcji wysokiego poziomu aplikacja dostarcza bufory wejścia, wyniku oraz - przy Base64 - bufor pośredni. Obszar roboczy samego dekodera jest przydzielany oddzielnie, zgodnie z zasadami poniżej:
 
 - `hal_image_jpeg_decode_rgb565()` odczytuje bajty JPEG z pamięci i zapisuje piksele
   RGB565 do bufora wyjściowego dostarczonego przez wywołującego.
@@ -110,7 +104,9 @@ wyjściowych dostarczonych przez wywołującego:
   nieprawidłowe, JPEG ma nieobsługiwany format, nie uda się przydzielić
   pamięci, dekodowanie zakończy się błędem albo bufor jest za mały.
 
-## Przykład: dekodowanie bajtów JPEG do RGB565
+<a id="przykład-dekodowanie-bajtów-jpeg-do-rgb565"></a>
+
+## Przykład: dekodowanie JPEG do RGB565
 
 ```c
 #include <hal/codecs/hal_image.h>
@@ -166,13 +162,13 @@ static bool decode_base64_jpeg_rgb565(const char *jpeg_base64,
 }
 ```
 
-## Skrypt zasobów: JPEG do Base64
+<a id="skrypt-zasobów-jpeg-do-base64"></a>
 
-Użyj `scripts/image_to_base64.py`, aby przekształcić plik JPEG w łańcuch
-znaków C, który można osadzić w firmware i zdekodować przy włączonym
-`HAL_ENABLE_JPEG_AS_BASE64`.
+## Przygotowanie zasobu JPEG w Base64
 
-Wypisz wygenerowaną deklarację C na konsolę:
+Skrypt `scripts/image_to_base64.py` zamienia plik JPEG na deklarację łańcucha C. Można ją osadzić w oprogramowaniu i odczytać po włączeniu `HAL_ENABLE_JPEG_AS_BASE64`.
+
+Wyświetlenie deklaracji C w konsoli:
 
 ```bash
 ./scripts/image_to_base64.py icon.jpg
@@ -185,7 +181,7 @@ static const char image[] =
     "...base64...";
 ```
 
-Zapisz wygenerowany tekst do pliku:
+Zapis deklaracji do pliku:
 
 ```bash
 ./scripts/image_to_base64.py icon.jpg --output icon_base64.txt
@@ -200,7 +196,7 @@ Zapisz wygenerowany tekst do pliku:
 
 ## Przykład: Base64 JPEG do ILI9341
 
-`examples/07_display_media` pokazuje cały proces wyświetlania obrazu:
+Kompletny przykład `examples/07_display_media` pokazuje przygotowanie danych i wyświetlenie obrazu:
 
 1. `hal_image_jpeg_base64_decoded_size()` oblicza dokładny rozmiar JPEG po dekodowaniu
    Base64.
@@ -213,5 +209,4 @@ Zapisz wygenerowany tekst do pliku:
 5. `hal_display_draw_rgb_bitmap()` rysuje obraz RGB565 na wyświetlaczu
    ILI9341.
 
-Ten sam projekt sprawdza również wariant, w którym przed wyświetleniem obraz
-jest dekodowany bezpośrednio z pamięci.
+Ten sam projekt sprawdza także bezpośrednie dekodowanie JPEG z pamięci przed wyświetleniem obrazu.

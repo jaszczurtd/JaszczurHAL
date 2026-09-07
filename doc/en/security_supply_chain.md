@@ -1,13 +1,14 @@
-# Security Supply Chain
+<a id="security-supply-chain"></a>
+
+# Dependency and toolchain security
 
 *Also available in [Polish](../pl/security_supply_chain.md).*
 
-This document describes the lightweight SBOM and vulnerability-tracking process
-used by JaszczurHAL.
+JaszczurHAL maintains an inventory of external components and tools, generates an SBOM from that inventory, and records vulnerability assessments. This guide explains how to reproduce and check those records and how to prepare dependency updates for a release.
 
 ## Scope
 
-The tracked supply-chain surface includes:
+The inventory covers:
 
 - bundled third-party source copied into `src/`,
 - pinned external checkouts used by the component updater, including BearSSL,
@@ -17,18 +18,13 @@ The tracked supply-chain surface includes:
   tool registry for `esp32` and `esp32s3`,
 - adapted upstream code where local changes may affect security behavior.
 
-The inventory does not replace per-product firmware analysis. Downstream
-firmware should generate or retain its own SBOM because active `HAL_ENABLE_*`
-flags decide which optional modules are actually compiled.
+The repository inventory is not a substitute for product-specific analysis. Applications should maintain their own SBOM because the enabled `HAL_ENABLE_*` flags determine which optional modules are included in the firmware.
 
-## Native OTA Security Boundary
+<a id="native-ota-security-boundary"></a>
 
-Native RP OTA authenticates the versioned image header with HMAC-SHA256 and
-verifies payload SHA-256 plus header CRC before activation. The symmetric HMAC
-key is derived from the same application password used by transport
-authentication. Anyone who knows that password can produce an accepted image,
-so products should use a unique, high-entropy secret supplied to the VS Code
-dispatcher through `ota.passwordEnv`, not a tracked inline password.
+## Native OTA protections and limitations
+
+Native RP OTA authenticates the versioned image header with HMAC-SHA256 and verifies the payload SHA-256 and header CRC before activation. The symmetric HMAC key is derived from the same application password used for transport authentication. Anyone who knows that password can therefore create an accepted image. Products should use a unique, high-entropy secret supplied to the VS Code project tooling through `ota.passwordEnv`, not a password written into a tracked file.
 
 The transport and image are not encrypted; firmware confidentiality is outside
 this mechanism. Image generation is authenticated metadata, not an
@@ -52,11 +48,7 @@ peer.
 
 Both nonce generators use the platform secure-random provider.
 
-Strict ASCII parsing rejects ambiguous whitespace, embedded NULs, numeric aliases,
-malformed lengths and extra fields. A non-empty host password cannot fall back
-to direct `OK`, legacy `AUTH`, or legacy `200` authentication. Mutex-allocation
-failure leaves each target service stopped instead of entering an unlocked
-transport path.
+The ASCII parser rejects ambiguous whitespace, embedded NULs, numeric aliases, invalid lengths, and extra fields. A non-empty host password rules out direct `OK`, legacy `AUTH`, and legacy `200` authentication. If mutex allocation fails, the service stays stopped on both platforms rather than starting the transport without its required lock.
 
 AUTH2 is symmetric password authentication, not modern image signing or
 encryption. Omitting the device password or setting it to an empty string skips
@@ -92,13 +84,11 @@ and recovery are documented in
 python3 scripts/sync_generated.py --write
 ```
 
-The shared runner invokes the SBOM generator, which reads
-`security/third_party.json` and
-`security/esp_idf_tools.json`, then writes `security/sbom.cdx.json`. The
-generated SBOM is deterministic so normal regeneration should produce small,
-reviewable diffs.
+The synchronization script invokes the generator, which reads `security/third_party.json` and `security/esp_idf_tools.json` and writes `security/sbom.cdx.json`. Generation is deterministic: unchanged inputs should produce the same output.
 
-## ESP-IDF tool provenance
+<a id="esp-idf-tool-provenance"></a>
+
+## ESP-IDF tool versions and provenance
 
 `third_party/esp_idf_version.conf` pins ESP-IDF v6.0.2 to one commit and selects
 `esp32` and `esp32s3`. `security/esp_idf_tools.json` records the matching
@@ -160,10 +150,7 @@ optional SBOM-based CVE check.
 python3 scripts/sync_generated.py --check
 ```
 
-This verifies every tracked generated artifact in read-only mode, including a
-temporary SBOM candidate compared with `security/sbom.cdx.json`. The focused
-compatibility command `./scripts/check_sbom.sh` delegates to the same SBOM
-check.
+This read-only check covers every tracked generated file. It creates a temporary SBOM and compares it with `security/sbom.cdx.json`. The compatibility command `./scripts/check_sbom.sh` uses the same check but limits its scope to the SBOM.
 
 ## CI policy
 
@@ -176,12 +163,9 @@ job:
 - runs `osv-scanner` against the repository source tree,
 - runs `cve-bin-tool` against the CycloneDX SBOM.
 
-Scanning is intentionally separate from build/test/static-analysis jobs. Security
-scanner failures can be triaged independently from compiler or test failures,
-and scheduled runs catch newly published CVEs even when the code has not
-changed.
+Vulnerability scanning runs separately from compilation, tests, and static analysis so scanner failures can be investigated independently. Scheduled scans also detect newly published CVEs when the repository code has not changed.
 
-Policy for findings:
+Handle findings as follows:
 
 - Critical and high severity findings block release unless a
   `not_affected` decision is recorded.
@@ -191,7 +175,9 @@ Policy for findings:
 - Opt-in module findings should state the affected `HAL_ENABLE_*` flags and
   supported targets.
 
-## Release gate
+<a id="release-gate"></a>
+
+## Pre-release checks
 
 Before creating a release tag, verify that `VERSION` and the SBOM project
 version agree:
@@ -200,12 +186,7 @@ version agree:
 python3 scripts/check_release_metadata.py
 ```
 
-Create the matching tag only after the release commit is on `main`. Tag-triggered
-CI additionally checks the tag name and proves that the tagged commit is an
-ancestor of `origin/main`; a tag from a divergent release branch is rejected.
-The host CI also runs the complete test suite under ASan/UBSan and smoke-fuzzes
-the HTTP, WebSocket, and multipart upload parsers. ThreadSanitizer remains an
-optional local gate through `-DJH_ENABLE_THREAD_SANITIZER=ON`.
+Create the release tag only after its commit has been merged into `main`. Tag-triggered CI checks the tag name and verifies that the tagged commit is an ancestor of `origin/main`; it rejects a tag from a divergent release branch. Host CI also runs the complete test suite with ASan/UBSan and short fuzzing runs for the HTTP, WebSocket, and multipart upload parsers. ThreadSanitizer is an optional local check enabled with `-DJH_ENABLE_THREAD_SANITIZER=ON`.
 
 ## Updating a component
 
@@ -224,9 +205,11 @@ optional local gate through `-DJH_ENABLE_THREAD_SANITIZER=ON`.
 7. If the update fixes or assesses a CVE, add an entry to
    `security/vulnerability_log.md` with CVSS, affected flags and decision.
 
-## Vulnerability assessment rules
+<a id="vulnerability-assessment-rules"></a>
 
-Use the inventory as the starting point, then decide reachability:
+## Assessing vulnerability impact
+
+Start with the component inventory, then check whether the vulnerable code is present and reachable in a supported configuration:
 
 - `not_affected`: the vulnerable code is not present, not compiled, or not
   reachable in the supported HAL integration.

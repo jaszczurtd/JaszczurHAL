@@ -1,19 +1,14 @@
-# LodePNG
+<a id="lodepng"></a>
+
+# PNG - kodowanie i dekodowanie obrazów
 
 *Dostępne również [po angielsku](../en/18_LodePNG.md).*
 
 > **Część [Dokumentacji API JaszczurHAL](../../pl/JaszczurHAL_API.md)**
 
-Zakres dokumentu: biblioteka `LodePNG` dostarczana z JaszczurHAL i włączana
-przez `HAL_ENABLE_PNG` oraz funkcje pomocnicze do obsługi PNG w formacie Base64,
-włączane przez `HAL_ENABLE_PNG_AS_BASE64`.
+Kodowanie i dekodowanie obrazów PNG przez dołączoną bibliotekę `LodePNG` (`HAL_ENABLE_PNG`). Flaga `HAL_ENABLE_PNG_AS_BASE64` dodatkowo udostępnia odczyt PNG zakodowanych jako Base64.
 
-`LodePNG` to samodzielna biblioteka do kodowania i dekodowania PNG. Jej źródła
-są pobierane do `third_party/lodepng` w commicie wskazanym przez
-`third_party/lodepng_version.conf`. Warstwa integracyjna w
-`src/hal/codecs/lodepng/` kompiluje źródła upstreamu tylko przy włączonym
-`HAL_ENABLE_PNG` i udostępnia API operujące na pamięci pod dotychczasową
-ścieżką nagłówka.
+Domyślnie API przetwarza obrazy w pamięci, bez operacji plikowych. Źródła LodePNG są pobierane do `third_party/lodepng`; dokładny commit określa `third_party/lodepng_version.conf`. Integracja w `src/hal/codecs/lodepng/` kompiluje je przy włączonym `HAL_ENABLE_PNG` i zachowuje dotychczasową publiczną ścieżkę nagłówka.
 
 Wersja dostarczana z projektem: `LodePNG` 20260119 z repozytorium
 `jaszczurtd/lodepng`.
@@ -27,7 +22,9 @@ pozostałych ostrzeżeń. Pobrane źródła biblioteki pozostają niezmienione.
 Autor/licencja: autorem projektu upstream `LodePNG` jest Lode Vandevenne.
 Biblioteka jest udostępniana na licencji zlib.
 
-## Włączanie
+<a id="włączanie"></a>
+
+## Włączenie modułu
 
 Włącz moduł w pliku `hal_project_config.h` lub za pomocą definicji
 kompilatora:
@@ -38,7 +35,7 @@ kompilatora:
 #define HAL_ENABLE_PNG
 ```
 
-Dla zasobów PNG zakodowanych w Base64 włącz zamiast tego flagę pomocniczą:
+Aby korzystać z zasobów PNG zapisanych jako Base64, włącz zamiast tego:
 
 ```c
 #pragma once
@@ -46,43 +43,40 @@ Dla zasobów PNG zakodowanych w Base64 włącz zamiast tego flagę pomocniczą:
 #define HAL_ENABLE_PNG_AS_BASE64
 ```
 
-`HAL_ENABLE_PNG_AS_BASE64` propaguje zarówno `HAL_ENABLE_CRYPTO`, jak i
-`HAL_ENABLE_PNG`, więc dekoder Base64 i LodePNG są kompilowane razem.
+`HAL_ENABLE_PNG_AS_BASE64` automatycznie włącza `HAL_ENABLE_CRYPTO` i `HAL_ENABLE_PNG`, aby razem skompilować dekoder Base64 i obsługę PNG.
 
 Plik należy do wspólnej listy źródeł frameworka, lecz bez `HAL_ENABLE_PNG`
 powstaje z niego pusta jednostka translacji. Publiczny nagłówek jest
 zabezpieczony tą samą flagą, dlatego musi być ona aktywna także podczas
 kompilowania kodu korzystającego z symboli `lodepng_*`.
 
-## Dołączanie
+<a id="dołączanie"></a>
 
-Bezpośrednie dołączenie, bezpieczne zarówno z C, jak i C++:
+## Dołączenie nagłówków
+
+Nagłówki można dołączać bezpośrednio w C i C++:
 
 ```c
 #include <hal/codecs/hal_image.h>          // adaptery pamięci/Base64 HAL
 #include <hal/codecs/lodepng/lodepng.h>
 ```
 
-Zgodnościowe nagłówki narzędziowe nadal udostępniają historyczne aliasy bez
-prefiksu. Nowy kod powinien używać nazw `hal_image_*`.
+Nagłówki zgodności zachowują dawne aliasy bez prefiksu. W nowym kodzie używaj nazw `hal_image_*`.
 
 ## Konfiguracja dla systemów wbudowanych
 
-Domyślnie JaszczurHAL zachowuje API C upstreamu operujące na pamięci i
-wyłącza:
+Domyślna konfiguracja zachowuje oryginalne API C przetwarzające dane w pamięci, natomiast wyłącza:
 
 - `LODEPNG_COMPILE_DISK` - bez funkcji obsługujących `FILE` i pliki na dysku.
 - `LODEPNG_COMPILE_CPP` - bez interfejsu C++ opartego na `std::vector` i `std::string`.
 
-Jeśli aplikacja rzeczywiście potrzebuje tych opcjonalnych sekcji biblioteki,
-zdefiniuj `HAL_LODEPNG_ENABLE_DISK` lub `HAL_LODEPNG_ENABLE_CPP` przed
-dołączeniem `hal/codecs/lodepng/lodepng.h`.
+Aby włączyć opcjonalną obsługę plików lub interfejs C++, zdefiniuj odpowiednio `HAL_LODEPNG_ENABLE_DISK` lub `HAL_LODEPNG_ENABLE_CPP` przed dołączeniem `hal/codecs/lodepng/lodepng.h`.
 
-Standardowe flagi LodePNG `LODEPNG_NO_COMPILE_*` pozwalają dalej ograniczać
-zakres kompilowanego kodu, na przykład wyłączyć koder lub dekoder w buildzie
-przeznaczonym dla urządzenia z bardzo ograniczoną pamięcią.
+Flagi LodePNG `LODEPNG_NO_COMPILE_*` pozwalają ograniczyć rozmiar kodu, na przykład przez wyłączenie nieużywanego kodera albo dekodera.
 
-## Zakres API
+<a id="zakres-api"></a>
+
+## Dostępne operacje
 
 | Kategoria | Funkcje |
 |---|---|
@@ -95,11 +89,9 @@ przeznaczonym dla urządzenia z bardzo ograniczoną pamięcią.
 
 ## Zarządzanie pamięcią
 
-Proste funkcje kodowania i dekodowania przydzielają bufory wyjściowe przez
-alokator LodePNG. Przy domyślnej konfiguracji zwalniaj je za pomocą
-`free(ptr)`.
+Proste funkcje kodowania i dekodowania same przydzielają bufory wyjściowe przez alokator LodePNG. Przy konfiguracji domyślnej zwalniaj te bufory przez `free(ptr)`.
 
-Najważniejsze reguły:
+Zasady korzystania z buforów:
 
 - `lodepng_decode32()` i `lodepng_decode24()` przydzielają bufor samych pikseli.
 - `lodepng_encode32()` i `lodepng_encode24()` alokują bufor bajtów PNG.
@@ -185,13 +177,13 @@ static bool decode_base64_icon_rgb565(const char *png_base64,
 }
 ```
 
-## Skrypt zasobów: PNG do Base64
+<a id="skrypt-zasobów-png-do-base64"></a>
 
-Użyj `scripts/image_to_base64.py`, aby przekształcić plik PNG w łańcuch
-znaków C, który można osadzić w firmware i zdekodować przy włączonym
-`HAL_ENABLE_PNG_AS_BASE64`.
+## Przygotowanie zasobu PNG w Base64
 
-Wypisz wygenerowaną deklarację C na konsolę:
+Skrypt `scripts/image_to_base64.py` zamienia plik PNG na deklarację łańcucha C. Można ją osadzić w oprogramowaniu i odczytać po włączeniu `HAL_ENABLE_PNG_AS_BASE64`.
+
+Wyświetlenie deklaracji C w konsoli:
 
 ```bash
 ./scripts/image_to_base64.py icon.png
@@ -204,7 +196,7 @@ static const char image[] =
     "...base64...";
 ```
 
-Zapisz wygenerowany tekst do pliku:
+Zapis deklaracji do pliku:
 
 ```bash
 ./scripts/image_to_base64.py icon.png --output icon_base64.txt
@@ -219,7 +211,7 @@ Zapisz wygenerowany tekst do pliku:
 
 ## Przykład: Base64 PNG do ILI9341
 
-`examples/07_display_media` pokazuje cały proces wyświetlania obrazu:
+Kompletny przykład `examples/07_display_media` pokazuje przygotowanie danych i wyświetlenie obrazu:
 
 1. `hal_image_png_base64_decoded_size()` oblicza dokładny rozmiar PNG po dekodowaniu Base64.
 2. Tekst Base64 jest dekodowany do bufora roboczego o dokładnie wyliczonym

@@ -1,25 +1,30 @@
-# 25 - Natywne OTA dla RP
+<a id="25---natywne-ota-dla-rp"></a>
 
-Ten przykład włącza natywną obsługę OTA opartą na Pico SDK na Pico W i Pico 2 W.
-Ustaw dane WiFi i zastąp deweloperskie hasło OTA w `app.c`. Zachowaj tę samą
-nazwę hosta, port i hasło w `.vscode/jaszczurhal.project.json`.
-Przykład ustala także port TCP `8266`, na którym host nasłuchuje wywołań
-zwrotnych. Dzięki temu na hostach filtrujących połączenia przychodzące wystarcza
-jedna precyzyjna reguła zapory sieciowej. `runmefirst.sh` wykrywa lokalną sieć
-IPv4 i po pokazaniu dokładnego zakresu reguły proponuje jej trwałe dodanie.
+# 25 - Aktualizacja oprogramowania przez WiFi na płytkach RP
 
-Pełną procedurę przygotowania projektu i firmware, pierwszego wgrania, obsługi
-w VS Code, konfiguracji zapory, potwierdzania obrazu, wycofywania aktualizacji i
-odzyskiwania opisuje [Proces natywnej aktualizacji OTA dla RP](../../doc/pl/OTAWorkflow.md).
+Przykład umożliwia aktualizację OTA na Pico W i Pico 2 W, korzystając z obsługi
+OTA opartej na Pico SDK. W `app.c` ustaw dane sieci WiFi i zastąp przykładowe
+hasło OTA. Nazwa hosta, port i hasło muszą odpowiadać ustawieniom
+w `.vscode/jaszczurhal.project.json`.
 
-Aplikacja potwierdza obraz próbny dopiero po uzyskaniu łączności WiFi, po czym
-uruchamia uwierzytelnioną usługę OTA. Użyj:
+Komputer nasłuchuje połączeń zwrotnych na porcie TCP `8266`. Jeżeli zapora
+blokuje połączenia przychodzące, potrzebna jest reguła dopuszczająca ten ruch.
+`runmefirst.sh` wykrywa lokalną sieć IPv4, pokazuje zakres reguły i proponuje
+jej trwałe dodanie.
+
+Przygotowanie projektu, pierwsze wgranie, pracę w VS Code, ustawienia zapory,
+potwierdzanie aktualizacji, powrót do poprzedniej wersji i odzyskiwanie przez
+BOOTSEL opisuje [Aktualizacja OTA na płytkach RP](../../doc/pl/OTAWorkflow.md).
+
+Aplikacja potwierdza poprawne uruchomienie nowego obrazu dopiero po
+połączeniu z WiFi. Następnie uruchamia usługę OTA wymagającą uwierzytelnienia.
+Z katalogu tego przykładu uruchom:
 
 ```bash
 ../../vscode/entry/jh-vscode ota-discover --project "$PWD"
 ../../vscode/entry/jh-vscode upload-ota --project "$PWD" --interactive
 ```
 
-W rzeczywistych projektach ustaw `ota.passwordEnv` zamiast zapisywać hasło w
-manifeście. Odpowiadające mu hasło po stronie urządzenia nadal definiuje
-aplikacja.
+W docelowym projekcie użyj `ota.passwordEnv`, aby narzędzie na komputerze
+odczytywało hasło ze zmiennej środowiskowej zamiast z pliku konfiguracji.
+Odpowiadające mu hasło na urządzeniu nadal trzeba ustawić w aplikacji.

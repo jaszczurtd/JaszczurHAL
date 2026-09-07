@@ -1,24 +1,15 @@
-# 07 - Wyświetlacz i media
+<a id="07---wyświetlacz-i-media"></a>
 
-Ten przykład łączy demonstracje grafiki ILI9341 i zasobów firmware, które
-wcześniej wymagały pięciu osobnych kompilacji.
+# 07 - Grafika i obrazy PNG/JPEG na ILI9341
 
-| Poprzedni przykład | Zakres w tym projekcie |
-|---|---|
-| `09_display_tft` | Inicjalizacja ILI9341, tekst, linie, prostokąty, prostokąty zaokrąglone i okręgi. |
-| `36_lodePNG` | Obraz RGBA 2x2 jest kodowany do PNG, dekodowany, kodowany Base64, ponownie dekodowany i konwertowany do RGB565. |
-| `37_lodePNG_ili9341_base64` | Osadzony PNG Base64 jest sprawdzany, dekodowany, konwertowany do RGB565 i rysowany na TFT. |
-| `40_jpeg` | Osadzony obraz JPEG w profilu podstawowym jest dekodowany bezpośrednio oraz za pomocą funkcji pomocniczej Base64. |
-| `41_jpeg_ili931_base64` | Zdekodowane piksele JPEG RGB565 są rysowane na TFT. |
+Przykład rysuje tekst i figury oraz wyświetla obrazy PNG i JPEG na ekranie
+ILI9341. Pokazuje także kodowanie małego obrazu do PNG, konwersję Base64
+oraz przygotowanie pikseli RGB565 do wyświetlenia.
 
-Zarządzana integracja JPEG używa TJpgDec i obsługuje wyłącznie dekodowanie.
-Za kodowanie PNG odpowiada LodePNG.
-
-Włączone funkcje:
-
-- `HAL_ENABLE_ILI9341` i `HAL_DISPLAY_ILI9341`;
-- `HAL_ENABLE_PNG_AS_BASE64`;
-- `HAL_ENABLE_JPEG_AS_BASE64`.
+Za JPEG odpowiada TJpgDec, który w tej integracji obsługuje wyłącznie
+odczyt obrazów. Kodowanie PNG zapewnia LodePNG.
+Projekt włącza `HAL_ENABLE_ILI9341`, `HAL_DISPLAY_ILI9341`,
+`HAL_ENABLE_PNG_AS_BASE64` i `HAL_ENABLE_JPEG_AS_BASE64`.
 
 ## Połączenia
 
@@ -26,10 +17,10 @@ Aplikacja używa magistrali SPI 0.
 
 ### NUCLEO-G474RE
 
-Tabela używa oznaczeń złączy nadrukowanych na PCB NUCLEO-G474RE. Najpierw
-podano złącze ST morpho, a tam, gdzie jest dostępne, również elektrycznie
-równoważny pin Arduino Uno V3. Orientacja i numeracja odpowiadają rysunkowi 18 i
-tabeli 16 w [instrukcji płytki STM32G4 Nucleo-64 (UM2505)](https://www.st.com/resource/en/user_manual/um2505-stm32g4-nucleo64-boards-mb1367-stmicroelectronics.pdf).
+Tabela podaje oznaczenia złączy na płytce. Obok pinów ST morpho znajdują się
+odpowiadające im elektrycznie piny Arduino Uno V3, jeżeli są dostępne.
+Numerację i orientację złączy przedstawiają rysunek 18 i tabela 16
+w [instrukcji STM32G4 Nucleo-64 (UM2505)](https://www.st.com/resource/en/user_manual/um2505-stm32g4-nucleo64-boards-mb1367-stmicroelectronics.pdf).
 
 | Sygnał modułu ILI9341 | Sygnał STM32G474RE | Złącze ST morpho | Alternatywa Arduino Uno V3 |
 |---|---|---|---|
@@ -43,39 +34,28 @@ tabeli 16 w [instrukcji płytki STM32G4 Nucleo-64 (UM2505)](https://www.st.com/r
 | `VCC` | 3,3 V | pin 16 `CN7` | pin 4 `CN6` (`3V3`) |
 | `LED` / `BL` | 3,3 V przez 100 omów | pin 16 `CN7` | pin 4 `CN6` (`3V3`) |
 
-Przykład tylko zapisuje do wyświetlacza, dlatego `MISO` / `SDO` może pozostać
-niepodłączone. Sygnały SPI i sterujące są zgrupowane na `CN10`; odpowiedniki
-Arduino to standardowe piny SPI oraz `D10`, `D9` i `D8`. `PA5` jest też
-połączony z LED-em użytkownika `LD2`, który może migotać podczas transmisji SPI.
-Sygnały GPIO pracują z poziomami logicznymi 3,3 V; nie podłączaj do nich wyjścia
-logicznego 5 V. Jeżeli
-moduł ma własny regulator lub rezystor podświetlenia, postępuj zgodnie ze
-schematem modułu i nie omijaj tych elementów.
+Przykład tylko wysyła dane do wyświetlacza, dlatego `MISO` / `SDO` może
+pozostać niepodłączone. Sygnały SPI i sterujące są dostępne na CN10;
+na złączach Arduino odpowiadają im standardowe piny SPI oraz D10, D9 i D8.
+PA5 jest też połączony z diodą LD2, która może migotać podczas transmisji SPI.
+
+Sygnały GPIO mają poziom 3,3 V. Nie podłączaj do nich wyjść logicznych 5 V.
+Jeżeli moduł wyświetlacza ma własny regulator lub rezystor podświetlenia,
+postępuj zgodnie z jego schematem i nie omijaj tych elementów.
 
 ### Rodzina RP
 
-Targety RP używają GPIO 17 jako `CS`, GPIO 20 jako `DC` i GPIO 21 jako `RESET`.
-Połącz linie zegara i danych SPI panelu z pinami magistrali SPI 0 wybranymi przez
-implementację danego targetu.
-
-## Weryfikacja zegara STM32G474
-
-Wariant dla NUCLEO-G474RE został sprawdzony sprzętowo z konfiguracją zegarów
-backendu HSI16/PLL 170 MHz. SPI1 jest taktowane przez PCLK2 170 MHz; przykład żąda
-24 MHz, a preskaler sprzętowy wybiera 21,25 MHz (`170 MHz / 8`) zamiast 8 MHz
-osiąganych przy wcześniejszym starcie wyłącznie z HSI16.
-
-Dla tego samego firmware i podłączonego ILI9341 czas zmierzony przez DWT - od
-wejścia do `app_start()` do zakończenia pierwszego wywołania `app_task0()` -
-skrócił się z 1,338830 s do 0,838869 s. Pomiar obejmuje całą inicjalizację,
-obsługę mediów i wyświetlacza, a nie wyłącznie przepustowość SPI.
+`CS` jest na GPIO 17, `DC` na GPIO 20, a `RESET` na GPIO 21.
+Podłącz zegar i dane panelu do pinów SPI 0 wybranych dla danej platformy.
 
 ## Limity pamięci
 
-Zasoby firmware są ograniczone do 4096 bajtów zakodowanych danych i 64 x 64
-zdekodowanych pikseli. Wszystkie obliczenia rozmiaru są sprawdzane przed
-alokacją. Dekodowanie PNG używa tymczasowej alokacji RGBA8888 i wspólnego bufora
-RGB565 8 KiB; JPEG ponownie wykorzystuje ten sam bufor RGB565. Limity pozwalają
-zmieścić przykład w RAM STM32G474 i celowo odrzucają zasoby pełnoekranowe.
-Większe aplikacje powinny przetwarzać obraz kafelkami lub strumieniowo albo
-korzystać z zewnętrznej pamięci RAM.
+Obrazy zapisane w programie mogą mieć najwyżej 4096 bajtów zakodowanych
+danych i rozmiar 64×64 piksele po dekodowaniu. Rozmiary są sprawdzane przed
+przydzieleniem pamięci. Dekodowanie PNG wymaga tymczasowego bufora RGBA8888
+oraz wspólnego bufora RGB565 o rozmiarze 8 KiB. JPEG korzysta z tego samego
+bufora RGB565.
+
+Limity pozwalają zmieścić przykład w pamięci RAM STM32G474; obrazy
+pełnoekranowe są odrzucane. Przy większych obrazach zastosuj przetwarzanie
+fragmentami, odczyt strumieniowy lub zewnętrzną pamięć RAM.

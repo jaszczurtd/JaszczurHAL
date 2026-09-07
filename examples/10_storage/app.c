@@ -1,3 +1,9 @@
+/*
+ * Store a boot counter and device name in KV, check LittleFS, and log to an SD
+ * card. SD logging needs initialized EEPROM and SPI. A LittleFS mount failure
+ * never formats the partition unless the project explicitly permits erasing it.
+ */
+
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
 #include <hal/serial/hal_serial.h>
@@ -27,6 +33,8 @@
 #define SD_CS_PIN 4u
 #endif
 
+/* Native builds select the EEPROM size through HAL and use that region for KV.
+ */
 #if HAL_TARGET_IS_RP
 #define EEPROM_SIZE_BYTES 0u
 #define KV_SIZE_BYTES HAL_RP_FLASH_EEPROM_SIZE
@@ -197,6 +205,7 @@ static void write_boot_crash_report(uint32_t now) {
   }
 }
 
+/* SDLogger also needs EEPROM for its persistent state, not just the SPI bus. */
 static void start_sdlogger(uint32_t now) {
   if (!s_eeprom_ready || !s_spi_ready) {
     return;

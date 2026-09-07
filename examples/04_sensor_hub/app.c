@@ -1,3 +1,9 @@
+/*
+ * Read BH1750 light levels, DHT11 temperature/humidity, and DS18B20
+ * temperature. Each sensor is serviced independently; DS18B20 conversion is
+ * checked later rather than blocking the loop until the measurement completes.
+ */
+
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
 #include <hal/i2c/hal_i2c.h>

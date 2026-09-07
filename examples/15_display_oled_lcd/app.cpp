@@ -1,10 +1,9 @@
 /**
  * @file app.cpp
- * @brief Combined SSD1306 OLED and HD44780 character LCD example.
+ * @brief Display data on an SSD1306 OLED and an HD44780 character LCD.
  *
- * Both displays are initialized independently.  This keeps the example useful
- * with either display attached while compiling both portable display paths in
- * one firmware project.
+ * The displays are initialized independently, so either one can be omitted.
+ * Both drivers are included in the same firmware build.
  */
 
 #include <hal/core/hal_app.h>
@@ -27,7 +26,8 @@
 #define EXAMPLE_LCD_D6 8u
 #define EXAMPLE_LCD_D7 7u
 #else
-/* STM32 pin id = port * 16 + pin: PB9/PB8 and PC0..PC5. */
+/* STM32 pin numbers use port * 16 + pin. This example uses PB9/PB8 and
+ * PC0..PC5. */
 #define EXAMPLE_I2C_SDA 25u
 #define EXAMPLE_I2C_SCL 24u
 #define EXAMPLE_LCD_RS 32u

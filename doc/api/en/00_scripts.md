@@ -1,16 +1,16 @@
-# JaszczurHAL Process Scripts
+<a id="jaszczurhal-process-scripts"></a>
+
+# Repository setup, build, and validation scripts
 
 *Also available in [Polish](../pl/00_scripts.md).*
 
-This document is the central index for scripts that set up, build, validate,
-package, and operate JaszczurHAL. It covers every script under `scripts/` and
-the main process entrypoints located elsewhere in the repository.
+Use this reference to choose the script for setting up a workstation, building the library or an application, running tests, or managing dependencies. It covers the scripts in `scripts/` and the main commands provided elsewhere in the repository.
 
-Run commands from the repository root unless a section says otherwise. The
-script implementation and its `--help` output are authoritative when this
-document and the code disagree.
+Run commands from the repository root unless a section states otherwise. Use `--help` for option details. If this reference disagrees with a script, check the implementation.
 
-## Main Entry Points
+<a id="main-entry-points"></a>
+
+## Choose a command
 
 | Goal | Command | Result |
 |---|---|---|
@@ -27,18 +27,17 @@ document and the code disagree.
 | Build checked-in examples | `scripts/examples_dispatcher.py build --target <target>` | Builds example manifests through the same `jh-vscode` and CMake dispatcher used by firmware projects. |
 | Build native RP parity fixtures | `scripts/build_rp_native_parity_fixtures.sh` | Builds USB multicore and SDLogger probes for all supported native target/runtime combinations. |
 
-### Artifact policy
+<a id="artifact-policy"></a>
 
-Repository-owned generated build artifacts belong below `.build/`; managed
-component installations belong below `third_party/`. The directory model,
-target/board cache isolation, and generated-file ownership are defined in
-[Build Directories And Generated Files](../../en/FwProjectWorkflow.md#build-directories-and-generated-files).
+### Output directories
 
-## Tooling interfaces
+Build and test outputs go in `.build/`; managed dependencies are installed in `third_party/`. See [Build directories and generated files](../../en/FwProjectWorkflow.md#build-directories-and-generated-files) for the directory layout, separate caches for each target and board, and rules for maintaining generated files.
 
-`config/tooling/` contains versioned, repository-owned data shared by scripts,
-generated files, CMake, and host bootstrap code. Each JSON document has
-`schemaVersion: 1` and one domain owner:
+<a id="tooling-interfaces"></a>
+
+## Shared tool configuration
+
+The version-controlled files in `config/tooling/` supply configuration to scripts, generators, CMake, and workstation setup tools. Each JSON document has `schemaVersion: 1` and describes one configuration area:
 
 | Data file | Ownership |
 |---|---|
@@ -47,14 +46,9 @@ generated files, CMake, and host bootstrap code. Each JSON document has
 | `examples.json` | Defines the checked-in active example registry. |
 | `managed_components.json` | Defines managed source/tool components, validation metadata, default order, and compatibility launchers. |
 
-Python consumers load these documents through `scripts/tooling_contract.py`.
-Named artifact paths are projected by `scripts/repository_layout.py`. CMake
-does not parse JSON during ordinary configuration: the board generator writes
-`cmake/generated/jh_board_components_registry.cmake` from
-`board_components.json`.
+Python scripts read this configuration through `scripts/tooling_contract.py` and resolve named output paths through `scripts/repository_layout.py`. Normal CMake configuration does not parse these JSON files. Instead, it uses `cmake/generated/jh_board_components_registry.cmake`, which the board generator creates from `board_components.json`.
 
-After changing board-component data or another generator input, refresh and
-verify all tracked projections through the shared runner:
+After changing board-component configuration or other generator inputs, regenerate the tracked outputs and check that they are up to date:
 
 ```bash
 python3 scripts/sync_generated.py --write
@@ -66,14 +60,15 @@ explicit `encoding="utf-8"` arguments document the on-disk text format and
 are intentionally not replaced by a global string constant. User-facing
 messages and one-off syntax tokens likewise stay with the code that owns them.
 
-## Repository-Level Orchestrators
+<a id="repository-level-orchestrators"></a>
 
-These scripts are intentionally outside `scripts/` because they are top-level
-workflow entrypoints.
+## Top-level repository scripts
+
+These scripts live outside `scripts/` and provide the main commands for setting up the workstation and running repository-wide operations.
 
 ### `runmefirst.sh`
 
-One-time, idempotent setup for Debian/Ubuntu-like systems. It:
+Sets up Debian, Ubuntu, and compatible systems. Re-running the script restores the same configuration. It:
 
 - removes the repository `.build/` tree before setup;
 - installs compilers, CMake, Ninja, Python, Java, Valgrind, Clang sanitizer and
@@ -233,11 +228,13 @@ safeguards, and monitor behavior are documented only in
 target, board, cache, and artifact semantics belong to
 [Firmware Project Workflow](../../en/FwProjectWorkflow.md).
 
-## Build Scripts
+<a id="build-scripts"></a>
+
+## Library and firmware builds
 
 ### `scripts/build_rp_native_lib.sh`
 
-Builds JaszczurHAL with the official Pico SDK. Supported targets are:
+Builds JaszczurHAL with the official Pico SDK for the following targets:
 
 | Script target | Pico SDK platform | Default board |
 |---|---|---|
@@ -245,10 +242,7 @@ Builds JaszczurHAL with the official Pico SDK. Supported targets are:
 | `rp2350-arm` | `rp2350-arm-s` | `pico2` |
 | `rp2350-riscv` | `rp2350-riscv` | `pico2` |
 
-The script ensures the Pico SDK and picotool. It additionally ensures
-FreeRTOS-Kernel for `--freertos` and the RISC-V toolchain for
-`rp2350-riscv`. It can build a portable application with
-`--example <directory>`.
+Prepares Pico SDK and picotool before building. The `--freertos` option also prepares FreeRTOS-Kernel; `rp2350-riscv` additionally needs the RISC-V toolchain. Use `--example <directory>` to build a portable application as well.
 
 By default, each build verifies the static library, ELF/BIN/UF2 artifact
 probes, core-entry symbols, and optional example firmware. `--library-only`
@@ -263,9 +257,7 @@ Both build output directories must remain below `.build/`.
 
 ### `scripts/build_stm32_lib.sh`
 
-Builds the STM32G474 static library with the GNU Arm embedded toolchain.
-It accepts project configuration, repeatable HAL definitions, a custom CMake
-toolchain file, and an optional FreeRTOS-Kernel path.
+Builds the STM32G474 static library with the GNU Arm Embedded toolchain. Accepts a project configuration, repeated HAL definitions, a custom CMake toolchain file, and an optional FreeRTOS-Kernel path.
 
 Default output:
 
@@ -280,8 +272,7 @@ Default output:
 
 ### `scripts/build_esp_idf.py`
 
-Production project runner for targets whose board descriptor selects the
-`esp-idf` provider. It exposes three actions:
+Builds, validates, and flashes projects whose board descriptor selects the `esp-idf` provider. It supports three actions:
 
 | Action | Behavior |
 |---|---|
@@ -343,7 +334,9 @@ It is a library, not a standalone command.
 For full target requirements, options, outputs, and manual CMake equivalents,
 see [JaszczurHAL Library Compilation](../../en/lib_compilation.md).
 
-## Managed-Component Scripts
+<a id="managed-component-scripts"></a>
+
+## Dependency management
 
 `scripts/component_manager.py` owns the cross-platform implementation for Git
 clone/fetch/ref/origin/submodule checks, archive download and SHA-256,
@@ -357,7 +350,9 @@ The focused helpers read tracked pins from `third_party/*_version.conf`.
 Normally use `third_party/update_components.sh`; call an individual helper only
 for a focused build or diagnostic.
 
-### Common checkout behavior
+<a id="common-checkout-behavior"></a>
+
+### Working with source checkouts
 
 Git-backed managed directories are exact-commit installations. A missing
 directory is cloned at the pinned ref. A directory at another commit, or a
@@ -501,7 +496,9 @@ the tracked configuration, normal mode replaces the installation.
 `--verify-only` performs no download or extraction. Authenticated assets cover
 x86-64 and AArch64 Linux plus native AMD64 Windows.
 
-## Example And VS Code Support Scripts
+<a id="example-and-vs-code-support-scripts"></a>
+
+## Examples and VS Code integration
 
 ### `scripts/examples_dispatcher.py`
 
@@ -583,13 +580,7 @@ derived symbols. It also rejects conditional feature definitions outside a
 matching `#ifndef` guard and non-scalar CMake definition lists. Findings fail
 the command by default; `--report-only` is an explicit manual diagnostic mode.
 
-`--effective` reuses the `jh-vscode` resolver to enumerate declared targets,
-target profiles, and variants without reading gitignored local board state. It
-checks constraints and active duplicate requests after layer precedence has
-been applied. A standard `.vscode/jaszczurhal.project.json` creates the declared
-axes; an unpaired `hal_project_config.h` with at least one HAL feature request
-creates one axis-free direct context. Standalone headers without requests and
-reference manifests remain raw-lint-only inputs.
+`--effective` uses `jh-vscode` to resolve configurations for the declared targets, target profiles, and variants. It does not read the ignored local board-selection state. It checks constraints and duplicate active feature requests after applying configuration precedence. A `.vscode/jaszczurhal.project.json` manifest defines the configuration axes. An unpaired `hal_project_config.h` that requests at least one HAL feature defines a single configuration without axes. Standalone headers without feature requests and reference manifests are parsed but not resolved.
 
 `--resolution-output <path>`
 writes deterministic
@@ -625,10 +616,7 @@ can compile and link those package artifacts without invoking Python.
 
 ### `scripts/board_registry.py`
 
-Import-only projection of the validated `boards/` descriptors into the target
-and board model consumed by `jh-vscode`, project generators, and the example
-dispatcher. It deliberately contains no independent registry or command-line
-interface; descriptor files remain the source of truth.
+Provides other scripts with validated target and board data from `boards/`. It is used by `jh-vscode`, project generators, and example tools. The module has no separate registry or command-line interface: the descriptor files remain the source of truth.
 
 ### `scripts/tooling_contract.py` and `scripts/repository_layout.py`
 
@@ -768,14 +756,11 @@ the default board, selects that library profile, and delegates to
 
 ### `scripts/vscode_clear_build_artifacts.sh`
 
-Manual full-clean helper. It removes the entire repository `.build/` tree and
-nothing outside it. There are no options. This also removes cached target
-builds, examples, tests, IntelliSense data, and the built picotool executable;
-ignored component sources under `third_party/` are retained. The root VS Code
-`Project: Clean` task deliberately uses the scoped library-workspace action
-instead.
+Removes the entire repository `.build/` directory and nothing else. It takes no options. This deletes cached target builds, examples, tests, IntelliSense data, and the compiled picotool executable. Component sources in `third_party/` remain unchanged. The VS Code `Project: Clean` task deliberately uses the narrower cleanup action for the active library profile.
 
-## Static Analysis And Security Scripts
+<a id="static-analysis-and-security-scripts"></a>
+
+## Static analysis, documentation, and security
 
 ### `scripts/run_cpd.py`
 
@@ -800,15 +785,11 @@ Required options are `--build-dir` and `--profile host|stm32`.
 filtered deterministic database. For STM32 entries, the script adds an
 Arm-none-EABI clang target and compiler-reported system includes.
 
-This is an internal quality-gate helper called by `runalltests.sh`, not a
-general formatter.
+This is an internal validation tool called by `runalltests.sh`, not a code formatter.
 
 ### `scripts/check_documentation_links.py`
 
-Validates repository-local Markdown link targets and anchors across maintained
-documentation. The host CTest suite registers it as
-`test_documentation_links`, so the normal local and CI test gates reject broken
-documentation links.
+Checks that Markdown links in the maintained documentation resolve to files and anchors in the repository. CTest registers it as `test_documentation_links`; invalid links fail both local validation and CI.
 
 Run it directly with:
 
@@ -870,7 +851,9 @@ findings and scanner execution failures still propagate as command failures.
 See [Security Supply Chain](../../en/security_supply_chain.md) for inventory, SBOM, CI,
 triage, and component-update policy.
 
-## Asset Script
+<a id="asset-script"></a>
+
+## Preparing image assets
 
 ### `scripts/image_to_base64.py`
 
@@ -888,7 +871,9 @@ should use `--output`.
 PNG use is documented in [LodePNG API](18_LodePNG.md#asset-script-png-to-base64).
 JPEG use is documented in [JPEG API](19_JPEG.md#asset-script-jpeg-to-base64).
 
-## Related Documentation
+<a id="related-documentation"></a>
+
+## Related guides
 
 - [JaszczurHAL Library Compilation](../../en/lib_compilation.md) describes static
   library and native RP build prerequisites, options, outputs, and manual CMake

@@ -1,3 +1,10 @@
+/*
+ * Connect to a discovered Classic HID service and inspect its descriptor and
+ * reports. Pairing waits for AUTHORIZE or REJECT from the serial console.
+ * AUTHORIZE is a test interface, not an implementation of a trusted physical
+ * consent mechanism.
+ */
+
 #include <hal/bluetooth/hal_bluetooth_classic.h>
 #include <hal/bluetooth/hal_bluetooth_hid_host.h>
 #include <hal/core/hal_app.h>
@@ -139,6 +146,8 @@ static void executeCommand(void) {
       s_scanStarted = true;
     }
   } else if (strcmp(s_command, "AUTHORIZE") == 0) {
+    /* The caller must establish local consent before sending this test command.
+     */
     status = hal_bluetooth_classic_pairing_authorize(s_classic);
     if (status == HAL_OK) {
       s_pairingAuthorized = true;
@@ -195,6 +204,8 @@ static void drainReports(void) {
   }
 }
 
+/* Save only after local authorization, a copied descriptor, and an Input
+ * report. */
 static void saveValidatedPeer(void) {
   if (s_peerSaved || !s_pairingAuthorized || !s_descriptorSeen ||
       !s_inputSeen) {

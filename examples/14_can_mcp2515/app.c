@@ -1,6 +1,8 @@
 /**
  * @file app.c
- * @brief Portable MCP2515 CAN example over JaszczurHAL SPI + CAN abstractions.
+ * @brief Send a periodic CAN frame and print received frames using an MCP2515.
+ *
+ * The controller is polled over SPI; no interrupt pin is required.
  */
 
 #include <hal/can/hal_can.h>

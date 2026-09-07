@@ -55,6 +55,8 @@ collisions with POSIX `errno` names used by the BSD sockets compatibility layer.
 
 ## `hal_timer` - Hardware alarms
 
+Schedule one-shot alarms or use managed timers that can be started, stopped, paused, and resumed. Check callback context and alarm-pool cleanup requirements before selecting an API.
+
 ```c
 #include <hal/timers/hal_timer.h>
 
@@ -288,6 +290,8 @@ void example_alarm_pool(void) {
 
 ## `hal_system` - Timing, watchdog & system info
 
+Read time since boot, delay execution, manage the watchdog, and query device information. The module also exposes reset and fault diagnostics; some operations depend on the calling context.
+
 ```c
 #include <hal/system/hal_system.h>
 
@@ -399,12 +403,7 @@ active backend does not implement (`HAL_EUNSUPPORTED`). The historical
 `hal_read_chip_temp()`, `hal_get_last_fault()` and `hal_stack_guard_init()`
 functions are compatibility wrappers over their adjacent `_ex` operations.
 
-The millis-interval helpers provide a minimal non-blocking scheduler pattern
-for loop-driven firmware without arming hardware timers. They implement the
-wrap-safe arithmetic `now_ms - last_ms >= interval_ms` and update `last_ms`
-only when the interval elapsed. `*_now` variants fetch `now_ms` internally via
-`hal_millis()`. `hal_millis_interval_call*()` invokes a callback (when non-NULL)
-after a successful elapsed check and returns `true` for that iteration.
+Interval helpers run periodic work from a loop without blocking waits or a hardware timer. They check `now_ms - last_ms >= interval_ms`, including across counter wraparound, and update `last_ms` only when the interval elapses. The `*_now` variants read time through `hal_millis()`. `hal_millis_interval_call*()` invokes the supplied callback unless it is `NULL`, and returns `true` for the loop iteration in which the interval elapsed.
 
 - **impl/rp2040:** `hal_millis()` uses
   `to_ms_since_boot(get_absolute_time())`; `hal_micros()` and
@@ -460,14 +459,7 @@ after a successful elapsed check and returns `true` for that iteration.
   download modes.
 - **impl/.mock:** time driven by mock helpers; `hal_watchdog_caused_reboot`, `hal_get_free_heap`, chip temperature, and the device UID are injectable. `hal_enter_bootloader()` sets an observable flag instead of rebooting. `hal_in_isr()` returns the value set by `hal_mock_set_in_isr(bool)`.
 
-**Thread safety:** RP-family and ESP32-S3 time/watchdog APIs are safe to call
-from both cores. STM32G474 watchdog feeds are atomic register writes; callers
-must serialize watchdog reconfiguration. In RP, STM32G474, and ESP32-S3
-FreeRTOS modes,
-`hal_delay_ms()` yields or blocks
-the calling task only in legal task context and busy-waits in
-pre-scheduler/ISR/HAL-critical contexts; `hal_delay_us()` blocks only the
-calling core. Mock state is intended for single-threaded tests.
+**Concurrency:** RP and ESP32-S3 timing and watchdog APIs can be called from both cores. Feeding the STM32G474 watchdog is an atomic register write, but the application must serialize reconfiguration. In FreeRTOS on RP, STM32G474, and ESP32-S3, `hal_delay_ms()` blocks only the calling task when the context permits scheduler use. Before scheduler startup, in an ISR, or in a HAL critical section, it busy-waits instead. `hal_delay_us()` blocks the calling core. Mock state is intended for single-threaded tests.
 
 > **Note:** `COUNTOF(arr)` works only with statically-allocated arrays (not pointers).
 
@@ -892,7 +884,13 @@ void hal_mock_fault_diagnostics_reset(void);
 
 ---
 
-## `hal_power` - Low-power transitions *(optional - `HAL_ENABLE_POWER_MANAGEMENT`)*
+<a id="halpower-low-power-transitions-optional-halenablepowermanagement"></a>
+
+<a id="hal_power---low-power-transitions-optional---hal_enable_power_management"></a>
+
+## `hal_power` - sleep and wakeup *(optional - `HAL_ENABLE_POWER_MANAGEMENT`)*  *(optional - `HAL_ENABLE_POWER_MANAGEMENT`)*
+
+Enter a supported processor sleep state and query the wake reason. The application must prepare its peripherals before sleeping; available states depend on the platform and runtime.
 
 The power API is separate from RTC ownership. `hal_rtc_wakeup_arm_ex()` can
 configure a relative hardware wake-up event, while `hal_power_enter_ex()` owns
@@ -1015,6 +1013,8 @@ remains available through `hal_power_get_last_wake_ex()`.
 
 ## `hal_bits` - Bit helpers
 
+Set, clear, and read bits with macros. They do not make access to a shared variable atomic; the application must provide any required synchronization.
+
 ```c
 #include <hal/core/hal_bits.h>
 
@@ -1035,6 +1035,8 @@ remains available through `hal_power_get_last_wake_ex()`.
 ---
 
 ## `hal_compiler` - Compiler attributes and builtins
+
+Use common attribute macros and builtins instead of repeating compiler-specific conditions. The header covers the supported GNU, Clang, and MSVC variants described below.
 
 ```c
 #include <hal/core/hal_compiler.h>

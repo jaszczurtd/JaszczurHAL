@@ -4,17 +4,15 @@
 
 > **Part of [JaszczurHAL API Reference](../../en/JaszczurHAL_API.md)**
 
-Covers: `hal_thermocouple`, `hal_ds18b20`, `hal_dht`, `hal_bh1750`, `hal_adp5360`, `hal_mcp3221`, `hal_tsc2007`, `hal_stmpe610`, `hal_irsmall_decoder`, `hal_rtc`, `hal_external_adc`, `hal_gps`.
+This chapter covers temperature, humidity and light measurements, touch and infrared input, GPS data, real-time clocks, external ADCs, and power management.
 
-## `hal_thermocouple` - Thermocouple amplifier  *(optional - `HAL_ENABLE_THERMOCOUPLE`)*
+<a id="hal_thermocouple---thermocouple-amplifier--optional---hal_enable_thermocouple"></a>
 
-Supports MCP9600/MCP9601 (shared HAL I2C driver) and MAX6675 (shared SPI
-bit-bang over HAL GPIO). One target-independent facade owns the static handle
-pool, validation, per-instance locking and capability dispatch. Hardware and
-deterministic host-mock providers therefore exercise the same public lifecycle.
-Functions not available on the selected chip return `HAL_EUNSUPPORTED`; legacy
-value-returning wrappers return a safe default (`NAN` / `0` / `false`) and
-print an error.
+## `hal_thermocouple` - thermocouple temperature measurements  *(optional - `HAL_ENABLE_THERMOCOUPLE`)*
+
+Read temperatures from MCP9600/MCP9601 and MAX6675 devices through a common API. MCP9600/MCP9601 use I2C; MAX6675 uses software SPI built on HAL GPIO. Available operations depend on the selected chip. Unsupported operations return `HAL_EUNSUPPORTED`; legacy value-returning functions log the error and return `NAN`, `0`, or `false`.
+
+The shared implementation manages a static handle pool, validates arguments, protects each instance with a mutex, and selects chip-specific operations. Hardware and deterministic host-mock implementations use the same initialization and cleanup logic.
 
 ```c
 #include <hal/temperature/hal_thermocouple.h>
@@ -121,8 +119,7 @@ hal_status_t hal_thermocouple_get_status_ex(hal_thermocouple_t h,
                                             uint8_t *out_status);
 ```
 
-Every field used by the selected chip must be initialized. Start with a
-zero-initialized descriptor and set `i2c_bus` explicitly for MCP9600:
+Initialize every field required by the selected chip. Start with a zero-initialized descriptor and set `i2c_bus` explicitly for MCP9600:
 
 ```c
 hal_thermocouple_config_t cfg = {0};
@@ -141,10 +138,7 @@ Native backends validate the bus index and initialization then fails. This
 also applies when migrating code that previously relied on permissive
 I2C defaults.
 
-The shared facade selects a hardware provider on RP2040/RP2350 and STM32G474;
-that provider delegates MCP9600/MCP9601 and MAX6675 operations to the same
-portable HAL-only drivers. The host provider retains deterministic injection
-through `hal_mock_thermocouple_*()` without owning a second facade.
+RP2040/RP2350 and STM32G474 use the same portable MCP9600/MCP9601 and MAX6675 drivers through the shared API. Host tests can set deterministic results through `hal_mock_thermocouple_*()` without a separate copy of the public API.
 
 **Thread safety:** Thread-safe and multicore-safe. Pool allocation is protected
 by a critical section. Each live instance owns a `hal_mutex_t`; read,
@@ -153,9 +147,13 @@ that mutex.
 
 ---
 
-## `hal_ds18b20` - DS18B20 digital temperature sensor  *(optional - `HAL_ENABLE_DS18B20`)*
+<a id="hal_ds18b20---ds18b20-digital-temperature-sensor--optional---hal_enable_ds18b20"></a>
 
-Non-blocking sensor workflow:
+## `hal_ds18b20` - digital temperature sensor  *(optional - `HAL_ENABLE_DS18B20`)*
+
+Measure temperature over 1-Wire without waiting for the conversion to finish in a single call. The application starts a measurement, services the sensor periodically, and retrieves the completed sample.
+
+A measurement has three steps:
 
 1. `hal_ds18b20_request()` starts conversion.
 2. `hal_ds18b20_poll()` advances the state machine.
@@ -216,9 +214,7 @@ returns `HAL_ESTATE`, and scratchpad/CRC/decode failure returns `HAL_EPROTO`.
   over the shared 1-Wire bit-bang transport.
 - **impl/.mock:** deterministic conversion state machine driven by mock time (`hal_mock_set_micros` / `hal_mock_advance_micros`), with injected presence/CRC/temperature.
 
-**Thread safety:** Hardware backends use a per-handle mutex. Create/destroy
-should still follow the project-wide single-core init/deinit policy. Mock
-backend is intended for single-threaded tests.
+**Concurrency:** Hardware implementations protect each handle with a separate mutex. Keep initialization and cleanup on one core, as required by the project lifecycle rules. The mock implementation is intended for single-threaded tests.
 
 **Mock helpers:**
 ```c
@@ -230,9 +226,11 @@ uint32_t hal_mock_ds18b20_get_request_count(hal_ds18b20_t h);
 
 ---
 
-## `hal_dht` - DHT11/DHT22 temperature and humidity sensor  *(optional - `HAL_ENABLE_DHT`)*
+<a id="hal_dht---dht11dht22-temperature-and-humidity-sensor--optional---hal_enable_dht"></a>
 
-Blocking single-frame DHT reader over HAL GPIO.
+## `hal_dht` - DHT11/DHT22 temperature and humidity sensors  *(optional - `HAL_ENABLE_DHT`)*
+
+Read temperature and humidity from a single DHT frame using HAL GPIO. The call is blocking.
 
 ```c
 #include <hal/temperature/hal_dht.h>
@@ -302,7 +300,11 @@ bit-bang window.
 
 ---
 
-## `hal_bh1750` - BH1750 ambient-light sensor  *(optional - `HAL_ENABLE_BH1750`)*
+<a id="hal_bh1750---bh1750-ambient-light-sensor--optional---hal_enable_bh1750"></a>
+
+## `hal_bh1750` - ambient light measurements  *(optional - `HAL_ENABLE_BH1750`)*
+
+Read illuminance in lux from a BH1750 sensor connected over I2C.
 
 ```c
 #include <hal/sensors/hal_bh1750.h>
@@ -348,7 +350,11 @@ mutex.
 
 ---
 
-## `hal_adp5360` - ADP5360 PMIC  *(optional - `HAL_ENABLE_ADP5360`)*
+<a id="hal_adp5360---adp5360-pmic--optional---hal_enable_adp5360"></a>
+
+## `hal_adp5360` - power management  *(optional - `HAL_ENABLE_ADP5360`)*
+
+Configure the ADP5360 charger, battery gauge, and voltage regulators over I2C.
 
 ```c
 #include <hal/power/hal_adp5360.h>
@@ -402,7 +408,11 @@ callback registration for ADP5360 INT/PGOOD/reset-status pins.
 
 ---
 
-## `hal_tsc2007` - TSC2007 resistive touch controller  *(optional - `HAL_ENABLE_TSC2007`)*
+<a id="hal_tsc2007---tsc2007-resistive-touch-controller--optional---hal_enable_tsc2007"></a>
+
+## `hal_tsc2007` - I2C resistive touch controller  *(optional - `HAL_ENABLE_TSC2007`)*
+
+Read touch coordinates and Z1/Z2 measurements from a TSC2007. The driver checks the stability of successive measurements before accepting the coordinates.
 
 ```c
 #include <hal/input/hal_tsc2007.h>
@@ -479,7 +489,11 @@ with other operations on the same instance.
 
 ---
 
-## `hal_stmpe610` - STMPE610 resistive touch controller  *(optional - `HAL_ENABLE_STMPE610`)*
+<a id="hal_stmpe610---stmpe610-resistive-touch-controller--optional---hal_enable_stmpe610"></a>
+
+## `hal_stmpe610` - I2C or SPI resistive touch controller  *(optional - `HAL_ENABLE_STMPE610`)*
+
+Read coordinates and pressure data from the STMPE610 FIFO. The application selects the available transport and its configuration.
 
 ```c
 #include <hal/input/hal_stmpe610.h>
@@ -579,7 +593,11 @@ concurrently with other operations on the same instance.
 
 ---
 
-## `hal_irsmall_decoder` - IR receiver decoder  *(optional - `HAL_ENABLE_IRSMALL_DECODER`)*
+<a id="hal_irsmall_decoder---ir-receiver-decoder--optional---hal_enable_irsmall_decoder"></a>
+
+## `hal_irsmall_decoder` - infrared remote control decoding  *(optional - `HAL_ENABLE_IRSMALL_DECODER`)*
+
+Decode infrared remote-control signals from GPIO edges and their timing. Supported protocols and repeat handling are described below.
 
 ```c
 #include <hal/input/hal_irsmall_decoder.h>
@@ -649,12 +667,11 @@ critical sections for timeout/reset paths. Up to
 
 ---
 
-## `hal_rtc` - Real-time clock  *(optional - `HAL_ENABLE_RTC`)*
+<a id="hal_rtc---real-time-clock--optional---hal_enable_rtc"></a>
 
-Handle-based RTC abstraction. Backends include PCF8563 and DS3231 over I2C,
-the STM32G474 backup-domain RTC, and the RP2040/RP2350 always-on timer. The API
-is vendor-neutral and exposes generic alarm/timer/clock-output,
-source-diagnostic, and event/IRQ controls.
+## `hal_rtc` - real-time clock  *(optional - `HAL_ENABLE_RTC`)*
+
+Read and set the date and time through a common handle-based API. The module supports PCF8563 and DS3231 over I2C, the STM32G474 backup-domain RTC, and the RP2040/RP2350 always-on clock. It also exposes alarms, timers, clock output, clock-source diagnostics, events, and interrupts. Availability depends on the selected device, as detailed below.
 
 ```c
 #include <hal/rtc/hal_rtc.h>
@@ -925,7 +942,11 @@ if (hal_rtc_get_epoch_ex(rtc, &epoch) == HAL_OK) {
 ---
 
 
-## `hal_external_adc` - ADS1115 external ADC  *(optional - `HAL_ENABLE_EXTERNAL_ADC`)*
+<a id="hal_external_adc---ads1115-external-adc--optional---hal_enable_external_adc"></a>
+
+## `hal_external_adc` - external ADS1115 converter  *(optional - `HAL_ENABLE_EXTERNAL_ADC`)*
+
+Configure the measurement range and read ADS1115 converter channels over I2C.
 
 ```c
 #include <hal/analog/hal_external_adc.h>
@@ -958,12 +979,11 @@ float hal_mock_ext_adc_get_range(void);                               // return 
 
 ---
 
-## `hal_gps` - GPS NMEA receiver  *(optional - `HAL_ENABLE_GPS`)*
+<a id="hal_gps---gps-nmea-receiver--optional---hal_enable_gps"></a>
 
-Singleton GPS subsystem. One target-independent facade feeds the portable
-in-tree NMEA engine from HAL UART or SoftwareSerial, selected at compile time.
-The mock supports exact field injection and raw NMEA input through the same
-engine and public getters.
+## `hal_gps` - GPS receiver data  *(optional - `HAL_ENABLE_GPS`)*
+
+Read position, speed, date, and time from an NMEA receiver. The module supports one receiver per application. Data arrives through `hal_uart` or `hal_swserial`, selected at build time; both use a shared portable NMEA parser. The mock uses the same parser and getters, allowing tests to set individual fields or supply raw NMEA data.
 
 **SoftwareSerial auto-detect framing:** After ~500 received characters, if every
 NMEA sentence failed its checksum, the SoftwareSerial path toggles between 8N1
@@ -1042,11 +1062,7 @@ and compile-time selection between `hal_uart` and `hal_swserial`. RP2040 and
 STM32G474 use the same file and only the selected HAL transport supplies
 target-specific behavior.
 
-The shared `hal/gps/hal_gps_core.cpp` owns the mutex, byte
-feed, fix age, diagnostics and every public data getter around
-`gps_nmea_parser.cpp`. The parser logic is ported from TinyGPS++ (LGPL), with
-GSA/GSV/GST support based on the minmea field layouts. Mock injectors update a
-deterministic engine state without reimplementing public getters.
+`hal/gps/hal_gps_core.cpp` feeds bytes to `gps_nmea_parser.cpp`, calculates position-data age, collects diagnostics, and provides all public getters. A mutex protects the shared state. The parser comes from TinyGPS++ (LGPL); GSA/GSV/GST support follows the field layout in minmea. Mock functions update that same parser state rather than providing a separate set of getters.
 
 **Thread safety:** one internal `hal_mutex_t` protects parser state, mock
 injection, byte feeds and all accessors. Initialization remains a singleton
@@ -1113,7 +1129,11 @@ void hal_mock_gps_reset(void);                                 // zero all state
 
 ---
 
-## `hal_mcp3221` - MCP3221 12-bit ADC  *(optional - `HAL_ENABLE_MCP3221`)*
+<a id="hal_mcp3221---mcp3221-12-bit-adc--optional---hal_enable_mcp3221"></a>
+
+## `hal_mcp3221` - 12-bit ADC  *(optional - `HAL_ENABLE_MCP3221`)*
+
+Read 12-bit conversion results from an MCP3221 over I2C.
 
 ```c
 #include <hal/analog/hal_mcp3221.h>

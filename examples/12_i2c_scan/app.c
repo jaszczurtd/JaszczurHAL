@@ -1,12 +1,10 @@
 /**
  * @file app.c
- * @brief STM32G474 (Nucleo-G474RE) I2C bus scanner - hardware verification of
- *        the real hal_i2c backend.
+ * @brief Find I2C devices that acknowledge addresses 0x08 through 0x77.
  *
- * Probes every 7-bit address 0x08..0x77 and prints those that ACK. This is the
- * simplest way to prove the bare-metal I2C1 master works on real silicon.
- *
- * Wiring (I2C1): SCL = PB8, SDA = PB9, plus pull-ups to 3V3. See README.md.
+ * This application is wired for NUCLEO-G474RE: I2C1 SCL on PB8 and SDA on PB9,
+ * with external pull-ups to 3.3 V. Check the hard-coded pins before using an
+ * RP build listed in the project manifest. See README.md for wiring and limits.
  */
 
 #include <hal/core/hal_app.h>

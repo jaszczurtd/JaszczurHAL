@@ -1,6 +1,6 @@
 /**
  * @file app.c
- * @brief Combined TSC2007 and STMPE610 resistive-touch controller example.
+ * @brief Read TSC2007 and STMPE610 touch measurements and print the results.
  */
 
 #include <hal/core/hal_app.h>
@@ -17,7 +17,7 @@
 #define EXAMPLE_I2C_SDA_PIN 4u
 #define EXAMPLE_I2C_SCL_PIN 5u
 #else
-/* STM32 pin id = port * 16 + pin: PB9/PB8. */
+/* STM32 pin numbers use port * 16 + pin; these values select PB9 and PB8. */
 #define EXAMPLE_I2C_SDA_PIN 25u
 #define EXAMPLE_I2C_SCL_PIN 24u
 #endif

@@ -4,25 +4,13 @@
 
 > **Część [Dokumentacji API JaszczurHAL](../../pl/JaszczurHAL_API.md)**
 
-Obejmuje: `hal_wifi`, `hal_udp`, `hal_tcp`, `hal_http_server`,
-`hal_http_files`, `hal_websocket`, `hal_net_console`, `hal_net_commands`,
-`hal_notify`, `hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time` oraz
-opcjonalny adapter zgodności `HAL_ENABLE_BSD_SOCKETS`.
-Wspólne typy sieciowe znajdują się w `hal_net.h`.
+Rozdział opisuje łączenie z siecią WiFi, komunikację TCP/UDP, klientów HTTP/HTTPS i MQTT, serwery HTTP i WebSocket, powiadomienia, konsolę diagnostyczną, aktualizacje OTA oraz tunel WireGuard. Wspólne typy sieciowe znajdują się w `hal_net.h`; zgodność z wybranymi funkcjami BSD/POSIX zapewnia opcjonalny adapter `HAL_ENABLE_BSD_SOCKETS`.
 
 ## Sieciowe API zwracające status
 
-Nowy kod może korzystać z dodatkowych funkcji `_ex`, które zwracają
-`hal_status_t` dla WiFi, resolvera, TCP, UDP, MQTT i WireGuard. Dotychczasowe
-API pozostaje dostępne bez zmian. Funkcje, które wcześniej zwracały liczbę,
-zaakceptowane gniazdo lub stan peera, przekazują teraz pierwotny wynik przez
-jawny parametr wyjściowy. Zmiana sposobu zgłaszania statusu nie powoduje więc
-utraty żadnej informacji.
+W nowym kodzie wybieraj warianty `_ex`, aby otrzymać dokładny wynik `hal_status_t` dla WiFi, rozwiązywania nazw, TCP, UDP, MQTT i WireGuard. Dotychczasowe API pozostaje dostępne. Warianty statusowe przekazują właściwy wynik - liczbę bajtów, zaakceptowane gniazdo lub stan drugiej strony - przez jawny parametr wyjściowy. Zmiana jest rozszerzeniem API, nie wymusza migracji istniejącego kodu.
 
-Statusy WiFi, resolvera, TCP i UDP są obsługiwane bezpośrednio przez
-implementację testową oraz backendy rodziny RP. Dotychczasowe funkcje
-zwracające `bool`, liczbę lub uchwyt są cienką warstwą zgodności wywołującą
-odpowiednie warianty statusowe; same nie wykonują operacji wejścia/wyjścia.
+Implementacje testowe i implementacje dla rodziny RP wykonują operacje WiFi, rozwiązywania nazw, TCP oraz UDP w funkcjach zwracających status. Dotychczasowe funkcje `bool`, liczbowe i zwracające uchwyt wywołują odpowiedni wariant statusowy; nie zawierają osobnej obsługi wejścia/wyjścia.
 
 Przykładowe funkcje to `hal_wifi_begin_station_ex()`,
 `hal_wifi_ping_status_ex()`, `hal_net_resolve_ipv4_ex()`,
@@ -33,7 +21,7 @@ zgodne ze starszym API pakietowym, `hal_mqtt_{connect,publish,subscribe}_ex()`,
 `hal_notify_{open,send,poll,close}()` oraz
 `hal_wireguard_{begin,peer_up,kick_handshake}_ex()`.
 
-Kompletne rozszerzenie API o warianty statusowe wygląda następująco:
+Dostępne warianty zwracające status:
 
 ```c
 // WiFi i resolver
@@ -153,7 +141,7 @@ zgłaszają:
 - `HAL_EHW`, gdy podczas sondowania lub inicjalizacji sprzęt został uznany za
   uszkodzony.
 
-Sama inicjalizacja zwraca pierwotny status drivera. Późniejsze operacje
+Sama inicjalizacja zwraca pierwotny status sterownika. Późniejsze operacje
 sieciowe zachowują i zwracają stan `HAL_EHW`. Zestaw Pico+PIM730 wymaga zarówno
 obsługi CYW43, jak i zewnętrznego modułu radiowego. Jeśli wstępna kontrola
 konfiguracji zakończy się niepowodzeniem, backend nie zostanie uruchomiony,
@@ -237,7 +225,7 @@ granicy API.
 - ESP32-S3 rozwiązuje nazwy przez natywną ścieżkę `getaddrinfo()` ESP-IDF
   lwIP, gdy WiFi/`esp_netif` osiągnie stan gotowości.
 
-**Pomocnicy mock resolvera:**
+**Funkcje testowe rozwiązywania nazw:**
 ```c
 void hal_mock_net_reset(void);
 bool hal_mock_net_set_dns_entry(const char *host, const char *ip);
@@ -246,7 +234,7 @@ bool hal_mock_net_set_dns_entry(const char *host, const char *ip);
 ### Natywny backend ESP32-S3 i zakres objęty weryfikacją
 
 Backend ESP32-S3 inicjalizuje NVS, `esp_netif`, domyślną pętlę zdarzeń ESP,
-interfejs stacji oraz natywny driver WiFi używany przez istniejące publiczne
+interfejs stacji oraz natywny sterownik WiFi używany przez istniejące publiczne
 API HAL. Handlery zdarzeń odwzorowują w stanie HAL zdarzenia uruchomienia,
 połączenia i rozłączenia stacji, przydzielenia adresu IPv4, skanowania,
 uwierzytelniania, braku sieci, ponownego łączenia i zamknięcia. Uchwyty TCP i UDP są przydzielane
@@ -261,11 +249,13 @@ TLS, obsługa NTP i czasu, OTA przyjmujące surowy obraz aplikacji ESP oraz
 WireGuard korzystający z portu rozszerzenia lwIP dla tej platformy. Publiczne
 API nie udostępnia serwera TLS, serwera HTTPS ani WSS, ani klienta WebSocket.
 `tests/fixtures/esp32s3_phase3` sprawdza wyliczanie zestawu funkcji, dobór
-plików źródłowych i zależności, build, linkowanie, partycje oraz artefakty.
+plików źródłowych i zależności, kompilację, linkowanie, partycje oraz artefakty.
 Nie weryfikuje działania na sprzęcie, cyklu życia, rollbacku ani zachowania
 w negatywnych testach bezpieczeństwa.
 
-## `hal_wifi` - WiFi  *(opcjonalny - `HAL_ENABLE_WIFI`)*
+<a id="hal_wifi---wifi--opcjonalny---hal_enable_wifi"></a>
+
+## `hal_wifi` - łączenie z siecią WiFi  *(opcjonalny - `HAL_ENABLE_WIFI`)*
 
 Konfiguracje RP korzystające z WiFi wybierają profil obsługujący radio:
 `picow`, `pico2w` lub `pico-rm2`. ESP32-S3 używa natywnego radia
@@ -366,7 +356,7 @@ hal_status_t hal_wifi_get_scan_result_ex(size_t index,
 const char *hal_wifi_encryption_to_string(hal_wifi_encryption_t encryption);
 ```
 
-- **impl/rp2040:** driver CYW43 opracowany w JaszczurHAL oraz stos lwIP nad
+- **impl/rp2040:** sterownik CYW43 opracowany w JaszczurHAL oraz stos lwIP nad
   PIO/gSPI.
 - **impl/stm32g474:** ta sama implementacja CYW43/lwIP nad jednoprzewodowym
   transportem gSPI STM32G474.
@@ -376,8 +366,8 @@ const char *hal_wifi_encryption_to_string(hal_wifi_encryption_t encryption);
 - **impl/.mock:** funkcje pomocnicze pozwalają ustawiać stan implementacji
   testowej.
 
-**Thread safety:** Backendy sprzętowe RP, STM32G474 i ESP32-S3
-serializują wywołania publicznego API HAL. Wewnętrzne mutexy chronią stan
+**Współbieżność:** Backendy sprzętowe RP, STM32G474 i ESP32-S3
+serializują wywołania publicznego API HAL. Wewnętrzne muteksy chronią stan
 backendu, postęp obsługi sieci oraz dostęp do stosu. Deterministyczna
 implementacja testowa jest przeznaczona do testów jednowątkowych, a jej stan
 można ustawiać za pomocą funkcji pomocniczych.
@@ -404,8 +394,7 @@ bool        hal_mock_wifi_set_scan_result(size_t index,
 
 ### Konfiguracja i cykl życia backendu CYW43
 
-We wszystkich konfiguracjach sprzętowych CYW43 używany jest jeden backend
-wspólnego API, jedna magistrala i przypisany do nich stos lwIP:
+Konfiguracja sprzętowa CYW43 wybiera wspólną implementację API, jedną magistralę i powiązany stos lwIP:
 
 ```c
 #define HAL_NETWORK_BACKEND_CYW43
@@ -476,7 +465,7 @@ stosu. Inicjalizacja, pule gniazd i nasłuchiwaczy oraz deinicjalizacja są
 chronione oddzielnie. Dzięki temu deinicjalizacja zamyka wszystkie uchwyty
 publicznego API przed zatrzymaniem lwIP, radia i magistrali.
 
-Zużycie pamięci przez sieć ograniczają pule określane podczas buildu.
+Zużycie pamięci przez sieć ograniczają pule określane podczas kompilacji.
 Głównymi ustawieniami są `HAL_TCP_SOCKET_MAX_INSTANCES` (domyślnie 4),
 `HAL_TCP_LISTENER_MAX_INSTANCES` (domyślnie 2), `HAL_UDP_SOCKET_MAX_INSTANCES`
 (domyślnie 4), `HAL_LWIP_TCP_RX_LIMIT` (domyślnie 16 KiB na silnik TCP),
@@ -489,11 +478,11 @@ ilość SRAM dostępną na platformie docelowej.
 
 <a id="halhttpclient-httphttps-client-opt-in-halenablehttpclient"></a>
 
-## `hal_http_client` - klient HTTP/HTTPS  *(opt-in - `HAL_ENABLE_HTTP_CLIENT`)*
+<a id="hal_http_client---klient-httphttps--opt-in---hal_enable_http_client"></a>
 
-`hal_http_client` wykonuje pojedyncze żądanie HTTP/1.1 z timeoutem przez HAL
-TCP albo klienta TLS BearSSL z weryfikacją certyfikatu. Ta flaga włącza TCP
-i WiFi. W przypadku HTTPS należy dodatkowo wybrać `HAL_ENABLE_TLS`.
+## `hal_http_client` - żądania HTTP i HTTPS  *(opt-in - `HAL_ENABLE_HTTP_CLIENT`)*
+
+Wykonywanie pojedynczego żądania HTTP/1.1 z limitem czasu. Dla HTTP moduł korzysta z TCP HAL, a dla HTTPS z klienta TLS BearSSL weryfikującego certyfikat. `HAL_ENABLE_HTTP_CLIENT` włącza TCP i WiFi; HTTPS wymaga dodatkowo `HAL_ENABLE_TLS`.
 
 ```c
 #include <hal/network/http/hal_http_client.h>
@@ -546,13 +535,11 @@ zwraca wymaganą długość treści. Kodowanie transferu `chunked` powoduje zwro
 
 <a id="halnotify-notifications-opt-in-halenablenotify"></a>
 
-## `hal_notify` - powiadomienia  *(opt-in - `HAL_ENABLE_NOTIFY`)*
+<a id="hal_notify---powiadomienia--opt-in---hal_enable_notify"></a>
 
-`hal_notify` udostępnia wspólne API powiadomień. Korzysta ono z uchwytów
-kanałów zabezpieczonych licznikami generacji oraz z deskryptorów backendów.
-Warstwa wspólna zarządza cyklem życia kanału, wyborem domyślnego formatu
-i timeoutu oraz oddzielną serializacją każdego kanału. Poszczególne backendy
-przechowują natomiast konfigurację właściwego im protokołu.
+## `hal_notify` - wysyłanie powiadomień  *(opt-in - `HAL_ENABLE_NOTIFY`)*
+
+Wysyłanie powiadomień przez skonfigurowane kanały. Każdy kanał ma własny format domyślny, limit czasu i synchronizację wysyłania. Uchwyty zawierają liczniki generacji, które pozwalają rozpoznawać nieaktualne odwołania. Wspólna implementacja zarządza otwieraniem i zamykaniem kanałów, a wybrany backend przechowuje konfigurację protokołu.
 
 ```c
 #include <hal/network/notify/hal_notify.h>
@@ -643,14 +630,13 @@ operacja, o ile sama nie zakończy się błędem.
 
 ---
 
-## `hal_http_server` - serwer HTTP/1.1  *(opt-in - `HAL_ENABLE_HTTP_SERVER`)*
+<a id="hal_http_server---serwer-http11--opt-in---hal_enable_http_server"></a>
 
-Niewielki serwer HTTP pracujący w trybie odpytywania, zbudowany na API
-nasłuchiwaczy i gniazd `hal_tcp` opartym na uchwytach. Włączenie
-`HAL_ENABLE_HTTP_SERVER` powoduje włączenie `HAL_ENABLE_TCP`, a ta flaga
-z kolei włącza `HAL_ENABLE_WIFI` w obecnych konfiguracjach obsługujących sieć.
+## `hal_http_server` - obsługa żądań HTTP  *(opt-in - `HAL_ENABLE_HTTP_SERVER`)*
 
-Pierwsza wersja jest celowo niewielka i deterministyczna:
+Obsługa żądań HTTP/1.1 przez zarejestrowane trasy, bez osobnego wątku serwera. Aplikacja regularnie wywołuje funkcję obsługi. Serwer korzysta z gniazd `hal_tcp`; `HAL_ENABLE_HTTP_SERVER` włącza `HAL_ENABLE_TCP`, a w obecnych konfiguracjach sieciowych także `HAL_ENABLE_WIFI`.
+
+Zakres obsługi:
 
 - dokładne dopasowywanie tras na podstawie metody i ścieżki,
 - jedno żądanie na połączenie TCP,
@@ -791,11 +777,11 @@ Odrzucony zapis pozostawia dotychczasową treść i jej długość bez zmian.
 
 ---
 
-## `hal_http_files` - serwowanie i przesyłanie plików  *(opt-in - `HAL_ENABLE_HTTP_FILES`)*
+<a id="hal_http_files---serwowanie-i-przesyłanie-plików--opt-in---hal_enable_http_files"></a>
 
-Niewielki adapter plików zbudowany na `hal_http_server`. Włączenie
-`HAL_ENABLE_HTTP_FILES` włącza również `HAL_ENABLE_HTTP_SERVER`,
-`HAL_ENABLE_TCP` i `HAL_ENABLE_WIFI`.
+## `hal_http_files` - udostępnianie i przesyłanie plików przez HTTP  *(opt-in - `HAL_ENABLE_HTTP_FILES`)*
+
+Udostępnianie i przyjmowanie plików przez `hal_http_server`. Moduł korzysta z operacji plikowych dostarczonych przez aplikację, więc nie narzuca systemu plików. `HAL_ENABLE_HTTP_FILES` włącza także `HAL_ENABLE_HTTP_SERVER`, `HAL_ENABLE_TCP` i `HAL_ENABLE_WIFI`.
 
 Adapter nie zależy od konkretnego systemu plików. Odwzorowuje adresy URL HTTP
 na zamontowany katalog główny i wywołuje callbacki aplikacji lub backendu dla
@@ -947,17 +933,13 @@ Domyślne limity statyczne można nadpisać przed dołączeniem nagłówków HAL
 
 ---
 
+<a id="hal_websocket---serwer-websocket--opt-in---hal_enable_websocket"></a>
+
 ## `hal_websocket` - serwer WebSocket  *(opt-in - `HAL_ENABLE_WEBSOCKET`)*
 
-Niewielki serwer WebSocket działający w trybie odpytywania, zaimplementowany
-bezpośrednio na bazie `hal_tcp`. Włączenie `HAL_ENABLE_WEBSOCKET` powoduje
-włączenie `HAL_ENABLE_TCP`, a ta flaga z kolei włącza `HAL_ENABLE_WIFI`
-w obecnych konfiguracjach z obsługą sieci.
+Przyjmowanie połączeń WebSocket i wymiana ramek z klientami. Serwer działa bezpośrednio na `hal_tcp` i wymaga regularnego wywoływania funkcji obsługi. `HAL_ENABLE_WEBSOCKET` włącza `HAL_ENABLE_TCP`, a w obecnych konfiguracjach sieciowych także `HAL_ENABLE_WIFI`.
 
-Serwer przyjmuje klientów TCP i przeprowadza uzgadnianie HTTP Upgrade dla
-jednej skonfigurowanej ścieżki. Następnie każde zaakceptowane gniazdo
-przechodzi w tryb analizy ramek WebSocket. Pierwsza implementacja jest celowo
-niewielka:
+Po przyjęciu połączenia TCP serwer wykonuje uzgodnienie HTTP Upgrade dla jednej skonfigurowanej ścieżki. Następnie odczytuje ramki WebSocket z tego samego gniazda. Obsługiwany zakres obejmuje:
 
 - handshake `Sec-WebSocket-Accept` zgodny z RFC 6455,
 - maskowane ramki klienta i niemaskowane ramki serwera,
@@ -1069,24 +1051,15 @@ Domyślne limity statyczne można nadpisać przed dołączeniem nagłówków HAL
 
 ---
 
-## `hal_net_console` - konsola debugowania TCP  *(opt-in - `HAL_ENABLE_NET_CONSOLE`)*
+<a id="hal_net_console---konsola-debugowania-tcp--opt-in---hal_enable_net_console"></a>
 
-Chroniona hasłem konsola TCP zbudowana na API nasłuchiwaczy i gniazd `hal_tcp`
-opartym na uchwytach. Włączenie `HAL_ENABLE_NET_CONSOLE` powoduje włączenie
-`HAL_ENABLE_TCP`, a ta flaga z kolei włącza `HAL_ENABLE_WIFI` w konfiguracjach
-z obsługą sieci.
+## `hal_net_console` - konsola diagnostyczna przez TCP  *(opt-in - `HAL_ENABLE_NET_CONSOLE`)*
 
-Konsola stanowi dodatkową warstwę transportową, a nie zamiennik zwykłego
-portu debugowania:
-`hal_serial`, `deb` i `derr` nadal piszą do UART/USB, a uwierzytelnieni
-klienci TCP otrzymują dodatkową kopię. Firmware odbiera dane z TCP przez
-callback wywoływany dla każdej linii oraz bufor RX obsługiwany przez
-odpytywanie. Pozwala to aplikacji udostępnić prostą powłokę poleceń lub
-interfejs diagnostyczny.
+Zdalny odczyt logów i przesyłanie poleceń przez konsolę TCP chronioną hasłem. Moduł korzysta z gniazd `hal_tcp`. `HAL_ENABLE_NET_CONSOLE` włącza `HAL_ENABLE_TCP`, a w konfiguracjach sieciowych także `HAL_ENABLE_WIFI`.
 
-Model bezpieczeństwa: API wymaga niepustego hasła, ale transport to zwykłe
-TCP. Używaj jej wyłącznie w zaufanych sieciach lub za bezpiecznym
-tunelem/VPN, gdy liczy się dostęp zdalny.
+Konsola uzupełnia zwykły port diagnostyczny, a nie zastępuje go. `hal_serial`, `deb` i `derr` nadal wysyłają dane przez UART/USB; uwierzytelnieni klienci TCP otrzymują ich kopię. Aplikacja odbiera dane sieciowe przez callback wywoływany dla każdego wiersza albo przez odpytywany bufor RX. Może w ten sposób udostępnić własną powłokę poleceń lub interfejs diagnostyczny.
+
+**Bezpieczeństwo:** API wymaga niepustego hasła, ale połączenie jest zwykłym, nieszyfrowanym TCP. Hasło nie zapewnia poufności transmisji. Używaj konsoli w zaufanej sieci albo przez bezpieczny tunel lub VPN.
 
 ```c
 #include <hal/network/net_console/hal_net_console.h>
@@ -1172,16 +1145,11 @@ Domyślne limity statyczne można nadpisać przed dołączeniem nagłówków HAL
 
 ---
 
-## `hal_net_commands` - warstwa komend HTTP/WebSocket  *(opt-in - `HAL_ENABLE_NET_COMMANDS`)*
+<a id="hal_net_commands---warstwa-komend-httpwebsocket--opt-in---hal_enable_net_commands"></a>
 
-Adaptery tekstowe i JSON dla wbudowanych kanałów sterowania WebUI. Moduł
-analizuje dane z HTTP i WebSocket, przekazuje polecenia do współdzielonego,
-domyślnego [`hal_command_router`](23_commands.md), a następnie formatuje
-odpowiedź w buforze o ograniczonym rozmiarze. Włączenie
-`HAL_ENABLE_NET_COMMANDS` włącza również
-`HAL_ENABLE_COMMAND_ROUTER`, `HAL_ENABLE_HTTP_SERVER`,
-`HAL_ENABLE_WEBSOCKET`, `HAL_ENABLE_CJSON`, `HAL_ENABLE_TCP` i
-`HAL_ENABLE_WIFI`.
+## `hal_net_commands` - polecenia przez HTTP i WebSocket  *(opt-in - `HAL_ENABLE_NET_COMMANDS`)*
+
+Udostępnianie poleceń aplikacji przez HTTP i WebSocket, w postaci tekstowej lub JSON. Moduł odczytuje żądanie, przekazuje polecenie do współdzielonego domyślnego [`hal_command_router`](23_commands.md) i zapisuje odpowiedź w buforze o ograniczonym rozmiarze. `HAL_ENABLE_NET_COMMANDS` włącza również `HAL_ENABLE_COMMAND_ROUTER`, `HAL_ENABLE_HTTP_SERVER`, `HAL_ENABLE_WEBSOCKET`, `HAL_ENABLE_CJSON`, `HAL_ENABLE_TCP` i `HAL_ENABLE_WIFI`.
 
 Żądania mogą być zwykłym tekstem:
 
@@ -1343,7 +1311,7 @@ hal_net_commands_register_http_route(HAL_NET_COMMANDS_DEFAULT_HTTP_PATH,
                                      HAL_NET_COMMANDS_FORMAT_AUTO);
 ```
 
-Dla WebSocket wywołaj pomocnika ze zwykłego callbacku wiadomości:
+Dla WebSocket wywołaj funkcję pomocniczą ze zwykłej funkcji zwrotnej odbierającej wiadomości:
 
 ```c
 static void ws_message(hal_websocket_client_t client,
@@ -1383,13 +1351,11 @@ routera. Jeśli zdefiniowano obie formy, ich wartości muszą być takie same.
 ---
 
 
-## `hal_ota` - aktualizacja firmware'u z opcjonalnym AUTH2  *(opt-in - `HAL_ENABLE_OTA`)*
+<a id="hal_ota---aktualizacja-firmwareu-z-opcjonalnym-auth2--opt-in---hal_enable_ota"></a>
 
-Natywna usługa OTA nad HAL UDP/TCP, przystosowana do pracy wielowątkowej.
-Implementacje dla RP i ESP32-S3 współdzielą mechanizmy wykrywania, wymianę
-AUTH2 opartą na HMAC-SHA256 wyprowadzonym z hasła, przesyłanie danych,
-callbacki oraz sposób prezentowania stanu rozruchu przez publiczne API.
-Format obrazu i model aktywacji pozostają zależne od platformy docelowej.
+## `hal_ota` - aktualizacja oprogramowania przez sieć  *(opt-in - `HAL_ENABLE_OTA`)*
+
+Odbiór aktualizacji oprogramowania przez UDP/TCP HAL, z opcjonalnym uwierzytelnianiem AUTH2. Implementacje RP i ESP32-S3 współdzielą wykrywanie urządzeń, przesyłanie danych, callbacki i publiczny opis stanu rozruchu. AUTH2 korzysta z HMAC-SHA256 i klucza wyprowadzonego z hasła. Format obrazu i sposób aktywacji nowej wersji zależą od platformy. API synchronizuje wywołania z wielu zadań.
 
 ```c
 #include <hal/network/ota/hal_ota.h>
@@ -1440,7 +1406,7 @@ hal_status_t hal_ota_get_boot_info_ex(hal_ota_boot_info_t *out_info);
   zdarzenia do callbacków użytkownika.
 - Callback można zastąpić albo wyrejestrować, przekazując `NULL`.
 - Ponowne wywołanie `hal_ota_begin()` przed pierwszym wywołaniem obsługi czyści
-  zdarzenia zakolejkowane przez implementację testową lub driver.
+  zdarzenia zakolejkowane przez implementację testową lub sterownik.
 - Gdy skonfigurowano niepuste hasło, AUTH2 wiąże polecenie, port połączenia
   zwrotnego, rozmiar obrazu, jego MD5 oraz niezależne wartości nonce
   urządzenia i klienta. Uwierzytelnienie jest przyjmowane wyłącznie z adresu IP
@@ -1491,10 +1457,10 @@ hal_status_t hal_ota_get_boot_info_ex(hal_ota_boot_info_t *out_info);
 - **impl/.mock:** deterministyczna implementacja testowa z możliwością
   wstrzykiwania zdarzeń.
 
-**Thread safety:** Backendy rodziny RP i ESP32-S3 umożliwiają
+**Współbieżność:** Backendy rodziny RP i ESP32-S3 umożliwiają
 bezpieczne korzystanie z publicznego API z wielu wątków i rdzeni. Jeden
 `hal_mutex_t` serializuje wszystkie wywołania warstwy wspólnej, a callbacki
-są wywoływane poza tą blokadą. Mutex jest przydzielany przy pierwszym użyciu,
+są wywoływane poza tą blokadą. Muteks jest przydzielany przy pierwszym użyciu,
 a błąd przydziału jest obsługiwany zgodnie z zasadą fail-closed:
 funkcje zwracające `bool` zwracają `false`, funkcje statusowe zwracają
 `HAL_ENOMEM`, a funkcja obsługi kończy działanie bez zmieniania stanu.
@@ -1521,11 +1487,11 @@ Przykładowa aplikacja RP jest dostępna w
 
 ---
 
-## `hal_udp` - datagramy UDP  *(opt-in - `HAL_ENABLE_UDP`)*
+<a id="hal_udp---datagramy-udp--opt-in---hal_enable_udp"></a>
 
-API transportu UDP oparte na uchwytach, przeznaczone do obsługi niezależnych
-gniazd datagramowych. Pierwotne API `hal_udp_*` dla jednego gniazda pozostaje
-dostępne jako warstwa zgodności korzystająca z domyślnego uchwytu UDP.
+## `hal_udp` - wysyłanie i odbiór datagramów  *(opt-in - `HAL_ENABLE_UDP`)*
+
+Wysyłanie i odbiór datagramów przez niezależne gniazda UDP, identyfikowane uchwytami. Dotychczasowe API `hal_udp_*` dla jednego gniazda nadal działa i korzysta z domyślnego uchwytu.
 
 ```c
 #include <hal/network/hal_udp.h>
@@ -1604,8 +1570,8 @@ bool     hal_udp_end_packet(void);
   gniazd, wstrzykiwane pakiety przychodzące oraz rejestrowanie metadanych
   i zawartości pakietów wychodzących.
 
-**Thread safety:** Backendy rodziny RP i ESP32-S3 pozwalają
-bezpiecznie korzystać z publicznego API z wielu wątków i rdzeni. Mutexy
+**Współbieżność:** Backendy rodziny RP i ESP32-S3 pozwalają
+bezpiecznie korzystać z publicznego API z wielu wątków i rdzeni. Muteksy
 poszczególnych backendów chronią ich statyczne pule UDP oraz operacje stosu.
 
 **Pomocnicy mock:**
@@ -1638,10 +1604,11 @@ bool        hal_mock_udp_was_end_packet_called(void);
 
 ---
 
-## `hal_tcp` - gniazda i nasłuchiwacze TCP  *(opt-in - `HAL_ENABLE_TCP`)*
+<a id="hal_tcp---gniazda-i-nasłuchiwacze-tcp--opt-in---hal_enable_tcp"></a>
 
-API transportu TCP oparte na uchwytach. Obsługuje wychodzące połączenia
-strumieniowe oraz gniazda nasłuchujące, które przyjmują połączenia przychodzące.
+## `hal_tcp` - połączenia klienckie i serwerowe  *(opt-in - `HAL_ENABLE_TCP`)*
+
+Nawiązywanie połączeń TCP, przesyłanie danych i przyjmowanie połączeń przychodzących. API rozróżnia uchwyty połączonych gniazd i gniazd nasłuchujących; zaakceptowane połączenia mają własne uchwyty.
 
 ```c
 #include <hal/network/hal_tcp.h>
@@ -1732,8 +1699,8 @@ void hal_tcp_listener_close(hal_tcp_listener_t listener);
   rejestrować zawartość TX i zdalny punkt końcowy oraz utrzymuje osobną kolejkę
   oczekujących klientów dla każdego nasłuchiwacza.
 
-**Thread safety:** Backendy rodziny RP i ESP32-S3 pozwalają
-bezpiecznie korzystać z publicznego API z wielu wątków i rdzeni. Mutexy
+**Współbieżność:** Backendy rodziny RP i ESP32-S3 pozwalają
+bezpiecznie korzystać z publicznego API z wielu wątków i rdzeni. Muteksy
 poszczególnych backendów chronią ich statyczne pule TCP oraz operacje stosu.
 
 **Pomocnicy mock:**
@@ -1758,12 +1725,11 @@ uint8_t     hal_mock_tcp_listener_get_pending_count(hal_tcp_listener_t listener)
 
 ---
 
-## `hal_tls` - klient TLS  *(opt-in - `HAL_ENABLE_TLS`)*
+<a id="hal_tls---klient-tls--opt-in---hal_enable_tls"></a>
 
-`hal_tls` udostępnia wspólne API klienta TLS, niezależne od backendu
-i zabezpieczone licznikami generacji uchwytów. Korzysta z dołączonego silnika
-BearSSL. Włączenie modułu automatycznie włącza TCP i WiFi, ale nie włącza ani
-nie wymaga opcjonalnego adaptera gniazd BSD.
+## `hal_tls` - szyfrowane połączenia klienckie  *(opt-in - `HAL_ENABLE_TLS`)*
+
+Nawiązywanie szyfrowanych połączeń TLS z weryfikacją serwera przez BearSSL. Wspólne API nie zależy od implementacji transportu, a uchwyty są zabezpieczone licznikami generacji. Moduł automatycznie włącza TCP i WiFi, ale nie włącza ani nie wymaga adaptera BSD.
 
 ```c
 #include <hal/network/tls/hal_tls.h>
@@ -2003,10 +1969,11 @@ się od `HAL_BSD_SOCKET_FD_BASE` i są przechowywane w tabeli o rozmiarze
 
 ---
 
-## `hal_wireguard` - obsługa tunelu WireGuard  *(opt-in - `HAL_ENABLE_WIREGUARD`)*
+<a id="hal_wireguard---obsługa-tunelu-wireguard--opt-in---hal_enable_wireguard"></a>
 
-Wspólne API nad silnikiem WireGuard/lwIP, przystosowane do pracy
-wielowątkowej.
+## `hal_wireguard` - tunel VPN WireGuard  *(opt-in - `HAL_ENABLE_WIREGUARD`)*
+
+Konfiguracja tunelu WireGuard i komunikacja z jego drugą stroną przez wspólny interfejs oparty na WireGuard/lwIP. API synchronizuje wywołania z wielu zadań.
 
 ```c
 #include <hal/network/wireguard/hal_wireguard.h>
@@ -2100,7 +2067,7 @@ bool hal_wireguard_kick_handshake_text(const char *probe_ip_text,
   stanu. Rejestruje konfigurację, pozwala wstrzyknąć punkt końcowy peera
   i sprawdzić wyzwolenie uzgadniania.
 
-**Thread safety:** Jeden `hal_mutex_t` serializuje wszystkie
+**Współbieżność:** Jeden `hal_mutex_t` serializuje wszystkie
 publiczne wywołania warstwy wspólnej, a wybrany backend serializuje dostęp do
 prywatnego stosu lwIP.
 
@@ -2126,12 +2093,11 @@ uint32_t    hal_mock_wireguard_get_last_probe_min_interval_ms(void);
 
 ---
 
-## `hal_mqtt` - klient MQTT  *(opt-in - `HAL_ENABLE_MQTT`)*
+<a id="hal_mqtt---klient-mqtt--opt-in---hal_enable_mqtt"></a>
 
-Warstwa obsługi MQTT oparta na dołączonej bibliotece PubSubClient
-i przystosowana do pracy wielowątkowej. Callbacki są wywoływane poza
-wewnętrznym mutexem, co zapobiega deadlockom wynikającym z kolejności
-blokad w handlerach użytkownika.
+## `hal_mqtt` - publikowanie i odbiór wiadomości MQTT  *(opt-in - `HAL_ENABLE_MQTT`)*
+
+Publikowanie wiadomości MQTT i odbiór subskrybowanych tematów przez klienta opartego na dołączonej bibliotece PubSubClient. API synchronizuje współbieżne wywołania. Callbacki aplikacji są wykonywane poza wewnętrznym muteksem, aby nie powodować zakleszczeń wynikających z kolejności blokad w kodzie użytkownika.
 
 ```c
 #include <hal/network/mqtt/hal_mqtt.h>
@@ -2189,7 +2155,7 @@ bool hal_mqtt_unsubscribe(const char *topic);
 - `hal_mqtt_loop()` należy wywoływać regularnie, aby obsługiwać keepalive
   i odbierać przychodzące publikacje.
 - Wiadomości przychodzące są kopiowane do wewnętrznego bufora i dostarczane
-  z `hal_mqtt_loop()` po zwolnieniu wewnętrznego mutexu.
+  z `hal_mqtt_loop()` po zwolnieniu wewnętrznego muteksu.
 
 - **impl/rp2040/stm32g474/esp32:** dołączony `PubSubClient`
   (`frameworks/PubSubClient`) nad `hal_tcp` lub klientem BearSSL `hal_tls`.
@@ -2197,9 +2163,9 @@ bool hal_mqtt_unsubscribe(const char *topic);
   stanu. Pozwala wstrzyknąć wynik połączenia, wynik obsługi pętli oraz
   wiadomości przychodzące.
 
-**Thread safety:** Jeden `hal_mutex_t` serializuje wszystkie
+**Współbieżność:** Jeden `hal_mutex_t` serializuje wszystkie
 wywołania klienta MQTT. Callbacki są wykonywane po zwolnieniu wewnętrznego
-mutexu.
+muteksu.
 
 **Pomocnicy mock:**
 ```c
@@ -2224,7 +2190,11 @@ uint16_t    hal_mock_mqtt_get_socket_timeout(void);
 
 ---
 
-## `hal_time` - Funkcje pomocnicze kalendarza oraz opcjonalny czas systemowy/NTP
+<a id="hal_time---funkcje-pomocnicze-kalendarza-oraz-opcjonalny-czas-systemowyntp"></a>
+
+## `hal_time` - kalendarz, czas systemowy i NTP
+
+Obliczenia kalendarzowe oraz opcjonalny zegar czasu rzeczywistego aplikacji, ustawiany ręcznie, z RTC lub przez NTP. Czas działania urządzenia i czas kalendarzowy są odrębnymi wartościami; poniżej opisano ich zakresy i zasady synchronizacji.
 
 ```c
 #include <hal/time/hal_time.h>
@@ -2317,10 +2287,10 @@ ważny, dopóki RTC jest dołączony. Przed powrotem `hal_time_detach_rtc_ex()`
 czeka na zakończenie trwającego zapisu czasu NTP w RTC; dopiero potem
 wywołujący może zdeinicjalizować RTC.
 
-**Thread safety:** Funkcje pomocnicze bez efektów ubocznych są
+**Współbieżność:** Funkcje pomocnicze bez efektów ubocznych są
 reentrantne. Opcjonalne API czasu systemowego i NTP używają chronionych
-mutexem, spójnych kopii stanu i obsługują współbieżne zadania oraz rdzenie.
-Operacje wejścia/wyjścia DNS, UDP i RTC odbywają się bez mutexu stanu zegara,
+muteksem, spójnych kopii stanu i obsługują współbieżne zadania oraz rdzenie.
+Operacje wejścia/wyjścia DNS, UDP i RTC odbywają się bez muteksu stanu zegara,
 dzięki czemu callback obsługi sieci może bez deadlocku ponownie wywołać
 funkcję odczytującą czas. Każde wywołanie takiej funkcji lub
 `hal_time_get_status_ex()` obsługuje oczekujące żądanie. Po 5-sekundowym

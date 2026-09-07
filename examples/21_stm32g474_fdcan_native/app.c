@@ -1,6 +1,8 @@
 /**
  * @file app.c
- * @brief STM32G474 native FDCAN1 CAN FD example.
+ * @brief Send and receive CAN FD frames with the STM32G474 FDCAN1 peripheral.
+ *
+ * Connect the pins through a CAN FD transceiver, not directly to the bus.
  */
 
 #include <hal/can/hal_can.h>

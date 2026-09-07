@@ -1,14 +1,18 @@
-# Output devices - RGB LED, digipot, PGA2311, simple I/O chips, MFRC522, PN532, math helpers
+<a id="output-devices---rgb-led-digipot-pga2311-simple-io-chips-mfrc522-pn532-math-helpers"></a>
+
+# LEDs, controls, I/O devices, and RFID/NFC readers
 
 *Also available in [Polish](../pl/13_output_devices.md).*
 
 > **Part of [JaszczurHAL API Reference](../../en/JaszczurHAL_API.md)**
 
-Covers: `hal_rgb_led`, `hal_digipot`, `hal_pga2311`, `hal_mcp23017`, `hal_pca9654e`, `hal_pcf8574`, `hal_hc595`, `hal_mcp4725`, `hal_mfrc522`, `hal_pn532`, `hal_math`.
+This chapter covers NeoPixel LEDs, digital potentiometers, volume control, GPIO expanders, a DAC, and RFID/NFC readers. It also describes the `hal_math` numeric functions.
 
-## `hal_math` - Lightweight numeric helpers
+<a id="hal_math---lightweight-numeric-helpers"></a>
 
-`hal_math.h` provides platform-independent helpers usable from both C and C++.
+## `hal_math` - numeric functions
+
+`hal_math.h` provides portable numeric functions for C and C++.
 
 ```c
 #include <hal/core/hal_math.h>
@@ -24,7 +28,11 @@ Half values are rounded away from zero.
 
 ---
 
-## `hal_rgb_led` - NeoPixel status LED  *(optional - `HAL_ENABLE_RGB_LED`)*
+<a id="hal_rgb_led---neopixel-status-led--optional---hal_enable_rgb_led"></a>
+
+## `hal_rgb_led` - NeoPixel LEDs  *(optional - `HAL_ENABLE_RGB_LED`)*
+
+Set NeoPixel colors and brightness, or turn the LEDs off. The initialization configuration selects the pixel format.
 
 ```c
 #include <hal/gpio/hal_rgb_led.h>
@@ -99,7 +107,11 @@ void                hal_mock_rgb_led_fail_next_write(bool fail);
 ---
 
 
-## `hal_digipot` - I2C digital potentiometers  *(optional - `HAL_ENABLE_DIGIPOT`)*
+<a id="hal_digipot---i2c-digital-potentiometers--optional---hal_enable_digipot"></a>
+
+## `hal_digipot` - digital potentiometers  *(optional - `HAL_ENABLE_DIGIPOT`)*
+
+Set the resistance of MCP401x and MAX5395 potentiometers over I2C. The `_ex` variants distinguish invalid parameters from communication failures.
 
 ```c
 #include <hal/analog/hal_digipot.h>
@@ -117,13 +129,7 @@ uint32_t hal_digipot_e2e_resistance(hal_digipot_t h);
 hal_digipot_mode_t hal_digipot_mode(hal_digipot_t h);
 ```
 
-`hal_digipot_init_ex()` reports invalid configuration (`HAL_EINVAL`), static
-pool exhaustion (`HAL_ENOMEM`) and chip/bus initialisation failures
-(`HAL_EBUS`). `hal_digipot_set_resistance_ex()` reports invalid handles
-(`HAL_EUNINIT`), invalid resistance/mode (`HAL_EINVAL`), I2C failures
-(`HAL_EBUS`) and MCP401x read-back mismatches (`HAL_EIO`). The legacy
-`hal_digipot_init()` and `hal_digipot_set_resistance()` wrappers remain for
-source compatibility.
+`hal_digipot_init_ex()` returns `HAL_EINVAL` for an invalid configuration, `HAL_ENOMEM` when the static pool is exhausted, and `HAL_EBUS` when chip or bus initialization fails. `hal_digipot_set_resistance_ex()` returns `HAL_EUNINIT` for an invalid handle, `HAL_EINVAL` for an invalid resistance or mode, `HAL_EBUS` for an I2C failure, and `HAL_EIO` for an MCP401x read-back mismatch. The legacy `hal_digipot_init()` and `hal_digipot_set_resistance()` functions remain available for source compatibility.
 
 **shared thematic implementation:** `hal_digipot.cpp` owns the handle pool, validation dispatch and
 per-instance mutex; chip-specific MCP401x/MAX5395 transaction logic lives under
@@ -135,7 +141,11 @@ transaction uses HAL I2C helpers.
 ---
 
 
-## `hal_pga2311` - PGA2311 stereo volume controller  *(optional - `HAL_ENABLE_PGA2311`)*
+<a id="hal_pga2311---pga2311-stereo-volume-controller--optional---hal_enable_pga2311"></a>
+
+## `hal_pga2311` - stereo volume control  *(optional - `HAL_ENABLE_PGA2311`)*
+
+Set the gain of both PGA2311 channels and mute the output. The driver uses SPI; the application configures the bus pins.
 
 ```c
 #include <hal/audio/hal_pga2311.h>
@@ -233,7 +243,11 @@ wrapped in `hal_spi_lock()` / `hal_spi_unlock()`.
 
 ---
 
-## `hal_mfrc522` - MFRC522 RFID reader  *(optional - `HAL_ENABLE_MFRC522`)*
+<a id="hal_mfrc522---mfrc522-rfid-reader--optional---hal_enable_mfrc522"></a>
+
+## `hal_mfrc522` - RFID reader  *(optional - `HAL_ENABLE_MFRC522`)*
+
+Communicate with an MFRC522 reader over SPI or I2C. The application selects the transport and initializes its bus before using the reader.
 
 ```cpp
 #include <hal/nfc/hal_mfrc522.h>
@@ -268,7 +282,11 @@ Example: `examples/22_rfid_nfc`.
 
 ---
 
-## `hal_pn532` - PN532 NFC/RFID reader  *(optional - `HAL_ENABLE_PN532`)*
+<a id="hal_pn532---pn532-nfcrfid-reader--optional---hal_enable_pn532"></a>
+
+## `hal_pn532` - NFC/RFID reader  *(optional - `HAL_ENABLE_PN532`)*
+
+Detect passive cards and perform basic MIFARE operations through a PN532. SPI is available, with I2C and UART enabled by their corresponding flags.
 
 ```cpp
 #include <hal/nfc/hal_pn532.h>
@@ -306,7 +324,9 @@ Example: `examples/22_rfid_nfc`.
 
 ---
 
-## Simple I/O chips  *(optional - `HAL_ENABLE_MCP23017`, `HAL_ENABLE_PCA9654E`, `HAL_ENABLE_PCF8574`, `HAL_ENABLE_HC595`, `HAL_ENABLE_MCP4725`)*
+<a id="simple-io-chips--optional---hal_enable_mcp23017-hal_enable_pca9654e-hal_enable_pcf8574-hal_enable_hc595-hal_enable_mcp4725"></a>
+
+## GPIO expanders, shift registers, and DAC  *(optional - `HAL_ENABLE_MCP23017`, `HAL_ENABLE_PCA9654E`, `HAL_ENABLE_PCF8574`, `HAL_ENABLE_HC595`, `HAL_ENABLE_MCP4725`)*
 
 ```c
 #include <hal/gpio/hal_mcp23017.h>
@@ -346,7 +366,7 @@ hal_mcp4725_init_ex(&dac, NULL);
 hal_mcp4725_write_ex(&dac, 2048u); /* ~ mid-scale */
 ```
 
-The shared simple-I/O driver group currently covers:
+Available modules:
 
 - `hal_mcp23017`: MCP23017 GPIO expander over I2C. Runtime modes mirror the
   grblHAL plugin variants: 8 inputs/8 outputs, 16 outputs, or 16 inputs. Input
@@ -376,8 +396,7 @@ or `HAL_EIO` depending on the backend operation. Value-returning compatibility
 reads keep their historical zero-on-failure shape; use the `_ex` forms when the
 caller needs to distinguish zero data from an error.
 
-**Thread safety:** each device instance owns a HAL mutex, and bus transactions
-use the underlying HAL I2C/SPI locks. Lifecycle calls remain single-owner.
+**Concurrency:** Each device instance has its own HAL mutex. Transactions also acquire HAL I2C/SPI bus locks. One part of the application should own initialization and cleanup of each instance.
 
 Example: `examples/23_io_pmic`.
 

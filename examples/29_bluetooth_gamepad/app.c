@@ -1,3 +1,9 @@
+/*
+ * Read normalized buttons, axes, and D-pad state from a Classic Bluetooth
+ * gamepad. Keep pairing data for reconnects. The optional BLE observer shares
+ * the same controller and does not advertise a BLE service.
+ */
+
 #include <hal/bluetooth/hal_gamepad.h>
 #include <hal/bluetooth/jh_bluetooth_classic_hid_memory_probe.h>
 #include <hal/bluetooth/jh_btstack_diagnostics.h>

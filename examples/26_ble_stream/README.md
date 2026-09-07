@@ -1,23 +1,26 @@
-# 26 - BLE stream
+<a id="26---ble-stream"></a>
 
-BLE Peripheral and JH BLE Stream v1 example covering the
-advertising/connection lifecycle and the authenticated stream.
+# 26 - Exchanging data and commands over BLE
 
-The application is a connectable Peripheral that publishes the stream service
-and exchanges payloads only inside a mutually authenticated session.
+This example exposes JH BLE Stream v1 and exchanges data with a client after
+mutual authentication. The board acts as a BLE Peripheral: it advertises and
+accepts a connection from a Central.
 
-The device advertises as `JH Stream`, serves the protocol version and the
-capability bitmask to any client, and refuses payload traffic until the client
-proves knowledge of the per-device secret. Once authenticated it publishes a
-telemetry line every second, retains at most one sample for retry during TX
-backpressure, and logs whatever the client sends.
+The base application advertises as `JH Stream`. Any client can read the
+protocol version and capability bitmask, but application data is available
+only after the client proves knowledge of the device secret. Once
+authenticated, the application sends a telemetry line every second and prints
+received data to the console. If transmission is temporarily unavailable,
+it retains at most one sample for retry.
 
-The separate `commands` and `commands-freertos` variants advertise as
-`JH Commands`. They give `hal_ble_commands` exclusive ownership of Stream
-payloads, register transport-neutral handlers and exchange command-wire
-requests, responses and events with an authenticated Central.
+The `commands` and `commands-freertos` variants advertise as `JH Commands`.
+They exchange binary command requests, responses, and events with an
+authenticated client. `hal_ble_commands` has exclusive access to Stream
+payloads, while command handlers remain independent of the transport.
 
 ## Build and run
+
+Run from the repository root:
 
 ```bash
 ./scripts/examples_dispatcher.py build --target rp2040 --example 26_ble_stream
@@ -25,8 +28,8 @@ requests, responses and events with an authenticated Central.
 ./scripts/examples_dispatcher.py build --target stm32g474 --example 26_ble_stream
 ```
 
-The dispatcher command for example 26 builds the base firmware and both command
-variants. To build only one command variant, use the shared project entrypoint:
+For this project, the dispatcher builds the base firmware and both command
+variants. To build only one variant, use:
 
 ```bash
 vscode/entry/jh-vscode build --project examples/26_ble_stream \
@@ -35,10 +38,9 @@ vscode/entry/jh-vscode build --project examples/26_ble_stream \
   --target rp2040 --board picow --variant commands-freertos
 ```
 
-The dispatcher-backed default profiles are RP2040 `picow`, RP2350 ARM `pico2w`,
-and STM32G474 `nucleo-g474re-pim730`. RP2040 `pico-rm2` is also build-supported
-through an explicit board selection, but its dedicated hardware gate remains
-pending:
+The default boards are `picow` for RP2040, `pico2w` for RP2350 ARM, and
+`nucleo-g474re-pim730` for STM32G474. RP2040 also has an explicit `pico-rm2`
+build configuration, but its separate hardware test remains pending:
 
 ```bash
 vscode/entry/jh-vscode build \
@@ -46,44 +48,44 @@ vscode/entry/jh-vscode build \
   --target rp2040 --board pico-rm2
 ```
 
-RP2350 RISC-V is unsupported because its CYW43 Bluetooth transport is not
-enabled.
+RP2350 RISC-V is unsupported because CYW43 Bluetooth transport is not enabled
+for it.
 
-The example defers CYW43/BLE initialization until the first `app_task0()`
-iteration, after the FreeRTOS scheduler has started. Its project configuration
-selects a 1024-word task stack when FreeRTOS is enabled; the default 512-word
-stack is insufficient for the authenticated handshake on RP hardware.
+CYW43/BLE initialization runs on the first `app_task0()` call. With FreeRTOS,
+this places it after scheduler startup. The configuration reserves a
+1024-word task stack in that case; the default 512-word stack was not enough
+for authenticated session setup on RP hardware.
 
 ## Provisioning the secret
 
-`kDeviceSecret` in [`app.cpp`](app.cpp) stands in for provisioning so the
-example builds and runs as is. A product replaces it with a per-device value of
-at least 256 bits, delivered to the client out of band - for example through a
-label QR code or an authenticated USB channel - and never shares one secret
-across devices.
+`kDeviceSecret` in [`app.cpp`](app.cpp) is an example value. In a deployed
+device, replace it with a device-specific secret of at least 256 bits.
+Give it to the client through a separate channel, such as a label QR code
+or an authenticated USB connection. Do not share one secret across devices.
 
-`hal_ble_stream_set_secret()` installs it, `hal_ble_stream_clear_secret()`
-implements factory reset, and installing a new secret invalidates any session
-built on the previous one.
+`hal_ble_stream_set_secret()` sets the secret, and
+`hal_ble_stream_clear_secret()` removes it, for example during a factory
+reset. Installing a new secret invalidates a session based on the previous one.
 
 ## Client side
 
-A client completes the handshake by sending `HELLO`, verifying the device proof
-in `HELLO_ACK`, and answering with `AUTH`. Both proofs and the two directional
-keys come from HMAC-SHA256 over a transcript covering the profile name, the
-protocol version, both capability sets, the session identifier and both nonces.
-`DATA` frames use ChaCha20-Poly1305 with a directional counter. The frame layout
-and every constant live in
+The client sends `HELLO`, verifies the device's proof of secret knowledge
+in `HELLO_ACK`, and responds with `AUTH`. Both proofs and the separate keys
+for each direction are derived using HMAC-SHA256. The input covers the
+profile name, protocol version, both capability sets, session identifier,
+and both nonces. `DATA` frames use ChaCha20-Poly1305 and a separate counter
+for each direction. Frame layouts and constants are defined in
 [`hal_ble_stream.h`](../../src/hal/bluetooth/hal_ble_stream.h).
 
-The negotiated ATT MTU must reach `HAL_BLE_STREAM_MIN_ATT_MTU` before a
-handshake fits in one write; the example logs the MTU it observes.
+ATT MTU must reach `HAL_BLE_STREAM_MIN_ATT_MTU` before session setup so the
+handshake messages fit the required write size. The example logs the
+negotiated MTU.
 
-The command variants use Linux/BlueZ as the Central. JaszczurHAL currently
-provides Peripheral and passive Observer roles; a second board running this
-example is another Peripheral. The short hardware verifier performs the
-client-side handshake and splits command-wire data according to the negotiated
-MTU:
+The command variants use Linux/BlueZ as the Central. The documented
+JaszczurHAL integration provides Peripheral and passive Observer roles;
+a second board running this example is another Peripheral, not a client.
+The hardware verifier performs the client handshake and splits command data
+according to the MTU:
 
 ```bash
 python3 tests/hardware/bluetooth_stream/verify_commands.py \
@@ -91,29 +93,24 @@ python3 tests/hardware/bluetooth_stream/verify_commands.py \
   --target rp2040 --board picow --runtime baremetal
 ```
 
-The verifier covers a fragmented 500-byte binary echo, handler provenance and
-security metadata, source policy, unknown commands, an outbound event, a
-Peripheral-originated request and one reconnect. Use `--runtime freertos` for
-the `commands-freertos` image.
+It tests a fragmented 500-byte binary `echo`, handler and security metadata,
+source restrictions, unknown commands, an outbound event, a
+Peripheral-originated request, and one reconnect. Use `--runtime freertos`
+with the `commands-freertos` image.
 
 ## What the example shows
 
-- initializing the BLE controller, reading its address, advertising and
-  reacting to connection events;
-- publishing the service with a capability set;
-- refusing payload traffic without a session;
-- draining received payloads with explicit overflow reporting;
-- retaining and retrying one bounded telemetry sample after `HAL_EAGAIN`;
-- retaining one advertising request so advertising resumes automatically after
-  a disconnect.
+The base application initializes the BLE controller, reads its address,
+publishes the service, and handles connection events. It drains incoming data,
+reports overflow, and rejects application data outside a session.
+After `HAL_EAGAIN`, it retries one retained telemetry sample. It also keeps
+an advertising request active so advertising resumes after a disconnect.
 
-The command variants additionally show:
+The command variants register source restrictions in the router, process
+messages incrementally, handle responses, and let the Peripheral send its
+own event and request to the Central. One command adapter is attached to
+the already initialized Stream.
 
-- attaching one command adapter to the initialized authenticated Stream;
-- registering BLE-only and source-restricted routes on the shared router;
-- processing incoming requests and automatic responses incrementally;
-- sending an event and a Peripheral-originated request to the Central.
-
-For an independent client implementation and multi-target stability/security
-test, see
-the [`bluetooth_stream` hardware gate](../../doc/api/en/03_build_tests.md#jh-ble-stream-v1-hardware-gate).
+See the
+[`bluetooth_stream` hardware tests](../../doc/api/en/03_build_tests.md#jh-ble-stream-v1-hardware-gate)
+for an independent client and multi-target stability and security checks.

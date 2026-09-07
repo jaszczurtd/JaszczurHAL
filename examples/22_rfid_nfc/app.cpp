@@ -1,6 +1,9 @@
 /**
  * @file app.cpp
- * @brief Combined MFRC522 RFID and PN532 NFC example on one SPI bus.
+ * @brief Read RFID and NFC cards using MFRC522 and PN532 devices on one SPI
+ * bus.
+ *
+ * Each reader has separate chip-select and reset signals.
  */
 
 #include <hal/core/hal_app.h>
@@ -23,7 +26,8 @@
 #define EXAMPLE_PN532_CS 21u
 #define EXAMPLE_PN532_RST 22u
 #elif HAL_TARGET_IS_STM32G474
-/* STM32 pin id = port * 16 + pin: SPI1, primary CS on Nucleo D10. */
+/* STM32 pin numbers use port * 16 + pin. SPI1 and the MFRC522 CS use the Nucleo
+ * SPI/D10 pins. */
 #define EXAMPLE_SPI_MISO 6u
 #define EXAMPLE_SPI_MOSI 7u
 #define EXAMPLE_SPI_SCK 5u

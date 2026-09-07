@@ -1,3 +1,8 @@
+/*
+ * Connect to WiFi, confirm a trial firmware image, and start authenticated OTA.
+ * Replace the example WiFi and OTA credentials before using the application.
+ */
+
 #include <hal/core/hal_app.h>
 #include <hal/network/hal_wifi.h>
 #include <hal/network/ota/hal_ota.h>

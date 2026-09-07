@@ -1,9 +1,10 @@
-# 22 - Czytniki RFID i NFC
+<a id="22---czytniki-rfid-i-nfc"></a>
 
-Ten zbiorczy projekt sprawdza sterowniki MFRC522 i PN532 na wspólnej
-magistrali SPI. Każdy kontroler ma własne piny wyboru układu i resetu oraz jest
-inicjalizowany niezależnie, dlatego brak jednego czytnika nie wyłącza drugiej
-ścieżki.
+# 22 - Odczyt kart RFID i NFC
+
+Przykład obsługuje czytniki MFRC522 i PN532 na wspólnej magistrali SPI.
+Każdy czytnik ma własne piny `CS` i `RST` oraz jest inicjalizowany niezależnie.
+Brak jednego z nich nie zatrzymuje obsługi drugiego.
 
 | Sygnał | Rodzina RP | STM32G474 |
 | --- | --- | --- |
@@ -11,7 +12,10 @@ inicjalizowany niezależnie, dlatego brak jednego czytnika nie wyłącza drugiej
 | MFRC522 CS / RST | GP17 / GP20 | PB6 / PB1 |
 | PN532 CS / RST | GP21 / GP22 | PB2 / PB3 |
 
-Na NUCLEO-G474RE wspólne sygnały SPI i główny CS MFRC522 znajdują się na pinach
-13/15/11/17 CN10, odpowiadających D12/D11/D13/D10. PB1, PB2 i PB3 znajdują się
-odpowiednio na pinach 24, 22 i 31 CN10; PB3 jest także D3. Skonfiguruj moduł
-PN532 do trybu SPI. Oba czytniki używają logiki 3,3 V.
+Na NUCLEO-G474RE sygnały SPI MISO/MOSI/SCK oraz `CS` czytnika MFRC522 są
+wyprowadzone odpowiednio na piny 13/15/11/17 złącza CN10, czyli
+D12/D11/D13/D10. PB1, PB2 i PB3 znajdują się na pinach 24, 22 i 31 złącza
+CN10; PB3 jest również dostępny jako D3.
+
+Ustaw moduł PN532 w tryb SPI. Oba czytniki korzystają z sygnałów logicznych
+3,3 V.

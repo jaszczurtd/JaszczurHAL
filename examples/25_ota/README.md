@@ -1,26 +1,30 @@
-# 25 - Native RP OTA
+<a id="25---native-rp-ota"></a>
 
-This example enables the native Pico SDK OTA path on Pico W and Pico 2 W. Set
-the WiFi credentials and replace the development OTA password in `app.c`.
-Keep the same hostname, port, and password in
+# 25 - WiFi firmware updates on RP boards
+
+This example enables OTA updates on Pico W and Pico 2 W using the Pico SDK
+integration. Set the WiFi credentials and replace the example OTA password
+in `app.c`. The hostname, port, and password must match
 `.vscode/jaszczurhal.project.json`.
-The example also fixes the host callback listener at TCP port `8266`, so one
-narrow firewall rule is sufficient on hosts that filter inbound callbacks.
-`runmefirst.sh` detects the local IPv4 network and offers to provision that
-rule persistently after showing its exact scope.
 
-Read [Native RP OTA Workflow](../../doc/en/OTAWorkflow.md) for the complete
-project, firmware, first-flash, VS Code, firewall, confirmation, rollback, and
-recovery procedure.
+The computer listens for callback connections on TCP port `8266`.
+A firewall that blocks inbound connections needs a rule allowing this traffic.
+`runmefirst.sh` detects the local IPv4 network, shows the rule's scope, and
+offers to add it persistently.
 
-The application confirms a trial image only after WiFi connectivity has been
-established, then starts the authenticated OTA service. Use:
+See [OTA updates on RP boards](../../doc/en/OTAWorkflow.md) for project setup,
+first flashing, VS Code use, firewall configuration, update confirmation,
+rollback, and BOOTSEL recovery.
+
+The application confirms a trial image only after connecting to WiFi. It then
+starts the OTA service, which requires authentication. Run from this example's
+directory:
 
 ```bash
 ../../vscode/entry/jh-vscode ota-discover --project "$PWD"
 ../../vscode/entry/jh-vscode upload-ota --project "$PWD" --interactive
 ```
 
-For real projects, configure `ota.passwordEnv` instead of storing a password
-in the manifest. The application still owns the corresponding device-side
-password.
+In a deployed project, set `ota.passwordEnv` so the computer-side tool reads
+the password from an environment variable rather than the project file.
+The application must still configure the matching device-side password.

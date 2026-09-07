@@ -36,6 +36,41 @@ VSCODE_EXTENSION_RECOMMENDATIONS = [
     "ms-vscode.vscode-serial-monitor",
 ]
 
+EXAMPLE_VARIANT_TASK_SUMMARIES = {
+    "05_serial_gps_swserial": "the GPS and loopback example with software serial",
+    "16_rtc_display_clock": "the DS3231 clock with an ILI9341 display",
+    "18_freertos_network": "the FreeRTOS network services and client examples",
+    "26_ble_stream_commands": "the authenticated BLE command example",
+    "26_ble_stream_commands_freertos": (
+        "the authenticated BLE command example with FreeRTOS"
+    ),
+    "27_lora_point_to_point_probe": "the LoRa radio checks that do not transmit",
+    "27_lora_point_to_point_responder": "the LoRa ping/pong responder",
+    "27_lora_point_to_point_sf7": (
+        "the LoRa initiator with the SF7/6 dBm test settings"
+    ),
+    "27_lora_point_to_point_responder_sf7": (
+        "the LoRa responder with the SF7/6 dBm test settings"
+    ),
+    "27_lora_point_to_point_link": (
+        "the LoRa echo-command initiator with fragmentation and retries"
+    ),
+    "27_lora_point_to_point_link_responder": (
+        "the LoRa echo-command responder with fragmentation and retries"
+    ),
+    "29_bluetooth_classic_scan": (
+        "the Classic Bluetooth device and service discovery example"
+    ),
+    "29_bluetooth_hid_host": "the generic Classic HID descriptor and report example",
+    "29_bluetooth_gamepad_ble": (
+        "the Classic gamepad example with a BLE observer"
+    ),
+    "30_bluetooth_speaker_avrcp": "the A2DP speaker with AVRCP volume control",
+    "30_bluetooth_speaker_ble_a2dp": (
+        "the A2DP speaker with BLE and Classic support in one image"
+    ),
+}
+
 
 def write_text_lf(path: Path, content: str) -> None:
     with path.open("w", encoding="utf-8", newline="\n") as output:
@@ -330,7 +365,7 @@ def board_selection_input(
     options, default = board_selection_values(registry, selected_target, selected_board)
     return {
         "id": BOARD_SELECTION_INPUT_ID,
-        "description": "Target/board",
+        "description": "Select a target architecture and board",
         "type": "pickString",
         "options": options,
         "default": default,
@@ -340,7 +375,7 @@ def board_selection_input(
 def sync_board_picker_task() -> dict[str, Any]:
     return vscode_entry_task(
         label=SYNC_BOARD_PICKER_LABEL,
-        detail="Refresh target/board options and managed debug profiles",
+        detail="Update the board-selection list and managed debug configurations.",
         args=[
             "sync-board-picker",
             "--project",
@@ -368,37 +403,33 @@ def project_tasks_document(
     usb_product: str = "",
     variants: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    subject = f" {module}" if module else ""
+    subject = f" the {module}" if module else ""
     tasks = [
         vscode_entry_task(
             label="Project: Build",
-            detail=f"Compile{subject} through JaszczurHAL VS Code entry",
+            detail=f"Build{subject} firmware for the selected board.",
             args=["build", "--project", "${workspaceFolder}"],
             group={"kind": "build", "isDefault": True},
             problemMatcher="$gcc",
         ),
         vscode_entry_task(
             label="Project: Build (Debug)",
-            detail=f"Debug build{subject} through JaszczurHAL VS Code entry",
+            detail=f"Build{subject} firmware with debug settings.",
             args=["build-debug", "--project", "${workspaceFolder}"],
             group="build",
             problemMatcher="$gcc",
         ),
         vscode_entry_task(
             label="Project: Upload",
-            detail=(
-                f"Upload{subject} through the active target backend"
-                if module
-                else "Upload through the active target backend"
-            ),
+            detail=f"Upload{subject} firmware to the selected board.",
             args=["upload", "--project", "${workspaceFolder}"],
             problemMatcher="$gcc",
         ),
         vscode_entry_task(
             label="Project: Upload (UF2 / BOOTSEL)",
             detail=(
-                f"RP2040 only: build{subject} and copy UF2 to the single visible "
-                "BOOTSEL drive"
+                f"RP2040 only: build{subject} firmware and copy its UF2 file to "
+                "the only detected BOOTSEL drive."
             ),
             args=["upload-uf2", "--project", "${workspaceFolder}"],
             problemMatcher=[],
@@ -406,34 +437,38 @@ def project_tasks_document(
         vscode_entry_task(
             label="Project: Upload (OTA)",
             detail=(
-                f"Build, authenticate, and upload{subject} to a discovered native RP device"
-                if module
-                else "Build, authenticate, and upload to one discovered native RP device"
+                f"Build{subject} firmware, authenticate, and upload it to one RP "
+                "device discovered on the network."
             ),
             args=["upload-ota", "--project", "${workspaceFolder}", "--interactive"],
             problemMatcher=[],
         ),
         vscode_entry_task(
             label="Project: Discover OTA devices",
-            detail="List JaszczurHAL devices advertising native OTA",
+            detail="List JaszczurHAL devices available for native OTA updates.",
             args=["ota-discover", "--project", "${workspaceFolder}"],
             problemMatcher=[],
         ),
         vscode_entry_task(
             label="Project: List ports",
-            detail="Show serial ports, identity matches, and BOOTSEL candidates",
+            detail=(
+                "List serial ports, matching device identities, and possible "
+                "BOOTSEL drives."
+            ),
             args=["list-ports", "--project", "${workspaceFolder}"],
             problemMatcher=[],
         ),
         vscode_entry_task(
             label="Project: Change port",
-            detail="Interactively persist the upload/monitor serial port",
+            detail=(
+                "Select and save the serial port used for uploads and monitoring."
+            ),
             args=["change-port", "--project", "${workspaceFolder}"],
             problemMatcher=[],
         ),
         vscode_entry_task(
             label="Project: Serial Monitor",
-            detail=f"Persistent{subject} serial monitor" if module else "Persistent serial monitor",
+            detail="Open the project's persistent serial monitor.",
             args=[
                 "monitor",
                 "--project",
@@ -446,7 +481,7 @@ def project_tasks_document(
         ),
         vscode_entry_task(
             label="Project: Debug Probe Monitor",
-            detail="Debug Probe monitor through JaszczurHAL VS Code entry",
+            detail="Monitor serial output through the Debug Probe.",
             args=[
                 "monitor-probe",
                 "--project",
@@ -459,7 +494,7 @@ def project_tasks_document(
         ),
         vscode_entry_task(
             label="Project: Serial Monitor (Any)",
-            detail="Any serial monitor through JaszczurHAL VS Code entry",
+            detail="Monitor output from any serial port.",
             args=[
                 "monitor-any",
                 "--project",
@@ -472,39 +507,41 @@ def project_tasks_document(
         ),
         vscode_entry_task(
             label="Project: Refresh IntelliSense",
-            detail=(
-                f"Refresh{subject} IntelliSense through JaszczurHAL VS Code entry"
-                if module
-                else "Refresh IntelliSense through JaszczurHAL VS Code entry"
-            ),
+            detail="Update IntelliSense data for this project's sources.",
             args=["refresh-intellisense", "--project", "${workspaceFolder}"],
             problemMatcher=[],
         ),
         vscode_entry_task(
             label="Project: Clean",
-            detail=f"Clean{subject} build directory" if module else "Clean build directory",
+            detail="Remove the project's build files.",
             args=["clean", "--project", "${workspaceFolder}"],
             problemMatcher=[],
         ),
         vscode_entry_task(
             label="Project: Clear USB Identity",
             detail=(
-                f"Flash neutral firmware after verifying current {usb_product} identity"
+                "Replace the installed application with neutral firmware after "
+                f"verifying the {usb_product} USB device identity."
                 if usb_product
-                else "Flash neutral firmware after verifying current USB identity"
+                else (
+                    "Replace the installed application with neutral firmware after "
+                    "verifying the USB device identity."
+                )
             ),
             args=["clear-identity", "--project", "${workspaceFolder}"],
             problemMatcher=[],
         ),
         vscode_entry_task(
             label="Project: Config Dump",
-            detail="Show resolved JaszczurHAL VS Code project configuration",
+            detail="Show the effective project configuration.",
             args=["config-dump", "--project", "${workspaceFolder}"],
             problemMatcher=[],
         ),
         vscode_entry_task(
             label="Project: Select board",
-            detail="Interactive target/board selection",
+            detail=(
+                "Choose a target architecture and board in the interactive selector."
+            ),
             args=["select-board", "--project", "${workspaceFolder}", "--interactive"],
             presentation={
                 "echo": True,
@@ -518,7 +555,9 @@ def project_tasks_document(
         ),
         vscode_entry_task(
             label="Project: Select board (GUI)",
-            detail="Pick target/board from the VS Code input menu",
+            detail=(
+                "Choose a target architecture and board from the VS Code menu."
+            ),
             args=[
                 "select-board",
                 "--project",
@@ -534,10 +573,17 @@ def project_tasks_document(
         variant_id = str(variant.get("id") or "")
         if not variant_id:
             continue
+        variant_module = str(variant.get("module") or "")
+        variant_summary = EXAMPLE_VARIANT_TASK_SUMMARIES.get(variant_module)
+        variant_detail = (
+            f"Build {variant_summary} ({variant_id})."
+            if variant_summary
+            else f"Build the example variant {variant_id}."
+        )
         tasks.append(
             vscode_entry_task(
                 label=f"Project: Build variant: {variant_id}",
-                detail=f"Compile example variant {variant_id}",
+                detail=variant_detail,
                 args=[
                     "build",
                     "--project",

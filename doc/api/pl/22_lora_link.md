@@ -1,22 +1,14 @@
-# API niezawodnego łącza LoRa
+<a id="api-niezawodnego-łącza-lora"></a>
+
+# LoRa - wiadomości, potwierdzenia i ponowienia
 
 *Dostępne również [po angielsku](../en/22_lora_link.md).*
 
 > **Część [dokumentacji API JaszczurHAL](../../pl/JaszczurHAL_API.md)**
 
-`hal_lora_link` to niewielka warstwa bezpośredniej wymiany wiadomości
-przeznaczona dla JaszczurHAL. Działa nad jednym skonfigurowanym uchwytem
-[`hal_lora_radio`](21_lora.md). Dodaje adresowanie 16-bitowe, 32-bitowe numery
-sekwencyjne wiadomości, potwierdzenia, ograniczoną liczbę ponowień całej
-wiadomości, usuwanie duplikatów i automatyczną fragmentację. Opcjonalny
-ChaCha20-Poly1305 szyfruje i uwierzytelnia każdy fragment danych oraz
-uwierzytelnia potwierdzenia.
+Wymiana wiadomości między urządzeniami LoRa z adresowaniem, potwierdzeniami i ponawianiem transmisji. `hal_lora_link` działa na jednym skonfigurowanym uchwycie [`hal_lora_radio`](21_lora.md). Obsługuje adresy 16-bitowe, 32-bitowe numery sekwencyjne, ograniczoną liczbę ponowień całej wiadomości, pomijanie duplikatów i automatyczny podział na fragmenty. Opcjonalne ChaCha20-Poly1305 szyfruje i uwierzytelnia fragmenty oraz uwierzytelnia potwierdzenia.
 
-Jest to protokół właściwy dla JaszczurHAL. Nie jest zgodny z LoRaWAN ani
-certyfikowany przez LoRa Alliance, nie zapewnia routingu i nie współpracuje
-z bramkami LoRaWAN. Aplikacja odpowiada za zgodny z przepisami dobór
-częstotliwości, mocy, czasu transmisji i współczynnika zajętości pasma
-(duty cycle).
+To własny protokół JaszczurHAL, nie LoRaWAN. Nie ma certyfikacji LoRa Alliance, routingu ani zgodności z bramkami LoRaWAN. Aplikacja odpowiada za zgodny z przepisami dobór częstotliwości, mocy, czasu transmisji i współczynnika zajętości pasma (duty cycle).
 
 ## Włączanie modułu
 
@@ -34,7 +26,7 @@ Wybrana rodzina SX126x lub SX127x włącza również `HAL_ENABLE_SPI`. Jeśli u�
 `HAL_LORA_LINK_SECURITY_CHACHA20_POLY1305`, zdefiniuj również
 `HAL_ENABLE_CRYPTO`.
 
-Przed dołączeniem `hal_config.h` można ustawić następujące limity kompilacyjne:
+Limity można ustawić przed dołączeniem `hal_config.h`:
 
 | Makro | Domyślnie | Dozwolony zakres | Przeznaczenie |
 |---|---:|---:|---|
@@ -42,13 +34,13 @@ Przed dołączeniem `hal_config.h` można ustawić następujące limity kompilac
 | `HAL_LORA_LINK_MAX_MESSAGE_SIZE` | 1024 | 1..4096 | Rozmiar wewnętrznych buforów na kopie wiadomości TX i RX |
 | `HAL_LORA_LINK_MAX_PEERS` | 8 | 1..32 | Liczba przechowywanych okien wykrywania duplikatów dla par źródło/sesja |
 
-Każde łącze ma również dwa 255-bajtowe bufory robocze ramek. Po utworzeniu
-mutexu uchwytu żadna operacja protokołu nie przydziela pamięci na stercie.
+Każde łącze ma dodatkowo dwa bufory robocze ramek, po 255 bajtów. Po utworzeniu muteksu uchwytu operacje protokołu nie przydzielają pamięci na stercie.
 
-## Cykl życia
+<a id="cykl-życia"></a>
 
-Najpierw utwórz i skonfiguruj radio przez jego niskopoziomowe API, a następnie
-dołącz łącze:
+## Utworzenie łącza i dostęp do radia
+
+Najpierw utwórz i skonfiguruj radio przez API niskopoziomowe. Następnie dołącz łącze:
 
 ```c
 hal_lora_link_t link = NULL;
@@ -69,12 +61,7 @@ przez kryptograficznie bezpieczne źródło losowe albo trwałego, monotoniczneg
 licznika uruchomień. Nie wyprowadzaj jej wyłącznie z przewidywalnego czasu
 działania urządzenia.
 
-Po dołączeniu łącze jako jedyne steruje radiem: wyrejestrowuje funkcję zwrotną
-zdarzeń niskopoziomowego API i rozpoczyna ciągły odbiór. Wywołujący musi
-zachować uchwyt radia, ale do zakończenia `hal_lora_link_destroy()` nie może
-bezpośrednio uruchamiać TX, RX, CAD, sleep ani kalibracji. Zniszczenie łącza
-anuluje aktywne operacje I/O radia, zeruje kopię klucza i pozostawia radio
-w stanie standby. Sam uchwyt radia nie jest niszczony.
+Po dołączeniu łącze przejmuje wyłączną obsługę radia: wyrejestrowuje callback niskopoziomowy i uruchamia ciągły odbiór. Zachowaj uchwyt radia, ale do zakończenia `hal_lora_link_destroy()` nie uruchamiaj bezpośrednio TX, RX, CAD, uśpienia ani kalibracji. Zniszczenie łącza anuluje operacje wejścia/wyjścia, zeruje kopię klucza i pozostawia radio w stanie standby. Nie niszczy uchwytu radia.
 
 Nieprzezroczyste uchwyty łączy zawierają numer generacji. Użycie nieaktualnego
 uchwytu powoduje zwrócenie `HAL_EUNINIT`, a próba utworzenia większej liczby
@@ -82,10 +69,7 @@ uchwytu powoduje zwrócenie `HAL_EUNINIT`, a próba utworzenia większej liczby
 
 ## Wysyłanie i odbieranie
 
-`hal_lora_link_send_start()` kopiuje całą wiadomość, rozpoczyna transmisję
-pierwszego fragmentu i kończy działanie. Wywołuj `hal_lora_link_process()`
-regularnie z jednej głównej pętli albo z jednego zadania FreeRTOS
-odpowiedzialnego za obsługę łącza:
+`hal_lora_link_send_start()` kopiuje całą wiadomość, rozpoczyna nadawanie pierwszego fragmentu i wraca bez oczekiwania na koniec całej transmisji. Dalej regularnie wywołuj `hal_lora_link_process()` z jednej pętli głównej lub jednego zadania FreeRTOS obsługującego łącze:
 
 ```c
 static const uint8_t message[] = "acknowledged telemetry";
@@ -109,10 +93,7 @@ transmisja rozgłoszeniowa musi odbywać się bez potwierdzenia. Łącze może
 przechowywać jednocześnie tylko jedną wiadomość wysyłaną przez aplikację
 i jedną kompletną wiadomość odebraną.
 
-`hal_lora_link_receive()` kopiuje oczekującą kompletną wiadomość i usuwa ją
-z kolejki. `HAL_EAGAIN` oznacza, że żadna wiadomość nie jest gotowa. Jeśli bufor
-wywołującego jest za mały, funkcja zwraca `HAL_EOVERFLOW`, podaje wymagany
-rozmiar i mimo to usuwa wiadomość z kolejki.
+`hal_lora_link_receive()` kopiuje gotową wiadomość i usuwa ją z kolejki. `HAL_EAGAIN` oznacza brak wiadomości. **Zbyt mały bufor również powoduje usunięcie wiadomości:** funkcja zwraca wtedy `HAL_EOVERFLOW` i podaje wymagany rozmiar.
 
 ```c
 uint8_t buffer[HAL_LORA_LINK_MAX_MESSAGE_SIZE];
@@ -125,13 +106,11 @@ if (status == HAL_OK) {
 }
 ```
 
-`hal_lora_link_cancel()` zatrzymuje wyłącznie aktywną transmisję zleconą przez
-aplikację i wznawia ciągły odbiór. Stan łącza, stan wysyłania oraz diagnostyka
-są odczytywane jako spójne kopie chronione mutexem uchwytu, dlatego można je
-sprawdzać z innego zadania. Samą maszynę stanów `process()` może jednak
-obsługiwać tylko jedno zadanie lub jedna pętla.
+`hal_lora_link_cancel()` anuluje tylko transmisję rozpoczętą przez aplikację i przywraca ciągły odbiór. Stan łącza, stan transmisji i diagnostykę można odczytywać z innego zadania: funkcje zwracają spójne kopie chronione muteksem. Samo `process()` może jednak wykonywać tylko jedno zadanie lub jedna pętla.
 
-## Adapter poleceń
+<a id="adapter-poleceń"></a>
+
+## Przesyłanie poleceń aplikacji
 
 `HAL_ENABLE_LORA_COMMANDS` dodaje adapter
 [`hal_lora_commands`](23_commands.md#reliable-lora-adapter) oraz propaguje
@@ -167,7 +146,9 @@ Reguły routera mogą dzięki temu odrzucać słabiej chronione żądania. Funkc
 obsługi otrzymuje adres źródłowy, identyfikator sesji i kompletne metadane
 łącza, a jej logika nie zależy od wybranej rodziny radia.
 
-## Niezawodność i fragmentacja
+<a id="niezawodność-i-fragmentacja"></a>
+
+## Potwierdzenia, ponowienia i składanie wiadomości
 
 Domyślnie łącze czeka 1500 ms na potwierdzenie po wysłaniu całej wiadomości.
 Przed kolejną próbą odczekuje 200 ms i może ponowić całą, niezmienioną
@@ -196,8 +177,7 @@ usuwane jest najdłużej nieużywane okno.
 
 ## Opcjonalna ochrona kryptograficzna
 
-Przy włączonym `HAL_ENABLE_CRYPTO` ustaw jeden 32-bajtowy klucz współdzielony
-(PSK) i wybierz AEAD:
+Aby włączyć AEAD, zdefiniuj `HAL_ENABLE_CRYPTO`, przekaż 32-bajtowy klucz współdzielony (PSK) i wybierz odpowiedni tryb ochrony:
 
 ```c
 uint8_t provisioned_key[HAL_LORA_LINK_CRYPTO_KEY_BYTES];
@@ -226,7 +206,9 @@ Aplikacja odpowiada za bezpieczne dostarczanie i rotację kluczy oraz trwałe
 zarządzanie sesją. Łącze bez szyfrowania odrzuca ramki szyfrowane, a łącze
 szyfrowane odrzuca ramki niezaszyfrowane lub nieuwierzytelnione.
 
-## Diagnostyka i przykład
+<a id="diagnostyka-i-przykład"></a>
+
+## Diagnostyka i przykładowa aplikacja
 
 `hal_lora_link_get_diagnostics()` zwraca łączną liczbę wiadomości, ramek,
 potwierdzeń, retransmisji i duplikatów. Zawiera też liczniki błędów formatu,

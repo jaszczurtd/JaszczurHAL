@@ -1,16 +1,24 @@
-# 28 - Router poleceń portu szeregowego
+<a id="28---router-poleceń-portu-szeregowego"></a>
 
-Jest to minimalna aplikacja ramkowanej Serial Session, która używa niezależnego
-`hal_command_router`. Rejestruje `echo` i `info`, ogranicza obie trasy do
-`HAL_COMMAND_SOURCE_SERIAL_SESSION` oraz dołącza `hal_serial_commands` do
-domyślnego punktu końcowego portu szeregowego danego targetu.
+# 28 - Polecenia tekstowe przez port szeregowy
 
-Projekt jest oddzielony od przykładu GPS/UART, ponieważ nie wymaga zewnętrznego
-odbiornika ani portu UART zarezerwowanego przez aplikację. Na płytkach RP można
-go obsłużyć przez USB CDC; pozostałe targety używają wybranego punktu końcowego
-`hal_serial`.
+Przykład udostępnia dwa polecenia: `echo` zwraca przesłany tekst, a `info`
+podaje dane żądania i czas działania urządzenia. Komunikaty mają format ramek
+Serial Session. `hal_serial_commands` odbiera je z domyślnego portu
+`hal_serial` i przekazuje do osobnego `hal_command_router`.
+
+Oba polecenia dopuszczają tylko źródło
+`HAL_COMMAND_SOURCE_SERIAL_SESSION`. To ograniczenie sposobu dostarczenia
+żądania, nie uwierzytelnienie klienta; konfiguracja ustawia
+`required_security = 0u`.
+
+Projekt nie wymaga odbiornika GPS ani dodatkowego UART zarezerwowanego przez
+aplikację. Na płytkach RP można korzystać z USB CDC, a na pozostałych
+platformach - z wybranego portu `hal_serial`.
 
 ## Kompilacja
+
+Uruchom z głównego katalogu repozytorium:
 
 ```bash
 ./scripts/examples_dispatcher.py build \
@@ -19,8 +27,8 @@ go obsłużyć przez USB CDC; pozostałe targety używają wybranego punktu koń
   --target stm32g474 --example 28_serial_commands
 ```
 
-Projekt obsługuje też generowane konfiguracje RP2350 ARM i RISC-V. Pojedynczą
-konfigurację zbudujesz przez punkt wejścia VS Code:
+Dostępne są także konfiguracje RP2350 ARM i RISC-V. Aby skompilować
+pojedynczą konfigurację, użyj:
 
 ```bash
 vscode/entry/jh-vscode build \
@@ -29,57 +37,57 @@ vscode/entry/jh-vscode build \
 
 ## Wymiana danych przez port szeregowy
 
-Otwórz punkt końcowy portu szeregowego targetu i wysyłaj każde żądanie
-zakończone znakiem nowej linii. CRC obejmuje bajty między `$` i `*`, zgodnie z
-`hal_serial_frame.h`.
+Otwórz port urządzenia i zakończ każde żądanie znakiem nowej linii.
+Suma CRC obejmuje bajty między `$` a `*`, zgodnie z `hal_serial_frame.h`.
 
-Najpierw aktywuj sesję:
+Najpierw rozpocznij sesję:
 
 ```text
 $SC,1,HELLO*0F
 ```
 
-Odpowiedź zawiera moduł, protokół, wygenerowany identyfikator sesji, wersję
-firmware, identyfikator kompilacji i UID urządzenia. Zachowuje numer sekwencji `1`.
+Odpowiedź zachowuje numer sekwencji `1`. Podaje moduł, protokół,
+wygenerowany identyfikator sesji, wersję oprogramowania, identyfikator
+kompilacji i UID urządzenia.
 
-Przekaż echo przez router:
+Wyślij `echo`; druga linia poniżej pokazuje odpowiedź:
 
 ```text
 $SC,2,echo hello router*5B
 $SC,2,hello router*08
 ```
 
-Odczytaj metadane żądania i czas działania targetu:
+Aby odczytać dane żądania i czas działania urządzenia, wyślij:
 
 ```text
 $SC,3,info*74
 ```
 
-Dynamiczna odpowiedź zawiera następujące dane:
+Treść odpowiedzi ma postać:
 
 ```text
 source=SERIAL_SESSION request=3 session=<id> uptime_ms=<value>
 ```
 
-Zakończ sesję:
+Zakończ sesję poleceniem `BYE`; druga linia pokazuje odpowiedź:
 
 ```text
 $SC,4,BYE*EF
 $SC,4,OK BYE*9B
 ```
 
-Żądania wysłane przed `HELLO` otrzymują `ERR HELLO_REQUIRED`. Nieznane nazwy
-tras docierają do routera i są zwracane przez adapter jako `ERR HAL_ENOENT`.
+Przed `HELLO` żądania otrzymują `ERR HELLO_REQUIRED`. Nieznane polecenie
+jest przekazywane do routera, a adapter zwraca `ERR HAL_ENOENT`.
+`HELLO` rozpoczyna wymianę zgodną z protokołem, ale samo w sobie nie
+potwierdza tożsamości klienta.
 
 ## Co pokazuje przykład
 
-- tworzenie i utrzymywanie niezależnego routera;
-- rejestrowanie definicji tras kopiowanych przez router bez zastępowania wpisu
-  o istniejącej nazwie;
-- ograniczanie procedur obsługi do żądań Serial Session;
-- dołączanie stanu sesji i adaptera, których cyklem życia zarządza kod
-  wywołujący;
-- zwracanie treści tekstowych z zachowaniem sekwencji żądania;
-- odczyt niezależnych od transportu metadanych żądania wewnątrz procedury obsługi;
-- zwalnianie adaptera przed zniszczeniem routera podczas wycofywania zmian po
-  nieudanym uruchomieniu.
+Aplikacja tworzy własny router i rejestruje polecenia bez zastępowania
+istniejącej nazwy. Router kopiuje ich definicje; obiekty sesji i adaptera
+pozostają własnością aplikacji.
+
+Procedury obsługi odczytują metadane niezależne od transportu i zwracają
+tekstową odpowiedź z numerem odpowiadającym żądaniu. Po błędzie inicjalizacji
+aplikacja najpierw zwalnia adapter, a dopiero potem router, z którego
+adapter korzystał.

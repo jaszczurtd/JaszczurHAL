@@ -1,3 +1,9 @@
+/*
+ * Decode NEC infrared frames received on a GPIO pin and print them to the
+ * console. Choose another supported protocol in the decoder configuration when
+ * needed.
+ */
+
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
 #include <hal/input/hal_irsmall_decoder.h>

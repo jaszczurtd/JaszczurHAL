@@ -1,17 +1,16 @@
-# Skrypty obsługi repozytorium JaszczurHAL
+<a id="skrypty-obsługi-repozytorium-jaszczurhal"></a>
+
+# Skrypty konfiguracji, kompilacji i kontroli repozytorium
 
 *Dostępne również [po angielsku](../en/00_scripts.md).*
 
-Ten dokument zawiera zbiorczy wykaz skryptów służących do konfiguracji,
-kompilowania, sprawdzania, pakowania i obsługi JaszczurHAL. Obejmuje wszystkie
-skrypty z `scripts/` oraz główne punkty wejścia znajdujące się w pozostałych
-częściach repozytorium.
+Ten rozdział pomaga wybrać skrypt do przygotowania środowiska, kompilacji biblioteki lub aplikacji, uruchomienia testów i zarządzania zależnościami. Obejmuje skrypty z `scripts/` oraz główne polecenia dostępne w innych katalogach repozytorium.
 
-Uruchamiaj polecenia z katalogu głównego repozytorium, chyba że dana sekcja
-mówi inaczej. W razie rozbieżności z tym dokumentem rozstrzygające są
-implementacja skryptu i jego komunikat `--help`.
+Uruchamiaj polecenia z katalogu głównego repozytorium, chyba że instrukcja wskazuje inny katalog. Szczegóły opcji sprawdzaj przez `--help`. W razie rozbieżności z opisem należy sprawdzić implementację skryptu.
 
-## Główne punkty wejścia
+<a id="główne-punkty-wejścia"></a>
+
+## Wybór polecenia
 
 | Cel | Polecenie | Rezultat |
 |---|---|---|
@@ -20,27 +19,25 @@ implementacja skryptu i jego komunikat `--help`.
 | Synchronizacja zarządzanych zależności | `./third_party/update_components.sh` | Pobiera brakujące komponenty i zastępuje zarządzane instalacje niezgodne z wersjami zapisanymi w repozytorium. |
 | Weryfikacja zależności bez ich zmiany | `./third_party/update_components.sh --verify-only` | Sprawdza wersje wszystkich zarządzanych komponentów, commity, wymagane pliki, stan archiwum PMD, zbudowany picotool oraz stempel łańcucha narzędzi RISC-V. |
 | Odświeżenie wszystkich wersjonowanych plików generowanych | `python3 scripts/sync_generated.py --write` | Uruchamia generatory funkcji, płytek, przykładów, głównego VS Code oraz SBOM i wypisuje każdy plik zmieniony podczas synchronizacji. |
-| Weryfikacja wszystkich wersjonowanych plików generowanych | `python3 scripts/sync_generated.py --check` | Uruchamia każdy generator w trybie weryfikacji tylko do odczytu i kończy się niepowodzeniem przy brakującym lub nieaktualnym wyjściu. |
-| Uruchomienie pełnej bramki repozytorium | `./runalltests.sh` | Czyści katalogi robocze bramki i uruchamia testy, kontrole Clang ASan/UBSan/libFuzzer, Valgrind, analizę statyczną, CPD, buildy targetów oraz buildy przykładów. |
-| Uruchomienie bramki sanitizerów/fuzz | `scripts/run_sanitizer_fuzz.sh` | Odtwarza build hosta instrumentowany przez Clang, uruchamia wszystkie testy pod ASan/UBSan i wykonuje krótkie fuzzowanie parserów sieciowych. |
-| Obsługa projektu firmware | `vscode/entry/jh-vscode <action> --project <dir>` w Uniksie lub `vscode/entry/jh-vscode.cmd ...` w Windows | Dostarcza stabilny CLI buildu, wgrywania, monitorowania, wyboru płytki, IntelliSense oraz czyszczenia używany przez projekty VS Code. |
-| Build lub flashowanie projektu ESP-IDF | `python3 scripts/build_esp_idf.py <action> --project <dir>` | Uruchamia akcję `build`, `artifacts` lub `flash`; ustala metadane targetu i płytki ESP, w razie potrzeby przygotowuje SDK w wersji wskazanej przez repozytorium oraz sprawdza przenośny manifest zawierający wiele obrazów. |
-| Build przykładów przechowywanych w repozytorium | `scripts/examples_dispatcher.py build --target <target>` | Kompiluje manifesty przykładów za pomocą tego samego mechanizmu `jh-vscode` i CMake, którego używają projekty firmware. |
-| Build natywnych testów parytetu RP | `scripts/build_rp_native_parity_fixtures.sh` | Kompiluje testy USB wielordzeniowego i SDLogger dla wszystkich obsługiwanych natywnych kombinacji target/runtime. |
+| Weryfikacja wszystkich wersjonowanych plików generowanych | `python3 scripts/sync_generated.py --check` | Uruchamia każdy generator w trybie weryfikacji tylko do odczytu i zgłasza błąd, gdy pliku wynikowego brakuje lub jest on nieaktualny. |
+| Pełna kontrola jakości repozytorium | `./runalltests.sh` | Czyści katalogi robocze bramki i uruchamia testy, kontrole Clang ASan/UBSan/libFuzzer, Valgrind, analizę statyczną, CPD, kompilacje targetów oraz kompilacje przykładów. |
+| Testy z sanitizerami i fuzzingiem | `scripts/run_sanitizer_fuzz.sh` | Odtwarza konfigurację testów na komputerze z instrumentacją Clang, uruchamia wszystkie testy pod ASan/UBSan i wykonuje krótkie fuzzowanie parserów sieciowych. |
+| Obsługa projektu firmware | `vscode/entry/jh-vscode <action> --project <dir>` w Uniksie lub `vscode/entry/jh-vscode.cmd ...` w Windows | Udostępnia stały interfejs poleceń do kompilacji, wgrywania, monitorowania, wyboru płytki, konfiguracji IntelliSense i czyszczenia używany przez projekty VS Code. |
+| Kompilacja lub wgrywanie projektu ESP-IDF | `python3 scripts/build_esp_idf.py <action> --project <dir>` | Uruchamia akcję `build`, `artifacts` lub `flash`; ustala metadane targetu i płytki ESP, w razie potrzeby przygotowuje SDK w wersji wskazanej przez repozytorium oraz sprawdza przenośny manifest zawierający wiele obrazów. |
+| Kompilacja przykładów z repozytorium | `scripts/examples_dispatcher.py build --target <target>` | Kompiluje manifesty przykładów za pomocą tego samego mechanizmu `jh-vscode` i CMake, którego używają projekty firmware. |
+| Kompilacja testów zgodności działania na RP | `scripts/build_rp_native_parity_fixtures.sh` | Kompiluje testy USB wielordzeniowego i SDLogger dla wszystkich obsługiwanych natywnych kombinacji target/runtime. |
 
-### Polityka artefaktów
+<a id="polityka-artefaktów"></a>
 
-Artefakty buildu generowane przez repozytorium trafiają do `.build/`, a
-zarządzane instalacje komponentów do `third_party/`. Układ katalogów,
-oddzielenie cache dla poszczególnych targetów i płytek oraz zasady utrzymania
-plików generowanych opisano w
-[Katalogi buildu i pliki generowane](../../pl/FwProjectWorkflow.md#katalogi-budowania-i-pliki-generowane).
+### Gdzie powstają pliki wynikowe
 
-## Interfejsy narzędziowe
+Pliki wynikowe kompilacji i testów trafiają do `.build/`, a zarządzane zależności są instalowane w `third_party/`. Zasady rozdzielania katalogów według platformy i płytki oraz utrzymywania plików generowanych opisuje sekcja [Katalogi kompilacji i pliki generowane](../../pl/FwProjectWorkflow.md#katalogi-budowania-i-pliki-generowane).
 
-`config/tooling/` zawiera wersjonowane dane repozytorium używane wspólnie przez
-skrypty, pliki generowane, CMake i kod przygotowujący host. Każdy dokument JSON
-ma `schemaVersion: 1` i należy do jednego obszaru:
+<a id="interfejsy-narzędziowe"></a>
+
+## Wspólna konfiguracja narzędzi
+
+W katalogu `config/tooling/` znajdują się wersjonowane dane konfiguracyjne używane przez skrypty, generatory, CMake i narzędzia przygotowujące komputer. Każdy plik JSON ma `schemaVersion: 1` i opisuje jeden obszar konfiguracji:
 
 | Plik danych | Znaczenie |
 |---|---|
@@ -49,14 +46,9 @@ ma `schemaVersion: 1` i należy do jednego obszaru:
 | `examples.json` | Definiuje rejestr aktywnych przykładów przechowywanych w repozytorium. |
 | `managed_components.json` | Definiuje zarządzane komponenty źródłowe/narzędziowe, metadane walidacji, domyślną kolejność oraz skrypty startowe zgodności. |
 
-Kod Pythona wczytuje te dokumenty przez `scripts/tooling_contract.py`.
-Nazwane ścieżki artefaktów rozwiązuje `scripts/repository_layout.py`.
-CMake nie parsuje JSON podczas zwykłej konfiguracji: generator płytek zapisuje
-`cmake/generated/jh_board_components_registry.cmake` na podstawie
-`board_components.json`.
+Skrypty Pythona odczytują tę konfigurację przez `scripts/tooling_contract.py`, a ścieżki nazwanych plików wynikowych ustalają przez `scripts/repository_layout.py`. Podczas zwykłej konfiguracji CMake nie odczytuje tych plików JSON: korzysta z `cmake/generated/jh_board_components_registry.cmake`, który generator płytek tworzy na podstawie `board_components.json`.
 
-Po zmianie danych komponentów płytki lub innego wejścia generatora, odśwież i
-sprawdź wszystkie wersjonowane pliki generowane za pomocą wspólnego skryptu:
+Po zmianie konfiguracji komponentów płytki lub innych danych wejściowych generatora odśwież pliki generowane, a następnie sprawdź ich aktualność:
 
 ```bash
 python3 scripts/sync_generated.py --write
@@ -69,14 +61,15 @@ dysku i celowo nie są zastępowane globalną stałą tekstową. Komunikaty
 skierowane do użytkownika oraz tokeny składniowe używane tylko raz również
 pozostają przy kodzie, który je obsługuje.
 
-## Orkiestratorzy na poziomie repozytorium
+<a id="orkiestratorzy-na-poziomie-repozytorium"></a>
 
-Te skrypty celowo znajdują się poza `scripts/`, ponieważ stanowią główne
-punkty wejścia procesów obejmujących całe repozytorium.
+## Główne skrypty repozytorium
+
+Poniższe skrypty znajdują się poza `scripts/`. Służą do konfiguracji środowiska i wykonywania operacji obejmujących całe repozytorium.
 
 ### `runmefirst.sh`
 
-Jednorazowa, idempotentna konfiguracja dla systemów zgodnych z Debian/Ubuntu. Skrypt:
+Przygotowuje środowisko na Debianie, Ubuntu i systemach zgodnych z tymi dystrybucjami. Można uruchomić go ponownie, aby uzyskać tę samą konfigurację. Skrypt:
 
 - usuwa drzewo `.build/` repozytorium przed konfiguracją;
 - instaluje kompilatory, CMake, Ninja, Python, Java, Valgrind, narzędzia Clang
@@ -95,14 +88,14 @@ Jednorazowa, idempotentna konfiguracja dla systemów zgodnych z Debian/Ubuntu. S
 
 Skrypt używa `sudo` dla pakietów systemowych, `/usr/local/bin`, reguły udev
 oraz zaakceptowanej przez użytkownika zmiany zapory sieciowej. Pobiera narzędzia i
-zależności, więc wymaga dostępu do sieci. Dedykowany pomocnik zapory
+zależności, więc wymaga dostępu do sieci. Dedykowany skrypt zapory
 sieciowej to `scripts/configure_ota_firewall.py`; obsługuje `--check`, jawne
 `--interface` / `--network`; zmiany wymagają potwierdzenia lub opcji `--yes`.
 
 ### `runmefirst.ps1`
 
 Idempotentna konfiguracja natywnego środowiska Windows. Przed wprowadzeniem
-zmian skrypt wyświetla pełny plan. Używa krótkich katalogów narzędzi i buildu
+zmian skrypt wyświetla pełny plan. Używa krótkich katalogów narzędzi i kompilacji
 w profilu użytkownika, tworzy środowisko Python 3.12 w wersji wskazanej przez
 repozytorium, ze sprawdzonym
 skrótem pakietu pyserial, synchronizuje komponenty źródłowe i odnajduje CMake,
@@ -113,7 +106,7 @@ przeciwnym razie instalowane jest zarządzane archiwum o zweryfikowanej
 autentyczności.
 
 Zapisuje zweryfikowany zestaw plików wykonywalnych, zarządzany Python oraz
-krótki katalog główny buildu w `.build/windows/host-environment.json` dla
+krótki katalog główny kompilacji w `.build/windows/host-environment.json` dla
 wspólnych narzędzi firmware. Tryb edytora dodatkowo
 zachowuje i aktualizuje standardowy `settings.json` użytkownika VS Code o
 specyficzne dla Windows ścieżki OpenOCD i GNU Arm dla Cortex-Debug; tworzy
@@ -134,7 +127,7 @@ wymagania hosta, polecenia, ścieżki i obecnie obsługiwany zakres.
 
 Skrypt diagnostyczny PowerShell 5.1 dla Windows - nie wprowadza zmian.
 `runmefirst.ps1` używa go do końcowego sprawdzenia wymagań hosta. Podaje
-wersję buildu i architekturę Windows, ustawienia długich ścieżek, Git, Python,
+wersję kompilacji i architekturę Windows, ustawienia długich ścieżek, Git, Python,
 CMake, Ninja, GNU Arm, GNU RISC-V, OpenOCD, picotool, rozszerzenia VS Code
 oraz opcjonalne sprawdzenia zakończeń linii w repozytorium. Niepowodzenie
 obowiązkowej kontroli daje niezerowy kod wyjścia. `-Json` zwraca
@@ -160,7 +153,7 @@ komponentów bazowych w kolejności zależności zadeklarowanej przez
 7. lwIP
 8. littlefs
 9. BTstack
-10. Driver Semtech SX126x
+10. Sterownik Semtech SX126x
 11. FreeRTOS-Kernel
 12. Pico SDK
 13. PMD CPD
@@ -176,7 +169,7 @@ konfiguracja jest dostępna przez `scripts/ensure_esp_idf.sh --enable` lub
 
 Tryb normalny doprowadza każdą zarządzaną instalację do wersji zapisanej w
 konfiguracji. `--verify-only` nie wykonuje pobierania, ekstrakcji, zastąpienia
-checkoutu ani buildu. Weryfikacja picotool obejmuje jego wymagane
+checkoutu ani kompilacji. Weryfikacja picotool obejmuje jego wymagane
 polecenia oraz możliwości USB/podpisywania włączone przez aktualnie dostępne
 zależności.
 Układ wersji zapisanych w repozytorium i katalogów opisano w dokumencie
@@ -191,7 +184,7 @@ uruchomienie odświeża więc deterministycznie generowane pliki, a w podsumowan
 ponownie wymienia zmienione artefakty. Opcja `--check-generated` przełącza ten
 krok w tryb tylko do odczytu. CI korzysta z tego samego skryptu w trybie
 sprawdzania, dzięki czemu lista generatorów jest utrzymywana w jednym miejscu.
-Opcje `-j N`, `--jobs N` i `-jN` określają liczbę równoległych zadań buildu.
+Opcje `-j N`, `--jobs N` i `-jN` określają liczbę równoległych zadań kompilacji.
 Kontrola obejmuje:
 
 1. weryfikacja wymaganych narzędzi i zarządzanych komponentów;
@@ -205,14 +198,14 @@ Kontrola obejmuje:
    prawdziwej bazy danych ARM;
 7. wykrywanie duplikatów PMD CPD w implementacjach C/C++ utrzymywanych w
    repozytorium oraz w skryptach Python;
-8. buildy STM32, RP2040/RP2350, natywnego FreeRTOS, profilu funkcji RP
-   oraz czyste buildy ESP32-S3/ESP-IDF z walidacją artefaktów;
-9. każdy zadeklarowany przykład RP, buildy natywnych testów parytetu
+8. kompilacje STM32, RP2040/RP2350, natywnego FreeRTOS, profilu funkcji RP
+   oraz czyste kompilacje ESP32-S3/ESP-IDF z walidacją artefaktów;
+9. każdy zadeklarowany przykład RP, kompilacje natywnych testów parytetu
    oraz przykłady STM32.
 
 Skrypt na starcie usuwa tylko swoje zarządzane drzewa `.build/gate`,
-`.build/examples` oraz `.build/tests`. Kończy działanie przy pierwszej
-nieudanej bramce.
+`.build/examples` oraz `.build/tests`. Kończy działanie po pierwszym
+nieudanym etapie kontroli.
 Etap 4 uruchamia każdy bezpośrednio zarejestrowany natywny test wykonywalny
 C/C++ oznaczony jako `memcheck`. `MEMCHECK_REQUIRED_TESTS` zawiera obowiązkowy,
 krytyczny podzbiór i zapobiega niezauważonemu pominięciu tych testów. Testy
@@ -220,7 +213,7 @@ skryptów w Pythonie, CMake i shellu są
 wykluczone: opakowanie ich interpretera nadrzędnego mierzyłoby to narzędzie
 hosta, a nie skompilowane krzyżowo firmware lub procesy potomne.
 Valgrind korzysta ze sprawiedliwego planowania wątków, dzięki
-czemu natywne testy planisty FreeRTOS POSIX są uwzględnione bez zawieszania
+czemu natywne testy schedulera FreeRTOS POSIX są uwzględnione bez zawieszania
 się. Postęp CTest jest wyświetlany bez filtrowania zarówno w terminalu,
 jak i do `.build/gate/logs/jh_memcheck.log`.
 
@@ -228,7 +221,7 @@ jak i do `.build/gate/logs/jh_memcheck.log`.
 
 Wspólny skrypt sanitizerów dla Linuksa, używany przez lokalny etap 3 i job CI
 `sanitizer-fuzz`. Wyszukuje dostępny toolchain Clang, z numerem wersji w nazwie
-lub bez niego, odtwarza build w `.build/`, włącza ASan, UBSan i libFuzzer oraz uruchamia
+lub bez niego, odtwarza konfigurację kompilacji w `.build/`, włącza ASan, UBSan i libFuzzer oraz uruchamia
 kompletny zestaw CTest hosta z wykrywaniem wycieków i natychmiastowym
 zatrzymaniem po wykryciu niezdefiniowanego zachowania, a następnie wykonuje
 krótkie testy fuzz dla parserów HTTP, WebSocket i multipart.
@@ -243,7 +236,7 @@ Windows sprawdza Python 3 wraz z pyserial i przekazuje argumenty CLI oraz kod
 wyjścia. Konfiguracja firmware domyślnie używa Ninja, przekazuje
 aktywny interpreter Python, eksportuje bazę poleceń kompilacji oraz ustala
 ścieżki picotool i toolchainu właściwe dla platformy. Natywne drzewa CMake na
-Windows używają krótkiego katalogu buildu przygotowanego podczas konfiguracji
+Windows używają krótkiego katalogu kompilacji przygotowanego podczas konfiguracji
 hosta, a artefakty końcowe zachowują ścieżki zapisane w manifeście.
 
 `debug-tools` podaje zweryfikowany OpenOCD, GDB obsługujący ARM,
@@ -258,12 +251,13 @@ wyłącznie w
 manifestu, wykrywania źródeł, targetu, płytki, cache i artefaktów opisuje
 [Proces obsługi projektu firmware](../../pl/FwProjectWorkflow.md).
 
-## Skrypty buildu
+<a id="skrypty-buildu"></a>
+
+## Kompilacja biblioteki i firmware
 
 ### `scripts/build_rp_native_lib.sh`
 
-Kompiluje JaszczurHAL przy użyciu oficjalnego Pico SDK. Obsługiwane targety
-to:
+Kompiluje JaszczurHAL przy użyciu oficjalnego Pico SDK dla następujących platform:
 
 | Target skryptu | Platforma Pico SDK | Domyślna płytka |
 |---|---|---|
@@ -271,12 +265,9 @@ to:
 | `rp2350-arm` | `rp2350-arm-s` | `pico2` |
 | `rp2350-riscv` | `rp2350-riscv` | `pico2` |
 
-Skrypt przygotowuje Pico SDK i picotool. Dodatkowo przygotowuje
-FreeRTOS-Kernel dla `--freertos` oraz łańcucha narzędzi RISC-V dla
-`rp2350-riscv`. Może skompilować przenośną aplikację przy pomocy
-`--example <directory>`.
+Przed kompilacją przygotowuje Pico SDK i picotool. Opcja `--freertos` dodatkowo przygotowuje FreeRTOS-Kernel, a platforma `rp2350-riscv` wymaga przygotowania narzędzi RISC-V. Argument `--example <directory>` pozwala także skompilować przenośną aplikację.
 
-Domyślnie każdy build sprawdza bibliotekę statyczną, artefakty ELF/BIN/UF2,
+Domyślnie każda kompilacja sprawdza bibliotekę statyczną, artefakty ELF/BIN/UF2,
 symbole punktu wejścia rdzenia oraz opcjonalny firmware przykładu.
 `--library-only` kompiluje wyłącznie target CMake `JaszczurHAL` i sprawdza, czy
 archiwum `libJaszczurHAL.a` nadaje się do linkowania. Domyślny katalog wyjściowy to
@@ -286,14 +277,11 @@ Ważne opcje to `--target`, `--platform`, `--board`, `--sdk-dir`,
 `--toolchain`, `--picotool-dir`, `--picotool-build-dir`, `--example`,
 `--freertos`, `--library-only`, `--project-config`, powtarzalne `-D`,
 `--output`, `--clean` oraz `--jobs`.
-Oba katalogi wyjścia buildu muszą pozostać poniżej `.build/`.
+Oba katalogi wyjścia kompilacji muszą pozostać poniżej `.build/`.
 
 ### `scripts/build_stm32_lib.sh`
 
-Kompiluje statyczną bibliotekę STM32G474 przy użyciu wbudowanego łańcucha
-narzędzi GNU Arm. Akceptuje konfigurację projektu, powtarzalne definicje HAL,
-niestandardowy plik toolchain CMake oraz opcjonalną ścieżkę do
-FreeRTOS-Kernel.
+Kompiluje bibliotekę statyczną dla STM32G474 przy użyciu narzędzi GNU Arm Embedded. Przyjmuje konfigurację projektu, wielokrotne definicje HAL, niestandardowy plik narzędziowy CMake oraz opcjonalną ścieżkę do FreeRTOS-Kernel.
 
 Domyślne wyjście:
 
@@ -308,14 +296,13 @@ Domyślne wyjście:
 
 ### `scripts/build_esp_idf.py`
 
-Skrypt obsługujący projekty dla targetów, których deskryptor płytki wybiera
-providera `esp-idf`. Udostępnia trzy akcje:
+Kompiluje, sprawdza i wgrywa projekty korzystające z ESP-IDF. Obsługuje konfiguracje, w których deskryptor płytki wybiera `esp-idf` jako dostawcę środowiska. Dostępne są trzy akcje:
 
 | Akcja | Zachowanie |
 |---|---|
 | `build` | Opcjonalnie usuwa wybrane wyjście przy `--clean`, generuje wejścia projektu/płytki/SDK, kompiluje przy użyciu ESP-IDF w wersji wskazanej przez repozytorium, zapisuje informacje o pochodzeniu toolchainu oraz waliduje artefakty. |
-| `artifacts` | Ponownie waliduje istniejący build i zapisuje deterministyczny manifest `jh_esp_idf_artifacts.json` bez wywoływania kompilatora. |
-| `flash` | Ponownie sprawdza istniejący build, wymaga `--port` i uruchamia flashowanie ESP-IDF z pełnym zestawem obrazów i przesunięć. Następnie sprawdza log flashowania i manifest. |
+| `artifacts` | Ponownie waliduje dotychczasowe wyniki kompilacji i zapisuje deterministyczny manifest `jh_esp_idf_artifacts.json` bez wywoływania kompilatora. |
+| `flash` | Ponownie sprawdza dotychczasowe wyniki kompilacji, wymaga `--port` i uruchamia flashowanie ESP-IDF z pełnym zestawem obrazów i przesunięć. Następnie sprawdza log flashowania i manifest. |
 
 `--project` jest wymagane. `--target` domyślnie to `esp32s3`; jego deskryptor
 targetu wybiera `waveshare-esp32-s3-zero`, gdy pominięto `--board`.
@@ -338,8 +325,8 @@ wartości generowanego `sdkconfig` oraz kontrolowany graf komponentów.
 Zapisuje rozwiązane listy źródeł i zależności do generowanego wejścia CMake,
 którego używa komponent ESP-IDF.
 
-Manifest wyjściowy używa wyłącznie ścieżek względnych do buildu.
-Zapisuje uporządkowane obrazy flash i skróty; artefakty buildu; dane
+Manifest wyjściowy używa wyłącznie ścieżek względnych do kompilacji.
+Zapisuje uporządkowane obrazy flash i skróty; artefakty kompilacji; dane
 targetu, płytki, funkcji, partycji i `sdkconfig`; wersję/commit ESP-IDF;
 rzeczywiste wersje kompilatora, CMake, Ninja, IDF Python i esptool; oraz
 skrót pliku `tools.json` właściwy dla wybranej wersji.
@@ -356,14 +343,14 @@ przez standardowy proces `jh-vscode` dla:
 - RP2350 RISC-V/Pico 2;
 - bare-metal i FreeRTOS na każdym targecie.
 
-Czyści wyłącznie dwa zarządzane drzewa buildu testów poniżej
+Czyści wyłącznie dwa zarządzane drzewa kompilacji testów poniżej
 `.build/hardware/`. `--jobs N` kontroluje równoległość CMake. Skrypt jest
-bramką buildu; uruchomienie odpowiadających mu weryfikatorów Python nadal
+bramką kompilacji; uruchomienie odpowiadających mu weryfikatorów Python nadal
 wymaga fizycznych płytek, a dla SDLogger - karty SD SPI.
 
 ### `scripts/lib/build_artifacts.sh`
 
-Wewnętrzny moduł shell dołączany przez wszystkie trzy pomocniki buildu.
+Wewnętrzny moduł powłoki dołączany przez wszystkie trzy skrypty kompilacji.
 Definiuje:
 
 - `jh_build_root <repo>` do normalizacji `<repo>/.build`;
@@ -373,9 +360,11 @@ Definiuje:
 Jest to biblioteka, nie samodzielne polecenie.
 
 Po pełne wymagania targetu, opcje, wyjścia oraz ręczne odpowiedniki CMake
-zobacz [Build biblioteki JaszczurHAL](../../pl/lib_compilation.md).
+zobacz [Kompilacja biblioteki JaszczurHAL](../../pl/lib_compilation.md).
 
-## Skrypty komponentów zarządzanych
+<a id="skrypty-komponentów-zarządzanych"></a>
+
+## Zarządzanie zależnościami
 
 `scripts/component_manager.py` zawiera wieloplatformową implementację operacji
 Git `clone`/`fetch` oraz sprawdzania ref, origin i submodułów. Obsługuje również
@@ -386,12 +375,14 @@ argumenty CLI do tego menedżera w Pythonie. Metadane walidacji komponentów,
 domyślna kolejność i przypisanie adapterów znajdują się w wersjonowanym modelu
 `config/tooling/managed_components.json`.
 
-Dedykowane pomocniki wczytują wersje zapisane w
+Dedykowane skrypty wczytują wersje zapisane w
 `third_party/*_version.conf`. Normalnie używaj
-`third_party/update_components.sh`; wywołuj pojedynczego pomocnika tylko dla
-konkretnego buildu lub do diagnostyki.
+`third_party/update_components.sh`; wywołuj pojedynczy skrypt tylko dla
+konkretnej kompilacji lub do diagnostyki.
 
-### Wspólne zasady dotyczące kopii roboczych
+<a id="wspólne-zasady-dotyczące-kopii-roboczych"></a>
+
+### Zasady pracy z kopiami źródeł
 
 Katalog zarządzany przez Git zawsze odpowiada dokładnie wskazanemu commitowi.
 Jeśli go brakuje, repozytorium jest klonowane ze wskazanego ref. Katalog z innym
@@ -405,7 +396,7 @@ odrzucana przez `--verify-only`.
 
 Ścieżki FreeRTOS, Pico SDK i picotool dostarczone przez użytkownika są
 traktowane jako zarządzane zewnętrznie. Są weryfikowane i nie są zastępowane
-przez ich dedykowane pomocniki.
+przez ich dedykowane skrypty.
 
 ### `scripts/ensure_bearssl.sh`
 
@@ -418,26 +409,26 @@ nagłówki/źródła i obsługuje `--verify-only`, `--repo-root` oraz `--dir`.
 
 Synchronizuje `third_party/cJSON` z `third_party/cjson_version.conf` i
 weryfikuje dokładny commit, licencję, źródła rdzenia oraz źródła narzędziowe.
-Opcje odzwierciedlają pomocnika BearSSL.
+Opcje są takie same jak w skrypcie BearSSL.
 
 ### `scripts/ensure_lodepng.sh`
 
 Synchronizuje `third_party/lodepng` z `third_party/lodepng_version.conf` i
 weryfikuje czysty, dokładny commit, licencję, nagłówek oraz implementację.
-Opcje odzwierciedlają pomocnika BearSSL.
+Opcje są takie same jak w skrypcie BearSSL.
 
 ### `scripts/ensure_jpeg.sh`
 
 Synchronizuje `third_party/TJpg_Decoder` z `third_party/jpeg_version.conf` i
 weryfikuje czysty, dokładny commit, licencję oraz rdzeń Tiny JPEG
-Decompressor. Opcje odzwierciedlają pomocnika BearSSL.
+Decompressor. Opcje są takie same jak w skrypcie BearSSL.
 
 ### `scripts/ensure_fatfs.sh`
 
 Synchronizuje `third_party/FatFs` z dokładnego commita repozytorium projektu
 `jaszczurtd/ff16`, zapisanego w
 `third_party/fatfs_version.conf`. Repozytorium zawiera niezmienione
-archiwum R0.16 autorstwa ChaN. Pomocnik weryfikuje pochodzenie repozytorium,
+archiwum R0.16 autorstwa ChaN. Skrypt weryfikuje pochodzenie repozytorium,
 dokładny commit, wymagane pliki źródłowe oraz licencyjne i obsługuje
 `--verify-only`, `--repo-root` oraz `--dir`.
 
@@ -445,36 +436,36 @@ dokładny commit, wymagane pliki źródłowe oraz licencyjne i obsługuje
 
 Synchronizuje `third_party/Unity` z `third_party/unity_version.conf` i
 weryfikuje czysty, dokładny commit, pochodzenie repozytorium, licencję oraz
-źródła rdzenia frameworka. Opcje odzwierciedlają pomocnika BearSSL.
+źródła rdzenia frameworka. Opcje są takie same jak w skrypcie BearSSL.
 
 ### `scripts/ensure_lwip.sh`
 
 Synchronizuje `third_party/lwip` z `third_party/lwip_version.conf`. Oprócz
 dokładnego commita i wymaganych ścieżek, weryfikuje makra
 major/minor/revision lwIP względem skonfigurowanej wersji. Opcje
-odzwierciedlają pomocnika BearSSL.
+są takie same jak w skrypcie BearSSL.
 
 ### `scripts/ensure_littlefs.sh`
 
 Synchronizuje `third_party/littlefs` z
 `third_party/littlefs_version.conf`. Weryfikuje dokładny commit, wymagane
 źródła rdzenia i licencję oraz skonfigurowaną główną i poboczną wersję API
-littlefs. Natywne buildy RP i STM32G474 kompilują ten zarządzany
-checkout bezpośrednio. Opcje odzwierciedlają pomocnika BearSSL.
+littlefs. Natywne kompilacje RP i STM32G474 kompilują ten zarządzany
+checkout bezpośrednio. Opcje są takie same jak w skrypcie BearSSL.
 
 ### `scripts/ensure_btstack.sh`
 
 Synchronizuje `third_party/BTstack` z `third_party/btstack_version.conf`
 przez `python3 scripts/component_manager.py component btstack`. Opcje
-odzwierciedlają pomocnika BearSSL.
+są takie same jak w skrypcie BearSSL.
 
 ### `scripts/ensure_sx126x.sh`
 
 Synchronizuje `third_party/sx126x_driver` z
 `third_party/sx126x_driver_version.conf` przez
 `python3 scripts/component_manager.py component sx126x`. Weryfikuje czysty,
-dokładny commit, licencję Clear BSD, zestaw źródeł bazowego drivera i
-wersji oraz nagłówki HAL/status/rejestry. Opcje odzwierciedlają pomocnika
+dokładny commit, licencję Clear BSD, zestaw źródeł bazowego sterownika i
+wersji oraz nagłówki HAL/status/rejestry. Opcje odzwierciedlają skrypt
 BearSSL.
 
 ### `scripts/ensure_freertos_kernel.sh`
@@ -492,7 +483,7 @@ który jest weryfikowany, ale nie zastępowany. Zarządzane submoduły oraz
 wersja jądra są również sprawdzane. Natywne, bezpośrednie integracje CMake
 RP i STM32G474 wywołują `scripts/component_manager.py` bezpośrednio; ten
 skrypt shell jest punktem wejścia zgodności używanym przez skrypty
-buildu biblioteki statycznej.
+kompilacji biblioteki statycznej.
 
 ### `scripts/ensure_pico_sdk.sh`
 
@@ -514,13 +505,13 @@ generowane oraz plik wykonywalny domyślnie trafiają do
 
 Jest kompilowany ponownie, gdy zmieni się checkout źródeł, wersja podawana
 przez picotool jest błędna, obsługa USB staje się dostępna lub SDK zapewnia
-obsługę podpisywania, której brakowało w starszym buildzie. `--rebuild`
-wymusza czysty, ponowny build. `--verify-only` sprawdza zarówno źródło, jak i
+obsługę podpisywania, której brakowało w starszej kompilacji. `--rebuild`
+wymusza czystą, ponowną kompilację. `--verify-only` sprawdza zarówno źródło, jak i
 plik wykonywalny bez ich zmiany.
 
-Pomocnik jest włączany przez `--enable`, `--build`, `--force`,
+Skrypt jest włączany przez `--enable`, `--build`, `--force`,
 `--verify-only`, `--rebuild` lub `JH_ENABLE_PICOTOOL`. Jego katalog
-buildu musi pozostać poniżej `.build/`.
+kompilacji musi pozostać poniżej `.build/`.
 
 ### `scripts/ensure_pmd.sh`
 
@@ -547,7 +538,9 @@ różnią się od konfiguracji zapisanej w repozytorium, tryb normalny zastępuj
 zweryfikowanej autentyczności są dostępne dla Linuksa x86-64 i AArch64 oraz
 natywnego Windows AMD64.
 
-## Skrypty przykładów i wsparcia VS Code
+<a id="skrypty-przykładów-i-wsparcia-vs-code"></a>
+
+## Przykłady i integracja z VS Code
 
 ### `scripts/examples_dispatcher.py`
 
@@ -576,7 +569,7 @@ liczników.
 Przykłady RISC-V WiFi pozostają wykluczone, dopóki RP2350 RISC-V + CYW43 jest
 nieobsługiwane.
 
-Macierz targetów, interfejs aplikacji i polecenia buildu opisano w dokumencie
+Macierz targetów, interfejs aplikacji i polecenia kompilacji opisano w dokumencie
 [Przykłady JaszczurHAL](../../../examples/README.pl.md).
 
 ### `scripts/sync_generated.py`
@@ -600,8 +593,8 @@ bezpośrednio. `--validate-only` sprawdza kompletny rejestr.
 `--list targets|boards` oraz `--default-board` udostępniają listy dostępnych
 pozycji,
 natomiast `--feature` i `--define` dodają sprawdzoną warstwę konfiguracji
-buildu używaną dla generowanego wyjścia. `--output-dir` i `--output-root`
-muszą pozostać wewnątrz drzewa buildu wskazanego przez kod wywołujący.
+kompilacji używaną dla generowanego wyjścia. `--output-dir` i `--output-root`
+muszą pozostać wewnątrz drzewa kompilacji wskazanego przez kod wywołujący.
 Definicje providera i backendu są zapisywane spójnie w
 `jh_board_resolved.json.boardCompileDefinitions`, generowanego
 `JH_BOARD_COMPILE_DEFINITIONS` oraz makr `jh_board_config.h` do
@@ -624,7 +617,7 @@ jest dostępna jako
 pierwsze pochodzą z `boards/`; projekcja CMake pochodzi z
 `config/tooling/board_components.json`. `--check-static` odrzuca brakujące
 lub nieaktualne pliki. CI uruchamia sprawdzenie niezależnie od generowania
-płytki dla każdego buildu.
+płytki dla każdej kompilacji.
 
 ### `scripts/generate_hal_features.py`
 
@@ -641,14 +634,7 @@ strażnikiem `#ifndef` oraz nieskalarne listy definicji CMake. Wykryte problemy
 domyślnie kończą polecenie niepowodzeniem; `--report-only` jest jawnym,
 ręcznym trybem diagnostycznym.
 
-`--effective` korzysta z mechanizmu `jh-vscode`, aby ustalić zadeklarowane
-targetów, profili targetu i wariantów bez odczytywania ignorowanego przez
-git, lokalnego stanu płytki. Sprawdza ograniczenia oraz aktywne żądania
-powtórzone po uwzględnieniu pierwszeństwa warstw. Standardowy plik
-`.vscode/jaszczurhal.project.json` tworzy zadeklarowane osie; niesparowany
-`hal_project_config.h` z co najmniej jednym żądaniem modułu HAL tworzy
-pojedynczą konfigurację bez osi. Samodzielne nagłówki bez żądanych modułów i
-manifesty referencyjne są analizowane tylko bez rozwiązywania konfiguracji.
+`--effective` korzysta z mechanizmu `jh-vscode`, aby ustalić konfiguracje zadeklarowanych platform, ich profili i wariantów. Nie odczytuje lokalnego stanu płytki ignorowanego przez Git. Sprawdza ograniczenia oraz powtórzone żądania modułów po uwzględnieniu pierwszeństwa warstw konfiguracji. Plik `.vscode/jaszczurhal.project.json` określa osie konfiguracji; niepowiązany z manifestem `hal_project_config.h`, który żąda co najmniej jednego modułu HAL, tworzy pojedynczą konfigurację bez osi. Samodzielne nagłówki bez żądań modułów i manifesty referencyjne są jedynie analizowane składniowo, bez rozwiązywania konfiguracji.
 
 `--resolution-output <path>` zapisuje deterministyczne `requestedFeatures`,
 `resolvedFeatures`, skróty pełnego zbioru zależności oraz pochodzenie żądań
@@ -685,11 +671,7 @@ kompilatora może skompilować i zlinkować te artefakty bez wywoływania Python
 
 ### `scripts/board_registry.py`
 
-Moduł importowany przez inne skrypty, który przekształca sprawdzone deskryptory
-`boards/` w model targetu i płytki używany przez `jh-vscode`, generatory
-projektów oraz mechanizm obsługi przykładów. Celowo nie zawiera niezależnego
-rejestru ani interfejsu wiersza poleceń; pliki deskryptorów pozostają
-miarodajnym źródłem danych.
+Udostępnia innym skryptom sprawdzone dane platform i płytek z `boards/`. Korzystają z niego `jh-vscode`, generatory projektów i narzędzia obsługujące przykłady. Moduł nie ma własnego rejestru ani interfejsu wiersza poleceń: źródłem danych pozostają deskryptory.
 
 ### `scripts/tooling_contract.py` oraz `scripts/repository_layout.py`
 
@@ -705,9 +687,9 @@ zdefiniowane w [Interfejsach narzędziowych](#interfejsy-narzędziowe).
 
 Moduł źródłowy używany do generowania rozszerzeń VS Code, opisu
 skrótów klawiszowych, definicji zadań, pola wyboru płytki oraz
-zarządzanych profili Cortex-Debug. Dostarcza również pomocników migracji i
+zarządzanych profili Cortex-Debug. Udostępnia również funkcje migracji i
 synchronizacji używanych przez `sync-board-picker`. Generowane projekty,
-samodzielny generator projektów oraz testy dryfu importują te funkcje
+samodzielny generator projektów oraz testy aktualności plików generowanych importują te funkcje
 zamiast utrzymywać osobne szablony JSON. Zachowanie widoczne dla użytkownika
 każdego generowanego zadania jest udokumentowane w
 [Generowanych zadaniach VS Code](../../../vscode/README.pl.md#generowane-zadania-vs-code).
@@ -715,7 +697,7 @@ każdego generowanego zadania jest udokumentowane w
 ### `vscode/tools/create-vscode-example.py`
 
 Generuje samodzielny projekt firmware obsługiwany przez wspólny mechanizm
-buildu, wraz z manifestem,
+kompilacji, wraz z manifestem,
 aplikacją blink, konfiguracją projektu HAL, konfiguracją uruchamiania,
 współdzielonymi poleceniami zadań dla Uniksa/Windows, rekomendacjami
 rozszerzeń oraz opisem skrótów klawiszowych. Generowane ustawienia VS
@@ -746,7 +728,7 @@ końcowe. Tworzy `settings.json.jaszczurhal.bak` przed zmianą istniejącego
 profilu i zastępuje plik ustawień atomowo. `--check` jest tylko do odczytu,
 `--yes` potwierdza nieinteraktywną aktualizację, a `--settings` obsługuje
 jawnie wybrany profil VS Code lub fixture testowy. `runmefirst.ps1` wywołuje
-tego pomocnika automatycznie poza trybem `-FirmwareOnly`.
+tego skrypt automatycznie poza trybem `-FirmwareOnly`.
 
 ### `scripts/configure_ota_firewall.py`
 
@@ -767,7 +749,7 @@ Windows Defender Firewall ograniczoną do tego profilu, aliasu interfejsu,
 podsieci źródłowej RFC1918, TCP oraz wybranego portu lokalnego. Inspekcja i
 planowanie działają bez podniesionych uprawnień; zastosowanie reguły wymaga,
 by wywołujący ponownie uruchomił polecenie w już podniesionym PowerShell.
-Pomocnik nigdy nie uruchamia procesu z podniesionymi uprawnieniami ani nie
+Skrypt nigdy nie uruchamia procesu z podniesionymi uprawnieniami ani nie
 zmienia profilu sieciowego.
 
 Tryb interaktywny wypisuje pełny zakres reguły i pyta przed wprowadzeniem
@@ -799,13 +781,13 @@ względem publicznego punktu wejścia.
 
 ### `scripts/rp_ota_artifacts.py`
 
-Wewnętrzny pomocnik pakowania natywnego firmware RP używany przez CMake.
+Wewnętrzne narzędzie do pakowania natywnego firmware RP używany przez CMake.
 `package` dodaje do pliku BIN aplikacji wersjonowany nagłówek OTA JaszczurHAL z
 targetem, przesunięciem ładowania, generacją, wersją i skrótem SHA-256 danych.
 Pole HMAC pozostaje niepodpisane, dopóki akcja wgrywania VS Code nie
 zastosuje hasła projektu. `merge-uf2` łączy UF2 aplikatora rozruchu
 kopiującego do RAM z UF2 aplikacji, odrzucając konfliktujące bloki adresów i
-porządkując numerację bloków. Artefakty buildu pozostają w wyznaczonym
+porządkując numerację bloków. Artefakty kompilacji pozostają w wyznaczonym
 katalogu `.build/`. Zobacz
 [Natywny proces OTA](../../pl/OTAWorkflow.md), gdzie opisano pełny sposób pracy
 z tymi artefaktami.
@@ -816,20 +798,20 @@ Obsługuje bibliotekę statyczną z poziomu głównego katalogu repozytorium w V
 Code. Akcja `select` sprawdza pary target/płytka
 względem `boards/` i zapisuje aktywny profil w lokalnym stanie ignorowanym
 przez git. `build`, `refresh-intellisense`, `install`, `clean` oraz
-`config-dump` używają następnie tych samych ścieżek buildu i instalacji z
+`config-dump` używają następnie tych samych ścieżek kompilacji i instalacji z
 tego profilu.
 
-Buildy RP wywołują `build_rp_native_lib.sh --library-only`,
-buildy STM32G474 - `build_stm32_lib.sh`, a buildy mock
-wybierają główny target CMake `hal_mock`. Każdy build eksportuje
+Kompilacje RP wywołują `build_rp_native_lib.sh --library-only`,
+kompilacje STM32G474 - `build_stm32_lib.sh`, a kompilacje mock
+wybierają główny target CMake `hal_mock`. Każda kompilacja eksportuje
 `compile_commands.json`; akcje IntelliSense zapisują lokalny
 `.vscode/c_cpp_properties.json` bez zmiany wersjonowanych ustawień. Clean usuwa
-wyłącznie zarządzane drzewa buildu/instalacji aktywnego profilu.
+wyłącznie zarządzane drzewa kompilacji/instalacji aktywnego profilu.
 
 `sync-vscode` deterministycznie zapisuje wersjonowane zadania, ustawienia,
 rekomendacje rozszerzeń oraz opis skrótów klawiszowych katalogu
-głównego z rejestru płytek. Użyj `sync-vscode --check`, by odrzucić dryf bez
-zmiany plików.
+głównego z rejestru płytek. Użyj `sync-vscode --check`, aby wykryć nieaktualne pliki bez
+ich zmieniania.
 
 Projekty firmware są obsługiwane osobno przez
 `jh-vscode <action> --project <dir>`.
@@ -843,14 +825,11 @@ do `vscode_library_workspace.py refresh-intellisense`.
 
 ### `scripts/vscode_clear_build_artifacts.sh`
 
-Ręczny pomocnik pełnego czyszczenia. Usuwa całe drzewo `.build/`
-repozytorium i nic poza nim. Nie ma opcji. Usuwa to również zapisane w cache
-buildy targetów, przykłady, testy, dane IntelliSense oraz
-skompilowany plik wykonywalny picotool; ignorowane źródła komponentów pod
-`third_party/` pozostają bez zmian. Główne zadanie VS Code `Project: Clean`
-celowo używa zawężonej akcji dla przestrzeni roboczej biblioteki zamiast tego.
+Usuwa cały katalog `.build/` repozytorium i nic poza nim. Nie przyjmuje opcji. Usunięcie obejmuje wyniki kompilacji dla wszystkich platform, przykłady, testy, dane IntelliSense i skompilowany picotool; źródła komponentów w `third_party/` pozostają bez zmian. Zadanie VS Code `Project: Clean` celowo korzysta z węższego zakresu czyszczenia, właściwego dla aktywnego profilu biblioteki.
 
-## Skrypty analizy statycznej i bezpieczeństwa
+<a id="skrypty-analizy-statycznej-i-bezpieczeństwa"></a>
+
+## Analiza statyczna, dokumentacja i bezpieczeństwo
 
 ### `scripts/run_cpd.py`
 
@@ -858,7 +837,7 @@ Uruchamia zarządzany PMD Copy/Paste Detector dla źródeł C/C++ utrzymywanych 
 repozytorium oraz plików Pythona w
 `scripts/`. Każda grupa duplikatów C/C++ produkcyjnych, testowych lub
 przykładowych od 100 tokenów oraz każda grupa skryptów Python od 50 tokenów
-blokuje bramkę; nie ma listy bazowej ani akceptowanego długu. Implementacje
+powoduje niepowodzenie kontroli; nie ma listy bazowej ani akceptowanego długu. Implementacje
 generowane i dostarczone przez firmy trzecie są wykluczone. Raport podaje również udział
 zduplikowanych tokenów łącznie oraz dla zakresów mock, RP2040, STM32G474,
 wspólnego kodu, pozostałego kodu przenośnego oraz skryptów Pythona. Nakładające
@@ -869,7 +848,7 @@ raporty XML są zapisywane do żądanego katalogu wyjściowego poniżej
 ### `scripts/clang_tidy_files.py`
 
 Odczytuje plik CMake `compile_commands.json`, wybiera źródła JaszczurHAL, usuwa
-powtórzone wpisy buildu i
+powtórzone wpisy kompilacji i
 wypisuje zakotwiczone wyrażenia regularne plików dla `run-clang-tidy`.
 
 Wymagane opcje to `--build-dir` oraz `--profile host|stm32`.
@@ -878,15 +857,11 @@ przefiltrowaną, deterministyczną bazę danych. Dla wpisów STM32 skrypt ustawi
 w Clangu target `arm-none-eabi` oraz dodaje zgłaszane przez kompilator systemowe
 ścieżki nagłówków systemowych.
 
-Jest to wewnętrzny pomocnik bramki jakości wywoływany przez
-`runalltests.sh`, a nie ogólny formatter.
+Skrypt jest wewnętrznym narzędziem kontroli jakości wywoływanym przez `runalltests.sh`; nie służy do formatowania kodu.
 
 ### `scripts/check_documentation_links.py`
 
-Sprawdza znajdujące się w repozytorium cele i kotwice odnośników Markdown w
-utrzymywanej dokumentacji. Zestaw testów CTest hosta rejestruje go jako
-`test_documentation_links`, więc zwykłe lokalne bramki i bramki CI odrzucają
-uszkodzone linki dokumentacji.
+Sprawdza, czy odsyłacze Markdown w dokumentacji prowadzą do istniejących plików i kotwic w repozytorium. CTest rejestruje tę kontrolę jako `test_documentation_links`. Niepoprawny odsyłacz powoduje niepowodzenie lokalnej kontroli jakości i CI.
 
 Uruchom go bezpośrednio przy pomocy:
 
@@ -949,10 +924,13 @@ skanerów i ostrzega zamiast kończyć się niepowodzeniem wyłącznie z powodu
 braku dostępnego skanera. Wykryte podatności i błędy działania skanerów nadal
 powodują niepowodzenie polecenia.
 
-Inwentarz, SBOM, CI, triage i zasady aktualizacji komponentów opisano w
-[Łańcuchu dostaw bezpieczeństwa](../../pl/security_supply_chain.md).
+Wykaz komponentów, tworzenie SBOM, kontrole w CI oraz zasady oceny podatności
+i aktualizowania zależności opisano w rozdziale
+[Bezpieczeństwo zależności i narzędzi](../../pl/security_supply_chain.md).
 
-## Skrypt zasobów
+<a id="skrypt-zasobów"></a>
+
+## Przygotowanie zasobów graficznych
 
 ### `scripts/image_to_base64.py`
 
@@ -972,13 +950,15 @@ Użycie PNG jest udokumentowane w
 Użycie JPEG jest udokumentowane w
 [API JPEG](19_JPEG.md#skrypt-zasobów-jpeg-do-base64).
 
-## Powiązana dokumentacja
+<a id="powiązana-dokumentacja"></a>
+
+## Powiązane instrukcje
 
 - [Kompilacja biblioteki JaszczurHAL](../../pl/lib_compilation.md) opisuje
   wymagania, opcje, wyjścia oraz ręczne odpowiedniki CMake dla biblioteki
-  statycznej oraz natywnego buildu RP.
+  statycznej oraz natywnej kompilacji RP.
 - [Proces obsługi projektu firmware](../../pl/FwProjectWorkflow.md) opisuje
-  manifesty firmware obsługiwane przez wspólny mechanizm buildu, wykrywanie źródeł, wybór
+  manifesty firmware obsługiwane przez wspólny mechanizm kompilacji, wykrywanie źródeł, wybór
   targetu i płytki, zasady przechowywania cache, wgrywanie oraz pliki generowane.
 - [Integracja JaszczurHAL z VS Code](../../../vscode/README.pl.md) opisuje
   interfejs wiersza poleceń `jh-vscode` oraz zadania VS Code.
@@ -996,10 +976,10 @@ Użycie JPEG jest udokumentowane w
   `jh-vscode clear-identity`.
 - [Przykłady JaszczurHAL](../../../examples/README.pl.md) dokumentują rejestr
   przykładów, pokrycie targetów, interfejs wejścia aplikacji, warianty oraz
-  polecenia buildu.
+  polecenia kompilacji.
 - [Zarządzane komponenty zewnętrzne](../../../third_party/README.pl.md)
   opisują wersje zapisane w repozytorium, ignorowane instalacje, działanie
   mechanizmu aktualizacji oraz zasady korzystania z zewnętrznego checkoutu.
-- [Bezpieczeństwo łańcucha dostaw](../../pl/security_supply_chain.md)
-  opisuje generowanie SBOM, skanery podatności, politykę CI oraz zasady
-  aktualizacji/triage.
+- [Bezpieczeństwo zależności i narzędzi](../../pl/security_supply_chain.md)
+  opisuje tworzenie SBOM, skanowanie podatności, kontrole w CI oraz zasady
+  oceny wykrytych problemów i aktualizowania komponentów.

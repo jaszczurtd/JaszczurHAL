@@ -1,29 +1,24 @@
-# Status API (`hal_status_t`)
+<a id="status-api-hal_status_t"></a>
+
+# Operation results and error handling (`hal_status_t`)
 
 *Also available in [Polish](../pl/01_status_api.md).*
 
 > **Part of [JaszczurHAL API Reference](../../en/JaszczurHAL_API.md)**
 
-Covers: `hal_status_t`, the status helper functions in
-[`hal_status.h`](../../../src/hal/core/hal_status.h), in-place status migration and
-status-returning `_ex` companions used by migrated modules.
+Use `hal_status_t` to check an operation's result and identify the cause of a failure. This chapter covers status codes, helpers in [`hal_status.h`](../../../src/hal/core/hal_status.h), and migration from older APIs to status-returning functions, including `_ex` variants.
 
-## Why it exists
+<a id="why-it-exists"></a>
 
-The historical HAL API reports outcomes as `bool` (success/failure), an
-`int`/`size_t` count, a handle (`NULL` on failure) or plain `void`. Those shapes
-tell you *that* something failed, not *why*. `hal_status_t` adds a single,
-uniform result type so callers can branch on the cause - invalid argument,
-uninitialised backend, bus error, not-found, overflow - without inventing a
-per-module error convention.
+## Why use status codes
 
-The current approach to this problem is **status-first**. The status-returning function owns validation, backend execution and error mapping.
+Older HAL functions return `bool`, an `int` or `size_t` count, a handle, or `void`. These interfaces do not provide a consistent way to identify failures and their causes. `hal_status_t` distinguishes invalid arguments, missing initialization, bus errors, missing objects, and overflow without requiring a separate error convention for each module.
+
+The status-returning function validates arguments, performs the operation, and maps failures to error codes. Compatibility wrappers call that function, not the other way around.
 
 ## Status codes
 
-`hal_status_t` values are positive on success and negative on failure, so
-`status == HAL_OK` checks success and `status < 0` (or `hal_status_is_error()`)
-checks generic failure.
+In this API, success values are positive and error values are negative. Use `status == HAL_OK` to check successful completion and `status < 0` or `hal_status_is_error()` to detect an error. The value `0` means `HAL_NONE`, not `HAL_OK`.
 
 | Code | Meaning |
 |---|---|
@@ -69,8 +64,7 @@ bool        hal_status_to_bool(hal_status_t status);      // legacy bool shape
 const char *hal_status_to_string(hal_status_t status);    // e.g. "HAL_EINVAL"
 ```
 
-`hal_status_to_string()` returns a stable symbolic name (or
-`"HAL_STATUS_UNKNOWN"`), which is handy for logging:
+For logging, `hal_status_to_string()` returns a stable symbolic name or `"HAL_STATUS_UNKNOWN"`:
 
 ```c
 hal_status_t st = hal_spi_init(0, rx, tx, sck);
@@ -79,52 +73,39 @@ if (hal_status_is_error(st)) {
 }
 ```
 
-## Status naming and migration convention
+<a id="status-naming-and-migration-convention"></a>
 
-New fallible APIs return `hal_status_t` directly. During migration, the
-historical return shape decides whether the original name can become the
-status API or needs an `_ex` companion:
+## Function names and backward compatibility
 
-- A fallible historical `void` function changes in place to `hal_status_t`.
-  Existing callers may keep ignoring the return value, and a redundant `_ex`
-  adapter is not retained. Examples include `hal_eeprom_commit()`,
-  `hal_display_init()`, `hal_dac_write()` and `hal_i2c_init()`.
+New functions that can fail return `hal_status_t`. When changing an existing function, its previous return type determines how compatibility is preserved:
 
-- A historical `bool` function remains a thin compatibility wrapper because
-  negative `hal_status_t` errors are truthy in C. Its adjacent `_ex` function
-  owns validation and execution.
+- A function that previously returned `void` can return `hal_status_t` under the same name. Existing callers may continue to ignore the result, so a separate `_ex` variant is unnecessary. Examples include `hal_eeprom_commit()`, `hal_display_init()`, `hal_dac_write()`, and `hal_i2c_init()`.
 
-- **Value-returning** helpers expose their result through an **output
-  parameter**, keeping the return value free for the status:
+- A function returning `bool` remains a compatibility wrapper. Replacing its result directly with a status would be unsafe because a negative error code evaluates to true in C. The corresponding `_ex` function validates arguments and performs the operation.
+
+- A function returning data moves that data to an **output parameter** and returns the status:
 
   ```c
   int  w = hal_display_get_width();              // legacy: 0 if unconfigured
   hal_status_t st = hal_display_get_width_ex(&w); // _ex: status + value in *w
   ```
 
-- **Handle-returning** initialisers produce the handle through an output
-  parameter and map a `NULL` result to a failure code:
+- A function creating a handle writes it to an output parameter. An error code replaces the `NULL` result previously used to indicate failure:
 
   ```c
   hal_rtc_t rtc = NULL;
   hal_status_t st = hal_rtc_init_ex(&cfg, &rtc);  // HAL_OK, or a precise failure status
   ```
 
-- **Collision fallback:** when `hal_foo_bar_ex()` already exists as a legacy
-  entry point (a different meaning of "ex"), the status variant inserts
-  `_status` before `_ex`. Current cases:
-  `hal_wifi_ping_status_ex()` (legacy int-returning `hal_wifi_ping_ex()`) and
-  `hal_display_init_ssd1306_i2c_status_ex()` (legacy bus-selecting
-  `hal_display_init_ssd1306_i2c_ex()`).
+- If `hal_foo_bar_ex()` already names a legacy function, the status variant inserts `_status` before `_ex`. Examples are `hal_wifi_ping_status_ex()` alongside the int-returning `hal_wifi_ping_ex()`, and `hal_display_init_ssd1306_i2c_status_ex()` alongside the bus-selecting `hal_display_init_ssd1306_i2c_ex()`.
 
-- **Pure state queries** that cannot fail (for example
-  `hal_littlefs_is_mounted()`, `hal_spi_write_dma_async_busy()`) report state,
-  not the outcome of a fallible operation, so they keep no `_ex` form.
+- State queries that cannot fail do not need an `_ex` variant. Examples include `hal_littlefs_is_mounted()` and `hal_spi_write_dma_async_busy()`.
 
-## Where status variants are documented
+<a id="where-status-variants-are-documented"></a>
 
-Status functions and their compatibility wrappers are documented **inline
-next to each other** in the module reference, with worked examples:
+## Finding individual function references
+
+Each module reference documents status-returning functions alongside their compatibility wrappers and examples:
 
 | Area | Section |
 |---|---|
@@ -136,14 +117,10 @@ next to each other** in the module reference, with worked examples:
 | Storage (`hal_eeprom`, `hal_kv`, `hal_littlefs`) | [Storage](14_storage.md) |
 | Networking (`hal_wifi`, `hal_tcp`, `hal_udp`, `hal_mqtt`, `hal_notify`, `hal_wireguard`) | [Network connectivity](15_connectivity.md) |
 
-## Migration guidance
+<a id="migration-guidance"></a>
 
-- New code should prefer the status-returning function: either the primary
-  function returning `hal_status_t` or its `_ex` companion when a legacy
-  value/handle/`bool` signature must remain available.
-- Treat `hal_status_is_error(st)` as the generic failure gate; branch on
-  specific codes only where you act on them.
-- A residual failure that the legacy `bool` cannot disambiguate is mapped to
-  the most representative code for that module (documented in each module's
-  header and section). Status paths own validation, backend execution and
-  error mapping; they must not be adapters that call a legacy wrapper.
+## Migrating to status-returning APIs
+
+- In new code, use the function returning `hal_status_t`: either the primary function or its `_ex` variant when a legacy data, handle, or `bool` interface must remain available.
+- Use `hal_status_is_error(st)` for general error detection. Check individual codes when the application needs to react differently to them.
+- Failures that a legacy `bool` function could not distinguish are assigned module-specific codes documented in the header and module reference. The status-returning function must validate arguments, perform the operation, and map the error; it must not simply call a legacy wrapper.

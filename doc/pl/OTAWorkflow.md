@@ -1,37 +1,32 @@
-# Natywna aktualizacja OTA
+<a id="natywna-aktualizacja-ota"></a>
+
+# Aktualizacja firmware przez OTA
 
 *Dostępne również [po angielsku](../en/OTAWorkflow.md).*
 
-Ten dokument opisuje całą procedurę natywnej aktualizacji OTA w JaszczurHAL:
-konfigurację projektu i firmware'u dla danego targetu, artefakty buildu,
-pierwszą instalację, integrację z VS Code, komunikację sieciową, reguły zapory
-hosta, potwierdzanie nowej wersji po próbnym rozruchu, automatyczny powrót do
-poprzedniej wersji, odzyskiwanie oraz granice bezpieczeństwa.
+Ten rozdział prowadzi przez konfigurację i użycie natywnego OTA w JaszczurHAL: od przygotowania firmware i pierwszej instalacji, przez wgrywanie z VS Code i ustawienie zapory, po potwierdzenie próbnego rozruchu, przywrócenie poprzedniej wersji i odzyskanie urządzenia. Osobno opisuje wymagania RP i ESP32-S3 oraz ograniczenia zabezpieczeń.
 
-Ogólny model projektu, w którym polecenia są kierowane do właściwego targetu,
-opisano w dokumencie [Praca z projektem firmware](FwProjectWorkflow.md).
-Publiczne API udokumentowano w sekcji
-[`hal_ota`](../api/pl/15_connectivity.md). Implementację referencyjną dla RP
-zawiera przykład [`examples/25_ota`](../../examples/25_ota/README.pl.md).
+Konfigurację projektu, wybór platformy i obsługę poleceń opisuje [Praca z projektem firmware](FwProjectWorkflow.md). Opis publicznych funkcji znajduje się w sekcji [`hal_ota`](../api/pl/15_connectivity.md), a przykładową integrację RP zawiera [`examples/25_ota`](../../examples/25_ota/README.pl.md).
 
-## Macierz wsparcia
+<a id="macierz-wsparcia"></a>
 
-| Target | Wgrywany obraz | Model aktywacji | Stan weryfikacji |
+## Obsługiwane platformy i zakres weryfikacji
+
+| Platforma | Wgrywany obraz | Sposób aktywacji | Stan weryfikacji |
 |---|---|---|---|
-| `rp2040`, `rp2350-arm` | Podpisany kontener `.ota` JaszczurHAL | HAL zamienia zawartość slotu programu z zawartością slotu przejściowego, wykonuje rozruch próbny i w razie potrzeby przywraca poprzedni obraz | Zweryfikowane sprzętowo na Pico W, Pico 2 W oraz Pico+PIM730/RM2 |
-| `esp32s3` | Binarny obraz aplikacji ESP-IDF wybrany ze sprawdzonego manifestu buildu | Partycje aplikacji ESP-IDF `two-ota-large`, obraz oczekujący na weryfikację, potwierdzenie albo powrót do poprzedniego obrazu | Implementacja, kompilacja i linkowanie są kompletne; trwa weryfikacja sprzętowa i całego cyklu życia oraz testy negatywne mechanizmów bezpieczeństwa |
+| `rp2040`, `rp2350-arm` | Podpisany kontener `.ota` JaszczurHAL | HAL zamienia zawartość slotu programu i slotu przejściowego; uruchamia nowy obraz próbnie i w razie potrzeby przywraca poprzedni | Zweryfikowane sprzętowo na Pico W, Pico 2 W oraz Pico+PIM730/RM2 |
+| `esp32s3` | Obraz BIN aplikacji ESP-IDF wskazany w zweryfikowanym manifeście kompilacji | Partycje `two-ota-large` ESP-IDF; próbny rozruch obrazu oczekującego na weryfikację, potwierdzenie albo powrót do poprzedniego obrazu | Implementacja jest kompletna i przechodzi kompilację oraz linkowanie. Weryfikacja sprzętowa, pełnego cyklu aktualizacji i negatywnych scenariuszy bezpieczeństwa nie została jeszcze zakończona |
 
-Obie platformy korzystają z tego samego protokołu transportowego i publicznych
-funkcji zwrotnych. Kontener RP i obraz aplikacji ESP są jednak różnymi
-artefaktami i nie można ich wzajemnie konwertować.
+Obie platformy korzystają z tego samego protokołu transportowego i publicznych funkcji zwrotnych. Używają jednak różnych obrazów: kontener RP i plik BIN aplikacji ESP-IDF nie są zamienne ani wzajemnie konwertowane.
 
 <a id="shared-auth2-transport-authentication"></a>
 <a id="współdzielone-uwierzytelnianie-transportowe-auth2"></a>
 
-## Uwierzytelnianie transportu AUTH2 wspólne dla obu platform
+<a id="uwierzytelnianie-transportu-auth2-wspólne-dla-obu-platform"></a>
 
-Jeżeli skonfigurowano niepuste hasło, urządzenie i host przeprowadzają wymianę
-`AUTH2`. Każdy błąd kończy ją bez zaakceptowania połączenia:
+## Uwierzytelnianie transportu przez AUTH2
+
+Przy niepustym haśle urządzenie i host przeprowadzają wymianę `AUTH2`. Każdy błąd przerywa uwierzytelnianie, zamiast dopuścić połączenie:
 
 1. Host wysyła `0 <tcp-port> <image-size> <image-md5>` z jednego połączonego
    gniazda UDP. Urządzenie zapisuje adres IPv4 i port źródłowy tego gniazda.
@@ -67,13 +62,13 @@ starsze wyzwanie `AUTH` ani starsza odpowiedź `200` nie powodują przejścia do
 słabszego wariantu protokołu. Mechanizm wiązania punktu końcowego odrzuca
 również odpowiedź na wyzwanie wysłaną z innego adresu UDP lub portu źródłowego
 oraz połączenie zwrotne TCP z innego adresu. Nonce urządzenia pochodzi z
-kryptograficznie bezpiecznego generatora liczb losowych dostępnego na danym
-targecie; nonce klienta generuje CSPRNG systemu operacyjnego hosta. AUTH2
+kryptograficznie bezpiecznego generatora liczb losowych dostępnego na danej
+platformie; nonce klienta generuje CSPRNG systemu operacyjnego hosta. AUTH2
 uwierzytelnia zaproszenie oraz dowód znajomości hasła, lecz nie szyfruje
 pakietów służących do wykrywania urządzeń, metadanych ani firmware'u. Wartość MD5 zawarta w
 zaproszeniu wiąże je z obrazem dla zachowania zgodności protokołu
 transportowego, dlatego nadal jest potrzebna niezależna walidacja obrazu
-odpowiednia dla targetu.
+odpowiednia dla platformy.
 
 Pominięcie `hal_ota_set_password()` lub przekazanie pustego łańcucha sprawia,
 że urządzenie akceptuje zaproszenia bez AUTH2. Host zezwala na ten tryb
@@ -81,7 +76,7 @@ tylko wtedy, gdy `ota.allowEmptyPassword` jest jawnie ustawione na `true`;
 jest to świadome potwierdzenie decyzji operatora, a nie ustawienie urządzenia.
 Dowolny uczestnik sieci, który może dotrzeć do usługi UDP OTA, może wówczas
 rozpocząć transfer i dostarczyć obraz spełniający pozostałe warunki walidacji
-targetu. Używaj tego trybu wyłącznie w odizolowanych sieciach deweloperskich.
+danej platformy. Używaj tego trybu wyłącznie w odizolowanych sieciach deweloperskich.
 
 ## Procedura aktualizacji ESP32-S3
 
@@ -134,15 +129,7 @@ hal_ota_handle();
 hal_status_t confirm_status = hal_ota_confirm_boot_ex();
 ```
 
-`Project: Upload (OTA)` lub `jh-vscode upload-ota` uruchamia build produkcyjny
-i wymaga `HAL_ENABLE_OTA` w zestawie funkcji po rozwiązaniu zależności.
-Narzędzie sprawdza manifest artefaktów ESP-IDF, który można przenosić wraz z
-projektem, a rozmiar i SHA-256 pliku BIN aplikacji porównuje z odpowiednim
-wpisem obrazu flash. Do urządzenia wysyła same bajty obrazu aplikacji - nie
-podpisuje ich ani nie opakowuje w kontener `.ota` używany na RP. Wykrywanie
-urządzeń, stały adres `ota.host`, ustawienia `listenPort` i `passwordEnv` oraz
-reguły zapory korzystają ze wspólnej procedury po stronie hosta opisanej
-poniżej.
+Polecenia `Project: Upload (OTA)` i `jh-vscode upload-ota` wykonują kompilację produkcyjną. W wynikowym zestawie funkcji, po uwzględnieniu zależności, musi znajdować się `HAL_ENABLE_OTA`. Narzędzie sprawdza przenośny manifest artefaktów ESP-IDF oraz porównuje rozmiar i SHA-256 pliku BIN aplikacji z wpisem obrazu flash. Wysyła wyłącznie bajty aplikacji - nie podpisuje ich i nie tworzy kontenera `.ota` używanego na RP. Wykrywanie urządzeń, stały adres `ota.host`, ustawienia `listenPort` i `passwordEnv` oraz konfiguracja zapory działają według wspólnych zasad opisanych poniżej.
 
 Urządzenie zapisuje nieaktywną partycję aplikacji OTA za pomocą `esp_ota_*`,
 sprawdza sumę MD5 przesłanego obrazu i jego poprawność za pomocą mechanizmów
@@ -165,34 +152,18 @@ klucze oraz procedury odzyskiwania to osobne zabezpieczenia wymagane w
 produkcie. Podczas standardowego wgrywania i testów nie wolno programować
 nieodwracalnych bitów eFuse.
 
-Programowanie przez interfejs szeregowy lub JTAG na podstawie kompletnego,
-sprawdzonego manifestu pozostaje sposobem odzyskania urządzenia, gdy WiFi,
-nowa aplikacja lub metadane OTA są nieużywalne. Obecna implementacja OTA dla
-ESP32-S3 została sprawdzona tylko na poziomie kompilacji i linkowania.
-Weryfikacji sprzętowej nadal wymagają:
-rozruch próbny i jego potwierdzanie, powrót do poprzedniej wersji, przerwane
-transfery, nieprawidłowe obrazy, błędy uwierzytelniania i przesyłania oraz
-odzyskiwanie.
+Gdy WiFi, nowa aplikacja lub metadane OTA nie pozwalają uruchomić aktualizacji, urządzenie można odzyskać przez interfejs szeregowy albo JTAG, korzystając z kompletnego, zweryfikowanego manifestu. Implementację OTA dla ESP32-S3 sprawdzono dotąd wyłącznie przez kompilację i linkowanie. Testów na sprzęcie nadal wymagają próbny rozruch i jego potwierdzanie, przywracanie poprzedniej wersji, przerwane transfery, nieprawidłowe obrazy, błędy uwierzytelniania i transmisji oraz odzyskiwanie.
 
 ## Procedura aktualizacji RP
 
-Obsługa natywnego OTA na RP obejmuje oficjalne targety Pico SDK `rp2040` i
-`rp2350-arm`. Pełny przebieg aktualizacji przez WiFi sprawdzono na Pico W,
-Pico 2 W oraz zwykłym Pico z modułem PIM730/RM2, zarówno w buildach bare-metal,
-jak i FreeRTOS.
+Natywne OTA jest dostępne dla platform Pico SDK `rp2040` i `rp2350-arm`. Pełną aktualizację przez WiFi sprawdzono na Pico W, Pico 2 W i Pico z modułem PIM730/RM2 - zarówno bez systemu operacyjnego (bare-metal), jak i z FreeRTOS.
 
 Procedura obejmuje cztery odrębne etapy:
 
-1. Zbuduj aplikację z `HAL_ENABLE_OTA`. CMake tworzy dwa sloty na firmware,
-   obszar kontrolny OTA, niepodpisany kontener `.ota` oraz scalony plik UF2,
-   który zawiera program rozruchowy instalujący aktualizację i aplikację.
-2. Jednorazowo zainstaluj ten scalony plik UF2 przez BOOTSEL. Niezaprogramowana
-   płytka nie może otrzymać aktualizacji przez sieć.
-3. Wykryj działającą płytkę przez UDP albo podaj jej adres. Host podpisuje
-   kontener skonfigurowanym hasłem bezpośrednio przed wgraniem.
-4. Prześlij podpisany kontener do slotu przejściowego. Płytka wykonuje próbny
-   rozruch obrazu, a kod aplikacji potwierdza go dopiero po pomyślnym
-   zakończeniu testów startowych produktu.
+1. Skompiluj aplikację z `HAL_ENABLE_OTA`. CMake przygotuje dwa sloty firmware, obszar kontrolny OTA, niepodpisany kontener `.ota` i scalony plik UF2 z programem instalującym aktualizację oraz aplikacją.
+2. Zainstaluj scalony UF2 przez BOOTSEL. Jest to wymagane przy pierwszej instalacji; niezaprogramowana płytka nie przyjmie aktualizacji sieciowej.
+3. Wykryj uruchomioną płytkę przez UDP lub podaj jej adres. Bezpośrednio przed wgraniem host podpisze kontener skonfigurowanym hasłem.
+4. Prześlij podpisany kontener do slotu przejściowego. Płytka uruchomi nowy obraz próbnie. Aplikacja powinna potwierdzić rozruch dopiero po zakończeniu wszystkich testów startowych produktu.
 
 W scalonym pliku UF2 każdy niekońcowy sektor flash, w którym znajduje się choć
 część obrazu, zawiera również brakujące strony wypełnione zerami. Rozwiązanie
@@ -204,9 +175,7 @@ programem rozruchowym instalującym aktualizację a aplikacją może spowodować
 
 ## Manifest projektu dla RP
 
-Włącz OTA w `.vscode/jaszczurhal.project.json`, wpisz ścieżki do wygenerowanych
-artefaktów i zdefiniuj ustawienia wykrywania urządzeń oraz uwierzytelniania po
-stronie hosta:
+Włącz OTA w `.vscode/jaszczurhal.project.json`. Podaj ścieżki do plików wynikowych oraz ustawienia wykrywania urządzeń i uwierzytelniania używane przez hosta:
 
 ```json
 {
@@ -245,7 +214,7 @@ definicje projektu przy dodawaniu OTA, na przykład
 `"HAL_ENABLE_OTA;HAL_ENABLE_FREERTOS"`. `HAL_ENABLE_OTA` automatycznie
 włącza wymagane moduły WiFi, UDP, TCP, kryptografii i CRC.
 
-Metadane buildu mają następujący format:
+Metadane obrazu i ścieżki do plików wynikowych:
 
 | Ustawienie | Znaczenie |
 |---|---|
@@ -267,13 +236,11 @@ Ustawienia w obiekcie `ota` sterują działaniem narzędzia po stronie hosta:
 | `broadcast` | Adres docelowy pakietów służących do wykrywania urządzeń. Wartość domyślna to `255.255.255.255`. Na hostach z wieloma interfejsami często pewniej działa adres rozgłoszeniowy konkretnej podsieci, na przykład `192.168.2.255`, albo bezpośredni adres urządzenia. |
 | `host` | Stały adres IPv4 urządzenia lub nazwa hosta, którą można rozwiązać. Podczas wgrywania pozwala pominąć wykrywanie rozgłoszeniowe, a polecenie wykrywania kieruje zapytanie bezpośrednio do urządzenia. Ustawienie nadaje się do automatyzacji i sieci z routingiem. Opcja `--host` w wierszu poleceń zastępuje tę wartość przy pojedynczym wywołaniu. |
 
-Każdemu urządzeniu, które może być zasilane równocześnie z innymi, nadaj
-unikalną nazwę hosta. Wybór urządzenia uwzględnia również target aktywny w
-bieżącej konfiguracji. Jeśli wykryto więcej niż jedno pasujące urządzenie,
-wybierz je interaktywnie albo ustaw stały adres w `ota.host`; w procesie
-automatycznym wybór musi być jednoznaczny.
+Nadaj unikalne nazwy hosta urządzeniom, które mogą działać jednocześnie. Wykrywanie uwzględnia również platformę wybraną w konfiguracji projektu. Gdy pasuje kilka urządzeń, wybierz właściwe interaktywnie albo ustaw jego adres w `ota.host`. Automatyczne wgrywanie wymaga jednoznacznego wyboru.
 
-## Sekret i konfiguracja po stronie urządzenia RP
+<a id="sekret-i-konfiguracja-po-stronie-urządzenia-rp"></a>
+
+## Hasło i konfiguracja urządzenia RP
 
 To samo hasło musi być dostępne po obu stronach procedury:
 
@@ -335,14 +302,13 @@ code .
 Wartość `passwordEnv` to tylko nazwa zmiennej; nie wpisuj
 `"${TRACKER_OTA_PASSWORD}"` w manifeście.
 
-## Integracja firmware'u RP
+<a id="integracja-firmwareu-rp"></a>
 
-Przed uruchomieniem usługi OTA skonfiguruj nazwę hosta, port UDP, hasło i
-opcjonalne funkcje zwrotne. Uruchom usługę dopiero po zestawieniu połączenia
-sieciowego i często wywołuj `hal_ota_handle()`. Rozruch próbny potwierdź dopiero
-po pomyślnym przejściu wszystkich testów gotowości właściwych dla produktu.
+## Dodanie OTA do firmware RP
 
-Poniższy szkielet pokazuje pełny sposób sterowania usługą przez aplikację:
+Skonfiguruj nazwę hosta, port UDP, hasło i opcjonalne funkcje zwrotne przed uruchomieniem OTA. Uruchom usługę po uzyskaniu połączenia sieciowego, a następnie regularnie wywołuj `hal_ota_handle()`. Potwierdź próbny rozruch dopiero po zakończeniu wszystkich testów gotowości wymaganych przez produkt.
+
+Poniższy przykład pokazuje inicjalizację, bieżącą obsługę i potwierdzenie rozruchu:
 
 ```c
 #include <hal/core/hal_app.h>
@@ -411,13 +377,7 @@ void app_task0(void) {
 }
 ```
 
-Bezwarunkowe `true` w `application_startup_checks_passed()` służy tylko jako
-przykład. Gotowy produkt powinien sprawdzać każdy warunek wymagany
-do uznania nowego obrazu za bezpieczny: zgodność konfiguracji, zamontowanie
-wymaganej pamięci masowej, obecność wymaganego sprzętu, działanie usług
-sieciowych i wynik
-autotestów aplikacji. Zbyt wczesne potwierdzenie odbiera możliwość
-automatycznego przywrócenia poprzedniego obrazu po późniejszej awarii rozruchu.
+Stała wartość `true` zwracana przez `application_startup_checks_passed()` jest wyłącznie uproszczeniem przykładu. W produkcie sprawdź wszystkie wymagane warunki: zgodność konfiguracji, zamontowanie potrzebnej pamięci masowej, obecność sprzętu, gotowość usług sieciowych i wyniki autotestów aplikacji. Przedwczesne potwierdzenie rozruchu uniemożliwi automatyczne przywrócenie poprzedniego obrazu po późniejszym błędzie uruchamiania.
 
 Dodatkowe reguły API:
 
@@ -431,7 +391,7 @@ Dodatkowe reguły API:
 - `hal_ota_handle()` obsługuje sieć, wykrywanie urządzeń, uwierzytelnianie i
   transfer oraz wywołuje zarejestrowane funkcje zwrotne. Nie przestawaj go
   wywoływać, dopóki OTA jest włączone.
-- Jeśli nie uda się przydzielić mutexu używanego przez backend, usługa
+- Jeśli nie uda się przydzielić muteksu wymaganego przez implementację, usługa
   pozostaje zatrzymana:
   funkcje zwracające wartość logiczną zwracają `false`, funkcje zwracające
   status - `HAL_ENOMEM`, a `hal_ota_handle()` niczego nie robi.
@@ -461,24 +421,25 @@ testów regresyjnych używa 2048 słów stosu FreeRTOS, czyli 8 KiB na RP:
 Zmierz rzeczywiste maksymalne wykorzystanie stosu w gotowym produkcie zamiast
 zakładać, że ta wartość wystarczy w każdym zastosowaniu.
 
-## Artefakty buildu RP i pierwsza instalacja
+<a id="artefakty-buildu-rp-i-pierwsza-instalacja"></a>
 
-Przed pierwszym buildem sprawdź target wybrany po przetworzeniu konfiguracji,
-płytkę, ścieżki i ustawienia OTA:
+## Pliki wynikowe RP i pierwsza instalacja
+
+Przed pierwszą kompilacją sprawdź wybraną platformę, płytkę, ścieżki i ustawienia OTA po uwzględnieniu całej konfiguracji:
 
 ```bash
 ../libraries/JaszczurHAL/vscode/entry/jh-vscode \
   config-dump --project "$PWD"
 ```
 
-Zbuduj z katalogu projektu firmware'u:
+Uruchom kompilację z katalogu projektu firmware:
 
 ```bash
 ../libraries/JaszczurHAL/vscode/entry/jh-vscode \
   build --project "$PWD"
 ```
 
-Build natywny RP z włączonym OTA tworzy:
+Kompilacja RP z włączonym OTA tworzy następujące pliki:
 
 | Artefakt | Przeznaczenie |
 |---|---|
@@ -518,12 +479,7 @@ OTA, ale nie utrudnia odgadywania hasła. Przed oznaczeniem slotu przejściowego
 jako oczekującego urządzenie sprawdza zgodność targetu i układu pamięci,
 dozwolone zakresy, CRC nagłówka, HMAC oraz skrót danych obrazu.
 
-OTA rezerwuje obszar rozruchowy o rozmiarze 16 KiB, dwa równe sloty - programu
-i przejściowy - oraz cztery sektory kontrolne po 4 KiB. Dopiero za nimi może
-znajdować się końcowy obszar LittleFS/EEPROM. Dostępna przestrzeń aplikacji
-jest więc mniejsza niż w buildzie bez OTA. CMake wyznacza układ pamięci dla
-wybranego rozmiaru flash i zgłasza błąd, jeśli obszary się nakładają albo
-aplikacja się nie mieści.
+OTA rezerwuje 16 KiB na program rozruchowy, dwa równe sloty - programu i przejściowy - oraz cztery sektory kontrolne po 4 KiB. Dopiero za nimi może znajdować się końcowy obszar LittleFS/EEPROM. Aplikacja ma więc mniej miejsca niż w konfiguracji bez OTA. CMake oblicza układ dla wybranego rozmiaru flash i zgłasza błąd, gdy obszary się nakładają lub aplikacja nie mieści się w slocie.
 
 Dla niezaprogramowanej płytki:
 
@@ -569,16 +525,14 @@ Jeśli znasz adres urządzenia, możesz pominąć wykrywanie:
   upload-ota --project "$PWD" --host 192.168.2.200
 ```
 
-`upload-ota` zawsze najpierw wykonuje build. Następnie znajduje niepodpisany
+`upload-ota` zawsze najpierw kompiluje projekt. Następnie znajduje niepodpisany
 artefakt `.ota`, odczytuje hasło, tworzy `firmware.signed.ota`, uwierzytelnia
 zaproszenie, przesyła obraz, czeka na jego zaakceptowanie przez urządzenie i
 informuje o ponownym uruchomieniu urządzenia. Automatyczny wybór następuje
 tylko wtedy, gdy dokładnie jedno wykryte urządzenie pasuje do aktywnego targetu
 i skonfigurowanej nazwy hosta.
 
-Jeśli projekt zawiera konfiguracje dla kilku kombinacji targetu i płytki,
-najpierw wybierz właściwy profil albo jawnie podaj parametry, które mają
-zastąpić konfigurację:
+W projekcie z kilkoma platformami lub płytkami najpierw wybierz właściwy profil. Możesz też jawnie nadpisać wybór w poleceniu:
 
 ```bash
 ../libraries/JaszczurHAL/vscode/entry/jh-vscode \
@@ -608,7 +562,7 @@ wywołują `${config:jaszczurhal.vscodeEntry}`, dlatego ustawienie to w
 `.vscode/settings.json` musi wskazywać lokalny katalog źródłowy JaszczurHAL
 używany przez projekt.
 
-Zalecane skróty klawiszowe są następujące:
+Proponowane przypisania klawiszy:
 
 | Skrót | Zadanie |
 |---|---|
@@ -646,7 +600,7 @@ bibliotece JaszczurHAL, ze skrótami projektu firmware'u.
 
 ## Komunikacja sieciowa i zapora hosta dla RP
 
-W kanale danych OTA to urządzenie zestawia połączenie z hostem:
+W OTA połączenie do transferu danych inicjuje urządzenie, nie host:
 
 1. Host wysyła przez UDP pakiety służące do wykrywania urządzeń, zaproszenia i
    uwierzytelniania do skonfigurowanego portu OTA urządzenia, zwykle `8266`.
@@ -806,13 +760,11 @@ użyj `ota.host`, `--host` albo wpisz bezpośredni adres urządzenia w
 `ota.broadcast`. Pozwala to pominąć jedynie pakiety rozgłoszeniowe; zapora
 nadal musi zezwalać na połączenie zwrotne TCP.
 
-## Potwierdzanie rozruchu próbnego, przywracanie obrazu i odzyskiwanie na RP
+<a id="potwierdzanie-rozruchu-próbnego-przywracanie-obrazu-i-odzyskiwanie-na-rp"></a>
 
-Po udanym transferze program rozruchowy instalujący aktualizację zamienia
-miejscami zawartość slotu przejściowego i slotu programu, po czym uruchamia
-nowy obraz w stanie `HAL_OTA_BOOT_TRIAL`. Każdy niepotwierdzony rozruch
-zwiększa licznik prób. Po osiągnięciu zapisanego limitu program ponownie
-zamienia sloty, przywracając poprzedni obraz jako stabilny.
+## Próbny rozruch, przywracanie wersji i odzyskiwanie RP
+
+Po udanym transferze program instalujący aktualizację zamienia zawartość slotu przejściowego i slotu programu. Nowy obraz uruchamia się w stanie `HAL_OTA_BOOT_TRIAL`. Każdy rozruch bez potwierdzenia zwiększa licznik prób. Po osiągnięciu zapisanego limitu program ponownie zamienia sloty i przywraca poprzedni obraz jako stabilny.
 
 Wywołuj `hal_ota_confirm_boot_ex()` dopiero wtedy, gdy nowy obraz spełni
 wszystkie kryteria poprawnego uruchomienia. Wywołanie tej funkcji dla obrazu,
@@ -837,7 +789,9 @@ Zachowaj możliwość odzyskania urządzenia przez USB:
   uniwersalne zakresy kasowania dla produktu.
 - Fizyczny dostęp do BOOTSEL pozostaje poza granicą zaufania OTA.
 
-## Granica bezpieczeństwa RP
+<a id="granica-bezpieczeństwa-rp"></a>
+
+## Zabezpieczenia i ograniczenia OTA na RP
 
 W podpisanym kontenerze nagłówek z numerem wersji jest uwierzytelniany za pomocą
 HMAC-SHA256. Przed aktywacją sprawdzane są również SHA-256 danych obrazu i CRC
@@ -859,9 +813,11 @@ mechanizmów.
   produktu warstwę szyfrowanego transportu lub VPN.
 
 Aktualny opis właściwości bezpieczeństwa znajduje się w dokumencie
-[Bezpieczeństwo łańcucha dostaw](security_supply_chain.md#native-ota-security-boundary).
+[Bezpieczeństwo zależności i narzędzi](security_supply_chain.md#native-ota-security-boundary).
 
-## Lista kontrolna rozwiązywania problemów RP
+<a id="lista-kontrolna-rozwiązywania-problemów-rp"></a>
+
+## Rozwiązywanie problemów z OTA na RP
 
 Jeśli wykrywanie urządzeń lub wgrywanie zawiedzie, sprawdź kolejno:
 

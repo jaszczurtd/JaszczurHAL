@@ -1,7 +1,10 @@
-# 24 - Wyświetlacz e-paper SSD1681
+<a id="24---wyświetlacz-e-paper-ssd1681"></a>
 
-Ten przykład obsługuje monochromatyczny panel SSD1681 200 x 200 przez wspólny
-sterownik EPD korzystający z SPI/GPIO oraz niskopoziomowe API zapisu `hal_display`.
+# 24 - Obraz na wyświetlaczu e-paper SSD1681
+
+Przykład wyświetla monochromatyczny obraz na panelu SSD1681 o rozdzielczości
+200×200 pikseli. Przesyła dane obrazu przez API `hal_display`; sterownik
+korzysta z SPI oraz linii GPIO do sterowania panelem.
 
 | Sygnał | Rodzina RP | NUCLEO-G474RE | Złącze Nucleo |
 | --- | --- | --- | --- |
@@ -13,9 +16,8 @@ sterownik EPD korzystający z SPI/GPIO oraz niskopoziomowe API zapisu `hal_displ
 | RESET | GP21 | PA9 | pin 21 CN10 / D8 |
 | BUSY | GP22 | PA8 | pin 23 CN10 / D7 |
 
-Przykład celowo pozostawia profile przebiegów puste, więc kontroler używa
-przebiegu OTP z przyjętą przez driver domyślną temperaturą 25°C. W rozwiązaniu
-produkcyjnym
-należy dostarczyć profile LUT pełnego i częściowego odświeżania zalecane przez
-producenta panelu, jeśli wymaga tego moduł wyświetlacza lub jego zakres
-temperatur.
+Przykład nie dostarcza własnych tablic LUT określających sposób odświeżania.
+Kontroler korzysta z przebiegu zapisanego w pamięci OTP, a sterownik przyjmuje
+temperaturę 25°C. Nie jest to pomiar rzeczywistej temperatury panelu.
+Gdy wymaga tego moduł lub zakres temperatur pracy, dostarcz tablice LUT
+pełnego i częściowego odświeżania zgodne z zaleceniami producenta.

@@ -1,43 +1,49 @@
-# Zależności buildu, testy i stanowiska testowe sprzętu
+<a id="zależności-buildu-testy-i-stanowiska-testowe-sprzętu"></a>
+
+# Kompilacja, testy automatyczne i testy na sprzęcie
 
 *Dostępne również [po angielsku](../en/03_build_tests.md).*
 
 > **Część [Dokumentacji API JaszczurHAL](../../pl/JaszczurHAL_API.md)**
 
-## Zależności (build sprzętowy)
+Ten rozdział opisuje zależności potrzebne do kompilacji, uruchamianie testów na komputerze oraz procedury sprawdzania biblioteki na urządzeniach. Wynik kompilacji, test z użyciem mocka i test na fizycznym sprzęcie potwierdzają różne właściwości - nie należy traktować ich zamiennie.
+
+<a id="zależności-build-sprzętowy"></a>
+
+## Zależności przy kompilacji dla urządzenia
 
 | Moduł HAL | Zależność zewnętrzna |
 |---|---|
 | Model komponentowy ESP32-S3 | Wersja ESP-IDF wskazana przez repozytorium, z jednym generowanym grafem źródeł i zależności: podstawowy kod systemu i prostego PWM, opcjonalnie wybierane peryferia fazy 2 oraz natywna łączność i usługi fazy 3. |
-| `hal_gpio`, `hal_pwm`, `hal_adc`, `hal_system` | API `hardware_*` / `pico_*` Pico SDK w rodzinie RP; backend rejestrowy STM32G474; usługi GPIO, LEDC PWM, ADC i systemowe ESP-IDF dla ESP32-S3. `hal_system` używa też API zadań FreeRTOS w obsługiwanych buildach `HAL_ENABLE_FREERTOS`. |
-| `hal_usb` | Urządzenie TinyUSB zarządzane przez HAL na RP: deskryptory CDC, obsługa IRQ i timera w buildach bare-metal, zadanie robocze na rdzeniu 0 w buildach FreeRTOS oraz reset do trybu BOOTSEL. STM32G474 nie jest obecnie obsługiwany. Mock udostępnia deterministyczne bufory CDC i pozwala wykryć reset. |
+| `hal_gpio`, `hal_pwm`, `hal_adc`, `hal_system` | API `hardware_*` / `pico_*` Pico SDK w rodzinie RP; backend rejestrowy STM32G474; usługi GPIO, LEDC PWM, ADC i systemowe ESP-IDF dla ESP32-S3. `hal_system` używa też API zadań FreeRTOS w obsługiwanych konfiguracjach `HAL_ENABLE_FREERTOS`. |
+| `hal_usb` | Urządzenie TinyUSB zarządzane przez HAL na RP: deskryptory CDC, obsługa IRQ i timera w konfiguracjach bare-metal, zadanie robocze na rdzeniu 0 w konfiguracjach FreeRTOS oraz reset do trybu BOOTSEL. STM32G474 nie jest obecnie obsługiwany. Mock udostępnia deterministyczne bufory CDC i pozwala wykryć reset. |
 | `hal_serial` | Jedna niezależna od targetu implementacja portu szeregowego i debugowania oraz porty dołączane podczas linkowania: RP CDC `hal_usb`, VFS USB Serial/JTAG uruchamiany podczas startu ESP32-S3, debugowy USART2 lub stdout hosta na STM32G474 oraz przechwytywanie stdout i dane RX ustawiane przez testy w mocku. |
-| `hal_sync` | RP: `pico/mutex.h` z Pico SDK w buildach bare i semafory FreeRTOS w buildach RTOS. STM32G474: atomowa spinlock w buildach bare i muteksy FreeRTOS w buildach RTOS. ESP32-S3: muteksy FreeRTOS z ESP-IDF oraz sekcje krytyczne `portMUX_TYPE`. |
+| `hal_sync` | RP: `pico/mutex.h` z Pico SDK w konfiguracjach bare i semafory FreeRTOS w konfiguracjach RTOS. STM32G474: atomowa spinlock w konfiguracjach bare i muteksy FreeRTOS w konfiguracjach RTOS. ESP32-S3: muteksy FreeRTOS z ESP-IDF oraz sekcje krytyczne `portMUX_TYPE`. |
 | `hal_timer` | RP2040: API alarmów/czasu Pico SDK (`pico/time.h`); STM32G474: backend rejestrowy TIM6 + NVIC; ESP32-S3: domyślny GPTimer ESP-IDF oraz dedykowane pule. |
 | `hal_soft_timer` | wewnętrzne narzędzie `SmartTimers` |
 | `hal_pid_controller` | wewnętrzne narzędzie `pidController` |
-| `hal_can` | ogólna fasada CAN plus drivery CAN wybierane przez backend: MCP2515 (`hal/can/mcp2515/*`), MCP251XFD (`hal/can/mcp251xfd/*`) oraz natywny FDCAN STM32G474 (`impl/stm32g474/hal_can_stm32g474_fdcan.*`) |
+| `hal_can` | ogólna fasada CAN plus sterowniki CAN wybierane przez backend: MCP2515 (`hal/can/mcp2515/*`), MCP251XFD (`hal/can/mcp251xfd/*`) oraz natywny FDCAN STM32G474 (`impl/stm32g474/hal_can_stm32g474_fdcan.*`) |
 | `hal_display` | Współdzielony stos wyświetlacza (`hal/display/drivers/hal_display.cpp`, `jh_gfx.*`, `ili9341_driver.*`, `st77xx_driver.*`, `ssd1306_driver.*`) używany przez RP2040 i STM32G474; backendy targetowe dostarczają transport SPI/I2C/GPIO |
-| `hal_hd44780` | współdzielony driver znakowego LCD kompatybilnego z HD44780 (`hal/display/hd44780/hd44780.*`) nad HAL GPIO/timingiem systemowym |
-| `hal_dma_pwm_audio` | pomocnik DMA audio-PWM taktowany timerem, używany przez DACless na RP2040, STM32G474 i mocku |
+| `hal_hd44780` | współdzielony sterownik znakowego LCD kompatybilnego z HD44780 (`hal/display/hd44780/hd44780.*`) nad HAL GPIO/timingiem systemowym |
+| `hal_dma_pwm_audio` | obsługa transmisji DMA próbek PWM audio, taktowana timerem, używany przez DACless na RP2040, STM32G474 i mocku |
 | `hal_dacless` | współdzielony silnik audio-PWM DACless (`hal/audio/dacless/dacless.*`) nad HAL DMA/PWM-freq, ADC, timingiem i synchronizacją |
-| `hal_tsc2007` | współdzielony driver rezystancyjnego kontrolera dotyku TSC2007 (`hal/input/tsc2007/tsc2007.cpp`) nad HAL I2C/timingiem systemowym |
-| `hal_stmpe610` | współdzielony driver rezystancyjnego kontrolera dotyku STMPE610 (`hal/input/stmpe610/stmpe610.cpp`) nad HAL I2C lub HAL SPI/GPIO |
+| `hal_tsc2007` | współdzielony sterownik rezystancyjnego kontrolera dotyku TSC2007 (`hal/input/tsc2007/tsc2007.cpp`) nad HAL I2C/timingiem systemowym |
+| `hal_stmpe610` | współdzielony sterownik rezystancyjnego kontrolera dotyku STMPE610 (`hal/input/stmpe610/stmpe610.cpp`) nad HAL I2C lub HAL SPI/GPIO |
 | `hal_irsmall_decoder` | współdzielony dekoder odbiornika IR (`hal/input/irsmall_decoder/irsmall_decoder.cpp`) nad przerwaniami HAL GPIO i timingiem systemowym |
 | `hal_spi` | natywny `hardware/spi.h` Pico SDK dla RP2040; backend rejestrowy STM32G474; ESP-IDF SPI master na SPI2/SPI3 dla ESP32-S3. |
-| `hal_lora_radio` | Wzajemnie wykluczające się backendy rodzin układów: oficjalny driver Semtech SX126x w wersji wskazanej przez repozytorium, z adapterem HAL dla zwalidowanego SX1262 i eksperymentalnego SX1261, sprawdzonego wyłącznie programowo, albo własny backend rejestrowy HAL dla eksperymentalnych SX1276/SX1278, również sprawdzonych wyłącznie programowo. Oba kompilują się dla RP i STM32G474 i są deterministycznie testowane z użyciem mocka. |
+| `hal_lora_radio` | Wzajemnie wykluczające się backendy rodzin układów: oficjalny sterownik Semtech SX126x w wersji wskazanej przez repozytorium, z adapterem HAL dla zwalidowanego SX1262 i eksperymentalnego SX1261, sprawdzonego wyłącznie programowo, albo własny backend rejestrowy HAL dla eksperymentalnych SX1276/SX1278, również sprawdzonych wyłącznie programowo. Oba kompilują się dla RP i STM32G474 i są deterministycznie testowane z użyciem mocka. |
 | `hal_lora_link` | Własny protokół HAL nad jednym skonfigurowanym `hal_lora_radio`; CRC-32 jest wewnętrzne, ChaCha20-Poly1305 używa opcjonalnego modułu `hal_crypto`, i nie wprowadza się żadnej dodatkowej zależności zewnętrznej |
 | `hal_i2c` | natywny `hardware/i2c.h` Pico SDK dla RP2040; backend rejestrowy STM32G474; ESP-IDF I2C master na I2C0/I2C1 dla ESP32-S3. |
 | `hal_swserial` | natywny backend PIO/DMA Pico SDK na RP2040; współdzielony backend HAL GPIO/timing/sync na pozostałych targetach |
-| `hal_gps` | jedna przenośna fasada wybierająca `hal_uart` / `hal_swserial` podczas buildu, plus współdzielony wbudowany silnik NMEA |
+| `hal_gps` | jedna przenośna fasada wybierająca `hal_uart` / `hal_swserial` podczas kompilacji, plus współdzielony wbudowany silnik NMEA |
 | `hal_rgb_led` | współdzielony rdzeń NeoPixel (`hal/gpio/neopixel/jh_neopixel.*`) + implementacja transportu targetowego, w tym RMT na ESP32-S3 |
-| `hal_thermocouple` (MCP9600/MCP9601) | współdzielony driver (`hal/temperature/mcp9600/mcp9600_driver.*`) |
-| `hal_thermocouple` (MAX6675) | współdzielony driver (`hal/temperature/max6675/max6675_driver.*`) |
-| `hal_onewire` | współdzielony driver bit-bang (`hal/onewire/onewire_driver.*`) nad HAL GPIO/czasem |
+| `hal_thermocouple` (MCP9600/MCP9601) | współdzielony sterownik (`hal/temperature/mcp9600/mcp9600_driver.*`) |
+| `hal_thermocouple` (MAX6675) | współdzielony sterownik (`hal/temperature/max6675/max6675_driver.*`) |
+| `hal_onewire` | współdzielony sterownik bit-bang (`hal/onewire/onewire_driver.*`) nad HAL GPIO/czasem |
 | `hal_ds18b20` | współdzielony backend DS18B20 (`hal/temperature/ds18b20/hal_ds18b20.cpp`) nad współdzielonym OneWire |
-| `hal_external_adc` | współdzielony driver ADS1X15/ADS1115 (`hal/analog/ads1x15/ads1x15_driver.*`) |
-| `hal_pga2311` | współdzielony driver stereo-głośności PGA2311 (`hal/audio/pga2311/pga2311_driver.*`) nad HAL SPI/GPIO |
-| `hal_wifi` | driver CYW43/lwIP w wersji wskazanej przez repozytorium na RP i STM32G474 lub natywne WiFi ESP-IDF/`esp_netif`/lwIP na ESP32-S3 |
+| `hal_external_adc` | współdzielony sterownik ADS1X15/ADS1115 (`hal/analog/ads1x15/ads1x15_driver.*`) |
+| `hal_pga2311` | współdzielony sterownik stereo-głośności PGA2311 (`hal/audio/pga2311/pga2311_driver.*`) nad HAL SPI/GPIO |
+| `hal_wifi` | sterownik CYW43/lwIP w wersji wskazanej przez repozytorium na RP i STM32G474 lub natywne WiFi ESP-IDF/`esp_netif`/lwIP na ESP32-S3 |
 | `hal_littlefs` | jedna niezależna od targetu fasada i wspólny provider oparty na `third_party/littlefs` w wersji wskazanej przez repozytorium; RP i STM32G474 określają geometrię pamięci i udostępniają skoordynowane operacje bezpośredniego dostępu do wewnętrznego flash, a osobny test integracyjny hosta używa modelu flash w RAM |
 | `hal_udp` | wspólna implementacja bezpośredniego API UDP lwIP działająca na wybranym backendzie sieciowym CYW43 |
 | `hal_tls` | wbudowany BearSSL nad natywnym `hal_tcp`; opcjonalny adapter transportu BSD jest kompilowany tylko, gdy dodatkowo włączono `HAL_ENABLE_BSD_SOCKETS` |
@@ -46,13 +52,15 @@
 | `hal_mqtt` | wbudowany `PubSubClient` nad HAL TCP, z opcjonalnym transportem MQTTS przez BearSSL |
 | `hal_notify` | fasada wybierająca backend oraz Telegram korzystający ze współdzielonego klienta HTTP/HTTPS |
 | `hal_ota` | staging/aplikator RP z uwierzytelnionym transportem VS Code nad HAL UDP/TCP |
-| `hal_time` | Współdzielone pomocniki gregoriańskie/CET/CEST oraz interwałów, plus klient HAL UDP/NTP i integracja z zegarem targetu |
+| `hal_time` | Wspólne funkcje kalendarza gregoriańskiego, konwersji CET/CEST i interwałów oraz klient NTP korzystający z HAL UDP i zegara platformy |
 | `hal_kv` | wewnętrzne `hal_eeprom` + `hal_sync` |
 | `hal_sdlogger` | rdzeń FatFs R0.16 w wersji wskazanej przez repozytorium oraz współdzielona warstwa plikowa w `hal/storage/filesystem/` |
 | `tools` | API HAL |
-| `multicoreWatchdog` | wewnętrzne `SmartTimers` + mutex `hal_sync` |
+| `multicoreWatchdog` | wewnętrzne `SmartTimers` + muteks `hal_sync` |
 
-## Zależności (mock / build PC)
+<a id="zależności-mock--build-pc"></a>
+
+## Zależności testów na komputerze
 
 Wszystkie pliki `impl/.mock/` zależą tylko od standardowych nagłówków hosta,
 takich jak `<cstdio>`, `<cstring>`, `<mutex>`, `<queue>` i `<stdarg.h>`. Żadne
@@ -60,21 +68,19 @@ SDK wbudowane nie jest wymagane.
 
 ---
 
-## Mapa systemu testów i miarodajne źródła
+<a id="mapa-systemu-testów-i-miarodajne-źródła"></a>
+
+## Organizacja testów i ich konfiguracja
 
 | Warstwa testów | Źródło konfiguracji | Wykonanie | Punkt rozszerzenia |
 |---|---|---|---|
 | Testy jednostkowe hosta/mock | `tests/CMakeLists.txt`, `tests/test_*.cpp`, główny `CMakeLists.txt` | CMake plus CTest | Dodaj zestaw Unity i zarejestruj go przez `add_hal_test(...)`, lub zadeklaruj dedykowany plik wykonywalny dla dodatkowych źródeł. |
-| Testy hosta FreeRTOS POSIX | `tests/freertos_posix/`, `JH_ENABLE_FREERTOS_POSIX_TESTS` | CTest przez build hosta lub pełną kontrolę jakości | Dodaj target przez `add_hal_freertos_posix_test(...)`. |
+| Testy hosta FreeRTOS POSIX | `tests/freertos_posix/`, `JH_ENABLE_FREERTOS_POSIX_TESTS` | CTest w konfiguracji dla komputera lub pełną kontrolę jakości | Dodaj target przez `add_hal_freertos_posix_test(...)`. |
 | Kontrola jakości repozytorium | `runalltests.sh`, `.github/workflows/ci.yml` oraz dane narzędziowe opisane w `00_scripts.md` | `./runalltests.sh` | Rozszerz odpowiedni etap i jego ukierunkowane testy regresyjne; zapisuj generowane artefakty wyłącznie w `.build/`. |
-| Projekty sprawdzające build firmware | `tests/fixtures/<fixture>/.vscode/jaszczurhal.project.json` | `jh-vscode` lub właściwy skrypt produkcyjny | Rozszerz macierz targetów, płytek i wariantów w manifeście oraz test układu artefaktów. |
-| Fizyczne stanowiska sprzętowe | źródło, manifest i weryfikator w `tests/hardware/<fixture>/` | Build i wgranie przez `jh-vscode` lub właściwy skrypt produkcyjny, a następnie uruchomienie opisanego niżej weryfikatora | Dodaj firmware, jawną macierz sprzętową, mechanizm sprawdzający wynik na hoście, kryteria akceptacji i podsekcję w tym dokumencie. |
+| Projekty sprawdzające kompilację firmware | `tests/fixtures/<fixture>/.vscode/jaszczurhal.project.json` | `jh-vscode` lub właściwy skrypt produkcyjny | Rozszerz macierz targetów, płytek i wariantów w manifeście oraz test układu artefaktów. |
+| Fizyczne stanowiska sprzętowe | źródło, manifest i weryfikator w `tests/hardware/<fixture>/` | Kompilacja i wgranie przez `jh-vscode` lub właściwy skrypt produkcyjny, a następnie uruchomienie opisanego niżej weryfikatora | Dodaj firmware, jawną macierz sprzętową, mechanizm sprawdzający wynik na hoście, kryteria akceptacji i podsekcję w tym dokumencie. |
 
-Jeśli opis różni się od zachowania, rozstrzygające są powyższe pliki
-wykonywalne. README każdego stanowiska sprzętowego zawiera jedynie krótkie
-odnośniki ułatwiające odnalezienie dokumentacji. Pełne instrukcje operatora,
-okablowanie, wymagania i zapisane wyniki akceptacji znajdują się w sekcji
-[Stanowiska sprzętowe](#stanowiska-sprzętowe) poniżej.
+W razie rozbieżności między opisem a działaniem sprawdź wskazane pliki konfiguracji i programy testowe. Plik README przy każdym stanowisku zawiera krótki odsyłacz do dokumentacji. Pełne procedury, okablowanie, wymagania i zapisane wyniki znajdują się poniżej, w sekcji [Testy na fizycznych urządzeniach](#stanowiska-sprzętowe).
 
 ---
 
@@ -93,13 +99,17 @@ cmake --build .build/host
 ctest --test-dir .build/host --output-on-failure
 ```
 
-## Bramki jakości repozytorium
+<a id="bramki-jakości-repozytorium"></a>
 
-### Skrypty szybkiego startu
+## Kontrola jakości repozytorium
 
-Dwa skrypty ułatwiające pracę znajdują się w korzeniu repozytorium:
+<a id="skrypty-szybkiego-startu"></a>
 
-**`runmefirst.sh`** - jednorazowa konfiguracja toolchainu
+### Przygotowanie środowiska i uruchomienie kontroli
+
+W katalogu głównym repozytorium znajdują się dwa podstawowe skrypty:
+
+**`runmefirst.sh`** - przygotowanie środowiska i narzędzi
 ```bash
 ./runmefirst.sh
 ```
@@ -111,7 +121,7 @@ Przygotowuje lokalne środowisko:
   umożliwiające wgrywanie bez sudo i automatyczny reset BOOTSEL przez 1200 bps
 - proponuje trwałą regułę zapory TCP/8266, ograniczoną do sieci LAN, dla
   połączeń zwrotnych OTA;
-- przygotowuje katalogi buildu i początkową konfigurację CMake.
+- przygotowuje katalogi kompilacji i początkową konfigurację CMake.
 
 Uruchom go po sklonowaniu repozytorium oraz po zmianie środowiska.
 
@@ -139,18 +149,18 @@ Uruchamia dziewięć etapów kontroli jakości w następującej kolejności:
    którego używa CI
 4. Bezpieczeństwo pamięci (Valgrind memcheck na wszystkich natywnych plikach wykonywalnych testów C/C++)
 5. Analiza statyczna: cppcheck
-6. Analiza statyczna: clang-tidy (bazy danych buildu hosta + STM32 poniżej
+6. Analiza statyczna: clang-tidy (bazy danych kompilacji hosta + STM32 poniżej
    `.build/gate/`)
 7. Wykrywanie duplikatów PMD CPD w obrębie własnych implementacji C/C++ oraz
    skryptów Python
-8. Buildy targetów (STM32G474 oraz testy startu i rdzenia Pico SDK
+8. Kompilacje targetów (STM32G474 oraz testy startu i rdzenia Pico SDK
    RP2040/RP2350 ARM/RP2350 RISC-V, profile funkcjonalne RP, sześć
-   reprezentatywnych buildów ELF/BIN/UF2 `01_core_runtime`/`18_freertos_suite`
-   oraz jeden czysty build
+   reprezentatywnych kompilacji ELF/BIN/UF2 `01_core_runtime`/`18_freertos_suite`
+   oraz jeden czysta kompilacja
    `tests/fixtures/esp32s3_phase3` z ESP-IDF w wersji wskazanej przez
    repozytorium i zwalidowanym
    manifestem zawierającym wiele obrazów)
-9. Buildy przykładów (macierz `gateTargets` wyprowadzona ze wspólnego mechanizmu buildu
+9. Kompilacje przykładów (macierz `gateTargets` wyprowadzona ze wspólnego mechanizmu kompilacji
    plus dedykowane stanowiska target/runtime)
 
 Kończy działanie z niezerowym kodem przy pierwszym błędzie; logi rejestrują
@@ -160,39 +170,21 @@ zarejestrowany natywny plik wykonywalny testu C/C++ przez etykietę CTest
 `memcheck`. `MEMCHECK_REQUIRED_TESTS` w `runalltests.sh` to krytyczny podzbiór
 sprawdzany przed wykonaniem, ale nie jest pełną listą. Testy Python, CMake i
 sterowane powłoką nie są uruchamiane przez memcheck. Sprawiedliwe planowanie
-wątków Valgrind pozwala uruchamiać natywne testy planisty FreeRTOS POSIX bez
+wątków Valgrind pozwala uruchamiać natywne testy schedulera FreeRTOS POSIX bez
 ich zawieszania. Postęp CTest/Valgrind jest na bieżąco zapisywany w terminalu i w
 `.build/gate/logs/jh_memcheck.log`.
 
-Wszystkie dane wyjściowe buildu tworzone przez repozytorium trafiają do jednego
-ignorowanego katalogu `.build/`. Testy kompilatora CMake uruchamiane w trybie
-skryptowym używają `.build/tests/` i nie zapisują plików `.o` w
-katalogu głównym repozytorium.
+Pliki wynikowe kompilacji i testów trafiają do ignorowanego przez Git katalogu `.build/`. Testy kompilatora uruchamiane przez CMake w trybie skryptowym używają `.build/tests/`; nie zapisują plików `.o` w katalogu głównym repozytorium.
 
-Etap clang-tidy tworzy osobne bazy danych analizy dla każdego profilu, z jedną
-komendą buildu na plik źródłowy. Zapobiega to sytuacji, w której testy
-fasad, które kompilują ten sam wspólny driver z kilkoma zestawami modułów,
-uruchamiały analizator wielokrotnie. Zwykłe buildy targetów nadal kompilują
-każdy skonfigurowany wariant.
+Etap clang-tidy tworzy dla każdego profilu osobną bazę poleceń kompilacji, z jednym wpisem na plik źródłowy. Dzięki temu nie analizuje wielokrotnie tego samego wspólnego sterownika, nawet gdy testy API kompilują go z różnymi zestawami modułów. Zwykła kompilacja nadal obejmuje wszystkie skonfigurowane warianty.
 
-Etap CPD używa uwierzytelnionej dystrybucji PMD 7.26.0 zarządzanej w
-`third_party/pmd`. Skanuje pliki implementacji C/C++, a nie nagłówki, oraz
-pliki Pythona w `scripts/`, wykluczając źródła generowane i dostarczone przez
-firmy trzecie.
-Każda grupa duplikatów C/C++ od 100 tokenów blokuje w produkcji, testach i
-przykładach; każda grupa skryptów Python od 50 tokenów również blokuje. Żadna
-lista bazowa ani lista wyjątków nie może ukryć istniejącej grupy. Raport liczy
-łączny zakres zduplikowanych tokenów i podaje wynik globalnie oraz dla
-mocka, RP2040, STM32G474, kodu współdzielonego, pozostałego kodu przenośnego
-i skryptów Python. Raporty XML i deterministyczne listy plików są zapisywane
-poniżej `.build/gate/cpd/`. CPD `PASS` oznacza zero grup przy skonfigurowanych
-progach specyficznych dla danego języka.
+Etap CPD korzysta z dystrybucji PMD 7.26.0 o zweryfikowanej autentyczności, zarządzanej w `third_party/pmd`. Skanuje pliki implementacji C/C++ oraz skrypty Pythona w `scripts/`; pomija nagłówki, kod generowany i kod zewnętrzny. Kontrola kończy się niepowodzeniem po wykryciu choć jednej grupy duplikatów obejmującej co najmniej 100 tokenów C/C++ w kodzie produkcyjnym, testach lub przykładach albo co najmniej 50 tokenów Pythona. Nie ma listy wyjątków ani zaakceptowanych wcześniej duplikatów. Raport podaje łączny zakres powielonych tokenów oraz wyniki osobno dla mocka, RP2040, STM32G474, kodu wspólnego, pozostałego kodu przenośnego i skryptów Pythona. Raporty XML i uporządkowane listy plików trafiają do `.build/gate/cpd/`. Wynik CPD `PASS` oznacza brak grup duplikatów przy tych progach.
 
-Jest to **zalecana kontrola przed commitem** oraz **bramka testowa CI/CD**.
-Uruchamiaj przed wypchnięciem zmian, aby wcześnie wychwycić problemy między
-platformami.
+Uruchamiaj pełną kontrolę przed commitem i wysłaniem zmian do repozytorium. Ten sam zestaw kontroli służy do weryfikacji w CI/CD.
 
-### Natywna bramka CI dla Windows
+<a id="natywna-bramka-ci-dla-windows"></a>
+
+### Kontrola CI w natywnym środowisku Windows
 
 `.github/workflows/ci.yml` uruchamia dwie natywne bramki `windows-2025`, oprócz
 kompletnej bramki jakości dla Linuksa:
@@ -200,14 +192,14 @@ kompletnej bramki jakości dla Linuksa:
 - `windows-tooling` przygotowuje uwierzytelnione zarządzane środowisko,
   powtarza `runmefirst.ps1 -VerifyOnly`, uruchamia współdzielone testy
   runtime/platform/bootstrap i generatora, weryfikuje wybór źródeł zależności
-  CMake dla FreeRTOS na RP i STM32, wykonuje czysty produkcyjny build
+  CMake dla FreeRTOS na RP i STM32, wykonuje czysty produkcyjna kompilacja
   ESP32-S3/ESP-IDF i publikuje artefakty zawierające wiele obrazów, a następnie kompiluje
   i uruchamia przenośne testy hosta z MSVC `/W4 /permissive- /WX`;
 - `Windows firmware (<target>)` buduje wygenerowany projekt użytkownika ze
   ścieżki zawierającej spacje przez Ninja dla `rp2040`, `rp2350-arm`,
   `rp2350-riscv` i `stm32g474`, sprawdza artefakty targetu oraz bazę danych
-  buildu ze ścieżkami dostosowanymi do Windows, a następnie publikuje
-  reprezentatywne artefakty buildu.
+  kompilacji ze ścieżkami dostosowanymi do Windows, a następnie publikuje
+  reprezentatywne artefakty kompilacji.
 
 Inwentarz CTest dla Windows utrzymuje adapter BSD POSIX, integrację
 Bash/POSIX BearSSL oraz runtime FreeRTOS GCC/POSIX jako
@@ -217,10 +209,11 @@ Ford DPF Tracker mają osobne natywne procesy CI firmware dla Windows. Każdy z
 nich uruchamia właściwe dla danego projektu testy integracyjne, niezależnie od
 projektu testowego generowanego przez JaszczurHAL.
 
-## Stanowiska sprzętowe
+<a id="stanowiska-sprzętowe"></a>
 
-Powtarzalne testy fizycznych urządzeń używają tego samego mechanizmu VS Code
-co aplikacje i zapisują artefakty w `.build/hardware/`:
+## Testy na fizycznych urządzeniach
+
+Testy na urządzeniach korzystają z tych samych narzędzi VS Code co aplikacje użytkownika. Ich pliki wynikowe trafiają do `.build/hardware/`:
 
 | Stanowisko | Pokrycie |
 |---|---|
@@ -232,7 +225,7 @@ co aplikacje i zapisują artefakty w `.build/hardware/`:
 | `tests/hardware/bluetooth_stream` | Publiczny cykl życia BLE i uwierzytelniona bramka Stream w różnych krotkach target/board/runtime, w tym ponowne łączenie, watchdog, ciągły ruch, nasycenie i negatywne przypadki bezpieczeństwa. |
 | `tests/hardware/rp_usb_cdc_echo` | Natywne zgłaszanie interfejsu CDC TinyUSB, mechanizm ograniczania nadawcy (`backpressure`), ponowne łączenie i przepustowość |
 | `tests/hardware/rp_usb_multicore` | Równoległe zadania generujące dane CDC na obu rdzeniach RP, integralność i kompletność danych oraz przypisanie rekordów do właściwego producenta w trybach bare metal i FreeRTOS |
-| `tests/hardware/rp_freertos_smp` | Scheduler, oba rdzenie, mutex/opóźnienie, sterta i USB pod FreeRTOS SMP |
+| `tests/hardware/rp_freertos_smp` | Scheduler, oba rdzenie, muteks/opóźnienie, sterta i USB pod FreeRTOS SMP |
 | `tests/hardware/rp_flash_transaction` | Sekwencjonowanie koordynatora flash, ścieżki odrzucenia, kasowanie/programowanie i odzyskiwanie |
 | `tests/hardware/rp_kv_power_loss` | Odzyskiwanie dwóch banków KV po przerwaniu po kasowaniu, zapisie treści, weryfikacji i publikacji |
 | `tests/hardware/rp_storage` | Trwały zapis w EEPROM, formatowanie i ponowne montowanie LittleFS oraz montowanie po resecie |
@@ -242,11 +235,7 @@ co aplikacje i zapisują artefakty w `.build/hardware/`:
 | `tests/hardware/esp32s3_phase1` | Tożsamość targetu/płytki ESP32-S3 Fazy 1, generowana sygnatura linkowania, model układu/liczba rdzeni, fizyczny flash, zainicjalizowany Quad PSRAM oraz powtarzane bicie serca `app_task0()` FreeRTOS nad natywnym USB Serial/JTAG. |
 | `tests/hardware/esp32s3_phase2` | Sonda runtime Fazy 2 ESP32-S3 dla obu zadań aplikacji, system/sync, GPIO/IRQ, ADC, USB Serial/JTAG TX/RX, sprzętowy UART, skanowanie mastera I2C, ścieżka transferu mastera SPI, callbacki timera z dedykowanej puli oraz włączona konfiguracja stack-guard FreeRTOS. |
 
-Poniższe podsekcje zawierają pełne instrukcje obsługi każdego stanowiska
-fizycznego. Udany build firmware potwierdza wyłącznie poprawność programową,
-chyba że opis danego stanowiska wyraźnie stanowi inaczej. Do akceptacji
-sprzętowej potrzebny jest wynik weryfikatora hostowego albo kontroli wzrokowej
-oraz spełnienie zapisanych kryteriów PASS.
+Poniższe instrukcje opisują przygotowanie i obsługę każdego stanowiska. Udana kompilacja potwierdza zbudowanie firmware, nie jego poprawne działanie na urządzeniu. Akceptacja sprzętowa wymaga wykonania procedury, wyniku programu weryfikującego na komputerze lub wskazanej kontroli wzrokowej oraz spełnienia opisanych kryteriów PASS.
 
 ### Sprzętowy test USB CDC na RP
 
@@ -294,7 +283,9 @@ Użyj jawnego, stabilnego portu by-id, gdy podłączonych jest wiele
 kompatybilnych płytek. Skrypt celowo nie wybiera samodzielnie między dwoma
 zweryfikowanymi portami.
 
-#### Wstrzymanie i wznowienie w runtime na Linuksie
+<a id="wstrzymanie-i-wznowienie-w-runtime-na-linuksie"></a>
+
+#### Wstrzymanie i wznowienie podczas pracy na Linuksie
 
 Zamknij każdy proces trzymający port CDC. Ustaw `USB_DEVICE_SYSFS` na węzeł
 urządzenia USB, a nie węzeł jego interfejsu (na przykład
@@ -318,7 +309,9 @@ Oczekiwane stany to `suspended`, a następnie `active`. Uruchom ponownie
 `verify_cdc_echo.py` po wznowieniu, a następnie przywróć oryginalne wartości
 `autosuspend_delay_ms` i `control`.
 
-### Sprzętowy test USB wielordzeniowy na RP
+<a id="sprzętowy-test-usb-wielordzeniowy-na-rp"></a>
+
+### Test współbieżnej obsługi USB na RP
 
 `tests/hardware/rp_usb_multicore` uruchamia jednego producenta CDC na każdym
 rdzeniu RP. Obaj producenci zapisują 4096 niezależnie numerowanych rekordów z
@@ -342,19 +335,19 @@ python3 tests/hardware/rp_usb_multicore/verify_usb_multicore.py \
   --target rp2040 --board pico --runtime baremetal
 ```
 
-Dla Pico 2 wybierz `rp2350-arm` lub `rp2350-riscv`, użyj płytki buildu
+Dla Pico 2 wybierz `rp2350-arm` lub `rp2350-riscv`, użyj płytki kompilacji
 `pico2` i przekaż `--board pico2` do weryfikatora. Dodaj `--variant freertos`
-do komend buildu i wgrywania oraz użyj `--runtime freertos` dla przebiegu
+do komend kompilacji i wgrywania oraz użyj `--runtime freertos` dla przebiegu
 FreeRTOS SMP.
 
 Domyślne `--records 4096` weryfikatora musi zgadzać się z
-`JH_USB_MULTICORE_RECORDS` w buildu firmware.
+`JH_USB_MULTICORE_RECORDS` w kompilacji firmware.
 
 ### Sprzętowy test FreeRTOS SMP na RP
 
 `tests/hardware/rp_freertos_smp` sprawdza natywny kernel FreeRTOS w wersji
 wskazanej przez repozytorium na fizycznym Pico lub Pico 2. Obejmuje start
-planisty, przypisanie zadań
+schedulera, przypisanie zadań
 aplikacji na obu rdzeniach, działanie muteksu HAL między rdzeniami,
 raportowanie sterty FreeRTOS oraz natywny ruch USB CDC z opóźnionymi
 odczytami hosta.
@@ -407,13 +400,13 @@ vscode/entry/jh-vscode upload \
 ```
 
 Dla wariantu FreeRTOS SMP dodaj poniższy tymczasowy wpis cache do manifestu
-i uruchom te same komendy buildu/wgrywania:
+i uruchom te same komendy kompilacji/wgrywania:
 
 ```json
 "JH_EXTRA_DEFINES": "HAL_ENABLE_FREERTOS=1"
 ```
 
-Usuń wpis cache przed ponownym buildem wariantu bare-metal.
+Usuń wpis cache przed ponowną kompilacją wariantu bare-metal.
 
 Uruchom weryfikator:
 
@@ -459,7 +452,9 @@ python3 tests/hardware/rp_kv_power_loss/verify_kv_power_loss.py \
 Dla Pico 2 użyj `--target rp2350-arm --board pico2` i przekaż ten sam target
 weryfikatorowi. Fizyczne testy RP2040 oraz RP2350 ARM przeszły 2026-09-02.
 
-### Sprzętowy test natywnego magazynu danych na RP
+<a id="sprzętowy-test-natywnego-magazynu-danych-na-rp"></a>
+
+### Test zapisu danych w pamięci urządzenia na RP
 
 `tests/hardware/rp_storage` sprawdza natywne EEPROM i LittleFS na fizycznym
 sprzęcie RP2040/RP2350. Zapisuje trwale licznik uruchomień w EEPROM, formatuje
@@ -523,9 +518,9 @@ python3 tests/hardware/rp_sdlogger/verify_sdlogger.py \
   --target rp2040 --board pico --runtime baremetal
 ```
 
-Dla Pico 2 wybierz `rp2350-arm` lub `rp2350-riscv`, użyj płytki buildu
+Dla Pico 2 wybierz `rp2350-arm` lub `rp2350-riscv`, użyj płytki kompilacji
 `pico2` i przekaż `--board pico2` do weryfikatora. Dodaj `--variant freertos`
-do komend buildu i wgrywania oraz użyj `--runtime freertos` dla przebiegu
+do komend kompilacji i wgrywania oraz użyj `--runtime freertos` dla przebiegu
 FreeRTOS.
 
 Weryfikator jest powtarzalny bez formatowania karty. Jeśli istnieje stary
@@ -541,7 +536,7 @@ jawne potwierdzenie, drugą niepotwierdzoną próbę, automatyczne wycofanie
 zwiększa licznik rozruchów w dwubankowym `hal_kv` i montuje osobną partycję
 LittleFS, potwierdzając zachowanie obu użytkowników trwałego storage podczas
 zmian obszarów programu, stagingu i sterowania OTA. Obsługuje Pico W/RP2040
-oraz Pico 2 W/RP2350 ARM w buildach bare-metal i FreeRTOS, a także zwykłego
+oraz Pico 2 W/RP2350 ARM w konfiguracjach bare-metal i FreeRTOS, a także zwykłego
 Pico/RP2040 podłączonego do bezprzewodowego modułu PIM730/RM2.
 
 Skopiuj lokalny szablon sekretu i zastąp wszystkie wartości. Wynikowy
@@ -575,9 +570,9 @@ python3 tests/hardware/rp_ota/verify_ota.py \
 ```
 
 Użyj `--target rp2350-arm --board pico2w` dla Pico 2 W. Dodaj
-`--variant freertos` zarówno do buildu, jak i wgrywania, a następnie
+`--variant freertos` zarówno do kompilacji, jak i wgrywania, a następnie
 przekaż `--runtime freertos` do weryfikatora dla wariantu FreeRTOS. Stanowisko
-przydziela zadaniu aplikacji stos 8 KiB w buildach FreeRTOS, ponieważ
+przydziela zadaniu aplikacji stos 8 KiB w konfiguracjach FreeRTOS, ponieważ
 inicjalizacja CYW43 i obsługa OTA przekraczają ogólny domyślny rozmiar 2 KiB.
 
 Dla Pico+PIM730 podłącz moduł do zwykłego Pico w następujący sposób:
@@ -612,13 +607,13 @@ python3 tests/hardware/rp_ota/verify_ota.py \
 Dodaj `--status-only`, aby zweryfikować tożsamość płytki, gotowość sieci
 oraz automatyczną telemetrię zegara gSPI bez generowania ani przesyłania
 obrazów OTA. Ten tryb diagnostyczny nie wymaga hasła OTA ani artefaktów
-buildu.
+kompilacji.
 
 Użyj `--variant freertos`, `--runtime freertos` oraz katalogu artefaktów
 `.build/hardware/rp_ota/cmake/variants/freertos/rp2040/pico-rm2` dla
 przebiegu FreeRTOS.
 
-Gdy istnieje jednocześnie kilka buildów dla różnych kombinacji target/runtime, wskaż
+Gdy istnieje jednocześnie kilka kompilacji dla różnych kombinacji target/runtime, wskaż
 weryfikatorowi pasujące dane wyjściowe CMake zamiast ostatnio opublikowanego
 katalogu artefaktów:
 
@@ -667,14 +662,14 @@ zmieniania hosta:
 ```
 
 Zastosuj ten sam zakres z już podniesionego (elevated) PowerShell po usunięciu
-`--dry-run`. Pomocnik prosi o potwierdzenie, tworzy idempotentną regułę
+`--dry-run`. Skrypt prosi o potwierdzenie, tworzy idempotentną regułę
 Windows Defender Firewall ograniczoną do profilu `Private`, interfejsu,
 podsieci źródłowej i TCP/8266, i nigdy nie zmienia samego profilu sieci.
 Weryfikacja sprzętowa na Windows używa zarządzanego pliku wykonywalnego
 Pythona i akceptuje port COM, na przykład `--port COM3`.
 
 Jeśli sieć testowa różni się od sieci wybranej podczas wstępnej konfiguracji,
-uruchom ponownie pomocnika z jawnymi `--interface` i `--network`. Jeśli
+uruchom ponownie skrypt z jawnymi `--interface` i `--network`. Jeśli
 odkrywanie przez broadcast ograniczony (limited-broadcast) jest zablokowane,
 ale adres IP urządzenia jest znany, skieruj wykrywanie bezpośrednio pod ten
 adres:
@@ -705,7 +700,7 @@ odzyskiwania.
 ### Sprzętowy test Bluetooth - etap 1
 
 `tests/hardware/bluetooth_stage1` to wewnętrzny test integracji CYW43/BTstack,
-opracowany jeszcze przed publicznym API. Macierz buildu obejmuje STM32G474 Nucleo + PIM730,
+opracowany jeszcze przed publicznym API. Macierz kompilacji obejmuje STM32G474 Nucleo + PIM730,
 Raspberry Pi Pico W oraz RP2350 ARM Pico 2 W. Celowo nie włącza żadnego
 publicznego makra włączającego Bluetooth i nie może służyć jako
 przykład publicznego API aplikacji.
@@ -724,7 +719,7 @@ Następnie rozpoczyna rozgłaszanie z możliwością nawiązania połączenia po
 `JH BLE Stage 1` oraz udostępnia niewielką, statyczną charakterystykę GATT do
 odczytu i zapisu.
 
-Pomyślny build potwierdza tylko poprawność oprogramowania. Wyniki testu
+Udana kompilacja potwierdza zbudowanie firmware, nie jego działanie na urządzeniu. Wyniki testu
 sprzętowego muszą
 rejestrować wyjście `JHBT1`, zachowanie połączenia/zapisu, użycie pamięci
 ELF/map oraz dokładną płytkę/okablowanie testowane. Przebieg STM32
@@ -734,9 +729,9 @@ nadal jest połączony z `WL_ON`.
 Wariant `bluetooth` służy do właściwego testu, a `wifi-only` jest równoważnym
 punktem odniesienia dla pomiaru pamięci. Oba warianty należy mierzyć na
 podstawie plików ELF/map, przy tym samym układzie docelowym, tej samej płytce,
-wersji kompilatora i konfiguracji buildu.
+wersji kompilatora i konfiguracji kompilacji.
 
-Buildy programowe Etapu 1 zmierzone 2026-08-04 to:
+Kompilacje programowe Etapu 1 zmierzone 2026-08-04 to:
 
 | Target i wariant | Obciążenie FLASH | SRAM statyczne | Zarezerwowana sterta/stos |
 |---|---:|---:|---:|
@@ -1027,7 +1022,9 @@ Pliki ELF/map i lista symboli muszą również potwierdzać obecność HID Host
 kluczy połączeń, a także brak ATT, GATT, SM, RFCOMM, serwera SDP, HID Device i
 profili audio.
 
-### Bramka współistnienia BLE i gamepada Classic
+<a id="bramka-współistnienia-ble-i-gamepada-classic"></a>
+
+### Test współdziałania BLE i gamepada Classic
 
 Publiczny wariant `ble` przykładu 29 uruchamia pasywnego Observera BLE obok
 profilu Classic HID/gamepad na wspólnym hoście CYW43:
@@ -1050,7 +1047,9 @@ ponowne połączenie HID bez zatrzymywania BLE. `INFO` musi zachować obu
 użytkowników runtime radia i nie może zgłaszać błędów transportu HCI, alokacji
 ze stałych pul ani kolejek.
 
-### Bramka sprzętowa A2DP Sink i AVRCP Target
+<a id="bramka-sprzętowa-a2dp-sink-i-avrcp-target"></a>
+
+### Test sprzętowy A2DP Sink i AVRCP Target
 
 Przykład 30 służy do sprzętowego sprawdzania A2DP/AVRCP na Pico W i Pico 2 W:
 
@@ -1118,7 +1117,9 @@ po `REOPEN`.
 RP2350 RISC-V jest nieobsługiwane, ponieważ jego transport Bluetooth CYW43
 nie jest włączony.
 
-### Bramka sprzętowa JH BLE Stream v1
+<a id="bramka-sprzętowa-jh-ble-stream-v1"></a>
+
+### Test sprzętowy JH BLE Stream v1
 
 `tests/hardware/bluetooth_stream` sprawdza publiczny cykl życia BLE oraz
 uwierzytelniony strumień aplikacji na Raspberry Pi Pico W, Pico 2 W, RP2040
@@ -1127,7 +1128,9 @@ przez BLE jako `JH Stream HW`, wymaga stałego, testowego sekretu o długości
 256 bitów i odsyła uwierzytelnione ładunki. Skrypt `verify.py` pełni na
 Linuksie rolę urządzenia centralnego za pośrednictwem BlueZ.
 
-#### Macierz buildu
+<a id="macierz-buildu"></a>
+
+#### Warianty kompilacji
 
 Skompiluj i wgraj osobno każdą z ośmiu kombinacji układu docelowego, płytki i
 środowiska wykonawczego:
@@ -1160,14 +1163,14 @@ vscode/entry/jh-vscode build \
   --target stm32g474 --board nucleo-g474re-pim730
 ```
 
-Dołącz `--variant freertos` do każdej komendy buildu i wgrywania dla
+Dołącz `--variant freertos` do każdej komendy kompilacji i wgrywania dla
 obrazu FreeRTOS. Firmware testowy inicjalizuje BLE przy pierwszym wywołaniu
-`app_task0()`, już po uruchomieniu planisty FreeRTOS. Stos zadania 0 ma
+`app_task0()`, już po uruchomieniu schedulera FreeRTOS. Stos zadania 0 ma
 1024 słowa, ponieważ uwierzytelnione uzgadnianie połączenia i używane przez nie
 kryptograficzne
 zmienne tymczasowe przekraczają ogólny domyślny rozmiar stanowiska. Użyj tego
 samego jawnie wskazanego układu docelowego, płytki i wariantu podczas
-wgrywania. Pomyślny build potwierdza wyłącznie poprawność oprogramowania
+wgrywania. Udana kompilacja potwierdza zbudowanie firmware, nie jego działanie na urządzeniu
 i nie liczy się jako test sprzętowy.
 
 #### Warianty obciążeniowe STM32G474 PIM730 + ILI9341
@@ -1396,7 +1399,9 @@ losowego sekretu przypisanego do urządzenia, dostarczonego niezależnym kanałe
 
 <a id="sx1262-raw-lora-hardware-gate"></a>
 
-### Bramka sprzętowa surowego LoRa SX1262
+<a id="bramka-sprzętowa-surowego-lora-sx1262"></a>
+
+### Test sprzętowy surowego LoRa SX1262
 
 `tests/hardware/lora_sx1262` używa możliwego do zbudowania firmware'u
 [`27_lora_point_to_point`](../../../examples/27_lora_point_to_point/) oraz
@@ -1493,7 +1498,9 @@ modułu/anteny, dokładne okablowanie, wersję firmware, odległość, liczby
 pakietów, straty, zakres RSSI/SNR oraz JSON weryfikatora w prywatnym
 raporcie sprzętowym.
 
-### Bramka sprzętowa routera poleceń SX1262 przez LoRa
+<a id="bramka-sprzętowa-routera-poleceń-sx1262-przez-lora"></a>
+
+### Test sprzętowy routera poleceń SX1262 przez LoRa
 
 Warianty `link` i `link-responder` przykładu
 [`27_lora_point_to_point`](../../../examples/27_lora_point_to_point/) dołączają
@@ -1622,7 +1629,7 @@ najmniej jeden oraz `"status": "PASS"`.
 
 #### Zweryfikowany punkt odniesienia fazy 1
 
-Pełny test sprzętowy zakończył się czystym buildem ESP-IDF obejmującym 555
+Pełny test sprzętowy zakończył się czystą kompilacją ESP-IDF obejmującym 555
 kroków. Obraz aplikacji miał 150544 bajtów, a 86% partycji pozostało wolne.
 Podczas każdego z trzech pełnych wgrań zapisano bootloader, tabelę partycji i
 obraz aplikacji. Dane zgłoszone podczas działania odpowiadały ESP32-S3 z dwoma
@@ -1706,7 +1713,7 @@ zgłoszone jako pomyślny wynik podstawowego testu.
 
 Firmware testowy celowo nie wywołuje `hal_enter_bootloader()`: udane przejście
 do trybu pobierania resetuje MCU i wymaga osobnego testu ponownego połączenia
-oraz odzyskiwania. Projekt fazy 3 sprawdza obecność symbolu podczas buildu i
+oraz odzyskiwania. Projekt fazy 3 sprawdza obecność symbolu podczas kompilacji i
 linkowania, natomiast sam reset należy do kampanii sprzętowej fazy 3.5.
 
 #### Zarejestrowany stan fazy 2
@@ -1727,25 +1734,29 @@ sprzętowe testy wymuszające błędy stosu i inne usterki oraz odtwarzanie
 informacji o błędzie zachowanej po restarcie także pozostają częścią kampanii
 sprzętowej fazy 3.5.
 
-## Projekty do sprawdzania buildu i linkowania firmware'u
+<a id="projekty-do-sprawdzania-buildu-i-linkowania-firmwareu"></a>
 
-### Projekt sprawdzający build i linkowanie ESP32-S3
+## Projekty sprawdzające kompilację i linkowanie firmware
+
+<a id="projekt-sprawdzający-build-i-linkowanie-esp32-s3"></a>
+
+### Kompilacja i linkowanie projektu ESP32-S3
 
 | Projekt testowy | Zakres |
 |---|---|
-| `tests/fixtures/esp32s3_phase3` | Projekt ESP-IDF przeznaczony wyłącznie do sprawdzania buildu, wybierający każdy backend ESP32-S3 dostarczony w fazie 3. Sprawdza dobór funkcji, źródeł i zależności, build, linkowanie, generowanie partycji `two-ota-large` oraz publikowanie artefaktów. |
+| `tests/fixtures/esp32s3_phase3` | Projekt ESP-IDF przeznaczony wyłącznie do sprawdzania kompilacji, wybierający każdy backend ESP32-S3 dostarczony w fazie 3. Sprawdza dobór funkcji, źródeł i zależności, kompilację, linkowanie, generowanie partycji `two-ota-large` oraz publikowanie artefaktów. |
 
-Ten projekt jest kompilowany przez CI i lokalny etap kontroli jakości nr 8.
-Pomyślny build nie potwierdza działania WiFi, gniazd, TLS, usług, OTA ani
-WireGuard w czasie wykonywania, podobnie jak nowych peryferiów fazy 2. Te
-obszary wymagają osobnych testów sprzętowych, cyklu życia i negatywnych
-przypadków bezpieczeństwa.
+Ten projekt jest kompilowany przez CI i lokalny etap kontroli jakości nr 8. Udana kompilacja nie potwierdza działania WiFi, gniazd sieciowych, TLS, usług, OTA ani WireGuard podczas pracy urządzenia; nie zastępuje też testów nowych peryferiów fazy 2. Potrzebne są osobne testy sprzętowe, sprawdzenie inicjalizacji, pracy i zamykania modułów oraz testy odrzucania nieprawidłowych i nieuprawnionych operacji.
 
 ---
 
-## Architektura testów hosta
+<a id="architektura-testów-hosta"></a>
 
-### Jak to działa
+## Jak zbudowane są testy na komputerze
+
+<a id="jak-to-działa"></a>
+
+### Biblioteka testowa i zależności
 
 Konfiguracja CMake w katalogu głównym projektu kompiluje bibliotekę statyczną
 `hal_mock` z:
@@ -1754,7 +1765,7 @@ Konfiguracja CMake w katalogu głównym projektu kompiluje bibliotekę statyczn�
 - niezależnych od backendu źródeł HAL w `UTIL_SOURCES` (patrz
   `CMakeLists.txt`), w tym pozostałych współdzielonych adapterów statusu
   MQTT/WireGuard w `hal_network_status.cpp`, fasad HAL, warstw
-  kompatybilności, przenośnych driverów urządzeń i dołączonych bibliotek,
+  kompatybilności, przenośnych sterowników urządzeń i dołączonych bibliotek,
 - `src/utils/unity.c` (warstwa integracyjna Unity).
 
 Dokładną listę zawiera zbiór `UTIL_SOURCES` w `CMakeLists.txt`; jest on
@@ -1763,8 +1774,7 @@ miarodajnym źródłem danych.
 Każdy program testowy w `tests/` jest linkowany wyłącznie z `hal_mock`, bez
 nagłówków Pico SDK i bez dostępu do sprzętu.
 
-Zarządzany framework Unity 2.5.4 znajduje się w `third_party/Unity/src`.
-Śledzona integracja JaszczurHAL składa się z:
+Testy korzystają z Unity 2.5.4 w `third_party/Unity/src`. Wersjonowane pliki integracji z JaszczurHAL to:
 
 - `src/utils/unity.c`
 - `src/utils/unity.h`
@@ -1776,7 +1786,7 @@ Konfiguracja CMake dla hosta kompiluje warstwę `src/utils/unity.c` jako częś�
 dołączają `"utils/unity.h"` i używają lokalnego dla repozytorium
 `unity_config.h`. Uruchom `scripts/ensure_unity.sh` lub główny skrypt
 aktualizujący komponenty, aby odtworzyć wersję źródeł wskazaną przez
-repozytorium. Poza buildem
+repozytorium. Poza kompilacją
 testowym Unity pozostaje nieaktywne, chyba że jawnie włączono
 `HAL_ENABLE_UNITY`.
 
@@ -1841,9 +1851,9 @@ Prosta rejestracja CMake:
 add_hal_test(test_my_module)
 ```
 
-Oczekuje to `tests/test_my_module.cpp` i linkuje go z `hal_mock`.
+Ten zapis oczekuje pliku `tests/test_my_module.cpp` i tworzy program testowy linkowany z `hal_mock`.
 
-Gdy test wymaga dodatkowych plików implementacji, utwórz dedykowany target:
+Test wymagający dodatkowych plików implementacji zarejestruj jako osobny cel CMake:
 
 ```cmake
 add_executable(test_my_driver
@@ -1861,18 +1871,17 @@ cmake --build .build/host --target test_my_module
 ctest --test-dir .build/host -R test_my_module --output-on-failure
 ```
 
-### Przewodnik po zestawach testów
+<a id="przewodnik-po-zestawach-testów"></a>
 
-`tests/CMakeLists.txt` jest autorytatywnym spisem testów. Sprawdź zestaw
-zarejestrowany w bieżącym checkout za pomocą:
+### Zakres poszczególnych zestawów testów
+
+Pełny rejestr testów znajduje się w `tests/CMakeLists.txt`. Aby wyświetlić testy dostępne w bieżącej kopii repozytorium, uruchom:
 
 ```bash
 ctest --test-dir .build/host -N
 ```
 
-Poniższa tabela jest przewodnikiem pokrycia dla reprezentatywnych i
-zgrupowanych zestawów; celowo nie jest drugim wyczerpującym rejestrem
-testów.
+Tabela pokazuje zakres reprezentatywnych zestawów i grup testów. Nie zastępuje pełnego rejestru CMake.
 
 | Zestaw | Co obejmuje |
 |---|---|
@@ -1887,11 +1896,11 @@ testów.
 | `test_hal_rtc` | inicjalizacja, odczyt i ustawianie daty oraz czasu RTC, zgłaszanie wewnętrznego lub zewnętrznego źródła zegara, wybór providera innego niż I2C, pełna walidacja kalendarza gregoriańskiego, wartości graniczne lat 1970/2000/2099 i przepełnienie, flaga integralności, maska przerwań, flagi zdarzeń czyszczone przy odczycie, jednorazowe i zapamiętywane wybudzenie względne, konfiguracja CLKOUT, timera i alarmu, starsze zabezpieczenia przed nieprawidłowymi danymi oraz odwzorowanie statusu `_ex` |
 | `test_jh_rtc_i2c_provider` | wybór wspólnego providera PCF8563/DS3231, metadane, konwersja daty, czasu i zdarzeń, bezpieczne sterowanie CLKOUT układu DS3231, propagacja błędów I2C i odwzorowanie funkcji obsługiwanych przez backend na status z użyciem mocka HAL I2C |
 | `test_stm32_rtc_codec` | Kodowanie rejestrów BCD TR/DR i Alarmu A RTC STM32G474, odrzucanie kalendarza/zakresu, ograniczenia dzień-kontra-dzień tygodnia, preskalery LSE/LSI 1 Hz oraz zaokrąglanie/granice licznika wybudzenia |
-| `test_rtc_architecture` | jedna fasada RTC, wyraźny podział między providerem I2C i wewnętrznym, wspólna walidacja i blokowanie, drivery układów korzystające wyłącznie z HAL, wybór timera wybudzenia STM32G474 i alarmu AON RP oraz poprawny manifest źródeł |
+| `test_rtc_architecture` | jedna fasada RTC, wyraźny podział między providerem I2C i wewnętrznym, wspólna walidacja i blokowanie, sterowniki układów korzystające wyłącznie z HAL, wybór timera wybudzenia STM32G474 i alarmu AON RP oraz poprawny manifest źródeł |
 | `test_hal_power` / `test_hal_power_header_c` | obsługiwane funkcje zasilania, walidacja żądań, kolejność callbacków, wybudzenie RTC, monotoniczny upływ czasu, zachowanie mocka odpowiadające resetowi, czyszczenie i zgodność nagłówka C |
 | `test_power_architecture` | rozdzielenie odpowiedzialności RTC i zasilania, obecność backendu dla układu docelowego, odwzorowanie trybów STOP/Standby STM32, integracja AON RP, wygenerowana zależność funkcjonalna oraz poprawne źródła przykładu |
 | `test_jh_calendar` | walidacja gregoriańskich lat przestępnych, długości miesięcy i dni tygodnia, niemożliwe daty, początek epoki Uniksa, konwersja dnia przestępnego w obie strony, górna granica RTC i statusy przepełnienia 64-bitowego |
-| `test_calendar_architecture` | jedno wspólne źródło implementacji kalendarza, starsze adaptery czasu korzystające wyłącznie z HAL oraz wykrywanie algorytmów kalendarza powielonych lokalnie dla układu docelowego lub drivera, w tym kopii `hal_time_from_components()` |
+| `test_calendar_architecture` | jedno wspólne źródło implementacji kalendarza, starsze adaptery czasu korzystające wyłącznie z HAL oraz wykrywanie algorytmów kalendarza powielonych lokalnie dla układu docelowego lub sterownika, w tym kopii `hal_time_from_components()` |
 | `test_hal_eeprom` | zapis i odczyt bajtu oraz wartości typu `int`, flaga `commit` |
 | `test_hal_serial` | granice danych przesyłanych przewodowo i komunikatów portu szeregowego, wstrzyknięcie binarnych danych RX oraz operacje `available`/`read`, prefiksy debugowania zadania/ISR, akceptowane i odrzucane znaczniki czasu, konfiguracja i cykl życia ogranicznika szybkości oraz izolacja jego źródeł, strumieniowe formatowanie przekraczające `HAL_DEBUG_BUF_SIZE`, odroczone w ISR podsumowania bufora pierścieniowego i odrzuconych danych, działanie wyciszenia i `flush` |
 | `test_hal_serial_session` | cykl życia ramek HELLO/AUTH, deterministyczne i kolejne losowe wartości challenge, bezpieczne odrzucenie operacji przy braku entropii, czyszczenie wartości challenge, zgodność poleceń, obsługa nieznanej funkcji obsługującej, echo numeru sekwencji, odrzucanie uszkodzonych ramek i bezpieczna obsługa argumentów null |
@@ -1909,8 +1918,8 @@ testów.
 | `test_hal_lora_link` | ustawienia domyślne i cykl życia łącza, nieaktualne uchwyty, adresowana fragmentacja danych jawnych i AEAD, utrata i retransmisja ACK, ograniczony timeout wraz z maksymalną liczbą ponowień, pomijanie ponownie dostarczonych danych, integralność całej wiadomości, niepełne składanie fragmentów otrzymanych poza kolejnością, uszkodzone pakiety podczas oczekiwania na ACK, odzyskiwanie po rozpoczęciu od późniejszego fragmentu i szeregowanie równoczesnego wysyłania przez połączone radiostacje w mocku |
 | `test_lora_link_frame` | ścisłe, wersjonowane formaty ramek, pojemność danych jawnych i ich konwersja w obie strony, szyfrowanie uwierzytelnione, odrzucanie zmodyfikowanego nagłówka lub szyfrogramu, kodowanie ACK, obcinanie danych i granice wyjścia |
 | `test_hal_lora_link_header_c`, `test_hal_lora_link_header_cpp` | Samodzielna kompatybilność publicznego nagłówka łącza w C11 i C++17 |
-| `test_lora_link_plain_compile` | rygorystyczny build kodeka łącza i ramki bez opcjonalnej kryptografii, z ostrzeżeniami traktowanymi jako błędy |
-| `test_sx126x_adapter` | wykonywanie poleceń oficjalnego drivera we właściwej kolejności, wybór PA i OCP dla SX1261/SX1262, czyszczenie transakcji SPI, terminy BUSY, poziomy przełącznika RF, konfiguracja elektryczna, kalibracja pasma, timeout TX i odwzorowanie IRQ błędu CRC podczas RX |
+| `test_lora_link_plain_compile` | rygorystyczna kompilacja kodeka łącza i ramki bez opcjonalnej kryptografii, z ostrzeżeniami traktowanymi jako błędy |
+| `test_sx126x_adapter` | wykonywanie poleceń oficjalnego sterownika we właściwej kolejności, wybór PA i OCP dla SX1261/SX1262, czyszczenie transakcji SPI, terminy BUSY, poziomy przełącznika RF, konfiguracja elektryczna, kalibracja pasma, timeout TX i odwzorowanie IRQ błędu CRC podczas RX |
 | `test_hal_lora_sx127x` | walidacja deskryptora właściwego dla modelu SX1276/SX1278 oraz cykl życia wspólnej fasady, obsługiwane funkcje, granica kalibracji, TX, RX, CAD i stany zasilania |
 | `test_sx127x_adapter` | Transport rejestrów SX127x, sonda wersji, konfiguracja modemu/częstotliwości/PA, mapowanie IRQ/status, metadane FIFO, RSSI, CAD, timeout, anulowanie, błędy magistrali i zachowanie sen/wybudzenie TCXO |
 | `test_hal_pga2311` | Walidacja statusu/konfiguracji PGA2311, wyczerpanie puli, wstrzyknięte błędy SPI i ponowienie, zapisy ramek, konwersja dB/kod, zachowanie wyciszenia programowego/sprzętowego |
@@ -1927,7 +1936,7 @@ testów.
 | `test_simple_io_drivers` | wspólne sekwencje inicjalizacji MCP23017/PCA9654E/PCF8574/74HC595/MCP3221/MCP4725, zapis i odczyt pojedynczego pinu oraz całego portu, konfiguracja odwrócenia, podciągania i IRQ, a także pokrycie muteksu instancji |
 | `test_hd44780_driver` | wspólna inicjalizacja GPIO HD44780, ramkowanie poleceń 4- i 8-bitowych, przesunięcia wierszy kursora, zapisy CGRAM, operacje `print`/`write` i pokrycie muteksu instancji |
 | `test_hal_dma_pwm_audio` | cykl życia mocka DMA dla dźwięku PWM, wywoływanie callbacków, wstrzymywanie, wznawianie i interpolacja |
-| `test_dacless_driver` | normalizacja konfiguracji wspólnego drivera DACless, ponowne wypełnianie przez callback próbki lub bloku DMA oraz przez odpytywanie, bufor ADC, wyciszanie i przywracanie dźwięku, funkcje pomocnicze interpolacji i pokrycie muteksu |
+| `test_dacless_driver` | normalizacja konfiguracji wspólnego sterownika DACless, ponowne wypełnianie przez callback próbki lub bloku DMA oraz przez odpytywanie, bufor ADC, wyciszanie i przywracanie dźwięku, funkcje pomocnicze interpolacji i pokrycie muteksu |
 | `test_tsc2007_driver` | wspólny format bajtu poleceń TSC2007, dekodowanie 12-bitowej odpowiedzi, sekwencja odczytu dotyku, odrzucanie niestabilnych pomiarów, wybór magistrali i pokrycie muteksu instancji |
 | `test_stmpe610_driver` | wspólna sekwencja konfiguracji STMPE610, odczyt identyfikatora układu, transakcje I2C, SPI i rejestrowe, dekodowanie FIFO, programowa ścieżka bit-bang SPI i pokrycie muteksu instancji |
 | `test_ads1x15_driver` | wspólna konfiguracja rejestrów ADS1X15, odczyty wyników konwersji ADS1115/ADS1015, odwzorowanie wzmocnienia, trybu i szybkości danych, zapisy progu komparatora oraz przekazywanie częstotliwości zegara I2C |
@@ -1954,7 +1963,7 @@ testów.
 | `test_bsd_socket_headers_c` | przenośne deklaracje, stałe i struktury C dla nagłówków socket BSD; działa pod hostami zbliżonymi do GNU oraz MSVC |
 | `test_hal_tls` / `test_bearssl_provider` | publiczny cykl życia TLS, natywny transport HAL TCP, ograniczony postęp przetwarzania BearSSL i opcjonalne callbacki TLS korzystające z BSD |
 | Testy kompilacji TLS/BSD | potwierdzają, że TLS kompiluje się bez BSD, BSD kompiluje się bez TLS, a każda flaga włącza tylko wymagane przez nią moduły sieciowe |
-| `test_bsd_sockets_c_compile` | podstawowy test buildu i linkowania C dla nagłówków gniazd, `netdb.h`, interfejsów klienta i serwera TCP/UDP oraz funkcji `fcntl()`, `select()`, `getaddrinfo()` i `setsockopt()` |
+| `test_bsd_sockets_c_compile` | podstawowy test kompilacji i linkowania C dla nagłówków gniazd, `netdb.h`, interfejsów klienta i serwera TCP/UDP oraz funkcji `fcntl()`, `select()`, `getaddrinfo()` i `setsockopt()` |
 | `test_hal_wireguard` | walidacja parsera IPv4, ścieżki `begin`/`begin_advanced`/`kick` WireGuard przy danych wejściowych w postaci tablicy bajtów lub tekstu, raportowanie punktu końcowego aktywnego peera (`hal_wireguard_peer_up` + `hal_wireguard_peer_up_quick`), wyzwalanie uzgadniania przez `kick` oraz walidacja wejścia |
 | `test_hal_mqtt` | konfiguracja serwera i połączenia, przechwytywanie operacji `publish`/`subscribe`/`unsubscribe`, wywoływanie callbacku przez `hal_mqtt_loop` oraz odrzucanie nieprawidłowych danych wejściowych |
 | `test_hal_network_status` | Walidacja API statusu WiFi/DNS, TCP/UDP, MQTT i WireGuard między modułami, inicjalizacja wyjścia, wyczerpanie puli, mapowanie stanu i błędu |
@@ -1962,16 +1971,16 @@ testów.
 | `test_ota_protocol` | Ścisła gramatyka zaproszenia/AUTH2, normalizacja numeryczna i szesnastkowa, dokładna tożsamość punktu końcowego UDP, wiązanie pola transkryptu, porównanie tagu o stałym kształcie i współdzielony wektor HMAC-SHA256 hosta/urządzenia |
 | `test_ota_image` | Wersjonowany manifest OTA i redundantne kodowanie stanu rozruchu, walidacja CRC/HMAC, obsługa uszkodzeń, zawijanie sekwencji i wybór najnowszego rekordu |
 | `test_ota_swap_engine` | Wznawialna zamiana sektora program/staging przez każdą symulowaną granicę błędu przed/po mutacji, wycofanie odwrotnej zamiany i odrzucanie uszkodzonej fazy |
-| `test_rp_ota_artifacts` | Natywny pomocnik pakowania OTA RP, w tym wyrównanie sektora RP2040-E14, zachowanie rzeczywistej strony, renumeracja UF2 i odrzucanie nakładania się |
+| `test_rp_ota_artifacts` | Narzędzie do pakowania natywnych obrazów OTA dla RP, w tym wyrównanie sektora RP2040-E14, zachowanie rzeczywistej strony, renumeracja UF2 i odrzucanie nakładania się |
 | `test_hal_time` | wspólna funkcja ustawiająca i zwracany przez nią status, monotoniczny wzrost wartości 64-bitowej mimo zawinięcia licznika 32-bitowego, przywracanie czasu z RTC i utrwalanie czasu NTP, stan powodzenia lub błędu NTP, formatowanie strefy czasowej i czasu lokalnego, konwersja składników daty, CET/CEST, zakresy oraz wyodrębnianie minut |
 | `test_hal_kv` | CRUD u32/blob, usuwanie, pomijanie niezmienionych, GC, równoległe aktualizacje, bezpośrednia propagacja statusu EEPROM, błędy niezainicjalizowania/zakresu/pojemności i inicjalizacja wyjścia |
-| `test_hal_crypto` | Zachowanie pomocników Base64/MD5/jednorazowego i przyrostowego SHA-256/HMAC-SHA256/ChaCha20/ChaCha20-Poly1305, walidacja wejścia oraz regresyjne sprawdzenia odrzucania zawinięcia licznika ChaCha20 |
+| `test_hal_crypto` | Działanie funkcji Base64, MD5, jednorazowego i przyrostowego SHA-256, HMAC-SHA256, ChaCha20 i ChaCha20-Poly1305, walidacja wejścia oraz regresyjne sprawdzenia odrzucania zawinięcia licznika ChaCha20 |
 | `test_wireguard_crypto_shared` | wspólne prymitywy kryptograficzne WireGuard (`crypto_equal/zero`, BLAKE2s, X25519, ChaCha20, ChaCha20-Poly1305, w tym wektory RFC8439 IETF dla AEAD z oddzielnym tagiem) |
 | `test_hal_soft_timer` | pokrycie adaptera C: `create`/`begin`/`tick`/`abort`/`restart`, konfiguracja tabeli i funkcje pomocnicze `tick`, ścieżka callbacku `delay`/`idle`, walidacja nieprawidłowego wejścia (tabela `NULL` / `count==0`) |
 | `test_SmartTimers` | `tick`, wywołanie callbacku, `abort`, `restart` (zachowanie rdzenia używane przez `hal_soft_timer_*`) |
 | `test_pidController` | wyjście P, ograniczanie wyjścia, reset całkowania, wykrywanie stabilności (zachowanie rdzenia używane przez `hal_pid_controller_*`) |
 | `test_multicoreWatchdog` | wymaganie oznak aktywności obu rdzeni, reset zewnętrzny oraz bezpieczne pomijanie operacji przed inicjalizacją |
-| `test_tools` | pokrycie modułów tematycznych i zgodności przy użyciu mocków HAL, w tym aliasów debug, zwracających status helperów liczb/tekstu/ADC/NTC/pikseli, konwersji endian, odpornego na zawijanie czasu stanu losowego, starszych adapterów czasu i ograniczonego formatowania |
+| `test_tools` | pokrycie modułów tematycznych i zgodności przy użyciu mocków HAL, w tym aliasów debug, funkcji do obsługi liczb, tekstu, ADC, NTC i pikseli, zwracających kod statusu, konwersji endian, odpornego na zawijanie czasu stanu losowego, starszych adapterów czasu i ograniczonego formatowania |
 | `test_hal_critical_section` | zagnieżdżanie sekcji krytycznej i zachowanie przywracania stanu przerwań |
 | `test_hal_dac` | zgodność inicjalizacji DAC oraz zapisy surowych wartości i napięcia w miliwoltach zwracające status, walidacja kanału, zakresu i stanu niezainicjalizowania oraz raportowanie nieobsługiwanego układu docelowego |
 | `test_hal_digipot` | zachowanie init/set fasady MCP401x/MAX5395, walidacja zakresu i mapowanie statusu |
@@ -1997,13 +2006,13 @@ testów.
 | `test_ff16_memdisk` | zarządzana integracja FatFs R0.16 nad dyskiem w pamięci, montowanie i zachowanie I/O plików |
 | `test_stm32_pwm_clock` | testy obliczeń zegara timera PWM, preskalera i okresu STM32G474 |
 | `test_hal_onewire_driver` | wspólne zależności czasowe programowej komunikacji bit-bang OneWire, reset i wykrywanie obecności, wejście i wyjście bitów oraz bajtów, a także wyszukiwanie urządzeń |
-| `test_hal_config_storage_flags` | testy propagacji flag funkcji pamięci masowej i konfiguracji podczas buildu oraz w runtime |
+| `test_hal_config_storage_flags` | testy propagacji flag funkcji pamięci masowej i konfiguracji podczas kompilacji oraz w runtime |
 | `test_jpeg` | zarządzane dekodowanie TJpgDec, wymiary, konwersja RGB565 i nieprawidłowe wejście |
 | `test_lodepng` | kontrolowane kodowanie i dekodowanie LodePNG, zarządzanie pamięcią, konwersja oraz obsługa błędów |
 | `test_gps_nmea_parser` | ramkowanie i suma kontrolna NMEA, parsowanie pozycji, daty, czasu i prędkości oraz odzyskiwanie po nieprawidłowych danych wejściowych |
 | `test_stm32_hal_system` | zegar systemowy STM32G474, stan resetu i błędu oraz symulacja usługi systemowej backendu |
 | `test_stm32_hal_i2c_slave` | backend rejestrowy I2C-slave STM32G474, zdarzenia, callbacki i obsługa błędów |
-| `test_freertos_posix_runtime` | planista FreeRTOS POSIX na hoście, uruchamianie zadań, muteksy, opóźnienia i leniwe jednorazowe tworzenie zasobów, w tym granice wiadomości portu szeregowego i debugowania przy współbieżności |
+| `test_freertos_posix_runtime` | scheduler FreeRTOS POSIX na hoście, uruchamianie zadań, muteksy, opóźnienia i leniwe jednorazowe tworzenie zasobów, w tym granice wiadomości portu szeregowego i debugowania przy współbieżności |
 
 ### Dodawanie nowego zestawu testów
 
@@ -2015,7 +2024,9 @@ testów.
 3. Przekompiluj:
    `cmake --build .build/host && ctest --test-dir .build/host`.
 
-### Sterowanie czasem w mocku
+<a id="sterowanie-czasem-w-mocku"></a>
+
+### Sterowanie czasem w testach z użyciem mocka
 
 SmartTimers i PIDController zależą od `hal_millis()`.
 Zegar w mocku zaczyna od 0 i jest sterowany przez:
@@ -2035,4 +2046,4 @@ uniknąć uruchomienia się tego strażnika w testach.
 
 *Powrót do [Dokumentacji API JaszczurHAL](../../pl/JaszczurHAL_API.md)*
 
-*Dalej: [Bezpieczeństwo wielordzeniowe, drivery, przewodnik migracji](04_multicore_drivers_migration.md)*
+*Dalej: [Bezpieczeństwo wielordzeniowe, sterowniki, przewodnik migracji](04_multicore_drivers_migration.md)*

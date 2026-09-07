@@ -1,8 +1,10 @@
-# Profile targetów i płytek
+<a id="profile-targetów-i-płytek"></a>
+
+# Profile platform i płytek
 
 *Dostępne również [po angielsku](../en/boards_profiles_howto.md).*
 
-JaszczurHAL wybiera sprzęt za pomocą dwóch stabilnych identyfikatorów:
+JaszczurHAL wybiera platformę i płytkę za pomocą dwóch stałych identyfikatorów:
 
 ```json
 {
@@ -11,26 +13,15 @@ JaszczurHAL wybiera sprzęt za pomocą dwóch stabilnych identyfikatorów:
 }
 ```
 
-Target określa MCU, ISA, toolchain i recepturę buildu. Profil opisuje fizyczną
-płytkę, jej pamięć flash, wyprowadzone i zarezerwowane piny, wbudowane
-urządzenia, cechy sprzętowe oraz komponenty dobierane przez system budowania.
-Funkcje aplikacji trzeba jawnie włączać za pomocą `HAL_ENABLE_*`; sama obecność
-danej cechy sprzętowej nie włącza odpowiadającej jej funkcji.
+Platforma docelowa (target) określa mikrokontroler, architekturę zestawu instrukcji (ISA), zestaw narzędzi i sposób kompilacji. Profil płytki opisuje konkretny sprzęt: pamięć flash, wyprowadzone i zarezerwowane piny, wbudowane urządzenia, możliwości sprzętowe oraz komponenty dobierane podczas kompilacji. Funkcje aplikacji nadal trzeba włączać przez `HAL_ENABLE_*`. Sama obecność sprzętu nie włącza jego obsługi.
 
-Lista dostępnych profili pochodzi z `boards/profiles/*.json`. Ich stabilne
-identyfikatory można wyświetlić poleceniem
-`python3 scripts/generate_board_config.py --boards-root boards --list boards`.
-Target ESP32-S3 udostępnia zestaw backendów podstawowych funkcji i peryferiów
-oraz natywny graf zależności funkcji łączności i usług fazy 3.
-Generator buildu sprawdza zgodność targetu, rozmiar pamięci flash, piny,
-komponenty i reguły funkcji przed importem toolchainu. Te same deskryptory
-generują dane konfiguracji zastępczej używane przy wyborze płytki bezpośrednio
-w kodzie źródłowym. Dzięki temu nazwy płytek i ustawienia kompilacyjne pozostają
-takie same także wtedy, gdy nie ma konfiguracji wygenerowanej podczas buildu.
+Dostępne profile są zapisane w `boards/profiles/*.json`. Ich identyfikatory wyświetla polecenie `python3 scripts/generate_board_config.py --boards-root boards --list boards`. ESP32-S3 udostępnia zaimplementowane moduły podstawowe i peryferia oraz funkcje sieciowe i usługi określone w dokumentacji jako faza 3.
+
+Przed załadowaniem narzędzi kompilacji generator sprawdza zgodność platformy, rozmiar pamięci flash, piny, komponenty i zależności funkcji. Z tych samych deskryptorów tworzy również konfigurację zastępczą do bezpośredniego wyboru płytki w kodzie. Nazwy płytek i ustawienia kompilacji pozostają dzięki temu jednakowe także bez konfiguracji wygenerowanej dla konkretnej kompilacji.
 
 ## Pliki źródłowe
 
-Dane źródłowe śledzone w kontroli wersji znajdują się w katalogu `boards/`:
+Źródłowe dane przechowywane w systemie kontroli wersji znajdują się w `boards/`:
 
 - `targets/<id>.json` opisuje target MCU/ISA;
 - `profiles/<id>.json` opisuje fizyczną płytkę;
@@ -39,17 +30,14 @@ Dane źródłowe śledzone w kontroli wersji znajdują się w katalogu `boards/`
 - `scripts/generate_board_config.py` odpowiada za sprawdzanie poprawności
   strukturalnej i semantycznej.
 
-Identyfikatory deskryptorów używają kebab-case i muszą odpowiadać swoim
-nazwom plików. Nieznane pola, zduplikowane identyfikatory, niezgodne pary
-target/płytka, nieprawidłowe punkty końcowe, nieznane cechy lub komponenty
-oraz zapis poza `.build` zawsze powodują błąd.
+Identyfikatory deskryptorów muszą mieć zapis kebab-case i odpowiadać nazwom plików. Błędem są nieznane pola, powtórzone identyfikatory, niezgodne pary platforma-płytka, nieprawidłowe punkty połączeń, nieznane cechy lub komponenty oraz zapis wyników poza `.build`.
 
 ## Model deskryptora
 
 Każdy deskryptor zawiera `schemaVersion`, `kind`, `id`, `displayName`,
 `description` i `status`.
 
-Deskryptory targetu dodatkowo definiują:
+Deskryptor platformy określa ponadto:
 
 - `architecture`: producenta, rodzinę, SoC, ISA, liczbę rdzeni, publiczne
   nazwy MCU/podtypu/CPU, obecność FPU oraz nazwę backendu runtime;
@@ -63,22 +51,16 @@ Deskryptory targetu dodatkowo definiują:
   obszar standardowo udostępniany przez domyślny skrypt linkera aplikacji;
 - `defaultBoard`;
 - opcjonalny `sourceFallbackBoard`, używany tylko wtedy, gdy płytkę można
-  bezpiecznie wybrać w kodzie źródłowym bez udziału generatora buildu;
+  bezpiecznie wybrać w kodzie źródłowym bez udziału generatora kompilacji;
 - identyfikatory komponentów definiowanych przez target;
 - opcjonalny `requiredFeatures`, dodawany do wynikowego zestawu przed
   obliczeniem jego skrótu i wartości `featureHash`;
 - opcjonalny `supportedFeatures`, czyli zamkniętą listę funkcji dozwolonych
-  dla danego targetu, sprawdzaną przez skrypty buildów produkcyjnych po
+  dla danego targetu, sprawdzaną przez skrypty kompilacji produkcyjnych po
   rozwiązaniu zależności przechodnich. Lista ta musi zawierać wszystkie
   funkcje wymagane.
 
-Wynikowy `jh_board_config.h` przekształca dane z deskryptorów targetu w
-definicje `HAL_TARGET_*`, a dane z deskryptorów płytki w definicje
-`HAL_BOARD_*`. Funkcja `hal_system_get_current_architecture()` korzysta z
-wygenerowanych danych targetu, dzięki czemu źródła backendu nie muszą
-utrzymywać osobnej tabeli MCU, ISA i pamięci. Całkowity rozmiar flash pozostaje
-daną płytki, ponieważ płytki przeznaczone dla jednego targetu mogą mieć różne
-układy pamięci flash.
+Wygenerowany `jh_board_config.h` zapisuje dane platformy w makrach `HAL_TARGET_*`, a dane płytki w `HAL_BOARD_*`. Korzysta z nich `hal_system_get_current_architecture()`, więc implementacje nie muszą utrzymywać osobnej tabeli mikrokontrolerów, ISA i pamięci. Całkowity rozmiar flash pozostaje właściwością płytki: płytki z tym samym mikrokontrolerem mogą mieć różne układy pamięci.
 
 Deskryptory płytki dodatkowo definiują:
 
@@ -122,31 +104,17 @@ I2C i SPI, GPTimer, odbiór i nadawanie przez USB Serial/JTAG oraz działanie
 systemu i synchronizacji. Dlatego target i profil płytki mają status
 `supported`.
 
-Punkty GPIO mają jawnie określoną domenę:
+Każdy punkt połączenia GPIO ma jawnie wskazaną domenę:
 
 ```json
 { "domain": "soc-gpio", "id": 16 }
 ```
 
-Punkty STM32 mają identyfikatory symboliczne, na przykład `PA5`. Dla GPIO
-dostarczanego przez inny układ stosuje się `component-gpio`, dzięki czemu nie
-powiększa ono przestrzeni nazw GPIO SoC.
+Piny STM32 mają identyfikatory symboliczne, np. `PA5`. Linie GPIO udostępniane przez inny układ są oznaczane jako `component-gpio`, dzięki czemu nie rozszerzają przestrzeni nazw GPIO samego SoC.
 
-Rezerwacja ma typ `hard`, gdy aplikacja nie może użyć pinu, albo `soft`, gdy
-pin pełni funkcję przypisaną płytce, ale aplikacja może nim świadomie sterować.
-Okablowanie aplikacji, układ partycji, tożsamość produktu USB zdefiniowana
-przez firmware, wybór zegara, dane poufne oraz kolejność pikseli WS2812 nie
-należą do deskryptora płytki. Stały identyfikator USB interfejsu programowania
-jest fizyczną cechą płytki i należy go zapisać w `programming.usb`.
+Rezerwacja `hard` wyklucza użycie pinu przez aplikację. Rezerwacja `soft` oznacza funkcję przypisaną płytce, z możliwością świadomego sterowania pinem przez aplikację. Deskryptor płytki nie określa połączeń aplikacji, układu partycji, tożsamości produktu USB nadawanej przez firmware, wyboru zegara, sekretów ani kolejności kolorów WS2812. Stały identyfikator USB interfejsu programowania jest natomiast cechą sprzętu i należy do `programming.usb`.
 
-Profil kompozytowy musi zachować fizyczne urządzenia bazowej płytki,
-aliasy oraz publiczne definicje HAL. Nie usuwaj wbudowanego urządzenia,
-takiego jak `HAL_LED_BUILTIN`, tylko po to, aby ponownie użyć jego pinu dla
-podłączonego modułu: oryginalne urządzenie pozostaje elektrycznie
-podłączone i może obciążać lub przełączać współdzieloną linię, nawet gdy
-konflikt może wydawać się niegroźny. Zamiast tego wybierz niekolidujące
-okablowanie. Celowa przeróbka PCB, taka jak otwarcie mostka lutowniczego,
-wymaga odrębnego profilu, którego opis wyraźnie wskazuje fizyczną modyfikację.
+Profil złożony z płytki bazowej i dodatkowego modułu musi zachować fizyczne urządzenia płytki, aliasy i publiczne definicje HAL. Nie usuwaj np. `HAL_LED_BUILTIN` tylko po to, aby przeznaczyć jego pin dla modułu: dioda nadal jest elektrycznie podłączona i może obciążać lub przełączać wspólną linię. Wybierz połączenia bez konfliktów. Modyfikacja PCB, np. rozwarcie mostka lutowniczego, wymaga osobnego profilu z jednoznacznym opisem przeróbki.
 
 ## Urządzenia zdefiniowane w profilu płytki
 
@@ -154,13 +122,7 @@ Każdy wpis w sekcji `devices` ma identyfikator w formacie camelCase i określa
 `kind`. Urządzenia korzystające z jednej linii - `gpio`, `component-gpio` i
 `addressable` - mają pojedynczy `endpoint`.
 
-Urządzenie podłączone do kilku pinów magistrali używa
-`kind: "bus-device"` i wskazuje `role` z rejestru ról znanych generatorowi.
-Rola określa sygnały i atrybuty odpowiednich typów, które musi zawierać
-deskryptor. Dzięki temu profil nie może zawierać niepełnego opisu urządzenia.
-Poniższy skrócony przykład pokazuje nazewnictwo; pełny profil
-`rp2040-lora-lf` śledzony w repozytorium jest miarodajnym przykładem dla
-SX1262:
+Urządzenie używające kilku sygnałów magistrali ma `kind: "bus-device"` i pole `role` z rejestru ról generatora. Rola określa wymagane sygnały i typy atrybutów, co zapobiega zapisaniu niepełnego opisu. Poniższy skrócony przykład pokazuje nazewnictwo. Pełnym wzorcem konfiguracji SX1262 jest profil `rp2040-lora-lf` w repozytorium:
 
 ```json
 "loraRadio": {
@@ -181,17 +143,9 @@ SX1262:
 }
 ```
 
-Generator wymaga, aby każda rola występowała najwyżej raz w profilu płytki,
-żadne dwa sygnały jednego urządzenia nie korzystały z tego samego pinu, każdy
-sygnał `soc-gpio` miał rezerwację `hard`, a wartości atrybutów liczbowych
-mieściły się w zakresie zadeklarowanego typu i spełniały wymagane ograniczenia
-dotyczące kolejności. Obecność sygnałów i atrybutów może zależeć od wartości atrybutu
-wyliczeniowego: stają się wymagane dla odpowiednich wartości, a przy innych są
-niedozwolone.
-Dlatego `rfSwitchMode: "dio2"` wyklucza linie i poziomy logiczne sterujące
-przełącznikiem przez GPIO. Wartość `rfSwitchMode: "dio2-single-gpio"` opisuje
-płytki, które włączają sterowanie przełącznikiem RF przez DIO2 układu SX1262,
-a jednocześnie wymagają jednej zewnętrznej linii sterującej front-endu RF.
+Generator sprawdza, czy każda rola występuje w profilu najwyżej raz, sygnały urządzenia nie współdzielą pinów, każdy sygnał `soc-gpio` ma rezerwację `hard`, a wartości liczbowe mieszczą się w zakresach typów i spełniają wymagane relacje kolejności. Wymagane lub zabronione sygnały i atrybuty mogą zależeć od wartości pola wyliczeniowego.
+
+Dlatego `rfSwitchMode: "dio2"` wyklucza linie GPIO i poziomy logiczne do sterowania przełącznikiem. `rfSwitchMode: "dio2-single-gpio"` oznacza sterowanie przełącznikiem RF przez DIO2 układu SX1262 oraz jedną zewnętrzną linię sterującą torem radiowym.
 
 Każda rola generuje w `jh_board_config.h` stały zestaw makr z własnym
 prefiksem, a także `HAL_BOARD_DEVICE_PIN_NONE` dla brakujących sygnałów
@@ -214,20 +168,13 @@ piny STM32 są kodowane jako te same całkowitoliczbowe identyfikatory pinów,
 których używa HAL. Pełny deskryptor trafia również bez zmian do
 `jh_board_resolved.json`, gdzie jest dostępny dla narzędzi.
 
-Identyfikatory komponentów, ich przypisanie do systemów budowania oraz grupy
-wzajemnie wykluczających się komponentów pochodzą bezpośrednio z modelu danych
-`config/tooling/board_components.json`.
-Generator płytki odczytuje go bezpośrednio i tworzy na jego podstawie dane dla
-CMake, dołączane przez `cmake/jh_board_components.cmake`. Każdy oficjalny
-build sprawdza wynikową listę komponentów względem tego rejestru. Etap
-konfiguracji kończy się błędem w przypadku nieznanego komponentu, komponentu
-niezgodnego z wybranym systemem budowania albo dwóch komponentów należących do
-tej samej grupy wyłączności. Receptury mogą uzależniać dołączenie źródeł od
-wyeksportowanych flag `JH_BOARD_COMPONENT_<ID>`.
+Identyfikatory komponentów, obsługujące je systemy kompilacji i grupy wzajemnie wykluczających się komponentów są zdefiniowane w `config/tooling/board_components.json`. Generator płytki odczytuje ten plik i tworzy dane CMake dołączane przez `cmake/jh_board_components.cmake`.
+
+Każda oficjalna konfiguracja sprawdza wynikową listę komponentów. Nieznany komponent, niezgodność z systemem kompilacji albo dwa komponenty z tej samej grupy wykluczającej kończą konfigurację błędem. Skrypty kompilacji mogą dobierać źródła na podstawie flag `JH_BOARD_COMPONENT_<ID>`.
 
 ## Generowanie
 
-Sprawdź poprawność wszystkich deskryptorów śledzonych w repozytorium:
+Sprawdź wszystkie deskryptory przechowywane w repozytorium:
 
 ```bash
 python3 scripts/generate_board_config.py \
@@ -249,20 +196,14 @@ python3 scripts/generate_board_config.py \
 `--feature` pozostaje aliasem `--requested-feature` zachowanym dla zgodności
 wstecznej.
 
-Odśwież lub zweryfikuj wszystkie wygenerowane pliki śledzone w repozytorium, w
-tym konfiguracje płytki dostępne bezpośrednio w źródłach:
+Odśwież lub sprawdź wszystkie pliki generowane przechowywane w repozytorium, łącznie z konfiguracją zastępczą używaną bezpośrednio przez źródła:
 
 ```bash
 python3 scripts/sync_generated.py --write
 python3 scripts/sync_generated.py --check
 ```
 
-Te polecenia generują bezpośrednio z deskryptorów publiczny typ wyliczeniowy
-profili, rejestr cech sprzętowych i pełną konfigurację zastępczą dla kodu
-źródłowego, a z `config/tooling/board_components.json` - rejestr komponentów
-płytki dla CMake. Nagłówek C śledzony w repozytorium jest jedyną fizyczną kopią
-`jh_board_registry.h`; dane tworzone dla konkretnego buildu nie powielają tego
-pliku.
+Polecenia tworzą z deskryptorów publiczny typ wyliczeniowy profili, rejestr cech sprzętowych i pełną konfigurację zastępczą. Z `config/tooling/board_components.json` powstaje rejestr komponentów dla CMake. Nagłówek przechowywany w repozytorium jest jedyną kopią `jh_board_registry.h`; wyniki poszczególnych kompilacji go nie powielają.
 
 Deterministycznie wygenerowany zestaw plików obejmuje:
 
@@ -274,28 +215,15 @@ Deterministycznie wygenerowany zestaw plików obejmuje:
   do niej;
 - `generation.d`.
 
-Firmware nigdy nie analizuje plików JSON. CMake uruchamia generator przed
-importem Pico SDK i używa wygenerowanej konfiguracji platformy oraz płytki
-właściwej dla wybranego systemu budowania. `hal_board.h` zawsze korzysta z
-rejestru śledzonego w repozytorium, a następnie odczytuje konfigurację płytki
-wygenerowaną przez build, jeśli jest dostępna; w przeciwnym razie używa
-śledzonej konfiguracji zastępczej. `jh_board_resolved.json` zapisuje funkcje
-wskazane bezpośrednio w `requestedFeatures`, listę `resolvedFeatures` po
-rozwiązaniu zależności przechodnich, ich `featureProvenance`,
-`resolvedFeaturesDigest` oraz definicje płytki i systemu budowania w
-`boardCompileDefinitions`.
-Zachowane pole `features` jest aliasem `resolvedFeatures`. Wygenerowany
-CMake eksportuje te same wartości funkcji jako
-`JH_BOARD_REQUESTED_FEATURES`, `JH_BOARD_RESOLVED_FEATURES` oraz
-`JH_BOARD_RESOLVED_FEATURES_DIGEST`, a definicje systemu budowania eksportuje jako
-`JH_BOARD_COMPILE_DEFINITIONS`. Plik `jh_board_config.h` przekształca te
-definicje w makra preprocesora, dzięki czemu projekt kompilowany
-bezpośrednio otrzymuje tę samą konfigurację backendu, magistrali i pinów bez
-uruchamiania CMake ani Pythona.
+Firmware nie analizuje JSON. CMake uruchamia generator przed importem Pico SDK, a następnie używa wygenerowanych ustawień platformy i płytki. `hal_board.h` zawsze korzysta z rejestru w repozytorium. Konfigurację płytki odczytuje z plików wygenerowanych dla kompilacji, a przy ich braku - z zapisanej konfiguracji zastępczej.
+
+`jh_board_resolved.json` zawiera żądane funkcje w `requestedFeatures`, pełny zestaw po uwzględnieniu zależności w `resolvedFeatures`, informacje `featureProvenance`, skrót `resolvedFeaturesDigest` oraz definicje płytki i systemu kompilacji w `boardCompileDefinitions`. Pole `features` pozostaje aliasem `resolvedFeatures`.
+
+Wygenerowany CMake eksportuje te dane jako `JH_BOARD_REQUESTED_FEATURES`, `JH_BOARD_RESOLVED_FEATURES`, `JH_BOARD_RESOLVED_FEATURES_DIGEST` i `JH_BOARD_COMPILE_DEFINITIONS`. Nagłówek `jh_board_config.h` udostępnia definicje jako makra preprocesora. Dzięki temu projekt kompilowany bezpośrednio, bez CMake i Pythona, otrzymuje taką samą konfigurację implementacji, magistrali i pinów.
 
 ## Biblioteki statyczne dla poszczególnych płytek
 
-Biblioteki statyczne są rozdzielone według targetu i płytki:
+Biblioteki statyczne mają osobne katalogi dla każdej platformy i płytki:
 
 ```text
 .build/static/<target>/<board>/
@@ -303,7 +231,7 @@ Biblioteki statyczne są rozdzielone według targetu i płytki:
   include/generated/
 ```
 
-Przykłady buildu:
+Przykładowe polecenia kompilacji:
 
 ```bash
 ./scripts/build_rp_native_lib.sh \
@@ -320,7 +248,7 @@ Przykłady buildu:
 `nucleo-g474re` opisuje samą płytkę Nucleo. Projekty używające zewnętrznego
 radia PIM730/RM2 muszą wybrać obsługiwany profil `nucleo-g474re-pim730`;
 profil określa stałe piny gSPI CYW43 i udostępnia cechy oraz komponenty
-radiowe wymagane przez buildy sieciowe. Wygenerowany nagłówek płytki zawiera
+radiowe wymagane przez kompilacje sieciowe. Wygenerowany nagłówek płytki zawiera
 też definicje backendu CYW43, magistrali gSPI, stosu i pinów; projekty
 korzystające bezpośrednio z kompilatora nie mogą duplikować tych
 definicji opcjami `-D` z wiersza poleceń. Okablowanie i ograniczenia
@@ -358,10 +286,7 @@ ponieważ montaż na przewodach zworkowych i po jednym przetestowanym egzemplarz
 płytki bazowej każdego typu nie są równoważne stabilnemu projektowi płytki
 nośnej.
 
-Przy innym okablowaniu Core1262 należy użyć zwykłego profilu `pico` lub
-`nucleo-g474re` oraz jawnego deskryptora aplikacji. Nie należy wybierać profilu
-kompozytowego, którego stała konfiguracja pinów nie pasuje do fizycznego
-montażu.
+Przy innym połączeniu modułu Core1262 użyj podstawowego profilu `pico` lub `nucleo-g474re` i jawnego deskryptora aplikacji. Nie wybieraj profilu złożonego, którego stałe przypisanie pinów nie odpowiada rzeczywistym połączeniom.
 
 Archiwum definiuje:
 
@@ -369,47 +294,28 @@ Archiwum definiuje:
 jh_board_contract_<target>_<board>_<featureHash>
 ```
 
-`featureHash` to pierwsze 12 znaków szesnastkowych skrótu SHA-256 obliczonego
-dla `hal.profileId`, po którym następuje posortowana lista
-`resolvedFeatures` z rejestru, zapisana jako `HAL_ENABLE_*=1` lub
-`HAL_DISABLE_*=1`. Nazwa funkcji podana bez wartości oraz z wartością `=1`
-dają więc ten sam skrót. Generator odrzuca `=0`, nieznane funkcje, żądania
-funkcji pochodnych oraz inne jawne wartości funkcji. Dwa różne zestawy żądań,
-które prowadzą do tego samego domknięcia, mają taki sam `featureHash` i
-sygnaturę linkowania, choć `requestedFeatures` nadal zachowuje różnicę
-potrzebną w diagnostyce.
+`featureHash` obejmuje pierwsze 12 znaków szesnastkowych SHA-256 obliczonego z `hal.profileId` i następującej po nim posortowanej listy `resolvedFeatures`, zapisanej jako `HAL_ENABLE_*=1` lub `HAL_DISABLE_*=1`. Sama nazwa funkcji i zapis z `=1` dają ten sam skrót. Generator odrzuca `=0`, nieznane funkcje, żądania funkcji pochodnych i inne jawne wartości.
 
-Oficjalne buildy firmware zawsze kompilują wygenerowaną jednostkę translacji
-z odwołaniem do sygnatury. Dlatego próba zlinkowania archiwum przeznaczonego
-dla innego targetu, innej płytki lub innego wynikowego zestawu funkcji
-kończy się błędem niezdefiniowanego symbolu zgodności. W przypadku GCC i Clang
-wygenerowana funkcja z atrybutami `constructor, used` chroni odwołanie przed
-usunięciem. Obsługiwane skrypty linkera zachowują tablicę konstruktorów, więc
-sprawdzanie sygnatury nadal działa przy włączonych sekcjach funkcji i danych
-oraz opcji `--gc-sections`.
+Różne listy żądanych funkcji dają ten sam `featureHash` i sygnaturę linkowania, jeżeli po rozwiązaniu zależności prowadzą do tego samego zestawu. Pole `requestedFeatures` nadal zachowuje pierwotne żądania do celów diagnostycznych.
 
-Archiwum i jego wygenerowane nagłówki to jedna jednostka. Nigdy nie kopiuj
-ani nie linkuj `libJaszczurHAL.a` bez pasującego katalogu
-`include/generated/` oraz jednostki translacji zawierającej odwołanie do
-sygnatury linkowania.
+Oficjalna kompilacja firmware zawsze dołącza wygenerowaną jednostkę translacji odwołującą się do sygnatury. Próba użycia biblioteki dla innej platformy, płytki lub innego wynikowego zestawu funkcji kończy się więc błędem niezdefiniowanego symbolu zgodności.
 
-Dwie warunkowe reguły zgodności pozostają poza domknięciem rejestru v1:
-EEPROM AT24C256 może dodać I2C, a GPS może wybrać UART, gdy nie zażądano
-żadnego transportu szeregowego. Działają one w `hal_config.h` i nie
-uczestniczą w równoważności `featureHash`. Skrót uwzględnia zestaw wynikający
-z rozwiązania zależności w rejestrze, a nie każde makro dodane później przez
-te dodatkowe reguły.
+W GCC i Clang odwołanie jest zachowywane przez wygenerowaną funkcję z atrybutami `constructor, used`. Obsługiwane skrypty linkera zachowują tablicę konstruktorów, dlatego kontrola działa również z osobnymi sekcjami funkcji i danych oraz `--gc-sections`.
+
+Biblioteka statyczna i jej wygenerowane nagłówki stanowią jeden pakiet. Nie kopiuj ani nie linkuj `libJaszczurHAL.a` bez pasującego `include/generated/` i jednostki translacji odwołującej się do sygnatury linkowania.
+
+Dwie warunkowe reguły zgodności pozostają poza zestawem zależności rejestru v1: EEPROM AT24C256 może włączyć I2C, a GPS może wybrać UART, gdy nie wskazano transportu szeregowego. Reguły działają w `hal_config.h` i nie wpływają na równoważność `featureHash`. Skrót obejmuje zależności rozwiązane przez rejestr, nie każde makro dodane później.
 
 ## Zainstalowany pakiet
 
-Zainstaluj skonfigurowany build statyczny RP lub STM32 za pomocą CMake:
+Zainstaluj skonfigurowaną bibliotekę statyczną dla RP lub STM32 przez CMake:
 
 ```bash
 cmake --install .build/static/<target>/<board> \
   --prefix .build/install/<target>/<board>
 ```
 
-Zainstalowana jednostka zawiera:
+Zainstalowany pakiet zawiera:
 
 ```text
 include/
@@ -427,15 +333,7 @@ share/JaszczurHAL/generated/
   jh_board_resolved.json
 ```
 
-Pozostałe publiczne nagłówki są standardowo instalowane w katalogu
-`include/`. Po instalacji kompilator właściwy dla danego targetu może
-skompilować źródła projektu, korzystając z bezpośrednich żądań funkcji w
-`jh_board_resolved.json`; `hal_config.h` stosuje domknięcie zapisane w
-śledzonych plikach wygenerowanych. Skompiluj
-`jh_link_contract_reference.c` do aplikacji i zlinkuj go z pasującym
-archiwum. Ten sposób kompilacji i linkowania nie wymaga uruchamiania Pythona.
-Wybrana platforma nadal wymaga bibliotek SDK targetu, plików startowych,
-skryptów linkera i standardowych flag toolchainu.
+Pozostałe nagłówki publiczne są instalowane w `include/`. Po instalacji można kompilować aplikację odpowiednim kompilatorem, korzystając z żądań zapisanych w `jh_board_resolved.json`; `hal_config.h` uwzględnia zależności zapisane w wygenerowanych plikach repozytorium. Dołącz `jh_link_contract_reference.c` do aplikacji i zlinkuj ją z pasującą biblioteką. Ten sposób kompilacji nie wymaga Pythona. Nadal potrzebne są biblioteki SDK platformy, pliki startowe, skrypty linkera i standardowe opcje narzędzi.
 
 ## Dodawanie RP2040-Zero
 

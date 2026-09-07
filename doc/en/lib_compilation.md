@@ -1,8 +1,12 @@
-# JaszczurHAL Library Compilation
+<a id="jaszczurhal-library-compilation"></a>
+
+# Building JaszczurHAL
 
 *Also available in [Polish](../pl/lib_compilation.md).*
 
-## TL;DR
+<a id="tldr"></a>
+
+## Essential commands
 
 ```bash
 ./scripts/build_rp_native_lib.sh --target rp2040
@@ -15,10 +19,7 @@ python3 scripts/build_esp_idf.py build \
 
 > **Part of [JaszczurHAL API Reference](JaszczurHAL_API.md)**
 
-JaszczurHAL uses CMake for host, RP, and STM32 builds. The ESP32-S3 path invokes
-the pinned ESP-IDF build system through a controlled Python runner. Embedded
-builds select a target and a physical board from the declarative registry described in
-[Target and board profiles](boards_profiles_howto.md).
+JaszczurHAL uses CMake for host, RP, and STM32 builds. For ESP32-S3, a repository-managed Python script runs the pinned ESP-IDF build system. Embedded builds select a target and physical board from the registry described in [Target and board profiles](boards_profiles_howto.md).
 
 | Target | Default board | Build entry | Backend selector |
 |---|---|---|---|
@@ -62,32 +63,18 @@ The generated compatibility symbol has the form
 libraries, board headers, and feature sets fail during linking. Keep
 `libJaszczurHAL.a` together with the generated headers from the same build.
 
-Production feature resolution distinguishes:
+Feature configuration distinguishes two sets:
 
-- `requestedFeatures`: direct requests collected from CMake definition inputs
-  and `hal_project_config.h`;
-- `resolvedFeatures`: the sorted transitive registry closure used for source,
-  dependency, and link-signature selection.
+- `requestedFeatures`: features specified directly through CMake definitions and `hal_project_config.h`;
+- `resolvedFeatures`: the sorted set of requested features and all transitive registry dependencies, used to select sources, dependencies, and the link signature.
 
-Feature records may also declare additive `buildEffects`. Generated CMake data
-selects feature-owned sources and managed BearSSL, LittleFS, or SX126x source
-manifests for RP and STM32. ESP-IDF consumes portable source effects from the
-same registry and adds only its ESP32-specific backend files locally. Board
-facts, target adapters, flash layout, and special firmware images remain owned
-by their respective build recipes.
+Feature entries may include additional `buildEffects`. Generated CMake data selects sources for each feature and repository-managed BearSSL, LittleFS, or SX126x source manifests for RP and STM32. ESP-IDF uses the same entries for portable sources and adds its ESP32-specific files locally. The relevant build scripts define board configuration, target adapters, flash layout, and special firmware images.
 
-An exact target may add a required feature. ESP32-S3 always adds
-`HAL_ENABLE_FREERTOS` with target provenance because ESP-IDF starts its
-scheduler before `app_main()`.
+A target may require an additional feature. ESP32-S3 always adds `HAL_ENABLE_FREERTOS` and records the target as its source because ESP-IDF starts the scheduler before `app_main()`.
 
-The resolved board JSON stores both sets and their full closure digest. Its
-`features` field remains as an alias of `resolvedFeatures`. The 12-character
-`featureHash` is SHA-256 over `hal.profileId` followed by the sorted resolved
-closure, with feature names serialized as `=1`. Redundant direct requests that
-do not change the closure therefore do not change the archive signature. The
-same JSON records `boardCompileDefinitions`; generated CMake exposes them as
-`JH_BOARD_COMPILE_DEFINITIONS`, while `jh_board_config.h` materializes them for
-direct compiler consumers.
+The resolved board JSON stores both feature sets and the full digest of the dependency-resolved set. `features` remains an alias for `resolvedFeatures`. The 12-character `featureHash` is derived from SHA-256 over `hal.profileId` followed by sorted feature names serialized with `=1`. An additional request that leaves the resolved set unchanged also leaves the library signature unchanged.
+
+The JSON also records `boardCompileDefinitions`. CMake exposes them as `JH_BOARD_COMPILE_DEFINITIONS`, and `jh_board_config.h` provides them to projects compiled directly.
 
 Two conditional rules remain outside registry v1: AT24C256 EEPROM can add I2C,
 and GPS can add UART when no serial transport was requested. They remain in
@@ -103,13 +90,11 @@ python3 scripts/generate_hal_features.py \
   --resolution-output .build/effective-feature-resolution.json
 ```
 
-Both commands fail when they find an invalid configuration. `--report-only`
-is available for a temporary migration audit, not for the normal quality gate.
+Both commands fail on invalid configuration. Use `--report-only` for temporary migration audits, not as a replacement for normal quality checks.
 
 ## Installed package and direct compiler use
 
-After configuring and building either embedded static-library entry, create a
-complete matching JaszczurHAL installation:
+After configuring and building the static library for the selected platform, create a complete installation from that same configuration:
 
 ```bash
 cmake --install .build/static/<target>/<board> \
@@ -135,12 +120,7 @@ share/JaszczurHAL/generated/
   jh_board_resolved.json
 ```
 
-All other public HAL headers are installed under `include/`. Treat this tree as
-one unit. For a direct compiler build, add `include/` and `include/generated/`
-to the include path, compile with the target selector and the direct requests
-recorded in `jh_board_resolved.json`, compile
-`share/JaszczurHAL/generated/jh_link_contract_reference.c`, and link that object
-with `lib/libJaszczurHAL.a`. For example, the command shape is:
+Other public HAL headers are installed under `include/`. Treat the entire installation as one package. For direct compiler use, add `include/` and `include/generated/` to the include paths and define the target selector and requested features recorded in `jh_board_resolved.json`. Also compile `share/JaszczurHAL/generated/jh_link_contract_reference.c` and link the resulting object with `lib/libJaszczurHAL.a`. For example:
 
 ```bash
 "${CXX}" <target compile flags> \
@@ -155,28 +135,17 @@ with `lib/libJaszczurHAL.a`. For example, the command shape is:
   <prefix>/lib/libJaszczurHAL.a <platform libraries> -o firmware.elf
 ```
 
-When the recorded direct requests include `HAL_ENABLE_STACK_PROTECTOR`, add
-`-fstack-protector-strong` to every application C/C++ compilation. The native
-firmware CMake recipes propagate this automatically. The installed archive
-already contains the matching `__stack_chk_guard` / `__stack_chk_fail` runtime;
-do not provide a second stack-protector runtime.
+If the requested features include `HAL_ENABLE_STACK_PROTECTOR`, add `-fstack-protector-strong` when compiling every application C/C++ file. Native firmware CMake configurations do this automatically. The installed library already provides `__stack_chk_guard` / `__stack_chk_fail`; do not add a second stack-protection runtime.
 
-`hal_config.h` includes the installed generated feature header, so the direct
-compiler receives the same resolved closure without running Python. The
-installed `jh_board_config.h` also provides every board/provider definition
-listed in `jh_board_resolved.json.boardCompileDefinitions`, including radio
-backend, bus, stack, and pin selections. Pass only the target selector and the
-recorded direct feature requests on the command line; do not repeat those
-board-owned definitions with `-D` options. The generated reference uses a
-GCC/Clang `constructor, used` root, so the board/feature signature remains live
-under `--gc-sections` when the supported linker script retains constructor
-arrays. The target SDK, startup objects, linker script, and platform libraries
-remain part of the normal target toolchain requirements.
+`hal_config.h` includes the installed generated feature header, giving direct compiler builds the same dependency set without running Python. `jh_board_config.h` also provides the definitions in `jh_board_resolved.json.boardCompileDefinitions`, including radio implementation, bus, stack, and pin selections. Pass only the target selector and recorded feature requests on the command line; do not repeat board-profile definitions with `-D`.
 
-## Host mock
+The generated signature reference uses GCC/Clang `constructor, used` attributes. The compatibility check remains active under `--gc-sections` when the supported linker script retains constructor arrays. The target SDK, startup objects, linker script, and platform libraries are still required.
 
-The repository-root project builds the deterministic mock backend and its test
-executables:
+<a id="host-mock"></a>
+
+## Host tests with the mock implementation
+
+The repository-root project builds the deterministic mock implementation and test executables:
 
 ```bash
 cmake -S . -B .build/host
@@ -189,8 +158,7 @@ embedded SDK or cross compiler.
 
 ## RP2040 and RP2350
 
-RP builds use the pinned official Pico SDK, the generated board profile, and
-the HAL-owned application entry.
+RP builds use the official Pico SDK version pinned by the repository, the generated board profile, and the application entry point supplied by HAL.
 
 ### Helper script
 
@@ -251,9 +219,7 @@ verifies the static library and complete ELF/BIN/UF2 probe set; a
   jh_rp_native_firmware.{elf,bin,uf2}  # with --example
 ```
 
-The core-1 probe verifies the application-entry and multicore symbols. In a
-bare-metal build, `app_task1()` runs on Pico SDK core 1. In a FreeRTOS build,
-the HAL creates affinity-bound tasks and starts the scheduler.
+The core-1 probe checks application-entry and multicore symbols. In bare-metal configurations, `app_task1()` runs on core 1 provided by Pico SDK. With FreeRTOS, HAL creates tasks with CPU affinity and starts the scheduler.
 
 ### Direct CMake build
 
@@ -279,14 +245,13 @@ For an application directory, add:
 -DHAL_PROJECT_CONFIG_DIR="$PWD/examples/01_core_runtime"
 ```
 
-The application supplies `app_start()`, `app_task0()`, and optionally
-`app_task1()`. `src/hal_app_entry.cpp` owns `main()` and maps these hooks to
-the selected bare-metal or FreeRTOS execution model.
+The application provides `app_start()`, `app_task0()`, and optionally `app_task1()`. `src/hal_app_entry.cpp` defines `main()` and invokes these functions according to the selected bare-metal or FreeRTOS execution model.
 
-### Embedding the RP CMake support
+<a id="embedding-the-rp-cmake-support"></a>
 
-Dispatcher-backed firmware projects use `cmake/targets/rp-native.cmake`. A
-custom Pico SDK CMake project can use the same integration:
+### Using the RP CMake integration in your project
+
+Projects using the shared target-selection workflow include `cmake/targets/rp-native.cmake`. A custom Pico SDK CMake project can use the same integration:
 
 ```cmake
 include(path/to/JaszczurHAL/cmake/jh_rp_native_sdk.cmake)
@@ -340,10 +305,7 @@ cmake -S stm32_lib -B .build/manual/stm32g474-nucleo \
 cmake --build .build/manual/stm32g474-nucleo --parallel
 ```
 
-The same backend also compiles with the host compiler for sanity checks and the
-clang-tidy STM32 compile database. That mode leaves `JH_STM32G474_HW` undefined
-and is opt-in, so a missing cross toolchain cannot silently produce a host
-library instead of firmware:
+The same implementation can be built with the host compiler for basic checks and to generate the STM32 compilation database for clang-tidy. This mode leaves `JH_STM32G474_HW` undefined and must be enabled explicitly. A missing cross toolchain therefore cannot silently create a host library instead of firmware:
 
 ```bash
 cmake -S stm32_lib -B .build/manual/stm32g474-host \
@@ -356,16 +318,11 @@ Without either `CMAKE_TOOLCHAIN_FILE` or `JH_STM32_HOST_SANITY` the
 configuration stops and names both options. Generated board files stay inside
 the CMake build tree, so keep the build directory under a `.build` root.
 
-Pass project features through `EXTRA_HAL_DEFINES` or use
-`scripts/build_stm32_lib.sh -D ...`. `HAL_ENABLE_FREERTOS` selects the pinned
-kernel integration. Direct CMake invokes `scripts/component_manager.py` to
-prepare or verify the kernel. The shell helper invokes
-`scripts/ensure_freertos_kernel.sh` for `--freertos` or an explicit
-`-D HAL_ENABLE_FREERTOS`; a feature found only in `hal_project_config.h` is
-prepared by the CMake fallback. The wrapper delegates to the same manager. An
-external `JH_FREERTOS_KERNEL_DIR` is verified and never replaced. Bare-metal
-firmware calls the generated HAL application entry in a cooperative loop;
-FreeRTOS firmware uses scheduler-managed tasks.
+Pass project features through `EXTRA_HAL_DEFINES` or `scripts/build_stm32_lib.sh -D ...`. `HAL_ENABLE_FREERTOS` enables integration with the pinned kernel. Direct CMake configuration runs `scripts/component_manager.py` to prepare or verify it.
+
+The shell script calls `scripts/ensure_freertos_kernel.sh` for `--freertos` or explicit `-D HAL_ENABLE_FREERTOS`. If the feature is requested only in `hal_project_config.h`, CMake prepares the dependency. Both paths use the same manager. An external `JH_FREERTOS_KERNEL_DIR` is verified, never replaced.
+
+Bare-metal firmware uses a cooperative loop through the generated HAL application entry. FreeRTOS firmware uses scheduler-managed tasks.
 
 The firmware link must include the generated link-signature reference object and use
 the matching linker configuration. Its constructor root keeps the reference
@@ -376,9 +333,7 @@ storage, and OTA reservations.
 
 ## ESP32-S3 with ESP-IDF
 
-The ESP32-S3 build is a firmware-project flow, not an installed
-`libJaszczurHAL.a` package. The production entrypoint is
-`scripts/build_esp_idf.py`; it accepts `build`, `artifacts`, and `flash`:
+On ESP32-S3, JaszczurHAL is built as part of a firmware project rather than installed as a separate `libJaszczurHAL.a` package. The main script, `scripts/build_esp_idf.py`, supports `build`, `artifacts`, and `flash`:
 
 ```bash
 # Clean build using the target's default board.
@@ -398,10 +353,7 @@ python3 scripts/build_esp_idf.py flash \
   --port /dev/serial/by-id/<Espressif-USB-Serial-JTAG-device>
 ```
 
-`tests/fixtures/esp32s3_phase3` is the compile/link fixture used by CI and
-Gate 8. It selects every ESP32-S3 backend delivered through Phase 3 and proves
-feature resolution, component selection, compilation, linking, partition
-generation, and artifact publication. It is not a runtime hardware fixture.
+`tests/fixtures/esp32s3_phase3` is a compile/link test configuration used by CI and Gate 8. It enables all ESP32-S3 implementations delivered through Phase 3 and checks feature dependencies, component selection, compilation, linking, partition generation, and artifact publication. It does not test runtime behavior on hardware.
 
 The default build directory is
 `<project>/.build/esp-idf/esp32s3/waveshare-esp32-s3-zero/`. `--output` may
@@ -422,23 +374,15 @@ includes the final `sdkconfig` digest and selected partition profile; toolchain
 provenance includes the pinned ESP-IDF version/commit, actual compiler, CMake,
 Ninja, IDF Python and esptool versions, and the ESP-IDF `tools.json` digest.
 
-The target always resolves `HAL_ENABLE_FREERTOS` and accepts the delivered
-Phase 2 peripheral flags plus the Phase 3 network/service graph. System,
-synchronization, GPIO, ADC, simple PWM, serial/debug, and timer sources are part
-of the baseline component. Requested or transitively resolved features outside
-that descriptor allowlist fail with `[JH-CFG-UNSUPPORTED]`.
-The generated project CMake file carries the resolved feature list, component
-source list, and public/private ESP-IDF component dependencies; the component
-recipe consumes those generated lists instead of maintaining a second source
-graph.
-`scripts/build_esp_idf_phase0.py` remains a compatibility wrapper for the
-isolated Phase 0 fixture.
+ESP32-S3 always enables `HAL_ENABLE_FREERTOS`. It also supports the delivered Phase 2 peripheral flags and Phase 3 network and service features. The baseline component contains system, synchronization, GPIO, ADC, simple PWM, serial, diagnostics, and timers. A directly requested or implied feature outside the descriptor's allowlist fails with `[JH-CFG-UNSUPPORTED]`.
 
-## Repository workspace and VS Code
+Generated project CMake contains the resolved feature set, source list, and public/private ESP-IDF component dependencies. The component configuration uses these lists instead of maintaining a separate source graph. `scripts/build_esp_idf_phase0.py` remains a compatibility wrapper for the isolated Phase 0 test configuration.
 
-Open the JaszczurHAL repository root as the VS Code folder to use the
-static-library workflow. It is separate from the firmware-project workflow and
-uses the global task labels already shared by JaszczurHAL consumers:
+<a id="repository-workspace-and-vs-code"></a>
+
+## Working in the repository with VS Code
+
+To build static libraries in VS Code, open the JaszczurHAL repository root. This workflow is separate from building a firmware project but uses the same task names:
 
 | Shortcut | Repository task |
 |---|---|
@@ -458,22 +402,11 @@ all three native RP target families, and STM32G474. Build artifacts stay in:
 .build/vscode/library/<target>/<board>/
 ```
 
-`Project: Build` produces the active linkable archive and selects its generated
-compile database for cpptools. `Project: Refresh IntelliSense` performs the
-same incremental build explicitly before rewriting the gitignored
-`.vscode/c_cpp_properties.json`. Each production build contains
-`libJaszczurHAL.a`; the mock profile contains `libhal_mock.a`.
+`Project: Build` creates the library for the active profile and selects its compilation database for cpptools. `Project: Refresh IntelliSense` performs the same incremental build, then regenerates the gitignored `.vscode/c_cpp_properties.json`. Hardware configurations produce `libJaszczurHAL.a`; the mock produces `libhal_mock.a`.
 
-`Project: Install library` builds the active production profile and installs
-its archive, public headers, generated board headers, and link-signature data to
-`.build/install/<target>/<board>/`. The mock target has no installation
-installation interface. `Project: Clean` removes only these two directories for the active
-profile and its matching managed IntelliSense file. It preserves other builds,
-managed tools, and dependency sources.
+`Project: Install library` builds the active hardware profile and installs the library, public and generated headers, and signature data to `.build/install/<target>/<board>/`. The mock does not support installation. `Project: Clean` removes only the active profile's build and installation directories and its generated IntelliSense file. Other configurations, managed tools, and dependency sources are preserved.
 
-The tracked root `.vscode` files are derived from the board registry. Verify or
-regenerate all tracked generated artifacts after a registry or workspace-task
-change:
+Version-controlled `.vscode` files in the repository root are generated from the board registry. After changing the registry or tasks, check or regenerate the generated files:
 
 ```bash
 python3 scripts/sync_generated.py --check
@@ -485,7 +418,7 @@ intentionally undefined when the repository root is open.
 
 ## Firmware projects and VS Code
 
-Create, inspect, and build a project through the maintained workflow:
+Create a project, inspect its configuration, and build it with:
 
 ```bash
 ./vscode/tools/create-vscode-example.py --output /path/to/project
@@ -493,7 +426,4 @@ Create, inspect, and build a project through the maintained workflow:
 ./vscode/entry/jh-vscode build --project /path/to/project
 ```
 
-Generated projects expose board-aware build, upload, monitor, debug, OTA, and
-test tasks. Details are in
-[Firmware Project Workflow](FwProjectWorkflow.md) and
-[VS Code integration](../../vscode/README.md).
+Generated projects provide build, upload, monitor, debug, OTA, and test tasks configured for the selected board. See [Firmware Project Workflow](FwProjectWorkflow.md) and [VS Code integration](../../vscode/README.md).
