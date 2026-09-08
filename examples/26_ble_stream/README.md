@@ -58,7 +58,7 @@ for authenticated session setup on RP hardware.
 
 ## Provisioning the secret
 
-`kDeviceSecret` in [`app.cpp`](app.cpp) is an example value. In a deployed
+`kDeviceSecret` in [`app.c`](app.c) is an example value. In a deployed
 device, replace it with a device-specific secret of at least 256 bits.
 Give it to the client through a separate channel, such as a label QR code
 or an authenticated USB connection. Do not share one secret across devices.

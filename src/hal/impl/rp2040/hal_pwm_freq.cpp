@@ -5,6 +5,7 @@
 
 #include "hal/core/hal_mutex_once.h"
 #include "hal/gpio/hal_pwm_freq.h"
+#include "hal/gpio/hal_pwm_freq_internal.h"
 #include "hal/gpio/hal_pwm_freq_pool.h"
 #include "hal/serial/hal_serial.h"
 #include "hal/system/hal_sync.h"
@@ -34,22 +35,20 @@ struct hal_pwm_freq_channel_impl_s {
 
 static hal_pwm_freq_channel_impl_t s_pool[HAL_PWM_FREQ_MAX_CHANNELS];
 
-hal_pwm_freq_channel_t hal_pwm_freq_create(uint8_t pin, uint32_t frequency_hz,
-                                           uint32_t resolution) {
-  pwm_ensure_mutex();
-  hal_mutex_lock(pwm_mutex);
-
-  hal_pwm_freq_channel_impl_t *cfg =
-      jh_hal_pwm_freq_reserve(s_pool, hal_get_config()->pwm_freq_max_channels);
+hal_status_t jh_hal_pwm_freq_try_create(uint8_t pin, uint32_t frequency_hz,
+                                        uint32_t resolution,
+                                        hal_pwm_freq_channel_t *out_channel) {
+  const hal_status_t args_status =
+      jh_hal_pwm_freq_prepare_create(frequency_hz, resolution, out_channel);
+  if (args_status != HAL_OK) {
+    return args_status;
+  }
+  hal_pwm_freq_channel_impl_t *cfg = jh_hal_pwm_freq_begin_locked_create(
+      s_pool, hal_get_config()->pwm_freq_max_channels, &pwm_mutex);
   if (!cfg) {
-    hal_mutex_unlock(pwm_mutex);
-    HAL_ASSERT(
-        cfg != NULL,
-        "hal_pwm_freq: pool exhausted - increase HAL_PWM_FREQ_MAX_CHANNELS");
-    return NULL;
+    return HAL_ENOMEM;
   }
 
-  memset(cfg, 0, sizeof(*cfg));
   cfg->in_use = 1;
   cfg->pin = pin;
   cfg->frequency_hz = frequency_hz;
@@ -86,7 +85,13 @@ hal_pwm_freq_channel_t hal_pwm_freq_create(uint8_t pin, uint32_t frequency_hz,
   cfg->started = 0;
 
   hal_mutex_unlock(pwm_mutex);
-  return cfg;
+  *out_channel = cfg;
+  return HAL_OK;
+}
+
+hal_pwm_freq_channel_t hal_pwm_freq_create(uint8_t pin, uint32_t frequency_hz,
+                                           uint32_t resolution) {
+  return jh_hal_pwm_freq_create_compat(pin, frequency_hz, resolution);
 }
 
 uint32_t hal_pwm_freq_source_clock_hz(uint8_t pin) {

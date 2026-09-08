@@ -297,7 +297,7 @@ Wybierz `hal_pwm_freq` zamiast `hal_pwm`, gdy potrzebujesz określonej częstotl
 ```c
 #include <hal/gpio/hal_pwm_freq.h>
 
-// Opaque handle
+// Uchwyt do struktury z ukrytymi polami (ang. opaque handle)
 typedef hal_pwm_freq_channel_impl_t *hal_pwm_freq_channel_t;
 
 // Create a channel: pin, frequency in Hz, resolution (wrap value, e.g. 2047 for 11-bit = 2^11-1)
@@ -363,72 +363,138 @@ współbieżnego dostępu.
 
 <a id="daclessaudio---silnik-audio-pwm-opcjonalny---hal_enable_dacless"></a>
 
-## `DAClessAudio` - odtwarzanie audio przez PWM *(opcjonalne - `HAL_ENABLE_DACLESS`)*
+## `hal_dacless` - odtwarzanie audio przez PWM *(opcjonalne - `HAL_ENABLE_DACLESS`)*
 
-Odtwarzaj próbki audio przez wyjście PWM, z DMA lub okresową obsługą w pętli aplikacji. Moduł udostępnia funkcje zwrotne próbek i bloków oraz odczyt bufora ADC.
+Moduł odtwarza próbki audio przez wyjście PWM, korzystając z DMA albo okresowej
+obsługi w pętli aplikacji. Może pobierać dane z funkcji zwrotnej wywoływanej dla
+pojedynczej próbki albo dla całego bloku. Udostępnia też wyniki ADC i stan
+wyjścia.
+
+### API C
+
+`hal_dacless_t` jest uchwytem do instancji DACless. Każda funkcja
+zwrotna otrzymuje własny kontekst aplikacji `void *`, a funkcja obsługująca blok
+także liczbę aktywnych próbek.
+
+```c
+#include <hal/audio/hal_dacless.h>
+
+typedef struct {
+    uint16_t next_sample;
+} audio_source_t;
+
+static uint16_t next_sample(void *context) {
+    audio_source_t *source = (audio_source_t *)context;
+    return source->next_sample++;
+}
+
+hal_status_t start_audio(hal_dacless_t *out_audio, audio_source_t *source) {
+    if (out_audio == NULL || source == NULL) return HAL_EINVAL;
+    *out_audio = NULL;
+
+    hal_dacless_config_t config = hal_dacless_default_config();
+    config.use_dma = false;
+    config.adc_input_count = 0u;
+
+    hal_status_t status = hal_dacless_create(&config, out_audio);
+    if (status != HAL_OK) return status;
+
+    status = hal_dacless_set_sample_callback(*out_audio, next_sample, source);
+    if (status == HAL_OK) status = hal_dacless_begin(*out_audio);
+    if (status != HAL_OK) {
+        (void)hal_dacless_destroy(*out_audio);
+        *out_audio = NULL;
+    }
+    return status;
+}
+
+hal_status_t service_audio(hal_dacless_t audio) {
+    return hal_dacless_service(audio);
+}
+```
+
+`hal_dacless_default_config()` wybiera 12-bitowe wyjście PWM z DMA, 128 próbek
+w bloku, `DACLESS_DEFAULT_PWM_PIN` oraz cztery domyślne wejścia ADC.
+Implementacja dopasowuje rozdzielczość PWM, rozmiar bloku i liczbę wejść ADC
+do obsługiwanych zakresów. DMA obsługuje tyle wejść ADC ile zdefiniowanych jest w `DACLESS_MAX_DMA_ADC_INPUTS`. Statyczna pula API C mieści
+`DACLESS_MAX_INSTANCES` instancji. Obiekty C++ zarejestrowane na potrzeby
+globalnych zmiennych zgodności korzystają z tego samego limitu.
+
+Wywołaj `hal_dacless_begin()` przed `hal_dacless_service()`, wyciszeniem lub
+wznowieniem wyjścia. W trybie bez DMA często wywołuj
+`hal_dacless_service()` z funkcji `app_task0()` albo z zadania FreeRTOS.
+Funkcja zwrotna bloku ma pierwszeństwo przed funkcją zwrotną próbki; jeśli nie
+zarejestrowano żadnej z nich, sterownik podaje
+ciszę odpowiadającą środkowi zakresu. Po spóźnionym wywołaniu funkcja nadrabia
+najwyżej `DACLESS_MAX_POLLING_CATCHUP_SAMPLES` próbek, po czym synchronizuje
+odtwarzanie z bieżącym czasem.
+
+Obie funkcje zwrotne zarejestruj przed `hal_dacless_begin()`. Po pierwszym
+udanym uruchomieniu funkcje ustawiające zwracają `HAL_ESTATE`. Aby zmienić
+funkcję zwrotną lub jej kontekst, zwolnij instancję i utwórz ją ponownie.
+
+`hal_dacless_get_state()` zwraca informacje o uruchomieniu, wyciszeniu, pracy
+i aktywności DMA. API udostępnia również konfigurację po dopasowaniu do
+obsługiwanych zakresów, częstotliwość próbkowania, wartość wybranego kanału ADC
+lub należący do sterownika bufor ADC oraz wskaźnik do ostatnio ukończonego
+bufora wyjściowego. Na końcu wywołaj `hal_dacless_destroy()`.
+
+Domyślna ścieżka DMA używa `hal_dma_pwm_audio` do wysyłania próbek do PWM w
+dwóch buforach i aktualizowania wyników ADC. Na platformach RP każda instancja
+rezerwuje dwa kanały DMA przesyłające dane PWM oraz dwa kanały kontrolne, które
+przełączają bufory. Próbkowanie wejść ADC zajmuje kolejne dwa kanały DMA. Na
+STM32G474 transfery DMA są wyzwalane zdarzeniami aktualizacji timera TIM, a
+callbacki są wywoływane po ukończeniu połowy i całości transferu. ADC1 działa
+wtedy w trybie skanowania cyklicznego. Domyślne piny ADC to GPIO 26..29 na
+platformach RP i w backendzie testowym (mock) oraz PA0..PA3 na STM32G474
+(`port * 16 + pin`).
+
+Funkcja tworząca odrzuca piny PWM i używane piny ADC, których wybrana platforma
+nie obsługuje. Jeden pin nie może jednocześnie służyć jako wyjście PWM i wejście
+ADC. Skan ADC z DMA na platformach RP musi kolejno używać GPIO 26..29. Na
+platformach RP i STM32G474 tylko jedna instancja DMA może w danej chwili
+korzystać ze współdzielonego przetwornika; próba uruchomienia następnej zwraca
+`HAL_EBUSY`. Wyciszenie lub zatrzymanie tej instancji zwalnia ADC, a wznowienie
+ponownie go rezerwuje. Ograniczenie nie obejmuje instancji bez DMA ani
+instancji DMA, które nie próbkują ADC. Na platformach RP dana instancja zajmuje
+również cały sprzętowy blok PWM (ang. slice). Próba
+uruchomienia oddzielnego strumienia DACless na drugim pinie przypisanym do tego
+samego bloku zwraca `HAL_EBUSY`.
+
+**Współbieżność:** Wywołania z zadań serializują dostęp do stanu instancji. Za
+utworzenie i zwolnienie instancji odpowiada jeden właściciel. Na platformach RP
+konfiguruj, uruchamiaj, steruj i zwalniaj wszystkie instancje DACless z DMA na
+jednym rdzeniu; na tym rdzeniu instalowane jest przerwanie DMA. Funkcja zwrotna
+DMA działa w kontekście przerwania i nie może blokować. Może wywołać
+`hal_dacless_get_adc()` dla własnego uchwytu, ale żadnej innej funkcji DACless.
+Nie zwalniaj uchwytu równolegle z funkcją zwrotną. W trybie bez DMA funkcja
+zwrotna działa synchronicznie wewnątrz `hal_dacless_service()`. W obu trybach
+może ona wywołać tylko `hal_dacless_get_adc()` spośród funkcji DACless.
+
+### API C++ zachowane dla zgodności
+
+Ten sam nagłówek nadal udostępnia w kodzie C++ typy `DAClessConfig`,
+`DAClessAudio` i funkcję `interpolate()`. Istniejące aplikacje mogą zachować
+wywołania klasowe oraz globalne zmienne zgodności (`audio_rate`, `out_buf_ptr`
+i `adc_results_buf`).
 
 ```cpp
 #include <hal/audio/hal_dacless.h>
 
-struct DAClessConfig {
-    uint8_t  pinPWM;      // default 6
-    uint16_t pwmBits;     // default 12
-    uint16_t blockSize;   // default 128, capped by DACLESS_MAX_BLOCK_SIZE
-    uint8_t  nAdcInputs;  // capped by DACLESS_MAX_ADC_INPUTS
-    bool     useDma;      // default true; set false for cooperative service()
-    uint8_t  adcPins[DACLESS_MAX_ADC_INPUTS];
-};
+DAClessAudio audio;
 
-class DAClessAudio {
-public:
-    using SampleCallback = uint16_t (*)(void *);
-    using BlockCallback  = void (*)(void *, uint16_t *);
+bool start_audio_cpp(void) {
+    return audio.begin();
+}
 
-    explicit DAClessAudio(const DAClessConfig &cfg = DAClessConfig());
-    bool begin();
-    void service();
-    void mute();
-    void unmute();
-    void setSampleCallback(SampleCallback cb, void *userdata = nullptr);
-    void setBlockCallback(BlockCallback cb, void *userdata = nullptr);
-    uint16_t getADC(uint8_t channel) const;
-    float getSampleRate() const;
-    const volatile uint16_t *getOutBufPtr() const;
-    const volatile uint16_t *getAdcBuffer() const;
-    bool isDmaActive() const;
-};
-
-uint16_t interpolate(uint16_t x, uint16_t y, uint16_t mu_scaled);
+void service_audio_cpp(void) {
+    audio.service();
+}
 ```
 
-`HAL_ENABLE_DACLESS` propaguje `HAL_ENABLE_DMA_PWM_AUDIO` i
-`HAL_ENABLE_PWM_FREQ`. Wspólny sterownik bazuje na silniku DACless autorstwa
-Briana Varrena. Zachowuje jego konfigurację, podwójnie buforowany przepływ
-bloków, callbacki próbek i bloków, bufor wyników ADC, globalne zmienne
-zgodności (`audio_rate`, `out_buf_ptr`, `adc_results_buf`) oraz działanie
-funkcji interpolującej 8-bitowy współczynnik mieszania z wersji RP2040.
-
-Domyślnie (`cfg.useDma = true`) `hal_dma_pwm_audio` zasila PWM przez podwójnie
-buforowane DMA i na bieżąco aktualizuje bufor wyników ADC. Na RP2040 zachowany
-jest oryginalny łańcuch DMA: kanały A/B dla PWM oraz osobne DMA sterujące i
-próbkujące ADC. Na STM32G474 DMA aktualizacji TIM zapisuje aktywny rejestr CCR,
-callbacki `half-transfer`/`transfer-complete` obsługują dwie połowy bufora
-audio, a ADC1 cyklicznie skanuje skonfigurowane piny przez DMA.
-
-`begin()` zwraca `true` po utworzeniu i uruchomieniu obsługi PWM/DMA. Przy wyniku `false` instancja pozostaje zatrzymana i wyciszona. Jedną z możliwych przyczyn jest brak wolnego zasobu sprzętowego.
-
-Aby obsługiwać odtwarzanie w pętli aplikacji, ustaw `cfg.useDma = false` i często wywołuj `service()` z `app_task0()` lub zadania FreeRTOS. Funkcja zapisuje zaległe próbki przez `hal_pwm_freq_write()` i uzupełnia gotowy bufor przez funkcję zwrotną bloku. Gdy jej nie podano, korzysta z funkcji zwrotnej próbki, a bez niej wpisuje ciszę odpowiadającą środkowi zakresu. Po spóźnionym wywołaniu nadrabia najwyżej `DACLESS_MAX_POLLING_CATCHUP_SAMPLES` próbek, po czym synchronizuje odtwarzanie z bieżącym czasem. Funkcje zwrotne działają poza muteksem instancji, więc mogą wywołać `getADC()` bez zakleszczenia.
-
-Domyślne piny ADC to GPIO 26..29 na RP2040 i w backendzie mock oraz PA0..PA3 na STM32G474
-(`port * 16 + pin`). Nadpisz `cfg.adcPins[]` dla niestandardowego
-okablowania.
-
-**Wielowątkowość:** Publiczne metody chronią stan każdej instancji osobnym
-muteksem HAL utworzonym przez `jh_hal_mutex_create_once`.
-Callbacki bufora DMA działają z poziomu przerwania DMA backendu i nie
-przejmują muteksu instancji. Rejestracja callbacków, `begin()`, `service()`,
-`mute()`, `unmute()` i `getADC()` są bezpieczne do wywołania z normalnego
-kontekstu zadania/rdzenia. Nie wywołuj `service()` z ISR.
+Interfejs C++ pozostaje utrzymywany dla zgodności. W nowym kodzie, który
+potrzebuje informacji o przyczynie błędu i oddzielnego kontekstu dla każdej
+funkcji zwrotnej, preferuj opisany wyżej interfejs C.
 
 ---
 
@@ -440,11 +506,21 @@ Odczytuj sygnały analogowe z obsługiwanych pinów ADC. Wynik jest skalowany do
 #include <hal/analog/hal_adc.h>
 
 void hal_adc_set_resolution(uint8_t bits);
+bool hal_adc_is_pin_supported(uint8_t pin);
 int  hal_adc_read(uint8_t pin);
 ```
 
-Domyślna rozdzielczość to 12 bitów (spójna we wszystkich backendach RP2040,
+Przed konwersją można sprawdzić pin przez `hal_adc_is_pin_supported()`. Funkcja
+nie konfiguruje pinu ani przetwornika ADC.
+
+Domyślna rozdzielczość to 12 bitów (spójna na platformach RP oraz w backendach
 STM32G474, ESP32-S3 i mock).
+
+Na platformach RP i STM32G474 strumień DACless z DMA oraz wejściami ADC
+rezerwuje współdzielony przetwornik do chwili zatrzymania lub wyciszenia
+strumienia. W tym czasie `hal_adc_read()` zwraca `0` bez zmiany konfiguracji
+skanowania DMA, a `hal_read_chip_temp_ex()` zwraca `HAL_EBUSY`. Wznowienie
+strumienia ponownie rezerwuje przetwornik.
 
 - **impl/rp2040:** natywny pico-sdk `hardware/adc.h` (`adc_init`, `adc_gpio_init`,
   `adc_select_input`, `adc_read`). Prawidłowe piny ADC to GPIO 26-29 (kanały 0-3);
@@ -465,7 +541,7 @@ STM32G474, ESP32-S3 i mock).
   `hal_mock_adc_inject(pin, value)`.
 
 **Wielowątkowość:** API może być bezpiecznie używane z wielu wątków i rdzeni.
-Wewnętrzny muteks chroni wspólny stan ADC na RP2040, STM32G474 i ESP32-S3,
+Wewnętrzny muteks chroni wspólny stan ADC na platformach RP, STM32G474 i ESP32-S3,
 dlatego współbieżne odczyty są automatycznie wykonywane kolejno.
 
 ---

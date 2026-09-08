@@ -430,4 +430,6 @@ void hal_gpio_set_irq_priority(hal_irq_priority_t priority) {
 
 #endif /* JH_STM32G474_HW */
 
+bool jh_hal_gpio_pin_valid(uint8_t pin) { return gpio_pin_valid(pin); }
+
 #endif // HAL_TARGET_IS_STM32G474

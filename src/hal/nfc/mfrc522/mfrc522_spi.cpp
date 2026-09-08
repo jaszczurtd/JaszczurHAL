@@ -6,7 +6,8 @@ void MFRC522_SPI::PCD_WriteRegister(MFRC522::PCD_Register reg, byte value) {
   const byte frame[] = {(byte)(reg << 1), value};
   const hal_spi_device_operation_t operation = {HAL_SPI_DEVICE_OP_WRITE, frame,
                                                 NULL, sizeof(frame)};
-  (void)hal_spi_device_transaction(&_device, &operation, 1u);
+  PCD_RecordTransportStatus(
+      hal_spi_device_transaction(&_device, &operation, 1u));
 }
 
 void MFRC522_SPI::PCD_WriteRegister(MFRC522::PCD_Register reg, byte count,
@@ -16,7 +17,8 @@ void MFRC522_SPI::PCD_WriteRegister(MFRC522::PCD_Register reg, byte count,
       {HAL_SPI_DEVICE_OP_WRITE, &address, NULL, 1u},
       {HAL_SPI_DEVICE_OP_WRITE, values, NULL, count},
   };
-  (void)hal_spi_device_transaction(&_device, operations, COUNTOF(operations));
+  PCD_RecordTransportStatus(
+      hal_spi_device_transaction(&_device, operations, COUNTOF(operations)));
 }
 
 byte MFRC522_SPI::PCD_ReadRegister(MFRC522::PCD_Register reg) {
@@ -26,7 +28,8 @@ byte MFRC522_SPI::PCD_ReadRegister(MFRC522::PCD_Register reg) {
       {HAL_SPI_DEVICE_OP_WRITE, &address, NULL, 1u},
       {HAL_SPI_DEVICE_OP_TRANSFER_IN_PLACE, NULL, &value, 1u},
   };
-  (void)hal_spi_device_transaction(&_device, operations, COUNTOF(operations));
+  PCD_RecordTransportStatus(
+      hal_spi_device_transaction(&_device, operations, COUNTOF(operations)));
   return value;
 }
 
@@ -40,6 +43,7 @@ void MFRC522_SPI::PCD_ReadRegister(MFRC522::PCD_Register reg, byte count,
 
   hal_status_t status = hal_spi_device_acquire(&_device);
   if (hal_status_is_error(status)) {
+    PCD_RecordTransportStatus(status);
     return;
   }
   status = hal_spi_write(_device.bus, &address, 1u);
@@ -57,13 +61,15 @@ void MFRC522_SPI::PCD_ReadRegister(MFRC522::PCD_Register reg, byte count,
       values[index] = value;
     }
   }
-  (void)hal_spi_device_finish(&_device, status);
+  PCD_RecordTransportStatus(hal_spi_device_finish(&_device, status));
 }
 
 bool MFRC522_SPI::PCD_Init() {
   const hal_spi_settings_t settings = _device.settings;
-  if (hal_status_is_error(hal_spi_device_init(&_device, _device.bus,
-                                              _device.cs_pin, &settings))) {
+  const hal_status_t status =
+      hal_spi_device_init(&_device, _device.bus, _device.cs_pin, &settings);
+  PCD_RecordTransportStatus(status);
+  if (hal_status_is_error(status)) {
     return false;
   }
 

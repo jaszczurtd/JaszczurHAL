@@ -7,9 +7,13 @@
 void MFRC522_I2C::PCD_WriteRegister(MFRC522::PCD_Register reg, byte value) {
   hal_i2c_lock_bus(_bus);
   hal_i2c_begin_transmission_bus(_bus, _chipAddress);
-  (void)hal_i2c_write_bus(_bus, (byte)reg);
-  (void)hal_i2c_write_bus(_bus, value);
-  (void)hal_i2c_end_transmission_bus(_bus);
+  if (hal_i2c_write_bus(_bus, (byte)reg) != 1u) {
+    PCD_RecordTransportStatus(HAL_EIO);
+  }
+  if (hal_i2c_write_bus(_bus, value) != 1u) {
+    PCD_RecordTransportStatus(HAL_EIO);
+  }
+  PCD_RecordTransportStatus(hal_i2c_end_transmission_bus_ex(_bus));
   hal_i2c_unlock_bus(_bus);
 }
 
@@ -17,18 +21,25 @@ void MFRC522_I2C::PCD_WriteRegister(MFRC522::PCD_Register reg, byte count,
                                     byte *values) {
   hal_i2c_lock_bus(_bus);
   hal_i2c_begin_transmission_bus(_bus, _chipAddress);
-  (void)hal_i2c_write_bus(_bus, (byte)reg);
-  for (byte index = 0; index < count; index++) {
-    (void)hal_i2c_write_bus(_bus, values[index]);
+  if (hal_i2c_write_bus(_bus, (byte)reg) != 1u) {
+    PCD_RecordTransportStatus(HAL_EIO);
   }
-  (void)hal_i2c_end_transmission_bus(_bus);
+  for (byte index = 0; index < count; index++) {
+    if (hal_i2c_write_bus(_bus, values[index]) != 1u) {
+      PCD_RecordTransportStatus(HAL_EIO);
+    }
+  }
+  PCD_RecordTransportStatus(hal_i2c_end_transmission_bus_ex(_bus));
   hal_i2c_unlock_bus(_bus);
 }
 
 byte MFRC522_I2C::PCD_ReadRegister(MFRC522::PCD_Register reg) {
   byte value = 0;
   const byte address = (byte)reg;
-  if (!hal_i2c_write_read_bus(_bus, _chipAddress, &address, 1, &value, 1)) {
+  const hal_status_t status =
+      hal_i2c_write_read_bus_ex(_bus, _chipAddress, &address, 1u, &value, 1u);
+  PCD_RecordTransportStatus(status);
+  if (hal_status_is_error(status)) {
     return 0;
   }
   return value;
@@ -50,7 +61,10 @@ void MFRC522_I2C::PCD_ReadRegister(MFRC522::PCD_Register reg, byte count,
     dst = local;
   }
 
-  if (!hal_i2c_write_read_bus(_bus, _chipAddress, &address, 1, dst, count)) {
+  const hal_status_t status =
+      hal_i2c_write_read_bus_ex(_bus, _chipAddress, &address, 1u, dst, count);
+  PCD_RecordTransportStatus(status);
+  if (hal_status_is_error(status)) {
     return;
   }
 

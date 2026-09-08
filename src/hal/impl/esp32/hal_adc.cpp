@@ -95,6 +95,8 @@ void hal_adc_set_resolution(uint8_t bits) {
   hal_mutex_unlock(mutex);
 }
 
+bool hal_adc_is_pin_supported(uint8_t pin) { return adc_pin_available(pin); }
+
 int hal_adc_read(uint8_t pin) {
   if (!adc_pin_available(pin)) {
     return 0;

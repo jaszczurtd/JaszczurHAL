@@ -21,6 +21,10 @@ extern "C" hal_mutex_t hal_mutex_create(void) {
   return new hal_mutex_impl_t;
 }
 
+extern "C" hal_mutex_t jh_hal_mutex_try_create(void) {
+  return hal_mutex_create();
+}
+
 extern "C" void hal_mutex_lock(hal_mutex_t mutex) {
   mutex->mutex.lock();
   s_locked_mutex = mutex;
@@ -109,8 +113,32 @@ test_gpio_and_temperature_reads_share_one_adc_transaction_lock(void) {
   TEST_ASSERT_EQUAL_UINT(1u, s_adc_init_count.load());
 }
 
+static void
+test_dma_reservation_blocks_polled_adc_without_reprogramming_it(void) {
+  const unsigned int calls_before = s_unprotected_call_count.load();
+  const unsigned int init_before = s_adc_init_count.load();
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, rp2040_adc_acquire_dma());
+  TEST_ASSERT_EQUAL_INT(HAL_EBUSY, rp2040_adc_acquire_dma());
+  TEST_ASSERT_EQUAL_INT(0, rp2040_adc_read_gpio(26u));
+  TEST_ASSERT_EQUAL_UINT16(0u, rp2040_adc_read_temperature_raw());
+  uint16_t raw = 123u;
+  TEST_ASSERT_EQUAL_INT(HAL_EBUSY, rp2040_adc_read_temperature_raw_ex(&raw));
+  TEST_ASSERT_EQUAL_UINT16(123u, raw);
+  TEST_ASSERT_EQUAL_UINT(init_before, s_adc_init_count.load());
+  TEST_ASSERT_EQUAL_UINT(calls_before, s_unprotected_call_count.load());
+
+  rp2040_adc_release_dma();
+  TEST_ASSERT_EQUAL_INT(1000, rp2040_adc_read_gpio(26u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, rp2040_adc_read_temperature_raw_ex(&raw));
+  TEST_ASSERT_EQUAL_UINT16(1004u, raw);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, rp2040_adc_acquire_dma());
+  rp2040_adc_release_dma();
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_gpio_and_temperature_reads_share_one_adc_transaction_lock);
+  RUN_TEST(test_dma_reservation_blocks_polled_adc_without_reprogramming_it);
   return UNITY_END();
 }

@@ -19,6 +19,7 @@
  */
 
 #include "hal/core/hal_compiler.h"
+#include "hal/core/hal_status.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -61,6 +62,7 @@ uint32_t rp2040_system_get_free_heap(void);
 /** @brief Approximate on-die temperature in °C. Reads the internal temperature
  *  sensor through the shared native ADC path. */
 float rp2040_system_read_chip_temp(void);
+hal_status_t rp2040_system_read_chip_temp_ex(float *out_celsius);
 
 /** @brief Jump to the RP2040 USB bootloader (BOOTSEL/UF2 mode). Does not
  * return. Wraps @c reset_usb_boot(0, 0). */

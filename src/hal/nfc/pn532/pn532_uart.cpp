@@ -35,8 +35,7 @@ hal_status_t PN532_UART::begin() {
   if (_uart == NULL) {
     return HAL_ENOMEM;
   }
-  hal_uart_begin(_uart, 115200, HAL_UART_CFG_8N1);
-  return HAL_OK;
+  return hal_uart_begin(_uart, 115200, HAL_UART_CFG_8N1);
 }
 
 hal_status_t PN532_UART::wakeup() {
@@ -57,9 +56,17 @@ hal_status_t PN532_UART::writeCommand(const uint8_t *data, size_t len) {
   if (_uart == NULL || data == NULL || len == 0) {
     return HAL_EINVAL;
   }
-  size_t written = hal_uart_write(_uart, data, len);
-  hal_uart_flush(_uart);
-  return (written == len) ? HAL_OK : HAL_EIO;
+  size_t written = 0u;
+  const hal_status_t write_status =
+      hal_uart_write_ex(_uart, data, len, &written);
+  const hal_status_t flush_status = hal_uart_flush(_uart);
+  if (write_status != HAL_OK) {
+    return write_status;
+  }
+  if (written != len) {
+    return HAL_EIO;
+  }
+  return flush_status;
 }
 
 hal_status_t PN532_UART::readData(uint8_t *data, size_t len) {
@@ -83,10 +90,12 @@ hal_status_t PN532_UART::readByte(uint8_t *value, uint16_t timeout_ms) {
 
   const uint32_t start = hal_millis();
   while (!hal_millis_deadline_expired(start, timeout_ms)) {
-    int read = hal_uart_read(_uart);
-    if (read >= 0) {
-      *value = (uint8_t)read;
+    const hal_status_t status = hal_uart_read_ex(_uart, value);
+    if (status == HAL_OK) {
       return HAL_OK;
+    }
+    if (status != HAL_EAGAIN) {
+      return status;
     }
     hal_delay_ms(1);
   }

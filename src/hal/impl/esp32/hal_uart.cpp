@@ -7,6 +7,7 @@
 #include "hal/core/hal_mutex_once.h"
 #include "hal/impl/esp32/jh_esp32_status.h"
 #include "hal/serial/hal_uart.h"
+#include "hal/serial/hal_uart_internal.h"
 #include "hal/system/hal_sync.h"
 #include "jh_esp32_gpio.h"
 
@@ -230,6 +231,16 @@ hal_status_t uart_write_locked(hal_uart_t handle, const uint8_t *data,
 }
 
 } // namespace
+
+hal_status_t jh_hal_uart_validate_config_for_target(hal_uart_port_t port,
+                                                    uint8_t rx_pin,
+                                                    uint8_t tx_pin) {
+  uart_port_t idf_port = UART_NUM_MAX;
+  return uart_select_port(port, &idf_port) && uart_rx_pin_valid(rx_pin) &&
+                 uart_tx_pin_valid(tx_pin)
+             ? HAL_OK
+             : HAL_EINVAL;
+}
 
 hal_uart_t hal_uart_create(hal_uart_port_t port, uint8_t rx_pin,
                            uint8_t tx_pin) {

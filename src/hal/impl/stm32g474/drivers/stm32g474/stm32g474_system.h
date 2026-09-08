@@ -73,8 +73,10 @@ uint32_t stm32g474_system_get_free_heap(void);
  *  TS_CAL1/TS_CAL2/VREFINT_CAL bytes from system memory (RM0440 "Vbat,
  *  temperature sensor and VrefInt channel").
  *  @param out_celsius Destination for the measured die temperature.
- *  @return HAL_OK on success, HAL_EINVAL when @p out_celsius is NULL, or
- *          HAL_EUNSUPPORTED on host-sanity builds (no OTP/ADC to read). */
+ *  @return HAL_OK on success, HAL_EINVAL when @p out_celsius is NULL,
+ *          HAL_EBUSY while audio DMA owns ADC1, HAL_ENOMEM when ADC
+ *          synchronization cannot be allocated, or HAL_EUNSUPPORTED on
+ *          host-sanity builds (no OTP/ADC to read). */
 hal_status_t stm32g474_system_read_chip_temp_ex(float *out_celsius);
 
 /** @brief Two-point VREFINT-ratio-compensated die-temperature interpolation.

@@ -13,6 +13,7 @@
  * Original license: MIT, Copyright (c) 2025 brian sullivan.
  */
 
+#include "hal/audio/hal_dacless.h"
 #include "hal/core/hal_config.h"
 #include "hal/core/hal_target.h"
 
@@ -25,38 +26,6 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-
-#ifndef DACLESS_MAX_BLOCK_SIZE
-#define DACLESS_MAX_BLOCK_SIZE 512u
-#endif
-
-#ifndef DACLESS_MAX_ADC_INPUTS
-#define DACLESS_MAX_ADC_INPUTS 4u
-#endif
-
-#ifndef DACLESS_MAX_INSTANCES
-#define DACLESS_MAX_INSTANCES 4u
-#endif
-
-#ifndef DACLESS_MAX_POLLING_CATCHUP_SAMPLES
-#define DACLESS_MAX_POLLING_CATCHUP_SAMPLES 64u
-#endif
-
-#ifndef DACLESS_DEFAULT_PWM_PIN
-#define DACLESS_DEFAULT_PWM_PIN 6u
-#endif
-
-#if HAL_TARGET_IS_STM32G474
-#define DACLESS_DEFAULT_ADC0_PIN 0u
-#define DACLESS_DEFAULT_ADC1_PIN 1u
-#define DACLESS_DEFAULT_ADC2_PIN 2u
-#define DACLESS_DEFAULT_ADC3_PIN 3u
-#else
-#define DACLESS_DEFAULT_ADC0_PIN 26u
-#define DACLESS_DEFAULT_ADC1_PIN 27u
-#define DACLESS_DEFAULT_ADC2_PIN 28u
-#define DACLESS_DEFAULT_ADC3_PIN 29u
-#endif
 
 struct DAClessConfig {
   uint8_t pinPWM = DACLESS_DEFAULT_PWM_PIN;
@@ -81,12 +50,67 @@ public:
   DAClessAudio &operator=(const DAClessAudio &) = delete;
 
   bool begin();
+
+  /**
+   * @brief Start or restart audio while preserving the detailed HAL status.
+   * @return HAL_OK on success, HAL_EINVAL for invalid DMA pin routing,
+   *         HAL_EUNSUPPORTED when the DMA backend is not available, HAL_EBUSY
+   *         when a hardware resource is already used, HAL_ENOMEM when
+   *         synchronization or a backend slot is unavailable, or HAL_EIO
+   *         when the output backend cannot be started.
+   * @note Calls are serialized by the instance. On RP targets, all lifecycle
+   *       and control calls for DMA instances must use one owner core.
+   */
+  hal_status_t beginEx();
+
+  /**
+   * @brief Stop output and release backend resources before destruction.
+   * @return HAL_OK on success, HAL_ENOMEM when synchronization is
+   *         unavailable, or an error returned by the DMA backend.
+   * @note On RP targets, call this on the same core as @ref beginEx.
+   */
+  hal_status_t shutdownEx();
   void service();
   void mute();
+
+  /**
+   * @brief Pause output while preserving the detailed HAL status.
+   * @return HAL_OK on success, HAL_ENOMEM when synchronization cannot be
+   *         initialized, HAL_ESTATE for an invalid backend state, or HAL_EIO
+   *         when the DMA backend cannot be paused.
+   */
+  hal_status_t muteEx();
   void unmute();
 
+  /**
+   * @brief Resume output while preserving the detailed HAL status.
+   * @return HAL_OK on success, HAL_ENOMEM when synchronization cannot be
+   *         initialized, HAL_EBUSY when ADC/PWM resources are in use,
+   *         HAL_ESTATE for an invalid backend state, or HAL_EIO when the DMA
+   *         backend cannot be resumed.
+   */
+  hal_status_t unmuteEx();
+
   void setSampleCallback(SampleCallback cb, void *userdata = nullptr);
+
+  /**
+   * @brief Install the sample callback while preserving the HAL status.
+   * @param cb Callback to install, or NULL to clear it.
+   * @param userdata Value passed to @p cb.
+   * @return HAL_OK on success or HAL_ENOMEM when synchronization cannot be
+   *         initialized.
+   */
+  hal_status_t setSampleCallbackEx(SampleCallback cb, void *userdata = nullptr);
   void setBlockCallback(BlockCallback cb, void *userdata = nullptr);
+
+  /**
+   * @brief Install the block callback while preserving the HAL status.
+   * @param cb Callback to install, or NULL to clear it.
+   * @param userdata Value passed to @p cb.
+   * @return HAL_OK on success or HAL_ENOMEM when synchronization cannot be
+   *         initialized.
+   */
+  hal_status_t setBlockCallbackEx(BlockCallback cb, void *userdata = nullptr);
 
   void setAudioSampleCallback(SampleCallback cb, void *userdata = nullptr) {
     setSampleCallback(cb, userdata);
@@ -95,11 +119,37 @@ public:
   uint16_t getADC(uint8_t channel) const;
   float getSampleRate() const { return sampleRate_; }
   const DAClessConfig &getConfig() const { return cfg_; }
-  const volatile uint16_t *getOutBufPtr() const { return outBufPtr_; }
+  const volatile uint16_t *getOutBufPtr() const {
+    return __atomic_load_n(&outBufPtr_, __ATOMIC_ACQUIRE);
+  }
   const volatile uint16_t *getAdcBuffer() const { return adcBuf_; }
-  bool isMuted() const { return muted_; }
-  bool isRunning() const { return begun_ && !muted_; }
+
+  /**
+   * @brief Report whether the most recent start succeeded.
+   * @return true after a successful begin; false before begin or after a
+   *         failed restart.
+   * @note Do not race this compatibility accessor with lifecycle operations.
+   */
+  bool isBegun() const { return begun_; }
+  bool isMuted() const {
+    return muted_ ||
+           (dmaActive_ && dma_ != nullptr && hal_dma_pwm_audio_is_paused(dma_));
+  }
+  bool isRunning() const {
+    return begun_ && !isMuted() &&
+           (!dmaActive_ ||
+            (dma_ != nullptr && hal_dma_pwm_audio_is_running(dma_)));
+  }
   bool isDmaActive() const { return dmaActive_; }
+
+  /**
+   * @brief Report whether this object has a compatibility-registry slot.
+   * @return true when this instance occupies the shared compatibility
+   *         registry; false when that registry was already full at creation.
+   * @note The result is fixed after construction. Do not call it concurrently
+   *       with destruction.
+   */
+  bool isRegistered() const { return registryIndex_ >= 0; }
 
 #if HAL_TARGET_IS_MOCK
   hal_pwm_freq_channel_t getPwmChannelForTest() const { return pwm_; }
@@ -132,6 +182,7 @@ private:
   void unregisterInstance();
   void updateCompatibilityGlobalsUnlocked();
   bool isCompatibilityOwnerUnlocked() const;
+  void publishOutputBuffer(volatile uint16_t *buffer);
 
   void fillSilenceUnlocked();
   void markBeginFailedUnlocked();
@@ -143,8 +194,8 @@ private:
   void writeCurrentSampleUnlocked();
   void fillBufferWithCallback(uint16_t *buffer, SampleCallback sample_cb,
                               BlockCallback block_cb, void *user);
-  bool startDmaUnlocked();
-  void stopDmaUnlocked();
+  hal_status_t startDmaUnlocked();
+  hal_status_t stopDmaUnlocked();
   static void dmaBufferDoneThunk(void *user, uint16_t *buffer,
                                  uint8_t buffer_index);
   void onDmaBufferDone(uint16_t *buffer, uint8_t buffer_index);

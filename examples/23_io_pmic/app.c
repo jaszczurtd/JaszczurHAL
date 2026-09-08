@@ -1,5 +1,5 @@
 /**
- * @file app.cpp
+ * @file app.c
  * @brief Use GPIO expanders, ADC/DAC converters, an ADP5360, and an RGB LED.
  *
  * I2C devices are initialized independently, so missing modules do not prevent
@@ -102,11 +102,11 @@ static void init_i2c_devices(void) {
   s_pcf8574_ready = status == HAL_OK;
   log_status("PCF8574", status);
 
-  status = hal_mcp3221_init_ex(&s_mcp3221, nullptr);
+  status = hal_mcp3221_init_ex(&s_mcp3221, NULL);
   s_mcp3221_ready = status == HAL_OK;
   log_status("MCP3221", status);
 
-  status = hal_mcp4725_init_ex(&s_mcp4725, nullptr);
+  status = hal_mcp4725_init_ex(&s_mcp4725, NULL);
   s_mcp4725_ready = status == HAL_OK;
   log_status("MCP4725", status);
 

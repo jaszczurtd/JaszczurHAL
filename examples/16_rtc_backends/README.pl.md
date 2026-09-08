@@ -8,9 +8,9 @@ odliczający PCF8563, pomiar temperatury DS3231 oraz wybudzanie po zadanym
 czasie. Dla obsługujących to układów sprawdza też odczyt i zapis czasu
 w postaci znacznika epoch.
 
-Sterowniki są kompilowane razem. Układ wybiera pole `hal_rtc_config_t::chip`,
-a brak jednego zewnętrznego RTC nie zatrzymuje obsługi drugiego. I2C 0 używa
-GP4/GP5 na płytkach RP i PB9/PB8 na STM32G474.
+Sterowniki są kompilowane razem. Układ wybiera pole `chip` struktury
+`hal_rtc_config_t`, a brak jednego zewnętrznego RTC nie zatrzymuje obsługi
+drugiego. I2C 0 używa GP4/GP5 na płytkach RP i PB9/PB8 na STM32G474.
 
 Przed zmianą czasu aplikacja odczytuje stan zewnętrznego RTC. Zachowuje
 poprawny czas. Wartość testową `2026-08-20 12:34:50` wpisuje tylko wtedy,
@@ -57,7 +57,7 @@ konfiguracja wybiera dokładnie jeden plik aplikacji:
 | Wybór | Plik aplikacji | Platformy |
 |---|---|---|
 | Projekt podstawowy | `app.c` | RP2040, RP2350 ARM, RP2350 RISC-V, STM32G474 |
-| Wariant `display-clock` | `display_clock_app.cpp` | STM32G474 |
+| Wariant `display-clock` | `display_clock_app.c` | STM32G474 |
 
 Przykład podstawowy dla STM32G474:
 
@@ -81,7 +81,7 @@ vscode/entry/jh-vscode build \
   --variant display-clock
 ```
 
-Wariant ustawia `JH_PROJECT_SOURCES=display_clock_app.cpp` i włącza obsługę
+Wariant ustawia `JH_PROJECT_SOURCES=display_clock_app.c` i włącza obsługę
 ILI9341. Nie dołącza `app.c`, więc definicje `app_start()` i `app_task0()`
 nie kolidują. Wynik znajduje się w
 `.build/examples/16_rtc_backends/variants/display-clock/firmware.elf`.

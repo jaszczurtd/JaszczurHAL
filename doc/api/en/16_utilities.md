@@ -725,95 +725,59 @@ void app_task1(void) {
 
 ## `draw7Segment` - seven-segment-style digits and text
 
-Draw digits and selected characters through `hal_display`, for example for clocks and counters.
+This small helper draws digits and selected characters through `hal_display`.
+The same header and function names are available from C and C++.
+
+### C API
+
+Include the helper header:
 
 ```c
 #include <utils/draw7Segment.h>
 
-// Draw a 7-segment string at (x, y).
-// str          - null-terminated string to render.
-// digitWidth   - width of a single digit cell in pixels.
-// digitHeight  - height of a single digit cell in pixels.
-// thickness    - segment thickness in pixels.
-// color        - RGB565 colour.
-void draw7SegString(const char* str, int x, int y, int digitWidth, int digitHeight, float thickness, uint16_t color);
-
-// Calculate the pixel width of a 7-segment string without drawing it.
-// Returns the total width in pixels.
-int get7SegStringWidth(const char* str, int digitWidth, float thickness);
+void draw_value(const char *text) {
+    int width = get7SegStringWidth(text, 32, 3.0f);
+    int x = (320 - width) / 2;
+    draw7SegString(text, x, 50, 32, 48, 3.0f, HAL_COLOR_RED);
+}
 ```
+
+`draw7SegString()` draws the string, while `get7SegStringWidth()` returns its
+width in pixels. Both functions are exported with C ABI symbols.
 
 **Supported characters:** `0`-`9`, hex `A`-`F`, space, `+`, `-`, `.`, `:`, `%`, `^`.
 
-Characters have proportional widths: `1` and space are narrower, `^` slightly wider.
+Characters have proportional widths: `1` and space are narrower, while `^`
+is slightly wider. An unsupported character is not drawn but advances the
+cursor by one full digit cell.
 
-**Dependencies:** `hal_display.h` only. The interface uses no platform-specific types; all text parameters are `const char*`.
+**Dependencies:** `HAL_ENABLE_DISPLAY`, an active `hal_display` backend, and
+the RGB565 color values from the display API. The interface does not expose
+platform-specific types.
 
-**Thread safety:** Thread-safe when `hal_display` is thread-safe (RP-family backend). Delegates all drawing to `hal_display_*` functions which are mutex-protected.
+**Concurrency:** Each drawing primitive follows the synchronization rules of
+the selected `hal_display` backend. Rendering a complete string is not one
+atomic display transaction, so coordinate callers when interleaved drawing
+would be visible.
 
-**Example: digital clock display**
-```c
+### C++ API preserved for compatibility
+
+C++ code continues to include `utils/draw7Segment.h` and call the same
+functions:
+
+```cpp
 #include <utils/draw7Segment.h>
-#include <hal/display/hal_display.h>
 
-void app_start(void) {
-    // Assume display is already initialized via hal_display_init(...)
-    hal_display_fill_screen(HAL_COLOR_BLACK);
-}
-
-void draw_time_display(int hours, int minutes, int seconds) {
-    char time_str[16];
-    snprintf(time_str, sizeof(time_str), "%02d:%02d:%02d", hours, minutes, seconds);
-
-    // Calculate width of the string
-    int width = get7SegStringWidth(time_str, 32, 3.0f);  // 32-pixel digits
-    int x = (320 - width) / 2;  // center horizontally
-
-    // Draw 7-segment display in red color
-    draw7SegString(time_str, x, 50, 32, 48, 3.0f, HAL_COLOR_RED);
-}
-
-void app_task0(void) {
-    uint32_t ms = hal_millis();
-    uint32_t total_secs = ms / 1000;
-
-    int hours = (total_secs / 3600) % 24;
-    int minutes = (total_secs / 60) % 60;
-    int seconds = total_secs % 60;
-
-    draw_time_display(hours, minutes, seconds);
-
-    hal_delay_ms(100);
+void draw_value(void) {
+    int width = get7SegStringWidth("12:34", 32, 3.0f);
+    draw7SegString("12:34", (320 - width) / 2, 50,
+                   32, 48, 3.0f, HAL_COLOR_RED);
 }
 ```
 
-**Example: status LED counter**
-```c
-#include <utils/draw7Segment.h>
-#include <hal/gpio/hal_gpio.h>
-
-void show_counter_7seg(int value) {
-    char counter_str[16];
-    snprintf(counter_str, sizeof(counter_str), "%d", value);
-
-    // Draw on display (2x size, white, at position 10,100)
-    draw7SegString(counter_str, 10, 100, 24, 36, 2.0f, HAL_COLOR_WHITE);
-}
-
-void app_task0(void) {
-    static int counter = 0;
-
-    if (hal_gpio_read(BUTTON_PIN)) {  // button pressed
-        counter++;
-        if (counter > 9999) counter = 0;
-        show_counter_7seg(counter);
-        hal_delay_ms(500);
-    }
-}
-```
-
----
-
+The library exports both the new C ABI symbols and the existing C++ symbols.
+Both variants use one implementation and retain the same drawing behavior and
+`float` width calculation.
 
 ---
 

@@ -129,19 +129,17 @@
 #define NETWORK_SUITE_BSD_UDP_PORT 9000u
 #endif
 
-namespace {
+static const uint16_t kHttpPort = 80u;
+static const uint16_t kWebSocketPort = 81u;
+static const uint32_t kWifiRetryMs = 5000u;
+static const uint32_t kStatusIntervalMs = 5000u;
+static const uint32_t kBsdClientIntervalMs = 15000u;
+static const uint32_t kSocketTimeoutMs = 750u;
+static const uint32_t kHttpTimeoutMs = 5000u;
+static const uint16_t kBsdWorkerStackWords = 768u;
+static const uint16_t kHttpWorkerStackWords = 1536u;
 
-constexpr uint16_t kHttpPort = 80u;
-constexpr uint16_t kWebSocketPort = 81u;
-constexpr uint32_t kWifiRetryMs = 5000u;
-constexpr uint32_t kStatusIntervalMs = 5000u;
-constexpr uint32_t kBsdClientIntervalMs = 15000u;
-constexpr uint32_t kSocketTimeoutMs = 750u;
-constexpr uint32_t kHttpTimeoutMs = 5000u;
-constexpr uint16_t kBsdWorkerStackWords = 768u;
-constexpr uint16_t kHttpWorkerStackWords = 1536u;
-
-struct SuiteStats {
+typedef struct {
   uint32_t app_task0_ticks;
   uint32_t app_task1_ticks;
   uint32_t http_requests;
@@ -154,15 +152,15 @@ struct SuiteStats {
   uint32_t bsd_udp_client_runs;
   uint32_t http_client_runs;
   uint32_t https_client_runs;
-};
+} SuiteStats;
 
-struct RamFile {
+typedef struct {
   bool used;
   char path[96];
   uint8_t data[512];
   size_t len;
   uint32_t mtime;
-};
+} RamFile;
 
 static SemaphoreHandle_t s_stats_mutex;
 static SuiteStats s_stats;
@@ -180,7 +178,7 @@ static uint32_t s_last_status_ms;
 static uint32_t s_last_broadcast_ms;
 
 static void increment_stat(uint32_t *counter) {
-  if (s_stats_mutex != nullptr &&
+  if (s_stats_mutex != NULL &&
       xSemaphoreTake(s_stats_mutex, pdMS_TO_TICKS(20u)) == pdTRUE) {
     ++(*counter);
     xSemaphoreGive(s_stats_mutex);
@@ -189,7 +187,7 @@ static void increment_stat(uint32_t *counter) {
 
 static SuiteStats stats_snapshot(void) {
   SuiteStats snapshot = {};
-  if (s_stats_mutex != nullptr &&
+  if (s_stats_mutex != NULL &&
       xSemaphoreTake(s_stats_mutex, pdMS_TO_TICKS(20u)) == pdTRUE) {
     snapshot = s_stats;
     xSemaphoreGive(s_stats_mutex);
@@ -198,7 +196,7 @@ static SuiteStats stats_snapshot(void) {
 }
 
 static void set_wifi_ready(bool ready) {
-  if (s_stats_mutex != nullptr &&
+  if (s_stats_mutex != NULL &&
       xSemaphoreTake(s_stats_mutex, pdMS_TO_TICKS(20u)) == pdTRUE) {
     s_wifi_ready = ready;
     xSemaphoreGive(s_stats_mutex);
@@ -207,7 +205,7 @@ static void set_wifi_ready(bool ready) {
 
 static bool wifi_ready(void) {
   bool ready = false;
-  if (s_stats_mutex != nullptr &&
+  if (s_stats_mutex != NULL &&
       xSemaphoreTake(s_stats_mutex, pdMS_TO_TICKS(20u)) == pdTRUE) {
     ready = s_wifi_ready;
     xSemaphoreGive(s_stats_mutex);
@@ -237,8 +235,8 @@ static cJSON *make_status_json(const char *source) {
   (void)hal_system_get_current_architecture(&architecture);
 
   cJSON *root = cJSON_CreateObject();
-  if (root == nullptr) {
-    return nullptr;
+  if (root == NULL) {
+    return NULL;
   }
 
   cJSON_AddNumberToObject(root, "app0_ticks", (double)stats.app_task0_ticks);
@@ -249,11 +247,10 @@ static cJSON *make_status_json(const char *source) {
   cJSON_AddStringToObject(root, "ip", ip);
   cJSON_AddStringToObject(root, "mac", mac);
   cJSON_AddNumberToObject(root, "rssi", (double)hal_wifi_rssi());
-  cJSON_AddStringToObject(root, "source", source != nullptr ? source : "api");
-  cJSON_AddStringToObject(root, "target",
-                          architecture.target_name != nullptr
-                              ? architecture.target_name
-                              : "unknown");
+  cJSON_AddStringToObject(root, "source", source != NULL ? source : "api");
+  cJSON_AddStringToObject(
+      root, "target",
+      architecture.target_name != NULL ? architecture.target_name : "unknown");
   cJSON_AddNumberToObject(root, "uptime_ms", (double)hal_millis());
   cJSON_AddNumberToObject(root, "ws_clients",
                           (double)hal_websocket_client_count());
@@ -265,18 +262,18 @@ static void run_cjson_self_test(void) {
   static const char kConfig[] =
       "{\"name\":\"18_freertos_suite\",\"sample_ms\":250,"
       "\"enabled\":true}";
-  const char *parse_end = nullptr;
+  const char *parse_end = NULL;
   cJSON *root = cJSON_ParseWithOpts(kConfig, &parse_end, 1);
-  if (root == nullptr) {
+  if (root == NULL) {
     derr("network suite: cJSON parse failed near %.16s",
-         parse_end != nullptr ? parse_end : "");
+         parse_end != NULL ? parse_end : "");
     return;
   }
 
   const cJSON *name = cJSON_GetObjectItemCaseSensitive(root, "name");
   const cJSON *sample_ms = cJSON_GetObjectItemCaseSensitive(root, "sample_ms");
   const cJSON *enabled = cJSON_GetObjectItemCaseSensitive(root, "enabled");
-  if (!cJSON_IsString(name) || name->valuestring == nullptr ||
+  if (!cJSON_IsString(name) || name->valuestring == NULL ||
       !cJSON_IsNumber(sample_ms) || !cJSON_IsBool(enabled)) {
     derr("network suite: cJSON schema check failed");
     cJSON_Delete(root);
@@ -300,17 +297,17 @@ static RamFile *find_file(const char *path) {
       return &s_files[i];
     }
   }
-  return nullptr;
+  return NULL;
 }
 
 static hal_status_t ram_file_stat(const char *path,
                                   hal_http_file_info_t *out_info, void *user) {
   (void)user;
-  if (out_info == nullptr) {
+  if (out_info == NULL) {
     return HAL_EINVAL;
   }
   RamFile *file = find_file(path);
-  if (file == nullptr) {
+  if (file == NULL) {
     return HAL_ENOENT;
   }
   memset(out_info, 0, sizeof(*out_info));
@@ -323,11 +320,11 @@ static hal_status_t ram_file_stat(const char *path,
 static hal_status_t ram_file_read(const char *path, size_t offset, void *buffer,
                                   size_t max_len, size_t *out_len, void *user) {
   (void)user;
-  if (buffer == nullptr || out_len == nullptr) {
+  if (buffer == NULL || out_len == NULL) {
     return HAL_EINVAL;
   }
   RamFile *file = find_file(path);
-  if (file == nullptr) {
+  if (file == NULL) {
     return HAL_ENOENT;
   }
   if (offset >= file->len) {
@@ -349,14 +346,14 @@ static hal_status_t ram_file_write(const char *path, size_t offset,
                                    void *user) {
   (void) final;
   (void)user;
-  if (path == nullptr || (data == nullptr && len > 0u) ||
+  if (path == NULL || (data == NULL && len > 0u) ||
       offset > sizeof(s_files[0].data) ||
       len > sizeof(s_files[0].data) - offset) {
     return HAL_EINVAL;
   }
 
   RamFile *file = find_file(path);
-  if (file == nullptr) {
+  if (file == NULL) {
     for (size_t i = 0u; i < COUNTOF(s_files); ++i) {
       if (!s_files[i].used) {
         const int written =
@@ -370,7 +367,7 @@ static hal_status_t ram_file_write(const char *path, size_t offset,
       }
     }
   }
-  if (file == nullptr) {
+  if (file == NULL) {
     return HAL_ENOMEM;
   }
 
@@ -388,7 +385,7 @@ static hal_status_t authorize_file_upload(const hal_http_request_t *request,
   (void)upload;
   (void)user;
   const char *token = hal_http_request_get_header(request, "X-Upload-Token");
-  return token != nullptr && strcmp(token, NETWORK_SUITE_UPLOAD_TOKEN) == 0
+  return token != NULL && strcmp(token, NETWORK_SUITE_UPLOAD_TOKEN) == 0
              ? HAL_OK
              : HAL_EAUTH;
 }
@@ -452,7 +449,7 @@ static hal_status_t status_handler(const hal_http_request_t *request,
   increment_stat(&s_stats.http_requests);
 
   cJSON *root = make_status_json("http-get");
-  if (root == nullptr) {
+  if (root == NULL) {
     return HAL_ENOMEM;
   }
   char payload[640] = {};
@@ -477,7 +474,7 @@ static hal_status_t status_command(const hal_net_command_request_t *request,
   (void)user;
   increment_stat(&s_stats.command_requests);
   cJSON *root = make_status_json(command_source_name(request->source));
-  if (root == nullptr) {
+  if (root == NULL) {
     return HAL_ENOMEM;
   }
   cJSON_AddStringToObject(root, "command", request->command);
@@ -492,7 +489,7 @@ json_text_argument(const hal_net_command_request_t *request) {
   if (cJSON_IsString(request->json_args)) {
     return request->json_args->valuestring;
   }
-  if (request->json_args != nullptr) {
+  if (request->json_args != NULL) {
     const cJSON *text =
         cJSON_GetObjectItemCaseSensitive(request->json_args, "text");
     if (cJSON_IsString(text)) {
@@ -508,13 +505,13 @@ static hal_status_t echo_command(const hal_net_command_request_t *request,
   (void)user;
   increment_stat(&s_stats.command_requests);
   const char *text = json_text_argument(request);
-  if (text == nullptr) {
+  if (text == NULL) {
     text = "";
   }
 
-  if (request->json_root != nullptr) {
+  if (request->json_root != NULL) {
     cJSON *root = cJSON_CreateObject();
-    if (root == nullptr) {
+    if (root == NULL) {
       return HAL_ENOMEM;
     }
     cJSON_AddStringToObject(root, "echo", text);
@@ -602,16 +599,15 @@ static bool configure_services(void) {
   hal_http_files_clear();
 
   if (!require_status(hal_net_commands_clear(), "clear net commands") ||
-      !require_status(
-          hal_net_commands_register("status", status_command, nullptr),
-          "register status command") ||
-      !require_status(hal_net_commands_register("echo", echo_command, nullptr),
+      !require_status(hal_net_commands_register("status", status_command, NULL),
+                      "register status command") ||
+      !require_status(hal_net_commands_register("echo", echo_command, NULL),
                       "register echo command") ||
-      !require_status(hal_http_server_route(HAL_HTTP_METHOD_GET, "/",
-                                            root_handler, nullptr),
-                      "register root route") ||
+      !require_status(
+          hal_http_server_route(HAL_HTTP_METHOD_GET, "/", root_handler, NULL),
+          "register root route") ||
       !require_status(hal_http_server_route(HAL_HTTP_METHOD_GET, "/api/status",
-                                            status_handler, nullptr),
+                                            status_handler, NULL),
                       "register status route") ||
       !require_status(
           hal_net_commands_register_http_route(
@@ -637,10 +633,10 @@ static bool configure_services(void) {
   websocket.on_connect = websocket_connect;
   websocket.on_message = websocket_message;
   websocket.on_disconnect = websocket_disconnect;
-  if (!require_status(hal_websocket_server_set_callbacks(&websocket, nullptr),
+  if (!require_status(hal_websocket_server_set_callbacks(&websocket, NULL),
                       "set WebSocket callbacks") ||
       !require_status(
-          hal_net_console_set_callbacks(console_event, console_line, nullptr),
+          hal_net_console_set_callbacks(console_event, console_line, NULL),
           "set console callbacks")) {
     return false;
   }
@@ -752,7 +748,7 @@ static void broadcast_status(void) {
                  (unsigned long)stats.app_task0_ticks,
                  (unsigned long)stats.app_task1_ticks,
                  (unsigned long)stats.command_requests);
-  (void)hal_websocket_broadcast_text(payload, nullptr);
+  (void)hal_websocket_broadcast_text(payload, NULL);
 }
 
 static void print_status(void) {
@@ -800,9 +796,8 @@ static bool socket_would_block(int error) {
 
 static void set_socket_timeout(int fd, uint32_t timeout_ms) {
   struct timeval timeout = {};
-  timeout.tv_sec = static_cast<decltype(timeout.tv_sec)>(timeout_ms / 1000u);
-  timeout.tv_usec =
-      static_cast<decltype(timeout.tv_usec)>((timeout_ms % 1000u) * 1000u);
+  timeout.tv_sec = timeout_ms / 1000u;
+  timeout.tv_usec = (timeout_ms % 1000u) * 1000u;
   (void)setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
   (void)setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
 }
@@ -825,8 +820,7 @@ static int open_tcp_server(void) {
   address.sin_family = AF_INET;
   address.sin_addr.s_addr = htonl(INADDR_ANY);
   address.sin_port = htons((uint16_t)NETWORK_SUITE_BSD_TCP_PORT);
-  if (bind(fd, reinterpret_cast<struct sockaddr *>(&address),
-           (socklen_t)sizeof(address)) < 0 ||
+  if (bind(fd, (struct sockaddr *)&address, (socklen_t)sizeof(address)) < 0 ||
       listen(fd, 2) < 0 || !set_nonblocking(fd)) {
     derr("network suite: BSD TCP bind/listen failed errno=%d", errno);
     close(fd);
@@ -850,8 +844,7 @@ static int open_udp_server(void) {
   address.sin_family = AF_INET;
   address.sin_addr.s_addr = htonl(INADDR_ANY);
   address.sin_port = htons((uint16_t)NETWORK_SUITE_BSD_UDP_PORT);
-  if (bind(fd, reinterpret_cast<struct sockaddr *>(&address),
-           (socklen_t)sizeof(address)) < 0 ||
+  if (bind(fd, (struct sockaddr *)&address, (socklen_t)sizeof(address)) < 0 ||
       !set_nonblocking(fd)) {
     derr("network suite: BSD UDP bind failed errno=%d", errno);
     close(fd);
@@ -865,8 +858,7 @@ static int open_udp_server(void) {
 static void service_tcp_server(int server_fd) {
   struct sockaddr_in peer = {};
   socklen_t peer_len = (socklen_t)sizeof(peer);
-  const int client_fd =
-      accept(server_fd, reinterpret_cast<struct sockaddr *>(&peer), &peer_len);
+  const int client_fd = accept(server_fd, (struct sockaddr *)&peer, &peer_len);
   if (client_fd < 0) {
     if (!socket_would_block(errno)) {
       derr("network suite: BSD accept failed errno=%d", errno);
@@ -893,7 +885,7 @@ static void service_udp_server(int udp_fd) {
   char buffer[128] = {};
   const ssize_t received =
       recvfrom(udp_fd, buffer, sizeof(buffer) - 1u, MSG_DONTWAIT,
-               reinterpret_cast<struct sockaddr *>(&peer), &peer_len);
+               (struct sockaddr *)&peer, &peer_len);
   if (received < 0) {
     if (!socket_would_block(errno)) {
       derr("network suite: BSD recvfrom failed errno=%d", errno);
@@ -902,8 +894,8 @@ static void service_udp_server(int udp_fd) {
   }
   if (received > 0) {
     buffer[received] = '\0';
-    (void)sendto(udp_fd, buffer, (size_t)received, 0,
-                 reinterpret_cast<struct sockaddr *>(&peer), peer_len);
+    (void)sendto(udp_fd, buffer, (size_t)received, 0, (struct sockaddr *)&peer,
+                 peer_len);
     increment_stat(&s_stats.bsd_udp_server_datagrams);
   }
 }
@@ -916,14 +908,14 @@ static bool resolve_remote(uint16_t port, int socket_type,
   hints.ai_family = AF_INET;
   hints.ai_socktype = socket_type;
 
-  struct addrinfo *resolved = nullptr;
+  struct addrinfo *resolved = NULL;
   const int result =
       getaddrinfo(NETWORK_SUITE_REMOTE_HOST, service, &hints, &resolved);
-  if (result != 0 || resolved == nullptr ||
+  if (result != 0 || resolved == NULL ||
       resolved->ai_addrlen < (socklen_t)sizeof(*out)) {
     derr("network suite: getaddrinfo(%s:%s) failed: %s",
          NETWORK_SUITE_REMOTE_HOST, service, gai_strerror(result));
-    if (resolved != nullptr) {
+    if (resolved != NULL) {
       freeaddrinfo(resolved);
     }
     return false;
@@ -945,8 +937,7 @@ static void run_tcp_client_probe(void) {
     return;
   }
   set_socket_timeout(fd, kSocketTimeoutMs);
-  if (connect(fd, reinterpret_cast<struct sockaddr *>(&remote),
-              (socklen_t)sizeof(remote)) < 0) {
+  if (connect(fd, (struct sockaddr *)&remote, (socklen_t)sizeof(remote)) < 0) {
     derr("network suite: BSD TCP connect %s:%u failed errno=%d",
          NETWORK_SUITE_REMOTE_HOST, (unsigned)NETWORK_SUITE_BSD_TCP_PORT,
          errno);
@@ -981,15 +972,13 @@ static void run_udp_client_probe(void) {
   set_socket_timeout(fd, kSocketTimeoutMs);
 
   const char request[] = "hello from the consolidated BSD UDP client";
-  if (sendto(fd, request, sizeof(request) - 1u, 0,
-             reinterpret_cast<struct sockaddr *>(&remote),
+  if (sendto(fd, request, sizeof(request) - 1u, 0, (struct sockaddr *)&remote,
              (socklen_t)sizeof(remote)) >= 0) {
     struct sockaddr_in peer = {};
     socklen_t peer_len = (socklen_t)sizeof(peer);
     char response[128] = {};
-    const ssize_t received =
-        recvfrom(fd, response, sizeof(response) - 1u, 0,
-                 reinterpret_cast<struct sockaddr *>(&peer), &peer_len);
+    const ssize_t received = recvfrom(fd, response, sizeof(response) - 1u, 0,
+                                      (struct sockaddr *)&peer, &peer_len);
     if (received > 0) {
       response[received] = '\0';
       deb("network suite: BSD UDP client RX: %s", response);
@@ -1079,7 +1068,7 @@ static void http_client_worker(void *arg) {
     if (!http_complete) {
       http_complete = true;
       (void)perform_http_request(HAL_HTTP_CLIENT_TRANSPORT_PLAINTEXT, 80u,
-                                 nullptr);
+                                 NULL);
       increment_stat(&s_stats.http_client_runs);
     }
 
@@ -1117,28 +1106,26 @@ static void http_client_worker(void *arg) {
   }
 }
 
-} // namespace
-
-extern "C" void app_start(void) {
+void app_start(void) {
   hal_debug_init_default();
   hal_deb_set_prefix("18_freertos_suite");
   hal_gpio_set_mode(HAL_LED_BUILTIN, HAL_GPIO_OUTPUT);
 
   s_stats_mutex = xSemaphoreCreateMutex();
-  if (s_stats_mutex == nullptr) {
+  if (s_stats_mutex == NULL) {
     derr("network suite: stats mutex allocation failed");
     return;
   }
   s_services_configured = configure_services();
 
   BaseType_t created = xTaskCreate(bsd_worker, "jh_bsd", kBsdWorkerStackWords,
-                                   nullptr, tskIDLE_PRIORITY + 1u, nullptr);
+                                   NULL, tskIDLE_PRIORITY + 1u, NULL);
   if (created != pdPASS) {
     derr("network suite: BSD worker allocation failed");
   }
   created =
       xTaskCreate(http_client_worker, "jh_http_cli", kHttpWorkerStackWords,
-                  nullptr, tskIDLE_PRIORITY + 1u, nullptr);
+                  NULL, tskIDLE_PRIORITY + 1u, NULL);
   if (created != pdPASS) {
     derr("network suite: HTTP/HTTPS worker allocation failed");
   }
@@ -1146,8 +1133,8 @@ extern "C" void app_start(void) {
   deb("network suite: started FreeRTOS network workers");
 }
 
-extern "C" void app_task0(void) {
-  if (s_stats_mutex == nullptr) {
+void app_task0(void) {
+  if (s_stats_mutex == NULL) {
     hal_delay_ms(100u);
     return;
   }
@@ -1161,8 +1148,8 @@ extern "C" void app_task0(void) {
   hal_delay_ms(5u);
 }
 
-extern "C" void app_task1(void) {
-  if (s_stats_mutex == nullptr) {
+void app_task1(void) {
+  if (s_stats_mutex == NULL) {
     hal_delay_ms(100u);
     return;
   }

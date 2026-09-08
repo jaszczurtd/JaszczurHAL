@@ -344,8 +344,13 @@ hal_status_t stm32g474_system_read_chip_temp_ex(float *out_celsius) {
     return HAL_EINVAL;
   }
 #ifdef JH_STM32G474_HW
-  const uint16_t ts_raw = stm32g474_adc_read_temp_sensor_raw();
-  const uint16_t vref_raw = stm32g474_adc_read_vrefint_raw();
+  uint16_t ts_raw = 0u;
+  uint16_t vref_raw = 0u;
+  const hal_status_t adc_status =
+      stm32g474_adc_read_internal_pair(&ts_raw, &vref_raw);
+  if (adc_status != HAL_OK) {
+    return adc_status;
+  }
   const uint16_t ts_cal1 = JH_REG16(STM32_TS_CAL1_ADDR);
   const uint16_t ts_cal2 = JH_REG16(STM32_TS_CAL2_ADDR);
   const uint16_t vrefint_cal = JH_REG16(STM32_VREFINT_CAL_ADDR);

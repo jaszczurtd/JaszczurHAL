@@ -121,6 +121,12 @@ public:
   PN532_SPI(uint8_t chipSelectPin, uint8_t resetPin = PN532_UNUSED_PIN,
             uint8_t bus = 0);
 
+  /**
+   * @brief Release cached frame state owned by this SPI transport instance.
+   * @details The shared HAL SPI bus remains initialized and caller-owned.
+   */
+  ~PN532_SPI() override;
+
   hal_status_t begin() override;
   hal_status_t wakeup() override;
   hal_status_t isReady(bool *ready) override;
@@ -140,6 +146,12 @@ class PN532_I2C : public PN532_BUS_DEVICE {
 public:
   PN532_I2C(uint8_t resetPin = PN532_UNUSED_PIN,
             uint8_t address = PN532_I2C_DEFAULT_ADDRESS, uint8_t bus = 0);
+
+  /**
+   * @brief Release cached frame state owned by this I2C transport instance.
+   * @details The shared HAL I2C bus remains initialized and caller-owned.
+   */
+  ~PN532_I2C() override;
 
   hal_status_t begin() override;
   hal_status_t wakeup() override;

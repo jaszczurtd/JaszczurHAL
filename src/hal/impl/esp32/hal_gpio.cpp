@@ -105,6 +105,8 @@ esp_err_t add_attached_handlers(void) {
 
 } // namespace
 
+bool jh_hal_gpio_pin_valid(uint8_t pin) { return jh_esp32_gpio_pin_valid(pin); }
+
 void hal_gpio_set_mode(uint8_t pin, hal_gpio_mode_t mode) {
   if (!jh_esp32_gpio_pin_valid(pin)) {
     HAL_ASSERT(false, "hal_gpio_set_mode: inaccessible or invalid board pin");

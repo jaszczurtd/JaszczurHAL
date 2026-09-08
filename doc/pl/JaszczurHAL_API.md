@@ -15,13 +15,13 @@ JaszczurHAL udostępnia wspólne API do obsługi sprzętu w aplikacjach wbudowan
 
 W aplikacji dołącz zbiorczy nagłówek:
 
-```cpp
+```c
 #include <JaszczurHAL.h>
 ```
 
 W kodzie wewnętrznym lub wymagającym bezpośredniego dostępu do warstwy HAL można dołączyć:
 
-```cpp
+```c
 #include <hal/hal.h>
 ```
 
@@ -34,6 +34,34 @@ Aby korzystać wyłącznie z funkcji narzędziowych, dołącz odpowiedni nagłó
 ```c
 #include <tools_c.h>  // API narzędzi zgodne z C
 ```
+
+### API C
+
+W nowym kodzie aplikacji używaj deklaracji C z `JaszczurHAL.h` albo z
+odpowiedniego tematycznego nagłówka `hal_*`. Funkcje, których działanie
+może zakończyć się błędem, zwracają `hal_status_t`.
+W razie potrzeby moduł przechowujący stan udostępnia uchwyt do struktury z
+ukrytymi polami (ang. opaque handle).
+Takie uchwyty mają między innymi moduły `hal_hd44780`, `hal_dacless`,
+`hal_mfrc522` i `hal_pn532`. Prosta funkcja pomocnicza z nagłówka
+`utils/draw7Segment.h` jest również dostępna bezpośrednio z kodu C.
+
+Plik `.c` może bezpośrednio dołączać te nagłówki. Część implementacji
+JaszczurHAL nadal jest kompilowana jako C++, dlatego do końcowego linkowania
+użyj dostarczonej integracji CMake albo linkera C++, jeśli ręcznie integrujesz
+archiwum.
+
+### API C++
+
+Wybrane publiczne nagłówki `hal_*` podczas kompilacji jako C++ nadal
+udostępniają dotychczasowe klasy. Nagłówki zgodnościowe narzędzi zachowują też
+wcześniejsze nazwy funkcji. Te elementy API pozostają utrzymywane, więc
+istniejące aplikacje C++ nie wymagają natychmiastowego przepisania. W tej
+dokumentacji najpierw opisano API C zalecane dla nowego kodu, a odpowiadające
+mu dotychczasowe API C++ znajduje się w osobnej sekcji.
+
+`tools.h` pozostaje zbiorczym nagłówkiem narzędzi C++. Kod C powinien dołączać
+`tools_c.h` albo właściwy nagłówek tematyczny.
 
 ---
 

@@ -1794,8 +1794,6 @@ Tematyczne moduły narzędziowe i ich adaptery zgodnościowe sprawdza
 `test_tools` z użyciem mocków HAL.
 Plik `multicoreWatchdog.cpp` sprawdza `test_multicoreWatchdog` z użyciem
 lokalnej zaślepki zamknięcia loggera i mocków HAL.
-`utils/draw7Segment.cpp` nie ma zależności platformowych
-(czysty `const char*` + `hal_display`).
 
 ### Przykłady Unity
 
@@ -1913,7 +1911,7 @@ Tabela pokazuje zakres reprezentatywnych zestawów i grup testów. Nie zastępuj
 | `test_rp2040_swserial_backend` | kontrola wyboru źródeł RP2040: wymagane programy PIO z Pico SDK; zabronione własne implementacje adaptera portu szeregowego, callbacki RX GPIO, mikrosekundowe opóźnienia bitów i sekcje krytyczne HAL |
 | `test_hal_uart` | wstrzyknięcie RX sprzętowego UART, przechwycenie TX, przypisanie pinów |
 | `test_hal_spi` | inicjalizacja i ponowna inicjalizacja SPI, reset, blokady dla każdej magistrali, transfery, walidacja statusu i odwzorowanie błędów DMA |
-| `test_hal_lora_radio_lifecycle` | limity przydzielania nieprzezroczystych uchwytów, nieaktualne uchwyty, czyszczenie po zakończeniu cyklu życia i propagacja błędów providera |
+| `test_hal_lora_radio_lifecycle` | limity przydzielania uchwytów do instancji, nieaktualne uchwyty, czyszczenie po zakończeniu cyklu życia i propagacja błędów providera |
 | `test_hal_lora_radio` | profile i presety SX1262, ograniczenia modelu SX1261, blokujące TX, ograniczone czasowo i ciągłe odpytywanie RX, diagnostyka przepełnienia, CRC i timeoutu, stan zasilania, czas transmisji radiowej oraz dwie połączone radiostacje w mocku |
 | `test_hal_lora_link` | ustawienia domyślne i cykl życia łącza, nieaktualne uchwyty, adresowana fragmentacja danych jawnych i AEAD, utrata i retransmisja ACK, ograniczony timeout wraz z maksymalną liczbą ponowień, pomijanie ponownie dostarczonych danych, integralność całej wiadomości, niepełne składanie fragmentów otrzymanych poza kolejnością, uszkodzone pakiety podczas oczekiwania na ACK, odzyskiwanie po rozpoczęciu od późniejszego fragmentu i szeregowanie równoczesnego wysyłania przez połączone radiostacje w mocku |
 | `test_lora_link_frame` | ścisłe, wersjonowane formaty ramek, pojemność danych jawnych i ich konwersja w obie strony, szyfrowanie uwierzytelnione, odrzucanie zmodyfikowanego nagłówka lub szyfrogramu, kodowanie ACK, obcinanie danych i granice wyjścia |
@@ -1935,8 +1933,13 @@ Tabela pokazuje zakres reprezentatywnych zestawów i grup testów. Nie zastępuj
 | `test_adp5360_driver` | walidacja identyfikatora układu ADP5360 we wspólnej implementacji, operacje rejestrowe ładowarki, fuel gauge i regulatora, konwersja statusu, błędy I2C i pokrycie muteksu instancji |
 | `test_simple_io_drivers` | wspólne sekwencje inicjalizacji MCP23017/PCA9654E/PCF8574/74HC595/MCP3221/MCP4725, zapis i odczyt pojedynczego pinu oraz całego portu, konfiguracja odwrócenia, podciągania i IRQ, a także pokrycie muteksu instancji |
 | `test_hd44780_driver` | wspólna inicjalizacja GPIO HD44780, ramkowanie poleceń 4- i 8-bitowych, przesunięcia wierszy kursora, zapisy CGRAM, operacje `print`/`write` i pokrycie muteksu instancji |
+| `test_hal_hd44780_c_api` | cykl życia instancji, konfiguracja przez API C, sterowanie wyświetlaczem, wyniki zapisu, walidacja argumentów, nieaktualne uchwyty i zapełnienie statycznej puli |
+| `test_draw7_segment_c_abi` | niemanglowane symbole C rysowania siedmiosegmentowego i dotychczasowy sposób obliczania szerokości |
+| `test_draw7_segment_cpp_legacy` | zachowany symbol C++ obliczania szerokości i dotychczasowy sposób zaokrąglania w typie `float` |
 | `test_hal_dma_pwm_audio` | cykl życia mocka DMA dla dźwięku PWM, wywoływanie callbacków, wstrzymywanie, wznawianie i interpolacja |
 | `test_dacless_driver` | normalizacja konfiguracji wspólnego sterownika DACless, ponowne wypełnianie przez callback próbki lub bloku DMA oraz przez odpytywanie, bufor ADC, wyciszanie i przywracanie dźwięku, funkcje pomocnicze interpolacji i pokrycie muteksu |
+| `test_hal_dacless`, `test_hal_dacless_c_link` | cykl życia instancji obsługiwanej przez API C, niezależne konteksty funkcji zwrotnych, ścieżki stanu i statusu, zapełnienie statycznej puli oraz linkowanie z jednostki C |
+| `test_hal_dacless_header_c`, `test_hal_dacless_header_cpp` | możliwość samodzielnego dołączenia publicznego nagłówka DACless w C11 i C++17 |
 | `test_tsc2007_driver` | wspólny format bajtu poleceń TSC2007, dekodowanie 12-bitowej odpowiedzi, sekwencja odczytu dotyku, odrzucanie niestabilnych pomiarów, wybór magistrali i pokrycie muteksu instancji |
 | `test_stmpe610_driver` | wspólna sekwencja konfiguracji STMPE610, odczyt identyfikatora układu, transakcje I2C, SPI i rejestrowe, dekodowanie FIFO, programowa ścieżka bit-bang SPI i pokrycie muteksu instancji |
 | `test_ads1x15_driver` | wspólna konfiguracja rejestrów ADS1X15, odczyty wyników konwersji ADS1115/ADS1015, odwzorowanie wzmocnienia, trybu i szybkości danych, zapisy progu komparatora oraz przekazywanie częstotliwości zegara I2C |
@@ -2002,7 +2005,11 @@ Tabela pokazuje zakres reprezentatywnych zestawów i grup testów. Nie zastępuj
 | `test_jh_gfx_geometry` | wspólne przycinanie GFX, prymitywy geometryczne, bitmapy i układ tekstu |
 | `test_mcp2515_driver` | wspólne transakcje rejestrowe i SPI układu MCP2515, zależności czasowe bitów, TX/RX, filtry i błędy |
 | `test_mfrc522_driver` | wspólna obsługa transportów rejestrowych MFRC522, inicjalizacja i funkcje pomocnicze protokołu RFID |
+| `test_hal_mfrc522_c_link` | tworzenie i zwalnianie uchwytów do transportu/czytnika MFRC522 oraz linkowanie symboli C |
+| `test_hal_mfrc522_header_c`, `test_hal_mfrc522_header_cpp` | możliwość samodzielnego dołączenia publicznego nagłówka MFRC522 w C11 i C++17 |
 | `test_pn532_driver` | wspólne ramkowanie komunikacji PN532 przez SPI/I2C/UART, parsowanie ACK i odpowiedzi oraz polecenia NFC |
+| `test_hal_pn532_c_link` | tworzenie i zwalnianie uchwytów do transportu/czytnika PN532 oraz linkowanie symboli C |
+| `test_hal_pn532_header_c`, `test_hal_pn532_header_cpp` | możliwość samodzielnego dołączenia publicznego nagłówka PN532 w C11 i C++17 |
 | `test_ff16_memdisk` | zarządzana integracja FatFs R0.16 nad dyskiem w pamięci, montowanie i zachowanie I/O plików |
 | `test_stm32_pwm_clock` | testy obliczeń zegara timera PWM, preskalera i okresu STM32G474 |
 | `test_hal_onewire_driver` | wspólne zależności czasowe programowej komunikacji bit-bang OneWire, reset i wykrywanie obecności, wejście i wyjście bitów oraz bajtów, a także wyszukiwanie urządzeń |

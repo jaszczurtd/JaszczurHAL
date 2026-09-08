@@ -197,4 +197,21 @@ int get7SegStringWidth(const char *str, int digitWidth, float thickness) {
   return static_cast<int>(totalWidth);
 }
 
+// Keep the historical C++ symbols above while exporting the same entry points
+// with C linkage for C callers. The namespace only separates C++ identifiers.
+namespace jh_draw7_segment_c_api {
+
+extern "C" void draw7SegString(const char *str, int x, int y, int digitWidth,
+                               int digitHeight, float thickness,
+                               uint16_t color) {
+  ::draw7SegString(str, x, y, digitWidth, digitHeight, thickness, color);
+}
+
+extern "C" int get7SegStringWidth(const char *str, int digitWidth,
+                                  float thickness) {
+  return ::get7SegStringWidth(str, digitWidth, thickness);
+}
+
+} // namespace jh_draw7_segment_c_api
+
 #endif /* HAL_ENABLE_DISPLAY */

@@ -166,6 +166,33 @@ void test_set_cursor_uses_original_row_offsets(void) {
   TEST_ASSERT_EQUAL_HEX8(0x97u, bytes[0].data); /* 0x80 | (3 + 20) */
 }
 
+void test_rebegin_replaces_line_and_font_flags(void) {
+  HD44780 lcd(LCD_RS, LCD_EN, kData4[0], kData4[1], kData4[2], kData4[3]);
+
+  lcd.begin(16u, 2u, LCD_5x8DOTS);
+  hal_mock_gpio_trace_reset();
+  lcd.begin(16u, 1u, LCD_5x8DOTS);
+
+  lcd_bus_sample_t samples[16] = {};
+  size_t sample_count = capture_enable_samples(kData4, COUNTOF(kData4), samples,
+                                               COUNTOF(samples));
+  TEST_ASSERT_GREATER_OR_EQUAL_UINT32(6u, sample_count);
+  TEST_ASSERT_EQUAL_HEX8(
+      LCD_FUNCTIONSET | LCD_4BITMODE | LCD_1LINE | LCD_5x8DOTS,
+      (uint8_t)(((samples[4].data & 0x0Fu) << 4) | (samples[5].data & 0x0Fu)));
+
+  lcd.begin(16u, 1u, LCD_5x10DOTS);
+  hal_mock_gpio_trace_reset();
+  lcd.begin(16u, 1u, LCD_5x8DOTS);
+
+  sample_count = capture_enable_samples(kData4, COUNTOF(kData4), samples,
+                                        COUNTOF(samples));
+  TEST_ASSERT_GREATER_OR_EQUAL_UINT32(6u, sample_count);
+  TEST_ASSERT_EQUAL_HEX8(
+      LCD_FUNCTIONSET | LCD_4BITMODE | LCD_1LINE | LCD_5x8DOTS,
+      (uint8_t)(((samples[4].data & 0x0Fu) << 4) | (samples[5].data & 0x0Fu)));
+}
+
 void test_create_char_masks_location_and_writes_eight_rows(void) {
   HD44780 lcd(LCD_RS, LCD_EN, kData4[0], kData4[1], kData4[2], kData4[3]);
   const uint8_t glyph[8] = {0x00u, 0x04u, 0x0Eu, 0x15u,
@@ -253,6 +280,7 @@ int main(void) {
   RUN_TEST(test_write_sends_high_then_low_nibble_with_rs_high);
   RUN_TEST(test_8bit_mode_writes_one_enable_pulse_per_byte);
   RUN_TEST(test_set_cursor_uses_original_row_offsets);
+  RUN_TEST(test_rebegin_replaces_line_and_font_flags);
   RUN_TEST(test_create_char_masks_location_and_writes_eight_rows);
   RUN_TEST(test_print_string_and_number_use_lcd_write_path);
   RUN_TEST(test_println_advances_to_next_line_without_control_bytes);

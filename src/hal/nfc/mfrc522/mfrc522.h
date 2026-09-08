@@ -148,8 +148,7 @@ static const byte FM17522_firmware_reference[] = {
 #define MFRC522_I2C_DEFAULT_ADDR (0x28) // 0x3C also common at AliExpress
 #endif
 
-class MFRC522_BUS_DEVICE; // glue for a i2c, spi or uart device. actual calls
-                          // read/write the registers.
+class MFRC522_BUS_DEVICE; // Base interface for an I2C, SPI, or UART transport.
 class MFRC522_SPI;        // forward declaration for the `default' SPI.
 class MFRC522 {
 public:
@@ -507,6 +506,30 @@ protected:
 
 class MFRC522_BUS_DEVICE {
 public:
+  /**
+   * @brief Clear the first transport error recorded for the next operation.
+   * @note This diagnostic side channel does not change legacy read/write return
+   *       values. The C facade calls it before one logical reader operation.
+   * @return HAL_OK when the latch was activated and cleared, or HAL_ENOMEM
+   *         when the registry mutex or a registry slot is unavailable.
+   */
+  hal_status_t PCD_ClearTransportError();
+
+  /**
+   * @brief Read the first transport error recorded since the last clear.
+   * @return HAL_OK when no HAL bus call failed, otherwise the first negative
+   *         hal_status_t returned by the transport. HAL_ESTATE means no latch
+   *         is active for this object.
+   */
+  hal_status_t PCD_GetTransportError() const;
+
+  /**
+   * @brief Release this object's transport-error registry slot.
+   * @return HAL_OK when an active slot was released, or HAL_ESTATE when this
+   *         object has no active slot.
+   */
+  hal_status_t PCD_ReleaseTransportError();
+
   virtual bool PCD_Init();
   virtual void PCD_WriteRegister(MFRC522::PCD_Register reg, byte value);
   virtual void PCD_WriteRegister(MFRC522::PCD_Register reg, byte count,
@@ -514,6 +537,16 @@ public:
   virtual byte PCD_ReadRegister(MFRC522::PCD_Register reg);
   virtual void PCD_ReadRegister(MFRC522::PCD_Register reg, byte count,
                                 byte *values, byte rxAlign = 0);
+
+protected:
+  /**
+   * @brief Record a transport status without replacing an earlier error.
+   * @param status HAL_OK or a HAL transport failure. HAL_OK and non-error
+   *        statuses leave the latch unchanged.
+   * @note Objects without a latch activated by PCD_ClearTransportError() are
+   *       ignored.
+   */
+  void PCD_RecordTransportStatus(hal_status_t status);
 };
 
 class MFRC522_I2C : public MFRC522_BUS_DEVICE {

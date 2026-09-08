@@ -38,6 +38,16 @@ pominięte. `hal_config.h` pozostaje publicznym punktem konfiguracji i zawiera
 reguły zależne od kontekstu, których nie opisuje rejestr v1. Krótsze
 podsumowanie znajduje się w `doc/HAL_FLAGS.txt`.
 
+W tabeli nagłówek tematyczny `hal_*` oznacza API C zalecane dla nowego kodu.
+Jeśli dotychczasowa klasa C++ pozostaje dostępna, jej nagłówek jest wymieniony
+osobno po nagłówku C. Włączenie modułu zachowuje oba interfejsy;
+ten podział jest zaleceniem dla nowego kodu, a nie usunięciem istniejącej
+funkcjonalności.
+
+Moduł przechowujący stan może udostępniać uchwyt do struktury z ukrytymi
+polami (ang. opaque handle). W opisach tabeli jest on dalej nazywany krócej
+uchwytem do instancji.
+
 Flagi wejścia aplikacji są oddzielone od opcjonalnych modułów HAL:
 
 | Flaga | Efekt |
@@ -134,16 +144,16 @@ Ochronę stosu włączają dwie niezależne opcje:
 | `HAL_ENABLE_PCF8574` | `hal_pcf8574.h` | `hal/gpio/simple_io/hal_simple_io_drivers.cpp` | Quasi-dwukierunkowy ekspander GPIO PCF8574 przez HAL I2C (propaguje I2C) |
 | `HAL_ENABLE_HC595` | `hal_hc595.h` | `hal/gpio/simple_io/hal_simple_io_drivers.cpp` | Ekspander wyjść z rejestrem przesuwnym 74HC595 przez HAL SPI/GPIO (propaguje SPI) |
 | `HAL_ENABLE_MCP4725` | `hal_mcp4725.h` | `hal/gpio/simple_io/hal_simple_io_drivers.cpp` | 12-bitowy DAC MCP4725 przez HAL I2C (propaguje I2C) |
-| `HAL_ENABLE_MFRC522` | `hal_mfrc522.h` + `hal/nfc/mfrc522/mfrc522.h` | `hal/nfc/mfrc522/mfrc522*.cpp` | Sterownik czytnika RFID MFRC522 przez HAL SPI/I2C (propaguje SPI) |
-| `HAL_ENABLE_PN532` | `hal_pn532.h` + `hal/nfc/pn532/pn532.h` | `hal/nfc/pn532/pn532*.cpp` | Sterownik czytnika NFC/RFID PN532 przez HAL SPI/I2C/UART (propaguje SPI) |
-| `HAL_ENABLE_DACLESS` | `hal_dacless.h` + `hal/audio/dacless/dacless.h` | `hal/audio/dacless/dacless.cpp` | Współdzielony silnik audio PWM DACless z callbackami blokowymi/próbkowymi oraz próbkowaniem ADC (propaguje DMA_PWM_AUDIO + PWM_FREQ) |
+| `HAL_ENABLE_MFRC522` | `hal_mfrc522.h` (C); `hal/nfc/mfrc522/mfrc522.h` (C++) | `hal/nfc/hal_mfrc522.cpp` + `hal/nfc/mfrc522/mfrc522*.cpp` | Uchwyty do instancji transportu i czytnika, typy statusu/UID oraz operacje MFRC522 przez HAL SPI/I2C (propaguje SPI) |
+| `HAL_ENABLE_PN532` | `hal_pn532.h` (C); `hal/nfc/pn532/pn532.h` (C++) | `hal/nfc/hal_pn532.cpp` + `hal/nfc/pn532/pn532*.cpp` | Uchwyty do instancji transportu i czytnika, typ UID oraz operacje PN532 przez HAL SPI/I2C/UART (propaguje SPI) |
+| `HAL_ENABLE_DACLESS` | `hal_dacless.h` (C); `hal/audio/dacless/dacless.h` (C++) | `hal/audio/hal_dacless.cpp` + `hal/audio/dacless/dacless.cpp` | Uchwyt do instancji DACless, funkcje zwrotne C z kontekstem aplikacji, odczyt stanu oraz funkcje tworzenia i zwalniania instancji (propaguje DMA_PWM_AUDIO + PWM_FREQ) |
 | `HAL_ENABLE_DMA_PWM_AUDIO` | `hal_dma_pwm_audio.h` | `hal_dma_pwm_audio.cpp` | Funkcja pomocnicza DMA audio PWM taktowana timerem, wykorzystywana przez DACless |
 | `HAL_ENABLE_PWM_FREQ` | `hal_pwm_freq.h` | `hal_pwm_freq.cpp` | RP2040 hardware/pwm, STM32G474 TIM PWM lub ESP32-S3 LEDC |
 | `HAL_ENABLE_DAC` | `hal_dac.h` | `hal_dac.cpp` specyficzny dla targetu | Fasada sprzętowego DAC; STM32G474 udostępnia rzeczywiste wyjście, natomiast RP2040 zgłasza brak tej możliwości |
 | `HAL_ENABLE_PCNT` | `hal_pcnt.h` | `hal_pcnt.cpp` specyficzny dla targetu | Fasada licznika impulsów dla targetów RP2040, STM32G474, ESP32-S3 PCNT oraz mock |
 | `HAL_ENABLE_RGB_LED` | `hal_rgb_led.h` + `hal/gpio/neopixel/jh_neopixel.h` | `hal_rgb_led.cpp` + `hal/gpio/neopixel/jh_neopixel.cpp` | Współdzielony rdzeń NeoPixel + transport targetu (RP2040 PIO / STM32 GPIO taktowane cyklami / ESP32-S3 RMT) |
-| `HAL_ENABLE_HD44780` | `hal_hd44780.h` + `hal/display/hd44780/hd44780.h` | `hal/display/hd44780/hd44780.cpp` | Równoległy znakowy LCD kompatybilny z HD44780 przez HAL GPIO/taktowanie systemowe |
-| `HAL_ENABLE_DISPLAY` | `hal_display.h` | `hal/display/drivers/hal_display.cpp` | *(wymaga backendu TFT, OLED, LCD lub EPD)* |
+| `HAL_ENABLE_HD44780` | `hal_hd44780.h` (C); `hal/display/hd44780/hd44780.h` (C++) | `hal/display/hal_hd44780.cpp` + `hal/display/hd44780/hd44780.cpp` | Uchwyt do instancji HD44780, konfiguracja pinów, tekst, kursor i sterowanie wyświetlaczem przez HAL GPIO/taktowanie systemowe |
+| `HAL_ENABLE_DISPLAY` | `hal_display.h`; `utils/draw7Segment.h` (C i C++) | `hal/display/drivers/hal_display.cpp` + `utils/draw7Segment.cpp` | API wyświetlaczy graficznych i prosta funkcja rysowania siedmiosegmentowego; wymaga backendu TFT, OLED, LCD lub EPD |
 | `HAL_ENABLE_TFT` | `hal_display.h` | `hal/display/drivers/hal_display.cpp` | *(wymaga co najmniej jednego sterownika TFT poniżej; propaguje DISPLAY + SPI)* |
 | `HAL_ENABLE_ILI9341` | `hal_display.h` + `hal/display/drivers/ili9341_driver.h` | `hal/display/drivers/hal_display.cpp` + `hal/display/drivers/ili9341_driver.cpp` | współdzielony rdzeń ILI9341 HAL SPI/GPIO + silnik GFX (propaguje TFT + DISPLAY + SPI) |
 | `HAL_ENABLE_ST7789` | `hal_display.h` + `hal/display/drivers/st77xx_driver.h` | `hal/display/drivers/hal_display.cpp` + `hal/display/drivers/st77xx_driver.cpp` | współdzielony rdzeń ST77xx HAL SPI/GPIO + silnik GFX (propaguje TFT + DISPLAY + SPI) |

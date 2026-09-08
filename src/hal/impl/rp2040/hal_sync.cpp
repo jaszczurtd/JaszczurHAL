@@ -5,6 +5,8 @@
 #include <hardware/sync.h>
 #include <pico/platform.h>
 
+#include <new>
+
 #if defined(HAL_ENABLE_FREERTOS) && defined(__FREERTOS)
 #include <FreeRTOS.h>
 #include <semphr.h>
@@ -27,24 +29,28 @@ struct hal_mutex_impl_t {
 #endif
 };
 
-hal_mutex_t hal_mutex_create(void) {
-  hal_mutex_impl_t *m = new hal_mutex_impl_t();
-  HAL_ASSERT(m != NULL, "hal_mutex_create: allocation failed");
-#if JH_RP_HAL_SYNC_FREERTOS
+extern "C" hal_mutex_t jh_hal_mutex_try_create(void) {
+  hal_mutex_impl_t *m = new (std::nothrow) hal_mutex_impl_t();
   if (m == NULL) {
     return NULL;
   }
 
+#if JH_RP_HAL_SYNC_FREERTOS
   m->handle = xSemaphoreCreateMutex();
   if (m->handle == NULL) {
     delete m;
-    HAL_ASSERT(false, "hal_mutex_create: FreeRTOS mutex allocation failed");
     return NULL;
   }
 #else
   mutex_init(&m->mtx);
 #endif
   return m;
+}
+
+hal_mutex_t hal_mutex_create(void) {
+  hal_mutex_t mutex = jh_hal_mutex_try_create();
+  HAL_ASSERT(mutex != NULL, "hal_mutex_create: allocation failed");
+  return mutex;
 }
 
 void hal_mutex_lock(hal_mutex_t mutex) {

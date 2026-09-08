@@ -14,6 +14,7 @@
 
 static uint8_t s_resolution = 12u;
 static hal_mutex_t s_adc_mutex = nullptr;
+static bool s_dma_owned = false;
 
 #ifndef JH_STM32G474_HW
 /* Host-sanity build: no registers to touch - keep a benign zero-filled store.
@@ -21,8 +22,8 @@ static hal_mutex_t s_adc_mutex = nullptr;
 static int s_adc_values[128] = {};
 #endif
 
-static void adc_ensure_mutex(void) {
-  (void)jh_hal_mutex_create_once(&s_adc_mutex);
+static bool adc_ensure_mutex(void) {
+  return jh_hal_mutex_try_create_once(&s_adc_mutex) != nullptr;
 }
 
 #ifdef JH_STM32G474_HW
@@ -61,6 +62,14 @@ static void adc1_hw_init(void) {
   /* Kernel clock = HCLK/4 (42.5 MHz); peripheral bus clock via RCC. */
   RCC_AHB2ENR |= RCC_AHB2ENR_ADC12EN;
   ADC12_CCR = (ADC12_CCR & ~ADC_CCR_CKMODE_MASK) | ADC_CCR_CKMODE_HCLK_DIV4;
+
+  /* A boot stage may already have enabled ADC1. In that case do not clear
+   * ADRDY and wait for an edge which cannot occur while ADEN remains set. */
+  if ((ADC1_CR & ADC_CR_ADEN) != 0u) {
+    adc_apply_resolution();
+    s_adc_ready = true;
+    return;
+  }
 
   /* Leave deep-power-down and wait the documented regulator startup time. */
   ADC1_CR &= ~ADC_CR_DEEPPWD;
@@ -152,11 +161,13 @@ static uint16_t adc1_hw_read_internal(uint32_t channel,
 #endif // JH_STM32G474_HW
 
 void stm32g474_adc_set_resolution(uint8_t bits) {
-  adc_ensure_mutex();
+  if (!adc_ensure_mutex()) {
+    return;
+  }
   hal_mutex_lock(s_adc_mutex);
   s_resolution = bits;
 #ifdef JH_STM32G474_HW
-  if (s_adc_ready) {
+  if (s_adc_ready && !s_dma_owned) {
     adc_apply_resolution();
   }
 #else
@@ -166,9 +177,15 @@ void stm32g474_adc_set_resolution(uint8_t bits) {
 }
 
 int stm32g474_adc_read_gpio(uint8_t pin) {
-  adc_ensure_mutex();
+  if (!adc_ensure_mutex()) {
+    return 0;
+  }
   hal_mutex_lock(s_adc_mutex);
   int val;
+  if (s_dma_owned) {
+    hal_mutex_unlock(s_adc_mutex);
+    return 0;
+  }
 #ifdef JH_STM32G474_HW
   adc1_hw_init();
   val = adc1_hw_read_gpio(pin);
@@ -180,9 +197,15 @@ int stm32g474_adc_read_gpio(uint8_t pin) {
 }
 
 uint16_t stm32g474_adc_read_temp_sensor_raw(void) {
-  adc_ensure_mutex();
+  if (!adc_ensure_mutex()) {
+    return 0u;
+  }
   hal_mutex_lock(s_adc_mutex);
   uint16_t raw;
+  if (s_dma_owned) {
+    hal_mutex_unlock(s_adc_mutex);
+    return 0u;
+  }
 #ifdef JH_STM32G474_HW
   adc1_hw_init();
   raw = adc1_hw_read_internal(ADC_CHANNEL_VSENSE, ADC_CCR_VSENSESEL);
@@ -194,9 +217,15 @@ uint16_t stm32g474_adc_read_temp_sensor_raw(void) {
 }
 
 uint16_t stm32g474_adc_read_vrefint_raw(void) {
-  adc_ensure_mutex();
+  if (!adc_ensure_mutex()) {
+    return 0u;
+  }
   hal_mutex_lock(s_adc_mutex);
   uint16_t raw;
+  if (s_dma_owned) {
+    hal_mutex_unlock(s_adc_mutex);
+    return 0u;
+  }
 #ifdef JH_STM32G474_HW
   adc1_hw_init();
   raw = adc1_hw_read_internal(ADC_CHANNEL_VREFINT, ADC_CCR_VREFEN);
@@ -205,6 +234,68 @@ uint16_t stm32g474_adc_read_vrefint_raw(void) {
 #endif
   hal_mutex_unlock(s_adc_mutex);
   return raw;
+}
+
+hal_status_t stm32g474_adc_read_internal_pair(uint16_t *out_temp_raw,
+                                              uint16_t *out_vref_raw) {
+  if (out_temp_raw == nullptr || out_vref_raw == nullptr) {
+    return HAL_EINVAL;
+  }
+  if (!adc_ensure_mutex()) {
+    return HAL_ENOMEM;
+  }
+  hal_mutex_lock(s_adc_mutex);
+  if (s_dma_owned) {
+    hal_mutex_unlock(s_adc_mutex);
+    return HAL_EBUSY;
+  }
+#ifdef JH_STM32G474_HW
+  adc1_hw_init();
+  const uint16_t temp_raw =
+      adc1_hw_read_internal(ADC_CHANNEL_VSENSE, ADC_CCR_VSENSESEL);
+  const uint16_t vref_raw =
+      adc1_hw_read_internal(ADC_CHANNEL_VREFINT, ADC_CCR_VREFEN);
+#else
+  const uint16_t temp_raw = 0u;
+  const uint16_t vref_raw = 0u;
+#endif
+  hal_mutex_unlock(s_adc_mutex);
+  *out_temp_raw = temp_raw;
+  *out_vref_raw = vref_raw;
+  return HAL_OK;
+}
+
+hal_status_t stm32g474_adc_acquire_dma(void) {
+  if (!adc_ensure_mutex()) {
+    return HAL_ENOMEM;
+  }
+  hal_mutex_lock(s_adc_mutex);
+  if (s_dma_owned) {
+    hal_mutex_unlock(s_adc_mutex);
+    return HAL_EBUSY;
+  }
+#ifdef JH_STM32G474_HW
+  adc1_hw_init();
+#endif
+  s_dma_owned = true;
+  hal_mutex_unlock(s_adc_mutex);
+  return HAL_OK;
+}
+
+void stm32g474_adc_release_dma(void) {
+  if (!adc_ensure_mutex()) {
+    return;
+  }
+  hal_mutex_lock(s_adc_mutex);
+  if (s_dma_owned) {
+#ifdef JH_STM32G474_HW
+    if (s_adc_ready) {
+      adc_apply_resolution();
+    }
+#endif
+    s_dma_owned = false;
+  }
+  hal_mutex_unlock(s_adc_mutex);
 }
 
 #endif // HAL_TARGET_IS_STM32G474

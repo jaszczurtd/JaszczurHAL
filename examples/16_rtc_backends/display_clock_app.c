@@ -13,28 +13,26 @@
 #include <hal/system/hal_system.h>
 #include <utils/draw7Segment.h>
 
-#include <cstring>
+#include <string.h>
 
-namespace {
+static const uint8_t kRtcSdaPin = 25u; /* PB9, D14. */
+static const uint8_t kRtcSclPin = 24u; /* PB8, D15. */
+static const uint8_t kTftCsPin = 22u;  /* PB6, D10. */
+static const uint8_t kTftDcPin = 39u;  /* PC7, D9. */
+static const uint8_t kTftRstPin = 9u;  /* PA9, D8. */
 
-constexpr uint8_t kRtcSdaPin = 25u; /* PB9, D14. */
-constexpr uint8_t kRtcSclPin = 24u; /* PB8, D15. */
-constexpr uint8_t kTftCsPin = 22u;  /* PB6, D10. */
-constexpr uint8_t kTftDcPin = 39u;  /* PC7, D9. */
-constexpr uint8_t kTftRstPin = 9u;  /* PA9, D8. */
-
-constexpr int kPanelWidth = 240;
-constexpr int kPanelHeight = 320;
-constexpr int kDigitWidth = 36;
-constexpr int kDigitSlotWidth = 42;
-constexpr int kColonSlotWidth = 22;
-constexpr int kDigitHeight = 86;
-constexpr float kSegmentThickness = 6.0f;
+static const int kPanelWidth = 240;
+static const int kPanelHeight = 320;
+static const int kDigitWidth = 36;
+static const int kDigitSlotWidth = 42;
+static const int kColonSlotWidth = 22;
+static const int kDigitHeight = 86;
+static const float kSegmentThickness = 6.0f;
 
 /* Fixed local time recorded when the battery-backup test was prepared.
  * Update an older valid clock once; never overwrite a lost-clock indication,
  * because that would hide a failed battery-backup test. */
-constexpr hal_rtc_datetime_t kInitialTime = {
+static const hal_rtc_datetime_t kInitialTime = {
     .second = 0u,
     .minute = 20u,
     .hour = 22u,
@@ -45,20 +43,21 @@ constexpr hal_rtc_datetime_t kInitialTime = {
     .clock_integrity = true,
 };
 
-hal_rtc_t s_rtc = nullptr;
-bool s_display_ready = false;
-uint32_t s_last_poll_ms = 0u;
-char s_previous_text[9] = {};
-uint16_t s_previous_color = HAL_COLOR_BLACK;
+static hal_rtc_t s_rtc = NULL;
+static bool s_display_ready = false;
+static uint32_t s_last_poll_ms = 0u;
+static char s_previous_text[9] = {0};
+static uint16_t s_previous_color = HAL_COLOR_BLACK;
 
-bool datetime_before(const hal_rtc_datetime_t &left,
-                     const hal_rtc_datetime_t &right) {
+static bool datetime_before(const hal_rtc_datetime_t *left,
+                            const hal_rtc_datetime_t *right) {
   const uint16_t left_fields[] = {
-      left.year, left.month, left.day, left.hour, left.minute, left.second,
+      left->year, left->month,  left->day,
+      left->hour, left->minute, left->second,
   };
   const uint16_t right_fields[] = {
-      right.year, right.month,  right.day,
-      right.hour, right.minute, right.second,
+      right->year, right->month,  right->day,
+      right->hour, right->minute, right->second,
   };
   for (size_t i = 0u; i < COUNTOF(left_fields); ++i) {
     if (left_fields[i] != right_fields[i]) {
@@ -68,8 +67,8 @@ bool datetime_before(const hal_rtc_datetime_t &left,
   return false;
 }
 
-void render_clock(const char *text, uint16_t color) {
-  if (!s_display_ready || text == nullptr) {
+static void render_clock(const char *text, uint16_t color) {
+  if (!s_display_ready || text == NULL) {
     return;
   }
 
@@ -116,11 +115,11 @@ void render_clock(const char *text, uint16_t color) {
   }
   (void)hal_display_flush();
 
-  std::memcpy(s_previous_text, text, sizeof(s_previous_text));
+  memcpy(s_previous_text, text, sizeof(s_previous_text));
   s_previous_color = color;
 }
 
-bool initialize_display() {
+static bool initialize_display(void) {
   hal_status_t status = hal_display_init(kTftCsPin, kTftDcPin, kTftRstPin);
   if (status == HAL_OK) {
     status = hal_display_configure_ex(
@@ -139,7 +138,7 @@ bool initialize_display() {
   return true;
 }
 
-bool initialize_rtc() {
+static bool initialize_rtc(void) {
   const hal_rtc_config_t config = {
       .chip = HAL_RTC_CHIP_DS3231,
       .bus = {.i2c = {.sda_pin = kRtcSdaPin,
@@ -154,7 +153,7 @@ bool initialize_rtc() {
     return false;
   }
 
-  hal_rtc_datetime_t value = {};
+  hal_rtc_datetime_t value = {0};
   status = hal_rtc_get_datetime_ex(s_rtc, &value);
   if (status != HAL_OK) {
     derr("DS3231 initial read failed: %s", hal_status_to_string(status));
@@ -167,7 +166,7 @@ bool initialize_rtc() {
 
   /* The validity check above must succeed before applying the fixed initial
    * time. */
-  if (datetime_before(value, kInitialTime)) {
+  if (datetime_before(&value, &kInitialTime)) {
     status = hal_rtc_set_datetime_ex(s_rtc, &kInitialTime);
     if (status != HAL_OK) {
       derr("DS3231 initial time write failed: %s",
@@ -187,8 +186,6 @@ bool initialize_rtc() {
   return true;
 }
 
-} // namespace
-
 void app_start(void) {
   hal_debug_init_default();
   hal_serial_set_flush(true);
@@ -198,7 +195,7 @@ void app_start(void) {
   (void)hal_i2c_init(kRtcSdaPin, kRtcSclPin, HAL_I2C_CLOCK_FAST_HZ);
   if (!initialize_rtc()) {
     hal_rtc_deinit(s_rtc);
-    s_rtc = nullptr;
+    s_rtc = NULL;
     render_clock("--:--:--", HAL_COLOR_RED);
   }
 }
@@ -211,15 +208,15 @@ void app_task0(void) {
   }
   s_last_poll_ms = now_ms;
 
-  if (s_rtc == nullptr) {
+  if (s_rtc == NULL) {
     hal_delay_ms(100u);
     return;
   }
 
-  hal_rtc_datetime_t value = {};
+  hal_rtc_datetime_t value = {0};
   const hal_status_t status = hal_rtc_get_datetime_ex(s_rtc, &value);
   if (status != HAL_OK || !value.clock_integrity) {
-    if (std::strcmp(s_previous_text, "--:--:--") != 0 ||
+    if (strcmp(s_previous_text, "--:--:--") != 0 ||
         s_previous_color != HAL_COLOR_RED) {
       render_clock("--:--:--", HAL_COLOR_RED);
     }
@@ -237,7 +234,7 @@ void app_task0(void) {
       (char)('0' + value.minute / 10u), (char)('0' + value.minute % 10u), ':',
       (char)('0' + value.second / 10u), (char)('0' + value.second % 10u), '\0',
   };
-  if (std::strcmp(text, s_previous_text) != 0 ||
+  if (strcmp(text, s_previous_text) != 0 ||
       s_previous_color != HAL_COLOR_GREEN) {
     render_clock(text, HAL_COLOR_GREEN);
     deb("DS3231 %04u-%02u-%02u %s integrity=1", (unsigned)value.year,

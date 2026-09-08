@@ -33,9 +33,8 @@ uint32_t current_core(void) {
 
 } // namespace
 
-hal_mutex_t hal_mutex_create(void) {
+extern "C" hal_mutex_t jh_hal_mutex_try_create(void) {
   hal_mutex_impl_t *mutex = new (std::nothrow) hal_mutex_impl_t();
-  HAL_ASSERT(mutex != nullptr, "hal_mutex_create: allocation failed");
   if (mutex == nullptr) {
     return nullptr;
   }
@@ -43,9 +42,14 @@ hal_mutex_t hal_mutex_create(void) {
   mutex->handle = xSemaphoreCreateMutex();
   if (mutex->handle == nullptr) {
     delete mutex;
-    HAL_ASSERT(false, "hal_mutex_create: FreeRTOS mutex allocation failed");
     return nullptr;
   }
+  return mutex;
+}
+
+hal_mutex_t hal_mutex_create(void) {
+  hal_mutex_t mutex = jh_hal_mutex_try_create();
+  HAL_ASSERT(mutex != nullptr, "hal_mutex_create: allocation failed");
   return mutex;
 }
 

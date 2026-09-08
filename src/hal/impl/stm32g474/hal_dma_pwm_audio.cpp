@@ -4,9 +4,13 @@
 #include "hal/core/hal_config.h"
 #ifdef HAL_ENABLE_DMA_PWM_AUDIO
 
+#include "hal/analog/hal_adc.h"
 #include "hal/audio/hal_dma_pwm_audio.h"
+#include "hal/audio/hal_dma_pwm_audio_internal.h"
+#include "hal/system/hal_sync.h"
 #include "hal/system/hal_system.h"
 #include "hal_pwm_stm32g474.h"
+#include "stm32g474_adc_shared.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -30,11 +34,24 @@ struct hal_dma_pwm_audio_impl_s {
   uint8_t adc_count;
   volatile uint16_t *adc_buffer;
   bool adc_dma_configured;
+  bool adc_claimed;
   hal_dma_pwm_audio_buffer_cb_t cb;
   void *user;
 };
 
 static hal_dma_pwm_audio_impl_t s_pool[HAL_DMA_PWM_AUDIO_MAX_CHANNELS];
+
+static void pool_lock(void) { hal_critical_section_enter(); }
+
+static void pool_unlock(void) { hal_critical_section_exit(); }
+
+static bool audio_state_load(const bool *state) {
+  return __atomic_load_n(state, __ATOMIC_ACQUIRE);
+}
+
+static void audio_state_store(bool *state, bool value) {
+  __atomic_store_n(state, value, __ATOMIC_RELEASE);
+}
 
 #ifdef JH_STM32G474_HW
 static hal_dma_pwm_audio_impl_t *s_irq_audio = nullptr;
@@ -77,32 +94,10 @@ static void set_pin_analog(uint8_t pin) {
 static void stop_adc_conversion(void) {
   if ((ADC1_CR & ADC_CR_ADSTART) != 0u) {
     ADC1_CR |= ADC_CR_ADSTP;
-    while ((ADC1_CR & ADC_CR_ADSTP) != 0u) {
+    uint32_t timeout = ADC_POLL_TIMEOUT;
+    while ((ADC1_CR & ADC_CR_ADSTP) != 0u && timeout > 0u) {
+      --timeout;
     }
-  }
-}
-
-static void adc_hw_enable_if_needed(void) {
-  RCC_AHB2ENR |= RCC_AHB2ENR_ADC12EN;
-  (void)RCC_AHB2ENR;
-  ADC12_CCR = (ADC12_CCR & ~ADC_CCR_CKMODE_MASK) | ADC_CCR_CKMODE_HCLK_DIV4;
-
-  if ((ADC1_CR & ADC_CR_ADEN) != 0u) {
-    return;
-  }
-
-  ADC1_CR &= ~ADC_CR_DEEPPWD;
-  ADC1_CR |= ADC_CR_ADVREGEN;
-  hal_delay_us(20u);
-
-  ADC1_CR &= ~ADC_CR_ADCALDIF;
-  ADC1_CR |= ADC_CR_ADCAL;
-  while ((ADC1_CR & ADC_CR_ADCAL) != 0u) {
-  }
-
-  ADC1_ISR = ADC_ISR_ADRDY;
-  ADC1_CR |= ADC_CR_ADEN;
-  while ((ADC1_ISR & ADC_ISR_ADRDY) == 0u) {
   }
 }
 
@@ -129,20 +124,26 @@ static void configure_adc_sequence(const uint8_t *pins, uint8_t count,
   ADC1_SQR1 = sqr;
 }
 
-static bool configure_adc_dma(hal_dma_pwm_audio_impl_t *audio) {
+static hal_status_t configure_adc_dma(hal_dma_pwm_audio_impl_t *audio) {
   if (audio->adc_count == 0u) {
-    return true;
+    return HAL_OK;
   }
   if (audio->adc_buffer == nullptr) {
-    return false;
+    return HAL_EINVAL;
   }
 
   uint32_t channels[4] = {};
   if (!adc_pin_channels(audio->adc_pins, audio->adc_count, channels)) {
-    return false;
+    return HAL_EINVAL;
+  }
+  if (!audio->adc_claimed) {
+    const hal_status_t status = stm32g474_adc_acquire_dma();
+    if (status != HAL_OK) {
+      return status;
+    }
+    audio->adc_claimed = true;
   }
 
-  adc_hw_enable_if_needed();
   stop_adc_conversion();
   configure_adc_sequence(audio->adc_pins, audio->adc_count, channels);
 
@@ -162,33 +163,47 @@ static bool configure_adc_dma(hal_dma_pwm_audio_impl_t *audio) {
 
   ADC1_ISR = ADC_ISR_EOC;
   audio->adc_dma_configured = true;
-  return true;
+  return HAL_OK;
 }
 
-static bool start_adc_dma_conversion(hal_dma_pwm_audio_impl_t *audio) {
+static hal_status_t start_adc_dma_conversion(hal_dma_pwm_audio_impl_t *audio) {
   if (audio->adc_count == 0u) {
-    return true;
+    return HAL_OK;
   }
-  if (!audio->adc_dma_configured && !configure_adc_dma(audio)) {
-    return false;
+  if (!audio->adc_dma_configured) {
+    const hal_status_t status = configure_adc_dma(audio);
+    if (status != HAL_OK) {
+      return status;
+    }
   }
   if ((ADC1_CR & ADC_CR_ADSTART) == 0u) {
     ADC1_ISR = ADC_ISR_EOC;
     ADC1_CR |= ADC_CR_ADSTART;
   }
-  return true;
+  return HAL_OK;
+}
+
+static void quiesce_adc_dma(hal_dma_pwm_audio_impl_t *audio) {
+  if (audio == nullptr || !audio->adc_dma_configured) {
+    return;
+  }
+  stop_adc_conversion();
+  DMA_CCR(DMA1_BASE, kAdcDmaChannel) &= ~DMA_CCR_EN;
+  audio->adc_dma_configured = false;
 }
 
 static void release_adc_dma(hal_dma_pwm_audio_impl_t *audio) {
-  stop_adc_conversion();
-  DMA_CCR(DMA1_BASE, kAdcDmaChannel) &= ~DMA_CCR_EN;
+  if (audio == nullptr || !audio->adc_claimed) {
+    return;
+  }
+  quiesce_adc_dma(audio);
   DMAMUX_CCR(kAdcDmaChannel) = 0u;
   DMA_IFCR(DMA1_BASE) = DMA_IFCR_CLEAR_ALL(kAdcDmaChannel);
   ADC1_CFGR &= ~kAdcDmaCfgrMask;
   ADC1_ISR = ADC_ISR_EOC;
-  if (audio != nullptr) {
-    audio->adc_dma_configured = false;
-  }
+  audio->adc_dma_configured = false;
+  stm32g474_adc_release_dma();
+  audio->adc_claimed = false;
 }
 
 static bool configure_pwm_dma(hal_dma_pwm_audio_impl_t *audio) {
@@ -219,6 +234,13 @@ static bool configure_pwm_dma(hal_dma_pwm_audio_impl_t *audio) {
   return true;
 }
 
+static void reset_pwm_dma(hal_dma_pwm_audio_impl_t *audio) {
+  DMA_CCR(DMA1_BASE, kPwmDmaChannel) &= ~DMA_CCR_EN;
+  DMA_IFCR(DMA1_BASE) = DMA_IFCR_CLEAR_ALL(kPwmDmaChannel);
+  DMA_CMAR(DMA1_BASE, kPwmDmaChannel) = (uint32_t)(uintptr_t)audio->buffer_a;
+  DMA_CNDTR(DMA1_BASE, kPwmDmaChannel) = (uint32_t)audio->block_size * 2u;
+}
+
 static void disable_pwm_dma(void) {
   jh_stm32_pwm_set_update_dma_request(&s_irq_audio->pwm, false);
   DMA_CCR(DMA1_BASE, kPwmDmaChannel) &= ~DMA_CCR_EN;
@@ -231,13 +253,22 @@ extern "C" void DMA1_Channel1_IRQHandler(void) {
   if (clear != 0u) {
     DMA_IFCR(DMA1_BASE) = clear;
   }
-  if (audio == nullptr || !audio->in_use || !audio->running || audio->paused) {
+  const bool adc_transfer_error =
+      audio != nullptr && audio->adc_count > 0u &&
+      (status & DMA_FLAG_TEIF(kAdcDmaChannel)) != 0u;
+  if (adc_transfer_error) {
+    DMA_IFCR(DMA1_BASE) = DMA_IFCR_CLEAR_ALL(kAdcDmaChannel);
+  }
+  if (audio == nullptr || !audio->in_use ||
+      !audio_state_load(&audio->running) || audio_state_load(&audio->paused)) {
     return;
   }
 
-  if ((status & DMA_FLAG_TEIF(kPwmDmaChannel)) != 0u) {
+  if ((status & DMA_FLAG_TEIF(kPwmDmaChannel)) != 0u || adc_transfer_error) {
     disable_pwm_dma();
-    audio->running = false;
+    quiesce_adc_dma(audio);
+    jh_stm32_pwm_release_output(&audio->pwm);
+    audio_state_store(&audio->running, false);
     return;
   }
   if ((status & DMA_FLAG_HTIF(kPwmDmaChannel)) != 0u && audio->cb != nullptr) {
@@ -249,19 +280,41 @@ extern "C" void DMA1_Channel1_IRQHandler(void) {
 }
 #endif /* JH_STM32G474_HW */
 
+static void release_pool_slot(hal_dma_pwm_audio_impl_t *audio) {
+  pool_lock();
+#ifdef JH_STM32G474_HW
+  if (s_irq_audio == audio) {
+    s_irq_audio = nullptr;
+  }
+#endif
+  memset(audio, 0, sizeof(*audio));
+  pool_unlock();
+}
+
 hal_status_t hal_dma_pwm_audio_create_ex(const hal_dma_pwm_audio_config_t *cfg,
                                          hal_dma_pwm_audio_t *out_audio) {
   if (out_audio == nullptr) {
     return HAL_EINVAL;
   }
   *out_audio = nullptr;
-  if (cfg == nullptr || cfg->buffer_a == nullptr || cfg->buffer_b == nullptr ||
-      cfg->block_size == 0u || cfg->period_ticks == 0u ||
-      cfg->sample_rate_hz == 0u) {
+  if (!jh_hal_dma_pwm_audio_config_is_valid(cfg)) {
     return HAL_EINVAL;
+  }
+  for (uint8_t i = 0u; i < cfg->adc_count; ++i) {
+    if (cfg->adc_pins[i] == cfg->pwm_pin ||
+        !hal_adc_is_pin_supported(cfg->adc_pins[i])) {
+      return HAL_EINVAL;
+    }
   }
 
   hal_dma_pwm_audio_impl_t *audio = nullptr;
+  pool_lock();
+#ifdef JH_STM32G474_HW
+  if (s_irq_audio != nullptr) {
+    pool_unlock();
+    return HAL_EBUSY;
+  }
+#endif
   for (uint8_t i = 0u; i < HAL_DMA_PWM_AUDIO_MAX_CHANNELS; ++i) {
     if (!s_pool[i].in_use) {
       audio = &s_pool[i];
@@ -270,16 +323,21 @@ hal_status_t hal_dma_pwm_audio_create_ex(const hal_dma_pwm_audio_config_t *cfg,
       break;
     }
   }
+#ifdef JH_STM32G474_HW
+  if (audio != nullptr) {
+    s_irq_audio = audio;
+  }
+#endif
+  pool_unlock();
 
   if (audio == nullptr) {
-    HAL_ASSERT(false, "hal_dma_pwm_audio: STM32 pool exhausted");
     return HAL_ENOMEM;
   }
 
   if (!jh_stm32_pwm_prepare_pin(cfg->pwm_pin, cfg->sample_rate_hz,
                                 cfg->period_ticks, &audio->pwm)) {
-    audio->in_use = false;
-    return HAL_EIO;
+    release_pool_slot(audio);
+    return HAL_EINVAL;
   }
 
   audio->buffer_a = cfg->buffer_a;
@@ -293,24 +351,21 @@ hal_status_t hal_dma_pwm_audio_create_ex(const hal_dma_pwm_audio_config_t *cfg,
   audio->user = cfg->user;
 
 #ifdef JH_STM32G474_HW
-  if (s_irq_audio != nullptr) {
-    audio->in_use = false;
-    return HAL_EBUSY;
-  }
-
   RCC_AHB1ENR |= RCC_AHB1ENR_DMA1EN | RCC_AHB1ENR_DMAMUX1EN;
   (void)RCC_AHB1ENR;
 
-  if (!configure_adc_dma(audio)) {
-    audio->in_use = false;
-    return HAL_EIO;
+  const hal_status_t adc_status = configure_adc_dma(audio);
+  if (adc_status != HAL_OK) {
+    jh_stm32_pwm_release_output(&audio->pwm);
+    release_pool_slot(audio);
+    return adc_status;
   }
   if (!configure_pwm_dma(audio)) {
     release_adc_dma(audio);
-    audio->in_use = false;
+    jh_stm32_pwm_release_output(&audio->pwm);
+    release_pool_slot(audio);
     return HAL_EIO;
   }
-  s_irq_audio = audio;
 #endif
 
   *out_audio = audio;
@@ -325,19 +380,25 @@ hal_status_t hal_dma_pwm_audio_start_ex(hal_dma_pwm_audio_t audio) {
   if (audio == nullptr || !audio->in_use) {
     return audio == nullptr ? HAL_EINVAL : HAL_ESTATE;
   }
+  if (audio_state_load(&audio->running) || audio_state_load(&audio->paused)) {
+    return HAL_ESTATE;
+  }
 
 #ifdef JH_STM32G474_HW
-  if (!start_adc_dma_conversion(audio)) {
-    return HAL_EIO;
+  const hal_status_t adc_status = start_adc_dma_conversion(audio);
+  if (adc_status != HAL_OK) {
+    return adc_status;
   }
-  DMA_IFCR(DMA1_BASE) = DMA_IFCR_CLEAR_ALL(kPwmDmaChannel);
+  reset_pwm_dma(audio);
+  audio_state_store(&audio->running, true);
+  audio_state_store(&audio->paused, false);
   DMA_CCR(DMA1_BASE, kPwmDmaChannel) |= DMA_CCR_EN;
   jh_stm32_pwm_set_update_dma_request(&audio->pwm, true);
   jh_stm32_pwm_start_output(&audio->pwm);
+#else
+  audio_state_store(&audio->running, true);
+  audio_state_store(&audio->paused, false);
 #endif
-
-  audio->running = true;
-  audio->paused = false;
   return HAL_OK;
 }
 
@@ -346,6 +407,8 @@ hal_status_t hal_dma_pwm_audio_stop(hal_dma_pwm_audio_t audio) {
     return audio == nullptr ? HAL_EINVAL : HAL_ESTATE;
   }
 
+  audio_state_store(&audio->running, false);
+  audio_state_store(&audio->paused, false);
 #ifdef JH_STM32G474_HW
   jh_stm32_pwm_set_update_dma_request(&audio->pwm, false);
   DMA_CCR(DMA1_BASE, kPwmDmaChannel) &= ~DMA_CCR_EN;
@@ -353,7 +416,6 @@ hal_status_t hal_dma_pwm_audio_stop(hal_dma_pwm_audio_t audio) {
   jh_stm32_pwm_release_output(&audio->pwm);
 #endif
 
-  audio->running = false;
   return HAL_OK;
 }
 
@@ -362,16 +424,24 @@ hal_status_t hal_dma_pwm_audio_pause(hal_dma_pwm_audio_t audio,
   if (audio == nullptr || !audio->in_use) {
     return audio == nullptr ? HAL_EINVAL : HAL_ESTATE;
   }
+  if (idle_value >= audio->pwm.period_ticks) {
+    return HAL_EINVAL;
+  }
+  if (!audio_state_load(&audio->running) || audio_state_load(&audio->paused)) {
+    return HAL_ESTATE;
+  }
   audio->idle_value = idle_value;
+  audio_state_store(&audio->running, false);
+  audio_state_store(&audio->paused, true);
 
 #ifdef JH_STM32G474_HW
   jh_stm32_pwm_set_update_dma_request(&audio->pwm, false);
   DMA_CCR(DMA1_BASE, kPwmDmaChannel) &= ~DMA_CCR_EN;
+  release_adc_dma(audio);
   jh_stm32_pwm_write_compare(&audio->pwm, idle_value);
   jh_stm32_pwm_release_output(&audio->pwm);
 #endif
 
-  audio->paused = true;
   return HAL_OK;
 }
 
@@ -379,42 +449,49 @@ hal_status_t hal_dma_pwm_audio_resume(hal_dma_pwm_audio_t audio) {
   if (audio == nullptr || !audio->in_use) {
     return audio == nullptr ? HAL_EINVAL : HAL_ESTATE;
   }
+  if (!audio_state_load(&audio->paused) || audio_state_load(&audio->running)) {
+    return HAL_ESTATE;
+  }
 
 #ifdef JH_STM32G474_HW
-  if (!start_adc_dma_conversion(audio)) {
-    return HAL_EIO;
+  const hal_status_t adc_status = start_adc_dma_conversion(audio);
+  if (adc_status != HAL_OK) {
+    return adc_status;
   }
-  DMA_IFCR(DMA1_BASE) = DMA_IFCR_CLEAR_ALL(kPwmDmaChannel);
+  reset_pwm_dma(audio);
+  audio_state_store(&audio->paused, false);
+  audio_state_store(&audio->running, true);
   DMA_CCR(DMA1_BASE, kPwmDmaChannel) |= DMA_CCR_EN;
   jh_stm32_pwm_set_update_dma_request(&audio->pwm, true);
   jh_stm32_pwm_start_output(&audio->pwm);
+#else
+  audio_state_store(&audio->paused, false);
+  audio_state_store(&audio->running, true);
 #endif
+  return HAL_OK;
+}
 
-  audio->paused = false;
-  audio->running = true;
+hal_status_t hal_dma_pwm_audio_destroy_ex(hal_dma_pwm_audio_t audio) {
+  if (audio == nullptr || !audio->in_use) {
+    return audio == nullptr ? HAL_EINVAL : HAL_ESTATE;
+  }
+
+  (void)hal_dma_pwm_audio_stop(audio);
+  release_pool_slot(audio);
   return HAL_OK;
 }
 
 void hal_dma_pwm_audio_destroy(hal_dma_pwm_audio_t audio) {
-  if (audio == nullptr) {
-    return;
-  }
-
-  hal_dma_pwm_audio_stop(audio);
-#ifdef JH_STM32G474_HW
-  if (s_irq_audio == audio) {
-    s_irq_audio = nullptr;
-  }
-#endif
-  memset(audio, 0, sizeof(*audio));
+  (void)hal_dma_pwm_audio_destroy_ex(audio);
 }
 
 bool hal_dma_pwm_audio_is_running(hal_dma_pwm_audio_t audio) {
-  return audio != nullptr && audio->in_use && audio->running && !audio->paused;
+  return audio != nullptr && audio->in_use &&
+         audio_state_load(&audio->running) && !audio_state_load(&audio->paused);
 }
 
 bool hal_dma_pwm_audio_is_paused(hal_dma_pwm_audio_t audio) {
-  return audio != nullptr && audio->in_use && audio->paused;
+  return audio != nullptr && audio->in_use && audio_state_load(&audio->paused);
 }
 
 #endif /* HAL_ENABLE_DMA_PWM_AUDIO */

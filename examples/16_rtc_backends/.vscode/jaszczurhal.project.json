@@ -24,7 +24,7 @@
                 "id": "display-clock",
                 "module": "16_rtc_display_clock",
                 "sources": [
-                    "display_clock_app.cpp"
+                    "display_clock_app.c"
                 ],
                 "targets": [
                     "stm32g474"

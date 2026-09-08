@@ -12,7 +12,6 @@
 #include <hal/spi/hal_spi.h>
 #include <hal/system/hal_system.h>
 
-#include <new>
 #include <stdint.h>
 
 #if HAL_TARGET_IS_RP
@@ -44,10 +43,8 @@
 
 #define EXAMPLE_AUDIO_BLOCK_SIZE 64u
 
-alignas(
-    DAClessAudio) static unsigned char s_audio_storage[sizeof(DAClessAudio)];
-static DAClessAudio *s_audio = nullptr;
-static hal_pga2311_t s_pga = nullptr;
+static hal_dacless_t s_audio = NULL;
+static hal_pga2311_t s_pga = NULL;
 static uint32_t s_phase = 0u;
 static uint32_t s_phase_increment = 90000u;
 static uint32_t s_last_report_ms = 0u;
@@ -56,10 +53,15 @@ static uint32_t s_gain_index = 0u;
 
 static const int16_t kGainHalfDb[] = {-80, -40, -20, 0, 20, 40};
 
-static void fill_audio_block(void *, uint16_t *buffer) {
-  const uint16_t control = s_audio != nullptr ? s_audio->getADC(0u) : 0u;
+static void fill_audio_block(void *context, uint16_t *buffer,
+                             uint16_t sample_count) {
+  (void)context;
+  uint16_t control = 0u;
+  if (s_audio != NULL) {
+    (void)hal_dacless_get_adc(s_audio, 0u, &control);
+  }
   s_phase_increment = 50000u + ((uint32_t)control * 80u);
-  for (uint16_t i = 0u; i < EXAMPLE_AUDIO_BLOCK_SIZE; ++i) {
+  for (uint16_t i = 0u; i < sample_count; ++i) {
     buffer[i] = (uint16_t)((s_phase >> 20u) & 0x0FFFu);
     s_phase += s_phase_increment;
   }
@@ -82,40 +84,55 @@ static void start_pga2311(void) {
 }
 
 static void start_dacless(void) {
-  DAClessConfig config;
-  config.pinPWM = EXAMPLE_AUDIO_PWM;
-  config.pwmBits = 12u;
-  config.blockSize = EXAMPLE_AUDIO_BLOCK_SIZE;
-  config.nAdcInputs = 1u;
-  config.useDma = true;
-  config.adcPins[0] = EXAMPLE_AUDIO_ADC;
+  hal_dacless_config_t config = hal_dacless_default_config();
+  config.pwm_pin = EXAMPLE_AUDIO_PWM;
+  config.pwm_bits = 12u;
+  config.block_size = EXAMPLE_AUDIO_BLOCK_SIZE;
+  config.adc_input_count = 1u;
+  config.use_dma = true;
+  config.adc_pins[0] = EXAMPLE_AUDIO_ADC;
 
-  s_audio = new (s_audio_storage) DAClessAudio(config);
-  s_audio->setBlockCallback(fill_audio_block, nullptr);
-  if (!s_audio->begin()) {
-    derr("DACless audio unavailable");
-    s_audio = nullptr;
+  hal_status_t status = hal_dacless_create(&config, &s_audio);
+  if (status == HAL_OK) {
+    status = hal_dacless_set_block_callback(s_audio, fill_audio_block, NULL);
+  }
+  if (status == HAL_OK) {
+    status = hal_dacless_begin(s_audio);
+  }
+  if (status == HAL_OK) {
+    status = hal_dacless_unmute(s_audio);
+  }
+  if (status != HAL_OK) {
+    derr("DACless audio unavailable: %s", hal_status_to_string(status));
+    if (s_audio != NULL) {
+      (void)hal_dacless_destroy(s_audio);
+      s_audio = NULL;
+    }
     return;
   }
-  s_audio->unmute();
-  deb("DACless ready rate=%.2f Hz dma=%u", (double)s_audio->getSampleRate(),
-      s_audio->isDmaActive() ? 1u : 0u);
+
+  float sample_rate = 0.0f;
+  hal_dacless_state_t state = {0};
+  (void)hal_dacless_get_sample_rate(s_audio, &sample_rate);
+  (void)hal_dacless_get_state(s_audio, &state);
+  deb("DACless ready rate=%.2f Hz dma=%u", (double)sample_rate,
+      state.dma_active ? 1u : 0u);
 }
 
-extern "C" void app_start(void) {
+void app_start(void) {
   hal_debug_init_default();
   deb("=== JaszczurHAL audio output: PGA2311 + DACless PWM ===");
   start_pga2311();
   start_dacless();
 }
 
-extern "C" void app_task0(void) {
-  if (s_audio != nullptr) {
-    s_audio->service();
+void app_task0(void) {
+  if (s_audio != NULL) {
+    (void)hal_dacless_service(s_audio);
   }
 
   const uint32_t now = hal_millis();
-  if (s_pga != nullptr && (uint32_t)(now - s_last_gain_ms) >= 1000u) {
+  if (s_pga != NULL && (uint32_t)(now - s_last_gain_ms) >= 1000u) {
     s_last_gain_ms = now;
     const int16_t gain = kGainHalfDb[s_gain_index];
     (void)hal_pga2311_set_gain_half_db_ex(s_pga, gain, gain);
@@ -126,14 +143,21 @@ extern "C" void app_task0(void) {
 
   if ((uint32_t)(now - s_last_report_ms) >= 500u) {
     s_last_report_ms = now;
-    deb("audio adc=%u phase_increment=%lu",
-        s_audio != nullptr ? (unsigned)s_audio->getADC(0u) : 0u,
+    uint16_t adc = 0u;
+    if (s_audio != NULL) {
+      (void)hal_dacless_get_adc(s_audio, 0u, &adc);
+    }
+    deb("audio adc=%u phase_increment=%lu", (unsigned)adc,
         (unsigned long)s_phase_increment);
   }
 
   /* DMA refills buffers in its completion callback, so this loop may wait.
    * In polling mode, keep calling service() without adding a delay. */
-  if (s_audio == nullptr || s_audio->isDmaActive()) {
+  hal_dacless_state_t state = {0};
+  const bool dma_active = s_audio != NULL &&
+                          hal_dacless_get_state(s_audio, &state) == HAL_OK &&
+                          state.dma_active;
+  if (s_audio == NULL || dma_active) {
     hal_delay_ms(1u);
   }
 }

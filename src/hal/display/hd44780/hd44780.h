@@ -143,6 +143,12 @@ public:
   HD44780(const HD44780 &) = delete;
   HD44780 &operator=(const HD44780 &) = delete;
 
+  /**
+   * @brief Check whether the display initialization sequence completed.
+   * @return true when initialized, false when synchronization was unavailable.
+   */
+  bool isInitialized();
+
   void init(uint8_t fourbitmode, uint8_t rs, uint8_t rw, uint8_t enable,
             uint8_t d0, uint8_t d1, uint8_t d2, uint8_t d3, uint8_t d4,
             uint8_t d5, uint8_t d6, uint8_t d7);
