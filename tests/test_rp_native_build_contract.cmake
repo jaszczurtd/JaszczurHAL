@@ -13,7 +13,7 @@ set(_board_generator "${JH_ROOT}/scripts/generate_board_config.py")
 set(_board_cmake "${JH_ROOT}/cmake/jh_board_profiles.cmake")
 set(_sources "${JH_ROOT}/cmake/jh_rp_hal_sources.cmake")
 set(_app_entry "${JH_ROOT}/src/hal_app_entry.cpp")
-set(_core_runtime "${JH_ROOT}/examples/01_core_runtime/app.cpp")
+set(_core_runtime "${JH_ROOT}/examples/01_core_runtime/app.c")
 set(_usb_header "${JH_ROOT}/src/hal/usb/hal_usb.h")
 set(_usb_impl "${JH_ROOT}/src/hal/impl/rp2040/hal_usb.cpp")
 set(_flash_engine_header

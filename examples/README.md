@@ -162,7 +162,7 @@ cmake --build .build/examples-cmake/rp2040
 
 ```text
 NN_example_name/
-  app.c or app.cpp
+  app.c
   hal_project_config.h
   .vscode/
     jaszczurhal.project.json

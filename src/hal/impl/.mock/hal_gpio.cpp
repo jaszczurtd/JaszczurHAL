@@ -27,6 +27,8 @@ static size_t s_trace_count = 0u;
 
 static bool gpio_pin_valid(uint8_t pin) { return pin < MOCK_GPIO_MAX_PINS; }
 
+bool jh_hal_gpio_pin_valid(uint8_t pin) { return gpio_pin_valid(pin); }
+
 static bool gpio_mode_is_output(hal_gpio_mode_t mode) {
   return mode == HAL_GPIO_OUTPUT || mode == HAL_GPIO_OUTPUT_LOW ||
          mode == HAL_GPIO_OUTPUT_HIGH || mode == HAL_GPIO_OUTPUT_OPEN_DRAIN ||

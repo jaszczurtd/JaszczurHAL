@@ -7,9 +7,9 @@ microcontroller's internal clock. It demonstrates alarms, CLKOUT, the
 PCF8563 countdown timer, the DS3231 temperature sensor, and timed wake-up.
 For devices that support it, it also reads and writes epoch timestamps.
 
-The drivers are compiled together. `hal_rtc_config_t::chip` selects the
-hardware, and an absent external RTC does not stop the other one. I2C bus 0
-uses GP4/GP5 on RP boards and PB9/PB8 on STM32G474.
+The drivers are compiled together. The `chip` field of `hal_rtc_config_t`
+selects the hardware, and an absent external RTC does not stop the other one.
+I2C bus 0 uses GP4/GP5 on RP boards and PB9/PB8 on STM32G474.
 
 Before changing an external clock, the application reads its state and keeps
 an existing valid time. It writes the fixed test value `2026-08-20 12:34:50`
@@ -54,7 +54,7 @@ exactly one application source:
 | Selection | Application source | Targets |
 |---|---|---|
 | Base project | `app.c` | RP2040, RP2350 ARM, RP2350 RISC-V, STM32G474 |
-| `display-clock` variant | `display_clock_app.cpp` | STM32G474 |
+| `display-clock` variant | `display_clock_app.c` | STM32G474 |
 
 Build the base STM32G474 example:
 
@@ -78,7 +78,7 @@ vscode/entry/jh-vscode build \
   --variant display-clock
 ```
 
-The variant sets `JH_PROJECT_SOURCES=display_clock_app.cpp` and enables
+The variant sets `JH_PROJECT_SOURCES=display_clock_app.c` and enables
 ILI9341 support. It excludes `app.c`, avoiding duplicate definitions of
 `app_start()` and `app_task0()`. Its output is
 `.build/examples/16_rtc_backends/variants/display-clock/firmware.elf`.

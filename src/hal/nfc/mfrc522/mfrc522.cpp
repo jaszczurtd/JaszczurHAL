@@ -12,8 +12,42 @@
 
 #include <cstring>
 
+#ifndef HAL_MFRC522_MAX_TRANSPORTS
+#define HAL_MFRC522_MAX_TRANSPORTS 4u
+#endif
+
+static_assert(HAL_MFRC522_MAX_TRANSPORTS > 0u,
+              "HAL_MFRC522_MAX_TRANSPORTS must be positive");
+
+namespace {
+
+struct mfrc522_transport_error_slot_t {
+  const MFRC522_BUS_DEVICE *device = nullptr;
+  hal_status_t status = HAL_OK;
+};
+
+static mfrc522_transport_error_slot_t
+    s_transport_error_slots[HAL_MFRC522_MAX_TRANSPORTS];
+static hal_mutex_t s_transport_error_mutex = nullptr;
+
+static hal_mutex_t transport_error_mutex() {
+  return jh_hal_mutex_try_create_once(&s_transport_error_mutex);
+}
+
+static mfrc522_transport_error_slot_t *
+find_transport_error_slot(const MFRC522_BUS_DEVICE *device) {
+  for (mfrc522_transport_error_slot_t &slot : s_transport_error_slots) {
+    if (slot.device == device) {
+      return &slot;
+    }
+  }
+  return nullptr;
+}
+
+} // namespace
+
 MFRC522::MFRC522(MFRC522_BUS_DEVICE *dev) : uid(), _dev(dev), _mutex(NULL) {
-  (void)jh_hal_mutex_create_once(&_mutex);
+  (void)jh_hal_mutex_try_create_once(&_mutex);
 };
 
 MFRC522::~MFRC522() {
@@ -24,7 +58,7 @@ MFRC522::~MFRC522() {
 }
 
 void MFRC522::lock() {
-  if (jh_hal_mutex_create_once(&_mutex) != NULL) {
+  if (jh_hal_mutex_try_create_once(&_mutex) != NULL) {
     hal_mutex_lock(_mutex);
   }
 }
@@ -33,6 +67,75 @@ void MFRC522::unlock() {
   if (_mutex != NULL) {
     hal_mutex_unlock(_mutex);
   }
+}
+
+hal_status_t MFRC522_BUS_DEVICE::PCD_ClearTransportError() {
+  hal_mutex_t mutex = transport_error_mutex();
+  if (mutex == nullptr) {
+    return HAL_ENOMEM;
+  }
+  hal_mutex_lock(mutex);
+  mfrc522_transport_error_slot_t *slot = find_transport_error_slot(this);
+  if (slot == nullptr) {
+    for (mfrc522_transport_error_slot_t &candidate : s_transport_error_slots) {
+      if (candidate.device == nullptr) {
+        slot = &candidate;
+        slot->device = this;
+        break;
+      }
+    }
+  }
+  if (slot != nullptr) {
+    slot->status = HAL_OK;
+  }
+  hal_mutex_unlock(mutex);
+  return slot != nullptr ? HAL_OK : HAL_ENOMEM;
+}
+
+hal_status_t MFRC522_BUS_DEVICE::PCD_GetTransportError() const {
+  hal_mutex_t mutex =
+      __atomic_load_n(&s_transport_error_mutex, __ATOMIC_ACQUIRE);
+  if (mutex == nullptr) {
+    return HAL_ESTATE;
+  }
+  hal_mutex_lock(mutex);
+  const mfrc522_transport_error_slot_t *slot = find_transport_error_slot(this);
+  const hal_status_t status = slot != nullptr ? slot->status : HAL_ESTATE;
+  hal_mutex_unlock(mutex);
+  return status;
+}
+
+hal_status_t MFRC522_BUS_DEVICE::PCD_ReleaseTransportError() {
+  hal_mutex_t mutex =
+      __atomic_load_n(&s_transport_error_mutex, __ATOMIC_ACQUIRE);
+  if (mutex == nullptr) {
+    return HAL_ESTATE;
+  }
+  hal_mutex_lock(mutex);
+  mfrc522_transport_error_slot_t *slot = find_transport_error_slot(this);
+  if (slot != nullptr) {
+    slot->status = HAL_OK;
+    slot->device = nullptr;
+  }
+  hal_mutex_unlock(mutex);
+  return slot != nullptr ? HAL_OK : HAL_ESTATE;
+}
+
+void MFRC522_BUS_DEVICE::PCD_RecordTransportStatus(hal_status_t status) {
+  if (!hal_status_is_error(status)) {
+    return;
+  }
+  hal_mutex_t mutex =
+      __atomic_load_n(&s_transport_error_mutex, __ATOMIC_ACQUIRE);
+  if (mutex == nullptr) {
+    return;
+  }
+  hal_mutex_lock(mutex);
+  mfrc522_transport_error_slot_t *slot = find_transport_error_slot(this);
+  if (slot != nullptr && slot->status == HAL_OK) {
+    slot->status = status;
+  }
+  hal_mutex_unlock(mutex);
 }
 
 bool MFRC522_BUS_DEVICE::PCD_Init() { return false; }

@@ -21,6 +21,8 @@ void hal_adc_set_resolution(uint8_t bits) {
   hal_mutex_unlock(s_adc_mutex);
 }
 
+bool hal_adc_is_pin_supported(uint8_t pin) { return pin < 64u; }
+
 int hal_adc_read(uint8_t pin) {
   adc_ensure_mutex();
   hal_mutex_lock(s_adc_mutex);

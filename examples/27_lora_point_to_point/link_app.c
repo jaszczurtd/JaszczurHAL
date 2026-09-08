@@ -1,5 +1,5 @@
 /**
- * @file link_app.cpp
+ * @file link_app.c
  * @brief Send a 500-byte echo command over LoRa and check the matching
  * response.
  *
@@ -23,52 +23,54 @@
 #include <stdint.h>
 #include <string.h>
 
-namespace {
+#define INITIATOR_ADDRESS UINT16_C(0x1001)
+#define RESPONDER_ADDRESS UINT16_C(0x1002)
+#define EXAMPLE_PAYLOAD_LENGTH 500u
 
-constexpr uint16_t kInitiatorAddress = UINT16_C(0x1001);
-constexpr uint16_t kResponderAddress = UINT16_C(0x1002);
-constexpr uint8_t kApplicationPort = 1u;
-constexpr uint32_t kLfTestFrequencyHz = UINT32_C(434000000);
-constexpr uint32_t kFirstRequestDelayMs = UINT32_C(1000);
-constexpr uint32_t kRequestPeriodMs = UINT32_C(3000);
-constexpr uint32_t kResponseTimeoutMs = UINT32_C(20000);
-constexpr uint32_t kReadyPeriodMs = UINT32_C(5000);
-constexpr size_t kPayloadLength = 500u;
-constexpr char kCommandName[] = "echo";
+static const uint8_t kApplicationPort = 1u;
+static const uint32_t kLfTestFrequencyHz = UINT32_C(434000000);
+#ifndef HAL_LORA_LINK_EXAMPLE_RESPONDER
+static const uint32_t kFirstRequestDelayMs = UINT32_C(1000);
+static const uint32_t kRequestPeriodMs = UINT32_C(3000);
+static const uint32_t kResponseTimeoutMs = UINT32_C(20000);
+#endif
+static const uint32_t kReadyPeriodMs = UINT32_C(5000);
+static const char kCommandName[] = "echo";
 
 #ifdef HAL_LORA_LINK_EXAMPLE_RESPONDER
-constexpr uint16_t kLocalAddress = kResponderAddress;
-constexpr uint16_t kPeerAddress = kInitiatorAddress;
-constexpr char kRole[] = "responder";
+#define LOCAL_ADDRESS RESPONDER_ADDRESS
+#define PEER_ADDRESS INITIATOR_ADDRESS
+static const char kRole[] = "responder";
 #else
-constexpr uint16_t kLocalAddress = kInitiatorAddress;
-constexpr uint16_t kPeerAddress = kResponderAddress;
-constexpr char kRole[] = "initiator";
+#define LOCAL_ADDRESS INITIATOR_ADDRESS
+#define PEER_ADDRESS RESPONDER_ADDRESS
+static const char kRole[] = "initiator";
 #endif
 
-hal_lora_radio_t s_radio = nullptr;
-hal_lora_link_t s_link = nullptr;
-hal_command_router_t s_router = nullptr;
-hal_lora_commands_t s_commands = nullptr;
-bool s_ready = false;
-uint32_t s_handler_calls = 0u;
-uint32_t s_session_id = 0u;
-uint32_t s_next_ready_ms = 0u;
+static hal_lora_radio_t s_radio = NULL;
+static hal_lora_link_t s_link = NULL;
+static hal_command_router_t s_router = NULL;
+static hal_lora_commands_t s_commands = NULL;
+static bool s_ready = false;
+static uint32_t s_handler_calls = 0u;
+static uint32_t s_session_id = 0u;
+static uint32_t s_next_ready_ms = 0u;
 
 #ifndef HAL_LORA_LINK_EXAMPLE_RESPONDER
-uint8_t s_expected_payload[kPayloadLength]{};
-bool s_request_active = false;
-uint32_t s_expected_request_id = 0u;
-uint32_t s_expected_crc = 0u;
-uint32_t s_request_started_ms = 0u;
-uint32_t s_next_request_ms = 0u;
-uint32_t s_payload_generation = 0u;
+static uint8_t s_expected_payload[EXAMPLE_PAYLOAD_LENGTH] = {0};
+static bool s_request_active = false;
+static uint32_t s_expected_request_id = 0u;
+static uint32_t s_expected_crc = 0u;
+static uint32_t s_request_started_ms = 0u;
+static uint32_t s_next_request_ms = 0u;
+static uint32_t s_payload_generation = 0u;
 #endif
 
-hal_lora_modem_config_t modem_config(const hal_lora_radio_config_t &hardware) {
+static hal_lora_modem_config_t
+modem_config(const hal_lora_radio_config_t *hardware) {
   hal_lora_modem_config_t modem = hal_lora_default_eu868();
   modem.tx_power_dbm = 10;
-  if (hardware.hardware.sx126x.max_frequency_hz < UINT32_C(800000000)) {
+  if (hardware->hardware.sx126x.max_frequency_hz < UINT32_C(800000000)) {
     /* Fixed LF test frequency; not a region-specific regulatory configuration.
      */
     modem.frequency_hz = kLfTestFrequencyHz;
@@ -76,23 +78,27 @@ hal_lora_modem_config_t modem_config(const hal_lora_radio_config_t &hardware) {
   return modem;
 }
 
-uint32_t example_session_id(void) {
-  uint8_t seed[HAL_DEVICE_UID_BYTES + sizeof(uint32_t) + sizeof(uint16_t)]{};
+static uint32_t example_session_id(void) {
+  uint8_t seed[HAL_DEVICE_UID_BYTES + sizeof(uint32_t) + sizeof(uint16_t)] = {
+      0};
   (void)hal_get_device_uid(seed);
   const uint32_t started_us = hal_micros();
   memcpy(&seed[HAL_DEVICE_UID_BYTES], &started_us, sizeof(started_us));
-  memcpy(&seed[HAL_DEVICE_UID_BYTES + sizeof(started_us)], &kLocalAddress,
-         sizeof(kLocalAddress));
+  const uint16_t local_address = LOCAL_ADDRESS;
+  memcpy(&seed[HAL_DEVICE_UID_BYTES + sizeof(started_us)], &local_address,
+         sizeof(local_address));
   uint32_t session_id = hal_crc32(seed, sizeof(seed));
   if (session_id == 0u) {
-    session_id = static_cast<uint32_t>(kLocalAddress);
+    session_id = (uint32_t)LOCAL_ADDRESS;
   }
   return session_id;
 }
 
-hal_status_t echo_handler(const hal_command_request_t *request,
-                          hal_command_response_t *response, void *) {
-  if (request == nullptr || response == nullptr) {
+static hal_status_t echo_handler(const hal_command_request_t *request,
+                                 hal_command_response_t *response,
+                                 void *context) {
+  (void)context;
+  if (request == NULL || response == NULL) {
     return HAL_EINVAL;
   }
 
@@ -100,9 +106,9 @@ hal_status_t echo_handler(const hal_command_request_t *request,
   int16_t rssi_dbm = 0;
   int8_t snr_db = 0;
   if (request->source == HAL_COMMAND_SOURCE_LORA_LINK &&
-      request->source_context != nullptr) {
-    const auto *link_info = static_cast<const hal_lora_link_message_info_t *>(
-        request->source_context);
+      request->source_context != NULL) {
+    const hal_lora_link_message_info_t *link_info =
+        (const hal_lora_link_message_info_t *)request->source_context;
     fragments = link_info->fragment_count;
     rssi_dbm = link_info->packet.rssi_dbm;
     snr_db = link_info->packet.snr_db;
@@ -119,25 +125,23 @@ hal_status_t echo_handler(const hal_command_request_t *request,
   deb("JHCMD1 HANDLE id=%lu len=%u crc=%08lX fragments=%u status=%s "
       "call=%lu source=%s peer=0x%04llX session=0x%08llX "
       "security=0x%08lX rssi=%d snr=%d",
-      static_cast<unsigned long>(request->request_id),
-      static_cast<unsigned>(request->arguments_length),
-      static_cast<unsigned long>(crc), static_cast<unsigned>(fragments),
-      hal_status_to_string(status), static_cast<unsigned long>(handler_call),
+      (unsigned long)request->request_id, (unsigned)request->arguments_length,
+      (unsigned long)crc, (unsigned)fragments, hal_status_to_string(status),
+      (unsigned long)handler_call,
       hal_command_source_to_string(request->source),
-      static_cast<unsigned long long>(request->peer_id),
-      static_cast<unsigned long long>(request->session_id),
-      static_cast<unsigned long>(request->security_flags),
-      static_cast<int>(rssi_dbm), static_cast<int>(snr_db));
+      (unsigned long long)request->peer_id,
+      (unsigned long long)request->session_id,
+      (unsigned long)request->security_flags, (int)rssi_dbm, (int)snr_db);
   return status;
 }
 
-hal_status_t register_routes(void) {
+static hal_status_t register_routes(void) {
   hal_status_t status = hal_command_router_default(&s_router);
   if (status != HAL_OK) {
     return status;
   }
 
-  hal_command_definition_t echo = {};
+  hal_command_definition_t echo = {0};
   echo.name = kCommandName;
   echo.allowed_sources = HAL_COMMAND_SOURCE_MASK(HAL_COMMAND_SOURCE_LORA_LINK) |
                          HAL_COMMAND_SOURCE_MASK(HAL_COMMAND_SOURCE_BLE_STREAM);
@@ -146,46 +150,43 @@ hal_status_t register_routes(void) {
   return hal_command_router_register(s_router, &echo);
 }
 
-void report_error(const char *stage, hal_status_t status) {
+static void report_error(const char *stage, hal_status_t status) {
   derr("JHCMD1 ERROR stage=%s status=%s", stage, hal_status_to_string(status));
 }
 
-void report_ready(void) {
+static void report_ready(void) {
   deb("JHCMD1 READY role=%s local=0x%04X peer=0x%04X payload=%u "
       "sources=LORA_LINK|BLE_STREAM session=0x%08lX",
-      kRole, static_cast<unsigned>(kLocalAddress),
-      static_cast<unsigned>(kPeerAddress),
-      static_cast<unsigned>(kPayloadLength),
-      static_cast<unsigned long>(s_session_id));
+      kRole, (unsigned)LOCAL_ADDRESS, (unsigned)PEER_ADDRESS,
+      (unsigned)EXAMPLE_PAYLOAD_LENGTH, (unsigned long)s_session_id);
   s_next_ready_ms = hal_millis() + kReadyPeriodMs;
 }
 
-void report_ready_if_due(void) {
-  if (static_cast<int32_t>(hal_millis() - s_next_ready_ms) >= 0) {
+static void report_ready_if_due(void) {
+  if ((int32_t)(hal_millis() - s_next_ready_ms) >= 0) {
     report_ready();
   }
 }
 
 #ifndef HAL_LORA_LINK_EXAMPLE_RESPONDER
-void fill_expected_payload(void) {
+static void fill_expected_payload(void) {
   const uint32_t generation = ++s_payload_generation;
   for (size_t index = 0u; index < sizeof(s_expected_payload); ++index) {
     s_expected_payload[index] =
-        static_cast<uint8_t>(index * 29u + generation * 17u + (index >> 8u));
+        (uint8_t)(index * 29u + generation * 17u + (index >> 8u));
   }
   s_expected_crc = hal_crc32(s_expected_payload, sizeof(s_expected_payload));
 }
 
-void start_request(void) {
-  if (s_request_active ||
-      static_cast<int32_t>(hal_millis() - s_next_request_ms) < 0) {
+static void start_request(void) {
+  if (s_request_active || (int32_t)(hal_millis() - s_next_request_ms) < 0) {
     return;
   }
 
   fill_expected_payload();
   uint32_t request_id = 0u;
   const hal_status_t status = hal_lora_commands_request_start(
-      s_commands, kPeerAddress, kCommandName, HAL_COMMAND_ENCODING_BINARY,
+      s_commands, PEER_ADDRESS, kCommandName, HAL_COMMAND_ENCODING_BINARY,
       s_expected_payload, sizeof(s_expected_payload), &request_id);
   if (status == HAL_EBUSY || status == HAL_EAGAIN) {
     s_next_request_ms = hal_millis() + 100u;
@@ -208,13 +209,11 @@ void start_request(void) {
   s_request_started_ms = hal_millis();
   s_request_active = true;
   deb("JHCMD1 REQUEST id=%lu len=%u crc=%08lX fragments=%u",
-      static_cast<unsigned long>(request_id),
-      static_cast<unsigned>(sizeof(s_expected_payload)),
-      static_cast<unsigned long>(s_expected_crc),
-      static_cast<unsigned>(info.link_send.fragment_count));
+      (unsigned long)request_id, (unsigned)sizeof(s_expected_payload),
+      (unsigned long)s_expected_crc, (unsigned)info.link_send.fragment_count);
 }
 
-void receive_response(void) {
+static void receive_response(void) {
   hal_command_message_t response = {};
   hal_lora_link_message_info_t link_info = {};
   const hal_status_t receive_status =
@@ -246,16 +245,12 @@ void receive_response(void) {
   deb("JHCMD1 RESPONSE id=%lu len=%u crc=%08lX fragments=%u status=%s "
       "match=%u source=0x%04X session=0x%08lX security=0x%08lX "
       "rssi=%d snr=%d",
-      static_cast<unsigned long>(response.request_id),
-      static_cast<unsigned>(response.payload_length),
-      static_cast<unsigned long>(response_crc),
-      static_cast<unsigned>(link_info.fragment_count),
+      (unsigned long)response.request_id, (unsigned)response.payload_length,
+      (unsigned long)response_crc, (unsigned)link_info.fragment_count,
       hal_status_to_string(response.status), matches ? 1u : 0u,
-      static_cast<unsigned>(link_info.source),
-      static_cast<unsigned long>(link_info.session_id),
-      static_cast<unsigned long>(security_flags),
-      static_cast<int>(link_info.packet.rssi_dbm),
-      static_cast<int>(link_info.packet.snr_db));
+      (unsigned)link_info.source, (unsigned long)link_info.session_id,
+      (unsigned long)security_flags, (int)link_info.packet.rssi_dbm,
+      (int)link_info.packet.snr_db);
 
   if (current_request) {
     s_request_active = false;
@@ -263,23 +258,20 @@ void receive_response(void) {
   }
 }
 
-void check_response_timeout(void) {
+static void check_response_timeout(void) {
   if (!s_request_active ||
       hal_millis() - s_request_started_ms < kResponseTimeoutMs) {
     return;
   }
   derr("JHCMD1 TIMEOUT id=%lu len=%u crc=%08lX",
-       static_cast<unsigned long>(s_expected_request_id),
-       static_cast<unsigned>(sizeof(s_expected_payload)),
-       static_cast<unsigned long>(s_expected_crc));
+       (unsigned long)s_expected_request_id,
+       (unsigned)sizeof(s_expected_payload), (unsigned long)s_expected_crc);
   s_request_active = false;
   s_next_request_ms = hal_millis() + kRequestPeriodMs;
 }
 #endif
 
-} // namespace
-
-extern "C" void app_start(void) {
+void app_start(void) {
   hal_debug_init_default();
 
   hal_lora_radio_config_t hardware = {};
@@ -292,14 +284,14 @@ extern "C" void app_start(void) {
     status = hal_lora_radio_create(&hardware, &s_radio);
   }
   if (status == HAL_OK) {
-    const hal_lora_modem_config_t modem = modem_config(hardware);
+    const hal_lora_modem_config_t modem = modem_config(&hardware);
     status = hal_lora_radio_configure(s_radio, &modem);
   }
 
   s_session_id = example_session_id();
   if (status == HAL_OK) {
     hal_lora_link_config_t link_config =
-        hal_lora_link_config_defaults(s_radio, kLocalAddress, s_session_id);
+        hal_lora_link_config_defaults(s_radio, LOCAL_ADDRESS, s_session_id);
     status = hal_lora_link_create(&link_config, &s_link);
   }
   if (status == HAL_OK) {
@@ -323,7 +315,7 @@ extern "C" void app_start(void) {
 #endif
 }
 
-extern "C" void app_task0(void) {
+void app_task0(void) {
   if (!s_ready) {
     hal_delay_ms(100u);
     return;

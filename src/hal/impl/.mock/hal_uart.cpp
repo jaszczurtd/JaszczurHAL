@@ -22,6 +22,9 @@ struct hal_uart_impl_s {
   hal_uart_error_counters_t errors;
   hal_mock_uart_write_cb_t write_cb;
   void *write_cb_user;
+  hal_status_t next_begin_status;
+  hal_status_t next_write_status;
+  hal_status_t next_flush_status;
 };
 
 static hal_uart_impl_t s_pool[HAL_UART_MAX_INSTANCES];
@@ -42,6 +45,10 @@ hal_status_t hal_uart_begin(hal_uart_t h, uint32_t baud, uint16_t config) {
   (void)config;
   if (!h)
     return HAL_EINVAL;
+  const hal_status_t injected_status = h->next_begin_status;
+  h->next_begin_status = HAL_NONE;
+  if (injected_status != HAL_NONE && injected_status != HAL_OK)
+    return injected_status;
   h->head = 0;
   h->tail = 0;
   memset(&h->errors, 0, sizeof(h->errors));
@@ -78,6 +85,10 @@ hal_status_t hal_uart_write_ex(hal_uart_t h, const uint8_t *data, size_t len,
     *out_written = 0u;
   if (!h || (len > 0u && !data))
     return HAL_EINVAL;
+  const hal_status_t injected_status = h->next_write_status;
+  h->next_write_status = HAL_NONE;
+  if (injected_status != HAL_NONE && injected_status != HAL_OK)
+    return injected_status;
   if (len == 0u)
     return HAL_OK;
   size_t copy_len = len;
@@ -135,7 +146,9 @@ size_t hal_uart_println(hal_uart_t h, const char *s) {
 hal_status_t hal_uart_flush(hal_uart_t h) {
   if (!h)
     return HAL_EINVAL;
-  return HAL_OK;
+  const hal_status_t injected_status = h->next_flush_status;
+  h->next_flush_status = HAL_NONE;
+  return injected_status == HAL_NONE ? HAL_OK : injected_status;
 }
 
 hal_status_t
@@ -181,6 +194,9 @@ void hal_mock_uart_reset(hal_uart_t h) {
   h->tail = 0;
   h->last_write[0] = '\0';
   memset(&h->errors, 0, sizeof(h->errors));
+  h->next_begin_status = HAL_NONE;
+  h->next_write_status = HAL_NONE;
+  h->next_flush_status = HAL_NONE;
 }
 
 const char *hal_mock_uart_last_write(hal_uart_t h) {
@@ -197,5 +213,20 @@ void hal_mock_uart_set_write_callback(hal_uart_t h, hal_mock_uart_write_cb_t cb,
     return;
   h->write_cb = cb;
   h->write_cb_user = user;
+}
+
+void hal_mock_uart_set_next_begin_status(hal_uart_t h, hal_status_t status) {
+  if (h)
+    h->next_begin_status = status;
+}
+
+void hal_mock_uart_set_next_write_status(hal_uart_t h, hal_status_t status) {
+  if (h)
+    h->next_write_status = status;
+}
+
+void hal_mock_uart_set_next_flush_status(hal_uart_t h, hal_status_t status) {
+  if (h)
+    h->next_flush_status = status;
 }
 #endif // HAL_TARGET_IS_MOCK

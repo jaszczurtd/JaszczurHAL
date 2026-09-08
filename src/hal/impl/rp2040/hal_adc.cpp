@@ -13,6 +13,8 @@ void hal_adc_set_resolution(uint8_t bits) {
       "hal_adc_set_resolution: resolution is above 16 bits"));
 }
 
+bool hal_adc_is_pin_supported(uint8_t pin) { return adc_pin_valid(pin); }
+
 int hal_adc_read(uint8_t pin) {
   if (!adc_pin_valid(pin)) {
     HAL_ASSERT(false, "hal_adc_read: unsupported ADC pin");

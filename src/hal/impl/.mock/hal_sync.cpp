@@ -4,6 +4,7 @@
 #include "hal/system/hal_sync.h"
 #include "hal_mock.h"
 #include <mutex>
+#include <new>
 #include <stdint.h>
 
 namespace {
@@ -11,16 +12,24 @@ uint32_t s_mutex_lock_count = 0u;
 uint32_t s_mutex_unlock_count = 0u;
 uint32_t s_mutex_depth = 0u;
 uint32_t s_mutex_max_depth = 0u;
+bool s_fail_next_mutex_create = false;
 } // namespace
 
 struct hal_mutex_impl_t {
   std::mutex mtx;
 };
 
+extern "C" hal_mutex_t jh_hal_mutex_try_create(void) {
+  if (__atomic_exchange_n(&s_fail_next_mutex_create, false, __ATOMIC_ACQ_REL)) {
+    return nullptr;
+  }
+  return new (std::nothrow) hal_mutex_impl_t();
+}
+
 hal_mutex_t hal_mutex_create(void) {
-  hal_mutex_impl_t *m = new hal_mutex_impl_t();
-  HAL_ASSERT(m != NULL, "hal_mutex_create: allocation failed");
-  return m;
+  hal_mutex_t mutex = jh_hal_mutex_try_create();
+  HAL_ASSERT(mutex != NULL, "hal_mutex_create: allocation failed");
+  return mutex;
 }
 
 void hal_mutex_lock(hal_mutex_t mutex) {
@@ -130,4 +139,8 @@ uint32_t hal_mock_mutex_lock_count(void) { return s_mutex_lock_count; }
 uint32_t hal_mock_mutex_unlock_count(void) { return s_mutex_unlock_count; }
 
 uint32_t hal_mock_mutex_max_depth(void) { return s_mutex_max_depth; }
+
+void hal_mock_mutex_fail_next_create(bool fail) {
+  __atomic_store_n(&s_fail_next_mutex_create, fail, __ATOMIC_RELEASE);
+}
 #endif // HAL_TARGET_IS_MOCK

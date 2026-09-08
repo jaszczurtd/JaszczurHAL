@@ -524,8 +524,10 @@ uint32_t hal_get_free_heap(void);
  * @ref hal_read_chip_temp.
  *
  * @param out_celsius Destination for the measured die temperature.
- * @return HAL_OK on success, HAL_EINVAL when @p out_celsius is NULL, or
- *         HAL_EUNSUPPORTED when the backend has no implemented sensor path.
+ * @return HAL_OK on success, HAL_EINVAL when @p out_celsius is NULL,
+ *         HAL_EBUSY when an audio DMA scan owns the shared ADC, HAL_ENOMEM
+ *         when ADC synchronization cannot be allocated, or HAL_EUNSUPPORTED
+ *         when the backend has no implemented sensor path.
  */
 hal_status_t hal_read_chip_temp_ex(float *out_celsius);
 

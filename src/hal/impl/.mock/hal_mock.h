@@ -227,6 +227,14 @@ void hal_mock_mutex_stats_reset(void);
 uint32_t hal_mock_mutex_lock_count(void);
 uint32_t hal_mock_mutex_unlock_count(void);
 uint32_t hal_mock_mutex_max_depth(void);
+/** @brief Make the next non-asserting internal mutex allocation fail. */
+#ifdef __cplusplus
+extern "C" {
+#endif
+void hal_mock_mutex_fail_next_create(bool fail);
+#ifdef __cplusplus
+}
+#endif
 
 // ── PWM ──────────────────────────────────────────────────────────────────────
 uint32_t hal_mock_pwm_get_value(uint8_t pin);
@@ -244,7 +252,31 @@ bool hal_mock_pwm_freq_is_running(hal_pwm_freq_channel_t ch);
 #include "hal/audio/hal_dma_pwm_audio.h"
 void hal_mock_dma_pwm_audio_complete(hal_dma_pwm_audio_t audio,
                                      uint8_t buffer_index);
+
+/**
+ * @brief Find the active mock DMA PWM-audio channel for one PWM pin.
+ * @param pwm_pin PWM output pin configured for the channel.
+ * @return Channel handle, or NULL when no matching channel is active.
+ */
+hal_dma_pwm_audio_t hal_mock_dma_pwm_audio_find_by_pin(uint8_t pwm_pin);
+
+/**
+ * @brief Control one-shot failure injection for DMA PWM-audio creation.
+ * @param fail true to fail the next create operation; false to clear it.
+ */
 void hal_mock_dma_pwm_audio_fail_next_create(bool fail);
+
+/**
+ * @brief Control one-shot failure injection for DMA PWM-audio pause.
+ * @param fail true to fail the next pause operation; false to clear it.
+ */
+void hal_mock_dma_pwm_audio_fail_next_pause(bool fail);
+
+/**
+ * @brief Control one-shot failure injection for DMA PWM-audio resume.
+ * @param fail true to fail the next resume operation; false to clear it.
+ */
+void hal_mock_dma_pwm_audio_fail_next_resume(bool fail);
 uint32_t hal_mock_dma_pwm_audio_completion_count(hal_dma_pwm_audio_t audio);
 uint8_t hal_mock_dma_pwm_audio_get_pin(hal_dma_pwm_audio_t audio);
 uint16_t hal_mock_dma_pwm_audio_get_idle_value(hal_dma_pwm_audio_t audio);
@@ -404,6 +436,31 @@ typedef void (*hal_mock_uart_write_cb_t)(hal_uart_t h, const char *text,
  * clear. */
 void hal_mock_uart_set_write_callback(hal_uart_t h, hal_mock_uart_write_cb_t cb,
                                       void *user);
+
+/**
+ * @brief Override the status returned by the next mock UART begin operation.
+ * @param h Mock UART handle. A NULL handle is ignored.
+ * @param status One-shot result; HAL_OK clears any pending failure.
+ * @return Nothing. The override is consumed by the next hal_uart_begin() call.
+ */
+void hal_mock_uart_set_next_begin_status(hal_uart_t h, hal_status_t status);
+
+/**
+ * @brief Override the status returned by the next mock UART write operation.
+ * @param h Mock UART handle. A NULL handle is ignored.
+ * @param status One-shot result; HAL_OK clears any pending failure.
+ * @return Nothing. The override is consumed by the next hal_uart_write_ex()
+ *         call.
+ */
+void hal_mock_uart_set_next_write_status(hal_uart_t h, hal_status_t status);
+
+/**
+ * @brief Override the status returned by the next mock UART flush operation.
+ * @param h Mock UART handle. A NULL handle is ignored.
+ * @param status One-shot result; HAL_OK clears any pending failure.
+ * @return Nothing. The override is consumed by the next hal_uart_flush() call.
+ */
+void hal_mock_uart_set_next_flush_status(hal_uart_t h, hal_status_t status);
 #endif
 
 // ── SPI

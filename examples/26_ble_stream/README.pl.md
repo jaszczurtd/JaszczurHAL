@@ -60,7 +60,7 @@ nie wystarczało do uzgodnienia uwierzytelnionej sesji na sprzęcie RP.
 
 ## Przygotowanie sekretu
 
-`kDeviceSecret` w [`app.cpp`](app.cpp) jest wartością przykładową. W docelowym
+`kDeviceSecret` w [`app.c`](app.c) jest wartością przykładową. W docelowym
 urządzeniu zastąp ją indywidualnym sekretem o długości co najmniej 256 bitów.
 Przekaż go klientowi innym kanałem, np. przez kod QR na etykiecie lub
 uwierzytelnione połączenie USB. Nie używaj tego samego sekretu we wszystkich

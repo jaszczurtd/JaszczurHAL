@@ -57,7 +57,7 @@ HD44780::~HD44780() {
 }
 
 bool HD44780::ensureMutex() {
-  return jh_hal_mutex_create_once(&_mutex) != NULL;
+  return jh_hal_mutex_try_create_once(&_mutex) != NULL;
 }
 
 bool HD44780::lock() {
@@ -72,6 +72,15 @@ void HD44780::unlock() {
   if (_mutex != NULL) {
     hal_mutex_unlock(_mutex);
   }
+}
+
+bool HD44780::isInitialized() {
+  if (!lock()) {
+    return false;
+  }
+  const bool initialized = _initialized != 0u;
+  unlock();
+  return initialized;
 }
 
 void HD44780::init(uint8_t fourbitmode, uint8_t rs, uint8_t rw, uint8_t enable,
@@ -115,6 +124,7 @@ void HD44780::begin(uint8_t cols, uint8_t lines, uint8_t dotsize) {
 }
 
 void HD44780::beginUnlocked(uint8_t cols, uint8_t lines, uint8_t dotsize) {
+  _displayfunction &= (uint8_t) ~(LCD_2LINE | LCD_5x10DOTS);
   if (lines > 1) {
     _displayfunction |= LCD_2LINE;
   }

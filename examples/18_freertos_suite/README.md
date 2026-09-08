@@ -10,7 +10,7 @@ in one application.
 and native FreeRTOS mutexes, delays, idle processing, and GPIO. This basic
 runtime test is also available for RP2350 RISC-V.
 
-The `network` variant builds `network_app.cpp` for WiFi-capable RP2040/RP2350
+The `network` variant builds `network_app.c` for WiFi-capable RP2040/RP2350
 ARM boards and STM32G474 with PIM730. It provides an HTTP server, WebSocket,
 RAM-backed files, commands, and a network console. Separate workers handle
 BSD TCP/UDP sockets and an HTTP/HTTPS client, while two application tasks

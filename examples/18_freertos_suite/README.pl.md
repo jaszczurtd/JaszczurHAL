@@ -10,7 +10,7 @@ było sprawdzić ich współpracę w jednym programie.
 Używa muteksów HAL oraz FreeRTOS, opóźnień, obsługi bezczynności i GPIO.
 Jest to podstawowy test działania, dostępny także dla RP2350 RISC-V.
 
-Wariant `network` kompiluje `network_app.cpp` dla RP2040/RP2350 ARM z WiFi
+Wariant `network` kompiluje `network_app.c` dla RP2040/RP2350 ARM z WiFi
 oraz STM32G474 z PIM730. Udostępnia serwer HTTP, WebSocket, pliki w RAM,
 polecenia i konsolę sieciową. Osobne zadania obsługują gniazda BSD TCP/UDP
 oraz klienta HTTP/HTTPS. Nadal działają dwa zadania aplikacji. W programie
@@ -126,4 +126,3 @@ Alternative Name certyfikatu serwera. Jeśli kontrolujesz serwer HTTPS, możesz
 wygenerować własny CA i podpisać nim certyfikat serwera. Sprawdzona sekwencja
 poleceń OpenSSL znajduje się w
 [`tests/run_bearssl_native_integration.sh`](../../tests/run_bearssl_native_integration.sh).
-

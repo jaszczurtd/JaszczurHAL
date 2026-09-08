@@ -753,103 +753,61 @@ void app_task1(void) {
 
 <a id="draw7segment---renderowanie-wyświetlacza-w-stylu-7-segmentowym"></a>
 
-## `draw7Segment` - cyfry i tekst w stylu siedmiosegmentowym
+## `draw7Segment` - cyfry i tekst w stylu wyświetlacza siedmiosegmentowego
 
-Rysowanie cyfr i wybranych znaków przez `hal_display`, na przykład do zegarów i liczników.
+Prosta funkcja pomocnicza rysuje cyfry i wybrane znaki przez `hal_display`.
+Ten sam nagłówek i te same nazwy funkcji są dostępne w C oraz C++.
+
+### API C
+
+Dołącz nagłówek funkcji pomocniczej:
 
 ```c
 #include <utils/draw7Segment.h>
 
-// Narysuj 7-segmentowy ciąg znaków w (x, y).
-// str          - zakończony zerem ciąg znaków do wyrenderowania.
-// digitWidth   - szerokość pojedynczej komórki cyfry w pikselach.
-// digitHeight  - wysokość pojedynczej komórki cyfry w pikselach.
-// thickness    - grubość segmentu w pikselach.
-// color        - kolor RGB565.
-void draw7SegString(const char* str, int x, int y, int digitWidth, int digitHeight, float thickness, uint16_t color);
-
-// Oblicz szerokość w pikselach ciągu 7-segmentowego bez jego rysowania.
-// Zwraca całkowitą szerokość w pikselach.
-int get7SegStringWidth(const char* str, int digitWidth, float thickness);
+void draw_value(const char *text) {
+    int width = get7SegStringWidth(text, 32, 3.0f);
+    int x = (320 - width) / 2;
+    draw7SegString(text, x, 50, 32, 48, 3.0f, HAL_COLOR_RED);
+}
 ```
+
+`draw7SegString()` rysuje napis, a `get7SegStringWidth()` zwraca jego szerokość
+w pikselach. Obie funkcje mają symbole zgodne z ABI C.
 
 **Obsługiwane znaki:** `0`-`9`, szesnastkowe `A`-`F`, spacja, `+`, `-`, `.`,
 `:`, `%`, `^`.
 
-Znaki mają proporcjonalne szerokości: `1` i spacja są węższe, `^` nieco szerszy.
+Znaki mają proporcjonalne szerokości: `1` i spacja są węższe, natomiast `^`
+jest nieco szerszy. Nieobsługiwany znak nie zostaje narysowany, ale przesuwa
+kursor o pełną szerokość komórki cyfry.
 
-**Zależności:** wyłącznie `hal_display.h`. Interfejs nie używa typów
-specyficznych dla platformy; wszystkie parametry tekstowe to `const char*`.
+**Zależności:** `HAL_ENABLE_DISPLAY`, aktywny backend `hal_display` oraz
+wartości kolorów RGB565 z API wyświetlacza. Interfejs nie udostępnia typów
+specyficznych dla platformy.
 
-**Współbieżność:** Funkcje można bezpiecznie wywoływać współbieżnie, jeśli
-pozwala na to `hal_display` (dotyczy backendów z rodziny RP). Rysowanie odbywa
-się przez funkcje `hal_display_*`, których stan jest chroniony muteksem.
+**Współbieżność:** Każdy prymityw rysujący podlega zasadom synchronizacji
+wybranego backendu `hal_display`. Renderowanie całego napisu nie jest jedną
+atomową transakcją wyświetlacza, dlatego skoordynuj wywołania, jeśli ich
+odświeżanie jest widoczne.
 
-**Przykład: wyświetlacz zegara cyfrowego**
+### API C++ zachowane dla zgodności
 
-```c
+Kod C++ nadal dołącza `utils/draw7Segment.h` i wywołuje te same funkcje:
+
+```cpp
 #include <utils/draw7Segment.h>
-#include <hal/display/hal_display.h>
 
-void app_start(void) {
-    // Zakładamy, że wyświetlacz jest już zainicjalizowany przez hal_display_init(...)
-    hal_display_fill_screen(HAL_COLOR_BLACK);
-}
-
-void draw_time_display(int hours, int minutes, int seconds) {
-    char time_str[16];
-    snprintf(time_str, sizeof(time_str), "%02d:%02d:%02d", hours, minutes, seconds);
-
-    // Oblicz szerokość ciągu znaków
-    int width = get7SegStringWidth(time_str, 32, 3.0f);  // cyfry 32-pikselowe
-    int x = (320 - width) / 2;  // wyśrodkuj poziomo
-
-    // Narysuj wyświetlacz 7-segmentowy w kolorze czerwonym
-    draw7SegString(time_str, x, 50, 32, 48, 3.0f, HAL_COLOR_RED);
-}
-
-void app_task0(void) {
-    uint32_t ms = hal_millis();
-    uint32_t total_secs = ms / 1000;
-
-    int hours = (total_secs / 3600) % 24;
-    int minutes = (total_secs / 60) % 60;
-    int seconds = total_secs % 60;
-
-    draw_time_display(hours, minutes, seconds);
-
-    hal_delay_ms(100);
+void draw_value(void) {
+    int width = get7SegStringWidth("12:34", 32, 3.0f);
+    draw7SegString("12:34", (320 - width) / 2, 50,
+                   32, 48, 3.0f, HAL_COLOR_RED);
 }
 ```
 
-**Przykład: licznik na diodzie LED statusu**
-
-```c
-#include <utils/draw7Segment.h>
-#include <hal/gpio/hal_gpio.h>
-
-void show_counter_7seg(int value) {
-    char counter_str[16];
-    snprintf(counter_str, sizeof(counter_str), "%d", value);
-
-    // Rysuj na wyświetlaczu (2x rozmiar, biały, na pozycji 10,100)
-    draw7SegString(counter_str, 10, 100, 24, 36, 2.0f, HAL_COLOR_WHITE);
-}
-
-void app_task0(void) {
-    static int counter = 0;
-
-    if (hal_gpio_read(BUTTON_PIN)) {  // wciśnięty przycisk
-        counter++;
-        if (counter > 9999) counter = 0;
-        show_counter_7seg(counter);
-        hal_delay_ms(500);
-    }
-}
-```
-
----
-
+Kompilacja biblioteki udostępnia zarówno nowe symbole zgodne z ABI C, jak i
+dotychczasowe symbole C++. Oba warianty korzystają z jednego algorytmu i
+zachowują ten sam sposób rysowania oraz obliczania szerokości w typie `float`.
 
 ---
 

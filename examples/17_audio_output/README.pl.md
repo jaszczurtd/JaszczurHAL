@@ -7,10 +7,10 @@ wzmocnienia PGA2311 przez SPI. Wartość odczytana z ADC ustala częstotliwość
 generowanego sygnału. PGA2311 jest uruchamiany bez wyciszenia, a następnie
 aplikacja cyklicznie zmienia jego wzmocnienie. Nie demonstruje przełączania wyciszenia.
 
-Wyjście PWM korzysta z DACless. Pole `DAClessConfig::useDma` wybiera
-przekazywanie próbek przez DMA albo obsługę przez odpytywanie. Jest to
-ustawienie konfiguracji w kodzie, a nie osobny wariant kompilacji.
-Domyślnie `useDma` ma wartość `true`.
+Wyjście PWM korzysta z DACless. Pole `use_dma` struktury `hal_dacless_config_t`
+wybiera przekazywanie próbek przez DMA albo obsługę przez odpytywanie.
+Jest to ustawienie konfiguracji w kodzie, a nie osobny wariant kompilacji.
+Domyślnie `use_dma` ma wartość `true`.
 
 | Sygnał | Rodzina RP | NUCLEO-G474RE |
 |---|---|---|
@@ -19,4 +19,4 @@ Domyślnie `useDma` ma wartość `true`.
 
 Na NUCLEO-G474RE wyjście audio PWM jest na PB0 (pin 34 CN7 / A3), a wejście
 ADC na PA0 (A0). Numery pinów PWM i ADC dla pozostałych platform są podane
-w `app.cpp`.
+w `app.c`.

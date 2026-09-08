@@ -19,6 +19,7 @@
 
 #include "hal/analog/hal_adc.h"
 #include "hal/core/hal_mutex_once.h"
+#include "hal/gpio/hal_pwm_freq_internal.h"
 #include "hal/system/hal_system.h"
 
 #include <stddef.h>
@@ -30,7 +31,7 @@ hal_mutex_t s_registry_mutex = nullptr;
 DAClessAudio *s_instances[DACLESS_MAX_INSTANCES] = {};
 
 bool registry_lock() {
-  hal_mutex_t mutex = jh_hal_mutex_create_once(&s_registry_mutex);
+  hal_mutex_t mutex = jh_hal_mutex_try_create_once(&s_registry_mutex);
   if (mutex == nullptr) {
     return false;
   }
@@ -65,17 +66,14 @@ DAClessAudio::DAClessAudio(const DAClessConfig &cfg)
 }
 
 DAClessAudio::~DAClessAudio() {
-  if (lock()) {
-    begun_ = false;
-    muted_ = true;
-    stopDmaUnlocked();
-    if (pwm_ != nullptr) {
-      hal_pwm_freq_stop(pwm_);
-      hal_pwm_freq_destroy(pwm_);
-      pwm_ = nullptr;
-    }
-    unlock();
+  const hal_status_t status = shutdownEx();
+  if (status != HAL_OK && dma_ != nullptr) {
+    // A direct C++ destructor cannot report wrong-core ownership. Quiesce the
+    // stream before asserting so callbacks cannot retain a dead `this`.
+    (void)hal_dma_pwm_audio_stop(dma_);
   }
+  HAL_ASSERT(status == HAL_OK || (dma_ == nullptr && pwm_ == nullptr),
+             "DAClessAudio: destroy must run on the DMA owner core");
 
   unregisterInstance();
 
@@ -86,7 +84,7 @@ DAClessAudio::~DAClessAudio() {
 }
 
 bool DAClessAudio::ensureMutex() const {
-  return jh_hal_mutex_create_once(&mutex_) != nullptr;
+  return jh_hal_mutex_try_create_once(&mutex_) != nullptr;
 }
 
 bool DAClessAudio::lock() const {
@@ -169,7 +167,10 @@ uint64_t DAClessAudio::clampPollingCatchupQ16(uint64_t now_q16,
   }
 
   const uint64_t max_catchup =
-      (uint64_t)DACLESS_MAX_POLLING_CATCHUP_SAMPLES * sample_period_q16;
+      sample_period_q16 >
+              UINT64_MAX / (uint64_t)DACLESS_MAX_POLLING_CATCHUP_SAMPLES
+          ? UINT64_MAX
+          : (uint64_t)DACLESS_MAX_POLLING_CATCHUP_SAMPLES * sample_period_q16;
   const uint64_t overdue = now_q16 - next_due_q16;
   if (overdue <= max_catchup) {
     return next_due_q16;
@@ -193,8 +194,6 @@ void DAClessAudio::registerInstance() {
 
   if (registryIndex_ == 0) {
     audio_rate = sampleRate_;
-  } else if (registryIndex_ < 0) {
-    HAL_ASSERT(false, "DAClessAudio: instance registry full");
   }
 
   registry_unlock();
@@ -229,8 +228,12 @@ void DAClessAudio::updateCompatibilityGlobalsUnlocked() {
     return;
   }
   audio_rate = sampleRate_;
-  out_buf_ptr = outBufPtr_;
+  out_buf_ptr = __atomic_load_n(&outBufPtr_, __ATOMIC_ACQUIRE);
   adc_results_buf = begun_ ? adcBuf_ : nullptr;
+}
+
+void DAClessAudio::publishOutputBuffer(volatile uint16_t *buffer) {
+  __atomic_store_n(&outBufPtr_, buffer, __ATOMIC_RELEASE);
 }
 
 void DAClessAudio::fillSilenceUnlocked() {
@@ -247,7 +250,7 @@ void DAClessAudio::markBeginFailedUnlocked() {
   dmaActive_ = false;
   playBuf_ = bufferA();
   playIndex_ = 0u;
-  outBufPtr_ = nullptr;
+  publishOutputBuffer(nullptr);
   bufReady_ = false;
   callbackInProgress_ = false;
   updateCompatibilityGlobalsUnlocked();
@@ -271,9 +274,17 @@ void DAClessAudio::sampleAdcUnlocked() {
   }
 }
 
-bool DAClessAudio::begin() {
+bool DAClessAudio::begin() { return hal_status_to_bool(beginEx()); }
+
+hal_status_t DAClessAudio::beginEx() {
   if (!lock()) {
-    return false;
+    return HAL_ENOMEM;
+  }
+
+  const hal_status_t stop_status = stopDmaUnlocked();
+  if (stop_status != HAL_OK) {
+    unlock();
+    return stop_status;
   }
 
   fillSilenceUnlocked();
@@ -281,7 +292,7 @@ bool DAClessAudio::begin() {
   begun_ = false;
   muted_ = true;
   dmaActive_ = false;
-  outBufPtr_ = nullptr;
+  publishOutputBuffer(nullptr);
   bufReady_ = false;
   callbackInProgress_ = false;
   updateCompatibilityGlobalsUnlocked();
@@ -293,20 +304,20 @@ bool DAClessAudio::begin() {
       hal_pwm_freq_destroy(pwm_);
       pwm_ = nullptr;
     }
-    if (!startDmaUnlocked()) {
+    const hal_status_t status = startDmaUnlocked();
+    if (status != HAL_OK) {
       markBeginFailedUnlocked();
       unlock();
-      return false;
+      return status;
     }
   } else {
-    stopDmaUnlocked();
     if (pwm_ == nullptr) {
-      pwm_ = hal_pwm_freq_create(cfg_.pinPWM, sampleRateInt_,
-                                 periodTicksForBits(cfg_.pwmBits));
-      if (pwm_ == nullptr) {
+      const hal_status_t status = jh_hal_pwm_freq_try_create(
+          cfg_.pinPWM, sampleRateInt_, periodTicksForBits(cfg_.pwmBits), &pwm_);
+      if (status != HAL_OK) {
         markBeginFailedUnlocked();
         unlock();
-        return false;
+        return status;
       }
     }
     sampleAdcUnlocked();
@@ -314,7 +325,7 @@ bool DAClessAudio::begin() {
 
   playBuf_ = bufferA();
   playIndex_ = 0u;
-  outBufPtr_ = nullptr;
+  publishOutputBuffer(nullptr);
   bufReady_ = false;
   callbackInProgress_ = false;
   nextSampleDueQ16_ = hal_micros64() << 16u;
@@ -325,66 +336,118 @@ bool DAClessAudio::begin() {
   hal_critical_section_exit();
 
   unlock();
-  return true;
+  return HAL_OK;
+}
+
+hal_status_t DAClessAudio::shutdownEx() {
+  if (!lock()) {
+    return HAL_ENOMEM;
+  }
+  const hal_status_t status = stopDmaUnlocked();
+  if (status == HAL_OK) {
+    if (pwm_ != nullptr) {
+      hal_pwm_freq_stop(pwm_);
+      hal_pwm_freq_destroy(pwm_);
+      pwm_ = nullptr;
+    }
+    begun_ = false;
+    muted_ = true;
+  }
+  unlock();
+  return status;
 }
 
 void DAClessAudio::setSampleCallback(SampleCallback cb, void *userdata) {
+  (void)setSampleCallbackEx(cb, userdata);
+}
+
+hal_status_t DAClessAudio::setSampleCallbackEx(SampleCallback cb,
+                                               void *userdata) {
   if (!lock()) {
-    return;
+    return HAL_ENOMEM;
   }
   hal_critical_section_enter();
   sampleCb_ = cb;
   userPtr_ = userdata;
   hal_critical_section_exit();
   unlock();
+  return HAL_OK;
 }
 
 void DAClessAudio::setBlockCallback(BlockCallback cb, void *userdata) {
+  (void)setBlockCallbackEx(cb, userdata);
+}
+
+hal_status_t DAClessAudio::setBlockCallbackEx(BlockCallback cb,
+                                              void *userdata) {
   if (!lock()) {
-    return;
+    return HAL_ENOMEM;
   }
   hal_critical_section_enter();
   blockCb_ = cb;
   userPtr_ = userdata;
   hal_critical_section_exit();
   unlock();
+  return HAL_OK;
 }
 
-void DAClessAudio::mute() {
+void DAClessAudio::mute() { (void)muteEx(); }
+
+hal_status_t DAClessAudio::muteEx() {
   if (!lock()) {
-    return;
+    return HAL_ENOMEM;
+  }
+  if (muted_) {
+    unlock();
+    return HAL_OK;
   }
 
-  hal_critical_section_enter();
-  muted_ = true;
-  hal_critical_section_exit();
+  hal_status_t status = HAL_OK;
   if (dmaActive_ && dma_ != nullptr) {
-    hal_dma_pwm_audio_pause(dma_, midpointForBits(cfg_.pwmBits));
+    status = hal_dma_pwm_audio_pause(dma_, midpointForBits(cfg_.pwmBits));
   } else if (pwm_ != nullptr) {
     hal_pwm_freq_write(pwm_, midpointForBits(cfg_.pwmBits));
     hal_pwm_freq_stop(pwm_);
   }
+  if (status == HAL_OK) {
+    hal_critical_section_enter();
+    muted_ = true;
+    hal_critical_section_exit();
+  }
 
   unlock();
+  return status;
 }
 
-void DAClessAudio::unmute() {
+void DAClessAudio::unmute() { (void)unmuteEx(); }
+
+hal_status_t DAClessAudio::unmuteEx() {
   if (!lock()) {
-    return;
+    return HAL_ENOMEM;
   }
-  hal_critical_section_enter();
-  muted_ = false;
-  hal_critical_section_exit();
+  if (!muted_) {
+    unlock();
+    return HAL_OK;
+  }
+  hal_status_t status = HAL_OK;
   if (dmaActive_ && dma_ != nullptr) {
-    hal_dma_pwm_audio_resume(dma_);
+    status = hal_dma_pwm_audio_resume(dma_);
   }
-  nextSampleDueQ16_ = hal_micros64() << 16u;
+  if (status == HAL_OK) {
+    hal_critical_section_enter();
+    muted_ = false;
+    hal_critical_section_exit();
+    nextSampleDueQ16_ = hal_micros64() << 16u;
+  }
   unlock();
+  return status;
 }
 
 uint16_t DAClessAudio::getADC(uint8_t channel) const {
   if (hal_in_isr()) {
-    return (channel < cfg_.nAdcInputs) ? adcBuf_[channel] : 0u;
+    return (channel < cfg_.nAdcInputs)
+               ? static_cast<const volatile uint16_t *>(adcBuf_)[channel]
+               : 0u;
   }
 
   if (!lock()) {
@@ -392,7 +455,7 @@ uint16_t DAClessAudio::getADC(uint8_t channel) const {
   }
   uint16_t value = 0u;
   if (channel < cfg_.nAdcInputs) {
-    value = adcBuf_[channel];
+    value = static_cast<const volatile uint16_t *>(adcBuf_)[channel];
   }
   unlock();
   return value;
@@ -411,7 +474,7 @@ void DAClessAudio::writeCurrentSampleUnlocked() {
 
 void DAClessAudio::prepareFinishedBuffer(uint16_t *buffer) {
   hal_critical_section_enter();
-  outBufPtr_ = buffer;
+  publishOutputBuffer(buffer);
   bufReady_ = true;
   updateCompatibilityGlobalsUnlocked();
   hal_critical_section_exit();
@@ -432,7 +495,7 @@ bool DAClessAudio::claimDmaBufferUnlocked(uint16_t *buffer,
     return false;
   }
 
-  outBufPtr_ = buffer;
+  publishOutputBuffer(buffer);
   bufReady_ = true;
   callbackInProgress_ = true;
   updateCompatibilityGlobalsUnlocked();
@@ -477,12 +540,15 @@ void DAClessAudio::fillBufferWithCallback(uint16_t *buffer,
   }
 }
 
-bool DAClessAudio::startDmaUnlocked() {
+hal_status_t DAClessAudio::startDmaUnlocked() {
   if (!hal_dma_pwm_audio_supported()) {
-    return false;
+    return HAL_EUNSUPPORTED;
   }
 
-  stopDmaUnlocked();
+  const hal_status_t stop_status = stopDmaUnlocked();
+  if (stop_status != HAL_OK) {
+    return stop_status;
+  }
 
   hal_dma_pwm_audio_config_t dma_cfg = {};
   dma_cfg.pwm_pin = cfg_.pinPWM;
@@ -498,27 +564,31 @@ bool DAClessAudio::startDmaUnlocked() {
   dma_cfg.buffer_done_cb = dmaBufferDoneThunk;
   dma_cfg.user = this;
 
-  dma_ = hal_dma_pwm_audio_create(&dma_cfg);
-  if (dma_ == nullptr) {
-    return false;
+  hal_status_t status = hal_dma_pwm_audio_create_ex(&dma_cfg, &dma_);
+  if (status != HAL_OK) {
+    return status;
   }
-  if (!hal_dma_pwm_audio_start(dma_)) {
-    hal_dma_pwm_audio_destroy(dma_);
+  status = hal_dma_pwm_audio_start_ex(dma_);
+  if (status != HAL_OK) {
+    (void)hal_dma_pwm_audio_destroy_ex(dma_);
     dma_ = nullptr;
-    return false;
+    return status;
   }
 
   dmaActive_ = true;
-  return true;
+  return HAL_OK;
 }
 
-void DAClessAudio::stopDmaUnlocked() {
-  dmaActive_ = false;
+hal_status_t DAClessAudio::stopDmaUnlocked() {
   if (dma_ != nullptr) {
-    hal_dma_pwm_audio_stop(dma_);
-    hal_dma_pwm_audio_destroy(dma_);
+    const hal_status_t status = hal_dma_pwm_audio_destroy_ex(dma_);
+    if (status != HAL_OK) {
+      return status;
+    }
     dma_ = nullptr;
   }
+  dmaActive_ = false;
+  return HAL_OK;
 }
 
 void DAClessAudio::dmaBufferDoneThunk(void *user, uint16_t *buffer,
@@ -589,7 +659,7 @@ void DAClessAudio::service() {
 }
 
 uint16_t interpolate(uint16_t x, uint16_t y, uint16_t mu_scaled) {
-  return hal_dma_interpolate(x, y, mu_scaled);
+  return hal_dacless_interpolate(x, y, mu_scaled);
 }
 
 #endif /* HAL_ENABLE_DACLESS */

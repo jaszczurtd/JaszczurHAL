@@ -3,6 +3,7 @@
  * Software timers schedule the work; a separate timer counts 250 ms intervals.
  */
 
+#include <hal/control/hal_pid_controller.h>
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_array.h>
 #include <hal/gpio/hal_gpio.h>
@@ -10,8 +11,6 @@
 #include <hal/system/hal_system.h>
 #include <hal/timers/hal_soft_timer.h>
 #include <hal/timers/hal_timer.h>
-#include <utils/pidController.h>
-
 #include <stdint.h>
 
 static hal_soft_timer_t s_blink_timer = NULL;
@@ -20,7 +19,7 @@ static hal_timer_t s_periodic_timer = NULL;
 static volatile uint32_t s_periodic_ticks = 0u;
 static bool s_led_on = false;
 
-static PIDController s_pid(1.2f, 0.03f, 0.08f, 100.0f);
+static hal_pid_controller_t s_pid = NULL;
 static const float kPidSetpoint = 100.0f;
 static float s_process_value = 0.0f;
 static float s_pid_error = kPidSetpoint;
@@ -35,13 +34,17 @@ static void blink_tick(void) {
 }
 
 static void pid_tick(void) {
+  if (s_pid == NULL) {
+    return;
+  }
   /* The PID update takes seconds; hal_millis() measures milliseconds. */
-  s_pid.updatePIDtime(1000.0f);
+  hal_pid_controller_update_time(s_pid, 1000.0f);
   s_pid_error = kPidSetpoint - s_process_value;
-  s_pid_output = s_pid.updatePIDcontroller(s_pid_error);
+  s_pid_output = hal_pid_controller_update(s_pid, s_pid_error);
   s_process_value += s_pid_output * 0.05f;
-  s_pid_stable = s_pid.isErrorStable(s_pid_error, 1.0f, 10);
-  s_pid_oscillating = s_pid.isOscillating(s_pid_error, 10);
+  s_pid_stable =
+      hal_pid_controller_is_error_stable(s_pid, s_pid_error, 1.0f, 10);
+  s_pid_oscillating = hal_pid_controller_is_oscillating(s_pid, s_pid_error, 10);
 }
 
 static const hal_soft_timer_table_entry_t s_soft_timers[] = {
@@ -56,7 +59,7 @@ static void periodic_tick(hal_timer_t timer, void *user_data) {
 }
 
 static void report_architecture(void) {
-  hal_system_architecture_t architecture = {};
+  hal_system_architecture_t architecture = {0};
   const hal_status_t status =
       hal_system_get_current_architecture(&architecture);
   if (status != HAL_OK) {
@@ -121,9 +124,14 @@ void app_start(void) {
   hal_gpio_set_mode(HAL_LED_BUILTIN, HAL_GPIO_OUTPUT);
   hal_gpio_write(HAL_LED_BUILTIN, false);
 
-  s_pid.setOutputLimits(-25.0f, 25.0f);
-  s_pid.setTf(0.05f);
-  s_pid.reset();
+  s_pid = hal_pid_controller_create_with_gains(1.2f, 0.03f, 0.08f, 100.0f);
+  if (s_pid == NULL) {
+    derr("PID controller allocation failed");
+  } else {
+    hal_pid_controller_set_output_limits(s_pid, -25.0f, 25.0f);
+    hal_pid_controller_set_tf(s_pid, 0.05f);
+    hal_pid_controller_reset(s_pid);
+  }
 
   if (!hal_soft_timer_setup_table(s_soft_timers, COUNTOF(s_soft_timers),
                                   hal_watchdog_feed, 2u)) {

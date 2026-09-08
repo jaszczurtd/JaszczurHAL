@@ -218,6 +218,22 @@ static bool period_can_reach_frequency(uint32_t clock_hz, uint32_t frequency_hz,
          (uint64_t)clock_hz <= target * (uint64_t)kMaxPrescalerDivider;
 }
 
+static bool direct_period_can_reach_frequency(uint32_t clock_hz,
+                                              uint32_t frequency_hz,
+                                              uint32_t period_ticks) {
+  const uint64_t target = (uint64_t)frequency_hz * (uint64_t)period_ticks;
+  if (target == 0u ||
+      (uint64_t)clock_hz > target * (uint64_t)kMaxPrescalerDivider) {
+    return false;
+  }
+  if (target <= (uint64_t)clock_hz) {
+    return true;
+  }
+  const uint32_t nearest_unscaled_rate =
+      (clock_hz + period_ticks / 2u) / period_ticks;
+  return frequency_hz == nearest_unscaled_rate;
+}
+
 static bool period_is_too_slow(uint32_t clock_hz, uint32_t frequency_hz,
                                uint32_t period_ticks) {
   const uint64_t target = (uint64_t)frequency_hz * (uint64_t)period_ticks;
@@ -236,7 +252,9 @@ bool jh_stm32_pwm_prepare_pin(uint8_t pin, uint32_t frequency_hz,
                               uint32_t period_ticks,
                               jh_stm32_pwm_channel_desc *out) {
   const PwmPinMap *map = find_pin(pin);
-  if (!map || !out || frequency_hz == 0u || !valid_period(period_ticks)) {
+  if (!map || !out || frequency_hz == 0u || !valid_period(period_ticks) ||
+      !direct_period_can_reach_frequency(timer_clock_hz(map->timer),
+                                         frequency_hz, period_ticks)) {
     return false;
   }
 

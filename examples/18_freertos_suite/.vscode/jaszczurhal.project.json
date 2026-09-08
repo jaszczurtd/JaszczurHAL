@@ -24,7 +24,7 @@
                 "id": "network",
                 "module": "18_freertos_network",
                 "sources": [
-                    "network_app.cpp"
+                    "network_app.c"
                 ],
                 "targets": [
                     "rp2040",

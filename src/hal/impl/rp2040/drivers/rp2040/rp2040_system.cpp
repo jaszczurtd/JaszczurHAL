@@ -79,10 +79,24 @@ uint32_t rp2040_system_get_free_heap(void) {
 }
 
 float rp2040_system_read_chip_temp(void) {
+  float celsius = 0.0f;
+  (void)rp2040_system_read_chip_temp_ex(&celsius);
+  return celsius;
+}
+
+hal_status_t rp2040_system_read_chip_temp_ex(float *out_celsius) {
+  if (out_celsius == nullptr) {
+    return HAL_EINVAL;
+  }
   const float vref = 3.3f;
-  const uint16_t raw = rp2040_adc_read_temperature_raw();
+  uint16_t raw = 0u;
+  const hal_status_t status = rp2040_adc_read_temperature_raw_ex(&raw);
+  if (status != HAL_OK) {
+    return status;
+  }
   const float voltage = (float)raw * vref / 4096.0f;
-  return 27.0f - (voltage - 0.706f) / 0.001721f;
+  *out_celsius = 27.0f - (voltage - 0.706f) / 0.001721f;
+  return HAL_OK;
 }
 
 void rp2040_system_enter_bootloader(void) {

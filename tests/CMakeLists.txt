@@ -69,6 +69,60 @@ target_include_directories(test_hal_config_headers_cpp PRIVATE
 jh_enable_host_warnings(test_hal_config_headers_cpp ERRORS)
 add_test(NAME test_hal_config_headers_cpp COMMAND test_hal_config_headers_cpp)
 
+add_executable(test_hal_dacless_header_c test_hal_dacless_header.c)
+target_compile_definitions(test_hal_dacless_header_c PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_DACLESS=1)
+target_include_directories(test_hal_dacless_header_c PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+jh_enable_host_warnings(test_hal_dacless_header_c ERRORS)
+add_test(NAME test_hal_dacless_header_c COMMAND test_hal_dacless_header_c)
+
+add_executable(test_hal_dacless_header_cpp test_hal_dacless_header.cpp)
+target_compile_definitions(test_hal_dacless_header_cpp PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_DACLESS=1)
+target_include_directories(test_hal_dacless_header_cpp PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+jh_enable_host_warnings(test_hal_dacless_header_cpp ERRORS)
+add_test(NAME test_hal_dacless_header_cpp COMMAND test_hal_dacless_header_cpp)
+
+add_executable(test_hal_mfrc522_header_c test_hal_mfrc522_header.c)
+target_compile_definitions(test_hal_mfrc522_header_c PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_MFRC522=1)
+target_include_directories(test_hal_mfrc522_header_c PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+jh_enable_host_warnings(test_hal_mfrc522_header_c ERRORS)
+add_test(NAME test_hal_mfrc522_header_c COMMAND test_hal_mfrc522_header_c)
+
+add_executable(test_hal_mfrc522_header_cpp test_hal_mfrc522_header.cpp)
+target_compile_definitions(test_hal_mfrc522_header_cpp PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_MFRC522=1)
+target_include_directories(test_hal_mfrc522_header_cpp PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+jh_enable_host_warnings(test_hal_mfrc522_header_cpp ERRORS)
+add_test(NAME test_hal_mfrc522_header_cpp COMMAND test_hal_mfrc522_header_cpp)
+
+add_executable(test_hal_pn532_header_c test_hal_pn532_header.c)
+target_compile_definitions(test_hal_pn532_header_c PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_PN532=1)
+target_include_directories(test_hal_pn532_header_c PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+jh_enable_host_warnings(test_hal_pn532_header_c ERRORS)
+add_test(NAME test_hal_pn532_header_c COMMAND test_hal_pn532_header_c)
+
+add_executable(test_hal_pn532_header_cpp test_hal_pn532_header.cpp)
+target_compile_definitions(test_hal_pn532_header_cpp PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_PN532=1)
+target_include_directories(test_hal_pn532_header_cpp PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+jh_enable_host_warnings(test_hal_pn532_header_cpp ERRORS)
+add_test(NAME test_hal_pn532_header_cpp COMMAND test_hal_pn532_header_cpp)
+
 add_executable(test_hal_gamepad_header_c test_hal_gamepad_header.c)
 target_compile_definitions(test_hal_gamepad_header_c PRIVATE
     HAL_TARGET_MOCK=1
@@ -1231,6 +1285,22 @@ add_executable(test_hd44780_driver
 target_compile_definitions(test_hd44780_driver PRIVATE HAL_ENABLE_HD44780)
 target_link_libraries(test_hd44780_driver PRIVATE hal_mock)
 add_test(NAME test_hd44780_driver COMMAND test_hd44780_driver)
+add_executable(test_hal_hd44780_c_api test_hal_hd44780_c_api.c)
+target_link_libraries(test_hal_hd44780_c_api PRIVATE hal_mock)
+set_target_properties(test_hal_hd44780_c_api PROPERTIES LINKER_LANGUAGE CXX)
+jh_enable_host_warnings(test_hal_hd44780_c_api ERRORS)
+add_test(NAME test_hal_hd44780_c_api COMMAND test_hal_hd44780_c_api)
+
+add_executable(test_draw7_segment_c_abi test_draw7_segment_c_abi.c)
+target_link_libraries(test_draw7_segment_c_abi PRIVATE hal_mock)
+set_target_properties(test_draw7_segment_c_abi PROPERTIES LINKER_LANGUAGE CXX)
+jh_enable_host_warnings(test_draw7_segment_c_abi ERRORS)
+add_test(NAME test_draw7_segment_c_abi COMMAND test_draw7_segment_c_abi)
+
+add_executable(test_draw7_segment_cpp_legacy test_draw7_segment_cpp_legacy.cpp)
+target_link_libraries(test_draw7_segment_cpp_legacy PRIVATE hal_mock)
+jh_enable_host_warnings(test_draw7_segment_cpp_legacy ERRORS)
+add_test(NAME test_draw7_segment_cpp_legacy COMMAND test_draw7_segment_cpp_legacy)
 add_executable(test_tsc2007_driver
     test_tsc2007_driver.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/input/tsc2007/tsc2007.cpp
@@ -1259,6 +1329,12 @@ add_executable(test_ads1x15_driver
 target_link_libraries(test_ads1x15_driver PRIVATE hal_mock)
 add_test(NAME test_ads1x15_driver COMMAND test_ads1x15_driver)
 add_hal_test(test_dacless_driver)
+add_hal_test(test_hal_dacless)
+add_executable(test_hal_dacless_c_link test_hal_dacless_c_link.c)
+target_link_libraries(test_hal_dacless_c_link PRIVATE hal_mock)
+set_target_properties(test_hal_dacless_c_link PROPERTIES LINKER_LANGUAGE CXX)
+jh_enable_host_warnings(test_hal_dacless_c_link ERRORS)
+add_test(NAME test_hal_dacless_c_link COMMAND test_hal_dacless_c_link)
 add_executable(test_ili9341_driver
     test_ili9341_driver.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/ili9341_driver.cpp
@@ -1424,6 +1500,13 @@ add_executable(test_mfrc522_driver
 target_compile_definitions(test_mfrc522_driver PRIVATE HAL_ENABLE_MFRC522)
 target_link_libraries(test_mfrc522_driver PRIVATE hal_mock)
 add_test(NAME test_mfrc522_driver COMMAND test_mfrc522_driver)
+
+add_executable(test_hal_mfrc522_c_link test_hal_mfrc522_c_link.c)
+target_link_libraries(test_hal_mfrc522_c_link PRIVATE hal_mock)
+set_target_properties(test_hal_mfrc522_c_link PROPERTIES LINKER_LANGUAGE CXX)
+jh_enable_host_warnings(test_hal_mfrc522_c_link ERRORS)
+add_test(NAME test_hal_mfrc522_c_link COMMAND test_hal_mfrc522_c_link)
+
 add_executable(test_pn532_driver
     test_pn532_driver.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/nfc/pn532/pn532.cpp
@@ -1434,6 +1517,12 @@ add_executable(test_pn532_driver
 target_compile_definitions(test_pn532_driver PRIVATE HAL_ENABLE_PN532)
 target_link_libraries(test_pn532_driver PRIVATE hal_mock)
 add_test(NAME test_pn532_driver COMMAND test_pn532_driver)
+
+add_executable(test_hal_pn532_c_link test_hal_pn532_c_link.c)
+target_link_libraries(test_hal_pn532_c_link PRIVATE hal_mock)
+set_target_properties(test_hal_pn532_c_link PROPERTIES LINKER_LANGUAGE CXX)
+jh_enable_host_warnings(test_hal_pn532_c_link ERRORS)
+add_test(NAME test_hal_pn532_c_link COMMAND test_hal_pn532_c_link)
 add_executable(test_wireguard_crypto_shared
     test_wireguard_crypto_shared.cpp
 )
@@ -1514,6 +1603,25 @@ add_hal_test(test_hal_timer)
 add_hal_test(test_hal_power)
 add_stm32_host_test(test_stm32_hal_timer)
 add_stm32_host_test(test_stm32_hal_system)
+
+add_executable(test_stm32_adc_shared
+    test_stm32_adc_shared.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/stm32g474/stm32g474_adc_shared.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/stm32g474/hal_sync.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/core/hal_assert.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/core/hal_config.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
+)
+target_include_directories(test_stm32_adc_shared PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_compile_definitions(test_stm32_adc_shared PRIVATE
+    HAL_TARGET_STM32G474=1
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+jh_enable_host_warnings(test_stm32_adc_shared ERRORS)
+add_test(NAME test_stm32_adc_shared COMMAND test_stm32_adc_shared)
 
 add_executable(test_stm32_rtc_codec
     test_stm32_rtc_codec.cpp

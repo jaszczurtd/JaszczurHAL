@@ -149,7 +149,9 @@ set(UTIL_SOURCES
     ${SRC}/hal/security/jh_secure_random.cpp
     ${SRC}/hal/i2c/hal_i2c.cpp
     ${SRC}/hal/display/hal_display.cpp
+    ${SRC}/hal/display/hal_hd44780.cpp
     ${SRC}/hal/display/hal_pixel.cpp
+    ${SRC}/hal/display/hd44780/hd44780.cpp
     ${SRC}/hal/storage/hal_sdlogger.cpp
     ${SRC}/hal/storage/hal_eeprom.cpp
     ${SRC}/hal/storage/hal_littlefs.cpp
@@ -201,12 +203,15 @@ set(UTIL_SOURCES
     ${SRC}/hal/nfc/mfrc522/mfrc522.cpp
     ${SRC}/hal/nfc/mfrc522/mfrc522_spi.cpp
     ${SRC}/hal/nfc/mfrc522/mfrc522_i2c.cpp
+    ${SRC}/hal/nfc/hal_mfrc522.cpp
     ${SRC}/hal/nfc/pn532/pn532.cpp
     ${SRC}/hal/nfc/pn532/pn532_spi.cpp
     ${SRC}/hal/nfc/pn532/pn532_i2c.cpp
     ${SRC}/hal/nfc/pn532/pn532_uart.cpp
+    ${SRC}/hal/nfc/hal_pn532.cpp
     ${SRC}/hal/gpio/simple_io/hal_simple_io_drivers.cpp
     ${SRC}/hal/audio/dacless/dacless.cpp
+    ${SRC}/hal/audio/hal_dacless.cpp
     ${SRC}/hal/temperature/dht/hal_dht.cpp
     ${SRC}/hal/power/adp5360/hal_adp5360.cpp
     ${SRC}/hal/network/cyw43/jh_cyw43_driver.cpp
@@ -222,6 +227,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/timers/hal_timer_ext.cpp
     ${SRC}/hal/timers/hal_soft_timer.cpp
     ${SRC}/hal/timers/smart_timers/SmartTimers.cpp
+    ${SRC}/utils/draw7Segment.cpp
     ${SRC}/utils/pidController.cpp
     ${SRC}/hal/codecs/cjson/cJSON.c
     ${SRC}/hal/codecs/cjson/cJSON_Utils.c

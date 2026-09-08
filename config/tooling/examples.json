@@ -141,7 +141,7 @@
           "id": "display-clock",
           "module": "16_rtc_display_clock",
           "sources": [
-            "display_clock_app.cpp"
+            "display_clock_app.c"
           ],
           "targets": [
             "stm32g474"
@@ -180,7 +180,7 @@
           "id": "network",
           "module": "18_freertos_network",
           "sources": [
-            "network_app.cpp"
+            "network_app.c"
           ],
           "targets": [
             "rp2040",
@@ -389,7 +389,7 @@
           "id": "link",
           "module": "27_lora_point_to_point_link",
           "sources": [
-            "link_app.cpp"
+            "link_app.c"
           ],
           "targets": [
             "rp2040",
@@ -403,7 +403,7 @@
           "id": "link-responder",
           "module": "27_lora_point_to_point_link_responder",
           "sources": [
-            "link_app.cpp"
+            "link_app.c"
           ],
           "targets": [
             "rp2040",

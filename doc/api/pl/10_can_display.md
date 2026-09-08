@@ -25,7 +25,8 @@ Wysyłanie i odbiór ramek CAN przez kontroler MCP2515, MCP251XFD lub wewnętrzn
 #define HAL_CAN_MAX_FILTERS 6u
 #define HAL_CAN_NO_INT_PIN   0xFF
 
-// Nieprzezroczysty uchwyt - jeden na fizyczną instancję kontrolera/backendu CAN
+// Uchwyt do struktury z ukrytymi polami (ang. opaque handle).
+// Po jednym na fizyczną instancję kontrolera CAN.
 typedef hal_can_impl_t *hal_can_t;
 typedef void (*hal_can_frame_cb_t)(uint32_t id, uint8_t len, const uint8_t *data);
 
@@ -283,42 +284,90 @@ Jeżeli pierwsza próba transmisji się powiedzie, tryb one-shot i tryb normalny
 
 Wyświetlanie tekstu na równoległych LCD zgodnych z HD44780. Sterownik obsługuje 4- i 8-bitową transmisję przez GPIO, opcjonalną linię `RW`, własne znaki w CGRAM, kursor, włączanie i wyłączanie wyświetlania, przewijanie ręczne i automatyczne oraz konfigurowalne przesunięcia wierszy. Zakres funkcji odpowiada oryginalnej bibliotece LiquidCrystal.
 
+### API C
+
+`hal_hd44780_t` jest uchwytem do instancji wyświetlacza. Podaj piny i
+szerokość magistrali, utwórz uchwyt, a następnie wybierz geometrię wyświetlacza
+przez `hal_hd44780_begin()`:
+
+```c
+#include <hal/display/hal_hd44780.h>
+
+hal_status_t show_lcd_message(void) {
+    hal_hd44780_config_t config = {0};
+    config.rs_pin = 2;
+    config.rw_pin = HAL_HD44780_PIN_NONE;
+    config.enable_pin = 3;
+    config.data_pins[0] = 4; /* D4 */
+    config.data_pins[1] = 5; /* D5 */
+    config.data_pins[2] = 6; /* D6 */
+    config.data_pins[3] = 7; /* D7 */
+    config.bus_width = HAL_HD44780_BUS_4_BIT;
+
+    hal_hd44780_t lcd = NULL;
+    hal_status_t status = hal_hd44780_create(&config, &lcd);
+    if (status != HAL_OK) return status;
+
+    status = hal_hd44780_begin(lcd, 16u, 2u, HAL_HD44780_FONT_5X8);
+    if (status == HAL_OK) status = hal_hd44780_print(lcd, "JaszczurHAL", NULL);
+    if (status == HAL_OK) status = hal_hd44780_set_cursor(lcd, 0u, 1u);
+    if (status == HAL_OK) status = hal_hd44780_print(lcd, "ready", NULL);
+
+    hal_status_t close_status = hal_hd44780_destroy(lcd);
+    return status != HAL_OK ? status : close_status;
+}
+```
+
+`hal_hd44780_create()` odrzuca nieprawidłowe lub powtórzone numery wymaganych
+pinów, a po zapełnieniu statycznej puli zwraca `HAL_ENOMEM`. Tryb 4-bitowy
+korzysta z `data_pins[0..3]` jako D4..D7, natomiast tryb 8-bitowy używa
+wszystkich ośmiu pól. Ustaw `rw_pin` na `HAL_HD44780_PIN_NONE`, gdy linia `RW`
+jest połączona z masą. Pula mieści domyślnie `HAL_HD44780_MAX_INSTANCES`
+wyświetlaczy.
+
+Po `hal_hd44780_begin()` zapisuj dane przez `hal_hd44780_write()`,
+`hal_hd44780_write_byte()` albo `hal_hd44780_print()`. Kursor, wyświetlanie,
+miganie, przewijanie, kierunek tekstu, autoscroll, przesunięcia wierszy, surowe
+polecenia i znaki CGRAM mają osobne operacje zwracające status. Po ostatnim
+użyciu zwolnij uchwyt przez `hal_hd44780_destroy()`. Za utworzenie i
+zniszczenie danej instancji powinno odpowiadać jedno zadanie.
+
+- **Implementacja:** `hal/display/hal_hd44780.cpp` udostępnia API uchwytów i
+  używa `hal/display/hd44780/hd44780.*` na platformach RP, STM32G474 oraz w testach
+  hostowych.
+- **Zakres:** Jest to sterownik znakowego LCD. Do grafiki bitmapowej na
+  wyświetlaczach TFT/OLED służy `hal_display`.
+- **Czasowanie:** Inicjalizacja, czyszczenie/home, impuls na linii enable i
+  opóźnienie wykonania polecenia zachowują przyjętą sekwencję HD44780: 50 ms
+  oczekiwania na zasilanie, próby inicjalizacji 4,5 ms/150 us, 2 ms dla
+  czyszczenia/home oraz fazy impulsu enable 1/1/100 us.
+
+**Współbieżność:** Wywołania podczas działania dla jednego wyświetlacza są
+serializowane przez jego muteks HAL. Nie używaj tego API z procedury obsługi
+przerwania. Nie niszcz uchwytu, gdy korzysta z niego inne zadanie.
+
+### API C++ zachowane dla zgodności
+
+Ten sam publiczny nagłówek nadal udostępnia klasę `HD44780` w kodzie
+kompilowanym jako C++. Istniejące aplikacje mogą nadal jej używać; migracja
+źródeł nie jest wymagana.
+
 ```cpp
 #include <hal/display/hal_hd44780.h>
 
-// Tryb 4-bitowy, RW podpięte do GND:
-HD44780 lcd(rs_pin, enable_pin, d4_pin, d5_pin, d6_pin, d7_pin);
+HD44780 lcd(2, 3, 4, 5, 6, 7);
 
-// Tryb 4-bitowy z pinem RW:
-HD44780 lcd_rw(rs_pin, rw_pin, enable_pin, d4_pin, d5_pin, d6_pin, d7_pin);
-
-// Tryb 8-bitowy:
-HD44780 lcd8(rs_pin, enable_pin,
-             d0_pin, d1_pin, d2_pin, d3_pin,
-             d4_pin, d5_pin, d6_pin, d7_pin);
-
-lcd.begin(16, 2);
-lcd.clear();
-lcd.print("JaszczurHAL");
-lcd.setCursor(0, 1);
-lcd.print(hal_millis() / 1000u);
-
-uint8_t glyph[8] = {0x00, 0x04, 0x0E, 0x15, 0x04, 0x04, 0x04, 0x00};
-lcd.createChar(0, glyph);
-lcd.write((uint8_t)0);
+void show_lcd_message_cpp(void) {
+    lcd.begin(16, 2);
+    lcd.clear();
+    lcd.print("JaszczurHAL");
+    lcd.setCursor(0, 1);
+    lcd.print("ready");
+}
 ```
 
-- **Wspólna implementacja modułu:** `hal/display/hd44780/hd44780.*` jest używana
-  przez RP2040, STM32G474 oraz testy hostowe. Sterownik
-  korzysta z HAL GPIO, `hal_delay_us()` oraz muteksu `hal_mutex_t` instancji.
-- **Zakres klasy:** Jest to sterownik znakowego LCD. Do grafiki bitmapowej na
-  wyświetlaczach TFT/OLED przez SPI służy `hal_display`.
-- **Czasowanie:** Opóźnienia inicjalizacji, czyszczenia/home, impulsu enable i
-  wykonania komendy odpowiadają sprawdzonej sekwencji HD44780: 50 ms
-  oczekiwania na zasilanie, próby inicjalizacji 4,5 ms/150 us, 2 ms opóźnienia
-  czyszczenia/home oraz fazy impulsu enable 1/1/100 us.
-
-**Współbieżność:** Muteks każdej instancji `HD44780` chroni jej metody publiczne przed przeplataniem komend i danych GPIO przez inne zadania lub rdzenie. Dotyczy to również pracy z FreeRTOS. Nie wywołuj API z przerwania: `hal_mutex_lock` nie obsługuje tego kontekstu.
+Klasa zachowuje konstruktory i metody w stylu LiquidCrystal. W nowym kodzie,
+który potrzebuje jawnej diagnostyki, preferuj opisany wyżej interfejs C.
 
 ---
 

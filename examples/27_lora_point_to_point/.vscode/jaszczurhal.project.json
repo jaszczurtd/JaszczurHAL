@@ -77,7 +77,7 @@
                 "id": "link",
                 "module": "27_lora_point_to_point_link",
                 "sources": [
-                    "link_app.cpp"
+                    "link_app.c"
                 ],
                 "targets": [
                     "rp2040",
@@ -95,7 +95,7 @@
                 "id": "link-responder",
                 "module": "27_lora_point_to_point_link_responder",
                 "sources": [
-                    "link_app.cpp"
+                    "link_app.c"
                 ],
                 "targets": [
                     "rp2040",

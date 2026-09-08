@@ -31,6 +31,11 @@ void test_inject_multiple_pins(void) {
   TEST_ASSERT_EQUAL_INT(200, hal_adc_read(1));
 }
 
+void test_pin_support_query(void) {
+  TEST_ASSERT_TRUE(hal_adc_is_pin_supported(2u));
+  TEST_ASSERT_FALSE(hal_adc_is_pin_supported(64u));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_default_resolution);
@@ -38,5 +43,6 @@ int main(void) {
   RUN_TEST(test_inject_and_read);
   RUN_TEST(test_default_value_is_zero);
   RUN_TEST(test_inject_multiple_pins);
+  RUN_TEST(test_pin_support_query);
   return UNITY_END();
 }

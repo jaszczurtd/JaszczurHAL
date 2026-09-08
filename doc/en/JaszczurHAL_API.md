@@ -15,13 +15,13 @@ JaszczurHAL provides a common hardware API for embedded applications. This guide
 
 Include the umbrella header in application code:
 
-```cpp
+```c
 #include <JaszczurHAL.h>
 ```
 
 For internal code or direct access to the HAL layer, include:
 
-```cpp
+```c
 #include <hal/hal.h>
 ```
 
@@ -34,6 +34,30 @@ To use only the utility functions, include the appropriate utility header:
 ```c
 #include <tools_c.h>  // C-compatible utility API
 ```
+
+### C API
+
+New application code should use the C declarations from `JaszczurHAL.h` or
+the corresponding thematic `hal_*` header. Functions that can fail use
+`hal_status_t`; stateful modules use opaque handles where appropriate. These
+handles are provided by `hal_hd44780`, `hal_dacless`, `hal_mfrc522`, and
+`hal_pn532`, among others. The small `utils/draw7Segment.h` helper is also
+available directly from C code.
+
+A `.c` translation unit can include these headers directly. JaszczurHAL still
+contains C++ implementation units, so use the supplied CMake integration for
+the final link, or select a C++ linker when integrating the archive manually.
+
+### C++ API
+
+Selected public `hal_*` headers continue to expose their existing C++ classes
+when compiled as C++. Compatibility utility headers likewise retain their
+established names. Those entry points remain maintained, and existing C++
+applications do not need an immediate rewrite. This reference presents the C
+API recommended for new code first and lists the existing C++ API separately.
+
+`tools.h` remains the C++ utility aggregator. C code should include
+`tools_c.h` or the owning thematic header instead.
 
 ---
 

@@ -32,6 +32,8 @@ static bool rp2040_hal_pin_valid(uint8_t pin) {
   return rp2040_pin_valid(pin) || rp2040_cyw43_pin_valid(pin);
 }
 
+bool jh_hal_gpio_pin_valid(uint8_t pin) { return rp2040_hal_pin_valid(pin); }
+
 static void cyw43_gpio_set_output(uint8_t pin, bool high) {
 #if HAL_BOARD_HAS_CYW43 && defined(HAL_LED_BUILTIN)
   hal_cyw43_pinMode(pin, HAL_CYW43_PIN_OUTPUT);

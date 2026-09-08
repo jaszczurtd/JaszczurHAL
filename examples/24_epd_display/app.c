@@ -1,5 +1,5 @@
 /**
- * @file app.cpp
+ * @file app.c
  * @brief Draw a monochrome test pattern on an SSD1681 e-paper display.
  */
 
@@ -61,7 +61,7 @@ void app_start(void) {
     return;
   }
 
-  hal_display_ssd16xx_config_t config = {};
+  hal_display_ssd16xx_config_t config = {0};
   config.controller = HAL_DISPLAY_SSD16XX_SSD1681;
   config.transport.bus = 0u;
   config.transport.cs_pin = EPD_CS;

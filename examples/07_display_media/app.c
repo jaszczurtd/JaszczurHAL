@@ -35,13 +35,12 @@ static const uint8_t kTftRstPin = 21u;
 
 static const int kDisplayWidth = 240;
 static const int kDisplayHeight = 320;
-static const unsigned kMediaMaxDimension = 64u;
-static const size_t kMediaMaxPixels =
-    (size_t)kMediaMaxDimension * (size_t)kMediaMaxDimension;
-static const size_t kMediaMaxEncodedBytes = 4096u;
-static const size_t kMediaMaxBase64Bytes = 8192u;
+#define MEDIA_MAX_DIMENSION 64u
+#define MEDIA_MAX_PIXELS (MEDIA_MAX_DIMENSION * MEDIA_MAX_DIMENSION)
+#define MEDIA_MAX_ENCODED_BYTES 4096u
+#define MEDIA_MAX_BASE64_BYTES 8192u
 
-static uint16_t s_rgb565[kMediaMaxPixels];
+static uint16_t s_rgb565[MEDIA_MAX_PIXELS];
 static bool s_display_ready = false;
 
 static const unsigned char kRoundTripRgba[] = {
@@ -52,7 +51,7 @@ static const unsigned char kRoundTripRgba[] = {
 static bool checked_pixel_count(unsigned width, unsigned height,
                                 size_t *out_pixels) {
   if (out_pixels == NULL || width == 0u || height == 0u ||
-      width > kMediaMaxDimension || height > kMediaMaxDimension) {
+      width > MEDIA_MAX_DIMENSION || height > MEDIA_MAX_DIMENSION) {
     return false;
   }
   if ((size_t)height > ((size_t)-1) / (size_t)width) {
@@ -60,7 +59,7 @@ static bool checked_pixel_count(unsigned width, unsigned height,
   }
 
   const size_t pixels = (size_t)width * (size_t)height;
-  if (pixels > kMediaMaxPixels) {
+  if (pixels > MEDIA_MAX_PIXELS) {
     return false;
   }
   *out_pixels = pixels;
@@ -76,7 +75,7 @@ static bool png_memory_round_trip(void) {
     free(png);
     return false;
   }
-  if (png_size == 0u || png_size > kMediaMaxEncodedBytes) {
+  if (png_size == 0u || png_size > MEDIA_MAX_ENCODED_BYTES) {
     derr("PNG encode size rejected: %lu", (unsigned long)png_size);
     free(png);
     return false;
@@ -97,7 +96,7 @@ static bool png_memory_round_trip(void) {
   }
 
   const size_t base64_capacity = hal_base64_encoded_len(png_size) + 1u;
-  if (base64_capacity == 0u || base64_capacity > kMediaMaxBase64Bytes) {
+  if (base64_capacity == 0u || base64_capacity > MEDIA_MAX_BASE64_BYTES) {
     derr("PNG Base64 size rejected: %lu", (unsigned long)base64_capacity);
     free(png);
     return false;
@@ -117,7 +116,7 @@ static bool png_memory_round_trip(void) {
   unsigned png_error = 0u;
   unsigned base64_width = 0u;
   unsigned base64_height = 0u;
-  uint16_t base64_pixels[4] = {};
+  uint16_t base64_pixels[4] = {0};
   const bool base64_ok =
       hal_base64_encode(png, png_size, base64, base64_capacity,
                         &base64_length) &&
@@ -150,7 +149,7 @@ static bool decode_png_asset(unsigned *out_width, unsigned *out_height) {
   size_t png_size = 0u;
   if (!hal_image_png_base64_decoded_size(
           kMediaPngBase64, sizeof(kMediaPngBase64) - 1u, &png_size) ||
-      png_size == 0u || png_size > kMediaMaxEncodedBytes) {
+      png_size == 0u || png_size > MEDIA_MAX_ENCODED_BYTES) {
     derr("PNG asset size rejected");
     return false;
   }
@@ -219,7 +218,7 @@ static bool decode_jpeg_asset(unsigned *out_width, unsigned *out_height) {
   size_t jpeg_size = 0u;
   if (!hal_image_jpeg_base64_decoded_size(
           kMediaJpegBase64, sizeof(kMediaJpegBase64) - 1u, &jpeg_size) ||
-      jpeg_size == 0u || jpeg_size > kMediaMaxEncodedBytes) {
+      jpeg_size == 0u || jpeg_size > MEDIA_MAX_ENCODED_BYTES) {
     derr("JPEG asset size rejected");
     return false;
   }
@@ -238,7 +237,7 @@ static bool decode_jpeg_asset(unsigned *out_width, unsigned *out_height) {
                         jpeg_size, &decoded_size) &&
       decoded_size == jpeg_size &&
       hal_image_jpeg_decode_rgb565(jpeg, decoded_size, s_rgb565,
-                                   kMediaMaxPixels, &direct_width,
+                                   MEDIA_MAX_PIXELS, &direct_width,
                                    &direct_height);
 
   size_t direct_pixels = 0u;
@@ -255,7 +254,7 @@ static bool decode_jpeg_asset(unsigned *out_width, unsigned *out_height) {
   unsigned height = 0u;
   const bool helper_ok = hal_image_jpeg_base64_decode_rgb565(
       kMediaJpegBase64, sizeof(kMediaJpegBase64) - 1u, jpeg, jpeg_size,
-      s_rgb565, kMediaMaxPixels, &width, &height);
+      s_rgb565, MEDIA_MAX_PIXELS, &width, &height);
   free(jpeg);
 
   size_t pixels = 0u;

@@ -255,37 +255,98 @@ SPI są otoczone `hal_spi_lock()` / `hal_spi_unlock()`.
 
 Komunikacja z czytnikiem MFRC522 przez SPI lub I2C. Aplikacja wybiera transport i inicjalizuje jego magistralę przed użyciem czytnika.
 
-```cpp
+### API C
+
+Interfejs C rozdziela transport magistrali od czytnika. Każdy z nich jest
+reprezentowany przez uchwyt do struktury z ukrytymi polami (ang. opaque
+handle), dalej nazywany uchwytem do instancji. Uchwyty trzeba zwalniać w
+kolejności odwrotnej do tworzenia.
+
+```c
 #include <hal/nfc/hal_mfrc522.h>
+#include <hal/spi/hal_spi.h>
 
-hal_spi_init(0, miso_pin, mosi_pin, sck_pin);
+hal_status_t read_mfrc522_uid(hal_mfrc522_uid_t *out_uid) {
+    if (out_uid == NULL) return HAL_EINVAL;
 
-MFRC522_SPI bus(cs_pin, rst_pin, 0 /* magistrala SPI */);
-MFRC522 rfid(&bus);
-rfid.PCD_Init();
+    hal_status_t status = hal_spi_init(0u, 0u, 3u, 2u);
+    if (status != HAL_OK) return status;
 
-byte version = rfid.PCD_GetVersion();
-if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
-  MFRC522::PICC_Type type = MFRC522::PICC_GetType(rfid.uid.sak);
-  const char *name = MFRC522::PICC_GetTypeName(type);
+    hal_mfrc522_spi_config_t config = hal_mfrc522_spi_default_config(5u);
+    hal_mfrc522_transport_t transport = NULL;
+    hal_mfrc522_t reader = NULL;
+    bool present = false;
+
+    status = hal_mfrc522_transport_create_spi(&config, &transport);
+    if (status == HAL_OK) status = hal_mfrc522_create(transport, &reader);
+    if (status == HAL_OK) status = hal_mfrc522_begin(reader);
+    if (status == HAL_OK) status = hal_mfrc522_is_new_card_present(reader, &present);
+    if (status == HAL_OK && !present) status = HAL_ENOENT;
+    if (status == HAL_OK) status = hal_mfrc522_read_uid(reader, out_uid);
+
+    if (reader != NULL) {
+        hal_status_t close_status = hal_mfrc522_destroy(reader);
+        if (status == HAL_OK) status = close_status;
+    }
+    if (transport != NULL) {
+        hal_status_t close_status = hal_mfrc522_transport_destroy(transport);
+        if (status == HAL_OK) status = close_status;
+    }
+    return status;
 }
 ```
 
-`MFRC522_SPI` używa transakcji HAL SPI i sterowania GPIO chip-select.
-`MFRC522_I2C` używa transakcji zapisu/odczytu HAL I2C. Aplikacja nadal konfiguruje piny
-magistrali przez `hal_spi_init()` lub
-`hal_i2c_init_bus()`.
+`hal_mfrc522_transport_create_spi()` przechowuje pin chip-select, opcjonalny
+pin resetu, numer magistrali i ustawienia SPI. Po włączeniu `HAL_ENABLE_I2C`
+utworzenie transportu I2C zapisuje numer magistrali, 7-bitowy adres i
+opcjonalny pin resetu. Zainicjalizowana magistrala HAL nadal należy do
+aplikacji.
 
-Port zachowuje logikę protokołu MFRC522 pochodzącą z linii sterowników
-MFRC522-spi-i2c-uart-async / Miguela Balboi, jednocześnie zastępując
-wywołania transportu i czasowania prymitywami JaszczurHAL.
-`StatusCodeToHalStatus()` przekształca wyniki specyficzne dla sterownika na wspólne wartości
-`hal_status_t`.
+Do transportu można dołączyć jeden czytnik. Próba zniszczenia używanego
+transportu zwraca `HAL_EBUSY`; najpierw wywołaj `hal_mfrc522_destroy()`, a
+potem `hal_mfrc522_transport_destroy()`. Domyślne statyczne pule mieszczą
+`HAL_MFRC522_MAX_TRANSPORTS` transportów i `HAL_MFRC522_MAX_READERS` czytników.
 
-**Współbieżność:** Transakcje rejestrów SPI i I2C korzystają z blokad magistrali HAL.
-Sterownik przydziela osobny muteks HAL każdej instancji, aby w przyszłości umożliwić
-szerszą serializację operacji; tworzenie i niszczenie pozostają
-operacjami cyklu życia z jednym właścicielem.
+Wykrywanie karty zwraca `hal_mfrc522_uid_t` z bajtami UID, długością i SAK.
+Funkcje `hal_mfrc522_card_type_from_sak()` i
+`hal_mfrc522_card_type_name()` określają typ karty. Operacje zwracające status
+obejmują też REQA, WUPA, zatrzymanie karty, sterowanie anteną i zasilaniem,
+autotest, uwierzytelnianie MIFARE, odczyt i zapis bloków oraz operacje na
+wartościach MIFARE Classic, zapis Ultralight, uwierzytelnianie NTAG216, a także
+zmianę i naprawę sektora UID.
+
+Implementacja zachowuje logikę protokołu MFRC522 zaczerpniętą ze sterowników
+MFRC522-spi-i2c-uart-async i Miguela Balboi, zastępując wywołania transportu i
+czasowania funkcjami JaszczurHAL. `StatusCodeToHalStatus()` przekształca wyniki
+specyficzne dla sterownika na wspólne wartości `hal_status_t`.
+
+**Współbieżność:** Operacje czytnika są serializowane dla każdej instancji, a
+transakcje SPI/I2C korzystają z blokad magistrali HAL. Za utworzenie i
+zniszczenie transportu oraz czytnika powinno odpowiadać jedno zadanie. Nie
+niszcz ich, gdy inne zadanie korzysta z czytnika.
+
+### API C++ zachowane dla zgodności
+
+Ten sam publiczny nagłówek nadal udostępnia typy `MFRC522_SPI`, `MFRC522_I2C`
+i `MFRC522` podczas kompilacji C++. Kod korzystający z tych klas pozostaje
+obsługiwany.
+
+```cpp
+#include <hal/nfc/hal_mfrc522.h>
+
+MFRC522_SPI bus(5, HAL_MFRC522_PIN_NONE, 0);
+MFRC522 reader(&bus);
+
+void start_mfrc522_cpp(void) {
+    reader.PCD_Init();
+    if (reader.PICC_IsNewCardPresent()) {
+        (void)reader.PICC_ReadCardSerial();
+    }
+}
+```
+
+W nowym kodzie, który ma jawnie zarządzać cyklem życia transportu i czytnika
+oraz korzystać ze wspólnych kodów statusu, preferuj opisany wyżej interfejs C.
 
 Przykład: `examples/22_rfid_nfc`.
 
@@ -297,41 +358,103 @@ Przykład: `examples/22_rfid_nfc`.
 
 Wykrywanie pasywnych kart i obsługa podstawowych operacji MIFARE przez PN532. Dostępne są transporty SPI oraz, po włączeniu odpowiednich flag, I2C i UART.
 
-```cpp
+### API C
+
+Każdy z typów `hal_pn532_transport_t` i `hal_pn532_t` jest uchwytem do
+instancji. Najpierw utwórz transport, a następnie dołącz do niego jeden
+czytnik.
+
+```c
 #include <hal/nfc/hal_pn532.h>
+#include <hal/spi/hal_spi.h>
 
-hal_spi_init(0, miso_pin, mosi_pin, sck_pin);
+hal_status_t read_pn532_uid(hal_pn532_uid_t *out_uid) {
+    if (out_uid == NULL) return HAL_EINVAL;
 
-PN532_SPI bus(cs_pin, rst_pin, 0 /* magistrala SPI */);
-PN532 nfc(&bus);
-nfc.begin();
+    hal_status_t status = hal_spi_init(0u, 0u, 3u, 2u);
+    if (status != HAL_OK) return status;
 
-uint32_t firmware = 0;
-if (nfc.getFirmwareVersion(&firmware) == HAL_OK) {
-  nfc.SAMConfig();
+    hal_pn532_spi_config_t config = hal_pn532_spi_default_config(5u);
+    hal_pn532_transport_t transport = NULL;
+    hal_pn532_t reader = NULL;
+    uint32_t firmware = 0u;
+
+    status = hal_pn532_transport_create_spi(&config, &transport);
+    if (status == HAL_OK) status = hal_pn532_create(transport, &reader);
+    if (status == HAL_OK) status = hal_pn532_begin(reader);
+    if (status == HAL_OK) status = hal_pn532_get_firmware_version(reader, &firmware);
+    if (status == HAL_OK) status = hal_pn532_sam_configure(reader);
+    if (status == HAL_OK) {
+        status = hal_pn532_read_passive_target(
+            reader, HAL_PN532_MODULATION_ISO14443A,
+            HAL_PN532_DEFAULT_TIMEOUT_MS, out_uid);
+    }
+
+    if (reader != NULL) {
+        hal_status_t close_status = hal_pn532_destroy(reader);
+        if (status == HAL_OK) status = close_status;
+    }
+    if (transport != NULL) {
+        hal_status_t close_status = hal_pn532_transport_destroy(transport);
+        if (status == HAL_OK) status = close_status;
+    }
+    return status;
 }
 ```
 
-`PN532_SPI` używa transakcji HAL SPI i sterowania GPIO chip-select.
-`PN532_I2C` jest dostępny, gdy włączona jest flaga `HAL_ENABLE_I2C`, i używa
-bezpośrednich transakcji odczytu/zapisu HAL I2C wraz z bajtem gotowości PN532.
-`PN532_UART` jest dostępny, gdy włączona jest flaga
-`HAL_ENABLE_UART`, i używa odczytów z limitem czasu udostępnianych przez API
-HAL UART. Piny magistrali konfiguruje aplikacja przez
-`hal_spi_init()`, `hal_i2c_init_bus()` lub `hal_uart_create()`/
-`hal_uart_begin()`.
+`hal_pn532_transport_create_spi()` korzysta z magistrali HAL SPI
+zainicjalizowanej przez aplikację. Po włączeniu `HAL_ENABLE_I2C` funkcja
+`hal_pn532_transport_create_i2c()` używa bezpośrednich transakcji HAL I2C i
+bajtu gotowości PN532. Przy `HAL_ENABLE_UART` funkcja
+`hal_pn532_transport_create_uart()` tworzy port HAL UART i odpowiada za jego
+zwolnienie. Funkcja `hal_pn532_transport_create_uart_handle()` korzysta z
+przekazanego przez aplikację uchwytu UART i go nie niszczy. Uchwyt UART musi
+pozostać ważny przez cały czas istnienia transportu. Port można przekonfigurować
+lub zniszczyć dopiero po zniszczeniu transportu.
 
-Port zachowuje konstrukcję ramek Adafruit_PN532, obsługę ACK, zapytanie o
-firmware, konfigurację SAM, skanowanie celów pasywnych oraz podstawowe
-funkcje pomocnicze wymiany MIFARE, jednocześnie zastępując wywołania
-transportu i czasowania prymitywami JaszczurHAL. Publiczne operacje PN532
-zwracają `hal_status_t`.
+Do transportu można dołączyć jeden czytnik. Próba zniszczenia używanego
+transportu zwraca `HAL_EBUSY`; najpierw zwolnij czytnik. Domyślne statyczne
+pule mieszczą `HAL_PN532_MAX_TRANSPORTS` transportów i
+`HAL_PN532_MAX_READERS` czytników.
 
-**Współbieżność:** Publiczne operacje PN532 chroni osobny muteks HAL każdej instancji,
-tworzony przez `jh_hal_mutex_create_once()`.
-Transporty SPI i I2C również używają blokad magistrali HAL dla transakcji
-fizycznych. Tworzenie i niszczenie pozostają operacjami cyklu życia z jednym
-właścicielem.
+`hal_pn532_read_passive_target()` zapisuje UID wykrytego celu w strukturze
+`hal_pn532_uid_t`. Pozostałe funkcje zwracające status obsługują odczyt
+firmware i konfigurację SAM, wybudzenie, surowe polecenia i sprawdzanie
+odpowiedzi, wyszukiwanie celów i wymianę danych z nimi, uwierzytelnianie i
+operacje na blokach MIFARE Classic oraz stronach Ultralight/NTAG2xx.
+
+Implementacja zachowuje sposób budowy ramek Adafruit_PN532, obsługę ACK,
+zapytanie o firmware, konfigurację SAM, skanowanie celów pasywnych oraz
+podstawowe funkcje pomocnicze wymiany MIFARE, jednocześnie zastępując wywołania
+transportu i czasowania prymitywami JaszczurHAL.
+
+**Współbieżność:** Operacje czytnika są serializowane dla każdej instancji.
+Transporty SPI i I2C także korzystają z blokad magistrali HAL. Za utworzenie i
+zniszczenie transportu oraz czytnika powinno odpowiadać jedno zadanie. Nie
+niszcz ich, gdy inne zadanie korzysta z czytnika.
+
+### API C++ zachowane dla zgodności
+
+Ten sam nagłówek nadal udostępnia typ `PN532` oraz transporty `PN532_SPI`,
+`PN532_I2C` i `PN532_UART`, jeśli włączono ich flagi. Kod korzystający z tych
+klas pozostaje obsługiwany.
+
+```cpp
+#include <hal/nfc/hal_pn532.h>
+
+PN532_SPI bus(5, HAL_PN532_PIN_NONE, 0);
+PN532 reader(&bus);
+
+hal_status_t start_pn532_cpp(void) {
+    uint32_t firmware = 0u;
+    hal_status_t status = reader.begin();
+    if (status == HAL_OK) status = reader.getFirmwareVersion(&firmware);
+    return status;
+}
+```
+
+W nowym kodzie, który ma jawnie zarządzać cyklem życia transportu i czytnika,
+preferuj opisany wyżej interfejs C.
 
 Przykład: `examples/22_rfid_nfc`.
 

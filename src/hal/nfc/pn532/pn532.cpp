@@ -8,9 +8,27 @@
 #include <cstring>
 
 static const uint8_t kPn532Ack[] = {0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00};
+static constexpr size_t kPn532FrameHeaderSize = 5u;
+static constexpr size_t kPn532FrameOverhead = 7u;
+static constexpr size_t kPn532MinimumFrameSize = 9u;
+static constexpr size_t kPn532DiscardBufferSize = 16u;
+
+static hal_status_t discardResponseBytes(PN532_BUS_DEVICE *device,
+                                         size_t count) {
+  uint8_t discard[kPn532DiscardBufferSize] = {};
+  while (count > 0u) {
+    const size_t read_len = count < sizeof(discard) ? count : sizeof(discard);
+    const hal_status_t status = device->readData(discard, read_len);
+    if (status != HAL_OK) {
+      return status;
+    }
+    count -= read_len;
+  }
+  return HAL_OK;
+}
 
 PN532::PN532(PN532_BUS_DEVICE *dev) : _dev(dev), _mutex(NULL), _packetbuffer{} {
-  (void)jh_hal_mutex_create_once(&_mutex);
+  (void)jh_hal_mutex_try_create_once(&_mutex);
 }
 
 PN532::~PN532() {
@@ -21,7 +39,7 @@ PN532::~PN532() {
 }
 
 void PN532::lock() {
-  hal_mutex_t mutex = jh_hal_mutex_create_once(&_mutex);
+  hal_mutex_t mutex = jh_hal_mutex_try_create_once(&_mutex);
   if (mutex != NULL) {
     hal_mutex_lock(mutex);
   }
@@ -68,7 +86,7 @@ hal_status_t PN532::SAMConfig() {
   if (status == HAL_OK) {
     size_t response_len = sizeof(_packetbuffer);
     status = readResponse(PN532_COMMAND_SAMCONFIGURATION, _packetbuffer,
-                          &response_len, 8, PN532_DEFAULT_TIMEOUT_MS);
+                          &response_len, 9u, PN532_DEFAULT_TIMEOUT_MS);
   }
   unlock();
   return status;
@@ -86,7 +104,7 @@ hal_status_t PN532::getFirmwareVersion(uint32_t *version) {
   if (status == HAL_OK) {
     size_t response_len = sizeof(_packetbuffer);
     status = readResponse(PN532_COMMAND_GETFIRMWAREVERSION, _packetbuffer,
-                          &response_len, 12, PN532_DEFAULT_TIMEOUT_MS);
+                          &response_len, 13u, PN532_DEFAULT_TIMEOUT_MS);
     if (status == HAL_OK) {
       *version = jh_load_be32(&_packetbuffer[7]);
     }
@@ -167,22 +185,65 @@ hal_status_t PN532::readResponse(uint8_t command, uint8_t *response,
   if (_dev == NULL || response == NULL || response_len == NULL) {
     return HAL_EINVAL;
   }
-  if (*response_len < min_frame_len ||
-      *response_len > PN532_PACKETBUFFER_SIZE) {
-    return HAL_EOVERFLOW;
-  }
 
   hal_status_t status = waitReady(timeout_ms);
   if (status != HAL_OK) {
     return status;
   }
 
-  status = _dev->readData(response, min_frame_len);
+  uint8_t header[kPn532FrameHeaderSize] = {};
+  status = _dev->readData(header, sizeof(header));
   if (status != HAL_OK) {
     return status;
   }
 
-  status = checkResponseFrame(response, *response_len, command);
+  if (header[0] != PN532_PREAMBLE || header[1] != PN532_STARTCODE1 ||
+      header[2] != PN532_STARTCODE2 || (uint8_t)(header[3] + header[4]) != 0u ||
+      header[3] < 2u) {
+    /* LEN is bounded to one byte. Even when the header is corrupt, treating
+     * it as a recovery hint lets byte-stream transports reach the following
+     * frame. SPI/I2C serve the same bytes from their physical-read cache. */
+    (void)discardResponseBytes(_dev, (size_t)header[3] + kPn532FrameOverhead -
+                                         kPn532FrameHeaderSize);
+    return HAL_EPROTO;
+  }
+
+  const size_t frame_len = (size_t)header[3] + kPn532FrameOverhead;
+  const size_t response_capacity = *response_len;
+  const size_t storage_capacity = response_capacity < PN532_PACKETBUFFER_SIZE
+                                      ? response_capacity
+                                      : PN532_PACKETBUFFER_SIZE;
+  const size_t header_copy_len =
+      storage_capacity < sizeof(header) ? storage_capacity : sizeof(header);
+  std::memcpy(response, header, header_copy_len);
+
+  size_t remaining = frame_len - sizeof(header);
+  size_t stored = header_copy_len;
+  if (stored < storage_capacity) {
+    const size_t writable = storage_capacity - stored;
+    const size_t read_len = remaining < writable ? remaining : writable;
+    if (read_len > 0u) {
+      status = _dev->readData(response + stored, read_len);
+      if (status != HAL_OK) {
+        return status;
+      }
+      remaining -= read_len;
+    }
+  }
+
+  status = discardResponseBytes(_dev, remaining);
+  if (status != HAL_OK) {
+    return status;
+  }
+
+  if (frame_len > response_capacity || frame_len > PN532_PACKETBUFFER_SIZE) {
+    return HAL_EOVERFLOW;
+  }
+  if (frame_len < min_frame_len || frame_len < kPn532MinimumFrameSize) {
+    return HAL_EPROTO;
+  }
+
+  status = checkResponseFrame(response, frame_len, command);
   if (status != HAL_OK) {
     return status;
   }
@@ -194,7 +255,7 @@ hal_status_t PN532::readResponse(uint8_t command, uint8_t *response,
 
 hal_status_t PN532::checkResponseFrame(const uint8_t *frame, size_t len,
                                        uint8_t command) {
-  if (frame == NULL || len < 8) {
+  if (frame == NULL || len < kPn532FrameHeaderSize) {
     return HAL_EINVAL;
   }
   if (frame[0] != PN532_PREAMBLE || frame[1] != PN532_STARTCODE1 ||
@@ -204,7 +265,11 @@ hal_status_t PN532::checkResponseFrame(const uint8_t *frame, size_t len,
   if ((uint8_t)(frame[3] + frame[4]) != 0) {
     return HAL_EPROTO;
   }
-  if (frame[3] < 2 || len < (size_t)(frame[3] + 6u)) {
+  if (frame[3] < 2u) {
+    return HAL_EPROTO;
+  }
+  const size_t frame_len = (size_t)frame[3] + kPn532FrameOverhead;
+  if (len < frame_len) {
     return HAL_EOVERFLOW;
   }
   if (frame[5] != PN532_PN532TOHOST || frame[6] != (uint8_t)(command + 1u)) {
@@ -217,6 +282,9 @@ hal_status_t PN532::checkResponseFrame(const uint8_t *frame, size_t len,
   }
   checksum = (uint8_t)(checksum + frame[5 + frame[3]]);
   if (checksum != 0) {
+    return HAL_EPROTO;
+  }
+  if (frame[6u + frame[3]] != PN532_POSTAMBLE) {
     return HAL_EPROTO;
   }
 
@@ -237,19 +305,22 @@ hal_status_t PN532::readPassiveTargetID(uint8_t cardbaudrate, uint8_t *uid,
   };
 
   lock();
+  size_t response_len = sizeof(_packetbuffer);
   hal_status_t status =
       sendCommandCheckAck(command, sizeof(command), timeout_ms);
   if (status == HAL_OK) {
-    size_t response_len = sizeof(_packetbuffer);
     status = readResponse(PN532_COMMAND_INLISTPASSIVETARGET, _packetbuffer,
-                          &response_len, 20, timeout_ms);
+                          &response_len, 10u, timeout_ms);
   }
   if (status == HAL_OK) {
     if (_packetbuffer[7] != 1) {
       status = HAL_ENOENT;
+    } else if (response_len < 6u) {
+      status = HAL_EPROTO;
     } else {
       *uidLength = _packetbuffer[12];
-      if (*uidLength > 7) {
+      if (*uidLength == 0u || *uidLength > 7u ||
+          *uidLength > response_len - 6u) {
         status = HAL_EPROTO;
       } else {
         std::memcpy(uid, _packetbuffer + 13, *uidLength);
@@ -274,7 +345,7 @@ hal_status_t PN532::inListPassiveTarget(uint8_t *response,
   if (status == HAL_OK) {
     size_t len = sizeof(_packetbuffer);
     status = readResponse(PN532_COMMAND_INLISTPASSIVETARGET, _packetbuffer,
-                          &len, 20, PN532_DEFAULT_TIMEOUT_MS);
+                          &len, 10u, PN532_DEFAULT_TIMEOUT_MS);
     if (status == HAL_OK) {
       const size_t copy_len = (response_len < len) ? response_len : len;
       std::memcpy(response, _packetbuffer + 7, copy_len);
@@ -293,8 +364,6 @@ hal_status_t PN532::inDataExchange(const uint8_t *send, size_t send_len,
       response_len == NULL || send_len > (PN532_PACKETBUFFER_SIZE - 2)) {
     return HAL_EINVAL;
   }
-  const size_t expected_response_len = *response_len;
-
   lock();
   _packetbuffer[0] = PN532_COMMAND_INDATAEXCHANGE;
   _packetbuffer[1] = 1;
@@ -303,11 +372,8 @@ hal_status_t PN532::inDataExchange(const uint8_t *send, size_t send_len,
   hal_status_t status = sendCommandCheckAck(_packetbuffer, send_len + 2);
   if (status == HAL_OK) {
     size_t len = sizeof(_packetbuffer);
-    const size_t frame_len = expected_response_len + 10;
-    const size_t min_frame_len =
-        (frame_len < sizeof(_packetbuffer)) ? frame_len : sizeof(_packetbuffer);
     status = readResponse(PN532_COMMAND_INDATAEXCHANGE, _packetbuffer, &len,
-                          min_frame_len, PN532_DEFAULT_TIMEOUT_MS);
+                          10u, PN532_DEFAULT_TIMEOUT_MS);
     if (status == HAL_OK) {
       if (_packetbuffer[7] != 0x00) {
         status = HAL_EPROTO;
@@ -355,8 +421,18 @@ hal_status_t PN532::mifareclassic_ReadDataBlock(uint8_t blockNumber,
   }
 
   const uint8_t command[] = {PN532_MIFARE_CMD_READ, blockNumber};
-  size_t response_len = 16;
-  return inDataExchange(command, sizeof(command), data, &response_len);
+  uint8_t response[16] = {};
+  size_t response_len = sizeof(response);
+  const hal_status_t status =
+      inDataExchange(command, sizeof(command), response, &response_len);
+  if (status != HAL_OK) {
+    return status;
+  }
+  if (response_len != sizeof(response)) {
+    return HAL_EPROTO;
+  }
+  std::memcpy(data, response, sizeof(response));
+  return HAL_OK;
 }
 
 hal_status_t PN532::mifareclassic_WriteDataBlock(uint8_t blockNumber,
@@ -381,8 +457,18 @@ hal_status_t PN532::mifareultralight_ReadPage(uint8_t page, uint8_t *buffer) {
   }
 
   const uint8_t command[] = {PN532_MIFARE_CMD_READ, page};
-  size_t response_len = 4;
-  return inDataExchange(command, sizeof(command), buffer, &response_len);
+  uint8_t pages[16] = {};
+  size_t response_len = sizeof(pages);
+  const hal_status_t status =
+      inDataExchange(command, sizeof(command), pages, &response_len);
+  if (status != HAL_OK) {
+    return status;
+  }
+  if (response_len < 4u) {
+    return HAL_EPROTO;
+  }
+  std::memcpy(buffer, pages, 4u);
+  return HAL_OK;
 }
 
 hal_status_t PN532::mifareultralight_WritePage(uint8_t page,

@@ -74,9 +74,8 @@ extern "C" bool hal_stm32g474_critical_section_active(void) {
   return s_critical_depth > 0u;
 }
 
-hal_mutex_t hal_mutex_create(void) {
+extern "C" hal_mutex_t jh_hal_mutex_try_create(void) {
   hal_mutex_impl_t *m = new (std::nothrow) hal_mutex_impl_t();
-  HAL_ASSERT(m != NULL, "hal_mutex_create: allocation failed");
   if (!m) {
     return NULL;
   }
@@ -85,13 +84,18 @@ hal_mutex_t hal_mutex_create(void) {
   m->handle = xSemaphoreCreateMutex();
   if (m->handle == NULL) {
     delete m;
-    HAL_ASSERT(false, "hal_mutex_create: FreeRTOS mutex allocation failed");
     return NULL;
   }
 #else
   m->locked = 0u;
 #endif
   return m;
+}
+
+hal_mutex_t hal_mutex_create(void) {
+  hal_mutex_t mutex = jh_hal_mutex_try_create();
+  HAL_ASSERT(mutex != NULL, "hal_mutex_create: allocation failed");
+  return mutex;
 }
 
 void hal_mutex_lock(hal_mutex_t mutex) {

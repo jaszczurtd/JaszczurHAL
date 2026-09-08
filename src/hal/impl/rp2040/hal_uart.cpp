@@ -4,6 +4,7 @@
 #ifdef HAL_ENABLE_UART
 
 #include "hal/serial/hal_uart.h"
+#include "hal/serial/hal_uart_internal.h"
 #include "hal/system/hal_sync.h"
 
 #include <hardware/gpio.h>
@@ -126,6 +127,16 @@ static bool uart_tx_pin_valid(uart_inst_t *uart, uint8_t pin) {
   };
 #endif
   return uart_pin_bit_is_set(pin, valid[uart_get_index(uart)]);
+}
+
+hal_status_t jh_hal_uart_validate_config_for_target(hal_uart_port_t port,
+                                                    uint8_t rx_pin,
+                                                    uint8_t tx_pin) {
+  uart_inst_t *uart = hal_uart_select_port(port);
+  return uart != NULL && uart_rx_pin_valid(uart, rx_pin) &&
+                 uart_tx_pin_valid(uart, tx_pin)
+             ? HAL_OK
+             : HAL_EINVAL;
 }
 
 static gpio_function_t uart_gpio_function(uint8_t pin) {

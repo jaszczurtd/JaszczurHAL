@@ -1717,8 +1717,6 @@ The thematic utility modules and their compatibility wrappers are covered by
 `test_tools` using HAL mocks.
 `multicoreWatchdog.cpp` is covered by `test_multicoreWatchdog` using a local
 logger-close stub plus HAL mocks.
-`utils/draw7Segment.cpp` has no platform dependencies
-(pure `const char*` + `hal_display`).
 
 ### Unity examples
 
@@ -1858,8 +1856,13 @@ The table summarizes representative suites and groups. It does not replace the c
 | `test_adp5360_driver` | Shared ADP5360 device-ID validation, charger/fuel-gauge/regulator register flows, status conversion, I2C failures and instance-mutex coverage |
 | `test_simple_io_drivers` | Shared MCP23017/PCA9654E/PCF8574/74HC595/MCP3221/MCP4725 init sequences, per-pin/full-port write and read paths, invert/pull-up/IRQ configuration and instance-mutex coverage |
 | `test_hd44780_driver` | Shared HD44780 GPIO init, 4-bit/8-bit command framing, cursor row offsets, CGRAM writes, print/write path and instance-mutex coverage |
+| `test_hal_hd44780_c_api` | C API instance/configuration lifecycle, display controls, write results, argument validation, stale handles and static-pool exhaustion |
+| `test_draw7_segment_c_abi` | Unmangled seven-segment C symbols and the existing width calculation behavior |
+| `test_draw7_segment_cpp_legacy` | Preserved C++ width symbol and `float` rounding behavior |
 | `test_hal_dma_pwm_audio` | Mock DMA PWM-audio lifecycle, callback dispatch, pause/resume and interpolation coverage |
 | `test_dacless_driver` | Shared DACless config normalization, DMA and polling sample/block callback refill flow, ADC buffer, mute/unmute, interpolation helpers and mutex coverage |
+| `test_hal_dacless`, `test_hal_dacless_c_link` | C API instance lifecycle, independent callback contexts, state/status paths, static-pool exhaustion and linking from a C translation unit |
+| `test_hal_dacless_header_c`, `test_hal_dacless_header_cpp` | Standalone public DACless-header compatibility in C11 and C++17 |
 | `test_tsc2007_driver` | Shared TSC2007 command-byte layout, 12-bit reply decode, touch-read sequence, stability rejection, bus routing and instance-mutex coverage |
 | `test_stmpe610_driver` | Shared STMPE610 setup sequence, chip-ID probing, I2C/SPI/register transactions, FIFO decode, soft-SPI bit-bang path and instance-mutex coverage |
 | `test_ads1x15_driver` | Shared ADS1X15 register config, ADS1115/ADS1015 conversion reads, gain/mode/data-rate mapping, comparator threshold writes and I2C clock forwarding |
@@ -1925,7 +1928,11 @@ The table summarizes representative suites and groups. It does not replace the c
 | `test_jh_gfx_geometry` | shared GFX clipping, geometry primitives, bitmap and text-layout behavior |
 | `test_mcp2515_driver` | shared MCP2515 register/SPI transactions, bit timing, TX/RX, filters and errors |
 | `test_mfrc522_driver` | shared MFRC522 register transports, initialization and RFID protocol helpers |
+| `test_hal_mfrc522_c_link` | Opaque MFRC522 transport/reader lifecycle and C-symbol linking |
+| `test_hal_mfrc522_header_c`, `test_hal_mfrc522_header_cpp` | Standalone public MFRC522-header compatibility in C11 and C++17 |
 | `test_pn532_driver` | shared PN532 SPI/I2C/UART framing, ACK/response parsing and NFC commands |
+| `test_hal_pn532_c_link` | Opaque PN532 transport/reader lifecycle and C-symbol linking |
+| `test_hal_pn532_header_c`, `test_hal_pn532_header_cpp` | Standalone public PN532-header compatibility in C11 and C++17 |
 | `test_ff16_memdisk` | managed FatFs R0.16 integration over an in-memory disk, mount and file I/O behavior |
 | `test_stm32_pwm_clock` | STM32G474 PWM timer-clock, prescaler and period calculation coverage |
 | `test_hal_onewire_driver` | shared bit-bang OneWire timing, reset/presence, bit/byte I/O and search behavior |

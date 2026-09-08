@@ -22,63 +22,61 @@
 #include <hal/security/hal_crc.h>
 #endif
 
-namespace {
-
-constexpr uint16_t kAdvertisingInterval100Ms = 0x00A0u;
-constexpr uint8_t kAdStructureTypeFieldSize = 1u;
-constexpr uint8_t kAdTypeFlags = 0x01u;
-constexpr uint8_t kAdTypeCompleteLocalName = 0x09u;
-constexpr uint8_t kAdFlagGeneralDiscoverable = 0x02u;
-constexpr uint8_t kAdFlagBrEdrNotSupported = 0x04u;
+static const uint16_t kAdvertisingInterval100Ms = 0x00A0u;
+static const uint8_t kAdStructureTypeFieldSize = 1u;
+static const uint8_t kAdTypeFlags = 0x01u;
+static const uint8_t kAdTypeCompleteLocalName = 0x09u;
+static const uint8_t kAdFlagGeneralDiscoverable = 0x02u;
+static const uint8_t kAdFlagBrEdrNotSupported = 0x04u;
 #if defined(HAL_BLE_STREAM_EXAMPLE_COMMANDS)
-constexpr char kDeviceName[] = "JH Commands";
+static const char kDeviceName[] = "JH Commands";
 #else
-constexpr char kDeviceName[] = "JH Stream";
-constexpr uint32_t kTelemetryPeriodMs = 1000u;
+static const char kDeviceName[] = "JH Stream";
+static const uint32_t kTelemetryPeriodMs = 1000u;
 #endif
 
 /* Example value only. Replace it with a secret unique to this device. */
-const uint8_t kDeviceSecret[HAL_BLE_STREAM_SECRET_MIN_LEN] = {
+static const uint8_t kDeviceSecret[HAL_BLE_STREAM_SECRET_MIN_LEN] = {
     0x8Fu, 0x2Cu, 0x51u, 0xE4u, 0xB7u, 0x0Du, 0x93u, 0xA6u, 0x14u, 0x7Bu, 0xC8u,
     0x35u, 0x6Eu, 0xF1u, 0x2Au, 0x59u, 0xD3u, 0x60u, 0x8Bu, 0x47u, 0xE2u, 0x1Cu,
     0x75u, 0xB0u, 0x39u, 0xA8u, 0x4Fu, 0xD6u, 0x62u, 0x1Eu, 0xC4u, 0x97u};
 
-hal_ble_advertising_handle_t s_advertising;
-hal_status_t s_status = HAL_NONE;
+static hal_ble_advertising_handle_t s_advertising;
+static hal_status_t s_status = HAL_NONE;
 #if defined(HAL_BLE_STREAM_EXAMPLE_COMMANDS)
-constexpr char kEchoCommand[] = "echo";
-constexpr char kMetadataCommand[] = "metadata";
-constexpr char kForbiddenCommand[] = "ble-forbidden";
-constexpr char kReadyEvent[] = "peripheral.ready";
-constexpr char kResultEvent[] = "peripheral.result";
-constexpr char kHostEchoCommand[] = "host.echo";
-constexpr char kHostEchoPayload[] = "peripheral-to-central";
+static const char kEchoCommand[] = "echo";
+static const char kMetadataCommand[] = "metadata";
+static const char kForbiddenCommand[] = "ble-forbidden";
+static const char kReadyEvent[] = "peripheral.ready";
+static const char kResultEvent[] = "peripheral.result";
+static const char kHostEchoCommand[] = "host.echo";
+static const char kHostEchoPayload[] = "peripheral-to-central";
 #if defined(HAL_ENABLE_FREERTOS)
-constexpr char kRuntimeName[] = "freertos";
+static const char kRuntimeName[] = "freertos";
 #else
-constexpr char kRuntimeName[] = "baremetal";
+static const char kRuntimeName[] = "baremetal";
 #endif
 
-hal_command_router_t s_router = nullptr;
-hal_ble_commands_t s_commands = nullptr;
-uint64_t s_active_session;
-uint32_t s_outbound_request_id;
-uint32_t s_echo_calls;
-uint32_t s_metadata_calls;
-bool s_ready_event_started;
-bool s_outbound_request_started;
-bool s_result_event_pending;
+static hal_command_router_t s_router = NULL;
+static hal_ble_commands_t s_commands = NULL;
+static uint64_t s_active_session;
+static uint32_t s_outbound_request_id;
+static uint32_t s_echo_calls;
+static uint32_t s_metadata_calls;
+static bool s_ready_event_started;
+static bool s_outbound_request_started;
+static bool s_result_event_pending;
 #else
-uint32_t s_next_telemetry_ms;
-uint32_t s_sequence;
-char s_pending_telemetry[48];
-size_t s_pending_telemetry_length;
-bool s_telemetry_pending;
+static uint32_t s_next_telemetry_ms;
+static uint32_t s_sequence;
+static char s_pending_telemetry[48];
+static size_t s_pending_telemetry_length;
+static bool s_telemetry_pending;
 #endif
-bool s_started;
+static bool s_started;
 
-hal_ble_advertising_config_t advertising_config(void) {
-  hal_ble_advertising_config_t config{};
+static hal_ble_advertising_config_t advertising_config(void) {
+  hal_ble_advertising_config_t config = {0};
   config.interval_min = kAdvertisingInterval100Ms;
   config.interval_max = kAdvertisingInterval100Ms;
 
@@ -96,10 +94,11 @@ hal_ble_advertising_config_t advertising_config(void) {
   return config;
 }
 
-void on_ble_event(const hal_ble_event_t *event, void *) {
+static void on_ble_event(const hal_ble_event_t *event, void *context) {
+  (void)context;
   switch (event->type) {
   case HAL_BLE_EVENT_CONTROLLER_READY: {
-    hal_ble_address_t address{};
+    hal_ble_address_t address = {0};
     char text[HAL_BLE_ADDRESS_TEXT_SIZE];
     if (hal_ble_get_local_address(&address) == HAL_OK &&
         hal_ble_format_address(&address, text, sizeof(text)) == HAL_OK) {
@@ -155,28 +154,30 @@ void on_ble_event(const hal_ble_event_t *event, void *) {
 
 #if defined(HAL_BLE_STREAM_EXAMPLE_COMMANDS)
 
-const hal_ble_commands_peer_info_t *
+static const hal_ble_commands_peer_info_t *
 command_peer(const hal_command_request_t *request) {
-  if (request == nullptr || request->source != HAL_COMMAND_SOURCE_BLE_STREAM ||
-      request->source_context == nullptr || request->session_id == 0u ||
+  if (request == NULL || request->source != HAL_COMMAND_SOURCE_BLE_STREAM ||
+      request->source_context == NULL || request->session_id == 0u ||
       request->security_flags != HAL_COMMAND_SECURITY_ALL) {
-    return nullptr;
+    return NULL;
   }
-  const auto *peer = static_cast<const hal_ble_commands_peer_info_t *>(
-      request->source_context);
+  const hal_ble_commands_peer_info_t *peer =
+      (const hal_ble_commands_peer_info_t *)request->source_context;
   return peer->session_id == request->session_id &&
                  peer->security_flags == request->security_flags
              ? peer
-             : nullptr;
+             : NULL;
 }
 
-hal_status_t echo_command(const hal_command_request_t *request,
-                          hal_command_response_t *response, void *) {
-  if (request == nullptr || response == nullptr) {
+static hal_status_t echo_command(const hal_command_request_t *request,
+                                 hal_command_response_t *response,
+                                 void *context) {
+  (void)context;
+  if (request == NULL || response == NULL) {
     return HAL_EINVAL;
   }
   const hal_ble_commands_peer_info_t *peer = command_peer(request);
-  if (peer == nullptr) {
+  if (peer == NULL) {
     derr("JHBC1 FAULT stage=echo-metadata");
     return HAL_EINTERNAL;
   }
@@ -202,13 +203,15 @@ hal_status_t echo_command(const hal_command_request_t *request,
   return status;
 }
 
-hal_status_t metadata_command(const hal_command_request_t *request,
-                              hal_command_response_t *response, void *) {
-  if (request == nullptr || response == nullptr) {
+static hal_status_t metadata_command(const hal_command_request_t *request,
+                                     hal_command_response_t *response,
+                                     void *context) {
+  (void)context;
+  if (request == NULL || response == NULL) {
     return HAL_EINVAL;
   }
   const hal_ble_commands_peer_info_t *peer = command_peer(request);
-  if (peer == nullptr) {
+  if (peer == NULL) {
     derr("JHBC1 FAULT stage=metadata-provenance");
     return HAL_EINTERNAL;
   }
@@ -243,17 +246,21 @@ hal_status_t metadata_command(const hal_command_request_t *request,
   return status;
 }
 
-hal_status_t forbidden_command(const hal_command_request_t *,
-                               hal_command_response_t *, void *) {
+static hal_status_t forbidden_command(const hal_command_request_t *request,
+                                      hal_command_response_t *response,
+                                      void *context) {
+  (void)request;
+  (void)response;
+  (void)context;
   derr("JHBC1 FAULT stage=forbidden-handler");
   return HAL_EINTERNAL;
 }
 
-hal_status_t register_command(const char *name,
-                              hal_command_source_mask_t sources,
-                              hal_command_security_flags_t security,
-                              hal_command_handler_t handler) {
-  hal_command_definition_t definition{};
+static hal_status_t register_command(const char *name,
+                                     hal_command_source_mask_t sources,
+                                     hal_command_security_flags_t security,
+                                     hal_command_handler_t handler) {
+  hal_command_definition_t definition = {0};
   definition.name = name;
   definition.allowed_sources = sources;
   definition.required_security = security;
@@ -261,7 +268,7 @@ hal_status_t register_command(const char *name,
   return hal_command_router_register(s_router, &definition);
 }
 
-hal_status_t register_commands(void) {
+static hal_status_t register_commands(void) {
   hal_status_t status = hal_command_router_default(&s_router);
   if (status == HAL_OK) {
     status = register_command(
@@ -282,7 +289,7 @@ hal_status_t register_commands(void) {
   return status;
 }
 
-void reset_command_session(uint64_t session_id) {
+static void reset_command_session(uint64_t session_id) {
   s_active_session = session_id;
   s_outbound_request_id = 0u;
   s_ready_event_started = false;
@@ -293,9 +300,9 @@ void reset_command_session(uint64_t session_id) {
   }
 }
 
-void consume_adapter_message(void) {
-  hal_command_message_t message{};
-  hal_ble_commands_peer_info_t peer{};
+static void consume_adapter_message(void) {
+  hal_command_message_t message = {0};
+  hal_ble_commands_peer_info_t peer = {0};
   const hal_status_t status =
       hal_ble_commands_receive(s_commands, &message, &peer);
   if (status == HAL_EAGAIN) {
@@ -323,11 +330,11 @@ void consume_adapter_message(void) {
   s_result_event_pending = true;
 }
 
-void advance_session_output(const hal_ble_commands_info_t &info) {
-  if (info.session_id != s_active_session) {
-    reset_command_session(info.session_id);
+static void advance_session_output(const hal_ble_commands_info_t *info) {
+  if (info->session_id != s_active_session) {
+    reset_command_session(info->session_id);
   }
-  if (info.session_id == 0u) {
+  if (info->session_id == 0u) {
     return;
   }
 
@@ -339,7 +346,7 @@ void advance_session_output(const hal_ble_commands_info_t &info) {
     if (status == HAL_OK) {
       s_result_event_pending = false;
       deb("JHBC1 RESULT event=queued session=0x%016llX",
-          (unsigned long long)info.session_id);
+          (unsigned long long)info->session_id);
     } else if (status != HAL_EBUSY && status != HAL_EAGAIN) {
       derr("JHBC1 FAULT stage=result-event status=%s",
            hal_status_to_string(status));
@@ -352,7 +359,7 @@ void advance_session_output(const hal_ble_commands_info_t &info) {
     const int written =
         snprintf(payload, sizeof(payload), "JBC1|%s|%s|%s|%016llX",
                  HAL_TARGET_NAME, HAL_BOARD_PROFILE_NAME, kRuntimeName,
-                 (unsigned long long)info.session_id);
+                 (unsigned long long)info->session_id);
     if (written <= 0 || (size_t)written >= sizeof(payload)) {
       derr("JHBC1 FAULT stage=ready-format");
       return;
@@ -369,8 +376,8 @@ void advance_session_output(const hal_ble_commands_info_t &info) {
     return;
   }
 
-  if (!s_outbound_request_started && info.transmit_length == 0u &&
-      !info.pending_response) {
+  if (!s_outbound_request_started && info->transmit_length == 0u &&
+      !info->pending_response) {
     uint32_t request_id = 0u;
     const hal_status_t status = hal_ble_commands_request_start(
         s_commands, kHostEchoCommand, HAL_COMMAND_ENCODING_BINARY,
@@ -387,16 +394,16 @@ void advance_session_output(const hal_ble_commands_info_t &info) {
   }
 }
 
-void process_commands(void) {
+static void process_commands(void) {
   const hal_status_t status = hal_ble_commands_process(s_commands);
   if (status != HAL_OK && status != HAL_EAGAIN) {
     derr("JHBC1 FAULT stage=process status=%s", hal_status_to_string(status));
   }
   consume_adapter_message();
-  hal_ble_commands_info_t info{};
+  hal_ble_commands_info_t info = {0};
   const hal_status_t info_status = hal_ble_commands_get_info(s_commands, &info);
   if (info_status == HAL_OK) {
-    advance_session_output(info);
+    advance_session_output(&info);
   } else {
     derr("JHBC1 FAULT stage=info status=%s", hal_status_to_string(info_status));
   }
@@ -404,7 +411,7 @@ void process_commands(void) {
 
 #else
 
-void drain_received_payloads(void) {
+static void drain_received_payloads(void) {
   uint8_t payload[HAL_BLE_STREAM_MAX_PAYLOAD];
   size_t length = 0u;
   for (;;) {
@@ -422,12 +429,12 @@ void drain_received_payloads(void) {
   }
 }
 
-void clear_pending_telemetry(void) {
+static void clear_pending_telemetry(void) {
   s_pending_telemetry_length = 0u;
   s_telemetry_pending = false;
 }
 
-hal_status_t flush_pending_telemetry(void) {
+static hal_status_t flush_pending_telemetry(void) {
   const hal_status_t status =
       hal_ble_stream_send(s_pending_telemetry, s_pending_telemetry_length);
   if (status != HAL_EAGAIN) {
@@ -436,8 +443,8 @@ hal_status_t flush_pending_telemetry(void) {
   return status;
 }
 
-void publish_telemetry(void) {
-  hal_ble_stream_info_t info{};
+static void publish_telemetry(void) {
+  hal_ble_stream_info_t info = {0};
   if (hal_ble_stream_get_info(&info) != HAL_OK ||
       info.state != HAL_BLE_STREAM_STATE_AUTHENTICATED) {
     clear_pending_telemetry();
@@ -483,18 +490,18 @@ void publish_telemetry(void) {
 
 /* With FreeRTOS, initialize Bluetooth from app_task0 after the scheduler
  * starts. */
-hal_status_t initialize_runtime(void) {
+static hal_status_t initialize_runtime(void) {
   hal_status_t status = hal_ble_initialize();
   if (status != HAL_OK) {
     return status;
   }
-  status = hal_ble_set_event_callback(on_ble_event, nullptr);
+  status = hal_ble_set_event_callback(on_ble_event, NULL);
   if (status != HAL_OK) {
     (void)hal_ble_deinitialize();
     return status;
   }
 
-  hal_ble_stream_config_t config{};
+  hal_ble_stream_config_t config = {0};
   config.capabilities =
       HAL_BLE_STREAM_CAP_TELEMETRY | HAL_BLE_STREAM_CAP_DIAGNOSTICS;
   status = hal_ble_stream_initialize(&config);
@@ -513,9 +520,9 @@ hal_status_t initialize_runtime(void) {
 #endif
   if (status != HAL_OK) {
 #if defined(HAL_BLE_STREAM_EXAMPLE_COMMANDS)
-    if (s_commands != nullptr) {
+    if (s_commands != NULL) {
       (void)hal_ble_commands_destroy(s_commands);
-      s_commands = nullptr;
+      s_commands = NULL;
     }
 #endif
     (void)hal_ble_stream_deinitialize();
@@ -524,9 +531,7 @@ hal_status_t initialize_runtime(void) {
   return status;
 }
 
-} // namespace
-
-extern "C" void app_start(void) {
+void app_start(void) {
   hal_debug_init_default();
 #if defined(HAL_BLE_STREAM_EXAMPLE_COMMANDS)
   deb("JHBC1 BLE command-router Peripheral");
@@ -535,7 +540,7 @@ extern "C" void app_start(void) {
 #endif
 }
 
-extern "C" void app_task0(void) {
+void app_task0(void) {
   if (!s_started) {
     s_started = true;
     s_status = initialize_runtime();

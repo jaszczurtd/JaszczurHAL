@@ -1,5 +1,5 @@
 /**
- * @file app.cpp
+ * @file app.c
  * @brief Display data on an SSD1306 OLED and an HD44780 character LCD.
  *
  * The displays are initialized independently, so either one can be omitted.
@@ -13,8 +13,6 @@
 #include <hal/i2c/hal_i2c.h>
 #include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
-
-#include <new>
 
 #if HAL_TARGET_IS_RP
 #define EXAMPLE_I2C_SDA 4u
@@ -38,12 +36,11 @@
 #define EXAMPLE_LCD_D7 37u
 #endif
 
-static constexpr int OLED_WIDTH = 128;
-static constexpr int OLED_HEIGHT = 64;
-static constexpr uint8_t OLED_I2C_ADDR = 0x3cu;
+static const int OLED_WIDTH = 128;
+static const int OLED_HEIGHT = 64;
+static const uint8_t OLED_I2C_ADDR = 0x3cu;
 
-alignas(HD44780) static unsigned char s_lcd_storage[sizeof(HD44780)];
-static HD44780 *s_lcd = nullptr;
+static hal_hd44780_t s_lcd = NULL;
 static bool s_oled_ready = false;
 static uint32_t s_last_update_ms = 0u;
 static uint32_t s_seconds = 0u;
@@ -61,7 +58,7 @@ static void draw_oled_layout(void) {
 }
 
 static void update_oled(uint32_t seconds) {
-  char text[16] = {};
+  char text[16] = {0};
   hal_display_prepare_text(text, sizeof(text), "%lu", (unsigned long)seconds);
   hal_display_fill_rect(64, 50, OLED_WIDTH - 64, 14, HAL_COLOR_BLACK);
   hal_display_set_cursor(64, 52);
@@ -93,15 +90,41 @@ void app_start(void) {
     derr("SSD1306 init failed; continuing with HD44780");
   }
 
-  s_lcd = new (s_lcd_storage)
-      HD44780(EXAMPLE_LCD_RS, EXAMPLE_LCD_EN, EXAMPLE_LCD_D4, EXAMPLE_LCD_D5,
-              EXAMPLE_LCD_D6, EXAMPLE_LCD_D7);
-  s_lcd->begin(16u, 2u);
-  s_lcd->clear();
-  s_lcd->print("JaszczurHAL");
-  s_lcd->setCursor(0u, 1u);
-  s_lcd->print("LCD ready");
-  deb("HD44780 initialized");
+  hal_hd44780_config_t lcd_config = {0};
+  lcd_config.rs_pin = EXAMPLE_LCD_RS;
+  lcd_config.rw_pin = HAL_HD44780_PIN_NONE;
+  lcd_config.enable_pin = EXAMPLE_LCD_EN;
+  lcd_config.data_pins[0] = EXAMPLE_LCD_D4;
+  lcd_config.data_pins[1] = EXAMPLE_LCD_D5;
+  lcd_config.data_pins[2] = EXAMPLE_LCD_D6;
+  lcd_config.data_pins[3] = EXAMPLE_LCD_D7;
+  lcd_config.bus_width = HAL_HD44780_BUS_4_BIT;
+
+  hal_status_t lcd_status = hal_hd44780_create(&lcd_config, &s_lcd);
+  if (lcd_status == HAL_OK) {
+    lcd_status = hal_hd44780_begin(s_lcd, 16u, 2u, HAL_HD44780_FONT_5X8);
+  }
+  if (lcd_status == HAL_OK) {
+    lcd_status = hal_hd44780_clear(s_lcd);
+  }
+  if (lcd_status == HAL_OK) {
+    lcd_status = hal_hd44780_print(s_lcd, "JaszczurHAL", NULL);
+  }
+  if (lcd_status == HAL_OK) {
+    lcd_status = hal_hd44780_set_cursor(s_lcd, 0u, 1u);
+  }
+  if (lcd_status == HAL_OK) {
+    lcd_status = hal_hd44780_print(s_lcd, "LCD ready", NULL);
+  }
+  if (lcd_status == HAL_OK) {
+    deb("HD44780 initialized");
+  } else {
+    derr("HD44780 init failed: %s", hal_status_to_string(lcd_status));
+    if (s_lcd != NULL) {
+      (void)hal_hd44780_destroy(s_lcd);
+      s_lcd = NULL;
+    }
+  }
 }
 
 void app_task0(void) {
@@ -116,11 +139,12 @@ void app_task0(void) {
   if (s_oled_ready) {
     update_oled(s_seconds);
   }
-  if (s_lcd != nullptr) {
-    char line[17] = {};
+  if (s_lcd != NULL) {
+    char line[17] = {0};
     hal_display_prepare_text(line, sizeof(line), "t=%-13lus",
                              (unsigned long)s_seconds);
-    s_lcd->setCursor(0u, 1u);
-    s_lcd->print(line);
+    if (hal_hd44780_set_cursor(s_lcd, 0u, 1u) == HAL_OK) {
+      (void)hal_hd44780_print(s_lcd, line, NULL);
+    }
   }
 }

@@ -69,6 +69,15 @@ class ToolingContractTests(unittest.TestCase):
         self.assertTrue(all("covers" not in item for item in document["examples"]))
         self.assertEqual(document["examples"], examples_dispatcher.EXAMPLES)
 
+    def test_examples_use_c_application_sources_only(self) -> None:
+        cxx_suffixes = {".cc", ".cpp", ".cxx"}
+        cxx_sources = sorted(
+            path.relative_to(ROOT).as_posix()
+            for path in (ROOT / "examples").rglob("*")
+            if path.is_file() and path.suffix.lower() in cxx_suffixes
+        )
+        self.assertEqual([], cxx_sources)
+
     def test_board_component_catalog_matches_python_and_generated_cmake(self) -> None:
         document = load_tooling_contract("board_components.json")
         identifiers = tuple(item["id"] for item in document["components"])

@@ -264,41 +264,87 @@ When the first transmission attempt succeeds, one-shot and normal mode have the 
 
 Display text on parallel HD44780-compatible LCDs. The driver supports 4-bit and 8-bit GPIO transfers, an optional `RW` line, custom CGRAM characters, cursor and display control, manual and automatic scrolling, and configurable row offsets. Its feature set matches the original LiquidCrystal library.
 
+### C API
+
+The C interface stores each display behind an opaque `hal_hd44780_t` handle.
+Provide the pins and bus width, create the handle, and then select the display
+geometry with `hal_hd44780_begin()`:
+
+```c
+#include <hal/display/hal_hd44780.h>
+
+hal_status_t show_lcd_message(void) {
+    hal_hd44780_config_t config = {0};
+    config.rs_pin = 2;
+    config.rw_pin = HAL_HD44780_PIN_NONE;
+    config.enable_pin = 3;
+    config.data_pins[0] = 4; /* D4 */
+    config.data_pins[1] = 5; /* D5 */
+    config.data_pins[2] = 6; /* D6 */
+    config.data_pins[3] = 7; /* D7 */
+    config.bus_width = HAL_HD44780_BUS_4_BIT;
+
+    hal_hd44780_t lcd = NULL;
+    hal_status_t status = hal_hd44780_create(&config, &lcd);
+    if (status != HAL_OK) return status;
+
+    status = hal_hd44780_begin(lcd, 16u, 2u, HAL_HD44780_FONT_5X8);
+    if (status == HAL_OK) status = hal_hd44780_print(lcd, "JaszczurHAL", NULL);
+    if (status == HAL_OK) status = hal_hd44780_set_cursor(lcd, 0u, 1u);
+    if (status == HAL_OK) status = hal_hd44780_print(lcd, "ready", NULL);
+
+    hal_status_t close_status = hal_hd44780_destroy(lcd);
+    return status != HAL_OK ? status : close_status;
+}
+```
+
+`hal_hd44780_create()` rejects missing, repeated, or invalid required pins and
+returns `HAL_ENOMEM` when the static handle pool is full. Four-bit mode uses
+`data_pins[0..3]` for D4..D7; eight-bit mode uses all eight entries. Set
+`rw_pin` to `HAL_HD44780_PIN_NONE` when `RW` is tied to ground. The pool holds
+`HAL_HD44780_MAX_INSTANCES` displays by default.
+
+After `hal_hd44780_begin()`, use `hal_hd44780_write()`,
+`hal_hd44780_write_byte()`, or `hal_hd44780_print()` for data. Cursor, display,
+blink, scrolling, text direction, autoscroll, row offsets, raw commands, and
+CGRAM characters have corresponding status-returning operations. Destroy the
+handle with `hal_hd44780_destroy()` after its last use. Creation and destruction
+are single-owner operations.
+
+- **Implementation:** `hal/display/hal_hd44780.cpp` provides the handle API and
+  reuses `hal/display/hd44780/hd44780.*` on RP platforms, STM32G474, and host tests.
+- **Scope:** This is a character LCD driver. Use `hal_display` for bitmap
+  graphics on TFT/OLED displays.
+- **Timing:** Initialization, clear/home, enable-pulse, and command-settle
+  delays follow the established HD44780 sequence: 50 ms power-on wait,
+  4.5 ms/150 us init retries, 2 ms clear/home delay, and 1/1/100 us enable
+  pulse phases.
+
+**Concurrency:** Runtime calls for one display are serialized by its HAL mutex.
+Do not use this API from an interrupt handler. Do not destroy a handle while
+another task is using it.
+
+### Existing C++ compatibility API
+
+The same public header continues to expose the `HD44780` class in C++ builds.
+Existing applications may keep using it; no source migration is required.
+
 ```cpp
 #include <hal/display/hal_hd44780.h>
 
-// 4-bit mode, RW tied to GND:
-HD44780 lcd(rs_pin, enable_pin, d4_pin, d5_pin, d6_pin, d7_pin);
+HD44780 lcd(2, 3, 4, 5, 6, 7);
 
-// 4-bit mode with RW pin:
-HD44780 lcd_rw(rs_pin, rw_pin, enable_pin, d4_pin, d5_pin, d6_pin, d7_pin);
-
-// 8-bit mode:
-HD44780 lcd8(rs_pin, enable_pin,
-             d0_pin, d1_pin, d2_pin, d3_pin,
-             d4_pin, d5_pin, d6_pin, d7_pin);
-
-lcd.begin(16, 2);
-lcd.clear();
-lcd.print("JaszczurHAL");
-lcd.setCursor(0, 1);
-lcd.print(hal_millis() / 1000u);
-
-uint8_t glyph[8] = {0x00, 0x04, 0x0E, 0x15, 0x04, 0x04, 0x04, 0x00};
-lcd.createChar(0, glyph);
-lcd.write((uint8_t)0);
+void show_lcd_message_cpp(void) {
+    lcd.begin(16, 2);
+    lcd.clear();
+    lcd.print("JaszczurHAL");
+    lcd.setCursor(0, 1);
+    lcd.print("ready");
+}
 ```
 
-- **shared thematic implementation:** `hal/display/hd44780/hd44780.*`, reused by RP2040,
-  STM32G474 and host tests. The driver uses HAL GPIO, `hal_delay_us()` and an
-  instance `hal_mutex_t`.
-- **Display class scope:** This is a character LCD driver, not the bitmap
-  `hal_display` facade. Use `hal_display` for SPI TFT/OLED graphics.
-- **Timing:** The init, clear/home, enable-pulse and command-settle delays match
-  the proven HD44780 sequence: 50 ms power-on wait, 4.5 ms/150 us init retries,
-  2 ms clear/home delay and 1/1/100 us enable pulse phases.
-
-**Concurrency:** Each `HD44780` instance has a mutex protecting its public methods, so tasks or cores cannot interleave GPIO commands and data for that display. This also applies under FreeRTOS. Do not call this API from an interrupt handler: `hal_mutex_lock` does not support that context.
+The class keeps its constructors and LiquidCrystal-style methods. New code that
+needs explicit diagnostics should prefer the C interface above.
 
 ---
 

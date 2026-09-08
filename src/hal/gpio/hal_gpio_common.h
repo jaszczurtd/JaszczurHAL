@@ -4,6 +4,13 @@
 #include "hal/gpio/hal_gpio.h"
 
 /**
+ * @brief Check whether the active backend accepts a GPIO identifier.
+ * @param pin GPIO identifier to check.
+ * @return true when digital GPIO operations accept @p pin.
+ */
+bool jh_hal_gpio_pin_valid(uint8_t pin);
+
+/**
  * @brief Check whether a GPIO mode belongs to the public mode range.
  * @param mode Mode to validate.
  * @return true for a supported mode value.

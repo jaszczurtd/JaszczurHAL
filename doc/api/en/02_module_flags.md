@@ -36,6 +36,11 @@ This section is the maintained public catalog of user-selectable
 `hal_config.h` remains the public configuration facade and retains contextual
 rules outside registry v1. `doc/HAL_FLAGS.txt` provides a concise text summary.
 
+In the table, a thematic `hal_*` header is the C API recommended for new code.
+Where an existing C++ class remains available, its header is listed separately
+after the C header. Enabling a module keeps both interfaces; this
+distinction is guidance for new code, not a removal of existing functionality.
+
 Application entry flags are separate from optional HAL modules:
 
 | Flag | Effect |
@@ -132,16 +137,16 @@ Stack protection uses two independent opt-ins:
 | `HAL_ENABLE_PCF8574` | `hal_pcf8574.h` | `hal/gpio/simple_io/hal_simple_io_drivers.cpp` | PCF8574 quasi-bidirectional GPIO expander over HAL I2C (propagates I2C) |
 | `HAL_ENABLE_HC595` | `hal_hc595.h` | `hal/gpio/simple_io/hal_simple_io_drivers.cpp` | 74HC595 shift-register output expander over HAL SPI/GPIO (propagates SPI) |
 | `HAL_ENABLE_MCP4725` | `hal_mcp4725.h` | `hal/gpio/simple_io/hal_simple_io_drivers.cpp` | MCP4725 12-bit DAC over HAL I2C (propagates I2C) |
-| `HAL_ENABLE_MFRC522` | `hal_mfrc522.h` + `hal/nfc/mfrc522/mfrc522.h` | `hal/nfc/mfrc522/mfrc522*.cpp` | MFRC522 RFID reader driver over HAL SPI/I2C (propagates SPI) |
-| `HAL_ENABLE_PN532` | `hal_pn532.h` + `hal/nfc/pn532/pn532.h` | `hal/nfc/pn532/pn532*.cpp` | PN532 NFC/RFID reader driver over HAL SPI/I2C/UART (propagates SPI) |
-| `HAL_ENABLE_DACLESS` | `hal_dacless.h` + `hal/audio/dacless/dacless.h` | `hal/audio/dacless/dacless.cpp` | Shared DACless PWM-audio engine with block/sample callbacks and ADC sampling (propagates DMA_PWM_AUDIO + PWM_FREQ) |
+| `HAL_ENABLE_MFRC522` | `hal_mfrc522.h` (C); `hal/nfc/mfrc522/mfrc522.h` (C++) | `hal/nfc/hal_mfrc522.cpp` + `hal/nfc/mfrc522/mfrc522*.cpp` | Opaque transport and reader handles, card status/UID types and MFRC522 operations over HAL SPI/I2C (propagates SPI) |
+| `HAL_ENABLE_PN532` | `hal_pn532.h` (C); `hal/nfc/pn532/pn532.h` (C++) | `hal/nfc/hal_pn532.cpp` + `hal/nfc/pn532/pn532*.cpp` | Opaque transport and reader handles, UID types and PN532 operations over HAL SPI/I2C/UART (propagates SPI) |
+| `HAL_ENABLE_DACLESS` | `hal_dacless.h` (C); `hal/audio/dacless/dacless.h` (C++) | `hal/audio/hal_dacless.cpp` + `hal/audio/dacless/dacless.cpp` | Opaque DACless handle, C callbacks with application contexts, state and lifecycle (propagates DMA_PWM_AUDIO + PWM_FREQ) |
 | `HAL_ENABLE_DMA_PWM_AUDIO` | `hal_dma_pwm_audio.h` | `hal_dma_pwm_audio.cpp` | Timer-paced PWM-audio DMA helper used by DACless |
 | `HAL_ENABLE_PWM_FREQ` | `hal_pwm_freq.h` | `hal_pwm_freq.cpp` | RP2040 hardware/pwm, STM32G474 TIM PWM, or ESP32-S3 LEDC |
 | `HAL_ENABLE_DAC` | `hal_dac.h` | target `hal_dac.cpp` | True-DAC capability facade; STM32G474 provides hardware output, while RP2040 reports the capability as unsupported |
 | `HAL_ENABLE_PCNT` | `hal_pcnt.h` | target `hal_pcnt.cpp` | Target pulse-counter facade for RP2040, STM32G474, ESP32-S3 PCNT, and mock targets |
 | `HAL_ENABLE_RGB_LED` | `hal_rgb_led.h` + `hal/gpio/neopixel/jh_neopixel.h` | `hal_rgb_led.cpp` + `hal/gpio/neopixel/jh_neopixel.cpp` | Shared NeoPixel core + target transport (RP2040 PIO / STM32 cycle-timed GPIO / ESP32-S3 RMT) |
-| `HAL_ENABLE_HD44780` | `hal_hd44780.h` + `hal/display/hd44780/hd44780.h` | `hal/display/hd44780/hd44780.cpp` | HD44780-compatible parallel character LCD over HAL GPIO/system timing |
-| `HAL_ENABLE_DISPLAY` | `hal_display.h` | `hal/display/drivers/hal_display.cpp` | *(needs a TFT, OLED, LCD or EPD backend)* |
+| `HAL_ENABLE_HD44780` | `hal_hd44780.h` (C); `hal/display/hd44780/hd44780.h` (C++) | `hal/display/hal_hd44780.cpp` + `hal/display/hd44780/hd44780.cpp` | Opaque HD44780 handle, pin configuration, text, cursor and display control over HAL GPIO/system timing |
+| `HAL_ENABLE_DISPLAY` | `hal_display.h`; `utils/draw7Segment.h` (C and C++) | `hal/display/drivers/hal_display.cpp` + `utils/draw7Segment.cpp` | Graphics display API and a small seven-segment drawing helper; requires a TFT, OLED, LCD or EPD backend |
 | `HAL_ENABLE_TFT` | `hal_display.h` | `hal/display/drivers/hal_display.cpp` | *(needs at least one TFT driver below; propagates DISPLAY + SPI)* |
 | `HAL_ENABLE_ILI9341` | `hal_display.h` + `hal/display/drivers/ili9341_driver.h` | `hal/display/drivers/hal_display.cpp` + `hal/display/drivers/ili9341_driver.cpp` | shared HAL SPI/GPIO ILI9341 core + GFX engine (propagates TFT + DISPLAY + SPI) |
 | `HAL_ENABLE_ST7789` | `hal_display.h` + `hal/display/drivers/st77xx_driver.h` | `hal/display/drivers/hal_display.cpp` + `hal/display/drivers/st77xx_driver.cpp` | shared HAL SPI/GPIO ST77xx core + GFX engine (propagates TFT + DISPLAY + SPI) |
