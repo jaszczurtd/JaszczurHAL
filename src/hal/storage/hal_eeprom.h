@@ -60,6 +60,12 @@
  */
 typedef void (*hal_eeprom_progress_callback_t)(void *ctx);
 
+/** @brief Prepare application resources for a flash write; HAL_OK permits it.
+ */
+typedef hal_status_t (*hal_eeprom_flash_prepare_callback_t)(void *ctx);
+/** @brief Restore application resources after an attempted flash write. */
+typedef void (*hal_eeprom_flash_finish_callback_t)(void *ctx);
+
 /**
  * @brief Supported EEPROM back-ends.
  */
@@ -107,6 +113,31 @@ hal_status_t hal_eeprom_init(hal_eeprom_type_t type, uint16_t size,
 hal_status_t
 hal_eeprom_set_progress_callback(hal_eeprom_progress_callback_t callback,
                                  void *ctx);
+
+/**
+ * @brief Register application callbacks around physical EEPROM flash writes.
+ *
+ * The flash provider calls prepare after validation, immediately before a
+ * write, and finish after that attempt, including write failures. If prepare
+ * fails, no write or finish occurs; prepare must undo its own partial work.
+ * Reads, RAM staging, clean commits and external EEPROM writes skip both.
+ * Existing flash coordination (interrupts, other cores and DMA) still applies.
+ *
+ * Callbacks run on the caller's task/core while the EEPROM mutex is held.
+ * They must not re-enter EEPROM/KV or change callback registration. They may
+ * not take an application lock held by another thread waiting for EEPROM.
+ * Finish cannot change the storage result; the application owns reporting and
+ * recovery if restoring its resources fails. Registration survives init.
+ *
+ * @param prepare Preparation callback, or NULL together with finish to disable.
+ * @param finish Cleanup callback paired with prepare, or NULL to disable.
+ * @param ctx Application context passed unchanged; may be NULL.
+ * @return HAL_OK; HAL_EINVAL for an incomplete pair; HAL_ENOMEM on lock
+ * failure.
+ */
+hal_status_t hal_eeprom_set_flash_write_callbacks(
+    hal_eeprom_flash_prepare_callback_t prepare,
+    hal_eeprom_flash_finish_callback_t finish, void *ctx);
 
 /**
  * @brief Write one byte to EEPROM.

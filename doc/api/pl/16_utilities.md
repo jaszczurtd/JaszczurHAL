@@ -123,6 +123,9 @@ float hal_pid_controller_get_tf(hal_pid_controller_t controller);
 
 void  hal_pid_controller_update_time(hal_pid_controller_t controller, float time_divider);
 float hal_pid_controller_update(hal_pid_controller_t controller, float error);
+hal_status_t hal_pid_controller_step_ex(hal_pid_controller_t controller,
+    float error, float measurement, float dt_s, float integral_deadband,
+    hal_pid_terms_t *terms);
 void  hal_pid_controller_set_output_limits(hal_pid_controller_t controller, float min_output, float max_output);
 void  hal_pid_controller_reset(hal_pid_controller_t controller);
 void  hal_pid_controller_set_direction(hal_pid_controller_t controller, hal_pid_direction_t direction);
@@ -145,11 +148,51 @@ uzupełniające się mechanizmy:
 
 1. **Sztywne ograniczenie całki** - `setMaxIntegral()` /
    `hal_pid_controller_set_max_integral()` ogranicza `|integral|`.
-2. **Wstrzymanie całkowania przy nasyceniu** - regulator nie zwiększa całki,
-   gdy wyjście osiągnęło ograniczenie w kierunku uchybu (tj. wyjście ≥ max
-   i uchyb > 0 albo wyjście ≤ min i uchyb < 0). Zapobiega to dalszemu
-   narastaniu całki po osiągnięciu limitu wyjścia bez konieczności ręcznego
-   dobierania jej ograniczenia.
+2. **Wstrzymanie całkowania przy nasyceniu** - regulator pomija zmianę całki,
+   która pogłębiłaby nasycenie wyjścia. Starsze `update()` sprawdza poprzednie
+   wyjście i znak `Ki * error * dt`: dodatni przy górnym limicie, ujemny przy
+   dolnym. Uwzględnia to również ujemne Ki i kierunek BACKWARD.
+
+**Obliczanie kolejnego kroku regulatora**
+
+Użyj hal_pid_controller_step_ex(), gdy aplikacja samodzielnie mierzy czas między kolejnymi krokami regulatora. Przekaż ten czas w sekundach.
+
+Człon różniczkujący D jest obliczany na podstawie zmian wartości mierzonej, a nie zmian błędu regulacji. W pierwszym kroku po zresetowaniu regulatora wartość tego członu wynosi zero.
+
+Strefa nieczułości dotyczy wyłącznie członu całkującego I. Błąd mieszczący się w tej strefie nie zmienia zgromadzonej całki, ale też jej nie zeruje. Przy przekraczaniu granicy strefy wartość błędu używana do całkowania zmienia się bez skoku. Człon proporcjonalny P nadal uwzględnia pełną wartość błędu, również wewnątrz tej strefy.
+
+Regulator pomija zmianę całki, jeżeli w danym kroku pogłębiłaby ona przekroczenie dolnego lub górnego limitu wyjścia. Dzięki temu całka nie narasta w kierunku, który odsuwałby wyjście jeszcze dalej od dopuszczalnego zakresu.
+
+**Wyniki i ograniczenia wyjścia**
+
+Funkcja zapisuje w strukturze hal_pid_terms_t wartości członów P, I i D, ich sumę przed zastosowaniem ograniczeń oraz wynik po ograniczeniu do dopuszczalnego zakresu. Osobne flagi informują o nasyceniu przy dolnym i górnym limicie. Ich stan wynika z porównania wyjścia z limitami, a nie ze znaku błędu regulacji.
+
+Jeżeli aplikacja dodaje sterowanie wyprzedzające (feedforward), przelicza sygnał sterujący zależnie od napięcia lub wymusza jego minimalną wartość na dalszym etapie sterowania, uwzględnij te operacje przy ustawianiu limitów korekcji PID.
+
+**Wymagania i obsługa błędów**
+
+Uchwyt regulatora i wskaźnik do struktury wynikowej nie mogą mieć wartości NULL.
+
+Wartości wejściowe i współczynniki regulatora muszą być skończone - nie mogą być NaN ani nieskończonością. Czas kroku musi być większy od zera. Parametr określający strefę nieczułości, stała czasowa filtra i limit całki muszą być nieujemne.
+
+Ustaw oba limity wyjścia, tak aby tworzyły poprawny zakres, albo pozostaw oba nieustawione. Nie można ustawić tylko jednego z nich.
+
+Dla nieprawidłowych argumentów lub ustawień funkcja zwraca HAL_EINVAL. Przepełnienie podczas obliczeń powoduje zwrócenie HAL_EOVERFLOW. W obu przypadkach stan regulatora i zawartość struktury wynikowej pozostają bez zmian.
+
+Przed przełączeniem między hal_pid_controller_step_ex() a starszym API, które oblicza człon D ze zmian błędu regulacji, zresetuj regulator. Dotyczy to przełączania w obu kierunkach.
+
+**Częstotliwość wywołań**
+
+update_time() nadal wyznacza krok czasu, dzieląc upływ czasu wyrażony w milisekundach przez ustawiony dzielnik. Nie uruchamia regulatora cyklicznie ani nie ustala odstępów między jego wywołaniami. Za częstotliwość wywołań odpowiada aplikacja.
+
+Pierwszy odstęp jest liczony od utworzenia regulatora, a reset rozpoczyna pomiar
+od nowa. Znaczniki czasu są odejmowane jako `uint32_t`, przed konwersją do float,
+więc długi uptime nie zmniejsza rozdzielczości krótkich odstępów. Pomiar obsługuje
+zawinięcie licznika, jeśli odstęp jest krótszy niż 2^32 ms. Dzielnik 1000 daje czas
+w sekundach; zerowy dzielnik lub niedodatni wynik zachowuje starsze zachowanie:
+krok 0,001.
+
+Poniższy przykład wywołuje regulator co 10 ms, ale do obliczeń przekazuje rzeczywiście zmierzony czas od poprzedniego kroku. W aplikacji należy uzupełnić odczyt czujnika i wskazać pin służący do sterowania silnikiem.
 
 **Przykład: sterowanie prędkością silnika**
 
@@ -159,6 +202,7 @@ uzupełniające się mechanizmy:
 static hal_pid_controller_t speed_pid;
 static float target_rpm = 1000.0f;
 static float current_rpm = 0.0f;
+static uint32_t last_control_us;
 
 void app_start(void) {
     speed_pid = hal_pid_controller_create_with_gains(
@@ -168,15 +212,20 @@ void app_start(void) {
         200.0f    // max_integral
     );
     hal_pid_controller_set_output_limits(speed_pid, 0.0f, 255.0f);
-    hal_pid_controller_update_time(speed_pid, 1.0f / 10.0f);
+    last_control_us = hal_micros();
 }
 
 void app_task0(void) {
+    const uint32_t now = hal_micros();
+    if (!hal_elapsed_u32(now, last_control_us, 10000U)) return;
+    const float dt_s = (float)(uint32_t)(now - last_control_us) * 0.000001f;
+    last_control_us = now;
     current_rpm = read_encoder_rpm();
     float error = target_rpm - current_rpm;
-    float pwm = hal_pid_controller_update(speed_pid, error);
-
-    hal_pwm_write(MOTOR_PWM_PIN, (uint32_t)pwm);
+    hal_pid_terms_t terms;
+    if (hal_pid_controller_step_ex(speed_pid, error, current_rpm, dt_s,
+                                   5.0f, &terms) != HAL_OK) return;
+    hal_pwm_write(MOTOR_PWM_PIN, (uint32_t)terms.output);
 
     if (hal_pid_controller_is_error_stable(speed_pid, error, 10.0f, 5)) {
         hal_deb("Speed stable at %.1f RPM", current_rpm);

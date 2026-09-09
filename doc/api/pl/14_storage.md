@@ -134,6 +134,23 @@ może zająć kilka sekund.
 (`MOCK_EEPROM_BUF_SIZE`, domyślnie 32768). Mock nie powiela obsługi
 `hal_eeprom_*`.
 
+**Przygotowanie zapisu flash:** Jeśli aplikacja musi zatrzymać własne zasoby
+na czas fizycznego zapisu EEPROM we flash, rejestruje parę przez
+`hal_eeprom_set_flash_write_callbacks(prepare, finish, ctx)`. Backend wywołuje
+`prepare(ctx)` po walidacji i zapisuje tylko po otrzymaniu `HAL_OK`.
+Następnie wywołuje `finish(ctx)`, także po błędzie zapisu. Jeśli prepare
+zakończy się błędem, musi sam wycofać swoje częściowe działania; finish nie
+zostanie wtedy wywołany. Odczyty, przygotowanie danych w RAM, commit bez zmian
+i zapisy do zewnętrznego EEPROM pomijają te callbacki.
+
+Oba callbacki działają w zadaniu i na rdzeniu wywołującym, pod muteksem EEPROM.
+Nie mogą ponownie wywoływać EEPROM/KV ani brać blokady zajętej przez wątek
+czekający na EEPROM. Finish nie zmienia wyniku zapisu; aplikacja odpowiada
+za obsługę nieudanego wznowienia zasobów. Dwa callbacki NULL wyłączają parę.
+Niekompletna para daje `HAL_EINVAL`, a błąd alokacji `HAL_ENOMEM`.
+Rejestracja pozostaje aktywna po inicjalizacji EEPROM. Dotychczasowa
+koordynacja flash nadal obowiązuje; callbacki są opcjonalne i domyślnie wyłączone.
+
 **Współbieżność:** Obie rodziny implementacji obsługują współbieżne wywołania z wielu rdzeni.
 Wspólny muteks chroni wybór backendu, aktywny rozmiar, callbacki, ograniczanie zakresu i
 każdą operację. Transfery `HAL_EEPROM_AT24C256` dodatkowo używają muteksu magistrali
@@ -283,6 +300,12 @@ bool hal_kv_bank_looks_present(uint16_t bank_addr, uint16_t bank_size);
 - **Zależności:** `hal_eeprom`, `hal_crc`, `hal_sync`, `hal_serial`.
 
 **Podział pamięci:** Każdy bank musi zajmować niezależny region. Domyślna rezerwacja RP wynosi 8192 bajty: dwa sektory po 4096 bajtów. STM32G474 rezerwuje 4096 bajtów: dwie strony po 2048 bajtów. W EEPROM banki zajmują dwa nienakładające się zakresy logiczne. `HAL_KV_PUBLISH_SIZE` określa rozmiar prefiksu zapisywanego na końcu (domyślnie 256 bajtów), a `HAL_KV_MAX_BANK_SIZE` ogranicza statyczny bufor roboczy w RAM. Niestandardowy obszar flash musi dać się podzielić na dwa banki wyrównane do granic kasowania.
+
+`hal_kv_init_ex()` odrzuca nieprawidłowe wyrównanie kasowania/programowania
+przez `HAL_EINVAL` przed odczytem banków lub próbą zapisu, także gdy istniejący
+bank ma poprawny nagłówek. Mock hostowy wymaga geometrii RP dla
+`HAL_EEPROM_FLASH`/`HAL_EEPROM_DEFAULT`, geometrii STM32 dla
+`HAL_EEPROM_STM32_FLASH` i adresowania bajtowego dla `HAL_EEPROM_AT24C256`.
 
 **Współbieżność:** API obsługuje współbieżne wywołania z wielu rdzeni. Wszystkie
 operacje chroni muteks singletona utworzony przez atomowy mechanizm jednokrotnej

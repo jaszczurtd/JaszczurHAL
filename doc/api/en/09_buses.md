@@ -144,6 +144,11 @@ transaction paths call backend end, deassert CS and unlock the bus.
 
 Configure an I2C controller, read and write data, and scan for devices with 7-bit addresses. Addressing modes and achievable clock rates depend on the configuration and platform.
 
+On RP targets, `HAL_RP_I2C_TIMEOUT_US` sets the timeout per read/write phase
+(default 100000 us, range 1..1000000). Set it in `hal_project_config.h`
+according to the transfer size and allowed clock stretching. A combined
+write/read has two separately bounded phases; waiting for a bus lock is separate.
+
 ```c
 #include <hal/i2c/hal_i2c.h>
 

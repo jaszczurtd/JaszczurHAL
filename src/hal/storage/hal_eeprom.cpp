@@ -14,9 +14,14 @@ namespace {
 
 const jh_eeprom_provider_ops_t *s_provider = nullptr;
 uint16_t s_size = 0u;
+uint16_t s_erase_size = 1u;
+uint16_t s_program_size = 1u;
 hal_mutex_t s_eeprom_mutex = nullptr;
 hal_eeprom_progress_callback_t s_progress_callback = nullptr;
 void *s_progress_ctx = nullptr;
+hal_eeprom_flash_prepare_callback_t s_flash_prepare = nullptr;
+hal_eeprom_flash_finish_callback_t s_flash_finish = nullptr;
+void *s_flash_ctx = nullptr;
 
 hal_mutex_t eeprom_mutex() { return jh_hal_mutex_create_once(&s_eeprom_mutex); }
 
@@ -47,6 +52,20 @@ hal_status_t combine_status(hal_status_t range, hal_status_t provider_status) {
     return range;
   }
   return provider_status == HAL_OK ? range : provider_status;
+}
+
+hal_status_t region_status(uint16_t addr, uint16_t len, uint16_t publish_size) {
+  const hal_status_t range = range_status(addr, len);
+  if (range != HAL_OK) {
+    return range;
+  }
+  if (len == 0u || publish_size == 0u || publish_size >= len ||
+      addr % s_erase_size != 0u || len % s_erase_size != 0u ||
+      addr % s_program_size != 0u || len % s_program_size != 0u ||
+      publish_size % s_program_size != 0u) {
+    return HAL_EINVAL;
+  }
+  return HAL_OK;
 }
 
 hal_status_t write_clipped(uint16_t addr, const uint8_t *data, uint16_t len) {
@@ -93,10 +112,15 @@ hal_status_t hal_eeprom_init(hal_eeprom_type_t type, uint16_t size,
 
   const jh_eeprom_provider_config_t config = {type, size, i2c_addr};
   jh_eeprom_provider_info_t info = {};
-  const hal_status_t status = provider->initialize(&config, &info);
+  hal_status_t status = provider->initialize(&config, &info);
+  if (status == HAL_OK && (info.erase_size == 0u || info.program_size == 0u)) {
+    status = HAL_ECONFIG;
+  }
   if (status == HAL_OK && info.size > 0u) {
     s_provider = provider;
     s_size = info.size;
+    s_erase_size = info.erase_size;
+    s_program_size = info.program_size;
   } else {
     s_provider = nullptr;
     s_size = 0u;
@@ -124,6 +148,34 @@ hal_status_t hal_eeprom_write_byte(uint16_t addr, uint8_t val) {
       write_clipped(addr, &val, clipped_len(addr, 1u));
   hal_mutex_unlock(mutex);
   return combine_status(range, provider_status);
+}
+
+hal_status_t hal_eeprom_set_flash_write_callbacks(
+    hal_eeprom_flash_prepare_callback_t prepare,
+    hal_eeprom_flash_finish_callback_t finish, void *ctx) {
+  if ((prepare == nullptr) != (finish == nullptr)) {
+    return HAL_EINVAL;
+  }
+  hal_mutex_t mutex = eeprom_mutex();
+  if (mutex == nullptr) {
+    return HAL_ENOMEM;
+  }
+  hal_mutex_lock(mutex);
+  s_flash_prepare = prepare;
+  s_flash_finish = finish;
+  s_flash_ctx = ctx;
+  hal_mutex_unlock(mutex);
+  return HAL_OK;
+}
+
+hal_status_t jh_eeprom_flash_write_begin(void) {
+  return s_flash_prepare != nullptr ? s_flash_prepare(s_flash_ctx) : HAL_OK;
+}
+
+void jh_eeprom_flash_write_end(void) {
+  if (s_flash_finish != nullptr) {
+    s_flash_finish(s_flash_ctx);
+  }
 }
 
 uint8_t hal_eeprom_read_byte(uint16_t addr) {
@@ -239,12 +291,24 @@ hal_status_t jh_eeprom_replace_region(uint16_t addr, const uint8_t *data,
   }
   hal_mutex_t mutex = eeprom_mutex();
   hal_mutex_lock(mutex);
-  const hal_status_t range = range_status(addr, len);
+  const hal_status_t range = region_status(addr, len, publish_size);
   const hal_status_t status =
       range == HAL_OK
           ? s_provider->replace_region(addr, data, len, publish_size,
                                        s_progress_callback, s_progress_ctx)
           : range;
+  hal_mutex_unlock(mutex);
+  return status;
+}
+
+hal_status_t jh_eeprom_validate_region(uint16_t addr, uint16_t len,
+                                       uint16_t publish_size) {
+  hal_mutex_t mutex = eeprom_mutex();
+  if (mutex == nullptr) {
+    return HAL_ENOMEM;
+  }
+  hal_mutex_lock(mutex);
+  const hal_status_t status = region_status(addr, len, publish_size);
   hal_mutex_unlock(mutex);
   return status;
 }
@@ -289,6 +353,9 @@ void jh_eeprom_mock_reset_facade(void) {
   s_size = 0u;
   s_progress_callback = nullptr;
   s_progress_ctx = nullptr;
+  s_flash_prepare = nullptr;
+  s_flash_finish = nullptr;
+  s_flash_ctx = nullptr;
   hal_mutex_unlock(mutex);
   /* Force the singleton mutex through a real destroy so Helgrind/DRD can
    * observe the teardown path. Only the mock's hal_mock_eeprom_reset()

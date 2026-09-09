@@ -54,3 +54,7 @@ Use the shared generator runner after changing the feature or board registry:
 `HAL_CONFIG_VERBOSE` reports the final active registered flags after generated
 and contextual propagation. `HAL_DISABLE_ASSERTS` is the compatibility opt-out
 for assertions; assertions are enabled by default.
+
+RP I2C transfers use HAL_RP_I2C_TIMEOUT_US (default 100000, range 1..1000000)
+per read/write phase. Set it in hal_project_config.h; see doc/api/en/09_buses.md
+and doc/api/pl/09_buses.md for timing and locking limits.

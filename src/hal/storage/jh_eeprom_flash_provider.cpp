@@ -44,6 +44,8 @@ hal_status_t initialize(const jh_eeprom_provider_config_t *config,
   s_ready = true;
   out_info->type = s_backend->type;
   out_info->size = s_active_size;
+  out_info->erase_size = s_backend->erase_size;
+  out_info->program_size = s_backend->program_size;
   return HAL_OK;
 }
 
@@ -83,8 +85,13 @@ hal_status_t commit(hal_eeprom_progress_callback_t progress, void *ctx) {
   if (!s_dirty) {
     return HAL_OK;
   }
+  const hal_status_t prepare = jh_eeprom_flash_write_begin();
+  if (prepare != HAL_OK) {
+    return prepare;
+  }
   const hal_status_t status = s_backend->store(
       s_backend->context, s_backend->mirror, s_storage_size, progress, ctx);
+  jh_eeprom_flash_write_end();
   if (status == HAL_OK) {
     s_dirty = false;
   }
@@ -102,8 +109,13 @@ hal_status_t replace_region(uint16_t addr, const uint8_t *data, uint16_t len,
       addr > s_storage_size || len > s_storage_size - addr) {
     return HAL_EINVAL;
   }
+  const hal_status_t prepare = jh_eeprom_flash_write_begin();
+  if (prepare != HAL_OK) {
+    return prepare;
+  }
   const hal_status_t status = s_backend->replace_region(
       s_backend->context, addr, data, len, publish_size, progress, ctx);
+  jh_eeprom_flash_write_end();
   if (status == HAL_OK) {
     memcpy(s_backend->mirror + addr, data, len);
   }

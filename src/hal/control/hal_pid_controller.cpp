@@ -100,6 +100,16 @@ float hal_pid_controller_update(hal_pid_controller_t controller, float error) {
   return (pid != nullptr) ? pid->updatePIDcontroller(error) : 0.0f;
 }
 
+hal_status_t hal_pid_controller_step_ex(hal_pid_controller_t controller,
+                                        float error, float measurement,
+                                        float dt_s, float integral_deadband,
+                                        hal_pid_terms_t *terms) {
+  PIDController *pid = hal_pid_get(controller);
+  return pid != nullptr
+             ? pid->step(error, measurement, dt_s, integral_deadband, terms)
+             : HAL_EINVAL;
+}
+
 void hal_pid_controller_set_output_limits(hal_pid_controller_t controller,
                                           float min_output, float max_output) {
   PIDController *pid = hal_pid_get(controller);

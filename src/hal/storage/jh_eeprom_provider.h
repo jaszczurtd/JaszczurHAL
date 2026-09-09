@@ -19,6 +19,8 @@ typedef struct {
 typedef struct {
   hal_eeprom_type_t type;
   uint16_t size;
+  uint16_t erase_size;
+  uint16_t program_size;
 } jh_eeprom_provider_info_t;
 
 typedef struct {
@@ -52,7 +54,18 @@ typedef struct {
                                  uint16_t publish_size,
                                  hal_eeprom_progress_callback_t progress,
                                  void *ctx);
+  uint16_t erase_size;
+  uint16_t program_size;
 } jh_eeprom_flash_backend_t;
+
+/** Validate a publication range against the active provider without I/O. */
+hal_status_t jh_eeprom_validate_region(uint16_t addr, uint16_t len,
+                                       uint16_t publish_size);
+
+/** Run under the facade lock, after validation and before a physical write. */
+hal_status_t jh_eeprom_flash_write_begin(void);
+/** Pair with a successful begin, including when the physical write fails. */
+void jh_eeprom_flash_write_end(void);
 
 /** Replace one independent storage region and publish its prefix last. */
 hal_status_t jh_eeprom_replace_region(uint16_t addr, const uint8_t *data,

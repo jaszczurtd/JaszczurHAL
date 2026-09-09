@@ -1671,7 +1671,7 @@ target_compile_definitions(test_stm32_pwm_clock PRIVATE
     UNITY_INCLUDE_CONFIG_H
     HAL_ENABLE_UNITY
 )
-jh_enable_host_warnings(test_stm32_pwm_clock)
+jh_enable_host_warnings(test_stm32_pwm_clock ERRORS)
 add_test(NAME test_stm32_pwm_clock COMMAND test_stm32_pwm_clock)
 add_hal_test(test_hal_pwm)
 add_hal_test(test_hal_adc)
@@ -1976,6 +1976,29 @@ add_hal_test(test_at24c256_provider)
 add_hal_test(test_hal_rtc)
 add_hal_test(test_jh_calendar)
 add_hal_test(test_hal_kv)
+
+# Exercise production RP EEPROM/KV over RAM flash, without a device or SDK.
+add_library(test_rp_kv_storage_backend OBJECT
+    ${CMAKE_SOURCE_DIR}/src/hal/storage/hal_eeprom.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/storage/hal_kv.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/storage/jh_eeprom_flash_provider.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/rp2040/hal_eeprom.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/rp2040/drivers/flash/rp_flash_storage.cpp)
+target_include_directories(test_rp_kv_storage_backend PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/rp_flash ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(test_rp_kv_storage_backend PRIVATE
+    HAL_TARGET_RP2040=1 HAL_ENABLE_KV=1
+    HAL_BOARD_PROFILE_RP2040_PLUS_4MB=1
+    HAL_RP_FLASH_EEPROM_SIZE=32768 PICO_FLASH_SIZE_BYTES=4194304
+    JH_RP_FLASH_FAULT_INJECTION=1)
+jh_enable_host_warnings(test_rp_kv_storage_backend ERRORS)
+add_hal_test(test_rp_kv_storage)
+target_sources(test_rp_kv_storage PRIVATE
+    $<TARGET_OBJECTS:test_rp_kv_storage_backend>)
+target_include_directories(test_rp_kv_storage PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/rp_flash)
+target_compile_definitions(test_rp_kv_storage PRIVATE JH_RP_FLASH_FAULT_INJECTION=1)
+jh_enable_host_warnings(test_rp_kv_storage ERRORS)
 add_hal_test(test_hal_external_adc)
 add_hal_test(test_hal_gps)
 add_hal_test(test_hal_system)
@@ -1994,6 +2017,8 @@ add_test(NAME test_lodepng COMMAND test_lodepng)
 add_hal_test(test_SmartTimers)
 add_hal_test(test_hal_soft_timer)
 add_hal_test(test_pidController)
+target_sources(test_pidController PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/hal/control/hal_pid_controller.cpp)
 
 if(TARGET hal_freertos_posix)
     add_hal_freertos_posix_test(test_freertos_posix_runtime)
