@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the private Classic HID Host build and sanitized Zero 2 capture."""
+"""Validate the Classic HID Host build and sanitized Zero 2 parser data."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from source_assertions import source_has_fragment, source_section
 
 
 ROOT = Path(sys.argv[1]).resolve()
-FIXTURE_DIR = ROOT / "tests" / "hardware" / "bluetooth_gamepad"
+TEST_DATA_DIR = ROOT / "tests" / "fixtures" / "bluetooth_gamepad"
 
 
 def require(condition: bool, message: str) -> None:
@@ -24,7 +24,7 @@ def hex_bytes(value: str) -> bytes:
     return bytes.fromhex(value)
 
 
-capture_path = FIXTURE_DIR / "zero2_android_dinput.json"
+capture_path = TEST_DATA_DIR / "zero2_android_dinput.json"
 capture_text = capture_path.read_text(encoding="utf-8")
 capture = json.loads(capture_text)
 
@@ -503,105 +503,6 @@ require(
         btstack_cmake, '"-Wl,--wrap=btstack_memory_hci_connection_get"'
     ),
     "public HID builds do not enable the C10 pool high-water instrumentation",
-)
-
-verifier_path = FIXTURE_DIR / "verify_zero2.py"
-verifier = verifier_path.read_text(encoding="utf-8")
-for expected in (
-    "DISCONNECT_TIMEOUT_S = 60.0",
-    "RECONNECT_CYCLES = 5",
-    "RECONNECT_SETTLE_MS = 3_000",
-    "RECONNECT_TIMEOUT_S = 180.0",
-    "STABILITY_DURATION_MS = 30 * 60 * 1000",
-    'probe.command("DISCOVER")',
-    'probe.command("AUTHORIZE")',
-    'probe.command("DISCONNECT")',
-    '"--resume-stability"',
-    '"hostVerifierResumed"',
-    "health_counter",
-    '"gamepad": "unavailable"',
-    'DEFAULT_RESULT_PATH = Path(__file__).with_name("zero2_pico2w_c6_result.json")',
-    '"descriptorsRejected"',
-    '"droppedSnapshots"',
-    '"reportsRejected"',
-):
-    require(
-        source_has_fragment(verifier, expected),
-        f"C5 verifier is missing {expected}",
-    )
-require(
-    "known-pad reconnect in cycle" in verifier,
-    "C5 verifier is missing known-pad reconnect in cycle",
-)
-require(
-    all(
-        secret not in verifier
-        for secret in ("bd_addr_to_str", '"linkKey":', '"deviceAddress":')
-    ),
-    "C5 verifier exposes an address or key field",
-)
-
-result_path = FIXTURE_DIR / "zero2_pico2w_c5_result.json"
-if result_path.exists():
-    result_text = result_path.read_text(encoding="utf-8")
-    result = json.loads(result_text)
-    require(result["result"] == "pass", "stored C5 result is not a pass")
-    require(
-        result["capture"] == capture_path.name
-        and result["firmware"]["gamepad"] == "unavailable",
-        "stored C5 result is detached from the characterized fixture",
-    )
-    require(
-        re.search(r"(?i)(?:[0-9a-f]{2}:){5}[0-9a-f]{2}", result_text) is None,
-        "stored C5 result contains a Bluetooth device address",
-    )
-
-c6_result_path = FIXTURE_DIR / "zero2_pico2w_c6_result.json"
-if c6_result_path.exists():
-    c6_result_text = c6_result_path.read_text(encoding="utf-8")
-    c6_result = json.loads(c6_result_text)
-    require(c6_result["result"] == "pass", "stored C6 result is not a pass")
-    require(
-        c6_result["capture"] == capture_path.name
-        and c6_result["firmware"]["gamepad"] == "unavailable",
-        "stored C6 result is detached from the characterized fixture",
-    )
-    c6_parser = c6_result["parser"]
-    require(
-        c6_parser["descriptorLimit"] == 256
-        and c6_parser["reportLimit"] == 32
-        and c6_parser["queueCapacity"] == 16,
-        "stored C6 result does not use the frozen parser limits",
-    )
-    require(
-        c6_parser["descriptorsAccepted"] == 1
-        and c6_parser["reportsAccepted"] > 0
-        and c6_parser["descriptorsRejected"] == 0
-        and c6_parser["reportsRejected"] == 0
-        and c6_parser["droppedSnapshots"] == 0,
-        "stored C6 result reports a parser failure",
-    )
-    require(
-        re.search(r"(?i)(?:[0-9a-f]{2}:){5}[0-9a-f]{2}", c6_result_text)
-        is None,
-        "stored C6 result contains a Bluetooth device address",
-    )
-
-manifest = json.loads(
-    (FIXTURE_DIR / ".vscode" / "jaszczurhal.project.json").read_text(
-        encoding="utf-8"
-    )
-)
-require(
-    manifest["target"] == "rp2350-arm"
-    and manifest["board"] == "pico2w"
-    and manifest["example"]["boards"]["rp2350-arm"] == "pico2w",
-    "Classic HID fixture no longer defaults to Pico 2 W",
-)
-variant = manifest["example"]["variants"][0]
-require(
-    variant["extraDefines"] == ["JH_BLUETOOTH_CLASSIC_HID_PROBE"],
-    "fixture must use only the private Classic HID selector",
 )
 
 public_hal = (ROOT / "src" / "hal" / "hal.h").read_text(encoding="utf-8")

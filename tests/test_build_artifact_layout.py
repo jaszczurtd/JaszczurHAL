@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the repository-wide managed build artifact layout."""
+"""Validate the managed build artifact layout used by automated workflows."""
 
 from __future__ import annotations
 
@@ -24,28 +24,6 @@ def load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-hardware_reference = (ROOT / "doc" / "api" / "en" / "03_build_tests.md").read_text(
-    encoding="utf-8"
-)
-for fixture_dir in sorted((ROOT / "tests" / "hardware").iterdir()):
-    if not fixture_dir.is_dir():
-        continue
-    readme_path = fixture_dir / "README.md"
-    require(
-        readme_path.is_file(),
-        f"{fixture_dir.name}: local README link is missing",
-    )
-    readme = readme_path.read_text(encoding="utf-8")
-    require(
-        "../../../doc/api/en/03_build_tests.md#" in readme,
-        f"{fixture_dir.name}: README does not link to the central fixture reference",
-    )
-    require(
-        f"`tests/hardware/{fixture_dir.name}`" in hardware_reference,
-        f"{fixture_dir.name}: fixture is missing from the central reference index",
-    )
-
-
 for example_dir in examples_dispatcher.selected_example_dirs([]):
     manifest_path = example_dir / ".vscode" / "jaszczurhal.project.json"
     manifest = load_json(manifest_path)
@@ -62,117 +40,6 @@ for example_dir in examples_dispatcher.selected_example_dirs([]):
     require(
         cache.get("JH_ARTIFACT_DIR") == "${buildDir}",
         f"{example_dir.name}: final artifacts do not follow buildDir",
-    )
-
-for fixture in (
-    "rp_usb_cdc_echo",
-    "rp_usb_multicore",
-    "rp_freertos_smp",
-    "rp_flash_transaction",
-    "rp_storage",
-    "rp_sdlogger",
-    "rp_ota",
-    "bluetooth_stage1",
-    "bluetooth_gamepad",
-    "bluetooth_stream",
-):
-    manifest = load_json(
-        ROOT
-        / "tests"
-        / "hardware"
-        / fixture
-        / ".vscode"
-        / "jaszczurhal.project.json"
-    )
-    require(
-        manifest.get("buildDir") == f"${{jhRoot}}/.build/hardware/{fixture}",
-        f"{fixture}: hardware artifacts escape the central .build tree",
-    )
-    require(
-        manifest.get("cmake", {}).get("cache", {}).get("JH_ARTIFACT_DIR")
-        == "${buildDir}",
-        f"{fixture}: final artifacts do not follow buildDir",
-    )
-
-bluetooth_stream_manifest = load_json(
-    ROOT
-    / "tests"
-    / "hardware"
-    / "bluetooth_stream"
-    / ".vscode"
-    / "jaszczurhal.project.json"
-)
-hardware_matrix = bluetooth_stream_manifest.get("example", {}).get(
-    "hardwareMatrix"
-)
-require(
-    isinstance(hardware_matrix, list),
-    "bluetooth_stream: example.hardwareMatrix is missing",
-)
-require(
-    all(
-        isinstance(entry, dict)
-        and set(entry) == {"target", "board", "runtime"}
-        and all(isinstance(value, str) for value in entry.values())
-        for entry in hardware_matrix
-    ),
-    "bluetooth_stream: hardwareMatrix entries must be exact string tuples",
-)
-expected_bluetooth_stream_matrix = {
-    ("rp2040", "picow", "baremetal"),
-    ("rp2040", "picow", "freertos"),
-    ("rp2040", "pico-rm2", "baremetal"),
-    ("rp2040", "pico-rm2", "freertos"),
-    ("rp2350-arm", "pico2w", "baremetal"),
-    ("rp2350-arm", "pico2w", "freertos"),
-    ("stm32g474", "nucleo-g474re-pim730", "baremetal"),
-    ("stm32g474", "nucleo-g474re-pim730", "freertos"),
-}
-actual_bluetooth_stream_matrix = {
-    (entry["target"], entry["board"], entry["runtime"])
-    for entry in hardware_matrix
-}
-require(
-    len(hardware_matrix) == len(expected_bluetooth_stream_matrix)
-    and actual_bluetooth_stream_matrix == expected_bluetooth_stream_matrix,
-    "bluetooth_stream: hardwareMatrix must declare exactly the eight gate images",
-)
-
-bluetooth_stream_variants = {
-    variant.get("id"): variant
-    for variant in bluetooth_stream_manifest.get("example", {}).get(
-        "variants", []
-    )
-    if isinstance(variant, dict)
-}
-expected_display_variants = {
-    "display": {
-        "module": "bluetooth_stream_display",
-        "defines": {
-            "JHBL5_ENABLE_DISPLAY=1",
-            "HAL_ENABLE_ILI9341",
-            "HAL_DISPLAY_ILI9341",
-        },
-    },
-    "display-freertos": {
-        "module": "bluetooth_stream_display_freertos",
-        "defines": {
-            "JHBL5_ENABLE_DISPLAY=1",
-            "HAL_ENABLE_ILI9341",
-            "HAL_DISPLAY_ILI9341",
-            "HAL_ENABLE_FREERTOS",
-        },
-    },
-}
-for variant_id, expected_variant in expected_display_variants.items():
-    variant = bluetooth_stream_variants.get(variant_id)
-    require(
-        isinstance(variant, dict)
-        and variant.get("module") == expected_variant["module"]
-        and variant.get("targets") == ["stm32g474"]
-        and set(variant.get("extraDefines", []))
-        == expected_variant["defines"],
-        f"bluetooth_stream:{variant_id} display load contract changed",
     )
 
 from board_registry import tooling_target_registry

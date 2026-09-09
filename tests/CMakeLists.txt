@@ -657,7 +657,7 @@ target_compile_definitions(test_bluetooth_gamepad_parser PRIVATE
     JH_BLUETOOTH_CLASSIC_HID_PROBE=1
     HAL_ENABLE_UNITY
     UNITY_INCLUDE_CONFIG_H
-    JH_ZERO2_FIXTURE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/hardware/bluetooth_gamepad/zero2_android_dinput.json"
+    JH_ZERO2_FIXTURE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/bluetooth_gamepad/zero2_android_dinput.json"
 )
 target_link_options(test_bluetooth_gamepad_parser PRIVATE
     "-Wl,--wrap=malloc"
@@ -813,6 +813,8 @@ add_test(NAME test_system_architecture_metadata_contract
 )
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+option(JH_ENABLE_HARDWARE_FIXTURE_CHECKS
+    "Register host-side checks of manually invoked hardware fixtures" OFF)
 add_test(NAME test_feature_registry
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_feature_registry.py
@@ -919,11 +921,18 @@ add_test(NAME test_bluetooth_classic_hid
         ${CMAKE_CURRENT_SOURCE_DIR}/test_bluetooth_classic_hid.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
-add_test(NAME test_bluetooth_classic_hci_trace
-    COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_CURRENT_SOURCE_DIR}/test_bluetooth_classic_hci_trace.py
-        ${CMAKE_CURRENT_SOURCE_DIR}/..
-)
+if(JH_ENABLE_HARDWARE_FIXTURE_CHECKS)
+    add_test(NAME test_bluetooth_classic_hci_trace
+        COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_bluetooth_classic_hci_trace.py
+            ${CMAKE_CURRENT_SOURCE_DIR}/..
+    )
+    add_test(NAME test_hardware_fixture_files
+        COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_hardware_fixture_files.py
+            ${CMAKE_CURRENT_SOURCE_DIR}/..
+    )
+endif()
 add_test(NAME test_component_manager
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_component_manager.py
@@ -934,11 +943,13 @@ add_test(NAME test_esp_idf_phase0
         ${CMAKE_CURRENT_SOURCE_DIR}/test_esp_idf_phase0.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
-add_test(NAME test_esp32s3_phase1
-    COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_CURRENT_SOURCE_DIR}/test_esp32s3_phase1.py
-        ${CMAKE_CURRENT_SOURCE_DIR}/..
-)
+if(JH_ENABLE_HARDWARE_FIXTURE_CHECKS)
+    add_test(NAME test_esp32s3_phase1
+        COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_esp32s3_phase1.py
+            ${CMAKE_CURRENT_SOURCE_DIR}/..
+    )
+endif()
 add_test(NAME test_esp32s3_phase2
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_esp32s3_phase2.py

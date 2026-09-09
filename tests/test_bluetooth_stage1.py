@@ -310,38 +310,6 @@ for expected in (
         f"fake HCI coverage is missing {expected}",
     )
 
-manifest = json.loads(
-    (
-        ROOT
-        / "tests/hardware/bluetooth_stage1/.vscode/jaszczurhal.project.json"
-    ).read_text(encoding="utf-8")
-)
-require(
-    manifest["example"]["targets"]
-    == ["stm32g474", "rp2350-arm", "rp2040"],
-    "hardware probe does not cover all Stage 1 targets",
-)
-require(
-    manifest["example"]["boards"]
-    == {
-        "stm32g474": "nucleo-g474re-pim730",
-        "rp2350-arm": "pico2w",
-        "rp2040": "picow",
-    },
-    "hardware probe selects unexpected boards",
-)
-variants = {item["id"]: item for item in manifest["example"]["variants"]}
-require(set(variants) == {"bluetooth", "wifi-only"}, "memory baseline is incomplete")
-require(
-    variants["bluetooth"].get("extraDefines")
-    == ["JH_BLUETOOTH_STAGE1_PROBE"],
-    "Bluetooth sources are not explicitly feature-gated",
-)
-require(
-    "JH_BLUETOOTH_STAGE1_PROBE"
-    not in variants["wifi-only"].get("extraDefines", []),
-    "WiFi-only baseline enables the Bluetooth probe",
-)
 
 public_hal = (ROOT / "src/hal/hal.h").read_text(encoding="utf-8")
 require(

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Host-side contract tests for the ESP32-S3 Phase 2 integration."""
+"""Host-side tests for the ESP32-S3 Phase 2 integration."""
 
 from __future__ import annotations
 
@@ -20,7 +20,6 @@ from source_assertions import (
 
 ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).parents[1]
 SCRIPTS = ROOT / "scripts"
-FIXTURE = ROOT / "tests" / "hardware" / "esp32s3_phase2"
 sys.path.insert(0, str(SCRIPTS))
 
 
@@ -34,45 +33,6 @@ def load_module(name: str, path: Path):
 
 
 esp_idf = load_module("jh_phase2_build_esp_idf", SCRIPTS / "build_esp_idf.py")
-verifier = load_module(
-    "jh_esp32s3_phase2_verifier", FIXTURE / "verify_phase2.py"
-)
-
-
-def valid_report() -> dict[str, int | str]:
-    return {
-        "sequence": 7,
-        "target": "esp32s3",
-        "board": "waveshare-esp32-s3-zero",
-        "core0": 0,
-        "core1": 1,
-        "task1": 12,
-        "system": 1,
-        "sync": 1,
-        "gpio": 1,
-        "irq": 2,
-        "irq_isr": 1,
-        "adc": 1,
-        "adc_low": 120,
-        "adc_high": 3900,
-        "uart": 1,
-        "i2c": 1,
-        "i2c_found": 0,
-        "spi": 1,
-        "timer": 1,
-        "timer_count": 3,
-        "timer_isr": 1,
-        "serial_rx": 1,
-        "stack_guard": 1,
-        "heap": 185000,
-        "temp_centi": 3175,
-        "status": "PASS",
-    }
-
-
-def encode_report(report: dict[str, int | str]) -> bytes:
-    payload = " ".join(f"{key}={value}" for key, value in report.items())
-    return f"I (123) stdout: {verifier.REPORT_PREFIX}{payload}\r\n".encode()
 
 
 def resolve_model(repo_root: Path, project: Path) -> dict:
@@ -88,47 +48,27 @@ def resolve_model(repo_root: Path, project: Path) -> dict:
     )
 
 
-class Phase2ReportTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.expected = verifier.load_expected_contract(
-            "esp32s3", "waveshare-esp32-s3-zero"
-        )
-
-    def test_report_parser_and_validator_accept_complete_pass(self) -> None:
-        report = verifier.parse_report(encode_report(valid_report()))
-        self.assertEqual(report, valid_report())
-        verifier.validate_report(report, self.expected)
-
-    def test_parser_ignores_unrelated_or_malformed_lines(self) -> None:
-        self.assertIsNone(verifier.parse_report(b"ordinary log output\n"))
-        self.assertIsNone(
-            verifier.parse_report(b"JH_ESP32_PHASE2 sequence=1 malformed\n")
-        )
-
-    def test_validator_rejects_failed_subsystem(self) -> None:
-        report = valid_report()
-        report["spi"] = 0
-        with self.assertRaisesRegex(RuntimeError, "subsystem checks failed"):
-            verifier.validate_report(report, self.expected)
-
-    def test_validator_rejects_wrong_task_core(self) -> None:
-        report = valid_report()
-        report["core1"] = 0
-        with self.assertRaisesRegex(RuntimeError, "task affinity mismatch"):
-            verifier.validate_report(report, self.expected)
-
-    def test_validator_rejects_insufficient_irq_timer_or_adc_signal(self) -> None:
-        invalid = {
-            "IRQ": ("irq", 1, "callbacks did not repeat"),
-            "timer": ("timer_count", 2, "callbacks did not repeat"),
-            "ADC": ("adc_high", valid_report()["adc_low"] + 256, "not distinguishable"),
-        }
-        for name, (field, value, diagnostic) in invalid.items():
-            with self.subTest(name=name):
-                report = valid_report()
-                report[field] = value
-                with self.assertRaisesRegex(RuntimeError, diagnostic):
-                    verifier.validate_report(report, self.expected)
+def create_phase2_project(project: Path) -> None:
+    project.mkdir(parents=True)
+    (project / "app.c").write_text(
+        "void app_start(void) {}\n"
+        "void app_task0(void) {}\n"
+        "void app_task1(void) {}\n",
+        encoding="utf-8",
+    )
+    (project / "hal_project_config.h").write_text(
+        "#pragma once\n"
+        "#define HAL_ENABLE_APP_TASK1 1\n"
+        "#define HAL_ENABLE_I2C 1\n"
+        "#define HAL_ENABLE_SPI 1\n"
+        "#define HAL_ENABLE_STACK_GUARD 1\n"
+        "#define HAL_ENABLE_UART 1\n"
+        "#define HAL_FREERTOS_TASK0_CORE 0\n"
+        "#define HAL_FREERTOS_TASK1_CORE 1\n"
+        "#define HAL_FREERTOS_TASK0_STACK 4096u\n"
+        "#define HAL_FREERTOS_TASK1_STACK 4096u\n",
+        encoding="utf-8",
+    )
 
 
 class Phase2RegistryAndBuildModelTests(unittest.TestCase):
@@ -209,8 +149,11 @@ class Phase2RegistryAndBuildModelTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertIn(f"#define {name} UINT64_C({value})", config)
 
-    def test_phase2_fixture_resolves_feature_driven_source_and_dependency_graph(self) -> None:
-        model = resolve_model(ROOT, FIXTURE)
+    def test_phase2_features_resolve_source_and_dependency_graph(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="jh-esp32-phase2-project-") as text:
+            project = Path(text) / "project"
+            create_phase2_project(project)
+            model = resolve_model(ROOT, project)
         self.assertEqual(
             model["resolvedFeatures"],
             [
@@ -254,10 +197,8 @@ class Phase2RegistryAndBuildModelTests(unittest.TestCase):
             cold_root = Path(text)
             shutil.copytree(ROOT / "boards", cold_root / "boards")
             shutil.copytree(ROOT / "config", cold_root / "config")
-            cold_project = cold_root / "tests/hardware/esp32s3_phase2"
-            cold_project.mkdir(parents=True)
-            for name in ("app.cpp", "hal_project_config.h"):
-                shutil.copy2(FIXTURE / name, cold_project / name)
+            cold_project = cold_root / "project"
+            create_phase2_project(cold_project)
 
             self.assertFalse((cold_root / "third_party/esp-idf").exists())
             model = resolve_model(cold_root, cold_project)
@@ -438,31 +379,6 @@ class Phase2BackendLifecycleTests(unittest.TestCase):
         self.assertTrue(source_has_fragment(source, "if (result != ESP_OK)"))
         self.assertTrue(source_has_fragment(source, "s_initialized = all_handlers_installed();"))
         self.assertFalse(source_has_fragment(source, "(void)esp_ipc_call_blocking"))
-
-    def test_hardware_fixture_uses_and_releases_dedicated_timer_pool(self) -> None:
-        source = (FIXTURE / "app.cpp").read_text(encoding="utf-8")
-        self.assertTrue(
-            source_has_fragment(source, "s_timer_pool = hal_timer_pool_create_auto(1u);")
-        )
-        self.assertTrue(source_has_fragment(source, "hal_timer_create(s_timer_pool"))
-        self.assertTrue(
-            source_has_fragment(source, "hal_timer_pool_destroy(s_timer_pool);")
-        )
-        self.assertFalse(
-            source_has_fragment(source, "hal_timer_pool_create_auto(1u) != nullptr")
-        )
-
-    def test_hardware_fixture_requires_implemented_stack_guard(self) -> None:
-        source = (FIXTURE / "app.cpp").read_text(encoding="utf-8")
-        config = (FIXTURE / "hal_project_config.h").read_text(encoding="utf-8")
-        self.assertTrue(source_has_fragment(config, "#define HAL_ENABLE_STACK_GUARD 1"))
-        self.assertTrue(source_has_fragment(source, "hal_stack_guard_init_ex()"))
-        self.assertFalse(
-            source_has_fragment(source, "hal_enter_bootloader() == HAL_EUNSUPPORTED")
-        )
-        self.assertFalse(
-            source_has_fragment(source, "hal_stack_guard_init_ex() == HAL_EUNSUPPORTED")
-        )
 
     def test_compile_fixture_retains_destructive_boot_entry_without_running_it(self) -> None:
         source = (
