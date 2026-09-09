@@ -15,12 +15,14 @@ extern "C" {
 /** @brief Opaque, generation-checked TLS client handle. */
 typedef struct hal_tls_client_impl_t *hal_tls_client_t;
 
-/** @brief Execution policy for the private TLS provider. */
+/** @brief Describe how the application schedules TLS engine progress. */
 typedef enum {
-  /** Caller repeatedly invokes hal_tls_client_poll_ex(); no call owns a task.
-   */
+  /** The caller advances the TLS engine with hal_tls_client_poll_ex().
+   * Initial DNS and TCP setup in hal_tls_client_connect_ex() remains
+   * partially blocking. */
   HAL_TLS_EXECUTION_POLL = 0,
-  /** Finite blocking I/O is allowed from a dedicated worker/task context. */
+  /** The caller runs finite blocking operations in an application-owned task.
+   * JaszczurHAL does not create or schedule that task. */
   HAL_TLS_EXECUTION_BOUNDED_WORKER = 1
 } hal_tls_execution_model_t;
 
@@ -37,8 +39,13 @@ typedef enum {
 
 typedef struct {
   hal_tls_execution_model_t execution_model;
+  /** Timeout for each TCP endpoint connection attempt. DNS uses the timeout
+   * of the selected network implementation. */
   uint32_t transport_timeout_ms;
+  /** Timeout for TLS handshake and close-notify progress after the TCP
+   * transport is open. It does not bound the complete connect call. */
   uint32_t operation_timeout_ms;
+  /** Maximum BearSSL transport steps performed by one polling call. */
   uint16_t poll_step_budget;
 } hal_tls_client_config_t;
 
@@ -110,7 +117,8 @@ typedef struct hal_tls_security_config_t {
   const uint8_t *server_public_key_sha256;
 } hal_tls_security_config_t;
 
-/** Fill a client configuration with bounded defaults. */
+/** Fill a client configuration with finite TCP-attempt and TLS-progress
+ * defaults. */
 hal_status_t hal_tls_client_config_init(hal_tls_client_config_t *config);
 
 hal_status_t hal_tls_client_create_ex(const hal_tls_client_config_t *config,
@@ -121,6 +129,27 @@ hal_status_t hal_tls_client_configure_server_ex(hal_tls_client_t client,
 hal_status_t
 hal_tls_client_configure_security_ex(hal_tls_client_t client,
                                      const hal_tls_security_config_t *security);
+
+/**
+ * @brief Open the transport and start the TLS handshake.
+ *
+ * In both execution modes this function calls the configured time and entropy
+ * callbacks, resolves the hostname synchronously, and tries resolved TCP
+ * endpoints in sequence. Each TCP attempt may block for
+ * @ref hal_tls_client_config_t::transport_timeout_ms. DNS follows the timeout
+ * of the selected network implementation. These steps are not covered by
+ * @ref hal_tls_client_config_t::operation_timeout_ms, which starts after the
+ * TCP transport opens.
+ *
+ * `HAL_TLS_EXECUTION_POLL` limits only subsequent BearSSL progress through
+ * @ref hal_tls_client_poll_ex. Call this function from an application-owned
+ * task when the calling loop cannot tolerate DNS or TCP setup delays.
+ * `HAL_TLS_EXECUTION_BOUNDED_WORKER` does not create that task. Cancellation
+ * is observed after synchronous transport setup completes.
+ *
+ * @return HAL_OK if the handshake completes immediately, HAL_EAGAIN when
+ *         polling must continue, or a HAL error from setup or BearSSL.
+ */
 hal_status_t hal_tls_client_connect_ex(hal_tls_client_t client);
 hal_status_t hal_tls_client_poll_ex(hal_tls_client_t client);
 hal_status_t hal_tls_client_read_ex(hal_tls_client_t client, void *buffer,
