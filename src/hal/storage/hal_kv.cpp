@@ -684,6 +684,10 @@ hal_status_t hal_kv_get_u32_ex(uint16_t key, uint32_t *out_value) {
     hal_mutex_unlock(s_kv_mutex);
     return HAL_EUNINIT;
   }
+  if (s_read_through && s_dirty) {
+    hal_mutex_unlock(s_kv_mutex);
+    return HAL_EBUSY;
+  }
   const int index = index_find(key);
   if (index < 0 || s_index[index].type != KV_REC_TYPE_U32 ||
       s_index[index].len != sizeof(uint32_t)) {
@@ -745,6 +749,10 @@ hal_status_t hal_kv_get_blob_ex(uint16_t key, uint8_t *out, uint16_t out_size,
   if (!s_ready) {
     hal_mutex_unlock(s_kv_mutex);
     return HAL_EUNINIT;
+  }
+  if (s_read_through && s_dirty) {
+    hal_mutex_unlock(s_kv_mutex);
+    return HAL_EBUSY;
   }
   const int index = index_find(key);
   if (index < 0 || s_index[index].type != KV_REC_TYPE_BLOB) {

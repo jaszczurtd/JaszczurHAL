@@ -424,7 +424,11 @@ publikacji. Po każdym przypadku stanowisko ponownie ładuje kopię EEPROM z
 fizycznej pamięci flash, tak jak podczas nowego uruchomienia, po czym wspólny
 `hal_kv` wybiera bank. Pierwsze trzy przypadki muszą odzyskać poprzednią
 wartość, a późny błąd po kompletnej publikacji - nową. Test obejmuje także
-odroczony commit dwóch kluczy.
+odroczony commit dwóch kluczy oraz regresję trybu odczytu z kontrolą nośnika
+(ang. read-through). Gdy obraz RAM zawiera niezatwierdzone zmiany, funkcje
+odczytujące muszą zwrócić `HAL_EBUSY` i wyzerować wyjściową wartość skalarną
+albo długość bloba. Po zatwierdzeniu oraz po ponownym wczytaniu danych
+z fizycznej pamięci flash muszą zwrócić nową wartość skalarną i blob.
 
 Stanowisko kasuje i przejmuje całą natywną rezerwację EEPROM/KV. Nie uruchamiaj
 go na płytce, której trwałe dane z końca flash muszą zostać zachowane.
@@ -450,7 +454,9 @@ python3 tests/hardware/rp_kv_power_loss/verify_kv_power_loss.py \
 ```
 
 Dla Pico 2 użyj `--target rp2350-arm --board pico2` i przekaż ten sam target
-weryfikatorowi. Fizyczne testy RP2040 oraz RP2350 ARM przeszły 2026-09-02.
+weryfikatorowi. Fizyczne testy utraty zasilania na RP2040 oraz RP2350 ARM
+przeszły 2026-09-02. Rozszerzony test regresji odczytu z kontrolą nośnika
+przeszedł na fizycznym RP2040 Pico 2026-09-09.
 
 <a id="sprzętowy-test-natywnego-magazynu-danych-na-rp"></a>
 
@@ -1923,6 +1929,7 @@ Tabela pokazuje zakres reprezentatywnych zestawów i grup testów. Nie zastępuj
 | `test_hal_pga2311` | Walidacja statusu/konfiguracji PGA2311, wyczerpanie puli, wstrzyknięte błędy SPI i ponowienie, zapisy ramek, konwersja dB/kod, zachowanie wyciszenia programowego/sprzętowego |
 | `test_irsmall_decoder_driver` | Dekodowanie ramek NEC/NECx/SIRC/Samsung IRsmallDecoder, dekodowanie tabeli przejść RC5 wraz z rozszerzonym bitem polecenia, raportowanie powtórzenia/przytrzymania, reset timeoutu i ścieżki wyłączenia/włączenia przerwania |
 | `test_hal_i2c` | ścieżki transferu i statusu magistral bus0/bus1, bezpośrednie funkcje pomocnicze odczytu, blokowanie, inicjalizacja i deinicjalizacja, czyszczenie magistrali, ograniczone wyniki skanowania, działanie trybu zliczania i przepełnienia oraz pokrycie callbacku dla każdego adresu |
+| `test_i2c_recursive_lock` | wielokrotne zagnieżdżenie blokady przez tego samego właściciela, kontrola właściciela, obsługa przepełnienia licznika i serializacja równoległego dostępu w implementacjach sprzętowych |
 | `test_hal_rgb_led` | init/init_ex zorientowane na status, nieprawidłowa konfiguracja, błąd alokacji/transportu, ponowienie, ograniczenie jasności, wyłączenie i strażnik przed inicjalizacją |
 | `test_hal_display` | API wyświetlacza zwracające status, obsługiwane funkcje i reguły surowego zapisu, formatowanie i rozmiar tekstu, presety, rysowanie, inicjalizacja SSD1306, stan transmisji strumieniowej i asynchronicznego DMA, walidacja oraz wstrzyknięte błędy I/O backendu |
 | `test_hal_can` | wysyłanie/odbieranie, bufor pierścieniowy, strażnik null-data, ograniczenie ładunku, wybór backendu, walidacja ramki classic-kontra-FD, API filtrów, `hal_can_process_all`, `hal_can_create_with_retry`, `hal_can_encode_temp_i8` |

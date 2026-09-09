@@ -111,6 +111,12 @@ bool hal_kv_commit(void);
  * that only care about the last successfully published generation should
  * leave it at the default.
  *
+ * Read-through cannot address records in a dirty RAM image because their
+ * offsets belong to a bank that has not been published yet. In that state,
+ * get operations return HAL_EBUSY (and the bool wrappers return false).
+ * Call hal_kv_commit_ex() first, or disable read-through to read the staged
+ * values from RAM.
+ *
  * The mode is a KV-wide setting, not per-call; it persists across
  * hal_kv_init_ex() the same way hal_kv_set_auto_commit() does.
  *
@@ -161,8 +167,10 @@ bool hal_kv_bank_looks_present(uint16_t bank_addr, uint16_t bank_size);
  * distinguish invalid arguments (HAL_EINVAL), a read miss (HAL_ENOENT), a
  * caller buffer too small for a stored blob (HAL_EOVERFLOW), statistics on a
  * store that is not ready (HAL_EUNINIT) and backend write/commit failures
- * (HAL_EIO). The legacy bool API cannot separate an uninitialised store from a
- * genuine miss; the status API reports them as HAL_EUNINIT and HAL_ENOENT.
+ * (HAL_EIO). Read-through getters also report HAL_EBUSY while the RAM image
+ * contains unpublished changes. The legacy bool API cannot separate an
+ * uninitialised store from a genuine miss; the status API reports them as
+ * HAL_EUNINIT and HAL_ENOENT.
  */
 hal_status_t hal_kv_init_ex(uint16_t base_addr, uint16_t size_bytes);
 hal_status_t hal_kv_set_u32_ex(uint16_t key, uint32_t value);

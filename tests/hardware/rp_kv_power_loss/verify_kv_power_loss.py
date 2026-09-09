@@ -9,10 +9,13 @@ import serial
 
 
 RESULT_PATTERN = re.compile(
-    rb"^JHKV2 target=(rp2040|rp2350-arm) "
+    rb"^JHKV3 target=(rp2040|rp2350-arm) "
     rb"invalidate=(-?\d+)/(\d+) body=(-?\d+)/(\d+) "
     rb"verify=(-?\d+)/(\d+) publish=(-?\d+)/(\d+) "
-    rb"deferred=(-?\d+)/(\d+)/(\d+)\n$"
+    rb"deferred=(-?\d+)/(\d+)/(\d+) "
+    rb"readthrough=(-?\d+)/(-?\d+)/(\d+)/(-?\d+)/(\d+)/"
+    rb"(-?\d+)/(-?\d+)/(\d+)/(-?\d+)/(\d+)/(\d+)/"
+    rb"(-?\d+)/(-?\d+)/(\d+)/(-?\d+)/(\d+)/(\d+)\n$"
 )
 
 
@@ -55,7 +58,36 @@ def main() -> int:
     values = match.groups()
     target = values[0].decode("ascii")
     numeric = tuple(int(value) for value in values[1:])
-    expected = (-4, 100, -4, 100, -4, 100, -4, 200, 1, 11, 22)
+    expected = (
+        -4,
+        100,
+        -4,
+        100,
+        -4,
+        100,
+        -4,
+        200,
+        1,
+        11,
+        22,
+        1,
+        -2,
+        0,
+        -2,
+        0,
+        1,
+        1,
+        20,
+        1,
+        4,
+        1,
+        1,
+        1,
+        20,
+        1,
+        4,
+        1,
+    )
     if target != args.target or numeric != expected:
         raise RuntimeError(
             f"KV recovery mismatch: target={target!r}, values={numeric!r}, "

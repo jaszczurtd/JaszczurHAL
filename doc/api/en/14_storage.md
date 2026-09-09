@@ -292,6 +292,8 @@ value is unchanged, avoiding unnecessary flash wear.
 
 `hal_kv_set_read_through(true)` enables one additional EEPROM record read per call. A current medium failure then produces a `hal_status_t` error instead of being hidden by a valid RAM copy. This setting applies to the whole module and, like `hal_kv_set_auto_commit()`, survives `hal_kv_init_ex()`. Enable it when application decisions, such as disabling writes, depend on the medium being operational now. Keep the default when only the last successfully published generation matters.
 
+Read-through operations return `HAL_EBUSY` while the RAM image contains changes that have not been published. Their record offsets describe the staged image, not the currently active EEPROM bank. Call `hal_kv_commit_ex()` before reading, or disable read-through to read the staged values from RAM. Compatibility wrappers returning `bool` report this condition as `false`.
+
 **Example: storing integers and binary values by key**
 ```c
 #include <hal/storage/hal_kv.h>

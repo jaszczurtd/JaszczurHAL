@@ -8,5 +8,8 @@ This fixture writes controlled incomplete KV banks to native RP flash after
 erase, body program, and body verification. It reloads the EEPROM mirror from
 physical flash to model a reboot, verifies fallback to the previous complete
 bank, and verifies recovery of a fully published newer bank after a late
-reported error. The build-only fault-injection switch must never be enabled in
+reported error. It also verifies that read-through getters reject a dirty RAM
+image with `HAL_EBUSY`, return zeroed scalar outputs and blob lengths, and read
+the newly committed values both before and after reloading from physical
+flash. The build-only fault-injection switch must never be enabled in
 production firmware.

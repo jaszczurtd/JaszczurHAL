@@ -451,9 +451,13 @@ zatrzymania/resetu i unieważnia stan związany z poprzednim trybem.
   `hal_i2c_init()` go zeruje.
 
 **Współbieżność:** Backendy sprzętowe chronią transfery wewnętrznym
-`hal_mutex_t` przypisanym do magistrali. Użyj `hal_i2c_lock()`
-i `hal_i2c_unlock()`, jeśli sekcja krytyczna ma objąć również bezpośrednie
-wywołania backendu lub zewnętrznej biblioteki. `hal_i2c_init*()`
+`hal_mutex_t` przypisanym do magistrali. Wspólna wewnętrzna funkcja pomocnicza
+aktualizuje atomowo właściciela blokady i poziom zagnieżdżenia, dlatego
+współbieżne zadania lub rdzenie nie odczytują niezabezpieczonego stanu. Użyj
+`hal_i2c_lock()` i `hal_i2c_unlock()`, jeśli sekcja krytyczna ma objąć
+również bezpośrednie wywołania implementacji sprzętowej lub zewnętrznej
+biblioteki.
+`hal_i2c_init*()`
 i `hal_i2c_deinit*()` rekonfigurują wspólny obiekt magistrali, dlatego podczas
 konfiguracji i zwalniania zasobów aplikacja musi serializować te wywołania.
 Implementacja testowa nie synchronizuje dostępu współbieżnego.

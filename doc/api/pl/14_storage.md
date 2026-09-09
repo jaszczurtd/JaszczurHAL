@@ -301,6 +301,8 @@ pamięci flash.
 
 `hal_kv_set_read_through(true)` włącza dodatkowy odczyt rekordu z EEPROM przy każdym wywołaniu. Bieżąca awaria nośnika jest wtedy zgłaszana jako błąd `hal_status_t`, zamiast zostać ukryta przez poprawną kopię w RAM. Ustawienie dotyczy całego modułu i, podobnie jak `hal_kv_set_auto_commit()`, pozostaje zachowane po `hal_kv_init_ex()`. Włącz je, gdy decyzje aplikacji, na przykład blokada zapisów, zależą od bieżącej sprawności nośnika. Pozostaw tryb domyślny, gdy potrzebna jest tylko ostatnia poprawnie zatwierdzona generacja.
 
+Odczyt z kontrolą nośnika zwraca `HAL_EBUSY`, dopóki obraz w RAM zawiera niezatwierdzone zmiany. Przesunięcia rekordów opisują wtedy przygotowywany obraz, a nie aktywny bank w EEPROM. Przed odczytem wywołaj `hal_kv_commit_ex()` albo wyłącz kontrolę nośnika, aby odczytać przygotowane wartości z RAM. Funkcje zachowane dla zgodności, które zwracają `bool`, zgłaszają ten stan jako `false`.
+
 **Przykład: zapis liczb całkowitych i danych binarnych pod kluczami**
 ```c
 #include <hal/storage/hal_kv.h>

@@ -4,10 +4,9 @@
 #include "hal/core/hal_config.h"
 #ifdef HAL_ENABLE_I2C
 
-#include "hal/core/hal_mutex_once.h"
 #include "hal/i2c/hal_i2c.h"
 #include "hal/i2c/hal_i2c_internal.h"
-#include "hal/system/hal_sync.h"
+#include "hal/i2c/jh_i2c_recursive_lock.h"
 #include "hal/system/hal_system.h"
 
 #include <string.h>
@@ -41,9 +40,7 @@ typedef struct {
   uint32_t bus_clear_count;
   uint8_t sda_pin;
   uint8_t scl_pin;
-  hal_mutex_t mutex;
-  uintptr_t lock_owner;
-  uint32_t lock_depth;
+  jh_i2c_recursive_lock_t lock;
 #ifdef JH_STM32G474_HW
   uint32_t hw_base;
   uint32_t hw_rcc_mask;
@@ -83,11 +80,6 @@ static inline bool i2c_state_is_10bit(const i2c_bus_state_t *st) {
 }
 #endif
 
-static void i2c_ensure_mutex(uint8_t bus) {
-  i2c_bus_state_t *st = i2c_state(bus);
-  (void)jh_hal_mutex_create_once(&st->mutex);
-}
-
 static uintptr_t i2c_current_owner_token(void) {
 #if defined(HAL_ENABLE_FREERTOS)
   TaskHandle_t task = xTaskGetCurrentTaskHandle();
@@ -98,41 +90,24 @@ static uintptr_t i2c_current_owner_token(void) {
 }
 
 static void i2c_lock_state(i2c_bus_state_t *st) {
-  const uintptr_t owner = i2c_current_owner_token();
-  if ((st->lock_depth > 0u) && (st->lock_owner == owner)) {
-    st->lock_depth++;
-    return;
+  const bool acquired =
+      jh_i2c_recursive_lock_acquire(&st->lock, i2c_current_owner_token());
+  if (!acquired) {
+    HAL_ASSERT(false, "hal_i2c_lock: mutex allocation or depth overflow");
   }
-
-  hal_mutex_lock(st->mutex);
-  st->lock_owner = owner;
-  st->lock_depth = 1u;
 }
 
 static void i2c_unlock_state(i2c_bus_state_t *st) {
-  const uintptr_t owner = i2c_current_owner_token();
-  HAL_ASSERT((st->lock_depth > 0u) && (st->lock_owner == owner),
-             "hal_i2c_unlock: bus is not locked by this context");
-  if ((st->lock_depth == 0u) || (st->lock_owner != owner)) {
-    return;
-  }
-
-  st->lock_depth--;
-  if (st->lock_depth == 0u) {
-    st->lock_owner = 0u;
-    hal_mutex_unlock(st->mutex);
+  const bool released =
+      jh_i2c_recursive_lock_release(&st->lock, i2c_current_owner_token());
+  if (!released) {
+    HAL_ASSERT(false, "hal_i2c_unlock: bus is not locked by this context");
   }
 }
 
-static void i2c_lock_bus(uint8_t bus) {
-  i2c_ensure_mutex(bus);
-  i2c_lock_state(i2c_state(bus));
-}
+static void i2c_lock_bus(uint8_t bus) { i2c_lock_state(i2c_state(bus)); }
 
-static void i2c_unlock_bus(uint8_t bus) {
-  i2c_ensure_mutex(bus);
-  i2c_unlock_state(i2c_state(bus));
-}
+static void i2c_unlock_bus(uint8_t bus) { i2c_unlock_state(i2c_state(bus)); }
 
 static hal_status_t i2c_status_from_result(uint8_t result) {
   switch (result) {
@@ -473,7 +448,9 @@ static hal_status_t stm32_i2c_init_bus_common(uint8_t bus, uint8_t sda_pin,
   if (!i2c_bus_valid(bus)) {
     return HAL_EINVAL;
   }
-  i2c_ensure_mutex(bus);
+  if (!jh_i2c_recursive_lock_init(&s_i2c[bus].lock)) {
+    return HAL_ENOMEM;
+  }
 
   i2c_bus_state_t *st = i2c_state(bus);
   st->rx_len = 0;
@@ -486,9 +463,6 @@ static hal_status_t stm32_i2c_init_bus_common(uint8_t bus, uint8_t sda_pin,
   st->bus_clear_count = 0u;
   st->sda_pin = sda_pin;
   st->scl_pin = scl_pin;
-  if (st->lock_depth == 0u) {
-    st->lock_owner = 0u;
-  }
 #ifdef JH_STM32G474_HW
   st->hw_base = 0u;
   st->hw_rcc_mask = 0u;
@@ -564,7 +538,6 @@ hal_status_t hal_i2c_set_clock_bus(uint8_t bus, uint32_t clock_hz) {
   if (!i2c_bus_valid(bus)) {
     return HAL_EINVAL;
   }
-  i2c_ensure_mutex(bus);
   i2c_bus_state_t *st = i2c_state(bus);
   i2c_lock_state(st);
   st->clock_hz = (clock_hz == 0u) ? HAL_I2C_CLOCK_STANDARD_HZ : clock_hz;

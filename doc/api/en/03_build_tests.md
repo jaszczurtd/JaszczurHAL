@@ -422,7 +422,11 @@ invalidation, body programming, body verification, or publication. After each
 case the fixture reloads the EEPROM mirror from physical flash, just as a new
 boot would, and asks shared `hal_kv` to select a bank. The first three cases
 must recover the previous value; the late error after complete publication
-must recover the new value. A deferred two-key commit is checked as well.
+must recover the new value. The fixture also checks a deferred two-key commit
+and the read-through regression. Read-through getters must return `HAL_EBUSY`
+and zero their scalar output or blob length while the RAM image contains
+unpublished changes. After a commit and after reloading from physical flash,
+they must return the newly published scalar and blob.
 
 The probe erases and owns the complete native EEPROM/KV reservation. Do not run
 it on a board whose persistent tail must be preserved. The fault-injection
@@ -448,7 +452,9 @@ python3 tests/hardware/rp_kv_power_loss/verify_kv_power_loss.py \
 ```
 
 Use `--target rp2350-arm --board pico2` for Pico 2 and pass the same target to
-the verifier. Physical RP2040 and RP2350 ARM runs passed on 2026-09-02.
+the verifier. Physical RP2040 and RP2350 ARM power-loss runs passed on
+2026-09-02. The extended read-through regression passed on a physical RP2040
+Pico on 2026-09-09.
 
 <a id="rp-native-storage-hardware-probe"></a>
 
@@ -1846,6 +1852,7 @@ The table summarizes representative suites and groups. It does not replace the c
 | `test_hal_pga2311` | PGA2311 status/config validation, pool exhaustion, injected SPI failures and retry, frame writes, dB/code conversion, soft/hardware mute behavior |
 | `test_irsmall_decoder_driver` | IRsmallDecoder NEC/NECx/SIRC/Samsung frame decode, RC5 transition-table decode including extended command bit, repeat/held reporting, timeout reset and interrupt disable/enable paths |
 | `test_hal_i2c` | bus0/bus1 transfer and status paths, direct read helpers, locking, init/deinit, bus clear, bounded scan results, count-only/overflow behavior and per-address callback coverage |
+| `test_i2c_recursive_lock` | recursive depth, owner validation, overflow handling and concurrent serialization of the hardware-backend lock helper |
 | `test_hal_rgb_led` | status-first init/init_ex, invalid config, allocation/transport failure, retry, brightness clamp, off and pre-init guard |
 | `test_hal_display` | status-first display API, capabilities/raw-write rules, text sizing/formatting, presets, drawing, SSD1306 init, streaming/async DMA state, validation and injected backend-I/O failures |
 | `test_hal_can` | send/receive, ring buffer, null-data guard, payload clamp, backend selection, classic-vs-FD frame validation, filter API, `hal_can_process_all`, `hal_can_create_with_retry`, `hal_can_encode_temp_i8` |

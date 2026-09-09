@@ -69,7 +69,8 @@ extern "C" {
  * Mutex lifecycle: hal_i2c_init()/hal_i2c_init_bus() creates the per-bus
  * mutex early in normal use. Runtime calls keep an atomic create-once fallback
  * for defensive use before init, so two FreeRTOS tasks or hardware cores
- * cannot accidentally create different locks for the same bus.
+ * cannot accidentally create different locks for the same bus. Hardware
+ * backends also update the recursive owner and nesting depth atomically.
  *
  * Init order: hal_i2c_init()/hal_i2c_init_bus() is still required to
  * configure pins, clock and start the selected hardware controller before real
