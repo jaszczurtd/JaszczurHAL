@@ -943,12 +943,12 @@
 #define HAL_TLS_HOSTNAME_MAX_LENGTH 253u
 #endif
 
-/** Finite timeout used by the bounded-worker BearSSL BSD callbacks. */
+/** Default timeout for each TCP connection attempt made by TLS. */
 #ifndef HAL_TLS_DEFAULT_TRANSPORT_TIMEOUT_MS
 #define HAL_TLS_DEFAULT_TRANSPORT_TIMEOUT_MS 5000u
 #endif
 
-/** Default upper bound for a complete public TLS operation. */
+/** Default timeout for TLS handshake and close-notify progress. */
 #ifndef HAL_TLS_DEFAULT_OPERATION_TIMEOUT_MS
 #define HAL_TLS_DEFAULT_OPERATION_TIMEOUT_MS 15000u
 #endif

@@ -1766,9 +1766,25 @@ hal_tls_client_close_ex(client);
 `hal_tls_client_config_init()` wybiera tryb pracy oparty na odpytywaniu,
 5-sekundowy timeout transportu, 15-sekundowy timeout operacji oraz cztery
 kroki backendu na każde wywołanie funkcji odpytywania. Aplikacja może wybrać
-`HAL_TLS_EXECUTION_BOUNDED_WORKER`, jeśli wszystkie blokujące wywołania
-z ograniczonym czasem wykonuje dedykowane zadanie. Oba timeouty muszą mieć
-niezerową, skończoną wartość.
+`HAL_TLS_EXECUTION_BOUNDED_WORKER`, jeśli wszystkie wywołania, które mogą
+czekać przez ograniczony czas, wykonuje osobne zadanie aplikacji. JaszczurHAL
+nie tworzy ani nie uruchamia tego zadania. Oba timeouty muszą mieć niezerową,
+skończoną wartość.
+
+Pole `execution_model` nie zmienia sposobu, w jaki
+`hal_tls_client_connect_ex()` rozpoczyna połączenie. W obu trybach funkcja
+wywołuje callbacki czasu i entropii, synchronicznie rozwiązuje nazwę hosta,
+a następnie próbuje połączyć się kolejno ze zwróconymi adresami TCP. Każda
+próba TCP może wstrzymać wywołujące zadanie na czas `transport_timeout_ms`;
+DNS korzysta z timeoutu wybranej implementacji sieci. Pomiar
+`operation_timeout_ms` zaczyna się dopiero po otwarciu transportu TCP, więc
+nie ogranicza czasu całego wywołania. Tryb `POLL` wraz z
+`poll_step_budget` ogranicza wyłącznie późniejszą pracę BearSSL wykonywaną
+przez `hal_tls_client_poll_ex()`.
+
+Jeżeli pętla wywołująca nie może czekać na DNS lub połączenie TCP, wywołuj
+`hal_tls_client_connect_ex()` w osobnym zadaniu aplikacji. Biblioteka sprawdza
+żądanie anulowania dopiero po zakończeniu synchronicznego otwierania transportu.
 
 Konfiguracja bezpieczeństwa wymaga co najmniej jednej kotwicy zaufania RSA
 lub EC oraz callbacków czasu i entropii. `hal_tls_trust_anchor_from_der_ex()`

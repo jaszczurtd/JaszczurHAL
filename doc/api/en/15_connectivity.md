@@ -1687,8 +1687,23 @@ hal_tls_client_close_ex(client);
 `hal_tls_client_config_init()` selects poll execution, a 5-second finite
 transport timeout, a 15-second operation timeout, and four provider steps per
 poll. Applications may select `HAL_TLS_EXECUTION_BOUNDED_WORKER` when a
-dedicated worker owns all finite blocking calls. Both timeout fields must
-remain finite and non-zero.
+task created by the application makes all finite blocking calls. JaszczurHAL
+does not create or schedule that task. Both timeout fields must remain finite
+and non-zero.
+
+The execution model does not change transport setup in
+`hal_tls_client_connect_ex()`. In both modes this function calls the configured
+time and entropy callbacks, resolves the hostname synchronously, and tries the
+resolved TCP endpoints in sequence. Each TCP attempt may block for
+`transport_timeout_ms`; DNS uses the timeout of the selected network
+implementation. `operation_timeout_ms` starts only after the TCP transport
+opens, so it does not limit the complete call. The `POLL` setting and
+`poll_step_budget` limit only later BearSSL progress through
+`hal_tls_client_poll_ex()`.
+
+Call `hal_tls_client_connect_ex()` from an application-owned task when the
+calling loop cannot tolerate DNS or TCP setup delays. Cancellation is observed
+after synchronous transport setup completes.
 
 Security configuration requires at least one RSA or EC trust anchor plus time
 and entropy callbacks. `hal_tls_trust_anchor_from_der_ex()` decodes a DER CA
