@@ -592,12 +592,6 @@ run_logged "${LOG_ROOT}/jh_examples_rp2040_native_build.log" \
         --target rp2040 --gate --jobs "${JOBS}"
 pass "RP2040 example gate set built successfully; Gate 8 covers both RP2350 ISAs."
 
-info "Building native RP USB-multicore and SDLogger parity fixtures..."
-run_logged "${LOG_ROOT}/jh_rp_native_parity_fixtures.log" \
-    "${SCRIPT_DIR}/scripts/build_rp_native_parity_fixtures.sh" \
-        --jobs "${JOBS}"
-pass "Native RP parity fixtures built for all target/runtime combinations."
-
 info "Building STM32G474 examples through dispatcher-backed VS Code manifests..."
 run_logged "${LOG_ROOT}/jh_examples_stm32g474_build.log" \
     "${SCRIPT_DIR}/scripts/examples_dispatcher.py" build \
@@ -620,7 +614,7 @@ echo "  cppcheck:         PASS"
 echo "  clang-tidy:       PASS"
 echo "  PMD CPD:          PASS (C/C++ >= 100, scripts/Python >= 50 tokens)"
 echo "  Target builds:    PASS (native Pico SDK + STM32G474 + ESP32-S3/ESP-IDF)"
-echo "  Examples builds:  PASS (RP2040 + STM32G474 gate sets; RP2350 probes)"
+echo "  Examples builds:  PASS (RP2040 + STM32G474 gate sets)"
 echo ""
 echo "  Generated artifacts:"
 while IFS= read -r report_line; do

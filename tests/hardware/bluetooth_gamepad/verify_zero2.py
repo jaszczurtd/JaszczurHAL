@@ -13,7 +13,12 @@ from typing import Callable
 import serial
 
 
-FIXTURE_PATH = Path(__file__).with_name("zero2_android_dinput.json")
+FIXTURE_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "fixtures"
+    / "bluetooth_gamepad"
+    / "zero2_android_dinput.json"
+)
 DEFAULT_RESULT_PATH = Path(__file__).with_name("zero2_pico2w_c6_result.json")
 SNAPSHOT_PREFIX = "JHBT5-SNAPSHOT "
 ACK_PREFIX = "JHBT5-ACK "

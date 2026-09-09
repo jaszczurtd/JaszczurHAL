@@ -25,7 +25,7 @@ Run commands from the repository root unless a section states otherwise. Use `--
 | Operate a firmware project | `vscode/entry/jh-vscode <action> --project <dir>` on Unix or `vscode/entry/jh-vscode.cmd ...` on Windows | Provides the stable build, upload, monitor, board-selection, IntelliSense, and clean CLI used by VS Code projects. |
 | Build or flash an ESP-IDF project | `python3 scripts/build_esp_idf.py <action> --project <dir>` | Runs the `build`, `artifacts`, or `flash` action; resolves the ESP target/board metadata; prepares the pinned SDK on demand; and validates the relocatable multi-image manifest. |
 | Build checked-in examples | `scripts/examples_dispatcher.py build --target <target>` | Builds example manifests through the same `jh-vscode` and CMake dispatcher used by firmware projects. |
-| Build native RP parity fixtures | `scripts/build_rp_native_parity_fixtures.sh` | Builds USB multicore and SDLogger probes for all supported native target/runtime combinations. |
+| Build native RP parity fixtures manually | `scripts/build_rp_native_parity_fixtures.sh` | Builds USB multicore and SDLogger probes for all supported native target/runtime combinations. |
 
 <a id="artifact-policy"></a>
 
@@ -183,8 +183,7 @@ are:
    scripts;
 8. STM32, RP2040/RP2350, native FreeRTOS, RP feature-profile, and clean
    ESP32-S3/ESP-IDF builds with artifact validation;
-9. every declared RP example, native parity fixture builds, and STM32
-   examples.
+9. every declared RP example and the STM32 examples.
 
 The script removes only its managed `.build/gate`, `.build/examples`, and
 `.build/tests` trees at startup. It exits on the first failed gate.
@@ -317,9 +316,9 @@ Builds `tests/hardware/rp_usb_multicore` and
 - bare-metal and FreeRTOS on every target.
 
 It cleans only the two managed fixture build trees below `.build/hardware/`.
-`--jobs N` controls CMake parallelism. The script is a compile gate; running
-the corresponding Python verifiers still requires physical boards and, for
-SDLogger, an SPI SD card.
+`--jobs N` controls CMake parallelism. Run this helper explicitly; neither
+`runalltests.sh` nor CI invokes it. The corresponding Python verifiers require
+physical boards and, for SDLogger, an SPI SD card.
 
 ### `scripts/lib/build_artifacts.sh`
 

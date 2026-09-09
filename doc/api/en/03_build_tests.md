@@ -214,10 +214,15 @@ coverage in addition to JaszczurHAL's generated-consumer fixture.
 
 Device tests use the same VS Code tooling as user applications. Their outputs go in `.build/hardware/`:
 
+The default `runalltests.sh`, CTest configuration, and CI do not read or build
+this firmware. Run the commands in this section explicitly when the required
+devices are available. Optional host-side checks of fixture-specific files can
+be registered with `-DJH_ENABLE_HARDWARE_FIXTURE_CHECKS=ON`.
+
 | Fixture | Coverage |
 |---|---|
 | `tests/hardware/bluetooth_stage1` | Internal pre-API CYW43/BTstack controller, advertising, static GATT and WiFi-only memory baseline on Pico W and STM32G474/PIM730. |
-| `tests/hardware/bluetooth_gamepad` | Sanitized 8BitDo Zero 2 Android D-input descriptor/report capture and the private Classic HID Host gamepad parser probe for Pico 2 W. |
+| `tests/hardware/bluetooth_gamepad` | Private Classic HID Host gamepad parser probe for Pico 2 W, using the sanitized 8BitDo Zero 2 Android D-input descriptor/report data from `tests/fixtures/bluetooth_gamepad`. |
 | `tests/hardware/bluetooth_classic_hid_device` | Private Pico W Classic HID mouse used to validate the public generic HID Host on a second Pico radio. |
 | `tests/hardware/bluetooth_classic_hci_trace` | Private privacy-preserving raw HCI inquiry trace and CYW43 transport/clock diagnostics for Pico W and Pico 2 W. |
 | `tests/hardware/bluetooth_observer` | Public passive Observer scan, bounded report queue and Teltonika/iBeacon/Eddystone BLE parsing on Pico W, Pico 2 W and STM32G474/PIM730. |
@@ -936,8 +941,9 @@ the result does not claim persistence across reset.
 ### Bluetooth Classic HID gamepad probe
 
 `tests/hardware/bluetooth_gamepad` owns the private pre-API Classic HID Host
-probe and the sanitized `zero2_android_dinput.json` capture. The capture keeps
-the 137-byte report descriptor, PnP identity, SDP metadata, all twelve input
+probe. The sanitized
+`tests/fixtures/bluetooth_gamepad/zero2_android_dinput.json` test data keeps the
+137-byte report descriptor, PnP identity, SDP metadata, all twelve input
 states, the undeclared trailing input byte, and a repeated raw report. It omits
 Bluetooth addresses, link keys, host identity, and USB serial numbers.
 
@@ -959,9 +965,9 @@ report IDs, duplicate mapped usages, and queue overflow are reported through
 bounded diagnostics. Repeated reports that do not change the state do not add
 another snapshot.
 
-`test_bluetooth_gamepad_parser` uses the same sanitized capture as the hardware
-probe. It covers the captured reports, descriptor-driven layouts, idempotent
-input, reconnect state clearing, malformed/truncated input, unknown report IDs
+`test_bluetooth_gamepad_parser` uses the sanitized data independently of the
+hardware fixture. It covers the captured reports, descriptor-driven layouts,
+idempotent input, reconnect state clearing, malformed/truncated input, unknown report IDs
 and usages, duplicate usages, queue overflow, and the absence of dynamic
 allocation during parser operation.
 

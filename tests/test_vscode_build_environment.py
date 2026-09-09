@@ -72,36 +72,52 @@ require(
     "ESP32-S3 tooling did not derive USB identity from board.programming",
 )
 
-esp32s3_project = ROOT / "tests" / "hardware" / "esp32s3_phase1"
-esp32s3_config_dump_output = io.StringIO()
-esp32s3_config_dump_args = runtime.build_parser().parse_args(
-    ["config-dump", "--project", str(esp32s3_project), "--json"]
-)
-with redirect_stdout(esp32s3_config_dump_output):
-    require(
-        runtime.command_config_dump(esp32s3_config_dump_args) == 0,
-        "ESP32-S3 config-dump failed",
+with tempfile.TemporaryDirectory(prefix="jh-esp32s3-config-dump-") as temporary_text:
+    esp32s3_project = Path(temporary_text) / "project"
+    manifest_dir = esp32s3_project / ".vscode"
+    manifest_dir.mkdir(parents=True)
+    (manifest_dir / "jaszczurhal.project.json").write_text(
+        json.dumps(
+            {
+                "schemaVersion": 1,
+                "project": "ESP32-S3 config dump test",
+                "module": "esp32s3_config_dump_test",
+                "target": "esp32s3",
+                "board": "waveshare-esp32-s3-zero",
+            }
+        ),
+        encoding="utf-8",
     )
-esp32s3_config_dump = json.loads(esp32s3_config_dump_output.getvalue())
-require(
-    esp32s3_config_dump["toolchain"] == "esp-idf"
-    and esp32s3_config_dump["_sources"]["espIdf"]
-    == "registry:esp32s3.build.provider"
-    and esp32s3_config_dump["identity"]
-    == {"enabled": True, "usbVid": 0x303A, "usbPid": 0x1001}
-    and esp32s3_config_dump["_sources"]["identity"]
-    == "registry:esp32s3.boards.waveshare-esp32-s3-zero.programming.usb"
-    and esp32s3_config_dump["featureResolution"]["requestedFeatures"] == []
-    and esp32s3_config_dump["featureResolution"]["resolvedFeatures"]
-    == ["HAL_ENABLE_FREERTOS"]
-    and esp32s3_config_dump["featureResolution"]["provenance"]
-    == {
-        "HAL_ENABLE_FREERTOS": [
-            "target:esp32s3:requiredFeatures[0]"
-        ]
-    },
-    "ESP32-S3 config dump differs from target-required feature resolution",
-)
+
+    esp32s3_config_dump_output = io.StringIO()
+    esp32s3_config_dump_args = runtime.build_parser().parse_args(
+        ["config-dump", "--project", str(esp32s3_project), "--json"]
+    )
+    with redirect_stdout(esp32s3_config_dump_output):
+        require(
+            runtime.command_config_dump(esp32s3_config_dump_args) == 0,
+            "ESP32-S3 config-dump failed",
+        )
+    esp32s3_config_dump = json.loads(esp32s3_config_dump_output.getvalue())
+    require(
+        esp32s3_config_dump["toolchain"] == "esp-idf"
+        and esp32s3_config_dump["_sources"]["espIdf"]
+        == "registry:esp32s3.build.provider"
+        and esp32s3_config_dump["identity"]
+        == {"enabled": True, "usbVid": 0x303A, "usbPid": 0x1001}
+        and esp32s3_config_dump["_sources"]["identity"]
+        == "registry:esp32s3.boards.waveshare-esp32-s3-zero.programming.usb"
+        and esp32s3_config_dump["featureResolution"]["requestedFeatures"] == []
+        and esp32s3_config_dump["featureResolution"]["resolvedFeatures"]
+        == ["HAL_ENABLE_FREERTOS"]
+        and esp32s3_config_dump["featureResolution"]["provenance"]
+        == {
+            "HAL_ENABLE_FREERTOS": [
+                "target:esp32s3:requiredFeatures[0]"
+            ]
+        },
+        "ESP32-S3 config dump differs from target-required feature resolution",
+    )
 
 with tempfile.TemporaryDirectory(prefix="jh build env spacje ") as temporary_text:
     temporary = Path(temporary_text)

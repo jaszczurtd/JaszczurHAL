@@ -295,36 +295,6 @@ require(
     "18_freertos_suite does not enable FreeRTOS through project configuration",
 )
 
-ota_fixture = load_json(
-    ROOT
-    / "tests"
-    / "hardware"
-    / "rp_ota"
-    / ".vscode"
-    / "jaszczurhal.project.json"
-)
-require(
-    set(ota_fixture["example"]["targets"]) == {"rp2040", "rp2350-arm"},
-    "OTA hardware fixture target matrix changed",
-)
-require(
-    ota_fixture["example"]["boards"]
-    == {"rp2040": "picow", "rp2350-arm": "pico2w"},
-    "OTA hardware fixture defaults changed from the supported W boards",
-)
-ota_variants = {
-    variant["id"]: variant for variant in ota_fixture["example"]["variants"]
-}
-require(
-    set(ota_variants["freertos"]["extraDefines"])
-    == {"HAL_ENABLE_FREERTOS"},
-    "OTA hardware fixture FreeRTOS variant lost required defines",
-)
-require(
-    ota_fixture["ota"]["passwordEnv"] == "JH_OTA_TEST_PASSWORD",
-    "OTA hardware fixture must not store a tracked password",
-)
-
 example_dirs = examples_dispatcher.selected_example_dirs([])
 manifest_example_names = {
     path.parent.parent.name
@@ -595,58 +565,6 @@ require(
     "26_ble_stream no longer represents the supported BLE targets",
 )
 
-
-def require_parity_fixture(name: str, base_define: str) -> None:
-    manifest = load_json(
-        ROOT
-        / "tests"
-        / "hardware"
-        / name
-        / ".vscode"
-        / "jaszczurhal.project.json"
-    )
-    metadata = manifest["example"]
-    require(
-        set(metadata["targets"]) == set(expected),
-        f"{name}: native target matrix is incomplete",
-    )
-    require(
-        metadata["boards"]
-        == {
-            "rp2040": "pico",
-            "rp2350-arm": "pico2",
-            "rp2350-riscv": "pico2",
-        },
-        f"{name}: plain-board matrix changed",
-    )
-    variants = {variant["id"]: variant for variant in metadata["variants"]}
-    require(
-        set(variants) == {"freertos"},
-        f"{name}: runtime matrix must contain the FreeRTOS variant",
-    )
-    require(
-        set(variants["freertos"]["targets"]) == set(expected),
-        f"{name}: FreeRTOS target matrix is incomplete",
-    )
-    require(
-        set(variants["freertos"]["extraDefines"])
-        == {"HAL_ENABLE_FREERTOS"},
-        f"{name}: FreeRTOS feature classification changed",
-    )
-    header = (ROOT / "tests" / "hardware" / name / "hal_project_config.h")
-    require(
-        base_define in header.read_text(encoding="utf-8"),
-        f"{name}: base feature is missing from hal_project_config.h",
-    )
-    require(
-        base_define
-        not in manifest["cmake"]["cache"].get("JH_EXTRA_DEFINES", "").split(";"),
-        f"{name}: base feature is duplicated in the manifest",
-    )
-
-
-require_parity_fixture("rp_usb_multicore", "HAL_ENABLE_APP_TASK1")
-require_parity_fixture("rp_sdlogger", "HAL_ENABLE_SDLOGGER")
 
 required_tasks = {
     "Project: Build",

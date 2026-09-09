@@ -25,7 +25,7 @@ Uruchamiaj polecenia z katalogu głównego repozytorium, chyba że instrukcja ws
 | Obsługa projektu firmware | `vscode/entry/jh-vscode <action> --project <dir>` w Uniksie lub `vscode/entry/jh-vscode.cmd ...` w Windows | Udostępnia stały interfejs poleceń do kompilacji, wgrywania, monitorowania, wyboru płytki, konfiguracji IntelliSense i czyszczenia używany przez projekty VS Code. |
 | Kompilacja lub wgrywanie projektu ESP-IDF | `python3 scripts/build_esp_idf.py <action> --project <dir>` | Uruchamia akcję `build`, `artifacts` lub `flash`; ustala metadane targetu i płytki ESP, w razie potrzeby przygotowuje SDK w wersji wskazanej przez repozytorium oraz sprawdza przenośny manifest zawierający wiele obrazów. |
 | Kompilacja przykładów z repozytorium | `scripts/examples_dispatcher.py build --target <target>` | Kompiluje manifesty przykładów za pomocą tego samego mechanizmu `jh-vscode` i CMake, którego używają projekty firmware. |
-| Kompilacja testów zgodności działania na RP | `scripts/build_rp_native_parity_fixtures.sh` | Kompiluje testy USB wielordzeniowego i SDLogger dla wszystkich obsługiwanych natywnych kombinacji target/runtime. |
+| Ręczna kompilacja testów działania na RP | `scripts/build_rp_native_parity_fixtures.sh` | Kompiluje testy USB wielordzeniowego i SDLogger dla wszystkich obsługiwanych natywnych kombinacji target/runtime. |
 
 <a id="polityka-artefaktów"></a>
 
@@ -200,8 +200,7 @@ Kontrola obejmuje:
    repozytorium oraz w skryptach Python;
 8. kompilacje STM32, RP2040/RP2350, natywnego FreeRTOS, profilu funkcji RP
    oraz czyste kompilacje ESP32-S3/ESP-IDF z walidacją artefaktów;
-9. każdy zadeklarowany przykład RP, kompilacje natywnych testów parytetu
-   oraz przykłady STM32.
+9. każdy zadeklarowany przykład RP oraz przykłady STM32.
 
 Skrypt na starcie usuwa tylko swoje zarządzane drzewa `.build/gate`,
 `.build/examples` oraz `.build/tests`. Kończy działanie po pierwszym
@@ -344,9 +343,10 @@ przez standardowy proces `jh-vscode` dla:
 - bare-metal i FreeRTOS na każdym targecie.
 
 Czyści wyłącznie dwa zarządzane drzewa kompilacji testów poniżej
-`.build/hardware/`. `--jobs N` kontroluje równoległość CMake. Skrypt jest
-bramką kompilacji; uruchomienie odpowiadających mu weryfikatorów Python nadal
-wymaga fizycznych płytek, a dla SDLogger - karty SD SPI.
+`.build/hardware/`. `--jobs N` kontroluje równoległość CMake. Skrypt trzeba
+uruchomić jawnie; nie wywołuje go ani `runalltests.sh`, ani CI. Odpowiadające
+mu weryfikatory Python wymagają fizycznych płytek, a dla SDLogger - karty SD
+SPI.
 
 ### `scripts/lib/build_artifacts.sh`
 

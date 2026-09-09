@@ -215,6 +215,11 @@ projektu testowego generowanego przez JaszczurHAL.
 
 Testy na urządzeniach korzystają z tych samych narzędzi VS Code co aplikacje użytkownika. Ich pliki wynikowe trafiają do `.build/hardware/`:
 
+Domyślna konfiguracja `runalltests.sh`, CTest i CI nie odczytuje ani nie
+kompiluje tego firmware'u. Polecenia z tej sekcji uruchamiaj jawnie, gdy masz
+dostęp do wymaganych urządzeń. Dodatkowe testy hostowe plików związanych z tymi
+testami można zarejestrować przez `-DJH_ENABLE_HARDWARE_FIXTURE_CHECKS=ON`.
+
 | Stanowisko | Pokrycie |
 |---|---|
 | `tests/hardware/bluetooth_stage1` | Wewnętrzny test kontrolera CYW43/BTstack opracowany przed publicznym API: rozgłaszanie, statyczny GATT oraz wariant odniesienia `wifi-only` na Pico W i STM32G474/PIM730. |
@@ -954,8 +959,8 @@ deklaruje trwałości po restarcie.
 ### Sprzętowy test gamepada Bluetooth Classic HID
 
 `tests/hardware/bluetooth_gamepad` zawiera wewnętrzny test hosta Classic HID,
-opracowany przed publicznym API, oraz zanonimizowany zapis
-`zero2_android_dinput.json`. Zapis obejmuje
+opracowany przed publicznym API. Zanonimizowane dane testowe
+`tests/fixtures/bluetooth_gamepad/zero2_android_dinput.json` obejmują
 137-bajtowy deskryptor raportu, tożsamość PnP, metadane SDP, wszystkie dwanaście
 stanów wejściowych, niedeklarowany końcowy bajt wejścia i powtórzony surowy
 raport. Nie zawiera adresów Bluetooth, kluczy połączeń, tożsamości hosta ani
@@ -981,8 +986,8 @@ deskryptory, skrócone lub zbyt duże raporty, nieznane identyfikatory raportów
 powtórzone mapowania zastosowań oraz przepełnienie kolejki. Ponowny raport,
 który nie zmienia stanu, nie dodaje do kolejki kolejnego rekordu.
 
-`test_bluetooth_gamepad_parser` używa tego samego zanonimizowanego zapisu co
-test sprzętowy. Obejmuje zapisane raporty, układy pól wynikające z deskryptora,
+`test_bluetooth_gamepad_parser` używa zanonimizowanych danych niezależnie od
+testu sprzętowego. Obejmuje zapisane raporty, układy pól wynikające z deskryptora,
 wielokrotne podanie tego samego stanu wejścia, czyszczenie stanu po ponownym
 połączeniu, nieprawidłowe i skrócone dane, nieznane identyfikatory raportów i
 zastosowania HID, powtórzone zastosowania,

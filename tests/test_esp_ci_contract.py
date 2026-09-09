@@ -209,12 +209,20 @@ require(
 )
 
 require(
-    "tests/test_esp32s3_phase1.py" in windows,
-    "windows-tooling does not run the ESP32-S3 Phase 1 host contract test",
+    "tests/test_esp32s3_phase1.py" not in windows,
+    "windows-tooling must not inspect the ESP32-S3 Phase 1 hardware fixture",
+)
+require(
+    "tests/hardware" not in WORKFLOW,
+    "default CI must not read or build hardware fixtures",
+)
+require(
+    "build_rp_native_parity_fixtures.sh" not in QUALITY_GATE,
+    "runalltests.sh must not build RP hardware fixtures",
 )
 require(
     "tests/test_esp32s3_phase2.py" in windows,
-    "windows-tooling does not run the ESP32-S3 Phase 2 host contract test",
+    "windows-tooling does not run the ESP32-S3 Phase 2 host test",
 )
 require(
     "tests/test_esp32s3_phase3.py" in windows,

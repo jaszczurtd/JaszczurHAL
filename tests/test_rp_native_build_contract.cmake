@@ -2,6 +2,8 @@ if(NOT DEFINED JH_ROOT)
     message(FATAL_ERROR "JH_ROOT is required")
 endif()
 
+# Keep this default host/CI test limited to production sources. Firmware
+# fixtures and their verifiers belong to explicitly invoked hardware workflows.
 set(_cmake "${JH_ROOT}/rp_native_lib/CMakeLists.txt")
 set(_native_common "${JH_ROOT}/cmake/jh_rp_native_sdk.cmake")
 set(_dispatcher "${JH_ROOT}/cmake/jh_firmware_project/CMakeLists.txt")
@@ -43,12 +45,6 @@ set(_littlefs_provider
 set(_littlefs_core
     "${JH_ROOT}/third_party/littlefs/lfs.c")
 set(_littlefs_cmake "${JH_ROOT}/cmake/jh_littlefs.cmake")
-set(_flash_probe "${JH_ROOT}/tests/hardware/rp_flash_transaction/app.c")
-set(_flash_verifier
-    "${JH_ROOT}/tests/hardware/rp_flash_transaction/verify_flash_transaction.py")
-set(_kv_probe "${JH_ROOT}/tests/hardware/rp_kv_power_loss/app.c")
-set(_kv_verifier
-    "${JH_ROOT}/tests/hardware/rp_kv_power_loss/verify_kv_power_loss.py")
 set(_usb_descriptors
     "${JH_ROOT}/src/hal/impl/rp2040/drivers/usb/rp_usb_descriptors.c")
 set(_tusb_config
@@ -61,17 +57,8 @@ set(_freertos_hooks
     "${JH_ROOT}/src/hal/impl/rp2040/freertos/freertos_hooks.c")
 set(_freertos_riscv_tick
     "${JH_ROOT}/src/hal/impl/rp2040/freertos/rp2350_riscv_tick.c")
-set(_freertos_probe "${JH_ROOT}/tests/hardware/rp_freertos_smp/app.c")
-set(_freertos_verifier
-    "${JH_ROOT}/tests/hardware/rp_freertos_smp/verify_freertos_smp.py")
-set(_ota_probe "${JH_ROOT}/tests/hardware/rp_ota/app.c")
-set(_ota_verifier "${JH_ROOT}/tests/hardware/rp_ota/verify_ota.py")
 set(_ota_boot
     "${JH_ROOT}/src/hal/impl/rp2040/ota/rp_ota_boot.cpp")
-set(_ota_manifest
-    "${JH_ROOT}/tests/hardware/rp_ota/.vscode/jaszczurhal.project.json")
-set(_ota_config
-    "${JH_ROOT}/tests/hardware/rp_ota/hal_project_config.h")
 
 foreach(_file IN ITEMS
         "${_cmake}" "${_native_common}" "${_dispatcher}" "${_native_recipe}"
@@ -85,13 +72,9 @@ foreach(_file IN ITEMS
         "${_rp_littlefs}" "${_shared_littlefs}"
         "${_littlefs_provider_header}" "${_littlefs_provider}"
         "${_littlefs_core}" "${_littlefs_cmake}"
-        "${_flash_probe}" "${_flash_verifier}" "${_kv_probe}"
-        "${_kv_verifier}"
         "${_usb_descriptors}" "${_tusb_config}"
         "${_serial_impl}" "${_freertos_cmake}" "${_freertos_config}"
-        "${_freertos_hooks}" "${_freertos_riscv_tick}" "${_freertos_probe}"
-        "${_freertos_verifier}" "${_ota_probe}" "${_ota_verifier}"
-        "${_ota_boot}" "${_ota_manifest}" "${_ota_config}")
+        "${_freertos_hooks}" "${_freertos_riscv_tick}" "${_ota_boot}")
     if(NOT EXISTS "${_file}")
         message(FATAL_ERROR "Native RP build contract file is missing: ${_file}")
     endif()
@@ -125,10 +108,6 @@ file(READ "${_shared_littlefs}" _shared_littlefs_text)
 file(READ "${_littlefs_provider_header}" _littlefs_provider_header_text)
 file(READ "${_littlefs_provider}" _littlefs_provider_text)
 file(READ "${_littlefs_core}" _littlefs_core_text)
-file(READ "${_flash_probe}" _flash_probe_text)
-file(READ "${_flash_verifier}" _flash_verifier_text)
-file(READ "${_kv_probe}" _kv_probe_text)
-file(READ "${_kv_verifier}" _kv_verifier_text)
 file(READ "${_usb_descriptors}" _usb_descriptors_text)
 file(READ "${_tusb_config}" _tusb_config_text)
 file(READ "${_serial_impl}" _serial_impl_text)
@@ -136,13 +115,7 @@ file(READ "${_freertos_cmake}" _freertos_cmake_text)
 file(READ "${_freertos_config}" _freertos_config_text)
 file(READ "${_freertos_hooks}" _freertos_hooks_text)
 file(READ "${_freertos_riscv_tick}" _freertos_riscv_tick_text)
-file(READ "${_freertos_probe}" _freertos_probe_text)
-file(READ "${_freertos_verifier}" _freertos_verifier_text)
-file(READ "${_ota_probe}" _ota_probe_text)
-file(READ "${_ota_verifier}" _ota_verifier_text)
 file(READ "${_ota_boot}" _ota_boot_text)
-file(READ "${_ota_manifest}" _ota_manifest_text)
-file(READ "${_ota_config}" _ota_config_text)
 set(_native_text
     "${_cmake_text}\n${_native_common_text}\n${_native_recipe_text}")
 
@@ -246,23 +219,6 @@ foreach(_storage_contract IN ITEMS
     if(_storage_at EQUAL -1)
         message(FATAL_ERROR
             "Native RP flash storage contract is missing: ${_storage_contract}")
-    endif()
-endforeach()
-
-foreach(_kv_probe_contract IN ITEMS
-        "JH_RP_FLASH_REPLACE_FAIL_AFTER_INVALIDATE"
-        "JH_RP_FLASH_REPLACE_FAIL_AFTER_BODY"
-        "JH_RP_FLASH_REPLACE_FAIL_AFTER_VERIFY"
-        "JH_RP_FLASH_REPLACE_FAIL_AFTER_PUBLISH"
-        "hal_eeprom_init"
-        "hal_kv_init_ex"
-        "JHKV2"
-        "\"status\": \"pass\"")
-    string(FIND "${_kv_probe_text}\n${_kv_verifier_text}"
-        "${_kv_probe_contract}" _kv_probe_at)
-    if(_kv_probe_at EQUAL -1)
-        message(FATAL_ERROR
-            "Native RP KV hardware probe is missing: ${_kv_probe_contract}")
     endif()
 endforeach()
 
@@ -404,60 +360,6 @@ foreach(_flash_impl_contract IN ITEMS
     endif()
 endforeach()
 
-foreach(_flash_probe_contract IN ITEMS
-        "app_task1"
-        "flash_range_erase"
-        "flash_range_program"
-        "dma_channel_is_busy"
-        "flash_resident_operation"
-        "recursive_operation"
-        "JHFLASH-RESULT"
-        "\"status\": \"pass\"")
-    string(FIND
-        "${_flash_probe_text}\n${_flash_verifier_text}"
-        "${_flash_probe_contract}" _flash_probe_at)
-    if(_flash_probe_at EQUAL -1)
-        message(FATAL_ERROR
-            "Native RP flash hardware probe is missing: "
-            "${_flash_probe_contract}")
-    endif()
-endforeach()
-
-foreach(_ota_hardware_contract IN ITEMS
-        "JHOTA-HW1"
-        "HAL_BOARD_PROFILE_NAME"
-        "hal_wifi_get_local_ip_ex"
-        "\"board\""
-        "\"ipv4\""
-        "JH_OTA_TEST_WIFI_PASSWORD, false"
-        "s_last_connect_ms = hal_millis()"
-        "hal_ota_get_boot_info_ex"
-        "hal_ota_confirm_boot_ex"
-        "jh-ota-rp2040"
-        "jh-ota-rp2350-arm"
-        "--board"
-        "pico-rm2"
-        "wrongPassword"
-        "rollbackBoots"
-        "HAL_ENABLE_FREERTOS"
-        "HAL_FREERTOS_TASK0_STACK 2048u"
-        "HAL_ENABLE_KV"
-        "HAL_ENABLE_LITTLEFS"
-        "hal_kv_set_u32_ex"
-        "hal_littlefs_begin_ex"
-        "kv_count"
-        "storage_total"
-        "passwordEnv")
-    string(FIND
-        "${_ota_probe_text}\n${_ota_verifier_text}\n${_ota_manifest_text}\n${_ota_config_text}"
-        "${_ota_hardware_contract}" _ota_hardware_at)
-    if(_ota_hardware_at EQUAL -1)
-        message(FATAL_ERROR
-            "Native RP OTA hardware probe is missing: "
-            "${_ota_hardware_contract}")
-    endif()
-endforeach()
-
 foreach(_ota_boot_contract IN ITEMS
         "HAL_RP_OTA_PROGRAM_OFFSET + FLASH_PAGE_SIZE"
         "jump_to_vectors(vectors)"
@@ -581,22 +483,6 @@ foreach(_freertos_entry_contract IN ITEMS
         message(FATAL_ERROR
             "Native RP FreeRTOS entry is missing: "
             "${_freertos_entry_contract}")
-    endif()
-endforeach()
-
-foreach(_freertos_probe_contract IN ITEMS
-        "get_core_num"
-        "hal_mutex_lock"
-        "xTaskGetSchedulerState"
-        "hal_get_free_heap"
-        "hal_usb_cdc_write")
-    string(FIND
-        "${_freertos_probe_text}\n${_freertos_verifier_text}"
-        "${_freertos_probe_contract}" _freertos_probe_at)
-    if(_freertos_probe_at EQUAL -1)
-        message(FATAL_ERROR
-            "Native RP FreeRTOS hardware probe is missing: "
-            "${_freertos_probe_contract}")
     endif()
 endforeach()
 
