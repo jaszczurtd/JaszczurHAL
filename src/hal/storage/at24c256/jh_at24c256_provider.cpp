@@ -38,6 +38,8 @@ hal_status_t initialize(const jh_eeprom_provider_config_t *config,
   s_i2c_addr = config->i2c_addr != 0u ? config->i2c_addr : EEPROM_I2C_ADDRESS;
   out_info->type = HAL_EEPROM_AT24C256;
   out_info->size = kDeviceSize;
+  out_info->erase_size = 1u;
+  out_info->program_size = 1u;
   return HAL_OK;
 #endif
 }

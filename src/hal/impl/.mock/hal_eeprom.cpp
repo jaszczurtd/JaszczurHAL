@@ -17,6 +17,7 @@ uint8_t s_memory[MOCK_EEPROM_BUF_SIZE] = {};
 hal_eeprom_type_t s_type = HAL_EEPROM_AT24C256;
 uint16_t s_size = 0u;
 bool s_committed = false;
+bool s_dirty = false;
 uint32_t s_write_count = 0u;
 hal_status_t s_io_status = HAL_OK;
 hal_status_t s_commit_status = HAL_OK;
@@ -45,10 +46,18 @@ hal_status_t initialize(const jh_eeprom_provider_config_t *config,
   s_type = config->requested_type;
   s_size = size;
   s_committed = false;
+  s_dirty = false;
   s_write_count = 0u;
   memset(s_memory, 0, sizeof(s_memory));
   out_info->type = s_type;
   out_info->size = s_size;
+  out_info->erase_size =
+      s_type == HAL_EEPROM_AT24C256
+          ? 1u
+          : (s_type == HAL_EEPROM_STM32_FLASH ? 2048u : 4096u);
+  out_info->program_size = s_type == HAL_EEPROM_AT24C256
+                               ? 1u
+                               : (s_type == HAL_EEPROM_STM32_FLASH ? 8u : 256u);
   return HAL_OK;
 }
 
@@ -82,6 +91,7 @@ hal_status_t write_bytes(uint16_t addr, const uint8_t *data, uint16_t len,
   if (len > 0u) {
     memcpy(s_memory + addr, data, len);
     s_write_count += len;
+    s_dirty = true;
   }
   return HAL_OK;
 }
@@ -99,26 +109,26 @@ hal_status_t commit(hal_eeprom_progress_callback_t progress, void *ctx) {
   if (s_commit_status != HAL_OK) {
     return s_commit_status;
   }
+  const bool flash_write = s_dirty && s_type != HAL_EEPROM_AT24C256;
+  if (flash_write) {
+    const hal_status_t prepare = jh_eeprom_flash_write_begin();
+    if (prepare != HAL_OK) {
+      return prepare;
+    }
+  }
   s_committed = true;
+  s_dirty = false;
   notify(progress, ctx);
+  if (flash_write) {
+    jh_eeprom_flash_write_end();
+  }
   return HAL_OK;
 }
 
-hal_status_t replace_region(uint16_t addr, const uint8_t *data, uint16_t len,
+hal_status_t publish_region(uint16_t addr, const uint8_t *data, uint16_t len,
                             uint16_t publish_size,
                             hal_eeprom_progress_callback_t progress,
                             void *ctx) {
-  if (s_io_status != HAL_OK) {
-    return s_io_status;
-  }
-  if (s_commit_status != HAL_OK) {
-    return s_commit_status;
-  }
-  if (data == nullptr || publish_size == 0u || publish_size >= len ||
-      !range_valid(addr, len)) {
-    return HAL_EINVAL;
-  }
-
   memset(s_memory + addr, 0, publish_size);
   s_write_count += publish_size;
   notify(progress, ctx);
@@ -151,14 +161,42 @@ hal_status_t replace_region(uint16_t addr, const uint8_t *data, uint16_t len,
   return memcmp(s_memory + addr, data, len) == 0 ? HAL_OK : HAL_EIO;
 }
 
+hal_status_t replace_region(uint16_t addr, const uint8_t *data, uint16_t len,
+                            uint16_t publish_size,
+                            hal_eeprom_progress_callback_t progress,
+                            void *ctx) {
+  if (s_io_status != HAL_OK) {
+    return s_io_status;
+  }
+  if (s_commit_status != HAL_OK) {
+    return s_commit_status;
+  }
+  if (data == nullptr || publish_size == 0u || publish_size >= len ||
+      !range_valid(addr, len)) {
+    return HAL_EINVAL;
+  }
+  const bool flash_write = s_type != HAL_EEPROM_AT24C256;
+  if (flash_write) {
+    const hal_status_t prepare = jh_eeprom_flash_write_begin();
+    if (prepare != HAL_OK) {
+      return prepare;
+    }
+  }
+  const hal_status_t status =
+      publish_region(addr, data, len, publish_size, progress, ctx);
+  if (flash_write) {
+    jh_eeprom_flash_write_end();
+  }
+  return status;
+}
+
 hal_status_t reset(hal_eeprom_progress_callback_t progress, void *ctx) {
   if (s_io_status != HAL_OK) {
     return s_io_status;
   }
   memset(s_memory, 0, sizeof(s_memory));
-  s_committed = true;
-  notify(progress, ctx);
-  return HAL_OK;
+  s_dirty = true;
+  return commit(progress, ctx);
 }
 
 const jh_eeprom_provider_ops_t kProvider = {
@@ -205,6 +243,7 @@ void hal_mock_eeprom_reset(void) {
   s_type = HAL_EEPROM_AT24C256;
   s_size = 0u;
   s_committed = false;
+  s_dirty = false;
   s_write_count = 0u;
   s_io_status = HAL_OK;
   s_commit_status = HAL_OK;

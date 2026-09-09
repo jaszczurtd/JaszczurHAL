@@ -127,6 +127,22 @@ progress. A full AT24C256 reset touches 512 pages and can take seconds.
 (`MOCK_EEPROM_BUF_SIZE`, default 32768); the mock does not duplicate
 `hal_eeprom_*` behavior.
 
+**Preparing for a flash write:** Register a pair with
+`hal_eeprom_set_flash_write_callbacks(prepare, finish, ctx)` when application
+resources must be stopped for a physical EEPROM flash write. The provider
+calls `prepare(ctx)` after validation and proceeds only on `HAL_OK`.
+It then calls `finish(ctx)` even if the write fails. A failed prepare must
+undo its own partial work; finish is not called in that case. Reads, RAM
+staging, clean commits and external EEPROM writes skip these callbacks.
+
+Both callbacks execute on the caller's task/core under the EEPROM mutex.
+They must not re-enter EEPROM/KV or take a lock held by a thread waiting for
+EEPROM. Finish does not change the storage result; the application handles
+any failure to restore its resources. Pass two NULL callbacks to disable the
+pair. An incomplete pair returns `HAL_EINVAL`; allocation failure returns
+`HAL_ENOMEM`. Registration survives EEPROM initialization. Existing flash
+coordination still applies; callbacks are optional and disabled by default.
+
 **Thread safety:** Thread-safe and multicore-safe for both back-end families.
 The shared facade mutex protects provider selection, active size, callbacks,
 range clipping and every operation. `HAL_EEPROM_AT24C256` transfers also use
@@ -276,6 +292,12 @@ bool hal_kv_bank_looks_present(uint16_t bank_addr, uint16_t bank_size);
 - **Dependencies:** `hal_eeprom`, `hal_crc`, `hal_sync`, `hal_serial`.
 
 **Memory layout:** Each bank must occupy an independent region. The RP default reservation is 8192 bytes: two 4096-byte sectors. STM32G474 reserves 4096 bytes: two 2048-byte pages. EEPROM banks use two non-overlapping logical ranges. `HAL_KV_PUBLISH_SIZE` sets the size of the prefix written last (256 bytes by default), and `HAL_KV_MAX_BANK_SIZE` limits the static RAM work buffer. A custom flash area must split into two banks aligned to erase boundaries.
+
+`hal_kv_init_ex()` rejects incompatible erase/program alignment with
+`HAL_EINVAL` before reading banks or attempting a write, even if an existing
+bank has a valid header. The host mock enforces RP geometry for
+`HAL_EEPROM_FLASH`/`HAL_EEPROM_DEFAULT`, STM32 geometry for
+`HAL_EEPROM_STM32_FLASH`, and byte addressing for `HAL_EEPROM_AT24C256`.
 
 **Thread safety:** Thread-safe and multicore-safe. An internal singleton mutex
 created with the HAL atomic create-once helper protects all operations.

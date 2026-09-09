@@ -20,12 +20,16 @@
 
 #include "stm32g474_clock.h"
 
+/* Match the pointer width in both native ARM and host builds. */
 #define JH_REG8(addr)                                                          \
-  (*(volatile uint8_t *)(addr)) /* NOLINT(performance-no-int-to-ptr) */
+  (*(volatile uint8_t                                                          \
+         *)(uintptr_t)(addr)) /* NOLINT(performance-no-int-to-ptr) */
 #define JH_REG16(addr)                                                         \
-  (*(volatile uint16_t *)(addr)) /* NOLINT(performance-no-int-to-ptr) */
+  (*(volatile uint16_t                                                         \
+         *)(uintptr_t)(addr)) /* NOLINT(performance-no-int-to-ptr) */
 #define JH_REG32(addr)                                                         \
-  (*(volatile uint32_t *)(addr)) /* NOLINT(performance-no-int-to-ptr) */
+  (*(volatile uint32_t                                                         \
+         *)(uintptr_t)(addr)) /* NOLINT(performance-no-int-to-ptr) */
 
 /* ── RCC (Reset & Clock Control) ─────────────────────────────────────────── */
 #define RCC_BASE 0x40021000u

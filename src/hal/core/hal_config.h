@@ -65,6 +65,16 @@
 #define HAL_AT24C256_ACK_POLL_US 100u
 #endif
 
+/** @brief RP I2C controller timeout per read/write phase, in microseconds
+ * (1..1000000). Override in hal_project_config.h; a combined write/read has two
+ * phases. */
+#ifndef HAL_RP_I2C_TIMEOUT_US
+#define HAL_RP_I2C_TIMEOUT_US 100000u
+#endif
+#if HAL_RP_I2C_TIMEOUT_US < 1u || HAL_RP_I2C_TIMEOUT_US > 1000000u
+#error "HAL_RP_I2C_TIMEOUT_US must be in 1..1000000"
+#endif
+
 #ifndef HAL_STM32_FLASH_PAGE_SIZE
 #define HAL_STM32_FLASH_PAGE_SIZE 2048u
 #endif

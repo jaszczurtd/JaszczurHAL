@@ -626,6 +626,12 @@ def check_production_feature_facade(compiler: str) -> None:
         ("HAL_TARGET_MOCK=1", "HAL_COMMAND_ROUTER_MAX_INSTANCES=0"),
         "HAL_COMMAND_ROUTER_MAX_INSTANCES must be in range 1..16",
     )
+    for timeout in (0, 1000001):
+        require_hal_config_failure(
+            compiler,
+            ("HAL_TARGET_MOCK=1", f"HAL_RP_I2C_TIMEOUT_US={timeout}"),
+            "HAL_RP_I2C_TIMEOUT_US must be in 1..1000000",
+        )
     require_hal_config_failure(
         compiler,
         ("HAL_TARGET_MOCK=1", "HAL_COMMAND_ROUTER_MAX_COMMANDS=65"),
@@ -965,8 +971,8 @@ for facade in facade_provider_checks:
     )
 require(
     len(re.findall(r"^#error(?:\s|$)", hal_config_text, flags=re.MULTILINE))
-    == 75,
-    "hal_config.h retained validation inventory drifted from 75 #error checks",
+    == 76,
+    "hal_config.h retained validation inventory drifted from 76 #error checks",
 )
 
 checked = run_generator("--check")

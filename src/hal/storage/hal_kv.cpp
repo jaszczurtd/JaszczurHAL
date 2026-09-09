@@ -581,6 +581,12 @@ hal_status_t hal_kv_init_ex(uint16_t base_addr, uint16_t size_bytes) {
     return HAL_EOVERFLOW;
   }
 
+  status = jh_eeprom_validate_region(base_addr, bank_size, KV_PUBLISH_SIZE);
+  if (status != HAL_OK) {
+    hal_mutex_unlock(s_kv_mutex);
+    return status;
+  }
+
   s_base = base_addr;
   s_bank_size = bank_size;
   kv_bank_meta_t metadata[2] = {};

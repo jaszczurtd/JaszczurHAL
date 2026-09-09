@@ -8,6 +8,7 @@
 
 #include "hal/impl/rp2040/drivers/flash/rp_flash_storage.h"
 #include "hal/storage/jh_eeprom_provider.h"
+#include <hardware/flash.h>
 
 namespace {
 
@@ -76,7 +77,9 @@ const jh_eeprom_flash_backend_t kFlashBackend = {HAL_EEPROM_FLASH,
                                                  nullptr,
                                                  load,
                                                  store,
-                                                 replace_region};
+                                                 replace_region,
+                                                 FLASH_SECTOR_SIZE,
+                                                 FLASH_PAGE_SIZE};
 
 } // namespace
 

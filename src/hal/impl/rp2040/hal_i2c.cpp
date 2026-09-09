@@ -20,7 +20,6 @@
 #endif
 
 #define RP2040_I2C_BUF_SIZE 255u
-#define RP2040_I2C_TIMEOUT_US 100000u
 
 typedef struct {
   uint8_t rx_buf[RP2040_I2C_BUF_SIZE];
@@ -341,7 +340,7 @@ static hal_status_t i2c_status_from_result(uint8_t result) {
 static uint8_t i2c_probe_read(uint8_t idx, uint8_t address) {
   uint8_t dummy = 0u;
   int rc = i2c_read_timeout_us(i2c_bus_hw(idx), address, &dummy, 1u, false,
-                               RP2040_I2C_TIMEOUT_US);
+                               HAL_RP_I2C_TIMEOUT_US);
   if (rc == 1) {
     return HAL_I2C_RESULT_OK;
   }
@@ -355,7 +354,7 @@ static uint8_t i2c_probe_read(uint8_t idx, uint8_t address) {
 static uint8_t i2c_probe_read_10bit(uint8_t idx, hal_i2c_address_t address) {
   uint8_t dummy = 0u;
   int rc = i2c_10bit_read_timeout_us(i2c_bus_hw(idx), address, &dummy, 1u,
-                                     false, RP2040_I2C_TIMEOUT_US);
+                                     false, HAL_RP_I2C_TIMEOUT_US);
   if (rc == 1) {
     return HAL_I2C_RESULT_OK;
   }
@@ -538,7 +537,7 @@ hal_status_t hal_i2c_end_transmission_bus_ex(uint8_t bus) {
       } else {
         int rc = i2c_10bit_write_timeout_us(i2c_bus_hw(idx), st->cur_addr,
                                             st->tx_buf, st->tx_len, false,
-                                            RP2040_I2C_TIMEOUT_US);
+                                            HAL_RP_I2C_TIMEOUT_US);
         result = i2c_result_from_write_rc(rc, st->tx_len);
       }
     } else
@@ -548,7 +547,7 @@ hal_status_t hal_i2c_end_transmission_bus_ex(uint8_t bus) {
     } else {
       int rc = i2c_write_timeout_us(i2c_bus_hw(idx), (uint8_t)st->cur_addr,
                                     st->tx_buf, st->tx_len, false,
-                                    RP2040_I2C_TIMEOUT_US);
+                                    HAL_RP_I2C_TIMEOUT_US);
       result = i2c_result_from_write_rc(rc, st->tx_len);
     }
   }
@@ -588,12 +587,12 @@ hal_status_t hal_i2c_write_read_bus_ex(uint8_t bus, hal_i2c_address_t address,
 #ifdef HAL_ENABLE_I2C_10BIT
   if (s_i2c[idx].addr_mode == HAL_I2C_ADDR_MODE_10BIT) {
     written = i2c_10bit_write_timeout_us(i2c_bus_hw(idx), address, tx, tx_len,
-                                         rx_len > 0u, RP2040_I2C_TIMEOUT_US);
+                                         rx_len > 0u, HAL_RP_I2C_TIMEOUT_US);
   } else
 #endif
   {
     written = i2c_write_timeout_us(i2c_bus_hw(idx), (uint8_t)address, tx,
-                                   tx_len, rx_len > 0u, RP2040_I2C_TIMEOUT_US);
+                                   tx_len, rx_len > 0u, HAL_RP_I2C_TIMEOUT_US);
   }
   __atomic_fetch_add(&s_i2c[idx].transaction_count, 1u, __ATOMIC_RELAXED);
   if (written != (int)tx_len) {
@@ -605,12 +604,12 @@ hal_status_t hal_i2c_write_read_bus_ex(uint8_t bus, hal_i2c_address_t address,
 #ifdef HAL_ENABLE_I2C_10BIT
     if (s_i2c[idx].addr_mode == HAL_I2C_ADDR_MODE_10BIT) {
       got = i2c_10bit_read_timeout_us(i2c_bus_hw(idx), address, rx, rx_len,
-                                      false, RP2040_I2C_TIMEOUT_US);
+                                      false, HAL_RP_I2C_TIMEOUT_US);
     } else
 #endif
     {
       got = i2c_read_timeout_us(i2c_bus_hw(idx), (uint8_t)address, rx, rx_len,
-                                false, RP2040_I2C_TIMEOUT_US);
+                                false, HAL_RP_I2C_TIMEOUT_US);
     }
     __atomic_fetch_add(&s_i2c[idx].transaction_count, 1u, __ATOMIC_RELAXED);
     if (got != (int)rx_len) {
@@ -666,12 +665,12 @@ static bool i2c_read_bytes_bus_impl(uint8_t bus, hal_i2c_address_t address,
 #ifdef HAL_ENABLE_I2C_10BIT
   if (s_i2c[idx].addr_mode == HAL_I2C_ADDR_MODE_10BIT) {
     got = i2c_10bit_read_timeout_us(i2c_bus_hw(idx), address, rx, rx_len, false,
-                                    RP2040_I2C_TIMEOUT_US);
+                                    HAL_RP_I2C_TIMEOUT_US);
   } else
 #endif
   {
     got = i2c_read_timeout_us(i2c_bus_hw(idx), (uint8_t)address, rx, rx_len,
-                              false, RP2040_I2C_TIMEOUT_US);
+                              false, HAL_RP_I2C_TIMEOUT_US);
   }
   s_i2c[idx].rx_len = 0u;
   s_i2c[idx].rx_pos = 0u;
@@ -716,12 +715,12 @@ static uint8_t i2c_request_from_bus_impl(uint8_t bus, hal_i2c_address_t address,
 #ifdef HAL_ENABLE_I2C_10BIT
     if (st->addr_mode == HAL_I2C_ADDR_MODE_10BIT) {
       got = i2c_10bit_read_timeout_us(i2c_bus_hw(idx), address, st->rx_buf,
-                                      count, false, RP2040_I2C_TIMEOUT_US);
+                                      count, false, HAL_RP_I2C_TIMEOUT_US);
     } else
 #endif
     {
       got = i2c_read_timeout_us(i2c_bus_hw(idx), (uint8_t)address, st->rx_buf,
-                                count, false, RP2040_I2C_TIMEOUT_US);
+                                count, false, HAL_RP_I2C_TIMEOUT_US);
     }
     if (got < 0) {
       got = 0;

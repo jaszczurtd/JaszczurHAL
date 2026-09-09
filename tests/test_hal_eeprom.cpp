@@ -4,6 +4,19 @@
 
 static uint32_t s_progress_calls = 0u;
 static void *s_progress_ctx = NULL;
+static unsigned s_prepare_calls;
+static unsigned s_finish_calls;
+
+static hal_status_t prepare_flash(void *ctx) {
+  TEST_ASSERT_EQUAL_PTR(&s_prepare_calls, ctx);
+  ++s_prepare_calls;
+  return HAL_OK;
+}
+
+static void finish_flash(void *ctx) {
+  TEST_ASSERT_EQUAL_PTR(&s_prepare_calls, ctx);
+  ++s_finish_calls;
+}
 
 static void progress_callback(void *ctx) {
   s_progress_calls++;
@@ -13,6 +26,7 @@ static void progress_callback(void *ctx) {
 void setUp(void) {
   s_progress_calls = 0u;
   s_progress_ctx = NULL;
+  s_prepare_calls = s_finish_calls = 0u;
   hal_mock_eeprom_reset();
   hal_eeprom_init(HAL_EEPROM_AT24C256, 0, 0x50);
 }
@@ -187,8 +201,35 @@ void test_mock_eeprom_injects_init_and_commit_failures_separately(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_init(HAL_EEPROM_FLASH, 256u, 0u));
 }
 
+void test_flash_callbacks_skip_external_writes_and_clean_commits(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_eeprom_set_flash_write_callbacks(
+                                        prepare_flash, nullptr, nullptr));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_eeprom_set_flash_write_callbacks(
+                                        nullptr, finish_flash, nullptr));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_eeprom_set_flash_write_callbacks(prepare_flash, finish_flash,
+                                                   &s_prepare_calls));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_write_byte(0u, 7u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_commit());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_reset());
+  TEST_ASSERT_EQUAL_UINT(0u, s_prepare_calls);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_init(HAL_EEPROM_FLASH, 8192u, 0u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_write_byte(0u, 7u));
+  TEST_ASSERT_EQUAL_UINT(0u, s_prepare_calls);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_commit());
+  TEST_ASSERT_EQUAL_UINT(1u, s_prepare_calls);
+  TEST_ASSERT_EQUAL_UINT(1u, s_finish_calls);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_commit());
+  TEST_ASSERT_EQUAL_UINT(1u, s_prepare_calls);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_eeprom_set_flash_write_callbacks(nullptr, nullptr, nullptr));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_reset());
+  TEST_ASSERT_EQUAL_UINT(1u, s_prepare_calls);
+}
+
 int main(void) {
   UNITY_BEGIN();
+  RUN_TEST(test_flash_callbacks_skip_external_writes_and_clean_commits);
   RUN_TEST(test_init_sets_type);
   RUN_TEST(test_init_sets_size_at24c256);
   RUN_TEST(test_flash_alias_uses_requested_size);

@@ -168,6 +168,12 @@ magistralę.
 
 Konfiguracja kontrolera I2C, odczyt i zapis danych oraz wyszukiwanie urządzeń z adresami 7-bitowymi. Tryb adresowania i dostępne częstotliwości zależą od konfiguracji i platformy.
 
+Na targetach RP `HAL_RP_I2C_TIMEOUT_US` ustala timeout pojedynczej fazy odczytu
+lub zapisu (domyślnie 100000 us, zakres 1..1000000). Ustaw go w
+`hal_project_config.h`, uwzględniając długość transmisji i clock stretching.
+Operacja write/read ma dwie osobno ograniczone fazy; oczekiwanie na blokadę
+magistrali jest liczone oddzielnie.
+
 ```c
 #include <hal/i2c/hal_i2c.h>
 

@@ -38,6 +38,10 @@ typedef struct {
  * RP builds therefore reserve at least two 4096-byte sectors, while the
  * STM32G474 default uses two 2048-byte pages. Non-flash providers expose the
  * same publication behavior over two non-overlapping logical regions.
+ * Initialization checks the selected provider's erase/program geometry before
+ * reading any bank or attempting a write, including when a valid bank exists.
+ * An incompatible layout returns HAL_EINVAL from hal_kv_init_ex() and false
+ * from hal_kv_init().
  */
 bool hal_kv_init(uint16_t base_addr, uint16_t size_bytes);
 

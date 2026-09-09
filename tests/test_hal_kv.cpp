@@ -330,6 +330,47 @@ void test_read_through_rejects_unpublished_ram_image(void) {
   TEST_ASSERT_EQUAL_UINT8_ARRAY(newBlob, blobOut, sizeof(newBlob));
 }
 
+void test_flash_rejects_unaligned_banks_without_writing(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_init(HAL_EEPROM_FLASH, 16384u, 0u));
+  const uint16_t bases[] = {96u, 128u};
+  for (uint16_t base : bases) {
+    hal_mock_eeprom_clear_write_count();
+    TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_kv_init_ex(base, 8192u));
+    TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_eeprom_get_write_count());
+    TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_kv_set_u32_ex(1u, 7u));
+  }
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_kv_init_ex(0u, 4096u));
+}
+
+void test_flash_rejects_misaligned_existing_bank_before_loading(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_u32_ex(1u, 7u));
+  uint8_t banks[8192];
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_eeprom_read_bytes(0u, banks, sizeof(banks)));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_init(HAL_EEPROM_FLASH, 16384u, 0u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_eeprom_write_bytes(128u, banks, sizeof(banks)));
+  hal_mock_eeprom_clear_write_count();
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_kv_init_ex(128u, sizeof(banks)));
+  TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_eeprom_get_write_count());
+}
+
+void test_at24_and_stm32_keep_their_own_bank_geometry(void) {
+  const hal_eeprom_type_t types[] = {HAL_EEPROM_AT24C256,
+                                     HAL_EEPROM_STM32_FLASH};
+  for (hal_eeprom_type_t type : types) {
+    const uint16_t base = type == HAL_EEPROM_AT24C256 ? 128u : 0u;
+    TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_init(type, 4096u, 0u));
+    TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_init_ex(base, 4096u));
+    TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_u32_ex(1u, 23u));
+    hal_mock_kv_full_reset();
+    TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_init_ex(base, 4096u));
+    uint32_t value = 0u;
+    TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_u32_ex(1u, &value));
+    TEST_ASSERT_EQUAL_UINT32(23u, value);
+  }
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_set_get_u32_and_reinit);
@@ -348,5 +389,8 @@ int main(void) {
   RUN_TEST(test_bank_looks_present_detects_active_and_absent_banks);
   RUN_TEST(test_read_through_surfaces_live_eeprom_fault);
   RUN_TEST(test_read_through_rejects_unpublished_ram_image);
+  RUN_TEST(test_flash_rejects_unaligned_banks_without_writing);
+  RUN_TEST(test_flash_rejects_misaligned_existing_bank_before_loading);
+  RUN_TEST(test_at24_and_stm32_keep_their_own_bank_geometry);
   return UNITY_END();
 }

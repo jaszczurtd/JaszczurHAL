@@ -113,6 +113,9 @@ float hal_pid_controller_get_tf(hal_pid_controller_t controller);
 
 void  hal_pid_controller_update_time(hal_pid_controller_t controller, float time_divider);
 float hal_pid_controller_update(hal_pid_controller_t controller, float error);
+hal_status_t hal_pid_controller_step_ex(hal_pid_controller_t controller,
+    float error, float measurement, float dt_s, float integral_deadband,
+    hal_pid_terms_t *terms);
 void  hal_pid_controller_set_output_limits(hal_pid_controller_t controller, float min_output, float max_output);
 void  hal_pid_controller_reset(hal_pid_controller_t controller);
 void  hal_pid_controller_set_direction(hal_pid_controller_t controller, hal_pid_direction_t direction);
@@ -127,10 +130,50 @@ bool  hal_pid_controller_is_oscillating(hal_pid_controller_t controller, float c
 
 **Anti-windup:** two complementary mechanisms:
 1. **Integral hard clamp** - `setMaxIntegral()` / `hal_pid_controller_set_max_integral()` limits `|integral|`.
-2. **Clamping anti-windup** - integral accumulation is skipped when the output
-   is saturated in the direction of the error (i.e. output ≥ max and error > 0,
-   or output ≤ min and error < 0). This prevents integral windup at output
-   limits without requiring manual tuning of the integral cap.
+2. **Clamping anti-windup** - integration is skipped when its contribution
+   would deepen output saturation. The legacy `update()` checks the previous
+   output and the sign of `Ki * error * dt`: positive at the upper limit,
+   negative at the lower limit. This also handles negative Ki and BACKWARD.
+
+**Running a controller step**
+
+Use hal_pid_controller_step_ex() when the application measures the elapsed time between controller steps. Pass this time in seconds.
+
+The derivative term D is calculated from changes in the measured value, not from changes in the control error. On the first step after a reset, D is zero.
+
+The dead zone affects only the integral term I. Errors within this zone leave the accumulated integral unchanged; they do not reset it to zero. The error used for integration changes without a jump at the zone boundary. The proportional term P continues to use the full error, including values within the dead zone.
+
+The controller skips an integral update if it would push the output further beyond either limit in the current step. This prevents the integral from accumulating in a direction that would move the output further outside the allowed range.
+
+**Results and output limits**
+
+The function writes the P, I and D terms, their sum before limiting, and the limited output to hal_pid_terms_t. Separate flags report saturation at the lower and upper limits. These flags are determined by comparing the output with the limits, not by the sign of the control error.
+
+If the application adds feedforward, scales the control signal according to voltage, or enforces a minimum command value at a later stage, account for these operations when setting the PID correction limits.
+
+**Requirements and error handling**
+
+The controller handle and the pointer to the result structure must not be NULL.
+
+Input values and controller gains must be finite: neither NaN nor infinity is allowed. The elapsed time must be greater than zero. The dead-zone parameter, filter time constant and integral limit must be nonnegative.
+
+Configure both output limits to define a valid range, or leave both unset. Configuring only one limit is not allowed.
+
+The function returns HAL_EINVAL for invalid arguments or settings, and HAL_EOVERFLOW if an arithmetic operation overflows. In either case, the controller state and the result structure remain unchanged.
+
+Reset the controller before switching between hal_pid_controller_step_ex() and the legacy API, which calculates D from changes in the control error. A reset is required when switching in either direction.
+
+**Calling the controller periodically**
+
+update_time() continues to calculate the time step by dividing elapsed milliseconds by the configured divider. It does not run the controller periodically or determine the interval between calls. The application is responsible for calling the controller at the required intervals.
+
+The first interval starts when the controller is created; reset starts timing
+again. Timestamps are subtracted as `uint32_t` before conversion to float, so
+long uptime does not reduce the resolution of short intervals. Counter wrap is
+supported for intervals shorter than 2^32 ms. A divider of 1000 gives seconds;
+a zero divider or nonpositive computed step uses the legacy fallback of 0.001.
+
+The example below calls the controller every 10 ms but uses the actual measured time since the previous step in its calculations. Provide the sensor-reading code and select the motor-control pin for your application.
 
 **Example: motor speed control**
 ```c
@@ -139,6 +182,7 @@ bool  hal_pid_controller_is_oscillating(hal_pid_controller_t controller, float c
 static hal_pid_controller_t speed_pid;
 static float target_rpm = 1000.0f;
 static float current_rpm = 0.0f;
+static uint32_t last_control_us;
 
 void app_start(void) {
     speed_pid = hal_pid_controller_create_with_gains(
@@ -148,15 +192,20 @@ void app_start(void) {
         200.0f    // max_integral
     );
     hal_pid_controller_set_output_limits(speed_pid, 0.0f, 255.0f);
-    hal_pid_controller_update_time(speed_pid, 1.0f / 10.0f);
+    last_control_us = hal_micros();
 }
 
 void app_task0(void) {
+    const uint32_t now = hal_micros();
+    if (!hal_elapsed_u32(now, last_control_us, 10000U)) return;
+    const float dt_s = (float)(uint32_t)(now - last_control_us) * 0.000001f;
+    last_control_us = now;
     current_rpm = read_encoder_rpm();
     float error = target_rpm - current_rpm;
-    float pwm = hal_pid_controller_update(speed_pid, error);
-
-    hal_pwm_write(MOTOR_PWM_PIN, (uint32_t)pwm);
+    hal_pid_terms_t terms;
+    if (hal_pid_controller_step_ex(speed_pid, error, current_rpm, dt_s,
+                                   5.0f, &terms) != HAL_OK) return;
+    hal_pwm_write(MOTOR_PWM_PIN, (uint32_t)terms.output);
 
     if (hal_pid_controller_is_error_stable(speed_pid, error, 10.0f, 5)) {
         hal_deb("Speed stable at %.1f RPM", current_rpm);

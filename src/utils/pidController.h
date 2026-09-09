@@ -9,6 +9,7 @@
 
 #include "libConfig.h"
 #include <float.h>
+#include <hal/control/hal_pid_controller.h>
 #include <hal/core/hal_math.h> // hal_constrain (type-independent macro)
 #include <hal/system/hal_system.h>
 #include <inttypes.h>
@@ -48,17 +49,11 @@ typedef struct {
  */
 class PIDController {
 public:
-  /** @brief Default constructor (all gains zero, limits uninitialised). */
-  PIDController()
-      : dt(0.001f), last_time(0.0f), integral(0.0f), previous(0.0f),
-        output(0.0f), pid_kp(0.0f), pid_ki(0.0f), pid_kd(0.0f),
-        max_integral(0.0f), dir(FORWARD), errorHistory{}, errorHistoryHead(0),
-        errorHistoryCount(0) {
-    setOutputLimits(PID_UNINITIALIZED, PID_UNINITIALIZED);
-  }
+  /** @brief Zero gains, unset limits; timing starts at construction. */
+  PIDController() : PIDController(0.0f, 0.0f, 0.0f, 0.0f) {}
 
   /**
-   * @brief Construct with initial gains and integral limit.
+   * @brief Construct with initial gains and integral limit; start timing now.
    * @param kp Proportional gain.
    * @param ki Integral gain.
    * @param kd Derivative gain.
@@ -87,8 +82,12 @@ public:
   float getTf() { return Tf; }
 
   /**
-   * @brief Update the PID time step from a divider value.
-   * @param timeDivider Divider applied to compute dt.
+   * @brief Update dt from elapsed milliseconds, subtracting uint32_t
+   * timestamps.
+   * @param timeDivider Divides elapsed milliseconds; 1000 gives seconds.
+   * @note Elapsed time starts at construction, reset or the last time update.
+   * Supports counter wrap if the interval is less than 2^32 ms. A zero divider
+   * or nonpositive computed dt retains the legacy fallback of 0.001.
    */
   void updatePIDtime(float timeDivider);
 
@@ -100,13 +99,26 @@ public:
   float updatePIDcontroller(float error);
 
   /**
+   * @brief Explicit-time step; see hal_pid_controller_step_ex for units,
+   * validation, saturation behavior and reset requirements.
+   * @param error Setpoint minus measurement.
+   * @param measurement Current measured value.
+   * @param seconds Positive elapsed seconds.
+   * @param deadband Continuous dead zone applied only to integration.
+   * @param terms Non-NULL output, unchanged on error.
+   * @return HAL_OK, HAL_EINVAL or HAL_EOVERFLOW; errors preserve state.
+   */
+  hal_status_t step(float error, float measurement, float seconds,
+                    float deadband, hal_pid_terms_t *terms);
+
+  /**
    * @brief Set the output clamping range.
    * @param min Minimum output value.
    * @param max Maximum output value.
    */
   void setOutputLimits(float min, float max);
 
-  /** @brief Reset internal state (integral, derivative, history). */
+  /** @brief Clear integral, derivative and history; restart timing now. */
   void reset();
 
   /**
@@ -134,8 +146,12 @@ public:
   bool isOscillating(float currentError, int windowSize = 20);
 
 private:
+  float filteredDerivative(float sample, float previousSample,
+                           float seconds) const;
+  bool measurementInitialized = false;
+  float previousMeasurement = 0.0f;
   float dt;
-  float last_time;
+  uint32_t last_time_ms;
   float integral;
   float previous;
   float output;

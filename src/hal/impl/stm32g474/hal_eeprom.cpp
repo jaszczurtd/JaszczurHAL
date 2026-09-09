@@ -161,7 +161,9 @@ const jh_eeprom_flash_backend_t kFlashBackend = {HAL_EEPROM_STM32_FLASH,
                                                  nullptr,
                                                  load,
                                                  store,
-                                                 replace_region};
+                                                 replace_region,
+                                                 HAL_STM32_FLASH_PAGE_SIZE,
+                                                 8u};
 
 } // namespace
 
