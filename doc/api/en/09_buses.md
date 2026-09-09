@@ -384,7 +384,7 @@ normal stop/reset cycle and invalidates state tied to the previous mode.
   zero-byte probe.
 - **impl/.mock:** ring buffer; injectable via mock helpers. Injected RX bytes are consumed sequentially by request/read transactions, which lets tests script multi-register flows. `hal_i2c_end_transmission()` returns `HAL_I2C_ERROR_GENERIC` when the mock busy flag is set, `HAL_I2C_RESULT_OK` otherwise. `hal_i2c_bus_clear()` increments an internal counter (query via `hal_mock_i2c_get_bus_clear_count()`); counter resets on `hal_i2c_init()`.
 
-**Thread safety:** Hardware backends serialize transfer APIs with an internal per-bus `hal_mutex_t`; use `hal_i2c_lock` / `hal_i2c_unlock` to extend critical regions around direct third-party/backend bus calls. `hal_i2c_init*()` / `hal_i2c_deinit*()` reconfigure shared bus objects and must be serialized by the application during setup/teardown. Mock backend does not synchronize concurrent access.
+**Thread safety:** Hardware backends serialize transfer APIs with an internal per-bus `hal_mutex_t`. A shared internal helper updates the recursive owner and nesting depth atomically, so contending tasks or cores never read unsynchronized lock state. Use `hal_i2c_lock` / `hal_i2c_unlock` to extend critical regions around direct third-party/backend bus calls. `hal_i2c_init*()` / `hal_i2c_deinit*()` reconfigure shared bus objects and must be serialized by the application during setup/teardown. Mock backend does not synchronize concurrent access.
 
 Mock controls and inspection functions:
 ```c

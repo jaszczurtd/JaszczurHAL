@@ -4,10 +4,9 @@
 #include "hal/core/hal_config.h"
 #ifdef HAL_ENABLE_I2C
 
-#include "hal/core/hal_mutex_once.h"
 #include "hal/i2c/hal_i2c.h"
 #include "hal/i2c/hal_i2c_internal.h"
-#include "hal/system/hal_sync.h"
+#include "hal/i2c/jh_i2c_recursive_lock.h"
 #include "jh_board_config.h"
 #include "jh_esp32_status.h"
 
@@ -54,9 +53,7 @@ struct I2cBusState {
   bool initialized;
   i2c_master_bus_handle_t bus_handle;
   i2c_master_dev_handle_t devices[kI2cAddressCount];
-  hal_mutex_t mutex;
-  volatile uintptr_t lock_owner;
-  volatile uint32_t lock_depth;
+  jh_i2c_recursive_lock_t lock;
   volatile uint32_t transaction_count;
 };
 
@@ -111,54 +108,17 @@ uintptr_t i2c_current_owner_token() {
   return task != nullptr ? (uintptr_t)task : UINTPTR_MAX;
 }
 
-bool i2c_ensure_mutex(uint8_t bus) {
-  return jh_hal_mutex_create_once(&i2c_state(bus).mutex) != nullptr;
-}
-
 bool i2c_lock_index(uint8_t index) {
-  if (!i2c_ensure_mutex(index)) {
-    return false;
-  }
-
-  I2cBusState &state = s_i2c[index];
-  const uintptr_t owner = i2c_current_owner_token();
-  const uint32_t depth = __atomic_load_n(&state.lock_depth, __ATOMIC_ACQUIRE);
-  const uintptr_t active_owner =
-      depth > 0u ? __atomic_load_n(&state.lock_owner, __ATOMIC_ACQUIRE) : 0u;
-  if (depth > 0u && active_owner == owner) {
-    HAL_ASSERT(depth < UINT32_MAX, "hal_i2c_lock: nesting depth overflow");
-    if (depth == UINT32_MAX) {
-      return false;
-    }
-    (void)__atomic_fetch_add(&state.lock_depth, 1u, __ATOMIC_RELAXED);
-    return true;
-  }
-
-  hal_mutex_lock(state.mutex);
-  __atomic_store_n(&state.lock_owner, owner, __ATOMIC_RELAXED);
-  __atomic_store_n(&state.lock_depth, 1u, __ATOMIC_RELEASE);
-  return true;
+  const bool acquired = jh_i2c_recursive_lock_acquire(
+      &s_i2c[index].lock, i2c_current_owner_token());
+  HAL_ASSERT(acquired, "hal_i2c_lock: mutex allocation or depth overflow");
+  return acquired;
 }
 
 void i2c_unlock_index(uint8_t index) {
-  I2cBusState &state = s_i2c[index];
-  const uintptr_t owner = i2c_current_owner_token();
-  const uint32_t depth = __atomic_load_n(&state.lock_depth, __ATOMIC_ACQUIRE);
-  const uintptr_t active_owner =
-      depth > 0u ? __atomic_load_n(&state.lock_owner, __ATOMIC_ACQUIRE) : 0u;
-  HAL_ASSERT(depth > 0u && active_owner == owner,
-             "hal_i2c_unlock: bus is not locked by this context");
-  if (depth == 0u || active_owner != owner) {
-    return;
-  }
-
-  if (depth > 1u) {
-    (void)__atomic_fetch_sub(&state.lock_depth, 1u, __ATOMIC_RELEASE);
-    return;
-  }
-  __atomic_store_n(&state.lock_depth, 0u, __ATOMIC_RELEASE);
-  __atomic_store_n(&state.lock_owner, 0u, __ATOMIC_RELAXED);
-  hal_mutex_unlock(state.mutex);
+  const bool released = jh_i2c_recursive_lock_release(
+      &s_i2c[index].lock, i2c_current_owner_token());
+  HAL_ASSERT(released, "hal_i2c_unlock: bus is not locked by this context");
 }
 
 void i2c_clear_buffers(I2cBusState &state) {

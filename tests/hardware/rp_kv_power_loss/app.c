@@ -10,16 +10,39 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #define COMMAND_RUN ((uint8_t)'T')
 #define TEST_KEY 0x1901u
+#define READ_THROUGH_U32_KEY 0x1904u
+#define READ_THROUGH_BLOB_KEY 0x1905u
 
 typedef struct {
   hal_status_t write_status;
   uint32_t recovered_value;
 } phase_result_t;
 
-static uint8_t s_response[320];
+typedef struct {
+  hal_status_t setup_status;
+  hal_status_t dirty_u32_status;
+  uint32_t dirty_u32_value;
+  hal_status_t dirty_blob_status;
+  uint16_t dirty_blob_length;
+  hal_status_t commit_status;
+  hal_status_t committed_u32_status;
+  uint32_t committed_u32_value;
+  hal_status_t committed_blob_status;
+  uint16_t committed_blob_length;
+  uint8_t committed_blob_matches;
+  hal_status_t reload_status;
+  hal_status_t reloaded_u32_status;
+  uint32_t reloaded_u32_value;
+  hal_status_t reloaded_blob_status;
+  uint16_t reloaded_blob_length;
+  uint8_t reloaded_blob_matches;
+} read_through_result_t;
+
+static uint8_t s_response[512];
 static size_t s_response_length;
 static size_t s_response_offset;
 
@@ -102,6 +125,75 @@ static hal_status_t run_deferred(uint32_t *first, uint32_t *second) {
   return status;
 }
 
+static uint8_t blob_matches(const uint8_t *actual, uint16_t actual_length,
+                            const uint8_t *expected, uint16_t expected_length) {
+  return (uint8_t)(actual_length == expected_length &&
+                   memcmp(actual, expected, expected_length) == 0);
+}
+
+static read_through_result_t run_read_through_deferred(void) {
+  static const uint8_t old_blob[] = {1u, 2u, 3u};
+  static const uint8_t new_blob[] = {7u, 8u, 9u, 10u};
+  read_through_result_t result = {0};
+
+  hal_status_t status = fresh_store();
+  if (status == HAL_OK) {
+    status = hal_kv_set_auto_commit(true);
+  }
+  if (status == HAL_OK) {
+    status = hal_kv_set_read_through(false);
+  }
+  if (status == HAL_OK) {
+    status = hal_kv_set_u32_ex(READ_THROUGH_U32_KEY, 10u);
+  }
+  if (status == HAL_OK) {
+    status = hal_kv_set_blob_ex(READ_THROUGH_BLOB_KEY, old_blob,
+                                (uint16_t)sizeof(old_blob));
+  }
+  if (status == HAL_OK) {
+    status = hal_kv_set_auto_commit(false);
+  }
+  if (status == HAL_OK) {
+    status = hal_kv_set_read_through(true);
+  }
+  if (status == HAL_OK) {
+    status = hal_kv_set_u32_ex(READ_THROUGH_U32_KEY, 20u);
+  }
+  if (status == HAL_OK) {
+    status = hal_kv_set_blob_ex(READ_THROUGH_BLOB_KEY, new_blob,
+                                (uint16_t)sizeof(new_blob));
+  }
+  result.setup_status = status;
+
+  result.dirty_u32_value = UINT32_MAX;
+  result.dirty_u32_status =
+      hal_kv_get_u32_ex(READ_THROUGH_U32_KEY, &result.dirty_u32_value);
+  uint8_t blob[sizeof(new_blob)] = {0};
+  result.dirty_blob_length = UINT16_MAX;
+  result.dirty_blob_status = hal_kv_get_blob_ex(
+      READ_THROUGH_BLOB_KEY, blob, sizeof(blob), &result.dirty_blob_length);
+
+  result.commit_status = hal_kv_commit_ex();
+  result.committed_u32_status =
+      hal_kv_get_u32_ex(READ_THROUGH_U32_KEY, &result.committed_u32_value);
+  result.committed_blob_status = hal_kv_get_blob_ex(
+      READ_THROUGH_BLOB_KEY, blob, sizeof(blob), &result.committed_blob_length);
+  result.committed_blob_matches = blob_matches(
+      blob, result.committed_blob_length, new_blob, (uint16_t)sizeof(new_blob));
+
+  result.reload_status = reload_store();
+  result.reloaded_u32_status =
+      hal_kv_get_u32_ex(READ_THROUGH_U32_KEY, &result.reloaded_u32_value);
+  result.reloaded_blob_status = hal_kv_get_blob_ex(
+      READ_THROUGH_BLOB_KEY, blob, sizeof(blob), &result.reloaded_blob_length);
+  result.reloaded_blob_matches = blob_matches(
+      blob, result.reloaded_blob_length, new_blob, (uint16_t)sizeof(new_blob));
+
+  (void)hal_kv_set_auto_commit(true);
+  (void)hal_kv_set_read_through(false);
+  return result;
+}
+
 static void run_tests(void) {
   const phase_result_t invalidated =
       run_phase(JH_RP_FLASH_REPLACE_FAIL_AFTER_INVALIDATE);
@@ -113,17 +205,34 @@ static void run_tests(void) {
   uint32_t first = 0u;
   uint32_t second = 0u;
   const hal_status_t deferred = run_deferred(&first, &second);
+  const read_through_result_t read_through = run_read_through_deferred();
 
   const int length = snprintf(
       (char *)s_response, sizeof(s_response),
-      "JHKV2 target=%s invalidate=%d/%lu body=%d/%lu verify=%d/%lu "
-      "publish=%d/%lu deferred=%d/%lu/%lu\n",
+      "JHKV3 target=%s invalidate=%d/%lu body=%d/%lu verify=%d/%lu "
+      "publish=%d/%lu deferred=%d/%lu/%lu "
+      "readthrough=%d/%d/%lu/%d/%u/%d/%d/%lu/%d/%u/%u/"
+      "%d/%d/%lu/%d/%u/%u\n",
       target_name(), (int)invalidated.write_status,
       (unsigned long)invalidated.recovered_value, (int)body.write_status,
       (unsigned long)body.recovered_value, (int)verified.write_status,
       (unsigned long)verified.recovered_value, (int)published.write_status,
       (unsigned long)published.recovered_value, (int)deferred,
-      (unsigned long)first, (unsigned long)second);
+      (unsigned long)first, (unsigned long)second,
+      (int)read_through.setup_status, (int)read_through.dirty_u32_status,
+      (unsigned long)read_through.dirty_u32_value,
+      (int)read_through.dirty_blob_status,
+      (unsigned int)read_through.dirty_blob_length,
+      (int)read_through.commit_status, (int)read_through.committed_u32_status,
+      (unsigned long)read_through.committed_u32_value,
+      (int)read_through.committed_blob_status,
+      (unsigned int)read_through.committed_blob_length,
+      (unsigned int)read_through.committed_blob_matches,
+      (int)read_through.reload_status, (int)read_through.reloaded_u32_status,
+      (unsigned long)read_through.reloaded_u32_value,
+      (int)read_through.reloaded_blob_status,
+      (unsigned int)read_through.reloaded_blob_length,
+      (unsigned int)read_through.reloaded_blob_matches);
   s_response_length =
       length > 0 && (size_t)length < sizeof(s_response) ? (size_t)length : 0u;
   s_response_offset = 0u;
