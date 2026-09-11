@@ -18,6 +18,28 @@
         "gateTargets": [
             "stm32g474",
             "rp2040"
+        ],
+        "variants": [
+            {
+                "id": "capture",
+                "module": "01_core_runtime_capture",
+                "sources": [
+                    "pulse_capture_app.c"
+                ],
+                "targets": [
+                    "stm32g474",
+                    "rp2040",
+                    "rp2350-arm",
+                    "rp2350-riscv"
+                ],
+                "extraDefines": [
+                    "HAL_ENABLE_PULSE_CAPTURE=1"
+                ],
+                "gateTargets": [
+                    "stm32g474",
+                    "rp2040"
+                ]
+            }
         ]
     },
     "toolchain": "cmake",
@@ -30,7 +52,8 @@
         "cache": {
             "JH_ARTIFACT_DIR": "${buildDir}",
             "JH_PROJECT_DIR": "${project}",
-            "JH_MODULE_NAME": "01_core_runtime"
+            "JH_MODULE_NAME": "01_core_runtime",
+            "JH_PROJECT_SOURCES": "app.c"
         }
     },
     "artifacts": {

@@ -298,6 +298,7 @@
 
 /* ── DMA1 + DMAMUX1 ─────────────────────────────────────────────────────── */
 #define DMA1_BASE 0x40020000u
+#define DMA2_BASE 0x40020400u
 #define DMAMUX1_BASE 0x40020800u
 
 #define DMA_ISR(base) JH_REG32((base) + 0x00u)
@@ -318,6 +319,8 @@
 #define DMA_CCR_MINC (1u << 7)
 #define DMA_CCR_PSIZE_16 (1u << 8)
 #define DMA_CCR_MSIZE_16 (1u << 10)
+#define DMA_CCR_PSIZE_32 (2u << 8)
+#define DMA_CCR_MSIZE_32 (2u << 10)
 #define DMA_CCR_PL_HIGH (2u << 12)
 
 #define DMA_FLAG_GIF(ch) (1u << ((uint32_t)(ch) * 4u))
@@ -336,6 +339,7 @@
 #define DMA_REQUEST_TIM2_UP 60u
 #define DMA_REQUEST_TIM3_UP 65u
 #define DMA_REQUEST_TIM4_UP 71u
+#define DMA_REQUEST_TIM5_CH1 72u
 #define DMA_REQUEST_TIM15_UP 79u
 #define DMA_REQUEST_TIM16_UP 83u
 #define DMA_REQUEST_TIM17_UP 85u
@@ -357,6 +361,7 @@
 #define TIM2_BASE 0x40000000u
 #define TIM3_BASE 0x40000400u
 #define TIM4_BASE 0x40000800u
+#define TIM5_BASE 0x40000C00u
 #define TIM6_BASE 0x40001000u
 #define TIM7_BASE 0x40001400u
 #define TIM15_BASE 0x40014000u
@@ -391,6 +396,8 @@
 #define TIM_CR1_ARPE (1u << 7)
 #define TIM_DIER_UIE (1u << 0)
 #define TIM_DIER_UDE (1u << 8)
+#define TIM_DIER_CC1DE (1u << 9)
+#define TIM_SR_CC1OF (1u << 9)
 #define TIM_SR_UIF (1u << 0)
 #define TIM_EGR_UG (1u << 0)
 

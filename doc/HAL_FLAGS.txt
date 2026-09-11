@@ -58,3 +58,6 @@ for assertions; assertions are enabled by default.
 RP I2C transfers use HAL_RP_I2C_TIMEOUT_US (default 100000, range 1..1000000)
 per read/write phase. Set it in hal_project_config.h; see doc/api/en/09_buses.md
 and doc/api/pl/09_buses.md for timing and locking limits.
+
+HAL_ENABLE_PULSE_CAPTURE enables hardware period timestamps and disjoint
+32-period windows; backend limits and API: doc/api/en/24_pulse_capture.md.

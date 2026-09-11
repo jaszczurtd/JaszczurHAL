@@ -3,6 +3,7 @@
  * through the final linker without touching hardware in CI. */
 
 #include "hal/analog/hal_pcnt.h"
+#include "hal/analog/hal_pulse_capture.h"
 #include "hal/bluetooth/hal_ble.h"
 #include "hal/gpio/hal_pwm.h"
 #include "hal/gpio/hal_pwm_freq.h"
@@ -189,6 +190,11 @@ void jh_phase3_link_probe(void) {
   (void)hal_i2c_slave_get_address();
   (void)hal_i2c_slave_get_transaction_count();
   hal_i2c_slave_deinit();
+  const hal_pulse_capture_config_t capture_config = {4U, true, 10000U};
+  hal_pulse_capture_sample_t capture_sample = {};
+  (void)hal_pulse_capture_init(&capture_config);
+  (void)hal_pulse_capture_read(&capture_sample);
+  (void)hal_pulse_capture_deinit();
   (void)hal_pcnt_is_supported();
   (void)hal_pcnt_channel_count();
   (void)hal_pcnt_init_ex(0u, 17u, HAL_PCNT_EDGE_RISING);

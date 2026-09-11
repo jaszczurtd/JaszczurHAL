@@ -1205,6 +1205,14 @@ void hal_mock_i2c_slave_simulate_receive_bus(uint8_t bus, const uint8_t *data,
 /** @brief Simulate a master-read starting from current reg pointer. Returns
  * bytes copied. */
 int hal_mock_i2c_slave_simulate_request(uint8_t *out_buf, int max_len);
+/**
+ * @brief Install a hook called after each byte of a simulated master read.
+ * @param hook Receives the bus index and register just read; NULL disables it.
+ * @note May publish local registers to simulate updates during a transaction.
+ * Must not reenter bus simulation or change device lifetime. Global to both
+ * buses; tests must clear the hook when finished.
+ */
+void hal_mock_i2c_slave_set_read_hook(void (*hook)(uint8_t bus, uint8_t reg));
 /** @brief Simulate a master-read on selected bus. */
 int hal_mock_i2c_slave_simulate_request_bus(uint8_t bus, uint8_t *out_buf,
                                             int max_len);
@@ -1328,3 +1336,10 @@ void hal_mock_ble_commands_full_reset(void);
  * call recreates it from scratch. Lets Helgrind/DRD observe a real destroy;
  * production firmware never calls this. */
 void hal_mock_gps_engine_full_reset(void);
+
+/** @brief Inject one 16 MHz capture timestamp; returns HAL_OK or HAL_EUNINIT.
+ * @param ticks Hardware timestamp, wrapping at 32 bits.
+ * @param measured_us Timestamp in mock hal_micros units. */
+hal_status_t hal_mock_pulse_capture_edge(uint32_t ticks, uint32_t measured_us);
+/** @brief Inject a backend error (or HAL_OK to clear it) for capture tests. */
+void hal_mock_pulse_capture_fault(hal_status_t status);

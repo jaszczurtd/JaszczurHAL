@@ -1656,6 +1656,25 @@ target_compile_definitions(test_hal_power_header_c PRIVATE
 jh_enable_host_warnings(test_hal_power_header_c ERRORS)
 add_test(NAME test_hal_power_header_c COMMAND test_hal_power_header_c)
 add_stm32_i2c_slave_host_test(test_stm32_hal_i2c_slave)
+
+foreach(I2C_TEST IN ITEMS test_rp_i2c_slave_snapshot test_rp_i2c_slave_live)
+    add_executable(${I2C_TEST}
+        test_rp_i2c_slave_snapshot.cpp
+        ${CMAKE_SOURCE_DIR}/src/hal/impl/rp2040/hal_i2c_slave.cpp
+        ${CMAKE_SOURCE_DIR}/src/hal/core/hal_assert.cpp
+        ${CMAKE_SOURCE_DIR}/src/hal/core/hal_config.cpp
+        ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+    target_include_directories(${I2C_TEST} PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/fakes/rp2040_i2c_sdk
+        ${CMAKE_SOURCE_DIR}/src)
+    target_compile_definitions(${I2C_TEST} PRIVATE
+        HAL_TARGET_RP2040=1 HAL_BOARD_PROFILE_RP_PICO=1 HAL_ENABLE_I2C_SLAVE
+        HAL_I2C_SLAVE_REG_MAP_SIZE=64U HAL_ENABLE_UNITY UNITY_INCLUDE_CONFIG_H)
+    jh_enable_host_warnings(${I2C_TEST} ERRORS)
+    add_test(NAME ${I2C_TEST} COMMAND ${I2C_TEST})
+endforeach()
+target_compile_definitions(test_rp_i2c_slave_snapshot PRIVATE
+    HAL_ENABLE_I2C_SLAVE_SNAPSHOT)
 add_stm32_gpio_host_test(test_stm32_hal_gpio)
 add_executable(test_stm32_pwm_clock
     test_stm32_pwm_clock.cpp
@@ -1680,6 +1699,9 @@ add_hal_test(test_hal_dma_pwm_audio)
 add_hal_test(test_hal_digipot)
 add_hal_test(test_hal_pga2311)
 add_hal_test(test_hal_pcnt)
+add_hal_test(test_hal_pulse_capture)
+add_hal_test(test_hal_pulse_capture_lifecycle)
+add_hal_test(test_rp_pulse_capture_program)
 add_hal_test(test_hal_spi)
 add_hal_test(test_hal_spi_device)
 add_hal_test(test_hal_lora_radio_lifecycle)

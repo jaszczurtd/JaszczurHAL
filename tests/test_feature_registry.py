@@ -792,7 +792,7 @@ TEST_ROOT.mkdir(parents=True)
 )
 
 model = generate_hal_features.load_registry(CONFIG)
-require(len(model.features) == 113, "feature registry symbol count drifted")
+require(len(model.features) == 115, "feature registry symbol count drifted")
 catalog_text = (ROOT / "doc/api/en/02_module_flags.md").read_text(encoding="utf-8")
 catalog_features = set(
     re.findall(
@@ -811,11 +811,11 @@ require(
     f"unknown={sorted(catalog_features - public_features)}",
 )
 require(
-    sum(bool(feature.implies) for feature in model.features.values()) == 74,
+    sum(bool(feature.implies) for feature in model.features.values()) == 75,
     "feature registry implies-source count drifted",
 )
 require(
-    sum(len(feature.implies) for feature in model.features.values()) == 133,
+    sum(len(feature.implies) for feature in model.features.values()) == 134,
     "feature registry direct-edge count drifted",
 )
 require(

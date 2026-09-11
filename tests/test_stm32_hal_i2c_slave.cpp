@@ -37,6 +37,18 @@ void test_register_write_read16_roundtrip_big_endian(void) {
   TEST_ASSERT_EQUAL_UINT8(0x34, hal_i2c_slave_reg_read8(0x05));
 }
 
+void test_block_write_rejects_overflow_without_changing_registers(void) {
+  const uint8_t bytes[] = {0x12, 0x34, 0x56};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_slave_reg_write_block(0U, bytes, 3U));
+  TEST_ASSERT_EQUAL_HEX16(0x1234U, hal_i2c_slave_reg_read16(0U));
+  TEST_ASSERT_EQUAL_UINT8(0x56U, hal_i2c_slave_reg_read8(2U));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL, hal_i2c_slave_reg_write_block(HAL_I2C_SLAVE_REG_MAP_SIZE - 1U,
+                                                bytes, 3U));
+  TEST_ASSERT_EQUAL_UINT8(
+      0U, hal_i2c_slave_reg_read8(HAL_I2C_SLAVE_REG_MAP_SIZE - 1U));
+}
+
 void test_out_of_range_access_is_ignored(void) {
   hal_i2c_slave_reg_write8(HAL_I2C_SLAVE_REG_MAP_SIZE, 0xFF);
   hal_i2c_slave_reg_write16(HAL_I2C_SLAVE_REG_MAP_SIZE - 1u, 0xFFFF);
@@ -71,6 +83,7 @@ int main(void) {
   RUN_TEST(test_bus1_is_independent);
   RUN_TEST(test_register_write_read8_roundtrip);
   RUN_TEST(test_register_write_read16_roundtrip_big_endian);
+  RUN_TEST(test_block_write_rejects_overflow_without_changing_registers);
   RUN_TEST(test_out_of_range_access_is_ignored);
   RUN_TEST(test_reinit_clears_register_map_and_counter);
   RUN_TEST(test_deinit_clears_address_and_registers);

@@ -18,6 +18,7 @@
         "JH_ARTIFACT_DIR": "${workspaceFolder}/../../.build/examples/01_core_runtime",
         "JH_PROJECT_DIR": "${workspaceFolder}",
         "JH_MODULE_NAME": "01_core_runtime",
+        "JH_PROJECT_SOURCES": "app.c",
         "JH_ROOT": "${workspaceFolder}/../.."
     },
     "files.exclude": {

@@ -330,6 +330,24 @@
                 "showReuseMessage": false
             },
             "problemMatcher": []
+        },
+        {
+            "label": "Project: Build variant: capture",
+            "detail": "Build the example variant capture.",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "build",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "capture"
+            ],
+            "group": "build",
+            "problemMatcher": "$gcc"
         }
     ]
 }

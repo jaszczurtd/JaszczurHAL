@@ -5,6 +5,7 @@
 
 #include "hal/core/jh_endian.h"
 #include "hal/i2c/hal_i2c_slave.h"
+#include "hal/i2c/jh_i2c_slave_registers.h"
 
 #include <hardware/gpio.h>
 #include <hardware/i2c.h>
@@ -16,6 +17,7 @@
 
 typedef struct {
   uint8_t regs[HAL_I2C_SLAVE_REG_MAP_SIZE];
+  jh_i2c_slave_snapshot_t read_snapshot;
   uint8_t reg_ptr;
   uint8_t address;
   uint8_t sda_pin;
@@ -39,10 +41,6 @@ static inline uint8_t slave_bus_index(uint8_t bus) {
 
 static inline i2c_inst_t *slave_i2c_hw(uint8_t bus) {
   return slave_bus_index(bus) == 1u ? i2c1 : i2c0;
-}
-
-static inline i2c_slave_state_t *slave_state(uint8_t bus) {
-  return &s_slave[slave_bus_index(bus)];
 }
 
 static inline uint slave_irq_num(uint8_t bus) {
@@ -109,7 +107,8 @@ static void slave_handle_request(i2c_slave_state_t *st, i2c_inst_t *i2c) {
   uint8_t value = 0u;
   slave_lock(st);
   if (st->reg_ptr < HAL_I2C_SLAVE_REG_MAP_SIZE) {
-    value = st->regs[st->reg_ptr++];
+    const uint8_t *view = jh_i2c_slave_read_view(&st->read_snapshot, st->regs);
+    value = view[st->reg_ptr++];
   }
   slave_unlock(st);
   i2c_write_byte_raw(i2c, value);
@@ -143,6 +142,9 @@ static void slave_handle_irq(uint8_t idx) {
     finish_after_data = true;
   }
   if (finish_before_data) {
+    /* A pending STOP may belong to the previous transfer. Invalidate at
+     * START/abort so it cannot discard a newly captured read below. */
+    st->read_snapshot.valid = false;
     slave_finish_transfer(st);
   }
 
@@ -228,6 +230,7 @@ void hal_i2c_slave_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
   st->sda_pin = sda_pin;
   st->scl_pin = scl_pin;
   st->rx_seen = false;
+  st->read_snapshot.valid = false;
   st->transfer_in_progress = false;
   st->initialized = true;
   __atomic_store_n(&st->transaction_count, 0u, __ATOMIC_RELEASE);
@@ -252,6 +255,7 @@ void hal_i2c_slave_deinit_bus(uint8_t bus) {
   st->address = 0u;
   st->reg_ptr = 0u;
   st->rx_seen = false;
+  st->read_snapshot.valid = false;
   st->transfer_in_progress = false;
   __atomic_store_n(&st->transaction_count, 0u, __ATOMIC_RELEASE);
   memset(st->regs, 0, sizeof(st->regs));
@@ -286,6 +290,26 @@ void hal_i2c_slave_reg_write16_bus(uint8_t bus, uint8_t reg, uint16_t value) {
   slave_lock(&s_slave[idx]);
   jh_store_be16(&s_slave[idx].regs[reg], value);
   slave_unlock(&s_slave[idx]);
+}
+
+hal_status_t hal_i2c_slave_reg_write_block(uint8_t reg, const uint8_t *data,
+                                           size_t count) {
+  return hal_i2c_slave_reg_write_block_bus(0U, reg, data, count);
+}
+
+hal_status_t hal_i2c_slave_reg_write_block_bus(uint8_t bus, uint8_t reg,
+                                               const uint8_t *data,
+                                               size_t count) {
+  if (bus > 1U) {
+    return HAL_EINVAL;
+  }
+  slave_ensure_lock(bus);
+  i2c_slave_state_t *st = &s_slave[bus];
+  slave_lock(st);
+  const hal_status_t status =
+      jh_i2c_slave_write_block(st->regs, reg, data, count);
+  slave_unlock(st);
+  return status;
 }
 
 uint8_t hal_i2c_slave_reg_read8(uint8_t reg) {

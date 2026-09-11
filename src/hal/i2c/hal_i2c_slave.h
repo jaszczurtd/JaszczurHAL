@@ -1,6 +1,8 @@
 #pragma once
 
 #include "hal/core/hal_config.h"
+#include "hal/core/hal_status.h"
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,10 +39,19 @@ extern "C" {
  * Two I2C controllers are supported via bus-index APIs:
  *   - bus 0 -> default I2C controller
  *   - bus 1 -> second I2C controller, when available
- * Any other bus value is invalid and triggers HAL_ASSERT in checked builds.
+ * Any other bus value is invalid. Legacy APIs trigger HAL_ASSERT in checked
+ * builds; the status-returning block writer returns HAL_EINVAL.
  *
  * Register map size is fixed at compile time (HAL_I2C_SLAVE_REG_MAP_SIZE,
  * default 32 bytes). Override in hal_project_config.h if needed.
+ *
+ * HAL_ENABLE_I2C_SLAVE_SNAPSHOT freezes the register map at the first byte
+ * serviced for each master read on RP, STM32 and mock. Later local writes
+ * are visible to the next read, including a bare read after STOP. The extra
+ * storage is one register map per controller. Publish related fields with
+ * reg_write_block*() so the frozen map contains a complete publication.
+ * ESP32 retains its queued-read behavior described above; with this option
+ * even partial queue submissions share one map until register reselection.
  */
 
 #ifndef HAL_I2C_SLAVE_REG_MAP_SIZE
@@ -94,6 +105,33 @@ void hal_i2c_slave_reg_write8_bus(uint8_t bus, uint8_t reg, uint8_t value);
  */
 void hal_i2c_slave_reg_write16(uint8_t reg, uint16_t value);
 void hal_i2c_slave_reg_write16_bus(uint8_t bus, uint8_t reg, uint16_t value);
+
+/**
+ * @brief Atomically publish a register block on bus 0.
+ * @param reg First register; must be inside the register map.
+ * @param data Source bytes, stable for this call; NULL allowed only for
+ * count=0.
+ * @param count Number of bytes; the complete block must fit in the map.
+ * @return HAL_OK, or HAL_EINVAL without any writes for invalid arguments.
+ * @note Uses a short register-map lock. A multi-byte master read also needs
+ * HAL_ENABLE_I2C_SLAVE_SNAPSHOT to remain coherent across later publications.
+ */
+hal_status_t hal_i2c_slave_reg_write_block(uint8_t reg, const uint8_t *data,
+                                           size_t count);
+
+/**
+ * @brief Atomically publish a register block on the selected bus.
+ * @param bus Controller index, 0 or 1.
+ * @param reg First register; must be inside the register map.
+ * @param data Source bytes, stable for this call; NULL allowed only for
+ * count=0.
+ * @param count Number of bytes; the complete block must fit in the map.
+ * @return HAL_OK, or HAL_EINVAL without any writes for invalid arguments.
+ * @note Same locking and snapshot behavior as hal_i2c_slave_reg_write_block().
+ */
+hal_status_t hal_i2c_slave_reg_write_block_bus(uint8_t bus, uint8_t reg,
+                                               const uint8_t *data,
+                                               size_t count);
 
 /**
  * @brief Read a single byte from the register map.

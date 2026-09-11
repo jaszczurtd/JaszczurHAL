@@ -436,25 +436,25 @@ require(
 require(
     full_configuration_counts
     == {
-        "rp2040": 44,
-        "rp2350-arm": 37,
-        "rp2350-riscv": 23,
-        "stm32g474": 40,
+        "rp2040": 45,
+        "rp2350-arm": 38,
+        "rp2350-riscv": 24,
+        "stm32g474": 41,
     }
-    and sum(full_configuration_counts.values()) == 144,
-    "full example build matrix must contain exactly 144 configurations: "
+    and sum(full_configuration_counts.values()) == 148,
+    "full example build matrix must contain exactly 148 configurations: "
     f"{full_configuration_counts}",
 )
 require(
     gate_configuration_counts
     == {
-        "rp2040": 42,
+        "rp2040": 43,
         "rp2350-arm": 4,
         "rp2350-riscv": 0,
-        "stm32g474": 31,
+        "stm32g474": 32,
     }
-    and sum(gate_configuration_counts.values()) == 77,
-    "example gate matrix must contain exactly 77 configurations: "
+    and sum(gate_configuration_counts.values()) == 79,
+    "example gate matrix must contain exactly 79 configurations: "
     f"{gate_configuration_counts}",
 )
 required_feature_surface = {
