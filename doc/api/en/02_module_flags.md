@@ -104,6 +104,7 @@ Stack protection uses two independent opt-ins:
 | `HAL_ENABLE_I2C` | `hal_i2c.h` | `hal_i2c.cpp` | I2C master/controller bus |
 | `HAL_ENABLE_I2C_10BIT` | `hal_i2c.h` | `hal_i2c.cpp` + target backends | Opt-in 10-bit I2C master addressing via `hal_i2c_init_10bit()`/`hal_i2c_init_bus_10bit()` and `hal_i2c_address_t` (propagates I2C); `hal_i2c_scan()` stays 7-bit-only |
 | `HAL_ENABLE_I2C_SLAVE` | `hal_i2c_slave.h` | `hal_i2c_slave.cpp` | I2C slave/target register-map mode |
+| `HAL_ENABLE_I2C_SLAVE_SNAPSHOT` | `hal_i2c_slave.h` | `hal_i2c_slave.cpp` | Immutable register-map response per read; implies `HAL_ENABLE_I2C_SLAVE`. ESP32 refreshes on register reselection. |
 | `HAL_ENABLE_SPI` | `hal_spi.h` | `hal_spi.cpp` | SPI master/controller |
 | `HAL_ENABLE_CAN` | `hal_can.h` | `hal_can.cpp` + `hal_can_util.cpp` | Generic CAN API facade; requires at least one backend |
 | `HAL_ENABLE_MCP2515` | `hal_can.h` + `hal/can/mcp2515/mcp2515_driver.h` | target `hal_can.cpp` facade + `hal/can/mcp2515/hal_can_mcp2515.cpp` + `hal/can/mcp2515/hal_can_mcp2515_config.cpp` + `hal/can/mcp2515/mcp2515_driver.cpp` | Shared HAL-only MCP2515 CAN backend (propagates CAN + SPI) |
@@ -144,6 +145,7 @@ Stack protection uses two independent opt-ins:
 | `HAL_ENABLE_PWM_FREQ` | `hal_pwm_freq.h` | `hal_pwm_freq.cpp` | RP2040 hardware/pwm, STM32G474 TIM PWM, or ESP32-S3 LEDC |
 | `HAL_ENABLE_DAC` | `hal_dac.h` | target `hal_dac.cpp` | True-DAC capability facade; STM32G474 provides hardware output, while RP2040 reports the capability as unsupported |
 | `HAL_ENABLE_PCNT` | `hal_pcnt.h` | target `hal_pcnt.cpp` | Target pulse-counter facade for RP2040, STM32G474, ESP32-S3 PCNT, and mock targets |
+| `HAL_ENABLE_PULSE_CAPTURE` | `hal_pulse_capture.h` | `hal_pulse_capture.cpp` | [Hardware period capture](24_pulse_capture.md) |
 | `HAL_ENABLE_RGB_LED` | `hal_rgb_led.h` + `hal/gpio/neopixel/jh_neopixel.h` | `hal_rgb_led.cpp` + `hal/gpio/neopixel/jh_neopixel.cpp` | Shared NeoPixel core + target transport (RP2040 PIO / STM32 cycle-timed GPIO / ESP32-S3 RMT) |
 | `HAL_ENABLE_HD44780` | `hal_hd44780.h` (C); `hal/display/hd44780/hd44780.h` (C++) | `hal/display/hal_hd44780.cpp` + `hal/display/hd44780/hd44780.cpp` | Opaque HD44780 handle, pin configuration, text, cursor and display control over HAL GPIO/system timing |
 | `HAL_ENABLE_DISPLAY` | `hal_display.h`; `utils/draw7Segment.h` (C and C++) | `hal/display/drivers/hal_display.cpp` + `utils/draw7Segment.cpp` | Graphics display API and a small seven-segment drawing helper; requires a TFT, OLED, LCD or EPD backend |

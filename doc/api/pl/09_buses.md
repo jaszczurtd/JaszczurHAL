@@ -575,6 +575,15 @@ Jest to niezależne od modułu I2C master (`hal_i2c`) - oba mogą być
 wyłączane/włączane osobno, ale nie mogą jednocześnie współdzielić tej samej
 magistrali.
 
+Opcja `HAL_ENABLE_I2C_SLAVE_SNAPSHOT` utrwala mapę rejestrów na czas odczytu
+na RP, STM32 i mock. Obraz powstaje przy obsłudze pierwszego bajtu; następny
+odczyt otrzymuje aktualne dane. ESP32 zachowuje obraz także przy częściowym
+wypełnianiu kolejki, aż do ponownego wyboru rejestru. Koszt to jedna mapa na
+kontroler, bez trzymania blokady podczas transmisji. Powiązane pola publikuj
+przez `hal_i2c_slave_reg_write_block*()` pod jedną krótką blokadą; zapisy
+pojedynczych bajtów nadal mogą pozostawić niepełną publikację w chwili
+utrwalania obrazu. Aplikacja nadal sprawdza spójność i świeżość danych.
+
 ```c
 #include <hal/i2c/hal_i2c_slave.h>
 
@@ -596,6 +605,10 @@ void hal_i2c_slave_reg_write8_bus(uint8_t bus, uint8_t reg, uint8_t value);
 void hal_i2c_slave_reg_write16(uint8_t reg, uint16_t value);   // big-endian: MSB przy reg, LSB przy reg+1
 void hal_i2c_slave_reg_write16_bus(uint8_t bus, uint8_t reg, uint16_t value);
 
+// Publikacja całego bloku; HAL_EINVAL przy błędnym bus/wskaźniku/zakresie.
+hal_status_t hal_i2c_slave_reg_write_block(uint8_t reg, const uint8_t *data, size_t count);
+hal_status_t hal_i2c_slave_reg_write_block_bus(uint8_t bus, uint8_t reg, const uint8_t *data, size_t count);
+
 // Odczyt z mapy rejestrów
 uint8_t  hal_i2c_slave_reg_read8(uint8_t reg);
 uint8_t  hal_i2c_slave_reg_read8_bus(uint8_t bus, uint8_t reg);
@@ -615,6 +628,9 @@ uint32_t hal_i2c_slave_get_transaction_count_bus(uint8_t bus);
 
 Obsługiwane są tylko wartości magistrali 0 i 1. Inne wartości są błędami
 programisty i wywołują `HAL_ASSERT` w konfiguracjach z włączonymi kontrolami.
+Statusowe funkcje zapisu bloku zwracają dla błędnej magistrali `HAL_EINVAL`.
+Zapis długości zero dopuszcza NULL przy poprawnym rejestrze początkowym;
+pozostałe zapisy wymagają miejsca na cały blok.
 
 **Protokół mapy rejestrów (I2C):**
 1. Master zapisuje `[reg_address]`, ustawiając wskaźnik rejestru.

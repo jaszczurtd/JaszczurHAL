@@ -60,10 +60,12 @@ EXPECTED_RESOLVED = [
     "HAL_ENABLE_I2C",
     "HAL_ENABLE_I2C_10BIT",
     "HAL_ENABLE_I2C_SLAVE",
+    "HAL_ENABLE_I2C_SLAVE_SNAPSHOT",
     "HAL_ENABLE_MQTT",
     "HAL_ENABLE_NETWORK_CORE",
     "HAL_ENABLE_OTA",
     "HAL_ENABLE_PCNT",
+    "HAL_ENABLE_PULSE_CAPTURE",
     "HAL_ENABLE_PWM_FREQ",
     "HAL_ENABLE_RGB_LED",
     "HAL_ENABLE_SPI",
@@ -102,6 +104,8 @@ class Phase3RegistryAndBuildTests(unittest.TestCase):
             {
                 "src/hal/impl/esp32/hal_i2c_slave.cpp",
                 "src/hal/impl/esp32/hal_pcnt.cpp",
+                "src/hal/impl/esp32/hal_pulse_capture.cpp",
+                "src/hal/analog/hal_pulse_capture.cpp",
                 "src/hal/impl/esp32/hal_pwm.cpp",
                 "src/hal/impl/esp32/hal_pwm_freq.cpp",
                 "src/hal/gpio/hal_rgb_led.cpp",
@@ -117,6 +121,7 @@ class Phase3RegistryAndBuildTests(unittest.TestCase):
                 "esp_driver_i2c",
                 "esp_driver_ledc",
                 "esp_driver_pcnt",
+                "esp_driver_mcpwm",
                 "esp_driver_rmt",
             }
             <= dependencies

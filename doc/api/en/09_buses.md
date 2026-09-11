@@ -489,6 +489,16 @@ do not change bytes already queued; select a register again to refresh them.
 This is independent of the I2C master module (`hal_i2c`) - both can be
 disabled/enabled separately, but they cannot share the same bus simultaneously.
 
+Enable `HAL_ENABLE_I2C_SLAVE_SNAPSHOT` to freeze one register map per read on
+RP, STM32 and mock. The snapshot is taken when the first byte is served and
+released at the transaction boundary; later local writes appear on the next
+read. ESP32 keeps the same snapshot through partial queue submissions until a
+new register-pointer write. This adds one map per controller and does not hold
+a lock during transmission. Use `hal_i2c_slave_reg_write_block*()` to publish
+related fields under a single short lock; byte-by-byte updates can still leave
+a partially published image at snapshot time. Sequence and freshness checks
+remain the application's responsibility.
+
 ```c
 #include <hal/i2c/hal_i2c_slave.h>
 
@@ -510,6 +520,10 @@ void hal_i2c_slave_reg_write8_bus(uint8_t bus, uint8_t reg, uint8_t value);
 void hal_i2c_slave_reg_write16(uint8_t reg, uint16_t value);   // big-endian: MSB at reg, LSB at reg+1
 void hal_i2c_slave_reg_write16_bus(uint8_t bus, uint8_t reg, uint16_t value);
 
+// All-or-nothing block publication; HAL_EINVAL for invalid bus/pointer/range.
+hal_status_t hal_i2c_slave_reg_write_block(uint8_t reg, const uint8_t *data, size_t count);
+hal_status_t hal_i2c_slave_reg_write_block_bus(uint8_t bus, uint8_t reg, const uint8_t *data, size_t count);
+
 // Read from register map
 uint8_t  hal_i2c_slave_reg_read8(uint8_t reg);
 uint8_t  hal_i2c_slave_reg_read8_bus(uint8_t bus, uint8_t reg);
@@ -528,7 +542,9 @@ uint32_t hal_i2c_slave_get_transaction_count_bus(uint8_t bus);
 ```
 
 Only bus values 0 and 1 are supported. Other values are programmer errors and
-trigger `HAL_ASSERT` in checked builds.
+trigger `HAL_ASSERT` in checked builds. The status-returning block writer
+returns `HAL_EINVAL` for an invalid bus. Its zero-length write permits NULL
+data with an in-range register; other writes require the complete block to fit.
 
 **Register map protocol (I2C):**
 1. Master writes: `[reg_address]` - sets the register pointer

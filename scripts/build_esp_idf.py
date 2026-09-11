@@ -108,6 +108,7 @@ ESP_IDF_TARGET_SOURCES = {
         "src/hal/impl/esp32/hal_ota.cpp",
     ),
     "HAL_ENABLE_PCNT": ("src/hal/impl/esp32/hal_pcnt.cpp",),
+    "HAL_ENABLE_PULSE_CAPTURE": ("src/hal/impl/esp32/hal_pulse_capture.cpp",),
     "HAL_ENABLE_PWM_FREQ": (
         "src/hal/impl/esp32/hal_pwm_freq.cpp",
     ),
@@ -167,6 +168,7 @@ ESP_IDF_FEATURE_COMPONENT_DEPENDENCIES = {
     ),
     "HAL_ENABLE_OTA": ("app_update", "esp_partition"),
     "HAL_ENABLE_PCNT": ("esp_driver_pcnt",),
+    "HAL_ENABLE_PULSE_CAPTURE": ("esp_driver_mcpwm",),
     "HAL_ENABLE_RGB_LED": ("esp_driver_rmt",),
     "HAL_ENABLE_SPI": ("esp_driver_spi",),
     "HAL_ENABLE_UART": ("esp_driver_uart",),
@@ -1241,6 +1243,8 @@ def _render_sdkconfig_defaults(model: Mapping[str, Any]) -> str:
                 "CONFIG_LWIP_TCPIP_CORE_LOCKING=y",
             )
         )
+    if "HAL_ENABLE_PULSE_CAPTURE" in model["resolvedFeatures"]:
+        lines.append("CONFIG_MCPWM_ISR_CACHE_SAFE=y")
     if "HAL_ENABLE_BLE" in model["resolvedFeatures"]:
         lines.extend(
             (

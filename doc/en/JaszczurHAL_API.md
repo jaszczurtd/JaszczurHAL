@@ -412,6 +412,7 @@ The complete reference is split across the following focused documents:
 | 21 | [Raw LoRa radio](../api/en/21_lora.md) | Validated SX1262 profiles plus experimental software-only SX1261/SX1276/SX1278, asynchronous TX/RX/CAD, current RSSI, capabilities, callbacks, diagnostics and time-on-air |
 | 22 | [Reliable LoRa link](../api/en/22_lora_link.md) | 16-bit addressing, message sequences, ACK/retry, duplicate suppression, fragmentation and optional ChaCha20-Poly1305 over `hal_lora_radio` |
 | 23 | [Command routing](../api/en/23_commands.md) | Transport-neutral handler registration and policy, bounded request/response/event wire messages, network compatibility, framed serial, reliable LoRa and authenticated BLE Stream adapters |
+| 24 | [Hardware period capture](../api/en/24_pulse_capture.md) | Hardware timestamps and 32-period frequency windows on RP, STM32G474, ESP32-S3, and mock |
 
 ---
 
@@ -502,3 +503,4 @@ The complete reference is split across the following focused documents:
 | `pidController` | [Utilities](../api/en/16_utilities.md) |
 | `SmartTimers` | [Utilities](../api/en/16_utilities.md) |
 | `draw7Segment` | [Utilities](../api/en/16_utilities.md) |
+| `hal_pulse_capture` | [Hardware period capture](../api/en/24_pulse_capture.md) |

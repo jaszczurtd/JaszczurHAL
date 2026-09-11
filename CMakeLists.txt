@@ -100,6 +100,7 @@ file(GLOB MOCK_SOURCES ${SRC}/hal/impl/.mock/*.cpp)
 # extra fixtures.
 set(UTIL_SOURCES
     ${SRC}/hal/analog/hal_adc_utils.cpp
+    ${SRC}/hal/analog/hal_pulse_capture.cpp
     ${SRC}/hal/codecs/hal_image.cpp
     ${SRC}/hal/core/hal_assert.cpp
     ${SRC}/hal/core/hal_math.cpp
@@ -341,6 +342,7 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_DMA_PWM_AUDIO
     HAL_ENABLE_STACK_GUARD   # target-independent synchronous stack protection API
     HAL_ENABLE_PCNT
+    HAL_ENABLE_PULSE_CAPTURE
     HAL_ENABLE_POWER_MANAGEMENT
     HAL_ENABLE_PWM_FREQ
     HAL_ENABLE_RGB_LED

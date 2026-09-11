@@ -24,7 +24,7 @@ See each project's README for wiring and hardware test coverage.
 
 | Project | Purpose | Supported targets | `gateTargets` | Variants |
 |---|---|---|---|---|
-| `01_core_runtime` | Blink an LED, inspect platform diagnostics, run software timers, and calculate PID output. | R0, RA, RV, S | R0, S | - |
+| `01_core_runtime` | Blink an LED, inspect platform diagnostics, run software timers, and calculate PID output. | R0, RA, RV, S | R0, S | `capture` |
 | `02_crypto` | Calculate an MD5 digest and encrypt/decrypt with ChaCha20-Poly1305. | R0, RA, RV, S | R0, S | - |
 | `03_modem_A7670E` | Start an A7670/A7672 modem and publish MQTT messages over a cellular network. | R0, RA, RV | R0 | - |
 | `04_sensor_hub` | Read DS18B20 temperature, DHT temperature/humidity, and BH1750 illuminance. | R0, RA, RV, S | R0, S | - |
@@ -237,3 +237,5 @@ Project and task files are generated from the registry and repository
 tools. To retain wording changes after regeneration, also update the
 corresponding generator source; manually edited generated files may be
 overwritten on the next refresh.
+
+The `01_core_runtime` variant `capture` has a separate entry point because it reserves a capture input and timer/DMA resources; the base diagnostic application needs none of them.

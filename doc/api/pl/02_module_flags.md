@@ -111,6 +111,7 @@ Ochronę stosu włączają dwie niezależne opcje:
 | `HAL_ENABLE_I2C` | `hal_i2c.h` | `hal_i2c.cpp` | Magistrala I2C master/kontroler |
 | `HAL_ENABLE_I2C_10BIT` | `hal_i2c.h` | `hal_i2c.cpp` + backendy targetów | Opcjonalne 10-bitowe adresowanie I2C master przez `hal_i2c_init_10bit()`/`hal_i2c_init_bus_10bit()` i `hal_i2c_address_t` (propaguje I2C); `hal_i2c_scan()` pozostaje wyłącznie 7-bitowy |
 | `HAL_ENABLE_I2C_SLAVE` | `hal_i2c_slave.h` | `hal_i2c_slave.cpp` | Tryb I2C slave/target z mapą rejestrów |
+| `HAL_ENABLE_I2C_SLAVE_SNAPSHOT` | `hal_i2c_slave.h` | `hal_i2c_slave.cpp` | Niezmienna odpowiedź rejestrów podczas odczytu; włącza `HAL_ENABLE_I2C_SLAVE`. ESP32 odświeża obraz po ponownym wyborze rejestru. |
 | `HAL_ENABLE_SPI` | `hal_spi.h` | `hal_spi.cpp` | SPI master/kontroler |
 | `HAL_ENABLE_CAN` | `hal_can.h` | `hal_can.cpp` + `hal_can_util.cpp` | Generyczna fasada API CAN; wymaga co najmniej jednego backendu |
 | `HAL_ENABLE_MCP2515` | `hal_can.h` + `hal/can/mcp2515/mcp2515_driver.h` | fasada `hal_can.cpp` specyficzna dla targetu + `hal/can/mcp2515/hal_can_mcp2515.cpp` + `hal/can/mcp2515/hal_can_mcp2515_config.cpp` + `hal/can/mcp2515/mcp2515_driver.cpp` | Współdzielony backend CAN MCP2515 wyłącznie HAL (propaguje CAN + SPI) |
@@ -151,6 +152,7 @@ Ochronę stosu włączają dwie niezależne opcje:
 | `HAL_ENABLE_PWM_FREQ` | `hal_pwm_freq.h` | `hal_pwm_freq.cpp` | RP2040 hardware/pwm, STM32G474 TIM PWM lub ESP32-S3 LEDC |
 | `HAL_ENABLE_DAC` | `hal_dac.h` | `hal_dac.cpp` specyficzny dla targetu | Fasada sprzętowego DAC; STM32G474 udostępnia rzeczywiste wyjście, natomiast RP2040 zgłasza brak tej możliwości |
 | `HAL_ENABLE_PCNT` | `hal_pcnt.h` | `hal_pcnt.cpp` specyficzny dla targetu | Fasada licznika impulsów dla targetów RP2040, STM32G474, ESP32-S3 PCNT oraz mock |
+| `HAL_ENABLE_PULSE_CAPTURE` | `hal_pulse_capture.h` | `hal_pulse_capture.cpp` | [Sprzętowy pomiar okresów](24_pulse_capture.md) |
 | `HAL_ENABLE_RGB_LED` | `hal_rgb_led.h` + `hal/gpio/neopixel/jh_neopixel.h` | `hal_rgb_led.cpp` + `hal/gpio/neopixel/jh_neopixel.cpp` | Współdzielony rdzeń NeoPixel + transport targetu (RP2040 PIO / STM32 GPIO taktowane cyklami / ESP32-S3 RMT) |
 | `HAL_ENABLE_HD44780` | `hal_hd44780.h` (C); `hal/display/hd44780/hd44780.h` (C++) | `hal/display/hal_hd44780.cpp` + `hal/display/hd44780/hd44780.cpp` | Uchwyt do instancji HD44780, konfiguracja pinów, tekst, kursor i sterowanie wyświetlaczem przez HAL GPIO/taktowanie systemowe |
 | `HAL_ENABLE_DISPLAY` | `hal_display.h`; `utils/draw7Segment.h` (C i C++) | `hal/display/drivers/hal_display.cpp` + `utils/draw7Segment.cpp` | API wyświetlaczy graficznych i prosta funkcja rysowania siedmiosegmentowego; wymaga backendu TFT, OLED, LCD lub EPD |

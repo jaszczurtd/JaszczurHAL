@@ -7,6 +7,7 @@
 #include "hal/core/hal_mutex_once.h"
 #include "hal/core/jh_endian.h"
 #include "hal/i2c/hal_i2c_slave.h"
+#include "hal/i2c/jh_i2c_slave_registers.h"
 #include "hal/system/hal_sync.h"
 #include "jh_esp32_gpio.h"
 
@@ -43,6 +44,7 @@ enum event_bits_t : uint32_t {
 
 struct slave_state_t {
   uint8_t registers[HAL_I2C_SLAVE_REG_MAP_SIZE];
+  jh_i2c_slave_snapshot_t read_snapshot;
   uint16_t register_pointer;
   uint32_t register_selection_generation;
   uint8_t address;
@@ -94,6 +96,7 @@ bool IRAM_ATTR receive_callback(i2c_slave_dev_handle_t,
     }
   }
   ++state.register_selection_generation;
+  state.read_snapshot.valid = false;
   portEXIT_CRITICAL_ISR(&s_register_lock);
   __atomic_fetch_add(&state.transaction_count, 1u, __ATOMIC_RELAXED);
 
@@ -120,9 +123,11 @@ void write_snapshot(slave_state_t &state) {
   portENTER_CRITICAL_SAFE(&s_register_lock);
   const uint16_t pointer = state.register_pointer;
   const uint32_t generation = state.register_selection_generation;
+  const uint8_t *view =
+      jh_i2c_slave_read_view(&state.read_snapshot, state.registers);
   size_t output = 0u;
   for (uint16_t reg = pointer; reg < HAL_I2C_SLAVE_REG_MAP_SIZE; ++reg) {
-    snapshot[output++] = state.registers[reg];
+    snapshot[output++] = view[reg];
   }
   portEXIT_CRITICAL_SAFE(&s_register_lock);
 
@@ -224,6 +229,7 @@ esp_err_t release_slave(slave_state_t &state) {
   }
   portENTER_CRITICAL_SAFE(&s_register_lock);
   memset(state.registers, 0, sizeof(state.registers));
+  state.read_snapshot.valid = false;
   state.register_pointer = 0u;
   state.register_selection_generation = 0u;
   state.address = 0u;
@@ -296,6 +302,7 @@ void hal_i2c_slave_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
   if (result == ESP_OK) {
     portENTER_CRITICAL_SAFE(&s_register_lock);
     memset(state.registers, 0, sizeof(state.registers));
+    state.read_snapshot.valid = false;
     state.register_pointer = 0u;
     state.register_selection_generation = 0u;
     state.address = address;
@@ -357,6 +364,25 @@ void hal_i2c_slave_reg_write16_bus(uint8_t bus, uint8_t reg, uint16_t value) {
   portENTER_CRITICAL_SAFE(&s_register_lock);
   jh_store_be16(&state.registers[reg], value);
   portEXIT_CRITICAL_SAFE(&s_register_lock);
+}
+
+hal_status_t hal_i2c_slave_reg_write_block(uint8_t reg, const uint8_t *data,
+                                           size_t count) {
+  return hal_i2c_slave_reg_write_block_bus(0U, reg, data, count);
+}
+
+hal_status_t hal_i2c_slave_reg_write_block_bus(uint8_t bus, uint8_t reg,
+                                               const uint8_t *data,
+                                               size_t count) {
+  if (bus > 1U) {
+    return HAL_EINVAL;
+  }
+  slave_state_t &state = s_slaves[bus];
+  portENTER_CRITICAL_SAFE(&s_register_lock);
+  const hal_status_t status =
+      jh_i2c_slave_write_block(state.registers, reg, data, count);
+  portEXIT_CRITICAL_SAFE(&s_register_lock);
+  return status;
 }
 
 uint8_t hal_i2c_slave_reg_read8(uint8_t reg) {

@@ -41,3 +41,4 @@
 - [21 - LoRa - radio configuration and packet transfers](api/en/21_lora.md)
 - [22 - LoRa - messages, acknowledgements, and retries](api/en/22_lora_link.md)
 - [23 - Transport-independent application commands](api/en/23_commands.md)
+- [24 - Hardware period capture](api/en/24_pulse_capture.md)

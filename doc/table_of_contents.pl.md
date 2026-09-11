@@ -41,3 +41,4 @@
 - [21 - LoRa - konfiguracja radia i wymiana pakietów](api/pl/21_lora.md)
 - [22 - LoRa - wiadomości, potwierdzenia i ponowienia](api/pl/22_lora_link.md)
 - [23 - Polecenia aplikacji niezależne od transportu](api/pl/23_commands.md)
+- [24 - Sprzętowy pomiar długości trwania impulsów](api/pl/24_pulse_capture.md)

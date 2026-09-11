@@ -6,6 +6,7 @@
 
 #include "hal/core/jh_endian.h"
 #include "hal/i2c/hal_i2c_slave.h"
+#include "hal/i2c/jh_i2c_slave_registers.h"
 #include "hal/system/hal_sync.h"
 
 #include <stddef.h>
@@ -18,6 +19,7 @@
 
 typedef struct {
   uint8_t regs[HAL_I2C_SLAVE_REG_MAP_SIZE];
+  jh_i2c_slave_snapshot_t read_snapshot;
   uint8_t reg_ptr;
   uint8_t address;
   bool initialized;
@@ -45,6 +47,7 @@ static void slave_state_reset(i2c_slave_state_t *st, uint8_t address) {
   st->reg_ptr = 0u;
   st->address = address;
   st->rx_seen = false;
+  st->read_snapshot.valid = false;
   __atomic_store_n(&st->transaction_count, 0u, __ATOMIC_RELEASE);
 }
 
@@ -153,6 +156,9 @@ static void i2c_slave_hw_deinit(i2c_slave_state_t *st) {
 static void i2c_slave_handle_addr(i2c_slave_state_t *st, uint32_t isr) {
   (void)isr;
   st->rx_seen = false;
+  /* Refresh at address match; a delayed STOP/NACK must not discard the
+   * snapshot of a read already started by this IRQ. */
+  st->read_snapshot.valid = false;
   I2C_ICR_REG(st->hw_base) = I2C_ICR_ADDRCF;
 }
 
@@ -169,8 +175,9 @@ static void i2c_slave_handle_rx(i2c_slave_state_t *st) {
 }
 
 static void i2c_slave_handle_tx(i2c_slave_state_t *st) {
+  const uint8_t *view = jh_i2c_slave_read_view(&st->read_snapshot, st->regs);
   I2C_TXDR_REG(st->hw_base) =
-      (st->reg_ptr < HAL_I2C_SLAVE_REG_MAP_SIZE) ? st->regs[st->reg_ptr++] : 0u;
+      (st->reg_ptr < HAL_I2C_SLAVE_REG_MAP_SIZE) ? view[st->reg_ptr++] : 0u;
 }
 
 static void i2c_slave_flush_txdr(i2c_slave_state_t *st) {
@@ -211,6 +218,7 @@ static void i2c_slave_handle_error(uint8_t bus) {
   if (st->hw_base == 0u) {
     return;
   }
+  st->read_snapshot.valid = false;
   I2C_ICR_REG(st->hw_base) =
       I2C_ICR_BERRCF | I2C_ICR_ARLOCF | I2C_ICR_OVRCF | I2C_ICR_NACKCF;
 }
@@ -260,6 +268,7 @@ void hal_i2c_slave_deinit_bus(uint8_t bus) {
   st->address = 0u;
   st->reg_ptr = 0u;
   st->rx_seen = false;
+  st->read_snapshot.valid = false;
   __atomic_store_n(&st->transaction_count, 0u, __ATOMIC_RELEASE);
   memset(st->regs, 0, sizeof(st->regs));
   slave_unlock();
@@ -291,6 +300,25 @@ void hal_i2c_slave_reg_write16_bus(uint8_t bus, uint8_t reg, uint16_t value) {
   slave_lock();
   jh_store_be16(&st->regs[reg], value);
   slave_unlock();
+}
+
+hal_status_t hal_i2c_slave_reg_write_block(uint8_t reg, const uint8_t *data,
+                                           size_t count) {
+  return hal_i2c_slave_reg_write_block_bus(0U, reg, data, count);
+}
+
+hal_status_t hal_i2c_slave_reg_write_block_bus(uint8_t bus, uint8_t reg,
+                                               const uint8_t *data,
+                                               size_t count) {
+  if (bus > 1U) {
+    return HAL_EINVAL;
+  }
+  i2c_slave_state_t *st = &s_slave[bus];
+  slave_lock();
+  const hal_status_t status =
+      jh_i2c_slave_write_block(st->regs, reg, data, count);
+  slave_unlock();
+  return status;
 }
 
 uint8_t hal_i2c_slave_reg_read8(uint8_t reg) {

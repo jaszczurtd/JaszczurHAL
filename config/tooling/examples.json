@@ -6,6 +6,25 @@
       "targets": [
         "rp2040",
         "stm32g474"
+      ],
+      "variants": [
+        {
+          "id": "capture",
+          "module": "01_core_runtime_capture",
+          "sources": [
+            "pulse_capture_app.c"
+          ],
+          "targets": [
+            "rp2040",
+            "stm32g474"
+          ],
+          "extraDefines": [
+            "HAL_ENABLE_PULSE_CAPTURE=1"
+          ]
+        }
+      ],
+      "sources": [
+        "app.c"
       ]
     },
     {

@@ -16,6 +16,9 @@
       "implies": ["HAL_ENABLE_I2C"]
     },
     "HAL_ENABLE_I2C_SLAVE": {},
+    "HAL_ENABLE_I2C_SLAVE_SNAPSHOT": {
+      "implies": ["HAL_ENABLE_I2C_SLAVE"]
+    },
     "HAL_ENABLE_MCP23017": {
       "implies": ["HAL_ENABLE_I2C"]
     },

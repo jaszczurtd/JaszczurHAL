@@ -390,23 +390,23 @@ for entry in examples_dispatcher.EXAMPLES:
 require(
     full_configuration_counts
     == {
-        "rp2040": 44,
-        "rp2350-arm": 37,
-        "rp2350-riscv": 23,
-        "stm32g474": 40,
+        "rp2040": 45,
+        "rp2350-arm": 38,
+        "rp2350-riscv": 24,
+        "stm32g474": 41,
     }
-    and sum(full_configuration_counts.values()) == 144,
+    and sum(full_configuration_counts.values()) == 148,
     f"full dispatcher matrix changed: {full_configuration_counts}",
 )
 require(
     gate_configuration_counts
     == {
-        "rp2040": 42,
+        "rp2040": 43,
         "rp2350-arm": 4,
         "rp2350-riscv": 0,
-        "stm32g474": 31,
+        "stm32g474": 32,
     }
-    and sum(gate_configuration_counts.values()) == 77,
+    and sum(gate_configuration_counts.values()) == 79,
     f"dispatcher gate matrix changed: {gate_configuration_counts}",
 )
 
@@ -512,7 +512,7 @@ scheduled_runner.assert_has_calls(
             "rp2040",
             "pico",
             True,
-            [],
+            ["capture"],
             3,
             False,
         ),

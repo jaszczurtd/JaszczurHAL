@@ -42,6 +42,11 @@
       "implies": ["HAL_ENABLE_CRYPTO", "HAL_ENABLE_JPEG"]
     },
     "HAL_ENABLE_PCNT": {},
+    "HAL_ENABLE_PULSE_CAPTURE": {
+      "buildEffects": {
+        "portableSources": ["src/hal/analog/hal_pulse_capture.cpp"]
+      }
+    },
     "HAL_ENABLE_POWER_MANAGEMENT": {
       "implies": ["HAL_ENABLE_INTERNAL_RTC"]
     },

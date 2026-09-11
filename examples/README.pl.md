@@ -25,7 +25,7 @@ testów i wymagane połączenia opisują README poszczególnych projektów.
 
 | Projekt | Co pokazuje przykład | Obsługiwane platformy | `gateTargets` | Warianty |
 |---|---|---|---|---|
-| `01_core_runtime` | Miganie diodą, diagnostyka platformy, timery programowe i obliczenia regulatora PID. | R0, RA, RV, S | R0, S | - |
+| `01_core_runtime` | Miganie diodą, diagnostyka platformy, timery programowe i obliczenia regulatora PID. | R0, RA, RV, S | R0, S | `capture` |
 | `02_crypto` | Obliczanie MD5 oraz szyfrowanie i odszyfrowywanie ChaCha20-Poly1305. | R0, RA, RV, S | R0, S | - |
 | `03_modem_A7670E` | Uruchomienie modemu A7670/A7672 i wysyłanie wiadomości MQTT przez sieć komórkową. | R0, RA, RV | R0 | - |
 | `04_sensor_hub` | Pomiar temperatury DS18B20, temperatury i wilgotności DHT oraz oświetlenia BH1750. | R0, RA, RV, S | R0, S | - |
@@ -244,3 +244,5 @@ Pliki projektów i zadań są generowane na podstawie rejestru i narzędzi
 repozytorium. Trwałe zmiany opisów trzeba wprowadzać także w odpowiednim
 źródle generatora; ręczna zmiana wygenerowanego pliku może zostać nadpisana
 przy kolejnym odświeżeniu.
+
+Wariant `capture` przykładu `01_core_runtime` ma osobny punkt wejścia, ponieważ rezerwuje wejście pomiarowe i zasoby timera/DMA; bazowa aplikacja diagnostyczna ich nie potrzebuje.
