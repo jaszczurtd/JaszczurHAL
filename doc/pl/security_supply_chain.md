@@ -10,7 +10,8 @@ JaszczurHAL prowadzi wykaz zewnętrznych komponentów i narzędzi, generuje na j
 
 Wykaz obejmuje:
 
-- źródła zewnętrznych komponentów dołączone do `src/`,
+- źródła zewnętrznych komponentów dołączone do `src/`, w tym stos CYW43
+  i redystrybuowany firmware radia w `src/hal/network/cyw43/vendor`,
 - kopie zewnętrznych źródeł w ściśle określonych wersjach, obsługiwane przez
   skrypt aktualizujący komponenty,
   w tym BearSSL, cJSON, LodePNG, TJpg_Decoder, FatFs, Unity, lwIP, littlefs,
@@ -65,6 +66,8 @@ instalację, wycofywanie aktualizacji i odzyskiwanie opisano w dokumencie
 | `security/sbom.cdx.json` | Generowany SBOM CycloneDX dla repozytorium biblioteki. |
 | `security/esp_idf_tools.json` | Zweryfikowany wykaz dokładnych wersji narzędzi dla platform ESP-IDF, ich licencji i projektów źródłowych, rewizji frameworka oraz skrótu `tools.json`. |
 | `security/vulnerability_log.md` | Ręcznie utrzymywany rejestr oceny podatności i poprawek. |
+| `third_party/cyw43_driver_version.conf` | Wersja, na której przypięty jest dołączony import CYW43, razem z osobną wersją Pico SDK, z której pochodzą pliki shared-bus Bluetooth. |
+| `src/hal/network/cyw43/vendor/SHA256SUMS` | Manifest SHA-256 wszystkich dołączonych plików CYW43, pilnowany przez `test_cyw43_dependency_boundary`. |
 | `SECURITY.md` | Zasady zgłaszania, wstępnej oceny, klasyfikacji ważności i utrzymania. |
 | `scripts/generate_sbom.py` | Generator SBOM działający offline i używający wyłącznie biblioteki standardowej Pythona. |
 | `scripts/sync_generated.py` | Wspólny skrypt odświeżający wszystkie generowane artefakty przechowywane w repozytorium, w tym SBOM, i weryfikujący je w trybie tylko do odczytu. |

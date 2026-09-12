@@ -92,6 +92,62 @@
       "notes": "SBC decoder sources bundled with the pinned BTstack fork. Source headers retain Android Open Source Project, Broadcom and Open Interface copyright notices. The A2DP host fixture also compiles the bundled encoder to produce deterministic decoder vectors; firmware includes the decoder only."
     },
     {
+      "name": "cyw43-driver",
+      "version": "dd7568229f",
+      "commit": "dd7568229f3bf7a37737b9e1ef250c26efe75b23",
+      "type": "library",
+      "scope": "optional",
+      "supplier": "George Robotics Pty Ltd",
+      "licenses": ["LicenseRef-CYW43-GeorgeRobotics-NonCommercial OR LicenseRef-CYW43-RaspberryPi-Devices"],
+      "purl": "pkg:github/georgerobotics/cyw43-driver@dd7568229f3bf7a37737b9e1ef250c26efe75b23",
+      "paths": [
+        "src/hal/network/cyw43/vendor/src",
+        "src/hal/network/cyw43/vendor/SHA256SUMS",
+        "src/hal/network/cyw43/UPSTREAM.md",
+        "src/hal/network/cyw43/LICENSE",
+        "src/hal/network/cyw43/LICENSE.RP",
+        "third_party/cyw43_driver_version.conf"
+      ],
+      "upstream": "https://github.com/georgerobotics/cyw43-driver",
+      "feature_flags": ["HAL_ENABLE_WIFI", "HAL_ENABLE_NETWORK_CORE"],
+      "notes": "Host stack for the CYW43xx radio, vendored in the source tree instead of fetched because the bundled firmware images must stay byte-identical for RP2040 and STM32G474 builds. Upstream translation units are stored as *.c.upstream so recursive source discovery cannot compile them without an explicit target manifest. Every vendored file is checksummed in src/hal/network/cyw43/vendor/SHA256SUMS and verified by test_cyw43_dependency_boundary. The import ships two license alternatives and the applicable one depends on the target: the George Robotics grant permits redistribution solely for personal, non-commercial benefit, while the Raspberry Pi grant in LICENSE.RP covers use only with RP2040 or other Raspberry Pi silicon. STM32G474 builds compile the same manifest, so that second grant does not reach them."
+    },
+    {
+      "name": "CYW43xx SoC firmware",
+      "version": "cyw43-driver-dd7568229f",
+      "type": "firmware",
+      "scope": "optional",
+      "supplier": "Infineon Technologies AG, formerly Broadcom",
+      "licenses": ["LicenseRef-CYW43-GeorgeRobotics-NonCommercial OR LicenseRef-CYW43-RaspberryPi-Devices"],
+      "paths": [
+        "src/hal/network/cyw43/vendor/firmware",
+        "src/hal/network/cyw43/vendor/SHA256SUMS",
+        "third_party/cyw43_driver_version.conf"
+      ],
+      "upstream": "https://github.com/georgerobotics/cyw43-driver",
+      "feature_flags": ["HAL_ENABLE_WIFI"],
+      "notes": "Radio firmware and NVRAM images bundled with the pinned driver, stored as C arrays and downloaded to the SoC at startup. WiFi images cover 7.95.49.00 for the 43439A0, 7.95.59 for the 1YN SDIO part and 7.45.98.50 with 7.45.98.102 for the 4343W A1; Bluetooth patch images cover the 43439, 4343A1 and 1YN, next to three NVRAM tables. At roughly 9.6 MB this is the largest redistributed artifact in the repository, which is why the license alternatives recorded on cyw43-driver apply to every image that embeds WiFi."
+    },
+    {
+      "name": "CYW43 Bluetooth shared-bus port",
+      "version": "pico-sdk-2.2.0",
+      "commit": "a1438dff1d38bd9c65dbd693f0e5db4b9ae91779",
+      "type": "library",
+      "scope": "optional",
+      "supplier": "Raspberry Pi Ltd",
+      "licenses": ["BSD-3-Clause"],
+      "paths": [
+        "src/hal/network/cyw43/vendor/src/cybt_shared_bus.c.upstream",
+        "src/hal/network/cyw43/vendor/src/cybt_shared_bus_driver.c.upstream",
+        "src/hal/network/cyw43/vendor/src/cybt_shared_bus_driver.h",
+        "src/hal/network/cyw43/vendor/src/cybt_logging.h",
+        "third_party/cyw43_driver_version.conf"
+      ],
+      "upstream": "https://github.com/raspberrypi/pico-sdk",
+      "feature_flags": ["HAL_ENABLE_BLE", "HAL_ENABLE_BLUETOOTH_CLASSIC"],
+      "notes": "Bluetooth shared-bus transport taken from the pinned Pico SDK revision rather than from the driver upstream, and carrying a local safety delta: fatal shared-bus assertions and corruption panics become bounded CYBT errors, public buffer and index arguments are validated, and wake, queue-full and read or write failures propagate to the HCI adapter. Checksums live in the same manifest as the rest of the CYW43 import."
+    },
+    {
       "name": "Semtech SX126x driver",
       "version": "v2.5.0",
       "commit": "a10c5dfdf89788c6ac805e9fe98889de44175aa2",

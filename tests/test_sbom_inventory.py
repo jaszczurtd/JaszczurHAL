@@ -82,6 +82,53 @@ class SbomInventoryTests(unittest.TestCase):
             components["PMD Copy/Paste Detector"]["paths"],
         )
 
+    def test_cyw43_vendor_pin_matches_inventory_and_provenance(self) -> None:
+        inventory = json.loads(
+            (ROOT / "security/third_party.json").read_text(encoding="utf-8")
+        )
+        pin = read_shell_assignments(
+            ROOT / "third_party/cyw43_driver_version.conf"
+        )
+        components = {item["name"]: item for item in inventory["components"]}
+
+        driver = components["cyw43-driver"]
+        self.assertEqual(pin["CYW43_DRIVER_REF"], driver["commit"])
+        self.assertEqual(pin["CYW43_DRIVER_VERSION"], driver["version"])
+        self.assertTrue(driver["purl"].endswith(f"@{pin['CYW43_DRIVER_REF']}"))
+        self.assertIn(
+            "third_party/cyw43_driver_version.conf", driver["paths"]
+        )
+        self.assertEqual(
+            [
+                "LicenseRef-CYW43-GeorgeRobotics-NonCommercial"
+                " OR LicenseRef-CYW43-RaspberryPi-Devices"
+            ],
+            driver["licenses"],
+        )
+
+        firmware = components["CYW43xx SoC firmware"]
+        self.assertEqual("firmware", firmware["type"])
+        self.assertEqual(driver["licenses"], firmware["licenses"])
+
+        shared_bus = components["CYW43 Bluetooth shared-bus port"]
+        self.assertEqual(pin["CYW43_SHARED_BUS_REF"], shared_bus["commit"])
+        self.assertEqual(
+            pin["CYW43_SHARED_BUS_REF"],
+            components["Raspberry Pi Pico SDK"]["commit"],
+        )
+
+        # The human-readable provenance note must not drift away from the pin.
+        upstream_note = (
+            ROOT / "src/hal/network/cyw43/UPSTREAM.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn(pin["CYW43_DRIVER_REF"], upstream_note)
+        self.assertIn(pin["CYW43_SHARED_BUS_REF"], upstream_note)
+
+        # test_cyw43_dependency_boundary verifies the checksums themselves; the
+        # pin only has to point at a manifest that is actually there.
+        self.assertTrue((ROOT / pin["CYW43_DRIVER_MANIFEST"]).is_file())
+        self.assertTrue((ROOT / pin["CYW43_DRIVER_DIR"]).is_dir())
+
     def test_esp_idf_tool_inventory_matches_the_pinned_tool_snapshot(self) -> None:
         inventory = json.loads(
             (ROOT / "security/third_party.json").read_text(encoding="utf-8")
