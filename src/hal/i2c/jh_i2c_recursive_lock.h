@@ -1,5 +1,6 @@
 #pragma once
 
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_mutex_once.h"
 
 #include <stdbool.h>
@@ -24,44 +25,44 @@ static inline bool jh_i2c_recursive_lock_acquire(jh_i2c_recursive_lock_t *lock,
     return false;
   }
 
-  const uint32_t depth = __atomic_load_n(&lock->depth, __ATOMIC_ACQUIRE);
+  const uint32_t depth = HAL_ATOMIC_LOAD(&lock->depth, HAL_ATOMIC_ACQUIRE);
   const uintptr_t active_owner =
-      depth > 0u ? __atomic_load_n(&lock->owner, __ATOMIC_ACQUIRE) : 0u;
+      depth > 0u ? HAL_ATOMIC_LOAD(&lock->owner, HAL_ATOMIC_ACQUIRE) : 0u;
   if (depth > 0u && active_owner == owner) {
     if (depth == UINT32_MAX) {
       return false;
     }
-    (void)__atomic_fetch_add(&lock->depth, 1u, __ATOMIC_RELAXED);
+    (void)HAL_ATOMIC_FETCH_ADD(&lock->depth, 1u, HAL_ATOMIC_RELAXED);
     return true;
   }
 
   hal_mutex_lock(lock->mutex);
-  __atomic_store_n(&lock->owner, owner, __ATOMIC_RELAXED);
-  __atomic_store_n(&lock->depth, 1u, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&lock->owner, owner, HAL_ATOMIC_RELAXED);
+  HAL_ATOMIC_STORE(&lock->depth, 1u, HAL_ATOMIC_RELEASE);
   return true;
 }
 
 static inline bool jh_i2c_recursive_lock_release(jh_i2c_recursive_lock_t *lock,
                                                  uintptr_t owner) {
   if (lock == NULL || owner == 0u ||
-      __atomic_load_n(&lock->mutex, __ATOMIC_ACQUIRE) == NULL) {
+      HAL_ATOMIC_POINTER_LOAD(&lock->mutex, HAL_ATOMIC_ACQUIRE) == NULL) {
     return false;
   }
 
-  const uint32_t depth = __atomic_load_n(&lock->depth, __ATOMIC_ACQUIRE);
+  const uint32_t depth = HAL_ATOMIC_LOAD(&lock->depth, HAL_ATOMIC_ACQUIRE);
   const uintptr_t active_owner =
-      depth > 0u ? __atomic_load_n(&lock->owner, __ATOMIC_ACQUIRE) : 0u;
+      depth > 0u ? HAL_ATOMIC_LOAD(&lock->owner, HAL_ATOMIC_ACQUIRE) : 0u;
   if (depth == 0u || active_owner != owner) {
     return false;
   }
 
   if (depth > 1u) {
-    (void)__atomic_fetch_sub(&lock->depth, 1u, __ATOMIC_RELEASE);
+    (void)HAL_ATOMIC_FETCH_SUB(&lock->depth, 1u, HAL_ATOMIC_RELEASE);
     return true;
   }
 
-  __atomic_store_n(&lock->depth, 0u, __ATOMIC_RELEASE);
-  __atomic_store_n(&lock->owner, 0u, __ATOMIC_RELAXED);
+  HAL_ATOMIC_STORE(&lock->depth, 0u, HAL_ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&lock->owner, 0u, HAL_ATOMIC_RELAXED);
   hal_mutex_unlock(lock->mutex);
   return true;
 }

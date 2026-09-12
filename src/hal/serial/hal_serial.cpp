@@ -1,3 +1,4 @@
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_MOCK || HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 ||       \
     HAL_TARGET_IS_ESP32_FAMILY
@@ -84,11 +85,11 @@ static inline size_t isr_ring_next(size_t idx) {
 }
 
 static bool isr_ring_push(uint8_t level, uint32_t ts_us, const char *text) {
-  const size_t head = __atomic_load_n(&s_isr_head, __ATOMIC_RELAXED);
-  const size_t tail = __atomic_load_n(&s_isr_tail, __ATOMIC_ACQUIRE);
+  const size_t head = HAL_ATOMIC_LOAD(&s_isr_head, HAL_ATOMIC_RELAXED);
+  const size_t tail = HAL_ATOMIC_LOAD(&s_isr_tail, HAL_ATOMIC_ACQUIRE);
   const size_t next = isr_ring_next(head);
   if (next == tail) {
-    __atomic_fetch_add(&s_isr_dropped, 1u, __ATOMIC_RELAXED);
+    HAL_ATOMIC_FETCH_ADD(&s_isr_dropped, 1u, HAL_ATOMIC_RELAXED);
     return false;
   }
   hal_isr_rec_t *slot = &s_isr_slots[head];
@@ -105,23 +106,23 @@ static bool isr_ring_push(uint8_t level, uint32_t ts_us, const char *text) {
   }
   slot->text[n] = '\0';
   slot->text_len = n;
-  __atomic_store_n(&s_isr_head, next, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_isr_head, next, HAL_ATOMIC_RELEASE);
   return true;
 }
 
 static bool isr_ring_pop(hal_isr_rec_t *out) {
-  const size_t tail = __atomic_load_n(&s_isr_tail, __ATOMIC_RELAXED);
-  const size_t head = __atomic_load_n(&s_isr_head, __ATOMIC_ACQUIRE);
+  const size_t tail = HAL_ATOMIC_LOAD(&s_isr_tail, HAL_ATOMIC_RELAXED);
+  const size_t head = HAL_ATOMIC_LOAD(&s_isr_head, HAL_ATOMIC_ACQUIRE);
   if (tail == head) {
     return false;
   }
   *out = s_isr_slots[tail];
-  __atomic_store_n(&s_isr_tail, isr_ring_next(tail), __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_isr_tail, isr_ring_next(tail), HAL_ATOMIC_RELEASE);
   return true;
 }
 
 static uint32_t isr_ring_consume_dropped(void) {
-  return __atomic_exchange_n(&s_isr_dropped, 0u, __ATOMIC_ACQ_REL);
+  return HAL_ATOMIC_EXCHANGE(&s_isr_dropped, 0u, HAL_ATOMIC_ACQ_REL);
 }
 
 static bool isr_enqueue_vformat(uint8_t level, uint32_t ts_us,
@@ -238,12 +239,12 @@ static hal_error_slot_t *get_error_slot(const char *source) {
  * init while others yield/spin until s_debug_initialized is published.
  */
 static void hal_debug_ensure_init(void) {
-  if (__atomic_load_n(&s_debug_initialized, __ATOMIC_ACQUIRE)) {
+  if (HAL_ATOMIC_LOAD(&s_debug_initialized, HAL_ATOMIC_ACQUIRE)) {
     return;
   }
   (void)jh_hal_mutex_create_once(&s_deb_mutex);
   hal_mutex_lock(s_deb_mutex);
-  if (!__atomic_load_n(&s_debug_initialized, __ATOMIC_ACQUIRE)) {
+  if (!HAL_ATOMIC_LOAD(&s_debug_initialized, HAL_ATOMIC_ACQUIRE)) {
     hal_debug_init(HAL_DEBUG_DEFAULT_BAUD);
   }
   hal_mutex_unlock(s_deb_mutex);
@@ -344,8 +345,8 @@ void hal_debug_init(uint32_t baud, const hal_debug_rate_limit_t *cfg) {
   (void)jh_hal_mutex_create_once(&s_rl_mutex);
   hal_serial_ensure_tx_mutex();
   hal_serial_begin(baud);
-  __atomic_store_n(&s_debug_muted, false, __ATOMIC_RELEASE);
-  __atomic_store_n(&s_debug_initialized, true, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_debug_muted, false, HAL_ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_debug_initialized, true, HAL_ATOMIC_RELEASE);
 }
 
 void hal_debug_init_default(void) {
@@ -371,15 +372,15 @@ void hal_debug_set_module_prefix(const char *module_name) {
 }
 
 bool hal_deb_is_initialized(void) {
-  return __atomic_load_n(&s_debug_initialized, __ATOMIC_ACQUIRE);
+  return HAL_ATOMIC_LOAD(&s_debug_initialized, HAL_ATOMIC_ACQUIRE);
 }
 
 void hal_debug_set_muted(bool muted) {
-  __atomic_store_n(&s_debug_muted, muted, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_debug_muted, muted, HAL_ATOMIC_RELEASE);
 }
 
 bool hal_debug_is_muted(void) {
-  return __atomic_load_n(&s_debug_muted, __ATOMIC_ACQUIRE);
+  return HAL_ATOMIC_LOAD(&s_debug_muted, HAL_ATOMIC_ACQUIRE);
 }
 
 void hal_deb_set_prefix(const char *prefix) {
@@ -594,8 +595,8 @@ void hal_deb_hex(const char *prefix, const uint8_t *buf, int len,
 static hal_isr_rec_t s_mock_isr_test_slots[HAL_MOCK_DEBUG_ISR_TEST_SLOT_POOL];
 
 size_t hal_mock_debug_isr_used_slots(void) {
-  const size_t head = __atomic_load_n(&s_isr_head, __ATOMIC_RELAXED);
-  const size_t tail = __atomic_load_n(&s_isr_tail, __ATOMIC_RELAXED);
+  const size_t head = HAL_ATOMIC_LOAD(&s_isr_head, HAL_ATOMIC_RELAXED);
+  const size_t tail = HAL_ATOMIC_LOAD(&s_isr_tail, HAL_ATOMIC_RELAXED);
   if (head >= tail) {
     return head - tail;
   }
@@ -605,13 +606,13 @@ size_t hal_mock_debug_isr_used_slots(void) {
 size_t hal_mock_debug_isr_capacity(void) { return s_isr_cap; }
 
 uint32_t hal_mock_debug_isr_dropped(void) {
-  return __atomic_load_n(&s_isr_dropped, __ATOMIC_RELAXED);
+  return HAL_ATOMIC_LOAD(&s_isr_dropped, HAL_ATOMIC_RELAXED);
 }
 
 void hal_mock_debug_isr_reset(void) {
-  __atomic_store_n(&s_isr_head, 0u, __ATOMIC_RELAXED);
-  __atomic_store_n(&s_isr_tail, 0u, __ATOMIC_RELAXED);
-  __atomic_store_n(&s_isr_dropped, 0u, __ATOMIC_RELAXED);
+  HAL_ATOMIC_STORE(&s_isr_head, 0u, HAL_ATOMIC_RELAXED);
+  HAL_ATOMIC_STORE(&s_isr_tail, 0u, HAL_ATOMIC_RELAXED);
+  HAL_ATOMIC_STORE(&s_isr_dropped, 0u, HAL_ATOMIC_RELAXED);
 }
 
 void hal_mock_debug_isr_set_test_capacity(size_t cap) {
@@ -707,7 +708,7 @@ void hal_mock_debug_serial_full_reset(void) {
     hal_mutex_destroy(s_tx_mutex);
     s_tx_mutex = NULL;
   }
-  __atomic_store_n(&s_debug_initialized, false, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_debug_initialized, false, HAL_ATOMIC_RELEASE);
 }
 #endif /* HAL_TARGET_IS_MOCK */
 

@@ -1110,9 +1110,9 @@ rejestru, kod wywołujący musi zapewnić synchronizację.
 
 ---
 
-## `hal_compiler` - Atrybuty i funkcje wbudowane kompilatora
+## `hal_compiler` - Funkcje zależne od kompilatora
 
-Używaj wspólnych makr atrybutów i funkcji wbudowanych zamiast powielać warunki zależne od kompilatora. Nagłówek obejmuje obsługiwane warianty GNU, Clang i MSVC w zakresie opisanym poniżej.
+Używaj wspólnych makr zamiast powielać warunki zależne od kompilatora. Nagłówek obejmuje obsługiwane warianty GNU, Clang i MSVC w zakresie opisanym poniżej.
 
 ```c
 #include <hal/core/hal_compiler.h>
@@ -1127,6 +1127,32 @@ Używaj wspólnych makr atrybutów i funkcji wbudowanych zamiast powielać warun
 #define HAL_PACKED            ...  // structure suffix, empty on MSVC
 #define HAL_PACKED_BEGIN      ...  // pragma pack(push, 1) on MSVC
 #define HAL_PACKED_END        ...  // pragma pack(pop) on MSVC
+
+typedef enum {
+  HAL_ATOMIC_RELAXED,
+  HAL_ATOMIC_ACQUIRE,
+  HAL_ATOMIC_RELEASE,
+  HAL_ATOMIC_ACQ_REL,
+  HAL_ATOMIC_SEQ_CST,
+} hal_atomic_memory_order_t;
+
+#define HAL_ATOMIC_LOAD(object, order)                              ...
+#define HAL_ATOMIC_STORE(object, value, order)                      ...
+#define HAL_ATOMIC_EXCHANGE(object, value, order)                   ...
+#define HAL_ATOMIC_COMPARE_EXCHANGE(object, expected, desired,
+                                    success_order, failure_order)   ...
+#define HAL_ATOMIC_FETCH_ADD(object, value, order)                  ...
+#define HAL_ATOMIC_FETCH_SUB(object, value, order)                  ...
+#define HAL_ATOMIC_FETCH_OR(object, value, order)                   ...
+#define HAL_ATOMIC_ADD_FETCH(object, value, order)                  ...
+#define HAL_ATOMIC_SUB_FETCH(object, value, order)                  ...
+#define HAL_ATOMIC_TEST_AND_SET(object, order)                      ...
+#define HAL_ATOMIC_CLEAR(object, order)                             ...
+#define HAL_ATOMIC_THREAD_FENCE(order)                              ...
+#define HAL_ATOMIC_POINTER_LOAD(object, order)                      ...
+#define HAL_ATOMIC_POINTER_COMPARE_EXCHANGE(object, expected,
+                                            desired, success_order,
+                                            failure_order)          ...
 
 uint32_t hal_clz32(uint32_t value);  // leading zero count, value must be non-zero
 ```
@@ -1157,9 +1183,29 @@ Napisanie `inline` obok `HAL_FORCE_INLINE` powoduje zduplikowanie
 specyfikatora na GNU i podnosi ostrzeżenie C4141 na MSVC, dlatego to makro
 zawiera ten specyfikator.
 
+Makra operacji atomowych obsługują wartości skalarne o rozmiarze 1, 2, 4 lub
+8 bajtów. W C++ operacji skalarnych można używać także ze wskaźnikami do
+obiektów i funkcji. Przenośny kod C korzysta z osobnych makr do odczytu i
+porównania z wymianą wskaźnika do obiektu. Porównanie z wymianą jest silne:
+po niepowodzeniu zapisuje zaobserwowaną wartość przez `expected`. Dla
+niepowodzenia wybieraj porządek acquire lub słabszy, nigdy release ani
+acquire-release. Odczyt i zapis przyjmują wyłącznie porządki dozwolone dla
+danego rodzaju operacji.
+
+GNU i Clang odwzorowują wywołania bezpośrednio na `__atomic_*`, zachowując
+żądany porządek znany podczas kompilacji. Wariant hostowy MSVC używa funkcji
+Interlocked, które mogą zapewnić silniejszą barierę niż wskazana. Plik dla
+Cortex-M4 STM32G474 zachowuje trzy 64-bitowe punkty wejścia środowiska GNU
+wymagane przez linker; zwykłe źródła HAL nadal używają wyłącznie tego
+nagłówka. Model cppcheck w `config/tooling/cppcheck-atomics.cfg` pozwala
+analizie przepływu wartości interpretować odczyty atomowe i warunki operacji
+compare-exchange.
+
 Obydwa makra tożsamości można wstępnie zdefiniować jako `0`, co wybiera
 przenośny wariant awaryjny: `HAL_TRAP()` staje się `abort()`,
-`hal_clz32()` używa pętli, a makra atrybutów rozwijają się do niczego. Test
+`hal_clz32()` używa pętli, a makra atrybutów rozwijają się do niczego. Użycie
+operacji atomowej jest wtedy odrzucane podczas kompilacji, ponieważ ten wariant
+nie może zapewnić synchronizacji. Test
 kompilatora hostowego buduje w ten sposób jedną jednostkę translacji i
 porównuje wynik `hal_clz32()` z wariantem korzystającym z funkcji wbudowanej.
 Dzięki temu test obejmuje także kod, którego nie wybiera żaden obecnie
@@ -1170,13 +1216,11 @@ własne mapowanie.
 **Celowo poza zakresem:** atrybuty wpływające na linker (`section`,
 `naked`, `constructor`) i asembler inline są zapisane bezpośrednio w kodzie
 właściwym dla targetu. Ich błędne odwzorowanie mogłoby niezauważenie uszkodzić
-układ pamięci. Źródła firm trzecich zachowują oryginalną postać. Operacje
-atomowe pozostają bezpośrednimi wywołaniami `__atomic_*`,
-ponieważ każda jednostka translacji, która ich używa, jest kompilowana przez
-toolchain GNU.
+układ pamięci. Źródła firm trzecich zachowują oryginalną postać.
 
-**Wielowątkowość:** Makra oraz `hal_clz32()` nie przechowują stanu i są
-bezpieczne w dowolnym kontekście.
+**Wielowątkowość:** Makra atrybutów oraz `hal_clz32()` nie przechowują stanu.
+Operacja atomowa synchronizuje tylko obiekt przekazany przez kod wywołujący i
+tylko zgodnie z wybranym porządkiem pamięci.
 
 ### Przykłady
 

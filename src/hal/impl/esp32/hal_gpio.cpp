@@ -1,3 +1,4 @@
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_ESP32_FAMILY
 
@@ -71,7 +72,7 @@ void gpio_irq_dispatch(void *argument) {
     return;
   }
   void (*callback)(void) =
-      __atomic_load_n(&s_callbacks[raw_pin], __ATOMIC_ACQUIRE);
+      HAL_ATOMIC_LOAD(&s_callbacks[raw_pin], HAL_ATOMIC_ACQUIRE);
   if (callback != nullptr) {
     callback();
   }
@@ -249,7 +250,7 @@ hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin, void (*callback)(void),
 
   const bool reconfigure = s_irq_attached[pin];
   void (*const previous_callback)(void) =
-      reconfigure ? __atomic_load_n(&s_callbacks[pin], __ATOMIC_ACQUIRE)
+      reconfigure ? HAL_ATOMIC_LOAD(&s_callbacks[pin], HAL_ATOMIC_ACQUIRE)
                   : nullptr;
   const gpio_int_type_t previous_type = s_irq_type[pin];
   const gpio_int_type_t type = gpio_irq_type(mode);
@@ -264,7 +265,7 @@ hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin, void (*callback)(void),
     result = gpio_set_intr_type((gpio_num_t)pin, type);
   }
   if (result == ESP_OK) {
-    __atomic_store_n(&s_callbacks[pin], callback, __ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&s_callbacks[pin], callback, HAL_ATOMIC_RELEASE);
     result = gpio_isr_handler_add((gpio_num_t)pin, gpio_irq_dispatch,
                                   (void *)(uintptr_t)pin);
   }
@@ -274,14 +275,14 @@ hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin, void (*callback)(void),
     if (reconfigure) {
       restore_result = gpio_set_intr_type((gpio_num_t)pin, previous_type);
       if (restore_result == ESP_OK) {
-        __atomic_store_n(&s_callbacks[pin], previous_callback,
-                         __ATOMIC_RELEASE);
+        HAL_ATOMIC_STORE(&s_callbacks[pin], previous_callback,
+                         HAL_ATOMIC_RELEASE);
         restore_result = gpio_isr_handler_add(
             (gpio_num_t)pin, gpio_irq_dispatch, (void *)(uintptr_t)pin);
       }
       if (restore_result != ESP_OK) {
         (void)gpio_isr_handler_remove((gpio_num_t)pin);
-        __atomic_store_n(&s_callbacks[pin], nullptr, __ATOMIC_RELEASE);
+        HAL_ATOMIC_STORE(&s_callbacks[pin], nullptr, HAL_ATOMIC_RELEASE);
         s_irq_attached[pin] = false;
         s_irq_owner[pin] = HAL_GPIO_IRQ_CORE_NONE;
         s_irq_type[pin] = GPIO_INTR_DISABLE;
@@ -292,7 +293,7 @@ hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin, void (*callback)(void),
         }
       }
     } else {
-      __atomic_store_n(&s_callbacks[pin], nullptr, __ATOMIC_RELEASE);
+      HAL_ATOMIC_STORE(&s_callbacks[pin], nullptr, HAL_ATOMIC_RELEASE);
     }
 
     if (installed_service || s_attached_count == 0u) {
@@ -353,8 +354,8 @@ hal_status_t hal_gpio_detach_interrupt_ex(uint8_t pin) {
     return jh_esp32_status_from_esp_err(remove_result);
   }
 
-  __atomic_store_n(&s_callbacks[pin], (void (*)(void)) nullptr,
-                   __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_callbacks[pin], (void (*)(void)) nullptr,
+                   HAL_ATOMIC_RELEASE);
   s_irq_attached[pin] = false;
   s_irq_owner[pin] = HAL_GPIO_IRQ_CORE_NONE;
   s_irq_type[pin] = GPIO_INTR_DISABLE;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "hal/core/hal_compiler.h"
 #include "hal/system/hal_sync.h"
 
 #include <stddef.h>
@@ -19,7 +20,7 @@ hal_mutex_t jh_hal_mutex_try_create(void);
  * concurrent tasks or RP2040 cores. The winner publishes its mutex; losers
  * destroy their private allocation and use the published handle. */
 static inline hal_mutex_t jh_hal_mutex_create_once(hal_mutex_t *slot) {
-  hal_mutex_t existing = __atomic_load_n(slot, __ATOMIC_ACQUIRE);
+  hal_mutex_t existing = HAL_ATOMIC_POINTER_LOAD(slot, HAL_ATOMIC_ACQUIRE);
   if (existing != NULL) {
     return existing;
   }
@@ -30,8 +31,8 @@ static inline hal_mutex_t jh_hal_mutex_create_once(hal_mutex_t *slot) {
   }
 
   hal_mutex_t expected = NULL;
-  if (__atomic_compare_exchange_n(slot, &expected, created, false,
-                                  __ATOMIC_RELEASE, __ATOMIC_ACQUIRE)) {
+  if (HAL_ATOMIC_POINTER_COMPARE_EXCHANGE(
+          slot, &expected, created, HAL_ATOMIC_RELEASE, HAL_ATOMIC_ACQUIRE)) {
     return created;
   }
 
@@ -43,7 +44,7 @@ static inline hal_mutex_t jh_hal_mutex_create_once(hal_mutex_t *slot) {
  * reported to their caller instead of triggering the compatibility assert in
  * hal_mutex_create(). */
 static inline hal_mutex_t jh_hal_mutex_try_create_once(hal_mutex_t *slot) {
-  hal_mutex_t existing = __atomic_load_n(slot, __ATOMIC_ACQUIRE);
+  hal_mutex_t existing = HAL_ATOMIC_POINTER_LOAD(slot, HAL_ATOMIC_ACQUIRE);
   if (existing != NULL) {
     return existing;
   }
@@ -54,8 +55,8 @@ static inline hal_mutex_t jh_hal_mutex_try_create_once(hal_mutex_t *slot) {
   }
 
   hal_mutex_t expected = NULL;
-  if (__atomic_compare_exchange_n(slot, &expected, created, false,
-                                  __ATOMIC_RELEASE, __ATOMIC_ACQUIRE)) {
+  if (HAL_ATOMIC_POINTER_COMPARE_EXCHANGE(
+          slot, &expected, created, HAL_ATOMIC_RELEASE, HAL_ATOMIC_ACQUIRE)) {
     return created;
   }
 

@@ -9,6 +9,7 @@
  * Original license: MIT, Copyright (c) 2025 brian sullivan.
  */
 
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_target.h"
 #if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK)
 
@@ -228,12 +229,12 @@ void DAClessAudio::updateCompatibilityGlobalsUnlocked() {
     return;
   }
   audio_rate = sampleRate_;
-  out_buf_ptr = __atomic_load_n(&outBufPtr_, __ATOMIC_ACQUIRE);
+  out_buf_ptr = HAL_ATOMIC_LOAD(&outBufPtr_, HAL_ATOMIC_ACQUIRE);
   adc_results_buf = begun_ ? adcBuf_ : nullptr;
 }
 
 void DAClessAudio::publishOutputBuffer(volatile uint16_t *buffer) {
-  __atomic_store_n(&outBufPtr_, buffer, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&outBufPtr_, buffer, HAL_ATOMIC_RELEASE);
 }
 
 void DAClessAudio::fillSilenceUnlocked() {

@@ -1,3 +1,4 @@
+#include "hal/core/hal_compiler.h"
 #include "hal/system/hal_sync.h"
 #include "hal/system/hal_system.h"
 #include "hal/timers/hal_timer.h"
@@ -26,40 +27,40 @@ struct hal_timer_impl_s {
 
 static inline void timer_set_state_atomic(hal_timer_impl_t *t,
                                           hal_timer_state_t s) {
-  __atomic_store_n(&t->state, s, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&t->state, s, HAL_ATOMIC_RELEASE);
 }
 
 static inline hal_timer_state_t
 timer_get_state_atomic(const hal_timer_impl_t *t) {
-  return __atomic_load_n(&t->state, __ATOMIC_ACQUIRE);
+  return HAL_ATOMIC_LOAD(&t->state, HAL_ATOMIC_ACQUIRE);
 }
 
 static inline void timer_set_alarm_id_atomic(hal_timer_impl_t *t,
                                              hal_alarm_id_t id) {
-  __atomic_store_n(&t->alarm_id, id, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&t->alarm_id, id, HAL_ATOMIC_RELEASE);
 }
 
 static inline hal_alarm_id_t
 timer_get_alarm_id_atomic(const hal_timer_impl_t *t) {
-  return __atomic_load_n(&t->alarm_id, __ATOMIC_ACQUIRE);
+  return HAL_ATOMIC_LOAD(&t->alarm_id, HAL_ATOMIC_ACQUIRE);
 }
 
 static inline void timer_set_next_fire_atomic(hal_timer_impl_t *t,
                                               uint64_t next_fire_us) {
-  __atomic_store_n(&t->next_fire_us, next_fire_us, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&t->next_fire_us, next_fire_us, HAL_ATOMIC_RELEASE);
 }
 
 static inline uint64_t timer_get_next_fire_atomic(const hal_timer_impl_t *t) {
-  return __atomic_load_n(&t->next_fire_us, __ATOMIC_ACQUIRE);
+  return HAL_ATOMIC_LOAD(&t->next_fire_us, HAL_ATOMIC_ACQUIRE);
 }
 
 static inline void timer_set_period_atomic(hal_timer_impl_t *t,
                                            uint32_t period_us) {
-  __atomic_store_n(&t->period_us, period_us, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&t->period_us, period_us, HAL_ATOMIC_RELEASE);
 }
 
 static inline uint32_t timer_get_period_atomic(const hal_timer_impl_t *t) {
-  return __atomic_load_n(&t->period_us, __ATOMIC_ACQUIRE);
+  return HAL_ATOMIC_LOAD(&t->period_us, HAL_ATOMIC_ACQUIRE);
 }
 
 static int64_t timer_internal_alarm_cb_body(hal_timer_impl_t *t) {
@@ -107,9 +108,9 @@ static int64_t timer_internal_alarm_cb(hal_alarm_id_t, void *user_data) {
     return 0;
   }
 
-  __atomic_add_fetch(&t->in_callback, 1u, __ATOMIC_ACQ_REL);
+  HAL_ATOMIC_ADD_FETCH(&t->in_callback, 1u, HAL_ATOMIC_ACQ_REL);
   const int64_t rc = timer_internal_alarm_cb_body(t);
-  __atomic_sub_fetch(&t->in_callback, 1u, __ATOMIC_ACQ_REL);
+  HAL_ATOMIC_SUB_FETCH(&t->in_callback, 1u, HAL_ATOMIC_ACQ_REL);
   return rc;
 }
 
@@ -142,7 +143,7 @@ hal_timer_result_t hal_timer_create(hal_timer_pool_t pool, uint32_t period_us,
   timer_set_state_atomic(t, HAL_TIMER_STATE_STOPPED);
   timer_set_next_fire_atomic(t, 0u);
   t->paused_remaining_us = 0u;
-  __atomic_store_n(&t->in_callback, 0u, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&t->in_callback, 0u, HAL_ATOMIC_RELEASE);
 
   *out_timer = t;
   return HAL_TIMER_OK;
@@ -162,7 +163,7 @@ hal_timer_result_t hal_timer_destroy(hal_timer_t timer) {
   //
   // Caveat: this is a busy-wait. It must NOT be called from a context that
   // preempts the alarm IRQ (e.g. higher-priority ISR) - that would deadlock.
-  while (__atomic_load_n(&timer->in_callback, __ATOMIC_ACQUIRE) != 0u) {
+  while (HAL_ATOMIC_LOAD(&timer->in_callback, HAL_ATOMIC_ACQUIRE) != 0u) {
     // Spin; the in-flight callback will run to completion on its own core.
   }
 

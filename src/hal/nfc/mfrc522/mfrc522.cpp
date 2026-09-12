@@ -6,6 +6,7 @@
  */
 
 #include "mfrc522.h"
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_mutex_once.h"
 #include "hal/core/jh_endian.h"
 #include "hal/system/hal_system.h"
@@ -94,7 +95,7 @@ hal_status_t MFRC522_BUS_DEVICE::PCD_ClearTransportError() {
 
 hal_status_t MFRC522_BUS_DEVICE::PCD_GetTransportError() const {
   hal_mutex_t mutex =
-      __atomic_load_n(&s_transport_error_mutex, __ATOMIC_ACQUIRE);
+      HAL_ATOMIC_LOAD(&s_transport_error_mutex, HAL_ATOMIC_ACQUIRE);
   if (mutex == nullptr) {
     return HAL_ESTATE;
   }
@@ -107,7 +108,7 @@ hal_status_t MFRC522_BUS_DEVICE::PCD_GetTransportError() const {
 
 hal_status_t MFRC522_BUS_DEVICE::PCD_ReleaseTransportError() {
   hal_mutex_t mutex =
-      __atomic_load_n(&s_transport_error_mutex, __ATOMIC_ACQUIRE);
+      HAL_ATOMIC_LOAD(&s_transport_error_mutex, HAL_ATOMIC_ACQUIRE);
   if (mutex == nullptr) {
     return HAL_ESTATE;
   }
@@ -126,7 +127,7 @@ void MFRC522_BUS_DEVICE::PCD_RecordTransportStatus(hal_status_t status) {
     return;
   }
   hal_mutex_t mutex =
-      __atomic_load_n(&s_transport_error_mutex, __ATOMIC_ACQUIRE);
+      HAL_ATOMIC_LOAD(&s_transport_error_mutex, HAL_ATOMIC_ACQUIRE);
   if (mutex == nullptr) {
     return;
   }

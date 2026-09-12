@@ -1,3 +1,4 @@
+#include "hal/core/hal_compiler.h"
 #include "jh_ble_backend.h"
 
 #if defined(JH_BLUETOOTH_PUBLIC_BLE)
@@ -640,7 +641,7 @@ static void service_stream_notification_under_radio_lock(void) {
 
 static hal_status_t ble_profile_service(void *context) {
   (void)context;
-  if (__atomic_load_n(&s_ble.faulted, __ATOMIC_ACQUIRE)) {
+  if (HAL_ATOMIC_LOAD(&s_ble.faulted, HAL_ATOMIC_ACQUIRE)) {
     return HAL_EHW;
   }
   if (!s_ble.started) {
@@ -737,10 +738,10 @@ static hal_status_t ble_profile_service(void *context) {
 static void ble_profile_invalidated(void *context, uint32_t generation) {
   (void)context;
   (void)generation;
-  if (__atomic_load_n(&s_ble.stopping, __ATOMIC_ACQUIRE)) {
+  if (HAL_ATOMIC_LOAD(&s_ble.stopping, HAL_ATOMIC_ACQUIRE)) {
     return;
   }
-  __atomic_store_n(&s_ble.faulted, true, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_ble.faulted, true, HAL_ATOMIC_RELEASE);
   emit_error(HAL_EHW, true);
 }
 
@@ -787,7 +788,7 @@ static hal_status_t backend_start(void *context,
     return status;
   }
   s_ble.started = true;
-  __atomic_store_n(&s_ble.bootstrapping, false, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_ble.bootstrapping, false, HAL_ATOMIC_RELEASE);
   return HAL_OK;
 }
 
@@ -796,7 +797,7 @@ static hal_status_t backend_stop(void *context) {
   if (!s_ble.host_reference.active) {
     return HAL_OK;
   }
-  __atomic_store_n(&s_ble.stopping, true, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_ble.stopping, true, HAL_ATOMIC_RELEASE);
   const hal_status_t status = jh_btstack_host_release(&s_ble.host_reference);
   s_ble.event_handler = NULL;
   s_ble.event_context = NULL;

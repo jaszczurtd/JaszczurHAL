@@ -46,12 +46,12 @@ static void prepare_result(void) {
       "core0=%lu core1=%lu status0=%d status1=%d observed0=%u observed1=%u\n",
       HAL_TARGET_NAME, HAL_BOARD_PROFILE_NAME, JH_RUNTIME_NAME,
       (unsigned long)JH_USB_MULTICORE_RECORDS,
-      (unsigned long)__atomic_load_n(&s_count[0], __ATOMIC_ACQUIRE),
-      (unsigned long)__atomic_load_n(&s_count[1], __ATOMIC_ACQUIRE),
-      (int)__atomic_load_n(&s_status[0], __ATOMIC_ACQUIRE),
-      (int)__atomic_load_n(&s_status[1], __ATOMIC_ACQUIRE),
-      (unsigned int)__atomic_load_n(&s_observed_core[0], __ATOMIC_ACQUIRE),
-      (unsigned int)__atomic_load_n(&s_observed_core[1], __ATOMIC_ACQUIRE));
+      (unsigned long)HAL_ATOMIC_LOAD(&s_count[0], HAL_ATOMIC_ACQUIRE),
+      (unsigned long)HAL_ATOMIC_LOAD(&s_count[1], HAL_ATOMIC_ACQUIRE),
+      (int)HAL_ATOMIC_LOAD(&s_status[0], HAL_ATOMIC_ACQUIRE),
+      (int)HAL_ATOMIC_LOAD(&s_status[1], HAL_ATOMIC_ACQUIRE),
+      (unsigned int)HAL_ATOMIC_LOAD(&s_observed_core[0], HAL_ATOMIC_ACQUIRE),
+      (unsigned int)HAL_ATOMIC_LOAD(&s_observed_core[1], HAL_ATOMIC_ACQUIRE));
   s_response_length =
       length > 0 && (size_t)length < sizeof(s_response) ? (size_t)length : 0u;
   s_response_offset = 0u;
@@ -59,37 +59,37 @@ static void prepare_result(void) {
 
 static void start_run(void) {
   for (uint8_t producer = 0u; producer < 2u; ++producer) {
-    __atomic_store_n(&s_count[producer], 0u, __ATOMIC_RELEASE);
-    __atomic_store_n(&s_status[producer], HAL_NONE, __ATOMIC_RELEASE);
-    __atomic_store_n(&s_observed_core[producer], 0xffu, __ATOMIC_RELEASE);
-    __atomic_store_n(&s_done[producer], false, __ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&s_count[producer], 0u, HAL_ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&s_status[producer], HAL_NONE, HAL_ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&s_observed_core[producer], 0xffu, HAL_ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&s_done[producer], false, HAL_ATOMIC_RELEASE);
   }
-  __atomic_store_n(&s_running, true, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_running, true, HAL_ATOMIC_RELEASE);
 }
 
 static void run_producer(uint8_t producer) {
-  if (__atomic_load_n(&s_done[producer], __ATOMIC_ACQUIRE)) {
+  if (HAL_ATOMIC_LOAD(&s_done[producer], HAL_ATOMIC_ACQUIRE)) {
     hal_delay_ms(1u);
     return;
   }
 
   const uint32_t sequence =
-      __atomic_load_n(&s_count[producer], __ATOMIC_ACQUIRE);
+      HAL_ATOMIC_LOAD(&s_count[producer], HAL_ATOMIC_ACQUIRE);
   if (sequence >= JH_USB_MULTICORE_RECORDS) {
-    __atomic_store_n(&s_status[producer], HAL_OK, __ATOMIC_RELEASE);
-    __atomic_store_n(&s_done[producer], true, __ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&s_status[producer], HAL_OK, HAL_ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&s_done[producer], true, HAL_ATOMIC_RELEASE);
     return;
   }
 
-  __atomic_store_n(&s_observed_core[producer], (uint8_t)get_core_num(),
-                   __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_observed_core[producer], (uint8_t)get_core_num(),
+                   HAL_ATOMIC_RELEASE);
   const int length = snprintf(s_record[producer], sizeof(s_record[producer]),
                               "JHUSB2 core=%u seq=%06lu token=%08lx\n",
                               (unsigned int)producer, (unsigned long)sequence,
                               (unsigned long)record_token(producer, sequence));
   if (length <= 0 || (size_t)length >= sizeof(s_record[producer])) {
-    __atomic_store_n(&s_status[producer], HAL_EOVERFLOW, __ATOMIC_RELEASE);
-    __atomic_store_n(&s_done[producer], true, __ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&s_status[producer], HAL_EOVERFLOW, HAL_ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&s_done[producer], true, HAL_ATOMIC_RELEASE);
     return;
   }
 
@@ -101,15 +101,15 @@ static void run_producer(uint8_t producer) {
     if (status == HAL_OK) {
       status = HAL_EIO;
     }
-    __atomic_store_n(&s_status[producer], status, __ATOMIC_RELEASE);
-    __atomic_store_n(&s_done[producer], true, __ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&s_status[producer], status, HAL_ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&s_done[producer], true, HAL_ATOMIC_RELEASE);
     return;
   }
 
-  __atomic_store_n(&s_count[producer], sequence + 1u, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_count[producer], sequence + 1u, HAL_ATOMIC_RELEASE);
   if (sequence + 1u == JH_USB_MULTICORE_RECORDS) {
-    __atomic_store_n(&s_status[producer], HAL_OK, __ATOMIC_RELEASE);
-    __atomic_store_n(&s_done[producer], true, __ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&s_status[producer], HAL_OK, HAL_ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&s_done[producer], true, HAL_ATOMIC_RELEASE);
   }
 }
 
@@ -125,11 +125,11 @@ void app_task0(void) {
     return;
   }
 
-  if (__atomic_load_n(&s_running, __ATOMIC_ACQUIRE)) {
+  if (HAL_ATOMIC_LOAD(&s_running, HAL_ATOMIC_ACQUIRE)) {
     run_producer(0u);
-    if (__atomic_load_n(&s_done[0], __ATOMIC_ACQUIRE) &&
-        __atomic_load_n(&s_done[1], __ATOMIC_ACQUIRE)) {
-      __atomic_store_n(&s_running, false, __ATOMIC_RELEASE);
+    if (HAL_ATOMIC_LOAD(&s_done[0], HAL_ATOMIC_ACQUIRE) &&
+        HAL_ATOMIC_LOAD(&s_done[1], HAL_ATOMIC_ACQUIRE)) {
+      HAL_ATOMIC_STORE(&s_running, false, HAL_ATOMIC_RELEASE);
       prepare_result();
     }
     return;
@@ -146,7 +146,7 @@ void app_task0(void) {
 }
 
 void app_task1(void) {
-  if (__atomic_load_n(&s_running, __ATOMIC_ACQUIRE)) {
+  if (HAL_ATOMIC_LOAD(&s_running, HAL_ATOMIC_ACQUIRE)) {
     run_producer(1u);
   } else {
     hal_delay_ms(1u);

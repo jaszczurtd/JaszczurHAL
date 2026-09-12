@@ -259,13 +259,13 @@ class Phase3RegistryAndBuildTests(unittest.TestCase):
         self.assertTrue(
             source_has_fragment(
                 timer_backend,
-                "__atomic_load_n(&s_default_pool.timer, __ATOMIC_ACQUIRE)",
+                "HAL_ATOMIC_LOAD(&s_default_pool.timer, HAL_ATOMIC_ACQUIRE)",
             )
         )
         self.assertTrue(
             source_has_fragment(
                 timer_backend,
-                "__atomic_store_n(&pool.timer, timer, __ATOMIC_RELEASE)",
+                "HAL_ATOMIC_STORE(&pool.timer, timer, HAL_ATOMIC_RELEASE)",
             )
         )
 
@@ -278,7 +278,7 @@ class Phase3RegistryAndBuildTests(unittest.TestCase):
         )
         for line_number, line in enumerate(managed_timer.splitlines(), start=1):
             if cross_context_access.search(line):
-                self.assertIn("__atomic_", line, f"non-atomic access at {line_number}")
+                self.assertIn("HAL_ATOMIC_", line, f"non-atomic access at {line_number}")
 
     def test_phase3_mutex_allocation_is_never_ignored(self) -> None:
         sources = (
@@ -319,17 +319,17 @@ class Phase3RegistryAndBuildTests(unittest.TestCase):
             "bool hal_timer_pool_cancel_alarm(",
         )
         publish_begin = source_fragment_position(
-            add_alarm, "__atomic_add_fetch(&dispatch->publishing"
+            add_alarm, "HAL_ATOMIC_ADD_FETCH(&dispatch->publishing"
         )
         sdk_add = source_fragment_position(add_alarm, "alarm_pool_add_alarm_in_us(")
         clear_cancellation = source_fragment_position(
-            add_alarm, "__atomic_store_n(&entry.cancelled_id, HAL_ALARM_INVALID"
+            add_alarm, "HAL_ATOMIC_STORE(&entry.cancelled_id, HAL_ALARM_INVALID"
         )
         publish_id = source_fragment_position(
-            add_alarm, "__atomic_store_n(&entry.active_id"
+            add_alarm, "HAL_ATOMIC_STORE(&entry.active_id"
         )
         publish_end = source_fragment_position(
-            add_alarm, "__atomic_sub_fetch(&dispatch->publishing", publish_id
+            add_alarm, "HAL_ATOMIC_SUB_FETCH(&dispatch->publishing", publish_id
         )
         self.assertLess(publish_begin, sdk_add)
         self.assertLess(sdk_add, clear_cancellation)
@@ -342,7 +342,7 @@ class Phase3RegistryAndBuildTests(unittest.TestCase):
             "static inline void timer_store_result(",
         )
         self.assertTrue(
-            source_has_fragment(callback, "__atomic_load_n(&dispatch->publishing")
+            source_has_fragment(callback, "HAL_ATOMIC_LOAD(&dispatch->publishing")
         )
         self.assertTrue(source_has_fragment(callback, "publishing != 0u ||"))
 

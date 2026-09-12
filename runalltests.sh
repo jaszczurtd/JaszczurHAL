@@ -265,6 +265,7 @@ info "Scanning src/ (vendored code excluded)..."
 cppcheck --enable=warning,performance,portability \
     --inline-suppr \
     --suppressions-list=tests/cppcheck-suppressions.txt \
+    --library=config/tooling/cppcheck-atomics.cfg \
     -i src/hal/impl/rp2040/drivers \
     -i src/hal/codecs/cjson \
     -i src/hal/codecs/jpeg \

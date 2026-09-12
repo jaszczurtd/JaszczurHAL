@@ -561,7 +561,7 @@ string(SUBSTRING "${_app_entry_text}" ${_core1_bootstrap_at} -1
 string(FIND "${_native_core1_startup_tail}" "  app_start();"
     _app_start_after_bootstrap_at)
 string(FIND "${_native_core1_startup_tail}"
-    "  __atomic_store_n(&s_app_start_complete, true, __ATOMIC_RELEASE);"
+    "  HAL_ATOMIC_STORE(&s_app_start_complete, true, HAL_ATOMIC_RELEASE);"
     _task1_release_at)
 if(_app_start_after_bootstrap_at EQUAL -1 OR _task1_release_at EQUAL -1 OR
    NOT _app_start_after_bootstrap_at LESS _task1_release_at)
@@ -572,8 +572,8 @@ foreach(_startup_guard IN ITEMS
         "s_core1_flash_status"
         "s_app_start_complete"
         "hal_rp_native_require_flash_ready"
-        "__ATOMIC_RELEASE"
-        "__ATOMIC_ACQUIRE")
+        "HAL_ATOMIC_RELEASE"
+        "HAL_ATOMIC_ACQUIRE")
     string(FIND "${_app_entry_text}" "${_startup_guard}" _guard_at)
     if(_guard_at EQUAL -1)
         message(FATAL_ERROR

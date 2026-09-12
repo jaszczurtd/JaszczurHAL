@@ -1,3 +1,4 @@
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_RP
 #include "hal/core/hal_config.h"
@@ -50,21 +51,21 @@ static inline uint slave_irq_num(uint8_t bus) {
 static void slave_ensure_lock(uint8_t bus) {
   uint8_t idx = slave_bus_index(bus);
   i2c_slave_state_t *st = &s_slave[idx];
-  if (__atomic_load_n(&st->reg_lock_state, __ATOMIC_ACQUIRE) ==
+  if (HAL_ATOMIC_LOAD(&st->reg_lock_state, HAL_ATOMIC_ACQUIRE) ==
       SLAVE_LOCK_READY) {
     return;
   }
 
   unsigned int expected = SLAVE_LOCK_UNINIT;
-  if (__atomic_compare_exchange_n(&st->reg_lock_state, &expected,
-                                  SLAVE_LOCK_INITING, false, __ATOMIC_ACQUIRE,
-                                  __ATOMIC_RELAXED)) {
+  if (HAL_ATOMIC_COMPARE_EXCHANGE(&st->reg_lock_state, &expected,
+                                  SLAVE_LOCK_INITING, HAL_ATOMIC_ACQUIRE,
+                                  HAL_ATOMIC_RELAXED)) {
     critical_section_init(&st->reg_lock);
-    __atomic_store_n(&st->reg_lock_state, SLAVE_LOCK_READY, __ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&st->reg_lock_state, SLAVE_LOCK_READY, HAL_ATOMIC_RELEASE);
     return;
   }
 
-  while (__atomic_load_n(&st->reg_lock_state, __ATOMIC_ACQUIRE) !=
+  while (HAL_ATOMIC_LOAD(&st->reg_lock_state, HAL_ATOMIC_ACQUIRE) !=
          SLAVE_LOCK_READY) {
   }
 }
@@ -80,7 +81,7 @@ static inline void slave_unlock(i2c_slave_state_t *st) {
 static void slave_finish_transfer(i2c_slave_state_t *st) {
   st->rx_seen = false;
   if (st->transfer_in_progress) {
-    __atomic_fetch_add(&st->transaction_count, 1u, __ATOMIC_RELAXED);
+    HAL_ATOMIC_FETCH_ADD(&st->transaction_count, 1u, HAL_ATOMIC_RELAXED);
     st->transfer_in_progress = false;
   }
 }
@@ -233,7 +234,7 @@ void hal_i2c_slave_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
   st->read_snapshot.valid = false;
   st->transfer_in_progress = false;
   st->initialized = true;
-  __atomic_store_n(&st->transaction_count, 0u, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&st->transaction_count, 0u, HAL_ATOMIC_RELEASE);
   slave_unlock(st);
 
   slave_hw_init(idx);
@@ -257,7 +258,7 @@ void hal_i2c_slave_deinit_bus(uint8_t bus) {
   st->rx_seen = false;
   st->read_snapshot.valid = false;
   st->transfer_in_progress = false;
-  __atomic_store_n(&st->transaction_count, 0u, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&st->transaction_count, 0u, HAL_ATOMIC_RELEASE);
   memset(st->regs, 0, sizeof(st->regs));
   slave_unlock(st);
 }
@@ -357,8 +358,8 @@ uint32_t hal_i2c_slave_get_transaction_count(void) {
 }
 
 uint32_t hal_i2c_slave_get_transaction_count_bus(uint8_t bus) {
-  return __atomic_load_n(&s_slave[slave_bus_index(bus)].transaction_count,
-                         __ATOMIC_ACQUIRE);
+  return HAL_ATOMIC_LOAD(&s_slave[slave_bus_index(bus)].transaction_count,
+                         HAL_ATOMIC_ACQUIRE);
 }
 
 #endif /* HAL_ENABLE_I2C_SLAVE */

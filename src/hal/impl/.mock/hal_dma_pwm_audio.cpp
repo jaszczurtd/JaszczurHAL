@@ -1,3 +1,4 @@
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_MOCK
 
@@ -29,12 +30,12 @@ static bool s_fail_next_pause = false;
 static bool s_fail_next_resume = false;
 
 static void pool_lock(void) {
-  while (__atomic_test_and_set(&s_pool_lock, __ATOMIC_ACQUIRE)) {
+  while (HAL_ATOMIC_TEST_AND_SET(&s_pool_lock, HAL_ATOMIC_ACQUIRE)) {
   }
 }
 
 static void pool_unlock(void) {
-  __atomic_clear(&s_pool_lock, __ATOMIC_RELEASE);
+  HAL_ATOMIC_CLEAR(&s_pool_lock, HAL_ATOMIC_RELEASE);
 }
 
 bool hal_dma_pwm_audio_supported(void) { return true; }

@@ -1,3 +1,4 @@
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_RP
 
@@ -16,7 +17,7 @@ void jh_serial_port_begin(uint32_t baud) {
 }
 
 void jh_serial_port_set_flush(bool enabled) {
-  __atomic_store_n(&s_serial_flush_enabled, enabled, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_serial_flush_enabled, enabled, HAL_ATOMIC_RELEASE);
 }
 
 void jh_serial_port_message_begin(jh_serial_port_message_t kind) { (void)kind; }
@@ -39,7 +40,7 @@ size_t jh_serial_port_finish_line(char line_ending[2]) {
 }
 
 void jh_serial_port_flush(void) {
-  if (__atomic_load_n(&s_serial_flush_enabled, __ATOMIC_ACQUIRE)) {
+  if (HAL_ATOMIC_LOAD(&s_serial_flush_enabled, HAL_ATOMIC_ACQUIRE)) {
     (void)hal_usb_cdc_flush(HAL_USB_CDC_WRITE_TIMEOUT_MS);
   }
 }

@@ -1,4 +1,5 @@
 #include "hal/audio/hal_dacless.h"
+#include "hal/core/hal_compiler.h"
 
 #if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK) &&     \
     defined(HAL_ENABLE_DACLESS)
@@ -180,7 +181,7 @@ static hal_status_t finish_operation(jh_dacless_operation_t *operation,
 }
 
 static bool context_started(const jh_dacless_context_t *context) {
-  return __atomic_load_n(&context->started, __ATOMIC_ACQUIRE);
+  return HAL_ATOMIC_LOAD(&context->started, HAL_ATOMIC_ACQUIRE);
 }
 
 static void block_callback_thunk(void *user, uint16_t *buffer) {
@@ -201,9 +202,9 @@ static void block_callback_thunk(void *user, uint16_t *buffer) {
       buffer[i] = context->silence_sample;
     }
   }
-  __atomic_store_n(&context->completed_output_buffer,
+  HAL_ATOMIC_STORE(&context->completed_output_buffer,
                    static_cast<const volatile uint16_t *>(buffer),
-                   __ATOMIC_RELEASE);
+                   HAL_ATOMIC_RELEASE);
 }
 
 static hal_status_t apply_callbacks(jh_dacless_context_t *context) {
@@ -335,8 +336,8 @@ hal_status_t hal_dacless_begin(hal_dacless_t audio) {
   }
   jh_dacless_context_t *context = operation.context;
   control_lock(context);
-  __atomic_store_n(&context->completed_output_buffer, nullptr,
-                   __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&context->completed_output_buffer, nullptr,
+                   HAL_ATOMIC_RELEASE);
   const bool wants_dma = context->driver->getConfig().useDma;
   if (wants_dma && !hal_dma_pwm_audio_supported()) {
     status = HAL_EUNSUPPORTED;
@@ -346,7 +347,7 @@ hal_status_t hal_dacless_begin(hal_dacless_t audio) {
   if (status == HAL_OK) {
     context->callbacks_frozen = true;
   }
-  __atomic_store_n(&context->started, status == HAL_OK, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&context->started, status == HAL_OK, HAL_ATOMIC_RELEASE);
   control_unlock(context);
   return finish_operation(&operation, status);
 }
@@ -360,7 +361,7 @@ hal_status_t hal_dacless_destroy(hal_dacless_t audio) {
   control_lock(operation.context);
   status = operation.context->driver->shutdownEx();
   if (status == HAL_OK) {
-    __atomic_store_n(&operation.context->started, false, __ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&operation.context->started, false, HAL_ATOMIC_RELEASE);
   }
   control_unlock(operation.context);
   status = finish_operation(&operation, status);
@@ -531,8 +532,8 @@ hal_dacless_get_output_buffer(hal_dacless_t audio,
   jh_dacless_operation_t operation = {};
   hal_status_t status = begin_operation(audio, &operation);
   if (status == HAL_OK) {
-    *out_buffer = __atomic_load_n(&operation.context->completed_output_buffer,
-                                  __ATOMIC_ACQUIRE);
+    *out_buffer = HAL_ATOMIC_LOAD(&operation.context->completed_output_buffer,
+                                  HAL_ATOMIC_ACQUIRE);
     status = finish_operation(&operation, HAL_OK);
   }
   return status;

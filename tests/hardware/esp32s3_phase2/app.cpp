@@ -79,13 +79,13 @@ char s_serial_line[16] = {};
 size_t s_serial_line_length = 0u;
 
 void gpio_smoke_isr(void) {
-  __atomic_store_n(&s_gpio_irq_was_isr, hal_in_isr(), __ATOMIC_RELEASE);
-  (void)__atomic_add_fetch(&s_gpio_irq_count, 1u, __ATOMIC_ACQ_REL);
+  HAL_ATOMIC_STORE(&s_gpio_irq_was_isr, hal_in_isr(), HAL_ATOMIC_RELEASE);
+  (void)HAL_ATOMIC_ADD_FETCH(&s_gpio_irq_count, 1u, HAL_ATOMIC_ACQ_REL);
 }
 
 void timer_smoke_callback(hal_timer_t, void *) {
-  __atomic_store_n(&s_timer_was_isr, hal_in_isr(), __ATOMIC_RELEASE);
-  (void)__atomic_add_fetch(&s_timer_count, 1u, __ATOMIC_ACQ_REL);
+  HAL_ATOMIC_STORE(&s_timer_was_isr, hal_in_isr(), HAL_ATOMIC_RELEASE);
+  (void)HAL_ATOMIC_ADD_FETCH(&s_timer_count, 1u, HAL_ATOMIC_ACQ_REL);
 }
 
 bool test_system(void) {
@@ -177,8 +177,8 @@ bool test_gpio(void) {
   return pulled_input_high && status == HAL_OK && level_high &&
          detach_status == HAL_OK && owner_after_detach == HAL_ENOENT &&
          reported_owner == HAL_GPIO_IRQ_CORE_NONE &&
-         __atomic_load_n(&s_gpio_irq_count, __ATOMIC_ACQUIRE) >= 2u &&
-         __atomic_load_n(&s_gpio_irq_was_isr, __ATOMIC_ACQUIRE);
+         HAL_ATOMIC_LOAD(&s_gpio_irq_count, HAL_ATOMIC_ACQUIRE) >= 2u &&
+         HAL_ATOMIC_LOAD(&s_gpio_irq_was_isr, HAL_ATOMIC_ACQUIRE);
 }
 
 bool test_adc(void) {
@@ -298,7 +298,7 @@ bool start_timer_test(void) {
       remaining_us > 0;
   hal_delay_ms(30u);
   const bool stayed_paused =
-      __atomic_load_n(&s_timer_count, __ATOMIC_ACQUIRE) == 0u;
+      HAL_ATOMIC_LOAD(&s_timer_count, HAL_ATOMIC_ACQUIRE) == 0u;
   return paused && stayed_paused && hal_timer_resume(s_timer) == HAL_TIMER_OK;
 }
 
@@ -318,7 +318,7 @@ void process_debug_serial(void) {
       if (s_serial_line_length > 0u) {
         s_serial_line[s_serial_line_length] = '\0';
         if (strcmp(s_serial_line, "PING") == 0) {
-          __atomic_store_n(&s_serial_ping, true, __ATOMIC_RELEASE);
+          HAL_ATOMIC_STORE(&s_serial_ping, true, HAL_ATOMIC_RELEASE);
         }
         s_serial_line_length = 0u;
       }
@@ -337,17 +337,17 @@ void increment_shared_counter(void) {
     return;
   }
   hal_mutex_lock(s_shared_mutex);
-  (void)__atomic_add_fetch(&s_shared_count, 1u, __ATOMIC_ACQ_REL);
+  (void)HAL_ATOMIC_ADD_FETCH(&s_shared_count, 1u, HAL_ATOMIC_ACQ_REL);
   hal_mutex_unlock(s_shared_mutex);
 }
 
 bool timer_test_complete(void) {
   const bool complete =
       s_results.timer_setup &&
-      __atomic_load_n(&s_timer_count, __ATOMIC_ACQUIRE) >= 3u &&
-      __atomic_load_n(&s_timer_was_isr, __ATOMIC_ACQUIRE);
+      HAL_ATOMIC_LOAD(&s_timer_count, HAL_ATOMIC_ACQUIRE) >= 3u &&
+      HAL_ATOMIC_LOAD(&s_timer_was_isr, HAL_ATOMIC_ACQUIRE);
   if (complete &&
-      !__atomic_exchange_n(&s_timer_destroyed, true, __ATOMIC_ACQ_REL)) {
+      !HAL_ATOMIC_EXCHANGE(&s_timer_destroyed, true, HAL_ATOMIC_ACQ_REL)) {
     if (hal_timer_stop(s_timer) != HAL_TIMER_OK ||
         hal_timer_destroy(s_timer) != HAL_TIMER_OK) {
       return false;
@@ -360,18 +360,18 @@ bool timer_test_complete(void) {
 }
 
 void report_phase2(void) {
-  const uint32_t sequence = __atomic_load_n(&s_task0_count, __ATOMIC_ACQUIRE);
+  const uint32_t sequence = HAL_ATOMIC_LOAD(&s_task0_count, HAL_ATOMIC_ACQUIRE);
   const uint32_t task1_count =
-      __atomic_load_n(&s_task1_count, __ATOMIC_ACQUIRE);
+      HAL_ATOMIC_LOAD(&s_task1_count, HAL_ATOMIC_ACQUIRE);
   const uint32_t timer_count =
-      __atomic_load_n(&s_timer_count, __ATOMIC_ACQUIRE);
+      HAL_ATOMIC_LOAD(&s_timer_count, HAL_ATOMIC_ACQUIRE);
   const uint32_t irq_count =
-      __atomic_load_n(&s_gpio_irq_count, __ATOMIC_ACQUIRE);
-  const bool serial_ping = __atomic_load_n(&s_serial_ping, __ATOMIC_ACQUIRE);
+      HAL_ATOMIC_LOAD(&s_gpio_irq_count, HAL_ATOMIC_ACQUIRE);
+  const bool serial_ping = HAL_ATOMIC_LOAD(&s_serial_ping, HAL_ATOMIC_ACQUIRE);
   const bool timer = timer_test_complete();
-  const bool tasks = __atomic_load_n(&s_task0_core, __ATOMIC_ACQUIRE) ==
+  const bool tasks = HAL_ATOMIC_LOAD(&s_task0_core, HAL_ATOMIC_ACQUIRE) ==
                          HAL_FREERTOS_TASK0_CORE &&
-                     __atomic_load_n(&s_task1_core, __ATOMIC_ACQUIRE) ==
+                     HAL_ATOMIC_LOAD(&s_task1_core, HAL_ATOMIC_ACQUIRE) ==
                          HAL_FREERTOS_TASK1_CORE &&
                      task1_count > 0u;
   const bool pass = s_results.system && s_results.sync && s_results.gpio &&
@@ -380,29 +380,29 @@ void report_phase2(void) {
                     serial_ping;
 
   char line[768] = {};
-  (void)snprintf(line, sizeof(line),
-                 "JH_ESP32_PHASE2 sequence=%" PRIu32
-                 " target=%s board=%s core0=%" PRId32 " core1=%" PRId32
-                 " task1=%" PRIu32 " system=%u sync=%u gpio=%u irq=%" PRIu32
-                 " irq_isr=%u adc=%u adc_low=%d adc_high=%d uart=%u i2c=%u"
-                 " i2c_found=%u spi=%u timer=%u timer_count=%" PRIu32
-                 " timer_isr=%u serial_rx=%u stack_guard=%u heap=%" PRIu32
-                 " temp_centi=%" PRId32 " status=%s",
-                 sequence, HAL_TARGET_DESCRIPTOR_ID, HAL_BOARD_PROFILE_NAME,
-                 __atomic_load_n(&s_task0_core, __ATOMIC_ACQUIRE),
-                 __atomic_load_n(&s_task1_core, __ATOMIC_ACQUIRE), task1_count,
-                 s_results.system ? 1u : 0u, s_results.sync ? 1u : 0u,
-                 s_results.gpio ? 1u : 0u, irq_count,
-                 __atomic_load_n(&s_gpio_irq_was_isr, __ATOMIC_ACQUIRE) ? 1u
-                                                                        : 0u,
-                 s_results.adc ? 1u : 0u, s_results.adc_low, s_results.adc_high,
-                 s_results.uart ? 1u : 0u, s_results.i2c ? 1u : 0u,
-                 static_cast<unsigned int>(s_results.i2c_found),
-                 s_results.spi ? 1u : 0u, timer ? 1u : 0u, timer_count,
-                 __atomic_load_n(&s_timer_was_isr, __ATOMIC_ACQUIRE) ? 1u : 0u,
-                 serial_ping ? 1u : 0u, s_results.stack_guard ? 1u : 0u,
-                 s_results.heap_free, s_results.temperature_centi_celsius,
-                 pass ? "PASS" : "FAIL");
+  (void)snprintf(
+      line, sizeof(line),
+      "JH_ESP32_PHASE2 sequence=%" PRIu32 " target=%s board=%s core0=%" PRId32
+      " core1=%" PRId32 " task1=%" PRIu32
+      " system=%u sync=%u gpio=%u irq=%" PRIu32
+      " irq_isr=%u adc=%u adc_low=%d adc_high=%d uart=%u i2c=%u"
+      " i2c_found=%u spi=%u timer=%u timer_count=%" PRIu32
+      " timer_isr=%u serial_rx=%u stack_guard=%u heap=%" PRIu32
+      " temp_centi=%" PRId32 " status=%s",
+      sequence, HAL_TARGET_DESCRIPTOR_ID, HAL_BOARD_PROFILE_NAME,
+      HAL_ATOMIC_LOAD(&s_task0_core, HAL_ATOMIC_ACQUIRE),
+      HAL_ATOMIC_LOAD(&s_task1_core, HAL_ATOMIC_ACQUIRE), task1_count,
+      s_results.system ? 1u : 0u, s_results.sync ? 1u : 0u,
+      s_results.gpio ? 1u : 0u, irq_count,
+      HAL_ATOMIC_LOAD(&s_gpio_irq_was_isr, HAL_ATOMIC_ACQUIRE) ? 1u : 0u,
+      s_results.adc ? 1u : 0u, s_results.adc_low, s_results.adc_high,
+      s_results.uart ? 1u : 0u, s_results.i2c ? 1u : 0u,
+      static_cast<unsigned int>(s_results.i2c_found), s_results.spi ? 1u : 0u,
+      timer ? 1u : 0u, timer_count,
+      HAL_ATOMIC_LOAD(&s_timer_was_isr, HAL_ATOMIC_ACQUIRE) ? 1u : 0u,
+      serial_ping ? 1u : 0u, s_results.stack_guard ? 1u : 0u,
+      s_results.heap_free, s_results.temperature_centi_celsius,
+      pass ? "PASS" : "FAIL");
   hal_serial_println(line);
 }
 
@@ -430,8 +430,8 @@ extern "C" void app_start(void) {
 }
 
 extern "C" void app_task0(void) {
-  __atomic_store_n(&s_task0_core, xPortGetCoreID(), __ATOMIC_RELEASE);
-  (void)__atomic_add_fetch(&s_task0_count, 1u, __ATOMIC_ACQ_REL);
+  HAL_ATOMIC_STORE(&s_task0_core, xPortGetCoreID(), HAL_ATOMIC_RELEASE);
+  (void)HAL_ATOMIC_ADD_FETCH(&s_task0_count, 1u, HAL_ATOMIC_ACQ_REL);
   increment_shared_counter();
   process_debug_serial();
   hal_watchdog_feed();
@@ -445,8 +445,8 @@ extern "C" void app_task0(void) {
 }
 
 extern "C" void app_task1(void) {
-  __atomic_store_n(&s_task1_core, xPortGetCoreID(), __ATOMIC_RELEASE);
-  (void)__atomic_add_fetch(&s_task1_count, 1u, __ATOMIC_ACQ_REL);
+  HAL_ATOMIC_STORE(&s_task1_core, xPortGetCoreID(), HAL_ATOMIC_RELEASE);
+  (void)HAL_ATOMIC_ADD_FETCH(&s_task1_count, 1u, HAL_ATOMIC_ACQ_REL);
   increment_shared_counter();
   hal_watchdog_feed();
   hal_delay_ms(2u);

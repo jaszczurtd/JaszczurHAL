@@ -1034,9 +1034,9 @@ Set, clear, and read bits with macros. They do not make access to a shared varia
 
 ---
 
-## `hal_compiler` - Compiler attributes and builtins
+## `hal_compiler` - Compiler features
 
-Use common attribute macros and builtins instead of repeating compiler-specific conditions. The header covers the supported GNU, Clang, and MSVC variants described below.
+Use common macros instead of repeating compiler-specific conditions. The header covers the supported GNU, Clang, and MSVC variants described below.
 
 ```c
 #include <hal/core/hal_compiler.h>
@@ -1051,6 +1051,32 @@ Use common attribute macros and builtins instead of repeating compiler-specific 
 #define HAL_PACKED            ...  // structure suffix, empty on MSVC
 #define HAL_PACKED_BEGIN      ...  // pragma pack(push, 1) on MSVC
 #define HAL_PACKED_END        ...  // pragma pack(pop) on MSVC
+
+typedef enum {
+  HAL_ATOMIC_RELAXED,
+  HAL_ATOMIC_ACQUIRE,
+  HAL_ATOMIC_RELEASE,
+  HAL_ATOMIC_ACQ_REL,
+  HAL_ATOMIC_SEQ_CST,
+} hal_atomic_memory_order_t;
+
+#define HAL_ATOMIC_LOAD(object, order)                              ...
+#define HAL_ATOMIC_STORE(object, value, order)                      ...
+#define HAL_ATOMIC_EXCHANGE(object, value, order)                   ...
+#define HAL_ATOMIC_COMPARE_EXCHANGE(object, expected, desired,
+                                    success_order, failure_order)   ...
+#define HAL_ATOMIC_FETCH_ADD(object, value, order)                  ...
+#define HAL_ATOMIC_FETCH_SUB(object, value, order)                  ...
+#define HAL_ATOMIC_FETCH_OR(object, value, order)                   ...
+#define HAL_ATOMIC_ADD_FETCH(object, value, order)                  ...
+#define HAL_ATOMIC_SUB_FETCH(object, value, order)                  ...
+#define HAL_ATOMIC_TEST_AND_SET(object, order)                      ...
+#define HAL_ATOMIC_CLEAR(object, order)                             ...
+#define HAL_ATOMIC_THREAD_FENCE(order)                              ...
+#define HAL_ATOMIC_POINTER_LOAD(object, order)                      ...
+#define HAL_ATOMIC_POINTER_COMPARE_EXCHANGE(object, expected,
+                                            desired, success_order,
+                                            failure_order)          ...
 
 uint32_t hal_clz32(uint32_t value);  // leading zero count, value must be non-zero
 ```
@@ -1073,11 +1099,15 @@ HAL_PACKED_END
 
 Writing `inline` next to `HAL_FORCE_INLINE` duplicates the specifier on GNU and raises C4141 on MSVC, so the macro carries it.
 
-Both identity macros can be pre-defined to `0`, which selects the portable fallback: `HAL_TRAP()` becomes `abort()`, `hal_clz32()` uses a loop, and the attribute macros expand to nothing. The host compiler test builds one translation unit that way and compares its `hal_clz32()` against the builtin path, so the branch no real compiler selects stays covered. An exotic port can use the same switch before its own mapping exists.
+The atomic macros support 1-, 2-, 4-, and 8-byte scalar values. C++ can use the scalar operations with object and function pointers; portable C code uses the dedicated object-pointer load and compare-exchange macros. Compare-exchange is strong: when it fails, it writes the observed value through `expected`. Use acquire or a weaker order for failure, never release or acquire-release. Load and store accept only the orderings allowed for those operation types.
 
-**Out of scope by design:** linker-level attributes (`section`, `naked`, `constructor`) and inline assembly stay explicit at their target-specific call sites, where a wrong mapping would silently corrupt the memory map; vendored third-party sources keep their upstream form. Atomics remain direct `__atomic_*` calls, because every translation unit that uses them is compiled by a GNU toolchain.
+GNU and Clang map the calls directly to `__atomic_*`, preserving the requested compile-time ordering. The MSVC host path uses Interlocked intrinsics, which can provide a stronger barrier than requested. The STM32G474 Cortex-M4 file keeps the three 64-bit GNU runtime entry points required by the linker; normal HAL sources still use only this header. The cppcheck model in `config/tooling/cppcheck-atomics.cfg` lets value-flow analysis interpret atomic loads and compare-exchange conditions.
 
-**Thread safety:** Macros and `hal_clz32()` are stateless and safe from any context.
+Both identity macros can be pre-defined to `0`, which selects the portable fallback: `HAL_TRAP()` becomes `abort()`, `hal_clz32()` uses a loop, and the attribute macros expand to nothing. Atomic use is rejected at compile time because that branch cannot provide synchronization. The host compiler test builds one translation unit that way and compares its `hal_clz32()` against the builtin path, so the branch no real compiler selects stays covered. An exotic port can use the same switch before its own mapping exists.
+
+**Out of scope by design:** linker-level attributes (`section`, `naked`, `constructor`) and inline assembly stay explicit at their target-specific call sites, where a wrong mapping would silently corrupt the memory map; vendored third-party sources keep their upstream form.
+
+**Thread safety:** The attribute macros and `hal_clz32()` are stateless. Atomic operations synchronize only the object passed by the caller and only according to the selected memory ordering.
 
 ### Examples
 

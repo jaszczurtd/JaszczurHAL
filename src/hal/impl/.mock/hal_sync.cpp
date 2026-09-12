@@ -1,3 +1,4 @@
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_MOCK
 #include "hal/core/hal_config.h"
@@ -20,7 +21,8 @@ struct hal_mutex_impl_t {
 };
 
 extern "C" hal_mutex_t jh_hal_mutex_try_create(void) {
-  if (__atomic_exchange_n(&s_fail_next_mutex_create, false, __ATOMIC_ACQ_REL)) {
+  if (HAL_ATOMIC_EXCHANGE(&s_fail_next_mutex_create, false,
+                          HAL_ATOMIC_ACQ_REL)) {
     return nullptr;
   }
   return new (std::nothrow) hal_mutex_impl_t();
@@ -141,6 +143,6 @@ uint32_t hal_mock_mutex_unlock_count(void) { return s_mutex_unlock_count; }
 uint32_t hal_mock_mutex_max_depth(void) { return s_mutex_max_depth; }
 
 void hal_mock_mutex_fail_next_create(bool fail) {
-  __atomic_store_n(&s_fail_next_mutex_create, fail, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_fail_next_mutex_create, fail, HAL_ATOMIC_RELEASE);
 }
 #endif // HAL_TARGET_IS_MOCK

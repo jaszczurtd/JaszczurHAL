@@ -1,3 +1,4 @@
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_ESP32_FAMILY
 
@@ -111,22 +112,22 @@ void hal_mutex_destroy(hal_mutex_t mutex) {
 }
 
 extern "C" bool hal_esp32_critical_section_active(void) {
-  return __atomic_load_n(&s_critical_depth[current_core()], __ATOMIC_ACQUIRE) !=
-         0u;
+  return HAL_ATOMIC_LOAD(&s_critical_depth[current_core()],
+                         HAL_ATOMIC_ACQUIRE) != 0u;
 }
 
 void hal_critical_section_enter(void) {
   portENTER_CRITICAL_SAFE(&s_critical_mux);
-  (void)__atomic_fetch_add(&s_critical_depth[current_core()], 1u,
-                           __ATOMIC_RELAXED);
+  (void)HAL_ATOMIC_FETCH_ADD(&s_critical_depth[current_core()], 1u,
+                             HAL_ATOMIC_RELAXED);
 }
 
 void hal_critical_section_exit(void) {
   const uint32_t core = current_core();
-  if (__atomic_load_n(&s_critical_depth[core], __ATOMIC_RELAXED) == 0u) {
+  if (HAL_ATOMIC_LOAD(&s_critical_depth[core], HAL_ATOMIC_RELAXED) == 0u) {
     return;
   }
-  (void)__atomic_fetch_sub(&s_critical_depth[core], 1u, __ATOMIC_RELEASE);
+  (void)HAL_ATOMIC_FETCH_SUB(&s_critical_depth[core], 1u, HAL_ATOMIC_RELEASE);
   portEXIT_CRITICAL_SAFE(&s_critical_mux);
 }
 
