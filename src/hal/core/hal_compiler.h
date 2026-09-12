@@ -378,7 +378,6 @@ static HAL_FORCE_INLINE uint64_t jh_atomic_msvc_mask(size_t size) {
     return UINT64_MAX;
   default:
     HAL_TRAP();
-    return 0u;
   }
 }
 
@@ -399,7 +398,6 @@ static HAL_FORCE_INLINE uint64_t jh_atomic_msvc_compare_exchange_bits(
         (volatile __int64 *)object, (__int64)desired, (__int64)expected);
   default:
     HAL_TRAP();
-    return 0u;
   }
 }
 
