@@ -144,16 +144,16 @@ static hal_status_t run_dma_gate(void) {
 }
 
 static hal_status_t run_core1_transaction(void) {
-  __atomic_store_n(&s_core1_status, HAL_NONE, __ATOMIC_RELEASE);
-  __atomic_store_n(&s_core1_request, true, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_core1_status, HAL_NONE, HAL_ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_core1_request, true, HAL_ATOMIC_RELEASE);
   const uint64_t start_us = hal_micros64();
-  while (__atomic_load_n(&s_core1_status, __ATOMIC_ACQUIRE) == HAL_NONE) {
+  while (HAL_ATOMIC_LOAD(&s_core1_status, HAL_ATOMIC_ACQUIRE) == HAL_NONE) {
     if (hal_micros64() - start_us >= 1000000u) {
       return HAL_ETIMEOUT;
     }
     hal_delay_ms(1u);
   }
-  return __atomic_load_n(&s_core1_status, __ATOMIC_ACQUIRE);
+  return HAL_ATOMIC_LOAD(&s_core1_status, HAL_ATOMIC_ACQUIRE);
 }
 
 static hal_status_t run_usb_quiesce_probe(void) {
@@ -177,13 +177,13 @@ static hal_status_t run_raw_lockout_probe(void) {
 }
 
 static void prepare_status(void) {
-  const int length =
-      snprintf((char *)s_response, sizeof(s_response),
-               "JHFLASH1 task0=%lu task1=%lu core0=%u core1=%u\n",
-               (unsigned long)__atomic_load_n(&s_task0_ticks, __ATOMIC_ACQUIRE),
-               (unsigned long)__atomic_load_n(&s_task1_ticks, __ATOMIC_ACQUIRE),
-               (unsigned int)__atomic_load_n(&s_task0_core, __ATOMIC_ACQUIRE),
-               (unsigned int)__atomic_load_n(&s_task1_core, __ATOMIC_ACQUIRE));
+  const int length = snprintf(
+      (char *)s_response, sizeof(s_response),
+      "JHFLASH1 task0=%lu task1=%lu core0=%u core1=%u\n",
+      (unsigned long)HAL_ATOMIC_LOAD(&s_task0_ticks, HAL_ATOMIC_ACQUIRE),
+      (unsigned long)HAL_ATOMIC_LOAD(&s_task1_ticks, HAL_ATOMIC_ACQUIRE),
+      (unsigned int)HAL_ATOMIC_LOAD(&s_task0_core, HAL_ATOMIC_ACQUIRE),
+      (unsigned int)HAL_ATOMIC_LOAD(&s_task1_core, HAL_ATOMIC_ACQUIRE));
   s_response_length =
       length > 0 && (size_t)length < sizeof(s_response) ? (size_t)length : 0u;
   s_response_offset = 0u;
@@ -254,8 +254,8 @@ static void run_transaction_tests(void) {
 void app_start(void) {}
 
 void app_task0(void) {
-  __atomic_add_fetch(&s_task0_ticks, 1u, __ATOMIC_RELAXED);
-  __atomic_store_n(&s_task0_core, (uint8_t)get_core_num(), __ATOMIC_RELEASE);
+  HAL_ATOMIC_ADD_FETCH(&s_task0_ticks, 1u, HAL_ATOMIC_RELAXED);
+  HAL_ATOMIC_STORE(&s_task0_core, (uint8_t)get_core_num(), HAL_ATOMIC_RELEASE);
 
   if (s_response_offset < s_response_length) {
     size_t written = 0u;
@@ -278,13 +278,13 @@ void app_task0(void) {
 }
 
 void app_task1(void) {
-  __atomic_add_fetch(&s_task1_ticks, 1u, __ATOMIC_RELAXED);
-  __atomic_store_n(&s_task1_core, (uint8_t)get_core_num(), __ATOMIC_RELEASE);
-  if (__atomic_exchange_n(&s_core1_request, false, __ATOMIC_ACQ_REL)) {
+  HAL_ATOMIC_ADD_FETCH(&s_task1_ticks, 1u, HAL_ATOMIC_RELAXED);
+  HAL_ATOMIC_STORE(&s_task1_core, (uint8_t)get_core_num(), HAL_ATOMIC_RELEASE);
+  if (HAL_ATOMIC_EXCHANGE(&s_core1_request, false, HAL_ATOMIC_ACQ_REL)) {
     uint32_t counter = 0u;
     const hal_status_t status = jh_rp_flash_transaction_execute(
         noop_operation, &counter, FLASH_TIMEOUT_MS);
-    __atomic_store_n(&s_core1_status, status, __ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&s_core1_status, status, HAL_ATOMIC_RELEASE);
   }
   hal_delay_ms(1u);
 }

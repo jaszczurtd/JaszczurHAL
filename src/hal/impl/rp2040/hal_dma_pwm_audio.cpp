@@ -1,3 +1,4 @@
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_RP
 
@@ -57,11 +58,11 @@ static uint8_t s_irq_users = 0u;
 static uint8_t s_irq_owner_core = UINT8_MAX;
 
 static bool audio_state_load(const bool *state) {
-  return __atomic_load_n(state, __ATOMIC_ACQUIRE);
+  return HAL_ATOMIC_LOAD(state, HAL_ATOMIC_ACQUIRE);
 }
 
 static void audio_state_store(bool *state, bool value) {
-  __atomic_store_n(state, value, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(state, value, HAL_ATOMIC_RELEASE);
 }
 
 static void reset_audio_slot(hal_dma_pwm_audio_impl_t *audio) {

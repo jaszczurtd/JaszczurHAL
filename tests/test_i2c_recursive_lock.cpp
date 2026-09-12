@@ -38,9 +38,9 @@ void test_wrong_owner_cannot_release_lock(void) {
 void test_nesting_depth_overflow_is_rejected(void) {
   jh_i2c_recursive_lock_t lock = {};
   TEST_ASSERT_TRUE(jh_i2c_recursive_lock_acquire(&lock, 1u));
-  __atomic_store_n(&lock.depth, UINT32_MAX, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&lock.depth, UINT32_MAX, HAL_ATOMIC_RELEASE);
   TEST_ASSERT_FALSE(jh_i2c_recursive_lock_acquire(&lock, 1u));
-  __atomic_store_n(&lock.depth, 1u, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&lock.depth, 1u, HAL_ATOMIC_RELEASE);
   TEST_ASSERT_TRUE(jh_i2c_recursive_lock_release(&lock, 1u));
   destroy_lock(&lock);
 }

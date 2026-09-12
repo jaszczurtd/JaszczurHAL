@@ -1,3 +1,4 @@
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_STM32G474
 
@@ -118,7 +119,7 @@ void hal_mutex_lock(hal_mutex_t mutex) {
   HAL_ASSERT(ok == pdTRUE, "hal_mutex_lock: FreeRTOS mutex take failed");
   (void)ok;
 #else
-  while (__atomic_test_and_set(&mutex->locked, __ATOMIC_ACQUIRE)) {
+  while (HAL_ATOMIC_TEST_AND_SET(&mutex->locked, HAL_ATOMIC_ACQUIRE)) {
     hal_sync_relax();
   }
 #endif
@@ -137,8 +138,8 @@ bool hal_mutex_try_lock(hal_mutex_t mutex) {
   return xSemaphoreTake(mutex->handle, 0u) == pdTRUE;
 #else
   uint8_t expected = 0u;
-  return __atomic_compare_exchange_n(&mutex->locked, &expected, 1u, false,
-                                     __ATOMIC_ACQUIRE, __ATOMIC_RELAXED);
+  return HAL_ATOMIC_COMPARE_EXCHANGE(&mutex->locked, &expected, 1u,
+                                     HAL_ATOMIC_ACQUIRE, HAL_ATOMIC_RELAXED);
 #endif
 }
 
@@ -159,7 +160,7 @@ void hal_mutex_unlock(hal_mutex_t mutex) {
   HAL_ASSERT(ok == pdTRUE, "hal_mutex_unlock: FreeRTOS mutex give failed");
   (void)ok;
 #else
-  __atomic_clear(&mutex->locked, __ATOMIC_RELEASE);
+  HAL_ATOMIC_CLEAR(&mutex->locked, HAL_ATOMIC_RELEASE);
 #endif
 }
 

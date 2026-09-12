@@ -41,6 +41,7 @@ add_test(NAME test_host_warning_profiles
 # strict warning profile.
 add_executable(test_host_compiler_smoke
     test_host_compiler_smoke.cpp
+    test_host_compiler_atomic.c
     test_host_compiler_portable.cpp
     ${CMAKE_SOURCE_DIR}/src/hal/security/hal_crc.cpp)
 target_compile_definitions(test_host_compiler_smoke PRIVATE
@@ -54,6 +55,11 @@ target_include_directories(test_host_compiler_smoke PRIVATE
     ${CMAKE_SOURCE_DIR}/src)
 jh_enable_host_warnings(test_host_compiler_smoke ERRORS)
 add_test(NAME test_host_compiler_smoke COMMAND test_host_compiler_smoke)
+
+add_test(NAME test_atomic_abstraction
+    COMMAND ${CMAKE_COMMAND}
+        "-DJH_ROOT=${CMAKE_SOURCE_DIR}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/test_atomic_abstraction.cmake")
 
 # These public headers must remain standalone in both supported source
 # languages. They intentionally do not link the monolithic mock backend.

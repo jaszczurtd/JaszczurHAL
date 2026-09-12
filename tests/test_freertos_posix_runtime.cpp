@@ -48,11 +48,11 @@ volatile int s_network_active_contexts;
 volatile int s_network_reentry_requested;
 
 void record_failure(void) {
-  __atomic_fetch_add(&s_failures, 1, __ATOMIC_RELAXED);
+  HAL_ATOMIC_FETCH_ADD(&s_failures, 1, HAL_ATOMIC_RELAXED);
 }
 
 void timer_callback(void) {
-  __atomic_fetch_add(&s_timer_callbacks, 1, __ATOMIC_RELAXED);
+  HAL_ATOMIC_FETCH_ADD(&s_timer_callbacks, 1, HAL_ATOMIC_RELAXED);
 }
 
 void give_done(void) {
@@ -72,27 +72,27 @@ jh_network_context_owner_t network_current_owner(void *) {
 
 hal_status_t network_stack_enter(void *) {
   hal_mutex_lock(s_network_stack_mutex);
-  if (__atomic_add_fetch(&s_network_active_contexts, 1, __ATOMIC_RELAXED) !=
+  if (HAL_ATOMIC_ADD_FETCH(&s_network_active_contexts, 1, HAL_ATOMIC_RELAXED) !=
       1) {
     record_failure();
   }
-  __atomic_fetch_add(&s_network_entries, 1, __ATOMIC_RELAXED);
+  HAL_ATOMIC_FETCH_ADD(&s_network_entries, 1, HAL_ATOMIC_RELAXED);
   return HAL_OK;
 }
 
 void network_stack_leave(void *) {
-  if (__atomic_sub_fetch(&s_network_active_contexts, 1, __ATOMIC_RELAXED) !=
+  if (HAL_ATOMIC_SUB_FETCH(&s_network_active_contexts, 1, HAL_ATOMIC_RELAXED) !=
       0) {
     record_failure();
   }
-  __atomic_fetch_add(&s_network_leaves, 1, __ATOMIC_RELAXED);
+  HAL_ATOMIC_FETCH_ADD(&s_network_leaves, 1, HAL_ATOMIC_RELAXED);
   hal_mutex_unlock(s_network_stack_mutex);
 }
 
 hal_status_t network_service_callback(void *) {
-  __atomic_fetch_add(&s_network_service_calls, 1, __ATOMIC_RELAXED);
-  if (__atomic_exchange_n(&s_network_reentry_requested, 0, __ATOMIC_RELAXED) !=
-      0) {
+  HAL_ATOMIC_FETCH_ADD(&s_network_service_calls, 1, HAL_ATOMIC_RELAXED);
+  if (HAL_ATOMIC_EXCHANGE(&s_network_reentry_requested, 0,
+                          HAL_ATOMIC_RELAXED) != 0) {
     if (jh_network_service_enter(&s_network_service, false) != HAL_OK) {
       record_failure();
       return HAL_EINTERNAL;
@@ -119,7 +119,7 @@ void counter_worker(void *arg) {
 
     s_timer->tick();
     hal_idle();
-    __atomic_fetch_add(&s_idle_calls, 1, __ATOMIC_RELAXED);
+    HAL_ATOMIC_FETCH_ADD(&s_idle_calls, 1, HAL_ATOMIC_RELAXED);
     hal_delay_ms(1);
   }
 
@@ -135,7 +135,7 @@ void once_worker(void *arg) {
     record_failure();
   } else {
     hal_mutex_lock(mutex);
-    __atomic_fetch_add(&s_once_hits, 1, __ATOMIC_RELAXED);
+    HAL_ATOMIC_FETCH_ADD(&s_once_hits, 1, HAL_ATOMIC_RELAXED);
     hal_mutex_unlock(mutex);
   }
 

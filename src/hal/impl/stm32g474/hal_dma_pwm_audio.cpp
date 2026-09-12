@@ -1,3 +1,4 @@
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_STM32G474
 
@@ -46,11 +47,11 @@ static void pool_lock(void) { hal_critical_section_enter(); }
 static void pool_unlock(void) { hal_critical_section_exit(); }
 
 static bool audio_state_load(const bool *state) {
-  return __atomic_load_n(state, __ATOMIC_ACQUIRE);
+  return HAL_ATOMIC_LOAD(state, HAL_ATOMIC_ACQUIRE);
 }
 
 static void audio_state_store(bool *state, bool value) {
-  __atomic_store_n(state, value, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(state, value, HAL_ATOMIC_RELEASE);
 }
 
 #ifdef JH_STM32G474_HW

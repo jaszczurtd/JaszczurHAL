@@ -17,7 +17,7 @@ volatile bool s_start;
 hal_status_t s_results[2];
 volatile int s_failures;
 
-void fail(void) { __atomic_fetch_add(&s_failures, 1, __ATOMIC_RELAXED); }
+void fail(void) { HAL_ATOMIC_FETCH_ADD(&s_failures, 1, HAL_ATOMIC_RELAXED); }
 
 hal_status_t provider_initialize(jh_lora_radio_context_t *) { return HAL_OK; }
 hal_status_t provider_deinitialize(jh_lora_radio_context_t *) { return HAL_OK; }
@@ -118,7 +118,7 @@ hal_lora_radio_config_t radio_config(void) {
 void transmit_worker(void *argument) {
   const size_t index = (size_t)(uintptr_t)argument;
   static const uint8_t payload[] = {0xA5u};
-  while (!__atomic_load_n(&s_start, __ATOMIC_ACQUIRE)) {
+  while (!HAL_ATOMIC_LOAD(&s_start, HAL_ATOMIC_ACQUIRE)) {
     taskYIELD();
   }
   s_results[index] =
@@ -148,7 +148,7 @@ void supervisor(void *) {
                   3u, nullptr) != pdPASS) {
     fail();
   }
-  __atomic_store_n(&s_start, true, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_start, true, HAL_ATOMIC_RELEASE);
   for (size_t index = 0u; index < 2u; ++index) {
     if (xSemaphoreTake(s_done, pdMS_TO_TICKS(1000u)) != pdTRUE) {
       fail();

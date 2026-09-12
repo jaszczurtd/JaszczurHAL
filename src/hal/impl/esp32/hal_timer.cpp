@@ -1,3 +1,4 @@
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_ESP32_FAMILY
 
@@ -235,12 +236,12 @@ bool initialize_pool_timer(hal_timer_pool_impl_s &pool) {
   // Default-pool first use is concurrent. Pair this publication with the
   // acquire load in initialize_default_timer() so no caller observes a
   // partially initialized GPTimer handle.
-  __atomic_store_n(&pool.timer, timer, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&pool.timer, timer, HAL_ATOMIC_RELEASE);
   return true;
 }
 
 bool initialize_default_timer(void) {
-  if (__atomic_load_n(&s_default_pool.timer, __ATOMIC_ACQUIRE) != nullptr) {
+  if (HAL_ATOMIC_LOAD(&s_default_pool.timer, HAL_ATOMIC_ACQUIRE) != nullptr) {
     return true;
   }
   if (xPortInIsrContext() != pdFALSE) {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_mutex_once.h"
 #include "hal/core/hal_status.h"
 #include "hal/system/hal_sync.h"
@@ -63,7 +64,7 @@ public:
       return HAL_EINVAL;
     }
     *out_cached = false;
-    hal_mutex_t mutex = __atomic_load_n(&_mutex, __ATOMIC_ACQUIRE);
+    hal_mutex_t mutex = HAL_ATOMIC_LOAD(&_mutex, HAL_ATOMIC_ACQUIRE);
     if (mutex == nullptr) {
       return HAL_OK;
     }
@@ -104,7 +105,7 @@ public:
     if (device == nullptr) {
       return HAL_EINVAL;
     }
-    hal_mutex_t mutex = __atomic_load_n(&_mutex, __ATOMIC_ACQUIRE);
+    hal_mutex_t mutex = HAL_ATOMIC_LOAD(&_mutex, HAL_ATOMIC_ACQUIRE);
     if (mutex == nullptr) {
       return HAL_OK;
     }

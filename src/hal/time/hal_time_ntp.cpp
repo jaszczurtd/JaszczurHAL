@@ -1,3 +1,4 @@
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_config.h"
 
 #ifdef HAL_ENABLE_TIME
@@ -122,8 +123,8 @@ hal_status_t lock_rtc_operation(hal_mutex_t *out_mutex) {
 
 bool service_try_enter() {
   bool expected = false;
-  return __atomic_compare_exchange_n(&s_service_active, &expected, true, false,
-                                     __ATOMIC_ACQUIRE, __ATOMIC_RELAXED);
+  return HAL_ATOMIC_COMPARE_EXCHANGE(&s_service_active, &expected, true,
+                                     HAL_ATOMIC_ACQUIRE, HAL_ATOMIC_RELAXED);
 }
 
 void service_enter() {
@@ -133,7 +134,7 @@ void service_enter() {
 }
 
 void service_leave() {
-  __atomic_store_n(&s_service_active, false, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_service_active, false, HAL_ATOMIC_RELEASE);
 }
 
 void copy_server_name(char out[kServerNameSize], const char *server) {

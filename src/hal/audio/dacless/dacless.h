@@ -14,6 +14,7 @@
  */
 
 #include "hal/audio/hal_dacless.h"
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_config.h"
 #include "hal/core/hal_target.h"
 
@@ -120,7 +121,7 @@ public:
   float getSampleRate() const { return sampleRate_; }
   const DAClessConfig &getConfig() const { return cfg_; }
   const volatile uint16_t *getOutBufPtr() const {
-    return __atomic_load_n(&outBufPtr_, __ATOMIC_ACQUIRE);
+    return HAL_ATOMIC_LOAD(&outBufPtr_, HAL_ATOMIC_ACQUIRE);
   }
   const volatile uint16_t *getAdcBuffer() const { return adcBuf_; }
 

@@ -1,3 +1,4 @@
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_ESP32_FAMILY
 
@@ -61,7 +62,7 @@ void IRAM_ATTR fault_handler(XtExcFrame *frame) {
   s_retained_fault.address = address;
   s_retained_fault.checksum =
       UINT32_C(0xA55A17E3) ^ kFaultVersion ^ pc ^ lr ^ ps ^ cause ^ address;
-  __atomic_store_n(&s_retained_fault.magic, kFaultMagic, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_retained_fault.magic, kFaultMagic, HAL_ATOMIC_RELEASE);
 
   const unsigned core = (unsigned)xPortGetCoreID();
   xt_exc_handler previous = nullptr;
@@ -100,7 +101,7 @@ void install_handlers_on_current_core(void *) {
 
 void latch_retained_fault(void) {
   const uint32_t magic =
-      __atomic_load_n(&s_retained_fault.magic, __ATOMIC_ACQUIRE);
+      HAL_ATOMIC_LOAD(&s_retained_fault.magic, HAL_ATOMIC_ACQUIRE);
   const uint32_t version = s_retained_fault.version;
   const uint32_t pc = s_retained_fault.pc;
   const uint32_t lr = s_retained_fault.lr;
@@ -117,7 +118,7 @@ void latch_retained_fault(void) {
     s_last_fault.psr = ps;
     s_fault_available = true;
   }
-  __atomic_store_n(&s_retained_fault.magic, 0u, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_retained_fault.magic, 0u, HAL_ATOMIC_RELEASE);
 }
 
 bool all_handlers_installed(void) {
@@ -170,7 +171,7 @@ bool jh_esp32_fault_get(hal_fault_info_t *out) {
 void jh_esp32_fault_clear(void) {
   s_last_fault = {};
   s_fault_available = false;
-  __atomic_store_n(&s_retained_fault.magic, 0u, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_retained_fault.magic, 0u, HAL_ATOMIC_RELEASE);
 }
 
 #endif // HAL_TARGET_IS_ESP32_FAMILY

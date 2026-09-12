@@ -1,3 +1,4 @@
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_ESP32_FAMILY
 
@@ -44,7 +45,7 @@ size_t s_rx_tail = 0u;
 size_t s_rx_count = 0u;
 
 bool ensure_started(void) {
-  if (__atomic_load_n(&s_started, __ATOMIC_ACQUIRE)) {
+  if (HAL_ATOMIC_LOAD(&s_started, HAL_ATOMIC_ACQUIRE)) {
     return true;
   }
   hal_mutex_t mutex = jh_hal_mutex_create_once(&s_control_mutex);
@@ -53,7 +54,7 @@ bool ensure_started(void) {
   }
 
   hal_mutex_lock(mutex);
-  if (!__atomic_load_n(&s_started, __ATOMIC_ACQUIRE)) {
+  if (!HAL_ATOMIC_LOAD(&s_started, HAL_ATOMIC_ACQUIRE)) {
 #if HAL_TARGET_IS_ESP32_S3
     esp_err_t driver_result = ESP_OK;
     if (!usb_serial_jtag_is_driver_installed()) {
@@ -86,10 +87,10 @@ bool ensure_started(void) {
     const int nonblocking_result =
         flags >= 0 ? fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK) : -1;
     if (nonblocking_result >= 0) {
-      __atomic_store_n(&s_started, true, __ATOMIC_RELEASE);
+      HAL_ATOMIC_STORE(&s_started, true, HAL_ATOMIC_RELEASE);
     }
   }
-  const bool started = __atomic_load_n(&s_started, __ATOMIC_ACQUIRE);
+  const bool started = HAL_ATOMIC_LOAD(&s_started, HAL_ATOMIC_ACQUIRE);
   hal_mutex_unlock(mutex);
   return started;
 }
@@ -127,7 +128,7 @@ void jh_serial_port_begin(uint32_t baud) {
 }
 
 void jh_serial_port_set_flush(bool enabled) {
-  __atomic_store_n(&s_flush_enabled, enabled, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_flush_enabled, enabled, HAL_ATOMIC_RELEASE);
 }
 
 void jh_serial_port_message_begin(jh_serial_port_message_t kind) { (void)kind; }
@@ -157,7 +158,8 @@ size_t jh_serial_port_finish_line(char line_ending[2]) {
 }
 
 void jh_serial_port_flush(void) {
-  if (__atomic_load_n(&s_flush_enabled, __ATOMIC_ACQUIRE) && ensure_started()) {
+  if (HAL_ATOMIC_LOAD(&s_flush_enabled, HAL_ATOMIC_ACQUIRE) &&
+      ensure_started()) {
     (void)fsync(STDOUT_FILENO);
   }
 }

@@ -1,3 +1,4 @@
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_RP
 #include "hal/core/hal_mutex_once.h"
@@ -74,18 +75,18 @@ static int64_t timer_dispatch_callback(alarm_id_t alarm_id, void *context) {
   }
 
   rp_alarm_dispatch_entry_s &entry = dispatch->entries[index];
-  __atomic_add_fetch(&entry.firing, 1u, __ATOMIC_ACQ_REL);
+  HAL_ATOMIC_ADD_FETCH(&entry.firing, 1u, HAL_ATOMIC_ACQ_REL);
 
   int64_t delay_us = 0;
   const hal_alarm_id_t active_id =
-      __atomic_load_n(&entry.active_id, __ATOMIC_ACQUIRE);
+      HAL_ATOMIC_LOAD(&entry.active_id, HAL_ATOMIC_ACQUIRE);
   hal_alarm_id_t published_id = active_id;
   uint32_t publishing = 0u;
   if (published_id != (hal_alarm_id_t)alarm_id) {
-    publishing = __atomic_load_n(&dispatch->publishing, __ATOMIC_SEQ_CST);
+    publishing = HAL_ATOMIC_LOAD(&dispatch->publishing, HAL_ATOMIC_SEQ_CST);
     if (publishing == 0u) {
       /* Publication may have completed after the first active-ID load. */
-      published_id = __atomic_load_n(&entry.active_id, __ATOMIC_ACQUIRE);
+      published_id = HAL_ATOMIC_LOAD(&entry.active_id, HAL_ATOMIC_ACQUIRE);
     }
   }
   if (published_id == (hal_alarm_id_t)alarm_id) {
@@ -100,12 +101,12 @@ static int64_t timer_dispatch_callback(alarm_id_t alarm_id, void *context) {
     if (delay_us <= 0) {
       delay_us = 0;
       hal_alarm_id_t expected = (hal_alarm_id_t)alarm_id;
-      (void)__atomic_compare_exchange_n(&entry.active_id, &expected,
-                                        HAL_ALARM_INVALID, false,
-                                        __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE);
+      (void)HAL_ATOMIC_COMPARE_EXCHANGE(&entry.active_id, &expected,
+                                        HAL_ALARM_INVALID, HAL_ATOMIC_ACQ_REL,
+                                        HAL_ATOMIC_ACQUIRE);
     }
   } else if (publishing != 0u ||
-             __atomic_load_n(&entry.cancelled_id, __ATOMIC_ACQUIRE) !=
+             HAL_ATOMIC_LOAD(&entry.cancelled_id, HAL_ATOMIC_ACQUIRE) !=
                  (hal_alarm_id_t)alarm_id) {
     // The IRQ may run between the SDK allocating an entry and this backend
     // publishing the returned alarm ID. A dispatch-wide publication count
@@ -114,7 +115,7 @@ static int64_t timer_dispatch_callback(alarm_id_t alarm_id, void *context) {
     delay_us = 1;
   }
 
-  __atomic_sub_fetch(&entry.firing, 1u, __ATOMIC_ACQ_REL);
+  HAL_ATOMIC_SUB_FETCH(&entry.firing, 1u, HAL_ATOMIC_ACQ_REL);
   return delay_us;
 }
 
@@ -249,14 +250,14 @@ hal_alarm_id_t hal_timer_pool_add_alarm_us_ex(
   }
 
   rp_alarm_dispatch_s *dispatch = resolve_dispatch(pool);
-  __atomic_add_fetch(&dispatch->publishing, 1u, __ATOMIC_SEQ_CST);
+  HAL_ATOMIC_ADD_FETCH(&dispatch->publishing, 1u, HAL_ATOMIC_SEQ_CST);
   alarm_id_t id = alarm_pool_add_alarm_in_us(
       target_pool, delay_us, timer_dispatch_callback, dispatch, fire_if_past);
   if (id > 0) {
     const int16_t index = timer_alarm_index((hal_alarm_id_t)id);
     if (!dispatch || index < 0 || (uint16_t)index >= dispatch->entry_count) {
       (void)alarm_pool_cancel_alarm(target_pool, id);
-      __atomic_sub_fetch(&dispatch->publishing, 1u, __ATOMIC_SEQ_CST);
+      HAL_ATOMIC_SUB_FETCH(&dispatch->publishing, 1u, HAL_ATOMIC_SEQ_CST);
       timer_store_result(out_result, HAL_TIMER_ERR_INTERNAL);
       return HAL_ALARM_INVALID;
     }
@@ -268,14 +269,15 @@ hal_alarm_id_t hal_timer_pool_add_alarm_us_ex(
      * cancellation marker before publishing a reused ID. publishing keeps a
      * pre-publication IRQ from mistaking the new alarm for that cancellation.
      */
-    __atomic_store_n(&entry.cancelled_id, HAL_ALARM_INVALID, __ATOMIC_RELEASE);
-    __atomic_store_n(&entry.active_id, (hal_alarm_id_t)id, __ATOMIC_RELEASE);
-    __atomic_sub_fetch(&dispatch->publishing, 1u, __ATOMIC_SEQ_CST);
+    HAL_ATOMIC_STORE(&entry.cancelled_id, HAL_ALARM_INVALID,
+                     HAL_ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&entry.active_id, (hal_alarm_id_t)id, HAL_ATOMIC_RELEASE);
+    HAL_ATOMIC_SUB_FETCH(&dispatch->publishing, 1u, HAL_ATOMIC_SEQ_CST);
     timer_store_result(out_result, HAL_TIMER_OK);
     return (hal_alarm_id_t)id;
   }
 
-  __atomic_sub_fetch(&dispatch->publishing, 1u, __ATOMIC_SEQ_CST);
+  HAL_ATOMIC_SUB_FETCH(&dispatch->publishing, 1u, HAL_ATOMIC_SEQ_CST);
 
   if (id == 0) {
     timer_store_result(out_result, HAL_TIMER_ERR_TIME_PASSED);
@@ -299,11 +301,11 @@ bool hal_timer_pool_cancel_alarm(hal_timer_pool_t pool,
   rp_alarm_dispatch_entry_s *entry = NULL;
   if (dispatch && index >= 0 && (uint16_t)index < dispatch->entry_count) {
     entry = &dispatch->entries[index];
-    __atomic_store_n(&entry->cancelled_id, alarm_id, __ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&entry->cancelled_id, alarm_id, HAL_ATOMIC_RELEASE);
     hal_alarm_id_t expected = alarm_id;
-    (void)__atomic_compare_exchange_n(&entry->active_id, &expected,
-                                      HAL_ALARM_INVALID, false,
-                                      __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE);
+    (void)HAL_ATOMIC_COMPARE_EXCHANGE(&entry->active_id, &expected,
+                                      HAL_ALARM_INVALID, HAL_ATOMIC_ACQ_REL,
+                                      HAL_ATOMIC_ACQUIRE);
   }
 
   const bool cancelled =
@@ -315,7 +317,7 @@ bool hal_timer_pool_cancel_alarm(hal_timer_pool_t pool,
   // exception context cannot wait (a callback cancelling itself would
   // deadlock), but managed-timer destruction is explicitly task-only.
   if (entry && __get_current_exception() == 0u) {
-    while (__atomic_load_n(&entry->firing, __ATOMIC_ACQUIRE) != 0u) {
+    while (HAL_ATOMIC_LOAD(&entry->firing, HAL_ATOMIC_ACQUIRE) != 0u) {
       tight_loop_contents();
     }
   }

@@ -214,9 +214,9 @@ class Phase2BackendLifecycleTests(unittest.TestCase):
         source = (ROOT / "src/hal/impl/esp32/hal_i2c_slave.cpp").read_text(
             encoding="utf-8"
         )
-        self.assertTrue(source_has_fragment(source, "__atomic_fetch_or(&state.pending_events"))
+        self.assertTrue(source_has_fragment(source, "HAL_ATOMIC_FETCH_OR(&state.pending_events"))
         self.assertTrue(source_has_fragment(source, "xSemaphoreGiveFromISR(state.event_ready"))
-        self.assertTrue(source_has_fragment(source, "__atomic_exchange_n(&state.pending_events"))
+        self.assertTrue(source_has_fragment(source, "HAL_ATOMIC_EXCHANGE(&state.pending_events"))
         self.assertFalse(source_has_fragment(source, "xQueueSendToBackFromISR"))
         worker = source_section(source, "void worker_task(", "void stop_worker(")
         self.assertLess(

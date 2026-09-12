@@ -17,6 +17,14 @@ static_assert(sizeof(packed_probe) == 5u,
 /* Defined by test_host_compiler_portable.cpp with the fallback forced on. */
 extern uint32_t portable_clz32_probe(uint32_t value);
 extern void portable_abort_probe(int guard);
+extern "C" int compiler_atomic_c_probe(void);
+
+static void first_callback(void) {}
+static void second_callback(void) {}
+
+struct atomic_cpp_pointer_probe {
+  uint32_t marker;
+};
 
 static HAL_FORCE_INLINE uint32_t leading_zero_span(uint32_t value) {
   return hal_clz32(value);
@@ -63,6 +71,42 @@ int main(int argc, char **) {
     if (portable_clz32_probe(value) != hal_clz32(value)) {
       fail(6);
     }
+  }
+
+  if (compiler_atomic_c_probe() != 0) {
+    fail(7);
+  }
+
+  void (*callback)(void) = first_callback;
+  if (HAL_ATOMIC_LOAD(&callback, HAL_ATOMIC_ACQUIRE) != first_callback) {
+    fail(8);
+  }
+  if (HAL_ATOMIC_EXCHANGE(&callback, &second_callback, HAL_ATOMIC_ACQ_REL) !=
+          first_callback ||
+      callback != second_callback) {
+    fail(9);
+  }
+
+  atomic_cpp_pointer_probe first_pointer_probe = {1u};
+  atomic_cpp_pointer_probe second_pointer_probe = {2u};
+  atomic_cpp_pointer_probe *pointer = &first_pointer_probe;
+  if (HAL_ATOMIC_POINTER_LOAD(&pointer, HAL_ATOMIC_ACQUIRE) !=
+      &first_pointer_probe) {
+    fail(10);
+  }
+  atomic_cpp_pointer_probe *expected_pointer = &first_pointer_probe;
+  if (!HAL_ATOMIC_POINTER_COMPARE_EXCHANGE(
+          &pointer, &expected_pointer, &second_pointer_probe,
+          HAL_ATOMIC_ACQ_REL, HAL_ATOMIC_ACQUIRE) ||
+      pointer != &second_pointer_probe) {
+    fail(11);
+  }
+
+  uint8_t byte = 1u;
+  uint8_t operand = 2u;
+  if (HAL_ATOMIC_ADD_FETCH(&byte, operand++, HAL_ATOMIC_RELAXED) != 3u ||
+      operand != 3u) {
+    fail(12);
   }
 
   if (argc > 100000) {

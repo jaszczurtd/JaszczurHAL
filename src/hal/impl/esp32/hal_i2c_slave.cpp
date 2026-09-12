@@ -1,3 +1,4 @@
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_ESP32_FAMILY
 
@@ -68,10 +69,10 @@ uint8_t bus_index(uint8_t bus) {
 
 void IRAM_ATTR signal_from_isr(slave_state_t &state, uint32_t event,
                                BaseType_t *task_woken) {
-  if (!__atomic_load_n(&state.accepting_events, __ATOMIC_ACQUIRE)) {
+  if (!HAL_ATOMIC_LOAD(&state.accepting_events, HAL_ATOMIC_ACQUIRE)) {
     return;
   }
-  __atomic_fetch_or(&state.pending_events, event, __ATOMIC_RELEASE);
+  HAL_ATOMIC_FETCH_OR(&state.pending_events, event, HAL_ATOMIC_RELEASE);
   if (state.event_ready != nullptr) {
     /* A full binary semaphore is harmless: pending_events retains every event
      * class until the worker atomically consumes it. */
@@ -83,7 +84,7 @@ bool IRAM_ATTR receive_callback(i2c_slave_dev_handle_t,
                                 const i2c_slave_rx_done_event_data_t *event,
                                 void *argument) {
   slave_state_t &state = *static_cast<slave_state_t *>(argument);
-  if (!__atomic_load_n(&state.accepting_events, __ATOMIC_ACQUIRE) ||
+  if (!HAL_ATOMIC_LOAD(&state.accepting_events, HAL_ATOMIC_ACQUIRE) ||
       event == nullptr || event->buffer == nullptr || event->length == 0u) {
     return false;
   }
@@ -98,7 +99,7 @@ bool IRAM_ATTR receive_callback(i2c_slave_dev_handle_t,
   ++state.register_selection_generation;
   state.read_snapshot.valid = false;
   portEXIT_CRITICAL_ISR(&s_register_lock);
-  __atomic_fetch_add(&state.transaction_count, 1u, __ATOMIC_RELAXED);
+  HAL_ATOMIC_FETCH_ADD(&state.transaction_count, 1u, HAL_ATOMIC_RELAXED);
 
   BaseType_t task_woken = pdFALSE;
   signal_from_isr(state, kEventResetTx, &task_woken);
@@ -109,10 +110,10 @@ bool IRAM_ATTR request_callback(i2c_slave_dev_handle_t,
                                 const i2c_slave_request_event_data_t *,
                                 void *argument) {
   slave_state_t &state = *static_cast<slave_state_t *>(argument);
-  if (!__atomic_load_n(&state.accepting_events, __ATOMIC_ACQUIRE)) {
+  if (!HAL_ATOMIC_LOAD(&state.accepting_events, HAL_ATOMIC_ACQUIRE)) {
     return false;
   }
-  __atomic_fetch_add(&state.transaction_count, 1u, __ATOMIC_RELAXED);
+  HAL_ATOMIC_FETCH_ADD(&state.transaction_count, 1u, HAL_ATOMIC_RELAXED);
   BaseType_t task_woken = pdFALSE;
   signal_from_isr(state, kEventTransmit, &task_woken);
   return task_woken == pdTRUE;
@@ -165,7 +166,7 @@ void worker_task(void *argument) {
       continue;
     }
     const uint32_t events =
-        __atomic_exchange_n(&state.pending_events, 0u, __ATOMIC_ACQ_REL);
+        HAL_ATOMIC_EXCHANGE(&state.pending_events, 0u, HAL_ATOMIC_ACQ_REL);
     if ((events & kEventShutdown) != 0u) {
       break;
     }
@@ -196,7 +197,8 @@ void stop_worker(slave_state_t &state) {
   if (state.worker == nullptr || state.event_ready == nullptr) {
     return;
   }
-  __atomic_fetch_or(&state.pending_events, kEventShutdown, __ATOMIC_RELEASE);
+  HAL_ATOMIC_FETCH_OR(&state.pending_events, kEventShutdown,
+                      HAL_ATOMIC_RELEASE);
   /* When the binary semaphore is already full, the pending token still wakes
    * the worker and the shutdown bit remains set. Always wait for its ack. */
   (void)xSemaphoreGive(state.event_ready);
@@ -206,7 +208,7 @@ void stop_worker(slave_state_t &state) {
 
 esp_err_t release_slave(slave_state_t &state) {
   esp_err_t teardown_result = ESP_OK;
-  __atomic_store_n(&state.accepting_events, false, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&state.accepting_events, false, HAL_ATOMIC_RELEASE);
   if (state.handle != nullptr) {
     const i2c_slave_event_callbacks_t callbacks = {};
     /* Keep valid callback context throughout deregistration. ESP-IDF updates
@@ -237,8 +239,8 @@ esp_err_t release_slave(slave_state_t &state) {
   state.worker_stopped = nullptr;
   state.worker = nullptr;
   portEXIT_CRITICAL_SAFE(&s_register_lock);
-  __atomic_store_n(&state.pending_events, 0u, __ATOMIC_RELEASE);
-  __atomic_store_n(&state.transaction_count, 0u, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&state.pending_events, 0u, HAL_ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&state.transaction_count, 0u, HAL_ATOMIC_RELEASE);
   return teardown_result;
 }
 
@@ -307,9 +309,9 @@ void hal_i2c_slave_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
     state.register_selection_generation = 0u;
     state.address = address;
     portEXIT_CRITICAL_SAFE(&s_register_lock);
-    __atomic_store_n(&state.pending_events, 0u, __ATOMIC_RELEASE);
-    __atomic_store_n(&state.transaction_count, 0u, __ATOMIC_RELEASE);
-    __atomic_store_n(&state.accepting_events, true, __ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&state.pending_events, 0u, HAL_ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&state.transaction_count, 0u, HAL_ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&state.accepting_events, true, HAL_ATOMIC_RELEASE);
     result =
         i2c_slave_register_event_callbacks(state.handle, &callbacks, &state);
   }
@@ -432,8 +434,8 @@ uint32_t hal_i2c_slave_get_transaction_count(void) {
 }
 
 uint32_t hal_i2c_slave_get_transaction_count_bus(uint8_t bus) {
-  return __atomic_load_n(&s_slaves[bus_index(bus)].transaction_count,
-                         __ATOMIC_ACQUIRE);
+  return HAL_ATOMIC_LOAD(&s_slaves[bus_index(bus)].transaction_count,
+                         HAL_ATOMIC_ACQUIRE);
 }
 
 #endif // HAL_ENABLE_I2C_SLAVE

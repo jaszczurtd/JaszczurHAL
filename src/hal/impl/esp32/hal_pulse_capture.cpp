@@ -1,3 +1,4 @@
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_config.h"
 #if HAL_TARGET_IS_ESP32_S3 && defined(HAL_ENABLE_PULSE_CAPTURE)
 #include "hal/analog/jh_pulse_capture_backend.h"
@@ -23,13 +24,13 @@ uint32_t frequency, last_poll_us;
 
 bool IRAM_ATTR captured(mcpwm_cap_channel_handle_t,
                         const mcpwm_capture_event_data_t *event, void *) {
-  const uint32_t write = __atomic_load_n(&produced, __ATOMIC_RELAXED);
-  if (write - __atomic_load_n(&consumed, __ATOMIC_ACQUIRE) >= COUNTOF(ring)) {
-    __atomic_store_n(&overflow, true, __ATOMIC_RELEASE);
+  const uint32_t write = HAL_ATOMIC_LOAD(&produced, HAL_ATOMIC_RELAXED);
+  if (write - HAL_ATOMIC_LOAD(&consumed, HAL_ATOMIC_ACQUIRE) >= COUNTOF(ring)) {
+    HAL_ATOMIC_STORE(&overflow, true, HAL_ATOMIC_RELEASE);
     return false;
   }
   ring[write % COUNTOF(ring)] = event->cap_value;
-  __atomic_store_n(&produced, write + 1U, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&produced, write + 1U, HAL_ATOMIC_RELEASE);
   return false;
 }
 
@@ -169,10 +170,10 @@ hal_status_t jh_pulse_capture_next(jh_pulse_capture_edge_t *edge) {
   if (hal_elapsed_u32(polled_us, last_poll_us, 10000U))
     return HAL_EOVERFLOW;
   last_poll_us = polled_us;
-  if (__atomic_load_n(&overflow, __ATOMIC_ACQUIRE))
+  if (HAL_ATOMIC_LOAD(&overflow, HAL_ATOMIC_ACQUIRE))
     return HAL_EOVERFLOW;
-  const uint32_t read = __atomic_load_n(&consumed, __ATOMIC_RELAXED);
-  if (read == __atomic_load_n(&produced, __ATOMIC_ACQUIRE))
+  const uint32_t read = HAL_ATOMIC_LOAD(&consumed, HAL_ATOMIC_RELAXED);
+  if (read == HAL_ATOMIC_LOAD(&produced, HAL_ATOMIC_ACQUIRE))
     return HAL_EAGAIN;
   const uint32_t ticks = ring[read % COUNTOF(ring)];
   uint32_t current;
@@ -182,7 +183,7 @@ hal_status_t jh_pulse_capture_next(jh_pulse_capture_edge_t *edge) {
     error = mcpwm_capture_get_latched_value(reference, &current);
   if (error != ESP_OK)
     return jh_esp32_status_from_esp_err(error);
-  __atomic_store_n(&consumed, read + 1U, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&consumed, read + 1U, HAL_ATOMIC_RELEASE);
   const uint32_t age_us =
       (uint32_t)(((uint64_t)(current - ticks) * 1000000U) / frequency);
   *edge = {ticks, wall_us - age_us - 1U};

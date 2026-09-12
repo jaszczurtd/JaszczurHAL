@@ -5,6 +5,7 @@
  * @brief Internal validation and transition ownership helpers for hal_power.
  */
 
+#include "hal/core/hal_compiler.h"
 #include "hal/power/hal_power.h"
 #include "hal/system/hal_sync.h"
 
@@ -35,7 +36,7 @@ jh_power_transition_claim(jh_power_transition_guard_t *guard) {
     return false;
   }
 #if defined(__GNUC__) || defined(__clang__)
-  return !__atomic_test_and_set(&guard->busy, __ATOMIC_ACQUIRE);
+  return !HAL_ATOMIC_TEST_AND_SET(&guard->busy, HAL_ATOMIC_ACQUIRE);
 #else
   hal_critical_section_enter();
   const bool available = !guard->busy;
@@ -53,7 +54,7 @@ jh_power_transition_release(jh_power_transition_guard_t *guard) {
     return;
   }
 #if defined(__GNUC__) || defined(__clang__)
-  __atomic_clear(&guard->busy, __ATOMIC_RELEASE);
+  HAL_ATOMIC_CLEAR(&guard->busy, HAL_ATOMIC_RELEASE);
 #else
   hal_critical_section_enter();
   guard->busy = false;

@@ -1,3 +1,4 @@
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_RP
 
@@ -96,15 +97,15 @@ void usb_worker_irq(void) {
   if (mutex == nullptr || !hal_mutex_try_lock(mutex)) {
     return;
   }
-  if (__atomic_load_n(&s_initialized, __ATOMIC_ACQUIRE)) {
+  if (HAL_ATOMIC_LOAD(&s_initialized, HAL_ATOMIC_ACQUIRE)) {
     tud_task();
   }
   hal_mutex_unlock(mutex);
 }
 
 bool usb_task_timer(repeating_timer_t *) {
-  const int worker_irq = __atomic_load_n(&s_worker_irq, __ATOMIC_ACQUIRE);
-  if (__atomic_load_n(&s_initialized, __ATOMIC_ACQUIRE) && worker_irq >= 0) {
+  const int worker_irq = HAL_ATOMIC_LOAD(&s_worker_irq, HAL_ATOMIC_ACQUIRE);
+  if (HAL_ATOMIC_LOAD(&s_initialized, HAL_ATOMIC_ACQUIRE) && worker_irq >= 0) {
     irq_set_pending((uint)worker_irq);
     return true;
   }
@@ -131,11 +132,11 @@ void usb_worker_task(void *) {
     delay_ticks = 1u;
   }
 
-  while (!__atomic_load_n(&s_worker_stop, __ATOMIC_ACQUIRE)) {
+  while (!HAL_ATOMIC_LOAD(&s_worker_stop, HAL_ATOMIC_ACQUIRE)) {
     hal_mutex_t mutex = usb_mutex();
     if (mutex != nullptr) {
       hal_mutex_lock(mutex);
-      if (__atomic_load_n(&s_initialized, __ATOMIC_ACQUIRE)) {
+      if (HAL_ATOMIC_LOAD(&s_initialized, HAL_ATOMIC_ACQUIRE)) {
         usb_task_locked();
       }
       hal_mutex_unlock(mutex);
@@ -143,7 +144,7 @@ void usb_worker_task(void *) {
     vTaskDelay(delay_ticks);
   }
 
-  __atomic_store_n(&s_worker_task, nullptr, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_worker_task, nullptr, HAL_ATOMIC_RELEASE);
   vTaskDelete(nullptr);
 }
 #endif
@@ -154,7 +155,7 @@ bool usb_connected_locked(void) {
 
 void notify_reset_hook(void) {
   hal_usb_bootloader_reset_hook_t hook =
-      __atomic_load_n(&s_reset_hook, __ATOMIC_ACQUIRE);
+      HAL_ATOMIC_LOAD(&s_reset_hook, HAL_ATOMIC_ACQUIRE);
   if (hook != nullptr) {
     hook(s_reset_hook_user);
   }
@@ -163,7 +164,7 @@ void notify_reset_hook(void) {
 } // namespace
 
 hal_status_t hal_usb_init(void) {
-  if (__atomic_load_n(&s_initialized, __ATOMIC_ACQUIRE)) {
+  if (HAL_ATOMIC_LOAD(&s_initialized, HAL_ATOMIC_ACQUIRE)) {
     return HAL_OK;
   }
 
@@ -176,7 +177,7 @@ hal_status_t hal_usb_init(void) {
     (void)jh_board_runtime_set_failed(HAL_BOARD_CAP_USB_DEVICE);
     return HAL_ENOMEM;
   }
-  if (__atomic_load_n(&s_initialized, __ATOMIC_ACQUIRE)) {
+  if (HAL_ATOMIC_LOAD(&s_initialized, HAL_ATOMIC_ACQUIRE)) {
     return HAL_OK;
   }
 
@@ -186,8 +187,8 @@ hal_status_t hal_usb_init(void) {
   }
 
 #if JH_RP_USB_FREERTOS
-  __atomic_store_n(&s_worker_stop, false, __ATOMIC_RELEASE);
-  __atomic_store_n(&s_initialized, true, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_worker_stop, false, HAL_ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_initialized, true, HAL_ATOMIC_RELEASE);
   TaskHandle_t worker = nullptr;
 #if configNUMBER_OF_CORES > 1
   const BaseType_t created = xTaskCreateAffinitySet(
@@ -201,12 +202,12 @@ hal_status_t hal_usb_init(void) {
                   (UBaseType_t)HAL_USB_FREERTOS_TASK_PRIORITY, &worker);
 #endif
   if (created != pdPASS) {
-    __atomic_store_n(&s_initialized, false, __ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&s_initialized, false, HAL_ATOMIC_RELEASE);
     (void)tud_disconnect();
     (void)jh_board_runtime_set_failed(HAL_BOARD_CAP_USB_DEVICE);
     return HAL_ENOMEM;
   }
-  __atomic_store_n(&s_worker_task, worker, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_worker_task, worker, HAL_ATOMIC_RELEASE);
 #else
   s_worker_irq = user_irq_claim_unused(false);
   if (s_worker_irq < 0) {
@@ -217,11 +218,11 @@ hal_status_t hal_usb_init(void) {
   irq_set_exclusive_handler((uint)s_worker_irq, usb_worker_irq);
   irq_set_enabled((uint)s_worker_irq, true);
 
-  __atomic_store_n(&s_initialized, true, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_initialized, true, HAL_ATOMIC_RELEASE);
   s_task_timer_active = add_repeating_timer_us(
       HAL_USB_TASK_INTERVAL_US, usb_task_timer, nullptr, &s_task_timer);
   if (!s_task_timer_active) {
-    __atomic_store_n(&s_initialized, false, __ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&s_initialized, false, HAL_ATOMIC_RELEASE);
     irq_set_enabled((uint)s_worker_irq, false);
     irq_remove_handler((uint)s_worker_irq, usb_worker_irq);
     user_irq_unclaim((uint)s_worker_irq);
@@ -238,7 +239,7 @@ hal_status_t hal_usb_init(void) {
 }
 
 hal_status_t hal_usb_deinit(void) {
-  if (!__atomic_load_n(&s_initialized, __ATOMIC_ACQUIRE)) {
+  if (!HAL_ATOMIC_LOAD(&s_initialized, HAL_ATOMIC_ACQUIRE)) {
     return HAL_EUNINIT;
   }
   if (get_core_num() != 0u) {
@@ -246,24 +247,24 @@ hal_status_t hal_usb_deinit(void) {
   }
 
 #if JH_RP_USB_FREERTOS
-  TaskHandle_t worker = __atomic_load_n(&s_worker_task, __ATOMIC_ACQUIRE);
+  TaskHandle_t worker = HAL_ATOMIC_LOAD(&s_worker_task, HAL_ATOMIC_ACQUIRE);
   if (worker != nullptr && xTaskGetCurrentTaskHandle() == worker) {
     return HAL_ESTATE;
   }
-  __atomic_store_n(&s_worker_stop, true, __ATOMIC_RELEASE);
-  __atomic_store_n(&s_initialized, false, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_worker_stop, true, HAL_ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_initialized, false, HAL_ATOMIC_RELEASE);
   if (worker != nullptr) {
     if (xTaskGetSchedulerState() == taskSCHEDULER_RUNNING) {
-      while (__atomic_load_n(&s_worker_task, __ATOMIC_ACQUIRE) != nullptr) {
+      while (HAL_ATOMIC_LOAD(&s_worker_task, HAL_ATOMIC_ACQUIRE) != nullptr) {
         vTaskDelay(1u);
       }
     } else {
       vTaskDelete(worker);
-      __atomic_store_n(&s_worker_task, nullptr, __ATOMIC_RELEASE);
+      HAL_ATOMIC_STORE(&s_worker_task, nullptr, HAL_ATOMIC_RELEASE);
     }
   }
 #else
-  __atomic_store_n(&s_initialized, false, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_initialized, false, HAL_ATOMIC_RELEASE);
   if (s_worker_irq >= 0) {
     irq_set_enabled((uint)s_worker_irq, false);
   }
@@ -291,7 +292,7 @@ hal_status_t hal_usb_deinit(void) {
 }
 
 hal_status_t hal_usb_task(void) {
-  if (!__atomic_load_n(&s_initialized, __ATOMIC_ACQUIRE) ||
+  if (!HAL_ATOMIC_LOAD(&s_initialized, HAL_ATOMIC_ACQUIRE) ||
       !usb_stack_inited()) {
     return HAL_EUNINIT;
   }
@@ -308,7 +309,7 @@ hal_status_t hal_usb_cdc_is_connected(bool *out_connected) {
     return HAL_EINVAL;
   }
   *out_connected = false;
-  if (!__atomic_load_n(&s_initialized, __ATOMIC_ACQUIRE) ||
+  if (!HAL_ATOMIC_LOAD(&s_initialized, HAL_ATOMIC_ACQUIRE) ||
       !usb_stack_inited()) {
     return HAL_EUNINIT;
   }
@@ -327,7 +328,7 @@ hal_status_t hal_usb_cdc_available(size_t *out_available) {
     return HAL_EINVAL;
   }
   *out_available = 0u;
-  if (!__atomic_load_n(&s_initialized, __ATOMIC_ACQUIRE) ||
+  if (!HAL_ATOMIC_LOAD(&s_initialized, HAL_ATOMIC_ACQUIRE) ||
       !usb_stack_inited()) {
     return HAL_EUNINIT;
   }
@@ -347,7 +348,7 @@ hal_status_t hal_usb_cdc_read(uint8_t *data, size_t capacity,
     return HAL_EINVAL;
   }
   *out_read = 0u;
-  if (!__atomic_load_n(&s_initialized, __ATOMIC_ACQUIRE) ||
+  if (!HAL_ATOMIC_LOAD(&s_initialized, HAL_ATOMIC_ACQUIRE) ||
       !usb_stack_inited()) {
     return HAL_EUNINIT;
   }
@@ -373,7 +374,7 @@ hal_status_t hal_usb_cdc_write(const uint8_t *data, size_t length,
     return HAL_EINVAL;
   }
   *out_written = 0u;
-  if (!__atomic_load_n(&s_initialized, __ATOMIC_ACQUIRE) ||
+  if (!HAL_ATOMIC_LOAD(&s_initialized, HAL_ATOMIC_ACQUIRE) ||
       !usb_stack_inited()) {
     return HAL_EUNINIT;
   }
@@ -433,7 +434,7 @@ hal_status_t hal_usb_cdc_write(const uint8_t *data, size_t length,
 }
 
 hal_status_t hal_usb_cdc_flush(uint32_t timeout_ms) {
-  if (!__atomic_load_n(&s_initialized, __ATOMIC_ACQUIRE) ||
+  if (!HAL_ATOMIC_LOAD(&s_initialized, HAL_ATOMIC_ACQUIRE) ||
       !usb_stack_inited()) {
     return HAL_EUNINIT;
   }
@@ -473,7 +474,7 @@ hal_status_t
 hal_usb_set_bootloader_reset_hook(hal_usb_bootloader_reset_hook_t hook,
                                   void *user) {
   s_reset_hook_user = user;
-  __atomic_store_n(&s_reset_hook, hook, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_reset_hook, hook, HAL_ATOMIC_RELEASE);
   return HAL_OK;
 }
 
@@ -486,20 +487,20 @@ hal_status_t jh_rp_usb_flash_quiesce(uint32_t timeout_ms,
   if (hal_in_isr()) {
     return HAL_ESTATE;
   }
-  if (!__atomic_load_n(&s_initialized, __ATOMIC_ACQUIRE)) {
+  if (!HAL_ATOMIC_LOAD(&s_initialized, HAL_ATOMIC_ACQUIRE)) {
     return HAL_OK;
   }
 
 #if JH_RP_USB_FREERTOS
-  if (__atomic_load_n(&s_worker_task, __ATOMIC_ACQUIRE) ==
+  if (HAL_ATOMIC_LOAD(&s_worker_task, HAL_ATOMIC_ACQUIRE) ==
       xTaskGetCurrentTaskHandle()) {
     return HAL_ESTATE;
   }
 #endif
 
   const uintptr_t owner = flash_owner_token();
-  if (__atomic_load_n(&s_flash_paused, __ATOMIC_ACQUIRE) &&
-      __atomic_load_n(&s_flash_pause_owner, __ATOMIC_ACQUIRE) == owner) {
+  if (HAL_ATOMIC_LOAD(&s_flash_paused, HAL_ATOMIC_ACQUIRE) &&
+      HAL_ATOMIC_LOAD(&s_flash_pause_owner, HAL_ATOMIC_ACQUIRE) == owner) {
     return HAL_ESTATE;
   }
 
@@ -520,12 +521,12 @@ hal_status_t jh_rp_usb_flash_quiesce(uint32_t timeout_ms,
     hal_idle();
   }
 
-  if (__atomic_load_n(&s_initialized, __ATOMIC_ACQUIRE)) {
+  if (HAL_ATOMIC_LOAD(&s_initialized, HAL_ATOMIC_ACQUIRE)) {
     usb_task_locked();
     (void)tud_cdc_write_flush();
   }
-  __atomic_store_n(&s_flash_pause_owner, owner, __ATOMIC_RELEASE);
-  __atomic_store_n(&s_flash_paused, true, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_flash_pause_owner, owner, HAL_ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_flash_paused, true, HAL_ATOMIC_RELEASE);
   *out_mutex_held = true;
   return HAL_OK;
 }
@@ -535,16 +536,16 @@ hal_status_t jh_rp_usb_flash_resume(bool mutex_held) {
     return HAL_OK;
   }
   const uintptr_t owner = flash_owner_token();
-  if (!__atomic_load_n(&s_flash_paused, __ATOMIC_ACQUIRE) ||
-      __atomic_load_n(&s_flash_pause_owner, __ATOMIC_ACQUIRE) != owner) {
+  if (!HAL_ATOMIC_LOAD(&s_flash_paused, HAL_ATOMIC_ACQUIRE) ||
+      HAL_ATOMIC_LOAD(&s_flash_pause_owner, HAL_ATOMIC_ACQUIRE) != owner) {
     return HAL_ESTATE;
   }
 
-  if (__atomic_load_n(&s_initialized, __ATOMIC_ACQUIRE)) {
+  if (HAL_ATOMIC_LOAD(&s_initialized, HAL_ATOMIC_ACQUIRE)) {
     usb_task_locked();
   }
-  __atomic_store_n(&s_flash_paused, false, __ATOMIC_RELEASE);
-  __atomic_store_n(&s_flash_pause_owner, UINTPTR_MAX, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_flash_paused, false, HAL_ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_flash_pause_owner, UINTPTR_MAX, HAL_ATOMIC_RELEASE);
   hal_mutex_unlock(usb_mutex());
   return HAL_OK;
 }
@@ -556,14 +557,14 @@ extern "C" void tud_cdc_line_coding_cb(uint8_t interface_number,
     return;
   }
   const bool armed = line_coding->bit_rate == HAL_USB_BOOTLOADER_TOUCH_BAUD;
-  __atomic_store_n(&s_touch_armed, armed, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_touch_armed, armed, HAL_ATOMIC_RELEASE);
 }
 
 extern "C" void tud_cdc_line_state_cb(uint8_t interface_number, bool dtr,
                                       bool rts) {
   (void)interface_number;
   (void)rts;
-  if (!dtr && __atomic_load_n(&s_touch_armed, __ATOMIC_ACQUIRE)) {
+  if (!dtr && HAL_ATOMIC_LOAD(&s_touch_armed, HAL_ATOMIC_ACQUIRE)) {
     (void)hal_usb_reset_to_bootloader();
   }
 }

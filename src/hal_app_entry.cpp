@@ -11,6 +11,7 @@
  * See src/hal/core/hal_app.h for the full contract and backend mapping.
  */
 
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_config.h"
 
 #if defined(HAL_PROVIDE_APP_ENTRY)
@@ -129,11 +130,11 @@ static bool s_app_start_complete = false;
 
 static void hal_rp_native_core1_entry(void) {
   const hal_status_t flash_status = jh_rp_flash_transaction_core_init();
-  __atomic_store_n(&s_core1_flash_status, flash_status, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_core1_flash_status, flash_status, HAL_ATOMIC_RELEASE);
   hal_rp_native_require_flash_ready(
       flash_status, "hal_app_entry: core1 flash coordinator init failed");
 
-  while (!__atomic_load_n(&s_app_start_complete, __ATOMIC_ACQUIRE)) {
+  while (!HAL_ATOMIC_LOAD(&s_app_start_complete, HAL_ATOMIC_ACQUIRE)) {
     tight_loop_contents();
   }
 
@@ -153,8 +154,8 @@ int main(void) {
 #ifdef HAL_ENABLE_APP_TASK1
   multicore_launch_core1(hal_rp_native_core1_entry);
   hal_status_t core1_flash_status = HAL_NONE;
-  while ((core1_flash_status = __atomic_load_n(&s_core1_flash_status,
-                                               __ATOMIC_ACQUIRE)) == HAL_NONE) {
+  while ((core1_flash_status = HAL_ATOMIC_LOAD(
+              &s_core1_flash_status, HAL_ATOMIC_ACQUIRE)) == HAL_NONE) {
     tight_loop_contents();
   }
   hal_rp_native_require_flash_ready(
@@ -164,7 +165,7 @@ int main(void) {
   app_start();
 
 #ifdef HAL_ENABLE_APP_TASK1
-  __atomic_store_n(&s_app_start_complete, true, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_app_start_complete, true, HAL_ATOMIC_RELEASE);
 #endif
 
   for (;;) {

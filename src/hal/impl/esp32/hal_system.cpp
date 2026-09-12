@@ -1,3 +1,4 @@
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_ESP32_FAMILY
 
@@ -175,7 +176,7 @@ void hal_delay_us(uint32_t us) { esp_rom_delay_us(us); }
 
 void hal_watchdog_feed(void) {
   esp_task_wdt_user_handle_t user =
-      __atomic_load_n(&s_watchdog_user, __ATOMIC_ACQUIRE);
+      HAL_ATOMIC_LOAD(&s_watchdog_user, HAL_ATOMIC_ACQUIRE);
   if (user != nullptr) {
     const esp_err_t result = esp_task_wdt_reset_user(user);
     HAL_ASSERT(result == ESP_OK, "hal_watchdog_feed: ESP-IDF reset failed");
@@ -222,7 +223,7 @@ hal_status_t hal_watchdog_enable(uint32_t ms, bool pause_on_debug) {
       hal_mutex_unlock(mutex);
       return jh_esp32_status_from_esp_err(result);
     }
-    __atomic_store_n(&s_watchdog_user, user, __ATOMIC_RELEASE);
+    HAL_ATOMIC_STORE(&s_watchdog_user, user, HAL_ATOMIC_RELEASE);
   }
 
   hal_mutex_unlock(mutex);

@@ -1,3 +1,4 @@
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_RP
 #include "hal/core/hal_config.h"
@@ -384,7 +385,7 @@ static hal_status_t i2c_init_bus_common(uint8_t bus, uint8_t sda_pin,
   st->scl_pin = scl_pin;
   st->clock_hz = i2c_normalize_clock(clock_hz);
   st->actual_clock_hz = 0u;
-  __atomic_store_n(&st->transaction_count, 0u, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&st->transaction_count, 0u, HAL_ATOMIC_RELEASE);
   i2c_hw_init_bus(idx);
   st->initialized = true;
   return HAL_OK;
@@ -552,7 +553,7 @@ hal_status_t hal_i2c_end_transmission_bus_ex(uint8_t bus) {
     }
   }
   st->tx_len = 0u;
-  __atomic_fetch_add(&st->transaction_count, 1u, __ATOMIC_RELAXED);
+  HAL_ATOMIC_FETCH_ADD(&st->transaction_count, 1u, HAL_ATOMIC_RELAXED);
   i2c_unlock_idx(idx);
   return i2c_status_from_result(result);
 }
@@ -594,7 +595,7 @@ hal_status_t hal_i2c_write_read_bus_ex(uint8_t bus, hal_i2c_address_t address,
     written = i2c_write_timeout_us(i2c_bus_hw(idx), (uint8_t)address, tx,
                                    tx_len, rx_len > 0u, HAL_RP_I2C_TIMEOUT_US);
   }
-  __atomic_fetch_add(&s_i2c[idx].transaction_count, 1u, __ATOMIC_RELAXED);
+  HAL_ATOMIC_FETCH_ADD(&s_i2c[idx].transaction_count, 1u, HAL_ATOMIC_RELAXED);
   if (written != (int)tx_len) {
     i2c_unlock_idx(idx);
     return (written == PICO_ERROR_TIMEOUT) ? HAL_ETIMEOUT : HAL_EBUS;
@@ -611,7 +612,7 @@ hal_status_t hal_i2c_write_read_bus_ex(uint8_t bus, hal_i2c_address_t address,
       got = i2c_read_timeout_us(i2c_bus_hw(idx), (uint8_t)address, rx, rx_len,
                                 false, HAL_RP_I2C_TIMEOUT_US);
     }
-    __atomic_fetch_add(&s_i2c[idx].transaction_count, 1u, __ATOMIC_RELAXED);
+    HAL_ATOMIC_FETCH_ADD(&s_i2c[idx].transaction_count, 1u, HAL_ATOMIC_RELAXED);
     if (got != (int)rx_len) {
       i2c_unlock_idx(idx);
       return (got == PICO_ERROR_TIMEOUT) ? HAL_ETIMEOUT : HAL_EBUS;
@@ -674,7 +675,7 @@ static bool i2c_read_bytes_bus_impl(uint8_t bus, hal_i2c_address_t address,
   }
   s_i2c[idx].rx_len = 0u;
   s_i2c[idx].rx_pos = 0u;
-  __atomic_fetch_add(&s_i2c[idx].transaction_count, 1u, __ATOMIC_RELAXED);
+  HAL_ATOMIC_FETCH_ADD(&s_i2c[idx].transaction_count, 1u, HAL_ATOMIC_RELAXED);
   i2c_unlock_idx(idx);
   return got == (int)rx_len;
 }
@@ -728,7 +729,7 @@ static uint8_t i2c_request_from_bus_impl(uint8_t bus, hal_i2c_address_t address,
   }
   st->rx_len = (size_t)got;
   st->rx_pos = 0u;
-  __atomic_fetch_add(&st->transaction_count, 1u, __ATOMIC_RELAXED);
+  HAL_ATOMIC_FETCH_ADD(&st->transaction_count, 1u, HAL_ATOMIC_RELAXED);
   i2c_unlock_idx(idx);
   return (uint8_t)got;
 }
@@ -764,8 +765,8 @@ uint32_t hal_i2c_get_transaction_count(void) {
 }
 
 uint32_t hal_i2c_get_transaction_count_bus(uint8_t bus) {
-  return __atomic_load_n(&s_i2c[i2c_bus_index(bus)].transaction_count,
-                         __ATOMIC_ACQUIRE);
+  return HAL_ATOMIC_LOAD(&s_i2c[i2c_bus_index(bus)].transaction_count,
+                         HAL_ATOMIC_ACQUIRE);
 }
 
 hal_status_t hal_i2c_bus_clear(uint8_t sda_pin, uint8_t scl_pin) {

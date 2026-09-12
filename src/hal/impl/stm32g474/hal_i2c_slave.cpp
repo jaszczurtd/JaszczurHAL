@@ -1,3 +1,4 @@
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_STM32G474
 
@@ -48,7 +49,7 @@ static void slave_state_reset(i2c_slave_state_t *st, uint8_t address) {
   st->address = address;
   st->rx_seen = false;
   st->read_snapshot.valid = false;
-  __atomic_store_n(&st->transaction_count, 0u, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&st->transaction_count, 0u, HAL_ATOMIC_RELEASE);
 }
 
 static inline void slave_lock(void) { hal_critical_section_enter(); }
@@ -208,7 +209,7 @@ static void i2c_slave_handle_event(uint8_t bus) {
   if ((isr & I2C_ISR_STOPF) != 0u) {
     i2c_slave_flush_txdr(st);
     st->rx_seen = false;
-    __atomic_fetch_add(&st->transaction_count, 1u, __ATOMIC_RELAXED);
+    HAL_ATOMIC_FETCH_ADD(&st->transaction_count, 1u, HAL_ATOMIC_RELAXED);
     I2C_ICR_REG(st->hw_base) = I2C_ICR_STOPCF;
   }
 }
@@ -269,7 +270,7 @@ void hal_i2c_slave_deinit_bus(uint8_t bus) {
   st->reg_ptr = 0u;
   st->rx_seen = false;
   st->read_snapshot.valid = false;
-  __atomic_store_n(&st->transaction_count, 0u, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&st->transaction_count, 0u, HAL_ATOMIC_RELEASE);
   memset(st->regs, 0, sizeof(st->regs));
   slave_unlock();
 }
@@ -364,8 +365,8 @@ uint32_t hal_i2c_slave_get_transaction_count(void) {
 }
 
 uint32_t hal_i2c_slave_get_transaction_count_bus(uint8_t bus) {
-  return __atomic_load_n(&slave_state(bus)->transaction_count,
-                         __ATOMIC_ACQUIRE);
+  return HAL_ATOMIC_LOAD(&slave_state(bus)->transaction_count,
+                         HAL_ATOMIC_ACQUIRE);
 }
 
 #endif /* HAL_ENABLE_I2C_SLAVE */

@@ -1,3 +1,4 @@
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_target.h"
 
 #if HAL_TARGET_IS_RP
@@ -83,7 +84,7 @@ hal_status_t acquire_transaction(void *, uint32_t timeout_ms) {
   }
 
   const uintptr_t owner = current_owner_token();
-  if (__atomic_load_n(&s_owner, __ATOMIC_ACQUIRE) == owner) {
+  if (HAL_ATOMIC_LOAD(&s_owner, HAL_ATOMIC_ACQUIRE) == owner) {
     return HAL_ESTATE;
   }
 
@@ -104,13 +105,13 @@ hal_status_t acquire_transaction(void *, uint32_t timeout_ms) {
     hal_idle();
   }
 
-  if (__atomic_load_n(&s_active, __ATOMIC_ACQUIRE)) {
+  if (HAL_ATOMIC_LOAD(&s_active, HAL_ATOMIC_ACQUIRE)) {
     hal_mutex_unlock(mutex);
     return HAL_ESTATE;
   }
 
-  __atomic_store_n(&s_owner, owner, __ATOMIC_RELEASE);
-  __atomic_store_n(&s_active, true, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_owner, owner, HAL_ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_active, true, HAL_ATOMIC_RELEASE);
   return HAL_OK;
 }
 
@@ -174,13 +175,13 @@ hal_status_t resume_runtime(void *backend_context) {
 }
 
 hal_status_t release_transaction(void *) {
-  hal_mutex_t mutex = __atomic_load_n(&s_transaction_mutex, __ATOMIC_ACQUIRE);
-  if (mutex == nullptr || !__atomic_load_n(&s_active, __ATOMIC_ACQUIRE)) {
+  hal_mutex_t mutex = HAL_ATOMIC_LOAD(&s_transaction_mutex, HAL_ATOMIC_ACQUIRE);
+  if (mutex == nullptr || !HAL_ATOMIC_LOAD(&s_active, HAL_ATOMIC_ACQUIRE)) {
     return HAL_ESTATE;
   }
 
-  __atomic_store_n(&s_active, false, __ATOMIC_RELEASE);
-  __atomic_store_n(&s_owner, kNoOwner, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_active, false, HAL_ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&s_owner, kNoOwner, HAL_ATOMIC_RELEASE);
   hal_mutex_unlock(mutex);
   return HAL_OK;
 }
@@ -200,8 +201,8 @@ hal_status_t jh_rp_flash_transaction_core_init(void) {
 
 hal_status_t __no_inline_not_in_flash_func(jh_rp_flash_transaction_execute)(
     jh_rp_flash_operation_t operation, void *context, uint32_t timeout_ms) {
-  if (__atomic_load_n(&s_active, __ATOMIC_ACQUIRE) &&
-      __atomic_load_n(&s_owner, __ATOMIC_ACQUIRE) == current_owner_token()) {
+  if (HAL_ATOMIC_LOAD(&s_active, HAL_ATOMIC_ACQUIRE) &&
+      HAL_ATOMIC_LOAD(&s_owner, HAL_ATOMIC_ACQUIRE) == current_owner_token()) {
     return HAL_ESTATE;
   }
   if (operation == nullptr || address_is_xip((const void *)operation) ||

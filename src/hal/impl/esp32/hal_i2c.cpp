@@ -1,3 +1,4 @@
+#include "hal/core/hal_compiler.h"
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_ESP32_S3
 
@@ -244,7 +245,7 @@ hal_status_t i2c_zero_byte_probe_locked(I2cBusState &state,
 }
 
 void i2c_count_transaction(I2cBusState &state) {
-  __atomic_fetch_add(&state.transaction_count, 1u, __ATOMIC_RELAXED);
+  HAL_ATOMIC_FETCH_ADD(&state.transaction_count, 1u, HAL_ATOMIC_RELAXED);
 }
 
 hal_status_t i2c_require_initialized(const I2cBusState &state) {
@@ -346,7 +347,7 @@ static hal_status_t esp32_i2c_init_bus_common(uint8_t bus, uint8_t sda_pin,
   state.clock_hz = i2c_normalize_clock(clock_hz);
   state.initialized = true;
   i2c_clear_buffers(state);
-  __atomic_store_n(&state.transaction_count, 0u, __ATOMIC_RELEASE);
+  HAL_ATOMIC_STORE(&state.transaction_count, 0u, HAL_ATOMIC_RELEASE);
   i2c_unlock_index(index);
   return HAL_OK;
 }
@@ -623,8 +624,8 @@ uint32_t hal_i2c_get_transaction_count(void) {
 }
 
 uint32_t hal_i2c_get_transaction_count_bus(uint8_t bus) {
-  return __atomic_load_n(&s_i2c[i2c_bus_index(bus)].transaction_count,
-                         __ATOMIC_ACQUIRE);
+  return HAL_ATOMIC_LOAD(&s_i2c[i2c_bus_index(bus)].transaction_count,
+                         HAL_ATOMIC_ACQUIRE);
 }
 
 hal_status_t hal_i2c_bus_clear(uint8_t sda_pin, uint8_t scl_pin) {
