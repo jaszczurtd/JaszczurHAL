@@ -40,6 +40,7 @@ entry point.
 | littlefs | `littlefs_version.conf` | `littlefs/` | Filesystem core used by the shared provider, host integration test, and native RP/STM32G474 storage |
 | BTstack | `btstack_version.conf` | `BTstack/` | BLE and Classic host stack used by the CYW43 Bluetooth integration |
 | Bluedroid SBC codec | BTstack pin | `BTstack/3rd-party/bluedroid/` | Apache-2.0 SBC decoder used by A2DP Sink; encoder used by host fixtures only |
+| cyw43-driver | `cyw43_driver_version.conf` | vendored in `src/hal/network/cyw43/vendor/` | CYW43xx WiFi and Bluetooth host stack with the redistributed radio firmware |
 | Semtech SX126x driver | `sx126x_driver_version.conf` | `sx126x_driver/` | Portable SX1261/SX1262 command driver for the LoRa provider |
 | FreeRTOS-Kernel | `freertos_core_version.conf` | `FreeRTOS-Kernel/` | Native RP SMP and STM32G474 FreeRTOS kernel |
 | Pico SDK | `pico_sdk_version.conf` | `pico-sdk/` | Native RP2040/RP2350 SDK |
@@ -64,6 +65,19 @@ The Semtech checkout is kept clean at the exact `v2.5.0` commit. Its tracked
 Clear BSD license copy is `LICENSE.SX126X`. Stage 1 LoRa integration will use
 only `sx126x.c` and `sx126x_driver_version.c`; optional LR-FHSS and BPSK source
 sets remain excluded until separately reviewed.
+
+The CYW43 import is the one dependency that is not fetched. Its driver
+sources, the CYW43xx firmware images and the Bluetooth shared-bus files sit
+in `src/hal/network/cyw43/vendor/`, because the firmware is a redistributed
+binary that RP2040 and STM32G474 builds have to compile byte for byte.
+Instead of a checkout, `cyw43_driver_version.conf` records the upstream
+revision and `vendor/SHA256SUMS` records every file;
+`test_cyw43_dependency_boundary` checks both and rejects any vendored file
+the manifest does not list. The import ships two license alternatives and
+which one applies depends on the target: the George Robotics grant is
+limited to personal, non-commercial use, while the Raspberry Pi grant in
+`src/hal/network/cyw43/LICENSE.RP` covers Raspberry Pi silicon only and so
+does not reach STM32G474 builds. Both are recorded in the SBOM.
 
 The Pico SDK submodules required by native builds are listed in
 `PICO_SDK_SUBMODULES` in `pico_sdk_version.conf`. JaszczurHAL deliberately uses

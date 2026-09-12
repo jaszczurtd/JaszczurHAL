@@ -42,6 +42,7 @@ aktualizujący.
 | littlefs | `littlefs_version.conf` | `littlefs/` | Rdzeń systemu plików używany przez wspólny provider, test integracyjny na hoście oraz natywną pamięć masową RP i STM32G474 |
 | BTstack | `btstack_version.conf` | `BTstack/` | Stos hosta BLE i Classic używany przez integrację Bluetooth CYW43 |
 | Kodek SBC Bluedroid | pin BTstack | `BTstack/3rd-party/bluedroid/` | Dekoder SBC na licencji Apache-2.0 dla A2DP Sink; encoder jest używany tylko przez fixture hostowe |
+| cyw43-driver | `cyw43_driver_version.conf` | dołączony w `src/hal/network/cyw43/vendor/` | Stos WiFi i Bluetooth dla układów CYW43xx razem z redystrybuowanym firmware radia |
 | Sterownik Semtech SX126x | `sx126x_driver_version.conf` | `sx126x_driver/` | Przenośny sterownik poleceń SX1261/SX1262 dla implementacji LoRa |
 | FreeRTOS-Kernel | `freertos_core_version.conf` | `FreeRTOS-Kernel/` | Jądro FreeRTOS dla natywnego RP SMP i STM32G474 |
 | Pico SDK | `pico_sdk_version.conf` | `pico-sdk/` | Natywne SDK dla RP2040/RP2350 |
@@ -72,6 +73,20 @@ commicie `v2.5.0`. Plik
 Integracja LoRa na etapie 1 używa wyłącznie `sx126x.c` i
 `sx126x_driver_version.c`; opcjonalne źródła LR-FHSS i BPSK pozostają wyłączone
 do czasu osobnego przeglądu.
+
+Import CYW43 jako jedyny nie jest pobierany. Źródła sterownika, obrazy
+firmware układów CYW43xx i pliki shared-bus Bluetooth leżą w
+`src/hal/network/cyw43/vendor/`, bo firmware to redystrybuowany plik
+binarny, który kompilacje RP2040 i STM32G474 muszą wkompilować bajt
+w bajt. Zamiast kopii repozytorium mamy tu `cyw43_driver_version.conf`
+z wersją źródła i `vendor/SHA256SUMS` ze skrótem każdego pliku;
+`test_cyw43_dependency_boundary` sprawdza jedno i drugie, a plik spoza
+manifestu odrzuca. Razem z importem przychodzą dwie alternatywne licencje
+i to, która obowiązuje, zależy od platformy docelowej: zgoda George
+Robotics ogranicza się do zastosowań osobistych i niekomercyjnych, a zgoda
+Raspberry Pi w `src/hal/network/cyw43/LICENSE.RP` obejmuje wyłącznie układy
+tego producenta, więc nie sięga kompilacji STM32G474. Obie są zapisane
+w SBOM.
 
 Submoduły Pico SDK wymagane przez natywne kompilacje wymieniono w
 `PICO_SDK_SUBMODULES` w pliku `pico_sdk_version.conf`. JaszczurHAL celowo używa

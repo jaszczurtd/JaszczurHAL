@@ -10,7 +10,9 @@ JaszczurHAL maintains an inventory of external components and tools, generates a
 
 The inventory covers:
 
-- bundled third-party source copied into `src/`,
+- bundled third-party source copied into `src/`, including the CYW43 host
+  stack and the redistributed radio firmware under
+  `src/hal/network/cyw43/vendor`,
 - pinned external checkouts used by the component updater, including BearSSL,
   cJSON, LodePNG, TJpg_Decoder, FatFs, Unity, lwIP, littlefs, BTstack, the
   Semtech SX126x driver, FreeRTOS-Kernel, Pico SDK, and ESP-IDF,
@@ -72,6 +74,8 @@ and recovery are documented in
 | `security/sbom.cdx.json` | Generated CycloneDX SBOM for the library repository. |
 | `security/esp_idf_tools.json` | Reviewed snapshot of the exact ESP-IDF target-tool versions, licenses, upstreams, framework commit, and `tools.json` digest. |
 | `security/vulnerability_log.md` | Human-maintained vulnerability assessment and patch log. |
+| `third_party/cyw43_driver_version.conf` | Pinned revision of the vendored CYW43 import, including the separate Pico SDK revision behind its Bluetooth shared-bus files. |
+| `src/hal/network/cyw43/vendor/SHA256SUMS` | SHA-256 manifest of every vendored CYW43 file, enforced by `test_cyw43_dependency_boundary`. |
 | `SECURITY.md` | Reporting, triage, severity and maintenance policy. |
 | `scripts/generate_sbom.py` | Offline SBOM generator using only Python standard library. |
 | `scripts/sync_generated.py` | Shared refresh and read-only verification runner for all tracked generated artifacts, including the SBOM. |
