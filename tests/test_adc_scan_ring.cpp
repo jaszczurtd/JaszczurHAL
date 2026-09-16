@@ -1,4 +1,5 @@
 #include "hal/analog/jh_adc_scan_ring.h"
+#include "hal/impl/rp2040/jh_rp_adc_scan_clock.h"
 #include "utils/unity.h"
 
 #define PINS 3u
@@ -63,11 +64,21 @@ void test_nothing_before_the_first_frame_and_fallback_without_busy_channel(
       jh_adc_scan_latest_frame(0u, 9u, PINS, 0u, 1u, 0u, &s_half, &s_frame));
 }
 
+void test_rp_clkdiv_runs_back_to_back_at_the_minimum_period(void) {
+  // Divider 95 would trigger on the cycle the previous conversion ends and
+  // halve the rate; the minimum period needs the free-running mode.
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, jh_rp_adc_scan_clkdiv(96u));
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, jh_rp_adc_scan_clkdiv(0u));
+  TEST_ASSERT_EQUAL_FLOAT(96.0f, jh_rp_adc_scan_clkdiv(97u));
+  TEST_ASSERT_EQUAL_FLOAT(383.0f, jh_rp_adc_scan_clkdiv(384u));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_block_in_progress_serves_its_newest_complete_frame);
   RUN_TEST(test_chain_boundary_reads_the_half_just_filled_before_its_interrupt);
   RUN_TEST(
       test_nothing_before_the_first_frame_and_fallback_without_busy_channel);
+  RUN_TEST(test_rp_clkdiv_runs_back_to_back_at_the_minimum_period);
   return UNITY_END();
 }
