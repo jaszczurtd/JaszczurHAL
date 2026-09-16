@@ -3,6 +3,7 @@
 #include "utils/unity.h"
 
 #include <limits.h>
+#include <math.h>
 
 void setUp(void) {
   hal_mock_set_millis(0);
@@ -964,6 +965,25 @@ void test_hal_adc_average_uses_explicit_transform(void) {
   TEST_ASSERT_FLOAT_WITHIN(0.001f, 521.0f, average);
 }
 
+void test_hal_adc_average_reports_unreadable_input(void) {
+  /* A negative read means the input has no sample to offer (e.g. a pin
+   * outside a running DMA scan); the average must not pretend it was 0. */
+  hal_mock_adc_inject(0, -1);
+  const hal_adc_average_config_t config = {
+      0u, 3u, 0u, false, hal_adc_compensate_rp2040_12bit,
+  };
+  float average = 77.0f;
+  TEST_ASSERT_EQUAL_INT(HAL_ESTATE, hal_adc_read_average_ex(&config, &average));
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 77.0f, average);
+  const hal_adc_average_config_t discarding = {
+      0u, 3u, 0u, true, hal_adc_compensate_rp2040_12bit,
+  };
+  TEST_ASSERT_EQUAL_INT(HAL_ESTATE,
+                        hal_adc_read_average_ex(&discarding, &average));
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 77.0f, average);
+  TEST_ASSERT_TRUE(isnan(hal_adc_read_average(0)));
+}
+
 void test_hal_ntc_rejects_adc_endpoints(void) {
   const hal_ntc_beta_config_t config = {10000.0f, 10000.0f, 3600.0f, 21.0f};
   float temperature = 99.0f;
@@ -1201,6 +1221,7 @@ int main(void) {
   RUN_TEST(test_hal_text_hex_pair_rejects_invalid_input);
   RUN_TEST(test_hal_adc_voltage_rejects_invalid_divider);
   RUN_TEST(test_hal_adc_average_uses_explicit_transform);
+  RUN_TEST(test_hal_adc_average_reports_unreadable_input);
   RUN_TEST(test_hal_ntc_rejects_adc_endpoints);
   RUN_TEST(test_hal_pixel_converters_report_invalid_arguments);
   RUN_TEST(test_hal_periodic_random_holds_value_until_interval);

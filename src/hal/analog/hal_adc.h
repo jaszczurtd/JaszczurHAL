@@ -32,9 +32,12 @@ bool hal_adc_is_pin_supported(uint8_t pin);
 /**
  * @brief Read the analog value on the given pin.
  * @param pin Analog input pin number.
- * @return Raw ADC value in the range [0, 2^bits - 1]. RP and STM32G474
- *         return 0 without reconfiguring the converter while a DACless DMA
- *         scan owns the shared ADC.
+ * @return Raw ADC value in the range [0, 2^bits - 1], or a negative value when
+ *         the input cannot be read now: on RP and STM32G474 a running DMA scan
+ *         owns the shared converter, and a pin the scan does not carry has no
+ *         sample to offer. A scanned pin returns its newest scanned sample.
+ *         Callers that average or convert must check for the negative result;
+ *         hal_adc_read_average_ex() reports it as HAL_ESTATE.
  */
 int hal_adc_read(uint8_t pin);
 

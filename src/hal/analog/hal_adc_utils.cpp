@@ -70,12 +70,18 @@ hal_status_t hal_adc_read_average_ex(const hal_adc_average_config_t *config,
     return HAL_EINVAL;
   }
   if (config->discard_first) {
-    (void)hal_adc_read(config->pin);
+    if (hal_adc_read(config->pin) < 0) {
+      return HAL_ESTATE;
+    }
   }
 
   float sum = 0.0f;
   for (uint16_t i = 0u; i < config->sample_count; ++i) {
     int sample = hal_adc_read(config->pin);
+    if (sample < 0) {
+      // The input cannot be read now; an average of nothing is not zero.
+      return HAL_ESTATE;
+    }
     if (config->transform != nullptr) {
       sample = config->transform(sample);
     }
@@ -102,7 +108,9 @@ float hal_adc_read_average(uint8_t pin) {
       pin,  (uint16_t)HAL_ADC_UTIL_DEFAULT_SAMPLES, 10u,
       true, hal_adc_compensate_rp2040_12bit,
   };
-  float average = 0.0f;
-  (void)hal_adc_read_average_ex(&config, &average);
+  float average = NAN;
+  if (hal_adc_read_average_ex(&config, &average) != HAL_OK) {
+    average = NAN;
+  }
   return average;
 }

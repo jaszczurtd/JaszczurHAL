@@ -16,9 +16,11 @@ extern "C" {
  * the buffer alternately, so every sample has a known position in time and
  * the CPU only reads finished blocks. While a scan runs it owns the
  * converter: the DACless audio path and the scan exclude each other with
- * HAL_EBUSY, and hal_adc_read() of a scanned pin returns the newest scanned
- * sample instead of converting. Start/stop belong to one owner core;
- * take/latest may be called from any task but not from an ISR.
+ * HAL_EBUSY, hal_adc_read() of a scanned pin returns the newest scanned
+ * sample instead of converting, and hal_adc_read() of a pin the scan does
+ * not carry returns -1 because no conversion can be made for it. Start/stop
+ * belong to one owner core; take/latest may be called from any task but not
+ * from an ISR.
  */
 
 /** @brief Most pins one scan can carry. */

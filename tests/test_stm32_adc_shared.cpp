@@ -7,7 +7,8 @@ void tearDown(void) { stm32g474_adc_release_dma(); }
 static void test_dma_reservation_is_exclusive_and_reusable(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, stm32g474_adc_acquire_dma());
   TEST_ASSERT_EQUAL_INT(HAL_EBUSY, stm32g474_adc_acquire_dma());
-  TEST_ASSERT_EQUAL_INT(0, stm32g474_adc_read_gpio(0u));
+  // The DMA owner installs no scan reader here, so the input is unreadable.
+  TEST_ASSERT_EQUAL_INT(-1, stm32g474_adc_read_gpio(0u));
   TEST_ASSERT_EQUAL_UINT16(0u, stm32g474_adc_read_temp_sensor_raw());
   TEST_ASSERT_EQUAL_UINT16(0u, stm32g474_adc_read_vrefint_raw());
   uint16_t temp_raw = 123u;
