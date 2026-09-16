@@ -64,6 +64,59 @@ void test_nothing_before_the_first_frame_and_fallback_without_busy_channel(
       jh_adc_scan_latest_frame(0u, 9u, PINS, 0u, 1u, 0u, &s_half, &s_frame));
 }
 
+static bool pick(bool busy0, bool after0, uint32_t written0, bool busy1,
+                 bool after1, uint32_t written1, uint32_t sequence,
+                 uint8_t completed) {
+  const jh_adc_scan_channel_t channels[2] = {{busy0, after0, written0},
+                                             {busy1, after1, written1}};
+  s_half = 0xFFu;
+  s_frame = 0xFFFFFFFFu;
+  return jh_adc_scan_pick_frame(channels, PINS, FRAMES, sequence, completed,
+                                &s_half, &s_frame);
+}
+
+void test_pick_treats_a_channel_that_finished_between_two_looks_as_full(void) {
+  // Half 1 was busy; its completion interrupt re-armed the pointer to the
+  // base before it was read. The whole half is there, not none of it, and
+  // half 0 is the one being overwritten right now.
+  TEST_ASSERT_TRUE(pick(false, false, 0u, true, false, 0u, 4u, 0u));
+  TEST_ASSERT_EQUAL_UINT8(1u, s_half);
+  TEST_ASSERT_EQUAL_UINT32(FRAMES - 1u, s_frame);
+  // The pointer may equally have been read just before the re-arm.
+  TEST_ASSERT_TRUE(
+      pick(false, false, 0u, true, false, (FRAMES * PINS) - 1u, 4u, 0u));
+  TEST_ASSERT_EQUAL_UINT8(1u, s_half);
+  TEST_ASSERT_EQUAL_UINT32(FRAMES - 1u, s_frame);
+  // Still busy with the pointer at the base is a genuine fresh trigger: the
+  // other half just filled and is the one to read.
+  TEST_ASSERT_TRUE(pick(false, false, 0u, true, true, 0u, 4u, 0u));
+  TEST_ASSERT_EQUAL_UINT8(0u, s_half);
+  TEST_ASSERT_EQUAL_UINT32(FRAMES - 1u, s_frame);
+}
+
+void test_pick_prefers_the_half_at_its_end_when_no_channel_is_busy(void) {
+  // Half 0 just completed and neither the chain nor its interrupt has run:
+  // the bookkeeping still names half 1, which is a block older.
+  TEST_ASSERT_TRUE(pick(false, false, FRAMES * PINS, false, false, 0u, 4u, 1u));
+  TEST_ASSERT_EQUAL_UINT8(0u, s_half);
+  TEST_ASSERT_EQUAL_UINT32(FRAMES - 1u, s_frame);
+  // Both re-armed and idle leaves only the bookkeeping.
+  TEST_ASSERT_TRUE(pick(false, false, 0u, false, false, 0u, 4u, 1u));
+  TEST_ASSERT_EQUAL_UINT8(1u, s_half);
+  TEST_ASSERT_EQUAL_UINT32(FRAMES - 1u, s_frame);
+  TEST_ASSERT_FALSE(pick(false, false, 0u, false, false, 0u, 0u, 0u));
+}
+
+void test_pick_keeps_the_choice_inside_a_block_in_progress(void) {
+  TEST_ASSERT_TRUE(
+      pick(true, true, (7u * PINS) + 2u, false, false, 0u, 5u, 1u));
+  TEST_ASSERT_EQUAL_UINT8(0u, s_half);
+  TEST_ASSERT_EQUAL_UINT32(6u, s_frame);
+  const jh_adc_scan_channel_t none[2] = {{true, true, 9u}, {false, false, 0u}};
+  TEST_ASSERT_FALSE(
+      jh_adc_scan_pick_frame(none, 0u, FRAMES, 1u, 0u, &s_half, &s_frame));
+}
+
 void test_rp_clkdiv_runs_back_to_back_at_the_minimum_period(void) {
   // Divider 95 would trigger on the cycle the previous conversion ends and
   // halve the rate; the minimum period needs the free-running mode.
@@ -79,6 +132,9 @@ int main(void) {
   RUN_TEST(test_chain_boundary_reads_the_half_just_filled_before_its_interrupt);
   RUN_TEST(
       test_nothing_before_the_first_frame_and_fallback_without_busy_channel);
+  RUN_TEST(test_pick_treats_a_channel_that_finished_between_two_looks_as_full);
+  RUN_TEST(test_pick_prefers_the_half_at_its_end_when_no_channel_is_busy);
+  RUN_TEST(test_pick_keeps_the_choice_inside_a_block_in_progress);
   RUN_TEST(test_rp_clkdiv_runs_back_to_back_at_the_minimum_period);
   return UNITY_END();
 }
