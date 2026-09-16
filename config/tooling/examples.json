@@ -130,6 +130,25 @@
       "targets": [
         "rp2040",
         "stm32g474"
+      ],
+      "variants": [
+        {
+          "id": "scan",
+          "module": "13_adc_scan",
+          "sources": [
+            "scan_app.c"
+          ],
+          "targets": [
+            "rp2040",
+            "stm32g474"
+          ],
+          "extraDefines": [
+            "HAL_ENABLE_ADC_SCAN=1"
+          ]
+        }
+      ],
+      "sources": [
+        "app.c"
       ]
     },
     {

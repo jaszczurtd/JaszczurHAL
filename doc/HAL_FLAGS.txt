@@ -61,3 +61,7 @@ and doc/api/pl/09_buses.md for timing and locking limits.
 
 HAL_ENABLE_PULSE_CAPTURE enables hardware period timestamps and disjoint
 32-period windows; backend limits and API: doc/api/en/24_pulse_capture.md.
+
+HAL_ENABLE_ADC_SCAN enables a continuous hardware-paced ADC scan into a
+caller-owned double block via DMA; ownership, backend limits and API:
+doc/api/en/25_adc_scan.md.

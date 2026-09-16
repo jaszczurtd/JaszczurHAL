@@ -153,6 +153,7 @@ Ochronę stosu włączają dwie niezależne opcje:
 | `HAL_ENABLE_DAC` | `hal_dac.h` | `hal_dac.cpp` specyficzny dla targetu | Fasada sprzętowego DAC; STM32G474 udostępnia rzeczywiste wyjście, natomiast RP2040 zgłasza brak tej możliwości |
 | `HAL_ENABLE_PCNT` | `hal_pcnt.h` | `hal_pcnt.cpp` specyficzny dla targetu | Fasada licznika impulsów dla targetów RP2040, STM32G474, ESP32-S3 PCNT oraz mock |
 | `HAL_ENABLE_PULSE_CAPTURE` | `hal_pulse_capture.h` | `hal_pulse_capture.cpp` | [Sprzętowy pomiar okresów](24_pulse_capture.md) |
+| `HAL_ENABLE_ADC_SCAN` | `hal_adc_scan.h` | `hal_adc_scan.cpp` + docelowy `hal_adc_scan.cpp` | [Sprzętowo taktowany skan ADC](25_adc_scan.md) |
 | `HAL_ENABLE_RGB_LED` | `hal_rgb_led.h` + `hal/gpio/neopixel/jh_neopixel.h` | `hal_rgb_led.cpp` + `hal/gpio/neopixel/jh_neopixel.cpp` | Współdzielony rdzeń NeoPixel + transport targetu (RP2040 PIO / STM32 GPIO taktowane cyklami / ESP32-S3 RMT) |
 | `HAL_ENABLE_HD44780` | `hal_hd44780.h` (C); `hal/display/hd44780/hd44780.h` (C++) | `hal/display/hal_hd44780.cpp` + `hal/display/hd44780/hd44780.cpp` | Uchwyt do instancji HD44780, konfiguracja pinów, tekst, kursor i sterowanie wyświetlaczem przez HAL GPIO/taktowanie systemowe |
 | `HAL_ENABLE_DISPLAY` | `hal_display.h`; `utils/draw7Segment.h` (C i C++) | `hal/display/drivers/hal_display.cpp` + `utils/draw7Segment.cpp` | API wyświetlaczy graficznych i prosta funkcja rysowania siedmiosegmentowego; wymaga backendu TFT, OLED, LCD lub EPD |

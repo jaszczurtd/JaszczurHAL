@@ -36,7 +36,7 @@ See each project's README for wiring and hardware test coverage.
 | `10_storage` | Store settings and a boot counter in KV, write LittleFS files, and log to SD/FatFs. | R0, RA, RV, S | R0, S | - |
 | `11_i2c_slave` | Expose status, counter, and time values through I2C slave registers. | R0, RA, RV, S | R0, S | - |
 | `12_i2c_scan` | Discover I2C addresses with time limits; the wiring in the source is configured for STM32G474. | R0, RA, RV, S | R0, S | - |
-| `13_adc` | Read voltage through the internal ADC and an ADS1115 converter. | R0, RA, RV, S | R0, S | - |
+| `13_adc` | Read voltage through the internal ADC and an ADS1115 converter; sample internal inputs continuously with a hardware-paced DMA scan in a separate variant. | R0, RA, RV, S | R0, S | `scan` on R0, RA, RV, S; default check on R0, S |
 | `14_can_mcp2515` | Send and receive classic CAN frames through MCP2515. | R0, RA, RV, S | R0, S | - |
 | `15_display_oled_lcd` | Display text on an SSD1306 OLED and an HD44780 character LCD. | R0, RA, RV, S | R0, S | - |
 | `16_rtc_backends` | Read RTCs, schedule wake-up, and enter low-power modes; display a DS3231 clock on ILI9341 in a separate variant. | R0, RA, RV, S | R0, S | separately selected `display-clock` on S |

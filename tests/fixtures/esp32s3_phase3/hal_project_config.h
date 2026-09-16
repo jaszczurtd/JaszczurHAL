@@ -3,6 +3,7 @@
 /* Phase 3 compile/link fixture: every ESP32-S3 backend completed through
  * Phase 3 is selected together. Hardware behavior is deliberately deferred
  * to the separately tracked Phase 3.5 verification campaign. */
+#define HAL_ENABLE_ADC_SCAN 1
 #define HAL_ENABLE_APP_TASK1 1
 #define HAL_ENABLE_BSD_SOCKETS 1
 #define HAL_ENABLE_BLE 1

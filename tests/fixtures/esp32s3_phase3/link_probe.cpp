@@ -2,6 +2,7 @@
  * gate stays false. Calls below retain complete Phase 2/3 service lifecycles
  * through the final linker without touching hardware in CI. */
 
+#include "hal/analog/hal_adc_scan.h"
 #include "hal/analog/hal_pcnt.h"
 #include "hal/analog/hal_pulse_capture.h"
 #include "hal/bluetooth/hal_ble.h"
@@ -195,6 +196,21 @@ void jh_phase3_link_probe(void) {
   (void)hal_pulse_capture_init(&capture_config);
   (void)hal_pulse_capture_read(&capture_sample);
   (void)hal_pulse_capture_deinit();
+
+  static uint16_t scan_buffer[2U * 8U * 2U] __attribute__((aligned(4)));
+  hal_adc_scan_config_t scan_config = {};
+  scan_config.pins[0] = 1U;
+  scan_config.pins[1] = 2U;
+  scan_config.pin_count = 2U;
+  scan_config.conversion_period_ns = 12000U;
+  scan_config.buffer = scan_buffer;
+  scan_config.block_frames = 8U;
+  hal_adc_scan_block_t scan_block = {};
+  uint16_t scan_raw = 0U;
+  (void)hal_adc_scan_start(&scan_config);
+  (void)hal_adc_scan_take(&scan_block);
+  (void)hal_adc_scan_latest(1U, &scan_raw);
+  (void)hal_adc_scan_stop();
   (void)hal_pcnt_is_supported();
   (void)hal_pcnt_channel_count();
   (void)hal_pcnt_init_ex(0u, 17u, HAL_PCNT_EDGE_RISING);

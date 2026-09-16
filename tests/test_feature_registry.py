@@ -792,7 +792,7 @@ TEST_ROOT.mkdir(parents=True)
 )
 
 model = generate_hal_features.load_registry(CONFIG)
-require(len(model.features) == 115, "feature registry symbol count drifted")
+require(len(model.features) == 116, "feature registry symbol count drifted")
 catalog_text = (ROOT / "doc/api/en/02_module_flags.md").read_text(encoding="utf-8")
 catalog_features = set(
     re.findall(

@@ -2,6 +2,7 @@
 
 #include "hal/core/hal_status.h"
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -16,6 +17,12 @@ int stm32g474_adc_read_gpio(uint8_t pin);
  * while audio DMA is active. */
 hal_status_t stm32g474_adc_acquire_dma(void);
 void stm32g474_adc_release_dma(void);
+
+/* While a DMA owner also publishes samples, on-demand reads of the pins it
+ * scans return the newest scanned sample instead of 0. The reader runs under
+ * the ADC mutex and must not take it. Cleared on release. */
+typedef bool (*stm32g474_adc_scan_reader_fn)(uint8_t pin, uint16_t *raw);
+void stm32g474_adc_set_scan_reader(stm32g474_adc_scan_reader_fn reader);
 
 /* Raw 12-bit ADC1 code from the internal die-temperature channel (IN16) /
  * VREFINT channel (IN18). Both force the conversion to 12-bit resolution

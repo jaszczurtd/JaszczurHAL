@@ -9,6 +9,7 @@
 static hal_mutex_t s_adc_mutex = NULL;
 static bool s_adc_initialized = false;
 static bool s_dma_owned = false;
+static rp2040_adc_scan_reader_fn s_scan_reader = NULL;
 static uint8_t s_resolution_bits = 12u;
 
 static bool adc_ensure_mutex(void) {
@@ -43,8 +44,11 @@ int rp2040_adc_read_gpio(uint8_t pin) {
   }
   hal_mutex_lock(s_adc_mutex);
   if (s_dma_owned) {
+    uint16_t raw = 0u;
+    const bool scanned =
+        s_scan_reader != NULL && s_scan_reader((uint8_t)(pin - 26u), &raw);
     hal_mutex_unlock(s_adc_mutex);
-    return 0;
+    return scanned ? scale_adc_result(raw) : 0;
   }
   adc_ensure_initialized();
   adc_gpio_init(pin);
@@ -63,8 +67,15 @@ hal_status_t rp2040_adc_read_temperature_raw_ex(uint16_t *out_raw) {
   }
   hal_mutex_lock(s_adc_mutex);
   if (s_dma_owned) {
+    uint16_t raw = 0u;
+    const bool scanned = s_scan_reader != NULL &&
+                         s_scan_reader(ADC_TEMPERATURE_CHANNEL_NUM, &raw);
     hal_mutex_unlock(s_adc_mutex);
-    return HAL_EBUSY;
+    if (!scanned) {
+      return HAL_EBUSY;
+    }
+    *out_raw = raw;
+    return HAL_OK;
   }
   adc_ensure_initialized();
   adc_set_temp_sensor_enabled(true);
@@ -104,5 +115,15 @@ void rp2040_adc_release_dma(void) {
   }
   hal_mutex_lock(s_adc_mutex);
   s_dma_owned = false;
+  s_scan_reader = NULL;
+  hal_mutex_unlock(s_adc_mutex);
+}
+
+void rp2040_adc_set_scan_reader(rp2040_adc_scan_reader_fn reader) {
+  if (!adc_ensure_mutex()) {
+    return;
+  }
+  hal_mutex_lock(s_adc_mutex);
+  s_scan_reader = reader;
   hal_mutex_unlock(s_adc_mutex);
 }

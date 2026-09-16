@@ -402,6 +402,15 @@ void hal_mock_can_set_error_counters(hal_can_t h, uint8_t tx, uint8_t rx);
 uint8_t hal_mock_adc_get_resolution(void);
 void hal_mock_adc_inject(uint8_t pin, int value);
 
+// ── ADC scan ─────────────────────────────────────────────────────────────────
+#ifdef HAL_ENABLE_ADC_SCAN
+/** Hand the running scan one finished block: frames must equal the configured
+ * block size; the block lands in the next caller buffer, the completion hook
+ * runs and the sequence advances, as the DMA ring would do. */
+hal_status_t hal_mock_adc_scan_complete(const uint16_t *samples,
+                                        uint32_t frames);
+#endif
+
 // ── SoftwareSerial (swserial)
 // ─────────────────────────────────────────────────
 #ifdef HAL_ENABLE_SWSERIAL

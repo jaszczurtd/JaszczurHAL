@@ -76,6 +76,9 @@
 #ifdef HAL_ENABLE_DMA_PWM_AUDIO
 #include "hal/audio/hal_dma_pwm_audio.h"
 #endif
+#ifdef HAL_ENABLE_ADC_SCAN
+#include "hal/analog/hal_adc_scan.h"
+#endif
 #ifdef HAL_ENABLE_PULSE_CAPTURE
 #include "hal/analog/hal_pulse_capture.h"
 #endif

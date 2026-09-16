@@ -330,6 +330,24 @@
                 "showReuseMessage": false
             },
             "problemMatcher": []
+        },
+        {
+            "label": "Project: Build variant: scan",
+            "detail": "Build the example variant scan.",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "build",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "scan"
+            ],
+            "group": "build",
+            "problemMatcher": "$gcc"
         }
     ]
 }

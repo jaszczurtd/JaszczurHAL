@@ -214,6 +214,7 @@
 #define ADC1_SMPR1 JH_REG32(ADC1_BASE + 0x14u) /* sample time, ch 0..9   */
 #define ADC1_SMPR2 JH_REG32(ADC1_BASE + 0x18u) /* sample time, ch 10..18 */
 #define ADC1_SQR1 JH_REG32(ADC1_BASE + 0x30u)  /* regular sequence       */
+#define ADC1_SQR2 JH_REG32(ADC1_BASE + 0x34u)  /* regular sequence 5..9  */
 #define ADC1_DR                                                                \
   JH_REG32(ADC1_BASE + 0x40u) /* regular data (read clears EOC)                \
                                */
@@ -785,6 +786,7 @@
 #define RTC_WKUP_IRQn 3u
 #define RTC_Alarm_IRQn 41u
 #define DMA1_Channel1_IRQn 11u
+#define DMA1_Channel3_IRQn 13u
 #define DMA1_Channel7_IRQn 17u
 #define DMA1_Channel8_IRQn 96u
 #define I2C1_EV_IRQn 31u

@@ -73,6 +73,7 @@ ESP_IDF_BASE_SOURCES = (
     "src/hal/timers/hal_timer_ext.cpp",
     "src/hal_app_entry.cpp",
     "src/hal/impl/esp32/hal_adc.cpp",
+    "src/hal/impl/esp32/hal_adc_scan.cpp",
     "src/hal/impl/esp32/hal_esp32_build_config.cpp",
     "src/hal/impl/esp32/hal_gpio.cpp",
     "src/hal/impl/esp32/hal_pwm.cpp",

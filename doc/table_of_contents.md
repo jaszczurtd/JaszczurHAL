@@ -42,3 +42,4 @@
 - [22 - LoRa - messages, acknowledgements, and retries](api/en/22_lora_link.md)
 - [23 - Transport-independent application commands](api/en/23_commands.md)
 - [24 - Hardware period capture](api/en/24_pulse_capture.md)
+- [25 - Hardware-paced ADC scan](api/en/25_adc_scan.md)

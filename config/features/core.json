@@ -17,7 +17,9 @@
     },
     "HAL_ENABLE_CRC": {
       "buildEffects": {
-        "portableSources": ["src/hal/security/hal_crc.cpp"]
+        "portableSources": [
+          "src/hal/security/hal_crc.cpp"
+        ]
       }
     },
     "HAL_ENABLE_CRYPTO": {
@@ -31,28 +33,48 @@
         ]
       }
     },
+    "HAL_ENABLE_ADC_SCAN": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/analog/hal_adc_scan.cpp"
+        ]
+      }
+    },
     "HAL_ENABLE_DAC": {},
     "HAL_ENABLE_DACLESS": {
-      "implies": ["HAL_ENABLE_DMA_PWM_AUDIO", "HAL_ENABLE_PWM_FREQ"]
+      "implies": [
+        "HAL_ENABLE_DMA_PWM_AUDIO",
+        "HAL_ENABLE_PWM_FREQ"
+      ]
     },
     "HAL_ENABLE_DMA_PWM_AUDIO": {},
     "HAL_ENABLE_FREERTOS": {},
     "HAL_ENABLE_JPEG": {},
     "HAL_ENABLE_JPEG_AS_BASE64": {
-      "implies": ["HAL_ENABLE_CRYPTO", "HAL_ENABLE_JPEG"]
+      "implies": [
+        "HAL_ENABLE_CRYPTO",
+        "HAL_ENABLE_JPEG"
+      ]
     },
     "HAL_ENABLE_PCNT": {},
     "HAL_ENABLE_PULSE_CAPTURE": {
       "buildEffects": {
-        "portableSources": ["src/hal/analog/hal_pulse_capture.cpp"]
+        "portableSources": [
+          "src/hal/analog/hal_pulse_capture.cpp"
+        ]
       }
     },
     "HAL_ENABLE_POWER_MANAGEMENT": {
-      "implies": ["HAL_ENABLE_INTERNAL_RTC"]
+      "implies": [
+        "HAL_ENABLE_INTERNAL_RTC"
+      ]
     },
     "HAL_ENABLE_PNG": {},
     "HAL_ENABLE_PNG_AS_BASE64": {
-      "implies": ["HAL_ENABLE_CRYPTO", "HAL_ENABLE_PNG"]
+      "implies": [
+        "HAL_ENABLE_CRYPTO",
+        "HAL_ENABLE_PNG"
+      ]
     },
     "HAL_ENABLE_PWM_FREQ": {},
     "HAL_ENABLE_RGB_LED": {
@@ -67,7 +89,9 @@
     "HAL_ENABLE_STACK_PROTECTOR": {},
     "HAL_ENABLE_UNITY": {
       "buildEffects": {
-        "featureSources": ["src/utils/unity.c"]
+        "featureSources": [
+          "src/utils/unity.c"
+        ]
       }
     }
   }

@@ -37,7 +37,7 @@ testów i wymagane połączenia opisują README poszczególnych projektów.
 | `10_storage` | Zapis ustawień i licznika uruchomień w KV, plików w LittleFS oraz logów na karcie SD/FatFs. | R0, RA, RV, S | R0, S | - |
 | `11_i2c_slave` | Udostępnienie statusu, licznika i czasu w rejestrach urządzenia I2C slave. | R0, RA, RV, S | R0, S | - |
 | `12_i2c_scan` | Wykrywanie adresów na I2C z limitem czasu; połączenia w kodzie dobrano dla STM32G474. | R0, RA, RV, S | R0, S | - |
-| `13_adc` | Odczyt napięcia z wewnętrznego ADC i przetwornika ADS1115. | R0, RA, RV, S | R0, S | - |
+| `13_adc` | Odczyt napięcia z wewnętrznego ADC i przetwornika ADS1115; w osobnym wariancie ciągły, sprzętowo taktowany skan DMA wejść wewnętrznych. | R0, RA, RV, S | R0, S | `scan` na R0, RA, RV, S; domyślna kontrola na R0, S |
 | `14_can_mcp2515` | Wysyłanie i odbieranie ramek klasycznego CAN przez MCP2515. | R0, RA, RV, S | R0, S | - |
 | `15_display_oled_lcd` | Wyświetlanie tekstu na OLED SSD1306 i znakowym LCD HD44780. | R0, RA, RV, S | R0, S | - |
 | `16_rtc_backends` | Odczyt RTC, wybudzanie i tryby oszczędzania energii; wariant zegara DS3231/ILI9341. | R0, RA, RV, S | R0, S | wybierany osobno `display-clock` na S |

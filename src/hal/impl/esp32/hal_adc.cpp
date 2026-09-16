@@ -7,6 +7,7 @@
 #include "hal/core/hal_mutex_once.h"
 #include "hal/core/jh_resolution.h"
 #include "hal/system/hal_sync.h"
+#include "jh_esp32_adc_scan.h"
 #include "jh_esp32_gpio.h"
 
 #include <esp_adc/adc_oneshot.h>
@@ -22,6 +23,7 @@ hal_mutex_t s_adc_mutex = nullptr;
 adc_oneshot_unit_handle_t s_units[SOC_ADC_PERIPH_NUM] = {};
 uint32_t s_configured_channels[SOC_ADC_PERIPH_NUM] = {};
 uint8_t s_resolution_bits = kDefaultResolutionBits;
+jh_esp32_adc_scan_reader_fn s_scan_reader = nullptr;
 
 bool adc_pin_available(uint8_t pin) {
   const bool board_accessible =
@@ -101,6 +103,14 @@ int hal_adc_read(uint8_t pin) {
   if (!adc_pin_available(pin)) {
     return 0;
   }
+  // A running continuous scan owns ADC1; its newest sample stands in for a
+  // one-shot conversion the driver would refuse.
+  if (s_scan_reader != nullptr) {
+    uint16_t raw = 0u;
+    if (s_scan_reader(pin, &raw)) {
+      return scale_adc_result(static_cast<int>(raw), s_resolution_bits);
+    }
+  }
 
   adc_unit_t unit = ADC_UNIT_1;
   adc_channel_t channel = ADC_CHANNEL_0;
@@ -126,6 +136,10 @@ int hal_adc_read(uint8_t pin) {
       error == ESP_OK ? scale_adc_result(raw, s_resolution_bits) : 0;
   hal_mutex_unlock(mutex);
   return result;
+}
+
+void jh_esp32_adc_set_scan_reader(jh_esp32_adc_scan_reader_fn reader) {
+  s_scan_reader = reader;
 }
 
 #endif /* HAL_TARGET_IS_ESP32_S3 */
