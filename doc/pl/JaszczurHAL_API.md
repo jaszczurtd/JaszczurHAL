@@ -456,6 +456,7 @@ tematyczne:
 | 22 | [Niezawodne łącze LoRa](../api/pl/22_lora_link.md) | 16-bitowe adresowanie, numery sekwencyjne wiadomości, ACK i ponawianie, tłumienie duplikatów, fragmentacja oraz opcjonalne ChaCha20-Poly1305 na `hal_lora_radio` |
 | 23 | [Kierowanie poleceń](../api/pl/23_commands.md) | Niezależna od transportu rejestracja procedur obsługi i reguł, binarne komunikaty żądania, odpowiedzi i zdarzenia o ograniczonym rozmiarze, zgodność z warstwą sieciową oraz adaptery ramkowanego portu szeregowego, niezawodnego LoRa i uwierzytelnionego BLE Stream |
 | 24 | [Sprzętowy pomiar okresów](../api/pl/24_pulse_capture.md) | Sprzętowe znaczniki czasu i okna 32 okresów na RP, STM32G474, ESP32-S3 oraz mocku |
+| 25 | [Sprzętowo taktowany skan ADC](../api/pl/25_adc_scan.md) | Ciągły skan DMA zestawu pinów do bloków aplikacji na RP, STM32G474, ESP32-S3 i mocku |
 
 ---
 
@@ -547,3 +548,4 @@ tematyczne:
 | `SmartTimers` | [Narzędzia](../api/pl/16_utilities.md) |
 | `draw7Segment` | [Narzędzia](../api/pl/16_utilities.md) |
 | `hal_pulse_capture` | [Sprzętowy pomiar okresów](../api/pl/24_pulse_capture.md) |
+| `hal_adc_scan` | [Sprzętowo taktowany skan ADC](../api/pl/25_adc_scan.md) |

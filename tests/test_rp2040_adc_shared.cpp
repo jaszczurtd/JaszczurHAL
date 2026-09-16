@@ -1,5 +1,6 @@
 #include "hal/impl/rp2040/rp2040_adc_shared.h"
 #include "hal/system/hal_sync.h"
+#include "hardware/adc.h"
 #include "utils/unity.h"
 
 #include <atomic>
@@ -136,9 +137,51 @@ test_dma_reservation_blocks_polled_adc_without_reprogramming_it(void) {
   rp2040_adc_release_dma();
 }
 
+static bool s_reader_called = false;
+
+static bool fake_scan_reader(uint8_t input, uint16_t *raw) {
+  s_reader_called = true;
+  if (input == 0u) {
+    *raw = 2048u;
+    return true;
+  }
+  if (input == ADC_TEMPERATURE_CHANNEL_NUM) {
+    *raw = 900u;
+    return true;
+  }
+  return false;
+}
+
+static void test_scan_reader_serves_polled_reads_while_dma_owns_the_adc(void) {
+  const unsigned int calls_before = s_unprotected_call_count.load();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, rp2040_adc_acquire_dma());
+  rp2040_adc_set_scan_reader(fake_scan_reader);
+  s_reader_called = false;
+  // Scanned inputs read the newest scanned sample without touching the
+  // converter; inputs outside the scan keep reading 0 as before.
+  TEST_ASSERT_EQUAL_INT(2048, rp2040_adc_read_gpio(26u));
+  TEST_ASSERT_TRUE(s_reader_called);
+  TEST_ASSERT_EQUAL_INT(0, rp2040_adc_read_gpio(27u));
+  uint16_t raw = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, rp2040_adc_read_temperature_raw_ex(&raw));
+  TEST_ASSERT_EQUAL_UINT16(900u, raw);
+  TEST_ASSERT_EQUAL_UINT(calls_before, s_unprotected_call_count.load());
+  // Releasing the DMA owner also drops the reader: DACless never sets one
+  // and must keep seeing plain conversions afterwards.
+  rp2040_adc_release_dma();
+  TEST_ASSERT_EQUAL_INT(1000, rp2040_adc_read_gpio(26u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, rp2040_adc_acquire_dma());
+  s_reader_called = false;
+  TEST_ASSERT_EQUAL_INT(0, rp2040_adc_read_gpio(26u));
+  TEST_ASSERT_FALSE(s_reader_called);
+  TEST_ASSERT_EQUAL_INT(HAL_EBUSY, rp2040_adc_read_temperature_raw_ex(&raw));
+  rp2040_adc_release_dma();
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_gpio_and_temperature_reads_share_one_adc_transaction_lock);
   RUN_TEST(test_dma_reservation_blocks_polled_adc_without_reprogramming_it);
+  RUN_TEST(test_scan_reader_serves_polled_reads_while_dma_owns_the_adc);
   return UNITY_END();
 }

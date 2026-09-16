@@ -146,6 +146,7 @@ Stack protection uses two independent opt-ins:
 | `HAL_ENABLE_DAC` | `hal_dac.h` | target `hal_dac.cpp` | True-DAC capability facade; STM32G474 provides hardware output, while RP2040 reports the capability as unsupported |
 | `HAL_ENABLE_PCNT` | `hal_pcnt.h` | target `hal_pcnt.cpp` | Target pulse-counter facade for RP2040, STM32G474, ESP32-S3 PCNT, and mock targets |
 | `HAL_ENABLE_PULSE_CAPTURE` | `hal_pulse_capture.h` | `hal_pulse_capture.cpp` | [Hardware period capture](24_pulse_capture.md) |
+| `HAL_ENABLE_ADC_SCAN` | `hal_adc_scan.h` | `hal_adc_scan.cpp` + target `hal_adc_scan.cpp` | [Hardware-paced ADC scan](25_adc_scan.md) |
 | `HAL_ENABLE_RGB_LED` | `hal_rgb_led.h` + `hal/gpio/neopixel/jh_neopixel.h` | `hal_rgb_led.cpp` + `hal/gpio/neopixel/jh_neopixel.cpp` | Shared NeoPixel core + target transport (RP2040 PIO / STM32 cycle-timed GPIO / ESP32-S3 RMT) |
 | `HAL_ENABLE_HD44780` | `hal_hd44780.h` (C); `hal/display/hd44780/hd44780.h` (C++) | `hal/display/hal_hd44780.cpp` + `hal/display/hd44780/hd44780.cpp` | Opaque HD44780 handle, pin configuration, text, cursor and display control over HAL GPIO/system timing |
 | `HAL_ENABLE_DISPLAY` | `hal_display.h`; `utils/draw7Segment.h` (C and C++) | `hal/display/drivers/hal_display.cpp` + `utils/draw7Segment.cpp` | Graphics display API and a small seven-segment drawing helper; requires a TFT, OLED, LCD or EPD backend |

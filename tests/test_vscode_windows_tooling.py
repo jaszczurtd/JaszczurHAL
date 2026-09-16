@@ -390,23 +390,23 @@ for entry in examples_dispatcher.EXAMPLES:
 require(
     full_configuration_counts
     == {
-        "rp2040": 45,
-        "rp2350-arm": 38,
-        "rp2350-riscv": 24,
-        "stm32g474": 41,
+        "rp2040": 46,
+        "rp2350-arm": 39,
+        "rp2350-riscv": 25,
+        "stm32g474": 42,
     }
-    and sum(full_configuration_counts.values()) == 148,
+    and sum(full_configuration_counts.values()) == 152,
     f"full dispatcher matrix changed: {full_configuration_counts}",
 )
 require(
     gate_configuration_counts
     == {
-        "rp2040": 43,
+        "rp2040": 44,
         "rp2350-arm": 4,
         "rp2350-riscv": 0,
-        "stm32g474": 32,
+        "stm32g474": 33,
     }
-    and sum(gate_configuration_counts.values()) == 79,
+    and sum(gate_configuration_counts.values()) == 81,
     f"dispatcher gate matrix changed: {gate_configuration_counts}",
 )
 

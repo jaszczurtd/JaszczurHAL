@@ -48,6 +48,7 @@ def resolve_model(repo_root: Path, project: Path) -> dict:
 
 
 EXPECTED_RESOLVED = [
+    "HAL_ENABLE_ADC_SCAN",
     "HAL_ENABLE_APP_TASK1",
     "HAL_ENABLE_BLE",
     "HAL_ENABLE_BSD_SOCKETS",
@@ -102,6 +103,8 @@ class Phase3RegistryAndBuildTests(unittest.TestCase):
         dependencies = set(model["privateComponentDependencies"])
         self.assertTrue(
             {
+                "src/hal/impl/esp32/hal_adc_scan.cpp",
+                "src/hal/analog/hal_adc_scan.cpp",
                 "src/hal/impl/esp32/hal_i2c_slave.cpp",
                 "src/hal/impl/esp32/hal_pcnt.cpp",
                 "src/hal/impl/esp32/hal_pulse_capture.cpp",

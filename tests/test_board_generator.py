@@ -384,6 +384,7 @@ require(
 require(
     esp32_target["supportedFeatures"]
     == [
+        "HAL_ENABLE_ADC_SCAN",
         "HAL_ENABLE_APP_TASK1",
         "HAL_ENABLE_BLE",
         "HAL_ENABLE_BSD_SOCKETS",

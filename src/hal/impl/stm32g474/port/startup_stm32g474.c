@@ -64,6 +64,8 @@ void EXTI15_10_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void RTC_Alarm_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void DMA1_Channel1_IRQHandler(void)
     __attribute__((weak, alias("Default_Handler")));
+void DMA1_Channel3_IRQHandler(void)
+    __attribute__((weak, alias("Default_Handler")));
 void DMA1_Channel7_IRQHandler(void)
     __attribute__((weak, alias("Default_Handler")));
 void DMA1_Channel8_IRQHandler(void)
@@ -93,6 +95,7 @@ void SysTick_Handler(void) __attribute__((weak, alias("Default_Handler")));
 #define STM32_IRQ_EXTI3 9u
 #define STM32_IRQ_EXTI4 10u
 #define STM32_IRQ_DMA1_CHANNEL1 11u
+#define STM32_IRQ_DMA1_CHANNEL3 13u
 #define STM32_IRQ_DMA1_CHANNEL7 17u
 #define STM32_IRQ_EXTI9_5 23u
 #define STM32_IRQ_I2C1_EV 31u
@@ -126,6 +129,7 @@ __attribute__((section(".isr_vector"),
     [16u + STM32_IRQ_EXTI3] = EXTI3_IRQHandler,
     [16u + STM32_IRQ_EXTI4] = EXTI4_IRQHandler,
     [16u + STM32_IRQ_DMA1_CHANNEL1] = DMA1_Channel1_IRQHandler,
+    [16u + STM32_IRQ_DMA1_CHANNEL3] = DMA1_Channel3_IRQHandler,
     [16u + STM32_IRQ_DMA1_CHANNEL7] = DMA1_Channel7_IRQHandler,
     [16u + STM32_IRQ_EXTI9_5] = EXTI9_5_IRQHandler,
     [16u + STM32_IRQ_I2C1_EV] = I2C1_EV_IRQHandler,

@@ -22,6 +22,16 @@ static bool s_dma_owned = false;
 static int s_adc_values[128] = {};
 #endif
 
+static stm32g474_adc_scan_reader_fn s_scan_reader = NULL;
+
+/* Scanned samples are 12-bit codes; present them at the configured
+ * resolution like a polled conversion. */
+static int scale_scanned(uint16_t raw) {
+  const uint32_t max_in = (1u << 12u) - 1u;
+  const uint32_t max_out = (1u << s_resolution) - 1u;
+  return (int)(((uint32_t)raw * max_out + (max_in / 2u)) / max_in);
+}
+
 static bool adc_ensure_mutex(void) {
   return jh_hal_mutex_try_create_once(&s_adc_mutex) != nullptr;
 }
@@ -183,8 +193,10 @@ int stm32g474_adc_read_gpio(uint8_t pin) {
   hal_mutex_lock(s_adc_mutex);
   int val;
   if (s_dma_owned) {
+    uint16_t raw = 0u;
+    const bool scanned = s_scan_reader != NULL && s_scan_reader(pin, &raw);
     hal_mutex_unlock(s_adc_mutex);
-    return 0;
+    return scanned ? scale_scanned(raw) : 0;
   }
 #ifdef JH_STM32G474_HW
   adc1_hw_init();
@@ -295,6 +307,16 @@ void stm32g474_adc_release_dma(void) {
 #endif
     s_dma_owned = false;
   }
+  s_scan_reader = NULL;
+  hal_mutex_unlock(s_adc_mutex);
+}
+
+void stm32g474_adc_set_scan_reader(stm32g474_adc_scan_reader_fn reader) {
+  if (!adc_ensure_mutex()) {
+    return;
+  }
+  hal_mutex_lock(s_adc_mutex);
+  s_scan_reader = reader;
   hal_mutex_unlock(s_adc_mutex);
 }
 
