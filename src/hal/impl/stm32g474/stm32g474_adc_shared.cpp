@@ -193,10 +193,12 @@ int stm32g474_adc_read_gpio(uint8_t pin) {
   hal_mutex_lock(s_adc_mutex);
   int val;
   if (s_dma_owned) {
+    // A running scan owns the converter; a pin it does not carry has no
+    // sample to offer, and a one-shot conversion would break the scan.
     uint16_t raw = 0u;
     const bool scanned = s_scan_reader != NULL && s_scan_reader(pin, &raw);
     hal_mutex_unlock(s_adc_mutex);
-    return scanned ? scale_scanned(raw) : 0;
+    return scanned ? scale_scanned(raw) : -1;
   }
 #ifdef JH_STM32G474_HW
   adc1_hw_init();

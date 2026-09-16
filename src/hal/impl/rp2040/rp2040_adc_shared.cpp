@@ -44,11 +44,14 @@ int rp2040_adc_read_gpio(uint8_t pin) {
   }
   hal_mutex_lock(s_adc_mutex);
   if (s_dma_owned) {
+    // The converter is free-running for the scan; a one-shot conversion would
+    // corrupt the FIFO order, so an input the scan does not carry cannot be
+    // read now. Say so instead of handing back a silent zero.
     uint16_t raw = 0u;
     const bool scanned =
         s_scan_reader != NULL && s_scan_reader((uint8_t)(pin - 26u), &raw);
     hal_mutex_unlock(s_adc_mutex);
-    return scanned ? scale_adc_result(raw) : 0;
+    return scanned ? scale_adc_result(raw) : -1;
   }
   adc_ensure_initialized();
   adc_gpio_init(pin);

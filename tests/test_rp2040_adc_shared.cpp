@@ -121,7 +121,9 @@ test_dma_reservation_blocks_polled_adc_without_reprogramming_it(void) {
 
   TEST_ASSERT_EQUAL_INT(HAL_OK, rp2040_adc_acquire_dma());
   TEST_ASSERT_EQUAL_INT(HAL_EBUSY, rp2040_adc_acquire_dma());
-  TEST_ASSERT_EQUAL_INT(0, rp2040_adc_read_gpio(26u));
+  // No scan reader is installed, so no input has a sample to offer: the
+  // read says so instead of returning a zero that looks like a conversion.
+  TEST_ASSERT_EQUAL_INT(-1, rp2040_adc_read_gpio(26u));
   TEST_ASSERT_EQUAL_UINT16(0u, rp2040_adc_read_temperature_raw());
   uint16_t raw = 123u;
   TEST_ASSERT_EQUAL_INT(HAL_EBUSY, rp2040_adc_read_temperature_raw_ex(&raw));
@@ -158,10 +160,11 @@ static void test_scan_reader_serves_polled_reads_while_dma_owns_the_adc(void) {
   rp2040_adc_set_scan_reader(fake_scan_reader);
   s_reader_called = false;
   // Scanned inputs read the newest scanned sample without touching the
-  // converter; inputs outside the scan keep reading 0 as before.
+  // converter; an input outside the scan cannot be converted now and reports
+  // -1 rather than a zero indistinguishable from a real sample.
   TEST_ASSERT_EQUAL_INT(2048, rp2040_adc_read_gpio(26u));
   TEST_ASSERT_TRUE(s_reader_called);
-  TEST_ASSERT_EQUAL_INT(0, rp2040_adc_read_gpio(27u));
+  TEST_ASSERT_EQUAL_INT(-1, rp2040_adc_read_gpio(27u));
   uint16_t raw = 0u;
   TEST_ASSERT_EQUAL_INT(HAL_OK, rp2040_adc_read_temperature_raw_ex(&raw));
   TEST_ASSERT_EQUAL_UINT16(900u, raw);
@@ -172,7 +175,7 @@ static void test_scan_reader_serves_polled_reads_while_dma_owns_the_adc(void) {
   TEST_ASSERT_EQUAL_INT(1000, rp2040_adc_read_gpio(26u));
   TEST_ASSERT_EQUAL_INT(HAL_OK, rp2040_adc_acquire_dma());
   s_reader_called = false;
-  TEST_ASSERT_EQUAL_INT(0, rp2040_adc_read_gpio(26u));
+  TEST_ASSERT_EQUAL_INT(-1, rp2040_adc_read_gpio(26u));
   TEST_ASSERT_FALSE(s_reader_called);
   TEST_ASSERT_EQUAL_INT(HAL_EBUSY, rp2040_adc_read_temperature_raw_ex(&raw));
   rp2040_adc_release_dma();

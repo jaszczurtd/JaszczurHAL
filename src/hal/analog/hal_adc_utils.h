@@ -68,7 +68,10 @@ int hal_adc_compensate_rp2040_12bit(int sample);
  * @brief Read and average ADC samples according to a configuration.
  * @param config Sampling configuration.
  * @param out_average Receives the transformed sample average.
- * @return HAL_OK, or HAL_EINVAL for invalid input or zero samples.
+ * @return HAL_OK; HAL_EINVAL for invalid input or zero samples; HAL_ESTATE
+ *         when hal_adc_read() reports the input unreadable (negative), e.g. a
+ *         pin outside a running DMA scan on a shared converter. The average is
+ *         left untouched on failure.
  */
 hal_status_t hal_adc_read_average_ex(const hal_adc_average_config_t *config,
                                      float *out_average);
@@ -86,7 +89,8 @@ float hal_adc_raw_to_voltage(int raw, float high_side_resistance,
 /**
  * @brief Read a pin using default sampling and RP2040 compensation settings.
  * @param pin ADC pin or channel.
- * @return Averaged sample, or 0.0f when the read configuration is invalid.
+ * @return Averaged sample, or NaN when the read configuration is invalid or
+ *         the input is unreadable (see hal_adc_read_average_ex()).
  */
 float hal_adc_read_average(uint8_t pin);
 
