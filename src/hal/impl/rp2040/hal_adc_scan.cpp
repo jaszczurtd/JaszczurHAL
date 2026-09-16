@@ -262,23 +262,26 @@ hal_status_t jh_adc_scan_latest(uint8_t position, uint16_t *raw) {
     return HAL_ESTATE;
   }
   // Exactly one channel is busy between block boundaries; its write pointer
-  // says how many complete frames the block in progress already holds. Right
-  // after the chain the other half is the complete one even before its
-  // interrupt has run, so the frame choice never leans on that bookkeeping.
-  uint8_t busy = UINT8_MAX;
-  uint32_t written = 0u;
+  // says how many complete frames the block in progress already holds. The
+  // busy flag is looked at again after the pointer: the completion interrupt
+  // runs on this core and re-arms the pointer to the base the moment the
+  // channel finishes, and a reader preempted between the two register reads
+  // used to take that for a fresh trigger and hand out the other half's last
+  // frame, a whole block old. Right after the chain the other half is the
+  // complete one even before its interrupt has run, so the frame choice never
+  // leans on that bookkeeping.
+  jh_adc_scan_channel_t channels[2] = {};
   for (uint8_t b = 0u; b < 2u; ++b) {
-    if (s.channel[b] < 0 || !dma_channel_is_busy((uint)s.channel[b])) {
+    if (s.channel[b] < 0) {
       continue;
     }
+    const uint channel = (uint)s.channel[b];
+    channels[b].busy_before = dma_channel_is_busy(channel);
     const uintptr_t base = (uintptr_t)half(b);
-    const uintptr_t write =
-        (uintptr_t)dma_hw->ch[(uint)s.channel[b]].write_addr;
-    if (write >= base) {
-      busy = b;
-      written = (uint32_t)((write - base) / sizeof(uint16_t));
-      break;
-    }
+    const uintptr_t write = (uintptr_t)dma_hw->ch[channel].write_addr;
+    channels[b].busy_after = dma_channel_is_busy(channel);
+    channels[b].written =
+        write >= base ? (uint32_t)((write - base) / sizeof(uint16_t)) : 0u;
   }
   const uint32_t saved = save_and_disable_interrupts();
   const uint32_t sequence = s.sequence;
@@ -286,8 +289,8 @@ hal_status_t jh_adc_scan_latest(uint8_t position, uint16_t *raw) {
   restore_interrupts(saved);
   uint8_t index = 0u;
   uint32_t frame = 0u;
-  if (!jh_adc_scan_latest_frame(busy, written, s.count, s.config.block_frames,
-                                sequence, completed, &index, &frame)) {
+  if (!jh_adc_scan_pick_frame(channels, s.count, s.config.block_frames,
+                              sequence, completed, &index, &frame)) {
     return HAL_EAGAIN;
   }
   *raw = half(index)[(frame * s.count) + position];
