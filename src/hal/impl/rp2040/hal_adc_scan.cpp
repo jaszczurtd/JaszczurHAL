@@ -5,6 +5,7 @@
 #include "hal/analog/jh_adc_scan_backend.h"
 #include "hal/analog/jh_adc_scan_ring.h"
 #include "hal/system/hal_system.h"
+#include "jh_rp_adc_scan_clock.h"
 #include "rp2040_adc_shared.h"
 
 #include <hardware/adc.h>
@@ -19,7 +20,7 @@ namespace {
 // triggers the other and raises DMA_IRQ_0, where it is re-armed for its next
 // turn. DACless keeps DMA_IRQ_1; both paths share the converter ownership
 // flag in rp2040_adc_shared, so they exclude each other instead of colliding.
-constexpr uint32_t kMinConversionCycles = 96u;
+constexpr uint32_t kMinConversionCycles = JH_RP_ADC_CONVERSION_CYCLES;
 constexpr uint32_t kMaxConversionCycles = 65536u;
 constexpr uint8_t kTemperatureInput = 4u;
 constexpr uint8_t kInputs = 5u;
@@ -184,7 +185,7 @@ hal_status_t jh_adc_scan_start(const hal_adc_scan_config_t *config,
   }
   adc_run(false);
   adc_fifo_drain();
-  adc_set_clkdiv((float)cycles - 1.0f);
+  adc_set_clkdiv(jh_rp_adc_scan_clkdiv(cycles));
   adc_set_round_robin(mask);
   adc_select_input(s.input_of_position[0]);
   adc_fifo_setup(true, true, 1u, false, false);
