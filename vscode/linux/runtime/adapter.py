@@ -228,7 +228,10 @@ class LinuxPlatformAdapter:
 
     def port_owner_pids(self, port: str) -> list[int]:
         pids: set[int] = set()
-        for command in (["fuser", port], ["lsof", "-t", "--", port]):
+        # lsof without -b stats every open file, so one unreachable network
+        # mount blocks it for good; -b/-w skip those calls and the timeout
+        # bounds whatever is left. A tool that cannot answer reports no owner.
+        for command in (["fuser", port], ["lsof", "-b", "-w", "-t", "--", port]):
             try:
                 result = subprocess.run(
                     command,
@@ -236,6 +239,7 @@ class LinuxPlatformAdapter:
                     stderr=subprocess.DEVNULL,
                     text=True,
                     check=False,
+                    timeout=5.0,
                 )
             except Exception:
                 continue
