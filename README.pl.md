@@ -239,7 +239,9 @@ różnice między implementacjami i zakres testów opisuje
 
 ## Kompilacja biblioteki statycznej (.a)
 
-JaszczurHAL można skompilować jako bibliotekę statyczną `libJaszczurHAL.a`.
+JaszczurHAL można skompilować jako bibliotekę statyczną `libJaszczurHAL.a` dla
+każdej obsługiwanej platformy. Runnery leżą w `link_libraries/`, po jednym na
+rodzinę buildów, a `scripts/build_link_library.sh --target <id>` wybiera właściwy.
 [Przewodnik po kompilacji](doc/pl/lib_compilation.md) opisuje jej budowanie,
 kompilację przykładowych aplikacji oraz podział na kod biblioteki i kod
 uruchamiający aplikację.

@@ -18,41 +18,41 @@ te ustawienia i generuje manifesty dla `vscode/entry/jh-vscode` oraz
 ## Katalog projektów
 
 Skróty w tabeli: `R0` oznacza `rp2040`, `RA` - `rp2350-arm`, `RV` -
-`rp2350-riscv`, a `S` - `stm32g474`. Kolumna `gateTargets` wskazuje podzbiór
+`rp2350-riscv`, `S` - `stm32g474`, a `E` - `esp32s3`. Kolumna `gateTargets` wskazuje podzbiór
 platform objętych domyślną kontrolą kompilacji. **Dostępna konfiguracja
 kompilacji nie oznacza potwierdzenia działania na każdej płytce.** Zakres
 testów i wymagane połączenia opisują README poszczególnych projektów.
 
 | Projekt | Co pokazuje przykład | Obsługiwane platformy | `gateTargets` | Warianty |
 |---|---|---|---|---|
-| `01_core_runtime` | Miganie diodą, diagnostyka platformy, timery programowe i obliczenia regulatora PID. | R0, RA, RV, S | R0, S | `capture` |
-| `02_crypto` | Obliczanie MD5 oraz szyfrowanie i odszyfrowywanie ChaCha20-Poly1305. | R0, RA, RV, S | R0, S | - |
-| `03_modem_A7670E` | Uruchomienie modemu A7670/A7672 i wysyłanie wiadomości MQTT przez sieć komórkową. | R0, RA, RV | R0 | - |
-| `04_sensor_hub` | Pomiar temperatury DS18B20, temperatury i wilgotności DHT oraz oświetlenia BH1750. | R0, RA, RV, S | R0, S | - |
-| `05_serial_gps` | Odczyt danych GPS przez UART; wariant z pętlą zwrotną programowego portu szeregowego. | R0, RA, RV, S | R0, S | `swserial` na R0, RA, RV; domyślna kontrola na R0 |
-| `06_thermocouple` | Odczyt temperatury z termopar przez MCP9600 i MAX6675. | R0, RA, RV, S | R0, S | - |
-| `07_display_media` | Wyświetlanie grafiki na ILI9341, dekodowanie PNG/JPEG i konwersja Base64/RGB565. | R0, RA, RV, S | R0, S | - |
-| `08_mqtt` | Publikowanie i odbieranie wiadomości MQTT przez sieć obsługiwaną przez CYW43. | R0, RA, S | R0, S | - |
-| `09_wireguard` | Przygotowanie konfiguracji WireGuard; samo uruchomienie przykładu nie potwierdza zestawienia tunelu. | R0, RA, S | R0, S | - |
+| `01_core_runtime` | Miganie diodą, diagnostyka platformy, timery programowe i obliczenia regulatora PID. | R0, RA, RV, S, E | R0, S, E | `capture` |
+| `02_crypto` | Obliczanie MD5 oraz szyfrowanie i odszyfrowywanie ChaCha20-Poly1305. | R0, RA, RV, S, E | R0, S, E | - |
+| `03_modem_A7670E` | Uruchomienie modemu A7670/A7672 i wysyłanie wiadomości MQTT przez sieć komórkową. | R0, RA, RV, E | R0, E | - |
+| `04_sensor_hub` | Pomiar temperatury DS18B20, temperatury i wilgotności DHT oraz oświetlenia BH1750. | R0, RA, RV, S, E | R0, S, E | - |
+| `05_serial_gps` | Odczyt danych GPS przez UART; wariant z pętlą zwrotną programowego portu szeregowego. | R0, RA, RV, S, E | R0, S, E | `swserial` na R0, RA, RV; domyślna kontrola na R0 |
+| `06_thermocouple` | Odczyt temperatury z termopar przez MCP9600 i MAX6675. | R0, RA, RV, S, E | R0, S, E | - |
+| `07_display_media` | Wyświetlanie grafiki na ILI9341, dekodowanie PNG/JPEG i konwersja Base64/RGB565. | R0, RA, RV, S, E | R0, S, E | - |
+| `08_mqtt` | Publikowanie i odbieranie wiadomości MQTT przez sieć obsługiwaną przez CYW43. | R0, RA, S, E | R0, S, E | - |
+| `09_wireguard` | Przygotowanie konfiguracji WireGuard; samo uruchomienie przykładu nie potwierdza zestawienia tunelu. | R0, RA, S, E | R0, S, E | - |
 | `10_storage` | Zapis ustawień i licznika uruchomień w KV, plików w LittleFS oraz logów na karcie SD/FatFs. | R0, RA, RV, S | R0, S | - |
-| `11_i2c_slave` | Udostępnienie statusu, licznika i czasu w rejestrach urządzenia I2C slave. | R0, RA, RV, S | R0, S | - |
-| `12_i2c_scan` | Wykrywanie adresów na I2C z limitem czasu; połączenia w kodzie dobrano dla STM32G474. | R0, RA, RV, S | R0, S | - |
-| `13_adc` | Odczyt napięcia z wewnętrznego ADC i przetwornika ADS1115; w osobnym wariancie ciągły, sprzętowo taktowany skan DMA wejść wewnętrznych. | R0, RA, RV, S | R0, S | `scan` na R0, RA, RV, S; domyślna kontrola na R0, S |
-| `14_can_mcp2515` | Wysyłanie i odbieranie ramek klasycznego CAN przez MCP2515. | R0, RA, RV, S | R0, S | - |
-| `15_display_oled_lcd` | Wyświetlanie tekstu na OLED SSD1306 i znakowym LCD HD44780. | R0, RA, RV, S | R0, S | - |
+| `11_i2c_slave` | Udostępnienie statusu, licznika i czasu w rejestrach urządzenia I2C slave. | R0, RA, RV, S, E | R0, S, E | - |
+| `12_i2c_scan` | Wykrywanie adresów na I2C z limitem czasu; połączenia w kodzie dobrano dla STM32G474. | R0, RA, RV, S, E | R0, S, E | - |
+| `13_adc` | Odczyt napięcia z wewnętrznego ADC i przetwornika ADS1115; w osobnym wariancie ciągły, sprzętowo taktowany skan DMA wejść wewnętrznych. | R0, RA, RV, S, E | R0, S, E | `scan` na R0, RA, RV, S, E; domyślna kontrola na R0, S, E |
+| `14_can_mcp2515` | Wysyłanie i odbieranie ramek klasycznego CAN przez MCP2515. | R0, RA, RV, S, E | R0, S, E | - |
+| `15_display_oled_lcd` | Wyświetlanie tekstu na OLED SSD1306 i znakowym LCD HD44780. | R0, RA, RV, S, E | R0, S, E | - |
 | `16_rtc_backends` | Odczyt RTC, wybudzanie i tryby oszczędzania energii; wariant zegara DS3231/ILI9341. | R0, RA, RV, S | R0, S | wybierany osobno `display-clock` na S |
-| `17_audio_output` | Regulacja wzmocnienia PGA2311 oraz generowanie dźwięku przez PWM z DMA. | R0, RA, RV, S | R0, S | - |
-| `18_freertos_suite` | Zadania FreeRTOS; wariant sieciowy z WiFi, cJSON, BSD, serwerem HTTP, klientem HTTP/HTTPS, plikami, WebSocket i konsolą. Telegram jest włączony do kompilacji, ale przykład nie wysyła powiadomień. | R0, RA, RV, S | R0, S | `network` na R0, RA, S; domyślna kontrola na R0, S |
-| `19_touch` | Odczyt dotyku z TSC2007 i STMPE610. | R0, RA, RV, S | R0, S | - |
-| `20_irsmall_decoder` | Odbiór i dekodowanie sygnałów podczerwieni przez IRsmall. | R0, RA, RV, S | R0, S | - |
+| `17_audio_output` | Regulacja wzmocnienia PGA2311 oraz generowanie dźwięku przez PWM z DMA. | R0, RA, RV, S, E | R0, S, E | - |
+| `18_freertos_suite` | Zadania FreeRTOS; wariant sieciowy z WiFi, cJSON, BSD, serwerem HTTP, klientem HTTP/HTTPS, plikami, WebSocket i konsolą. Telegram jest włączony do kompilacji, ale przykład nie wysyła powiadomień. | R0, RA, RV, S, E | R0, S, E | `network` na R0, RA, S, E; domyślna kontrola na R0, S, E |
+| `19_touch` | Odczyt dotyku z TSC2007 i STMPE610. | R0, RA, RV, S, E | R0, S, E | - |
+| `20_irsmall_decoder` | Odbiór i dekodowanie sygnałów podczerwieni przez IRsmall. | R0, RA, RV, S, E | R0, S, E | - |
 | `21_stm32g474_fdcan_native` | Wysyłanie i odbieranie ramek przez wbudowany kontroler FDCAN w STM32G474. | S | S | - |
-| `22_rfid_nfc` | Odczyt identyfikatorów kart przez MFRC522 i PN532. | R0, RA, RV, S | R0, S | - |
-| `23_io_pmic` | Sterowanie diodą RGB, ekspanderem I/O i DAC oraz odczyt stanu zasilania z ADP5360. | R0, RA, RV, S | R0, S | - |
-| `24_epd_display` | Wyświetlanie wzoru testowego i odświeżanie ekranu e-paper 200 × 200. | R0, RA, RV, S | R0, S | - |
-| `25_ota` | Aktualizacja OTA: wykrywanie urządzenia, przygotowanie po uwierzytelnieniu, potwierdzenie nowej wersji, wycofanie aktualizacji i odzyskiwanie przez BOOTSEL. | R0, RA | R0 | - |
+| `22_rfid_nfc` | Odczyt identyfikatorów kart przez MFRC522 i PN532. | R0, RA, RV, S, E | R0, S, E | - |
+| `23_io_pmic` | Sterowanie diodą RGB, ekspanderem I/O i DAC oraz odczyt stanu zasilania z ADP5360. | R0, RA, RV, S, E | R0, S, E | - |
+| `24_epd_display` | Wyświetlanie wzoru testowego i odświeżanie ekranu e-paper 200 × 200. | R0, RA, RV, S, E | R0, S, E | - |
+| `25_ota` | Aktualizacja OTA: wykrywanie urządzenia, przygotowanie po uwierzytelnieniu, potwierdzenie nowej wersji, wycofanie aktualizacji i odzyskiwanie przez BOOTSEL. | R0, RA, E | R0, E | - |
 | `26_ble_stream` | Wymiana danych i poleceń przez JH BLE Stream v1 po obustronnym uwierzytelnieniu. | R0, RA, S | R0, RA, S | `commands` i `commands-freertos` na R0, RA, S; domyślna kontrola na R0 |
 | `27_lora_point_to_point` | Wymiana ping/pong przez SX1262 oraz 500-bajtowych poleceń i odpowiedzi we fragmentach przez `hal_lora_link`. | R0, S | R0, S | `probe`, `responder`, `link` i `link-responder` na R0, S; warianty sprzętowe wybierane osobno `sf7` i `responder-sf7` |
-| `28_serial_commands` | Odbieranie poleceń Serial Session i kierowanie ich do wspólnych procedur obsługi. | R0, RA, RV, S | R0, S | - |
+| `28_serial_commands` | Odbieranie poleceń Serial Session i kierowanie ich do wspólnych procedur obsługi. | R0, RA, RV, S, E | R0, S, E | - |
 | `29_bluetooth_gamepad` | Odczyt gamepada, wykrywanie urządzeń Classic i odbiór surowych raportów HID. | R0, RA, S | R0 | `classic-scan`, `hid-host` i `ble` na R0, RA, S; domyślna kontrola na R0 |
 | `30_bluetooth_speaker` | Odbiór dźwięku A2DP i odtwarzanie przez PWM; opcjonalna regulacja głośności AVRCP i kompilacja z BLE. | R0, RA | R0, RA | `avrcp` i `ble-a2dp` na R0, RA; oba w domyślnej kontroli |
 
@@ -88,14 +88,20 @@ potwierdzenia działania na sprzęcie.
 | `rp2350-arm` | `pico2` | oficjalny Pico SDK + GNU Arm | ELF, BIN, HEX, UF2, MAP |
 | `rp2350-riscv` | `pico2` | oficjalny Pico SDK + ustalona wersja narzędzi Hazard3 | ELF, BIN, HEX, UF2, MAP |
 | `stm32g474` | `nucleo-g474re` | GNU Arm | ELF, BIN, HEX, MAP |
+| `esp32s3` | `waveshare-esp32-s3-zero` | ESP-IDF w ustalonej wersji | ELF, BIN, MAP, bootloader, tabela partycji, `jh_esp_idf_artifacts.json` |
 
-ESP32-S3 korzysta z osobnych projektów ESP-IDF, a nie ze wspólnego skryptu
-kompilacji tych przykładów. Projekt `tests/fixtures/esp32s3_phase3`
-sprawdza kompilację i linkowanie implementacji z etapów 2 i 3. Dostępne
-raporty testów sprzętowych znajdują się w `tests/hardware/esp32s3_phase1`
-i `tests/hardware/esp32s3_phase2`. Dołączenie ESP32-S3 do wspólnego
-skryptu wymaga obsługi kompilacji ESP-IDF oraz sprawdzenia płytki
-i zasobów dla każdego przykładu.
+Dla `esp32s3` `jh-vscode` uruchamia `scripts/build_esp_idf.py` ze źródłami
+i definicjami z manifestu zamiast dispatchera CMake. Przykład deklaruje
+`esp32s3` tylko wtedy, gdy każda żądana przez niego funkcja jest na liście
+`supportedFeatures` targetu; lista obejmuje backendy ESP-IDF oraz przenośne
+sterowniki magistral, czujników, wyświetlaczy, kodeków i komend, a poza nią
+pozostają pamięć flash, audio, zasilanie, wewnętrzny RTC, LoRa, BLE Stream
+i Bluetooth Classic. Projekt `tests/fixtures/esp32s3_phase3`
+nadal sprawdza pełne domknięcie funkcji z etapów 2 i 3, a raporty testów
+sprzętowych znajdują się w `tests/hardware/esp32s3_phase1`
+i `tests/hardware/esp32s3_phase2`. Połączenia w źródłach przykładów są
+dobrane pod płytki RP i STM32; przed uruchomieniem sprawdź numery pinów
+względem profilu płytki ESP32-S3.
 
 ## Wymagania
 
@@ -127,6 +133,7 @@ Pełny zestaw obsługiwanych konfiguracji dla wybranej platformy:
 scripts/examples_dispatcher.py build --target rp2040 --jobs "$(nproc)"
 scripts/examples_dispatcher.py build --target rp2350-arm --jobs "$(nproc)"
 scripts/examples_dispatcher.py build --target rp2350-riscv --jobs "$(nproc)"
+scripts/examples_dispatcher.py build --target esp32s3 --jobs "$(nproc)"
 scripts/examples_dispatcher.py build --target stm32g474 --jobs "$(nproc)"
 ```
 

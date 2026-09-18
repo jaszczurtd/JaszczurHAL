@@ -11,8 +11,8 @@ at link time. RP erase/program operations share the flash transaction
 coordinator, which makes the other core safe, pauses USB work, rejects active
 DMA conflicts, masks local interrupts, and restores runtime state on exit.
 STM32G474 uses page-aligned linker reservations and its target flash service.
-See [RP memory map](../../../rp_native_lib/MEMORY_MAP.md) and
-[STM32G474 memory map](../../../stm32_lib/MEMORY_MAP.md).
+See [RP memory map](../../../link_libraries/rp_pico_lib/MEMORY_MAP.md) and
+[STM32G474 memory map](../../../link_libraries/stm32_lib/MEMORY_MAP.md).
 
 <a id="hal_eeprom---unified-eeprom--optional---hal_enable_eeprom"></a>
 

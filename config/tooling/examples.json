@@ -5,7 +5,8 @@
       "dir": "01_core_runtime",
       "targets": [
         "rp2040",
-        "stm32g474"
+        "stm32g474",
+        "esp32s3"
       ],
       "variants": [
         {
@@ -16,7 +17,8 @@
           ],
           "targets": [
             "rp2040",
-            "stm32g474"
+            "stm32g474",
+            "esp32s3"
           ],
           "extraDefines": [
             "HAL_ENABLE_PULSE_CAPTURE=1"
@@ -31,27 +33,31 @@
       "dir": "02_crypto",
       "targets": [
         "rp2040",
-        "stm32g474"
+        "stm32g474",
+        "esp32s3"
       ]
     },
     {
       "dir": "03_modem_A7670E",
       "targets": [
-        "rp2040"
+        "rp2040",
+        "esp32s3"
       ]
     },
     {
       "dir": "04_sensor_hub",
       "targets": [
         "rp2040",
-        "stm32g474"
+        "stm32g474",
+        "esp32s3"
       ]
     },
     {
       "dir": "05_serial_gps",
       "targets": [
         "rp2040",
-        "stm32g474"
+        "stm32g474",
+        "esp32s3"
       ],
       "sources": [
         "app.c"
@@ -76,21 +82,24 @@
       "dir": "06_thermocouple",
       "targets": [
         "rp2040",
-        "stm32g474"
+        "stm32g474",
+        "esp32s3"
       ]
     },
     {
       "dir": "07_display_media",
       "targets": [
         "rp2040",
-        "stm32g474"
+        "stm32g474",
+        "esp32s3"
       ]
     },
     {
       "dir": "08_mqtt",
       "targets": [
         "rp2040",
-        "stm32g474"
+        "stm32g474",
+        "esp32s3"
       ],
       "board": "picow",
       "stm32Board": "nucleo-g474re-pim730"
@@ -99,7 +108,8 @@
       "dir": "09_wireguard",
       "targets": [
         "rp2040",
-        "stm32g474"
+        "stm32g474",
+        "esp32s3"
       ],
       "board": "picow",
       "stm32Board": "nucleo-g474re-pim730"
@@ -115,21 +125,24 @@
       "dir": "11_i2c_slave",
       "targets": [
         "rp2040",
-        "stm32g474"
+        "stm32g474",
+        "esp32s3"
       ]
     },
     {
       "dir": "12_i2c_scan",
       "targets": [
         "rp2040",
-        "stm32g474"
+        "stm32g474",
+        "esp32s3"
       ]
     },
     {
       "dir": "13_adc",
       "targets": [
         "rp2040",
-        "stm32g474"
+        "stm32g474",
+        "esp32s3"
       ],
       "variants": [
         {
@@ -140,7 +153,8 @@
           ],
           "targets": [
             "rp2040",
-            "stm32g474"
+            "stm32g474",
+            "esp32s3"
           ],
           "extraDefines": [
             "HAL_ENABLE_ADC_SCAN=1"
@@ -155,14 +169,16 @@
       "dir": "14_can_mcp2515",
       "targets": [
         "rp2040",
-        "stm32g474"
+        "stm32g474",
+        "esp32s3"
       ]
     },
     {
       "dir": "15_display_oled_lcd",
       "targets": [
         "rp2040",
-        "stm32g474"
+        "stm32g474",
+        "esp32s3"
       ]
     },
     {
@@ -196,7 +212,8 @@
       "dir": "17_audio_output",
       "targets": [
         "rp2040",
-        "stm32g474"
+        "stm32g474",
+        "esp32s3"
       ]
     },
     {
@@ -205,7 +222,8 @@
         "rp2040",
         "rp2350-arm",
         "rp2350-riscv",
-        "stm32g474"
+        "stm32g474",
+        "esp32s3"
       ],
       "expandRpTargets": false,
       "board": "picow",
@@ -223,7 +241,8 @@
           "targets": [
             "rp2040",
             "rp2350-arm",
-            "stm32g474"
+            "stm32g474",
+            "esp32s3"
           ],
           "extraDefines": [
             "HAL_ENABLE_BSD_SOCKETS",
@@ -255,14 +274,16 @@
       "dir": "19_touch",
       "targets": [
         "rp2040",
-        "stm32g474"
+        "stm32g474",
+        "esp32s3"
       ]
     },
     {
       "dir": "20_irsmall_decoder",
       "targets": [
         "rp2040",
-        "stm32g474"
+        "stm32g474",
+        "esp32s3"
       ]
     },
     {
@@ -277,27 +298,31 @@
       "dir": "22_rfid_nfc",
       "targets": [
         "rp2040",
-        "stm32g474"
+        "stm32g474",
+        "esp32s3"
       ]
     },
     {
       "dir": "23_io_pmic",
       "targets": [
         "rp2040",
-        "stm32g474"
+        "stm32g474",
+        "esp32s3"
       ]
     },
     {
       "dir": "24_epd_display",
       "targets": [
         "rp2040",
-        "stm32g474"
+        "stm32g474",
+        "esp32s3"
       ]
     },
     {
       "dir": "25_ota",
       "targets": [
-        "rp2040"
+        "rp2040",
+        "esp32s3"
       ],
       "board": "picow",
       "cache": {
@@ -458,7 +483,8 @@
       "dir": "28_serial_commands",
       "targets": [
         "rp2040",
-        "stm32g474"
+        "stm32g474",
+        "esp32s3"
       ]
     },
     {

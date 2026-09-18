@@ -13,7 +13,7 @@
     "cmake.generator": "Ninja",
     "cmake.configureSettings": {
         "JH_TARGET": "stm32g474",
-        "CMAKE_TOOLCHAIN_FILE": "${workspaceFolder}/../../stm32_lib/toolchain_stm32g474.cmake",
+        "CMAKE_TOOLCHAIN_FILE": "${workspaceFolder}/../../link_libraries/stm32_lib/toolchain_stm32g474.cmake",
         "JH_BOARD": "nucleo-g474re",
         "JH_ARTIFACT_DIR": "${workspaceFolder}/../../.build/examples/21_stm32g474_fdcan_native",
         "JH_PROJECT_DIR": "${workspaceFolder}",

@@ -762,10 +762,10 @@ add_test(NAME test_project_feature_defines
         -P ${CMAKE_CURRENT_SOURCE_DIR}/test_project_feature_defines.cmake
 )
 
-add_test(NAME test_rp_native_build_contract
+add_test(NAME test_rp_pico_build_contract
     COMMAND ${CMAKE_COMMAND}
         -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
-        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_rp_native_build_contract.cmake
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_rp_pico_build_contract.cmake
 )
 
 add_test(NAME test_mqtt_dispatch_contract
@@ -891,6 +891,16 @@ add_test(NAME test_vscode_library_workspace
 add_test(NAME test_build_artifact_layout
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_build_artifact_layout.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_link_libraries
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_link_libraries.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_esp32_audio_backend
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_esp32_audio_backend.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
 add_test(NAME test_ci_library_matrix

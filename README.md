@@ -246,7 +246,9 @@ implementation differences, and test coverage, see the
 
 ## Building a static library (.a)
 
-JaszczurHAL can be built as the static library `libJaszczurHAL.a`.
+JaszczurHAL can be built as the static library `libJaszczurHAL.a` for every
+supported platform. The runners live in `link_libraries/`, one per build
+family, and `scripts/build_link_library.sh --target <id>` selects the right one.
 The [library build guide](doc/en/lib_compilation.md) covers this process,
 example application builds, and the separation between library code and
 application startup code.

@@ -1,4 +1,4 @@
-get_filename_component(_jh_repo_root "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
+get_filename_component(_jh_repo_root "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
 set(JH_REPO_ROOT "${_jh_repo_root}" CACHE INTERNAL "JaszczurHAL repository root")
 include("${JH_REPO_ROOT}/cmake/jh_project_features.cmake")
 

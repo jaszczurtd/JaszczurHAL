@@ -7,17 +7,20 @@
             "rp2040",
             "rp2350-arm",
             "rp2350-riscv",
-            "stm32g474"
+            "stm32g474",
+            "esp32s3"
         ],
         "boards": {
             "rp2040": "picow",
             "rp2350-arm": "pico2w",
             "rp2350-riscv": "pico2",
-            "stm32g474": "nucleo-g474re-pim730"
+            "stm32g474": "nucleo-g474re-pim730",
+            "esp32s3": "waveshare-esp32-s3-zero"
         },
         "gateTargets": [
             "rp2040",
-            "stm32g474"
+            "stm32g474",
+            "esp32s3"
         ],
         "variants": [
             {
@@ -29,7 +32,8 @@
                 "targets": [
                     "rp2040",
                     "rp2350-arm",
-                    "stm32g474"
+                    "stm32g474",
+                    "esp32s3"
                 ],
                 "extraDefines": [
                     "HAL_ENABLE_BSD_SOCKETS",
@@ -56,7 +60,8 @@
                 ],
                 "gateTargets": [
                     "rp2040",
-                    "stm32g474"
+                    "stm32g474",
+                    "esp32s3"
                 ]
             }
         ]

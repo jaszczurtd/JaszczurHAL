@@ -150,11 +150,12 @@ Runs the complete quality-gate suite (9 gates, in order):
    scripts
 8. Target builds (STM32G474 plus Pico SDK RP2040/RP2350 ARM/RP2350 RISC-V
    entry/core probes, RP feature profiles, six representative
-   `01_core_runtime`/`18_freertos_suite` ELF/BIN/UF2 builds, and one clean
+   `01_core_runtime`/`18_freertos_suite` ELF/BIN/UF2 builds, one clean
    compile-only `tests/fixtures/esp32s3_phase3` build with the pinned ESP-IDF
-   and validated multi-image manifest)
-9. Examples build (the dispatcher-derived `gateTargets` matrix plus dedicated
-   target/runtime fixtures)
+   and validated multi-image manifest, and the ESP32-S3 all-features
+   `libJaszczurHAL.a` covering the whole target allowlist)
+9. Examples build (the dispatcher-derived `gateTargets` matrix for RP2040,
+   STM32G474 and ESP32-S3 plus dedicated target/runtime fixtures)
 
 Exits non-zero on the first failure; logs capture warnings/errors from both
 standard output and standard error.
@@ -461,7 +462,7 @@ the verifier. Physical RP2040 and RP2350 ARM power-loss runs passed on
 2026-09-02. The extended read-through regression passed on a physical RP2040
 Pico on 2026-09-09.
 
-<a id="rp-native-storage-hardware-probe"></a>
+<a id="rp-pico-storage-hardware-probe"></a>
 
 ### RP native storage hardware test
 

@@ -5,6 +5,7 @@
 #include "hal/analog/hal_adc_scan.h"
 #include "hal/analog/hal_pcnt.h"
 #include "hal/analog/hal_pulse_capture.h"
+#include "hal/audio/hal_dacless.h"
 #include "hal/bluetooth/hal_ble.h"
 #include "hal/gpio/hal_pwm.h"
 #include "hal/gpio/hal_pwm_freq.h"
@@ -434,6 +435,24 @@ void jh_phase3_link_probe(void) {
   hal_ota_boot_info_t boot = {};
   (void)hal_ota_get_boot_info_ex(&boot);
   (void)hal_ota_confirm_boot_ex();
+
+  hal_dacless_t audio = nullptr;
+  hal_dacless_config_t audio_config = hal_dacless_default_config();
+  audio_config.adc_input_count = 1u;
+  audio_config.use_dma = true;
+  if (hal_dacless_create(&audio_config, &audio) == HAL_OK) {
+    hal_dacless_state_t audio_state = {};
+    uint16_t audio_control = 0u;
+    float audio_rate = 0.0f;
+    (void)hal_dacless_begin(audio);
+    (void)hal_dacless_get_adc(audio, 0u, &audio_control);
+    (void)hal_dacless_get_state(audio, &audio_state);
+    (void)hal_dacless_get_sample_rate(audio, &audio_rate);
+    (void)hal_dacless_mute(audio);
+    (void)hal_dacless_unmute(audio);
+    (void)hal_dacless_service(audio);
+    (void)hal_dacless_destroy(audio);
+  }
 
   const uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS] = {10u, 0u, 0u, 2u};
   const uint8_t allowed_ip[HAL_WIREGUARD_IPV4_OCTETS] = {};

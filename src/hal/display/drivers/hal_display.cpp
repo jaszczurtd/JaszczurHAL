@@ -1,5 +1,5 @@
 #include "hal/core/hal_target.h"
-#if HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474
+#if !HAL_TARGET_IS_MOCK
 
 #include "hal/core/hal_config.h"
 #ifdef HAL_ENABLE_DISPLAY
@@ -2483,4 +2483,4 @@ hal_status_t hal_display_get_text_bounds_ex(const char *s, int *w, int *h) {
   return HAL_OK;
 }
 #endif /* HAL_ENABLE_DISPLAY */
-#endif /* HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 */
+#endif /* !HAL_TARGET_IS_MOCK */

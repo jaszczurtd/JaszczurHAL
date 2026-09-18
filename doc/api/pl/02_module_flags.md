@@ -148,7 +148,7 @@ Ochronę stosu włączają dwie niezależne opcje:
 | `HAL_ENABLE_MFRC522` | `hal_mfrc522.h` (C); `hal/nfc/mfrc522/mfrc522.h` (C++) | `hal/nfc/hal_mfrc522.cpp` + `hal/nfc/mfrc522/mfrc522*.cpp` | Uchwyty do instancji transportu i czytnika, typy statusu/UID oraz operacje MFRC522 przez HAL SPI/I2C (propaguje SPI) |
 | `HAL_ENABLE_PN532` | `hal_pn532.h` (C); `hal/nfc/pn532/pn532.h` (C++) | `hal/nfc/hal_pn532.cpp` + `hal/nfc/pn532/pn532*.cpp` | Uchwyty do instancji transportu i czytnika, typ UID oraz operacje PN532 przez HAL SPI/I2C/UART (propaguje SPI) |
 | `HAL_ENABLE_DACLESS` | `hal_dacless.h` (C); `hal/audio/dacless/dacless.h` (C++) | `hal/audio/hal_dacless.cpp` + `hal/audio/dacless/dacless.cpp` | Uchwyt do instancji DACless, funkcje zwrotne C z kontekstem aplikacji, odczyt stanu oraz funkcje tworzenia i zwalniania instancji (propaguje DMA_PWM_AUDIO + PWM_FREQ) |
-| `HAL_ENABLE_DMA_PWM_AUDIO` | `hal_dma_pwm_audio.h` | `hal_dma_pwm_audio.cpp` | Funkcja pomocnicza DMA audio PWM taktowana timerem, wykorzystywana przez DACless |
+| `HAL_ENABLE_DMA_PWM_AUDIO` | `hal_dma_pwm_audio.h` | `hal_dma_pwm_audio.cpp` | Funkcja pomocnicza buforów audio PWM taktowanych timerem, wykorzystywana przez DACless; DMA na RP i STM32G474, przerwanie timera na ESP32 |
 | `HAL_ENABLE_PWM_FREQ` | `hal_pwm_freq.h` | `hal_pwm_freq.cpp` | RP2040 hardware/pwm, STM32G474 TIM PWM lub ESP32-S3 LEDC |
 | `HAL_ENABLE_DAC` | `hal_dac.h` | `hal_dac.cpp` specyficzny dla targetu | Fasada sprzętowego DAC; STM32G474 udostępnia rzeczywiste wyjście, natomiast RP2040 zgłasza brak tej możliwości |
 | `HAL_ENABLE_PCNT` | `hal_pcnt.h` | `hal_pcnt.cpp` specyficzny dla targetu | Fasada licznika impulsów dla targetów RP2040, STM32G474, ESP32-S3 PCNT oraz mock |
@@ -349,7 +349,7 @@ wyłącznie z `hal_project_config.h` albo z `-D` na RP, CMake mimo to
 przygotowuje kernel. Zewnętrzny `JH_FREERTOS_KERNEL_DIR` jest
 weryfikowany i nigdy nie jest zastępowany.
 
-- Natywny RP2040/RP2350: użyj `./scripts/build_rp_native_lib.sh --freertos`
+- Natywny RP2040/RP2350: użyj `./scripts/build_rp_pico_lib.sh --freertos`
   lub wybierz `examples/18_freertos_suite` przez zwykły target VS Code.
   CMake wybiera port SMP w wersji wskazanej przez repozytorium dla RP2040,
   RP2350 ARM_NTZ lub RP2350 RISC-V, linkuje `heap_4`, tworzy `app_task0()`
@@ -432,7 +432,7 @@ Narzędzia projektu automatycznie dodają katalog nagłówków aplikacji. W proj
 ### Alternatywa: definicje `-D` w poleceniu kompilatora
 
 ```bash
-./scripts/build_rp_native_lib.sh \
+./scripts/build_rp_pico_lib.sh \
   --target rp2040 \
   --board picow \
   -D HAL_ENABLE_WIFI \

@@ -177,7 +177,7 @@ require(
 )
 
 stm32_freertos_cmake = (
-    ROOT / "stm32_lib/freertos_stm32g474.cmake"
+    ROOT / "link_libraries/stm32_lib/freertos_stm32g474.cmake"
 ).read_text(encoding="utf-8")
 require(
     '"${Python3_EXECUTABLE}" "${_helper}"' in stm32_freertos_cmake

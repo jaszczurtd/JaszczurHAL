@@ -2,7 +2,7 @@
 
 This document describes the memory layout used by the STM32G474 bare-metal and
 FreeRTOS backends. The authoritative source is
-`stm32_lib/STM32G474RETx_FLASH.ld`.
+`link_libraries/stm32_lib/STM32G474RETx_FLASH.ld`.
 
 ## Device Profile
 
@@ -160,5 +160,5 @@ stack        -> RAM, grows downward from _estack
 
 STM32 LittleFS is opt-in. `HAL_ENABLE_LITTLEFS` compiles the backend, but a
 non-zero `HAL_STM32_FLASH_LITTLEFS_SIZE` is still required for a usable
-filesystem. The examples and `stm32_lib` CMake helpers reserve 64 KB
+filesystem. The examples and `link_libraries/stm32_lib` CMake helpers reserve 64 KB
 automatically when LittleFS is enabled through their define lists.

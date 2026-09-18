@@ -156,12 +156,13 @@ Uruchamia dziewięć etapów kontroli jakości w następującej kolejności:
 8. Kompilacje targetów (STM32G474 oraz testy startu i rdzenia Pico SDK
    RP2040/RP2350 ARM/RP2350 RISC-V, profile funkcjonalne RP, sześć
    reprezentatywnych kompilacji ELF/BIN/UF2 `01_core_runtime`/`18_freertos_suite`
-   oraz jeden czysta kompilacja
+   jedna czysta kompilacja
    `tests/fixtures/esp32s3_phase3` z ESP-IDF w wersji wskazanej przez
    repozytorium i zwalidowanym
-   manifestem zawierającym wiele obrazów)
+   manifestem zawierającym wiele obrazów oraz `libJaszczurHAL.a` ESP32-S3
+   z pełnym zestawem cech, obejmująca całą allowlistę targetu)
 9. Kompilacje przykładów (macierz `gateTargets` wyprowadzona ze wspólnego mechanizmu kompilacji
-   plus dedykowane stanowiska target/runtime)
+   dla RP2040, STM32G474 i ESP32-S3 plus dedykowane stanowiska target/runtime)
 
 Kończy działanie z niezerowym kodem przy pierwszym błędzie; logi rejestrują
 wszelkie ostrzeżenia/błędy zarówno ze standardowego wyjścia, jak i ze

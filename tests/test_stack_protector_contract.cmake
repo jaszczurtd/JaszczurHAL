@@ -5,9 +5,9 @@ endif()
 set(_contract_files
     "config/features/core.json"
     "cmake/jh_stack_protector.cmake"
-    "cmake/jh_rp_native_sdk.cmake"
-    "stm32_lib/CMakeLists.txt"
-    "stm32_lib/jh_stm32g474_firmware.cmake"
+    "cmake/jh_rp_pico_sdk.cmake"
+    "link_libraries/stm32_lib/CMakeLists.txt"
+    "link_libraries/stm32_lib/jh_stm32g474_firmware.cmake"
     "src/hal/system/jh_stack_protector.c"
     "src/hal/system/jh_stack_protector.h")
 
@@ -20,9 +20,9 @@ endforeach()
 
 file(READ "${JH_ROOT}/config/features/core.json" _registry)
 file(READ "${JH_ROOT}/cmake/jh_stack_protector.cmake" _helper)
-file(READ "${JH_ROOT}/cmake/jh_rp_native_sdk.cmake" _rp)
-file(READ "${JH_ROOT}/stm32_lib/CMakeLists.txt" _stm_static)
-file(READ "${JH_ROOT}/stm32_lib/jh_stm32g474_firmware.cmake" _stm_firmware)
+file(READ "${JH_ROOT}/cmake/jh_rp_pico_sdk.cmake" _rp)
+file(READ "${JH_ROOT}/link_libraries/stm32_lib/CMakeLists.txt" _stm_static)
+file(READ "${JH_ROOT}/link_libraries/stm32_lib/jh_stm32g474_firmware.cmake" _stm_firmware)
 file(READ "${JH_ROOT}/src/hal/system/jh_stack_protector.c" _runtime)
 file(READ
     "${JH_ROOT}/src/hal/impl/stm32g474/port/exception_info.c"

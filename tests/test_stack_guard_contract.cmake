@@ -4,7 +4,7 @@ endif()
 
 set(_contract_files
     "config/features/core.json"
-    "cmake/jh_rp_native_sdk.cmake"
+    "cmake/jh_rp_pico_sdk.cmake"
     "src/hal/impl/rp2040/drivers/rp2040/rp2040_fault.cpp"
     "src/hal/impl/rp2040/drivers/rp2040/rp2040_fault_entry.S"
     "src/hal/impl/rp2040/freertos/FreeRTOSConfig.h"
@@ -22,7 +22,7 @@ foreach(_relative IN LISTS _contract_files)
 endforeach()
 
 file(READ "${JH_ROOT}/config/features/core.json" _registry)
-file(READ "${JH_ROOT}/cmake/jh_rp_native_sdk.cmake" _rp_cmake)
+file(READ "${JH_ROOT}/cmake/jh_rp_pico_sdk.cmake" _rp_cmake)
 file(READ
     "${JH_ROOT}/src/hal/impl/rp2040/drivers/rp2040/rp2040_fault.cpp"
     _rp_fault)

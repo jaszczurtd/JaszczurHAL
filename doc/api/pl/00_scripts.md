@@ -23,9 +23,10 @@ Uruchamiaj polecenia z katalogu głównego repozytorium, chyba że instrukcja ws
 | Pełna kontrola jakości repozytorium | `./runalltests.sh` | Czyści katalogi robocze bramki i uruchamia testy, kontrole Clang ASan/UBSan/libFuzzer, Valgrind, analizę statyczną, CPD, kompilacje targetów oraz kompilacje przykładów. |
 | Testy z sanitizerami i fuzzingiem | `scripts/run_sanitizer_fuzz.sh` | Odtwarza konfigurację testów na komputerze z instrumentacją Clang, uruchamia wszystkie testy pod ASan/UBSan i wykonuje krótkie fuzzowanie parserów sieciowych. |
 | Obsługa projektu firmware | `vscode/entry/jh-vscode <action> --project <dir>` w Uniksie lub `vscode/entry/jh-vscode.cmd ...` w Windows | Udostępnia stały interfejs poleceń do kompilacji, wgrywania, monitorowania, wyboru płytki, konfiguracji IntelliSense i czyszczenia używany przez projekty VS Code. |
+| Kompilacja biblioteki linkowalnej dla dowolnego targetu | `scripts/build_link_library.sh --target <id>` | Wybiera runner rodziny z `link_libraries/` na podstawie providera builda targetu i przekazuje pozostałe opcje. |
 | Kompilacja lub wgrywanie projektu ESP-IDF | `python3 scripts/build_esp_idf.py <action> --project <dir>` | Uruchamia akcję `build`, `artifacts` lub `flash`; ustala metadane targetu i płytki ESP, w razie potrzeby przygotowuje SDK w wersji wskazanej przez repozytorium oraz sprawdza przenośny manifest zawierający wiele obrazów. |
 | Kompilacja przykładów z repozytorium | `scripts/examples_dispatcher.py build --target <target>` | Kompiluje manifesty przykładów za pomocą tego samego mechanizmu `jh-vscode` i CMake, którego używają projekty firmware. |
-| Ręczna kompilacja testów działania na RP | `scripts/build_rp_native_parity_fixtures.sh` | Kompiluje testy USB wielordzeniowego i SDLogger dla wszystkich obsługiwanych natywnych kombinacji target/runtime. |
+| Ręczna kompilacja testów działania na RP | `scripts/build_rp_pico_parity_fixtures.sh` | Kompiluje testy USB wielordzeniowego i SDLogger dla wszystkich obsługiwanych natywnych kombinacji target/runtime. |
 
 <a id="polityka-artefaktów"></a>
 
@@ -254,7 +255,22 @@ manifestu, wykrywania źródeł, targetu, płytki, cache i artefaktów opisuje
 
 ## Kompilacja biblioteki i firmware
 
-### `scripts/build_rp_native_lib.sh`
+### `scripts/build_link_library.sh`
+
+Jeden punkt wejścia dla każdej kompilacji biblioteki linkowalnej. `--target <id>`
+wskazuje target z rejestru; skrypt odczytuje jego provider builda przez
+`scripts/board_registry.py target-facts` i uruchamia runner rodziny:
+`pico-sdk` wybiera `build_rp_pico_lib.sh`, `jh-stm32-baremetal` wybiera
+`build_stm32_lib.sh`, a `esp-idf` wybiera `build_esp32_lib.sh`. Pozostałe
+opcje są przekazywane bez zmian. Mock hosta nie ma runnera i jest odrzucany.
+`--help` bez targetu wypisuje runnery i targety.
+
+Każdy runner przyjmuje `--target`, `--board`, `--all-features`,
+`--library-only`, `--freertos`, `--project-config`, powtarzalne `-D`,
+`--output`, `--clean` oraz `--jobs`; domyślny katalog wyjściowy to
+`.build/static/<target>/<board>/`.
+
+### `scripts/build_rp_pico_lib.sh`
 
 Kompiluje JaszczurHAL przy użyciu oficjalnego Pico SDK dla następujących platform:
 
@@ -272,7 +288,7 @@ symbole punktu wejścia rdzenia oraz opcjonalny firmware przykładu.
 archiwum `libJaszczurHAL.a` nadaje się do linkowania. Domyślny katalog wyjściowy to
 `.build/static/<target>/<board>/`.
 
-Ważne opcje to `--target`, `--platform`, `--board`, `--sdk-dir`,
+Ważne opcje to `--target`, `--board`, `--sdk-dir`,
 `--toolchain`, `--picotool-dir`, `--picotool-build-dir`, `--example`,
 `--freertos`, `--library-only`, `--project-config`, powtarzalne `-D`,
 `--output`, `--clean` oraz `--jobs`.
@@ -280,7 +296,7 @@ Oba katalogi wyjścia kompilacji muszą pozostać poniżej `.build/`.
 
 ### `scripts/build_stm32_lib.sh`
 
-Kompiluje bibliotekę statyczną dla STM32G474 przy użyciu narzędzi GNU Arm Embedded. Przyjmuje konfigurację projektu, wielokrotne definicje HAL, niestandardowy plik narzędziowy CMake oraz opcjonalną ścieżkę do FreeRTOS-Kernel.
+Kompiluje bibliotekę statyczną STM32 przy użyciu narzędzi GNU Arm Embedded. `--target` wybiera target STM32 z rejestru (domyślnie `stm32g474`), a `--board` jego profil płytki. Przyjmuje konfigurację projektu, wielokrotne definicje HAL, niestandardowy plik narzędziowy CMake oraz opcjonalną ścieżkę do FreeRTOS-Kernel.
 
 Domyślne wyjście:
 
@@ -290,8 +306,25 @@ Domyślne wyjście:
 
 `--freertos` lub jawna definicja `HAL_ENABLE_FREERTOS` wywołuje
 `ensure_freertos_kernel.sh` przed konfiguracją CMake. Ważne opcje to
-`--project-config`, powtarzalne `-D`, `--freertos`, `--freertos-kernel`,
-`--output`, `--toolchain`, `--clean` oraz `--jobs`.
+`--target`, `--board`, `--all-features`, `--project-config`, powtarzalne `-D`,
+`--freertos`, `--freertos-kernel`, `--output`, `--toolchain`, `--clean` oraz
+`--jobs`. `--library-only` jest przyjmowane dla zgodności; ten runner i tak
+buduje wyłącznie archiwum.
+
+### `scripts/build_esp32_lib.sh`
+
+Kompiluje bibliotekę statyczną ESP-IDF dla targetu z providerem `esp-idf`
+(domyślnie `esp32s3`). Uruchamia `build_esp_idf.py build` na minimalnej
+aplikacji kontrolnej z `link_libraries/esp32_lib/`, a następnie publikuje
+archiwum komponentu JaszczurHAL jako `libJaszczurHAL.a` i kopiuje
+wygenerowane nagłówki płytki do `include/generated/` w tym samym katalogu
+builda. Bez `--project-config` archiwum zawiera sam rdzeń runtime;
+`--all-features` żąda każdej funkcji z `supportedFeatures` targetu, którą
+można wskazać bezpośrednio. `--library-only`, `--freertos` i `--jobs` są
+przyjmowane dla zgodności z pozostałymi runnerami i niczego nie zmieniają:
+ESP-IDF zawsze linkuje aplikację kontrolną, zawsze dostarcza FreeRTOS i sam
+dobiera liczbę zadań. `--idf-dir` wskazuje zewnętrznie zarządzane
+repozytorium.
 
 ### `scripts/build_esp_idf.py`
 
@@ -309,7 +342,12 @@ targetu wybiera `waveshare-esp32-s3-zero`, gdy pominięto `--board`.
 repozytorium. Powtarzalne argumenty `--source` zastępują automatyczne
 wykrywanie; w przeciwnym razie skrypt uwzględnia obsługiwane pliki w
 katalogu głównym projektu i rekurencyjnie pod `src/`. Powtarzalne argumenty
-`--feature` i `--define` rozszerzają konfigurację projektu. `--idf-dir` lub
+`--feature` i `--define` rozszerzają konfigurację projektu, `--all-features`
+żąda każdej funkcji z `supportedFeatures` targetu, którą można wskazać
+bezpośrednio, a `--project-config DIR` czyta `hal_project_config.h` z katalogu
+spoza projektu. Funkcje opakowujące cJSON, LodePNG, TJpgDec lub FatFs
+sprawiają, że skrypt przygotowuje te zarządzane źródła i dodaje ich katalogi
+include do komponentu. `--idf-dir` lub
 `JH_ESP_IDF_DIR` wybiera dokładny, zgodny zewnętrzny checkout.
 
 Skrypt odczytuje bezpośrednio `boards/` i rejestr modułów. Moduły wymagane
@@ -332,7 +370,7 @@ skrót pliku `tools.json` właściwy dla wybranej wersji.
 `scripts/build_esp_idf_phase0.py` jest adapterem zgodności, który przekazuje
 głównemu skryptowi starsze argumenty projektów testowych.
 
-### `scripts/build_rp_native_parity_fixtures.sh`
+### `scripts/build_rp_pico_parity_fixtures.sh`
 
 Kompiluje `tests/hardware/rp_usb_multicore` oraz `tests/hardware/rp_sdlogger`
 przez standardowy proces `jh-vscode` dla:
@@ -801,9 +839,10 @@ przez git. `build`, `refresh-intellisense`, `install`, `clean` oraz
 `config-dump` używają następnie tych samych ścieżek kompilacji i instalacji z
 tego profilu.
 
-Kompilacje RP wywołują `build_rp_native_lib.sh --library-only`,
-kompilacje STM32G474 - `build_stm32_lib.sh`, a kompilacje mock
-wybierają główny target CMake `hal_mock`. Każda kompilacja eksportuje
+Profile sprzętowe wywołują `build_link_library.sh --library-only`, który
+wybiera runner rodziny z rejestru, a kompilacje mock wybierają główny target
+CMake `hal_mock`. Profil ESP-IDF buduje i odświeża IntelliSense, ale nie ma
+akcji instalacji. Każda kompilacja eksportuje
 `compile_commands.json`; akcje IntelliSense zapisują lokalny
 `.vscode/c_cpp_properties.json` bez zmiany wersjonowanych ustawień. Clean usuwa
 wyłącznie zarządzane drzewa kompilacji/instalacji aktywnego profilu.
@@ -971,7 +1010,7 @@ Użycie JPEG jest udokumentowane w
 - [Środowisko wykonawcze Windows](../../../vscode/windows/runtime/README.pl.md)
   opisuje obecny zakres natywnego runtime Windows oraz
   pozostałą pracę nad adapterem urządzenia.
-- [Natywny neutralny firmware RP](../../../vscode/neutral_fw/rp_native/README.pl.md)
+- [Natywny neutralny firmware RP](../../../vscode/neutral_fw/rp_pico/README.pl.md)
   wyjaśnia obraz domyślnej tożsamości używany przez
   `jh-vscode clear-identity`.
 - [Przykłady JaszczurHAL](../../../examples/README.pl.md) dokumentują rejestr

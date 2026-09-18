@@ -19,7 +19,7 @@
     "backendName": "stm32g474/bare-metal"
   },
   "hal": { "targetSelector": "HAL_TARGET_STM32G474" },
-  "build": { "provider": "jh-stm32-baremetal", "recipe": "stm32g474-native" },
+  "build": { "provider": "jh-stm32-baremetal", "recipe": "stm32g474" },
   "gpio": {
     "pinIdFormat": "stm32-port-pin",
     "validPins": {
@@ -37,5 +37,5 @@
   },
   "defaultBoard": "nucleo-g474re",
   "sourceFallbackBoard": "nucleo-g474re",
-  "components": { "stm32g474-native": { "mode": "required" } }
+  "components": { "stm32g474": { "mode": "required" } }
 }

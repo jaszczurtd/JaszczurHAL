@@ -4,6 +4,11 @@
   "domain": "connectivity",
   "symbols": {
     "HAL_ENABLE_A7670": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/modem/hal_simcom_a76xx.cpp"
+        ]
+      },
       "implies": ["HAL_ENABLE_CELLULAR_MODEM", "HAL_ENABLE_UART"]
     },
     "HAL_ENABLE_BLE": {
@@ -18,6 +23,12 @@
       "implies": ["HAL_ENABLE_BLE_STREAM", "HAL_ENABLE_COMMAND_ROUTER"]
     },
     "HAL_ENABLE_BLE_STREAM": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/bluetooth/hal_ble_stream.cpp",
+          "src/hal/bluetooth/jh_ble_stream_session.c"
+        ]
+      },
       "implies": ["HAL_ENABLE_BLE", "HAL_ENABLE_CRYPTO"]
     },
     "HAL_ENABLE_BLUETOOTH_CLASSIC": {
@@ -73,7 +84,13 @@
         "HAL_ENABLE_UDP"
       ]
     },
-    "HAL_ENABLE_CELLULAR_MODEM": {},
+    "HAL_ENABLE_CELLULAR_MODEM": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/modem/hal_modem_at.cpp"
+        ]
+      }
+    },
     "HAL_ENABLE_HTTP_CLIENT": {
       "buildEffects": {
         "portableSources": ["src/hal/network/http/hal_http_client.cpp"]
@@ -135,6 +152,11 @@
       "note": "Shared network core selected by public connectivity features."
     },
     "HAL_ENABLE_NET_COMMANDS": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/network/net_commands/hal_net_commands.cpp"
+        ]
+      },
       "implies": [
         "HAL_ENABLE_CJSON",
         "HAL_ENABLE_COMMAND_ROUTER",
@@ -146,10 +168,26 @@
       ]
     },
     "HAL_ENABLE_NET_CONSOLE": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/network/net_console/hal_net_console.cpp"
+        ]
+      },
       "implies": ["HAL_ENABLE_NETWORK_CORE", "HAL_ENABLE_TCP"]
     },
-    "HAL_ENABLE_NOTIFY": {},
+    "HAL_ENABLE_NOTIFY": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/network/notify/hal_notify.cpp"
+        ]
+      }
+    },
     "HAL_ENABLE_NOTIFY_TELEGRAM": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/network/notify/hal_notify_telegram.cpp"
+        ]
+      },
       "implies": [
         "HAL_ENABLE_CJSON",
         "HAL_ENABLE_HTTP_CLIENT",

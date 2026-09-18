@@ -40,7 +40,6 @@
  */
 
 #include "hal/core/hal_target.h"
-#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK)
 
 #include "hal/core/hal_config.h"
 #ifdef HAL_ENABLE_ONEWIRE
@@ -334,4 +333,3 @@ bool JHOneWire::search(uint8_t *new_addr, bool search_mode) {
 /* CRC-8/CRC-16 moved to hal_crc.cpp (hal_crc8_maxim / hal_crc16_maxim). */
 
 #endif /* HAL_ENABLE_ONEWIRE */
-#endif /* supported target */

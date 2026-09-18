@@ -3,10 +3,15 @@
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
-from typing import Any
+import sys
+from typing import Any, Sequence
 
 from generate_board_config import load_registry
+
+
+LINK_LIBRARY_PROVIDERS = frozenset({"pico-sdk", "jh-stm32-baremetal", "esp-idf"})
 
 
 def _registry_targets(
@@ -38,7 +43,7 @@ def library_target_registry(jh_root: Path) -> dict[str, dict[str, Any]]:
 
     for target_id, target, boards in _registry_targets(jh_root):
         provider = target["build"]["provider"]
-        if provider not in {"host", "pico-sdk", "jh-stm32-baremetal"}:
+        if provider != "host" and provider not in LINK_LIBRARY_PROVIDERS:
             continue
 
         target_boards = []
@@ -107,7 +112,7 @@ def tooling_target_registry(jh_root: Path) -> dict[str, dict[str, Any]]:
         elif provider == "jh-stm32-baremetal":
             toolchain = "cmake"
             cache["CMAKE_TOOLCHAIN_FILE"] = (
-                "${jhRoot}/stm32_lib/toolchain_stm32g474.cmake"
+                "${jhRoot}/link_libraries/stm32_lib/toolchain_stm32g474.cmake"
             )
             upload = {
                 "strategy": "openocd",
@@ -147,3 +152,63 @@ def tooling_target_registry(jh_root: Path) -> dict[str, dict[str, Any]]:
         }
 
     return registry
+
+
+def target_facts(jh_root: Path, target_id: str) -> dict[str, Any]:
+    """Return the build facts a library runner needs for one target."""
+    targets, _, _ = load_registry(jh_root / "boards")
+    if target_id not in targets:
+        known = ", ".join(sorted(targets))
+        raise KeyError(f"unknown target {target_id!r}; known targets: {known}")
+    target = targets[target_id]
+    return {
+        "provider": target["build"]["provider"],
+        "defaultBoard": target["defaultBoard"],
+        "isa": target["architecture"]["isa"],
+        "status": target["status"],
+        "supportedFeatures": [
+            str(item).removesuffix("=1")
+            for item in target.get("supportedFeatures", [])
+        ],
+    }
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Query the target and board descriptor registry."
+    )
+    parser.add_argument(
+        "--repo-root",
+        type=Path,
+        default=Path(__file__).resolve().parents[1],
+    )
+    subparsers = parser.add_subparsers(dest="action", required=True)
+    facts = subparsers.add_parser(
+        "target-facts", help="Print KEY=VALUE build facts for one target"
+    )
+    facts.add_argument("target")
+    subparsers.add_parser(
+        "list-targets", help="Print every target that has a library runner"
+    )
+    args = parser.parse_args(argv)
+    jh_root = args.repo_root.resolve()
+    if args.action == "target-facts":
+        try:
+            result = target_facts(jh_root, args.target)
+        except KeyError as error:
+            print(f"error: {error.args[0]}", file=sys.stderr)
+            return 2
+        for key, value in result.items():
+            if isinstance(value, list):
+                value = " ".join(value)
+            print(f"{key}={value}")
+        return 0
+    for target_id, target in sorted(library_target_registry(jh_root).items()):
+        if target["provider"] == "host":
+            continue
+        print(f"{target_id} {target['provider']} {target['status']}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

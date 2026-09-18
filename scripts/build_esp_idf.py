@@ -55,6 +55,7 @@ PARTITION_PROFILE_SYMBOLS = (
 ESP_IDF_BASE_SOURCES = (
     "src/hal/analog/hal_adc_utils.cpp",
     "src/hal/codecs/hal_image.cpp",
+    "src/hal/control/hal_pid_controller.cpp",
     "src/hal/core/hal_assert.cpp",
     "src/hal/core/hal_config.cpp",
     "src/hal/core/hal_math.cpp",
@@ -64,16 +65,22 @@ ESP_IDF_BASE_SOURCES = (
     "src/hal/debug/hal_debug_format.cpp",
     "src/hal/display/hal_pixel.cpp",
     "src/hal/network/hal_network_utils.cpp",
+    "src/hal/security/jh_secure_random.cpp",
     "src/hal/serial/hal_serial.cpp",
+    "src/hal/serial/hal_serial_session.cpp",
     "src/hal/system/hal_board.cpp",
     "src/hal/system/hal_periodic_random.cpp",
     "src/hal/temperature/hal_ntc.cpp",
     "src/hal/time/hal_time.cpp",
+    "src/hal/timers/hal_soft_timer.cpp",
     "src/hal/timers/hal_timer.cpp",
     "src/hal/timers/hal_timer_ext.cpp",
+    "src/hal/timers/smart_timers/SmartTimers.cpp",
     "src/hal_app_entry.cpp",
+    "src/utils/pidController.cpp",
     "src/hal/impl/esp32/hal_adc.cpp",
     "src/hal/impl/esp32/hal_adc_scan.cpp",
+    "src/hal/impl/esp32/esp32_secure_random.cpp",
     "src/hal/impl/esp32/hal_esp32_build_config.cpp",
     "src/hal/impl/esp32/hal_gpio.cpp",
     "src/hal/impl/esp32/hal_pwm.cpp",
@@ -94,6 +101,9 @@ ESP_IDF_TARGET_SOURCES = {
         "src/hal/impl/esp32/jh_bluetooth_classic_bluedroid_backend.c",
     ),
     "HAL_ENABLE_BLUETOOTH_HID_HOST": (),
+    "HAL_ENABLE_DMA_PWM_AUDIO": (
+        "src/hal/impl/esp32/hal_dma_pwm_audio.cpp",
+    ),
     "HAL_ENABLE_I2C": (
         "src/hal/impl/esp32/hal_i2c.cpp",
     ),
@@ -176,6 +186,14 @@ ESP_IDF_FEATURE_COMPONENT_DEPENDENCIES = {
 }
 ESP_IDF_MANAGED_DEPENDENCIES = {
     "bearssl": ("jh_bearssl",),
+}
+# Managed source frameworks wrapped by src/hal/codecs and src/hal/storage:
+# feature -> (component_manager id, include directories below the repo root).
+ESP_IDF_MANAGED_FRAMEWORKS = {
+    "HAL_ENABLE_CJSON": ("cjson", ("third_party/cJSON",)),
+    "HAL_ENABLE_FAT": ("fatfs", ("third_party/FatFs/source",)),
+    "HAL_ENABLE_JPEG": ("jpeg", ("third_party/TJpg_Decoder/src",)),
+    "HAL_ENABLE_PNG": ("lodepng", ("third_party/lodepng",)),
 }
 GENERATED_BOARD_CONTRACT_INPUTS = (
     "jh_board_resolved.json",
@@ -885,6 +903,13 @@ def _relative_to_project(path: Path, project_dir: Path) -> str:
         raise EspIdfError(f"Project input escapes {project_dir}: {path}") from error
 
 
+def _display_path(path: Path, project_dir: Path) -> str:
+    """Return a project-relative path, or an absolute one for external inputs."""
+    if _inside(path, project_dir):
+        return _relative_path(path, project_dir)
+    return _canonical_path(path).as_posix()
+
+
 def resolve_project_sources(
     project_dir: Path, requested_sources: Sequence[str]
 ) -> list[Path]:
@@ -957,7 +982,7 @@ def _normalize_definition(value: str) -> str:
 
 def collect_project_features(
     repo_root: Path,
-    project_dir: Path,
+    config_dir: Path,
     features: Sequence[str],
     definitions: Sequence[str],
 ) -> tuple[list[str], set[str], list[str], set[str]]:
@@ -969,7 +994,7 @@ def collect_project_features(
         raise EspIdfError(str(error)) from error
 
     requests = generate_hal_features.collect_header_requests(
-        project_dir / "hal_project_config.h", "hal_project_config.h"
+        config_dir / "hal_project_config.h", "hal_project_config.h"
     )
     header_symbols = {request.symbol for request in requests}
     command_line_symbols: set[str] = set()
@@ -1083,8 +1108,8 @@ def resolve_component_build_inputs(
     )
 
 
-def _header_defines(project_dir: Path, name: str) -> bool:
-    path = project_dir / "hal_project_config.h"
+def _header_defines(config_dir: Path, name: str) -> bool:
+    path = config_dir / "hal_project_config.h"
     if not path.is_file():
         return False
     try:
@@ -1098,6 +1123,27 @@ def _header_defines(project_dir: Path, name: str) -> bool:
     )
 
 
+def all_features_for_target(
+    target: Mapping[str, Any],
+    feature_model: generate_hal_features.FeatureModel,
+) -> list[str]:
+    """Return every directly requestable feature the target supports."""
+    supported = target.get("supportedFeatures")
+    if not supported:
+        raise EspIdfError(
+            f"Target {target['id']!r} declares no supportedFeatures for --all-features"
+        )
+    requestable: list[str] = []
+    for item in generate_board_config.normalize_features(list(supported)):
+        symbol = item.removesuffix("=1")
+        feature = feature_model.features.get(symbol)
+        if feature is None:
+            raise EspIdfError(f"Unknown supported feature: {symbol}")
+        if feature.kind != "derived":
+            requestable.append(symbol)
+    return requestable
+
+
 def resolve_build_model(
     repo_root: Path,
     project_dir: Path,
@@ -1108,9 +1154,16 @@ def resolve_build_model(
     requested_sources: Sequence[str],
     features: Sequence[str],
     definitions: Sequence[str],
+    project_config_dir: Path | None = None,
+    all_features: bool = False,
 ) -> dict[str, Any]:
     repo_root = _canonical_path(repo_root)
     project_dir = _canonical_path(project_dir)
+    config_dir = (
+        _canonical_path(project_config_dir) if project_config_dir else project_dir
+    )
+    if not config_dir.is_dir():
+        raise EspIdfError(f"Project config directory does not exist: {config_dir}")
     try:
         targets, boards, capabilities = generate_board_config.load_registry(
             repo_root / "boards"
@@ -1139,12 +1192,25 @@ def resolve_build_model(
         raise EspIdfError(f"Target {target!r} has no ESP-IDF target mapping")
 
     sources = resolve_project_sources(project_dir, requested_sources)
+    feature_model = generate_hal_features.load_registry(repo_root / "config")
+    if all_features:
+        features = [
+            *features,
+            *all_features_for_target(target_descriptor, feature_model),
+        ]
+        if "HAL_ENABLE_TFT" in features and not any(
+            _normalize_definition(item).startswith("HAL_DISPLAY_")
+            for item in definitions
+        ):
+            # HAL_ENABLE_TFT needs one concrete facade selection even though
+            # every TFT driver is enabled; mirror jh_all_features_for_target.
+            definitions = [*definitions, "HAL_DISPLAY_ILI9341"]
     (
         requested_features,
         header_symbols,
         non_feature_definitions,
         command_line_features,
-    ) = collect_project_features(repo_root, project_dir, features, definitions)
+    ) = collect_project_features(repo_root, config_dir, features, definitions)
     try:
         _, resolved_features, _ = generate_board_config.resolve_features(
             requested_features, target_descriptor
@@ -1158,10 +1224,7 @@ def resolve_build_model(
         integration_sources,
         component_dependencies,
         private_component_dependencies,
-    ) = resolve_component_build_inputs(
-        resolved_features,
-        generate_hal_features.load_registry(repo_root / "config"),
-    )
+    ) = resolve_component_build_inputs(resolved_features, feature_model)
     compile_features = set(command_line_features)
     for required in target_descriptor.get("requiredFeatures", []):
         symbol = required.removesuffix("=1")
@@ -1176,14 +1239,25 @@ def resolve_build_model(
         ),
         *non_feature_definitions,
     }
-    if not _header_defines(project_dir, "HAL_PROVIDE_APP_ENTRY"):
+    if not _header_defines(config_dir, "HAL_PROVIDE_APP_ENTRY"):
         compile_definitions.add("HAL_PROVIDE_APP_ENTRY")
     include_dirs = sorted(
-        {project_dir.resolve(), *(source.parent for source in sources)},
+        {project_dir, config_dir, *(source.parent for source in sources)},
         key=lambda path: path.as_posix(),
     )
+    managed_frameworks: list[str] = []
+    component_include_dirs: list[str] = []
+    for feature in sorted(ESP_IDF_MANAGED_FRAMEWORKS):
+        if feature not in resolved_features:
+            continue
+        component, directories = ESP_IDF_MANAGED_FRAMEWORKS[feature]
+        managed_frameworks.append(component)
+        component_include_dirs.extend(directories)
     return {
         "repoRoot": repo_root,
+        "projectConfigDir": config_dir,
+        "managedFrameworks": list(dict.fromkeys(managed_frameworks)),
+        "componentIncludeDirs": list(dict.fromkeys(component_include_dirs)),
         "target": target,
         "board": selected_board,
         "idfTarget": idf_target,
@@ -1246,6 +1320,16 @@ def _render_sdkconfig_defaults(model: Mapping[str, Any]) -> str:
         )
     if "HAL_ENABLE_PULSE_CAPTURE" in model["resolvedFeatures"]:
         lines.append("CONFIG_MCPWM_ISR_CACHE_SAFE=y")
+    if "HAL_ENABLE_DMA_PWM_AUDIO" in model["resolvedFeatures"]:
+        # The sample clock runs from a GPTimer alarm that writes the LEDC duty
+        # directly, so both the alarm handler and the LEDC control functions
+        # must stay reachable while the flash cache is disabled.
+        lines.extend(
+            (
+                "CONFIG_GPTIMER_ISR_HANDLER_IN_IRAM=y",
+                "CONFIG_LEDC_CTRL_FUNC_IN_IRAM=y",
+            )
+        )
     if "HAL_ENABLE_BLE" in model["resolvedFeatures"]:
         lines.extend(
             (
@@ -1366,6 +1450,15 @@ def _render_project_cmake(
     )
     lines.extend(
         _render_cmake_list(
+            "JH_ESP_IDF_COMPONENT_INCLUDE_DIRS",
+            [
+                _canonical_path(model["repoRoot"] / path).as_posix()
+                for path in model["componentIncludeDirs"]
+            ],
+        )
+    )
+    lines.extend(
+        _render_cmake_list(
             "JH_ESP_IDF_COMPONENT_REQUIRES",
             model["componentDependencies"],
         )
@@ -1416,10 +1509,11 @@ def _project_config_contract(
         ): _project_input_digest(path, "sdkconfig defaults")
         for path in sdkconfig_defaults
     }
-    config_header_path = project_dir / "hal_project_config.h"
+    config_dir = _canonical_path(model.get("projectConfigDir") or project_dir)
+    config_header_path = config_dir / "hal_project_config.h"
     config_header = (
         {
-            "path": "hal_project_config.h",
+            "path": _display_path(config_header_path, project_dir),
             "sha256": _project_input_digest(
                 config_header_path, "configuration header"
             ),
@@ -1436,7 +1530,7 @@ def _project_config_contract(
         "projectSources": list(source_paths),
         "projectSourceSha256": source_paths,
         "projectIncludeDirs": [
-            _relative_to_project(path, project_dir)
+            _display_path(path, project_dir)
             for path in model["projectIncludeDirs"]
         ],
         "projectConfigHeader": config_header,
@@ -2145,9 +2239,12 @@ def prepare_feature_dependencies(
     repo_root: Path, model: Mapping[str, Any], *, verify_only: bool
 ) -> None:
     """Synchronize only third-party sources selected by the feature graph."""
+    components = list(model["managedFrameworks"])
     if "HAL_ENABLE_TLS" in model["resolvedFeatures"]:
+        components.append("bearssl")
+    for component in components:
         component_manager.ensure_git_component(
-            "bearssl", repo_root, verify_only=verify_only
+            component, repo_root, verify_only=verify_only
         )
 
 
@@ -2168,6 +2265,17 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--define", action="append", default=[])
     parser.add_argument("--port", default="")
     parser.add_argument("--clean", action="store_true")
+    parser.add_argument(
+        "--all-features",
+        action="store_true",
+        help="Request every directly requestable feature the target supports",
+    )
+    parser.add_argument(
+        "--project-config",
+        type=Path,
+        default=None,
+        help="Directory holding hal_project_config.h (default: the project)",
+    )
     return parser
 
 
@@ -2190,6 +2298,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             requested_sources=arguments.source,
             features=arguments.feature,
             definitions=arguments.define,
+            project_config_dir=(
+                arguments.project_config.expanduser()
+                if arguments.project_config
+                else None
+            ),
+            all_features=arguments.all_features,
         )
         stage = "resolve-build-directory"
         build_dir = resolve_build_dir(

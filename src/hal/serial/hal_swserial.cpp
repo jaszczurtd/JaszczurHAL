@@ -1,5 +1,4 @@
 #include "hal/core/hal_target.h"
-#if HAL_TARGET_IS_MOCK || HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474
 
 #include "hal/core/hal_config.h"
 #ifdef HAL_ENABLE_SWSERIAL
@@ -39,5 +38,4 @@ size_t hal_swserial_println(hal_swserial_t handle, const char *text) {
   return written;
 }
 
-#endif
 #endif

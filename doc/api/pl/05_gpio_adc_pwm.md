@@ -340,6 +340,9 @@ zapewnia dokładne 100% wypełnienia przez stan `idle-high` i ponownie uruchamia
 LEDC po zapisie wartości częściowej. Jeśli ESP-IDF odrzuci usunięcie kanału,
 uchwyt logiczny i kanał LEDC pozostają zarezerwowane do ponowienia próby. W konfiguracjach z
 włączonym sprawdzaniem nieudane `hal_pwm_freq_destroy()` wyzwala `HAL_ASSERT`.
+Alokator udostępnia też bezpieczną w przerwaniu aktualizację wypełnienia, która
+nie bierze blokady i nie rekonfiguruje kanału; korzysta z niej backend audio
+odmierzający próbki.
 
 **impl/.mock:** przechowuje ostatnio zapisaną wartość, którą można odczytać
 funkcjami pomocniczymi mock.
@@ -446,8 +449,18 @@ przełączają bufory. Próbkowanie wejść ADC zajmuje kolejne dwa kanały DMA.
 STM32G474 transfery DMA są wyzwalane zdarzeniami aktualizacji timera TIM, a
 callbacki są wywoływane po ukończeniu połowy i całości transferu. ADC1 działa
 wtedy w trybie skanowania cyklicznego. Domyślne piny ADC to GPIO 26..29 na
-platformach RP i w backendzie testowym (mock) oraz PA0..PA3 na STM32G474
-(`port * 16 + pin`).
+platformach RP i w backendzie testowym (mock), PA0..PA3 na STM32G474
+(`port * 16 + pin`) oraz GPIO 1..4 na ESP32.
+
+ESP32 nie ma DMA prowadzącego do rejestru porównania PWM, więc jego backend
+odmierza próbki w przerwaniu timera ogólnego przeznaczenia, które wpisuje
+wypełnienie LEDC bezpośrednio. Build wybiera opcje ESP-IDF utrzymujące procedurę
+alarmu i funkcje sterujące LEDC w IRAM. Jeden okres PWM niesie jedną próbkę,
+więc timer LEDC pracuje z częstotliwością próbkowania i obniża rozdzielczość
+wypełnienia, gdy ta częstotliwość zostawia mniej bitów niż żądany zakres
+porównania. Ukończony bufor trafia do zadania obsługi, które uruchamia funkcję
+zwrotną aplikacji i odświeża wejścia ADC raz na blok, a nie co próbkę jak
+backendy z DMA.
 
 Funkcja tworząca odrzuca piny PWM i używane piny ADC, których wybrana platforma
 nie obsługuje. Jeden pin nie może jednocześnie służyć jako wyjście PWM i wejście
@@ -465,7 +478,9 @@ samego bloku zwraca `HAL_EBUSY`.
 utworzenie i zwolnienie instancji odpowiada jeden właściciel. Na platformach RP
 konfiguruj, uruchamiaj, steruj i zwalniaj wszystkie instancje DACless z DMA na
 jednym rdzeniu; na tym rdzeniu instalowane jest przerwanie DMA. Funkcja zwrotna
-DMA działa w kontekście przerwania i nie może blokować. Może wywołać
+DMA działa w kontekście przerwania na RP i STM32G474, a na ESP32 w zadaniu
+obsługi backendu; na każdej platformie musi wrócić zanim skończy się
+odtwarzanie drugiego bufora i nie może blokować. Może wywołać
 `hal_dacless_get_adc()` dla własnego uchwytu, ale żadnej innej funkcji DACless.
 Nie zwalniaj uchwytu równolegle z funkcją zwrotną. W trybie bez DMA funkcja
 zwrotna działa synchronicznie wewnątrz `hal_dacless_service()`. W obu trybach

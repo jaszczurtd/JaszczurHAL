@@ -7,7 +7,6 @@
  */
 
 #include "hal/core/hal_target.h"
-#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK)
 
 #include "hal/core/hal_config.h"
 #if defined(HAL_ENABLE_ADP5360) && defined(HAL_ENABLE_I2C)
@@ -1420,4 +1419,3 @@ hal_status_t hal_adp5360_regulator_get_active_discharge(
 }
 
 #endif /* HAL_ENABLE_ADP5360 && HAL_ENABLE_I2C */
-#endif /* supported target */

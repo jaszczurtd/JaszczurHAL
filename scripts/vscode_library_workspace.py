@@ -240,25 +240,18 @@ def build_commands(
                 "--parallel",
             ],
         ]
-    if profile.provider == "pico-sdk":
+    add_scripts_to_path(repo_root)
+    from board_registry import LINK_LIBRARY_PROVIDERS
+
+    if profile.provider in LINK_LIBRARY_PROVIDERS:
         return [
             [
-                str(repo_root / "scripts/build_rp_native_lib.sh"),
+                str(repo_root / "scripts/build_link_library.sh"),
                 "--target",
                 profile.target,
                 "--board",
                 profile.board,
                 "--library-only",
-                "--output",
-                str(paths.build_dir),
-            ]
-        ]
-    if profile.provider == "jh-stm32-baremetal":
-        return [
-            [
-                str(repo_root / "scripts/build_stm32_lib.sh"),
-                "--board",
-                profile.board,
                 "--output",
                 str(paths.build_dir),
             ]
@@ -306,7 +299,9 @@ def cpp_properties_document(
                     repo_root,
                     paths.compile_commands,
                 ),
-                "cStandard": "c17" if profile.provider == "pico-sdk" else "c11",
+                "cStandard": (
+                    "c17" if profile.provider in {"pico-sdk", "esp-idf"} else "c11"
+                ),
                 "cppStandard": "gnu++17",
             }
         ],
@@ -387,6 +382,12 @@ def install_profile(repo_root: Path, profile: LibraryProfile) -> ProfilePaths:
     if profile.provider == "host":
         raise WorkspaceError(
             "the mock profile produces libhal_mock.a but has no install contract",
+            4,
+        )
+    if profile.provider == "esp-idf":
+        raise WorkspaceError(
+            "the ESP-IDF profile publishes libJaszczurHAL.a and include/generated "
+            "in its build directory but has no install contract",
             4,
         )
     paths = build_profile(repo_root, profile)

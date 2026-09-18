@@ -3,42 +3,114 @@
   "schemaVersion": 1,
   "domain": "displays",
   "symbols": {
-    "HAL_ENABLE_DISPLAY": {},
+    "HAL_ENABLE_DISPLAY": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/display/drivers/hal_display.cpp",
+          "src/hal/display/drivers/jh_gfx.cpp",
+          "src/hal/display/hal_display.cpp"
+        ]
+      }
+    },
     "HAL_ENABLE_GC9A01": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/display/drivers/st77xx_driver.cpp"
+        ]
+      },
       "implies": ["HAL_ENABLE_TFT"]
     },
-    "HAL_ENABLE_HD44780": {},
+    "HAL_ENABLE_HD44780": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/display/hal_hd44780.cpp",
+          "src/hal/display/hd44780/hd44780.cpp"
+        ]
+      }
+    },
     "HAL_ENABLE_ILI9341": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/display/drivers/ili9341_driver.cpp"
+        ]
+      },
       "implies": ["HAL_ENABLE_TFT"]
     },
     "HAL_ENABLE_SSD1306": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/display/drivers/ssd1306_driver.cpp"
+        ]
+      },
       "implies": ["HAL_ENABLE_DISPLAY", "HAL_ENABLE_I2C"]
     },
     "HAL_ENABLE_SSD1331": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/display/drivers/rgb_oled_driver.cpp"
+        ]
+      },
       "implies": ["HAL_ENABLE_DISPLAY", "HAL_ENABLE_SPI"]
     },
     "HAL_ENABLE_SSD135X": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/display/drivers/rgb_oled_driver.cpp"
+        ]
+      },
       "implies": ["HAL_ENABLE_DISPLAY", "HAL_ENABLE_SPI"]
     },
     "HAL_ENABLE_SSD16XX": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/display/drivers/epd_spi_transport.cpp",
+          "src/hal/display/drivers/ssd16xx_driver.cpp"
+        ]
+      },
       "implies": ["HAL_ENABLE_DISPLAY", "HAL_ENABLE_SPI"]
     },
     "HAL_ENABLE_ST7567": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/display/drivers/st7567_driver.cpp"
+        ]
+      },
       "implies": ["HAL_ENABLE_DISPLAY", "HAL_ENABLE_I2C"]
     },
     "HAL_ENABLE_ST7735": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/display/drivers/st77xx_driver.cpp"
+        ]
+      },
       "implies": ["HAL_ENABLE_TFT"]
     },
     "HAL_ENABLE_ST7789": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/display/drivers/st77xx_driver.cpp"
+        ]
+      },
       "implies": ["HAL_ENABLE_TFT"]
     },
     "HAL_ENABLE_ST7796S": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/display/drivers/st77xx_driver.cpp"
+        ]
+      },
       "implies": ["HAL_ENABLE_TFT"]
     },
     "HAL_ENABLE_TFT": {
       "implies": ["HAL_ENABLE_DISPLAY", "HAL_ENABLE_SPI"]
     },
     "HAL_ENABLE_UC81XX": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/display/drivers/epd_spi_transport.cpp",
+          "src/hal/display/drivers/uc81xx_driver.cpp"
+        ]
+      },
       "implies": ["HAL_ENABLE_DISPLAY", "HAL_ENABLE_SPI"]
     }
   }

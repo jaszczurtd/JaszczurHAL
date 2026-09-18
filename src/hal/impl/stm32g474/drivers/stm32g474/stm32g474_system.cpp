@@ -293,8 +293,8 @@ bool stm32g474_system_in_isr(void) {
   __asm__ __volatile__("MRS %0, ipsr" : "=r"(ipsr));
   return (ipsr & 0x1FFu) != 0u;
 #else
-  /* Host/sanity builds of stm32_lib use a desktop compiler and cannot
-   * execute Cortex-M specific instructions. */
+  /* Host/sanity builds of link_libraries/stm32_lib use a desktop compiler and
+   * cannot execute Cortex-M specific instructions. */
   return false;
 #endif
 }

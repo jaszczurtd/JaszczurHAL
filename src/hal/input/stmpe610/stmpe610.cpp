@@ -1,7 +1,5 @@
 #include "hal/core/hal_target.h"
 
-#if HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK
-
 #include "hal/core/hal_config.h"
 
 #if defined(HAL_ENABLE_STMPE610)
@@ -671,7 +669,5 @@ hal_stmpe610_point_t hal_stmpe610_get_point(hal_stmpe610_t *dev) {
 
   return point;
 }
-
-#endif
 
 #endif

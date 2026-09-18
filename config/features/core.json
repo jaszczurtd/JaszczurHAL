@@ -5,7 +5,14 @@
   "symbols": {
     "HAL_DISABLE_ASSERTS": {},
     "HAL_ENABLE_APP_TASK1": {},
-    "HAL_ENABLE_CJSON": {},
+    "HAL_ENABLE_CJSON": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/codecs/cjson/cJSON.c",
+          "src/hal/codecs/cjson/cJSON_Utils.c"
+        ]
+      }
+    },
     "HAL_ENABLE_COMMAND_ROUTER": {
       "buildEffects": {
         "portableSources": [
@@ -29,7 +36,8 @@
           "src/hal/network/wireguard/core/crypto/chacha20poly1305.c",
           "src/hal/network/wireguard/core/crypto/crypto.c",
           "src/hal/network/wireguard/core/crypto/poly1305-donna.c",
-          "src/hal/security/hal_crypto.cpp"
+          "src/hal/security/hal_crypto.cpp",
+          "src/hal/security/hal_sc_auth.cpp"
         ]
       }
     },
@@ -42,14 +50,32 @@
     },
     "HAL_ENABLE_DAC": {},
     "HAL_ENABLE_DACLESS": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/audio/dacless/dacless.cpp",
+          "src/hal/audio/hal_dacless.cpp"
+        ]
+      },
       "implies": [
         "HAL_ENABLE_DMA_PWM_AUDIO",
         "HAL_ENABLE_PWM_FREQ"
       ]
     },
-    "HAL_ENABLE_DMA_PWM_AUDIO": {},
+    "HAL_ENABLE_DMA_PWM_AUDIO": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/audio/hal_dma_pwm_audio.cpp"
+        ]
+      }
+    },
     "HAL_ENABLE_FREERTOS": {},
-    "HAL_ENABLE_JPEG": {},
+    "HAL_ENABLE_JPEG": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/codecs/jpeg/tjpgd.c"
+        ]
+      }
+    },
     "HAL_ENABLE_JPEG_AS_BASE64": {
       "implies": [
         "HAL_ENABLE_CRYPTO",
@@ -69,7 +95,13 @@
         "HAL_ENABLE_INTERNAL_RTC"
       ]
     },
-    "HAL_ENABLE_PNG": {},
+    "HAL_ENABLE_PNG": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/codecs/lodepng/lodepng.cpp"
+        ]
+      }
+    },
     "HAL_ENABLE_PNG_AS_BASE64": {
       "implies": [
         "HAL_ENABLE_CRYPTO",

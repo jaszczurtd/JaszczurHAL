@@ -53,8 +53,9 @@ for target in ("rp2040", "rp2350-arm", "rp2350-riscv"):
     )
 
 for script in (
-    "build_rp_native_lib.sh",
+    "build_rp_pico_lib.sh",
     "build_stm32_lib.sh",
+    "build_esp32_lib.sh",
 ):
     text = (ROOT / "scripts" / script).read_text(encoding="utf-8")
     require(
@@ -218,7 +219,7 @@ for probe in (
     )
 
 target_artifacts = {
-    "cmake/targets/rp-native.cmake": ("firmware.elf", "firmware.bin", "firmware.uf2", "firmware.hex", "firmware.map"),
+    "cmake/targets/rp-pico.cmake": ("firmware.elf", "firmware.bin", "firmware.uf2", "firmware.hex", "firmware.map"),
     "cmake/targets/stm32g474.cmake": ("firmware.elf", "firmware.bin", "firmware.hex", "firmware.map"),
 }
 for recipe, artifacts in target_artifacts.items():
@@ -229,7 +230,7 @@ for recipe, artifacts in target_artifacts.items():
             f"{recipe}: managed artifact layout omits {artifact}",
         )
 
-stm32_linker_script = (ROOT / "stm32_lib" / "STM32G474RETx_FLASH.ld").read_text(
+stm32_linker_script = (ROOT / "link_libraries/stm32_lib" / "STM32G474RETx_FLASH.ld").read_text(
     encoding="utf-8"
 )
 for section in (".preinit_array", ".init_array"):
@@ -237,7 +238,7 @@ for section in (".preinit_array", ".init_array"):
         f"{section} (READONLY)" in stm32_linker_script,
         f"STM32 linker script leaves {section} writable in the executable segment",
     )
-stm32_recipe = (ROOT / "stm32_lib" / "jh_stm32g474_firmware.cmake").read_text(
+stm32_recipe = (ROOT / "link_libraries/stm32_lib" / "jh_stm32g474_firmware.cmake").read_text(
     encoding="utf-8"
 )
 require(
@@ -248,7 +249,7 @@ require(
     "-Wl,-u,_printf_float" in stm32_recipe,
     "STM32 firmware does not enable newlib-nano floating-point formatting",
 )
-stm32_library = (ROOT / "stm32_lib" / "CMakeLists.txt").read_text(encoding="utf-8")
+stm32_library = (ROOT / "link_libraries/stm32_lib" / "CMakeLists.txt").read_text(encoding="utf-8")
 require(
     'OUTPUT_ROOT "${CMAKE_BINARY_DIR}"' in stm32_library,
     "STM32 static-library generator is not scoped to its CMake build tree",

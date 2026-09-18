@@ -31,12 +31,20 @@ foreach(_required_file
         message(FATAL_ERROR "Required ESP-IDF input is missing: ${_required_file}")
     endif()
 endforeach()
+foreach(_framework_dir ${JH_ESP_IDF_COMPONENT_INCLUDE_DIRS})
+    if(NOT IS_DIRECTORY "${_framework_dir}")
+        message(FATAL_ERROR
+            "Managed framework include directory is missing: ${_framework_dir}. "
+            "Run third_party/update_components.sh")
+    endif()
+endforeach()
 
 idf_component_register(
     SRCS ${_jh_sources}
     INCLUDE_DIRS
         "${JH_ROOT}/src"
         "${_jh_generated_dir}"
+        ${JH_ESP_IDF_COMPONENT_INCLUDE_DIRS}
         ${JH_ESP_IDF_PROJECT_INCLUDE_DIRS}
     REQUIRES ${JH_ESP_IDF_COMPONENT_REQUIRES}
     PRIV_REQUIRES ${JH_ESP_IDF_COMPONENT_PRIV_REQUIRES})

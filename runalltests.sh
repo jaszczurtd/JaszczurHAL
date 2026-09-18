@@ -285,7 +285,7 @@ header "Gate 6/9: Static analysis - clang-tidy"
 BUILD_STM32="${GATE_BUILD_ROOT}/stm32-host"
 rm -rf "${BUILD_STM32}"
 info "Generating host-compiler STM32 sanity build..."
-cmake -S stm32_lib -B "${BUILD_STM32}" \
+cmake -S link_libraries/stm32_lib -B "${BUILD_STM32}" \
     -DJH_STM32_HOST_SANITY=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 info "Building host-compiler STM32 sanity library..."
 cmake --build "${BUILD_STM32}" --parallel "${JOBS}"
@@ -294,8 +294,8 @@ pass "Host-compiler STM32 sanity library ready."
 BUILD_STM32_TARGET="${GATE_BUILD_ROOT}/stm32-target"
 rm -rf "${BUILD_STM32_TARGET}"
 info "Generating real ARM STM32 compile database..."
-cmake -S stm32_lib -B "${BUILD_STM32_TARGET}" \
-    -DCMAKE_TOOLCHAIN_FILE="${SCRIPT_DIR}/stm32_lib/toolchain_stm32g474.cmake" \
+cmake -S link_libraries/stm32_lib -B "${BUILD_STM32_TARGET}" \
+    -DCMAKE_TOOLCHAIN_FILE="${SCRIPT_DIR}/link_libraries/stm32_lib/toolchain_stm32g474.cmake" \
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 info "Building real ARM STM32 static library..."
 cmake --build "${BUILD_STM32_TARGET}" --parallel "${JOBS}"
@@ -304,8 +304,8 @@ pass "ARM STM32 compile database ready."
 BUILD_STM32_SX127X="${GATE_BUILD_ROOT}/stm32-target-sx127x"
 rm -rf "${BUILD_STM32_SX127X}"
 info "Building real ARM STM32 SX1276/SX1278 static library..."
-cmake -S stm32_lib -B "${BUILD_STM32_SX127X}" \
-    -DCMAKE_TOOLCHAIN_FILE="${SCRIPT_DIR}/stm32_lib/toolchain_stm32g474.cmake" \
+cmake -S link_libraries/stm32_lib -B "${BUILD_STM32_SX127X}" \
+    -DCMAKE_TOOLCHAIN_FILE="${SCRIPT_DIR}/link_libraries/stm32_lib/toolchain_stm32g474.cmake" \
     -DEXTRA_HAL_DEFINES=HAL_ENABLE_SX127X
 cmake --build "${BUILD_STM32_SX127X}" --parallel "${JOBS}"
 pass "ARM STM32 SX1276/SX1278 static library ready."
@@ -375,33 +375,33 @@ else
     exit 1
 fi
 
-info "Building native Pico SDK artifact matrix..."
-NATIVE_RP_PLATFORMS=(
+info "Building Pico SDK artifact matrix..."
+RP_PICO_TARGETS=(
     rp2040
-    rp2350-arm-s
+    rp2350-arm
     rp2350-riscv
 )
-for platform in "${NATIVE_RP_PLATFORMS[@]}"; do
-    info "Building native Pico SDK platform: ${platform}"
-    run_logged "${LOG_ROOT}/jh_rp_native_${platform}.log" \
-        "${SCRIPT_DIR}/scripts/build_rp_native_lib.sh" \
-            --platform "${platform}" --example 01_core_runtime \
+for target in "${RP_PICO_TARGETS[@]}"; do
+    info "Building Pico SDK target: ${target}"
+    run_logged "${LOG_ROOT}/jh_rp_pico_${target}.log" \
+        "${SCRIPT_DIR}/scripts/build_rp_pico_lib.sh" \
+            --target "${target}" --example 01_core_runtime \
             --clean --jobs "${JOBS}" \
-            --output "${GATE_BUILD_ROOT}/rp-native/${platform}/bare"
+            --output "${GATE_BUILD_ROOT}/rp-pico/${target}/bare"
 done
-pass "Native Pico SDK matrix built HAL entry/core probes and core-runtime artifacts successfully."
+pass "Pico SDK matrix built HAL entry/core probes and core-runtime artifacts successfully."
 
-info "Building native FreeRTOS SMP artifact matrix..."
-for platform in "${NATIVE_RP_PLATFORMS[@]}"; do
-    info "Building native FreeRTOS SMP platform: ${platform}"
-    run_logged "${LOG_ROOT}/jh_rp_native_freertos_${platform}.log" \
-        "${SCRIPT_DIR}/scripts/build_rp_native_lib.sh" \
-            --platform "${platform}" --example 18_freertos_suite \
+info "Building Pico SDK FreeRTOS SMP artifact matrix..."
+for target in "${RP_PICO_TARGETS[@]}"; do
+    info "Building Pico SDK FreeRTOS SMP target: ${target}"
+    run_logged "${LOG_ROOT}/jh_rp_pico_freertos_${target}.log" \
+        "${SCRIPT_DIR}/scripts/build_rp_pico_lib.sh" \
+            --target "${target}" --example 18_freertos_suite \
             --example-source app.c \
             --freertos --clean --jobs "${JOBS}" \
-            --output "${GATE_BUILD_ROOT}/rp-native/${platform}/freertos"
+            --output "${GATE_BUILD_ROOT}/rp-pico/${target}/freertos"
 done
-pass "Native FreeRTOS SMP matrix built for RP2040 and both RP2350 ISAs."
+pass "Pico SDK FreeRTOS SMP matrix built for RP2040 and both RP2350 ISAs."
 
 info "Building RP2040 flag matrix..."
 RP_FLAG_PROFILES=(
@@ -531,11 +531,11 @@ for profile in "${RP_FLAG_PROFILES[@]}"; do
             ;;
     esac
 
-    matrix_build_dir="${GATE_BUILD_ROOT}/rp-native-flags/${profile}"
+    matrix_build_dir="${GATE_BUILD_ROOT}/rp-pico-flags/${profile}"
     info "Building RP2040 flag profile: ${profile}"
-    run_logged "${LOG_ROOT}/jh_rp_native_${profile}.log" \
-        "${SCRIPT_DIR}/scripts/build_rp_native_lib.sh" \
-            --platform rp2040 --board "${board}" --clean --jobs "${JOBS}" \
+    run_logged "${LOG_ROOT}/jh_rp_pico_${profile}.log" \
+        "${SCRIPT_DIR}/scripts/build_rp_pico_lib.sh" \
+            --target rp2040 --board "${board}" --clean --jobs "${JOBS}" \
             --output "${matrix_build_dir}" "${flags[@]}"
 
     if [[ ! -f "${matrix_build_dir}/libJaszczurHAL.a" ]]; then
@@ -546,13 +546,13 @@ done
 pass "RP2040 flag matrix built successfully."
 
 info "Verifying native RP link inputs..."
-if find "${GATE_BUILD_ROOT}/rp-native" "${GATE_BUILD_ROOT}/rp-native-flags" \
+if find "${GATE_BUILD_ROOT}/rp-pico" "${GATE_BUILD_ROOT}/rp-pico-flags" \
         -type f -name core.a -print -quit | grep -q .; then
     fail "Native RP build produced an unexpected core.a"
     exit 1
 fi
 if grep -R -E '(^|[ /])core\.a([[:space:]]|$)|arduino-pico|Arduino\.h' \
-        "${GATE_BUILD_ROOT}/rp-native" "${GATE_BUILD_ROOT}/rp-native-flags" \
+        "${GATE_BUILD_ROOT}/rp-pico" "${GATE_BUILD_ROOT}/rp-pico-flags" \
         --include='link.txt' --include='*.map' --include='compile_commands.json' \
         --include='CMakeCache.txt'; then
     fail "Native RP build metadata references the removed carrier"
@@ -582,10 +582,24 @@ run_logged "${LOG_ROOT}/jh_esp32_gamepad.log" \
         --clean
 pass "ESP32 Classic gamepad fixture produced a validated ESP-IDF build."
 
+info "Building the ESP32-S3 all-features linkable library with pinned ESP-IDF..."
+ESP32_LIBRARY_BUILD_DIR="${GATE_BUILD_ROOT}/link-libraries/esp32s3"
+run_logged "${LOG_ROOT}/jh_esp32s3_link_library.log" \
+    "${SCRIPT_DIR}/scripts/build_esp32_lib.sh" \
+        --target esp32s3 \
+        --all-features \
+        --clean \
+        --output "${ESP32_LIBRARY_BUILD_DIR}"
+if [[ ! -f "${ESP32_LIBRARY_BUILD_DIR}/libJaszczurHAL.a" ]]; then
+    fail "ESP32-S3 library runner did not publish libJaszczurHAL.a"
+    exit 1
+fi
+pass "ESP32-S3 linkable library published libJaszczurHAL.a with its generated headers."
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 9: Examples build
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 9/9: Consolidated examples (representative RP + STM32G474)"
+header "Gate 9/9: Consolidated examples (representative RP + STM32G474 + ESP32-S3)"
 
 info "Building the RP2040 example gate set..."
 run_logged "${LOG_ROOT}/jh_examples_rp2040_native_build.log" \
@@ -598,6 +612,12 @@ run_logged "${LOG_ROOT}/jh_examples_stm32g474_build.log" \
     "${SCRIPT_DIR}/scripts/examples_dispatcher.py" build \
         --target stm32g474 --gate --jobs "${JOBS}"
 pass "STM32G474 examples built successfully."
+
+info "Building ESP32-S3 examples through dispatcher-backed VS Code manifests..."
+run_logged "${LOG_ROOT}/jh_examples_esp32s3_build.log" \
+    "${SCRIPT_DIR}/scripts/examples_dispatcher.py" build \
+        --target esp32s3 --gate --jobs "${JOBS}"
+pass "ESP32-S3 examples built successfully."
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Summary

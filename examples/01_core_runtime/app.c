@@ -28,9 +28,13 @@ static bool s_pid_stable = false;
 static bool s_pid_oscillating = false;
 static uint32_t s_last_report_ms = 0u;
 
+/* Boards without a plain GPIO status LED (for example an addressable WS2812
+ * only) do not define HAL_LED_BUILTIN; the blink then only toggles state. */
 static void blink_tick(void) {
   s_led_on = !s_led_on;
+#if defined(HAL_LED_BUILTIN)
   hal_gpio_write(HAL_LED_BUILTIN, s_led_on);
+#endif
 }
 
 static void pid_tick(void) {
@@ -121,8 +125,10 @@ static void report_runtime(void) {
 void app_start(void) {
   hal_debug_init_default();
   hal_deb_set_prefix("CORE");
+#if defined(HAL_LED_BUILTIN)
   hal_gpio_set_mode(HAL_LED_BUILTIN, HAL_GPIO_OUTPUT);
   hal_gpio_write(HAL_LED_BUILTIN, false);
+#endif
 
   s_pid = hal_pid_controller_create_with_gains(1.2f, 0.03f, 0.08f, 100.0f);
   if (s_pid == NULL) {

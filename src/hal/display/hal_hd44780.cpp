@@ -1,7 +1,5 @@
 #include "hal/core/hal_target.h"
 
-#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK)
-
 #include "hal/core/hal_config.h"
 
 #ifdef HAL_ENABLE_HD44780
@@ -444,4 +442,3 @@ hal_status_t hal_hd44780_print(hal_hd44780_t lcd, const char *text,
 }
 
 #endif /* HAL_ENABLE_HD44780 */
-#endif /* supported target */

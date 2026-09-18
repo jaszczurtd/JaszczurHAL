@@ -26,98 +26,98 @@ include("${JH_ROOT}/cmake/jh_bearssl.cmake")
 include("${JH_ROOT}/cmake/jh_feature_build_effects.cmake")
 include("${JH_ROOT}/cmake/jh_managed_frameworks.cmake")
 include("${JH_ROOT}/cmake/jh_stack_protector.cmake")
-jh_managed_framework_include_dirs(_jh_native_framework_include_dirs)
+jh_managed_framework_include_dirs(_jh_rp_framework_include_dirs)
 jh_managed_framework_configure_sources()
 
-jh_hal_define_enabled(_jh_native_eeprom HAL_ENABLE_EEPROM)
-jh_hal_define_enabled(_jh_native_kv HAL_ENABLE_KV)
-jh_hal_define_enabled(_jh_native_internal_rtc HAL_ENABLE_INTERNAL_RTC)
-jh_feature_build_dependency_enabled(_jh_native_littlefs littlefs
+jh_hal_define_enabled(_jh_rp_eeprom HAL_ENABLE_EEPROM)
+jh_hal_define_enabled(_jh_rp_kv HAL_ENABLE_KV)
+jh_hal_define_enabled(_jh_rp_internal_rtc HAL_ENABLE_INTERNAL_RTC)
+jh_feature_build_dependency_enabled(_jh_rp_littlefs littlefs
     FEATURES ${JH_RESOLVED_FEATURES})
-jh_hal_define_enabled(_jh_native_ota HAL_ENABLE_OTA)
-jh_hal_define_enabled(_jh_native_stack_guard HAL_ENABLE_STACK_GUARD)
-jh_hal_define_enabled(_jh_native_stack_protector HAL_ENABLE_STACK_PROTECTOR)
-if(_jh_native_ota AND JH_RP_TARGET_NAME STREQUAL "rp2350-riscv")
+jh_hal_define_enabled(_jh_rp_ota HAL_ENABLE_OTA)
+jh_hal_define_enabled(_jh_rp_stack_guard HAL_ENABLE_STACK_GUARD)
+jh_hal_define_enabled(_jh_rp_stack_protector HAL_ENABLE_STACK_PROTECTOR)
+if(_jh_rp_ota AND JH_RP_TARGET_NAME STREQUAL "rp2350-riscv")
     message(FATAL_ERROR
         "HAL_ENABLE_OTA is not supported for rp2350-riscv; "
         "use rp2040 or rp2350-arm")
 endif()
-jh_hal_define_value(_jh_native_eeprom_size HAL_RP_FLASH_EEPROM_SIZE)
-jh_hal_define_value(_jh_native_littlefs_size HAL_RP_FLASH_LITTLEFS_SIZE)
+jh_hal_define_value(_jh_rp_eeprom_size HAL_RP_FLASH_EEPROM_SIZE)
+jh_hal_define_value(_jh_rp_littlefs_size HAL_RP_FLASH_LITTLEFS_SIZE)
 
-if(NOT _jh_native_eeprom_size)
-    if(_jh_native_kv)
-        set(_jh_native_eeprom_size 8192)
+if(NOT _jh_rp_eeprom_size)
+    if(_jh_rp_kv)
+        set(_jh_rp_eeprom_size 8192)
     else()
-        set(_jh_native_eeprom_size 4096)
+        set(_jh_rp_eeprom_size 4096)
     endif()
 endif()
-if(_jh_native_littlefs AND NOT _jh_native_littlefs_size)
-    set(_jh_native_littlefs_size 65536)
-elseif(NOT _jh_native_littlefs_size)
-    set(_jh_native_littlefs_size 0)
+if(_jh_rp_littlefs AND NOT _jh_rp_littlefs_size)
+    set(_jh_rp_littlefs_size 65536)
+elseif(NOT _jh_rp_littlefs_size)
+    set(_jh_rp_littlefs_size 0)
 endif()
 
-if(_jh_native_eeprom OR _jh_native_littlefs)
-    set(_jh_native_eeprom_reservation "${_jh_native_eeprom_size}")
+if(_jh_rp_eeprom OR _jh_rp_littlefs)
+    set(_jh_rp_eeprom_reservation "${_jh_rp_eeprom_size}")
 else()
-    set(_jh_native_eeprom_reservation 0)
+    set(_jh_rp_eeprom_reservation 0)
 endif()
-math(EXPR _jh_native_storage_reservation
-    "${_jh_native_eeprom_reservation} + ${_jh_native_littlefs_size}")
-math(EXPR _jh_native_physical_flash_size "${PICO_FLASH_SIZE_BYTES}")
-set(_jh_native_ota_boot_size 0)
-set(_jh_native_ota_control_size 0)
-set(_jh_native_ota_slot_size 0)
-set(_jh_native_program_offset 0)
-set(_jh_native_staging_offset 0)
-set(_jh_native_ota_phase_offset 0)
-set(_jh_native_ota_scratch_offset 0)
-set(_jh_native_ota_state_a_offset 0)
-set(_jh_native_ota_state_b_offset 0)
-if(_jh_native_ota)
-    set(_jh_native_ota_boot_size 16384)
-    set(_jh_native_ota_control_size 16384)
-    math(EXPR _jh_native_ota_slots_available
-        "${_jh_native_physical_flash_size} - ${_jh_native_storage_reservation} - ${_jh_native_ota_boot_size} - ${_jh_native_ota_control_size}")
-    if(_jh_native_ota_slots_available LESS 8192)
+math(EXPR _jh_rp_storage_reservation
+    "${_jh_rp_eeprom_reservation} + ${_jh_rp_littlefs_size}")
+math(EXPR _jh_rp_physical_flash_size "${PICO_FLASH_SIZE_BYTES}")
+set(_jh_rp_ota_boot_size 0)
+set(_jh_rp_ota_control_size 0)
+set(_jh_rp_ota_slot_size 0)
+set(_jh_rp_program_offset 0)
+set(_jh_rp_staging_offset 0)
+set(_jh_rp_ota_phase_offset 0)
+set(_jh_rp_ota_scratch_offset 0)
+set(_jh_rp_ota_state_a_offset 0)
+set(_jh_rp_ota_state_b_offset 0)
+if(_jh_rp_ota)
+    set(_jh_rp_ota_boot_size 16384)
+    set(_jh_rp_ota_control_size 16384)
+    math(EXPR _jh_rp_ota_slots_available
+        "${_jh_rp_physical_flash_size} - ${_jh_rp_storage_reservation} - ${_jh_rp_ota_boot_size} - ${_jh_rp_ota_control_size}")
+    if(_jh_rp_ota_slots_available LESS 8192)
         message(FATAL_ERROR
             "RP flash is too small for OTA boot/control regions and two "
             "sector-aligned firmware slots")
     endif()
-    math(EXPR _jh_native_firmware_flash_size
-        "(${_jh_native_ota_slots_available} / 8192) * 4096")
-    set(_jh_native_ota_slot_size "${_jh_native_firmware_flash_size}")
-    set(_jh_native_program_offset "${_jh_native_ota_boot_size}")
-    math(EXPR _jh_native_staging_offset
-        "${_jh_native_program_offset} + ${_jh_native_firmware_flash_size}")
-    math(EXPR _jh_native_ota_phase_offset
-        "${_jh_native_staging_offset} + ${_jh_native_firmware_flash_size}")
-    math(EXPR _jh_native_ota_scratch_offset
-        "${_jh_native_ota_phase_offset} + 4096")
-    math(EXPR _jh_native_ota_state_a_offset
-        "${_jh_native_ota_scratch_offset} + 4096")
-    math(EXPR _jh_native_ota_state_b_offset
-        "${_jh_native_ota_state_a_offset} + 4096")
-    math(EXPR _jh_native_ota_control_end
-        "${_jh_native_ota_state_b_offset} + 4096")
-    math(EXPR _jh_native_storage_begin
-        "${_jh_native_physical_flash_size} - ${_jh_native_storage_reservation}")
-    if(_jh_native_ota_control_end GREATER _jh_native_storage_begin)
+    math(EXPR _jh_rp_firmware_flash_size
+        "(${_jh_rp_ota_slots_available} / 8192) * 4096")
+    set(_jh_rp_ota_slot_size "${_jh_rp_firmware_flash_size}")
+    set(_jh_rp_program_offset "${_jh_rp_ota_boot_size}")
+    math(EXPR _jh_rp_staging_offset
+        "${_jh_rp_program_offset} + ${_jh_rp_firmware_flash_size}")
+    math(EXPR _jh_rp_ota_phase_offset
+        "${_jh_rp_staging_offset} + ${_jh_rp_firmware_flash_size}")
+    math(EXPR _jh_rp_ota_scratch_offset
+        "${_jh_rp_ota_phase_offset} + 4096")
+    math(EXPR _jh_rp_ota_state_a_offset
+        "${_jh_rp_ota_scratch_offset} + 4096")
+    math(EXPR _jh_rp_ota_state_b_offset
+        "${_jh_rp_ota_state_a_offset} + 4096")
+    math(EXPR _jh_rp_ota_control_end
+        "${_jh_rp_ota_state_b_offset} + 4096")
+    math(EXPR _jh_rp_storage_begin
+        "${_jh_rp_physical_flash_size} - ${_jh_rp_storage_reservation}")
+    if(_jh_rp_ota_control_end GREATER _jh_rp_storage_begin)
         message(FATAL_ERROR
             "RP OTA program/staging/control layout overlaps EEPROM/LittleFS")
     endif()
 else()
-    math(EXPR _jh_native_firmware_flash_size
-        "${_jh_native_physical_flash_size} - ${_jh_native_storage_reservation}")
+    math(EXPR _jh_rp_firmware_flash_size
+        "${_jh_rp_physical_flash_size} - ${_jh_rp_storage_reservation}")
 endif()
-if(_jh_native_firmware_flash_size LESS_EQUAL 0)
+if(_jh_rp_firmware_flash_size LESS_EQUAL 0)
     message(FATAL_ERROR
         "RP EEPROM/LittleFS reservations exceed physical flash")
 endif()
 foreach(_storage_size IN ITEMS
-        _jh_native_eeprom_reservation
-        _jh_native_littlefs_size)
+        _jh_rp_eeprom_reservation
+        _jh_rp_littlefs_size)
     math(EXPR _storage_remainder "${${_storage_size}} % 4096")
     if(NOT _storage_remainder EQUAL 0)
         message(FATAL_ERROR
@@ -125,32 +125,32 @@ foreach(_storage_size IN ITEMS
             "(4096 bytes)")
     endif()
 endforeach()
-if(_jh_native_kv)
-    if(_jh_native_eeprom_reservation LESS 8192)
+if(_jh_rp_kv)
+    if(_jh_rp_eeprom_reservation LESS 8192)
         message(FATAL_ERROR
             "HAL_ENABLE_KV requires at least two RP flash sectors "
             "(HAL_RP_FLASH_EEPROM_SIZE >= 8192)")
     endif()
-    math(EXPR _jh_native_kv_bank_size
-        "${_jh_native_eeprom_reservation} / 2")
-    math(EXPR _jh_native_kv_bank_remainder
-        "${_jh_native_kv_bank_size} % 4096")
-    if(NOT _jh_native_kv_bank_remainder EQUAL 0)
+    math(EXPR _jh_rp_kv_bank_size
+        "${_jh_rp_eeprom_reservation} / 2")
+    math(EXPR _jh_rp_kv_bank_remainder
+        "${_jh_rp_kv_bank_size} % 4096")
+    if(NOT _jh_rp_kv_bank_remainder EQUAL 0)
         message(FATAL_ERROR
             "Each KV bank must contain complete RP flash sectors; "
             "HAL_RP_FLASH_EEPROM_SIZE / 2 must be a multiple of 4096")
     endif()
 endif()
-if(_jh_native_ota)
+if(_jh_rp_ota)
     foreach(_ota_value IN ITEMS
-            _jh_native_ota_boot_size
-            _jh_native_program_offset
-            _jh_native_firmware_flash_size
-            _jh_native_staging_offset
-            _jh_native_ota_phase_offset
-            _jh_native_ota_scratch_offset
-            _jh_native_ota_state_a_offset
-            _jh_native_ota_state_b_offset)
+            _jh_rp_ota_boot_size
+            _jh_rp_program_offset
+            _jh_rp_firmware_flash_size
+            _jh_rp_staging_offset
+            _jh_rp_ota_phase_offset
+            _jh_rp_ota_scratch_offset
+            _jh_rp_ota_state_a_offset
+            _jh_rp_ota_state_b_offset)
         math(EXPR _ota_remainder "${${_ota_value}} % 4096")
         if(NOT _ota_remainder EQUAL 0)
             message(FATAL_ERROR
@@ -160,46 +160,46 @@ if(_jh_native_ota)
     endforeach()
 endif()
 
-jh_collect_feature_build_effects(_jh_native_build_effects
+jh_collect_feature_build_effects(_jh_rp_build_effects
     ROOT "${JH_ROOT}"
     FEATURES ${JH_RESOLVED_FEATURES})
 jh_collect_rp_hal_sources(JH_RP_HAL_SOURCES "${SRC}" EXCLUDE_APP_ENTRY)
 list(APPEND JH_RP_HAL_SOURCES
-    ${_jh_native_build_effects_FEATURE_SOURCES}
-    ${_jh_native_build_effects_PORTABLE_SOURCES}
-    ${_jh_native_build_effects_DEPENDENCY_SOURCES})
+    ${_jh_rp_build_effects_FEATURE_SOURCES}
+    ${_jh_rp_build_effects_PORTABLE_SOURCES}
+    ${_jh_rp_build_effects_DEPENDENCY_SOURCES})
 list(REMOVE_DUPLICATES JH_RP_HAL_SOURCES)
 add_library(JaszczurHAL STATIC ${JH_RP_HAL_SOURCES})
-if(_jh_native_build_effects_SX126X_SOURCES)
-    set_source_files_properties(${_jh_native_build_effects_SX126X_SOURCES}
+if(_jh_rp_build_effects_SX126X_SOURCES)
+    set_source_files_properties(${_jh_rp_build_effects_SX126X_SOURCES}
         PROPERTIES COMPILE_OPTIONS "-w")
 endif()
-if(_jh_native_build_effects_LITTLEFS_SOURCES)
-    set_source_files_properties(${_jh_native_build_effects_LITTLEFS_SOURCES}
+if(_jh_rp_build_effects_LITTLEFS_SOURCES)
+    set_source_files_properties(${_jh_rp_build_effects_LITTLEFS_SOURCES}
         PROPERTIES COMPILE_DEFINITIONS LFS_NO_ASSERT)
 endif()
 
 target_include_directories(JaszczurHAL PUBLIC
     "${SRC}"
     "${SRC}/hal/impl/rp2040/drivers/usb"
-    ${_jh_native_build_effects_INCLUDE_DIRS}
-    ${_jh_native_framework_include_dirs})
+    ${_jh_rp_build_effects_INCLUDE_DIRS}
+    ${_jh_rp_framework_include_dirs})
 if(DEFINED HAL_PROJECT_CONFIG_DIR)
     target_include_directories(JaszczurHAL PUBLIC ${HAL_PROJECT_CONFIG_DIR})
 endif()
 
 target_compile_definitions(JaszczurHAL PUBLIC
     ${JH_RP_TARGET_DEFINE}=1
-    HAL_RP_FLASH_EEPROM_SIZE=${_jh_native_eeprom_reservation}u
-    HAL_RP_FLASH_LITTLEFS_SIZE=${_jh_native_littlefs_size}u
-    HAL_RP_OTA_BOOT_SIZE=${_jh_native_ota_boot_size}u
-    HAL_RP_OTA_PROGRAM_OFFSET=${_jh_native_program_offset}u
-    HAL_RP_OTA_SLOT_SIZE=${_jh_native_ota_slot_size}u
-    HAL_RP_OTA_STAGING_OFFSET=${_jh_native_staging_offset}u
-    HAL_RP_OTA_PHASE_OFFSET=${_jh_native_ota_phase_offset}u
-    HAL_RP_OTA_SCRATCH_OFFSET=${_jh_native_ota_scratch_offset}u
-    HAL_RP_OTA_STATE_A_OFFSET=${_jh_native_ota_state_a_offset}u
-    HAL_RP_OTA_STATE_B_OFFSET=${_jh_native_ota_state_b_offset}u
+    HAL_RP_FLASH_EEPROM_SIZE=${_jh_rp_eeprom_reservation}u
+    HAL_RP_FLASH_LITTLEFS_SIZE=${_jh_rp_littlefs_size}u
+    HAL_RP_OTA_BOOT_SIZE=${_jh_rp_ota_boot_size}u
+    HAL_RP_OTA_PROGRAM_OFFSET=${_jh_rp_program_offset}u
+    HAL_RP_OTA_SLOT_SIZE=${_jh_rp_ota_slot_size}u
+    HAL_RP_OTA_STAGING_OFFSET=${_jh_rp_staging_offset}u
+    HAL_RP_OTA_PHASE_OFFSET=${_jh_rp_ota_phase_offset}u
+    HAL_RP_OTA_SCRATCH_OFFSET=${_jh_rp_ota_scratch_offset}u
+    HAL_RP_OTA_STATE_A_OFFSET=${_jh_rp_ota_state_a_offset}u
+    HAL_RP_OTA_STATE_B_OFFSET=${_jh_rp_ota_state_b_offset}u
     PICO_FLASH_ASSERT_ON_UNSAFE=0
     ${JH_RP_BOARD_DEFINES}
 )
@@ -214,7 +214,7 @@ endif()
 if(DEFINED EXTRA_HAL_DEFINES)
     target_compile_definitions(JaszczurHAL PUBLIC ${EXTRA_HAL_DEFINES})
 endif()
-if(_jh_native_stack_guard)
+if(_jh_rp_stack_guard)
     target_compile_definitions(JaszczurHAL PUBLIC PICO_USE_STACK_GUARDS=1)
 endif()
 jh_hal_define_value(_jh_core0_stack_size HAL_RP_CORE0_STACK_SIZE)
@@ -238,7 +238,7 @@ target_compile_options(JaszczurHAL PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
 )
 
-if(_jh_native_stack_protector)
+if(_jh_rp_stack_protector)
     # PUBLIC is intentional: the firmware/app target linking JaszczurHAL must
     # receive the same compiler instrumentation as the HAL archive.
     jh_target_enable_stack_protector(JaszczurHAL PUBLIC)
@@ -270,37 +270,37 @@ target_link_libraries(JaszczurHAL PUBLIC
     hardware_uart
     hardware_watchdog
 )
-if(_jh_native_internal_rtc)
+if(_jh_rp_internal_rtc)
     target_link_libraries(JaszczurHAL PUBLIC pico_aon_timer)
 endif()
 
-jh_feature_build_dependency_enabled(_jh_native_tls bearssl
+jh_feature_build_dependency_enabled(_jh_rp_tls bearssl
     FEATURES ${JH_RESOLVED_FEATURES})
-if(_jh_native_tls)
-    jh_add_bearssl_source_library(jh_bearssl_rp_native)
-    target_link_libraries(jh_bearssl_rp_native PRIVATE pico_stdlib)
-    target_link_libraries(JaszczurHAL PUBLIC jh_bearssl_rp_native)
+if(_jh_rp_tls)
+    jh_add_bearssl_source_library(jh_bearssl_rp_pico)
+    target_link_libraries(jh_bearssl_rp_pico PRIVATE pico_stdlib)
+    target_link_libraries(JaszczurHAL PUBLIC jh_bearssl_rp_pico)
 endif()
 
-jh_hal_define_enabled(_jh_native_freertos HAL_ENABLE_FREERTOS)
-set(_jh_native_core1_active FALSE)
-if(_jh_native_freertos)
+jh_hal_define_enabled(_jh_rp_freertos HAL_ENABLE_FREERTOS)
+set(_jh_rp_core1_active FALSE)
+if(_jh_rp_freertos)
     jh_hal_define_value(_jh_freertos_core_count HAL_FREERTOS_CORE_COUNT)
     if(NOT _jh_freertos_core_count)
         set(_jh_freertos_core_count "2")
     endif()
     if(NOT "${_jh_freertos_core_count}" MATCHES "^1[uUlL]*$")
-        set(_jh_native_core1_active TRUE)
+        set(_jh_rp_core1_active TRUE)
     endif()
     include("${JH_ROOT}/cmake/freertos_rp.cmake")
     jh_rp_enable_freertos(JaszczurHAL)
 else()
-    jh_hal_define_enabled(_jh_native_app_task1 HAL_ENABLE_APP_TASK1)
-    if(_jh_native_app_task1)
-        set(_jh_native_core1_active TRUE)
+    jh_hal_define_enabled(_jh_rp_app_task1 HAL_ENABLE_APP_TASK1)
+    if(_jh_rp_app_task1)
+        set(_jh_rp_core1_active TRUE)
     endif()
 endif()
-if(NOT _jh_native_core1_active)
+if(NOT _jh_rp_core1_active)
     target_compile_definitions(JaszczurHAL PUBLIC
         PICO_FLASH_ASSUME_CORE1_SAFE=1)
 endif()
@@ -311,44 +311,44 @@ if(NOT TARGET tinyusb_device)
 endif()
 target_link_libraries(JaszczurHAL PUBLIC tinyusb_device)
 
-jh_hal_define_enabled(_jh_native_cyw43_backend HAL_NETWORK_BACKEND_CYW43)
-jh_hal_define_enabled(_jh_native_bluetooth_classic_hid
+jh_hal_define_enabled(_jh_rp_cyw43_backend HAL_NETWORK_BACKEND_CYW43)
+jh_hal_define_enabled(_jh_rp_bluetooth_classic_hid
     JH_BLUETOOTH_CLASSIC_HID_PROBE)
-set(_jh_native_bluetooth_classic_hid_device_fixture FALSE)
+set(_jh_rp_bluetooth_classic_hid_device_fixture FALSE)
 if(JH_BLUETOOTH_CLASSIC_HID_DEVICE_FIXTURE)
-    set(_jh_native_bluetooth_classic_hid_device_fixture TRUE)
+    set(_jh_rp_bluetooth_classic_hid_device_fixture TRUE)
 endif()
-jh_hal_define_enabled(_jh_native_bluetooth_classic HAL_ENABLE_BLUETOOTH_CLASSIC)
-jh_hal_define_enabled(_jh_native_bluetooth_hid_host HAL_ENABLE_BLUETOOTH_HID_HOST)
-jh_hal_define_enabled(_jh_native_bluetooth_a2dp_sink
+jh_hal_define_enabled(_jh_rp_bluetooth_classic HAL_ENABLE_BLUETOOTH_CLASSIC)
+jh_hal_define_enabled(_jh_rp_bluetooth_hid_host HAL_ENABLE_BLUETOOTH_HID_HOST)
+jh_hal_define_enabled(_jh_rp_bluetooth_a2dp_sink
     HAL_ENABLE_BLUETOOTH_A2DP_SINK)
-jh_hal_define_enabled(_jh_native_bluetooth_avrcp_target
+jh_hal_define_enabled(_jh_rp_bluetooth_avrcp_target
     HAL_ENABLE_BLUETOOTH_AVRCP_TARGET)
-if((_jh_native_bluetooth_classic_hid OR
-    _jh_native_bluetooth_classic_hid_device_fixture OR
-    _jh_native_bluetooth_classic) AND
-   NOT _jh_native_cyw43_backend)
+if((_jh_rp_bluetooth_classic_hid OR
+    _jh_rp_bluetooth_classic_hid_device_fixture OR
+    _jh_rp_bluetooth_classic) AND
+   NOT _jh_rp_cyw43_backend)
     message(FATAL_ERROR
         "Bluetooth Classic HID requires a CYW43 network backend")
 endif()
-if(_jh_native_cyw43_backend)
-    jh_hal_define_enabled(_jh_native_bluetooth_stage1
+if(_jh_rp_cyw43_backend)
+    jh_hal_define_enabled(_jh_rp_bluetooth_stage1
         JH_BLUETOOTH_STAGE1_PROBE)
-    jh_hal_define_enabled(_jh_native_ble HAL_ENABLE_BLE)
-    jh_hal_define_enabled(_jh_native_ble_stream HAL_ENABLE_BLE_STREAM)
+    jh_hal_define_enabled(_jh_rp_ble HAL_ENABLE_BLE)
+    jh_hal_define_enabled(_jh_rp_ble_stream HAL_ENABLE_BLE_STREAM)
     jh_target_enable_cyw43_feature_stack(JaszczurHAL
         LWIP TRUE
-        OTA "${_jh_native_ota}"
-        BLUETOOTH_STAGE1 "${_jh_native_bluetooth_stage1}"
-        BLUETOOTH_CLASSIC_HID "${_jh_native_bluetooth_classic_hid}"
+        OTA "${_jh_rp_ota}"
+        BLUETOOTH_STAGE1 "${_jh_rp_bluetooth_stage1}"
+        BLUETOOTH_CLASSIC_HID "${_jh_rp_bluetooth_classic_hid}"
         BLUETOOTH_CLASSIC_HID_DEVICE_FIXTURE
-            "${_jh_native_bluetooth_classic_hid_device_fixture}"
-        CLASSIC "${_jh_native_bluetooth_classic}"
-        HID_HOST "${_jh_native_bluetooth_hid_host}"
-        A2DP_SINK "${_jh_native_bluetooth_a2dp_sink}"
-        AVRCP_TARGET "${_jh_native_bluetooth_avrcp_target}"
-        BLE "${_jh_native_ble}"
-        BLE_STREAM "${_jh_native_ble_stream}")
+            "${_jh_rp_bluetooth_classic_hid_device_fixture}"
+        CLASSIC "${_jh_rp_bluetooth_classic}"
+        HID_HOST "${_jh_rp_bluetooth_hid_host}"
+        A2DP_SINK "${_jh_rp_bluetooth_a2dp_sink}"
+        AVRCP_TARGET "${_jh_rp_bluetooth_avrcp_target}"
+        BLE "${_jh_rp_ble}"
+        BLE_STREAM "${_jh_rp_ble_stream}")
 elseif(_jh_pico_board_has_cyw43)
     target_compile_definitions(JaszczurHAL PUBLIC
         JH_RP_CYW43_LED_ONLY=1
@@ -374,13 +374,13 @@ function(jh_add_rp_ota_boot_target BOOT_TARGET)
         JH_RP_OTA_BOOT_IMAGE=1
         HAL_ENABLE_CRYPTO=1
         HAL_ENABLE_CRC=1
-        HAL_RP_OTA_PROGRAM_OFFSET=${_jh_native_program_offset}u
-        HAL_RP_OTA_SLOT_SIZE=${_jh_native_ota_slot_size}u
-        HAL_RP_OTA_STAGING_OFFSET=${_jh_native_staging_offset}u
-        HAL_RP_OTA_PHASE_OFFSET=${_jh_native_ota_phase_offset}u
-        HAL_RP_OTA_SCRATCH_OFFSET=${_jh_native_ota_scratch_offset}u
-        HAL_RP_OTA_STATE_A_OFFSET=${_jh_native_ota_state_a_offset}u
-        HAL_RP_OTA_STATE_B_OFFSET=${_jh_native_ota_state_b_offset}u)
+        HAL_RP_OTA_PROGRAM_OFFSET=${_jh_rp_program_offset}u
+        HAL_RP_OTA_SLOT_SIZE=${_jh_rp_ota_slot_size}u
+        HAL_RP_OTA_STAGING_OFFSET=${_jh_rp_staging_offset}u
+        HAL_RP_OTA_PHASE_OFFSET=${_jh_rp_ota_phase_offset}u
+        HAL_RP_OTA_SCRATCH_OFFSET=${_jh_rp_ota_scratch_offset}u
+        HAL_RP_OTA_STATE_A_OFFSET=${_jh_rp_ota_state_a_offset}u
+        HAL_RP_OTA_STATE_B_OFFSET=${_jh_rp_ota_state_b_offset}u)
     target_compile_options("${BOOT_TARGET}" PRIVATE
         -Os -ffunction-sections -fdata-sections
         -Wall -Wextra -Werror
@@ -407,7 +407,7 @@ function(jh_add_rp_ota_boot_target BOOT_TARGET)
     file(READ "${_jh_boot_linker_source}" _jh_boot_linker_contents)
     string(REPLACE
         "INCLUDE \"pico_flash_region.ld\""
-        "FLASH(rx) : ORIGIN = 0x10000000, LENGTH = ${_jh_native_ota_boot_size}"
+        "FLASH(rx) : ORIGIN = 0x10000000, LENGTH = ${_jh_rp_ota_boot_size}"
         _jh_boot_linker_contents "${_jh_boot_linker_contents}")
     set(_jh_boot_linker_script
         "${CMAKE_CURRENT_BINARY_DIR}/${BOOT_TARGET}.ld")
@@ -418,11 +418,11 @@ function(jh_add_rp_ota_boot_target BOOT_TARGET)
     pico_add_extra_outputs("${BOOT_TARGET}")
 endfunction()
 
-function(jh_add_rp_native_firmware TARGET_NAME)
+function(jh_add_rp_pico_firmware TARGET_NAME)
     cmake_parse_arguments(JH_NATIVE "CUSTOM_ENTRY" "" "" ${ARGN})
     if(NOT TARGET "${TARGET_NAME}")
         message(FATAL_ERROR
-            "jh_add_rp_native_firmware: target '${TARGET_NAME}' does not exist")
+            "jh_add_rp_pico_firmware: target '${TARGET_NAME}' does not exist")
     endif()
     target_link_libraries("${TARGET_NAME}" PRIVATE JaszczurHAL)
     target_compile_options("${TARGET_NAME}" PRIVATE -Wall -Wextra -Werror)
@@ -432,7 +432,7 @@ function(jh_add_rp_native_firmware TARGET_NAME)
         target_compile_definitions("${TARGET_NAME}" PRIVATE
             HAL_PROVIDE_APP_ENTRY=1)
     endif()
-    if(_jh_native_storage_reservation GREATER 0 OR _jh_native_ota)
+    if(_jh_rp_storage_reservation GREATER 0 OR _jh_rp_ota)
         set(_jh_default_linker_script
             "${PICO_LINKER_SCRIPT_PATH}/memmap_default.ld")
         if(NOT EXISTS "${_jh_default_linker_script}")
@@ -443,7 +443,7 @@ function(jh_add_rp_native_firmware TARGET_NAME)
         file(READ "${_jh_default_linker_script}" _jh_linker_contents)
         string(REPLACE
             "INCLUDE \"pico_flash_region.ld\""
-            "FLASH(rx) : ORIGIN = 0x10000000 + ${_jh_native_program_offset}, LENGTH = ${_jh_native_firmware_flash_size}"
+            "FLASH(rx) : ORIGIN = 0x10000000 + ${_jh_rp_program_offset}, LENGTH = ${_jh_rp_firmware_flash_size}"
             _jh_linker_contents "${_jh_linker_contents}")
         set(_jh_storage_linker_script
             "${CMAKE_CURRENT_BINARY_DIR}/${TARGET_NAME}_storage.ld")
@@ -455,7 +455,7 @@ function(jh_add_rp_native_firmware TARGET_NAME)
     # The Pico SDK derives the UF2 family from PICO_PLATFORM. The linked ELF
     # already carries the offset OTA application's absolute flash addresses.
     pico_add_extra_outputs("${TARGET_NAME}")
-    if(_jh_native_ota)
+    if(_jh_rp_ota)
         find_package(Python3 REQUIRED COMPONENTS Interpreter)
         set(_jh_boot_target "${TARGET_NAME}_ota_boot")
         jh_add_rp_ota_boot_target("${_jh_boot_target}")
@@ -473,7 +473,7 @@ function(jh_add_rp_native_firmware TARGET_NAME)
                 --binary "${CMAKE_CURRENT_BINARY_DIR}/${TARGET_NAME}.bin"
                 --output "${CMAKE_CURRENT_BINARY_DIR}/${TARGET_NAME}.ota"
                 --target "${JH_RP_TARGET_NAME}"
-                --program-offset "${_jh_native_program_offset}"
+                --program-offset "${_jh_rp_program_offset}"
                 --generation "${JH_OTA_GENERATION}"
                 --version "${JH_OTA_VERSION}"
             COMMAND "${Python3_EXECUTABLE}"

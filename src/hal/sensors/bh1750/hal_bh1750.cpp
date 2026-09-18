@@ -7,7 +7,6 @@
  */
 
 #include "hal/core/hal_target.h"
-#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK)
 
 #include "hal/core/hal_config.h"
 #if defined(HAL_ENABLE_BH1750) && defined(HAL_ENABLE_I2C)
@@ -116,4 +115,3 @@ float hal_bh1750_light(hal_bh1750_t *dev) {
 }
 
 #endif /* HAL_ENABLE_BH1750 && HAL_ENABLE_I2C */
-#endif /* supported target */

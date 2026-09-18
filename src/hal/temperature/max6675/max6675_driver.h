@@ -12,8 +12,7 @@
 
 #include "hal/core/hal_config.h"
 
-#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK) &&     \
-    defined(HAL_ENABLE_MAX6675)
+#if defined(HAL_ENABLE_MAX6675)
 
 #include "hal/system/hal_sync.h"
 #include <stdbool.h>

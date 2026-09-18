@@ -15,12 +15,12 @@ set(_stm_flash
 set(_stm_eeprom "${JH_ROOT}/src/hal/impl/stm32g474/hal_eeprom.cpp")
 set(_rp_flash_storage
     "${JH_ROOT}/src/hal/impl/rp2040/drivers/flash/rp_flash_storage.cpp")
-set(_stm_linker "${JH_ROOT}/stm32_lib/STM32G474RETx_FLASH.ld")
+set(_stm_linker "${JH_ROOT}/link_libraries/stm32_lib/STM32G474RETx_FLASH.ld")
 set(_root_cmake "${JH_ROOT}/CMakeLists.txt")
 set(_rp_sources "${JH_ROOT}/cmake/jh_rp_hal_sources.cmake")
-set(_stm_sources "${JH_ROOT}/stm32_lib/CMakeLists.txt")
+set(_stm_sources "${JH_ROOT}/link_libraries/stm32_lib/CMakeLists.txt")
 set(_stm_firmware_sources
-    "${JH_ROOT}/stm32_lib/jh_stm32g474_firmware.cmake")
+    "${JH_ROOT}/link_libraries/stm32_lib/jh_stm32g474_firmware.cmake")
 
 foreach(_required IN ITEMS
         "${_facade}"

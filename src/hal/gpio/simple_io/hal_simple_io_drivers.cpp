@@ -8,7 +8,6 @@
  */
 
 #include "hal/core/hal_target.h"
-#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK)
 
 #include "hal/core/hal_config.h"
 
@@ -1111,5 +1110,4 @@ uint16_t hal_mcp4725_output_latch(const hal_mcp4725_t *dev) {
 }
 #endif /* HAL_ENABLE_MCP4725 */
 
-#endif
 #endif

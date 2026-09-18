@@ -72,6 +72,7 @@ known_targets = {
     "rp2350-arm",
     "rp2350-riscv",
     "stm32g474",
+    "esp32s3",
 }
 profile_descriptors = [
     load_json(path) for path in sorted((ROOT / "boards" / "profiles").glob("*.json"))
@@ -128,7 +129,7 @@ require(
 require(
     same_path(
         stm32_cache["CMAKE_TOOLCHAIN_FILE"],
-        ROOT / "stm32_lib" / "toolchain_stm32g474.cmake",
+        ROOT / "link_libraries/stm32_lib" / "toolchain_stm32g474.cmake",
     ),
     "stm32g474: cross toolchain must be selected before CMake project()",
 )
@@ -430,6 +431,7 @@ require(
         "rp2350-arm": 28,
         "rp2350-riscv": 22,
         "stm32g474": 27,
+        "esp32s3": 23,
     },
     f"declared example target matrix changed without review: {example_counts}",
 )
@@ -440,9 +442,10 @@ require(
         "rp2350-arm": 39,
         "rp2350-riscv": 25,
         "stm32g474": 42,
+        "esp32s3": 26,
     }
-    and sum(full_configuration_counts.values()) == 152,
-    "full example build matrix must contain exactly 152 configurations: "
+    and sum(full_configuration_counts.values()) == 178,
+    "full example build matrix must contain exactly 178 configurations: "
     f"{full_configuration_counts}",
 )
 require(
@@ -452,9 +455,10 @@ require(
         "rp2350-arm": 4,
         "rp2350-riscv": 0,
         "stm32g474": 33,
+        "esp32s3": 26,
     }
-    and sum(gate_configuration_counts.values()) == 81,
-    "example gate matrix must contain exactly 81 configurations: "
+    and sum(gate_configuration_counts.values()) == 107,
+    "example gate matrix must contain exactly 107 configurations: "
     f"{gate_configuration_counts}",
 )
 required_feature_surface = {

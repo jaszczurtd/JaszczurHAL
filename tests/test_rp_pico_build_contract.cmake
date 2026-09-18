@@ -4,13 +4,13 @@ endif()
 
 # Keep this default host/CI test limited to production sources. Firmware
 # fixtures and their verifiers belong to explicitly invoked hardware workflows.
-set(_cmake "${JH_ROOT}/rp_native_lib/CMakeLists.txt")
-set(_native_common "${JH_ROOT}/cmake/jh_rp_native_sdk.cmake")
+set(_cmake "${JH_ROOT}/link_libraries/rp_pico_lib/CMakeLists.txt")
+set(_native_common "${JH_ROOT}/cmake/jh_rp_pico_sdk.cmake")
 set(_dispatcher "${JH_ROOT}/cmake/jh_firmware_project/CMakeLists.txt")
-set(_native_recipe "${JH_ROOT}/cmake/targets/rp-native.cmake")
-set(_probe "${JH_ROOT}/rp_native_lib/artifact_probe.cpp")
-set(_core1_probe "${JH_ROOT}/rp_native_lib/core1_probe.c")
-set(_script "${JH_ROOT}/scripts/build_rp_native_lib.sh")
+set(_native_recipe "${JH_ROOT}/cmake/targets/rp-pico.cmake")
+set(_probe "${JH_ROOT}/link_libraries/rp_pico_lib/artifact_probe.cpp")
+set(_core1_probe "${JH_ROOT}/link_libraries/rp_pico_lib/core1_probe.c")
+set(_script "${JH_ROOT}/scripts/build_rp_pico_lib.sh")
 set(_board_generator "${JH_ROOT}/scripts/generate_board_config.py")
 set(_board_cmake "${JH_ROOT}/cmake/jh_board_profiles.cmake")
 set(_sources "${JH_ROOT}/cmake/jh_rp_hal_sources.cmake")
@@ -124,20 +124,39 @@ foreach(_target IN ITEMS rp2040 rp2350-arm rp2350-riscv)
         _target_at)
     if(_target_at EQUAL -1)
         message(FATAL_ERROR
-            "rp_native_lib does not map JH_TARGET=${_target}")
+            "link_libraries/rp_pico_lib does not map JH_TARGET=${_target}")
     endif()
-    string(FIND "${_script_text}" "${_target})" _script_target_at)
+    string(FIND "${_script_text}" "${_target}" _script_target_at)
     if(_script_target_at EQUAL -1)
         message(FATAL_ERROR
-            "Native RP build script does not accept ${_target}")
+            "Native RP build script does not document ${_target}")
     endif()
 endforeach()
+
+# The script takes target facts from the board registry instead of a local
+# target list, and refuses targets that another family runner owns.
+foreach(_registry_contract IN ITEMS
+        "jh_target_facts \"\${REPO_ROOT}\" \"\${TARGET}\""
+        "[[ \"\${TARGET_PROVIDER}\" == \"pico-sdk\" ]]"
+        ": \"\${BOARD:=\${TARGET_DEFAULT_BOARD}}\""
+        "jh_validate_hal_defines")
+    string(FIND "${_script_text}" "${_registry_contract}" _registry_at)
+    if(_registry_at EQUAL -1)
+        message(FATAL_ERROR
+            "Native RP build script does not use the registry contract: "
+            "${_registry_contract}")
+    endif()
+endforeach()
+string(FIND "${_script_text}" "--platform" _platform_at)
+if(NOT _platform_at EQUAL -1)
+    message(FATAL_ERROR "Native RP build script still exposes --platform")
+endif()
 
 foreach(_define IN ITEMS
         HAL_TARGET_RP2040 HAL_TARGET_RP2350_ARM HAL_TARGET_RP2350_RISCV)
     string(FIND "${_native_text}" "${_define}" _define_at)
     if(_define_at EQUAL -1)
-        message(FATAL_ERROR "rp_native_lib is missing ${_define}")
+        message(FATAL_ERROR "link_libraries/rp_pico_lib is missing ${_define}")
     endif()
 endforeach()
 
@@ -151,7 +170,7 @@ foreach(_sdk_contract IN ITEMS
     string(FIND "${_native_text}" "${_sdk_contract}" _sdk_at)
     if(_sdk_at EQUAL -1)
         message(FATAL_ERROR
-            "rp_native_lib is missing Pico SDK contract: ${_sdk_contract}")
+            "link_libraries/rp_pico_lib is missing Pico SDK contract: ${_sdk_contract}")
     endif()
 endforeach()
 
@@ -373,7 +392,7 @@ foreach(_ota_boot_contract IN ITEMS
 endforeach()
 
 foreach(_ota_target_contract IN ITEMS
-        "if(_jh_native_ota AND JH_RP_TARGET_NAME STREQUAL \"rp2350-riscv\")"
+        "if(_jh_rp_ota AND JH_RP_TARGET_NAME STREQUAL \"rp2350-riscv\")"
         "HAL_ENABLE_OTA is not supported for rp2350-riscv"
         "use rp2040 or rp2350-arm")
     string(FIND "${_native_common_text}" "${_ota_target_contract}"
@@ -550,7 +569,7 @@ foreach(_entry_contract IN ITEMS
 endforeach()
 
 string(FIND "${_app_entry_text}"
-    "  multicore_launch_core1(hal_rp_native_core1_entry);"
+    "  multicore_launch_core1(hal_rp_pico_core1_entry);"
     _core1_bootstrap_at)
 if(_core1_bootstrap_at EQUAL -1)
     message(FATAL_ERROR
@@ -571,7 +590,7 @@ endif()
 foreach(_startup_guard IN ITEMS
         "s_core1_flash_status"
         "s_app_start_complete"
-        "hal_rp_native_require_flash_ready"
+        "hal_rp_pico_require_flash_ready"
         "HAL_ATOMIC_RELEASE"
         "HAL_ATOMIC_ACQUIRE")
     string(FIND "${_app_entry_text}" "${_startup_guard}" _guard_at)
@@ -589,8 +608,8 @@ endif()
 foreach(_cmake_contract IN ITEMS
         "CUSTOM_ENTRY"
         "HAL_PROVIDE_APP_ENTRY=1"
-        "JH_RP_NATIVE_APP_DIR"
-        "JH_RP_NATIVE_APP_SOURCES"
+        "JH_RP_PICO_APP_DIR"
+        "JH_RP_PICO_APP_SOURCES"
         "OUTPUT_ROOT"
         "jh_generate_board_config"
         "jh_apply_board_components"
@@ -601,8 +620,8 @@ foreach(_cmake_contract IN ITEMS
         "JH_RP_CYW43_LED_ONLY"
         "jh_target_enable_cyw43_driver"
         "set(PICO_CYW43_SUPPORTED 0)"
-        "jh_rp_native_core1_probe"
-        "jh_rp_native_firmware"
+        "jh_rp_pico_core1_probe"
+        "jh_rp_pico_firmware"
         "EXCLUDE_APP_ENTRY"
         "PICO_STACK_SIZE"
         "PICO_CORE1_STACK_SIZE")
@@ -632,7 +651,7 @@ endforeach()
 foreach(_dispatcher_contract IN ITEMS
         "rp2350-arm"
         "rp2350-riscv"
-        "cmake/targets/rp-native.cmake")
+        "cmake/targets/rp-pico.cmake")
     string(FIND "${_dispatcher_text}" "${_dispatcher_contract}" _dispatcher_at)
     if(_dispatcher_at EQUAL -1)
         message(FATAL_ERROR
@@ -645,11 +664,11 @@ foreach(_script_contract IN ITEMS
         "--example-source"
         "--library-only"
         "examples/"
-        "JH_RP_NATIVE_BUILD_ARTIFACT_PROBE=OFF"
-        "JH_RP_NATIVE_BUILD_CORE1_PROBE=OFF"
+        "JH_RP_PICO_BUILD_ARTIFACT_PROBE=OFF"
+        "JH_RP_PICO_BUILD_CORE1_PROBE=OFF"
         "--target JaszczurHAL"
-        "jh_rp_native_core1_probe"
-        "jh_rp_native_firmware")
+        "jh_rp_pico_core1_probe"
+        "jh_rp_pico_firmware")
     string(FIND "${_script_text}" "${_script_contract}" _script_contract_at)
     if(_script_contract_at EQUAL -1)
         message(FATAL_ERROR

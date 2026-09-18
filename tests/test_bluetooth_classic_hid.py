@@ -329,10 +329,10 @@ require(
 cyw43_cmake = (ROOT / "cmake" / "jh_cyw43_driver.cmake").read_text(
     encoding="utf-8"
 )
-rp_cmake = (ROOT / "cmake" / "jh_rp_native_sdk.cmake").read_text(
+rp_cmake = (ROOT / "cmake" / "jh_rp_pico_sdk.cmake").read_text(
     encoding="utf-8"
 )
-stm32_static_cmake = (ROOT / "stm32_lib" / "CMakeLists.txt").read_text(
+stm32_static_cmake = (ROOT / "link_libraries/stm32_lib" / "CMakeLists.txt").read_text(
     encoding="utf-8"
 )
 require(

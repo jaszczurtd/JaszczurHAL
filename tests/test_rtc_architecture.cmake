@@ -127,8 +127,8 @@ foreach(_driver IN ITEMS
 endforeach()
 
 file(READ "${JH_ROOT}/CMakeLists.txt" _root_cmake)
-file(READ "${JH_ROOT}/stm32_lib/CMakeLists.txt" _stm32_cmake)
-file(READ "${JH_ROOT}/cmake/jh_rp_native_sdk.cmake" _rp_cmake)
+file(READ "${JH_ROOT}/link_libraries/stm32_lib/CMakeLists.txt" _stm32_cmake)
+file(READ "${JH_ROOT}/cmake/jh_rp_pico_sdk.cmake" _rp_cmake)
 if(NOT _root_cmake MATCHES "hal/rtc/hal_rtc\\.cpp" OR
    NOT _stm32_cmake MATCHES "hal/\\*\\.cpp" OR
    NOT _rp_cmake MATCHES "pico_aon_timer")

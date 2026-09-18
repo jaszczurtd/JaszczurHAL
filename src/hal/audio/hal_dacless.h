@@ -11,8 +11,7 @@
 
 #include "hal/core/hal_config.h"
 
-#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK) &&     \
-    defined(HAL_ENABLE_DACLESS)
+#if defined(HAL_ENABLE_DACLESS)
 
 #include "hal/core/hal_status.h"
 
@@ -75,7 +74,16 @@
 #define DACLESS_DEFAULT_PWM_PIN 6u
 #endif
 
-#if HAL_TARGET_IS_STM32G474
+#if HAL_TARGET_IS_ESP32_FAMILY
+/** @brief Default first ADC input pin on ESP32; ADC1 starts at GPIO1. */
+#define DACLESS_DEFAULT_ADC0_PIN 1u
+/** @brief Default second ADC input pin on ESP32. */
+#define DACLESS_DEFAULT_ADC1_PIN 2u
+/** @brief Default third ADC input pin on ESP32. */
+#define DACLESS_DEFAULT_ADC2_PIN 3u
+/** @brief Default fourth ADC input pin on ESP32. */
+#define DACLESS_DEFAULT_ADC3_PIN 4u
+#elif HAL_TARGET_IS_STM32G474
 /** @brief Default first ADC input pin on STM32G474. */
 #define DACLESS_DEFAULT_ADC0_PIN 0u
 /** @brief Default second ADC input pin on STM32G474. */
@@ -364,4 +372,4 @@ uint16_t hal_dacless_interpolate(uint16_t x, uint16_t y, uint16_t mu_scaled);
 #include "hal/audio/dacless/dacless.h"
 #endif
 
-#endif /* supported target && HAL_ENABLE_DACLESS */
+#endif /* HAL_ENABLE_DACLESS */

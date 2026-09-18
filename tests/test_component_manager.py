@@ -600,7 +600,11 @@ class TrackedContractTests(unittest.TestCase):
 
     @unittest.skipIf(sys.platform == "win32", "fixture requires POSIX scripts")
     def test_static_build_scripts_reject_disabled_feature_spelling(self) -> None:
-        for script in ("build_rp_native_lib.sh", "build_stm32_lib.sh"):
+        for script in (
+            "build_rp_pico_lib.sh",
+            "build_stm32_lib.sh",
+            "build_esp32_lib.sh",
+        ):
             for definition in (
                 "HAL_ENABLE_WIFI=0",
                 "$<1:HAL_$<1:ENABLE>_WIFI=0>",

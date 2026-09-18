@@ -21,10 +21,10 @@ endif()
 file(READ "${_driver}/jh_cyw43_hostname.cpp" _cyw43_hostname)
 file(READ "${_driver}/jh_cyw43_mdns.cpp" _cyw43_mdns)
 file(READ "${JH_ROOT}/cmake/jh_cyw43_driver.cmake" _cyw43_cmake)
-file(READ "${JH_ROOT}/cmake/jh_rp_native_sdk.cmake" _rp_native_cmake)
+file(READ "${JH_ROOT}/cmake/jh_rp_pico_sdk.cmake" _rp_pico_cmake)
 file(READ "${JH_ROOT}/cmake/targets/stm32g474.cmake"
     _stm32_firmware_cmake)
-file(READ "${JH_ROOT}/stm32_lib/CMakeLists.txt" _stm32_library_cmake)
+file(READ "${JH_ROOT}/link_libraries/stm32_lib/CMakeLists.txt" _stm32_library_cmake)
 file(READ "${JH_ROOT}/src/hal/network/lwip/port/lwipopts.h" _lwipopts)
 file(READ
     "${JH_ROOT}/src/hal/network/lwip/port/jh_lwip_mdns_adapter.inc"
@@ -89,7 +89,7 @@ foreach(_mdns_contract IN ITEMS
         "jh_cyw43_mdns_publish"
         "jh_cyw43_mdns_remove")
     string(FIND
-        "${_cyw43_cmake}\n${_rp_native_cmake}\n${_lwipopts}\n${_rp_ota}\n${_cyw43_mdns}\n${_cyw43_driver_wrapper}\n${_mdns_adapter}\n${_mdns_teardown}"
+        "${_cyw43_cmake}\n${_rp_pico_cmake}\n${_lwipopts}\n${_rp_ota}\n${_cyw43_mdns}\n${_cyw43_driver_wrapper}\n${_mdns_adapter}\n${_mdns_teardown}"
         "${_mdns_contract}" _mdns_contract_at)
     if(_mdns_contract_at EQUAL -1)
         message(FATAL_ERROR

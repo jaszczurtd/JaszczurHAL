@@ -6,6 +6,7 @@
 
 #include "hal/core/hal_mutex_once.h"
 #include "hal/gpio/hal_pwm_freq.h"
+#include "hal/gpio/hal_pwm_freq_internal.h"
 #include "hal/gpio/hal_pwm_freq_pool.h"
 #include "hal/system/hal_sync.h"
 #include "jh_esp32_gpio.h"
@@ -28,35 +29,37 @@ hal_mutex_t pwm_mutex(void) { return jh_hal_mutex_create_once(&s_mutex); }
 
 } // namespace
 
-hal_pwm_freq_channel_t hal_pwm_freq_create(uint8_t pin, uint32_t frequency_hz,
-                                           uint32_t resolution) {
-  if (!jh_esp32_gpio_output_pin_valid(pin) || frequency_hz == 0u ||
-      resolution == 0u) {
-    HAL_ASSERT(false, "hal_pwm_freq_create: invalid pin/frequency/resolution");
-    return nullptr;
+hal_status_t jh_hal_pwm_freq_try_create(uint8_t pin, uint32_t frequency_hz,
+                                        uint32_t resolution,
+                                        hal_pwm_freq_channel_t *out_channel) {
+  const hal_status_t args_status =
+      jh_hal_pwm_freq_prepare_create(frequency_hz, resolution, out_channel);
+  if (args_status != HAL_OK) {
+    return args_status;
   }
-  hal_mutex_t mutex = pwm_mutex();
-  if (mutex == nullptr) {
-    return nullptr;
+  if (!jh_esp32_gpio_output_pin_valid(pin)) {
+    return HAL_EINVAL;
   }
-  hal_mutex_lock(mutex);
-  hal_pwm_freq_channel_impl_t *channel =
-      jh_hal_pwm_freq_reserve(s_pool, hal_get_config()->pwm_freq_max_channels);
+  hal_pwm_freq_channel_impl_t *channel = jh_hal_pwm_freq_begin_locked_create(
+      s_pool, hal_get_config()->pwm_freq_max_channels, &s_mutex);
   if (channel == nullptr) {
-    hal_mutex_unlock(mutex);
-    HAL_ASSERT(false, "hal_pwm_freq_create: logical channel pool exhausted");
-    return nullptr;
+    return HAL_ENOMEM;
   }
-  memset(channel, 0, sizeof(*channel));
   channel->ledc = jh_esp32_ledc_acquire(pin, frequency_hz, resolution);
   if (channel->ledc == nullptr) {
-    hal_mutex_unlock(mutex);
-    return nullptr;
+    hal_mutex_unlock(s_mutex);
+    return HAL_EIO;
   }
   channel->resolution = resolution;
   channel->in_use = 1;
-  hal_mutex_unlock(mutex);
-  return channel;
+  hal_mutex_unlock(s_mutex);
+  *out_channel = channel;
+  return HAL_OK;
+}
+
+hal_pwm_freq_channel_t hal_pwm_freq_create(uint8_t pin, uint32_t frequency_hz,
+                                           uint32_t resolution) {
+  return jh_hal_pwm_freq_create_compat(pin, frequency_hz, resolution);
 }
 
 uint32_t hal_pwm_freq_source_clock_hz(uint8_t pin) {

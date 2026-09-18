@@ -54,6 +54,8 @@ EXPECTED_RESOLVED = [
     "HAL_ENABLE_BSD_SOCKETS",
     "HAL_ENABLE_CRC",
     "HAL_ENABLE_CRYPTO",
+    "HAL_ENABLE_DACLESS",
+    "HAL_ENABLE_DMA_PWM_AUDIO",
     "HAL_ENABLE_FREERTOS",
     "HAL_ENABLE_HTTP_CLIENT",
     "HAL_ENABLE_HTTP_FILES",
@@ -83,10 +85,18 @@ EXPECTED_RESOLVED = [
 
 
 class Phase3RegistryAndBuildTests(unittest.TestCase):
-    def test_target_allowlist_is_the_exact_supported_feature_closure(self) -> None:
+    def test_target_allowlist_covers_every_phase3_backend(self) -> None:
         target_path = ROOT / "boards" / "targets" / "esp32s3.json"
         target = json.loads(target_path.read_text(encoding="utf-8"))
-        self.assertEqual(target["supportedFeatures"], EXPECTED_RESOLVED)
+        supported = set(target["supportedFeatures"])
+        # The allowlist also carries portable drivers that need no ESP32
+        # backend; every Phase 2/3 backend and every feature with ESP32
+        # target sources must stay inside it and inside the fixture.
+        self.assertTrue(set(EXPECTED_RESOLVED) <= supported)
+        self.assertTrue(
+            (set(esp_idf.ESP_IDF_TARGET_SOURCES) & supported) <= set(EXPECTED_RESOLVED)
+        )
+        self.assertEqual(target["supportedFeatures"], sorted(supported))
         esp_idf.generate_board_config.validate_target(target_path, target)
 
     def test_fixture_resolves_all_phase3_features(self) -> None:
