@@ -32,6 +32,14 @@ uint8_t hal_i2c_end_transmission_bus(uint8_t bus) {
   return legacy_result(hal_i2c_end_transmission_bus_ex(bus));
 }
 
+hal_status_t hal_i2c_get_clock(uint32_t *out_clock_hz) {
+  return hal_i2c_get_clock_bus(0u, out_clock_hz);
+}
+
+hal_status_t hal_i2c_set_clock(uint32_t clock_hz) {
+  return hal_i2c_set_clock_bus(0u, clock_hz);
+}
+
 hal_status_t hal_i2c_scan(uint8_t *addresses, size_t capacity, size_t *outFound,
                           hal_i2c_scan_callback_t callback) {
   return hal_i2c_scan_bus(0u, addresses, capacity, outFound, callback);

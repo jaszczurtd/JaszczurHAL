@@ -20,8 +20,8 @@ Run commands from the repository root unless a section states otherwise. Use `--
 | Verify dependencies without changing them | `./third_party/update_components.sh --verify-only` | Checks all managed component versions, commits, required files, PMD archive state, built picotool, and the RISC-V toolchain stamp. |
 | Refresh all tracked generated files | `python3 scripts/sync_generated.py --write` | Runs the feature, board, example, root VS Code, and SBOM generators and lists every file changed during synchronization. |
 | Verify all tracked generated files | `python3 scripts/sync_generated.py --check` | Runs every generator in read-only verification mode and fails on missing or stale output. |
-| Run the complete repository gate | `./runalltests.sh` | Cleans managed gate outputs and runs tests, Clang ASan/UBSan/libFuzzer checks, Valgrind, static analysis, CPD, target builds, and example builds. |
-| Run the sanitizer/fuzz gate | `scripts/run_sanitizer_fuzz.sh` | Recreates a Clang-instrumented host build, runs all tests under ASan/UBSan, and smoke-fuzzes the network parsers. |
+| Run the complete repository gate | `./runalltests.sh` | Cleans managed gate outputs and runs tests, Clang ASan/UBSan/TSan/libFuzzer checks, Valgrind, static analysis, CPD, target builds, and example builds. |
+| Run the sanitizer/fuzz gate | `scripts/run_sanitizer_fuzz.sh` | Recreates a Clang-instrumented host build, runs all tests under ASan/UBSan and the native tests under TSan, and smoke-fuzzes the network parsers. |
 | Operate a firmware project | `vscode/entry/jh-vscode <action> --project <dir>` on Unix or `vscode/entry/jh-vscode.cmd ...` on Windows | Provides the stable build, upload, monitor, board-selection, IntelliSense, and clean CLI used by VS Code projects. |
 | Build a linkable library for any target | `scripts/build_link_library.sh --target <id>` | Selects the family runner under `link_libraries/` from the target's build provider and forwards the remaining options. |
 | Build or flash an ESP-IDF project | `python3 scripts/build_esp_idf.py <action> --project <dir>` | Runs the `build`, `artifacts`, or `flash` action; resolves the ESP target/board metadata; prepares the pinned SDK on demand; and validates the relocatable multi-image manifest. |
@@ -174,8 +174,8 @@ are:
 
 1. required tools and managed-component verification;
 2. host tests, including the optional FreeRTOS POSIX suite;
-3. Clang ASan/UBSan tests and libFuzzer smoke checks through the same runner
-   used by CI;
+3. Clang ASan/UBSan tests, native tests under ThreadSanitizer, and libFuzzer
+   smoke checks through the same runner used by CI;
 4. Valgrind memcheck;
 5. cppcheck;
 6. clang-tidy for host/shared code and the STM32 backend, using both the
@@ -204,7 +204,9 @@ The shared Linux sanitizer runner used by local Gate 3 and the CI
 recreates a build below `.build/`, enables ASan, UBSan and libFuzzer, runs the
 complete host CTest suite with leak detection and fail-fast undefined-behavior
 reporting, then executes bounded smoke runs for the HTTP, WebSocket and
-multipart fuzz targets. `--build-dir`, `--jobs`, and `--fuzz-runs` select its
+multipart fuzz targets. A second build next to the first (`<build-dir>-tsan`)
+runs the native C/C++ tests under ThreadSanitizer and stops at the first
+reported race. `--build-dir`, `--jobs`, and `--fuzz-runs` select its
 managed output and workload; `--check-tools` only verifies Clang availability.
 
 ### `vscode/entry/jh-vscode` and `jh-vscode.cmd`

@@ -4,16 +4,28 @@
 #include "hal/core/hal_config.h"
 #include "hal/system/hal_sync.h"
 #include "hal_mock.h"
+#include <atomic>
 #include <mutex>
 #include <new>
 #include <stdint.h>
 
 namespace {
-uint32_t s_mutex_lock_count = 0u;
-uint32_t s_mutex_unlock_count = 0u;
-uint32_t s_mutex_depth = 0u;
-uint32_t s_mutex_max_depth = 0u;
+/* Statistics span every mutex, and threaded host tests lock different
+ * mutexes at once, so the counters themselves must be atomic. */
+std::atomic<uint32_t> s_mutex_lock_count{0u};
+std::atomic<uint32_t> s_mutex_unlock_count{0u};
+std::atomic<uint32_t> s_mutex_depth{0u};
+std::atomic<uint32_t> s_mutex_max_depth{0u};
 bool s_fail_next_mutex_create = false;
+
+void record_lock(void) {
+  s_mutex_lock_count.fetch_add(1u);
+  const uint32_t depth = s_mutex_depth.fetch_add(1u) + 1u;
+  uint32_t seen = s_mutex_max_depth.load();
+  while (depth > seen &&
+         !s_mutex_max_depth.compare_exchange_weak(seen, depth)) {
+  }
+}
 } // namespace
 
 struct hal_mutex_impl_t {
@@ -41,11 +53,7 @@ void hal_mutex_lock(hal_mutex_t mutex) {
   }
 
   mutex->mtx.lock();
-  s_mutex_lock_count++;
-  s_mutex_depth++;
-  if (s_mutex_depth > s_mutex_max_depth) {
-    s_mutex_max_depth = s_mutex_depth;
-  }
+  record_lock();
 }
 
 bool hal_mutex_try_lock(hal_mutex_t mutex) {
@@ -54,11 +62,7 @@ bool hal_mutex_try_lock(hal_mutex_t mutex) {
     return false;
   }
 
-  s_mutex_lock_count++;
-  s_mutex_depth++;
-  if (s_mutex_depth > s_mutex_max_depth) {
-    s_mutex_max_depth = s_mutex_depth;
-  }
+  record_lock();
   return true;
 }
 
@@ -68,9 +72,10 @@ void hal_mutex_unlock(hal_mutex_t mutex) {
     return;
   }
 
-  s_mutex_unlock_count++;
-  if (s_mutex_depth > 0u) {
-    s_mutex_depth--;
+  s_mutex_unlock_count.fetch_add(1u);
+  uint32_t depth = s_mutex_depth.load();
+  while (depth > 0u &&
+         !s_mutex_depth.compare_exchange_weak(depth, depth - 1u)) {
   }
   mutex->mtx.unlock();
 }
@@ -130,17 +135,19 @@ void hal_mock_critical_section_reset(void) {
 }
 
 void hal_mock_mutex_stats_reset(void) {
-  s_mutex_lock_count = 0u;
-  s_mutex_unlock_count = 0u;
-  s_mutex_depth = 0u;
-  s_mutex_max_depth = 0u;
+  s_mutex_lock_count.store(0u);
+  s_mutex_unlock_count.store(0u);
+  s_mutex_depth.store(0u);
+  s_mutex_max_depth.store(0u);
 }
 
-uint32_t hal_mock_mutex_lock_count(void) { return s_mutex_lock_count; }
+uint32_t hal_mock_mutex_lock_count(void) { return s_mutex_lock_count.load(); }
 
-uint32_t hal_mock_mutex_unlock_count(void) { return s_mutex_unlock_count; }
+uint32_t hal_mock_mutex_unlock_count(void) {
+  return s_mutex_unlock_count.load();
+}
 
-uint32_t hal_mock_mutex_max_depth(void) { return s_mutex_max_depth; }
+uint32_t hal_mock_mutex_max_depth(void) { return s_mutex_max_depth.load(); }
 
 void hal_mock_mutex_fail_next_create(bool fail) {
   HAL_ATOMIC_STORE(&s_fail_next_mutex_create, fail, HAL_ATOMIC_RELEASE);

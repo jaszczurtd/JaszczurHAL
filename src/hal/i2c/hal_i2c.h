@@ -296,17 +296,22 @@ hal_status_t hal_i2c_set_clock_bus(uint8_t bus, uint32_t clock_hz);
  *
  * @param out_clock_hz Destination for the configured frequency. Must not be
  *                      NULL.
- * @return HAL_OK on success or HAL_EINVAL for a NULL output pointer.
+ * @return HAL_OK on success, HAL_EINVAL for a NULL output pointer, or
+ *         HAL_ENOMEM when the bus lock cannot be created.
  */
 hal_status_t hal_i2c_get_clock(uint32_t *out_clock_hz);
 
 /**
  * @brief Read back the configured clock of the selected I2C controller.
+ *
+ * Takes the bus lock like hal_i2c_set_clock_bus(), so it waits while another
+ * task or core holds the bus and never returns a value mid-change.
  * @param bus          I2C controller index (0 = default, 1 = second
  *                      controller).
  * @param out_clock_hz Destination for the configured frequency. Must not be
  *                      NULL.
- * @return HAL_OK on success or HAL_EINVAL for an invalid bus/NULL pointer.
+ * @return HAL_OK on success, HAL_EINVAL for an invalid bus/NULL pointer, or
+ *         HAL_ENOMEM when the bus lock cannot be created.
  */
 hal_status_t hal_i2c_get_clock_bus(uint8_t bus, uint32_t *out_clock_hz);
 

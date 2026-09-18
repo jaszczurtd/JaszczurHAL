@@ -76,6 +76,8 @@ def read_prefixed_line(
             continue
         line.extend(chunk)
         if not line.endswith(b"\n"):
+            if len(line) > 2048:
+                line.clear()
             continue
         completed = bytes(line)
         if completed.startswith(prefix):

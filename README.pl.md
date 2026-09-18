@@ -263,7 +263,7 @@ Aby uruchomić automatyczne testy i kontrole repozytorium, wykonaj:
 ```
 
 Skrypt uruchamia testy jednostkowe na komputerze, w tym testy FreeRTOS POSIX,
-kontrole Clang ASan/UBSan/libFuzzer i Valgrind memcheck oraz analizę statyczną.
+kontrole Clang ASan/UBSan/TSan/libFuzzer i Valgrind memcheck oraz analizę statyczną.
 Sprawdza również duplikaty kodu i dokumentację, a także kompiluje bibliotekę
 i firmware w zestawie konfiguracji dla obsługiwanych platform.
 

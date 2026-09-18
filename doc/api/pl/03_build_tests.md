@@ -146,8 +146,8 @@ same pliki i nie poprawia rozbieżności. CI używa tego bardziej rygorystyczneg
 Uruchamia dziewięć etapów kontroli jakości w następującej kolejności:
 1. Sprawdzenie obecności narzędzi
 2. Testy jednostkowe hosta/mock (`.build/gate/host/` + ctest, w tym FreeRTOS POSIX)
-3. Testy Clang ASan/UBSan i krótkie testy libFuzzer przez ten sam skrypt,
-   którego używa CI
+3. Testy Clang ASan/UBSan, testy natywne pod ThreadSanitizerem i krótkie
+   testy libFuzzer przez ten sam skrypt, którego używa CI
 4. Bezpieczeństwo pamięci (Valgrind memcheck na wszystkich natywnych plikach wykonywalnych testów C/C++)
 5. Analiza statyczna: cppcheck
 6. Analiza statyczna: clang-tidy (bazy danych kompilacji hosta + STM32 poniżej

@@ -130,6 +130,8 @@ def wait_for_report(path: str, timeout_s: float) -> dict[str, int | str]:
                     continue
                 line.extend(chunk)
                 if not line.endswith(b"\n"):
+                    if len(line) > 2048:
+                        line.clear()
                     continue
                 report = parse_report(bytes(line))
                 if report is not None and is_task0_heartbeat(report):

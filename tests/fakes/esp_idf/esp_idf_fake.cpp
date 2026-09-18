@@ -10,8 +10,6 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "hal/core/hal_assert.h"
-#include "hal/core/hal_mutex_once.h"
-#include "hal/system/hal_sync.h"
 #include "soc/soc_caps.h"
 #include "xtensa_api.h"
 
@@ -45,9 +43,6 @@ struct fake_rmt_channel {
 };
 struct fake_rmt_encoder {
   int unused;
-};
-struct hal_mutex_impl_t {
-  std::mutex mutex;
 };
 
 namespace fake_idf {
@@ -716,19 +711,7 @@ extern "C" void xt_unhandled_exception(XtExcFrame *) {
   violation("unhandled exception reached");
 }
 
-/* ---- HAL services the backends link against ------------------------------ */
+/* ---- HAL assert; hal_mutex comes from fakes/host_sync ----------------------
+ */
 
-extern "C" {
-
-hal_mutex_t hal_mutex_create(void) { return new hal_mutex_impl_t(); }
-hal_mutex_t jh_hal_mutex_try_create(void) { return hal_mutex_create(); }
-void hal_mutex_lock(hal_mutex_t mutex) { mutex->mutex.lock(); }
-bool hal_mutex_try_lock(hal_mutex_t mutex) { return mutex->mutex.try_lock(); }
-void hal_mutex_unlock(hal_mutex_t mutex) { mutex->mutex.unlock(); }
-void hal_mutex_destroy(hal_mutex_t mutex) { delete mutex; }
-void hal_critical_section_enter(void) {}
-void hal_critical_section_exit(void) {}
-
-void hal_assert_fail(const char *msg) { throw AssertFailure(msg); }
-
-} // extern "C"
+extern "C" void hal_assert_fail(const char *msg) { throw AssertFailure(msg); }

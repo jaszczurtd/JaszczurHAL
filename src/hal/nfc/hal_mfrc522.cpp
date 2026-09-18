@@ -127,9 +127,9 @@ static void release_transport_context(mfrc522_transport_context_t *context) {
   if (context->native != nullptr) {
     (void)context->native->PCD_ReleaseTransportError();
     if (context->kind == mfrc522_transport_kind_t::spi) {
-      context->storage.spi.~MFRC522_SPI();
+      context->storage.spi.MFRC522_SPI::~MFRC522_SPI();
     } else {
-      context->storage.i2c.~MFRC522_I2C();
+      context->storage.i2c.MFRC522_I2C::~MFRC522_I2C();
     }
   }
   context->native = nullptr;
@@ -142,7 +142,7 @@ static void release_reader_context(mfrc522_reader_context_t *context) {
     return;
   }
   if (context->native != nullptr) {
-    context->storage.reader.~MFRC522();
+    context->storage.reader.MFRC522::~MFRC522();
   }
   if (context->mutex != nullptr) {
     hal_mutex_destroy(context->mutex);

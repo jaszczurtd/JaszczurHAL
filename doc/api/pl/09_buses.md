@@ -459,7 +459,10 @@ zatrzymania/resetu i unieważnia stan związany z poprzednim trybem.
 **Współbieżność:** Backendy sprzętowe chronią transfery wewnętrznym
 `hal_mutex_t` przypisanym do magistrali. Wspólna wewnętrzna funkcja pomocnicza
 aktualizuje atomowo właściciela blokady i poziom zagnieżdżenia, dlatego
-współbieżne zadania lub rdzenie nie odczytują niezabezpieczonego stanu. Użyj
+współbieżne zadania lub rdzenie nie odczytują niezabezpieczonego stanu.
+Funkcje ustawiające i odczytujące zegar korzystają z tej samej blokady
+magistrali, więc odczyt zegara czeka, dopóki magistralę trzyma inne zadanie
+lub rdzeń. Użyj
 `hal_i2c_lock()` i `hal_i2c_unlock()`, jeśli sekcja krytyczna ma objąć
 również bezpośrednie wywołania implementacji sprzętowej lub zewnętrznej
 biblioteki.

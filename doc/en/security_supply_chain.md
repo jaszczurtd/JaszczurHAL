@@ -190,7 +190,7 @@ version agree:
 python3 scripts/check_release_metadata.py
 ```
 
-Create the release tag only after its commit has been merged into `main`. Tag-triggered CI checks the tag name and verifies that the tagged commit is an ancestor of `origin/main`; it rejects a tag from a divergent release branch. Host CI also runs the complete test suite with ASan/UBSan and short fuzzing runs for the HTTP, WebSocket, and multipart upload parsers. ThreadSanitizer is an optional local check enabled with `-DJH_ENABLE_THREAD_SANITIZER=ON`.
+Create the release tag only after its commit has been merged into `main`. Tag-triggered CI checks the tag name and verifies that the tagged commit is an ancestor of `origin/main`; it rejects a tag from a divergent release branch. Host CI also runs the complete test suite with ASan/UBSan, the native tests with ThreadSanitizer, and short fuzzing runs for the HTTP, WebSocket, and multipart upload parsers.
 
 ## Updating a component
 

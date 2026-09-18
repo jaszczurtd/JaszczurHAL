@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 from vscode.runtime.serial_io import (
     open_serial_port,
+    read_line,
     serial_error_types,
 )
 
@@ -57,24 +58,12 @@ def open_port(path: str):
     return port
 
 
-def read_line(port, timeout_s: float) -> bytes:
-    deadline = time.monotonic() + timeout_s
-    received = bytearray()
-    while not received.endswith(b"\n"):
-        chunk = port.read(1)
-        if chunk:
-            received.extend(chunk)
-        elif time.monotonic() >= deadline:
-            raise TimeoutError(f"incomplete response: {received!r}")
-    return bytes(received)
-
-
 def command(path: str, value: bytes, timeout_s: float) -> bytes:
     with open_port(path) as port:
         port.reset_input_buffer()
         port.write(value)
         port.flush()
-        return read_line(port, timeout_s)
+        return read_line(port, time.monotonic() + timeout_s)
 
 
 def parse_status(line: bytes) -> dict[str, int | str]:

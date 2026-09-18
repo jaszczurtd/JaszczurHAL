@@ -172,7 +172,6 @@ private:
 
   int stabilityCounter = 0;
   int instabilityCounter = 0;
-  int zeroCrossings = 0;
 };
 
 #endif

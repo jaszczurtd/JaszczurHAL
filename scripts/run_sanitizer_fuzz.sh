@@ -12,8 +12,9 @@ usage() {
     cat <<'EOF'
 Usage: scripts/run_sanitizer_fuzz.sh [options]
 
-Configure, build, and run the Clang ASan/UBSan host suite and parser fuzz smoke
-tests. The build directory must stay below the repository .build/ tree.
+Configure, build, and run the Clang ASan/UBSan host suite, parser fuzz smoke
+tests, and the native host tests under ThreadSanitizer. Build directories must
+stay below the repository .build/ tree; the TSan build uses PATH-tsan.
 
 Options:
   --build-dir PATH   Build directory (default: .build/sanitizer-fuzz)
@@ -171,4 +172,16 @@ for target in fuzz_http_server fuzz_websocket fuzz_http_multipart; do
         "-runs=${FUZZ_RUNS}" -max_len=1024
 done
 
-echo "[PASS] Clang ASan/UBSan tests and parser fuzz smoke checks passed."
+# ThreadSanitizer cannot share a build with ASan. It covers the native tests;
+# the Python checks gain nothing from instrumentation.
+TSAN_BUILD_DIR="${BUILD_DIR}-tsan"
+cmake -E remove_directory "${TSAN_BUILD_DIR}"
+cmake -E env "CC=${CLANG_CC}" "CXX=${CLANG_CXX}" \
+    cmake -S "${REPO_ROOT}" -B "${TSAN_BUILD_DIR}" \
+        -DJH_ENABLE_THREAD_SANITIZER=ON
+cmake --build "${TSAN_BUILD_DIR}" --parallel "${JOBS}"
+cmake -E env "TSAN_OPTIONS=halt_on_error=1:second_deadlock_stack=1" \
+    ctest --test-dir "${TSAN_BUILD_DIR}" --output-on-failure \
+        --parallel "${JOBS}" -L '^memcheck$'
+
+echo "[PASS] Clang ASan/UBSan, TSan and parser fuzz smoke checks passed."

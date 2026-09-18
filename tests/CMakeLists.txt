@@ -1692,12 +1692,31 @@ endforeach()
 target_compile_definitions(test_rp_i2c_slave_snapshot PRIVATE
     HAL_ENABLE_I2C_SLAVE_SNAPSHOT)
 
+# RP I2C master clock accessors from two threads standing in for the cores.
+add_executable(test_rp_i2c_clock_sync
+    test_rp_i2c_clock_sync.cpp
+    fakes/host_sync/hal_sync_host.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/rp2040/hal_i2c.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/i2c/hal_i2c.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/core/hal_config.cpp
+    ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+target_include_directories(test_rp_i2c_clock_sync PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/fakes/rp2040_i2c_sdk
+    ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(test_rp_i2c_clock_sync PRIVATE
+    HAL_TARGET_RP2040=1 HAL_BOARD_PROFILE_RP_PICO=1 HAL_ENABLE_I2C
+    HAL_ENABLE_UNITY UNITY_INCLUDE_CONFIG_H)
+jh_enable_host_warnings(test_rp_i2c_clock_sync ERRORS)
+target_link_libraries(test_rp_i2c_clock_sync PRIVATE Threads::Threads)
+add_test(NAME test_rp_i2c_clock_sync COMMAND test_rp_i2c_clock_sync)
+
 # ESP32 I2C target, LEDC, RMT and fault backends against a fake ESP-IDF that
 # records driver calls, injects failures and schedules FreeRTOS tasks.
 set(_esp32_backend_dir ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/esp32)
 add_executable(test_esp32_backend_lifecycle
     test_esp32_backend_lifecycle.cpp
     fakes/esp_idf/esp_idf_fake.cpp
+    fakes/host_sync/hal_sync_host.cpp
     ${_esp32_backend_dir}/hal_i2c_slave.cpp
     ${_esp32_backend_dir}/hal_pwm.cpp
     ${_esp32_backend_dir}/hal_pwm_freq.cpp

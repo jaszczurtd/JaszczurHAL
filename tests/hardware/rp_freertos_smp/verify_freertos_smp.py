@@ -5,9 +5,14 @@ import hashlib
 import json
 import re
 import threading
+from pathlib import Path
+import sys
 import time
 
 import serial
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from vscode.runtime.serial_io import read_line  # noqa: E402
 
 
 STATUS_COMMAND = b"\xa5"
@@ -36,24 +41,11 @@ def read_exact(port: serial.Serial, length: int, timeout_s: float) -> bytes:
     return bytes(received)
 
 
-def read_line(port: serial.Serial, timeout_s: float) -> bytes:
-    deadline = time.monotonic() + timeout_s
-    received = bytearray()
-    while not received.endswith(b"\n"):
-        chunk = port.read(1)
-        if chunk:
-            received.extend(chunk)
-            continue
-        if time.monotonic() >= deadline:
-            raise TimeoutError(f"incomplete status response: {received!r}")
-    return bytes(received)
-
-
 def query_status(port: serial.Serial, timeout_s: float) -> dict[str, int]:
     port.reset_input_buffer()
     port.write(STATUS_COMMAND)
     port.flush()
-    line = read_line(port, timeout_s)
+    line = read_line(port, time.monotonic() + timeout_s)
     match = STATUS_PATTERN.fullmatch(line)
     if match is None:
         raise RuntimeError(f"invalid status response: {line!r}")
