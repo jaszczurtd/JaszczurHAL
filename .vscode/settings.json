@@ -2,6 +2,7 @@
     "C_Cpp.default.configurationProvider": "",
     "C_Cpp.errorSquiggles": "enabled",
     "cmake.configureOnOpen": false,
+    "cmake.buildDirectory": "${workspaceFolder}/.build/vscode",
     "files.exclude": {
         "**/.build": true
     },

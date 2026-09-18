@@ -548,6 +548,8 @@ def root_settings_document() -> dict[str, Any]:
         "C_Cpp.default.configurationProvider": "",
         "C_Cpp.errorSquiggles": "enabled",
         "cmake.configureOnOpen": False,
+        # CMake Tools would otherwise configure into ${workspaceFolder}/build.
+        "cmake.buildDirectory": "${workspaceFolder}/.build/vscode",
         "files.exclude": {"**/.build": True},
         "search.exclude": {"**/.build": True},
     }

@@ -9,7 +9,9 @@ import sys
 import tempfile
 
 
-ROOT = Path(sys.argv[1]).resolve()
+from repo_root import repo_root  # noqa: E402
+
+ROOT = repo_root(sys.argv, __file__)
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import vscode_library_workspace as workspace
@@ -41,6 +43,13 @@ for relative, expected in workspace.root_vscode_documents(ROOT).items():
         f"tracked {relative} is stale; run "
         "'python3 scripts/vscode_library_workspace.py sync-vscode'",
     )
+
+require(
+    workspace.root_settings_document()
+    .get("cmake.buildDirectory", "")
+    .startswith("${workspaceFolder}/.build/"),
+    "CMake Tools would configure the library outside .build",
+)
 
 tasks = json.loads((ROOT / ".vscode/tasks.json").read_text(encoding="utf-8"))
 task_labels = {item["label"] for item in tasks["tasks"]}

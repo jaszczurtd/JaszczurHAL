@@ -12,7 +12,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 
-ROOT = Path(sys.argv[1]).resolve()
+from repo_root import repo_root  # noqa: E402
+
+ROOT = repo_root(sys.argv, __file__)
 SCRIPT = ROOT / "scripts" / "rp_ota_artifacts.py"
 
 spec = importlib.util.spec_from_file_location("rp_ota_artifacts_test", SCRIPT)

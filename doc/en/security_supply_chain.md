@@ -167,6 +167,9 @@ job:
 - runs `osv-scanner` against the repository source tree,
 - runs `cve-bin-tool` against the CycloneDX SBOM.
 
+The CVE database is cached for a day. When the NVD mirror is unreachable, the
+scan uses the most recent cached database and reports a warning.
+
 Vulnerability scanning runs separately from compilation, tests, and static analysis so scanner failures can be investigated independently. Scheduled scans also detect newly published CVEs when the repository code has not changed.
 
 Handle findings as follows:

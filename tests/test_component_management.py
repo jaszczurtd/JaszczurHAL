@@ -9,7 +9,9 @@ import subprocess
 import sys
 
 
-ROOT = Path(sys.argv[1]).resolve()
+from repo_root import repo_root  # noqa: E402
+
+ROOT = repo_root(sys.argv, __file__)
 THIRD_PARTY = ROOT / "third_party"
 
 

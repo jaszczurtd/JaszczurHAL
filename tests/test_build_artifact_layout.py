@@ -4,12 +4,15 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
 
 
-ROOT = Path(sys.argv[1]).resolve()
+from repo_root import repo_root  # noqa: E402
+
+ROOT = repo_root(sys.argv, __file__)
 BUILD_ROOT = ROOT / ".build"
 sys.path.insert(0, str(ROOT / "scripts"))
 import examples_dispatcher
@@ -153,6 +156,25 @@ for duplicated_generator in (
 require(
     "/tmp/jh_" not in quality_gate,
     "runalltests.sh still writes logs outside .build",
+)
+
+# Every CMake build tree inside the repository must sit below a .build
+# directory; the configure-time guard cannot remove what a refused configure
+# already wrote.
+stray_build_trees = []
+for directory, subdirectories, files in os.walk(ROOT):
+    subdirectories[:] = [
+        name
+        for name in subdirectories
+        if name not in {".build", ".git", "third_party"}
+    ]
+    if "CMakeCache.txt" in files:
+        stray_build_trees.append(Path(directory).relative_to(ROOT).as_posix())
+require(
+    not stray_build_trees,
+    "CMake build trees outside .build/: "
+    + ", ".join(sorted(stray_build_trees))
+    + "; delete them and configure into .build/<name>",
 )
 
 sanitizer_runner = (ROOT / "scripts" / "run_sanitizer_fuzz.sh").read_text(

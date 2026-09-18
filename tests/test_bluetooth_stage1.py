@@ -11,7 +11,9 @@ import sys
 from source_assertions import source_fragment_position, source_has_fragment
 
 
-ROOT = Path(sys.argv[1]).resolve()
+from repo_root import repo_root  # noqa: E402
+
+ROOT = repo_root(sys.argv, __file__)
 BTSTACK_REPO = "https://github.com/jaszczurtd/btstack.git"
 BTSTACK_REF = "6c27e47476f17e46190def9043a3e60b1178f044"
 

@@ -1,7 +1,6 @@
-# Managed build output
+# Managed build output. Stray build*/ trees stay visible on purpose: CMake and
+# the gate refuse build trees outside .build/.
 .build/
-build/
-build*/
 *__pycache__*
 *.py[cod]
 

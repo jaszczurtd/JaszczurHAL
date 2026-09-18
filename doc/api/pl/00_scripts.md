@@ -32,7 +32,7 @@ Uruchamiaj polecenia z katalogu głównego repozytorium, chyba że instrukcja ws
 
 ### Gdzie powstają pliki wynikowe
 
-Pliki wynikowe kompilacji i testów trafiają do `.build/`, a zarządzane zależności są instalowane w `third_party/`. Zasady rozdzielania katalogów według platformy i płytki oraz utrzymywania plików generowanych opisuje sekcja [Katalogi kompilacji i pliki generowane](../../pl/FwProjectWorkflow.md#katalogi-budowania-i-pliki-generowane).
+Pliki wynikowe kompilacji i testów trafiają do `.build/`, a zarządzane zależności są instalowane w `third_party/`. Ręczną konfigurację CMake również kieruj do `.build/<nazwa>`, na przykład `cmake -S . -B .build/host`. CMake przerywa pracę z komunikatem `[JH-BUILD-DIR]`, gdy katalog kompilacji wewnątrz repozytorium nie leży pod katalogiem `.build`, a pełna kontrola jakości nie przejdzie, dopóki zostaje taki `CMakeCache.txt`. Katalogi kompilacji poza repozytorium, np. projektów korzystających z biblioteki, nie są sprawdzane. Testy Python uruchamiaj poleceniem `python3 tests/test_<nazwa>.py .`; pierwszy argument, który nie jest katalogiem głównym repozytorium, zatrzymuje test, zanim cokolwiek zapisze. Zasady rozdzielania katalogów według platformy i płytki oraz utrzymywania plików generowanych opisuje sekcja [Katalogi kompilacji i pliki generowane](../../pl/FwProjectWorkflow.md#katalogi-budowania-i-pliki-generowane).
 
 <a id="interfejsy-narzędziowe"></a>
 
@@ -959,6 +959,13 @@ zainstalowane:
 - `osv-scanner` skanuje rekurencyjnie źródło repozytorium;
 - gdy `JH_SECURITY_SCAN_SOURCE=1`, `cve-bin-tool` skanuje generowany SBOM
   CycloneDX.
+
+`cve-bin-tool` zwraca ten sam kod zarówno po wykryciu CVE, jak i po nieudanym
+pobraniu danych. Dlatego skrypt najpierw odświeża bazę na pustym katalogu, a
+potem skanuje SBOM bez dostępu do sieci. Nieudane odświeżenie jest ponawiane
+(`JH_CVE_REFRESH_ATTEMPTS`, domyślnie 3). Jeśli źródło danych pozostaje
+niedostępne, skan korzysta z bazy zapisanej w `~/.cache/cve-bin-tool` i
+zgłasza ostrzeżenie; bez takiej bazy skrypt kończy się błędem.
 
 Skrypt przeszukuje zarówno `PATH`, jak i `~/.local/bin`, nie instaluje
 skanerów i ostrzega zamiast kończyć się niepowodzeniem wyłącznie z powodu

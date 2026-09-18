@@ -15,7 +15,9 @@ from unittest import mock
 import zipfile
 
 
-ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).parents[1]
+from repo_root import repo_root  # noqa: E402
+
+ROOT = repo_root(sys.argv, __file__)
 MODULE_PATH = ROOT / "scripts/component_manager.py"
 SPEC = importlib.util.spec_from_file_location("jh_component_manager", MODULE_PATH)
 assert SPEC and SPEC.loader

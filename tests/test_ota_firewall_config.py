@@ -15,7 +15,9 @@ import sys
 import unittest
 
 
-ROOT = Path(sys.argv[1]).resolve()
+from repo_root import repo_root  # noqa: E402
+
+ROOT = repo_root(sys.argv, __file__)
 MODULE_PATH = ROOT / "scripts/configure_ota_firewall.py"
 SPEC = importlib.util.spec_from_file_location("configure_ota_firewall", MODULE_PATH)
 if SPEC is None or SPEC.loader is None:

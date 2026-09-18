@@ -1,4 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/jh_build_dir_guard.cmake")
+jh_require_managed_build_dir()
 
 set(JH_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 set(JH_TARGET "rp2040" CACHE STRING

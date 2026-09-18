@@ -11,7 +11,9 @@ import sys
 from source_assertions import source_has_fragment
 
 
-ROOT = Path(sys.argv[1]).resolve()
+from repo_root import repo_root  # noqa: E402
+
+ROOT = repo_root(sys.argv, __file__)
 FIXTURE = ROOT / "tests" / "hardware" / "bluetooth_classic_hci_trace"
 
 

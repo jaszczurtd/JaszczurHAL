@@ -16,7 +16,9 @@ from types import SimpleNamespace
 from unittest import mock
 
 
-ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).resolve().parents[1]
+from repo_root import repo_root  # noqa: E402
+
+ROOT = repo_root(sys.argv, __file__)
 SCRIPTS_DIR = ROOT / "scripts"
 TOOLS_DIR = ROOT / "vscode" / "tools"
 for import_dir in (str(SCRIPTS_DIR), str(TOOLS_DIR)):

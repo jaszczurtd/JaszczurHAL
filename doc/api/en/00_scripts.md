@@ -32,7 +32,7 @@ Run commands from the repository root unless a section states otherwise. Use `--
 
 ### Output directories
 
-Build and test outputs go in `.build/`; managed dependencies are installed in `third_party/`. See [Build directories and generated files](../../en/FwProjectWorkflow.md#build-directories-and-generated-files) for the directory layout, separate caches for each target and board, and rules for maintaining generated files.
+Build and test outputs go in `.build/`; managed dependencies are installed in `third_party/`. Configure a manual CMake build into `.build/<name>` as well, for example `cmake -S . -B .build/host`. CMake stops with `[JH-BUILD-DIR]` when a build directory inside the repository is not below a `.build` directory, and the gate fails while any such leftover `CMakeCache.txt` remains. Build directories outside the repository, such as those of consumer projects, are not checked. Run Python tests as `python3 tests/test_<name>.py .`; a first argument that is not the repository root stops the test before it writes anything. See [Build directories and generated files](../../en/FwProjectWorkflow.md#build-directories-and-generated-files) for the directory layout, separate caches for each target and board, and rules for maintaining generated files.
 
 <a id="tooling-interfaces"></a>
 
@@ -881,6 +881,13 @@ Regenerates the tracked SBOM, then runs scanners that are already installed:
 - `osv-scanner` scans the repository source recursively;
 - when `JH_SECURITY_SCAN_SOURCE=1`, `cve-bin-tool` scans the generated
   CycloneDX SBOM.
+
+`cve-bin-tool` returns the same status for found CVEs and for a failed data
+download, so the script first refreshes its database against an empty
+directory and then scans the SBOM offline. A failed refresh is retried
+(`JH_CVE_REFRESH_ATTEMPTS`, default 3). When the data source stays
+unreachable, the scan uses the cached database from `~/.cache/cve-bin-tool`
+with a warning; without a cached database the script fails.
 
 The script searches both `PATH` and `~/.local/bin`, does not install scanners,
 and warns rather than failing solely because no scanner is available. Scanner
