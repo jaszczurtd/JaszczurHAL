@@ -2305,13 +2305,21 @@ wywołujący może zdeinicjalizować RTC.
 
 **Współbieżność:** Funkcje pomocnicze bez efektów ubocznych są
 reentrantne. Opcjonalne API czasu systemowego i NTP używają chronionych
-muteksem, spójnych kopii stanu i obsługują współbieżne zadania oraz rdzenie.
-Operacje wejścia/wyjścia DNS, UDP i RTC odbywają się bez muteksu stanu zegara,
-dzięki czemu callback obsługi sieci może bez deadlocku ponownie wywołać
-funkcję odczytującą czas. Każde wywołanie takiej funkcji lub
-`hal_time_get_status_ex()` obsługuje oczekujące żądanie. Po 5-sekundowym
-timeoucie serwera podstawowego rozpoczyna się próba z opcjonalnym serwerem
-zapasowym.
+muteksem, spójnych kopii stanu i obsługują współbieżne zadania oraz rdzenie;
+nie wolno ich wywoływać z ISR. Operacje wejścia/wyjścia DNS, UDP i RTC
+odbywają się bez muteksu stanu zegara, dzięki czemu callback obsługi sieci może
+bez deadlocku ponownie wywołać funkcję odczytującą czas. Każde wywołanie takiej
+funkcji lub `hal_time_get_status_ex()` obsługuje oczekujące żądanie. Po
+5-sekundowym timeoucie serwera podstawowego rozpoczyna się próba z opcjonalnym
+serwerem zapasowym. Żądanie obsługuje w danej chwili tylko jeden wywołujący.
+Funkcja odczytu, która zastanie obsługę zajętą, pomija ją i zwraca ostatnią
+kopię stanu, a `hal_time_sync_ntp()` czeka, aż zajęty wywołujący skończy.
+
+`hal_time_set_timezone()` oraz dołączanie i odłączanie RTC traktuj jako
+konfigurację. Na platformach sprzętowych zmiana strefy czasowej nie jest
+synchronizowana z `hal_time_get_local()` ani `hal_time_format_local()`; ustaw
+ją, zanim inne zadania zaczną odczytywać czas lokalny. Dołączanie, odłączanie
+RTC i jego deinicjalizacja nie mogą się na siebie nakładać.
 
 **Pomocnicy mock:**
 ```c

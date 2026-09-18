@@ -260,7 +260,6 @@ bool hal_can_get_error_counters(hal_can_t h,
 
 /**
  * @brief Check if at least one frame is waiting in the RX buffer.
- * @param h CAN handle.
  * @return true if data is available.
  */
 bool hal_can_available(hal_can_t h);

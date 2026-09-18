@@ -158,7 +158,6 @@ hal_bluetooth_a2dp_sink_open(hal_bluetooth_classic_t classic,
 
 /**
  * @brief Close the profile and discard encoded and PCM queues.
- * @param sink Live profile handle.
  * @return HAL_OK, HAL_EUNINIT for a stale handle, HAL_ENOMEM, or a backend
  * detach error.
  */
@@ -166,7 +165,6 @@ hal_status_t hal_bluetooth_a2dp_sink_close(hal_bluetooth_a2dp_sink_t sink);
 
 /**
  * @brief Decode queued SBC packets and prepare bounded PCM blocks.
- * @param sink Live profile handle.
  * @return HAL_OK when serviced, HAL_EUNINIT for a stale handle, HAL_EAGAIN
  * when no packet is pending, HAL_EBUSY when the PCM queue must be drained
  * before decoding the next packet, HAL_EPROTO for a rejected packet/frame,

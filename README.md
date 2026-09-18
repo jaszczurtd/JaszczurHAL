@@ -293,8 +293,8 @@ runmefirst.ps1
 Tests on physical hardware are run separately, following the instructions
 for each test setup.
 
-For requirements, configuration, test organization, extension rules,
-hardware procedures, and recorded results, see the
+For requirements, configuration, test organization, extension rules, and the
+index of hardware procedures, see the
 [build and test guide](doc/api/en/03_build_tests.md). The
 [repository scripts guide](doc/api/en/00_scripts.md) explains how the test
 and quality-check scripts work.
@@ -421,6 +421,16 @@ Key references:
 - [Build-time flags reference](doc/HAL_FLAGS.txt).
 - [Static library builds](doc/en/lib_compilation.md).
 - [Firmware development in VS Code](vscode/README.md).
+
+
+## Is this project built with AI?
+
+It's an important question, especially these days. And yes, I use AI in this project. I wouldn't have been able to prepare such detailed documentation on my own, including the Doxygen comments. The vast majority of the Python-based build system was written by AI - it's an area I personally don't enjoy, and I'm relieved to hand it over to agents. The same goes for most of the unit tests (but in the vast majority of cases, they are based on real regressions or issues I have encountered). AI also did a lot of work refactoring the sources and adapting my old, or someone else's, Arduino code to the requirements of the JaszczurHAL API, including multithreading support.
+
+But I'm the one steering the whole thing. The architecture and structure of the project, the quality gates (unit tests, sanitizers, fuzzing, Valgrind, static analysis), and testing on real hardware are my work. I wrote around 60% of the C/C++ code by hand. I use agents to carry out specific tasks, but the responsibility for the whole project stays with me. Every piece of code that AI produces goes through my review - I can say that there are no fragments here I've never laid eyes on, or that I don't know how they work.
+
+Using AI on its own doesn't determine code quality - neither for better nor for worse. What matters is whether a solution meets the requirements, passes the tests, and runs on the target hardware. For me, AI is a tool that lets me achieve more than I could on my own. It cut my working time from months to weeks.
+And it's not like building a project like this with AI is painless - every single iteration is still tedious work, whether it's checking results or analyzing why something still doesn't work the way it should. Sometimes it takes dozens of long iterations and a lot of back-and-forth with the agent. And how much I had to fight with AI just to make the documentation readable at all - only I know. ;)
 
 ## Notes and credits
 

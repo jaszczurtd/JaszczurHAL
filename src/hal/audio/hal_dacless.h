@@ -195,7 +195,6 @@ hal_status_t hal_dacless_create(const hal_dacless_config_t *config,
 
 /**
  * @brief Start or restart PWM audio output.
- * @param audio Valid DACless handle.
  * @return HAL_OK on success, HAL_EINVAL for an invalid handle,
  *         HAL_EUNSUPPORTED when the selected DMA backend is unavailable,
  *         HAL_EBUSY when a required hardware resource is already active,
@@ -210,7 +209,6 @@ hal_status_t hal_dacless_begin(hal_dacless_t audio);
  * Do not call this function from an audio callback or concurrently with an
  * audio callback. A NULL, stale or already destroyed handle is rejected.
  *
- * @param audio Valid DACless handle.
  * @return HAL_OK on success, HAL_EINVAL for an invalid handle, HAL_ENOMEM
  *         when synchronization is unavailable, or HAL_EBUSY when an RP DMA
  *         instance is destroyed from a core other than its owner.

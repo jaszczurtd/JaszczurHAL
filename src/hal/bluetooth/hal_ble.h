@@ -261,7 +261,6 @@ hal_status_t hal_ble_advertising_stop(hal_ble_advertising_handle_t advertising);
 
 /**
  * @brief Queue disconnection of the current Peripheral link.
- * @param connection Current connection handle.
  * @return HAL_OK when queued; HAL_EINVAL for an invalid handle,
  * HAL_EUNINIT before initialization, HAL_EBUSY during another operation, or
  * HAL_ESTATE when no matching connection is active.

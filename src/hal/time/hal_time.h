@@ -18,7 +18,8 @@ extern "C" {
  * The optional NTP state is protected by short mutex-held snapshots. DNS,
  * socket, UDP service, receive, send, close, and runtime-clock calls execute
  * after releasing the state mutex, so network callbacks may safely re-enter
- * time getters. Calls from concurrent tasks/cores are supported.
+ * time getters. Calls from concurrent tasks/cores are supported, except for
+ * the setup calls noted below; none may run in an ISR.
  */
 
 #include <stdbool.h>
@@ -166,6 +167,9 @@ hal_status_t hal_time_get_status_ex(hal_time_status_t *out_status);
 
 /**
  * @brief Configure POSIX timezone string (TZ environment variable).
+ *
+ * A setup call: on hardware targets it updates the libc timezone without the
+ * time-service mutex, so call it before other tasks read local time.
  * @param tz Null-terminated TZ string.
  * @return true on success.
  */

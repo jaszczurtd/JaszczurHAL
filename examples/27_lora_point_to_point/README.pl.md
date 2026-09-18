@@ -70,7 +70,7 @@ Dla dwóch zintegrowanych płytek Waveshare LF wybierz
 `--target rp2040 --board rp2040-lora-lf` oraz warianty `link` i
 `link-responder`. Procedurę wgrywania, stały wybór portu szeregowego i kryteria
 `JHCMD1` opisują
-[testy sprzętowe poleceń przesyłanych przez LoRa](../../doc/api/pl/03_build_tests.md#bramka-sprzętowa-routera-poleceń-sx1262-przez-lora).
+[testy sprzętowe poleceń przesyłanych przez LoRa](../../tests/hardware/lora_sx1262/README.pl.md).
 
 **Polecenia w tym przykładzie nie są szyfrowane.** Dane mają sumę CRC,
 która nie zastępuje uwierzytelnienia. Włączenie szyfrowanego łącza wymaga

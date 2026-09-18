@@ -51,7 +51,6 @@ hal_config_t hal_config_defaults(void);
 void hal_setup(const hal_config_t *cfg);
 
 /**
- * @brief Get the active HAL configuration.
  * @return Read-only pointer to the internal configuration.
  */
 const hal_config_t *hal_get_config(void);

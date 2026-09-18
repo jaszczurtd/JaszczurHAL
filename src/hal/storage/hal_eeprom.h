@@ -157,7 +157,6 @@ hal_status_t hal_eeprom_write_byte(uint16_t addr, uint8_t val);
 
 /**
  * @brief Read one byte from EEPROM.
- * @param addr EEPROM address.
  * @return Stored byte value (0 when out of range). Use
  * hal_eeprom_read_byte_ex() for a typed status.
  */

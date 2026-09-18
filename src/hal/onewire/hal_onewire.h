@@ -44,7 +44,6 @@ void hal_onewire_deinit(hal_onewire_t h);
 
 /**
  * @brief Perform 1-Wire reset and detect presence pulse.
- * @param h Valid OneWire handle.
  * @return true when at least one device is present.
  */
 bool hal_onewire_reset(hal_onewire_t h);
@@ -58,7 +57,6 @@ void hal_onewire_select(hal_onewire_t h, const uint8_t rom[8]);
 
 /**
  * @brief Address all devices on the bus (Skip ROM command).
- * @param h Valid OneWire handle.
  */
 void hal_onewire_skip(hal_onewire_t h);
 
@@ -83,7 +81,6 @@ size_t hal_onewire_write_bytes(hal_onewire_t h, const uint8_t *data,
 
 /**
  * @brief Read one byte from the bus.
- * @param h Valid OneWire handle.
  * @return Received byte (0 on invalid handle).
  */
 uint8_t hal_onewire_read(hal_onewire_t h);
@@ -106,20 +103,17 @@ void hal_onewire_write_bit(hal_onewire_t h, uint8_t bit);
 
 /**
  * @brief Read one bit.
- * @param h Valid OneWire handle.
  * @return 0 or 1.
  */
 uint8_t hal_onewire_read_bit(hal_onewire_t h);
 
 /**
  * @brief Release parasite-power strong drive.
- * @param h Valid OneWire handle.
  */
 void hal_onewire_depower(hal_onewire_t h);
 
 /**
  * @brief Reset device-search state.
- * @param h Valid OneWire handle.
  */
 void hal_onewire_reset_search(hal_onewire_t h);
 

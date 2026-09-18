@@ -103,7 +103,6 @@ int hal_udp_socket_recvfrom(hal_udp_socket_t socket, void *buffer,
  *
  * This is a non-consuming readiness probe used by compatibility layers such as
  * BSD `select()`. It never blocks.
- * @param socket UDP socket handle.
  * @return true when a subsequent receive can complete immediately.
  */
 bool hal_udp_socket_can_recv(hal_udp_socket_t socket);
@@ -113,7 +112,6 @@ bool hal_udp_socket_can_recv(hal_udp_socket_t socket);
  *
  * This is a non-blocking readiness probe for compatibility layers. The socket
  * must be valid and bound for the HAL-level send API.
- * @param socket UDP socket handle.
  * @return true when a subsequent send can be attempted immediately.
  */
 bool hal_udp_socket_can_send(hal_udp_socket_t socket);
@@ -126,7 +124,6 @@ void hal_udp_socket_close(hal_udp_socket_t socket);
 
 /**
  * @brief Open UDP socket on local port.
- * @param local_port Local UDP port.
  * @return true on successful bind/open.
  */
 bool hal_udp_begin(uint16_t local_port);

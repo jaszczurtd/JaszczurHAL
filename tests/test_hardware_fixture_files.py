@@ -42,23 +42,36 @@ def load_module(name: str, path: Path):
 
 
 def check_documentation_index() -> None:
-    reference = (ROOT / "doc" / "api" / "en" / "03_build_tests.md").read_text(
-        encoding="utf-8"
-    )
+    """Each fixture README carries its own procedure and the guide indexes it."""
+    guides = {
+        "README.md": (ROOT / "doc" / "api" / "en" / "03_build_tests.md").read_text(
+            encoding="utf-8"
+        ),
+        "README.pl.md": (
+            ROOT / "doc" / "api" / "pl" / "03_build_tests.md"
+        ).read_text(encoding="utf-8"),
+    }
     for fixture_dir in sorted(HARDWARE.iterdir()):
         if not fixture_dir.is_dir():
             continue
-        readme_path = fixture_dir / "README.md"
-        require(readme_path.is_file(), f"{fixture_dir.name}: README is missing")
-        readme = readme_path.read_text(encoding="utf-8")
-        require(
-            "../../../doc/api/en/03_build_tests.md#" in readme,
-            f"{fixture_dir.name}: README does not link to the device-test guide",
-        )
-        require(
-            f"`tests/hardware/{fixture_dir.name}`" in reference,
-            f"{fixture_dir.name}: device-test guide entry is missing",
-        )
+        for readme_name, guide in guides.items():
+            readme_path = fixture_dir / readme_name
+            require(
+                readme_path.is_file(), f"{fixture_dir.name}: {readme_name} is missing"
+            )
+            readme = readme_path.read_text(encoding="utf-8")
+            require(
+                f"tests/hardware/{fixture_dir.name}" in readme and "```" in readme,
+                f"{fixture_dir.name}: {readme_name} does not hold the procedure",
+            )
+            require(
+                "03_build_tests.md#" not in readme,
+                f"{fixture_dir.name}: {readme_name} defers to the device-test guide",
+            )
+            require(
+                f"(../../../tests/hardware/{fixture_dir.name}/{readme_name})" in guide,
+                f"{fixture_dir.name}: device-test guide does not link {readme_name}",
+            )
 
 
 def check_build_layout() -> None:

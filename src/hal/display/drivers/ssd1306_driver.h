@@ -138,21 +138,18 @@ bool jh_ssd1306_set_orientation(jh_ssd1306_t *dev,
 
 /**
  * @brief Enter low-power display-off state.
- * @param dev Initialised driver instance.
  * @return true on success.
  */
 bool jh_ssd1306_suspend(jh_ssd1306_t *dev);
 
 /**
  * @brief Leave display-off state.
- * @param dev Initialised driver instance.
  * @return true on success.
  */
 bool jh_ssd1306_resume(jh_ssd1306_t *dev);
 
 /**
  * @brief Resolve the framebuffer size in bytes for the configured geometry.
- * @param dev Initialised driver instance.
  * @return Buffer size in bytes, or 0 when not initialised.
  */
 size_t jh_ssd1306_buffer_size(const jh_ssd1306_t *dev);

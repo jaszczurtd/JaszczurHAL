@@ -93,7 +93,6 @@ hal_bluetooth_hid_host_open(hal_bluetooth_classic_t classic,
 
 /**
  * @brief Close the HID Host profile without closing its Classic manager.
- * @param hid_host Live profile handle.
  * @return HAL_OK, HAL_EUNINIT for an invalid or stale handle, HAL_EBUSY during
  * another profile operation, HAL_ENOMEM, or a backend detach error.
  */
@@ -124,7 +123,6 @@ hal_bluetooth_hid_host_connect(hal_bluetooth_hid_host_t hid_host,
 
 /**
  * @brief Request asynchronous disconnection of the active HID link.
- * @param hid_host Live profile handle.
  * @return HAL_OK when queued, HAL_EUNINIT for an invalid handle, HAL_EBUSY
  * during another operation, HAL_ESTATE without an active connection, or a
  * backend error.

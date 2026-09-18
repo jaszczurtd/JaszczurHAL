@@ -204,7 +204,6 @@ hal_status_t hal_bluetooth_classic_open_ex(
 
 /**
  * @brief Close the manager and erase in-memory link-key copies.
- * @param classic Live manager handle.
  * @return HAL_OK, HAL_EUNINIT for an invalid or stale handle, HAL_EBUSY while
  * a profile remains attached, HAL_ENOMEM when the runtime lock cannot be
  * created, or a backend shutdown error.
@@ -213,7 +212,6 @@ hal_status_t hal_bluetooth_classic_close(hal_bluetooth_classic_t classic);
 
 /**
  * @brief Service the controller and commit pending peers outside callbacks.
- * @param classic Live manager handle.
  * @return HAL_OK, HAL_EUNINIT for an invalid handle, HAL_EBUSY during another
  * operation, HAL_EOVERFLOW when no peer slot is available, a provider error,
  * or a backend service/restore error.
@@ -254,7 +252,6 @@ hal_bluetooth_classic_pairing_window_open(hal_bluetooth_classic_t classic,
 
 /**
  * @brief Close the pairing window while retaining known-peer reconnects.
- * @param classic Live manager handle.
  * @return HAL_OK, HAL_EUNINIT for an invalid handle, HAL_ESTATE when no window
  * is open, HAL_EBUSY during another operation, HAL_ENOMEM, or a backend error.
  */
@@ -285,7 +282,6 @@ hal_status_t hal_bluetooth_classic_scan_start(hal_bluetooth_classic_t classic,
 
 /**
  * @brief Stop the active inquiry window.
- * @param classic Live manager handle.
  * @return HAL_OK when queued; HAL_EUNINIT for an invalid handle, HAL_EBUSY
  * during another operation, HAL_ESTATE when no scan is active, or a backend
  * error.
@@ -328,7 +324,6 @@ hal_bluetooth_classic_pair(hal_bluetooth_classic_t classic,
 
 /**
  * @brief Approve the current pairing request; PIN pairing uses `0000`.
- * @param classic Live manager handle.
  * @return HAL_OK when queued, HAL_EUNINIT for an invalid handle, HAL_ESTATE
  * without a pending request, HAL_EBUSY during another operation, HAL_ENOMEM,
  * or a backend error.
@@ -338,7 +333,6 @@ hal_bluetooth_classic_pairing_authorize(hal_bluetooth_classic_t classic);
 
 /**
  * @brief Reject the current pairing request.
- * @param classic Live manager handle.
  * @return HAL_OK when queued, HAL_EUNINIT for an invalid handle, HAL_ESTATE
  * without a pending request, HAL_EBUSY during another operation, HAL_ENOMEM,
  * or a backend error.
@@ -415,7 +409,6 @@ hal_status_t hal_bluetooth_classic_peer_forget(
  * stay erased and the remaining records can be retried. A new pairing window
  * is never opened automatically.
  *
- * @param classic Live manager handle.
  * @return HAL_OK when all records are gone, HAL_EUNINIT for an invalid handle,
  * HAL_EBUSY during another operation, HAL_ENOMEM, or the first erase/backend
  * error.

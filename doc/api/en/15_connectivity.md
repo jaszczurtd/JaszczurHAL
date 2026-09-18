@@ -2183,11 +2183,19 @@ persistence write before returning, after which the caller may deinitialize the
 RTC.
 
 **Thread safety:** The pure helpers are reentrant. Optional system/NTP APIs use
-mutex-protected state snapshots and support concurrent tasks/cores. DNS, UDP,
-and RTC I/O run without the wall-clock state mutex, so a network service
-callback may re-enter a time getter without deadlocking. Calling any time
-getter or `hal_time_get_status_ex()` services a pending request; a 5-second
-primary timeout starts the optional secondary.
+mutex-protected state snapshots and support concurrent tasks/cores; they must
+not be called from an ISR. DNS, UDP, and RTC I/O run without the wall-clock
+state mutex, so a network service callback may re-enter a time getter without
+deadlocking. Calling any time getter or `hal_time_get_status_ex()` services a
+pending request; a 5-second primary timeout starts the optional secondary.
+One caller services the request at a time. A getter that finds the service
+busy skips it and returns the last snapshot, while `hal_time_sync_ntp()` waits
+for the busy caller to finish.
+
+Treat `hal_time_set_timezone()` and the RTC attach/detach calls as setup. On
+hardware targets the timezone change is not synchronized with
+`hal_time_get_local()` and `hal_time_format_local()`; set it before other
+tasks read local time. RTC attach, detach, and RTC deinit must not overlap.
 
 **Mock helpers:**
 ```c

@@ -189,7 +189,6 @@ hal_status_t hal_ble_commands_event_start(hal_ble_commands_t commands,
  * call performs bounded work: at most one outgoing and one incoming Stream
  * chunk, plus at most one synchronous command dispatch.
  *
- * @param commands Live adapter handle.
  * @return HAL_OK after progress, HAL_EAGAIN when idle, HAL_EBUSY on reentry,
  * HAL_EAUTH when the session is unavailable for queued traffic, HAL_ETIMEOUT
  * for an incomplete frame, or a Stream, framing, dispatch or handle error.

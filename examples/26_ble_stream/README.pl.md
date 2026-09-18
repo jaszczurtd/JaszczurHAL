@@ -118,4 +118,4 @@ Central. Adapter poleceń jest dołączany raz do wcześniej uruchomionego Strea
 
 Niezależnego klienta oraz testy stabilności i bezpieczeństwa na kilku
 platformach opisują
-[testy sprzętowe `bluetooth_stream`](../../doc/api/pl/03_build_tests.md#bramka-sprzętowa-jh-ble-stream-v1).
+[testy sprzętowe `bluetooth_stream`](../../tests/hardware/bluetooth_stream/README.pl.md).

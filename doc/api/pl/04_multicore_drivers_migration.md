@@ -47,14 +47,14 @@ Po inicjalizacji większość funkcji HAL można współdzielić między rdzenia
 
 - **Muteksy instancji** chronią API oparte na uchwytach, np. `hal_can`, `hal_thermocouple`, `hal_rtc` i `SmartTimers`.
 - **Muteksy magistral** chronią współdzielone zasoby `hal_spi` i `hal_i2c`.
-- **Muteksy modułów globalnych** chronią `hal_eeprom`, `hal_display`, `hal_gps`, `hal_external_adc`, `hal_wifi`, `hal_udp`, `hal_wireguard`, `hal_mqtt`, `hal_kv` oraz wyjście diagnostyczne portu szeregowego.
+- **Muteksy modułów globalnych** chronią `hal_eeprom`, `hal_display`, `hal_gps`, `hal_external_adc`, `hal_wifi`, `hal_udp`, `hal_wireguard`, `hal_mqtt`, `hal_kv`, zegar systemowy i NTP w `hal_time` oraz wyjście diagnostyczne portu szeregowego.
 - **Funkcje bez stanu współdzielonego**, takie jak `hal_bits`, `hal_math`, czyste funkcje `hal_time`, `hal_crypto`, `hal_constrain` i `hal_map`, nie wymagają takiej synchronizacji.
 
 Muteksy modułów globalnych i magistral są tworzone atomowo tylko raz (`create-once`). Dwa zadania lub rdzenie nie utworzą więc różnych blokad dla tego samego zasobu. Najlepiej jednak utworzyć blokady podczas `init`/`begin`, zanim rozpocznie się współbieżny dostęp.
 
 Moduły `hal_uart` i `pidController` wymagają synchronizacji po stronie aplikacji lub użycia z jednego rdzenia.
 
-**Do weryfikacji - czas systemowy i NTP:** pierwotny opis ogólny wymieniał również opcjonalne API `hal_time` jako nieprzystosowane do współbieżnego użycia, natomiast [opis modułu sieciowego](15_connectivity.md) deklaruje chronione muteksem kopie stanu i obsługę wielu zadań oraz rdzeni. Bez sprawdzenia implementacji nie można rozstrzygnąć tej rozbieżności. Przed współdzieleniem tego API potwierdź jego rzeczywiste zasady synchronizacji.
+**Czas systemowy i NTP:** przy włączonym `HAL_ENABLE_TIME` funkcje zegara, NTP i statusu z `hal_time` można wywoływać współbieżnie z wielu zadań i rdzeni, ale nie z procedury obsługi przerwania (ISR). Trzy wywołania należą do konfiguracji: `hal_time_set_timezone()`, `hal_time_attach_rtc_ex()` i `hal_time_detach_rtc_ex()`. Na platformach sprzętowych zmiana strefy czasowej nie jest synchronizowana z `hal_time_get_local()` ani `hal_time_format_local()`, dlatego ustaw strefę, zanim inne zadania zaczną odczytywać czas lokalny. [Opis `hal_time`](15_connectivity.md#hal_time---funkcje-pomocnicze-kalendarza-oraz-opcjonalny-czas-systemowyntp) wyjaśnia, jak wywołujący dzielą się obsługą NTP.
 
 <a id="backend-mock"></a>
 

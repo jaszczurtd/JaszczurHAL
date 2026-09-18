@@ -784,7 +784,7 @@ Zachowaj możliwość odzyskania urządzenia przez USB:
   wszystkich potrzebnych danych LittleFS/EEPROM.
 - Polecenia kasowania sektorów kontrolnych właściwe dla poszczególnych
   targetów, podane w opisie
-  [sprzętowego testu natywnego OTA na RP](../api/pl/03_build_tests.md#sprzętowy-test-natywnego-ota-na-rp),
+  [sprzętowego testu natywnego OTA na RP](../../tests/hardware/rp_ota/README.pl.md),
   odnoszą się do dokładnego układu pamięci tego stanowiska testowego. Nie są to
   uniwersalne zakresy kasowania dla produktu.
 - Fizyczny dostęp do BOOTSEL pozostaje poza granicą zaufania OTA.

@@ -82,11 +82,9 @@ hal_status_t hal_wifi_scan_networks_ex(int *out_count);
 hal_status_t hal_wifi_get_scan_result_ex(size_t index,
                                          hal_wifi_scan_result_t *out);
 
-/** @brief Set WiFi mode. */
 bool hal_wifi_set_mode(hal_wifi_mode_t mode);
 
 /**
- * @brief Disconnect from WiFi.
  * @param erase_credentials Forwarded to platform implementation.
  */
 bool hal_wifi_disconnect(bool erase_credentials);

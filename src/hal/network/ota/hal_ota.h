@@ -69,7 +69,6 @@ typedef struct {
 bool hal_ota_set_port(uint16_t port);
 
 /**
- * @brief Set OTA hostname.
  * @param hostname Null-terminated hostname.
  * @return true when accepted.
  */

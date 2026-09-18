@@ -440,4 +440,4 @@ z rzeczywistym schedulerem. Przykład
 [`27_lora_point_to_point`](../../../examples/27_lora_point_to_point/) można
 zbudować dla RP2040 i STM32G474. Powtarzalna procedura dla dwóch urządzeń
 i weryfikator portu szeregowego są opisane w
-[teście sprzętowym niskopoziomowej komunikacji LoRa SX1262](03_build_tests.md#sx1262-raw-lora-hardware-gate).
+[teście sprzętowym niskopoziomowej komunikacji LoRa SX1262](../../../tests/hardware/lora_sx1262/README.pl.md).

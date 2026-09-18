@@ -29,7 +29,6 @@
 extern "C" {
 #endif
 
-/** @brief Current session protocol version. */
 #define HAL_SERIAL_SESSION_PROTOCOL_VERSION 1u
 
 /** @brief Maximum accepted command line length, excluding its terminator. */

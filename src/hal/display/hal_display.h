@@ -628,7 +628,6 @@ hal_status_t hal_display_soft_init(int delay_ms);
 
 /**
  * @brief Set the display rotation (0-3).
- * @param r Rotation value.
  */
 bool hal_display_set_rotation(uint8_t r);
 
@@ -821,7 +820,6 @@ bool hal_display_end_write(void);
 /* ---- Text ---- */
 
 /**
- * @brief Select the active font.
  * @param font Font identifier from hal_font_id_t.
  */
 bool hal_display_set_font(hal_font_id_t font);

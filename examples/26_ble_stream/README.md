@@ -112,5 +112,5 @@ own event and request to the Central. One command adapter is attached to
 the already initialized Stream.
 
 See the
-[`bluetooth_stream` hardware tests](../../doc/api/en/03_build_tests.md#jh-ble-stream-v1-hardware-gate)
+[`bluetooth_stream` hardware tests](../../tests/hardware/bluetooth_stream/README.md)
 for an independent client and multi-target stability and security checks.

@@ -285,8 +285,8 @@ runmefirst.ps1
 Testy na rzeczywistym sprzęcie wykonuje się osobno, zgodnie z instrukcjami
 dla poszczególnych stanowisk.
 
-Wymagania, konfigurację, organizację i zasady rozszerzania testów, procedury
-sprzętowe oraz zapisane wyniki znajdziesz w
+Wymagania, konfigurację, organizację i zasady rozszerzania testów oraz spis
+procedur sprzętowych znajdziesz w
 [rozdziale o kompilacji i testach](doc/api/pl/03_build_tests.md).
 Działanie skryptów uruchamiających testy i kontrole opisuje
 [rozdział o skryptach repozytorium](doc/api/pl/00_scripts.md).
@@ -419,6 +419,17 @@ Najważniejsze punkty odniesienia:
 - [Zestawienie flag kompilacji](doc/HAL_FLAGS.txt).
 - [Kompilacja biblioteki statycznej](doc/pl/lib_compilation.md).
 - [Praca z firmware w VS Code](vscode/README.pl.md).
+
+## Czy ten projekt powstaje z użyciem AI?
+
+To istotne pytanie, zwłaszcza w dzisiejszych czasach. I tak, w tym projekcie korzystam z AI. Nie przygotowałbym samodzielnie tak szczegółowej dokumentacji, w tym komentarzy dla Doxygena. Zdecydowaną większość buildsystemu opartego na Pythonie napisało AI - to obszar, którego osobiście nie lubię i który z ulgą powierzam agentom.
+To samo dotyczy większości testów jednostkowych (które pokrywają realne problemy i regresje, jakie napotkałem podczas pracy z projektem). AI wykonało też sporo pracy przy refaktoryzacji źródeł oraz dostosowywaniu mojego starego, lub obcego kodu Arduino do wymagań API JaszczurHAL, między innymi w zakresie obsługi wielowątkowości.
+
+Natomiast całością kieruję ja. Architektura i struktura projektu, bramki jakości (testy jednostkowe, sanitizery, fuzzing, Valgrind, analiza statyczna) oraz testy na rzeczywistym sprzęcie to moja praca. Około 60% kodu w C/C++ napisałem własnoręcznie. Korzystam z agentów do wykonywania konkretnych zadań, ale odpowiedzialność za cały projekt pozostaje po mojej stronie. Każdy kod który
+tworzy AI przechodzi przez mój review, praktycznie nie ma tu fragmentów których nigdy nie widziałem na oczy, i które nie wiem jak działają.
+
+Samo użycie AI nie przesądza o jakości kodu - ani na plus, ani na minus. Liczy się to, czy rozwiązanie spełnia wymagania, przechodzi testy i działa na docelowym sprzęcie. Dla mnie AI jest narzędziem, które pozwala zrealizować więcej, niż byłbym w stanie zrobić sam. Skróciło czas mojej pracy z miesięcy, do tygodni.
+I to nie jest tak, że stworzenie takiego projektu z AI jest bezbolesne - każda jedna iteracja to dalej jest mozolna praca - czy to przy sprawdzaniu, czy to przy analizowaniu dlaczego coś mimo wszystko nie działa jak powinno. To są czasami dziesiątki długich iteracji i współpracy z agentem. A już ile się nawalczyłem z AI by dokumentację w ogóle dało się czytać, to moje. ;)
 
 ## Uwagi i podziękowania
 

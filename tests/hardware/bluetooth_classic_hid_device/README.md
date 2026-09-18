@@ -1,20 +1,26 @@
-# Bluetooth Classic HID device fixture
+# Bluetooth Classic non-gamepad HID Host hardware test
 
-The complete procedure and recorded result are maintained in the
-[central hardware-fixture reference](../../../doc/api/en/03_build_tests.md#bluetooth-classic-non-gamepad-hid-host-hardware-probe).
+`tests/hardware/bluetooth_classic_hid_device` is a private, test-only BTstack
+HID Device fixture. A Pico W advertises a standards-based Classic HID mouse
+with a Generic Desktop descriptor and emits alternating relative-motion input
+reports. This is not a public HID-device API. Build the RP2040 fixture and the
+public `hid-host` example for the RP2350 ARM host:
 
-This private Pico W fixture advertises a standards-based Bluetooth Classic HID
-mouse, accepts Just Works pairing, and emits alternating raw mouse reports. It
-exists only to validate the public JaszczurHAL Classic manager and generic HID
-Host on a second radio; it is not a public HID-device API.
+```sh
+vscode/entry/jh-vscode build \
+  --project tests/hardware/bluetooth_classic_hid_device \
+  --target rp2040 --board picow
+vscode/entry/jh-vscode build \
+  --project examples/29_bluetooth_gamepad \
+  --target rp2350-arm --board pico2w --variant hid-host
+```
 
-Build it for `rp2040:picow`, flash it only to the designated peripheral test
-board, and run the `hid-host` variant of example 29 on the host board. `INFO`
-must report `controller=1` on the fixture. Use `SCAN` on the host and authorize
-the host-side request with the serial `AUTHORIZE` command. Acceptance requires
-`JHC85-HID-PASS`; the following `INFO` must report the descriptor, input and
-saved-peer flags, while fixture `INFO` reports an HID connection and a non-zero
-report count.
+Flash each image only to its designated board. `INFO` on the fixture must show
+`controller=1`. On the host, use `SCAN`, approve the pending Just Works request
+with `AUTHORIZE`, then use `INFO`. Acceptance requires
+`JHC85-HID-PASS`, `descriptor=1`, `input=1`, and `saved=1`; the fixture must
+show `hid=1` and a non-zero report count. Neither console prints Bluetooth
+addresses or link keys.
 
-The fixture keeps link keys in RAM. Restarting either board clears its local
-test state, so this procedure does not validate persistent bonding.
+Both sides keep link keys in RAM only, so this test does not cover pairing
+that survives a reset.

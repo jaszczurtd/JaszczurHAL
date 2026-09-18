@@ -106,7 +106,6 @@ int hal_tcp_socket_recv(hal_tcp_socket_t socket, void *buffer, size_t max_len,
  *
  * This is a non-consuming readiness probe used by compatibility layers such as
  * BSD `select()`. It never blocks.
- * @param socket TCP socket handle.
  * @return true when a subsequent receive can complete immediately.
  */
 bool hal_tcp_socket_can_recv(hal_tcp_socket_t socket);
@@ -115,7 +114,6 @@ bool hal_tcp_socket_can_recv(hal_tcp_socket_t socket);
  * @brief Check whether a TCP socket can send immediately.
  *
  * This is a non-blocking readiness probe for compatibility layers.
- * @param socket TCP socket handle.
  * @return true when the socket is valid and connected.
  */
 bool hal_tcp_socket_can_send(hal_tcp_socket_t socket);
@@ -180,7 +178,6 @@ hal_tcp_socket_t hal_tcp_listener_accept(hal_tcp_listener_t listener,
  *
  * This is a non-consuming readiness probe used by compatibility layers such as
  * BSD `select()`. It never blocks.
- * @param listener TCP listener handle.
  * @return true when a subsequent accept can complete immediately.
  */
 bool hal_tcp_listener_can_accept(hal_tcp_listener_t listener);

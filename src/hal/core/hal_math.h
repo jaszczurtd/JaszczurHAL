@@ -147,7 +147,6 @@ int hal_math_percent_from_value(int value, int maximum);
 float hal_math_low_pass(float alpha, float input, float previous_output);
 
 /**
- * @brief Blend a current value with a new value.
  * @param current_value Existing value.
  * @param new_value New value.
  * @param alpha Weight assigned to @p new_value; it is not clamped.

@@ -753,7 +753,7 @@ Keep a USB recovery path:
   state sectors behind. Reprovision or erase the relevant device only after
   preserving any required LittleFS/EEPROM data.
 - Target-specific control-sector erase commands in
-  [Native RP OTA hardware probe](../api/en/03_build_tests.md#native-rp-ota-hardware-probe)
+  [Native RP OTA hardware probe](../../tests/hardware/rp_ota/README.md)
   apply to that fixture's exact layout and are not universal product erase
   ranges.
 - Physical BOOTSEL access remains outside the OTA trust boundary.
