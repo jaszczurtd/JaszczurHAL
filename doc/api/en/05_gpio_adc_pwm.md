@@ -300,7 +300,9 @@ and LEDC resources. The shared allocator gives the logical maximum an exact
 idle-high 100% state and restarts LEDC on the next partial-duty write. If
 ESP-IDF rejects teardown, the logical handle and LEDC slot remain owned for a
 retry; checked builds report the failed `hal_pwm_freq_destroy()` with
-`HAL_ASSERT`.
+`HAL_ASSERT`. The allocator also exposes an interrupt-safe duty update that
+takes no lock and never reconfigures the channel, which the sample-paced audio
+backend uses.
 
 **impl/.mock:** stores last written value; injectable via mock helpers.
 
@@ -401,7 +403,16 @@ channels and two control channels that switch between the buffers. Sampling
 ADC inputs reserves two more DMA channels. STM32G474 uses timer-update DMA,
 invokes callbacks after half and complete transfers, and scans ADC1 in circular
 mode. Default ADC pins are GPIO 26..29 on RP and in the mock implementation,
-and PA0..PA3 on STM32G474 (`port * 16 + pin`).
+PA0..PA3 on STM32G474 (`port * 16 + pin`), and GPIO 1..4 on ESP32.
+
+ESP32 has no DMA path into a PWM compare register, so its backend paces the
+samples from a general-purpose timer interrupt that writes the LEDC duty
+directly. The build selects the ESP-IDF options that keep the alarm handler and
+the LEDC control functions in IRAM. One PWM period carries one sample, so the
+LEDC timer runs at the sample rate and lowers its duty resolution when the rate
+leaves fewer bits than the requested compare range. A finished buffer is handed
+to a service task that runs the application callback and refreshes the ADC
+inputs once per block, rather than per sample as on the DMA backends.
 
 Creation rejects PWM and used ADC pins that the selected target does not
 support. The same pin cannot be used simultaneously for PWM output and an ADC
@@ -417,7 +428,9 @@ DMA instances without ADC sampling remain independent of the ADC restriction.
 Creation and destruction are single-owner operations. On RP platforms, configure,
 start, control, and destroy all DACless DMA instances from one owner core; the
 DMA interrupt is installed on that core. A DMA callback runs in interrupt
-context and must not block. It may call `hal_dacless_get_adc()` for its own
+context on RP and STM32G474 and in the backend's service task on ESP32; on every
+target it must return before the other buffer finishes playing and must not
+block. It may call `hal_dacless_get_adc()` for its own
 handle, but no other DACless function. Never destroy the handle concurrently
 with a callback. In polling mode, callbacks run synchronously inside
 `hal_dacless_service()`. In either mode, a callback may call only

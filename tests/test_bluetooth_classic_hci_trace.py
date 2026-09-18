@@ -77,7 +77,7 @@ require(
     "unknown HCI commands must expose only the opcode header",
 )
 
-parity = (ROOT / "scripts" / "build_rp_native_parity_fixtures.sh").read_text(
+parity = (ROOT / "scripts" / "build_rp_pico_parity_fixtures.sh").read_text(
     encoding="utf-8"
 )
 for expected in (

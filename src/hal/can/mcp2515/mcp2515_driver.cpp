@@ -1,5 +1,4 @@
 #include "hal/core/hal_target.h"
-#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK)
 
 #include "hal/core/hal_config.h"
 #if defined(HAL_ENABLE_MCP2515) && defined(HAL_ENABLE_SPI)
@@ -800,4 +799,3 @@ INT8U JHMCP2515::getGPI(void) {
 }
 
 #endif /* HAL_ENABLE_MCP2515 && HAL_ENABLE_SPI */
-#endif /* supported target */

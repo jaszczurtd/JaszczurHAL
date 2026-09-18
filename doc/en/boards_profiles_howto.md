@@ -227,15 +227,10 @@ Static libraries are separated by target and board:
 Build examples:
 
 ```bash
-./scripts/build_rp_native_lib.sh \
-  --target rp2040 \
-  --board rp2040-plus-4mb
-
-./scripts/build_stm32_lib.sh \
-  --board nucleo-g474re
-
-./scripts/build_stm32_lib.sh \
-  --board nucleo-g474re-pim730
+./scripts/build_link_library.sh --target rp2040 --board rp2040-plus-4mb
+./scripts/build_link_library.sh --target stm32g474 --board nucleo-g474re
+./scripts/build_link_library.sh --target stm32g474 --board nucleo-g474re-pim730
+./scripts/build_link_library.sh --target esp32s3 --board waveshare-esp32-s3-zero
 ```
 
 `nucleo-g474re` describes the Nucleo board alone. Projects using the external

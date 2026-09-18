@@ -22,10 +22,9 @@ usage() {
 Build JaszczurHAL and optional portable firmware with the official Pico SDK.
 
 Usage:
-  scripts/build_rp_native_lib.sh [options]
+  scripts/build_rp_pico_lib.sh [options]
 
 Options:
-  --platform NAME          Compatibility alias for --target
   --target NAME            rp2040, rp2350-arm, or rp2350-riscv
                            (default: rp2040)
   --board NAME             JaszczurHAL board profile (target default if omitted)
@@ -49,8 +48,7 @@ Options:
 USAGE
 }
 
-PLATFORM="rp2040"
-TARGET=""
+TARGET="rp2040"
 BOARD=""
 SDK_DIR="${JH_PICO_SDK_DIR:-${REPO_ROOT}/third_party/pico-sdk}"
 TOOLCHAIN_DIR=""
@@ -69,7 +67,6 @@ JOBS="$(nproc 2>/dev/null || echo 4)"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --platform) PLATFORM="$2"; shift 2 ;;
         --target) TARGET="$2"; shift 2 ;;
         --board) BOARD="$2"; shift 2 ;;
         --sdk-dir) SDK_DIR="$2"; shift 2 ;;
@@ -91,46 +88,30 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-for definition in "${EXTRA_DEFS[@]}"; do
-    normalized="${definition#-D}"
-    if [[ "${normalized}" == *'$<'* ]]; then
-        die "[JH-CFG-VALUE] ${definition} is unsupported; generator expressions are not accepted"
-    fi
-    if [[ "${normalized}" == *HAL_ENABLE_* ]] &&
-       [[ ! "${normalized}" =~ ^HAL_ENABLE_[A-Z0-9_]+(=1)?$ ]]; then
-        die "[JH-CFG-VALUE] ${definition} is unsupported; use a standalone bare symbol or an explicit value of 1"
-    fi
-done
+jh_validate_hal_defines "${EXTRA_DEFS[@]}" || exit 1
 
-if [[ -z "${TARGET}" ]]; then
-    case "${PLATFORM}" in
-        rp2040) TARGET="rp2040" ;;
-        rp2350-arm-s) TARGET="rp2350-arm" ;;
-        rp2350-riscv) TARGET="rp2350-riscv" ;;
-        *) die "Unsupported platform '${PLATFORM}'" ;;
+TARGET_PROVIDER=""
+TARGET_DEFAULT_BOARD=""
+TARGET_ISA=""
+facts="$(jh_target_facts "${REPO_ROOT}" "${TARGET}")" ||
+    die "Unknown target '${TARGET}'"
+while IFS='=' read -r key value; do
+    case "${key}" in
+        provider) TARGET_PROVIDER="${value}" ;;
+        defaultBoard) TARGET_DEFAULT_BOARD="${value}" ;;
+        isa) TARGET_ISA="${value}" ;;
     esac
+done <<< "${facts}"
+[[ "${TARGET_PROVIDER}" == "pico-sdk" ]] ||
+    die "Target '${TARGET}' is not built with the Pico SDK; use scripts/build_link_library.sh"
+: "${BOARD:=${TARGET_DEFAULT_BOARD}}"
+RISCV=0
+if [[ "${TARGET_ISA}" == "riscv32" ]]; then
+    RISCV=1
+    if [[ -z "${TOOLCHAIN_DIR}" ]]; then
+        TOOLCHAIN_DIR="${JH_RISCV_TOOLCHAIN_DIR:-${REPO_ROOT}/third_party/riscv-toolchain}"
+    fi
 fi
-
-case "${TARGET}" in
-    rp2040)
-        : "${BOARD:=pico}"
-        PLATFORM="rp2040"
-        ;;
-    rp2350-arm)
-        : "${BOARD:=pico2}"
-        PLATFORM="rp2350-arm-s"
-        ;;
-    rp2350-riscv)
-        : "${BOARD:=pico2}"
-        PLATFORM="rp2350-riscv"
-        if [[ -z "${TOOLCHAIN_DIR}" ]]; then
-            TOOLCHAIN_DIR="${JH_RISCV_TOOLCHAIN_DIR:-${REPO_ROOT}/third_party/riscv-toolchain}"
-        fi
-        ;;
-    *)
-        die "Unsupported target '${TARGET}'"
-        ;;
-esac
 
 [[ "${SDK_DIR}" == /* ]] || SDK_DIR="${REPO_ROOT}/${SDK_DIR}"
 [[ "${PICOTOOL_DIR}" == /* ]] || PICOTOOL_DIR="${REPO_ROOT}/${PICOTOOL_DIR}"
@@ -197,7 +178,7 @@ if [[ ${FREERTOS} -eq 1 ]]; then
     EXTRA_DEFS+=("HAL_ENABLE_FREERTOS=1")
 fi
 
-if [[ "${PLATFORM}" == "rp2350-riscv" ]]; then
+if [[ ${RISCV} -eq 1 ]]; then
     "${REPO_ROOT}/scripts/ensure_riscv_toolchain.sh" \
         --enable --repo-root "${REPO_ROOT}" --dir "${TOOLCHAIN_DIR}"
 fi
@@ -219,8 +200,8 @@ if [[ ${ALL_FEATURES} -eq 1 ]]; then
 fi
 if [[ ${LIBRARY_ONLY} -eq 1 ]]; then
     CMAKE_ARGS+=(
-        "-DJH_RP_NATIVE_BUILD_ARTIFACT_PROBE=OFF"
-        "-DJH_RP_NATIVE_BUILD_CORE1_PROBE=OFF"
+        "-DJH_RP_PICO_BUILD_ARTIFACT_PROBE=OFF"
+        "-DJH_RP_PICO_BUILD_CORE1_PROBE=OFF"
     )
 fi
 PICOTOOL_EXECUTABLE="${PICOTOOL_BUILD_DIR}/picotool"
@@ -234,19 +215,19 @@ if [[ -n "${PROJECT_CONFIG_DIR}" ]]; then
     CMAKE_ARGS+=("-DHAL_PROJECT_CONFIG_DIR=${PROJECT_CONFIG_DIR}")
 fi
 if [[ -n "${APP_DIR}" ]]; then
-    CMAKE_ARGS+=("-DJH_RP_NATIVE_APP_DIR=${APP_DIR}")
+    CMAKE_ARGS+=("-DJH_RP_PICO_APP_DIR=${APP_DIR}")
 fi
 if [[ ${#EXAMPLE_SOURCES[@]} -gt 0 ]]; then
     joined_sources="$(IFS=';'; echo "${EXAMPLE_SOURCES[*]}")"
-    CMAKE_ARGS+=("-DJH_RP_NATIVE_APP_SOURCES=${joined_sources}")
+    CMAKE_ARGS+=("-DJH_RP_PICO_APP_SOURCES=${joined_sources}")
 fi
 if [[ ${#EXTRA_DEFS[@]} -gt 0 ]]; then
     joined="$(IFS=';'; echo "${EXTRA_DEFS[*]}")"
     CMAKE_ARGS+=("-DEXTRA_HAL_DEFINES=${joined}")
 fi
 
-info "Configuring native Pico SDK build (${TARGET}, board ${BOARD})..."
-cmake -S "${REPO_ROOT}/rp_native_lib" -B "${OUTPUT_DIR}" "${CMAKE_ARGS[@]}"
+info "Configuring Pico SDK build (${TARGET}, board ${BOARD})..."
+cmake -S "${REPO_ROOT}/link_libraries/rp_pico_lib" -B "${OUTPUT_DIR}" "${CMAKE_ARGS[@]}"
 
 info "Building with ${JOBS} parallel jobs..."
 if [[ ${LIBRARY_ONLY} -eq 1 ]]; then
@@ -266,10 +247,10 @@ for generated_header in \
     cp -f "${GENERATED_SOURCE}/${generated_header}" "${GENERATED_INCLUDE}/"
 done
 [[ -f "${LIB_FILE}" ]] || die "Static library not found: ${LIB_FILE}"
-ok "Native Pico SDK library built: ${LIB_FILE}"
+ok "Pico SDK library built: ${LIB_FILE}"
 if [[ ${LIBRARY_ONLY} -eq 0 ]]; then
-    PROBE_BASE="${OUTPUT_DIR}/jh_rp_native_artifact_probe"
-    CORE1_PROBE_BASE="${OUTPUT_DIR}/jh_rp_native_core1_probe"
+    PROBE_BASE="${OUTPUT_DIR}/jh_rp_pico_artifact_probe"
+    CORE1_PROBE_BASE="${OUTPUT_DIR}/jh_rp_pico_core1_probe"
     for artifact_base in "${PROBE_BASE}" "${CORE1_PROBE_BASE}"; do
         for extension in elf bin uf2; do
             [[ -f "${artifact_base}.${extension}" ]] ||
@@ -277,14 +258,14 @@ if [[ ${LIBRARY_ONLY} -eq 0 ]]; then
         done
     done
     if [[ -n "${APP_DIR}" ]]; then
-        FIRMWARE_BASE="${OUTPUT_DIR}/jh_rp_native_firmware"
+        FIRMWARE_BASE="${OUTPUT_DIR}/jh_rp_pico_firmware"
         for extension in elf bin uf2; do
             [[ -f "${FIRMWARE_BASE}.${extension}" ]] ||
                 die "Native example ${extension^^} not found: ${FIRMWARE_BASE}.${extension}"
         done
     fi
 
-    if [[ "${PLATFORM}" == "rp2350-riscv" ]]; then
+    if [[ ${RISCV} -eq 1 ]]; then
         NM_TOOL="${TOOLCHAIN_DIR}/bin/riscv32-unknown-elf-nm"
     else
         NM_TOOL="$(command -v arm-none-eabi-nm || true)"

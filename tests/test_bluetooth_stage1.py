@@ -44,7 +44,7 @@ if btstack.is_dir():
 
 btstack_cmake = (ROOT / "cmake/jh_btstack.cmake").read_text(encoding="utf-8")
 cyw43_cmake = (ROOT / "cmake/jh_cyw43_driver.cmake").read_text(encoding="utf-8")
-rp_cmake = (ROOT / "cmake/jh_rp_native_sdk.cmake").read_text(encoding="utf-8")
+rp_cmake = (ROOT / "cmake/jh_rp_pico_sdk.cmake").read_text(encoding="utf-8")
 stm32_cmake = (ROOT / "cmake/targets/stm32g474.cmake").read_text(
     encoding="utf-8"
 )

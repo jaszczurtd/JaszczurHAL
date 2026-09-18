@@ -375,7 +375,7 @@ jh_enable_host_warnings(hal_mock)
 
 # ── Host FreeRTOS POSIX test library ──────────────────────────────────────────
 if(JH_ENABLE_FREERTOS_POSIX_TESTS)
-    include(${CMAKE_CURRENT_SOURCE_DIR}/stm32_lib/freertos_stm32g474.cmake)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/link_libraries/stm32_lib/freertos_stm32g474.cmake)
     jh_ensure_freertos_kernel()
 
     set(JH_FREERTOS_POSIX_CONFIG_DIR

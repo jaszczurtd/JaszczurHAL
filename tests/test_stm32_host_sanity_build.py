@@ -20,26 +20,26 @@ def require(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
-recipe = (ROOT / "stm32_lib" / "CMakeLists.txt").read_text(encoding="utf-8")
+recipe = (ROOT / "link_libraries/stm32_lib" / "CMakeLists.txt").read_text(encoding="utf-8")
 require(
     "option(JH_STM32_HOST_SANITY" in recipe,
-    "stm32_lib does not declare the host-compiler sanity option",
+    "link_libraries/stm32_lib does not declare the host-compiler sanity option",
 )
 require(
     'set(CMAKE_TOOLCHAIN_FILE "${CMAKE_TOOLCHAIN_FILE}" CACHE FILEPATH' in recipe,
-    "stm32_lib no longer pins its toolchain into the CMake cache",
+    "link_libraries/stm32_lib no longer pins its toolchain into the CMake cache",
 )
 require(
     "-DJH_STM32_HOST_SANITY=ON for the host-compiler analysis build." in recipe,
     "the missing-toolchain error does not name the host-compiler mode",
 )
 
-# Every caller configuring stm32_lib must state its mode: a cross toolchain for
+# Every caller configuring link_libraries/stm32_lib must state its mode: a cross toolchain for
 # firmware, or the host-compiler analysis mode.
 for relative in ("runalltests.sh", ".github/workflows/ci.yml"):
     lines = (ROOT / relative).read_text(encoding="utf-8").splitlines()
     for index, line in enumerate(lines):
-        if "-S stm32_lib" not in line:
+        if "-S link_libraries/stm32_lib" not in line:
             continue
         # Follow shell and PowerShell continuations so the whole flag list is read.
         window = [line]
@@ -50,7 +50,7 @@ for relative in ("runalltests.sh", ".github/workflows/ci.yml"):
         text = "\n".join(window)
         require(
             "-DCMAKE_TOOLCHAIN_FILE" in text or HOST_SANITY_FLAG in text,
-            f"{relative}:{index + 1} configures stm32_lib without declaring its mode",
+            f"{relative}:{index + 1} configures link_libraries/stm32_lib without declaring its mode",
         )
 
 ci_workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
@@ -139,7 +139,7 @@ try:
         [
             cmake,
             "-S",
-            str(ROOT / "stm32_lib"),
+            str(ROOT / "link_libraries/stm32_lib"),
             "-B",
             str(accepted),
             HOST_SANITY_FLAG,
@@ -188,7 +188,7 @@ try:
         [
             cmake,
             "-S",
-            str(ROOT / "stm32_lib"),
+            str(ROOT / "link_libraries/stm32_lib"),
             "-B",
             str(project_features),
             HOST_SANITY_FLAG,
@@ -234,7 +234,7 @@ try:
         [
             cmake,
             "-S",
-            str(ROOT / "stm32_lib"),
+            str(ROOT / "link_libraries/stm32_lib"),
             "-B",
             str(classic_features),
             HOST_SANITY_FLAG,
@@ -314,7 +314,7 @@ jh_target_enable_cyw43_feature_stack(probe GAMEPAD TRUE)
         [
             cmake,
             "-S",
-            str(ROOT / "stm32_lib"),
+            str(ROOT / "link_libraries/stm32_lib"),
             "-B",
             str(invalid_unity),
             HOST_SANITY_FLAG,
@@ -336,7 +336,7 @@ jh_target_enable_cyw43_feature_stack(probe GAMEPAD TRUE)
         [
             cmake,
             "-S",
-            str(ROOT / "stm32_lib"),
+            str(ROOT / "link_libraries/stm32_lib"),
             "-B",
             str(invalid_unity_list),
             HOST_SANITY_FLAG,
@@ -358,7 +358,7 @@ jh_target_enable_cyw43_feature_stack(probe GAMEPAD TRUE)
         [
             cmake,
             "-S",
-            str(ROOT / "stm32_lib"),
+            str(ROOT / "link_libraries/stm32_lib"),
             "-B",
             str(direct_unity),
             HOST_SANITY_FLAG,
@@ -406,10 +406,10 @@ jh_target_enable_cyw43_feature_stack(probe GAMEPAD TRUE)
         [
             cmake,
             "-S",
-            str(ROOT / "stm32_lib"),
+            str(ROOT / "link_libraries/stm32_lib"),
             "-B",
             str(radio_package),
-            f"-DCMAKE_TOOLCHAIN_FILE={ROOT / 'stm32_lib/toolchain_stm32g474.cmake'}",
+            f"-DCMAKE_TOOLCHAIN_FILE={ROOT / 'link_libraries/stm32_lib/toolchain_stm32g474.cmake'}",
             "-DJH_BOARD=nucleo-g474re-pim730",
             "-DEXTRA_HAL_DEFINES=HAL_ENABLE_WIFI",
         ],
@@ -641,17 +641,17 @@ add_custom_target(config_dependency_probe ALL
     )
 
     without_flag = subprocess.run(
-        [cmake, "-S", str(ROOT / "stm32_lib"), "-B", str(rejected)],
+        [cmake, "-S", str(ROOT / "link_libraries/stm32_lib"), "-B", str(rejected)],
         check=False,
         capture_output=True,
         text=True,
     )
     require(
         without_flag.returncode != 0,
-        "stm32_lib accepted a firmware configure without a cross toolchain",
+        "link_libraries/stm32_lib accepted a firmware configure without a cross toolchain",
     )
     require(
-        "CMAKE_TOOLCHAIN_FILE is required for stm32_lib" in without_flag.stderr,
+        "CMAKE_TOOLCHAIN_FILE is required for link_libraries/stm32_lib" in without_flag.stderr,
         "missing-toolchain diagnostic changed",
     )
 finally:

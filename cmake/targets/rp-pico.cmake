@@ -45,7 +45,7 @@ set(HAL_PROJECT_CONFIG_DIR "${JH_PROJECT_DIR}")
 set(EXTRA_HAL_DEFINES ${JH_EXTRA_DEFINES})
 set(JH_RP_BOARD_DEFINES ${JH_BOARD_COMPILE_DEFINITIONS})
 
-include("${JH_ROOT}/cmake/jh_rp_native_sdk.cmake")
+include("${JH_ROOT}/cmake/jh_rp_pico_sdk.cmake")
 
 jh_resolve_project_sources(_sources)
 add_executable(firmware ${_sources})
@@ -59,7 +59,7 @@ target_include_directories(firmware PRIVATE
 if(JH_LINK_LIBRARIES)
     target_link_libraries(firmware PRIVATE ${JH_LINK_LIBRARIES})
 endif()
-jh_add_rp_native_firmware(firmware)
+jh_add_rp_pico_firmware(firmware)
 target_sources(JaszczurHAL PRIVATE
     "${JH_BOARD_GENERATED_DIR}/jh_link_contract_definition.c")
 target_include_directories(JaszczurHAL PUBLIC "${JH_BOARD_GENERATED_DIR}")
@@ -83,7 +83,7 @@ add_custom_command(TARGET firmware POST_BUILD
             "${_jh_out_dir}/firmware.map"
     VERBATIM
 )
-if(_jh_native_ota)
+if(_jh_rp_ota)
     add_custom_command(TARGET firmware POST_BUILD
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                 "${CMAKE_CURRENT_BINARY_DIR}/firmware.ota"

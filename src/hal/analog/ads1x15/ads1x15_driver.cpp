@@ -30,7 +30,6 @@
  */
 
 #include "hal/core/hal_target.h"
-#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK)
 
 #include "hal/core/hal_config.h"
 #if defined(HAL_ENABLE_EXTERNAL_ADC) && defined(HAL_ENABLE_I2C)
@@ -568,4 +567,3 @@ void ADS1115::requestADC_Differential_2_3() {
 }
 
 #endif /* HAL_ENABLE_EXTERNAL_ADC && HAL_ENABLE_I2C */
-#endif /* supported target */

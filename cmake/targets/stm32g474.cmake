@@ -2,7 +2,7 @@
 # JaszczurHAL stm32g474 firmware recipe.
 #
 # Included by cmake/jh_firmware_project after enable_language(C CXX ASM) with the
-# STM32 cross toolchain (CMAKE_TOOLCHAIN_FILE=stm32_lib/toolchain_stm32g474.cmake,
+# STM32 cross toolchain (CMAKE_TOOLCHAIN_FILE=link_libraries/stm32_lib/toolchain_stm32g474.cmake,
 # passed via the manifest cache). Delegates the link to the reusable L1 recipe
 # and exposes the stable firmware* targets.
 #
@@ -21,8 +21,8 @@
 #   OPENOCD_BIN / OPENOCD_INTERFACE / OPENOCD_TARGET
 # ─────────────────────────────────────────────────────────────────────────────
 
-include("${JH_ROOT}/stm32_lib/jh_stm32g474_firmware.cmake")
-include("${JH_ROOT}/stm32_lib/freertos_stm32g474.cmake")
+include("${JH_ROOT}/link_libraries/stm32_lib/jh_stm32g474_firmware.cmake")
+include("${JH_ROOT}/link_libraries/stm32_lib/freertos_stm32g474.cmake")
 include("${JH_ROOT}/cmake/jh_entry_adapter.cmake")
 include("${JH_ROOT}/cmake/jh_cyw43_driver.cmake")
 

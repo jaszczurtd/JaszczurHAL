@@ -19,7 +19,7 @@
     "backendName": "rp/pico-sdk"
   },
   "hal": { "targetSelector": "HAL_TARGET_RP2350_RISCV" },
-  "build": { "provider": "pico-sdk", "recipe": "rp-native", "platform": "rp2350-riscv" },
+  "build": { "provider": "pico-sdk", "recipe": "rp-pico", "platform": "rp2350-riscv" },
   "gpio": {
     "pinIdFormat": "integer",
     "validPins": { "ranges": [{ "first": 0, "last": 47 }] },
@@ -32,5 +32,5 @@
     "ramUsableBytes": 532480
   },
   "defaultBoard": "pico2",
-  "components": { "rp-native": { "mode": "required" } }
+  "components": { "rp-pico": { "mode": "required" } }
 }

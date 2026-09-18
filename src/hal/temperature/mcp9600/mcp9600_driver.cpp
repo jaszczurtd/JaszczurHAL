@@ -35,7 +35,6 @@
  */
 
 #include "hal/core/hal_target.h"
-#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK)
 
 #include "hal/core/hal_config.h"
 #if defined(HAL_ENABLE_MCP9600) && defined(HAL_ENABLE_I2C)
@@ -467,4 +466,3 @@ void hal_mcp9600_set_ambient_resolution(
 }
 
 #endif /* HAL_ENABLE_MCP9600 && HAL_ENABLE_I2C */
-#endif /* supported target */

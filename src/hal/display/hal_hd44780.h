@@ -11,8 +11,7 @@
 
 #include "hal/core/hal_config.h"
 
-#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK) &&     \
-    defined(HAL_ENABLE_HD44780)
+#if defined(HAL_ENABLE_HD44780)
 
 #include "hal/core/hal_status.h"
 

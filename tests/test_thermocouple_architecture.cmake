@@ -91,7 +91,7 @@ endif()
 
 file(READ "${JH_ROOT}/CMakeLists.txt" _root_cmake)
 file(READ "${JH_ROOT}/cmake/jh_rp_hal_sources.cmake" _rp_sources)
-file(READ "${JH_ROOT}/stm32_lib/jh_stm32g474_firmware.cmake" _stm_sources)
+file(READ "${JH_ROOT}/link_libraries/stm32_lib/jh_stm32g474_firmware.cmake" _stm_sources)
 if(NOT _root_cmake MATCHES "hal/temperature/hal_thermocouple\\.cpp" OR
    NOT _rp_sources MATCHES "SRC_DIR}/hal/\\*\\.cpp" OR
    NOT _stm_sources MATCHES "_jh_src}/hal/\\*\\.cpp")

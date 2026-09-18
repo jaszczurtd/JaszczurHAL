@@ -3,12 +3,20 @@
  * Both HAL mutexes and native FreeRTOS mutexes are used by the test.
  */
 
+#include <hal/core/hal_target.h>
+
+/* ESP-IDF ships the kernel headers below a freertos/ prefix. */
+#if HAL_TARGET_IS_ESP32_FAMILY
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#include <freertos/task.h>
+#else
 #include <FreeRTOS.h>
 #include <semphr.h>
 #include <task.h>
+#endif
 
 #include <hal/core/hal_app.h>
-#include <hal/core/hal_target.h>
 #include <hal/gpio/hal_gpio.h>
 #include <hal/serial/hal_serial.h>
 #include <hal/system/hal_sync.h>
@@ -100,7 +108,9 @@ static void smoke_table_worker(void *arg) {
 
 void app_start(void) {
   hal_debug_init_default();
+#if defined(HAL_LED_BUILTIN)
   hal_gpio_set_mode(HAL_LED_BUILTIN, HAL_GPIO_OUTPUT);
+#endif
 
   s_smoke_mutex = hal_mutex_create();
   if (s_smoke_mutex == NULL) {
@@ -151,7 +161,12 @@ void app_task0(void) {
     xSemaphoreGive(s_table_mutex);
   }
 
+#if defined(HAL_LED_BUILTIN)
   hal_gpio_write(HAL_LED_BUILTIN, ((table_sum + task1_ticks) & 1u) != 0u);
+#else
+  (void)table_sum;
+  (void)task1_ticks;
+#endif
   hal_debug_loop();
   hal_idle();
   hal_delay_ms(100u);

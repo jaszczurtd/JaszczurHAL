@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "components": [
     {
-      "id": "rp-native",
+      "id": "rp-pico",
       "providers": [
         "pico-sdk"
       ],
       "slot": "target-runtime"
     },
     {
-      "id": "stm32g474-native",
+      "id": "stm32g474",
       "providers": [
         "jh-stm32-baremetal"
       ],
@@ -23,7 +23,7 @@
       "slot": "target-runtime"
     },
     {
-      "id": "esp-idf-native",
+      "id": "esp-idf",
       "providers": [
         "esp-idf"
       ],

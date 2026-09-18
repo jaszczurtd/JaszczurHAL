@@ -109,7 +109,7 @@ foreach(_forbidden_symbol IN ITEMS
 endforeach()
 
 file(READ "${JH_ROOT}/CMakeLists.txt" _root_cmake)
-file(READ "${JH_ROOT}/stm32_lib/CMakeLists.txt" _stm32_cmake)
+file(READ "${JH_ROOT}/link_libraries/stm32_lib/CMakeLists.txt" _stm32_cmake)
 if(NOT _root_cmake MATCHES "hal/gps/hal_gps\\.cpp" OR
    NOT _root_cmake MATCHES "hal/gps/hal_gps_core\\.cpp" OR
    NOT _stm32_cmake MATCHES "hal/\\*\\.cpp")

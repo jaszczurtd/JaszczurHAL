@@ -1,29 +1,29 @@
 cmake_minimum_required(VERSION 3.16)
 
-set(JH_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
+set(JH_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 set(JH_TARGET "rp2040" CACHE STRING
     "Target ID: rp2040, rp2350-arm, or rp2350-riscv")
 set(JH_BOARD "" CACHE STRING
     "Physical board profile; defaults to the target defaultBoard")
 set(EXTRA_HAL_DEFINES "" CACHE STRING "Extra HAL compile definitions")
-set(JH_RP_NATIVE_APP_DIR "" CACHE PATH
+set(JH_RP_PICO_APP_DIR "" CACHE PATH
     "Optional portable app directory containing app.c or app.cpp")
-set(JH_RP_NATIVE_APP_SOURCES "" CACHE STRING
-    "Optional source list relative to JH_RP_NATIVE_APP_DIR")
+set(JH_RP_PICO_APP_SOURCES "" CACHE STRING
+    "Optional source list relative to JH_RP_PICO_APP_DIR")
 option(JH_ENABLE_ALL_FEATURES
     "Enable every feature supported by the selected production target"
     OFF)
-if(JH_RP_NATIVE_APP_DIR)
-    get_filename_component(JH_RP_NATIVE_APP_DIR
-        "${JH_RP_NATIVE_APP_DIR}" ABSOLUTE BASE_DIR "${JH_ROOT}")
-    if(NOT IS_DIRECTORY "${JH_RP_NATIVE_APP_DIR}")
+if(JH_RP_PICO_APP_DIR)
+    get_filename_component(JH_RP_PICO_APP_DIR
+        "${JH_RP_PICO_APP_DIR}" ABSOLUTE BASE_DIR "${JH_ROOT}")
+    if(NOT IS_DIRECTORY "${JH_RP_PICO_APP_DIR}")
         message(FATAL_ERROR
-            "JH_RP_NATIVE_APP_DIR is not a directory: "
-            "${JH_RP_NATIVE_APP_DIR}")
+            "JH_RP_PICO_APP_DIR is not a directory: "
+            "${JH_RP_PICO_APP_DIR}")
     endif()
     if(NOT DEFINED HAL_PROJECT_CONFIG_DIR OR
        "${HAL_PROJECT_CONFIG_DIR}" STREQUAL "")
-        set(HAL_PROJECT_CONFIG_DIR "${JH_RP_NATIVE_APP_DIR}")
+        set(HAL_PROJECT_CONFIG_DIR "${JH_RP_PICO_APP_DIR}")
     endif()
 endif()
 
@@ -113,7 +113,7 @@ if(_jh_pico_board_has_cyw43)
     set(PICO_CYW43_SUPPORTED 0)
 endif()
 
-project(JaszczurHAL_RP_Native C CXX ASM)
+project(JaszczurHAL_RP_Pico C CXX ASM)
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_CXX_STANDARD 17)
@@ -133,7 +133,7 @@ if(JH_PICOTOOL_EXECUTABLE AND NOT TARGET picotool)
         IMPORTED_LOCATION "${JH_PICOTOOL_EXECUTABLE}")
 endif()
 
-include("${JH_ROOT}/cmake/jh_rp_native_sdk.cmake")
+include("${JH_ROOT}/cmake/jh_rp_pico_sdk.cmake")
 target_sources(JaszczurHAL PRIVATE
     "${JH_BOARD_GENERATED_DIR}/jh_link_contract_definition.c")
 target_include_directories(JaszczurHAL PUBLIC "${JH_BOARD_GENERATED_DIR}")
@@ -147,51 +147,51 @@ add_custom_command(TARGET JaszczurHAL POST_BUILD
         "${CMAKE_BINARY_DIR}/include/generated"
     VERBATIM)
 
-option(JH_RP_NATIVE_BUILD_ARTIFACT_PROBE
+option(JH_RP_PICO_BUILD_ARTIFACT_PROBE
     "Build a minimal link probe and produce ELF/BIN/UF2 artifacts" ON)
-if(JH_RP_NATIVE_BUILD_ARTIFACT_PROBE)
-    add_executable(jh_rp_native_artifact_probe artifact_probe.cpp)
-    jh_add_rp_native_firmware(jh_rp_native_artifact_probe CUSTOM_ENTRY)
+if(JH_RP_PICO_BUILD_ARTIFACT_PROBE)
+    add_executable(jh_rp_pico_artifact_probe artifact_probe.cpp)
+    jh_add_rp_pico_firmware(jh_rp_pico_artifact_probe CUSTOM_ENTRY)
 endif()
 
-option(JH_RP_NATIVE_BUILD_CORE1_PROBE
+option(JH_RP_PICO_BUILD_CORE1_PROBE
     "Build the HAL-owned native entry/task1 path" ON)
-if(JH_RP_NATIVE_BUILD_CORE1_PROBE)
-    add_executable(jh_rp_native_core1_probe core1_probe.c)
-    target_compile_definitions(jh_rp_native_core1_probe PRIVATE
+if(JH_RP_PICO_BUILD_CORE1_PROBE)
+    add_executable(jh_rp_pico_core1_probe core1_probe.c)
+    target_compile_definitions(jh_rp_pico_core1_probe PRIVATE
         HAL_ENABLE_APP_TASK1=1)
-    jh_add_rp_native_firmware(jh_rp_native_core1_probe)
+    jh_add_rp_pico_firmware(jh_rp_pico_core1_probe)
 endif()
 
-if(JH_RP_NATIVE_APP_DIR)
-    set(_jh_native_app_sources "")
-    if(JH_RP_NATIVE_APP_SOURCES)
-        foreach(_jh_native_app_source IN LISTS JH_RP_NATIVE_APP_SOURCES)
-            get_filename_component(_jh_native_app_source_abs
-                "${JH_RP_NATIVE_APP_DIR}/${_jh_native_app_source}" ABSOLUTE)
-            if(NOT EXISTS "${_jh_native_app_source_abs}")
+if(JH_RP_PICO_APP_DIR)
+    set(_jh_rp_app_sources "")
+    if(JH_RP_PICO_APP_SOURCES)
+        foreach(_jh_rp_app_source IN LISTS JH_RP_PICO_APP_SOURCES)
+            get_filename_component(_jh_rp_app_source_abs
+                "${JH_RP_PICO_APP_DIR}/${_jh_rp_app_source}" ABSOLUTE)
+            if(NOT EXISTS "${_jh_rp_app_source_abs}")
                 message(FATAL_ERROR
-                    "Native app source not found: ${_jh_native_app_source_abs}")
+                    "Native app source not found: ${_jh_rp_app_source_abs}")
             endif()
-            list(APPEND _jh_native_app_sources
-                "${_jh_native_app_source_abs}")
+            list(APPEND _jh_rp_app_sources
+                "${_jh_rp_app_source_abs}")
         endforeach()
     else()
-        file(GLOB _jh_native_app_sources CONFIGURE_DEPENDS
-            "${JH_RP_NATIVE_APP_DIR}/*.c"
-            "${JH_RP_NATIVE_APP_DIR}/*.cc"
-            "${JH_RP_NATIVE_APP_DIR}/*.cpp"
+        file(GLOB _jh_rp_app_sources CONFIGURE_DEPENDS
+            "${JH_RP_PICO_APP_DIR}/*.c"
+            "${JH_RP_PICO_APP_DIR}/*.cc"
+            "${JH_RP_PICO_APP_DIR}/*.cpp"
         )
     endif()
-    if(NOT _jh_native_app_sources)
+    if(NOT _jh_rp_app_sources)
         message(FATAL_ERROR
             "No C/C++ application sources found in "
-            "${JH_RP_NATIVE_APP_DIR}")
+            "${JH_RP_PICO_APP_DIR}")
     endif()
-    add_executable(jh_rp_native_firmware ${_jh_native_app_sources})
-    target_include_directories(jh_rp_native_firmware PRIVATE
-        "${JH_RP_NATIVE_APP_DIR}")
-    jh_add_rp_native_firmware(jh_rp_native_firmware)
+    add_executable(jh_rp_pico_firmware ${_jh_rp_app_sources})
+    target_include_directories(jh_rp_pico_firmware PRIVATE
+        "${JH_RP_PICO_APP_DIR}")
+    jh_add_rp_pico_firmware(jh_rp_pico_firmware)
 endif()
 
 install(TARGETS JaszczurHAL ARCHIVE DESTINATION lib)

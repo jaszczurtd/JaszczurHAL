@@ -10,13 +10,13 @@
 # caller passes portable app sources; this module adds the STM32G474 backend,
 # shared drivers, startup, linker script, arch flags and objcopy steps.
 #
-# Requires the STM32 cross toolchain (see stm32_lib/toolchain_stm32g474.cmake),
+# Requires the STM32 cross toolchain (see link_libraries/stm32_lib/toolchain_stm32g474.cmake),
 # so the consuming project must be configured with
-#   -DCMAKE_TOOLCHAIN_FILE=<jh>/stm32_lib/toolchain_stm32g474.cmake
+#   -DCMAKE_TOOLCHAIN_FILE=<jh>/link_libraries/stm32_lib/toolchain_stm32g474.cmake
 # and must enable_language(C CXX ASM) (i.e. project(... C CXX ASM)).
 #
 # Usage:
-#   include(<jh>/stm32_lib/jh_stm32g474_firmware.cmake)
+#   include(<jh>/link_libraries/stm32_lib/jh_stm32g474_firmware.cmake)
 #   jh_add_stm32g474_firmware(firmware
 #       SOURCES  ${app_sources}
 #       INCLUDES ${app_include_dirs}
@@ -26,10 +26,10 @@
 
 include_guard(GLOBAL)
 
-# Directory of this module == <jh_root>/stm32_lib.
+# Directory of this module == <jh_root>/link_libraries/stm32_lib.
 set(_JH_STM32_MODULE_DIR "${CMAKE_CURRENT_LIST_DIR}" CACHE INTERNAL "")
-include("${CMAKE_CURRENT_LIST_DIR}/../cmake/jh_project_features.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/../cmake/jh_stack_protector.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/jh_project_features.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/jh_stack_protector.cmake")
 
 # jh_add_stm32g474_firmware(<target>
 #     SOURCES  <portable app sources (.c/.cpp)>
@@ -38,7 +38,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/../cmake/jh_stack_protector.cmake")
 #     FEATURES <requested feature names defined by a project config header>
 #     RESOLVED_FEATURES <optional registry closure for source/link selection>
 #     LIBRARIES <precompiled static archives or CMake library targets>
-#     [JH_ROOT <path>]   # JaszczurHAL repo root; defaults to this module's ../
+#     [JH_ROOT <path>]   # JaszczurHAL repo root; defaults to this module's ../../
 # )
 # Produces an executable <target> named "<target>.elf" plus <target>.bin/.hex.
 function(jh_add_stm32g474_firmware TARGET)
@@ -69,7 +69,7 @@ function(jh_add_stm32g474_firmware TARGET)
     endif()
 
     if(NOT ARG_JH_ROOT)
-        get_filename_component(ARG_JH_ROOT "${_JH_STM32_MODULE_DIR}/.." ABSOLUTE)
+        get_filename_component(ARG_JH_ROOT "${_JH_STM32_MODULE_DIR}/../.." ABSOLUTE)
     endif()
     if(NOT EXISTS "${ARG_JH_ROOT}/src/hal/hal.h")
         message(FATAL_ERROR "jh_add_stm32g474_firmware: JaszczurHAL not found at '${ARG_JH_ROOT}'")
@@ -80,7 +80,7 @@ function(jh_add_stm32g474_firmware TARGET)
 
     set(_jh_src "${ARG_JH_ROOT}/src")
     set(_g474 "${_jh_src}/hal/impl/stm32g474")
-    set(_ldscript "${ARG_JH_ROOT}/stm32_lib/STM32G474RETx_FLASH.ld")
+    set(_ldscript "${ARG_JH_ROOT}/link_libraries/stm32_lib/STM32G474RETx_FLASH.ld")
     include("${ARG_JH_ROOT}/cmake/jh_bearssl.cmake")
     include("${ARG_JH_ROOT}/cmake/jh_feature_build_effects.cmake")
     include("${ARG_JH_ROOT}/cmake/jh_managed_frameworks.cmake")

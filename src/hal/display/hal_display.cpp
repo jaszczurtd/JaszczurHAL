@@ -1,5 +1,4 @@
 #include "hal/core/hal_target.h"
-#if HAL_TARGET_IS_MOCK || HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474
 
 #include "hal/core/hal_config.h"
 #ifdef HAL_ENABLE_DISPLAY
@@ -311,5 +310,4 @@ hal_status_t hal_display_prepare_text_ex(char *display_txt,
   return status;
 }
 
-#endif
 #endif

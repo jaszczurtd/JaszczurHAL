@@ -250,7 +250,7 @@ jobs:
             -BuildDirectory (Join-Path $buildRoot 'stm32g474') `
             -ExpectedPort 'portable/GCC/ARM_CM4F/port.c' `
             -ExtraArguments @(
-              "-DCMAKE_TOOLCHAIN_FILE=$(Join-Path $repo 'stm32_lib\toolchain_stm32g474.cmake')"
+              "-DCMAKE_TOOLCHAIN_FILE=$(Join-Path $repo 'link_libraries\stm32_lib\toolchain_stm32g474.cmake')"
             )
 
       - name: Validate MSVC warning profile and Windows test classification
@@ -399,9 +399,9 @@ jobs:
           $project = Join-Path $env:GITHUB_WORKSPACE 'stage5 consumer with spaces'
           $build = Join-Path $state.buildRoot 'ci-static-${{ matrix.target }}'
           if ('${{ matrix.target }}' -eq 'stm32g474') {
-            $source = Join-Path $env:GITHUB_WORKSPACE 'stm32_lib'
+            $source = Join-Path $env:GITHUB_WORKSPACE 'link_libraries\stm32_lib'
           } else {
-            $source = Join-Path $env:GITHUB_WORKSPACE 'rp_native_lib'
+            $source = Join-Path $env:GITHUB_WORKSPACE 'link_libraries\rp_pico_lib'
           }
           $arguments = @(
             '-S', $source,
@@ -417,12 +417,12 @@ jobs:
             '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON'
           )
           if ('${{ matrix.target }}' -eq 'stm32g474') {
-            $arguments += "-DCMAKE_TOOLCHAIN_FILE=$env:GITHUB_WORKSPACE\stm32_lib\toolchain_stm32g474.cmake"
+            $arguments += "-DCMAKE_TOOLCHAIN_FILE=$env:GITHUB_WORKSPACE\link_libraries\stm32_lib\toolchain_stm32g474.cmake"
           } else {
             $arguments += "-DPICO_SDK_PATH=$env:GITHUB_WORKSPACE\third_party\pico-sdk"
             $arguments += "-DJH_PICOTOOL_EXECUTABLE=$($state.tools.picotool)"
-            $arguments += '-DJH_RP_NATIVE_BUILD_ARTIFACT_PROBE=OFF'
-            $arguments += '-DJH_RP_NATIVE_BUILD_CORE1_PROBE=OFF'
+            $arguments += '-DJH_RP_PICO_BUILD_ARTIFACT_PROBE=OFF'
+            $arguments += '-DJH_RP_PICO_BUILD_CORE1_PROBE=OFF'
           }
           if ('${{ matrix.target }}' -eq 'rp2350-riscv') {
             $arguments += "-DPICO_TOOLCHAIN_PATH=$(Split-Path -Parent (Split-Path -Parent $state.tools.riscv))"
@@ -579,6 +579,26 @@ jobs:
             .build/ci/esp-idf/esp32s3-phase3/sdkconfig
           if-no-files-found: warn
           include-hidden-files: true
+
+      - name: Build ESP32-S3 linkable library with pinned ESP-IDF
+        id: esp32_link_library_build
+        run: |
+          output="${GITHUB_WORKSPACE}/.build/ci/link-libraries/esp32s3"
+          build_exit=0
+          ./scripts/build_esp32_lib.sh \
+            --target esp32s3 \
+            --all-features \
+            --clean \
+            --output "${output}" || build_exit=$?
+          if (( build_exit != 0 )); then
+            if [[ -f "${output}/build.log" ]]; then
+              echo 'Last 300 lines of the ESP-IDF build log:'
+              tail -n 300 "${output}/build.log"
+            fi
+            exit "${build_exit}"
+          fi
+          test -f "${output}/libJaszczurHAL.a"
+          test -f "${output}/include/generated/jh_board_config.h"
 
       - name: Build ESP32 Classic gamepad fixture with pinned ESP-IDF
         id: esp32_gamepad_build
@@ -769,7 +789,7 @@ jobs:
       - name: Generate compile databases
         run: |
           cmake -B .build/ci/static-host -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-          cmake -S stm32_lib -B .build/ci/static-stm32 \
+          cmake -S link_libraries/stm32_lib -B .build/ci/static-stm32 \
             -DJH_STM32_HOST_SANITY=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       - name: "cppcheck (all own code; vendored excluded)"
@@ -863,16 +883,12 @@ jobs:
       matrix:
         include:
           - target: rp2040
-            platform: rp2040
             board: picow
           - target: rp2350-arm
-            platform: rp2350-arm-s
             board: pico2w
           - target: rp2350-riscv
-            platform: rp2350-riscv
             board: pico2
           - target: stm32g474
-            platform: stm32g474
             board: nucleo-g474re-pim730
     name: "Linux all-features library (${{ matrix.target }})"
 
@@ -891,18 +907,11 @@ jobs:
 
       - name: Build all-features static library
         run: |
-          if [[ "${{ matrix.target }}" == "stm32g474" ]]; then
-            ./scripts/build_stm32_lib.sh \
-              --all-features --clean --jobs 4 \
-              --board "${{ matrix.board }}" \
-              --output ".build/ci/linux/${{ matrix.target }}"
-          else
-            ./scripts/build_rp_native_lib.sh \
-              --all-features --library-only --clean --jobs 4 \
-              --platform "${{ matrix.platform }}" \
-              --board "${{ matrix.board }}" \
-              --output ".build/ci/linux/${{ matrix.target }}"
-          fi
+          ./scripts/build_link_library.sh \
+            --target "${{ matrix.target }}" \
+            --board "${{ matrix.board }}" \
+            --all-features --library-only --clean --jobs 4 \
+            --output ".build/ci/linux/${{ matrix.target }}"
 
           build_dir=".build/ci/linux/${{ matrix.target }}"
           test -f "${build_dir}/libJaszczurHAL.a"

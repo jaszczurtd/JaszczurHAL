@@ -13,8 +13,7 @@
 #include "hal/core/hal_config.h"
 #include "hal/core/hal_target.h"
 
-#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK) &&     \
-    defined(HAL_ENABLE_EXTERNAL_ADC) && defined(HAL_ENABLE_I2C)
+#if defined(HAL_ENABLE_EXTERNAL_ADC) && defined(HAL_ENABLE_I2C)
 
 #include <stdbool.h>
 #include <stdint.h>

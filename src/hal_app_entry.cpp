@@ -115,8 +115,8 @@ int main(void) {
 #include <pico/multicore.h>
 #include <pico/platform.h>
 
-static void hal_rp_native_require_flash_ready(hal_status_t status,
-                                              const char *message) {
+static void hal_rp_pico_require_flash_ready(hal_status_t status,
+                                            const char *message) {
   (void)message;
   HAL_ASSERT(status == HAL_OK, message);
   while (status != HAL_OK) {
@@ -128,10 +128,10 @@ static void hal_rp_native_require_flash_ready(hal_status_t status,
 static hal_status_t s_core1_flash_status = HAL_NONE;
 static bool s_app_start_complete = false;
 
-static void hal_rp_native_core1_entry(void) {
+static void hal_rp_pico_core1_entry(void) {
   const hal_status_t flash_status = jh_rp_flash_transaction_core_init();
   HAL_ATOMIC_STORE(&s_core1_flash_status, flash_status, HAL_ATOMIC_RELEASE);
-  hal_rp_native_require_flash_ready(
+  hal_rp_pico_require_flash_ready(
       flash_status, "hal_app_entry: core1 flash coordinator init failed");
 
   while (!HAL_ATOMIC_LOAD(&s_app_start_complete, HAL_ATOMIC_ACQUIRE)) {
@@ -147,18 +147,18 @@ static void hal_rp_native_core1_entry(void) {
 int main(void) {
   hal_fault_subsystem_init();
   const hal_status_t flash_status = jh_rp_flash_transaction_core_init();
-  hal_rp_native_require_flash_ready(
+  hal_rp_pico_require_flash_ready(
       flash_status, "hal_app_entry: flash coordinator init failed");
   (void)hal_usb_init();
 
 #ifdef HAL_ENABLE_APP_TASK1
-  multicore_launch_core1(hal_rp_native_core1_entry);
+  multicore_launch_core1(hal_rp_pico_core1_entry);
   hal_status_t core1_flash_status = HAL_NONE;
   while ((core1_flash_status = HAL_ATOMIC_LOAD(
               &s_core1_flash_status, HAL_ATOMIC_ACQUIRE)) == HAL_NONE) {
     tight_loop_contents();
   }
-  hal_rp_native_require_flash_ready(
+  hal_rp_pico_require_flash_ready(
       core1_flash_status, "hal_app_entry: core1 flash coordinator init failed");
 #endif
 

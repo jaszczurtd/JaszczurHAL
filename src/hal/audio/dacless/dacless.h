@@ -18,8 +18,7 @@
 #include "hal/core/hal_config.h"
 #include "hal/core/hal_target.h"
 
-#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK) &&     \
-    defined(HAL_ENABLE_DACLESS)
+#if defined(HAL_ENABLE_DACLESS)
 
 #include "hal/audio/hal_dma_pwm_audio.h"
 #include "hal/gpio/hal_pwm_freq.h"
@@ -239,4 +238,4 @@ extern float audio_rate;
 extern volatile uint16_t *out_buf_ptr;
 extern const volatile uint16_t *adc_results_buf;
 
-#endif /* supported target && HAL_ENABLE_DACLESS */
+#endif /* HAL_ENABLE_DACLESS */

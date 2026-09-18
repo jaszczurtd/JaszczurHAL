@@ -69,18 +69,22 @@ VERSION                     # project version
 .build/                     # ignored root for all managed build artifacts
 boards/                     # target, board and capability descriptors
 config/                     # declarative HAL feature registry and schema
-rp_native_lib/              # Pico SDK RP2040/RP2350 static-library build
-  MEMORY_MAP.md             # native RP firmware/storage/OTA layout
+link_libraries/             # linkable-library runners, one directory per build family
+  rp_pico_lib/              # Pico SDK RP2040/RP2350 static-library build
+    MEMORY_MAP.md           # RP firmware/storage/OTA layout
+  stm32_lib/                # STM32G474 static-library CMake, toolchain, linker script
+  esp32_lib/                # ESP-IDF library probe application
 cmake/
   esp-idf/                  # controlled native ESP-IDF component recipe
   generated/                # generated production CMake feature resolver
-  jh_rp_native_sdk.cmake    # shared RP library/firmware CMake integration
+  jh_rp_pico_sdk.cmake    # shared RP library/firmware CMake integration
   targets/                  # VS Code dispatcher target recipes
-stm32_lib/                  # STM32G474 static-library CMake, toolchain, linker script
 scripts/
   # See doc/api/en/00_scripts.md for the complete process-script reference.
-  build_rp_native_lib.sh    # RP ELF/BIN/UF2 build helper
-  build_stm32_lib.sh        # STM32G474 static-library helper
+  build_link_library.sh     # library build entry for any registry target
+  build_rp_pico_lib.sh      # RP library and ELF/BIN/UF2 probe runner
+  build_stm32_lib.sh        # STM32 library runner
+  build_esp32_lib.sh        # ESP-IDF library runner
   build_esp_idf.py          # ESP-IDF project build/artifact/flash runner
   check_documentation_links.py # local Markdown link/anchor validation
   ensure_*.sh               # focused pinned-component fetch/verify helpers
@@ -183,12 +187,18 @@ header, and reference source, so direct compiler consumers can compile and
 link the fixed package without invoking Python.
 
 - `CMakeLists.txt` - repository-root host/mock tests build.
-- `rp_native_lib/` - official Pico SDK static library and firmware probes.
-- `stm32_lib/` - STM32G474 static-library CMake, toolchain file, and linker script.
-- `scripts/build_rp_native_lib.sh` - RP2040/RP2350 static-library and optional
-  firmware-probe helper, including an archive-only `--library-only` mode and
+- `link_libraries/` - linkable-library runners: `rp_pico_lib/` (official Pico
+  SDK static library and firmware probes), `stm32_lib/` (STM32G474 CMake,
+  toolchain file, and linker script) and `esp32_lib/` (ESP-IDF probe
+  application).
+- `scripts/build_link_library.sh` - selects the family runner for any registry
+  target and forwards the shared options.
+- `scripts/build_rp_pico_lib.sh` - RP2040/RP2350 static-library and optional
+  firmware-probe runner, including an archive-only `--library-only` mode and
   the optional pinned FreeRTOS SMP matrix.
-- `scripts/build_stm32_lib.sh` - STM32G474 static-library helper.
+- `scripts/build_stm32_lib.sh` - STM32 static-library runner.
+- `scripts/build_esp32_lib.sh` - ESP-IDF static-library runner publishing the
+  component archive and generated headers.
 - `scripts/build_esp_idf.py` - production ESP-IDF project build, artifact
   validation, and flash helper with a relocatable multi-image manifest.
 - `third_party/update_components.sh` - synchronizes BearSSL, cJSON, LodePNG,
@@ -267,9 +277,9 @@ link the fixed package without invoking Python.
 
 Memory layouts are documented alongside each platform's build configuration:
 
-- [RP memory map](../../rp_native_lib/MEMORY_MAP.md) - application and OTA linker
+- [RP memory map](../../link_libraries/rp_pico_lib/MEMORY_MAP.md) - application and OTA linker
   layouts, persistent flash regions, SRAM, heap, and stacks.
-- [STM32G474 memory map](../../stm32_lib/MEMORY_MAP.md) - bare-metal linker
+- [STM32G474 memory map](../../link_libraries/stm32_lib/MEMORY_MAP.md) - bare-metal linker
   regions, reserved flash EEPROM/KV pages, RAM sections, heap, and stack.
 
 ---

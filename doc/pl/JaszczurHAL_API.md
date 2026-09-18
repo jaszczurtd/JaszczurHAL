@@ -73,18 +73,22 @@ VERSION                     # wersja projektu
 .build/                     # ignorowany katalog wszystkich zarządzanych artefaktów kompilacji
 boards/                     # deskryptory targetów, płytek i możliwości
 config/                     # deklaratywny rejestr funkcji HAL i schemat
-rp_native_lib/               # kompilacja biblioteki statycznej RP2040/RP2350 na Pico SDK
-  MEMORY_MAP.md              # układ natywnego firmware/pamięci/OTA dla RP
+link_libraries/             # runnery bibliotek linkowalnych, po jednym katalogu na rodzinę
+  rp_pico_lib/              # kompilacja biblioteki statycznej RP2040/RP2350 na Pico SDK
+    MEMORY_MAP.md           # układ firmware/pamięci/OTA dla RP
+  stm32_lib/                # CMake biblioteki statycznej STM32G474, toolchain, skrypt linkera
+  esp32_lib/                # aplikacja kontrolna biblioteki ESP-IDF
 cmake/
   esp-idf/                  # kontrolowana natywna receptura komponentu ESP-IDF
   generated/                # wygenerowany mechanizm wyboru funkcji dla CMake
-  jh_rp_native_sdk.cmake    # współdzielona integracja CMake biblioteki/firmware RP
+  jh_rp_pico_sdk.cmake    # współdzielona integracja CMake biblioteki/firmware RP
   targets/                  # konfiguracje targetów dla narzędzia VS Code
-stm32_lib/                  # CMake biblioteki statycznej STM32G474, toolchain, skrypt linkera
 scripts/
   # Pełny opis skryptów obsługi repozytorium: doc/api/pl/00_scripts.md
-  build_rp_native_lib.sh    # skrypt kompilacji RP ELF/BIN/UF2
-  build_stm32_lib.sh        # pomocnik biblioteki statycznej STM32G474
+  build_link_library.sh     # kompilacja biblioteki dla dowolnego targetu z rejestru
+  build_rp_pico_lib.sh      # runner biblioteki RP i obrazów kontrolnych ELF/BIN/UF2
+  build_stm32_lib.sh        # runner biblioteki STM32
+  build_esp32_lib.sh        # runner biblioteki ESP-IDF
   build_esp_idf.py          # kompilowanie i flashowanie projektu ESP-IDF, obsługa artefaktów
   check_documentation_links.py # lokalna walidacja linków/kotwic Markdown
   ensure_*.sh               # wyspecjalizowane skrypty pobierania i weryfikacji komponentów
@@ -190,15 +194,19 @@ bezpośrednio mogą zbudować i zlinkować ustalony pakiet bez uruchamiania Pyth
 
 - `CMakeLists.txt` - kompilacja testów hosta i backendu mock w katalogu głównym
   repozytorium.
-- `rp_native_lib/` - oficjalna biblioteka statyczna Pico SDK i testowe obrazy
-  firmware.
-- `stm32_lib/` - CMake biblioteki statycznej STM32G474, plik toolchainu i skrypt
-  linkera.
-- `scripts/build_rp_native_lib.sh` - skrypt kompilujący bibliotekę statyczną RP2040/RP2350
+- `link_libraries/` - runnery bibliotek linkowalnych: `rp_pico_lib/`
+  (oficjalna biblioteka statyczna Pico SDK i testowe obrazy firmware),
+  `stm32_lib/` (CMake STM32G474, plik toolchainu i skrypt linkera) oraz
+  `esp32_lib/` (aplikacja kontrolna ESP-IDF).
+- `scripts/build_link_library.sh` - wybiera runner rodziny dla dowolnego
+  targetu z rejestru i przekazuje wspólne opcje.
+- `scripts/build_rp_pico_lib.sh` - runner biblioteki statycznej RP2040/RP2350
   i opcjonalnych testowych obrazów firmware, w tym tryb `--library-only`
   generujący wyłącznie archiwum oraz opcjonalną macierz testową dla FreeRTOS
   SMP w ustalonej wersji.
-- `scripts/build_stm32_lib.sh` - skrypt kompilujący bibliotekę statyczną STM32G474.
+- `scripts/build_stm32_lib.sh` - runner biblioteki statycznej STM32.
+- `scripts/build_esp32_lib.sh` - runner biblioteki statycznej ESP-IDF
+  publikujący archiwum komponentu i wygenerowane nagłówki.
 - `scripts/build_esp_idf.py` - produkcyjny skrypt kompilacji projektu
   ESP-IDF, walidacji artefaktów i flashowania z relokowalnym manifestem
   wieloobrazowym.
@@ -304,10 +312,10 @@ bezpośrednio mogą zbudować i zlinkować ustalony pakiet bez uruchamiania Pyth
 
 Układ pamięci każdej platformy opisano obok jej konfiguracji kompilacji:
 
-- [Mapa pamięci RP](../../rp_native_lib/MEMORY_MAP.md) - układy linkera dla
+- [Mapa pamięci RP](../../link_libraries/rp_pico_lib/MEMORY_MAP.md) - układy linkera dla
   aplikacji i OTA, obszary pamięci flash z trwałymi danymi, SRAM, sterta
   i stosy.
-- [Mapa pamięci STM32G474](../../stm32_lib/MEMORY_MAP.md) - regiony linkera
+- [Mapa pamięci STM32G474](../../link_libraries/stm32_lib/MEMORY_MAP.md) - regiony linkera
   bare-metal, zarezerwowane strony flash EEPROM/KV, sekcje RAM, sterta i stos.
 
 ---

@@ -7,26 +7,28 @@
 ## Podstawowe polecenia
 
 ```bash
-./scripts/build_rp_native_lib.sh --target rp2040
-./scripts/build_rp_native_lib.sh --target rp2350-arm
-./scripts/build_rp_native_lib.sh --target rp2350-riscv
-./scripts/build_stm32_lib.sh
-python3 scripts/build_esp_idf.py build \
-  --project tests/fixtures/esp32s3_phase3 --clean
+./scripts/build_link_library.sh --target rp2040
+./scripts/build_link_library.sh --target rp2350-arm
+./scripts/build_link_library.sh --target rp2350-riscv
+./scripts/build_link_library.sh --target stm32g474
+./scripts/build_link_library.sh --target esp32s3
 ```
 
 > **Część [Dokumentacji API JaszczurHAL](JaszczurHAL_API.md)**
 
-JaszczurHAL używa CMake do kompilacji dla komputera, RP i STM32. Dla ESP32-S3 skrypt Pythona z repozytorium uruchamia ESP-IDF w ustalonej wersji. Przy kompilacji na urządzenie wybiera się platformę docelową i fizyczną płytkę z rejestru opisanego w [profilach platform i płytek](boards_profiles_howto.md).
+JaszczurHAL używa CMake do kompilacji dla komputera, RP i STM32. Dla ESP32 skrypt Pythona z repozytorium uruchamia ESP-IDF w ustalonej wersji. Przy kompilacji na urządzenie wybiera się platformę docelową i fizyczną płytkę z rejestru opisanego w [profilach platform i płytek](boards_profiles_howto.md).
+
+Runnery bibliotek linkowalnych znajdują się w [`link_libraries/`](../../link_libraries/README.pl.md), po jednym katalogu na rodzinę buildów. `scripts/build_link_library.sh --target <id>` odczytuje provider builda targetu z rejestru i uruchamia właściwy runner z pozostałymi opcjami. Każdy runner przyjmuje ten sam zestaw podstawowych opcji: `--target`, `--board`, `--all-features`, `--library-only`, `--freertos`, `-p`/`--project-config`, `-D`, `-o`/`--output`, `--clean` i `-j`/`--jobs`.
 
 | Target | Domyślna płytka | Punkt wejścia kompilacji | Selektor backendu |
 |---|---|---|---|
 | Mock hosta | - | CMake w katalogu głównym repozytorium | `HAL_TARGET_MOCK` |
-| RP2040 | `pico` | `rp_native_lib/` | `HAL_TARGET_RP2040` |
-| RP2350 ARM | `pico2` | `rp_native_lib/` | `HAL_TARGET_RP2350_ARM` |
-| RP2350 RISC-V | `pico2` | `rp_native_lib/` | `HAL_TARGET_RP2350_RISCV` |
-| STM32G474 | `nucleo-g474re` | `stm32_lib/` | `HAL_TARGET_STM32G474` |
-| ESP32-S3 | `waveshare-esp32-s3-zero` | kompilacja komponentu ESP-IDF sterowana skryptem | `HAL_TARGET_ESP32_S3` |
+| RP2040 | `pico` | `link_libraries/rp_pico_lib/` | `HAL_TARGET_RP2040` |
+| RP2350 ARM | `pico2` | `link_libraries/rp_pico_lib/` | `HAL_TARGET_RP2350_ARM` |
+| RP2350 RISC-V | `pico2` | `link_libraries/rp_pico_lib/` | `HAL_TARGET_RP2350_RISCV` |
+| STM32G474 | `nucleo-g474re` | `link_libraries/stm32_lib/` | `HAL_TARGET_STM32G474` |
+| ESP32-S3 | `waveshare-esp32-s3-zero` | `link_libraries/esp32_lib/` | `HAL_TARGET_ESP32_S3` |
+| ESP32 (eksperymentalny) | `esp32-devkitc-v4` | `link_libraries/esp32_lib/` | `HAL_TARGET_ESP32` |
 
 Wszystkie artefakty tworzone przez repozytorium są zapisywane w `.build/`.
 Skrypty pomocnicze odrzucają ścieżki wyjściowe prowadzące poza ten katalog.
@@ -164,25 +166,25 @@ Z katalogu głównego repozytorium:
 
 ```bash
 # RP2040 / Pico
-./scripts/build_rp_native_lib.sh
+./scripts/build_rp_pico_lib.sh
 
 # RP2040 / Pico z przykładową aplikacją
-./scripts/build_rp_native_lib.sh \
+./scripts/build_rp_pico_lib.sh \
   --target rp2040 \
   --board pico \
   --example 01_core_runtime
 
 # RP2350 ARM
-./scripts/build_rp_native_lib.sh --target rp2350-arm
+./scripts/build_rp_pico_lib.sh --target rp2350-arm
 
 # RP2350 RISC-V
-./scripts/build_rp_native_lib.sh --target rp2350-riscv
+./scripts/build_rp_pico_lib.sh --target rp2350-riscv
 
 # Natywny FreeRTOS SMP
-./scripts/build_rp_native_lib.sh --target rp2040 --freertos
+./scripts/build_rp_pico_lib.sh --target rp2040 --freertos
 
 # Tylko linkowalna biblioteka statyczna, bez kontrolnych obrazów firmware'u
-./scripts/build_rp_native_lib.sh --target rp2040 --library-only
+./scripts/build_rp_pico_lib.sh --target rp2040 --library-only
 ```
 
 Główne opcje to:
@@ -210,9 +212,9 @@ Domyślny katalog wynikowy to `.build/static/<target>/<board>/`. Standardowa kom
 .build/static/<target>/<board>/
   libJaszczurHAL.a
   include/generated/
-  jh_rp_native_artifact_probe.{elf,bin,uf2}
-  jh_rp_native_core1_probe.{elf,bin,uf2}
-  jh_rp_native_firmware.{elf,bin,uf2}  # z opcją --example
+  jh_rp_pico_artifact_probe.{elf,bin,uf2}
+  jh_rp_pico_core1_probe.{elf,bin,uf2}
+  jh_rp_pico_firmware.{elf,bin,uf2}  # z opcją --example
 ```
 
 Program kontrolny rdzenia 1 sprawdza symbole punktu wejścia i obsługi wielu rdzeni. Bez systemu operacyjnego `app_task1()` działa na rdzeniu 1 uruchamianym przez Pico SDK. Przy FreeRTOS HAL tworzy zadania przypisane do rdzeni (CPU affinity) i uruchamia scheduler.
@@ -224,7 +226,7 @@ Program kontrolny rdzenia 1 sprawdza symbole punktu wejścia i obsługi wielu rd
 Skrypt przygotowuje zależności w ustalonych wersjach i przekazuje ustawienia pamięci podręcznej CMake. Przy `HAL_ENABLE_FREERTOS` bezpośrednia konfiguracja CMake uruchamia `scripts/component_manager.py`, aby przygotować lub sprawdzić FreeRTOS-Kernel. Zewnętrzny `JH_FREERTOS_KERNEL_DIR` jest sprawdzany, ale nigdy zastępowany. Po przygotowaniu pozostałych zależności podstawowa konfiguracja RP2040 wygląda tak:
 
 ```bash
-cmake -S rp_native_lib -B .build/manual/rp2040-pico \
+cmake -S link_libraries/rp_pico_lib -B .build/manual/rp2040-pico \
   -DPICO_SDK_PATH="$PWD/third_party/pico-sdk" \
   -DJH_PICOTOOL_EXECUTABLE="$PWD/.build/tools/picotool/picotool" \
   -DJH_TARGET=rp2040 \
@@ -235,7 +237,7 @@ cmake --build .build/manual/rp2040-pico --parallel
 Dla katalogu aplikacji dodaj:
 
 ```bash
--DJH_RP_NATIVE_APP_DIR="$PWD/examples/01_core_runtime" \
+-DJH_RP_PICO_APP_DIR="$PWD/examples/01_core_runtime" \
 -DHAL_PROJECT_CONFIG_DIR="$PWD/examples/01_core_runtime"
 ```
 
@@ -245,15 +247,15 @@ funkcje zgodnie z wybranym modelem wykonania: bare-metal albo FreeRTOS.
 
 ### Dołączanie obsługi CMake dla RP do własnego projektu
 
-Projekty używające wspólnego wyboru platformy korzystają z `cmake/targets/rp-native.cmake`. Tę samą integrację można dołączyć do własnego projektu CMake opartego na Pico SDK:
+Projekty używające wspólnego wyboru platformy korzystają z `cmake/targets/rp-pico.cmake`. Tę samą integrację można dołączyć do własnego projektu CMake opartego na Pico SDK:
 
 ```cmake
-include(path/to/JaszczurHAL/cmake/jh_rp_native_sdk.cmake)
+include(path/to/JaszczurHAL/cmake/jh_rp_pico_sdk.cmake)
 
 add_executable(firmware
     app.cpp
 )
-jh_add_rp_native_firmware(firmware)
+jh_add_rp_pico_firmware(firmware)
 ```
 
 Funkcja pomocnicza dołącza HAL, wygenerowane metadane płytki, wybrane
@@ -262,11 +264,11 @@ przetwarzanie plików ELF/BIN/UF2.
 
 Układ pamięci flash, pamięć trwała, sloty OTA i przydział pamięci RAM są
 udokumentowane w
-[Mapie pamięci RP](../../rp_native_lib/MEMORY_MAP.md).
+[Mapie pamięci RP](../../link_libraries/rp_pico_lib/MEMORY_MAP.md).
 
 ## STM32G474
 
-Dla STM32G474 powstaje biblioteka statyczna zgodna z wygenerowanym profilem płytki:
+Dla STM32G474 powstaje biblioteka statyczna zgodna z wygenerowanym profilem płytki. `--target` wybiera target STM32 z rejestru; `stm32g474` jest domyślny i na razie jedyny:
 
 ```bash
 # Bare-metal
@@ -294,8 +296,8 @@ Domyślny katalog wyjściowy ma następującą zawartość:
 Przy bezpośrednim użyciu CMake wskaż dostarczony zestaw narzędzi:
 
 ```bash
-cmake -S stm32_lib -B .build/manual/stm32g474-nucleo \
-  -DCMAKE_TOOLCHAIN_FILE=stm32_lib/toolchain_stm32g474.cmake \
+cmake -S link_libraries/stm32_lib -B .build/manual/stm32g474-nucleo \
+  -DCMAKE_TOOLCHAIN_FILE=link_libraries/stm32_lib/toolchain_stm32g474.cmake \
   -DJH_TARGET=stm32g474 \
   -DJH_BOARD=nucleo-g474re
 cmake --build .build/manual/stm32g474-nucleo --parallel
@@ -304,7 +306,7 @@ cmake --build .build/manual/stm32g474-nucleo --parallel
 Tę samą implementację można skompilować kompilatorem komputera, aby wykonać podstawowe kontrole i utworzyć bazę poleceń dla clang-tidy analizującego STM32. Tryb ten nie definiuje `JH_STM32G474_HW` i wymaga jawnego włączenia. Brak narzędzi krzyżowych nie może więc niepostrzeżenie spowodować utworzenia biblioteki dla komputera zamiast firmware:
 
 ```bash
-cmake -S stm32_lib -B .build/manual/stm32g474-host \
+cmake -S link_libraries/stm32_lib -B .build/manual/stm32g474-host \
   -DJH_STM32_HOST_SANITY=ON \
   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 cmake --build .build/manual/stm32g474-host --parallel
@@ -323,12 +325,39 @@ do sygnatury linkowania i użyć pasującej konfiguracji linkera. Wpis w sekcji
 konstruktorów zachowuje to odwołanie przy włączonym `--gc-sections`. Brakujące
 lub niedopasowane archiwum nadal powoduje oczekiwany błąd niezdefiniowanego
 symbolu zgodności. Zobacz
-[Mapę pamięci STM32G474](../../stm32_lib/MEMORY_MAP.md), aby sprawdzić rezerwacje
+[Mapę pamięci STM32G474](../../link_libraries/stm32_lib/MEMORY_MAP.md), aby sprawdzić rezerwacje
 flash, SRAM, pamięci trwałej i OTA.
 
 ## ESP32-S3 z ESP-IDF
 
-Na ESP32-S3 JaszczurHAL jest kompilowany jako część projektu firmware, a nie instalowany jako osobny pakiet `libJaszczurHAL.a`. Główny skrypt `scripts/build_esp_idf.py` obsługuje polecenia `build`, `artifacts` i `flash`:
+`scripts/build_esp32_lib.sh` tworzy ten sam układ biblioteki co runnery RP i STM32. Buduje minimalną aplikację ESP-IDF z `link_libraries/esp32_lib/` przez `scripts/build_esp_idf.py` i publikuje archiwum komponentu JaszczurHAL obok wygenerowanych nagłówków płytki:
+
+```bash
+# Sam rdzeń runtime, domyślna płytka.
+./scripts/build_esp32_lib.sh --target esp32s3
+
+# Wszystkie funkcje obsługiwane przez target.
+./scripts/build_esp32_lib.sh --target esp32s3 --all-features
+
+# Konfiguracja projektu i dodatkowe funkcje.
+./scripts/build_esp32_lib.sh \
+  --target esp32s3 \
+  -p /path/to/firmware \
+  -D HAL_ENABLE_WIFI \
+  -D HAL_ENABLE_MQTT
+```
+
+```text
+.build/static/esp32s3/waveshare-esp32-s3-zero/
+  libJaszczurHAL.a
+  include/generated/
+  esp32_lib.elf              # aplikacja kontrolna linkowania
+  esp-idf/, bootloader/, ... # drzewo builda ESP-IDF
+```
+
+Bez `-p` własny `hal_project_config.h` aplikacji kontrolnej nie żąda żadnych funkcji, więc archiwum zawiera sam rdzeń runtime; FreeRTOS zawsze dostarcza ESP-IDF. `--all-features` żąda każdej funkcji z listy `supportedFeatures` targetu, którą można wskazać bezpośrednio. `--library-only` i `--freertos` są przyjmowane dla zgodności z pozostałymi runnerami: ESP-IDF zawsze linkuje aplikację kontrolną i zawsze dostarcza FreeRTOS. Archiwum zależy od komponentów ESP-IDF i `sdkconfig` builda, który je utworzył, więc linkuj je z projektu ESP-IDF skonfigurowanego dla tego samego targetu, płytki i zestawu funkcji. Ta rodzina nie ma kroku `cmake --install`.
+
+Projekty firmware używają `scripts/build_esp_idf.py` bezpośrednio. Skrypt obsługuje polecenia `build`, `artifacts` i `flash`:
 
 ```bash
 # Czysty build z domyślną płytką targetu.
@@ -357,7 +386,9 @@ lub repozytorium. Argument `--source` można podać wielokrotnie, aby zastąpić
 automatyczne wykrywanie; bez niego skrypt dołącza obsługiwane pliki źródłowe
 z katalogu głównego projektu oraz, rekurencyjnie, z katalogu `src/`.
 Argumenty `--feature` i `--define` również można podawać wielokrotnie, aby
-rozszerzyć konfigurację projektu. Opcja `--idf-dir` lub zmienna
+rozszerzyć konfigurację projektu; `--all-features` żąda pełnego zestawu funkcji
+targetu, a `--project-config DIR` czyta `hal_project_config.h` z katalogu spoza
+projektu. Opcja `--idf-dir` lub zmienna
 `JH_ESP_IDF_DIR` wskazuje zewnętrznie zarządzane repozytorium dopiero po
 zweryfikowaniu jego dokładnej wersji i narzędzi.
 
@@ -374,7 +405,7 @@ dane o toolchainie obejmują wersję i commit ESP-IDF wskazane przez
 repozytorium, faktycznie użyty kompilator, wersje CMake, Ninja, IDF Python i
 esptool oraz skrót pliku `tools.json` ESP-IDF.
 
-ESP32-S3 zawsze włącza `HAL_ENABLE_FREERTOS`. Obsługuje również dostarczone flagi peryferiów fazy 2 oraz funkcje sieciowe i usługi fazy 3. Podstawowy komponent zawiera system, synchronizację, GPIO, ADC, prosty PWM, komunikację szeregową, diagnostykę i timery. Funkcja żądana bezpośrednio lub przez zależność, lecz nieobecna na liście deskryptora, powoduje `[JH-CFG-UNSUPPORTED]`.
+ESP32-S3 zawsze włącza `HAL_ENABLE_FREERTOS`. Obsługuje również dostarczone flagi peryferiów fazy 2, funkcje sieciowe i usługi fazy 3 oraz przenośne sterowniki, którym wystarczają te magistrale: czujniki, wyświetlacze, dotyk, NFC, ekspandery I/O, CAN przez MCP2515, GPS i modemy komórkowe, router komend, kodeki JSON i obrazów, FatFs po SPI oraz audio PWM przez DACless. Skrypt przygotowuje na żądanie zarządzane źródła cJSON, LodePNG, TJpgDec i FatFs i dodaje ich katalogi include do komponentu. Podstawowy komponent zawiera system, synchronizację, GPIO, ADC, prosty PWM, komunikację szeregową, diagnostykę, timery sprzętowe i programowe oraz regulator PID. Funkcja żądana bezpośrednio lub przez zależność, lecz nieobecna na liście deskryptora, powoduje `[JH-CFG-UNSUPPORTED]`.
 
 Wygenerowany CMake projektu zawiera wynikowy zestaw funkcji, listę źródeł i publiczne oraz prywatne zależności komponentów ESP-IDF. Konfiguracja komponentu korzysta z tych list, zamiast utrzymywać osobny graf źródeł. `scripts/build_esp_idf_phase0.py` pozostaje skryptem zgodności dla odrębnej konfiguracji testowej fazy 0.
 
@@ -393,7 +424,7 @@ Aby kompilować bibliotekę statyczną w VS Code, otwórz katalog główny repoz
 | `Ctrl+Shift+Alt+1` | `Project: Select board (GUI)` |
 | `Ctrl+Shift+Alt+2` | `Project: Select board` |
 
-Domyślny profil to `rp2040:pico`. Dane platformy i płytki pochodzą z `boards/`, a lokalny wybór jest zapisywany w ignorowanym przez Git `.vscode/jaszczurhal.library.local.json`. Obsługiwane są mock, trzy natywne warianty RP i STM32G474. Pliki wynikowe trafiają do:
+Domyślny profil to `rp2040:pico`. Dane platformy i płytki pochodzą z `boards/`, a lokalny wybór jest zapisywany w ignorowanym przez Git `.vscode/jaszczurhal.library.local.json`. Obsługiwane są mock, trzy targety RP, STM32G474 i targety ESP-IDF. Profile sprzętowe budują przez `scripts/build_link_library.sh --library-only`. Pliki wynikowe trafiają do:
 
 ```text
 .build/vscode/library/<target>/<board>/
@@ -401,7 +432,7 @@ Domyślny profil to `rp2040:pico`. Dane platformy i płytki pochodzą z `boards/
 
 `Project: Build` tworzy bibliotekę dla aktywnego profilu i wybiera jej bazę poleceń kompilacji dla cpptools. `Project: Refresh IntelliSense` wykonuje tę samą kompilację przyrostową, a następnie odtwarza ignorowany przez Git `.vscode/c_cpp_properties.json`. Konfiguracje sprzętowe tworzą `libJaszczurHAL.a`, a mock - `libhal_mock.a`.
 
-`Project: Install library` kompiluje aktywny profil sprzętowy i instaluje bibliotekę, publiczne i wygenerowane nagłówki oraz dane sygnatury w `.build/install/<target>/<board>/`. Mock nie obsługuje instalacji. `Project: Clean` usuwa tylko katalog kompilacji i instalacji aktywnego profilu oraz odpowiadający mu wygenerowany plik IntelliSense. Nie usuwa innych konfiguracji, zarządzanych narzędzi ani źródeł zależności.
+`Project: Install library` kompiluje aktywny profil sprzętowy i instaluje bibliotekę, publiczne i wygenerowane nagłówki oraz dane sygnatury w `.build/install/<target>/<board>/`. Mock i profile ESP-IDF nie obsługują instalacji; archiwum i nagłówki ESP-IDF pozostają w katalogu builda. `Project: Clean` usuwa tylko katalog kompilacji i instalacji aktywnego profilu oraz odpowiadający mu wygenerowany plik IntelliSense. Nie usuwa innych konfiguracji, zarządzanych narzędzi ani źródeł zależności.
 
 Pliki `.vscode` przechowywane w katalogu głównym repozytorium są generowane na podstawie rejestru płytek. Po zmianie rejestru lub zadań sprawdź albo odtwórz pliki generowane:
 

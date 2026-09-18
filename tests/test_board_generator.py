@@ -359,7 +359,7 @@ esp32_config = (esp32_output / "jh_board_config.h").read_text(encoding="utf-8")
 esp32_board = load(BOARDS / "profiles/waveshare-esp32-s3-zero.json")
 esp32_target = load(BOARDS / "targets/esp32s3.json")
 require(esp32_resolved["idfTarget"] == "esp32s3", "ESP-IDF target mapping changed")
-require(esp32_resolved["components"] == ["esp-idf-native"], "ESP-IDF runtime component changed")
+require(esp32_resolved["components"] == ["esp-idf"], "ESP-IDF runtime component changed")
 require(esp32_resolved["requestedFeatures"] == [], "target feature became a project request")
 require(esp32_resolved["resolvedFeatures"] == ["HAL_ENABLE_FREERTOS"], "ESP32-S3 must require FreeRTOS")
 require(
@@ -384,13 +384,33 @@ require(
 require(
     esp32_target["supportedFeatures"]
     == [
+        "HAL_ENABLE_A7670",
         "HAL_ENABLE_ADC_SCAN",
+        "HAL_ENABLE_ADP5360",
         "HAL_ENABLE_APP_TASK1",
+        "HAL_ENABLE_BH1750",
         "HAL_ENABLE_BLE",
         "HAL_ENABLE_BSD_SOCKETS",
+        "HAL_ENABLE_CAN",
+        "HAL_ENABLE_CELLULAR_MODEM",
+        "HAL_ENABLE_CJSON",
+        "HAL_ENABLE_COMMAND_ROUTER",
         "HAL_ENABLE_CRC",
         "HAL_ENABLE_CRYPTO",
+        "HAL_ENABLE_DACLESS",
+        "HAL_ENABLE_DHT",
+        "HAL_ENABLE_DIGIPOT",
+        "HAL_ENABLE_DISPLAY",
+        "HAL_ENABLE_DMA_PWM_AUDIO",
+        "HAL_ENABLE_DS18B20",
+        "HAL_ENABLE_DS3231",
+        "HAL_ENABLE_EXTERNAL_ADC",
+        "HAL_ENABLE_FAT",
         "HAL_ENABLE_FREERTOS",
+        "HAL_ENABLE_GC9A01",
+        "HAL_ENABLE_GPS",
+        "HAL_ENABLE_HC595",
+        "HAL_ENABLE_HD44780",
         "HAL_ENABLE_HTTP_CLIENT",
         "HAL_ENABLE_HTTP_FILES",
         "HAL_ENABLE_HTTP_SERVER",
@@ -398,19 +418,61 @@ require(
         "HAL_ENABLE_I2C_10BIT",
         "HAL_ENABLE_I2C_SLAVE",
         "HAL_ENABLE_I2C_SLAVE_SNAPSHOT",
+        "HAL_ENABLE_ILI9341",
+        "HAL_ENABLE_IRSMALL_DECODER",
+        "HAL_ENABLE_JPEG",
+        "HAL_ENABLE_JPEG_AS_BASE64",
+        "HAL_ENABLE_MAX5395",
+        "HAL_ENABLE_MAX6675",
+        "HAL_ENABLE_MCP23017",
+        "HAL_ENABLE_MCP2515",
+        "HAL_ENABLE_MCP251XFD",
+        "HAL_ENABLE_MCP3221",
+        "HAL_ENABLE_MCP401X",
+        "HAL_ENABLE_MCP4725",
+        "HAL_ENABLE_MCP9600",
+        "HAL_ENABLE_MFRC522",
         "HAL_ENABLE_MQTT",
         "HAL_ENABLE_NETWORK_CORE",
+        "HAL_ENABLE_NET_COMMANDS",
+        "HAL_ENABLE_NET_CONSOLE",
+        "HAL_ENABLE_NOTIFY",
+        "HAL_ENABLE_NOTIFY_TELEGRAM",
+        "HAL_ENABLE_ONEWIRE",
         "HAL_ENABLE_OTA",
+        "HAL_ENABLE_PCA9654E",
+        "HAL_ENABLE_PCF8563",
+        "HAL_ENABLE_PCF8574",
         "HAL_ENABLE_PCNT",
+        "HAL_ENABLE_PGA2311",
+        "HAL_ENABLE_PN532",
+        "HAL_ENABLE_PNG",
+        "HAL_ENABLE_PNG_AS_BASE64",
         "HAL_ENABLE_PULSE_CAPTURE",
         "HAL_ENABLE_PWM_FREQ",
         "HAL_ENABLE_RGB_LED",
+        "HAL_ENABLE_RTC",
+        "HAL_ENABLE_SERIAL_COMMANDS",
         "HAL_ENABLE_SPI",
+        "HAL_ENABLE_SSD1306",
+        "HAL_ENABLE_SSD1331",
+        "HAL_ENABLE_SSD135X",
+        "HAL_ENABLE_SSD16XX",
+        "HAL_ENABLE_ST7567",
+        "HAL_ENABLE_ST7735",
+        "HAL_ENABLE_ST7789",
+        "HAL_ENABLE_ST7796S",
         "HAL_ENABLE_STACK_GUARD",
+        "HAL_ENABLE_STMPE610",
+        "HAL_ENABLE_SWSERIAL",
         "HAL_ENABLE_TCP",
+        "HAL_ENABLE_TFT",
+        "HAL_ENABLE_THERMOCOUPLE",
         "HAL_ENABLE_TIME",
         "HAL_ENABLE_TLS",
+        "HAL_ENABLE_TSC2007",
         "HAL_ENABLE_UART",
+        "HAL_ENABLE_UC81XX",
         "HAL_ENABLE_UDP",
         "HAL_ENABLE_WEBSOCKET",
         "HAL_ENABLE_WIFI",
@@ -511,7 +573,7 @@ lora_resolved = load(lora_output / "jh_board_resolved.json")
 lora_config = (lora_output / "jh_board_config.h").read_text(encoding="utf-8")
 require(lora_resolved["profileId"] == 10, "LoRa board profile ID changed")
 require(
-    lora_resolved["components"] == ["rp-native", "sx126x-radio"],
+    lora_resolved["components"] == ["rp-pico", "sx126x-radio"],
     "LoRa board component contract changed",
 )
 require(
@@ -577,7 +639,7 @@ pico_core1262_config = (pico_core1262_output / "jh_board_config.h").read_text(
 )
 require(pico_core1262_resolved["profileId"] == 12, "Pico Core1262 profile ID changed")
 require(
-    pico_core1262_resolved["components"] == ["rp-native", "sx126x-radio"],
+    pico_core1262_resolved["components"] == ["rp-pico", "sx126x-radio"],
     "Pico Core1262 component contract changed",
 )
 for expected in (
@@ -615,7 +677,7 @@ require(
 )
 require(
     nucleo_core1262_resolved["components"]
-    == ["stm32g474-native", "sx126x-radio"],
+    == ["stm32g474", "sx126x-radio"],
     "NUCLEO Core1262 component contract changed",
 )
 for expected in (
@@ -694,7 +756,7 @@ run(
 pim730_resolved = load(pim730_output / "jh_board_resolved.json")
 require(
     pim730_resolved["components"]
-    == ["btstack-host", "cyw43-lwip", "cyw43-stm32-gspi", "stm32g474-native"],
+    == ["btstack-host", "cyw43-lwip", "cyw43-stm32-gspi", "stm32g474"],
     "NUCLEO PIM730 component set mismatch",
 )
 require(

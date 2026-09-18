@@ -1,5 +1,5 @@
 #include "hal/core/hal_target.h"
-#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474)
+#if !HAL_TARGET_IS_MOCK
 
 #include "hal/core/hal_config.h"
 #ifdef HAL_ENABLE_ONEWIRE
@@ -225,4 +225,4 @@ bool hal_onewire_search(hal_onewire_t h, uint8_t out_rom[8], bool search_mode) {
 /* CRC helpers now live in hal_crc.h (hal_crc8_maxim / hal_crc16_maxim). */
 
 #endif /* HAL_ENABLE_ONEWIRE */
-#endif /* HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 */
+#endif /* !HAL_TARGET_IS_MOCK */

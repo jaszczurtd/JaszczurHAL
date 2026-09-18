@@ -11,7 +11,7 @@ usage() {
 Build native RP parity hardware fixtures for every supported target/runtime.
 
 Usage:
-  scripts/build_rp_native_parity_fixtures.sh [--jobs N]
+  scripts/build_rp_pico_parity_fixtures.sh [--jobs N]
 
 Builds rp_usb_multicore and rp_sdlogger for RP2040, RP2350 ARM and RP2350
 RISC-V in bare-metal and FreeRTOS variants. It also builds the private

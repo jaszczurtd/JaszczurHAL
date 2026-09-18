@@ -8,7 +8,6 @@
  */
 
 #include "hal/core/hal_target.h"
-#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK)
 
 #include "hal/core/hal_config.h"
 #if defined(HAL_ENABLE_IRSMALL_DECODER)
@@ -236,7 +235,7 @@ static void irsmall_decode_nec(hal_irsmall_decoder_t *dev, uint32_t duration) {
     } else {
       if (fsm->possibly_held && duration >= rm_min && duration <= rm_max) {
         if (fsm->repeat_count < rpt_count) {
-          fsm->repeat_count++;
+          fsm->repeat_count = (uint8_t)(fsm->repeat_count + 1u);
         } else {
           irsmall_publish_held(dev);
         }
@@ -255,7 +254,7 @@ static void irsmall_decode_nec(hal_irsmall_decoder_t *dev, uint32_t duration) {
         signal |= 0x80000000u;
       }
       fsm->signal = signal;
-      fsm->bit_count++;
+      fsm->bit_count = (uint8_t)(fsm->bit_count + 1u);
 
       if (!extended && fsm->bit_count == 16u) {
         if (irsmall_byte32(signal, 2u) !=
@@ -297,7 +296,7 @@ static void irsmall_decode_rc5_finish(hal_irsmall_decoder_t *dev) {
                        rpt_period_max) &&
       (fsm->prev_toggle == toggle)) {
     if (fsm->repeat_count < rpt_count) {
-      fsm->repeat_count++;
+      fsm->repeat_count = (uint8_t)(fsm->repeat_count + 1u);
     } else {
       irsmall_publish_held(dev);
     }
@@ -341,10 +340,10 @@ static void irsmall_decode_rc5_event(hal_irsmall_decoder_t *dev,
   dev->state = new_state;
   if (new_state == IRSMALL_RC5_STATE_MID0) {
     fsm->signal <<= 1u;
-    fsm->bit_count++;
+    fsm->bit_count = (uint8_t)(fsm->bit_count + 1u);
   } else if (new_state == IRSMALL_RC5_STATE_MID1) {
     fsm->signal = (fsm->signal << 1u) + 1u;
-    fsm->bit_count++;
+    fsm->bit_count = (uint8_t)(fsm->bit_count + 1u);
   }
 
   if (fsm->bit_count == 14u) {
@@ -412,7 +411,7 @@ static void irsmall_decode_sirc_basic(hal_irsmall_decoder_t *dev,
         signal |= (bits == 20u) ? 0x80000000u : 0x00008000u;
       }
       fsm->signal = signal;
-      fsm->bit_count++;
+      fsm->bit_count = (uint8_t)(fsm->bit_count + 1u);
       if (fsm->bit_count == bits) {
         if (bits == 12u) {
           const uint32_t adjusted = signal >> 3u;
@@ -515,7 +514,7 @@ static void irsmall_decode_sirc_multi(hal_irsmall_decoder_t *dev,
         signal |= 0x80000000u;
       }
       fsm->signal = signal;
-      fsm->bit_count++;
+      fsm->bit_count = (uint8_t)(fsm->bit_count + 1u);
 
       if (fsm->frame_count == 3u) {
         if (fsm->bit_count == fsm->first_bit_count) {
@@ -530,7 +529,7 @@ static void irsmall_decode_sirc_multi(hal_irsmall_decoder_t *dev,
                  fsm->bit_count == fsm->first_bit_count &&
                  signal == fsm->first_code) {
         if (fsm->repeat_count < rpt_count) {
-          fsm->repeat_count++;
+          fsm->repeat_count = (uint8_t)(fsm->repeat_count + 1u);
         } else {
           irsmall_publish_held(dev);
         }
@@ -588,7 +587,7 @@ static void irsmall_decode_samsung(hal_irsmall_decoder_t *dev,
         cmd |= 0x80u;
       }
       fsm->cmd = cmd;
-      fsm->bit_count++;
+      fsm->bit_count = (uint8_t)(fsm->bit_count + 1u);
 
       if (fsm->bit_count == 8u) {
         fsm->addr16 = cmd;
@@ -599,7 +598,7 @@ static void irsmall_decode_samsung(hal_irsmall_decoder_t *dev,
       } else if (fsm->bit_count == 20u) {
         if (fsm->possibly_held && cmd == dev->data.cmd) {
           if (fsm->repeat_count < rpt_count) {
-            fsm->repeat_count++;
+            fsm->repeat_count = (uint8_t)(fsm->repeat_count + 1u);
           } else {
             irsmall_publish_held(dev);
           }
@@ -664,18 +663,18 @@ static void irsmall_decode_samsung32(hal_irsmall_decoder_t *dev,
         value |= 0x80u;
       }
       fsm->bytes[fsm->byte_index] = value;
-      fsm->bit_count++;
+      fsm->bit_count = (uint8_t)(fsm->bit_count + 1u);
 
       if (fsm->bit_count == 8u || fsm->bit_count == 16u ||
           fsm->bit_count == 24u) {
-        fsm->byte_index++;
+        fsm->byte_index = (uint8_t)(fsm->byte_index + 1u);
       } else if (fsm->bit_count == 32u) {
         dev->state = 0u;
         if (fsm->bytes[0] == fsm->bytes[1] &&
             fsm->bytes[2] == (uint8_t)~fsm->bytes[3]) {
           if (fsm->possibly_held && fsm->bytes[2] == dev->data.cmd) {
             if (fsm->repeat_count < rpt_count) {
-              fsm->repeat_count++;
+              fsm->repeat_count = (uint8_t)(fsm->repeat_count + 1u);
             } else {
               irsmall_publish_held(dev);
             }
@@ -978,4 +977,3 @@ hal_status_t hal_irsmall_decoder_has_data_ex(hal_irsmall_decoder_t *dev,
 }
 
 #endif /* HAL_ENABLE_IRSMALL_DECODER */
-#endif /* supported target */

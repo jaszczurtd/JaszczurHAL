@@ -6,7 +6,6 @@
  */
 
 #include "hal/core/hal_target.h"
-#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK)
 
 #include "hal/core/hal_config.h"
 #if defined(HAL_ENABLE_MCP9600) && defined(HAL_ENABLE_I2C)
@@ -111,4 +110,3 @@ uint8_t hal_mcp9600_get_status(hal_mcp9600_t *dev);
 #endif
 
 #endif /* HAL_ENABLE_MCP9600 && HAL_ENABLE_I2C */
-#endif /* supported target */

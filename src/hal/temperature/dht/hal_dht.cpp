@@ -7,7 +7,6 @@
  */
 
 #include "hal/core/hal_target.h"
-#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK)
 
 #include "hal/core/hal_config.h"
 #ifdef HAL_ENABLE_DHT
@@ -305,4 +304,3 @@ bool hal_dht_get_sample(hal_dht_t h, hal_dht_sample_t *out) {
 }
 
 #endif /* HAL_ENABLE_DHT */
-#endif /* supported target */

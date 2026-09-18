@@ -534,7 +534,7 @@ Jeśli tożsamość jest wyłączona lub niekompletna, build używa domyślnych
 deskryptorów USB JaszczurHAL.
 
 `clear-identity` jest osobną akcją. Wymaga `--project`, buduje neutralny firmware
-z `neutral_fw/rp_native/` za pomocą Pico SDK dla wybranego natywnego targetu i
+z `neutral_fw/rp_pico/` za pomocą Pico SDK dla wybranego natywnego targetu i
 płytki, nie przekazuje zmiennych niestandardowej tożsamości USB do cache, po czym
 wgrywa obraz na zweryfikowane urządzenie dostępne przez port szeregowy albo na
 jednoznacznie wybrane urządzenie BOOTSEL.

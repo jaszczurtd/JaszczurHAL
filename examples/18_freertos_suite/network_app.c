@@ -29,10 +29,6 @@
 #error "18_freertos_suite network variant requires RP FreeRTOS mode"
 #endif
 
-#if !(HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474)
-#error "18_freertos_suite network variant supports RP and STM32G474 targets"
-#endif
-
 #if !defined(HAL_FREERTOS_TASK0_STACK) || HAL_FREERTOS_TASK0_STACK < 1536u
 #error "network server polling requires HAL_FREERTOS_TASK0_STACK >= 1536 words"
 #endif
@@ -49,9 +45,16 @@
 #error "network suite requires at least four BSD file descriptors"
 #endif
 
+/* ESP-IDF ships the kernel headers below a freertos/ prefix. */
+#if HAL_TARGET_IS_ESP32_FAMILY
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#include <freertos/task.h>
+#else
 #include <FreeRTOS.h>
 #include <semphr.h>
 #include <task.h>
+#endif
 
 #include <hal/codecs/cjson/cJSON.h>
 #include <hal/codecs/cjson/cJSON_Utils.h>
@@ -913,8 +916,8 @@ static bool resolve_remote(uint16_t port, int socket_type,
       getaddrinfo(NETWORK_SUITE_REMOTE_HOST, service, &hints, &resolved);
   if (result != 0 || resolved == NULL ||
       resolved->ai_addrlen < (socklen_t)sizeof(*out)) {
-    derr("network suite: getaddrinfo(%s:%s) failed: %s",
-         NETWORK_SUITE_REMOTE_HOST, service, gai_strerror(result));
+    derr("network suite: getaddrinfo(%s:%s) failed (%d)",
+         NETWORK_SUITE_REMOTE_HOST, service, result);
     if (resolved != NULL) {
       freeaddrinfo(resolved);
     }
@@ -1109,7 +1112,9 @@ static void http_client_worker(void *arg) {
 void app_start(void) {
   hal_debug_init_default();
   hal_deb_set_prefix("18_freertos_suite");
+#if defined(HAL_LED_BUILTIN)
   hal_gpio_set_mode(HAL_LED_BUILTIN, HAL_GPIO_OUTPUT);
+#endif
 
   s_stats_mutex = xSemaphoreCreateMutex();
   if (s_stats_mutex == NULL) {
@@ -1154,8 +1159,10 @@ void app_task1(void) {
     return;
   }
   increment_stat(&s_stats.app_task1_ticks);
+#if defined(HAL_LED_BUILTIN)
   const SuiteStats stats = stats_snapshot();
   hal_gpio_write(HAL_LED_BUILTIN,
                  ((stats.app_task1_ticks + stats.command_requests) & 1u) != 0u);
+#endif
   hal_delay_ms(25u);
 }

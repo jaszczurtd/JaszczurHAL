@@ -5,16 +5,19 @@
     "example": {
         "targets": [
             "stm32g474",
+            "esp32s3",
             "rp2040",
             "rp2350-arm"
         ],
         "boards": {
             "rp2040": "picow",
             "rp2350-arm": "pico2w",
-            "stm32g474": "nucleo-g474re-pim730"
+            "stm32g474": "nucleo-g474re-pim730",
+            "esp32s3": "waveshare-esp32-s3-zero"
         },
         "gateTargets": [
             "stm32g474",
+            "esp32s3",
             "rp2040"
         ]
     },

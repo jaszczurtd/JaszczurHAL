@@ -29,8 +29,10 @@ JH_VSCODE = REPO_ROOT / "vscode" / "entry" / (
 )
 REFERENCE_VSCODE_DIR = REPO_ROOT / "vscode" / "examples"
 
-RP_NATIVE_TARGETS = ["rp2040", "rp2350-arm", "rp2350-riscv"]
-GATE_PRIMARY_TARGETS = ["rp2040", "stm32g474"]
+RP_PICO_TARGETS = ["rp2040", "rp2350-arm", "rp2350-riscv"]
+ESP_IDF_TARGETS = ["esp32s3"]
+GATE_PRIMARY_TARGETS = ["rp2040", "stm32g474", *ESP_IDF_TARGETS]
+DEFAULT_ESP32S3_BOARD = "waveshare-esp32-s3-zero"
 _EXAMPLE_CONTRACT = load_tooling_contract("examples.json")
 if set(_EXAMPLE_CONTRACT) != {"schemaVersion", "examples"}:
     raise ToolingContractError(
@@ -80,7 +82,7 @@ def example_targets(entry: dict[str, Any], targets: list[str] | None = None) -> 
     expanded = [target for target in declared if target != "rp2040"]
     expanded.extend(
         target
-        for target in RP_NATIVE_TARGETS
+        for target in RP_PICO_TARGETS
         if target != "rp2350-riscv" or entry.get("board") != "picow"
     )
     return expanded
@@ -98,6 +100,8 @@ def example_boards(entry: dict[str, Any]) -> dict[str, str]:
         boards["rp2350-riscv"] = "pico2"
     if "stm32g474" in targets:
         boards["stm32g474"] = str(entry.get("stm32Board") or "nucleo-g474re")
+    if "esp32s3" in targets:
+        boards["esp32s3"] = str(entry.get("esp32Board") or DEFAULT_ESP32S3_BOARD)
     return boards
 
 
@@ -596,12 +600,7 @@ def main(argv: list[str]) -> int:
     build_parser.add_argument(
         "--target",
         required=True,
-        choices=[
-            "rp2040",
-            "rp2350-arm",
-            "rp2350-riscv",
-            "stm32g474",
-        ],
+        choices=[*RP_PICO_TARGETS, "stm32g474", *ESP_IDF_TARGETS],
     )
     build_parser.add_argument("--example", action="append", help="Build only this example directory name.")
     build_parser.add_argument("--jobs", type=int, default=1)

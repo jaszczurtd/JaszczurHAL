@@ -31,6 +31,15 @@
 #define EXAMPLE_PGA_CS 22u
 #define EXAMPLE_AUDIO_PWM 16u
 #define EXAMPLE_AUDIO_ADC 0u
+#elif HAL_TARGET_IS_ESP32_FAMILY
+/* Waveshare ESP32-S3-Zero castellated pins; ADC1 covers GPIO1..GPIO10. */
+#define EXAMPLE_PGA_BUS 0u
+#define EXAMPLE_PGA_MISO 13u
+#define EXAMPLE_PGA_MOSI 11u
+#define EXAMPLE_PGA_SCK 12u
+#define EXAMPLE_PGA_CS 14u
+#define EXAMPLE_AUDIO_PWM 15u
+#define EXAMPLE_AUDIO_ADC 4u
 #else
 #define EXAMPLE_PGA_BUS 1u
 #define EXAMPLE_PGA_MISO 30u

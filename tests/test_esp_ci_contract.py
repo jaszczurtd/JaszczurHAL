@@ -217,7 +217,7 @@ require(
     "default CI must not read or build hardware fixtures",
 )
 require(
-    "build_rp_native_parity_fixtures.sh" not in QUALITY_GATE,
+    "build_rp_pico_parity_fixtures.sh" not in QUALITY_GATE,
     "runalltests.sh must not build RP hardware fixtures",
 )
 require(
@@ -243,7 +243,44 @@ require(
     "ESP-IDF must not be added to the static-library matrix",
 )
 
+library_step = workflow_step(
+    linux, "Build ESP32-S3 linkable library with pinned ESP-IDF"
+)
+for fragment in (
+    "id: esp32_link_library_build",
+    "./scripts/build_esp32_lib.sh",
+    "--target esp32s3",
+    "--all-features",
+    "--clean",
+    "${GITHUB_WORKSPACE}/.build/ci/link-libraries/esp32s3",
+    'test -f "${output}/libJaszczurHAL.a"',
+    'test -f "${output}/include/generated/jh_board_config.h"',
+):
+    require(
+        fragment in library_step,
+        f"Linux ESP32-S3 library step is missing {fragment!r}",
+    )
+
 gate8 = QUALITY_GATE.split("# GATE 8:", 1)[1].split("# GATE 9:", 1)[0]
+gate8_library = gate8.split(
+    'info "Building the ESP32-S3 all-features linkable library with pinned ESP-IDF..."', 1
+)[1].split(
+    'pass "ESP32-S3 linkable library published libJaszczurHAL.a with its generated headers."',
+    1,
+)[0]
+for fragment in (
+    "scripts/build_esp32_lib.sh",
+    "--target esp32s3",
+    "--all-features",
+    "--clean",
+    '"${GATE_BUILD_ROOT}/link-libraries/esp32s3"',
+    '"${LOG_ROOT}/jh_esp32s3_link_library.log"',
+    "libJaszczurHAL.a",
+):
+    require(
+        fragment in gate8_library,
+        f"Gate 8 ESP32-S3 library build is missing {fragment!r}",
+    )
 gate8_esp = gate8.split(
     'info "Building the ESP32-S3 Phase 3 fixture with pinned ESP-IDF..."', 1
 )[1].split(
@@ -310,5 +347,17 @@ require(
     '"${LOG_ROOT}/jh_esp32_gamepad.log"' in gate8,
     "Gate 8 ESP32 gamepad command is not captured below .build/gate/logs",
 )
+
+gate9 = QUALITY_GATE.split("# GATE 9:", 1)[1]
+gate9_esp = gate9.split(
+    'info "Building ESP32-S3 examples through dispatcher-backed VS Code manifests..."',
+    1,
+)[1].split('pass "ESP32-S3 examples built successfully."', 1)[0]
+for fragment in (
+    "scripts/examples_dispatcher.py",
+    "--target esp32s3 --gate",
+    '"${LOG_ROOT}/jh_examples_esp32s3_build.log"',
+):
+    require(fragment in gate9_esp, f"Gate 9 ESP32-S3 example build is missing {fragment!r}")
 
 print("ESP32-S3 Phase 3 CI and local gate integration verified")

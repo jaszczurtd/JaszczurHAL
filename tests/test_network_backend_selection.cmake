@@ -155,7 +155,7 @@ check_architecture_identity(stm32_cyw43_host_stack
     -DHAL_BOARD_PROFILE_STM32G474_NUCLEO_PIM730=1 -DHAL_ENABLE_TCP=1
     -DJH_EXPECT_NETWORK_CYW43=1)
 
-file(READ "${JH_ROOT}/stm32_lib/CMakeLists.txt" _stm32_library_cmake)
+file(READ "${JH_ROOT}/link_libraries/stm32_lib/CMakeLists.txt" _stm32_library_cmake)
 foreach(_stm32_cyw43_contract IN ITEMS
         "jh_cyw43_driver.cmake"
         "HAL_CYW43_BUS_STM32_GSPI"

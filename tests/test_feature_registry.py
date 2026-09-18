@@ -1763,7 +1763,7 @@ require(
     "the reference example manifest created an effective configuration",
 )
 require(
-    "vscode/neutral_fw/rp_native" not in root_effective_projects,
+    "vscode/neutral_fw/rp_pico" not in root_effective_projects,
     "the no-request neutral-firmware header created an effective configuration",
 )
 

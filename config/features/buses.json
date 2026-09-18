@@ -3,8 +3,20 @@
   "schemaVersion": 1,
   "domain": "buses",
   "symbols": {
-    "HAL_ENABLE_CAN": {},
+    "HAL_ENABLE_CAN": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/can/hal_can.cpp",
+          "src/hal/can/hal_can_util.cpp"
+        ]
+      }
+    },
     "HAL_ENABLE_HC595": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/gpio/simple_io/hal_simple_io_drivers.cpp"
+        ]
+      },
       "implies": ["HAL_ENABLE_SPI"]
     },
     "HAL_ENABLE_I2C": {
@@ -20,30 +32,87 @@
       "implies": ["HAL_ENABLE_I2C_SLAVE"]
     },
     "HAL_ENABLE_MCP23017": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/gpio/simple_io/hal_simple_io_drivers.cpp"
+        ]
+      },
       "implies": ["HAL_ENABLE_I2C"]
     },
     "HAL_ENABLE_MCP2515": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/can/mcp2515/hal_can_mcp2515.cpp",
+          "src/hal/can/mcp2515/hal_can_mcp2515_config.cpp",
+          "src/hal/can/mcp2515/mcp2515_driver.cpp"
+        ]
+      },
       "implies": ["HAL_ENABLE_CAN", "HAL_ENABLE_SPI"]
     },
     "HAL_ENABLE_MCP251XFD": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/can/mcp251xfd/hal_can_mcp251xfd.cpp",
+          "src/hal/can/mcp251xfd/hal_can_mcp251xfd_config.cpp",
+          "src/hal/can/mcp251xfd/mcp251xfd_driver.cpp"
+        ]
+      },
       "implies": ["HAL_ENABLE_CAN", "HAL_ENABLE_SPI"]
     },
     "HAL_ENABLE_MCP4725": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/gpio/simple_io/hal_simple_io_drivers.cpp"
+        ]
+      },
       "implies": ["HAL_ENABLE_I2C"]
     },
     "HAL_ENABLE_MFRC522": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/nfc/hal_mfrc522.cpp",
+          "src/hal/nfc/mfrc522/mfrc522.cpp",
+          "src/hal/nfc/mfrc522/mfrc522_i2c.cpp",
+          "src/hal/nfc/mfrc522/mfrc522_spi.cpp"
+        ]
+      },
       "implies": ["HAL_ENABLE_SPI"]
     },
     "HAL_ENABLE_PCA9654E": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/gpio/simple_io/hal_simple_io_drivers.cpp"
+        ]
+      },
       "implies": ["HAL_ENABLE_I2C"]
     },
     "HAL_ENABLE_PCF8574": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/gpio/simple_io/hal_simple_io_drivers.cpp"
+        ]
+      },
       "implies": ["HAL_ENABLE_I2C"]
     },
     "HAL_ENABLE_PGA2311": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/audio/hal_pga2311.cpp",
+          "src/hal/audio/pga2311/pga2311_driver.cpp"
+        ]
+      },
       "implies": ["HAL_ENABLE_SPI"]
     },
     "HAL_ENABLE_PN532": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/nfc/hal_pn532.cpp",
+          "src/hal/nfc/pn532/pn532.cpp",
+          "src/hal/nfc/pn532/pn532_i2c.cpp",
+          "src/hal/nfc/pn532/pn532_spi.cpp",
+          "src/hal/nfc/pn532/pn532_uart.cpp"
+        ]
+      },
       "implies": ["HAL_ENABLE_SPI"]
     },
     "HAL_ENABLE_SPI": {
@@ -57,7 +126,14 @@
     "HAL_ENABLE_STM32G474_FDCAN": {
       "implies": ["HAL_ENABLE_CAN"]
     },
-    "HAL_ENABLE_SWSERIAL": {},
+    "HAL_ENABLE_SWSERIAL": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/serial/hal_swserial.cpp",
+          "src/hal/serial/swserial/hal_swserial.cpp"
+        ]
+      }
+    },
     "HAL_ENABLE_UART": {}
   }
 }

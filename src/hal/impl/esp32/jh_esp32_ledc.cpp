@@ -7,6 +7,7 @@
 #include "jh_esp32_ledc.h"
 
 #include <driver/ledc.h>
+#include <esp_attr.h>
 #include <esp_clk_tree.h>
 #include <soc/soc.h>
 #include <soc/soc_caps.h>
@@ -93,15 +94,19 @@ int find_timer_locked(uint32_t frequency_hz, uint8_t duty_bits) {
   return -1;
 }
 
-bool valid_channel_locked(const jh_esp32_ledc_channel_t *channel) {
+bool IRAM_ATTR channel_owned(const jh_esp32_ledc_channel_t *channel) {
   const uintptr_t address = (uintptr_t)channel;
   return channel != nullptr && address >= (uintptr_t)&s_channels[0] &&
          address < (uintptr_t)&s_channels[SOC_LEDC_CHANNEL_NUM] &&
          channel->in_use;
 }
 
-uint32_t scale_duty(const jh_esp32_ledc_channel_t &channel,
-                    uint32_t logical_value) {
+bool valid_channel_locked(const jh_esp32_ledc_channel_t *channel) {
+  return channel_owned(channel);
+}
+
+uint32_t IRAM_ATTR scale_duty(const jh_esp32_ledc_channel_t &channel,
+                              uint32_t logical_value) {
   if (logical_value > channel.logical_max) {
     logical_value = channel.logical_max;
   }
@@ -225,6 +230,16 @@ bool jh_esp32_ledc_write(jh_esp32_ledc_channel_t *channel,
   }
   hal_mutex_unlock(mutex);
   return result == ESP_OK;
+}
+
+bool IRAM_ATTR jh_esp32_ledc_write_from_isr(jh_esp32_ledc_channel_t *channel,
+                                            uint32_t logical_value) {
+  if (!channel_owned(channel) || !channel->configured) {
+    return false;
+  }
+  return ledc_set_duty_and_update(
+             LEDC_LOW_SPEED_MODE, (ledc_channel_t)channel->channel,
+             scale_duty(*channel, logical_value), 0u) == ESP_OK;
 }
 
 void jh_esp32_ledc_stop(jh_esp32_ledc_channel_t *channel) {

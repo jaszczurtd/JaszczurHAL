@@ -141,7 +141,7 @@ Stack protection uses two independent opt-ins:
 | `HAL_ENABLE_MFRC522` | `hal_mfrc522.h` (C); `hal/nfc/mfrc522/mfrc522.h` (C++) | `hal/nfc/hal_mfrc522.cpp` + `hal/nfc/mfrc522/mfrc522*.cpp` | Opaque transport and reader handles, card status/UID types and MFRC522 operations over HAL SPI/I2C (propagates SPI) |
 | `HAL_ENABLE_PN532` | `hal_pn532.h` (C); `hal/nfc/pn532/pn532.h` (C++) | `hal/nfc/hal_pn532.cpp` + `hal/nfc/pn532/pn532*.cpp` | Opaque transport and reader handles, UID types and PN532 operations over HAL SPI/I2C/UART (propagates SPI) |
 | `HAL_ENABLE_DACLESS` | `hal_dacless.h` (C); `hal/audio/dacless/dacless.h` (C++) | `hal/audio/hal_dacless.cpp` + `hal/audio/dacless/dacless.cpp` | Opaque DACless handle, C callbacks with application contexts, state and lifecycle (propagates DMA_PWM_AUDIO + PWM_FREQ) |
-| `HAL_ENABLE_DMA_PWM_AUDIO` | `hal_dma_pwm_audio.h` | `hal_dma_pwm_audio.cpp` | Timer-paced PWM-audio DMA helper used by DACless |
+| `HAL_ENABLE_DMA_PWM_AUDIO` | `hal_dma_pwm_audio.h` | `hal_dma_pwm_audio.cpp` | Timer-paced PWM-audio buffer helper used by DACless; DMA on RP and STM32G474, a timer interrupt on ESP32 |
 | `HAL_ENABLE_PWM_FREQ` | `hal_pwm_freq.h` | `hal_pwm_freq.cpp` | RP2040 hardware/pwm, STM32G474 TIM PWM, or ESP32-S3 LEDC |
 | `HAL_ENABLE_DAC` | `hal_dac.h` | target `hal_dac.cpp` | True-DAC capability facade; STM32G474 provides hardware output, while RP2040 reports the capability as unsupported |
 | `HAL_ENABLE_PCNT` | `hal_pcnt.h` | target `hal_pcnt.cpp` | Target pulse-counter facade for RP2040, STM32G474, ESP32-S3 PCNT, and mock targets |
@@ -354,7 +354,7 @@ to the same manager. If the feature comes only from `hal_project_config.h` (or
 from RP `-D`), the CMake fallback still prepares the kernel. An external
 `JH_FREERTOS_KERNEL_DIR` is verified and never replaced.
 
-- Native RP2040/RP2350: use `./scripts/build_rp_native_lib.sh --freertos` or
+- Native RP2040/RP2350: use `./scripts/build_rp_pico_lib.sh --freertos` or
   select `examples/18_freertos_suite` through the normal VS Code target.
   CMake selects the pinned SMP port for RP2040, RP2350 ARM_NTZ or RP2350
   RISC-V, links `heap_4`, creates `app_task0()` pinned to core 0 and optional
@@ -429,7 +429,7 @@ The project tools add the application include directory automatically. In projec
 ### Alternative: compiler `-D` definitions
 
 ```bash
-./scripts/build_rp_native_lib.sh \
+./scripts/build_rp_pico_lib.sh \
   --target rp2040 \
   --board picow \
   -D HAL_ENABLE_WIFI \

@@ -2618,6 +2618,27 @@ def esp_idf_extra_arguments(config: dict[str, Any]) -> list[str]:
     return arguments
 
 
+def esp_idf_project_sources(config: dict[str, Any]) -> list[str]:
+    """Forward the manifest's explicit source list to the ESP-IDF runner.
+
+    Without it the runner compiles every source in the project directory,
+    which breaks examples whose variants select alternative entry files.
+    """
+    cmake = config.get("cmake")
+    cache = cmake.get("cache") if isinstance(cmake, dict) else None
+    if not isinstance(cache, dict):
+        return []
+    raw = cache.get("JH_PROJECT_SOURCES")
+    if raw is None or raw == "":
+        return []
+    arguments: list[str] = []
+    for item in str(raw).split(";"):
+        source = item.strip()
+        if source:
+            arguments.extend(["--source", source])
+    return arguments
+
+
 def esp_idf_runner_command(
     config: dict[str, Any],
     project_dir: Path,
@@ -2644,6 +2665,7 @@ def esp_idf_runner_command(
     ]
     if port is not None:
         command.extend(["--port", port])
+    command.extend(esp_idf_project_sources(config))
     command.extend(esp_idf_extra_arguments(config))
     return command
 
@@ -4598,7 +4620,7 @@ def command_upload_ota(args: argparse.Namespace) -> int:
 
 
 def neutral_firmware_source_dir() -> Path:
-    return jaszczurhal_root() / "vscode" / "neutral_fw" / "rp_native"
+    return jaszczurhal_root() / "vscode" / "neutral_fw" / "rp_pico"
 
 
 def neutral_firmware_config(

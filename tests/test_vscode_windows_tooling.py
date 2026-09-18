@@ -346,7 +346,7 @@ require(
 
 full_configuration_counts = {
     target: 0
-    for target in ("rp2040", "rp2350-arm", "rp2350-riscv", "stm32g474")
+    for target in ("rp2040", "rp2350-arm", "rp2350-riscv", "stm32g474", "esp32s3")
 }
 gate_configuration_counts = dict.fromkeys(full_configuration_counts, 0)
 for entry in examples_dispatcher.EXAMPLES:
@@ -394,8 +394,9 @@ require(
         "rp2350-arm": 39,
         "rp2350-riscv": 25,
         "stm32g474": 42,
+        "esp32s3": 26,
     }
-    and sum(full_configuration_counts.values()) == 152,
+    and sum(full_configuration_counts.values()) == 178,
     f"full dispatcher matrix changed: {full_configuration_counts}",
 )
 require(
@@ -405,8 +406,9 @@ require(
         "rp2350-arm": 4,
         "rp2350-riscv": 0,
         "stm32g474": 33,
+        "esp32s3": 26,
     }
-    and sum(gate_configuration_counts.values()) == 81,
+    and sum(gate_configuration_counts.values()) == 107,
     f"dispatcher gate matrix changed: {gate_configuration_counts}",
 )
 
@@ -612,7 +614,7 @@ for entry in examples_dispatcher.EXAMPLES:
     elif target == "stm32g474":
         require(
             configure_settings.get("CMAKE_TOOLCHAIN_FILE")
-            == "${workspaceFolder}/../../stm32_lib/toolchain_stm32g474.cmake",
+            == "${workspaceFolder}/../../link_libraries/stm32_lib/toolchain_stm32g474.cmake",
             f"checked-in example {entry['dir']} omits the STM32 toolchain for CMake Tools",
         )
     if entry.get("sources"):

@@ -125,7 +125,7 @@ if(NOT _ble_session_contents MATCHES "jh_constant_time_compare")
 endif()
 
 file(READ "${JH_ROOT}/CMakeLists.txt" _root_cmake)
-file(READ "${JH_ROOT}/stm32_lib/CMakeLists.txt" _stm32_cmake)
+file(READ "${JH_ROOT}/link_libraries/stm32_lib/CMakeLists.txt" _stm32_cmake)
 if(NOT _root_cmake MATCHES "hal/serial/hal_serial_session\\.cpp" OR
    NOT _root_cmake MATCHES "hal/security/hal_sc_auth\\.cpp" OR
    NOT _stm32_cmake MATCHES "hal/\\*\\.cpp")

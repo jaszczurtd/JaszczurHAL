@@ -1,8 +1,8 @@
-# Native RP Memory Map
+# RP Memory Map
 
-The native RP2040/RP2350 build derives its flash layout from the selected board
+The RP2040/RP2350 Pico SDK build derives its flash layout from the selected board
 profile and `PICO_FLASH_SIZE_BYTES`. The implementation is in
-`cmake/jh_rp_native_sdk.cmake`; generated linker scripts and resolved values are
+`cmake/jh_rp_pico_sdk.cmake`; generated linker scripts and resolved values are
 written below the active `.build` directory.
 
 ## Standard firmware layout
@@ -108,6 +108,6 @@ HAL-owned USB worker, coordinates the other core, masks local interrupts during
 the RAM-resident operation, and restores acquired runtime state on every exit
 path.
 
-See [Storage](../doc/api/en/14_storage.md) for filesystem and persistence behavior
-and [Native RP OTA Workflow](../doc/en/OTAWorkflow.md) for image format,
+See [Storage](../../doc/api/en/14_storage.md) for filesystem and persistence behavior
+and [Native RP OTA Workflow](../../doc/en/OTAWorkflow.md) for image format,
 provisioning, update, and recovery.

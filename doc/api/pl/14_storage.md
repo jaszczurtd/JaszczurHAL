@@ -12,8 +12,8 @@ wspólnego koordynatora transakcji flash, który zabezpiecza drugi rdzeń,
 wstrzymuje pracę USB, odrzuca aktywne konflikty DMA, maskuje lokalne
 przerwania, a po zakończeniu przywraca poprzedni stan runtime. STM32G474
 używa rezerwacji linkera wyrównanych do stron oraz usługi flash właściwej dla
-tego targetu. Zobacz [mapę pamięci RP](../../../rp_native_lib/MEMORY_MAP.md) oraz
-[mapę pamięci STM32G474](../../../stm32_lib/MEMORY_MAP.md).
+tego targetu. Zobacz [mapę pamięci RP](../../../link_libraries/rp_pico_lib/MEMORY_MAP.md) oraz
+[mapę pamięci STM32G474](../../../link_libraries/stm32_lib/MEMORY_MAP.md).
 
 <a id="hal_eeprom---ujednolicony-eeprom--opcjonalny---hal_enable_eeprom"></a>
 

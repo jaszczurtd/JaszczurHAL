@@ -12,14 +12,14 @@ if(CMAKE_TOOLCHAIN_FILE)
         "STM32 toolchain used by the static-library build" FORCE)
 elseif(JH_STM32_HOST_SANITY)
     message(STATUS
-        "stm32_lib: host-compiler sanity build; JH_STM32G474_HW stays undefined")
+        "link_libraries/stm32_lib: host-compiler sanity build; JH_STM32G474_HW stays undefined")
 else()
     message(FATAL_ERROR
-        "CMAKE_TOOLCHAIN_FILE is required for stm32_lib. Pass "
+        "CMAKE_TOOLCHAIN_FILE is required for link_libraries/stm32_lib. Pass "
         "-DJH_STM32_HOST_SANITY=ON for the host-compiler analysis build.")
 endif()
 
-set(JH_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
+set(JH_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 set(JH_TARGET "stm32g474" CACHE STRING "JaszczurHAL target ID")
 set(JH_BOARD "nucleo-g474re" CACHE STRING "Physical board profile")
 set(EXTRA_HAL_DEFINES "" CACHE STRING "Extra HAL compile definitions")
@@ -88,7 +88,7 @@ jh_generate_board_config(
     REQUESTED_FEATURES ${JH_REQUESTED_FEATURES}
     RESOLVED_FEATURES ${JH_RESOLVED_FEATURES})
 if(NOT JH_RESOLVED_TARGET STREQUAL "stm32g474")
-    message(FATAL_ERROR "stm32_lib requires target stm32g474")
+    message(FATAL_ERROR "link_libraries/stm32_lib requires target stm32g474")
 endif()
 
 include("${JH_ROOT}/cmake/jh_board_components.cmake")
@@ -99,13 +99,13 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(SRC ${CMAKE_CURRENT_SOURCE_DIR}/../src)
+set(SRC ${JH_ROOT}/src)
 include(${CMAKE_CURRENT_SOURCE_DIR}/freertos_stm32g474.cmake)
-include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_bearssl.cmake)
-include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_feature_build_effects.cmake)
-include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_managed_frameworks.cmake)
-include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_cyw43_driver.cmake)
-include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_stack_protector.cmake)
+include(${JH_ROOT}/cmake/jh_bearssl.cmake)
+include(${JH_ROOT}/cmake/jh_feature_build_effects.cmake)
+include(${JH_ROOT}/cmake/jh_managed_frameworks.cmake)
+include(${JH_ROOT}/cmake/jh_cyw43_driver.cmake)
+include(${JH_ROOT}/cmake/jh_stack_protector.cmake)
 jh_managed_framework_include_dirs(_jh_stm32_framework_include_dirs)
 jh_managed_framework_configure_sources()
 set(_jh_extra_hal_defines

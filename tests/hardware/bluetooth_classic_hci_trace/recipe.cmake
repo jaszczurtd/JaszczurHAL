@@ -1,4 +1,4 @@
-include("${JH_ROOT}/cmake/targets/rp-native.cmake")
+include("${JH_ROOT}/cmake/targets/rp-pico.cmake")
 
 # This is a private diagnostic fixture. Its application uses BTstack's dump
 # interface and the private CYW43 transport snapshot, neither of which is part

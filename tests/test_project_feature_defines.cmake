@@ -74,7 +74,7 @@ if(DEFINED JH_PROJECT_FEATURE_FAILURE_CASE)
         include("${JH_ROOT}/cmake/jh_rp_hal_sources.cmake")
         jh_hal_define_enabled(_jh_unused HAL_ENABLE_UNITY)
     elseif(JH_PROJECT_FEATURE_FAILURE_CASE STREQUAL "stm-helper-other")
-        include("${JH_ROOT}/stm32_lib/freertos_stm32g474.cmake")
+        include("${JH_ROOT}/link_libraries/stm32_lib/freertos_stm32g474.cmake")
         jh_cmake_defines_contain(_jh_unused HAL_ENABLE_WIFI
             HAL_ENABLE_WIFI=ON)
     elseif(JH_PROJECT_FEATURE_FAILURE_CASE STREQUAL "board-requested-mismatch")
@@ -88,7 +88,7 @@ if(DEFINED JH_PROJECT_FEATURE_FAILURE_CASE)
             REQUESTED_FEATURES HAL_ENABLE_CRC
             RESOLVED_FEATURES HAL_ENABLE_CRC)
     elseif(JH_PROJECT_FEATURE_FAILURE_CASE STREQUAL "stm-resolved-mismatch")
-        include("${JH_ROOT}/stm32_lib/jh_stm32g474_firmware.cmake")
+        include("${JH_ROOT}/link_libraries/stm32_lib/jh_stm32g474_firmware.cmake")
         jh_add_stm32g474_firmware(parity_probe
             SOURCES "${CMAKE_CURRENT_LIST_FILE}"
             DEFINES HAL_ENABLE_MQTT
@@ -212,7 +212,7 @@ if(_jh_continued_comment_features)
         "Continued line comment exposed project feature definitions")
 endif()
 
-include("${JH_ROOT}/stm32_lib/freertos_stm32g474.cmake")
+include("${JH_ROOT}/link_libraries/stm32_lib/freertos_stm32g474.cmake")
 jh_cmake_defines_contain(_jh_stm_tls_enabled HAL_ENABLE_TLS
     -DHAL_ENABLE_TLS=1)
 if(NOT _jh_stm_tls_enabled)

@@ -34,7 +34,6 @@
  */
 
 #include "hal/core/hal_target.h"
-#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK)
 
 #include "hal/core/hal_config.h"
 #ifdef HAL_ENABLE_MAX6675
@@ -144,5 +143,3 @@ float hal_max6675_read_farenheit(hal_max6675_t *dev) {
 }
 
 #endif /* HAL_ENABLE_MAX6675 */
-#endif /* HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 ||                       \
-          HAL_TARGET_IS_MOCK */

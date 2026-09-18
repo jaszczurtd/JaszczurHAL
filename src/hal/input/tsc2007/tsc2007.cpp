@@ -7,7 +7,6 @@
  */
 
 #include "hal/core/hal_target.h"
-#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK)
 
 #include "hal/core/hal_config.h"
 #if defined(HAL_ENABLE_TSC2007) && defined(HAL_ENABLE_I2C)
@@ -253,4 +252,3 @@ hal_tsc2007_point_t hal_tsc2007_get_point(hal_tsc2007_t *dev) {
 }
 
 #endif /* HAL_ENABLE_TSC2007 && HAL_ENABLE_I2C */
-#endif /* supported target */

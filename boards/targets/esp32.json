@@ -19,7 +19,7 @@
     "backendName": "esp-idf"
   },
   "hal": { "targetSelector": "HAL_TARGET_ESP32" },
-  "build": { "provider": "esp-idf", "recipe": "esp-idf-native", "idfTarget": "esp32" },
+  "build": { "provider": "esp-idf", "recipe": "esp-idf", "idfTarget": "esp32" },
   "gpio": {
     "pinIdFormat": "integer",
     "validPins": { "ranges": [{ "first": 0, "last": 19 }, { "first": 21, "last": 23 }, { "first": 25, "last": 27 }, { "first": 32, "last": 39 }] },
@@ -40,7 +40,7 @@
     "externalRam": { "interfaces": ["quad"], "maxBytes": 4194304 }
   },
   "defaultBoard": "esp32-devkitc-v4",
-  "components": { "esp-idf-native": { "mode": "required" } },
+  "components": { "esp-idf": { "mode": "required" } },
   "requiredFeatures": ["HAL_ENABLE_FREERTOS"],
   "supportedFeatures": [
     "HAL_ENABLE_BLUETOOTH_CLASSIC",

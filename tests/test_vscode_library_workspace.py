@@ -23,6 +23,8 @@ def require(condition: bool, message: str) -> None:
 registry = workspace.load_registry(ROOT)
 require(
     set(registry) == {
+        "esp32",
+        "esp32s3",
         "mock",
         "rp2040",
         "rp2350-arm",
@@ -68,6 +70,10 @@ require(len(rp_commands) == 1, "RP library build gained duplicate entrypoints")
 require("--library-only" in rp_commands[0], "RP workspace build is not archive-only")
 require("--target" in rp_commands[0], "RP workspace build omitted its target")
 require("--board" in rp_commands[0], "RP workspace build omitted its board")
+require(
+    Path(rp_commands[0][0]).name == "build_link_library.sh",
+    "RP workspace build bypasses the shared link-library dispatcher",
+)
 
 stm32 = workspace.profile_from_selection(
     registry,
@@ -78,10 +84,44 @@ stm32_paths = workspace.profile_paths(ROOT, stm32)
 stm32_commands = workspace.build_commands(ROOT, stm32, stm32_paths)
 stm32_helper = Path(stm32_commands[0][0])
 require(
-    stm32_helper.name == "build_stm32_lib.sh"
+    stm32_helper.name == "build_link_library.sh"
     and stm32_helper.parent.name == "scripts",
-    "STM32 workspace build bypasses the static-library helper",
+    "STM32 workspace build bypasses the shared link-library dispatcher",
 )
+require(
+    stm32_commands[0][stm32_commands[0].index("--target") + 1] == "stm32g474",
+    "STM32 workspace build does not pass its registry target",
+)
+
+esp32s3 = workspace.profile_from_selection(
+    registry,
+    "esp32s3",
+    "waveshare-esp32-s3-zero",
+)
+esp32s3_paths = workspace.profile_paths(ROOT, esp32s3)
+esp32s3_commands = workspace.build_commands(ROOT, esp32s3, esp32s3_paths)
+require(
+    Path(esp32s3_commands[0][0]).name == "build_link_library.sh"
+    and "esp32s3" in esp32s3_commands[0],
+    "ESP32-S3 workspace build does not use the shared link-library dispatcher",
+)
+require(
+    esp32s3_paths.archive.name == "libJaszczurHAL.a",
+    "ESP32-S3 workspace profile does not publish libJaszczurHAL.a",
+)
+require(
+    workspace.cpp_properties_document(ROOT, esp32s3, esp32s3_paths)[
+        "configurations"
+    ][0]["cStandard"]
+    == "c17",
+    "ESP-IDF IntelliSense profile does not use the ESP-IDF C standard",
+)
+try:
+    workspace.install_profile(ROOT, esp32s3)
+except workspace.WorkspaceError as exc:
+    require(exc.exit_code == 4, "ESP-IDF install rejection uses the wrong exit code")
+else:
+    raise AssertionError("ESP-IDF profile install must be rejected before building")
 
 mock = workspace.profile_from_selection(registry, "mock", "host-mock")
 mock_paths = workspace.profile_paths(ROOT, mock)

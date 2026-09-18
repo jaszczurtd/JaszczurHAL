@@ -36,7 +36,7 @@ set(_utility_headers
 file(READ "${JH_ROOT}/CMakeLists.txt" _host_manifest)
 file(READ "${JH_ROOT}/scripts/build_esp_idf.py" _esp_manifest)
 file(READ "${JH_ROOT}/cmake/jh_rp_hal_sources.cmake" _rp_manifest)
-file(READ "${JH_ROOT}/stm32_lib/jh_stm32g474_firmware.cmake" _stm_manifest)
+file(READ "${JH_ROOT}/link_libraries/stm32_lib/jh_stm32g474_firmware.cmake" _stm_manifest)
 file(READ "${JH_ROOT}/src/hal/hal.h" _hal_umbrella)
 
 foreach(_source IN LISTS _utility_sources)

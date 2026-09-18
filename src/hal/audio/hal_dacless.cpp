@@ -1,8 +1,7 @@
 #include "hal/audio/hal_dacless.h"
 #include "hal/core/hal_compiler.h"
 
-#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK) &&     \
-    defined(HAL_ENABLE_DACLESS)
+#if defined(HAL_ENABLE_DACLESS)
 
 #include "hal/analog/hal_adc.h"
 #include "hal/audio/dacless/dacless.h"
@@ -585,4 +584,4 @@ uint16_t hal_dacless_interpolate(uint16_t x, uint16_t y, uint16_t mu_scaled) {
   return hal_dma_interpolate(x, y, mu_scaled);
 }
 
-#endif /* supported target && HAL_ENABLE_DACLESS */
+#endif /* HAL_ENABLE_DACLESS */

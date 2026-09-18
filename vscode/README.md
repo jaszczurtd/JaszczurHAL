@@ -487,7 +487,7 @@ If identity is disabled or incomplete, the build uses JaszczurHAL's default USB
 descriptors.
 
 `clear-identity` is a separate action. It requires `--project`, builds the
-neutral firmware from `neutral_fw/rp_native/` through the selected native Pico
+neutral firmware from `neutral_fw/rp_pico/` through the selected native Pico
 SDK target and board, omits custom USB identity cache entries, and flashes a
 verified serial target or one unambiguous BOOTSEL device.
 
