@@ -816,7 +816,7 @@ podsumowaniem, a nie poradą prawną. Warunki dotyczą firmware i innych plików
 wynikowych zawierających BTstack, a nie kompilacji JaszczurHAL, które go nie
 kompilują.
 
-[Przykład `26_ble_stream`](../../../examples/26_ble_stream/) pokazuje uruchomienie Peripheral, rozgłaszanie i odbiór uwierzytelnionego strumienia. Wieloplatformowy [test sprzętowy `bluetooth_stream`](03_build_tests.md#bramka-sprzętowa-jh-ble-stream-v1) sprawdza pełny protokół przy użyciu niezależnego klienta BlueZ.
+[Przykład `26_ble_stream`](../../../examples/26_ble_stream/) pokazuje uruchomienie Peripheral, rozgłaszanie i odbiór uwierzytelnionego strumienia. Wieloplatformowy [test sprzętowy `bluetooth_stream`](../../../tests/hardware/bluetooth_stream/README.pl.md) sprawdza pełny protokół przy użyciu niezależnego klienta BlueZ.
 
 [Przykład `29_bluetooth_gamepad`](../../../examples/29_bluetooth_gamepad/)
 pokazuje obsługę stanów wejść Classic HID i wariant kompilacji BLE+Classic.

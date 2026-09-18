@@ -217,7 +217,6 @@ hal_status_t hal_thermocouple_init_ex(const hal_thermocouple_config_t *cfg,
  * The slot becomes available for a future hal_thermocouple_init() call.
  * Passing NULL is safe (no-op).
  *
- * @param h  Handle to release.
  */
 void hal_thermocouple_deinit(hal_thermocouple_t h);
 
@@ -227,7 +226,6 @@ void hal_thermocouple_deinit(hal_thermocouple_t h);
  * Supported by both MCP9600 and MAX6675.
  * Returns NAN when the chip reports an open-circuit / thermocouple fault.
  *
- * @param h  Valid handle.
  * @return Temperature in °C, or NAN on fault / invalid handle.
  */
 float hal_thermocouple_read(hal_thermocouple_t h);
@@ -240,7 +238,6 @@ hal_status_t hal_thermocouple_read_ex(hal_thermocouple_t h, float *out_c);
  * MCP9600 only - the chip contains an internal thermistor for cold-junction
  * compensation.  MAX6675 has no on-chip CJC sensor.
  *
- * @param h  Valid handle.
  * @return Temperature in °C, or NAN if unsupported / error.
  */
 float hal_thermocouple_read_ambient(hal_thermocouple_t h);
@@ -252,7 +249,6 @@ hal_status_t hal_thermocouple_read_ambient_ex(hal_thermocouple_t h,
  *
  * MCP9600 only.
  *
- * @param h  Valid handle.
  * @return Raw µV reading, or 0 if unsupported.
  */
 int32_t hal_thermocouple_read_adc_raw(hal_thermocouple_t h);
@@ -279,7 +275,6 @@ hal_status_t hal_thermocouple_set_type(hal_thermocouple_t h,
  * MCP9600: reads from the sensor-configuration register.
  * MAX6675: always returns HAL_THERMOCOUPLE_TYPE_K (fixed silicon - no error).
  *
- * @param h  Valid handle.
  * @return Current wire type.
  */
 hal_thermocouple_type_t hal_thermocouple_get_type(hal_thermocouple_t h);
@@ -302,7 +297,6 @@ hal_status_t hal_thermocouple_set_filter(hal_thermocouple_t h, uint8_t coeff);
  *
  * MCP9600 only.
  *
- * @param h  Valid handle.
  * @return Coefficient in [0, 7], or 0 if unsupported.
  */
 uint8_t hal_thermocouple_get_filter(hal_thermocouple_t h);
@@ -326,7 +320,6 @@ hal_thermocouple_set_adc_resolution(hal_thermocouple_t h,
  *
  * MCP9600 only.
  *
- * @param h  Valid handle.
  * @return Current ADC resolution, or HAL_THERMOCOUPLE_ADC_RES_12 if
  *         unsupported.
  */
@@ -365,7 +358,6 @@ hal_status_t hal_thermocouple_enable(hal_thermocouple_t h, bool enable);
  * MCP9600: reads the device-configuration register.
  * MAX6675: always returns true (no sleep mode, no error printed).
  *
- * @param h  Valid handle.
  * @return true if awake and measuring.
  */
 bool hal_thermocouple_is_enabled(hal_thermocouple_t h);
@@ -410,7 +402,6 @@ hal_status_t hal_thermocouple_get_alert_temp_ex(hal_thermocouple_t h,
  * HAL_MCP9600_STATUS_ALERT1..4, HAL_MCP9600_STATUS_THUPDATE,
  * HAL_MCP9600_STATUS_BURST and HAL_MCP9600_STATUS_INPUTRANGE.
  *
- * @param h  Valid handle.
  * @return Status byte, or 0 if unsupported.
  */
 uint8_t hal_thermocouple_get_status(hal_thermocouple_t h);

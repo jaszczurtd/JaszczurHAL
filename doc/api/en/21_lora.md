@@ -426,4 +426,4 @@ buildable
 [`27_lora_point_to_point`](../../../examples/27_lora_point_to_point/) project
 targets RP2040 and STM32G474. The repeatable two-device procedure and serial
 verifier are in
-[SX1262 raw LoRa hardware gate](03_build_tests.md#sx1262-raw-lora-hardware-gate).
+[SX1262 raw LoRa hardware gate](../../../tests/hardware/lora_sx1262/README.md).

@@ -19,7 +19,6 @@ extern "C" {
 /** @brief Opaque PID controller implementation type. */
 typedef struct hal_pid_controller_impl_s hal_pid_controller_impl_t;
 
-/** @brief Handle to a PID controller instance. */
 typedef hal_pid_controller_impl_t *hal_pid_controller_t;
 
 /** @brief PID direction for output response. */
@@ -49,7 +48,6 @@ hal_pid_controller_t hal_pid_controller_create_with_gains(float kp, float ki,
                                                           float max_integral);
 
 /**
- * @brief Destroy a PID controller instance.
  * @param controller Controller handle. NULL is ignored.
  */
 void hal_pid_controller_destroy(hal_pid_controller_t controller);
@@ -152,7 +150,6 @@ void hal_pid_controller_set_output_limits(hal_pid_controller_t controller,
 
 /**
  * @brief Reset PID internal state (integrator, derivative, timing, history).
- * @param controller Controller handle.
  */
 void hal_pid_controller_reset(hal_pid_controller_t controller);
 

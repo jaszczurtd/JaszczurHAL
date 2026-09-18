@@ -450,7 +450,7 @@ void hal_mock_uart_set_write_callback(hal_uart_t h, hal_mock_uart_write_cb_t cb,
  * @brief Override the status returned by the next mock UART begin operation.
  * @param h Mock UART handle. A NULL handle is ignored.
  * @param status One-shot result; HAL_OK clears any pending failure.
- * @return Nothing. The override is consumed by the next hal_uart_begin() call.
+ * @note The override is consumed by the next hal_uart_begin() call.
  */
 void hal_mock_uart_set_next_begin_status(hal_uart_t h, hal_status_t status);
 
@@ -458,7 +458,7 @@ void hal_mock_uart_set_next_begin_status(hal_uart_t h, hal_status_t status);
  * @brief Override the status returned by the next mock UART write operation.
  * @param h Mock UART handle. A NULL handle is ignored.
  * @param status One-shot result; HAL_OK clears any pending failure.
- * @return Nothing. The override is consumed by the next hal_uart_write_ex()
+ * @note The override is consumed by the next hal_uart_write_ex()
  *         call.
  */
 void hal_mock_uart_set_next_write_status(hal_uart_t h, hal_status_t status);
@@ -467,7 +467,7 @@ void hal_mock_uart_set_next_write_status(hal_uart_t h, hal_status_t status);
  * @brief Override the status returned by the next mock UART flush operation.
  * @param h Mock UART handle. A NULL handle is ignored.
  * @param status One-shot result; HAL_OK clears any pending failure.
- * @return Nothing. The override is consumed by the next hal_uart_flush() call.
+ * @note The override is consumed by the next hal_uart_flush() call.
  */
 void hal_mock_uart_set_next_flush_status(hal_uart_t h, hal_status_t status);
 #endif

@@ -1668,6 +1668,42 @@ def validate_generated_project_contract(
     return actual
 
 
+def _ninja_newer_inputs(
+    ninja: Path,
+    build_dir: Path,
+    project_name: str,
+    environment: Mapping[str, str] | None,
+) -> list[str]:
+    """Name the inputs Ninja considers newer than the artifacts they feed.
+
+    A build that ran correctly still leaves pending work when a source is
+    edited while it compiles, so the plain dry-run output reads like a build
+    failure. Ninja's explanation says which file moved underneath it.
+    """
+    try:
+        completed = subprocess.run(
+            [str(ninja), "-d", "explain", "-n", f"{project_name}.elf"],
+            cwd=build_dir,
+            env=_idf_environment(
+                os.environ if environment is None else environment, build_dir
+            ),
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    newer: list[str] = []
+    for line in (completed.stdout or "").splitlines():
+        match = re.search(r"older than most recent input (\S+)", line)
+        if match is not None and match.group(1) not in newer:
+            newer.append(match.group(1))
+    return newer
+
+
 def validate_ninja_freshness(
     build_dir: Path,
     project_name: str,
@@ -1715,6 +1751,13 @@ def validate_ninja_freshness(
         )
     if output != "ninja: no work to do.":
         preview = "\n".join(output.splitlines()[:8])
+        newer = _ninja_newer_inputs(ninja, build_dir, project_name, environment)
+        if newer:
+            preview += (
+                "\nInputs newer than the artifacts they feed; an edit landed "
+                "while the build ran:\n"
+                + "\n".join(f"  {item}" for item in newer[:5])
+            )
         raise EspIdfError(
             "ESP-IDF artifacts are stale; Ninja reports pending work:\n" + preview
         )

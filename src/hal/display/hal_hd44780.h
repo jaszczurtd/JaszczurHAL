@@ -126,14 +126,12 @@ hal_status_t hal_hd44780_begin(hal_hd44780_t lcd, uint8_t columns, uint8_t rows,
 
 /**
  * @brief Clear display memory and move the cursor to the home position.
- * @param lcd Valid display handle.
  * @return HAL_OK on success or HAL_EUNINIT for an invalid handle.
  */
 hal_status_t hal_hd44780_clear(hal_hd44780_t lcd);
 
 /**
  * @brief Move the cursor to the home position without clearing characters.
- * @param lcd Valid display handle.
  * @return HAL_OK on success or HAL_EUNINIT for an invalid handle.
  */
 hal_status_t hal_hd44780_home(hal_hd44780_t lcd);

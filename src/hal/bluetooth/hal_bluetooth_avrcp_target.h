@@ -60,7 +60,6 @@ hal_bluetooth_avrcp_target_open(hal_bluetooth_classic_t classic,
 
 /**
  * @brief Close AVRCP without closing the shared Classic manager.
- * @param target Live profile handle.
  * @return HAL_OK, HAL_EUNINIT for a stale handle, HAL_ENOMEM, or a backend
  * detach error.
  */

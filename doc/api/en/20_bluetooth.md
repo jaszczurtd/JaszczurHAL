@@ -775,7 +775,7 @@ do not compile BTstack.
 See the buildable [`26_ble_stream` example](../../../examples/26_ble_stream/) for
 the complete Peripheral startup and advertising flow plus an authenticated
 stream consumer. The multi-target
-[`bluetooth_stream` hardware gate](03_build_tests.md#jh-ble-stream-v1-hardware-gate)
+[`bluetooth_stream` hardware gate](../../../tests/hardware/bluetooth_stream/README.md)
 drives the complete protocol from an independent BlueZ client.
 
 See [`29_bluetooth_gamepad`](../../../examples/29_bluetooth_gamepad/) for the

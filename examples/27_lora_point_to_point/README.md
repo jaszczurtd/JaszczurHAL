@@ -66,7 +66,7 @@ vscode/entry/jh-vscode build \
 For two integrated Waveshare LF boards, select
 `--target rp2040 --board rp2040-lora-lf` with `link` and `link-responder`.
 See the
-[LoRa command hardware tests](../../doc/api/en/03_build_tests.md#sx1262-command-router-over-lora-hardware-gate)
+[LoRa command hardware tests](../../tests/hardware/lora_sx1262/README.md)
 for uploading, stable serial-port selection, and `JHCMD1` acceptance criteria.
 
 **Commands in this example are not encrypted.** They have CRC protection,

@@ -1,26 +1,31 @@
-# Bluetooth Classic HCI trace
+# Bluetooth Classic raw HCI inquiry diagnostics
 
-The full procedure and recorded diagnosis are maintained in the
-[central hardware-fixture reference](../../../doc/api/en/03_build_tests.md#bluetooth-classic-raw-hci-inquiry-diagnostics).
+`tests/hardware/bluetooth_classic_hci_trace` records BTstack HCI commands and
+events before the public manager parses them. The same fixture builds for Pico
+W RP2040 and Pico 2 W RP2350 ARM. It also reports HCI transport counters and
+the measured CYW43 gSPI clock. Bluetooth addresses are masked, unknown command
+payloads and ACL bodies are hidden, and Extended Inquiry Result is retained
+only through its RSSI byte; its EIR data body is redacted.
 
-This private hardware fixture captures raw BTstack HCI command and event
-packets before the public Classic manager interprets them. It supports Pico W
-RP2040 and Pico 2 W RP2350 ARM so the same application can compare controller
-behaviour. Bluetooth addresses and non-inquiry payloads are redacted on the
-serial console.
+```sh
+vscode/entry/jh-vscode build \
+  --project tests/hardware/bluetooth_classic_hci_trace \
+  --target rp2040 --board picow
+vscode/entry/jh-vscode build \
+  --project tests/hardware/bluetooth_classic_hci_trace \
+  --target rp2350-arm --board pico2w
+```
 
-Build and upload one target, open its serial console, then run `SCAN`, wait for
-the ten-second inquiry to finish, and run `INFO` followed by `DUMP`. Use
-`SCAN30` for three consecutive inquiry cycles. Both scan commands reset the
-trace first. `RESET` discards a trace without starting inquiry and `STOP`
-cancels an active scan. `INFO` includes HCI transport counters and the measured
-CYW43 gSPI clock.
+Use `SCAN` for one ten-second scan or `SCAN30` for three consecutive inquiry
+cycles, then issue `INFO` and `DUMP`. `STOP` exercises cancellation and `RESET`
+discards buffered records. This fixture uses private diagnostic interfaces and
+is not part of the public HAL API.
 
-The `JHHCI` records retain the raw Inquiry command, Inquiry Complete, Inquiry
-Result, and Inquiry Result with RSSI bytes. For Extended Inquiry Result they
-retain only metadata through RSSI; the EIR data body is redacted because it can
-contain names and arbitrary manufacturer data. Bluetooth addresses are always
-masked. `JHHCI-PEER` reports both the advertised name-field length and its
-NUL-terminated text length plus an FNV-1a hash, allowing padding and identity
-diagnosis without printing the name. Other HCI commands and events retain only
-the non-sensitive header needed to compare the command/event sequence.
+The backend requests Extended Inquiry Result mode, so a successful scan shows
+the EIR name and RSSI.
+
+When one board finds a device and another does not, compare their traces. If
+controller initialization and the Inquiry command match and neither board
+reports dropped records or drain-budget hits, the difference lies in the radio
+path (antenna, placement, a weak responder) rather than in the result parser,
+the scan deadline, or the HCI transport.

@@ -186,7 +186,6 @@ hal_gamepad_open_ex(hal_gamepad_t *out_gamepad,
 /**
  * @brief Stop the profile, clear its selected device, and invalidate its
  * handle.
- * @param gamepad Live gamepad handle.
  * @return HAL_OK, HAL_EUNINIT for an invalid or stale handle, HAL_EBUSY during
  * another operation, HAL_ENOMEM, or a Classic/HID shutdown error.
  */
@@ -194,7 +193,6 @@ hal_status_t hal_gamepad_close(hal_gamepad_t gamepad);
 
 /**
  * @brief Service Bluetooth transport and profile state without blocking.
- * @param gamepad Live gamepad handle.
  * @return HAL_OK, HAL_EUNINIT for an invalid handle, HAL_EBUSY during another
  * operation, HAL_EAGAIN while awaiting input, HAL_EOVERFLOW after lost queued
  * state, HAL_ENOMEM, or a Classic/HID/parser error.
@@ -238,7 +236,6 @@ hal_status_t hal_gamepad_snapshot_next(hal_gamepad_t gamepad,
 
 /**
  * @brief Open the two-minute pairing window, including device replacement.
- * @param gamepad Live gamepad handle.
  * @return HAL_OK, HAL_EUNINIT for an invalid handle, HAL_ESTATE unless the
  * adapter is ready and idle, HAL_EBUSY during another operation, HAL_ENOMEM,
  * or a Classic scan error.
@@ -247,7 +244,6 @@ hal_status_t hal_gamepad_pairing_open(hal_gamepad_t gamepad);
 
 /**
  * @brief Authorize a pending Just Works or legacy PIN 0000 request.
- * @param gamepad Live gamepad handle.
  * @return HAL_OK, HAL_EUNINIT for an invalid handle, HAL_ESTATE without a
  * pending request, HAL_EBUSY during another operation, HAL_ENOMEM, or a
  * Classic pairing error.
@@ -256,7 +252,6 @@ hal_status_t hal_gamepad_pairing_authorize(hal_gamepad_t gamepad);
 
 /**
  * @brief Start reconnection to the previously paired gamepad.
- * @param gamepad Live gamepad handle.
  * @return HAL_OK when queued, HAL_EUNINIT for an invalid handle, HAL_ESTATE
  * without a saved peer or unless HID is ready, HAL_EBUSY during another
  * operation, HAL_ENOMEM, or a HID connection error.
@@ -265,7 +260,6 @@ hal_status_t hal_gamepad_reconnect(hal_gamepad_t gamepad);
 
 /**
  * @brief Request asynchronous disconnection of the active gamepad link.
- * @param gamepad Live gamepad handle.
  * @return HAL_OK when queued, HAL_EUNINIT for an invalid handle, HAL_ESTATE
  * without an active link, HAL_EBUSY during another operation, HAL_ENOMEM, or a
  * HID disconnection error.
@@ -281,7 +275,6 @@ hal_status_t hal_gamepad_disconnect(hal_gamepad_t gamepad);
  * hal_gamepad_pairing_open() starts a fresh pairing; reconnect is refused
  * until a new peer is bonded.
  *
- * @param gamepad Live gamepad handle.
  * @return HAL_OK on success, HAL_EBUSY when another gamepad or Classic
  * operation is active, HAL_EUNINIT for an invalid handle, HAL_ENOMEM, or the
  * provider's erase status. HAL_EBUSY can be retried. A provider failure keeps

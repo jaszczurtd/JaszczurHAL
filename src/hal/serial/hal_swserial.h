@@ -116,7 +116,6 @@ hal_status_t hal_swserial_begin(hal_swserial_t h, uint32_t baud,
 
 /**
  * @brief Return the number of bytes available in the receive buffer.
- * @param h Handle.
  * @return Number of bytes ready to read, or 0 for an invalid or unstarted
  *         handle.
  */
@@ -138,7 +137,6 @@ hal_status_t hal_swserial_read_ex(hal_swserial_t h, uint8_t *out_value);
  *
  * Compatibility wrapper over hal_swserial_read_ex().
  *
- * @param h Handle.
  * @return Byte value (0-255), or -1 on any status error (including an empty
  *         receive buffer).
  */
@@ -204,7 +202,6 @@ size_t hal_swserial_println(hal_swserial_t h, const char *s);
 
 /**
  * @brief Flush the transmit buffer, blocking until all bytes are sent.
- * @param h Handle.
  * @return HAL_OK when transmission is complete; HAL_EINVAL for an invalid
  *         handle; or HAL_EUNINIT before begin().
  */

@@ -808,6 +808,41 @@ class NinjaFreshnessTests(unittest.TestCase):
                         build_dir, "firmware", provenance
                     )
 
+            # A source edited while the build ran leaves pending work that is
+            # not a build failure; the report must name the file that moved.
+            explained = [
+                mock.Mock(
+                    returncode=0,
+                    stdout="[1/1] compiler -c project/include/changed.h\n",
+                ),
+                mock.Mock(
+                    returncode=0,
+                    stdout=(
+                        "ninja explain: output firmware.obj older than most "
+                        "recent input /src/hal/core/hal_math.h (2 vs 3)\n"
+                    ),
+                ),
+            ]
+            with mock.patch.object(
+                esp_idf.subprocess, "run", side_effect=explained
+            ) as run:
+                with self.assertRaisesRegex(
+                    esp_idf.EspIdfError, "/src/hal/core/hal_math.h"
+                ):
+                    esp_idf.validate_ninja_freshness(
+                        build_dir, "firmware", provenance
+                    )
+            self.assertEqual(
+                run.call_args_list[1].args[0],
+                [
+                    str(Path(text) / "tools/ninja"),
+                    "-d",
+                    "explain",
+                    "-n",
+                    "firmware.elf",
+                ],
+            )
+
     def test_ninja_dry_run_accepts_windows_executable_identity(self) -> None:
         with tempfile.TemporaryDirectory(prefix="jh-esp-ninja-win-") as text:
             build_dir, provenance = self._fixture(Path(text), "ninja.exe")

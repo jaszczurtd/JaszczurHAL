@@ -11,11 +11,7 @@ import sys
 import tempfile
 import unittest
 
-from source_assertions import (
-    source_fragment_position,
-    source_has_fragment,
-    source_section,
-)
+from source_assertions import source_has_fragment
 
 
 ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).parents[1]
@@ -272,178 +268,12 @@ class Phase2RegistryAndBuildModelTests(unittest.TestCase):
             self.assertFalse((cold_root / "third_party/esp-idf").exists())
 
 
-class Phase2BackendLifecycleTests(unittest.TestCase):
-    def test_i2c_slave_events_are_coalesced_without_lossy_isr_queue(self) -> None:
-        source = (ROOT / "src/hal/impl/esp32/hal_i2c_slave.cpp").read_text(
-            encoding="utf-8"
-        )
-        self.assertTrue(source_has_fragment(source, "HAL_ATOMIC_FETCH_OR(&state.pending_events"))
-        self.assertTrue(source_has_fragment(source, "xSemaphoreGiveFromISR(state.event_ready"))
-        self.assertTrue(source_has_fragment(source, "HAL_ATOMIC_EXCHANGE(&state.pending_events"))
-        self.assertFalse(source_has_fragment(source, "xQueueSendToBackFromISR"))
-        worker = source_section(source, "void worker_task(", "void stop_worker(")
-        self.assertLess(
-            source_fragment_position(worker, "i2c_slave_reset_tx_fifo(state.handle)"),
-            source_fragment_position(worker, "write_snapshot(state)"),
-        )
-        self.assertTrue(source_has_fragment(worker, "bool transmit_pending = false;"))
+class Phase3FixtureSourceTests(unittest.TestCase):
+    """The compile-only fixture is judged by its source: it is never run.
 
-    def test_i2c_slave_deregister_keeps_valid_isr_context(self) -> None:
-        source = (ROOT / "src/hal/impl/esp32/hal_i2c_slave.cpp").read_text(
-            encoding="utf-8"
-        )
-        self.assertTrue(
-            source_has_fragment(
-                source,
-                "i2c_slave_register_event_callbacks(state.handle, &callbacks, &state)",
-            )
-        )
-        self.assertFalse(
-            source_has_fragment(
-                source,
-                "i2c_slave_register_event_callbacks(state.handle, &callbacks, nullptr)",
-            )
-        )
-
-    def test_i2c_slave_snapshot_preserves_wire_cursor_via_idf_queue(self) -> None:
-        source = (ROOT / "src/hal/impl/esp32/hal_i2c_slave.cpp").read_text(
-            encoding="utf-8"
-        )
-        write_call = source_fragment_position(
-            source, "const esp_err_t result = i2c_slave_write("
-        )
-        cursor_update = source_fragment_position(
-            source, "state.register_pointer = static_cast<uint16_t>(pointer + written);"
-        )
-        self.assertLess(write_call, cursor_update)
-        self.assertTrue(
-            source_has_fragment(source, "state.register_selection_generation == generation")
-        )
-        self.assertTrue(source_has_fragment(source, "if (written > output)"))
-        self.assertTrue(source_has_fragment(source, "if (output == 0u)"))
-        self.assertTrue(
-            source_has_fragment(source, "static_cast<uint32_t>(output), &written")
-        )
-        self.assertFalse(
-            source_has_fragment(source, "HAL_I2C_SLAVE_REG_MAP_SIZE * 2u")
-        )
-        self.assertIn("This is the producer cursor", source)
-        self.assertIn("accepted but unclocked bytes", source)
-
-        receive = source_section(
-            source,
-            "bool IRAM_ATTR receive_callback(",
-            "bool IRAM_ATTR request_callback(",
-        )
-        request = source_section(
-            source,
-            "bool IRAM_ATTR request_callback(",
-            "void write_snapshot(",
-        )
-        self.assertTrue(source_has_fragment(receive, "signal_from_isr(state, kEventResetTx"))
-        self.assertTrue(source_has_fragment(request, "signal_from_isr(state, kEventTransmit"))
-        self.assertFalse(source_has_fragment(request, "kEventResetTx"))
-
-        public_contract = (
-            ROOT / "src/hal/i2c/hal_i2c_slave.h"
-        ).read_text(encoding="utf-8")
-        self.assertIn(
-            "pointer advances for every byte clocked by the",
-            public_contract,
-        )
-        self.assertIn(
-            "bytes not yet clocked remain queued across STOP", public_contract
-        )
-        self.assertIn(
-            "local reg_write*() updates to bytes",
-            public_contract,
-        )
-
-    def test_i2c_slave_driver_lifetime_outlives_worker_and_isr_context(self) -> None:
-        source = (ROOT / "src/hal/impl/esp32/hal_i2c_slave.cpp").read_text(
-            encoding="utf-8"
-        )
-        release = source[source_fragment_position(source, "esp_err_t release_slave(") :]
-        stop_worker = source_fragment_position(release, "stop_worker(state);")
-        delete_driver = source_fragment_position(release, "i2c_del_slave_device(state.handle)")
-        clear_driver_handle = source_fragment_position(
-            release, "state.handle = nullptr", delete_driver
-        )
-        delete_event = source_fragment_position(release, "vSemaphoreDelete(state.event_ready)")
-        self.assertLess(stop_worker, delete_driver)
-        self.assertLess(delete_driver, clear_driver_handle)
-        self.assertLess(clear_driver_handle, delete_event)
-        self.assertIn("ESP-IDF consumes the device allocation", release)
-
-    def test_ledc_uses_idle_high_for_exact_full_on(self) -> None:
-        source = (ROOT / "src/hal/impl/esp32/jh_esp32_ledc.cpp").read_text(
-            encoding="utf-8"
-        )
-        self.assertTrue(source_has_fragment(source, "logical_value >= channel->logical_max"))
-        self.assertTrue(source_has_fragment(source, "(ledc_channel_t)channel->channel, 1u"))
-        self.assertTrue(source_has_fragment(source, "channel->full_on = full_on"))
-        self.assertTrue(source_has_fragment(source, "!full_on && !newly_configured"))
-        self.assertTrue(source_has_fragment(source, "ledc_set_duty_and_update("))
-
-    def test_ledc_failed_teardown_retains_hardware_and_logical_ownership(self) -> None:
-        ledc = (ROOT / "src/hal/impl/esp32/jh_esp32_ledc.cpp").read_text(
-            encoding="utf-8"
-        )
-        simple = (ROOT / "src/hal/impl/esp32/hal_pwm.cpp").read_text(
-            encoding="utf-8"
-        )
-        frequency = (ROOT / "src/hal/impl/esp32/hal_pwm_freq.cpp").read_text(
-            encoding="utf-8"
-        )
-        release = ledc[source_fragment_position(ledc, "bool jh_esp32_ledc_release(") :]
-        deconfigure = source_fragment_position(release, "ledc_channel_config(&config)")
-        clear = source_fragment_position(release, "*channel = {};")
-        self.assertLess(deconfigure, clear)
-        self.assertTrue(
-            source_has_fragment(release[:deconfigure], "if (stop_result != ESP_OK)")
-        )
-        self.assertTrue(
-            source_has_fragment(release, "if (ledc_channel_config(&config) != ESP_OK)")
-        )
-        self.assertTrue(
-            source_has_fragment(simple, "if (jh_esp32_ledc_release(channel))")
-        )
-        self.assertTrue(source_has_fragment(simple, "if (released)"))
-        self.assertTrue(
-            source_has_fragment(
-                frequency, "destroyed = jh_esp32_ledc_release(channel->ledc)"
-            )
-        )
-        self.assertTrue(source_has_fragment(frequency, "if (destroyed)"))
-
-    def test_rmt_teardown_retains_handles_until_successful_delete(self) -> None:
-        source = (ROOT / "src/hal/impl/esp32/hal_rgb_led.cpp").read_text(
-            encoding="utf-8"
-        )
-        channel_delete = source_fragment_position(source, "rmt_del_channel(s_channel)")
-        channel_clear = source_fragment_position(
-            source, "s_channel = nullptr", channel_delete
-        )
-        encoder_delete = source_fragment_position(source, "rmt_del_encoder(s_encoder)")
-        encoder_clear = source_fragment_position(
-            source, "s_encoder = nullptr", encoder_delete
-        )
-        self.assertLess(channel_delete, channel_clear)
-        self.assertLess(encoder_delete, encoder_clear)
-        self.assertTrue(
-            source_has_fragment(
-                source, "return jh_esp32_status_from_esp_err(delete_result);"
-            )
-        )
-
-    def test_fault_init_retries_failed_cross_core_installation(self) -> None:
-        source = (ROOT / "src/hal/impl/esp32/jh_esp32_fault.cpp").read_text(
-            encoding="utf-8"
-        )
-        self.assertTrue(source_has_fragment(source, "const esp_err_t result ="))
-        self.assertTrue(source_has_fragment(source, "if (result != ESP_OK)"))
-        self.assertTrue(source_has_fragment(source, "s_initialized = all_handlers_installed();"))
-        self.assertFalse(source_has_fragment(source, "(void)esp_ipc_call_blocking"))
+    Backend behaviour is covered by test_esp32_backend_lifecycle, which runs
+    the ESP32 backends against a fake ESP-IDF.
+    """
 
     def test_compile_fixture_retains_destructive_boot_entry_without_running_it(self) -> None:
         source = (

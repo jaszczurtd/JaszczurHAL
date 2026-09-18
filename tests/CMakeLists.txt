@@ -1691,6 +1691,31 @@ foreach(I2C_TEST IN ITEMS test_rp_i2c_slave_snapshot test_rp_i2c_slave_live)
 endforeach()
 target_compile_definitions(test_rp_i2c_slave_snapshot PRIVATE
     HAL_ENABLE_I2C_SLAVE_SNAPSHOT)
+
+# ESP32 I2C target, LEDC, RMT and fault backends against a fake ESP-IDF that
+# records driver calls, injects failures and schedules FreeRTOS tasks.
+set(_esp32_backend_dir ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/esp32)
+add_executable(test_esp32_backend_lifecycle
+    test_esp32_backend_lifecycle.cpp
+    fakes/esp_idf/esp_idf_fake.cpp
+    ${_esp32_backend_dir}/hal_i2c_slave.cpp
+    ${_esp32_backend_dir}/hal_pwm.cpp
+    ${_esp32_backend_dir}/hal_pwm_freq.cpp
+    ${_esp32_backend_dir}/hal_rgb_led.cpp
+    ${_esp32_backend_dir}/jh_esp32_fault.cpp
+    ${_esp32_backend_dir}/jh_esp32_ledc.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/core/hal_config.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c)
+target_include_directories(test_esp32_backend_lifecycle PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/fakes/esp_idf
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src)
+target_compile_definitions(test_esp32_backend_lifecycle PRIVATE
+    HAL_TARGET_ESP32_S3=1 HAL_BOARD_PROFILE_WAVESHARE_ESP32_S3_ZERO=1
+    HAL_ENABLE_I2C_SLAVE HAL_I2C_SLAVE_REG_MAP_SIZE=16U HAL_ENABLE_PWM_FREQ
+    HAL_ENABLE_RGB_LED HAL_ENABLE_UNITY UNITY_INCLUDE_CONFIG_H)
+jh_enable_host_warnings(test_esp32_backend_lifecycle ERRORS)
+target_link_libraries(test_esp32_backend_lifecycle PRIVATE Threads::Threads)
+add_test(NAME test_esp32_backend_lifecycle COMMAND test_esp32_backend_lifecycle)
 add_stm32_gpio_host_test(test_stm32_hal_gpio)
 add_executable(test_stm32_pwm_clock
     test_stm32_pwm_clock.cpp

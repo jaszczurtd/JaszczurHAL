@@ -50,7 +50,7 @@ After initialization, most HAL operations can be shared between RP2040/RP2350 co
 
 - **Per-instance mutexes** protect handle-based APIs (`hal_can`, `hal_thermocouple`, `hal_rtc`, `SmartTimers`).
 - **Per-bus mutexes** protect shared communication buses (`hal_spi`, `hal_i2c`).
-- **Singleton mutexes** protect global modules (`hal_eeprom`, `hal_display`, `hal_gps`, `hal_external_adc`, `hal_wifi`, `hal_udp`, `hal_wireguard`, `hal_mqtt`, `hal_kv`, debug serial).
+- **Singleton mutexes** protect global modules (`hal_eeprom`, `hal_display`, `hal_gps`, `hal_external_adc`, `hal_wifi`, `hal_udp`, `hal_wireguard`, `hal_mqtt`, `hal_kv`, the `hal_time` system clock and NTP, debug serial).
 - **Stateless helpers** (`hal_bits`, `hal_math`, pure `hal_time` helpers,
   `hal_crypto`, `hal_constrain`, `hal_map`) are inherently thread-safe.
 
@@ -58,7 +58,7 @@ Global-module and bus mutexes use atomic create-once initialization, so two task
 
 `hal_uart` and `pidController` require application-level synchronization or use from a single core.
 
-**Verification required - system time and NTP:** the original overview also classified the optional `hal_time` API as not thread-safe, while the [network module reference](15_connectivity.md) describes mutex-protected snapshots and concurrent task/core access. This discrepancy cannot be resolved without checking the implementation. Confirm the actual synchronization rules before sharing this API.
+**System time and NTP:** with `HAL_ENABLE_TIME`, the clock, NTP, and status functions of `hal_time` can be called concurrently from tasks and cores, but not from an ISR. Three calls belong to setup: `hal_time_set_timezone()`, `hal_time_attach_rtc_ex()`, and `hal_time_detach_rtc_ex()`. On hardware targets a timezone change is not synchronized with `hal_time_get_local()` and `hal_time_format_local()`, so set the timezone before other tasks read local time. The [`hal_time` reference](15_connectivity.md#hal_time---calendar-helpers-and-optional-system-timentp) describes how NTP servicing is shared between callers.
 
 <a id="mock-backend"></a>
 

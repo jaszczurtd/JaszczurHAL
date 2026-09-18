@@ -23,7 +23,6 @@
 #define m_mutex_exit(mutexname) hal_mutex_unlock(mutexname)
 /** @brief Delay in milliseconds. */
 #define m_delay(val) hal_delay_ms(val)
-/** @brief Delay in microseconds. */
 #define m_delay_microseconds(val) hal_delay_us(val)
 
 /** @brief Sentinel initialization value used by selected legacy helpers. */

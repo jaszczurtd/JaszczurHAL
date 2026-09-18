@@ -257,7 +257,6 @@ hal_modem_at_result_t hal_modem_at_listen_more(hal_modem_at_t h,
  *
  * Valid until the next call that writes to the engine on the same handle.
  *
- * @param h Handle.
  * @return Pointer to the rx_buf provided in the config, or NULL if @p h
  *         is NULL.
  */
@@ -293,7 +292,6 @@ bool hal_modem_at_urc_register(hal_modem_at_t h, const char *prefix,
  * messages, network registration changes, SMS notifications) are
  * dispatched promptly.
  *
- * @param h Handle.
  * @return Number of URC lines processed (zero if the UART was empty
  *         or no registered prefix matched).
  */

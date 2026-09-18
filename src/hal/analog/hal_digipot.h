@@ -180,21 +180,18 @@ bool hal_digipot_set_resistance(hal_digipot_t h, uint32_t ohms);
 /**
  * @brief Number of resistive steps (taps - 1): 127 for MCP401x, 255 for
  * MAX5395.
- * @param h  Valid handle.
  * @return Step count, or 0 for an invalid handle.
  */
 uint16_t hal_digipot_step_count(hal_digipot_t h);
 
 /**
  * @brief Configured end-to-end resistance in Ohms.
- * @param h  Valid handle.
  * @return End-to-end resistance, or 0 for an invalid handle.
  */
 uint32_t hal_digipot_e2e_resistance(hal_digipot_t h);
 
 /**
  * @brief Configured operation mode.
- * @param h  Valid handle.
  * @return The mode, or HAL_DIGIPOT_MODE_VOLTAGE_DIVIDER for an invalid handle.
  */
 hal_digipot_mode_t hal_digipot_mode(hal_digipot_t h);
