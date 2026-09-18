@@ -3,9 +3,14 @@
 import argparse
 import json
 import re
+from pathlib import Path
+import sys
 import time
 
 import serial
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from vscode.runtime.serial_io import read_line  # noqa: E402
 
 
 RESULT_PATTERN = re.compile(
@@ -17,18 +22,6 @@ RESULT_PATTERN = re.compile(
     rb"(-?\d+)/(-?\d+)/(\d+)/(-?\d+)/(\d+)/(\d+)/"
     rb"(-?\d+)/(-?\d+)/(\d+)/(-?\d+)/(\d+)/(\d+)\n$"
 )
-
-
-def read_line(port: serial.Serial, timeout_s: float) -> bytes:
-    deadline = time.monotonic() + timeout_s
-    received = bytearray()
-    while not received.endswith(b"\n"):
-        chunk = port.read(1)
-        if chunk:
-            received.extend(chunk)
-        elif time.monotonic() >= deadline:
-            raise TimeoutError(f"incomplete response: {received!r}")
-    return bytes(received)
 
 
 def main() -> int:
@@ -50,7 +43,7 @@ def main() -> int:
         port.reset_input_buffer()
         port.write(b"T")
         port.flush()
-        line = read_line(port, args.timeout)
+        line = read_line(port, time.monotonic() + args.timeout)
 
     match = RESULT_PATTERN.fullmatch(line)
     if match is None:

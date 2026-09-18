@@ -20,8 +20,8 @@ Uruchamiaj polecenia z katalogu głównego repozytorium, chyba że instrukcja ws
 | Weryfikacja zależności bez ich zmiany | `./third_party/update_components.sh --verify-only` | Sprawdza wersje wszystkich zarządzanych komponentów, commity, wymagane pliki, stan archiwum PMD, zbudowany picotool oraz stempel łańcucha narzędzi RISC-V. |
 | Odświeżenie wszystkich wersjonowanych plików generowanych | `python3 scripts/sync_generated.py --write` | Uruchamia generatory funkcji, płytek, przykładów, głównego VS Code oraz SBOM i wypisuje każdy plik zmieniony podczas synchronizacji. |
 | Weryfikacja wszystkich wersjonowanych plików generowanych | `python3 scripts/sync_generated.py --check` | Uruchamia każdy generator w trybie weryfikacji tylko do odczytu i zgłasza błąd, gdy pliku wynikowego brakuje lub jest on nieaktualny. |
-| Pełna kontrola jakości repozytorium | `./runalltests.sh` | Czyści katalogi robocze bramki i uruchamia testy, kontrole Clang ASan/UBSan/libFuzzer, Valgrind, analizę statyczną, CPD, kompilacje targetów oraz kompilacje przykładów. |
-| Testy z sanitizerami i fuzzingiem | `scripts/run_sanitizer_fuzz.sh` | Odtwarza konfigurację testów na komputerze z instrumentacją Clang, uruchamia wszystkie testy pod ASan/UBSan i wykonuje krótkie fuzzowanie parserów sieciowych. |
+| Pełna kontrola jakości repozytorium | `./runalltests.sh` | Czyści katalogi robocze bramki i uruchamia testy, kontrole Clang ASan/UBSan/TSan/libFuzzer, Valgrind, analizę statyczną, CPD, kompilacje targetów oraz kompilacje przykładów. |
+| Testy z sanitizerami i fuzzingiem | `scripts/run_sanitizer_fuzz.sh` | Odtwarza konfigurację testów na komputerze z instrumentacją Clang, uruchamia wszystkie testy pod ASan/UBSan, testy natywne pod TSan i wykonuje krótkie fuzzowanie parserów sieciowych. |
 | Obsługa projektu firmware | `vscode/entry/jh-vscode <action> --project <dir>` w Uniksie lub `vscode/entry/jh-vscode.cmd ...` w Windows | Udostępnia stały interfejs poleceń do kompilacji, wgrywania, monitorowania, wyboru płytki, konfiguracji IntelliSense i czyszczenia używany przez projekty VS Code. |
 | Kompilacja biblioteki linkowalnej dla dowolnego targetu | `scripts/build_link_library.sh --target <id>` | Wybiera runner rodziny z `link_libraries/` na podstawie providera builda targetu i przekazuje pozostałe opcje. |
 | Kompilacja lub wgrywanie projektu ESP-IDF | `python3 scripts/build_esp_idf.py <action> --project <dir>` | Uruchamia akcję `build`, `artifacts` lub `flash`; ustala metadane targetu i płytki ESP, w razie potrzeby przygotowuje SDK w wersji wskazanej przez repozytorium oraz sprawdza przenośny manifest zawierający wiele obrazów. |
@@ -190,8 +190,8 @@ Kontrola obejmuje:
 
 1. weryfikacja wymaganych narzędzi i zarządzanych komponentów;
 2. testy hosta, w tym opcjonalny zestaw FreeRTOS POSIX;
-3. testy Clang ASan/UBSan i krótkie kontrole libFuzzer przez ten sam skrypt,
-   którego używa CI;
+3. testy Clang ASan/UBSan, testy natywne pod ThreadSanitizerem i krótkie
+   kontrole libFuzzer przez ten sam skrypt, którego używa CI;
 4. Valgrind memcheck;
 5. cppcheck;
 6. clang-tidy dla kodu hosta/współdzielonego oraz backendu STM32, używający
@@ -224,7 +224,9 @@ Wspólny skrypt sanitizerów dla Linuksa, używany przez lokalny etap 3 i job CI
 lub bez niego, odtwarza konfigurację kompilacji w `.build/`, włącza ASan, UBSan i libFuzzer oraz uruchamia
 kompletny zestaw CTest hosta z wykrywaniem wycieków i natychmiastowym
 zatrzymaniem po wykryciu niezdefiniowanego zachowania, a następnie wykonuje
-krótkie testy fuzz dla parserów HTTP, WebSocket i multipart.
+krótkie testy fuzz dla parserów HTTP, WebSocket i multipart. Druga kompilacja
+obok pierwszej (`<build-dir>-tsan`) uruchamia natywne testy C/C++ pod
+ThreadSanitizerem i zatrzymuje się na pierwszym zgłoszonym wyścigu.
 `--build-dir`, `--jobs` oraz `--fuzz-runs` wybierają zarządzane wyjście i
 obciążenie; `--check-tools` tylko sprawdza dostępność Clanga.
 

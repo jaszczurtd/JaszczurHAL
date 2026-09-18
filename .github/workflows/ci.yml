@@ -689,7 +689,7 @@ jobs:
           ./scripts/ensure_sx126x.sh --force
           ./scripts/ensure_freertos_kernel.sh --force
 
-      - name: Run ASan, UBSan and libFuzzer gate
+      - name: Run ASan, UBSan, TSan and libFuzzer gate
         run: >-
           ./scripts/run_sanitizer_fuzz.sh
           --build-dir .build/ci/sanitizer-fuzz

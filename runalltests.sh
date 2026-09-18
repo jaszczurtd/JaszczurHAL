@@ -8,7 +8,7 @@
 # Gates (in order):
 #   1. Tool presence check
 #   2. Host unit tests (cmake + ctest, including FreeRTOS POSIX)
-#   3. Clang ASan/UBSan tests and parser fuzz smoke checks
+#   3. Clang ASan/UBSan and TSan tests, parser fuzz smoke checks
 #   4. Memory safety (Valgrind memcheck)
 #   5. Static analysis: cppcheck (all own code)
 #   6. Static analysis: clang-tidy (host + stm32 compile databases)
@@ -186,13 +186,13 @@ pass "All unit tests passed."
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 3: Clang sanitizers and parser fuzz smoke checks
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 3/9: Clang ASan/UBSan and parser fuzz smoke checks"
+header "Gate 3/9: Clang ASan/UBSan, TSan and parser fuzz smoke checks"
 
 run_logged "${LOG_ROOT}/jh_sanitizer_fuzz.log" \
     "${SCRIPT_DIR}/scripts/run_sanitizer_fuzz.sh" \
         --build-dir "${GATE_BUILD_ROOT}/sanitizer-fuzz" \
         --jobs "${JOBS}"
-pass "Clang ASan/UBSan and parser fuzz gate passed."
+pass "Clang ASan/UBSan, TSan and parser fuzz gate passed."
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 4: Valgrind memcheck
@@ -629,7 +629,7 @@ echo -e "${BOLD}═════════════════════�
 echo ""
 echo "  Unit tests:       PASS"
 echo "  FreeRTOS POSIX:   PASS"
-echo "  ASan/UBSan/fuzz:  PASS"
+echo "  Sanitizers/fuzz:  PASS (ASan/UBSan, TSan, parser fuzz)"
 echo "  Valgrind:         PASS"
 echo "  cppcheck:         PASS"
 echo "  clang-tidy:       PASS"

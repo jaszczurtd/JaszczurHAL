@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
+import time
+from typing import Any, Callable, Optional
 
 try:
     import serial as _serial
@@ -45,3 +46,31 @@ def open_serial_port(
     if exclusive:
         options["exclusive"] = True
     return _serial.Serial(path, **options)
+
+
+def read_line(
+    port: Any,
+    deadline: float,
+    *,
+    limit: int = 4096,
+    clock: Optional[Callable[[], float]] = None,
+) -> bytes:
+    """Read one newline-terminated line before an absolute monotonic deadline.
+
+    The deadline is checked before every read, so a device that keeps sending
+    bytes without a newline still times out. A line reaching ``limit`` bytes
+    without a newline is rejected instead of growing without bound.
+    """
+    now = clock if clock is not None else time.monotonic
+    line = bytearray()
+    while True:
+        if now() >= deadline:
+            raise TimeoutError(f"incomplete line: {bytes(line[-80:])!r}")
+        chunk = port.read(1)
+        if not chunk:
+            continue
+        line.extend(chunk)
+        if line.endswith(b"\n"):
+            return bytes(line)
+        if len(line) >= limit:
+            raise ValueError(f"line exceeds {limit} bytes without a newline")

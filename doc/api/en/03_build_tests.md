@@ -141,8 +141,8 @@ this stricter mode through `scripts/sync_generated.py --check`.
 Runs the complete quality-gate suite (9 gates, in order):
 1. Tool-presence check
 2. Host/mock unit tests (`.build/gate/host/` + ctest, incl. FreeRTOS POSIX)
-3. Clang ASan/UBSan tests and bounded libFuzzer smoke checks through the same
-   runner used by CI
+3. Clang ASan/UBSan tests, native tests under ThreadSanitizer, and bounded
+   libFuzzer smoke checks through the same runner used by CI
 4. Memory safety (Valgrind memcheck on all native C/C++ test executables)
 5. Static analysis: cppcheck
 6. Static analysis: clang-tidy (host + STM32 compile databases below

@@ -270,7 +270,7 @@ To run the repository's automated tests and checks, use:
 ```
 
 The script runs host unit tests, including FreeRTOS POSIX tests, Clang
-ASan/UBSan/libFuzzer checks, Valgrind memcheck, and static analysis. It also
+ASan/UBSan/TSan/libFuzzer checks, Valgrind memcheck, and static analysis. It also
 checks for duplicate code and documentation issues, and builds the library
 and firmware across a matrix of supported target configurations.
 

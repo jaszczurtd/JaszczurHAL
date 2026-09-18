@@ -179,7 +179,7 @@ SBOM są zgodne:
 python3 scripts/check_release_metadata.py
 ```
 
-Utwórz tag dopiero po włączeniu commitu wydania do `main`. CI uruchamiane przez tag sprawdza jego nazwę oraz to, czy wskazany commit jest przodkiem `origin/main`; odrzuca tag z rozbieżnej gałęzi wydania. CI na hoście uruchamia również pełny zestaw testów z ASan/UBSan oraz krótkie testy fuzzingowe parserów HTTP, WebSocket i przesyłania multipart. ThreadSanitizer jest opcjonalną kontrolą lokalną włączaną przez `-DJH_ENABLE_THREAD_SANITIZER=ON`.
+Utwórz tag dopiero po włączeniu commitu wydania do `main`. CI uruchamiane przez tag sprawdza jego nazwę oraz to, czy wskazany commit jest przodkiem `origin/main`; odrzuca tag z rozbieżnej gałęzi wydania. CI na hoście uruchamia również pełny zestaw testów z ASan/UBSan, testy natywne z ThreadSanitizerem oraz krótkie testy fuzzingowe parserów HTTP, WebSocket i przesyłania multipart.
 
 ## Aktualizowanie komponentu
 

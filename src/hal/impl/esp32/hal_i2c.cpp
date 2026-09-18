@@ -393,20 +393,13 @@ hal_i2c_addr_mode_t hal_i2c_get_addr_mode_bus(uint8_t bus) {
 }
 #endif /* HAL_ENABLE_I2C_10BIT */
 
-hal_status_t hal_i2c_get_clock(uint32_t *out_clock_hz) {
-  return hal_i2c_get_clock_bus(0u, out_clock_hz);
-}
-
 hal_status_t hal_i2c_get_clock_bus(uint8_t bus, uint32_t *out_clock_hz) {
   if (!i2c_bus_valid(bus) || out_clock_hz == nullptr) {
     return HAL_EINVAL;
   }
-  *out_clock_hz = i2c_state(bus).clock_hz;
-  return HAL_OK;
-}
-
-hal_status_t hal_i2c_set_clock(uint32_t clock_hz) {
-  return hal_i2c_set_clock_bus(0u, clock_hz);
+  I2cBusState &state = i2c_state(bus);
+  return jh_i2c_recursive_lock_read_u32(&state.lock, i2c_current_owner_token(),
+                                        &state.clock_hz, out_clock_hz);
 }
 
 hal_status_t hal_i2c_set_clock_bus(uint8_t bus, uint32_t clock_hz) {

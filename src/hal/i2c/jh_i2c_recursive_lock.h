@@ -2,6 +2,7 @@
 
 #include "hal/core/hal_compiler.h"
 #include "hal/core/hal_mutex_once.h"
+#include "hal/core/hal_status.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -65,4 +66,16 @@ static inline bool jh_i2c_recursive_lock_release(jh_i2c_recursive_lock_t *lock,
   HAL_ATOMIC_STORE(&lock->owner, 0u, HAL_ATOMIC_RELAXED);
   hal_mutex_unlock(lock->mutex);
   return true;
+}
+
+/* Read a bus field that its setter writes under the same lock. */
+static inline hal_status_t
+jh_i2c_recursive_lock_read_u32(jh_i2c_recursive_lock_t *lock, uintptr_t owner,
+                               const uint32_t *field, uint32_t *out_value) {
+  if (!jh_i2c_recursive_lock_acquire(lock, owner)) {
+    return HAL_ENOMEM;
+  }
+  *out_value = *field;
+  (void)jh_i2c_recursive_lock_release(lock, owner);
+  return HAL_OK;
 }

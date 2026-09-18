@@ -3,9 +3,14 @@
 import argparse
 import json
 import re
+from pathlib import Path
+import sys
 import time
 
 import serial
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from vscode.runtime.serial_io import read_line  # noqa: E402
 
 
 RECORD_PATTERN = re.compile(
@@ -37,17 +42,6 @@ def open_port(path: str) -> serial.Serial:
     port.dtr = True
     time.sleep(0.1)
     return port
-
-
-def read_line(port: serial.Serial, deadline: float) -> bytes:
-    line = bytearray()
-    while not line.endswith(b"\n"):
-        if time.monotonic() >= deadline:
-            raise TimeoutError(f"incomplete multicore USB line: {line!r}")
-        chunk = port.read(1)
-        if chunk:
-            line.extend(chunk)
-    return bytes(line)
 
 
 def validate_identity(
