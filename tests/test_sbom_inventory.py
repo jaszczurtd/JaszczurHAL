@@ -12,7 +12,9 @@ import tempfile
 import unittest
 
 
-ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).parents[1]
+from repo_root import repo_root  # noqa: E402
+
+ROOT = repo_root(sys.argv, __file__)
 sys.path.insert(0, str(ROOT / "scripts"))
 import generate_sbom  # noqa: E402
 import build_esp_idf  # noqa: E402

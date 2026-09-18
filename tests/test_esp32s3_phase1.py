@@ -9,7 +9,9 @@ import sys
 import unittest
 
 
-ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).parents[1]
+from repo_root import repo_root  # noqa: E402
+
+ROOT = repo_root(sys.argv, __file__)
 VERIFIER_PATH = ROOT / "tests" / "hardware" / "esp32s3_phase1" / "verify_phase1.py"
 SPEC = importlib.util.spec_from_file_location("jh_esp32s3_phase1_verifier", VERIFIER_PATH)
 assert SPEC and SPEC.loader

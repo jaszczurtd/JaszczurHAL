@@ -1,4 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/jh_build_dir_guard.cmake")
+jh_require_managed_build_dir()
 project(JaszczurHAL_Tests CXX C)
 
 set(CMAKE_CXX_STANDARD 17)

@@ -16,7 +16,9 @@ from unittest import mock
 from source_assertions import source_fragment_position, source_has_fragment, source_section
 
 
-ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).parents[1]
+from repo_root import repo_root  # noqa: E402
+
+ROOT = repo_root(sys.argv, __file__)
 SCRIPTS = ROOT / "scripts"
 FIXTURE = ROOT / "tests" / "fixtures" / "esp32s3_phase3"
 sys.path.insert(0, str(SCRIPTS))

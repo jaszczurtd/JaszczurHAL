@@ -871,6 +871,21 @@ jobs:
           python3 -m pipx install cve-bin-tool
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      # The NVD mirror is not always reachable. A daily cache keeps the full
+      # download to one per day, and restore-keys hand the scan the last good
+      # database when the mirror is down.
+      - name: Select the CVE database cache day
+        id: cve-day
+        run: echo "day=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache cve-bin-tool database
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/cve-bin-tool
+          key: cve-bin-tool-${{ runner.os }}-${{ steps.cve-day.outputs.day }}
+          restore-keys: |
+            cve-bin-tool-${{ runner.os }}-
+
       - name: Run vulnerability scan
         run: JH_SECURITY_SCAN_SOURCE=1 ./scripts/check_vulnerabilities.sh
 

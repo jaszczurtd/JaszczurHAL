@@ -11,7 +11,9 @@ import unittest
 from unittest import mock
 
 
-ROOT = Path(sys.argv[1]).resolve()
+from repo_root import repo_root  # noqa: E402
+
+ROOT = repo_root(sys.argv, __file__)
 sys.path.insert(0, str(ROOT))
 
 from vscode.runtime import serial_io

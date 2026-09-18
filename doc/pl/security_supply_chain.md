@@ -156,6 +156,10 @@ generowane artefakty, w tym SBOM. Zadanie bezpieczeństwa:
 - uruchamia `osv-scanner` dla drzewa źródeł repozytorium,
 - uruchamia `cve-bin-tool` dla SBOM CycloneDX.
 
+Baza CVE jest przechowywana w pamięci podręcznej przez dzień. Gdy lustro NVD
+jest niedostępne, skan korzysta z ostatniej zapisanej bazy i zgłasza
+ostrzeżenie.
+
 Skanowanie podatności jest oddzielone od kompilacji, testów i analizy statycznej. Pozwala to niezależnie diagnozować błędy skanera i błędy kodu. Uruchomienia cykliczne wykrywają również nowe CVE opublikowane od poprzedniego skanowania, nawet jeśli kod repozytorium się nie zmienił.
 
 Zasady postępowania z wynikami:

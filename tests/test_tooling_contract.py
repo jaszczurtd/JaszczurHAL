@@ -8,7 +8,9 @@ import sys
 import unittest
 
 
-ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).parents[1]
+from repo_root import repo_root  # noqa: E402
+
+ROOT = repo_root(sys.argv, __file__)
 SCRIPTS = ROOT / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))

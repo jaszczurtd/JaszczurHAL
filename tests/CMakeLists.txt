@@ -996,6 +996,11 @@ add_test(NAME test_serial_io
         ${CMAKE_CURRENT_SOURCE_DIR}/test_serial_io.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
+add_test(NAME test_check_vulnerabilities
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_check_vulnerabilities.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
 add_test(NAME test_board_generator
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_board_generator.py
@@ -1233,6 +1238,12 @@ add_test(NAME test_serial_architecture
     COMMAND ${CMAKE_COMMAND}
         -DJH_ROOT=${CMAKE_SOURCE_DIR}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/test_serial_architecture.cmake
+)
+
+add_test(NAME test_build_dir_guard
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_SOURCE_DIR}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_build_dir_guard.cmake
 )
 
 set(JH_CW43_FIXTURE_SETUP_SCRIPT "" CACHE FILEPATH

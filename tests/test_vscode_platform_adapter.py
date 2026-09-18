@@ -14,7 +14,9 @@ from typing import Any, Callable, Iterator
 from unittest.mock import patch
 
 
-ROOT = Path(sys.argv[1]).resolve()
+from repo_root import repo_root  # noqa: E402
+
+ROOT = repo_root(sys.argv, __file__)
 sys.path.insert(0, str(ROOT))
 
 from vscode.runtime import exit_codes

@@ -15,7 +15,9 @@ import sys
 import tempfile
 
 
-ROOT = Path(sys.argv[1]).resolve()
+from repo_root import repo_root  # noqa: E402
+
+ROOT = repo_root(sys.argv, __file__)
 GENERATOR = ROOT / "scripts/generate_board_config.py"
 BOARDS = ROOT / "boards"
 TEST_ROOT = ROOT / ".build/tests/board-generator"

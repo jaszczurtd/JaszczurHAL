@@ -14,7 +14,9 @@ import tempfile
 from unittest import mock
 
 
-ROOT = Path(sys.argv[1]).resolve()
+from repo_root import repo_root  # noqa: E402
+
+ROOT = repo_root(sys.argv, __file__)
 ENTRY = ROOT / "vscode" / "entry" / (
     "jh-vscode.cmd" if sys.platform == "win32" else "jh-vscode"
 )
