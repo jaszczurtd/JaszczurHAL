@@ -11,6 +11,11 @@ over-the-air packets, sequence continuity, DIO1-driven asynchronous callbacks,
 IRQ/cancel diagnostics, RSSI/SNR metadata, sleep/wake and radio destroy/create
 reinitialization.
 
+A passing run does not on its own prove that the DIO1 interrupt fires: the
+provider also polls the DIO1 level, so the link keeps working when the interrupt
+is dead. To isolate the interrupt, build with the level poll removed and confirm
+the link still runs.
+
 On profiles with a GPIO status LED, a solid LED indicates transmit activity
 and a 120 ms pulse confirms a received packet.
 

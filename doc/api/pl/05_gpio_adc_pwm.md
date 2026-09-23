@@ -45,6 +45,18 @@ hal_status_t hal_gpio_detach_interrupt_ex(uint8_t pin);
 hal_status_t hal_gpio_get_interrupt_owner_ex(uint8_t pin,
                                              uint8_t *out_owner_core);
 
+typedef void (*hal_gpio_irq_callback_t)(uint8_t pin, void *context);
+
+hal_status_t hal_gpio_attach_interrupt_ctx(uint8_t pin,
+                                           hal_gpio_irq_callback_t callback,
+                                           void *context,
+                                           hal_gpio_irq_mode_t mode);
+hal_status_t hal_gpio_attach_interrupt_ctx_ex(uint8_t pin,
+                                              hal_gpio_irq_callback_t callback,
+                                              void *context,
+                                              hal_gpio_irq_mode_t mode,
+                                              uint8_t owner_core);
+
 typedef enum {
     HAL_IRQ_PRIORITY_HIGHEST = 0,
     HAL_IRQ_PRIORITY_HIGH    = 1,
@@ -58,6 +70,39 @@ void hal_gpio_set_irq_priority(hal_irq_priority_t priority);
 **Uwaga:** Callback przekazany do `hal_gpio_attach_interrupt` działa w
 kontekście ISR. Nie wywołuj w nim `printf`, `malloc` ani żadnych funkcji
 blokujących.
+
+**Przerwania z kontekstem:** `hal_gpio_attach_interrupt_ctx` i
+`hal_gpio_attach_interrupt_ctx_ex` przekazują handlerowi pin, który wyzwolił
+przerwanie, oraz wskaźnik zarejestrowany razem z nim. Dzięki temu jeden handler
+obsłuży kilka pinów albo kilka instancji drivera bez generowania osobnego
+callbacku na pin. Wariant `_ctx` wiąże przerwanie z rdzeniem wywołującym,
+`_ctx_ex` przyjmuje rdzeń właściciela jawnie i podlega tym samym regułom co
+`hal_gpio_attach_interrupt_ex`.
+
+Pin ma jedną rejestrację. Podpięcie handlera dowolnego rodzaju zastępuje to, co
+zarejestrował wcześniej rdzeń właściciela, a `hal_gpio_detach_interrupt_ex`
+zwalnia oba rodzaje. Kontekst jest zapisywany bez zmian i musi żyć tak długo,
+jak podpięte jest przerwanie; `NULL` jest przekazywany dalej bez zmian.
+
+```c
+typedef struct { uint32_t edges; uint8_t pin; } channel_t;
+static channel_t s_left, s_right;
+
+static void edge_isr(uint8_t pin, void *context) {
+    channel_t *channel = (channel_t *)context;
+    channel->edges++;
+    channel->pin = pin;
+}
+
+hal_gpio_set_mode(4, HAL_GPIO_INPUT_PULLUP);
+hal_gpio_set_mode(5, HAL_GPIO_INPUT_PULLUP);
+(void)hal_gpio_attach_interrupt_ctx(4, edge_isr, &s_left, HAL_GPIO_IRQ_FALLING);
+(void)hal_gpio_attach_interrupt_ctx(5, edge_isr, &s_right, HAL_GPIO_IRQ_FALLING);
+```
+
+Handler dostaje informację o pinie, nie o zboczu: RP przekazuje zbocze do
+dispatchu swojego banku, ale STM32 EXTI i ESP32 już nie, więc nie byłaby to
+informacja przenośna. Gdy kierunek ma znaczenie, odczytaj stan pinu.
 
 **Walidacja:** Nieprawidłowe argumenty przekazane do starszych operacji `void`
 wyzwalają `HAL_ASSERT` w konfiguracjach z włączonym sprawdzaniem. Operacje IRQ

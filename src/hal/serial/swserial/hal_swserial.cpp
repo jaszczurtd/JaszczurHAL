@@ -6,14 +6,13 @@
 
 #include "hal/core/hal_mutex_once.h"
 #include "hal/gpio/hal_gpio.h"
+#include "hal/gpio/hal_gpio_common.h"
 #include "hal/system/hal_sync.h"
 #include "hal/system/hal_system.h"
 #include "hal_swserial_common.h"
 
-#include <array>
 #include <new>
 #include <string.h>
-#include <utility>
 
 /*
  * Software UART for JaszczurHAL.
@@ -25,8 +24,6 @@
 
 #define HAL_SWSERIAL_RX_BUF_SIZE 64u
 #define HAL_SWSERIAL_TX_CAPTURE_SIZE 512u
-#define HAL_SWSERIAL_MAX_GPIO_PIN 255u
-#define HAL_SWSERIAL_IRQ_PIN_COUNT 128u
 
 typedef enum {
   HAL_SWSERIAL_PARITY_NONE = 0,
@@ -56,22 +53,13 @@ struct hal_swserial_impl_s {
 static hal_swserial_impl_t s_pool[HAL_SWSERIAL_MAX_INSTANCES];
 static bool s_used[HAL_SWSERIAL_MAX_INSTANCES];
 static hal_mutex_t s_pool_mutex = NULL;
-static hal_swserial_t s_rx_by_pin[HAL_SWSERIAL_MAX_GPIO_PIN + 1u];
 
 static inline uint8_t next_index(uint8_t index) {
   return (uint8_t)((index + 1u) % HAL_SWSERIAL_RX_BUF_SIZE);
 }
 
 static bool swserial_pin_valid(uint8_t pin) {
-#if HAL_TARGET_IS_MOCK
-  return pin < 64u;
-#elif HAL_TARGET_IS_STM32G474
-  /* STM32 GPIO ids use port_index * 16 + pin_number; ports A..G exist. */
-  return (pin >> 4u) <= 6u;
-#else
-  /* Keep the portable backend usable by targets with the trampoline range. */
-  return pin < HAL_SWSERIAL_IRQ_PIN_COUNT;
-#endif
+  return jh_hal_gpio_pin_valid(pin);
 }
 
 static bool swserial_config_valid(uint16_t config) {
@@ -152,18 +140,10 @@ static void swserial_rx_edge(hal_swserial_t h) {
   hal_critical_section_exit();
 }
 
-template <size_t Pin> static void swserial_irq_trampoline(void) {
-  swserial_rx_edge(s_rx_by_pin[Pin]);
+static void swserial_rx_isr(uint8_t pin, void *context) {
+  (void)pin;
+  swserial_rx_edge((hal_swserial_t)context);
 }
-
-template <size_t... Pins>
-static constexpr std::array<void (*)(void), sizeof...(Pins)>
-swserial_make_trampolines(std::index_sequence<Pins...>) {
-  return {swserial_irq_trampoline<Pins>...};
-}
-
-static constexpr auto s_pin_trampoline = swserial_make_trampolines(
-    std::make_index_sequence<HAL_SWSERIAL_IRQ_PIN_COUNT>{});
 
 static void swserial_reset_handle(hal_swserial_t h, uint8_t rx_pin,
                                   uint8_t tx_pin) {
@@ -236,7 +216,6 @@ hal_status_t hal_swserial_begin(hal_swserial_t h, uint32_t baud,
   if (h->started) {
     h->started = false;
     hal_gpio_detach_interrupt(h->rx_pin);
-    s_rx_by_pin[h->rx_pin] = NULL;
   }
 
   h->baud = baud;
@@ -250,9 +229,12 @@ hal_status_t hal_swserial_begin(hal_swserial_t h, uint32_t baud,
 
   hal_gpio_set_mode(h->tx_pin, HAL_GPIO_OUTPUT_HIGH);
   hal_gpio_set_mode(h->rx_pin, HAL_GPIO_INPUT_PULLUP);
-  s_rx_by_pin[h->rx_pin] = h;
-  hal_gpio_attach_interrupt(h->rx_pin, s_pin_trampoline[h->rx_pin],
-                            HAL_GPIO_IRQ_FALLING);
+  const hal_status_t irq_status = hal_gpio_attach_interrupt_ctx(
+      h->rx_pin, swserial_rx_isr, h, HAL_GPIO_IRQ_FALLING);
+  if (irq_status != HAL_OK) {
+    hal_mutex_unlock(h->mutex);
+    return irq_status;
+  }
   hal_gpio_set_irq_priority(HAL_IRQ_PRIORITY_HIGH);
   h->started = true;
   hal_mutex_unlock(h->mutex);
@@ -382,9 +364,8 @@ void hal_swserial_destroy(hal_swserial_t h) {
   for (int i = 0; i < hal_get_config()->swserial_max_instances; i++) {
     if (h == &s_pool[i] && s_used[i] && h->mutex != NULL) {
       hal_mutex_lock(h->mutex);
-      if (h->started && h->rx_pin < s_pin_trampoline.size()) {
+      if (h->started) {
         hal_gpio_detach_interrupt(h->rx_pin);
-        s_rx_by_pin[h->rx_pin] = NULL;
       }
       hal_mutex_t mutex = h->mutex;
       h->started = false;

@@ -21,7 +21,7 @@
 
 namespace {
 
-void (*s_callbacks[SOC_GPIO_PIN_COUNT])(void) = {};
+jh_gpio_irq_slot_t s_irq_slot[SOC_GPIO_PIN_COUNT] = {};
 bool s_irq_attached[SOC_GPIO_PIN_COUNT] = {};
 uint8_t s_irq_owner[SOC_GPIO_PIN_COUNT] = {};
 gpio_int_type_t s_irq_type[SOC_GPIO_PIN_COUNT] = {};
@@ -71,11 +71,7 @@ void gpio_irq_dispatch(void *argument) {
   if (raw_pin >= SOC_GPIO_PIN_COUNT) {
     return;
   }
-  void (*callback)(void) =
-      HAL_ATOMIC_LOAD(&s_callbacks[raw_pin], HAL_ATOMIC_ACQUIRE);
-  if (callback != nullptr) {
-    callback();
-  }
+  jh_gpio_irq_slot_invoke(&s_irq_slot[raw_pin], (uint8_t)raw_pin);
 }
 
 esp_err_t install_irq_service(uint8_t owner_core, hal_irq_priority_t priority) {
@@ -206,10 +202,11 @@ bool hal_gpio_read(uint8_t pin) {
   return gpio_get_level((gpio_num_t)pin) != 0;
 }
 
-hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin, void (*callback)(void),
-                                          hal_gpio_irq_mode_t mode,
-                                          uint8_t owner_core) {
-  if (!jh_esp32_gpio_pin_valid(pin) || callback == nullptr ||
+static hal_status_t esp32_gpio_attach(uint8_t pin,
+                                      const jh_gpio_irq_slot_t *request,
+                                      hal_gpio_irq_mode_t mode,
+                                      uint8_t owner_core) {
+  if (!jh_esp32_gpio_pin_valid(pin) || !jh_gpio_irq_slot_armed(request) ||
       !jh_hal_gpio_irq_mode_valid(mode) || owner_core >= HAL_TARGET_CPU_CORES) {
     return HAL_EINVAL;
   }
@@ -249,9 +246,7 @@ hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin, void (*callback)(void),
   }
 
   const bool reconfigure = s_irq_attached[pin];
-  void (*const previous_callback)(void) =
-      reconfigure ? HAL_ATOMIC_LOAD(&s_callbacks[pin], HAL_ATOMIC_ACQUIRE)
-                  : nullptr;
+  const jh_gpio_irq_slot_t previous_slot = s_irq_slot[pin];
   const gpio_int_type_t previous_type = s_irq_type[pin];
   const gpio_int_type_t type = gpio_irq_type(mode);
   esp_err_t result = gpio_intr_disable((gpio_num_t)pin);
@@ -265,7 +260,7 @@ hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin, void (*callback)(void),
     result = gpio_set_intr_type((gpio_num_t)pin, type);
   }
   if (result == ESP_OK) {
-    HAL_ATOMIC_STORE(&s_callbacks[pin], callback, HAL_ATOMIC_RELEASE);
+    jh_gpio_irq_slot_apply(&s_irq_slot[pin], request);
     result = gpio_isr_handler_add((gpio_num_t)pin, gpio_irq_dispatch,
                                   (void *)(uintptr_t)pin);
   }
@@ -275,25 +270,24 @@ hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin, void (*callback)(void),
     if (reconfigure) {
       restore_result = gpio_set_intr_type((gpio_num_t)pin, previous_type);
       if (restore_result == ESP_OK) {
-        HAL_ATOMIC_STORE(&s_callbacks[pin], previous_callback,
-                         HAL_ATOMIC_RELEASE);
+        jh_gpio_irq_slot_apply(&s_irq_slot[pin], &previous_slot);
         restore_result = gpio_isr_handler_add(
             (gpio_num_t)pin, gpio_irq_dispatch, (void *)(uintptr_t)pin);
       }
       if (restore_result != ESP_OK) {
         (void)gpio_isr_handler_remove((gpio_num_t)pin);
-        HAL_ATOMIC_STORE(&s_callbacks[pin], nullptr, HAL_ATOMIC_RELEASE);
+        jh_gpio_irq_slot_clear(&s_irq_slot[pin]);
         s_irq_attached[pin] = false;
         s_irq_owner[pin] = HAL_GPIO_IRQ_CORE_NONE;
         s_irq_type[pin] = GPIO_INTR_DISABLE;
         HAL_ASSERT(s_attached_count > 0u,
-                   "hal_gpio_attach_interrupt_ex: invalid IRQ count");
+                   "esp32_gpio_attach: invalid IRQ count");
         if (s_attached_count > 0u) {
           --s_attached_count;
         }
       }
     } else {
-      HAL_ATOMIC_STORE(&s_callbacks[pin], nullptr, HAL_ATOMIC_RELEASE);
+      jh_gpio_irq_slot_clear(&s_irq_slot[pin]);
     }
 
     if (installed_service || s_attached_count == 0u) {
@@ -317,6 +311,30 @@ hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin, void (*callback)(void),
   s_irq_type[pin] = type;
   hal_mutex_unlock(mutex);
   return HAL_OK;
+}
+
+hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin, void (*callback)(void),
+                                          hal_gpio_irq_mode_t mode,
+                                          uint8_t owner_core) {
+  const jh_gpio_irq_slot_t request = jh_gpio_irq_slot_make_plain(callback);
+  return esp32_gpio_attach(pin, &request, mode, owner_core);
+}
+
+hal_status_t hal_gpio_attach_interrupt_ctx_ex(uint8_t pin,
+                                              hal_gpio_irq_callback_t callback,
+                                              void *context,
+                                              hal_gpio_irq_mode_t mode,
+                                              uint8_t owner_core) {
+  const jh_gpio_irq_slot_t request = jh_gpio_irq_slot_make(callback, context);
+  return esp32_gpio_attach(pin, &request, mode, owner_core);
+}
+
+hal_status_t hal_gpio_attach_interrupt_ctx(uint8_t pin,
+                                           hal_gpio_irq_callback_t callback,
+                                           void *context,
+                                           hal_gpio_irq_mode_t mode) {
+  return hal_gpio_attach_interrupt_ctx_ex(pin, callback, context, mode,
+                                          current_core());
 }
 
 void hal_gpio_attach_interrupt(uint8_t pin, void (*callback)(void),
@@ -354,8 +372,7 @@ hal_status_t hal_gpio_detach_interrupt_ex(uint8_t pin) {
     return jh_esp32_status_from_esp_err(remove_result);
   }
 
-  HAL_ATOMIC_STORE(&s_callbacks[pin], (void (*)(void)) nullptr,
-                   HAL_ATOMIC_RELEASE);
+  jh_gpio_irq_slot_clear(&s_irq_slot[pin]);
   s_irq_attached[pin] = false;
   s_irq_owner[pin] = HAL_GPIO_IRQ_CORE_NONE;
   s_irq_type[pin] = GPIO_INTR_DISABLE;

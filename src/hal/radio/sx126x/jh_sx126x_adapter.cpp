@@ -17,9 +17,13 @@
 #define JH_SX126X_RESET_LOW_US UINT32_C(200)
 #define JH_SX126X_RESET_SETTLE_US UINT32_C(10000)
 
-static volatile bool s_dio1_pending = false;
-
-static void sx126x_dio1_interrupt(void) { s_dio1_pending = true; }
+static void sx126x_dio1_interrupt(uint8_t pin, void *isr_context) {
+  (void)pin;
+  auto *radio = static_cast<jh_lora_radio_context_t *>(isr_context);
+  if (radio != nullptr) {
+    radio->provider_irq_pending = true;
+  }
+}
 
 typedef enum {
   JH_SX126X_RF_IDLE,
@@ -575,9 +579,14 @@ static hal_status_t sx126x_initialize(jh_lora_radio_context_t *context) {
   if (status != HAL_OK) {
     jh_sx126x_set_rf_idle(context);
   } else {
-    hal_gpio_attach_interrupt(hardware->dio1_pin, sx126x_dio1_interrupt,
-                              HAL_GPIO_IRQ_RISING);
-    context->provider_irq_attached = true;
+    context->provider_irq_pending = false;
+    status =
+        hal_gpio_attach_interrupt_ctx(hardware->dio1_pin, sx126x_dio1_interrupt,
+                                      context, HAL_GPIO_IRQ_RISING);
+    context->provider_irq_attached = status == HAL_OK;
+    if (status != HAL_OK) {
+      jh_sx126x_set_rf_idle(context);
+    }
   }
   return status;
 }
@@ -586,6 +595,7 @@ static hal_status_t sx126x_deinitialize(jh_lora_radio_context_t *context) {
   if (context->provider_irq_attached) {
     hal_gpio_detach_interrupt(context->config.hardware.sx126x.dio1_pin);
     context->provider_irq_attached = false;
+    context->provider_irq_pending = false;
   }
   jh_sx126x_set_rf_idle(context);
   if (context->provider_sleeping) {
@@ -791,12 +801,12 @@ static hal_status_t sx126x_process(jh_lora_radio_context_t *context,
       context->state == HAL_LORA_RADIO_STATE_CAD &&
       hal_elapsed_u32(now, context->channel_activity_started_ms,
                       context->channel_activity_timeout_ms);
-  if (!s_dio1_pending &&
+  if (!context->provider_irq_pending &&
       !hal_gpio_read(context->config.hardware.sx126x.dio1_pin) && !tx_timeout &&
       !rx_timeout && !cad_timeout) {
     return HAL_EAGAIN;
   }
-  s_dio1_pending = false;
+  context->provider_irq_pending = false;
 
   sx126x_irq_mask_t irq = SX126X_IRQ_NONE;
   hal_status_t status =

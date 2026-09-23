@@ -50,6 +50,34 @@ typedef enum {
   HAL_WIFI_STATE_FAILED
 } hal_wifi_state_t;
 
+/**
+ * @brief Name a station/link state for logs and diagnostics.
+ * @param state State to name.
+ * @return Stable short name, or "UNKNOWN" for a value outside the enum.
+ */
+static inline const char *hal_wifi_state_to_string(hal_wifi_state_t state) {
+  switch (state) {
+  case HAL_WIFI_STATE_OFF:
+    return "OFF";
+  case HAL_WIFI_STATE_IDLE:
+    return "IDLE";
+  case HAL_WIFI_STATE_CONNECTING:
+    return "CONNECTING";
+  case HAL_WIFI_STATE_CONNECTED_NO_IP:
+    return "CONNECTED_NO_IP";
+  case HAL_WIFI_STATE_CONNECTED:
+    return "CONNECTED";
+  case HAL_WIFI_STATE_NO_NETWORK:
+    return "NO_NETWORK";
+  case HAL_WIFI_STATE_AUTH_FAILED:
+    return "AUTH_FAILED";
+  case HAL_WIFI_STATE_FAILED:
+    return "FAILED";
+  default:
+    return "UNKNOWN";
+  }
+}
+
 typedef enum {
   HAL_WIFI_ENC_UNKNOWN = 0,
   HAL_WIFI_ENC_NONE,

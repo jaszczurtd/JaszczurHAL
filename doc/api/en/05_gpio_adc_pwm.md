@@ -45,6 +45,18 @@ hal_status_t hal_gpio_detach_interrupt_ex(uint8_t pin);
 hal_status_t hal_gpio_get_interrupt_owner_ex(uint8_t pin,
                                              uint8_t *out_owner_core);
 
+typedef void (*hal_gpio_irq_callback_t)(uint8_t pin, void *context);
+
+hal_status_t hal_gpio_attach_interrupt_ctx(uint8_t pin,
+                                           hal_gpio_irq_callback_t callback,
+                                           void *context,
+                                           hal_gpio_irq_mode_t mode);
+hal_status_t hal_gpio_attach_interrupt_ctx_ex(uint8_t pin,
+                                              hal_gpio_irq_callback_t callback,
+                                              void *context,
+                                              hal_gpio_irq_mode_t mode,
+                                              uint8_t owner_core);
+
 typedef enum {
     HAL_IRQ_PRIORITY_HIGHEST = 0,
     HAL_IRQ_PRIORITY_HIGH    = 1,
@@ -56,6 +68,38 @@ void hal_gpio_set_irq_priority(hal_irq_priority_t priority);
 ```
 
 **Note:** The callback passed to `hal_gpio_attach_interrupt` runs in ISR context - avoid `printf`, `malloc`, or any blocking call inside it.
+
+**Interrupts with context:** `hal_gpio_attach_interrupt_ctx` and
+`hal_gpio_attach_interrupt_ctx_ex` hand the handler the triggering pin and the
+pointer registered with it, so one handler can serve several pins or several
+driver instances without a generated callback per pin. `_ctx` binds the
+interrupt to the calling core; `_ctx_ex` takes the owner core explicitly and
+follows the same ownership rules as `hal_gpio_attach_interrupt_ex`.
+
+A pin holds one registration. Attaching either handler kind replaces what the
+owning core registered before, and `hal_gpio_detach_interrupt_ex` releases both
+kinds. The context is stored as given and must stay alive as long as the
+interrupt is attached; `NULL` is passed through unchanged.
+
+```c
+typedef struct { uint32_t edges; uint8_t pin; } channel_t;
+static channel_t s_left, s_right;
+
+static void edge_isr(uint8_t pin, void *context) {
+    channel_t *channel = (channel_t *)context;
+    channel->edges++;
+    channel->pin = pin;
+}
+
+hal_gpio_set_mode(4, HAL_GPIO_INPUT_PULLUP);
+hal_gpio_set_mode(5, HAL_GPIO_INPUT_PULLUP);
+(void)hal_gpio_attach_interrupt_ctx(4, edge_isr, &s_left, HAL_GPIO_IRQ_FALLING);
+(void)hal_gpio_attach_interrupt_ctx(5, edge_isr, &s_right, HAL_GPIO_IRQ_FALLING);
+```
+
+The handler learns which pin fired, not which edge: RP reports the edge to its
+bank dispatch, STM32 EXTI and ESP32 do not, so that information would not be
+portable. Read the pin level when the direction matters.
 
 **Validation:** Invalid arguments passed to legacy `void` operations trigger
 `HAL_ASSERT` in checked builds. The status-returning IRQ operations report

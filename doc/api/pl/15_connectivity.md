@@ -293,8 +293,9 @@ STM32G474 obsługuje zewnętrzny CYW43/PIM730 przez eksperymentalny profil
 `nucleo-g474re-pim730`, jego jednoprzewodowy transport gSPI oraz ten sam
 stos lwIP w wersji ustalonej w projekcie. Zwykły profil `nucleo-g474re` celowo nie ma możliwości
 radiowych i odrzuca konfigurację sieciową CYW43. Łączenie stacji na STM32G474
-jest blokujące i ograniczone timeoutem; żądanie wariantu nieblokującego zwraca
-`HAL_EUNSUPPORTED`.
+przyjmuje oba warianty: blokujący jest ograniczony ustawionym timeoutem, a
+nieblokujący rozpoczyna asocjację i raportuje postęp przez
+`hal_wifi_get_state_ex()`, podczas gdy pętla serwisowa ją posuwa.
 
 ```c
 #include <hal/network/hal_wifi.h>
@@ -325,6 +326,7 @@ typedef struct {
 bool    hal_wifi_set_mode(hal_wifi_mode_t mode);
 bool    hal_wifi_disconnect(bool erase_credentials);
 bool    hal_wifi_set_hostname(const char *hostname);
+const char *hal_wifi_state_to_string(hal_wifi_state_t state);
 bool    hal_wifi_begin_station(const char *ssid, const char *password, bool non_blocking);
 bool    hal_wifi_set_timeout_ms(uint32_t timeout_ms);
 bool    hal_wifi_is_connected(void);
@@ -365,6 +367,17 @@ const char *hal_wifi_encryption_to_string(hal_wifi_encryption_t encryption);
   i zdarzeń ponownego łączenia.
 - **impl/.mock:** funkcje pomocnicze pozwalają ustawiać stan implementacji
   testowej.
+
+**Złe hasło WPA2:** sterownik CYW43 nie zgłasza błędnego klucza jako
+`HAL_WIFI_STATE_AUTH_FAILED`. Punkt dostępowy odpowiada na nieudany
+czterodrożny handshake rozłączeniem, które sterownik traktuje jak stan
+przejściowy, i dalej ponawia asocjację. Obserwowalny objaw na każdej płytce z
+CYW43 to stacja, która zostaje w `HAL_WIFI_STATE_CONNECTING` (czasem na przemian
+z `HAL_WIFI_STATE_CONNECTED_NO_IP`) i nigdy nie osiąga
+`HAL_WIFI_STATE_CONNECTED`. Stację, która nie wychodzi z tych stanów, traktuj
+jako problem z poświadczeniami albo z zasięgiem; `hal_wifi_state_to_string()`
+nazywa stan na potrzeby logu. `HAL_WIFI_STATE_AUTH_FAILED`
+nadal raportuje te awarie uwierzytelnienia, które firmware zgłasza wprost.
 
 **Współbieżność:** Backendy sprzętowe RP, STM32G474 i ESP32-S3
 serializują wywołania publicznego API HAL. Wewnętrzne muteksy chronią stan

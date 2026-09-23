@@ -277,9 +277,10 @@ that waits for a DHCP lease.
 STM32G474 supports an external CYW43/PIM730 through the experimental
 `nucleo-g474re-pim730` profile, its one-wire gSPI transport, and the same pinned
 lwIP stack. The plain `nucleo-g474re` profile deliberately has no radio
-capability and rejects a CYW43 network build. Station join on STM32G474 is
-bounded and blocking; requesting the non-blocking form returns
-`HAL_EUNSUPPORTED`.
+capability and rejects a CYW43 network build. Station join on STM32G474 accepts
+both forms: the blocking one is bounded by the configured timeout, and the
+non-blocking one starts the association and reports progress through
+`hal_wifi_get_state_ex()` while the service loop advances it.
 
 ```c
 #include <hal/network/hal_wifi.h>
@@ -310,6 +311,7 @@ typedef struct {
 bool    hal_wifi_set_mode(hal_wifi_mode_t mode);
 bool    hal_wifi_disconnect(bool erase_credentials);
 bool    hal_wifi_set_hostname(const char *hostname);
+const char *hal_wifi_state_to_string(hal_wifi_state_t state);
 bool    hal_wifi_begin_station(const char *ssid, const char *password, bool non_blocking);
 bool    hal_wifi_set_timeout_ms(uint32_t timeout_ms);
 bool    hal_wifi_is_connected(void);
@@ -347,6 +349,17 @@ const char *hal_wifi_encryption_to_string(hal_wifi_encryption_t encryption);
 - **impl/esp32:** native ESP-IDF station lifecycle over NVS, `esp_netif`, the
   default event loop, `esp_wifi`, DHCP/DNS, scan, ping, and reconnect events.
 - **impl/.mock:** state injection via mock helpers.
+
+**Wrong WPA2 password:** the CYW43 driver does not report a wrong pre-shared
+key as `HAL_WIFI_STATE_AUTH_FAILED`. The access point answers a failed four-way
+handshake with a deauthentication the driver treats as a transient condition,
+and it keeps retrying the association. The observable symptom on every CYW43
+board is a station that stays in `HAL_WIFI_STATE_CONNECTING` (sometimes
+alternating with `HAL_WIFI_STATE_CONNECTED_NO_IP`) and never reaches
+`HAL_WIFI_STATE_CONNECTED`. Treat a station that never leaves those states as a
+credential or signal problem; `hal_wifi_state_to_string()` names the state for a
+log line. `HAL_WIFI_STATE_AUTH_FAILED` still reports
+authentication failures the firmware reports as such.
 
 **Thread safety:** The RP, STM32G474, and ESP32-S3 hardware backends serialize
 public HAL wrapper calls. Internal singleton mutexes protect provider state,

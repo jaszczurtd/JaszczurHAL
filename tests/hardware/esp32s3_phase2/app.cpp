@@ -32,6 +32,8 @@
 namespace {
 
 constexpr uint8_t kGpioSmokePin = 18u;
+constexpr uint8_t kGpioCtxPinA = 13u;
+constexpr uint8_t kGpioCtxPinB = 14u;
 constexpr uint8_t kGpioInputPin = 0u;
 constexpr uint8_t kAdcSmokePin = 3u;
 constexpr uint8_t kUartLoopPin = 17u;
@@ -46,6 +48,7 @@ struct Phase2Results {
   bool system;
   bool sync;
   bool gpio;
+  bool gpio_context;
   bool adc;
   bool uart;
   bool i2c;
@@ -65,6 +68,13 @@ hal_timer_pool_t s_timer_pool = nullptr;
 hal_timer_t s_timer = nullptr;
 volatile uint32_t s_gpio_irq_count = 0u;
 volatile bool s_gpio_irq_was_isr = false;
+struct GpioCtxProbe {
+  volatile uint32_t hits;
+  volatile uint8_t pin;
+};
+GpioCtxProbe s_ctx_a = {};
+GpioCtxProbe s_ctx_b = {};
+volatile uint32_t s_ctx_plain_hits = 0u;
 volatile uint32_t s_timer_count = 0u;
 volatile bool s_timer_was_isr = false;
 volatile uint32_t s_task0_count = 0u;
@@ -81,6 +91,20 @@ size_t s_serial_line_length = 0u;
 void gpio_smoke_isr(void) {
   HAL_ATOMIC_STORE(&s_gpio_irq_was_isr, hal_in_isr(), HAL_ATOMIC_RELEASE);
   (void)HAL_ATOMIC_ADD_FETCH(&s_gpio_irq_count, 1u, HAL_ATOMIC_ACQ_REL);
+}
+
+/* One handler for both context pins: it has to tell them apart on its own. */
+void gpio_ctx_isr(uint8_t pin, void *context) {
+  auto *probe = static_cast<GpioCtxProbe *>(context);
+  if (probe == nullptr) {
+    return;
+  }
+  HAL_ATOMIC_STORE(&probe->pin, pin, HAL_ATOMIC_RELEASE);
+  (void)HAL_ATOMIC_ADD_FETCH(&probe->hits, 1u, HAL_ATOMIC_ACQ_REL);
+}
+
+void gpio_ctx_plain_isr(void) {
+  (void)HAL_ATOMIC_ADD_FETCH(&s_ctx_plain_hits, 1u, HAL_ATOMIC_ACQ_REL);
 }
 
 void timer_smoke_callback(hal_timer_t, void *) {
@@ -179,6 +203,71 @@ bool test_gpio(void) {
          reported_owner == HAL_GPIO_IRQ_CORE_NONE &&
          HAL_ATOMIC_LOAD(&s_gpio_irq_count, HAL_ATOMIC_ACQUIRE) >= 2u &&
          HAL_ATOMIC_LOAD(&s_gpio_irq_was_isr, HAL_ATOMIC_ACQUIRE);
+}
+
+void pulse_gpio(uint8_t pin) {
+  hal_gpio_write(pin, true);
+  hal_delay_ms(5u);
+  hal_gpio_write(pin, false);
+  hal_delay_ms(5u);
+}
+
+/* Context-aware GPIO interrupts: one handler, two pins, separate contexts. */
+bool test_gpio_context(void) {
+  const uint8_t owner = static_cast<uint8_t>(xPortGetCoreID());
+  hal_gpio_set_mode(kGpioCtxPinA, HAL_GPIO_OUTPUT_LOW);
+  hal_gpio_set_mode(kGpioCtxPinB, HAL_GPIO_OUTPUT_LOW);
+
+  if (hal_gpio_attach_interrupt_ctx_ex(kGpioCtxPinA, gpio_ctx_isr, &s_ctx_a,
+                                       HAL_GPIO_IRQ_RISING, owner) != HAL_OK ||
+      hal_gpio_attach_interrupt_ctx_ex(kGpioCtxPinB, gpio_ctx_isr, &s_ctx_b,
+                                       HAL_GPIO_IRQ_RISING, owner) != HAL_OK) {
+    return false;
+  }
+
+  pulse_gpio(kGpioCtxPinA);
+  const bool a_routed =
+      HAL_ATOMIC_LOAD(&s_ctx_a.hits, HAL_ATOMIC_ACQUIRE) > 0u &&
+      HAL_ATOMIC_LOAD(&s_ctx_a.pin, HAL_ATOMIC_ACQUIRE) == kGpioCtxPinA &&
+      HAL_ATOMIC_LOAD(&s_ctx_b.hits, HAL_ATOMIC_ACQUIRE) == 0u;
+
+  pulse_gpio(kGpioCtxPinB);
+  const bool b_routed =
+      HAL_ATOMIC_LOAD(&s_ctx_b.hits, HAL_ATOMIC_ACQUIRE) > 0u &&
+      HAL_ATOMIC_LOAD(&s_ctx_b.pin, HAL_ATOMIC_ACQUIRE) == kGpioCtxPinB;
+
+  /* Both handler kinds must replace each other on one pin. */
+  const uint32_t a_before_plain =
+      HAL_ATOMIC_LOAD(&s_ctx_a.hits, HAL_ATOMIC_ACQUIRE);
+  const bool plain_attached =
+      hal_gpio_attach_interrupt_ex(kGpioCtxPinA, gpio_ctx_plain_isr,
+                                   HAL_GPIO_IRQ_RISING, owner) == HAL_OK;
+  pulse_gpio(kGpioCtxPinA);
+  const bool plain_took_over =
+      plain_attached &&
+      HAL_ATOMIC_LOAD(&s_ctx_plain_hits, HAL_ATOMIC_ACQUIRE) > 0u &&
+      HAL_ATOMIC_LOAD(&s_ctx_a.hits, HAL_ATOMIC_ACQUIRE) == a_before_plain;
+
+  const bool ctx_restored =
+      hal_gpio_attach_interrupt_ctx_ex(kGpioCtxPinA, gpio_ctx_isr, &s_ctx_a,
+                                       HAL_GPIO_IRQ_RISING, owner) == HAL_OK;
+  pulse_gpio(kGpioCtxPinA);
+  const bool ctx_back =
+      ctx_restored &&
+      HAL_ATOMIC_LOAD(&s_ctx_a.hits, HAL_ATOMIC_ACQUIRE) > a_before_plain;
+
+  const bool detached = hal_gpio_detach_interrupt_ex(kGpioCtxPinA) == HAL_OK &&
+                        hal_gpio_detach_interrupt_ex(kGpioCtxPinB) == HAL_OK;
+  const uint32_t a_final = HAL_ATOMIC_LOAD(&s_ctx_a.hits, HAL_ATOMIC_ACQUIRE);
+  const uint32_t b_final = HAL_ATOMIC_LOAD(&s_ctx_b.hits, HAL_ATOMIC_ACQUIRE);
+  pulse_gpio(kGpioCtxPinA);
+  pulse_gpio(kGpioCtxPinB);
+  const bool silent_after_detach =
+      HAL_ATOMIC_LOAD(&s_ctx_a.hits, HAL_ATOMIC_ACQUIRE) == a_final &&
+      HAL_ATOMIC_LOAD(&s_ctx_b.hits, HAL_ATOMIC_ACQUIRE) == b_final;
+
+  return a_routed && b_routed && plain_took_over && ctx_back && detached &&
+         silent_after_detach;
 }
 
 bool test_adc(void) {
@@ -375,9 +464,9 @@ void report_phase2(void) {
                          HAL_FREERTOS_TASK1_CORE &&
                      task1_count > 0u;
   const bool pass = s_results.system && s_results.sync && s_results.gpio &&
-                    s_results.adc && s_results.uart && s_results.i2c &&
-                    s_results.spi && timer && s_results.stack_guard && tasks &&
-                    serial_ping;
+                    s_results.gpio_context && s_results.adc && s_results.uart &&
+                    s_results.i2c && s_results.spi && timer &&
+                    s_results.stack_guard && tasks && serial_ping;
 
   char line[768] = {};
   (void)snprintf(
@@ -385,7 +474,9 @@ void report_phase2(void) {
       "JH_ESP32_PHASE2 sequence=%" PRIu32 " target=%s board=%s core0=%" PRId32
       " core1=%" PRId32 " task1=%" PRIu32
       " system=%u sync=%u gpio=%u irq=%" PRIu32
-      " irq_isr=%u adc=%u adc_low=%d adc_high=%d uart=%u i2c=%u"
+      " irq_isr=%u gpio_ctx=%u ctx_a_hits=%" PRIu32 " ctx_a_pin=%u"
+      " ctx_b_hits=%" PRIu32 " ctx_b_pin=%u ctx_plain=%" PRIu32
+      " adc=%u adc_low=%d adc_high=%d uart=%u i2c=%u"
       " i2c_found=%u spi=%u timer=%u timer_count=%" PRIu32
       " timer_isr=%u serial_rx=%u stack_guard=%u heap=%" PRIu32
       " temp_centi=%" PRId32 " status=%s",
@@ -395,6 +486,12 @@ void report_phase2(void) {
       s_results.system ? 1u : 0u, s_results.sync ? 1u : 0u,
       s_results.gpio ? 1u : 0u, irq_count,
       HAL_ATOMIC_LOAD(&s_gpio_irq_was_isr, HAL_ATOMIC_ACQUIRE) ? 1u : 0u,
+      s_results.gpio_context ? 1u : 0u,
+      HAL_ATOMIC_LOAD(&s_ctx_a.hits, HAL_ATOMIC_ACQUIRE),
+      (unsigned)HAL_ATOMIC_LOAD(&s_ctx_a.pin, HAL_ATOMIC_ACQUIRE),
+      HAL_ATOMIC_LOAD(&s_ctx_b.hits, HAL_ATOMIC_ACQUIRE),
+      (unsigned)HAL_ATOMIC_LOAD(&s_ctx_b.pin, HAL_ATOMIC_ACQUIRE),
+      HAL_ATOMIC_LOAD(&s_ctx_plain_hits, HAL_ATOMIC_ACQUIRE),
       s_results.adc ? 1u : 0u, s_results.adc_low, s_results.adc_high,
       s_results.uart ? 1u : 0u, s_results.i2c ? 1u : 0u,
       static_cast<unsigned int>(s_results.i2c_found), s_results.spi ? 1u : 0u,
@@ -417,6 +514,7 @@ extern "C" void app_start(void) {
   s_results.system = test_system();
   s_results.sync = test_sync();
   s_results.gpio = test_gpio();
+  s_results.gpio_context = test_gpio_context();
   s_results.adc = test_adc();
   s_results.uart = test_uart();
   s_results.i2c = test_i2c();

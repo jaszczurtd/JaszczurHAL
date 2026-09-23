@@ -13,6 +13,9 @@ import serial
 
 ROOT = Path(__file__).resolve().parents[3]
 REPORT_PREFIX = "JH_ESP32_PHASE2 "
+CTX_PIN_A = 13
+CTX_PIN_B = 14
+
 INTEGER_FIELDS = {
     "sequence",
     "core0",
@@ -23,6 +26,12 @@ INTEGER_FIELDS = {
     "gpio",
     "irq",
     "irq_isr",
+    "gpio_ctx",
+    "ctx_a_hits",
+    "ctx_a_pin",
+    "ctx_b_hits",
+    "ctx_b_pin",
+    "ctx_plain",
     "adc",
     "adc_low",
     "adc_high",
@@ -42,6 +51,7 @@ BOOLEAN_FIELDS = {
     "system",
     "sync",
     "gpio",
+    "gpio_ctx",
     "irq_isr",
     "adc",
     "uart",
@@ -117,6 +127,11 @@ def validate_report(
         "core1",
         "task1",
         "irq",
+        "ctx_a_hits",
+        "ctx_a_pin",
+        "ctx_b_hits",
+        "ctx_b_pin",
+        "ctx_plain",
         "adc_low",
         "adc_high",
         "i2c_found",
@@ -143,6 +158,16 @@ def validate_report(
         raise RuntimeError(f"both application tasks must execute: {report}")
     if report["irq"] < 2 or report["timer_count"] < 3:
         raise RuntimeError(f"IRQ/timer callbacks did not repeat: {report}")
+    if report["ctx_a_pin"] != CTX_PIN_A or report["ctx_b_pin"] != CTX_PIN_B:
+        raise RuntimeError(
+            f"context handler saw the wrong pin: {report}"
+        )
+    if (
+        report["ctx_a_hits"] < 1
+        or report["ctx_b_hits"] < 1
+        or report["ctx_plain"] < 1
+    ):
+        raise RuntimeError(f"context/plain GPIO handlers did not run: {report}")
     if report["adc_low"] < 0 or report["adc_high"] > 4095:
         raise RuntimeError(f"ADC values outside 12-bit range: {report}")
     if report["adc_high"] <= report["adc_low"] + 256:

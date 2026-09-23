@@ -14,7 +14,7 @@
 
 static bool s_state[64] = {};
 static hal_gpio_mode_t s_mode[64] = {};
-static void (*s_callback[64])(void) = {};
+static jh_gpio_irq_slot_t s_irq_slot[64] = {};
 static hal_gpio_irq_mode_t s_irq_mode[64] = {};
 static bool s_irq_attached[64] = {};
 static uint8_t s_irq_owner[64] = {};
@@ -91,13 +91,14 @@ bool hal_gpio_read(uint8_t pin) {
   return s_state[pin];
 }
 
-hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin, void (*callback)(void),
-                                          hal_gpio_irq_mode_t mode,
-                                          uint8_t owner_core) {
+static hal_status_t mock_gpio_attach(uint8_t pin,
+                                     const jh_gpio_irq_slot_t *request,
+                                     hal_gpio_irq_mode_t mode,
+                                     uint8_t owner_core) {
   if (!gpio_pin_valid(pin)) {
     return HAL_EINVAL;
   }
-  if (callback == NULL) {
+  if (!jh_gpio_irq_slot_armed(request)) {
     return HAL_EINVAL;
   }
   if (!jh_hal_gpio_irq_mode_valid(mode)) {
@@ -112,11 +113,35 @@ hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin, void (*callback)(void),
   if (s_irq_attached[pin] && s_irq_owner[pin] != owner_core) {
     return HAL_ESTATE;
   }
-  s_callback[pin] = callback;
+  jh_gpio_irq_slot_apply(&s_irq_slot[pin], request);
   s_irq_mode[pin] = mode;
   s_irq_owner[pin] = owner_core;
   s_irq_attached[pin] = true;
   return HAL_OK;
+}
+
+hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin, void (*callback)(void),
+                                          hal_gpio_irq_mode_t mode,
+                                          uint8_t owner_core) {
+  const jh_gpio_irq_slot_t request = jh_gpio_irq_slot_make_plain(callback);
+  return mock_gpio_attach(pin, &request, mode, owner_core);
+}
+
+hal_status_t hal_gpio_attach_interrupt_ctx_ex(uint8_t pin,
+                                              hal_gpio_irq_callback_t callback,
+                                              void *context,
+                                              hal_gpio_irq_mode_t mode,
+                                              uint8_t owner_core) {
+  const jh_gpio_irq_slot_t request = jh_gpio_irq_slot_make(callback, context);
+  return mock_gpio_attach(pin, &request, mode, owner_core);
+}
+
+hal_status_t hal_gpio_attach_interrupt_ctx(uint8_t pin,
+                                           hal_gpio_irq_callback_t callback,
+                                           void *context,
+                                           hal_gpio_irq_mode_t mode) {
+  return hal_gpio_attach_interrupt_ctx_ex(pin, callback, context, mode,
+                                          s_current_core);
 }
 
 void hal_gpio_attach_interrupt(uint8_t pin, void (*callback)(void),
@@ -136,7 +161,7 @@ hal_status_t hal_gpio_detach_interrupt_ex(uint8_t pin) {
   if (s_irq_owner[pin] != s_current_core) {
     return HAL_ESTATE;
   }
-  s_callback[pin] = NULL;
+  jh_gpio_irq_slot_clear(&s_irq_slot[pin]);
   s_irq_attached[pin] = false;
   s_irq_owner[pin] = HAL_GPIO_IRQ_CORE_NONE;
   return HAL_OK;
@@ -227,10 +252,10 @@ void hal_mock_gpio_clear_read_sequence(uint8_t pin) {
 }
 
 void hal_mock_gpio_fire_interrupt(uint8_t pin) {
-  if (gpio_pin_valid(pin) && s_irq_attached[pin] && s_callback[pin]) {
+  if (gpio_pin_valid(pin) && s_irq_attached[pin]) {
     const uint8_t saved_core = s_current_core;
     s_current_core = s_irq_owner[pin];
-    s_callback[pin]();
+    jh_gpio_irq_slot_invoke(&s_irq_slot[pin], pin);
     s_current_core = saved_core;
   }
 }

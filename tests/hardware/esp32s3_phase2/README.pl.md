@@ -13,6 +13,9 @@ Firmware sprawdza:
   do rdzeni 0 i 1;
 - wejście GPIO z podciągnięciem (pull-up), wyjście/odczyt zwrotny oraz
   przekonfigurowane przerwanie GPIO przypisane do tego samego rdzenia;
+- przerwania GPIO z kontekstem: jeden handler obsługujący dwa piny trafia we
+  własny kontekst i raportuje własny pin, callback bez kontekstu podmienia go na
+  jednym pinie i z powrotem, a odłączenie wycisza oba;
 - odczyty 12-bitowego ADC rozstawione przez wewnętrzne podciągnięcie/
   podwieszenie (pull-down/pull-up) GPIO;
 - sprzętowy UART1 TX/RX przez jeden pin pętli zwrotnej macierzy GPIO;
@@ -69,11 +72,10 @@ do trybu pobierania resetuje MCU i wymaga osobnego testu ponownego połączenia
 oraz odzyskiwania. Projekt `tests/fixtures/esp32s3_phase3` sprawdza obecność symbolu podczas
 kompilacji i linkowania, a sam reset wymaga osobnego testu sprzętowego.
 
-## Jeszcze niesprawdzone na sprzęcie
+## Pokrycie sprzętowe
 
-Wcześniejsza wersja tego fixture'a przeszła test na Waveshare ESP32-S3-Zero.
-Sprawdzenia dedykowanej puli timerów i ochrony stosu dodano później i nie
-uruchomiono ich jeszcze na sprzęcie.
+Fixture przechodzi na Waveshare ESP32-S3-Zero, razem z dedykowaną pulą timerów,
+sprawdzeniami ochrony stosu i przerwaniami GPIO z kontekstem.
 
 Poza tym fixture'em testów sprzętowych wciąż wymagają: I2C w roli układu
 podrzędnego, PWM i PWM_FREQ, RMT/RGB, PCNT, wejście w tryb pobierania,

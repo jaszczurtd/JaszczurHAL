@@ -22,10 +22,10 @@
 static volatile uint32_t s_count[RP2040_PCNT_CHANNELS] = {};
 static bool s_init[RP2040_PCNT_CHANNELS] = {};
 
-/* Per-channel ISR trampolines (hal_gpio callbacks take no context). */
-static void isr_ch0(void) { s_count[0]++; }
-static void isr_ch1(void) { s_count[1]++; }
-static void (*const s_isr[RP2040_PCNT_CHANNELS])(void) = {isr_ch0, isr_ch1};
+static void pcnt_isr(uint8_t pin, void *context) {
+  (void)pin;
+  (*(volatile uint32_t *)context)++;
+}
 
 static hal_gpio_irq_mode_t to_irq_mode(hal_pcnt_edge_t edge) {
   switch (edge) {
@@ -50,7 +50,11 @@ hal_status_t hal_pcnt_init_ex(uint8_t channel, uint8_t pin,
   }
   s_count[channel] = 0u;
   hal_gpio_set_mode(pin, HAL_GPIO_INPUT_PULLUP);
-  hal_gpio_attach_interrupt(pin, s_isr[channel], to_irq_mode(edge));
+  const hal_status_t status = hal_gpio_attach_interrupt_ctx(
+      pin, pcnt_isr, (void *)&s_count[channel], to_irq_mode(edge));
+  if (status != HAL_OK) {
+    return status;
+  }
   s_init[channel] = true;
   return HAL_OK;
 }

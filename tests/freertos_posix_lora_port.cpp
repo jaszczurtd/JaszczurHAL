@@ -14,6 +14,11 @@ bool hal_gpio_read(uint8_t) { return false; }
 
 void hal_gpio_attach_interrupt(uint8_t, void (*)(void), hal_gpio_irq_mode_t) {}
 
+hal_status_t hal_gpio_attach_interrupt_ctx(uint8_t, hal_gpio_irq_callback_t,
+                                           void *, hal_gpio_irq_mode_t) {
+  return HAL_OK;
+}
+
 void hal_gpio_detach_interrupt(uint8_t) {}
 
 hal_status_t hal_spi_init(uint8_t, uint8_t, uint8_t, uint8_t) { return HAL_OK; }

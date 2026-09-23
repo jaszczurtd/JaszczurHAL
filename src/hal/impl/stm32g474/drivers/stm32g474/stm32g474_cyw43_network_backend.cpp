@@ -266,9 +266,6 @@ hal_status_t wifi_join(const char *ssid, const char *password,
       timeout_ms == 0u) {
     return HAL_EINVAL;
   }
-  if (non_blocking) {
-    return HAL_EUNSUPPORTED;
-  }
   hal_status_t status = service_initialize();
   if (status != HAL_OK) {
     return status;
@@ -287,7 +284,11 @@ hal_status_t wifi_join(const char *ssid, const char *password,
   if (status == HAL_OK) {
     const uint32_t auth =
         password[0] == '\0' ? CYW43_AUTH_OPEN : CYW43_AUTH_WPA2_AES_PSK;
-    status = jh_cyw43_lwip_join(ssid, password, auth, timeout_ms);
+    /* A non-blocking join only starts the association; service_once() advances
+     * it and wifi_get_state() reports progress. */
+    status = non_blocking
+                 ? jh_cyw43_lwip_join_start(ssid, password, auth)
+                 : jh_cyw43_lwip_join(ssid, password, auth, timeout_ms);
   }
   stack_leave();
   return status;
