@@ -14,6 +14,28 @@ static void gpio_irq_hit(void) {
   s_gpio_irq_core_seen = hal_mock_gpio_get_current_core();
 }
 
+typedef struct {
+  int hits;
+  uint8_t last_pin;
+} gpio_ctx_probe_t;
+
+static gpio_ctx_probe_t s_probe_a;
+static gpio_ctx_probe_t s_probe_b;
+static int s_gpio_null_context_hits;
+
+static void gpio_irq_ctx_hit(uint8_t pin, void *context) {
+  gpio_ctx_probe_t *probe = (gpio_ctx_probe_t *)context;
+  probe->hits++;
+  probe->last_pin = pin;
+}
+
+static void gpio_irq_null_context_hit(uint8_t pin, void *context) {
+  (void)pin;
+  if (context == nullptr) {
+    s_gpio_null_context_hits++;
+  }
+}
+
 void test_common_gpio_validators_match_public_enum_ranges(void) {
   for (int mode = HAL_GPIO_INPUT; mode <= HAL_GPIO_OUTPUT_OPEN_DRAIN_HIGH;
        ++mode) {
@@ -220,6 +242,129 @@ void test_legacy_attach_records_current_core_owner(void) {
   hal_gpio_detach_interrupt(21u);
 }
 
+void test_context_handler_receives_pin_and_context(void) {
+  s_probe_a = {};
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_gpio_attach_interrupt_ctx_ex(
+                  22u, gpio_irq_ctx_hit, &s_probe_a, HAL_GPIO_IRQ_RISING, 0u));
+  hal_mock_gpio_fire_interrupt(22u);
+  TEST_ASSERT_EQUAL_INT(1, s_probe_a.hits);
+  TEST_ASSERT_EQUAL_UINT8(22u, s_probe_a.last_pin);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gpio_detach_interrupt_ex(22u));
+}
+
+/* The reason the API exists: one handler serving several pins has to tell the
+ * instances apart. */
+void test_one_handler_serves_two_pins_with_separate_contexts(void) {
+  s_probe_a = {};
+  s_probe_b = {};
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_gpio_attach_interrupt_ctx(23u, gpio_irq_ctx_hit, &s_probe_a,
+                                            HAL_GPIO_IRQ_RISING));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_gpio_attach_interrupt_ctx(24u, gpio_irq_ctx_hit, &s_probe_b,
+                                            HAL_GPIO_IRQ_FALLING));
+  hal_mock_gpio_fire_interrupt(23u);
+  hal_mock_gpio_fire_interrupt(24u);
+  hal_mock_gpio_fire_interrupt(24u);
+
+  TEST_ASSERT_EQUAL_INT(1, s_probe_a.hits);
+  TEST_ASSERT_EQUAL_UINT8(23u, s_probe_a.last_pin);
+  TEST_ASSERT_EQUAL_INT(2, s_probe_b.hits);
+  TEST_ASSERT_EQUAL_UINT8(24u, s_probe_b.last_pin);
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gpio_detach_interrupt_ex(23u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gpio_detach_interrupt_ex(24u));
+}
+
+void test_handler_kinds_replace_each_other_on_one_pin(void) {
+  s_probe_a = {};
+  s_gpio_irq_hits = 0;
+
+  hal_gpio_attach_interrupt(25u, gpio_irq_hit, HAL_GPIO_IRQ_RISING);
+  hal_mock_gpio_fire_interrupt(25u);
+  TEST_ASSERT_EQUAL_INT(1, s_gpio_irq_hits);
+
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_gpio_attach_interrupt_ctx(25u, gpio_irq_ctx_hit, &s_probe_a,
+                                            HAL_GPIO_IRQ_RISING));
+  hal_mock_gpio_fire_interrupt(25u);
+  TEST_ASSERT_EQUAL_INT(1, s_gpio_irq_hits);
+  TEST_ASSERT_EQUAL_INT(1, s_probe_a.hits);
+
+  hal_gpio_attach_interrupt(25u, gpio_irq_hit, HAL_GPIO_IRQ_RISING);
+  hal_mock_gpio_fire_interrupt(25u);
+  TEST_ASSERT_EQUAL_INT(2, s_gpio_irq_hits);
+  TEST_ASSERT_EQUAL_INT(1, s_probe_a.hits);
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gpio_detach_interrupt_ex(25u));
+}
+
+void test_detach_clears_context_handler(void) {
+  s_probe_a = {};
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_gpio_attach_interrupt_ctx(26u, gpio_irq_ctx_hit, &s_probe_a,
+                                            HAL_GPIO_IRQ_CHANGE));
+  hal_mock_gpio_fire_interrupt(26u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gpio_detach_interrupt_ex(26u));
+  hal_mock_gpio_fire_interrupt(26u);
+  TEST_ASSERT_EQUAL_INT(1, s_probe_a.hits);
+
+  uint8_t owner = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_ENOENT,
+                        hal_gpio_get_interrupt_owner_ex(26u, &owner));
+  TEST_ASSERT_EQUAL_UINT8(HAL_GPIO_IRQ_CORE_NONE, owner);
+}
+
+void test_context_handler_accepts_null_context(void) {
+  s_gpio_null_context_hits = 0;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_gpio_attach_interrupt_ctx(27u, gpio_irq_null_context_hit,
+                                            nullptr, HAL_GPIO_IRQ_RISING));
+  hal_mock_gpio_fire_interrupt(27u);
+  TEST_ASSERT_EQUAL_INT(1, s_gpio_null_context_hits);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gpio_detach_interrupt_ex(27u));
+}
+
+void test_context_attach_validates_arguments_and_owner_core(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_gpio_attach_interrupt_ctx_ex(
+                                        64u, gpio_irq_ctx_hit, &s_probe_a,
+                                        HAL_GPIO_IRQ_RISING, 0u));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL, hal_gpio_attach_interrupt_ctx_ex(28u, nullptr, &s_probe_a,
+                                                   HAL_GPIO_IRQ_RISING, 0u));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_gpio_attach_interrupt_ctx_ex(
+                                        28u, gpio_irq_ctx_hit, &s_probe_a,
+                                        (hal_gpio_irq_mode_t)99, 0u));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_gpio_attach_interrupt_ctx_ex(
+                                        28u, gpio_irq_ctx_hit, &s_probe_a,
+                                        HAL_GPIO_IRQ_RISING, 2u));
+  TEST_ASSERT_EQUAL_INT(HAL_ESTATE, hal_gpio_attach_interrupt_ctx_ex(
+                                        28u, gpio_irq_ctx_hit, &s_probe_a,
+                                        HAL_GPIO_IRQ_RISING, 1u));
+}
+
+void test_context_attach_binds_to_current_core(void) {
+  s_probe_a = {};
+  hal_mock_gpio_set_current_core(1u);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_gpio_attach_interrupt_ctx(29u, gpio_irq_ctx_hit, &s_probe_a,
+                                            HAL_GPIO_IRQ_RISING));
+  uint8_t owner = HAL_GPIO_IRQ_CORE_NONE;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gpio_get_interrupt_owner_ex(29u, &owner));
+  TEST_ASSERT_EQUAL_UINT8(1u, owner);
+
+  hal_mock_gpio_set_current_core(0u);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_ESTATE, hal_gpio_attach_interrupt_ctx(
+                      29u, gpio_irq_ctx_hit, &s_probe_b, HAL_GPIO_IRQ_RISING));
+  hal_mock_gpio_fire_interrupt(29u);
+  TEST_ASSERT_EQUAL_INT(1, s_probe_a.hits);
+
+  hal_mock_gpio_set_current_core(1u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gpio_detach_interrupt_ex(29u));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_common_gpio_validators_match_public_enum_ranges);
@@ -241,5 +386,12 @@ int main(void) {
   RUN_TEST(test_interrupt_owner_rejects_wrong_core_reconfigure_and_detach);
   RUN_TEST(test_interrupt_owner_validates_arguments_and_caller_core);
   RUN_TEST(test_legacy_attach_records_current_core_owner);
+  RUN_TEST(test_context_handler_receives_pin_and_context);
+  RUN_TEST(test_one_handler_serves_two_pins_with_separate_contexts);
+  RUN_TEST(test_handler_kinds_replace_each_other_on_one_pin);
+  RUN_TEST(test_detach_clears_context_handler);
+  RUN_TEST(test_context_handler_accepts_null_context);
+  RUN_TEST(test_context_attach_validates_arguments_and_owner_core);
+  RUN_TEST(test_context_attach_binds_to_current_core);
   return UNITY_END();
 }

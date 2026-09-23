@@ -12,6 +12,11 @@ asynchroniczne callbacki wyzwalane przez DIO1, diagnostykę IRQ i anulowania,
 metadane RSSI/SNR, usypianie i wybudzanie oraz ponowną inicjalizację po
 zniszczeniu i utworzeniu obiektu radia.
 
+Sam pozytywny wynik nie dowodzi jeszcze, że przerwanie DIO1 się zgłasza: provider
+odpytuje także poziom DIO1, więc link działa nawet przy martwym przerwaniu. Żeby
+odizolować przerwanie, zbuduj wariant bez odpytywania poziomu i sprawdź, czy link
+nadal chodzi.
+
 W profilach ze sprzętową diodą stanu jej ciągłe świecenie oznacza
 aktywność nadawania, a impuls 120 ms potwierdza odebrany pakiet.
 

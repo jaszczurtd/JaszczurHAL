@@ -95,6 +95,8 @@ struct jh_lora_radio_context_s {
   bool operation_busy;
   bool provider_sleeping;
   bool provider_irq_attached;
+  /* Set from the provider's GPIO ISR, cleared when the provider services it. */
+  volatile bool provider_irq_pending;
   bool board_device;
   bool allocated;
 };

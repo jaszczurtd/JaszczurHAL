@@ -203,8 +203,12 @@ platform_transfer(void *opaque_context, const uint8_t *tx, size_t tx_length,
 #endif
 }
 
-void host_wake_isr(void) {
-  stm32g474_gspi_context_t *context = &s_context;
+void host_wake_isr(uint8_t pin, void *isr_context) {
+  (void)pin;
+  auto *context = static_cast<stm32g474_gspi_context_t *>(isr_context);
+  if (context == nullptr) {
+    return;
+  }
 #ifdef JH_STM32G474_HW
   EXTI_IMR1 &= ~context->data_mask;
 #endif
@@ -224,8 +228,9 @@ platform_host_wake_attach(void *opaque_context,
   }
   context->host_wake_callback = callback;
   context->host_wake_callback_context = callback_context;
-  const hal_status_t status = hal_gpio_attach_interrupt_ex(
-      context->config.pin_data, host_wake_isr, HAL_GPIO_IRQ_RISING, 0u);
+  const hal_status_t status =
+      hal_gpio_attach_interrupt_ctx_ex(context->config.pin_data, host_wake_isr,
+                                       context, HAL_GPIO_IRQ_RISING, 0u);
   if (status != HAL_OK) {
     context->host_wake_callback = nullptr;
     context->host_wake_callback_context = nullptr;

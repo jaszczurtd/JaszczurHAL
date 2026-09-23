@@ -51,10 +51,17 @@ static void connectWifi(void) {
   }
   last_wifi_check_ms = now;
 
-  deb("WiFi: connecting to %s", WIFI_SSID);
+  hal_wifi_state_t state = HAL_WIFI_STATE_OFF;
+  (void)hal_wifi_get_state_ex(&state);
+  deb("WiFi: connecting to %s (state=%s)", WIFI_SSID,
+      hal_wifi_state_to_string(state));
   hal_wifi_set_mode(HAL_WIFI_MODE_STA);
   hal_wifi_set_hostname("jaszczurhal-mqtt");
-  hal_wifi_begin_station(WIFI_SSID, WIFI_PASSWORD, true);
+  const hal_status_t join =
+      hal_wifi_begin_station_ex(WIFI_SSID, WIFI_PASSWORD, true);
+  if (join != HAL_OK) {
+    derr("WiFi: join rejected (%s)", hal_status_to_string(join));
+  }
 }
 
 static void connectMqtt(void) {

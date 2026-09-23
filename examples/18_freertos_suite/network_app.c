@@ -665,10 +665,18 @@ static void connect_wifi(void) {
 
   (void)hal_wifi_set_mode(HAL_WIFI_MODE_STA);
   (void)hal_wifi_set_hostname("jaszczurhal-suite");
-  const bool accepted = hal_wifi_begin_station(
+  hal_wifi_state_t state = HAL_WIFI_STATE_OFF;
+  (void)hal_wifi_get_state_ex(&state);
+  deb("network suite: WiFi state before join %s",
+      hal_wifi_state_to_string(state));
+  const hal_status_t join = hal_wifi_begin_station_ex(
       NETWORK_SUITE_WIFI_SSID, NETWORK_SUITE_WIFI_PASSWORD, true);
-  deb("network suite: WiFi join %s (%s)", NETWORK_SUITE_WIFI_SSID,
-      accepted ? "accepted" : "rejected");
+  if (join == HAL_OK) {
+    deb("network suite: WiFi join %s accepted", NETWORK_SUITE_WIFI_SSID);
+  } else {
+    derr("network suite: WiFi join %s rejected (%s)", NETWORK_SUITE_WIFI_SSID,
+         hal_status_to_string(join));
+  }
 }
 
 static void start_services(void) {

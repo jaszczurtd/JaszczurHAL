@@ -12,6 +12,9 @@ The firmware checks:
   cores 0/1;
 - GPIO input with pull-up, output/readback, and a same-owner reconfigured GPIO
   interrupt;
+- context-aware GPIO interrupts: one handler serving two pins reaches its own
+  context and reports its own pin, a context-free callback replaces it on one
+  pin and back, and detaching silences both;
 - 12-bit ADC readings driven apart by the GPIO's internal pull-down/pull-up;
 - hardware UART1 TX/RX through one GPIO-matrix loopback pin;
 - I2C master bus clear, initialization, and a complete address scan (zero
@@ -65,11 +68,10 @@ download-mode entry resets the MCU and requires a separate reconnect/recovery
 test. The `tests/fixtures/esp32s3_phase3` project covers its symbol at compile
 and link time; the reset itself needs a separate hardware test.
 
-## Not yet run on hardware
+## Hardware coverage
 
-An earlier version of this fixture passed on the Waveshare ESP32-S3-Zero. The
-dedicated timer pool and stack-guard checks were added later and have not been
-run on hardware yet.
+The fixture passes on the Waveshare ESP32-S3-Zero, including the dedicated
+timer pool, the stack-guard checks and the context-aware GPIO interrupts.
 
 Outside this fixture, these areas still need hardware tests: the I2C target
 role, PWM and PWM_FREQ, RMT/RGB, PCNT, entry into download mode, deliberate

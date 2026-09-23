@@ -10,11 +10,13 @@
 #include <pico/mutex.h>
 #include <pico/platform.h>
 
-static bool s_open_drain_mode[256] = {};
-static void (*s_gpio_callbacks[256])(void) = {};
+/* Bank0 pins are the only ones these tables ever index: the CYW43 pin is
+ * handled before any of them is touched. */
+static bool s_open_drain_mode[NUM_BANK0_GPIOS] = {};
+static jh_gpio_irq_slot_t s_gpio_irq_slot[NUM_BANK0_GPIOS] = {};
 /* 0 = detached, 1 = core 0, 2 = core 1. The shared mutex prevents two cores
  * from claiming an unowned pin concurrently. */
-static uint8_t s_gpio_irq_owner_state[256] = {};
+static uint8_t s_gpio_irq_owner_state[NUM_BANK0_GPIOS] = {};
 auto_init_mutex(s_gpio_irq_owner_mutex);
 
 static bool rp2040_pin_valid(uint8_t pin) { return pin < NUM_BANK0_GPIOS; }
@@ -113,8 +115,8 @@ static uint32_t gpio_all_irq_events(void) {
 
 static void gpio_irq_dispatch(uint gpio, uint32_t events) {
   (void)events;
-  if (gpio < 256u && s_gpio_callbacks[gpio] != nullptr) {
-    s_gpio_callbacks[gpio]();
+  if (gpio < NUM_BANK0_GPIOS) {
+    jh_gpio_irq_slot_invoke(&s_gpio_irq_slot[gpio], (uint8_t)gpio);
   }
 }
 
@@ -215,16 +217,17 @@ bool hal_gpio_read(uint8_t pin) {
   return gpio_get(pin);
 }
 
-hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin, void (*callback)(void),
-                                          hal_gpio_irq_mode_t mode,
-                                          uint8_t owner_core) {
+static hal_status_t rp2040_gpio_attach(uint8_t pin,
+                                       const jh_gpio_irq_slot_t *request,
+                                       hal_gpio_irq_mode_t mode,
+                                       uint8_t owner_core) {
   if (!rp2040_hal_pin_valid(pin)) {
     return HAL_EINVAL;
   }
   if (rp2040_cyw43_pin_valid(pin)) {
     return HAL_EUNSUPPORTED;
   }
-  if (callback == nullptr) {
+  if (!jh_gpio_irq_slot_armed(request)) {
     return HAL_EINVAL;
   }
   if (!jh_hal_gpio_irq_mode_valid(mode)) {
@@ -249,11 +252,35 @@ hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin, void (*callback)(void),
   s_gpio_irq_owner_state[pin] = desired_state;
 
   gpio_set_irq_enabled(pin, gpio_all_irq_events(), false);
-  s_gpio_callbacks[pin] = callback;
+  jh_gpio_irq_slot_apply(&s_gpio_irq_slot[pin], request);
   gpio_set_irq_enabled_with_callback(pin, gpio_irq_events(mode), true,
                                      gpio_irq_dispatch);
   mutex_exit(&s_gpio_irq_owner_mutex);
   return HAL_OK;
+}
+
+hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin, void (*callback)(void),
+                                          hal_gpio_irq_mode_t mode,
+                                          uint8_t owner_core) {
+  const jh_gpio_irq_slot_t request = jh_gpio_irq_slot_make_plain(callback);
+  return rp2040_gpio_attach(pin, &request, mode, owner_core);
+}
+
+hal_status_t hal_gpio_attach_interrupt_ctx_ex(uint8_t pin,
+                                              hal_gpio_irq_callback_t callback,
+                                              void *context,
+                                              hal_gpio_irq_mode_t mode,
+                                              uint8_t owner_core) {
+  const jh_gpio_irq_slot_t request = jh_gpio_irq_slot_make(callback, context);
+  return rp2040_gpio_attach(pin, &request, mode, owner_core);
+}
+
+hal_status_t hal_gpio_attach_interrupt_ctx(uint8_t pin,
+                                           hal_gpio_irq_callback_t callback,
+                                           void *context,
+                                           hal_gpio_irq_mode_t mode) {
+  return hal_gpio_attach_interrupt_ctx_ex(pin, callback, context, mode,
+                                          (uint8_t)get_core_num());
 }
 
 void hal_gpio_attach_interrupt(uint8_t pin, void (*callback)(void),
@@ -281,7 +308,7 @@ hal_status_t hal_gpio_detach_interrupt_ex(uint8_t pin) {
     return HAL_ESTATE;
   }
   gpio_set_irq_enabled(pin, gpio_all_irq_events(), false);
-  s_gpio_callbacks[pin] = nullptr;
+  jh_gpio_irq_slot_clear(&s_gpio_irq_slot[pin]);
   s_gpio_irq_owner_state[pin] = 0u;
   mutex_exit(&s_gpio_irq_owner_mutex);
   return HAL_OK;

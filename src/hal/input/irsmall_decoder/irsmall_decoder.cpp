@@ -39,8 +39,12 @@
 #define IRSMALL_RC5_STATE_START0 3u
 
 static hal_mutex_t s_irsmall_slots_mutex;
-static hal_irsmall_decoder_t
-    *s_irsmall_slots[HAL_IRSMALL_DECODER_MAX_INSTANCES];
+/* A slot is a struct, not a bare pointer, so a handler context can point at the
+ * slot itself instead of at a pointer to the device. */
+typedef struct {
+  hal_irsmall_decoder_t *device;
+} irsmall_slot_t;
+static irsmall_slot_t s_irsmall_slots[HAL_IRSMALL_DECODER_MAX_INSTANCES];
 static const uint8_t s_irsmall_rc5_transitions[4] = {0x01u, 0x91u, 0x9Bu,
                                                      0xFBu};
 
@@ -102,16 +106,16 @@ static int irsmall_alloc_slot(hal_irsmall_decoder_t *dev) {
   hal_mutex_lock(s_irsmall_slots_mutex);
   int selected = -1;
   for (uint8_t i = 0u; i < HAL_IRSMALL_DECODER_MAX_INSTANCES; ++i) {
-    if (s_irsmall_slots[i] == dev) {
+    if (s_irsmall_slots[i].device == dev) {
       selected = (int)i;
       break;
     }
-    if (selected < 0 && s_irsmall_slots[i] == NULL) {
+    if (selected < 0 && s_irsmall_slots[i].device == NULL) {
       selected = (int)i;
     }
   }
   if (selected >= 0) {
-    s_irsmall_slots[selected] = dev;
+    s_irsmall_slots[selected].device = dev;
   }
   hal_mutex_unlock(s_irsmall_slots_mutex);
   return selected;
@@ -124,8 +128,8 @@ static void irsmall_free_slot(hal_irsmall_decoder_t *dev) {
 
   hal_mutex_lock(s_irsmall_slots_mutex);
   for (uint8_t i = 0u; i < HAL_IRSMALL_DECODER_MAX_INSTANCES; ++i) {
-    if (s_irsmall_slots[i] == dev) {
-      s_irsmall_slots[i] = NULL;
+    if (s_irsmall_slots[i].device == dev) {
+      s_irsmall_slots[i].device = NULL;
     }
   }
   hal_mutex_unlock(s_irsmall_slots_mutex);
@@ -726,29 +730,16 @@ static void irsmall_decode_edge(hal_irsmall_decoder_t *dev) {
   }
 }
 
-static void irsmall_isr_slot(uint8_t slot) {
-  if (slot >= HAL_IRSMALL_DECODER_MAX_INSTANCES) {
-    return;
-  }
-  hal_irsmall_decoder_t *dev = s_irsmall_slots[slot];
+/* The context is the slot itself, not the device: a decoder released while an
+ * edge is in flight clears its slot, and the ISR then sees NULL. */
+static void irsmall_isr(uint8_t pin, void *context) {
+  (void)pin;
+  hal_irsmall_decoder_t *dev = ((const irsmall_slot_t *)context)->device;
   if (dev == NULL || !dev->initialized || !dev->enabled) {
     return;
   }
   irsmall_decode_edge(dev);
 }
-
-static void irsmall_isr0(void) { irsmall_isr_slot(0u); }
-static void irsmall_isr1(void) { irsmall_isr_slot(1u); }
-static void irsmall_isr2(void) { irsmall_isr_slot(2u); }
-static void irsmall_isr3(void) { irsmall_isr_slot(3u); }
-
-static void (*const s_irsmall_callbacks[HAL_IRSMALL_DECODER_MAX_INSTANCES])(
-    void) = {
-    irsmall_isr0,
-    irsmall_isr1,
-    irsmall_isr2,
-    irsmall_isr3,
-};
 
 static void irsmall_check_timeout(hal_irsmall_decoder_t *dev) {
   if (!dev->cfg.timeout_enabled) {
@@ -842,8 +833,12 @@ hal_irsmall_decoder_init_ex(hal_irsmall_decoder_t *dev,
   }
   hal_mutex_unlock(dev->mutex);
 
-  hal_gpio_attach_interrupt(effective.input_pin, s_irsmall_callbacks[slot],
-                            hal_irsmall_decoder_irq_mode(effective.protocol));
+  const hal_status_t irq_status = hal_gpio_attach_interrupt_ctx(
+      effective.input_pin, irsmall_isr, &s_irsmall_slots[slot],
+      hal_irsmall_decoder_irq_mode(effective.protocol));
+  if (irq_status != HAL_OK) {
+    return irq_status;
+  }
   hal_gpio_set_irq_priority(effective.irq_priority);
   return HAL_OK;
 }
@@ -880,9 +875,12 @@ hal_status_t hal_irsmall_decoder_enable(hal_irsmall_decoder_t *dev) {
   hal_mutex_unlock(dev->mutex);
 
   hal_gpio_set_mode(dev->cfg.input_pin, HAL_GPIO_INPUT_PULLUP);
-  hal_gpio_attach_interrupt(dev->cfg.input_pin,
-                            s_irsmall_callbacks[dev->slot_index],
-                            hal_irsmall_decoder_irq_mode(dev->cfg.protocol));
+  const hal_status_t irq_status = hal_gpio_attach_interrupt_ctx(
+      dev->cfg.input_pin, irsmall_isr, &s_irsmall_slots[dev->slot_index],
+      hal_irsmall_decoder_irq_mode(dev->cfg.protocol));
+  if (irq_status != HAL_OK) {
+    return irq_status;
+  }
   hal_gpio_set_irq_priority(dev->cfg.irq_priority);
   return hal_irsmall_decoder_reset(dev);
 }

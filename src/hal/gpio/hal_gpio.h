@@ -49,6 +49,17 @@ typedef enum {
 #define HAL_GPIO_IRQ_CORE_NONE UINT8_MAX
 
 /**
+ * @brief GPIO interrupt handler receiving the triggering pin and its context.
+ *
+ * Runs in ISR context with the same restrictions as a context-free callback.
+ *
+ * @param pin     Pin whose edge triggered the interrupt.
+ * @param context Pointer registered together with the handler. NULL is allowed
+ *                and is passed through unchanged.
+ */
+typedef void (*hal_gpio_irq_callback_t)(uint8_t pin, void *context);
+
+/**
  * @brief Configure a GPIO pin mode.
  * @param pin  Pin number.
  * @param mode Direction / pull-up mode.
@@ -98,6 +109,52 @@ void hal_gpio_attach_interrupt(uint8_t pin, void (*callback)(void),
 hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin, void (*callback)(void),
                                           hal_gpio_irq_mode_t mode,
                                           uint8_t owner_core);
+
+/**
+ * @brief Attach a context-aware GPIO interrupt owned by the calling core.
+ *
+ * Equivalent to hal_gpio_attach_interrupt_ctx_ex() with the core the caller
+ * currently runs on, which is what a driver that does not manage core affinity
+ * wants.
+ *
+ * @param pin      Pin number.
+ * @param callback Handler called from ISR context with @p pin and @p context.
+ * @param context  Caller pointer passed to @p callback, may be NULL.
+ * @param mode     Edge trigger mode.
+ * @return Status of hal_gpio_attach_interrupt_ctx_ex() for the calling core.
+ * @note Call from initialization/task context, not from an ISR.
+ */
+hal_status_t hal_gpio_attach_interrupt_ctx(uint8_t pin,
+                                           hal_gpio_irq_callback_t callback,
+                                           void *context,
+                                           hal_gpio_irq_mode_t mode);
+
+/**
+ * @brief Attach a GPIO interrupt that receives the pin and a caller context.
+ *
+ * Core ownership follows hal_gpio_attach_interrupt_ex(). A pin holds one
+ * registration: attaching either handler kind replaces whatever the owning core
+ * registered before, and hal_gpio_detach_interrupt_ex() releases both kinds.
+ * The context is stored as given; its lifetime must cover the time the
+ * interrupt stays attached.
+ *
+ * @param pin        Pin number.
+ * @param callback   Handler called from ISR context with @p pin and
+ *                   @p context.
+ * @param context    Caller pointer passed to @p callback, may be NULL.
+ * @param mode       Edge trigger mode.
+ * @param owner_core Required core id for registration.
+ * @return HAL_OK on success, HAL_EINVAL for invalid arguments,
+ *         HAL_EUNSUPPORTED when the pin/backend cannot provide GPIO IRQs, or
+ *         HAL_ESTATE when the caller or existing owner does not match
+ *         @p owner_core.
+ * @note Call from initialization/task context, not from an ISR.
+ */
+hal_status_t hal_gpio_attach_interrupt_ctx_ex(uint8_t pin,
+                                              hal_gpio_irq_callback_t callback,
+                                              void *context,
+                                              hal_gpio_irq_mode_t mode,
+                                              uint8_t owner_core);
 
 /**
  * @brief Detach the interrupt handler from a GPIO pin.
