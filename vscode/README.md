@@ -573,8 +573,9 @@ an unauthenticated development transfer; it does not configure a password on
 the device. The host uses one connected UDP socket for invitation and AUTH2,
 accepts only strict control-line framing, and transfers data only when the TCP
 callback address matches the UDP peer selected by the OS.
-The host callback defaults to TCP/8266. `runmefirst.sh` offers a persistent,
-LAN-scoped firewall rule for that port after explicit confirmation.
+The host callback defaults to TCP/8266, and discovery replies return to
+UDP/8266. `runmefirst.sh` offers persistent, LAN-scoped firewall rules for
+both after explicit confirmation.
 
 Firmware integration, first installation, host firewall rules, keyboard
 shortcuts, trial confirmation, rollback, recovery, and troubleshooting are

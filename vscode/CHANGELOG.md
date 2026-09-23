@@ -2,6 +2,10 @@
 
 ## 0.1.0 - Unreleased
 
+- Receive OTA discovery replies on the fixed OTA host port (`ota.listenPort`,
+  UDP/8266 by default) and let `configure_ota_firewall.py` allow that UDP port
+  next to the TCP callback on Linux, so a stateful host firewall no longer drops
+  the device's unicast reply to a broadcast discovery query.
 - Make standalone generated projects and checked-in repository examples pass
   the initial dispatcher cache through `cmake.configureSettings` so VS Code
   CMake Tools can configure the shared firmware dispatcher directly.

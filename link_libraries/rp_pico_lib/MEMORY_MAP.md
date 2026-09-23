@@ -2,8 +2,9 @@
 
 The RP2040/RP2350 Pico SDK build derives its flash layout from the selected board
 profile and `PICO_FLASH_SIZE_BYTES`. The implementation is in
-`cmake/jh_rp_pico_sdk.cmake`; generated linker scripts and resolved values are
-written below the active `.build` directory.
+`cmake/jh_rp_pico_sdk.cmake` and `cmake/jh_rp_sdk_support.cmake`; the generated
+flash region and resolved values are written below the active `.build`
+directory.
 
 ## Standard firmware layout
 
@@ -27,8 +28,12 @@ low address                                      physical flash end
   filesystem start stable when EEPROM/KV is enabled later.
 
 The generated firmware linker region ends before the storage reservations.
-Pico SDK still receives the physical board flash size for flash address and
-range validation.
+It is a per-target `pico_flash_region.ld` placed on the Pico SDK linker script
+override path, so the SDK's own linker scripts are used unchanged. Every build
+with a storage or OTA reservation checks its UF2 after linking: the image must
+start at the region origin and stay inside the region, otherwise the build
+fails. Pico SDK still receives the physical board flash size for flash address
+and range validation.
 
 ## OTA firmware layout
 
@@ -55,8 +60,9 @@ sector-aligned space equally between program and staging, then exports:
 
 The application is linked directly into the program slot. The boot applier is
 linked separately into the boot region and copied to SRAM before it mutates
-flash. The phase journal and redundant state sectors support interrupted-swap
-recovery, trial confirmation, and rollback.
+flash. Both images get the same UF2 range check before they are merged. The
+phase journal and redundant state sectors support interrupted-swap recovery,
+trial confirmation, and rollback.
 
 Exact offsets depend on the selected board flash size and enabled storage
 features. Inspect the generated CMake cache, linker script, ELF map, or

@@ -918,6 +918,11 @@ add_test(NAME test_rp_ota_artifacts
         ${CMAKE_CURRENT_SOURCE_DIR}/test_rp_ota_artifacts.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
+add_test(NAME test_rp_sdk_support
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_rp_sdk_support.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
 add_test(NAME test_component_management
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_component_management.py

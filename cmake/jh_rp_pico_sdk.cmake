@@ -17,6 +17,11 @@ else()
         "Unknown native RP target define: ${JH_RP_TARGET_DEFINE}")
 endif()
 
+include("${JH_ROOT}/cmake/jh_rp_sdk_support.cmake")
+jh_rp_check_pico_sdk_version()
+jh_rp_remove_stale_flash_region()
+jh_rp_import_picotool()
+
 pico_sdk_init()
 
 set(SRC "${JH_ROOT}/src")
@@ -397,25 +402,11 @@ function(jh_add_rp_ota_boot_target BOOT_TARGET)
     set_target_properties("${BOOT_TARGET}" PROPERTIES LINKER_LANGUAGE CXX)
     pico_set_binary_type("${BOOT_TARGET}" copy_to_ram)
 
-    set(_jh_boot_linker_source
-        "${PICO_LINKER_SCRIPT_PATH}/memmap_copy_to_ram.ld")
-    if(NOT EXISTS "${_jh_boot_linker_source}")
-        message(FATAL_ERROR
-            "Pico SDK copy-to-RAM linker script not found: "
-            "${_jh_boot_linker_source}")
-    endif()
-    file(READ "${_jh_boot_linker_source}" _jh_boot_linker_contents)
-    string(REPLACE
-        "INCLUDE \"pico_flash_region.ld\""
-        "FLASH(rx) : ORIGIN = 0x10000000, LENGTH = ${_jh_rp_ota_boot_size}"
-        _jh_boot_linker_contents "${_jh_boot_linker_contents}")
-    set(_jh_boot_linker_script
-        "${CMAKE_CURRENT_BINARY_DIR}/${BOOT_TARGET}.ld")
-    file(WRITE "${_jh_boot_linker_script}" "${_jh_boot_linker_contents}")
-    pico_set_linker_script("${BOOT_TARGET}" "${_jh_boot_linker_script}")
+    jh_rp_set_flash_region("${BOOT_TARGET}" 0 "${_jh_rp_ota_boot_size}")
     pico_enable_stdio_uart("${BOOT_TARGET}" 0)
     pico_enable_stdio_usb("${BOOT_TARGET}" 0)
     pico_add_extra_outputs("${BOOT_TARGET}")
+    jh_rp_check_flash_range("${BOOT_TARGET}" 0 "${_jh_rp_ota_boot_size}")
 endfunction()
 
 function(jh_add_rp_pico_firmware TARGET_NAME)
@@ -432,29 +423,21 @@ function(jh_add_rp_pico_firmware TARGET_NAME)
         target_compile_definitions("${TARGET_NAME}" PRIVATE
             HAL_PROVIDE_APP_ENTRY=1)
     endif()
+    set(_jh_rp_reserved_flash FALSE)
     if(_jh_rp_storage_reservation GREATER 0 OR _jh_rp_ota)
-        set(_jh_default_linker_script
-            "${PICO_LINKER_SCRIPT_PATH}/memmap_default.ld")
-        if(NOT EXISTS "${_jh_default_linker_script}")
-            message(FATAL_ERROR
-                "Pico SDK default linker script not found: "
-                "${_jh_default_linker_script}")
-        endif()
-        file(READ "${_jh_default_linker_script}" _jh_linker_contents)
-        string(REPLACE
-            "INCLUDE \"pico_flash_region.ld\""
-            "FLASH(rx) : ORIGIN = 0x10000000 + ${_jh_rp_program_offset}, LENGTH = ${_jh_rp_firmware_flash_size}"
-            _jh_linker_contents "${_jh_linker_contents}")
-        set(_jh_storage_linker_script
-            "${CMAKE_CURRENT_BINARY_DIR}/${TARGET_NAME}_storage.ld")
-        file(WRITE "${_jh_storage_linker_script}" "${_jh_linker_contents}")
-        pico_set_linker_script("${TARGET_NAME}" "${_jh_storage_linker_script}")
+        set(_jh_rp_reserved_flash TRUE)
+        jh_rp_set_flash_region("${TARGET_NAME}"
+            "${_jh_rp_program_offset}" "${_jh_rp_firmware_flash_size}")
     endif()
     pico_enable_stdio_uart("${TARGET_NAME}" 0)
     pico_enable_stdio_usb("${TARGET_NAME}" 0)
     # The Pico SDK derives the UF2 family from PICO_PLATFORM. The linked ELF
     # already carries the offset OTA application's absolute flash addresses.
     pico_add_extra_outputs("${TARGET_NAME}")
+    if(_jh_rp_reserved_flash)
+        jh_rp_check_flash_range("${TARGET_NAME}"
+            "${_jh_rp_program_offset}" "${_jh_rp_firmware_flash_size}")
+    endif()
     if(_jh_rp_ota)
         find_package(Python3 REQUIRED COMPONENTS Interpreter)
         set(_jh_boot_target "${TARGET_NAME}_ota_boot")

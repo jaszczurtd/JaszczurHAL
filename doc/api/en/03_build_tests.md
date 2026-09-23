@@ -119,7 +119,8 @@ Configures your local environment for the first time:
 - Synchronizes all pinned components through `third_party/update_components.sh`
 - Installs persistent RP2040/RP2350 USB and `/dev/ttyACM*` access rules for
   sudo-less upload and automatic 1200-bps BOOTSEL reset
-- Offers persistent, LAN-scoped TCP/8266 firewall setup for OTA callbacks
+- Offers persistent, LAN-scoped firewall setup for the OTA TCP/8266 callback
+  and UDP/8266 discovery replies
 - Sets up build directories and initial CMake configuration
 - Run this once when cloning the repository or after environment changes
 

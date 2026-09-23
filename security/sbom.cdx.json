@@ -90,9 +90,9 @@
     },
     {
       "type": "framework",
-      "bom-ref": "pkg:raspberry-pi-pico-sdk@2.2.0",
+      "bom-ref": "pkg:raspberry-pi-pico-sdk@2.3.1",
       "name": "Raspberry Pi Pico SDK",
-      "version": "2.2.0",
+      "version": "2.3.1",
       "scope": "optional",
       "licenses": [
         {
@@ -104,7 +104,7 @@
       "supplier": {
         "name": "Raspberry Pi Ltd"
       },
-      "purl": "pkg:github/raspberrypi/pico-sdk@a1438dff1d38bd9c65dbd693f0e5db4b9ae91779",
+      "purl": "pkg:github/raspberrypi/pico-sdk@079c6f39023649b154152db30f1d781e884879bc",
       "externalReferences": [
         {
           "type": "website",
@@ -124,7 +124,7 @@
       "properties": [
         {
           "name": "jaszczurhal:commit",
-          "value": "a1438dff1d38bd9c65dbd693f0e5db4b9ae91779"
+          "value": "079c6f39023649b154152db30f1d781e884879bc"
         },
         {
           "name": "jaszczurhal:notes",
@@ -1162,9 +1162,9 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:cyw43-bluetooth-shared-bus-port@pico-sdk-2.2.0",
+      "bom-ref": "pkg:cyw43-bluetooth-shared-bus-port@pico-sdk-2.3.1",
       "name": "CYW43 Bluetooth shared-bus port",
-      "version": "pico-sdk-2.2.0",
+      "version": "pico-sdk-2.3.1",
       "scope": "optional",
       "licenses": [
         {
@@ -1210,7 +1210,7 @@
       "properties": [
         {
           "name": "jaszczurhal:commit",
-          "value": "a1438dff1d38bd9c65dbd693f0e5db4b9ae91779"
+          "value": "079c6f39023649b154152db30f1d781e884879bc"
         },
         {
           "name": "jaszczurhal:notes",
@@ -1285,9 +1285,9 @@
     },
     {
       "type": "application",
-      "bom-ref": "pkg:picotool@2.2.0",
+      "bom-ref": "pkg:picotool@2.3.1",
       "name": "picotool",
-      "version": "2.2.0",
+      "version": "2.3.1",
       "scope": "development",
       "licenses": [
         {
@@ -1299,7 +1299,7 @@
       "supplier": {
         "name": "Raspberry Pi Ltd"
       },
-      "purl": "pkg:github/raspberrypi/picotool@a7eb3988f0645239185fadb4e25d8279478c2dbb",
+      "purl": "pkg:github/raspberrypi/picotool@2041936441b48a3cc53ae3da9e805229fe8f4e18",
       "externalReferences": [
         {
           "type": "website",
@@ -1319,7 +1319,7 @@
       "properties": [
         {
           "name": "jaszczurhal:commit",
-          "value": "a7eb3988f0645239185fadb4e25d8279478c2dbb"
+          "value": "2041936441b48a3cc53ae3da9e805229fe8f4e18"
         },
         {
           "name": "jaszczurhal:notes",
@@ -2108,5 +2108,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:a3703712-b842-918f-dc7b-89215b777ffe"
+  "serialNumber": "urn:uuid:57346663-d4cb-0eb6-1b30-7bc10c51f870"
 }

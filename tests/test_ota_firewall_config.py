@@ -45,11 +45,15 @@ class FakeRunner:
             "apt-get",
         }
         self.calls: list[tuple[tuple[str, ...], bool, bool]] = []
-        self.live_rule = False
-        self.saved_rule = False
-        self.ufw_configured = False
-        self.firewalld_runtime = False
-        self.firewalld_permanent = False
+        # Rule state per protocol ("tcp", "udp") for each firewall manager.
+        self.live_rules: set[str] = set()
+        self.saved_rules: set[str] = set()
+        self.ufw_rules: set[str] = set()
+        self.firewalld_runtime: set[str] = set()
+        self.firewalld_permanent: set[str] = set()
+        self.tcp_listener = True
+        self.udp_bound = False
+        self.saved_text: str | None = None
         self.netfilter_service_enabled = False
         self.iptables_permissive = False
         self.elevated = True
@@ -96,36 +100,42 @@ class FakeRunner:
                 ),
             )
         if command == ["ss", "-H", "-ltn", "sport = :8266"]:
-            return result(command, stdout="LISTEN 0 1 0.0.0.0:8266 0.0.0.0:*\n")
+            listener = "LISTEN 0 1 0.0.0.0:8266 0.0.0.0:*\n"
+            return result(command, stdout=listener if self.tcp_listener else "")
+        if command == ["ss", "-H", "-lun", "sport = :8266"]:
+            bound = "UNCONN 0 0 0.0.0.0:8266 0.0.0.0:*\n"
+            return result(command, stdout=bound if self.udp_bound else "")
         if command[:2] == ["ufw", "status"]:
             return result(command, stdout="Status: active\n")
         if command[:3] == ["ufw", "show", "added"]:
-            added = ""
-            if self.ufw_configured:
-                added = (
-                    "ufw allow in on enp7s0 proto tcp from 192.168.2.0/24 "
-                    "to any port 8266 comment 'JaszczurHAL OTA callback'\n"
-                )
+            added = "".join(
+                f"ufw allow in on enp7s0 proto {protocol} from 192.168.2.0/24 "
+                f"to any port 8266 comment '{FIREWALL.RULE_COMMENTS[protocol]}'\n"
+                for protocol in sorted(self.ufw_rules)
+            )
             return result(command, stdout=added)
         if command[:2] == ["ufw", "allow"]:
-            self.ufw_configured = True
+            self.ufw_rules.add(command[command.index("proto") + 1])
             return result(command)
         if command[:2] == ["firewall-cmd", "--state"]:
             return result(command, stdout="running\n")
         if command[:2] == ["firewall-cmd", "--get-zone-of-interface"]:
             return result(command, stdout="home\n")
         if "--query-rich-rule" in command:
-            configured = (
+            rules = (
                 self.firewalld_permanent
                 if "--permanent" in command
                 else self.firewalld_runtime
             )
+            configured = rich_rule_protocol(command[-1]) in rules
             return result(command, returncode=0 if configured else 1)
         if "--add-rich-rule" in command:
-            if "--permanent" in command:
-                self.firewalld_permanent = True
-            else:
-                self.firewalld_runtime = True
+            rules = (
+                self.firewalld_permanent
+                if "--permanent" in command
+                else self.firewalld_runtime
+            )
+            rules.add(rich_rule_protocol(command[-1]))
             return result(command)
         if (
             command
@@ -145,35 +155,37 @@ class FakeRunner:
             and command[0] in {"iptables", "iptables-nft"}
             and "-C" in command
         ):
-            return result(command, returncode=0 if self.live_rule else 1)
+            protocol = command[command.index("-p") + 1]
+            return result(command, returncode=0 if protocol in self.live_rules else 1)
         if (
             command
             and command[0] in {"iptables", "iptables-nft"}
             and "-I" in command
         ):
-            self.live_rule = True
+            self.live_rules.add(command[command.index("-p") + 1])
             return result(command)
         if (
             command
             and command[0] in {"iptables", "iptables-nft"}
             and "-D" in command
         ):
-            self.live_rule = False
+            self.live_rules.discard(command[command.index("-p") + 1])
             return result(command)
         if command == ["cat", "/etc/iptables/rules.v4"]:
-            saved = ""
-            if self.saved_rule:
-                saved = (
-                    '-A INPUT -i enp7s0 -s 192.168.2.0/24 '
-                    '-p tcp --dport 8266 -m comment '
-                    '--comment "JaszczurHAL OTA callback" -j ACCEPT\n'
-                )
+            if self.saved_text is not None:
+                return result(command, stdout=self.saved_text)
+            saved = "".join(
+                f"-A INPUT -i enp7s0 -s 192.168.2.0/24 -p {protocol} "
+                f"--dport 8266 -m comment "
+                f'--comment "{FIREWALL.RULE_COMMENTS[protocol]}" -j ACCEPT\n'
+                for protocol in sorted(self.saved_rules)
+            )
             return result(command, stdout=saved)
         if command in (
             ["iptables-save", "-f", "/etc/iptables/rules.v4"],
             ["iptables-nft-save", "-f", "/etc/iptables/rules.v4"],
         ):
-            self.saved_rule = self.live_rule
+            self.saved_rules = set(self.live_rules)
             return result(command)
         if command == [
             "systemctl",
@@ -277,6 +289,13 @@ class FakeWindowsRunner:
         return result(command, returncode=127, stderr="unexpected fake command")
 
 
+def rich_rule_protocol(rich_rule: str) -> str:
+    return rich_rule.split('protocol="', 1)[1].split('"', 1)[0]
+
+
+BOTH_PROTOCOLS = {"tcp", "udp"}
+
+
 def arguments(**overrides: object) -> argparse.Namespace:
     values = {
         "port": 8266,
@@ -317,8 +336,8 @@ class OtaFirewallTests(unittest.TestCase):
             platform_name="linux",
         )
         self.assertEqual(status, 0)
-        self.assertFalse(runner.live_rule)
-        self.assertFalse(runner.saved_rule)
+        self.assertEqual(runner.live_rules, set())
+        self.assertEqual(runner.saved_rules, set())
 
     def test_refuses_to_expose_an_existing_listener(self) -> None:
         runner = FakeRunner()
@@ -330,7 +349,21 @@ class OtaFirewallTests(unittest.TestCase):
                 input_function=lambda _: "n",
                 platform_name="linux",
             )
-        self.assertFalse(runner.saved_rule)
+        self.assertEqual(runner.saved_rules, set())
+
+    def test_refuses_to_expose_an_existing_udp_socket(self) -> None:
+        runner = FakeRunner()
+        runner.available.add("ss")
+        runner.tcp_listener = False
+        runner.udp_bound = True
+        with self.assertRaisesRegex(FIREWALL.SetupError, "UDP/8266"):
+            FIREWALL.configure_firewall(
+                arguments(yes=True),
+                runner=runner,
+                input_function=lambda _: "n",
+                platform_name="linux",
+            )
+        self.assertEqual(runner.saved_rules, set())
 
     def test_decline_does_not_mutate_firewall(self) -> None:
         runner = FakeRunner()
@@ -350,8 +383,8 @@ class OtaFirewallTests(unittest.TestCase):
             platform_name="linux",
         )
         self.assertEqual(status, 0)
-        self.assertFalse(runner.live_rule)
-        self.assertFalse(runner.saved_rule)
+        self.assertEqual(runner.live_rules, set())
+        self.assertEqual(runner.saved_rules, set())
 
     def test_iptables_rule_is_scoped_and_persisted(self) -> None:
         runner = FakeRunner()
@@ -362,13 +395,43 @@ class OtaFirewallTests(unittest.TestCase):
             platform_name="linux",
         )
         self.assertEqual(status, 0)
-        self.assertTrue(runner.live_rule)
-        self.assertTrue(runner.saved_rule)
-        inserted = next(call[0] for call in runner.calls if "-I" in call[0])
-        self.assertIn("INPUT", inserted)
-        self.assertIn("enp7s0", inserted)
-        self.assertIn("192.168.2.0/24", inserted)
-        self.assertIn("8266", inserted)
+        self.assertEqual(runner.live_rules, BOTH_PROTOCOLS)
+        self.assertEqual(runner.saved_rules, BOTH_PROTOCOLS)
+        inserted = [call[0] for call in runner.calls if "-I" in call[0]]
+        self.assertEqual(
+            sorted(command[command.index("-p") + 1] for command in inserted),
+            ["tcp", "udp"],
+        )
+        for command in inserted:
+            self.assertIn("INPUT", command)
+            self.assertIn("enp7s0", command)
+            self.assertIn("192.168.2.0/24", command)
+            self.assertEqual(command[command.index("--dport") + 1], "8266")
+
+    def test_iptables_persistence_requires_both_rules(self) -> None:
+        runner = FakeRunner()
+        scope = FIREWALL.detect_network_scope(runner)
+        runner.live_rules = set(BOTH_PROTOCOLS)
+        runner.saved_rules = {"tcp"}
+        backend = FIREWALL.detect_firewall_backend(
+            runner, scope, 8266, sudo_non_interactive=True
+        )
+        self.assertFalse(backend.configured)
+        runner.saved_rules = set(BOTH_PROTOCOLS)
+        backend = FIREWALL.detect_firewall_backend(
+            runner, scope, 8266, sudo_non_interactive=True
+        )
+        self.assertTrue(backend.configured)
+        # The saved protocol decides, not the rule label.
+        runner.saved_text = "".join(
+            f"-A INPUT -i enp7s0 -s 192.168.2.0/24 -p tcp --dport 8266 "
+            f'-m comment --comment "{FIREWALL.RULE_COMMENTS[protocol]}" -j ACCEPT\n'
+            for protocol in ("tcp", "udp")
+        )
+        backend = FIREWALL.detect_firewall_backend(
+            runner, scope, 8266, sudo_non_interactive=True
+        )
+        self.assertFalse(backend.configured)
 
     def test_permissive_input_needs_no_rule_or_package(self) -> None:
         runner = FakeRunner()
@@ -381,7 +444,7 @@ class OtaFirewallTests(unittest.TestCase):
             platform_name="linux",
         )
         self.assertEqual(status, 0)
-        self.assertFalse(runner.saved_rule)
+        self.assertEqual(runner.saved_rules, set())
         self.assertFalse(any("-I" in call[0] for call in runner.calls))
         self.assertFalse(
             any("iptables-persistent" in call[0] for call in runner.calls)
@@ -397,7 +460,7 @@ class OtaFirewallTests(unittest.TestCase):
             platform_name="linux",
         )
         self.assertEqual(status, 0)
-        self.assertTrue(runner.saved_rule)
+        self.assertEqual(runner.saved_rules, BOTH_PROTOCOLS)
         self.assertTrue(
             any("iptables-persistent" in call[0] for call in runner.calls)
         )
@@ -413,7 +476,7 @@ class OtaFirewallTests(unittest.TestCase):
         )
         self.assertEqual(status, 0)
         self.assertTrue(runner.netfilter_service_enabled)
-        self.assertTrue(runner.saved_rule)
+        self.assertEqual(runner.saved_rules, BOTH_PROTOCOLS)
 
     def test_unmanaged_native_nftables_is_not_modified(self) -> None:
         runner = FakeRunner()
@@ -425,7 +488,7 @@ class OtaFirewallTests(unittest.TestCase):
                 input_function=lambda _: "n",
                 platform_name="linux",
             )
-        self.assertFalse(runner.saved_rule)
+        self.assertEqual(runner.saved_rules, set())
 
     def test_active_ufw_uses_ufw_persistent_rule(self) -> None:
         runner = FakeRunner()
@@ -437,8 +500,34 @@ class OtaFirewallTests(unittest.TestCase):
             platform_name="linux",
         )
         self.assertEqual(status, 0)
-        self.assertTrue(runner.ufw_configured)
+        self.assertEqual(runner.ufw_rules, BOTH_PROTOCOLS)
         self.assertFalse(any("-I" in call[0] for call in runner.calls))
+
+    def test_ufw_callback_rule_alone_gains_the_discovery_rule(self) -> None:
+        runner = FakeRunner()
+        runner.available.add("ufw")
+        runner.ufw_rules = {"tcp"}
+        with redirect_stderr(io.StringIO()):
+            missing = FIREWALL.configure_firewall(
+                arguments(check=True),
+                runner=runner,
+                platform_name="linux",
+            )
+        self.assertEqual(missing, 1)
+        status = FIREWALL.configure_firewall(
+            arguments(yes=True),
+            runner=runner,
+            input_function=lambda _: "n",
+            platform_name="linux",
+        )
+        self.assertEqual(status, 0)
+        self.assertEqual(runner.ufw_rules, BOTH_PROTOCOLS)
+        present = FIREWALL.configure_firewall(
+            arguments(check=True),
+            runner=runner,
+            platform_name="linux",
+        )
+        self.assertEqual(present, 0)
 
     def test_active_firewalld_updates_runtime_and_permanent_state(self) -> None:
         runner = FakeRunner()
@@ -450,13 +539,13 @@ class OtaFirewallTests(unittest.TestCase):
             platform_name="linux",
         )
         self.assertEqual(status, 0)
-        self.assertTrue(runner.firewalld_runtime)
-        self.assertTrue(runner.firewalld_permanent)
+        self.assertEqual(runner.firewalld_runtime, BOTH_PROTOCOLS)
+        self.assertEqual(runner.firewalld_permanent, BOTH_PROTOCOLS)
 
     def test_firewalld_preserves_existing_permanent_rule(self) -> None:
         runner = FakeRunner()
         runner.available = {"ip", "firewall-cmd"}
-        runner.firewalld_permanent = True
+        runner.firewalld_permanent = set(BOTH_PROTOCOLS)
         status = FIREWALL.configure_firewall(
             arguments(yes=True),
             runner=runner,
@@ -464,7 +553,7 @@ class OtaFirewallTests(unittest.TestCase):
             platform_name="linux",
         )
         self.assertEqual(status, 0)
-        self.assertTrue(runner.firewalld_runtime)
+        self.assertEqual(runner.firewalld_runtime, BOTH_PROTOCOLS)
         permanent_adds = [
             call
             for call in runner.calls

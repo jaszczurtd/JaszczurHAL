@@ -40,7 +40,8 @@ param(
 $ErrorActionPreference = 'Continue'
 
 # Contract floors. The firmware dispatcher requires CMake 3.20; the pinned Pico
-# SDK 2.2.0 declares 3.13...3.27. Windows 10 1809 is build 17763.
+# SDK (third_party/pico_sdk_version.conf) declares 3.13...3.27. Windows 10 1809
+# is build 17763.
 $MIN_OS_BUILD    = 17763
 $MIN_CMAKE       = [version]'3.20'
 $UNTESTED_CMAKE  = [version]'4.0'
@@ -251,7 +252,7 @@ if ($cmakePath) {
     if ($cmVer -lt $MIN_CMAKE) { $st = 'fail' }
     elseif ($cmVer -ge $UNTESTED_CMAKE) {
         $st = 'warn'
-        $note = "CMake 4.x is untested against the pinned Pico SDK 2.2.0, which declares 3.13...3.27."
+        $note = "CMake 4.x is untested against the pinned Pico SDK, which declares 3.13...3.27."
     }
     Add-Result 'CMake' 'required' $st "$cmVer ($cmakePath)" ">= $MIN_CMAKE" $note
 } else {
@@ -278,15 +279,15 @@ if ($armPath) {
 $rvPath = Get-ToolPath 'riscv32-unknown-elf-gcc'
 if ($rvPath) {
     $rVer = Get-FirstVersion (Invoke-Tool 'riscv32-unknown-elf-gcc' @('-dumpversion'))
-    Add-Result 'GNU RISC-V' 'optional' 'ok' "$rVer ($rvPath)" 'gcc 15' 'Only needed for rp2350-riscv.'
+    Add-Result 'GNU RISC-V' 'optional' 'ok' "$rVer ($rvPath)" 'pinned GCC' 'Only needed for rp2350-riscv; see third_party/riscv_toolchain_version.conf.'
 } else {
     Add-Result 'GNU RISC-V' 'optional' 'absent' 'not found' 'riscv32-unknown-elf-gcc' `
-        'Managed asset: riscv-toolchain-15-x64-win.zip from pico-sdk-tools v2.2.0-4.'
+        'Managed asset pinned in third_party/riscv_toolchain_version.conf.'
 }
 
 foreach ($t in @(
-    @{ N='picotool'; C='optional'; Note='Managed asset: picotool-2.2.0-a4-x64-win.zip. Plain COM/BOOTSEL upload does not need it.' },
-    @{ N='openocd';  C='optional'; Note='Managed asset: openocd-0.12.0+dev-x64-win.zip. Debug and probe paths only.' }
+    @{ N='picotool'; C='optional'; Note='Managed asset pinned in third_party/windows_tools_version.conf. Plain COM/BOOTSEL upload does not need it.' },
+    @{ N='openocd';  C='optional'; Note='Managed asset pinned in third_party/windows_tools_version.conf. Debug and probe paths only.' }
 )) {
     $p = Get-ToolPath $t.N
     if ($p) { Add-Result $t.N $t.C 'ok' $p 'managed install preferred' $t.Note }

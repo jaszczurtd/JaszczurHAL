@@ -1142,9 +1142,22 @@ def ensure_pmd(
     return executable
 
 
+def _picotool_reports(output: str, version: str) -> bool:
+    """True when `picotool version` output names the release of VERSION.
+
+    VERSION may carry a build suffix (2.2.0-a4); picotool prints the release
+    as `picotool vX.Y.Z`, the same form cmake/jh_rp_sdk_support.cmake reads.
+    """
+    reported = re.search(r"picotool v(\d+\.\d+\.\d+)", output)
+    pinned = re.match(r"\d+\.\d+\.\d+", version)
+    return bool(reported and pinned and reported.group(1) == pinned.group(0))
+
+
 def _picotool_binary_matches(binary: Path, version: str) -> bool:
     result = _run((str(binary), "version"), check=False)
-    return result.returncode == 0 and version in (result.stdout + result.stderr)
+    return result.returncode == 0 and _picotool_reports(
+        result.stdout + result.stderr, version
+    )
 
 
 def _picotool_capability_issues(
@@ -1304,7 +1317,9 @@ def _windows_tool_specs(repo_root: Path) -> list[ToolArchive]:
         "ninja": lambda output: _version_tuple(output) > (0, 0, 0),
         "gnu-arm": lambda output: "arm-none-eabi" in output.lower() and _version_tuple(output) > (0, 0, 0),
         "openocd": lambda output: "open on-chip debugger 0.12" in output.lower(),
-        "picotool": lambda output: "2.2.0" in output,
+        "picotool": lambda output: _picotool_reports(
+            output, config["WINDOWS_PICOTOOL_VERSION"]
+        ),
     }
     names = (
         ("cmake", "CMAKE", ("--version",)),

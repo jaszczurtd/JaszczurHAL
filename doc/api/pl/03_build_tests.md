@@ -120,8 +120,9 @@ Przygotowuje lokalne środowisko:
   w wersjach wskazanych przez repozytorium;
 - instaluje trwałe reguły dostępu USB i `/dev/ttyACM*` dla RP2040/RP2350,
   umożliwiające wgrywanie bez sudo i automatyczny reset BOOTSEL przez 1200 bps
-- proponuje trwałą regułę zapory TCP/8266, ograniczoną do sieci LAN, dla
-  połączeń zwrotnych OTA;
+- proponuje trwałe reguły zapory ograniczone do sieci LAN dla połączeń
+  zwrotnych OTA przez TCP/8266 i odpowiedzi na wyszukiwanie urządzeń przez
+  UDP/8266;
 - przygotowuje katalogi kompilacji i początkową konfigurację CMake.
 
 Uruchom go po sklonowaniu repozytorium oraz po zmianie środowiska.

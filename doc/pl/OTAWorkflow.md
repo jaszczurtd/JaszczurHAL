@@ -229,7 +229,7 @@ Ustawienia w obiekcie `ota` sterują działaniem narzędzia po stronie hosta:
 |---|---|
 | `hostname` | Nazwa urządzenia używana do filtrowania listy wykrytych urządzeń. Gdy korzystasz z wykrywania, musi odpowiadać wartości przekazanej w firmwarze do `hal_ota_set_hostname()`. |
 | `port` | Port UDP urządzenia używany do wykrywania, zaproszeń i uwierzytelniania. Musi odpowiadać wartości przekazanej do `hal_ota_set_port()`. Wartość domyślna to `8266`. Nie jest to port transferu danych TCP. |
-| `listenPort` | Ogłaszany urządzeniu port hosta dla połączenia zwrotnego TCP. Wartość domyślna to `8266`, zgodnie z trwałą regułą przygotowaną przez `runmefirst.sh`. Ustaw `0` tylko wtedy, gdy świadomie wybierasz port przydzielany dynamicznie i odpowiednio skonfigurowaną zaporę. |
+| `listenPort` | Ogłaszany urządzeniu port hosta dla połączenia zwrotnego TCP; na tym samym porcie UDP host odbiera odpowiedzi na wyszukiwanie urządzeń. Wartość domyślna to `8266`, zgodnie z trwałymi regułami przygotowanymi przez `runmefirst.sh`. Ustaw `0` tylko wtedy, gdy świadomie wybierasz porty przydzielane dynamicznie i odpowiednio skonfigurowaną zaporę. |
 | `passwordEnv` | Nazwa zmiennej środowiskowej hosta zawierającej hasło OTA. Ma pierwszeństwo przed `ota.password`. |
 | `password` | Hasło wpisane bezpośrednio w manifeście, przeznaczone wyłącznie do prac deweloperskich. Nie używaj go w manifeście produktu przechowywanym w repozytorium. |
 | `allowEmptyPassword` | Jawna wartość `true` zezwala na puste hasło. Domyślnie host takie hasła odrzuca. Nie włączaj tej opcji na wdrożonych urządzeniach. |
@@ -604,6 +604,8 @@ W OTA połączenie do transferu danych inicjuje urządzenie, nie host:
 
 1. Host wysyła przez UDP pakiety służące do wykrywania urządzeń, zaproszenia i
    uwierzytelniania do skonfigurowanego portu OTA urządzenia, zwykle `8266`.
+   Zapytanie broadcast o urządzenia wychodzi z portu UDP `ota.listenPort`, a
+   urządzenie odpowiada na ten port ze swojego adresu.
 2. Host otwiera gniazdo nasłuchujące TCP. `ota.listenPort` wybiera jego port;
    wartość domyślna to `8266`, natomiast jawna wartość `0` zleca systemowi
    operacyjnemu dynamiczne przydzielenie portu.
@@ -612,31 +614,37 @@ W OTA połączenie do transferu danych inicjuje urządzenie, nie host:
    fragmentach z potwierdzeniem odbioru.
 
 Przy `"listenPort": 8266` pakiet SYN z urządzenia jest kierowany na port TCP
-8266 hosta, więc wystarczy reguła zapory obejmująca dokładnie ten port
-połączenia zwrotnego. Przy `"listenPort": 0` Linux zwykle wybiera port z
+8266 hosta, a odpowiedzi na wyszukiwanie urządzeń na port UDP 8266. Zapora
+śledząca połączenia nie wiąże odpowiedzi z adresu urządzenia z zapytaniem
+broadcast, więc potrzebuje reguły dla tego portu UDP oraz dla portu TCP
+połączenia zwrotnego. Przy `"listenPort": 0` Linux zwykle wybiera porty z
 zakresu `/proc/sys/net/ipv4/ip_local_port_range`; reguły zapory muszą obejmować
-wybrany w ten sposób port. Punkt dostępowy lub sieć z routingiem również muszą
+wybrane w ten sposób porty. Punkt dostępowy lub sieć z routingiem również muszą
 zezwalać na ruch z urządzenia do hosta. W sieci OTA wyłącz izolację klientów
 bezprzewodowych.
 
 `runmefirst.sh` wykrywa sieć RFC1918 połączoną z domyślnym interfejsem IPv4 i
-sprawdza obecność trwałej reguły dla połączenia zwrotnego TCP/8266. W systemie
-Windows uruchom ten sam skrypt pomocniczy w Pythonie, korzystając z zarządzanego
-środowiska. Jeśli reguły brakuje, przed prośbą o potwierdzenie skrypt podaje
-dokładny interfejs, podsieć źródłową, port i mechanizm utrwalania reguł. Podaje
+sprawdza obecność trwałych reguł dla połączenia zwrotnego TCP/8266 i odpowiedzi
+na wyszukiwanie urządzeń przez UDP/8266. W systemie Windows uruchom ten sam
+skrypt pomocniczy w Pythonie, korzystając z zarządzanego środowiska; backend
+Windows zarządza tylko regułą TCP, bo Windows Defender Firewall domyślnie
+przepuszcza unicastową odpowiedź na zapytanie broadcast. Jeśli reguły brakuje,
+przed prośbą o potwierdzenie skrypt podaje dokładny interfejs, podsieć
+źródłową, porty i mechanizm utrwalania reguł. Podaje
 również, czy będzie potrzebna instalacja pakietu lub podniesienie uprawnień.
 Odmowa pozostawia zaporę bez zmian i nie blokuje dalszej konfiguracji. Host z
-pustym łańcuchem `INPUT` i polityką `ACCEPT` już zezwala na połączenie zwrotne,
+pustym łańcuchem `INPUT` i polityką `ACCEPT` już zezwala na oba rodzaje ruchu,
 dlatego konfiguracja kończy się powodzeniem bez instalowania narzędzi do
 utrwalania reguł.
 
 Po uzyskaniu potwierdzenia skrypt korzysta z aktywnego menedżera zapory:
 
-- w aktywnym UFW dodaje trwałą regułę ograniczoną do interfejsu i podsieci;
-- w aktywnym firewalld dodaje pasujące reguły typu rich rule w konfiguracji
-  bieżącej i trwałej;
-- na hoście `iptables-nft`/`iptables` dodaje wczesną regułę `INPUT` i utrwala
-  ją za pomocą `netfilter-persistent`; gdy dostępny jest systemd, włącza przy
+- w aktywnym UFW dodaje trwałe reguły TCP i UDP ograniczone do interfejsu i
+  podsieci;
+- w aktywnym firewalld dodaje pasujące reguły typu rich rule dla obu
+  protokołów w konfiguracji bieżącej i trwałej;
+- na hoście `iptables-nft`/`iptables` dodaje wczesne reguły `INPUT` dla obu
+  protokołów i utrwala je za pomocą `netfilter-persistent`; gdy dostępny jest systemd, włącza przy
   starcie systemu usługę odtwarzającą reguły;
 - instaluje `iptables-persistent` przez `apt` tylko wtedy, gdy wariant oparty
   na iptables wymaga trwałości, a żadne obsługiwane narzędzie do utrwalania

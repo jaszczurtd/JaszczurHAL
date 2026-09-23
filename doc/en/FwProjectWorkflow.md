@@ -374,7 +374,7 @@ For RP projects built with CMake, the manifest identifies the generated OTA cont
 
 ESP-IDF projects do not use the RP-specific `cmake` and `artifacts.ota` entries. Their build manifest identifies the raw application BIN. The `ota` object above still configures host-side addresses, ports, and authentication.
 
-`ota.broadcast` specifies the UDP discovery destination, while `ota.host` selects a fixed device address. `ota.listenPort` is the host port for the reverse TCP connection. Its default, `8266`, matches the persistent LAN-scoped firewall rule created by `runmefirst.sh`; `0` requests an ephemeral port. `ota.passwordEnv` keeps the secret in an environment variable rather than the version-controlled manifest.
+`ota.broadcast` specifies the UDP discovery destination, while `ota.host` selects a fixed device address. `ota.listenPort` is the host port for the reverse TCP connection and for UDP discovery replies. Its default, `8266`, matches the persistent LAN-scoped firewall rules created by `runmefirst.sh`; `0` requests ephemeral ports. `ota.passwordEnv` keeps the secret in an environment variable rather than the version-controlled manifest.
 
 The device hostname, UDP port, and password must match the firmware configuration. [Native OTA Workflow](OTAWorkflow.md) covers platform-specific artifacts, initial programming, tasks, authentication, the host firewall, trial-boot confirmation, rollback, and recovery. For RP updates, the uploader signs the JaszczurHAL container. For ESP-IDF, it validates the build manifest and sends the specified raw application image without converting it to the RP container format.
 

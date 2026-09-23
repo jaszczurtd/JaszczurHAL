@@ -79,8 +79,9 @@ Sets up Debian, Ubuntu, and compatible systems. Re-running the script restores t
 - installs `osv-scanner` and `cve-bin-tool`;
 - installs a udev rule for RP2040/RP2350 BOOTSEL/picotool USB access and the
   app-mode `/dev/ttyACM*` port used by the automatic 1200-bps reset;
-- checks for a persistent LAN-scoped OTA TCP/8266 callback rule and asks before
-  changing the firewall or installing `iptables-persistent`;
+- checks for persistent LAN-scoped OTA rules for the TCP/8266 callback and
+  UDP/8266 discovery replies, and asks before changing the firewall or
+  installing `iptables-persistent`;
 - configures the repository Git hooks;
 - verifies that every required tool is available.
 
@@ -709,21 +710,28 @@ invokes this helper automatically outside `-FirmwareOnly` mode.
 
 ### `scripts/configure_ota_firewall.py`
 
-Idempotently inspects and configures persistent inbound TCP access for the
-host-side OTA callback. The shared entrypoint selects a Linux or Windows
-backend, finds the RFC1918 network on the default IPv4 interface, scopes the
-rule to that interface and subnet, and defaults to TCP/8266. Active UFW and
+Idempotently inspects and configures persistent inbound access for the
+host-side OTA callback and OTA discovery replies. The shared entrypoint selects
+a Linux or Windows backend, finds the RFC1918 network on the default IPv4
+interface, scopes the rules to that interface and subnet, and defaults to port
+8266. On Linux it allows TCP for the callback and UDP on the same port, where
+host discovery receives replies to its broadcast query. The device answers
+from its own address, so a stateful firewall does not match the reply to the
+query and drops it unless that UDP port is allowed. Running the helper again
+adds the UDP rule to a host configured for the callback only. Active UFW and
 firewalld installations use their native persistent configuration; the Linux
 fallback uses `iptables-nft`/`iptables` with
 `iptables-save` plus the `netfilter-persistent` boot loader, enabled through
 systemd when available.
-An unfiltered `INPUT` policy already permits the callback and requires no
-additional package or rule.
+An unfiltered `INPUT` policy already permits both and requires no additional
+package or rule.
 
 On Windows, the backend accepts only an active network whose connection
 profile is `Private`. It manages one named Windows Defender Firewall inbound
 rule restricted to that profile, interface alias, RFC1918 source subnet, TCP,
-and the selected local port. Inspection and planning run without elevation;
+and the selected local port. Windows Defender Firewall admits a unicast reply
+to a broadcast query by default, so the Windows backend adds no UDP rule.
+Inspection and planning run without elevation;
 applying the rule requires the caller to restart the command in an already
 elevated PowerShell. The helper never starts an elevated process or changes a
 network profile.
@@ -731,9 +739,9 @@ network profile.
 Interactive mode prints the full rule scope and asks before making a change.
 `--check` is read-only, `--dry-run` prints the complete plan, `--interface`
 and `--network` override automatic route detection, `--port` selects a
-different fixed callback port, and `--yes` supports deliberate
+different fixed OTA host port, and `--yes` supports deliberate
 non-interactive provisioning. Only RFC1918 IPv4 networks are accepted, and
-setup refuses to expose a port already used by a listener.
+setup refuses to expose a port already used by another process.
 
 ### `scripts/ota_firewall_common.py`
 

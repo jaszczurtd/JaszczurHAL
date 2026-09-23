@@ -114,9 +114,10 @@ przykład przez `getent hosts jh-ota-rp2040.local` (lub nazwę hosta RP2350).
 Nazwa hosta WiFi jest wysyłana w opcji DHCP 12, a jej zmiana przy aktywnej
 dzierżawie wyzwala jej odnowienie.
 
-Callback wgrywania OTA to połączenie TCP od płytki do hosta na TCP/8266.
-Uruchom `./runmefirst.sh` i zatwierdź jego trwałą regułę OTA ograniczoną do
-sieci LAN przed testem sprzętowym. Zweryfikuj regułę bez jej zmiany za pomocą:
+Callback wgrywania OTA to połączenie TCP od płytki do hosta na TCP/8266, a
+odpowiedzi na wyszukiwanie przez broadcast wracają do hosta na UDP/8266.
+Uruchom `./runmefirst.sh` i zatwierdź jego trwałe reguły OTA ograniczone do
+sieci LAN przed testem sprzętowym. Zweryfikuj reguły bez ich zmiany za pomocą:
 
 ```sh
 python3 scripts/configure_ota_firewall.py --check

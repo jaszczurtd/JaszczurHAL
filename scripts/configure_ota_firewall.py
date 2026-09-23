@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Configure a persistent, LAN-scoped host firewall rule for OTA callbacks."""
+"""Configure persistent, LAN-scoped host firewall rules for OTA callbacks
+and OTA discovery replies."""
 
 from __future__ import annotations
 
@@ -22,7 +23,19 @@ from ota_firewall_common import NetworkScope, SetupError, is_rfc1918
 
 
 DEFAULT_PORT = 8266
-RULE_COMMENT = "JaszczurHAL OTA callback"
+# The device opens the OTA callback to this TCP port on the host, and the host
+# receives the replies to a broadcast OTA discovery on the same UDP port. A
+# stateful firewall does not relate a device's unicast reply to a broadcast
+# query, so that UDP port needs a rule just like the TCP callback.
+RULE_COMMENTS = {
+    "tcp": "JaszczurHAL OTA callback",
+    "udp": "JaszczurHAL OTA discovery",
+}
+PROTOCOLS = tuple(RULE_COMMENTS)
+
+
+def ports_label(port: int) -> str:
+    return " and ".join(f"{protocol.upper()}/{port}" for protocol in PROTOCOLS)
 
 
 @dataclass(frozen=True)
@@ -181,7 +194,7 @@ def sudo_is_ready(runner: CommandRunner) -> bool:
     return result.returncode == 0
 
 
-def ensure_callback_port_available(runner: CommandRunner, port: int) -> None:
+def ensure_ota_ports_available(runner: CommandRunner, port: int) -> None:
     if not runner.which("ss"):
         return
     listeners = runner.run(["ss", "-H", "-ltn", f"sport = :{port}"])
@@ -190,6 +203,12 @@ def ensure_callback_port_available(runner: CommandRunner, port: int) -> None:
             f"TCP/{port} is already used by a listening process; "
             "stop it before exposing the OTA callback port"
         )
+    bound = runner.run(["ss", "-H", "-lun", f"sport = :{port}"])
+    if bound.returncode == 0 and bound.stdout.strip():
+        raise SetupError(
+            f"UDP/{port} is already used by another process; "
+            "stop it before exposing the OTA discovery port"
+        )
 
 
 def iptables_rule_arguments(
@@ -197,6 +216,7 @@ def iptables_rule_arguments(
     chain: str,
     scope: NetworkScope,
     port: int,
+    protocol: str,
 ) -> list[str]:
     arguments = [
         "-t",
@@ -213,7 +233,7 @@ def iptables_rule_arguments(
             "-s",
             str(scope.network),
             "-p",
-            "tcp",
+            protocol,
             "--dport",
             str(port),
             "-m",
@@ -223,7 +243,7 @@ def iptables_rule_arguments(
             "-m",
             "comment",
             "--comment",
-            RULE_COMMENT,
+            RULE_COMMENTS[protocol],
             "-j",
             "ACCEPT",
         ]
@@ -231,7 +251,7 @@ def iptables_rule_arguments(
     return arguments
 
 
-def ufw_rule(scope: NetworkScope, port: int) -> list[str]:
+def ufw_rule(scope: NetworkScope, port: int, protocol: str) -> list[str]:
     return [
         "ufw",
         "allow",
@@ -239,7 +259,7 @@ def ufw_rule(scope: NetworkScope, port: int) -> list[str]:
         "on",
         scope.interface,
         "proto",
-        "tcp",
+        protocol,
         "from",
         str(scope.network),
         "to",
@@ -247,14 +267,14 @@ def ufw_rule(scope: NetworkScope, port: int) -> list[str]:
         "port",
         str(port),
         "comment",
-        RULE_COMMENT,
+        RULE_COMMENTS[protocol],
     ]
 
 
-def firewalld_rule(scope: NetworkScope, port: int) -> str:
+def firewalld_rule(scope: NetworkScope, port: int, protocol: str) -> str:
     return (
         f'rule family="ipv4" source address="{scope.network}" '
-        f'port port="{port}" protocol="tcp" accept'
+        f'port port="{port}" protocol="{protocol}" accept'
     )
 
 
@@ -264,13 +284,14 @@ def iptables_persistent_rule_present(
     chain: str,
     scope: NetworkScope,
     port: int,
+    protocol: str,
     *,
     sudo_non_interactive: bool,
 ) -> bool:
     live = runner.run(
         [
             command,
-            *iptables_rule_arguments("-C", chain, scope, port),
+            *iptables_rule_arguments("-C", chain, scope, port, protocol),
         ],
         sudo=True,
         sudo_non_interactive=sudo_non_interactive,
@@ -286,8 +307,9 @@ def iptables_persistent_rule_present(
         f"-A {chain}",
         f"-i {scope.interface}",
         f"-s {scope.network}",
+        f"-p {protocol}",
         f"--dport {port}",
-        RULE_COMMENT,
+        RULE_COMMENTS[protocol],
         "-j ACCEPT",
     )
     return saved.returncode == 0 and any(
@@ -358,15 +380,21 @@ def detect_firewall_backend(
                 sudo=True,
                 sudo_non_interactive=sudo_non_interactive,
             )
-            required = (
-                f"on {scope.interface}",
-                f"from {scope.network}",
-                f"port {port}",
-                "proto tcp",
-            )
-            configured = added.returncode == 0 and any(
-                all(item in line for item in required)
-                for line in added.stdout.splitlines()
+            lines = added.stdout.splitlines() if added.returncode == 0 else []
+            configured = all(
+                any(
+                    all(
+                        item in line
+                        for item in (
+                            f"on {scope.interface}",
+                            f"from {scope.network}",
+                            f"port {port}",
+                            f"proto {protocol}",
+                        )
+                    )
+                    for line in lines
+                )
+                for protocol in PROTOCOLS
             )
             return FirewallBackend("ufw", command="ufw", configured=configured)
 
@@ -391,35 +419,28 @@ def detect_firewall_backend(
                     check=True,
                 )
                 zone = default_zone.stdout.strip()
-            rich_rule = firewalld_rule(scope, port)
-            runtime = runner.run(
-                [
-                    "firewall-cmd",
-                    "--zone",
-                    zone,
-                    "--query-rich-rule",
-                    rich_rule,
-                ],
-                sudo=True,
-                sudo_non_interactive=sudo_non_interactive,
-            )
-            permanent = runner.run(
-                [
-                    "firewall-cmd",
-                    "--permanent",
-                    "--zone",
-                    zone,
-                    "--query-rich-rule",
-                    rich_rule,
-                ],
-                sudo=True,
-                sudo_non_interactive=sudo_non_interactive,
-            )
+            configured = True
+            for protocol in PROTOCOLS:
+                rich_rule = firewalld_rule(scope, port, protocol)
+                for state in ([], ["--permanent"]):
+                    query = runner.run(
+                        [
+                            "firewall-cmd",
+                            *state,
+                            "--zone",
+                            zone,
+                            "--query-rich-rule",
+                            rich_rule,
+                        ],
+                        sudo=True,
+                        sudo_non_interactive=sudo_non_interactive,
+                    )
+                    configured = configured and query.returncode == 0
             return FirewallBackend(
                 "firewalld",
                 command="firewall-cmd",
                 zone=zone,
-                configured=runtime.returncode == 0 and permanent.returncode == 0,
+                configured=configured,
             )
 
     command = ""
@@ -462,13 +483,17 @@ def detect_firewall_backend(
         and netfilter_persistence_enabled(
             runner, sudo_non_interactive=sudo_non_interactive
         )
-        and iptables_persistent_rule_present(
-            runner,
-            command,
-            chain,
-            scope,
-            port,
-            sudo_non_interactive=sudo_non_interactive,
+        and all(
+            iptables_persistent_rule_present(
+                runner,
+                command,
+                chain,
+                scope,
+                port,
+                protocol,
+                sudo_non_interactive=sudo_non_interactive,
+            )
+            for protocol in PROTOCOLS
         )
     )
     return FirewallBackend(
@@ -504,13 +529,15 @@ def apply_ufw(
     runner: CommandRunner, backend: FirewallBackend, scope: NetworkScope, port: int
 ) -> None:
     del backend
-    runner.run(ufw_rule(scope, port), sudo=True, check=True)
+    # ufw skips a rule that already exists, so an older TCP-only setup only
+    # gains the UDP discovery rule.
+    for protocol in PROTOCOLS:
+        runner.run(ufw_rule(scope, port, protocol), sudo=True, check=True)
 
 
-def apply_firewalld(
-    runner: CommandRunner, backend: FirewallBackend, scope: NetworkScope, port: int
+def apply_firewalld_rule(
+    runner: CommandRunner, backend: FirewallBackend, rich_rule: str
 ) -> None:
-    rich_rule = firewalld_rule(scope, port)
     permanent_query = [
         backend.command,
         "--permanent",
@@ -564,6 +591,13 @@ def apply_firewalld(
         raise
 
 
+def apply_firewalld(
+    runner: CommandRunner, backend: FirewallBackend, scope: NetworkScope, port: int
+) -> None:
+    for protocol in PROTOCOLS:
+        apply_firewalld_rule(runner, backend, firewalld_rule(scope, port, protocol))
+
+
 def apply_iptables(
     runner: CommandRunner, backend: FirewallBackend, scope: NetworkScope, port: int
 ) -> None:
@@ -592,30 +626,26 @@ def apply_iptables(
             check=True,
         )
 
-    check_arguments = [
-        backend.command,
-        *iptables_rule_arguments("-C", backend.chain, scope, port),
-    ]
-    add_arguments = [
-        backend.command,
-        *iptables_rule_arguments("-I", backend.chain, scope, port),
-    ]
-    delete_arguments = [
-        backend.command,
-        *iptables_rule_arguments("-D", backend.chain, scope, port),
-    ]
-    live = runner.run(check_arguments, sudo=True).returncode == 0
-    if not live:
-        runner.run(add_arguments, sudo=True, check=True)
+    def rule(action: str, protocol: str) -> list[str]:
+        return [
+            backend.command,
+            *iptables_rule_arguments(action, backend.chain, scope, port, protocol),
+        ]
+
+    inserted: list[str] = []
     try:
+        for protocol in PROTOCOLS:
+            if runner.run(rule("-C", protocol), sudo=True).returncode != 0:
+                runner.run(rule("-I", protocol), sudo=True, check=True)
+                inserted.append(protocol)
         runner.run(
             [save_command, "-f", "/etc/iptables/rules.v4"],
             sudo=True,
             check=True,
         )
     except subprocess.CalledProcessError:
-        if not live:
-            runner.run(delete_arguments, sudo=True)
+        for protocol in inserted:
+            runner.run(rule("-D", protocol), sudo=True)
         raise
 
 
@@ -639,10 +669,13 @@ def ask_for_consent(
     input_function: Callable[[str], str] = input,
 ) -> bool:
     print()
-    print("JaszczurHAL OTA needs a device-to-host TCP callback.")
+    print(
+        "JaszczurHAL OTA needs a device-to-host TCP callback and UDP replies "
+        "to broadcast device discovery."
+    )
     print(f"  interface: {scope.interface}")
     print(f"  source:    {scope.network}")
-    print(f"  port:      TCP/{port}")
+    print(f"  ports:     TCP/{port} callback, UDP/{port} discovery replies")
     print("  lifetime:  persistent across reboot")
     if backend is None:
         print("  backend:   inspected with sudo only after consent")
@@ -654,7 +687,7 @@ def ask_for_consent(
         print("  boot:      netfilter-persistent.service is enabled")
     try:
         response = input_function(
-            "Allow this LAN-scoped OTA callback rule? [y/N] "
+            "Allow these LAN-scoped OTA rules? [y/N] "
         ).strip()
     except EOFError:
         return False
@@ -682,14 +715,14 @@ def configure_linux_firewall(
         )
         if backend.configured:
             print(
-                f"OTA firewall already allows TCP/{args.port} from "
+                f"OTA firewall already allows {ports_label(args.port)} from "
                 f"{scope.network} on {scope.interface} ({backend.kind})."
             )
             return 0
         if args.check:
             print(
-                f"OTA firewall rule is missing for TCP/{args.port} from "
-                f"{scope.network} on {scope.interface}.",
+                f"OTA firewall rules are missing for {ports_label(args.port)} "
+                f"from {scope.network} on {scope.interface}.",
                 file=sys.stderr,
             )
             return 1
@@ -700,12 +733,15 @@ def configure_linux_firewall(
         )
         return 2
 
-    ensure_callback_port_available(runner, args.port)
+    ensure_ota_ports_available(runner, args.port)
     if args.dry_run:
-        print("Linux firewall OTA callback plan:")
+        print("Linux firewall OTA plan:")
         print(f"  interface: {scope.interface}")
         print(f"  source:    {scope.network}")
-        print(f"  port:      TCP/{args.port}")
+        print(
+            f"  ports:     TCP/{args.port} callback, "
+            f"UDP/{args.port} discovery replies"
+        )
         print("  lifetime:  persistent across reboot")
         if backend is not None:
             print(f"  backend:   {backend.kind}")
@@ -729,7 +765,7 @@ def configure_linux_firewall(
         )
         if backend.configured:
             print(
-                f"OTA firewall already allows TCP/{args.port} from "
+                f"OTA firewall already allows {ports_label(args.port)} from "
                 f"{scope.network} on {scope.interface} ({backend.kind})."
             )
             return 0
@@ -741,9 +777,9 @@ def configure_linux_firewall(
         runner, scope, args.port, sudo_non_interactive=False
     )
     if not verified.configured:
-        raise SetupError("the OTA firewall rule could not be verified as persistent")
+        raise SetupError("the OTA firewall rules could not be verified as persistent")
     print(
-        f"Configured persistent OTA callback access: TCP/{args.port} from "
+        f"Configured persistent OTA access: {ports_label(args.port)} from "
         f"{scope.network} on {scope.interface} ({verified.kind})."
     )
     return 0
@@ -776,8 +812,9 @@ def configure_firewall(
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Configure a persistent LAN-scoped firewall rule for the "
-            "JaszczurHAL OTA TCP callback."
+            "Configure persistent LAN-scoped firewall rules for the "
+            "JaszczurHAL OTA TCP callback and UDP discovery replies. "
+            "Windows keeps the TCP callback rule only."
         )
     )
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
@@ -786,17 +823,17 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument(
         "--yes",
         action="store_true",
-        help="Apply the detected rule without the confirmation prompt.",
+        help="Apply the detected rules without the confirmation prompt.",
     )
     parser.add_argument(
         "--check",
         action="store_true",
-        help="Check for the persistent rule without changing the firewall.",
+        help="Check for the persistent rules without changing the firewall.",
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Print the scoped rule plan without changing the firewall.",
+        help="Print the scoped rules plan without changing the firewall.",
     )
     args = parser.parse_args(argv)
     if not 1 <= args.port <= 65535:

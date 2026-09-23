@@ -18,17 +18,7 @@ ROOT = repo_root(sys.argv, __file__)
 sys.path.insert(0, str(ROOT / "scripts"))
 import generate_sbom  # noqa: E402
 import build_esp_idf  # noqa: E402
-
-
-def read_shell_assignments(path: Path) -> dict[str, str]:
-    assignments: dict[str, str] = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        name, value = line.split("=", 1)
-        assignments[name] = value
-    return assignments
+from component_manager import parse_config  # noqa: E402
 
 
 class SbomInventoryTests(unittest.TestCase):
@@ -88,9 +78,7 @@ class SbomInventoryTests(unittest.TestCase):
         inventory = json.loads(
             (ROOT / "security/third_party.json").read_text(encoding="utf-8")
         )
-        pin = read_shell_assignments(
-            ROOT / "third_party/cyw43_driver_version.conf"
-        )
+        pin = parse_config(ROOT / "third_party/cyw43_driver_version.conf")
         components = {item["name"]: item for item in inventory["components"]}
 
         driver = components["cyw43-driver"]
@@ -131,13 +119,33 @@ class SbomInventoryTests(unittest.TestCase):
         self.assertTrue((ROOT / pin["CYW43_DRIVER_MANIFEST"]).is_file())
         self.assertTrue((ROOT / pin["CYW43_DRIVER_DIR"]).is_dir())
 
+    def test_pico_sdk_and_picotool_pins_match_inventory(self) -> None:
+        inventory = json.loads(
+            (ROOT / "security/third_party.json").read_text(encoding="utf-8")
+        )
+        components = {item["name"]: item for item in inventory["components"]}
+        for name, conf, prefix, repository in (
+            ("Raspberry Pi Pico SDK", "pico_sdk_version.conf", "PICO_SDK", "pico-sdk"),
+            ("picotool", "picotool_version.conf", "PICOTOOL", "picotool"),
+        ):
+            with self.subTest(component=name):
+                pin = parse_config(ROOT / "third_party" / conf)
+                component = components[name]
+                self.assertEqual(pin[f"{prefix}_REF"], component["commit"])
+                self.assertEqual(pin[f"{prefix}_VERSION"], component["version"])
+                self.assertEqual(
+                    f"pkg:github/raspberrypi/{repository}@{pin[f'{prefix}_REF']}",
+                    component["purl"],
+                )
+                self.assertIn(f"third_party/{conf}", component["paths"])
+
     def test_esp_idf_tool_inventory_matches_the_pinned_tool_snapshot(self) -> None:
         inventory = json.loads(
             (ROOT / "security/third_party.json").read_text(encoding="utf-8")
         )
         snapshot_path = ROOT / "security/esp_idf_tools.json"
         snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
-        pin = read_shell_assignments(ROOT / "third_party/esp_idf_version.conf")
+        pin = parse_config(ROOT / "third_party/esp_idf_version.conf")
         components = {item["name"]: item for item in inventory["components"]}
         tool_components = generate_sbom.esp_idf_tool_components(snapshot_path)
         tool_components_by_name = {

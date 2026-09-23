@@ -81,8 +81,9 @@ Przygotowuje środowisko na Debianie, Ubuntu i systemach zgodnych z tymi dystryb
 - instaluje regułę udev dla dostępu USB BOOTSEL/picotool do RP2040/RP2350
   oraz portu `/dev/ttyACM*` w trybie aplikacji używanego przez automatyczny
   reset przy 1200 bps;
-- sprawdza obecność trwałej reguły dla połączeń zwrotnych OTA przez TCP/8266,
-  ograniczonej do sieci LAN, i pyta przed zmianą zapory sieciowej lub instalacją
+- sprawdza obecność trwałych reguł ograniczonych do sieci LAN dla połączeń
+  zwrotnych OTA przez TCP/8266 i odpowiedzi na wyszukiwanie urządzeń przez
+  UDP/8266, i pyta przed zmianą zapory sieciowej lub instalacją
   `iptables-persistent`;
 - konfiguruje hooki Git repozytorium;
 - weryfikuje, że każde wymagane narzędzie jest dostępne.
@@ -772,21 +773,30 @@ tego skrypt automatycznie poza trybem `-FirmwareOnly`.
 
 ### `scripts/configure_ota_firewall.py`
 
-W sposób idempotentny sprawdza i konfiguruje trwały dostęp przychodzący TCP dla
-połączenia zwrotnego OTA po stronie hosta. Współdzielony punkt wejścia wybiera backend
-Linux lub Windows, znajduje sieć RFC1918 na domyślnym interfejsie IPv4,
-zawęża regułę do tego interfejsu i podsieci, i domyślnie wybiera TCP/8266.
+W sposób idempotentny sprawdza i konfiguruje trwały dostęp przychodzący dla
+połączenia zwrotnego OTA i odpowiedzi na wyszukiwanie urządzeń po stronie
+hosta. Współdzielony punkt wejścia wybiera backend Linux lub Windows, znajduje
+sieć RFC1918 na domyślnym interfejsie IPv4, zawęża reguły do tego interfejsu i
+podsieci, i domyślnie wybiera port 8266. W Linuksie dopuszcza TCP dla
+połączenia zwrotnego oraz UDP na tym samym porcie, na którym host odbiera
+odpowiedzi na zapytanie broadcast. Urządzenie odpowiada ze swojego adresu,
+więc zapora śledząca połączenia nie wiąże tej odpowiedzi z zapytaniem i
+odrzuca ją, jeśli ten port UDP nie jest dopuszczony. Ponowne uruchomienie
+skryptu dodaje regułę UDP na hoście skonfigurowanym wcześniej tylko dla
+połączenia zwrotnego.
 Aktywne instalacje UFW i firewalld używają swojej natywnej, trwałej
 konfiguracji. Jeśli nie są dostępne, Linux używa `iptables-nft`/`iptables` z
 `iptables-save` oraz loadera rozruchowego `netfilter-persistent`,
 włączanego przez systemd, gdy jest dostępny.
-Niefiltrowana polityka `INPUT` już zezwala na połączenie zwrotne i nie wymaga
+Niefiltrowana polityka `INPUT` już zezwala na oba rodzaje ruchu i nie wymaga
 dodatkowego pakietu ani reguły.
 
 W Windows backend akceptuje wyłącznie aktywną sieć, której profil
 połączenia to `Private`. Zarządza jedną nazwaną, przychodzącą regułą
 Windows Defender Firewall ograniczoną do tego profilu, aliasu interfejsu,
-podsieci źródłowej RFC1918, TCP oraz wybranego portu lokalnego. Inspekcja i
+podsieci źródłowej RFC1918, TCP oraz wybranego portu lokalnego. Windows
+Defender Firewall domyślnie przepuszcza unicastową odpowiedź na zapytanie
+broadcast, więc backend Windows nie dodaje reguły UDP. Inspekcja i
 planowanie działają bez podniesionych uprawnień; zastosowanie reguły wymaga,
 by wywołujący ponownie uruchomił polecenie w już podniesionym PowerShell.
 Skrypt nigdy nie uruchamia procesu z podniesionymi uprawnieniami ani nie
@@ -795,10 +805,10 @@ zmienia profilu sieciowego.
 Tryb interaktywny wypisuje pełny zakres reguły i pyta przed wprowadzeniem
 zmiany. `--check` jest tylko do odczytu, `--dry-run` wypisuje kompletny
 plan, `--interface` oraz `--network` nadpisują automatyczne wykrywanie
-trasy, `--port` wybiera inny, stały port połączenia zwrotnego, a `--yes` obsługuje
+trasy, `--port` wybiera inny, stały port OTA hosta, a `--yes` obsługuje
 świadome, nieinteraktywne wprowadzenie zmian. Akceptowane są wyłącznie sieci
 IPv4 RFC1918, a konfiguracja odmawia wystawienia portu już używanego przez
-proces nasłuchujący.
+inny proces.
 
 ### `scripts/ota_firewall_common.py`
 

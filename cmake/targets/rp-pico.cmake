@@ -10,33 +10,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON CACHE BOOL
     "Generate compile_commands.json for VS Code" FORCE)
 
-set(JH_PICOTOOL_EXECUTABLE "" CACHE FILEPATH
-    "Verified picotool executable used by Pico SDK post-processing")
-if(NOT JH_PICOTOOL_EXECUTABLE)
-    set(_jh_managed_picotool_name "picotool")
-    if(CMAKE_HOST_WIN32)
-        set(_jh_managed_picotool_name "picotool.exe")
-    endif()
-    set(_jh_managed_picotool
-        "${JH_ROOT}/.build/tools/picotool/${_jh_managed_picotool_name}")
-    if(EXISTS "${_jh_managed_picotool}")
-        set(JH_PICOTOOL_EXECUTABLE "${_jh_managed_picotool}"
-            CACHE FILEPATH
-            "Verified picotool executable used by Pico SDK post-processing"
-            FORCE)
-    endif()
-endif()
-if(JH_PICOTOOL_EXECUTABLE AND NOT TARGET picotool)
-    if(NOT EXISTS "${JH_PICOTOOL_EXECUTABLE}")
-        message(FATAL_ERROR
-            "JH_PICOTOOL_EXECUTABLE does not exist: "
-            "${JH_PICOTOOL_EXECUTABLE}")
-    endif()
-    add_executable(picotool IMPORTED GLOBAL)
-    set_target_properties(picotool PROPERTIES
-        IMPORTED_LOCATION "${JH_PICOTOOL_EXECUTABLE}")
-endif()
-
 set(JH_EXTRA_INCLUDES "" CACHE STRING
     "Extra include directories for native RP firmware")
 set(JH_LINK_LIBRARIES "" CACHE STRING
