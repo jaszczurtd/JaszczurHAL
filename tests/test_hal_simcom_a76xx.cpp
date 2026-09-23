@@ -1,6 +1,7 @@
 #include "hal/impl/.mock/hal_mock.h"
 #include "hal/modem/hal_modem_at.h"
 #include "hal/modem/hal_simcom_a76xx.h"
+#include "hal/serial/hal_serial.h"
 #include "hal/serial/hal_uart.h"
 #include "utils/unity.h"
 
@@ -177,6 +178,97 @@ void test_wait_sim_ready_times_out_when_silent(void) {
   /* No reply scripted -> CPIN? always times out. */
   TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_TIMEOUT,
                     hal_simcom_a76xx_wait_sim_ready(s_modem, 200));
+}
+
+void test_wait_sim_ready_polls_until_ready(void) {
+  script_push("AT+CPIN?", "\r\n+CPIN: SIM PIN\r\n\r\nOK\r\n");
+  script_push("AT+CPIN?", "\r\n+CPIN: READY\r\n\r\nOK\r\n");
+  TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_OK,
+                    hal_simcom_a76xx_wait_sim_ready(s_modem, 5000));
+  TEST_ASSERT_EQUAL_INT(2, s_script_pos);
+}
+
+void test_get_sim_state_parses_codes(void) {
+  static const struct {
+    const char *reply;
+    hal_simcom_a76xx_sim_state_t state;
+  } cases[] = {
+      {"\r\n+CPIN: READY\r\n\r\nOK\r\n", HAL_SIMCOM_A76XX_SIM_READY},
+      {"\r\n+CPIN: SIM PIN\r\n\r\nOK\r\n", HAL_SIMCOM_A76XX_SIM_PIN},
+      {"\r\n+CPIN: SIM PUK\r\n\r\nOK\r\n", HAL_SIMCOM_A76XX_SIM_PUK},
+      {"\r\n+CPIN: SIM PIN2\r\n\r\nOK\r\n", HAL_SIMCOM_A76XX_SIM_OTHER},
+      {"\r\n+CPIN: PH-SIM PIN\r\n\r\nOK\r\n", HAL_SIMCOM_A76XX_SIM_OTHER},
+      /* Stale line before the reply: the last one wins. */
+      {"\r\n+CPIN: SIM PIN\r\n\r\n+CPIN: READY\r\n\r\nOK\r\n",
+       HAL_SIMCOM_A76XX_SIM_READY},
+  };
+  for (size_t i = 0; i < COUNTOF(cases); i++) {
+    script_reset();
+    script_push("AT+CPIN?", cases[i].reply);
+    hal_simcom_a76xx_sim_state_t state = HAL_SIMCOM_A76XX_SIM_OTHER;
+    if (cases[i].state == HAL_SIMCOM_A76XX_SIM_OTHER)
+      state = HAL_SIMCOM_A76XX_SIM_READY;
+    TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_OK,
+                      hal_simcom_a76xx_get_sim_state(s_modem, &state));
+    TEST_ASSERT_EQUAL(cases[i].state, state);
+  }
+}
+
+void test_get_sim_state_errors_leave_state_untouched(void) {
+  hal_simcom_a76xx_sim_state_t state = HAL_SIMCOM_A76XX_SIM_PUK;
+  TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_INVALID_ARG,
+                    hal_simcom_a76xx_get_sim_state(NULL, &state));
+  TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_INVALID_ARG,
+                    hal_simcom_a76xx_get_sim_state(s_modem, NULL));
+  TEST_ASSERT_EQUAL_INT(0, s_tx_count);
+
+  script_push("AT+CPIN?", "\r\n+CME ERROR: SIM not inserted\r\n");
+  TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_ERROR,
+                    hal_simcom_a76xx_get_sim_state(s_modem, &state));
+  script_push("AT+CPIN?", "\r\nOK\r\n");
+  TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_PARSE,
+                    hal_simcom_a76xx_get_sim_state(s_modem, &state));
+  TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_TIMEOUT,
+                    hal_simcom_a76xx_get_sim_state(s_modem, &state));
+  TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_SIM_PUK, state);
+}
+
+void test_set_pin_accepts_4_and_8_digits(void) {
+  script_push("AT+CPIN=\"1234\"", "\r\nOK\r\n");
+  script_push("AT+CPIN=\"12345678\"", "\r\nOK\r\n");
+  TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_OK,
+                    hal_simcom_a76xx_set_pin(s_modem, "1234"));
+  TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_OK,
+                    hal_simcom_a76xx_set_pin(s_modem, "12345678"));
+  TEST_ASSERT_EQUAL_INT(2, s_script_pos);
+}
+
+void test_set_pin_rejects_invalid_args(void) {
+  static const char *const bad[] = {"",     "123",   "123456789",
+                                    "12a4", "12\"4", "1234\r"};
+  TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_INVALID_ARG,
+                    hal_simcom_a76xx_set_pin(NULL, "1234"));
+  TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_INVALID_ARG,
+                    hal_simcom_a76xx_set_pin(s_modem, NULL));
+  for (size_t i = 0; i < COUNTOF(bad); i++) {
+    TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_INVALID_ARG,
+                      hal_simcom_a76xx_set_pin(s_modem, bad[i]));
+  }
+  TEST_ASSERT_EQUAL_INT(0, s_tx_count);
+}
+
+void test_set_pin_wrong_pin_is_error(void) {
+  script_push("AT+CPIN=\"0000\"", "\r\n+CME ERROR: incorrect password\r\n");
+  TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_ERROR,
+                    hal_simcom_a76xx_set_pin(s_modem, "0000"));
+}
+
+void test_set_pin_times_out_and_hides_pin_in_log(void) {
+  hal_debug_init_default();
+  TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_TIMEOUT,
+                    hal_simcom_a76xx_set_pin(s_modem, "4321"));
+  TEST_ASSERT_NOT_NULL(strstr(hal_mock_deb_last_line(), "AT+CPIN=\"***\""));
+  TEST_ASSERT_NULL(strstr(hal_mock_deb_last_line(), "4321"));
 }
 
 /* ── Network ──────────────────────────────────────────────────────────── */
@@ -766,6 +858,13 @@ int main(void) {
 
   RUN_TEST(test_wait_sim_ready_succeeds);
   RUN_TEST(test_wait_sim_ready_times_out_when_silent);
+  RUN_TEST(test_wait_sim_ready_polls_until_ready);
+  RUN_TEST(test_get_sim_state_parses_codes);
+  RUN_TEST(test_get_sim_state_errors_leave_state_untouched);
+  RUN_TEST(test_set_pin_accepts_4_and_8_digits);
+  RUN_TEST(test_set_pin_rejects_invalid_args);
+  RUN_TEST(test_set_pin_wrong_pin_is_error);
+  RUN_TEST(test_set_pin_times_out_and_hides_pin_in_log);
 
   RUN_TEST(test_wait_network_registered_home);
   RUN_TEST(test_wait_network_registered_roaming);

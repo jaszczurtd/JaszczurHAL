@@ -42,6 +42,9 @@ void           hal_modem_at_destroy(hal_modem_at_t h);
 
 hal_modem_at_result_t hal_modem_at_send(hal_modem_at_t h, const char *cmd,
                                         const char *expected, uint32_t timeout_ms);
+hal_modem_at_result_t hal_modem_at_send_masked(hal_modem_at_t h, const char *cmd,
+                                               const char *expected, uint32_t timeout_ms,
+                                               const char *secret);
 hal_modem_at_result_t hal_modem_at_send_with_data(hal_modem_at_t h, const char *cmd,
                                                   const uint8_t *data, size_t data_len,
                                                   uint32_t prompt_timeout_ms,
@@ -70,6 +73,11 @@ void hal_modem_at_sleep_ms(hal_modem_at_t h, uint32_t ms);
 - **Backend:** single implementation (`src/hal/modem/hal_modem_at.cpp`) shared
   between hardware and mock targets - sits entirely on `hal_uart` +
   `hal_millis` + `hal_mutex`.
+
+**Secrets in the log:** `hal_modem_at_set_log_filter()` hides a fixed list of
+strings in every logged command and reply. `hal_modem_at_send_masked()` hides a
+secret only for one command, including its echo, while the modem still receives
+the full command.
 
 **Thread safety:** every handle serialises access internally via a
 per-instance mutex. Safe to call from multiple threads/cores.
@@ -191,6 +199,10 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_hard_reset(hal_simcom_a76xx_t h);
 hal_simcom_a76xx_result_t hal_simcom_a76xx_wait_boot(hal_simcom_a76xx_t h,
                                                      uint32_t total_timeout_ms);
 hal_simcom_a76xx_result_t hal_simcom_a76xx_init(hal_simcom_a76xx_t h);
+hal_simcom_a76xx_result_t hal_simcom_a76xx_get_sim_state(hal_simcom_a76xx_t h,
+                                                         hal_simcom_a76xx_sim_state_t *out_state);
+hal_simcom_a76xx_result_t hal_simcom_a76xx_set_pin(hal_simcom_a76xx_t h,
+                                                   const char *pin);
 hal_simcom_a76xx_result_t hal_simcom_a76xx_wait_sim_ready(hal_simcom_a76xx_t h,
                                                           uint32_t timeout_ms);
 hal_simcom_a76xx_result_t hal_simcom_a76xx_wait_network_registered(hal_simcom_a76xx_t h,
@@ -240,6 +252,14 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_mqtt_set_message_callback(hal_simcom_
 int  hal_simcom_a76xx_mqtt_poll(hal_simcom_a76xx_t h);
 bool hal_simcom_a76xx_mqtt_is_connected(hal_simcom_a76xx_t h, int client_index);
 ```
+
+**SIM PIN:** after `hal_simcom_a76xx_init()` check the card with
+`hal_simcom_a76xx_get_sim_state()`. Only when it reports
+`HAL_SIMCOM_A76XX_SIM_PIN`, call `hal_simcom_a76xx_set_pin()` and then wait for the card with
+`hal_simcom_a76xx_wait_sim_ready()`. The PIN must have 4 to 8 digits. The modem
+rejects the command when no PIN request is pending, and every wrong PIN uses up
+one of the SIM's attempts, so don't retry it in a loop - this may block your SIM card.
+The debug log shows the PIN as `***`.
 
 GNSS helpers normalise common SimCom response variants:
 `+CGNSSINFO`, `+CGNSINF` and `+CGPSINFO`. `hal_simcom_a76xx_get_gnss_location()`

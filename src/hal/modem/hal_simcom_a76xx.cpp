@@ -110,6 +110,16 @@ static hal_simcom_a76xx_result_t map_at(hal_modem_at_result_t r) {
   }
 }
 
+/* Last occurrence of `needle`, so a stale line left in the buffer does not
+   shadow a fresh one. */
+static const char *find_last(const char *s, const char *needle) {
+  const char *last = NULL;
+  size_t n = strlen(needle);
+  for (const char *hit = strstr(s, needle); hit; hit = strstr(hit + n, needle))
+    last = hit;
+  return last;
+}
+
 static bool parse_cmqtt_result(const char *line, const char *prefix,
                                int *client_index, int *result_code) {
   if (!line || !prefix || !client_index || !result_code)
@@ -234,16 +244,8 @@ static bool parse_clbs_from_response(const char *resp, int *status, float *lat,
   if (!resp || !status || !lat || !lon || !acc)
     return false;
 
-  /* Parse from the LAST occurrence so a stale, partial line in the
-     buffer does not shadow a fresh, complete one. */
-  const char *p = NULL;
-  for (const char *cur = resp;;) {
-    const char *hit = strstr(cur, "+CLBS:");
-    if (!hit)
-      break;
-    p = hit;
-    cur = hit + 6;
-  }
+  /* A stale, partial line must not shadow a fresh, complete one. */
+  const char *p = find_last(resp, "+CLBS:");
   if (!p)
     return false;
 
@@ -998,14 +1000,69 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_init(hal_simcom_a76xx_t h) {
   return HAL_SIMCOM_A76XX_OK;
 }
 
+hal_simcom_a76xx_result_t hal_simcom_a76xx_set_pin(hal_simcom_a76xx_t h,
+                                                   const char *pin) {
+  if (!h || !pin)
+    return HAL_SIMCOM_A76XX_INVALID_ARG;
+  /* SIM PIN: 4..8 decimal digits. */
+  size_t len = 0;
+  for (; pin[len] != '\0'; len++) {
+    if (len >= 8u || pin[len] < '0' || pin[len] > '9')
+      return HAL_SIMCOM_A76XX_INVALID_ARG;
+  }
+  if (len < 4u)
+    return HAL_SIMCOM_A76XX_INVALID_ARG;
+
+  char cmd[20]; /* AT+CPIN="<8 digits>" + NUL */
+  (void)snprintf(cmd, sizeof(cmd), "AT+CPIN=\"%s\"", pin);
+  return map_at(hal_modem_at_send_masked(h->at, cmd, "OK", 5000u, pin));
+}
+
+/* True when `value` is exactly `code`, up to the end of the line. */
+static bool cpin_code_is(const char *value, const char *code) {
+  size_t n = strlen(code);
+  return strncmp(value, code, n) == 0 &&
+         (value[n] == '\0' || value[n] == '\r' || value[n] == '\n');
+}
+
+hal_simcom_a76xx_result_t
+hal_simcom_a76xx_get_sim_state(hal_simcom_a76xx_t h,
+                               hal_simcom_a76xx_sim_state_t *out_state) {
+  if (!h || !out_state)
+    return HAL_SIMCOM_A76XX_INVALID_ARG;
+
+  hal_modem_at_result_t r = hal_modem_at_send(h->at, "AT+CPIN?", NULL, 5000u);
+  if (r != HAL_MODEM_AT_OK)
+    return map_at(r);
+
+  const char *resp = hal_modem_at_last_response(h->at);
+  const char *p = resp ? find_last(resp, "+CPIN:") : NULL;
+  if (!p)
+    return HAL_SIMCOM_A76XX_PARSE;
+  p += strlen("+CPIN:");
+  while (*p == ' ')
+    p++;
+
+  if (cpin_code_is(p, "READY"))
+    *out_state = HAL_SIMCOM_A76XX_SIM_READY;
+  else if (cpin_code_is(p, "SIM PIN"))
+    *out_state = HAL_SIMCOM_A76XX_SIM_PIN;
+  else if (cpin_code_is(p, "SIM PUK"))
+    *out_state = HAL_SIMCOM_A76XX_SIM_PUK;
+  else
+    *out_state = HAL_SIMCOM_A76XX_SIM_OTHER;
+  return HAL_SIMCOM_A76XX_OK;
+}
+
 hal_simcom_a76xx_result_t hal_simcom_a76xx_wait_sim_ready(hal_simcom_a76xx_t h,
                                                           uint32_t timeout_ms) {
   if (!h)
     return HAL_SIMCOM_A76XX_INVALID_ARG;
   uint32_t start = hal_millis();
   do {
-    if (hal_modem_at_send(h->at, "AT+CPIN?", "READY", 5000u) ==
-        HAL_MODEM_AT_OK) {
+    hal_simcom_a76xx_sim_state_t state = HAL_SIMCOM_A76XX_SIM_OTHER;
+    if (hal_simcom_a76xx_get_sim_state(h, &state) == HAL_SIMCOM_A76XX_OK &&
+        state == HAL_SIMCOM_A76XX_SIM_READY) {
       return HAL_SIMCOM_A76XX_OK;
     }
     hal_modem_at_sleep_ms(h->at, 1000u);

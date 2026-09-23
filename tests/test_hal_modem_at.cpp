@@ -1,5 +1,6 @@
 #include "hal/impl/.mock/hal_mock.h"
 #include "hal/modem/hal_modem_at.h"
+#include "hal/serial/hal_serial.h"
 #include "hal/serial/hal_uart.h"
 #include "utils/unity.h"
 
@@ -282,6 +283,43 @@ void test_log_filter_install_and_clear(void) {
   hal_modem_at_set_log_filter(s_modem, NULL, 0);
 }
 
+/* ── send_masked ─────────────────────────────────────────────────────── */
+
+void test_send_masked_hides_secret_in_tx_log(void) {
+  hal_debug_init_default();
+  /* No reply -> no RX log, so the last debug line is the TX line. */
+  TEST_ASSERT_EQUAL(
+      HAL_MODEM_AT_TIMEOUT,
+      hal_modem_at_send_masked(s_modem, "AT+CPIN=\"1234\"", NULL, 50, "1234"));
+  TEST_ASSERT_EQUAL_STRING("AT+CPIN=\"1234\"\r\n",
+                           hal_mock_uart_last_write(s_uart));
+  TEST_ASSERT_NOT_NULL(strstr(hal_mock_deb_last_line(), "AT+CPIN=\"***\""));
+  TEST_ASSERT_NULL(strstr(hal_mock_deb_last_line(), "1234"));
+
+  /* The secret applies to one command only. */
+  (void)hal_modem_at_send(s_modem, "AT+CPIN=\"1234\"", NULL, 50);
+  TEST_ASSERT_NOT_NULL(strstr(hal_mock_deb_last_line(), "1234"));
+}
+
+void test_send_masked_hides_secret_in_echo(void) {
+  hal_debug_init_default();
+  push_str("AT+CPIN=\"1234\"\r\r\nOK\r\n");
+  TEST_ASSERT_EQUAL(
+      HAL_MODEM_AT_OK,
+      hal_modem_at_send_masked(s_modem, "AT+CPIN=\"1234\"", NULL, 100, "1234"));
+  TEST_ASSERT_NOT_NULL(strstr(hal_mock_deb_last_line(), "RX"));
+  TEST_ASSERT_NOT_NULL(strstr(hal_mock_deb_last_line(), "***"));
+  TEST_ASSERT_NULL(strstr(hal_mock_deb_last_line(), "1234"));
+}
+
+void test_send_masked_null_secret_matches_send(void) {
+  push_str("\r\nOK\r\n");
+  TEST_ASSERT_EQUAL(HAL_MODEM_AT_OK,
+                    hal_modem_at_send_masked(s_modem, "AT", NULL, 100, NULL));
+  TEST_ASSERT_EQUAL(HAL_MODEM_AT_INVALID_ARG,
+                    hal_modem_at_send_masked(NULL, "AT", NULL, 100, "1234"));
+}
+
 /* ── last_response ───────────────────────────────────────────────────── */
 
 void test_last_response_returns_buffer(void) {
@@ -379,6 +417,9 @@ int main(void) {
   RUN_TEST(test_urc_unknown_prefix_does_not_fire);
 
   RUN_TEST(test_log_filter_install_and_clear);
+  RUN_TEST(test_send_masked_hides_secret_in_tx_log);
+  RUN_TEST(test_send_masked_hides_secret_in_echo);
+  RUN_TEST(test_send_masked_null_secret_matches_send);
 
   RUN_TEST(test_last_response_returns_buffer);
   RUN_TEST(test_last_response_null_handle);
