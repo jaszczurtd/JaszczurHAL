@@ -13,8 +13,9 @@ standard `cyw43_*` symbols. The RP2040 recipe excludes competing network
 archives, wrappers and automatic Pico W startup, leaving exactly one
 JaszczurHAL-owned driver instance in the final image.
 
-Bluetooth shared-bus files come from the pinned Pico SDK 2.2.0 at commit
-`a1438dff1d38bd9c65dbd693f0e5db4b9ae91779`. The local safety delta converts
-fatal shared-bus assertions and corruption panics into bounded CYBT errors,
-validates public buffer/index arguments, and propagates wake, queue-full and
-read/write failures to the HCI adapter.
+Bluetooth shared-bus files come from the pinned Pico SDK 2.3.1 at commit
+`079c6f39023649b154152db30f1d781e884879bc`; the imported sources are
+unchanged since Pico SDK 2.2.0, where they were first taken from. The local
+safety delta converts fatal shared-bus assertions and corruption panics into
+bounded CYBT errors, validates public buffer/index arguments, and propagates
+wake, queue-full and read/write failures to the HCI adapter.

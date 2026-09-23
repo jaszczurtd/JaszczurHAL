@@ -214,7 +214,7 @@ The `ota` object controls the host tool:
 |---|---|
 | `hostname` | Device name used to filter discovery results. It must match `hal_ota_set_hostname()` in firmware when discovery is used. |
 | `port` | Device UDP discovery, invitation, and authentication port. It must match `hal_ota_set_port()`. The default is `8266`. This is not the TCP data-transfer port. |
-| `listenPort` | Host TCP callback port advertised to the device. The default is `8266`, matching the persistent rule prepared by `runmefirst.sh`. Set it explicitly to `0` only when an ephemeral callback port and a matching firewall policy are intentional. |
+| `listenPort` | Host TCP callback port advertised to the device; host discovery also receives UDP replies on this port. The default is `8266`, matching the persistent rules prepared by `runmefirst.sh`. Set it explicitly to `0` only when ephemeral ports and a matching firewall policy are intentional. |
 | `passwordEnv` | Name of the host environment variable containing the OTA password. This takes precedence over `ota.password`. |
 | `password` | Inline development-only password. Do not use it in a tracked product manifest. |
 | `allowEmptyPassword` | Allows an empty password when explicitly `true`. The default host behavior rejects empty passwords. Do not enable this for deployed devices. |
@@ -588,7 +588,9 @@ JaszczurHAL library itself, with firmware-project shortcuts.
 For the OTA data transfer, the device initiates the connection to the host:
 
 1. The host sends discovery, invitation, and authentication packets over UDP
-   to the device's configured OTA port, normally `8266`.
+   to the device's configured OTA port, normally `8266`. A broadcast discovery
+   query leaves from the `ota.listenPort` UDP port, and the device replies to
+   that port from its own address.
 2. The host opens a TCP listener. `ota.listenPort` selects its port; the
    default is `8266`, while an explicit value `0` asks the operating system for
    an ephemeral port.
@@ -596,29 +598,37 @@ For the OTA data transfer, the device initiates the connection to the host:
 4. The device initiates a new TCP connection back to the host and receives the
    image in acknowledged chunks.
 
-With `"listenPort": 8266`, the SYN from the device targets host TCP port 8266,
-so a firewall rule for that exact callback port is sufficient. With
-`"listenPort": 0`, Linux normally selects a port from
+With `"listenPort": 8266`, the SYN from the device targets host TCP port 8266
+and discovery replies target host UDP port 8266. A stateful firewall does not
+match a reply from the device's address to a broadcast query, so it needs a
+rule for that UDP port as well as for the TCP callback port. With
+`"listenPort": 0`, Linux normally selects ports from
 `/proc/sys/net/ipv4/ip_local_port_range`, and the firewall policy must cover
-that selected ephemeral port. The access point or routed network must also
+the selected ephemeral ports. The access point or routed network must also
 permit device-to-host traffic; disable wireless client isolation for the OTA
 network.
 
 `runmefirst.sh` detects the RFC1918 network attached to the default IPv4
-interface and checks for a persistent TCP/8266 callback rule. On Windows, run
-the same focused Python helper from the managed environment. When the rule is
-missing, it displays the exact interface, source subnet, port, persistence
-backend, and any package or elevation boundary before asking for confirmation.
+interface and checks for persistent rules for the TCP/8266 callback and the
+UDP/8266 discovery replies. On Windows, run the same focused Python helper from
+the managed environment; the Windows backend manages the TCP rule only,
+because Windows Defender Firewall admits a unicast reply to a broadcast query
+by default. When a rule is missing, it displays the exact interface, source
+subnet, ports, persistence backend, and any package or elevation boundary before asking for confirmation.
 Declining leaves the firewall unchanged and does not prevent the remaining
 setup.
 A host with an empty `INPUT` chain and an `ACCEPT` policy already permits the
-callback, so setup reports success without installing persistence tooling.
+callback and the discovery replies, so setup reports success without
+installing persistence tooling.
 
 After confirmation, setup uses the active firewall manager:
 
-- active UFW receives a persistent interface- and subnet-scoped rule;
-- active firewalld receives matching runtime and permanent rich rules;
-- an `iptables-nft`/`iptables` host receives an early `INPUT` rule, persisted
+- active UFW receives persistent interface- and subnet-scoped TCP and UDP
+  rules;
+- active firewalld receives matching runtime and permanent rich rules for both
+  protocols;
+- an `iptables-nft`/`iptables` host receives early `INPUT` rules for both
+  protocols, persisted
   with `netfilter-persistent`, whose boot service is enabled when systemd is
   available;
 - `iptables-persistent` is installed through `apt` only when the iptables path

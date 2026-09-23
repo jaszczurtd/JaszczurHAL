@@ -282,7 +282,7 @@
           "minimum": 0,
           "maximum": 65535,
           "default": 8266,
-          "description": "Host TCP callback port. Set zero explicitly to request an ephemeral port."
+          "description": "Host port for the TCP callback and for UDP discovery replies. Set zero explicitly to request ephemeral ports."
         },
         "broadcast": { "type": "string" },
         "password": {

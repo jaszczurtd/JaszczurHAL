@@ -7,10 +7,11 @@ integration. Set the WiFi credentials and replace the example OTA password
 in `app.c`. The hostname, port, and password must match
 `.vscode/jaszczurhal.project.json`.
 
-The computer listens for callback connections on TCP port `8266`.
-A firewall that blocks inbound connections needs a rule allowing this traffic.
-`runmefirst.sh` detects the local IPv4 network, shows the rule's scope, and
-offers to add it persistently.
+The computer listens for callback connections on TCP port `8266` and for
+discovery replies on UDP port `8266`. A firewall that blocks inbound
+connections needs rules allowing this traffic. `runmefirst.sh` detects the
+local IPv4 network, shows the rules' scope, and offers to add them
+persistently.
 
 See [OTA updates on RP boards](../../doc/en/OTAWorkflow.md) for project setup,
 first flashing, VS Code use, firewall configuration, update confirmation,

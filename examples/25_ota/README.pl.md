@@ -7,10 +7,11 @@ OTA opartej na Pico SDK. W `app.c` ustaw dane sieci WiFi i zastąp przykładowe
 hasło OTA. Nazwa hosta, port i hasło muszą odpowiadać ustawieniom
 w `.vscode/jaszczurhal.project.json`.
 
-Komputer nasłuchuje połączeń zwrotnych na porcie TCP `8266`. Jeżeli zapora
-blokuje połączenia przychodzące, potrzebna jest reguła dopuszczająca ten ruch.
-`runmefirst.sh` wykrywa lokalną sieć IPv4, pokazuje zakres reguły i proponuje
-jej trwałe dodanie.
+Komputer nasłuchuje połączeń zwrotnych na porcie TCP `8266` i odpowiedzi na
+wyszukiwanie urządzeń na porcie UDP `8266`. Jeżeli zapora blokuje połączenia
+przychodzące, potrzebne są reguły dopuszczające ten ruch. `runmefirst.sh`
+wykrywa lokalną sieć IPv4, pokazuje zakres reguł i proponuje ich trwałe
+dodanie.
 
 Przygotowanie projektu, pierwsze wgranie, pracę w VS Code, ustawienia zapory,
 potwierdzanie aktualizacji, powrót do poprzedniej wersji i odzyskiwanie przez

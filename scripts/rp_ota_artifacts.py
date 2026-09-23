@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Create native RP OTA containers and merge boot/application UF2 images."""
+"""Create native RP OTA containers, merge boot/application UF2 images and
+check the flash range of a UF2 image."""
 
 from __future__ import annotations
 
@@ -8,12 +9,15 @@ import binascii
 import hashlib
 import os
 import struct
+import sys
 from pathlib import Path
 
 
 UF2_MAGIC_START0 = 0x0A324655
 UF2_MAGIC_START1 = 0x9E5D5157
 UF2_MAGIC_END = 0x0AB16F30
+UF2_FLAG_EXTENSION_FLAGS_PRESENT = 0x00008000
+UF2_EXTENSION_RP2_IGNORE_BLOCK = 0x9957E304
 UF2_BLOCK_SIZE = 512
 UF2_PAGE_SIZE = 256
 FLASH_SECTOR_ERASE_SIZE = 4096
@@ -50,15 +54,38 @@ def uf2_blocks(path: Path) -> list[bytearray]:
     return blocks
 
 
+def is_ignored_block(block: bytearray) -> bool:
+    """Blocks tagged with the RP2 ignore extension are never written by BOOTSEL.
+
+    picotool adds one such block at 0x10ffff00 to RP2350 images as the
+    RP2350-E10 workaround. It marks no flash content, so it must neither end
+    up in a padded sector nor count as the final page of the image.
+    """
+    flags = struct.unpack_from("<I", block, 8)[0]
+    if not flags & UF2_FLAG_EXTENSION_FLAGS_PRESENT:
+        return False
+    extension = struct.unpack_from("<I", block, 32 + UF2_PAGE_SIZE)[0]
+    return extension == UF2_EXTENSION_RP2_IGNORE_BLOCK
+
+
+def written_blocks(blocks: dict[int, bytearray]) -> dict[int, bytearray]:
+    return {
+        address: block
+        for address, block in blocks.items()
+        if not is_ignored_block(block)
+    }
+
+
 def pad_touched_flash_sectors(blocks_by_address: dict[int, bytearray]) -> None:
-    if not blocks_by_address:
+    written = written_blocks(blocks_by_address)
+    if not written:
         raise ValueError("merged UF2 contains no blocks")
 
     touched_sectors: dict[int, bytearray] = {}
-    for address, block in blocks_by_address.items():
+    for address, block in written.items():
         touched_sectors.setdefault(address // FLASH_SECTOR_ERASE_SIZE, block)
 
-    last_page = max(blocks_by_address)
+    last_page = max(written)
     zero_payload = bytes(UF2_BLOCK_SIZE - 36)
     for sector, template in touched_sectors.items():
         sector_start = sector * FLASH_SECTOR_ERASE_SIZE
@@ -89,6 +116,33 @@ def merge_uf2(boot: Path, application: Path, output: Path) -> None:
     temporary = output.with_suffix(output.suffix + ".tmp")
     temporary.write_bytes(b"".join(blocks))
     os.replace(temporary, output)
+
+
+def check_range(image: Path, start: int, end: int) -> None:
+    """Require every written page of IMAGE to lie in [start, end) and the first at start.
+
+    A firmware linked into a reserved flash slice must begin exactly at its
+    region origin; an image that starts elsewhere or runs past the region was
+    linked with a different flash region than the build requested.
+    """
+    if start % UF2_PAGE_SIZE or end <= start:
+        raise ValueError(f"invalid flash range 0x{start:08x}..0x{end:08x}")
+    blocks = {
+        struct.unpack_from("<I", block, 12)[0]: block for block in uf2_blocks(image)
+    }
+    written = sorted(written_blocks(blocks))
+    if not written:
+        raise ValueError(f"{image}: no flash pages")
+    if written[0] != start:
+        raise ValueError(
+            f"{image}: image starts at 0x{written[0]:08x}, expected 0x{start:08x}"
+        )
+    outside = [address for address in written if address + UF2_PAGE_SIZE > end]
+    if outside:
+        raise ValueError(
+            f"{image}: {len(outside)} page(s) from 0x{outside[0]:08x} are past the "
+            f"region end 0x{end:08x}"
+        )
 
 
 def package_ota(
@@ -135,6 +189,11 @@ def parse_args() -> argparse.Namespace:
     merge.add_argument("--application", type=Path, required=True)
     merge.add_argument("--output", type=Path, required=True)
 
+    check = subparsers.add_parser("check-range")
+    check.add_argument("--uf2", type=Path, required=True)
+    check.add_argument("--start", type=lambda value: int(value, 0), required=True)
+    check.add_argument("--end", type=lambda value: int(value, 0), required=True)
+
     package = subparsers.add_parser("package")
     package.add_argument("--binary", type=Path, required=True)
     package.add_argument("--output", type=Path, required=True)
@@ -149,6 +208,12 @@ def main() -> int:
     args = parse_args()
     if args.command == "merge-uf2":
         merge_uf2(args.boot, args.application, args.output)
+    elif args.command == "check-range":
+        try:
+            check_range(args.uf2, args.start, args.end)
+        except ValueError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 1
     else:
         package_ota(
             args.binary,

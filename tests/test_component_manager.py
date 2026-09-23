@@ -653,6 +653,39 @@ class TrackedContractTests(unittest.TestCase):
         )
         self.assertTrue(windows_tools.prefer_managed)
 
+    def test_picotool_version_match_compares_the_reported_release(self) -> None:
+        self.assertTrue(
+            manager._picotool_reports(
+                "picotool v2.3.0 (Linux, GNU-13.3.0, Release)\n", "2.3.0"
+            )
+        )
+        self.assertTrue(
+            manager._picotool_reports("picotool v2.2.0 (Windows)\n", "2.2.0-a4")
+        )
+        for output in (
+            "picotool v2.2.0 (without USB support)\n",
+            "picotool v12.3.0\n",
+            "usage: picotool [options]\n",
+        ):
+            with self.subTest(output=output):
+                self.assertFalse(manager._picotool_reports(output, "2.3.0"))
+
+    def test_windows_picotool_is_the_pinned_picotool_release(self) -> None:
+        # The native RP configure checks every host's picotool against
+        # PICOTOOL_VERSION, so the managed Windows archive must be that release.
+        picotool = manager.parse_config(ROOT / "third_party/picotool_version.conf")
+        windows = manager.parse_config(ROOT / "third_party/windows_tools_version.conf")
+        self.assertTrue(
+            manager._picotool_reports(
+                f"picotool v{picotool['PICOTOOL_VERSION']} (Windows)",
+                windows["WINDOWS_PICOTOOL_VERSION"],
+            ),
+            (picotool["PICOTOOL_VERSION"], windows["WINDOWS_PICOTOOL_VERSION"]),
+        )
+        self.assertIn(
+            windows["WINDOWS_PICOTOOL_VERSION"], windows["WINDOWS_PICOTOOL_URL"]
+        )
+
     def test_picotool_capabilities_are_symmetric_and_dependency_aware(self) -> None:
         def fake_run(command, **_kwargs):
             if command[1] == "version":

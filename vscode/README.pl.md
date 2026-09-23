@@ -638,9 +638,9 @@ używa jednego połączonego gniazda UDP do zaproszenia i AUTH2, akceptuje linie
 sterujące wyłącznie w ściśle określonym formacie i przesyła dane dopiero wtedy, gdy adres
 połączenia zwrotnego TCP odpowiada adresowi drugiej strony połączenia UDP,
 który wybrał system operacyjny. Domyślnym portem połączenia zwrotnego z hostem
-jest TCP/8266. Po jawnej zgodzie
-`runmefirst.sh` może dodać trwałą regułę zapory dla tego portu, ograniczoną do
-sieci LAN.
+jest TCP/8266, a odpowiedzi na wyszukiwanie urządzeń wracają na UDP/8266. Po
+jawnej zgodzie `runmefirst.sh` może dodać dla obu trwałe reguły zapory
+ograniczone do sieci LAN.
 
 Integrację firmware, pierwszą instalację, reguły zapory na hoście, skróty
 klawiaturowe, zatwierdzanie rozruchu próbnego, wycofywanie, odzyskiwanie i

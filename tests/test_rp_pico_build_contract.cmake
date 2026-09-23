@@ -8,6 +8,7 @@ set(_cmake "${JH_ROOT}/link_libraries/rp_pico_lib/CMakeLists.txt")
 set(_native_common "${JH_ROOT}/cmake/jh_rp_pico_sdk.cmake")
 set(_dispatcher "${JH_ROOT}/cmake/jh_firmware_project/CMakeLists.txt")
 set(_native_recipe "${JH_ROOT}/cmake/targets/rp-pico.cmake")
+set(_sdk_support "${JH_ROOT}/cmake/jh_rp_sdk_support.cmake")
 set(_probe "${JH_ROOT}/link_libraries/rp_pico_lib/artifact_probe.cpp")
 set(_core1_probe "${JH_ROOT}/link_libraries/rp_pico_lib/core1_probe.c")
 set(_script "${JH_ROOT}/scripts/build_rp_pico_lib.sh")
@@ -62,6 +63,7 @@ set(_ota_boot
 
 foreach(_file IN ITEMS
         "${_cmake}" "${_native_common}" "${_dispatcher}" "${_native_recipe}"
+        "${_sdk_support}"
         "${_probe}" "${_core1_probe}" "${_script}" "${_board_generator}"
         "${_board_cmake}" "${_sources}"
         "${_app_entry}" "${_core_runtime}" "${_usb_header}"
@@ -84,6 +86,7 @@ file(READ "${_cmake}" _cmake_text)
 file(READ "${_native_common}" _native_common_text)
 file(READ "${_dispatcher}" _dispatcher_text)
 file(READ "${_native_recipe}" _native_recipe_text)
+file(READ "${_sdk_support}" _sdk_support_text)
 file(READ "${_probe}" _probe_text)
 file(READ "${_core1_probe}" _core1_probe_text)
 file(READ "${_script}" _script_text)
@@ -211,8 +214,8 @@ foreach(_flash_build_contract IN ITEMS
         "HAL_RP_FLASH_EEPROM_SIZE"
         "HAL_RP_FLASH_LITTLEFS_SIZE"
         "NDEBUG"
-        "pico_set_linker_script"
-        "_storage.ld")
+        "jh_rp_set_flash_region"
+        "jh_rp_check_flash_range")
     string(FIND "${_native_common_text}" "${_flash_build_contract}"
         _flash_build_at)
     if(_flash_build_at EQUAL -1)
@@ -419,11 +422,11 @@ foreach(_managed_picotool_contract IN ITEMS
         "JH_ROOT}/.build/tools/picotool/"
         "CMAKE_HOST_WIN32"
         "JH_PICOTOOL_EXECUTABLE")
-    string(FIND "${_native_recipe_text}" "${_managed_picotool_contract}"
+    string(FIND "${_sdk_support_text}" "${_managed_picotool_contract}"
         _managed_picotool_at)
     if(_managed_picotool_at EQUAL -1)
         message(FATAL_ERROR
-            "Native RP recipe does not probe the managed picotool fallback: "
+            "Native RP SDK support does not probe the managed picotool fallback: "
             "${_managed_picotool_contract}")
     endif()
 endforeach()

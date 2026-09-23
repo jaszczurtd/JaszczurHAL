@@ -933,6 +933,80 @@ for invalid_discovery in (
         invalid_discovery, ("192.0.2.1", 8266)
     ) is None
 
+class FakeDiscoverySocket:
+    """UDP socket double that records binds and replays received datagrams."""
+
+    def __init__(self, *, bind_errno: int | None = None, replies=()) -> None:
+        self.bind_errno = bind_errno
+        self.bound: list[tuple[str, int]] = []
+        self.sent: list[tuple[bytes, tuple[str, int]]] = []
+        self.replies = list(replies)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc) -> bool:
+        return False
+
+    def setsockopt(self, *_args) -> None:
+        pass
+
+    def settimeout(self, _timeout: float) -> None:
+        pass
+
+    def bind(self, address: tuple[str, int]) -> None:
+        if self.bind_errno is not None and address[1] != 0:
+            raise OSError(self.bind_errno, "fake bind failure")
+        self.bound.append(address)
+
+    def sendto(self, payload: bytes, address: tuple[str, int]) -> None:
+        self.sent.append((payload, address))
+
+    def recvfrom(self, _size: int):
+        if self.replies:
+            return self.replies.pop(0)
+        raise module.socket.timeout()
+
+
+def discover_with(fake: FakeDiscoverySocket, **kwargs):
+    with patch.object(module.socket, "socket", return_value=fake):
+        return module.discover_ota_devices(
+            8266, "255.255.255.255", timeout_s=0.02, **kwargs
+        )
+
+
+# Replies to a broadcast query come back from the device's own address, so
+# discovery listens on the fixed OTA host port that the firewall helper opens.
+own_query = (b"JHOTA DISCOVER 1", ("192.0.2.1", 8266))
+device_reply = (
+    b"JHOTA 1 pico-kitchen rp2040 8266 1007616 12 2\n",
+    ("192.0.2.40", 8266),
+)
+fixed_port = FakeDiscoverySocket(replies=[own_query, device_reply])
+found = discover_with(fixed_port)
+assert fixed_port.bound == [("", 8266)]
+assert fixed_port.sent == [(b"JHOTA DISCOVER 1", ("255.255.255.255", 8266))]
+assert [(item["address"], item["hostname"]) for item in found] == [
+    ("192.0.2.40", "pico-kitchen")
+]
+configured_port = FakeDiscoverySocket()
+discover_with(configured_port, reply_port=9100)
+assert configured_port.bound == [("", 9100)]
+for unavailable in (errno.EADDRINUSE, errno.EACCES):
+    fallback = FakeDiscoverySocket(bind_errno=unavailable)
+    discover_with(fallback)
+    assert fallback.bound == [("", 0)]
+ephemeral = FakeDiscoverySocket()
+discover_with(ephemeral, reply_port=0)
+assert ephemeral.bound == [("", 0)]
+unexpected = FakeDiscoverySocket(bind_errno=errno.EINVAL)
+try:
+    discover_with(unexpected)
+except OSError as error:
+    assert error.errno == errno.EINVAL
+else:
+    raise AssertionError("an unexpected discovery bind failure was hidden")
+
 discover_args = SimpleNamespace(host=None, json=False)
 with patch.object(
     module,
@@ -944,6 +1018,7 @@ with patch.object(
                 "host": "192.0.2.20",
                 "broadcast": "192.0.2.255",
                 "port": 8266,
+                "listenPort": 9100,
             }
         },
         0,
@@ -953,7 +1028,7 @@ with patch.object(
 ) as discover_mock, patch.object(module, "print_ota_devices") as print_mock:
     assert module.command_ota_discover(discover_args) == 0
 
-discover_mock.assert_called_once_with(8266, "192.0.2.20")
+discover_mock.assert_called_once_with(8266, "192.0.2.20", reply_port=9100)
 print_mock.assert_called_once_with([device], as_json=False)
 
 configured = module.choose_ota_device(
@@ -1067,4 +1142,40 @@ with TemporaryDirectory(prefix="jh-esp-ota-") as temporary_dir:
         esp_payload,
         "",
         8266,
+    )
+
+    discovered_config = json.loads(json.dumps(esp_config))
+    discovered_config["ota"] = {
+        "broadcast": "192.0.2.255",
+        "port": 8266,
+        "listenPort": 9100,
+        "allowEmptyPassword": True,
+    }
+    discovered_device = {
+        "address": "192.0.2.33",
+        "hostname": "esp-kitchen",
+        "target": "esp32s3",
+        "port": 8266,
+    }
+    with patch.object(
+        module,
+        "load_config_for_action",
+        return_value=(esp_project, discovered_config, 0),
+    ), patch.object(module, "command_build", return_value=0), patch.object(
+        module,
+        "esp_idf_ota_image",
+        return_value=(esp_application, esp_payload),
+    ), patch.object(
+        module, "discover_ota_devices", return_value=[discovered_device]
+    ) as discovered_mock, patch.object(
+        module, "upload_ota_container"
+    ) as discovered_upload_mock, patch.object(
+        module, "print_memory_map_overview"
+    ):
+        assert module.command_upload_ota(esp_upload_args) == 0
+
+    # The callback and the discovery replies share the configured host port.
+    discovered_mock.assert_called_once_with(8266, "192.0.2.255", reply_port=9100)
+    discovered_upload_mock.assert_called_once_with(
+        discovered_device, esp_payload, "", 9100
     )

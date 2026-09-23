@@ -122,19 +122,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(JH_PICOTOOL_EXECUTABLE "" CACHE FILEPATH
-    "Verified picotool executable used by Pico SDK post-processing")
-if(JH_PICOTOOL_EXECUTABLE AND NOT TARGET picotool)
-    if(NOT EXISTS "${JH_PICOTOOL_EXECUTABLE}")
-        message(FATAL_ERROR
-            "JH_PICOTOOL_EXECUTABLE does not exist: "
-            "${JH_PICOTOOL_EXECUTABLE}")
-    endif()
-    add_executable(picotool IMPORTED GLOBAL)
-    set_target_properties(picotool PROPERTIES
-        IMPORTED_LOCATION "${JH_PICOTOOL_EXECUTABLE}")
-endif()
-
 include("${JH_ROOT}/cmake/jh_rp_pico_sdk.cmake")
 target_sources(JaszczurHAL PRIVATE
     "${JH_BOARD_GENERATED_DIR}/jh_link_contract_definition.c")

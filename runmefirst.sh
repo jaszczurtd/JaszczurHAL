@@ -30,7 +30,8 @@ This setup needs sudo (you'll be prompted for your password) to:
   - write a udev rule under /etc/udev/rules.d so you can access RP2040/RP2350
     USB and serial devices without sudo afterwards,
   - inspect the host firewall and, only after separate confirmation, allow the
-    OTA TCP/8266 callback from the detected local IPv4 network persistently.
+    OTA TCP/8266 callback and UDP/8266 discovery replies from the detected
+    local IPv4 network persistently.
 
 WHYSUDO
 

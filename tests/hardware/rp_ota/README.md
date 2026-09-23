@@ -110,9 +110,10 @@ the probe is connected, verify the responder independently with, for example,
 is sent in DHCP option 12 and changing it with an active lease triggers a DHCP
 renewal.
 
-The OTA upload callback is a TCP connection from the board to host TCP/8266.
-Run `./runmefirst.sh` and approve its persistent, LAN-scoped OTA rule before the
-hardware test. Verify the rule without changing it with:
+The OTA upload callback is a TCP connection from the board to host TCP/8266,
+and replies to broadcast discovery return to host UDP/8266. Run
+`./runmefirst.sh` and approve its persistent, LAN-scoped OTA rules before the
+hardware test. Verify the rules without changing them with:
 
 ```sh
 python3 scripts/configure_ota_firewall.py --check

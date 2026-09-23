@@ -4165,11 +4165,36 @@ def parse_ota_discovery_response(payload: bytes, address: tuple[str, int]) -> di
     }
 
 
-def discover_ota_devices(port: int, broadcast: str, timeout_s: float = 1.0) -> list[dict[str, Any]]:
+def bind_ota_discovery_socket(udp: socket.socket, reply_port: int) -> None:
+    """Receive discovery replies on the fixed OTA host port when it is free.
+
+    A device answers a broadcast query from its own unicast address. A
+    stateful host firewall does not relate that reply to the broadcast query
+    and admits it only through a rule for its destination port, which
+    scripts/configure_ota_firewall.py opens next to the TCP callback. A busy,
+    reserved or zero port falls back to an ephemeral one, which still
+    receives the reply to a unicast query.
+    """
+    if 0 < reply_port <= 65535:
+        try:
+            udp.bind(("", reply_port))
+            return
+        except OSError as exc:
+            if exc.errno not in (errno.EADDRINUSE, errno.EACCES):
+                raise
+    udp.bind(("", 0))
+
+
+def discover_ota_devices(
+    port: int,
+    broadcast: str,
+    timeout_s: float = 1.0,
+    reply_port: int = DEFAULT_OTA_LISTEN_PORT,
+) -> list[dict[str, Any]]:
     devices: dict[tuple[str, int], dict[str, Any]] = {}
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:
         udp.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        udp.bind(("", 0))
+        bind_ota_discovery_socket(udp, reply_port)
         udp.settimeout(0.1)
         udp.sendto(b"JHOTA DISCOVER 1", (broadcast, port))
         deadline = time.monotonic() + timeout_s
@@ -4305,8 +4330,9 @@ def command_ota_discover(args: argparse.Namespace) -> int:
         or ota.get("broadcast")
         or "255.255.255.255"
     )
+    reply_port = ota_listen_port(ota)
     try:
-        devices = discover_ota_devices(port, destination)
+        devices = discover_ota_devices(port, destination, reply_port=reply_port)
     except OSError as exc:
         print(f"error: OTA discovery failed: {exc}", file=sys.stderr)
         return EXIT_UPLOAD
@@ -4578,9 +4604,12 @@ def command_upload_ota(args: argparse.Namespace) -> int:
     port = int(ota.get("port") or DEFAULT_OTA_PORT)
     broadcast = str(ota.get("broadcast") or "255.255.255.255")
     configured_host = str(args.host or ota.get("host") or "")
+    listen_port = ota_listen_port(ota)
     try:
         devices = (
-            [] if configured_host else discover_ota_devices(port, broadcast)
+            []
+            if configured_host
+            else discover_ota_devices(port, broadcast, reply_port=listen_port)
         )
         device = choose_ota_device(devices, config, ota, args)
     except OSError as exc:
@@ -4610,7 +4639,6 @@ def command_upload_ota(args: argparse.Namespace) -> int:
                 f"OTA image is {len(container)} bytes but the device slot is "
                 f"only {slot_size} bytes"
             )
-        listen_port = ota_listen_port(ota)
         upload_ota_container(device, container, password, listen_port)
     except (OSError, RuntimeError, ValueError, socket.timeout) as exc:
         print(f"error: OTA upload failed: {exc}", file=sys.stderr)

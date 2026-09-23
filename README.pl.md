@@ -105,8 +105,7 @@ Wszystkie przykłady korzystają z tych samych funkcji aplikacji:
 `HAL_ENABLE_APP_TASK1`. Sposób ich uruchamiania zależy od platformy:
 
 - Na RP `app_task1()` działa na drugim rdzeniu.
-- Na STM32G474 bez systemu operacyjnego (bare-metal) `app_task1()` jest
-  wywoływana kooperacyjnie, a nie na osobnym rdzeniu.
+- Na STM32G474 `app_task1()` jest wywoływana kooperacyjnie, a nie na osobnym rdzeniu (którego G474 nie ma).
 - Na ESP32-S3 funkcje aplikacji działają pod kontrolą schedulera FreeRTOS
   uruchomionego przez ESP-IDF. Domyślnie zadania 0 i 1 są przypisane
   odpowiednio do rdzeni 0 i 1; to przypisanie można zmienić.
@@ -121,8 +120,7 @@ zanim powstanie kolejny katalog z przykładem.
 ## Obsługiwane platformy
 
 RP2040 i RP2350 korzystają z oficjalnego Pico SDK. Dla STM32G474 repozytorium
-dostarcza implementację działającą bez systemu operacyjnego oraz konfigurację
-linkowania. ESP32-S3 korzysta z ESP-IDF.
+dostarcza praktycznie pełną implementację bare-metal z własnymi konfiguracjami budowania, linkowania, i debugowania. ESP32-S3 korzysta z ESP-IDF.
 
 Na RP i STM32G474 można opcjonalnie włączyć FreeRTOS. Na ESP32-S3 jest on
 wymagany przez ESP-IDF. Implementacja mock służy do deterministycznych testów
@@ -422,14 +420,19 @@ Najważniejsze punkty odniesienia:
 
 ## Czy ten projekt powstaje z użyciem AI?
 
-To istotne pytanie, zwłaszcza w dzisiejszych czasach. I tak, w tym projekcie korzystam z AI. Nie przygotowałbym samodzielnie tak szczegółowej dokumentacji, w tym komentarzy dla Doxygena. Zdecydowaną większość buildsystemu opartego na Pythonie napisało AI - to obszar, którego osobiście nie lubię i który z ulgą powierzam agentom.
-To samo dotyczy większości testów jednostkowych (które pokrywają realne problemy i regresje, jakie napotkałem podczas pracy z projektem). AI wykonało też sporo pracy przy refaktoryzacji źródeł oraz dostosowywaniu mojego starego, lub obcego kodu Arduino do wymagań API JaszczurHAL, między innymi w zakresie obsługi wielowątkowości.
+To istotne pytanie, zwłaszcza w dzisiejszych czasach. I tak, w tym projekcie korzystam z AI.
+Do czego konkretnie?
 
-Natomiast całością kieruję ja. Architektura i struktura projektu, bramki jakości (testy jednostkowe, sanitizery, fuzzing, Valgrind, analiza statyczna) oraz testy na rzeczywistym sprzęcie to moja praca. Około 60% kodu w C/C++ napisałem własnoręcznie. Korzystam z agentów do wykonywania konkretnych zadań, ale odpowiedzialność za cały projekt pozostaje po mojej stronie. Każdy kod który
-tworzy AI przechodzi przez mój review, praktycznie nie ma tu fragmentów których nigdy nie widziałem na oczy, i które nie wiem jak działają.
+- Dokumentacja, to oczywiste. Bez AI nie przygotowałbym samodzielnie tak szczegółowej dokumentacji, w tym komentarzy dla Doxygena.
+- Buildsystem: zdecydowaną większość buildsystemu opartego na Pythonie napisało AI - to obszar, którego osobiście nie lubię i który z ulgą powierzam agentom.
+- Testy jednostkowe: pokrywające główne ścieżki i scenariusze użycia. Sporo jest takich które
+pokrywają realne problemy i regresje, jakie napotkałem podczas pracy z projektem.
+- Refaktoryzacja: AI wykonało sporo pracy przy refaktoryzacji źródeł oraz dostosowywaniu mojego starego, lub obcego kodu Arduino do wymagań API JaszczurHAL, między innymi w zakresie obsługi wielowątkowości, stabilności, itp, itd.
+- Około 60% kodu C/C++ to mój kod pisany z palca, nie liczę kodu API będącego szkieletem HALa, który powstał już z użyciem AI.
+- Konfiguracja CI, skrypty zarządzające sanitizerami, fuzzingiem, Valgrindem, analizą statyczną.
 
-Samo użycie AI nie przesądza o jakości kodu - ani na plus, ani na minus. Liczy się to, czy rozwiązanie spełnia wymagania, przechodzi testy i działa na docelowym sprzęcie. Dla mnie AI jest narzędziem, które pozwala zrealizować więcej, niż byłbym w stanie zrobić sam. Skróciło czas mojej pracy z miesięcy, do tygodni.
-I to nie jest tak, że stworzenie takiego projektu z AI jest bezbolesne - każda jedna iteracja to dalej jest mozolna praca - czy to przy sprawdzaniu, czy to przy analizowaniu dlaczego coś mimo wszystko nie działa jak powinno. To są czasami dziesiątki długich iteracji i współpracy z agentem. A już ile się nawalczyłem z AI by dokumentację w ogóle dało się czytać, to moje. ;)
+To w dalszym ciągu jest tytaniczna praca nad projektem o takiej skali. Jeśli ktoś uważa że takie coś można stworzyć zwykłym promptowaniem, bez wiedzy i bez patrzenia w kod - życzę mu powodzenia, i wszystkiego dobrego. :)
+A już ile się nawalczyłem z AI by dokumentację w ogóle dało się czytać, to moje. ;)
 
 ## Uwagi i podziękowania
 
@@ -439,7 +442,7 @@ I to nie jest tak, że stworzenie takiego projektu z AI jest bezbolesne - każda
 - Testy korzystają z forka Unity utrzymywanego przez projekt. Używaną wersję
   wskazuje [plik wersji Unity](third_party/unity_version.conf).
 - Współdzielona obsługa wyświetlaczy (`src/hal/display/drivers/`) została
-  zaimplementowana na nowo jako przenośny kod korzystający z HAL. Moduł
+  zaimplementowana od zera jako przenośny kod korzystający z HAL. Moduł
   graficzny GFX (`jh_gfx.*`) wykorzystuje dostosowane algorytmy rysowania z
   [Adafruit GFX Library](https://github.com/adafruit/Adafruit-GFX-Library).
   Sterowniki `ili9341_driver.*`, `st77xx_driver.*` i `ssd1306_driver.*`

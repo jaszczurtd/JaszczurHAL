@@ -425,12 +425,19 @@ Key references:
 
 ## Is this project built with AI?
 
-It's an important question, especially these days. And yes, I use AI in this project. I wouldn't have been able to prepare such detailed documentation on my own, including the Doxygen comments. The vast majority of the Python-based build system was written by AI - it's an area I personally don't enjoy, and I'm relieved to hand it over to agents. The same goes for most of the unit tests (but in the vast majority of cases, they are based on real regressions or issues I have encountered). AI also did a lot of work refactoring the sources and adapting my old, or someone else's, Arduino code to the requirements of the JaszczurHAL API, including multithreading support.
+This is an important question, especially these days. And yes, I do use AI in this project.
+For what exactly?
 
-But I'm the one steering the whole thing. The architecture and structure of the project, the quality gates (unit tests, sanitizers, fuzzing, Valgrind, static analysis), and testing on real hardware are my work. I wrote around 60% of the C/C++ code by hand. I use agents to carry out specific tasks, but the responsibility for the whole project stays with me. Every piece of code that AI produces goes through my review - I can say that there are no fragments here I've never laid eyes on, or that I don't know how they work.
+* Documentation - obviously. Without AI, I would not have been able to prepare such detailed documentation on my own, including Doxygen comments.
+* Build system - the vast majority of the Python-based build system was written by AI. This is an area I personally do not enjoy, and one I am happy to delegate to agents.
+* Unit tests - covering the main paths and usage scenarios. Many of them are based on real issues and regressions I encountered while working on the project.
+* Refactoring - AI did a lot of work refactoring sources and adapting my old code, or third-party Arduino code, to the requirements of the JaszczurHAL API, including multithreading support, stability improvements, and similar areas.
+* Around 60% of the C/C++ code is still code I wrote manually, not counting the API code that forms the HAL skeleton, which was already created with AI assistance.
+* CI configuration, scripts for managing sanitizers, fuzzing, Valgrind, and static analysis.
 
-Using AI on its own doesn't determine code quality - neither for better nor for worse. What matters is whether a solution meets the requirements, passes the tests, and runs on the target hardware. For me, AI is a tool that lets me achieve more than I could on my own. It cut my working time from months to weeks.
-And it's not like building a project like this with AI is painless - every single iteration is still tedious work, whether it's checking results or analyzing why something still doesn't work the way it should. Sometimes it takes dozens of long iterations and a lot of back-and-forth with the agent. And how much I had to fight with AI just to make the documentation readable at all - only I know. ;)
+This is still a massive amount of work for a project of this scale. If someone believes that something like this can be created by simple prompting, without knowledge and without actually looking at the code - I wish them good luck and all the best. :)
+
+And the amount of fighting I had to do with AI just to make the documentation readable at all - that part is mine. ;)
 
 ## Notes and credits
 
