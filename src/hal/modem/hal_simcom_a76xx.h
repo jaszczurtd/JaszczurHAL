@@ -304,7 +304,64 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_wait_boot(hal_simcom_a76xx_t h,
 hal_simcom_a76xx_result_t hal_simcom_a76xx_init(hal_simcom_a76xx_t h);
 
 /**
+ * @brief SIM card state reported by AT+CPIN?.
+ */
+typedef enum {
+  HAL_SIMCOM_A76XX_SIM_READY = 0, /**< Unlocked, no password needed. */
+  HAL_SIMCOM_A76XX_SIM_PIN,       /**< Waiting for the SIM PIN. */
+  HAL_SIMCOM_A76XX_SIM_PUK,       /**< Blocked, waiting for the PUK. */
+  HAL_SIMCOM_A76XX_SIM_OTHER      /**< Any other request (PIN2, PUK2,
+                                       PH-SIM PIN, ...). */
+} hal_simcom_a76xx_sim_state_t;
+
+/**
+ * @brief Read the SIM card state with a single AT+CPIN? query.
+ *
+ * Use it to check whether the SIM asks for a PIN before calling
+ * hal_simcom_a76xx_set_pin().
+ *
+ * @param h         Handle.
+ * @param out_state Receives the state. Written only on HAL_SIMCOM_A76XX_OK.
+ * @return HAL_SIMCOM_A76XX_OK when the modem reported a state,
+ *         HAL_SIMCOM_A76XX_INVALID_ARG for a NULL argument,
+ *         HAL_SIMCOM_A76XX_ERROR when the modem replies with an error
+ *         (e.g. SIM missing or still busy after boot),
+ *         HAL_SIMCOM_A76XX_PARSE when the reply has no +CPIN: line,
+ *         HAL_SIMCOM_A76XX_TIMEOUT after 5 s without a reply.
+ */
+hal_simcom_a76xx_result_t
+hal_simcom_a76xx_get_sim_state(hal_simcom_a76xx_t h,
+                               hal_simcom_a76xx_sim_state_t *out_state);
+
+/**
+ * @brief Unlock the SIM card with its PIN.
+ *
+ * Call it after hal_simcom_a76xx_init() when hal_simcom_a76xx_get_sim_state()
+ * reports HAL_SIMCOM_A76XX_SIM_PIN, then hal_simcom_a76xx_wait_sim_ready().
+ * A wrong PIN uses up one of the SIM's attempts, so don't retry in a loop.
+ * The PIN is hidden in the debug log.
+ *
+ * @param h   Handle.
+ * @param pin 4 to 8 decimal digits.
+ * @return HAL_SIMCOM_A76XX_OK when the modem accepts the PIN,
+ *         HAL_SIMCOM_A76XX_INVALID_ARG for a NULL argument or a malformed
+ *         PIN, HAL_SIMCOM_A76XX_ERROR when the modem rejects it (wrong PIN
+ *         or no PIN request pending), HAL_SIMCOM_A76XX_TIMEOUT after 5 s
+ *         without a reply.
+ */
+hal_simcom_a76xx_result_t hal_simcom_a76xx_set_pin(hal_simcom_a76xx_t h,
+                                                   const char *pin);
+
+/**
  * @brief Wait for AT+CPIN? to report READY.
+ *
+ * Polls hal_simcom_a76xx_get_sim_state() about once per second.
+ *
+ * @param h          Handle.
+ * @param timeout_ms Total wait time; 0 queries once.
+ * @return HAL_SIMCOM_A76XX_OK once the SIM is ready,
+ *         HAL_SIMCOM_A76XX_INVALID_ARG for a NULL handle,
+ *         HAL_SIMCOM_A76XX_TIMEOUT when the SIM isn't ready in time.
  */
 hal_simcom_a76xx_result_t hal_simcom_a76xx_wait_sim_ready(hal_simcom_a76xx_t h,
                                                           uint32_t timeout_ms);

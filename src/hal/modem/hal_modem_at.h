@@ -26,6 +26,8 @@ extern "C" {
  *
  *  - hal_modem_at_send()           - one-shot AT command, wait for
  *                                    OK/ERROR/expected-substring
+ *  - hal_modem_at_send_masked()    - the same, with a secret hidden in
+ *                                    the debug log
  *  - hal_modem_at_send_with_data() - three-phase command (cmd -> '>'
  *                                    prompt -> binary/text payload -> OK)
  *  - hal_modem_at_listen_until()   - passive listener that drains the
@@ -168,6 +170,28 @@ void hal_modem_at_destroy(hal_modem_at_t h);
 hal_modem_at_result_t hal_modem_at_send(hal_modem_at_t h, const char *cmd,
                                         const char *expected,
                                         uint32_t timeout_ms);
+
+/**
+ * @brief Send an AT command carrying a secret, such as a SIM PIN.
+ *
+ * Works like hal_modem_at_send(), but every occurrence of @p secret in the
+ * debug log of this command (the sent line and the modem's reply, echo
+ * included) is replaced with "***". The UART still receives @p cmd
+ * unchanged. Filters installed with hal_modem_at_set_log_filter() apply as
+ * well.
+ *
+ * @param h           Handle.
+ * @param cmd         AT command without trailing CR/LF. Must not be NULL.
+ * @param expected    Optional substring that signals success early, or NULL.
+ * @param timeout_ms  Timeout in ms (0 = use default_timeout_ms from config).
+ * @param secret      Text to hide in the log. NULL or "" logs @p cmd as is.
+ * @return One of hal_modem_at_result_t, as for hal_modem_at_send().
+ */
+hal_modem_at_result_t hal_modem_at_send_masked(hal_modem_at_t h,
+                                               const char *cmd,
+                                               const char *expected,
+                                               uint32_t timeout_ms,
+                                               const char *secret);
 
 /**
  * @brief Send a three-phase command: header, wait for prompt, then payload.

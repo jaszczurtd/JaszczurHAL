@@ -67,6 +67,7 @@ struct hal_modem_at_impl_s {
   void *tick_user;
   const char *const *secrets; /* not owned                              */
   size_t secret_count;
+  const char *cmd_secret; /* masked while send_masked() runs, not owned */
   bool in_use;
 };
 
@@ -198,8 +199,36 @@ static int response_terminated(const hal_modem_at_impl_t *h,
   return 0;
 }
 
+/* Replace every occurrence of `s` in the NUL-terminated `buf` with "***". */
+static void mask_secret(char *buf, size_t buf_size, const char *s) {
+  if (!s || !*s)
+    return;
+  size_t slen = strlen(s);
+  char *p = buf;
+  while ((p = strstr(p, s)) != NULL) {
+    /* replace s with "***" in-place; if "***" longer than s,
+       shift right; if shorter, shift left. */
+    const char *repl = "***";
+    size_t rlen = 3;
+    ptrdiff_t off = p - buf;
+    ptrdiff_t cur_total = (ptrdiff_t)strlen(buf);
+    ptrdiff_t delta = (ptrdiff_t)rlen - (ptrdiff_t)slen;
+    if (off + (ptrdiff_t)slen > cur_total)
+      break;
+    if (delta != 0) {
+      if (cur_total + delta + 1 > (ptrdiff_t)buf_size)
+        break;
+      memmove(p + rlen, p + slen,
+              (size_t)(cur_total - off - (ptrdiff_t)slen) + 1u);
+    }
+    memcpy(p, repl, rlen);
+    p += rlen;
+  }
+}
+
 /* Render a TX line into a heap-free local buffer with any registered
-   secrets replaced by "***", then log via hal_deb. */
+   secrets and the current command's secret replaced by "***", then log
+   via hal_deb. */
 static void log_filtered(hal_modem_at_impl_t *h, const char *tag,
                          const char *line) {
   if (!hal_deb_is_initialized())
@@ -210,34 +239,9 @@ static void log_filtered(hal_modem_at_impl_t *h, const char *tag,
     in_len = sizeof(scratch) - 1;
   memcpy(scratch, line, in_len);
   scratch[in_len] = '\0';
-  for (size_t i = 0; i < h->secret_count; i++) {
-    const char *s = h->secrets[i];
-    if (!s || !*s)
-      continue;
-    char *p = scratch;
-    size_t slen = strlen(s);
-    if (slen == 0)
-      continue;
-    while ((p = strstr(p, s)) != NULL) {
-      /* replace s with "***" in-place; if "***" longer than s,
-         shift right; if shorter, shift left. */
-      const char *repl = "***";
-      size_t rlen = 3;
-      ptrdiff_t off = p - scratch;
-      ptrdiff_t cur_total = (ptrdiff_t)strlen(scratch);
-      ptrdiff_t delta = (ptrdiff_t)rlen - (ptrdiff_t)slen;
-      if (off + (ptrdiff_t)slen > cur_total)
-        break;
-      if (delta != 0) {
-        if (cur_total + delta + 1 > (ptrdiff_t)sizeof(scratch))
-          break;
-        memmove(p + rlen, p + slen,
-                (size_t)(cur_total - off - (ptrdiff_t)slen) + 1u);
-      }
-      memcpy(p, repl, rlen);
-      p += rlen;
-    }
-  }
+  for (size_t i = 0; i < h->secret_count; i++)
+    mask_secret(scratch, sizeof(scratch), h->secrets[i]);
+  mask_secret(scratch, sizeof(scratch), h->cmd_secret);
   hal_deb("modem %s: %s", tag, scratch);
 }
 
@@ -276,6 +280,7 @@ hal_modem_at_t hal_modem_at_create(const hal_modem_at_config_t *cfg) {
   h->tick_user = NULL;
   h->secrets = NULL;
   h->secret_count = 0;
+  h->cmd_secret = NULL;
   h->cfg = *cfg;
   if (h->cfg.default_timeout_ms == 0)
     h->cfg.default_timeout_ms = 1000u;
@@ -312,12 +317,21 @@ const char *hal_modem_at_last_response(hal_modem_at_t h) {
 hal_modem_at_result_t hal_modem_at_send(hal_modem_at_t h, const char *cmd,
                                         const char *expected,
                                         uint32_t timeout_ms) {
+  return hal_modem_at_send_masked(h, cmd, expected, timeout_ms, NULL);
+}
+
+hal_modem_at_result_t hal_modem_at_send_masked(hal_modem_at_t h,
+                                               const char *cmd,
+                                               const char *expected,
+                                               uint32_t timeout_ms,
+                                               const char *secret) {
   if (!h || !h->in_use || !cmd)
     return HAL_MODEM_AT_INVALID_ARG;
   if (timeout_ms == 0)
     timeout_ms = h->cfg.default_timeout_ms;
 
   hal_mutex_lock(h->mutex);
+  h->cmd_secret = secret;
 
   /* Drain stale bytes (URCs etc.) before issuing a fresh command. Any
      complete URC lines are dispatched by absorb_byte(); whatever stays
@@ -379,6 +393,7 @@ hal_modem_at_result_t hal_modem_at_send(hal_modem_at_t h, const char *cmd,
   if (h->rx_len > 0) {
     log_filtered(h, "RX", h->cfg.rx_buf);
   }
+  h->cmd_secret = NULL;
   hal_mutex_unlock(h->mutex);
   return res;
 }
