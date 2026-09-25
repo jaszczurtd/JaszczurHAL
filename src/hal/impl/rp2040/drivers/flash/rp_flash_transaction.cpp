@@ -52,7 +52,7 @@ uintptr_t current_owner_token() {
   return (uintptr_t)get_core_num() + 1u;
 }
 
-bool address_is_xip(const void *address) {
+bool __no_inline_not_in_flash_func(address_is_xip)(const void *address) {
   const uintptr_t value = reinterpret_cast<uintptr_t>(address);
 #if defined(PICO_RP2350)
   return value >= (uintptr_t)XIP_BASE &&
@@ -126,12 +126,26 @@ struct SafeExecuteContext {
   hal_status_t status;
 };
 
+// A busy DMA channel only endangers the flash operation when it reads or
+// writes the XIP window: with XIP disabled such a transfer stalls or returns
+// garbage. Peripheral-to-RAM rings (ADC scans, audio) keep running
+// untouched, so refusing every busy channel would deny persistence to any
+// application with a continuous DMA stream.
+static bool
+__no_inline_not_in_flash_func(dma_channel_touches_xip)(uint channel) {
+  const uintptr_t read_addr = dma_hw->ch[channel].read_addr;
+  const uintptr_t write_addr = dma_hw->ch[channel].write_addr;
+  return address_is_xip(reinterpret_cast<const void *>(read_addr)) ||
+         address_is_xip(reinterpret_cast<const void *>(write_addr));
+}
+
 void __no_inline_not_in_flash_func(execute_in_safe_zone)(void *raw_context) {
   auto *context = static_cast<SafeExecuteContext *>(raw_context);
   __compiler_memory_barrier();
 
   for (uint channel = 0u; channel < NUM_DMA_CHANNELS; ++channel) {
-    if ((dma_hw->ch[channel].ctrl_trig & DMA_CH0_CTRL_TRIG_BUSY_BITS) != 0u) {
+    if ((dma_hw->ch[channel].ctrl_trig & DMA_CH0_CTRL_TRIG_BUSY_BITS) != 0u &&
+        dma_channel_touches_xip(channel)) {
       context->status = HAL_EBUSY;
       return;
     }

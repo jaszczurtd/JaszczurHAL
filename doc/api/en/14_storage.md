@@ -8,8 +8,10 @@ This chapter covers persistent data through the EEPROM API, key-value storage, L
 
 Internal-flash layouts reserve application, OTA, LittleFS, and EEPROM regions
 at link time. RP erase/program operations share the flash transaction
-coordinator, which makes the other core safe, pauses USB work, rejects active
-DMA conflicts, masks local interrupts, and restores runtime state on exit.
+coordinator, which makes the other core safe, pauses USB work, rejects busy
+DMA channels whose source or destination lies in flash (peripheral-to-RAM
+rings keep running), masks local interrupts, and restores runtime state on
+exit.
 STM32G474 uses page-aligned linker reservations and its target flash service.
 See [RP memory map](../../../link_libraries/rp_pico_lib/MEMORY_MAP.md) and
 [STM32G474 memory map](../../../link_libraries/stm32_lib/MEMORY_MAP.md).
@@ -292,6 +294,8 @@ bool hal_kv_bank_looks_present(uint16_t bank_addr, uint16_t bank_size);
 - **Dependencies:** `hal_eeprom`, `hal_crc`, `hal_sync`, `hal_serial`.
 
 **Memory layout:** Each bank must occupy an independent region. The RP default reservation is 8192 bytes: two 4096-byte sectors. STM32G474 reserves 4096 bytes: two 2048-byte pages. EEPROM banks use two non-overlapping logical ranges. `HAL_KV_PUBLISH_SIZE` sets the size of the prefix written last (256 bytes by default), and `HAL_KV_MAX_BANK_SIZE` limits the static RAM work buffer. A custom flash area must split into two banks aligned to erase boundaries.
+
+**Key budget:** the store indexes at most `HAL_KV_MAX_KEYS` distinct keys (32 by default) in a static table, independent of the bank size. The first `set` beyond that returns `HAL_ENOMEM` and logs `key index full`; a delete frees its slot. Set the define from the project's key count, and read `hal_kv_stats_t.key_capacity` next to `key_count` at runtime.
 
 `hal_kv_init_ex()` rejects incompatible erase/program alignment with
 `HAL_EINVAL` before reading banks or attempting a write, even if an existing

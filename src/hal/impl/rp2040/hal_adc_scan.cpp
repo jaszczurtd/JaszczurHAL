@@ -16,10 +16,15 @@
 
 namespace {
 
-// Two DMA channels chained into a ring: each fills one half of the buffer,
-// triggers the other and raises DMA_IRQ_0, where it is re-armed for its next
-// turn. DACless keeps DMA_IRQ_1; both paths share the converter ownership
-// flag in rp2040_adc_shared, so they exclude each other instead of colliding.
+// Two DMA channels chained into a ring: each fills one half of the buffer and
+// then chains to a control channel that writes the other half's address into
+// the other data channel's write-address trigger alias, so the ring runs on
+// the DMA alone. DMA_IRQ_0 only publishes the finished block; a core that
+// keeps interrupts masked for longer than a block (a flash transaction holds
+// them for tens of milliseconds) loses blocks but the ring never runs past
+// its buffer. DACless keeps DMA_IRQ_1; both paths share the converter
+// ownership flag in rp2040_adc_shared, so they exclude each other instead of
+// colliding.
 constexpr uint32_t kMinConversionCycles = JH_RP_ADC_CONVERSION_CYCLES;
 constexpr uint32_t kMaxConversionCycles = 65536u;
 constexpr uint8_t kTemperatureInput = 4u;
@@ -31,6 +36,8 @@ struct scan_state_t {
   uint8_t input_mask;
   uint8_t input_of_position[kInputs];
   int channel[2];
+  int control[2];
+  uint32_t reload_target[2]; /* half(b) as the control channel's source */
   uint32_t samples_per_block;
   bool adc_owned;
   bool irq_owned;
@@ -49,20 +56,30 @@ uint16_t *half(uint8_t index) {
 
 void dma_irq0_handler(void) {
   const uint32_t ints = dma_hw->ints0;
+  uint32_t finished = 0u;
+  uint8_t newest = s.completed;
   for (uint8_t b = 0u; b < 2u; ++b) {
     if (s.channel[b] < 0 || (ints & (1u << (uint)s.channel[b])) == 0u) {
       continue;
     }
     dma_hw->ints0 = 1u << (uint)s.channel[b];
-    // The other channel runs now; this one restarts when that one chains.
-    dma_channel_set_write_addr((uint)s.channel[b], half(b), false);
-    dma_channel_set_trans_count((uint)s.channel[b], s.samples_per_block, false);
-    s.marker =
-        s.config.marker != NULL ? s.config.marker(s.config.marker_user) : 0u;
-    s.completed_us = hal_micros();
-    s.completed = b;
-    s.sequence = s.sequence + 1u;
+    ++finished;
+    newest = b;
   }
+  if (finished == 0u) {
+    return;
+  }
+  // Both halves finished while this core kept interrupts masked (a flash
+  // transaction, for example): the ring went on by itself, so the newest
+  // complete half is the one whose data channel is not filling right now.
+  if (finished == 2u) {
+    newest = dma_channel_is_busy((uint)s.channel[0]) ? 1u : 0u;
+  }
+  s.marker =
+      s.config.marker != NULL ? s.config.marker(s.config.marker_user) : 0u;
+  s.completed_us = hal_micros();
+  s.completed = newest;
+  s.sequence = s.sequence + finished;
 }
 
 bool scan_reader(uint8_t input, uint16_t *raw) {
@@ -86,17 +103,31 @@ bool input_for_pin(uint8_t pin, uint8_t *input) {
   return true;
 }
 
-void configure_channel(int channel, int next, uint16_t *target) {
+void configure_channel(int channel, int next_control, uint16_t *target) {
   dma_channel_config cfg = dma_channel_get_default_config((uint)channel);
   channel_config_set_transfer_data_size(&cfg, DMA_SIZE_16);
   channel_config_set_read_increment(&cfg, false);
   channel_config_set_write_increment(&cfg, true);
   channel_config_set_dreq(&cfg, DREQ_ADC);
-  channel_config_set_chain_to(&cfg, (uint)next);
+  channel_config_set_chain_to(&cfg, (uint)next_control);
   channel_config_set_irq_quiet(&cfg, false);
   dma_channel_configure((uint)channel, &cfg, target, &adc_hw->fifo,
                         s.samples_per_block, false);
   dma_channel_set_irq0_enabled((uint)channel, true);
+}
+
+// One word from reload_target[b] into data channel b's write-address trigger
+// alias: the write pointer returns to half(b) and the block starts.
+void configure_control(int control, int data_channel, uint32_t *source) {
+  dma_channel_config cfg = dma_channel_get_default_config((uint)control);
+  channel_config_set_transfer_data_size(&cfg, DMA_SIZE_32);
+  channel_config_set_read_increment(&cfg, false);
+  channel_config_set_write_increment(&cfg, false);
+  channel_config_set_irq_quiet(&cfg, true);
+  channel_config_set_dreq(&cfg, DREQ_FORCE);
+  dma_channel_configure((uint)control, &cfg,
+                        &dma_hw->ch[data_channel].al2_write_addr_trig, source,
+                        1u, false);
 }
 
 } // namespace
@@ -149,6 +180,8 @@ hal_status_t jh_adc_scan_start(const hal_adc_scan_config_t *config,
   s.samples_per_block = config->block_frames * (uint32_t)config->pin_count;
   s.channel[0] = -1;
   s.channel[1] = -1;
+  s.control[0] = -1;
+  s.control[1] = -1;
   s.sequence = 0u;
   s.completed = 0u;
   s.completed_us = 0u;
@@ -162,7 +195,10 @@ hal_status_t jh_adc_scan_start(const hal_adc_scan_config_t *config,
 
   s.channel[0] = dma_claim_unused_channel(false);
   s.channel[1] = dma_claim_unused_channel(false);
-  if (s.channel[0] < 0 || s.channel[1] < 0) {
+  s.control[0] = dma_claim_unused_channel(false);
+  s.control[1] = dma_claim_unused_channel(false);
+  if (s.channel[0] < 0 || s.channel[1] < 0 || s.control[0] < 0 ||
+      s.control[1] < 0) {
     return HAL_ENOMEM;
   }
   // The SDK's shared-handler pool hard-asserts when exhausted; an exclusive
@@ -192,8 +228,14 @@ hal_status_t jh_adc_scan_start(const hal_adc_scan_config_t *config,
   adc_fifo_drain();
 
   dma_hw->ints0 = (1u << (uint)s.channel[0]) | (1u << (uint)s.channel[1]);
-  configure_channel(s.channel[0], s.channel[1], half(0u));
-  configure_channel(s.channel[1], s.channel[0], half(1u));
+  s.reload_target[0] = (uint32_t)(uintptr_t)half(0u);
+  s.reload_target[1] = (uint32_t)(uintptr_t)half(1u);
+  // Data 0 finishes -> control 1 starts data 1 at half(1) -> control 0
+  // starts data 0 at half(0) -> ...
+  configure_channel(s.channel[0], s.control[1], half(0u));
+  configure_channel(s.channel[1], s.control[0], half(1u));
+  configure_control(s.control[0], s.channel[0], &s.reload_target[0]);
+  configure_control(s.control[1], s.channel[1], &s.reload_target[1]);
   rp2040_adc_set_scan_reader(scan_reader);
   dma_channel_start((uint)s.channel[0]);
   adc_run(true);
@@ -215,6 +257,9 @@ hal_status_t jh_adc_scan_stop(void) {
       dma_channel_abort((uint)s.channel[b]);
       dma_hw->ints0 = 1u << (uint)s.channel[b];
     }
+    if (s.control[b] >= 0) {
+      dma_channel_abort((uint)s.control[b]);
+    }
   }
   if (s.irq_owned) {
     irq_set_enabled(DMA_IRQ_0, false);
@@ -225,6 +270,10 @@ hal_status_t jh_adc_scan_stop(void) {
     if (s.channel[b] >= 0) {
       dma_channel_unclaim((uint)s.channel[b]);
       s.channel[b] = -1;
+    }
+    if (s.control[b] >= 0) {
+      dma_channel_unclaim((uint)s.control[b]);
+      s.control[b] = -1;
     }
   }
   if (s.started) {

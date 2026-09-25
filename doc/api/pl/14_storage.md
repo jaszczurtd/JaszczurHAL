@@ -9,7 +9,7 @@ Rozdział opisuje trwały zapis danych przez API EEPROM, magazyn klucz-wartość
 Regiony aplikacji, OTA, LittleFS i EEPROM w wewnętrznej pamięci flash są rezerwowane
 podczas linkowania. Na RP operacje kasowania i programowania korzystają ze
 wspólnego koordynatora transakcji flash, który zabezpiecza drugi rdzeń,
-wstrzymuje pracę USB, odrzuca aktywne konflikty DMA, maskuje lokalne
+wstrzymuje pracę USB, odrzuca zajęte kanały DMA, których źródło lub cel leży we flash (pierścienie peryferium->RAM pracują dalej), maskuje lokalne
 przerwania, a po zakończeniu przywraca poprzedni stan runtime. STM32G474
 używa rezerwacji linkera wyrównanych do stron oraz usługi flash właściwej dla
 tego targetu. Zobacz [mapę pamięci RP](../../../link_libraries/rp_pico_lib/MEMORY_MAP.md) oraz
@@ -300,6 +300,8 @@ bool hal_kv_bank_looks_present(uint16_t bank_addr, uint16_t bank_size);
 - **Zależności:** `hal_eeprom`, `hal_crc`, `hal_sync`, `hal_serial`.
 
 **Podział pamięci:** Każdy bank musi zajmować niezależny region. Domyślna rezerwacja RP wynosi 8192 bajty: dwa sektory po 4096 bajtów. STM32G474 rezerwuje 4096 bajtów: dwie strony po 2048 bajtów. W EEPROM banki zajmują dwa nienakładające się zakresy logiczne. `HAL_KV_PUBLISH_SIZE` określa rozmiar prefiksu zapisywanego na końcu (domyślnie 256 bajtów), a `HAL_KV_MAX_BANK_SIZE` ogranicza statyczny bufor roboczy w RAM. Niestandardowy obszar flash musi dać się podzielić na dwa banki wyrównane do granic kasowania.
+
+**Budżet kluczy:** magazyn indeksuje najwyżej `HAL_KV_MAX_KEYS` różnych kluczy (domyślnie 32) w statycznej tablicy, niezależnie od rozmiaru banku. Pierwszy `set` ponad ten limit zwraca `HAL_ENOMEM` i loguje `key index full`; usunięcie klucza zwalnia miejsce. Ustaw definicję według liczby kluczy projektu, a w runtime czytaj `hal_kv_stats_t.key_capacity` obok `key_count`.
 
 `hal_kv_init_ex()` odrzuca nieprawidłowe wyrównanie kasowania/programowania
 przez `HAL_EINVAL` przed odczytem banków lub próbą zapisu, także gdy istniejący

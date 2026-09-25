@@ -22,6 +22,8 @@ typedef struct {
   uint16_t used_bytes;
   uint16_t capacity_bytes;
   uint16_t key_count;
+  uint16_t
+      key_capacity; /**< Distinct keys the index holds (HAL_KV_MAX_KEYS). */
   uint32_t next_sequence;
 } hal_kv_stats_t;
 

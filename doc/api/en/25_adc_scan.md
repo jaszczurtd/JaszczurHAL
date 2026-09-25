@@ -58,6 +58,13 @@ core that started the scan: a few loads at most, no HAL calls, no locks. Use
 it to pair a block with something like a PWM counter. On ESP32-S3 the hook and
 `completed_us` are taken by the task that collects the block.
 
+On RP the ring runs on the DMA alone: each data channel chains to a control
+channel that resets the other channel's write pointer, so the CPU only
+publishes finished blocks. A core that keeps interrupts masked for longer than
+a block, for example during a flash transaction, misses blocks (a gap in
+`sequence`) but the ring never writes past its buffer. The scan takes four DMA
+channels.
+
 ## Ownership
 
 Start and stop belong to one owner core; take and latest are serialized and

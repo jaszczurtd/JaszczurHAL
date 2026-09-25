@@ -26,11 +26,13 @@ constexpr uint8_t KV_REC_TYPE_DELETE = 3u;
 constexpr uint16_t KV_REC_HDR_SIZE = 16u;
 constexpr uint16_t KV_REC_FTR_SIZE = 2u;
 constexpr uint16_t KV_REC_OVERHEAD = KV_REC_HDR_SIZE + KV_REC_FTR_SIZE;
-constexpr uint16_t KV_MAX_KEYS = 32u;
+constexpr uint16_t KV_MAX_KEYS = static_cast<uint16_t>(HAL_KV_MAX_KEYS);
 constexpr uint16_t KV_PUBLISH_SIZE = static_cast<uint16_t>(HAL_KV_PUBLISH_SIZE);
 
 static_assert(HAL_KV_MAX_BANK_SIZE <= UINT16_MAX,
               "HAL_KV_MAX_BANK_SIZE must fit in uint16_t");
+static_assert(HAL_KV_MAX_KEYS >= 1u && HAL_KV_MAX_KEYS <= 4096u,
+              "HAL_KV_MAX_KEYS must be within 1..4096");
 static_assert(HAL_KV_PUBLISH_SIZE <= UINT16_MAX,
               "HAL_KV_PUBLISH_SIZE must fit in uint16_t");
 static_assert(HAL_KV_PUBLISH_SIZE >= KV_BANK_HDR_SIZE,
@@ -315,7 +317,8 @@ static hal_status_t build_index_from_staging(void) {
         index = index_alloc();
       }
       if (index < 0) {
-        hal_derr("hal_kv: key index full, increase KV_MAX_KEYS");
+        hal_derr("hal_kv: key index full (%u keys), raise HAL_KV_MAX_KEYS",
+                 static_cast<unsigned>(KV_MAX_KEYS));
         return HAL_ENOMEM;
       }
       s_index[index].in_use = true;
@@ -484,7 +487,8 @@ static hal_status_t set_blob_locked(uint16_t key, uint8_t type,
     return finish_no_change_locked();
   }
   if (index < 0 && index_alloc() < 0) {
-    hal_derr("hal_kv: key index full, increase KV_MAX_KEYS");
+    hal_derr("hal_kv: key index full (%u keys), raise HAL_KV_MAX_KEYS",
+             static_cast<unsigned>(KV_MAX_KEYS));
     return HAL_ENOMEM;
   }
 
@@ -851,6 +855,7 @@ hal_status_t hal_kv_get_stats_ex(hal_kv_stats_t *out_stats) {
   out_stats->used_bytes = s_used_offset;
   out_stats->capacity_bytes = s_bank_size;
   out_stats->key_count = index_count();
+  out_stats->key_capacity = KV_MAX_KEYS;
   out_stats->next_sequence = s_next_seq;
   hal_mutex_unlock(s_kv_mutex);
   return HAL_OK;
