@@ -4,6 +4,7 @@
 #include "utils/unity.h"
 
 #include <atomic>
+#include <cstring>
 #include <thread>
 #include <vector>
 
@@ -143,6 +144,35 @@ void test_ex_blob_reports_overflow_and_length(void) {
 
   TEST_ASSERT_EQUAL_INT(HAL_ENOENT,
                         hal_kv_get_blob_ex(999, big, sizeof(big), &len));
+}
+
+void test_key_index_capacity_is_reported_and_enforced(void) {
+  hal_kv_stats_t stats = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_stats_ex(&stats));
+  TEST_ASSERT_EQUAL_UINT16(HAL_KV_MAX_KEYS, stats.key_capacity);
+  TEST_ASSERT_EQUAL_UINT16(0u, stats.key_count);
+
+  // Fill every index slot with a small record; the bank has room for far more.
+  for (uint16_t key = 1u; key <= stats.key_capacity; key++) {
+    TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_u32_ex(key, key));
+  }
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_stats_ex(&stats));
+  TEST_ASSERT_EQUAL_UINT16(stats.key_capacity, stats.key_count);
+
+  // The next distinct key finds no slot; an existing key still updates.
+  hal_mock_serial_reset();
+  TEST_ASSERT_EQUAL_INT(HAL_ENOMEM,
+                        hal_kv_set_u32_ex(stats.key_capacity + 1u, 7u));
+  TEST_ASSERT_NOT_NULL(strstr(hal_mock_serial_last_line(), "key index full"));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_u32_ex(1u, 99u));
+
+  // Deleting a key frees its slot for a new one.
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_delete_ex(2u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_u32_ex(stats.key_capacity + 1u, 7u));
+  uint32_t out = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_kv_get_u32_ex(stats.key_capacity + 1u, &out));
+  TEST_ASSERT_EQUAL_UINT32(7u, out);
 }
 
 void test_ex_stats_and_commit_status(void) {
@@ -381,6 +411,7 @@ int main(void) {
   RUN_TEST(test_ex_u32_roundtrip_and_status);
   RUN_TEST(test_ex_blob_reports_overflow_and_length);
   RUN_TEST(test_ex_stats_and_commit_status);
+  RUN_TEST(test_key_index_capacity_is_reported_and_enforced);
   RUN_TEST(test_ex_initialization_and_capacity_errors);
   RUN_TEST(test_ex_blob_too_large_reports_overflow);
   RUN_TEST(test_deferred_commit_publishes_one_complete_bank);

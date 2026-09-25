@@ -113,6 +113,13 @@
 #define HAL_KV_PUBLISH_SIZE 256u
 #endif
 
+/* Distinct keys the key-value store indexes at once. The index is a static
+ * table; a set() beyond it returns HAL_ENOMEM. Size it from the project's key
+ * budget (hal_kv_stats_t.key_capacity reports the built-in value). */
+#ifndef HAL_KV_MAX_KEYS
+#define HAL_KV_MAX_KEYS 32u
+#endif
+
 #ifndef HAL_RP_OTA_BOOT_SIZE
 #define HAL_RP_OTA_BOOT_SIZE 0u
 #endif

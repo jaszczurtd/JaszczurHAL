@@ -57,6 +57,13 @@ który uruchomił skan: co najwyżej kilka odczytów, bez wywołań HAL, bez blo
 Służy do sparowania bloku na przykład z licznikiem PWM. Na ESP32-S3 hook
 i `completed_us` pobiera zadanie, które odbiera blok.
 
+Na RP pierścień pracuje wyłącznie na DMA: każdy kanał danych po bloku uruchamia
+kanał sterujący, który cofa wskaźnik zapisu drugiego kanału na początek jego
+połowy, więc CPU tylko publikuje gotowe bloki. Rdzeń, który trzyma przerwania
+wyłączone dłużej niż jeden blok, na przykład w czasie transakcji flash, gubi
+bloki (przerwa w `sequence`), ale pierścień nigdy nie wychodzi poza bufor. Skan
+zajmuje cztery kanały DMA.
+
 ## Własność
 
 Start i stop należą do jednego rdzenia właściciela; take i latest są
