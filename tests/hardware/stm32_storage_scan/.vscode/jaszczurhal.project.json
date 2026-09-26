@@ -1,0 +1,23 @@
+{
+    "$schema": "../../../../vscode/schema/jh_vscode_project.schema.json",
+    "project": "JaszczurHAL hardware tests",
+    "module": "stm32_storage_scan",
+    "toolchain": "cmake",
+    "target": "stm32g474",
+    "board": "nucleo-g474re",
+    "buildDir": "${jhRoot}/.build/hardware/stm32_storage_scan",
+    "cmakeBuildDir": "${buildDir}/cmake",
+    "cmake": {
+        "sourceDir": "${project}/../../../cmake/jh_firmware_project",
+        "cache": {
+            "JH_ARTIFACT_DIR": "${buildDir}",
+            "JH_PROJECT_DIR": "${project}",
+            "JH_MODULE_NAME": "stm32_storage_scan"
+        }
+    },
+    "artifacts": {
+        "elf": "${buildDir}/firmware.elf",
+        "map": "${buildDir}/firmware.map",
+        "compileCommands": "${buildDir}/compile_commands_patched.json"
+    }
+}

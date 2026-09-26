@@ -1,5 +1,7 @@
 #include "esp_idf_fake.h"
 
+#include "esp_adc/adc_continuous.h"
+
 #include "driver/i2c_slave.h"
 #include "driver/ledc.h"
 #include "driver/rmt_tx.h"
@@ -139,7 +141,15 @@ void task_main(fake_idf_task *task) {
 
 } // namespace
 
+struct AdcFake {
+  AdcContinuousState state;
+  std::vector<uint8_t> ring;
+  adc_continuous_ctx_t *handle;
+};
+AdcFake g_adc;
+
 void reset() {
+  g_adc = AdcFake{};
   {
     std::lock_guard<std::mutex> lock(g_lock);
     for (auto &task : g_tasks) {
@@ -715,3 +725,137 @@ extern "C" void xt_unhandled_exception(XtExcFrame *) {
  */
 
 extern "C" void hal_assert_fail(const char *msg) { throw AssertFailure(msg); }
+
+// --- continuous ADC driver -------------------------------------------------
+
+struct adc_continuous_ctx_t {
+  int token;
+};
+
+namespace fake_idf {
+
+const AdcContinuousState &adc_continuous_state() { return g_adc.state; }
+
+void adc_continuous_push(uint8_t unit, uint8_t channel, uint16_t data) {
+  adc_digi_output_data_t record = {};
+  record.type2.unit = unit;
+  record.type2.channel = channel;
+  record.type2.data = data;
+  const uint8_t *bytes = reinterpret_cast<const uint8_t *>(&record.val);
+  g_adc.ring.insert(g_adc.ring.end(), bytes, bytes + sizeof(record.val));
+}
+
+size_t adc_continuous_pending_bytes() { return g_adc.ring.size(); }
+
+} // namespace fake_idf
+
+static adc_continuous_ctx_t g_adc_ctx = {1};
+
+esp_err_t adc_continuous_new_handle(const adc_continuous_handle_cfg_t *config,
+                                    adc_continuous_handle_t *out_handle) {
+  const esp_err_t result = driver_call("adc_continuous_new_handle");
+  if (result != ESP_OK) {
+    return result;
+  }
+  if (config == nullptr || out_handle == nullptr || g_adc.state.live) {
+    return ESP_ERR_INVALID_STATE;
+  }
+  g_adc.state.live = true;
+  g_adc.state.max_store_buf_size = config->max_store_buf_size;
+  g_adc.state.conv_frame_size = config->conv_frame_size;
+  g_adc.handle = &g_adc_ctx;
+  *out_handle = g_adc.handle;
+  return ESP_OK;
+}
+
+esp_err_t adc_continuous_config(adc_continuous_handle_t handle,
+                                const adc_continuous_config_t *config) {
+  const esp_err_t result = driver_call("adc_continuous_config");
+  if (result != ESP_OK) {
+    return result;
+  }
+  if (handle != g_adc.handle || !g_adc.state.live || config == nullptr) {
+    return ESP_ERR_INVALID_STATE;
+  }
+  g_adc.state.sample_freq_hz = config->sample_freq_hz;
+  g_adc.state.conv_mode = (int)config->conv_mode;
+  g_adc.state.pattern.assign(config->adc_pattern,
+                             config->adc_pattern + config->pattern_num);
+  return ESP_OK;
+}
+
+esp_err_t adc_continuous_start(adc_continuous_handle_t handle) {
+  const esp_err_t result = driver_call("adc_continuous_start");
+  if (result != ESP_OK) {
+    return result;
+  }
+  if (handle != g_adc.handle || !g_adc.state.live || g_adc.state.started) {
+    return ESP_ERR_INVALID_STATE;
+  }
+  g_adc.state.started = true;
+  return ESP_OK;
+}
+
+esp_err_t adc_continuous_stop(adc_continuous_handle_t handle) {
+  const esp_err_t result = driver_call("adc_continuous_stop");
+  if (result != ESP_OK) {
+    return result;
+  }
+  if (handle != g_adc.handle || !g_adc.state.started) {
+    return ESP_ERR_INVALID_STATE;
+  }
+  g_adc.state.started = false;
+  return ESP_OK;
+}
+
+esp_err_t adc_continuous_deinit(adc_continuous_handle_t handle) {
+  const esp_err_t result = driver_call("adc_continuous_deinit");
+  if (result != ESP_OK) {
+    return result;
+  }
+  if (handle != g_adc.handle || !g_adc.state.live || g_adc.state.started) {
+    return ESP_ERR_INVALID_STATE;
+  }
+  g_adc.state.live = false;
+  g_adc.handle = nullptr;
+  g_adc.ring.clear();
+  return ESP_OK;
+}
+
+esp_err_t adc_continuous_read(adc_continuous_handle_t handle, uint8_t *buf,
+                              uint32_t length_max, uint32_t *out_length,
+                              uint32_t) {
+  log_call("adc_continuous_read");
+  if (handle != g_adc.handle || !g_adc.state.started || buf == nullptr ||
+      out_length == nullptr) {
+    return ESP_ERR_INVALID_STATE;
+  }
+  const size_t count = std::min<size_t>(length_max, g_adc.ring.size());
+  if (count == 0u) {
+    *out_length = 0u;
+    return ESP_ERR_TIMEOUT;
+  }
+  std::copy(g_adc.ring.begin(), g_adc.ring.begin() + (long)count, buf);
+  g_adc.ring.erase(g_adc.ring.begin(), g_adc.ring.begin() + (long)count);
+  *out_length = (uint32_t)count;
+  return ESP_OK;
+}
+
+/* ESP32-S3 pads: GPIO1..10 are ADC1 channels 0..9, GPIO11..20 ADC2. */
+esp_err_t adc_continuous_io_to_channel(int io_num, adc_unit_t *unit_id,
+                                       adc_channel_t *channel) {
+  if (unit_id == nullptr || channel == nullptr) {
+    return ESP_ERR_INVALID_ARG;
+  }
+  if (io_num >= 1 && io_num <= 10) {
+    *unit_id = ADC_UNIT_1;
+    *channel = (adc_channel_t)(io_num - 1);
+    return ESP_OK;
+  }
+  if (io_num >= 11 && io_num <= 20) {
+    *unit_id = ADC_UNIT_2;
+    *channel = (adc_channel_t)(io_num - 11);
+    return ESP_OK;
+  }
+  return ESP_ERR_INVALID_ARG;
+}

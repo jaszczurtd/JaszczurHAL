@@ -56,12 +56,12 @@ jh_adc_scan_latest_frame(uint8_t busy_half, uint32_t written_samples,
 
 /**
  * @brief One DMA channel of the ring, as the reader sampled it.
- * @note The completion interrupt re-arms a channel the moment it finishes and
- * points its write pointer back at the base. A reader that saw the channel
- * busy and then read a pointer at the base cannot tell "just triggered, no
- * frame yet" from "just finished, whole half written" by the pointer alone;
- * a second look at the busy flag can, and the second case must not hand out
- * the other half, which is the one being overwritten right then.
+ * @note The moment a channel finishes, the ring restarts the other one at the
+ * base of its half. A reader that saw a channel busy and then read a pointer
+ * at the base cannot tell "just triggered, no frame yet" from "just finished,
+ * whole half written" by the pointer alone; a second look at the busy flag
+ * can, and the second case must not hand out the other half, which is the
+ * one being overwritten right then.
  */
 typedef struct {
   bool busy_before; /**< Busy when first looked at, before the pointer. */
@@ -80,11 +80,19 @@ typedef struct {
  * @param out_frame Non-NULL; receives the frame index inside that half.
  * @return True when a complete frame exists, false before the first one.
  * @note A channel that went idle between the two looks has filled its half
- * whatever its pointer says now. With no channel busy, a pointer at the end
- * of its half marks the block that just completed with its interrupt still
- * pending; only when neither applies does the interrupt's bookkeeping serve.
- * Bench 2026-09-16: the re-arm race alone put a frame from the block before
- * into one read in about three hundred thousand.
+ * whatever its pointer says now. A busy channel without a complete frame
+ * hands over to the other half only when that half's pointer reached its
+ * end; before the first block it has not. With no channel busy, a single
+ * pointer at the end of its half marks the block that just completed with
+ * its interrupt still pending. Two pointers at their ends cannot be ordered:
+ * a finished channel keeps its pointer at the end until it is restarted a
+ * block later, so between two blocks both look full. Then, and when neither
+ * applies, the interrupt's bookkeeping serves; a backend that can look again
+ * while no channel is busy, or while both look busy, should do so first: the
+ * first is the gap between blocks, the second a snapshot torn by a stall, and
+ * the bookkeeping may still name the block before. Bench 2026-09-16: the
+ * re-arm race alone put a frame from the block before into one read in
+ * about three hundred thousand.
  */
 static inline bool
 jh_adc_scan_pick_frame(const jh_adc_scan_channel_t channels[2],
@@ -101,16 +109,31 @@ jh_adc_scan_pick_frame(const jh_adc_scan_channel_t channels[2],
     }
     const uint32_t written =
         channels[b].busy_after ? channels[b].written : full;
-    return jh_adc_scan_latest_frame(b, written, pin_count, block_frames,
-                                    sequence, completed_half, out_half,
-                                    out_frame);
-  }
-  for (uint8_t b = 0u; b < 2u; ++b) {
-    if (channels[b].written >= full) {
-      return jh_adc_scan_latest_frame(b, full, pin_count, block_frames,
-                                      sequence, completed_half, out_half,
-                                      out_frame);
+    const uint32_t frames = written / pin_count;
+    if (frames >= 1u) {
+      *out_half = b;
+      *out_frame = frames - 1u;
+      return true;
     }
+    // No complete frame in the block in progress yet. The other half holds
+    // the block before exactly when its pointer reached the end: a finished
+    // channel keeps it there until restarted, and before the first block it
+    // still sits at the base. The interrupt's count says nothing about which
+    // half, and may lag behind the ring.
+    const uint8_t other = (uint8_t)(1u - b);
+    if (channels[other].written < full) {
+      return false;
+    }
+    *out_half = other;
+    *out_frame = block_frames - 1u;
+    return true;
+  }
+  const bool full0 = channels[0].written >= full;
+  const bool full1 = channels[1].written >= full;
+  if (full0 != full1) {
+    return jh_adc_scan_latest_frame(full0 ? 0u : 1u, full, pin_count,
+                                    block_frames, sequence, completed_half,
+                                    out_half, out_frame);
   }
   return jh_adc_scan_latest_frame(UINT8_MAX, 0u, pin_count, block_frames,
                                   sequence, completed_half, out_half,

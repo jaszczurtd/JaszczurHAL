@@ -3,6 +3,8 @@
 #include "hal/core/hal_config.h"
 #ifdef HAL_ENABLE_ADC_SCAN
 #include "hal/analog/jh_adc_scan_backend.h"
+#include "hal/core/hal_mutex_once.h"
+#include "hal/system/hal_sync.h"
 #include "hal/system/hal_system.h"
 #include "jh_esp32_adc_scan.h"
 #include "jh_esp32_status.h"
@@ -16,16 +18,21 @@
 namespace {
 
 // The ESP-IDF continuous driver keeps its own DMA ring of 4-byte records in
-// pattern order. Blocks are collected by the task that calls take(): the
-// stream is decoded in small fixed chunks into the caller buffer, resyncing
-// on the first pattern position, so no heap is used beyond the driver's own
-// pool. Completion time and marker therefore belong to the collecting task.
+// pattern order. The stream is decoded in small fixed chunks into the caller
+// buffer, resyncing on the first pattern position, so no heap is used beyond
+// the driver's own pool. Both take() and latest() collect whatever the driver
+// holds before answering, so the newest sample is as fresh as the driver ring
+// whichever of them the application calls; hal_adc_read() of a scanned pin
+// arrives through latest() under the ADC mutex while take() runs under the
+// facade mutex, hence the backend's own lock around the decoder state.
+// Completion time and marker belong to the task that collected the block.
 constexpr uint32_t kChunkRecords = 64u;
 constexpr uint32_t kRecordBytes = SOC_ADC_DIGI_RESULT_BYTES;
 constexpr uint32_t kChunkBytes = kChunkRecords * kRecordBytes;
 
 struct scan_state_t {
   hal_adc_scan_config_t config;
+  hal_mutex_t lock;
   adc_continuous_handle_t handle;
   uint32_t samples_per_block;
   bool started;
@@ -103,6 +110,19 @@ bool decode(const uint8_t *bytes, uint32_t length) {
   return completed;
 }
 
+/* Collect whatever the driver holds; the newest completed block wins. */
+void drain_locked(void) {
+  for (uint32_t rounds = 0u; rounds < 64u; ++rounds) {
+    uint32_t length = 0u;
+    const esp_err_t err =
+        adc_continuous_read(s.handle, s.chunk, kChunkBytes, &length, 0u);
+    if (err != ESP_OK || length == 0u) {
+      break;
+    }
+    (void)decode(s.chunk, length);
+  }
+}
+
 bool scan_reader(uint8_t pin, uint16_t *raw) {
   for (uint8_t i = 0u; i < s.config.pin_count; ++i) {
     if (s.config.pins[i] == pin) {
@@ -118,6 +138,9 @@ hal_status_t jh_adc_scan_start(const hal_adc_scan_config_t *config,
                                uint8_t *positions, uint32_t *frame_period_ns) {
   if (s.started) {
     return HAL_EBUSY;
+  }
+  if (jh_hal_mutex_try_create_once(&s.lock) == NULL) {
+    return HAL_ENOMEM;
   }
   adc_digi_pattern_config_t pattern[HAL_ADC_SCAN_MAX_PINS] = {};
   for (uint8_t i = 0u; i < SOC_ADC_CHANNEL_NUM(0); ++i) {
@@ -156,8 +179,17 @@ hal_status_t jh_adc_scan_start(const hal_adc_scan_config_t *config,
   s.samples_per_block = config->block_frames * (uint32_t)config->pin_count;
   reset_stream();
 
+  // The driver ring must outlast the longest gap between two collections:
+  // a FreeRTOS tick of the collecting task, a flash operation with the cache
+  // off. Two blocks of records, the application's own measure of how long
+  // it may look away, or the driver minimum, whichever is larger.
+  const uint32_t two_blocks = 2u * s.samples_per_block * kRecordBytes;
+  const uint32_t pool_bytes =
+      two_blocks > kChunkBytes * 8u
+          ? ((two_blocks + kChunkBytes - 1u) / kChunkBytes) * kChunkBytes
+          : kChunkBytes * 8u;
   adc_continuous_handle_cfg_t handle_config = {};
-  handle_config.max_store_buf_size = kChunkBytes * 8u;
+  handle_config.max_store_buf_size = pool_bytes;
   handle_config.conv_frame_size = kChunkBytes;
   esp_err_t err = adc_continuous_new_handle(&handle_config, &s.handle);
   if (err != ESP_OK) {
@@ -186,8 +218,12 @@ hal_status_t jh_adc_scan_start(const hal_adc_scan_config_t *config,
 }
 
 hal_status_t jh_adc_scan_stop(void) {
+  if (s.lock == NULL) {
+    return HAL_OK; /* never started */
+  }
+  jh_esp32_adc_set_scan_reader(NULL);
+  hal_mutex_lock(s.lock);
   if (s.started) {
-    jh_esp32_adc_set_scan_reader(NULL);
     (void)adc_continuous_stop(s.handle);
     s.started = false;
   }
@@ -195,46 +231,52 @@ hal_status_t jh_adc_scan_stop(void) {
     (void)adc_continuous_deinit(s.handle);
     s.handle = NULL;
   }
+  hal_mutex_unlock(s.lock);
   return HAL_OK;
 }
 
 bool jh_adc_scan_completed(hal_adc_scan_block_t *block) {
+  if (s.lock == NULL) {
+    return false;
+  }
+  hal_mutex_lock(s.lock);
   if (!s.started) {
+    hal_mutex_unlock(s.lock);
     return false;
   }
-  // Drain whatever the driver has; the newest completed block wins.
-  for (uint32_t rounds = 0u; rounds < 64u; ++rounds) {
-    uint32_t length = 0u;
-    const esp_err_t err =
-        adc_continuous_read(s.handle, s.chunk, kChunkBytes, &length, 0u);
-    if (err != ESP_OK || length == 0u) {
-      break;
-    }
-    (void)decode(s.chunk, length);
+  drain_locked();
+  const bool any = s.sequence != 0u;
+  if (any) {
+    jh_adc_scan_describe(block, half(s.completed), s.config.block_frames,
+                         s.config.pin_count, s.sequence, s.completed_us,
+                         s.marker);
   }
-  if (s.sequence == 0u) {
-    return false;
-  }
-  jh_adc_scan_describe(block, half(s.completed), s.config.block_frames,
-                       s.config.pin_count, s.sequence, s.completed_us,
-                       s.marker);
-  return true;
+  hal_mutex_unlock(s.lock);
+  return any;
 }
 
 hal_status_t jh_adc_scan_latest(uint8_t position, uint16_t *raw) {
-  if (!s.started || position >= s.config.pin_count) {
+  if (s.lock == NULL) {
     return HAL_ESTATE;
   }
+  hal_mutex_lock(s.lock);
+  if (!s.started || position >= s.config.pin_count) {
+    hal_mutex_unlock(s.lock);
+    return HAL_ESTATE;
+  }
+  drain_locked();
+  hal_status_t status = HAL_OK;
   if (s.frame >= 1u) {
     *raw = half(s.writing)[((s.frame - 1u) * s.config.pin_count) + position];
-    return HAL_OK;
+  } else if (s.sequence == 0u) {
+    status = HAL_EAGAIN;
+  } else {
+    *raw =
+        half(s.completed)[((s.config.block_frames - 1u) * s.config.pin_count) +
+                          position];
   }
-  if (s.sequence == 0u) {
-    return HAL_EAGAIN;
-  }
-  *raw = half(s.completed)[((s.config.block_frames - 1u) * s.config.pin_count) +
-                           position];
-  return HAL_OK;
+  hal_mutex_unlock(s.lock);
+  return status;
 }
 
 #endif // HAL_ENABLE_ADC_SCAN

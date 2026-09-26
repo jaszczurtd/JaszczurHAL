@@ -18,7 +18,9 @@ namespace {
 
 // ADC1 converts the regular sequence continuously and DMA1 channel 3 writes
 // the results circularly over both halves of the caller buffer: the
-// half-transfer interrupt completes block 0, transfer-complete block 1.
+// half-transfer interrupt completes block 0, transfer-complete block 1. The
+// ring runs on the DMA alone, so a late interrupt loses blocks but never the
+// buffer; with both flags pending it publishes the half not being written.
 // DACless keeps channels 1 and 2 with their own interrupt; both paths share
 // the ADC1 ownership flag in stm32g474_adc_shared and exclude each other.
 constexpr uint8_t kDmaChannel = 2u;             /* DMA1 Channel3 */
@@ -78,12 +80,21 @@ void set_sample_time(uint32_t channel, uint32_t code) {
   }
 }
 
-void complete_block(uint8_t index) {
+void complete_block(uint8_t index, uint32_t finished) {
   s.marker =
       s.config.marker != NULL ? s.config.marker(s.config.marker_user) : 0u;
   s.completed_us = hal_micros();
   s.completed = index;
-  s.sequence = s.sequence + 1u;
+  s.sequence = s.sequence + finished;
+}
+
+// Which half the circular channel is filling right now: CNDTR counts down
+// over both halves.
+uint8_t half_being_written(void) {
+  const uint32_t total = s.samples_per_block * 2u;
+  const uint32_t remaining = DMA_CNDTR(DMA1_BASE, kDmaChannel);
+  const uint32_t written = remaining <= total ? total - remaining : 0u;
+  return written >= s.samples_per_block ? 1u : 0u;
 }
 #endif
 
@@ -114,11 +125,20 @@ extern "C" void DMA1_Channel3_IRQHandler(void) {
     DMA_CCR(DMA1_BASE, kDmaChannel) &= ~DMA_CCR_EN;
     return;
   }
-  if ((status & DMA_FLAG_HTIF(kDmaChannel)) != 0u) {
-    complete_block(0u);
-  }
-  if ((status & DMA_FLAG_TCIF(kDmaChannel)) != 0u) {
-    complete_block(1u);
+  const bool half_done = (status & DMA_FLAG_HTIF(kDmaChannel)) != 0u;
+  const bool full_done = (status & DMA_FLAG_TCIF(kDmaChannel)) != 0u;
+  if (half_done && full_done) {
+    // Both halves finished while this handler waited (a flash page erase on
+    // the same bank stalls the core, or interrupts stayed masked): the ring
+    // went on by itself, so the newest complete half is the one the channel
+    // is not filling right now, and the count moves by the two flags seen.
+    complete_block((uint8_t)(1u - half_being_written()), 2u);
+  } else if (half_done) {
+    complete_block(0u, 1u);
+  } else if (full_done) {
+    complete_block(1u, 1u);
+  } else {
+    // Only the global flag: nothing to publish.
   }
 }
 #endif

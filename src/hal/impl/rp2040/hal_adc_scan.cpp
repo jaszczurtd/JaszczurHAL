@@ -21,8 +21,9 @@ namespace {
 // the other data channel's write-address trigger alias, so the ring runs on
 // the DMA alone. DMA_IRQ_0 only publishes the finished block; a core that
 // keeps interrupts masked for longer than a block (a flash transaction holds
-// them for tens of milliseconds) loses blocks but the ring never runs past
-// its buffer. DACless keeps DMA_IRQ_1; both paths share the converter
+// them for tens of milliseconds) loses blocks, at most two of which the
+// pending interrupt bits still count, but the ring never runs past its
+// buffer. DACless keeps DMA_IRQ_1; both paths share the converter
 // ownership flag in rp2040_adc_shared, so they exclude each other instead of
 // colliding.
 constexpr uint32_t kMinConversionCycles = JH_RP_ADC_CONVERSION_CYCLES;
@@ -37,7 +38,8 @@ struct scan_state_t {
   uint8_t input_of_position[kInputs];
   int channel[2];
   int control[2];
-  uint32_t reload_target[2]; /* half(b) as the control channel's source */
+  uintptr_t reload_target[2]; /* half(b) as the register image a control
+                                 channel copies into the trigger alias */
   uint32_t samples_per_block;
   bool adc_owned;
   bool irq_owned;
@@ -82,6 +84,43 @@ void dma_irq0_handler(void) {
   s.sequence = s.sequence + finished;
 }
 
+// Looks at the ring until the snapshot is settled: the gap between two
+// blocks lasts one control transfer, and a stall long enough to tear the
+// snapshot ends before the next look.
+constexpr uint8_t kReaderAttempts = 4u;
+
+// Exactly one data channel runs inside a block and none during the control
+// transfer between blocks. Two channels seen busy, or one seen idle and then
+// busy, is a snapshot torn by a stall between two reads (a flash lockout on
+// this core, for instance): the ring moved on by a block or more meanwhile.
+bool snapshot_settled(const jh_adc_scan_channel_t channels[2]) {
+  if (channels[0].busy_before == channels[1].busy_before) {
+    return false;
+  }
+  for (uint8_t b = 0u; b < 2u; ++b) {
+    if (!channels[b].busy_before && channels[b].busy_after) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void sample_channels(jh_adc_scan_channel_t channels[2]) {
+  for (uint8_t b = 0u; b < 2u; ++b) {
+    channels[b] = jh_adc_scan_channel_t{};
+    if (s.channel[b] < 0) {
+      continue;
+    }
+    const uint channel = (uint)s.channel[b];
+    channels[b].busy_before = dma_channel_is_busy(channel);
+    const uintptr_t base = (uintptr_t)half(b);
+    const uintptr_t write = (uintptr_t)dma_hw->ch[channel].write_addr;
+    channels[b].busy_after = dma_channel_is_busy(channel);
+    channels[b].written =
+        write >= base ? (uint32_t)((write - base) / sizeof(uint16_t)) : 0u;
+  }
+}
+
 bool scan_reader(uint8_t input, uint16_t *raw) {
   for (uint8_t position = 0u; position < s.count; ++position) {
     if (s.input_of_position[position] == input) {
@@ -118,7 +157,7 @@ void configure_channel(int channel, int next_control, uint16_t *target) {
 
 // One word from reload_target[b] into data channel b's write-address trigger
 // alias: the write pointer returns to half(b) and the block starts.
-void configure_control(int control, int data_channel, uint32_t *source) {
+void configure_control(int control, int data_channel, uintptr_t *source) {
   dma_channel_config cfg = dma_channel_get_default_config((uint)control);
   channel_config_set_transfer_data_size(&cfg, DMA_SIZE_32);
   channel_config_set_read_increment(&cfg, false);
@@ -228,8 +267,8 @@ hal_status_t jh_adc_scan_start(const hal_adc_scan_config_t *config,
   adc_fifo_drain();
 
   dma_hw->ints0 = (1u << (uint)s.channel[0]) | (1u << (uint)s.channel[1]);
-  s.reload_target[0] = (uint32_t)(uintptr_t)half(0u);
-  s.reload_target[1] = (uint32_t)(uintptr_t)half(1u);
+  s.reload_target[0] = (uintptr_t)half(0u);
+  s.reload_target[1] = (uintptr_t)half(1u);
   // Data 0 finishes -> control 1 starts data 1 at half(1) -> control 0
   // starts data 0 at half(0) -> ...
   configure_channel(s.channel[0], s.control[1], half(0u));
@@ -310,27 +349,27 @@ hal_status_t jh_adc_scan_latest(uint8_t position, uint16_t *raw) {
   if (!s.started || position >= s.count) {
     return HAL_ESTATE;
   }
-  // Exactly one channel is busy between block boundaries; its write pointer
-  // says how many complete frames the block in progress already holds. The
-  // busy flag is looked at again after the pointer: the completion interrupt
-  // runs on this core and re-arms the pointer to the base the moment the
-  // channel finishes, and a reader preempted between the two register reads
-  // used to take that for a fresh trigger and hand out the other half's last
-  // frame, a whole block old. Right after the chain the other half is the
-  // complete one even before its interrupt has run, so the frame choice never
-  // leans on that bookkeeping.
+  // Inside a block exactly one data channel is busy and its write pointer
+  // says how many complete frames the block already holds. The busy flag is
+  // looked at again after the pointer: a channel that finished between the
+  // two looks has filled its half whatever the pointer said, and taking it
+  // for a fresh trigger would hand out the other half, which the ring may
+  // have restarted by then (bench 2026-09-16, one read in three hundred
+  // thousand a block old). Between two blocks, for the few cycles the control
+  // channel needs, neither data channel is busy; a finished channel keeps its
+  // pointer at the end of its half until its own control channel restarts it
+  // a block later, so both halves then look full and cannot be ordered by
+  // their pointers. Looking again settles it, because the next block starts
+  // within those cycles. Right after the chain the other half is the complete
+  // one even before its interrupt has run, so the frame choice never leans on
+  // that bookkeeping while the ring runs. A snapshot torn by a stall between
+  // two reads is taken again; after the attempts the last one serves.
   jh_adc_scan_channel_t channels[2] = {};
-  for (uint8_t b = 0u; b < 2u; ++b) {
-    if (s.channel[b] < 0) {
-      continue;
+  for (uint8_t attempt = 0u; attempt < kReaderAttempts; ++attempt) {
+    sample_channels(channels);
+    if (snapshot_settled(channels)) {
+      break;
     }
-    const uint channel = (uint)s.channel[b];
-    channels[b].busy_before = dma_channel_is_busy(channel);
-    const uintptr_t base = (uintptr_t)half(b);
-    const uintptr_t write = (uintptr_t)dma_hw->ch[channel].write_addr;
-    channels[b].busy_after = dma_channel_is_busy(channel);
-    channels[b].written =
-        write >= base ? (uint32_t)((write - base) / sizeof(uint16_t)) : 0u;
   }
   const uint32_t saved = save_and_disable_interrupts();
   const uint32_t sequence = s.sequence;

@@ -409,6 +409,58 @@ jh_enable_host_warnings(test_rp2040_adc_shared ERRORS)
 target_link_libraries(test_rp2040_adc_shared PRIVATE Threads::Threads)
 add_test(NAME test_rp2040_adc_shared COMMAND test_rp2040_adc_shared)
 
+# The RP ADC scan backend on a simulated DMA, its interrupt and the ADC FIFO:
+# the ring, block publication under masked interrupts and the newest-frame
+# reader against every interleaving the DMA can produce.
+add_executable(test_rp_adc_scan_backend
+    test_rp_adc_scan_backend.cpp
+    fakes/host_sync/hal_sync_host.cpp
+    fakes/rp2040_adc_sdk/rp2040_dma_fake.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/rp2040/hal_adc_scan.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/rp2040/rp2040_adc_shared.cpp
+    ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+target_include_directories(test_rp_adc_scan_backend PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/fakes/rp2040_adc_sdk
+    ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(test_rp_adc_scan_backend PRIVATE
+    HAL_TARGET_RP2040=1 HAL_BOARD_PROFILE_RP_PICO=1 HAL_ENABLE_ADC_SCAN
+    HAL_ENABLE_UNITY UNITY_INCLUDE_CONFIG_H)
+jh_enable_host_warnings(test_rp_adc_scan_backend ERRORS)
+target_link_libraries(test_rp_adc_scan_backend PRIVATE Threads::Threads)
+add_test(NAME test_rp_adc_scan_backend COMMAND test_rp_adc_scan_backend)
+
+# The flash safe zone's DMA rule on the same simulated registers.
+add_executable(test_rp_flash_dma_guard
+    test_rp_flash_dma_guard.cpp
+    fakes/rp2040_adc_sdk/rp2040_dma_fake.cpp
+    ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+target_include_directories(test_rp_flash_dma_guard PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/fakes/rp2040_adc_sdk
+    ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(test_rp_flash_dma_guard PRIVATE
+    HAL_ENABLE_UNITY UNITY_INCLUDE_CONFIG_H)
+jh_enable_host_warnings(test_rp_flash_dma_guard ERRORS)
+add_test(NAME test_rp_flash_dma_guard COMMAND test_rp_flash_dma_guard)
+
+# The STM32G474 ADC scan backend with its registers in a host table: ring
+# programming, block publication and the newest half when the interrupt ran
+# late. JH_STM32G474_HW selects the register-level code paths on the host.
+add_executable(test_stm32_adc_scan_backend
+    test_stm32_adc_scan_backend.cpp
+    fakes/host_sync/hal_sync_host.cpp
+    fakes/stm32g474_regs/jh_stm32g474_host_regs.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/stm32g474/hal_adc_scan.cpp
+    ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+target_include_directories(test_stm32_adc_scan_backend PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/fakes/stm32g474_regs
+    ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(test_stm32_adc_scan_backend PRIVATE
+    HAL_TARGET_STM32G474=1 JH_STM32G474_HW=1 JH_STM32G474_HOST_REGS=1
+    HAL_ENABLE_ADC_SCAN HAL_ENABLE_UNITY UNITY_INCLUDE_CONFIG_H)
+jh_enable_host_warnings(test_stm32_adc_scan_backend ERRORS)
+target_link_libraries(test_stm32_adc_scan_backend PRIVATE Threads::Threads)
+add_test(NAME test_stm32_adc_scan_backend COMMAND test_stm32_adc_scan_backend)
+
 # Exercise the real Fiesta-convention CMake generator, not a handwritten copy.
 # The secondary initializer must execute on the first native core-1 task call.
 include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_entry_adapter.cmake")
@@ -1751,6 +1803,26 @@ target_compile_definitions(test_esp32_backend_lifecycle PRIVATE
 jh_enable_host_warnings(test_esp32_backend_lifecycle ERRORS)
 target_link_libraries(test_esp32_backend_lifecycle PRIVATE Threads::Threads)
 add_test(NAME test_esp32_backend_lifecycle COMMAND test_esp32_backend_lifecycle)
+
+# The ESP32-S3 ADC scan backend on the fake continuous driver: stream
+# configuration, block decoding with resynchronisation, and a newest sample
+# that stays fresh without anyone taking blocks.
+add_executable(test_esp32_adc_scan_backend
+    test_esp32_adc_scan_backend.cpp
+    fakes/esp_idf/esp_idf_fake.cpp
+    fakes/host_sync/hal_sync_host.cpp
+    ${_esp32_backend_dir}/hal_adc_scan.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/core/hal_config.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c)
+target_include_directories(test_esp32_adc_scan_backend PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/fakes/esp_idf
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src)
+target_compile_definitions(test_esp32_adc_scan_backend PRIVATE
+    HAL_TARGET_ESP32_S3=1 HAL_BOARD_PROFILE_WAVESHARE_ESP32_S3_ZERO=1
+    HAL_ENABLE_ADC_SCAN HAL_ENABLE_UNITY UNITY_INCLUDE_CONFIG_H)
+jh_enable_host_warnings(test_esp32_adc_scan_backend ERRORS)
+target_link_libraries(test_esp32_adc_scan_backend PRIVATE Threads::Threads)
+add_test(NAME test_esp32_adc_scan_backend COMMAND test_esp32_adc_scan_backend)
 add_stm32_gpio_host_test(test_stm32_hal_gpio)
 add_executable(test_stm32_pwm_clock
     test_stm32_pwm_clock.cpp

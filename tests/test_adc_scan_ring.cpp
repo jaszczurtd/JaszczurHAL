@@ -76,21 +76,36 @@ static bool pick(bool busy0, bool after0, uint32_t written0, bool busy1,
 }
 
 void test_pick_treats_a_channel_that_finished_between_two_looks_as_full(void) {
-  // Half 1 was busy; its completion interrupt re-armed the pointer to the
-  // base before it was read. The whole half is there, not none of it, and
-  // half 0 is the one being overwritten right now.
+  // Half 1 was busy and went idle before its pointer was read; the ring has
+  // restarted half 0 by then and its pointer sits at the base. The whole of
+  // half 1 is there, not none of it, and half 0 is being overwritten.
   TEST_ASSERT_TRUE(pick(false, false, 0u, true, false, 0u, 4u, 0u));
   TEST_ASSERT_EQUAL_UINT8(1u, s_half);
   TEST_ASSERT_EQUAL_UINT32(FRAMES - 1u, s_frame);
-  // The pointer may equally have been read just before the re-arm.
+  // The pointer may equally have been read just before the end.
   TEST_ASSERT_TRUE(
       pick(false, false, 0u, true, false, (FRAMES * PINS) - 1u, 4u, 0u));
   TEST_ASSERT_EQUAL_UINT8(1u, s_half);
   TEST_ASSERT_EQUAL_UINT32(FRAMES - 1u, s_frame);
-  // Still busy with the pointer at the base is a genuine fresh trigger: the
-  // other half just filled and is the one to read.
-  TEST_ASSERT_TRUE(pick(false, false, 0u, true, true, 0u, 4u, 0u));
+}
+
+void test_pick_hands_over_to_the_other_half_only_once_it_was_filled(void) {
+  // Half 1 is busy with no complete frame; half 0 finished just before and
+  // keeps its pointer at the end until it is restarted: read its last frame,
+  // whatever the interrupt has counted so far.
+  TEST_ASSERT_TRUE(pick(false, false, FRAMES * PINS, true, true, 0u, 0u, 0u));
   TEST_ASSERT_EQUAL_UINT8(0u, s_half);
+  TEST_ASSERT_EQUAL_UINT32(FRAMES - 1u, s_frame);
+  TEST_ASSERT_TRUE(
+      pick(false, false, FRAMES * PINS, true, true, PINS - 1u, 7u, 1u));
+  TEST_ASSERT_EQUAL_UINT8(0u, s_half);
+  // The very first block: the other pointer still sits at its base, so no
+  // frame exists yet, whatever a stale count says.
+  TEST_ASSERT_FALSE(pick(true, true, 0u, false, false, 0u, 0u, 0u));
+  TEST_ASSERT_FALSE(pick(true, true, PINS - 1u, false, false, 0u, 3u, 1u));
+  // And symmetrically for half 0 chaining into half 1.
+  TEST_ASSERT_TRUE(pick(true, true, 0u, false, false, FRAMES * PINS, 5u, 0u));
+  TEST_ASSERT_EQUAL_UINT8(1u, s_half);
   TEST_ASSERT_EQUAL_UINT32(FRAMES - 1u, s_frame);
 }
 
@@ -100,7 +115,13 @@ void test_pick_prefers_the_half_at_its_end_when_no_channel_is_busy(void) {
   TEST_ASSERT_TRUE(pick(false, false, FRAMES * PINS, false, false, 0u, 4u, 1u));
   TEST_ASSERT_EQUAL_UINT8(0u, s_half);
   TEST_ASSERT_EQUAL_UINT32(FRAMES - 1u, s_frame);
-  // Both re-armed and idle leaves only the bookkeeping.
+  // Both at their ends, as between two blocks, cannot be ordered by their
+  // pointers: only the bookkeeping is left.
+  TEST_ASSERT_TRUE(
+      pick(false, false, FRAMES * PINS, false, false, FRAMES * PINS, 6u, 1u));
+  TEST_ASSERT_EQUAL_UINT8(1u, s_half);
+  TEST_ASSERT_EQUAL_UINT32(FRAMES - 1u, s_frame);
+  // Both idle and empty leaves only the bookkeeping as well.
   TEST_ASSERT_TRUE(pick(false, false, 0u, false, false, 0u, 4u, 1u));
   TEST_ASSERT_EQUAL_UINT8(1u, s_half);
   TEST_ASSERT_EQUAL_UINT32(FRAMES - 1u, s_frame);
@@ -133,6 +154,7 @@ int main(void) {
   RUN_TEST(
       test_nothing_before_the_first_frame_and_fallback_without_busy_channel);
   RUN_TEST(test_pick_treats_a_channel_that_finished_between_two_looks_as_full);
+  RUN_TEST(test_pick_hands_over_to_the_other_half_only_once_it_was_filled);
   RUN_TEST(test_pick_prefers_the_half_at_its_end_when_no_channel_is_busy);
   RUN_TEST(test_pick_keeps_the_choice_inside_a_block_in_progress);
   RUN_TEST(test_rp_clkdiv_runs_back_to_back_at_the_minimum_period);

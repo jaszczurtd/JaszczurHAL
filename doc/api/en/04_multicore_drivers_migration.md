@@ -28,8 +28,9 @@ application state to `app_task1()`.
 In RP FreeRTOS SMP builds, the application functions run as tasks pinned to cores 0 and 1. On bare-metal STM32G474, both functions run cooperatively in one main loop; FreeRTOS instead creates independent `task0` and optional `task1` tasks. On ESP32-S3, ESP-IDF has already started the FreeRTOS scheduler. HAL creates `task0` on core 0 and optional `task1` on core 1 by default. Configuration may select another core or `-1` for no affinity.
 
 The coordinator serializes native flash mutations, makes the other core safe,
-pauses TinyUSB, rejects active DMA and XIP-resident operation state, masks local
-interrupts and restores acquired runtime state on every cleanup path. It uses
+pauses TinyUSB, rejects XIP-resident operation state and busy DMA that touches
+flash (peripheral-to-RAM rings keep running), masks local interrupts and
+restores acquired runtime state on every cleanup path. It uses
 the Pico SDK multicore helper in bare-metal firmware and its scheduler-aware
 helper under FreeRTOS SMP. Native EEPROM commits and all LittleFS program/erase
 callbacks use this shared transaction path exclusively.

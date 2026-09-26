@@ -1320,6 +1320,13 @@ def _render_sdkconfig_defaults(model: Mapping[str, Any]) -> str:
         )
     if "HAL_ENABLE_PULSE_CAPTURE" in model["resolvedFeatures"]:
         lines.append("CONFIG_MCPWM_ISR_CACHE_SAFE=y")
+    if "HAL_ENABLE_ADC_SCAN" in model["resolvedFeatures"]:
+        # The continuous driver's descriptor ring holds a few milliseconds
+        # of samples; with its interrupt parked while the flash cache is off,
+        # a flash write leaves the driver behind the DMA for good and the
+        # scan never delivers again. The IRAM-safe interrupt keeps collecting
+        # (and, at worst, dropping) frames through flash operations.
+        lines.append("CONFIG_ADC_CONTINUOUS_ISR_IRAM_SAFE=y")
     if "HAL_ENABLE_DMA_PWM_AUDIO" in model["resolvedFeatures"]:
         # The sample clock runs from a GPTimer alarm that writes the LEDC duty
         # directly, so both the alarm handler and the LEDC control functions
