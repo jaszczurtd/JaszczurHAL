@@ -55,14 +55,23 @@ Opcjonalny hook `marker` uruchamia się przy ukończeniu bloku, a jego wynik
 wędruje z blokiem. Na RP i STM32G474 dzieje się to w przerwaniu DMA na rdzeniu,
 który uruchomił skan: co najwyżej kilka odczytów, bez wywołań HAL, bez blokad.
 Służy do sparowania bloku na przykład z licznikiem PWM. Na ESP32-S3 hook
-i `completed_us` pobiera zadanie, które odbiera blok.
+i `completed_us` pobiera zadanie, które odbiera blok: zarówno `take()`, jak i `latest()` zbierają
+strumień sterownika przed odpowiedzią, więc najnowsza próbka jest świeża
+niezależnie od tego, które z nich aplikacja wywołuje. Pierścień sterownika
+mieści dwa bloki rekordów, czyli tyle, na ile aplikacja może odwrócić uwagę
+między dwoma wywołaniami; build ze skanem robi przerwanie sterownika
+IRAM-safe, więc zapis do flash (pamięć podręczna wyłączona na dziesiątki
+milisekund) gubi ramki z pierścienia, ale nigdy nie zatrzymuje strumienia.
 
 Na RP pierścień pracuje wyłącznie na DMA: każdy kanał danych po bloku uruchamia
 kanał sterujący, który cofa wskaźnik zapisu drugiego kanału na początek jego
 połowy, więc CPU tylko publikuje gotowe bloki. Rdzeń, który trzyma przerwania
 wyłączone dłużej niż jeden blok, na przykład w czasie transakcji flash, gubi
-bloki (przerwa w `sequence`), ale pierścień nigdy nie wychodzi poza bufor. Skan
-zajmuje cztery kanały DMA.
+bloki: przerwanie dolicza wtedy do `sequence` najwyżej dwa z nich, a przerwę
+widać w `completed_us`, ale pierścień nigdy nie wychodzi poza bufor. Skan
+zajmuje cztery kanały DMA. Na STM32G474 kołowy kanał DMA prowadzi pierścień
+tak samo; spóźnione przerwanie z obiema flagami połówek publikuje połowę,
+której kanał akurat nie wypełnia.
 
 ## Własność
 
@@ -87,5 +96,6 @@ backend nie obsłuży, `HAL_EBUSY`, gdy przetwornik albo przerwanie są już zaj
 i `HAL_ENOMEM`, gdy nie ma wolnego kanału DMA. Stop jest idempotentny i zwalnia
 wszystko, także po nieudanym starcie.
 
-Backend RP2040 jest sprawdzony na sprzęcie; testy sprzętowe RP2350, STM32G474
-i ESP32-S3 oczekują na wykonanie.
+Backendy RP2040, STM32G474 i ESP32-S3 są sprawdzone na sprzęcie
+(`tests/hardware/rp_flash_transaction`, `stm32_storage_scan` i
+`esp32s3_adc_scan`); test sprzętowy RP2350 oczekuje na wykonanie.

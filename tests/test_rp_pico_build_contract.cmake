@@ -27,6 +27,8 @@ set(_flash_header
     "${JH_ROOT}/src/hal/impl/rp2040/drivers/flash/rp_flash_transaction.h")
 set(_flash_impl
     "${JH_ROOT}/src/hal/impl/rp2040/drivers/flash/rp_flash_transaction.cpp")
+set(_flash_dma_guard
+    "${JH_ROOT}/src/hal/impl/rp2040/drivers/flash/rp_flash_dma_guard.h")
 set(_flash_storage_header
     "${JH_ROOT}/src/hal/impl/rp2040/drivers/flash/rp_flash_storage.h")
 set(_flash_storage
@@ -101,6 +103,7 @@ file(READ "${_flash_engine_header}" _flash_engine_header_text)
 file(READ "${_flash_engine}" _flash_engine_text)
 file(READ "${_flash_header}" _flash_header_text)
 file(READ "${_flash_impl}" _flash_impl_text)
+file(READ "${_flash_dma_guard}" _flash_dma_guard_text)
 file(READ "${_flash_storage_header}" _flash_storage_header_text)
 file(READ "${_flash_storage}" _flash_storage_text)
 file(READ "${_flash_runtime}" _flash_runtime_text)
@@ -373,7 +376,7 @@ foreach(_flash_impl_contract IN ITEMS
         "HAL_EBUSY"
         "HAL_ESTATE")
     string(FIND
-        "${_flash_header_text}\n${_flash_impl_text}\n${_flash_runtime_text}\n${_usb_impl_text}"
+        "${_flash_header_text}\n${_flash_impl_text}\n${_flash_dma_guard_text}\n${_flash_runtime_text}\n${_usb_impl_text}"
         "${_flash_impl_contract}" _flash_impl_at)
     if(_flash_impl_at EQUAL -1)
         message(FATAL_ERROR

@@ -12,6 +12,7 @@
 
 #include "driver/i2c_slave.h"
 #include "esp_err.h"
+#include "hal/adc_types.h"
 
 #include <functional>
 #include <stdexcept>
@@ -78,5 +79,21 @@ size_t rmt_live_encoders();
 /* Fault handlers: which core runs the code, and per-core installs. */
 void set_core(int core);
 size_t exception_handlers_installed(int core);
+
+/* Continuous ADC driver: what the code under test configured, and the
+ * record stream the test feeds into the driver ring. */
+struct AdcContinuousState {
+  bool live;    /* a handle exists */
+  bool started; /* between start and stop */
+  uint32_t max_store_buf_size;
+  uint32_t conv_frame_size;
+  uint32_t sample_freq_hz;
+  int conv_mode;
+  std::vector<adc_digi_pattern_config_t> pattern;
+};
+const AdcContinuousState &adc_continuous_state();
+/* One record into the ring, as the converter would produce it. */
+void adc_continuous_push(uint8_t unit, uint8_t channel, uint16_t data);
+size_t adc_continuous_pending_bytes();
 
 } // namespace fake_idf

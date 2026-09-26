@@ -56,14 +56,23 @@ The optional `marker` hook runs at block completion and its result travels
 with the block. On RP and STM32G474 that is inside the DMA interrupt on the
 core that started the scan: a few loads at most, no HAL calls, no locks. Use
 it to pair a block with something like a PWM counter. On ESP32-S3 the hook and
-`completed_us` are taken by the task that collects the block.
+`completed_us` are taken by the task that collects the block: both `take()`
+and `latest()` collect the driver's stream before answering, so the newest
+sample is fresh whichever of them the application calls. The driver ring
+holds two blocks of records, which is how long the application may look away
+between two calls; the scan build makes the driver's interrupt IRAM-safe, so a
+flash write (the cache off for tens of milliseconds) drops frames from the
+ring but never stops the stream.
 
 On RP the ring runs on the DMA alone: each data channel chains to a control
 channel that resets the other channel's write pointer, so the CPU only
 publishes finished blocks. A core that keeps interrupts masked for longer than
-a block, for example during a flash transaction, misses blocks (a gap in
-`sequence`) but the ring never writes past its buffer. The scan takes four DMA
-channels.
+a block, for example during a flash transaction, loses blocks: the interrupt
+then counts at most two of them into `sequence` and `completed_us` shows the
+pause, but the ring never writes past its buffer. The scan takes four DMA
+channels. On STM32G474 the circular DMA channel keeps the ring going the same
+way; a late interrupt with both half-transfer flags pending publishes the half
+the channel is not filling.
 
 ## Ownership
 
@@ -88,5 +97,6 @@ backend cannot serve, `HAL_EBUSY` when the converter or the interrupt is
 already taken, and `HAL_ENOMEM` when no DMA channel is free. Stop is
 idempotent and releases everything, also after a failed start.
 
-The RP2040 backend is validated on hardware; RP2350, STM32G474 and ESP32-S3
-hardware validation is still pending.
+The RP2040, STM32G474 and ESP32-S3 backends are validated on hardware
+(`tests/hardware/rp_flash_transaction`, `stm32_storage_scan` and
+`esp32s3_adc_scan`); RP2350 hardware validation is still pending.

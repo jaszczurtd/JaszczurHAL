@@ -29,7 +29,7 @@ aplikacji.
 
 W konfiguracji RP z FreeRTOS SMP funkcje aplikacji działają jako zadania przypisane do rdzeni 0 i 1. Na STM32G474 bez systemu operacyjnego obie funkcje są wywoływane kooperacyjnie w jednej pętli, natomiast FreeRTOS uruchamia niezależne `task0` i opcjonalne `task1`. Na ESP32-S3 scheduler FreeRTOS jest już uruchomiony przez ESP-IDF. HAL domyślnie tworzy `task0` na rdzeniu 0 i opcjonalne `task1` na rdzeniu 1. Konfiguracja może wskazać inny rdzeń lub `-1`, czyli brak przypisania.
 
-Wspólny koordynator szereguje operacje modyfikujące flash: zatrzymuje drugi rdzeń w bezpiecznym miejscu, wstrzymuje TinyUSB, odrzuca operacje przy aktywnym DMA lub wykonywane z XIP i maskuje lokalne przerwania. Po zakończeniu przywraca tymczasowo zmieniony stan. W konfiguracji bare-metal korzysta z mechanizmu wielordzeniowego Pico SDK, a w FreeRTOS SMP - z jego odpowiednika współpracującego ze schedulerem. Wszystkie zapisy EEPROM i funkcje zwrotne LittleFS `program`/`erase` przechodzą przez ten mechanizm.
+Wspólny koordynator szereguje operacje modyfikujące flash: zatrzymuje drugi rdzeń w bezpiecznym miejscu, wstrzymuje TinyUSB, odrzuca operacje wykonywane z XIP i zajęte DMA sięgające do flash (pierścienie peryferium->RAM pracują dalej) i maskuje lokalne przerwania. Po zakończeniu przywraca tymczasowo zmieniony stan. W konfiguracji bare-metal korzysta z mechanizmu wielordzeniowego Pico SDK, a w FreeRTOS SMP - z jego odpowiednika współpracującego ze schedulerem. Wszystkie zapisy EEPROM i funkcje zwrotne LittleFS `program`/`erase` przechodzą przez ten mechanizm.
 
 <a id="inicjalizacja-tylko-jeden-rdzeń"></a>
 

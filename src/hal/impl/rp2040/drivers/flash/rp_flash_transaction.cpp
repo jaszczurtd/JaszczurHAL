@@ -8,12 +8,10 @@
 #include "hal/storage/flash/jh_flash_transaction_engine.h"
 #include "hal/system/hal_sync.h"
 #include "hal/system/hal_system.h"
+#include "rp_flash_dma_guard.h"
 #include "rp_flash_runtime.h"
 #include "rp_flash_transaction.h"
 
-#include <hardware/dma.h>
-#include <hardware/regs/addressmap.h>
-#include <hardware/structs/dma.h>
 #include <hardware/sync.h>
 #include <pico/error.h>
 #include <pico/flash.h>
@@ -50,17 +48,6 @@ uintptr_t current_owner_token() {
   }
 #endif
   return (uintptr_t)get_core_num() + 1u;
-}
-
-bool __no_inline_not_in_flash_func(address_is_xip)(const void *address) {
-  const uintptr_t value = reinterpret_cast<uintptr_t>(address);
-#if defined(PICO_RP2350)
-  return value >= (uintptr_t)XIP_BASE &&
-         value < (uintptr_t)XIP_NOCACHE_NOALLOC_NOTRANSLATE_END;
-#else
-  return (value >= (uintptr_t)XIP_BASE && value < (uintptr_t)XIP_CTRL_BASE) ||
-         (value >= (uintptr_t)XIP_SRAM_BASE && value < (uintptr_t)XIP_SRAM_END);
-#endif
 }
 
 hal_status_t pico_status_to_hal(int status) {
@@ -126,29 +113,15 @@ struct SafeExecuteContext {
   hal_status_t status;
 };
 
-// A busy DMA channel only endangers the flash operation when it reads or
-// writes the XIP window: with XIP disabled such a transfer stalls or returns
-// garbage. Peripheral-to-RAM rings (ADC scans, audio) keep running
-// untouched, so refusing every busy channel would deny persistence to any
-// application with a continuous DMA stream.
-static bool
-__no_inline_not_in_flash_func(dma_channel_touches_xip)(uint channel) {
-  const uintptr_t read_addr = dma_hw->ch[channel].read_addr;
-  const uintptr_t write_addr = dma_hw->ch[channel].write_addr;
-  return address_is_xip(reinterpret_cast<const void *>(read_addr)) ||
-         address_is_xip(reinterpret_cast<const void *>(write_addr));
-}
-
+// The DMA rule lives in rp_flash_dma_guard.h; XIP is off from here on, so
+// the check is inlined into this RAM-resident function.
 void __no_inline_not_in_flash_func(execute_in_safe_zone)(void *raw_context) {
   auto *context = static_cast<SafeExecuteContext *>(raw_context);
   __compiler_memory_barrier();
 
-  for (uint channel = 0u; channel < NUM_DMA_CHANNELS; ++channel) {
-    if ((dma_hw->ch[channel].ctrl_trig & DMA_CH0_CTRL_TRIG_BUSY_BITS) != 0u &&
-        dma_channel_touches_xip(channel)) {
-      context->status = HAL_EBUSY;
-      return;
-    }
+  if (jh_rp_flash_dma_blocks()) {
+    context->status = HAL_EBUSY;
+    return;
   }
 
   context->status = context->operation(context->operation_context);
@@ -219,8 +192,10 @@ hal_status_t __no_inline_not_in_flash_func(jh_rp_flash_transaction_execute)(
       HAL_ATOMIC_LOAD(&s_owner, HAL_ATOMIC_ACQUIRE) == current_owner_token()) {
     return HAL_ESTATE;
   }
-  if (operation == nullptr || address_is_xip((const void *)operation) ||
-      (context != nullptr && address_is_xip(context))) {
+  if (operation == nullptr ||
+      jh_rp_flash_address_is_xip(reinterpret_cast<uintptr_t>(operation)) ||
+      (context != nullptr &&
+       jh_rp_flash_address_is_xip(reinterpret_cast<uintptr_t>(context)))) {
     return HAL_EINVAL;
   }
 

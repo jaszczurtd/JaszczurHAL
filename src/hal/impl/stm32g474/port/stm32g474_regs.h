@@ -20,6 +20,14 @@
 
 #include "stm32g474_clock.h"
 
+#if defined(JH_STM32G474_HOST_REGS)
+/* Host tests of a register-level backend: every register lives in a table
+ * the test reads and writes through the same macros. */
+#include "jh_stm32g474_host_regs.h"
+#define JH_REG8(addr) (*jh_stm32g474_host_reg8((uintptr_t)(addr)))
+#define JH_REG16(addr) (*jh_stm32g474_host_reg16((uintptr_t)(addr)))
+#define JH_REG32(addr) (*jh_stm32g474_host_reg32((uintptr_t)(addr)))
+#else
 /* Fixed MMIO addresses have no source-pointer provenance to preserve.
  * uintptr_t also keeps dynamic addresses intact in 64-bit host builds. */
 /* NOLINTBEGIN(performance-no-int-to-ptr) */
@@ -27,6 +35,7 @@
 #define JH_REG16(addr) (*(volatile uint16_t *)(uintptr_t)(addr))
 #define JH_REG32(addr) (*(volatile uint32_t *)(uintptr_t)(addr))
 /* NOLINTEND(performance-no-int-to-ptr) */
+#endif
 
 /* ── RCC (Reset & Clock Control) ─────────────────────────────────────────── */
 #define RCC_BASE 0x40021000u
