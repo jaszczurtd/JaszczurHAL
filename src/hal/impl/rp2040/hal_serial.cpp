@@ -10,6 +10,28 @@
 
 static volatile bool s_serial_flush_enabled = false;
 
+/* A host that keeps DTR asserted but stops reading (Linux port closed with
+ * HUPCL cleared) leaves the CDC FIFO full forever. Debug output must not pay
+ * the bounded write timeout for every fragment then, or the application
+ * watchdog starves. After the first timeout with the host still asserted,
+ * writes drop instead of blocking until the host drains data (HAL_OK) or
+ * releases DTR (HAL_EAGAIN). */
+static volatile bool s_tx_congested = false;
+
+static uint32_t jh_tx_timeout_ms(void) {
+  return HAL_ATOMIC_LOAD(&s_tx_congested, HAL_ATOMIC_ACQUIRE)
+             ? 0u
+             : HAL_USB_CDC_WRITE_TIMEOUT_MS;
+}
+
+static void jh_tx_note_result(hal_status_t status) {
+  if (status == HAL_ETIMEOUT) {
+    HAL_ATOMIC_STORE(&s_tx_congested, true, HAL_ATOMIC_RELEASE);
+  } else if (status == HAL_OK || status == HAL_EAGAIN) {
+    HAL_ATOMIC_STORE(&s_tx_congested, false, HAL_ATOMIC_RELEASE);
+  }
+}
+
 void jh_serial_port_begin(uint32_t baud) {
   (void)baud;
   (void)hal_usb_init();
@@ -28,8 +50,8 @@ void jh_serial_port_write(const char *data, size_t len) {
   }
 
   size_t written = 0u;
-  (void)hal_usb_cdc_write((const uint8_t *)data, len,
-                          HAL_USB_CDC_WRITE_TIMEOUT_MS, &written);
+  jh_tx_note_result(hal_usb_cdc_write((const uint8_t *)data, len,
+                                      jh_tx_timeout_ms(), &written));
 }
 
 size_t jh_serial_port_finish_line(char line_ending[2]) {
@@ -41,7 +63,7 @@ size_t jh_serial_port_finish_line(char line_ending[2]) {
 
 void jh_serial_port_flush(void) {
   if (HAL_ATOMIC_LOAD(&s_serial_flush_enabled, HAL_ATOMIC_ACQUIRE)) {
-    (void)hal_usb_cdc_flush(HAL_USB_CDC_WRITE_TIMEOUT_MS);
+    (void)hal_usb_cdc_flush(jh_tx_timeout_ms());
   }
 }
 

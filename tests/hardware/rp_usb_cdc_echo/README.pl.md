@@ -3,7 +3,9 @@
 `tests/hardware/rp_usb_cdc_echo` sprawdza natywną obsługę TinyUSB przez HAL na RP
 na fizycznym Pico lub Pico 2, w tym targety RP2350 ARM i RISC-V. Firmware
 odbija dowolne bajty CDC i przełącza diodę LED płytki po każdym w pełni
-odbitym bloku odbioru USB.
+odbitym bloku odbioru USB. Dodatkowo uruchamia sprzętowy watchdog 4 s karmiony
+z pętli aplikacji, więc każda ścieżka transportu blokująca pętlę kończy się
+widocznym resetem.
 
 Skompiluj i wykonaj pierwsze wgranie BOOTSEL:
 
@@ -21,14 +23,26 @@ Gdy inna płytka jest już w trybie BOOTSEL, niezależna od targetu akcja
 `upload` najpierw zapamiętuje listę istniejących dysków, następnie wyzwala
 reset przez 1200 bps i zapisuje plik wyłącznie na nowo wykrytym dysku.
 
-Zweryfikuj integralność danych, opóźnione odczyty hosta, przepustowość oraz
-zamknięcie/ponowne otwarcie:
+Zweryfikuj integralność danych, opóźnione odczyty hosta, przepustowość,
+zamknięcie/ponowne otwarcie oraz okno uptime z zawieszonym DTR:
 
 ```sh
 python3 -m pip install pyserial
 python3 tests/hardware/rp_usb_cdc_echo/verify_cdc_echo.py \
   --port /dev/serial/by-id/<device>
 ```
+
+Końcowa faza `dtr_stuck_uptime` odtwarza linuksowy terminal, który czyści
+`HUPCL` i zamyka port: DTR zostaje w górze, a nikt nie odbiera danych. Skrypt
+najpierw przełącza firmware w tryb chatter (`JH:DTRSTUCK\n` na wejściu CDC),
+w którym co 20 ms wychodzi linia debug
+`JHDTR uptime_ms=... wdt_reboot=... seq=...`, a LED przełącza się co 25
+linii. Potem zamyka port z wyczyszczonym `HUPCL`, czeka 65 s
+(`--dtr-stuck-seconds`, `0` pomija fazę), otwiera port ponownie i wymaga, by
+najnowszy raportowany uptime obejmował całe okno przy `wdt_reboot=0` - dowód,
+że zablokowane zapisy debug nie mogą zagłodzić watchdoga. `JH:ECHO\n`
+przełącza firmware z powrotem w tryb echo, a końcowa wymiana echo potwierdza,
+że transport wrócił do normalnej pracy.
 
 Po pierwszym wgraniu, neutralna względem targetu akcja `upload` musi wejść
 do BOOTSEL przez dotknięcie DTR 1200 bps i wrócić z tą samą tożsamością CDC:

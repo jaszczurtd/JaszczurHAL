@@ -77,8 +77,7 @@ There are also smaller, but still nontrivial, projects:
 
 - [doomConsole](https://github.com/jaszczurtd/doomConsole) - a Doom port with
   sound, a TFT display, and support for an 8BitDo Bluetooth gamepad;
-- [Ford-Mondeo-MK-DPF-Tracker](https://github.com/jaszczurtd/Ford-Mondeo-MK-DPF-Tracker)
-  - a device that tracks DPF regeneration cycles;
+- [Ford-Mondeo-MK-DPF-Tracker](https://github.com/jaszczurtd/Ford-Mondeo-MK-DPF-Tracker)- a device that tracks DPF regeneration cycles;
 - [lights-timer](https://github.com/jaszczurtd/lights-timer) - aquarium
   lighting controlled through an Android app.
 

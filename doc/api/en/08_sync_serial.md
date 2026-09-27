@@ -321,6 +321,16 @@ that want an extra transport poll before the TX mutex is released.
 Leaving `hal_serial_set_flush(false)` keeps the RP backend on its default
 path and avoids the optional extra poll/flush while preserving the TX mutex.
 It does not bypass the write loop's bounded retry when the CDC FIFO is full.
+
+A host can keep DTR asserted while no longer reading - on Linux this happens
+when a terminal clears `HUPCL` and closes the port, so the CDC FIFO stays full
+forever. The RP debug port pays the bounded write timeout
+(`HAL_USB_CDC_WRITE_TIMEOUT_MS`) once, then drops debug bytes instead of
+blocking until the host drains data again or releases DTR. An application
+loop that feeds a watchdog therefore never stalls on debug output for longer
+than one write timeout, whatever the host does with the port. The hardware
+probe for this scenario is the DTR-stuck phase of
+`tests/hardware/rp_usb_cdc_echo`.
 On ESP32-S3 the option maps to `fsync(stdout)` on the startup console VFS. On
 STM32G474, enabling it waits for USART2's transmission-complete flag after each
 message. This is useful before STOP changes the peripheral clock or an

@@ -442,6 +442,22 @@ target_compile_definitions(test_rp_flash_dma_guard PRIVATE
 jh_enable_host_warnings(test_rp_flash_dma_guard ERRORS)
 add_test(NAME test_rp_flash_dma_guard COMMAND test_rp_flash_dma_guard)
 
+# The RP debug serial port on a fake hal_usb CDC: a host holding DTR without
+# reading costs one bounded write timeout, then debug writes drop until the
+# host drains data or releases DTR.
+add_executable(test_rp_serial_cdc_congestion
+    test_rp_serial_cdc_congestion.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/rp2040/hal_serial.cpp
+    ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+target_include_directories(test_rp_serial_cdc_congestion PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(test_rp_serial_cdc_congestion PRIVATE
+    HAL_TARGET_RP2040=1 HAL_BOARD_PROFILE_RP_PICO=1
+    HAL_ENABLE_UNITY UNITY_INCLUDE_CONFIG_H)
+jh_enable_host_warnings(test_rp_serial_cdc_congestion ERRORS)
+add_test(NAME test_rp_serial_cdc_congestion
+    COMMAND test_rp_serial_cdc_congestion)
+
 # The STM32G474 ADC scan backend with its registers in a host table: ring
 # programming, block publication and the newest half when the interrupt ran
 # late. JH_STM32G474_HW selects the register-level code paths on the host.

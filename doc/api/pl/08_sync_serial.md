@@ -346,7 +346,17 @@ aplikacji, które chcą jeszcze raz odpytać transport przed zwolnieniem muteksu
 Ustawienie `hal_serial_set_flush(false)` pozostawia backend RP w trybie
 domyślnym. Dodatkowe odpytywanie i `flush` są wtedy pomijane, ale muteks TX
 nadal chroni zapis. Nie wyłącza to ograniczonej liczby ponowień w pętli
-zapisu, gdy FIFO CDC jest pełne. Na ESP32-S3 włączenie tej opcji wywołuje
+zapisu, gdy FIFO CDC jest pełne.
+
+Host może trzymać DTR w górze i jednocześnie przestać odbierać dane - na
+Linuksie dzieje się tak, gdy terminal wyczyści `HUPCL` i zamknie port, przez
+co FIFO CDC zostaje pełne na stałe. Port debug RP płaci wtedy ograniczony
+timeout zapisu (`HAL_USB_CDC_WRITE_TIMEOUT_MS`) tylko raz, a następnie
+odrzuca bajty debugu zamiast blokować, dopóki host znów nie odbierze danych
+albo nie zdejmie DTR. Pętla aplikacji karmiąca watchdog nie zatrzyma się więc
+na wyjściu debug dłużej niż jeden timeout zapisu, niezależnie od tego, co
+host zrobi z portem. Scenariusz sprawdza faza DTR-stuck testu
+`tests/hardware/rp_usb_cdc_echo`. Na ESP32-S3 włączenie tej opcji wywołuje
 `fsync(stdout)` dla konsoli VFS skonfigurowanej podczas startu. Na STM32G474
 kod czeka po każdym komunikacie na flagę zakończenia transmisji USART2. Jest
 to przydatne przed zmianą zegara peryferiów przez STOP lub przed wyłączeniem

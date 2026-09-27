@@ -3,7 +3,9 @@
 `tests/hardware/rp_usb_cdc_echo` validates the native RP TinyUSB owner on a
 physical Pico or Pico 2, including the RP2350 ARM and RISC-V targets. The
 firmware echoes arbitrary CDC bytes and toggles the board LED after each fully
-echoed USB receive block.
+echoed USB receive block. It also runs a 4 s hardware watchdog fed from the
+application loop, so any transport path that blocks the loop shows up as a
+reset.
 
 Build and perform the first BOOTSEL upload:
 
@@ -21,13 +23,25 @@ When another board is already in BOOTSEL, target-neutral `upload` snapshots the
 existing drives before the 1200-bps touch and writes only to the newly appeared
 drive.
 
-Validate data integrity, delayed host reads, throughput, and close/reopen:
+Validate data integrity, delayed host reads, throughput, close/reopen, and
+the DTR-stuck uptime window:
 
 ```sh
 python3 -m pip install pyserial
 python3 tests/hardware/rp_usb_cdc_echo/verify_cdc_echo.py \
   --port /dev/serial/by-id/<device>
 ```
+
+The final `dtr_stuck_uptime` phase reproduces a Linux terminal that clears
+`HUPCL` and closes the port: DTR stays asserted while nobody reads. The
+script first switches the firmware into chatter mode (`JH:DTRSTUCK\n` on the
+CDC input), where it emits a `JHDTR uptime_ms=... wdt_reboot=... seq=...`
+debug line every 20 ms and toggles the LED every 25 lines. It then closes the
+port with `HUPCL` cleared, waits 65 s (`--dtr-stuck-seconds`, `0` skips the
+phase), reopens, and requires the newest reported uptime to span the whole
+window with `wdt_reboot=0` - proof that blocked debug writes cannot starve
+the watchdog. `JH:ECHO\n` switches the firmware back to echo mode and a
+closing echo exchange confirms the transport recovered.
 
 After the first flash, the target-neutral `upload` action must enter BOOTSEL
 through the 1200-bps DTR touch and return with the same CDC identity:
