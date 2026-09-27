@@ -348,6 +348,23 @@
             ],
             "group": "build",
             "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Project: Upload variant: display-clock",
+            "detail": "Build and upload the DS3231 clock with an ILI9341 display (display-clock).",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "upload",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "display-clock"
+            ],
+            "problemMatcher": "$gcc"
         }
     ]
 }

@@ -270,6 +270,112 @@ require(
     "example variant lost its isolated CMake directory",
 )
 
+
+def variant_dump(project: Path, variant: str | None) -> dict:
+    command = [str(ENTRY), "config-dump", "--project", str(project), "--json"]
+    if variant is not None:
+        command += ["--variant", variant]
+    result = subprocess.run(command, capture_output=True, text=True)
+    require(result.returncode == 0, f"config-dump failed: {result.stderr}")
+    return json.loads(result.stdout)
+
+
+# A firmware project declares variants at the top level. Its manifest leaves
+# JH_ARTIFACT_DIR to the CMake default, which is the base .build directory, so
+# the variant must still publish into its own directory.
+with tempfile.TemporaryDirectory(prefix="jh-vscode-variants-") as temp_dir:
+    variant_project = Path(temp_dir) / "consumer"
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "vscode" / "tools" / "create-vscode-example.py"),
+            "--output",
+            str(variant_project),
+            "--name",
+            "Variant workflow test",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    manifest_path = variant_project / ".vscode" / "jaszczurhal.project.json"
+    manifest = load_json(manifest_path)
+    manifest["cmake"]["cache"].pop("JH_ARTIFACT_DIR", None)
+    manifest["variants"] = [
+        {"id": "bench", "module": "firmware", "extraDefines": ["BENCH=1"]}
+    ]
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+    base = variant_dump(variant_project, None)
+    bench = variant_dump(variant_project, "bench")
+    bench_dir = Path(base["buildDir"]) / "variants" / "bench"
+    require(
+        same_path(bench["buildDir"], bench_dir),
+        "project variant shares the base build directory",
+    )
+    require(
+        same_path(bench["cmake"]["cache"].get("JH_ARTIFACT_DIR", ""), bench_dir),
+        "project variant without a base JH_ARTIFACT_DIR publishes into the base directory",
+    )
+    require(
+        bench["cmake"]["cache"]["JH_EXTRA_DEFINES"] == "BENCH=1",
+        "project variant lost its definitions",
+    )
+    require(
+        "JH_ARTIFACT_DIR" not in base["cmake"]["cache"],
+        "base build gained an artifact directory it did not declare",
+    )
+
+    custom_dir = Path(temp_dir) / "artifacts"
+    manifest["cmake"]["cache"]["JH_ARTIFACT_DIR"] = str(custom_dir)
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    require(
+        same_path(
+            variant_dump(variant_project, "bench")["cmake"]["cache"]["JH_ARTIFACT_DIR"],
+            custom_dir / "variants" / "bench",
+        ),
+        "project variant publishes into a custom base artifact directory",
+    )
+
+    manifest["example"] = {"variants": [{"id": "bench"}]}
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    duplicate = subprocess.run(
+        [str(ENTRY), "config-dump", "--project", str(variant_project), "--variant", "bench"],
+        capture_output=True,
+        text=True,
+    )
+    require(
+        duplicate.returncode != 0 and "declared more than once" in duplicate.stderr,
+        "a variant id declared twice was accepted",
+    )
+
+from vscode_task_config import project_tasks_document  # noqa: E402
+
+variant_tasks = {
+    task["label"]: task
+    for task in project_tasks_document(
+        workflow_runtime.load_target_registry(),
+        "rp2040",
+        "pico",
+        module="ECU",
+        variants=[{"id": "bench", "module": "ECU"}],
+    )["tasks"]
+}
+for action, label in (
+    ("build", "Project: Build variant: bench"),
+    ("upload", "Project: Upload variant: bench"),
+):
+    require(
+        variant_tasks.get(label, {}).get("args")
+        == [action, "--project", "${workspaceFolder}", "--variant", "bench"],
+        f"variant task '{label}' is missing or runs the wrong action",
+    )
+require(
+    variant_tasks["Project: Upload variant: bench"]["detail"]
+    == "Build and upload the ECU variant bench.",
+    "project variant upload task lost its module in the description",
+)
+
 storage = load_json(
     ROOT / "examples" / "10_storage" / ".vscode" / "jaszczurhal.project.json"
 )

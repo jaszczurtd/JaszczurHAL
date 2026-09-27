@@ -348,6 +348,23 @@
             ],
             "group": "build",
             "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Project: Upload variant: network",
+            "detail": "Build and upload the FreeRTOS network services and client examples (network).",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "upload",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "network"
+            ],
+            "problemMatcher": "$gcc"
         }
     ]
 }

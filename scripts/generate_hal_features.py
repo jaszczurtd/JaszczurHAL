@@ -1124,7 +1124,6 @@ def effective_axes(document: dict[str, Any]) -> list[tuple[str | None, str | Non
         target_names.update(str(name) for name in profiles if str(name))
 
     example = document.get("example")
-    variants: list[dict[str, Any]] = []
     boards: dict[str, Any] = {}
     if isinstance(example, dict):
         targets = example.get("targets")
@@ -1132,14 +1131,11 @@ def effective_axes(document: dict[str, Any]) -> list[tuple[str | None, str | Non
             target_names.update(str(item) for item in targets if str(item))
         if isinstance(example.get("boards"), dict):
             boards = example["boards"]
-        if isinstance(example.get("variants"), list):
-            variants = [
-                item for item in example["variants"] if isinstance(item, dict)
-            ]
-            for variant in variants:
-                targets = variant.get("targets")
-                if isinstance(targets, list):
-                    target_names.update(str(item) for item in targets if str(item))
+    variants = load_workflow_runtime().manifest_variants(document)
+    for variant in variants:
+        targets = variant.get("targets")
+        if isinstance(targets, list):
+            target_names.update(str(item) for item in targets if str(item))
 
     targets: list[str | None] = sorted(target_names) if target_names else [None]
     variant_axes: list[tuple[str | None, dict[str, Any] | None]] = [(None, None)]
@@ -1550,7 +1546,7 @@ def lint_effective_inputs(
                     board_override=board,
                     use_local_state=False,
                 )
-                workflow.apply_example_variant(config, variant_id)
+                workflow.apply_variant(config, variant_id)
                 workflow.validate_hal_enable_values(config, project)
             except (OSError, ValueError) as error:
                 axis = f"target={target or 'default'}, variant={variant_id or 'base'}"

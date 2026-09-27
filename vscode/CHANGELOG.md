@@ -2,6 +2,11 @@
 
 ## 0.1.0 - Unreleased
 
+- Let any firmware project declare build variants in a top-level `variants`
+  array next to `example.variants`, generate a `Project: Upload variant: <id>`
+  task beside each `Project: Build variant: <id>`, and publish a variant into
+  its own artifact directory even when the manifest leaves `JH_ARTIFACT_DIR`
+  to the default, so a variant build never replaces the base firmware.
 - Receive OTA discovery replies on the fixed OTA host port (`ota.listenPort`,
   UDP/8266 by default) and let `configure_ota_firewall.py` allow that UDP port
   next to the TCP callback on Linux, so a stateful host firewall no longer drops
