@@ -266,7 +266,7 @@ Put project feature flags in `hal_project_config.h`:
 }
 ```
 
-Enable a feature with `HAL_ENABLE_X` or `HAL_ENABLE_X=1`. After selecting the active target profile and example variant, the shared build configuration and `jh-vscode` reject `HAL_ENABLE_X=0` and other explicit values with `[JH-CFG-VALUE]`. To disable a feature, omit its symbol.
+Enable a feature with `HAL_ENABLE_X` or `HAL_ENABLE_X=1`. After selecting the active target profile and variant, the shared build configuration and `jh-vscode` reject `HAL_ENABLE_X=0` and other explicit values with `[JH-CFG-VALUE]`. To disable a feature, omit its symbol.
 
 This rule does not apply to ordinary parameters such as `APP_DIAGNOSTICS=0`. In definition lists, each `HAL_ENABLE_*` entry must be a separate, simple token, and entries must be separated by semicolons. Whitespace is not a separator. CMake generator expressions are not supported.
 
@@ -383,6 +383,21 @@ The device hostname, UDP port, and password must match the firmware configuratio
 Example manifests may declare `example.targets` and `example.variants`.
 Variants can override module name, sources, feature definitions, supported
 targets, and CMake cache entries.
+
+Any firmware project can declare variants too, in a top-level `variants`
+array with the same fields; an id may appear only once across both lists.
+`--variant <id>` selects one, and the generated tasks
+`Project: Build variant: <id>` and `Project: Upload variant: <id>` run it.
+A variant builds into `<buildDir>/variants/<id>` with its own CMake tree and
+artifacts, so it never replaces the base firmware, also when the manifest
+leaves `JH_ARTIFACT_DIR` to its default. Its `extraDefines` replace the base
+`JH_EXTRA_DEFINES`, so the list carries every definition the variant needs.
+
+```json
+"variants": [
+  { "id": "bench", "module": "ECU", "extraDefines": ["BENCH_TESTS=1"] }
+]
+```
 
 ```bash
 scripts/examples_dispatcher.py list

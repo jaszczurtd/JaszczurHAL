@@ -134,7 +134,8 @@ uses `jaszczurhal.vscodeEntry`; the Windows override uses
 | `Project: Select board` | `select-board --interactive` | Selects the target and board in the terminal and persists the selection locally. |
 | `Project: Select board (GUI)` | `select-board --selection ...` | Uses the generated VS Code picker and persists the selected target/board pair locally. |
 | `Project: Sync board picker` | `sync-board-picker` | Runs once on trusted folder open, refreshes picker values, and creates or repairs the managed RP2040, RP2350 Arm, and STM32G474 debug profiles while preserving consumer-owned profiles. |
-| `Project: Build variant: <id>` | `build --variant <id>` | Appears only for declared example variants and builds that manifest variant through the normal artifact pipeline. |
+| `Project: Build variant: <id>` | `build --variant <id>` | Appears for each variant the manifest declares in `variants` or `example.variants` and builds it into `<buildDir>/variants/<id>` through the normal artifact pipeline. |
+| `Project: Upload variant: <id>` | `upload --variant <id>` | Builds and uploads that variant through the active target backend, like `Project: Upload`. |
 
 The Run and Debug panel exposes three Cortex-Debug launch configurations:
 
@@ -151,7 +152,7 @@ Common options:
 --project <path>       Firmware module directory.
 --target <id>          Override active target family for this invocation.
 --board <id>           Override active board within the target.
---variant <id>         Select an example variant declared by the manifest.
+--variant <id>         Select a variant declared by the manifest.
 --selection <t:b>      Persist target/board selection; GUI labels are accepted.
 --interactive          Prompt for target/board selection in the terminal.
 --port <port>          Override configured upload/monitor port.
@@ -268,7 +269,7 @@ libraries/JaszczurHAL/vscode/tools/create-vscode-example.py \
   --board nucleo-g474re
 ```
 
-Feature flags in the project header, final target profile, and active example
+Feature flags in the project header, final target profile, and active
 variant accept bare `HAL_ENABLE_X` or `HAL_ENABLE_X=1`. `jh-vscode` rejects
 `=0` and CMake generator expressions with `[JH-CFG-VALUE]` before CMake
 configure. In definition-list inputs, every `HAL_ENABLE_*` entry must be a

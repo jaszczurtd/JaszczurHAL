@@ -701,6 +701,7 @@ def normalize_manifest(data: dict[str, Any]) -> dict[str, Any]:
         "project",
         "module",
         "example",
+        "variants",
         "toolchain",
         "target",
         "board",
@@ -720,28 +721,43 @@ def normalize_manifest(data: dict[str, Any]) -> dict[str, Any]:
     return config
 
 
-def example_variants(config: dict[str, Any]) -> list[dict[str, Any]]:
+def manifest_variants(config: dict[str, Any]) -> list[dict[str, Any]]:
+    """Build variants a manifest declares: top-level ``variants`` of a firmware
+    project followed by ``example.variants`` of a checked-in example."""
     example = config.get("example")
-    if not isinstance(example, dict):
-        return []
-    variants = example.get("variants")
-    if not isinstance(variants, list):
-        return []
-    return [variant for variant in variants if isinstance(variant, dict)]
+    sources = (
+        config.get("variants"),
+        example.get("variants") if isinstance(example, dict) else None,
+    )
+    return [
+        variant
+        for source in sources
+        if isinstance(source, list)
+        for variant in source
+        if isinstance(variant, dict)
+    ]
 
 
-def apply_example_variant(config: dict[str, Any], variant_id: str | None) -> None:
+def apply_variant(config: dict[str, Any], variant_id: str | None) -> None:
+    """Overlay one declared variant on a loaded manifest.
+
+    The variant builds into ``<buildDir>/variants/<id>`` with its own CMake
+    tree and artifact directory, so it never replaces the base firmware.
+    """
     if not variant_id:
         return
 
-    variant: dict[str, Any] | None = None
-    for candidate in example_variants(config):
-        if str(candidate.get("id") or "") == variant_id:
-            variant = candidate
-            break
-    if variant is None:
-        known = ", ".join(str(item.get("id")) for item in example_variants(config) if item.get("id"))
-        raise ValueError(f"unknown example variant '{variant_id}'" + (f"; known variants: {known}" if known else ""))
+    matches = [
+        candidate
+        for candidate in manifest_variants(config)
+        if str(candidate.get("id") or "") == variant_id
+    ]
+    if len(matches) > 1:
+        raise ValueError(f"variant '{variant_id}' is declared more than once")
+    if not matches:
+        known = ", ".join(str(item.get("id")) for item in manifest_variants(config) if item.get("id"))
+        raise ValueError(f"unknown variant '{variant_id}'" + (f"; known variants: {known}" if known else ""))
+    variant = matches[0]
 
     module = str(variant.get("module") or f"{config.get('module', 'firmware')}_{variant_id}")
     config["module"] = module
@@ -769,7 +785,12 @@ def apply_example_variant(config: dict[str, Any], variant_id: str | None) -> Non
 
     cmake = dict(config.get("cmake") or {})
     cache = dict(cmake.get("cache") or {})
-    if base_build_dir and cache.get("JH_ARTIFACT_DIR") == base_build_dir:
+    # Without an explicit value CMake publishes into <project>/.build, the base
+    # firmware's directory; a custom base directory gets its own variants/<id>.
+    base_artifact_dir = cache.get("JH_ARTIFACT_DIR")
+    if base_artifact_dir and base_artifact_dir != base_build_dir:
+        cache["JH_ARTIFACT_DIR"] = str(Path(str(base_artifact_dir)) / "variants" / variant_id)
+    elif base_build_dir:
         cache["JH_ARTIFACT_DIR"] = config["buildDir"]
     cache["JH_MODULE_NAME"] = module
     sources = variant.get("sources")
@@ -980,7 +1001,7 @@ def command_config_dump(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_CONFIG
     try:
-        apply_example_variant(config, getattr(args, "variant", None))
+        apply_variant(config, getattr(args, "variant", None))
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_CONFIG
@@ -1440,7 +1461,7 @@ def build_preflight_diagnostics(config: dict[str, Any], project_dir: Path) -> li
             variant = example.get("activeVariant")
             suffix = f" variant '{variant}'" if variant else ""
             messages.append(
-                f"axis-2: example {config.get('module', project_dir.name)}{suffix} "
+                f"axis-2: project {config.get('module', project_dir.name)}{suffix} "
                 f"does not declare support for target {target_display_name(config)}; "
                 f"supported targets: {', '.join(str(item) for item in supported_targets)}."
             )
@@ -3031,7 +3052,7 @@ def load_config_for_action(args: argparse.Namespace) -> tuple[Path, dict[str, An
         print(f"error: {exc}", file=sys.stderr)
         return project_dir, {}, EXIT_CONFIG
     try:
-        apply_example_variant(config, getattr(args, "variant", None))
+        apply_variant(config, getattr(args, "variant", None))
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return project_dir, {}, EXIT_CONFIG
@@ -5051,7 +5072,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override active target family (e.g. rp2040, rp2350-arm, stm32g474).",
     )
     parser.add_argument("--board", help="Override active board/variant within the target.")
-    parser.add_argument("--variant", help="Example variant id from the manifest's example.variants list.")
+    parser.add_argument("--variant", help="Variant id from the manifest's variants or example.variants list.")
     parser.add_argument("--selection", help="Board selection in '<target>:<board>' form (for VS Code pickers).")
     parser.add_argument("--interactive", action="store_true", help="Prompt for a target/board selection in the terminal.")
     parser.add_argument("--port", help="Override serial upload/monitor port.")

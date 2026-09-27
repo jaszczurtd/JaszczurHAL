@@ -348,6 +348,23 @@
             ],
             "group": "build",
             "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Project: Upload variant: scan",
+            "detail": "Build and upload the example variant scan.",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "upload",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "scan"
+            ],
+            "problemMatcher": "$gcc"
         }
     ]
 }

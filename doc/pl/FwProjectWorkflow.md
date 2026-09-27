@@ -257,7 +257,7 @@ Dla profili platform, wariantów kompilacji i CI można użyć `JH_EXTRA_DEFINES
 }
 ```
 
-Funkcję włącza zapis `HAL_ENABLE_X` albo `HAL_ENABLE_X=1`. Po ustaleniu aktywnego profilu platformy i wariantu przykładu wspólna konfiguracja oraz `jh-vscode` odrzucają `HAL_ENABLE_X=0` i inne jawne wartości, zgłaszając `[JH-CFG-VALUE]`. Aby wyłączyć funkcję, pomiń jej symbol.
+Funkcję włącza zapis `HAL_ENABLE_X` albo `HAL_ENABLE_X=1`. Po ustaleniu aktywnego profilu platformy i wariantu wspólna konfiguracja oraz `jh-vscode` odrzucają `HAL_ENABLE_X=0` i inne jawne wartości, zgłaszając `[JH-CFG-VALUE]`. Aby wyłączyć funkcję, pomiń jej symbol.
 
 Ta reguła nie dotyczy zwykłych parametrów, takich jak `APP_DIAGNOSTICS=0`. Na listach definicji każdy wpis `HAL_ENABLE_*` musi być osobnym, prostym tokenem, a wpisy muszą być rozdzielone średnikami. Białe znaki nie są separatorami definicji. Wyrażenia generatora CMake nie są obsługiwane.
 
@@ -379,6 +379,14 @@ Nazwa hosta urządzenia, port UDP i hasło muszą być zgodne z konfiguracją fi
 ## Przykłady i warianty
 
 Manifesty przykładów mogą zawierać `example.targets` i `example.variants`. Wariant może zastąpić nazwę modułu, źródła, definicje funkcji, obsługiwane platformy i wpisy pamięci podręcznej CMake.
+
+Warianty może też deklarować każdy projekt firmware, w tablicy `variants` na najwyższym poziomie manifestu, z tymi samymi polami; dany identyfikator może wystąpić tylko raz w obu listach. `--variant <id>` wybiera wariant, a wygenerowane zadania `Project: Build variant: <id>` i `Project: Upload variant: <id>` go uruchamiają. Wariant buduje się do `<buildDir>/variants/<id>`, z własnym drzewem CMake i artefaktami, więc nigdy nie zastępuje firmware bazowego, także gdy manifest zostawia `JH_ARTIFACT_DIR` domyślne. Jego `extraDefines` zastępują bazowe `JH_EXTRA_DEFINES`, więc lista musi zawierać wszystkie definicje potrzebne wariantowi.
+
+```json
+"variants": [
+  { "id": "bench", "module": "ECU", "extraDefines": ["BENCH_TESTS=1"] }
+]
+```
 
 ```bash
 scripts/examples_dispatcher.py list

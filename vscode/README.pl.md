@@ -151,7 +151,8 @@ systemach Unix korzysta z `jaszczurhal.vscodeEntry`, a wariant dla Windows - z
 | `Project: Select board` | `select-board --interactive` | Pozwala wybrać target i płytkę w terminalu, a następnie zapisuje ten wybór lokalnie. |
 | `Project: Select board (GUI)` | `select-board --selection ...` | Korzysta z wygenerowanego selektora VS Code i zapisuje lokalnie wybraną parę target/płytka. |
 | `Project: Sync board picker` | `sync-board-picker` | Uruchamia się raz po otwarciu zaufanego katalogu, odświeża wartości selektora i tworzy lub naprawia zarządzane profile debugowe dla RP2040, RP2350 Arm i STM32G474, pozostawiając profile użytkownika bez zmian. |
-| `Project: Build variant: <id>` | `build --variant <id>` | Pojawia się tylko przy zadeklarowanych wariantach przykładu i buduje wybrany wariant manifestu za pośrednictwem standardowego procesu publikowania artefaktów. |
+| `Project: Build variant: <id>` | `build --variant <id>` | Pojawia się dla każdego wariantu zadeklarowanego w `variants` albo `example.variants` i buduje go do `<buildDir>/variants/<id>` za pośrednictwem standardowego procesu publikowania artefaktów. |
+| `Project: Upload variant: <id>` | `upload --variant <id>` | Buduje i wgrywa ten wariant przez backend aktywnego targetu, tak jak `Project: Upload`. |
 
 Panel Run and Debug udostępnia trzy konfiguracje Cortex-Debug:
 
@@ -168,7 +169,7 @@ Wspólne opcje:
 --project <path>       Katalog modułu firmware.
 --target <id>          Zastąp aktywną rodzinę targetu w tym wywołaniu.
 --board <id>           Zastąp aktywną płytkę w obrębie targetu.
---variant <id>         Wybierz wariant przykładu zadeklarowany w manifeście.
+--variant <id>         Wybierz wariant zadeklarowany w manifeście.
 --selection <t:b>      Zapisz wybór targetu i płytki; etykiety GUI są dozwolone.
 --interactive          Zapytaj o target i płytkę w terminalu.
 --port <port>          Zastąp skonfigurowany port wgrywania lub monitora.

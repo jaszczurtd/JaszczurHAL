@@ -350,6 +350,23 @@
             "problemMatcher": "$gcc"
         },
         {
+            "label": "Project: Upload variant: commands",
+            "detail": "Build and upload the authenticated BLE command example (commands).",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "upload",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "commands"
+            ],
+            "problemMatcher": "$gcc"
+        },
+        {
             "label": "Project: Build variant: commands-freertos",
             "detail": "Build the authenticated BLE command example with FreeRTOS (commands-freertos).",
             "type": "shell",
@@ -365,6 +382,23 @@
                 "commands-freertos"
             ],
             "group": "build",
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Project: Upload variant: commands-freertos",
+            "detail": "Build and upload the authenticated BLE command example with FreeRTOS (commands-freertos).",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "upload",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "commands-freertos"
+            ],
             "problemMatcher": "$gcc"
         }
     ]

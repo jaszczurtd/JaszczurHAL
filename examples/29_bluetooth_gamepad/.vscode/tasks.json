@@ -350,6 +350,23 @@
             "problemMatcher": "$gcc"
         },
         {
+            "label": "Project: Upload variant: classic-scan",
+            "detail": "Build and upload the Classic Bluetooth device and service discovery example (classic-scan).",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "upload",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "classic-scan"
+            ],
+            "problemMatcher": "$gcc"
+        },
+        {
             "label": "Project: Build variant: hid-host",
             "detail": "Build the generic Classic HID descriptor and report example (hid-host).",
             "type": "shell",
@@ -368,6 +385,23 @@
             "problemMatcher": "$gcc"
         },
         {
+            "label": "Project: Upload variant: hid-host",
+            "detail": "Build and upload the generic Classic HID descriptor and report example (hid-host).",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "upload",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "hid-host"
+            ],
+            "problemMatcher": "$gcc"
+        },
+        {
             "label": "Project: Build variant: ble",
             "detail": "Build the Classic gamepad example with a BLE observer (ble).",
             "type": "shell",
@@ -383,6 +417,23 @@
                 "ble"
             ],
             "group": "build",
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Project: Upload variant: ble",
+            "detail": "Build and upload the Classic gamepad example with a BLE observer (ble).",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "upload",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "ble"
+            ],
             "problemMatcher": "$gcc"
         }
     ]

@@ -575,23 +575,27 @@ def project_tasks_document(
             continue
         variant_module = str(variant.get("module") or "")
         variant_summary = EXAMPLE_VARIANT_TASK_SUMMARIES.get(variant_module)
-        variant_detail = (
-            f"Build {variant_summary} ({variant_id})."
-            if variant_summary
-            else f"Build the example variant {variant_id}."
-        )
+        if variant_summary:
+            variant_subject = f"{variant_summary} ({variant_id})"
+        elif module:
+            variant_subject = f"the {module} variant {variant_id}"
+        else:
+            variant_subject = f"the example variant {variant_id}"
+        variant_args = ["--project", "${workspaceFolder}", "--variant", variant_id]
         tasks.append(
             vscode_entry_task(
                 label=f"Project: Build variant: {variant_id}",
-                detail=variant_detail,
-                args=[
-                    "build",
-                    "--project",
-                    "${workspaceFolder}",
-                    "--variant",
-                    variant_id,
-                ],
+                detail=f"Build {variant_subject}.",
+                args=["build", *variant_args],
                 group="build",
+                problemMatcher="$gcc",
+            )
+        )
+        tasks.append(
+            vscode_entry_task(
+                label=f"Project: Upload variant: {variant_id}",
+                detail=f"Build and upload {variant_subject}.",
+                args=["upload", *variant_args],
                 problemMatcher="$gcc",
             )
         )

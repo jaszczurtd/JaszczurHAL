@@ -4,6 +4,36 @@
   "title": "JaszczurHAL VS Code Project",
   "type": "object",
   "additionalProperties": true,
+  "$defs": {
+    "variant": {
+      "type": "object",
+      "description": "One build variant. It builds into <buildDir>/variants/<id> with its own CMake tree and artifact directory, so it never replaces the base firmware.",
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string" },
+        "module": { "type": "string" },
+        "sources": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "targets": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "gateTargets": {
+          "type": "array",
+          "description": "Representative target subset compiled for this variant by the examples quality gate.",
+          "items": { "type": "string" }
+        },
+        "extraDefines": {
+          "type": "array",
+          "description": "Compile definitions of the variant; they replace the base JH_EXTRA_DEFINES. HAL_ENABLE_* entries must be bare or use the explicit value 1.",
+          "items": { "type": "string" }
+        },
+        "cmake": { "type": "object", "additionalProperties": true }
+      }
+    }
+  },
   "properties": {
     "project": {
       "type": "string",
@@ -53,35 +83,14 @@
         },
         "variants": {
           "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": true,
-            "properties": {
-              "id": { "type": "string" },
-              "module": { "type": "string" },
-              "sources": {
-                "type": "array",
-                "items": { "type": "string" }
-              },
-              "targets": {
-                "type": "array",
-                "items": { "type": "string" }
-              },
-              "gateTargets": {
-                "type": "array",
-                "description": "Representative target subset compiled for this variant by the examples quality gate.",
-                "items": { "type": "string" }
-              },
-              "extraDefines": {
-                "type": "array",
-                "description": "Additional compile definitions applied by the active variant. HAL_ENABLE_* entries must be bare or use the explicit value 1.",
-                "items": { "type": "string" }
-              },
-              "cmake": { "type": "object", "additionalProperties": true }
-            }
-          }
+          "items": { "$ref": "#/$defs/variant" }
         }
       }
+    },
+    "variants": {
+      "type": "array",
+      "description": "Build variants of a firmware project, selected with --variant and offered as the Project: Build variant and Project: Upload variant tasks. Ids are unique across variants and example.variants.",
+      "items": { "$ref": "#/$defs/variant" }
     },
     "toolchain": {
       "type": "string",
