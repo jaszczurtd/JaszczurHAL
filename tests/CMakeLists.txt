@@ -887,6 +887,12 @@ add_test(NAME test_system_architecture_metadata_contract
 )
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+if(UNIX AND NOT APPLE)
+    add_test(NAME test_ram_functions
+        COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_ram_functions.py
+            ${CMAKE_CURRENT_SOURCE_DIR}/..)
+endif()
 option(JH_ENABLE_HARDWARE_FIXTURE_CHECKS
     "Register host-side checks of manually invoked hardware fixtures" OFF)
 add_test(NAME test_feature_registry
