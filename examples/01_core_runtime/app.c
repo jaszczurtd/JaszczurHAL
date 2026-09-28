@@ -6,6 +6,7 @@
 #include <hal/control/hal_pid_controller.h>
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_array.h>
+#include <hal/core/hal_memory.h>
 #include <hal/gpio/hal_gpio.h>
 #include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
@@ -30,7 +31,7 @@ static uint32_t s_last_report_ms = 0u;
 
 /* Boards without a plain GPIO status LED (for example an addressable WS2812
  * only) do not define HAL_LED_BUILTIN; the blink then only toggles state. */
-static void blink_tick(void) {
+static void HAL_RAM_FUNC(blink_tick)(void) {
   s_led_on = !s_led_on;
 #if defined(HAL_LED_BUILTIN)
   hal_gpio_write(HAL_LED_BUILTIN, s_led_on);

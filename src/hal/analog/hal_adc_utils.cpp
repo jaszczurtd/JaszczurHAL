@@ -1,4 +1,5 @@
 #include "hal/analog/hal_adc_utils.h"
+#include "hal/core/hal_memory.h"
 
 #include "hal/analog/hal_adc.h"
 #include "hal/system/hal_system.h"
@@ -23,7 +24,7 @@ hal_status_t hal_adc_raw_to_voltage_ex(int raw, float reference_voltage,
   return HAL_OK;
 }
 
-int hal_adc_compensate_rp2040_12bit(int sample) {
+int HAL_RAM_FUNC(hal_adc_compensate_rp2040_12bit)(int sample) {
   if (sample > 3584) {
     return sample + 32;
   }

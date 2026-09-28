@@ -1,4 +1,5 @@
 #include "hal/core/hal_compiler.h"
+#include "hal/core/hal_memory.h"
 #include "hal/security/hal_crc.h"
 
 #include <cstdint>
@@ -19,7 +20,7 @@ extern uint32_t portable_clz32_probe(uint32_t value);
 extern void portable_abort_probe(int guard);
 extern "C" int compiler_atomic_c_probe(void);
 
-static void first_callback(void) {}
+static void HAL_RAM_FUNC(first_callback)(void) {}
 static void second_callback(void) {}
 
 struct atomic_cpp_pointer_probe {

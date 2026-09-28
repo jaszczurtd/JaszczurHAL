@@ -136,6 +136,7 @@ SECTIONS
     {
         . = ALIGN(4);
         _sdata = .;
+        *(.ram_func .ram_func.*)
         *(.data)
         *(.data*)
         . = ALIGN(4);

@@ -4,6 +4,30 @@
 
 > **Part of [JaszczurHAL API Reference](../../en/JaszczurHAL_API.md)**
 
+## Functions in RAM
+
+`HAL_RAM_FUNC(name)` from `<hal/core/hal_memory.h>` places a function in
+executable RAM and prevents its inlining into flash. It is also included by
+`<JaszczurHAL.h>`.
+
+```c
+static unsigned HAL_RAM_FUNC(scale_sample)(unsigned raw) {
+    return raw * 3u;
+}
+```
+
+Use the same spelling on a separate declaration, if present. RP2040/RP2350
+use Pico SDK's `.time_critical` sections. STM32G474 copies `.ram_func`
+sections together with `.data` at startup. ESP32 uses ESP-IDF's IRAM
+sections; mock builds keep normal host placement. Use the HAL's supported
+linker and startup files.
+
+Only the annotated function moves. Check its callees, constant data and
+compiler runtime helpers in the ELF/map before relying on RAM execution.
+This attribute alone does not permit calls while flash is unavailable.
+Measure the complete path and leave room for stacks and heap; RAM code
+consumes SRAM as well as its load image in flash.
+
 ## `hal_status` - Shared status codes
 
 ```c

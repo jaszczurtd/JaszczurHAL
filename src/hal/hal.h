@@ -15,6 +15,7 @@
 #include "hal/core/hal_array.h"
 #include "hal/core/hal_bits.h"
 #include "hal/core/hal_config.h"
+#include "hal/core/hal_memory.h"
 #include "hal/core/hal_text.h"
 #include "hal/core/jh_endian.h"
 #ifdef HAL_ENABLE_COMMAND_ROUTER
