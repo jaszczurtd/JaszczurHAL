@@ -1104,9 +1104,12 @@ różnice między targetami pozostają w wybranym transporcie HAL.
 **Współbieżność:** Jeden wewnętrzny `hal_mutex_t` chroni stan parsera, ustawianie danych
 mocka, przekazywanie bajtów i wszystkie gettery. Na sprzęcie inicjalizacja
 singletona nadal odbywa się tylko raz; inicjalizacja mocka resetuje stan przed
-każdym testem. Wstrzymywanie i wznawianie pracy to operacje cyklu życia: należy
-wywoływać je z kodu zarządzającego transportem i nie wykonywać równocześnie
-z `hal_gps_update()`.
+każdym testem. Wstrzymanie, wznowienie i `hal_gps_update()` nigdy na siebie
+nie czekają. Wstrzymanie albo wznowienie wywołane, gdy inny rdzeń jest w
+trakcie wywołania transportu GPS, wykonuje to wywołanie przy wyjściu, a
+`hal_gps_update()` w trakcie wstrzymywania pomija odczyt. Można je więc
+wywoływać z różnych rdzeni, np. wstrzymać GPS na czas zapisu flash na
+rdzeniu, który zapisuje.
 
 **Transport RP2040 i przypisanie do rdzenia:**
 

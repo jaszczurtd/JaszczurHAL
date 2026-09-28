@@ -2,8 +2,8 @@
 
 `tests/hardware/rp_ota` validates OTA discovery and authentication,
 acknowledged chunk-by-chunk transfer, trial boot, explicit confirmation, a
-second unconfirmed trial, automatic rollback, and network/USB recovery after
-each reboot. The same fixture increments a boot counter in two-bank `hal_kv`
+second unconfirmed trial that refuses a new upload, automatic rollback, and
+network/USB recovery after each reboot. The same fixture increments a boot counter in two-bank `hal_kv`
 and mounts a separate LittleFS partition, proving that both persistent users
 remain intact while OTA program, staging and control regions change. It
 supports Pico W/RP2040 and Pico 2 W/RP2350 ARM in bare-metal and FreeRTOS

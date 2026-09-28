@@ -52,7 +52,12 @@ void hal_gps_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud,
  * no-op. On transports that own background resources, such as RP PIO/DMA
  * SoftwareSerial, those resources are released until hal_gps_resume().
  *
- * @return HAL_OK on success, or a transport status when pausing fails.
+ * It never waits. When hal_gps_update() or another pause/resume is running on
+ * another core or task, the request is left to that call, which releases the
+ * transport as it returns, and this call returns HAL_OK at once.
+ *
+ * @return HAL_OK on success or when left to the running call, or a transport
+ *         status when pausing fails.
  */
 hal_status_t hal_gps_pause(void);
 
@@ -63,7 +68,11 @@ hal_status_t hal_gps_pause(void);
  * reset, so callers retain the most recent fix while the receiver restarts.
  * This operation is idempotent and is a no-op before a successful init.
  *
- * @return HAL_OK on success, or a transport status when restart fails.
+ * Like hal_gps_pause() it never waits. A restart left to a running call and
+ * failing there is logged and retried by later GPS calls once per second.
+ *
+ * @return HAL_OK on success or when left to the running call, or a transport
+ *         status when restart fails.
  */
 hal_status_t hal_gps_resume(void);
 
@@ -73,7 +82,8 @@ hal_status_t hal_gps_resume(void);
  * Should be called frequently (e.g. every main-loop iteration) to prevent the
  * selected transport's receive buffer from overflowing. In multicore code,
  * keeping this call in the task/core that initialized GPS makes transport
- * ownership explicit.
+ * ownership explicit. While a pause or resume runs on another core the call
+ * returns without reading; the bytes wait in the transport buffer.
  *
  * In the mock build this function is a no-op; use the inject helpers instead.
  */
@@ -187,7 +197,11 @@ uint32_t hal_gps_failed_checksum(void);
 /** @brief Number of valid sentences that contained a location fix. */
 uint32_t hal_gps_sentences_with_fix(void);
 
-/** @brief Bytes currently waiting in the underlying serial RX buffer. */
+/**
+ * @brief Bytes currently waiting in the underlying serial RX buffer.
+ * @return Byte count; 0 while paused or while another core is inside a GPS
+ *         transport call; -1 before a successful init.
+ */
 int hal_gps_serial_available(void);
 
 #endif /* HAL_ENABLE_GPS */

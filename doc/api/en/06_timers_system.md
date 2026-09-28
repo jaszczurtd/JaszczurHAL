@@ -145,6 +145,12 @@ callbacks have returned. External synchronization with other callers alone is
 not sufficient; pool destruction from an alarm callback/ISR is unsupported.
 
 - **Layer model:** use low-level alarms for minimal ISR scheduling; use managed timers when you need start/stop/pause/resume/status semantics and periodic behavior.
+- **Managed timer callbacks:** only the alarm that currently owns the timer
+  runs its callback. A one-shot timer is `STOPPED` before its callback runs,
+  so a `hal_timer_start()` made meanwhile arms it again. When a call made during
+  a periodic callback stops, pauses or re-arms the timer, the finished alarm is
+  not rescheduled. Restarting a one-shot from its own callback needs a free
+  slot in the pool: the firing alarm keeps its slot until the callback returns.
 - **Error model:** `_ex` functions return detailed `hal_timer_result_t` diagnostics (`INVALID_ARG`, `TIME_PASSED`, `POOL_FULL`, `NO_RESOURCE`, etc.) while legacy non-`_ex` variants preserve `HAL_ALARM_INVALID` compatibility.
 - **impl/rp2040:** Pico SDK alarm pools (`pico/time.h`) and callback scheduling
   (`alarm_pool_add_alarm_in_us`, cancel APIs). `add_alarm_in_us()` outcomes `<= 0`

@@ -1447,8 +1447,15 @@ hal_status_t hal_ota_get_boot_info_ex(hal_ota_boot_info_t *out_info);
   oraz istniejący obszar końcowy LittleFS/EEPROM.
 - Kod aktualizujący przy rozruchu RP zamienia miejscami `program` i `staging`,
   sektor po sektorze. Monotoniczny dziennik faz pozwala wznowić działanie po
-  utracie zasilania. Niepotwierdzona wersja próbna jest wycofywana po
+  utracie zasilania. Skrót obszaru `staging` jest sprawdzany tylko przed
+  rozpoczęciem zamiany; zamiana przerwana błędem po zmianie slotu `program`
+  jest ponawiana przy następnym rozruchu, zamiast uruchamiać obraz złożony
+  z dwóch wersji. Niepotwierdzona wersja próbna jest wycofywana po
   `HAL_RP_OTA_MAX_BOOT_ATTEMPTS` rozruchach.
+- RP przyjmuje nowy obraz tylko w stanie stabilnym. W trakcie próby obszar
+  `staging` przechowuje kopię do wycofania, więc najpierw potwierdź wersję
+  próbną; w pozostałych stanach przesyłanie kończy się odpowiedzią
+  `ERR: Update Begin`.
 - ESP32-S3 przyjmuje surowy plik BIN aplikacji ESP, sprawdza MD5 transferu
   oraz poprawność obrazu przez ESP-IDF, po czym zapisuje nieaktywną partycję
   aplikacji OTA za pomocą `esp_ota_*`, wybiera ją do rozruchu i restartuje

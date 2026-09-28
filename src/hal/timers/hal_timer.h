@@ -180,6 +180,10 @@ bool hal_timer_cancel_alarm(hal_alarm_id_t alarm_id);
  * @brief Create a managed timer object.
  *
  * The timer is created in STOPPED state. Call hal_timer_start() to arm it.
+ * Only the alarm that currently owns the timer runs @p callback. A one-shot
+ * timer is STOPPED before its callback runs, so a hal_timer_start() made
+ * meanwhile arms it again; a periodic timer stopped, paused or re-armed during
+ * its callback is not rescheduled by the finished alarm.
  *
  * @param pool      Alarm pool for this timer (HAL_TIMER_POOL_DEFAULT allowed).
  * @param period_us Initial period in microseconds (>0).

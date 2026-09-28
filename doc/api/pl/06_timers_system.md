@@ -151,6 +151,14 @@ obsługiwane.
 - **Podział na warstwy:** alarmy niskiego poziomu służą do prostego planowania
   w ISR. Timerów zarządzanych używaj, gdy potrzebujesz operacji
   start/stop/pause/resume, odczytu stanu albo pracy okresowej.
+- **Callbacki timerów zarządzanych:** callback uruchamia tylko alarm, do
+  którego timer w danej chwili należy. Timer jednorazowy przechodzi w
+  `STOPPED` przed wywołaniem callbacku, więc `hal_timer_start()` wywołane w
+  tym czasie uzbraja go ponownie. Gdy w trakcie callbacku okresowego timer
+  zostanie zatrzymany, wstrzymany albo uzbrojony od nowa, zakończony alarm
+  nie jest planowany ponownie. Ponowne uruchomienie timera jednorazowego z
+  jego własnego callbacku wymaga wolnego miejsca w puli, bo wyzwolony alarm
+  zajmuje swój slot do końca callbacku.
 - **Obsługa błędów:** funkcje `_ex` zwracają szczegółowy wynik typu
   `hal_timer_result_t` (`INVALID_ARG`, `TIME_PASSED`, `POOL_FULL`,
   `NO_RESOURCE` itd.). Starsze warianty bez `_ex` zachowują zgodność przez

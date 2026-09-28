@@ -6,9 +6,11 @@
 /* Portable GPS transport facade. The NMEA engine and public data getters live
  * in hal/gps/hal_gps_core.cpp. */
 
+#include "hal/core/hal_compiler.h"
 #include "hal/gps/hal_gps.h"
 #include "hal/gps/hal_gps_core.h"
 #include "hal/serial/hal_serial.h"
+#include "hal/system/hal_system.h"
 
 #if HAL_TARGET_IS_MOCK
 #define JH_GPS_TRANSPORT_MOCK 1
@@ -77,8 +79,8 @@ static hal_status_t gps_reconfigure_serial(uint16_t config) {
   return status;
 }
 
-void hal_gps_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud,
-                  uint16_t config) {
+static void gps_transport_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud,
+                               uint16_t config) {
   if (s_initialized) {
     return;
   }
@@ -109,7 +111,7 @@ void hal_gps_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud,
   s_paused = false;
 }
 
-hal_status_t hal_gps_pause(void) {
+static hal_status_t gps_transport_pause(void) {
   if (!s_initialized || s_paused) {
     return HAL_OK;
   }
@@ -122,7 +124,7 @@ hal_status_t hal_gps_pause(void) {
   return HAL_OK;
 }
 
-hal_status_t hal_gps_resume(void) {
+static hal_status_t gps_transport_resume(void) {
   if (!s_initialized || !s_paused) {
     return HAL_OK;
   }
@@ -133,7 +135,7 @@ hal_status_t hal_gps_resume(void) {
   return status;
 }
 
-void hal_gps_update(void) {
+static void gps_transport_update(void) {
   if (s_paused) {
     return;
   }
@@ -170,7 +172,7 @@ void hal_gps_update(void) {
   }
 }
 
-int hal_gps_serial_available(void) {
+static int gps_transport_available(void) {
   return s_serial ? hal_swserial_available(s_serial) : (s_paused ? 0 : -1);
 }
 
@@ -203,8 +205,8 @@ static hal_status_t gps_start_uart(void) {
   return status;
 }
 
-void hal_gps_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud,
-                  uint16_t config) {
+static void gps_transport_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud,
+                               uint16_t config) {
   if (s_initialized) {
     return;
   }
@@ -224,7 +226,7 @@ void hal_gps_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud,
   s_paused = false;
 }
 
-hal_status_t hal_gps_pause(void) {
+static hal_status_t gps_transport_pause(void) {
   if (!s_initialized || s_paused) {
     return HAL_OK;
   }
@@ -237,7 +239,7 @@ hal_status_t hal_gps_pause(void) {
   return HAL_OK;
 }
 
-hal_status_t hal_gps_resume(void) {
+static hal_status_t gps_transport_resume(void) {
   if (!s_initialized || !s_paused) {
     return HAL_OK;
   }
@@ -248,7 +250,7 @@ hal_status_t hal_gps_resume(void) {
   return status;
 }
 
-void hal_gps_update(void) {
+static void gps_transport_update(void) {
   if (s_paused) {
     return;
   }
@@ -266,7 +268,7 @@ void hal_gps_update(void) {
   }
 }
 
-int hal_gps_serial_available(void) {
+static int gps_transport_available(void) {
   return s_uart ? hal_uart_available(s_uart) : (s_paused ? 0 : -1);
 }
 
@@ -275,8 +277,8 @@ int hal_gps_serial_available(void) {
 static bool s_initialized = false;
 static bool s_paused = false;
 
-void hal_gps_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud,
-                  uint16_t config) {
+static void gps_transport_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud,
+                               uint16_t config) {
   (void)rx_pin;
   (void)tx_pin;
   (void)baud;
@@ -286,14 +288,14 @@ void hal_gps_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud,
   s_paused = false;
 }
 
-hal_status_t hal_gps_pause(void) {
+static hal_status_t gps_transport_pause(void) {
   if (s_initialized) {
     s_paused = true;
   }
   return HAL_OK;
 }
 
-hal_status_t hal_gps_resume(void) {
+static hal_status_t gps_transport_resume(void) {
   if (!s_initialized || !s_paused) {
     return HAL_OK;
   }
@@ -301,10 +303,103 @@ hal_status_t hal_gps_resume(void) {
   return HAL_OK;
 }
 
-void hal_gps_update(void) {}
+static void gps_transport_update(void) {}
 
-int hal_gps_serial_available(void) { return 0; }
+static int gps_transport_available(void) { return 0; }
 
 #endif
+
+/* No GPS call waits for another. One token guards the transport handle; a
+ * call that finds it taken skips the transport. A pause or resume request left
+ * that way is applied by the token holder before it lets go, so a pause from
+ * one core never waits for hal_gps_update() on the other. */
+static uint32_t s_owner = 0u;
+static uint32_t s_want_paused = 0u;
+static uint32_t s_requests = 0u;
+
+/* Token holder only. A request that failed to apply is retried this often. */
+static constexpr uint32_t GPS_REQUEST_RETRY_MS = 1000u;
+static uint32_t s_applied_requests = 0u;
+static bool s_retry = false;
+static uint32_t s_retry_ms = 0u;
+
+static bool gps_try_own(void) {
+  uint32_t free_token = 0u;
+  return HAL_ATOMIC_COMPARE_EXCHANGE(&s_owner, &free_token, 1u,
+                                     HAL_ATOMIC_SEQ_CST, HAL_ATOMIC_SEQ_CST);
+}
+
+static hal_status_t gps_apply_request(void) {
+  s_applied_requests = HAL_ATOMIC_LOAD(&s_requests, HAL_ATOMIC_SEQ_CST);
+  const hal_status_t status =
+      HAL_ATOMIC_LOAD(&s_want_paused, HAL_ATOMIC_SEQ_CST) != 0u
+          ? gps_transport_pause()
+          : gps_transport_resume();
+  s_retry = status != HAL_OK;
+  s_retry_ms = hal_millis();
+  return status;
+}
+
+// Lets go of the token, first applying requests that arrived meanwhile.
+static void gps_release(void) {
+  for (;;) {
+    if (HAL_ATOMIC_LOAD(&s_requests, HAL_ATOMIC_SEQ_CST) !=
+            s_applied_requests ||
+        (s_retry &&
+         hal_millis_deadline_expired(s_retry_ms, GPS_REQUEST_RETRY_MS))) {
+      (void)gps_apply_request();
+    }
+    const uint32_t applied = s_applied_requests;
+    HAL_ATOMIC_STORE(&s_owner, 0u, HAL_ATOMIC_SEQ_CST);
+    if (HAL_ATOMIC_LOAD(&s_requests, HAL_ATOMIC_SEQ_CST) == applied ||
+        !gps_try_own()) {
+      return;
+    }
+  }
+}
+
+static hal_status_t gps_request(bool paused) {
+  HAL_ATOMIC_STORE(&s_want_paused, paused ? 1u : 0u, HAL_ATOMIC_SEQ_CST);
+  HAL_ATOMIC_ADD_FETCH(&s_requests, 1u, HAL_ATOMIC_SEQ_CST);
+  if (!gps_try_own()) {
+    return HAL_OK;
+  }
+  const hal_status_t status = gps_apply_request();
+  gps_release();
+  return status;
+}
+
+void hal_gps_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud,
+                  uint16_t config) {
+  if (!gps_try_own()) {
+    hal_derr_limited("gps", "init skipped: transport in use");
+    return;
+  }
+  HAL_ATOMIC_STORE(&s_want_paused, 0u, HAL_ATOMIC_SEQ_CST);
+  s_applied_requests = HAL_ATOMIC_LOAD(&s_requests, HAL_ATOMIC_SEQ_CST);
+  s_retry = false;
+  gps_transport_init(rx_pin, tx_pin, baud, config);
+  gps_release();
+}
+
+hal_status_t hal_gps_pause(void) { return gps_request(true); }
+
+hal_status_t hal_gps_resume(void) { return gps_request(false); }
+
+void hal_gps_update(void) {
+  if (gps_try_own()) {
+    gps_transport_update();
+    gps_release();
+  }
+}
+
+int hal_gps_serial_available(void) {
+  if (!gps_try_own()) {
+    return 0;
+  }
+  const int available = gps_transport_available();
+  gps_release();
+  return available;
+}
 
 #endif /* HAL_ENABLE_GPS */

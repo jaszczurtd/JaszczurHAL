@@ -444,8 +444,8 @@ class TrackedContractTests(unittest.TestCase):
 
     def test_esp_idf_python_tools_are_pinned_by_reviewed_snapshot(self) -> None:
         pins = dict(manager._esp_idf_python_tool_pins(ROOT))
-        self.assertEqual(pins["esp-coredump"], "1.16.0")
-        self.assertEqual(pins["esptool"], "5.3.1")
+        self.assertEqual(pins["esp-coredump"], "1.17.2")
+        self.assertEqual(pins["esptool"], "5.4.0")
         self.assertEqual(len(pins), 11)
 
     def test_esp_idf_python_tool_drift_is_rejected_in_verify_mode(self) -> None:

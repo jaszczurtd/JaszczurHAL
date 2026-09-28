@@ -188,12 +188,16 @@ void hal_mock_timer_advance_us(uint64_t us) {
 
   for (int i = 0; i < MOCK_MAX_ALARMS; i++) {
     if (s_alarms[i].active && s_alarms[i].fire_at_us <= s_current_us) {
+      const hal_alarm_id_t id = s_alarms[i].id;
       int64_t next_delay = 0;
       if (s_alarms[i].callback) {
-        next_delay =
-            s_alarms[i].callback(s_alarms[i].id, s_alarms[i].user_data);
+        next_delay = s_alarms[i].callback(id, s_alarms[i].user_data);
       }
 
+      // The callback may have cancelled this alarm and reused its slot.
+      if (!s_alarms[i].active || s_alarms[i].id != id) {
+        continue;
+      }
       if (next_delay > 0) {
         s_alarms[i].fire_at_us = s_current_us + (uint64_t)next_delay;
       } else {

@@ -14,6 +14,64 @@ static int64_t on_alarm(hal_alarm_id_t id, void *) {
 
 static void on_managed_timer(hal_timer_t, void *) { s_managed_fired++; }
 
+// What a managed-timer callback does to its own timer, as a call made from
+// the callback or from another context while it runs.
+enum CallbackAction {
+  kActionRestart,
+  kActionStopStart,
+  kActionPauseResume,
+  kActionSetPeriod
+};
+static CallbackAction s_action;
+static int s_actions_left;
+
+static void on_managed_action(hal_timer_t timer, void *) {
+  s_managed_fired++;
+  if (s_actions_left <= 0) {
+    return;
+  }
+  s_actions_left--;
+  switch (s_action) {
+  case kActionRestart:
+    TEST_ASSERT_EQUAL_INT(HAL_TIMER_OK, hal_timer_start(timer));
+    break;
+  case kActionStopStart:
+    (void)hal_timer_stop(timer);
+    TEST_ASSERT_EQUAL_INT(HAL_TIMER_OK, hal_timer_start(timer));
+    break;
+  case kActionPauseResume:
+    TEST_ASSERT_EQUAL_INT(HAL_TIMER_OK, hal_timer_pause(timer));
+    TEST_ASSERT_EQUAL_INT(HAL_TIMER_OK, hal_timer_resume(timer));
+    break;
+  case kActionSetPeriod:
+    TEST_ASSERT_EQUAL_INT(HAL_TIMER_OK,
+                          hal_timer_set_period_us(timer, 50, true));
+    break;
+  }
+}
+
+static hal_timer_t create_action_timer(hal_timer_pool_t pool, bool periodic,
+                                       uint32_t period_us,
+                                       CallbackAction action, int count) {
+  s_action = action;
+  s_actions_left = count;
+  hal_timer_t timer = nullptr;
+  TEST_ASSERT_EQUAL_INT(HAL_TIMER_OK,
+                        hal_timer_create(pool, period_us, periodic,
+                                         on_managed_action, nullptr, &timer));
+  TEST_ASSERT_EQUAL_INT(HAL_TIMER_OK, hal_timer_start(timer));
+  return timer;
+}
+
+static hal_alarm_id_t s_replacement_id;
+
+static int64_t on_alarm_replaced(hal_alarm_id_t id, void *) {
+  s_fired++;
+  TEST_ASSERT_TRUE(hal_timer_cancel_alarm(id));
+  s_replacement_id = hal_timer_add_alarm_us(500, on_alarm, nullptr, false);
+  return 100;
+}
+
 void setUp(void) {
   s_fired = 0;
   s_fired_id = HAL_ALARM_INVALID;
@@ -225,6 +283,97 @@ void test_managed_get_remaining_stopped_returns_error(void) {
   TEST_ASSERT_EQUAL_INT(HAL_TIMER_OK, hal_timer_destroy(timer));
 }
 
+void test_alarm_cancelled_in_callback_keeps_slot_reuse(void) {
+  hal_timer_add_alarm_us(100, on_alarm_replaced, nullptr, false);
+  hal_mock_timer_advance_us(100);
+  TEST_ASSERT_EQUAL_INT(1, s_fired);
+  hal_mock_timer_advance_us(100);
+  TEST_ASSERT_EQUAL_INT(1, s_fired);
+  hal_mock_timer_advance_us(400);
+  TEST_ASSERT_EQUAL_INT(2, s_fired);
+  TEST_ASSERT_EQUAL_INT(s_replacement_id, s_fired_id);
+}
+
+void test_one_shot_restarts_from_its_callback(void) {
+  hal_timer_t timer = create_action_timer(HAL_TIMER_POOL_DEFAULT, false, 100,
+                                          kActionRestart, 2);
+  for (int fire = 1; fire <= 3; ++fire) {
+    hal_mock_timer_advance_us(99);
+    TEST_ASSERT_EQUAL_INT(fire - 1, s_managed_fired);
+    hal_mock_timer_advance_us(1);
+    TEST_ASSERT_EQUAL_INT(fire, s_managed_fired);
+  }
+  TEST_ASSERT_EQUAL_INT(HAL_TIMER_STATE_STOPPED, hal_timer_get_state(timer));
+  hal_mock_timer_advance_us(1000);
+  TEST_ASSERT_EQUAL_INT(3, s_managed_fired);
+  TEST_ASSERT_EQUAL_INT(HAL_TIMER_OK, hal_timer_destroy(timer));
+}
+
+// A one-shot alarm holds its pool slot until its callback returns, so a
+// restart from the callback needs a second slot.
+void test_one_shot_stop_and_start_in_callback_keeps_one_alarm(void) {
+  hal_timer_pool_t pool = hal_timer_pool_create_auto(2);
+  TEST_ASSERT_NOT_NULL(pool);
+  hal_timer_t timer =
+      create_action_timer(pool, false, 100, kActionStopStart, 1);
+  hal_mock_timer_advance_us(100);
+  TEST_ASSERT_EQUAL_INT(1, s_managed_fired);
+  TEST_ASSERT_EQUAL_INT(HAL_TIMER_STATE_RUNNING, hal_timer_get_state(timer));
+  hal_mock_timer_advance_us(100);
+  TEST_ASSERT_EQUAL_INT(2, s_managed_fired);
+  TEST_ASSERT_EQUAL_INT(HAL_TIMER_STATE_STOPPED, hal_timer_get_state(timer));
+  TEST_ASSERT_EQUAL_INT(HAL_TIMER_OK, hal_timer_destroy(timer));
+  hal_timer_pool_destroy(pool);
+}
+
+void test_destroy_after_restart_in_callback_leaves_no_alarm(void) {
+  hal_timer_pool_t pool = hal_timer_pool_create_auto(2);
+  TEST_ASSERT_NOT_NULL(pool);
+  hal_timer_t timer =
+      create_action_timer(pool, false, 100, kActionStopStart, 1);
+  hal_mock_timer_advance_us(100);
+  TEST_ASSERT_EQUAL_INT(HAL_TIMER_OK, hal_timer_destroy(timer));
+
+  // Both slots are free again: no alarm is left pointing at the timer.
+  for (int slot = 0; slot < 2; ++slot) {
+    TEST_ASSERT_NOT_EQUAL(
+        HAL_ALARM_INVALID,
+        hal_timer_pool_add_alarm_us(pool, 50, on_alarm, nullptr, false));
+  }
+  hal_mock_timer_advance_us(1000);
+  TEST_ASSERT_EQUAL_INT(1, s_managed_fired);
+  TEST_ASSERT_EQUAL_INT(2, s_fired);
+  hal_timer_pool_destroy(pool);
+}
+
+void test_periodic_pause_and_resume_in_callback_fires_once_per_period(void) {
+  hal_timer_t timer = create_action_timer(HAL_TIMER_POOL_DEFAULT, true, 100,
+                                          kActionPauseResume, 1);
+  hal_mock_timer_advance_us(100);
+  TEST_ASSERT_EQUAL_INT(1, s_managed_fired);
+  for (int step = 0; step < 1000; ++step) {
+    hal_mock_timer_advance_us(1);
+  }
+  TEST_ASSERT_EQUAL_INT(11, s_managed_fired);
+  TEST_ASSERT_EQUAL_INT(HAL_TIMER_OK, hal_timer_destroy(timer));
+}
+
+void test_periodic_restart_with_new_period_in_callback(void) {
+  hal_timer_t timer = create_action_timer(HAL_TIMER_POOL_DEFAULT, true, 200,
+                                          kActionSetPeriod, 1);
+  hal_mock_timer_advance_us(200);
+  TEST_ASSERT_EQUAL_INT(1, s_managed_fired);
+  hal_mock_timer_advance_us(49);
+  TEST_ASSERT_EQUAL_INT(1, s_managed_fired);
+  hal_mock_timer_advance_us(1);
+  TEST_ASSERT_EQUAL_INT(2, s_managed_fired);
+  for (int step = 0; step < 10; ++step) {
+    hal_mock_timer_advance_us(50);
+  }
+  TEST_ASSERT_EQUAL_INT(12, s_managed_fired);
+  TEST_ASSERT_EQUAL_INT(HAL_TIMER_OK, hal_timer_destroy(timer));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_alarm_fires_after_advance);
@@ -242,5 +391,11 @@ int main(void) {
   RUN_TEST(test_managed_periodic_pause_and_resume);
   RUN_TEST(test_managed_set_period_with_restart);
   RUN_TEST(test_managed_get_remaining_stopped_returns_error);
+  RUN_TEST(test_alarm_cancelled_in_callback_keeps_slot_reuse);
+  RUN_TEST(test_one_shot_restarts_from_its_callback);
+  RUN_TEST(test_one_shot_stop_and_start_in_callback_keeps_one_alarm);
+  RUN_TEST(test_destroy_after_restart_in_callback_leaves_no_alarm);
+  RUN_TEST(test_periodic_pause_and_resume_in_callback_fires_once_per_period);
+  RUN_TEST(test_periodic_restart_with_new_period_in_callback);
   return UNITY_END();
 }
