@@ -20,9 +20,25 @@ const uint8_t *flash_ptr(uint32_t offset) {
   return reinterpret_cast<const uint8_t *>((uintptr_t)XIP_BASE + offset);
 }
 
-bool digest_matches(uint32_t offset, uint32_t size,
-                    const uint8_t expected[JH_OTA_SHA256_BYTES]) {
-  if (size == 0u || size > HAL_RP_OTA_SLOT_SIZE) {
+uint32_t slot_offset(jh_ota_swap_slot_t slot, uint32_t sector) {
+  const uint32_t relative = sector * FLASH_SECTOR_SIZE;
+  switch (slot) {
+  case JH_OTA_SWAP_SLOT_PROGRAM:
+    return HAL_RP_OTA_PROGRAM_OFFSET + relative;
+  case JH_OTA_SWAP_SLOT_STAGING:
+    return HAL_RP_OTA_STAGING_OFFSET + relative;
+  case JH_OTA_SWAP_SLOT_SCRATCH:
+    return HAL_RP_OTA_SCRATCH_OFFSET;
+  default:
+    return UINT32_MAX;
+  }
+}
+
+bool slot_matches(void *, jh_ota_swap_slot_t slot, uint32_t size,
+                  const uint8_t expected[JH_OTA_SHA256_BYTES]) {
+  const uint32_t offset = slot_offset(slot, 0u);
+  if (offset == UINT32_MAX || slot == JH_OTA_SWAP_SLOT_SCRATCH || size == 0u ||
+      size > HAL_RP_OTA_SLOT_SIZE) {
     return false;
   }
   hal_sha256_context_t context = {};
@@ -48,26 +64,29 @@ bool read_state(jh_ota_boot_state_t *out_state, uint8_t *out_index) {
                                   out_state, out_index) == HAL_OK;
 }
 
-bool write_state(const jh_ota_boot_state_t *state, uint8_t current_index) {
+hal_status_t write_state(void *, const jh_ota_boot_state_t *state,
+                         uint8_t current_index) {
   uint8_t encoded[JH_OTA_STATE_RECORD_SIZE];
-  if (jh_ota_boot_state_encode(state, encoded) != HAL_OK) {
-    return false;
+  const hal_status_t status = jh_ota_boot_state_encode(state, encoded);
+  if (status != HAL_OK) {
+    return status;
   }
   const uint32_t offset = current_index == 0u ? HAL_RP_OTA_STATE_B_OFFSET
                                               : HAL_RP_OTA_STATE_A_OFFSET;
   flash_range_erase(offset, FLASH_SECTOR_SIZE);
   flash_range_program(offset, encoded, sizeof(encoded));
-  return memcmp(flash_ptr(offset), encoded, sizeof(encoded)) == 0;
+  return memcmp(flash_ptr(offset), encoded, sizeof(encoded)) == 0 ? HAL_OK
+                                                                  : HAL_EIO;
 }
 
-bool erase_phase(void) {
+hal_status_t erase_phase(void *) {
   flash_range_erase(HAL_RP_OTA_PHASE_OFFSET, FLASH_SECTOR_SIZE);
   for (size_t index = 0u; index < FLASH_SECTOR_SIZE; ++index) {
     if (flash_ptr(HAL_RP_OTA_PHASE_OFFSET)[index] != 0xFFu) {
-      return false;
+      return HAL_EIO;
     }
   }
-  return true;
+  return HAL_OK;
 }
 
 hal_status_t mark_phase(void *, uint32_t sector_index, uint8_t value) {
@@ -90,20 +109,6 @@ bool copy_sector_raw(uint32_t destination, uint32_t source) {
          0;
 }
 
-uint32_t slot_offset(jh_ota_swap_slot_t slot, uint32_t sector) {
-  const uint32_t relative = sector * FLASH_SECTOR_SIZE;
-  switch (slot) {
-  case JH_OTA_SWAP_SLOT_PROGRAM:
-    return HAL_RP_OTA_PROGRAM_OFFSET + relative;
-  case JH_OTA_SWAP_SLOT_STAGING:
-    return HAL_RP_OTA_STAGING_OFFSET + relative;
-  case JH_OTA_SWAP_SLOT_SCRATCH:
-    return HAL_RP_OTA_SCRATCH_OFFSET;
-  default:
-    return UINT32_MAX;
-  }
-}
-
 hal_status_t read_phase(void *, uint32_t sector, uint8_t *out_phase) {
   if (out_phase == nullptr || sector >= FLASH_SECTOR_SIZE) {
     return HAL_EINVAL;
@@ -123,36 +128,11 @@ hal_status_t copy_sector(void *, uint32_t sector,
   return copy_sector_raw(destination_offset, source_offset) ? HAL_OK : HAL_EIO;
 }
 
-bool swap_slots(void) {
-  static const jh_ota_swap_backend_t backend = {read_phase, copy_sector,
-                                                mark_phase};
-  const uint32_t sectors = HAL_RP_OTA_SLOT_SIZE / FLASH_SECTOR_SIZE;
-  return sectors <= FLASH_SECTOR_SIZE &&
-         jh_ota_swap_execute(&backend, nullptr, sectors) == HAL_OK;
-}
+constexpr uint32_t kSlotSectors = HAL_RP_OTA_SLOT_SIZE / FLASH_SECTOR_SIZE;
+static_assert(kSlotSectors > 0u && kSlotSectors <= FLASH_SECTOR_SIZE,
+              "RP OTA phase journal holds one byte per slot sector");
 
-void swap_state_roles(jh_ota_boot_state_t *state) {
-  uint32_t value = state->program_size;
-  state->program_size = state->staging_size;
-  state->staging_size = value;
-  value = state->program_generation;
-  state->program_generation = state->staging_generation;
-  state->staging_generation = value;
-
-  uint8_t digest[JH_OTA_SHA256_BYTES];
-  memcpy(digest, state->program_sha256, sizeof(digest));
-  memcpy(state->program_sha256, state->staging_sha256,
-         sizeof(state->program_sha256));
-  memcpy(state->staging_sha256, digest, sizeof(state->staging_sha256));
-
-  char version[JH_OTA_VERSION_TEXT_SIZE];
-  memcpy(version, state->program_version, sizeof(version));
-  memcpy(state->program_version, state->staging_version,
-         sizeof(state->program_version));
-  memcpy(state->staging_version, version, sizeof(state->staging_version));
-}
-
-[[noreturn]] void recovery(void) {
+[[noreturn]] void restart(void) {
   watchdog_reboot(0u, 0u, 100u);
   for (;;) {
     tight_loop_contents();
@@ -201,73 +181,21 @@ void swap_state_roles(jh_ota_boot_state_t *state) {
   jump_to_vectors(vectors);
 }
 
-void complete_swap(jh_ota_boot_state_t *state, uint8_t *state_index,
-                   jh_ota_boot_mode_t completed_mode) {
-  if (!swap_slots()) {
-    state->sequence++;
-    state->mode = JH_OTA_BOOT_RECOVERY;
-    (void)write_state(state, *state_index);
-    recovery();
-  }
-  swap_state_roles(state);
-  state->sequence++;
-  state->mode = completed_mode;
-  state->attempts = 0u;
-  if (!write_state(state, *state_index)) {
-    recovery();
-  }
-  *state_index ^= 1u;
-  (void)erase_phase();
-}
-
 } // namespace
 
 int main() {
+  static const jh_ota_boot_backend_t backend = {
+      {read_phase, copy_sector, mark_phase},
+      write_state,
+      erase_phase,
+      slot_matches};
   jh_ota_boot_state_t state = {};
   uint8_t state_index = 0u;
-  if (!read_state(&state, &state_index)) {
-    launch_program();
+  if (read_state(&state, &state_index) &&
+      jh_ota_boot_apply(&backend, nullptr, &state, state_index, kSlotSectors) ==
+          JH_OTA_BOOT_ACTION_RESTART) {
+    restart();
   }
-
-  if (state.mode == JH_OTA_BOOT_PENDING) {
-    if (!digest_matches(HAL_RP_OTA_STAGING_OFFSET, state.staging_size,
-                        state.staging_sha256)) {
-      state.sequence++;
-      state.mode = JH_OTA_BOOT_RECOVERY;
-      (void)write_state(&state, state_index);
-      launch_program();
-    }
-    complete_swap(&state, &state_index, JH_OTA_BOOT_TRIAL);
-    if (!digest_matches(HAL_RP_OTA_PROGRAM_OFFSET, state.program_size,
-                        state.program_sha256)) {
-      recovery();
-    }
-  } else if (state.mode == JH_OTA_BOOT_TRIAL) {
-    if (state.attempts >= state.max_attempts) {
-      if (!erase_phase()) {
-        recovery();
-      }
-      state.sequence++;
-      state.mode = JH_OTA_BOOT_ROLLBACK;
-      if (!write_state(&state, state_index)) {
-        recovery();
-      }
-      state_index ^= 1u;
-      complete_swap(&state, &state_index, JH_OTA_BOOT_STABLE);
-    } else {
-      state.sequence++;
-      state.attempts++;
-      if (!write_state(&state, state_index)) {
-        recovery();
-      }
-      state_index ^= 1u;
-    }
-  } else if (state.mode == JH_OTA_BOOT_ROLLBACK) {
-    complete_swap(&state, &state_index, JH_OTA_BOOT_STABLE);
-  } else if (state.mode == JH_OTA_BOOT_RECOVERY) {
-    launch_program();
-  }
-
   launch_program();
 }
 

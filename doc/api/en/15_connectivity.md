@@ -1385,8 +1385,13 @@ hal_status_t hal_ota_get_boot_info_ex(hal_ota_boot_info_t *out_info);
   `program`/`staging` slots, a phase journal, scratch sector, two redundant
   state sectors and the existing LittleFS/EEPROM tail.
 - The RP boot applier swaps `program` and `staging` sector by sector. Its monotonic
-  phase journal lets it resume after power loss. An unconfirmed trial is
-  reverted after `HAL_RP_OTA_MAX_BOOT_ATTEMPTS` boots.
+  phase journal lets it resume after power loss. The staging hash is checked
+  only before the swap starts; a swap that fails after the program slot
+  changed is retried on the next boot instead of starting a mixed image. An
+  unconfirmed trial is reverted after `HAL_RP_OTA_MAX_BOOT_ATTEMPTS` boots.
+- RP accepts a new image only in the stable state. During a trial the staging
+  slot holds the rollback copy, so confirm the trial first; in other states
+  the upload ends with `ERR: Update Begin`.
 - ESP32-S3 accepts a raw ESP application BIN, verifies the transfer MD5 and
   ESP-IDF image validation, writes the inactive OTA app partition through
   `esp_ota_*`, selects it for boot, and restarts. Its generated defaults select

@@ -2,8 +2,9 @@
 
 `tests/hardware/rp_ota` weryfikuje odkrywanie i uwierzytelnianie OTA,
 potwierdzany transfer fragment po fragmencie, próbny rozruch (trial boot),
-jawne potwierdzenie, drugą niepotwierdzoną próbę, automatyczne wycofanie
-(rollback) oraz odzyskiwanie sieci/USB po każdym restarcie. Ten sam fixture
+jawne potwierdzenie, drugą niepotwierdzoną próbę, w trakcie której urządzenie
+odrzuca nowy obraz, automatyczne wycofanie (rollback) oraz odzyskiwanie
+sieci/USB po każdym restarcie. Ten sam fixture
 zwiększa licznik rozruchów w dwubankowym `hal_kv` i montuje osobną partycję
 LittleFS, potwierdzając zachowanie obu użytkowników trwałego storage podczas
 zmian obszarów programu, stagingu i sterowania OTA. Obsługuje Pico W/RP2040

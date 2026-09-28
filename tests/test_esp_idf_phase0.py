@@ -448,7 +448,7 @@ class ArtifactTests(unittest.TestCase):
                 ["0x0", "0x8000", "0x10000"],
             )
             self.assertEqual(manifest["board"], "waveshare-esp32-s3-zero")
-            self.assertEqual(manifest["toolchain"]["esptool"]["version"], "5.3.1")
+            self.assertEqual(manifest["toolchain"]["esptool"]["version"], "5.4.0")
             self.assertEqual(
                 manifest["toolchain"]["supplyChain"]["snapshot"],
                 {
@@ -1314,7 +1314,7 @@ class CommandContractTests(unittest.TestCase):
                 ),
                 mock.Mock(
                     returncode=0,
-                    stdout="esptool v5.3.1\n",
+                    stdout="esptool v5.4.0\n",
                     stderr="",
                 ),
                 mock.Mock(
@@ -1340,7 +1340,7 @@ class CommandContractTests(unittest.TestCase):
             serialized = json.dumps(provenance)
             self.assertNotIn(str(root), serialized)
             self.assertNotIn(str(ROOT), serialized)
-            self.assertEqual(provenance["esptool"]["version"], "5.3.1")
+            self.assertEqual(provenance["esptool"]["version"], "5.4.0")
             self.assertEqual(provenance["cmake"]["version"], "3.28.3")
             self.assertEqual(provenance["ninja"]["version"], "1.11.1")
             self.assertEqual(provenance["idfPython"]["version"], "3.12.3")

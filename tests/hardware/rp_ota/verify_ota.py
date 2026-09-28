@@ -410,6 +410,31 @@ def main() -> int:
     )
     validate_storage(trial_b, allow_format=False)
 
+    # During a trial the staging slot holds the rollback copy, so the device
+    # must refuse a new image and keep its state.
+    device = wait_for_device(
+        runtime,
+        args.target,
+        expected_hostname,
+        args.ota_port,
+        args.broadcast,
+        args.timeout,
+    )
+    trial_upload_rejected = False
+    try:
+        runtime.upload_ota_container(device, container_a, password)
+    except (OSError, RuntimeError, TimeoutError):
+        trial_upload_rejected = True
+    if not trial_upload_rejected:
+        raise RuntimeError("device accepted an OTA upload during a trial boot")
+    after_trial_upload = query_status(args.port, args.timeout)
+    if state_identity(after_trial_upload) != state_identity(trial_b):
+        raise RuntimeError(
+            "upload attempt during a trial changed OTA state: "
+            f"before={state_identity(trial_b)}, "
+            f"after={state_identity(after_trial_upload)}"
+        )
+
     rollback_boots = []
     for _ in range(int(trial_b["max"]) + 2):
         reboot(args.port)

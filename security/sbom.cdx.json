@@ -446,9 +446,9 @@
     },
     {
       "type": "application",
-      "bom-ref": "pkg:esptool@5.3.1",
+      "bom-ref": "pkg:esptool@5.4.0",
       "name": "esptool",
-      "version": "5.3.1",
+      "version": "5.4.0",
       "scope": "development",
       "licenses": [
         {
@@ -460,7 +460,7 @@
       "supplier": {
         "name": "Espressif Systems"
       },
-      "purl": "pkg:pypi/esptool@5.3.1",
+      "purl": "pkg:pypi/esptool@5.4.0",
       "externalReferences": [
         {
           "type": "website",
@@ -490,9 +490,9 @@
     },
     {
       "type": "application",
-      "bom-ref": "pkg:esp-idf-component-manager@3.0.3",
+      "bom-ref": "pkg:esp-idf-component-manager@3.1.2",
       "name": "ESP-IDF Component Manager",
-      "version": "3.0.3",
+      "version": "3.1.2",
       "scope": "development",
       "licenses": [
         {
@@ -504,7 +504,7 @@
       "supplier": {
         "name": "Espressif Systems"
       },
-      "purl": "pkg:pypi/idf-component-manager@3.0.3",
+      "purl": "pkg:pypi/idf-component-manager@3.1.2",
       "externalReferences": [
         {
           "type": "website",
@@ -534,9 +534,9 @@
     },
     {
       "type": "application",
-      "bom-ref": "pkg:esp-idf-monitor@1.9.0",
+      "bom-ref": "pkg:esp-idf-monitor@1.10.0",
       "name": "ESP-IDF Monitor",
-      "version": "1.9.0",
+      "version": "1.10.0",
       "scope": "development",
       "licenses": [
         {
@@ -548,7 +548,7 @@
       "supplier": {
         "name": "Espressif Systems"
       },
-      "purl": "pkg:pypi/esp-idf-monitor@1.9.0",
+      "purl": "pkg:pypi/esp-idf-monitor@1.10.0",
       "externalReferences": [
         {
           "type": "website",
@@ -578,9 +578,9 @@
     },
     {
       "type": "application",
-      "bom-ref": "pkg:esp-core-dump@1.16.0",
+      "bom-ref": "pkg:esp-core-dump@1.17.2",
       "name": "ESP Core Dump",
-      "version": "1.16.0",
+      "version": "1.17.2",
       "scope": "development",
       "licenses": [
         {
@@ -592,7 +592,7 @@
       "supplier": {
         "name": "Espressif Systems"
       },
-      "purl": "pkg:pypi/esp-coredump@1.16.0",
+      "purl": "pkg:pypi/esp-coredump@1.17.2",
       "externalReferences": [
         {
           "type": "website",
@@ -622,9 +622,9 @@
     },
     {
       "type": "application",
-      "bom-ref": "pkg:esp-idf-kconfig@3.12.0",
+      "bom-ref": "pkg:esp-idf-kconfig@3.13.0",
       "name": "ESP-IDF Kconfig",
-      "version": "3.12.0",
+      "version": "3.13.0",
       "scope": "development",
       "licenses": [
         {
@@ -636,7 +636,7 @@
       "supplier": {
         "name": "Espressif Systems"
       },
-      "purl": "pkg:pypi/esp-idf-kconfig@3.12.0",
+      "purl": "pkg:pypi/esp-idf-kconfig@3.13.0",
       "externalReferences": [
         {
           "type": "website",
@@ -2108,5 +2108,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:57346663-d4cb-0eb6-1b30-7bc10c51f870"
+  "serialNumber": "urn:uuid:9dd22f23-7224-08b8-93f0-87f657570b8e"
 }

@@ -1782,6 +1782,26 @@ endforeach()
 target_compile_definitions(test_rp_i2c_slave_snapshot PRIVATE
     HAL_ENABLE_I2C_SLAVE_SNAPSHOT)
 
+# hal_gps over SoftwareSerial with a second thread standing in for the other
+# core: pause and update never wait for each other.
+add_executable(test_gps_transport_handoff
+    test_gps_transport_handoff.cpp
+    fakes/host_sync/hal_sync_host.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/gps/hal_gps.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/gps/hal_gps_core.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/gps/gps_nmea_parser.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/gps/hal_gps_nmea_utils.cpp
+    ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+target_include_directories(test_gps_transport_handoff PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(test_gps_transport_handoff PRIVATE
+    HAL_TARGET_RP2040=1 HAL_BOARD_PROFILE_RP_PICO=1 HAL_ENABLE_GPS
+    HAL_ENABLE_SWSERIAL HAL_GPS_TRANSPORT_SWSERIAL
+    HAL_ENABLE_UNITY UNITY_INCLUDE_CONFIG_H)
+jh_enable_host_warnings(test_gps_transport_handoff ERRORS)
+target_link_libraries(test_gps_transport_handoff PRIVATE Threads::Threads)
+add_test(NAME test_gps_transport_handoff COMMAND test_gps_transport_handoff)
+
 # RP I2C master clock accessors from two threads standing in for the cores.
 add_executable(test_rp_i2c_clock_sync
     test_rp_i2c_clock_sync.cpp
@@ -2193,6 +2213,32 @@ target_include_directories(test_rp_kv_storage PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/rp_flash)
 target_compile_definitions(test_rp_kv_storage PRIVATE JH_RP_FLASH_FAULT_INJECTION=1)
 jh_enable_host_warnings(test_rp_kv_storage ERRORS)
+
+# RP OTA staging over the host flash array: 16 KiB slots after a 16 KiB boot.
+set(_rp_ota_storage_layout
+    HAL_RP_OTA_PROGRAM_OFFSET=0x4000u HAL_RP_OTA_SLOT_SIZE=0x4000u
+    HAL_RP_OTA_STAGING_OFFSET=0x8000u HAL_RP_OTA_PHASE_OFFSET=0xC000u
+    HAL_RP_OTA_SCRATCH_OFFSET=0xD000u HAL_RP_OTA_STATE_A_OFFSET=0xE000u
+    HAL_RP_OTA_STATE_B_OFFSET=0xF000u)
+add_library(test_rp_ota_storage_backend OBJECT
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/rp2040/drivers/flash/rp_ota_storage.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/rp2040/drivers/flash/rp_flash_storage.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/network/ota/jh_ota_image.cpp)
+target_include_directories(test_rp_ota_storage_backend PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/rp_flash ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(test_rp_ota_storage_backend PRIVATE
+    HAL_TARGET_RP2040=1 HAL_BOARD_PROFILE_RP_PICO_W=1 HAL_ENABLE_OTA=1
+    HAL_ENABLE_CRYPTO=1 HAL_ENABLE_CRC=1 PICO_FLASH_SIZE_BYTES=4194304
+    ${_rp_ota_storage_layout})
+jh_enable_host_warnings(test_rp_ota_storage_backend ERRORS)
+add_hal_test(test_rp_ota_storage)
+target_sources(test_rp_ota_storage PRIVATE
+    $<TARGET_OBJECTS:test_rp_ota_storage_backend>)
+target_include_directories(test_rp_ota_storage PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/rp_flash)
+target_compile_definitions(test_rp_ota_storage PRIVATE
+    ${_rp_ota_storage_layout})
+jh_enable_host_warnings(test_rp_ota_storage ERRORS)
 add_hal_test(test_hal_external_adc)
 add_hal_test(test_hal_gps)
 add_hal_test(test_hal_system)

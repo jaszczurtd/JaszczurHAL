@@ -1067,8 +1067,11 @@ target-specific behavior.
 **Thread safety:** one internal `hal_mutex_t` protects parser state, mock
 injection, byte feeds and all accessors. Initialization remains a singleton
 init operation on hardware; mock initialization resets state for each test.
-Pause and resume are lifecycle operations: call them from the transport owner
-and do not overlap them with `hal_gps_update()`.
+Pause, resume and `hal_gps_update()` never wait for each other. A pause or
+resume made while another core is inside a GPS transport call is carried out
+by that call as it returns, and an update made during a pause skips reading.
+They may therefore run on different cores, e.g. a pause around a flash write
+on the core that writes.
 
 **RP2040 transport and core affinity:**
 

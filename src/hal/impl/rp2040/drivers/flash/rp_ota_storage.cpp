@@ -261,6 +261,16 @@ hal_status_t jh_rp_ota_storage_begin(uint32_t container_size,
       authentication_key_size > sizeof(s_writer.authentication_key)) {
     return s_writer.active ? HAL_EBUSY : HAL_EINVAL;
   }
+  // Outside STABLE the staging slot holds the rollback copy or the next image.
+  jh_ota_boot_state_t state = {};
+  uint8_t current_index = 0u;
+  const hal_status_t status = load_state(&state, &current_index);
+  if (status == HAL_OK && state.mode != JH_OTA_BOOT_STABLE) {
+    return HAL_ESTATE;
+  }
+  if (status != HAL_OK && status != HAL_ENOENT) {
+    return status;
+  }
   memset(&s_writer, 0, sizeof(s_writer));
   s_writer.active = true;
   s_writer.container_size = container_size;
