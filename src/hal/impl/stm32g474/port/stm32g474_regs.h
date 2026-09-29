@@ -580,9 +580,13 @@
 #define GPIO_PUPD_UP 0x1u
 #define GPIO_PUPD_DOWN 0x2u
 
-/* ── FDCAN1 (STM32G474 native Bosch M_CAN-derived controller) ───────────── */
+/* ── FDCAN1 (STM32G4 layout, RM0440) ───────────────────────────────────────
+ * Derived from Bosch M_CAN, but with a fixed message RAM: SIDFC, XIDFC,
+ * RXF0C, RXF1C, RXESC, TXESC and TXEFC do not exist, the filter list sizes sit
+ * in RXGFC, and the FIFO and TX buffer registers use other offsets than the
+ * full M_CAN of STM32H7. */
 #define FDCAN1_BASE 0x40006400u
-#define FDCAN_SRAM_BASE 0x4000AC00u
+#define FDCAN_SRAM_BASE 0x4000A400u /* SRAMCAN_BASE, FDCAN1 message RAM */
 
 #define FDCAN_REG(base, off) JH_REG32((base) + (off))
 #define FDCAN_DBTP(base) FDCAN_REG((base), 0x00Cu)
@@ -595,23 +599,19 @@
 #define FDCAN_IR(base) FDCAN_REG((base), 0x050u)
 #define FDCAN_IE(base) FDCAN_REG((base), 0x054u)
 #define FDCAN_RXGFC(base) FDCAN_REG((base), 0x080u)
-#define FDCAN_SIDFC(base) FDCAN_REG((base), 0x084u)
-#define FDCAN_XIDFC(base) FDCAN_REG((base), 0x088u)
-#define FDCAN_XIDAM(base) FDCAN_REG((base), 0x090u)
-#define FDCAN_RXF0C(base) FDCAN_REG((base), 0x0A0u)
-#define FDCAN_RXF0S(base) FDCAN_REG((base), 0x0A4u)
-#define FDCAN_RXF0A(base) FDCAN_REG((base), 0x0A8u)
-#define FDCAN_RXF1C(base) FDCAN_REG((base), 0x0B0u)
-#define FDCAN_RXESC(base) FDCAN_REG((base), 0x0BCu)
+#define FDCAN_XIDAM(base) FDCAN_REG((base), 0x084u)
+#define FDCAN_RXF0S(base) FDCAN_REG((base), 0x090u)
+#define FDCAN_RXF0A(base) FDCAN_REG((base), 0x094u)
 #define FDCAN_TXBC(base) FDCAN_REG((base), 0x0C0u)
 #define FDCAN_TXFQS(base) FDCAN_REG((base), 0x0C4u)
-#define FDCAN_TXESC(base) FDCAN_REG((base), 0x0C8u)
-#define FDCAN_TXBRP(base) FDCAN_REG((base), 0x0CCu)
-#define FDCAN_TXBAR(base) FDCAN_REG((base), 0x0D0u)
-#define FDCAN_TXBCR(base) FDCAN_REG((base), 0x0D4u)
-#define FDCAN_TXBTO(base) FDCAN_REG((base), 0x0D8u)
-#define FDCAN_TXBCF(base) FDCAN_REG((base), 0x0DCu)
-#define FDCAN_TXEFC(base) FDCAN_REG((base), 0x0F0u)
+#define FDCAN_TXBRP(base) FDCAN_REG((base), 0x0C8u)
+#define FDCAN_TXBAR(base) FDCAN_REG((base), 0x0CCu)
+#define FDCAN_TXBCR(base) FDCAN_REG((base), 0x0D0u)
+#define FDCAN_TXBTO(base) FDCAN_REG((base), 0x0D4u)
+#define FDCAN_TXBCF(base) FDCAN_REG((base), 0x0D8u)
+
+/* One 32-bit word of the FDCAN1 message RAM, written whole as ST does. */
+#define FDCAN_MRAM(word) JH_REG32(FDCAN_SRAM_BASE + ((uint32_t)(word) * 4u))
 
 #define FDCAN_CCCR_INIT (1u << 0)
 #define FDCAN_CCCR_CCE (1u << 1)
@@ -631,12 +631,17 @@
 #define FDCAN_ECR_TEC_MASK 0xFFu
 #define FDCAN_ECR_REC_MASK (0x7Fu << 8)
 
-#define FDCAN_TXBC_TFQM (1u << 30)
-#define FDCAN_ELEM_SIZE_64 7u
+/* RXGFC: reject frames no filter matches (ANFS/ANFE), list sizes LSS/LSE. */
+#define FDCAN_RXGFC_REJECT_NON_MATCHING ((3u << 4) | (3u << 2))
+#define FDCAN_RXGFC_LSS_POS 16u
+#define FDCAN_RXGFC_LSE_POS 24u
 #define FDCAN_RXF0S_F0FL_MASK 0x0Fu
 #define FDCAN_RXF0S_F0GI_MASK (0x3u << 8)
 #define FDCAN_RXF0S_F0GI_POS 8u
 #define FDCAN_RXF0A_F0AI_MASK 0x7u
+#define FDCAN_TXFQS_TFQPI_MASK (0x3u << 16)
+#define FDCAN_TXFQS_TFQPI_POS 16u
+#define FDCAN_TXFQS_TFQF (1u << 21)
 
 #define FDCAN_MRAM_STD_FILTER_WORDS 28u
 #define FDCAN_MRAM_EXT_FILTER_WORDS (8u * 2u)
@@ -657,6 +662,10 @@
   (FDCAN_MRAM_RX1_WORD + (FDCAN_MRAM_RX_FIFO1_ELEMS * FDCAN_MRAM_ELEM_WORDS_64))
 #define FDCAN_MRAM_TX_BUF_WORD                                                 \
   (FDCAN_MRAM_TX_EVENT_WORD + (FDCAN_MRAM_TX_EVENT_ELEMS * 2u))
+/* 212 words, 0x350 bytes per instance; FDCAN2 RAM follows right after. */
+#define FDCAN_MRAM_WORDS                                                       \
+  (FDCAN_MRAM_TX_BUF_WORD +                                                    \
+   (FDCAN_MRAM_TX_BUF_ELEMS * FDCAN_MRAM_ELEM_WORDS_64))
 
 #define FDCAN_POLL_TIMEOUT 200000u
 

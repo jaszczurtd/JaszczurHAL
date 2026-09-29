@@ -458,6 +458,24 @@ jh_enable_host_warnings(test_rp_serial_cdc_congestion ERRORS)
 add_test(NAME test_rp_serial_cdc_congestion
     COMMAND test_rp_serial_cdc_congestion)
 
+# The STM32G474 native FDCAN backend on a register table, checked against the
+# G4 register offsets and message RAM layout written out in the test.
+add_executable(test_stm32_fdcan_backend
+    test_stm32_fdcan_backend.cpp
+    fakes/stm32g474_regs/jh_stm32g474_host_regs.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/stm32g474/hal_can_stm32g474_fdcan.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/can/hal_can_util.cpp
+    ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+target_include_directories(test_stm32_fdcan_backend PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/fakes/stm32g474_regs
+    ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(test_stm32_fdcan_backend PRIVATE
+    HAL_TARGET_STM32G474=1 JH_STM32G474_HW=1 JH_STM32G474_HOST_REGS=1
+    HAL_ENABLE_CAN HAL_ENABLE_STM32G474_FDCAN
+    HAL_ENABLE_UNITY UNITY_INCLUDE_CONFIG_H)
+jh_enable_host_warnings(test_stm32_fdcan_backend ERRORS)
+add_test(NAME test_stm32_fdcan_backend COMMAND test_stm32_fdcan_backend)
+
 # The STM32G474 ADC scan backend with its registers in a host table: ring
 # programming, block publication and the newest half when the interrupt ran
 # late. JH_STM32G474_HW selects the register-level code paths on the host.
