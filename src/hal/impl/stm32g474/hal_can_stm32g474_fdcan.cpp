@@ -90,10 +90,6 @@ static bool fdcan_mode_valid(const hal_can_stm32g474_fdcan_t *fdcan,
 }
 
 #ifdef JH_STM32G474_HW
-static volatile uint32_t *fdcan_mram_word(uint32_t word_offset) {
-  return (volatile uint32_t *)(FDCAN_SRAM_BASE + (word_offset * 4u));
-}
-
 static void fdcan_gpio_af9(uint8_t pin) {
   const uint32_t port = (uint32_t)(pin >> 4);
   const uint32_t n = (uint32_t)(pin & 0x0Fu);
@@ -155,23 +151,38 @@ static uint32_t fdcan_encode_dbtp(uint32_t bitrate_hz) {
 }
 
 static void fdcan_clear_mram(void) {
-  volatile uint32_t *mram = fdcan_mram_word(0u);
-  for (uint32_t i = 0; i < 256u; ++i) {
-    mram[i] = 0u;
+  for (uint32_t i = 0; i < FDCAN_MRAM_WORDS; ++i) {
+    FDCAN_MRAM(i) = 0u;
   }
 }
 
 static void fdcan_write_filter_config(uint8_t std_count, uint8_t ext_count,
                                       bool filters_active) {
-  FDCAN_SIDFC(FDCAN1_BASE) =
-      FDCAN_MRAM_STD_FILTER_WORD | ((uint32_t)std_count << 16);
-  FDCAN_XIDFC(FDCAN1_BASE) =
-      FDCAN_MRAM_EXT_FILTER_WORD | ((uint32_t)ext_count << 16);
-  uint32_t rxgfc = 0u;
-  if (filters_active) {
-    rxgfc |= (3u << 4) | (3u << 2); /* reject non-matching std/ext frames */
+  FDCAN_RXGFC(FDCAN1_BASE) =
+      ((uint32_t)std_count << FDCAN_RXGFC_LSS_POS) |
+      ((uint32_t)ext_count << FDCAN_RXGFC_LSE_POS) |
+      (filters_active ? FDCAN_RXGFC_REJECT_NON_MATCHING : 0u);
+}
+
+/* Payload bytes packed little-endian into the words after the header. */
+static void fdcan_write_payload(uint32_t word, const uint8_t *data,
+                                uint8_t len) {
+  for (uint8_t i = 0; i < len; i += 4u) {
+    uint32_t value = 0u;
+    for (uint8_t b = 0; b < 4u && (uint8_t)(i + b) < len; ++b) {
+      value |= (uint32_t)data[i + b] << (8u * b);
+    }
+    FDCAN_MRAM(word + (uint32_t)(i / 4u)) = value;
   }
-  FDCAN_RXGFC(FDCAN1_BASE) = rxgfc;
+}
+
+static void fdcan_read_payload(uint32_t word, uint8_t *data, uint8_t len) {
+  for (uint8_t i = 0; i < len; i += 4u) {
+    const uint32_t value = FDCAN_MRAM(word + (uint32_t)(i / 4u));
+    for (uint8_t b = 0; b < 4u && (uint8_t)(i + b) < len; ++b) {
+      data[i + b] = (uint8_t)(value >> (8u * b));
+    }
+  }
 }
 
 static uint32_t fdcan_tx_elem_word(uint8_t idx) {
@@ -219,14 +230,8 @@ bool hal_can_stm32g474_fdcan_init(hal_can_stm32g474_fdcan_t *fdcan,
   FDCAN_TDCR(FDCAN1_BASE) = cfg->enable_fd ? (8u << 8) : 0u;
   FDCAN_XIDAM(FDCAN1_BASE) = HAL_CAN_EXT_ID_MASK;
   fdcan_write_filter_config(0u, 0u, false);
-  FDCAN_RXF0C(FDCAN1_BASE) =
-      FDCAN_MRAM_RX0_WORD | (FDCAN_MRAM_RX_FIFO0_ELEMS << 16);
-  FDCAN_RXF1C(FDCAN1_BASE) = 0u;
-  FDCAN_RXESC(FDCAN1_BASE) = FDCAN_ELEM_SIZE_64;
-  FDCAN_TXEFC(FDCAN1_BASE) = 0u;
-  FDCAN_TXBC(FDCAN1_BASE) =
-      FDCAN_MRAM_TX_BUF_WORD | (FDCAN_MRAM_TX_BUF_ELEMS << 16);
-  FDCAN_TXESC(FDCAN1_BASE) = FDCAN_ELEM_SIZE_64;
+  /* TX FIFO mode; the G4 has no dedicated TX buffers. */
+  FDCAN_TXBC(FDCAN1_BASE) = 0u;
   FDCAN_IR(FDCAN1_BASE) = FDCAN_IR_ALL;
   FDCAN_IE(FDCAN1_BASE) = 0u;
 
@@ -266,27 +271,18 @@ bool hal_can_stm32g474_fdcan_send_frame(hal_can_stm32g474_fdcan_t *fdcan,
   }
 
 #ifdef JH_STM32G474_HW
-  uint32_t pending = FDCAN_TXBRP(FDCAN1_BASE);
-  uint8_t idx = 0xFFu;
-  for (uint8_t i = 0; i < FDCAN_MRAM_TX_BUF_ELEMS; ++i) {
-    if ((pending & (1u << i)) == 0u) {
-      idx = i;
-      break;
-    }
-  }
-  if (idx == 0xFFu) {
+  const uint32_t fifo = FDCAN_TXFQS(FDCAN1_BASE);
+  if ((fifo & FDCAN_TXFQS_TFQF) != 0u) {
     return false;
   }
-
-  volatile uint32_t *elem = fdcan_mram_word(fdcan_tx_elem_word(idx));
-  elem[0] = fdcan_tx_header0(frame);
-  elem[1] = fdcan_tx_header1(frame);
-  const uint8_t bytes =
-      ((frame->flags & HAL_CAN_FRAME_RTR) != 0u) ? 0u : frame->len;
-  for (uint8_t i = 0; i < bytes; ++i) {
-    volatile uint8_t *payload = (volatile uint8_t *)&elem[2];
-    payload[i] = frame->data[i];
-  }
+  const uint8_t idx =
+      (uint8_t)((fifo & FDCAN_TXFQS_TFQPI_MASK) >> FDCAN_TXFQS_TFQPI_POS);
+  const uint32_t elem = fdcan_tx_elem_word(idx);
+  FDCAN_MRAM(elem) = fdcan_tx_header0(frame);
+  FDCAN_MRAM(elem + 1u) = fdcan_tx_header1(frame);
+  fdcan_write_payload(elem + 2u, frame->data,
+                      ((frame->flags & HAL_CAN_FRAME_RTR) != 0u) ? 0u
+                                                                 : frame->len);
   FDCAN_TXBAR(FDCAN1_BASE) = 1u << idx;
   for (uint32_t spin = 0; spin < FDCAN_POLL_TIMEOUT; ++spin) {
     if ((FDCAN_TXBTO(FDCAN1_BASE) & (1u << idx)) != 0u) {
@@ -343,13 +339,10 @@ bool hal_can_stm32g474_fdcan_receive_frame(hal_can_stm32g474_fdcan_t *fdcan,
   }
   const uint8_t idx =
       (uint8_t)((status & FDCAN_RXF0S_F0GI_MASK) >> FDCAN_RXF0S_F0GI_POS);
-  volatile uint32_t *elem = fdcan_mram_word(fdcan_rx0_elem_word(idx));
-  fdcan_decode_header(elem[0], elem[1], frame);
-  if ((frame->flags & HAL_CAN_FRAME_RTR) == 0u && frame->len > 0u) {
-    volatile uint8_t *payload = (volatile uint8_t *)&elem[2];
-    for (uint8_t i = 0; i < frame->len; ++i) {
-      frame->data[i] = payload[i];
-    }
+  const uint32_t elem = fdcan_rx0_elem_word(idx);
+  fdcan_decode_header(FDCAN_MRAM(elem), FDCAN_MRAM(elem + 1u), frame);
+  if ((frame->flags & HAL_CAN_FRAME_RTR) == 0u) {
+    fdcan_read_payload(elem + 2u, frame->data, frame->len);
   }
   FDCAN_RXF0A(FDCAN1_BASE) = idx & FDCAN_RXF0A_F0AI_MASK;
   return hal_can_validate_frame(frame);
@@ -392,20 +385,18 @@ bool hal_can_stm32g474_fdcan_set_filter(hal_can_stm32g474_fdcan_t *fdcan,
   if (!fdcan_enter_init()) {
     return false;
   }
+  /* Classic filters store to RX FIFO0: ID first (EFID1/SFID1), mask second. */
   if (ext) {
-    volatile uint32_t *elem =
-        fdcan_mram_word(FDCAN_MRAM_EXT_FILTER_WORD + ((uint32_t)index * 2u));
-    elem[0] = (1u << 29) | (filter->id & HAL_CAN_EXT_ID_MASK);
-    elem[1] = (2u << 30) | (filter->mask & HAL_CAN_EXT_ID_MASK);
+    const uint32_t elem = FDCAN_MRAM_EXT_FILTER_WORD + ((uint32_t)index * 2u);
+    FDCAN_MRAM(elem) = (1u << 29) | (filter->id & HAL_CAN_EXT_ID_MASK);
+    FDCAN_MRAM(elem + 1u) = (2u << 30) | (filter->mask & HAL_CAN_EXT_ID_MASK);
     if ((uint8_t)(index + 1u) > fdcan->ext_filter_count) {
       fdcan->ext_filter_count = (uint8_t)(index + 1u);
     }
   } else {
-    volatile uint32_t *elem =
-        fdcan_mram_word(FDCAN_MRAM_STD_FILTER_WORD + index);
-    elem[0] = (2u << 30) | (1u << 27) |
-              ((filter->mask & HAL_CAN_STD_ID_MASK) << 16) |
-              (filter->id & HAL_CAN_STD_ID_MASK);
+    FDCAN_MRAM(FDCAN_MRAM_STD_FILTER_WORD + index) =
+        (2u << 30) | (1u << 27) | ((filter->id & HAL_CAN_STD_ID_MASK) << 16) |
+        (filter->mask & HAL_CAN_STD_ID_MASK);
     if ((uint8_t)(index + 1u) > fdcan->std_filter_count) {
       fdcan->std_filter_count = (uint8_t)(index + 1u);
     }
