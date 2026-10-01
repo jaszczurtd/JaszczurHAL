@@ -133,7 +133,7 @@ header "Gate 1/9: Checking required tools"
 
 REQUIRED_TOOLS=(
     cmake ninja g++ gcc make
-    valgrind clang-tidy cppcheck run-clang-tidy java
+    valgrind clang-tidy run-clang-tidy java
     arm-none-eabi-gcc arm-none-eabi-g++ arm-none-eabi-ar arm-none-eabi-ranlib arm-none-eabi-objcopy
 )
 missing=0
@@ -261,18 +261,8 @@ pass "No memory defects found."
 # ═══════════════════════════════════════════════════════════════════════════════
 header "Gate 5/9: Static analysis - cppcheck"
 
-info "Scanning src/ (vendored code excluded)..."
-cppcheck --enable=warning,performance,portability \
-    --inline-suppr \
-    --suppressions-list=tests/cppcheck-suppressions.txt \
-    --library=config/tooling/cppcheck-atomics.cfg \
-    -i src/hal/impl/rp2040/drivers \
-    -i src/hal/codecs/cjson \
-    -i src/hal/codecs/jpeg \
-    -i src/hal/codecs/lodepng \
-    -i src/utils/unity.c \
-    --error-exitcode=1 --quiet \
-    src
+info "Scanning src/ (vendored code excluded) with the pinned cppcheck..."
+"${SCRIPT_DIR}/scripts/run_cppcheck.sh"
 
 pass "cppcheck: no issues found."
 

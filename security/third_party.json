@@ -193,6 +193,20 @@
       "notes": "Authenticated upstream binary distribution used only for the C/C++ CPD quality gate; the archive and version are pinned and verified by the component manager."
     },
     {
+      "name": "Cppcheck",
+      "version": "2.13.0",
+      "commit": "da29903ffcbde465b6c2b47e8dc38277743f47ec",
+      "type": "application",
+      "scope": "development",
+      "supplier": "Cppcheck team",
+      "licenses": ["GPL-3.0-or-later"],
+      "purl": "pkg:github/danmar/cppcheck@da29903ffcbde465b6c2b47e8dc38277743f47ec",
+      "paths": ["third_party/cppcheck", "third_party/cppcheck_version.conf"],
+      "upstream": "https://github.com/danmar/cppcheck",
+      "feature_flags": [],
+      "notes": "Host analyzer built from its pinned tag for the cppcheck quality gate and consumers' MISRA scans; it is not linked into firmware."
+    },
+    {
       "name": "Raspberry Pi RISC-V toolchain",
       "version": "v2.2.0-4-gcc15",
       "type": "application",

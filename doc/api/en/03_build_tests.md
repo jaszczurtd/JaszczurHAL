@@ -145,7 +145,7 @@ Runs the complete quality-gate suite (9 gates, in order):
 3. Clang ASan/UBSan tests, native tests under ThreadSanitizer, and bounded
    libFuzzer smoke checks through the same runner used by CI
 4. Memory safety (Valgrind memcheck on all native C/C++ test executables)
-5. Static analysis: cppcheck
+5. Static analysis: cppcheck (the pinned build, `scripts/run_cppcheck.sh`)
 6. Static analysis: clang-tidy (host + STM32 compile databases below
    `.build/gate/`)
 7. PMD CPD duplicate detection across owned C/C++ implementations and Python
@@ -172,6 +172,10 @@ the selection. Live CTest/Valgrind progress is streamed to the terminal and
 All build and test outputs go in the ignored `.build/` directory. CMake compiler probes run in script mode use `.build/tests/` and do not leave `.o` files in the repository root.
 
 The clang-tidy stage creates a separate compilation database for each profile, with one entry per source file. This avoids repeated analysis of a shared driver that API tests compile with several feature sets. Normal target builds still compile every configured variant.
+
+The cppcheck gate runs the cppcheck build pinned in
+`third_party/cppcheck_version.conf` (see `scripts/ensure_cppcheck.sh`), not the
+distribution package, so its findings do not depend on the host.
 
 The CPD gate uses the authenticated PMD 7.26.0 distribution managed under
 `third_party/pmd`. It scans C/C++ implementation files rather than headers and

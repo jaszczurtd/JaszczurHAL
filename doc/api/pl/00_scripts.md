@@ -17,7 +17,7 @@ Uruchamiaj polecenia z katalogu głównego repozytorium, chyba że instrukcja ws
 | Przygotowanie stacji roboczej Debian/Ubuntu | `./runmefirst.sh` | Instaluje wymagane narzędzia hostowe, toolchain ARM, narzędzia analizy i bezpieczeństwa, obsługę USB oraz integrację z VS Code; synchronizuje zarządzane komponenty i konfiguruje hooki Git. |
 | Przygotowanie natywnej stacji roboczej Windows | `powershell -NoProfile -ExecutionPolicy Bypass -File .\runmefirst.ps1` | Przygotowuje zarządzane środowisko Pythona w wersji wskazanej przez repozytorium, natywne toolchainy, komponenty źródłowe i ścieżki użytkownika Cortex-Debug, a następnie sprawdza konfigurację hosta Windows. |
 | Synchronizacja zarządzanych zależności | `./third_party/update_components.sh` | Pobiera brakujące komponenty i zastępuje zarządzane instalacje niezgodne z wersjami zapisanymi w repozytorium. |
-| Weryfikacja zależności bez ich zmiany | `./third_party/update_components.sh --verify-only` | Sprawdza wersje wszystkich zarządzanych komponentów, commity, wymagane pliki, stan archiwum PMD, zbudowany picotool oraz stempel łańcucha narzędzi RISC-V. |
+| Weryfikacja zależności bez ich zmiany | `./third_party/update_components.sh --verify-only` | Sprawdza wersje wszystkich zarządzanych komponentów, commity, wymagane pliki, stan archiwum PMD, zbudowane picotool i cppcheck oraz stempel łańcucha narzędzi RISC-V. |
 | Odświeżenie wszystkich wersjonowanych plików generowanych | `python3 scripts/sync_generated.py --write` | Uruchamia generatory funkcji, płytek, przykładów, głównego VS Code oraz SBOM i wypisuje każdy plik zmieniony podczas synchronizacji. |
 | Weryfikacja wszystkich wersjonowanych plików generowanych | `python3 scripts/sync_generated.py --check` | Uruchamia każdy generator w trybie weryfikacji tylko do odczytu i zgłasza błąd, gdy pliku wynikowego brakuje lub jest on nieaktualny. |
 | Pełna kontrola jakości repozytorium | `./runalltests.sh` | Czyści katalogi robocze bramki i uruchamia testy, kontrole Clang ASan/UBSan/TSan/libFuzzer, Valgrind, analizę statyczną, CPD, kompilacje targetów oraz kompilacje przykładów. |
@@ -74,9 +74,10 @@ Przygotowuje środowisko na Debianie, Ubuntu i systemach zgodnych z tymi dystryb
 
 - usuwa drzewo `.build/` repozytorium przed konfiguracją;
 - instaluje kompilatory, CMake, Ninja, Python, Java, Valgrind, narzędzia Clang
-  do sanitizerów i fuzzowania, clang-tidy, cppcheck, OpenOCD,
-  `gdb-multiarch`, obsługę portu szeregowego, libusb oraz inne pakiety hosta;
-- wywołuje `third_party/update_components.sh`;
+  do sanitizerów i fuzzowania, clang-tidy, OpenOCD, `gdb-multiarch`,
+  obsługę portu szeregowego, libusb oraz inne pakiety hosta;
+- wywołuje `third_party/update_components.sh`, który buduje też przypięty
+  cppcheck;
 - instaluje `osv-scanner` oraz `cve-bin-tool`;
 - instaluje regułę udev dla dostępu USB BOOTSEL/picotool do RP2040/RP2350
   oraz portu `/dev/ttyACM*` w trybie aplikacji używanego przez automatyczny
@@ -142,7 +143,7 @@ diagnostyczne.
 ### `third_party/update_components.sh`
 
 Główny punkt wejścia do zarządzania zależnościami. Jest to adapter zgodności
-dla `scripts/component_manager.py all`, który przetwarza piętnaście
+dla `scripts/component_manager.py all`, który przetwarza szesnaście
 komponentów bazowych w kolejności zależności zadeklarowanej przez
 `config/tooling/managed_components.json`:
 
@@ -159,10 +160,11 @@ komponentów bazowych w kolejności zależności zadeklarowanej przez
 11. FreeRTOS-Kernel
 12. Pico SDK
 13. PMD CPD
-14. picotool
-15. Łańcuch narzędzi RISC-V
+14. cppcheck
+15. picotool
+16. Łańcuch narzędzi RISC-V
 
-ESP-IDF jest szesnastym zarządzanym komponentem, lecz jest instalowany tylko
+ESP-IDF jest siedemnastym zarządzanym komponentem, lecz jest instalowany tylko
 na żądanie,
 ponieważ jego checkout, rekurencyjne submoduły i narzędzia targetu są duże.
 Skrypt obsługi ESP-IDF przygotowuje go przy pierwszym użyciu; dedykowana
@@ -173,7 +175,8 @@ Tryb normalny doprowadza każdą zarządzaną instalację do wersji zapisanej w
 konfiguracji. `--verify-only` nie wykonuje pobierania, ekstrakcji, zastąpienia
 checkoutu ani kompilacji. Weryfikacja picotool obejmuje jego wymagane
 polecenia oraz możliwości USB/podpisywania włączone przez aktualnie dostępne
-zależności.
+zależności. Weryfikacja cppcheck sprawdza zgłaszaną wersję, addon MISRA obok
+pliku wykonywalnego i stempel builda.
 Układ wersji zapisanych w repozytorium i katalogów opisano w dokumencie
 [Zarządzane komponenty zewnętrzne](../../../third_party/README.pl.md).
 
@@ -194,7 +197,7 @@ Kontrola obejmuje:
 3. testy Clang ASan/UBSan, testy natywne pod ThreadSanitizerem i krótkie
    kontrole libFuzzer przez ten sam skrypt, którego używa CI;
 4. Valgrind memcheck;
-5. cppcheck;
+5. cppcheck w przypiętym buildzie (`scripts/run_cppcheck.sh`);
 6. clang-tidy dla kodu hosta/współdzielonego oraz backendu STM32, używający
    zarówno bazy danych `JH_STM32_HOST_SANITY` kompilatora hosta, jak i
    prawdziwej bazy danych ARM;
@@ -564,6 +567,21 @@ platformy i sprawdza wersję podaną przez PMD. Wymagane jest środowisko Java;
 `runmefirst.sh` dla Linuksa instaluje domyślny runtime bez interfejsu
 graficznego.
 
+### `scripts/ensure_cppcheck.sh`
+
+Buduje cppcheck z commita tagu przypiętego w
+`third_party/cppcheck_version.conf`. Źródła trafiają do `third_party/cppcheck`,
+a build do `.build/tools/cppcheck/`; jego `bin/` zawiera plik wykonywalny razem
+z `cfg/`, `addons/` i `platforms/`. Wyniki analizy i addon MISRA zmieniają się
+między wydaniami cppcheck, dlatego bramki używają tego builda zamiast pakietu
+z dystrybucji i na każdym hoście dają te same wyniki.
+
+Przebudowuje go, gdy zmieni się checkout, plik wykonywalny zgłasza inną wersję,
+brakuje addonu MISRA albo stempel builda nie pasuje już do pinu i opcji
+kompilacji. `--rebuild` wymusza czysty build; `--verify-only` sprawdza checkout
+i build bez ich zmiany. Build wymaga CMake, kompilatora C++ i Pythona i działa
+tylko na Linuksie.
+
 ### `scripts/ensure_riscv_toolchain.sh`
 
 Instaluje gotowy łańcuch narzędzi `riscv32-unknown-elf` w wersji wskazanej
@@ -876,11 +894,33 @@ do `vscode_library_workspace.py refresh-intellisense`.
 
 ### `scripts/vscode_clear_build_artifacts.sh`
 
-Usuwa cały katalog `.build/` repozytorium i nic poza nim. Nie przyjmuje opcji. Usunięcie obejmuje wyniki kompilacji dla wszystkich platform, przykłady, testy, dane IntelliSense i skompilowany picotool; źródła komponentów w `third_party/` pozostają bez zmian. Zadanie VS Code `Project: Clean` celowo korzysta z węższego zakresu czyszczenia, właściwego dla aktywnego profilu biblioteki.
+Usuwa cały katalog `.build/` repozytorium i nic poza nim. Nie przyjmuje opcji. Usunięcie obejmuje wyniki kompilacji dla wszystkich platform, przykłady, testy, dane IntelliSense oraz skompilowane picotool i cppcheck; źródła komponentów w `third_party/` pozostają bez zmian. Zadanie VS Code `Project: Clean` celowo korzysta z węższego zakresu czyszczenia, właściwego dla aktywnego profilu biblioteki.
 
 <a id="skrypty-analizy-statycznej-i-bezpieczeństwa"></a>
 
 ## Analiza statyczna, dokumentacja i bezpieczeństwo
+
+### `scripts/cppcheck.sh`
+
+Uruchamia przypięty cppcheck z podanymi argumentami. Gdy builda brakuje albo
+nie pasuje do pinu, zatrzymuje się i podaje polecenie `ensure_cppcheck.sh`,
+które go naprawi. Projekty korzystające z JaszczurHAL wywołują go zamiast
+`cppcheck`, na przykład we własnych bramkach cppcheck i MISRA:
+
+```bash
+<JaszczurHAL>/scripts/cppcheck.sh --version
+```
+
+`python3 scripts/component_manager.py tool-path cppcheck` po tym samym
+sprawdzeniu wypisuje ścieżkę gotowego pliku wykonywalnego.
+
+### `scripts/run_cppcheck.sh`
+
+Bramka cppcheck dla własnego kodu JaszczurHAL, uruchamiana przez
+`runalltests.sh` i CI. Skanuje `src/` przypiętym cppcheck z wyciszeniami z
+`tests/cppcheck-suppressions.txt` i modelem atomics z
+`config/tooling/cppcheck-atomics.cfg`; kod zewnętrzny jest pominięty. Każde
+zgłoszenie zatrzymuje bramkę.
 
 ### `scripts/run_cpd.py`
 

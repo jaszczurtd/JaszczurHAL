@@ -46,6 +46,7 @@ entry point.
 | Pico SDK | `pico_sdk_version.conf` | `pico-sdk/` | Native RP2040/RP2350 SDK |
 | ESP-IDF | `esp_idf_version.conf` | `esp-idf/` | Native ESP32-family SDK and tool bootstrap |
 | picotool | `picotool_version.conf` | `picotool/` | Source for the native RP upload/metadata utility |
+| cppcheck | `cppcheck_version.conf` | `cppcheck/` | Source of the static analyzer and MISRA addon used by the cppcheck gates |
 
 JaszczurHAL-owned BearSSL, cJSON, LodePNG, JPEG and FatFs integration wrappers,
 along with the lwIP port configuration, remain tracked in their thematic
@@ -153,6 +154,11 @@ artifacts and the executable live under:
 ```text
 .build/tools/picotool/
 ```
+
+cppcheck is built the same way from `third_party/cppcheck` into
+`.build/tools/cppcheck/`; `bin/` there holds the executable with its `cfg/`,
+`addons/` and `platforms/`. Gates run it through `scripts/cppcheck.sh`, which
+refuses a build that does not match the pin.
 
 The `rp2350-riscv` target uses the prebuilt toolchain pinned by
 `riscv_toolchain_version.conf` and installed at:
