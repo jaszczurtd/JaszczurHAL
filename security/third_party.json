@@ -200,7 +200,7 @@
       "scope": "development",
       "supplier": "Cppcheck team",
       "licenses": ["GPL-3.0-or-later"],
-      "purl": "pkg:github/danmar/cppcheck@da29903ffcbde465b6c2b47e8dc38277743f47ec",
+      "purl": "pkg:generic/cppcheck@2.13.0",
       "paths": ["third_party/cppcheck", "third_party/cppcheck_version.conf"],
       "upstream": "https://github.com/danmar/cppcheck",
       "feature_flags": [],

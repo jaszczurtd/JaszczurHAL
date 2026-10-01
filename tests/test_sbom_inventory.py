@@ -139,6 +139,19 @@ class SbomInventoryTests(unittest.TestCase):
                 )
                 self.assertIn(f"third_party/{conf}", component["paths"])
 
+    def test_cppcheck_pin_matches_inventory(self) -> None:
+        inventory = json.loads(
+            (ROOT / "security/third_party.json").read_text(encoding="utf-8")
+        )
+        component = {item["name"]: item for item in inventory["components"]}["Cppcheck"]
+        pin = parse_config(ROOT / "third_party/cppcheck_version.conf")
+        self.assertEqual(pin["CPPCHECK_REF"], component["commit"])
+        self.assertEqual(pin["CPPCHECK_VERSION"], component["version"])
+        # CVE scanners compare the purl version with affected ranges; a commit
+        # there matches every range of an unrelated product named cppcheck.
+        self.assertEqual(f"pkg:generic/cppcheck@{pin['CPPCHECK_VERSION']}", component["purl"])
+        self.assertIn("third_party/cppcheck_version.conf", component["paths"])
+
     def test_esp_idf_tool_inventory_matches_the_pinned_tool_snapshot(self) -> None:
         inventory = json.loads(
             (ROOT / "security/third_party.json").read_text(encoding="utf-8")
