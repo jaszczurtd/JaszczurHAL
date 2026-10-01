@@ -48,6 +48,7 @@ aktualizujący.
 | Pico SDK | `pico_sdk_version.conf` | `pico-sdk/` | Natywne SDK dla RP2040/RP2350 |
 | ESP-IDF | `esp_idf_version.conf` | `esp-idf/` | Natywne SDK dla rodziny ESP32 i narzędzia do przygotowania środowiska |
 | picotool | `picotool_version.conf` | `picotool/` | Źródła natywnego narzędzia RP do wgrywania i odczytu metadanych |
+| cppcheck | `cppcheck_version.conf` | `cppcheck/` | Źródła analizatora statycznego i addonu MISRA używanych przez bramki cppcheck |
 
 Wrappery integracyjne BearSSL, cJSON, LodePNG, JPEG i FatFs należące do
 JaszczurHAL, a także konfiguracja portu lwIP, pozostają w odpowiednich
@@ -169,6 +170,11 @@ buildu i plik wykonywalny trafiają do:
 ```text
 .build/tools/picotool/
 ```
+
+cppcheck budowany jest tak samo, z `third_party/cppcheck` do
+`.build/tools/cppcheck/`; jego `bin/` zawiera plik wykonywalny razem z `cfg/`,
+`addons/` i `platforms/`. Bramki uruchamiają go przez `scripts/cppcheck.sh`,
+który odrzuca build niezgodny z pinem.
 
 Target `rp2350-riscv` używa gotowego toolchainu w wersji określonej przez
 `riscv_toolchain_version.conf`, instalowanego jako:

@@ -20,6 +20,7 @@ third_party/pico-sdk/
 third_party/esp-idf/
 third_party/picotool/
 third_party/pmd/
+third_party/cppcheck/
 third_party/riscv-toolchain/
 
 # IDE / editor

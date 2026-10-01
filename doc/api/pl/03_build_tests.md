@@ -150,7 +150,7 @@ Uruchamia dziewięć etapów kontroli jakości w następującej kolejności:
 3. Testy Clang ASan/UBSan, testy natywne pod ThreadSanitizerem i krótkie
    testy libFuzzer przez ten sam skrypt, którego używa CI
 4. Bezpieczeństwo pamięci (Valgrind memcheck na wszystkich natywnych plikach wykonywalnych testów C/C++)
-5. Analiza statyczna: cppcheck
+5. Analiza statyczna: cppcheck (przypięty build, `scripts/run_cppcheck.sh`)
 6. Analiza statyczna: clang-tidy (bazy danych kompilacji hosta + STM32 poniżej
    `.build/gate/`)
 7. Wykrywanie duplikatów PMD CPD w obrębie własnych implementacji C/C++ oraz
@@ -180,6 +180,8 @@ ich zawieszania. Postęp CTest/Valgrind jest na bieżąco zapisywany w terminalu
 Pliki wynikowe kompilacji i testów trafiają do ignorowanego przez Git katalogu `.build/`. Testy kompilatora uruchamiane przez CMake w trybie skryptowym używają `.build/tests/`; nie zapisują plików `.o` w katalogu głównym repozytorium.
 
 Etap clang-tidy tworzy dla każdego profilu osobną bazę poleceń kompilacji, z jednym wpisem na plik źródłowy. Dzięki temu nie analizuje wielokrotnie tego samego wspólnego sterownika, nawet gdy testy API kompilują go z różnymi zestawami modułów. Zwykła kompilacja nadal obejmuje wszystkie skonfigurowane warianty.
+
+Bramka cppcheck używa builda cppcheck przypiętego w `third_party/cppcheck_version.conf` (patrz `scripts/ensure_cppcheck.sh`), a nie pakietu z dystrybucji, więc jej wyniki nie zależą od hosta.
 
 Etap CPD korzysta z dystrybucji PMD 7.26.0 o zweryfikowanej autentyczności, zarządzanej w `third_party/pmd`. Skanuje pliki implementacji C/C++ oraz skrypty Pythona w `scripts/`; pomija nagłówki, kod generowany i kod zewnętrzny. Kontrola kończy się niepowodzeniem po wykryciu choć jednej grupy duplikatów obejmującej co najmniej 100 tokenów C/C++ w kodzie produkcyjnym, testach lub przykładach albo co najmniej 50 tokenów Pythona. Nie ma listy wyjątków ani zaakceptowanych wcześniej duplikatów. Raport podaje łączny zakres powielonych tokenów oraz wyniki osobno dla mocka, RP2040, STM32G474, kodu wspólnego, pozostałego kodu przenośnego i skryptów Pythona. Raporty XML i uporządkowane listy plików trafiają do `.build/gate/cpd/`. Wynik CPD `PASS` oznacza brak grup duplikatów przy tych progach.
 

@@ -17,7 +17,7 @@ Run commands from the repository root unless a section states otherwise. Use `--
 | Prepare a Debian/Ubuntu workstation | `./runmefirst.sh` | Installs host, ARM, analysis, security, USB, and VS Code workflow prerequisites; synchronizes managed components; configures Git hooks. |
 | Prepare a native Windows workstation | `powershell -NoProfile -ExecutionPolicy Bypass -File .\runmefirst.ps1` | Prepares the pinned managed Python environment, native toolchains, source components, Cortex-Debug user paths, and the Windows host self-check. |
 | Synchronize managed dependencies | `./third_party/update_components.sh` | Fetches missing components and replaces managed installations that differ from tracked pins. |
-| Verify dependencies without changing them | `./third_party/update_components.sh --verify-only` | Checks all managed component versions, commits, required files, PMD archive state, built picotool, and the RISC-V toolchain stamp. |
+| Verify dependencies without changing them | `./third_party/update_components.sh --verify-only` | Checks all managed component versions, commits, required files, PMD archive state, the built picotool and cppcheck, and the RISC-V toolchain stamp. |
 | Refresh all tracked generated files | `python3 scripts/sync_generated.py --write` | Runs the feature, board, example, root VS Code, and SBOM generators and lists every file changed during synchronization. |
 | Verify all tracked generated files | `python3 scripts/sync_generated.py --check` | Runs every generator in read-only verification mode and fails on missing or stale output. |
 | Run the complete repository gate | `./runalltests.sh` | Cleans managed gate outputs and runs tests, Clang ASan/UBSan/TSan/libFuzzer checks, Valgrind, static analysis, CPD, target builds, and example builds. |
@@ -73,9 +73,10 @@ Sets up Debian, Ubuntu, and compatible systems. Re-running the script restores t
 
 - removes the repository `.build/` tree before setup;
 - installs compilers, CMake, Ninja, Python, Java, Valgrind, Clang sanitizer and
-  fuzz tooling, clang-tidy, cppcheck, OpenOCD, `gdb-multiarch`, serial, libusb,
-  and other host packages;
-- invokes `third_party/update_components.sh`;
+  fuzz tooling, clang-tidy, OpenOCD, `gdb-multiarch`, serial, libusb, and other
+  host packages;
+- invokes `third_party/update_components.sh`, which also builds the pinned
+  cppcheck;
 - installs `osv-scanner` and `cve-bin-tool`;
 - installs a udev rule for RP2040/RP2350 BOOTSEL/picotool USB access and the
   app-mode `/dev/ttyACM*` port used by the automatic 1200-bps reset;
@@ -130,7 +131,7 @@ a standalone setup diagnostic.
 ### `third_party/update_components.sh`
 
 The normal dependency-management entrypoint. It is a compatibility launcher
-for `scripts/component_manager.py all`, which processes fifteen baseline
+for `scripts/component_manager.py all`, which processes sixteen baseline
 components in the dependency order declared by
 `config/tooling/managed_components.json`:
 
@@ -147,10 +148,11 @@ components in the dependency order declared by
 11. FreeRTOS-Kernel
 12. Pico SDK
 13. PMD CPD
-14. picotool
-15. RISC-V toolchain
+14. cppcheck
+15. picotool
+16. RISC-V toolchain
 
-ESP-IDF is the sixteenth managed component but remains opt-in because its
+ESP-IDF is the seventeenth managed component but remains opt-in because its
 checkout, recursive submodules, and target tools are large. The production
 ESP-IDF runner prepares it on first use; focused setup is available through
 `scripts/ensure_esp_idf.sh --enable` or `JH_ENABLE_ESP_IDF=1`.
@@ -158,7 +160,9 @@ ESP-IDF runner prepares it on first use; focused setup is available through
 Normal mode makes each managed installation match its tracked configuration.
 `--verify-only` performs no fetch, extraction, checkout replacement, or build.
 picotool verification includes its required commands and the USB/signing
-capabilities enabled by the currently available dependencies.
+capabilities enabled by the currently available dependencies. cppcheck
+verification checks the reported version, the MISRA addon beside the
+executable, and the build stamp.
 See [Managed Third-Party Components](../../../third_party/README.md) for the pin and
 directory layout.
 
@@ -178,7 +182,7 @@ are:
 3. Clang ASan/UBSan tests, native tests under ThreadSanitizer, and libFuzzer
    smoke checks through the same runner used by CI;
 4. Valgrind memcheck;
-5. cppcheck;
+5. cppcheck with the pinned build (`scripts/run_cppcheck.sh`);
 6. clang-tidy for host/shared code and the STM32 backend, using both the
    `JH_STM32_HOST_SANITY` host-compiler database and the real ARM database;
 7. PMD CPD duplicate detection across owned C/C++ implementations and Python
@@ -521,6 +525,22 @@ tracks the complete extracted-file manifest, resolves the platform launcher,
 and checks the reported PMD version. A Java runtime is required; Linux
 `runmefirst.sh` installs the headless default runtime.
 
+### `scripts/ensure_cppcheck.sh`
+
+Builds cppcheck from the tag commit pinned in
+`third_party/cppcheck_version.conf`. The source is checked out into
+`third_party/cppcheck` and built in `.build/tools/cppcheck/`; `bin/` there holds
+the executable together with its `cfg/`, `addons/` and `platforms/`. Analysis
+results and the MISRA addon change between cppcheck releases, so gates use this
+build instead of the distribution package and every host gets the same
+findings.
+
+It rebuilds when the checkout changes, the executable reports a different
+version, the MISRA addon is missing, or the build stamp no longer matches the
+pin and build options. `--rebuild` forces a clean rebuild; `--verify-only`
+checks the checkout and the build without changing them. The build needs
+CMake, a C++ compiler, and Python, and runs on Linux only.
+
 ### `scripts/ensure_riscv_toolchain.sh`
 
 Installs the pinned Raspberry Pi prebuilt
@@ -802,11 +822,33 @@ the default board, selects that library profile, and delegates to
 
 ### `scripts/vscode_clear_build_artifacts.sh`
 
-Removes the entire repository `.build/` directory and nothing else. It takes no options. This deletes cached target builds, examples, tests, IntelliSense data, and the compiled picotool executable. Component sources in `third_party/` remain unchanged. The VS Code `Project: Clean` task deliberately uses the narrower cleanup action for the active library profile.
+Removes the entire repository `.build/` directory and nothing else. It takes no options. This deletes cached target builds, examples, tests, IntelliSense data, and the compiled picotool and cppcheck executables. Component sources in `third_party/` remain unchanged. The VS Code `Project: Clean` task deliberately uses the narrower cleanup action for the active library profile.
 
 <a id="static-analysis-and-security-scripts"></a>
 
 ## Static analysis, documentation, and security
+
+### `scripts/cppcheck.sh`
+
+Runs the pinned cppcheck with the given arguments. When the build is missing
+or does not match the pin, it stops and names the `ensure_cppcheck.sh`
+command that repairs it. Projects using JaszczurHAL call it in place of
+`cppcheck`, for example for their own cppcheck and MISRA gates:
+
+```bash
+<JaszczurHAL>/scripts/cppcheck.sh --version
+```
+
+`python3 scripts/component_manager.py tool-path cppcheck` prints the path of
+the ready executable after the same check.
+
+### `scripts/run_cppcheck.sh`
+
+The cppcheck gate over JaszczurHAL's own code, run by `runalltests.sh` and CI.
+It scans `src/` with the pinned cppcheck, the suppressions from
+`tests/cppcheck-suppressions.txt` and the atomics model from
+`config/tooling/cppcheck-atomics.cfg`; vendored code is excluded. Any finding
+fails it.
 
 ### `scripts/run_cpd.py`
 

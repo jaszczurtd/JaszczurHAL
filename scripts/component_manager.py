@@ -1194,6 +1194,25 @@ def _libusb_build_support_available() -> bool:
     return _run(("pkg-config", "--exists", "libusb-1.0"), check=False).returncode == 0
 
 
+def _managed_build_dir(repo_root: Path, name: str, override: str = "") -> Path:
+    """Build directory of a source-built host tool, required below .build/."""
+    build = _resolve_component_dir(repo_root, f".build/tools/{name}", override)
+    expected_build_root = (repo_root / ".build").resolve(strict=False)
+    try:
+        build.relative_to(expected_build_root)
+    except ValueError as error:
+        raise ComponentError(f"{name} build output must be inside {expected_build_root}") from error
+    return build
+
+
+def _cmake_build(source: Path, build: Path, definitions: Sequence[str]) -> None:
+    """Configure and build SOURCE from scratch in BUILD."""
+    if build.exists():
+        _remove_tree(build)
+    _run(("cmake", "-S", str(source), "-B", str(build), *definitions))
+    _run(("cmake", "--build", str(build), "-j", str(os.cpu_count() or 4)))
+
+
 def ensure_picotool_linux(
     repo_root: Path,
     *,
@@ -1215,12 +1234,7 @@ def ensure_picotool_linux(
         config["PICOTOOL_REPO"], config["PICOTOOL_REF"], source,
         verify_only=verify_only,
     )
-    build = _resolve_component_dir(repo_root, ".build/tools/picotool", build_override)
-    expected_build_root = (repo_root / ".build").resolve(strict=False)
-    try:
-        build.relative_to(expected_build_root)
-    except ValueError as error:
-        raise ComponentError(f"picotool build output must be inside {expected_build_root}") from error
+    build = _managed_build_dir(repo_root, "picotool", build_override)
     binary = build / "picotool"
     sdk_config = parse_config(repo_root / "third_party/pico_sdk_version.conf")
     sdk = _resolve_component_dir(
@@ -1271,15 +1285,9 @@ def ensure_picotool_linux(
             "without USB device access. Install libusb-1.0-0-dev and pkg-config "
             "to enable self-repair on the next run."
         )
-    if build.exists():
-        _remove_tree(build)
-    _run(
-        (
-            "cmake", "-S", str(source), "-B", str(build),
-            f"-DPICO_SDK_PATH={sdk}", "-DCMAKE_BUILD_TYPE=Release",
-        )
+    _cmake_build(
+        source, build, (f"-DPICO_SDK_PATH={sdk}", "-DCMAKE_BUILD_TYPE=Release")
     )
-    _run(("cmake", "--build", str(build), "-j", str(os.cpu_count() or 4)))
     if not _picotool_binary_matches(binary, config["PICOTOOL_VERSION"]):
         raise ComponentError(f"Built picotool does not report {config['PICOTOOL_VERSION']}.")
     issues = _picotool_capability_issues(
@@ -1292,6 +1300,107 @@ def ensure_picotool_linux(
             f"Built picotool lacks expected capabilities: {', '.join(issues)}."
         )
     ok(f"picotool ready: {binary}")
+    return binary
+
+
+_CPPCHECK_SUPPORT_FILES = ("cfg/std.cfg", "addons/misra.py", "addons/cppcheckdata.py")
+
+
+def _cppcheck_config(repo_root: Path) -> dict[str, str]:
+    config_path = repo_root / "third_party/cppcheck_version.conf"
+    config = parse_config(config_path)
+    require_values(
+        config,
+        ("CPPCHECK_REPO", "CPPCHECK_REF", "CPPCHECK_VERSION", "CPPCHECK_DIR"),
+        config_path,
+    )
+    return config
+
+
+def _cppcheck_definitions(build: Path) -> tuple[str, ...]:
+    # The build copies cfg/, addons/ and platforms/ into its bin/; FILESDIR
+    # points there too, so both cppcheck lookups find the pinned MISRA addon.
+    return (
+        "-DCMAKE_BUILD_TYPE=Release",
+        f"-DFILESDIR={build / 'bin'}",
+        "-DBUILD_GUI=OFF",
+        "-DBUILD_TESTS=OFF",
+    )
+
+
+def _cppcheck_stamp(config: dict[str, str], build: Path) -> str:
+    return "|".join(("cppcheck", config["CPPCHECK_REF"], *_cppcheck_definitions(build)))
+
+
+def _cppcheck_problem(build: Path, version: str, stamp: str) -> str:
+    """Why BUILD does not hold the pinned cppcheck, or "" when it does."""
+    binary = build / "bin/cppcheck"
+    if not binary.is_file():
+        return f"no executable at {binary}"
+    result = _run((str(binary), "--version"), check=False)
+    reported = (result.stdout + result.stderr).strip()
+    if result.returncode != 0 or reported != f"Cppcheck {version}":
+        return f"{binary} reports {reported or 'no version'}, expected Cppcheck {version}"
+    missing = [name for name in _CPPCHECK_SUPPORT_FILES if not (binary.parent / name).is_file()]
+    if missing:
+        return f"missing beside {binary}: {', '.join(missing)}"
+    stamp_path = build / VERSION_STAMP
+    if not stamp_path.is_file() or stamp_path.read_text(encoding="utf-8").strip() != stamp:
+        return f"{build} was built from a different pin or configuration"
+    return ""
+
+
+def resolve_cppcheck(repo_root: Path, *, build_override: str = "") -> Path:
+    """Return the pinned cppcheck executable, or fail with the repair command."""
+    config = _cppcheck_config(repo_root)
+    build = _managed_build_dir(repo_root, "cppcheck", build_override)
+    problem = _cppcheck_problem(
+        build, config["CPPCHECK_VERSION"], _cppcheck_stamp(config, build)
+    )
+    if problem:
+        raise ComponentError(
+            f"Pinned cppcheck {config['CPPCHECK_VERSION']} is not ready: {problem}. "
+            f"Run {repo_root / 'scripts/ensure_cppcheck.sh'}."
+        )
+    return build / "bin/cppcheck"
+
+
+def ensure_cppcheck_linux(
+    repo_root: Path,
+    *,
+    verify_only: bool,
+    source_override: str = "",
+    build_override: str = "",
+    rebuild: bool = False,
+) -> Path:
+    config = _cppcheck_config(repo_root)
+    source = _resolve_component_dir(repo_root, config["CPPCHECK_DIR"], source_override)
+    changed = sync_git_checkout(
+        config["CPPCHECK_REPO"], config["CPPCHECK_REF"], source,
+        verify_only=verify_only,
+    )
+    if verify_only:
+        binary = resolve_cppcheck(repo_root, build_override=build_override)
+        ok(f"cppcheck ready: {binary}")
+        return binary
+    version = config["CPPCHECK_VERSION"]
+    build = _managed_build_dir(repo_root, "cppcheck", build_override)
+    binary = build / "bin/cppcheck"
+    stamp = _cppcheck_stamp(config, build)
+    if rebuild or changed:
+        reason = "rebuild requested" if rebuild else "checkout changed"
+    else:
+        reason = _cppcheck_problem(build, version, stamp)
+    if not reason:
+        ok(f"cppcheck {version} already built: {binary}")
+        return binary
+    info(f"Building cppcheck {version} ({reason})")
+    _cmake_build(source, build, _cppcheck_definitions(build))
+    (build / VERSION_STAMP).write_text(stamp + "\n", encoding="utf-8")
+    problem = _cppcheck_problem(build, version, stamp)
+    if problem:
+        raise ComponentError(f"Built cppcheck is not the pinned build: {problem}")
+    ok(f"cppcheck {version} ready: {binary}")
     return binary
 
 
@@ -1632,6 +1741,16 @@ def ensure_component(arguments: argparse.Namespace) -> None:
             sdk_override=arguments.sdk_dir or "",
             rebuild=arguments.rebuild,
         )
+    elif name == "cppcheck":
+        if sys.platform == "win32":
+            raise ComponentError("The pinned cppcheck build and its gates are Linux-only.")
+        ensure_cppcheck_linux(
+            repo_root,
+            verify_only=arguments.verify_only,
+            source_override=directory,
+            build_override=arguments.build_dir or "",
+            rebuild=arguments.rebuild,
+        )
     else:
         raise ComponentError(f"Unknown component: {name}")
 
@@ -1670,6 +1789,12 @@ def build_parser() -> argparse.ArgumentParser:
     all_parser.add_argument("--verify-only", action="store_true")
     all_parser.add_argument("--force", action="store_true")
     all_parser.add_argument("--repo-root", default=str(Path(__file__).resolve().parents[1]))
+
+    tool_path = subparsers.add_parser(
+        "tool-path", help="print a ready pinned host tool executable"
+    )
+    tool_path.add_argument("name", choices=("cppcheck",))
+    tool_path.add_argument("--repo-root", default=str(Path(__file__).resolve().parents[1]))
 
     tools = subparsers.add_parser("windows-tools", help="ensure native Windows host tools")
     tools.add_argument("--verify-only", action="store_true")
@@ -1714,6 +1839,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 print("All managed source components are synchronized.")
             else:
                 print("All managed third-party components are synchronized.")
+        elif arguments.command == "tool-path":
+            print(resolve_cppcheck(Path(arguments.repo_root).resolve()))
         elif arguments.command == "windows-tools":
             ensure_windows_tools(
                 Path(arguments.repo_root).resolve(),

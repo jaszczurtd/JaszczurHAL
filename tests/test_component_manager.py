@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import importlib.util
+import io
 from pathlib import Path
 import subprocess
 import sys
@@ -775,6 +777,95 @@ class TrackedContractTests(unittest.TestCase):
                 ),
                 [],
             )
+
+    @staticmethod
+    def _cppcheck_root(root: Path) -> Path:
+        third_party = root / "third_party"
+        third_party.mkdir()
+        (third_party / "cppcheck_version.conf").write_text(
+            "CPPCHECK_REPO=https://example.invalid/cppcheck.git\n"
+            "CPPCHECK_REF=0123456789abcdef\n"
+            "CPPCHECK_VERSION=2.13.0\n"
+            "CPPCHECK_DIR=third_party/cppcheck\n",
+            encoding="utf-8",
+        )
+        (third_party / "cppcheck").mkdir()
+        return root / ".build/tools/cppcheck"
+
+    @staticmethod
+    def _write_cppcheck(build: Path, version: str) -> None:
+        binary = build / "bin/cppcheck"
+        binary.parent.mkdir(parents=True, exist_ok=True)
+        binary.write_text(f"#!/bin/sh\necho 'Cppcheck {version}'\n", encoding="utf-8")
+        binary.chmod(0o755)
+        for name in ("cfg/std.cfg", "addons/misra.py", "addons/cppcheckdata.py"):
+            (binary.parent / name).parent.mkdir(parents=True, exist_ok=True)
+            (binary.parent / name).write_text("", encoding="utf-8")
+
+    @unittest.skipIf(sys.platform == "win32", "fixture uses a POSIX shell executable")
+    def test_cppcheck_builds_once_and_rebuilds_a_stale_build(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="jh-cppcheck-build-") as text:
+            root = Path(text)
+            build = self._cppcheck_root(root)
+            real_run = manager._run
+            cmake_calls = []
+
+            def fake_run(command, **kwargs):
+                if command[0] == "cmake":
+                    cmake_calls.append(tuple(command))
+                    if "--build" in command:
+                        self._write_cppcheck(build, "2.13.0")
+                    return subprocess.CompletedProcess(command, 0, "", "")
+                return real_run(command, **kwargs)
+
+            with mock.patch.object(manager, "sync_git_checkout", return_value=False), \
+                    mock.patch.object(manager, "_run", side_effect=fake_run):
+                binary = manager.ensure_cppcheck_linux(root, verify_only=False)
+                self.assertEqual(binary, build / "bin/cppcheck")
+                self.assertEqual(len(cmake_calls), 2)
+                self.assertIn(f"-DFILESDIR={build / 'bin'}", cmake_calls[0])
+
+                manager.ensure_cppcheck_linux(root, verify_only=False)
+                self.assertEqual(len(cmake_calls), 2)
+                self.assertEqual(manager.ensure_cppcheck_linux(root, verify_only=True), binary)
+
+                (build / manager.VERSION_STAMP).write_text("cppcheck|old\n", encoding="utf-8")
+                with self.assertRaisesRegex(manager.ComponentError, "different pin"):
+                    manager.ensure_cppcheck_linux(root, verify_only=True)
+                manager.ensure_cppcheck_linux(root, verify_only=False)
+                self.assertEqual(len(cmake_calls), 4)
+                self.assertEqual(manager.resolve_cppcheck(root), binary)
+
+    @unittest.skipIf(sys.platform == "win32", "fixture uses a POSIX shell executable")
+    def test_cppcheck_resolution_rejects_other_builds_and_names_the_repair(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="jh-cppcheck-resolve-") as text:
+            root = Path(text)
+            build = self._cppcheck_root(root)
+            config = manager._cppcheck_config(root)
+            with self.assertRaisesRegex(manager.ComponentError, "no executable"):
+                manager.resolve_cppcheck(root)
+
+            self._write_cppcheck(build, "2.10")
+            (build / manager.VERSION_STAMP).write_text(
+                manager._cppcheck_stamp(config, build) + "\n", encoding="utf-8"
+            )
+            with self.assertRaisesRegex(
+                manager.ComponentError, r"reports Cppcheck 2\.10.*ensure_cppcheck\.sh"
+            ):
+                manager.resolve_cppcheck(root)
+
+            self._write_cppcheck(build, "2.13.0")
+            (build / "bin/addons/misra.py").unlink()
+            with self.assertRaisesRegex(manager.ComponentError, "addons/misra.py"):
+                manager.resolve_cppcheck(root)
+
+            self._write_cppcheck(build, "2.13.0")
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                self.assertEqual(
+                    manager.main(["tool-path", "cppcheck", "--repo-root", str(root)]), 0
+                )
+            self.assertEqual(stdout.getvalue().strip(), str(build / "bin/cppcheck"))
 
     def test_openocd_without_required_scripts_falls_back_to_managed(self) -> None:
         spec = manager.ToolArchive(

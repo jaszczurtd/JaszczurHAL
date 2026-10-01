@@ -382,7 +382,7 @@ wyłącznie w Linuksie opisuje
 ## Wersje zależności i aktualizacje
 
 Pliki `third_party/*_version.conf` określają używane wersje Pico SDK, ESP-IDF,
-picotool, PMD CPD, zestawu narzędzi RISC-V dla RP2350, FreeRTOS, BearSSL,
+picotool, PMD CPD, cppcheck, zestawu narzędzi RISC-V dla RP2350, FreeRTOS, BearSSL,
 cJSON, LodePNG, TJpgDec, FatFs, Unity, lwIP, littlefs, BTstack i sterownika
 Semtech SX126x.
 

@@ -200,6 +200,7 @@
   ],
   "toolComponents": [
     "pmd",
+    "cppcheck",
     "picotool",
     "riscv-toolchain"
   ],
@@ -217,6 +218,7 @@
     "freertos",
     "pico-sdk",
     "pmd",
+    "cppcheck",
     "picotool",
     "riscv-toolchain"
   ],
@@ -235,6 +237,7 @@
     "pico-sdk": "ensure_pico_sdk.sh",
     "esp-idf": "ensure_esp_idf.sh",
     "pmd": "ensure_pmd.sh",
+    "cppcheck": "ensure_cppcheck.sh",
     "picotool": "ensure_picotool.sh",
     "riscv-toolchain": "ensure_riscv_toolchain.sh"
   }

@@ -35,6 +35,7 @@ configs = (
     "esp_idf_version.conf",
     "picotool_version.conf",
     "pmd_version.conf",
+    "cppcheck_version.conf",
     "riscv_toolchain_version.conf",
     "unity_version.conf",
     "windows_tools_version.conf",
@@ -201,6 +202,7 @@ for component in (
     "sx126x_driver",
     "esp-idf",
     "pmd",
+    "cppcheck",
 ):
     ignored = subprocess.run(
         ["git", "check-ignore", "-q", f"third_party/{component}/sentinel"],

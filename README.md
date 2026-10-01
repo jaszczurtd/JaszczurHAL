@@ -387,7 +387,7 @@ the [Windows setup guide](doc/en/windows_setup.md).
 ## Dependency versions and updates
 
 The `third_party/*_version.conf` files specify the versions of Pico SDK,
-ESP-IDF, picotool, PMD CPD, the RP2350 RISC-V toolchain, FreeRTOS, BearSSL,
+ESP-IDF, picotool, PMD CPD, cppcheck, the RP2350 RISC-V toolchain, FreeRTOS, BearSSL,
 cJSON, LodePNG, TJpgDec, FatFs, Unity, lwIP, littlefs, BTstack, and the
 Semtech SX126x driver.
 
