@@ -1391,7 +1391,7 @@
       "supplier": {
         "name": "Cppcheck team"
       },
-      "purl": "pkg:github/danmar/cppcheck@da29903ffcbde465b6c2b47e8dc38277743f47ec",
+      "purl": "pkg:generic/cppcheck@2.13.0",
       "externalReferences": [
         {
           "type": "website",
@@ -2156,5 +2156,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:75e0e7c9-f358-f4b2-592f-49d618a85875"
+  "serialNumber": "urn:uuid:6378c6c1-dfb5-624c-90f3-804068c1851e"
 }
