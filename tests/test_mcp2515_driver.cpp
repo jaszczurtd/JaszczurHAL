@@ -1,9 +1,14 @@
 #include "hal/impl/.mock/hal_mock.h"
 #include "utils/unity.h"
+
+#include <string.h>
 #define private public
 #include "hal/can/mcp2515/mcp2515_driver.h"
 #undef private
 #include "hal/can/mcp2515/hal_can_mcp2515.h"
+
+/* The provider operations the facade calls; their context is a JHMCP2515. */
+static const jh_can_provider_t &P = jh_can_mcp2515_provider;
 
 /* MCP2515 datasheet (register map: TXBnSIDH/TXBnSIDL/TXBnEID8/TXBnEID0):
  * - Standard 11-bit ID uses SIDH[10:3] and SIDL[2:0] -> bits [2:0] shifted to
@@ -74,6 +79,7 @@ void setUp(void) {
   hal_mock_spi_reset();
   hal_mock_set_millis(0);
   hal_mock_set_micros(0);
+  hal_mock_set_micros_step(0u);
 }
 
 void tearDown(void) {}
@@ -307,7 +313,7 @@ void test_backend_set_filter_enables_filters_on_both_receive_buffers(void) {
   push_set_filter_rx_script();
   const hal_can_filter_t filter = {0x127u, HAL_CAN_STD_ID_MASK, 0u};
 
-  TEST_ASSERT_TRUE(hal_can_mcp2515_set_filter(&can, 0u, &filter));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, P.set_filter(&can, 0u, &filter));
 
   const uint8_t enable_rxb0_filters[] = {MCP_BITMOD, MCP_RXB0CTRL,
                                          MCP_RXB_RX_MASK, MCP_RXB_RX_STDEXT};
@@ -382,7 +388,286 @@ void test_backend_send_propagates_one_shot_tx_failure(void) {
   hal_mock_spi_reset();
   hal_mock_spi_push_rx(0u, rx_script, sizeof(rx_script));
 
-  TEST_ASSERT_FALSE(hal_can_mcp2515_send(&can, 0x123u, 0u, nullptr));
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, P.legacy_send(&can, 0x123u, 0u, nullptr));
+}
+
+/* Datasheet 3.3 "Aborting transmission": clearing TXBnCTRL.TXREQ requests the
+ * abort of a pending frame. Without it a frame reported as failed after the
+ * send timeout would still be transmitted later. */
+void test_send_timeout_clears_txreq_of_the_stuck_buffer(void) {
+  JHMCP2515 can(10u, 0u);
+  uint8_t rx_script[200];
+  memset(rx_script, MCP_TXB_TXREQ_M, sizeof(rx_script));
+  memset(rx_script, 0, 18); /* free TXB0, then the frame writes */
+  hal_mock_spi_reset();
+  hal_mock_spi_push_rx(0u, rx_script, sizeof(rx_script));
+  hal_mock_set_micros_step(100u);
+
+  TEST_ASSERT_EQUAL_UINT8(CAN_SENDMSGTIMEOUT,
+                          can.sendMsgBuf(0x123u, 0u, nullptr));
+
+  const uint8_t clear_txreq[] = {MCP_BITMOD, MCP_TXB0CTRL, MCP_TXB_TXREQ_M,
+                                 0x00u};
+  assert_spi_tx_contains(clear_txreq, sizeof(clear_txreq));
+}
+
+/* A send that was preempted longer than the timeout but finds TXREQ already
+ * clear went out; reporting a failure would make the caller send it twice. */
+void test_send_after_long_preemption_reports_success_when_txreq_cleared(void) {
+  JHMCP2515 can(10u, 0u);
+  uint8_t rx_script[24] = {};
+  rx_script[23] = MODE_ONESHOT;
+  hal_mock_spi_reset();
+  hal_mock_spi_push_rx(0u, rx_script, sizeof(rx_script));
+  hal_mock_set_micros_step(3000u); /* every clock read jumps past 2.5 ms */
+
+  TEST_ASSERT_EQUAL_UINT8(CAN_OK, can.sendMsgBuf(0x123u, 0u, nullptr));
+}
+
+/* Register 10-1 CANCTRL.ABAT: while set, every pending and later transmission
+ * is aborted; it has to be cleared once the buffers dropped TXREQ. */
+void test_abort_tx_releases_abat_after_buffers_drop_txreq(void) {
+  JHMCP2515 can(10u, 0u);
+  const uint8_t rx_script[17] = {}; /* every TXBnCTRL read: TXREQ clear */
+  hal_mock_spi_reset();
+  hal_mock_spi_push_rx(0u, rx_script, sizeof(rx_script));
+
+  TEST_ASSERT_EQUAL_UINT8(CAN_OK, can.abortTX());
+
+  const uint8_t expected[] = {
+      MCP_BITMOD, MCP_CANCTRL,  ABORT_TX, ABORT_TX, /* request abort */
+      MCP_READ,   MCP_TXB0CTRL, 0x00u,              /* TXREQ clear */
+      MCP_READ,   MCP_TXB1CTRL, 0x00u,              //
+      MCP_READ,   MCP_TXB2CTRL, 0x00u,              //
+      MCP_BITMOD, MCP_CANCTRL,  ABORT_TX, 0x00u};   /* release ABAT */
+  assert_spi_tx_equals(expected, sizeof(expected));
+}
+
+void test_abort_tx_releases_abat_even_when_a_buffer_stays_pending(void) {
+  JHMCP2515 can(10u, 0u);
+  uint8_t rx_script[400];
+  memset(rx_script, MCP_TXB_TXREQ_M, sizeof(rx_script));
+  hal_mock_spi_reset();
+  hal_mock_spi_push_rx(0u, rx_script, sizeof(rx_script));
+  hal_mock_set_micros_step(100u);
+
+  TEST_ASSERT_EQUAL_UINT8(CAN_FAIL, can.abortTX());
+
+  uint8_t tx[1024] = {};
+  const size_t tx_len = hal_mock_spi_get_tx(0u, tx, sizeof(tx));
+  const uint8_t release[] = {MCP_BITMOD, MCP_CANCTRL, ABORT_TX, 0x00u};
+  TEST_ASSERT_TRUE(tx_len >= sizeof(release));
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(release, &tx[tx_len - sizeof(release)],
+                                sizeof(release));
+}
+
+/* ── Statuses of the provider operations ──────────────────────────────── */
+
+/* A controller that answers every byte with 0xFF (no chip on the bus, MISO
+ * pulled up) while time passes, so mode requests run into their 200 ms. */
+static void silent_edge(void *) {}
+static uint8_t silent_exchange(void *, uint8_t) {
+  hal_mock_set_millis(hal_millis() + 1u);
+  return 0xFFu;
+}
+static const hal_mock_spi_device_t kSilentChip = {silent_edge, silent_exchange,
+                                                  silent_edge};
+
+static hal_can_config_t fiesta_config(void) {
+  hal_can_config_t cfg = {};
+  cfg.backend = HAL_CAN_BACKEND_MCP2515;
+  cfg.mcp2515.cs_pin = 10u;
+  cfg.mcp2515.bitrate_hz = 500000u;
+  cfg.mcp2515.oscillator_hz = 8000000u;
+  cfg.mcp2515.one_shot_tx = true;
+  return cfg;
+}
+
+/* Context storage like the facade's; a failed init leaves it destroyed. */
+alignas(JHMCP2515) static unsigned char s_ctx[sizeof(JHMCP2515)];
+
+static hal_status_t provider_init(const hal_can_config_t &cfg) {
+  jh_can_caps_t caps = {};
+  hal_can_mode_t mode = HAL_CAN_MODE_NORMAL;
+  const hal_status_t st = P.init(s_ctx, &cfg, &caps, &mode);
+  if (st == HAL_OK) {
+    P.deinit(s_ctx);
+  }
+  return st;
+}
+
+/* Register file of an MCP2515 that answers READ, WRITE and BIT MODIFY,
+ * resets into configuration mode and reports in CANSTAT the operating mode
+ * CANCTRL requests. With stuck_osm the one-shot bit (CANCTRL.OSM) never
+ * reads back set. */
+struct RegisterChip {
+  uint8_t regs[128];
+  uint8_t instruction;
+  uint8_t address;
+  uint8_t mask;
+  uint8_t count;
+  bool stuck_osm;
+};
+
+static void chip_write(RegisterChip *chip, uint8_t addr, uint8_t value) {
+  addr &= 0x7Fu;
+  chip->regs[addr] = value;
+  if (addr == MCP_CANCTRL) {
+    if (chip->stuck_osm) {
+      chip->regs[MCP_CANCTRL] &= (uint8_t)~MODE_ONESHOT;
+    }
+    chip->regs[MCP_CANSTAT] = (uint8_t)(value & MODE_MASK);
+  }
+}
+
+static void chip_select(void *user) {
+  RegisterChip *chip = static_cast<RegisterChip *>(user);
+  chip->count = 0u;
+}
+
+static uint8_t chip_exchange(void *user, uint8_t mosi) {
+  RegisterChip *chip = static_cast<RegisterChip *>(user);
+  const uint8_t index = chip->count++;
+  if (index == 0u) {
+    chip->instruction = mosi;
+    if (mosi == MCP_RESET) {
+      memset(chip->regs, 0, sizeof(chip->regs));
+      chip->regs[MCP_CANCTRL] = MODE_CONFIG;
+      chip->regs[MCP_CANSTAT] = MODE_CONFIG;
+    }
+    return 0u;
+  }
+  if (index == 1u) {
+    chip->address = mosi;
+    return 0u;
+  }
+  switch (chip->instruction) {
+  case MCP_READ:
+    return chip->regs[chip->address++ & 0x7Fu];
+  case MCP_WRITE:
+    chip_write(chip, chip->address++, mosi);
+    return 0u;
+  case MCP_BITMOD:
+    if (index == 2u) {
+      chip->mask = mosi;
+    } else if (index == 3u) {
+      const uint8_t old = chip->regs[chip->address & 0x7Fu];
+      chip_write(chip, chip->address,
+                 (uint8_t)((old & ~chip->mask) | (mosi & chip->mask)));
+    }
+    return 0u;
+  default:
+    return 0u;
+  }
+}
+
+static void chip_deselect(void *) {}
+
+static const hal_mock_spi_device_t kRegisterChip = {chip_select, chip_exchange,
+                                                    chip_deselect};
+
+void test_init_reaches_normal_mode_with_one_shot_on_a_working_chip(void) {
+  static RegisterChip chip = {};
+  hal_mock_spi_reset();
+  hal_mock_spi_attach_device(0u, 10u, &kRegisterChip, &chip);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, provider_init(fiesta_config()));
+  TEST_ASSERT_EQUAL_HEX8(MCP_NORMAL, chip.regs[MCP_CANSTAT] & MODE_MASK);
+  TEST_ASSERT_EQUAL_HEX8(MODE_ONESHOT, chip.regs[MCP_CANCTRL] & MODE_ONESHOT);
+}
+
+void test_init_fails_when_one_shot_does_not_read_back(void) {
+  static RegisterChip chip = {};
+  chip.stuck_osm = true;
+  hal_mock_spi_reset();
+  hal_mock_spi_attach_device(0u, 10u, &kRegisterChip, &chip);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, provider_init(fiesta_config()));
+}
+
+void test_init_reports_a_bitrate_without_timing_before_touching_spi(void) {
+  hal_can_config_t cfg = fiesta_config();
+  cfg.mcp2515.bitrate_hz = 300000u;
+  hal_mock_spi_reset();
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, provider_init(cfg));
+  cfg.mcp2515.bitrate_hz = 500000u;
+  cfg.mcp2515.oscillator_hz = 12000000u;
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, provider_init(cfg));
+  uint8_t tx[4] = {};
+  TEST_ASSERT_EQUAL_size_t(0u, hal_mock_spi_get_tx(0u, tx, sizeof(tx)));
+}
+
+void test_init_of_a_controller_that_does_not_answer_is_an_io_error(void) {
+  hal_mock_spi_reset();
+  hal_mock_spi_attach_device(0u, 10u, &kSilentChip, nullptr);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, provider_init(fiesta_config()));
+}
+
+void test_a_mode_the_controller_never_reaches_is_a_timeout(void) {
+  JHMCP2515 can(10u, 0u);
+  hal_mock_spi_reset();
+  hal_mock_spi_attach_device(0u, 10u, &kSilentChip, nullptr);
+  /* The one-shot bit reads back set (0xFF); CANSTAT never shows NORMAL. */
+  TEST_ASSERT_EQUAL_INT(HAL_ETIMEOUT,
+                        P.apply_mode(&can, HAL_CAN_MODE_ONE_SHOT));
+  const hal_can_filter_t filter = {0x127u, HAL_CAN_STD_ID_MASK, 0u};
+  TEST_ASSERT_EQUAL_INT(HAL_ETIMEOUT, P.set_filter(&can, 0u, &filter));
+  /* The first failed mode request ends the call: one 200 ms wait, not one
+   * per mask and filter. */
+  const uint32_t started = hal_millis();
+  TEST_ASSERT_EQUAL_INT(HAL_ETIMEOUT, P.set_std_filters(&can, 0x7E0u, 0x7DFu));
+  TEST_ASSERT_TRUE(hal_millis() - started < 400u);
+  hal_mock_set_micros_step(100u); /* the abort wait before the mode change */
+  TEST_ASSERT_EQUAL_INT(HAL_ETIMEOUT, P.stop(&can));
+}
+
+void test_a_one_shot_bit_that_does_not_read_back_is_an_io_error(void) {
+  JHMCP2515 can(10u, 0u);
+  hal_mock_spi_reset();
+  hal_mock_spi_attach_device(0u, 10u, &kSilentChip, nullptr);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, P.apply_mode(&can, HAL_CAN_MODE_NORMAL));
+}
+
+void test_send_with_every_transmit_buffer_taken_is_busy(void) {
+  JHMCP2515 can(10u, 0u);
+  uint8_t rx_script[600];
+  memset(rx_script, MCP_TXB_TXREQ_M, sizeof(rx_script));
+  hal_mock_spi_reset();
+  hal_mock_spi_push_rx(0u, rx_script, sizeof(rx_script));
+  hal_mock_set_micros_step(100u);
+  TEST_ASSERT_EQUAL_INT(HAL_EBUSY, P.legacy_send(&can, 0x123u, 0u, nullptr));
+}
+
+void test_send_of_a_frame_that_never_leaves_is_a_timeout(void) {
+  JHMCP2515 can(10u, 0u);
+  uint8_t rx_script[200];
+  memset(rx_script, MCP_TXB_TXREQ_M, sizeof(rx_script));
+  memset(rx_script, 0, 18); /* free TXB0, then the frame writes */
+  hal_mock_spi_reset();
+  hal_mock_spi_push_rx(0u, rx_script, sizeof(rx_script));
+  hal_mock_set_micros_step(100u);
+  TEST_ASSERT_EQUAL_INT(HAL_ETIMEOUT, P.legacy_send(&can, 0x123u, 0u, nullptr));
+  const hal_can_frame_t frame = {0x123u, 0u, 0u, 0u, {}};
+  hal_mock_spi_reset();
+  hal_mock_spi_push_rx(0u, rx_script, sizeof(rx_script));
+  TEST_ASSERT_EQUAL_INT(HAL_ETIMEOUT, P.send_frame(&can, &frame));
+}
+
+void test_receive_without_a_frame_says_try_again(void) {
+  JHMCP2515 can(10u, 0u);
+  const uint8_t empty[8] = {}; /* READ STATUS: no RXnIF */
+  hal_mock_spi_reset();
+  hal_mock_spi_push_rx(0u, empty, sizeof(empty));
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, P.available(&can));
+  uint32_t id = 0u;
+  uint8_t len = 0u;
+  uint8_t data[HAL_CAN_MAX_DATA_LEN] = {};
+  hal_mock_spi_push_rx(0u, empty, sizeof(empty));
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, P.legacy_receive(&can, &id, &len, data));
+  hal_can_frame_t frame = {};
+  hal_mock_spi_push_rx(0u, empty, sizeof(empty));
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, P.receive_frame(&can, &frame));
+  const uint8_t waiting[2] = {0x00u, MCP_STAT_RX0IF};
+  hal_mock_spi_push_rx(0u, waiting, sizeof(waiting));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, P.available(&can));
 }
 
 int main(void) {
@@ -406,5 +691,18 @@ int main(void) {
   RUN_TEST(test_send_reports_failure_when_one_shot_sets_txerr);
   RUN_TEST(test_send_accepts_successful_normal_mode_retry_with_latched_errors);
   RUN_TEST(test_backend_send_propagates_one_shot_tx_failure);
+  RUN_TEST(test_send_timeout_clears_txreq_of_the_stuck_buffer);
+  RUN_TEST(test_send_after_long_preemption_reports_success_when_txreq_cleared);
+  RUN_TEST(test_abort_tx_releases_abat_after_buffers_drop_txreq);
+  RUN_TEST(test_abort_tx_releases_abat_even_when_a_buffer_stays_pending);
+  RUN_TEST(test_init_reaches_normal_mode_with_one_shot_on_a_working_chip);
+  RUN_TEST(test_init_fails_when_one_shot_does_not_read_back);
+  RUN_TEST(test_init_reports_a_bitrate_without_timing_before_touching_spi);
+  RUN_TEST(test_init_of_a_controller_that_does_not_answer_is_an_io_error);
+  RUN_TEST(test_a_mode_the_controller_never_reaches_is_a_timeout);
+  RUN_TEST(test_a_one_shot_bit_that_does_not_read_back_is_an_io_error);
+  RUN_TEST(test_send_with_every_transmit_buffer_taken_is_busy);
+  RUN_TEST(test_send_of_a_frame_that_never_leaves_is_a_timeout);
+  RUN_TEST(test_receive_without_a_frame_says_try_again);
   return UNITY_END();
 }

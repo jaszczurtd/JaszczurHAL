@@ -222,9 +222,13 @@ coverage in addition to JaszczurHAL's generated-consumer fixture.
 Device tests use the same VS Code tooling as user applications. Their outputs go in `.build/hardware/`.
 
 The default `runalltests.sh`, CTest configuration, and CI do not read or build
-this firmware. Run the commands in this section explicitly when the required
-devices are available. Optional host-side checks of fixture-specific files can
-be registered with `-DJH_ENABLE_HARDWARE_FIXTURE_CHECKS=ON`.
+this firmware: the feature-configuration lint, the documentation link and
+EN/PL checks, the duplicate-code gate and the generated-artifact snapshot all
+leave `tests/hardware` out. Run the commands in this section explicitly when
+the required devices are available. `-DJH_ENABLE_HARDWARE_FIXTURE_CHECKS=ON`
+registers the host-side checks of the fixtures: their files and READMEs, the
+feature configuration of every fixture, the links and translations of the
+fixture READMEs, and the bounded line reader of the serial verifiers.
 
 | Fixture | Coverage |
 |---|---|
@@ -242,6 +246,7 @@ be registered with `-DJH_ENABLE_HARDWARE_FIXTURE_CHECKS=ON`.
 | [`tests/hardware/rp_kv_power_loss`](../../../tests/hardware/rp_kv_power_loss/README.md) | Dual-bank KV recovery after interruption following erase, body write, verification and publication |
 | [`tests/hardware/rp_storage`](../../../tests/hardware/rp_storage/README.md) | EEPROM commit/persistence, LittleFS format/remount and cross-reset mounting |
 | [`tests/hardware/stm32_storage_scan`](../../../tests/hardware/stm32_storage_scan/README.md) | NUCLEO-G474RE: KV over the flash EEPROM reservation with persistence across a watchdog reset, the ADC scan ring under masked interrupts and during KV publications |
+| [`tests/hardware/stm32_fdcan_canhat`](../../../tests/hardware/stm32_fdcan_canhat/README.md) | NUCLEO-G474RE with the CAN-FD HAT: HSE clock tree, loopback of classic and CAN FD frames up to 1M/5M on three channels, send queue and events, filters changed while running, send timestamps, bus-off and recovery on a lone node, optional shared bus |
 | [`tests/hardware/rp_sdlogger`](../../../tests/hardware/rp_sdlogger/README.md) | Physical SPI SD mount, deterministic append, flush/close, reset/remount, content and EEPROM log-counter persistence |
 | [`tests/hardware/rp_ota`](../../../tests/hardware/rp_ota/README.md) | Discovery, authentication, transfer, trial/confirm, rollback, persistent-storage coexistence and USB/network recovery |
 | [`tests/hardware/lora_sx1262`](../../../tests/hardware/lora_sx1262/README.md) | Two-device SX1262 initialization, bidirectional raw packets, reliable-link lifecycle, and fragmented command-router request/response transactions on integrated LF or external HF pairs |

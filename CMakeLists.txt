@@ -173,6 +173,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/network/jh_public_network_backend_adapter.cpp
     ${SRC}/hal/network/ota/jh_ota_image.cpp
     ${SRC}/hal/network/ota/jh_ota_swap_engine.cpp
+    ${SRC}/hal/can/hal_can.cpp
     ${SRC}/hal/can/hal_can_util.cpp
     ${SRC}/hal/network/tls/BearSSL/jh_bearssl_engine.cpp
     ${SRC}/hal/network/tls/BearSSL/jh_bearssl_hal_tcp_io.cpp

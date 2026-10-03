@@ -5,6 +5,9 @@
 This example sends a CAN frame with ID `0x321` once per second and prints
 received frames to the serial console. The MCP2515 connects to SPI bus 0.
 The application polls for received data, so no interrupt pin is needed.
+The built-in LED toggles with every frame sent and goes off when a send fails.
+On NUCLEO-G474RE the LD2 LED is PA5, which this wiring uses as the SPI clock,
+so the example leaves it alone there.
 
 `HAL_ENABLE_MCP2515` enables the driver and its CAN and SPI dependencies.
 The wiring below covers RP2040 and STM32G474.
@@ -23,6 +26,7 @@ The wiring below covers RP2040 and STM32G474.
 | CS | GPIO17 | PB6, CN10 pin 17 / D10 |
 
 Use an MCP2515 module with a CAN transceiver and a terminated CAN bus.
-`hal_can_create()` enables one-shot transmission: a missing ACK causes the
-send attempt to fail rather than retry indefinitely. A controller on an
+`hal_can_create()` enables one-shot transmission: a missing ACK makes the
+send fail with `HAL_EIO` (printed in the log) rather than retry
+indefinitely. A controller on an
 otherwise disconnected bus will not receive that acknowledgement.

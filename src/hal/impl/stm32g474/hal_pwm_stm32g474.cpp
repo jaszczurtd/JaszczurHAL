@@ -64,6 +64,12 @@ static TimerState s_timer_state[PWM_TIMER_COUNT] = {};
 
 static const PwmPinMap *find_pin(uint8_t pin) {
   for (size_t i = 0; i < COUNTOF(kPinMap); i++) {
+#ifdef HAL_CAN_STM32G474_TIMESTAMP_TIM3
+    /* TIM3 counts FDCAN frame timestamps and is not available for PWM. */
+    if (kPinMap[i].timer == PWM_TIMER_TIM3) {
+      continue;
+    }
+#endif
     if (kPinMap[i].pin == pin) {
       return &kPinMap[i];
     }

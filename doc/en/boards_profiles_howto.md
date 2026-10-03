@@ -160,6 +160,41 @@ one `_IS_<VALUE>` flag per allowed value and a `_NAME` string; STM32 symbolic
 pins are encoded into the same integer pin IDs the HAL consumes. The full
 descriptor also reaches `jh_board_resolved.json` unchanged for tooling.
 
+## CAN channels
+
+A board that wires CAN transceivers to controllers lists them under
+`can.channels`, in the order applications number them:
+
+```json
+"can": {
+  "channels": [
+    { "controller": "stm32g474-fdcan", "instance": 1,
+      "rx": { "domain": "soc-gpio", "id": "PA11" },
+      "tx": { "domain": "soc-gpio", "id": "PA12" },
+      "standby": { "domain": "soc-gpio", "id": "PB11" },
+      "standbyActiveHigh": true,
+      "transceiver": "mcp2562fd", "maxBitrateHz": 5000000 }
+  ]
+}
+```
+
+`controller` must exist on every compatible target and `instance` is wired at
+most once. `standby` and `standbyActiveHigh` go together; `standbyActiveHigh`
+is the level that puts the transceiver in standby. `maxBitrateHz` is the
+highest bitrate the transceiver guarantees. Every signal must be a target pin
+used once and covered by a hard reservation; whether a pin can carry the
+instance is checked by the controller backend when the channel is created.
+The generator emits a count and one X-macro row per channel, read by
+`hal_can_board_config()`:
+
+```c
+#define HAL_BOARD_CAN_CHANNEL_COUNT 1
+#define HAL_BOARD_CAN_CHANNELS(X) X(STM32G474_FDCAN, 1u, 11u, 12u, 27u, 1, UINT32_C(5000000))
+```
+
+Boards without the section define a count of 0 and an empty table. A count
+above 2 also raises the default `HAL_CAN_MAX_INSTANCES`.
+
 Component IDs, supported build providers, and mutually exclusive component groups are defined in `config/tooling/board_components.json`. The board generator reads that file and produces CMake data included by `cmake/jh_board_components.cmake`.
 
 Every official build checks the resolved component list. An unknown component, provider mismatch, or two components from the same exclusion group causes configuration to fail. Build scripts can select sources using the exported `JH_BOARD_COMPONENT_<ID>` flags.
@@ -267,6 +302,17 @@ OTA tests, but remain experimental because jumper-wire assembly and one tested
 host of each type are not equivalent to a stable carrier design.
 
 For different Core1262 wiring, use the plain `pico` or `nucleo-g474re` profile with an explicit application descriptor. Do not select a composite profile whose fixed pin assignment differs from the physical assembly.
+
+The experimental `nucleo-g474re-canhat` profile describes a NUCLEO-G474RE with
+the [Embedded Garage](https://www.youtube.com/@embeddedGarage) CAN-FD HAT v1.2
+([shop](https://sklep.embeddedgarage.com/)). It declares the three FDCAN
+channels of CN5-CN7 with their MCP2562FD standby lines, hard-reserves them,
+the relay drivers K1-K4 (the gates have no pull-down, so any other use
+switches the relays) and the PF0/PF1 crystal, and soft-reserves the LEDs,
+12 V inputs and buttons. `HAL_LED_BUILTIN` is the RDY LED on PC1; PA5 drives
+both LD2 and a CAN2 LED. The board-owned `stm32g474-hse-24mhz` component
+selects the 160 MHz clock tree from the 24 MHz HSE with the FDCAN kernel
+clock at 80 MHz (`HAL_STM32G474_CLOCK_HSE_160MHZ`).
 
 The archive defines:
 

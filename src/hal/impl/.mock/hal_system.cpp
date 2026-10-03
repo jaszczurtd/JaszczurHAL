@@ -10,6 +10,7 @@
 
 static uint32_t s_millis = 0;
 static uint32_t s_micros = 0;
+static uint32_t s_micros_step = 0;
 static uint64_t s_micros64 = 0;
 static bool s_watchdog_fed = false;
 static bool s_caused_reboot = false;
@@ -22,7 +23,13 @@ static uint8_t s_device_uid[HAL_DEVICE_UID_BYTES] = {0xE6, 0x61, 0xA4, 0xD1,
 
 uint32_t hal_millis(void) { return s_millis; }
 
-uint32_t hal_micros(void) { return s_micros; }
+uint32_t hal_micros(void) {
+  const uint32_t now = s_micros;
+  s_micros += s_micros_step;
+  return now;
+}
+
+void hal_mock_set_micros_step(uint32_t step_us) { s_micros_step = step_us; }
 
 uint64_t hal_micros64(void) { return s_micros64; }
 

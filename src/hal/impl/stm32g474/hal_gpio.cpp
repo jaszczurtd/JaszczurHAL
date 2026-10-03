@@ -16,6 +16,7 @@
  * GPIO direction + digital read/write + EXTI interrupts are implemented.
  * STM32 EXTI routes one callback per line (0..15), selected by pin number.
  * ───────────────────────────────────────────────────────────────────────── */
+#include "port/stm32g474_nvic.h"
 #include "port/stm32g474_regs.h"
 
 static inline uint32_t pin_port(uint8_t pin) { return (uint32_t)(pin >> 4); }
@@ -63,13 +64,6 @@ static void exti_apply_priority(void) {
   NVIC_IPR8(EXTI4_IRQn) = hw_prio;
   NVIC_IPR8(EXTI9_5_IRQn) = hw_prio;
   NVIC_IPR8(EXTI15_10_IRQn) = hw_prio;
-}
-
-static void exti_enable_irq(uint32_t irqn) {
-  const uint32_t bank = irqn >> 5u;
-  const uint32_t bit = 1u << (irqn & 31u);
-  NVIC_ICPR(bank) = bit;
-  NVIC_ISER(bank) = bit;
 }
 
 static void exti_dispatch_line(uint32_t line) {
@@ -230,7 +224,7 @@ static hal_status_t stm32_gpio_attach(uint8_t pin,
 
   EXTI_IMR1 |= mask;
   exti_apply_priority();
-  exti_enable_irq(exti_irqn_for_line(line));
+  jh_stm32g474_nvic_unmask(exti_irqn_for_line(line));
   s_exti_owner[line] = owner_core;
   s_exti_attached[line] = true;
   return HAL_OK;

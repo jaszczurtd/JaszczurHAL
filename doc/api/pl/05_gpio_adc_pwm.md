@@ -227,8 +227,8 @@ wspólną częstotliwość i wartość `wrap`, ale niezależne wypełnienie. Uż
 przypisanych kanałów timera. Prosty PWM ustawia w miarę możliwości 1 kHz w
 granicach możliwości sprzętu. Backend używa jawnych stałych
 `JH_G474_TIMCLK1_HZ` /
-`JH_G474_TIMCLK2_HZ`. Obie wynoszą 170 MHz w bieżącym drzewie zegarów,
-ponieważ APB1 i APB2 działają bez preskalera; przyszłe zmiany APB muszą
+`JH_G474_TIMCLK2_HZ`. Obie wynoszą 170 MHz w domyślnym drzewie zegarów
+(160 MHz w drzewie HSE), ponieważ APB1 i APB2 działają bez preskalera; przyszłe zmiany APB muszą
 aktualizować stałe zegara wejściowego timera zgodnie z regułą mnożenia zegara
 timera STM32 przez 2.
 
@@ -365,10 +365,12 @@ void hal_pwm_freq_destroy(hal_pwm_freq_channel_t ch);
 brzegowych stosuje korekcję pseudo/slow-scale.
 
 **impl/stm32g474:** PWM TIM na poziomie rejestrów na zmapowanych kanałach
-TIM2/TIM3/TIM4/TIM15/TIM16/TIM17. Częstotliwość jest zasobem na poziomie
+TIM2/TIM3/TIM4/TIM15/TIM16/TIM17 (piny TIM3 odpadają, gdy
+`HAL_CAN_STM32G474_TIMESTAMP_TIM3` rezerwuje TIM3 na znaczniki czasu FDCAN).
+Częstotliwość jest zasobem na poziomie
 timera, więc wiele kanałów na tym samym TIM współdzieli tę samą częstotliwość
-i efektywny okres. Podobnie jak `hal_pwm`, wykorzystuje jawne stałe TIMCLK
-170 MHz, dzięki czemu częstotliwość próbkowania podawana przez DACless jest
+i efektywny okres. Podobnie jak `hal_pwm`, wykorzystuje jawne stałe TIMCLK,
+dzięki czemu częstotliwość próbkowania podawana przez DACless jest
 zgodna z konfiguracją timera. Wyjście PWM jest konfigurowane podczas
 `hal_pwm_freq_create()`, ale **nie jest uruchamiane** - skonfigurowanie funkcji
 GPIO lub włączenie kanału TIM jest odroczone do pierwszego wywołania
@@ -588,8 +590,8 @@ strumienia ponownie rezerwuje przetwornik.
 - **impl/stm32g474:** regularne konwersje niesymetryczne ADC1 z uruchamianiem
   regulatora dopiero przy pierwszym użyciu, kalibracją i walidacją mapowania
   pinu na kanał.
-  ADC12 jest taktowane synchronicznie z HCLK/4, czyli 42,5 MHz przy bieżącym
-  drzewie zegarów 170 MHz.
+  ADC12 jest taktowane synchronicznie z HCLK/4: 42,5 MHz w domyślnym drzewie
+  zegarów 170 MHz, 40 MHz w drzewie HSE.
 - **impl/esp32:** konwersja jednorazowa (oneshot) ESP-IDF ADC z leniwą
   konfiguracją jednostki/kanału i tłumieniem 12 dB. Akceptowane są wyłącznie
   piny obsługujące ADC, które profil płytki oznacza jako wyprowadzone lub

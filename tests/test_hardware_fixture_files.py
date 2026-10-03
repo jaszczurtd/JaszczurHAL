@@ -7,7 +7,9 @@ import importlib.util
 import json
 from pathlib import Path
 import re
+import subprocess
 import sys
+from unittest import mock
 
 from source_assertions import source_has_fragment
 
@@ -15,7 +17,21 @@ from source_assertions import source_has_fragment
 from repo_root import repo_root  # noqa: E402
 
 ROOT = repo_root(sys.argv, __file__)
+sys.path.insert(0, str(ROOT))
+
+from scripted_serial_port import ScriptedPort  # noqa: E402
+from vscode.runtime import serial_io  # noqa: E402
+
 HARDWARE = ROOT / "tests" / "hardware"
+# Verifiers that read request/response lines through the shared reader.
+LINE_VERIFIERS = (
+    "rp_flash_transaction/verify_flash_transaction.py",
+    "rp_freertos_smp/verify_freertos_smp.py",
+    "rp_kv_power_loss/verify_kv_power_loss.py",
+    "rp_ota/verify_ota.py",
+    "rp_storage/verify_storage.py",
+    "rp_usb_multicore/verify_usb_multicore.py",
+)
 GAMEPAD_DATA = (
     ROOT
     / "tests"
@@ -399,6 +415,48 @@ def check_esp32s3_phase2() -> None:
     )
 
 
+def run_script(*arguments: str) -> None:
+    result = subprocess.run(
+        [sys.executable, *arguments], cwd=ROOT, check=False,
+        capture_output=True, text=True,
+    )
+    require(
+        result.returncode == 0,
+        f"{arguments[0]} failed:\n{result.stdout}{result.stderr}",
+    )
+
+
+def check_feature_configs() -> None:
+    """The default lint leaves tests/hardware out; check the fixtures here."""
+    run_script(
+        "scripts/generate_hal_features.py", "--lint", "--effective",
+        "--input-root", str(HARDWARE), "--include-hardware-fixtures",
+    )
+
+
+def check_fixture_documentation() -> None:
+    """Links and EN/PL parity of the fixture READMEs and the links into them."""
+    run_script("scripts/check_documentation_links.py", str(ROOT),
+               "--include-hardware-fixtures")
+    run_script("scripts/check_documentation_i18n_parity.py", str(ROOT),
+               "--include-hardware-fixtures")
+
+
+def check_line_verifiers() -> None:
+    """Verifiers give up at their deadline even while bytes keep arriving."""
+    for relative in LINE_VERIFIERS:
+        module = load_module(Path(relative).stem, HARDWARE / relative)
+        port = ScriptedPort(b"x", step=0.05, repeat=True)
+        with mock.patch.object(serial_io.time, "monotonic", port.clock):
+            try:
+                module.read_line(port, 0.2)
+            except TimeoutError:
+                pass
+            else:
+                raise AssertionError(f"{relative}: read_line did not time out")
+        require(port.now < 0.3, f"{relative}: read_line overran its deadline")
+
+
 check_documentation_index()
 check_build_layout()
 check_bluetooth_stream()
@@ -406,3 +464,6 @@ check_rp_manifests()
 check_bluetooth_stage1()
 check_bluetooth_gamepad()
 check_esp32s3_phase2()
+check_feature_configs()
+check_fixture_documentation()
+check_line_verifiers()

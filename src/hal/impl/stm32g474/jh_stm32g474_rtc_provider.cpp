@@ -12,6 +12,7 @@
 
 #include "hal/system/hal_sync.h"
 #include "hal/system/hal_system.h"
+#include "port/stm32g474_nvic.h"
 #include "port/stm32g474_regs.h"
 #include "port/stm32g474_rtc_codec.h"
 #include "port/stm32g474_rtc_wakeup.h"
@@ -256,7 +257,7 @@ rtc_write_calendar(const jh_stm32g474_rtc_context_t *context,
 }
 
 static void rtc_alarm_irq_disable(void) {
-  NVIC_ICER(RTC_Alarm_IRQn / 32u) = 1u << (RTC_Alarm_IRQn % 32u);
+  jh_stm32g474_nvic_disable(RTC_Alarm_IRQn);
   EXTI_IMR1 &= ~JH_G474_RTC_ALARM_EXTI_LINE;
   rtc_write_enable();
   RTC_CR &= ~RTC_CR_ALRAIE;
@@ -264,7 +265,7 @@ static void rtc_alarm_irq_disable(void) {
 }
 
 static void rtc_wakeup_irq_disable(void) {
-  NVIC_ICER(RTC_WKUP_IRQn / 32u) = 1u << (RTC_WKUP_IRQn % 32u);
+  jh_stm32g474_nvic_disable(RTC_WKUP_IRQn);
   EXTI_IMR1 &= ~JH_G474_RTC_WAKEUP_EXTI_LINE;
   rtc_write_enable();
   RTC_CR &= ~RTC_CR_WUTIE;
@@ -418,9 +419,7 @@ static hal_status_t internal_set_interrupt_enable(void *context,
     EXTI_PR1 = JH_G474_RTC_ALARM_EXTI_LINE;
     EXTI_RTSR1 |= JH_G474_RTC_ALARM_EXTI_LINE;
     EXTI_IMR1 |= JH_G474_RTC_ALARM_EXTI_LINE;
-    NVIC_ICPR(RTC_Alarm_IRQn / 32u) = 1u << (RTC_Alarm_IRQn % 32u);
-    NVIC_IPR8(RTC_Alarm_IRQn) = JH_NVIC_PRIO_RTC;
-    NVIC_ISER(RTC_Alarm_IRQn / 32u) = 1u << (RTC_Alarm_IRQn % 32u);
+    jh_stm32g474_nvic_enable(RTC_Alarm_IRQn, JH_NVIC_PRIO_RTC);
   }
 
   const bool wakeup_enable = (irq_mask & HAL_RTC_IRQ_WAKEUP) != 0u;
@@ -433,9 +432,7 @@ static hal_status_t internal_set_interrupt_enable(void *context,
     EXTI_PR1 = JH_G474_RTC_WAKEUP_EXTI_LINE;
     EXTI_RTSR1 |= JH_G474_RTC_WAKEUP_EXTI_LINE;
     EXTI_IMR1 |= JH_G474_RTC_WAKEUP_EXTI_LINE;
-    NVIC_ICPR(RTC_WKUP_IRQn / 32u) = 1u << (RTC_WKUP_IRQn % 32u);
-    NVIC_IPR8(RTC_WKUP_IRQn) = JH_NVIC_PRIO_RTC;
-    NVIC_ISER(RTC_WKUP_IRQn / 32u) = 1u << (RTC_WKUP_IRQn % 32u);
+    jh_stm32g474_nvic_enable(RTC_WKUP_IRQn, JH_NVIC_PRIO_RTC);
   }
   return HAL_OK;
 }
@@ -477,7 +474,7 @@ static hal_status_t internal_get_and_clear_flags(void *context,
     EXTI_PR1 = JH_G474_RTC_ALARM_EXTI_LINE;
   }
   if (wakeup) {
-    NVIC_ICER(RTC_WKUP_IRQn / 32u) = 1u << (RTC_WKUP_IRQn % 32u);
+    jh_stm32g474_nvic_disable(RTC_WKUP_IRQn);
     EXTI_IMR1 &= ~JH_G474_RTC_WAKEUP_EXTI_LINE;
     rtc_write_enable();
     RTC_CR &= ~(RTC_CR_WUTE | RTC_CR_WUTIE);
@@ -638,9 +635,7 @@ static hal_status_t internal_wakeup_arm(void *context, uint64_t timeout_us,
   EXTI_PR1 = JH_G474_RTC_WAKEUP_EXTI_LINE;
   EXTI_RTSR1 |= JH_G474_RTC_WAKEUP_EXTI_LINE;
   EXTI_IMR1 |= JH_G474_RTC_WAKEUP_EXTI_LINE;
-  NVIC_ICPR(RTC_WKUP_IRQn / 32u) = 1u << (RTC_WKUP_IRQn % 32u);
-  NVIC_IPR8(RTC_WKUP_IRQn) = JH_NVIC_PRIO_RTC;
-  NVIC_ISER(RTC_WKUP_IRQn / 32u) = 1u << (RTC_WKUP_IRQn % 32u);
+  jh_stm32g474_nvic_enable(RTC_WKUP_IRQn, JH_NVIC_PRIO_RTC);
   return HAL_OK;
 }
 

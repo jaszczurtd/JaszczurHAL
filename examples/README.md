@@ -44,7 +44,7 @@ See each project's README for wiring and hardware test coverage.
 | `18_freertos_suite` | Run FreeRTOS tasks; add WiFi, cJSON, BSD sockets, an HTTP server, an HTTP/HTTPS client, files, WebSocket, and a console. Telegram support is compiled in but sends no notifications in this example. | R0, RA, RV, S, E | R0, S, E | `network` on R0, RA, S, E; default check on R0, S, E |
 | `19_touch` | Read touch input from TSC2007 and STMPE610. | R0, RA, RV, S, E | R0, S, E | - |
 | `20_irsmall_decoder` | Receive and decode infrared signals with IRsmall. | R0, RA, RV, S, E | R0, S, E | - |
-| `21_stm32g474_fdcan_native` | Send and receive frames through the STM32G474 built-in FDCAN controller. | S | S | - |
+| `21_stm32g474_fdcan_native` | Send and receive CAN FD frames on every board channel through the STM32G474 built-in FDCAN controllers; loopback without wiring by default. | S | S | - |
 | `22_rfid_nfc` | Read card identifiers through MFRC522 and PN532. | R0, RA, RV, S, E | R0, S, E | - |
 | `23_io_pmic` | Control an RGB LED, I/O expander, and DAC, and read ADP5360 power status. | R0, RA, RV, S, E | R0, S, E | - |
 | `24_epd_display` | Draw a test pattern and refresh a 200 × 200 e-paper display. | R0, RA, RV, S, E | R0, S, E | - |

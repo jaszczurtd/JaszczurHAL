@@ -172,8 +172,8 @@ obsługiwane.
   są nieaktualne znaczniki anulowania. Sekwencja przypisana do danego slotu
   powtarza się po 32767 alokacjach.
 - **impl/stm32g474:** TIM6 obsługuje alarmy jednorazowe
-  1 MHz, taktowany z jawnie określonego zegara timera APB1 o częstotliwości
-  170 MHz. Długie opóźnienia są dzielone na fragmenty mieszczące się w
+  1 MHz, taktowany z jawnie określonego zegara timera APB1
+  (`JH_G474_TIMCLK1_HZ`). Długie opóźnienia są dzielone na fragmenty mieszczące się w
   16-bitowych okresach TIM6, wartości zwracane z callbacku większe od zera
   ponownie planują ten sam alarm, a pule programowe zapewniają takie samo
   publiczne zachowanie pul/anulowania jak RP2040.
@@ -473,7 +473,14 @@ Funkcje interwałowe pozwalają uruchamiać czynności okresowo w pętli, bez bl
   aplikacji, więc późniejsze włączenie watchdoga nie usuwa informacji o
   przyczynie poprzedniego restartu.
 - **impl/stm32g474:** Podczas uruchamiania PLL generuje SYSCLK 170 MHz z HSI16.
-  Magistrale AHB, APB1 i APB2 pracują bez preskalera. W trybie bare metal
+  Magistrale AHB, APB1 i APB2 pracują bez preskalera. Płytki, których profil
+  wybiera komponent `stm32g474-hse-24mhz` (`nucleo-g474re-canhat`), definiują
+  `HAL_STM32G474_CLOCK_HSE_160MHZ` i pracują zamiast tego z 160 MHz z kwarcu
+  HSE 24 MHz, z zegarem jądra FDCAN 80 MHz z PLL Q; gdy HSE nie
+  wstanie w ciągu 100 ms, start buduje te same częstotliwości z HSI16.
+  Wszystkie sterowniki biorą zegary z `JH_G474_*_HZ` w
+  `port/stm32g474_clock.h`, więc podane niżej wartości dla 170 MHz skalują
+  się z drzewem. W trybie bare metal
   64-bitowy licznik milisekund jest zwiększany przez SysTick. W konfiguracjach z
   FreeRTOS każdy tick przekazany przez kernel zwiększa ten licznik. Stan
   licznika jest zapisywany w dwóch buforach. W trybie
@@ -503,8 +510,8 @@ Funkcje interwałowe pozwalają uruchamiać czynności okresowo w pętli, bez bl
   stosowane jest aktywne oczekiwanie oparte na DWT. Informacje o konfiguracji
   systemu łączą pojemności zapisane w deskryptorach targetu i płytki z
   zakresami heapu, stosu, EEPROM i LittleFS wynikającymi z wybranego runtime i
-  skryptu linkera. Częstotliwość CPU i głównego zegara peryferiów wynosi 170
-  MHz. Sprzętowy watchdog korzysta z IWDG taktowanego nominalnym zegarem LSI
+  skryptu linkera. Częstotliwość CPU i głównego zegara peryferiów to SYSCLK
+  drzewa (170 albo 160 MHz). Sprzętowy watchdog korzysta z IWDG taktowanego nominalnym zegarem LSI
   32 kHz. Wybiera najkrótszy preskaler mieszczący żądany czas i obsługuje
   timeouty od 1 do 32768 ms. `pause_on_debug` steruje bitem zamrażającym IWDG w
   DBGMCU. Przy określaniu, czy restart wywołał watchdog, używana jest flaga
@@ -1082,8 +1089,9 @@ resetu.
 
 Na STM32G474 przejścia Sleep/STOP z wybudzeniem RTC zachowują monotoniczność
 `hal_micros64()` i `hal_millis()`, dodając zaprogramowany interwał RTC,
-podczas gdy SysTick jest zatrzymany. Drzewo PLL 170 MHz oraz SysTick są
-przywracane przed powrotem do wywołującego.
+podczas gdy SysTick jest zatrzymany. Drzewo PLL (z uruchomieniem HSE i jego
+wariantem zastępczym) oraz SysTick są przywracane przed powrotem do
+wywołującego.
 `can_compensate_monotonic_time` informuje o dostępności tej korekty na
 podstawie RTC. Jeśli tryb STOP zakończy się wyłącznie przez przerwanie, nie ma
 precyzyjnego źródła informacji o upływie czasu, więc wyniku nie można traktować

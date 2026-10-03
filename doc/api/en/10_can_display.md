@@ -24,6 +24,8 @@ Send and receive CAN frames through an MCP2515, MCP251XFD, or the STM32G474 inte
 #define HAL_CAN_EXT_ID_MASK 0x1FFFFFFFu
 #define HAL_CAN_MAX_FILTERS 6u
 #define HAL_CAN_NO_INT_PIN   0xFF
+#define HAL_CAN_ID_EXTENDED_FLAG 0x80000000u
+#define HAL_CAN_ID_RTR_FLAG      0x40000000u
 
 // Opaque handle - one per physical CAN controller/backend instance
 typedef hal_can_impl_t *hal_can_t;
@@ -69,7 +71,14 @@ enum {
     HAL_CAN_MODE_LISTEN_ONLY = 0x02u,
     HAL_CAN_MODE_FD          = 0x04u,
     HAL_CAN_MODE_ONE_SHOT    = 0x08u,
-    HAL_CAN_MODE_SLEEP       = 0x10u
+    HAL_CAN_MODE_SLEEP       = 0x10u,
+    HAL_CAN_MODE_EXTERNAL_LOOPBACK = 0x20u
+};
+
+enum {
+    HAL_CAN_TDC_AUTO   = 0u,
+    HAL_CAN_TDC_OFF    = 1u,
+    HAL_CAN_TDC_MANUAL = 2u
 };
 
 typedef enum {
@@ -101,16 +110,27 @@ typedef struct {
     uint32_t data_bitrate_hz;
     uint32_t oscillator_hz;
     uint32_t spi_clock_hz;
+    uint16_t arbitration_sample_point_permille;
+    uint16_t data_sample_point_permille;
     bool enable_fd;
     bool one_shot_tx;
     bool sleep_wakeup;
 } hal_can_mcp251xfd_config_t;
 
 typedef struct {
+    uint8_t instance;
     uint8_t rx_pin;
     uint8_t tx_pin;
+    bool has_standby;
+    uint8_t standby_pin;
+    bool standby_high;
     uint32_t arbitration_bitrate_hz;
     uint32_t data_bitrate_hz;
+    uint16_t arbitration_sample_point_permille;
+    uint16_t data_sample_point_permille;
+    uint8_t tdc_mode;
+    uint8_t tdc_offset;
+    uint32_t transceiver_max_bitrate_hz;
     bool enable_fd;
     bool one_shot_tx;
 } hal_can_stm32g474_fdcan_config_t;
@@ -128,90 +148,111 @@ typedef struct {
 // the compatibility default, followed by MCP251XFD, then STM32G474 FDCAN.
 // MCP2515: SPI bus 0, CS pin 0, 500 kbps / 8 MHz crystal.
 // MCP251XFD: SPI bus 0, CS pin 0, 500 kbit/s arbitration, 2 Mbit/s data.
-// STM32G474 FDCAN: PA11/PA12, 500 kbit/s arbitration, 2 Mbit/s data.
+// STM32G474 FDCAN: FDCAN1 on PA11/PA12, 500 kbit/s arbitration, 2 Mbit/s data.
 hal_can_config_t hal_can_default_config(void);
 
+// Config of CAN channel `channel` (0-based) the board profile declares:
+// controller, instance, pins, standby, transceiver limit, 500 kbit/s with a
+// 2 Mbit/s FD data phase. HAL_ENOENT when the board has no such channel.
+hal_status_t hal_can_board_config(uint8_t channel, hal_can_config_t *out);
+
+// Every call that can fail returns hal_status_t: HAL_OK, or the error that
+// says what went wrong (see "Status results" below).
+
 // Create and init a CAN channel from config. NULL uses default config.
-// Returns NULL on failure (chip not responding or pool exhausted)
-hal_can_t hal_can_create(const hal_can_config_t *cfg);
+hal_status_t hal_can_create(const hal_can_config_t *cfg, hal_can_t *out);
 
 // Release all resources; handle must not be used after this call
 void hal_can_destroy(hal_can_t h);
 
-// Send a CAN frame
-bool hal_can_send(hal_can_t h, uint32_t id, uint8_t len, const uint8_t *data);
+// Send a classic CAN frame and wait for it: 11-bit id, or 29-bit with
+// HAL_CAN_ID_EXTENDED_FLAG; HAL_CAN_ID_RTR_FLAG sends a remote frame.
+hal_status_t hal_can_send(hal_can_t h, uint32_t id, uint8_t len,
+                          const uint8_t *data);
 
-// Send a CAN/CAN FD frame. MCP2515 accepts only classic CAN frames;
-// MCP251XFD and STM32G474 FDCAN accept CAN FD when enable_fd=true.
-bool hal_can_send_frame(hal_can_t h, const hal_can_frame_t *frame);
+// Send a CAN/CAN FD frame and wait for it. CAN FD needs HAL_CAN_MODE_FD in
+// the current mode; MCP2515 accepts only classic CAN frames.
+hal_status_t hal_can_send_frame(hal_can_t h, const hal_can_frame_t *frame);
 
-// Read the next available frame (returns false if no frame ready)
-bool hal_can_receive(hal_can_t h, uint32_t *id, uint8_t *len, uint8_t *data);
+// Read the next classic frame; HAL_EAGAIN when none waits. Extended and
+// remote frames carry the HAL_CAN_ID_* flags in id.
+hal_status_t hal_can_receive(hal_can_t h, uint32_t *id, uint8_t *len,
+                             uint8_t *data);
 
-// Read the next available CAN/CAN FD frame.
-bool hal_can_receive_frame(hal_can_t h, hal_can_frame_t *frame);
+// Read the next CAN/CAN FD frame; HAL_EAGAIN when none waits.
+hal_status_t hal_can_receive_frame(hal_can_t h, hal_can_frame_t *frame);
 
 // Start/stop and controller modes. New handles are started by default.
-bool hal_can_start(hal_can_t h);
-bool hal_can_stop(hal_can_t h);
-bool hal_can_set_mode(hal_can_t h, hal_can_mode_t mode);
-bool hal_can_get_mode(hal_can_t h, hal_can_mode_t *mode);
+hal_status_t hal_can_start(hal_can_t h);
+hal_status_t hal_can_stop(hal_can_t h);
+hal_status_t hal_can_set_mode(hal_can_t h, hal_can_mode_t mode);
+hal_status_t hal_can_get_mode(hal_can_t h, hal_can_mode_t *mode);
 
 // Controller state and diagnostics.
-bool hal_can_get_state(hal_can_t h, hal_can_state_t *state);
-bool hal_can_get_error_counters(hal_can_t h,
-                                hal_can_error_counters_t *counters);
+hal_status_t hal_can_get_state(hal_can_t h, hal_can_state_t *state);
+hal_status_t hal_can_get_error_counters(hal_can_t h,
+                                        hal_can_error_counters_t *counters);
 
-// Non-blocking check: true if at least one frame is waiting
-bool hal_can_available(hal_can_t h);
+// Non-blocking check: HAL_OK when a frame waits, HAL_EAGAIN when none does.
+hal_status_t hal_can_available(hal_can_t h);
 
 // Configure hardware RX filters for two accepted standard 11-bit IDs.
 // Non-matching IDs are dropped by backends with hardware filter support.
-// Returns false if backend mask/filter programming fails.
-bool hal_can_set_std_filters(hal_can_t h, uint32_t id0, uint32_t id1);
+hal_status_t hal_can_set_std_filters(hal_can_t h, uint32_t id0, uint32_t id1);
 
-// Configure one acceptance-filter slot with id/mask/flags.
-bool hal_can_set_filter(hal_can_t h, uint8_t index,
-                        const hal_can_filter_t *filter);
+// Configure one acceptance-filter slot with id/mask/flags; without room for
+// the new filter the old one stays and the call returns HAL_ENOMEM.
+hal_status_t hal_can_set_filter(hal_can_t h, uint8_t index,
+                                const hal_can_filter_t *filter);
 
-// Retry-friendly create helper with optional IRQ pin setup.
-hal_can_t hal_can_create_with_retry(const hal_can_config_t *cfg,
-                                    uint8_t int_pin,
-                                    void (*isr)(void),
-                                    int max_retries,
-                                    void (*retry_idle)(void));
+// Retry-friendly create helper with optional IRQ pin setup; returns the error
+// of the last attempt.
+hal_status_t hal_can_create_with_retry(const hal_can_config_t *cfg,
+                                       uint8_t int_pin,
+                                       void (*isr)(void),
+                                       int max_retries,
+                                       void (*retry_idle)(void),
+                                       hal_can_t *out);
 
-// Drain pending RX frames and invoke callback for each valid one.
-int hal_can_process_all(hal_can_t h, hal_can_frame_cb_t cb);
+// Drain pending RX frames and invoke callback for each valid one. HAL_OK once
+// the buffer is empty, or the receive error that ended the drain; delivered
+// (may be NULL) gets the number of frames handed to cb.
+hal_status_t hal_can_process_all(hal_can_t h, hal_can_frame_cb_t cb,
+                                 uint32_t *delivered);
 
 // CAN/CAN FD DLC helpers. bytes_to_dlc() rounds up to the next representable
 // CAN FD length and returns HAL_CAN_DLC_INVALID for >64 bytes.
 uint8_t hal_can_dlc_to_bytes(uint8_t dlc);
 uint8_t hal_can_bytes_to_dlc(uint8_t bytes);
-bool hal_can_validate_frame(const hal_can_frame_t *frame);
-bool hal_can_validate_filter(const hal_can_filter_t *filter);
-bool hal_can_frame_matches_filter(const hal_can_frame_t *frame,
-                                  const hal_can_filter_t *filter);
+// HAL_OK or HAL_EINVAL.
+hal_status_t hal_can_validate_frame(const hal_can_frame_t *frame);
+hal_status_t hal_can_validate_filter(const hal_can_filter_t *filter);
+// HAL_OK with *matches set, HAL_EINVAL for an invalid frame or filter.
+hal_status_t hal_can_frame_matches_filter(const hal_can_frame_t *frame,
+                                          const hal_can_filter_t *filter,
+                                          bool *matches);
 
 // Encode temperature in °C as signed int8 CAN payload byte.
 // Truncates toward zero, saturates to [-128, 127], returns two's complement byte.
 uint8_t hal_can_encode_temp_i8(float temp_c);
 ```
 
-- **shared thematic implementation:** Target `hal_can.cpp` files own the CAN facade, handle lifetime,
-  mutexing and backend dispatch. MCP2515-specific operations live in
+- **shared thematic implementation:** `hal/can/hal_can.cpp` owns the CAN facade, handle lifetime,
+  mutexing and backend dispatch for every target; the per-target `hal_can.cpp`
+  files under `impl/` are empty build anchors. MCP2515-specific operations live in
   `hal/can/mcp2515/hal_can_mcp2515.*`, backed by the HAL-only MCP2515
   register/SPI driver in `hal/can/mcp2515/mcp2515_driver.*`. MCP251XFD
   operations live in `hal/can/mcp251xfd/hal_can_mcp251xfd.*`, backed by the
   HAL-only polling register/SPI driver in `hal/can/mcp251xfd/mcp251xfd_driver.*`.
   STM32G474 native FDCAN operations live in
-  `impl/stm32g474/hal_can_stm32g474_fdcan.*` and program FDCAN1 registers plus
-  the fixed STM32G4 message RAM layout directly.
+  `impl/stm32g474/hal_can_stm32g474_fdcan.*` and program the registers of
+  FDCAN1, FDCAN2 or FDCAN3 plus the fixed STM32G4 message RAM of that instance
+  directly.
 - **Backend selection:** The CAN API takes `hal_can_config_t`. Enable
   `HAL_ENABLE_MCP2515` for the classic MCP2515 backend or
   `HAL_ENABLE_MCP251XFD` for MCP2517FD/MCP2518FD CAN FD support. Both external
   controller flags pull in the CAN facade plus SPI dependency. Enable
-  `HAL_ENABLE_STM32G474_FDCAN` for native FDCAN1 on STM32G474; this flag pulls in
+  `HAL_ENABLE_STM32G474_FDCAN` for the native FDCAN controllers of STM32G474; this flag pulls in
   only the CAN facade and is compile-time rejected on other targets. Plain
   `HAL_ENABLE_CAN` no longer propagates SPI by itself and is treated as a facade
   flag that requires a backend.
@@ -229,32 +270,230 @@ uint8_t hal_can_encode_temp_i8(float temp_c);
 - **Modes and diagnostics:** New handles are started by default.
   `hal_can_stop()` puts the controller into a non-participating/configuration
   mode and `hal_can_start()` reapplies the stored mode. MCP2515 supports normal,
-  loopback, listen-only, sleep and one-shot mode flags. MCP251XFD also supports
-  `HAL_CAN_MODE_FD` on FD-capable handles; STM32G474 FDCAN supports FD, loopback,
-  listen-only, one-shot and sleep/configuration transitions through CCCR/TEST.
+  loopback, listen-only, sleep and one-shot mode flags. MCP251XFD and
+  STM32G474 FDCAN support FD, internal and external loopback, listen-only,
+  one-shot and sleep.
+  `HAL_CAN_MODE_LOOPBACK` is an internal loopback on every backend: own frames
+  come back and the bus is not driven. `HAL_CAN_MODE_EXTERNAL_LOOPBACK`
+  (STM32G474 FDCAN) also sends them on the bus and ignores missing ACKs; the
+  frames still come back from inside the controller, so the mode shows them to
+  a bus analyser but does not test the receive path through the transceiver.
   State/error-counter APIs map backend controller registers into
   `hal_can_state_t` and `hal_can_error_counters_t`.
+- **Board channels:** a board profile with a `can.channels` section (such as
+  `nucleo-g474re-canhat`) lists its wired channels; `hal_can_board_config()`
+  turns channel *n* into a ready config, which the application can adjust
+  before `hal_can_create()`. `HAL_CAN_MAX_INSTANCES` defaults to the number of
+  board channels when that exceeds 2; with every handle in use
+  `hal_can_create()` returns `HAL_ENOMEM`.
+- **STM32G474 FDCAN:** `instance` selects FDCAN1..3 (0 means FDCAN1); one
+  handle per instance, a second `hal_can_create()` for the same instance
+  returns `HAL_EBUSY`. `rx_pin`/`tx_pin` 0 select PA11/PA12, PB12/PB13 or PA8/PB4;
+  other pins must be ones the instance can be routed to. With `has_standby`
+  the backend drives the transceiver standby input: standby while the channel
+  is configured, stopped, asleep or destroyed, active 40 µs before the
+  controller joins the bus. Bit timing comes from the FDCAN kernel clock
+  (PCLK1 at 170 MHz, or PLL Q at 80 MHz on the HSE clock tree): the bitrate must be met within 0.5 %, the sample point
+  defaults to 80 % (arbitration) and 75 % (data), and the data phase uses the
+  arbitration prescaler when that gives an exact rate. A rate the clock cannot
+  make fails `hal_can_create()` with `HAL_EUNSUPPORTED`; an arbitration rate
+  above 1 Mbit/s, a data rate below the arbitration rate or above
+  `transceiver_max_bitrate_hz` with `HAL_EINVAL`. At 170 MHz this rules out 4
+  and 8 Mbit/s data phases, which 80 MHz makes. Transmitter delay
+  compensation (`HAL_CAN_TDC_AUTO`) switches on above 1 Mbit/s when the data
+  prescaler is 1 or 2, with the secondary sample point at the regular one.
+  `hal_can_send_frame()` waits until the frame has left: a failed one-shot
+  attempt returns `HAL_EIO`, bus-off `HAL_EBUS` and a timeout of 20 frame
+  times (at least 5 ms) `HAL_ETIMEOUT`; a frame reported as failed is
+  dropped, never sent later. A bus-off controller
+  starts its recovery on the next send, receive or state call. Filters are
+  written while the controller runs, so changing them does not take the node
+  off the bus.
 - **Filters:** `hal_can_set_filter()` programs one id/mask slot. `HAL_CAN_MAX_FILTERS`
   (6) is the *minimum* number of hardware acceptance filters every backend
   guarantees, so it is the portable slot count to rely on. MCP2515 maps them onto
-  its six hardware filters; MCP251XFD and STM32G474 FDCAN map them onto the first
-  six hardware filter objects routed to RX FIFO 0 (and may have more in hardware). `hal_can_set_std_filters()` remains a
+  its six hardware filters; MCP251XFD maps them onto the first six hardware filter
+  objects routed to its RX FIFO 1, STM32G474 FDCAN onto free standard or
+  extended filter elements routed to RX FIFO 0 (both have more in hardware). `hal_can_set_std_filters()` remains a
   convenience helper for two exact 11-bit IDs. Programming an MCP2515 filter also
   clears receive-any mode on both hardware RX buffers so unmatched frames are
   rejected before consuming either buffer.
   `hal_can_create_with_retry()` retries init up to `max_retries + 1` attempts and can auto-attach an IRQ handler when `int_pin != HAL_CAN_NO_INT_PIN`.
-  `hal_can_process_all()` repeatedly calls `hal_can_receive()` and forwards only frames with `id != 0` and `len > 0`.
+  `hal_can_process_all()` repeatedly calls `hal_can_receive()` and forwards only frames with `id != 0` and `len > 0`; a receive error other than `HAL_EAGAIN` ends the drain and comes back as its result.
   `hal_can_encode_temp_i8()` is a small shared wire-format helper for signed 1-byte temperature fields on CAN frames. It truncates the float input toward zero, saturates to `int8_t` range, and returns the matching two's complement payload byte.
+
+**Filters beyond the classic slots** (STM32G474 FDCAN):
+
+```c
+enum { HAL_CAN_FILTER_MASK = 0, HAL_CAN_FILTER_RANGE = 1, HAL_CAN_FILTER_DUAL = 2 };
+enum { HAL_CAN_FILTER_ACCEPT = 0, HAL_CAN_FILTER_REJECT = 1 };
+#define HAL_CAN_FILTER_FIRST_ADDED HAL_CAN_MAX_FILTERS
+
+typedef struct {
+    uint8_t type;   /* HAL_CAN_FILTER_MASK, _RANGE or _DUAL */
+    uint8_t action; /* HAL_CAN_FILTER_ACCEPT or _REJECT */
+    uint8_t flags;  /* HAL_CAN_FILTER_EXTENDED */
+    uint32_t id1;   /* ID, range start or first ID */
+    uint32_t id2;   /* mask, range end or second ID */
+} hal_can_filter_ex_t;
+
+hal_status_t hal_can_add_filter(hal_can_t h, const hal_can_filter_ex_t *filter,
+                                uint8_t *index);
+hal_status_t hal_can_remove_filter(hal_can_t h, uint8_t index);
+hal_status_t hal_can_set_unmatched_policy(hal_can_t h, bool accept_std,
+                                          bool accept_ext, bool accept_rtr);
+hal_status_t hal_can_validate_filter_ex(const hal_can_filter_ex_t *filter);
+hal_status_t hal_can_frame_matches_filter_ex(const hal_can_frame_t *frame,
+                                             const hal_can_filter_ex_t *filter,
+                                             bool *matches);
+```
+
+- Filters live in the controller's element lists (28 standard, 8 extended)
+  and change while the channel runs, without taking it off the bus. A new
+  filter takes the lowest free element; the controller checks the elements
+  in order and the first match decides, so a reject filter added before an
+  accept range carves an exception out of it.
+- `hal_can_add_filter()` returns indices from `HAL_CAN_FILTER_FIRST_ADDED`
+  (6) up; the classic slots of `hal_can_set_filter()` keep 0-5 and sit in
+  the same lists. `hal_can_rx_info_t::filter_index` names the filter that
+  accepted a frame, `HAL_CAN_FILTER_NONE` when no filter did.
+  `hal_can_remove_filter()` frees either kind.
+- Without filters a channel accepts everything. The first classic filter
+  rejects unmatched frames unless `hal_can_set_unmatched_policy()` was
+  called before. Accepting unmatched frames of one ID kind keeps the last
+  element of that list for itself (27 standard filters remain), so it fails
+  with `HAL_ENOMEM` when a filter holds that element. Refusing remote frames
+  (`accept_rtr` false) needs a stopped channel (`HAL_EBUSY` otherwise).
+- MCP251XFD has 32 filters for both ID kinds and can only send a matching
+  frame to its receive FIFO: it takes mask filters that accept
+  (`HAL_CAN_FILTER_MASK`, `HAL_CAN_FILTER_ACCEPT`) at indices 6..30 and answers
+  `HAL_EUNSUPPORTED` for ranges, ID pairs and rejecting filters. Filter 31
+  holds the unmatched policy. The chip cannot refuse remote frames, so with
+  `accept_rtr` false the driver drops them when it reads them, on a running
+  channel too.
+- MCP2515 answers `HAL_EUNSUPPORTED`.
+
+**Queued operation, events and status:**
+
+```c
+#define HAL_CAN_MODE_MANUAL_RECOVERY 0x40u  /* stay bus-off until hal_can_recover() */
+#define HAL_CAN_WAIT_FOREVER 0xFFFFFFFFu
+#define HAL_CAN_FILTER_NONE 0xFFu
+
+hal_status_t hal_can_get_caps(hal_can_t h, hal_can_caps_t *out);
+
+hal_status_t hal_can_send_frame_ex(hal_can_t h, const hal_can_frame_t *frame,
+                                   uint32_t timeout_ms, uint32_t *tag);
+hal_status_t hal_can_receive_frame_ex(hal_can_t h, hal_can_frame_t *frame,
+                                      hal_can_rx_info_t *info,
+                                      uint32_t timeout_ms);
+
+hal_status_t hal_can_set_callbacks(hal_can_t h, hal_can_rx_cb_t rx,
+                                   hal_can_tx_cb_t tx,
+                                   hal_can_state_cb_t state, void *user);
+int hal_can_service(hal_can_t h, int max_events);
+hal_status_t hal_can_set_isr_notify(hal_can_t h, void (*notify)(void *),
+                                    void *user);
+
+hal_status_t hal_can_get_status(hal_can_t h, hal_can_status_t *out);
+hal_status_t hal_can_recover(hal_can_t h, uint32_t timeout_ms);
+```
+
+- **Queued channels:** STM32G474 FDCAN runs from its interrupts (IT0 for the
+  RX FIFOs, IT1 for everything else). Received frames go into a per-handle
+  queue of `HAL_CAN_RX_QUEUE_LEN` (16), queued sends into one of
+  `HAL_CAN_TX_QUEUE_LEN` (8) in front of the three controller slots, and send
+  outcomes and state changes into one of `HAL_CAN_EVENT_QUEUE_LEN` (16). The
+  lengths can be set in `hal_project_config.h` within 0..1024; with any of
+  them at 0 the channel works synchronously, like the SPI controllers. Queued
+  channels report `HAL_CAN_CAP_TX_EVENTS` and `HAL_CAN_CAP_RX_QUEUE`. The
+  classic receive calls read the same queue; a CAN FD frame they cannot
+  return is consumed and counted in `rx_dropped_fd_on_classic_read`. The
+  classic sends still wait for their own frame and produce no event.
+- **Sending:** `hal_can_send_frame_ex()` queues the frame and returns a tag;
+  `timeout_ms` only bounds the wait for room in a full queue. The outcome
+  arrives as a `hal_can_tx_event_t`: `HAL_CAN_TX_DONE`, `HAL_CAN_TX_FAILED`
+  (one-shot attempt without success, result `HAL_EIO`), `HAL_CAN_TX_BUS_OFF`
+  (`HAL_EBUS`) or `HAL_CAN_TX_STOPPED` (`HAL_ECANCELED`; `hal_can_stop()` or
+  a mode change: frames still waiting were queued for the old mode). Every queued frame gets exactly one
+  event, and a frame reported as failed never goes out later. A CAN FD frame
+  needs `HAL_CAN_MODE_FD` in the channel's current mode; a channel switched
+  to classic CAN refuses it with `HAL_EUNSUPPORTED`.
+  On FDCAN a failed one-shot attempt is noticed through the protocol-error
+  interrupts, which are enabled only in `HAL_CAN_MODE_ONE_SHOT`.
+- **Events:** `hal_can_service()` hands send outcomes and state changes to
+  the callbacks, then received frames when a receive callback is set. It runs
+  in the caller's task; the callbacks run without the handle lock and may use
+  the same handle. `hal_can_set_isr_notify()` sets a function the interrupt
+  calls after queueing something, for example to wake the task that calls
+  `hal_can_service()`. Each queue counts what it had to drop
+  (`rx_queue_overflow`, `event_overflow`).
+- **Bus-off:** a queued channel drops every pending frame when it goes
+  bus-off and, unless `HAL_CAN_MODE_MANUAL_RECOVERY` is set, starts the
+  recovery at once (128 x 11 recessive bits). In manual mode it stays off the
+  bus until `hal_can_recover()`, also after a classic send that met bus-off.
+- **Status:** `hal_can_get_status()` returns the state, TEC/REC, the last
+  protocol error codes (FDCAN LEC/DLEC, kept although reading the controller
+  resets them), the measured transmitter delay and the traffic counters
+  (frames sent and received, frames lost in the receive queue, failed sends,
+  bus-off count). `rx_hw_lost` counts overflows of the controller's receive
+  FIFO: each one lost at least one frame, but the controller only latches
+  that it happened, so it is a lower bound of the frames lost there.
+  `ram_access_failures` counts message RAM access failures of STM32G474
+  FDCAN (MRAF): a received frame dropped, or a transmission aborted because
+  the controller could not read the frame from its message RAM in time.
+  After such a transmission the controller sends nothing until software
+  ends its restricted operation mode; the HAL does that at once, so the
+  waiting frames go out. Other backends report 0.
+- **Timestamps:** on STM32G474 FDCAN, `hal_can_rx_info_t::timestamp_us` and
+  `hal_can_tx_event_t::timestamp_us` are on the `hal_micros64()` scale. By
+  default they are the time the interrupt handled the frame, one value per
+  interrupt. Defining `HAL_CAN_STM32G474_TIMESTAMP_TIM3` in
+  `hal_project_config.h` makes them start-of-frame captures: TIM3 counts
+  microseconds, the controller latches it at SOF (`TSCC.TSS` external) for
+  received frames and, through the TX event FIFO, for sent ones, and the
+  16-bit value is extended to 64 bits (valid while the interrupt runs within
+  65 ms). The channel then reports `HAL_CAN_CAP_TIMESTAMP_HW`, and TIM3 pins
+  are not available to `hal_pwm` / `hal_pwm_freq`. Outcomes of frames that
+  did not go out carry 0.
+- **MCP251XFD:** a 40 or 20 MHz clock drives the controller directly, a
+  4 MHz crystal turns on its x10 PLL. The bit timing is searched within the
+  chip's ranges like on FDCAN, with the sample points of
+  `arbitration_sample_point_permille` / `data_sample_point_permille`
+  (default 80.0 % / 75.0 %) and the same prescaler in both phases when it
+  fits; from 1 Mbit/s data phase in CAN FD mode automatic transmitter delay
+  compensation sets the secondary sample point to the data sample point.
+  Every mode change passes through the chip's Configuration mode, which drops
+  frames waiting in it. A send waits until its frame went out: a failed
+  one-shot attempt returns `HAL_EIO`, no success within about 1400 bit times
+  at the arbitration rate `HAL_ETIMEOUT`, and the frame is removed, never
+  sent later. A bitrate the clock cannot make fails `hal_can_create()` with
+  `HAL_EUNSUPPORTED`, an oscillator or mode that does not come up within
+  about 100 ms with `HAL_ETIMEOUT`, and a chip that does not answer after
+  reset with `HAL_EIO`. The receive FIFO holds 24 frames. The backend is `experimental`: it
+  passed host tests against a model of the MCP2518FD and target builds, but
+  no test with a physical chip, so no board profile describes one. Changing
+  this status requires a documented hardware test.
+- **Synchronous channels:** MCP2515 and MCP251XFD have no queue:
+  `hal_can_send_frame_ex()` sends before returning and still queues the
+  outcome event (4 events by default), `hal_can_service()` reads frames from
+  the controller and reports state changes it sees, and
+  `hal_can_set_isr_notify()` returns `HAL_EUNSUPPORTED`.
+- **Host tests:** `hal_mock_can_set_queued(true)` makes mock handles created
+  afterwards queued like FDCAN; `hal_mock_can_fail_sends()` ends the next
+  queued sends as failed.
 
 **One-shot TX mode:** `hal_can_create()` enables MCP2515 one-shot mode (`CANCTRL.OSM = 1`) by default
 after initialisation. It can be disabled through `cfg.mcp2515.one_shot_tx`. In one-shot mode, when a transmitted frame receives no ACK (e.g. no other node on the bus),
 the hardware frees the TX buffer immediately instead of retransmitting indefinitely. This prevents TX buffer
 starvation: without one-shot, just 3 consecutive un-ACK'd frames permanently block all 3 TX buffers, making
-every subsequent `hal_can_send()` fail with `CAN_GETTXBFTIMEOUT`.
+every subsequent `hal_can_send()` fail with `HAL_EBUSY`.
 
 One-shot mode is useful for periodic broadcasts when a later update can replace a lost frame. It does not guarantee delivery of every update. Applications that transmit only when data changes should retry failed transmissions, periodically resend the current state, or disable `one_shot_tx`; otherwise the receiver may retain stale data.
 
-When the first transmission attempt succeeds, one-shot and normal mode have the same result: no retry is needed. In one-shot mode, a missing ACK, lost arbitration, aborted transmission, or bus error makes `hal_can_send()` return `false`. The error is logged through `hal_derr_limited("can", ...)` to limit serial output. Normal mode continues hardware retransmission and reports success when a later attempt succeeds.
+When the first transmission attempt succeeds, one-shot and normal mode have the same result: no retry is needed. In one-shot mode, a missing ACK, lost arbitration, aborted transmission, or bus error makes `hal_can_send()` return `HAL_EIO`. The error is logged through `hal_derr_limited("can", ...)` with the status name to limit serial output. Normal mode continues hardware retransmission and reports success when a later attempt succeeds.
+
+**Status results (MCP2515):** `hal_can_send()` and `hal_can_send_frame()` return `HAL_EBUSY` when no transmit buffer became free within 2.5 ms, `HAL_ETIMEOUT` when the frame did not leave within 2.5 ms (it is aborted and never sent later) and `HAL_EIO` for a failed one-shot attempt. The receive calls return `HAL_EAGAIN` when no frame waits. A mode change, `hal_can_stop()` and every filter call return `HAL_ETIMEOUT` when the controller did not enter or leave the requested mode within 200 ms; filter calls stop at the first such failure. `hal_can_create()` returns `HAL_EUNSUPPORTED` for a bitrate or crystal without a timing table and `HAL_EIO` when the controller does not answer or does not take its configuration. The controller cannot detect bus-off during a send; `hal_can_get_state()` reports it. Every channel: `HAL_EINVAL` for an invalid handle or argument and `HAL_EBUSY` for a send on a stopped or sleeping channel.
 
 ---
 

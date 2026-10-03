@@ -200,8 +200,8 @@ duty. Use `hal_pwm_freq` when exact frequency matters.
 **impl/stm32g474:** register-level TIM PWM output on mapped timer channels;
 default simple-PWM target frequency is 1 kHz best-effort. The backend uses
 explicit `JH_G474_TIMCLK1_HZ` / `JH_G474_TIMCLK2_HZ` constants. Both are
-170 MHz in the current clock tree because APB1 and APB2 run without a
-prescaler; future APB changes must update the timer-kernel constants according
+170 MHz on the default clock tree (160 MHz on the HSE tree) because APB1 and
+APB2 run without a prescaler; future APB changes must update the timer-kernel constants according
 to the STM32 timer x2 clock rule.
 
 **impl/esp32:** ESP-IDF LEDC output at 1 kHz. The backend allocates a logical
@@ -328,9 +328,11 @@ void hal_pwm_freq_destroy(hal_pwm_freq_channel_t ch);
 to achieve the exact requested frequency, with pseudo/slow-scale correction for edge cases.
 
 **impl/stm32g474:** register-level TIM PWM on mapped
-TIM2/TIM3/TIM4/TIM15/TIM16/TIM17 channels. Frequency is a timer-level
+TIM2/TIM3/TIM4/TIM15/TIM16/TIM17 channels (TIM3 pins drop out when
+`HAL_CAN_STM32G474_TIMESTAMP_TIM3` reserves TIM3 for FDCAN timestamps).
+Frequency is a timer-level
 resource, so multiple channels on the same TIM share the same frequency and
-effective period. Like `hal_pwm`, it uses the explicit 170 MHz TIMCLK constants,
+effective period. Like `hal_pwm`, it uses the explicit TIMCLK constants,
 which keeps DACless sample-rate reporting consistent with timer programming.
 The PWM slice is configured at `hal_pwm_freq_create()` time but **not started** - the GPIO
 function / TIM channel enable are deferred until the first `hal_pwm_freq_write()` call. This
@@ -536,7 +538,8 @@ reacquires the converter.
   the 12-bit hardware sample is rescaled to the configured resolution.
 - **impl/stm32g474:** ADC1 single-ended regular conversions with lazy regulator
   startup, calibration, and pin-to-channel validation. ADC12 is synchronously
-  clocked from HCLK/4, or 42.5 MHz with the current 170 MHz clock tree.
+  clocked from HCLK/4: 42.5 MHz on the default 170 MHz clock tree, 40 MHz on
+  the HSE tree.
 - **impl/esp32:** ESP-IDF ADC oneshot conversion with lazy unit/channel setup and
   12 dB attenuation. Only ADC-capable pins that are exposed or soft-reserved by
   the generated board profile are accepted. The 12-bit hardware result is scaled

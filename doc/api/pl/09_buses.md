@@ -91,8 +91,8 @@ zwraca sterowanie natychmiast.
   aktywnego asynchronicznego TX DMA.
 - **impl/stm32g474:** SPI1/SPI2 master na poziomie rejestrów, 8-bitowy
   full-duplex, programowe NSS, transfer w trybie pollingu, konfiguracja pinów
-  AF5 i sterowany przerwaniami TX DMA. SPI1 jest zasilane z 170 MHz PCLK2, a
-  SPI2 z 170 MHz PCLK1; backend wybiera najszybszy preskaler będący potęgą
+  AF5 i sterowany przerwaniami TX DMA. SPI1 jest zasilane z PCLK2, a SPI2
+  z PCLK1 (oba równe SYSCLK); backend wybiera najszybszy preskaler będący potęgą
   dwójki, który nie przekracza żądanego zegara.
   Domyślne piny: magistrala SPI 0 = PA6/PA7/PA5, magistrala 1 = PB14/PB15/PB13.
   TX SPI1 rezerwuje DMA1 Channel7, a TX SPI2 rezerwuje DMA1 Channel8.
@@ -421,7 +421,7 @@ zatrzymania/resetu i unieważnia stan związany z poprzednim trybem.
 - **impl/stm32g474:** kontroler I2C v2 na I2C1/I2C2 działa w trybie master
   i jest obsługiwany bezpośrednio przez rejestry. Oba kontrolery wybierają
   HSI16 jako źródło zegara, dlatego sprawdzone ustawienia `TIMINGR` dla 16 MHz
-  nie zależą od zegara APB 170 MHz. Backend sprawdza funkcje alternatywne pinów
+  nie zależą od zegara APB. Backend sprawdza funkcje alternatywne pinów
   SDA/SCL i konfiguruje je jako open-drain z podciągnięciem. Na obu
   magistralach obsługuje wszystkie poziomy częstotliwości HAL oraz operacje
   zapisu, odczytu, zapisu z odczytem i sprawdzania zajętości. Przed
@@ -859,7 +859,7 @@ Każdej odpowiada wariant `_ex` zwracający status.
   cyklu życia UART z zadania przypiętego do zamierzonego rdzenia i nie
   migruj tego zadania, gdy UART jest aktywny.
 - **impl/stm32g474:** USART1/USART2 są obsługiwane bezpośrednio przez rejestry
-  i taktowane odpowiednio z PCLK2/PCLK1 170 MHz. Dane RX są odbierane przez
+  i taktowane odpowiednio z PCLK2/PCLK1 (oba równe SYSCLK). Dane RX są odbierane przez
   polling. Backend zlicza ORE, PE, FE i NE oraz jawne flagi LIN-break, jeśli
   udostępnia je `USART_ISR`.
 - **impl/esp32:** Porty HAL 1/2 odpowiadają ESP-IDF UART1/UART2; UART0

@@ -32,6 +32,8 @@ PRODUCTION_EXCLUDED_PREFIXES = (
     "src/hal/network/wireguard/core/",
 )
 PRODUCTION_EXCLUDED_FILES = frozenset({"src/utils/unity.c"})
+# Device-test firmware is never read by the default gate (AGENTS.md).
+HARDWARE_FIXTURES_PREFIX = "tests/hardware/"
 
 
 class CpdError(RuntimeError):
@@ -107,6 +109,8 @@ def collect_sources(
             if _is_generated_build_artifact(relative):
                 continue
             if production and _is_production_excluded(relative):
+                continue
+            if relative.startswith(HARDWARE_FIXTURES_PREFIX):
                 continue
             sources.append(path.resolve())
     return sorted(set(sources), key=lambda path: _relative_text(path, repo_root))

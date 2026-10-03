@@ -888,10 +888,51 @@
 /**
  * @def HAL_CAN_MAX_INSTANCES
  * Maximum number of CAN-bus controller interfaces. One instance per physical
- * controller, whether it is native or attached over SPI.
+ * controller, whether it is native or attached over SPI. Defaults to 2, or to
+ * the number of CAN channels the board profile declares when that is larger.
  */
 #ifndef HAL_CAN_MAX_INSTANCES
+#if defined(HAL_BOARD_CAN_CHANNEL_COUNT) && (HAL_BOARD_CAN_CHANNEL_COUNT > 2)
+#define HAL_CAN_MAX_INSTANCES HAL_BOARD_CAN_CHANNEL_COUNT
+#else
 #define HAL_CAN_MAX_INSTANCES 2
+#endif
+#endif
+
+/**
+ * @def HAL_CAN_RX_QUEUE_LEN
+ * Received frames each CAN handle can queue between the receiving interrupt
+ * and the application. Defaults to 16 where the native FDCAN backend (or the
+ * host mock) is built, 0 otherwise. When this or one of the two lengths below
+ * is 0, channels stay synchronous: reception is left to the controller's own
+ * buffers and sends complete before they return.
+ *
+ * @def HAL_CAN_TX_QUEUE_LEN
+ * Frames each CAN handle can queue for sending in addition to the
+ * controller's own slots. Defaults to 8 with FDCAN or the mock, 0 otherwise.
+ *
+ * @def HAL_CAN_EVENT_QUEUE_LEN
+ * Send outcomes and state changes each CAN handle can queue for
+ * hal_can_service(). Defaults to 16 with FDCAN or the mock, 4 otherwise.
+ */
+#if HAL_TARGET_IS_MOCK || defined(HAL_ENABLE_STM32G474_FDCAN)
+#define JH_CAN_QUEUED_DEFAULT 1
+#else
+#define JH_CAN_QUEUED_DEFAULT 0
+#endif
+#ifndef HAL_CAN_RX_QUEUE_LEN
+#define HAL_CAN_RX_QUEUE_LEN (JH_CAN_QUEUED_DEFAULT ? 16 : 0)
+#endif
+#ifndef HAL_CAN_TX_QUEUE_LEN
+#define HAL_CAN_TX_QUEUE_LEN (JH_CAN_QUEUED_DEFAULT ? 8 : 0)
+#endif
+#ifndef HAL_CAN_EVENT_QUEUE_LEN
+#define HAL_CAN_EVENT_QUEUE_LEN (JH_CAN_QUEUED_DEFAULT ? 16 : 4)
+#endif
+#if HAL_CAN_RX_QUEUE_LEN < 0 || HAL_CAN_RX_QUEUE_LEN > 1024 ||                 \
+    HAL_CAN_TX_QUEUE_LEN < 0 || HAL_CAN_TX_QUEUE_LEN > 1024 ||                 \
+    HAL_CAN_EVENT_QUEUE_LEN < 0 || HAL_CAN_EVENT_QUEUE_LEN > 1024
+#error "HAL_CAN_*_QUEUE_LEN must be in range 0..1024"
 #endif
 
 /**

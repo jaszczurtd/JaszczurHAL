@@ -27,6 +27,10 @@
 #define JH_REG8(addr) (*jh_stm32g474_host_reg8((uintptr_t)(addr)))
 #define JH_REG16(addr) (*jh_stm32g474_host_reg16((uintptr_t)(addr)))
 #define JH_REG32(addr) (*jh_stm32g474_host_reg32((uintptr_t)(addr)))
+/* Function access lets a test model the side effects of a register. */
+#define JH_REG32_RD(addr) jh_stm32g474_host_read32((uintptr_t)(addr))
+#define JH_REG32_WR(addr, value)                                               \
+  jh_stm32g474_host_write32((uintptr_t)(addr), (value))
 #else
 /* Fixed MMIO addresses have no source-pointer provenance to preserve.
  * uintptr_t also keeps dynamic addresses intact in 64-bit host builds. */
@@ -34,25 +38,35 @@
 #define JH_REG8(addr) (*(volatile uint8_t *)(uintptr_t)(addr))
 #define JH_REG16(addr) (*(volatile uint16_t *)(uintptr_t)(addr))
 #define JH_REG32(addr) (*(volatile uint32_t *)(uintptr_t)(addr))
+#define JH_REG32_RD(addr) (*(volatile uint32_t *)(uintptr_t)(addr))
+#define JH_REG32_WR(addr, value)                                               \
+  (*(volatile uint32_t *)(uintptr_t)(addr) = (value))
 /* NOLINTEND(performance-no-int-to-ptr) */
 #endif
 
 /* ── RCC (Reset & Clock Control) ─────────────────────────────────────────── */
 #define RCC_BASE 0x40021000u
-#define RCC_CR JH_REG32(RCC_BASE + 0x00u)
-#define RCC_CFGR JH_REG32(RCC_BASE + 0x08u)
-#define RCC_PLLCFGR JH_REG32(RCC_BASE + 0x0Cu)
-#define RCC_AHB1ENR JH_REG32(RCC_BASE + 0x48u)  /* DMA / DMAMUX clocks   */
-#define RCC_AHB2ENR JH_REG32(RCC_BASE + 0x4Cu)  /* GPIO port clocks      */
-#define RCC_APB1ENR1 JH_REG32(RCC_BASE + 0x58u) /* TIM2.. / USART2 / SPI2 */
-#define RCC_APB2ENR JH_REG32(RCC_BASE + 0x60u)  /* TIM15.. / USART1 / SPI1 */
-#define RCC_CCIPR JH_REG32(RCC_BASE + 0x88u)    /* peripheral clock muxes  */
-#define RCC_BDCR JH_REG32(RCC_BASE + 0x90u)     /* backup-domain clocks    */
-#define RCC_CSR JH_REG32(RCC_BASE + 0x94u)      /* reset flags / clear    */
-#define RCC_CRRCR JH_REG32(RCC_BASE + 0x98u)    /* HSI48 control/status    */
+#define RCC_CR_ADDR (RCC_BASE + 0x00u)
+#define RCC_CFGR_ADDR (RCC_BASE + 0x08u)
+#define RCC_PLLCFGR_ADDR (RCC_BASE + 0x0Cu)
+#define RCC_APB1ENR1_ADDR (RCC_BASE + 0x58u)
+#define RCC_CCIPR_ADDR (RCC_BASE + 0x88u)
+#define RCC_CR JH_REG32(RCC_CR_ADDR)
+#define RCC_CFGR JH_REG32(RCC_CFGR_ADDR)
+#define RCC_PLLCFGR JH_REG32(RCC_PLLCFGR_ADDR)
+#define RCC_AHB1ENR JH_REG32(RCC_BASE + 0x48u)   /* DMA / DMAMUX clocks   */
+#define RCC_AHB2ENR JH_REG32(RCC_BASE + 0x4Cu)   /* GPIO port clocks      */
+#define RCC_APB1ENR1 JH_REG32(RCC_APB1ENR1_ADDR) /* TIM2.. / USART2 / SPI2 */
+#define RCC_APB2ENR JH_REG32(RCC_BASE + 0x60u)   /* TIM15.. / USART1 / SPI1 */
+#define RCC_CCIPR JH_REG32(RCC_CCIPR_ADDR)       /* peripheral clock muxes  */
+#define RCC_BDCR JH_REG32(RCC_BASE + 0x90u)      /* backup-domain clocks    */
+#define RCC_CSR JH_REG32(RCC_BASE + 0x94u)       /* reset flags / clear    */
+#define RCC_CRRCR JH_REG32(RCC_BASE + 0x98u)     /* HSI48 control/status    */
 
 #define RCC_CR_HSION (1u << 8)
 #define RCC_CR_HSIRDY (1u << 10)
+#define RCC_CR_HSEON (1u << 16)
+#define RCC_CR_HSERDY (1u << 17)
 #define RCC_CR_PLLON (1u << 24)
 #define RCC_CR_PLLRDY (1u << 25)
 
@@ -70,10 +84,14 @@
 
 #define RCC_PLLCFGR_PLLSRC_MASK (0x3u << 0)
 #define RCC_PLLCFGR_PLLSRC_HSI (0x2u << 0)
-#define RCC_PLLCFGR_PLLM_MASK (0x7u << 4)
-#define RCC_PLLCFGR_PLLM_DIV4 (0x3u << 4)
+#define RCC_PLLCFGR_PLLSRC_HSE (0x3u << 0)
+#define RCC_PLLCFGR_PLLM_MASK (0xFu << 4)
+#define RCC_PLLCFGR_PLLM(div) ((((uint32_t)(div)) - 1u) << 4)
 #define RCC_PLLCFGR_PLLN_MASK (0x7Fu << 8)
-#define RCC_PLLCFGR_PLLN_MUL85 (85u << 8)
+#define RCC_PLLCFGR_PLLN(mul) (((uint32_t)(mul)) << 8)
+#define RCC_PLLCFGR_PLLQEN (1u << 20)
+#define RCC_PLLCFGR_PLLQ_MASK (0x3u << 21)
+#define RCC_PLLCFGR_PLLQ_DIV4 (0x1u << 21)
 #define RCC_PLLCFGR_PLLREN (1u << 24)
 #define RCC_PLLCFGR_PLLR_MASK (0x3u << 25)
 #define RCC_PLLCFGR_PLLR_DIV2 (0x0u << 25)
@@ -121,6 +139,8 @@
 #define RCC_CCIPR_I2C2SEL_MASK (0x3u << 14)
 #define RCC_CCIPR_I2C2SEL_HSI16 (0x2u << 14)
 #define RCC_CCIPR_FDCANSEL_MASK (0x3u << 24)
+#define RCC_CCIPR_FDCANSEL_HSE (0x0u << 24)
+#define RCC_CCIPR_FDCANSEL_PLLQ (0x1u << 24)
 #define RCC_CCIPR_FDCANSEL_PCLK1 (0x2u << 24)
 #define RCC_CRRCR_HSI48ON (1u << 0)
 #define RCC_CRRCR_HSI48RDY (1u << 1)
@@ -170,7 +190,8 @@
 
 /* ── FLASH controller (main flash erase/program) ────────────────────────── */
 #define FLASH_BASE 0x40022000u
-#define FLASH_ACR JH_REG32(FLASH_BASE + 0x00u)
+#define FLASH_ACR_ADDR (FLASH_BASE + 0x00u)
+#define FLASH_ACR JH_REG32(FLASH_ACR_ADDR)
 #define FLASH_KEYR JH_REG32(FLASH_BASE + 0x08u)
 #define FLASH_SR JH_REG32(FLASH_BASE + 0x10u)
 #define FLASH_CR JH_REG32(FLASH_BASE + 0x14u)
@@ -211,7 +232,7 @@
 
 /* ── ADC1 + ADC12 common (single-channel polled regular conversions) ───────
  * ADC1 inputs are single-ended; the ADC kernel clock is taken from HCLK/4
- * (CKMODE=11), yielding 42.5 MHz with the 170 MHz system clock.
+ * (CKMODE=11), JH_G474_ADC_CLOCK_HZ in stm32g474_clock.h.
  * Register layout / bit positions per RM0440; pending on-silicon validation
  * (see examples/g474_adc_read). */
 #define ADC1_BASE 0x50000000u
@@ -580,38 +601,52 @@
 #define GPIO_PUPD_UP 0x1u
 #define GPIO_PUPD_DOWN 0x2u
 
-/* ── FDCAN1 (STM32G4 layout, RM0440) ───────────────────────────────────────
+/* ── FDCAN1..3 (STM32G4 layout, RM0440 §44) ────────────────────────────────
  * Derived from Bosch M_CAN, but with a fixed message RAM: SIDFC, XIDFC,
  * RXF0C, RXF1C, RXESC, TXESC and TXEFC do not exist, the filter list sizes sit
  * in RXGFC, and the FIFO and TX buffer registers use other offsets than the
- * full M_CAN of STM32H7. */
+ * full M_CAN of STM32H7. The backend reaches the registers through
+ * JH_REG32_RD/JH_REG32_WR so host tests can model their side effects. */
 #define FDCAN1_BASE 0x40006400u
+#define FDCAN2_BASE 0x40006800u
+#define FDCAN3_BASE 0x40006C00u
 #define FDCAN_SRAM_BASE 0x4000A400u /* SRAMCAN_BASE, FDCAN1 message RAM */
+#define FDCAN_MRAM_STRIDE 0x350u    /* FDCAN2 at +0x350, FDCAN3 at +0x6A0 */
+#define FDCAN_INSTANCE_COUNT 3u
 
-#define FDCAN_REG(base, off) JH_REG32((base) + (off))
-#define FDCAN_DBTP(base) FDCAN_REG((base), 0x00Cu)
-#define FDCAN_TEST(base) FDCAN_REG((base), 0x010u)
-#define FDCAN_CCCR(base) FDCAN_REG((base), 0x018u)
-#define FDCAN_NBTP(base) FDCAN_REG((base), 0x01Cu)
-#define FDCAN_ECR(base) FDCAN_REG((base), 0x040u)
-#define FDCAN_PSR(base) FDCAN_REG((base), 0x044u)
-#define FDCAN_TDCR(base) FDCAN_REG((base), 0x048u)
-#define FDCAN_IR(base) FDCAN_REG((base), 0x050u)
-#define FDCAN_IE(base) FDCAN_REG((base), 0x054u)
-#define FDCAN_RXGFC(base) FDCAN_REG((base), 0x080u)
-#define FDCAN_XIDAM(base) FDCAN_REG((base), 0x084u)
-#define FDCAN_RXF0S(base) FDCAN_REG((base), 0x090u)
-#define FDCAN_RXF0A(base) FDCAN_REG((base), 0x094u)
-#define FDCAN_TXBC(base) FDCAN_REG((base), 0x0C0u)
-#define FDCAN_TXFQS(base) FDCAN_REG((base), 0x0C4u)
-#define FDCAN_TXBRP(base) FDCAN_REG((base), 0x0C8u)
-#define FDCAN_TXBAR(base) FDCAN_REG((base), 0x0CCu)
-#define FDCAN_TXBCR(base) FDCAN_REG((base), 0x0D0u)
-#define FDCAN_TXBTO(base) FDCAN_REG((base), 0x0D4u)
-#define FDCAN_TXBCF(base) FDCAN_REG((base), 0x0D8u)
-
-/* One 32-bit word of the FDCAN1 message RAM, written whole as ST does. */
-#define FDCAN_MRAM(word) JH_REG32(FDCAN_SRAM_BASE + ((uint32_t)(word) * 4u))
+/* Register offsets. CKDIV exists in FDCAN1 only and divides the kernel clock
+ * of all three instances. */
+#define FDCAN_DBTP 0x00Cu
+#define FDCAN_TEST 0x010u
+#define FDCAN_CCCR 0x018u
+#define FDCAN_NBTP 0x01Cu
+#define FDCAN_TSCC 0x020u
+#define FDCAN_TSCV 0x024u
+#define FDCAN_ECR 0x040u
+#define FDCAN_PSR 0x044u
+#define FDCAN_TDCR 0x048u
+#define FDCAN_IR 0x050u
+#define FDCAN_IE 0x054u
+#define FDCAN_ILS 0x058u
+#define FDCAN_ILE 0x05Cu
+#define FDCAN_RXGFC 0x080u
+#define FDCAN_XIDAM 0x084u
+#define FDCAN_RXF0S 0x090u
+#define FDCAN_RXF0A 0x094u
+#define FDCAN_RXF1S 0x098u
+#define FDCAN_RXF1A 0x09Cu
+#define FDCAN_TXBC 0x0C0u
+#define FDCAN_TXFQS 0x0C4u
+#define FDCAN_TXBRP 0x0C8u
+#define FDCAN_TXBAR 0x0CCu
+#define FDCAN_TXBCR 0x0D0u
+#define FDCAN_TXBTO 0x0D4u
+#define FDCAN_TXBCF 0x0D8u
+#define FDCAN_TXBTIE 0x0DCu
+#define FDCAN_TXBCIE 0x0E0u
+#define FDCAN_TXEFS 0x0E4u
+#define FDCAN_TXEFA 0x0E8u
+#define FDCAN_CKDIV 0x100u
 
 #define FDCAN_CCCR_INIT (1u << 0)
 #define FDCAN_CCCR_CCE (1u << 1)
@@ -622,29 +657,49 @@
 #define FDCAN_CCCR_TEST (1u << 7)
 #define FDCAN_CCCR_FDOE (1u << 8)
 #define FDCAN_CCCR_BRSE (1u << 9)
+#define FDCAN_CCCR_PXHD (1u << 12)
+#define FDCAN_CCCR_EFBI (1u << 13)
 
+#define FDCAN_DBTP_TDC (1u << 23)
+#define FDCAN_TDCR_TDCO_POS 8u
 #define FDCAN_TEST_LBCK (1u << 4)
-#define FDCAN_IR_ALL 0xFFFFFFFFu
+#define FDCAN_TSCC_TSS_EXTERNAL (2u << 0) /* TIM3 counter, constant under BRS  \
+                                           */
+#define FDCAN_IR_ALL 0x00FFFFFFu
+#define FDCAN_PSR_LEC_MASK 0x7u
 #define FDCAN_PSR_EP (1u << 5)
 #define FDCAN_PSR_EW (1u << 6)
 #define FDCAN_PSR_BO (1u << 7)
+#define FDCAN_PSR_DLEC_POS 8u
+#define FDCAN_PSR_DLEC_MASK (0x7u << 8)
+#define FDCAN_PSR_TDCV_POS 16u
+#define FDCAN_PSR_TDCV_MASK (0x7Fu << 16)
 #define FDCAN_ECR_TEC_MASK 0xFFu
 #define FDCAN_ECR_REC_MASK (0x7Fu << 8)
 
-/* RXGFC: reject frames no filter matches (ANFS/ANFE), list sizes LSS/LSE. */
-#define FDCAN_RXGFC_REJECT_NON_MATCHING ((3u << 4) | (3u << 2))
+/* RXGFC: list sizes LSS/LSE; frames no filter matches go to FIFO0 (00) or are
+ * rejected (10). All fields are protected (CCE). */
 #define FDCAN_RXGFC_LSS_POS 16u
 #define FDCAN_RXGFC_LSE_POS 24u
-#define FDCAN_RXF0S_F0FL_MASK 0x0Fu
-#define FDCAN_RXF0S_F0GI_MASK (0x3u << 8)
-#define FDCAN_RXF0S_F0GI_POS 8u
-#define FDCAN_RXF0A_F0AI_MASK 0x7u
+#define FDCAN_RXGFC_ANFS_REJECT (2u << 4)
+#define FDCAN_RXGFC_ANFE_REJECT (2u << 2)
+#define FDCAN_RXGFC_RRFS (1u << 1) /* reject standard remote frames */
+#define FDCAN_RXGFC_RRFE (1u << 0) /* reject extended remote frames */
+#define FDCAN_RXFS_FL_MASK 0x0Fu
+#define FDCAN_RXFS_GI_MASK (0x3u << 8)
+#define FDCAN_RXFS_GI_POS 8u
+#define FDCAN_RXFS_RFL (1u << 25)
+#define FDCAN_RXFA_AI_MASK 0x7u
 #define FDCAN_TXFQS_TFQPI_MASK (0x3u << 16)
 #define FDCAN_TXFQS_TFQPI_POS 16u
 #define FDCAN_TXFQS_TFQF (1u << 21)
+#define FDCAN_TXEFS_EFFL_MASK 0x7u
+#define FDCAN_TXEFS_EFGI_MASK (0x3u << 8)
+#define FDCAN_TXEFS_EFGI_POS 8u
 
-#define FDCAN_MRAM_STD_FILTER_WORDS 28u
-#define FDCAN_MRAM_EXT_FILTER_WORDS (8u * 2u)
+/* Message RAM of one instance, in 32-bit words (RM0440 Figure 670). */
+#define FDCAN_MRAM_STD_FILTERS 28u
+#define FDCAN_MRAM_EXT_FILTERS 8u
 #define FDCAN_MRAM_RX_FIFO0_ELEMS 3u
 #define FDCAN_MRAM_RX_FIFO1_ELEMS 3u
 #define FDCAN_MRAM_TX_EVENT_ELEMS 3u
@@ -653,21 +708,19 @@
 
 #define FDCAN_MRAM_STD_FILTER_WORD 0u
 #define FDCAN_MRAM_EXT_FILTER_WORD                                             \
-  (FDCAN_MRAM_STD_FILTER_WORD + FDCAN_MRAM_STD_FILTER_WORDS)
+  (FDCAN_MRAM_STD_FILTER_WORD + FDCAN_MRAM_STD_FILTERS)
 #define FDCAN_MRAM_RX0_WORD                                                    \
-  (FDCAN_MRAM_EXT_FILTER_WORD + FDCAN_MRAM_EXT_FILTER_WORDS)
+  (FDCAN_MRAM_EXT_FILTER_WORD + (FDCAN_MRAM_EXT_FILTERS * 2u))
 #define FDCAN_MRAM_RX1_WORD                                                    \
   (FDCAN_MRAM_RX0_WORD + (FDCAN_MRAM_RX_FIFO0_ELEMS * FDCAN_MRAM_ELEM_WORDS_64))
 #define FDCAN_MRAM_TX_EVENT_WORD                                               \
   (FDCAN_MRAM_RX1_WORD + (FDCAN_MRAM_RX_FIFO1_ELEMS * FDCAN_MRAM_ELEM_WORDS_64))
 #define FDCAN_MRAM_TX_BUF_WORD                                                 \
   (FDCAN_MRAM_TX_EVENT_WORD + (FDCAN_MRAM_TX_EVENT_ELEMS * 2u))
-/* 212 words, 0x350 bytes per instance; FDCAN2 RAM follows right after. */
+/* 212 words, 0x350 bytes per instance. */
 #define FDCAN_MRAM_WORDS                                                       \
   (FDCAN_MRAM_TX_BUF_WORD +                                                    \
    (FDCAN_MRAM_TX_BUF_ELEMS * FDCAN_MRAM_ELEM_WORDS_64))
-
-#define FDCAN_POLL_TIMEOUT 200000u
 
 /* ── SYSCFG / EXTI (external interrupt routing) ─────────────────────────── */
 #define SYSCFG_BASE 0x40010000u
@@ -739,7 +792,11 @@
 #define PWR_CR1 JH_REG32(PWR_BASE + 0x00u)
 #define PWR_SR1 JH_REG32(PWR_BASE + 0x10u)
 #define PWR_SCR JH_REG32(PWR_BASE + 0x18u)
-#define PWR_CR5 JH_REG32(PWR_BASE + 0x80u)
+#define PWR_CR3 JH_REG32(PWR_BASE + 0x08u)
+#define PWR_CR5_ADDR (PWR_BASE + 0x80u)
+#define PWR_CR5 JH_REG32(PWR_CR5_ADDR)
+/* USB Type-C dead-battery pull-downs on PB4/PB6 (UCPD1 CC2/CC1) off. */
+#define PWR_CR3_UCPD1_DBDIS (1u << 14)
 #define PWR_CR1_LPMS_MASK (0x7u << 0)
 #define PWR_CR1_LPMS_STOP0 (0x0u << 0)
 #define PWR_CR1_LPMS_STOP1 (0x1u << 0)
@@ -823,14 +880,17 @@
 
 /* ── DWT cycle counter (Cortex-M debug block) ────────────────────────────── */
 #define DWT_BASE 0xE0001000u
-#define DWT_CTRL JH_REG32(DWT_BASE + 0x00u)
-#define DWT_CYCCNT JH_REG32(DWT_BASE + 0x04u)
+#define DWT_CTRL_ADDR (DWT_BASE + 0x00u)
+#define DWT_CYCCNT_ADDR (DWT_BASE + 0x04u)
+#define DWT_CTRL JH_REG32(DWT_CTRL_ADDR)
+#define DWT_CYCCNT JH_REG32(DWT_CYCCNT_ADDR)
 
 #define DWT_CTRL_CYCCNTENA (1u << 0)
 
 /* ── CoreDebug (for enabling DWT CYCCNT) ─────────────────────────────────── */
 #define COREDEBUG_BASE 0xE000EDF0u
-#define COREDEBUG_DEMCR JH_REG32(COREDEBUG_BASE + 0x0Cu)
+#define COREDEBUG_DEMCR_ADDR (COREDEBUG_BASE + 0x0Cu)
+#define COREDEBUG_DEMCR JH_REG32(COREDEBUG_DEMCR_ADDR)
 
 #define COREDEBUG_DEMCR_TRCENA (1u << 24)
 

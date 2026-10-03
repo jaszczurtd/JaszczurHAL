@@ -11,6 +11,7 @@
 
 #ifdef JH_STM32G474_HW
 #include "port/stm32g474_adc_channels.h"
+#include "port/stm32g474_nvic.h"
 #include "port/stm32g474_regs.h"
 #endif
 
@@ -23,8 +24,8 @@ namespace {
 // buffer; with both flags pending it publishes the half not being written.
 // DACless keeps channels 1 and 2 with their own interrupt; both paths share
 // the ADC1 ownership flag in stm32g474_adc_shared and exclude each other.
-constexpr uint8_t kDmaChannel = 2u;             /* DMA1 Channel3 */
-constexpr uint32_t kAdcClockHz = 42500000u;     /* HCLK / 4 */
+constexpr uint8_t kDmaChannel = 2u; /* DMA1 Channel3 */
+constexpr uint32_t kAdcClockHz = JH_G474_ADC_CLOCK_HZ;
 constexpr uint32_t kConversionHalfCycles = 25u; /* 12.5 cycles */
 constexpr uint32_t kMaxSequence = 8u;
 
@@ -232,9 +233,7 @@ hal_status_t jh_adc_scan_start(const hal_adc_scan_config_t *config,
   DMA_CCR(DMA1_BASE, kDmaChannel) =
       DMA_CCR_MINC | DMA_CCR_CIRC | DMA_CCR_PSIZE_16 | DMA_CCR_MSIZE_16 |
       DMA_CCR_PL_HIGH | DMA_CCR_HTIE | DMA_CCR_TCIE | DMA_CCR_TEIE;
-  NVIC_IPR8(DMA1_Channel3_IRQn) = JH_NVIC_PRIO_TIMER;
-  NVIC_ICPR(DMA1_Channel3_IRQn / 32u) = 1u << (DMA1_Channel3_IRQn % 32u);
-  NVIC_ISER(DMA1_Channel3_IRQn / 32u) = 1u << (DMA1_Channel3_IRQn % 32u);
+  jh_stm32g474_nvic_enable(DMA1_Channel3_IRQn, JH_NVIC_PRIO_TIMER);
   DMA_CCR(DMA1_BASE, kDmaChannel) |= DMA_CCR_EN;
 
   stm32g474_adc_set_scan_reader(scan_reader);
@@ -257,7 +256,7 @@ hal_status_t jh_adc_scan_stop(void) {
     stop_conversion();
     stm32g474_adc_set_scan_reader(NULL);
   }
-  NVIC_ICER(DMA1_Channel3_IRQn / 32u) = 1u << (DMA1_Channel3_IRQn % 32u);
+  jh_stm32g474_nvic_disable(DMA1_Channel3_IRQn);
   DMA_CCR(DMA1_BASE, kDmaChannel) &= ~DMA_CCR_EN;
   DMAMUX_CCR(kDmaChannel) = 0u;
   DMA_IFCR(DMA1_BASE) = DMA_IFCR_CLEAR_ALL(kDmaChannel);

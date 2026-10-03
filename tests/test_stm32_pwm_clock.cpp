@@ -35,10 +35,23 @@ void test_pwm_direct_timing_rejects_unrepresentable_rates(void) {
   TEST_ASSERT_FALSE(jh_stm32_pwm_prepare_pin(5u, 1u, 65537u, &channel));
 }
 
+/* TIM3 (PA6) belongs to FDCAN timestamps when that option is on. */
+void test_tim3_pins_follow_the_can_timestamp_option(void) {
+#ifdef HAL_CAN_STM32G474_TIMESTAMP_TIM3
+  TEST_ASSERT_EQUAL_UINT32(0u, jh_stm32_pwm_source_clock_hz(6u));
+#else
+  TEST_ASSERT_EQUAL_UINT32(JH_G474_TIMCLK1_HZ,
+                           jh_stm32_pwm_source_clock_hz(6u));
+#endif
+  TEST_ASSERT_EQUAL_UINT32(JH_G474_TIMCLK1_HZ,
+                           jh_stm32_pwm_source_clock_hz(5u)); /* TIM2 */
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_pwm_source_clock_tracks_pin_timer_bus);
   RUN_TEST(test_pwm_source_clock_rejects_unknown_pin);
   RUN_TEST(test_pwm_direct_timing_rejects_unrepresentable_rates);
+  RUN_TEST(test_tim3_pins_follow_the_can_timestamp_option);
   return UNITY_END();
 }

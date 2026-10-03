@@ -168,6 +168,41 @@ piny STM32 są kodowane jako te same całkowitoliczbowe identyfikatory pinów,
 których używa HAL. Pełny deskryptor trafia również bez zmian do
 `jh_board_resolved.json`, gdzie jest dostępny dla narzędzi.
 
+## Kanały CAN
+
+Płytka, która łączy transceivery CAN z kontrolerami, wymienia je w
+`can.channels`, w kolejności, w jakiej numeruje je aplikacja:
+
+```json
+"can": {
+  "channels": [
+    { "controller": "stm32g474-fdcan", "instance": 1,
+      "rx": { "domain": "soc-gpio", "id": "PA11" },
+      "tx": { "domain": "soc-gpio", "id": "PA12" },
+      "standby": { "domain": "soc-gpio", "id": "PB11" },
+      "standbyActiveHigh": true,
+      "transceiver": "mcp2562fd", "maxBitrateHz": 5000000 }
+  ]
+}
+```
+
+`controller` musi istnieć na każdym zgodnym targecie, a każda `instance` może
+być podłączona tylko raz. `standby` i `standbyActiveHigh` występują razem;
+`standbyActiveHigh` to poziom, który przełącza transceiver w standby.
+`maxBitrateHz` to najwyższa prędkość gwarantowana przez transceiver. Każdy
+sygnał musi być pinem targetu, użytym raz i objętym twardą rezerwacją; to, czy
+pin może obsłużyć daną instancję, sprawdza backend kontrolera przy tworzeniu
+kanału. Generator tworzy liczbę kanałów i po jednym wierszu X-makra na kanał,
+z których korzysta `hal_can_board_config()`:
+
+```c
+#define HAL_BOARD_CAN_CHANNEL_COUNT 1
+#define HAL_BOARD_CAN_CHANNELS(X) X(STM32G474_FDCAN, 1u, 11u, 12u, 27u, 1, UINT32_C(5000000))
+```
+
+Płytki bez tej sekcji definiują liczbę 0 i pustą tablicę. Liczba większa niż 2
+podnosi też domyślne `HAL_CAN_MAX_INSTANCES`.
+
 Identyfikatory komponentów, obsługujące je systemy kompilacji i grupy wzajemnie wykluczających się komponentów są zdefiniowane w `config/tooling/board_components.json`. Generator płytki odczytuje ten plik i tworzy dane CMake dołączane przez `cmake/jh_board_components.cmake`.
 
 Każda oficjalna konfiguracja sprawdza wynikową listę komponentów. Nieznany komponent, niezgodność z systemem kompilacji albo dwa komponenty z tej samej grupy wykluczającej kończą konfigurację błędem. Skrypty kompilacji mogą dobierać źródła na podstawie flag `JH_BOARD_COMPONENT_<ID>`.
@@ -282,6 +317,17 @@ płytki bazowej każdego typu nie są równoważne stabilnemu projektowi płytki
 nośnej.
 
 Przy innym połączeniu modułu Core1262 użyj podstawowego profilu `pico` lub `nucleo-g474re` i jawnego deskryptora aplikacji. Nie wybieraj profilu złożonego, którego stałe przypisanie pinów nie odpowiada rzeczywistym połączeniom.
+
+Eksperymentalny profil `nucleo-g474re-canhat` opisuje NUCLEO-G474RE z nakładką
+CAN-FD HAT v1.2 od [Embedded Garage](https://www.youtube.com/@embeddedGarage)
+([sklep](https://sklep.embeddedgarage.com/)). Deklaruje trzy kanały FDCAN
+złączy CN5-CN7 z liniami standby MCP2562FD i twardo rezerwuje je, sterowanie
+przekaźników K1-K4 (bramki nie mają rezystora do masy, więc każde inne użycie
+przełącza przekaźniki) oraz kwarc na PF0/PF1; diody, wejścia 12 V i przyciski
+rezerwuje miękko. `HAL_LED_BUILTIN` to dioda RDY na PC1; PA5 steruje
+jednocześnie LD2 i diodą CAN2. Komponent płytki `stm32g474-hse-24mhz` wybiera
+drzewo zegara 160 MHz z HSE 24 MHz z zegarem jądra FDCAN 80 MHz
+(`HAL_STM32G474_CLOCK_HSE_160MHZ`).
 
 Archiwum definiuje:
 

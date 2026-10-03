@@ -20,10 +20,14 @@ DOCUMENTATION_GLOBS = (
     "link_libraries/**/*.md",
     "security/**/*.md",
     "src/**/*.md",
-    "tests/hardware/**/*.md",
     "tests/fixtures/**/*.md",
     "vscode/**/*.md",
 )
+
+# Device-test fixtures are read only by the opt-in hardware-fixture checks
+# (AGENTS.md); by default neither their files nor links into them are read.
+HARDWARE_FIXTURES = Path("tests") / "hardware"
+HARDWARE_GLOB = "tests/hardware/**/*.md"
 
 LINK_RE = re.compile(r"!?\[[^\]]*]\(([^)\n]+)\)")
 HEADING_RE = re.compile(r"^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$")
@@ -33,11 +37,20 @@ EXPLICIT_ANCHOR_RE = re.compile(
 )
 
 
-def documentation_files(root: Path) -> list[Path]:
+def documentation_files(root: Path, include_hardware: bool = False) -> list[Path]:
     files: set[Path] = set()
-    for pattern in DOCUMENTATION_GLOBS:
+    patterns = DOCUMENTATION_GLOBS + ((HARDWARE_GLOB,) if include_hardware else ())
+    for pattern in patterns:
         files.update(path for path in root.glob(pattern) if path.is_file())
     return sorted(files)
+
+
+def in_hardware_fixtures(root: Path, path: Path) -> bool:
+    try:
+        path.relative_to(root / HARDWARE_FIXTURES)
+    except ValueError:
+        return False
+    return True
 
 
 def split_link_target(raw_target: str) -> tuple[str, str]:
@@ -88,11 +101,11 @@ def markdown_anchors(path: Path) -> set[str]:
     return anchors
 
 
-def check_links(root: Path) -> list[str]:
+def check_links(root: Path, include_hardware: bool = False) -> list[str]:
     failures: list[str] = []
     anchor_cache: dict[Path, set[str]] = {}
 
-    for path in documentation_files(root):
+    for path in documentation_files(root, include_hardware):
         relative = path.relative_to(root)
         text = path.read_text(encoding="utf-8")
         if path.suffix.lower() != ".md":
@@ -112,6 +125,8 @@ def check_links(root: Path) -> list[str]:
                 failures.append(
                     f"{relative}: local link escapes the repository: {raw_target!r}"
                 )
+                continue
+            if not include_hardware and in_hardware_fixtures(root, target):
                 continue
             if not target.exists():
                 failures.append(
@@ -139,10 +154,16 @@ def main() -> int:
         default=Path(__file__).resolve().parent.parent,
         help="JaszczurHAL repository root",
     )
+    parser.add_argument(
+        "--include-hardware-fixtures",
+        action="store_true",
+        help="also check tests/hardware (opt-in hardware-fixture checks only)",
+    )
     args = parser.parse_args()
     root = args.root.resolve()
+    include = args.include_hardware_fixtures
 
-    failures = check_links(root)
+    failures = check_links(root, include)
     if failures:
         print("Documentation link check failed:", file=sys.stderr)
         for failure in failures:
@@ -151,7 +172,7 @@ def main() -> int:
 
     print(
         f"Documentation link check passed "
-        f"({len(documentation_files(root))} files)."
+        f"({len(documentation_files(root, include))} files)."
     )
     return 0
 

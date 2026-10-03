@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #ifdef JH_STM32G474_HW
+#include "port/stm32g474_nvic.h"
 #include "port/stm32g474_regs.h"
 #endif
 
@@ -188,9 +189,7 @@ static void timer_hw_init(void) {
   TIM_EGR(TIM6_BASE) = TIM_EGR_UG;
   TIM_SR(TIM6_BASE) = 0u;
 
-  NVIC_IPR8(TIM6_DACUNDER_IRQn) = JH_NVIC_PRIO_TIMER;
-  NVIC_ICPR(TIM6_DACUNDER_IRQn >> 5u) = (1u << (TIM6_DACUNDER_IRQn & 31u));
-  NVIC_ISER(TIM6_DACUNDER_IRQn >> 5u) = (1u << (TIM6_DACUNDER_IRQn & 31u));
+  jh_stm32g474_nvic_enable(TIM6_DACUNDER_IRQn, JH_NVIC_PRIO_TIMER);
 
   s_hw_ready = true;
 }

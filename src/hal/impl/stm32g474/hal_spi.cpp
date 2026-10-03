@@ -12,6 +12,7 @@
 
 #ifdef JH_STM32G474_HW
 #include "port/stm32g474_gpio_af.h"
+#include "port/stm32g474_nvic.h"
 #include "port/stm32g474_regs.h"
 #endif
 
@@ -335,9 +336,7 @@ static hal_status_t spi_hw_init(uint8_t idx) {
   (void)RCC_AHB1ENR;
   spi_dma_reset_channel(idx, true);
   const uint8_t irq = kSpiDmaTxIrqs[idx];
-  NVIC_IPR8(irq) = kSpiDmaIrqPriority;
-  NVIC_ICPR(irq / 32u) = 1u << (irq % 32u);
-  NVIC_ISER(irq / 32u) = 1u << (irq % 32u);
+  jh_stm32g474_nvic_enable(irq, kSpiDmaIrqPriority);
   spi_config_af5_pin(st->rx_pin);
   spi_config_af5_pin(st->tx_pin);
   spi_config_af5_pin(st->sck_pin);
@@ -414,8 +413,8 @@ void hal_spi_deinit(uint8_t bus) {
 #ifdef JH_STM32G474_HW
   (void)hal_spi_write_dma_async_wait_ex(idx);
   const uint8_t irq = kSpiDmaTxIrqs[idx];
-  NVIC_ICER(irq / 32u) = 1u << (irq % 32u);
-  NVIC_ICPR(irq / 32u) = 1u << (irq % 32u);
+  jh_stm32g474_nvic_disable(irq);
+  jh_stm32g474_nvic_clear_pending(irq);
   spi_dma_reset_channel(idx, false);
   SPI_CR1(spi_hw_base(idx)) &= ~SPI_CR1_SPE;
   st->hw_configured = false;

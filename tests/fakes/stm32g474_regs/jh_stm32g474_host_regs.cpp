@@ -9,6 +9,8 @@ namespace {
 // land inside the word, little-endian as on the chip. Map elements keep their
 // address across insertions, so handed-out pointers stay valid.
 std::map<uintptr_t, uint32_t> s_cells;
+jh_stm32g474_host_read_hook_t s_read_hook;
+jh_stm32g474_host_write_hook_t s_write_hook;
 
 volatile uint8_t *cell_bytes(uintptr_t address) {
   const uintptr_t word = address & ~(uintptr_t)3u;
@@ -37,6 +39,32 @@ volatile uint32_t *jh_stm32g474_host_reg32(uintptr_t address) {
       cell_bytes(address & ~(uintptr_t)3u));
 }
 
-void jh_stm32g474_host_regs_reset(void) { s_cells.clear(); }
+uint32_t jh_stm32g474_host_read32(uintptr_t address) {
+  volatile uint32_t *cell = jh_stm32g474_host_reg32(address);
+  return s_read_hook ? s_read_hook(address & ~(uintptr_t)3u, *cell) : *cell;
+}
+
+void jh_stm32g474_host_write32(uintptr_t address, uint32_t value) {
+  volatile uint32_t *cell = jh_stm32g474_host_reg32(address);
+  if (s_write_hook) {
+    uint32_t stored = *cell;
+    s_write_hook(address & ~(uintptr_t)3u, value, &stored);
+    *cell = stored;
+  } else {
+    *cell = value;
+  }
+}
+
+void jh_stm32g474_host_regs_set_hooks(jh_stm32g474_host_read_hook_t read,
+                                      jh_stm32g474_host_write_hook_t write) {
+  s_read_hook = read;
+  s_write_hook = write;
+}
+
+void jh_stm32g474_host_regs_reset(void) {
+  s_cells.clear();
+  s_read_hook = nullptr;
+  s_write_hook = nullptr;
+}
 
 } // extern "C"

@@ -159,7 +159,7 @@ not sufficient; pool destruction from an alarm callback/ISR is unsupported.
   stale cancellation markers are cleared before publishing a reused Pico alarm
   ID, whose per-slot sequence repeats after 32767 allocations.
 - **impl/stm32g474:** TIM6 runs as a 1 MHz one-shot alarm scheduler derived from
-  the explicit 170 MHz APB1 timer-kernel clock. Long delays are chunked across
+  the explicit APB1 timer-kernel clock (`JH_G474_TIMCLK1_HZ`). Long delays are chunked across
   16-bit TIM6 periods, callback return values greater than zero reschedule the
   same alarm, and software pools provide the same public pool/cancel behavior as
   RP2040.
@@ -450,7 +450,14 @@ Interval helpers run periodic work from a loop without blocking waits or a hardw
   latched before application entry so enabling the watchdog later cannot erase
   the previous-boot result.
 - **impl/stm32g474:** Startup derives a 170 MHz SYSCLK from HSI16 through the PLL
-  and runs AHB, APB1, and APB2 without a prescaler. SysTick (bare metal) or the
+  and runs AHB, APB1, and APB2 without a prescaler. Boards whose profile
+  selects the `stm32g474-hse-24mhz` component (`nucleo-g474re-canhat`) define
+  `HAL_STM32G474_CLOCK_HSE_160MHZ` and run 160 MHz from the 24 MHz HSE
+  crystal instead, with the FDCAN kernel clock at 80 MHz from PLL Q; if the
+  HSE is not ready within 100 ms, startup builds the same frequencies from
+  HSI16. All drivers take their clocks from `JH_G474_*_HZ` in
+  `port/stm32g474_clock.h`, so the values quoted below for 170 MHz scale
+  with the tree. SysTick (bare metal) or the
   committed FreeRTOS tick (RTOS builds) advances a double-buffered 64-bit
   millisecond epoch. Bare-metal reads add the current SysTick microsecond
   fraction and account for a pending rollover. Consequently `hal_micros()` keeps
@@ -471,8 +478,8 @@ Interval helpers run periodic work from a loop without blocking waits or a hardw
   FreeRTOS task-context delay yields to the scheduler; pre-scheduler, ISR, and
   critical paths use DWT waits. The architecture snapshot combines generated
   target and board capacities with heap, stack, EEPROM, and LittleFS spans from
-  the selected runtime and linker layout, and reports 170 MHz for both CPU and
-  the primary peripheral clock. The hardware watchdog uses IWDG with the 32 kHz
+  the selected runtime and linker layout, and reports the SYSCLK of the tree
+  (170 or 160 MHz) for both CPU and the primary peripheral clock. The hardware watchdog uses IWDG with the 32 kHz
   nominal LSI clock, selects the shortest fitting prescaler, and accepts timeouts
   from 1 through 32768 ms. `pause_on_debug` controls the DBGMCU IWDG freeze bit.
   Watchdog reset classification uses the boot-latched `RCC_CSR_IWDGRSTF` flag.
@@ -1016,8 +1023,8 @@ execution restarts from reset.
 
 On STM32G474, RTC-timed Sleep/STOP transitions keep `hal_micros64()` and
 `hal_millis()` monotonic by adding the programmed RTC interval while SysTick is
-stopped. The 170 MHz PLL tree and SysTick are restored before returning to the
-caller. `can_compensate_monotonic_time` describes this RTC-timed guarantee; an
+stopped. The PLL tree (including the HSE start with its fallback) and SysTick
+are restored before returning to the caller. `can_compensate_monotonic_time` describes this RTC-timed guarantee; an
 arbitrary interrupt-only STOP interval has no precise elapsed-time source and
 must not be interpreted as a measured sleep duration.
 

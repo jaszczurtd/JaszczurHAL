@@ -5,7 +5,10 @@
 Przykład co sekundę wysyła ramkę CAN o identyfikatorze `0x321` i wypisuje
 odebrane ramki w konsoli szeregowej. Kontroler MCP2515 jest podłączony do
 magistrali SPI 0. Aplikacja cyklicznie sprawdza odbiór, więc nie wymaga
-podłączenia pinu przerwania.
+podłączenia pinu przerwania. Wbudowana dioda zmienia stan przy każdej wysłanej
+ramce i gaśnie, gdy wysłanie się nie uda. Na NUCLEO-G474RE dioda LD2 to PA5,
+którego te połączenia używają jako zegara SPI, więc tam przykład jej nie
+steruje.
 
 Flaga `HAL_ENABLE_MCP2515` włącza sterownik oraz potrzebną obsługę CAN i SPI.
 Poniższe połączenia dotyczą RP2040 i STM32G474.
@@ -25,6 +28,6 @@ Poniższe połączenia dotyczą RP2040 i STM32G474.
 
 Użyj modułu MCP2515 z transceiverem CAN i rezystorami terminującymi
 magistralę. `hal_can_create()` włącza tryb pojedynczej próby nadawania:
-brak potwierdzenia ACK powoduje błąd wysyłania, a nie nieograniczone
-ponawianie. Sam kontroler na odłączonej magistrali nie otrzyma takiego
+brak potwierdzenia ACK kończy wysyłanie statusem `HAL_EIO` (widocznym
+w logu), a nie nieograniczonym ponawianiem. Sam kontroler na odłączonej magistrali nie otrzyma takiego
 potwierdzenia.

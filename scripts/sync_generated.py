@@ -112,10 +112,17 @@ def file_fingerprint(path: Path) -> tuple[int, str] | None:
     return stat.S_IMODE(metadata.st_mode), hashlib.sha256(content).hexdigest()
 
 
+# No generator writes into device-test fixtures, and the default checks never
+# read them (AGENTS.md), so their files stay out of the snapshot.
+HARDWARE_FIXTURES = Path("tests") / "hardware"
+
+
 def repository_state(root: Path) -> dict[Path, tuple[int, str]]:
-    """Snapshot repository file modes and contents."""
+    """Snapshot repository file modes and contents, without tests/hardware."""
     state: dict[Path, tuple[int, str]] = {}
     for path in repository_files(root):
+        if path.relative_to(root).parts[:2] == HARDWARE_FIXTURES.parts:
+            continue
         fingerprint = file_fingerprint(path)
         if fingerprint is not None:
             state[path.relative_to(root)] = fingerprint

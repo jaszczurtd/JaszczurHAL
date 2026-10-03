@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
 import sys
@@ -17,59 +16,13 @@ ROOT = repo_root(sys.argv, __file__)
 sys.path.insert(0, str(ROOT))
 
 from vscode.runtime import serial_io
+from scripted_serial_port import ScriptedPort
 
 
 class FakeSerialException(Exception):
     pass
 
 
-# Verifiers that read request/response lines through the shared reader.
-LINE_VERIFIERS = (
-    "rp_flash_transaction/verify_flash_transaction.py",
-    "rp_freertos_smp/verify_freertos_smp.py",
-    "rp_kv_power_loss/verify_kv_power_loss.py",
-    "rp_ota/verify_ota.py",
-    "rp_storage/verify_storage.py",
-    "rp_usb_multicore/verify_usb_multicore.py",
-)
-
-
-class ScriptedPort:
-    """Serial port whose every read(1) costs `step` seconds of fake time."""
-
-    def __init__(self, data: bytes, step: float, repeat: bool = False) -> None:
-        self.data = data
-        self.step = step
-        self.repeat = repeat
-        self.position = 0
-        self.reads = 0
-        self.now = 0.0
-
-    def clock(self) -> float:
-        return self.now
-
-    def read(self, size: int) -> bytes:
-        assert size == 1
-        if self.reads >= 10000:
-            raise AssertionError("reader kept reading past its deadline")
-        self.reads += 1
-        self.now += self.step
-        if self.position >= len(self.data):
-            if not self.repeat:
-                return b""
-            self.position = 0
-        byte = self.data[self.position : self.position + 1]
-        self.position += 1
-        return byte
-
-
-def load_verifier(relative: str):
-    path = ROOT / "tests" / "hardware" / relative
-    spec = importlib.util.spec_from_file_location(path.stem, path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 class ReadLineTests(unittest.TestCase):
@@ -96,16 +49,6 @@ class ReadLineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "exceeds 64 bytes"):
             serial_io.read_line(port, 1.0, limit=64, clock=port.clock)
         self.assertEqual(64, port.reads)
-
-    def test_hardware_verifiers_use_the_bounded_reader(self) -> None:
-        for relative in LINE_VERIFIERS:
-            with self.subTest(verifier=relative):
-                module = load_verifier(relative)
-                port = ScriptedPort(b"x", step=0.05, repeat=True)
-                with mock.patch.object(serial_io.time, "monotonic", port.clock):
-                    with self.assertRaises(TimeoutError):
-                        module.read_line(port, 0.2)
-                self.assertLess(port.now, 0.3)
 
 
 class SerialIoTests(unittest.TestCase):

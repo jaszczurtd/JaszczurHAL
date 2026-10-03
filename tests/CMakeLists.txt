@@ -460,21 +460,86 @@ add_test(NAME test_rp_serial_cdc_congestion
 
 # The STM32G474 native FDCAN backend on a register table, checked against the
 # G4 register offsets and message RAM layout written out in the test.
-add_executable(test_stm32_fdcan_backend
-    test_stm32_fdcan_backend.cpp
-    fakes/stm32g474_regs/jh_stm32g474_host_regs.cpp
-    ${CMAKE_SOURCE_DIR}/src/hal/impl/stm32g474/hal_can_stm32g474_fdcan.cpp
-    ${CMAKE_SOURCE_DIR}/src/hal/can/hal_can_util.cpp
+# The second build captures frame timestamps with TIM3.
+foreach(_jh_fdcan_variant IN ITEMS "" _tim3)
+    set(_jh_fdcan_test test_stm32_fdcan_backend${_jh_fdcan_variant})
+    add_executable(${_jh_fdcan_test}
+        test_stm32_fdcan_backend.cpp
+        fakes/stm32g474_regs/jh_stm32g474_host_regs.cpp
+        ${CMAKE_SOURCE_DIR}/src/hal/impl/stm32g474/hal_can_stm32g474_fdcan.cpp
+        ${CMAKE_SOURCE_DIR}/src/hal/can/hal_can_util.cpp
+        ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+    target_include_directories(${_jh_fdcan_test} PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/fakes/stm32g474_regs
+        ${CMAKE_SOURCE_DIR}/src)
+    target_compile_definitions(${_jh_fdcan_test} PRIVATE
+        HAL_TARGET_STM32G474=1 JH_STM32G474_HW=1 JH_STM32G474_HOST_REGS=1
+        HAL_ENABLE_CAN HAL_ENABLE_STM32G474_FDCAN
+        HAL_ENABLE_UNITY UNITY_INCLUDE_CONFIG_H)
+    if(_jh_fdcan_variant)
+        target_compile_definitions(${_jh_fdcan_test} PRIVATE
+            HAL_CAN_STM32G474_TIMESTAMP_TIM3)
+    endif()
+    jh_enable_host_warnings(${_jh_fdcan_test} ERRORS)
+    add_test(NAME ${_jh_fdcan_test} COMMAND ${_jh_fdcan_test})
+endforeach()
+
+# The ISR-to-task element queue in src/hal/core, with a two-thread run.
+add_executable(test_spsc_ring
+    test_spsc_ring.cpp
     ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
-target_include_directories(test_stm32_fdcan_backend PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/fakes/stm32g474_regs
-    ${CMAKE_SOURCE_DIR}/src)
-target_compile_definitions(test_stm32_fdcan_backend PRIVATE
-    HAL_TARGET_STM32G474=1 JH_STM32G474_HW=1 JH_STM32G474_HOST_REGS=1
-    HAL_ENABLE_CAN HAL_ENABLE_STM32G474_FDCAN
+target_include_directories(test_spsc_ring PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(test_spsc_ring PRIVATE
     HAL_ENABLE_UNITY UNITY_INCLUDE_CONFIG_H)
-jh_enable_host_warnings(test_stm32_fdcan_backend ERRORS)
-add_test(NAME test_stm32_fdcan_backend COMMAND test_stm32_fdcan_backend)
+jh_enable_host_warnings(test_spsc_ring ERRORS)
+target_link_libraries(test_spsc_ring PRIVATE Threads::Threads)
+add_test(NAME test_spsc_ring COMMAND test_spsc_ring)
+
+# hal_can_board_config() over generated board facts: the host mock board
+# declares no CAN channel, the CAN-FD HAT profile three.
+foreach(_jh_can_board IN ITEMS mock canhat)
+    set(_jh_can_board_test test_can_board_config_${_jh_can_board})
+    add_executable(${_jh_can_board_test}
+        test_can_board_config.cpp
+        ${CMAKE_SOURCE_DIR}/src/hal/can/hal_can_util.cpp
+        ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+    target_include_directories(${_jh_can_board_test} PRIVATE
+        ${CMAKE_SOURCE_DIR}/src)
+    target_compile_definitions(${_jh_can_board_test} PRIVATE
+        HAL_ENABLE_CAN HAL_ENABLE_UNITY UNITY_INCLUDE_CONFIG_H)
+    if(_jh_can_board STREQUAL "canhat")
+        target_compile_definitions(${_jh_can_board_test} PRIVATE
+            HAL_TARGET_STM32G474=1 HAL_ENABLE_STM32G474_FDCAN
+            HAL_BOARD_PROFILE_STM32G474_NUCLEO_CANHAT=1)
+    else()
+        target_compile_definitions(${_jh_can_board_test} PRIVATE
+            HAL_ENABLE_MCP2515)
+    endif()
+    jh_enable_host_warnings(${_jh_can_board_test} ERRORS)
+    add_test(NAME ${_jh_can_board_test} COMMAND ${_jh_can_board_test})
+endforeach()
+
+# The STM32G474 clock tree bring-up on a modelled RCC, once per tree: the
+# default HSI16 170 MHz tree and the HSE 160 MHz tree with FDCAN on PLL Q.
+foreach(_jh_clock_tree IN ITEMS default hse160)
+    set(_jh_clock_test test_stm32_clock_tree_${_jh_clock_tree})
+    add_executable(${_jh_clock_test}
+        test_stm32_clock_tree.cpp
+        fakes/stm32g474_regs/jh_stm32g474_host_regs.cpp
+        ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+    target_include_directories(${_jh_clock_test} PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/fakes/stm32g474_regs
+        ${CMAKE_SOURCE_DIR}/src)
+    target_compile_definitions(${_jh_clock_test} PRIVATE
+        HAL_TARGET_STM32G474=1 JH_STM32G474_HW=1 JH_STM32G474_HOST_REGS=1
+        HAL_ENABLE_UNITY UNITY_INCLUDE_CONFIG_H)
+    if(_jh_clock_tree STREQUAL "hse160")
+        target_compile_definitions(${_jh_clock_test} PRIVATE
+            HAL_STM32G474_CLOCK_HSE_160MHZ)
+    endif()
+    jh_enable_host_warnings(${_jh_clock_test} ERRORS)
+    add_test(NAME ${_jh_clock_test} COMMAND ${_jh_clock_test})
+endforeach()
 
 # The STM32G474 ADC scan backend with its registers in a host table: ring
 # programming, block publication and the newest half when the interrupt ran
@@ -1093,6 +1158,12 @@ add_test(NAME test_serial_io
         ${CMAKE_CURRENT_SOURCE_DIR}/test_serial_io.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
+# Default checks never read tests/hardware; the case runs on throwaway trees.
+add_test(NAME test_hardware_isolation
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_hardware_isolation.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
 add_test(NAME test_check_vulnerabilities
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_check_vulnerabilities.py
@@ -1365,6 +1436,24 @@ add_hal_test(test_cyw43_gspi_transport)
 add_hal_test(test_cyw43_lwip)
 add_hal_test(test_hal_crc)
 add_hal_test(test_hal_can)
+# The status-returning CAN API through the facade: queued and synchronous.
+add_hal_test(test_hal_can_queued)
+jh_enable_host_warnings(test_hal_can_queued ERRORS)
+# Without a transmit queue a queueing controller stays synchronous; the facade
+# is compiled again with that length ahead of the copy in hal_mock.
+add_executable(test_hal_can_without_tx_queue test_hal_can_without_tx_queue.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/can/hal_can.cpp)
+target_compile_definitions(test_hal_can_without_tx_queue PRIVATE
+    HAL_CAN_TX_QUEUE_LEN=0)
+target_link_libraries(test_hal_can_without_tx_queue PRIVATE hal_mock)
+add_test(NAME test_hal_can_without_tx_queue COMMAND test_hal_can_without_tx_queue)
+jh_enable_host_warnings(test_hal_can_without_tx_queue ERRORS)
+# The classic CAN API exactly as the Fiesta modules use it (C and C++).
+add_executable(test_can_fiesta_compat test_can_fiesta_compat.cpp
+    can_fiesta_usage.c)
+target_link_libraries(test_can_fiesta_compat PRIVATE hal_mock)
+jh_enable_host_warnings(test_can_fiesta_compat ERRORS)
+add_test(NAME test_can_fiesta_compat COMMAND test_can_fiesta_compat)
 add_hal_test(test_hal_thermocouple)
 add_hal_test(test_hal_critical_section)
 add_executable(test_pcf8563_driver
@@ -1626,6 +1715,17 @@ add_executable(test_mcp2515_driver
 )
 target_link_libraries(test_mcp2515_driver PRIVATE hal_mock)
 add_test(NAME test_mcp2515_driver COMMAND test_mcp2515_driver)
+# The MCP251XFD provider and driver against a model of the MCP2518FD.
+add_executable(test_mcp251xfd_driver
+    test_mcp251xfd_driver.cpp
+    fakes/mcp251xfd/mcp251xfd_model.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/can/mcp251xfd/hal_can_mcp251xfd.cpp
+)
+target_include_directories(test_mcp251xfd_driver PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(test_mcp251xfd_driver PRIVATE hal_mock)
+add_test(NAME test_mcp251xfd_driver COMMAND test_mcp251xfd_driver)
+jh_enable_host_warnings(test_mcp251xfd_driver ERRORS)
 add_executable(test_mfrc522_driver
     test_mfrc522_driver.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/nfc/mfrc522/mfrc522.cpp
@@ -1884,22 +1984,30 @@ jh_enable_host_warnings(test_esp32_adc_scan_backend ERRORS)
 target_link_libraries(test_esp32_adc_scan_backend PRIVATE Threads::Threads)
 add_test(NAME test_esp32_adc_scan_backend COMMAND test_esp32_adc_scan_backend)
 add_stm32_gpio_host_test(test_stm32_hal_gpio)
-add_executable(test_stm32_pwm_clock
-    test_stm32_pwm_clock.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/stm32g474/hal_pwm_stm32g474.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
-)
-target_include_directories(test_stm32_pwm_clock PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src
-)
-target_compile_definitions(test_stm32_pwm_clock PRIVATE
-    HAL_TARGET_STM32G474=1
-    HAL_ENABLE_PWM_FREQ
-    UNITY_INCLUDE_CONFIG_H
-    HAL_ENABLE_UNITY
-)
-jh_enable_host_warnings(test_stm32_pwm_clock ERRORS)
-add_test(NAME test_stm32_pwm_clock COMMAND test_stm32_pwm_clock)
+# PWM pin timing; the second build reserves TIM3 for FDCAN timestamps.
+foreach(_jh_pwm_variant IN ITEMS "" _can_tim3)
+    set(_jh_pwm_test test_stm32_pwm_clock${_jh_pwm_variant})
+    add_executable(${_jh_pwm_test}
+        test_stm32_pwm_clock.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/stm32g474/hal_pwm_stm32g474.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
+    )
+    target_include_directories(${_jh_pwm_test} PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../src
+    )
+    target_compile_definitions(${_jh_pwm_test} PRIVATE
+        HAL_TARGET_STM32G474=1
+        HAL_ENABLE_PWM_FREQ
+        UNITY_INCLUDE_CONFIG_H
+        HAL_ENABLE_UNITY
+    )
+    if(_jh_pwm_variant)
+        target_compile_definitions(${_jh_pwm_test} PRIVATE
+            HAL_CAN_STM32G474_TIMESTAMP_TIM3)
+    endif()
+    jh_enable_host_warnings(${_jh_pwm_test} ERRORS)
+    add_test(NAME ${_jh_pwm_test} COMMAND ${_jh_pwm_test})
+endforeach()
 add_hal_test(test_hal_pwm)
 add_hal_test(test_hal_adc)
 add_hal_test(test_hal_dac)

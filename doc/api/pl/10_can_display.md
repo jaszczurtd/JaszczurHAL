@@ -24,6 +24,8 @@ Wysyłanie i odbiór ramek CAN przez kontroler MCP2515, MCP251XFD lub wewnętrzn
 #define HAL_CAN_EXT_ID_MASK 0x1FFFFFFFu
 #define HAL_CAN_MAX_FILTERS 6u
 #define HAL_CAN_NO_INT_PIN   0xFF
+#define HAL_CAN_ID_EXTENDED_FLAG 0x80000000u
+#define HAL_CAN_ID_RTR_FLAG      0x40000000u
 
 // Uchwyt do struktury z ukrytymi polami (ang. opaque handle).
 // Po jednym na fizyczną instancję kontrolera CAN.
@@ -70,7 +72,14 @@ enum {
     HAL_CAN_MODE_LISTEN_ONLY = 0x02u,
     HAL_CAN_MODE_FD          = 0x04u,
     HAL_CAN_MODE_ONE_SHOT    = 0x08u,
-    HAL_CAN_MODE_SLEEP       = 0x10u
+    HAL_CAN_MODE_SLEEP       = 0x10u,
+    HAL_CAN_MODE_EXTERNAL_LOOPBACK = 0x20u
+};
+
+enum {
+    HAL_CAN_TDC_AUTO   = 0u,
+    HAL_CAN_TDC_OFF    = 1u,
+    HAL_CAN_TDC_MANUAL = 2u
 };
 
 typedef enum {
@@ -102,16 +111,27 @@ typedef struct {
     uint32_t data_bitrate_hz;
     uint32_t oscillator_hz;
     uint32_t spi_clock_hz;
+    uint16_t arbitration_sample_point_permille;
+    uint16_t data_sample_point_permille;
     bool enable_fd;
     bool one_shot_tx;
     bool sleep_wakeup;
 } hal_can_mcp251xfd_config_t;
 
 typedef struct {
+    uint8_t instance;
     uint8_t rx_pin;
     uint8_t tx_pin;
+    bool has_standby;
+    uint8_t standby_pin;
+    bool standby_high;
     uint32_t arbitration_bitrate_hz;
     uint32_t data_bitrate_hz;
+    uint16_t arbitration_sample_point_permille;
+    uint16_t data_sample_point_permille;
+    uint8_t tdc_mode;
+    uint8_t tdc_offset;
+    uint32_t transceiver_max_bitrate_hz;
     bool enable_fd;
     bool one_shot_tx;
 } hal_can_stm32g474_fdcan_config_t;
@@ -130,73 +150,93 @@ typedef struct {
 // z MCP251XFD, a na końcu ze STM32G474 FDCAN.
 // MCP2515: magistrala SPI 0, pin CS 0, 500 kbps / kryształ 8 MHz.
 // MCP251XFD: magistrala SPI 0, pin CS 0, arbitraż 500 kbit/s, dane 2 Mbit/s.
-// STM32G474 FDCAN: PA11/PA12, arbitraż 500 kbit/s, dane 2 Mbit/s.
+// STM32G474 FDCAN: FDCAN1 na PA11/PA12, arbitraż 500 kbit/s, dane 2 Mbit/s.
 hal_can_config_t hal_can_default_config(void);
+
+// Konfiguracja kanału CAN `channel` (od 0) zadeklarowanego w profilu płytki:
+// kontroler, instancja, piny, standby, limit transceivera, 500 kbit/s z fazą
+// danych FD 2 Mbit/s. HAL_ENOENT, gdy płytka nie ma takiego kanału.
+hal_status_t hal_can_board_config(uint8_t channel, hal_can_config_t *out);
+
+// Każde wywołanie, które może się nie udać, zwraca hal_status_t: HAL_OK albo
+// błąd mówiący, co poszło źle (zob. „Statusy wyników" niżej).
 
 // Tworzy i inicjalizuje kanał CAN na podstawie konfiguracji. NULL używa
 // konfiguracji domyślnej.
-// Zwraca NULL w razie niepowodzenia (układ nie odpowiada lub pula wyczerpana)
-hal_can_t hal_can_create(const hal_can_config_t *cfg);
+hal_status_t hal_can_create(const hal_can_config_t *cfg, hal_can_t *out);
 
 // Zwalnia wszystkie zasoby; uchwyt nie może być używany po tym wywołaniu
 void hal_can_destroy(hal_can_t h);
 
-// Wysyła ramkę CAN
-bool hal_can_send(hal_can_t h, uint32_t id, uint8_t len, const uint8_t *data);
+// Wysyła klasyczną ramkę CAN i czeka na nią: ID 11-bitowe albo 29-bitowe
+// z HAL_CAN_ID_EXTENDED_FLAG; HAL_CAN_ID_RTR_FLAG wysyła ramkę zdalną.
+hal_status_t hal_can_send(hal_can_t h, uint32_t id, uint8_t len,
+                          const uint8_t *data);
 
-// Wysyła ramkę CAN/CAN FD. MCP2515 akceptuje wyłącznie klasyczne ramki CAN;
-// MCP251XFD i STM32G474 FDCAN akceptują CAN FD, gdy enable_fd=true.
-bool hal_can_send_frame(hal_can_t h, const hal_can_frame_t *frame);
+// Wysyła ramkę CAN/CAN FD i czeka na nią. CAN FD wymaga HAL_CAN_MODE_FD
+// w bieżącym trybie; MCP2515 akceptuje wyłącznie klasyczne ramki CAN.
+hal_status_t hal_can_send_frame(hal_can_t h, const hal_can_frame_t *frame);
 
-// Odczytuje kolejną dostępną ramkę (zwraca false, jeśli żadna ramka nie jest gotowa)
-bool hal_can_receive(hal_can_t h, uint32_t *id, uint8_t *len, uint8_t *data);
+// Odczytuje kolejną klasyczną ramkę; HAL_EAGAIN, gdy żadna nie czeka. Ramki
+// rozszerzone i zdalne mają w id flagi HAL_CAN_ID_*.
+hal_status_t hal_can_receive(hal_can_t h, uint32_t *id, uint8_t *len,
+                             uint8_t *data);
 
-// Odczytuje kolejną dostępną ramkę CAN/CAN FD.
-bool hal_can_receive_frame(hal_can_t h, hal_can_frame_t *frame);
+// Odczytuje kolejną ramkę CAN/CAN FD; HAL_EAGAIN, gdy żadna nie czeka.
+hal_status_t hal_can_receive_frame(hal_can_t h, hal_can_frame_t *frame);
 
 // Start/stop oraz tryby kontrolera. Nowe uchwyty są domyślnie uruchomione.
-bool hal_can_start(hal_can_t h);
-bool hal_can_stop(hal_can_t h);
-bool hal_can_set_mode(hal_can_t h, hal_can_mode_t mode);
-bool hal_can_get_mode(hal_can_t h, hal_can_mode_t *mode);
+hal_status_t hal_can_start(hal_can_t h);
+hal_status_t hal_can_stop(hal_can_t h);
+hal_status_t hal_can_set_mode(hal_can_t h, hal_can_mode_t mode);
+hal_status_t hal_can_get_mode(hal_can_t h, hal_can_mode_t *mode);
 
 // Stan kontrolera i diagnostyka.
-bool hal_can_get_state(hal_can_t h, hal_can_state_t *state);
-bool hal_can_get_error_counters(hal_can_t h,
-                                hal_can_error_counters_t *counters);
+hal_status_t hal_can_get_state(hal_can_t h, hal_can_state_t *state);
+hal_status_t hal_can_get_error_counters(hal_can_t h,
+                                        hal_can_error_counters_t *counters);
 
-// Sprawdzenie nieblokujące: true, jeśli czeka co najmniej jedna ramka
-bool hal_can_available(hal_can_t h);
+// Sprawdzenie nieblokujące: HAL_OK, gdy czeka ramka, HAL_EAGAIN, gdy nie.
+hal_status_t hal_can_available(hal_can_t h);
 
 // Konfiguruje sprzętowe filtry RX dla dwóch akceptowanych standardowych
 // 11-bitowych ID.
 // Niepasujące ID są odrzucane przez backendy ze sprzętowym wsparciem filtrów.
-// Zwraca false, jeśli programowanie maski/filtra backendu się nie powiedzie.
-bool hal_can_set_std_filters(hal_can_t h, uint32_t id0, uint32_t id1);
+hal_status_t hal_can_set_std_filters(hal_can_t h, uint32_t id0, uint32_t id1);
 
-// Konfiguruje jeden slot filtra akceptacji z id/maską/flagami.
-bool hal_can_set_filter(hal_can_t h, uint8_t index,
-                        const hal_can_filter_t *filter);
+// Konfiguruje jeden slot filtra akceptacji z id/maską/flagami; bez miejsca
+// na nowy filtr zostaje stary, a wywołanie zwraca HAL_ENOMEM.
+hal_status_t hal_can_set_filter(hal_can_t h, uint8_t index,
+                                const hal_can_filter_t *filter);
 
-// Pomocnik tworzenia z ponawianiem prób, z opcjonalną konfiguracją pinu IRQ.
-hal_can_t hal_can_create_with_retry(const hal_can_config_t *cfg,
-                                    uint8_t int_pin,
-                                    void (*isr)(void),
-                                    int max_retries,
-                                    void (*retry_idle)(void));
+// Pomocnik tworzenia z ponawianiem prób, z opcjonalną konfiguracją pinu IRQ;
+// zwraca błąd ostatniej próby.
+hal_status_t hal_can_create_with_retry(const hal_can_config_t *cfg,
+                                       uint8_t int_pin,
+                                       void (*isr)(void),
+                                       int max_retries,
+                                       void (*retry_idle)(void),
+                                       hal_can_t *out);
 
 // Opróżnia oczekujące ramki RX i wywołuje callback dla każdej poprawnej.
-int hal_can_process_all(hal_can_t h, hal_can_frame_cb_t cb);
+// HAL_OK po opróżnieniu bufora albo błąd odbioru, który przerwał
+// opróżnianie; delivered (może być NULL) dostaje liczbę ramek przekazanych
+// do cb.
+hal_status_t hal_can_process_all(hal_can_t h, hal_can_frame_cb_t cb,
+                                 uint32_t *delivered);
 
 // Pomocnicy DLC dla CAN/CAN FD. bytes_to_dlc() zaokrągla w górę do
 // najbliższej reprezentowalnej długości CAN FD i zwraca HAL_CAN_DLC_INVALID
 // dla wartości >64 bajtów.
 uint8_t hal_can_dlc_to_bytes(uint8_t dlc);
 uint8_t hal_can_bytes_to_dlc(uint8_t bytes);
-bool hal_can_validate_frame(const hal_can_frame_t *frame);
-bool hal_can_validate_filter(const hal_can_filter_t *filter);
-bool hal_can_frame_matches_filter(const hal_can_frame_t *frame,
-                                  const hal_can_filter_t *filter);
+// HAL_OK albo HAL_EINVAL.
+hal_status_t hal_can_validate_frame(const hal_can_frame_t *frame);
+hal_status_t hal_can_validate_filter(const hal_can_filter_t *filter);
+// HAL_OK z ustawionym *matches, HAL_EINVAL dla błędnej ramki albo filtra.
+hal_status_t hal_can_frame_matches_filter(const hal_can_frame_t *frame,
+                                          const hal_can_filter_t *filter,
+                                          bool *matches);
 
 // Koduje temperaturę w °C jako bajt payloadu CAN typu signed int8.
 // Obcina w stronę zera, saturuje do zakresu [-128, 127], zwraca bajt w
@@ -204,9 +244,10 @@ bool hal_can_frame_matches_filter(const hal_can_frame_t *frame,
 uint8_t hal_can_encode_temp_i8(float temp_c);
 ```
 
-- **Wspólna implementacja modułu:** Pliki `hal_can.cpp` właściwe dla poszczególnych
-  targetów zawierają publiczną warstwę CAN, zarządzają cyklem życia uchwytów i muteksami
-  oraz kierują wywołania do backendu. Operacje specyficzne dla MCP2515 znajdują się w
+- **Wspólna implementacja modułu:** `hal/can/hal_can.cpp` zawiera publiczną warstwę
+  CAN dla wszystkich targetów, zarządza cyklem życia uchwytów i muteksami oraz
+  kieruje wywołania do backendu. Pliki `hal_can.cpp` w katalogach `impl/` są
+  pustymi kotwicami builda. Operacje specyficzne dla MCP2515 znajdują się w
   `hal/can/mcp2515/hal_can_mcp2515.*` i korzystają z dostępnego wyłącznie w HAL
   sterownika rejestrów/SPI MCP2515 z `hal/can/mcp2515/mcp2515_driver.*`.
   Operacje MCP251XFD znajdują się w `hal/can/mcp251xfd/hal_can_mcp251xfd.*`
@@ -214,12 +255,13 @@ uint8_t hal_can_encode_temp_i8(float temp_c);
   z `hal/can/mcp251xfd/mcp251xfd_driver.*`.
   Natywne operacje FDCAN dla STM32G474 znajdują się w
   `impl/stm32g474/hal_can_stm32g474_fdcan.*` i programują bezpośrednio rejestry
-  FDCAN1 oraz stały układ pamięci komunikatów (message RAM) STM32G4.
+  FDCAN1, FDCAN2 albo FDCAN3 oraz stały układ pamięci komunikatów (message RAM)
+  tej instancji.
 - **Wybór backendu:** API CAN przyjmuje `hal_can_config_t`. Włącz
   `HAL_ENABLE_MCP2515` dla klasycznego backendu MCP2515 lub
   `HAL_ENABLE_MCP251XFD` dla wsparcia CAN FD w MCP2517FD/MCP2518FD. Obie flagi
   kontrolerów zewnętrznych dołączają publiczną warstwę CAN oraz zależność SPI. Włącz
-  `HAL_ENABLE_STM32G474_FDCAN` dla natywnego FDCAN1 na STM32G474; ta flaga
+  `HAL_ENABLE_STM32G474_FDCAN` dla natywnych kontrolerów FDCAN STM32G474; ta flaga
   dołącza wyłącznie publiczną warstwę CAN i powoduje błąd kompilacji na innych
   targetach. Sama flaga `HAL_ENABLE_CAN` nie dołącza już SPI: włącza wspólne API
   i wymaga wskazania backendu.
@@ -239,17 +281,51 @@ uint8_t hal_can_encode_temp_i8(float temp_c);
   `hal_can_stop()` przełącza kontroler w tryb nieuczestniczący/konfiguracyjny,
   a `hal_can_start()` ponownie stosuje zapamiętany tryb. MCP2515 obsługuje
   flagi trybu normalnego, loopback, listen-only, sleep i one-shot. MCP251XFD
-  obsługuje dodatkowo `HAL_CAN_MODE_FD` na uchwytach z obsługą FD; STM32G474
-  FDCAN obsługuje tryb FD, loopback, listen-only i one-shot oraz przejścia do
-  trybów sleep i konfiguracji za pośrednictwem CCCR/TEST.
+  i STM32G474 FDCAN obsługują tryb FD, loopback wewnętrzny i zewnętrzny,
+  listen-only, one-shot i sleep. `HAL_CAN_MODE_LOOPBACK` to w każdym backendzie loopback
+  wewnętrzny: własne ramki wracają, a magistrala nie jest wysterowana.
+  `HAL_CAN_MODE_EXTERNAL_LOOPBACK` (STM32G474 FDCAN) wysyła je także na
+  magistralę i pomija brak ACK; ramki nadal wracają z wnętrza kontrolera, więc
+  ten tryb pokazuje je analizatorowi magistrali, ale nie sprawdza odbioru przez
+  transceiver.
   API stanu i liczników błędów przekształca zawartość rejestrów kontrolera do
   `hal_can_state_t` i `hal_can_error_counters_t`.
+- **Kanały płytki:** profil płytki z sekcją `can.channels` (np.
+  `nucleo-g474re-canhat`) wymienia podłączone kanały; `hal_can_board_config()`
+  zamienia kanał *n* w gotową konfigurację, którą aplikacja może zmienić przed
+  `hal_can_create()`. `HAL_CAN_MAX_INSTANCES` domyślnie równa się liczbie
+  kanałów płytki, gdy przekracza ona 2; przy zajętych wszystkich uchwytach
+  `hal_can_create()` zwraca `HAL_ENOMEM`.
+- **STM32G474 FDCAN:** `instance` wybiera FDCAN1..3 (0 oznacza FDCAN1); na
+  instancję przypada jeden uchwyt, drugie `hal_can_create()` dla tej samej
+  instancji zwraca `HAL_EBUSY`. `rx_pin`/`tx_pin` równe 0 wybierają PA11/PA12,
+  PB12/PB13 albo PA8/PB4; inne piny muszą być takimi, do których instancję da
+  się poprowadzić. Przy `has_standby` backend steruje wejściem standby
+  transceivera: standby przy konfiguracji, zatrzymaniu, uśpieniu i zniszczeniu
+  kanału, praca 40 µs przed wejściem kontrolera na magistralę. Bit timing
+  wynika z zegara jądra FDCAN (PCLK1 170 MHz albo PLL Q 80 MHz w drzewie
+  zegarów HSE): prędkość musi wyjść z błędem
+  do 0,5 %, punkt próbkowania domyślnie wynosi 80 % (arbitraż) i 75 % (dane),
+  a faza danych używa preskalera arbitrażu, gdy daje on dokładną prędkość.
+  Prędkość, której zegar nie zrobi, kończy `hal_can_create()` statusem
+  `HAL_EUNSUPPORTED`; arbitraż powyżej 1 Mbit/s, faza danych wolniejsza od
+  arbitrażu albo szybsza od `transceiver_max_bitrate_hz` statusem
+  `HAL_EINVAL`. Przy 170 MHz wyklucza to fazę danych 4 i 8 Mbit/s, które
+  daje 80 MHz. Kompensacja opóźnienia nadajnika (`HAL_CAN_TDC_AUTO`) włącza się
+  powyżej 1 Mbit/s przy preskalerze danych 1 lub 2, z drugim punktem
+  próbkowania w miejscu zwykłego. `hal_can_send_frame()` czeka, aż ramka
+  wyjdzie: nieudana próba one-shot zwraca `HAL_EIO`, bus-off `HAL_EBUS`,
+  a limit czasu 20 ramek (co najmniej 5 ms) `HAL_ETIMEOUT`; ramka zgłoszona
+  jako nieudana jest porzucana i nigdy nie wychodzi później. Kontroler w stanie bus-off zaczyna wychodzenie z niego przy
+  następnym nadaniu, odbiorze albo odczycie stanu. Filtry są zapisywane podczas
+  pracy kontrolera, więc ich zmiana nie zdejmuje węzła z magistrali.
 - **Filtry:** `hal_can_set_filter()` programuje jeden slot id/maska.
   `HAL_CAN_MAX_FILTERS` (6) to *minimalna* liczba sprzętowych filtrów akceptacji
   gwarantowana przez każdy backend, a zatem liczba slotów, na której może polegać
   przenośny kod. W MCP2515 odpowiadają one sześciu filtrom sprzętowym. MCP251XFD
-  i STM32G474 FDCAN używają pierwszych sześciu sprzętowych obiektów filtrów
-  kierowanych do RX FIFO 0, choć sprzęt może udostępniać ich więcej.
+  używa pierwszych sześciu sprzętowych obiektów filtrów kierowanych do swojego
+  RX FIFO 1, a STM32G474 FDCAN wolnych elementów filtrów standardowych lub
+  rozszerzonych kierowanych do RX FIFO 0; oba układy mają ich więcej.
   `hal_can_set_std_filters()` pozostaje funkcją pomocniczą dla dwóch
   dokładnych 11-bitowych ID. Zaprogramowanie filtra MCP2515 czyści też tryb
   odbioru dowolnego (receive-any) na obu sprzętowych buforach odbiorczych, więc
@@ -257,11 +333,178 @@ uint8_t hal_can_encode_temp_i8(float temp_c);
   `hal_can_create_with_retry()` ponawia inicjalizację do `max_retries + 1` prób
   i może automatycznie podłączyć handler IRQ, gdy `int_pin != HAL_CAN_NO_INT_PIN`.
   `hal_can_process_all()` wielokrotnie wywołuje `hal_can_receive()` i przekazuje
-  dalej tylko ramki z `id != 0` i `len > 0`.
+  dalej tylko ramki z `id != 0` i `len > 0`; błąd odbioru inny niż
+  `HAL_EAGAIN` kończy opróżnianie i wraca jako jego wynik.
   `hal_can_encode_temp_i8()` to funkcja pomocnicza wspólnego formatu danych dla
   jednobajtowych pól temperatury ze znakiem w ramkach CAN. Obcina wejściową
   wartość typu `float` w stronę zera, nasyca ją do zakresu `int8_t` i zwraca
   odpowiadający bajt payloadu w zapisie uzupełnienia do dwóch.
+
+**Filtry ponad klasyczne sloty** (STM32G474 FDCAN):
+
+```c
+enum { HAL_CAN_FILTER_MASK = 0, HAL_CAN_FILTER_RANGE = 1, HAL_CAN_FILTER_DUAL = 2 };
+enum { HAL_CAN_FILTER_ACCEPT = 0, HAL_CAN_FILTER_REJECT = 1 };
+#define HAL_CAN_FILTER_FIRST_ADDED HAL_CAN_MAX_FILTERS
+
+typedef struct {
+    uint8_t type;   /* HAL_CAN_FILTER_MASK, _RANGE or _DUAL */
+    uint8_t action; /* HAL_CAN_FILTER_ACCEPT or _REJECT */
+    uint8_t flags;  /* HAL_CAN_FILTER_EXTENDED */
+    uint32_t id1;   /* ID, range start or first ID */
+    uint32_t id2;   /* mask, range end or second ID */
+} hal_can_filter_ex_t;
+
+hal_status_t hal_can_add_filter(hal_can_t h, const hal_can_filter_ex_t *filter,
+                                uint8_t *index);
+hal_status_t hal_can_remove_filter(hal_can_t h, uint8_t index);
+hal_status_t hal_can_set_unmatched_policy(hal_can_t h, bool accept_std,
+                                          bool accept_ext, bool accept_rtr);
+hal_status_t hal_can_validate_filter_ex(const hal_can_filter_ex_t *filter);
+hal_status_t hal_can_frame_matches_filter_ex(const hal_can_frame_t *frame,
+                                             const hal_can_filter_ex_t *filter,
+                                             bool *matches);
+```
+
+- Filtry są elementami list kontrolera (28 standardowych, 8 rozszerzonych)
+  i zmieniają się podczas pracy kanału, bez zdejmowania go z magistrali.
+  Nowy filtr zajmuje najniższy wolny element; kontroler sprawdza elementy po
+  kolei i decyduje pierwsze dopasowanie, więc filtr odrzucający dodany przed
+  zakresem akceptującym wycina z niego wyjątek.
+- `hal_can_add_filter()` zwraca indeksy od `HAL_CAN_FILTER_FIRST_ADDED` (6)
+  w górę; klasyczne sloty `hal_can_set_filter()` zachowują 0-5 i leżą na tych
+  samych listach. `hal_can_rx_info_t::filter_index` wskazuje filtr, który
+  przyjął ramkę, a `HAL_CAN_FILTER_NONE`, gdy nie zrobił tego żaden.
+  `hal_can_remove_filter()` usuwa filtry obu rodzajów.
+- Bez filtrów kanał przyjmuje wszystko. Pierwszy filtr klasyczny odrzuca
+  ramki bez dopasowania, chyba że wcześniej wywołano
+  `hal_can_set_unmatched_policy()`. Przyjmowanie ramek bez dopasowania dla
+  jednego rodzaju ID zajmuje ostatni element tej listy (zostaje 27 filtrów
+  standardowych), więc kończy się `HAL_ENOMEM`, gdy ten element ma filtr.
+  Odrzucanie ramek zdalnych (`accept_rtr` false) wymaga zatrzymanego kanału
+  (inaczej `HAL_EBUSY`).
+- MCP251XFD ma 32 filtry wspólne dla obu rodzajów ID i pasującą ramkę może
+  tylko skierować do swojej kolejki odbiorczej: przyjmuje filtry maskowe
+  akceptujące (`HAL_CAN_FILTER_MASK`, `HAL_CAN_FILTER_ACCEPT`) pod indeksami
+  6..30, a na zakresy, pary ID i filtry odrzucające odpowiada
+  `HAL_EUNSUPPORTED`. Filtr 31 przechowuje politykę ramek bez filtra. Układ nie
+  umie odrzucać ramek zdalnych, więc przy `accept_rtr` równym false sterownik
+  odrzuca je przy odczycie, także na pracującym kanale.
+- MCP2515 odpowiada `HAL_EUNSUPPORTED`.
+
+**Praca kolejkowa, zdarzenia i stan:**
+
+```c
+#define HAL_CAN_MODE_MANUAL_RECOVERY 0x40u  /* stay bus-off until hal_can_recover() */
+#define HAL_CAN_WAIT_FOREVER 0xFFFFFFFFu
+#define HAL_CAN_FILTER_NONE 0xFFu
+
+hal_status_t hal_can_get_caps(hal_can_t h, hal_can_caps_t *out);
+
+hal_status_t hal_can_send_frame_ex(hal_can_t h, const hal_can_frame_t *frame,
+                                   uint32_t timeout_ms, uint32_t *tag);
+hal_status_t hal_can_receive_frame_ex(hal_can_t h, hal_can_frame_t *frame,
+                                      hal_can_rx_info_t *info,
+                                      uint32_t timeout_ms);
+
+hal_status_t hal_can_set_callbacks(hal_can_t h, hal_can_rx_cb_t rx,
+                                   hal_can_tx_cb_t tx,
+                                   hal_can_state_cb_t state, void *user);
+int hal_can_service(hal_can_t h, int max_events);
+hal_status_t hal_can_set_isr_notify(hal_can_t h, void (*notify)(void *),
+                                    void *user);
+
+hal_status_t hal_can_get_status(hal_can_t h, hal_can_status_t *out);
+hal_status_t hal_can_recover(hal_can_t h, uint32_t timeout_ms);
+```
+
+- **Kanały kolejkowe:** STM32G474 FDCAN pracuje na przerwaniach (IT0 dla
+  FIFO odbiorczych, IT1 dla reszty). Odebrane ramki trafiają do kolejki
+  uchwytu o długości `HAL_CAN_RX_QUEUE_LEN` (16), nadania kolejkowe do kolejki
+  `HAL_CAN_TX_QUEUE_LEN` (8) przed trzema slotami kontrolera, a wyniki nadań
+  i zmiany stanu do kolejki `HAL_CAN_EVENT_QUEUE_LEN` (16). Długości można
+  ustawić w `hal_project_config.h` w zakresie 0..1024; gdy któraś z nich
+  wynosi 0, kanał pracuje synchronicznie, jak kontrolery SPI. Kanały
+  kolejkowe zgłaszają `HAL_CAN_CAP_TX_EVENTS` i `HAL_CAN_CAP_RX_QUEUE`. Klasyczne
+  funkcje odbioru czytają tę samą kolejkę; ramka CAN FD, której nie mogą
+  zwrócić, jest zabierana i liczona w `rx_dropped_fd_on_classic_read`.
+  Klasyczne nadanie nadal czeka na swoją ramkę i nie daje zdarzenia.
+- **Nadawanie:** `hal_can_send_frame_ex()` kolejkuje ramkę i zwraca jej
+  znacznik; `timeout_ms` ogranicza tylko czekanie na miejsce w pełnej
+  kolejce. Wynik przychodzi jako `hal_can_tx_event_t`: `HAL_CAN_TX_DONE`,
+  `HAL_CAN_TX_FAILED` (nieudana próba one-shot, wynik `HAL_EIO`),
+  `HAL_CAN_TX_BUS_OFF` (`HAL_EBUS`) albo `HAL_CAN_TX_STOPPED`
+  (`HAL_ECANCELED`; `hal_can_stop()` lub zmiana trybu: ramki czekające
+  w kolejce były kolejkowane dla starego trybu). Każda ramka z kolejki
+  dostaje dokładnie jedno zdarzenie, a ramka zgłoszona jako nieudana nigdy
+  nie wychodzi później. Ramka CAN FD wymaga `HAL_CAN_MODE_FD` w bieżącym
+  trybie kanału; kanał przełączony na klasyczny CAN odrzuca ją z
+  `HAL_EUNSUPPORTED`. Na FDCAN nieudaną próbę one-shot
+  wykrywają przerwania błędu protokołu, włączane tylko w
+  `HAL_CAN_MODE_ONE_SHOT`.
+- **Zdarzenia:** `hal_can_service()` przekazuje callbackom wyniki nadań
+  i zmiany stanu, a potem odebrane ramki, jeśli ustawiono callback odbioru.
+  Działa w zadaniu, które ją wywołuje; callbacki działają bez blokady uchwytu
+  i mogą używać tego samego uchwytu. `hal_can_set_isr_notify()` ustawia
+  funkcję, którą przerwanie wywołuje po dodaniu czegoś do kolejki, np. by
+  obudzić zadanie wołające `hal_can_service()`. Każda kolejka liczy to, co
+  musiała odrzucić (`rx_queue_overflow`, `event_overflow`).
+- **Bus-off:** kanał kolejkowy po wejściu w bus-off porzuca wszystkie
+  oczekujące ramki i, jeśli nie ustawiono `HAL_CAN_MODE_MANUAL_RECOVERY`,
+  od razu zaczyna wychodzenie (128 x 11 bitów recesywnych). W trybie
+  ręcznym zostaje poza magistralą do `hal_can_recover()`, także po
+  klasycznym nadaniu, które trafiło na bus-off.
+- **Stan:** `hal_can_get_status()` zwraca stan, TEC/REC, ostatnie kody
+  błędów protokołu (FDCAN LEC/DLEC, zachowane, choć odczyt kontrolera je
+  zeruje), zmierzone opóźnienie nadajnika i liczniki ruchu (ramki nadane
+  i odebrane, ramki utracone w kolejce odbiorczej, nieudane nadania, liczba
+  bus-off). `rx_hw_lost` liczy przepełnienia FIFO odbiorczego kontrolera:
+  każde zgubiło co najmniej jedną ramkę, ale kontroler zatrzaskuje tylko sam
+  fakt, więc to dolna granica ramek utraconych w kontrolerze.
+  `ram_access_failures` liczy błędy dostępu do message RAM STM32G474 FDCAN
+  (MRAF): odrzuconą ramkę odbieraną albo nadanie przerwane, bo kontroler nie
+  zdążył odczytać ramki ze swojego message RAM. Po takim nadaniu kontroler
+  nic nie wysyła, dopóki oprogramowanie nie zakończy trybu ograniczonego
+  (restricted operation); HAL robi to od razu, więc czekające ramki
+  wychodzą. Pozostałe backendy podają 0.
+- **Znaczniki czasu:** na STM32G474 FDCAN `hal_can_rx_info_t::timestamp_us`
+  i `hal_can_tx_event_t::timestamp_us` są w skali `hal_micros64()`. Domyślnie
+  to chwila, w której przerwanie obsłużyło ramkę, jedna wartość na
+  przerwanie. Zdefiniowanie `HAL_CAN_STM32G474_TIMESTAMP_TIM3` w
+  `hal_project_config.h` zamienia je na znaczniki początku ramki: TIM3 liczy
+  mikrosekundy, kontroler zatrzaskuje go przy SOF (`TSCC.TSS` zewnętrzny) dla
+  ramek odebranych oraz, przez TX event FIFO, dla nadanych, a 16-bitowa
+  wartość jest rozszerzana do 64 bitów (poprawnie, gdy przerwanie zdąży
+  w 65 ms). Kanał zgłasza wtedy `HAL_CAN_CAP_TIMESTAMP_HW`, a piny TIM3 nie
+  są dostępne dla `hal_pwm` / `hal_pwm_freq`. Wyniki ramek, które nie
+  wyszły, mają 0.
+- **MCP251XFD:** zegar 40 lub 20 MHz taktuje kontroler bezpośrednio, kwarc
+  4 MHz włącza jego PLL x10. Timing bitów jest wyszukiwany w zakresach układu
+  tak jak w FDCAN, z punktami próbkowania z
+  `arbitration_sample_point_permille` / `data_sample_point_permille`
+  (domyślnie 80,0 % / 75,0 %) i z tym samym preskalerem w obu fazach, jeśli
+  się mieści; od 1 Mbit/s w fazie danych w trybie CAN FD automatyczna
+  kompensacja opóźnienia nadajnika ustawia drugi punkt próbkowania na punkt
+  próbkowania fazy danych. Każda zmiana trybu przechodzi przez tryb
+  konfiguracji układu, który porzuca czekające w nim ramki. Nadanie czeka, aż
+  ramka wyjdzie: nieudana próba one-shot zwraca `HAL_EIO`, brak sukcesu
+  w ciągu ok. 1400 czasów bitu przy prędkości arbitrażu `HAL_ETIMEOUT`,
+  a ramka jest usuwana i nigdy nie wychodzi później. Prędkość, której zegar
+  nie zrobi, kończy `hal_can_create()` statusem `HAL_EUNSUPPORTED`,
+  oscylator albo tryb, który nie ruszy w ok. 100 ms, statusem
+  `HAL_ETIMEOUT`, a układ, który nie odpowiada po resecie, statusem
+  `HAL_EIO`. Kolejka odbiorcza mieści 24 ramki. Backend
+  jest `experimental`: przeszedł testy hostowe z modelem MCP2518FD i buildy
+  targetów, ale nie test z fizycznym układem, więc żaden profil płytki go nie
+  opisuje. Zmiana tego statusu wymaga udokumentowanego testu na sprzęcie.
+- **Kanały synchroniczne:** MCP2515 i MCP251XFD nie mają kolejki:
+  `hal_can_send_frame_ex()` nadaje przed powrotem, a zdarzenie z wynikiem
+  i tak trafia do kolejki (domyślnie 4 zdarzenia), `hal_can_service()` czyta
+  ramki z kontrolera i zgłasza zauważone zmiany stanu, a
+  `hal_can_set_isr_notify()` zwraca `HAL_EUNSUPPORTED`.
+- **Testy hostowe:** `hal_mock_can_set_queued(true)` sprawia, że uchwyty
+  mocka tworzone później są kolejkowe jak FDCAN; `hal_mock_can_fail_sends()`
+  kończy kolejne nadania kolejkowe porażką.
 
 **Tryb TX one-shot:** `hal_can_create()` domyślnie włącza tryb one-shot MCP2515
 (`CANCTRL.OSM = 1`) po inicjalizacji. Można go wyłączyć poprzez
@@ -270,11 +513,13 @@ ACK (np. brak innego węzła na magistrali), sprzęt natychmiast zwalnia bufor
 TX zamiast retransmitować w nieskończoność. Zapobiega to wyczerpaniu buforów TX:
 bez one-shot już 3 kolejne ramki bez ACK trwale blokują wszystkie 3 bufory
 TX, powodując, że każde kolejne `hal_can_send()` zawodzi z
-`CAN_GETTXBFTIMEOUT`.
+`HAL_EBUSY`.
 
 Tryb one-shot jest przydatny przy okresowym rozgłaszaniu, gdy kolejna aktualizacja może zastąpić utraconą ramkę. Nie gwarantuje jednak dostarczenia każdej aktualizacji. Jeśli aplikacja wysyła dane tylko po zmianie, powinna ponawiać nieudaną transmisję, okresowo wysyłać aktualny stan albo wyłączyć `one_shot_tx`; inaczej odbiorca może pozostać z nieaktualnymi danymi.
 
-Jeżeli pierwsza próba transmisji się powiedzie, tryb one-shot i tryb normalny dają ten sam wynik - ponowienie nie jest potrzebne. W trybie one-shot brak ACK, utrata arbitrażu, przerwanie transmisji lub błąd magistrali powodują zwrócenie `false` przez `hal_can_send()`. Błąd jest logowany przez `hal_derr_limited("can", ...)`, aby ograniczyć liczbę komunikatów na porcie szeregowym. Tryb normalny kontynuuje sprzętowe ponawianie transmisji i zgłasza sukces, gdy kolejna próba się powiedzie.
+Jeżeli pierwsza próba transmisji się powiedzie, tryb one-shot i tryb normalny dają ten sam wynik - ponowienie nie jest potrzebne. W trybie one-shot brak ACK, utrata arbitrażu, przerwanie transmisji lub błąd magistrali powodują zwrócenie `HAL_EIO` przez `hal_can_send()`. Błąd jest logowany z nazwą statusu przez `hal_derr_limited("can", ...)`, aby ograniczyć liczbę komunikatów na porcie szeregowym. Tryb normalny kontynuuje sprzętowe ponawianie transmisji i zgłasza sukces, gdy kolejna próba się powiedzie.
+
+**Statusy wyników (MCP2515):** `hal_can_send()` i `hal_can_send_frame()` zwracają `HAL_EBUSY`, gdy żaden bufor nadawczy nie zwolnił się w 2,5 ms, `HAL_ETIMEOUT`, gdy ramka nie wyszła w 2,5 ms (jest przerywana i nigdy nie wychodzi później), oraz `HAL_EIO` dla nieudanej próby one-shot. Funkcje odbioru zwracają `HAL_EAGAIN`, gdy żadna ramka nie czeka. Zmiana trybu, `hal_can_stop()` i każde wywołanie filtrów zwracają `HAL_ETIMEOUT`, gdy kontroler nie wszedł w żądany tryb albo z niego nie wyszedł w 200 ms; wywołania filtrów kończą się na pierwszym takim błędzie. `hal_can_create()` zwraca `HAL_EUNSUPPORTED` dla prędkości albo kwarcu bez tabeli timingu i `HAL_EIO`, gdy kontroler nie odpowiada albo nie przyjmuje konfiguracji. Kontroler nie wykrywa bus-off w trakcie nadawania; zgłasza go `hal_can_get_state()`. Każdy kanał: `HAL_EINVAL` dla błędnego uchwytu albo argumentu i `HAL_EBUSY` dla nadania na zatrzymanym albo uśpionym kanale.
 
 ---
 

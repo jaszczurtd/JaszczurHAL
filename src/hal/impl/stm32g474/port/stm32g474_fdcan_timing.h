@@ -2,108 +2,64 @@
 
 /**
  * @file stm32g474_fdcan_timing.h
- * @brief Pure STM32G4 FDCAN bit-timing search and register encoding.
+ * @brief STM32G4 FDCAN bit-timing ranges and register encoding.
+ *
+ * The search itself is the shared jh_can_compute_timing(); this header gives
+ * it the NBTP/DBTP field ranges of RM0440 and encodes the result.
  */
 
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
+#include "hal/can/jh_can_bit_timing.h"
 
-typedef struct {
-  uint16_t prescaler;
-  uint16_t segment1;
-  uint16_t segment2;
-  uint16_t sync_jump_width;
-  uint32_t actual_bitrate_hz;
-} jh_stm32g474_fdcan_timing_t;
+typedef jh_can_timing_t jh_stm32g474_fdcan_timing_t;
 
-static inline uint32_t jh_stm32g474_abs_diff_u32(uint32_t a, uint32_t b) {
-  return a > b ? a - b : b - a;
+/** @brief NBTP (arbitration) and DBTP (data) ranges, RM0440 44.4. */
+static const jh_can_timing_limits_t kJhStm32g474FdcanNominalLimits = {
+    512u, 2u, 256u, 128u, 128u, JH_CAN_NOMINAL_SP_PERMILLE};
+static const jh_can_timing_limits_t kJhStm32g474FdcanDataLimits = {
+    32u, 1u, 32u, 16u, 16u, JH_CAN_DATA_SP_PERMILLE};
+
+/**
+ * @brief Find the FDCAN bit timing for one phase.
+ * @param kernel_clock_hz FDCAN kernel clock after CKDIV.
+ * @param bitrate_hz Requested bitrate; it must be met within 0.5 %.
+ * @param data_phase Use the DBTP (data) limits instead of NBTP.
+ * @param sample_point_permille Target sample point; 0 selects the default of
+ *        the phase.
+ * @param preferred_prescaler Prescaler to use when it gives an exact bitrate
+ *        (the arbitration prescaler for the data phase); 0 for none.
+ * @param[out] out Chosen timing; untouched on error.
+ * @return HAL_OK, HAL_EINVAL for a zero clock or bitrate or NULL @p out, or
+ *         HAL_EUNSUPPORTED when no timing meets the bitrate.
+ */
+static inline hal_status_t jh_stm32g474_fdcan_compute_timing(
+    uint32_t kernel_clock_hz, uint32_t bitrate_hz, bool data_phase,
+    uint16_t sample_point_permille, uint16_t preferred_prescaler,
+    jh_stm32g474_fdcan_timing_t *out) {
+  return jh_can_compute_timing(kernel_clock_hz, bitrate_hz,
+                               data_phase ? &kJhStm32g474FdcanDataLimits
+                                          : &kJhStm32g474FdcanNominalLimits,
+                               sample_point_permille, preferred_prescaler, out);
 }
 
-static inline bool
-jh_stm32g474_fdcan_compute_timing(uint32_t kernel_clock_hz, uint32_t bitrate_hz,
-                                  bool data_phase,
-                                  jh_stm32g474_fdcan_timing_t *out) {
-  if (kernel_clock_hz == 0u || bitrate_hz == 0u || out == NULL) {
-    return false;
+/**
+ * @brief Transmitter delay compensation offset for a data-phase timing.
+ *
+ * TDC is meant for data bitrates above 1 Mbit/s with a data prescaler of 1 or
+ * 2 (CiA). The offset puts the secondary sample point at the regular sample
+ * point, counted in kernel clock periods, as Zephyr's CAN_CALC_TDCO does.
+ *
+ * @param timing Data-phase timing.
+ * @return TDCO in mtq (1..127), or 0 when TDC should stay off.
+ */
+static inline uint8_t
+jh_stm32g474_fdcan_tdc_offset(const jh_stm32g474_fdcan_timing_t *timing) {
+  if (timing == NULL || timing->prescaler > 2u ||
+      timing->actual_bitrate_hz <= JH_CAN_TDC_MIN_BITRATE_HZ) {
+    return 0u;
   }
-
-  const uint32_t max_prescaler = data_phase ? 32u : 512u;
-  const uint32_t max_segment1 = data_phase ? 32u : 256u;
-  const uint32_t max_segment2 = data_phase ? 16u : 128u;
-  const uint32_t max_sjw = data_phase ? 8u : 16u;
-  const uint32_t target_sample_per_mille = data_phase ? 750u : 800u;
-  const uint32_t max_total_quanta = 1u + max_segment1 + max_segment2;
-
-  bool found = false;
-  uint32_t best_bitrate_error = UINT32_MAX;
-  uint32_t best_sample_error = UINT32_MAX;
-  uint32_t best_total_quanta = 0u;
-  jh_stm32g474_fdcan_timing_t best = {0u, 0u, 0u, 0u, 0u};
-
-  for (uint32_t prescaler = 1u; prescaler <= max_prescaler; ++prescaler) {
-    for (uint32_t total_quanta = 3u; total_quanta <= max_total_quanta;
-         ++total_quanta) {
-      const uint32_t divisor = prescaler * total_quanta;
-      const uint32_t actual =
-          (uint32_t)(((uint64_t)kernel_clock_hz + (divisor / 2u)) / divisor);
-      const uint32_t bitrate_error =
-          jh_stm32g474_abs_diff_u32(actual, bitrate_hz);
-
-      uint32_t sample_quanta =
-          ((total_quanta * target_sample_per_mille) + 500u) / 1000u;
-      if (sample_quanta < 2u) {
-        sample_quanta = 2u;
-      }
-      uint32_t segment1 = sample_quanta - 1u;
-      uint32_t segment2 = total_quanta - sample_quanta;
-      if (segment2 < 1u) {
-        segment2 = 1u;
-        segment1 = total_quanta - 2u;
-      }
-      if (segment1 > max_segment1) {
-        segment1 = max_segment1;
-        segment2 = total_quanta - 1u - segment1;
-      }
-      if (segment1 < 1u || segment2 < 1u || segment2 > max_segment2) {
-        continue;
-      }
-
-      const uint32_t sample_error = jh_stm32g474_abs_diff_u32(
-          (1u + segment1) * 1000u, target_sample_per_mille * total_quanta);
-      const bool better_sample =
-          !found || ((uint64_t)sample_error * best_total_quanta <
-                     (uint64_t)best_sample_error * total_quanta);
-      const bool same_sample =
-          found && ((uint64_t)sample_error * best_total_quanta ==
-                    (uint64_t)best_sample_error * total_quanta);
-      if (!found || bitrate_error < best_bitrate_error ||
-          (bitrate_error == best_bitrate_error && better_sample) ||
-          (bitrate_error == best_bitrate_error && same_sample &&
-           total_quanta > best_total_quanta)) {
-        found = true;
-        best_bitrate_error = bitrate_error;
-        best_sample_error = sample_error;
-        best_total_quanta = total_quanta;
-        best.prescaler = (uint16_t)prescaler;
-        best.segment1 = (uint16_t)segment1;
-        best.segment2 = (uint16_t)segment2;
-        best.sync_jump_width =
-            (uint16_t)(segment2 < max_sjw ? segment2 : max_sjw);
-        best.actual_bitrate_hz = actual;
-      }
-    }
-  }
-
-  /* Reject configurations farther than 0.5% from the requested bitrate. */
-  const uint32_t max_error = bitrate_hz / 200u;
-  if (!found || best_bitrate_error > (max_error > 0u ? max_error : 1u)) {
-    return false;
-  }
-
-  *out = best;
-  return true;
+  const uint32_t offset =
+      (1u + (uint32_t)timing->segment1) * (uint32_t)timing->prescaler;
+  return (uint8_t)(offset > 127u ? 127u : offset);
 }
 
 static inline uint32_t
@@ -114,9 +70,12 @@ jh_stm32g474_fdcan_encode_nbtp(const jh_stm32g474_fdcan_timing_t *timing) {
          (uint32_t)(timing->segment2 - 1u);
 }
 
+/** @brief DBTP value; @p tdc sets the TDC enable bit (23). */
 static inline uint32_t
-jh_stm32g474_fdcan_encode_dbtp(const jh_stm32g474_fdcan_timing_t *timing) {
-  return ((uint32_t)(timing->prescaler - 1u) << 16u) |
+jh_stm32g474_fdcan_encode_dbtp(const jh_stm32g474_fdcan_timing_t *timing,
+                               bool tdc) {
+  return (tdc ? (1u << 23u) : 0u) |
+         ((uint32_t)(timing->prescaler - 1u) << 16u) |
          ((uint32_t)(timing->segment1 - 1u) << 8u) |
          ((uint32_t)(timing->segment2 - 1u) << 4u) |
          (uint32_t)(timing->sync_jump_width - 1u);

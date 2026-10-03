@@ -44,6 +44,24 @@ class CpdGateTests(unittest.TestCase):
 
         self.assertEqual({"tests/fixture/app.c"}, sources)
 
+    def test_source_scope_never_reads_hardware_fixtures(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="jh-cpd-hardware-") as text:
+            repo = Path(text)
+            owned = repo / "tests/fixture/app.c"
+            device = repo / "tests/hardware/board_check/app.c"
+            for path in (owned, device):
+                path.parent.mkdir(parents=True)
+                path.write_text("int app(void) { return 0; }\n", encoding="utf-8")
+
+            sources = {
+                path.relative_to(repo).as_posix()
+                for path in cpd.collect_sources(
+                    repo, ("tests",), production=False
+                )
+            }
+
+        self.assertEqual({"tests/fixture/app.c"}, sources)
+
     def test_owned_scope_includes_backends_and_excludes_vendored_sources(self) -> None:
         sources = {
             path.relative_to(ROOT).as_posix()

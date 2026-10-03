@@ -11,7 +11,7 @@
 extern "C" {
 #endif
 
-/** Restore the 170 MHz PLL clock tree after STOP0/STOP1 wake-up. */
+/** Restore the PLL clock tree after STOP0/STOP1 wake-up. */
 void stm32g474_system_clock_restore_after_stop(void);
 
 /** Add time elapsed while SysTick and the core clock were stopped. */
