@@ -180,7 +180,16 @@ def _check_pair(
     return failures
 
 
-def check(root: Path) -> list[str]:
+def _in_hardware_fixtures(root: Path, path: Path) -> bool:
+    """Device-test fixtures are read only by the opt-in fixture checks."""
+    try:
+        path.relative_to(root / "tests" / "hardware")
+    except ValueError:
+        return False
+    return True
+
+
+def check(root: Path, include_hardware: bool = False) -> list[str]:
     failures: list[str] = []
     doc_root = root / "doc"
 
@@ -236,11 +245,15 @@ def check(root: Path) -> list[str]:
         if not directory.is_dir():
             continue
         for en_path in sorted(directory.rglob("README.md")):
+            if not include_hardware and _in_hardware_fixtures(root, en_path):
+                continue
             en_relative = en_path.relative_to(root).as_posix()
             pl_relative = en_path.with_name("README.pl.md").relative_to(root).as_posix()
             readme_pairs.append((en_relative, pl_relative))
 
         for pl_path in sorted(directory.rglob("README.pl.md")):
+            if not include_hardware and _in_hardware_fixtures(root, pl_path):
+                continue
             en_path = pl_path.with_name("README.md")
             if not en_path.is_file():
                 pl_relative = pl_path.relative_to(root).as_posix()
@@ -298,7 +311,7 @@ def check(root: Path) -> list[str]:
     return failures
 
 
-def _parse_repository_root() -> Path:
+def _parse_repository_root() -> tuple[Path, bool]:
     parser = argparse.ArgumentParser(
         description="Check the bilingual JaszczurHAL documentation layout."
     )
@@ -310,13 +323,19 @@ def _parse_repository_root() -> Path:
         metavar="ROOT",
         help="repository to inspect (defaults to the parent of scripts/)",
     )
-    return parser.parse_args().repository.resolve()
+    parser.add_argument(
+        "--include-hardware-fixtures",
+        action="store_true",
+        help="also check tests/hardware (opt-in hardware-fixture checks only)",
+    )
+    args = parser.parse_args()
+    return args.repository.resolve(), args.include_hardware_fixtures
 
 
 def main() -> int:
-    root = _parse_repository_root()
+    root, include_hardware = _parse_repository_root()
 
-    failures = check(root)
+    failures = check(root, include_hardware)
     if not failures:
         print("Documentation EN/PL parity check passed.")
         return 0

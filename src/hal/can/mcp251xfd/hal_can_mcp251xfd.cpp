@@ -1,119 +1,119 @@
-#include "hal/core/hal_target.h"
-#if !HAL_TARGET_IS_MOCK
-
 #include "hal/core/hal_config.h"
 #if defined(HAL_ENABLE_CAN) && defined(HAL_ENABLE_MCP251XFD)
 
 #include "hal/serial/hal_serial.h"
 #include "hal_can_mcp251xfd.h"
 
-#include <string.h>
+#include <new>
 
-bool hal_can_mcp251xfd_init(JHMCP251XFD *mcp,
-                            const hal_can_mcp251xfd_config_t *cfg) {
-  if (!mcp || !cfg) {
-    return false;
+static JHMCP251XFD *mcp_ctx(void *ctx) {
+  return static_cast<JHMCP251XFD *>(ctx);
+}
+
+static hal_status_t mcp251xfd_init(void *ctx, const hal_can_config_t *cfg,
+                                   jh_can_caps_t *caps, hal_can_mode_t *mode) {
+  const hal_can_mcp251xfd_config_t *c = &cfg->mcp251xfd;
+  JHMCP251XFD *mcp = new (ctx) JHMCP251XFD(c->cs_pin, c->spi_bus);
+  const hal_status_t st = mcp->begin(c);
+  if (st != HAL_OK) {
+    hal_derr_limited("can", "MCP251XFD init failed: %s",
+                     hal_status_to_string(st));
+    mcp->~JHMCP251XFD();
+    return st;
   }
-  if (!mcp->begin(cfg)) {
-    hal_derr_limited("can", "MCP251XFD init failed");
-    return false;
+  caps->modes = HAL_CAN_MODE_LOOPBACK | HAL_CAN_MODE_EXTERNAL_LOOPBACK |
+                HAL_CAN_MODE_LISTEN_ONLY | HAL_CAN_MODE_ONE_SHOT |
+                HAL_CAN_MODE_SLEEP |
+                (c->enable_fd ? HAL_CAN_MODE_FD : HAL_CAN_MODE_NORMAL);
+  caps->legacy_filters = HAL_CAN_MAX_FILTERS;
+  /* 32 filters shared by both ID kinds (the last one holds the unmatched
+   * policy); a send waits for its frame, so one TXQ object. */
+  caps->public_caps.std_filters = 32u;
+  caps->public_caps.ext_filters = 32u;
+  caps->public_caps.tx_slots = 1u;
+  if (c->enable_fd) {
+    caps->public_caps.features = HAL_CAN_CAP_FD;
   }
-  return true;
+  caps->public_caps.core_clock_hz = mcp->sysclk_hz();
+  caps->public_caps.max_nominal_bitrate_hz = 1000000u;
+  caps->public_caps.max_data_bitrate_hz = c->enable_fd ? 8000000u : 1000000u;
+  *mode = (c->one_shot_tx ? HAL_CAN_MODE_ONE_SHOT : HAL_CAN_MODE_NORMAL) |
+          (c->enable_fd ? HAL_CAN_MODE_FD : HAL_CAN_MODE_NORMAL);
+  return HAL_OK;
 }
 
-void hal_can_mcp251xfd_deinit(JHMCP251XFD *mcp) {
-  if (!mcp) {
-    return;
-  }
-  mcp->~JHMCP251XFD();
+static void mcp251xfd_deinit(void *ctx) { mcp_ctx(ctx)->~JHMCP251XFD(); }
+
+static hal_status_t mcp251xfd_apply_mode(void *ctx, hal_can_mode_t mode) {
+  return mcp_ctx(ctx)->set_mode(mode);
 }
 
-bool hal_can_mcp251xfd_send_frame(JHMCP251XFD *mcp,
-                                  const hal_can_frame_t *frame) {
-  return mcp && mcp->send_frame(frame);
+static hal_status_t mcp251xfd_stop(void *ctx) { return mcp_ctx(ctx)->stop(); }
+
+static hal_status_t mcp251xfd_send_frame(void *ctx,
+                                         const hal_can_frame_t *frame) {
+  return mcp_ctx(ctx)->send_frame(frame);
 }
 
-bool hal_can_mcp251xfd_send(JHMCP251XFD *mcp, uint32_t id, uint8_t len,
-                            const uint8_t *data) {
-  if (!mcp || (len > 0u && data == NULL)) {
-    return false;
-  }
-  if (len > HAL_CAN_MAX_DATA_LEN) {
-    len = HAL_CAN_MAX_DATA_LEN;
-  }
-  hal_can_frame_t frame = {};
-  frame.id = id & HAL_CAN_STD_ID_MASK;
-  frame.dlc = len;
-  frame.len = len;
-  if (len > 0u) {
-    memcpy(frame.data, data, len);
-  }
-  return mcp->send_frame(&frame);
+static hal_status_t mcp251xfd_receive_frame(void *ctx, hal_can_frame_t *frame) {
+  return mcp_ctx(ctx)->receive_frame(frame);
 }
 
-bool hal_can_mcp251xfd_receive_frame(JHMCP251XFD *mcp, hal_can_frame_t *frame) {
-  return mcp && mcp->receive_frame(frame);
+static hal_status_t mcp251xfd_available(void *ctx) {
+  return mcp_ctx(ctx)->available();
 }
 
-bool hal_can_mcp251xfd_receive(JHMCP251XFD *mcp, uint32_t *id, uint8_t *len,
-                               uint8_t *data) {
-  if (!mcp || !id || !len || !data) {
-    return false;
-  }
-  hal_can_frame_t frame = {};
-  if (!mcp->receive_frame(&frame)) {
-    return false;
-  }
-  if ((frame.flags & HAL_CAN_FRAME_FD) != 0u ||
-      frame.len > HAL_CAN_MAX_DATA_LEN) {
-    return false;
-  }
-  *id = frame.id;
-  *len = frame.len;
-  if (frame.len > 0u) {
-    memcpy(data, frame.data, frame.len);
-  }
-  return true;
+static hal_status_t mcp251xfd_set_filter(void *ctx, uint8_t index,
+                                         const hal_can_filter_t *filter) {
+  return mcp_ctx(ctx)->set_filter(index, filter);
 }
 
-bool hal_can_mcp251xfd_available(JHMCP251XFD *mcp) {
-  return mcp && mcp->available();
+static hal_status_t mcp251xfd_get_state(void *ctx, hal_can_state_t *state) {
+  return mcp_ctx(ctx)->get_state(state);
 }
 
-bool hal_can_mcp251xfd_set_std_filters(JHMCP251XFD *mcp, uint32_t id0,
-                                       uint32_t id1) {
-  if (!mcp) {
-    return false;
-  }
-  hal_can_filter_t f0 = {id0 & HAL_CAN_STD_ID_MASK, HAL_CAN_STD_ID_MASK, 0u};
-  hal_can_filter_t f1 = {id1 & HAL_CAN_STD_ID_MASK, HAL_CAN_STD_ID_MASK, 0u};
-  return mcp->set_filter(0u, &f0) && mcp->set_filter(1u, &f1);
+static hal_status_t mcp251xfd_get_error_counters(void *ctx,
+                                                 hal_can_error_counters_t *c) {
+  return mcp_ctx(ctx)->get_error_counters(c);
 }
 
-bool hal_can_mcp251xfd_set_filter(JHMCP251XFD *mcp, uint8_t index,
-                                  const hal_can_filter_t *filter) {
-  return mcp && mcp->set_filter(index, filter);
+static hal_status_t mcp251xfd_add_filter(void *ctx,
+                                         const hal_can_filter_ex_t *filter,
+                                         uint8_t *index) {
+  return mcp_ctx(ctx)->add_filter(filter, index);
 }
 
-bool hal_can_mcp251xfd_start(JHMCP251XFD *mcp, hal_can_mode_t mode) {
-  return mcp && mcp->start(mode);
+static hal_status_t mcp251xfd_remove_filter(void *ctx, uint8_t index) {
+  return mcp_ctx(ctx)->remove_filter(index);
 }
 
-bool hal_can_mcp251xfd_stop(JHMCP251XFD *mcp) { return mcp && mcp->stop(); }
-
-bool hal_can_mcp251xfd_set_mode(JHMCP251XFD *mcp, hal_can_mode_t mode) {
-  return mcp && mcp->set_mode(mode);
+static hal_status_t mcp251xfd_set_unmatched_policy(void *ctx, bool accept_std,
+                                                   bool accept_ext,
+                                                   bool accept_rtr) {
+  return mcp_ctx(ctx)->set_unmatched_policy(accept_std, accept_ext, accept_rtr);
 }
 
-bool hal_can_mcp251xfd_get_state(JHMCP251XFD *mcp, bool started,
-                                 hal_can_state_t *state) {
-  return mcp && mcp->get_state(started, state);
-}
-
-bool hal_can_mcp251xfd_get_error_counters(JHMCP251XFD *mcp,
-                                          hal_can_error_counters_t *counters) {
-  return mcp && mcp->get_error_counters(counters);
-}
+const jh_can_provider_t jh_can_mcp251xfd_provider = {
+    HAL_CAN_BACKEND_MCP251XFD,
+    mcp251xfd_init,
+    mcp251xfd_deinit,
+    mcp251xfd_apply_mode,
+    mcp251xfd_stop,
+    mcp251xfd_send_frame,
+    mcp251xfd_receive_frame,
+    mcp251xfd_available,
+    mcp251xfd_set_filter,
+    mcp251xfd_get_state,
+    mcp251xfd_get_error_counters,
+    NULL, /* legacy_send */
+    NULL, /* legacy_receive */
+    NULL, /* set_std_filters */
+    NULL, /* attach: SPI cannot be read from an interrupt */
+    NULL, /* kick_tx */
+    NULL, /* get_status */
+    NULL, /* recover */
+    mcp251xfd_add_filter,
+    mcp251xfd_remove_filter,
+    mcp251xfd_set_unmatched_policy};
 
 #endif /* HAL_ENABLE_CAN && HAL_ENABLE_MCP251XFD */
-#endif /* !HAL_TARGET_IS_MOCK */

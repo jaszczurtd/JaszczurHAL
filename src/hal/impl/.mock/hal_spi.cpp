@@ -29,6 +29,10 @@ typedef struct {
   bool fail_next_end;
   bool fail_next_write;
   bool fail_next_dma_write;
+  const hal_mock_spi_device_t *device;
+  void *device_user;
+  uint8_t device_cs;
+  bool device_selected;
 } mock_spi_bus_t;
 
 static uint8_t s_last_bus = 0;
@@ -45,7 +49,18 @@ static void spi_log_tx(mock_spi_bus_t *st, uint8_t data) {
   }
 }
 
-static uint8_t spi_next_rx(mock_spi_bus_t *st) {
+/* One byte through the attached device, if any, else the script. */
+static uint8_t spi_next_rx(mock_spi_bus_t *st, uint8_t tx) {
+  if (st->device != nullptr) {
+    if (hal_mock_gpio_get_state(st->device_cs)) {
+      return 0xFFu; /* not selected */
+    }
+    if (!st->device_selected) {
+      st->device_selected = true;
+      st->device->select(st->device_user);
+    }
+    return st->device->exchange(st->device_user, tx);
+  }
   if (st->rx_pos < st->rx_len) {
     return st->rx_script[st->rx_pos++];
   }
@@ -112,6 +127,10 @@ hal_status_t hal_spi_end_transaction(uint8_t bus) {
   }
   mock_spi_bus_t *st = &s_spi[spi_bus_index(bus)];
   st->transaction_active = false;
+  if (st->device_selected) {
+    st->device_selected = false;
+    st->device->deselect(st->device_user);
+  }
   if (st->fail_next_end) {
     st->fail_next_end = false;
     return HAL_EIO;
@@ -134,7 +153,7 @@ hal_status_t hal_spi_transfer_ex(uint8_t bus, uint8_t data,
   mock_spi_bus_t *st = &s_spi[idx];
   spi_log_tx(st, data);
   st->transfer_count++;
-  *out_received = spi_next_rx(st);
+  *out_received = spi_next_rx(st, data);
   return HAL_OK;
 }
 
@@ -284,6 +303,16 @@ size_t hal_mock_spi_get_tx(uint8_t bus, uint8_t *out, size_t max_len) {
     memcpy(out, st->tx_log, n);
   }
   return st->tx_len;
+}
+
+void hal_mock_spi_attach_device(uint8_t bus, uint8_t cs_pin,
+                                const hal_mock_spi_device_t *device,
+                                void *user) {
+  mock_spi_bus_t *st = &s_spi[spi_bus_index(bus)];
+  st->device = device;
+  st->device_user = user;
+  st->device_cs = cs_pin;
+  st->device_selected = false;
 }
 
 void hal_mock_spi_reset(void) {

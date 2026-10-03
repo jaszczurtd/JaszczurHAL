@@ -15,6 +15,7 @@
 
 #ifdef JH_STM32G474_HW
 #include "port/stm32g474_i2c_pins.h"
+#include "port/stm32g474_nvic.h"
 #include "port/stm32g474_regs.h"
 #endif
 
@@ -91,11 +92,6 @@ static void i2c_slave_gpio_set_af_od_pullup(uint8_t pin, uint8_t af) {
   jh_stm32g474_i2c_set_af_od_pullup(pin, af);
 }
 
-static void i2c_slave_nvic_enable(uint8_t irqn) {
-  NVIC_ICPR(irqn >> 5u) = (1u << (irqn & 31u));
-  NVIC_ISER(irqn >> 5u) = (1u << (irqn & 31u));
-}
-
 static bool i2c_slave_hw_configure(uint8_t bus, uint8_t sda_pin,
                                    uint8_t scl_pin, uint8_t address) {
   const i2c_slave_hw_desc_t *desc = &k_i2c_slave_hw_desc[slave_bus_index(bus)];
@@ -137,8 +133,8 @@ static bool i2c_slave_hw_configure(uint8_t bus, uint8_t sda_pin,
                              I2C_CR1_ADDRIE | I2C_CR1_NACKIE | I2C_CR1_STOPIE |
                              I2C_CR1_ERRIE;
 
-  i2c_slave_nvic_enable(desc->ev_irqn);
-  i2c_slave_nvic_enable(desc->er_irqn);
+  jh_stm32g474_nvic_unmask(desc->ev_irqn);
+  jh_stm32g474_nvic_unmask(desc->er_irqn);
   return true;
 }
 

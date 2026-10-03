@@ -19,6 +19,7 @@
 
 #ifdef JH_STM32G474_HW
 #include "port/stm32g474_adc_channels.h"
+#include "port/stm32g474_nvic.h"
 #include "port/stm32g474_regs.h"
 #endif
 
@@ -229,9 +230,7 @@ static bool configure_pwm_dma(hal_dma_pwm_audio_impl_t *audio) {
       DMA_CCR_MSIZE_16 | DMA_CCR_PL_HIGH | DMA_CCR_HTIE | DMA_CCR_TCIE |
       DMA_CCR_TEIE;
 
-  NVIC_IPR8(DMA1_Channel1_IRQn) = JH_NVIC_PRIO_TIMER;
-  NVIC_ICPR(DMA1_Channel1_IRQn / 32u) = 1u << (DMA1_Channel1_IRQn % 32u);
-  NVIC_ISER(DMA1_Channel1_IRQn / 32u) = 1u << (DMA1_Channel1_IRQn % 32u);
+  jh_stm32g474_nvic_enable(DMA1_Channel1_IRQn, JH_NVIC_PRIO_TIMER);
   return true;
 }
 

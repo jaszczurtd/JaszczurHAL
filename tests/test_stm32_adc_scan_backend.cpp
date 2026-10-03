@@ -112,11 +112,12 @@ void test_start_programs_a_circular_ring_and_stop_releases_it(void) {
   TEST_ASSERT_EQUAL_UINT8(0u, s_positions[0]);
   TEST_ASSERT_EQUAL_UINT8(1u, s_positions[1]);
   TEST_ASSERT_EQUAL_UINT8(2u, s_positions[2]);
-  // 1 us asks for 85 half cycles at 42.5 MHz: sample time 47.5 + 12.5 cycles
-  // is the shortest that is not faster, 120 half cycles per conversion.
-  TEST_ASSERT_EQUAL_UINT32(
-      (uint32_t)((120ull * PINS * 1000000000ull) / (2ull * 42500000ull)),
-      s_period_ns);
+  // 1 us asks for 85 half cycles at 42.5 MHz (80 at 40 MHz): sample time
+  // 47.5 + 12.5 cycles is the shortest that is not faster, 120 half cycles
+  // per conversion.
+  TEST_ASSERT_EQUAL_UINT32((uint32_t)((120ull * PINS * 1000000000ull) /
+                                      (2ull * JH_G474_ADC_CLOCK_HZ)),
+                           s_period_ns);
 
   TEST_ASSERT_EQUAL_INT(HAL_OK, jh_adc_scan_stop());
   TEST_ASSERT_EQUAL_UINT32(1u, s_released);

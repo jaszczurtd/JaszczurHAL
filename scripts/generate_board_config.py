@@ -79,6 +79,7 @@ BOARD_FIELDS = COMMON_FIELDS | {
     "components",
     "constraints",
     "programming",
+    "can",
 }
 
 
@@ -209,6 +210,17 @@ DEVICE_ROLE_REGISTRY = {
         ],
     }
 }
+# CAN controllers a board can wire channels to: the targets that have them,
+# their instance count and the HAL_CAN_BACKEND_* suffix of the generated table.
+CAN_CONTROLLERS = {
+    "stm32g474-fdcan": {
+        "targets": {"stm32g474"},
+        "instances": 3,
+        "backend": "STM32G474_FDCAN",
+    },
+}
+CAN_TRANSCEIVERS = {"mcp2562fd", "generic"}
+CAN_CHANNEL_SIGNALS = ("rx", "tx", "standby")
 ID_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 MACRO_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
 CAMEL_PATTERN = re.compile(r"^[a-z][a-zA-Z0-9]*$")
@@ -591,6 +603,142 @@ def validate_device(
     validate_endpoint(
         path, f"{json_path}.endpoint", device["endpoint"], valid_pins, components
     )
+
+
+def validate_can_channel(
+    path: Path,
+    json_path: str,
+    board: dict[str, Any],
+    channel: Any,
+) -> dict[str, Any]:
+    """Check the controller, instance and attributes of one CAN channel."""
+    exact_fields(
+        path,
+        json_path,
+        channel,
+        {"controller", "instance", "rx", "tx", "transceiver", "maxBitrateHz"},
+        {
+            "controller",
+            "instance",
+            "rx",
+            "tx",
+            "standby",
+            "standbyActiveHigh",
+            "transceiver",
+            "maxBitrateHz",
+        },
+    )
+    controller = CAN_CONTROLLERS.get(channel["controller"])
+    if controller is None:
+        fail(
+            path,
+            f"{json_path}.controller",
+            channel["controller"],
+            f"one of {sorted(CAN_CONTROLLERS)}",
+        )
+    if not set(board["compatibleTargets"]) <= controller["targets"]:
+        fail(
+            path,
+            f"{json_path}.controller",
+            channel["controller"],
+            "a controller present on every compatible target",
+        )
+    instance = channel["instance"]
+    if (
+        not isinstance(instance, int)
+        or isinstance(instance, bool)
+        or not 1 <= instance <= controller["instances"]
+    ):
+        fail(
+            path,
+            f"{json_path}.instance",
+            instance,
+            f"an instance in [1, {controller['instances']}]",
+        )
+    if ("standby" in channel) != ("standbyActiveHigh" in channel):
+        fail(path, json_path, sorted(channel), "standby and standbyActiveHigh together")
+    if "standbyActiveHigh" in channel and not isinstance(
+        channel["standbyActiveHigh"], bool
+    ):
+        fail(
+            path,
+            f"{json_path}.standbyActiveHigh",
+            channel["standbyActiveHigh"],
+            "a boolean",
+        )
+    if channel["transceiver"] not in CAN_TRANSCEIVERS:
+        fail(
+            path,
+            f"{json_path}.transceiver",
+            channel["transceiver"],
+            f"one of {sorted(CAN_TRANSCEIVERS)}",
+        )
+    rate = channel["maxBitrateHz"]
+    if (
+        not isinstance(rate, int)
+        or isinstance(rate, bool)
+        or not 1 <= rate <= 0xFFFFFFFF
+    ):
+        fail(path, f"{json_path}.maxBitrateHz", rate, "a uint32 integer of at least 1")
+    return controller
+
+
+def validate_can(
+    path: Path,
+    board: dict[str, Any],
+    valid_pins: set[Any],
+    components: set[str],
+    hard_reserved: set[Any],
+) -> None:
+    """Validate the CAN channels a board wires to its controllers.
+
+    Pin routing to an instance is checked by the controller backend at run
+    time; here every signal must be a target pin, used once and covered by a
+    hard reservation, and every instance is wired at most once.
+    """
+    if "can" not in board:
+        return
+    can = exact_fields(path, "$.can", board["can"], {"channels"}, {"channels"})
+    channels = can["channels"]
+    if not isinstance(channels, list) or not channels:
+        fail(path, "$.can.channels", channels, "a non-empty channel array")
+    instances: dict[tuple[str, int], int] = {}
+    pins_seen: dict[Any, str] = {}
+    for index, channel in enumerate(channels):
+        json_path = f"$.can.channels[{index}]"
+        validate_can_channel(path, json_path, board, channel)
+        key = (channel["controller"], channel["instance"])
+        if key in instances:
+            fail(
+                path,
+                f"{json_path}.instance",
+                channel["instance"],
+                f"an instance not already wired by channel {instances[key]}",
+            )
+        instances[key] = index
+        for signal in CAN_CHANNEL_SIGNALS:
+            if signal not in channel:
+                continue
+            signal_path = f"{json_path}.{signal}"
+            endpoint = channel[signal]
+            validate_endpoint(path, signal_path, endpoint, valid_pins, components)
+            if endpoint["domain"] != "soc-gpio":
+                fail(path, signal_path, endpoint, "a SoC GPIO endpoint")
+            if endpoint["id"] in pins_seen:
+                fail(
+                    path,
+                    signal_path,
+                    endpoint["id"],
+                    f"a pin not already used by {pins_seen[endpoint['id']]}",
+                )
+            pins_seen[endpoint["id"]] = signal_path
+            if endpoint["id"] not in hard_reserved:
+                fail(
+                    path,
+                    signal_path,
+                    endpoint["id"],
+                    "a pin covered by a hard gpio reservation",
+                )
 
 
 def validate_components(
@@ -1223,6 +1371,7 @@ def validate_board(
             roles_seen[role] = device_id
     if not isinstance(board["peripherals"], dict):
         fail(path, "$.peripherals", board["peripherals"], "an object")
+    validate_can(path, board, valid_union, resolved_components, hard_reserved)
 
 
 def load_registry(
@@ -1578,6 +1727,35 @@ def device_config_lines(board: dict[str, Any]) -> list[str]:
     return lines
 
 
+def can_config_lines(board: dict[str, Any]) -> list[str]:
+    """Materialize the board CAN channels as a count and an X-macro table.
+
+    Each row is X(backend, instance, rx, tx, standby, standby_active_high,
+    max_bitrate_hz); backend is the HAL_CAN_BACKEND_* suffix.
+    """
+    channels = board.get("can", {}).get("channels", [])
+    rows = []
+    for channel in channels:
+        standby = channel.get("standby")
+        standby_pin = (
+            f"{encode_hal_pin(standby)}u"
+            if standby is not None
+            else "HAL_BOARD_DEVICE_PIN_NONE"
+        )
+        rows.append(
+            f"X({CAN_CONTROLLERS[channel['controller']]['backend']}, "
+            f"{channel['instance']}u, {encode_hal_pin(channel['rx'])}u, "
+            f"{encode_hal_pin(channel['tx'])}u, {standby_pin}, "
+            f"{1 if channel.get('standbyActiveHigh') else 0}, "
+            f"UINT32_C({channel['maxBitrateHz']}))"
+        )
+    return [
+        # Plain int: HAL_CAN_MAX_INSTANCES derives from it and stays an int.
+        f"#define HAL_BOARD_CAN_CHANNEL_COUNT {len(channels)}",
+        "#define HAL_BOARD_CAN_CHANNELS(X)" + "".join(f" {row}" for row in rows),
+    ]
+
+
 def board_enum_name(board: dict[str, Any]) -> str:
     return board["hal"]["selector"].replace("HAL_BOARD_PROFILE_", "HAL_BOARD_", 1)
 
@@ -1608,6 +1786,8 @@ def board_compile_definitions(
                 "HAL_CYW43_MAX_TRANSACTION_BYTES=2048u",
             ]
         )
+    if "stm32g474-hse-24mhz" in components:
+        definitions.append("HAL_STM32G474_CLOCK_HSE_160MHZ")
     if "cyw43-stm32-gspi" in components:
         definitions.extend(
             [
@@ -1787,6 +1967,7 @@ def selected_board_fact_lines(
                 ]
             )
     lines.extend(device_config_lines(board))
+    lines.extend(can_config_lines(board))
     return lines
 
 

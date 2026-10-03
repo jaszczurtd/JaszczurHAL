@@ -1,5 +1,4 @@
 #include "hal/impl/stm32g474/drivers/stm32g474/stm32g474_system.h"
-#include "hal/impl/stm32g474/port/stm32g474_fdcan_timing.h"
 #include "hal/impl/stm32g474/port/stm32g474_regs.h"
 #include "hal/impl/stm32g474/port/stm32g474_time.h"
 #include "hal/system/hal_system.h"
@@ -330,32 +329,6 @@ void test_stm32_hardware_time_composition_crosses_micros32_wrap(void) {
                                   first_64_bit_only_microsecond);
 }
 
-void test_stm32_fdcan_timing_is_exact_at_170mhz(void) {
-  jh_stm32g474_fdcan_timing_t nominal = {};
-  jh_stm32g474_fdcan_timing_t data = {};
-
-  TEST_ASSERT_TRUE(jh_stm32g474_fdcan_compute_timing(JH_G474_FDCAN_CLOCK_HZ,
-                                                     500000u, false, &nominal));
-  TEST_ASSERT_TRUE(jh_stm32g474_fdcan_compute_timing(JH_G474_FDCAN_CLOCK_HZ,
-                                                     2000000u, true, &data));
-
-  TEST_ASSERT_EQUAL_UINT32(500000u, nominal.actual_bitrate_hz);
-  TEST_ASSERT_EQUAL_UINT32(340u,
-                           (uint32_t)nominal.prescaler *
-                               (1u + nominal.segment1 + nominal.segment2));
-  TEST_ASSERT_EQUAL_UINT32(2000000u, data.actual_bitrate_hz);
-  TEST_ASSERT_EQUAL_UINT32(85u, (uint32_t)data.prescaler *
-                                    (1u + data.segment1 + data.segment2));
-  TEST_ASSERT_NOT_EQUAL(0u, jh_stm32g474_fdcan_encode_nbtp(&nominal));
-  TEST_ASSERT_NOT_EQUAL(0u, jh_stm32g474_fdcan_encode_dbtp(&data));
-}
-
-void test_stm32_fdcan_timing_rejects_unreachable_bitrate(void) {
-  jh_stm32g474_fdcan_timing_t timing = {};
-  TEST_ASSERT_FALSE(jh_stm32g474_fdcan_compute_timing(
-      JH_G474_FDCAN_CLOCK_HZ, JH_G474_FDCAN_CLOCK_HZ, true, &timing));
-}
-
 void test_stm32_architecture_reports_generated_target_metadata(void) {
   hal_system_architecture_t architecture = {};
 
@@ -371,8 +344,8 @@ void test_stm32_architecture_reports_generated_target_metadata(void) {
   TEST_ASSERT_EQUAL_UINT32(512u * 1024u, architecture.flash_total_bytes);
   TEST_ASSERT_EQUAL_UINT32(128u * 1024u, architecture.ram_total_bytes);
   TEST_ASSERT_EQUAL_UINT32(96u * 1024u, architecture.ram_usable_bytes);
-  TEST_ASSERT_EQUAL_UINT32(170000000u, architecture.cpu_clock_hz);
-  TEST_ASSERT_EQUAL_UINT32(170000000u, architecture.peripheral_clock_hz);
+  TEST_ASSERT_EQUAL_UINT32(JH_G474_CORE_CLOCK_HZ, architecture.cpu_clock_hz);
+  TEST_ASSERT_EQUAL_UINT32(JH_G474_PCLK1_HZ, architecture.peripheral_clock_hz);
   TEST_ASSERT_EQUAL_STRING("none", architecture.network_backend_name);
   TEST_ASSERT_EQUAL_STRING("none", architecture.network_stack_name);
   TEST_ASSERT_EQUAL_INT(HAL_SYSTEM_NETWORK_STACK_TYPE_NONE,
@@ -407,8 +380,6 @@ int main(void) {
   RUN_TEST(test_stm32_watchdog_rounds_up_and_accepts_max_timeout);
   RUN_TEST(test_stm32_micros64_remains_monotonic_across_micros32_wrap);
   RUN_TEST(test_stm32_hardware_time_composition_crosses_micros32_wrap);
-  RUN_TEST(test_stm32_fdcan_timing_is_exact_at_170mhz);
-  RUN_TEST(test_stm32_fdcan_timing_rejects_unreachable_bitrate);
   RUN_TEST(test_stm32_architecture_reports_generated_target_metadata);
   return UNITY_END();
 }

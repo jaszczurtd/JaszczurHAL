@@ -1,0 +1,48 @@
+{
+  "$schema": "../board.schema.json",
+  "schemaVersion": 1,
+  "kind": "board",
+  "id": "nucleo-g474re-canhat",
+  "displayName": "ST NUCLEO-G474RE with CAN-FD HAT",
+  "description": "NUCLEO-G474RE with the Embedded Garage CAN-FD HAT v1.2: three FDCAN channels on MCP2562FD transceivers, relays, 12 V inputs, buttons and LEDs; 160 MHz clock tree from the 24 MHz HSE.",
+  "status": "experimental",
+  "compatibleTargets": ["stm32g474"],
+  "build": { "provider": "jh-stm32-baremetal" },
+  "hal": { "profileId": 16, "selector": "HAL_BOARD_PROFILE_STM32G474_NUCLEO_CANHAT", "legacySelectors": [], "autoDetectSelectors": [] },
+  "memory": { "flash": { "source": "target", "expectedBytes": 524288 } },
+  "gpio": {
+    "exposedPins": { "values": ["PA0", "PA1", "PA2", "PA3", "PA4", "PA5", "PA6", "PA7", "PA8", "PA9", "PA10", "PA11", "PA12", "PA15", "PB0", "PB1", "PB2", "PB3", "PB4", "PB5", "PB6", "PB7", "PB8", "PB9", "PB10", "PB11", "PB12", "PB13", "PB14", "PB15", "PC0", "PC1", "PC2", "PC3", "PC4", "PC5", "PC6", "PC7", "PC8", "PC9", "PC10", "PC11", "PC12", "PC13", "PD2", "PD3", "PD4", "PD5", "PD6", "PD7", "PD8", "PD9", "PD10", "PD11", "PD12", "PD13", "PD14", "PD15", "PE0", "PE1", "PE2", "PE3", "PE4", "PE5", "PE6", "PE7", "PE8", "PE9", "PE10", "PE11", "PE12", "PE13", "PE14", "PE15", "PF2", "PF9", "PF10", "PG10"] },
+    "connectors": {
+      "arduino-uno-v3": { "pins": [{ "domain": "soc-gpio", "id": "PA0" }, { "domain": "soc-gpio", "id": "PA1" }, { "domain": "soc-gpio", "id": "PA4" }, { "domain": "soc-gpio", "id": "PA5" }, { "domain": "soc-gpio", "id": "PA6" }, { "domain": "soc-gpio", "id": "PA7" }, { "domain": "soc-gpio", "id": "PA8" }, { "domain": "soc-gpio", "id": "PA9" }, { "domain": "soc-gpio", "id": "PA10" }, { "domain": "soc-gpio", "id": "PB0" }, { "domain": "soc-gpio", "id": "PB4" }, { "domain": "soc-gpio", "id": "PB5" }, { "domain": "soc-gpio", "id": "PB8" }, { "domain": "soc-gpio", "id": "PB9" }, { "domain": "soc-gpio", "id": "PC0" }, { "domain": "soc-gpio", "id": "PC1" }, { "domain": "soc-gpio", "id": "PC2" }, { "domain": "soc-gpio", "id": "PC3" }, { "domain": "soc-gpio", "id": "PC7" }, { "domain": "soc-gpio", "id": "PC13" }] }
+    },
+    "reservations": {
+      "can-channels": { "pins": [{ "domain": "soc-gpio", "id": "PA11" }, { "domain": "soc-gpio", "id": "PA12" }, { "domain": "soc-gpio", "id": "PB11" }, { "domain": "soc-gpio", "id": "PB12" }, { "domain": "soc-gpio", "id": "PB13" }, { "domain": "soc-gpio", "id": "PC7" }, { "domain": "soc-gpio", "id": "PA8" }, { "domain": "soc-gpio", "id": "PB4" }, { "domain": "soc-gpio", "id": "PB6" }], "owner": "board.can", "strength": "hard", "reason": "FDCAN1-3 RX/TX and MCP2562FD STBY of CN5-CN7." },
+      "relays": { "pins": [{ "domain": "soc-gpio", "id": "PC3" }, { "domain": "soc-gpio", "id": "PC0" }, { "domain": "soc-gpio", "id": "PA10" }, { "domain": "soc-gpio", "id": "PB3" }], "owner": "board.relays", "strength": "hard", "reason": "Relay drivers K1-K4 (CN8-CN11); the gates have no pull-down, so any other use switches the relays." },
+      "hse-oscillator": { "pins": [{ "domain": "soc-gpio", "id": "PF0" }, { "domain": "soc-gpio", "id": "PF1" }], "owner": "board.hse", "strength": "hard", "reason": "24 MHz HSE crystal X3 of the clock tree." },
+      "status-led": { "pins": [{ "domain": "soc-gpio", "id": "PC1" }], "owner": "board.status-led", "strength": "soft", "reason": "HAT LED RDY." },
+      "hat-leds": { "pins": [{ "domain": "soc-gpio", "id": "PC2" }, { "domain": "soc-gpio", "id": "PA7" }, { "domain": "soc-gpio", "id": "PC12" }, { "domain": "soc-gpio", "id": "PA5" }, { "domain": "soc-gpio", "id": "PA6" }, { "domain": "soc-gpio", "id": "PB9" }, { "domain": "soc-gpio", "id": "PC6" }], "owner": "board.hat-leds", "strength": "soft", "reason": "HAT LED BUSY and TX/RX LEDs of CAN1-3; PA5 also drives the Nucleo LD2." },
+      "inputs": { "pins": [{ "domain": "soc-gpio", "id": "PC10" }, { "domain": "soc-gpio", "id": "PC11" }, { "domain": "soc-gpio", "id": "PC8" }, { "domain": "soc-gpio", "id": "PC9" }], "owner": "board.inputs", "strength": "soft", "reason": "12 V inputs I1-I4 (CN12-CN15)." },
+      "buttons": { "pins": [{ "domain": "soc-gpio", "id": "PB0" }, { "domain": "soc-gpio", "id": "PB7" }, { "domain": "soc-gpio", "id": "PB5" }, { "domain": "soc-gpio", "id": "PB1" }, { "domain": "soc-gpio", "id": "PA9" }, { "domain": "soc-gpio", "id": "PB2" }], "owner": "board.buttons", "strength": "soft", "reason": "HAT buttons SW1-SW6, active low with pull-ups." },
+      "user-button": { "pins": [{ "domain": "soc-gpio", "id": "PC13" }], "owner": "board.user-button", "strength": "soft", "reason": "User button B1." },
+      "swd": { "pins": [{ "domain": "soc-gpio", "id": "PA13" }, { "domain": "soc-gpio", "id": "PA14" }], "owner": "debug.swd", "strength": "hard", "reason": "ST-LINK SWD connection." }
+    },
+    "aliases": {
+      "status-led": { "endpoint": { "domain": "soc-gpio", "id": "PC1" } },
+      "user-button": { "endpoint": { "domain": "soc-gpio", "id": "PC13" } }
+    }
+  },
+  "capabilities": { "usb-device": { "present": false }, "cyw43": { "present": false }, "native-wifi": { "present": false }, "external-radio-frontend": { "present": false }, "bluetooth-controller": { "present": false }, "bluetooth-le-controller": { "present": false }, "bluetooth-classic-controller": { "present": false }, "sx1262-radio": { "present": false } },
+  "devices": {
+    "statusLed": { "kind": "gpio", "endpoint": { "domain": "soc-gpio", "id": "PC1" }, "activeLevel": "high" },
+    "userButton": { "kind": "gpio", "endpoint": { "domain": "soc-gpio", "id": "PC13" }, "activeLevel": "low" }
+  },
+  "peripherals": { "defaults": {} },
+  "can": {
+    "channels": [
+      { "controller": "stm32g474-fdcan", "instance": 1, "rx": { "domain": "soc-gpio", "id": "PA11" }, "tx": { "domain": "soc-gpio", "id": "PA12" }, "standby": { "domain": "soc-gpio", "id": "PB11" }, "standbyActiveHigh": true, "transceiver": "mcp2562fd", "maxBitrateHz": 5000000 },
+      { "controller": "stm32g474-fdcan", "instance": 2, "rx": { "domain": "soc-gpio", "id": "PB12" }, "tx": { "domain": "soc-gpio", "id": "PB13" }, "standby": { "domain": "soc-gpio", "id": "PC7" }, "standbyActiveHigh": true, "transceiver": "mcp2562fd", "maxBitrateHz": 5000000 },
+      { "controller": "stm32g474-fdcan", "instance": 3, "rx": { "domain": "soc-gpio", "id": "PA8" }, "tx": { "domain": "soc-gpio", "id": "PB4" }, "standby": { "domain": "soc-gpio", "id": "PB6" }, "standbyActiveHigh": true, "transceiver": "mcp2562fd", "maxBitrateHz": 5000000 }
+    ]
+  },
+  "components": { "stm32g474-hse-24mhz": { "mode": "board-owned" } }
+}

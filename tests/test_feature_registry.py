@@ -971,8 +971,8 @@ for facade in facade_provider_checks:
     )
 require(
     len(re.findall(r"^#error(?:\s|$)", hal_config_text, flags=re.MULTILINE))
-    == 76,
-    "hal_config.h retained validation inventory drifted from 76 #error checks",
+    == 77,
+    "hal_config.h retained validation inventory drifted from 77 #error checks",
 )
 
 checked = run_generator("--check")

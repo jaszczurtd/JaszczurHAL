@@ -292,7 +292,7 @@
         "stm32g474"
       ],
       "target": "stm32g474",
-      "board": "nucleo-g474re"
+      "stm32Board": "nucleo-g474re-canhat"
     },
     {
       "dir": "22_rfid_nfc",

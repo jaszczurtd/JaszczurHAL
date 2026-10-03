@@ -36,9 +36,19 @@ static hal_can_config_t test_mcp251xfd_config(void) {
   return cfg;
 }
 
+/* Software filter match of a valid frame and filter. */
+static bool can_matches(const hal_can_frame_t *frame,
+                        const hal_can_filter_t *filter) {
+  bool matches = false;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_can_frame_matches_filter(frame, filter, &matches));
+  return matches;
+}
+
 void setUp(void) {
   hal_can_config_t cfg = hal_can_default_config();
-  can = hal_can_create(&cfg);
+  can = nullptr;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_create(&cfg, &can));
   s_frame_count = 0;
   s_last_id = 0;
   s_last_len = 0;
@@ -69,13 +79,14 @@ void test_default_config_selects_mcp2515_backend(void) {
 
 void test_mcp251xfd_config_can_create_fd_capable_handle(void) {
   hal_can_config_t cfg = test_mcp251xfd_config();
-  hal_can_t h = hal_can_create(&cfg);
+  hal_can_t h = nullptr;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_create(&cfg, &h));
 
   TEST_ASSERT_NOT_NULL(h);
   hal_can_mode_t mode = HAL_CAN_MODE_NORMAL;
-  TEST_ASSERT_TRUE(hal_can_get_mode(h, &mode));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_get_mode(h, &mode));
   TEST_ASSERT_EQUAL_UINT32(HAL_CAN_MODE_ONE_SHOT | HAL_CAN_MODE_FD, mode);
-  TEST_ASSERT_TRUE(hal_can_set_mode(h, HAL_CAN_MODE_FD));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_set_mode(h, HAL_CAN_MODE_FD));
   hal_can_destroy(h);
 }
 
@@ -83,18 +94,19 @@ void test_create_rejects_unsupported_backend(void) {
   hal_can_config_t cfg = hal_can_default_config();
   cfg.backend = (hal_can_backend_t)255;
 
-  hal_can_t h = hal_can_create(&cfg);
+  hal_can_t h = nullptr;
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, hal_can_create(&cfg, &h));
 
   TEST_ASSERT_NULL(h);
 }
 
 void test_send_stores_frame(void) {
   uint8_t data[] = {0x01, 0x02, 0x03};
-  TEST_ASSERT_TRUE(hal_can_send(can, 0x100, 3, data));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_send(can, 0x100, 3, data));
 
   uint32_t id;
   uint8_t len, buf[8];
-  TEST_ASSERT_TRUE(hal_mock_can_get_sent(can, &id, &len, buf));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_can_get_sent(can, &id, &len, buf));
   TEST_ASSERT_EQUAL_HEX32(0x100, id);
   TEST_ASSERT_EQUAL_UINT8(3, len);
   TEST_ASSERT_EQUAL_HEX8(0x01, buf[0]);
@@ -105,19 +117,19 @@ void test_receive_injected_frame(void) {
   uint8_t payload[] = {0xAB, 0xCD};
   hal_mock_can_inject(can, 0x200, 2, payload);
 
-  TEST_ASSERT_TRUE(hal_can_available(can));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_available(can));
 
   uint32_t id;
   uint8_t len, buf[8];
-  TEST_ASSERT_TRUE(hal_can_receive(can, &id, &len, buf));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_receive(can, &id, &len, buf));
   TEST_ASSERT_EQUAL_HEX32(0x200, id);
   TEST_ASSERT_EQUAL_UINT8(2, len);
   TEST_ASSERT_EQUAL_HEX8(0xAB, buf[0]);
   TEST_ASSERT_EQUAL_HEX8(0xCD, buf[1]);
 }
 
-void test_available_false_when_empty(void) {
-  TEST_ASSERT_FALSE(hal_can_available(can));
+void test_available_says_eagain_when_empty(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, hal_can_available(can));
 }
 
 void test_receive_consumes_frame(void) {
@@ -126,7 +138,7 @@ void test_receive_consumes_frame(void) {
   uint32_t id;
   uint8_t len, buf[8];
   hal_can_receive(can, &id, &len, buf);
-  TEST_ASSERT_FALSE(hal_can_available(can));
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, hal_can_available(can));
 }
 
 void test_reset_clears_buffers(void) {
@@ -134,19 +146,19 @@ void test_reset_clears_buffers(void) {
   hal_mock_can_inject(can, 0x1, 1, data);
   hal_can_send(can, 0x2, 1, data);
   hal_mock_can_reset(can);
-  TEST_ASSERT_FALSE(hal_can_available(can));
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, hal_can_available(can));
   uint32_t id;
   uint8_t len, buf[8];
-  TEST_ASSERT_FALSE(hal_mock_can_get_sent(can, &id, &len, buf));
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, hal_mock_can_get_sent(can, &id, &len, buf));
 }
 
-void test_send_null_handle_returns_false(void) {
+void test_send_null_handle_is_invalid(void) {
   uint8_t data[] = {0x01};
-  TEST_ASSERT_FALSE(hal_can_send(nullptr, 0x1, 1, data));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_can_send(nullptr, 0x1, 1, data));
 }
 
-void test_send_null_data_with_nonzero_len_returns_false(void) {
-  TEST_ASSERT_FALSE(hal_can_send(can, 0x123, 1, nullptr));
+void test_send_null_data_with_nonzero_len_is_invalid(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_can_send(can, 0x123, 1, nullptr));
 }
 
 void test_send_clamps_payload_len_to_max(void) {
@@ -155,11 +167,11 @@ void test_send_clamps_payload_len_to_max(void) {
     data[i] = (uint8_t)(i + 1);
   }
 
-  TEST_ASSERT_TRUE(hal_can_send(can, 0x321, 12, data));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_send(can, 0x321, 12, data));
 
   uint32_t id;
   uint8_t len, buf[8] = {};
-  TEST_ASSERT_TRUE(hal_mock_can_get_sent(can, &id, &len, buf));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_can_get_sent(can, &id, &len, buf));
   TEST_ASSERT_EQUAL_HEX32(0x321, id);
   TEST_ASSERT_EQUAL_UINT8(HAL_CAN_MAX_DATA_LEN, len);
   TEST_ASSERT_EQUAL_HEX8(0x01, buf[0]);
@@ -187,28 +199,28 @@ void test_frame_validation_rejects_invalid_id_flags_and_lengths(void) {
   frame.id = 0x7FFu;
   frame.dlc = 8;
   frame.len = 8;
-  TEST_ASSERT_TRUE(hal_can_validate_frame(&frame));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_validate_frame(&frame));
 
   frame.id = 0x800u;
-  TEST_ASSERT_FALSE(hal_can_validate_frame(&frame));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_can_validate_frame(&frame));
 
   frame.id = 0x1FFFFFFFu;
   frame.flags = HAL_CAN_FRAME_EXTENDED;
-  TEST_ASSERT_TRUE(hal_can_validate_frame(&frame));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_validate_frame(&frame));
 
   frame.flags = HAL_CAN_FRAME_BRS;
-  TEST_ASSERT_FALSE(hal_can_validate_frame(&frame));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_can_validate_frame(&frame));
 
   frame.flags = 0x80u;
-  TEST_ASSERT_FALSE(hal_can_validate_frame(&frame));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_can_validate_frame(&frame));
 
   frame.flags = HAL_CAN_FRAME_FD | HAL_CAN_FRAME_RTR;
-  TEST_ASSERT_FALSE(hal_can_validate_frame(&frame));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_can_validate_frame(&frame));
 
   frame.flags = HAL_CAN_FRAME_FD;
   frame.dlc = 9;
   frame.len = 11;
-  TEST_ASSERT_FALSE(hal_can_validate_frame(&frame));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_can_validate_frame(&frame));
 }
 
 void test_filter_validation_and_frame_matching(void) {
@@ -218,18 +230,18 @@ void test_filter_validation_and_frame_matching(void) {
   frame.len = 2;
 
   hal_can_filter_t filter = {0x120u, 0x7F0u, 0u};
-  TEST_ASSERT_TRUE(hal_can_validate_filter(&filter));
-  TEST_ASSERT_TRUE(hal_can_frame_matches_filter(&frame, &filter));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_validate_filter(&filter));
+  TEST_ASSERT_TRUE(can_matches(&frame, &filter));
 
   filter.id = 0x130u;
-  TEST_ASSERT_FALSE(hal_can_frame_matches_filter(&frame, &filter));
+  TEST_ASSERT_FALSE(can_matches(&frame, &filter));
 
   filter.id = 0x123u;
   filter.flags = HAL_CAN_FILTER_EXTENDED;
-  TEST_ASSERT_FALSE(hal_can_frame_matches_filter(&frame, &filter));
+  TEST_ASSERT_FALSE(can_matches(&frame, &filter));
 
   filter.id = 0x20000000u;
-  TEST_ASSERT_FALSE(hal_can_validate_filter(&filter));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_can_validate_filter(&filter));
 }
 
 void test_send_frame_stores_extended_rtr_frame(void) {
@@ -239,10 +251,10 @@ void test_send_frame_stores_extended_rtr_frame(void) {
   frame.dlc = 4;
   frame.len = 4;
 
-  TEST_ASSERT_TRUE(hal_can_send_frame(can, &frame));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_send_frame(can, &frame));
 
   hal_can_frame_t sent = {};
-  TEST_ASSERT_TRUE(hal_mock_can_get_sent_frame(can, &sent));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_can_get_sent_frame(can, &sent));
   TEST_ASSERT_EQUAL_HEX32(frame.id, sent.id);
   TEST_ASSERT_EQUAL_UINT8(frame.flags, sent.flags);
   TEST_ASSERT_EQUAL_UINT8(4, sent.dlc);
@@ -251,7 +263,8 @@ void test_send_frame_stores_extended_rtr_frame(void) {
 
 void test_send_receive_can_fd_frame_via_mock_frame_api(void) {
   hal_can_config_t cfg = test_mcp251xfd_config();
-  hal_can_t fd_can = hal_can_create(&cfg);
+  hal_can_t fd_can = nullptr;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_create(&cfg, &fd_can));
   TEST_ASSERT_NOT_NULL(fd_can);
 
   hal_can_frame_t frame = {};
@@ -263,9 +276,9 @@ void test_send_receive_can_fd_frame_via_mock_frame_api(void) {
     frame.data[i] = i;
   }
 
-  TEST_ASSERT_TRUE(hal_can_send_frame(fd_can, &frame));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_send_frame(fd_can, &frame));
   hal_can_frame_t sent = {};
-  TEST_ASSERT_TRUE(hal_mock_can_get_sent_frame(fd_can, &sent));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_can_get_sent_frame(fd_can, &sent));
   TEST_ASSERT_EQUAL_UINT8(HAL_CAN_FRAME_FD | HAL_CAN_FRAME_BRS, sent.flags);
   TEST_ASSERT_EQUAL_UINT8(15, sent.dlc);
   TEST_ASSERT_EQUAL_UINT8(64, sent.len);
@@ -273,7 +286,7 @@ void test_send_receive_can_fd_frame_via_mock_frame_api(void) {
 
   hal_mock_can_inject_frame(fd_can, &frame);
   hal_can_frame_t rx = {};
-  TEST_ASSERT_TRUE(hal_can_receive_frame(fd_can, &rx));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_receive_frame(fd_can, &rx));
   TEST_ASSERT_EQUAL_HEX32(0x123u, rx.id);
   TEST_ASSERT_EQUAL_UINT8(HAL_CAN_FRAME_FD | HAL_CAN_FRAME_BRS, rx.flags);
   TEST_ASSERT_EQUAL_UINT8(64, rx.len);
@@ -288,7 +301,7 @@ void test_mcp2515_rejects_can_fd_frame(void) {
   frame.len = 12u;
   frame.dlc = hal_can_bytes_to_dlc(frame.len);
 
-  TEST_ASSERT_FALSE(hal_can_send_frame(can, &frame));
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, hal_can_send_frame(can, &frame));
 }
 
 void test_send_frame_rejects_invalid_fd_shape(void) {
@@ -297,12 +310,12 @@ void test_send_frame_rejects_invalid_fd_shape(void) {
   frame.flags = HAL_CAN_FRAME_BRS;
   frame.dlc = 9;
   frame.len = 12;
-  TEST_ASSERT_FALSE(hal_can_send_frame(can, &frame));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_can_send_frame(can, &frame));
 
   frame.flags = HAL_CAN_FRAME_FD;
   frame.dlc = 9;
   frame.len = 11;
-  TEST_ASSERT_FALSE(hal_can_send_frame(can, &frame));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_can_send_frame(can, &frame));
 }
 
 void test_legacy_receive_rejects_fd_frame(void) {
@@ -316,30 +329,32 @@ void test_legacy_receive_rejects_fd_frame(void) {
   uint32_t id;
   uint8_t len;
   uint8_t buf[HAL_CAN_MAX_DATA_LEN] = {};
-  TEST_ASSERT_FALSE(hal_can_receive(can, &id, &len, buf));
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, hal_can_receive(can, &id, &len, buf));
 }
 
 void test_set_std_filters_validates_handle(void) {
-  TEST_ASSERT_TRUE(hal_can_set_std_filters(can, 0x7E0, 0x7DF));
-  TEST_ASSERT_FALSE(hal_can_set_std_filters(nullptr, 0x7E0, 0x7DF));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_set_std_filters(can, 0x7E0, 0x7DF));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_can_set_std_filters(nullptr, 0x7E0, 0x7DF));
 }
 
 void test_static_filter_accepts_matching_frames_only(void) {
   hal_can_filter_t filter = {0x120u, 0x7F0u, 0u};
-  TEST_ASSERT_TRUE(hal_can_set_filter(can, 0u, &filter));
-  TEST_ASSERT_FALSE(hal_can_set_filter(can, HAL_CAN_MAX_FILTERS, &filter));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_set_filter(can, 0u, &filter));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_can_set_filter(can, HAL_CAN_MAX_FILTERS, &filter));
 
   uint8_t payload[] = {0x42};
   hal_mock_can_inject(can, 0x130u, 1u, payload);
-  TEST_ASSERT_FALSE(hal_can_available(can));
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, hal_can_available(can));
 
   hal_mock_can_inject(can, 0x123u, 1u, payload);
-  TEST_ASSERT_TRUE(hal_can_available(can));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_available(can));
 
   uint32_t id;
   uint8_t len;
   uint8_t buf[HAL_CAN_MAX_DATA_LEN] = {};
-  TEST_ASSERT_TRUE(hal_can_receive(can, &id, &len, buf));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_receive(can, &id, &len, buf));
   TEST_ASSERT_EQUAL_HEX32(0x123u, id);
   TEST_ASSERT_EQUAL_UINT8(1u, len);
   TEST_ASSERT_EQUAL_HEX8(0x42u, buf[0]);
@@ -347,7 +362,7 @@ void test_static_filter_accepts_matching_frames_only(void) {
 
 void test_extended_filter_matches_only_extended_frames(void) {
   hal_can_filter_t filter = {0x1ABCDE0u, 0x1FFFFFF0u, HAL_CAN_FILTER_EXTENDED};
-  TEST_ASSERT_TRUE(hal_can_set_filter(can, 2u, &filter));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_set_filter(can, 2u, &filter));
 
   hal_can_frame_t frame = {};
   frame.id = 0x5E0u;
@@ -355,60 +370,63 @@ void test_extended_filter_matches_only_extended_frames(void) {
   frame.len = 1;
   frame.data[0] = 0x11u;
   hal_mock_can_inject_frame(can, &frame);
-  TEST_ASSERT_FALSE(hal_can_available(can));
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, hal_can_available(can));
 
   frame.id = 0x1ABCDE3u;
   frame.flags = HAL_CAN_FRAME_EXTENDED;
   hal_mock_can_inject_frame(can, &frame);
-  TEST_ASSERT_TRUE(hal_can_available(can));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_available(can));
 }
 
 void test_start_stop_and_modes_control_send_path(void) {
   hal_can_mode_t mode = 0xFFFFFFFFu;
-  TEST_ASSERT_TRUE(hal_can_get_mode(can, &mode));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_get_mode(can, &mode));
   TEST_ASSERT_EQUAL_UINT32(HAL_CAN_MODE_ONE_SHOT, mode);
 
-  TEST_ASSERT_TRUE(
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK,
       hal_can_set_mode(can, HAL_CAN_MODE_LOOPBACK | HAL_CAN_MODE_ONE_SHOT));
-  TEST_ASSERT_TRUE(hal_can_get_mode(can, &mode));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_get_mode(can, &mode));
   TEST_ASSERT_EQUAL_UINT32(HAL_CAN_MODE_LOOPBACK | HAL_CAN_MODE_ONE_SHOT, mode);
 
-  TEST_ASSERT_FALSE(
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EUNSUPPORTED,
       hal_can_set_mode(can, HAL_CAN_MODE_LOOPBACK | HAL_CAN_MODE_LISTEN_ONLY));
-  TEST_ASSERT_FALSE(hal_can_set_mode(can, HAL_CAN_MODE_FD));
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED,
+                        hal_can_set_mode(can, HAL_CAN_MODE_FD));
 
   uint8_t payload[] = {0x01};
-  TEST_ASSERT_TRUE(hal_can_stop(can));
-  TEST_ASSERT_FALSE(hal_can_send(can, 0x123u, 1u, payload));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_stop(can));
+  TEST_ASSERT_EQUAL_INT(HAL_EBUSY, hal_can_send(can, 0x123u, 1u, payload));
 
   hal_can_state_t state = HAL_CAN_STATE_ERROR_ACTIVE;
-  TEST_ASSERT_TRUE(hal_can_get_state(can, &state));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_get_state(can, &state));
   TEST_ASSERT_EQUAL(HAL_CAN_STATE_STOPPED, state);
 
-  TEST_ASSERT_TRUE(hal_can_start(can));
-  TEST_ASSERT_TRUE(hal_can_send(can, 0x123u, 1u, payload));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_start(can));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_send(can, 0x123u, 1u, payload));
 
-  TEST_ASSERT_TRUE(hal_can_set_mode(can, HAL_CAN_MODE_SLEEP));
-  TEST_ASSERT_FALSE(hal_can_send(can, 0x123u, 1u, payload));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_set_mode(can, HAL_CAN_MODE_SLEEP));
+  TEST_ASSERT_EQUAL_INT(HAL_EBUSY, hal_can_send(can, 0x123u, 1u, payload));
 }
 
 void test_state_and_error_counters_are_reported(void) {
   hal_can_state_t state = HAL_CAN_STATE_STOPPED;
-  TEST_ASSERT_TRUE(hal_can_get_state(can, &state));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_get_state(can, &state));
   TEST_ASSERT_EQUAL(HAL_CAN_STATE_ERROR_ACTIVE, state);
 
   hal_mock_can_set_state(can, HAL_CAN_STATE_ERROR_PASSIVE);
-  TEST_ASSERT_TRUE(hal_can_get_state(can, &state));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_get_state(can, &state));
   TEST_ASSERT_EQUAL(HAL_CAN_STATE_ERROR_PASSIVE, state);
 
   hal_mock_can_set_error_counters(can, 17u, 23u);
   hal_can_error_counters_t counters = {};
-  TEST_ASSERT_TRUE(hal_can_get_error_counters(can, &counters));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_get_error_counters(can, &counters));
   TEST_ASSERT_EQUAL_UINT8(17u, counters.tx);
   TEST_ASSERT_EQUAL_UINT8(23u, counters.rx);
 
-  TEST_ASSERT_FALSE(hal_can_get_state(nullptr, &state));
-  TEST_ASSERT_FALSE(hal_can_get_error_counters(can, nullptr));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_can_get_state(nullptr, &state));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_can_get_error_counters(can, nullptr));
 }
 
 void test_encode_temp_i8_positive_values(void) {
@@ -455,19 +473,24 @@ void test_process_all_drains_queue_and_skips_invalid_frames(void) {
   hal_mock_can_inject(can, 0x456, 0, c); // invalid (len == 0)
   hal_mock_can_inject(can, 0x321, 1, d); // valid
 
-  int processed = hal_can_process_all(can, test_can_frame_cb);
+  uint32_t processed = 0u;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_can_process_all(can, test_can_frame_cb, &processed));
 
-  TEST_ASSERT_EQUAL_INT(2, processed);
+  TEST_ASSERT_EQUAL_UINT32(2u, processed);
   TEST_ASSERT_EQUAL_INT(2, s_frame_count);
   TEST_ASSERT_EQUAL_HEX32(0x321, s_last_id);
   TEST_ASSERT_EQUAL_UINT8(1, s_last_len);
   TEST_ASSERT_EQUAL_HEX8(0xAA, s_last_payload[0]);
-  TEST_ASSERT_FALSE(hal_can_available(can));
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, hal_can_available(can));
 }
 
-void test_process_all_returns_zero_on_null_args(void) {
-  TEST_ASSERT_EQUAL_INT(0, hal_can_process_all(nullptr, test_can_frame_cb));
-  TEST_ASSERT_EQUAL_INT(0, hal_can_process_all(can, nullptr));
+void test_process_all_refuses_null_args(void) {
+  uint32_t processed = 7u;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL, hal_can_process_all(nullptr, test_can_frame_cb, &processed));
+  TEST_ASSERT_EQUAL_UINT32(0u, processed);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_can_process_all(can, nullptr, nullptr));
 }
 
 void test_create_with_retry_returns_handle_and_sets_irq_pin_mode(void) {
@@ -477,8 +500,10 @@ void test_create_with_retry_returns_handle_and_sets_irq_pin_mode(void) {
 
   hal_mock_set_millis(0);
   hal_can_config_t cfg = hal_can_default_config();
-  hal_can_t h =
-      hal_can_create_with_retry(&cfg, 7, nullptr, 3, test_retry_idle_cb);
+  hal_can_t h = nullptr;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK,
+      hal_can_create_with_retry(&cfg, 7, nullptr, 3, test_retry_idle_cb, &h));
 
   TEST_ASSERT_NOT_NULL(h);
   TEST_ASSERT_EQUAL(HAL_GPIO_INPUT, hal_mock_gpio_get_mode(7));
@@ -493,8 +518,10 @@ void test_create_with_retry_skips_irq_setup_with_no_int_pin(void) {
   TEST_ASSERT_TRUE(hal_mock_gpio_is_output(9));
 
   hal_can_config_t cfg = hal_can_default_config();
-  hal_can_t h = hal_can_create_with_retry(&cfg, HAL_CAN_NO_INT_PIN, nullptr, 2,
-                                          test_retry_idle_cb);
+  hal_can_t h = nullptr;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_can_create_with_retry(&cfg, HAL_CAN_NO_INT_PIN, nullptr, 2,
+                                        test_retry_idle_cb, &h));
 
   TEST_ASSERT_NOT_NULL(h);
   TEST_ASSERT_EQUAL(HAL_GPIO_OUTPUT, hal_mock_gpio_get_mode(9));
@@ -510,11 +537,11 @@ int main(void) {
   RUN_TEST(test_create_rejects_unsupported_backend);
   RUN_TEST(test_send_stores_frame);
   RUN_TEST(test_receive_injected_frame);
-  RUN_TEST(test_available_false_when_empty);
+  RUN_TEST(test_available_says_eagain_when_empty);
   RUN_TEST(test_receive_consumes_frame);
   RUN_TEST(test_reset_clears_buffers);
-  RUN_TEST(test_send_null_handle_returns_false);
-  RUN_TEST(test_send_null_data_with_nonzero_len_returns_false);
+  RUN_TEST(test_send_null_handle_is_invalid);
+  RUN_TEST(test_send_null_data_with_nonzero_len_is_invalid);
   RUN_TEST(test_send_clamps_payload_len_to_max);
   RUN_TEST(test_dlc_helpers_cover_classic_and_fd_lengths);
   RUN_TEST(test_frame_validation_rejects_invalid_id_flags_and_lengths);
@@ -535,7 +562,7 @@ int main(void) {
   RUN_TEST(test_encode_temp_i8_saturates_out_of_range);
   RUN_TEST(test_encode_temp_i8_truncates_fractional_values);
   RUN_TEST(test_process_all_drains_queue_and_skips_invalid_frames);
-  RUN_TEST(test_process_all_returns_zero_on_null_args);
+  RUN_TEST(test_process_all_refuses_null_args);
   RUN_TEST(test_create_with_retry_returns_handle_and_sets_irq_pin_mode);
   RUN_TEST(test_create_with_retry_skips_irq_setup_with_no_int_pin);
   return UNITY_END();

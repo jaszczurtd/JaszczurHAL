@@ -65,3 +65,9 @@ HAL_ENABLE_PULSE_CAPTURE enables hardware period timestamps and disjoint
 HAL_ENABLE_ADC_SCAN enables a continuous hardware-paced ADC scan into a
 caller-owned double block via DMA; ownership, backend limits and API:
 doc/api/en/25_adc_scan.md.
+
+HAL_ENABLE_STM32G474_FDCAN queues received frames, sends and events per CAN
+handle. HAL_CAN_RX_QUEUE_LEN (default 16), HAL_CAN_TX_QUEUE_LEN (8) and
+HAL_CAN_EVENT_QUEUE_LEN (16) size them; HAL_CAN_MAX_INSTANCES follows the
+board's CAN channels. HAL_CAN_STM32G474_TIMESTAMP_TIM3 takes TIM3 for
+start-of-frame timestamps. Ranges and behaviour: doc/api/en/10_can_display.md.

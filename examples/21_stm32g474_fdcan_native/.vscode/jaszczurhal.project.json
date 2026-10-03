@@ -7,7 +7,7 @@
             "stm32g474"
         ],
         "boards": {
-            "stm32g474": "nucleo-g474re"
+            "stm32g474": "nucleo-g474re-canhat"
         },
         "gateTargets": [
             "stm32g474"
@@ -15,7 +15,7 @@
     },
     "toolchain": "cmake",
     "target": "stm32g474",
-    "board": "nucleo-g474re",
+    "board": "nucleo-g474re-canhat",
     "buildDir": "${jhRoot}/.build/examples/21_stm32g474_fdcan_native",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

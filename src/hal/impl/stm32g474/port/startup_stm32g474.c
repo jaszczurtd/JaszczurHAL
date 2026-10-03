@@ -76,6 +76,18 @@ void I2C2_EV_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void I2C2_ER_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void TIM6_DACUNDER_IRQHandler(void)
     __attribute__((weak, alias("Default_Handler")));
+void FDCAN1_IT0_IRQHandler(void)
+    __attribute__((weak, alias("Default_Handler")));
+void FDCAN1_IT1_IRQHandler(void)
+    __attribute__((weak, alias("Default_Handler")));
+void FDCAN2_IT0_IRQHandler(void)
+    __attribute__((weak, alias("Default_Handler")));
+void FDCAN2_IT1_IRQHandler(void)
+    __attribute__((weak, alias("Default_Handler")));
+void FDCAN3_IT0_IRQHandler(void)
+    __attribute__((weak, alias("Default_Handler")));
+void FDCAN3_IT1_IRQHandler(void)
+    __attribute__((weak, alias("Default_Handler")));
 
 #ifdef HAL_ENABLE_FREERTOS
 void SVC_Handler(void);
@@ -97,6 +109,8 @@ void SysTick_Handler(void) __attribute__((weak, alias("Default_Handler")));
 #define STM32_IRQ_DMA1_CHANNEL1 11u
 #define STM32_IRQ_DMA1_CHANNEL3 13u
 #define STM32_IRQ_DMA1_CHANNEL7 17u
+#define STM32_IRQ_FDCAN1_IT0 21u
+#define STM32_IRQ_FDCAN1_IT1 22u
 #define STM32_IRQ_EXTI9_5 23u
 #define STM32_IRQ_I2C1_EV 31u
 #define STM32_IRQ_I2C1_ER 32u
@@ -105,6 +119,10 @@ void SysTick_Handler(void) __attribute__((weak, alias("Default_Handler")));
 #define STM32_IRQ_EXTI15_10 40u
 #define STM32_IRQ_RTC_ALARM 41u
 #define STM32_IRQ_TIM6_DACUNDER 54u
+#define STM32_IRQ_FDCAN2_IT0 86u
+#define STM32_IRQ_FDCAN2_IT1 87u
+#define STM32_IRQ_FDCAN3_IT0 88u
+#define STM32_IRQ_FDCAN3_IT1 89u
 #define STM32_IRQ_DMA1_CHANNEL8 96u
 
 /* Vector table: initial SP + 15 system exceptions + populated peripheral IRQs.
@@ -131,6 +149,8 @@ __attribute__((section(".isr_vector"),
     [16u + STM32_IRQ_DMA1_CHANNEL1] = DMA1_Channel1_IRQHandler,
     [16u + STM32_IRQ_DMA1_CHANNEL3] = DMA1_Channel3_IRQHandler,
     [16u + STM32_IRQ_DMA1_CHANNEL7] = DMA1_Channel7_IRQHandler,
+    [16u + STM32_IRQ_FDCAN1_IT0] = FDCAN1_IT0_IRQHandler,
+    [16u + STM32_IRQ_FDCAN1_IT1] = FDCAN1_IT1_IRQHandler,
     [16u + STM32_IRQ_EXTI9_5] = EXTI9_5_IRQHandler,
     [16u + STM32_IRQ_I2C1_EV] = I2C1_EV_IRQHandler,
     [16u + STM32_IRQ_I2C1_ER] = I2C1_ER_IRQHandler,
@@ -139,6 +159,10 @@ __attribute__((section(".isr_vector"),
     [16u + STM32_IRQ_EXTI15_10] = EXTI15_10_IRQHandler,
     [16u + STM32_IRQ_RTC_ALARM] = RTC_Alarm_IRQHandler,
     [16u + STM32_IRQ_TIM6_DACUNDER] = TIM6_DACUNDER_IRQHandler,
+    [16u + STM32_IRQ_FDCAN2_IT0] = FDCAN2_IT0_IRQHandler,
+    [16u + STM32_IRQ_FDCAN2_IT1] = FDCAN2_IT1_IRQHandler,
+    [16u + STM32_IRQ_FDCAN3_IT0] = FDCAN3_IT0_IRQHandler,
+    [16u + STM32_IRQ_FDCAN3_IT1] = FDCAN3_IT1_IRQHandler,
     [16u + STM32_IRQ_DMA1_CHANNEL8] = DMA1_Channel8_IRQHandler,
 };
 

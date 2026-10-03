@@ -74,6 +74,10 @@ python3 scripts/generate_hal_features.py \
   --resolution-output .build/effective-feature-resolution.json
 ```
 
+Żadna z kontroli nie odczytuje `tests/hardware`: firmware testów na
+urządzeniach pozostaje poza domyślnymi kontrolami. Opcjonalne testy stanowisk
+sprawdzają go z `--include-hardware-fixtures`.
+
 Obie kontrole działają rygorystycznie: wykrycie problemu powoduje zwrócenie
 niezerowego kodu zakończenia. `--report-only` pozostaje dostępne dla
 tymczasowych audytów migracji, ale nie jest normalnym wywołaniem CI.

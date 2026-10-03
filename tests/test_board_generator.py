@@ -90,7 +90,7 @@ require(
 
 validated = run("--validate-only")
 require(
-    validated.stdout.strip() == "validated 7 targets and 15 boards",
+    validated.stdout.strip() == "validated 7 targets and 16 boards",
     "unexpected validated registry size",
 )
 require(
@@ -112,6 +112,7 @@ require(
         "esp32-devkitc-v4",
         "host-mock",
         "nucleo-g474re",
+        "nucleo-g474re-canhat",
         "nucleo-g474re-core1262-hf",
         "nucleo-g474re-pim730",
         "pico",
@@ -698,6 +699,54 @@ require(
     == "PA5",
     "NUCLEO Core1262 must preserve the physical PA5/LD2 status LED",
 )
+
+nucleo_canhat_output = TEST_ROOT / "generated/nucleo-canhat"
+run(
+    "--target",
+    "stm32g474",
+    "--board",
+    "nucleo-g474re-canhat",
+    "--output-dir",
+    str(nucleo_canhat_output),
+)
+nucleo_canhat_resolved = load(nucleo_canhat_output / "jh_board_resolved.json")
+nucleo_canhat_config = (nucleo_canhat_output / "jh_board_config.h").read_text(
+    encoding="utf-8"
+)
+require(nucleo_canhat_resolved["profileId"] == 16, "NUCLEO CAN-FD HAT profile ID changed")
+require(
+    nucleo_canhat_resolved["components"] == ["stm32g474", "stm32g474-hse-24mhz"],
+    "NUCLEO CAN-FD HAT component contract changed",
+)
+require(
+    "HAL_STM32G474_CLOCK_HSE_160MHZ"
+    in nucleo_canhat_resolved["boardCompileDefinitions"],
+    "the HSE crystal component must select the 160 MHz clock tree",
+)
+for expected in (
+    "#define HAL_BOARD_PROFILE_STM32G474_NUCLEO_CANHAT 1",
+    "#define HAL_STM32G474_CLOCK_HSE_160MHZ 1",
+    "#define HAL_BOARD_STATUS_LED_PIN 33u",
+    "#define HAL_LED_BUILTIN HAL_BOARD_STATUS_LED_PIN",
+    "#define HAL_BOARD_CAN_CHANNEL_COUNT 3\n",
+    "#define HAL_BOARD_CAN_CHANNELS(X) "
+    "X(STM32G474_FDCAN, 1u, 11u, 12u, 27u, 1, UINT32_C(5000000)) "
+    "X(STM32G474_FDCAN, 2u, 28u, 29u, 39u, 1, UINT32_C(5000000)) "
+    "X(STM32G474_FDCAN, 3u, 8u, 20u, 22u, 1, UINT32_C(5000000))",
+):
+    require(expected in nucleo_canhat_config, f"NUCLEO CAN-FD HAT lacks {expected!r}")
+for expected in (
+    "#define HAL_BOARD_CAN_CHANNEL_COUNT 0\n",
+    "#define HAL_BOARD_CAN_CHANNELS(X)\n",
+):
+    require(
+        expected in nucleo_core1262_config,
+        f"a board without CAN channels lacks {expected!r}",
+    )
+require(
+    "HAL_STM32G474_CLOCK_HSE_160MHZ" not in nucleo_core1262_config,
+    "only the HSE crystal component selects the 160 MHz tree",
+)
 require(
     nucleo_core1262_resolved["devices"]["loraRadio"]["signals"]["sck"]["id"]
     == "PB13",
@@ -1265,6 +1314,70 @@ require(
     in run("--validate-only", boards_root=unknown_capability, expected_success=False).stderr,
     "unknown capability was not diagnosed",
 )
+def can_channel_case(case: str, change) -> str:
+    """Validate the CAN-FD HAT profile after one change to its channels."""
+    root = mutate(
+        case,
+        "profiles/nucleo-g474re-canhat.json",
+        lambda value: change(value["can"]["channels"], value),
+    )
+    return run("--validate-only", boards_root=root, expected_success=False).stderr
+
+
+for case, change, diagnostic in (
+    (
+        "can-duplicate-instance",
+        lambda channels, _: channels[1].update(instance=1),
+        "an instance not already wired by channel 0",
+    ),
+    (
+        "can-instance-range",
+        lambda channels, _: channels[2].update(instance=4),
+        "an instance in [1, 3]",
+    ),
+    (
+        "can-unknown-controller",
+        lambda channels, _: channels[0].update(controller="mcp2515"),
+        "one of ['stm32g474-fdcan']",
+    ),
+    (
+        "can-standby-polarity-missing",
+        lambda channels, _: channels[0].pop("standbyActiveHigh"),
+        "standby and standbyActiveHigh together",
+    ),
+    (
+        "can-shared-pin",
+        lambda channels, _: channels[1]["standby"].update(id="PB11"),
+        "a pin not already used by $.can.channels[0].standby",
+    ),
+    (
+        "can-pin-not-hard-reserved",
+        lambda channels, value: value["gpio"]["reservations"]["can-channels"][
+            "pins"
+        ].pop(),
+        "a pin covered by a hard gpio reservation",
+    ),
+    (
+        "can-zero-bitrate",
+        lambda channels, _: channels[0].update(maxBitrateHz=0),
+        "a uint32 integer of at least 1",
+    ),
+    (
+        "can-unknown-field",
+        lambda channels, _: channels[0].update(termination=True),
+        "only fields",
+    ),
+    (
+        "can-empty",
+        lambda channels, _: channels.clear(),
+        "a non-empty channel array",
+    ),
+):
+    require(
+        diagnostic in can_channel_case(case, change),
+        f"{case} was not diagnosed with {diagnostic!r}",
+    )
+
 unknown_component = mutate(
     "unknown-component",
     "profiles/pico.json",

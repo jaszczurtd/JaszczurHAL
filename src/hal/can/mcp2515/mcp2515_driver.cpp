@@ -655,7 +655,7 @@ INT8U JHMCP2515::sendMsg() {
     res = mcp2515_getNextFreeTXBuf(&txbuf_n);
     uiTimeOut = hal_micros() - temp;
   } while (res == MCP_ALLTXBUSY && (uiTimeOut < TIMEOUTVALUE));
-  if (uiTimeOut >= TIMEOUTVALUE)
+  if (res == MCP_ALLTXBUSY)
     return CAN_GETTXBFTIMEOUT;
   mcp2515_write_canMsg(txbuf_n);
   mcp2515_modifyRegister((INT8U)(txbuf_n - 1), MCP_TXB_TXREQ_M,
@@ -665,8 +665,14 @@ INT8U JHMCP2515::sendMsg() {
     txctrl = mcp2515_readRegister((INT8U)(txbuf_n - 1));
     uiTimeOut = hal_micros() - temp;
   } while ((txctrl & MCP_TXB_TXREQ_M) != 0u && (uiTimeOut < TIMEOUTVALUE));
-  if (uiTimeOut >= TIMEOUTVALUE)
+  /* The register decides, not the clock: a task preempted past the timeout
+   * after the frame went out must not report a failure. */
+  if ((txctrl & MCP_TXB_TXREQ_M) != 0u) {
+    /* Clearing TXREQ aborts the frame unless it is on the wire right now;
+     * left set, a frame reported as failed would still go out later. */
+    mcp2515_modifyRegister((INT8U)(txbuf_n - 1), MCP_TXB_TXREQ_M, 0u);
     return CAN_SENDMSGTIMEOUT;
+  }
   /* Normal mode can retain MLOA/TXERR from an attempt that was later retried
    * successfully. In one-shot mode, cleared TXREQ plus any failure flag means
    * the frame was not delivered. */
@@ -781,10 +787,22 @@ INT8U JHMCP2515::disOneShotTX(void) {
 
 INT8U JHMCP2515::abortTX(void) {
   JHMCP2515Guard guard(*this);
+  static const INT8U kTxCtrl[] = {MCP_TXB0CTRL, MCP_TXB1CTRL, MCP_TXB2CTRL};
   mcp2515_modifyRegister(MCP_CANCTRL, ABORT_TX, ABORT_TX);
-  return ((mcp2515_readRegister(MCP_CANCTRL) & ABORT_TX) == ABORT_TX)
-             ? CAN_OK
-             : CAN_FAIL;
+  /* ABAT aborts every later transmission too until it is cleared, so wait
+   * for the pending buffers to drop TXREQ and release it. */
+  const uint32_t started = hal_micros();
+  bool pending = true;
+  while (pending && !hal_elapsed_u32(hal_micros(), started, TIMEOUTVALUE)) {
+    pending = false;
+    for (INT8U i = 0; i < (INT8U)COUNTOF(kTxCtrl); ++i) {
+      if ((mcp2515_readRegister(kTxCtrl[i]) & MCP_TXB_TXREQ_M) != 0u) {
+        pending = true;
+      }
+    }
+  }
+  mcp2515_modifyRegister(MCP_CANCTRL, ABORT_TX, 0u);
+  return pending ? CAN_FAIL : CAN_OK;
 }
 
 INT8U JHMCP2515::setGPO(INT8U data) {

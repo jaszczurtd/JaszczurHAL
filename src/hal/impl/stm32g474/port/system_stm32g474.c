@@ -2,8 +2,9 @@
  * @file system_stm32g474.c
  * @brief SystemInit, PLL clock tree, and monotonic time for STM32G474.
  *
- * The STM32G4 boots on HSI16 (16 MHz). Startup configures HSI16 as the PLL
- * source and runs the core and both APB buses at 170 MHz. It also:
+ * The STM32G4 boots on HSI16 (16 MHz). Startup brings up the PLL tree of
+ * stm32g474_clock.h (170 MHz from HSI16, or 160 MHz from HSE on boards that
+ * select it) with the core and both APB buses undivided. It also:
  *   - relocates the vector table to flash base (VTOR),
  *   - enables the FPU (CPACR),
  *   - enables the dedicated fault handlers so CFSR/HFSR are meaningful,
@@ -14,6 +15,7 @@
 
 #ifdef JH_STM32G474_HW
 
+#include "stm32g474_clock_tree.h"
 #include "stm32g474_power_port.h"
 #include "stm32g474_regs.h"
 #include "stm32g474_time.h"
@@ -110,54 +112,15 @@ void stm32g474_monotonic_compensate_us(uint64_t elapsed_us) {
   g_monotonic_offset_active = next;
 }
 
+static volatile jh_stm32g474_pll_source_t g_pll_source =
+    JH_STM32G474_PLL_FROM_HSI16;
+
+jh_stm32g474_pll_source_t stm32g474_clock_pll_source(void) {
+  return g_pll_source;
+}
+
 static void stm32g474_clock_init(void) {
-  RCC_APB1ENR1 |= RCC_APB1ENR1_PWREN;
-  (void)RCC_APB1ENR1;
-
-  /* 170 MHz requires voltage Range 1 boost and four flash wait states. */
-  PWR_CR5 &= ~PWR_CR5_R1MODE;
-  FLASH_ACR = (FLASH_ACR & ~FLASH_ACR_LATENCY_MASK) | FLASH_ACR_LATENCY_4WS |
-              FLASH_ACR_PRFTEN | FLASH_ACR_ICEN | FLASH_ACR_DCEN;
-  while ((FLASH_ACR & FLASH_ACR_LATENCY_MASK) != FLASH_ACR_LATENCY_4WS) {
-  }
-
-  RCC_CR |= RCC_CR_HSION;
-  while ((RCC_CR & RCC_CR_HSIRDY) == 0u) {
-  }
-
-  RCC_CR &= ~RCC_CR_PLLON;
-  while ((RCC_CR & RCC_CR_PLLRDY) != 0u) {
-  }
-
-  RCC_PLLCFGR = RCC_PLLCFGR_PLLSRC_HSI | RCC_PLLCFGR_PLLM_DIV4 |
-                RCC_PLLCFGR_PLLN_MUL85 | RCC_PLLCFGR_PLLREN |
-                RCC_PLLCFGR_PLLR_DIV2;
-  RCC_CR |= RCC_CR_PLLON;
-  while ((RCC_CR & RCC_CR_PLLRDY) == 0u) {
-  }
-
-  /* Keep HCLK at 85 MHz during the SYSCLK transition, then expose the full
-   * 170 MHz after PLL is selected and stable. Both APB buses remain /1. */
-  RCC_CFGR = (RCC_CFGR & ~(RCC_CFGR_HPRE_MASK | RCC_CFGR_PPRE1_MASK |
-                           RCC_CFGR_PPRE2_MASK)) |
-             RCC_CFGR_HPRE_DIV2 | RCC_CFGR_PPRE1_DIV1 | RCC_CFGR_PPRE2_DIV1;
-  RCC_CFGR = (RCC_CFGR & ~RCC_CFGR_SW_MASK) | RCC_CFGR_SW_PLL;
-  while ((RCC_CFGR & RCC_CFGR_SWS_MASK) != RCC_CFGR_SWS_PLL) {
-  }
-
-  for (volatile uint32_t delay = 0u; delay < 200u; ++delay) {
-    __asm volatile("nop");
-  }
-  RCC_CFGR = (RCC_CFGR & ~RCC_CFGR_HPRE_MASK) | RCC_CFGR_HPRE_DIV1;
-
-  /* Keep timing-sensitive I2C on HSI16 and give FDCAN a live PCLK1 source. */
-  RCC_CCIPR = (RCC_CCIPR & ~(RCC_CCIPR_I2C1SEL_MASK | RCC_CCIPR_I2C2SEL_MASK |
-                             RCC_CCIPR_FDCANSEL_MASK)) |
-              RCC_CCIPR_I2C1SEL_HSI16 | RCC_CCIPR_I2C2SEL_HSI16 |
-              RCC_CCIPR_FDCANSEL_PCLK1;
-
-  __asm volatile("dsb");
-  __asm volatile("isb");
+  g_pll_source = jh_stm32g474_clock_tree_init();
 }
 
 void stm32g474_system_clock_restore_after_stop(void) {
@@ -191,6 +154,11 @@ void SystemInit(void) {
 
   stm32g474_clock_init();
 
+  /* RM0440 6.4.3 recommends turning the UCPD dead-battery pull-downs off in
+   * all cases; left on, PA9/PA10 high pulls PB4/PB6 to ground. PWR keeps the
+   * bit through STOP. */
+  PWR_CR3 |= PWR_CR3_UCPD1_DBDIS;
+
 #if defined(HAL_ENABLE_POWER_MANAGEMENT) && !defined(HAL_ENABLE_FREERTOS)
   /* Preserve the RTC/Standby reason before an RTC handle can reconfigure WUT.
    */
@@ -222,7 +190,7 @@ void SystemInit(void) {
 #endif
 
 #ifndef HAL_ENABLE_FREERTOS
-  /* SysTick @ 1 kHz from the 170 MHz core clock. */
+  /* SysTick @ 1 kHz from the core clock. */
   SYSTICK_LOAD = (JH_G474_CORE_CLOCK_HZ / 1000u) - 1u;
   SYSTICK_VAL = 0u;
   SYSTICK_CTRL =

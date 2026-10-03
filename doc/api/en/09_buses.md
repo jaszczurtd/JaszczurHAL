@@ -82,7 +82,7 @@ write inside `_async_start()`, report `_async_busy() == false`, and let
 - **impl/rp2040:** Native Pico SDK `hardware/spi.h` on SPI0/SPI1 plus `hardware/gpio.h` pin muxing. `hal_spi_write_dma_async_start()` uses SPI TX DMA for MSB-first byte streams and returns before the bus is idle; `hal_spi_end_transaction()` / `hal_spi_deinit()` wait for any active async TX DMA before closing the transaction or releasing the channel.
 - **impl/stm32g474:** register-level SPI1/SPI2 master, 8-bit full-duplex,
   software NSS, polling transfer, AF5 pin setup and interrupt-driven TX DMA.
-  SPI1 is sourced from the 170 MHz PCLK2 and SPI2 from the 170 MHz PCLK1; the
+  SPI1 is sourced from PCLK2 and SPI2 from PCLK1 (both SYSCLK); the
   backend selects the fastest power-of-two prescaler that does not exceed the
   requested clock.
   Default pins: SPI bus 0 = PA6/PA7/PA5, bus 1 = PB14/PB15/PB13. SPI1 TX
@@ -373,7 +373,7 @@ Switching a bus between modes requires an explicit re-init, which runs the
 normal stop/reset cycle and invalidates state tied to the previous mode.
 
 - **impl/rp2040:** Native Pico SDK `hardware/i2c.h` on I2C0/I2C1 plus `hardware/gpio.h` pin muxing; per-bus mutex guards all transactions. Clock requests above Fast-mode Plus are clamped to 1 MHz because RP2040 I2C does not implement Hs-mode. `hal_i2c_bus_clear()` uses GPIO-level SCL/SDA recovery before restoring the I2C pin function. 10-bit mode sets the DesignWare `IC_CON.IC_10BITADDR_MASTER` bit for the controller's lifetime at init and uses a dedicated low-level FIFO/timeout transfer path (`IC_TAR` carries the full 10-bit address; the stock Pico SDK's `i2c_write_timeout_us()`/`i2c_read_timeout_us()` hard-assert a 7-bit address and cannot be reused).
-- **impl/stm32g474:** Register-level I2C v2 master on I2C1/I2C2. Both controllers explicitly select HSI16 as their kernel source, so the validated 16 MHz TIMINGR presets remain independent of the 170 MHz APB clock. The backend validates SDA/SCL alternate-function mappings, configures GPIO open-drain pull-ups, supports the HAL clock tiers, handles write/read/write-read/is-busy paths on both buses, and performs GPIO-level bus clear with clock-independent microsecond pacing before init. 10-bit mode sets `CR2.ADD10` and puts the raw 10-bit address in `CR2.SADD[9:0]` (7-bit mode keeps the existing `SADD[7:1]` shift); `CR2.HEAD10R` is deliberately never set, matching the mainline Linux `i2c-stm32f7` driver for the same I2C v2 IP, which always sends the complete 10-bit header on every phase.
+- **impl/stm32g474:** Register-level I2C v2 master on I2C1/I2C2. Both controllers explicitly select HSI16 as their kernel source, so the validated 16 MHz TIMINGR presets remain independent of the APB clock. The backend validates SDA/SCL alternate-function mappings, configures GPIO open-drain pull-ups, supports the HAL clock tiers, handles write/read/write-read/is-busy paths on both buses, and performs GPIO-level bus clear with clock-independent microsecond pacing before init. 10-bit mode sets `CR2.ADD10` and puts the raw 10-bit address in `CR2.SADD[9:0]` (7-bit mode keeps the existing `SADD[7:1]` shift); `CR2.HEAD10R` is deliberately never set, matching the mainline Linux `i2c-stm32f7` driver for the same I2C v2 IP, which always sends the complete 10-bit header on every phase.
 - **impl/esp32:** ESP-IDF's master/controller API on I2C0/I2C1 with
   generated board-pin validation, internal pull-ups, cached device handles,
   a 100 ms transfer/probe timeout, and controller reset after a timeout. Clock
@@ -741,7 +741,7 @@ signatures and each has an adjacent `_ex` status variant.
   from a task pinned to the intended core and do not migrate that task while the
   UART is active.
 - **impl/stm32g474:** register-level USART1/USART2 using their respective
-  170 MHz PCLK2/PCLK1 sources and a polled RX drain; counts ORE, PE, FE, NE, and
+  PCLK2/PCLK1 sources (both SYSCLK) and a polled RX drain; counts ORE, PE, FE, NE, and
   explicit LIN-break flags when reported by USART_ISR.
 - **impl/esp32:** HAL ports 1/2 map to ESP-IDF UART1/UART2; UART0 remains reserved
   from this HAL surface. Each active handle owns a 512-byte IDF RX buffer and a

@@ -66,6 +66,13 @@
         "pico-sdk"
       ],
       "slot": "lora-radio-provider"
+    },
+    {
+      "id": "stm32g474-hse-24mhz",
+      "providers": [
+        "jh-stm32-baremetal"
+      ],
+      "slot": "system-clock"
     }
   ]
 }

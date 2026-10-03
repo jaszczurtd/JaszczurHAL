@@ -12,6 +12,7 @@
 #if defined(JH_STM32G474_HW) && !defined(HAL_ENABLE_FREERTOS)
 #include "hal/system/hal_sync.h"
 #include "hal/system/hal_system.h"
+#include "port/stm32g474_nvic.h"
 #include "port/stm32g474_power_port.h"
 #include "port/stm32g474_regs.h"
 
@@ -122,7 +123,7 @@ extern "C" void stm32g474_power_capture_boot_wake(void) {
   const bool rtc_wake = (RTC_SR & RTC_SR_WUTF) != 0u;
 
   if (marked) {
-    NVIC_ICER(RTC_WKUP_IRQn / 32u) = 1u << (RTC_WKUP_IRQn % 32u);
+    jh_stm32g474_nvic_disable(RTC_WKUP_IRQn);
     EXTI_IMR1 &= ~(UINT32_C(1) << 20u);
     RTC_WPR = RTC_WPR_KEY1;
     RTC_WPR = RTC_WPR_KEY2;

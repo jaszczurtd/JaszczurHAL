@@ -45,7 +45,7 @@ testów i wymagane połączenia opisują README poszczególnych projektów.
 | `18_freertos_suite` | Zadania FreeRTOS; wariant sieciowy z WiFi, cJSON, BSD, serwerem HTTP, klientem HTTP/HTTPS, plikami, WebSocket i konsolą. Telegram jest włączony do kompilacji, ale przykład nie wysyła powiadomień. | R0, RA, RV, S, E | R0, S, E | `network` na R0, RA, S, E; domyślna kontrola na R0, S, E |
 | `19_touch` | Odczyt dotyku z TSC2007 i STMPE610. | R0, RA, RV, S, E | R0, S, E | - |
 | `20_irsmall_decoder` | Odbiór i dekodowanie sygnałów podczerwieni przez IRsmall. | R0, RA, RV, S, E | R0, S, E | - |
-| `21_stm32g474_fdcan_native` | Wysyłanie i odbieranie ramek przez wbudowany kontroler FDCAN w STM32G474. | S | S | - |
+| `21_stm32g474_fdcan_native` | Wysyłanie i odbieranie ramek CAN FD na wszystkich kanałach płytki przez wbudowane kontrolery FDCAN w STM32G474; domyślnie pętla zwrotna bez okablowania. | S | S | - |
 | `22_rfid_nfc` | Odczyt identyfikatorów kart przez MFRC522 i PN532. | R0, RA, RV, S, E | R0, S, E | - |
 | `23_io_pmic` | Sterowanie diodą RGB, ekspanderem I/O i DAC oraz odczyt stanu zasilania z ADP5360. | R0, RA, RV, S, E | R0, S, E | - |
 | `24_epd_display` | Wyświetlanie wzoru testowego i odświeżanie ekranu e-paper 200 × 200. | R0, RA, RV, S, E | R0, S, E | - |

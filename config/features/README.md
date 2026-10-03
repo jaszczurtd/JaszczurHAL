@@ -70,6 +70,10 @@ python3 scripts/generate_hal_features.py \
   --resolution-output .build/effective-feature-resolution.json
 ```
 
+Neither lint reads `tests/hardware`: device-test firmware stays out of the
+default checks. The opt-in hardware-fixture checks lint it with
+`--include-hardware-fixtures`.
+
 Both raw and effective lint are strict: findings produce a non-zero exit code.
 `--report-only` remains available for temporary migration audits, but is not the
 normal CI invocation.

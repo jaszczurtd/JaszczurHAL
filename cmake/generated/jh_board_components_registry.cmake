@@ -9,6 +9,7 @@ set(JH_BOARD_COMPONENT_IDS
     cyw43-lwip
     btstack-host
     sx126x-radio
+    stm32g474-hse-24mhz
 )
 
 set(JH_BOARD_COMPONENT_rp_pico_PROVIDERS "pico-sdk")
@@ -37,3 +38,6 @@ set(JH_BOARD_COMPONENT_btstack_host_SLOT "bluetooth-host-stack")
 
 set(JH_BOARD_COMPONENT_sx126x_radio_PROVIDERS "jh-stm32-baremetal;pico-sdk")
 set(JH_BOARD_COMPONENT_sx126x_radio_SLOT "lora-radio-provider")
+
+set(JH_BOARD_COMPONENT_stm32g474_hse_24mhz_PROVIDERS "jh-stm32-baremetal")
+set(JH_BOARD_COMPONENT_stm32g474_hse_24mhz_SLOT "system-clock")

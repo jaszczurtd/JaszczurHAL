@@ -221,9 +221,14 @@ projektu testowego generowanego przez JaszczurHAL.
 Testy na urządzeniach korzystają z tych samych narzędzi VS Code co aplikacje użytkownika. Ich pliki wynikowe trafiają do `.build/hardware/`.
 
 Domyślna konfiguracja `runalltests.sh`, CTest i CI nie odczytuje ani nie
-kompiluje tego firmware'u. Polecenia z tej sekcji uruchamiaj jawnie, gdy masz
-dostęp do wymaganych urządzeń. Dodatkowe testy hostowe plików związanych z tymi
-testami można zarejestrować przez `-DJH_ENABLE_HARDWARE_FIXTURE_CHECKS=ON`.
+kompiluje tego firmware'u: kontrola konfiguracji funkcji, kontrola linków
+i tłumaczeń dokumentacji, bramka duplikatów kodu i migawka plików
+generowanych pomijają `tests/hardware`. Polecenia z tej sekcji uruchamiaj
+jawnie, gdy masz dostęp do wymaganych urządzeń.
+`-DJH_ENABLE_HARDWARE_FIXTURE_CHECKS=ON` rejestruje testy hostowe stanowisk:
+ich plików i README, konfiguracji funkcji każdego stanowiska, linków
+i tłumaczeń README stanowisk oraz ograniczonego czytnika linii w skryptach
+weryfikujących komunikację szeregową.
 
 | Stanowisko | Pokrycie |
 |---|---|
@@ -241,6 +246,7 @@ testami można zarejestrować przez `-DJH_ENABLE_HARDWARE_FIXTURE_CHECKS=ON`.
 | [`tests/hardware/rp_kv_power_loss`](../../../tests/hardware/rp_kv_power_loss/README.pl.md) | Odzyskiwanie dwóch banków KV po przerwaniu po kasowaniu, zapisie treści, weryfikacji i publikacji |
 | [`tests/hardware/rp_storage`](../../../tests/hardware/rp_storage/README.pl.md) | Trwały zapis w EEPROM, formatowanie i ponowne montowanie LittleFS oraz montowanie po resecie |
 | [`tests/hardware/stm32_storage_scan`](../../../tests/hardware/stm32_storage_scan/README.pl.md) | NUCLEO-G474RE: KV nad rezerwacją EEPROM we flash z trwałością po resecie watchdogiem, pierścień skanu ADC przy wyłączonych przerwaniach i w czasie publikacji KV |
+| [`tests/hardware/stm32_fdcan_canhat`](../../../tests/hardware/stm32_fdcan_canhat/README.pl.md) | NUCLEO-G474RE z nakładką CAN-FD: drzewo zegarów z HSE, pętla zwrotna ramek klasycznych i CAN FD do 1M/5M na trzech kanałach, kolejka nadawcza i zdarzenia, filtry zmieniane w trakcie pracy, znaczniki czasu nadania, bus-off i wychodzenie z niego na samotnym węźle, opcjonalna wspólna magistrala |
 | [`tests/hardware/rp_sdlogger`](../../../tests/hardware/rp_sdlogger/README.pl.md) | Fizyczne montowanie karty SD przez SPI, deterministyczne dopisywanie, opróżnianie bufora i zamykanie pliku, reset, ponowne montowanie, zawartość pliku i trwałość licznika logów w EEPROM |
 | [`tests/hardware/rp_ota`](../../../tests/hardware/rp_ota/README.pl.md) | Odkrywanie, uwierzytelnianie, transfer, próba/potwierdzenie, wycofanie (rollback), współpraca trwałego storage i odzyskiwanie USB/sieci |
 | [`tests/hardware/lora_sx1262`](../../../tests/hardware/lora_sx1262/README.pl.md) | Inicjalizacja dwóch urządzeń SX1262, dwukierunkowe surowe pakiety, cykl życia niezawodnego łącza oraz fragmentowane transakcje żądanie/odpowiedź routera poleceń na parach zintegrowanych LF lub zewnętrznych HF |

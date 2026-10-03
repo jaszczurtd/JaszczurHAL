@@ -309,6 +309,9 @@ void hal_mock_set_millis(uint32_t ms);
 void hal_mock_advance_millis(uint32_t ms);
 void hal_mock_set_micros(uint32_t us);
 void hal_mock_advance_micros(uint32_t us);
+/** @brief Advance hal_micros() by @p step_us after every read, so polling
+ *         loops with a timeout run out of time; 0 freezes the clock again. */
+void hal_mock_set_micros_step(uint32_t step_us);
 void hal_mock_set_micros64(uint64_t us);
 void hal_mock_advance_micros64(uint64_t us);
 bool hal_mock_watchdog_was_fed(void);
@@ -390,13 +393,44 @@ void hal_mock_debug_isr_restore_default_ring(void);
 #include "hal/can/hal_can.h"
 void hal_mock_can_inject(hal_can_t h, uint32_t id, uint8_t len,
                          const uint8_t *data);
-bool hal_mock_can_get_sent(hal_can_t h, uint32_t *id, uint8_t *len,
-                           uint8_t *data);
+/** @brief Oldest frame the channel sent, as a classic id/len/data triple.
+ *  @return HAL_OK, HAL_EINVAL for a NULL output or a handle the mock does
+ *          not serve, or HAL_EAGAIN when nothing was sent. */
+hal_status_t hal_mock_can_get_sent(hal_can_t h, uint32_t *id, uint8_t *len,
+                                   uint8_t *data);
 void hal_mock_can_inject_frame(hal_can_t h, const hal_can_frame_t *frame);
-bool hal_mock_can_get_sent_frame(hal_can_t h, hal_can_frame_t *frame);
+/** @brief Oldest frame the channel sent; statuses as hal_mock_can_get_sent().
+ */
+hal_status_t hal_mock_can_get_sent_frame(hal_can_t h, hal_can_frame_t *frame);
 void hal_mock_can_reset(hal_can_t h);
 void hal_mock_can_set_state(hal_can_t h, hal_can_state_t state);
 void hal_mock_can_set_error_counters(hal_can_t h, uint8_t tx, uint8_t rx);
+/** @brief Make the next @p count calls to hal_can_create() fail, as when the
+ *         controller does not answer; 0 restores normal creation. */
+void hal_mock_can_fail_creates(unsigned count);
+
+/**
+ * @brief Make CAN handles created from now on behave like the native FDCAN
+ *        backend: queued from simulated interrupts (received frames and send
+ *        outcomes pass through the facade queues) and with the filters of
+ *        hal_can_add_filter(). Off by default, which keeps the synchronous,
+ *        classic-filter behaviour of the SPI controllers.
+ */
+void hal_mock_can_set_queued(bool queued);
+
+/**
+ * @brief Make the next @p count queued sends (hal_can_send_frame_ex()) of a
+ *        queued channel end with HAL_CAN_TX_FAILED, like failed one-shot
+ *        attempts.
+ */
+void hal_mock_can_fail_sends(hal_can_t h, unsigned count);
+
+/**
+ * @brief Report one message RAM access failure of the controller, counted in
+ *        hal_can_status_t::ram_access_failures like on the native FDCAN
+ *        backend (by the simulated interrupt on a queued channel).
+ */
+void hal_mock_can_report_ram_access_failure(hal_can_t h);
 
 // ── ADC ──────────────────────────────────────────────────────────────────────
 uint8_t hal_mock_adc_get_resolution(void);
@@ -493,6 +527,33 @@ void hal_mock_spi_fail_next_dma_write(uint8_t bus, bool fail);
 void hal_mock_spi_push_rx(uint8_t bus, const uint8_t *data, size_t len);
 size_t hal_mock_spi_get_tx(uint8_t bus, uint8_t *out, size_t max_len);
 void hal_mock_spi_reset(void);
+
+/** @brief A simulated SPI peripheral answering on the mock bus. */
+typedef struct {
+  /** Chip select went low: a new instruction starts. */
+  void (*select)(void *user);
+  /** One byte on the wire: @p mosi from the host, the result goes back. */
+  uint8_t (*exchange)(void *user, uint8_t mosi);
+  /** Chip select went high: the instruction ends. */
+  void (*deselect)(void *user);
+} hal_mock_spi_device_t;
+
+/**
+ * @brief Let a simulated peripheral answer on @p bus instead of the scripted
+ *        bytes of hal_mock_spi_push_rx().
+ *
+ * The device sees the bytes sent while @p cs_pin is low; an instruction starts
+ * with the first such byte and ends at hal_spi_end_transaction(). Bytes sent
+ * with the pin high read 0xFF and do not reach it. hal_mock_spi_reset()
+ * detaches it.
+ * @param bus SPI bus.
+ * @param cs_pin GPIO the driver uses as chip select (active low).
+ * @param device Callbacks; NULL detaches.
+ * @param user Passed to every callback.
+ */
+void hal_mock_spi_attach_device(uint8_t bus, uint8_t cs_pin,
+                                const hal_mock_spi_device_t *device,
+                                void *user);
 
 // ── LoRa radio
 // ──────────────────────────────────────────────────────────────────────

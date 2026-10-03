@@ -50,6 +50,9 @@ SYMBOL_FIELDS = {
 }
 BUILD_EFFECT_FIELDS = {"featureSources", "portableSources", "dependencies"}
 IGNORED_INPUT_PARTS = {".build", ".git", "third_party"}
+# Device-test firmware is never read by the default checks (AGENTS.md); the
+# opt-in hardware-fixture checks lint it with --include-hardware-fixtures.
+HARDWARE_FIXTURE_DIR = ("tests", "hardware")
 
 
 class RegistryError(ValueError):
@@ -753,19 +756,26 @@ def check_outputs(output_root: Path, outputs: dict[Path, str]) -> bool:
     )
 
 
-def iter_lint_inputs(root: Path) -> list[Path]:
+def is_hardware_fixture_dir(path: Path) -> bool:
+    return tuple(path.parts[-2:]) == HARDWARE_FIXTURE_DIR
+
+
+def iter_lint_inputs(root: Path, include_hardware: bool = False) -> list[Path]:
     if root.is_file():
         return [root]
     if not root.is_dir():
         raise RegistryError(f"{root}: lint input root does not exist")
     inputs: list[Path] = []
     for directory, directory_names, file_names in os.walk(root):
+        directory_path = Path(directory)
         directory_names[:] = sorted(
             name
             for name in directory_names
-            if name not in IGNORED_INPUT_PARTS and not name.startswith("build")
+            if name not in IGNORED_INPUT_PARTS
+            and not name.startswith("build")
+            and (include_hardware
+                 or not is_hardware_fixture_dir(directory_path / name))
         )
-        directory_path = Path(directory)
         for name in sorted(file_names):
             if name in {"hal_project_config.h", "jaszczurhal.project.json"}:
                 inputs.append(directory_path / name)
@@ -1043,11 +1053,14 @@ def lint_manifest(path: Path, model: FeatureModel) -> list[str]:
 
 
 def lint_inputs(
-    roots: list[Path], model: FeatureModel, report_only: bool
+    roots: list[Path],
+    model: FeatureModel,
+    report_only: bool,
+    include_hardware: bool = False,
 ) -> bool:
     files: set[Path] = set()
     for root in roots:
-        files.update(iter_lint_inputs(root.resolve()))
+        files.update(iter_lint_inputs(root.resolve(), include_hardware))
     findings: list[str] = []
     for path in sorted(files):
         if path.name == "hal_project_config.h":
@@ -1067,10 +1080,12 @@ def lint_inputs(
     return report_only or not findings
 
 
-def effective_inputs(roots: list[Path]) -> tuple[list[Path], list[Path]]:
+def effective_inputs(
+    roots: list[Path], include_hardware: bool = False
+) -> tuple[list[Path], list[Path]]:
     files: set[Path] = set()
     for root in roots:
-        files.update(iter_lint_inputs(root.resolve()))
+        files.update(iter_lint_inputs(root.resolve(), include_hardware))
 
     projects: set[Path] = set()
     for path in files:
@@ -1491,11 +1506,12 @@ def lint_effective_inputs(
     model: FeatureModel,
     report_only: bool,
     resolution_output: Path | None,
+    include_hardware: bool = False,
 ) -> bool:
     workflow = load_workflow_runtime()
     findings: list[str] = []
     records: list[dict[str, Any]] = []
-    projects, standalone_headers = effective_inputs(roots)
+    projects, standalone_headers = effective_inputs(roots, include_hardware)
     target_registry = workflow.load_target_registry()
     for project in projects:
         project_display = relative_display(project, roots)
@@ -1651,6 +1667,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--report-only", action="store_true")
     parser.add_argument("--effective", action="store_true")
     parser.add_argument("--resolution-output", type=Path)
+    parser.add_argument(
+        "--include-hardware-fixtures",
+        action="store_true",
+        help="also lint tests/hardware (opt-in hardware-fixture checks only)",
+    )
     args = parser.parse_args()
     if args.report_only and not args.lint:
         parser.error("--report-only requires --lint")
@@ -1660,6 +1681,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--effective requires --lint")
     if args.resolution_output is not None and not args.effective:
         parser.error("--resolution-output requires --effective")
+    if args.include_hardware_fixtures and not args.lint:
+        parser.error("--include-hardware-fixtures requires --lint")
     return args
 
 
@@ -1674,7 +1697,9 @@ def main() -> int:
         if args.check:
             return 0 if check_outputs(args.output_root.resolve(), outputs) else 1
         input_roots = args.input_root or [Path(__file__).resolve().parents[1]]
-        raw_valid = lint_inputs(input_roots, model, args.report_only)
+        raw_valid = lint_inputs(
+            input_roots, model, args.report_only, args.include_hardware_fixtures
+        )
         effective_valid = True
         if args.effective:
             effective_valid = lint_effective_inputs(
@@ -1682,6 +1707,7 @@ def main() -> int:
                 model,
                 args.report_only,
                 args.resolution_output,
+                args.include_hardware_fixtures,
             )
         return 0 if raw_valid and effective_valid else 1
     except RegistryError as error:

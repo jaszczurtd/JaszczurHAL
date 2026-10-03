@@ -79,6 +79,9 @@ set(_nucleo_core1262
     -DJH_EXPECT_PROFILE=HAL_BOARD_STM32G474_NUCLEO_CORE1262_HF
     -DJH_EXPECT_EXTERNAL_RADIO=1 -DJH_EXPECT_SX1262=1 -DJH_EXPECT_LED=5
     -DJH_EXPECT_NAME="nucleo-g474re-core1262-hf")
+set(_nucleo_canhat
+    -DJH_EXPECT_PROFILE=HAL_BOARD_STM32G474_NUCLEO_CANHAT -DJH_EXPECT_LED=33
+    -DJH_EXPECT_NAME="nucleo-g474re-canhat")
 set(_host_mock
     -DJH_EXPECT_PROFILE=HAL_BOARD_HOST_MOCK -DJH_EXPECT_BLUETOOTH=1
     -DJH_EXPECT_NAME="host-mock")
@@ -115,6 +118,9 @@ check_board(explicit_nucleo_core1262 TRUE ""
     -DHAL_TARGET_STM32G474=1
     -DHAL_BOARD_PROFILE_STM32G474_NUCLEO_CORE1262_HF=1
     ${_nucleo_core1262})
+check_board(explicit_nucleo_canhat TRUE ""
+    -DHAL_TARGET_STM32G474=1
+    -DHAL_BOARD_PROFILE_STM32G474_NUCLEO_CANHAT=1 ${_nucleo_canhat})
 
 check_board(default_rp2040 FALSE "unknown board" -DHAL_TARGET_RP2040=1)
 check_board(default_rp2350 FALSE "unknown board" -DHAL_TARGET_RP2350_ARM=1)

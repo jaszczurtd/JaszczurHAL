@@ -1,25 +1,17 @@
 #pragma once
 
 #include "hal/can/hal_can.h"
+#include "hal/can/jh_can_provider.h"
 #include "mcp2515_driver.h"
 
-bool hal_can_mcp2515_init(JHMCP2515 *mcp, const hal_can_mcp2515_config_t *cfg);
-void hal_can_mcp2515_deinit(JHMCP2515 *mcp);
-bool hal_can_mcp2515_send(JHMCP2515 *mcp, uint32_t id, uint8_t len,
-                          const uint8_t *data);
-bool hal_can_mcp2515_receive(JHMCP2515 *mcp, uint32_t *id, uint8_t *len,
-                             uint8_t *data);
-bool hal_can_mcp2515_available(JHMCP2515 *mcp);
-bool hal_can_mcp2515_set_std_filters(JHMCP2515 *mcp, uint32_t id0,
-                                     uint32_t id1);
-bool hal_can_mcp2515_set_filter(JHMCP2515 *mcp, uint8_t index,
-                                const hal_can_filter_t *filter);
-bool hal_can_mcp2515_start(JHMCP2515 *mcp, hal_can_mode_t mode);
-bool hal_can_mcp2515_stop(JHMCP2515 *mcp);
-bool hal_can_mcp2515_set_mode(JHMCP2515 *mcp, hal_can_mode_t mode);
-bool hal_can_mcp2515_get_state(JHMCP2515 *mcp, bool started,
-                               hal_can_state_t *state);
-bool hal_can_mcp2515_get_error_counters(JHMCP2515 *mcp,
-                                        hal_can_error_counters_t *counters);
-bool hal_can_mcp2515_send_frame(JHMCP2515 *mcp, const hal_can_frame_t *frame);
-bool hal_can_mcp2515_receive_frame(JHMCP2515 *mcp, hal_can_frame_t *frame);
+/**
+ * @brief MCP2515 provider of the CAN facade; its context is a JHMCP2515.
+ *
+ * The operations return the facade's statuses: HAL_EBUSY when no transmit
+ * buffer became free, HAL_ETIMEOUT when a frame did not leave in time or the
+ * controller did not reach a requested mode within 200 ms, HAL_EIO for a
+ * failed one-shot attempt or a controller that did not answer, HAL_EAGAIN
+ * when no frame waits, and HAL_EUNSUPPORTED from init for a bitrate or
+ * crystal without a timing table.
+ */
+extern const jh_can_provider_t jh_can_mcp2515_provider;
