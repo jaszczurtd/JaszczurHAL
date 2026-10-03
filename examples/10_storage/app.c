@@ -84,6 +84,13 @@ static void init_eeprom_and_kv(void) {
     return;
   }
 
+  /* Erasing flash is slow, so erase the spare bank now, while a pause does no
+   * harm; the compaction a full log needs later then only programs it. */
+  status = hal_kv_prepare_ex();
+  if (status != HAL_OK) {
+    derr("KV prepare failed: %s", hal_status_to_string(status));
+  }
+
   status = hal_kv_set_auto_commit(false);
   if (status != HAL_OK) {
     derr("KV deferred mode failed: %s", hal_status_to_string(status));
@@ -266,9 +273,10 @@ static void service_kv(uint32_t now) {
   hal_kv_stats_t stats = {0};
   const hal_status_t status = hal_kv_get_stats_ex(&stats);
   if (status == HAL_OK) {
-    deb("KV: keys=%u used=%u/%u generation=%lu", (unsigned)stats.key_count,
-        (unsigned)stats.used_bytes, (unsigned)stats.capacity_bytes,
-        (unsigned long)stats.generation);
+    deb("KV: keys=%u used=%u/%u generation=%lu spare=%s",
+        (unsigned)stats.key_count, (unsigned)stats.used_bytes,
+        (unsigned)stats.capacity_bytes, (unsigned long)stats.generation,
+        stats.spare_erased ? "erased" : "dirty");
   } else {
     derr("KV stats failed: %s", hal_status_to_string(status));
   }

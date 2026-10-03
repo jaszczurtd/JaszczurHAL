@@ -16,6 +16,7 @@ const jh_eeprom_provider_ops_t *s_provider = nullptr;
 uint16_t s_size = 0u;
 uint16_t s_erase_size = 1u;
 uint16_t s_program_size = 1u;
+uint16_t s_append_size = 1u;
 hal_mutex_t s_eeprom_mutex = nullptr;
 hal_eeprom_progress_callback_t s_progress_callback = nullptr;
 void *s_progress_ctx = nullptr;
@@ -103,7 +104,8 @@ hal_status_t hal_eeprom_init(hal_eeprom_type_t type, uint16_t size,
   if (provider == nullptr || provider->initialize == nullptr ||
       provider->read == nullptr || provider->write == nullptr ||
       provider->commit == nullptr || provider->replace_region == nullptr ||
-      provider->reset == nullptr) {
+      provider->reset == nullptr || provider->append == nullptr ||
+      provider->erase == nullptr || provider->region_erased == nullptr) {
     s_provider = nullptr;
     s_size = 0u;
     hal_mutex_unlock(mutex);
@@ -113,7 +115,8 @@ hal_status_t hal_eeprom_init(hal_eeprom_type_t type, uint16_t size,
   const jh_eeprom_provider_config_t config = {type, size, i2c_addr};
   jh_eeprom_provider_info_t info = {};
   hal_status_t status = provider->initialize(&config, &info);
-  if (status == HAL_OK && (info.erase_size == 0u || info.program_size == 0u)) {
+  if (status == HAL_OK && (info.erase_size == 0u || info.program_size == 0u ||
+                           info.append_size == 0u)) {
     status = HAL_ECONFIG;
   }
   if (status == HAL_OK && info.size > 0u) {
@@ -121,6 +124,7 @@ hal_status_t hal_eeprom_init(hal_eeprom_type_t type, uint16_t size,
     s_size = info.size;
     s_erase_size = info.erase_size;
     s_program_size = info.program_size;
+    s_append_size = info.append_size;
   } else {
     s_provider = nullptr;
     s_size = 0u;
@@ -297,6 +301,70 @@ hal_status_t jh_eeprom_replace_region(uint16_t addr, const uint8_t *data,
           ? s_provider->replace_region(addr, data, len, publish_size,
                                        s_progress_callback, s_progress_ctx)
           : range;
+  hal_mutex_unlock(mutex);
+  return status;
+}
+
+hal_status_t jh_eeprom_append_region(uint16_t addr, const uint8_t *data,
+                                     uint16_t len) {
+  if (data == nullptr || len == 0u) {
+    return HAL_EINVAL;
+  }
+  hal_mutex_t mutex = eeprom_mutex();
+  hal_mutex_lock(mutex);
+  hal_status_t status = range_status(addr, len);
+  if (status == HAL_OK &&
+      (addr % s_append_size != 0u || len % s_append_size != 0u)) {
+    status = HAL_EINVAL;
+  }
+  if (status == HAL_OK) {
+    status = s_provider->append(addr, data, len, s_progress_callback,
+                                s_progress_ctx);
+  }
+  hal_mutex_unlock(mutex);
+  return status;
+}
+
+hal_status_t jh_eeprom_erase_region(uint16_t addr, uint16_t len) {
+  hal_mutex_t mutex = eeprom_mutex();
+  hal_mutex_lock(mutex);
+  hal_status_t status = range_status(addr, len);
+  if (status == HAL_OK &&
+      (len == 0u || addr % s_erase_size != 0u || len % s_erase_size != 0u)) {
+    status = HAL_EINVAL;
+  }
+  if (status == HAL_OK) {
+    status = s_provider->erase(addr, len, s_progress_callback, s_progress_ctx);
+  }
+  hal_mutex_unlock(mutex);
+  return status;
+}
+
+hal_status_t jh_eeprom_region_erased(uint16_t addr, uint16_t len,
+                                     bool *out_erased) {
+  if (out_erased == nullptr) {
+    return HAL_EINVAL;
+  }
+  *out_erased = false;
+  hal_mutex_t mutex = eeprom_mutex();
+  hal_mutex_lock(mutex);
+  const hal_status_t range = range_status(addr, len);
+  const hal_status_t status =
+      range == HAL_OK ? s_provider->region_erased(addr, len, out_erased)
+                      : range;
+  hal_mutex_unlock(mutex);
+  return status;
+}
+
+hal_status_t jh_eeprom_append_size(uint16_t *out_size) {
+  if (out_size == nullptr) {
+    return HAL_EINVAL;
+  }
+  hal_mutex_t mutex = eeprom_mutex();
+  hal_mutex_lock(mutex);
+  const hal_status_t status =
+      s_provider != nullptr && s_size > 0u ? HAL_OK : HAL_EUNINIT;
+  *out_size = status == HAL_OK ? s_append_size : 0u;
   hal_mutex_unlock(mutex);
   return status;
 }

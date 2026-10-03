@@ -472,7 +472,9 @@
 #define I2C_CR1_REG(base) JH_REG32((base) + 0x00u)
 #define I2C_CR2_REG(base) JH_REG32((base) + 0x04u)
 #define I2C_TIMINGR_REG(base) JH_REG32((base) + 0x10u)
-#define I2C_ISR_REG(base) JH_REG32((base) + 0x18u)
+#define I2C_ISR_REG_ADDR(base) ((base) + 0x18u)
+#define I2C_ISR_REG(base) JH_REG32(I2C_ISR_REG_ADDR(base))
+#define I2C_ISR_READ(base) JH_REG32_RD(I2C_ISR_REG_ADDR(base))
 #define I2C_ICR_REG(base) JH_REG32((base) + 0x1Cu)
 #define I2C_RXDR_REG(base) JH_REG32((base) + 0x24u)
 #define I2C_TXDR_REG(base) JH_REG32((base) + 0x28u)
@@ -663,8 +665,9 @@
 #define FDCAN_DBTP_TDC (1u << 23)
 #define FDCAN_TDCR_TDCO_POS 8u
 #define FDCAN_TEST_LBCK (1u << 4)
-#define FDCAN_TSCC_TSS_EXTERNAL (2u << 0) /* TIM3 counter, constant under BRS  \
-                                           */
+#define FDCAN_TSCC_TSS_EXTERNAL                                                \
+  (2u << 0) /* TIM3 counter, constant under BRS                                \
+             */
 #define FDCAN_IR_ALL 0x00FFFFFFu
 #define FDCAN_PSR_LEC_MASK 0x7u
 #define FDCAN_PSR_EP (1u << 5)

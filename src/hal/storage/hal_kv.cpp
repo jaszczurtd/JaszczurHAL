@@ -16,13 +16,19 @@
 namespace {
 
 constexpr uint32_t KV_BANK_MAGIC = 0x564B484Au; // "JHKV", little-endian.
-constexpr uint8_t KV_BANK_VERSION = 2u;
+/* Version 3 adds the committed log after the body; a version 2 bank is the
+ * same layout with an empty log, so both are read. */
+constexpr uint8_t KV_BANK_VERSION = 3u;
+constexpr uint8_t KV_BANK_VERSION_NO_LOG = 2u;
 constexpr uint16_t KV_BANK_HDR_SIZE = 24u;
 constexpr uint16_t KV_REC_MAGIC = 0xA55Au;
 constexpr uint16_t KV_REC_FOOTER = 0x5AA5u;
 constexpr uint8_t KV_REC_TYPE_U32 = 1u;
 constexpr uint8_t KV_REC_TYPE_BLOB = 2u;
 constexpr uint8_t KV_REC_TYPE_DELETE = 3u;
+/* Closes a log batch: payload = u16 batch start, u16 CRC of the batch. */
+constexpr uint8_t KV_REC_TYPE_COMMIT = 4u;
+constexpr uint16_t KV_COMMIT_LEN = 4u;
 constexpr uint16_t KV_REC_HDR_SIZE = 16u;
 constexpr uint16_t KV_REC_FTR_SIZE = 2u;
 constexpr uint16_t KV_REC_OVERHEAD = KV_REC_HDR_SIZE + KV_REC_FTR_SIZE;
@@ -84,6 +90,12 @@ static bool s_ready = false;
 static bool s_auto_commit = true;
 static bool s_read_through = false;
 static bool s_dirty = false;
+/* The next commit must compact into the other bank instead of appending. */
+static bool s_needs_publish = false;
+static uint16_t s_append_size = 1u;
+/* Active-bank offset up to which the medium holds committed content; the
+ * next log batch starts here. RAM records past it are not committed yet. */
+static uint16_t s_flash_end = 0u;
 static uint16_t s_base = 0u;
 static uint16_t s_bank_size = 0u;
 static uint16_t s_active_bank = 0u;
@@ -108,6 +120,19 @@ static uint16_t bank_base(uint16_t bank) {
 
 static uint32_t record_size(uint16_t len) {
   return static_cast<uint32_t>(KV_REC_OVERHEAD) + len;
+}
+
+static uint32_t align_up(uint32_t value) {
+  return (value + s_append_size - 1u) / s_append_size * s_append_size;
+}
+
+static bool bytes_erased(uint16_t offset, uint16_t len) {
+  for (uint16_t index = 0u; index < len; index++) {
+    if (s_bank[offset + index] != 0xFFu) {
+      return false;
+    }
+  }
+  return true;
 }
 
 static bool record_type_valid(uint8_t type, uint16_t len) {
@@ -192,7 +217,9 @@ static bool validate_bank_header(const uint8_t raw[KV_BANK_HDR_SIZE],
                                  uint16_t expected_bank_size,
                                  kv_bank_hdr_t *out_header) {
   const kv_bank_hdr_t header = decode_bank_header(raw);
-  if (header.magic != KV_BANK_MAGIC || header.version != KV_BANK_VERSION ||
+  if (header.magic != KV_BANK_MAGIC ||
+      (header.version != KV_BANK_VERSION &&
+       header.version != KV_BANK_VERSION_NO_LOG) ||
       header.header_size != KV_BANK_HDR_SIZE ||
       header.bank_size != expected_bank_size ||
       header.used_offset < KV_PUBLISH_SIZE ||
@@ -212,6 +239,32 @@ static bool validate_bank_header(const uint8_t raw[KV_BANK_HDR_SIZE],
   if (out_header != nullptr) {
     *out_header = header;
   }
+  return true;
+}
+
+/* Check one stored record at offset that must end by limit; a commit record
+ * is accepted only where allow_commit says so (the log, not the body). */
+static bool record_valid(uint16_t offset, uint16_t limit, bool allow_commit,
+                         kv_rec_hdr_t *out_record) {
+  if (static_cast<uint32_t>(offset) + KV_REC_OVERHEAD > limit) {
+    return false;
+  }
+  const kv_rec_hdr_t record = decode_record_header(s_bank + offset);
+  const bool commit = record.type == KV_REC_TYPE_COMMIT &&
+                      record.len == KV_COMMIT_LEN && allow_commit;
+  if (record.magic != KV_REC_MAGIC || record.flags != 0u ||
+      (!commit && !record_type_valid(record.type, record.len)) ||
+      record.header_crc != record_header_crc(record) ||
+      static_cast<uint32_t>(offset) + record_size(record.len) > limit) {
+    return false;
+  }
+  const uint16_t payload_offset =
+      static_cast<uint16_t>(offset + KV_REC_HDR_SIZE);
+  if (crc16(s_bank + payload_offset, record.len) != record.payload_crc ||
+      jh_load_le16(s_bank + payload_offset + record.len) != KV_REC_FOOTER) {
+    return false;
+  }
+  *out_record = record;
   return true;
 }
 
@@ -235,31 +288,11 @@ static bool validate_bank_buffer(kv_bank_meta_t *out_meta) {
   uint16_t offset = KV_PUBLISH_SIZE;
   uint16_t records = 0u;
   while (offset < header.used_offset) {
-    if (static_cast<uint32_t>(offset) + KV_REC_OVERHEAD > header.used_offset) {
+    kv_rec_hdr_t record = {};
+    if (!record_valid(offset, header.used_offset, false, &record)) {
       return false;
     }
-    const kv_rec_hdr_t record = decode_record_header(s_bank + offset);
-    if (record.magic != KV_REC_MAGIC || record.flags != 0u ||
-        !record_type_valid(record.type, record.len) ||
-        record.header_crc != record_header_crc(record)) {
-      return false;
-    }
-
-    const uint32_t total = record_size(record.len);
-    if (static_cast<uint32_t>(offset) + total > header.used_offset) {
-      return false;
-    }
-    const uint16_t payload_offset =
-        static_cast<uint16_t>(offset + KV_REC_HDR_SIZE);
-    if (crc16(s_bank + payload_offset, record.len) != record.payload_crc) {
-      return false;
-    }
-    const uint16_t footer_offset =
-        static_cast<uint16_t>(payload_offset + record.len);
-    if (jh_load_le16(s_bank + footer_offset) != KV_REC_FOOTER) {
-      return false;
-    }
-    offset = static_cast<uint16_t>(offset + total);
+    offset = static_cast<uint16_t>(offset + record_size(record.len));
     records++;
   }
 
@@ -301,11 +334,9 @@ static uint16_t index_count(void) {
   return count;
 }
 
-static hal_status_t build_index_from_staging(void) {
-  memset(s_index, 0, sizeof(s_index));
-  uint16_t offset = KV_PUBLISH_SIZE;
-  uint32_t last_seq = 0u;
-  while (offset < s_used_offset) {
+/* Apply the validated records of [offset, end) to the index in order. */
+static hal_status_t index_apply_range(uint16_t offset, uint16_t end) {
+  while (offset < end) {
     const kv_rec_hdr_t record = decode_record_header(s_bank + offset);
     int index = index_find(record.key);
     if (record.type == KV_REC_TYPE_DELETE) {
@@ -329,11 +360,80 @@ static hal_status_t build_index_from_staging(void) {
           static_cast<uint16_t>(offset + KV_REC_HDR_SIZE);
       s_index[index].seq = record.seq;
     }
-    last_seq = record.seq;
+    s_next_seq = record.seq + 1u;
     offset = static_cast<uint16_t>(offset + record_size(record.len));
   }
-  s_next_seq = last_seq + 1u;
   return HAL_OK;
+}
+
+/*
+ * Walk the log after the body: batches of records, each closed by a commit
+ * record whose CRC covers the batch, the next batch starting on the append
+ * granularity. A batch counts only with its commit; the log ends at erased
+ * bytes. Anything else past the last commit (a write cut by power loss) is
+ * left alone, and the next commit compacts into the other bank instead.
+ */
+static hal_status_t scan_log_locked(uint16_t body_end) {
+  uint16_t committed = body_end;
+  uint16_t batch = static_cast<uint16_t>(align_up(body_end));
+  uint16_t offset = batch;
+  bool damaged = false;
+  while (batch < s_bank_size) {
+    kv_rec_hdr_t record = {};
+    if (bytes_erased(offset, static_cast<uint16_t>(s_bank_size - offset))) {
+      damaged = offset != batch;
+      break;
+    }
+    if (!record_valid(offset, s_bank_size, true, &record)) {
+      damaged = true;
+      break;
+    }
+    const uint16_t next =
+        static_cast<uint16_t>(offset + record_size(record.len));
+    if (record.type != KV_REC_TYPE_COMMIT) {
+      offset = next;
+      continue;
+    }
+    const uint8_t *payload = s_bank + offset + KV_REC_HDR_SIZE;
+    if (jh_load_le16(payload) != batch || offset == batch ||
+        jh_load_le16(payload + 2u) !=
+            crc16(s_bank + batch, static_cast<uint16_t>(offset - batch))) {
+      damaged = true;
+      break;
+    }
+    const hal_status_t status = index_apply_range(batch, offset);
+    if (status != HAL_OK) {
+      return status;
+    }
+    committed = next;
+    batch = static_cast<uint16_t>(align_up(next));
+    offset = batch;
+  }
+  s_flash_end = static_cast<uint16_t>(align_up(committed));
+  s_used_offset = damaged ? committed : s_flash_end;
+  s_needs_publish = damaged;
+  return HAL_OK;
+}
+
+/* Encode one record at offset; data may already sit at its payload offset
+ * (compaction moves payloads left, so the payload goes first). */
+static void write_record(uint16_t offset, uint16_t key, uint8_t type,
+                         const uint8_t *data, uint16_t len, uint32_t seq) {
+  const uint16_t payload_offset =
+      static_cast<uint16_t>(offset + KV_REC_HDR_SIZE);
+  if (len > 0u) {
+    memmove(s_bank + payload_offset, data, len);
+  }
+  kv_rec_hdr_t record = {};
+  record.magic = KV_REC_MAGIC;
+  record.key = key;
+  record.type = type;
+  record.len = len;
+  record.seq = seq;
+  record.payload_crc = crc16(s_bank + payload_offset, len);
+  record.header_crc = record_header_crc(record);
+  encode_record_header(s_bank + offset, record);
+  jh_store_le16(s_bank + payload_offset + len, KV_REC_FOOTER);
 }
 
 static void prepare_bank_header(uint32_t generation) {
@@ -358,10 +458,9 @@ static void prepare_bank_header(uint32_t generation) {
   encode_bank_header(s_bank, header);
 }
 
-static hal_status_t publish_locked(void) {
-  if (!s_dirty) {
-    return HAL_OK;
-  }
+/* Write the compacted RAM image to the other bank, its header last. The
+ * erase is skipped when hal_kv_prepare_ex() already erased that bank. */
+static hal_status_t publish_full_locked(void) {
   const uint16_t destination = s_active_bank == 0u ? 1u : 0u;
   const uint32_t next_generation = s_generation + 1u;
   prepare_bank_header(next_generation);
@@ -372,17 +471,83 @@ static hal_status_t publish_locked(void) {
   }
   s_active_bank = destination;
   s_generation = next_generation;
+  s_flash_end = static_cast<uint16_t>(align_up(s_used_offset));
+  s_used_offset = s_flash_end;
+  s_needs_publish = false;
   s_dirty = false;
   return HAL_OK;
 }
 
+static uint32_t commit_record_reserve(void) {
+  return s_needs_publish ? 0u : record_size(KV_COMMIT_LEN) + s_append_size - 1u;
+}
+
+/* Close the records staged since the last commit with a commit record and
+ * program them after the committed log, without any erase. */
+static hal_status_t append_batch_locked(void) {
+  const uint16_t batch = s_flash_end;
+  const uint16_t commit = s_used_offset;
+  const uint32_t end = align_up(commit + record_size(KV_COMMIT_LEN));
+  if (end > s_bank_size) {
+    return HAL_ENOMEM;
+  }
+  uint8_t payload[KV_COMMIT_LEN] = {};
+  jh_store_le16(payload, batch);
+  jh_store_le16(payload + 2u,
+                crc16(s_bank + batch, static_cast<uint16_t>(commit - batch)));
+  write_record(commit, 0u, KV_REC_TYPE_COMMIT, payload, KV_COMMIT_LEN,
+               s_next_seq);
+  const hal_status_t status = jh_eeprom_append_region(
+      static_cast<uint16_t>(bank_base(s_active_bank) + batch), s_bank + batch,
+      static_cast<uint16_t>(end - batch));
+  if (hal_status_is_error(status)) {
+    memset(s_bank + commit, 0xFF, end - commit);
+    /* A refused write leaves the tail erased and is retried in place; once
+     * part of the batch reached the medium, never append there again. */
+    bool erased = false;
+    if (jh_eeprom_region_erased(
+            static_cast<uint16_t>(bank_base(s_active_bank) + batch),
+            static_cast<uint16_t>(end - batch), &erased) != HAL_OK ||
+        !erased) {
+      s_needs_publish = true;
+    }
+    return status;
+  }
+  s_flash_end = static_cast<uint16_t>(end);
+  s_used_offset = s_flash_end;
+  s_dirty = false;
+  return HAL_OK;
+}
+
+static hal_status_t compact_locked(void);
+
+static hal_status_t commit_locked(void) {
+  if (!s_dirty) {
+    return HAL_OK;
+  }
+  if (!s_needs_publish) {
+    if (s_used_offset == s_flash_end) {
+      s_dirty = false;
+      return HAL_OK;
+    }
+    /* No room for the batch, or bytes past the log that the store did not
+     * write (nothing was programmed then): compact instead. */
+    const hal_status_t status = append_batch_locked();
+    if (status != HAL_ENOMEM && status != HAL_ESTATE) {
+      return status;
+    }
+  }
+  const hal_status_t status = compact_locked();
+  return hal_status_is_error(status) ? status : publish_full_locked();
+}
+
 static hal_status_t finish_mutation_locked(void) {
   s_dirty = true;
-  return s_auto_commit ? publish_locked() : HAL_OK;
+  return s_auto_commit ? commit_locked() : HAL_OK;
 }
 
 static hal_status_t finish_no_change_locked(void) {
-  return s_auto_commit && s_dirty ? publish_locked() : HAL_OK;
+  return s_auto_commit && s_dirty ? commit_locked() : HAL_OK;
 }
 
 static hal_status_t append_record_locked(uint16_t key, uint8_t type,
@@ -391,22 +556,7 @@ static hal_status_t append_record_locked(uint16_t key, uint8_t type,
   if (static_cast<uint32_t>(s_used_offset) + total > s_bank_size) {
     return HAL_ENOMEM;
   }
-  const uint16_t record_offset = s_used_offset;
-  const uint16_t payload_offset =
-      static_cast<uint16_t>(record_offset + KV_REC_HDR_SIZE);
-  kv_rec_hdr_t record = {};
-  record.magic = KV_REC_MAGIC;
-  record.key = key;
-  record.type = type;
-  record.len = len;
-  record.seq = s_next_seq++;
-  record.payload_crc = crc16(data, len);
-  record.header_crc = record_header_crc(record);
-  encode_record_header(s_bank + record_offset, record);
-  if (len > 0u) {
-    memcpy(s_bank + payload_offset, data, len);
-  }
-  jh_store_le16(s_bank + payload_offset + len, KV_REC_FOOTER);
+  write_record(s_used_offset, key, type, data, len, s_next_seq++);
   s_used_offset = static_cast<uint16_t>(s_used_offset + total);
   s_record_count++;
   return HAL_OK;
@@ -434,33 +584,23 @@ static hal_status_t compact_locked(void) {
   uint16_t destination = KV_PUBLISH_SIZE;
   for (uint16_t order_index = 0u; order_index < live_count; order_index++) {
     kv_index_entry_t &entry = s_index[order[order_index]];
-    const uint16_t source_payload = entry.payload_offset;
-    const uint16_t destination_payload =
-        static_cast<uint16_t>(destination + KV_REC_HDR_SIZE);
-    memmove(s_bank + destination_payload, s_bank + source_payload, entry.len);
-
-    kv_rec_hdr_t record = {};
-    record.magic = KV_REC_MAGIC;
-    record.key = entry.key;
-    record.type = entry.type;
-    record.len = entry.len;
-    record.seq = entry.seq;
-    record.payload_crc = crc16(s_bank + destination_payload, entry.len);
-    record.header_crc = record_header_crc(record);
-    encode_record_header(s_bank + destination, record);
-    jh_store_le16(s_bank + destination_payload + entry.len, KV_REC_FOOTER);
-    entry.payload_offset = destination_payload;
+    write_record(destination, entry.key, entry.type,
+                 s_bank + entry.payload_offset, entry.len, entry.seq);
+    entry.payload_offset = static_cast<uint16_t>(destination + KV_REC_HDR_SIZE);
     destination = static_cast<uint16_t>(destination + record_size(entry.len));
   }
   s_used_offset = destination;
   s_record_count = live_count;
+  s_needs_publish = true;
   s_dirty = true;
   return HAL_OK;
 }
 
 static hal_status_t ensure_space_locked(uint16_t len) {
   const uint32_t required = record_size(len);
-  if (static_cast<uint32_t>(s_used_offset) + required <= s_bank_size) {
+  if (static_cast<uint32_t>(s_used_offset) + required +
+          commit_record_reserve() <=
+      s_bank_size) {
     return HAL_OK;
   }
   const hal_status_t status = compact_locked();
@@ -540,6 +680,9 @@ static bool generation_newer(uint32_t lhs, uint32_t rhs) {
 static void reset_runtime_state_locked(void) {
   s_ready = false;
   s_dirty = false;
+  s_needs_publish = false;
+  s_append_size = 1u;
+  s_flash_end = 0u;
   s_base = 0u;
   s_bank_size = 0u;
   s_active_bank = 0u;
@@ -586,6 +729,9 @@ hal_status_t hal_kv_init_ex(uint16_t base_addr, uint16_t size_bytes) {
   }
 
   status = jh_eeprom_validate_region(base_addr, bank_size, KV_PUBLISH_SIZE);
+  if (status == HAL_OK) {
+    status = jh_eeprom_append_size(&s_append_size);
+  }
   if (status != HAL_OK) {
     hal_mutex_unlock(s_kv_mutex);
     return status;
@@ -612,7 +758,8 @@ hal_status_t hal_kv_init_ex(uint16_t base_addr, uint16_t size_bytes) {
     s_generation = 0u;
     s_next_seq = 1u;
     s_dirty = true;
-    status = publish_locked();
+    s_needs_publish = true;
+    status = commit_locked();
     if (hal_status_is_error(status)) {
       reset_runtime_state_locked();
       hal_mutex_unlock(s_kv_mutex);
@@ -642,7 +789,12 @@ hal_status_t hal_kv_init_ex(uint16_t base_addr, uint16_t size_bytes) {
     s_generation = active.generation;
     s_used_offset = active.used_offset;
     s_record_count = active.record_count;
-    status = build_index_from_staging();
+    memset(s_index, 0, sizeof(s_index));
+    s_next_seq = 1u;
+    status = index_apply_range(KV_PUBLISH_SIZE, active.used_offset);
+    if (status == HAL_OK) {
+      status = scan_log_locked(active.used_offset);
+    }
     if (hal_status_is_error(status)) {
       reset_runtime_state_locked();
       hal_mutex_unlock(s_kv_mutex);
@@ -827,7 +979,7 @@ hal_status_t hal_kv_gc_ex(void) {
   if (s_ready) {
     status = compact_locked();
     if (hal_status_is_ok(status) && s_auto_commit) {
-      status = publish_locked();
+      status = commit_locked();
     }
   }
   hal_mutex_unlock(s_kv_mutex);
@@ -857,12 +1009,34 @@ hal_status_t hal_kv_get_stats_ex(hal_kv_stats_t *out_stats) {
   out_stats->key_count = index_count();
   out_stats->key_capacity = KV_MAX_KEYS;
   out_stats->next_sequence = s_next_seq;
+  const uint16_t spare = s_active_bank == 0u ? 1u : 0u;
+  const hal_status_t status = jh_eeprom_region_erased(
+      bank_base(spare), s_bank_size, &out_stats->spare_erased);
   hal_mutex_unlock(s_kv_mutex);
-  return HAL_OK;
+  return status;
 }
 
 bool hal_kv_get_stats(hal_kv_stats_t *out_stats) {
   return hal_status_to_bool(hal_kv_get_stats_ex(out_stats));
+}
+
+hal_status_t hal_kv_prepare_ex(void) {
+  kv_ensure_mutex();
+  if (s_kv_mutex == nullptr) {
+    return HAL_ENOMEM;
+  }
+  hal_mutex_lock(s_kv_mutex);
+  hal_status_t status = HAL_EUNINIT;
+  if (s_ready) {
+    const uint16_t spare = bank_base(s_active_bank == 0u ? 1u : 0u);
+    bool erased = false;
+    status = jh_eeprom_region_erased(spare, s_bank_size, &erased);
+    if (status == HAL_OK && !erased) {
+      status = jh_eeprom_erase_region(spare, s_bank_size);
+    }
+  }
+  hal_mutex_unlock(s_kv_mutex);
+  return status;
 }
 
 hal_status_t hal_kv_set_auto_commit(bool enabled) {
@@ -920,7 +1094,7 @@ hal_status_t hal_kv_commit_ex(void) {
     return HAL_ENOMEM;
   }
   hal_mutex_lock(s_kv_mutex);
-  const hal_status_t status = s_ready ? publish_locked() : HAL_EUNINIT;
+  const hal_status_t status = s_ready ? commit_locked() : HAL_EUNINIT;
   hal_mutex_unlock(s_kv_mutex);
   return status;
 }

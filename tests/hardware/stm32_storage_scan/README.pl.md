@@ -5,7 +5,7 @@ rezerwacją EEPROM we flash oraz pierścień skanu ADC na NUCLEO-G474RE.
 Nieparzysty rozruch wykonuje sprawdzenia: inicjalizację KV, licznik rozruchów i
 blob z nazwą, pięć bloków skanu, dziesięć przebiegów z przerwaniami wyłączonymi
 dłużej niż jeden blok (spóźnione przerwanie ma opublikować połowę, której DMA
-akurat nie wypełnia), cztery publikacje KV do flash w czasie skanu (pierścień
+akurat nie wypełnia), cztery zapisy KV do flash w czasie skanu (pierścień
 ma pracować dalej), a potem zapisuje werdykt w KV i resetuje układ przez
 watchdog. Parzysty rozruch potwierdza, że licznik, nazwa i werdykt przetrwały,
 skanuje dalej i co dwie sekundy drukuje `JHSTM32REPORT`. Dioda (PA5) przełącza

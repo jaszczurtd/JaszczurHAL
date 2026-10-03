@@ -1151,6 +1151,22 @@ typedef enum {
 /** Inject a power-loss-style failure into region replacement. */
 void hal_mock_eeprom_set_replace_fail_phase(
     hal_mock_eeprom_replace_fail_phase_t phase);
+/**
+ * @brief Cut the next append short, as a power loss would.
+ *
+ * One-shot: the next append stores only its first @p written bytes and returns
+ * HAL_EIO; later appends behave normally.
+ */
+void hal_mock_eeprom_tear_next_append(uint16_t written);
+/**
+ * @brief Return how many erases ran since the last reset or counter clear.
+ *
+ * Counts erase operations and region replacements whose destination was not
+ * erased (0xFF) on a flash type; an EEPROM type never erases.
+ */
+uint32_t hal_mock_eeprom_get_erase_count(void);
+/** @brief Clear the erase counter. */
+void hal_mock_eeprom_clear_erase_count(void);
 /** @brief Reset all mock EEPROM state (memory, type, committed flag) to
  * defaults. */
 void hal_mock_eeprom_reset(void);

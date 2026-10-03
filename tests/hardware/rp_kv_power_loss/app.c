@@ -1,6 +1,7 @@
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_status.h>
 #include <hal/core/hal_target.h>
+#include <hal/gpio/hal_gpio.h>
 #include <hal/impl/rp2040/drivers/flash/rp_flash_storage.h>
 #include <hal/storage/hal_eeprom.h>
 #include <hal/storage/hal_kv.h>
@@ -23,6 +24,12 @@ typedef struct {
 } phase_result_t;
 
 typedef struct {
+  uint32_t append_max_us; /* slowest of ten log commits */
+  uint32_t prepare_us;    /* erasing the spare bank */
+  uint32_t compact_us;    /* compaction into the prepared bank */
+} timing_result_t;
+
+typedef struct {
   hal_status_t setup_status;
   hal_status_t dirty_u32_status;
   uint32_t dirty_u32_value;
@@ -42,7 +49,9 @@ typedef struct {
   uint8_t reloaded_blob_matches;
 } read_through_result_t;
 
-static uint8_t s_response[512];
+static uint8_t s_response[640];
+static bool s_led_state;
+static uint32_t s_led_ms;
 static size_t s_response_length;
 static size_t s_response_offset;
 
@@ -65,7 +74,7 @@ static hal_status_t reload_store(void) {
 }
 
 static hal_status_t fresh_store(void) {
-  jh_rp_flash_storage_set_replace_fail_phase(JH_RP_FLASH_REPLACE_FAIL_NONE);
+  jh_rp_flash_storage_set_fail_phase(JH_RP_FLASH_FAIL_NONE);
   hal_status_t status = hal_eeprom_init(HAL_EEPROM_FLASH, 0u, 0u);
   if (status == HAL_OK) {
     status = hal_eeprom_reset();
@@ -73,20 +82,36 @@ static hal_status_t fresh_store(void) {
   return status == HAL_OK ? reload_store() : status;
 }
 
-static phase_result_t run_phase(jh_rp_flash_replace_fail_phase_t phase) {
+static bool phase_hits_append(jh_rp_flash_fail_phase_t phase) {
+  return phase == JH_RP_FLASH_FAIL_APPEND_TORN ||
+         phase == JH_RP_FLASH_FAIL_APPEND_AFTER_PROGRAM;
+}
+
+/* Write 100, then 200 with the flash write cut at the given phase: an append
+ * phase hits the log commit, the others the compaction into the other bank. */
+static phase_result_t run_phase(jh_rp_flash_fail_phase_t phase) {
   phase_result_t result = {HAL_NONE, 0u};
   hal_status_t status = fresh_store();
   if (status == HAL_OK) {
     status = hal_kv_set_u32_ex(TEST_KEY, 100u);
+  }
+  if (status == HAL_OK && !phase_hits_append(phase)) {
+    status = hal_kv_set_auto_commit(false);
+    if (status == HAL_OK) {
+      status = hal_kv_set_u32_ex(TEST_KEY, 200u);
+    }
+    (void)hal_kv_set_auto_commit(true);
   }
   if (status != HAL_OK) {
     result.write_status = status;
     return result;
   }
 
-  jh_rp_flash_storage_set_replace_fail_phase(phase);
-  result.write_status = hal_kv_set_u32_ex(TEST_KEY, 200u);
-  jh_rp_flash_storage_set_replace_fail_phase(JH_RP_FLASH_REPLACE_FAIL_NONE);
+  jh_rp_flash_storage_set_fail_phase(phase);
+  result.write_status = phase_hits_append(phase)
+                            ? hal_kv_set_u32_ex(TEST_KEY, 200u)
+                            : hal_kv_gc_ex();
+  jh_rp_flash_storage_set_fail_phase(JH_RP_FLASH_FAIL_NONE);
 
   status = reload_store();
   if (status == HAL_OK) {
@@ -194,30 +219,61 @@ static read_through_result_t run_read_through_deferred(void) {
   return result;
 }
 
+/* Wall time of a log commit, of erasing the spare bank, and of the
+ * compaction that bank then takes without an erase. */
+static hal_status_t run_timing(timing_result_t *timing) {
+  hal_status_t status = fresh_store();
+  for (uint32_t round = 0u; status == HAL_OK && round < 10u; round++) {
+    const uint32_t started = hal_micros();
+    status = hal_kv_set_u32_ex(TEST_KEY, round);
+    const uint32_t took = hal_micros() - started;
+    if (took > timing->append_max_us) {
+      timing->append_max_us = took;
+    }
+  }
+  if (status == HAL_OK) {
+    const uint32_t started = hal_micros();
+    status = hal_kv_prepare_ex();
+    timing->prepare_us = hal_micros() - started;
+  }
+  if (status == HAL_OK) {
+    const uint32_t started = hal_micros();
+    status = hal_kv_gc_ex();
+    timing->compact_us = hal_micros() - started;
+  }
+  return status;
+}
+
 static void run_tests(void) {
+  hal_gpio_write(HAL_LED_BUILTIN, true);
   const phase_result_t invalidated =
-      run_phase(JH_RP_FLASH_REPLACE_FAIL_AFTER_INVALIDATE);
-  const phase_result_t body = run_phase(JH_RP_FLASH_REPLACE_FAIL_AFTER_BODY);
-  const phase_result_t verified =
-      run_phase(JH_RP_FLASH_REPLACE_FAIL_AFTER_VERIFY);
-  const phase_result_t published =
-      run_phase(JH_RP_FLASH_REPLACE_FAIL_AFTER_PUBLISH);
+      run_phase(JH_RP_FLASH_FAIL_AFTER_INVALIDATE);
+  const phase_result_t body = run_phase(JH_RP_FLASH_FAIL_AFTER_BODY);
+  const phase_result_t verified = run_phase(JH_RP_FLASH_FAIL_AFTER_VERIFY);
+  const phase_result_t published = run_phase(JH_RP_FLASH_FAIL_AFTER_PUBLISH);
+  const phase_result_t torn = run_phase(JH_RP_FLASH_FAIL_APPEND_TORN);
+  const phase_result_t programmed =
+      run_phase(JH_RP_FLASH_FAIL_APPEND_AFTER_PROGRAM);
   uint32_t first = 0u;
   uint32_t second = 0u;
   const hal_status_t deferred = run_deferred(&first, &second);
   const read_through_result_t read_through = run_read_through_deferred();
+  timing_result_t timing = {0u, 0u, 0u};
+  const hal_status_t timed = run_timing(&timing);
 
   const int length = snprintf(
       (char *)s_response, sizeof(s_response),
-      "JHKV3 target=%s invalidate=%d/%lu body=%d/%lu verify=%d/%lu "
-      "publish=%d/%lu deferred=%d/%lu/%lu "
+      "JHKV4 target=%s invalidate=%d/%lu body=%d/%lu verify=%d/%lu "
+      "publish=%d/%lu torn=%d/%lu programmed=%d/%lu deferred=%d/%lu/%lu "
       "readthrough=%d/%d/%lu/%d/%u/%d/%d/%lu/%d/%u/%u/"
-      "%d/%d/%lu/%d/%u/%u\n",
+      "%d/%d/%lu/%d/%u/%u timing=%d/%lu/%lu/%lu\n",
       target_name(), (int)invalidated.write_status,
       (unsigned long)invalidated.recovered_value, (int)body.write_status,
       (unsigned long)body.recovered_value, (int)verified.write_status,
       (unsigned long)verified.recovered_value, (int)published.write_status,
-      (unsigned long)published.recovered_value, (int)deferred,
+      (unsigned long)published.recovered_value, (int)torn.write_status,
+      (unsigned long)torn.recovered_value, (int)programmed.write_status,
+      (unsigned long)programmed.recovered_value, (int)deferred,
       (unsigned long)first, (unsigned long)second,
       (int)read_through.setup_status, (int)read_through.dirty_u32_status,
       (unsigned long)read_through.dirty_u32_value,
@@ -232,15 +288,30 @@ static void run_tests(void) {
       (unsigned long)read_through.reloaded_u32_value,
       (int)read_through.reloaded_blob_status,
       (unsigned int)read_through.reloaded_blob_length,
-      (unsigned int)read_through.reloaded_blob_matches);
+      (unsigned int)read_through.reloaded_blob_matches, (int)timed,
+      (unsigned long)timing.append_max_us, (unsigned long)timing.prepare_us,
+      (unsigned long)timing.compact_us);
   s_response_length =
       length > 0 && (size_t)length < sizeof(s_response) ? (size_t)length : 0u;
   s_response_offset = 0u;
+  hal_gpio_write(HAL_LED_BUILTIN, false);
+  s_led_ms = hal_millis();
 }
 
-void app_start(void) {}
+/* The LED stays lit while the probe runs and blinks at 1 Hz while idle. */
+void app_start(void) {
+  hal_gpio_set_mode(HAL_LED_BUILTIN, HAL_GPIO_OUTPUT);
+  hal_gpio_write(HAL_LED_BUILTIN, false);
+  s_led_ms = hal_millis();
+}
 
 void app_task0(void) {
+  const uint32_t now = hal_millis();
+  if (hal_elapsed_u32(now, s_led_ms, 500u)) {
+    s_led_ms = now;
+    s_led_state = !s_led_state;
+    hal_gpio_write(HAL_LED_BUILTIN, s_led_state);
+  }
   if (s_response_offset < s_response_length) {
     size_t written = 0u;
     (void)hal_usb_cdc_write(s_response + s_response_offset,

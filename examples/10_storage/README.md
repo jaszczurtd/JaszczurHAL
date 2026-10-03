@@ -6,8 +6,9 @@ This example writes and reads a key-value (KV) store, mounts a LittleFS
 partition, and logs to an SD card through SDLogger. Errors are handled separately, but SDLogger needs initialized EEPROM and
 SPI. LittleFS does not depend on successful KV initialization.
 
-The KV example increments a persistent boot counter, writes a binary
-device-name record, commits the changes, and verifies the name read back.
+The KV example erases the spare bank at startup with `hal_kv_prepare_ex()`,
+increments a persistent boot counter, writes a binary device-name record,
+commits the changes, and verifies the name read back.
 After mounting LittleFS, the application checks for `/hal_marker.txt`
 and removes it if present, without creating new files. SDLogger writes
 a log and a one-time boot report.

@@ -266,19 +266,23 @@ if (hal_eeprom_read_byte_ex(10, &value) == HAL_OK) {
 
 Przechowywanie liczb i danych binarnych pod kluczami, z obsługą współbieżnego dostępu i odzyskiwaniem ostatniego pełnego zapisu po utracie zasilania. Moduł korzysta z `hal_eeprom`.
 
-Wybrany przez aplikację zakres pamięci jest dzielony na dwa równe banki. Zmiany powstają w RAM, po czym cała zawartość nieaktywnego banku jest zapisywana i sprawdzana. Nagłówek z numerem generacji jest zapisywany jako ostatni. Przy uruchomieniu moduł sprawdza nagłówki, zawartość i poszczególne rekordy obu banków, a następnie wybiera najnowszą kompletną generację. Niepełny nowszy zapis nie zastępuje więc wcześniejszego kompletnego banku.
+Wybrany przez aplikację zakres pamięci jest dzielony na dwa równe banki. Aktywny bank zawiera upakowane rekordy, a za nimi dziennik w jeszcze skasowanej części banku. Zmiana powstaje w RAM i trafia na koniec tego dziennika razem z zamykającym rekordem zatwierdzenia, który niesie sumę kontrolną całego zapisu. Nic przy tym nie jest kasowane, więc we flashu zapis kosztuje programowanie jednej lub dwóch stron. Przy uruchomieniu moduł wybiera najnowszy poprawny bank i odtwarza dziennik do ostatniego kompletnego zatwierdzenia. Zapis przerwany przez utratę zasilania nie ma poprawnego rekordu zatwierdzenia, więc zostaje pominięty w całości.
 
-RP, STM32G474, AT24C256 i mock używają tej samej implementacji `hal_kv`. Warstwa obsługująca nośnik odpowiada jedynie za fizyczne zastąpienie zawartości regionu i końcowe zatwierdzenie banku. Taki podział pozwala dodać obsługę nośnika dla ESP32 bez zmiany API używanego przez aplikację; nie oznacza, że ta obsługa jest już dostępna.
+Gdy w dzienniku kończy się miejsce, żywe rekordy są upakowywane do drugiego banku: cały bank jest zapisywany i sprawdzany, a jego nagłówek z nowym numerem generacji trafia na nośnik jako ostatni. Niepełne upakowanie nie zastępuje więc wcześniejszego banku. Ten krok musi najpierw skasować drugi bank, chyba że zrobiło to już `hal_kv_prepare_ex()`.
+
+RP, STM32G474, AT24C256 i mock używają tej samej implementacji `hal_kv`. Warstwa obsługująca nośnik jedynie programuje skasowane bajty, kasuje region i zastępuje region, zapisując jego nagłówek na końcu. Taki podział pozwala dodać obsługę nośnika dla ESP32 bez zmiany API używanego przez aplikację; nie oznacza, że ta obsługa jest już dostępna.
 
 ```c
 #include <hal/storage/hal_kv.h>
 
 typedef struct {
-    uint32_t generation;       // licznik generacji banku
-    uint16_t used_bytes;       // bajty użyte w aktywnym banku
+    uint32_t generation;       // generacja banku, rośnie przy każdym upakowaniu
+    uint16_t used_bytes;       // bajty użyte w aktywnym banku, razem z dziennikiem
     uint16_t capacity_bytes;   // pojemność pojedynczego banku
     uint16_t key_count;        // liczba żywych kluczy
+    uint16_t key_capacity;     // liczba kluczy, które mieści indeks (HAL_KV_MAX_KEYS)
     uint32_t next_sequence;    // następny numer sekwencyjny rekordu
+    bool spare_erased;         // drugi bank jest skasowany i gotowy
 } hal_kv_stats_t;
 
 bool hal_kv_init(uint16_t base_addr, uint16_t size_bytes);
@@ -288,6 +292,7 @@ bool hal_kv_set_blob(uint16_t key, const uint8_t *data, uint16_t len);
 bool hal_kv_get_blob(uint16_t key, uint8_t *out, uint16_t out_size, uint16_t *out_len);
 bool hal_kv_delete(uint16_t key);
 bool hal_kv_gc(void);
+hal_status_t hal_kv_prepare_ex(void);
 bool hal_kv_get_stats(hal_kv_stats_t *out_stats);
 hal_status_t hal_kv_set_auto_commit(bool enabled);
 bool hal_kv_commit(void);
@@ -318,15 +323,17 @@ po `hal_eeprom_init()`.
 danych do EEPROM, jeśli wartość się nie zmieniła. Ogranicza to niepotrzebne zużycie
 pamięci flash.
 
-**Automatyczny `commit`:** Domyślnie każda zmiana wartości powoduje zapis całego nieaktywnego banku i jego zatwierdzenie. Wywołaj `hal_kv_set_auto_commit(false)`, aby przygotować kilka zmian w RAM, a następnie zapisać je razem przez `hal_kv_commit()`. Nieudaną operację można ponowić; nie aktywuje ona banku docelowego w działającej aplikacji.
+**Automatyczny `commit`:** Domyślnie każda zmiana wartości od razu trafia do dziennika. Wywołaj `hal_kv_set_auto_commit(false)`, aby przygotować kilka zmian w RAM, a następnie zapisać je razem przez `hal_kv_commit()`; po utracie zasilania wracają wszystkie albo żadna. Nieudany zapis można ponowić. Jeśli jego część zdążyła trafić na nośnik, ponowienie upakowuje dane do drugiego banku, zamiast pisać po tych bajtach.
 
-**Format danych:** Implementacja zapisuje format w wersji 2 i nie odczytuje starszej wersji 1, która dopisywała dane w miejscu. Aktualizacja urządzenia z danymi w wersji 1 wymaga migracji w aplikacji albo świadomego wymazania tych danych. Układ nagłówka - znacznik magic, wersja, rozmiary i przesunięcia pól - jest prywatnym szczegółem implementacji i zmienił się między wersjami 1 i 2. Aby sprawdzić obecność banku pod wybranym adresem przed `hal_kv_init_ex()`, użyj `hal_kv_bank_looks_present()` lub `hal_kv_bank_looks_present_ex()` zamiast samodzielnie dekodować nagłówek.
+**Kasowanie z wyprzedzeniem:** we flashu RP skasowanie jednego sektora 4 KiB trwa około 50 ms, a oba rdzenie w tym czasie stoją. Zapis do dziennika nigdy niczego nie kasuje. Skasowanego banku potrzebuje tylko upakowanie, i to dopiero wtedy, gdy dziennik się zapełni. `hal_kv_prepare_ex()` kasuje nieaktywny bank zawczasu, więc wywołuj je wtedy, gdy taka przerwa niczemu nie szkodzi, na przykład przy starcie albo gdy urządzenie nic nie robi. Funkcja wraca od razu, gdy bank jest już skasowany, a `hal_kv_stats_t.spare_erased` mówi, czy ma coś do zrobienia. Bez niej moduł działa tak samo, tylko upakowanie obejmuje wtedy kasowanie.
 
-**Odczyt z RAM lub z kontrolą nośnika:** Domyślnie `hal_kv_get_u32()` i `hal_kv_get_blob()` odczytują pełną kopię aktywnego banku z RAM. Kopia jest uzupełniana przy `hal_kv_init_ex()` oraz po każdym zatwierdzeniu banku. Te wywołania nie odczytują EEPROM, dlatego przejściowy problem z nośnikiem nie wpływa na wynik. Jednocześnie awaria powstała po inicjalizacji pozostaje niewidoczna dla zwykłego odczytu.
+**Format danych:** Implementacja zapisuje format w wersji 3 i odczytuje także banki w wersji 2, które mają ten sam układ bez dziennika; urządzenie z danymi w wersji 2 zachowuje je i pisze dalej. Nie odczytuje starszej wersji 1, która zmieniała nagłówek banku w miejscu. Aktualizacja urządzenia z danymi w wersji 1 wymaga migracji w aplikacji albo świadomego wymazania tych danych. Układ nagłówka - znacznik magic, wersja, rozmiary i przesunięcia pól - jest prywatnym szczegółem implementacji i może się zmieniać między wersjami. Aby sprawdzić obecność banku pod wybranym adresem przed `hal_kv_init_ex()`, użyj `hal_kv_bank_looks_present()` lub `hal_kv_bank_looks_present_ex()` zamiast samodzielnie dekodować nagłówek.
 
-`hal_kv_set_read_through(true)` włącza dodatkowy odczyt rekordu z EEPROM przy każdym wywołaniu. Bieżąca awaria nośnika jest wtedy zgłaszana jako błąd `hal_status_t`, zamiast zostać ukryta przez poprawną kopię w RAM. Ustawienie dotyczy całego modułu i, podobnie jak `hal_kv_set_auto_commit()`, pozostaje zachowane po `hal_kv_init_ex()`. Włącz je, gdy decyzje aplikacji, na przykład blokada zapisów, zależą od bieżącej sprawności nośnika. Pozostaw tryb domyślny, gdy potrzebna jest tylko ostatnia poprawnie zatwierdzona generacja.
+**Odczyt z RAM lub z kontrolą nośnika:** Domyślnie `hal_kv_get_u32()` i `hal_kv_get_blob()` odczytują pełną kopię aktywnego banku z RAM. Kopia powstaje przy `hal_kv_init_ex()` i każdy zapis utrzymuje ją na bieżąco. Te wywołania nie odczytują EEPROM, dlatego przejściowy problem z nośnikiem nie wpływa na wynik. Jednocześnie awaria powstała po inicjalizacji pozostaje niewidoczna dla zwykłego odczytu.
 
-Odczyt z kontrolą nośnika zwraca `HAL_EBUSY`, dopóki obraz w RAM zawiera niezatwierdzone zmiany. Przesunięcia rekordów opisują wtedy przygotowywany obraz, a nie aktywny bank w EEPROM. Przed odczytem wywołaj `hal_kv_commit_ex()` albo wyłącz kontrolę nośnika, aby odczytać przygotowane wartości z RAM. Funkcje zachowane dla zgodności, które zwracają `bool`, zgłaszają ten stan jako `false`.
+`hal_kv_set_read_through(true)` włącza dodatkowy odczyt rekordu z EEPROM przy każdym wywołaniu. Bieżąca awaria nośnika jest wtedy zgłaszana jako błąd `hal_status_t`, zamiast zostać ukryta przez poprawną kopię w RAM. Ustawienie dotyczy całego modułu i, podobnie jak `hal_kv_set_auto_commit()`, pozostaje zachowane po `hal_kv_init_ex()`. Włącz je, gdy decyzje aplikacji, na przykład blokada zapisów, zależą od bieżącej sprawności nośnika. Pozostaw tryb domyślny, gdy liczą się tylko ostatnio poprawnie zapisane wartości.
+
+Odczyt z kontrolą nośnika zwraca `HAL_EBUSY`, dopóki obraz w RAM zawiera jeszcze niezapisane zmiany. Przesunięcia rekordów wskazują wtedy miejsca na nośniku, w których tych zmian jeszcze nie ma. Przed odczytem wywołaj `hal_kv_commit_ex()` albo wyłącz kontrolę nośnika, aby odczytać przygotowane wartości z RAM. Funkcje zachowane dla zgodności, które zwracają `bool`, zgłaszają ten stan jako `false`.
 
 **Przykład: zapis liczb całkowitych i danych binarnych pod kluczami**
 ```c

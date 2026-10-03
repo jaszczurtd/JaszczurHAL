@@ -40,6 +40,7 @@ hal_status_t initialize(const jh_eeprom_provider_config_t *config,
   out_info->size = kDeviceSize;
   out_info->erase_size = 1u;
   out_info->program_size = 1u;
+  out_info->append_size = 1u;
   return HAL_OK;
 #endif
 }
@@ -182,6 +183,27 @@ hal_status_t verify_region(uint16_t addr, const uint8_t *expected,
   return HAL_OK;
 }
 
+hal_status_t fill_region(uint32_t addr, uint32_t len, uint8_t value,
+                         hal_eeprom_progress_callback_t progress, void *ctx) {
+  uint8_t pattern[HAL_AT24C256_PAGE_SIZE];
+  memset(pattern, value, sizeof(pattern));
+  const uint32_t end = addr + len;
+  while (addr < end) {
+    uint32_t chunk = end - addr;
+    if (chunk > sizeof(pattern)) {
+      chunk = sizeof(pattern);
+    }
+    const hal_status_t status =
+        write_bytes(static_cast<uint16_t>(addr), pattern,
+                    static_cast<uint16_t>(chunk), progress, ctx);
+    if (status != HAL_OK) {
+      return status;
+    }
+    addr += chunk;
+  }
+  return HAL_OK;
+}
+
 hal_status_t replace_region(uint16_t addr, const uint8_t *data, uint16_t len,
                             uint16_t publish_size,
                             hal_eeprom_progress_callback_t progress,
@@ -191,26 +213,12 @@ hal_status_t replace_region(uint16_t addr, const uint8_t *data, uint16_t len,
     return HAL_EINVAL;
   }
 
-  uint8_t invalid[HAL_AT24C256_PAGE_SIZE] = {};
-  uint16_t invalidated = 0u;
-  while (invalidated < publish_size) {
-    uint16_t size = static_cast<uint16_t>(publish_size - invalidated);
-    if (size > sizeof(invalid)) {
-      size = sizeof(invalid);
-    }
-    const hal_status_t status =
-        write_bytes(static_cast<uint16_t>(addr + invalidated), invalid, size,
-                    progress, ctx);
-    if (status != HAL_OK) {
-      return status;
-    }
-    invalidated = static_cast<uint16_t>(invalidated + size);
-  }
-
   const uint16_t body_size = static_cast<uint16_t>(len - publish_size);
-  hal_status_t status =
-      write_bytes(static_cast<uint16_t>(addr + publish_size),
-                  data + publish_size, body_size, progress, ctx);
+  hal_status_t status = fill_region(addr, publish_size, 0u, progress, ctx);
+  if (status == HAL_OK) {
+    status = write_bytes(static_cast<uint16_t>(addr + publish_size),
+                         data + publish_size, body_size, progress, ctx);
+  }
   if (status == HAL_OK) {
     status = verify_region(static_cast<uint16_t>(addr + publish_size),
                            data + publish_size, body_size);
@@ -222,23 +230,68 @@ hal_status_t replace_region(uint16_t addr, const uint8_t *data, uint16_t len,
 }
 
 hal_status_t reset(hal_eeprom_progress_callback_t progress, void *ctx) {
-  uint8_t zeros[HAL_AT24C256_PAGE_SIZE] = {};
-  for (uint32_t addr = 0u; addr < kDeviceSize; addr += HAL_AT24C256_PAGE_SIZE) {
-    uint16_t chunk = static_cast<uint16_t>(kDeviceSize - addr);
-    if (chunk > HAL_AT24C256_PAGE_SIZE) {
-      chunk = HAL_AT24C256_PAGE_SIZE;
+  return fill_region(0u, kDeviceSize, 0u, progress, ctx);
+}
+
+hal_status_t region_erased(uint16_t addr, uint16_t len, bool *out_erased) {
+  if (out_erased == nullptr ||
+      static_cast<uint32_t>(addr) + len > kDeviceSize) {
+    return HAL_EINVAL;
+  }
+  *out_erased = false;
+  uint8_t chunk[32];
+  uint16_t checked = 0u;
+  while (checked < len) {
+    uint16_t size = static_cast<uint16_t>(len - checked);
+    if (size > sizeof(chunk)) {
+      size = sizeof(chunk);
     }
     const hal_status_t status =
-        write_bytes(static_cast<uint16_t>(addr), zeros, chunk, progress, ctx);
+        read_bytes(static_cast<uint16_t>(addr + checked), chunk, size);
     if (status != HAL_OK) {
       return status;
     }
+    for (uint16_t index = 0u; index < size; index++) {
+      if (chunk[index] != 0xFFu) {
+        return HAL_OK;
+      }
+    }
+    checked = static_cast<uint16_t>(checked + size);
   }
+  *out_erased = true;
   return HAL_OK;
 }
 
+/* An EEPROM needs no erase; append keeps the flash rule that the range must
+ * read 0xFF first, so the KV log behaves the same on every medium. */
+hal_status_t append(uint16_t addr, const uint8_t *data, uint16_t len,
+                    hal_eeprom_progress_callback_t progress, void *ctx) {
+  if (data == nullptr || len == 0u ||
+      static_cast<uint32_t>(addr) + len > kDeviceSize) {
+    return HAL_EINVAL;
+  }
+  bool erased = false;
+  hal_status_t status = region_erased(addr, len, &erased);
+  if (status == HAL_OK && !erased) {
+    status = HAL_ESTATE;
+  }
+  if (status == HAL_OK) {
+    status = write_bytes(addr, data, len, progress, ctx);
+  }
+  return status == HAL_OK ? verify_region(addr, data, len) : status;
+}
+
+hal_status_t erase(uint16_t addr, uint16_t len,
+                   hal_eeprom_progress_callback_t progress, void *ctx) {
+  if (static_cast<uint32_t>(addr) + len > kDeviceSize) {
+    return HAL_EINVAL;
+  }
+  return fill_region(addr, len, 0xFFu, progress, ctx);
+}
+
 const jh_eeprom_provider_ops_t kProvider = {
-    initialize, provider_read, provider_write, commit, replace_region, reset};
+    initialize, provider_read, provider_write, commit,       replace_region,
+    reset,      append,        erase,          region_erased};
 
 } // namespace
 

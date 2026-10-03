@@ -2,6 +2,7 @@
 
 #include "hal/core/hal_status.h"
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -43,23 +44,39 @@ hal_status_t
 jh_rp_flash_storage_replace(const jh_rp_flash_partition_t *partition,
                             const void *data, size_t size);
 
+/**
+ * Program an arbitrary byte range of erased flash in one transaction, page by
+ * page; the rest of each touched page is sent as 0xFF and stays unchanged.
+ * Verifies the range afterwards (HAL_EIO on mismatch).
+ */
 hal_status_t
-jh_rp_flash_storage_replace_published(const jh_rp_flash_partition_t *partition,
-                                      uint32_t offset, const void *data,
-                                      size_t size, size_t publish_size);
+jh_rp_flash_storage_program_bytes(const jh_rp_flash_partition_t *partition,
+                                  uint32_t offset, const void *data,
+                                  size_t size);
+
+/**
+ * Replace a sector-aligned region: erase it unless erased is true, program
+ * and verify the body, then program the publish_size prefix last. Body pages
+ * that are all 0xFF are not programmed.
+ */
+hal_status_t jh_rp_flash_storage_replace_published(
+    const jh_rp_flash_partition_t *partition, uint32_t offset, const void *data,
+    size_t size, size_t publish_size, bool erased);
+
+/* Fault phases the fault-injection hook can force; never used by firmware. */
+typedef enum {
+  JH_RP_FLASH_FAIL_NONE = 0,
+  JH_RP_FLASH_FAIL_AFTER_INVALIDATE, /* replace: erased, nothing programmed */
+  JH_RP_FLASH_FAIL_AFTER_BODY,       /* replace: body programmed, unverified */
+  JH_RP_FLASH_FAIL_AFTER_VERIFY,     /* replace: body verified, prefix not */
+  JH_RP_FLASH_FAIL_AFTER_PUBLISH,    /* replace: complete, then an error */
+  JH_RP_FLASH_FAIL_APPEND_TORN,      /* append: first half of the bytes only */
+  JH_RP_FLASH_FAIL_APPEND_AFTER_PROGRAM, /* append: complete, then an error */
+} jh_rp_flash_fail_phase_t;
 
 #ifdef JH_RP_FLASH_FAULT_INJECTION
-typedef enum {
-  JH_RP_FLASH_REPLACE_FAIL_NONE = 0,
-  JH_RP_FLASH_REPLACE_FAIL_AFTER_INVALIDATE,
-  JH_RP_FLASH_REPLACE_FAIL_AFTER_BODY,
-  JH_RP_FLASH_REPLACE_FAIL_AFTER_VERIFY,
-  JH_RP_FLASH_REPLACE_FAIL_AFTER_PUBLISH,
-} jh_rp_flash_replace_fail_phase_t;
-
 /** Test fixture hook; never enable in production firmware. */
-void jh_rp_flash_storage_set_replace_fail_phase(
-    jh_rp_flash_replace_fail_phase_t phase);
+void jh_rp_flash_storage_set_fail_phase(jh_rp_flash_fail_phase_t phase);
 #endif
 
 #ifdef __cplusplus

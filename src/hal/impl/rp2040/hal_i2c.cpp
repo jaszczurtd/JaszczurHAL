@@ -324,6 +324,13 @@ static uint8_t i2c_result_from_write_rc(int rc, size_t expected_len) {
   return HAL_I2C_ERROR_OTHER;
 }
 
+static hal_status_t i2c_status_from_read_rc(int rc, size_t expected_len) {
+  if (rc == (int)expected_len) {
+    return HAL_OK;
+  }
+  return (rc == PICO_ERROR_TIMEOUT) ? HAL_ETIMEOUT : HAL_EBUS;
+}
+
 static hal_status_t i2c_status_from_result(uint8_t result) {
   switch (result) {
   case HAL_I2C_RESULT_OK:
@@ -616,8 +623,9 @@ hal_status_t hal_i2c_write_read_bus_ex(uint8_t bus, hal_i2c_address_t address,
   return HAL_OK;
 }
 
-static bool i2c_read_bytes_bus_impl(uint8_t bus, hal_i2c_address_t address,
-                                    uint8_t *rx, size_t rx_len);
+static hal_status_t i2c_read_bytes_bus_impl(uint8_t bus,
+                                            hal_i2c_address_t address,
+                                            uint8_t *rx, size_t rx_len);
 
 hal_status_t hal_i2c_read_bytes_bus_ex(uint8_t bus, hal_i2c_address_t address,
                                        uint8_t *rx, size_t rx_len) {
@@ -636,24 +644,24 @@ hal_status_t hal_i2c_read_bytes_bus_ex(uint8_t bus, hal_i2c_address_t address,
     HAL_ASSERT(false, "hal_i2c: bus used before hal_i2c_init_bus");
     return HAL_EUNINIT;
   }
-  return hal_status_from_bool(i2c_read_bytes_bus_impl(bus, address, rx, rx_len),
-                              HAL_EBUS);
+  return i2c_read_bytes_bus_impl(bus, address, rx, rx_len);
 }
 
-static bool i2c_read_bytes_bus_impl(uint8_t bus, hal_i2c_address_t address,
-                                    uint8_t *rx, size_t rx_len) {
+static hal_status_t i2c_read_bytes_bus_impl(uint8_t bus,
+                                            hal_i2c_address_t address,
+                                            uint8_t *rx, size_t rx_len) {
   if ((rx_len > 0u && rx == NULL) || rx_len > RP2040_I2C_BUF_SIZE) {
-    return false;
+    return HAL_EINVAL;
   }
   if (rx_len == 0u) {
-    return true;
+    return HAL_OK;
   }
 
   uint8_t idx = i2c_bus_index(bus);
   i2c_lock_idx(idx);
   if (!i2c_ensure_initialized(idx)) {
     i2c_unlock_idx(idx);
-    return false;
+    return HAL_EBUS;
   }
   int got;
 #ifdef HAL_ENABLE_I2C_10BIT
@@ -670,11 +678,13 @@ static bool i2c_read_bytes_bus_impl(uint8_t bus, hal_i2c_address_t address,
   s_i2c[idx].rx_pos = 0u;
   HAL_ATOMIC_FETCH_ADD(&s_i2c[idx].transaction_count, 1u, HAL_ATOMIC_RELAXED);
   i2c_unlock_idx(idx);
-  return got == (int)rx_len;
+  return i2c_status_from_read_rc(got, rx_len);
 }
 
-static uint8_t i2c_request_from_bus_impl(uint8_t bus, hal_i2c_address_t address,
-                                         uint8_t count);
+static hal_status_t i2c_request_from_bus_impl(uint8_t bus,
+                                              hal_i2c_address_t address,
+                                              uint8_t count,
+                                              uint8_t *outReceived);
 
 hal_status_t hal_i2c_request_from_bus_ex(uint8_t bus, hal_i2c_address_t address,
                                          uint8_t count, uint8_t *outReceived) {
@@ -690,18 +700,19 @@ hal_status_t hal_i2c_request_from_bus_ex(uint8_t bus, hal_i2c_address_t address,
     HAL_ASSERT(false, "hal_i2c: bus used before hal_i2c_init_bus");
     return HAL_EUNINIT;
   }
-  *outReceived = i2c_request_from_bus_impl(bus, address, count);
-  return (*outReceived == count) ? HAL_OK : HAL_EBUS;
+  return i2c_request_from_bus_impl(bus, address, count, outReceived);
 }
 
-static uint8_t i2c_request_from_bus_impl(uint8_t bus, hal_i2c_address_t address,
-                                         uint8_t count) {
+static hal_status_t i2c_request_from_bus_impl(uint8_t bus,
+                                              hal_i2c_address_t address,
+                                              uint8_t count,
+                                              uint8_t *outReceived) {
   uint8_t idx = i2c_bus_index(bus);
   i2c_bus_state_t *st = &s_i2c[idx];
   i2c_lock_idx(idx);
   if (!i2c_ensure_initialized(idx)) {
     i2c_unlock_idx(idx);
-    return 0u;
+    return (count == 0u) ? HAL_OK : HAL_EBUS;
   }
 
   int got = 0;
@@ -716,15 +727,17 @@ static uint8_t i2c_request_from_bus_impl(uint8_t bus, hal_i2c_address_t address,
       got = i2c_read_timeout_us(i2c_bus_hw(idx), (uint8_t)address, st->rx_buf,
                                 count, false, HAL_RP_I2C_TIMEOUT_US);
     }
-    if (got < 0) {
-      got = 0;
-    }
+  }
+  const hal_status_t status = i2c_status_from_read_rc(got, count);
+  if (got < 0) {
+    got = 0;
   }
   st->rx_len = (size_t)got;
   st->rx_pos = 0u;
   HAL_ATOMIC_FETCH_ADD(&st->transaction_count, 1u, HAL_ATOMIC_RELAXED);
   i2c_unlock_idx(idx);
-  return (uint8_t)got;
+  *outReceived = (uint8_t)got;
+  return status;
 }
 
 int hal_i2c_available(void) { return hal_i2c_available_bus(0); }
