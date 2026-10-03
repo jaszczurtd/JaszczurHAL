@@ -169,6 +169,8 @@ hal_status_t hal_i2c_write_byte_bus_ex(uint8_t bus, hal_i2c_address_t address,
 /**
  * @brief Status-returning one-byte read helper.
  * @param outValue Destination byte. Must not be NULL.
+ * @return HAL_OK on success; HAL_ETIMEOUT on RP/STM32 transfer timeout,
+ * HAL_EBUS on NACK/bus failure, or an argument/initialization error.
  */
 hal_status_t hal_i2c_read_byte_ex(hal_i2c_address_t address, uint8_t *outValue);
 
@@ -176,7 +178,12 @@ hal_status_t hal_i2c_read_byte_ex(hal_i2c_address_t address, uint8_t *outValue);
 hal_status_t hal_i2c_read_byte_bus_ex(uint8_t bus, hal_i2c_address_t address,
                                       uint8_t *outValue);
 
-/** @brief Status-returning variant of hal_i2c_write_read(). */
+/**
+ * @brief Status-returning variant of hal_i2c_write_read().
+ * @return HAL_OK on success; HAL_ETIMEOUT on RP/STM32 transfer timeout,
+ * HAL_EBUS on NACK/bus failure, or an argument/initialization error.
+ * @note The receive buffer may contain partial data on failure.
+ */
 hal_status_t hal_i2c_write_read_ex(hal_i2c_address_t address, const uint8_t *tx,
                                    size_t tx_len, uint8_t *rx, size_t rx_len);
 
@@ -185,7 +192,13 @@ hal_status_t hal_i2c_write_read_bus_ex(uint8_t bus, hal_i2c_address_t address,
                                        const uint8_t *tx, size_t tx_len,
                                        uint8_t *rx, size_t rx_len);
 
-/** @brief Status-returning variant of hal_i2c_read_bytes(). */
+/**
+ * @brief Status-returning variant of hal_i2c_read_bytes().
+ * @return HAL_OK on success; HAL_ETIMEOUT on RP/STM32 transfer timeout,
+ * HAL_EBUS on NACK/bus failure, or an argument/initialization error.
+ * @note The receive buffer may contain partial data on failure. STM32 also
+ * reports a timeout if all bytes arrive but the final STOP does not.
+ */
 hal_status_t hal_i2c_read_bytes_ex(hal_i2c_address_t address, uint8_t *rx,
                                    size_t rx_len);
 
@@ -196,6 +209,10 @@ hal_status_t hal_i2c_read_bytes_bus_ex(uint8_t bus, hal_i2c_address_t address,
 /**
  * @brief Status-returning variant of hal_i2c_request_from().
  * @param outReceived Destination for received byte count. Must not be NULL.
+ * Received bytes remain available through available/read even on failure;
+ * the count can be complete when STM32 times out waiting for STOP.
+ * @return HAL_OK on success; HAL_ETIMEOUT on RP/STM32 transfer timeout,
+ * HAL_EBUS on NACK/bus failure, or an argument/initialization error.
  */
 hal_status_t hal_i2c_request_from_ex(hal_i2c_address_t address, uint8_t count,
                                      uint8_t *outReceived);

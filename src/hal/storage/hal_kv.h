@@ -18,23 +18,31 @@ extern "C" {
 #include <stdint.h>
 
 typedef struct {
-  uint32_t generation;
-  uint16_t used_bytes;
-  uint16_t capacity_bytes;
+  uint32_t generation;     /**< Generation of the active bank; grows with every
+                                compaction into the other bank. */
+  uint16_t used_bytes;     /**< Active-bank bytes in use, log included. */
+  uint16_t capacity_bytes; /**< Size of one bank. */
   uint16_t key_count;
   uint16_t
       key_capacity; /**< Distinct keys the index holds (HAL_KV_MAX_KEYS). */
   uint32_t next_sequence;
+  bool spare_erased; /**< The other bank is erased, so the next compaction
+                          needs no erase (see hal_kv_prepare_ex()). */
 } hal_kv_stats_t;
 
 /**
  * @brief Initialize KV storage inside a selected EEPROM address range.
  *
  * Storage splits [base_addr, base_addr + size_bytes) into two equal banks.
- * A mutation is assembled in RAM and replaces the inactive bank; its
- * publication header is written only after the complete bank body has been
- * written and verified. Startup validates both complete banks and selects the
- * newest valid generation.
+ * The active bank holds a compacted body and, after it, a log in its erased
+ * tail. A commit programs the new records and a closing commit record (CRC of
+ * the batch) into the tail without erasing anything; on flash that is one or
+ * two page programs. When the tail runs out, the live records are compacted
+ * into the other bank, whose header is written only after the complete body
+ * has been written and verified; that step erases the other bank unless
+ * hal_kv_prepare_ex() already did. Startup validates both banks, selects the
+ * newest valid generation and replays the committed log batches; a batch cut
+ * short by a power loss has no valid commit record and is ignored.
  *
  * Flash-backed banks must start and end on independently erasable boundaries.
  * RP builds therefore reserve at least two 4096-byte sectors, while the
@@ -70,16 +78,32 @@ bool hal_kv_delete(uint16_t key);
 /** @brief Compact live records and publish them in the alternate bank. */
 bool hal_kv_gc(void);
 
+/**
+ * @brief Erase the inactive bank ahead of the next compaction.
+ *
+ * Ordinary commits only program the active bank's erased tail. A compaction,
+ * needed once that tail is full, writes the other bank; when that bank is
+ * still erased it is only programmed. Erasing takes long (on RP flash about
+ * 50 ms per 4 KiB sector with both cores stopped), so call this when such a
+ * pause is harmless. Returns at once when the bank is already erased.
+ *
+ * @return HAL_OK when the inactive bank is erased afterwards, HAL_EUNINIT
+ *         before hal_kv_init_ex(), HAL_ENOMEM when the module mutex cannot be
+ *         created, or the EEPROM erase status (for example HAL_EIO, or the
+ *         flash write callback's refusal).
+ */
+hal_status_t hal_kv_prepare_ex(void);
+
 /** @brief Return runtime statistics of active KV bank. */
 bool hal_kv_get_stats(hal_kv_stats_t *out_stats);
 
 /**
  * @brief Switch the KV store between auto-commit and deferred-commit modes.
  *
- * By default every logical mutation publishes one complete inactive bank.
- * Switching to deferred mode (`enabled = false`) lets a caller coalesce
- * several mutations into one bank publication by calling hal_kv_commit() at
- * the end of the batch.
+ * By default every logical mutation is committed at once as a log batch of
+ * its own. Switching to deferred mode (`enabled = false`) lets a caller
+ * coalesce several mutations into one batch, which becomes visible after a
+ * power loss only as a whole, by calling hal_kv_commit() at the end.
  *
  * Mode change itself does NOT flush pending writes; call hal_kv_commit()
  * explicitly if needed before disabling deferred mode.
@@ -92,8 +116,10 @@ hal_status_t hal_kv_set_auto_commit(bool enabled);
 /**
  * @brief Flush pending writes to non-volatile storage.
  *
- * Publishes the staged image when dirty. This also retries a publication that
- * previously failed in auto-commit mode.
+ * Commits the staged records when dirty: appends them as one log batch, or
+ * compacts into the other bank when the log has no room or a previous write
+ * failed. This also retries a commit that previously failed in auto-commit
+ * mode.
  *
  * @return true on success or if nothing was dirty.
  */
@@ -103,7 +129,7 @@ bool hal_kv_commit(void);
  * @brief Switch KV reads between RAM-cache (default) and read-through modes.
  *
  * The active bank is fully cached in RAM after hal_kv_init_ex() and after
- * every publish, so by default hal_kv_get_u32()/hal_kv_get_blob() never touch
+ * every commit, so by default hal_kv_get_u32()/hal_kv_get_blob() never touch
  * the backing EEPROM: they are fast and immune to spurious media errors, but
  * a storage fault that develops *after* init (not caught at init or at the
  * next write) is invisible to a plain get.
@@ -114,11 +140,11 @@ bool hal_kv_commit(void);
  * as a real hal_status_t error from the get call instead of being served
  * from the (still valid) RAM copy. Callers that gate writes or other
  * decisions on "is storage currently healthy" should enable this; callers
- * that only care about the last successfully published generation should
- * leave it at the default.
+ * that only care about the last successfully committed values should leave
+ * it at the default.
  *
  * Read-through cannot address records in a dirty RAM image because their
- * offsets belong to a bank that has not been published yet. In that state,
+ * offsets point at storage that has not been written yet. In that state,
  * get operations return HAL_EBUSY (and the bool wrappers return false).
  * Call hal_kv_commit_ex() first, or disable read-through to read the staged
  * values from RAM.

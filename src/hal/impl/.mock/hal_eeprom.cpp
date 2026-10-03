@@ -23,6 +23,9 @@ hal_status_t s_io_status = HAL_OK;
 hal_status_t s_commit_status = HAL_OK;
 hal_mock_eeprom_replace_fail_phase_t s_replace_fail_phase =
     HAL_MOCK_EEPROM_REPLACE_FAIL_NONE;
+uint32_t s_erase_count = 0u;
+bool s_tear_next_append = false;
+uint16_t s_tear_written = 0u;
 
 uint16_t selected_size(const jh_eeprom_provider_config_t *config) {
   if (config->requested_type == HAL_EEPROM_AT24C256) {
@@ -58,11 +61,39 @@ hal_status_t initialize(const jh_eeprom_provider_config_t *config,
   out_info->program_size = s_type == HAL_EEPROM_AT24C256
                                ? 1u
                                : (s_type == HAL_EEPROM_STM32_FLASH ? 8u : 256u);
+  out_info->append_size = s_type == HAL_EEPROM_STM32_FLASH ? 8u : 1u;
   return HAL_OK;
 }
 
 bool range_valid(uint16_t addr, uint16_t len) {
   return addr <= s_size && len <= static_cast<uint16_t>(s_size - addr);
+}
+
+bool memory_erased(uint16_t addr, uint16_t len) {
+  for (uint16_t index = 0u; index < len; index++) {
+    if (s_memory[addr + index] != 0xFFu) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool is_flash(void) { return s_type != HAL_EEPROM_AT24C256; }
+
+/* Flash writes run between the facade's prepare and finish callbacks, as on
+ * the native providers; an EEPROM write does not. */
+template <typename Write> hal_status_t guarded_write(Write write) {
+  if (is_flash()) {
+    const hal_status_t prepare = jh_eeprom_flash_write_begin();
+    if (prepare != HAL_OK) {
+      return prepare;
+    }
+  }
+  const hal_status_t status = write();
+  if (is_flash()) {
+    jh_eeprom_flash_write_end();
+  }
+  return status;
 }
 
 hal_status_t read_bytes(uint16_t addr, uint8_t *out, uint16_t len) {
@@ -175,19 +206,71 @@ hal_status_t replace_region(uint16_t addr, const uint8_t *data, uint16_t len,
       !range_valid(addr, len)) {
     return HAL_EINVAL;
   }
-  const bool flash_write = s_type != HAL_EEPROM_AT24C256;
-  if (flash_write) {
-    const hal_status_t prepare = jh_eeprom_flash_write_begin();
-    if (prepare != HAL_OK) {
-      return prepare;
+  return guarded_write([&]() {
+    if (is_flash() && !memory_erased(addr, len)) {
+      s_erase_count++;
     }
+    return publish_region(addr, data, len, publish_size, progress, ctx);
+  });
+}
+
+hal_status_t append(uint16_t addr, const uint8_t *data, uint16_t len,
+                    hal_eeprom_progress_callback_t progress, void *ctx) {
+  if (s_io_status != HAL_OK) {
+    return s_io_status;
   }
-  const hal_status_t status =
-      publish_region(addr, data, len, publish_size, progress, ctx);
-  if (flash_write) {
-    jh_eeprom_flash_write_end();
+  if (s_commit_status != HAL_OK) {
+    return s_commit_status;
   }
-  return status;
+  if (data == nullptr || len == 0u || !range_valid(addr, len)) {
+    return HAL_EINVAL;
+  }
+  if (!memory_erased(addr, len)) {
+    return HAL_ESTATE;
+  }
+  return guarded_write([&]() {
+    const bool torn = s_tear_next_append;
+    s_tear_next_append = false;
+    const uint16_t written =
+        torn && s_tear_written < len ? s_tear_written : len;
+    memcpy(s_memory + addr, data, written);
+    s_write_count += written;
+    s_committed = true;
+    notify(progress, ctx);
+    if (torn) {
+      return HAL_EIO;
+    }
+    return memcmp(s_memory + addr, data, len) == 0 ? HAL_OK : HAL_EIO;
+  });
+}
+
+hal_status_t erase(uint16_t addr, uint16_t len,
+                   hal_eeprom_progress_callback_t progress, void *ctx) {
+  if (s_io_status != HAL_OK) {
+    return s_io_status;
+  }
+  if (!range_valid(addr, len)) {
+    return HAL_EINVAL;
+  }
+  return guarded_write([&]() {
+    memset(s_memory + addr, 0xFF, len);
+    if (is_flash()) {
+      s_erase_count++;
+    }
+    notify(progress, ctx);
+    return HAL_OK;
+  });
+}
+
+hal_status_t region_erased(uint16_t addr, uint16_t len, bool *out_erased) {
+  if (s_io_status != HAL_OK) {
+    return s_io_status;
+  }
+  if (out_erased == nullptr || !range_valid(addr, len)) {
+    return HAL_EINVAL;
+  }
+  *out_erased = memory_erased(addr, len);
+  return HAL_OK;
 }
 
 hal_status_t reset(hal_eeprom_progress_callback_t progress, void *ctx) {
@@ -200,7 +283,8 @@ hal_status_t reset(hal_eeprom_progress_callback_t progress, void *ctx) {
 }
 
 const jh_eeprom_provider_ops_t kProvider = {
-    initialize, read_bytes, write_bytes, commit, replace_region, reset};
+    initialize, read_bytes, write_bytes, commit,       replace_region,
+    reset,      append,     erase,       region_erased};
 
 } // namespace
 
@@ -238,6 +322,15 @@ void hal_mock_eeprom_set_replace_fail_phase(
   s_replace_fail_phase = phase;
 }
 
+void hal_mock_eeprom_tear_next_append(uint16_t written) {
+  s_tear_next_append = true;
+  s_tear_written = written;
+}
+
+uint32_t hal_mock_eeprom_get_erase_count(void) { return s_erase_count; }
+
+void hal_mock_eeprom_clear_erase_count(void) { s_erase_count = 0u; }
+
 void hal_mock_eeprom_reset(void) {
   memset(s_memory, 0, sizeof(s_memory));
   s_type = HAL_EEPROM_AT24C256;
@@ -248,6 +341,9 @@ void hal_mock_eeprom_reset(void) {
   s_io_status = HAL_OK;
   s_commit_status = HAL_OK;
   s_replace_fail_phase = HAL_MOCK_EEPROM_REPLACE_FAIL_NONE;
+  s_erase_count = 0u;
+  s_tear_next_append = false;
+  s_tear_written = 0u;
   jh_eeprom_mock_reset_facade();
 }
 

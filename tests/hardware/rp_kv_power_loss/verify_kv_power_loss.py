@@ -14,14 +14,21 @@ from vscode.runtime.serial_io import read_line  # noqa: E402
 
 
 RESULT_PATTERN = re.compile(
-    rb"^JHKV3 target=(rp2040|rp2350-arm) "
+    rb"^JHKV4 target=(rp2040|rp2350-arm) "
     rb"invalidate=(-?\d+)/(\d+) body=(-?\d+)/(\d+) "
     rb"verify=(-?\d+)/(\d+) publish=(-?\d+)/(\d+) "
+    rb"torn=(-?\d+)/(\d+) programmed=(-?\d+)/(\d+) "
     rb"deferred=(-?\d+)/(\d+)/(\d+) "
     rb"readthrough=(-?\d+)/(-?\d+)/(\d+)/(-?\d+)/(\d+)/"
     rb"(-?\d+)/(-?\d+)/(\d+)/(-?\d+)/(\d+)/(\d+)/"
-    rb"(-?\d+)/(-?\d+)/(\d+)/(-?\d+)/(\d+)/(\d+)\n$"
+    rb"(-?\d+)/(-?\d+)/(\d+)/(-?\d+)/(\d+)/(\d+) "
+    rb"timing=(-?\d+)/(\d+)/(\d+)/(\d+)\n$"
 )
+
+# A log commit programs a page or two; a compaction into the prepared bank
+# programs the pages holding data. Both stay far below one sector erase.
+APPEND_LIMIT_US = 10_000
+COMPACT_LIMIT_US = 20_000
 
 
 def main() -> int:
@@ -51,11 +58,17 @@ def main() -> int:
     values = match.groups()
     target = values[0].decode("ascii")
     numeric = tuple(int(value) for value in values[1:])
+    timing = numeric[-4:]
+    numeric = numeric[:-4]
     expected = (
         -4,
         100,
         -4,
         100,
+        -4,
+        100,
+        -4,
+        200,
         -4,
         100,
         -4,
@@ -86,8 +99,27 @@ def main() -> int:
             f"KV recovery mismatch: target={target!r}, values={numeric!r}, "
             f"expected target={args.target!r}, values={expected!r}"
         )
+    timed, append_us, prepare_us, compact_us = timing
+    if timed != 1 or append_us > APPEND_LIMIT_US or compact_us > COMPACT_LIMIT_US:
+        raise RuntimeError(
+            f"KV timing out of bounds: status={timed}, append={append_us} us "
+            f"(limit {APPEND_LIMIT_US}), compaction={compact_us} us "
+            f"(limit {COMPACT_LIMIT_US}), prepare={prepare_us} us"
+        )
 
-    print(json.dumps({"port": args.port, "target": target, "status": "pass"}, indent=2))
+    print(
+        json.dumps(
+            {
+                "port": args.port,
+                "target": target,
+                "append_max_us": append_us,
+                "prepare_us": prepare_us,
+                "compact_us": compact_us,
+                "status": "pass",
+            },
+            indent=2,
+        )
+    )
     return 0
 
 

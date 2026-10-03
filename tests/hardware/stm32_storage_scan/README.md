@@ -4,7 +4,7 @@
 flash EEPROM reservation and the ADC scan ring on a NUCLEO-G474RE. An odd boot
 runs the checks: KV init, boot counter and name blob, five scan blocks, ten
 runs with interrupts masked for longer than a block (the late interrupt must
-publish the half the DMA is not filling), four KV publications to flash while
+publish the half the DMA is not filling), four KV writes to flash while
 the scan runs (the ring must go on), then it stores the verdict in KV and
 resets through the watchdog. The even boot confirms the counter, the name and
 the verdict survived, keeps scanning and prints `JHSTM32REPORT` every two

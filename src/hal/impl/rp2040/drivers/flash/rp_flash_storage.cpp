@@ -15,8 +15,7 @@
 namespace {
 
 #ifdef JH_RP_FLASH_FAULT_INJECTION
-jh_rp_flash_replace_fail_phase_t s_replace_fail_phase =
-    JH_RP_FLASH_REPLACE_FAIL_NONE;
+jh_rp_flash_fail_phase_t s_fail_phase = JH_RP_FLASH_FAIL_NONE;
 #endif
 
 enum class FlashAction : uint8_t {
@@ -24,6 +23,7 @@ enum class FlashAction : uint8_t {
   Erase,
   Replace,
   ReplacePublished,
+  ProgramBytes,
 };
 
 struct FlashOperation {
@@ -32,7 +32,21 @@ struct FlashOperation {
   const uint8_t *data;
   size_t size;
   size_t publish_size;
+  bool erased;
 };
+
+/* Page image for ProgramBytes; RAM-resident like the code that fills it. */
+uint8_t s_page[FLASH_PAGE_SIZE];
+
+/* Called with XIP off, so it lives in RAM like its callers. */
+bool __no_inline_not_in_flash_func(fail_at)(jh_rp_flash_fail_phase_t phase) {
+#ifdef JH_RP_FLASH_FAULT_INJECTION
+  return s_fail_phase == phase;
+#else
+  (void)phase;
+  return false;
+#endif
+}
 
 bool range_valid(const jh_rp_flash_partition_t *partition, uint32_t offset,
                  size_t size) {
@@ -40,12 +54,63 @@ bool range_valid(const jh_rp_flash_partition_t *partition, uint32_t offset,
          offset <= partition->size && size <= partition->size - offset;
 }
 
+bool __no_inline_not_in_flash_func(stored_matches)(uint32_t flash_offset,
+                                                   const uint8_t *expected,
+                                                   size_t size) {
+  const volatile uint8_t *stored = reinterpret_cast<const volatile uint8_t *>(
+      (uintptr_t)XIP_BASE + flash_offset);
+  for (size_t index = 0u; index < size; index++) {
+    if (stored[index] != expected[index]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/* Program [offset, offset + size) page by page. Bytes of a page outside the
+ * range are sent as 0xFF, which leaves them as they are; so is a page whose
+ * range bytes are all 0xFF, which is skipped. */
+void __no_inline_not_in_flash_func(program_bytes)(uint32_t flash_offset,
+                                                  const uint8_t *data,
+                                                  size_t size, size_t written) {
+  const uint32_t end = flash_offset + (uint32_t)size;
+  const uint32_t torn = flash_offset + (uint32_t)written;
+  for (uint32_t page = flash_offset & ~(uint32_t)(FLASH_PAGE_SIZE - 1u);
+       page < end; page += FLASH_PAGE_SIZE) {
+    bool blank = true;
+    for (uint32_t index = 0u; index < FLASH_PAGE_SIZE; index++) {
+      const uint32_t address = page + index;
+      const uint8_t value = address >= flash_offset && address < torn
+                                ? data[address - flash_offset]
+                                : 0xFFu;
+      s_page[index] = value;
+      blank = blank && value == 0xFFu;
+    }
+    if (!blank) {
+      flash_range_program(page, s_page, FLASH_PAGE_SIZE);
+    }
+  }
+}
+
 hal_status_t
 __no_inline_not_in_flash_func(run_flash_operation)(void *raw_context) {
   auto *operation = static_cast<FlashOperation *>(raw_context);
+  if (operation->action == FlashAction::ProgramBytes) {
+    const bool torn = fail_at(JH_RP_FLASH_FAIL_APPEND_TORN);
+    program_bytes(operation->flash_offset, operation->data, operation->size,
+                  torn ? operation->size / 2u : operation->size);
+    if (torn || fail_at(JH_RP_FLASH_FAIL_APPEND_AFTER_PROGRAM)) {
+      return HAL_EIO;
+    }
+    return stored_matches(operation->flash_offset, operation->data,
+                          operation->size)
+               ? HAL_OK
+               : HAL_EIO;
+  }
   if (operation->action == FlashAction::Erase ||
       operation->action == FlashAction::Replace ||
-      operation->action == FlashAction::ReplacePublished) {
+      (operation->action == FlashAction::ReplacePublished &&
+       !operation->erased)) {
     flash_range_erase(operation->flash_offset, operation->size);
   }
   if (operation->action == FlashAction::Program ||
@@ -53,49 +118,36 @@ __no_inline_not_in_flash_func(run_flash_operation)(void *raw_context) {
     flash_range_program(operation->flash_offset, operation->data,
                         operation->size);
   } else if (operation->action == FlashAction::ReplacePublished) {
-#ifdef JH_RP_FLASH_FAULT_INJECTION
-    if (s_replace_fail_phase == JH_RP_FLASH_REPLACE_FAIL_AFTER_INVALIDATE) {
+    if (fail_at(JH_RP_FLASH_FAIL_AFTER_INVALIDATE)) {
       return HAL_EIO;
     }
-#endif
-    flash_range_program(operation->flash_offset + operation->publish_size,
-                        operation->data + operation->publish_size,
-                        operation->size - operation->publish_size);
-#ifdef JH_RP_FLASH_FAULT_INJECTION
-    if (s_replace_fail_phase == JH_RP_FLASH_REPLACE_FAIL_AFTER_BODY) {
+    const size_t body = operation->size - operation->publish_size;
+    program_bytes(operation->flash_offset + operation->publish_size,
+                  operation->data + operation->publish_size, body, body);
+    if (fail_at(JH_RP_FLASH_FAIL_AFTER_BODY)) {
       return HAL_EIO;
     }
-#endif
-    const volatile uint8_t *stored = reinterpret_cast<const volatile uint8_t *>(
-        (uintptr_t)XIP_BASE + operation->flash_offset +
-        operation->publish_size);
-    const uint8_t *expected = operation->data + operation->publish_size;
-    for (size_t index = 0u; index < operation->size - operation->publish_size;
-         index++) {
-      if (stored[index] != expected[index]) {
-        return HAL_EIO;
-      }
-    }
-#ifdef JH_RP_FLASH_FAULT_INJECTION
-    if (s_replace_fail_phase == JH_RP_FLASH_REPLACE_FAIL_AFTER_VERIFY) {
+    if (!stored_matches(operation->flash_offset + operation->publish_size,
+                        operation->data + operation->publish_size, body)) {
       return HAL_EIO;
     }
-#endif
+    if (fail_at(JH_RP_FLASH_FAIL_AFTER_VERIFY)) {
+      return HAL_EIO;
+    }
     flash_range_program(operation->flash_offset, operation->data,
                         operation->publish_size);
-#ifdef JH_RP_FLASH_FAULT_INJECTION
-    if (s_replace_fail_phase == JH_RP_FLASH_REPLACE_FAIL_AFTER_PUBLISH) {
+    if (fail_at(JH_RP_FLASH_FAIL_AFTER_PUBLISH)) {
       return HAL_EIO;
     }
-#endif
   }
   return HAL_OK;
 }
 
 hal_status_t execute(FlashAction action, uint32_t flash_offset,
                      const void *data, size_t size) {
-  FlashOperation operation = {action, flash_offset,
-                              static_cast<const uint8_t *>(data), size, 0u};
+  FlashOperation operation = {
+      action, flash_offset, static_cast<const uint8_t *>(data),
+      size,   0u,           false};
   return jh_rp_flash_transaction_execute(run_flash_operation, &operation,
                                          HAL_RP_FLASH_TRANSACTION_TIMEOUT_MS);
 }
@@ -252,9 +304,22 @@ jh_rp_flash_storage_replace(const jh_rp_flash_partition_t *partition,
 }
 
 hal_status_t
-jh_rp_flash_storage_replace_published(const jh_rp_flash_partition_t *partition,
-                                      uint32_t offset, const void *data,
-                                      size_t size, size_t publish_size) {
+jh_rp_flash_storage_program_bytes(const jh_rp_flash_partition_t *partition,
+                                  uint32_t offset, const void *data,
+                                  size_t size) {
+  if (data == nullptr || !range_valid(partition, offset, size)) {
+    return HAL_EINVAL;
+  }
+  if (size == 0u) {
+    return HAL_OK;
+  }
+  return execute(FlashAction::ProgramBytes, partition->flash_offset + offset,
+                 data, size);
+}
+
+hal_status_t jh_rp_flash_storage_replace_published(
+    const jh_rp_flash_partition_t *partition, uint32_t offset, const void *data,
+    size_t size, size_t publish_size, bool erased) {
   if (data == nullptr || !range_valid(partition, offset, size) ||
       publish_size == 0u || publish_size >= size ||
       ((partition->flash_offset + offset) % FLASH_SECTOR_SIZE) != 0u ||
@@ -264,9 +329,12 @@ jh_rp_flash_storage_replace_published(const jh_rp_flash_partition_t *partition,
     return HAL_EINVAL;
   }
 
-  FlashOperation operation = {
-      FlashAction::ReplacePublished, partition->flash_offset + offset,
-      static_cast<const uint8_t *>(data), size, publish_size};
+  FlashOperation operation = {FlashAction::ReplacePublished,
+                              partition->flash_offset + offset,
+                              static_cast<const uint8_t *>(data),
+                              size,
+                              publish_size,
+                              erased};
   const hal_status_t status = jh_rp_flash_transaction_execute(
       run_flash_operation, &operation, HAL_RP_FLASH_TRANSACTION_TIMEOUT_MS);
   if (status != HAL_OK) {
@@ -280,9 +348,8 @@ jh_rp_flash_storage_replace_published(const jh_rp_flash_partition_t *partition,
 }
 
 #ifdef JH_RP_FLASH_FAULT_INJECTION
-void jh_rp_flash_storage_set_replace_fail_phase(
-    jh_rp_flash_replace_fail_phase_t phase) {
-  s_replace_fail_phase = phase;
+void jh_rp_flash_storage_set_fail_phase(jh_rp_flash_fail_phase_t phase) {
+  s_fail_phase = phase;
 }
 #endif
 

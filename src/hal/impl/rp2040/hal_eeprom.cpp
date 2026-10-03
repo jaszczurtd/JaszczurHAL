@@ -56,6 +56,7 @@ hal_status_t store(void *context, const uint8_t *mirror, uint16_t storage_size,
 
 hal_status_t replace_region(void *context, uint16_t addr, const uint8_t *data,
                             uint16_t len, uint16_t publish_size,
+                            bool destination_erased,
                             hal_eeprom_progress_callback_t progress,
                             void *ctx) {
   (void)context;
@@ -64,11 +65,39 @@ hal_status_t replace_region(void *context, uint16_t addr, const uint8_t *data,
   }
   notify(progress, ctx);
   const hal_status_t status = jh_rp_flash_storage_replace_published(
-      &s_partition, addr, data, len, publish_size);
+      &s_partition, addr, data, len, publish_size, destination_erased);
   notify(progress, ctx);
   return status;
 }
 
+hal_status_t program(void *context, uint16_t addr, const uint8_t *data,
+                     uint16_t len, hal_eeprom_progress_callback_t progress,
+                     void *ctx) {
+  (void)context;
+  notify(progress, ctx);
+  const hal_status_t status =
+      jh_rp_flash_storage_program_bytes(&s_partition, addr, data, len);
+  notify(progress, ctx);
+  return status;
+}
+
+hal_status_t erase(void *context, uint16_t addr, uint16_t len,
+                   hal_eeprom_progress_callback_t progress, void *ctx) {
+  (void)context;
+  notify(progress, ctx);
+  const hal_status_t status =
+      jh_rp_flash_storage_erase(&s_partition, addr, len);
+  notify(progress, ctx);
+  return status;
+}
+
+hal_status_t read(void *context, uint16_t addr, uint8_t *out, uint16_t len) {
+  (void)context;
+  return jh_rp_flash_storage_read(&s_partition, addr, out, len);
+}
+
+/* NOR flash programs a byte range of a page and leaves 0xFF bytes untouched,
+ * so appends need no alignment beyond a byte. */
 const jh_eeprom_flash_backend_t kFlashBackend = {HAL_EEPROM_FLASH,
                                                  s_mirror,
                                                  sizeof(s_mirror),
@@ -78,8 +107,12 @@ const jh_eeprom_flash_backend_t kFlashBackend = {HAL_EEPROM_FLASH,
                                                  load,
                                                  store,
                                                  replace_region,
+                                                 program,
+                                                 erase,
+                                                 read,
                                                  FLASH_SECTOR_SIZE,
-                                                 FLASH_PAGE_SIZE};
+                                                 FLASH_PAGE_SIZE,
+                                                 1u};
 
 } // namespace
 

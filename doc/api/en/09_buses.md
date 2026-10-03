@@ -322,6 +322,14 @@ to `HAL_EBUS`, and non-specific backend failures map to `HAL_EIO`.
 Existing wrappers keep their `void`, `uint8_t` and `bool` return shapes for
 source compatibility.
 
+On RP and STM32G474, status-returning reads preserve `HAL_ETIMEOUT` separately
+from `HAL_EBUS`. A failed read may leave partial data in the destination.
+`hal_i2c_request_from[_bus]_ex()` reports the received count independently of
+the status and keeps those bytes available through `available/read`.
+On STM32G474, waiting for the final STOP can time out even after every byte
+arrives. This returns `HAL_ETIMEOUT`; legacy `bool` reads return `false`,
+while legacy `request_from()` still returns the received count.
+
 `hal_i2c_scan()` replaces the old `tools.cpp` `i2cScanner()` helper. It scans
 once rather than owning an infinite print/delay loop, skips reserved 7-bit
 addresses, has no serial dependency, supports both controllers, reports

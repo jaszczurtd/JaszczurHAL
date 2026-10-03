@@ -7,8 +7,9 @@ partycję LittleFS oraz zapisuje dziennik na karcie SD przez SDLogger.
 Błędy są obsługiwane osobno, ale SDLogger wymaga poprawnie uruchomionych
 EEPROM i SPI. LittleFS nie zależy od inicjalizacji magazynu KV.
 
-Magazyn KV zwiększa trwały licznik uruchomień, zapisuje nazwę urządzenia jako
-rekord binarny, zatwierdza zmiany i sprawdza odczytaną nazwę. Po zamontowaniu
+Magazyn KV przy starcie kasuje zapasowy bank przez `hal_kv_prepare_ex()`,
+zwiększa trwały licznik uruchomień, zapisuje nazwę urządzenia jako rekord
+binarny, zatwierdza zmiany i sprawdza odczytaną nazwę. Po zamontowaniu
 LittleFS aplikacja sprawdza, czy istnieje
 `/hal_marker.txt`, i usuwa go, jeśli jest obecny. Nie tworzy przy tym nowych
 plików. SDLogger prowadzi dziennik i zapisuje jednorazowy raport startowy.

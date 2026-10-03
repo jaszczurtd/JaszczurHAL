@@ -260,19 +260,23 @@ if (hal_eeprom_read_byte_ex(10, &value) == HAL_OK) {
 
 Store numbers and binary data by key, with synchronized access and recovery of the last complete write after power loss. The module uses `hal_eeprom`.
 
-The application-selected range is split into two equal banks. Changes are prepared in RAM, then the entire inactive bank is written and verified. Its header and generation number are written last. At startup, the module validates both headers, bank contents, and individual records, then selects the newest complete generation. An incomplete newer write therefore does not replace the previous complete bank.
+The application-selected range is split into two equal banks. The active bank holds the compacted records and, after them, a log in the still-erased part of the bank. A change is prepared in RAM and written to the end of that log together with a closing commit record, which carries a checksum of the whole write. Nothing is erased for this, so on flash a write costs one or two page programs. At startup the module picks the newest valid bank and replays the log up to the last complete commit. A write cut short by a power loss has no valid commit record, so it is ignored as a whole.
 
-RP, STM32G474, AT24C256, and mock use the same `hal_kv` implementation. The storage-specific layer only replaces the physical region and performs the final bank publication. This separation allows ESP32 storage support to be added without changing the application-facing KV API; it does not imply that such support is already available.
+When the log has no room left, the live records are compacted into the other bank: the whole bank is written and verified, and its header with a new generation number goes last. An incomplete compaction therefore does not replace the previous bank. This step has to erase the other bank first, unless `hal_kv_prepare_ex()` already did.
+
+RP, STM32G474, AT24C256, and mock use the same `hal_kv` implementation. The storage-specific layer only programs erased bytes, erases a region, and replaces a region with its header written last. This separation allows ESP32 storage support to be added without changing the application-facing KV API; it does not imply that such support is already available.
 
 ```c
 #include <hal/storage/hal_kv.h>
 
 typedef struct {
-    uint32_t generation;       // bank generation counter
-    uint16_t used_bytes;       // bytes used in active bank
+    uint32_t generation;       // bank generation, grows with each compaction
+    uint16_t used_bytes;       // bytes used in the active bank, log included
     uint16_t capacity_bytes;   // single-bank capacity
     uint16_t key_count;        // number of live keys
+    uint16_t key_capacity;     // keys the index holds (HAL_KV_MAX_KEYS)
     uint32_t next_sequence;    // next record sequence number
+    bool spare_erased;         // the other bank is erased and ready
 } hal_kv_stats_t;
 
 bool hal_kv_init(uint16_t base_addr, uint16_t size_bytes);
@@ -282,6 +286,7 @@ bool hal_kv_set_blob(uint16_t key, const uint8_t *data, uint16_t len);
 bool hal_kv_get_blob(uint16_t key, uint8_t *out, uint16_t out_size, uint16_t *out_len);
 bool hal_kv_delete(uint16_t key);
 bool hal_kv_gc(void);
+hal_status_t hal_kv_prepare_ex(void);
 bool hal_kv_get_stats(hal_kv_stats_t *out_stats);
 hal_status_t hal_kv_set_auto_commit(bool enabled);
 bool hal_kv_commit(void);
@@ -310,15 +315,17 @@ created with the HAL atomic create-once helper protects all operations.
 **Deduplication:** `hal_kv_set_u32` / `hal_kv_set_blob` skip the EEPROM write when the
 value is unchanged, avoiding unnecessary flash wear.
 
-**Automatic commit:** By default, each changed value writes and publishes the entire inactive bank. Call `hal_kv_set_auto_commit(false)` to prepare several changes in RAM, then write them together with `hal_kv_commit()`. A failed operation can be retried; it does not activate the target bank in the running application.
+**Automatic commit:** By default, each changed value is written to the log at once. Call `hal_kv_set_auto_commit(false)` to prepare several changes in RAM, then write them together with `hal_kv_commit()`; after a power loss they come back all together or not at all. A failed write can be retried. If part of it reached the storage, the retry compacts into the other bank instead of writing over those bytes.
 
-**Data format:** The implementation writes version 2 and does not read the older version 1 append-in-place layout. Updating a device containing version 1 data requires application-level migration or a deliberate data reset. The header layout-magic, version, sizes, and field offsets-is private and changed between versions 1 and 2. To check for a bank at a candidate address before `hal_kv_init_ex()`, use `hal_kv_bank_looks_present()` or `hal_kv_bank_looks_present_ex()` rather than decoding the header yourself.
+**Erasing ahead of time:** on RP flash, erasing one 4 KiB sector takes about 50 ms with both cores stopped. A log write never erases. Only the compaction needs an erased bank, and only once the log is full. `hal_kv_prepare_ex()` erases the inactive bank in advance, so call it when such a pause is harmless, for example at startup or while the device is idle. It returns at once when the bank is already erased, and `hal_kv_stats_t.spare_erased` tells whether it has work to do. Without it the module still works; the compaction then includes the erase.
 
-**Cached reads and medium checks:** By default, `hal_kv_get_u32()` and `hal_kv_get_blob()` read a full copy of the active bank from RAM. The copy is populated at `hal_kv_init_ex()` and after each bank publication. These calls do not access EEPROM, so transient medium failures do not affect the result. However, an ordinary read cannot detect a failure that occurs after initialization.
+**Data format:** The implementation writes version 3 and also reads version 2 banks, which are the same layout without a log; a device with version 2 data keeps it and continues from there. It does not read the older version 1 layout, which updated the bank header in place. Updating a device containing version 1 data requires application-level migration or a deliberate data reset. The header layout-magic, version, sizes, and field offsets-is private and may change between versions. To check for a bank at a candidate address before `hal_kv_init_ex()`, use `hal_kv_bank_looks_present()` or `hal_kv_bank_looks_present_ex()` rather than decoding the header yourself.
 
-`hal_kv_set_read_through(true)` enables one additional EEPROM record read per call. A current medium failure then produces a `hal_status_t` error instead of being hidden by a valid RAM copy. This setting applies to the whole module and, like `hal_kv_set_auto_commit()`, survives `hal_kv_init_ex()`. Enable it when application decisions, such as disabling writes, depend on the medium being operational now. Keep the default when only the last successfully published generation matters.
+**Cached reads and medium checks:** By default, `hal_kv_get_u32()` and `hal_kv_get_blob()` read a full copy of the active bank from RAM. The copy is populated at `hal_kv_init_ex()` and kept current by every write. These calls do not access EEPROM, so transient medium failures do not affect the result. However, an ordinary read cannot detect a failure that occurs after initialization.
 
-Read-through operations return `HAL_EBUSY` while the RAM image contains changes that have not been published. Their record offsets describe the staged image, not the currently active EEPROM bank. Call `hal_kv_commit_ex()` before reading, or disable read-through to read the staged values from RAM. Compatibility wrappers returning `bool` report this condition as `false`.
+`hal_kv_set_read_through(true)` enables one additional EEPROM record read per call. A current medium failure then produces a `hal_status_t` error instead of being hidden by a valid RAM copy. This setting applies to the whole module and, like `hal_kv_set_auto_commit()`, survives `hal_kv_init_ex()`. Enable it when application decisions, such as disabling writes, depend on the medium being operational now. Keep the default when only the last successfully written values matter.
+
+Read-through operations return `HAL_EBUSY` while the RAM image contains changes that have not been written yet. Their record offsets then point at storage that does not hold them. Call `hal_kv_commit_ex()` before reading, or disable read-through to read the staged values from RAM. Compatibility wrappers returning `bool` report this condition as `false`.
 
 **Example: storing integers and binary values by key**
 ```c

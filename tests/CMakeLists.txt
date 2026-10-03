@@ -1938,6 +1938,51 @@ jh_enable_host_warnings(test_rp_i2c_clock_sync ERRORS)
 target_link_libraries(test_rp_i2c_clock_sync PRIVATE Threads::Threads)
 add_test(NAME test_rp_i2c_clock_sync COMMAND test_rp_i2c_clock_sync)
 
+# Real I2C master errors and legacy results on both addressing widths.
+foreach(I2C_BACKEND IN ITEMS rp stm32)
+    foreach(I2C_VARIANT IN ITEMS "" _10bit)
+        set(I2C_TEST test_${I2C_BACKEND}_i2c_read_status${I2C_VARIANT})
+        add_executable(${I2C_TEST}
+            test_${I2C_BACKEND}_i2c_read_status.cpp
+            fakes/host_sync/hal_sync_host.cpp
+            ${CMAKE_SOURCE_DIR}/src/hal/i2c/hal_i2c.cpp
+            ${CMAKE_SOURCE_DIR}/src/hal/core/hal_config.cpp
+            ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+        target_include_directories(${I2C_TEST} PRIVATE ${CMAKE_SOURCE_DIR}/src)
+        target_compile_definitions(${I2C_TEST} PRIVATE
+            HAL_ENABLE_I2C HAL_ENABLE_UNITY UNITY_INCLUDE_CONFIG_H)
+        if(I2C_VARIANT)
+            target_compile_definitions(${I2C_TEST} PRIVATE HAL_ENABLE_I2C_10BIT)
+        endif()
+        if(I2C_BACKEND STREQUAL "rp")
+            target_sources(${I2C_TEST} PRIVATE
+                ${CMAKE_SOURCE_DIR}/src/hal/impl/rp2040/hal_i2c.cpp)
+            target_include_directories(${I2C_TEST} PRIVATE
+                ${CMAKE_CURRENT_SOURCE_DIR}/fakes/rp2040_i2c_sdk)
+            target_compile_definitions(${I2C_TEST} PRIVATE
+                HAL_TARGET_RP2040=1 HAL_BOARD_PROFILE_RP_PICO=1)
+        else()
+            target_sources(${I2C_TEST} PRIVATE
+                fakes/stm32g474_regs/jh_stm32g474_host_regs.cpp
+                ${CMAKE_SOURCE_DIR}/src/hal/impl/stm32g474/hal_i2c.cpp)
+            target_include_directories(${I2C_TEST} PRIVATE
+                ${CMAKE_CURRENT_SOURCE_DIR}/fakes/stm32g474_regs)
+            target_compile_definitions(${I2C_TEST} PRIVATE
+                HAL_TARGET_STM32G474=1 JH_STM32G474_HW=1
+                JH_STM32G474_HOST_REGS=1)
+        endif()
+        jh_enable_host_warnings(${I2C_TEST} ERRORS)
+        target_link_libraries(${I2C_TEST} PRIVATE Threads::Threads)
+        add_test(NAME ${I2C_TEST} COMMAND ${I2C_TEST})
+        if(I2C_BACKEND STREQUAL "stm32")
+            # Exercise the real polling budget, including under Valgrind.
+            set_tests_properties(${I2C_TEST} PROPERTIES TIMEOUT 240)
+        else()
+            set_tests_properties(${I2C_TEST} PROPERTIES TIMEOUT 20)
+        endif()
+    endforeach()
+endforeach()
+
 # ESP32 I2C target, LEDC, RMT and fault backends against a fake ESP-IDF that
 # records driver calls, injects failures and schedules FreeRTOS tasks.
 set(_esp32_backend_dir ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/esp32)

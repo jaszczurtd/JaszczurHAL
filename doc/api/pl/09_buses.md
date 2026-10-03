@@ -350,6 +350,15 @@ NACK lub magistrali - `HAL_EBUS`, a pozostałe błędy backendu - `HAL_EIO`.
 Dla zgodności źródłowej dotychczasowe funkcje nadal zwracają `void`, `uint8_t`
 lub `bool`.
 
+Na RP i STM32G474 statusowe odczyty rozróżniają `HAL_ETIMEOUT` i `HAL_EBUS`.
+Po nieudanym odczycie bufor docelowy może zawierać część danych.
+`hal_i2c_request_from[_bus]_ex()` przekazuje liczbę odebranych bajtów niezależnie
+od statusu i zachowuje te bajty do odczytu przez `available/read`.
+Na STM32G474 oczekiwanie na końcowy STOP może przekroczyć limit czasu także po
+odebraniu wszystkich bajtów. Funkcja zwraca wtedy `HAL_ETIMEOUT`, starsze
+odczyty `bool` zwracają `false`, a starsze `request_from()` nadal zwraca
+liczbę odebranych bajtów.
+
 `hal_i2c_scan()` zastępuje wcześniejszą funkcję pomocniczą `i2cScanner()` z `tools.cpp`.
 Wykonuje pojedynczy skan zamiast nieskończonej pętli print/delay, pomija
 zarezerwowane adresy 7-bitowe, nie zależy od wyjścia szeregowego i działa na

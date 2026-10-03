@@ -83,30 +83,38 @@ bool program_range(uintptr_t address, const uint8_t *data, uint32_t size,
   return true;
 }
 
+bool program_verified(uintptr_t address, const uint8_t *data, uint32_t size,
+                      hal_eeprom_progress_callback_t progress, void *ctx) {
+  return program_range(address, data, size, progress, ctx) &&
+         memcmp(reinterpret_cast<const void *>(address), data, size) == 0;
+}
+
+bool erase_pages(uintptr_t address, uint32_t len,
+                 hal_eeprom_progress_callback_t progress, void *ctx) {
+  for (uint32_t offset = 0u; offset < len;
+       offset += HAL_STM32_FLASH_PAGE_SIZE) {
+    if (!jh_stm32g474_flash_unlock()) {
+      return false;
+    }
+    const bool erased = jh_stm32g474_flash_erase_page(address + offset);
+    jh_stm32g474_flash_lock();
+    if (!erased) {
+      return false;
+    }
+    notify(progress, ctx);
+  }
+  return true;
+}
+
 hal_status_t store(void *context, const uint8_t *mirror, uint16_t storage_size,
                    hal_eeprom_progress_callback_t progress, void *ctx) {
   (void)context;
   if (storage_size != s_reserved_size) {
     return HAL_EINVAL;
   }
-  bool ok = true;
-  for (uint32_t offset = 0u; offset < s_reserved_size;
-       offset += HAL_STM32_FLASH_PAGE_SIZE) {
-    if (!jh_stm32g474_flash_unlock()) {
-      ok = false;
-      break;
-    }
-    const bool erased = jh_stm32g474_flash_erase_page(s_flash_start + offset);
-    jh_stm32g474_flash_lock();
-    if (!erased) {
-      ok = false;
-      break;
-    }
-    notify(progress, ctx);
-  }
-  if (ok) {
-    ok = program_range(s_flash_start, mirror, s_reserved_size, progress, ctx);
-  }
+  const bool ok =
+      erase_pages(s_flash_start, s_reserved_size, progress, ctx) &&
+      program_range(s_flash_start, mirror, s_reserved_size, progress, ctx);
   if (!ok) {
     hal_derr("hal_eeprom_commit: STM32 flash commit failed");
   }
@@ -115,6 +123,7 @@ hal_status_t store(void *context, const uint8_t *mirror, uint16_t storage_size,
 
 hal_status_t replace_region(void *context, uint16_t addr, const uint8_t *data,
                             uint16_t len, uint16_t publish_size,
+                            bool destination_erased,
                             hal_eeprom_progress_callback_t progress,
                             void *ctx) {
   (void)context;
@@ -126,24 +135,13 @@ hal_status_t replace_region(void *context, uint16_t addr, const uint8_t *data,
   }
 
   const uintptr_t address = s_flash_start + addr;
-  for (uint32_t offset = 0u; offset < len;
-       offset += HAL_STM32_FLASH_PAGE_SIZE) {
-    if (!jh_stm32g474_flash_unlock()) {
-      return HAL_EIO;
-    }
-    const bool erased = jh_stm32g474_flash_erase_page(address + offset);
-    jh_stm32g474_flash_lock();
-    if (!erased) {
-      return HAL_EIO;
-    }
-    notify(progress, ctx);
+  if (!destination_erased && !erase_pages(address, len, progress, ctx)) {
+    return HAL_EIO;
   }
 
   const uint32_t body_size = (uint32_t)len - publish_size;
-  if (!program_range(address + publish_size, data + publish_size, body_size,
-                     progress, ctx) ||
-      memcmp(reinterpret_cast<const void *>(address + publish_size),
-             data + publish_size, body_size) != 0) {
+  if (!program_verified(address + publish_size, data + publish_size, body_size,
+                        progress, ctx)) {
     return HAL_EIO;
   }
   if (!program_range(address, data, publish_size, progress, ctx) ||
@@ -153,6 +151,42 @@ hal_status_t replace_region(void *context, uint16_t addr, const uint8_t *data,
   return HAL_OK;
 }
 
+hal_status_t program(void *context, uint16_t addr, const uint8_t *data,
+                     uint16_t len, hal_eeprom_progress_callback_t progress,
+                     void *ctx) {
+  (void)context;
+  if (data == nullptr || (addr % 8u) != 0u || (len % 8u) != 0u ||
+      (uint32_t)addr + len > s_reserved_size) {
+    return HAL_EINVAL;
+  }
+  return program_verified(s_flash_start + addr, data, len, progress, ctx)
+             ? HAL_OK
+             : HAL_EIO;
+}
+
+hal_status_t erase(void *context, uint16_t addr, uint16_t len,
+                   hal_eeprom_progress_callback_t progress, void *ctx) {
+  (void)context;
+  if ((addr % HAL_STM32_FLASH_PAGE_SIZE) != 0u ||
+      (len % HAL_STM32_FLASH_PAGE_SIZE) != 0u ||
+      (uint32_t)addr + len > s_reserved_size) {
+    return HAL_EINVAL;
+  }
+  return erase_pages(s_flash_start + addr, len, progress, ctx) ? HAL_OK
+                                                               : HAL_EIO;
+}
+
+hal_status_t read(void *context, uint16_t addr, uint8_t *out, uint16_t len) {
+  (void)context;
+  if (out == nullptr || (uint32_t)addr + len > s_reserved_size) {
+    return HAL_EINVAL;
+  }
+  memcpy(out, reinterpret_cast<const void *>(s_flash_start + addr), len);
+  return HAL_OK;
+}
+
+/* Each double word carries ECC and is programmed once per erase, so an append
+ * starts and ends on a double word. */
 const jh_eeprom_flash_backend_t kFlashBackend = {HAL_EEPROM_STM32_FLASH,
                                                  s_mirror,
                                                  sizeof(s_mirror),
@@ -162,7 +196,11 @@ const jh_eeprom_flash_backend_t kFlashBackend = {HAL_EEPROM_STM32_FLASH,
                                                  load,
                                                  store,
                                                  replace_region,
+                                                 program,
+                                                 erase,
+                                                 read,
                                                  HAL_STM32_FLASH_PAGE_SIZE,
+                                                 8u,
                                                  8u};
 
 } // namespace
