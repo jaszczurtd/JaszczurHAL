@@ -330,6 +330,8 @@ function(add_stm32_host_test NAME)
         ${SRC_DIR}/hal/impl/stm32g474/hal_system.cpp
         ${SRC_DIR}/hal/impl/stm32g474/drivers/stm32g474/stm32g474_system.cpp
         ${SRC_DIR}/hal/impl/stm32g474/drivers/stm32g474/stm32g474_fault.cpp
+        ${SRC_DIR}/hal/system/hal_device_id.cpp
+        ${SRC_DIR}/hal/core/hal_text.cpp
         ${SRC_DIR}/hal/core/hal_assert.cpp
         ${SRC_DIR}/hal/core/hal_config.cpp
         ${SRC_DIR}/utils/unity.c
@@ -559,6 +561,86 @@ target_compile_definitions(test_stm32_adc_scan_backend PRIVATE
 jh_enable_host_warnings(test_stm32_adc_scan_backend ERRORS)
 target_link_libraries(test_stm32_adc_scan_backend PRIVATE Threads::Threads)
 add_test(NAME test_stm32_adc_scan_backend COMMAND test_stm32_adc_scan_backend)
+
+# The STM32G474 UART backend on the same register table: circular DMA
+# reception with lap counting, the DMA transmit queue, line errors, frame
+# formats, pin tables and the debug console hand-over of USART2.
+add_executable(test_stm32_uart_backend
+    test_stm32_uart_backend.cpp
+    fakes/host_sync/hal_sync_host.cpp
+    fakes/stm32g474_regs/jh_stm32g474_host_regs.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/core/hal_config.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/serial/hal_uart.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/stm32g474/hal_uart.cpp
+    ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+target_include_directories(test_stm32_uart_backend PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/fakes/stm32g474_regs
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/stm32g474)
+target_compile_definitions(test_stm32_uart_backend PRIVATE
+    HAL_TARGET_STM32G474=1 JH_STM32G474_HW=1 JH_STM32G474_HOST_REGS=1
+    HAL_ENABLE_UART HAL_DISABLE_ASSERTS HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H)
+jh_enable_host_warnings(test_stm32_uart_backend ERRORS)
+target_link_libraries(test_stm32_uart_backend PRIVATE Threads::Threads)
+add_test(NAME test_stm32_uart_backend COMMAND test_stm32_uart_backend)
+
+# hal_kv over the real STM32G474 flash EEPROM backend on a flash model with
+# ECC semantics (a double word takes one write per erase, 0xFF included).
+add_executable(test_stm32_kv_flash
+    test_stm32_kv_flash.cpp
+    fakes/host_sync/hal_sync_host.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/storage/hal_eeprom.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/storage/hal_kv.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/storage/jh_eeprom_flash_provider.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/stm32g474/hal_eeprom.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/security/hal_crc.cpp
+    ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+target_include_directories(test_stm32_kv_flash PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(test_stm32_kv_flash PRIVATE
+    HAL_TARGET_STM32G474=1 HAL_ENABLE_EEPROM HAL_ENABLE_KV
+    HAL_STM32_FLASH_EEPROM_SIZE=16384u HAL_DISABLE_ASSERTS HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H)
+jh_enable_host_warnings(test_stm32_kv_flash ERRORS)
+target_link_libraries(test_stm32_kv_flash PRIVATE Threads::Threads)
+add_test(NAME test_stm32_kv_flash COMMAND test_stm32_kv_flash)
+
+# Lock-free reads of the same backend with a preemption injected between
+# its atomic loads (the backend source is compiled into the test).
+add_executable(test_stm32_uart_preemption
+    test_stm32_uart_preemption.cpp
+    fakes/host_sync/hal_sync_host.cpp
+    fakes/stm32g474_regs/jh_stm32g474_host_regs.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/core/hal_config.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/serial/hal_uart.cpp
+    ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+target_include_directories(test_stm32_uart_preemption PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/fakes/stm32g474_regs
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/stm32g474)
+target_compile_definitions(test_stm32_uart_preemption PRIVATE
+    HAL_TARGET_STM32G474=1 JH_STM32G474_HW=1 JH_STM32G474_HOST_REGS=1
+    HAL_ENABLE_UART HAL_DISABLE_ASSERTS HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H)
+jh_enable_host_warnings(test_stm32_uart_preemption ERRORS)
+target_link_libraries(test_stm32_uart_preemption PRIVATE Threads::Threads)
+add_test(NAME test_stm32_uart_preemption COMMAND test_stm32_uart_preemption)
+
+# The USART2 debug console handing the port to hal_uart PORT_2 and back.
+add_executable(test_stm32_debug_console
+    test_stm32_debug_console.cpp
+    fakes/stm32g474_regs/jh_stm32g474_host_regs.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/stm32g474/port/g474_debug_uart.c
+    ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+target_include_directories(test_stm32_debug_console PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/fakes/stm32g474_regs
+    ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(test_stm32_debug_console PRIVATE
+    HAL_TARGET_STM32G474=1 JH_STM32G474_HW=1 JH_STM32G474_HOST_REGS=1
+    HAL_ENABLE_UNITY UNITY_INCLUDE_CONFIG_H)
+jh_enable_host_warnings(test_stm32_debug_console ERRORS)
+add_test(NAME test_stm32_debug_console COMMAND test_stm32_debug_console)
 
 # Exercise the real Fiesta-convention CMake generator, not a handwritten copy.
 # The secondary initializer must execute on the first native core-1 task call.

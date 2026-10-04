@@ -58,26 +58,14 @@ set(_defines
 set(_feature_defines ${JH_RESOLVED_FEATURES})
 list(APPEND _sources "${JH_BOARD_GENERATED_DIR}/jh_link_contract_reference.c")
 list(APPEND _sources "${JH_BOARD_GENERATED_DIR}/jh_link_contract_definition.c")
-function(_jh_extract_define_value OUT_VAR KEY)
-    set(_value "")
-    foreach(_def IN LISTS ARGN)
-        if("${_def}" MATCHES "^${KEY}=(.+)$")
-            set(_value "${CMAKE_MATCH_1}")
-        endif()
-    endforeach()
-    set(${OUT_VAR} "${_value}" PARENT_SCOPE)
-endfunction()
-
-_jh_extract_define_value(_stm32_main_stack_size HAL_STM32_MAIN_STACK_SIZE ${_defines})
-_jh_extract_define_value(_stm32_littlefs_size HAL_STM32_FLASH_LITTLEFS_SIZE ${_defines})
+jh_cmake_define_link_value(_stm32_main_stack_size HAL_STM32_MAIN_STACK_SIZE ${_defines})
+jh_cmake_define_link_value(_stm32_littlefs_size HAL_STM32_FLASH_LITTLEFS_SIZE ${_defines})
+jh_cmake_define_link_value(_stm32_eeprom_size HAL_STM32_FLASH_EEPROM_SIZE ${_defines})
 jh_cmake_defines_contain(
     _stm32_has_littlefs HAL_ENABLE_LITTLEFS ${_feature_defines})
 if(_stm32_has_littlefs AND "${_stm32_littlefs_size}" STREQUAL "")
     list(APPEND _defines HAL_STM32_FLASH_LITTLEFS_SIZE=65536u)
     set(_stm32_littlefs_size "65536")
-endif()
-if(NOT "${_stm32_littlefs_size}" STREQUAL "")
-    string(REGEX REPLACE "[uUlL]+$" "" _stm32_littlefs_size "${_stm32_littlefs_size}")
 endif()
 
 # Fiesta-convention projects: bridge initialization/looper -> app_* via the
@@ -146,6 +134,11 @@ endif()
 if(NOT "${_stm32_littlefs_size}" STREQUAL "")
     target_link_options(firmware PRIVATE
         "-Wl,--defsym=HAL_STM32_FLASH_LITTLEFS_SIZE=${_stm32_littlefs_size}"
+    )
+endif()
+if(NOT "${_stm32_eeprom_size}" STREQUAL "")
+    target_link_options(firmware PRIVATE
+        "-Wl,--defsym=HAL_STM32_FLASH_EEPROM_SIZE=${_stm32_eeprom_size}"
     )
 endif()
 jh_cmake_defines_contain(

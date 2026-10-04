@@ -828,6 +828,8 @@ typedef enum {
 typedef hal_uart_impl_t *hal_uart_t;
 
 typedef struct {
+    // Przepełnienia odbiornika; na STM32G474 także spóźnione przerwania DMA
+    // odbioru, po których mogło zginąć więcej bajtów, niż widać (opis niżej).
     uint32_t rx_overrun;
     // Błędy ramkowania; błędy szumu STM32 są liczone tutaj też.
     uint32_t rx_framing;
@@ -849,12 +851,31 @@ hal_status_t hal_uart_flush(hal_uart_t h);   // blokuje do zakończenia TX
 bool hal_uart_get_error_counters(hal_uart_t h,
                                  hal_uart_error_counters_t *counters);
 void hal_uart_destroy(hal_uart_t h);
+
+// Odczyt wielu bajtów i nieblokujący zapis, zwracające status.
+hal_status_t hal_uart_read_bytes_ex(hal_uart_t h, uint8_t *out, size_t size,
+                                    size_t *out_read);
+hal_status_t hal_uart_try_write_ex(hal_uart_t h, const uint8_t *data,
+                                   size_t len);
+hal_status_t hal_uart_tx_free_ex(hal_uart_t h, size_t *out_free);
 ```
 
 `hal_uart_begin()` i `hal_uart_flush()` zwracają status; zastąpiły dawną parę
 `void` + `_ex`. Funkcje zwracające `bool` lub wartość (`set_rx`, `set_tx`, `read`,
 `write`, `println`, `get_error_counters`) zachowują dotychczasowe sygnatury.
 Każdej odpowiada wariant `_ex` zwracający status.
+
+- `hal_uart_read_bytes_ex()` kopiuje bez czekania do `size` odebranych
+  bajtów: `HAL_OK` z liczbą bajtów albo `HAL_EAGAIN`, gdy nic nie czeka.
+- `hal_uart_try_write_ex()` kolejkuje wszystkie `len` bajtów albo żadnego i
+  nigdy nie czeka: `HAL_EAGAIN`, gdy w kolejce nadawczej brakuje miejsca,
+  `HAL_EOVERFLOW`, gdy `len` przekracza całą kolejkę. `hal_uart_tx_free_ex()`
+  podaje wolne miejsce. Obie funkcje są dla pętli, które nie mogą się
+  blokować (mostki, obsługa protokołów); mają je STM32G474 i mock, RP2040 i
+  ESP32-S3 zwracają `HAL_EUNSUPPORTED`.
+- `hal_uart_write_ex()` blokuje, aż wszystkie bajty trafią do kolejki; na
+  STM32G474 kończy się `HAL_ETIMEOUT` (liczba bajtów w `out_written`), gdy
+  kolejka nie posuwa się przez dwukrotny czas jej opróżnienia plus 100 ms.
 
 - **impl/rp2040:** UART SDK RP2040 (`uart0` / `uart1`) ze sterowanym
   przerwaniami RX. `hal_uart_begin()` instaluje i włącza `UARTx_IRQ` w NVIC
@@ -867,10 +888,54 @@ Każdej odpowiada wariant `_ex` zwracający status.
   wymogu przypisania przerwania. W konfiguracjach FreeRTOS/SMP wykonuj operacje
   cyklu życia UART z zadania przypiętego do zamierzonego rdzenia i nie
   migruj tego zadania, gdy UART jest aktywny.
-- **impl/stm32g474:** USART1/USART2 są obsługiwane bezpośrednio przez rejestry
-  i taktowane odpowiednio z PCLK2/PCLK1 (oba równe SYSCLK). Dane RX są odbierane przez
-  polling. Backend zlicza ORE, PE, FE i NE oraz jawne flagi LIN-break, jeśli
-  udostępnia je `USART_ISR`.
+- **impl/stm32g474:** USART1 (`PORT_1`, PCLK2) i USART2 (`PORT_2`, PCLK1)
+  obsługiwane bezpośrednio przez rejestry, oba taktowane z SYSCLK z
+  nadpróbkowaniem 16x: prędkości od około 10 baud (przez preskaler USART)
+  do SYSCLK/16, dzielnik zaokrąglany do najbliższego kroku (3 Mbaud mieści
+  się w 0,6 % przy 160 i 170 MHz). Inne prędkości zwracają
+  `HAL_EUNSUPPORTED`.
+  - Piny (AF7, id pinu = port * 16 + numer): `PORT_1` RX PA10, PB7, PC5,
+    PE1; TX PA9, PB6, PC4, PE0, PG9. `PORT_2` RX PA3, PA15, PB4, PD6; TX PA2,
+    PA14, PB3, PD5. Dla niepodłączonego kierunku podaj 255 (port tylko TX
+    albo tylko RX); inne piny są odrzucane przy tworzeniu.
+  - Odbiór działa na kołowym pierścieniu DMA (DMA2 kanał 1 / 3) o rozmiarze
+    `HAL_UART_RX_BUFFER_SIZE` bajtów, bez pracy CPU na każdy bajt; odczyt
+    bierze to, co zapisało DMA. Gdy czytający zostanie w tyle o więcej niż
+    pierścień (minus 16 bajtów zapasu), starsza połowa jest porzucana i
+    liczona w `rx_buffer_overflow`; najnowsza połowa zostaje do odczytu.
+  - Przerwania połowy i końca pierścienia liczą okrążenia DMA. Wstrzymane
+    (przerwania zamaskowane) najwyżej na półtora pierścienia czasu linii
+    (768 bajtów, 2,6 ms przy 3 Mbaud i domyślnym rozmiarze) niczego nie
+    przekłamują. Wstrzymane dłużej mogą przepuścić całe okrążenia: odczyt
+    nadal dostaje najnowsze bajty, ale nie da się policzyć utraconych, więc
+    zdarzenie liczy `rx_overrun`. Licznik cykli ogranicza liczbę bajtów,
+    które mogły przyjść (po ponad ok. 12 s bez odczytu i bez przerwania
+    odbioru robi to zegar milisekundowy, bo licznik się zawija), więc długa
+    maska zgłasza zdarzenie także wtedy, gdy danych przyszło mało. Dobierz pierścień do najdłuższej maski
+    przerwań na drodze odbioru, np. kasowania flasha w tym samym banku.
+  - Nadawanie działa na DMA (DMA2 kanał 2 / 4) z kolejki o rozmiarze
+    `HAL_UART_TX_BUFFER_SIZE` bajtów; zapis wraca, gdy bajty są w kolejce.
+    `hal_uart_flush()` czeka na ostatni bit stopu.
+  - Ramki 7, 8 lub 9 bitów razem z parzystością: 7N, 8N, 6E/6O, 7E/7O,
+    8E/8O, z jednym lub dwoma bitami stopu. Inne formaty zwracają
+    `HAL_EUNSUPPORTED`. Przy parzystości odebrane bajty są maskowane do bitów
+    danych.
+  - Przerwanie USART liczy ORE, FE, NE (jako błąd ramki) i PE; błąd magistrali
+    DMA przy odbiorze liczy się jako `rx_overrun`.
+  - `PORT_2` jest też konsolą debug (wirtualny port COM ST-LINK na Nucleo).
+    `hal_uart_begin()` przejmuje USART2: `printf`, logi HAL, tekst asercji i
+    komunikat faultu nic nie wypisują, dopóki uchwyt jest aktywny (sam zapis
+    faultu przetrwa reset). `hal_uart_destroy()` oddaje USART2 i konsola
+    wraca na 115200.
+  - Odczyt i zapis mają osobne blokady w każdym uchwycie: blokujący zapis,
+    który czeka na miejsce, nie wstrzymuje odczytu, a
+    `hal_uart_try_write_ex()` zwraca `HAL_EAGAIN`, gdy kolejkę trzyma inny
+    piszący. Odczyt wywłaszczony na tyle długo, że DMA okrąży pierścień i
+    dojdzie do kopiowanych bajtów, odrzuca je i liczy w
+    `rx_buffer_overflow`.
+  - Ponowne `hal_uart_begin()` najpierw pozwala zakolejkowanym bajtom wyjść
+    ze starą prędkością; gdy nie zdążą w czasie opróżniania, zwraca
+    `HAL_ETIMEOUT`, a port działa dalej bez zmian.
 - **impl/esp32:** Porty HAL 1/2 odpowiadają ESP-IDF UART1/UART2; UART0
   pozostaje zarezerwowany poza tym API HAL. Każdy aktywny uchwyt
   posiada 512-bajtowy bufor RX IDF i 32-wpisową kolejkę zdarzeń używaną do
@@ -891,7 +956,8 @@ Każdej odpowiada wariant `_ex` zwracający status.
 w runtime chroni osobny muteks każdej instancji. Nadal jednak wszystkie
 operacje cyklu życia muszą być wykonywane na tym samym rdzeniu. Na RP2040 za
 serializację odpowiada wywołujący; tam również obowiązuje reguła jednego
-rdzenia dla całego cyklu życia.
+rdzenia dla całego cyklu życia. STM32G474 ma w każdym uchwycie osobne
+blokady odczytu i zapisu.
 
 **Pomocnicy mock:**
 ```c
@@ -905,6 +971,9 @@ typedef void (*hal_mock_uart_write_cb_t)(hal_uart_t h, const char *text, void *u
 void        hal_mock_uart_set_write_callback(hal_uart_t h,
                                              hal_mock_uart_write_cb_t cb,
                                              void *user);
+// hal_uart_try_write_ex() zapełnia modelowaną kolejkę HAL_UART_TX_BUFFER_SIZE,
+// którą opróżnia tylko to wywołanie.
+void        hal_mock_uart_drain_tx(hal_uart_t h, size_t bytes);
 ```
 
 ---

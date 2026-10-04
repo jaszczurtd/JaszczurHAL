@@ -404,28 +404,38 @@ int hal_uart_available(hal_uart_t handle) {
   return error == ESP_OK ? (int)available : 0;
 }
 
-hal_status_t hal_uart_read_ex(hal_uart_t handle, uint8_t *out_value) {
-  if (out_value == nullptr) {
+hal_status_t hal_uart_read_bytes_ex(hal_uart_t handle, uint8_t *out,
+                                    size_t size, size_t *out_read) {
+  if (out_read != nullptr) {
+    *out_read = 0u;
+  }
+  if (!uart_handle_valid(handle) || (out == nullptr && size > 0u)) {
     return HAL_EINVAL;
   }
-  *out_value = 0u;
-  if (!uart_handle_valid(handle)) {
-    return HAL_EINVAL;
-  }
-
   uart_lock(handle);
   if (!handle->running) {
     uart_unlock(handle);
     return HAL_EUNINIT;
   }
   uart_drain_events_locked(handle);
-  const int result = uart_read_bytes(handle->idf_port, out_value, 1u, 0u);
+  const int result =
+      size > 0u ? uart_read_bytes(handle->idf_port, out, size, 0u) : 0;
   uart_unlock(handle);
-  if (result == 1) {
-    return HAL_OK;
+  if (result < 0) {
+    return HAL_EIO;
+  }
+  if (out_read != nullptr) {
+    *out_read = (size_t)result;
+  }
+  return result > 0 || size == 0u ? HAL_OK : HAL_EAGAIN;
+}
+
+hal_status_t hal_uart_read_ex(hal_uart_t handle, uint8_t *out_value) {
+  if (out_value == nullptr) {
+    return HAL_EINVAL;
   }
   *out_value = 0u;
-  return result == 0 ? HAL_EAGAIN : HAL_EIO;
+  return hal_uart_read_bytes_ex(handle, out_value, 1u, nullptr);
 }
 
 int hal_uart_read(hal_uart_t handle) {
@@ -461,6 +471,23 @@ size_t hal_uart_write(hal_uart_t handle, const uint8_t *data, size_t length) {
   size_t written = 0u;
   (void)hal_uart_write_ex(handle, data, length, &written);
   return written;
+}
+
+/* The driver is installed without a transmit ring: writes go to the FIFO. */
+hal_status_t hal_uart_try_write_ex(hal_uart_t handle, const uint8_t *data,
+                                   size_t length) {
+  if (!uart_handle_valid(handle) || (length > 0u && data == nullptr)) {
+    return HAL_EINVAL;
+  }
+  return HAL_EUNSUPPORTED;
+}
+
+hal_status_t hal_uart_tx_free_ex(hal_uart_t handle, size_t *out_free) {
+  if (out_free == nullptr) {
+    return HAL_EINVAL;
+  }
+  *out_free = 0u;
+  return uart_handle_valid(handle) ? HAL_EUNSUPPORTED : HAL_EINVAL;
 }
 
 hal_status_t hal_uart_println_ex(hal_uart_t handle, const char *text,

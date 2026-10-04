@@ -8,6 +8,9 @@
 #include "hal/system/hal_system.h"
 #include "hal/system/hal_system_common.h"
 #include "port/stm32g474_regs.h"
+#ifdef JH_STM32G474_HW
+#include "port/stm32g474_reset.h"
+#endif
 
 #if defined(HAL_ENABLE_FREERTOS)
 #include <FreeRTOS.h>
@@ -167,19 +170,25 @@ hal_status_t hal_get_device_uid(uint8_t uid[HAL_DEVICE_UID_BYTES]) {
   return HAL_OK;
 }
 
-hal_status_t hal_get_device_uid_hex_ex(char *buf, size_t buflen) {
-  if (buf == nullptr) {
+hal_status_t hal_get_device_serial_ex(uint8_t *out, size_t out_size,
+                                      size_t *out_len) {
+  if (out == nullptr || out_len == nullptr) {
     return HAL_EINVAL;
   }
-  if (buflen < HAL_DEVICE_UID_HEX_BUF_SIZE) {
+  *out_len = STM32G474_SERIAL_BYTES;
+  if (out_size < STM32G474_SERIAL_BYTES) {
     return HAL_EOVERFLOW;
   }
-  return hal_status_from_bool(stm32g474_system_get_device_uid_hex(buf, buflen),
-                              HAL_EIO);
+  stm32g474_system_get_device_serial(out);
+  return HAL_OK;
 }
 
-bool hal_get_device_uid_hex(char *buf, size_t buflen) {
-  return hal_status_to_bool(hal_get_device_uid_hex_ex(buf, buflen));
+hal_status_t hal_system_reset(void) {
+#ifdef JH_STM32G474_HW
+  jh_stm32g474_system_reset();
+#else
+  return HAL_EUNSUPPORTED;
+#endif
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

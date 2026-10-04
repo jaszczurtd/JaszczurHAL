@@ -69,6 +69,7 @@ ESP_IDF_BASE_SOURCES = (
     "src/hal/serial/hal_serial.cpp",
     "src/hal/serial/hal_serial_session.cpp",
     "src/hal/system/hal_board.cpp",
+    "src/hal/system/hal_device_id.cpp",
     "src/hal/system/hal_periodic_random.cpp",
     "src/hal/temperature/hal_ntc.cpp",
     "src/hal/time/hal_time.cpp",

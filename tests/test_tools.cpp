@@ -499,6 +499,32 @@ void test_hal_text_format_mac(void) {
                         hal_text_format_mac_ex(mac, NULL, sizeof(buf)));
 }
 
+void test_hal_text_format_hex_writes_two_digits_per_byte(void) {
+  const uint8_t bytes[] = {0x00u, 0x0Fu, 0xA5u, 0xFFu};
+  char buf[9] = {};
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_text_format_hex_ex(bytes, sizeof(bytes), true, buf, 9u));
+  TEST_ASSERT_EQUAL_STRING("000FA5FF", buf);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_text_format_hex_ex(bytes, sizeof(bytes), false, buf, 9u));
+  TEST_ASSERT_EQUAL_STRING("000fa5ff", buf);
+
+  // One byte short of the terminator: nothing written.
+  memset(buf, 'x', sizeof(buf));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EOVERFLOW,
+      hal_text_format_hex_ex(bytes, sizeof(bytes), true, buf, 8u));
+  TEST_ASSERT_EQUAL_CHAR('x', buf[0]);
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_text_format_hex_ex(NULL, 0u, true, buf, 1u));
+  TEST_ASSERT_EQUAL_STRING("", buf);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_text_format_hex_ex(NULL, 1u, true, buf, 9u));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_text_format_hex_ex(bytes, 1u, true, NULL, 9u));
+}
+
 void test_hal_network_format_mac(void) {
   uint8_t mac[6] = {0x11, 0x22, 0x33, 0xAA, 0xBB, 0xCC};
   char buf[20];
@@ -1140,6 +1166,7 @@ int main(void) {
   RUN_TEST(test_rgb565_buffer_converters_reject_null);
 
   RUN_TEST(test_hal_text_format_mac);
+  RUN_TEST(test_hal_text_format_hex_writes_two_digits_per_byte);
   RUN_TEST(test_hal_network_format_mac);
   RUN_TEST(test_hal_wifi_scan_for_ssid_uses_hal_wifi_scan_results);
 

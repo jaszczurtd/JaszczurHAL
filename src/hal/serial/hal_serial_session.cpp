@@ -1,5 +1,6 @@
 #include "hal/serial/hal_serial_session.h"
 
+#include "hal/core/hal_text.h"
 #include "hal/security/jh_secure_random.h"
 #include "hal/serial/hal_serial.h"
 #include "hal/serial/hal_serial_frame.h"
@@ -82,11 +83,8 @@ void handle_auth_begin(hal_serial_session_t *session) {
   session->challenge_pending = true;
 
   char hex[HAL_SC_AUTH_CHALLENGE_HEX_BUF_SIZE] = {0};
-  static const char k_hex[] = "0123456789abcdef";
-  for (size_t index = 0u; index < HAL_SC_AUTH_CHALLENGE_BYTES; ++index) {
-    hex[index * 2u] = k_hex[(session->challenge[index] >> 4u) & 0x0Fu];
-    hex[index * 2u + 1u] = k_hex[session->challenge[index] & 0x0Fu];
-  }
+  (void)hal_text_format_hex_ex(session->challenge, HAL_SC_AUTH_CHALLENGE_BYTES,
+                               false, hex, sizeof(hex));
 
   const char *format =
       HAL_SERIAL_SESSION_VOCAB(session, reply_auth_challenge_fmt);

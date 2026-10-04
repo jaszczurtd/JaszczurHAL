@@ -42,6 +42,11 @@ ASSERT(HAL_STM32_FLASH_EEPROM_SIZE >= (2 * HAL_STM32_FLASH_PAGE_SIZE),
        "hal_kv requires two independently erasable flash pages");
 ASSERT((HAL_STM32_FLASH_EEPROM_SIZE % HAL_STM32_FLASH_PAGE_SIZE) == 0,
        "HAL_STM32_FLASH_EEPROM_SIZE must be a multiple of HAL_STM32_FLASH_PAGE_SIZE");
+/* hal_eeprom defines __hal_stm32_eeprom_c_size from the compiler's value. */
+ASSERT((DEFINED(__hal_stm32_eeprom_c_size) ? __hal_stm32_eeprom_c_size
+                                            : HAL_STM32_FLASH_EEPROM_SIZE) ==
+           HAL_STM32_FLASH_EEPROM_SIZE,
+       "HAL_STM32_FLASH_EEPROM_SIZE differs between compiler and linker: set it as a build define (EXTRA_HAL_DEFINES or the project's defines), not only in hal_project_config.h");
 
 PROVIDE(__hal_stm32_littlefs_flash_start = ORIGIN(HAL_LITTLEFS_FLASH));
 PROVIDE(__hal_stm32_littlefs_flash_end = ORIGIN(HAL_LITTLEFS_FLASH) + LENGTH(HAL_LITTLEFS_FLASH));

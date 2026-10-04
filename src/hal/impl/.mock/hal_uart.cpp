@@ -25,6 +25,7 @@ struct hal_uart_impl_s {
   hal_status_t next_begin_status;
   hal_status_t next_write_status;
   hal_status_t next_flush_status;
+  size_t tx_pending; /* bytes the modelled queue still holds */
 };
 
 static hal_uart_impl_t s_pool[HAL_UART_MAX_INSTANCES];
@@ -61,17 +62,27 @@ int hal_uart_available(hal_uart_t h) {
   return (h->tail - h->head + HAL_UART_BUF_SIZE) % HAL_UART_BUF_SIZE;
 }
 
+hal_status_t hal_uart_read_bytes_ex(hal_uart_t h, uint8_t *out, size_t size,
+                                    size_t *out_read) {
+  if (out_read)
+    *out_read = 0u;
+  if (!h || (!out && size > 0u))
+    return HAL_EINVAL;
+  size_t count = 0u;
+  while (count < size && h->head != h->tail) {
+    out[count++] = h->rx_buf[h->head];
+    h->head = (h->head + 1) % HAL_UART_BUF_SIZE;
+  }
+  if (out_read)
+    *out_read = count;
+  return count > 0u || size == 0u ? HAL_OK : HAL_EAGAIN;
+}
+
 hal_status_t hal_uart_read_ex(hal_uart_t h, uint8_t *out_value) {
   if (!out_value)
     return HAL_EINVAL;
   *out_value = 0u;
-  if (!h)
-    return HAL_EINVAL;
-  if (hal_uart_available(h) == 0)
-    return HAL_EAGAIN;
-  *out_value = h->rx_buf[h->head];
-  h->head = (h->head + 1) % HAL_UART_BUF_SIZE;
-  return HAL_OK;
+  return hal_uart_read_bytes_ex(h, out_value, 1u, NULL);
 }
 
 int hal_uart_read(hal_uart_t h) {
@@ -109,6 +120,40 @@ size_t hal_uart_write(hal_uart_t h, const uint8_t *data, size_t len) {
   size_t written = 0u;
   (void)hal_uart_write_ex(h, data, len, &written);
   return written;
+}
+
+/* The queue fills with every accepted message and empties only through
+ * hal_mock_uart_drain_tx(), so a test can drive it full. The capture keeps
+ * the message's first bytes, as for write. */
+hal_status_t hal_uart_try_write_ex(hal_uart_t h, const uint8_t *data,
+                                   size_t len) {
+  if (!h || (len > 0u && !data))
+    return HAL_EINVAL;
+  if (len > (size_t)HAL_UART_TX_BUFFER_SIZE)
+    return HAL_EOVERFLOW;
+  if (h->tx_pending + len > (size_t)HAL_UART_TX_BUFFER_SIZE)
+    return HAL_EAGAIN;
+  size_t written = 0u;
+  const hal_status_t status = hal_uart_write_ex(h, data, len, &written);
+  if (status != HAL_OK && status != HAL_EOVERFLOW)
+    return status;
+  h->tx_pending += len;
+  return HAL_OK;
+}
+
+hal_status_t hal_uart_tx_free_ex(hal_uart_t h, size_t *out_free) {
+  if (!out_free)
+    return HAL_EINVAL;
+  *out_free = 0u;
+  if (!h)
+    return HAL_EINVAL;
+  *out_free = (size_t)HAL_UART_TX_BUFFER_SIZE - h->tx_pending;
+  return HAL_OK;
+}
+
+void hal_mock_uart_drain_tx(hal_uart_t h, size_t bytes) {
+  if (h)
+    h->tx_pending -= bytes < h->tx_pending ? bytes : h->tx_pending;
 }
 
 hal_status_t hal_uart_println_ex(hal_uart_t h, const char *s,
@@ -197,6 +242,7 @@ void hal_mock_uart_reset(hal_uart_t h) {
   h->next_begin_status = HAL_NONE;
   h->next_write_status = HAL_NONE;
   h->next_flush_status = HAL_NONE;
+  h->tx_pending = 0u;
 }
 
 const char *hal_mock_uart_last_write(hal_uart_t h) {

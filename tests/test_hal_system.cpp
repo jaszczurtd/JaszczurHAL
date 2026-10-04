@@ -23,6 +23,11 @@ void setUp(void) {
   hal_mock_set_chip_temp(25.0f);
   hal_mock_bootloader_reset_flag();
   hal_mock_reset_device_uid();
+  {
+    const uint8_t serial[8] = {0xE6, 0x61, 0xA4, 0xD1, 0x23, 0x45, 0x67, 0xAB};
+    hal_mock_set_device_serial(serial, sizeof(serial));
+  }
+  hal_mock_system_reset_clear();
   hal_mock_fault_diagnostics_reset();
   s_interval_cb_calls = 0;
 }
@@ -273,6 +278,48 @@ void test_get_device_uid_hex_null_buffer_is_safe(void) {
   TEST_ASSERT_FALSE(hal_get_device_uid_hex(NULL, HAL_DEVICE_UID_HEX_BUF_SIZE));
 }
 
+void test_device_serial_reports_bytes_and_length(void) {
+  uint8_t serial[HAL_DEVICE_SERIAL_MAX_BYTES] = {};
+  size_t length = 0u;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_get_device_serial_ex(serial, sizeof(serial), &length));
+  TEST_ASSERT_EQUAL_UINT32(8u, (uint32_t)length);
+
+  const uint8_t custom[12] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xAB,
+                              0xCD, 0xEF, 0x10, 0x32, 0x54, 0x76};
+  hal_mock_set_device_serial(custom, sizeof(custom));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_get_device_serial_ex(serial, sizeof(serial), &length));
+  TEST_ASSERT_EQUAL_UINT32(12u, (uint32_t)length);
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(custom, serial, sizeof(custom));
+
+  char hex[HAL_DEVICE_SERIAL_HEX_BUF_SIZE] = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_get_device_serial_hex_ex(hex, sizeof(hex)));
+  TEST_ASSERT_EQUAL_STRING("0123456789ABCDEF10325476", hex);
+
+  // Too small: the length is still reported, nothing is written.
+  uint8_t small[11] = {};
+  length = 0u;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EOVERFLOW, hal_get_device_serial_ex(small, sizeof(small), &length));
+  TEST_ASSERT_EQUAL_UINT32(12u, (uint32_t)length);
+  TEST_ASSERT_EACH_EQUAL_UINT8(0u, small, sizeof(small));
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW, hal_get_device_serial_hex_ex(hex, 24u));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_get_device_serial_ex(NULL, 12u, &length));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_get_device_serial_ex(serial, 12u, NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_get_device_serial_hex_ex(NULL, 25u));
+}
+
+void test_system_reset_is_recorded_by_the_mock(void) {
+  TEST_ASSERT_FALSE(hal_mock_system_reset_was_requested());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_system_reset());
+  TEST_ASSERT_TRUE(hal_mock_system_reset_was_requested());
+  hal_mock_system_reset_clear();
+  TEST_ASSERT_FALSE(hal_mock_system_reset_was_requested());
+}
+
 void test_countof_returns_static_array_size(void) {
   int values[5] = {0};
   TEST_ASSERT_EQUAL_UINT32(5u, (uint32_t)COUNTOF(values));
@@ -439,6 +486,8 @@ int main(void) {
   RUN_TEST(test_get_device_uid_hex_formats_injected_value);
   RUN_TEST(test_get_device_uid_hex_rejects_small_buffer);
   RUN_TEST(test_get_device_uid_hex_null_buffer_is_safe);
+  RUN_TEST(test_device_serial_reports_bytes_and_length);
+  RUN_TEST(test_system_reset_is_recorded_by_the_mock);
   RUN_TEST(test_countof_returns_static_array_size);
   RUN_TEST(test_endian_helpers_load_and_store_unaligned_values);
   RUN_TEST(test_endian_helpers_swap_integer_bytes);

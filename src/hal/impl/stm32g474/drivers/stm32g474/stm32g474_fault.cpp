@@ -8,6 +8,11 @@
 #include "../../port/stm32g474_regs.h"
 #include "hal/core/hal_target.h"
 
+#ifdef JH_STM32G474_HW
+#include "../../port/g474_debug_uart.h"
+#include "../../port/stm32g474_reset.h"
+#endif
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -467,7 +472,9 @@ void stm32g474_fault_stack_guard_check(void) {}
 
 #ifdef JH_STM32G474_HW
 static HAL_NO_STACK_PROTECTOR void fault_console_best_effort(void) {
-  if ((RCC_APB1ENR1 & RCC_APB1ENR1_USART2EN) == 0u ||
+  /* An application stream on USART2 (hal_uart PORT_2) gets no text. */
+  if (g474_debug_uart_is_app_owned() != 0 ||
+      (RCC_APB1ENR1 & RCC_APB1ENR1_USART2EN) == 0u ||
       (USART2_CR1 & (USART_CR1_UE | USART_CR1_TE)) !=
           (USART_CR1_UE | USART_CR1_TE)) {
     return;
@@ -510,11 +517,7 @@ jh_stm32_stack_overflow_reset_c(uint32_t pc, uint32_t lr) {
   retained_record_stack_overflow(pc, lr, 0u);
   __asm volatile("dsb" ::: "memory");
   fault_console_best_effort();
-  SCB_AIRCR = (SCB_AIRCR & 0x700u) | SCB_AIRCR_VECTKEY | SCB_AIRCR_SYSRESETREQ;
-  __asm volatile("dsb" ::: "memory");
-  for (;;) {
-    __asm volatile("nop");
-  }
+  jh_stm32g474_system_reset();
 }
 
 extern "C" HAL_NORETURN HAL_NO_STACK_PROTECTOR void
@@ -524,11 +527,7 @@ jh_stm32_stack_fault_reset(const jh_exception_info_t *record) {
   retained_record_stack_overflow(pc, lr, record != nullptr ? record->xpsr : 0u);
   __asm volatile("dsb" ::: "memory");
   fault_console_best_effort();
-  SCB_AIRCR = (SCB_AIRCR & 0x700u) | SCB_AIRCR_VECTKEY | SCB_AIRCR_SYSRESETREQ;
-  __asm volatile("dsb" ::: "memory");
-  for (;;) {
-    __asm volatile("nop");
-  }
+  jh_stm32g474_system_reset();
 }
 
 extern "C" __attribute__((naked, used, no_stack_protector, noreturn)) void

@@ -200,6 +200,64 @@ void test_uart_ring_buffer_overflow_drops_excess(void) {
   TEST_ASSERT_EQUAL_UINT32(0u, counters.rx_overrun);
 }
 
+/* ── bulk read, non-blocking write ──────────────────────────────────────── */
+
+void test_uart_read_bytes_takes_what_is_there(void) {
+  const uint8_t payload[] = {1u, 2u, 3u};
+  hal_mock_uart_push(s_uart, payload, (int)sizeof(payload));
+  uint8_t buffer[8] = {};
+  size_t got = 99u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_uart_read_bytes_ex(s_uart, buffer, 2u, &got));
+  TEST_ASSERT_EQUAL_UINT32(2u, got);
+  TEST_ASSERT_EQUAL_UINT8(1u, buffer[0]);
+  TEST_ASSERT_EQUAL_UINT8(2u, buffer[1]);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_uart_read_bytes_ex(s_uart, buffer, 8u, &got));
+  TEST_ASSERT_EQUAL_UINT32(1u, got);
+  TEST_ASSERT_EQUAL_UINT8(3u, buffer[0]);
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN,
+                        hal_uart_read_bytes_ex(s_uart, buffer, 8u, &got));
+  TEST_ASSERT_EQUAL_UINT32(0u, got);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_uart_read_bytes_ex(s_uart, NULL, 0u, &got));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_uart_read_bytes_ex(s_uart, NULL, 1u, &got));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_uart_read_bytes_ex(NULL, buffer, 1u, &got));
+}
+
+void test_uart_try_write_fills_the_modelled_queue(void) {
+  static uint8_t data[HAL_UART_TX_BUFFER_SIZE + 1u];
+  memset(data, 'x', sizeof(data));
+  size_t free_bytes = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_uart_tx_free_ex(s_uart, &free_bytes));
+  TEST_ASSERT_EQUAL_UINT32(HAL_UART_TX_BUFFER_SIZE, free_bytes);
+
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW,
+                        hal_uart_try_write_ex(s_uart, data, sizeof(data)));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK,
+      hal_uart_try_write_ex(s_uart, data, HAL_UART_TX_BUFFER_SIZE - 3u));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EAGAIN, hal_uart_try_write_ex(s_uart, (const uint8_t *)"abcd", 4u));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_uart_try_write_ex(s_uart, (const uint8_t *)"abc", 3u));
+  TEST_ASSERT_EQUAL_STRING("abc", hal_mock_uart_last_write(s_uart));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_uart_tx_free_ex(s_uart, &free_bytes));
+  TEST_ASSERT_EQUAL_UINT32(0u, free_bytes);
+
+  hal_mock_uart_drain_tx(s_uart, 4u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_uart_tx_free_ex(s_uart, &free_bytes));
+  TEST_ASSERT_EQUAL_UINT32(4u, free_bytes);
+  hal_mock_uart_drain_tx(s_uart, 100000u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_uart_tx_free_ex(s_uart, &free_bytes));
+  TEST_ASSERT_EQUAL_UINT32(HAL_UART_TX_BUFFER_SIZE, free_bytes);
+
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_uart_try_write_ex(s_uart, NULL, 1u));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_uart_tx_free_ex(s_uart, NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_uart_tx_free_ex(NULL, &free_bytes));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_uart_reads_injected_bytes);
@@ -218,5 +276,7 @@ int main(void) {
   RUN_TEST(test_uart_flush_does_not_crash);
   RUN_TEST(test_uart_create_destroy_recycles_slot);
   RUN_TEST(test_uart_ring_buffer_overflow_drops_excess);
+  RUN_TEST(test_uart_read_bytes_takes_what_is_there);
+  RUN_TEST(test_uart_try_write_fills_the_modelled_queue);
   return UNITY_END();
 }

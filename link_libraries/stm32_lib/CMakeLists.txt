@@ -205,14 +205,12 @@ if(_jh_stm32_has_littlefs)
         list(APPEND _jh_extra_hal_defines HAL_STM32_FLASH_LITTLEFS_SIZE=65536u)
         set(_jh_stm32_littlefs_link_size "65536")
     else()
-        foreach(_def IN LISTS _jh_extra_hal_defines)
-            if("${_def}" MATCHES "^HAL_STM32_FLASH_LITTLEFS_SIZE=(.+)$")
-                set(_jh_stm32_littlefs_link_size "${CMAKE_MATCH_1}")
-                string(REGEX REPLACE "[uUlL]+$" "" _jh_stm32_littlefs_link_size "${_jh_stm32_littlefs_link_size}")
-            endif()
-        endforeach()
+        jh_cmake_define_link_value(_jh_stm32_littlefs_link_size
+            HAL_STM32_FLASH_LITTLEFS_SIZE ${_jh_extra_hal_defines})
     endif()
 endif()
+jh_cmake_define_link_value(_jh_stm32_eeprom_link_size
+    HAL_STM32_FLASH_EEPROM_SIZE ${_jh_extra_hal_defines})
 
 # Default STM32G474 profile for the initial skeleton backend.
 #
@@ -286,6 +284,11 @@ endif()
 if(NOT "${_jh_stm32_littlefs_link_size}" STREQUAL "")
     target_link_options(JaszczurHAL PUBLIC
         "-Wl,--defsym=HAL_STM32_FLASH_LITTLEFS_SIZE=${_jh_stm32_littlefs_link_size}"
+    )
+endif()
+if(NOT "${_jh_stm32_eeprom_link_size}" STREQUAL "")
+    target_link_options(JaszczurHAL PUBLIC
+        "-Wl,--defsym=HAL_STM32_FLASH_EEPROM_SIZE=${_jh_stm32_eeprom_link_size}"
     )
 endif()
 

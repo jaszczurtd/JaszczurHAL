@@ -31,6 +31,8 @@
 #define JH_REG32_RD(addr) jh_stm32g474_host_read32((uintptr_t)(addr))
 #define JH_REG32_WR(addr, value)                                               \
   jh_stm32g474_host_write32((uintptr_t)(addr), (value))
+/* Memory ordering before a DMA reads what the CPU wrote. */
+#define JH_STM32G474_DMB() __asm volatile("" ::: "memory")
 #else
 /* Fixed MMIO addresses have no source-pointer provenance to preserve.
  * uintptr_t also keeps dynamic addresses intact in 64-bit host builds. */
@@ -42,6 +44,7 @@
 #define JH_REG32_WR(addr, value)                                               \
   (*(volatile uint32_t *)(uintptr_t)(addr) = (value))
 /* NOLINTEND(performance-no-int-to-ptr) */
+#define JH_STM32G474_DMB() __asm volatile("dmb" ::: "memory")
 #endif
 
 /* ── RCC (Reset & Clock Control) ─────────────────────────────────────────── */
@@ -335,7 +338,8 @@
 #define DMA_ISR(base) JH_REG32((base) + 0x00u)
 #define DMA_IFCR(base) JH_REG32((base) + 0x04u)
 #define DMA_CCR(base, ch) JH_REG32((base) + 0x08u + ((uint32_t)(ch) * 0x14u))
-#define DMA_CNDTR(base, ch) JH_REG32((base) + 0x0Cu + ((uint32_t)(ch) * 0x14u))
+#define DMA_CNDTR_ADDR(base, ch) ((base) + 0x0Cu + ((uint32_t)(ch) * 0x14u))
+#define DMA_CNDTR(base, ch) JH_REG32(DMA_CNDTR_ADDR(base, ch))
 #define DMA_CPAR(base, ch) JH_REG32((base) + 0x10u + ((uint32_t)(ch) * 0x14u))
 #define DMA_CMAR(base, ch) JH_REG32((base) + 0x14u + ((uint32_t)(ch) * 0x14u))
 #define DMAMUX_CCR(ch) JH_REG32(DMAMUX1_BASE + ((uint32_t)(ch) * 4u))
@@ -365,6 +369,10 @@
 
 /* Values from ST stm32g4xx_hal_dma.h for STM32G4 DMAMUX1 requests. */
 #define DMA_REQUEST_ADC1 5u
+#define DMA_REQUEST_USART1_RX 24u
+#define DMA_REQUEST_USART1_TX 25u
+#define DMA_REQUEST_USART2_RX 26u
+#define DMA_REQUEST_USART2_TX 27u
 #define DMA_REQUEST_SPI1_TX 11u
 #define DMA_REQUEST_SPI2_TX 13u
 #define DMA_REQUEST_TIM2_UP 60u
@@ -743,14 +751,29 @@
  * Used by the hal_uart backend for USART1 (PORT_1) and USART2 (PORT_2). The
  * debug console keeps its own dedicated USART2_* accessors below. */
 #define USART_CR1(base) JH_REG32((base) + 0x00u)
+#define USART_CR2(base) JH_REG32((base) + 0x04u)
+#define USART_CR3(base) JH_REG32((base) + 0x08u)
 #define USART_BRR(base) JH_REG32((base) + 0x0Cu)
 #define USART_ISR(base) JH_REG32((base) + 0x1Cu)
+/* Kernel clock prescaler: 0..11 divide by 1, 2, 4, 6, 8, 10, 12, 16, 32, 64,
+ * 128, 256. */
+#define USART_PRESC(base) JH_REG32((base) + 0x2Cu)
 #define USART_ICR(base) JH_REG32((base) + 0x20u)
 #define USART_RDR(base) JH_REG32((base) + 0x24u)
 #define USART_TDR(base) JH_REG32((base) + 0x28u)
 
 #define USART_CR1_RE_BIT (1u << 2)
 #define USART_CR1_TE_BIT (1u << 3)
+#define USART_CR1_PEIE (1u << 8) /* parity error interrupt */
+#define USART_CR1_PS (1u << 9)   /* odd parity */
+#define USART_CR1_PCE (1u << 10) /* parity control */
+#define USART_CR1_M0 (1u << 12)  /* M1:M0 = 01 -> 9-bit word */
+#define USART_CR1_M1 (1u << 28)  /* M1:M0 = 10 -> 7-bit word */
+#define USART_CR2_STOP_2 (2u << 12)
+#define USART_CR3_EIE (1u << 0) /* FE/NE/ORE interrupt when DMAR is set */
+#define USART_CR3_DMAR (1u << 6)
+#define USART_CR3_DMAT (1u << 7)
+#define USART_ICR_ALL_ERRORS_F (0x0Fu | (1u << 8))
 #define USART_ISR_PE_F (1u << 0)
 #define USART_ISR_FE_F (1u << 1)
 #define USART_ISR_NE_F (1u << 2)
@@ -855,9 +878,12 @@
 #define TAMP_BKPR(index) JH_REG32(TAMP_BASE + 0x100u + ((uint32_t)(index) * 4u))
 
 /* ── NVIC (Cortex-M interrupt controller) ───────────────────────────────── */
-#define NVIC_ISER(n) JH_REG32(0xE000E100u + ((uint32_t)(n) * 4u))
-#define NVIC_ICER(n) JH_REG32(0xE000E180u + ((uint32_t)(n) * 4u))
-#define NVIC_ICPR(n) JH_REG32(0xE000E280u + ((uint32_t)(n) * 4u))
+#define NVIC_ISER_ADDR(n) (0xE000E100u + ((uint32_t)(n) * 4u))
+#define NVIC_ICER_ADDR(n) (0xE000E180u + ((uint32_t)(n) * 4u))
+#define NVIC_ICPR_ADDR(n) (0xE000E280u + ((uint32_t)(n) * 4u))
+#define NVIC_ISER(n) JH_REG32(NVIC_ISER_ADDR(n))
+#define NVIC_ICER(n) JH_REG32(NVIC_ICER_ADDR(n))
+#define NVIC_ICPR(n) JH_REG32(NVIC_ICPR_ADDR(n))
 #define NVIC_IPR8(irqn) JH_REG8(0xE000E400u + (uint32_t)(irqn))
 
 #define TIM6_DACUNDER_IRQn 54u
@@ -867,6 +893,12 @@
 #define DMA1_Channel3_IRQn 13u
 #define DMA1_Channel7_IRQn 17u
 #define DMA1_Channel8_IRQn 96u
+#define USART1_IRQn 37u
+#define USART2_IRQn 38u
+#define DMA2_Channel1_IRQn 56u
+#define DMA2_Channel2_IRQn 57u
+#define DMA2_Channel3_IRQn 58u
+#define DMA2_Channel4_IRQn 59u
 #define I2C1_EV_IRQn 31u
 #define I2C1_ER_IRQn 32u
 #define I2C2_EV_IRQn 33u

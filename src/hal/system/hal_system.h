@@ -622,6 +622,64 @@ hal_status_t hal_get_device_uid_hex_ex(char *buf, size_t buflen);
  */
 bool hal_get_device_uid_hex(char *buf, size_t buflen);
 
+/** @brief Longest serial number any target reports (STM32: 96 bits). */
+#define HAL_DEVICE_SERIAL_MAX_BYTES 12u
+
+/** @brief Buffer size, NUL included, for the hex form of any serial number. */
+#define HAL_DEVICE_SERIAL_HEX_BUF_SIZE ((HAL_DEVICE_SERIAL_MAX_BYTES * 2u) + 1u)
+
+/**
+ * @brief Read the device serial number: the chip's unique identifier in full.
+ *
+ * hal_get_device_uid() folds every target into 8 bytes; this returns the
+ * native identifier unchanged, so it matches what the vendor's tools show:
+ * - STM32G474: the 96-bit factory UID, 12 bytes: the words at UID_BASE,
+ *   UID_BASE + 4 and UID_BASE + 8 in that order, each most significant byte
+ *   first (the hex form reads as `%08lX%08lX%08lX` of the three words);
+ * - RP2040/RP2350: the 64-bit unique id of the flash chip, 8 bytes, the same
+ *   as hal_get_device_uid();
+ * - ESP32-S3: the 48-bit factory MAC, 6 bytes;
+ * - mock: 8 bytes, set with hal_mock_set_device_serial().
+ *
+ * @param out Destination; must not be NULL.
+ * @param out_size Capacity of @p out; HAL_DEVICE_SERIAL_MAX_BYTES always
+ *                 suffices.
+ * @param out_len Receives the length of the serial number in bytes, also
+ *                when @p out_size is too small; must not be NULL.
+ * @return HAL_OK; HAL_EINVAL for a NULL pointer; HAL_EOVERFLOW when
+ *         @p out_size is shorter than the serial number (nothing written);
+ *         or the backend's read error.
+ */
+hal_status_t hal_get_device_serial_ex(uint8_t *out, size_t out_size,
+                                      size_t *out_len);
+
+/**
+ * @brief Write the serial number as uppercase hex, two digits per byte in the
+ *        order of hal_get_device_serial_ex().
+ *
+ * @param buf Destination; must not be NULL.
+ * @param buflen Capacity of @p buf including the NUL;
+ *               HAL_DEVICE_SERIAL_HEX_BUF_SIZE always suffices.
+ * @return HAL_OK; HAL_EINVAL for a NULL buffer; HAL_EOVERFLOW when @p buflen
+ *         is shorter than twice the serial length plus one (nothing
+ *         written); or the backend's read error.
+ */
+hal_status_t hal_get_device_serial_hex_ex(char *buf, size_t buflen);
+
+/**
+ * @brief Restart the MCU now (software reset).
+ *
+ * Flush pending output and put outputs into a safe state first. The next boot
+ * reports HAL_RESET_REASON_SOFT. RP2040/RP2350 reboot through the watchdog
+ * timer without arming the watchdog, ESP32-S3 calls esp_restart() and
+ * STM32G474 requests SYSRESETREQ.
+ *
+ * @note Does not return on real hardware. The mock records the request
+ *       (hal_mock_system_reset_was_requested()) and returns HAL_OK.
+ * @return HAL_OK from the mock only.
+ */
+hal_status_t hal_system_reset(void);
+
 /**
  * @def NONULL(x)
  * @brief Guard-pointer helper that jumps to a local `error:` label when `x` is

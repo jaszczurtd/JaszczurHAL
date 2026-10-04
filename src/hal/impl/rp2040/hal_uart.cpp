@@ -529,12 +529,12 @@ int hal_uart_available(hal_uart_t h) {
   return available;
 }
 
-hal_status_t hal_uart_read_ex(hal_uart_t h, uint8_t *out_value) {
-  if (!out_value) {
-    return HAL_EINVAL;
+hal_status_t hal_uart_read_bytes_ex(hal_uart_t h, uint8_t *out, size_t size,
+                                    size_t *out_read) {
+  if (out_read) {
+    *out_read = 0u;
   }
-  *out_value = 0u;
-  if (!h || !h->uart || !h->mutex) {
+  if (!h || !h->uart || !h->mutex || (!out && size > 0u)) {
     return HAL_EINVAL;
   }
   if (!h->running) {
@@ -543,16 +543,25 @@ hal_status_t hal_uart_read_ex(hal_uart_t h, uint8_t *out_value) {
   uart_lock(h);
   uart_rx_lock(h);
   uart_drain_rx_locked(h);
-  if (uart_ring_available(h) == 0) {
-    uart_rx_unlock(h);
-    uart_unlock(h);
-    return HAL_EAGAIN;
+  size_t count = 0u;
+  while (count < size && uart_ring_available(h) > 0) {
+    out[count++] = h->rx_buf[h->head];
+    h->head = (h->head + 1) % HAL_RP_UART_BUF_SIZE;
   }
-  *out_value = h->rx_buf[h->head];
-  h->head = (h->head + 1) % HAL_RP_UART_BUF_SIZE;
   uart_rx_unlock(h);
   uart_unlock(h);
-  return HAL_OK;
+  if (out_read) {
+    *out_read = count;
+  }
+  return count > 0u || size == 0u ? HAL_OK : HAL_EAGAIN;
+}
+
+hal_status_t hal_uart_read_ex(hal_uart_t h, uint8_t *out_value) {
+  if (!out_value) {
+    return HAL_EINVAL;
+  }
+  *out_value = 0u;
+  return hal_uart_read_bytes_ex(h, out_value, 1u, nullptr);
 }
 
 int hal_uart_read(hal_uart_t h) {
@@ -590,6 +599,23 @@ size_t hal_uart_write(hal_uart_t h, const uint8_t *data, size_t len) {
   size_t written = 0u;
   (void)hal_uart_write_ex(h, data, len, &written);
   return written;
+}
+
+/* Writes go straight to the 32-byte hardware FIFO; there is no queue. */
+hal_status_t hal_uart_try_write_ex(hal_uart_t h, const uint8_t *data,
+                                   size_t len) {
+  if (!h || !h->uart || !h->mutex || (len > 0u && !data)) {
+    return HAL_EINVAL;
+  }
+  return HAL_EUNSUPPORTED;
+}
+
+hal_status_t hal_uart_tx_free_ex(hal_uart_t h, size_t *out_free) {
+  if (!out_free) {
+    return HAL_EINVAL;
+  }
+  *out_free = 0u;
+  return h && h->uart && h->mutex ? HAL_EUNSUPPORTED : HAL_EINVAL;
 }
 
 hal_status_t hal_uart_println_ex(hal_uart_t h, const char *s,

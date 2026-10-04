@@ -110,6 +110,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/core/hal_text.cpp
     ${SRC}/hal/core/jh_endian.cpp
     ${SRC}/hal/system/hal_board.cpp
+    ${SRC}/hal/system/hal_device_id.cpp
     ${SRC}/hal/system/hal_periodic_random.cpp
     ${SRC}/hal/bluetooth/hal_ble.cpp
     ${SRC}/hal/bluetooth/hal_ble_commands.cpp

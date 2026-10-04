@@ -326,6 +326,16 @@ void hal_mock_set_chip_temp(float celsius);
 bool hal_mock_bootloader_was_requested(void);
 /** @brief Clear the mock bootloader request flag. */
 void hal_mock_bootloader_reset_flag(void);
+/**
+ * @brief Set the serial number hal_get_device_serial_ex() returns.
+ * @param serial Bytes in reporting order; ignored when NULL.
+ * @param len 1..HAL_DEVICE_SERIAL_MAX_BYTES; other lengths are ignored.
+ */
+void hal_mock_set_device_serial(const uint8_t *serial, size_t len);
+/** @brief Return true once hal_system_reset() has been called. */
+bool hal_mock_system_reset_was_requested(void);
+/** @brief Clear the flag hal_system_reset() sets. */
+void hal_mock_system_reset_clear(void);
 /** @brief Override the 8-byte UID returned by hal_get_device_uid(). */
 void hal_mock_set_device_uid(const uint8_t uid[8]);
 /** @brief Restore the default deterministic mock UID. */
@@ -467,6 +477,13 @@ void hal_mock_uart_push(hal_uart_t h, const uint8_t *data, int len);
 void hal_mock_uart_reset(hal_uart_t h);
 /** @brief Return the last string written via hal_uart_write/println. */
 const char *hal_mock_uart_last_write(hal_uart_t h);
+/**
+ * @brief Let @p bytes of the modelled transmit queue leave.
+ *
+ * hal_uart_try_write_ex() fills the queue (HAL_UART_TX_BUFFER_SIZE bytes)
+ * and nothing empties it but this call, so tests decide when it is full.
+ */
+void hal_mock_uart_drain_tx(hal_uart_t h, size_t bytes);
 /** @brief Return the current RX pin stored in the handle. */
 uint8_t hal_mock_uart_get_rx_pin(hal_uart_t h);
 /** @brief Return the current TX pin stored in the handle. */

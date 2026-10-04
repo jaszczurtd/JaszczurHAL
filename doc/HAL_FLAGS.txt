@@ -71,3 +71,9 @@ handle. HAL_CAN_RX_QUEUE_LEN (default 16), HAL_CAN_TX_QUEUE_LEN (8) and
 HAL_CAN_EVENT_QUEUE_LEN (16) size them; HAL_CAN_MAX_INSTANCES follows the
 board's CAN channels. HAL_CAN_STM32G474_TIMESTAMP_TIM3 takes TIM3 for
 start-of-frame timestamps. Ranges and behaviour: doc/api/en/10_can_display.md.
+
+HAL_ENABLE_UART on STM32G474 receives into a DMA ring of
+HAL_UART_RX_BUFFER_SIZE bytes (default 512) and sends from a DMA queue of
+HAL_UART_TX_BUFFER_SIZE bytes (512); both must be powers of two of at least
+64. While hal_uart PORT_2 runs it owns USART2 and the debug console is
+silent. Ranges and behaviour: doc/api/en/09_buses.md and doc/api/pl/09_buses.md.

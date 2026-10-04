@@ -60,8 +60,11 @@ __hal_stm32_eeprom_flash_end   = 0x08080000
 reserved pages. Application code is linked only into `FLASH`, so the EEPROM
 pages are not available for normal `.text` / `.rodata`.
 
-If `HAL_STM32_FLASH_EEPROM_SIZE` or `HAL_STM32_FLASH_LITTLEFS_SIZE` is changed,
-keep the C compile definition and linker value in sync. EEPROM/KV storage must
+Set `HAL_STM32_FLASH_EEPROM_SIZE` and `HAL_STM32_FLASH_LITTLEFS_SIZE` as build
+defines; the build passes them to the linker with `--defsym`. `hal_eeprom`
+records the EEPROM size it was compiled with, and the linker stops when it
+differs from the reservation (for example, a size set only in
+`hal_project_config.h`). EEPROM/KV storage must
 contain at least two pages. LittleFS size may be zero, or at least two pages. Both sizes
 must be multiples of `HAL_STM32_FLASH_PAGE_SIZE`; the linker asserts these
 constraints.

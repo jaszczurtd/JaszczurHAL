@@ -352,6 +352,19 @@ void test_stm32_architecture_reports_generated_target_metadata(void) {
                         architecture.network_stack_type);
 }
 
+void test_stm32_serial_is_the_three_uid_words_msb_first(void) {
+  uint8_t serial[HAL_DEVICE_SERIAL_MAX_BYTES] = {};
+  size_t length = 0u;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_get_device_serial_ex(serial, sizeof(serial), &length));
+  TEST_ASSERT_EQUAL_UINT32(12u, (uint32_t)length);
+  // Host builds read the placeholder words 0x47340000 + n in place of UID_BASE.
+  char hex[HAL_DEVICE_SERIAL_HEX_BUF_SIZE] = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_get_device_serial_hex_ex(hex, sizeof(hex)));
+  TEST_ASSERT_EQUAL_STRING("473400004734000147340002", hex);
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, hal_system_reset());
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_stm32_reset_reason_soft_reset_maps_to_soft);
@@ -381,5 +394,6 @@ int main(void) {
   RUN_TEST(test_stm32_micros64_remains_monotonic_across_micros32_wrap);
   RUN_TEST(test_stm32_hardware_time_composition_crosses_micros32_wrap);
   RUN_TEST(test_stm32_architecture_reports_generated_target_metadata);
+  RUN_TEST(test_stm32_serial_is_the_three_uid_words_msb_first);
   return UNITY_END();
 }

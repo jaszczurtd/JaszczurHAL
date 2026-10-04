@@ -710,6 +710,8 @@ typedef enum {
 typedef hal_uart_impl_t *hal_uart_t;
 
 typedef struct {
+    // Receiver overruns; on STM32G474 also late receive DMA interrupts after
+    // which bytes may be missing uncounted (see below).
     uint32_t rx_overrun;
     // Framing errors; STM32 noise errors are counted here too.
     uint32_t rx_framing;
@@ -731,12 +733,30 @@ hal_status_t hal_uart_flush(hal_uart_t h);   // block until TX complete
 bool hal_uart_get_error_counters(hal_uart_t h,
                                  hal_uart_error_counters_t *counters);
 void hal_uart_destroy(hal_uart_t h);
+
+// Status-first bulk and non-blocking I/O.
+hal_status_t hal_uart_read_bytes_ex(hal_uart_t h, uint8_t *out, size_t size,
+                                    size_t *out_read);
+hal_status_t hal_uart_try_write_ex(hal_uart_t h, const uint8_t *data,
+                                   size_t len);
+hal_status_t hal_uart_tx_free_ex(hal_uart_t h, size_t *out_free);
 ```
 
 `hal_uart_begin()` and `hal_uart_flush()` are status-first (they replaced the
 former `void` + `_ex` pair). The `bool`/value operations (`set_rx`, `set_tx`,
 `read`, `write`, `println`, `get_error_counters`) keep their compatibility
 signatures and each has an adjacent `_ex` status variant.
+
+- `hal_uart_read_bytes_ex()` copies up to `size` received bytes without
+  waiting: `HAL_OK` with the count, `HAL_EAGAIN` when nothing is waiting.
+- `hal_uart_try_write_ex()` queues all `len` bytes or none and never waits:
+  `HAL_EAGAIN` when the transmit queue lacks room, `HAL_EOVERFLOW` when `len`
+  exceeds the whole queue. `hal_uart_tx_free_ex()` reports the room. Both are
+  for loops that must not block (bridges, protocol pumps); STM32G474 and the
+  mock implement them, RP2040 and ESP32-S3 return `HAL_EUNSUPPORTED`.
+- `hal_uart_write_ex()` blocks until every byte is queued; on STM32G474 it
+  gives up with `HAL_ETIMEOUT` (count in `out_written`) when the queue makes
+  no progress for twice its drain time plus 100 ms.
 
 - **impl/rp2040:** RP2040 SDK UART (`uart0` / `uart1`) with interrupt-driven RX.
   `hal_uart_begin()` installs and enables `UARTx_IRQ` in the calling core's NVIC,
@@ -748,9 +768,52 @@ signatures and each has an adjacent `_ex` status variant.
   affinity requirement. In FreeRTOS/SMP builds, perform UART lifecycle operations
   from a task pinned to the intended core and do not migrate that task while the
   UART is active.
-- **impl/stm32g474:** register-level USART1/USART2 using their respective
-  PCLK2/PCLK1 sources (both SYSCLK) and a polled RX drain; counts ORE, PE, FE, NE, and
-  explicit LIN-break flags when reported by USART_ISR.
+- **impl/stm32g474:** register-level USART1 (`PORT_1`, PCLK2) and USART2
+  (`PORT_2`, PCLK1), both clocked from SYSCLK with 16x oversampling: rates
+  from about 10 baud (through the USART prescaler) up to SYSCLK/16, divider
+  rounded to the nearest step (3 Mbaud is within 0.6 % at 160 and 170 MHz).
+  Other rates return `HAL_EUNSUPPORTED`.
+  - Pins (AF7, pin id = port * 16 + number): `PORT_1` RX PA10, PB7, PC5, PE1;
+    TX PA9, PB6, PC4, PE0, PG9. `PORT_2` RX PA3, PA15, PB4, PD6; TX PA2,
+    PA14, PB3, PD5. Pass 255 for a direction that is not connected (TX-only or
+    RX-only port); other pins are refused at create.
+  - Reception runs on a circular DMA ring (DMA2 channel 1 / 3) of
+    `HAL_UART_RX_BUFFER_SIZE` bytes with no CPU work per byte; reads take what
+    the DMA wrote. When the reader falls more than a ring behind (minus 16
+    bytes of margin), the older half is dropped and counted in
+    `rx_buffer_overflow`; the newest half stays readable.
+  - The half and full ring interrupts count the laps of the DMA. Held off
+    (interrupts masked) for up to one and a half rings of line time (768
+    bytes, 2.6 ms at 3 Mbaud with the default size), nothing is miscounted.
+    Held off longer, whole rings may go by unseen: the reader still gets the
+    newest bytes, but cannot count what was lost, so `rx_overrun` counts the
+    event. The cycle counter bounds the bytes that could have arrived (after
+    more than about 12 s without a read or a receive interrupt, the
+    millisecond clock does, since the counter wraps), so a long mask raises
+    the event even when little data came. Size the ring
+    for the longest interrupt mask on the receive path, such as a flash
+    erase in the same bank.
+  - Transmission runs on DMA (DMA2 channel 2 / 4) from a queue of
+    `HAL_UART_TX_BUFFER_SIZE` bytes; writes return once the bytes are queued.
+    `hal_uart_flush()` waits for the last stop bit.
+  - Frames of 7, 8 or 9 bits including parity: 7N, 8N, 6E/6O, 7E/7O, 8E/8O,
+    with one or two stop bits. Other formats return `HAL_EUNSUPPORTED`. With
+    parity, received bytes are masked to the data bits.
+  - The USART interrupt counts ORE, FE, NE (as framing) and PE; a DMA bus
+    error on reception counts as `rx_overrun`.
+  - `PORT_2` is also the debug console (ST-LINK virtual COM port on the
+    Nucleo). `hal_uart_begin()` takes USART2 over: `printf`, HAL logs,
+    assertion text and the fault message write nothing while the handle is
+    active (the fault record itself survives the reset).
+    `hal_uart_destroy()` gives USART2 back and the console resumes at 115200.
+  - Reading and writing lock separately per handle: a blocking write that
+    waits for room does not hold up reads, and `hal_uart_try_write_ex()`
+    returns `HAL_EAGAIN` while another writer holds the queue. A read
+    preempted long enough for the DMA to come round onto the bytes it was
+    copying drops them and counts them in `rx_buffer_overflow`.
+  - A repeated `hal_uart_begin()` lets queued bytes leave at the old rate
+    first; when they cannot leave within the drain time it returns
+    `HAL_ETIMEOUT` and the port runs on unchanged.
 - **impl/esp32:** HAL ports 1/2 map to ESP-IDF UART1/UART2; UART0 remains reserved
   from this HAL surface. Each active handle owns a 512-byte IDF RX buffer and a
   32-entry event queue used to accumulate overrun, buffer-overflow, break,
@@ -765,7 +828,8 @@ signatures and each has an adjacent `_ex` status variant.
 **Thread safety:** Portable callers should still serialize lifecycle and shared
 handle use. ESP32-S3 serializes runtime I/O per instance, but that lock does not
 replace its same-core lifecycle rule. RP2040 remains caller-serialized and its
-same-core lifecycle rule also applies.
+same-core lifecycle rule also applies. STM32G474 locks reading and writing
+separately per handle.
 
 **Mock helpers:**
 ```c
@@ -779,6 +843,9 @@ typedef void (*hal_mock_uart_write_cb_t)(hal_uart_t h, const char *text, void *u
 void        hal_mock_uart_set_write_callback(hal_uart_t h,
                                              hal_mock_uart_write_cb_t cb,
                                              void *user);
+// hal_uart_try_write_ex() fills a modelled HAL_UART_TX_BUFFER_SIZE queue that
+// only this call empties.
+void        hal_mock_uart_drain_tx(hal_uart_t h, size_t bytes);
 ```
 
 ---

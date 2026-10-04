@@ -17,6 +17,17 @@ extern const uint8_t __hal_stm32_eeprom_flash_start[];
 extern const uint8_t __hal_stm32_eeprom_flash_end[];
 }
 
+#ifdef JH_STM32G474_HW
+/* The linker script compares this with the region it reserved, so a size the
+ * compiler sees but the linker does not (set only in hal_project_config.h)
+ * fails the link instead of leaving storage at the linker's 4 KB. */
+extern "C" void jh_stm32_eeprom_size_marker(void) {
+  __asm volatile(".globl __hal_stm32_eeprom_c_size\n"
+                 ".set __hal_stm32_eeprom_c_size, %c0\n" ::"i"(
+                     HAL_STM32_FLASH_EEPROM_SIZE));
+}
+#endif
+
 namespace {
 
 uint8_t s_mirror[HAL_STM32_FLASH_EEPROM_SIZE] = {};

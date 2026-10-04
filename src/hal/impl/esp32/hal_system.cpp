@@ -350,30 +350,23 @@ hal_status_t hal_get_device_uid(uint8_t uid[HAL_DEVICE_UID_BYTES]) {
   return HAL_OK;
 }
 
-hal_status_t hal_get_device_uid_hex_ex(char *buf, size_t buflen) {
-  if (buf == nullptr) {
+hal_status_t hal_get_device_serial_ex(uint8_t *out, size_t out_size,
+                                      size_t *out_len) {
+  constexpr size_t kMacBytes = 6u;
+  if (out == nullptr || out_len == nullptr) {
     return HAL_EINVAL;
   }
-  if (buflen < HAL_DEVICE_UID_HEX_BUF_SIZE) {
+  *out_len = kMacBytes;
+  if (out_size < kMacBytes) {
     return HAL_EOVERFLOW;
   }
-
-  uint8_t uid[HAL_DEVICE_UID_BYTES] = {};
-  const hal_status_t status = hal_get_device_uid(uid);
-  if (status != HAL_OK) {
-    return status;
-  }
-  static const char kHex[] = "0123456789ABCDEF";
-  for (size_t index = 0u; index < HAL_DEVICE_UID_BYTES; ++index) {
-    buf[index * 2u] = kHex[(uid[index] >> 4u) & 0x0Fu];
-    buf[index * 2u + 1u] = kHex[uid[index] & 0x0Fu];
-  }
-  buf[HAL_DEVICE_UID_BYTES * 2u] = '\0';
-  return HAL_OK;
+  const esp_err_t result = esp_efuse_mac_get_default(out);
+  return result == ESP_OK ? HAL_OK : jh_esp32_status_from_esp_err(result);
 }
 
-bool hal_get_device_uid_hex(char *buf, size_t buflen) {
-  return hal_status_to_bool(hal_get_device_uid_hex_ex(buf, buflen));
+hal_status_t hal_system_reset(void) {
+  esp_restart();
+  return HAL_OK;
 }
 
 void hal_fault_subsystem_init(void) { jh_esp32_fault_init(); }

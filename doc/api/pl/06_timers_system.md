@@ -409,6 +409,17 @@ hal_status_t hal_get_device_uid(uint8_t uid[HAL_DEVICE_UID_BYTES]);
 hal_status_t hal_get_device_uid_hex_ex(char *buf, size_t buflen);
 bool hal_get_device_uid_hex(char *buf, size_t buflen);
 
+// Device serial number: the chip's unique identifier in full (STM32: 96 bits).
+#define HAL_DEVICE_SERIAL_MAX_BYTES    12u
+#define HAL_DEVICE_SERIAL_HEX_BUF_SIZE 25u  // 24 hex chars + NUL
+
+hal_status_t hal_get_device_serial_ex(uint8_t *out, size_t out_size,
+                                      size_t *out_len);
+hal_status_t hal_get_device_serial_hex_ex(char *buf, size_t buflen);
+
+// Software reset; does not return on hardware.
+hal_status_t hal_system_reset(void);
+
 // Crash / fault diagnostics (full reference in the "Crash / fault diagnostics"
 // block below).
 void               hal_fault_subsystem_init(void);
@@ -759,6 +770,9 @@ bool hal_mock_bootloader_was_requested(void);
 void hal_mock_bootloader_reset_flag(void);
 void hal_mock_set_device_uid(const uint8_t uid[8]);  // override UID
 void hal_mock_reset_device_uid(void);                // restore default E661A4D1234567AB
+void hal_mock_set_device_serial(const uint8_t *serial, size_t len);  // 1..12 bytes
+bool hal_mock_system_reset_was_requested(void);      // set by hal_system_reset()
+void hal_mock_system_reset_clear(void);
 void hal_mock_set_in_isr(bool in_isr);               // forces hal_in_isr() return value for tests
 ```
 
@@ -779,10 +793,52 @@ void hal_mock_set_in_isr(bool in_isr);               // forces hal_in_isr() retu
 - Na ESP32-S3 źródłem jest fabryczny eFuse MAC. HAL rozszerza zerami
   48-bitową wartość do publicznej szerokości UID wynoszącej 8 bajtów, bez
   zapisu eFuse'ów.
+- Na STM32G474 96-bitowy fabryczny UID jest składany do 8 bajtów: słowa
+  little-endian `UID0 ^ UID2` i `UID1 ^ UID2`. Gdy identyfikator ma się
+  zgadzać z narzędziami ST, użyj numeru seryjnego opisanego niżej.
 - W backendzie mock wartość domyślna jest deterministyczna
   (`0xE6 0x61 0xA4 0xD1 0x23 0x45 0x67 0xAB` -> `"E661A4D1234567AB"`), dzięki
   czemu testy porównujące tekstowy UID mogą mieć zaszytą oczekiwaną wartość na
   stałe. Użyj `hal_mock_set_device_uid()`, aby zasymulować drugą płytkę.
+
+**Numer seryjny urządzenia:**
+
+UID opisany wyżej ma na każdym targecie tę samą szerokość 8 bajtów. Numer
+seryjny to własny identyfikator układu bez zmian, a jego długość zależy od
+targetu:
+
+| Target | Bajty | Źródło |
+| --- | --- | --- |
+| STM32G474 | 12 | fabryczny UID: słowa pod `UID_BASE`, `+4`, `+8`, każde od najstarszego bajtu |
+| RP2040 / RP2350 | 8 | unikalny id pamięci flash, te same bajty co `hal_get_device_uid()` |
+| ESP32-S3 | 6 | fabryczny eFuse MAC |
+| mock | domyślnie 8 | `hal_mock_set_device_serial()` |
+
+- `hal_get_device_serial_ex(out, out_size, out_len)` kopiuje bajty i podaje
+  ich liczbę w `out_len`, także przy `HAL_EOVERFLOW`, gdy `out_size` jest za
+  mały (nic nie zostaje skopiowane). `HAL_DEVICE_SERIAL_MAX_BYTES` zawsze
+  wystarcza.
+- `hal_get_device_serial_hex_ex(buf, buflen)` zapisuje dwie wielkie cyfry
+  szesnastkowe na bajt i NUL. Na STM32G474 tekst jest taki sam jak
+  `printf("%08lX%08lX%08lX", UID0, UID1, UID2)`.
+
+```c
+uint8_t serial[HAL_DEVICE_SERIAL_MAX_BYTES];
+size_t serial_len = 0u;
+char serial_hex[HAL_DEVICE_SERIAL_HEX_BUF_SIZE];
+if (hal_get_device_serial_ex(serial, sizeof(serial), &serial_len) == HAL_OK &&
+    hal_get_device_serial_hex_ex(serial_hex, sizeof(serial_hex)) == HAL_OK) {
+    hal_deb("serial (%u bytes): %s", (unsigned)serial_len, serial_hex);
+}
+```
+
+**Reset programowy:**
+
+`hal_system_reset()` od razu restartuje MCU: STM32G474 zgłasza
+`SYSRESETREQ`, RP2040/RP2350 restartują się przez timer watchdoga bez jego
+uzbrajania, ESP32-S3 wywołuje `esp_restart()`. Następny start zgłasza
+`HAL_RESET_REASON_SOFT`. Przed wywołaniem opróżnij wyjście i ustaw elementy
+wykonawcze w stan bezpieczny. Mock zapisuje żądanie i zwraca `HAL_OK`.
 
 **Diagnostyka awarii / usterek (crash / fault):**
 ```c
