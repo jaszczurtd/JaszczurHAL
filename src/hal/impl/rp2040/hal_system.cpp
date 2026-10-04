@@ -8,6 +8,7 @@
 #include "hal/system/hal_system_common.h"
 #include <hardware/clocks.h>
 #include <hardware/regs/addressmap.h>
+#include <hardware/watchdog.h>
 #include <pico/time.h>
 
 #if defined(HAL_ENABLE_FREERTOS) && defined(__FREERTOS)
@@ -197,19 +198,26 @@ hal_status_t hal_get_device_uid(uint8_t uid[HAL_DEVICE_UID_BYTES]) {
   return HAL_OK;
 }
 
-hal_status_t hal_get_device_uid_hex_ex(char *buf, size_t buflen) {
-  if (buf == nullptr) {
+hal_status_t hal_get_device_serial_ex(uint8_t *out, size_t out_size,
+                                      size_t *out_len) {
+  if (out == nullptr || out_len == nullptr) {
     return HAL_EINVAL;
   }
-  if (buflen < HAL_DEVICE_UID_HEX_BUF_SIZE) {
+  *out_len = HAL_DEVICE_UID_BYTES;
+  if (out_size < HAL_DEVICE_UID_BYTES) {
     return HAL_EOVERFLOW;
   }
-  return hal_status_from_bool(rp2040_system_get_device_uid_hex(buf, buflen),
-                              HAL_EIO);
+  rp2040_system_get_device_uid(out);
+  return HAL_OK;
 }
 
-bool hal_get_device_uid_hex(char *buf, size_t buflen) {
-  return hal_status_to_bool(hal_get_device_uid_hex_ex(buf, buflen));
+hal_status_t hal_system_reset(void) {
+  /* A watchdog-timer reboot without arming the watchdog reads back as a soft
+   * reset (rp2040_fault map_pico_reset_reason). */
+  watchdog_reboot(0u, 0u, 0u);
+  for (;;) {
+    rp2040_system_idle();
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -432,14 +432,16 @@ bool riscv_fault_accesses_stack_guard(const uint32_t *registers, uint32_t cause,
 // chip-reset register (VREG_AND_CHIP_RESET on RP2040, POWMAN on RP2350) into
 // hal_reset_reason_t. Precedence matches the upstream: a genuine watchdog
 // timeout wins, then a soft reset()/reboot() routed through the watchdog
-// timer, then the chip-reset bits.
+// (its timer, or the forced trigger watchdog_reboot() uses without a
+// delay), then the chip-reset bits.
 void map_pico_reset_reason(void) {
   if (watchdog_caused_reboot() && watchdog_enable_caused_reboot()) {
     g_reset_reason = HAL_RESET_REASON_WATCHDOG;
     return;
   }
 
-  if ((watchdog_hw->reason & WATCHDOG_REASON_TIMER_BITS) != 0u) {
+  if ((watchdog_hw->reason &
+       (WATCHDOG_REASON_TIMER_BITS | WATCHDOG_REASON_FORCE_BITS)) != 0u) {
     g_reset_reason = HAL_RESET_REASON_SOFT;
     return;
   }

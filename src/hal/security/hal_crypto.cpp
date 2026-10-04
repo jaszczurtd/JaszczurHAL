@@ -2,6 +2,7 @@
 
 #ifdef HAL_ENABLE_CRYPTO
 
+#include "hal/core/hal_text.h"
 #include "hal/core/jh_endian.h"
 
 #include <limits.h>
@@ -276,13 +277,8 @@ bool hal_md5_hex(const uint8_t *input, size_t input_len, char *output,
     return false;
   }
 
-  static const char kHex[] = "0123456789abcdef";
-  for (size_t i = 0u; i < HAL_MD5_DIGEST_BYTES; ++i) {
-    output[i * 2u] = kHex[digest[i] >> 4];
-    output[i * 2u + 1u] = kHex[digest[i] & 0x0Fu];
-  }
-  output[HAL_MD5_HEX_BUF_SIZE - 1u] = '\0';
-  return true;
+  return hal_text_format_hex_ex(digest, sizeof(digest), false, output,
+                                out_size) == HAL_OK;
 }
 
 size_t hal_base64_encoded_len(size_t input_len) {

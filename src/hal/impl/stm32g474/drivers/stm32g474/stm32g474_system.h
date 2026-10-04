@@ -98,15 +98,19 @@ float stm32g474_system_calc_chip_temp_celsius(uint16_t ts_raw,
 /** @brief Jump to the STM32 system bootloader. Stub: no-op. */
 void stm32g474_system_enter_bootloader(void);
 
-/** @brief Fill @p uid (exactly 8 bytes) with the device unique id.
- *  Safe no-op if @p uid is @c NULL. Real impl will read three 32-bit
- *  words from @c UID_BASE and fold them into 8 bytes; stub returns a
- *  fixed deterministic placeholder. */
+/** @brief Fill @p uid (exactly 8 bytes) with the device unique id: the
+ *  three 32-bit words at @c UID_BASE folded into 8 bytes (w0 ^ w2, w1 ^ w2,
+ *  little-endian). Safe no-op if @p uid is @c NULL; host sanity builds
+ *  return a fixed placeholder. */
 void stm32g474_system_get_device_uid(uint8_t *uid);
 
-/** @brief Format the device unique id as 16 uppercase hex characters
- *  plus a NUL terminator (17 bytes total). */
-bool stm32g474_system_get_device_uid_hex(char *buf, size_t buflen);
+/** @brief Length of the full factory UID in bytes. */
+#define STM32G474_SERIAL_BYTES 12u
+
+/** @brief Copy the full 96-bit factory UID: the words at @c UID_BASE,
+ *  +4 and +8 in that order, each most significant byte first. Host sanity
+ *  builds return a fixed placeholder. */
+void stm32g474_system_get_device_serial(uint8_t serial[STM32G474_SERIAL_BYTES]);
 
 #ifdef __cplusplus
 }

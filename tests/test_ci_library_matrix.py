@@ -91,16 +91,14 @@ if "needs: test" not in job("security-scan"):
     raise AssertionError("security CI must consume the SBOM verified by the test job")
 
 
-def require_tidy_stderr_capture(recipe: str, recipe_name: str) -> None:
+def tidy_commands(recipe: str, recipe_name: str) -> list[str]:
     commands = [
         line
         for line in recipe.splitlines()
         if line.lstrip().startswith("run-clang-tidy ")
     ]
-    if len(commands) != 2:
-        raise AssertionError(
-            f"{recipe_name} must run clang-tidy exactly twice; got {len(commands)}"
-        )
+    if not commands:
+        raise AssertionError(f"{recipe_name} does not run clang-tidy")
     if any("2>&1" not in command for command in commands):
         raise AssertionError(
             f"{recipe_name} does not capture clang-tidy standard error"
@@ -110,10 +108,41 @@ def require_tidy_stderr_capture(recipe: str, recipe_name: str) -> None:
         raise AssertionError(
             f"{recipe_name} does not reject concrete clang-tidy diagnostics"
         )
+    return commands
 
 
-require_tidy_stderr_capture(LOCAL_GATE, "runalltests.sh")
-require_tidy_stderr_capture(job("static-analysis"), "static-analysis CI job")
+ci_tidy = tidy_commands(job("static-analysis"), "static-analysis CI job")
+if len(ci_tidy) != 2:
+    raise AssertionError(
+        "static-analysis CI job must run clang-tidy on the host and the STM32 "
+        f"databases; got {len(ci_tidy)} runs"
+    )
+
+# The local gate runs one helper per database. Besides the host database it
+# covers the STM32 backend twice: the ARM database sees the hardware branches,
+# the host-compiler one is the database CI analyses (64-bit size_t).
+local_tidy = tidy_commands(LOCAL_GATE, "runalltests.sh")
+local_passes = re.findall(
+    r'^run_tidy_pass "[^"]+" "\$\{(\w+)\}" (\w+) ', LOCAL_GATE, flags=re.MULTILINE
+)
+expected_passes = [
+    ("BUILD_DIR", "host"),
+    ("BUILD_STM32_TARGET", "stm32"),
+    ("BUILD_STM32", "stm32"),
+]
+if len(local_tidy) != 1 or sorted(local_passes) != sorted(expected_passes):
+    raise AssertionError(
+        "runalltests.sh must run its clang-tidy helper on the host database and "
+        f"on both STM32 databases; got {len(local_tidy)} runs, passes "
+        f"{local_passes!r}"
+    )
+if not re.search(
+    r'-B "\$\{BUILD_STM32\}" \\\n\s+-DJH_STM32_HOST_SANITY=ON', LOCAL_GATE
+):
+    raise AssertionError(
+        "runalltests.sh BUILD_STM32 is not the host-compiler STM32 database "
+        "the CI static-analysis job analyses"
+    )
 
 sanitizer_job = job("sanitizer-fuzz")
 shared_sanitizer_command = "./scripts/run_sanitizer_fuzz.sh"

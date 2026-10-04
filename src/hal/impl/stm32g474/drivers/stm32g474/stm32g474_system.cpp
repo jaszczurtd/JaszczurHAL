@@ -385,22 +385,15 @@ void stm32g474_system_get_device_uid(uint8_t *uid) {
 #endif
 }
 
-bool stm32g474_system_get_device_uid_hex(char *buf, size_t buflen) {
-  constexpr size_t kUidBytes = 8u;
-  constexpr size_t kHexBufSize = (kUidBytes * 2u) + 1u;
-  if (buf == nullptr) {
-    return false;
+void stm32g474_system_get_device_serial(
+    uint8_t serial[STM32G474_SERIAL_BYTES]) {
+  for (size_t word = 0u; word < 3u; word++) {
+#ifdef JH_STM32G474_HW
+    const uint32_t value = JH_REG32(STM32_UID_BASE + (word * 4u));
+#else
+    /* Host sanity builds: a fixed pattern in place of the factory UID. */
+    const uint32_t value = 0x47340000u | (uint32_t)word;
+#endif
+    jh_store_be32(&serial[word * 4u], value);
   }
-  if (buflen < kHexBufSize) {
-    return false;
-  }
-  uint8_t uid[kUidBytes];
-  stm32g474_system_get_device_uid(uid);
-  static const char kHex[] = "0123456789ABCDEF";
-  for (size_t i = 0; i < kUidBytes; ++i) {
-    buf[(i * 2u) + 0u] = kHex[(uid[i] >> 4) & 0x0Fu];
-    buf[(i * 2u) + 1u] = kHex[uid[i] & 0x0Fu];
-  }
-  buf[kUidBytes * 2u] = '\0';
-  return true;
 }

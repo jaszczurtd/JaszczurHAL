@@ -7,6 +7,7 @@
 #include "hal/gpio/hal_gpio_common.h"
 #include "hal/serial/hal_uart_internal.h"
 
+#if HAL_TARGET_IS_MOCK
 hal_status_t jh_hal_uart_validate_config_for_target(hal_uart_port_t port,
                                                     uint8_t rx_pin,
                                                     uint8_t tx_pin) {
@@ -15,6 +16,7 @@ hal_status_t jh_hal_uart_validate_config_for_target(hal_uart_port_t port,
              ? HAL_OK
              : HAL_EINVAL;
 }
+#endif
 
 hal_uart_t hal_uart_create(hal_uart_port_t port, uint8_t rx_pin,
                            uint8_t tx_pin) {

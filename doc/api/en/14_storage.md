@@ -104,9 +104,12 @@ reservation from firmware.
 STM32 linker script. The
 default reservation is `HAL_STM32_FLASH_EEPROM_SIZE = 4096` bytes, with
 `HAL_STM32_FLASH_PAGE_SIZE = 2048` bytes. This reduces the flash available for
-application code by 4 KB. If the reservation size is changed, keep the compile
-definition and linker symbol in sync, and use a multiple of the STM32 flash page
-size.
+application code by 4 KB. To change it, set `HAL_STM32_FLASH_EEPROM_SIZE` as a
+build define (`EXTRA_HAL_DEFINES` for the library build, the project's defines
+for a firmware project) to a multiple of the flash page size; the build passes
+the same value to the linker. Each `hal_kv` bank takes half of the reservation.
+A size set only in `hal_project_config.h` reaches the compiler but not the
+linker, and the link stops with an error.
 
 The STM32 linker also supports a separate LittleFS reservation before EEPROM.
 Keep `HAL_STM32_FLASH_EEPROM_SIZE` and `HAL_STM32_FLASH_LITTLEFS_SIZE`
@@ -264,7 +267,9 @@ The application-selected range is split into two equal banks. The active bank ho
 
 When the log has no room left, the live records are compacted into the other bank: the whole bank is written and verified, and its header with a new generation number goes last. An incomplete compaction therefore does not replace the previous bank. This step has to erase the other bank first, unless `hal_kv_prepare_ex()` already did.
 
-RP, STM32G474, AT24C256, and mock use the same `hal_kv` implementation. The storage-specific layer only programs erased bytes, erases a region, and replaces a region with its header written last. This separation allows ESP32 storage support to be added without changing the application-facing KV API; it does not imply that such support is already available.
+RP, STM32G474, AT24C256, and mock use the same `hal_kv` implementation. The storage-specific layer only programs erased bytes, erases a region, and replaces a region with its header written last.
+
+On flash, bytes that read 0xFF are taken as erased. A programmer writing a full image may have programmed them with 0xFF, and the STM32G474 flash (ECC) then refuses another write until the page is erased. When nothing reached the flash, the write is not reported as an error: an append that is refused this way makes the same commit compact into the other bank, and a bank that refuses its replacement is erased and written again. This separation allows ESP32 storage support to be added without changing the application-facing KV API; it does not imply that such support is already available.
 
 ```c
 #include <hal/storage/hal_kv.h>

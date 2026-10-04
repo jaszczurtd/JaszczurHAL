@@ -138,9 +138,16 @@ hal_status_t replace_region(uint16_t addr, const uint8_t *data, uint16_t len,
   if (prepare != HAL_OK) {
     return prepare;
   }
-  const hal_status_t status = s_backend->replace_region(
-      s_backend->context, addr, data, len, publish_size,
-      mirror_erased(addr, len), progress, ctx);
+  const bool reads_erased = mirror_erased(addr, len);
+  hal_status_t status =
+      s_backend->replace_region(s_backend->context, addr, data, len,
+                                publish_size, reads_erased, progress, ctx);
+  /* Reading 0xFF does not make flash erased: a programmer may have written
+   * 0xFF there, and flash with ECC refuses a second write. Erase first. */
+  if (status == HAL_EIO && reads_erased) {
+    status = s_backend->replace_region(s_backend->context, addr, data, len,
+                                       publish_size, false, progress, ctx);
+  }
   jh_eeprom_flash_write_end();
   if (status == HAL_OK) {
     memcpy(s_backend->mirror + addr, data, len);
@@ -165,13 +172,19 @@ hal_status_t append(uint16_t addr, const uint8_t *data, uint16_t len,
   if (prepare != HAL_OK) {
     return prepare;
   }
-  const hal_status_t status =
+  hal_status_t status =
       s_backend->program(s_backend->context, addr, data, len, progress, ctx);
   jh_eeprom_flash_write_end();
   if (status == HAL_OK) {
     memcpy(s_backend->mirror + addr, data, len);
   } else {
     resync_mirror(addr, len);
+    /* Nothing reached the medium although it reads erased: flash that was
+     * programmed with 0xFF refuses writes until erased, like a region that
+     * is not erased at all. */
+    if (status == HAL_EIO && mirror_erased(addr, len)) {
+      status = HAL_ESTATE;
+    }
   }
   return status;
 }

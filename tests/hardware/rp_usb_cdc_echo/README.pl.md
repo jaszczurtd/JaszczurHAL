@@ -44,6 +44,12 @@ najnowszy raportowany uptime obejmował całe okno przy `wdt_reboot=0` - dowód,
 przełącza firmware z powrotem w tryb echo, a końcowa wymiana echo potwierdza,
 że transport wrócił do normalnej pracy.
 
+`--identity` dodaje fazę, która resetuje płytkę. `JH:IDENTITY\n` na wejściu
+CDC odpowiada linią `JHID serial=... len=... uid=... reset=... wdt=...`:
+numer seryjny musi być numerem seryjnym USB portu (unikalny id pamięci
+flash, 8 bajtów) i równać się UID. Potem `JH:RESET\n` restartuje płytkę przez
+`hal_system_reset()`; gdy port wróci, następny start musi zgłosić `SOFT`.
+
 Po pierwszym wgraniu, neutralna względem targetu akcja `upload` musi wejść
 do BOOTSEL przez dotknięcie DTR 1200 bps i wrócić z tą samą tożsamością CDC:
 

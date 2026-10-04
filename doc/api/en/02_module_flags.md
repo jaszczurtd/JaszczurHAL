@@ -99,7 +99,7 @@ Stack protection uses two independent opt-ins:
 | `HAL_ENABLE_LITTLEFS` | `hal_littlefs.h` | `hal/storage/hal_littlefs.cpp` + shared littlefs provider + target/mock provider | One lifecycle/locking/path/stats facade; native RP uses `HAL_RP_FLASH_LITTLEFS_SIZE`, STM32G474 uses `HAL_STM32_FLASH_LITTLEFS_SIZE` |
 | `HAL_ENABLE_FAT` | FatFs `ff.h` | managed FatFs sources and target disk I/O | Shared FatFs filesystem support used by SD-backed modules |
 | `HAL_ENABLE_SDLOGGER` | `hal_sdlogger.h` | `hal/storage/filesystem/sdlogger/hal_sdlogger.cpp` | SD logger over shared FatFs (propagates FAT + EEPROM + SPI) |
-| `HAL_ENABLE_UART` | `hal_uart.h` | `hal_uart.cpp` | Hardware UART |
+| `HAL_ENABLE_UART` | `hal_uart.h` | `hal_uart.cpp` | Hardware UART. STM32G474 tunables `HAL_UART_RX_BUFFER_SIZE`, `HAL_UART_TX_BUFFER_SIZE`: [Buses API](09_buses.md) |
 | `HAL_ENABLE_SWSERIAL` | `hal_swserial.h` | target `hal_swserial.cpp` | Native Pico SDK PIO/DMA software UART on RP2040; shared HAL GPIO backend on other targets |
 | `HAL_ENABLE_I2C` | `hal_i2c.h` | `hal_i2c.cpp` | I2C master/controller bus |
 | `HAL_ENABLE_I2C_10BIT` | `hal_i2c.h` | `hal_i2c.cpp` + target backends | Opt-in 10-bit I2C master addressing via `hal_i2c_init_10bit()`/`hal_i2c_init_bus_10bit()` and `hal_i2c_address_t` (propagates I2C); `hal_i2c_scan()` stays 7-bit-only |

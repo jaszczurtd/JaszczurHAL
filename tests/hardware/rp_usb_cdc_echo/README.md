@@ -43,6 +43,13 @@ window with `wdt_reboot=0` - proof that blocked debug writes cannot starve
 the watchdog. `JH:ECHO\n` switches the firmware back to echo mode and a
 closing echo exchange confirms the transport recovered.
 
+`--identity` adds a phase that resets the board. `JH:IDENTITY\n` on the CDC
+input answers with a `JHID serial=... len=... uid=... reset=... wdt=...` line:
+the serial number must be the USB serial number of the port (the flash unique
+id, 8 bytes) and equal the UID. `JH:RESET\n` then restarts the board through
+`hal_system_reset()`; once the port is back, the next boot must report
+`SOFT`.
+
 After the first flash, the target-neutral `upload` action must enter BOOTSEL
 through the 1200-bps DTR touch and return with the same CDC identity:
 

@@ -107,9 +107,13 @@ używają ostatnich stron wewnętrznej pamięci flash zarezerwowanych przez
 skrypt linkera STM32. Domyślna rezerwacja ma
 `HAL_STM32_FLASH_EEPROM_SIZE = 4096` bajtów, a rozmiar strony
 `HAL_STM32_FLASH_PAGE_SIZE = 2048` bajtów. Zmniejsza to
-pamięć flash dostępną dla kodu aplikacji o 4 KB. Jeśli rozmiar rezerwacji
-zostanie zmieniony, utrzymuj synchronizację definicji kompilacji i symbolu
-linkera oraz użyj wielokrotności rozmiaru strony flash STM32.
+pamięć flash dostępną dla kodu aplikacji o 4 KB. Aby go zmienić, ustaw
+`HAL_STM32_FLASH_EEPROM_SIZE` jako definicję budowania (`EXTRA_HAL_DEFINES`
+przy budowaniu biblioteki, definicje projektu przy projekcie firmware) na
+wielokrotność rozmiaru strony flash; budowanie przekazuje tę samą wartość do
+linkera. Każdy bank `hal_kv` zajmuje połowę rezerwacji. Rozmiar ustawiony
+tylko w `hal_project_config.h` trafia do kompilatora, ale nie do linkera, i
+linkowanie kończy się błędem.
 
 Linker STM32 obsługuje też osobną rezerwację LittleFS przed EEPROM. Utrzymuj
 `HAL_STM32_FLASH_EEPROM_SIZE` i `HAL_STM32_FLASH_LITTLEFS_SIZE`
@@ -270,7 +274,9 @@ Wybrany przez aplikację zakres pamięci jest dzielony na dwa równe banki. Akty
 
 Gdy w dzienniku kończy się miejsce, żywe rekordy są upakowywane do drugiego banku: cały bank jest zapisywany i sprawdzany, a jego nagłówek z nowym numerem generacji trafia na nośnik jako ostatni. Niepełne upakowanie nie zastępuje więc wcześniejszego banku. Ten krok musi najpierw skasować drugi bank, chyba że zrobiło to już `hal_kv_prepare_ex()`.
 
-RP, STM32G474, AT24C256 i mock używają tej samej implementacji `hal_kv`. Warstwa obsługująca nośnik jedynie programuje skasowane bajty, kasuje region i zastępuje region, zapisując jego nagłówek na końcu. Taki podział pozwala dodać obsługę nośnika dla ESP32 bez zmiany API używanego przez aplikację; nie oznacza, że ta obsługa jest już dostępna.
+RP, STM32G474, AT24C256 i mock używają tej samej implementacji `hal_kv`. Warstwa obsługująca nośnik jedynie programuje skasowane bajty, kasuje region i zastępuje region, zapisując jego nagłówek na końcu.
+
+We flashu bajty odczytywane jako 0xFF są uznawane za skasowane. Programator zapisujący pełny obraz mógł je jednak zaprogramować wartością 0xFF, a flash STM32G474 (ECC) odmawia wtedy kolejnego zapisu do czasu skasowania strony. Jeśli nic nie trafiło do flasha, zapis nie jest zgłaszany jako błąd: odrzucone w ten sposób dopisanie sprawia, że to samo zatwierdzenie upakowuje rekordy do drugiego banku, a bank, który odmawia zastąpienia, jest kasowany i zapisywany ponownie. Taki podział pozwala dodać obsługę nośnika dla ESP32 bez zmiany API używanego przez aplikację; nie oznacza, że ta obsługa jest już dostępna.
 
 ```c
 #include <hal/storage/hal_kv.h>

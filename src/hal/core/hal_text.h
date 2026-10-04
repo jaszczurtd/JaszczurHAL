@@ -28,6 +28,21 @@ hal_status_t hal_text_format_mac_ex(const uint8_t mac[6], char *buffer,
                                     size_t buffer_size);
 
 /**
+ * @brief Format bytes as hexadecimal text, two digits per byte, in order.
+ * @param bytes Input bytes; may be NULL only when @p length is 0.
+ * @param length Number of input bytes.
+ * @param uppercase true for A-F, false for a-f.
+ * @param buffer Destination buffer; must not be NULL.
+ * @param buffer_size Destination capacity including the terminator; at least
+ * `2 * length + 1`.
+ * @return HAL_OK, HAL_EINVAL for a NULL pointer, or HAL_EOVERFLOW when the
+ * destination is too short (the buffer is then left untouched).
+ */
+hal_status_t hal_text_format_hex_ex(const uint8_t *bytes, size_t length,
+                                    bool uppercase, char *buffer,
+                                    size_t buffer_size);
+
+/**
  * @brief Format an integer as an 8-, 16-, or 32-bit binary string.
  *
  * Positive values use the smallest supported width. Negative values use the

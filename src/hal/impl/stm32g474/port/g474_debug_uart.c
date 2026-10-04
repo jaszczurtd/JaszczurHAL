@@ -8,41 +8,24 @@
 #ifdef JH_STM32G474_HW
 
 #include "g474_debug_uart.h"
+#include "stm32g474_gpio_af.h"
 #include "stm32g474_regs.h"
 
-#define GPIOA_INDEX 0u
 #define PIN_TX 2u /* PA2 */
 #define PIN_RX 3u /* PA3 */
 #define AF7 7u    /* USART2 alternate function */
 
 static int s_initialised = 0;
-
-static void set_af(uint32_t port, uint32_t pin, uint32_t af) {
-  /* Alternate-function mode in MODER. */
-  GPIO_MODER(port) =
-      (GPIO_MODER(port) & ~(0x3u << (pin * 2u))) | (GPIO_MODE_AF << (pin * 2u));
-  /* AF selection in AFRL (pins 0-7) or AFRH (pins 8-15). */
-  if (pin < 8u) {
-    GPIO_AFRL(port) =
-        (GPIO_AFRL(port) & ~(0xFu << (pin * 4u))) | (af << (pin * 4u));
-  } else {
-    const uint32_t p = pin - 8u;
-    GPIO_AFRH(port) =
-        (GPIO_AFRH(port) & ~(0xFu << (p * 4u))) | (af << (p * 4u));
-  }
-}
+static volatile int s_app_owned = 0;
 
 void g474_debug_uart_init(void) {
-  if (s_initialised) {
+  if (s_initialised || s_app_owned) {
     return;
   }
 
-  /* Clock the GPIOA port and USART2. */
-  RCC_AHB2ENR |= RCC_AHB2ENR_GPIOAEN;
   RCC_APB1ENR1 |= RCC_APB1ENR1_USART2EN;
-
-  set_af(GPIOA_INDEX, PIN_TX, AF7);
-  set_af(GPIOA_INDEX, PIN_RX, AF7);
+  jh_stm32g474_gpio_set_af(PIN_TX, AF7);
+  jh_stm32g474_gpio_set_af(PIN_RX, AF7);
 
   /* BRR = PCLK1 / baud with oversampling by 16. */
   USART2_CR1 = 0u;
@@ -53,6 +36,12 @@ void g474_debug_uart_init(void) {
 }
 
 void g474_debug_uart_putc(char c) {
+  if (s_app_owned) {
+    return;
+  }
+  if (!s_initialised) {
+    g474_debug_uart_init();
+  }
   while ((USART2_ISR & USART_ISR_TXE) == 0u) {
     /* wait for TX register empty */
   }
@@ -60,7 +49,7 @@ void g474_debug_uart_putc(char c) {
 }
 
 void g474_debug_uart_flush(void) {
-  if (!s_initialised) {
+  if (!s_initialised || s_app_owned) {
     return;
   }
   while ((USART2_ISR & USART_ISR_TC) == 0u) {
@@ -78,6 +67,9 @@ void g474_debug_uart_puts(const char *s) {
 }
 
 int g474_debug_uart_getc_nonblock(void) {
+  if (s_app_owned) {
+    return -1;
+  }
   if ((USART2_ISR & USART_ISR_ORE_F) != 0u) {
     USART_ICR(USART2_BASE) = USART_ICR_ORECF_F;
   }
@@ -88,6 +80,19 @@ int g474_debug_uart_getc_nonblock(void) {
 
   return (int)(USART_RDR(USART2_BASE) & 0xFFu);
 }
+
+void g474_debug_uart_set_app_owned(int owned) {
+  if (owned) {
+    g474_debug_uart_flush();
+    s_app_owned = 1;
+  } else {
+    s_app_owned = 0;
+  }
+  /* Either way the next console output starts from its own settings. */
+  s_initialised = 0;
+}
+
+int g474_debug_uart_is_app_owned(void) { return s_app_owned; }
 
 void g474_debug_uart_put_u32(uint32_t v) {
   char buf[10];

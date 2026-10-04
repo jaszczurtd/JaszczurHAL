@@ -1060,6 +1060,28 @@
 #endif
 
 /**
+ * @def HAL_UART_RX_BUFFER_SIZE
+ * Receive ring of each STM32G474 UART handle, in bytes; a power of two of at
+ * least 64. The DMA writes it in circles, so it must hold everything that
+ * arrives while the application does not read (at 3 Mbaud 300 bytes per
+ * millisecond). RP2040 and ESP32-S3 keep their own receive buffers.
+ */
+#ifndef HAL_UART_RX_BUFFER_SIZE
+#define HAL_UART_RX_BUFFER_SIZE 512
+#endif
+
+/**
+ * @def HAL_UART_TX_BUFFER_SIZE
+ * Transmit queue of each STM32G474 UART handle (and of the mock's model),
+ * in bytes; a power of two of at least 64. hal_uart_write_ex() waits for room
+ * when it is full, hal_uart_try_write_ex() refuses a message that does not
+ * fit.
+ */
+#ifndef HAL_UART_TX_BUFFER_SIZE
+#define HAL_UART_TX_BUFFER_SIZE 512
+#endif
+
+/**
  * @def HAL_RTC_MAX_INSTANCES
  * Maximum number of simultaneous RTC handles.
  *

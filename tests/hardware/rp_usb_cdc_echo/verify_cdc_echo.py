@@ -3,11 +3,14 @@
 import argparse
 import hashlib
 import json
+import os
+import re
 import termios
 import threading
 import time
 
 import serial
+from serial.tools import list_ports
 
 CHATTER_ENTER_MAGIC = b"JH:DTRSTUCK\n"
 CHATTER_EXIT_MAGIC = b"JH:ECHO\n"
@@ -175,6 +178,65 @@ def open_port(path: str) -> serial.Serial:
     return port
 
 
+def read_identity(port: serial.Serial, timeout_s: float) -> dict:
+    """Ask for the identity line; the echo of the command comes first."""
+    drain(port)
+    port.write(b"JH:IDENTITY\n")
+    port.flush()
+    deadline = time.monotonic() + timeout_s
+    buffer = bytearray()
+    while time.monotonic() < deadline:
+        buffer.extend(port.read(256))
+        match = re.search(
+            rb"JHID serial=(\w+) len=(\d+) uid=(\w+) reset=(\w+) wdt=(\d)\n",
+            buffer)
+        if match:
+            return {
+                "serial": match.group(1).decode(),
+                "len": int(match.group(2)),
+                "uid": match.group(3).decode(),
+                "reset": match.group(4).decode(),
+                "wdt": int(match.group(5)),
+            }
+    raise TimeoutError(f"no identity line, got {bytes(buffer[-120:])!r}")
+
+
+def usb_serial_number(path: str) -> str:
+    device = os.path.realpath(path)
+    for info in list_ports.comports():
+        if os.path.realpath(info.device) == device:
+            return info.serial_number or ""
+    return ""
+
+
+def identity_reset_phase(port_path: str) -> dict:
+    """The serial number must be the USB serial number (the flash unique id,
+    eight bytes, the same as the UID); hal_system_reset() must come back as a
+    software reset."""
+    usb_serial = usb_serial_number(port_path)
+    with open_port(port_path) as port:
+        before = read_identity(port, 5.0)
+        if (before["serial"] != usb_serial or before["len"] != 8 or
+                before["uid"] != before["serial"]):
+            raise RuntimeError(f"identity {before} vs USB serial {usb_serial}")
+        port.write(b"JH:RESET\n")
+        port.flush()
+        time.sleep(0.5)
+    deadline = time.monotonic() + 20.0
+    after = None
+    while after is None and time.monotonic() < deadline:
+        time.sleep(0.5)
+        try:
+            with open_port(port_path) as port:
+                after = read_identity(port, 3.0)
+        except (serial.SerialException, OSError, TimeoutError):
+            continue
+    if after is None or after["reset"] != "SOFT" or after["serial"] != usb_serial:
+        raise RuntimeError(f"after reset: {after}")
+    return {"name": "identity_reset", "usbSerial": usb_serial,
+            "before": before, "after": after}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", required=True)
@@ -186,6 +248,11 @@ def main() -> int:
         type=float,
         default=65.0,
         help="DTR-stuck uptime window in seconds (0 skips the phase)",
+    )
+    parser.add_argument(
+        "--identity",
+        action="store_true",
+        help="also check the serial number and hal_system_reset() (resets the board)",
     )
     args = parser.parse_args()
 
@@ -218,6 +285,10 @@ def main() -> int:
         }
         for name, payload, elapsed in phases
     ]
+
+    if args.identity:
+        time.sleep(0.25)
+        phase_reports.append(identity_reset_phase(args.port))
 
     if args.dtr_stuck_seconds > 0.0:
         time.sleep(0.25)

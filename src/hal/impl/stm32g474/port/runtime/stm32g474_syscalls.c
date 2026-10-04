@@ -13,6 +13,7 @@
 
 #include "../g474_debug_uart.h"
 #include "../stm32g474_regs.h"
+#include "../stm32g474_reset.h"
 
 #if defined(HAL_ENABLE_FREERTOS)
 #include <FreeRTOS.h>
@@ -75,16 +76,6 @@ uint32_t stm32g474_runtime_heap_free_bytes(void) {
   const uintptr_t current = s_heap_current == 0u ? heap_base() : s_heap_current;
   const uintptr_t limit = heap_limit();
   return current < limit ? (uint32_t)(limit - current) : 0u;
-}
-
-static HAL_NORETURN void stm32g474_runtime_reset(void);
-static void stm32g474_runtime_reset(void) {
-  SCB_AIRCR =
-      (SCB_AIRCR & 0x00000700u) | SCB_AIRCR_VECTKEY | SCB_AIRCR_SYSRESETREQ;
-  __asm volatile("dsb" ::: "memory");
-  __asm volatile("isb" ::: "memory");
-  for (;;) {
-  }
 }
 
 int _close(int fd) {
@@ -254,12 +245,12 @@ int _getpid(void) { return 1; }
 int _kill(int pid, int sig) {
   (void)pid;
   (void)sig;
-  stm32g474_runtime_reset();
+  jh_stm32g474_system_reset();
 }
 
 void _exit(int status) {
   (void)status;
-  stm32g474_runtime_reset();
+  jh_stm32g474_system_reset();
 }
 
 #endif /* JH_STM32G474_HW */

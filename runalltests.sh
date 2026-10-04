@@ -300,40 +300,39 @@ cmake -S link_libraries/stm32_lib -B "${BUILD_STM32_SX127X}" \
 cmake --build "${BUILD_STM32_SX127X}" --parallel "${JOBS}"
 pass "ARM STM32 SX1276/SX1278 static library ready."
 
-info "Running clang-tidy on host-compilable code..."
-TIDY_HOST_BUILD="${BUILD_DIR}/clang_tidy_db"
-mapfile -t TIDY_HOST_FILES < <(
-    scripts/clang_tidy_files.py --build-dir "${BUILD_DIR}" --repo-root "${SCRIPT_DIR}" --profile host \
-        --output-compile-db "${TIDY_HOST_BUILD}/compile_commands.json"
-)
-if [[ "${#TIDY_HOST_FILES[@]}" -eq 0 ]]; then
-    fail "clang-tidy host file list is empty"
-    exit 1
-fi
-run-clang-tidy -p "${TIDY_HOST_BUILD}" -quiet "${TIDY_HOST_FILES[@]}" 2>&1 \
-    | tee "${LOG_ROOT}/jh_tidy_host.log"
-pass "clang-tidy host pass complete."
+# run_tidy_pass LABEL BUILD PROFILE LOG: clang-tidy over the files PROFILE
+# selects from BUILD's compile database, output kept in LOG.
+run_tidy_pass() {
+    local label="$1" build="$2" profile="$3" log="$4"
+    local tidy_db="${build}/clang_tidy_db"
+    local files=()
+    info "Running clang-tidy on ${label}..."
+    mapfile -t files < <(
+        scripts/clang_tidy_files.py --build-dir "${build}" --repo-root "${SCRIPT_DIR}" --profile "${profile}" \
+            --output-compile-db "${tidy_db}/compile_commands.json"
+    )
+    if [[ "${#files[@]}" -eq 0 ]]; then
+        fail "clang-tidy ${label} file list is empty"
+        exit 1
+    fi
+    run-clang-tidy -p "${tidy_db}" -quiet "${files[@]}" 2>&1 | tee "${log}"
+    pass "clang-tidy ${label} pass complete."
+}
 
-info "Running clang-tidy on STM32 backend..."
-TIDY_STM32_BUILD="${BUILD_STM32_TARGET}/clang_tidy_db"
-mapfile -t TIDY_STM32_FILES < <(
-    scripts/clang_tidy_files.py --build-dir "${BUILD_STM32_TARGET}" --repo-root "${SCRIPT_DIR}" --profile stm32 \
-        --output-compile-db "${TIDY_STM32_BUILD}/compile_commands.json"
+# The STM32 backend is checked in both builds: the ARM one sees the hardware
+# branches, the host-compiler one (the CI static-analysis job) a 64-bit size_t.
+TIDY_LOGS=(
+    "${LOG_ROOT}/jh_tidy_host.log"
+    "${LOG_ROOT}/jh_tidy_stm32.log"
+    "${LOG_ROOT}/jh_tidy_stm32_host.log"
 )
-if [[ "${#TIDY_STM32_FILES[@]}" -eq 0 ]]; then
-    fail "clang-tidy STM32 file list is empty"
-    exit 1
-fi
-run-clang-tidy -p "${TIDY_STM32_BUILD}" -quiet "${TIDY_STM32_FILES[@]}" 2>&1 \
-    | tee "${LOG_ROOT}/jh_tidy_stm32.log"
-pass "clang-tidy STM32 pass complete."
+run_tidy_pass "host-compilable code" "${BUILD_DIR}" host "${TIDY_LOGS[0]}"
+run_tidy_pass "STM32 backend (ARM)" "${BUILD_STM32_TARGET}" stm32 "${TIDY_LOGS[1]}"
+run_tidy_pass "STM32 backend (host compiler)" "${BUILD_STM32}" stm32 "${TIDY_LOGS[2]}"
 
-if grep -qE ':[0-9]+:[0-9]+: (warning|error):' \
-        "${LOG_ROOT}/jh_tidy_host.log" "${LOG_ROOT}/jh_tidy_stm32.log" \
-        2>/dev/null; then
+if grep -qE ':[0-9]+:[0-9]+: (warning|error):' "${TIDY_LOGS[@]}" 2>/dev/null; then
     fail "clang-tidy reported findings:"
-    grep -E ':[0-9]+:[0-9]+: (warning|error):' \
-        "${LOG_ROOT}/jh_tidy_host.log" "${LOG_ROOT}/jh_tidy_stm32.log" \
+    grep -E ':[0-9]+:[0-9]+: (warning|error):' "${TIDY_LOGS[@]}" \
         2>/dev/null | head -20
     exit 1
 fi

@@ -116,24 +116,4 @@ void rp2040_system_get_device_uid(uint8_t *uid) {
   memcpy(uid, id.id, 8u);
 }
 
-bool rp2040_system_get_device_uid_hex(char *buf, size_t buflen) {
-  constexpr size_t kUidBytes = 8u;
-  constexpr size_t kHexBufSize = (kUidBytes * 2u) + 1u;
-  if (buf == nullptr) {
-    return false;
-  }
-  if (buflen < kHexBufSize) {
-    return false;
-  }
-  uint8_t uid[kUidBytes];
-  rp2040_system_get_device_uid(uid);
-  static const char kHex[] = "0123456789ABCDEF";
-  for (size_t i = 0; i < kUidBytes; ++i) {
-    buf[(i * 2u) + 0u] = kHex[(uid[i] >> 4) & 0x0Fu];
-    buf[(i * 2u) + 1u] = kHex[uid[i] & 0x0Fu];
-  }
-  buf[kUidBytes * 2u] = '\0';
-  return true;
-}
-
 bool rp2040_system_in_isr(void) { return __get_current_exception() != 0u; }

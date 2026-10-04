@@ -70,6 +70,16 @@ void DMA1_Channel7_IRQHandler(void)
     __attribute__((weak, alias("Default_Handler")));
 void DMA1_Channel8_IRQHandler(void)
     __attribute__((weak, alias("Default_Handler")));
+void DMA2_Channel1_IRQHandler(void)
+    __attribute__((weak, alias("Default_Handler")));
+void DMA2_Channel2_IRQHandler(void)
+    __attribute__((weak, alias("Default_Handler")));
+void DMA2_Channel3_IRQHandler(void)
+    __attribute__((weak, alias("Default_Handler")));
+void DMA2_Channel4_IRQHandler(void)
+    __attribute__((weak, alias("Default_Handler")));
+void USART1_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
+void USART2_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void I2C1_EV_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void I2C1_ER_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void I2C2_EV_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
@@ -124,6 +134,12 @@ void SysTick_Handler(void) __attribute__((weak, alias("Default_Handler")));
 #define STM32_IRQ_FDCAN3_IT0 88u
 #define STM32_IRQ_FDCAN3_IT1 89u
 #define STM32_IRQ_DMA1_CHANNEL8 96u
+#define STM32_IRQ_USART1 37u
+#define STM32_IRQ_USART2 38u
+#define STM32_IRQ_DMA2_CHANNEL1 56u
+#define STM32_IRQ_DMA2_CHANNEL2 57u
+#define STM32_IRQ_DMA2_CHANNEL3 58u
+#define STM32_IRQ_DMA2_CHANNEL4 59u
 
 /* Vector table: initial SP + 15 system exceptions + populated peripheral IRQs.
  * Unlisted peripheral entries stay zero; only enabled IRQs must be present. */
@@ -157,8 +173,14 @@ __attribute__((section(".isr_vector"),
     [16u + STM32_IRQ_I2C2_EV] = I2C2_EV_IRQHandler,
     [16u + STM32_IRQ_I2C2_ER] = I2C2_ER_IRQHandler,
     [16u + STM32_IRQ_EXTI15_10] = EXTI15_10_IRQHandler,
+    [16u + STM32_IRQ_USART1] = USART1_IRQHandler,
+    [16u + STM32_IRQ_USART2] = USART2_IRQHandler,
     [16u + STM32_IRQ_RTC_ALARM] = RTC_Alarm_IRQHandler,
     [16u + STM32_IRQ_TIM6_DACUNDER] = TIM6_DACUNDER_IRQHandler,
+    [16u + STM32_IRQ_DMA2_CHANNEL1] = DMA2_Channel1_IRQHandler,
+    [16u + STM32_IRQ_DMA2_CHANNEL2] = DMA2_Channel2_IRQHandler,
+    [16u + STM32_IRQ_DMA2_CHANNEL3] = DMA2_Channel3_IRQHandler,
+    [16u + STM32_IRQ_DMA2_CHANNEL4] = DMA2_Channel4_IRQHandler,
     [16u + STM32_IRQ_FDCAN2_IT0] = FDCAN2_IT0_IRQHandler,
     [16u + STM32_IRQ_FDCAN2_IT1] = FDCAN2_IT1_IRQHandler,
     [16u + STM32_IRQ_FDCAN3_IT0] = FDCAN3_IT0_IRQHandler,

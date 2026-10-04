@@ -85,6 +85,24 @@ hal_status_t hal_text_format_mac_ex(const uint8_t mac[6], char *buffer,
   return written == (int)(HAL_TEXT_MAC_STRING_SIZE - 1u) ? HAL_OK : HAL_EIO;
 }
 
+hal_status_t hal_text_format_hex_ex(const uint8_t *bytes, size_t length,
+                                    bool uppercase, char *buffer,
+                                    size_t buffer_size) {
+  if (buffer == nullptr || (bytes == nullptr && length > 0u)) {
+    return HAL_EINVAL;
+  }
+  if (length > (SIZE_MAX - 1u) / 2u || buffer_size < (length * 2u) + 1u) {
+    return HAL_EOVERFLOW;
+  }
+  const char *digits = uppercase ? "0123456789ABCDEF" : "0123456789abcdef";
+  for (size_t index = 0u; index < length; index++) {
+    buffer[index * 2u] = digits[bytes[index] >> 4];
+    buffer[(index * 2u) + 1u] = digits[bytes[index] & 0x0Fu];
+  }
+  buffer[length * 2u] = '\0';
+  return HAL_OK;
+}
+
 char *hal_text_format_binary_int(int value, char *buffer, size_t buffer_size) {
   if (buffer == nullptr || buffer_size == 0u) {
     return buffer;

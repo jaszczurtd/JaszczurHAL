@@ -16,6 +16,10 @@ static bool s_watchdog_fed = false;
 static bool s_caused_reboot = false;
 static uint32_t s_free_heap = 256 * 1024;
 static bool s_bootloader_requested = false;
+static bool s_reset_requested = false;
+static uint8_t s_device_serial[HAL_DEVICE_SERIAL_MAX_BYTES] = {
+    0xE6, 0x61, 0xA4, 0xD1, 0x23, 0x45, 0x67, 0xAB};
+static size_t s_device_serial_len = 8u;
 
 /* Default deterministic mock UID so tests can rely on a stable value. */
 static uint8_t s_device_uid[HAL_DEVICE_UID_BYTES] = {0xE6, 0x61, 0xA4, 0xD1,
@@ -173,25 +177,35 @@ hal_status_t hal_get_device_uid(uint8_t uid[HAL_DEVICE_UID_BYTES]) {
   return HAL_OK;
 }
 
-hal_status_t hal_get_device_uid_hex_ex(char *buf, size_t buflen) {
-  if (buf == nullptr) {
+hal_status_t hal_get_device_serial_ex(uint8_t *out, size_t out_size,
+                                      size_t *out_len) {
+  if (out == nullptr || out_len == nullptr) {
     return HAL_EINVAL;
   }
-  if (buflen < HAL_DEVICE_UID_HEX_BUF_SIZE) {
+  *out_len = s_device_serial_len;
+  if (out_size < s_device_serial_len) {
     return HAL_EOVERFLOW;
   }
-  static const char kHex[] = "0123456789ABCDEF";
-  for (size_t i = 0; i < HAL_DEVICE_UID_BYTES; ++i) {
-    buf[(i * 2u) + 0u] = kHex[(s_device_uid[i] >> 4) & 0x0Fu];
-    buf[(i * 2u) + 1u] = kHex[s_device_uid[i] & 0x0Fu];
-  }
-  buf[HAL_DEVICE_UID_BYTES * 2u] = '\0';
+  memcpy(out, s_device_serial, s_device_serial_len);
   return HAL_OK;
 }
 
-bool hal_get_device_uid_hex(char *buf, size_t buflen) {
-  return hal_status_to_bool(hal_get_device_uid_hex_ex(buf, buflen));
+void hal_mock_set_device_serial(const uint8_t *serial, size_t len) {
+  if (serial == nullptr || len == 0u || len > HAL_DEVICE_SERIAL_MAX_BYTES) {
+    return;
+  }
+  memcpy(s_device_serial, serial, len);
+  s_device_serial_len = len;
 }
+
+hal_status_t hal_system_reset(void) {
+  s_reset_requested = true;
+  return HAL_OK;
+}
+
+bool hal_mock_system_reset_was_requested(void) { return s_reset_requested; }
+
+void hal_mock_system_reset_clear(void) { s_reset_requested = false; }
 
 void hal_mock_set_device_uid(const uint8_t uid[HAL_DEVICE_UID_BYTES]) {
   if (uid == nullptr) {

@@ -72,16 +72,6 @@ HAL_NORETURN void rp2040_system_enter_bootloader(void);
  *  Safe no-op if @p uid is @c NULL. Wraps @c pico_get_unique_board_id(). */
 void rp2040_system_get_device_uid(uint8_t *uid);
 
-/** @brief Format the 8-byte unique board id as 16 uppercase hex characters
- *  plus a NUL terminator (17 bytes total).
- *
- *  @param buf    Output buffer.
- *  @param buflen Capacity of @p buf in bytes; must be at least 17.
- *  @return false (without writing anything) if @p buf is @c NULL or
- *          @p buflen is too small; true on success.
- */
-bool rp2040_system_get_device_uid_hex(char *buf, size_t buflen);
-
 /** @brief True when called from a Cortex-M exception / IRQ handler.
  *
  *  Reads the ARM Cortex-M @c IPSR register: zero in Thread mode, equal to
