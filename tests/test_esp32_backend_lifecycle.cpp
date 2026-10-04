@@ -356,6 +356,12 @@ static void test_fault_init_retries_the_other_core_after_an_ipc_failure(void) {
       2u, (uint32_t)fake_idf::count_calls("esp_ipc_call_blocking"));
 }
 
+extern "C" bool jh_esp32_headers_link_from_c(void);
+
+static void test_internal_headers_link_from_c(void) {
+  TEST_ASSERT_TRUE(jh_esp32_headers_link_from_c());
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_GUARDED(test_i2c_events_raised_before_the_worker_runs_are_all_served);
@@ -375,5 +381,6 @@ int main(void) {
   RUN_GUARDED(test_rmt_failed_channel_delete_keeps_the_handle_for_retry);
   RUN_GUARDED(test_rmt_failed_encoder_delete_keeps_the_encoder_for_retry);
   RUN_GUARDED(test_fault_init_retries_the_other_core_after_an_ipc_failure);
+  RUN_GUARDED(test_internal_headers_link_from_c);
   return UNITY_END();
 }

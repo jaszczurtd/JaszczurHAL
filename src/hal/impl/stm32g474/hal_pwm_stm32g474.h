@@ -4,15 +4,20 @@
 
 #if HAL_TARGET_IS_STM32G474
 
+#include <stdbool.h>
 #include <stdint.h>
 
-struct jh_stm32_pwm_channel_desc {
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct jh_stm32_pwm_channel_desc {
   uint8_t pin;
   uint8_t timer;
   uint8_t channel;
   uint8_t valid;
   uint32_t period_ticks;
-};
+} jh_stm32_pwm_channel_desc;
 
 bool jh_stm32_pwm_prepare_pin(uint8_t pin, uint32_t frequency_hz,
                               uint32_t period_ticks,
@@ -41,5 +46,9 @@ uint32_t jh_stm32_pwm_timer_dma_request(const jh_stm32_pwm_channel_desc *ch);
 
 void jh_stm32_pwm_set_update_dma_request(const jh_stm32_pwm_channel_desc *ch,
                                          bool enabled);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // HAL_TARGET_IS_STM32G474

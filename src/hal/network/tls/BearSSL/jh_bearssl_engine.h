@@ -6,6 +6,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum {
   JH_BEARSSL_EVENT_NONE = 0,
   JH_BEARSSL_EVENT_APPLICATION_READABLE,
@@ -56,3 +60,7 @@ hal_status_t jh_bearssl_engine_poll(void *engine,
 hal_status_t jh_bearssl_engine_poll_for_read(
     void *engine, const jh_bearssl_transport_t *transport, uint16_t step_budget,
     jh_bearssl_poll_result_t *out_result);
+
+#ifdef __cplusplus
+}
+#endif

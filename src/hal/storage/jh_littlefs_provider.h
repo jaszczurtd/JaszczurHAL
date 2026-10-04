@@ -9,6 +9,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct {
   uint32_t read_size;
   uint32_t prog_size;
@@ -80,5 +84,9 @@ hal_status_t jh_littlefs_block_sync(const jh_littlefs_block_backend_t *backend);
 
 /** Reset shared facade state after resetting the mock provider. */
 void jh_littlefs_mock_reset_facade(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* HAL_ENABLE_LITTLEFS */

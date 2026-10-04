@@ -354,11 +354,18 @@ void test_native_provider_propagates_format_io_failures(void) {
   TEST_ASSERT_FALSE(s_fixture.out_of_range);
 }
 
+extern "C" bool jh_littlefs_provider_header_links_from_c(void);
+
+static void test_provider_header_links_from_c(void) {
+  TEST_ASSERT_TRUE(jh_littlefs_provider_header_links_from_c());
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_checked_block_adapters_reject_invalid_ranges_and_alignment);
   RUN_TEST(test_native_provider_rejects_invalid_geometry);
   RUN_TEST(test_native_provider_runs_real_littlefs_lifecycle_and_errors);
   RUN_TEST(test_native_provider_propagates_format_io_failures);
+  RUN_TEST(test_provider_header_links_from_c);
   return UNITY_END();
 }

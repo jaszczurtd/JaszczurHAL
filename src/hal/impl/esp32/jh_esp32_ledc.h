@@ -3,6 +3,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct jh_esp32_ledc_channel_s;
 typedef struct jh_esp32_ledc_channel_s jh_esp32_ledc_channel_t;
 
@@ -30,3 +34,7 @@ bool jh_esp32_ledc_write_from_isr(jh_esp32_ledc_channel_t *channel,
 void jh_esp32_ledc_stop(jh_esp32_ledc_channel_t *channel);
 bool jh_esp32_ledc_release(jh_esp32_ledc_channel_t *channel);
 uint32_t jh_esp32_ledc_source_clock_hz(void);
+
+#ifdef __cplusplus
+}
+#endif

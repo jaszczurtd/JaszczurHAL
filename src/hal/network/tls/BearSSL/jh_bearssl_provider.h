@@ -6,6 +6,10 @@
 
 #include <bearssl.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define JH_BEARSSL_ENTROPY_SIZE 32u
 
 typedef struct {
@@ -35,5 +39,9 @@ jh_bearssl_verify_server_key_pin(const jh_bearssl_client_t *provider,
                                  const uint8_t expected_sha256[32]);
 
 const char *jh_bearssl_provider_source_revision(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

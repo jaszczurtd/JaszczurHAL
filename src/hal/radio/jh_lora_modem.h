@@ -4,6 +4,10 @@
 
 #ifdef HAL_ENABLE_LORA
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 bool jh_lora_modem_config_valid(const hal_lora_modem_config_t *config,
                                 uint32_t min_frequency_hz,
                                 uint32_t max_frequency_hz,
@@ -14,5 +18,9 @@ bool jh_lora_modem_config_valid(const hal_lora_modem_config_t *config,
 hal_status_t jh_lora_modem_time_on_air(const hal_lora_modem_config_t *config,
                                        size_t payload_length,
                                        uint32_t *out_time_ms);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* HAL_ENABLE_LORA */

@@ -9,6 +9,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Static facade storage keeps provider allocation deterministic on targets. */
 #define JH_THERMOCOUPLE_PROVIDER_CONTEXT_SIZE 64u
 
@@ -60,5 +64,9 @@ typedef void (*jh_thermocouple_context_visitor_t)(void *provider_context,
 hal_status_t jh_thermocouple_provider_visit_context(
     hal_thermocouple_t handle, jh_thermocouple_context_visitor_t visitor,
     void *visitor_context);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* HAL_ENABLE_THERMOCOUPLE */

@@ -10,6 +10,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct {
   hal_eeprom_type_t requested_type;
   uint16_t requested_size;
@@ -129,5 +133,9 @@ const jh_eeprom_provider_ops_t *jh_eeprom_hardware_provider_get_ops(
 
 /** Reset shared facade state after resetting the mock provider. */
 void jh_eeprom_mock_reset_facade(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* HAL_ENABLE_EEPROM */

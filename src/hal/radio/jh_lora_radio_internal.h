@@ -8,6 +8,10 @@
 
 #include <stdbool.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct jh_lora_radio_context_s jh_lora_radio_context_t;
 
 typedef uint32_t jh_lora_provider_events_t;
@@ -119,6 +123,10 @@ hal_status_t jh_lora_radio_describe_capabilities(
 /** Install a provider for host tests; NULL restores the default provider. */
 hal_status_t jh_lora_radio_set_provider_for_test(
     const jh_lora_radio_provider_ops_t *provider);
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif /* HAL_ENABLE_LORA */

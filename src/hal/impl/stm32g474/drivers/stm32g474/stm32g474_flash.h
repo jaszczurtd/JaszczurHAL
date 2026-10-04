@@ -3,6 +3,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 bool jh_stm32g474_flash_wait_ready(void);
 bool jh_stm32g474_flash_access_begin(void);
 void jh_stm32g474_flash_access_end(void);
@@ -11,3 +15,7 @@ void jh_stm32g474_flash_lock(void);
 bool jh_stm32g474_flash_erase_page(uintptr_t address);
 bool jh_stm32g474_flash_program_doubleword(uintptr_t address,
                                            const uint8_t *data);
+
+#ifdef __cplusplus
+}
+#endif
