@@ -4,6 +4,10 @@
 
 #ifdef HAL_ENABLE_COMMAND_ROUTER
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define JH_COMMAND_ROUTER_CALLBACK_STORAGE_SIZE 16u
 
 typedef hal_status_t (*jh_command_router_invoke_t)(
@@ -28,5 +32,9 @@ hal_status_t jh_command_router_register_erased(
 bool jh_command_name_valid(const char *name, size_t *out_length);
 bool jh_command_source_valid(hal_command_source_t source);
 bool jh_command_encoding_valid(hal_command_encoding_t encoding);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* HAL_ENABLE_COMMAND_ROUTER */

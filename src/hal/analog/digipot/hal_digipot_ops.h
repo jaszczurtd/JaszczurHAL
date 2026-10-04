@@ -10,6 +10,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct hal_digipot_ops {
   bool (*validate)(const hal_digipot_config_t *cfg);
   hal_status_t (*init)(hal_digipot_config_t *cfg);
@@ -69,5 +73,9 @@ hal_digipot_scale_to_wiper_round_nearest(uint32_t value, uint32_t full_scale,
   wiper += ((remainder * 2u) > full_scale) ? 1u : 0u;
   return wiper;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* HAL_ENABLE_DIGIPOT */

@@ -12,6 +12,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef bool (*jh_bearssl_cancel_fn)(void *context);
 typedef void (*jh_bearssl_service_fn)(void *context);
 
@@ -51,5 +55,9 @@ hal_status_t jh_bearssl_blocking_io_init(jh_bearssl_blocking_io_t *provider,
                                          jh_bearssl_cancel_fn is_cancelled,
                                          jh_bearssl_service_fn service,
                                          void *callback_context);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

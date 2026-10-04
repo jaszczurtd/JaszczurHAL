@@ -1636,6 +1636,20 @@ target_link_libraries(test_ads1x15_driver PRIVATE hal_mock)
 add_test(NAME test_ads1x15_driver COMMAND test_ads1x15_driver)
 add_hal_test(test_dacless_driver)
 add_hal_test(test_hal_dacless)
+add_executable(test_hal_internal_headers_c_link
+    test_hal_internal_headers_c_link.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/rtc/jh_rtc_i2c_provider.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/rtc/pcf8563/pcf8563.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/rtc/ds3231/ds3231.cpp)
+target_link_libraries(test_hal_internal_headers_c_link PRIVATE hal_mock)
+set_target_properties(test_hal_internal_headers_c_link PROPERTIES LINKER_LANGUAGE CXX)
+jh_enable_host_warnings(test_hal_internal_headers_c_link ERRORS)
+add_test(NAME test_hal_internal_headers_c_link COMMAND test_hal_internal_headers_c_link)
+add_executable(test_jh_eeprom_provider_c_link test_jh_eeprom_provider_c_link.c)
+target_link_libraries(test_jh_eeprom_provider_c_link PRIVATE hal_mock)
+set_target_properties(test_jh_eeprom_provider_c_link PROPERTIES LINKER_LANGUAGE CXX)
+jh_enable_host_warnings(test_jh_eeprom_provider_c_link ERRORS)
+add_test(NAME test_jh_eeprom_provider_c_link COMMAND test_jh_eeprom_provider_c_link)
 add_executable(test_hal_dacless_c_link test_hal_dacless_c_link.c)
 target_link_libraries(test_hal_dacless_c_link PRIVATE hal_mock)
 set_target_properties(test_hal_dacless_c_link PROPERTIES LINKER_LANGUAGE CXX)
@@ -2070,6 +2084,7 @@ endforeach()
 set(_esp32_backend_dir ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/esp32)
 add_executable(test_esp32_backend_lifecycle
     test_esp32_backend_lifecycle.cpp
+    esp32_headers_c_link_probe.c
     fakes/esp_idf/esp_idf_fake.cpp
     fakes/host_sync/hal_sync_host.cpp
     ${_esp32_backend_dir}/hal_i2c_slave.cpp
@@ -2116,6 +2131,7 @@ foreach(_jh_pwm_variant IN ITEMS "" _can_tim3)
     set(_jh_pwm_test test_stm32_pwm_clock${_jh_pwm_variant})
     add_executable(${_jh_pwm_test}
         test_stm32_pwm_clock.cpp
+        stm32_pwm_c_link_probe.c
         ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/stm32g474/hal_pwm_stm32g474.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
     )
@@ -2293,6 +2309,7 @@ add_hal_test(test_hal_gamepad)
 add_hal_test(test_hal_littlefs)
 add_executable(test_jh_littlefs_lfs_provider
     test_jh_littlefs_lfs_provider.cpp
+    littlefs_provider_c_link_probe.c
     ${CMAKE_SOURCE_DIR}/src/hal/storage/jh_littlefs_lfs_provider.cpp
     ${JH_LITTLEFS_TEST_SOURCES}
     ${CMAKE_SOURCE_DIR}/src/utils/unity.c)

@@ -47,11 +47,18 @@ void test_tim3_pins_follow_the_can_timestamp_option(void) {
                            jh_stm32_pwm_source_clock_hz(5u)); /* TIM2 */
 }
 
+extern "C" bool jh_stm32_pwm_header_links_from_c(void);
+
+static void test_pwm_header_links_from_c(void) {
+  TEST_ASSERT_TRUE(jh_stm32_pwm_header_links_from_c());
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_pwm_source_clock_tracks_pin_timer_bus);
   RUN_TEST(test_pwm_source_clock_rejects_unknown_pin);
   RUN_TEST(test_pwm_direct_timing_rejects_unrepresentable_rates);
   RUN_TEST(test_tim3_pins_follow_the_can_timestamp_option);
+  RUN_TEST(test_pwm_header_links_from_c);
   return UNITY_END();
 }

@@ -8,6 +8,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define JH_LORA_LINK_FRAME_HEADER_SIZE 25u
 #define JH_LORA_LINK_FRAME_TAG_SIZE 16u
 #define JH_LORA_LINK_FRAME_MAX_PLAINTEXT                                       \
@@ -43,5 +47,9 @@ hal_status_t jh_lora_link_frame_decode(const uint8_t *frame,
                                        uint8_t *out_payload,
                                        size_t payload_capacity,
                                        size_t *out_payload_length);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* HAL_ENABLE_LORA_LINK */

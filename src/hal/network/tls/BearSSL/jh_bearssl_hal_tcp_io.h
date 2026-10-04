@@ -7,6 +7,10 @@
 #include "hal/network/hal_tcp.h"
 #include "jh_bearssl_transport.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct {
   jh_bearssl_transport_t transport;
   hal_tcp_socket_t socket;
@@ -15,5 +19,9 @@ typedef struct {
 hal_status_t
 jh_bearssl_hal_tcp_transport_init(jh_bearssl_hal_tcp_transport_t *adapter,
                                   hal_tcp_socket_t socket);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

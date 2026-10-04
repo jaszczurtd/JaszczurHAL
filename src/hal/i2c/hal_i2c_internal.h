@@ -6,6 +6,10 @@
 
 #include "hal/i2c/hal_i2c.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 bool jh_hal_i2c_bus_is_initialized(uint8_t bus);
 
 #ifdef HAL_ENABLE_I2C_10BIT
@@ -32,5 +36,9 @@ jh_hal_i2c_validate_address(uint8_t bus, hal_i2c_address_t address) {
 #endif
   return (address <= 0x7Fu) ? HAL_OK : HAL_EINVAL;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

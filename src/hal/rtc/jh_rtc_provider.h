@@ -9,6 +9,10 @@
 
 #include <stddef.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /** Storage reserved in each public RTC handle for the selected provider. */
 #define JH_RTC_PROVIDER_STORAGE_SIZE 128u
 
@@ -63,6 +67,10 @@ jh_rtc_mock_provider_set_datetime(void *context,
 hal_status_t jh_rtc_mock_provider_set_clock_integrity(void *context, bool ok);
 hal_status_t jh_rtc_mock_provider_set_flags(void *context, uint8_t flags);
 hal_status_t jh_rtc_mock_provider_fire_wakeup(void *context);
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif /* HAL_ENABLE_RTC */

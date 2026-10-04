@@ -4,6 +4,10 @@
 #include "hal/core/hal_status.h"
 #include "hal/network/wireguard/hal_wireguard.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 hal_status_t jh_hal_wireguard_begin_provider(
     const uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS], const char *private_key,
     const char *remote_peer_address, const char *remote_peer_public_key,
@@ -18,5 +22,9 @@ void jh_hal_wireguard_note_quick_check(void);
 hal_status_t jh_hal_wireguard_kick_provider(
     const uint8_t probe_ip[HAL_WIREGUARD_IPV4_OCTETS], uint16_t probe_port,
     uint32_t min_interval_ms);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
