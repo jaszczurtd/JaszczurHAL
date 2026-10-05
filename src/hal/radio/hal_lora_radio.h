@@ -294,7 +294,13 @@ typedef void (*hal_lora_radio_event_callback_t)(
 
 /**
  * @brief Build a radio descriptor from the active board profile.
- * @return HAL_OK or HAL_EUNSUPPORTED when the board has no embedded radio.
+ *
+ * Only a radio soldered onto the board is part of its profile. A module
+ * connected with wires is described by the application instead.
+ *
+ * @param out_config Descriptor to fill; zeroed before anything else.
+ * @return HAL_OK, HAL_EINVAL for NULL, or HAL_EUNSUPPORTED when the board has
+ *         no embedded radio or SX126x support is not compiled in.
  */
 hal_status_t
 hal_lora_radio_config_from_board(hal_lora_radio_config_t *out_config);
@@ -303,9 +309,13 @@ hal_lora_radio_config_from_board(hal_lora_radio_config_t *out_config);
  * @brief Fill the fixed electrical profile of a Waveshare Core1262-HF.
  *
  * The caller still supplies the host SPI bus and all host pin assignments in
- * hal_lora_radio_config_t. Assign RXEN to rf_switch_pin_a and TXEN to
- * rf_switch_pin_b. The helper fills only module-owned electrical and RF
- * limits.
+ * hal_lora_radio_config_t; every pin field is left at HAL_LORA_PIN_NONE.
+ * Assign RXEN to rf_switch_pin_a and TXEN to rf_switch_pin_b. Waveshare names
+ * these lines after the path they turn off, so RXEN is high while
+ * transmitting and TXEN while receiving; the helper sets these levels.
+ *
+ * @param out_hardware Hardware descriptor to fill.
+ * @return HAL_OK or HAL_EINVAL for NULL.
  */
 hal_status_t hal_lora_sx126x_core1262_hf_defaults(
     hal_lora_sx126x_hardware_config_t *out_hardware);

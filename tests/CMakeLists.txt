@@ -988,6 +988,13 @@ add_test(NAME test_board_selection
         -P ${CMAKE_CURRENT_SOURCE_DIR}/test_board_selection.cmake
 )
 
+add_test(NAME test_board_config_dependencies
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
+        -DJH_TEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_board_config_dependencies.cmake
+)
+
 add_test(NAME test_project_feature_defines
     COMMAND ${CMAKE_COMMAND}
         -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..

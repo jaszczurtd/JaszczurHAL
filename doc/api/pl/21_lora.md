@@ -61,8 +61,8 @@ Magistralę SPI można współdzielić z innymi urządzeniami HAL. Tworzenie rad
 ## Konfiguracja z profilu płytki
 
 `hal_lora_radio_config_from_board()` kopiuje konfigurację radia z aktywnego
-profilu płytki. Zwraca `HAL_EUNSUPPORTED`, jeśli profil nie deklaruje radia
-zintegrowanego ani będącego częścią stałego stanowiska.
+profilu płytki. Profil opisuje wyłącznie radio przylutowane do płytki; na
+każdej innej płytce funkcja zwraca `HAL_EUNSUPPORTED`.
 
 ```c
 hal_lora_radio_config_t hardware;
@@ -79,26 +79,26 @@ Profil `rp2040-lora-lf` opisuje zintegrowany SX1262 na płytce Waveshare
 RP2040-LoRa-LF, w tym limity częstotliwości pasma LF. Dobierz częstotliwość
 jawnie do używanego sprzętu, scenariusza testowego i lokalnych przepisów.
 
-Eksperymentalne profile `pico-core1262-hf` i
-`nucleo-g474re-core1262-hf` opisują dwie stałe konfiguracje testowe projektu
-z zewnętrznymi modułami Waveshare Core1262-HF. Oba przeszły testy CAD, RSSI
-i kalibracji bez transmisji oraz dwukierunkowe testy radiowe. Stanowisko Nucleo
-używa SPI2 na
-PB13/PB14/PB15, dzięki czemu wbudowana LD2 i `HAL_LED_BUILTIN` pozostają
-dostępne na PA5.
-
 ## Zewnętrzny moduł Waveshare Core1262-HF
 
-Dla stałego okablowania używanego w projekcie wybierz
-`pico-core1262-hf` albo `nucleo-g474re-core1262-hf` i użyj
-`hal_lora_radio_config_from_board()`. Jeśli aplikacja używa innego okablowania,
-wybierz zwykły profil hosta i użyj
-`hal_lora_sx126x_core1262_hf_defaults()`. Funkcja wypełnia parametry elektryczne
+Moduł podłączany przewodami nie ma profilu płytki, bo ten sam moduł można
+podpiąć pod dowolne wolne piny. Wybierz zwykłą płytkę hosta (`pico`,
+`nucleo-g474re` itd.) i opisz okablowanie w aplikacji.
+`hal_lora_sx126x_core1262_hf_defaults()` wypełnia to, co należy do samego
 modułu: podwójne sterowanie RXEN/TXEN, DCDC, TCXO 1,8 V sterowane przez DIO3,
 opóźnienie startu, zakres RF, limit SPI i limity mocy wyjściowej. Aplikacja
-nadal musi podać magistralę oraz przypisanie pinów hosta. Przypisz RXEN do
-`rf_switch_pin_a`, a TXEN do `rf_switch_pin_b`; funkcja ustawi udokumentowaną
-tabelę poziomów.
+podaje magistralę SPI i wszystkie piny hosta.
+
+Przypisz RXEN do `rf_switch_pin_a`, a TXEN do `rf_switch_pin_b`. Waveshare
+nazywa te linie od toru, który wyłączają: RXEN ma stan wysoki podczas
+nadawania, a TXEN podczas odbioru, i dokładnie takie poziomy ustawia funkcja.
+Na pierwszy rzut oka wyglądają na zamienione, ale są zgodne ze schematem
+modułu.
+
+`examples/27_lora_point_to_point` trzyma w jednym nagłówku okablowanie
+stanowiska dla Pico (SPI0) i NUCLEO-G474RE (SPI2 na PB13/PB14/PB15, dzięki
+czemu LD2 i `HAL_LED_BUILTIN` zostają na PA5). Oba zestawy przeszły testy CAD,
+RSSI i kalibracji bez transmisji oraz dwukierunkowe testy radiowe.
 
 ```c
 hal_lora_radio_config_t hardware = {0};

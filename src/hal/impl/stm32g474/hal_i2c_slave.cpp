@@ -6,6 +6,7 @@
 #ifdef HAL_ENABLE_I2C_SLAVE
 
 #include "hal/core/jh_endian.h"
+#include "hal/gpio/hal_gpio.h"
 #include "hal/i2c/hal_i2c_slave.h"
 #include "hal/i2c/jh_i2c_slave_registers.h"
 #include "hal/system/hal_sync.h"
@@ -59,8 +60,6 @@ static inline void slave_unlock(void) { hal_critical_section_exit(); }
 
 #ifdef JH_STM32G474_HW
 
-#define JH_STM32_PIN(port, pin) ((uint8_t)(((port) * 16u) + (pin)))
-
 enum {
   I2C_CTRL_1 = 1u,
   I2C_CTRL_2 = 2u,
@@ -78,9 +77,9 @@ typedef struct {
 
 static const i2c_slave_hw_desc_t k_i2c_slave_hw_desc[2] = {
     {I2C_CTRL_1, I2C1_BASE, RCC_APB1ENR1_I2C1EN, I2C1_EV_IRQn, I2C1_ER_IRQn,
-     JH_STM32_PIN(1u, 9u), JH_STM32_PIN(1u, 8u)},
+     HAL_GPIO_STM32_PIN('B', 9u), HAL_GPIO_STM32_PIN('B', 8u)},
     {I2C_CTRL_2, I2C2_BASE, RCC_APB1ENR1_I2C2EN, I2C2_EV_IRQn, I2C2_ER_IRQn,
-     JH_STM32_PIN(0u, 8u), JH_STM32_PIN(0u, 9u)},
+     HAL_GPIO_STM32_PIN('A', 8u), HAL_GPIO_STM32_PIN('A', 9u)},
 };
 
 static bool i2c_slave_pin_find_af(uint8_t controller, bool is_sda, uint8_t pin,

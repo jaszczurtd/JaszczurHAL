@@ -248,7 +248,13 @@ Deterministycznie wygenerowany zestaw plików obejmuje:
 - `jh_link_contract.h`;
 - jednostki translacji definiujące sygnaturę linkowania oraz odwołujące się
   do niej;
-- `generation.d`.
+- `generation.d`, czyli listę wszystkich plików odczytanych przez generator:
+  deskryptorów z `--boards-root`, rejestrów funkcji i narzędzi oraz jego
+  własnych modułów Pythona.
+
+Tylko generator wie, co czyta. CMake ponawia konfigurację po zmianie pliku
+z `generation.d`, a nowe deskryptory wychwytuje według wzorców
+z `JH_BOARD_INPUT_GLOBS` (z `jh_board_config.cmake`).
 
 Firmware nie analizuje JSON. CMake uruchamia generator przed importem Pico SDK, a następnie używa wygenerowanych ustawień platformy i płytki. `hal_board.h` zawsze korzysta z rejestru w repozytorium. Konfigurację płytki odczytuje z plików wygenerowanych dla kompilacji, a przy ich braku - z zapisanej konfiguracji zastępczej.
 
@@ -303,20 +309,10 @@ połączone sterowanie ścieżką antenową przez DIO2 i GPIO17. Podczas działa
 mechanizm cyklu życia `hal_lora_radio` udostępnia informację o zadeklarowanej
 obsłudze radia.
 
-Eksperymentalne profile `pico-core1262-hf` oraz
-`nucleo-g474re-core1262-hf` opisują stałe konfiguracje sprzętowe projektów
-testowych, złożone z płytki bazowej i zewnętrznego modułu Waveshare
-Core1262-HF. Rezerwują kompletne
-okablowanie SPI/sterujące/przełącznika RF, deklarują `loraRadio` i
-eksportują zarówno `external-radio-frontend`, jak i `sx1262-radio`. Profil
-Nucleo używa SPI2 na PB13/PB14/PB15 i celowo zachowuje LD2 plus
-`HAL_LED_BUILTIN` na PA5. Obie konfiguracje przeszły testy CAD/RSSI/kalibracji
-bez transmisji oraz dwukierunkowe testy OTA, ale pozostają eksperymentalne,
-ponieważ montaż na przewodach zworkowych i po jednym przetestowanym egzemplarzu
-płytki bazowej każdego typu nie są równoważne stabilnemu projektowi płytki
-nośnej.
-
-Przy innym połączeniu modułu Core1262 użyj podstawowego profilu `pico` lub `nucleo-g474re` i jawnego deskryptora aplikacji. Nie wybieraj profilu złożonego, którego stałe przypisanie pinów nie odpowiada rzeczywistym połączeniom.
+Moduł podłączany przewodami, taki jak Waveshare Core1262-HF, nie dostaje
+profilu płytki, bo ten sam moduł można podpiąć pod dowolne wolne piny. Wybierz
+zwykłą płytkę hosta i opisz okablowanie w aplikacji; dla Core1262-HF opisuje
+to rozdział [LoRa](../api/pl/21_lora.md#zewnętrzny-moduł-waveshare-core1262-hf).
 
 Eksperymentalny profil `nucleo-g474re-canhat` opisuje NUCLEO-G474RE z nakładką
 CAN-FD HAT v1.2 od [Embedded Garage](https://www.youtube.com/@embeddedGarage)

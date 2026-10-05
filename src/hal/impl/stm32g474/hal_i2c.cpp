@@ -2,6 +2,7 @@
 #if HAL_TARGET_IS_STM32G474
 
 #include "hal/core/hal_config.h"
+#include "hal/gpio/hal_gpio.h"
 #ifdef HAL_ENABLE_I2C
 
 #include "hal/i2c/hal_i2c.h"
@@ -126,9 +127,6 @@ static hal_status_t i2c_status_from_result(uint8_t result) {
 #ifdef JH_STM32G474_HW
 #define I2C_TIMEOUT 200000u
 
-/* Port-indexed pin id helper: pin = port*16 + pin_number. */
-#define JH_STM32_PIN(port, pin) ((uint8_t)(((port) * 16u) + (pin)))
-
 enum {
   I2C_CTRL_1 = 1u,
   I2C_CTRL_2 = 2u,
@@ -144,11 +142,11 @@ typedef struct {
 
 static const i2c_hw_desc_t k_i2c_hw_desc[2] = {
     {/* bus 0 */
-     I2C_CTRL_1, I2C1_BASE, RCC_APB1ENR1_I2C1EN, JH_STM32_PIN(1u, 9u),
-     JH_STM32_PIN(1u, 8u)},
+     I2C_CTRL_1, I2C1_BASE, RCC_APB1ENR1_I2C1EN, HAL_GPIO_STM32_PIN('B', 9u),
+     HAL_GPIO_STM32_PIN('B', 8u)},
     {/* bus 1 */
-     I2C_CTRL_2, I2C2_BASE, RCC_APB1ENR1_I2C2EN, JH_STM32_PIN(0u, 8u),
-     JH_STM32_PIN(0u, 9u)},
+     I2C_CTRL_2, I2C2_BASE, RCC_APB1ENR1_I2C2EN, HAL_GPIO_STM32_PIN('A', 8u),
+     HAL_GPIO_STM32_PIN('A', 9u)},
 };
 
 static inline const i2c_hw_desc_t *i2c_hw_desc_for_bus(uint8_t bus) {

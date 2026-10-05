@@ -49,6 +49,19 @@ typedef enum {
 #define HAL_GPIO_IRQ_CORE_NONE UINT8_MAX
 
 /**
+ * @brief HAL pin number of an STM32G474 port pin, e.g. `HAL_GPIO_STM32_PIN('B',
+ *        9u)` for PB9.
+ *
+ * STM32G474 numbers pins as `port * 16 + pin`: PA0 is 0, PB0 is 16 and PG15 is
+ * 111. The result is an integer constant expression, so it also works in `#if`
+ * and in static initializers. The macro does not check its arguments.
+ *
+ * @param port Port letter, `'A'` to `'G'`.
+ * @param pin  Pin number within the port, 0 to 15.
+ */
+#define HAL_GPIO_STM32_PIN(port, pin) ((((port) - 'A') * 16u) + (pin))
+
+/**
  * @brief GPIO interrupt handler receiving the triggering pin and its context.
  *
  * Runs in ISR context with the same restrictions as a context-free callback.

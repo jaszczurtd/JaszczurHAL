@@ -60,9 +60,9 @@ RP2350 ARM. RP2350 RISC-V configurations that require CYW43 are not
 supported. STM32G474 network and Bluetooth projects use the NUCLEO-G474RE
 profile with an external PIM730/RM2 module.
 
-The LoRa project defaults to `pico-core1262-hf` and
-`nucleo-g474re-core1262-hf`. Explicitly select `rp2040-lora-lf` for the
-integrated Waveshare LF board. LF and HF devices use different bands;
+The LoRa project builds for the plain `pico` and `nucleo-g474re` boards with an
+external Waveshare Core1262-HF wired as described in its README. Explicitly
+select `rp2040-lora-lf` for the integrated Waveshare LF board. LF and HF devices use different bands;
 do not combine them as one radio pair. The `probe` variant checks chip
 capabilities, calibration, current RSSI, and CAD without transmitting.
 The base and `responder` variants use SF9/10 dBm; `sf7` and

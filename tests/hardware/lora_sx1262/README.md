@@ -51,23 +51,23 @@ configuration, not a universal regulatory preset.
 
 ### HF pair: external Core1262-HF on RP2040 and STM32G474
 
-Use the fixed wiring documented by the composite profiles. Build the
-RP2040/Pico as initiator and the NUCLEO-G474RE as responder (or reverse both
-roles):
+Wire both modules as in the example README; the example keeps that wiring in
+`lora_example_radio.h`. Build the RP2040/Pico as initiator and the
+NUCLEO-G474RE as responder (or reverse both roles):
 
 ```bash
 vscode/entry/jh-vscode build \
   --project examples/27_lora_point_to_point \
-  --target rp2040 --board pico-core1262-hf
+  --target rp2040
 vscode/entry/jh-vscode build \
   --project examples/27_lora_point_to_point \
-  --target stm32g474 --board nucleo-g474re-core1262-hf --variant responder
+  --target stm32g474 --variant responder
 ```
 
 Both Core1262-HF devices use the same module electrical profile and EU868
-technical configuration. The generated board facts own their host pin maps;
-the example contains no target-specific fixture wiring. The Nucleo profile
-uses SPI2 on PB13/PB14/PB15 and retains LD2/`HAL_LED_BUILTIN` on PA5.
+technical configuration from `hal_lora_sx126x_core1262_hf_defaults()`. The
+host pin maps belong to the example, one per target. The Nucleo wiring uses
+SPI2 on PB13/PB14/PB15 and leaves LD2/`HAL_LED_BUILTIN` on PA5.
 
 Before an OTA run, the no-transmit probe may be built and uploaded on either
 host with `--variant probe`. A pass verifies provider capabilities, explicit

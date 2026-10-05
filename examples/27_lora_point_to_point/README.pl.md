@@ -31,9 +31,10 @@ Jeżeli profil płytki udostępnia diodę stanu GPIO, świeci ona podczas nadawa
 i zapala się na 120 ms po odebraniu pakietu. Brak takiej diody nie zmienia
 pracy radia.
 
-Domyślne profile to `pico-core1262-hf` i `nucleo-g474re-core1262-hf`
-z modułami Waveshare Core1262-HF. Dla zintegrowanej płytki LF wybierz
-`rp2040-lora-lf`. Jej częstotliwość 434,0 MHz jest ustawieniem testowym,
+Przykład buduje się dla zwykłych płytek `pico` i `nucleo-g474re`
+i zakłada zewnętrzny moduł Waveshare Core1262-HF podłączony jak w tabeli
+poniżej. Dla zintegrowanej płytki LF wybierz `rp2040-lora-lf`; jej profil
+opisuje już radio. Jej częstotliwość 434,0 MHz jest ustawieniem testowym,
 a nie deklaracją zgodności z przepisami w dowolnym regionie.
 Nie łącz w jednej parze radiowej urządzeń LF i HF.
 
@@ -59,11 +60,10 @@ lub uruchom:
 ```bash
 vscode/entry/jh-vscode build \
   --project examples/27_lora_point_to_point \
-  --target rp2040 --board pico-core1262-hf --variant link
+  --target rp2040 --variant link
 vscode/entry/jh-vscode build \
   --project examples/27_lora_point_to_point \
-  --target stm32g474 --board nucleo-g474re-core1262-hf \
-  --variant link-responder
+  --target stm32g474 --variant link-responder
 ```
 
 Dla dwóch zintegrowanych płytek Waveshare LF wybierz
@@ -81,6 +81,10 @@ i klucza. Przed włączeniem AEAD przeczytaj
 
 ## Połączenia zewnętrznego Core1262-HF
 
+Piny są zapisane w `lora_example_radio.h`; zmień je tam, jeśli moduł jest
+podłączony inaczej. Parametry elektryczne samego modułu daje
+`hal_lora_sx126x_core1262_hf_defaults()`.
+
 | Sygnał | Rodzina RP | STM32G474 |
 |---|---|---|
 | MISO / MOSI / SCK | GP16 / GP19 / GP18 | PB14 / PB15 / PB13 |
@@ -92,11 +96,11 @@ Zasil moduł napięciem 3,3 V i używaj takich samych poziomów logicznych.
 Połącz masy, zastosuj lokalne kondensatory odsprzęgające i podłącz właściwą
 antenę HF przed rozpoczęciem nadawania. Sterownik używa SPI 8 MHz,
 czeka na zwolnienie BUSY, steruje TCXO przez DIO3 i osobno obsługuje
-RXEN oraz TXEN.
+RXEN oraz TXEN. Waveshare nazywa te linie od toru, który wyłączają: RXEN ma
+stan wysoki podczas nadawania, a TXEN podczas odbioru.
 
-Na NUCLEO-G474RE użyto SPI2, aby nie zajmować PA5. Pin pozostaje połączony
-z diodą LD2 i jest dostępny jako `HAL_LED_BUILTIN`. Profil płytki z modułem
-nie powinien ukrywać tej diody ani przedstawiać jej pinu jako niepodłączonego.
+Na NUCLEO-G474RE użyto SPI2, bo PA5, zegar SPI1 na złączu Arduino, steruje
+diodą LD2, której przykład używa jako `HAL_LED_BUILTIN`.
 
 Dostępne połączenia tworzą dwa oddzielne zestawy testowe: dwie zintegrowane
 płytki LF albo dwa zewnętrzne moduły HF podłączone do RP2040 i STM32G474.

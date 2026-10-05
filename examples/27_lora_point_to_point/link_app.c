@@ -20,15 +20,17 @@
 #include <hal/spi/hal_spi.h>
 #include <hal/system/hal_system.h>
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+
+#include "lora_example_radio.h"
 
 #define INITIATOR_ADDRESS UINT16_C(0x1001)
 #define RESPONDER_ADDRESS UINT16_C(0x1002)
 #define EXAMPLE_PAYLOAD_LENGTH 500u
 
 static const uint8_t kApplicationPort = 1u;
-static const uint32_t kLfTestFrequencyHz = UINT32_C(434000000);
 #ifndef HAL_LORA_LINK_EXAMPLE_RESPONDER
 static const uint32_t kFirstRequestDelayMs = UINT32_C(1000);
 static const uint32_t kRequestPeriodMs = UINT32_C(3000);
@@ -65,18 +67,6 @@ static uint32_t s_request_started_ms = 0u;
 static uint32_t s_next_request_ms = 0u;
 static uint32_t s_payload_generation = 0u;
 #endif
-
-static hal_lora_modem_config_t
-modem_config(const hal_lora_radio_config_t *hardware) {
-  hal_lora_modem_config_t modem = hal_lora_default_eu868();
-  modem.tx_power_dbm = 10;
-  if (hardware->hardware.sx126x.max_frequency_hz < UINT32_C(800000000)) {
-    /* Fixed LF test frequency; not a region-specific regulatory configuration.
-     */
-    modem.frequency_hz = kLfTestFrequencyHz;
-  }
-  return modem;
-}
 
 static uint32_t example_session_id(void) {
   uint8_t seed[HAL_DEVICE_UID_BYTES + sizeof(uint32_t) + sizeof(uint16_t)] = {
@@ -275,8 +265,11 @@ void app_start(void) {
   hal_debug_init_default();
 
   hal_lora_radio_config_t hardware = {};
-  hal_status_t status = hal_lora_radio_config_from_board(&hardware);
+  bool from_board = false;
+  hal_status_t status = example_lora_radio_config(&hardware, &from_board);
   if (status == HAL_OK) {
+    deb("Using %s radio wiring",
+        from_board ? "board-declared" : "external Core1262-HF");
     status = hal_spi_init(hardware.spi_bus, hardware.spi_miso_pin,
                           hardware.spi_mosi_pin, hardware.spi_sck_pin);
   }
@@ -284,7 +277,7 @@ void app_start(void) {
     status = hal_lora_radio_create(&hardware, &s_radio);
   }
   if (status == HAL_OK) {
-    const hal_lora_modem_config_t modem = modem_config(&hardware);
+    const hal_lora_modem_config_t modem = example_lora_modem_config(&hardware);
     status = hal_lora_radio_configure(s_radio, &modem);
   }
 

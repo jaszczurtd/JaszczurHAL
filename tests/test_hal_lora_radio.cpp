@@ -50,12 +50,26 @@ void test_core1262_hf_defaults_and_presets_are_valid(void) {
   TEST_ASSERT_EQUAL_INT(HAL_LORA_REGULATOR_DCDC, hardware.regulator_mode);
   TEST_ASSERT_EQUAL_INT(HAL_LORA_TCXO_CONTROL_DIO3, hardware.tcxo_control);
   TEST_ASSERT_EQUAL_INT(HAL_LORA_TCXO_1V8, hardware.tcxo_voltage);
+  /* Waveshare RXEN on pin A is high while transmitting, TXEN on pin B while
+   * receiving; both are low when idle. */
+  TEST_ASSERT_FALSE(hardware.rf_switch_idle_level_a);
+  TEST_ASSERT_FALSE(hardware.rf_switch_idle_level_b);
   TEST_ASSERT_FALSE(hardware.rf_switch_rx_level_a);
   TEST_ASSERT_TRUE(hardware.rf_switch_rx_level_b);
   TEST_ASSERT_TRUE(hardware.rf_switch_tx_level_a);
   TEST_ASSERT_FALSE(hardware.rf_switch_tx_level_b);
+  TEST_ASSERT_EQUAL_UINT32(UINT32_C(5000), hardware.tcxo_startup_us);
   TEST_ASSERT_EQUAL_UINT32(UINT32_C(850000000), hardware.min_frequency_hz);
   TEST_ASSERT_EQUAL_UINT32(UINT32_C(930000000), hardware.max_frequency_hz);
+  TEST_ASSERT_EQUAL_UINT32(UINT32_C(18000000), hardware.max_spi_clock_hz);
+  TEST_ASSERT_EQUAL_INT8(-9, hardware.min_tx_power_dbm);
+  TEST_ASSERT_EQUAL_INT8(22, hardware.max_tx_power_dbm);
+  /* Host wiring is the application's: the helper leaves every pin unset. */
+  TEST_ASSERT_EQUAL_UINT8(HAL_LORA_PIN_NONE, hardware.reset_pin);
+  TEST_ASSERT_EQUAL_UINT8(HAL_LORA_PIN_NONE, hardware.busy_pin);
+  TEST_ASSERT_EQUAL_UINT8(HAL_LORA_PIN_NONE, hardware.dio1_pin);
+  TEST_ASSERT_EQUAL_UINT8(HAL_LORA_PIN_NONE, hardware.rf_switch_pin_a);
+  TEST_ASSERT_EQUAL_UINT8(HAL_LORA_PIN_NONE, hardware.rf_switch_pin_b);
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_lora_sx126x_core1262_hf_defaults(NULL));
 
   const hal_lora_modem_config_t balanced = hal_lora_default_eu868();
@@ -93,6 +107,16 @@ void test_core1262_hf_defaults_and_presets_are_valid(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK,
                         hal_lora_time_on_air(&short_symbol, 1u, &fast_ms));
   TEST_ASSERT_EQUAL_UINT32(224u, fast_ms);
+}
+
+void test_config_from_board_reports_a_board_without_radio(void) {
+  hal_lora_radio_config_t config = {};
+  memset(&config, 0xA5, sizeof(config));
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED,
+                        hal_lora_radio_config_from_board(&config));
+  static const hal_lora_radio_config_t zero = {};
+  TEST_ASSERT_EQUAL_MEMORY(&zero, &config, sizeof(config));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_lora_radio_config_from_board(NULL));
 }
 
 void test_sx1261_model_limits_share_the_sx126x_lifecycle(void) {
@@ -495,6 +519,7 @@ void test_concurrent_transmit_start_serializes_one_handle(void) {
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_core1262_hf_defaults_and_presets_are_valid);
+  RUN_TEST(test_config_from_board_reports_a_board_without_radio);
   RUN_TEST(test_sx1261_model_limits_share_the_sx126x_lifecycle);
   RUN_TEST(test_transmit_copies_payload_and_updates_state_and_diagnostics);
   RUN_TEST(test_bounded_receive_reports_progress_packet_overflow_and_timeout);

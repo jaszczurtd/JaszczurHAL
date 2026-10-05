@@ -134,19 +134,13 @@ function(jh_generate_board_config)
                 "'${_jh_expected_feature}'")
         endif()
     endforeach()
-    file(GLOB _jh_board_descriptors CONFIGURE_DEPENDS
-        "${JH_BOARD_ROOT}/boards/targets/*.json"
-        "${JH_BOARD_ROOT}/boards/profiles/*.json")
+    # The generator owns its inputs: generation.d lists every file it read and
+    # JH_BOARD_INPUT_GLOBS the patterns that catch files created later.
+    file(STRINGS "${JH_BOARD_OUTPUT_DIR}/generation.d" _jh_board_inputs)
+    file(GLOB_RECURSE _jh_board_new_inputs CONFIGURE_DEPENDS
+        ${JH_BOARD_INPUT_GLOBS})
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-        "${JH_BOARD_ROOT}/scripts/generate_board_config.py"
-        "${JH_BOARD_ROOT}/scripts/generate_hal_features.py"
-        "${JH_BOARD_ROOT}/config/features.schema.json"
-        "${JH_BOARD_ROOT}/boards/capabilities.json"
-        ${_jh_board_descriptors})
-    file(GLOB _jh_feature_descriptors CONFIGURE_DEPENDS
-        "${JH_BOARD_ROOT}/config/features/*.json")
-    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-        ${_jh_feature_descriptors})
+        ${_jh_board_inputs} ${_jh_board_new_inputs})
 
     foreach(_variable
         JH_RESOLVED_TARGET

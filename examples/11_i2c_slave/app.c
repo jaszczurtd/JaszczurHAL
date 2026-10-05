@@ -6,14 +6,14 @@
 
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
+#include <hal/gpio/hal_gpio.h>
 #include <hal/i2c/hal_i2c_slave.h>
 #include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
 
 #if HAL_TARGET_IS_STM32G474
-#define EXAMPLE_PIN(port, pin) ((uint8_t)(((port) * 16u) + (pin)))
-#define I2C_SLAVE_SDA_PIN EXAMPLE_PIN(1u, 9u) /* PB9 = I2C1_SDA */
-#define I2C_SLAVE_SCL_PIN EXAMPLE_PIN(1u, 8u) /* PB8 = I2C1_SCL */
+#define I2C_SLAVE_SDA_PIN HAL_GPIO_STM32_PIN('B', 9u) /* PB9 = I2C1_SDA */
+#define I2C_SLAVE_SCL_PIN HAL_GPIO_STM32_PIN('B', 8u) /* PB8 = I2C1_SCL */
 #else
 #define I2C_SLAVE_SDA_PIN 4u
 #define I2C_SLAVE_SCL_PIN 5u

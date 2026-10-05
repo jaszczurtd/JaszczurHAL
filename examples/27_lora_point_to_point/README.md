@@ -30,9 +30,10 @@ If the board profile provides a GPIO status LED, it stays on during
 transmission and lights for 120 ms after a packet arrives. Radio behavior
 is unchanged on boards without that LED.
 
-The defaults are `pico-core1262-hf` and `nucleo-g474re-core1262-hf` with
-Waveshare Core1262-HF modules. Select `rp2040-lora-lf` for the integrated
-LF board. Its 434.0 MHz frequency is a test setting, not a declaration of
+The example builds for the plain `pico` and `nucleo-g474re` boards and expects
+an external Waveshare Core1262-HF wired as shown below. Select
+`rp2040-lora-lf` for the integrated LF board; its profile already describes
+the radio. Its 434.0 MHz frequency is a test setting, not a declaration of
 regulatory compliance in every region. Do not pair LF and HF devices over
 the radio link.
 
@@ -56,11 +57,10 @@ To build only the command pair, choose the variants in VS Code or run:
 ```bash
 vscode/entry/jh-vscode build \
   --project examples/27_lora_point_to_point \
-  --target rp2040 --board pico-core1262-hf --variant link
+  --target rp2040 --variant link
 vscode/entry/jh-vscode build \
   --project examples/27_lora_point_to_point \
-  --target stm32g474 --board nucleo-g474re-core1262-hf \
-  --variant link-responder
+  --target stm32g474 --variant link-responder
 ```
 
 For two integrated Waveshare LF boards, select
@@ -77,6 +77,10 @@ that is never reused with the same address and key. Read the
 
 ## External Core1262-HF wiring
 
+The pins live in `lora_example_radio.h`; change them there to match your own
+wiring. Electrical facts of the module come from
+`hal_lora_sx126x_core1262_hf_defaults()`.
+
 | Signal | RP family | STM32G474 |
 |---|---|---|
 | MISO / MOSI / SCK | GP16 / GP19 / GP18 | PB14 / PB15 / PB13 |
@@ -87,11 +91,11 @@ that is never reused with the same address and key. Read the
 Use 3.3 V power and logic levels, connect grounds, add local decoupling,
 and attach the correct HF antenna before transmitting. The driver uses
 8 MHz SPI, waits for BUSY to clear, drives the TCXO through DIO3, and
-controls RXEN and TXEN separately.
+controls RXEN and TXEN separately. Waveshare names these lines after the path
+they turn off: RXEN is high while transmitting and TXEN while receiving.
 
-NUCLEO-G474RE uses SPI2 to leave PA5 available. PA5 remains physically
-connected to LD2 and exposed as `HAL_LED_BUILTIN`. A composite board profile
-must not hide that LED or describe its pin as unconnected.
+NUCLEO-G474RE uses SPI2 because PA5, the SPI1 clock on the Arduino header,
+drives LD2, which the example uses as `HAL_LED_BUILTIN`.
 
 The available wiring supports two separate test setups: two integrated LF
 boards, or two external HF modules connected to RP2040 and STM32G474 hosts.
