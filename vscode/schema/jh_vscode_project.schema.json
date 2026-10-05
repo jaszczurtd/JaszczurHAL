@@ -174,6 +174,11 @@
             "type": "string",
             "enum": ["cmake", "esp-idf", "custom"]
           },
+          "board": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Board used when this target is active; must be registered for this target. Local state and --board take precedence."
+          },
           "buildDir": { "type": "string" },
           "cmakeBuildDir": { "type": "string" },
           "cmake": { "type": "object", "additionalProperties": true },

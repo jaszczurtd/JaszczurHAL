@@ -1163,12 +1163,10 @@ def effective_axes(document: dict[str, Any]) -> list[tuple[str | None, str | Non
     for target in targets:
         board: str | None = None
         board_value = boards.get(target) if target is not None else None
+        # Example matrices pass their board like the dispatcher does; any other
+        # axis lets the resolver apply targetProfiles and manifest precedence.
         if isinstance(board_value, str) and board_value:
             board = board_value
-        elif target == manifest_target:
-            manifest_board = document.get("board")
-            if isinstance(manifest_board, str) and manifest_board:
-                board = manifest_board
         for variant_id, variant in variant_axes:
             allowed = variant.get("targets") if variant is not None else None
             if (
@@ -1544,11 +1542,7 @@ def lint_effective_inputs(
                         f"[JH-CFG-TARGET] unknown target"
                     )
                     continue
-                valid_boards = {
-                    str(item.get("id"))
-                    for item in target_descriptor.get("boards", [])
-                    if isinstance(item, dict) and item.get("id")
-                }
+                valid_boards = workflow.registry_board_ids(target_descriptor)
                 if board is not None and board not in valid_boards:
                     findings.append(
                         f"{project_display} [target={target}, board={board}]: "

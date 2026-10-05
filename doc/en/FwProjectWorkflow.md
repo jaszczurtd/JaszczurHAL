@@ -91,12 +91,33 @@ Automation can use `--install --yes` after obtaining consent.
 
 ## Selecting the target and configuration
 
-The target and board are selected in the following order, from highest priority:
+The target is selected in the following order, from highest priority:
 
-1. invocation overrides such as `--target rp2040 --board picow`;
+1. `--target`;
 2. `.vscode/jaszczurhal.local.json`;
-3. tracked manifest `target` and `board`;
-4. registry default `rp2040/pico`.
+3. tracked manifest `target`;
+4. `rp2040`.
+
+The board for that target is taken from the first of these that names one:
+
+1. `--board`;
+2. `.vscode/jaszczurhal.local.json`;
+3. `targetProfiles.<target>.board`;
+4. tracked manifest `board`;
+5. the target's default board in the registry.
+
+A board that no target registers stops the command with `[JH-CFG-BOARD]`,
+and so does a board of another target given with `--board`. The manifest is
+checked as a whole: its `board` must belong to its `target`, and every
+`targetProfiles.<target>.board` to that target, even when another board is
+selected. A board of another target in local state, or the manifest `board`
+while a different target is active, is skipped, so `--target` can switch
+targets without editing the manifest.
+
+`select-board` stores a selection only after it resolves. Without `--board` it
+stores just the target, leaving the board to `targetProfiles` and the registry
+default. It replaces a broken local selection, but a broken manifest has to be
+fixed in the manifest.
 
 Settings are then merged in this order. Later values override earlier ones:
 

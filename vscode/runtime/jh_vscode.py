@@ -332,13 +332,16 @@ def resolve_target_profile(
     target_override: str | None = None,
     board_override: str | None = None,
     override_source: str = "cli",
+    local_board: str | None = None,
 ) -> None:
     """Resolve the active target and merge its targetProfiles overlay in place.
 
-    Precedence for the active target/board: override (CLI or the gitignored
+    Target precedence: override (CLI or the gitignored
     .vscode/jaszczurhal.local.json, whichever the caller passed) > manifest
-    target/board > default 'rp2040'. `override_source` labels the override's
-    origin for config-dump only.
+    target > default 'rp2040'. `override_source` labels the target override's
+    origin for config-dump only. Board precedence: `board_override` (CLI) >
+    `local_board` > targetProfiles.<active>.board > manifest board > the
+    target's defaultBoard; see select_registry_board for rejected boards.
 
     Parity contract: a manifest with no target / board / targetProfiles AND no
     override is left byte-for-byte untouched, so config-dump on existing pico
@@ -352,6 +355,7 @@ def resolve_target_profile(
     has_any = (
         target_override is not None
         or board_override is not None
+        or local_board is not None
         or manifest_target is not None
         or manifest_board is not None
         or isinstance(profiles, dict)
@@ -365,15 +369,20 @@ def resolve_target_profile(
     active = target_override or manifest_target or "rp2040"
     target_desc = registry.get(active)
 
-    # Board precedence: override > manifest > registry defaultBoard. The board is
-    # scoped to the ACTIVE target: a board carried over from a different target
-    # (e.g. local.json held an STM32 board but the target was switched to rp2040)
-    # is invalid here and falls back to this target's default.
-    board = board_override or manifest_board
-    if isinstance(target_desc, dict):
-        valid_boards = [b.get("id") for b in (target_desc.get("boards") or []) if isinstance(b, dict)]
-        if board is None or (valid_boards and board not in valid_boards):
-            board = target_desc.get("defaultBoard")
+    validate_manifest_boards(registry, config)
+    manifest_overlay: dict[str, Any] = {}
+    if isinstance(profiles, dict) and isinstance(profiles.get(active), dict):
+        manifest_overlay = profiles[active]
+
+    board, board_source = select_registry_board(
+        registry,
+        active,
+        [
+            (board_override, "cli", True),
+            (local_board, ".vscode/jaszczurhal.local.json", False),
+            *manifest_board_candidates(config, active),
+        ],
+    )
 
     # Effective overlay = registry family+board layer (build defaults) with the
     # manifest's own targetProfiles.<active> entry merged on top (project wins).
@@ -393,10 +402,6 @@ def resolve_target_profile(
             board_desc.get("identity"), dict
         ):
             registry_layer["identity"] = dict(board_desc["identity"])
-
-    manifest_overlay: dict[str, Any] = {}
-    if isinstance(profiles, dict) and isinstance(profiles.get(active), dict):
-        manifest_overlay = profiles[active]
 
     # Precedence (low -> high): registry target/board defaults are the floor, the
     # base manifest overrides them, and the active target's targetProfiles overlay
@@ -428,13 +433,6 @@ def resolve_target_profile(
     # Expand tokens the overlay may have introduced (idempotent on the base).
     expand_config_sections(config, project_dir)
 
-    cmake = config.get("cmake")
-    if config.get("toolchain") == "cmake" and isinstance(cmake, dict):
-        cache = cmake.get("cache")
-        if not isinstance(cache, dict):
-            cache = {}
-            cmake["cache"] = cache
-        cache["JH_TARGET"] = active
 
     target_switched = active != (manifest_target or "rp2040")
     registry_upload = target_desc.get("upload") if isinstance(target_desc, dict) else None
@@ -477,12 +475,23 @@ def resolve_target_profile(
 
     if board is not None:
         config["board"] = board
-        if board_override:
-            sources["board"] = override_source
-        elif manifest_board is not None:
-            sources["board"] = ".vscode/jaszczurhal.project.json"
-        else:
-            sources["board"] = f"registry:{active}.defaultBoard"
+        sources["board"] = board_source
+    pin_resolved_target_board(config)
+
+
+def pin_resolved_target_board(config: dict[str, Any]) -> None:
+    """Make the resolved target and board win over JH_TARGET/JH_BOARD set in
+    the manifest, a targetProfiles overlay, or a variant's CMake cache."""
+    cmake = config.get("cmake")
+    if config.get("toolchain") != "cmake" or not isinstance(cmake, dict):
+        return
+    cache = cmake.get("cache")
+    if not isinstance(cache, dict):
+        cache = {}
+        cmake["cache"] = cache
+    for key, field in (("JH_TARGET", "target"), ("JH_BOARD", "board")):
+        if config.get(field):
+            cache[key] = config[field]
 
 
 def jaszczurhal_root() -> Path:
@@ -695,6 +704,99 @@ def resolve_registry_board(
     )
 
 
+def registry_board_ids(target_desc: dict[str, Any]) -> list[str]:
+    return [
+        str(board.get("id"))
+        for board in (target_desc.get("boards") or [])
+        if isinstance(board, dict) and board.get("id")
+    ]
+
+
+def select_registry_board(
+    registry: dict[str, dict[str, Any]],
+    target: str,
+    candidates: list[tuple[Any, str, bool]],
+) -> tuple[str | None, str]:
+    """Pick the board for `target` from (board, source, scoped) candidates.
+
+    Candidates come in precedence order. A board that no target registers is
+    rejected. A board of another target is rejected when the candidate is
+    scoped to `target` (CLI, targetProfiles.<target>, the manifest's own
+    target) and skipped otherwise, e.g. a local selection kept from a previous
+    target. Without a usable candidate the target's defaultBoard is used.
+    """
+    target_desc = registry.get(target)
+    if not isinstance(target_desc, dict):
+        for board, source, _ in candidates:
+            if board is not None:
+                return str(board), source
+        return None, "default"
+    target_boards = registry_board_ids(target_desc)
+    for board, source, scoped in candidates:
+        if board is None:
+            continue
+        board = str(board)
+        if not target_boards or board in target_boards:
+            return board, source
+        owners = sorted(
+            tid
+            for tid, desc in registry.items()
+            if isinstance(desc, dict) and board in registry_board_ids(desc)
+        )
+        known = f"{target} boards: {', '.join(target_boards)}"
+        if not owners:
+            raise ValueError(
+                f"[JH-CFG-BOARD] {source}: board '{board}' is not in the "
+                f"board registry; {known}"
+            )
+        if scoped:
+            raise ValueError(
+                f"[JH-CFG-BOARD] {source}: board '{board}' belongs to "
+                f"{', '.join(owners)}, not to target {target}; {known}"
+            )
+    return target_desc.get("defaultBoard"), f"registry:{target}.defaultBoard"
+
+
+def validate_manifest_boards(
+    registry: dict[str, dict[str, Any]], manifest: dict[str, Any]
+) -> None:
+    """Reject a manifest board that its target does not register: the base
+    board against the manifest target and every targetProfiles board against
+    its own target, even when that target is inactive or overridden."""
+    manifest_target = str(manifest.get("target") or "rp2040")
+    select_registry_board(
+        registry,
+        manifest_target,
+        manifest_board_candidates(manifest, manifest_target)[1:],
+    )
+    profiles = manifest.get("targetProfiles")
+    if isinstance(profiles, dict):
+        for profile_target in profiles:
+            select_registry_board(
+                registry,
+                str(profile_target),
+                manifest_board_candidates(manifest, str(profile_target))[:1],
+            )
+
+
+def manifest_board_candidates(
+    manifest: dict[str, Any], target: str
+) -> list[tuple[Any, str, bool]]:
+    """Board candidates of a manifest for `target`: its targetProfiles entry,
+    then the base board, which is scoped only while its own target is active."""
+    label = ".vscode/jaszczurhal.project.json"
+    profiles = manifest.get("targetProfiles")
+    overlay = profiles.get(target) if isinstance(profiles, dict) else None
+    return [
+        (
+            overlay.get("board") if isinstance(overlay, dict) else None,
+            f"{label} targetProfiles.{target}",
+            True,
+        ),
+        (manifest.get("board"), label, target == (manifest.get("target") or "rp2040")),
+    ]
+
+
 def normalize_manifest(data: dict[str, Any]) -> dict[str, Any]:
     config: dict[str, Any] = {}
     for key in (
@@ -806,6 +908,7 @@ def apply_variant(config: dict[str, Any], variant_id: str | None) -> None:
         cmake = deep_merge(cmake, {k: v for k, v in variant_cmake.items() if k != "cache"})
     cmake["cache"] = cache
     config["cmake"] = cmake
+    pin_resolved_target_board(config)
 
     example = dict(config.get("example") or {})
     example["activeVariant"] = variant_id
@@ -927,17 +1030,12 @@ def load_project_config(
         upload["bootselVolume"] = str(local_bootsel_volume)
         config["upload"] = upload
         sources["upload.bootselVolume"] = ".vscode/jaszczurhal.local.json"
-    eff_target = target_override or local_target
-    eff_board = board_override or local_board
-    if target_override or board_override:
-        override_source = "cli"
-    else:
-        override_source = ".vscode/jaszczurhal.local.json"
     resolve_target_profile(
         config, project_dir, sources,
-        target_override=eff_target,
-        board_override=eff_board,
-        override_source=override_source,
+        target_override=target_override or local_target,
+        board_override=board_override,
+        override_source="cli" if target_override else ".vscode/jaszczurhal.local.json",
+        local_board=local_board,
     )
     config["_projectDir"] = str(project_dir)
     config["_sources"] = sources
@@ -1607,13 +1705,16 @@ def current_board_selection(
     source = ".vscode/jaszczurhal.local.json" if local_state.get("target") else (
         ".vscode/jaszczurhal.project.json" if manifest.get("target") else "default"
     )
-    board = local_state.get("board") or manifest.get("board")
-    desc = registry.get(str(target))
-    if isinstance(desc, dict):
-        board_ids = [b.get("id") for b in (desc.get("boards") or []) if isinstance(b, dict)]
-        if board is None or (board_ids and board not in board_ids):
-            board = desc.get("defaultBoard")
-    return str(target), str(board) if board is not None else None, source
+    validate_manifest_boards(registry, manifest)
+    board, _ = select_registry_board(
+        registry,
+        str(target),
+        [
+            (local_state.get("board"), ".vscode/jaszczurhal.local.json", False),
+            *manifest_board_candidates(manifest, str(target)),
+        ],
+    )
+    return str(target), board, source
 
 
 def persist_board_selection(
@@ -1621,6 +1722,7 @@ def persist_board_selection(
     local_state: dict[str, Any],
     target: str,
     board: str | None,
+    resolved_board: str | None,
 ) -> int:
     vscode_dir = project_dir / ".vscode"
     new_state = dict(local_state) if isinstance(local_state, dict) else {}
@@ -1634,7 +1736,7 @@ def persist_board_selection(
         json.dumps(new_state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     ensure_local_state_gitignored(project_dir)
-    print(f"Selected target={target} board={board or '(target default)'}")
+    print(f"Selected target={target} board={resolved_board or '(target default)'}")
     print(f"Persisted to .vscode/{LOCAL_STATE_FILENAME} (gitignored; project default stays in the manifest).")
     return 0
 
@@ -1649,7 +1751,7 @@ def validate_board_selection(
         known = ", ".join(sorted(registry)) or "(registry empty)"
         print(f"error: unknown target '{target}'. Known targets: {known}", file=sys.stderr)
         return None, None, EXIT_CONFIG
-    board_ids = [b.get("id") for b in (desc.get("boards") or []) if isinstance(b, dict)]
+    board_ids = registry_board_ids(desc)
     selected_board = board or desc.get("defaultBoard")
     if board_ids and selected_board not in board_ids:
         print(f"error: unknown board '{selected_board}' for target '{target}'. Known boards: {', '.join(board_ids)}", file=sys.stderr)
@@ -1715,7 +1817,17 @@ def command_select_board(args: argparse.Namespace) -> int:
     vscode_dir = project_dir / ".vscode"
     local_state = load_json_file(vscode_dir / LOCAL_STATE_FILENAME)
     manifest = load_json_file(vscode_dir / "jaszczurhal.project.json")
-    current_target, current_board, current_source = current_board_selection(registry, local_state, manifest)
+    try:
+        current_target, current_board, current_source = current_board_selection(
+            registry, local_state, manifest
+        )
+    except ValueError as exc:
+        # An explicit selection replaces a broken one, so only list and
+        # interactive modes need the current selection to resolve.
+        if not (args.target or args.selection):
+            print(f"error: {exc}", file=sys.stderr)
+            return EXIT_CONFIG
+        current_target, current_board, current_source = "", None, ""
 
     target = args.target
     board = args.board
@@ -1768,10 +1880,24 @@ def command_select_board(args: argparse.Namespace) -> int:
         return 0
 
     # Set mode.
-    _, selected_board, status = validate_board_selection(registry, str(target), board)
+    _, _, status = validate_board_selection(registry, str(target), board)
     if status != 0:
         return status
-    return persist_board_selection(project_dir, local_state, str(target), selected_board)
+    # Persist only a selection that resolves; without --board the manifest's
+    # targetProfiles board or the target default stays in charge.
+    try:
+        resolved = load_project_config(
+            project_dir,
+            target_override=str(target),
+            board_override=board,
+            use_local_state=False,
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_CONFIG
+    return persist_board_selection(
+        project_dir, local_state, str(target), board, resolved.get("board")
+    )
 
 
 def json_indent_width(text: str) -> int:

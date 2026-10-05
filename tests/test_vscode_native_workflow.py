@@ -938,13 +938,14 @@ def write_feature_value_fixture(
     target_profiles: dict[str, object] | None = None,
     variants: list[dict[str, object]] | None = None,
     header: str = "#pragma once\n",
+    board: str = "pico",
 ) -> None:
     manifest: dict[str, object] = {
         "project": "jh-vscode feature value test",
         "module": "feature_value_test",
         "toolchain": "cmake",
         "target": "rp2040",
-        "board": "pico",
+        "board": board,
         "buildDir": "${project}/.build",
         "cmakeBuildDir": "${project}/.build/cmake",
         "cmake": {
@@ -1246,4 +1247,183 @@ with tempfile.TemporaryDirectory(prefix="jh-vscode-feature-values-") as temp_dir
         overridden_result.returncode == 0,
         "feature values were validated before the active target profile merge: "
         f"{overridden_result.stderr}",
+    )
+
+
+def require_board_rejection(
+    result: subprocess.CompletedProcess[str], board: str, source: str
+) -> None:
+    require(
+        result.returncode == workflow_runtime.EXIT_CONFIG,
+        f"board {board} from {source} returned {result.returncode}: {result.stderr}",
+    )
+    require("[JH-CFG-BOARD]" in result.stderr, f"{board}: missing diagnostic id")
+    require(f"'{board}'" in result.stderr, f"{board}: missing board in diagnostic")
+    require(source in result.stderr, f"{board}: missing source in diagnostic")
+
+
+def require_board(
+    result: subprocess.CompletedProcess[str], board: str, source: str
+) -> None:
+    require(result.returncode == 0, f"expected board {board}: {result.stderr}")
+    dumped = json.loads(result.stdout)
+    require(dumped["board"] == board, f"resolved {dumped['board']}, expected {board}")
+    require(
+        dumped["cmake"]["cache"]["JH_BOARD"] == board,
+        f"JH_BOARD does not follow the resolved board {board}",
+    )
+    require(
+        dumped["_sources"]["board"] == source,
+        f"board {board} attributed to {dumped['_sources']['board']}, expected {source}",
+    )
+
+
+def write_local_state(project_dir: Path, state: dict[str, str]) -> None:
+    (project_dir / ".vscode" / "jaszczurhal.local.json").write_text(
+        json.dumps(state) + "\n", encoding="utf-8"
+    )
+
+
+def run_select_board(
+    project_dir: Path, *extra_args: str
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [str(ENTRY), "select-board", "--project", str(project_dir), *extra_args],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+MANIFEST_SOURCE = ".vscode/jaszczurhal.project.json"
+LOCAL_SOURCE = ".vscode/jaszczurhal.local.json"
+
+with tempfile.TemporaryDirectory(prefix="jh-vscode-board-selection-") as temp_dir:
+    fixture_root = Path(temp_dir)
+
+    unknown = fixture_root / "unknown"
+    write_feature_value_fixture(unknown, board="pico-removed")
+    require_board_rejection(
+        run_feature_value_dump(unknown), "pico-removed", MANIFEST_SOURCE
+    )
+    require(
+        run_select_board(unknown).returncode == workflow_runtime.EXIT_CONFIG,
+        "select-board listed a manifest with an unknown board",
+    )
+    require(
+        run_select_board(unknown, "--target", "rp2040", "--board", "picow").returncode
+        == workflow_runtime.EXIT_CONFIG,
+        "select-board accepted a manifest whose board does not resolve",
+    )
+    write_local_state(unknown, {"target": "rp2040", "board": "picow"})
+    require_board_rejection(
+        run_feature_value_dump(unknown), "pico-removed", MANIFEST_SOURCE
+    )
+
+    foreign = fixture_root / "foreign"
+    write_feature_value_fixture(foreign, board="pico2w")
+    require_board_rejection(run_feature_value_dump(foreign), "pico2w", MANIFEST_SOURCE)
+
+    base = fixture_root / "base"
+    write_feature_value_fixture(base)
+    require_board(run_feature_value_dump(base), "pico", MANIFEST_SOURCE)
+    require_board(
+        run_feature_value_dump(base, "--target", "rp2350-arm"),
+        "pico2",
+        "registry:rp2350-arm.defaultBoard",
+    )
+    require_board_rejection(
+        run_feature_value_dump(base, "--board", "pico-removed"), "pico-removed", "cli"
+    )
+    require_board_rejection(
+        run_feature_value_dump(base, "--board", "pico2w"), "pico2w", "cli"
+    )
+
+    write_local_state(base, {"target": "rp2350-arm", "board": "pico2w"})
+    require_board(
+        run_feature_value_dump(base, "--target", "rp2040"), "pico", MANIFEST_SOURCE
+    )
+    require_board(run_feature_value_dump(base), "pico2w", LOCAL_SOURCE)
+    write_local_state(base, {"target": "rp2040", "board": "pico-removed"})
+    require_board_rejection(run_feature_value_dump(base), "pico-removed", LOCAL_SOURCE)
+    require(
+        run_select_board(base).returncode == workflow_runtime.EXIT_CONFIG,
+        "select-board listed a broken local selection",
+    )
+    repaired = run_select_board(base, "--target", "rp2040", "--board", "picow")
+    require(repaired.returncode == 0, f"select-board could not replace a broken local selection: {repaired.stderr}")
+    require_board(run_feature_value_dump(base), "picow", LOCAL_SOURCE)
+
+    overlay = fixture_root / "overlay"
+    write_feature_value_fixture(
+        overlay,
+        target_profiles={
+            "rp2040": {"board": "rp2040-zero"},
+            "rp2350-arm": {"board": "pico2w"},
+        },
+    )
+    require_board(
+        run_feature_value_dump(overlay),
+        "rp2040-zero",
+        f"{MANIFEST_SOURCE} targetProfiles.rp2040",
+    )
+    require_board(
+        run_feature_value_dump(overlay, "--target", "rp2350-arm"),
+        "pico2w",
+        f"{MANIFEST_SOURCE} targetProfiles.rp2350-arm",
+    )
+    require_board(run_feature_value_dump(overlay, "--board", "picow"), "picow", "cli")
+    selected = run_select_board(overlay, "--target", "rp2350-arm")
+    require(selected.returncode == 0, f"target-only selection failed: {selected.stderr}")
+    require("board=pico2w" in selected.stdout, "select-board hid the resolved board")
+    require(
+        "board" not in load_json(overlay / ".vscode" / "jaszczurhal.local.json"),
+        "a target-only selection pinned a board over targetProfiles",
+    )
+    require_board(
+        run_feature_value_dump(overlay),
+        "pico2w",
+        f"{MANIFEST_SOURCE} targetProfiles.rp2350-arm",
+    )
+
+    pinned_cache = fixture_root / "pinned-cache"
+    write_feature_value_fixture(
+        pinned_cache,
+        cache={"JH_BOARD": "pico"},
+        target_profiles={"rp2040": {"board": "rp2040-zero"}},
+        variants=[
+            {"id": "pinned", "cmake": {"cache": {"JH_BOARD": "pico", "JH_TARGET": "stm32g474"}}}
+        ],
+    )
+    pinned_variant = run_feature_value_dump(pinned_cache, "--variant", "pinned")
+    require_board(pinned_variant, "rp2040-zero", f"{MANIFEST_SOURCE} targetProfiles.rp2040")
+    require(
+        json.loads(pinned_variant.stdout)["cmake"]["cache"]["JH_TARGET"] == "rp2040",
+        "a variant cache replaced the resolved JH_TARGET",
+    )
+    require_board(
+        run_feature_value_dump(pinned_cache),
+        "rp2040-zero",
+        f"{MANIFEST_SOURCE} targetProfiles.rp2040",
+    )
+    require_board(run_feature_value_dump(pinned_cache, "--board", "picow"), "picow", "cli")
+
+    overlay_foreign = fixture_root / "overlay-foreign"
+    write_feature_value_fixture(
+        overlay_foreign, target_profiles={"rp2350-arm": {"board": "pico"}}
+    )
+    require_board_rejection(
+        run_feature_value_dump(overlay_foreign),
+        "pico",
+        f"{MANIFEST_SOURCE} targetProfiles.rp2350-arm",
+    )
+    repair = run_select_board(overlay_foreign, "--target", "rp2040", "--board", "picow")
+    require(
+        repair.returncode == workflow_runtime.EXIT_CONFIG
+        and "[JH-CFG-BOARD]" in repair.stderr,
+        "select-board reported success for a manifest that still does not resolve",
+    )
+    require(
+        not (overlay_foreign / ".vscode" / "jaszczurhal.local.json").exists(),
+        "select-board persisted a selection that does not resolve",
     )
