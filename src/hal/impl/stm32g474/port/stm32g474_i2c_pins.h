@@ -2,13 +2,12 @@
 #define JH_STM32G474_I2C_PINS_H
 
 #include "hal/core/hal_array.h"
+#include "hal/gpio/hal_gpio.h"
 
 #include "stm32g474_regs.h"
 
 #include <stddef.h>
 #include <stdint.h>
-
-#define JH_STM32G474_PIN(port, pin) ((uint8_t)(((port) * 16u) + (pin)))
 
 typedef struct {
   uint8_t controller;
@@ -18,17 +17,17 @@ typedef struct {
 } jh_stm32g474_i2c_pin_af_t;
 
 static const jh_stm32g474_i2c_pin_af_t kJhStm32g474I2cPins[] = {
-    {1u, false, JH_STM32G474_PIN(1u, 8u), 4u},
-    {1u, false, JH_STM32G474_PIN(0u, 13u), 4u},
-    {1u, false, JH_STM32G474_PIN(0u, 15u), 4u},
-    {1u, true, JH_STM32G474_PIN(1u, 7u), 4u},
-    {1u, true, JH_STM32G474_PIN(1u, 9u), 4u},
-    {1u, true, JH_STM32G474_PIN(0u, 14u), 4u},
-    {2u, false, JH_STM32G474_PIN(0u, 9u), 4u},
-    {2u, false, JH_STM32G474_PIN(2u, 4u), 4u},
-    {2u, false, JH_STM32G474_PIN(5u, 6u), 4u},
-    {2u, true, JH_STM32G474_PIN(0u, 8u), 4u},
-    {2u, true, JH_STM32G474_PIN(5u, 0u), 4u},
+    {1u, false, HAL_GPIO_STM32_PIN('B', 8u), 4u},
+    {1u, false, HAL_GPIO_STM32_PIN('A', 13u), 4u},
+    {1u, false, HAL_GPIO_STM32_PIN('A', 15u), 4u},
+    {1u, true, HAL_GPIO_STM32_PIN('B', 7u), 4u},
+    {1u, true, HAL_GPIO_STM32_PIN('B', 9u), 4u},
+    {1u, true, HAL_GPIO_STM32_PIN('A', 14u), 4u},
+    {2u, false, HAL_GPIO_STM32_PIN('A', 9u), 4u},
+    {2u, false, HAL_GPIO_STM32_PIN('C', 4u), 4u},
+    {2u, false, HAL_GPIO_STM32_PIN('F', 6u), 4u},
+    {2u, true, HAL_GPIO_STM32_PIN('A', 8u), 4u},
+    {2u, true, HAL_GPIO_STM32_PIN('F', 0u), 4u},
 };
 
 static inline bool jh_stm32g474_i2c_find_af(uint8_t controller, bool is_sda,

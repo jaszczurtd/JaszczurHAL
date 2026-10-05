@@ -1,7 +1,7 @@
 /**
  * @file app.c
- * @brief Exchange LoRa ping/pong packets using an SX1262 configured by the
- * board profile.
+ * @brief Exchange LoRa ping/pong packets using an SX1262 from the board profile
+ * or the external Core1262-HF wiring in lora_example_radio.h.
  *
  * Build one initiator and one responder. The probe variant checks the radio
  * without transmitting. See README.md for matching LF and HF hardware.
@@ -13,13 +13,13 @@
 #include <hal/radio/hal_lora_radio.h>
 #include <hal/serial/hal_serial.h>
 #include <hal/spi/hal_spi.h>
-#include <hal/system/hal_board.h>
 #include <hal/system/hal_system.h>
 
 #include <stdio.h>
 #include <string.h>
 
-static const uint32_t kLfTestFrequencyHz = UINT32_C(434000000);
+#include "lora_example_radio.h"
+
 #ifndef HAL_LORA_EXAMPLE_RESPONDER
 static const uint32_t kReplyTimeoutMs = UINT32_C(1500);
 static const uint32_t kTransmitPeriodMs = UINT32_C(3000);
@@ -108,25 +108,6 @@ static void radio_event_callback(hal_lora_radio_t radio,
   (void)context;
   s_event = *event;
   s_event_ready = true;
-}
-
-static hal_lora_modem_config_t
-modem_config(const hal_lora_radio_config_t *hardware) {
-  hal_lora_modem_config_t modem = hal_lora_default_eu868();
-  modem.tx_power_dbm = 10;
-  if (hardware->hardware.sx126x.max_frequency_hz < UINT32_C(800000000)) {
-    /* Fixed LF test frequency; not a region-specific regulatory configuration.
-     */
-    modem.frequency_hz = kLfTestFrequencyHz;
-    modem.tx_power_dbm = 10;
-  }
-#ifdef HAL_LORA_EXAMPLE_SF
-  modem.spreading_factor = HAL_LORA_EXAMPLE_SF;
-#endif
-#ifdef HAL_LORA_EXAMPLE_TX_POWER_DBM
-  modem.tx_power_dbm = HAL_LORA_EXAMPLE_TX_POWER_DBM;
-#endif
-  return modem;
 }
 
 static void log_packet(const char *direction, const uint8_t *data,
@@ -379,28 +360,20 @@ void app_start(void) {
   deb("=== JaszczurHAL raw LoRa initiator ===");
 #endif
 
-  hal_status_t status = hal_lora_radio_config_from_board(&s_hardware);
-  if (status == HAL_EUNSUPPORTED) {
+  bool from_board = false;
+  hal_status_t status = example_lora_radio_config(&s_hardware, &from_board);
+  if (status != HAL_OK) {
 #ifdef HAL_LORA_EXAMPLE_PROBE_ONLY
-    s_probe_stage = "board-config-unsupported";
+    s_probe_stage = "radio-config";
 #endif
-    derr("Selected board profile does not declare an SX1262 radio");
-#ifdef HAL_LORA_EXAMPLE_PROBE_ONLY
-    record_probe_result(status, 0u);
-#endif
-    return;
-  } else if (status != HAL_OK) {
-#ifdef HAL_LORA_EXAMPLE_PROBE_ONLY
-    s_probe_stage = "board-config";
-#endif
-    derr("Board radio config failed: %s", hal_status_to_string(status));
+    derr("Radio config failed: %s", hal_status_to_string(status));
 #ifdef HAL_LORA_EXAMPLE_PROBE_ONLY
     record_probe_result(status, 0u);
 #endif
     return;
-  } else {
-    deb("Using board-declared radio wiring");
   }
+  deb("Using %s radio wiring",
+      from_board ? "board-declared" : "external Core1262-HF");
 #ifdef HAL_LORA_EXAMPLE_PROBE_ONLY
   s_probe_stage = "spi-init";
 #endif
@@ -412,7 +385,7 @@ void app_start(void) {
 #endif
     status = hal_lora_radio_create(&s_hardware, &s_radio);
   }
-  s_modem = modem_config(&s_hardware);
+  s_modem = example_lora_modem_config(&s_hardware);
   if (status == HAL_OK) {
 #ifdef HAL_LORA_EXAMPLE_PROBE_ONLY
     s_probe_stage = "radio-configure";

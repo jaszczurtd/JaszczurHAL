@@ -54,23 +54,23 @@ regionu.
 
 ### Para HF: zewnętrzny Core1262-HF na RP2040 i STM32G474
 
-Użyj stałego okablowania udokumentowanego przez profile złożone. Skompiluj
-RP2040/Pico jako inicjatora oraz NUCLEO-G474RE jako respondera (lub odwróć
-obie role):
+Podłącz oba moduły zgodnie z README przykładu, który trzyma to okablowanie
+w `lora_example_radio.h`. Skompiluj RP2040/Pico jako inicjatora oraz
+NUCLEO-G474RE jako respondera (lub odwróć obie role):
 
 ```bash
 vscode/entry/jh-vscode build \
   --project examples/27_lora_point_to_point \
-  --target rp2040 --board pico-core1262-hf
+  --target rp2040
 vscode/entry/jh-vscode build \
   --project examples/27_lora_point_to_point \
-  --target stm32g474 --board nucleo-g474re-core1262-hf --variant responder
+  --target stm32g474 --variant responder
 ```
 
 Oba urządzenia Core1262-HF używają tego samego profilu elektrycznego modułu i
-konfiguracji technicznej EU868. Mapowania pinów hosta pochodzą z danych
-wygenerowanych dla płytek; przykład nie zawiera okablowania zależnego od
-układu docelowego. Profil Nucleo używa SPI2 na PB13/PB14/PB15 i pozostawia
+konfiguracji technicznej EU868 z `hal_lora_sx126x_core1262_hf_defaults()`.
+Mapowania pinów hosta należą do przykładu, osobno dla każdej platformy.
+Okablowanie Nucleo używa SPI2 na PB13/PB14/PB15 i pozostawia
 LD2/`HAL_LED_BUILTIN` na PA5.
 
 Przed próbą transmisji radiowej można zbudować i wgrać na dowolnym hoście

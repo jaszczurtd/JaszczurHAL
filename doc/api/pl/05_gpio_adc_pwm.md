@@ -162,7 +162,8 @@ RP2040 SoftwareSerial odbiera zamiast tego przez PIO/DMA i nie instaluje
 przerwania RX CPU.
 
 **Routing STM32G474:** Identyfikator pinu ma postać `port * 16 + pin`
-(`PA0=0`, `PB0=16`, ...). EXTI działa według numeru linii
+(`PA0=0`, `PB0=16`, ...); `HAL_GPIO_STM32_PIN('B', 9u)` wylicza go z litery
+portu i działa także w `#if`. EXTI działa według numeru linii
 (`line == pin_number`), dlatego w danej chwili tylko jeden port może używać
 konkretnej linii. Dołączenie pinu o tym samym numerze z innego portu zmienia
 przypisanie tej linii EXTI.

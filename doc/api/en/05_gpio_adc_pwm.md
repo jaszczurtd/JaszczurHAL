@@ -145,7 +145,7 @@ the [`hal_uart` bus documentation](09_buses.md) and
 RP2040 SoftwareSerial instead receives through PIO/DMA and does not install a
 CPU RX interrupt.
 
-**STM32G474 routing:** Pin id is `port * 16 + pin` (`PA0=0`, `PB0=16`, ...). EXTI is line-based (`line == pin_number`), so only one port source can own a given line at a time; attaching another pin with the same pin number remaps that EXTI line.
+**STM32G474 routing:** Pin id is `port * 16 + pin` (`PA0=0`, `PB0=16`, ...); `HAL_GPIO_STM32_PIN('B', 9u)` computes it from the port letter and also works in `#if`. EXTI is line-based (`line == pin_number`), so only one port source can own a given line at a time; attaching another pin with the same pin number remaps that EXTI line.
 
 **IRQ priority:** `hal_gpio_set_irq_priority` sets GPIO interrupt priority. On
 RP2040 all GPIO pins share `IO_IRQ_BANK0`. On STM32G474 GPIO IRQs are split

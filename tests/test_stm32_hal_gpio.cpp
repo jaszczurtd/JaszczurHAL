@@ -5,6 +5,13 @@ namespace {
 void gpio_irq_hit(void) {}
 } // namespace
 
+static_assert(HAL_GPIO_STM32_PIN('A', 0u) == 0u, "PA0 is pin 0");
+static_assert(HAL_GPIO_STM32_PIN('B', 9u) == 25u, "PB9 is pin 25");
+static_assert(HAL_GPIO_STM32_PIN('G', 15u) == 111u, "PG15 is pin 111");
+#if HAL_GPIO_STM32_PIN('C', 13u) != 45u
+#error "HAL_GPIO_STM32_PIN must work in #if"
+#endif
+
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -33,8 +40,9 @@ void test_stm32_gpio_irq_owner_rejects_nonzero_caller_core(void) {
 }
 
 void test_stm32_exti_reroute_moves_owner_to_new_pin(void) {
-  constexpr uint8_t pa5 = 5u;
-  constexpr uint8_t pb5 = 21u;
+  /* Same pin number on two ports shares one EXTI line. */
+  constexpr uint8_t pa5 = HAL_GPIO_STM32_PIN('A', 5u);
+  constexpr uint8_t pb5 = HAL_GPIO_STM32_PIN('B', 5u);
   uint8_t owner = HAL_GPIO_IRQ_CORE_NONE;
 
   TEST_ASSERT_EQUAL_INT(

@@ -396,8 +396,6 @@
         "stm32g474"
       ],
       "expandRpTargets": false,
-      "board": "pico-core1262-hf",
-      "stm32Board": "nucleo-g474re-core1262-hf",
       "variants": [
         {
           "id": "probe",

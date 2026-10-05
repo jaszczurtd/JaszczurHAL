@@ -2272,6 +2272,7 @@ def generate(
     capabilities: dict[str, Any],
     output_dir: Path,
     requested_feature_inputs: list[str],
+    boards_root: Path | None = None,
 ) -> None:
     requested_features, resolved_features, feature_provenance = resolve_features(
         requested_feature_inputs, target
@@ -2334,6 +2335,7 @@ def generate(
         f'set(JH_BOARD_RESOLVED_FEATURES "{";".join(resolved_features)}")',
         f'set(JH_BOARD_RESOLVED_FEATURES_DIGEST "{resolved_features_digest}")',
         f'set(JH_BOARD_FEATURES "{";".join(resolved_features)}")',
+        f'set(JH_BOARD_INPUT_GLOBS "{";".join(generation_input_globs(boards_root))}")',
         f'set(JH_BOARD_FEATURE_HASH "{feature_hash}")',
         f'set(JH_BOARD_CONTRACT_SYMBOL "{contract_symbol}")',
     ]
@@ -2414,23 +2416,51 @@ def generate(
         output_dir / "jh_board_resolved.json",
         json.dumps(resolved, indent=2, sort_keys=True) + "\n",
     )
-    dependencies = [
-        str(Path(__file__).resolve()),
-        str((Path(__file__).resolve().parent / "generate_hal_features.py")),
+    atomic_write(
+        output_dir / "generation.d",
+        "\n".join(path.as_posix() for path in generation_inputs(boards_root)) + "\n",
+    )
+
+
+GENERATION_INPUT_PATTERN = "*.json"
+
+
+def generation_input_roots(boards_root: Path | None = None) -> list[Path]:
+    """Directories whose JSON files a generation reads: the descriptors under
+    ``boards_root`` and the feature and tooling registries."""
+    repository_root = Path(__file__).resolve().parents[1]
+    return [
+        (boards_root or repository_root / "boards").resolve(),
+        (repository_root / "config").resolve(),
+    ]
+
+
+def generation_input_globs(boards_root: Path | None = None) -> list[str]:
+    """Recursive patterns a build system watches to notice new input files."""
+    return [
+        f"{root.as_posix()}/{GENERATION_INPUT_PATTERN}"
+        for root in generation_input_roots(boards_root)
+    ]
+
+
+def generation_inputs(boards_root: Path | None = None) -> list[Path]:
+    """Every file one generation reads: the JSON files under the input roots
+    and the generator's own modules."""
+    scripts_dir = Path(__file__).resolve().parent
+    modules = {
+        Path(module.__file__).resolve()
+        for module in list(sys.modules.values())
+        if getattr(module, "__file__", None)
+        and Path(module.__file__).resolve().parent == scripts_dir
+    }
+    return [
+        *sorted(modules),
         *(
-            str(path.resolve())
-            for path in sorted(
-                (Path(__file__).resolve().parents[1] / "boards").rglob("*.json")
-            )
-        ),
-        *(
-            str(path.resolve())
-            for path in sorted(
-                (Path(__file__).resolve().parents[1] / "config").rglob("*.json")
-            )
+            path.resolve()
+            for root in generation_input_roots(boards_root)
+            for path in sorted(root.rglob(GENERATION_INPUT_PATTERN))
         ),
     ]
-    atomic_write(output_dir / "generation.d", "\n".join(dependencies) + "\n")
 
 
 def parse_args() -> argparse.Namespace:
@@ -2569,6 +2599,7 @@ def main() -> int:
             capabilities,
             output_dir,
             args.requested_feature,
+            boards_root,
         )
     except DescriptorError as error:
         print(f"error: {error}", file=sys.stderr)

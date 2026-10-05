@@ -239,7 +239,13 @@ The deterministic output contains:
 - `jh_board_resolved.json`;
 - `jh_link_contract.h`;
 - link-signature definition and reference translation units;
-- `generation.d`.
+- `generation.d`, the list of every file the generator read: descriptors from
+  `--boards-root`, the feature and tooling registries, and its own Python
+  modules.
+
+The generator alone knows its inputs. CMake reconfigures when a file from
+`generation.d` changes, and watches the patterns in `JH_BOARD_INPUT_GLOBS`
+(from `jh_board_config.cmake`) to notice new descriptors.
 
 Firmware does not parse JSON. CMake runs the generator before importing Pico SDK, then uses the generated platform and board settings. `hal_board.h` always uses the version-controlled registry. It reads the board configuration generated for the build when available, or the stored fallback otherwise.
 
@@ -291,17 +297,10 @@ conservative 410-450 MHz LF range from the manufacturer wiki, DCDC regulation,
 XTAL oscillator mode and combined DIO2 plus GPIO17 antenna-path control. The
 `hal_lora_radio` lifecycle publishes the declared radio capability at runtime.
 
-The experimental `pico-core1262-hf` and
-`nucleo-g474re-core1262-hf` profiles describe fixed project fixtures built from
-a base board and an external Waveshare Core1262-HF. They reserve the complete
-SPI/control/RF-switch wiring, declare `loraRadio`, and export both
-`external-radio-frontend` and `sx1262-radio`. The Nucleo profile uses SPI2 on
-PB13/PB14/PB15 and deliberately preserves LD2 plus `HAL_LED_BUILTIN` on PA5.
-Both fixtures passed no-transmit CAD/RSSI/calibration probes and bidirectional
-OTA tests, but remain experimental because jumper-wire assembly and one tested
-host of each type are not equivalent to a stable carrier design.
-
-For different Core1262 wiring, use the plain `pico` or `nucleo-g474re` profile with an explicit application descriptor. Do not select a composite profile whose fixed pin assignment differs from the physical assembly.
+A module connected with wires, such as a Waveshare Core1262-HF, gets no board
+profile, because the same module can sit on any free pins. Select the plain
+host board and describe the wiring in the application; for the Core1262-HF see
+[LoRa](../api/en/21_lora.md#external-waveshare-core1262-hf).
 
 The experimental `nucleo-g474re-canhat` profile describes a NUCLEO-G474RE with
 the [Embedded Garage](https://www.youtube.com/@embeddedGarage) CAN-FD HAT v1.2

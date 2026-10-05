@@ -58,9 +58,9 @@ The SPI bus can be shared with other HAL devices. Radio creation registers risin
 
 ## Integrated board configuration
 
-`hal_lora_radio_config_from_board()` copies the active board profile's radio
-facts. It returns `HAL_EUNSUPPORTED` when the selected board has no declared
-radio, whether integrated or part of a fixed composite fixture.
+`hal_lora_radio_config_from_board()` copies the radio facts of the active board
+profile. Only a radio soldered onto the board is described there; for any other
+board the function returns `HAL_EUNSUPPORTED`.
 
 ```c
 hal_lora_radio_config_t hardware;
@@ -77,24 +77,25 @@ The `rp2040-lora-lf` profile describes the integrated SX1262 on the Waveshare
 RP2040-LoRa-LF board, including its LF frequency limits. Choose an explicit
 frequency for the intended hardware test and regulatory environment.
 
-The experimental `pico-core1262-hf` and
-`nucleo-g474re-core1262-hf` profiles describe the two fixed project fixtures
-with external Waveshare Core1262-HF modules. Both have passed no-transmit
-CAD/RSSI/calibration probes and bidirectional OTA tests. The Nucleo fixture
-uses SPI2 on PB13/PB14/PB15 so the built-in LD2 and `HAL_LED_BUILTIN` remain
-available on PA5.
-
 ## External Waveshare Core1262-HF
 
-For the fixed project wiring, select `pico-core1262-hf` or
-`nucleo-g474re-core1262-hf` and use
-`hal_lora_radio_config_from_board()`. For a different application-owned wiring,
-select the plain host profile and use
-`hal_lora_sx126x_core1262_hf_defaults()`. The helper fills the module-owned
-electrical profile: dual RXEN/TXEN control, DCDC, DIO3-controlled 1.8 V TCXO,
-startup delay, RF range, SPI limit and output-power limits. Host bus and pin
-assignments remain application input. Assign RXEN to `rf_switch_pin_a` and
-TXEN to `rf_switch_pin_b`; the helper installs the documented level table.
+A module connected with wires has no board profile, because the same module
+can be wired to any free pins. Select the plain host board (`pico`,
+`nucleo-g474re`, ...) and describe the wiring in the application.
+`hal_lora_sx126x_core1262_hf_defaults()` fills what belongs to the module
+itself: dual RXEN/TXEN control, DCDC, DIO3-controlled 1.8 V TCXO, startup
+delay, RF range, SPI limit and output-power limits. The application supplies
+the SPI bus and every host pin.
+
+Assign RXEN to `rf_switch_pin_a` and TXEN to `rf_switch_pin_b`. Waveshare names
+these lines after the path they turn off: RXEN is high while transmitting and
+TXEN while receiving, and the helper sets exactly these levels. They look
+swapped at first sight, but they match the module schematic.
+
+`examples/27_lora_point_to_point` keeps the bench wiring for a Pico (SPI0) and
+a NUCLEO-G474RE (SPI2 on PB13/PB14/PB15, so LD2 and `HAL_LED_BUILTIN` stay on
+PA5) in one header. Both setups have passed no-transmit CAD/RSSI/calibration
+probes and bidirectional OTA tests.
 
 ```c
 hal_lora_radio_config_t hardware = {0};

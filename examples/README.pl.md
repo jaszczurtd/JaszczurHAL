@@ -61,9 +61,9 @@ dla RP2350 ARM. Konfiguracje RP2350 RISC-V wymagające CYW43 nie są
 obsługiwane. Dla sieci i Bluetooth na STM32G474 wybierany jest profil
 NUCLEO-G474RE z zewnętrznym modułem PIM730/RM2.
 
-Projekt LoRa używa domyślnie profili `pico-core1262-hf` i
-`nucleo-g474re-core1262-hf`. Dla zintegrowanej płytki Waveshare LF wybierz
-jawnie `rp2040-lora-lf`. Urządzenia LF i HF pracują w różnych pasmach;
+Projekt LoRa buduje się dla zwykłych płytek `pico` i `nucleo-g474re`
+z zewnętrznym modułem Waveshare Core1262-HF podłączonym zgodnie z jego README.
+Dla zintegrowanej płytki Waveshare LF wybierz jawnie `rp2040-lora-lf`. Urządzenia LF i HF pracują w różnych pasmach;
 nie zestawiaj z nich jednej pary radiowej. Wariant `probe` sprawdza funkcje
 układu, kalibrację, bieżące RSSI i CAD bez nadawania. Wersja podstawowa
 i `responder` używają SF9/10 dBm, a `sf7` i `responder-sf7` tworzą parę

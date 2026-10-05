@@ -8,8 +8,8 @@
             "stm32g474"
         ],
         "boards": {
-            "rp2040": "pico-core1262-hf",
-            "stm32g474": "nucleo-g474re-core1262-hf"
+            "rp2040": "pico",
+            "stm32g474": "nucleo-g474re"
         },
         "gateTargets": [
             "rp2040",
@@ -114,7 +114,7 @@
     },
     "toolchain": "cmake",
     "target": "rp2040",
-    "board": "pico-core1262-hf",
+    "board": "pico",
     "buildDir": "${jhRoot}/.build/examples/27_lora_point_to_point",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

@@ -5,18 +5,21 @@
 
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
+#include <hal/gpio/hal_gpio.h>
 #include <hal/i2c/hal_i2c.h>
 #include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
 #include <hal/temperature/hal_thermocouple.h>
 
 #if HAL_TARGET_IS_STM32G474
-#define EXAMPLE_PIN(port, pin) ((uint8_t)(((port) * 16u) + (pin)))
-#define MCP9600_SDA_PIN EXAMPLE_PIN(1u, 9u)  /* PB9  = I2C1_SDA */
-#define MCP9600_SCL_PIN EXAMPLE_PIN(1u, 8u)  /* PB8  = I2C1_SCL */
-#define MAX6675_SCLK_PIN EXAMPLE_PIN(0u, 5u) /* PA5, CN10 pin 11 / D13 */
-#define MAX6675_CS_PIN EXAMPLE_PIN(1u, 6u)   /* PB6, CN10 pin 17 / D10 */
-#define MAX6675_MISO_PIN EXAMPLE_PIN(0u, 6u) /* PA6, CN10 pin 13 / D12 */
+#define MCP9600_SDA_PIN HAL_GPIO_STM32_PIN('B', 9u) /* PB9  = I2C1_SDA */
+#define MCP9600_SCL_PIN HAL_GPIO_STM32_PIN('B', 8u) /* PB8  = I2C1_SCL */
+#define MAX6675_SCLK_PIN                                                       \
+  HAL_GPIO_STM32_PIN('A', 5u)                      /* PA5, CN10 pin 11 / D13 */
+#define MAX6675_CS_PIN HAL_GPIO_STM32_PIN('B', 6u) /* PB6, CN10 pin 17 / D10   \
+                                                    */
+#define MAX6675_MISO_PIN                                                       \
+  HAL_GPIO_STM32_PIN('A', 6u) /* PA6, CN10 pin 13 / D12 */
 #else
 #define MCP9600_SDA_PIN 4u
 #define MCP9600_SCL_PIN 5u
