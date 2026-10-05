@@ -1499,6 +1499,42 @@ require(
     "effective resolution JSON is nondeterministic",
 )
 
+profile_board_consumer = TEST_ROOT / "effective-profile-board"
+(profile_board_consumer / ".vscode").mkdir(parents=True)
+(profile_board_consumer / ".vscode/jaszczurhal.project.json").write_text(
+    json.dumps(
+        {
+            "target": "rp2040",
+            "board": "pico",
+            "targetProfiles": {
+                "rp2040": {"board": "rp2040-zero"},
+                "rp2350-arm": {"board": "pico2w"},
+                "stm32g474": {},
+            },
+        }
+    )
+    + "\n",
+    encoding="utf-8",
+)
+profile_board_report_path = TEST_ROOT / "effective-profile-board.json"
+run_generator(
+    "--lint",
+    "--effective",
+    "--input-root",
+    str(profile_board_consumer),
+    "--resolution-output",
+    str(profile_board_report_path),
+)
+profile_boards = {
+    record["target"]: record["board"]
+    for record in load(profile_board_report_path)["configurations"]
+}
+require(
+    profile_boards
+    == {"rp2040": "rp2040-zero", "rp2350-arm": "pico2w", "stm32g474": "nucleo-g474re"},
+    f"effective lint did not resolve boards like jh-vscode: {profile_boards}",
+)
+
 target_required_consumer = TEST_ROOT / "effective-target-required"
 (target_required_consumer / ".vscode").mkdir(parents=True)
 (target_required_consumer / ".vscode/jaszczurhal.project.json").write_text(

@@ -730,7 +730,9 @@ kompilatora może skompilować i zlinkować te artefakty bez wywoływania Python
 
 ### `scripts/board_registry.py`
 
-Udostępnia innym skryptom sprawdzone dane platform i płytek z `boards/`. Korzystają z niego `jh-vscode`, generatory projektów i narzędzia obsługujące przykłady. Moduł nie ma własnego rejestru ani interfejsu wiersza poleceń: źródłem danych pozostają deskryptory.
+Udostępnia innym skryptom sprawdzone dane platform i płytek z `boards/`. Korzystają z niego `jh-vscode`, generatory projektów i narzędzia obsługujące przykłady. Moduł nie ma własnego rejestru; źródłem danych pozostają deskryptory.
+
+Dwa polecenia służą skryptom budującym biblioteki: `target-facts <target>` wypisuje dane kompilacji jednej platformy jako wiersze `KLUCZ=WARTOŚĆ`, a `list-targets` wypisuje wszystkie platformy, dla których istnieje skrypt budujący bibliotekę, razem ze środowiskiem kompilacji (`provider`) i statusem. Oba wywołuje `build_link_library.sh`.
 
 ### `scripts/tooling_contract.py` oraz `scripts/repository_layout.py`
 

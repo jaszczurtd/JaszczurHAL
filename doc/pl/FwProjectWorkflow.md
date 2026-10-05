@@ -81,13 +81,33 @@ Opcja `--install` wymaga potwierdzenia przed instalacją brakujących rozszerze�
 
 ## Wybór platformy i konfiguracji
 
-Platforma i płytka są wybierane według następujących priorytetów, od najwyższego:
+Platforma jest wybierana według następujących priorytetów, od najwyższego:
 
-1. opcje przekazane przy wywołaniu, takie jak
-   `--target rp2040 --board picow`;
+1. `--target`;
 2. `.vscode/jaszczurhal.local.json`;
-3. śledzony manifest `target` i `board`;
-4. domyślna wartość rejestru `rp2040/pico`.
+3. pole `target` w manifeście;
+4. `rp2040`.
+
+Płytkę dla tej platformy wskazuje pierwsze z poniższych źródeł, które ją podaje:
+
+1. `--board`;
+2. `.vscode/jaszczurhal.local.json`;
+3. `targetProfiles.<target>.board`;
+4. pole `board` w manifeście;
+5. domyślna płytka platformy w rejestrze.
+
+Płytka, której nie ma w rejestrze żadnej platformy, przerywa polecenie
+z diagnostyką `[JH-CFG-BOARD]`; tak samo kończy się podanie w `--board` płytki
+innej platformy. Manifest jest sprawdzany w całości: jego pole `board` musi
+należeć do platformy z pola `target`, a każde `targetProfiles.<target>.board`
+do swojej platformy, nawet gdy wybrano inną płytkę. Płytka innej platformy
+zapisana w stanie lokalnym oraz pole `board` manifestu przy innej aktywnej
+platformie są pomijane, więc `--target` zmienia platformę bez edycji manifestu.
+
+`select-board` zapisuje wybór dopiero wtedy, gdy da się go rozwiązać. Bez
+`--board` zapisuje samą platformę, a płytkę wskazują wtedy `targetProfiles`
+i domyślna płytka z rejestru. Polecenie zastępuje zepsuty wybór lokalny, ale
+błąd w manifeście trzeba poprawić w samym manifeście.
 
 Następnie ustawienia są łączone w poniższej kolejności. Wartości z późniejszych pozycji zastępują wcześniejsze:
 

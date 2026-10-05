@@ -674,7 +674,9 @@ can compile and link those package artifacts without invoking Python.
 
 ### `scripts/board_registry.py`
 
-Provides other scripts with validated target and board data from `boards/`. It is used by `jh-vscode`, project generators, and example tools. The module has no separate registry or command-line interface: the descriptor files remain the source of truth.
+Provides other scripts with validated target and board data from `boards/`. It is used by `jh-vscode`, project generators, and example tools. The module keeps no registry of its own; the descriptor files remain the source of truth.
+
+Two commands serve the library build scripts: `target-facts <target>` prints the build facts of one target as `KEY=VALUE` lines, and `list-targets` prints every target that has a library runner, with its provider and status. `build_link_library.sh` uses both.
 
 ### `scripts/tooling_contract.py` and `scripts/repository_layout.py`
 

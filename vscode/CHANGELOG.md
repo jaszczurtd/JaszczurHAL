@@ -2,6 +2,15 @@
 
 ## 0.1.0 - Unreleased
 
+- Stop with `[JH-CFG-BOARD]` when the CLI, local state, or manifest names a
+  board that no target registers, when `--board` names a board of another
+  target, or when any manifest board does not belong to its target, instead of
+  silently building for the target's default board. Honour
+  `targetProfiles.<target>.board` in `config-dump`, builds, and
+  `--lint --effective`; the resolved target and board now pin `JH_TARGET` and
+  `JH_BOARD` over the manifest, overlay, and variant CMake caches. `select-board` stores
+  only a selection that resolves, keeps a target-only selection free of a
+  board, and can replace a broken local selection.
 - Let any firmware project declare build variants in a top-level `variants`
   array next to `example.variants`, generate a `Project: Upload variant: <id>`
   task beside each `Project: Build variant: <id>`, and publish a variant into
