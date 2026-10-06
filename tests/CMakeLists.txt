@@ -1278,6 +1278,11 @@ add_test(NAME test_check_vulnerabilities
         ${CMAKE_CURRENT_SOURCE_DIR}/test_check_vulnerabilities.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
+add_test(NAME test_install_host_tools
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_install_host_tools.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
 add_test(NAME test_board_generator
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_board_generator.py

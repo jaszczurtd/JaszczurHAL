@@ -97,8 +97,13 @@ i fuzzowania, clang-tidy, clang-format, toolchain Arm z newlib, OpenOCD,
 `cve-bin-tool`. Potem uruchamia `third_party/update_components.sh`, który
 buduje też przypięty cppcheck, a na końcu sprawdza każde wymagane polecenie
 i moduł Pythona. Wołają go `runmefirst.sh` i każdy linuksowy job CI, więc
-lokalna kontrola i CI pracują na tym samym zestawie narzędzi. Opcja `--check`
-tylko zgłasza brakujące narzędzia; tak uruchamia go etap `tools`.
+lokalna kontrola i CI pracują na tym samym zestawie narzędzi. `osv-scanner`
+i `cve-bin-tool` to wydania przypięte w `third_party/osv_scanner_version.conf`
+i `third_party/cve_bin_tool_version.conf`, instalowane po sprawdzeniu SHA-256
+i wymieniane, gdy zainstalowane jest inne; `osv-scanner` trafia do
+`/usr/local/bin`, a `cve-bin-tool` przez pipx do `~/.local/bin`, skąd uruchamia
+je skan. Opcja `--check` tylko zgłasza brakujące narzędzia i skanery w innym
+wydaniu; tak uruchamia go etap `tools`.
 
 ### `runmefirst.ps1`
 
@@ -1056,7 +1061,11 @@ danych lokalnie i w CI.
 Regeneruje wersjonowany SBOM, a następnie uruchamia skanery, które są już
 zainstalowane:
 
-- `osv-scanner` skanuje rekurencyjnie źródło repozytorium;
+- `osv-scanner` skanuje własne pliki repozytorium, a potem, z katalogu
+  głównego repozytorium i z pominięciem `.build`, komponenty w dokładnie
+  określonych rewizjach, rozpoznane po commitach, a na końcu wydania, od
+  których pochodzą komponenty ustawione na późniejszy commit (ich `pedigree`
+  w SBOM);
 - gdy `JH_SECURITY_SCAN_SOURCE=1`, `cve-bin-tool` skanuje generowany SBOM
   CycloneDX.
 
@@ -1067,10 +1076,14 @@ potem skanuje SBOM bez dostępu do sieci. Nieudane odświeżenie jest ponawiane
 niedostępne, skan korzysta z bazy zapisanej w `~/.cache/cve-bin-tool` i
 zgłasza ostrzeżenie; bez takiej bazy skrypt kończy się błędem.
 
-Skrypt przeszukuje zarówno `PATH`, jak i `~/.local/bin`, nie instaluje
-skanerów i ostrzega zamiast kończyć się niepowodzeniem wyłącznie z powodu
-braku dostępnego skanera. Wykryte podatności i błędy działania skanerów nadal
-powodują niepowodzenie polecenia.
+Skrypt uruchamia skanery tam, gdzie instaluje je
+`scripts/install_host_tools.sh`: `/usr/local/bin/osv-scanner` (katalog zmienia
+`JH_OSV_SCANNER_DIR`) i `~/.local/bin/cve-bin-tool`, niezależnie od tego, co
+jeszcze jest w `PATH`. Nie instaluje skanerów i ostrzega zamiast kończyć się
+niepowodzeniem wyłącznie z powodu braku dostępnego skanera. Wykryte podatności i błędy działania skanerów nadal
+powodują niepowodzenie polecenia. `osv-scanner` lub `cve-bin-tool` w wydaniu
+innym niż przypięte w `third_party/osv_scanner_version.conf` lub
+`third_party/cve_bin_tool_version.conf` kończy skrypt błędem przed skanem.
 
 Wykaz komponentów, tworzenie SBOM, kontrole w CI oraz zasady oceny podatności
 i aktualizowania zależności opisano w rozdziale

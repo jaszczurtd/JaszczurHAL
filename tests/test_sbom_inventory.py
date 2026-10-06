@@ -317,6 +317,62 @@ class SbomInventoryTests(unittest.TestCase):
             xtensa["licenses"][0]["expression"],
         )
 
+    def test_cjson_pin_and_release_match_inventory(self) -> None:
+        pin = parse_config(ROOT / "third_party/cjson_version.conf")
+        inventory = json.loads(
+            (ROOT / "security/third_party.json").read_text(encoding="utf-8")
+        )
+        cjson = next(item for item in inventory["components"]
+                     if item["name"] == "cJSON")
+        self.assertEqual(pin["CJSON_REF"], cjson["commit"])
+        self.assertEqual(pin["CJSON_VERSION"], cjson["version"])
+        # The pin is v1.7.19 plus later fixes; advisories end at v1.7.19.
+        self.assertEqual(
+            {"version": "1.7.19",
+             "commit": "c859b25da02955fef659d658b8f324b5cde87be3"},
+            cjson["release"],
+        )
+
+    def test_release_becomes_the_sbom_pedigree(self) -> None:
+        component = {
+            "name": "Lib",
+            "version": "1.0",
+            "commit": "a" * 40,
+            "licenses": ["MIT"],
+            "purl": f"pkg:github/owner/lib@{'a' * 40}",
+            "release": {"version": "1.0", "commit": "b" * 40},
+        }
+        item = generate_sbom.make_component(component)
+        self.assertEqual(f"pkg:github/owner/lib@{'a' * 40}", item["purl"])
+        self.assertEqual(
+            [{"type": "library", "name": "Lib", "version": "1.0",
+              "purl": f"pkg:github/owner/lib@{'b' * 40}"}],
+            item["pedigree"]["ancestors"],
+        )
+        del component["release"]
+        self.assertNotIn("pedigree", generate_sbom.make_component(component))
+
+    def test_inventory_rejects_unusable_releases(self) -> None:
+        inventory = json.loads(
+            (ROOT / "security/third_party.json").read_text(encoding="utf-8")
+        )
+        cases = {
+            "pinned to its release": lambda item: item["release"].update(
+                commit=item["commit"]),
+            "no exact commit": lambda item: item["release"].update(
+                commit=item["release"]["commit"][:7]),
+            "needs a version": lambda item: item["release"].update(version=""),
+            "needs a GitHub purl": lambda item: item.update(
+                purl="pkg:generic/cjson@1.7.19"),
+        }
+        for message, change in cases.items():
+            with self.subTest(message):
+                broken = json.loads(json.dumps(inventory))
+                change(next(item for item in broken["components"]
+                            if item["name"] == "cJSON"))
+                with self.assertRaisesRegex(ValueError, message):
+                    generate_sbom.validate_inventory(broken)
+
     def test_sbom_check_detects_missing_and_stale_output(self) -> None:
         inventory = ROOT / "security/third_party.json"
         tools = ROOT / "security/esp_idf_tools.json"

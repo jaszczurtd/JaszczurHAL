@@ -180,6 +180,15 @@ Native Windows host archives are pinned in `windows_tools_version.conf`.
 picotool, and RISC-V tools below a short user-local root and records resolved
 executables in `resolved-tools.json`.
 
+The Linux scanners of the security stage are pinned with their URLs and
+SHA-256: `osv-scanner` in `osv_scanner_version.conf` (x86-64 and AArch64
+binaries) and `cve-bin-tool` in `cve_bin_tool_version.conf` (the PyPI wheel;
+pip resolves its dependencies). `scripts/install_host_tools.sh` installs them,
+`osv-scanner` into `/usr/local/bin` and `cve-bin-tool` with pipx into
+`~/.local/bin`, after checking the digest. Its `--check` and
+`scripts/check_vulnerabilities.sh` run them from there, whatever else `PATH`
+holds, and refuse any other release.
+
 picotool needs `libusb-1.0-0-dev` and `pkg-config` for USB access. It builds
 against the pinned Pico SDK and uses the SDK's Mbed TLS submodule for RP2350
 hashing and signing support. On both Linux and Windows, verification requires

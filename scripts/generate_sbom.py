@@ -82,6 +82,17 @@ def make_component(component: dict[str, object]) -> dict[str, object]:
     if isinstance(purl, str) and purl:
         item["purl"] = purl
 
+    release = component.get("release")
+    if isinstance(release, dict):
+        # The release the pinned commit descends from: advisories name
+        # releases, so scripts/check_vulnerabilities.sh scans it as well.
+        item["pedigree"] = {"ancestors": [{
+            "type": item["type"],
+            "name": component["name"],
+            "version": release["version"],
+            "purl": f"{str(purl).rsplit('@', 1)[0]}@{release['commit']}",
+        }]}
+
     refs = external_refs(component)
     if refs:
         item["externalReferences"] = refs
@@ -154,6 +165,16 @@ def validate_inventory(inventory: dict[str, object]) -> None:
                 raise ValueError(f"{name} GitHub component has no exact commit")
             if not purl.endswith(f"@{commit}"):
                 raise ValueError(f"{name} purl does not use its exact commit")
+        release = component.get("release")
+        if release is not None:
+            if not isinstance(release, dict) or not str(release.get("version", "")):
+                raise ValueError(f"{name} release needs a version and a commit")
+            if not re.fullmatch(r"[0-9a-f]{40}", str(release.get("commit", ""))):
+                raise ValueError(f"{name} release has no exact commit")
+            if release["commit"] == commit:
+                raise ValueError(f"{name} is pinned to its release; drop release")
+            if not purl.startswith("pkg:github/"):
+                raise ValueError(f"{name} release needs a GitHub purl")
 
 
 def esp_idf_tool_components(snapshot_path: pathlib.Path) -> list[dict[str, object]]:

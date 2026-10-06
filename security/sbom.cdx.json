@@ -1596,6 +1596,16 @@
         "name": "Dave Gamble and cJSON contributors"
       },
       "purl": "pkg:github/DaveGamble/cJSON@6d9f2443ab071f86e5d9b43025a40929ec41c46c",
+      "pedigree": {
+        "ancestors": [
+          {
+            "type": "library",
+            "name": "cJSON",
+            "version": "1.7.19",
+            "purl": "pkg:github/DaveGamble/cJSON@c859b25da02955fef659d658b8f324b5cde87be3"
+          }
+        ]
+      },
       "externalReferences": [
         {
           "type": "website",
@@ -2156,5 +2166,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:1559ab48-d4fe-db83-68a9-1de592e27da5"
+  "serialNumber": "urn:uuid:b352b103-a330-ee73-cf22-ea140935bd2e"
 }

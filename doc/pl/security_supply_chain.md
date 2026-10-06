@@ -154,7 +154,10 @@ tygodniowego i na żądanie. Zadanie testowe uruchamia etap `repository` skryptu
 a po etapie `esp-idf` także etap `security`, ten sam, który wykonuje lokalne
 `./runalltests.sh`. Etap wymaga ESP-IDF, więc w obu miejscach skan go obejmuje:
 
-- `scripts/install_host_tools.sh` instaluje `osv-scanner` i `cve-bin-tool`,
+- `scripts/install_host_tools.sh` instaluje wydania `osv-scanner`
+  i `cve-bin-tool` przypięte w `third_party/osv_scanner_version.conf`
+  i `third_party/cve_bin_tool_version.conf`, sprawdzone po SHA-256; skan
+  odrzuca każde inne wydanie,
 - `osv-scanner` sprawdza własne pliki repozytorium (manifesty i SBOM),
   z uwzględnieniem `.gitignore` i bez heurystyki katalogów vendored, która
   rozpoznaje komponenty po skrótach plików, nie radzi sobie z ESP-IDF
@@ -162,6 +165,11 @@ a po etapie `esp-idf` także etap `security`, ten sam, który wykonuje lokalne
 - drugi przebieg `osv-scanner` rozpoznaje komponenty w wersjach wskazanych
   przez repozytorium i ich submoduły (ESP-IDF, Pico SDK, lwIP, cJSON i
   pozostałe) po commitach gita, z pominięciem `.build`,
+- trzeci przebieg sprawdza wydanie, od którego pochodzi komponent przypięty
+  do późniejszego commita (`release` w `security/third_party.json`,
+  `pedigree` w SBOM): zgłoszenia podatności kończą się na wydaniach, które
+  wymieniają, więc dla późniejszego commita, takiego jak cJSON `6d9f244` po
+  1.7.19, skaner nic nie zgłasza,
 - przebieg, który nie może się zakończyć, jest ponawiany; znalezione
   podatności i trwałe błędy kończą skan niepowodzeniem,
 - `cve-bin-tool` sprawdza SBOM CycloneDX.
@@ -171,8 +179,8 @@ rozpoznaje, zaakceptowane ryzyko, kod niekompilowany na żadnym targecie),
 trafia do `security/osv-scanner.toml` z datą swojego wiersza
 w `security/vulnerability_log.md`. Wpisy o statusie `mitigated` mają
 `ignoreUntil`, czyli datę przeglądu: w tym dniu test kończy się błędem, nawet
-jeśli skaner nie zgłasza już znaleziska. Tak bywa, gdy komponent jest przypięty
-do commita nowszego niż ostatni wskazany w zgłoszeniu podatności.
+jeśli skaner nie zgłasza już znaleziska, jak dla commita, którego nie wymienia
+żadne zgłoszenie podatności.
 
 Baza CVE jest przechowywana w pamięci podręcznej przez dzień. Gdy lustro NVD
 jest niedostępne, skan korzysta z ostatniej zapisanej bazy i zgłasza
@@ -211,7 +219,8 @@ Utwórz tag dopiero po włączeniu commitu wydania do `main`. CI uruchamiane prz
    dotychczasowej lokalizacji.
 2. Zachowaj oryginalne pliki licencji i informacje o autorstwie.
 3. Zaktualizuj w `security/third_party.json` wersję, tag, rewizję, purl lub
-   odwołanie do projektu źródłowego.
+   odwołanie do projektu źródłowego. Dla pinu po wydaniu `release` podaje
+   wersję i commit tego wydania; gdy pin jest wydaniem, usuń to pole.
 4. Dla ESP-IDF odśwież `security/esp_idf_tools.json` na podstawie pliku
    `tools.json` z ustalonej wersji frameworka i zarządzanego środowiska Python,
    a następnie sprawdź licencję każdego narzędzia.

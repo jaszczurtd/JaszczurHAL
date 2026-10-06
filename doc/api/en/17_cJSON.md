@@ -11,7 +11,8 @@ Parse, create, and modify JSON documents with `cJSON` and `cJSON_Utils`. Jaszczu
 `cJSON` provides a small C parser and generator for JSON. The project fetches its sources into `third_party/cJSON` at the commit specified by `third_party/cjson_version.conf`. Integration code in `src/hal/codecs/cjson/` compiles the original sources and exposes the headers only when `HAL_ENABLE_CJSON` is enabled, preserving the stable public include path.
 
 Managed version: `cJSON` 1.7.19, pinned to upstream commit `6d9f244` after the
-release for its later security fixes.
+release for its later security fixes. The security scan also checks advisories
+against the 1.7.19 release commit `c859b25`, where they end.
 
 Author/license: upstream `cJSON` is authored by Dave Gamble and contributors
 and distributed under the MIT license.
