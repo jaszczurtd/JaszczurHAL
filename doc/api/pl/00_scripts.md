@@ -14,13 +14,13 @@ Uruchamiaj polecenia z katalogu głównego repozytorium, chyba że instrukcja ws
 
 | Cel | Polecenie | Rezultat |
 |---|---|---|
-| Przygotowanie stacji roboczej Debian/Ubuntu | `./runmefirst.sh` | Instaluje wymagane narzędzia hostowe, toolchain ARM, narzędzia analizy i bezpieczeństwa, obsługę USB oraz integrację z VS Code; synchronizuje zarządzane komponenty i konfiguruje hooki Git. |
+| Przygotowanie stacji roboczej Debian/Ubuntu | `./runmefirst.sh` | Instaluje wymagane narzędzia hostowe, toolchain ARM, narzędzia analizy i bezpieczeństwa, obsługę USB oraz integrację z VS Code przez `scripts/install_host_tools.sh`, ten sam skrypt, którego używa linuksowe CI; synchronizuje zarządzane komponenty i konfiguruje hooki Git. |
 | Przygotowanie natywnej stacji roboczej Windows | `powershell -NoProfile -ExecutionPolicy Bypass -File .\runmefirst.ps1` | Przygotowuje zarządzane środowisko Pythona w wersji wskazanej przez repozytorium, natywne toolchainy, komponenty źródłowe i ścieżki użytkownika Cortex-Debug, a następnie sprawdza konfigurację hosta Windows. |
 | Synchronizacja zarządzanych zależności | `./third_party/update_components.sh` | Pobiera brakujące komponenty i zastępuje zarządzane instalacje niezgodne z wersjami zapisanymi w repozytorium. |
-| Weryfikacja zależności bez ich zmiany | `./third_party/update_components.sh --verify-only` | Sprawdza wersje wszystkich zarządzanych komponentów, commity, wymagane pliki, stan archiwum PMD, zbudowane picotool i cppcheck oraz stempel łańcucha narzędzi RISC-V. |
+| Weryfikacja zależności bez ich zmiany | `./third_party/update_components.sh --verify-only` | Sprawdza wersje wszystkich zarządzanych komponentów, commity, wymagane pliki, brak lokalnych zmian w przypiętych checkoutach (także w submodułach), stan archiwum PMD, zbudowane picotool i cppcheck oraz stempel łańcucha narzędzi RISC-V. |
 | Odświeżenie wszystkich wersjonowanych plików generowanych | `python3 scripts/sync_generated.py --write` | Uruchamia generatory funkcji, płytek, przykładów, głównego VS Code oraz SBOM i wypisuje każdy plik zmieniony podczas synchronizacji. |
 | Weryfikacja wszystkich wersjonowanych plików generowanych | `python3 scripts/sync_generated.py --check` | Uruchamia każdy generator w trybie weryfikacji tylko do odczytu i zgłasza błąd, gdy pliku wynikowego brakuje lub jest on nieaktualny. |
-| Pełna kontrola jakości repozytorium | `./runalltests.sh` | Czyści katalogi robocze bramki i uruchamia testy, kontrole Clang ASan/UBSan/TSan/libFuzzer, Valgrind, analizę statyczną, CPD, kompilacje targetów oraz kompilacje przykładów. |
+| Pełna kontrola jakości repozytorium | `./runalltests.sh`; przed wysłaniem zmian `./runalltests.sh --commit` | Czyści katalogi robocze bramki i uruchamia wszystkie etapy: testy, kontrole Clang ASan/UBSan/TSan/libFuzzer, Valgrind, analizę statyczną, CPD, kompilacje targetów, bibliotek i przykładów oraz skan podatności. Linuksowe CI wykonuje te same etapy poza kompilacją przykładów. |
 | Testy z sanitizerami i fuzzingiem | `scripts/run_sanitizer_fuzz.sh` | Odtwarza konfigurację testów na komputerze z instrumentacją Clang, uruchamia wszystkie testy pod ASan/UBSan, testy natywne pod TSan i wykonuje krótkie fuzzowanie parserów sieciowych. |
 | Obsługa projektu firmware | `vscode/entry/jh-vscode <action> --project <dir>` w Uniksie lub `vscode/entry/jh-vscode.cmd ...` w Windows | Udostępnia stały interfejs poleceń do kompilacji, wgrywania, monitorowania, wyboru płytki, konfiguracji IntelliSense i czyszczenia używany przez projekty VS Code. |
 | Kompilacja biblioteki linkowalnej dla dowolnego targetu | `scripts/build_link_library.sh --target <id>` | Wybiera runner rodziny z `link_libraries/` na podstawie providera builda targetu i przekazuje pozostałe opcje. |
@@ -72,12 +72,7 @@ Poniższe skrypty znajdują się poza `scripts/`. Służą do konfiguracji środ
 Przygotowuje środowisko na Debianie, Ubuntu i systemach zgodnych z tymi dystrybucjami. Można uruchomić go ponownie, aby uzyskać tę samą konfigurację. Skrypt:
 
 - usuwa drzewo `.build/` repozytorium przed konfiguracją;
-- instaluje kompilatory, CMake, Ninja, Python, Java, Valgrind, narzędzia Clang
-  do sanitizerów i fuzzowania, clang-tidy, OpenOCD, `gdb-multiarch`,
-  obsługę portu szeregowego, libusb oraz inne pakiety hosta;
-- wywołuje `third_party/update_components.sh`, który buduje też przypięty
-  cppcheck;
-- instaluje `osv-scanner` oraz `cve-bin-tool`;
+- uruchamia `scripts/install_host_tools.sh`, opisany niżej;
 - instaluje regułę udev dla dostępu USB BOOTSEL/picotool do RP2040/RP2350
   oraz portu `/dev/ttyACM*` w trybie aplikacji używanego przez automatyczny
   reset przy 1200 bps;
@@ -85,14 +80,25 @@ Przygotowuje środowisko na Debianie, Ubuntu i systemach zgodnych z tymi dystryb
   zwrotnych OTA przez TCP/8266 i odpowiedzi na wyszukiwanie urządzeń przez
   UDP/8266, i pyta przed zmianą zapory sieciowej lub instalacją
   `iptables-persistent`;
-- konfiguruje hooki Git repozytorium;
-- weryfikuje, że każde wymagane narzędzie jest dostępne.
+- konfiguruje hooki Git repozytorium.
 
 Skrypt używa `sudo` dla pakietów systemowych, `/usr/local/bin`, reguły udev
 oraz zaakceptowanej przez użytkownika zmiany zapory sieciowej. Pobiera narzędzia i
 zależności, więc wymaga dostępu do sieci. Dedykowany skrypt zapory
 sieciowej to `scripts/configure_ota_firewall.py`; obsługuje `--check`, jawne
 `--interface` / `--network`; zmiany wymagają potwierdzenia lub opcji `--yes`.
+
+### `scripts/install_host_tools.sh`
+
+Instaluje narzędzia kontroli jakości i generowanych projektów: kompilatory,
+CMake, Ninja, Python z PyYAML, Java, Valgrind, narzędzia Clang do sanitizerów
+i fuzzowania, clang-tidy, clang-format, toolchain Arm z newlib, OpenOCD,
+`gdb-multiarch`, obsługę portu szeregowego, libusb, rsync, `osv-scanner` oraz
+`cve-bin-tool`. Potem uruchamia `third_party/update_components.sh`, który
+buduje też przypięty cppcheck, a na końcu sprawdza każde wymagane polecenie
+i moduł Pythona. Wołają go `runmefirst.sh` i każdy linuksowy job CI, więc
+lokalna kontrola i CI pracują na tym samym zestawie narzędzi. Opcja `--check`
+tylko zgłasza brakujące narzędzia; tak uruchamia go etap `tools`.
 
 ### `runmefirst.ps1`
 
@@ -172,7 +178,11 @@ konfiguracja jest dostępna przez `scripts/ensure_esp_idf.sh --enable` lub
 
 Tryb normalny doprowadza każdą zarządzaną instalację do wersji zapisanej w
 konfiguracji. `--verify-only` nie wykonuje pobierania, ekstrakcji, zastąpienia
-checkoutu ani kompilacji. Weryfikacja picotool obejmuje jego wymagane
+checkoutu ani kompilacji, a odrzuca checkout z lokalnymi zmianami lub plikami
+spoza Gita, także w submodułach. Dzięki temu kontrola jakości nie sprawdza
+innych źródeł niż te, które pobiera CI. Skrypt obsługi ESP-IDF stosuje tę samą
+regułę przed każdą kompilacją. Tryb normalny naprawia taki checkout tylko dla
+komponentów oznaczonych jako `clean`. Weryfikacja picotool obejmuje jego wymagane
 polecenia oraz możliwości USB/podpisywania włączone przez aktualnie dostępne
 zależności. Weryfikacja cppcheck sprawdza zgłaszaną wersję, addon MISRA obok
 pliku wykonywalnego i stempel builda.
@@ -181,35 +191,54 @@ Układ wersji zapisanych w repozytorium i katalogów opisano w dokumencie
 
 ### `runalltests.sh`
 
-Pełna lokalna kontrola jakości. Przed uruchomieniem dziewięciu etapów skrypt
-wywołuje `scripts/sync_generated.py --write` dla wersjonowanych plików dotyczących
-modułów, płytek, przykładów, głównej konfiguracji VS Code i SBOM. Lokalne
-uruchomienie odświeża więc deterministycznie generowane pliki, a w podsumowaniu
-ponownie wymienia zmienione artefakty. Opcja `--check-generated` przełącza ten
-krok w tryb tylko do odczytu. CI korzysta z tego samego skryptu w trybie
-sprawdzania, dzięki czemu lista generatorów jest utrzymywana w jednym miejscu.
-Opcje `-j N`, `--jobs N` i `-jN` określają liczbę równoległych zadań kompilacji.
-Kontrola obejmuje:
+Kontrola jakości repozytorium. Jej etapy, wypisywane przez `--list-stages`,
+to jedyna lista kontroli: lokalne uruchomienie wykonuje je po kolei, a
+linuksowe joby CI uruchamiają te same etapy przez
+`--stage NAZWA[,NAZWA...]`, każdy dokładnie raz, po instalacji narzędzi przez
+`scripts/install_host_tools.sh`. Wyjątkiem są kompilacje przykładów:
+wypisuje je `--list-local-stages` i działają wyłącznie lokalnie. `tests/test_ci_gate_stages.py` kończy się
+błędem, gdy workflow i lista się rozjadą. `--commit [REV]` uruchamia kontrolę
+na czystym checkoucie `REV` (domyślnie `HEAD`) w `.build/commit-gate`;
+uruchamiaj go przed wysłaniem zmian. Komponenty z Gita w wersjach wskazanych
+przez repozytorium trafiają tam z tego drzewa przez `rsync`, a zanim ruszy
+którykolwiek etap, niezależnie od wyboru, ich weryfikacja odrzuca każdą
+lokalną zmianę. PMD i łańcuch narzędzi RISC-V są instalowane
+w checkoucie z przypiętych archiwów, a cppcheck i picotool budowane na
+miejscu; wszystko zostaje na kolejny przebieg. `--list-libraries` wypisuje target i
+płytkę każdego etapu bibliotek. Opcje `-j N`, `--jobs N` i `-jN` określają
+liczbę równoległych zadań kompilacji. Kontrola sprawdza wersjonowane pliki
+modułów, płytek, przykładów, głównej konfiguracji VS Code i SBOM przez
+`scripts/sync_generated.py --check` i nigdy ich nie przepisuje. Etapy:
 
-1. weryfikacja wymaganych narzędzi i zarządzanych komponentów;
-2. testy hosta, w tym opcjonalny zestaw FreeRTOS POSIX;
-3. testy Clang ASan/UBSan, testy natywne pod ThreadSanitizerem i krótkie
-   kontrole libFuzzer przez ten sam skrypt, którego używa CI;
-4. Valgrind memcheck;
-5. cppcheck w przypiętym buildzie (`scripts/run_cppcheck.sh`);
-6. clang-tidy dla kodu hosta/współdzielonego oraz backendu STM32, używający
-   zarówno bazy danych `JH_STM32_HOST_SANITY` kompilatora hosta, jak i
-   prawdziwej bazy danych ARM;
-7. wykrywanie duplikatów PMD CPD w implementacjach C/C++ utrzymywanych w
-   repozytorium oraz w skryptach Python;
-8. kompilacje STM32, RP2040/RP2350, natywnego FreeRTOS, profilu funkcji RP
-   oraz czyste kompilacje ESP32-S3/ESP-IDF z walidacją artefaktów;
-9. każdy zadeklarowany przykład RP oraz przykłady STM32.
+1. `tools`: weryfikacja wymaganych narzędzi i zarządzanych komponentów;
+2. `repository`: artefakty generowane, metadane wydania i efektywna
+   konfiguracja funkcji każdego projektu;
+3. `host`: testy hosta, w tym opcjonalny zestaw FreeRTOS POSIX;
+4. `sanitizer-fuzz`: testy Clang ASan/UBSan, testy natywne pod
+   ThreadSanitizerem i krótkie kontrole libFuzzer;
+5. `memcheck`: Valgrind memcheck;
+6. `cppcheck`: przypięty build (`scripts/run_cppcheck.sh`);
+7. `clang-tidy`: kod hosta/współdzielony w bazach hosta z testami FreeRTOS
+   POSIX i bez nich oraz backend STM32 w bazie `JH_STM32_HOST_SANITY`
+   kompilatora hosta i w prawdziwej bazie ARM;
+8. `cpd`: wykrywanie duplikatów PMD CPD w implementacjach C/C++ utrzymywanych
+   w repozytorium oraz w skryptach Python;
+9. `stm32`: biblioteki STM32G474 dla kompilatora hosta, ARM i SX1276/SX1278;
+10. `rp`: kompilacje RP2040/RP2350, natywnego FreeRTOS i profili funkcji
+    RP2040 z walidacją artefaktów;
+11. `esp-idf`: czyste kompilacje fixture'ów ESP-IDF dla ESP32-S3/ESP32 i
+    biblioteka ESP32-S3 ze wszystkimi funkcjami;
+12. `library-<target>`: biblioteki ze wszystkimi funkcjami dla każdego targetu
+    RP i STM32, bez nagłówka projektu oraz dla aplikacji w ścieżce ze spacjami;
+13. `examples-<target>`: każda zadeklarowana konfiguracja przykładów dla
+    RP2040, STM32G474 i ESP32-S3, tylko lokalnie;
+14. `security`: `scripts/check_vulnerabilities.sh` ze skanem CVE na SBOM.
 
-Skrypt na starcie usuwa tylko swoje zarządzane drzewa `.build/gate`,
-`.build/examples` oraz `.build/tests`. Kończy działanie po pierwszym
-nieudanym etapie kontroli.
-Etap 4 uruchamia każdy bezpośrednio zarejestrowany natywny test wykonywalny
+Pełne uruchomienie usuwa na starcie tylko zarządzane drzewa `.build/gate`,
+`.build/examples` oraz `.build/tests`; uruchomienie z `--stage` je zostawia,
+więc etapy korzystające z tego samego buildu używają go ponownie. Skrypt
+kończy działanie po pierwszym nieudanym etapie.
+Etap memcheck uruchamia każdy bezpośrednio zarejestrowany natywny test wykonywalny
 C/C++ oznaczony jako `memcheck`. `MEMCHECK_REQUIRED_TESTS` zawiera obowiązkowy,
 krytyczny podzbiór i zapobiega niezauważonemu pominięciu tych testów. Testy
 skryptów w Pythonie, CMake i shellu są
@@ -222,8 +251,8 @@ jak i do `.build/gate/logs/jh_memcheck.log`.
 
 ### `scripts/run_sanitizer_fuzz.sh`
 
-Wspólny skrypt sanitizerów dla Linuksa, używany przez lokalny etap 3 i job CI
-`sanitizer-fuzz`. Wyszukuje dostępny toolchain Clang, z numerem wersji w nazwie
+Wspólny skrypt sanitizerów dla Linuksa, używany przez etap `sanitizer-fuzz`,
+lokalnie i w CI. Wyszukuje dostępny toolchain Clang, z numerem wersji w nazwie
 lub bez niego, odtwarza konfigurację kompilacji w `.build/`, włącza ASan, UBSan i libFuzzer oraz uruchamia
 kompletny zestaw CTest hosta z wykrywaniem wycieków i natychmiastowym
 zatrzymaniem po wykryciu niezdefiniowanego zachowania, a następnie wykonuje
@@ -627,8 +656,8 @@ wariantem; pary zatrzymane w nagłówku przez `#error` są pomijane. Każdy
 przykład kompiluje się dla płytki, którą jego manifest wybiera dla danej
 platformy.
 
-Etap 9 skryptu `runalltests.sh` uruchamia `build` dla `rp2040`, `stm32g474`
-i `esp32s3`. Aktualną macierz pokazuje `list`, dlatego ta strona nie podaje
+Etapy `examples-<target>` skryptu `runalltests.sh` uruchamiają `build` dla
+`rp2040`, `stm32g474` i `esp32s3`. Aktualną macierz pokazuje `list`, dlatego ta strona nie podaje
 liczby konfiguracji. Przykłady RISC-V WiFi pozostają wykluczone, dopóki
 RP2350 RISC-V + CYW43 jest nieobsługiwane.
 
@@ -679,8 +708,8 @@ jest dostępna jako
 `jh_board_fallback_config.h` oraz rejestr CMake komponentów płytki. Dwa
 pierwsze pochodzą z `boards/`; projekcja CMake pochodzi z
 `config/tooling/board_components.json`. `--check-static` odrzuca brakujące
-lub nieaktualne pliki. CI uruchamia sprawdzenie niezależnie od generowania
-płytki dla każdej kompilacji.
+lub nieaktualne pliki. Etap `repository` uruchamia sprawdzenie niezależnie od
+generowania płytki dla każdej kompilacji.
 
 ### `scripts/generate_hal_features.py`
 
@@ -727,9 +756,9 @@ wstępnej kontroli oraz podejmowania decyzji OTA. Bezpośrednie żądania przeka
 CMake.
 
 Warunkowe wartości domyślne, wybór providera, sprawdzanie cech płytki
-oraz ograniczenia targetu pozostają w `hal_config.h`. CI uruchamia `--check`
-oraz ścisłą analizę konfiguracji źródłowej i wynikowej, po czym publikuje
-deterministyczny raport. Zainstalowane pakiety RP i STM32G474 zawierają
+oraz ograniczenia targetu pozostają w `hal_config.h`. Etap `repository`
+uruchamia `--check` oraz ścisłą analizę konfiguracji źródłowej i wynikowej,
+a CI publikuje deterministyczny raport. Zainstalowane pakiety RP i STM32G474 zawierają
 generowane nagłówki modułów i płytki, rozwiązany JSON płytki, nagłówek sygnatury
 linkowania oraz źródło referencyjne; projekt korzystający bezpośrednio z
 kompilatora może skompilować i zlinkować te artefakty bez wywoływania Pythona.
@@ -936,8 +965,7 @@ sprawdzeniu wypisuje ścieżkę gotowego pliku wykonywalnego.
 
 ### `scripts/run_cppcheck.sh`
 
-Bramka cppcheck dla własnego kodu JaszczurHAL, uruchamiana przez
-`runalltests.sh` i CI. Skanuje `src/` przypiętym cppcheck z wyciszeniami z
+Etap cppcheck skryptu `runalltests.sh` dla własnego kodu JaszczurHAL. Skanuje `src/` przypiętym cppcheck z wyciszeniami z
 `tests/cppcheck-suppressions.txt` i modelem atomics z
 `config/tooling/cppcheck-atomics.cfg`; kod zewnętrzny jest pominięty. Każde
 zgłoszenie zatrzymuje bramkę.

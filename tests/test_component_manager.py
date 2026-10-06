@@ -99,6 +99,23 @@ class GitManagerTests(unittest.TestCase):
             )
             self.assertEqual((checkout / "payload.txt").read_text(), "one\n")
 
+            # Verification wants the pinned sources whatever the clean flag:
+            # an edited or an added file fails it, while an update without
+            # clean leaves the local edit alone.
+            (checkout / "payload.txt").write_text("edited\n", encoding="utf-8")
+            with self.assertRaises(manager.ComponentError):
+                manager.sync_git_checkout(repository, first_ref, checkout, verify_only=True)
+            self.assertFalse(manager.sync_git_checkout(repository, first_ref, checkout))
+            self.assertEqual((checkout / "payload.txt").read_text(), "edited\n")
+            git(checkout, "checkout", "--", "payload.txt")
+            (checkout / "extra.c").write_text("#error added\n", encoding="utf-8")
+            with self.assertRaises(manager.ComponentError):
+                manager.sync_git_checkout(repository, first_ref, checkout, verify_only=True)
+            (checkout / "extra.c").unlink()
+            self.assertFalse(
+                manager.sync_git_checkout(repository, first_ref, checkout, verify_only=True)
+            )
+
             alternate = (temporary / "alternate").resolve().as_uri()
             git(checkout, "remote", "set-url", "origin", alternate)
             with self.assertRaises(manager.ComponentError):
@@ -912,6 +929,8 @@ class TrackedContractTests(unittest.TestCase):
     def test_windows_bootstrap_is_consent_gated_and_read_only_on_verify(self) -> None:
         bootstrap = (ROOT / "runmefirst.ps1").read_text(encoding="utf-8")
         unix_bootstrap = (ROOT / "runmefirst.sh").read_text(encoding="utf-8")
+        # runmefirst.sh and Linux CI install through one script.
+        unix_tools = (ROOT / "scripts/install_host_tools.sh").read_text(encoding="utf-8")
         inventory = (ROOT / "scripts/windows_host_inventory.ps1").read_text(
             encoding="utf-8"
         )
@@ -943,8 +962,9 @@ class TrackedContractTests(unittest.TestCase):
         self.assertIn("CurrentBuildNumber", inventory)
         self.assertIn("[switch]$FirmwareOnly", inventory)
         self.assertIn("$editorCategory", inventory)
-        self.assertIn("build-essential cmake ninja-build", unix_bootstrap)
-        self.assertIn("for tool in cmake ninja", unix_bootstrap)
+        self.assertIn('"${SCRIPT_DIR}/scripts/install_host_tools.sh"', unix_bootstrap)
+        self.assertIn("build-essential cmake ninja-build", unix_tools)
+        self.assertIn("COMMANDS=(\n    cmake ninja", unix_tools)
         self.assertGreaterEqual(
             workflow.count("-ConfigureHost -FirmwareOnly"),
             2,

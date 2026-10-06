@@ -9,6 +9,7 @@ import sys
 
 
 from repo_root import repo_root  # noqa: E402
+from source_assertions import shell_function_body  # noqa: E402
 
 ROOT = repo_root(sys.argv, __file__)
 WORKFLOW = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
@@ -99,10 +100,10 @@ def require_uploaded_images(body: str, context: str) -> None:
         require(fragment in body, f"{context} artifact upload is missing {fragment!r}")
 
 
-def require_failure_diagnostics(body: str, context: str) -> None:
+def require_failure_diagnostics(body: str, context: str, trigger: str) -> None:
     for fragment in (
         "failure() && !cancelled() &&",
-        "steps.esp32_phase3_build.outcome == 'failure'",
+        trigger,
         "uses: actions/upload-artifact@v6",
         "jh_esp_idf_failure.txt",
         "build.log",
@@ -122,42 +123,37 @@ def require_failure_diagnostics(body: str, context: str) -> None:
         )
 
 
+WINDOWS_TRIGGER = "steps.esp32_phase3_build.outcome == 'failure'"
+LINUX_PHASE3 = ".build/gate/esp-idf/esp32s3-phase3"
+LINUX_GAMEPAD = ".build/gate/esp-idf/esp32-gamepad"
+
+
+def gate_function(name: str) -> str:
+    return shell_function_body(QUALITY_GATE, name)
+
+
 windows = workflow_job("windows-tooling")
 linux = workflow_job("test")
-for body, context in ((windows, "windows-tooling"), (linux, "Linux test")):
-    build_marker = (
-        "      - name: Build ESP32-S3 Phase 3 fixture with pinned ESP-IDF\n"
-    )
-    failure_marker = (
-        "      - name: Upload ESP32-S3 Phase 3 failure diagnostics\n"
-    )
-    require(
-        body.index(build_marker) < body.index(failure_marker),
-        f"{context} failure upload appears before the ESP-IDF build step",
-    )
-    build_step = workflow_step(
-        body, "Build ESP32-S3 Phase 3 fixture with pinned ESP-IDF"
-    )
-    require_real_esp_build(build_step, context)
-    require(
-        "id: esp32_phase3_build" in build_step,
-        f"{context} ESP-IDF build step has no stable diagnostic id",
-    )
-    require(
-        "--jobs" not in build_step,
-        f"{context} passes the removed --jobs option to build_esp_idf.py",
-    )
-    require_esp_cache(body, context)
-    upload_step = workflow_step(body, "Upload ESP32-S3 Phase 3 build artifacts")
-    require_uploaded_images(upload_step, context)
-    failure_step = workflow_step(
-        body, "Upload ESP32-S3 Phase 3 failure diagnostics"
-    )
-    require_failure_diagnostics(failure_step, context)
 
-windows_build = workflow_step(
-    windows, "Build ESP32-S3 Phase 3 fixture with pinned ESP-IDF"
+# Windows builds the fixture itself; it is the only CI host the gate cannot be.
+build_marker = "      - name: Build ESP32-S3 Phase 3 fixture with pinned ESP-IDF\n"
+failure_marker = "      - name: Upload ESP32-S3 Phase 3 failure diagnostics\n"
+require(
+    windows.index(build_marker) < windows.index(failure_marker),
+    "windows-tooling failure upload appears before the ESP-IDF build step",
 )
+windows_build = workflow_step(windows, "Build ESP32-S3 Phase 3 fixture with pinned ESP-IDF")
+require_real_esp_build(windows_build, "windows-tooling")
+require("id: esp32_phase3_build" in windows_build,
+        "windows-tooling ESP-IDF build step has no stable diagnostic id")
+require("--jobs" not in windows_build,
+        "windows-tooling passes the removed --jobs option to build_esp_idf.py")
+require_esp_cache(windows, "windows-tooling")
+require_uploaded_images(
+    workflow_step(windows, "Upload ESP32-S3 Phase 3 build artifacts"), "windows-tooling")
+require_failure_diagnostics(
+    workflow_step(windows, "Upload ESP32-S3 Phase 3 failure diagnostics"),
+    "windows-tooling", WINDOWS_TRIGGER)
 for fragment in (
     "$buildExitCode = $LASTEXITCODE",
     "jh_esp_idf_failure.txt",
@@ -167,201 +163,111 @@ for fragment in (
     "Missing failure diagnostic:",
     "exit $buildExitCode",
 ):
-    require(
-        fragment in windows_build,
-        f"windows-tooling failure output is missing {fragment!r}",
-    )
+    require(fragment in windows_build,
+            f"windows-tooling failure output is missing {fragment!r}")
 require(
     windows_build.index("Get-Content -LiteralPath $buildLog -Tail 300")
     < windows_build.index("Get-Content -LiteralPath $failureDiagnostic"),
     "windows-tooling does not print the failure diagnostic after the log tail",
 )
+require("$env:GITHUB_WORKSPACE" in windows_build,
+        "windows-tooling ESP-IDF output is not rooted in GITHUB_WORKSPACE")
 
-linux_build = workflow_step(
-    linux, "Build ESP32-S3 Phase 3 fixture with pinned ESP-IDF"
+# Linux CI runs the gate's esp-idf stage in the test job, which keeps the
+# ESP-IDF cache and publishes what the stage left below .build/gate.
+require(
+    re.search(r"\./runalltests\.sh --stage \S*\besp-idf\b", linux) is not None,
+    "the Linux test job does not run the esp-idf gate stage",
 )
+require_esp_cache(linux, "Linux test")
+phase3_upload = workflow_step(linux, "Upload ESP32-S3 Phase 3 build artifacts")
+require_uploaded_images(phase3_upload, "Linux test")
+require(f"{LINUX_PHASE3}/" in phase3_upload,
+        "Linux test does not publish the esp-idf stage output")
+require_failure_diagnostics(
+    workflow_step(linux, "Upload ESP32-S3 Phase 3 failure diagnostics"),
+    "Linux test", f"hashFiles('{LINUX_PHASE3}/jh_esp_idf_failure.txt')")
+require(
+    "linux-esp32-gamepad" in workflow_step(linux, "Upload ESP32 Classic gamepad build artifacts"),
+    "Linux gamepad artifacts have no stable upload name",
+)
+require(
+    f"hashFiles('{LINUX_GAMEPAD}/jh_esp_idf_failure.txt')"
+    in workflow_step(linux, "Upload ESP32 Classic gamepad failure diagnostics"),
+    "Linux gamepad failure upload is not tied to its diagnostic",
+)
+
+# The esp-idf stage: both fixtures, the all-features library, and failure
+# output that shows the build log tail before the runner's diagnostic.
+esp_stage = gate_function("stage_esp_idf")
+require_real_esp_build(esp_stage, "runalltests.sh esp-idf stage")
+require_gamepad_esp_build(esp_stage, "runalltests.sh esp-idf stage")
+require("--jobs" not in esp_stage,
+        "the esp-idf stage passes the removed --jobs option to build_esp_idf.py")
 for fragment in (
-    "build_exit=0",
-    "|| build_exit=$?",
+    '"${GATE_BUILD_ROOT}/esp-idf/esp32s3-phase3"',
+    '"${LOG_ROOT}/jh_esp32s3_phase3.log"',
+    '"${GATE_BUILD_ROOT}/esp-idf/esp32-gamepad"',
+    '"${LOG_ROOT}/jh_esp32_gamepad.log"',
+    "scripts/build_esp32_lib.sh",
+    "--target esp32s3",
+    "--all-features",
+    '"${GATE_BUILD_ROOT}/link-libraries/esp32s3"',
+    '"${LOG_ROOT}/jh_esp32s3_link_library.log"',
+    "libJaszczurHAL.a",
+    "include/generated/jh_board_config.h",
+):
+    require(fragment in esp_stage, f"the esp-idf stage is missing {fragment!r}")
+esp_failure = gate_function("run_esp_build")
+for fragment in (
     "jh_esp_idf_failure.txt",
     'tail -n 300 "${output}/build.log"',
     "ESP-IDF failure diagnostic:",
     "Missing failure diagnostic:",
-    'exit "${build_exit}"',
+    "exit 1",
 ):
-    require(
-        fragment in linux_build,
-        f"Linux test failure output is missing {fragment!r}",
-    )
+    require(fragment in esp_failure, f"ESP-IDF failure output is missing {fragment!r}")
 require(
-    linux_build.index('tail -n 300 "${output}/build.log"')
-    < linux_build.index(
-        "sed -n '1,120p' \"${output}/jh_esp_idf_failure.txt\""
-    ),
-    "Linux test does not print the failure diagnostic after the log tail",
-)
-
-require(
-    "$env:GITHUB_WORKSPACE" in windows_build,
-    "windows-tooling ESP-IDF output is not rooted in GITHUB_WORKSPACE",
-)
-require(
-    "${GITHUB_WORKSPACE}/.build/ci/esp-idf/esp32s3-phase3" in linux_build,
-    "Linux test ESP-IDF output is not rooted in GITHUB_WORKSPACE",
+    esp_failure.index('tail -n 300 "${output}/build.log"')
+    < esp_failure.index("sed -n '1,120p' \"${output}/jh_esp_idf_failure.txt\""),
+    "the gate does not print the failure diagnostic after the log tail",
 )
 
 require(
     "tests/test_esp32s3_phase1.py" not in windows,
     "windows-tooling must not inspect the ESP32-S3 Phase 1 hardware fixture",
 )
-require(
-    "tests/hardware" not in WORKFLOW,
-    "default CI must not read or build hardware fixtures",
-)
+require("tests/hardware" not in WORKFLOW, "default CI must not read or build hardware fixtures")
 require(
     "build_rp_pico_parity_fixtures.sh" not in QUALITY_GATE,
     "runalltests.sh must not build RP hardware fixtures",
 )
-require(
-    "tests/test_esp32s3_phase2.py" in windows,
-    "windows-tooling does not run the ESP32-S3 Phase 2 host test",
-)
-require(
-    "tests/test_esp32s3_phase3.py" in windows,
-    "windows-tooling does not run the ESP32-S3 Phase 3 host contract test",
-)
-require(
-    "tests/test_esp_ci_contract.py" in windows,
-    "windows-tooling does not guard its ESP-IDF CI contract",
-)
+for host_test in (
+    "tests/test_esp32s3_phase2.py",
+    "tests/test_esp32s3_phase3.py",
+    "tests/test_esp_ci_contract.py",
+):
+    require(host_test in windows, f"windows-tooling does not run {host_test}")
 
 jobs = re.findall(r"^  ([a-z0-9-]+):$", WORKFLOW, flags=re.MULTILINE)
 require(
     not any("esp" in name for name in jobs),
-    f"ESP integration must reuse existing CI jobs, found: {jobs!r}",
+    f"ESP builds run as gate stages, not as ESP-only CI jobs: {jobs!r}",
 )
-require(
-    "esp32s3" not in workflow_job("linux-static-library"),
-    "ESP-IDF must not be added to the static-library matrix",
-)
+# The ESP32-S3 library comes from the esp-idf stage, not a library-* stage.
+require("esp32s3" not in gate_function("stage_library") and
+        not re.search(r"^\s+esp32s3:", QUALITY_GATE, flags=re.MULTILINE),
+        "ESP-IDF must not join the library-* stages")
 
-library_step = workflow_step(
-    linux, "Build ESP32-S3 linkable library with pinned ESP-IDF"
-)
-for fragment in (
-    "id: esp32_link_library_build",
-    "./scripts/build_esp32_lib.sh",
-    "--target esp32s3",
-    "--all-features",
-    "--clean",
-    "${GITHUB_WORKSPACE}/.build/ci/link-libraries/esp32s3",
-    'test -f "${output}/libJaszczurHAL.a"',
-    'test -f "${output}/include/generated/jh_board_config.h"',
-):
-    require(
-        fragment in library_step,
-        f"Linux ESP32-S3 library step is missing {fragment!r}",
-    )
-
-gate8 = QUALITY_GATE.split("# GATE 8:", 1)[1].split("# GATE 9:", 1)[0]
-gate8_library = gate8.split(
-    'info "Building the ESP32-S3 all-features linkable library with pinned ESP-IDF..."', 1
-)[1].split(
-    'pass "ESP32-S3 linkable library published libJaszczurHAL.a with its generated headers."',
-    1,
-)[0]
-for fragment in (
-    "scripts/build_esp32_lib.sh",
-    "--target esp32s3",
-    "--all-features",
-    "--clean",
-    '"${GATE_BUILD_ROOT}/link-libraries/esp32s3"',
-    '"${LOG_ROOT}/jh_esp32s3_link_library.log"',
-    "libJaszczurHAL.a",
-):
-    require(
-        fragment in gate8_library,
-        f"Gate 8 ESP32-S3 library build is missing {fragment!r}",
-    )
-gate8_esp = gate8.split(
-    'info "Building the ESP32-S3 Phase 3 fixture with pinned ESP-IDF..."', 1
-)[1].split(
-    'pass "ESP32-S3 Phase 3 fixture produced a validated multi-image ESP-IDF build."',
-    1,
-)[0]
-require_real_esp_build(gate8_esp, "runalltests.sh Gate 8")
-require(
-    "--jobs" not in gate8_esp,
-    "Gate 8 passes the removed --jobs option to build_esp_idf.py",
-)
-require(
-    '"${GATE_BUILD_ROOT}/esp-idf/esp32s3-phase3"' in gate8,
-    "Gate 8 ESP-IDF output is not below .build/gate",
-)
-require(
-    '"${LOG_ROOT}/jh_esp32s3_phase3.log"' in gate8,
-    "Gate 8 ESP-IDF command is not captured below .build/gate/logs",
-)
-
-linux_gamepad_build = workflow_step(
-    linux, "Build ESP32 Classic gamepad fixture with pinned ESP-IDF"
-)
-require_gamepad_esp_build(linux_gamepad_build, "Linux gamepad build")
-for fragment in (
-    "id: esp32_gamepad_build",
-    "build_exit=0",
-    "|| build_exit=$?",
-    "jh_esp_idf_failure.txt",
-    'tail -n 300 "${output}/build.log"',
-    'exit "${build_exit}"',
-):
-    require(
-        fragment in linux_gamepad_build,
-        f"Linux gamepad failure output is missing {fragment!r}",
-    )
-require(
-    "linux-esp32-gamepad" in workflow_step(
-        linux, "Upload ESP32 Classic gamepad build artifacts"
-    ),
-    "Linux gamepad artifacts have no stable upload name",
-)
-require(
-    "steps.esp32_gamepad_build.outcome == 'failure'"
-    in workflow_step(
-        linux, "Upload ESP32 Classic gamepad failure diagnostics"
-    ),
-    "Linux gamepad failure upload is not tied to its build step",
-)
-
-gate8_gamepad = gate8.split(
-    'info "Building the ESP32 Classic gamepad fixture with pinned ESP-IDF..."',
-    1,
-)[1].split(
-    'pass "ESP32 Classic gamepad fixture produced a validated ESP-IDF build."',
-    1,
-)[0]
-require_gamepad_esp_build(gate8_gamepad, "runalltests.sh Gate 8 gamepad")
-require(
-    '"${GATE_BUILD_ROOT}/esp-idf/esp32-gamepad"' in gate8,
-    "Gate 8 ESP32 gamepad output is not below .build/gate",
-)
-require(
-    '"${LOG_ROOT}/jh_esp32_gamepad.log"' in gate8,
-    "Gate 8 ESP32 gamepad command is not captured below .build/gate/logs",
-)
-
-gate9 = QUALITY_GATE.split("# GATE 9:", 1)[1]
-gate9_examples = gate9.split("for target in rp2040 stm32g474 esp32s3; do", 1)[1].split(
-    "done", 1
-)[0]
+# Every ESP32-S3 example configuration builds in the examples-esp32s3 stage.
+examples = gate_function("stage_examples")
 for fragment in (
     "scripts/examples_dispatcher.py",
-    '--target "${target}"',
-    '"${LOG_ROOT}/jh_examples_${target}_build.log"',
+    '--target "$1"',
+    '"${LOG_ROOT}/jh_examples_$1_build.log"',
 ):
-    require(
-        fragment in gate9_examples,
-        f"Gate 9 ESP32-S3 example build is missing {fragment!r}",
-    )
+    require(fragment in examples, f"the examples stage is missing {fragment!r}")
+require(re.search(r"^EXAMPLE_TARGETS=\(.*\besp32s3\b", QUALITY_GATE, flags=re.MULTILINE)
+        is not None, "runalltests.sh has no examples-esp32s3 stage")
 
 print("ESP32-S3 Phase 3 CI and local gate integration verified")

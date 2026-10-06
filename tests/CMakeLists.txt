@@ -1169,9 +1169,9 @@ add_test(NAME test_esp32_audio_backend
         ${CMAKE_CURRENT_SOURCE_DIR}/test_esp32_audio_backend.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
-add_test(NAME test_ci_library_matrix
+add_test(NAME test_ci_gate_stages
     COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_CURRENT_SOURCE_DIR}/test_ci_library_matrix.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_ci_gate_stages.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
 add_test(NAME test_stm32_host_sanity_build

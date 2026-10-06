@@ -260,6 +260,22 @@ with tempfile.TemporaryDirectory(prefix="jh-project-config-") as temporary:
         ],
         f"variants: {variants.variants}",
     )
+    # A Windows checkout may end lines with CRLF; the header reads the same.
+    crlf_header = root / "variant_switches_crlf" / "hal_project_config.h"
+    crlf_header.parent.mkdir(parents=True, exist_ok=True)
+    crlf_header.write_bytes(
+        (root / "variant_switches/hal_project_config.h").read_bytes().replace(b"\n", b"\r\n")
+    )
+    for predefined in ([], ["HAL_TARGET_RP2350_ARM", "PANEL=2", "EXTRA"]):
+        lf = read_project_config(root / "variant_switches/hal_project_config.h", predefined)
+        crlf = read_project_config(crlf_header, predefined)
+        require(
+            [(item.id, item.definitions) for item in crlf.variants]
+            == [(item.id, item.definitions) for item in lf.variants]
+            and sorted(macro.name for macro in crlf.features())
+            == sorted(macro.name for macro in lf.features()),
+            f"CRLF header reads differently with {predefined}",
+        )
     blocked = read_project_config(
         root / "variant_switches/hal_project_config.h", ["HAL_TARGET_RP2040", "PANEL=2"]
     )

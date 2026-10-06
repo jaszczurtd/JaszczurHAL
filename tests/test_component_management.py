@@ -59,12 +59,15 @@ require(
 )
 
 runmefirst = (ROOT / "runmefirst.sh").read_text(encoding="utf-8")
+# runmefirst.sh and Linux CI install through scripts/install_host_tools.sh.
+host_tools = (ROOT / "scripts" / "install_host_tools.sh").read_text(encoding="utf-8")
 require(
-    "third_party/update_components.sh" in runmefirst,
+    "scripts/install_host_tools.sh" in runmefirst
+    and "third_party/update_components.sh" in host_tools,
     "runmefirst does not use the central component updater",
 )
 require(
-    "/scripts/ensure_" not in runmefirst,
+    "/scripts/ensure_" not in runmefirst and "/ensure_" not in host_tools,
     "runmefirst bypasses the central component updater",
 )
 require(

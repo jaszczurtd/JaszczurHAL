@@ -56,46 +56,19 @@ for relative in ("runalltests.sh", ".github/workflows/ci.yml"):
         )
 
 ci_workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-host_test_job = ci_workflow.split("\n  test:\n", 1)[1].split("\n  memcheck:\n", 1)[0]
+# Every Linux CI job installs through scripts/install_host_tools.sh (the
+# runmefirst.sh list): the Arm newlib/libstdc++ packages the host tests and the
+# STM32 builds need, and every pinned source component (BTstack, FreeRTOS).
+host_tools = (ROOT / "scripts/install_host_tools.sh").read_text(encoding="utf-8")
 for package in (
     "gcc-arm-none-eabi",
     "libnewlib-arm-none-eabi",
     "libstdc++-arm-none-eabi-dev",
 ):
-    require(
-        package in host_test_job,
-        f"the Linux host-test job does not provision {package}",
-    )
-for dependency in ("ensure_btstack.sh --force", "ensure_freertos_kernel.sh --force"):
-    require(
-        dependency in host_test_job,
-        f"the Linux host-test job does not prepare {dependency.split()[0]}",
-    )
-
-memcheck_job = ci_workflow.split("\n  memcheck:\n", 1)[1].split(
-    "\n  static-analysis:\n", 1
-)[0]
-for package in (
-    "gcc-arm-none-eabi",
-    "libnewlib-arm-none-eabi",
-    "libstdc++-arm-none-eabi-dev",
-):
-    require(
-        package in memcheck_job,
-        f"the memcheck job does not provision {package}",
-    )
-for dependency in ("ensure_btstack.sh --force", "ensure_freertos_kernel.sh --force"):
-    require(
-        dependency in memcheck_job,
-        f"the memcheck job does not prepare {dependency.split()[0]}",
-    )
-
-static_analysis_job = ci_workflow.split("\n  static-analysis:\n", 1)[1].split(
-    "\n  security-scan:\n", 1
-)[0]
+    require(package in host_tools, f"install_host_tools.sh does not provision {package}")
 require(
-    "ensure_btstack.sh --force" in static_analysis_job,
-    "the static-analysis job does not prepare BTstack",
+    '"${REPO_ROOT}/third_party/update_components.sh"' in host_tools,
+    "install_host_tools.sh does not prepare the pinned source components",
 )
 
 windows_tooling_job = ci_workflow.split("\n  windows-tooling:\n", 1)[1].split(

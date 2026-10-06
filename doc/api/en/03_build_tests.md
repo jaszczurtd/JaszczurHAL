@@ -77,7 +77,7 @@ SDK is required.
 | Host/mock unit tests | `tests/CMakeLists.txt`, `tests/test_*.cpp`, root `CMakeLists.txt` | CMake plus CTest | Add a Unity suite and register it with `add_hal_test(...)`, or declare a dedicated executable for extra sources. |
 | Target backends on the host | `tests/fakes/<sdk>/` headers and fakes, a dedicated executable in `tests/CMakeLists.txt` | CMake plus CTest | Compile the real backend against the fake SDK and check its behaviour through the fake: recorded driver calls, injected failures, and simulated interrupts. |
 | FreeRTOS POSIX host tests | `tests/freertos_posix/`, `JH_ENABLE_FREERTOS_POSIX_TESTS` | CTest through the host build or full gate | Add a target with `add_hal_freertos_posix_test(...)`. |
-| Repository quality gate | `runalltests.sh`, `.github/workflows/ci.yml`, and the tooling data described in `00_scripts.md` | `./runalltests.sh` | Extend the owning gate and its focused regression tests; keep generated artifacts below `.build/`. |
+| Repository quality gate | `runalltests.sh`, `.github/workflows/ci.yml`, and the tooling data described in `00_scripts.md` | `./runalltests.sh` | Extend the owning stage and its focused regression tests, never the workflow alone; keep generated artifacts below `.build/`. |
 | Firmware compile fixtures | `tests/fixtures/<fixture>/.vscode/jaszczurhal.project.json` | `jh-vscode` or the target production runner | Extend the targets and variants in the fixture's `hal_project_config.h`, the boards in its manifest, and its artifact-layout test. |
 | Physical hardware fixtures | `tests/hardware/<fixture>/` source, `hal_project_config.h`, manifest, and verifier | Build/upload through `jh-vscode` or the target production runner, then run the verifier described in the fixture README | Add the firmware, explicit hardware matrix, host oracle, a README with the procedure and acceptance criteria in both languages, and a row in the table below. |
 
@@ -115,8 +115,10 @@ The repository root contains two main scripts:
 ./runmefirst.sh
 ```
 Configures your local environment for the first time:
+- Installs the host packages, security scanners and pinned components through
+  `scripts/install_host_tools.sh`; every Linux CI job installs through the same
+  script, so both run with the same tools
 - Installs git hooks (pre-commit and commit-msg from `.githooks/`)
-- Synchronizes all pinned components through `third_party/update_components.sh`
 - Installs persistent RP2040/RP2350 USB and `/dev/ttyACM*` access rules for
   sudo-less upload and automatic 1200-bps BOOTSEL reset
 - Offers persistent, LAN-scoped firewall setup for the OTA TCP/8266 callback
@@ -125,43 +127,60 @@ Configures your local environment for the first time:
 - Run this once when cloning the repository or after environment changes
 
 The pre-commit hook normalizes and formats staged files, then verifies all
-tracked generated artifacts. If any output is missing or stale, it blocks the
-commit and asks you to run `python3 scripts/sync_generated.py --write`, review
-the changes, and stage them before retrying.
+tracked generated artifacts in the staged content, after formatting, so the
+check sees exactly what the commit records. If any output is missing or stale,
+it blocks the commit and asks you to run
+`python3 scripts/sync_generated.py --write`, review the changes, and stage them
+before retrying.
 
 **`runalltests.sh`** - Full validation gate
 ```bash
-./runalltests.sh
-./runalltests.sh --check-generated
+./runalltests.sh                  # every stage on the working tree
+./runalltests.sh --commit         # every stage on a clean checkout of HEAD
+./runalltests.sh --stage host     # selected stages, e.g. host,memcheck
+./runalltests.sh --list-stages    # stage names in run order
+./runalltests.sh --list-local-stages  # stages CI does not run
 ```
-The default mode refreshes deterministic tracked output before the gates and
-lists files changed by that synchronization in the final summary.
-`--check-generated` verifies the same output without repairing drift; CI uses
-this stricter mode through `scripts/sync_generated.py --check`.
+The stages below are the only list of checks. A local run executes all of
+them in order. The Linux CI jobs install their tools with the same script and
+run the same stages with `--stage`, each exactly once, and nothing else;
+only the example builds (`examples-<target>`) run locally alone.
+`tests/test_ci_gate_stages.py` fails when the workflow and the list drift
+apart. A local run therefore checks everything Linux CI checks on the same
+commit. Add a new check to a stage, never to the workflow alone.
 
-Runs the complete quality-gate suite (9 gates, in order):
-1. Tool-presence check
-2. Host/mock unit tests (`.build/gate/host/` + ctest, incl. FreeRTOS POSIX)
-3. Clang ASan/UBSan tests, native tests under ThreadSanitizer, and bounded
-   libFuzzer smoke checks through the same runner used by CI
-4. Memory safety (Valgrind memcheck on all native C/C++ test executables)
-5. Static analysis: cppcheck (the pinned build, `scripts/run_cppcheck.sh`)
-6. Static analysis: clang-tidy (host + STM32 compile databases below
-   `.build/gate/`)
-7. PMD CPD duplicate detection across owned C/C++ implementations and Python
-   scripts
-8. Target builds (STM32G474 plus Pico SDK RP2040/RP2350 ARM/RP2350 RISC-V
-   entry/core probes, RP feature profiles, six representative
-   `01_core_runtime`/`18_freertos_suite` ELF/BIN/UF2 builds, one clean
-   compile-only `tests/fixtures/esp32s3_phase3` build with the pinned ESP-IDF
-   and validated multi-image manifest, and the ESP32-S3 all-features
-   `libJaszczurHAL.a` covering the whole target allowlist)
-9. Examples build (every example configuration for RP2040, STM32G474 and
-   ESP32-S3 through `scripts/examples_dispatcher.py`; Gate 8 covers RP2350)
+`--commit [REV]` checks out `REV` (default `HEAD`) into `.build/commit-gate`,
+without untracked files or unstaged edits, and runs the gate there. The
+pinned git components come from this tree with `rsync`, and before any stage
+runs, whichever were selected with `--stage`, their verification rejects any
+local edit in them, submodules included; PMD and the RISC-V
+toolchain are installed there from their pinned archives, and cppcheck and
+picotool are built there. The checkout, its components and tools are kept for
+the next run, so only the first one copies, installs, and builds
+everything. Run it before a push. The gate only
+checks generated artifacts; `python3 scripts/sync_generated.py --write`
+refreshes them.
+
+| Stage | What it checks |
+| --- | --- |
+| `tools` | The tools `scripts/install_host_tools.sh` installs, the Clang sanitizer tools and the pinned components |
+| `repository` | Tracked generated artifacts, release metadata and the effective feature configuration of every project |
+| `host` | Host/mock unit tests (`.build/gate/host/` + ctest, incl. FreeRTOS POSIX) |
+| `sanitizer-fuzz` | Clang ASan/UBSan tests, native tests under ThreadSanitizer and bounded libFuzzer smoke checks |
+| `memcheck` | Valgrind memcheck on all native C/C++ test executables |
+| `cppcheck` | The pinned cppcheck build (`scripts/run_cppcheck.sh`) |
+| `clang-tidy` | Host compile databases with and without the FreeRTOS POSIX tests, STM32 ARM and host-compiler databases, all below `.build/gate/` |
+| `cpd` | PMD CPD duplicate detection across owned C/C++ implementations and Python scripts |
+| `stm32` | STM32G474 host-compiler, ARM and SX1276/SX1278 static libraries |
+| `rp` | Pico SDK RP2040/RP2350 ARM/RP2350 RISC-V entry/core probes, six representative `01_core_runtime`/`18_freertos_suite` ELF/BIN/UF2 builds and the RP2040 feature profiles |
+| `esp-idf` | One clean compile-only `tests/fixtures/esp32s3_phase3` build with the pinned ESP-IDF and its validated multi-image manifest, the ESP32 Classic gamepad fixture, and the ESP32-S3 all-features `libJaszczurHAL.a` covering the whole target allowlist |
+| `library-<target>` | Every feature for `rp2040`, `rp2350-arm`, `rp2350-riscv` and `stm32g474`: once without a project header and once for an application in a path with spaces |
+| `examples-<target>` | Every example configuration for `rp2040`, `stm32g474` and `esp32s3` through `scripts/examples_dispatcher.py`; local only, not in CI |
+| `security` | SBOM regeneration, osv-scanner and the cve-bin-tool SBOM scan |
 
 Exits non-zero on the first failure; logs capture warnings/errors from both
 standard output and standard error.
-The Valgrind gate selects every directly registered native C/C++ test executable
+The memcheck stage selects every directly registered native C/C++ test executable
 through the CTest `memcheck` label. `MEMCHECK_REQUIRED_TESTS` in
 `runalltests.sh` is a critical subset checked before execution, not the complete
 selection. Python, CMake, and shell-driver tests remain outside memcheck. Fair
@@ -173,11 +192,11 @@ All build and test outputs go in the ignored `.build/` directory. CMake compiler
 
 The clang-tidy stage creates a separate compilation database for each profile, with one entry per source file. This avoids repeated analysis of a shared driver that API tests compile with several feature sets. Normal target builds still compile every configured variant.
 
-The cppcheck gate runs the cppcheck build pinned in
+The cppcheck stage runs the cppcheck build pinned in
 `third_party/cppcheck_version.conf` (see `scripts/ensure_cppcheck.sh`), not the
 distribution package, so its findings do not depend on the host.
 
-The CPD gate uses the authenticated PMD 7.26.0 distribution managed under
+The CPD stage uses the authenticated PMD 7.26.0 distribution managed under
 `third_party/pmd`. It scans C/C++ implementation files rather than headers and
 Python files below `scripts/`, while excluding generated and vendored sources.
 Every C/C++ duplicate group from 100 tokens blocks in production, tests, and
@@ -188,7 +207,7 @@ STM32G474, shared, remaining portable code, and Python scripts. XML reports and
 deterministic file lists are written below `.build/gate/cpd/`. CPD `PASS` means
 zero groups at the configured language-specific thresholds.
 
-Run the full validation before committing and pushing changes. CI/CD uses the same checks.
+Run `./runalltests.sh --commit` before pushing changes; Linux CI runs the same stages except the example builds.
 
 <a id="native-windows-ci-gate"></a>
 
@@ -352,7 +371,7 @@ coexistence is not yet a hardware requirement.
 |---|---|
 | `tests/fixtures/esp32s3_phase3` | Compile-only ESP-IDF project selecting every ESP32-S3 backend delivered through Phase 3. It checks feature/source/dependency resolution, compilation, linking, `two-ota-large` partition generation, and artifact publication. |
 
-CI and local validation stage 8 build this project. A successful build does not validate WiFi, sockets, TLS, services, OTA, or WireGuard at runtime, nor does it replace tests of the new Phase 2 peripherals. These areas need separate hardware, lifecycle, and negative security tests.
+The `esp-idf` gate stage builds this project, locally and in CI. A successful build does not validate WiFi, sockets, TLS, services, OTA, or WireGuard at runtime, nor does it replace tests of the new Phase 2 peripherals. These areas need separate hardware, lifecycle, and negative security tests.
 
 ---
 

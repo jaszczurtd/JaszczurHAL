@@ -77,7 +77,7 @@ SDK wbudowane nie jest wymagane.
 | Testy jednostkowe hosta/mock | `tests/CMakeLists.txt`, `tests/test_*.cpp`, główny `CMakeLists.txt` | CMake plus CTest | Dodaj zestaw Unity i zarejestruj go przez `add_hal_test(...)`, lub zadeklaruj dedykowany plik wykonywalny dla dodatkowych źródeł. |
 | Implementacje sprzętowe na hoście | nagłówki i atrapy w `tests/fakes/<sdk>/`, osobny plik wykonywalny w `tests/CMakeLists.txt` | CMake plus CTest | Skompiluj prawdziwą implementację z atrapą SDK i sprawdzaj jej zachowanie przez atrapę: zarejestrowane wywołania sterownika, wstrzyknięte błędy i symulowane przerwania. |
 | Testy hosta FreeRTOS POSIX | `tests/freertos_posix/`, `JH_ENABLE_FREERTOS_POSIX_TESTS` | CTest w konfiguracji dla komputera lub pełną kontrolę jakości | Dodaj target przez `add_hal_freertos_posix_test(...)`. |
-| Kontrola jakości repozytorium | `runalltests.sh`, `.github/workflows/ci.yml` oraz dane narzędziowe opisane w `00_scripts.md` | `./runalltests.sh` | Rozszerz odpowiedni etap i jego ukierunkowane testy regresyjne; zapisuj generowane artefakty wyłącznie w `.build/`. |
+| Kontrola jakości repozytorium | `runalltests.sh`, `.github/workflows/ci.yml` oraz dane narzędziowe opisane w `00_scripts.md` | `./runalltests.sh` | Rozszerz odpowiedni etap i jego ukierunkowane testy regresyjne, nigdy samego workflow; zapisuj generowane artefakty wyłącznie w `.build/`. |
 | Projekty sprawdzające kompilację firmware | `tests/fixtures/<fixture>/.vscode/jaszczurhal.project.json` | `jh-vscode` lub właściwy skrypt produkcyjny | Rozszerz platformy i warianty w `hal_project_config.h` projektu, płytki w jego manifeście oraz test układu artefaktów. |
 | Fizyczne stanowiska sprzętowe | źródło, `hal_project_config.h`, manifest i weryfikator w `tests/hardware/<fixture>/` | Kompilacja i wgranie przez `jh-vscode` lub właściwy skrypt produkcyjny, a następnie uruchomienie weryfikatora opisanego w README stanowiska | Dodaj firmware, jawną macierz sprzętową, mechanizm sprawdzający wynik na hoście, README z procedurą i kryteriami akceptacji w obu językach oraz wiersz w tabeli poniżej. |
 
@@ -115,9 +115,11 @@ W katalogu głównym repozytorium znajdują się dwa podstawowe skrypty:
 ./runmefirst.sh
 ```
 Przygotowuje lokalne środowisko:
+- instaluje pakiety hosta, skanery bezpieczeństwa i komponenty w wersjach
+  wskazanych przez repozytorium przez `scripts/install_host_tools.sh`; każdy
+  linuksowy job CI instaluje narzędzia tym samym skryptem, więc oba miejsca
+  pracują na tym samym zestawie;
 - instaluje hooki Git (`pre-commit` i `commit-msg` z `.githooks/`);
-- synchronizuje przez `third_party/update_components.sh` wszystkie komponenty
-  w wersjach wskazanych przez repozytorium;
 - instaluje trwałe reguły dostępu USB i `/dev/ttyACM*` dla RP2040/RP2350,
   umożliwiające wgrywanie bez sudo i automatyczny reset BOOTSEL przez 1200 bps
 - proponuje trwałe reguły zapory ograniczone do sieci LAN dla połączeń
@@ -128,48 +130,61 @@ Przygotowuje lokalne środowisko:
 Uruchom go po sklonowaniu repozytorium oraz po zmianie środowiska.
 
 Hook pre-commit normalizuje i formatuje pliki dodane do commita, a następnie
-sprawdza wszystkie wersjonowane artefakty generowane. Jeśli któregoś brakuje
-albo jest nieaktualny, blokuje commit i prosi o uruchomienie
+sprawdza wszystkie wersjonowane artefakty generowane w zawartości commita, już
+po formatowaniu, więc kontrola widzi dokładnie to, co trafi do commita. Jeśli
+któregoś brakuje albo jest nieaktualny, blokuje commit i prosi o uruchomienie
 `python3 scripts/sync_generated.py --write`, przejrzenie zmian oraz dodanie ich
 do commita przed kolejną próbą.
 
 **`runalltests.sh`** - pełna kontrola jakości
 ```bash
-./runalltests.sh
-./runalltests.sh --check-generated
+./runalltests.sh                  # wszystkie etapy na drzewie roboczym
+./runalltests.sh --commit         # wszystkie etapy na czystym checkoucie HEAD
+./runalltests.sh --stage host     # wybrane etapy, np. host,memcheck
+./runalltests.sh --list-stages    # nazwy etapów w kolejności wykonania
+./runalltests.sh --list-local-stages  # etapy, których CI nie uruchamia
 ```
-Domyślnie przed rozpoczęciem kontroli skrypt odświeża wersjonowane pliki
-generowane deterministycznie, a w końcowym podsumowaniu wymienia zmiany
-wprowadzone przez synchronizację. Opcja `--check-generated` tylko sprawdza te
-same pliki i nie poprawia rozbieżności. CI używa tego bardziej rygorystycznego trybu przez
-`scripts/sync_generated.py --check`.
+Etapy z tabeli poniżej to jedyna lista kontroli. Lokalne uruchomienie wykonuje
+je wszystkie po kolei. Linuksowe joby CI instalują narzędzia tym samym
+skryptem i uruchamiają te same etapy przez `--stage`, każdy dokładnie raz,
+i nic poza nimi; tylko kompilacje przykładów (`examples-<target>`) działają
+wyłącznie lokalnie. `tests/test_ci_gate_stages.py` kończy się błędem, gdy
+workflow i lista się rozjadą. Lokalne uruchomienie sprawdza więc wszystko, co
+sprawdza linuksowe CI na tym samym commicie. Nową kontrolę dodawaj do etapu,
+nigdy tylko do workflow.
 
-Uruchamia dziewięć etapów kontroli jakości w następującej kolejności:
-1. Sprawdzenie obecności narzędzi
-2. Testy jednostkowe hosta/mock (`.build/gate/host/` + ctest, w tym FreeRTOS POSIX)
-3. Testy Clang ASan/UBSan, testy natywne pod ThreadSanitizerem i krótkie
-   testy libFuzzer przez ten sam skrypt, którego używa CI
-4. Bezpieczeństwo pamięci (Valgrind memcheck na wszystkich natywnych plikach wykonywalnych testów C/C++)
-5. Analiza statyczna: cppcheck (przypięty build, `scripts/run_cppcheck.sh`)
-6. Analiza statyczna: clang-tidy (bazy danych kompilacji hosta + STM32 poniżej
-   `.build/gate/`)
-7. Wykrywanie duplikatów PMD CPD w obrębie własnych implementacji C/C++ oraz
-   skryptów Python
-8. Kompilacje targetów (STM32G474 oraz testy startu i rdzenia Pico SDK
-   RP2040/RP2350 ARM/RP2350 RISC-V, profile funkcjonalne RP, sześć
-   reprezentatywnych kompilacji ELF/BIN/UF2 `01_core_runtime`/`18_freertos_suite`
-   jedna czysta kompilacja
-   `tests/fixtures/esp32s3_phase3` z ESP-IDF w wersji wskazanej przez
-   repozytorium i zwalidowanym
-   manifestem zawierającym wiele obrazów oraz `libJaszczurHAL.a` ESP32-S3
-   z pełnym zestawem cech, obejmująca całą allowlistę targetu)
-9. Kompilacje przykładów (wszystkie konfiguracje przykładów dla RP2040,
-   STM32G474 i ESP32-S3 przez `scripts/examples_dispatcher.py`; RP2350 obejmuje
-   etap 8)
+`--commit [REV]` tworzy w `.build/commit-gate` checkout `REV` (domyślnie
+`HEAD`) bez plików spoza Gita i niezapisanych zmian i uruchamia w nim
+kontrolę jakości. Komponenty z Gita w wersjach wskazanych przez repozytorium
+trafiają tam z tego drzewa przez `rsync`, a zanim ruszy którykolwiek etap,
+niezależnie od wyboru `--stage`, ich weryfikacja odrzuca każdą lokalną zmianę,
+także w submodułach. PMD i łańcuch narzędzi RISC-V są
+instalowane z przypiętych archiwów, a cppcheck i picotool budowane na miejscu.
+Checkout, komponenty i narzędzia zostają na kolejny przebieg, więc pełne
+kopiowanie, instalacja i budowanie odbywają się tylko za pierwszym razem. Uruchamiaj go przed
+wysłaniem zmian. Kontrola tylko sprawdza artefakty
+generowane; odświeża je `python3 scripts/sync_generated.py --write`.
+
+| Etap | Co sprawdza |
+| --- | --- |
+| `tools` | Narzędzia instalowane przez `scripts/install_host_tools.sh`, narzędzia sanitizerów Clang i komponenty w wersjach wskazanych przez repozytorium |
+| `repository` | Wersjonowane artefakty generowane, metadane wydania i efektywną konfigurację funkcji każdego projektu |
+| `host` | Testy jednostkowe hosta/mock (`.build/gate/host/` + ctest, w tym FreeRTOS POSIX) |
+| `sanitizer-fuzz` | Testy Clang ASan/UBSan, testy natywne pod ThreadSanitizerem i krótkie testy libFuzzer |
+| `memcheck` | Valgrind memcheck na wszystkich natywnych plikach wykonywalnych testów C/C++ |
+| `cppcheck` | Przypięty build cppcheck (`scripts/run_cppcheck.sh`) |
+| `clang-tidy` | Bazy kompilacji hosta z testami FreeRTOS POSIX i bez nich oraz bazy STM32 dla ARM i kompilatora hosta, wszystkie w `.build/gate/` |
+| `cpd` | Wykrywanie duplikatów PMD CPD w obrębie własnych implementacji C/C++ oraz skryptów Python |
+| `stm32` | Biblioteki statyczne STM32G474: kompilator hosta, ARM i SX1276/SX1278 |
+| `rp` | Testy startu i rdzenia Pico SDK dla RP2040/RP2350 ARM/RP2350 RISC-V, sześć reprezentatywnych kompilacji ELF/BIN/UF2 `01_core_runtime`/`18_freertos_suite` oraz profile funkcji RP2040 |
+| `esp-idf` | Jedna czysta kompilacja `tests/fixtures/esp32s3_phase3` z ESP-IDF w wersji wskazanej przez repozytorium i zwalidowanym manifestem wielu obrazów, fixture gamepada ESP32 Classic oraz `libJaszczurHAL.a` ESP32-S3 z pełnym zestawem funkcji, obejmująca całą allowlistę targetu |
+| `library-<target>` | Wszystkie funkcje dla `rp2040`, `rp2350-arm`, `rp2350-riscv` i `stm32g474`: raz bez nagłówka projektu i raz dla aplikacji w ścieżce ze spacjami |
+| `examples-<target>` | Wszystkie konfiguracje przykładów dla `rp2040`, `stm32g474` i `esp32s3` przez `scripts/examples_dispatcher.py`; tylko lokalnie, nie w CI |
+| `security` | Odtworzenie SBOM, osv-scanner i skan SBOM przez cve-bin-tool |
 
 Kończy działanie z niezerowym kodem przy pierwszym błędzie; logi rejestrują
 wszelkie ostrzeżenia/błędy zarówno ze standardowego wyjścia, jak i ze
-standardowego wyjścia błędów. Bramka Valgrind wybiera każdy bezpośrednio
+standardowego wyjścia błędów. Etap memcheck wybiera każdy bezpośrednio
 zarejestrowany natywny plik wykonywalny testu C/C++ przez etykietę CTest
 `memcheck`. `MEMCHECK_REQUIRED_TESTS` w `runalltests.sh` to krytyczny podzbiór
 sprawdzany przed wykonaniem, ale nie jest pełną listą. Testy Python, CMake i
@@ -182,11 +197,11 @@ Pliki wynikowe kompilacji i testów trafiają do ignorowanego przez Git katalogu
 
 Etap clang-tidy tworzy dla każdego profilu osobną bazę poleceń kompilacji, z jednym wpisem na plik źródłowy. Dzięki temu nie analizuje wielokrotnie tego samego wspólnego sterownika, nawet gdy testy API kompilują go z różnymi zestawami modułów. Zwykła kompilacja nadal obejmuje wszystkie skonfigurowane warianty.
 
-Bramka cppcheck używa builda cppcheck przypiętego w `third_party/cppcheck_version.conf` (patrz `scripts/ensure_cppcheck.sh`), a nie pakietu z dystrybucji, więc jej wyniki nie zależą od hosta.
+Etap cppcheck używa builda cppcheck przypiętego w `third_party/cppcheck_version.conf` (patrz `scripts/ensure_cppcheck.sh`), a nie pakietu z dystrybucji, więc jego wyniki nie zależą od hosta.
 
 Etap CPD korzysta z dystrybucji PMD 7.26.0 o zweryfikowanej autentyczności, zarządzanej w `third_party/pmd`. Skanuje pliki implementacji C/C++ oraz skrypty Pythona w `scripts/`; pomija nagłówki, kod generowany i kod zewnętrzny. Kontrola kończy się niepowodzeniem po wykryciu choć jednej grupy duplikatów obejmującej co najmniej 100 tokenów C/C++ w kodzie produkcyjnym, testach lub przykładach albo co najmniej 50 tokenów Pythona. Nie ma listy wyjątków ani zaakceptowanych wcześniej duplikatów. Raport podaje łączny zakres powielonych tokenów oraz wyniki osobno dla mocka, RP2040, STM32G474, kodu wspólnego, pozostałego kodu przenośnego i skryptów Pythona. Raporty XML i uporządkowane listy plików trafiają do `.build/gate/cpd/`. Wynik CPD `PASS` oznacza brak grup duplikatów przy tych progach.
 
-Uruchamiaj pełną kontrolę przed commitem i wysłaniem zmian do repozytorium. Ten sam zestaw kontroli służy do weryfikacji w CI/CD.
+Przed wysłaniem zmian uruchom `./runalltests.sh --commit`; linuksowe CI wykonuje te same etapy poza kompilacją przykładów.
 
 <a id="natywna-bramka-ci-dla-windows"></a>
 
@@ -353,7 +368,7 @@ wymaganiem sprzętowym.
 |---|---|
 | `tests/fixtures/esp32s3_phase3` | Projekt ESP-IDF przeznaczony wyłącznie do sprawdzania kompilacji, wybierający każdy backend ESP32-S3 dostarczony w fazie 3. Sprawdza dobór funkcji, źródeł i zależności, kompilację, linkowanie, generowanie partycji `two-ota-large` oraz publikowanie artefaktów. |
 
-Ten projekt jest kompilowany przez CI i lokalny etap kontroli jakości nr 8. Udana kompilacja nie potwierdza działania WiFi, gniazd sieciowych, TLS, usług, OTA ani WireGuard podczas pracy urządzenia; nie zastępuje też testów nowych peryferiów fazy 2. Potrzebne są osobne testy sprzętowe, sprawdzenie inicjalizacji, pracy i zamykania modułów oraz testy odrzucania nieprawidłowych i nieuprawnionych operacji.
+Ten projekt kompiluje etap `esp-idf`, lokalnie i w CI. Udana kompilacja nie potwierdza działania WiFi, gniazd sieciowych, TLS, usług, OTA ani WireGuard podczas pracy urządzenia; nie zastępuje też testów nowych peryferiów fazy 2. Potrzebne są osobne testy sprzętowe, sprawdzenie inicjalizacji, pracy i zamykania modułów oraz testy odrzucania nieprawidłowych i nieuprawnionych operacji.
 
 ---
 

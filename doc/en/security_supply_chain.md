@@ -158,17 +158,20 @@ This read-only check covers every tracked generated file. It creates a temporary
 
 ## CI policy
 
-GitHub Actions run a required `test` job and a dependent `security-scan` job on
-pull requests, pushes to `main`, a weekly schedule and manual dispatch. The
-test job verifies all generated artifacts, including the SBOM. The security
-job:
+GitHub Actions run a required `test` job and dependent jobs on pull requests,
+pushes to `main`, a weekly schedule and manual dispatch. The test job runs the
+`repository` stage of `runalltests.sh`, which verifies all generated artifacts,
+including the SBOM. A dependent job runs the `security` stage, the same one a
+local `./runalltests.sh` runs:
 
-- installs `osv-scanner` and `cve-bin-tool`,
-- runs `osv-scanner` against the repository source tree,
-- runs `cve-bin-tool` against the CycloneDX SBOM.
+- `scripts/install_host_tools.sh` installs `osv-scanner` and `cve-bin-tool`,
+- `osv-scanner` scans the repository source tree; a run that cannot finish is
+  retried, findings fail at once,
+- `cve-bin-tool` scans the CycloneDX SBOM.
 
 The CVE database is cached for a day. When the NVD mirror is unreachable, the
-scan uses the most recent cached database and reports a warning.
+scan uses the most recent cached database and reports a warning; without any
+cached database it fails.
 
 Vulnerability scanning runs separately from compilation, tests, and static analysis so scanner failures can be investigated independently. Scheduled scans also detect newly published CVEs when the repository code has not changed.
 

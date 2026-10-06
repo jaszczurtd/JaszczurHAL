@@ -147,18 +147,22 @@ Kontrola działa w trybie tylko do odczytu i obejmuje wszystkie śledzone pliki 
 
 ## Polityka CI
 
-GitHub Actions uruchamia wymagane zadanie `test` oraz zależne zadanie
-`security-scan` dla pull requestów, zmian wysyłanych do `main`, według
-harmonogramu tygodniowego i na żądanie. Zadanie testowe weryfikuje wszystkie
-generowane artefakty, w tym SBOM. Zadanie bezpieczeństwa:
+GitHub Actions uruchamia wymagane zadanie `test` oraz zadania od niego zależne
+dla pull requestów, zmian wysyłanych do `main`, według harmonogramu
+tygodniowego i na żądanie. Zadanie testowe uruchamia etap `repository` skryptu
+`runalltests.sh`, który weryfikuje wszystkie generowane artefakty, w tym SBOM.
+Jedno z zadań zależnych uruchamia etap `security`, ten sam, który wykonuje
+lokalne `./runalltests.sh`:
 
-- instaluje `osv-scanner` i `cve-bin-tool`,
-- uruchamia `osv-scanner` dla drzewa źródeł repozytorium,
-- uruchamia `cve-bin-tool` dla SBOM CycloneDX.
+- `scripts/install_host_tools.sh` instaluje `osv-scanner` i `cve-bin-tool`,
+- `osv-scanner` sprawdza drzewo źródeł repozytorium; przebieg, który nie może
+  się zakończyć, jest ponawiany, a znalezione podatności od razu kończą skan
+  błędem,
+- `cve-bin-tool` sprawdza SBOM CycloneDX.
 
 Baza CVE jest przechowywana w pamięci podręcznej przez dzień. Gdy lustro NVD
 jest niedostępne, skan korzysta z ostatniej zapisanej bazy i zgłasza
-ostrzeżenie.
+ostrzeżenie; bez żadnej zapisanej bazy kończy się błędem.
 
 Skanowanie podatności jest oddzielone od kompilacji, testów i analizy statycznej. Pozwala to niezależnie diagnozować błędy skanera i błędy kodu. Uruchomienia cykliczne wykrywają również nowe CVE opublikowane od poprzedniego skanowania, nawet jeśli kod repozytorium się nie zmienił.
 

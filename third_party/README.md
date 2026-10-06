@@ -52,8 +52,10 @@ JaszczurHAL-owned BearSSL, cJSON, LodePNG, JPEG and FatFs integration wrappers,
 along with the lwIP port configuration, remain tracked in their thematic
 `src/hal/network/`, `src/hal/codecs/`, and `src/hal/storage/` domains. Unity
 integration remains in the test infrastructure. Their upstream source trees
-are managed here. The cJSON, LodePNG, TJpg_Decoder and Unity helpers require clean
-exact-commit checkouts; verify-only mode rejects local or untracked changes.
+are managed here. Every pinned checkout must be a clean exact-commit checkout:
+verify-only mode rejects local or untracked changes in any of them, submodules
+included. The cJSON, LodePNG, TJpg_Decoder, Unity and SX126x helpers also
+restore such a checkout in normal mode.
 Configured repository origins are enforced, including the project-owned
 BearSSL, LodePNG, FatFs and Unity repositories. The `jaszczurtd/ff16` checkout
 is a direct mirror of ChaN's unchanged R0.16 archive and replaces the unreliable

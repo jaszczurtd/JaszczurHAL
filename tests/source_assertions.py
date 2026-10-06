@@ -40,3 +40,12 @@ def source_section(source: str, start: str, end: str) -> str:
     if end_match is None:
         raise AssertionError(f"source section is missing {end}")
     return source[start_match.end() : end_match.start()]
+
+
+def shell_function_body(source: str, name: str) -> str:
+    """Return the body of the shell function ``name() {`` ... ``}`` defined at
+    the start of a line, or raise AssertionError."""
+    marker = f"\n{name}() {{\n"
+    if marker not in source:
+        raise AssertionError(f"shell script has no {name}()")
+    return source.split(marker, 1)[1].split("\n}\n", 1)[0]

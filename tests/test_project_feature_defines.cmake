@@ -279,6 +279,16 @@ expect_equal("${_jh_rp_tcp_enabled}" "TRUE" "RP selection of MQTT-implied TCP")
 jh_project_value(_jh_buffer APP_BUFFER)
 expect_equal("${_jh_buffer}" "64" "A library -D value")
 
+# A library build merges target defaults, --freertos and every feature, so the
+# same feature can arrive twice and in both spellings; the first one stays.
+jh_read_library_config(
+    ROOT "${JH_ROOT}" TARGET rp2040
+    OUTPUT_DIR "${JH_TEST_BINARY_DIR}/jh_project_feature_library"
+    DEFINES HAL_ENABLE_FREERTOS=1 HAL_ENABLE_MQTT HAL_ENABLE_FREERTOS
+        -DHAL_ENABLE_MQTT=1)
+expect_equal("${EXTRA_HAL_DEFINES}" "HAL_ENABLE_FREERTOS=1;HAL_ENABLE_MQTT"
+    "One request per merged library feature")
+
 # A configuration without HAL features: the dispatcher's later
 # set(JH_RESOLVED_FEATURES ...) of an empty list unsets the variable, and
 # source selection must still answer.
