@@ -19,7 +19,7 @@ while (status == HAL_OK && hal_pulse_capture_read(&sample) == HAL_OK) {
 }
 ```
 
-Wariant `capture` przykładu [01_core_runtime](../../../examples/01_core_runtime/)
+Wariant `CAPTURE` przykładu [01_core_runtime](../../../examples/01_core_runtime/)
 pokazuje obsługę statusów i regularny odbiór danych. Korzysta z GPIO0 (PA0 na STM32).
 
 ## Uruchomienie i ważność danych

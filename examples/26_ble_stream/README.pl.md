@@ -13,7 +13,7 @@ aplikacja co sekundę wysyła linię telemetrii i wypisuje otrzymane dane
 w konsoli. Gdy nadawanie jest chwilowo niemożliwe, zachowuje najwyżej jedną
 próbkę do ponownej próby.
 
-Warianty `commands` i `commands-freertos` są widoczne jako `JH Commands`.
+Warianty `COMMANDS` i `COMMANDS_FREERTOS` są widoczne jako `JH Commands`.
 Wymieniają z uwierzytelnionym klientem żądania, odpowiedzi i zdarzenia
 binarnego protokołu poleceń. Dane Stream obsługuje wtedy wyłącznie
 `hal_ble_commands`, a procedury wykonujące polecenia nie zależą od sposobu
@@ -34,9 +34,9 @@ Aby zbudować tylko wskazany wariant, użyj:
 
 ```bash
 vscode/entry/jh-vscode build --project examples/26_ble_stream \
-  --target rp2040 --board picow --variant commands
+  --target rp2040 --board picow --variant COMMANDS
 vscode/entry/jh-vscode build --project examples/26_ble_stream \
-  --target rp2040 --board picow --variant commands-freertos
+  --target rp2040 --board picow --variant COMMANDS_FREERTOS
 ```
 
 Domyślne płytki to `picow` dla RP2040, `pico2w` dla RP2350 ARM oraz
@@ -100,7 +100,7 @@ python3 tests/hardware/bluetooth_stream/verify_commands.py \
 Test obejmuje 500-bajtowe binarne `echo` przesyłane we fragmentach,
 informacje o wywołanej procedurze i zabezpieczeniach, ograniczenia źródła
 poleceń, nieznane polecenia, wysłanie zdarzenia i żądania przez Peripheral
-oraz jedno ponowne połączenie. Dla `commands-freertos` użyj
+oraz jedno ponowne połączenie. Dla `COMMANDS_FREERTOS` użyj
 `--runtime freertos`.
 
 ## Co pokazuje przykład

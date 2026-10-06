@@ -16,7 +16,6 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import component_manager
-import examples_dispatcher
 import generate_board_config
 import repository_layout
 from tooling_contract import ToolingContractError, load_tooling_contract
@@ -64,12 +63,6 @@ class ToolingContractTests(unittest.TestCase):
                     launcher, component_manager.COMPONENT_LAUNCHERS[component]
                 )
                 self.assertTrue((SCRIPTS / launcher).is_file())
-
-    def test_example_catalog_matches_dispatcher(self) -> None:
-        document = load_tooling_contract("examples.json")
-        self.assertEqual(set(document), {"schemaVersion", "examples"})
-        self.assertTrue(all("covers" not in item for item in document["examples"]))
-        self.assertEqual(document["examples"], examples_dispatcher.EXAMPLES)
 
     def test_examples_use_c_application_sources_only(self) -> None:
         cxx_suffixes = {".cc", ".cpp", ".cxx"}

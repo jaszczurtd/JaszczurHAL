@@ -351,15 +351,17 @@ require(
 )
 
 gate9 = QUALITY_GATE.split("# GATE 9:", 1)[1]
-gate9_esp = gate9.split(
-    'info "Building ESP32-S3 examples through dispatcher-backed VS Code manifests..."',
-    1,
-)[1].split('pass "ESP32-S3 examples built successfully."', 1)[0]
+gate9_examples = gate9.split("for target in rp2040 stm32g474 esp32s3; do", 1)[1].split(
+    "done", 1
+)[0]
 for fragment in (
     "scripts/examples_dispatcher.py",
-    "--target esp32s3 --gate",
-    '"${LOG_ROOT}/jh_examples_esp32s3_build.log"',
+    '--target "${target}"',
+    '"${LOG_ROOT}/jh_examples_${target}_build.log"',
 ):
-    require(fragment in gate9_esp, f"Gate 9 ESP32-S3 example build is missing {fragment!r}")
+    require(
+        fragment in gate9_examples,
+        f"Gate 9 ESP32-S3 example build is missing {fragment!r}",
+    )
 
 print("ESP32-S3 Phase 3 CI and local gate integration verified")

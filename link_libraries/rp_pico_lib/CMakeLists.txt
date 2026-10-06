@@ -10,8 +10,6 @@ set(JH_BOARD "" CACHE STRING
 set(EXTRA_HAL_DEFINES "" CACHE STRING "Extra HAL compile definitions")
 set(JH_RP_PICO_APP_DIR "" CACHE PATH
     "Optional portable app directory containing app.c or app.cpp")
-set(JH_RP_PICO_APP_SOURCES "" CACHE STRING
-    "Optional source list relative to JH_RP_PICO_APP_DIR")
 option(JH_ENABLE_ALL_FEATURES
     "Enable every feature supported by the selected production target"
     OFF)
@@ -29,28 +27,20 @@ if(JH_RP_PICO_APP_DIR)
     endif()
 endif()
 
-include("${JH_ROOT}/cmake/jh_project_features.cmake")
+include("${JH_ROOT}/cmake/jh_project_config.cmake")
+set(_jh_library_defines ${EXTRA_HAL_DEFINES})
 if(JH_ENABLE_ALL_FEATURES)
     jh_all_features_for_target(_jh_all_features "${JH_TARGET}")
-    list(APPEND EXTRA_HAL_DEFINES ${_jh_all_features})
+    list(APPEND _jh_library_defines ${_jh_all_features})
 endif()
-jh_collect_cmake_feature_defines(_jh_cmake_feature_defines)
-list(APPEND EXTRA_HAL_DEFINES ${_jh_cmake_feature_defines})
-jh_normalize_feature_defines(EXTRA_HAL_DEFINES ${EXTRA_HAL_DEFINES})
-set(_jh_project_features "")
-if(DEFINED HAL_PROJECT_CONFIG_DIR)
-    foreach(_jh_project_config_dir IN LISTS HAL_PROJECT_CONFIG_DIR)
-        jh_collect_project_feature_defines(_jh_project_config_features
-            "${_jh_project_config_dir}")
-        list(APPEND _jh_project_features ${_jh_project_config_features})
-    endforeach()
-endif()
-jh_resolve_feature_defines(
-    JH_REQUESTED_FEATURES
-    JH_RESOLVED_FEATURES
-    ${EXTRA_HAL_DEFINES}
-    ${_jh_project_features})
+jh_read_library_config(
+    ROOT "${JH_ROOT}"
+    TARGET "${JH_TARGET}"
+    OUTPUT_DIR "${CMAKE_BINARY_DIR}/generated/project"
+    DEFINES ${_jh_library_defines})
 include("${JH_ROOT}/cmake/jh_board_profiles.cmake")
+jh_split_project_definitions(
+    _jh_library_plain_defines _jh_library_feature_defines ${EXTRA_HAL_DEFINES})
 jh_generate_board_config(
     ROOT "${JH_ROOT}"
     TARGET "${JH_TARGET}"
@@ -58,7 +48,7 @@ jh_generate_board_config(
     OUTPUT_DIR
         "${CMAKE_BINARY_DIR}/generated/boards/${JH_TARGET}/${JH_BOARD}"
     OUTPUT_ROOT "${CMAKE_BINARY_DIR}"
-    DEFINES ${EXTRA_HAL_DEFINES} ${_jh_project_features}
+    DEFINES ${_jh_library_plain_defines}
     REQUESTED_FEATURES ${JH_REQUESTED_FEATURES}
     RESOLVED_FEATURES ${JH_RESOLVED_FEATURES})
 set(JH_BOARD "${JH_RESOLVED_BOARD}" CACHE STRING
@@ -153,25 +143,11 @@ if(JH_RP_PICO_BUILD_CORE1_PROBE)
 endif()
 
 if(JH_RP_PICO_APP_DIR)
-    set(_jh_rp_app_sources "")
-    if(JH_RP_PICO_APP_SOURCES)
-        foreach(_jh_rp_app_source IN LISTS JH_RP_PICO_APP_SOURCES)
-            get_filename_component(_jh_rp_app_source_abs
-                "${JH_RP_PICO_APP_DIR}/${_jh_rp_app_source}" ABSOLUTE)
-            if(NOT EXISTS "${_jh_rp_app_source_abs}")
-                message(FATAL_ERROR
-                    "Native app source not found: ${_jh_rp_app_source_abs}")
-            endif()
-            list(APPEND _jh_rp_app_sources
-                "${_jh_rp_app_source_abs}")
-        endforeach()
-    else()
-        file(GLOB _jh_rp_app_sources CONFIGURE_DEPENDS
-            "${JH_RP_PICO_APP_DIR}/*.c"
-            "${JH_RP_PICO_APP_DIR}/*.cc"
-            "${JH_RP_PICO_APP_DIR}/*.cpp"
-        )
-    endif()
+    file(GLOB _jh_rp_app_sources CONFIGURE_DEPENDS
+        "${JH_RP_PICO_APP_DIR}/*.c"
+        "${JH_RP_PICO_APP_DIR}/*.cc"
+        "${JH_RP_PICO_APP_DIR}/*.cpp"
+    )
     if(NOT _jh_rp_app_sources)
         message(FATAL_ERROR
             "No C/C++ application sources found in "

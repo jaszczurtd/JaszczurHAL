@@ -3,14 +3,14 @@
 # 18 - FreeRTOS tasks and network services
 
 The base example demonstrates FreeRTOS tasks and synchronized access to
-shared data. The `network` variant adds services that can be tested together
+shared data. The `NETWORK` variant adds services that can be tested together
 in one application.
 
 `app.c` runs two application tasks and two additional workers. It uses HAL
 and native FreeRTOS mutexes, delays, idle processing, and GPIO. This basic
 runtime test is also available for RP2350 RISC-V.
 
-The `network` variant builds `network_app.c` for WiFi-capable RP2040/RP2350
+The `NETWORK` variant builds `network_app.c` for WiFi-capable RP2040/RP2350
 ARM boards and STM32G474 with PIM730. It provides an HTTP server, WebSocket,
 RAM-backed files, commands, and a network console. Separate workers handle
 BSD TCP/UDP sockets and an HTTP/HTTPS client, while two application tasks

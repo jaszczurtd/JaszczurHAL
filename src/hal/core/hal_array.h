@@ -7,7 +7,7 @@
 
 /**
  * @def COUNTOF(arr)
- * @brief Number of elements in a statically allocated array.
+ * @brief Number of elements in an actual array, including a local array.
  *
  * This compatibility macro is the primary JaszczurHAL spelling used by
  * firmware and downstream applications.

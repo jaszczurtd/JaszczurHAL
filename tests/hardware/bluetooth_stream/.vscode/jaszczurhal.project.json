@@ -2,102 +2,17 @@
     "$schema": "../../../../vscode/schema/jh_vscode_project.schema.json",
     "project": "JaszczurHAL hardware tests",
     "module": "bluetooth_stream",
-    "example": {
-        "targets": [
-            "stm32g474",
-            "rp2350-arm",
-            "rp2040"
-        ],
-        "boards": {
-            "stm32g474": "nucleo-g474re-pim730",
-            "rp2350-arm": "pico2w",
-            "rp2040": "picow"
-        },
-        "hardwareMatrix": [
-            {
-                "target": "rp2040",
-                "board": "picow",
-                "runtime": "baremetal"
-            },
-            {
-                "target": "rp2040",
-                "board": "picow",
-                "runtime": "freertos"
-            },
-            {
-                "target": "rp2040",
-                "board": "pico-rm2",
-                "runtime": "baremetal"
-            },
-            {
-                "target": "rp2040",
-                "board": "pico-rm2",
-                "runtime": "freertos"
-            },
-            {
-                "target": "rp2350-arm",
-                "board": "pico2w",
-                "runtime": "baremetal"
-            },
-            {
-                "target": "rp2350-arm",
-                "board": "pico2w",
-                "runtime": "freertos"
-            },
-            {
-                "target": "stm32g474",
-                "board": "nucleo-g474re-pim730",
-                "runtime": "baremetal"
-            },
-            {
-                "target": "stm32g474",
-                "board": "nucleo-g474re-pim730",
-                "runtime": "freertos"
-            }
-        ],
-        "variants": [
-            {
-                "id": "freertos",
-                "module": "bluetooth_stream_freertos",
-                "targets": [
-                    "stm32g474",
-                    "rp2350-arm",
-                    "rp2040"
-                ],
-                "extraDefines": [
-                    "HAL_ENABLE_FREERTOS"
-                ]
-            },
-            {
-                "id": "display",
-                "module": "bluetooth_stream_display",
-                "targets": [
-                    "stm32g474"
-                ],
-                "extraDefines": [
-                    "JHBL5_ENABLE_DISPLAY=1",
-                    "HAL_ENABLE_ILI9341",
-                    "HAL_DISPLAY_ILI9341"
-                ]
-            },
-            {
-                "id": "display-freertos",
-                "module": "bluetooth_stream_display_freertos",
-                "targets": [
-                    "stm32g474"
-                ],
-                "extraDefines": [
-                    "JHBL5_ENABLE_DISPLAY=1",
-                    "HAL_ENABLE_ILI9341",
-                    "HAL_DISPLAY_ILI9341",
-                    "HAL_ENABLE_FREERTOS"
-                ]
-            }
-        ]
-    },
     "toolchain": "cmake",
     "target": "stm32g474",
     "board": "nucleo-g474re-pim730",
+    "targetProfiles": {
+        "rp2040": {
+            "board": "picow"
+        },
+        "rp2350-arm": {
+            "board": "pico2w"
+        }
+    },
     "buildDir": "${jhRoot}/.build/hardware/bluetooth_stream",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {
@@ -105,8 +20,7 @@
         "cache": {
             "JH_ARTIFACT_DIR": "${buildDir}",
             "JH_PROJECT_DIR": "${project}",
-            "JH_MODULE_NAME": "bluetooth_stream",
-            "JH_PROJECT_SOURCES": "app.cpp"
+            "JH_MODULE_NAME": "bluetooth_stream"
         }
     },
     "artifacts": {

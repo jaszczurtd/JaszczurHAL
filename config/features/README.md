@@ -56,13 +56,15 @@ python3 scripts/generate_hal_features.py --lint --input-root .
 
 Raw lint accepts presence-only definitions and `=1`. A value of `=0`, an
 unknown symbol, or a direct request for a `derived` symbol is reported as a
-configuration error. Feature definitions in `hal_project_config.h` must be
-unconditional or use an `#ifndef` guard for the same symbol. CMake definition
-lists are semicolon-separated scalar strings.
+configuration error. It checks every feature definition in
+`hal_project_config.h`, in any branch, and the definitions of every variant
+the header declares. Feature definitions may be conditional; a header the
+project configuration reader cannot evaluate is a finding as well. A manifest
+that carries project configuration is reported with `[JH-CFG-MANIFEST]`.
 
-Effective lint reuses the `jh-vscode` target-profile and variant resolver,
-ignores gitignored local board state, and writes deterministic requested,
-resolved, digest, and provenance data:
+Effective lint evaluates through `jh-vscode` every target and variant the
+project builds, ignores gitignored local board state, and writes deterministic
+requested, resolved, digest, and provenance data:
 
 ```bash
 python3 scripts/generate_hal_features.py \
@@ -78,9 +80,11 @@ Both raw and effective lint are strict: findings produce a non-zero exit code.
 `--report-only` remains available for temporary migration audits, but is not the
 normal CI invocation.
 
-Standard `.vscode/jaszczurhal.project.json` files enumerate target, board, and
-variant axes. A standalone `hal_project_config.h` containing at least one HAL
-feature request contributes one axis-free direct context. Standalone headers
+Each project builds for the targets its `hal_project_config.h` declares, or
+the targets of its manifest, times the base build and each variant; boards come
+from the manifest. A standalone `hal_project_config.h` containing at least one
+HAL feature request is evaluated for the targets and variants it declares, or
+without a target when it declares none. Standalone headers
 without requests and reference manifests stay in the raw-lint inventory without
 creating synthetic configurations.
 

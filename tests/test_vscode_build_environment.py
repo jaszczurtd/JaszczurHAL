@@ -512,14 +512,7 @@ with tempfile.TemporaryDirectory(prefix="jh ESP-IDF VS Code ") as temporary_text
                 build_dir / "jh_esp_idf_artifacts.json"
             ),
         },
-        "cmake": {
-            "cache": {
-                "JH_EXTRA_DEFINES": (
-                    "HAL_ENABLE_WIFI;CUSTOM_BUFFER=7;HAL_DISABLE_BLE"
-                ),
-                "EXTRA_HAL_DEFINES": "HAL_ENABLE_WIFI=1;TRACE_BUILD",
-            }
-        },
+        "variant": "BENCH",
         "upload": {"strategy": "esp-idf"},
         "uploadPort": "/dev/ttyACM7",
         "identity": {
@@ -603,23 +596,10 @@ with tempfile.TemporaryDirectory(prefix="jh ESP-IDF VS Code ") as temporary_text
             f"ESP-IDF build runner lost {option}",
         )
     require(
-        build_command.count("--feature") == 1
-        and build_command[build_command.index("--feature") + 1]
-        == "HAL_ENABLE_WIFI",
-        "ESP-IDF build duplicated or lost manifest feature arguments",
-    )
-    forwarded_defines = {
-        build_command[index + 1]
-        for index, value in enumerate(build_command)
-        if value == "--define"
-    }
-    require(
-        forwarded_defines == {
-            "CUSTOM_BUFFER=7",
-            "HAL_DISABLE_BLE",
-            "TRACE_BUILD",
-        },
-        f"ESP-IDF build forwarded wrong manifest definitions: {forwarded_defines}",
+        build_command.count("--variant") == 1
+        and build_command[build_command.index("--variant") + 1] == "BENCH"
+        and not {"--feature", "--define", "--source"}.intersection(build_command),
+        "ESP-IDF build did not hand the runner exactly the selected variant",
     )
 
     manifest, artifacts, flash_images = (

@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+import project_config
+
 
 BOARD_SELECTION_INPUT_ID = "boardSelection"
 SYNC_BOARD_PICKER_LABEL = "Project: Sync board picker"
@@ -35,42 +37,6 @@ VSCODE_EXTENSION_RECOMMENDATIONS = [
     "marus25.cortex-debug",
     "ms-vscode.vscode-serial-monitor",
 ]
-
-EXAMPLE_VARIANT_TASK_SUMMARIES = {
-    "05_serial_gps_swserial": "the GPS and loopback example with software serial",
-    "16_rtc_display_clock": "the DS3231 clock with an ILI9341 display",
-    "18_freertos_network": "the FreeRTOS network services and client examples",
-    "26_ble_stream_commands": "the authenticated BLE command example",
-    "26_ble_stream_commands_freertos": (
-        "the authenticated BLE command example with FreeRTOS"
-    ),
-    "27_lora_point_to_point_probe": "the LoRa radio checks that do not transmit",
-    "27_lora_point_to_point_responder": "the LoRa ping/pong responder",
-    "27_lora_point_to_point_sf7": (
-        "the LoRa initiator with the SF7/6 dBm test settings"
-    ),
-    "27_lora_point_to_point_responder_sf7": (
-        "the LoRa responder with the SF7/6 dBm test settings"
-    ),
-    "27_lora_point_to_point_link": (
-        "the LoRa echo-command initiator with fragmentation and retries"
-    ),
-    "27_lora_point_to_point_link_responder": (
-        "the LoRa echo-command responder with fragmentation and retries"
-    ),
-    "29_bluetooth_classic_scan": (
-        "the Classic Bluetooth device and service discovery example"
-    ),
-    "29_bluetooth_hid_host": "the generic Classic HID descriptor and report example",
-    "29_bluetooth_gamepad_ble": (
-        "the Classic gamepad example with a BLE observer"
-    ),
-    "30_bluetooth_speaker_avrcp": "the A2DP speaker with AVRCP volume control",
-    "30_bluetooth_speaker_ble_a2dp": (
-        "the A2DP speaker with BLE and Classic support in one image"
-    ),
-}
-
 
 def write_text_lf(path: Path, content: str) -> None:
     with path.open("w", encoding="utf-8", newline="\n") as output:
@@ -401,8 +367,10 @@ def project_tasks_document(
     *,
     module: str = "",
     usb_product: str = "",
-    variants: list[dict[str, Any]] | None = None,
+    project_dir: Path | None = None,
 ) -> dict[str, Any]:
+    """Tasks of one project; ``project_dir`` adds a build and an upload task
+    for each variant its hal_project_config.h declares."""
     subject = f" the {module}" if module else ""
     tasks = [
         vscode_entry_task(
@@ -569,18 +537,14 @@ def project_tasks_document(
         ),
         sync_board_picker_task(),
     ]
-    for variant in variants or []:
-        variant_id = str(variant.get("id") or "")
-        if not variant_id:
-            continue
-        variant_module = str(variant.get("module") or "")
-        variant_summary = EXAMPLE_VARIANT_TASK_SUMMARIES.get(variant_module)
-        if variant_summary:
-            variant_subject = f"{variant_summary} ({variant_id})"
-        elif module:
-            variant_subject = f"the {module} variant {variant_id}"
-        else:
-            variant_subject = f"the example variant {variant_id}"
+    variants = (
+        project_config.read_project_config(project_dir / project_config.HEADER_NAME).variants
+        if project_dir is not None
+        else ()
+    )
+    for variant in variants:
+        variant_id = variant.id
+        variant_subject = f"the {variant_id} variant: {variant.description}"
         variant_args = ["--project", "${workspaceFolder}", "--variant", variant_id]
         tasks.append(
             vscode_entry_task(

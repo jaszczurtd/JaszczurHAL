@@ -78,8 +78,8 @@ SDK wbudowane nie jest wymagane.
 | Implementacje sprzętowe na hoście | nagłówki i atrapy w `tests/fakes/<sdk>/`, osobny plik wykonywalny w `tests/CMakeLists.txt` | CMake plus CTest | Skompiluj prawdziwą implementację z atrapą SDK i sprawdzaj jej zachowanie przez atrapę: zarejestrowane wywołania sterownika, wstrzyknięte błędy i symulowane przerwania. |
 | Testy hosta FreeRTOS POSIX | `tests/freertos_posix/`, `JH_ENABLE_FREERTOS_POSIX_TESTS` | CTest w konfiguracji dla komputera lub pełną kontrolę jakości | Dodaj target przez `add_hal_freertos_posix_test(...)`. |
 | Kontrola jakości repozytorium | `runalltests.sh`, `.github/workflows/ci.yml` oraz dane narzędziowe opisane w `00_scripts.md` | `./runalltests.sh` | Rozszerz odpowiedni etap i jego ukierunkowane testy regresyjne; zapisuj generowane artefakty wyłącznie w `.build/`. |
-| Projekty sprawdzające kompilację firmware | `tests/fixtures/<fixture>/.vscode/jaszczurhal.project.json` | `jh-vscode` lub właściwy skrypt produkcyjny | Rozszerz macierz targetów, płytek i wariantów w manifeście oraz test układu artefaktów. |
-| Fizyczne stanowiska sprzętowe | źródło, manifest i weryfikator w `tests/hardware/<fixture>/` | Kompilacja i wgranie przez `jh-vscode` lub właściwy skrypt produkcyjny, a następnie uruchomienie weryfikatora opisanego w README stanowiska | Dodaj firmware, jawną macierz sprzętową, mechanizm sprawdzający wynik na hoście, README z procedurą i kryteriami akceptacji w obu językach oraz wiersz w tabeli poniżej. |
+| Projekty sprawdzające kompilację firmware | `tests/fixtures/<fixture>/.vscode/jaszczurhal.project.json` | `jh-vscode` lub właściwy skrypt produkcyjny | Rozszerz platformy i warianty w `hal_project_config.h` projektu, płytki w jego manifeście oraz test układu artefaktów. |
+| Fizyczne stanowiska sprzętowe | źródło, `hal_project_config.h`, manifest i weryfikator w `tests/hardware/<fixture>/` | Kompilacja i wgranie przez `jh-vscode` lub właściwy skrypt produkcyjny, a następnie uruchomienie weryfikatora opisanego w README stanowiska | Dodaj firmware, jawną macierz sprzętową, mechanizm sprawdzający wynik na hoście, README z procedurą i kryteriami akceptacji w obu językach oraz wiersz w tabeli poniżej. |
 
 W razie rozbieżności między opisem a działaniem sprawdź wskazane pliki konfiguracji i programy testowe. README każdego stanowiska sprzętowego zawiera jego procedurę, połączenia i wymagania; wszystkie stanowiska wymienia sekcja [Testy na fizycznych urządzeniach](#stanowiska-sprzętowe).
 
@@ -163,8 +163,9 @@ Uruchamia dziewięć etapów kontroli jakości w następującej kolejności:
    repozytorium i zwalidowanym
    manifestem zawierającym wiele obrazów oraz `libJaszczurHAL.a` ESP32-S3
    z pełnym zestawem cech, obejmująca całą allowlistę targetu)
-9. Kompilacje przykładów (macierz `gateTargets` wyprowadzona ze wspólnego mechanizmu kompilacji
-   dla RP2040, STM32G474 i ESP32-S3 plus dedykowane stanowiska target/runtime)
+9. Kompilacje przykładów (wszystkie konfiguracje przykładów dla RP2040,
+   STM32G474 i ESP32-S3 przez `scripts/examples_dispatcher.py`; RP2350 obejmuje
+   etap 8)
 
 Kończy działanie z niezerowym kodem przy pierwszym błędzie; logi rejestrują
 wszelkie ostrzeżenia/błędy zarówno ze standardowego wyjścia, jak i ze
@@ -232,7 +233,7 @@ weryfikujących komunikację szeregową.
 
 | Stanowisko | Pokrycie |
 |---|---|
-| [`tests/hardware/bluetooth_stage1`](../../../tests/hardware/bluetooth_stage1/README.pl.md) | Wewnętrzny test kontrolera CYW43/BTstack opracowany przed publicznym API: rozgłaszanie, statyczny GATT oraz wariant odniesienia `wifi-only` na Pico W i STM32G474/PIM730. |
+| [`tests/hardware/bluetooth_stage1`](../../../tests/hardware/bluetooth_stage1/README.pl.md) | Wewnętrzny test kontrolera CYW43/BTstack opracowany przed publicznym API: rozgłaszanie, statyczny GATT oraz wariant odniesienia `WIFI_ONLY` na Pico W i STM32G474/PIM730. |
 | [`tests/hardware/bluetooth_gamepad`](../../../tests/hardware/bluetooth_gamepad/README.pl.md) | Zanonimizowany deskryptor i raporty 8BitDo Zero 2 Android D-input oraz prywatna sonda parsera gamepada Classic HID Host dla Pico 2 W. |
 | [`tests/hardware/bluetooth_classic_hid_device`](../../../tests/hardware/bluetooth_classic_hid_device/README.pl.md) | Prywatna mysz Classic HID na Pico W używana do sprawdzenia publicznego ogólnego HID Host na drugim radiu Pico. |
 | [`tests/hardware/bluetooth_classic_hci_trace`](../../../tests/hardware/bluetooth_classic_hci_trace/README.pl.md) | Prywatny, chroniący dane surowy ślad inquiry HCI oraz diagnostyka transportu i zegara CYW43 dla Pico W i Pico 2 W. |
@@ -259,7 +260,7 @@ README każdego stanowiska opisuje połączenia, polecenia i kryteria zaliczenia
 
 ### Sprzętowy test managera Bluetooth Classic
 
-Publiczny wariant `classic-scan` przykładu 29 jest ogólnym testem sprzętowym
+Publiczny wariant `CLASSIC_SCAN` przykładu 29 jest ogólnym testem sprzętowym
 Classic. Używa wyłącznie `HAL_ENABLE_BLUETOOTH_CLASSIC`, nadaje wykrytym
 urządzeniom ulotne indeksy i celowo nie umieszcza w logu adresów Bluetooth ani
 materiału link key. Zbuduj i wgraj obraz, a następnie otwórz konsolę szeregową:
@@ -267,10 +268,10 @@ materiału link key. Zbuduj i wgraj obraz, a następnie otwórz konsolę szerego
 ```sh
 vscode/entry/jh-vscode build \
   --project examples/29_bluetooth_gamepad \
-  --target rp2350-arm --board pico2w --variant classic-scan
+  --target rp2350-arm --board pico2w --variant CLASSIC_SCAN
 vscode/entry/jh-vscode upload \
   --project examples/29_bluetooth_gamepad \
-  --target rp2350-arm --board pico2w --variant classic-scan \
+  --target rp2350-arm --board pico2w --variant CLASSIC_SCAN \
   --port /dev/ttyACM0
 ```
 
@@ -287,16 +288,16 @@ Sprawdzenie nie obejmuje profilu transmisji audio.
 
 ### Test współdziałania BLE i gamepada Classic
 
-Publiczny wariant `ble` przykładu 29 uruchamia pasywnego Observera BLE obok
+Publiczny wariant `BLE` przykładu 29 uruchamia pasywnego Observera BLE obok
 profilu Classic HID/gamepad na wspólnym hoście CYW43:
 
 ```sh
 vscode/entry/jh-vscode build \
   --project examples/29_bluetooth_gamepad \
-  --target rp2350-arm --board pico2w --variant ble
+  --target rp2350-arm --board pico2w --variant BLE
 vscode/entry/jh-vscode upload \
   --project examples/29_bluetooth_gamepad \
-  --target rp2350-arm --board pico2w --variant ble \
+  --target rp2350-arm --board pico2w --variant BLE \
   --port /dev/ttyACM0
 ```
 
@@ -317,17 +318,17 @@ Przykład 30 służy do sprzętowego sprawdzania A2DP/AVRCP na Pico W i Pico 2 W
 ```sh
 vscode/entry/jh-vscode build \
   --project examples/30_bluetooth_speaker \
-  --target rp2040 --board picow --variant avrcp
+  --target rp2040 --board picow --variant AVRCP
 vscode/entry/jh-vscode upload \
   --project examples/30_bluetooth_speaker \
-  --target rp2040 --board picow --variant avrcp \
+  --target rp2040 --board picow --variant AVRCP \
   --port /dev/ttyACM0
 vscode/entry/jh-vscode build \
   --project examples/30_bluetooth_speaker \
-  --target rp2350-arm --board pico2w --variant avrcp
+  --target rp2350-arm --board pico2w --variant AVRCP
 vscode/entry/jh-vscode upload \
   --project examples/30_bluetooth_speaker \
-  --target rp2350-arm --board pico2w --variant avrcp \
+  --target rp2350-arm --board pico2w --variant AVRCP \
   --port /dev/ttyACM0
 ```
 
@@ -337,7 +338,7 @@ Warunkiem zaliczenia są czysty dźwięk SBC, pause/resume/stop, bezwzględna
 regulacja głośności AVRCP, reconnect z bondem po restarcie, osobna próba
 reconnectu po resecie watchdogiem oraz brak błędów kolejek, pul, DMA i czasu
 obsługi. Fizyczny tor wyjściowy wymaga osobnej walidacji w produkcie. Wariant
-`ble-a2dp` należy do bramki kompilacji; aktywny dźwięk+BLE nie jest jeszcze
+`BLE_A2DP` należy do bramki kompilacji; aktywny dźwięk+BLE nie jest jeszcze
 wymaganiem sprzętowym.
 
 <a id="projekty-do-sprawdzania-buildu-i-linkowania-firmwareu"></a>

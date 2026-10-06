@@ -4,14 +4,14 @@
 
 This example connects two devices with SX1262 radios. In the base application,
 one sends a packet and the other replies; build an initiator and a
-`responder` variant. Transmission and reception are asynchronous, using DIO1
+`RESPONDER` variant. Transmission and reception are asynchronous, using DIO1
 and callbacks. The code also demonstrates cancellation, packet metadata,
 receive timeouts, and continuous reception.
 
-The `probe` variant does not transmit. It checks radio capabilities,
+The `PROBE` variant does not transmit. It checks radio capabilities,
 calibration, current RSSI, channel activity detection (CAD), and standby.
 
-The `link` and `link-responder` variants replace simple ping/pong with
+The `LINK` and `LINK_RESPONDER` variants replace simple ping/pong with
 commands carried by `hal_lora_commands` and `hal_lora_link`. The initiator
 sends a 500-byte binary `echo` request to address `0x1002`. The responder
 runs the command through the shared router and returns the same bytes in a
@@ -48,23 +48,23 @@ Run from the repository root:
   --target stm32g474 --example 27_lora_point_to_point
 ```
 
-The default compile checks cover the initiator, `probe`, `responder`, `link`,
-and `link-responder`. The hardware-test variants `sf7` and `responder-sf7`
-can be built through `jh-vscode` but are not part of that check set.
+The dispatcher builds the initiator and every variant declared in
+`hal_project_config.h`: `PROBE`, `RESPONDER`, the hardware-test pair `SF7` and
+`RESPONDER_SF7`, `LINK`, and `LINK_RESPONDER`.
 
 To build only the command pair, choose the variants in VS Code or run:
 
 ```bash
 vscode/entry/jh-vscode build \
   --project examples/27_lora_point_to_point \
-  --target rp2040 --variant link
+  --target rp2040 --variant LINK
 vscode/entry/jh-vscode build \
   --project examples/27_lora_point_to_point \
-  --target stm32g474 --variant link-responder
+  --target stm32g474 --variant LINK_RESPONDER
 ```
 
 For two integrated Waveshare LF boards, select
-`--target rp2040 --board rp2040-lora-lf` with `link` and `link-responder`.
+`--target rp2040 --board rp2040-lora-lf` with `LINK` and `LINK_RESPONDER`.
 See the
 [LoRa command hardware tests](../../tests/hardware/lora_sx1262/README.md)
 for uploading, stable serial-port selection, and `JHCMD1` acceptance criteria.

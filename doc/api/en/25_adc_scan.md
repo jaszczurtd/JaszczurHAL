@@ -32,7 +32,7 @@ if (status == HAL_OK && hal_adc_scan_take(&block) == HAL_OK) {
 }
 ```
 
-The `scan` variant of [13_adc](../../../examples/13_adc/) prints block
+The `SCAN` variant of [13_adc](../../../examples/13_adc/) prints block
 statistics on RP and STM32G474 targets.
 
 ## Blocks, positions and the marker

@@ -331,8 +331,8 @@
             "problemMatcher": []
         },
         {
-            "label": "Project: Build variant: network",
-            "detail": "Build the FreeRTOS network services and client examples (network).",
+            "label": "Project: Build variant: NETWORK",
+            "detail": "Build the NETWORK variant: FreeRTOS network services and client examples.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -343,14 +343,14 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "network"
+                "NETWORK"
             ],
             "group": "build",
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Project: Upload variant: network",
-            "detail": "Build and upload the FreeRTOS network services and client examples (network).",
+            "label": "Project: Upload variant: NETWORK",
+            "detail": "Build and upload the NETWORK variant: FreeRTOS network services and client examples.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -361,7 +361,7 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "network"
+                "NETWORK"
             ],
             "problemMatcher": "$gcc"
         }

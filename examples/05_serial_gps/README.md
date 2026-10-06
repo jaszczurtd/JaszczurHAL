@@ -14,7 +14,7 @@ test port at 115200 baud.
 | RP family | UART 1, GP1 / GP0 | UART 2, GP5 / GP4 |
 | STM32G474 | USART1, PA10 / PA9 | Not available; USART2 on PA3 / PA2 is reserved for the ST-Link VCP debug console. |
 
-The RP-only `swserial` variant implements both serial ports in software.
+The RP-only `SWSERIAL` variant implements both serial ports in software.
 It uses GP5/GP4 for GPS RX/TX and GP9/GP8 for test-port RX/TX.
 Its build configuration sets `EXAMPLE_SERIAL_GPS_USE_SWSERIAL=1` so the GPS
 module also uses software serial.

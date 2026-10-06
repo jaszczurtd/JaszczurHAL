@@ -2,32 +2,6 @@
     "$schema": "../../../../vscode/schema/jh_vscode_project.schema.json",
     "project": "JaszczurHAL hardware tests",
     "module": "rp_usb_multicore",
-    "example": {
-        "targets": [
-            "rp2040",
-            "rp2350-arm",
-            "rp2350-riscv"
-        ],
-        "boards": {
-            "rp2040": "pico",
-            "rp2350-arm": "pico2",
-            "rp2350-riscv": "pico2"
-        },
-        "variants": [
-            {
-                "id": "freertos",
-                "module": "rp_usb_multicore_freertos",
-                "targets": [
-                    "rp2040",
-                    "rp2350-arm",
-                    "rp2350-riscv"
-                ],
-                "extraDefines": [
-                    "HAL_ENABLE_FREERTOS"
-                ]
-            }
-        ]
-    },
     "toolchain": "cmake",
     "target": "rp2040",
     "board": "pico",

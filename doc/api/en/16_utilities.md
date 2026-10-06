@@ -246,6 +246,13 @@ Choosing a header:
 
 The `_ex` variants return `hal_status_t`, validate arguments, and use explicitly supplied buffers and state. `hal_adc_average_config_t` selects ADC sample count, dummy-read behavior, delay, and characteristic correction rather than hidden project-wide settings.
 
+`HAL_MATH_ROLLING_AVERAGE_DEFAULT_SIZE` from `<hal/core/hal_math.h>` sets
+the sample count for `hal_math_rolling_average_default_f32()` (default: 5).
+Define it consistently across the application and HAL build, and allocate
+that many floats for its table. If omitted, the older
+`HAL_TOOLS_TEMPERATURE_TABLES_SIZE` setting is still accepted. The `_ex`
+variant takes an explicit table size instead.
+
 `hal_text_format_mac_ex()` formats a six-byte hardware address as uppercase `XX:XX:XX:XX:XX:XX`. The destination must hold `HAL_TEXT_MAC_STRING_SIZE` bytes. The compatibility function `hal_network_format_mac_ex()` remains available and delegates to the same operation.
 
 ### Bit-manipulation helpers (`hal_bits`)

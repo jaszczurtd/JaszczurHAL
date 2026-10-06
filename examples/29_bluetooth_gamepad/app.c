@@ -4,6 +4,11 @@
  * the same controller and does not advertise a BLE service.
  */
 
+#include <hal/core/hal_config.h>
+
+#if !defined(EXAMPLE_BLUETOOTH_CLASSIC_SCAN) &&                                \
+    !defined(EXAMPLE_BLUETOOTH_HID_HOST)
+
 #include <hal/bluetooth/hal_gamepad.h>
 #include <hal/bluetooth/jh_bluetooth_classic_hid_memory_probe.h>
 #include <hal/bluetooth/jh_btstack_diagnostics.h>
@@ -529,3 +534,5 @@ void app_task0(void) {
 #endif
   hal_delay_ms(1u);
 }
+
+#endif /* gamepad application */

@@ -160,7 +160,15 @@ application can make BOOTSEL program an incomplete image.
 
 ## RP Project Manifest
 
-Enable OTA in `.vscode/jaszczurhal.project.json`. Specify the output files and the discovery and authentication settings used by the host:
+Enable OTA in the project's `hal_project_config.h`:
+
+```c
+#define HAL_ENABLE_OTA
+```
+
+`HAL_ENABLE_OTA` automatically enables the required WiFi, UDP, TCP, crypto,
+and CRC modules. In `.vscode/jaszczurhal.project.json`, specify the output
+files and the discovery and authentication settings used by the host:
 
 ```json
 {
@@ -174,7 +182,6 @@ Enable OTA in `.vscode/jaszczurhal.project.json`. Specify the output files and t
     "cache": {
       "JH_PROJECT_DIR": "${project}",
       "JH_MODULE_NAME": "tracker",
-      "JH_EXTRA_DEFINES": "HAL_ENABLE_OTA",
       "JH_OTA_GENERATION": 7,
       "JH_OTA_VERSION": "1.4.0"
     }
@@ -193,11 +200,6 @@ Enable OTA in `.vscode/jaszczurhal.project.json`. Specify the output files and t
   }
 }
 ```
-
-`JH_EXTRA_DEFINES` is a semicolon-separated CMake list. Preserve other
-project defines when adding OTA, for example
-`"HAL_ENABLE_OTA;HAL_ENABLE_FREERTOS"`. `HAL_ENABLE_OTA` automatically enables
-the required WiFi, UDP, TCP, crypto, and CRC modules.
 
 Image metadata and output paths:
 
@@ -389,8 +391,8 @@ Additional API rules:
 - `hal_ota_get_boot_info_ex()` reports stable, trial, rollback and recovery
   state together with generation, version, attempts, and attempt limit.
 - `HAL_RP_OTA_MAX_BOOT_ATTEMPTS` defaults to `3` and accepts values from 1 to
-  255. Override it through `JH_EXTRA_DEFINES` or `hal_project_config.h` only
-  when the product has a deliberate boot policy.
+  255. Override it in `hal_project_config.h` only when the product has a
+  deliberate boot policy.
 
 For a FreeRTOS application, run the service from one task and size that task
 for CYW43 initialization and OTA processing. The hardware regression fixture
@@ -528,8 +530,9 @@ the override explicitly:
   --target rp2350-arm --board pico2w --host 192.168.2.200
 ```
 
-`--variant` applies only when the manifest declares that variant. For example,
-a declared `freertos` variant is selected with `--variant freertos`.
+`--variant` applies only when `hal_project_config.h` declares that variant in
+`JH_PROJECT_VARIANTS`. For example, a declared `FREERTOS` variant is selected
+with `--variant FREERTOS`.
 
 ## RP VS Code tasks and keyboard shortcuts
 

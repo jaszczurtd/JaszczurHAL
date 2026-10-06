@@ -1187,75 +1187,34 @@ consumer = TEST_ROOT / "consumer"
     encoding="utf-8",
 )
 (consumer / ".vscode/jaszczurhal.project.json").write_text(
-    json.dumps({"cmake": {"cache": {"JH_EXTRA_DEFINES": "HAL_ENABLE_I2C"}}}),
+    json.dumps({"target": "rp2040", "board": "pico", "note": "HAL_ENABLE_UNKNOWN"}),
     encoding="utf-8",
 )
 run_generator("--lint", "--input-root", str(consumer))
 
-(consumer / ".vscode/jaszczurhal.project.json").write_text(
-    json.dumps(
-        {
-            "cmake": {
-                "cache": {
-                    "JH_EXTRA_DEFINES": "-DHAL_ENABLE_UNKNOWN;-DHAL_ENABLE_WIFI=0"
-                }
-            }
-        }
+# A manifest holds no project configuration, wherever it would sit.
+for manifest, location in (
+    ({"cmake": {"cache": {"JH_EXTRA_DEFINES": ""}}}, "cmake.cache.JH_EXTRA_DEFINES"),
+    ({"cmake": {"cache": {"EXTRA_HAL_DEFINES": "HAL_ENABLE_I2C"}}}, "cmake.cache.EXTRA_HAL_DEFINES"),
+    ({"cmake": {"cache": {"HAL_ENABLE_WIFI": 1}}}, "cmake.cache.HAL_ENABLE_WIFI"),
+    (
+        {"targetProfiles": {"stm32g474": {"cmake": {"cache": {"JH_PROJECT_SOURCES": "app.c"}}}}},
+        "targetProfiles.stm32g474.cmake.cache.JH_PROJECT_SOURCES",
     ),
-    encoding="utf-8",
-)
-semicolon_lint = run_generator(
-    "--lint", "--input-root", str(consumer), expected_success=False
-)
-require(
-    "[JH-CFG-UNKNOWN]" in semicolon_lint.stderr
-    and "[JH-CFG-VALUE]" in semicolon_lint.stderr,
-    "semicolon-separated CMake definitions were not linted independently",
-)
+    ({"variants": [{"id": "bench"}]}, "'variants' is not a manifest field"),
+):
+    (consumer / ".vscode/jaszczurhal.project.json").write_text(
+        json.dumps(manifest), encoding="utf-8"
+    )
+    manifest_lint = run_generator(
+        "--lint", "--input-root", str(consumer), expected_success=False
+    )
+    require(
+        "[JH-CFG-MANIFEST]" in manifest_lint.stderr and location in manifest_lint.stderr,
+        f"raw lint accepted a manifest carrying {location}",
+    )
 (consumer / ".vscode/jaszczurhal.project.json").write_text(
-    json.dumps({"cmake": {"cache": {"JH_EXTRA_DEFINES": "HAL_ENABLE_WIFI="}}}),
-    encoding="utf-8",
-)
-empty_assignment_lint = run_generator(
-    "--lint", "--input-root", str(consumer), expected_success=False
-)
-require(
-    "[JH-CFG-VALUE]" in empty_assignment_lint.stderr,
-    "empty feature assignment was accepted by raw manifest lint",
-)
-(consumer / ".vscode/jaszczurhal.project.json").write_text(
-    json.dumps(
-        {
-            "cmake": {
-                "cache": {
-                    "JH_EXTRA_DEFINES": "$<1:HAL_$<1:ENABLE>_WIFI=0>"
-                }
-            }
-        }
-    ),
-    encoding="utf-8",
-)
-genex_lint = run_generator(
-    "--lint", "--input-root", str(consumer), expected_success=False
-)
-require(
-    "[JH-CFG-VALUE]" in genex_lint.stderr,
-    "generator-expression feature bypassed raw manifest lint",
-)
-(consumer / ".vscode/jaszczurhal.project.json").write_text(
-    json.dumps({"cmake": {"cache": {"HAL_ENABLE_WIFI": 0}}}),
-    encoding="utf-8",
-)
-direct_cache_lint = run_generator(
-    "--lint", "--input-root", str(consumer), expected_success=False
-)
-require(
-    "[JH-CFG-VALUE]" in direct_cache_lint.stderr,
-    "direct CMake feature cache value bypassed raw manifest lint",
-)
-(consumer / ".vscode/jaszczurhal.project.json").write_text(
-    json.dumps({"cmake": {"cache": {"JH_EXTRA_DEFINES": "HAL_ENABLE_I2C"}}}),
-    encoding="utf-8",
+    json.dumps({"target": "rp2040", "board": "pico"}), encoding="utf-8"
 )
 
 second_consumer = TEST_ROOT / "consumer-second"
@@ -1326,18 +1285,42 @@ derived_lint = run_generator(
 )
 require("[JH-CFG-DERIVED]" in derived_lint.stderr, "derived lint ID missing")
 
+# Every branch and every variant is linted, whatever the build selects.
 (consumer / "hal_project_config.h").write_text(
-    "#if defined(ENABLE_WIFI_FOR_PROBE)\n"
+    "#define JH_PROJECT_VARIANTS(X) X(PROBE, \"Probe\", HAL_ENABLE_WIFI=0)\n"
+    "#if 0\n#define HAL_ENABLE_UNKNOWN\n#endif\n",
+    encoding="utf-8",
+)
+branch_lint = run_generator(
+    "--lint", "--input-root", str(consumer), expected_success=False
+)
+require(
+    "[JH-CFG-UNKNOWN]" in branch_lint.stderr
+    and "JH_PROJECT_VARIANTS(PROBE): [JH-CFG-VALUE]" in branch_lint.stderr,
+    "raw lint skipped an inactive branch or a variant definition",
+)
+
+# A condition the build decides is fine; one on an identifier the build never
+# passes leaves the feature undecided for every build.
+(consumer / "hal_project_config.h").write_text(
+    "#define JH_PROJECT_VARIANTS(X) X(PROBE, \"Probe\", ENABLE_WIFI_FOR_PROBE=1)\n"
+    "#if defined(ENABLE_WIFI_FOR_PROBE) && defined(HAL_TARGET_RP2040)\n"
     "#define HAL_ENABLE_WIFI\n"
     "#endif\n",
     encoding="utf-8",
 )
+run_generator("--lint", "--effective", "--input-root", str(consumer))
+(consumer / "hal_project_config.h").write_text(
+    "#if defined(SDK_ONLY_SWITCH)\n#define HAL_ENABLE_WIFI\n#endif\n",
+    encoding="utf-8",
+)
+run_generator("--lint", "--input-root", str(consumer))
 conditional_lint = run_generator(
-    "--lint", "--input-root", str(consumer), expected_success=False
+    "--lint", "--effective", "--input-root", str(consumer), expected_success=False
 )
 require(
-    "[JH-CFG-SCOPE]" in conditional_lint.stderr,
-    "conditional feature definition bypassed raw scope lint",
+    "[JH-CFG-SCOPE] HAL_ENABLE_WIFI depends on SDK_ONLY_SWITCH" in conditional_lint.stderr,
+    "a feature decided by an unknown identifier passed the effective lint",
 )
 (consumer / "hal_project_config.h").write_text(
     "#ifndef HAL_PROJECT_CONFIG_H\n"
@@ -1348,36 +1331,31 @@ require(
     "#endif\n",
     encoding="utf-8",
 )
-(consumer / ".vscode/jaszczurhal.project.json").write_text(
-    json.dumps(
-        {
-            "note": "HAL_ENABLE_UNKNOWN",
-            "cmake": {"cache": {"JH_EXTRA_DEFINES": ""}},
-        }
-    ),
-    encoding="utf-8",
-)
-run_generator("--lint", "--input-root", str(consumer))
-(consumer / ".vscode/jaszczurhal.project.json").write_text(
-    json.dumps(
-        {"cmake": {"cache": {"JH_EXTRA_DEFINES": ["HAL_ENABLE_WIFI"]}}}
-    ),
-    encoding="utf-8",
-)
-list_cache_lint = run_generator(
-    "--lint", "--input-root", str(consumer), expected_success=False
-)
-require(
-    "semicolon-separated scalar" in list_cache_lint.stderr,
-    "JSON list bypassed raw cache grammar lint",
-)
+run_generator("--lint", "--effective", "--input-root", str(consumer))
 
 run_generator("--lint", "--input-root", str(ROOT))
 
 effective_consumer = TEST_ROOT / "effective-consumer"
 (effective_consumer / ".vscode").mkdir(parents=True)
 (effective_consumer / "hal_project_config.h").write_text(
-    "#pragma once\n#define HAL_ENABLE_CRC\n#define HAL_DISABLE_ASSERTS\n",
+    "#pragma once\n"
+    "#define JH_PROJECT_TARGETS(X) X(HAL_TARGET_RP2040) X(HAL_TARGET_STM32G474)\n"
+    "#define JH_PROJECT_VARIANTS(X) \\\n"
+    "    X(STREAM, \"BLE stream\", HAL_ENABLE_BLE_STREAM) \\\n"
+    "    X(RP_TLS, \"TLS on RP2040\", EXAMPLE_TLS=1)\n"
+    "#define HAL_ENABLE_CRC\n"
+    "#define HAL_DISABLE_ASSERTS\n"
+    "#if defined(HAL_TARGET_RP2040)\n"
+    "#define HAL_ENABLE_MQTT\n"
+    "#else\n"
+    "#define HAL_ENABLE_UDP\n"
+    "#endif\n"
+    "#if defined(EXAMPLE_TLS)\n"
+    "#if !defined(HAL_TARGET_RP2040)\n"
+    "#error \"RP_TLS: RP2040 only\"\n"
+    "#endif\n"
+    "#define HAL_ENABLE_TLS\n"
+    "#endif\n",
     encoding="utf-8",
 )
 (effective_consumer / ".vscode/jaszczurhal.local.json").write_text(
@@ -1385,44 +1363,7 @@ effective_consumer = TEST_ROOT / "effective-consumer"
     encoding="utf-8",
 )
 (effective_consumer / ".vscode/jaszczurhal.project.json").write_text(
-    json.dumps(
-        {
-            "target": "rp2040",
-            "board": "pico",
-            "example": {
-                "targets": ["rp2040", "stm32g474"],
-                "boards": {
-                    "rp2040": "pico",
-                    "stm32g474": "nucleo-g474re",
-                },
-                "variants": [
-                    {
-                        "id": "stream",
-                        "targets": ["rp2040", "stm32g474"],
-                        "extraDefines": ["HAL_ENABLE_BLE_STREAM"],
-                    },
-                    {
-                        "id": "rp-tls",
-                        "targets": ["rp2040"],
-                        "cmake": {
-                            "cache": {"JH_EXTRA_DEFINES": "HAL_ENABLE_TLS"}
-                        },
-                    },
-                ],
-            },
-            "cmake": {"cache": {"JH_EXTRA_DEFINES": "HAL_ENABLE_WIFI"}},
-            "targetProfiles": {
-                "rp2040": {
-                    "cmake": {"cache": {"JH_EXTRA_DEFINES": "HAL_ENABLE_MQTT"}}
-                },
-                "stm32g474": {
-                    "cmake": {"cache": {"JH_EXTRA_DEFINES": "HAL_ENABLE_UDP"}}
-                },
-            },
-        },
-        indent=2,
-    )
-    + "\n",
+    json.dumps({"target": "rp2040", "board": "pico"}, indent=2) + "\n",
     encoding="utf-8",
 )
 effective_report_path = TEST_ROOT / "effective-report.json"
@@ -1462,18 +1403,22 @@ rp_base = effective_record("rp2040", None)
 require(
     rp_base["requestedFeatures"]
     == ["HAL_DISABLE_ASSERTS", "HAL_ENABLE_CRC", "HAL_ENABLE_MQTT"],
-    f"target profile was not resolved effectively: {rp_base}",
+    f"the target condition was not resolved effectively: {rp_base}",
 )
 require(
-    "$.targetProfiles.rp2040.cmake.cache.JH_EXTRA_DEFINES[0]"
-    in rp_base["provenance"]["HAL_ENABLE_MQTT"][0],
-    "target-profile provenance is missing",
+    rp_base["provenance"]["HAL_ENABLE_MQTT"] == ["hal_project_config.h:9"],
+    "header provenance is missing",
 )
-stream = effective_record("stm32g474", "stream")
+require(
+    effective_record("rp2040", "RP_TLS")["requestedFeatures"]
+    == ["HAL_DISABLE_ASSERTS", "HAL_ENABLE_CRC", "HAL_ENABLE_MQTT", "HAL_ENABLE_TLS"],
+    "a variant switch did not reach the header",
+)
+stream = effective_record("stm32g474", "STREAM")
 require(
     stream["requestedFeatures"]
-    == ["HAL_DISABLE_ASSERTS", "HAL_ENABLE_BLE_STREAM", "HAL_ENABLE_CRC"],
-    f"variant did not replace the profile feature list: {stream}",
+    == ["HAL_DISABLE_ASSERTS", "HAL_ENABLE_BLE_STREAM", "HAL_ENABLE_CRC", "HAL_ENABLE_UDP"],
+    f"variant did not add to the base configuration: {stream}",
 )
 require(
     "HAL_ENABLE_BLE" in stream["resolvedFeatures"]
@@ -1481,8 +1426,8 @@ require(
     "variant closure is incomplete",
 )
 require(
-    "$.example.variants[0].extraDefines[0]"
-    in stream["provenance"]["HAL_ENABLE_BLE_STREAM"][0],
+    stream["provenance"]["HAL_ENABLE_BLE_STREAM"]
+    == ["hal_project_config.h:JH_PROJECT_VARIANTS(STREAM)"],
     "variant provenance is missing",
 )
 second_effective_report = TEST_ROOT / "effective-report-second.json"
@@ -1728,10 +1673,12 @@ require(
 duplicate_consumer = TEST_ROOT / "effective-duplicate"
 (duplicate_consumer / ".vscode").mkdir(parents=True)
 (duplicate_consumer / "hal_project_config.h").write_text(
-    "#define HAL_ENABLE_WIFI\n", encoding="utf-8"
+    "#define JH_PROJECT_VARIANTS(X) X(AGAIN, \"Again\", HAL_ENABLE_WIFI=1)\n"
+    "#define HAL_ENABLE_WIFI\n",
+    encoding="utf-8",
 )
 (duplicate_consumer / ".vscode/jaszczurhal.project.json").write_text(
-    json.dumps({"cmake": {"cache": {"JH_EXTRA_DEFINES": "HAL_ENABLE_WIFI=1"}}}),
+    json.dumps({"target": "rp2040", "board": "pico"}),
     encoding="utf-8",
 )
 duplicate_effective = run_generator(

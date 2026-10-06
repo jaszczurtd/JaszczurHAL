@@ -18,8 +18,6 @@
         "JH_ARTIFACT_DIR": "${workspaceFolder}/../../.build/examples/29_bluetooth_gamepad",
         "JH_PROJECT_DIR": "${workspaceFolder}",
         "JH_MODULE_NAME": "29_bluetooth_gamepad",
-        "JH_PROJECT_SOURCES": "app.c",
-        "JH_EXTRA_DEFINES": "HAL_ENABLE_BLUETOOTH_GAMEPAD=1",
         "JH_ROOT": "${workspaceFolder}/../.."
     },
     "files.exclude": {

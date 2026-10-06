@@ -834,6 +834,10 @@ int  hal_display_prepare_text_v(char *display_txt, size_t display_txt_size,
   or `HAL_COLOR(name)` selector, for example `HAL_COLOR(ORANGE)`.
 - **Display mode helpers:** `HAL_DISPLAY_ROTATION_*`, `HAL_DISPLAY_ROTATION(deg)`,
   `HAL_DISPLAY_INVERT_ON/OFF`, `HAL_DISPLAY_COLOR_ORDER_RGB/BGR`.
+- **Rotation masks:** `HAL_DISPLAY_ROTATION_MASK(rotation)` converts a rotation
+  enum value (0..3) to a bit in `supported_rotations`; pass the enum rather than
+  an angle in degrees. `HAL_DISPLAY_ROTATION_MASK_ALL` includes all four bits.
+  Test the returned capability mask before selecting a rotation.
 - **Capabilities and raw buffers:** Query the active backend with
   `hal_display_get_capabilities_ex()`, then use only advertised formats and
   alignments with `hal_display_write_raw_ex()`. `pitch` is in pixels. TFT and

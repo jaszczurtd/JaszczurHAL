@@ -32,14 +32,17 @@ vscode/entry/jh-vscode upload \
   --port /dev/serial/by-id/<device>
 ```
 
-Dla wariantu FreeRTOS SMP dodaj poniższy tymczasowy wpis cache do manifestu
-i uruchom te same komendy kompilacji/wgrywania:
+Dla przebiegu z FreeRTOS SMP dodaj `--variant FREERTOS` do tych samych
+komend kompilacji i wgrywania. Wariant definiuje `HAL_ENABLE_FREERTOS=1`
+i kompiluje się do osobnego katalogu, więc obraz bare-metal pozostaje bez
+zmian:
 
-```json
-"JH_EXTRA_DEFINES": "HAL_ENABLE_FREERTOS=1"
+```sh
+vscode/entry/jh-vscode upload \
+  --project tests/hardware/rp_flash_transaction \
+  --target rp2040 --board pico --variant FREERTOS \
+  --port /dev/serial/by-id/<device>
 ```
-
-Usuń wpis cache przed ponowną kompilacją wariantu bare-metal.
 
 Uruchom weryfikator:
 

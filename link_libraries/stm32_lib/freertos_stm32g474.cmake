@@ -30,20 +30,6 @@ function(jh_cmake_defines_contain OUT_VAR MACRO_NAME)
     set(${OUT_VAR} ${_found} PARENT_SCOPE)
 endfunction()
 
-# Value of MACRO_NAME=<value> in the define list with a C integer suffix
-# (u, U, l, L) removed, so the linker can take it; empty when absent.
-function(jh_cmake_define_link_value OUT_VAR MACRO_NAME)
-    jh_normalize_feature_defines(_jh_defines ${ARGN})
-    set(_value "")
-    foreach(_def IN LISTS _jh_defines)
-        if("${_def}" MATCHES "^${MACRO_NAME}=(.+)$")
-            set(_value "${CMAKE_MATCH_1}")
-        endif()
-    endforeach()
-    string(REGEX REPLACE "[uUlL]+$" "" _value "${_value}")
-    set(${OUT_VAR} "${_value}" PARENT_SCOPE)
-endfunction()
-
 function(jh_ensure_freertos_kernel)
     get_property(_already_ensured GLOBAL PROPERTY JH_FREERTOS_KERNEL_ENSURED)
     if(_already_ensured)

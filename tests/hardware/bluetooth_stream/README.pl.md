@@ -19,9 +19,10 @@ Skompiluj i wgraj osobno każdą z ośmiu kombinacji układu docelowego, płytki
 | `rp2350-arm` | `pico2w` | bare-metal, FreeRTOS |
 | `stm32g474` | `nucleo-g474re-pim730` | bare-metal, FreeRTOS |
 
-Te same osiem krotek jest zadeklarowanych jako `example.hardwareMatrix` w
-manifeście stanowiska i są sprawdzane przez test układu artefaktów
-repozytorium.
+Ta tabela jest macierzą sprzętową stanowiska. `hal_project_config.h`
+deklaruje platformy i wariant `FREERTOS`, manifest wybiera domyślne płytki,
+a `tests/test_hardware_fixture_files.py` sprawdza, czy stanowisko kompiluje się
+dla każdej z ośmiu kombinacji.
 
 Warianty bare-metal zbudujesz następująco:
 
@@ -40,7 +41,7 @@ vscode/entry/jh-vscode build \
   --target stm32g474 --board nucleo-g474re-pim730
 ```
 
-Dołącz `--variant freertos` do każdej komendy kompilacji i wgrywania dla
+Dołącz `--variant FREERTOS` do każdej komendy kompilacji i wgrywania dla
 obrazu FreeRTOS. Firmware testowy inicjalizuje BLE przy pierwszym wywołaniu
 `app_task0()`, już po uruchomieniu schedulera FreeRTOS. Stos zadania 0 ma
 1024 słowa, ponieważ uwierzytelnione uzgadnianie połączenia i używane przez nie
@@ -52,13 +53,14 @@ i nie liczy się jako test sprzętowy.
 
 ## Warianty obciążeniowe STM32G474 PIM730 + ILI9341
 
-Opcjonalne warianty `display` i `display-freertos` zachowują ten sam
+Opcjonalne warianty `DISPLAY` i `DISPLAY_FREERTOS` zachowują ten sam
 protokół BLE Stream i weryfikator hosta, jednocześnie ciągle aktualizując
 ILI9341 podłączony do złącza SPI Arduino NUCLEO-G474RE. Wykorzystują SPI1
 równolegle z dedykowanym transportem gSPI PIM730 na PB12-PB15. Te warianty
 stanowią dodatkowy dowód współistnienia/obciążenia i nie zastępują żadnego z
-dwóch bazowych obrazów bramki STM32 zadeklarowanych w
-`example.hardwareMatrix`.
+dwóch bazowych obrazów bramki STM32 wymienionych w macierzy kompilacji.
+`hal_project_config.h` zatrzymuje je przez `#error` na platformach innych niż
+STM32G474.
 
 Skompiluj osobne artefakty za pomocą:
 
@@ -66,12 +68,12 @@ Skompiluj osobne artefakty za pomocą:
 vscode/entry/jh-vscode build \
   --project tests/hardware/bluetooth_stream \
   --target stm32g474 --board nucleo-g474re-pim730 \
-  --variant display
+  --variant DISPLAY
 
 vscode/entry/jh-vscode build \
   --project tests/hardware/bluetooth_stream \
   --target stm32g474 --board nucleo-g474re-pim730 \
-  --variant display-freertos
+  --variant DISPLAY_FREERTOS
 ```
 
 ILI9341 używa okablowania już zwalidowanego przez `examples/07_display_media`:
@@ -153,7 +155,7 @@ a `--stream-rate` co najmniej 10. Test kończy się niepowodzeniem również wte
 gdy rzeczywista szybkość przesyłania uwierzytelnionych wiadomości spadnie
 poniżej 90% wartości `--stream-rate`. Na potrzeby wielogodzinnego testu
 stabilności zwiększ czas trwania strumienia. Dla obrazu podstawowego wybierz
-runtime `baremetal`, a dla wariantu manifestu `freertos` - runtime `freertos`.
+runtime `baremetal`, a dla wariantu `FREERTOS` - runtime `freertos`.
 Weryfikator jawnie wybiera wykrywanie LE, dlatego nieaktualny alias BlueZ nie
 wpływa na wybór według adresu. Wymaga systemowych pakietów Pythona dla D-Bus i
 GLib oraz pakietu `cryptography`.
@@ -168,7 +170,7 @@ testu utraty zasilania.
 
 Jeszcze nie uruchomiono na sprzęcie: RP2040 Pico z RM2/PIM730 w obu runtime
 oraz podstawowych obrazów STM32G474 + RM2/PIM730 w obu runtime. Warianty
-`display` dla STM32G474 zostały uruchomione. Strona hosta działa wyłącznie na
+`DISPLAY` dla STM32G474 zostały uruchomione. Strona hosta działa wyłącznie na
 Linuksie z BlueZ; natywny Windows nie jest objęty testem.
 
 ## Polecenia stanowiska testowego i zasady identyfikacji
@@ -224,7 +226,7 @@ losowego sekretu przypisanego do urządzenia, dostarczonego niezależnym kanałe
 
 ## Podstawowy test routera poleceń BLE
 
-Warianty `commands` z `examples/26_ble_stream` sprawdzają osobny adapter
+Warianty `COMMANDS` z `examples/26_ble_stream` sprawdzają osobny adapter
 `hal_ble_commands`, podczas gdy bazowy firmware używany w tym teście nadal
 sprawdza bezpośrednio dane Stream. System Linux z BlueZ działa w roli Central, a każda
 płytka pozostaje urządzeniem Peripheral.
@@ -235,12 +237,12 @@ już w BOOTSEL, wybierz jawnie każdy wolumin:
 ```bash
 vscode/entry/jh-vscode upload \
   --project examples/26_ble_stream \
-  --target rp2040 --board picow --variant commands \
+  --target rp2040 --board picow --variant COMMANDS \
   --bootsel-volume /dev/<baremetal-partition>
 
 vscode/entry/jh-vscode upload \
   --project examples/26_ble_stream \
-  --target rp2040 --board picow --variant commands-freertos \
+  --target rp2040 --board picow --variant COMMANDS_FREERTOS \
   --bootsel-volume /dev/<freertos-partition>
 ```
 

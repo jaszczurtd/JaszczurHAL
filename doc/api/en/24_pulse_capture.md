@@ -19,7 +19,7 @@ while (status == HAL_OK && hal_pulse_capture_read(&sample) == HAL_OK) {
 }
 ```
 
-The `capture` variant of [01_core_runtime](../../../examples/01_core_runtime/)
+The `CAPTURE` variant of [01_core_runtime](../../../examples/01_core_runtime/)
 shows status handling and periodic service. It uses GPIO0 (PA0 on STM32).
 
 ## Lifetime and validity

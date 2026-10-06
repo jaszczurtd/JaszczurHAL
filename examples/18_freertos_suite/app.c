@@ -3,6 +3,10 @@
  * Both HAL mutexes and native FreeRTOS mutexes are used by the test.
  */
 
+#include <hal/core/hal_config.h>
+
+#if !defined(EXAMPLE_FREERTOS_NETWORK)
+
 #include <hal/core/hal_target.h>
 
 /* ESP-IDF ships the kernel headers below a freertos/ prefix. */
@@ -184,3 +188,5 @@ void app_task1(void) {
 
   hal_delay_ms(25u);
 }
+
+#endif /* !defined(EXAMPLE_FREERTOS_NETWORK) */

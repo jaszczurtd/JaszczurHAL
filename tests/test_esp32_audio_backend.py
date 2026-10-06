@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import build_esp_idf
 import generate_hal_features
+import project_config
 
 
 def require(condition: bool, message: str) -> None:
@@ -201,9 +202,14 @@ require(
     "HAL_TARGET_IS_ESP32_FAMILY" in example,
     "17_audio_output has no ESP32 pin assignment",
 )
-manifest = json.loads(read("examples/17_audio_output/.vscode/jaszczurhal.project.json"))
 require(
-    "esp32s3" in manifest["example"]["targets"],
+    "esp32s3"
+    in project_config.project_target_ids(
+        project_config.read_project_config(
+            ROOT / "examples/17_audio_output/hal_project_config.h"
+        ),
+        project_config.load_targets(ROOT),
+    ),
     "17_audio_output does not declare esp32s3",
 )
 

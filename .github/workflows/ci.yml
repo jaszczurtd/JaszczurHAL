@@ -166,7 +166,6 @@ jobs:
           $source = Join-Path $repo 'cmake\jh_firmware_project'
           $project = Join-Path $repo 'examples\18_freertos_suite'
           $buildRoot = Join-Path $state.buildRoot 'ci-freertos-configure'
-          $featureDefines = 'HAL_ENABLE_FREERTOS;HAL_ENABLE_APP_TASK1'
 
           function Invoke-FreeRtosConfigure {
             param(
@@ -185,10 +184,8 @@ jobs:
               "-DPython3_EXECUTABLE=$($state.python)",
               "-DJH_PROJECT_DIR=$project",
               '-DJH_MODULE_NAME=18_freertos_suite',
-              '-DJH_PROJECT_SOURCES=app.c',
               "-DJH_TARGET=$TargetName",
               "-DJH_BOARD=$BoardName",
-              "-DJH_EXTRA_DEFINES=$featureDefines",
               "-DJH_ARTIFACT_DIR=$BuildDirectory\artifacts",
               '-DCMAKE_BUILD_TYPE=Release',
               '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON'
@@ -314,14 +311,14 @@ jobs:
           }
 
           & $state.tools.cmake --build $build --parallel 2 `
-            --target test_host_compiler_smoke `
+            --target test_host_compiler_smoke test_cpu_only_bss `
               test_hal_config_headers_c test_hal_config_headers_cpp `
               test_bsd_socket_headers_c
           if ($LASTEXITCODE -ne 0) { throw 'MSVC host API tests failed to compile.' }
 
           $ctest = Join-Path (Split-Path -Parent $state.tools.cmake) 'ctest.exe'
           & $ctest --test-dir $build --output-on-failure `
-            -R '^(test_host_compiler_smoke|test_hal_config_headers_c|test_hal_config_headers_cpp|test_bsd_socket_headers_c)$'
+            -R '^(test_host_compiler_smoke|test_cpu_only_bss|test_hal_config_headers_c|test_hal_config_headers_cpp|test_bsd_socket_headers_c)$'
           if ($LASTEXITCODE -ne 0) { throw 'MSVC host API tests failed.' }
           $inventory = (& $ctest --test-dir $build --show-only=json-v1 |
             Out-String) | ConvertFrom-Json

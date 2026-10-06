@@ -188,6 +188,49 @@ with tempfile.TemporaryDirectory(prefix="jh-esp32-lib-config-") as temporary:
         "external project config header is not recorded by absolute path",
     )
 
+    # A project variant reaches the compiler and the header that reads it.
+    (config_dir / "hal_project_config.h").write_text(
+        "#pragma once\n"
+        "#define JH_PROJECT_VARIANTS(X) X(WIDE, \"Wide\", EXAMPLE_WIDE=1)\n"
+        "#define HAL_ENABLE_UART 1\n"
+        "#if defined(EXAMPLE_WIDE)\n#define HAL_ENABLE_CRC\n#endif\n",
+        encoding="utf-8",
+    )
+    variant_model = build_esp_idf.resolve_build_model(
+        ROOT,
+        probe_dir,
+        target="esp32s3",
+        board="",
+        project_name="esp32_lib",
+        requested_sources=[],
+        features=[],
+        definitions=[],
+        project_config_dir=config_dir,
+        variant="WIDE",
+    )
+    require(
+        variant_model["requestedFeatures"] == ["HAL_ENABLE_CRC", "HAL_ENABLE_UART"]
+        and "EXAMPLE_WIDE=1" in variant_model["compileDefinitions"],
+        "the ESP-IDF runner ignored the selected variant",
+    )
+    try:
+        build_esp_idf.resolve_build_model(
+            ROOT,
+            probe_dir,
+            target="esp32s3",
+            board="",
+            project_name="esp32_lib",
+            requested_sources=[],
+            features=[],
+            definitions=[],
+            project_config_dir=config_dir,
+            variant="NARROW",
+        )
+    except build_esp_idf.EspIdfError as error:
+        require("[JH-CFG-VARIANT]" in str(error), f"unknown variant diagnostic: {error}")
+    else:
+        raise AssertionError("the ESP-IDF runner accepted an undeclared variant")
+
 if sys.platform != "win32":
     result = subprocess.run(
         [str(ROOT / "scripts" / "build_link_library.sh"), "--target", "mock"],

@@ -390,7 +390,7 @@ ramki SBC. Identyfikator profilu to
 Deterministyczny mock potrafi wstrzykiwać gotowość Classic, wyniki inquiry/SDP,
 parowanie, link keys, ogólne deskryptory i surowe raporty. Test hostowy używa
 deskryptora myszy, aby dowieść braku filtra gamepada we wspólnej ścieżce HID.
-Warianty `classic-scan` i `hid-host` projektu
+Warianty `CLASSIC_SCAN` i `HID_HOST` projektu
 [`examples/29_bluetooth_gamepad`](../../../examples/29_bluetooth_gamepad/)
 kompilują te warstwy bez `HAL_ENABLE_BLUETOOTH_GAMEPAD`.
 

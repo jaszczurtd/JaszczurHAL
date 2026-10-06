@@ -22,10 +22,10 @@ włączony. Generatory płytek, funkcje CMake, skrypty bibliotek statycznych i
 `jh-vscode` odrzucają `=0` oraz inne jawne wartości, zgłaszając
 `[JH-CFG-VALUE]`. Bezpośrednie wywołanie kompilatora nadal stosuje zwykłe
 reguły preprocesora. Linter rejestru zgłasza także symbole nieznane lub
-wyprowadzane automatycznie. Gdy definicje są przekazywane jako lista, każdy
-wpis `HAL_ENABLE_*` musi być osobnym, prostym tokenem, a wpisy należy
-rozdzielać średnikami. Same białe znaki nie rozdzielają definicji. Wyrażenia
-generatora CMake są odrzucane.
+wyprowadzane automatycznie. Na liście `EXTRA_HAL_DEFINES` kompilacji
+biblioteki statycznej każdy wpis `HAL_ENABLE_*` musi być osobnym, prostym
+tokenem, a wpisy należy rozdzielać średnikami. Same białe znaki nie
+rozdzielają definicji. Wyrażenia generatora CMake są odrzucane.
 
 Rejestr w `config/features/` definiuje zależności modułów. Na jego podstawie powstaje nagłówek C dołączany przez `hal_config.h`. CMake, generator danych płytki i linkowania oraz `jh-vscode` korzystają z tych samych reguł i zapisują zestawy `requestedFeatures` oraz `resolvedFeatures`.
 
@@ -323,7 +323,7 @@ moduły, których używasz:
 #define HAL_ENABLE_PWM_FREQ
 ```
 
-Plik jest wykrywany przez `__has_include("hal_project_config.h")` przed automatycznym wyborem platformy. Umieszczaj w nim wyłącznie makra - bez dołączania innych nagłówków i bez warunków opartych na wyznaczanych później `HAL_TARGET_IS_*` lub `HAL_BOARD_IS_*`. Flagi wybierające źródła zapisuj bezwarunkowo jako `#define HAL_ENABLE_X` albo `#define HAL_ENABLE_X 1`. Jedynym dopuszczalnym warunkiem jest `#ifndef HAL_ENABLE_X` dla definiowanego symbolu. Nie umieszczaj tych flag w innych gałęziach `#if` lub `#ifdef`, także zależnych od platformy czy płytki: wczesny etap konfiguracji odczytuje plik tekstowo, bez pełnego przetwarzania warunków.
+Plik jest wykrywany przez `__has_include("hal_project_config.h")` przed automatycznym wyborem platformy. Umieszczaj w nim wyłącznie makra - bez dołączania innych nagłówków i bez warunków opartych na wyznaczanych później `HAL_TARGET_IS_*` lub `HAL_BOARD_IS_*`. Definicje funkcji mogą zależeć od makra platformy (`HAL_TARGET_RP2040`, `HAL_TARGET_STM32G474` itd.) i od definicji wybranego wariantu, ponieważ każde narzędzie przetwarza nagłówek tak jak preprocesor, dla jednej platformy i jednego wariantu. Funkcja zależna od czegoś, czego kompilacja nie przekazuje do kompilatora, kończy kompilację błędem `[JH-CFG-SCOPE]`. Zobacz [platformy i warianty](../../pl/FwProjectWorkflow.md#platformy-i-warianty).
 
 <a id="flaga-dostępności-freertos"></a>
 

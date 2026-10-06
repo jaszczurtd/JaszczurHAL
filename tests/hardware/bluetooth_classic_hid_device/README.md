@@ -4,7 +4,7 @@
 HID Device fixture. A Pico W advertises a standards-based Classic HID mouse
 with a Generic Desktop descriptor and emits alternating relative-motion input
 reports. This is not a public HID-device API. Build the RP2040 fixture and the
-public `hid-host` example for the RP2350 ARM host:
+public `HID_HOST` example for the RP2350 ARM host:
 
 ```sh
 vscode/entry/jh-vscode build \
@@ -12,7 +12,7 @@ vscode/entry/jh-vscode build \
   --target rp2040 --board picow
 vscode/entry/jh-vscode build \
   --project examples/29_bluetooth_gamepad \
-  --target rp2350-arm --board pico2w --variant hid-host
+  --target rp2350-arm --board pico2w --variant HID_HOST
 ```
 
 Flash each image only to its designated board. `INFO` on the fixture must show

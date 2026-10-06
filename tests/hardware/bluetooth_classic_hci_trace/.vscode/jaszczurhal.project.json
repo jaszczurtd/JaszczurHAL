@@ -2,19 +2,14 @@
     "$schema": "../../../../vscode/schema/jh_vscode_project.schema.json",
     "project": "JaszczurHAL hardware tests",
     "module": "bluetooth_classic_hci_trace",
-    "example": {
-        "targets": [
-            "rp2040",
-            "rp2350-arm"
-        ],
-        "boards": {
-            "rp2040": "picow",
-            "rp2350-arm": "pico2w"
-        }
-    },
     "toolchain": "cmake",
     "target": "rp2040",
     "board": "picow",
+    "targetProfiles": {
+        "rp2350-arm": {
+            "board": "pico2w"
+        }
+    },
     "buildDir": "${jhRoot}/.build/hardware/bluetooth_classic_hci_trace",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {
@@ -23,8 +18,6 @@
             "JH_ARTIFACT_DIR": "${buildDir}",
             "JH_PROJECT_DIR": "${project}",
             "JH_MODULE_NAME": "bluetooth_classic_hci_trace",
-            "JH_PROJECT_SOURCES": "app.c",
-            "JH_EXTRA_DEFINES": "HAL_ENABLE_BLUETOOTH_CLASSIC=1",
             "JH_PROJECT_RECIPE": "${project}/recipe.cmake"
         }
     },

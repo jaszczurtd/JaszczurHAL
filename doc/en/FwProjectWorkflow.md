@@ -4,7 +4,7 @@
 
 *Also available in [Polish](../pl/FwProjectWorkflow.md).*
 
-This chapter explains how to create, configure, build, and upload firmware projects using JaszczurHAL. The same workflow applies to user projects and checked-in examples. It covers the version-controlled manifest, target and board selection, source files, generated outputs, and separate CMake caches for each configuration.
+This chapter explains how to create, configure, build, and upload firmware projects using JaszczurHAL. The same workflow applies to user projects and checked-in examples. It covers the project header with its targets and variants, the version-controlled manifest, target and board selection, source files, generated outputs, and separate CMake caches for each configuration.
 
 For CLI actions and device checks before upload, see [JaszczurHAL VS Code Entry](../../vscode/README.md). For descriptor fields and generated metadata, see [Target and board profiles](boards_profiles_howto.md). Network updates are covered in [Native OTA Workflow](OTAWorkflow.md).
 
@@ -52,7 +52,7 @@ Generated `tasks.json` provides GUI and terminal board selection, OTA discovery 
 
 The terminal task `Project: Select board` reads the registry each time it runs. Generated tasks use `jaszczurhal.vscodeEntry` on Unix and the `jaszczurhal.vscodeEntryWindows` override on Windows. These settings select the adjacent `jh-vscode` and `jh-vscode.cmd` launchers, which run the same Python code.
 
-To check or regenerate version-controlled generated files, including shared configuration snippets and example projects, run:
+To check or regenerate version-controlled generated files, including shared configuration snippets and the generated VS Code files of the examples, run:
 
 ```bash
 python3 scripts/sync_generated.py --check
@@ -72,7 +72,12 @@ Automation can use `--install --yes` after obtaining consent.
 
 - **Project directory**: path passed to `--project` and normally stored as
   `JH_PROJECT_DIR`.
-- **Manifest**: tracked `.vscode/jaszczurhal.project.json`.
+- **Project header**: `hal_project_config.h`, the whole HAL configuration of
+  the project: features, build values, targets, and variants.
+- **Manifest**: tracked `.vscode/jaszczurhal.project.json` with tooling
+  metadata: paths, target, board, upload, OTA, USB identity, and hooks.
+- **Variant**: a named build configuration declared in the project header; it
+  adds definitions to the base configuration.
 - **Local state**: gitignored `.vscode/jaszczurhal.local.json`, containing a
   developer's selected target, board, and serial port.
 - **Target**: stable build ID: `rp2040`, `rp2350-arm`, `rp2350-riscv`,
@@ -97,6 +102,9 @@ The target is selected in the following order, from highest priority:
 2. `.vscode/jaszczurhal.local.json`;
 3. tracked manifest `target`;
 4. `rp2040`.
+
+When the header declares its targets, the selected target must be one of
+them; otherwise the build stops with `[JH-CFG-TARGET]` (see [Targets and variants](#targets-and-variants)).
 
 The board for that target is taken from the first of these that names one:
 
@@ -128,7 +136,7 @@ Settings are then merged in this order. Later values override earlier ones:
 5. action-specific options such as `--port`, `--host`, `--verbose`, and
    `--allow-unverified-port`.
 
-`.vscode/settings.json` contains editor paths and display preferences. Store project identity, build directories, source layout, target profiles, artifacts, and OTA settings in the manifest. Standalone projects created by `create-vscode-example.py` also copy the initial shared build settings to `cmake.configureSettings`, allowing CMake Tools to configure the project without calling `jh-vscode`.
+`.vscode/settings.json` contains editor paths and display preferences. Store project identity, build directories, extra source paths, target profiles, artifacts, and OTA settings in the manifest, and the HAL configuration in `hal_project_config.h`. Standalone projects created by `create-vscode-example.py` also copy the initial shared build settings to `cmake.configureSettings`, allowing CMake Tools to configure the project without calling `jh-vscode`.
 
 Before diagnosing a build or upload problem, inspect the complete configuration after all settings have been merged:
 
@@ -189,19 +197,25 @@ Store common settings in the base manifest and target-specific differences in sm
 ```json
 {
   "targetProfiles": {
+    "rp2350-arm": {
+      "board": "pico2w"
+    },
     "stm32g474": {
-      "board": "nucleo-g474re",
-      "cmake": {
-        "cache": {
-          "JH_EXTRA_DEFINES": "APP_STM32_BUILD=1"
-        }
-      }
+      "board": "nucleo-g474re"
     }
   }
 }
 ```
 
 The resolved registry values always pin the final `JH_TARGET` and `JH_BOARD`.
+
+The manifest carries tooling metadata only. `jh-vscode` and the feature lint
+reject, with `[JH-CFG-MANIFEST]`, the removed `variants` and `example` fields
+and these keys in `cmake.cache` or `targetProfiles.<target>.cmake.cache`:
+`JH_EXTRA_DEFINES`, `EXTRA_HAL_DEFINES`, `JH_PROJECT_SOURCES`, `JH_VARIANT`,
+and any `HAL_ENABLE_*` or `HAL_DISABLE_*`. A definition that depends on the
+target goes into the header under `#if defined(HAL_TARGET_STM32G474)` or a
+similar condition.
 
 An ESP32-S3 project uses the smaller provider-specific manifest shape:
 
@@ -220,8 +234,8 @@ The target and board registry supplies the build runner, artifact manifest, uplo
 
 ## Adding project source files
 
-The shared CMake project automatically discovers `*.c`, `*.cpp`, `*.h`, and
-`*.hpp` directly under `JH_PROJECT_DIR`.
+The shared CMake project compiles every `*.c` and `*.cpp` file directly
+under `JH_PROJECT_DIR`.
 
 ```text
 tracker/
@@ -231,33 +245,24 @@ tracker/
   gps_filter.h
 ```
 
-For sources in subdirectories, provide the complete list:
+Add files from other places, including subdirectories of the project, with
+`JH_EXTRA_SOURCES`, a semicolon-separated list of paths relative to
+`JH_PROJECT_DIR`:
 
 ```json
 {
   "cmake": {
     "cache": {
-      "JH_PROJECT_SOURCES": "app.cpp;hal_project_config.h;filters/gps.c;filters/gps.h"
+      "JH_EXTRA_SOURCES": "filters/gps.c;../common/product_identity.cpp"
     }
   }
 }
 ```
 
-`JH_PROJECT_SOURCES` is a semicolon-separated list of paths relative to `JH_PROJECT_DIR`. Providing it replaces automatic discovery in the project root.
-
-Additional shared files can be appended with `JH_EXTRA_SOURCES`:
-
-```json
-{
-  "cmake": {
-    "cache": {
-      "JH_EXTRA_SOURCES": "../common/product_identity.cpp"
-    }
-  }
-}
-```
-
-The shared CMake configuration normalizes paths and removes duplicates.
+The shared CMake configuration normalizes paths and removes duplicates. Every
+variant compiles the same file set; a variant that runs a different
+application guards its files as described in
+[Targets and variants](#targets-and-variants).
 
 The ESP-IDF runner discovers C, C++, and assembly files in the project root and recursively under `src/`. When invoking the runner directly, repeated `--source <relative-path>` arguments can replace automatic discovery. Every source path must stay within the project.
 
@@ -265,7 +270,7 @@ The ESP-IDF runner discovers C, C++, and assembly files in the project root and 
 
 ## Selecting features and the runtime
 
-Put project feature flags in `hal_project_config.h`:
+Put project feature flags and application parameters in `hal_project_config.h`:
 
 ```c
 #pragma once
@@ -273,23 +278,14 @@ Put project feature flags in `hal_project_config.h`:
 #define HAL_ENABLE_WIFI
 #define HAL_ENABLE_MQTT
 #define HAL_ENABLE_APP_TASK1
+#define APP_DIAGNOSTICS 1
+
+#if defined(HAL_TARGET_STM32G474)
+#define HAL_ENABLE_FREERTOS
+#endif
 ```
 
-`JH_EXTRA_DEFINES` is useful for target profiles, build variants, and CI:
-
-```json
-{
-  "cmake": {
-    "cache": {
-      "JH_EXTRA_DEFINES": "HAL_ENABLE_FREERTOS;APP_DIAGNOSTICS=1"
-    }
-  }
-}
-```
-
-Enable a feature with `HAL_ENABLE_X` or `HAL_ENABLE_X=1`. After selecting the active target profile and variant, the shared build configuration and `jh-vscode` reject `HAL_ENABLE_X=0` and other explicit values with `[JH-CFG-VALUE]`. To disable a feature, omit its symbol.
-
-This rule does not apply to ordinary parameters such as `APP_DIAGNOSTICS=0`. In definition lists, each `HAL_ENABLE_*` entry must be a separate, simple token, and entries must be separated by semicolons. Whitespace is not a separator. CMake generator expressions are not supported.
+Enable a feature with `HAL_ENABLE_X` or `HAL_ENABLE_X=1`. After selecting the active target and variant, the shared build configuration and `jh-vscode` reject `HAL_ENABLE_X=0` and other explicit values with `[JH-CFG-VALUE]`. To disable a feature, omit its symbol. This rule does not apply to ordinary parameters such as `APP_DIAGNOSTICS=0`.
 
 The `esp32s3` descriptor requires `HAL_ENABLE_FREERTOS` and supports the peripheral and network/service features described as Phases 2 and 3. These include APP_TASK1, UART, I2C controller/target, SPI, PWM_FREQ, RGB_LED, PCNT, STACK_GUARD, BLE, WiFi, TCP/UDP, BSD sockets, TLS, HTTP client/server/files, WebSocket server, MQTT, time, OTA, and WireGuard.
 
@@ -305,9 +301,110 @@ Rules that depend on configuration parameters, the build provider, board capabil
 
 `hal_project_config.h` is read before target auto-detection and before derived target and board macros exist. Keep it macro-only: it may directly define `HAL_TARGET_*`, `HAL_BOARD_PROFILE_*`, `HAL_ENABLE_*`, and tuning parameters. Do not include JaszczurHAL headers or condition its contents on `HAL_TARGET_IS_*` / `HAL_BOARD_IS_*`.
 
-Feature definitions used for source selection must be unconditional `#define HAL_ENABLE_X` or `#define HAL_ENABLE_X 1`. The only supported exception is a same-symbol `#ifndef HAL_ENABLE_X` guard. No other `#if`/`#ifdef`, including raw or derived target/board conditions, is supported: at this stage, the tool reads the file text rather than preprocessor output.
+Every tool reads the header through `scripts/project_config.py`, which evaluates it the way the C preprocessor does for the selected target and variant. Conditions may use the target selector (`HAL_TARGET_RP2040`, `HAL_TARGET_STM32G474`, and so on), the variant definitions, `defined()`, integer expressions, and the header's own macros. A quoted `#include "..."` resolves relative to the including file. When a HAL feature, or a value the build reads such as a stack or flash reservation size, depends on an identifier the build never passes to the compiler, also through a local alias, the build and the feature lint stop with `[JH-CFG-SCOPE]`. The same applies when such a value is computed from a name the header does not define, for example `(PICO_FLASH_SIZE_BYTES / 256)`: only the compiler knows that value, so write the number in the header.
+
+The reader uses signed integer arithmetic without 64-bit wraparound. Keep
+conditions independent of unsigned conversions and overflow. Active negative
+shift counts follow GCC's extension and produce different results in Clang;
+use nonnegative counts in portable headers. Operands skipped by `&&`, `||`
+and `?:` are parsed without performing their arithmetic.
 
 Select the physical platform and board through `target` and `board`. The project defines application wiring, USB identity, secrets, partition policy, and enabled features.
+
+<a id="targets-and-variants"></a>
+
+## Targets and variants
+
+`hal_project_config.h` declares the targets the project builds for and its
+named variants with two X-macros:
+
+```c
+#pragma once
+
+#define JH_PROJECT_TARGETS(X)                                         \
+    X(HAL_TARGET_RP2040)                                              \
+    X(HAL_TARGET_STM32G474)
+
+#define JH_PROJECT_VARIANTS(X)                                        \
+    X(BENCH, "Bench firmware with test hooks", BENCH_TESTS=1)         \
+    X(DISPLAY, "Status display on ILI9341", APP_DISPLAY=1,            \
+      HAL_ENABLE_ILI9341, HAL_DISPLAY_ILI9341)
+
+#define HAL_ENABLE_I2C
+
+#if defined(APP_DISPLAY) && !defined(HAL_TARGET_STM32G474)
+#error "DISPLAY: STM32G474 only"
+#endif
+```
+
+`JH_PROJECT_TARGETS` lists target selectors: `HAL_TARGET_RP2040`,
+`HAL_TARGET_RP2350_ARM`, `HAL_TARGET_RP2350_RISCV`, `HAL_TARGET_STM32G474`,
+`HAL_TARGET_ESP32_S3`, and `HAL_TARGET_ESP32`. A build for a target the macro
+does not list stops with `[JH-CFG-TARGET]`. Without the macro, the project's
+targets are the ones its manifest configures: `target` and the keys of
+`targetProfiles`.
+
+Each `JH_PROJECT_VARIANTS` entry is `X(id, "description", NAME[=VALUE], ...)`;
+`NAME = VALUE` with spaces, as clang-format writes it, works too. The id uses capital letters, digits, and `_`, and starts with a letter, so the
+build directories and module names it produces stay distinct on file systems
+that ignore letter case. The build passes the variant's definitions to
+the compiler as `-D`, for HAL and application sources alike, so they arrive
+before the header and add to the base configuration rather than replace it.
+The header can test them, as in the `#error` above: a target and variant pair
+that reaches `#error` does not build. The build stops with `[JH-CFG-ERROR]`,
+while the examples dispatcher and the feature lint skip that pair.
+
+Define both macros once and unconditionally, in `hal_project_config.h` itself
+rather than in an included file. A classic include guard around the whole file
+is fine.
+
+Select a variant with `jh-vscode build --variant <id>` or
+`jh-vscode upload --variant <id>`, with `-DJH_VARIANT=<id>` in plain CMake, or
+with `--variant <id>` for the ESP-IDF runner. The generated tasks
+`Project: Build variant: <id>` and `Project: Upload variant: <id>` do the same
+from VS Code. `jh-vscode` builds the variant as module `<module>_<id>` into
+`<buildDir>/variants/<id>` with its own CMake tree and artifacts, so it never
+replaces the base firmware, also when the manifest leaves `JH_ARTIFACT_DIR` to
+its default.
+
+Every variant compiles the same source files. A variant that runs a different
+application keeps it in a separate file, which includes
+`<hal/core/hal_config.h>` first and wraps the rest in a condition on the
+variant's definition. The base application uses the negated condition:
+
+```c
+/* display_app.c */
+#include <hal/core/hal_config.h>
+
+#if defined(APP_DISPLAY)
+#include <hal/core/hal_app.h>
+
+void app_start(void) { /* ... */ }
+void app_task0(void) { /* ... */ }
+#endif
+```
+
+```c
+/* app.c */
+#include <hal/core/hal_config.h>
+
+#if !defined(APP_DISPLAY)
+#include <hal/core/hal_app.h>
+
+void app_start(void) { /* ... */ }
+void app_task0(void) { /* ... */ }
+#endif
+```
+
+The checked-in examples follow the same rules. The examples dispatcher lists
+and builds every configuration they declare:
+
+```bash
+scripts/examples_dispatcher.py list
+scripts/examples_dispatcher.py build --target rp2040 --example 01_core_runtime
+```
+
+See [JaszczurHAL Examples](../../examples/README.md).
 
 ## Build directories and generated files
 
@@ -370,13 +467,12 @@ On ESP32-S3, `Project: Serial Monitor` selects the single device matching the re
 
 ## OTA manifest configuration
 
-For RP projects built with CMake, the manifest identifies the generated OTA container and build metadata alongside the shared connection settings:
+Enable OTA with `#define HAL_ENABLE_OTA` in `hal_project_config.h`. For RP projects built with CMake, the manifest identifies the generated OTA container and build metadata alongside the shared connection settings:
 
 ```json
 {
   "cmake": {
     "cache": {
-      "JH_EXTRA_DEFINES": "HAL_ENABLE_OTA",
       "JH_OTA_GENERATION": 7,
       "JH_OTA_VERSION": "1.4.0"
     }
@@ -398,31 +494,3 @@ ESP-IDF projects do not use the RP-specific `cmake` and `artifacts.ota` entries.
 `ota.broadcast` specifies the UDP discovery destination, while `ota.host` selects a fixed device address. `ota.listenPort` is the host port for the reverse TCP connection and for UDP discovery replies. Its default, `8266`, matches the persistent LAN-scoped firewall rules created by `runmefirst.sh`; `0` requests ephemeral ports. `ota.passwordEnv` keeps the secret in an environment variable rather than the version-controlled manifest.
 
 The device hostname, UDP port, and password must match the firmware configuration. [Native OTA Workflow](OTAWorkflow.md) covers platform-specific artifacts, initial programming, tasks, authentication, the host firewall, trial-boot confirmation, rollback, and recovery. For RP updates, the uploader signs the JaszczurHAL container. For ESP-IDF, it validates the build manifest and sends the specified raw application image without converting it to the RP container format.
-
-## Examples and variants
-
-Example manifests may declare `example.targets` and `example.variants`.
-Variants can override module name, sources, feature definitions, supported
-targets, and CMake cache entries.
-
-Any firmware project can declare variants too, in a top-level `variants`
-array with the same fields; an id may appear only once across both lists.
-`--variant <id>` selects one, and the generated tasks
-`Project: Build variant: <id>` and `Project: Upload variant: <id>` run it.
-A variant builds into `<buildDir>/variants/<id>` with its own CMake tree and
-artifacts, so it never replaces the base firmware, also when the manifest
-leaves `JH_ARTIFACT_DIR` to its default. Its `extraDefines` replace the base
-`JH_EXTRA_DEFINES`, so the list carries every definition the variant needs.
-
-```json
-"variants": [
-  { "id": "bench", "module": "ECU", "extraDefines": ["BENCH_TESTS=1"] }
-]
-```
-
-```bash
-scripts/examples_dispatcher.py list
-scripts/examples_dispatcher.py build --target rp2040 --example 01_core_runtime
-```
-
-The validation suite uses generated example manifests as build inputs. See [JaszczurHAL Examples](../../examples/README.md).

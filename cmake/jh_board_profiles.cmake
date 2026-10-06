@@ -1,5 +1,6 @@
 include_guard(GLOBAL)
 include("${CMAKE_CURRENT_LIST_DIR}/jh_project_features.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/jh_python.cmake")
 
 function(jh_generate_board_config)
     set(options)
@@ -58,15 +59,7 @@ function(jh_generate_board_config)
         endif()
     endforeach()
 
-    if(Python3_EXECUTABLE)
-        if(NOT EXISTS "${Python3_EXECUTABLE}")
-            message(FATAL_ERROR
-                "Python3_EXECUTABLE does not exist: ${Python3_EXECUTABLE}")
-        endif()
-        set(_jh_board_python "${Python3_EXECUTABLE}")
-    else()
-        find_program(_jh_board_python NAMES python3 python REQUIRED)
-    endif()
+    jh_find_python(_jh_board_python)
     if(NOT JH_BOARD_BOARD)
         execute_process(
             COMMAND

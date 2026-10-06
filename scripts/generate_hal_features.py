@@ -22,6 +22,8 @@ from codegen_support import (
     validation_error,
     write_generated_outputs,
 )
+import project_config
+from project_config import preprocessor_logical_lines
 from repository_layout import FEATURE_CMAKE_OUTPUT, FEATURE_HEADER_OUTPUT
 
 
@@ -31,9 +33,6 @@ SYMBOL_PATTERN = re.compile(r"^HAL_(?:ENABLE|DISABLE)_[A-Z0-9_]+$")
 DOMAIN_PATTERN = re.compile(r"^[a-z][a-z0-9-]*$")
 BUILD_SOURCE_PATTERN = re.compile(
     r"^src/[A-Za-z0-9_./+-]+\.(?:c|cc|cpp|S)$"
-)
-MANIFEST_DEFINITION_PATTERN = re.compile(
-    r"^(?:-D)?(HAL_(?:ENABLE|DISABLE)_[A-Z0-9_]+)(?:=(.*))?$"
 )
 HEADER_DEFINITION_PATTERN = re.compile(
     r"^[ \t]*#[ \t]*define[ \t]+"
@@ -811,245 +810,53 @@ def validate_requested_symbol(
     return findings
 
 
-def preprocessor_logical_lines(text: str) -> Iterable[tuple[int, str]]:
-    """Yield comment-free preprocessing lines and their source line."""
-    text = text.replace("\r\n", "\n").replace("\r", "\n")
-    spliced: list[str] = []
-    source_lines: list[int] = []
-    source_line = 1
-    source_offset = 0
-    while source_offset < len(text):
-        if text.startswith("\\\n", source_offset):
-            source_line += 1
-            source_offset += 2
-            continue
-        character = text[source_offset]
-        spliced.append(character)
-        source_lines.append(source_line)
-        if character == "\n":
-            source_line += 1
-        source_offset += 1
-    text = "".join(spliced)
-
-    buffer: list[str] = []
-    origin_line: int | None = None
-    offset = 0
-    quote: str | None = None
-
-    def append(character: str) -> None:
-        nonlocal origin_line
-        if origin_line is None and not character.isspace():
-            origin_line = source_lines[offset]
-        buffer.append(character)
-
-    while offset < len(text):
-        character = text[offset]
-        if quote is not None:
-            append(character)
-            if character == "\\" and offset + 1 < len(text):
-                offset += 1
-                append(text[offset])
-            elif character == quote:
-                quote = None
-            elif character == "\n":
-                yield origin_line or source_lines[offset], "".join(buffer)
-                buffer.clear()
-                origin_line = None
-                quote = None
-            offset += 1
-            continue
-
-        if text.startswith("//", offset):
-            append(" ")
-            newline = text.find("\n", offset + 2)
-            offset = len(text) if newline < 0 else newline
-            continue
-        if text.startswith("/*", offset):
-            append(" ")
-            block_end = text.find("*/", offset + 2)
-            if block_end < 0:
-                offset = len(text)
-                continue
-            offset = block_end + 2
-            continue
-        if character in {'"', "'"}:
-            quote = character
-            append(character)
-            offset += 1
-            continue
-        if character == "\n":
-            yield origin_line or source_lines[offset], "".join(buffer)
-            buffer.clear()
-            origin_line = None
-            offset += 1
-            continue
-        append(character)
-        offset += 1
-
-    if buffer:
-        final_line = source_lines[-1] if source_lines else 1
-        yield origin_line or final_line, "".join(buffer)
-
-
 def lint_header(path: Path, model: FeatureModel) -> list[str]:
+    """Check every feature the header can request, in any branch and in any
+    variant, and that the project configuration reader accepts the header."""
     try:
+        config = project_config.read_project_config(path)
         text = path.read_text(encoding="utf-8")
+    except project_config.ProjectConfigError as error:
+        return [str(error)]
     except OSError as error:
         raise RegistryError(f"{path}: cannot read lint input: {error}") from error
     findings: list[str] = []
-    conditions: list[tuple[str, str | None]] = []
     for line_number, line in preprocessor_logical_lines(text):
-        directive = re.match(
-            r"^[ \t]*#[ \t]*(if|ifdef|ifndef|elif|else|endif)\b(.*)$", line
-        )
-        if directive:
-            name = directive.group(1)
-            argument = directive.group(2).strip()
-            if name == "ifndef" and re.fullmatch(r"[A-Z_][A-Z0-9_]*", argument):
-                conditions.append(("ifndef", argument))
-            elif name in {"if", "ifdef"}:
-                conditions.append(("conditional", None))
-            elif name in {"elif", "else"} and conditions:
-                conditions[-1] = ("conditional", None)
-            elif name == "endif" and conditions:
-                conditions.pop()
-            continue
         match = HEADER_DEFINITION_PATTERN.match(line)
         if not match:
             continue
-        symbol = match.group(1)
         raw_value = match.group(2).strip()
-        feature_conditions = [
-            item
-            for item in conditions
-            if item != ("ifndef", "HAL_PROJECT_CONFIG_H")
-        ]
-        if feature_conditions not in ([], [("ifndef", symbol)]):
-            findings.append(
-                f"{path}:{line_number}: [JH-CFG-SCOPE] {symbol} must be "
-                "unconditional or guarded only by #ifndef of the same symbol"
-            )
         findings.extend(
             validate_requested_symbol(
                 path,
                 str(line_number),
-                symbol,
+                match.group(1),
                 raw_value if raw_value else None,
                 model,
             )
         )
-    return findings
-
-
-def walk_json_strings(value: Any, json_path: str = "$") -> Iterable[tuple[str, str]]:
-    if isinstance(value, str):
-        yield json_path, value
-    elif isinstance(value, list):
-        for index, item in enumerate(value):
-            yield from walk_json_strings(item, f"{json_path}[{index}]")
-    elif isinstance(value, dict):
-        for key, item in value.items():
-            yield from walk_json_strings(item, f"{json_path}.{key}")
-
-
-def lint_manifest_feature_cache(
-    path: Path, value: Any, model: FeatureModel, json_path: str = "$"
-) -> list[str]:
-    findings: list[str] = []
-    if isinstance(value, dict):
-        if json_path.endswith(".cache"):
-            for key, item in value.items():
-                if key in {"JH_EXTRA_DEFINES", "EXTRA_HAL_DEFINES"} and isinstance(
-                    item, (list, dict)
-                ):
-                    findings.append(
-                        f"{path}:{json_path}.{key}: [JH-CFG-VALUE] expected a "
-                        "semicolon-separated scalar, not a JSON array or object"
-                    )
-                if not SYMBOL_PATTERN.fullmatch(str(key)):
-                    continue
-                if item is None or isinstance(item, (list, dict)):
-                    feature_value = ""
-                elif isinstance(item, bool):
-                    feature_value = str(item).lower()
-                else:
-                    feature_value = str(item)
+    for variant in config.variants:
+        for definition in variant.definitions:
+            symbol, separator, value = definition.partition("=")
+            if SYMBOL_PATTERN.fullmatch(symbol):
                 findings.extend(
                     validate_requested_symbol(
                         path,
-                        f"{json_path}.{key}",
-                        str(key),
-                        feature_value,
+                        f"{project_config.VARIANTS_MACRO}({variant.id})",
+                        symbol,
+                        value if separator else None,
                         model,
                     )
                 )
-        for key, item in value.items():
-            findings.extend(
-                lint_manifest_feature_cache(
-                    path, item, model, f"{json_path}.{key}"
-                )
-            )
-    elif isinstance(value, list):
-        for index, item in enumerate(value):
-            findings.extend(
-                lint_manifest_feature_cache(
-                    path, item, model, f"{json_path}[{index}]"
-                )
-            )
     return findings
 
 
 def lint_manifest(path: Path, model: FeatureModel) -> list[str]:
-    document = load_json(path)
-    findings = lint_manifest_feature_cache(path, document, model)
-    for json_path, value in walk_json_strings(document):
-        definitions = [item.strip() for item in value.split(";") if item.strip()]
-        for index, definition in enumerate(definitions):
-            definition_surface = (
-                json_path.endswith(".JH_EXTRA_DEFINES")
-                or json_path.endswith(".EXTRA_HAL_DEFINES")
-                or ".extraDefines[" in json_path
-            )
-            if not definition_surface:
-                continue
-            match = MANIFEST_DEFINITION_PATTERN.fullmatch(definition)
-            if definition_surface and "$<" in definition:
-                location = json_path
-                if len(definitions) > 1:
-                    location = f"{json_path}[cmake-list:{index}]"
-                findings.append(
-                    f"{path}:{location}: [JH-CFG-VALUE] compile definition "
-                    f"{definition!r} uses an unsupported generator expression"
-                )
-                continue
-            if (
-                match is None
-                and definition_surface
-                and (
-                    "HAL_ENABLE_" in definition
-                    or "HAL_DISABLE_" in definition
-                )
-            ):
-                location = json_path
-                if len(definitions) > 1:
-                    location = f"{json_path}[cmake-list:{index}]"
-                findings.append(
-                    f"{path}:{location}: [JH-CFG-VALUE] compile definition "
-                    f"{definition!r} embeds HAL_ENABLE_* in an unsupported "
-                    "expression"
-                )
-                continue
-            if not match:
-                continue
-            location = json_path
-            if len(definitions) > 1:
-                location = f"{json_path}[cmake-list:{index}]"
-            findings.extend(
-                validate_requested_symbol(
-                    path, location, match.group(1), match.group(2), model
-                )
-            )
-    return findings
+    """A manifest holds no project configuration; report what it carries."""
+    del model
+    return load_workflow_runtime().manifest_configuration_findings(
+        load_json(path), str(path)
+    )
 
 
 def lint_inputs(
@@ -1128,202 +935,12 @@ def load_workflow_runtime() -> Any:
     return jh_vscode
 
 
-def effective_axes(document: dict[str, Any]) -> list[tuple[str | None, str | None, str | None]]:
-    target_names: set[str] = set()
-    manifest_target = document.get("target")
-    if isinstance(manifest_target, str) and manifest_target:
-        target_names.add(manifest_target)
-
-    profiles = document.get("targetProfiles")
-    if isinstance(profiles, dict):
-        target_names.update(str(name) for name in profiles if str(name))
-
-    example = document.get("example")
-    boards: dict[str, Any] = {}
-    if isinstance(example, dict):
-        targets = example.get("targets")
-        if isinstance(targets, list):
-            target_names.update(str(item) for item in targets if str(item))
-        if isinstance(example.get("boards"), dict):
-            boards = example["boards"]
-    variants = load_workflow_runtime().manifest_variants(document)
-    for variant in variants:
-        targets = variant.get("targets")
-        if isinstance(targets, list):
-            target_names.update(str(item) for item in targets if str(item))
-
-    targets: list[str | None] = sorted(target_names) if target_names else [None]
-    variant_axes: list[tuple[str | None, dict[str, Any] | None]] = [(None, None)]
-    for variant in variants:
-        variant_id = variant.get("id")
-        if isinstance(variant_id, str) and variant_id:
-            variant_axes.append((variant_id, variant))
-
-    axes: list[tuple[str | None, str | None, str | None]] = []
-    for target in targets:
-        board: str | None = None
-        board_value = boards.get(target) if target is not None else None
-        # Example matrices pass their board like the dispatcher does; any other
-        # axis lets the resolver apply targetProfiles and manifest precedence.
-        if isinstance(board_value, str) and board_value:
-            board = board_value
-        for variant_id, variant in variant_axes:
-            allowed = variant.get("targets") if variant is not None else None
-            if (
-                target is not None
-                and isinstance(allowed, list)
-                and target not in [str(item) for item in allowed]
-            ):
-                continue
-            axes.append((target, board, variant_id))
-    return sorted(
-        axes,
-        key=lambda item: tuple(value or "" for value in item),
-    )
-
-
-def cache_json_path(
-    document: dict[str, Any],
-    target: str | None,
-    variant_id: str | None,
-    key: str,
-) -> str:
-    example = document.get("example")
-    variants = example.get("variants") if isinstance(example, dict) else None
-    if variant_id and isinstance(variants, list):
-        for index, variant in enumerate(variants):
-            if not isinstance(variant, dict) or variant.get("id") != variant_id:
-                continue
-            variant_cmake = variant.get("cmake")
-            variant_cache = (
-                variant_cmake.get("cache")
-                if isinstance(variant_cmake, dict)
-                else None
-            )
-            if isinstance(variant_cache, dict) and key in variant_cache:
-                return f"$.example.variants[{index}].cmake.cache.{key}"
-            if key == "JH_EXTRA_DEFINES":
-                extra_defines = variant.get("extraDefines")
-                if isinstance(extra_defines, list) and extra_defines:
-                    return f"$.example.variants[{index}].extraDefines"
-            break
-
-    profiles = document.get("targetProfiles")
-    profile = profiles.get(target) if isinstance(profiles, dict) else None
-    profile_cmake = profile.get("cmake") if isinstance(profile, dict) else None
-    profile_cache = (
-        profile_cmake.get("cache") if isinstance(profile_cmake, dict) else None
-    )
-    if isinstance(profile_cache, dict) and key in profile_cache:
-        return f"$.targetProfiles.{target}.cmake.cache.{key}"
-
-    cmake = document.get("cmake")
-    cache = cmake.get("cache") if isinstance(cmake, dict) else None
-    if isinstance(cache, dict) and key in cache:
-        return f"$.cmake.cache.{key}"
-    return f"$effective.cmake.cache.{key}"
-
-
-def collect_header_requests(path: Path, display: str) -> list[FeatureRequest]:
-    if not path.exists():
-        return []
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError as error:
-        raise RegistryError(f"{path}: cannot read effective input: {error}") from error
-    requests: list[FeatureRequest] = []
-    for line_number, line in preprocessor_logical_lines(text):
-        match = HEADER_DEFINITION_PATTERN.match(line)
-        if not match:
-            continue
-        raw_value = match.group(2).strip()
-        requests.append(
-            FeatureRequest(
-                symbol=match.group(1),
-                value=raw_value if raw_value else None,
-                source=f"{display}:{line_number}",
-            )
-        )
-    return requests
-
-
-def collect_effective_cache_requests(
-    config: dict[str, Any],
-    document: dict[str, Any],
-    manifest_display: str,
-    target: str | None,
-    variant_id: str | None,
-) -> tuple[list[FeatureRequest], list[str]]:
-    requests: list[FeatureRequest] = []
-    findings: list[str] = []
-    cmake = config.get("cmake")
-    cache = cmake.get("cache") if isinstance(cmake, dict) else None
-    if not isinstance(cache, dict):
-        return requests, findings
-
-    for key, item in sorted(cache.items()):
-        symbol = str(key)
-        if not SYMBOL_PATTERN.fullmatch(symbol):
-            continue
-        if item is None or isinstance(item, (list, dict)):
-            value = ""
-        elif isinstance(item, bool):
-            value = str(item).lower()
-        else:
-            value = str(item)
-        json_path = cache_json_path(document, target, variant_id, symbol)
-        requests.append(
-            FeatureRequest(
-                symbol=symbol,
-                value=value,
-                source=f"{manifest_display}:{json_path}",
-            )
-        )
-
-    for key in ("JH_EXTRA_DEFINES", "EXTRA_HAL_DEFINES"):
-        item = cache.get(key)
-        if item is None or item == "":
-            continue
-        if isinstance(item, (list, dict)):
-            json_path = cache_json_path(document, target, variant_id, key)
-            findings.append(
-                f"{manifest_display}:{json_path}: [JH-CFG-VALUE] expected a "
-                "semicolon-separated scalar, not a JSON array or object"
-            )
-            continue
-        raw_items = item if isinstance(item, list) else [item]
-        token_index = 0
-        for raw_item in raw_items:
-            for raw_token in str(raw_item).split(";"):
-                token = raw_token.strip()
-                if not token:
-                    continue
-                json_path = cache_json_path(document, target, variant_id, key)
-                source = f"{manifest_display}:{json_path}[{token_index}]"
-                token_index += 1
-                if "$<" in token:
-                    findings.append(
-                        f"{source}: [JH-CFG-VALUE] compile definition "
-                        f"{token!r} uses an unsupported generator expression"
-                    )
-                    continue
-                match = MANIFEST_DEFINITION_PATTERN.fullmatch(token)
-                if match is None:
-                    if "HAL_ENABLE_" in token or "HAL_DISABLE_" in token:
-                        findings.append(
-                            f"{source}: [JH-CFG-VALUE] compile definition "
-                            f"{token!r} embeds a HAL feature in an unsupported "
-                            "expression"
-                        )
-                    continue
-                requests.append(
-                    FeatureRequest(
-                        symbol=match.group(1),
-                        value=match.group(2),
-                        source=source,
-                    )
-                )
-    return requests, findings
+def display_source(source: str, roots: list[Path]) -> str:
+    """Show a request source inside the linted roots relative to them."""
+    location, separator, detail = source.rpartition(":")
+    if separator and Path(location).is_absolute():
+        return f"{relative_display(Path(location), roots)}:{detail}"
+    return source
 
 
 def resolve_feature_requests(
@@ -1506,117 +1123,80 @@ def lint_effective_inputs(
     resolution_output: Path | None,
     include_hardware: bool = False,
 ) -> bool:
+    """Resolve every build each project configures, the way jh-vscode and
+    CMake do: targets and variants from hal_project_config.h, boards from the
+    manifest."""
     workflow = load_workflow_runtime()
+    targets = project_config.load_targets()
     findings: list[str] = []
     records: list[dict[str, Any]] = []
     projects, standalone_headers = effective_inputs(roots, include_hardware)
-    target_registry = workflow.load_target_registry()
+
+    def record(
+        project_display: str,
+        build: project_config.BuildConfig,
+        board: str | None,
+    ) -> None:
+        resolution, resolution_findings = project_config.resolve_build_features(
+            build, model
+        )
+        findings.extend(resolution_findings)
+        resolution = FeatureResolution(
+            resolution.requested,
+            resolution.resolved,
+            {
+                symbol: tuple(display_source(source, roots) for source in sources)
+                for symbol, sources in resolution.provenance.items()
+            },
+        )
+        records.append(
+            feature_resolution_record(
+                project_display,
+                build.target.id or None,
+                board,
+                build.variant.id if build.variant else None,
+                resolution,
+            )
+        )
+
     for project in projects:
         project_display = relative_display(project, roots)
         manifest_path = project / ".vscode/jaszczurhal.project.json"
         try:
-            document = workflow.load_json_file(manifest_path)
+            builds = workflow.project_builds(
+                project, workflow.load_json_file(manifest_path)
+            )
         except (OSError, ValueError) as error:
-            findings.append(f"{project_display}: [JH-CFG-INPUT] {error}")
+            findings.append(f"{project_display}: [JH-CFG-EFFECTIVE] {error}")
             continue
-        manifest_display = (
-            f"{project_display}/.vscode/jaszczurhal.project.json"
-            if project_display != "."
-            else ".vscode/jaszczurhal.project.json"
-        )
-        header_display = (
-            f"{project_display}/hal_project_config.h"
-            if project_display != "."
-            else "hal_project_config.h"
-        )
-        header_requests = collect_header_requests(
-            project / "hal_project_config.h", header_display
-        )
-        for target, board, variant_id in effective_axes(document):
-            target_descriptor = None
-            if target is not None:
-                target_descriptor = target_registry.get(target)
-                if not isinstance(target_descriptor, dict):
-                    findings.append(
-                        f"{project_display} [target={target}]: "
-                        f"[JH-CFG-TARGET] unknown target"
-                    )
-                    continue
-                valid_boards = workflow.registry_board_ids(target_descriptor)
-                if board is not None and board not in valid_boards:
-                    findings.append(
-                        f"{project_display} [target={target}, board={board}]: "
-                        "[JH-CFG-BOARD] board is not registered for the target"
-                    )
-                    continue
+        for available in builds:
+            target = available.target.id
+            variant_id = available.variant.id if available.variant else None
             try:
                 config = workflow.load_project_config(
-                    project,
-                    target_override=target,
-                    board_override=board,
-                    use_local_state=False,
+                    project, target_override=target or None, use_local_state=False
                 )
                 workflow.apply_variant(config, variant_id)
-                workflow.validate_hal_enable_values(config, project)
+                build = workflow.project_build(config, project)
             except (OSError, ValueError) as error:
                 axis = f"target={target or 'default'}, variant={variant_id or 'base'}"
                 findings.append(
                     f"{project_display} [{axis}]: [JH-CFG-EFFECTIVE] {error}"
                 )
                 continue
-
-            active_target = str(config.get("target")) if config.get("target") else None
-            active_board = str(config.get("board")) if config.get("board") else None
-            axis = (
-                f"target={active_target or 'default'}, "
-                f"board={active_board or 'default'}, "
-                f"variant={variant_id or 'base'}"
-            )
-            cache_requests, cache_findings = collect_effective_cache_requests(
-                config,
-                document,
-                manifest_display,
-                active_target,
-                variant_id,
-            )
-            findings.extend(cache_findings)
-            resolution, resolution_findings = resolve_target_feature_requests(
-                [*header_requests, *cache_requests],
-                model,
-                f"{project_display} [{axis}]",
-                active_target,
-                target_descriptor,
-            )
-            findings.extend(resolution_findings)
-            records.append(
-                feature_resolution_record(
-                    project_display,
-                    active_target,
-                    active_board,
-                    variant_id,
-                    resolution,
-                )
-            )
+            record(project_display, build, str(config["board"]) if config.get("board") else None)
 
     for header_path in standalone_headers:
         project = header_path.parent
         project_display = relative_display(project, roots)
-        header_display = relative_display(header_path, roots)
-        header_requests = collect_header_requests(header_path, header_display)
-        if not header_requests:
+        try:
+            builds = project_config.available_builds(project, targets, [""])
+        except ValueError as error:
+            findings.append(f"{project_display}: [JH-CFG-EFFECTIVE] {error}")
             continue
-        axis = "target=default, board=default, variant=base"
-        resolution, resolution_findings = resolve_feature_requests(
-            header_requests,
-            model,
-            f"{project_display} [{axis}]",
-        )
-        findings.extend(resolution_findings)
-        records.append(
-            feature_resolution_record(
-                project_display, None, None, None, resolution
-            )
-        )
+        for build in builds:
+            if build.requested_features():
+                record(project_display, build, None)
 
     records.sort(
         key=lambda item: (

@@ -3,6 +3,10 @@
  * This RP-only variant selects software serial for the GPS module as well.
  */
 
+#include <hal/core/hal_config.h>
+
+#if defined(EXAMPLE_SERIAL_GPS_USE_SWSERIAL)
+
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
 #include <hal/gps/hal_gps.h>
@@ -10,14 +14,6 @@
 #include <hal/serial/hal_swserial.h>
 #include <hal/system/hal_system.h>
 #include <stdio.h>
-
-#if !HAL_TARGET_IS_RP
-#error "The software-serial GPS variant is supported only on RP targets"
-#endif
-
-#if !defined(EXAMPLE_SERIAL_GPS_USE_SWSERIAL)
-#error "Define EXAMPLE_SERIAL_GPS_USE_SWSERIAL for this variant"
-#endif
 
 #define GPS_RX_PIN 5u
 #define GPS_TX_PIN 4u
@@ -129,3 +125,5 @@ void app_task0(void) {
   report_gps(now);
   hal_delay_ms(10u);
 }
+
+#endif /* defined(EXAMPLE_SERIAL_GPS_USE_SWSERIAL) */

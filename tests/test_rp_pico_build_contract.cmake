@@ -615,7 +615,6 @@ foreach(_cmake_contract IN ITEMS
         "CUSTOM_ENTRY"
         "HAL_PROVIDE_APP_ENTRY=1"
         "JH_RP_PICO_APP_DIR"
-        "JH_RP_PICO_APP_SOURCES"
         "OUTPUT_ROOT"
         "jh_generate_board_config"
         "jh_apply_board_components"
@@ -667,7 +666,6 @@ endforeach()
 
 foreach(_script_contract IN ITEMS
         "--example"
-        "--example-source"
         "--library-only"
         "examples/"
         "JH_RP_PICO_BUILD_ARTIFACT_PROBE=OFF"
@@ -701,16 +699,20 @@ foreach(_core_runtime_contract IN ITEMS app_start app_task0 HAL_LED_BUILTIN)
 endforeach()
 
 include("${_sources}")
-set(EXTRA_HAL_DEFINES
-    "HAL_RP_CORE0_STACK_SIZE=3072u"
+jh_read_library_config(
+    ROOT "${JH_ROOT}"
+    TARGET rp2040
+    OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/jh_rp_pico_build_contract"
+    DEFINES "HAL_RP_CORE0_STACK_SIZE=3072u")
+set(JH_RP_BOARD_DEFINES "HAL_RP_CORE0_STACK_SIZE=1024u"
     "HAL_RP_CORE1_STACK_SIZE=2048u")
 jh_hal_define_value(_stack0 HAL_RP_CORE0_STACK_SIZE)
 jh_hal_define_value(_stack1 HAL_RP_CORE1_STACK_SIZE)
-if(NOT "${_stack0}" STREQUAL "3072u" OR
-   NOT "${_stack1}" STREQUAL "2048u")
+if(NOT "${_stack0}" STREQUAL "3072" OR
+   NOT "${_stack1}" STREQUAL "2048")
     message(FATAL_ERROR "RP native stack define mapping is broken")
 endif()
-unset(EXTRA_HAL_DEFINES)
+unset(JH_RP_BOARD_DEFINES)
 
 foreach(_source_contract IN ITEMS
         "jh_hal_define_value"

@@ -28,7 +28,7 @@ expect_managed("${JH_ROOT}/.buildx/host" FALSE)
 set(_probe "${JH_ROOT}/jh-build-guard-probe")
 file(REMOVE_RECURSE "${_probe}")
 execute_process(
-    COMMAND "${CMAKE_COMMAND}" -S "${JH_ROOT}/examples" -B "${_probe}"
+    COMMAND "${CMAKE_COMMAND}" -S "${JH_ROOT}/cmake/jh_firmware_project" -B "${_probe}"
     RESULT_VARIABLE _result
     OUTPUT_VARIABLE _output
     ERROR_VARIABLE _error)

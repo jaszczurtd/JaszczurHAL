@@ -331,8 +331,8 @@
             "problemMatcher": []
         },
         {
-            "label": "Project: Build variant: capture",
-            "detail": "Build the example variant capture.",
+            "label": "Project: Build variant: CAPTURE",
+            "detail": "Build the CAPTURE variant: Pulse capture example.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -343,14 +343,14 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "capture"
+                "CAPTURE"
             ],
             "group": "build",
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Project: Upload variant: capture",
-            "detail": "Build and upload the example variant capture.",
+            "label": "Project: Upload variant: CAPTURE",
+            "detail": "Build and upload the CAPTURE variant: Pulse capture example.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -361,7 +361,7 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "capture"
+                "CAPTURE"
             ],
             "problemMatcher": "$gcc"
         }

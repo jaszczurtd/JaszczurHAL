@@ -4,6 +4,10 @@
  * an invalid time or its initial calendar cannot be read.
  */
 
+#include <hal/core/hal_config.h>
+
+#if !defined(EXAMPLE_RTC_DISPLAY_CLOCK)
+
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
 #include <hal/i2c/hal_i2c.h>
@@ -413,3 +417,5 @@ void app_task0(void) {
     }
   }
 }
+
+#endif /* !defined(EXAMPLE_RTC_DISPLAY_CLOCK) */

@@ -41,10 +41,10 @@ vscode/entry/jh-vscode upload \
 
 vscode/entry/jh-vscode build \
   --project examples/27_lora_point_to_point \
-  --target rp2040 --board rp2040-lora-lf --variant responder
+  --target rp2040 --board rp2040-lora-lf --variant RESPONDER
 vscode/entry/jh-vscode upload \
   --project examples/27_lora_point_to_point \
-  --target rp2040 --board rp2040-lora-lf --variant responder \
+  --target rp2040 --board rp2040-lora-lf --variant RESPONDER \
   --port /dev/serial/by-id/<lf-responder>
 ```
 
@@ -64,7 +64,7 @@ vscode/entry/jh-vscode build \
   --target rp2040
 vscode/entry/jh-vscode build \
   --project examples/27_lora_point_to_point \
-  --target stm32g474 --variant responder
+  --target stm32g474 --variant RESPONDER
 ```
 
 Oba urządzenia Core1262-HF używają tego samego profilu elektrycznego modułu i
@@ -74,7 +74,7 @@ Okablowanie Nucleo używa SPI2 na PB13/PB14/PB15 i pozostawia
 LD2/`HAL_LED_BUILTIN` na PA5.
 
 Przed próbą transmisji radiowej można zbudować i wgrać na dowolnym hoście
-wariant bez nadawania, wybierając `--variant probe`. Pomyślny wynik potwierdza
+wariant bez nadawania, wybierając `--variant PROBE`. Pomyślny wynik potwierdza
 możliwości backendu, jawną kalibrację, bieżący poziom RSSI, CAD i tryb czuwania,
 bez uruchamiania toru nadawczego RF.
 
@@ -94,10 +94,10 @@ Do zaliczenia potrzeba co najmniej pięciu zgodnych sekwencji ping/pong, metadan
 pakietów, znacznika asynchronicznej pętli zdarzeń na obu radiostacjach,
 niezerowych liczników IRQ/callback/anulowania, `HAL_OK` snu/wybudzenia oraz
 `HAL_OK` reinicjalizacji. Następnie zamień, które fizyczne urządzenie
-otrzymuje wariant `responder`, i powtórz test.
+otrzymuje wariant `RESPONDER`, i powtórz test.
 
 Powtórz test dla dwóch deterministycznych kombinacji. Warianty
-bazowy i `responder` używają SF9/10 dBm; `sf7` i `responder-sf7` używają
+bazowy i `RESPONDER` używają SF9/10 dBm; `SF7` i `RESPONDER_SF7` używają
 SF7/6 dBm. Nie zakładaj, że SF12/14 dBm jest dozwolone. Oba końce przebiegu
 muszą używać pasującej rodziny wariantów. Zarejestruj etykiety
 modułu/anteny, dokładne okablowanie, wersję firmware, odległość, liczby
@@ -106,7 +106,7 @@ raporcie sprzętowym.
 
 ## Router poleceń przez LoRa
 
-Warianty `link` i `link-responder` przykładu
+Warianty `LINK` i `LINK_RESPONDER` przykładu
 [`27_lora_point_to_point`](../../../examples/27_lora_point_to_point/) dołączają
 `hal_lora_commands` do jednego niezawodnego łącza. Inicjator wysyła
 500-bajtowe binarne żądanie `echo` z identyfikatorem korelacji. Responder
@@ -126,12 +126,12 @@ dysk jawnie:
 ```bash
 vscode/entry/jh-vscode upload \
   --project examples/27_lora_point_to_point \
-  --target rp2040 --board rp2040-lora-lf --variant link \
+  --target rp2040 --board rp2040-lora-lf --variant LINK \
   --bootsel-volume /dev/<initiator-partition>
 
 vscode/entry/jh-vscode upload \
   --project examples/27_lora_point_to_point \
-  --target rp2040 --board rp2040-lora-lf --variant link-responder \
+  --target rp2040 --board rp2040-lora-lf --variant LINK_RESPONDER \
   --bootsel-volume /dev/<responder-partition>
 ```
 

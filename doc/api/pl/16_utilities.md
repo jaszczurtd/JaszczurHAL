@@ -266,6 +266,13 @@ Wybór nagłówka:
 
 Warianty `_ex` zwracają `hal_status_t`, sprawdzają argumenty i korzystają z buforów oraz stanu przekazanych jawnie. Liczbę próbek ADC, pusty odczyt, opóźnienie i korekcję charakterystyki wybiera `hal_adc_average_config_t`; nie zależą one od ukrytych ustawień całego projektu.
 
+`HAL_MATH_ROLLING_AVERAGE_DEFAULT_SIZE` z `<hal/core/hal_math.h>` wybiera
+liczbę próbek dla `hal_math_rolling_average_default_f32()` (domyślnie 5).
+Definiuj tę samą wartość w buildzie aplikacji i HAL oraz przeznacz tyle
+elementów `float` na tablicę tej funkcji. Jeśli makro nie jest zdefiniowane,
+obsługiwane jest starsze ustawienie `HAL_TOOLS_TEMPERATURE_TABLES_SIZE`.
+Wariant `_ex` przyjmuje rozmiar tablicy jawnie.
+
 `hal_text_format_mac_ex()` zapisuje sześciobajtowy adres sprzętowy w formacie `XX:XX:XX:XX:XX:XX`, używając wielkich liter. Bufor musi mieścić `HAL_TEXT_MAC_STRING_SIZE` bajtów. Funkcja zgodności `hal_network_format_mac_ex()` pozostaje dostępna i wywołuje tę samą operację.
 
 ### Funkcje pomocnicze do manipulacji bitami (`hal_bits`)

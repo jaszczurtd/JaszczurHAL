@@ -115,8 +115,8 @@ static const hal_serial_session_vocabulary_t
  * @p field are non-NULL; otherwise returns the corresponding field of
  * @ref hal_serial_session_vocabulary_default.
  *
- * @note The macro evaluates @p vocab_ptr twice; pass a side-effect-free
- *       lvalue (typically @c session->vocab).
+ * @note The macro evaluates @p vocab_ptr up to three times; pass a
+ * side-effect-free lvalue (typically @c session->vocab).
  */
 #define HAL_SERIAL_SESSION_VOCAB_FIELD(vocab_ptr, field)                       \
   (((vocab_ptr) != NULL && (vocab_ptr)->field != NULL)                         \

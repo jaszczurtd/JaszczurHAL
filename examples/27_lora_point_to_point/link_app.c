@@ -7,6 +7,8 @@
  * example sends plaintext with CRC protection; it does not enable encryption.
  */
 
+#include <hal/core/hal_config.h>
+
 #ifdef HAL_ENABLE_LORA_COMMANDS
 
 #include <hal/commands/hal_command_router.h>

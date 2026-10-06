@@ -4,6 +4,10 @@
  * storage provider, saved peers are kept only until restart.
  */
 
+#include <hal/core/hal_config.h>
+
+#if defined(EXAMPLE_BLUETOOTH_CLASSIC_SCAN)
+
 #include <hal/bluetooth/hal_bluetooth_classic.h>
 #include <hal/core/hal_app.h>
 #include <hal/serial/hal_serial.h>
@@ -290,3 +294,5 @@ void app_task0(void) {
   }
   hal_delay_ms(1u);
 }
+
+#endif /* defined(EXAMPLE_BLUETOOTH_CLASSIC_SCAN) */

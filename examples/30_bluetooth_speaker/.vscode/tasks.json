@@ -331,8 +331,8 @@
             "problemMatcher": []
         },
         {
-            "label": "Project: Build variant: avrcp",
-            "detail": "Build the A2DP speaker with AVRCP volume control (avrcp).",
+            "label": "Project: Build variant: AVRCP",
+            "detail": "Build the AVRCP variant: A2DP speaker with AVRCP volume control.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -343,14 +343,14 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "avrcp"
+                "AVRCP"
             ],
             "group": "build",
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Project: Upload variant: avrcp",
-            "detail": "Build and upload the A2DP speaker with AVRCP volume control (avrcp).",
+            "label": "Project: Upload variant: AVRCP",
+            "detail": "Build and upload the AVRCP variant: A2DP speaker with AVRCP volume control.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -361,13 +361,13 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "avrcp"
+                "AVRCP"
             ],
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Project: Build variant: ble-a2dp",
-            "detail": "Build the A2DP speaker with BLE and Classic support in one image (ble-a2dp).",
+            "label": "Project: Build variant: BLE_A2DP",
+            "detail": "Build the BLE_A2DP variant: A2DP speaker with BLE and Classic support in one image.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -378,14 +378,14 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "ble-a2dp"
+                "BLE_A2DP"
             ],
             "group": "build",
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Project: Upload variant: ble-a2dp",
-            "detail": "Build and upload the A2DP speaker with BLE and Classic support in one image (ble-a2dp).",
+            "label": "Project: Upload variant: BLE_A2DP",
+            "detail": "Build and upload the BLE_A2DP variant: A2DP speaker with BLE and Classic support in one image.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -396,7 +396,7 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "ble-a2dp"
+                "BLE_A2DP"
             ],
             "problemMatcher": "$gcc"
         }

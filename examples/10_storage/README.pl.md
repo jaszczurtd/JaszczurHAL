@@ -40,5 +40,5 @@ obsługuje oddzielnie: zamyka go i podejmuje kolejną próbę.
 
 Formatowanie jest domyślnie wyłączone, aby błąd montowania nie spowodował
 utraty danych. Ustaw `EXAMPLE_STORAGE_ALLOW_LITTLEFS_FORMAT=1`
-w `hal_project_config.h` albo jako definicję kompilatora tylko wtedy,
+w `hal_project_config.h`, bezpośrednio lub przez wariant, tylko wtedy,
 gdy dopuszczasz wymazanie zarezerwowanej partycji LittleFS.

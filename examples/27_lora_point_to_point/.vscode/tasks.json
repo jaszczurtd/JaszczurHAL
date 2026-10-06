@@ -331,8 +331,8 @@
             "problemMatcher": []
         },
         {
-            "label": "Project: Build variant: probe",
-            "detail": "Build the LoRa radio checks that do not transmit (probe).",
+            "label": "Project: Build variant: PROBE",
+            "detail": "Build the PROBE variant: LoRa radio checks that do not transmit.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -343,14 +343,14 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "probe"
+                "PROBE"
             ],
             "group": "build",
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Project: Upload variant: probe",
-            "detail": "Build and upload the LoRa radio checks that do not transmit (probe).",
+            "label": "Project: Upload variant: PROBE",
+            "detail": "Build and upload the PROBE variant: LoRa radio checks that do not transmit.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -361,13 +361,13 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "probe"
+                "PROBE"
             ],
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Project: Build variant: responder",
-            "detail": "Build the LoRa ping/pong responder (responder).",
+            "label": "Project: Build variant: RESPONDER",
+            "detail": "Build the RESPONDER variant: LoRa ping/pong responder.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -378,14 +378,14 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "responder"
+                "RESPONDER"
             ],
             "group": "build",
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Project: Upload variant: responder",
-            "detail": "Build and upload the LoRa ping/pong responder (responder).",
+            "label": "Project: Upload variant: RESPONDER",
+            "detail": "Build and upload the RESPONDER variant: LoRa ping/pong responder.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -396,13 +396,13 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "responder"
+                "RESPONDER"
             ],
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Project: Build variant: sf7",
-            "detail": "Build the LoRa initiator with the SF7/6 dBm test settings (sf7).",
+            "label": "Project: Build variant: SF7",
+            "detail": "Build the SF7 variant: LoRa initiator with the SF7/6 dBm test settings.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -413,14 +413,14 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "sf7"
+                "SF7"
             ],
             "group": "build",
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Project: Upload variant: sf7",
-            "detail": "Build and upload the LoRa initiator with the SF7/6 dBm test settings (sf7).",
+            "label": "Project: Upload variant: SF7",
+            "detail": "Build and upload the SF7 variant: LoRa initiator with the SF7/6 dBm test settings.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -431,13 +431,13 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "sf7"
+                "SF7"
             ],
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Project: Build variant: responder-sf7",
-            "detail": "Build the LoRa responder with the SF7/6 dBm test settings (responder-sf7).",
+            "label": "Project: Build variant: RESPONDER_SF7",
+            "detail": "Build the RESPONDER_SF7 variant: LoRa responder with the SF7/6 dBm test settings.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -448,14 +448,14 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "responder-sf7"
+                "RESPONDER_SF7"
             ],
             "group": "build",
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Project: Upload variant: responder-sf7",
-            "detail": "Build and upload the LoRa responder with the SF7/6 dBm test settings (responder-sf7).",
+            "label": "Project: Upload variant: RESPONDER_SF7",
+            "detail": "Build and upload the RESPONDER_SF7 variant: LoRa responder with the SF7/6 dBm test settings.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -466,13 +466,13 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "responder-sf7"
+                "RESPONDER_SF7"
             ],
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Project: Build variant: link",
-            "detail": "Build the LoRa echo-command initiator with fragmentation and retries (link).",
+            "label": "Project: Build variant: LINK",
+            "detail": "Build the LINK variant: LoRa echo-command initiator with fragmentation and retries.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -483,14 +483,14 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "link"
+                "LINK"
             ],
             "group": "build",
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Project: Upload variant: link",
-            "detail": "Build and upload the LoRa echo-command initiator with fragmentation and retries (link).",
+            "label": "Project: Upload variant: LINK",
+            "detail": "Build and upload the LINK variant: LoRa echo-command initiator with fragmentation and retries.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -501,13 +501,13 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "link"
+                "LINK"
             ],
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Project: Build variant: link-responder",
-            "detail": "Build the LoRa echo-command responder with fragmentation and retries (link-responder).",
+            "label": "Project: Build variant: LINK_RESPONDER",
+            "detail": "Build the LINK_RESPONDER variant: LoRa echo-command responder with fragmentation and retries.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -518,14 +518,14 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "link-responder"
+                "LINK_RESPONDER"
             ],
             "group": "build",
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Project: Upload variant: link-responder",
-            "detail": "Build and upload the LoRa echo-command responder with fragmentation and retries (link-responder).",
+            "label": "Project: Upload variant: LINK_RESPONDER",
+            "detail": "Build and upload the LINK_RESPONDER variant: LoRa echo-command responder with fragmentation and retries.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -536,7 +536,7 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "link-responder"
+                "LINK_RESPONDER"
             ],
             "problemMatcher": "$gcc"
         }

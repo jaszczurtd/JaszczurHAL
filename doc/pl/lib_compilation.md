@@ -18,7 +18,7 @@
 
 JaszczurHAL używa CMake do kompilacji dla komputera, RP i STM32. Dla ESP32 skrypt Pythona z repozytorium uruchamia ESP-IDF w ustalonej wersji. Przy kompilacji na urządzenie wybiera się platformę docelową i fizyczną płytkę z rejestru opisanego w [profilach platform i płytek](boards_profiles_howto.md).
 
-Runnery bibliotek linkowalnych znajdują się w [`link_libraries/`](../../link_libraries/README.pl.md), po jednym katalogu na rodzinę buildów. `scripts/build_link_library.sh --target <id>` odczytuje provider builda targetu z rejestru i uruchamia właściwy runner z pozostałymi opcjami. Każdy runner przyjmuje ten sam zestaw podstawowych opcji: `--target`, `--board`, `--all-features`, `--library-only`, `--freertos`, `-p`/`--project-config`, `-D`, `-o`/`--output`, `--clean` i `-j`/`--jobs`.
+Runnery bibliotek linkowalnych znajdują się w [`link_libraries/`](../../link_libraries/README.pl.md), po jednym katalogu na rodzinę buildów. `scripts/build_link_library.sh --target <id>` odczytuje provider builda targetu z rejestru i uruchamia właściwy runner z pozostałymi opcjami. Każdy runner przyjmuje ten sam zestaw podstawowych opcji: `--target`, `--board`, `--all-features`, `--library-only`, `--freertos`, `-p`/`--project-config`, `-D`, `-o`/`--output`, `--clean` i `-j`/`--jobs`. `-p` wskazuje jeden katalog z `hal_project_config.h`. Ten nagłówek i definicje `-D` przetwarza `scripts/project_config.py`, ten sam mechanizm, którego używają projekty firmware, więc nagłówek może sprawdzać makro platformy i te definicje.
 
 | Target | Domyślna płytka | Punkt wejścia kompilacji | Selektor backendu |
 |---|---|---|---|
@@ -44,9 +44,33 @@ Makra wybierające platformę są zdefiniowane w `src/hal/core/hal_target.h`. Gd
 #define HAL_TARGET_RP2350_ARM
 #define HAL_TARGET_RP2350_RISCV
 #define HAL_TARGET_STM32G474
+#define HAL_TARGET_ESP32
 #define HAL_TARGET_ESP32_S3
 #define HAL_TARGET_MOCK
 ```
+
+Po wyborze platformy `hal_target.h` definiuje wartości dla kodu backendów:
+
+| Makro | Platforma wskazana przez wartość `1` |
+|---|---|
+| `HAL_TARGET_IS_RP2040` | RP2040 |
+| `HAL_TARGET_IS_RP2350_ARM` | RP2350 Arm |
+| `HAL_TARGET_IS_RP2350_RISCV` | RP2350 RISC-V |
+| `HAL_TARGET_IS_STM32G474` | STM32G474 |
+| `HAL_TARGET_IS_ESP32` | ESP32 |
+| `HAL_TARGET_IS_ESP32_S3` | ESP32-S3 |
+| `HAL_TARGET_IS_MOCK` | Mock |
+| `HAL_TARGET_IS_RP` | Dowolna platforma RP |
+| `HAL_TARGET_IS_ESP32_FAMILY` | Jedna z platform ESP32 |
+| `HAL_RP_ARCH_ARM` | RP2040 lub RP2350 Arm |
+| `HAL_RP_ARCH_RISCV` | RP2350 RISC-V |
+
+Każde z tych makr jest zawsze zdefiniowane jako `0` albo `1`; sprawdzaj
+wartość przez `#if`, np. `#if HAL_TARGET_IS_RP`. `HAL_TARGET_NAME` zawiera
+tekstowe ID platformy używane przez narzędzia, np. `"rp2350-arm"` lub
+`"esp32s3"`. Nagłówki konfiguracji projektu używają pierwotnych selektorów
+`HAL_TARGET_*`, ponieważ wartości pochodne jeszcze nie istnieją podczas
+odczytu nagłówka.
 
 `JH_TARGET` określa procesor i platformę wykonawczą, a `JH_BOARD` - profil fizycznej płytki. Wygenerowany rejestr globalny i konfiguracja zastępcza są przechowywane w `src/hal/generated/`. Każda kompilacja tworzy ponadto:
 
@@ -193,8 +217,7 @@ Główne opcje to:
 |---|---|
 | `--target NAME` | `rp2040`, `rp2350-arm` lub `rp2350-riscv` |
 | `--board NAME` | Profil płytki zgodny z wybranym targetem |
-| `--example NAME` | Zbuduj `examples/NAME` jako firmware |
-| `--example-source FILE` | Wybierz jedno źródło z przykładu wieloprofilowego; opcję można podać wielokrotnie |
+| `--example NAME` | Zbuduj `examples/NAME` jako firmware ze wszystkich jego źródeł i z jego własnym `hal_project_config.h` |
 | `--freertos` | Włącz jądro FreeRTOS SMP w wersji wskazanej przez repozytorium |
 | `--library-only` | Zbuduj wyłącznie linkowalny target `libJaszczurHAL.a`, bez kontrolnych obrazów firmware'u |
 | `-p`, `--project-config DIR` | Katalog zawierający `hal_project_config.h` |
@@ -385,9 +408,9 @@ może wybrać inną lokalizację poniżej katalogu głównego `.build` projektu
 lub repozytorium. Argument `--source` można podać wielokrotnie, aby zastąpić
 automatyczne wykrywanie; bez niego skrypt dołącza obsługiwane pliki źródłowe
 z katalogu głównego projektu oraz, rekurencyjnie, z katalogu `src/`.
-Argumenty `--feature` i `--define` również można podawać wielokrotnie, aby
-rozszerzyć konfigurację projektu; `--all-features` żąda pełnego zestawu funkcji
-targetu, a `--project-config DIR` czyta `hal_project_config.h` z katalogu spoza
+`--variant <id>` wybiera wariant zadeklarowany w nagłówku projektu.
+Powtarzalne argumenty `--define` są przeznaczone dla kompilacji bibliotek
+statycznych; `--all-features` żąda pełnego zestawu funkcji targetu, a `--project-config DIR` czyta `hal_project_config.h` z katalogu spoza
 projektu. Opcja `--idf-dir` lub zmienna
 `JH_ESP_IDF_DIR` wskazuje zewnętrznie zarządzane repozytorium dopiero po
 zweryfikowaniu jego dokładnej wersji i narzędzi.

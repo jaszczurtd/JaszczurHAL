@@ -2,32 +2,14 @@
     "$schema": "../../../../vscode/schema/jh_vscode_project.schema.json",
     "project": "JaszczurHAL hardware tests",
     "module": "rp_ota",
-    "example": {
-        "targets": [
-            "rp2040",
-            "rp2350-arm"
-        ],
-        "boards": {
-            "rp2040": "picow",
-            "rp2350-arm": "pico2w"
-        },
-        "variants": [
-            {
-                "id": "freertos",
-                "module": "rp_ota_freertos",
-                "targets": [
-                    "rp2040",
-                    "rp2350-arm"
-                ],
-                "extraDefines": [
-                    "HAL_ENABLE_FREERTOS"
-                ]
-            }
-        ]
-    },
     "toolchain": "cmake",
     "target": "rp2040",
     "board": "picow",
+    "targetProfiles": {
+        "rp2350-arm": {
+            "board": "pico2w"
+        }
+    },
     "buildDir": "${jhRoot}/.build/hardware/rp_ota",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

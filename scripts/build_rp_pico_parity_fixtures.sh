@@ -63,7 +63,7 @@ for fixture in "${fixtures[@]}"; do
         "${JH_VSCODE}" build --project "${project}" \
             --target "${target}" --board "${board}"
         "${JH_VSCODE}" build --project "${project}" \
-            --target "${target}" --board "${board}" --variant freertos
+            --target "${target}" --board "${board}" --variant FREERTOS
     done
 done
 

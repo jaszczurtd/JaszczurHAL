@@ -11,9 +11,9 @@ is connected.
 | Variant | Behavior |
 |---|---|
 | Base | Connects a gamepad, reads input changes, and stores the accepted device for reconnection after restart. |
-| `classic-scan` | Discovers Classic devices and services through inquiry and SDP. |
-| `hid-host` | Connects to a discovered HID service, copies its descriptor, and receives raw reports without interpreting them as gamepad input. |
-| `ble` | Adds passive BLE scanning alongside the Classic gamepad on the shared CYW43 controller. |
+| `CLASSIC_SCAN` | Discovers Classic devices and services through inquiry and SDP. |
+| `HID_HOST` | Connects to a discovered HID service, copies its descriptor, and receives raw reports without interpreting them as gamepad input. |
+| `BLE` | Adds passive BLE scanning alongside the Classic gamepad on the shared CYW43 controller. |
 
 ## Build and run
 
@@ -37,13 +37,13 @@ To build a specific variant:
 ```bash
 vscode/entry/jh-vscode build \
   --project examples/29_bluetooth_gamepad \
-  --target rp2040 --board picow --variant classic-scan
+  --target rp2040 --board picow --variant CLASSIC_SCAN
 vscode/entry/jh-vscode build \
   --project examples/29_bluetooth_gamepad \
-  --target rp2040 --board picow --variant hid-host
+  --target rp2040 --board picow --variant HID_HOST
 vscode/entry/jh-vscode build \
   --project examples/29_bluetooth_gamepad \
-  --target rp2040 --board picow --variant ble
+  --target rp2040 --board picow --variant BLE
 ```
 
 The Bluedroid implementation for the original ESP32 has a separate
@@ -73,7 +73,7 @@ gamepad compatible with the doomConsole hardware-regression image.
 
 ## Discover devices and services
 
-The `classic-scan` variant starts with a ten-second inquiry. After inquiry
+The `CLASSIC_SCAN` variant starts with a ten-second inquiry. After inquiry
 finishes, it processes pending SDP service queries one at a time. Each
 discovered device receives a temporary index `n`; Bluetooth addresses are
 not printed.
@@ -95,7 +95,7 @@ does not replace that validation.
 
 ## Receive raw HID reports
 
-The `hid-host` variant selects a discovered HID service and exposes a copy
+The `HID_HOST` variant selects a discovered HID service and exposes a copy
 of its descriptor and raw reports. The operator decides how to handle a
 pending pairing request with the `AUTHORIZE` or `REJECT` serial command.
 `SCAN` and `INFO` are also available. Service discovery does not grant
@@ -126,7 +126,7 @@ queue-overflow handling.
 
 ## Run BLE and Classic together
 
-The `ble` variant scans as a passive BLE Observer; it does not advertise a
+The `BLE` variant scans as a passive BLE Observer; it does not advertise a
 BLE service. At startup it closes and reopens each profile while the other
 continues using the shared CYW43 controller and BTstack host. Use `INFO`,
 `BLE_START`, `BLE_STOP`, and `DISCONNECT` to test BLE scanning alongside

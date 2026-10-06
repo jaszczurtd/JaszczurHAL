@@ -20,6 +20,7 @@ ROOT = repo_root(sys.argv, __file__)
 sys.path.insert(0, str(ROOT))
 
 from scripted_serial_port import ScriptedPort  # noqa: E402
+from vscode.runtime import jh_vscode as workflow  # noqa: E402
 from vscode.runtime import serial_io  # noqa: E402
 
 HARDWARE = ROOT / "tests" / "hardware"
@@ -57,6 +58,28 @@ def load_module(name: str, path: Path):
     sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def fixture_builds(name: str) -> dict[tuple[str, str | None], object]:
+    """Every build a fixture configures, keyed by target and variant."""
+    project = HARDWARE / name
+    manifest = load_json(project / ".vscode" / "jaszczurhal.project.json")
+    return {
+        (build.target.id, build.variant.id if build.variant else None): build
+        for build in workflow.project_builds(project, manifest)
+    }
+
+
+def fixture_board(name: str, target: str, board: str | None = None) -> str:
+    """Board the fixture builds for ``target``; ``board`` must be selectable."""
+    return str(
+        workflow.load_project_config(
+            HARDWARE / name,
+            target_override=target,
+            board_override=board,
+            use_local_state=False,
+        )["board"]
+    )
 
 
 def check_documentation_index() -> None:
@@ -120,21 +143,9 @@ def check_build_layout() -> None:
 
 
 def check_bluetooth_stream() -> None:
-    manifest = load_json(
-        HARDWARE / "bluetooth_stream" / ".vscode" / "jaszczurhal.project.json"
-    )
-    matrix = manifest.get("example", {}).get("hardwareMatrix")
-    require(isinstance(matrix, list), "bluetooth_stream: hardwareMatrix is missing")
-    require(
-        all(
-            isinstance(entry, dict)
-            and set(entry) == {"target", "board", "runtime"}
-            and all(isinstance(value, str) for value in entry.values())
-            for entry in matrix
-        ),
-        "bluetooth_stream: invalid hardwareMatrix entry",
-    )
-    expected = {
+    builds = fixture_builds("bluetooth_stream")
+    # The physical gate needs these eight target, board and runtime images.
+    for target, board, runtime in (
         ("rp2040", "picow", "baremetal"),
         ("rp2040", "picow", "freertos"),
         ("rp2040", "pico-rm2", "baremetal"),
@@ -143,105 +154,78 @@ def check_bluetooth_stream() -> None:
         ("rp2350-arm", "pico2w", "freertos"),
         ("stm32g474", "nucleo-g474re-pim730", "baremetal"),
         ("stm32g474", "nucleo-g474re-pim730", "freertos"),
-    }
-    actual = {
-        (entry["target"], entry["board"], entry["runtime"]) for entry in matrix
-    }
-    require(
-        len(matrix) == len(expected) and actual == expected,
-        "bluetooth_stream: hardwareMatrix changed",
-    )
-
-    variants = {
-        variant.get("id"): variant
-        for variant in manifest.get("example", {}).get("variants", [])
-        if isinstance(variant, dict)
-    }
-    expected_variants = {
-        "display": {
-            "JHBL5_ENABLE_DISPLAY=1",
-            "HAL_ENABLE_ILI9341",
-            "HAL_DISPLAY_ILI9341",
-        },
-        "display-freertos": {
-            "JHBL5_ENABLE_DISPLAY=1",
-            "HAL_ENABLE_ILI9341",
-            "HAL_DISPLAY_ILI9341",
-            "HAL_ENABLE_FREERTOS",
-        },
-    }
-    for variant_id, defines in expected_variants.items():
-        variant = variants.get(variant_id)
+    ):
+        variant = None if runtime == "baremetal" else "FREERTOS"
         require(
-            isinstance(variant, dict)
-            and variant.get("module") == f"bluetooth_stream_{variant_id.replace('-', '_')}"
-            and variant.get("targets") == ["stm32g474"]
-            and set(variant.get("extraDefines", [])) == defines,
-            f"bluetooth_stream:{variant_id} changed",
+            (target, variant) in builds and fixture_board("bluetooth_stream", target, board) == board,
+            f"bluetooth_stream: no {runtime} image for {target}/{board}",
+        )
+    display = {"JHBL5_ENABLE_DISPLAY=1", "HAL_ENABLE_ILI9341", "HAL_DISPLAY_ILI9341"}
+    for variant, definitions in (
+        ("DISPLAY", display),
+        ("DISPLAY_FREERTOS", display | {"HAL_ENABLE_FREERTOS"}),
+    ):
+        require(
+            {target for target, item in builds if item == variant} == {"stm32g474"}
+            and set(builds[("stm32g474", variant)].definitions) == definitions,
+            f"bluetooth_stream:{variant} changed",
         )
 
 
 def check_rp_manifests() -> None:
-    ota = load_json(HARDWARE / "rp_ota" / ".vscode" / "jaszczurhal.project.json")
+    ota = fixture_builds("rp_ota")
     require(
-        set(ota["example"]["targets"]) == {"rp2040", "rp2350-arm"},
-        "rp_ota: target matrix changed",
+        set(ota) == {(target, variant) for target in ("rp2040", "rp2350-arm") for variant in (None, "FREERTOS")},
+        "rp_ota: target or variant matrix changed",
     )
     require(
-        ota["example"]["boards"] == {"rp2040": "picow", "rp2350-arm": "pico2w"},
+        {target: fixture_board("rp_ota", target) for target in ("rp2040", "rp2350-arm")}
+        == {"rp2040": "picow", "rp2350-arm": "pico2w"},
         "rp_ota: default boards changed",
     )
-    variants = {variant["id"]: variant for variant in ota["example"]["variants"]}
     require(
-        set(variants["freertos"]["extraDefines"]) == {"HAL_ENABLE_FREERTOS"},
+        ota[("rp2040", "FREERTOS")].definitions == ("HAL_ENABLE_FREERTOS",),
         "rp_ota: FreeRTOS variant changed",
     )
+    manifest = load_json(HARDWARE / "rp_ota" / ".vscode" / "jaszczurhal.project.json")
     require(
-        ota["ota"]["passwordEnv"] == "JH_OTA_TEST_PASSWORD",
+        manifest["ota"]["passwordEnv"] == "JH_OTA_TEST_PASSWORD",
         "rp_ota: a tracked password replaced the environment variable",
     )
 
-    targets = {"rp2040", "rp2350-arm", "rp2350-riscv"}
+    targets = ("rp2040", "rp2350-arm", "rp2350-riscv")
     boards = {"rp2040": "pico", "rp2350-arm": "pico2", "rp2350-riscv": "pico2"}
     for name, base_define in (
         ("rp_usb_multicore", "HAL_ENABLE_APP_TASK1"),
         ("rp_sdlogger", "HAL_ENABLE_SDLOGGER"),
     ):
-        manifest = load_json(
-            HARDWARE / name / ".vscode" / "jaszczurhal.project.json"
-        )
-        metadata = manifest["example"]
-        require(set(metadata["targets"]) == targets, f"{name}: targets changed")
-        require(metadata["boards"] == boards, f"{name}: boards changed")
-        variants = {variant["id"]: variant for variant in metadata["variants"]}
-        require(set(variants) == {"freertos"}, f"{name}: variants changed")
+        builds = fixture_builds(name)
         require(
-            set(variants["freertos"]["targets"]) == targets
-            and set(variants["freertos"]["extraDefines"])
-            == {"HAL_ENABLE_FREERTOS"},
-            f"{name}: FreeRTOS matrix changed",
+            set(builds) == {(target, variant) for target in targets for variant in (None, "FREERTOS")},
+            f"{name}: target or variant matrix changed",
         )
-        config = (HARDWARE / name / "hal_project_config.h").read_text(
-            encoding="utf-8"
-        )
-        require(base_define in config, f"{name}: base feature is missing")
         require(
-            base_define
-            not in manifest["cmake"]["cache"].get("JH_EXTRA_DEFINES", "").split(";"),
-            f"{name}: base feature is duplicated",
+            {target: fixture_board(name, target) for target in targets} == boards,
+            f"{name}: boards changed",
+        )
+        freertos = builds[("rp2040", "FREERTOS")]
+        require(
+            freertos.definitions == ("HAL_ENABLE_FREERTOS",)
+            and builds[("rp2040", None)].config.defined(base_define)
+            and base_define not in freertos.definitions,
+            f"{name}: base feature or FreeRTOS variant changed",
         )
 
 
 def check_bluetooth_stage1() -> None:
-    manifest = load_json(
-        HARDWARE / "bluetooth_stage1" / ".vscode" / "jaszczurhal.project.json"
+    builds = fixture_builds("bluetooth_stage1")
+    targets = ("stm32g474", "rp2350-arm", "rp2040")
+    require(
+        set(builds) == {(target, variant) for target in targets for variant in (None, "WIFI_ONLY")},
+        "bluetooth_stage1: targets or variants changed",
     )
     require(
-        manifest["example"]["targets"] == ["stm32g474", "rp2350-arm", "rp2040"],
-        "bluetooth_stage1: targets changed",
-    )
-    require(
-        manifest["example"]["boards"]
+        {target: fixture_board("bluetooth_stage1", target) for target in targets}
         == {
             "stm32g474": "nucleo-g474re-pim730",
             "rp2350-arm": "pico2w",
@@ -249,16 +233,12 @@ def check_bluetooth_stage1() -> None:
         },
         "bluetooth_stage1: boards changed",
     )
-    variants = {item["id"]: item for item in manifest["example"]["variants"]}
-    require(set(variants) == {"bluetooth", "wifi-only"}, "stage1 variants changed")
     require(
-        variants["bluetooth"].get("extraDefines")
-        == ["JH_BLUETOOTH_STAGE1_PROBE"],
+        builds[("rp2040", None)].config.defined("JH_BLUETOOTH_STAGE1_PROBE"),
         "bluetooth_stage1: Bluetooth selector is missing",
     )
     require(
-        "JH_BLUETOOTH_STAGE1_PROBE"
-        not in variants["wifi-only"].get("extraDefines", []),
+        not builds[("rp2040", "WIFI_ONLY")].config.defined("JH_BLUETOOTH_STAGE1_PROBE"),
         "bluetooth_stage1: WiFi-only variant enables Bluetooth",
     )
 
@@ -330,13 +310,13 @@ def check_bluetooth_gamepad() -> None:
     manifest = load_json(fixture / ".vscode" / "jaszczurhal.project.json")
     require(
         manifest["target"] == "rp2350-arm"
-        and manifest["board"] == "pico2w"
-        and manifest["example"]["boards"]["rp2350-arm"] == "pico2w",
+        and fixture_board("bluetooth_gamepad", "rp2350-arm") == "pico2w",
         "bluetooth_gamepad: default board changed",
     )
     require(
-        manifest["example"]["variants"][0]["extraDefines"]
-        == ["JH_BLUETOOTH_CLASSIC_HID_PROBE"],
+        fixture_builds("bluetooth_gamepad")[("rp2350-arm", None)].config.defined(
+            "JH_BLUETOOTH_CLASSIC_HID_PROBE"
+        ),
         "bluetooth_gamepad: private selector changed",
     )
 

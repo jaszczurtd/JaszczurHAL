@@ -4,36 +4,6 @@
   "title": "JaszczurHAL VS Code Project",
   "type": "object",
   "additionalProperties": true,
-  "$defs": {
-    "variant": {
-      "type": "object",
-      "description": "One build variant. It builds into <buildDir>/variants/<id> with its own CMake tree and artifact directory, so it never replaces the base firmware.",
-      "additionalProperties": true,
-      "properties": {
-        "id": { "type": "string" },
-        "module": { "type": "string" },
-        "sources": {
-          "type": "array",
-          "items": { "type": "string" }
-        },
-        "targets": {
-          "type": "array",
-          "items": { "type": "string" }
-        },
-        "gateTargets": {
-          "type": "array",
-          "description": "Representative target subset compiled for this variant by the examples quality gate.",
-          "items": { "type": "string" }
-        },
-        "extraDefines": {
-          "type": "array",
-          "description": "Compile definitions of the variant; they replace the base JH_EXTRA_DEFINES. HAL_ENABLE_* entries must be bare or use the explicit value 1.",
-          "items": { "type": "string" }
-        },
-        "cmake": { "type": "object", "additionalProperties": true }
-      }
-    }
-  },
   "properties": {
     "project": {
       "type": "string",
@@ -42,55 +12,6 @@
     "module": {
       "type": "string",
       "minLength": 1
-    },
-    "example": {
-      "type": "object",
-      "description": "Optional metadata for checked-in example projects. jh-vscode ignores it except for variant selection and friendly unsupported-target diagnostics.",
-      "additionalProperties": true,
-      "properties": {
-        "targets": {
-          "type": "array",
-          "items": { "type": "string" }
-        },
-        "boards": {
-          "type": "object",
-          "description": "Default board id used by the automated example dispatcher for each declared target.",
-          "additionalProperties": { "type": "string" }
-        },
-        "hardwareMatrix": {
-          "type": "array",
-          "description": "Auditable target, board, and runtime combinations required by a physical hardware gate. baremetal selects the base manifest; freertos selects the freertos variant.",
-          "minItems": 1,
-          "uniqueItems": true,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["target", "board", "runtime"],
-            "properties": {
-              "target": { "type": "string", "minLength": 1 },
-              "board": { "type": "string", "minLength": 1 },
-              "runtime": {
-                "type": "string",
-                "enum": ["baremetal", "freertos"]
-              }
-            }
-          }
-        },
-        "gateTargets": {
-          "type": "array",
-          "description": "Representative target subset compiled by the examples quality gate. Supported targets remain declared in targets.",
-          "items": { "type": "string" }
-        },
-        "variants": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/variant" }
-        }
-      }
-    },
-    "variants": {
-      "type": "array",
-      "description": "Build variants of a firmware project, selected with --variant and offered as the Project: Build variant and Project: Upload variant tasks. Ids are unique across variants and example.variants.",
-      "items": { "$ref": "#/$defs/variant" }
     },
     "toolchain": {
       "type": "string",
@@ -134,7 +55,15 @@
         },
         "cache": {
           "type": "object",
-          "description": "Effective CMake cache entries. In JH_EXTRA_DEFINES and EXTRA_HAL_DEFINES, each HAL_ENABLE_* entry must be a standalone simple token separated with semicolons and must be bare or use the explicit value 1. Whitespace does not separate multiple feature definitions, and CMake generator expressions are unsupported.",
+          "description": "CMake cache entries of the tooling: paths, toolchain and module settings. The HAL configuration of the project (features, compile definitions, sources and variants) lives only in hal_project_config.h, so HAL_ENABLE_*, HAL_DISABLE_*, EXTRA_HAL_DEFINES, JH_EXTRA_DEFINES, JH_PROJECT_SOURCES and JH_VARIANT are rejected here; a variant is selected with --variant.",
+          "propertyNames": {
+            "not": {
+              "anyOf": [
+                { "enum": ["EXTRA_HAL_DEFINES", "JH_EXTRA_DEFINES", "JH_PROJECT_SOURCES", "JH_VARIANT"] },
+                { "pattern": "^HAL_(ENABLE|DISABLE)_[A-Z0-9_]+$" }
+              ]
+            }
+          },
           "additionalProperties": {
             "type": ["string", "number", "integer", "boolean", "null"]
           }

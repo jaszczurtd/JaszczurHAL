@@ -7,54 +7,59 @@ w `README.pl.md` i po angielsku w `README.md`.
 
 Otwórz katalog wybranego projektu w VS Code, aby korzystać z jego zadań
 `Build`, `Upload`, `Serial Monitor`, `Clean`, `Config Dump`, `OTA` i wyboru
-płytki. Wygenerowany plik `.vscode/jaszczurhal.project.json` opisuje projekt
-w taki sam sposób jak samodzielną aplikację firmware.
+płytki.
 
-Rejestr `config/tooling/examples.json` określa źródła, funkcje, platformy,
-profile płytek i warianty. Skrypt `scripts/examples_dispatcher.py` odczytuje
-te ustawienia i generuje manifesty dla `vscode/entry/jh-vscode` oraz
-`cmake/jh_firmware_project`.
+Każdy przykład jest zwykłym projektem firmware. Jego `hal_project_config.h`
+deklaruje funkcje HAL, platformy (`JH_PROJECT_TARGETS`) i warianty
+(`JH_PROJECT_VARIANTS`). Pisany ręcznie `.vscode/jaszczurhal.project.json`
+zawiera ustawienia narzędzi, np. domyślną płytkę dla każdej platformy. Skrypt
+`scripts/examples_dispatcher.py` generuje na ich podstawie pozostałe pliki
+VS Code i kompiluje wszystkie konfiguracje przez `vscode/entry/jh-vscode`.
+Zasady opisuje część
+[platformy i warianty](../doc/pl/FwProjectWorkflow.md#platformy-i-warianty).
 
 ## Katalog projektów
 
 Skróty w tabeli: `R0` oznacza `rp2040`, `RA` - `rp2350-arm`, `RV` -
-`rp2350-riscv`, `S` - `stm32g474`, a `E` - `esp32s3`. Kolumna `gateTargets` wskazuje podzbiór
-platform objętych domyślną kontrolą kompilacji. **Dostępna konfiguracja
-kompilacji nie oznacza potwierdzenia działania na każdej płytce.** Zakres
-testów i wymagane połączenia opisują README poszczególnych projektów.
+`rp2350-riscv`, `S` - `stm32g474`, a `E` - `esp32s3`. Wariant kompiluje się
+dla wszystkich platform projektu, chyba że tabela wymienia konkretne
+platformy. Etap 9 skryptu `runalltests.sh` kompiluje wszystkie konfiguracje
+dla `rp2040`, `stm32g474` i `esp32s3`. **Dostępna konfiguracja kompilacji nie
+oznacza potwierdzenia działania na każdej płytce.** Zakres testów i wymagane
+połączenia opisują README poszczególnych projektów.
 
-| Projekt | Co pokazuje przykład | Obsługiwane platformy | `gateTargets` | Warianty |
-|---|---|---|---|---|
-| `01_core_runtime` | Miganie diodą, diagnostyka platformy, timery programowe i obliczenia regulatora PID. | R0, RA, RV, S, E | R0, S, E | `capture` |
-| `02_crypto` | Obliczanie MD5 oraz szyfrowanie i odszyfrowywanie ChaCha20-Poly1305. | R0, RA, RV, S, E | R0, S, E | - |
-| `03_modem_A7670E` | Uruchomienie modemu A7670/A7672 i wysyłanie wiadomości MQTT przez sieć komórkową. | R0, RA, RV, E | R0, E | - |
-| `04_sensor_hub` | Pomiar temperatury DS18B20, temperatury i wilgotności DHT oraz oświetlenia BH1750. | R0, RA, RV, S, E | R0, S, E | - |
-| `05_serial_gps` | Odczyt danych GPS przez UART; wariant z pętlą zwrotną programowego portu szeregowego. | R0, RA, RV, S, E | R0, S, E | `swserial` na R0, RA, RV; domyślna kontrola na R0 |
-| `06_thermocouple` | Odczyt temperatury z termopar przez MCP9600 i MAX6675. | R0, RA, RV, S, E | R0, S, E | - |
-| `07_display_media` | Wyświetlanie grafiki na ILI9341, dekodowanie PNG/JPEG i konwersja Base64/RGB565. | R0, RA, RV, S, E | R0, S, E | - |
-| `08_mqtt` | Publikowanie i odbieranie wiadomości MQTT przez sieć obsługiwaną przez CYW43. | R0, RA, S, E | R0, S, E | - |
-| `09_wireguard` | Przygotowanie konfiguracji WireGuard; samo uruchomienie przykładu nie potwierdza zestawienia tunelu. | R0, RA, S, E | R0, S, E | - |
-| `10_storage` | Zapis ustawień i licznika uruchomień w KV, plików w LittleFS oraz logów na karcie SD/FatFs. | R0, RA, RV, S | R0, S | - |
-| `11_i2c_slave` | Udostępnienie statusu, licznika i czasu w rejestrach urządzenia I2C slave. | R0, RA, RV, S, E | R0, S, E | - |
-| `12_i2c_scan` | Wykrywanie adresów na I2C z limitem czasu; połączenia w kodzie dobrano dla STM32G474. | R0, RA, RV, S, E | R0, S, E | - |
-| `13_adc` | Odczyt napięcia z wewnętrznego ADC i przetwornika ADS1115; w osobnym wariancie ciągły, sprzętowo taktowany skan DMA wejść wewnętrznych. | R0, RA, RV, S, E | R0, S, E | `scan` na R0, RA, RV, S, E; domyślna kontrola na R0, S, E |
-| `14_can_mcp2515` | Wysyłanie i odbieranie ramek klasycznego CAN przez MCP2515. | R0, RA, RV, S, E | R0, S, E | - |
-| `15_display_oled_lcd` | Wyświetlanie tekstu na OLED SSD1306 i znakowym LCD HD44780. | R0, RA, RV, S, E | R0, S, E | - |
-| `16_rtc_backends` | Odczyt RTC, wybudzanie i tryby oszczędzania energii; wariant zegara DS3231/ILI9341. | R0, RA, RV, S | R0, S | wybierany osobno `display-clock` na S |
-| `17_audio_output` | Regulacja wzmocnienia PGA2311 oraz generowanie dźwięku przez PWM z DMA. | R0, RA, RV, S, E | R0, S, E | - |
-| `18_freertos_suite` | Zadania FreeRTOS; wariant sieciowy z WiFi, cJSON, BSD, serwerem HTTP, klientem HTTP/HTTPS, plikami, WebSocket i konsolą. Telegram jest włączony do kompilacji, ale przykład nie wysyła powiadomień. | R0, RA, RV, S, E | R0, S, E | `network` na R0, RA, S, E; domyślna kontrola na R0, S, E |
-| `19_touch` | Odczyt dotyku z TSC2007 i STMPE610. | R0, RA, RV, S, E | R0, S, E | - |
-| `20_irsmall_decoder` | Odbiór i dekodowanie sygnałów podczerwieni przez IRsmall. | R0, RA, RV, S, E | R0, S, E | - |
-| `21_stm32g474_fdcan_native` | Wysyłanie i odbieranie ramek CAN FD na wszystkich kanałach płytki przez wbudowane kontrolery FDCAN w STM32G474; domyślnie pętla zwrotna bez okablowania. | S | S | - |
-| `22_rfid_nfc` | Odczyt identyfikatorów kart przez MFRC522 i PN532. | R0, RA, RV, S, E | R0, S, E | - |
-| `23_io_pmic` | Sterowanie diodą RGB, ekspanderem I/O i DAC oraz odczyt stanu zasilania z ADP5360. | R0, RA, RV, S, E | R0, S, E | - |
-| `24_epd_display` | Wyświetlanie wzoru testowego i odświeżanie ekranu e-paper 200 × 200. | R0, RA, RV, S, E | R0, S, E | - |
-| `25_ota` | Aktualizacja OTA: wykrywanie urządzenia, przygotowanie po uwierzytelnieniu, potwierdzenie nowej wersji, wycofanie aktualizacji i odzyskiwanie przez BOOTSEL. | R0, RA, E | R0, E | - |
-| `26_ble_stream` | Wymiana danych i poleceń przez JH BLE Stream v1 po obustronnym uwierzytelnieniu. | R0, RA, S | R0, RA, S | `commands` i `commands-freertos` na R0, RA, S; domyślna kontrola na R0 |
-| `27_lora_point_to_point` | Wymiana ping/pong przez SX1262 oraz 500-bajtowych poleceń i odpowiedzi we fragmentach przez `hal_lora_link`. | R0, S | R0, S | `probe`, `responder`, `link` i `link-responder` na R0, S; warianty sprzętowe wybierane osobno `sf7` i `responder-sf7` |
-| `28_serial_commands` | Odbieranie poleceń Serial Session i kierowanie ich do wspólnych procedur obsługi. | R0, RA, RV, S, E | R0, S, E | - |
-| `29_bluetooth_gamepad` | Odczyt gamepada, wykrywanie urządzeń Classic i odbiór surowych raportów HID. | R0, RA, S | R0 | `classic-scan`, `hid-host` i `ble` na R0, RA, S; domyślna kontrola na R0 |
-| `30_bluetooth_speaker` | Odbiór dźwięku A2DP i odtwarzanie przez PWM; opcjonalna regulacja głośności AVRCP i kompilacja z BLE. | R0, RA | R0, RA | `avrcp` i `ble-a2dp` na R0, RA; oba w domyślnej kontroli |
+| Projekt | Co pokazuje przykład | Obsługiwane platformy | Warianty |
+|---|---|---|---|
+| `01_core_runtime` | Miganie diodą, diagnostyka platformy, timery programowe i obliczenia regulatora PID. | R0, RA, RV, S, E | `CAPTURE` |
+| `02_crypto` | Obliczanie MD5 oraz szyfrowanie i odszyfrowywanie ChaCha20-Poly1305. | R0, RA, RV, S, E | - |
+| `03_modem_A7670E` | Uruchomienie modemu A7670/A7672 i wysyłanie wiadomości MQTT przez sieć komórkową. | R0, RA, RV, E | - |
+| `04_sensor_hub` | Pomiar temperatury DS18B20, temperatury i wilgotności DHT oraz oświetlenia BH1750. | R0, RA, RV, S, E | - |
+| `05_serial_gps` | Odczyt danych GPS przez UART; wariant z pętlą zwrotną programowego portu szeregowego. | R0, RA, RV, S, E | `SWSERIAL` na R0, RA, RV |
+| `06_thermocouple` | Odczyt temperatury z termopar przez MCP9600 i MAX6675. | R0, RA, RV, S, E | - |
+| `07_display_media` | Wyświetlanie grafiki na ILI9341, dekodowanie PNG/JPEG i konwersja Base64/RGB565. | R0, RA, RV, S, E | - |
+| `08_mqtt` | Publikowanie i odbieranie wiadomości MQTT przez sieć obsługiwaną przez CYW43. | R0, RA, S, E | - |
+| `09_wireguard` | Przygotowanie konfiguracji WireGuard; samo uruchomienie przykładu nie potwierdza zestawienia tunelu. | R0, RA, S, E | - |
+| `10_storage` | Zapis ustawień i licznika uruchomień w KV, plików w LittleFS oraz logów na karcie SD/FatFs. | R0, RA, RV, S | - |
+| `11_i2c_slave` | Udostępnienie statusu, licznika i czasu w rejestrach urządzenia I2C slave. | R0, RA, RV, S, E | - |
+| `12_i2c_scan` | Wykrywanie adresów na I2C z limitem czasu; połączenia w kodzie dobrano dla STM32G474. | R0, RA, RV, S, E | - |
+| `13_adc` | Odczyt napięcia z wewnętrznego ADC i przetwornika ADS1115; w osobnym wariancie ciągły, sprzętowo taktowany skan DMA wejść wewnętrznych. | R0, RA, RV, S, E | `SCAN` |
+| `14_can_mcp2515` | Wysyłanie i odbieranie ramek klasycznego CAN przez MCP2515. | R0, RA, RV, S, E | - |
+| `15_display_oled_lcd` | Wyświetlanie tekstu na OLED SSD1306 i znakowym LCD HD44780. | R0, RA, RV, S, E | - |
+| `16_rtc_backends` | Odczyt RTC, wybudzanie i tryby oszczędzania energii; wariant zegara DS3231/ILI9341. | R0, RA, RV, S | `DISPLAY_CLOCK` na S |
+| `17_audio_output` | Regulacja wzmocnienia PGA2311 oraz generowanie dźwięku przez PWM z DMA. | R0, RA, RV, S, E | - |
+| `18_freertos_suite` | Zadania FreeRTOS; wariant sieciowy z WiFi, cJSON, BSD, serwerem HTTP, klientem HTTP/HTTPS, plikami, WebSocket i konsolą. Telegram jest włączony do kompilacji, ale przykład nie wysyła powiadomień. | R0, RA, RV, S, E | `NETWORK` na R0, RA, S, E |
+| `19_touch` | Odczyt dotyku z TSC2007 i STMPE610. | R0, RA, RV, S, E | - |
+| `20_irsmall_decoder` | Odbiór i dekodowanie sygnałów podczerwieni przez IRsmall. | R0, RA, RV, S, E | - |
+| `21_stm32g474_fdcan_native` | Wysyłanie i odbieranie ramek CAN FD na wszystkich kanałach płytki przez wbudowane kontrolery FDCAN w STM32G474; domyślnie pętla zwrotna bez okablowania. | S | - |
+| `22_rfid_nfc` | Odczyt identyfikatorów kart przez MFRC522 i PN532. | R0, RA, RV, S, E | - |
+| `23_io_pmic` | Sterowanie diodą RGB, ekspanderem I/O i DAC oraz odczyt stanu zasilania z ADP5360. | R0, RA, RV, S, E | - |
+| `24_epd_display` | Wyświetlanie wzoru testowego i odświeżanie ekranu e-paper 200 × 200. | R0, RA, RV, S, E | - |
+| `25_ota` | Aktualizacja OTA: wykrywanie urządzenia, przygotowanie po uwierzytelnieniu, potwierdzenie nowej wersji, wycofanie aktualizacji i odzyskiwanie przez BOOTSEL. | R0, RA, E | - |
+| `26_ble_stream` | Wymiana danych i poleceń przez JH BLE Stream v1 po obustronnym uwierzytelnieniu. | R0, RA, S | `COMMANDS`, `COMMANDS_FREERTOS` |
+| `27_lora_point_to_point` | Wymiana ping/pong przez SX1262 oraz 500-bajtowych poleceń i odpowiedzi we fragmentach przez `hal_lora_link`. | R0, S | `PROBE`, `RESPONDER`, `SF7`, `RESPONDER_SF7`, `LINK`, `LINK_RESPONDER` |
+| `28_serial_commands` | Odbieranie poleceń Serial Session i kierowanie ich do wspólnych procedur obsługi. | R0, RA, RV, S, E | - |
+| `29_bluetooth_gamepad` | Odczyt gamepada, wykrywanie urządzeń Classic i odbiór surowych raportów HID. | R0, RA, S | `CLASSIC_SCAN`, `HID_HOST`, `BLE` |
+| `30_bluetooth_speaker` | Odbiór dźwięku A2DP i odtwarzanie przez PWM; opcjonalna regulacja głośności AVRCP i kompilacja z BLE. | R0, RA | `AVRCP`, `BLE_A2DP` |
 
 Projekty sieciowe na RP używają domyślnie `picow` dla RP2040 i `pico2w`
 dla RP2350 ARM. Konfiguracje RP2350 RISC-V wymagające CYW43 nie są
@@ -64,12 +69,12 @@ NUCLEO-G474RE z zewnętrznym modułem PIM730/RM2.
 Projekt LoRa buduje się dla zwykłych płytek `pico` i `nucleo-g474re`
 z zewnętrznym modułem Waveshare Core1262-HF podłączonym zgodnie z jego README.
 Dla zintegrowanej płytki Waveshare LF wybierz jawnie `rp2040-lora-lf`. Urządzenia LF i HF pracują w różnych pasmach;
-nie zestawiaj z nich jednej pary radiowej. Wariant `probe` sprawdza funkcje
+nie zestawiaj z nich jednej pary radiowej. Wariant `PROBE` sprawdza funkcje
 układu, kalibrację, bieżące RSSI i CAD bez nadawania. Wersja podstawowa
-i `responder` używają SF9/10 dBm, a `sf7` i `responder-sf7` tworzą parę
+i `RESPONDER` używają SF9/10 dBm, a `SF7` i `RESPONDER_SF7` tworzą parę
 testową z SF7/6 dBm.
 
-Warianty `link` i `link-responder` wymieniają 500-bajtowe binarne polecenie
+Warianty `LINK` i `LINK_RESPONDER` wymieniają 500-bajtowe binarne polecenie
 `echo` i odpowiedź, po trzy fragmenty w każdym kierunku. Sprawdzają
 adresowanie, identyfikatory żądań, składanie wiadomości, odrzucanie
 duplikatów i retransmisję. Reguła routera dopuszcza także źródło
@@ -90,10 +95,10 @@ potwierdzenia działania na sprzęcie.
 | `stm32g474` | `nucleo-g474re` | GNU Arm | ELF, BIN, HEX, MAP |
 | `esp32s3` | `waveshare-esp32-s3-zero` | ESP-IDF w ustalonej wersji | ELF, BIN, MAP, bootloader, tabela partycji, `jh_esp_idf_artifacts.json` |
 
-Dla `esp32s3` `jh-vscode` uruchamia `scripts/build_esp_idf.py` ze źródłami
-i definicjami z manifestu zamiast dispatchera CMake. Przykład deklaruje
-`esp32s3` tylko wtedy, gdy każda żądana przez niego funkcja jest na liście
-`supportedFeatures` targetu; lista obejmuje backendy ESP-IDF oraz przenośne
+Dla `esp32s3` `jh-vscode` uruchamia `scripts/build_esp_idf.py` z nagłówkiem
+projektu i wybranym wariantem zamiast dispatchera CMake. Przykład umieszcza
+`HAL_TARGET_ESP32_S3` w `JH_PROJECT_TARGETS` tylko wtedy, gdy każda żądana
+przez niego funkcja jest na liście `supportedFeatures` targetu; lista obejmuje backendy ESP-IDF oraz przenośne
 sterowniki magistral, czujników, wyświetlaczy, kodeków i komend, a poza nią
 pozostają pamięć flash, audio, zasilanie, wewnętrzny RTC, LoRa, BLE Stream
 i Bluetooth Classic. Projekt `tests/fixtures/esp32s3_phase3`
@@ -119,11 +124,18 @@ i wielokrotną kompilację całego HAL-a dla każdej platformy.
 
 Utwórz osobny projekt, gdy połączenie nie jest praktyczne ze względu na
 platformę, narzędzia kompilacji, sposób wykonywania zadań, profil płytki,
-konflikt zasobów lub wymagania sprzętowe. Opisz przyczynę w tym katalogu
-i podaj dokładne `targets` oraz `gateTargets` w
-`config/tooling/examples.json`. Wariant dodawaj wtedy, gdy zachowania
-nie można wybrać podczas działania programu. Po zmianie sprawdź liczbę
-konfiguracji w pełnym zestawie kompilacji i w domyślnych kontrolach.
+konflikt zasobów lub wymagania sprzętowe, i opisz przyczynę w tym katalogu.
+Nowy przykład to katalog w `examples/` z ręcznie napisanym
+`.vscode/jaszczurhal.project.json` i plikiem `hal_project_config.h`, który
+deklaruje platformy w `JH_PROJECT_TARGETS`. Pozostałe pliki VS Code zapisze
+`scripts/examples_dispatcher.py generate`.
+
+Wariant dodawaj do `JH_PROJECT_VARIANTS` tylko wtedy, gdy zachowania nie można
+wybrać podczas działania programu. Ograniczenie wariantu do części platform
+zapisz w nagłówku przez `#error`. Wynikowe konfiguracje pokazuje
+`scripts/examples_dispatcher.py list`; po zmianie zaktualizuj liczby
+konfiguracji pełnej macierzy i etapu 9 zapisane w
+`tests/test_vscode_native_workflow.py`.
 
 ## Polecenia kompilacji
 
@@ -144,7 +156,7 @@ vscode/entry/jh-vscode build \
   --project examples/01_core_runtime --target rp2040 --board pico
 ```
 
-Wybrane projekty z rejestru:
+Wybrane projekty:
 
 ```bash
 scripts/examples_dispatcher.py build \
@@ -152,23 +164,29 @@ scripts/examples_dispatcher.py build \
   --example 01_core_runtime --example 10_storage
 ```
 
-Wyświetlenie zestawu konfiguracji i odświeżenie plików generowanych po
-zmianie rejestru:
+Jeden wariant:
+
+```bash
+vscode/entry/jh-vscode build \
+  --project examples/16_rtc_backends \
+  --target stm32g474 --board nucleo-g474re --variant DISPLAY_CLOCK
+```
+
+Wyświetlenie zestawu konfiguracji i odświeżenie wygenerowanych plików VS Code
+po zmianie manifestu lub nagłówka:
 
 ```bash
 scripts/examples_dispatcher.py list
-python3 scripts/sync_generated.py --write
+scripts/examples_dispatcher.py generate
+scripts/examples_dispatcher.py check
 ```
 
-Pliki wynikowe trafiają do `.build/examples/<example>/`. Katalogi robocze
-CMake mają postać `.build/examples/<example>/cmake/<target>/<board>/`.
-Plik `examples/CMakeLists.txt` pozwala wywołać ten sam skrypt przez CMake:
+`python3 scripts/sync_generated.py --write` uruchamia `generate` razem
+z pozostałymi generatorami repozytorium.
 
-```bash
-cmake -S examples -B .build/examples-cmake/rp2040 \
-  -DJH_EXAMPLE_TARGET=rp2040
-cmake --build .build/examples-cmake/rp2040
-```
+Pliki wynikowe trafiają do `.build/examples/<example>/`, a pliki wariantu do
+`.build/examples/<example>/variants/<id>/`. Katalogi robocze CMake mają postać
+`.build/examples/<example>/cmake/<target>/<board>/`.
 
 ## Struktura aplikacji
 
@@ -230,10 +248,9 @@ Moduły biblioteki włącza się w `hal_project_config.h`:
 Definiuj makra `HAL_ENABLE_*` bez wartości albo z wartością `1`.
 Narzędzia projektu odrzucają wartość `0`; aby wyłączyć moduł, pomiń makro.
 Nagłówek powinien zawierać wyłącznie makra, ponieważ jest odczytywany
-przed ustaleniem końcowej konfiguracji platformy i płytki. Definicje muszą
-być bezwarunkowe. Wyjątkiem jest `#ifndef` chroniący definicję tego samego
-symbolu: narzędzie wybierające źródła odczytuje te deklaracje jako tekst,
-a nie wynik pełnego przetwarzania przez preprocesor.
+przed ustaleniem końcowej konfiguracji platformy i płytki. Definicje mogą
+zależeć od makra platformy lub definicji wariantu; zobacz
+[platformy i warianty](../doc/pl/FwProjectWorkflow.md#platformy-i-warianty).
 
 Proces kompilacji ustawia `HAL_PROVIDE_APP_ENTRY`. Przypisanie pinów
 pochodzi z wybranego, wygenerowanego profilu płytki. Gdy żaden gotowy
@@ -247,9 +264,10 @@ Nazwy zadań i skróty klawiszowe opisano w rozdziale
 wybór platformy i płytki, wyszukiwanie źródeł oraz katalogi wynikowe
 przedstawia [praca z projektem firmware](../doc/pl/FwProjectWorkflow.md).
 
-Pliki projektów i zadań są generowane na podstawie rejestru i narzędzi
-repozytorium. Trwałe zmiany opisów trzeba wprowadzać także w odpowiednim
-źródle generatora; ręczna zmiana wygenerowanego pliku może zostać nadpisana
-przy kolejnym odświeżeniu.
+Manifest pisze się ręcznie. Pliki `settings.json`, `tasks.json`,
+`launch.json`, `keybindings.reference.json` i `extensions.json` generuje
+na podstawie manifestu i nagłówka `scripts/examples_dispatcher.py generate`.
+Trwałą zmianę opisu w tych plikach wprowadź w źródle generatora; ręczna
+edycja zostanie nadpisana przy kolejnym odświeżeniu.
 
-Wariant `capture` przykładu `01_core_runtime` ma osobny punkt wejścia, ponieważ rezerwuje wejście pomiarowe i zasoby timera/DMA; bazowa aplikacja diagnostyczna ich nie potrzebuje.
+Wariant `CAPTURE` przykładu `01_core_runtime` ma osobny punkt wejścia, ponieważ rezerwuje wejście pomiarowe i zasoby timera/DMA; bazowa aplikacja diagnostyczna ich nie potrzebuje.

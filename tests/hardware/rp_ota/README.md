@@ -41,7 +41,7 @@ python3 tests/hardware/rp_ota/verify_ota.py \
 ```
 
 Use `--target rp2350-arm --board pico2w` for Pico 2 W. Add
-`--variant freertos` to both build and upload, then pass `--runtime freertos`
+`--variant FREERTOS` to both build and upload, then pass `--runtime freertos`
 to the verifier for the FreeRTOS variant. The fixture gives its application
 task an 8 KiB stack in FreeRTOS builds because CYW43 initialization and OTA
 handling exceed the general-purpose 2 KiB default.
@@ -78,7 +78,7 @@ Add `--status-only` to validate the board identity, network readiness, and
 automatic gSPI clock telemetry without generating or transferring OTA images.
 This diagnostic mode does not require the OTA password or build artifacts.
 
-Use `--variant freertos`, `--runtime freertos`, and the artifact directory
+Use `--variant FREERTOS`, `--runtime freertos`, and the artifact directory
 `.build/hardware/rp_ota/cmake/variants/freertos/rp2040/pico-rm2` for the
 FreeRTOS run.
 

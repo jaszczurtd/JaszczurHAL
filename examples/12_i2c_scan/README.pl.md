@@ -20,10 +20,10 @@ Połączenie PB9/PB8 sprawdzono wcześniej z PCF8563 (`0x51`) i DS3231 (`0x68`).
 Ten przykład używa 100 kHz; przykład `examples/16_rtc_backends` korzysta
 z tego samego połączenia przy 400 kHz.
 
-**Zakres konfiguracji:** manifest zawiera również platformy RP, ale
-`app.c` ma na stałe wpisane piny `25u`/`24u` i opis STM32G474. W STM32
+**Zakres konfiguracji:** `hal_project_config.h` deklaruje również platformy
+RP, ale `app.c` ma na stałe wpisane piny `25u`/`24u` i opis STM32G474. W STM32
 oznaczają one PB9/PB8. Przed uruchomieniem na RP sprawdź konfigurację pinów;
-sama obecność platformy w manifeście nie potwierdza działania tego połączenia.
+sama deklaracja platformy nie potwierdza działania tego połączenia.
 
 ## Połączenia sprzętowe
 

@@ -6,6 +6,9 @@
  */
 
 #include <hal/core/hal_config.h>
+
+#if defined(EXAMPLE_FREERTOS_NETWORK)
+
 #include <hal/core/hal_target.h>
 
 #if !defined(HAL_ENABLE_FREERTOS)
@@ -1174,3 +1177,5 @@ void app_task1(void) {
 #endif
   hal_delay_ms(25u);
 }
+
+#endif /* defined(EXAMPLE_FREERTOS_NETWORK) */

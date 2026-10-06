@@ -134,7 +134,7 @@ uses `jaszczurhal.vscodeEntry`; the Windows override uses
 | `Project: Select board` | `select-board --interactive` | Selects the target and board in the terminal and persists the selection locally. |
 | `Project: Select board (GUI)` | `select-board --selection ...` | Uses the generated VS Code picker and persists the selected target/board pair locally. |
 | `Project: Sync board picker` | `sync-board-picker` | Runs once on trusted folder open, refreshes picker values, and creates or repairs the managed RP2040, RP2350 Arm, and STM32G474 debug profiles while preserving consumer-owned profiles. |
-| `Project: Build variant: <id>` | `build --variant <id>` | Appears for each variant the manifest declares in `variants` or `example.variants` and builds it into `<buildDir>/variants/<id>` through the normal artifact pipeline. |
+| `Project: Build variant: <id>` | `build --variant <id>` | Appears for each variant declared by `JH_PROJECT_VARIANTS` in `hal_project_config.h`, with the detail "Build the <id> variant: <description>.", and builds it as module `<module>_<id>` into `<buildDir>/variants/<id>` through the normal artifact pipeline. |
 | `Project: Upload variant: <id>` | `upload --variant <id>` | Builds and uploads that variant through the active target backend, like `Project: Upload`. |
 
 The Run and Debug panel exposes three Cortex-Debug launch configurations:
@@ -152,7 +152,7 @@ Common options:
 --project <path>       Firmware module directory.
 --target <id>          Override active target family for this invocation.
 --board <id>           Override active board within the target.
---variant <id>         Select a variant declared by the manifest.
+--variant <id>         Select a variant declared in hal_project_config.h.
 --selection <t:b>      Persist target/board selection; GUI labels are accepted.
 --interactive          Prompt for target/board selection in the terminal.
 --port <port>          Override configured upload/monitor port.
@@ -240,7 +240,7 @@ launch profiles.
 
 ## Adding Project Source Files
 
-Source discovery and the complete `JH_PROJECT_SOURCES` rules are defined in
+Source discovery and the `JH_EXTRA_SOURCES` rules are defined in
 [Adding Project Source Files](../doc/en/FwProjectWorkflow.md#adding-project-source-files).
 That document is the only source for project layout and manifest examples.
 
@@ -269,16 +269,16 @@ libraries/JaszczurHAL/vscode/tools/create-vscode-example.py \
   --board nucleo-g474re
 ```
 
-Feature flags in the project header, final target profile, and active
-variant accept bare `HAL_ENABLE_X` or `HAL_ENABLE_X=1`. `jh-vscode` rejects
-`=0` and CMake generator expressions with `[JH-CFG-VALUE]` before CMake
-configure. In definition-list inputs, every `HAL_ENABLE_*` entry must be a
-standalone simple token separated with semicolons; whitespace does not separate
-multiple feature definitions.
+Feature flags in the project header and in the active variant accept bare
+`HAL_ENABLE_X` or `HAL_ENABLE_X=1`. `jh-vscode` rejects `=0` with
+`[JH-CFG-VALUE]` before CMake configure. It also rejects a manifest that
+carries project configuration (the `variants` or `example` fields, or
+`JH_EXTRA_DEFINES`, `EXTRA_HAL_DEFINES`, `JH_PROJECT_SOURCES`, `JH_VARIANT`,
+`HAL_ENABLE_*`, or `HAL_DISABLE_*` in a CMake cache) with `[JH-CFG-MANIFEST]`.
 
-After applying the active target profile and variant, `jh-vscode` validates
-unknown and derived symbols, resolves transitive implications, and checks
-registry requirements and conflicts. `config-dump` exposes this result as
+After evaluating the project header for the active target and variant,
+`jh-vscode` validates unknown and derived symbols, resolves transitive
+implications, and checks registry requirements and conflicts. `config-dump` exposes this result as
 `featureResolution`, with `registryDigest`, `requestedFeatures`,
 `resolvedFeatures`, `resolvedFeaturesDigest`, and per-request `provenance`.
 Requested features remain the CMake inputs; preflight and OTA eligibility use
@@ -293,11 +293,9 @@ with `[JH-CFG-UNSUPPORTED]`.
 
 The project header is a macro-only input loaded before target auto-detection;
 do not include JaszczurHAL headers or use derived target/board selectors in it.
-Feature definitions used for source selection must be unconditional
-`#define HAL_ENABLE_X` or `#define HAL_ENABLE_X 1`; only a same-symbol
-`#ifndef HAL_ENABLE_X` guard is supported. Do not put feature definitions under
-any other conditional branch because the early collector reads the file
-textually.
+Conditions on the target selector and on variant definitions are supported,
+and the header declares the project's targets and variants. The rules are in
+[Targets and variants](../doc/en/FwProjectWorkflow.md#targets-and-variants).
 
 The generated project uses `jh-vscode` for the same actions as migrated
 projects:
@@ -335,8 +333,9 @@ The full generated project should live outside `libraries/JaszczurHAL/vscode/`.
 The `vscode/examples/` directory remains a place for lightweight configuration
 snippets, not a checked-in firmware project.
 
-The shared snippets and all checked-in example `.vscode` files use the
-repository-wide generated-artifact runner:
+The shared snippets and the generated `.vscode` files of the checked-in
+examples use the repository-wide generated-artifact runner. An example's
+manifest is written by hand and is only checked, never rewritten:
 
 ```bash
 python3 scripts/sync_generated.py --check
@@ -344,7 +343,7 @@ python3 scripts/sync_generated.py --write
 ```
 
 The first command is read-only and suitable for CI. The second refreshes every
-tracked projection from its registry.
+tracked generated file from its source.
 
 ## VS Code Extensions
 

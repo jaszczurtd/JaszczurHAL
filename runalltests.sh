@@ -386,7 +386,6 @@ for target in "${RP_PICO_TARGETS[@]}"; do
     run_logged "${LOG_ROOT}/jh_rp_pico_freertos_${target}.log" \
         "${SCRIPT_DIR}/scripts/build_rp_pico_lib.sh" \
             --target "${target}" --example 18_freertos_suite \
-            --example-source app.c \
             --freertos --clean --jobs "${JOBS}" \
             --output "${GATE_BUILD_ROOT}/rp-pico/${target}/freertos"
 done
@@ -588,25 +587,15 @@ pass "ESP32-S3 linkable library published libJaszczurHAL.a with its generated he
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 9: Examples build
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 9/9: Consolidated examples (representative RP + STM32G474 + ESP32-S3)"
+header "Gate 9/9: Examples (every configuration on RP2040 + STM32G474 + ESP32-S3)"
 
-info "Building the RP2040 example gate set..."
-run_logged "${LOG_ROOT}/jh_examples_rp2040_native_build.log" \
-    "${SCRIPT_DIR}/scripts/examples_dispatcher.py" build \
-        --target rp2040 --gate --jobs "${JOBS}"
-pass "RP2040 example gate set built successfully; Gate 8 covers both RP2350 ISAs."
-
-info "Building STM32G474 examples through dispatcher-backed VS Code manifests..."
-run_logged "${LOG_ROOT}/jh_examples_stm32g474_build.log" \
-    "${SCRIPT_DIR}/scripts/examples_dispatcher.py" build \
-        --target stm32g474 --gate --jobs "${JOBS}"
-pass "STM32G474 examples built successfully."
-
-info "Building ESP32-S3 examples through dispatcher-backed VS Code manifests..."
-run_logged "${LOG_ROOT}/jh_examples_esp32s3_build.log" \
-    "${SCRIPT_DIR}/scripts/examples_dispatcher.py" build \
-        --target esp32s3 --gate --jobs "${JOBS}"
-pass "ESP32-S3 examples built successfully."
+for target in rp2040 stm32g474 esp32s3; do
+    info "Building every ${target} example configuration through jh-vscode..."
+    run_logged "${LOG_ROOT}/jh_examples_${target}_build.log" \
+        "${SCRIPT_DIR}/scripts/examples_dispatcher.py" build \
+            --target "${target}" --jobs "${JOBS}"
+done
+pass "Every example configuration built for RP2040, STM32G474 and ESP32-S3; Gate 8 covers both RP2350 ISAs."
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Summary

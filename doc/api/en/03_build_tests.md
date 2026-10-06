@@ -78,8 +78,8 @@ SDK is required.
 | Target backends on the host | `tests/fakes/<sdk>/` headers and fakes, a dedicated executable in `tests/CMakeLists.txt` | CMake plus CTest | Compile the real backend against the fake SDK and check its behaviour through the fake: recorded driver calls, injected failures, and simulated interrupts. |
 | FreeRTOS POSIX host tests | `tests/freertos_posix/`, `JH_ENABLE_FREERTOS_POSIX_TESTS` | CTest through the host build or full gate | Add a target with `add_hal_freertos_posix_test(...)`. |
 | Repository quality gate | `runalltests.sh`, `.github/workflows/ci.yml`, and the tooling data described in `00_scripts.md` | `./runalltests.sh` | Extend the owning gate and its focused regression tests; keep generated artifacts below `.build/`. |
-| Firmware compile fixtures | `tests/fixtures/<fixture>/.vscode/jaszczurhal.project.json` | `jh-vscode` or the target production runner | Extend the manifest target/board/variant matrix and its artifact-layout test. |
-| Physical hardware fixtures | `tests/hardware/<fixture>/` source, manifest, and verifier | Build/upload through `jh-vscode` or the target production runner, then run the verifier described in the fixture README | Add the firmware, explicit hardware matrix, host oracle, a README with the procedure and acceptance criteria in both languages, and a row in the table below. |
+| Firmware compile fixtures | `tests/fixtures/<fixture>/.vscode/jaszczurhal.project.json` | `jh-vscode` or the target production runner | Extend the targets and variants in the fixture's `hal_project_config.h`, the boards in its manifest, and its artifact-layout test. |
+| Physical hardware fixtures | `tests/hardware/<fixture>/` source, `hal_project_config.h`, manifest, and verifier | Build/upload through `jh-vscode` or the target production runner, then run the verifier described in the fixture README | Add the firmware, explicit hardware matrix, host oracle, a README with the procedure and acceptance criteria in both languages, and a row in the table below. |
 
 If the description disagrees with test behavior, check the configuration and executable files listed above. Each hardware fixture README holds its procedure, wiring, and requirements; [Tests on physical devices](#hardware-fixtures) lists them all.
 
@@ -156,8 +156,8 @@ Runs the complete quality-gate suite (9 gates, in order):
    compile-only `tests/fixtures/esp32s3_phase3` build with the pinned ESP-IDF
    and validated multi-image manifest, and the ESP32-S3 all-features
    `libJaszczurHAL.a` covering the whole target allowlist)
-9. Examples build (the dispatcher-derived `gateTargets` matrix for RP2040,
-   STM32G474 and ESP32-S3 plus dedicated target/runtime fixtures)
+9. Examples build (every example configuration for RP2040, STM32G474 and
+   ESP32-S3 through `scripts/examples_dispatcher.py`; Gate 8 covers RP2350)
 
 Exits non-zero on the first failure; logs capture warnings/errors from both
 standard output and standard error.
@@ -261,7 +261,7 @@ Each fixture README lists the wiring, the commands, and the pass criteria. The l
 
 ### Bluetooth Classic manager hardware test
 
-The public `classic-scan` variant of example 29 is the generic Classic
+The public `CLASSIC_SCAN` variant of example 29 is the generic Classic
 hardware probe. It uses only `HAL_ENABLE_BLUETOOTH_CLASSIC`, assigns volatile
 indexes to observed devices, and deliberately omits Bluetooth addresses and
 link-key material from its log. Build, upload, and open its serial console:
@@ -269,10 +269,10 @@ link-key material from its log. Build, upload, and open its serial console:
 ```sh
 vscode/entry/jh-vscode build \
   --project examples/29_bluetooth_gamepad \
-  --target rp2350-arm --board pico2w --variant classic-scan
+  --target rp2350-arm --board pico2w --variant CLASSIC_SCAN
 vscode/entry/jh-vscode upload \
   --project examples/29_bluetooth_gamepad \
-  --target rp2350-arm --board pico2w --variant classic-scan \
+  --target rp2350-arm --board pico2w --variant CLASSIC_SCAN \
   --port /dev/ttyACM0
 ```
 
@@ -289,16 +289,16 @@ The check does not cover an audio data profile.
 
 ### BLE and Classic gamepad coexistence validation
 
-The public `ble` variant of example 29 runs a passive BLE Observer beside the
+The public `BLE` variant of example 29 runs a passive BLE Observer beside the
 Classic HID/gamepad profile on the shared CYW43 host:
 
 ```sh
 vscode/entry/jh-vscode build \
   --project examples/29_bluetooth_gamepad \
-  --target rp2350-arm --board pico2w --variant ble
+  --target rp2350-arm --board pico2w --variant BLE
 vscode/entry/jh-vscode upload \
   --project examples/29_bluetooth_gamepad \
-  --target rp2350-arm --board pico2w --variant ble \
+  --target rp2350-arm --board pico2w --variant BLE \
   --port /dev/ttyACM0
 ```
 
@@ -318,17 +318,17 @@ Example 30 is the public A2DP/AVRCP hardware exercise for Pico W and Pico 2 W:
 ```sh
 vscode/entry/jh-vscode build \
   --project examples/30_bluetooth_speaker \
-  --target rp2040 --board picow --variant avrcp
+  --target rp2040 --board picow --variant AVRCP
 vscode/entry/jh-vscode upload \
   --project examples/30_bluetooth_speaker \
-  --target rp2040 --board picow --variant avrcp \
+  --target rp2040 --board picow --variant AVRCP \
   --port /dev/ttyACM0
 vscode/entry/jh-vscode build \
   --project examples/30_bluetooth_speaker \
-  --target rp2350-arm --board pico2w --variant avrcp
+  --target rp2350-arm --board pico2w --variant AVRCP
 vscode/entry/jh-vscode upload \
   --project examples/30_bluetooth_speaker \
-  --target rp2350-arm --board pico2w --variant avrcp \
+  --target rp2350-arm --board pico2w --variant AVRCP \
   --port /dev/ttyACM0
 ```
 
@@ -337,7 +337,7 @@ Follow the wiring, pairing, and serial-command procedure in the
 requires clean SBC playback, pause/resume/stop, AVRCP absolute volume, bonded
 reconnect after restart, a separate watchdog-reset reconnect, and no queue,
 pool, DMA, or timing failure. The physical output stage remains a product-level
-check. The `ble-a2dp` variant is part of the compile gate; active audio+BLE
+check. The `BLE_A2DP` variant is part of the compile gate; active audio+BLE
 coexistence is not yet a hardware requirement.
 
 <a id="firmware-compilelink-fixtures"></a>

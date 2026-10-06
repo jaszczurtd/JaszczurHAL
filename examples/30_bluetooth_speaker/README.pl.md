@@ -8,8 +8,8 @@ widoczny jako `JaszczurHAL Speaker`. Odbiera dźwięk SBC z częstotliwością
 miksuje go do próbek PCM mono ze znakiem i odtwarza przez wyjście PWM na
 GP6. Przesyłaniem próbek sterują timer i DMA.
 
-Wersja podstawowa obsługuje A2DP. Wariant `avrcp` dodaje bezwzględną
-regulację głośności, a `ble-a2dp` kompiluje obsługę BLE i Classic/A2DP
+Wersja podstawowa obsługuje A2DP. Wariant `AVRCP` dodaje bezwzględną
+regulację głośności, a `BLE_A2DP` kompiluje obsługę BLE i Classic/A2DP
 wspólnie dla kontrolera CYW43. Przykład jest dostępny tylko dla rodziny RP.
 
 ## Połączenie
@@ -48,9 +48,9 @@ Uruchom z głównego katalogu repozytorium:
   --example 30_bluetooth_speaker
 
 vscode/entry/jh-vscode build --project examples/30_bluetooth_speaker \
-  --target rp2040 --board picow --variant avrcp
+  --target rp2040 --board picow --variant AVRCP
 vscode/entry/jh-vscode build --project examples/30_bluetooth_speaker \
-  --target rp2350-arm --board pico2w --variant ble-a2dp
+  --target rp2350-arm --board pico2w --variant BLE_A2DP
 ```
 
 ## Parowanie i odtwarzanie

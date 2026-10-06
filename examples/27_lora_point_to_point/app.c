@@ -7,6 +7,10 @@
  * without transmitting. See README.md for matching LF and HF hardware.
  */
 
+#include <hal/core/hal_config.h>
+
+#if !defined(HAL_ENABLE_LORA_COMMANDS)
+
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_status.h>
 #include <hal/gpio/hal_gpio.h>
@@ -541,3 +545,5 @@ void app_task0(void) {
   initiator_start_transmit();
 #endif
 }
+
+#endif /* !defined(HAL_ENABLE_LORA_COMMANDS) */

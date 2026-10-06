@@ -331,8 +331,8 @@
             "problemMatcher": []
         },
         {
-            "label": "Project: Build variant: display-clock",
-            "detail": "Build the DS3231 clock with an ILI9341 display (display-clock).",
+            "label": "Project: Build variant: DISPLAY_CLOCK",
+            "detail": "Build the DISPLAY_CLOCK variant: DS3231 clock with an ILI9341 display.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -343,14 +343,14 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "display-clock"
+                "DISPLAY_CLOCK"
             ],
             "group": "build",
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Project: Upload variant: display-clock",
-            "detail": "Build and upload the DS3231 clock with an ILI9341 display (display-clock).",
+            "label": "Project: Upload variant: DISPLAY_CLOCK",
+            "detail": "Build and upload the DISPLAY_CLOCK variant: DS3231 clock with an ILI9341 display.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -361,7 +361,7 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "display-clock"
+                "DISPLAY_CLOCK"
             ],
             "problemMatcher": "$gcc"
         }

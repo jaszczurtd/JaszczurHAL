@@ -10,7 +10,7 @@ druga funkcja zwraca również status operacji.
 Brak ADS1115 nie zatrzymuje pomiarów wewnętrznego ADC. Aplikacja ponawia
 inicjalizację zewnętrznego przetwornika co pięć sekund.
 
-Wariant `scan` włącza `HAL_ENABLE_ADC_SCAN` i próbkuje oba wejścia wewnętrzne
+Wariant `SCAN` włącza `HAL_ENABLE_ADC_SCAN` i próbkuje oba wejścia wewnętrzne
 oraz czujnik temperatury w sposób ciągły, z taktowaniem sprzętowym: każdy pin
 co 12 µs, jeden blok 400 ramek co 4,8 ms. Raportuje średnią, minimum i maksimum
 z bloków zebranych w ostatniej sekundzie oraz liczbę bloków pominiętych.

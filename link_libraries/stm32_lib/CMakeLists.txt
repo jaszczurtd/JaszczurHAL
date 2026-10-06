@@ -28,23 +28,7 @@ set(EXTRA_HAL_DEFINES "" CACHE STRING "Extra HAL compile definitions")
 option(JH_ENABLE_ALL_FEATURES
     "Enable every feature supported by the selected production target"
     OFF)
-include("${JH_ROOT}/cmake/jh_project_features.cmake")
-if(JH_ENABLE_ALL_FEATURES)
-    jh_all_features_for_target(_jh_all_features "${JH_TARGET}")
-    list(APPEND EXTRA_HAL_DEFINES ${_jh_all_features})
-endif()
-jh_collect_cmake_feature_defines(_jh_cmake_feature_defines)
-list(APPEND EXTRA_HAL_DEFINES ${_jh_cmake_feature_defines})
-jh_normalize_feature_defines(EXTRA_HAL_DEFINES ${EXTRA_HAL_DEFINES})
-set(_jh_project_features "")
-if(DEFINED HAL_PROJECT_CONFIG_DIR)
-    foreach(_jh_project_config_dir IN LISTS HAL_PROJECT_CONFIG_DIR)
-        jh_collect_project_feature_defines(_jh_project_config_features
-            "${_jh_project_config_dir}")
-        list(APPEND _jh_project_features ${_jh_project_config_features})
-    endforeach()
-    list(REMOVE_DUPLICATES _jh_project_features)
-endif()
+include("${JH_ROOT}/cmake/jh_project_config.cmake")
 # Default STM32G474 feature profile. Keep this as the single requested set used
 # by compilation, source/link selection, and the board feature signature.
 set(_jh_stm32_default_features
@@ -69,13 +53,19 @@ set(_jh_stm32_default_features
     HAL_ENABLE_DHT
     HAL_ENABLE_GPS
     HAL_ENABLE_HD44780)
-jh_resolve_feature_defines(
-    JH_REQUESTED_FEATURES
-    JH_RESOLVED_FEATURES
-    ${_jh_stm32_default_features}
-    ${EXTRA_HAL_DEFINES}
-    ${_jh_project_features})
+set(_jh_library_defines ${_jh_stm32_default_features} ${EXTRA_HAL_DEFINES})
+if(JH_ENABLE_ALL_FEATURES)
+    jh_all_features_for_target(_jh_all_features "${JH_TARGET}")
+    list(APPEND _jh_library_defines ${_jh_all_features})
+endif()
+jh_read_library_config(
+    ROOT "${JH_ROOT}"
+    TARGET "${JH_TARGET}"
+    OUTPUT_DIR "${CMAKE_BINARY_DIR}/generated/project"
+    DEFINES ${_jh_library_defines})
 include("${JH_ROOT}/cmake/jh_board_profiles.cmake")
+jh_split_project_definitions(
+    _jh_library_plain_defines _jh_library_feature_defines ${EXTRA_HAL_DEFINES})
 jh_generate_board_config(
     ROOT "${JH_ROOT}"
     TARGET "${JH_TARGET}"
@@ -83,10 +73,7 @@ jh_generate_board_config(
     OUTPUT_DIR
         "${CMAKE_BINARY_DIR}/generated/boards/${JH_TARGET}/${JH_BOARD}"
     OUTPUT_ROOT "${CMAKE_BINARY_DIR}"
-    DEFINES
-        ${_jh_stm32_default_features}
-        ${EXTRA_HAL_DEFINES}
-        ${_jh_project_features}
+    DEFINES ${_jh_library_plain_defines}
     REQUESTED_FEATURES ${JH_REQUESTED_FEATURES}
     RESOLVED_FEATURES ${JH_RESOLVED_FEATURES})
 if(NOT JH_RESOLVED_TARGET STREQUAL "stm32g474")
@@ -103,6 +90,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(SRC ${JH_ROOT}/src)
 include(${CMAKE_CURRENT_SOURCE_DIR}/freertos_stm32g474.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/jh_stm32g474_memory.cmake)
 include(${JH_ROOT}/cmake/jh_bearssl.cmake)
 include(${JH_ROOT}/cmake/jh_feature_build_effects.cmake)
 include(${JH_ROOT}/cmake/jh_managed_frameworks.cmake)
@@ -113,10 +101,6 @@ jh_managed_framework_configure_sources()
 set(_jh_extra_hal_defines
     ${JH_BOARD_COMPILE_DEFINITIONS}
     ${EXTRA_HAL_DEFINES})
-set(_jh_stm32_selection_defines
-    ${_jh_extra_hal_defines}
-    ${_jh_project_features}
-    ${JH_RESOLVED_FEATURES})
 jh_collect_feature_build_effects(_jh_stm32_build_effects
     ROOT "${JH_ROOT}"
     FEATURES ${JH_RESOLVED_FEATURES})
@@ -173,6 +157,9 @@ add_library(JaszczurHAL STATIC
     "${JH_BOARD_GENERATED_DIR}/jh_link_contract_definition.c"
 )
 
+jh_stm32g474_configure_memory(JaszczurHAL PUBLIC
+    FEATURES ${JH_RESOLVED_FEATURES})
+
 set_source_files_properties(${STM32_LITTLEFS_SOURCES} PROPERTIES
     COMPILE_OPTIONS "-w"
 )
@@ -197,20 +184,17 @@ add_custom_command(TARGET JaszczurHAL POST_BUILD
         "${CMAKE_BINARY_DIR}/include/generated"
     VERBATIM)
 
-jh_cmake_defines_contain(_jh_stm32_has_littlefs_size
-    HAL_STM32_FLASH_LITTLEFS_SIZE ${_jh_stm32_selection_defines})
 set(_jh_stm32_littlefs_link_size "")
 if(_jh_stm32_has_littlefs)
-    if(NOT _jh_stm32_has_littlefs_size)
+    jh_build_define_value(_jh_stm32_littlefs_link_size
+        HAL_STM32_FLASH_LITTLEFS_SIZE ${JH_BOARD_COMPILE_DEFINITIONS})
+    if("${_jh_stm32_littlefs_link_size}" STREQUAL "")
         list(APPEND _jh_extra_hal_defines HAL_STM32_FLASH_LITTLEFS_SIZE=65536u)
         set(_jh_stm32_littlefs_link_size "65536")
-    else()
-        jh_cmake_define_link_value(_jh_stm32_littlefs_link_size
-            HAL_STM32_FLASH_LITTLEFS_SIZE ${_jh_extra_hal_defines})
     endif()
 endif()
-jh_cmake_define_link_value(_jh_stm32_eeprom_link_size
-    HAL_STM32_FLASH_EEPROM_SIZE ${_jh_extra_hal_defines})
+jh_build_define_value(_jh_stm32_eeprom_link_size
+    HAL_STM32_FLASH_EEPROM_SIZE ${JH_BOARD_COMPILE_DEFINITIONS})
 
 # Default STM32G474 profile for the initial skeleton backend.
 #
@@ -230,23 +214,23 @@ if(_jh_extra_hal_defines)
     target_compile_definitions(JaszczurHAL PUBLIC ${_jh_extra_hal_defines})
 endif()
 
-jh_cmake_defines_contain(_jh_stm32_has_cyw43_gspi HAL_CYW43_BUS_STM32_GSPI
-    ${_jh_stm32_selection_defines})
+jh_build_defined(_jh_stm32_has_cyw43_gspi HAL_CYW43_BUS_STM32_GSPI
+    ${JH_BOARD_COMPILE_DEFINITIONS})
 if(_jh_stm32_has_cyw43_gspi)
-    jh_cmake_defines_contain(_jh_stm32_has_cyw43_lwip HAL_CYW43_STACK_LWIP
-        ${_jh_stm32_selection_defines})
-    jh_cmake_defines_contain(_jh_stm32_has_bluetooth_stage1
-        JH_BLUETOOTH_STAGE1_PROBE ${_jh_stm32_selection_defines})
+    jh_build_defined(_jh_stm32_has_cyw43_lwip HAL_CYW43_STACK_LWIP
+        ${JH_BOARD_COMPILE_DEFINITIONS})
+    jh_build_defined(_jh_stm32_has_bluetooth_stage1
+        JH_BLUETOOTH_STAGE1_PROBE ${JH_BOARD_COMPILE_DEFINITIONS})
     jh_cmake_defines_contain(_jh_stm32_has_ble
-        HAL_ENABLE_BLE ${_jh_stm32_selection_defines})
+        HAL_ENABLE_BLE ${JH_RESOLVED_FEATURES})
     jh_cmake_defines_contain(_jh_stm32_has_ble_stream
-        HAL_ENABLE_BLE_STREAM ${_jh_stm32_selection_defines})
+        HAL_ENABLE_BLE_STREAM ${JH_RESOLVED_FEATURES})
     jh_cmake_defines_contain(_jh_stm32_has_bluetooth_classic
-        HAL_ENABLE_BLUETOOTH_CLASSIC ${_jh_stm32_selection_defines})
+        HAL_ENABLE_BLUETOOTH_CLASSIC ${JH_RESOLVED_FEATURES})
     jh_cmake_defines_contain(_jh_stm32_has_bluetooth_hid_host
-        HAL_ENABLE_BLUETOOTH_HID_HOST ${_jh_stm32_selection_defines})
+        HAL_ENABLE_BLUETOOTH_HID_HOST ${JH_RESOLVED_FEATURES})
     jh_cmake_defines_contain(_jh_stm32_has_ota
-        HAL_ENABLE_OTA ${_jh_stm32_selection_defines})
+        HAL_ENABLE_OTA ${JH_RESOLVED_FEATURES})
     jh_target_enable_cyw43_feature_stack(JaszczurHAL
         LWIP "${_jh_stm32_has_cyw43_lwip}"
         OTA "${_jh_stm32_has_ota}"
@@ -273,9 +257,9 @@ if(DEFINED JH_STM32_FREERTOS)
 endif()
 
 jh_cmake_defines_contain(_jh_stm32_freertos_enabled HAL_ENABLE_FREERTOS
-    ${_jh_stm32_selection_defines})
+    ${JH_RESOLVED_FEATURES})
 jh_cmake_defines_contain(_jh_stm32_stack_protector_enabled
-    HAL_ENABLE_STACK_PROTECTOR ${_jh_stm32_selection_defines})
+    HAL_ENABLE_STACK_PROTECTOR ${JH_RESOLVED_FEATURES})
 
 if(_jh_stm32_freertos_enabled)
     jh_stm32g474_enable_freertos(JaszczurHAL)
