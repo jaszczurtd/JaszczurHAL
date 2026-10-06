@@ -106,6 +106,23 @@ for name, job in WORKFLOW["jobs"].items():
             run_stages.update(value.split(","))
     require(gate_steps == 1, f"{name}: expected one runalltests.sh step, got {gate_steps}")
 
+# The security scan covers ESP-IDF, so CI runs it in the job of the esp-idf
+# stage, after it.
+security_job = [
+    value.split(",")
+    for name, job in WORKFLOW["jobs"].items()
+    if not job["runs-on"].startswith("windows-")
+    for step in job["steps"] if "run" in step and GATE.fullmatch(step["run"].strip())
+    for value in expand((GATE.fullmatch(step["run"].strip()).group(1)
+                         or GATE.fullmatch(step["run"].strip()).group(2)), job)
+    if "security" in value.split(",")
+]
+require(
+    len(security_job) == 1 and "esp-idf" in security_job[0]
+    and security_job[0].index("esp-idf") < security_job[0].index("security"),
+    f"security must run after esp-idf in the same CI job, got {security_job}",
+)
+
 # One Linux image, the base the local gate runs on (runmefirst.sh).
 require(linux_images == {"ubuntu-24.04"}, f"Linux CI images: {sorted(linux_images)}")
 require(
@@ -157,6 +174,8 @@ def stage_body(function: str) -> str:
 
 require("--all-features" in stage_body("build_library"),
         "the library stages do not enable all features")
+require('-e "${SCRIPT_DIR}/third_party/esp-idf/.git"' in stage_body("stage_security"),
+        "the security stage runs without ESP-IDF")
 
 repository = stage_body("stage_repository")
 require("scripts/sync_generated.py --check" in repository,
@@ -206,7 +225,7 @@ commit_mode = stage_body("run_on_commit")
 handover = commit_mode.index('exec "${worktree}/runalltests.sh"')
 for verification in (
     '"${worktree}/third_party/update_components.sh" --verify-only',
-    'component esp-idf \\\n            --verify-only --repo-root "${worktree}"',
+    'ensure_git_component("esp-idf", Path(sys.argv[1]), verify_only=True)',
 ):
     require(verification in commit_mode and commit_mode.index(verification) < handover,
             f"--commit hands over to the stages before {verification!r}")

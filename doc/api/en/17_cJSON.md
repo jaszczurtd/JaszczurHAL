@@ -10,7 +10,8 @@ Parse, create, and modify JSON documents with `cJSON` and `cJSON_Utils`. Jaszczu
 
 `cJSON` provides a small C parser and generator for JSON. The project fetches its sources into `third_party/cJSON` at the commit specified by `third_party/cjson_version.conf`. Integration code in `src/hal/codecs/cjson/` compiles the original sources and exposes the headers only when `HAL_ENABLE_CJSON` is enabled, preserving the stable public include path.
 
-Managed version: `cJSON` 1.7.18.
+Managed version: `cJSON` 1.7.19, pinned to upstream commit `6d9f244` after the
+release for its later security fixes.
 
 Author/license: upstream `cJSON` is authored by Dave Gamble and contributors
 and distributed under the MIT license.
@@ -325,6 +326,14 @@ escape them as `~0` and `~1`.
 - `cJSON_Utils` patch generation may sort and mutate input objects as noted by
   upstream comments. Duplicate documents first if original ordering/content must
   remain untouched.
+- Do not apply JSON Patch documents from outside the device with
+  `cJSONUtils_ApplyPatches()` or `cJSONUtils_ApplyPatchesCaseSensitive()`:
+  upstream has no fix yet for unbounded recursion (CVE-2026-67215) and for
+  operations that destroy data before failing (CVE-2026-67217). Do not pass
+  untrusted documents of unbounded nesting to `cJSON_Compare()`, whose running
+  time grows exponentially with nesting (CVE-2026-67216). The HAL itself calls
+  none of these functions; the decisions are recorded in
+  `security/vulnerability_log.md`.
 
 <a id="storage-and-transport"></a>
 

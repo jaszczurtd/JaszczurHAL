@@ -183,7 +183,8 @@ builds are the exception: `--list-local-stages` names them, and they run only
 locally.
 `tests/test_ci_gate_stages.py` fails when the workflow and the list drift
 apart. `--commit [REV]` runs the gate on a clean checkout of `REV` (default
-`HEAD`) in `.build/commit-gate`; run it before a push. The pinned git
+`HEAD`) in `~/.cache/jaszczurhal/commit-gate/<id>`, outside the repository
+so that tools honouring parent `.gitignore` files see it; run it before a push. The pinned git
 components come from this tree by `rsync`, and before any stage runs,
 whichever were selected, their verification rejects any local edit in them;
 PMD and the RISC-V toolchain are installed in the

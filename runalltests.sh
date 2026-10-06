@@ -12,7 +12,8 @@
 # Usage:
 #   ./runalltests.sh                    # every stage on the working tree
 #   ./runalltests.sh --commit [REV]     # every stage on a clean checkout of
-#                                       # REV (default HEAD); run before a push
+#                                       # REV (default HEAD) under
+#                                       # ~/.cache/jaszczurhal; run before a push
 #   ./runalltests.sh --stage host       # one stage; more as host,memcheck
 #                                       # or by repeating --stage
 #   ./runalltests.sh --list-stages      # stage names in run order
@@ -150,8 +151,11 @@ done
 
 # ── Clean checkout of a commit ───────────────────────────────────────────────
 # Runs the gate on exactly what REV holds: no untracked files, no unstaged
-# edits. The checkout in .build/commit-gate is reused: checked out again and
-# cleaned of everything but the pinned components and built tools. Git
+# edits. The checkout lives outside the repository, under the user cache: a
+# checkout inside the ignored .build would count as ignored for tools that
+# honour parent .gitignore files, so osv-scanner would scan nothing. It is
+# reused: checked out again and cleaned of everything but the pinned
+# components and built tools. Git
 # components are copied from this tree with rsync, as real directories like
 # in CI; before any stage runs, whichever were selected, the checkout's
 # component verification rejects a local edit in them, submodules included.
@@ -161,7 +165,8 @@ run_on_commit() {
     local sha worktree entry
     local git_components=() archive_components=() excludes=(-e /.build/tools)
     sha="$(git rev-parse --verify "${COMMIT_REV}^{commit}")"
-    worktree="${BUILD_ROOT}/commit-gate"
+    # One checkout per repository copy.
+    worktree="${XDG_CACHE_HOME:-${HOME}/.cache}/jaszczurhal/commit-gate/$(printf '%s' "${SCRIPT_DIR}" | sha256sum | cut -c1-12)"
     while IFS= read -r entry; do
         entry="${entry%/}"
         [[ -d "${entry}" ]] || continue
@@ -181,6 +186,7 @@ run_on_commit() {
     else
         rm -rf -- "${worktree}"
         git worktree prune
+        mkdir -p "$(dirname "${worktree}")"
         git worktree add --detach --quiet "${worktree}" "${sha}"
     fi
     for entry in "${git_components[@]}"; do
@@ -195,14 +201,24 @@ run_on_commit() {
             --enable --repo-root "${worktree}"
     done
     "${worktree}/scripts/ensure_cppcheck.sh"
-    "${worktree}/scripts/ensure_picotool.sh"
+    "${worktree}/scripts/ensure_picotool.sh" --enable
     # Whatever stages run, they build only from the pinned components: the
     # copies must be clean, submodules included, before any stage starts.
     info "Verifying the pinned components in ${worktree}..."
     "${worktree}/third_party/update_components.sh" --verify-only
     if [[ -d "${worktree}/third_party/esp-idf" ]]; then
-        python3 "${worktree}/scripts/component_manager.py" component esp-idf \
-            --verify-only --repo-root "${worktree}"
+        # Only the checkout: ESP-IDF builds install the target tools for this
+        # path themselves and verify the checkout again.
+        python3 - "${worktree}" <<'VERIFY_ESP_IDF'
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(sys.argv[1]) / "scripts"))
+import component_manager
+try:
+    component_manager.ensure_git_component("esp-idf", Path(sys.argv[1]), verify_only=True)
+except component_manager.ComponentError as error:
+    sys.exit(f"[ERROR] {error}")
+VERIFY_ESP_IDF
     fi
     exec "${worktree}/runalltests.sh" "${FORWARDED[@]}"
 }
@@ -683,6 +699,12 @@ stage_examples() {
 }
 
 stage_security() {
+    # The scan covers ESP-IDF and its submodules, as in CI, where the test job
+    # runs this stage after esp-idf.
+    if [[ ! -e "${SCRIPT_DIR}/third_party/esp-idf/.git" ]]; then
+        fail "The security scan needs ESP-IDF, as in CI: run the esp-idf stage first or scripts/ensure_esp_idf.sh --enable"
+        exit 1
+    fi
     JH_SECURITY_SCAN_SOURCE=1 "${SCRIPT_DIR}/scripts/check_vulnerabilities.sh"
 }
 

@@ -161,19 +161,35 @@ This read-only check covers every tracked generated file. It creates a temporary
 GitHub Actions run a required `test` job and dependent jobs on pull requests,
 pushes to `main`, a weekly schedule and manual dispatch. The test job runs the
 `repository` stage of `runalltests.sh`, which verifies all generated artifacts,
-including the SBOM. A dependent job runs the `security` stage, the same one a
-local `./runalltests.sh` runs:
+including the SBOM, and, after the `esp-idf` stage, the `security` stage, the
+same one a local `./runalltests.sh` runs. The stage needs ESP-IDF, so the scan
+covers it in both places:
 
 - `scripts/install_host_tools.sh` installs `osv-scanner` and `cve-bin-tool`,
-- `osv-scanner` scans the repository source tree; a run that cannot finish is
-  retried, findings fail at once,
+- `osv-scanner` scans the repository's own files (manifests and the SBOM) with
+  `.gitignore` honoured and without its vendored-directory heuristic, which
+  guesses components from file hashes, cannot hash ESP-IDF and matches some
+  directories to the wrong project,
+- a second `osv-scanner` pass identifies the pinned components and their
+  submodules (ESP-IDF, the Pico SDK, lwIP, cJSON and the rest) by their git
+  commits, leaving `.build` out,
+- a pass that cannot finish is retried; findings and lasting errors fail the
+  scan,
 - `cve-bin-tool` scans the CycloneDX SBOM.
+
+A finding with a recorded decision that the scanner reports (a fix it does not
+recognize, an accepted risk, code that no target compiles) goes to
+`security/osv-scanner.toml` with the date of its row in
+`security/vulnerability_log.md`. Mitigated entries carry `ignoreUntil`, their
+review date: a test fails on that date even when the scanner no longer reports
+the finding, as happens for a component pinned to a commit newer than the last
+one the advisory names.
 
 The CVE database is cached for a day. When the NVD mirror is unreachable, the
 scan uses the most recent cached database and reports a warning; without any
 cached database it fails.
 
-Vulnerability scanning runs separately from compilation, tests, and static analysis so scanner failures can be investigated independently. Scheduled scans also detect newly published CVEs when the repository code has not changed.
+Vulnerability scanning is a stage of its own, so scanner failures are reported apart from compilation, tests, and static analysis. Scheduled scans also detect newly published CVEs when the repository code has not changed.
 
 Handle findings as follows:
 

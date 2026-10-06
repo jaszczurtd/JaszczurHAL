@@ -150,21 +150,35 @@ Kontrola działa w trybie tylko do odczytu i obejmuje wszystkie śledzone pliki 
 GitHub Actions uruchamia wymagane zadanie `test` oraz zadania od niego zależne
 dla pull requestów, zmian wysyłanych do `main`, według harmonogramu
 tygodniowego i na żądanie. Zadanie testowe uruchamia etap `repository` skryptu
-`runalltests.sh`, który weryfikuje wszystkie generowane artefakty, w tym SBOM.
-Jedno z zadań zależnych uruchamia etap `security`, ten sam, który wykonuje
-lokalne `./runalltests.sh`:
+`runalltests.sh`, który weryfikuje wszystkie generowane artefakty, w tym SBOM,
+a po etapie `esp-idf` także etap `security`, ten sam, który wykonuje lokalne
+`./runalltests.sh`. Etap wymaga ESP-IDF, więc w obu miejscach skan go obejmuje:
 
 - `scripts/install_host_tools.sh` instaluje `osv-scanner` i `cve-bin-tool`,
-- `osv-scanner` sprawdza drzewo źródeł repozytorium; przebieg, który nie może
-  się zakończyć, jest ponawiany, a znalezione podatności od razu kończą skan
-  błędem,
+- `osv-scanner` sprawdza własne pliki repozytorium (manifesty i SBOM),
+  z uwzględnieniem `.gitignore` i bez heurystyki katalogów vendored, która
+  rozpoznaje komponenty po skrótach plików, nie radzi sobie z ESP-IDF
+  i przypisuje niektóre katalogi niewłaściwym projektom,
+- drugi przebieg `osv-scanner` rozpoznaje komponenty w wersjach wskazanych
+  przez repozytorium i ich submoduły (ESP-IDF, Pico SDK, lwIP, cJSON i
+  pozostałe) po commitach gita, z pominięciem `.build`,
+- przebieg, który nie może się zakończyć, jest ponawiany; znalezione
+  podatności i trwałe błędy kończą skan niepowodzeniem,
 - `cve-bin-tool` sprawdza SBOM CycloneDX.
+
+Znalezisko z zapisaną decyzją, które skaner zgłasza (poprawka, której nie
+rozpoznaje, zaakceptowane ryzyko, kod niekompilowany na żadnym targecie),
+trafia do `security/osv-scanner.toml` z datą swojego wiersza
+w `security/vulnerability_log.md`. Wpisy o statusie `mitigated` mają
+`ignoreUntil`, czyli datę przeglądu: w tym dniu test kończy się błędem, nawet
+jeśli skaner nie zgłasza już znaleziska. Tak bywa, gdy komponent jest przypięty
+do commita nowszego niż ostatni wskazany w zgłoszeniu podatności.
 
 Baza CVE jest przechowywana w pamięci podręcznej przez dzień. Gdy lustro NVD
 jest niedostępne, skan korzysta z ostatniej zapisanej bazy i zgłasza
 ostrzeżenie; bez żadnej zapisanej bazy kończy się błędem.
 
-Skanowanie podatności jest oddzielone od kompilacji, testów i analizy statycznej. Pozwala to niezależnie diagnozować błędy skanera i błędy kodu. Uruchomienia cykliczne wykrywają również nowe CVE opublikowane od poprzedniego skanowania, nawet jeśli kod repozytorium się nie zmienił.
+Skanowanie podatności jest osobnym etapem, więc błędy skanera są zgłaszane oddzielnie od kompilacji, testów i analizy statycznej. Uruchomienia cykliczne wykrywają również nowe CVE opublikowane od poprzedniego skanowania, nawet jeśli kod repozytorium się nie zmienił.
 
 Zasady postępowania z wynikami:
 

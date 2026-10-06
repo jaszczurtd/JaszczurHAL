@@ -153,7 +153,8 @@ workflow i lista się rozjadą. Lokalne uruchomienie sprawdza więc wszystko, co
 sprawdza linuksowe CI na tym samym commicie. Nową kontrolę dodawaj do etapu,
 nigdy tylko do workflow.
 
-`--commit [REV]` tworzy w `.build/commit-gate` checkout `REV` (domyślnie
+`--commit [REV]` tworzy poza repozytorium, w
+`~/.cache/jaszczurhal/commit-gate/<id>`, checkout `REV` (domyślnie
 `HEAD`) bez plików spoza Gita i niezapisanych zmian i uruchamia w nim
 kontrolę jakości. Komponenty z Gita w wersjach wskazanych przez repozytorium
 trafiają tam z tego drzewa przez `rsync`, a zanim ruszy którykolwiek etap,

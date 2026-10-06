@@ -1,0 +1,35 @@
+# osv-scanner findings with a recorded decision; scripts/check_vulnerabilities.sh
+# passes this file with --config. Every entry has its row, with the same date
+# and ID, in security/vulnerability_log.md (tests/test_check_vulnerabilities.py
+# keeps the two in step). Entries marked mitigated carry ignoreUntil, their
+# review date: the scan reports them again from then on, and the test fails
+# on that date even when the scanner no longer reports them.
+
+# cJSON at the pinned 6d9f244.
+[[IgnoredVulns]]
+id = "CVE-2026-87933"
+reason = "2026-10-06: fixed by the pinned cJSON 6d9f244 (PR #1065)"
+
+[[IgnoredVulns]]
+id = "CVE-2026-16554"
+reason = "2026-10-06: needs ~858 million control characters in one string; not_affected"
+
+[[IgnoredVulns]]
+id = "CVE-2026-67215"
+ignoreUntil = 2027-01-06
+reason = "2026-10-06: no upstream fix; HAL never applies JSON Patch; mitigated"
+
+[[IgnoredVulns]]
+id = "CVE-2026-67216"
+ignoreUntil = 2027-01-06
+reason = "2026-10-06: no upstream fix; HAL never calls cJSON_Compare; mitigated"
+
+[[IgnoredVulns]]
+id = "CVE-2026-67217"
+ignoreUntil = 2027-01-06
+reason = "2026-10-06: no upstream fix; HAL never applies JSON Patch; mitigated"
+
+# lwIP 2.2.1, in third_party/lwip and in the Pico SDK's lib/lwip.
+[[IgnoredVulns]]
+id = "CVE-2026-8836"
+reason = "2026-10-06: SNMPv3 agent, compiled on no target; not_affected"

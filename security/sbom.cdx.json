@@ -1581,9 +1581,9 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:cjson@1.7.18",
+      "bom-ref": "pkg:cjson@1.7.19",
       "name": "cJSON",
-      "version": "1.7.18",
+      "version": "1.7.19",
       "scope": "optional",
       "licenses": [
         {
@@ -1595,7 +1595,7 @@
       "supplier": {
         "name": "Dave Gamble and cJSON contributors"
       },
-      "purl": "pkg:github/DaveGamble/cJSON@acc76239bee01d8e9c858ae2cab296704e52d916",
+      "purl": "pkg:github/DaveGamble/cJSON@6d9f2443ab071f86e5d9b43025a40929ec41c46c",
       "externalReferences": [
         {
           "type": "website",
@@ -1620,11 +1620,11 @@
       "properties": [
         {
           "name": "jaszczurhal:commit",
-          "value": "acc76239bee01d8e9c858ae2cab296704e52d916"
+          "value": "6d9f2443ab071f86e5d9b43025a40929ec41c46c"
         },
         {
           "name": "jaszczurhal:notes",
-          "value": "Git-ignored exact-commit cJSON checkout plus tracked JaszczurHAL feature-gating wrappers."
+          "value": "Git-ignored exact-commit cJSON checkout plus tracked JaszczurHAL feature-gating wrappers. Pinned to master after the 1.7.19 release for its security fixes; see security/vulnerability_log.md."
         },
         {
           "name": "jaszczurhal:feature_flags",
@@ -2156,5 +2156,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:6378c6c1-dfb5-624c-90f3-804068c1851e"
+  "serialNumber": "urn:uuid:1559ab48-d4fe-db83-68a9-1de592e27da5"
 }

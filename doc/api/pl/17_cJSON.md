@@ -10,7 +10,8 @@ Odczyt, tworzenie i modyfikacja JSON-u przez biblioteki `cJSON` i `cJSON_Utils`.
 
 `cJSON` udostępnia niewielki parser i generator JSON-u w C. Projekt pobiera jego źródła do `third_party/cJSON`; dokładny commit określa `third_party/cjson_version.conf`. Integracja w `src/hal/codecs/cjson/` kompiluje oryginalne źródła i udostępnia nagłówki tylko przy włączonym `HAL_ENABLE_CJSON`, zachowując stałą publiczną ścieżkę dołączania.
 
-Wersja dostarczana z projektem: `cJSON` 1.7.18.
+Wersja dostarczana z projektem: `cJSON` 1.7.19, przypięty do commita upstream
+`6d9f244` po wydaniu ze względu na późniejsze poprawki bezpieczeństwa.
 
 Autor/licencja: projekt `cJSON` jest rozwijany przez Dave'a
 Gamble'a i współtwórców oraz udostępniany na licencji MIT.
@@ -329,6 +330,14 @@ JSON Pointer używa ścieżek rozdzielanych znakiem `/`. W nazwach kluczy znaki
 - Podczas generowania JSON Patch `cJSON_Utils` może sortować i modyfikować
   obiekty wejściowe, zgodnie z dokumentacją biblioteki. Jeśli ich kolejność
   i treść mają pozostać bez zmian, najpierw utwórz kopie dokumentów.
+- Nie stosuj dokumentów JSON Patch pochodzących spoza urządzenia przez
+  `cJSONUtils_ApplyPatches()` ani `cJSONUtils_ApplyPatchesCaseSensitive()`:
+  upstream nie ma jeszcze poprawki nieograniczonej rekurencji
+  (CVE-2026-67215) ani operacji, które niszczą dane przed zgłoszeniem błędu
+  (CVE-2026-67217). Nie przekazuj niezaufanych dokumentów o nieograniczonym
+  zagnieżdżeniu do `cJSON_Compare()`, której czas działania rośnie wykładniczo
+  z głębokością (CVE-2026-67216). Sam HAL nie wywołuje żadnej z tych funkcji;
+  decyzje opisuje `security/vulnerability_log.md`.
 
 <a id="przechowywanie-i-transport"></a>
 
