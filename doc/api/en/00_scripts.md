@@ -94,7 +94,13 @@ tooling, clang-tidy, clang-format, the Arm toolchain with newlib, OpenOCD,
 `third_party/update_components.sh`, which also builds the pinned cppcheck, and
 ends by checking every required command and Python module. `runmefirst.sh` and
 every Linux CI job call it, so a local gate and CI run with the same tool set.
-`--check` only reports missing tools; the gate's `tools` stage runs it so.
+`osv-scanner` and `cve-bin-tool` are the releases pinned in
+`third_party/osv_scanner_version.conf` and
+`third_party/cve_bin_tool_version.conf`, installed after a SHA-256 check and
+replaced when another release is found; `osv-scanner` goes into
+`/usr/local/bin`, `cve-bin-tool` through pipx into `~/.local/bin`, the places
+the scan runs them from. `--check` only reports missing tools and scanners of
+another release; the gate's `tools` stage runs it so.
 
 ### `runmefirst.ps1`
 
@@ -979,7 +985,10 @@ freshness gate.
 
 Regenerates the tracked SBOM, then runs scanners that are already installed:
 
-- `osv-scanner` scans the repository source recursively;
+- `osv-scanner` scans the repository's own files, then, from the repository
+  root and with `.build` left out, the pinned components by their git commits,
+  and last the releases that components pinned after a release descend from
+  (their SBOM `pedigree`);
 - when `JH_SECURITY_SCAN_SOURCE=1`, `cve-bin-tool` scans the generated
   CycloneDX SBOM.
 
@@ -990,9 +999,15 @@ directory and then scans the SBOM offline. A failed refresh is retried
 unreachable, the scan uses the cached database from `~/.cache/cve-bin-tool`
 with a warning; without a cached database the script fails.
 
-The script searches both `PATH` and `~/.local/bin`, does not install scanners,
-and warns rather than failing solely because no scanner is available. Scanner
+The script runs the scanners where `scripts/install_host_tools.sh` installs
+them, `/usr/local/bin/osv-scanner` (`JH_OSV_SCANNER_DIR` overrides the
+directory) and `~/.local/bin/cve-bin-tool`, whatever else `PATH` holds. It
+does not install scanners and warns rather than failing solely because no
+scanner is available. Scanner
 findings and scanner execution failures still propagate as command failures.
+An `osv-scanner` or `cve-bin-tool` other than the release pinned in
+`third_party/osv_scanner_version.conf` or
+`third_party/cve_bin_tool_version.conf` fails the script before it scans.
 
 See [Security Supply Chain](../../en/security_supply_chain.md) for inventory, SBOM, CI,
 triage, and component-update policy.

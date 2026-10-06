@@ -264,6 +264,10 @@
       "supplier": "Dave Gamble and cJSON contributors",
       "licenses": ["MIT"],
       "purl": "pkg:github/DaveGamble/cJSON@6d9f2443ab071f86e5d9b43025a40929ec41c46c",
+      "release": {
+        "version": "1.7.19",
+        "commit": "c859b25da02955fef659d658b8f324b5cde87be3"
+      },
       "paths": [
         "third_party/cJSON",
         "third_party/cjson_version.conf",

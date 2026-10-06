@@ -34,54 +34,84 @@ PACKAGES=(
 # scripts/run_sanitizer_fuzz.sh --check-tools resolves and checks it.
 COMMANDS=(
     cmake ninja g++ gcc make git python3 ip java rsync valgrind clang-tidy
-    run-clang-tidy clang-format osv-scanner cve-bin-tool
+    run-clang-tidy clang-format
     arm-none-eabi-gcc arm-none-eabi-g++ arm-none-eabi-ar arm-none-eabi-ranlib
     arm-none-eabi-objcopy arm-none-eabi-objdump openocd gdb-multiarch fuser
 )
 PYTHON_MODULES=(serial yaml)
 
+# shellcheck source=scanner_pins.sh
+source "${SCRIPT_DIR}/scanner_pins.sh"
+
+# True when scanner $1 is installed at its pinned release.
+scanner_current() {
+    local path
+    path="$(scanner_path "$1")" && scanner_is_pinned "$1" "${path}" >/dev/null
+}
+
+# Downloads URL $1 to file $3; fails unless the file has SHA-256 $2.
+fetch_pinned() {
+    curl -fsSL "$1" -o "$3" || return 1
+    if ! printf '%s  %s\n' "$2" "$3" | sha256sum --check --status; then
+        echo "Download does not match its pinned SHA-256: $1" >&2
+        return 1
+    fi
+}
+
 install_osv_scanner() {
-    if command -v osv-scanner >/dev/null 2>&1; then
+    if scanner_current osv-scanner; then
         return
     fi
 
-    local arch
+    local url sha256
     case "$(uname -m)" in
-        x86_64|amd64) arch="amd64" ;;
-        aarch64|arm64) arch="arm64" ;;
+        x86_64|amd64)
+            url="${OSV_SCANNER_URL_AMD64}"
+            sha256="${OSV_SCANNER_SHA256_AMD64}"
+            ;;
+        aarch64|arm64)
+            url="${OSV_SCANNER_URL_ARM64}"
+            sha256="${OSV_SCANNER_SHA256_ARM64}"
+            ;;
         *)
             echo "Unsupported architecture for automatic osv-scanner install: $(uname -m)"
-            echo "Install osv-scanner manually and re-run this script."
+            echo "Install osv-scanner ${OSV_SCANNER_VERSION} manually and re-run this script."
             return 1
             ;;
     esac
 
-    local version="${OSV_SCANNER_VERSION:-latest}"
-    local url
-    if [ "${version}" = "latest" ]; then
-        url="https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_${arch}"
-    else
-        url="https://github.com/google/osv-scanner/releases/download/${version}/osv-scanner_linux_${arch}"
-    fi
-
     local tmp
     tmp="$(mktemp)"
-    curl -fsSL "${url}" -o "${tmp}"
-    chmod +x "${tmp}"
-    sudo install -m 0755 "${tmp}" /usr/local/bin/osv-scanner
+    if ! fetch_pinned "${url}" "${sha256}" "${tmp}"; then
+        rm -f "${tmp}"
+        return 1
+    fi
+    sudo install -m 0755 "${tmp}" "$(scanner_bin osv-scanner)"
     rm -f "${tmp}"
 }
 
 install_cve_bin_tool() {
-    if command -v cve-bin-tool >/dev/null 2>&1 || [ -x "${HOME}/.local/bin/cve-bin-tool" ]; then
+    if scanner_current cve-bin-tool; then
         return
     fi
 
-    python3 -m pipx install cve-bin-tool
+    # pip reads the version from the wheel's file name, so the download keeps it.
+    local dir wheel
+    dir="$(mktemp -d)"
+    wheel="${dir}/${CVE_BIN_TOOL_URL##*/}"
+    if ! fetch_pinned "${CVE_BIN_TOOL_URL}" "${CVE_BIN_TOOL_SHA256}" "${wheel}"; then
+        rm -rf "${dir}"
+        return 1
+    fi
+    # Into the directory the scan runs it from, whatever PIPX_BIN_DIR says
+    # (GitHub runners point it at /opt/pipx_bin).
+    PIPX_BIN_DIR="$(dirname "$(scanner_bin cve-bin-tool)")" \
+        python3 -m pipx install --force "${wheel}"
+    rm -rf "${dir}"
 }
 
 check_tools() {
-    local missing=0 tool module
+    local missing=0 tool module path report
     if "${SCRIPT_DIR}/run_sanitizer_fuzz.sh" --check-tools >/dev/null 2>&1; then
         printf '  ok       %s\n' "clang (sanitizer toolchain)"
     else
@@ -96,6 +126,19 @@ check_tools() {
             missing=1
         fi
     done
+    # The scanners scripts/check_vulnerabilities.sh runs: the pinned releases
+    # where this script installs them, whatever else PATH holds.
+    for tool in osv-scanner cve-bin-tool; do
+        if ! path="$(scanner_path "${tool}")"; then
+            printf '  MISSING  %s at %s\n' "${tool}" "$(scanner_bin "${tool}")"
+            missing=1
+        elif ! report="$(scanner_is_pinned "${tool}" "${path}")"; then
+            printf '  VERSION  %s\n' "${report}"
+            missing=1
+        else
+            printf '  ok       %s %s\n' "${tool}" "$(scanner_pin "${tool}")"
+        fi
+    done
     for module in "${PYTHON_MODULES[@]}"; do
         if python3 -c "import ${module}" >/dev/null 2>&1; then
             printf '  ok       %s\n' "python3:${module}"
@@ -105,7 +148,7 @@ check_tools() {
         fi
     done
     if [ "${missing}" -ne 0 ]; then
-        echo "Some tools are missing; run ./runmefirst.sh (CI: scripts/install_host_tools.sh)."
+        echo "Some tools are missing or not at their pinned version; run ./runmefirst.sh (CI: scripts/install_host_tools.sh)."
         return 1
     fi
     echo "All required tools present."

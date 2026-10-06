@@ -165,7 +165,10 @@ including the SBOM, and, after the `esp-idf` stage, the `security` stage, the
 same one a local `./runalltests.sh` runs. The stage needs ESP-IDF, so the scan
 covers it in both places:
 
-- `scripts/install_host_tools.sh` installs `osv-scanner` and `cve-bin-tool`,
+- `scripts/install_host_tools.sh` installs the `osv-scanner` and
+  `cve-bin-tool` releases pinned in `third_party/osv_scanner_version.conf` and
+  `third_party/cve_bin_tool_version.conf`, checked by SHA-256; the scan
+  refuses any other release,
 - `osv-scanner` scans the repository's own files (manifests and the SBOM) with
   `.gitignore` honoured and without its vendored-directory heuristic, which
   guesses components from file hashes, cannot hash ESP-IDF and matches some
@@ -173,6 +176,10 @@ covers it in both places:
 - a second `osv-scanner` pass identifies the pinned components and their
   submodules (ESP-IDF, the Pico SDK, lwIP, cJSON and the rest) by their git
   commits, leaving `.build` out,
+- a third pass checks the release that a component pinned to a later commit
+  descends from (`release` in `security/third_party.json`, the SBOM
+  `pedigree`): advisories end at the releases they name, so the scanner reports
+  nothing for a later commit such as cJSON `6d9f244` after 1.7.19,
 - a pass that cannot finish is retried; findings and lasting errors fail the
   scan,
 - `cve-bin-tool` scans the CycloneDX SBOM.
@@ -182,8 +189,7 @@ recognize, an accepted risk, code that no target compiles) goes to
 `security/osv-scanner.toml` with the date of its row in
 `security/vulnerability_log.md`. Mitigated entries carry `ignoreUntil`, their
 review date: a test fails on that date even when the scanner no longer reports
-the finding, as happens for a component pinned to a commit newer than the last
-one the advisory names.
+the finding, as for a commit that no advisory names.
 
 The CVE database is cached for a day. When the NVD mirror is unreachable, the
 scan uses the most recent cached database and reports a warning; without any
@@ -222,7 +228,8 @@ Create the release tag only after its commit has been merged into `main`. Tag-tr
    its existing location.
 2. Preserve upstream license files and attribution.
 3. Update `security/third_party.json` with the new version, tag, commit, purl
-   or upstream reference.
+   or upstream reference. For a pin after a release, `release` names that
+   release's version and commit; drop it when the pin is a release.
 4. For ESP-IDF, refresh `security/esp_idf_tools.json` from the pinned
    `tools.json` and managed Python environment, then review every tool license.
 5. Run `python3 scripts/sync_generated.py --write` and review the generated

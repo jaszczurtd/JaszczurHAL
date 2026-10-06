@@ -8,6 +8,9 @@ SBOM="${REPO_ROOT}/security/sbom.cdx.json"
 # Findings with a recorded decision (security/vulnerability_log.md).
 OSV_CONFIG="${REPO_ROOT}/security/osv-scanner.toml"
 
+# shellcheck source=scanner_pins.sh
+source "${SCRIPT_DIR}/scanner_pins.sh"
+
 CVE_DB="${HOME}/.cache/cve-bin-tool/cve.db"
 CVE_REFRESH_ATTEMPTS="${JH_CVE_REFRESH_ATTEMPTS:-3}"
 CVE_REFRESH_DELAY_S="${JH_CVE_REFRESH_DELAY_S:-20}"
@@ -16,18 +19,14 @@ CVE_COMMON=(--disable-data-source OSV --disable-version-check)
 info() { printf '[INFO] %s\n' "$*"; }
 warn() { printf '[WARN] %s\n' "$*" >&2; }
 
-find_tool() {
-    if command -v "$1" >/dev/null 2>&1; then
-        command -v "$1"
-        return 0
+# A scanner release other than the pinned one, which CI runs, fails the scan:
+# results differ between releases.
+require_pinned() {
+    local report
+    if ! report="$(scanner_is_pinned "$1" "$2")"; then
+        printf '[ERROR] %s; run scripts/install_host_tools.sh\n' "${report}" >&2
+        exit 1
     fi
-
-    if [[ -x "${HOME}/.local/bin/$1" ]]; then
-        printf '%s\n' "${HOME}/.local/bin/$1"
-        return 0
-    fi
-
-    return 1
 }
 
 # cve-bin-tool exits with 1 both for found CVEs and for a failed data download.
@@ -75,7 +74,8 @@ run_osv_scanner() {
     return "${status}"
 }
 
-if scanner="$(find_tool osv-scanner)"; then
+if scanner="$(scanner_path osv-scanner)"; then
+    require_pinned osv-scanner "${scanner}"
     ran_scanner=1
     # The repository's own files: manifests and the SBOM, honouring
     # .gitignore. The vendored-directory heuristic stays off; it guesses
@@ -85,18 +85,52 @@ if scanner="$(find_tool osv-scanner)"; then
         --experimental-disable-plugins filesystem/vendored \
         --recursive "${REPO_ROOT}"
     # The pinned components (git-ignored checkouts with their submodules),
-    # identified by their commits; build trees stay out.
+    # identified by their commits; build trees stay out. osv-scanner matches
+    # the excluded .build against paths relative to the working directory, so
+    # the scan runs from the repository root.
     info "Running osv-scanner against the pinned component commits"
-    run_osv_scanner "${scanner}" scan source --config "${OSV_CONFIG}" \
+    (cd "${REPO_ROOT}" && run_osv_scanner "${scanner}" scan source --config "${OSV_CONFIG}" \
         --experimental-no-default-plugins --experimental-plugins vcs/gitrepo \
         --include-git-root --no-ignore --experimental-exclude .build \
-        --recursive "${REPO_ROOT}"
+        --recursive "${REPO_ROOT}")
+    # A component pinned to a commit after a release: advisories end at the
+    # releases they name, so osv-scanner reports nothing for that commit. The
+    # release it descends from, its SBOM pedigree, is checked as well.
+    release_input="$(mktemp)"
+    trap 'rm -f "${release_input}"' EXIT
+    releases="$(python3 - "${SBOM}" "${release_input}" <<'RELEASES'
+import json
+import re
+import sys
+
+sbom = json.load(open(sys.argv[1], encoding="utf-8"))
+packages = []
+for component in sbom.get("components", []):
+    for ancestor in component.get("pedigree", {}).get("ancestors", []):
+        match = re.fullmatch(r"pkg:github/([^/@]+/[^/@]+)@([0-9a-f]{40})",
+                             ancestor.get("purl", ""))
+        if not match:
+            sys.exit(f"[ERROR] {component['name']}: release without a GitHub commit purl")
+        packages.append({"package": {"name": f"https://github.com/{match[1]}",
+                                     "commit": match[2]}})
+with open(sys.argv[2], "w", encoding="utf-8") as output:
+    json.dump({"results": [{"source": {"path": sys.argv[1], "type": "lockfile"},
+                            "packages": packages}]}, output)
+print(len(packages))
+RELEASES
+)"
+    if ((releases > 0)); then
+        info "Running osv-scanner against the releases of components pinned after them"
+        run_osv_scanner "${scanner}" scan source --config "${OSV_CONFIG}" \
+            -L "osv-scanner:${release_input}"
+    fi
 else
-    warn "osv-scanner not found; skipping OSV vulnerability scan"
+    warn "osv-scanner not found at $(scanner_bin osv-scanner); skipping OSV vulnerability scan"
 fi
 
 if [[ "${JH_SECURITY_SCAN_SOURCE:-0}" == "1" ]]; then
-    if scanner="$(find_tool cve-bin-tool)"; then
+    if scanner="$(scanner_path cve-bin-tool)"; then
+        require_pinned cve-bin-tool "${scanner}"
         ran_scanner=1
         info "Refreshing the cve-bin-tool database"
         if ! refresh_cve_data "${scanner}"; then
@@ -117,7 +151,7 @@ if [[ "${JH_SECURITY_SCAN_SOURCE:-0}" == "1" ]]; then
             --sbom cyclonedx \
             --sbom-file "${SBOM}"
     else
-        warn "cve-bin-tool not found; skipping SBOM CVE scan"
+        warn "cve-bin-tool not found at $(scanner_bin cve-bin-tool); skipping SBOM CVE scan"
     fi
 fi
 

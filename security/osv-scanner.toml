@@ -5,7 +5,7 @@
 # review date: the scan reports them again from then on, and the test fails
 # on that date even when the scanner no longer reports them.
 
-# cJSON at the pinned 6d9f244.
+# cJSON: reported for 1.7.19 (c859b25), the release the pinned 6d9f244 follows.
 [[IgnoredVulns]]
 id = "CVE-2026-87933"
 reason = "2026-10-06: fixed by the pinned cJSON 6d9f244 (PR #1065)"

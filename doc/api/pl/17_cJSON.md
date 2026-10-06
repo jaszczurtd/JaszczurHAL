@@ -11,7 +11,9 @@ Odczyt, tworzenie i modyfikacja JSON-u przez biblioteki `cJSON` i `cJSON_Utils`.
 `cJSON` udostępnia niewielki parser i generator JSON-u w C. Projekt pobiera jego źródła do `third_party/cJSON`; dokładny commit określa `third_party/cjson_version.conf`. Integracja w `src/hal/codecs/cjson/` kompiluje oryginalne źródła i udostępnia nagłówki tylko przy włączonym `HAL_ENABLE_CJSON`, zachowując stałą publiczną ścieżkę dołączania.
 
 Wersja dostarczana z projektem: `cJSON` 1.7.19, przypięty do commita upstream
-`6d9f244` po wydaniu ze względu na późniejsze poprawki bezpieczeństwa.
+`6d9f244` po wydaniu ze względu na późniejsze poprawki bezpieczeństwa. Skan
+bezpieczeństwa sprawdza zgłoszenia podatności także dla commita wydania 1.7.19
+`c859b25`, na którym się one kończą.
 
 Autor/licencja: projekt `cJSON` jest rozwijany przez Dave'a
 Gamble'a i współtwórców oraz udostępniany na licencji MIT.

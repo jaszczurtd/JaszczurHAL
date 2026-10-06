@@ -199,6 +199,14 @@ CMake, Ninja, GNU Arm, OpenOCD, picotool i narzędzi RISC-V utrzymywane przez
 projekt w lokalnym katalogu głównym użytkownika o krótkiej ścieżce oraz zapisuje
 ustalone ścieżki do plików wykonywalnych w `resolved-tools.json`.
 
+Linuksowe skanery etapu bezpieczeństwa są przypięte z adresami i SHA-256:
+`osv-scanner` w `osv_scanner_version.conf` (binarki dla x86-64 i AArch64),
+a `cve-bin-tool` w `cve_bin_tool_version.conf` (koło z PyPI; zależności
+rozwiązuje pip). `scripts/install_host_tools.sh` instaluje je po sprawdzeniu
+skrótu, `osv-scanner` do `/usr/local/bin`, a `cve-bin-tool` przez pipx do
+`~/.local/bin`. Jego `--check` i `scripts/check_vulnerabilities.sh` uruchamiają
+je stamtąd, niezależnie od zawartości `PATH`, i odrzucają każde inne wydanie.
+
 picotool wymaga `libusb-1.0-0-dev` i `pkg-config`, aby uzyskać dostęp do USB.
 Jest budowany z Pico SDK w ustalonej wersji i używa zawartego w SDK submodułu
 Mbed TLS do obliczania skrótów oraz podpisywania obrazów RP2350. W Linuksie i
