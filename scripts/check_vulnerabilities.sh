@@ -54,10 +54,29 @@ info "Generating CycloneDX SBOM"
 
 ran_scanner=0
 
+# osv-scanner exits with 1 for found vulnerabilities and with another code
+# when it cannot finish, e.g. without network. Findings fail at once; other
+# failures get retried and still fail the scan if they last.
+run_osv_scanner() {
+    local scanner="$1" attempt status
+    for ((attempt = 1; attempt <= CVE_REFRESH_ATTEMPTS; attempt++)); do
+        status=0
+        "${scanner}" scan source --recursive "${REPO_ROOT}" || status=$?
+        if [[ "${status}" -le 1 ]]; then
+            return "${status}"
+        fi
+        warn "osv-scanner could not finish (exit ${status}, attempt ${attempt}/${CVE_REFRESH_ATTEMPTS})"
+        if ((attempt < CVE_REFRESH_ATTEMPTS)); then
+            sleep "$((attempt * CVE_REFRESH_DELAY_S))"
+        fi
+    done
+    return "${status}"
+}
+
 if scanner="$(find_tool osv-scanner)"; then
     ran_scanner=1
     info "Running osv-scanner against repository sources"
-    "${scanner}" scan source --recursive "${REPO_ROOT}"
+    run_osv_scanner "${scanner}"
 else
     warn "osv-scanner not found; skipping OSV vulnerability scan"
 fi

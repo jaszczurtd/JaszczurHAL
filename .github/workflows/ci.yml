@@ -18,6 +18,8 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   PYTHONUTF8: "1"
 
+# Windows jobs check what the Linux gate host cannot run; the Linux jobs
+# below run stages of runalltests.sh.
 jobs:
   windows-tooling:
     runs-on: windows-2025
@@ -441,13 +443,30 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true
 
+  # ── Linux: stages of runalltests.sh ────────────────────────────────────────
+  # Every Linux job installs the tools with scripts/install_host_tools.sh (the
+  # list runmefirst.sh installs locally) and runs stages of runalltests.sh;
+  # no Linux job runs checks of its own. Together the jobs run every stage
+  # once except the local-only example builds (--list-local-stages), so a
+  # local ./runalltests.sh (or --commit before a push) checks everything
+  # Linux CI checks. tests/test_ci_gate_stages.py keeps the two in step.
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    env:
+      JH_RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
 
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+
+      - name: Cache pinned cppcheck build
+        uses: actions/cache@v5
+        with:
+          path: |
+            third_party/cppcheck
+            .build/tools/cppcheck
+          key: cppcheck-${{ runner.os }}-${{ hashFiles('third_party/cppcheck_version.conf', 'scripts/component_manager.py') }}
 
       - name: Cache pinned ESP-IDF SDK and tools
         uses: actions/cache@v5
@@ -457,329 +476,107 @@ jobs:
             ~/.espressif
           key: esp-idf-${{ runner.os }}-${{ hashFiles('third_party/esp_idf_version.conf', 'security/esp_idf_tools.json') }}
 
-      - name: Verify release metadata and tag ancestry
-        run: |
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            python3 scripts/check_release_metadata.py \
-              --tag "${GITHUB_REF_NAME}" --release-ref origin/main
-          else
-            python3 scripts/check_release_metadata.py
-          fi
+      - name: Install host tools and pinned components
+        run: ./scripts/install_host_tools.sh
 
-      - name: Verify generated artifacts
-        run: |
-          python3 scripts/sync_generated.py --check
-          python3 tests/test_tooling_contract.py .
-
-      - name: Validate effective feature configuration
-        run: |
-          python3 scripts/generate_hal_features.py \
-            --lint --effective --input-root . \
-            --resolution-output .build/ci/effective-feature-resolution.json
+      - name: Run gate stages
+        run: ./runalltests.sh --stage tools,repository,host,esp-idf
 
       - name: Upload effective feature resolution
-        if: ${{ always() && hashFiles('.build/ci/effective-feature-resolution.json') != '' }}
+        if: ${{ always() && hashFiles('.build/gate/effective-feature-resolution.json') != '' }}
         uses: actions/upload-artifact@v6
         with:
           name: effective-feature-resolution
-          path: .build/ci/effective-feature-resolution.json
+          path: .build/gate/effective-feature-resolution.json
           if-no-files-found: error
-
-      - name: Install GNU Arm Embedded toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            gcc-arm-none-eabi \
-            libnewlib-arm-none-eabi \
-            libstdc++-arm-none-eabi-dev
-
-      - name: Prepare host source dependencies
-        run: |
-          ./scripts/ensure_bearssl.sh --force
-          ./scripts/ensure_cjson.sh --force
-          ./scripts/ensure_lodepng.sh --force
-          ./scripts/ensure_jpeg.sh --force
-          ./scripts/ensure_fatfs.sh --force
-          ./scripts/ensure_unity.sh --force
-          ./scripts/ensure_lwip.sh --force
-          ./scripts/ensure_littlefs.sh --force
-          ./scripts/ensure_btstack.sh --force
-          ./scripts/ensure_sx126x.sh --force
-          ./scripts/ensure_freertos_kernel.sh --force
-
-      - name: Configure
-        run: >-
-          cmake -B .build/ci/host
-          -DJH_ENABLE_FREERTOS_POSIX_TESTS=ON
-
-      - name: Build
-        run: cmake --build .build/ci/host --parallel
-
-      - name: Test
-        run: ctest --test-dir .build/ci/host --output-on-failure
-
-      - name: Build ESP32-S3 Phase 3 fixture with pinned ESP-IDF
-        id: esp32_phase3_build
-        run: |
-          output="${GITHUB_WORKSPACE}/.build/ci/esp-idf/esp32s3-phase3"
-          build_exit=0
-          python3 scripts/build_esp_idf.py build \
-            --project tests/fixtures/esp32s3_phase3 \
-            --target esp32s3 \
-            --board waveshare-esp32-s3-zero \
-            --output "${output}" \
-            --clean || build_exit=$?
-          if (( build_exit != 0 )); then
-            if [[ -f "${output}/build.log" ]]; then
-              echo 'Last 300 lines of the ESP-IDF build log:'
-              tail -n 300 "${output}/build.log"
-            fi
-            echo 'ESP-IDF failure diagnostic:'
-            if [[ -f "${output}/jh_esp_idf_failure.txt" ]]; then
-              sed -n '1,120p' "${output}/jh_esp_idf_failure.txt"
-            else
-              echo "Missing failure diagnostic: ${output}/jh_esp_idf_failure.txt" >&2
-            fi
-            exit "${build_exit}"
-          fi
 
       - name: Upload ESP32-S3 Phase 3 build artifacts
         uses: actions/upload-artifact@v6
         with:
           name: linux-esp32s3-phase3
           path: |
-            .build/ci/esp-idf/esp32s3-phase3/jh_esp_idf_artifacts.json
-            .build/ci/esp-idf/esp32s3-phase3/build.log
-            .build/ci/esp-idf/esp32s3-phase3/bootloader/bootloader.bin
-            .build/ci/esp-idf/esp32s3-phase3/partition_table/partition-table.bin
-            .build/ci/esp-idf/esp32s3-phase3/ota_data_initial.bin
-            .build/ci/esp-idf/esp32s3-phase3/esp32s3_phase3.bin
+            .build/gate/esp-idf/esp32s3-phase3/jh_esp_idf_artifacts.json
+            .build/gate/esp-idf/esp32s3-phase3/build.log
+            .build/gate/esp-idf/esp32s3-phase3/bootloader/bootloader.bin
+            .build/gate/esp-idf/esp32s3-phase3/partition_table/partition-table.bin
+            .build/gate/esp-idf/esp32s3-phase3/ota_data_initial.bin
+            .build/gate/esp-idf/esp32s3-phase3/esp32s3_phase3.bin
           if-no-files-found: error
           include-hidden-files: true
 
       - name: Upload ESP32-S3 Phase 3 failure diagnostics
         if: >-
           ${{ failure() && !cancelled() &&
-          steps.esp32_phase3_build.outcome == 'failure' }}
+          hashFiles('.build/gate/esp-idf/esp32s3-phase3/jh_esp_idf_failure.txt') != '' }}
         uses: actions/upload-artifact@v6
         with:
           name: linux-esp32s3-phase3-failure
           path: |
-            .build/ci/esp-idf/esp32s3-phase3/jh_esp_idf_failure.txt
-            .build/ci/esp-idf/esp32s3-phase3/build.log
-            .build/ci/esp-idf/esp32s3-phase3/generated/jaszczurhal/
-            .build/ci/esp-idf/esp32s3-phase3/CMakeCache.txt
-            .build/ci/esp-idf/esp32s3-phase3/CMakeFiles/CMakeConfigureLog.yaml
-            .build/ci/esp-idf/esp32s3-phase3/project_description.json
-            .build/ci/esp-idf/esp32s3-phase3/compile_commands.json
-            .build/ci/esp-idf/esp32s3-phase3/flasher_args.json
-            .build/ci/esp-idf/esp32s3-phase3/sdkconfig
+            .build/gate/esp-idf/esp32s3-phase3/jh_esp_idf_failure.txt
+            .build/gate/esp-idf/esp32s3-phase3/build.log
+            .build/gate/esp-idf/esp32s3-phase3/generated/jaszczurhal/
+            .build/gate/esp-idf/esp32s3-phase3/CMakeCache.txt
+            .build/gate/esp-idf/esp32s3-phase3/CMakeFiles/CMakeConfigureLog.yaml
+            .build/gate/esp-idf/esp32s3-phase3/project_description.json
+            .build/gate/esp-idf/esp32s3-phase3/compile_commands.json
+            .build/gate/esp-idf/esp32s3-phase3/flasher_args.json
+            .build/gate/esp-idf/esp32s3-phase3/sdkconfig
           if-no-files-found: warn
           include-hidden-files: true
-
-      - name: Build ESP32-S3 linkable library with pinned ESP-IDF
-        id: esp32_link_library_build
-        run: |
-          output="${GITHUB_WORKSPACE}/.build/ci/link-libraries/esp32s3"
-          build_exit=0
-          ./scripts/build_esp32_lib.sh \
-            --target esp32s3 \
-            --all-features \
-            --clean \
-            --output "${output}" || build_exit=$?
-          if (( build_exit != 0 )); then
-            if [[ -f "${output}/build.log" ]]; then
-              echo 'Last 300 lines of the ESP-IDF build log:'
-              tail -n 300 "${output}/build.log"
-            fi
-            exit "${build_exit}"
-          fi
-          test -f "${output}/libJaszczurHAL.a"
-          test -f "${output}/include/generated/jh_board_config.h"
-
-      - name: Build ESP32 Classic gamepad fixture with pinned ESP-IDF
-        id: esp32_gamepad_build
-        run: |
-          output="${GITHUB_WORKSPACE}/.build/ci/esp-idf/esp32-gamepad"
-          build_exit=0
-          python3 scripts/build_esp_idf.py build \
-            --project tests/fixtures/esp32_gamepad \
-            --target esp32 \
-            --board esp32-devkitc-v4 \
-            --output "${output}" \
-            --clean || build_exit=$?
-          if (( build_exit != 0 )); then
-            if [[ -f "${output}/build.log" ]]; then
-              echo 'Last 300 lines of the ESP-IDF build log:'
-              tail -n 300 "${output}/build.log"
-            fi
-            echo 'ESP-IDF failure diagnostic:'
-            if [[ -f "${output}/jh_esp_idf_failure.txt" ]]; then
-              sed -n '1,120p' "${output}/jh_esp_idf_failure.txt"
-            else
-              echo "Missing failure diagnostic: ${output}/jh_esp_idf_failure.txt" >&2
-            fi
-            exit "${build_exit}"
-          fi
 
       - name: Upload ESP32 Classic gamepad build artifacts
         uses: actions/upload-artifact@v6
         with:
           name: linux-esp32-gamepad
           path: |
-            .build/ci/esp-idf/esp32-gamepad/jh_esp_idf_artifacts.json
-            .build/ci/esp-idf/esp32-gamepad/build.log
-            .build/ci/esp-idf/esp32-gamepad/bootloader/bootloader.bin
-            .build/ci/esp-idf/esp32-gamepad/partition_table/partition-table.bin
-            .build/ci/esp-idf/esp32-gamepad/esp32_gamepad.bin
+            .build/gate/esp-idf/esp32-gamepad/jh_esp_idf_artifacts.json
+            .build/gate/esp-idf/esp32-gamepad/build.log
+            .build/gate/esp-idf/esp32-gamepad/bootloader/bootloader.bin
+            .build/gate/esp-idf/esp32-gamepad/partition_table/partition-table.bin
+            .build/gate/esp-idf/esp32-gamepad/esp32_gamepad.bin
           if-no-files-found: error
           include-hidden-files: true
 
       - name: Upload ESP32 Classic gamepad failure diagnostics
         if: >-
           ${{ failure() && !cancelled() &&
-          steps.esp32_gamepad_build.outcome == 'failure' }}
+          hashFiles('.build/gate/esp-idf/esp32-gamepad/jh_esp_idf_failure.txt') != '' }}
         uses: actions/upload-artifact@v6
         with:
           name: linux-esp32-gamepad-failure
           path: |
-            .build/ci/esp-idf/esp32-gamepad/jh_esp_idf_failure.txt
-            .build/ci/esp-idf/esp32-gamepad/build.log
-            .build/ci/esp-idf/esp32-gamepad/generated/jaszczurhal/
-            .build/ci/esp-idf/esp32-gamepad/CMakeCache.txt
-            .build/ci/esp-idf/esp32-gamepad/CMakeFiles/CMakeConfigureLog.yaml
-            .build/ci/esp-idf/esp32-gamepad/project_description.json
-            .build/ci/esp-idf/esp32-gamepad/compile_commands.json
-            .build/ci/esp-idf/esp32-gamepad/flasher_args.json
-            .build/ci/esp-idf/esp32-gamepad/sdkconfig
+            .build/gate/esp-idf/esp32-gamepad/jh_esp_idf_failure.txt
+            .build/gate/esp-idf/esp32-gamepad/build.log
+            .build/gate/esp-idf/esp32-gamepad/generated/jaszczurhal/
+            .build/gate/esp-idf/esp32-gamepad/CMakeCache.txt
+            .build/gate/esp-idf/esp32-gamepad/CMakeFiles/CMakeConfigureLog.yaml
+            .build/gate/esp-idf/esp32-gamepad/project_description.json
+            .build/gate/esp-idf/esp32-gamepad/compile_commands.json
+            .build/gate/esp-idf/esp32-gamepad/flasher_args.json
+            .build/gate/esp-idf/esp32-gamepad/sdkconfig
           if-no-files-found: warn
           include-hidden-files: true
 
-  # ── Sanitizer and parser fuzz gate ─────────────────────────────────────────
-  sanitizer-fuzz:
-    runs-on: ubuntu-latest
+  stages:
+    runs-on: ubuntu-24.04
     needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        stages:
+          - sanitizer-fuzz
+          - memcheck
+          - cppcheck,clang-tidy,cpd
+          - stm32,rp
+          - library-rp2040
+          - library-rp2350-arm
+          - library-rp2350-riscv
+          - library-stm32g474
+          - security
+    name: "Gate stages (${{ matrix.stages }})"
 
     steps:
       - uses: actions/checkout@v6
-
-      - name: Install Clang and GNU Arm Embedded toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            clang \
-            gcc-arm-none-eabi \
-            libnewlib-arm-none-eabi \
-            libstdc++-arm-none-eabi-dev
-
-      - name: Prepare host source dependencies
-        run: |
-          ./scripts/ensure_bearssl.sh --force
-          ./scripts/ensure_cjson.sh --force
-          ./scripts/ensure_lodepng.sh --force
-          ./scripts/ensure_jpeg.sh --force
-          ./scripts/ensure_fatfs.sh --force
-          ./scripts/ensure_unity.sh --force
-          ./scripts/ensure_lwip.sh --force
-          ./scripts/ensure_littlefs.sh --force
-          ./scripts/ensure_btstack.sh --force
-          ./scripts/ensure_sx126x.sh --force
-          ./scripts/ensure_freertos_kernel.sh --force
-
-      - name: Run ASan, UBSan, TSan and libFuzzer gate
-        run: >-
-          ./scripts/run_sanitizer_fuzz.sh
-          --build-dir .build/ci/sanitizer-fuzz
-
-  # ── Valgrind memcheck gate ─────────────────────────────────────────────────
-  # Runs the host unit-test suite under Valgrind to catch memory defects
-  # (leaks, use-after-free, invalid/uninitialised reads). Host-only: this does
-  # NOT exercise firmware on MCU targets - it validates the portable HAL logic
-  # tested in tests/. Memcheck flags and the suppressions file are configured in
-  # the root CMakeLists.txt (MEMORYCHECK_* -> DartConfiguration.tcl), so a real
-  # defect exits non-zero and fails this job.
-  memcheck:
-    runs-on: ubuntu-latest
-    needs: test
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Prepare host source dependencies
-        run: |
-          ./scripts/ensure_bearssl.sh --force
-          ./scripts/ensure_cjson.sh --force
-          ./scripts/ensure_lodepng.sh --force
-          ./scripts/ensure_jpeg.sh --force
-          ./scripts/ensure_fatfs.sh --force
-          ./scripts/ensure_unity.sh --force
-          ./scripts/ensure_lwip.sh --force
-          ./scripts/ensure_littlefs.sh --force
-          ./scripts/ensure_btstack.sh --force
-          ./scripts/ensure_sx126x.sh --force
-          ./scripts/ensure_freertos_kernel.sh --force
-
-      - name: Install Valgrind
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            valgrind \
-            gcc-arm-none-eabi \
-            libnewlib-arm-none-eabi \
-            libstdc++-arm-none-eabi-dev
-
-      - name: Configure
-        run: cmake -B .build/ci/memcheck
-
-      - name: Build
-        run: cmake --build .build/ci/memcheck --parallel
-
-      - name: Run tests under Valgrind
-        run: ctest --test-dir .build/ci/memcheck -T memcheck --output-on-failure
-
-  # ── Static analysis gate ───────────────────────────────────────────────────
-  # Three complementary analyzers on the project's OWN code (vendored libraries
-  # excluded). They reach layers the host valgrind gate cannot run:
-  #
-  #   cppcheck    - parses standalone, so it scans ALL own code: portable logic,
-  #                 the mock/RP/STM32 backends.
-  #   clang-tidy  - needs a compile database, so it covers the host-compilable
-  #                 production code in the thematic src/hal directories and the
-  #                 stm32g474 backend. The mock backend (test scaffolding) is
-  #                 intentionally out of scope.
-  #   PMD CPD     - compares C/C++ implementation tokens across the mock,
-  #                 thematic portable HAL, RP and STM32G474 code, and Python
-  #                 tokens across repository-owned scripts.
-  #
-  # Tool configs live in .clang-tidy, scripts/run_cppcheck.sh,
-  # tests/cppcheck-suppressions.txt and scripts/run_cpd.py. cppcheck is built
-  # from its pinned tag and PMD is an authenticated 7.26.0 archive, both managed
-  # under third_party; clang-tidy comes from ubuntu-latest. Vendored code is
-  # excluded from duplicate analysis and static-analysis ownership.
-  static-analysis:
-    runs-on: ubuntu-latest
-    needs: test
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Prepare analysis source dependencies
-        run: |
-          ./scripts/ensure_bearssl.sh --force
-          ./scripts/ensure_cjson.sh --force
-          ./scripts/ensure_lodepng.sh --force
-          ./scripts/ensure_jpeg.sh --force
-          ./scripts/ensure_fatfs.sh --force
-          ./scripts/ensure_unity.sh --force
-          ./scripts/ensure_lwip.sh --force
-          ./scripts/ensure_littlefs.sh --force
-          ./scripts/ensure_btstack.sh --force
-          ./scripts/ensure_sx126x.sh --force
-
-      - name: Install analyzers
-        run: >-
-          sudo apt-get update && sudo apt-get install -y
-          clang-tidy clang-tools default-jre-headless
 
       - name: Cache pinned cppcheck build
         uses: actions/cache@v5
@@ -787,96 +584,18 @@ jobs:
           path: |
             third_party/cppcheck
             .build/tools/cppcheck
-          key: cppcheck-${{ runner.os }}-${{ hashFiles('third_party/cppcheck_version.conf') }}
-
-      - name: Prepare pinned cppcheck
-        run: ./scripts/ensure_cppcheck.sh --force
-
-      - name: Prepare pinned PMD CPD
-        run: ./scripts/ensure_pmd.sh --force
-
-      - name: Generate compile databases
-        run: |
-          cmake -B .build/ci/static-host -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-          cmake -S link_libraries/stm32_lib -B .build/ci/static-stm32 \
-            -DJH_STM32_HOST_SANITY=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-
-      - name: "cppcheck (all own code; vendored excluded)"
-        run: scripts/run_cppcheck.sh
-
-      - name: "clang-tidy (portable HAL + shared + stm32 backend)"
-        run: |
-          mkdir -p .build/ci/static-analysis
-          TIDY_HOST_BUILD=.build/ci/static-host/clang_tidy_db
-          mapfile -t TIDY_HOST_FILES < <(
-            scripts/clang_tidy_files.py --build-dir .build/ci/static-host --repo-root "$PWD" --profile host \
-              --output-compile-db "$TIDY_HOST_BUILD/compile_commands.json"
-          )
-          test "${#TIDY_HOST_FILES[@]}" -gt 0
-          run-clang-tidy -p "$TIDY_HOST_BUILD" -quiet "${TIDY_HOST_FILES[@]}" 2>&1 \
-            | tee .build/ci/static-analysis/tidy_host.log
-          TIDY_STM32_BUILD=.build/ci/static-stm32/clang_tidy_db
-          mapfile -t TIDY_STM32_FILES < <(
-            scripts/clang_tidy_files.py --build-dir .build/ci/static-stm32 --repo-root "$PWD" --profile stm32 \
-              --output-compile-db "$TIDY_STM32_BUILD/compile_commands.json"
-          )
-          test "${#TIDY_STM32_FILES[@]}" -gt 0
-          run-clang-tidy -p "$TIDY_STM32_BUILD" -quiet "${TIDY_STM32_FILES[@]}" 2>&1 \
-            | tee .build/ci/static-analysis/tidy_stm32.log
-          if grep -qE ':[0-9]+:[0-9]+: (warning|error):' \
-            .build/ci/static-analysis/tidy_host.log \
-            .build/ci/static-analysis/tidy_stm32.log; then
-            echo "::error::clang-tidy reported findings (see logs above)"
-            exit 1
-          fi
-
-      - name: "PMD CPD strict duplicate gate (owned C/C++ and Python)"
-        run: >-
-          scripts/run_cpd.py
-          --output-dir .build/ci/static-analysis/cpd
-
-  # ── Security supply-chain gate ─────────────────────────────────────────────
-  # Uses the SBOM verified by the required test job, then runs osv-scanner against
-  # the source tree and cve-bin-tool against the regenerated SBOM. cve-bin-tool
-  # intentionally does not scan the managed .build artifact tree because object
-  # files create excessive noise; the reviewed inventories are the source of
-  # truth and the SBOM is their tracked generated projection.
-  security-scan:
-    runs-on: ubuntu-latest
-    needs: test
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Install security scanners
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y curl ca-certificates python3 pipx
-
-          arch="$(uname -m)"
-          case "${arch}" in
-            x86_64|amd64) osv_arch="amd64" ;;
-            aarch64|arm64) osv_arch="arm64" ;;
-            *) echo "::error::Unsupported osv-scanner architecture: ${arch}"; exit 1 ;;
-          esac
-
-          curl -fsSL \
-            "https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_${osv_arch}" \
-            -o /tmp/osv-scanner
-          chmod +x /tmp/osv-scanner
-          sudo install -m 0755 /tmp/osv-scanner /usr/local/bin/osv-scanner
-
-          python3 -m pipx install cve-bin-tool
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          key: cppcheck-${{ runner.os }}-${{ hashFiles('third_party/cppcheck_version.conf', 'scripts/component_manager.py') }}
 
       # The NVD mirror is not always reachable. A daily cache keeps the full
       # download to one per day, and restore-keys hand the scan the last good
       # database when the mirror is down.
       - name: Select the CVE database cache day
+        if: ${{ matrix.stages == 'security' }}
         id: cve-day
         run: echo "day=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
 
       - name: Cache cve-bin-tool database
+        if: ${{ matrix.stages == 'security' }}
         uses: actions/cache@v5
         with:
           path: ~/.cache/cve-bin-tool
@@ -884,67 +603,8 @@ jobs:
           restore-keys: |
             cve-bin-tool-${{ runner.os }}-
 
-      - name: Run vulnerability scan
-        run: JH_SECURITY_SCAN_SOURCE=1 ./scripts/check_vulnerabilities.sh
+      - name: Install host tools and pinned components
+        run: ./scripts/install_host_tools.sh
 
-  # ── One all-features build per production architecture ─────────────────────
-  linux-static-library:
-    runs-on: ubuntu-latest
-    needs: test
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: rp2040
-            board: picow
-          - target: rp2350-arm
-            board: pico2w
-          - target: rp2350-riscv
-            board: pico2
-          - target: stm32g474
-            board: nucleo-g474re-pim730
-    name: "Linux all-features library (${{ matrix.target }})"
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Install native build prerequisites
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            gcc-arm-none-eabi binutils-arm-none-eabi \
-            libusb-1.0-0-dev pkg-config default-jre-headless
-
-      - name: Cache pinned cppcheck build
-        uses: actions/cache@v5
-        with:
-          path: |
-            third_party/cppcheck
-            .build/tools/cppcheck
-          key: cppcheck-${{ runner.os }}-${{ hashFiles('third_party/cppcheck_version.conf') }}
-
-      - name: Prepare pinned source dependencies
-        run: ./third_party/update_components.sh
-
-      - name: Build all-features static library
-        run: |
-          ./scripts/build_link_library.sh \
-            --target "${{ matrix.target }}" \
-            --board "${{ matrix.board }}" \
-            --all-features --library-only --clean --jobs 4 \
-            --output ".build/ci/linux/${{ matrix.target }}"
-
-          build_dir=".build/ci/linux/${{ matrix.target }}"
-          test -f "${build_dir}/libJaszczurHAL.a"
-          if find "${build_dir}" -type f -name core.a -print -quit |
-              grep -q .; then
-            echo "::error::Native build produced an unexpected core.a"
-            exit 1
-          fi
-          if grep -R -E '(^|[ /])core\.a([[:space:]]|$)|arduino-pico|Arduino\.h' \
-              "${build_dir}" \
-              --include='link.txt' --include='*.map' \
-              --include='compile_commands.json' --include='CMakeCache.txt'; then
-            echo "::error::Native build metadata references the removed carrier"
-            exit 1
-          fi
+      - name: Run gate stages
+        run: ./runalltests.sh --stage "${{ matrix.stages }}"

@@ -54,9 +54,11 @@ Wrappery integracyjne BearSSL, cJSON, LodePNG, JPEG i FatFs należące do
 JaszczurHAL, a także konfiguracja portu lwIP, pozostają w odpowiednich
 katalogach `src/hal/network/`, `src/hal/codecs/` i `src/hal/storage/`. Integracja
 Unity należy do infrastruktury testowej. W tym katalogu zarządzane są natomiast
-drzewa źródeł projektów zewnętrznych. Skrypty cJSON, LodePNG, TJpg_Decoder i
-Unity wymagają czystych katalogów roboczych z dokładnie wskazanym commitem; tryb
-`verify-only` odrzuca zmiany lokalne i pliki nieśledzone przez Git. Sprawdzany
+drzewa źródeł projektów zewnętrznych. Każdy przypięty checkout musi być czystym
+katalogiem roboczym z dokładnie wskazanym commitem: tryb `verify-only` odrzuca
+zmiany lokalne i pliki nieśledzone przez Git w każdym z nich, także
+w submodułach. Skrypty cJSON, LodePNG, TJpg_Decoder, Unity i SX126x dodatkowo
+przywracają taki checkout w trybie normalnym. Sprawdzany
 jest również adres repozytorium źródłowego, w tym repozytoriów BearSSL, LodePNG,
 FatFs i Unity utrzymywanych przez projekt. `jaszczurtd/ff16` jest bezpośrednią
 kopią lustrzaną niezmienionego archiwum ChaN R0.16 i zastępuje zawodny mechanizm

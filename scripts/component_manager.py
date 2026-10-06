@@ -339,12 +339,16 @@ def sync_git_checkout(
             _git_output(destination, "remote", "add", "origin", repository)
         changed = True
 
-    if clean:
+    # Verification wants the pinned sources exactly, submodules included: a
+    # local edit would make a gate check other code than CI downloads.
+    if clean or verify_only:
         status_text = _git_output(destination, "status", "--porcelain")
         if status_text:
             if verify_only:
                 raise ComponentError(
-                    f"Pinned checkout has local changes at {destination} (verify-only)."
+                    f"Pinned checkout has local changes at {destination} (verify-only); "
+                    f"`git -C {destination} status` lists them. Discard them or "
+                    "rerun third_party/update_components.sh after removing the checkout."
                 )
             _git_output(destination, "reset", "--hard", reference)
             _git_output(destination, "clean", "-fdx")
@@ -1320,11 +1324,14 @@ def _cppcheck_config(repo_root: Path) -> dict[str, str]:
 def _cppcheck_definitions(build: Path) -> tuple[str, ...]:
     # The build copies cfg/, addons/ and platforms/ into its bin/; FILESDIR
     # points there too, so both cppcheck lookups find the pinned MISRA addon.
+    # DISABLE_DMAKE keeps the build from rewriting Makefile in the pinned
+    # source checkout, which verification requires to stay clean.
     return (
         "-DCMAKE_BUILD_TYPE=Release",
         f"-DFILESDIR={build / 'bin'}",
         "-DBUILD_GUI=OFF",
         "-DBUILD_TESTS=OFF",
+        "-DDISABLE_DMAKE=ON",
     )
 
 

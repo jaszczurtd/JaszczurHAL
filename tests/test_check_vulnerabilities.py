@@ -29,6 +29,15 @@ mv "${FAKE_DIR}/refresh.next" "${FAKE_DIR}/refresh.codes"
 exit "${code:-0}"
 """
 
+# Fake osv-scanner: one exit code per run, taken from osv.codes.
+FAKE_OSV = """#!/usr/bin/env bash
+echo "osv $*" >> "${FAKE_DIR}/calls.log"
+code="$(head -n 1 "${FAKE_DIR}/osv.codes")"
+tail -n +2 "${FAKE_DIR}/osv.codes" > "${FAKE_DIR}/osv.next"
+mv "${FAKE_DIR}/osv.next" "${FAKE_DIR}/osv.codes"
+exit "${code:-0}"
+"""
+
 
 def executable(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
@@ -56,7 +65,12 @@ class CveScanTests(unittest.TestCase):
         shutil.rmtree(self.work)
 
     def run_scan(self, refresh_codes: list[int], scan_code: int,
-                 cached_db: bool) -> subprocess.CompletedProcess:
+                 cached_db: bool,
+                 osv_codes: list[int] | None = None) -> subprocess.CompletedProcess:
+        if osv_codes is not None:
+            executable(self.fake / "osv-scanner", FAKE_OSV)
+            (self.fake / "osv.codes").write_text(
+                "".join(f"{code}\n" for code in osv_codes), encoding="utf-8")
         (self.fake / "refresh.codes").write_text(
             "".join(f"{code}\n" for code in refresh_codes), encoding="utf-8")
         (self.fake / "scan.code").write_text(f"{scan_code}\n", encoding="utf-8")
@@ -103,6 +117,26 @@ class CveScanTests(unittest.TestCase):
         refreshes = [call for call in self.calls() if "--sbom" not in call]
         self.assertEqual(2, len(refreshes))
         self.assertNotIn("cached database", result.stderr)
+
+
+    def osv_runs(self) -> int:
+        return sum(call.startswith("osv ") for call in self.calls())
+
+    def test_osv_findings_fail_without_retry(self) -> None:
+        result = self.run_scan([0], 0, cached_db=True, osv_codes=[1])
+        self.assertNotEqual(0, result.returncode)
+        self.assertEqual(1, self.osv_runs())
+
+    def test_osv_unfinished_run_is_retried(self) -> None:
+        result = self.run_scan([0], 0, cached_db=True, osv_codes=[127, 0])
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(2, self.osv_runs())
+        self.assertIn("could not finish", result.stderr)
+
+    def test_osv_lasting_failure_fails_the_scan(self) -> None:
+        result = self.run_scan([0], 0, cached_db=True, osv_codes=[127, 127, 127])
+        self.assertNotEqual(0, result.returncode)
+        self.assertEqual(3, self.osv_runs())
 
 
 if __name__ == "__main__":

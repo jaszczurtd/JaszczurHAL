@@ -308,10 +308,18 @@ def prepare_sdk(repo_root: Path, directory_override: str) -> Path:
         )
         return directory
     except component_manager.ComponentError:
-        directory = component_manager.ensure_git_component(
+        component_manager.ensure_git_component(
             "esp-idf",
             repo_root,
             verify_only=False,
+            directory_override=directory_override,
+        )
+        # Synchronizing leaves local edits in place; build only from the
+        # pinned sources.
+        directory = component_manager.ensure_git_component(
+            "esp-idf",
+            repo_root,
+            verify_only=True,
             directory_override=directory_override,
         )
         component_manager.ensure_esp_idf_tools(

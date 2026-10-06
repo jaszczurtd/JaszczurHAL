@@ -99,6 +99,42 @@ class EnvironmentTests(unittest.TestCase):
         )
 
 
+class PrepareSdkTests(unittest.TestCase):
+    """prepare_sdk() builds only from the pinned ESP-IDF sources."""
+
+    def run_prepare(self, verify_results: list[object]) -> list[bool]:
+        """Run prepare_sdk() with each verify-only checkout check taking the
+        next of ``verify_results`` (a path or an exception); returns the
+        verify_only flag of every checkout call."""
+        calls: list[bool] = []
+        results = iter(verify_results)
+
+        def checkout(name: str, root: Path, *, verify_only: bool,
+                     directory_override: str) -> Path:
+            calls.append(verify_only)
+            if not verify_only:
+                return Path("/idf")
+            result = next(results)
+            if isinstance(result, Exception):
+                raise result
+            return result
+
+        with mock.patch.object(esp_idf.component_manager, "ensure_git_component",
+                               side_effect=checkout), \
+                mock.patch.object(esp_idf.component_manager, "ensure_esp_idf_tools"):
+            esp_idf.prepare_sdk(Path("/repo"), "")
+        return calls
+
+    def test_missing_sdk_is_synchronized_and_checked_again(self) -> None:
+        missing = esp_idf.component_manager.ComponentError("missing checkout")
+        self.assertEqual(self.run_prepare([missing, Path("/idf")]), [True, False, True])
+
+    def test_locally_edited_sdk_stops_the_build(self) -> None:
+        edited = esp_idf.component_manager.ComponentError("local changes")
+        with self.assertRaises(esp_idf.component_manager.ComponentError):
+            self.run_prepare([edited, edited])
+
+
 class ProjectModelTests(unittest.TestCase):
     def test_discovers_root_and_nested_src_sources(self) -> None:
         with tempfile.TemporaryDirectory(prefix="jh-esp-project-") as text:

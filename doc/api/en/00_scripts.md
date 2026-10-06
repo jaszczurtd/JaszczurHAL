@@ -14,13 +14,13 @@ Run commands from the repository root unless a section states otherwise. Use `--
 
 | Goal | Command | Result |
 |---|---|---|
-| Prepare a Debian/Ubuntu workstation | `./runmefirst.sh` | Installs host, ARM, analysis, security, USB, and VS Code workflow prerequisites; synchronizes managed components; configures Git hooks. |
+| Prepare a Debian/Ubuntu workstation | `./runmefirst.sh` | Installs host, ARM, analysis, security, USB, and VS Code workflow prerequisites through `scripts/install_host_tools.sh`, the script Linux CI uses; synchronizes managed components; configures Git hooks. |
 | Prepare a native Windows workstation | `powershell -NoProfile -ExecutionPolicy Bypass -File .\runmefirst.ps1` | Prepares the pinned managed Python environment, native toolchains, source components, Cortex-Debug user paths, and the Windows host self-check. |
 | Synchronize managed dependencies | `./third_party/update_components.sh` | Fetches missing components and replaces managed installations that differ from tracked pins. |
-| Verify dependencies without changing them | `./third_party/update_components.sh --verify-only` | Checks all managed component versions, commits, required files, PMD archive state, the built picotool and cppcheck, and the RISC-V toolchain stamp. |
+| Verify dependencies without changing them | `./third_party/update_components.sh --verify-only` | Checks all managed component versions, commits, required files, that no pinned checkout has local edits (submodules included), PMD archive state, the built picotool and cppcheck, and the RISC-V toolchain stamp. |
 | Refresh all tracked generated files | `python3 scripts/sync_generated.py --write` | Runs the feature, board, example, root VS Code, and SBOM generators and lists every file changed during synchronization. |
 | Verify all tracked generated files | `python3 scripts/sync_generated.py --check` | Runs every generator in read-only verification mode and fails on missing or stale output. |
-| Run the complete repository gate | `./runalltests.sh` | Cleans managed gate outputs and runs tests, Clang ASan/UBSan/TSan/libFuzzer checks, Valgrind, static analysis, CPD, target builds, and example builds. |
+| Run the complete repository gate | `./runalltests.sh`; before a push `./runalltests.sh --commit` | Cleans managed gate outputs and runs every stage: tests, Clang ASan/UBSan/TSan/libFuzzer checks, Valgrind, static analysis, CPD, target, library and example builds, and the vulnerability scan. Linux CI runs the same stages except the example builds. |
 | Run the sanitizer/fuzz gate | `scripts/run_sanitizer_fuzz.sh` | Recreates a Clang-instrumented host build, runs all tests under ASan/UBSan and the native tests under TSan, and smoke-fuzzes the network parsers. |
 | Operate a firmware project | `vscode/entry/jh-vscode <action> --project <dir>` on Unix or `vscode/entry/jh-vscode.cmd ...` on Windows | Provides the stable build, upload, monitor, board-selection, IntelliSense, and clean CLI used by VS Code projects. |
 | Build a linkable library for any target | `scripts/build_link_library.sh --target <id>` | Selects the family runner under `link_libraries/` from the target's build provider and forwards the remaining options. |
@@ -71,25 +71,30 @@ These scripts live outside `scripts/` and provide the main commands for setting 
 Sets up Debian, Ubuntu, and compatible systems. Re-running the script restores the same configuration. It:
 
 - removes the repository `.build/` tree before setup;
-- installs compilers, CMake, Ninja, Python, Java, Valgrind, Clang sanitizer and
-  fuzz tooling, clang-tidy, OpenOCD, `gdb-multiarch`, serial, libusb, and other
-  host packages;
-- invokes `third_party/update_components.sh`, which also builds the pinned
-  cppcheck;
-- installs `osv-scanner` and `cve-bin-tool`;
+- runs `scripts/install_host_tools.sh`, described below;
 - installs a udev rule for RP2040/RP2350 BOOTSEL/picotool USB access and the
   app-mode `/dev/ttyACM*` port used by the automatic 1200-bps reset;
 - checks for persistent LAN-scoped OTA rules for the TCP/8266 callback and
   UDP/8266 discovery replies, and asks before changing the firewall or
   installing `iptables-persistent`;
-- configures the repository Git hooks;
-- verifies that every required tool is available.
+- configures the repository Git hooks.
 
 The script uses `sudo` for system packages, `/usr/local/bin`, the udev rule,
 and an explicitly approved firewall change. It downloads tools and
 dependencies, so it requires network access. The focused firewall helper is
 `scripts/configure_ota_firewall.py`; it supports `--check`, explicit
 `--interface` / `--network`, and confirmed or `--yes` provisioning.
+
+### `scripts/install_host_tools.sh`
+
+Installs the tools of the quality gate and of generated projects: compilers,
+CMake, Ninja, Python with PyYAML, Java, Valgrind, Clang sanitizer and fuzz
+tooling, clang-tidy, clang-format, the Arm toolchain with newlib, OpenOCD,
+`gdb-multiarch`, serial, libusb, rsync, `osv-scanner` and `cve-bin-tool`. It then runs
+`third_party/update_components.sh`, which also builds the pinned cppcheck, and
+ends by checking every required command and Python module. `runmefirst.sh` and
+every Linux CI job call it, so a local gate and CI run with the same tool set.
+`--check` only reports missing tools; the gate's `tools` stage runs it so.
 
 ### `runmefirst.ps1`
 
@@ -157,8 +162,11 @@ ESP-IDF runner prepares it on first use; focused setup is available through
 `scripts/ensure_esp_idf.sh --enable` or `JH_ENABLE_ESP_IDF=1`.
 
 Normal mode makes each managed installation match its tracked configuration.
-`--verify-only` performs no fetch, extraction, checkout replacement, or build.
-picotool verification includes its required commands and the USB/signing
+`--verify-only` performs no fetch, extraction, checkout replacement, or build,
+and rejects a pinned checkout with local edits or untracked files, submodules
+included, so a gate never checks other sources than CI downloads. The ESP-IDF
+runner applies the same rule before every build. Normal mode repairs such a
+checkout only for components marked `clean`. picotool verification includes its required commands and the USB/signing
 capabilities enabled by the currently available dependencies. cppcheck
 verification checks the reported version, the MISRA addon beside the
 executable, and the build stamp.
@@ -167,32 +175,53 @@ directory layout.
 
 ### `runalltests.sh`
 
-The complete local quality gate. Before running its nine gates, it invokes
-`scripts/sync_generated.py --write` for tracked feature, board, example, root
-VS Code, and SBOM projections. A local run therefore repairs deterministic
-generated drift and prints the changed-artifact list again in its final
-summary. `--check-generated` selects read-only verification instead. CI uses
-the same shared runner in check mode, so the list of generators is maintained
-in one place. `-j N`, `--jobs N`, and `-jN` select build parallelism. The gates
-are:
+The repository quality gate. Its stages, printed by `--list-stages`, are the
+only list of checks: a local run executes them in order, and the Linux CI jobs
+run the same stages with `--stage NAME[,NAME...]`, each exactly once, after
+installing their tools with `scripts/install_host_tools.sh`. The example
+builds are the exception: `--list-local-stages` names them, and they run only
+locally.
+`tests/test_ci_gate_stages.py` fails when the workflow and the list drift
+apart. `--commit [REV]` runs the gate on a clean checkout of `REV` (default
+`HEAD`) in `.build/commit-gate`; run it before a push. The pinned git
+components come from this tree by `rsync`, and before any stage runs,
+whichever were selected, their verification rejects any local edit in them;
+PMD and the RISC-V toolchain are installed in the
+checkout from their pinned archives, and cppcheck and picotool are built
+there; all of them are kept for the next run. `--list-libraries` prints the
+target and board of each library stage. `-j N`, `--jobs N`, and `-jN` select
+build parallelism. The gate verifies tracked feature, board, example, root VS
+Code, and SBOM projections through `scripts/sync_generated.py --check` and
+never rewrites them. The stages are:
 
-1. required tools and managed-component verification;
-2. host tests, including the optional FreeRTOS POSIX suite;
-3. Clang ASan/UBSan tests, native tests under ThreadSanitizer, and libFuzzer
-   smoke checks through the same runner used by CI;
-4. Valgrind memcheck;
-5. cppcheck with the pinned build (`scripts/run_cppcheck.sh`);
-6. clang-tidy for host/shared code and the STM32 backend, using both the
+1. `tools`: required tools and managed-component verification;
+2. `repository`: generated artifacts, release metadata, and the effective
+   feature configuration of every project;
+3. `host`: host tests, including the optional FreeRTOS POSIX suite;
+4. `sanitizer-fuzz`: Clang ASan/UBSan tests, native tests under
+   ThreadSanitizer, and libFuzzer smoke checks;
+5. `memcheck`: Valgrind memcheck;
+6. `cppcheck`: the pinned build (`scripts/run_cppcheck.sh`);
+7. `clang-tidy`: host/shared code in the host databases with and without the
+   FreeRTOS POSIX tests, and the STM32 backend in both the
    `JH_STM32_HOST_SANITY` host-compiler database and the real ARM database;
-7. PMD CPD duplicate detection across owned C/C++ implementations and Python
-   scripts;
-8. STM32, RP2040/RP2350, native FreeRTOS, RP feature-profile, and clean
-   ESP32-S3/ESP-IDF builds with artifact validation;
-9. every declared RP example and the STM32 examples.
+8. `cpd`: PMD CPD duplicate detection across owned C/C++ implementations and
+   Python scripts;
+9. `stm32`: STM32G474 host-compiler, ARM, and SX1276/SX1278 libraries;
+10. `rp`: RP2040/RP2350, native FreeRTOS, and RP2040 feature-profile builds
+    with artifact validation;
+11. `esp-idf`: clean ESP32-S3/ESP32 ESP-IDF fixture builds and the ESP32-S3
+    all-features library;
+12. `library-<target>`: all-features libraries for each RP and STM32 target,
+    without a project header and for an application in a path with spaces;
+13. `examples-<target>`: every declared example configuration for RP2040,
+    STM32G474, and ESP32-S3, locally only;
+14. `security`: `scripts/check_vulnerabilities.sh` with the SBOM CVE scan.
 
-The script removes only its managed `.build/gate`, `.build/examples`, and
-`.build/tests` trees at startup. It exits on the first failed gate.
-Gate 4 runs every directly registered native C/C++ test executable labelled
+A full run removes only its managed `.build/gate`, `.build/examples`, and
+`.build/tests` trees at startup; a `--stage` run keeps them, so stages that
+share a build reuse it. The script exits on the first failed stage. The
+memcheck stage runs every directly registered native C/C++ test executable labelled
 `memcheck`. `MEMCHECK_REQUIRED_TESTS` remains a required critical subset and
 prevents those suites from silently leaving the selection. Python, CMake, and
 shell driver tests are excluded: wrapping their parent interpreter would
@@ -203,8 +232,8 @@ unfiltered to both the terminal and `.build/gate/logs/jh_memcheck.log`.
 
 ### `scripts/run_sanitizer_fuzz.sh`
 
-The shared Linux sanitizer runner used by local Gate 3 and the CI
-`sanitizer-fuzz` job. It resolves an unversioned or versioned Clang toolchain,
+The shared Linux sanitizer runner of the `sanitizer-fuzz` gate stage,
+locally and in CI. It resolves an unversioned or versioned Clang toolchain,
 recreates a build below `.build/`, enables ASan, UBSan and libFuzzer, runs the
 complete host CTest suite with leak detection and fail-fast undefined-behavior
 reporting, then executes bounded smoke runs for the HTTP, WebSocket and
@@ -583,8 +612,8 @@ with the base build or one variant; pairs the header stops with `#error` are
 skipped. Each example builds with the board its manifest selects for the
 target.
 
-Gate 9 of `runalltests.sh` runs `build` for `rp2040`, `stm32g474`, and
-`esp32s3`. `list` reports the current matrix, so this page does not keep
+The `examples-<target>` stages of `runalltests.sh` run `build` for `rp2040`,
+`stm32g474`, and `esp32s3`. `list` reports the current matrix, so this page does not keep
 counts. RISC-V WiFi examples remain excluded while RP2350 RISC-V + CYW43 is
 unsupported.
 
@@ -628,7 +657,8 @@ as `HAL_BOARD_EXPECTED_FLASH_BYTES`.
 `jh_board_fallback_config.h`, and board-component CMake registry. The first two
 come from `boards/`; the CMake projection comes from
 `config/tooling/board_components.json`. `--check-static` rejects missing or
-stale copies. CI runs the check independently of per-build board generation.
+stale copies. The `repository` gate stage runs the check independently of
+per-build board generation.
 
 ### `scripts/generate_hal_features.py`
 
@@ -672,8 +702,8 @@ active target and variant, exposes the result through
 while passing direct requests to CMake.
 
 Conditional defaults, provider choices, board capability checks, and target
-constraints remain in `hal_config.h`. CI runs `--check` and strict raw/effective
-lint, and uploads the deterministic resolution report. Installed RP and
+constraints remain in `hal_config.h`. The `repository` gate stage runs `--check`
+and strict raw/effective lint; CI uploads the deterministic resolution report. Installed RP and
 STM32G474 packages carry the generated feature/board headers, resolved board
 JSON, link-signature header, and reference source; a direct compiler consumer
 can compile and link those package artifacts without invoking Python.
@@ -864,7 +894,7 @@ the ready executable after the same check.
 
 ### `scripts/run_cppcheck.sh`
 
-The cppcheck gate over JaszczurHAL's own code, run by `runalltests.sh` and CI.
+The cppcheck stage of `runalltests.sh` over JaszczurHAL's own code.
 It scans `src/` with the pinned cppcheck, the suppressions from
 `tests/cppcheck-suppressions.txt` and the atomics model from
 `config/tooling/cppcheck-atomics.cfg`; vendored code is excluded. Any finding

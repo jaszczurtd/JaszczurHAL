@@ -35,77 +35,9 @@ This setup needs sudo (you'll be prompted for your password) to:
 
 WHYSUDO
 
-sudo apt-get update
-
-# Core build + host-test toolchain (required: without `cmake -B .build/host`
-# and `ctest` the gate cannot run). build-essential provides gcc/g++/make; the host mock
-# backend links pthreads, which comes with glibc. curl fetches the security
-# scanner below. Python runs repository helper scripts. The headless Java runtime
-# executes the pinned PMD 7 CPD distribution managed under third_party/.
-sudo apt-get install -y build-essential cmake ninja-build git curl ca-certificates python3 iproute2 default-jre-headless
-
-# Client/runtime tooling used by generated jh-vscode projects:
-# - openocd and gdb-multiarch debug Arm targets,
-# - python3-serial powers the persistent serial monitor,
-# - psmisc provides fuser for safe serial monitor handoff before upload,
-# - libusb-1.0-0-dev + pkg-config let picotool talk to RP2040/RP2350 over USB.
-sudo apt-get install -y openocd gdb-multiarch python3-serial psmisc libusb-1.0-0-dev pkg-config
-
-# Synchronize all pinned source and toolchain components after their host build
-# prerequisites are installed.
-"${SCRIPT_DIR}/third_party/update_components.sh"
-
-# Quality-gate tooling - memory safety (valgrind / `ctest -T memcheck`) and
-# dynamic analysis (Clang ASan/UBSan/libFuzzer), static analysis (clang-tidy;
-# clang-tools provides run-clang-tidy; the pinned cppcheck build and PMD CPD
-# come from the managed component updater above).
-# See README "Continuous integration and quality gates".
-sudo apt-get install -y valgrind clang clang-tidy clang-tools clang-format
-
-# Security/SBOM tooling. `generate_sbom.py` only needs Python stdlib, but the
-# vulnerability check wrapper uses osv-scanner for source/vendored dependency
-# checks and can optionally use cve-bin-tool for SBOM-based CVE checks.
-sudo apt-get install -y pipx
-
-install_osv_scanner() {
-  if command -v osv-scanner >/dev/null 2>&1; then
-    return
-  fi
-
-  local arch
-  case "$(uname -m)" in
-    x86_64|amd64) arch="amd64" ;;
-    aarch64|arm64) arch="arm64" ;;
-    *)
-      echo "Unsupported architecture for automatic osv-scanner install: $(uname -m)"
-      echo "Install osv-scanner manually and re-run this script."
-      return 1
-      ;;
-  esac
-
-  local version="${OSV_SCANNER_VERSION:-latest}"
-  local url
-  if [ "${version}" = "latest" ]; then
-    url="https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_${arch}"
-  else
-    url="https://github.com/google/osv-scanner/releases/download/${version}/osv-scanner_linux_${arch}"
-  fi
-
-  local tmp
-  tmp="$(mktemp)"
-  curl -fsSL "${url}" -o "${tmp}"
-  chmod +x "${tmp}"
-  sudo install -m 0755 "${tmp}" /usr/local/bin/osv-scanner
-  rm -f "${tmp}"
-}
-
-install_cve_bin_tool() {
-  if command -v cve-bin-tool >/dev/null 2>&1 || [ -x "${HOME}/.local/bin/cve-bin-tool" ]; then
-    return
-  fi
-
-  python3 -m pipx install cve-bin-tool
-}
+# Host packages, security scanners and the pinned components; Linux CI
+# installs through the same script. It ends by checking every tool.
+"${SCRIPT_DIR}/scripts/install_host_tools.sh"
 
 # udev rules for sudo-less USB flashing of Raspberry Pi RP2040/RP2350 boards.
 # picotool and native UF2 upload need the USB device node, while the automatic
@@ -135,15 +67,8 @@ install_pico_udev_rule() {
   echo "  Installed ${rule_file} (sudo-less RP2040/RP2350 USB and ttyACM access)."
 }
 
-install_osv_scanner
-install_cve_bin_tool
 install_pico_udev_rule
 python3 "${SCRIPT_DIR}/scripts/configure_ota_firewall.py"
-
-# ARM bare-metal toolchain - cross-compiles real STM32G474 firmware
-# (scripts/build_stm32_lib.sh). The host-compiler STM32 build and the unit
-# tests do not need it, but it is part of a complete JaszczurHAL setup.
-sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi
 
 # Git hooks for formatting and commit-message validation.
 if [ -d "${SCRIPT_DIR}/.githooks" ]; then
@@ -151,37 +76,5 @@ if [ -d "${SCRIPT_DIR}/.githooks" ]; then
   git -C "${SCRIPT_DIR}" config core.hooksPath .githooks
 fi
 
-# ── Self-check: report anything still missing ────────────────────────────────
-echo
-echo "Verifying toolchain..."
-missing=0
-tool_exists() {
-  command -v "$1" >/dev/null 2>&1 || [ -x "${HOME}/.local/bin/$1" ]
-}
-
-for tool in cmake ninja g++ gcc make git python3 ip java valgrind clang clang-tidy \
-            run-clang-tidy clang-format osv-scanner cve-bin-tool \
-            arm-none-eabi-gcc arm-none-eabi-g++ arm-none-eabi-ar \
-            arm-none-eabi-ranlib arm-none-eabi-objcopy arm-none-eabi-objdump \
-            openocd gdb-multiarch fuser; do
-  if tool_exists "$tool"; then
-    printf '  ok       %s\n' "$tool"
-  else
-    printf '  MISSING  %s\n' "$tool"
-    missing=1
-  fi
-done
-
-if python3 -c 'import serial' >/dev/null 2>&1; then
-  printf '  ok       %s\n' "python3:serial"
-else
-  printf '  MISSING  %s\n' "python3:serial"
-  missing=1
-fi
-
-if [ "$missing" -ne 0 ]; then
-  echo "Some tools are still missing (see above)."
-  exit 1
-fi
 echo "Git hooks configured: $(git -C "${SCRIPT_DIR}" config --get core.hooksPath || echo "not configured")"
 echo "All required tools present. JaszczurHAL is ready to build and test."

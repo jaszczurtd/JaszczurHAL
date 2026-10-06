@@ -264,6 +264,11 @@ kontrole Clang ASan/UBSan/TSan/libFuzzer i Valgrind memcheck oraz analizę staty
 Sprawdza również duplikaty kodu i dokumentację, a także kompiluje bibliotekę
 i firmware w zestawie konfiguracji dla obsługiwanych platform.
 
+CI na GitHubie uruchamia na Linuksie te same etapy tego skryptu poza
+kompilacją przykładów, która działa tylko lokalnie; udane lokalne uruchomienie
+oznacza więc udane linuksowe CI. Przed wysłaniem zmian
+`./runalltests.sh --commit` sprawdza czysty checkout ostatniego commita.
+
 Ten skrypt wymaga już zainstalowanego zestawu narzędzi i kompilatorów (standardowe
 paczki, dostępne zarówno dla linuxa jak i windows które można pobrać też samodzielnie).
 JaszczurHAL posiada już gotowy skrypt, który pobiera i instaluje wszystkie niezbędne
@@ -299,8 +304,7 @@ i tworzenia SBOM, czyli zestawienia składników oprogramowania:
 - [Zgłaszanie podatności](SECURITY.md) - zasady zgłaszania i oceny podatności
   oraz utrzymywania projektu.
 - [Bezpieczeństwo zależności i narzędzi](doc/pl/security_supply_chain.md) -
-  tworzenie SBOM, sprawdzanie podatności i zasady działania `security-scan`
-  w CI.
+  tworzenie SBOM, sprawdzanie podatności i etap `security` w CI.
 - [Wykaz komponentów zewnętrznych](security/third_party.json) - lista
   aktualizowana ręcznie.
 - [SBOM w formacie CycloneDX](security/sbom.cdx.json) - zestawienie generowane

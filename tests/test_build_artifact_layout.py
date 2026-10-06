@@ -13,6 +13,7 @@ import tempfile
 
 
 from repo_root import repo_root  # noqa: E402
+from source_assertions import shell_function_body  # noqa: E402
 
 ROOT = repo_root(sys.argv, __file__)
 BUILD_ROOT = ROOT / ".build"
@@ -77,19 +78,19 @@ require(
     'PYTHONPYCACHEPREFIX="${BUILD_ROOT}/python-cache"' in quality_gate,
     "runalltests.sh Python cache is not below .build",
 )
+host_tools = (ROOT / "scripts" / "install_host_tools.sh").read_text(encoding="utf-8")
 require(
-    "cmake ninja g++ gcc make" in quality_gate,
-    "runalltests.sh gate 1 does not verify the default Ninja generator",
+    "cmake ninja g++ gcc make" in host_tools
+    and '"${SCRIPT_DIR}/scripts/install_host_tools.sh" --check' in quality_gate,
+    "the tools stage does not verify the default Ninja generator",
 )
 require(
     'scripts/run_cpd.py --output-dir "${GATE_BUILD_ROOT}/cpd"' in quality_gate,
     "runalltests.sh does not keep CPD reports below .build/gate",
 )
-memcheck_gate = quality_gate.split('header "Gate 4/9', 1)[1].split(
-    'header "Gate 5/9', 1
-)[0]
+memcheck_gate = shell_function_body(quality_gate, "stage_memcheck")
 require(
-    'ctest --test-dir "${BUILD_DIR}" -N' in memcheck_gate
+    'ctest --test-dir "${HOST_BUILD}" -N' in memcheck_gate
     and "-L '^memcheck$'" in memcheck_gate
     and "-LE '^no_memcheck$'" not in memcheck_gate
     and '-R "${memcheck_regex}"' not in memcheck_gate,
@@ -115,16 +116,13 @@ require(
     and "no_memcheck" not in tests_cmake,
     "native CTest executables are not automatically labelled for memcheck",
 )
+# The gate only checks generated files, as CI does; rewriting them stays a
+# separate command.
 require(
-    'scripts/sync_generated.py --write --report-file "${GENERATED_REPORT}"'
-    in quality_gate,
-    "runalltests.sh does not use the shared generated-artifact writer",
-)
-require(
-    "--check-generated) CHECK_GENERATED=1" in quality_gate
-    and 'scripts/sync_generated.py --check --report-file "${GENERATED_REPORT}"'
-    in quality_gate,
-    "runalltests.sh does not expose strict generated-artifact verification",
+    'scripts/sync_generated.py --check --report-file "${GENERATED_REPORT}"'
+    in quality_gate
+    and "--check-generated" not in quality_gate,
+    "runalltests.sh does not verify generated artifacts strictly",
 )
 require(
     'done < "${GENERATED_REPORT}"' in quality_gate,
@@ -136,7 +134,7 @@ require(
     "shared generated-artifact runner does not refresh and verify the SBOM",
 )
 require(
-    "if ! python3 scripts/sync_generated.py --check; then" in pre_commit_hook
+    'python3 "$staged_tree/scripts/sync_generated.py" --check; then' in pre_commit_hook
     and "python3 scripts/sync_generated.py --write" in pre_commit_hook
     and "Commit blocked: generated artifacts are missing or stale."
     in pre_commit_hook,
@@ -144,25 +142,41 @@ require(
 )
 
 
-def commit_through_hook(work: Path) -> subprocess.CompletedProcess[str]:
-    """Commit one header in a scratch repository that runs the real hook with
-    a clang-format which rewrites the file and a generated-artifact check that
-    refuses the rewritten text."""
+def hook_scenarios(work: Path) -> None:
+    """Run the real pre-commit hook in a scratch repository, with a
+    clang-format that appends a marker line and a generated-artifact check
+    that wants generated.txt equal to config.txt and an unformatted layout.h
+    in the tree it runs from."""
     repo = work / "repo"
     (repo / ".githooks").mkdir(parents=True)
     shutil.copy2(ROOT / ".githooks" / "pre-commit", repo / ".githooks" / "pre-commit")
     (repo / "scripts").mkdir()
+    # Like the real runner, the stub lists the tree through git; it must see
+    # the commit's index there, not an empty one.
     (repo / "scripts" / "sync_generated.py").write_text(
-        "import pathlib, sys\n"
-        "sys.exit('FORMATTED' in pathlib.Path('config.h').read_text())\n",
+        "import pathlib, subprocess, sys\n"
+        "root = pathlib.Path(__file__).resolve().parents[1]\n"
+        "cached = subprocess.run(['git', '-C', str(root), 'ls-files', '--cached'],\n"
+        "                        capture_output=True, text=True).stdout.split()\n"
+        "if 'scripts/sync_generated.py' not in cached:\n"
+        "    sys.exit('the staged tree does not see the commit index')\n"
+        "layout = root / 'layout.h'\n"
+        "if layout.exists() and 'formatted' in layout.read_text():\n"
+        "    sys.exit('layout.h changed by formatting')\n"
+        "config, generated = root / 'config.txt', root / 'generated.txt'\n"
+        "sys.exit(config.exists() and (not generated.exists()"
+        " or generated.read_text() != config.read_text()))\n",
         encoding="utf-8",
     )
     tools = work / "bin"
     tools.mkdir()
     formatter = tools / "clang-format"
-    formatter.write_text('#!/bin/sh\necho FORMATTED >> "$2"\n', encoding="utf-8")
+    formatter.write_text(
+        '#!/bin/sh\n[ "$1" = -i ] || exit 2\n'
+        'grep -q "// formatted" "$2" || echo "// formatted" >> "$2"\n',
+        encoding="utf-8",
+    )
     formatter.chmod(0o755)
-    (repo / "config.h").write_text("#define A 1\n", encoding="utf-8")
     environment = {**os.environ, "PATH": f"{tools}{os.pathsep}{os.environ['PATH']}"}
 
     def git(*arguments: str) -> subprocess.CompletedProcess[str]:
@@ -171,20 +185,71 @@ def commit_through_hook(work: Path) -> subprocess.CompletedProcess[str]:
             cwd=repo, env=environment, capture_output=True, text=True, check=False,
         )
 
+    def stage(name: str, data: bytes) -> None:
+        (repo / name).write_bytes(data)
+        require(git("add", name).returncode == 0, f"scratch repository: git add {name}")
+
+    def commit() -> subprocess.CompletedProcess[str]:
+        return git("commit", "-q", "-m", "feat: probe")
+
     for arguments in (("init", "-q"), ("config", "core.hooksPath", ".githooks"),
-                      ("add", "config.h")):
+                      ("add", "scripts")):
         require(git(*arguments).returncode == 0, f"scratch repository: git {arguments}")
-    return git("commit", "-q", "-m", "feat: probe")
+    require(commit().returncode == 0, "the first commit was refused")
+
+    # The hook formats and normalizes the staged files and commits the result.
+    stage("config.h", b"#define A 1\n")
+    stage("notes.md", "one\r\nit\u2019s \u201cquoted\u201d \u2014 done\u2026  \r\n".encode())
+    formatted = commit()
+    require(formatted.returncode == 0, f"the hook refused a fixable commit:\n{formatted.stderr}")
+    require(git("show", "HEAD:config.h").stdout == "#define A 1\n// formatted\n",
+            "the hook did not commit the formatted C file")
+    require(git("show", "HEAD:notes.md").stdout == "one\nit's \"quoted\" - done...\n",
+            "the hook did not normalize line ends, blanks and punctuation")
+
+    # The generator check reads the files after formatting, so a formatting
+    # change a generator rejects blocks the commit.
+    stage("layout.h", b"#define LAYOUT 1\n")
+    reformatted = commit()
+    require(
+        reformatted.returncode != 0
+        and "generated artifacts are missing or stale" in reformatted.stderr,
+        "pre-commit hook checks generated artifacts before formatting the commit:\n"
+        f"{reformatted.stderr}",
+    )
+    require(git("rm", "-q", "--cached", "layout.h").returncode == 0, "git rm layout.h")
+    (repo / "layout.h").unlink()
+
+    # Generators check the staged tree: a staged input with its regenerated
+    # output left unstaged blocks the commit, though the working tree is fresh.
+    stage("config.txt", b"a\n")
+    stage("generated.txt", b"a\n")
+    require(commit().returncode == 0, "a fresh generated pair was refused")
+    stage("config.txt", b"b\n")
+    (repo / "generated.txt").write_bytes(b"b\n")
+    stale = commit()
+    require(
+        stale.returncode != 0 and "generated artifacts are missing or stale" in stale.stderr,
+        f"pre-commit hook accepted a stale staged generated file:\n{stale.stderr}",
+    )
+    stage("generated.txt", b"b\n")
+    require(commit().returncode == 0, "the fully staged generated pair was refused")
+    # A commit naming paths uses a temporary index; the same rule holds.
+    (repo / "config.txt").write_bytes(b"c\n")
+    (repo / "generated.txt").write_bytes(b"c\n")
+    partial = git("commit", "-q", "-m", "feat: probe", "config.txt")
+    require(
+        partial.returncode != 0 and "generated artifacts are missing or stale" in partial.stderr,
+        f"pre-commit hook accepted a path commit without its generated file:\n{partial.stderr}",
+    )
+    require(git("commit", "-q", "-m", "feat: probe", "config.txt", "generated.txt").returncode == 0,
+            "a path commit with both files was refused")
+    require(not (repo / ".build" / "pre-commit" / "staged").exists(),
+            "the hook left its staged-tree export behind")
 
 
-# The check runs after formatting, so it sees what the commit records.
 with tempfile.TemporaryDirectory() as hook_work:
-    hook_commit = commit_through_hook(Path(hook_work))
-require(
-    hook_commit.returncode != 0 and "Commit blocked" in hook_commit.stderr,
-    "pre-commit hook checks generated artifacts before formatting the commit:\n"
-    f"{hook_commit.stdout}{hook_commit.stderr}",
-)
+    hook_scenarios(Path(hook_work))
 for duplicated_generator in (
     "scripts/generate_hal_features.py --write",
     "scripts/generate_board_config.py --boards-root boards --write-static",

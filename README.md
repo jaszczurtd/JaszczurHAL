@@ -273,6 +273,11 @@ ASan/UBSan/TSan/libFuzzer checks, Valgrind memcheck, and static analysis. It als
 checks for duplicate code and documentation issues, and builds the library
 and firmware across a matrix of supported target configurations.
 
+GitHub CI runs the same stages of this script on Linux, except the example
+builds, which run only locally; a passing local run therefore means passing
+Linux CI. Before a push, `./runalltests.sh --commit` checks a
+clean checkout of the last commit.
+
 This command requires the toolchain and compilers to already be installed - standard
 packages available for both Linux and Windows, which can also be downloaded manually.
 
@@ -309,7 +314,7 @@ and generate a software bill of materials (SBOM):
 - [Vulnerability reporting](SECURITY.md) - reporting, assessment, and project
   maintenance policies.
 - [Dependency and tool security](doc/en/security_supply_chain.md) - SBOM
-  generation, vulnerability checks, and the CI `security-scan` policy.
+  generation, vulnerability checks, and the `security` gate stage in CI.
 - [Third-party component inventory](security/third_party.json) - a manually
   maintained list.
 - [CycloneDX SBOM](security/sbom.cdx.json) - a generated inventory based on

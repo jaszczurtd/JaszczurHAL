@@ -88,6 +88,22 @@ function(jh_read_library_config)
     jh_collect_cmake_feature_defines(_jh_lc_cmake_features)
     jh_normalize_feature_defines(EXTRA_HAL_DEFINES
         ${_JH_LC_DEFINES} ${_jh_lc_cmake_features})
+    # The build merges several lists (target defaults, --freertos, all
+    # features, HAL_ENABLE_* variables), so a feature can arrive twice and in
+    # both spellings. The first one stays as written; the reader then reports
+    # repeats only in the project's own configuration.
+    set(_jh_lc_defines "")
+    set(_jh_lc_seen "")
+    foreach(_jh_lc_define IN LISTS EXTRA_HAL_DEFINES)
+        string(REGEX REPLACE "^(HAL_(ENABLE|DISABLE)_[A-Z0-9_]+)=1$" "\\1"
+            _jh_lc_key "${_jh_lc_define}")
+        list(FIND _jh_lc_seen "${_jh_lc_key}" _jh_lc_index)
+        if(_jh_lc_index EQUAL -1)
+            list(APPEND _jh_lc_seen "${_jh_lc_key}")
+            list(APPEND _jh_lc_defines "${_jh_lc_define}")
+        endif()
+    endforeach()
+    set(EXTRA_HAL_DEFINES ${_jh_lc_defines})
     jh_read_project_config(
         ROOT "${_JH_LC_ROOT}"
         CONFIG_DIR "${HAL_PROJECT_CONFIG_DIR}"
