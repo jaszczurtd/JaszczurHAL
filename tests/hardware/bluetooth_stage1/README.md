@@ -22,23 +22,23 @@ the `JHBT1` output, connection/write behaviour, ELF/map memory use, and the
 exact board/wiring under test. The STM32 run additionally verifies that the
 PIM730 `BT_ON` trace still follows `WL_ON` in the assembled setup.
 
-The `bluetooth` variant is the probe; `wifi-only` is the otherwise equivalent
-memory baseline. Both variants must be measured from their ELF/map files with
-the same target, board, compiler, and build type.
+The base build is the probe; the `WIFI_ONLY` variant is the otherwise
+equivalent memory baseline. Both images must be measured from their ELF/map
+files with the same target, board, compiler, and build type.
 
-The `wifi-only` image excludes BTstack, the Bluetooth firmware, and the
+The `WIFI_ONLY` image excludes BTstack, the Bluetooth firmware, and the
 Bluetooth pools on the shared bus.
 
-Build the probe for each board, and repeat with `--variant wifi-only` for the
+Build the probe for each board, and repeat with `--variant WIFI_ONLY` for the
 baseline:
 
 ```sh
 vscode/entry/jh-vscode build \
   --project tests/hardware/bluetooth_stage1 \
-  --target stm32g474 --board nucleo-g474re-pim730 --variant bluetooth
+  --target stm32g474 --board nucleo-g474re-pim730
 vscode/entry/jh-vscode build \
   --project tests/hardware/bluetooth_stage1 \
-  --target rp2040 --board picow --variant bluetooth
+  --target rp2040 --board picow
 ```
 
 ## Hardware substage 1.a wiring and procedure

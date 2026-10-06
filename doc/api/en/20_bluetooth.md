@@ -376,7 +376,7 @@ key and the first successfully decoded SBC frame. Its profile identifier is
 The deterministic mock can inject Classic readiness, inquiry/SDP results,
 pairing, link keys, generic descriptors and raw reports. Host tests include a
 mouse descriptor to prove that the shared HID path contains no gamepad filter.
-The `classic-scan` and `hid-host` variants of
+The `CLASSIC_SCAN` and `HID_HOST` variants of
 [`examples/29_bluetooth_gamepad`](../../../examples/29_bluetooth_gamepad/)
 compile these layers without `HAL_ENABLE_BLUETOOTH_GAMEPAD`.
 

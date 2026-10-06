@@ -331,8 +331,8 @@
             "problemMatcher": []
         },
         {
-            "label": "Project: Build variant: commands",
-            "detail": "Build the authenticated BLE command example (commands).",
+            "label": "Project: Build variant: COMMANDS",
+            "detail": "Build the COMMANDS variant: Authenticated BLE command example.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -343,14 +343,14 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "commands"
+                "COMMANDS"
             ],
             "group": "build",
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Project: Upload variant: commands",
-            "detail": "Build and upload the authenticated BLE command example (commands).",
+            "label": "Project: Upload variant: COMMANDS",
+            "detail": "Build and upload the COMMANDS variant: Authenticated BLE command example.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -361,13 +361,13 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "commands"
+                "COMMANDS"
             ],
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Project: Build variant: commands-freertos",
-            "detail": "Build the authenticated BLE command example with FreeRTOS (commands-freertos).",
+            "label": "Project: Build variant: COMMANDS_FREERTOS",
+            "detail": "Build the COMMANDS_FREERTOS variant: Authenticated BLE command example with FreeRTOS.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -378,14 +378,14 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "commands-freertos"
+                "COMMANDS_FREERTOS"
             ],
             "group": "build",
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Project: Upload variant: commands-freertos",
-            "detail": "Build and upload the authenticated BLE command example with FreeRTOS (commands-freertos).",
+            "label": "Project: Upload variant: COMMANDS_FREERTOS",
+            "detail": "Build and upload the COMMANDS_FREERTOS variant: Authenticated BLE command example with FreeRTOS.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -396,7 +396,7 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "commands-freertos"
+                "COMMANDS_FREERTOS"
             ],
             "problemMatcher": "$gcc"
         }

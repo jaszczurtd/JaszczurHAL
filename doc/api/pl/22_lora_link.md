@@ -217,8 +217,8 @@ przekroczeń ich limitu czasu, przepełnień kolejki, przekroczeń limitu czasu
 wysyłania oraz anulowań. Oprócz tego podaje
 ostatnio zaobserwowane adresy i parametry RF.
 
-`examples/27_lora_point_to_point` udostępnia warianty `link` i
-`link-responder`. Wymieniają one przez `hal_lora_commands` powiązane
+`examples/27_lora_point_to_point` udostępnia warianty `LINK` i
+`LINK_RESPONDER`. Wymieniają one przez `hal_lora_commands` powiązane
 identyfikatorem żądanie komendy i odpowiedź, obie o rozmiarze 500 bajtów.
 Wymusza to po trzy fragmenty w obu
 kierunkach na tych samych stanowiskach SX1262 co przykład niskopoziomowego API

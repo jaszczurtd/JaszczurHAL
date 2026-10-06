@@ -4,6 +4,10 @@
  * part.
  */
 
+#include <hal/core/hal_config.h>
+
+#if !defined(EXAMPLE_SERIAL_GPS_USE_SWSERIAL)
+
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_target.h>
 #include <hal/gps/hal_gps.h>
@@ -136,3 +140,5 @@ void app_task0(void) {
   report_gps(now);
   hal_delay_ms(10u);
 }
+
+#endif /* !defined(EXAMPLE_SERIAL_GPS_USE_SWSERIAL) */

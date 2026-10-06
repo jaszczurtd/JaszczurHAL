@@ -20,7 +20,7 @@
 
 JaszczurHAL uses CMake for host, RP, and STM32 builds. For ESP32, a repository-managed Python script runs the pinned ESP-IDF build system. Embedded builds select a target and physical board from the registry described in [Target and board profiles](boards_profiles_howto.md).
 
-The linkable-library runners live in [`link_libraries/`](../../link_libraries/README.md), one directory per build family. `scripts/build_link_library.sh --target <id>` reads the target's build provider from the registry and starts the matching family runner with the remaining options. Every runner accepts the same core options: `--target`, `--board`, `--all-features`, `--library-only`, `--freertos`, `-p`/`--project-config`, `-D`, `-o`/`--output`, `--clean` and `-j`/`--jobs`.
+The linkable-library runners live in [`link_libraries/`](../../link_libraries/README.md), one directory per build family. `scripts/build_link_library.sh --target <id>` reads the target's build provider from the registry and starts the matching family runner with the remaining options. Every runner accepts the same core options: `--target`, `--board`, `--all-features`, `--library-only`, `--freertos`, `-p`/`--project-config`, `-D`, `-o`/`--output`, `--clean` and `-j`/`--jobs`. `-p` names one directory with `hal_project_config.h`. That header and the `-D` definitions are evaluated by `scripts/project_config.py`, the reader that firmware projects use, so the header may test the target selector and those definitions.
 
 | Target | Default board | Build entry | Backend selector |
 |---|---|---|---|
@@ -46,9 +46,32 @@ detection:
 #define HAL_TARGET_RP2350_ARM
 #define HAL_TARGET_RP2350_RISCV
 #define HAL_TARGET_STM32G474
+#define HAL_TARGET_ESP32
 #define HAL_TARGET_ESP32_S3
 #define HAL_TARGET_MOCK
 ```
+
+After target selection, `hal_target.h` defines these values for backend code:
+
+| Macro | Value `1` selects |
+|---|---|
+| `HAL_TARGET_IS_RP2040` | RP2040 |
+| `HAL_TARGET_IS_RP2350_ARM` | RP2350 Arm |
+| `HAL_TARGET_IS_RP2350_RISCV` | RP2350 RISC-V |
+| `HAL_TARGET_IS_STM32G474` | STM32G474 |
+| `HAL_TARGET_IS_ESP32` | ESP32 |
+| `HAL_TARGET_IS_ESP32_S3` | ESP32-S3 |
+| `HAL_TARGET_IS_MOCK` | Mock |
+| `HAL_TARGET_IS_RP` | Any RP target |
+| `HAL_TARGET_IS_ESP32_FAMILY` | Either ESP32 target |
+| `HAL_RP_ARCH_ARM` | RP2040 or RP2350 Arm |
+| `HAL_RP_ARCH_RISCV` | RP2350 RISC-V |
+
+Each is always defined as `0` or `1`; test its value with `#if`, for example
+`#if HAL_TARGET_IS_RP`. `HAL_TARGET_NAME` contains the selected tooling ID
+as a string, such as `"rp2350-arm"` or `"esp32s3"`. Project configuration
+headers use the original `HAL_TARGET_*` selectors because these derived
+values do not yet exist when the header is read.
 
 `JH_TARGET` identifies the processor and execution platform. `JH_BOARD`
 identifies the physical board profile. The source tree tracks the generated
@@ -195,8 +218,7 @@ The main options are:
 |---|---|
 | `--target NAME` | `rp2040`, `rp2350-arm`, or `rp2350-riscv` |
 | `--board NAME` | Board profile compatible with the selected target |
-| `--example NAME` | Build `examples/NAME` as firmware |
-| `--example-source FILE` | Select one source from a multi-profile example (repeatable) |
+| `--example NAME` | Build `examples/NAME` as firmware from all its sources and its own `hal_project_config.h` |
 | `--freertos` | Enable the pinned FreeRTOS SMP kernel |
 | `--library-only` | Build only the linkable `libJaszczurHAL.a` target, without firmware probes |
 | `-p`, `--project-config DIR` | Directory containing `hal_project_config.h` |
@@ -389,8 +411,9 @@ The default build directory is
 select another location below the project or repository `.build` root.
 Repeatable `--source` arguments replace automatic discovery; without them, the
 runner includes supported source files in the project root and recursively
-under `src/`. Repeatable `--feature` and `--define` arguments extend project
-configuration, `--all-features` requests the target's full requestable set, and
+under `src/`. `--variant <id>` selects a variant declared in the project
+header, repeatable `--define` arguments are meant for static library builds,
+`--all-features` requests the target's full requestable set, and
 `--project-config DIR` reads `hal_project_config.h` from a directory outside
 the project. `--idf-dir` or `JH_ESP_IDF_DIR` selects an externally managed
 checkout only after its exact pin and tools pass verification.

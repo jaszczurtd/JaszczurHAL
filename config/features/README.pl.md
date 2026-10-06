@@ -59,14 +59,17 @@ python3 scripts/generate_hal_features.py --lint --input-root .
 
 Kontrola bezpośrednich definicji przyjmuje zapis oparty na samej obecności
 symbolu oraz `=1`. Wartość `=0`, nieznany symbol i bezpośrednie żądanie symbolu
-`derived` są błędami konfiguracji. Definicje funkcji w `hal_project_config.h` muszą być
-bezwarunkowe albo objęte warunkiem `#ifndef` dotyczącym tego samego symbolu.
-Listy definicji CMake są pojedynczymi ciągami znaków rozdzielonymi średnikami.
+`derived` są błędami konfiguracji. Sprawdzane są wszystkie definicje funkcji
+w `hal_project_config.h`, w każdej gałęzi, oraz definicje każdego
+zadeklarowanego w nim wariantu. Definicje funkcji mogą być warunkowe; nagłówek,
+którego nie potrafi przetworzyć mechanizm odczytu konfiguracji projektu, także
+jest zgłaszany. Manifest zawierający konfigurację projektu jest zgłaszany
+z diagnostyką `[JH-CFG-MANIFEST]`.
 
-Kontrola konfiguracji wynikowej korzysta z mechanizmu wyboru profilu targetu
-i wariantu z `jh-vscode`. Ignoruje lokalny stan płytki zapisany w plikach
-pomijanych przez Git i zapisuje deterministyczne dane o funkcjach żądanych
-i wynikowych, ich skrót oraz pochodzenie:
+Kontrola konfiguracji wynikowej przetwarza przez `jh-vscode` każdą platformę
+i każdy wariant, dla których projekt się kompiluje. Ignoruje lokalny stan
+płytki zapisany w plikach pomijanych przez Git i zapisuje deterministyczne dane
+o funkcjach żądanych i wynikowych, ich skrót oraz pochodzenie:
 
 ```bash
 python3 scripts/generate_hal_features.py \
@@ -82,9 +85,12 @@ Obie kontrole działają rygorystycznie: wykrycie problemu powoduje zwrócenie
 niezerowego kodu zakończenia. `--report-only` pozostaje dostępne dla
 tymczasowych audytów migracji, ale nie jest normalnym wywołaniem CI.
 
-Standardowe pliki `.vscode/jaszczurhal.project.json` wymieniają osie targetu,
-płytki i wariantu. Samodzielny `hal_project_config.h` z co najmniej jednym
-żądaniem funkcji HAL dodaje jeden bezpośredni kontekst bez przypisania do osi.
+Każdy projekt kompiluje się dla platform zadeklarowanych w jego
+`hal_project_config.h` (albo dla platform z manifestu), z kompilacją bazową
+i każdym wariantem; płytki pochodzą z manifestu. Samodzielny
+`hal_project_config.h` z co najmniej jednym żądaniem funkcji HAL jest
+przetwarzany dla zadeklarowanych w nim platform i wariantów, a gdy nie
+deklaruje platform, bez wybranej platformy.
 Samodzielne nagłówki bez żądań i manifesty używane jako dane odniesienia
 pozostają w wykazie kontroli bezpośrednich definicji,
 ale nie tworzą sztucznych konfiguracji.

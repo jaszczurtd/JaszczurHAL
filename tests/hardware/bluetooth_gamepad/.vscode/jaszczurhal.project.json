@@ -2,28 +2,14 @@
     "$schema": "../../../../vscode/schema/jh_vscode_project.schema.json",
     "project": "JaszczurHAL hardware tests",
     "module": "bluetooth_gamepad",
-    "example": {
-        "targets": [
-            "rp2350-arm",
-            "rp2040"
-        ],
-        "boards": {
-            "rp2350-arm": "pico2w",
-            "rp2040": "picow"
-        },
-        "variants": [
-            {
-                "id": "classic-hid",
-                "module": "bluetooth_gamepad",
-                "sources": ["app.c"],
-                "extraDefines": ["JH_BLUETOOTH_CLASSIC_HID_PROBE"],
-                "targets": ["rp2350-arm", "rp2040"]
-            }
-        ]
-    },
     "toolchain": "cmake",
     "target": "rp2350-arm",
     "board": "pico2w",
+    "targetProfiles": {
+        "rp2040": {
+            "board": "picow"
+        }
+    },
     "buildDir": "${jhRoot}/.build/hardware/bluetooth_gamepad",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {
@@ -31,9 +17,7 @@
         "cache": {
             "JH_ARTIFACT_DIR": "${buildDir}",
             "JH_PROJECT_DIR": "${project}",
-            "JH_MODULE_NAME": "bluetooth_gamepad",
-            "JH_PROJECT_SOURCES": "app.c",
-            "JH_EXTRA_DEFINES": "JH_BLUETOOTH_CLASSIC_HID_PROBE"
+            "JH_MODULE_NAME": "bluetooth_gamepad"
         }
     },
     "artifacts": {

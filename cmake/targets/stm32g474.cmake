@@ -17,8 +17,8 @@
 #
 # Optional manifest cache inputs (target-unaware, declared by the project):
 #   JH_EXTRA_INCLUDES  extra include dirs (';'-separated)
-#   JH_EXTRA_DEFINES   extra compile definitions (';'-separated)
 #   OPENOCD_BIN / OPENOCD_INTERFACE / OPENOCD_TARGET
+# Compile definitions come only from hal_project_config.h and its variant.
 # ─────────────────────────────────────────────────────────────────────────────
 
 include("${JH_ROOT}/link_libraries/stm32_lib/jh_stm32g474_firmware.cmake")
@@ -54,13 +54,16 @@ endforeach()
 set(_defines
     HAL_PROVIDE_APP_ENTRY=1
     ${JH_BOARD_COMPILE_DEFINITIONS}
-    ${JH_EXTRA_DEFINES})
+    ${_jh_project_plain_definitions})
 set(_feature_defines ${JH_RESOLVED_FEATURES})
 list(APPEND _sources "${JH_BOARD_GENERATED_DIR}/jh_link_contract_reference.c")
 list(APPEND _sources "${JH_BOARD_GENERATED_DIR}/jh_link_contract_definition.c")
-jh_cmake_define_link_value(_stm32_main_stack_size HAL_STM32_MAIN_STACK_SIZE ${_defines})
-jh_cmake_define_link_value(_stm32_littlefs_size HAL_STM32_FLASH_LITTLEFS_SIZE ${_defines})
-jh_cmake_define_link_value(_stm32_eeprom_size HAL_STM32_FLASH_EEPROM_SIZE ${_defines})
+jh_build_define_value(_stm32_main_stack_size HAL_STM32_MAIN_STACK_SIZE
+    ${JH_BOARD_COMPILE_DEFINITIONS})
+jh_build_define_value(_stm32_littlefs_size HAL_STM32_FLASH_LITTLEFS_SIZE
+    ${JH_BOARD_COMPILE_DEFINITIONS})
+jh_build_define_value(_stm32_eeprom_size HAL_STM32_FLASH_EEPROM_SIZE
+    ${JH_BOARD_COMPILE_DEFINITIONS})
 jh_cmake_defines_contain(
     _stm32_has_littlefs HAL_ENABLE_LITTLEFS ${_feature_defines})
 if(_stm32_has_littlefs AND "${_stm32_littlefs_size}" STREQUAL "")
@@ -83,22 +86,27 @@ jh_add_stm32g474_firmware(firmware
     INCLUDES "${JH_PROJECT_DIR}" "${JH_BOARD_GENERATED_DIR}"
         ${JH_EXTRA_INCLUDES} ${_extra_lib_includes}
     DEFINES ${_defines}
-    FEATURES ${_jh_project_feature_defines}
+    FEATURES ${JH_PROJECT_FEATURES}
     RESOLVED_FEATURES ${JH_RESOLVED_FEATURES}
     LIBRARIES ${JH_LINK_LIBRARIES}
 )
+# Feature definitions of the variant reach the compiler before the header,
+# like any definition; the features come from JH_PROJECT_FEATURES above.
+target_compile_definitions(firmware PRIVATE ${_jh_project_feature_definitions})
 
-jh_cmake_defines_contain(_stm32_has_bluetooth_classic_hid
-    JH_BLUETOOTH_CLASSIC_HID_PROBE ${_defines})
-jh_cmake_defines_contain(_stm32_has_cyw43_gspi HAL_CYW43_BUS_STM32_GSPI ${_defines})
+jh_build_defined(_stm32_has_bluetooth_classic_hid
+    JH_BLUETOOTH_CLASSIC_HID_PROBE ${JH_BOARD_COMPILE_DEFINITIONS})
+jh_build_defined(_stm32_has_cyw43_gspi HAL_CYW43_BUS_STM32_GSPI
+    ${JH_BOARD_COMPILE_DEFINITIONS})
 if(_stm32_has_bluetooth_classic_hid AND NOT _stm32_has_cyw43_gspi)
     message(FATAL_ERROR
         "JH_BLUETOOTH_CLASSIC_HID_PROBE requires a CYW43 board profile")
 endif()
 if(_stm32_has_cyw43_gspi)
-    jh_cmake_defines_contain(_stm32_has_cyw43_lwip HAL_CYW43_STACK_LWIP ${_defines})
-    jh_cmake_defines_contain(_stm32_has_bluetooth_stage1
-        JH_BLUETOOTH_STAGE1_PROBE ${_defines})
+    jh_build_defined(_stm32_has_cyw43_lwip HAL_CYW43_STACK_LWIP
+        ${JH_BOARD_COMPILE_DEFINITIONS})
+    jh_build_defined(_stm32_has_bluetooth_stage1
+        JH_BLUETOOTH_STAGE1_PROBE ${JH_BOARD_COMPILE_DEFINITIONS})
     jh_cmake_defines_contain(_stm32_has_ble
         HAL_ENABLE_BLE ${_feature_defines})
     jh_cmake_defines_contain(_stm32_has_ble_stream

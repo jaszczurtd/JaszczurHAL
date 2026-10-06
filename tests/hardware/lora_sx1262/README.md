@@ -39,10 +39,10 @@ vscode/entry/jh-vscode upload \
 
 vscode/entry/jh-vscode build \
   --project examples/27_lora_point_to_point \
-  --target rp2040 --board rp2040-lora-lf --variant responder
+  --target rp2040 --board rp2040-lora-lf --variant RESPONDER
 vscode/entry/jh-vscode upload \
   --project examples/27_lora_point_to_point \
-  --target rp2040 --board rp2040-lora-lf --variant responder \
+  --target rp2040 --board rp2040-lora-lf --variant RESPONDER \
   --port /dev/serial/by-id/<lf-responder>
 ```
 
@@ -61,7 +61,7 @@ vscode/entry/jh-vscode build \
   --target rp2040
 vscode/entry/jh-vscode build \
   --project examples/27_lora_point_to_point \
-  --target stm32g474 --variant responder
+  --target stm32g474 --variant RESPONDER
 ```
 
 Both Core1262-HF devices use the same module electrical profile and EU868
@@ -70,7 +70,7 @@ host pin maps belong to the example, one per target. The Nucleo wiring uses
 SPI2 on PB13/PB14/PB15 and leaves LD2/`HAL_LED_BUILTIN` on PA5.
 
 Before an OTA run, the no-transmit probe may be built and uploaded on either
-host with `--variant probe`. A pass verifies provider capabilities, explicit
+host with `--variant PROBE`. A pass verifies provider capabilities, explicit
 calibration, current RSSI, CAD and standby without enabling the RF transmit
 path.
 
@@ -89,10 +89,10 @@ python3 tests/hardware/lora_sx1262/verify_pair.py \
 A pass requires at least five matched ping/pong sequences, packet metadata,
 the asynchronous event-loop marker on both radios, non-zero IRQ/callback/cancel
 counters, `HAL_OK` sleep/wake and `HAL_OK` reinitialization. Then swap which
-physical device receives the `responder` build and repeat.
+physical device receives the `RESPONDER` build and repeat.
 
 Repeat the gate for the two deterministic test combinations. The base and
-`responder` variants use SF9/10 dBm; `sf7` and `responder-sf7` use SF7/6 dBm.
+`RESPONDER` variants use SF9/10 dBm; `SF7` and `RESPONDER_SF7` use SF7/6 dBm.
 Do not assume that SF12/14 dBm is permitted. Both ends of a run must use the
 matching variant family. Record module/antenna labels, exact wiring, firmware
 revision, distance, packet counts, loss, RSSI/SNR range and the verifier JSON
@@ -100,7 +100,7 @@ in the private hardware report.
 
 ## Command router over LoRa
 
-The `link` and `link-responder` variants of
+The `LINK` and `LINK_RESPONDER` variants of
 [`27_lora_point_to_point`](../../../examples/27_lora_point_to_point/) attach
 `hal_lora_commands` to one reliable link. The initiator sends a correlated
 500-byte binary `echo` request; the responder dispatches it through the shared
@@ -119,12 +119,12 @@ drive explicitly:
 ```bash
 vscode/entry/jh-vscode upload \
   --project examples/27_lora_point_to_point \
-  --target rp2040 --board rp2040-lora-lf --variant link \
+  --target rp2040 --board rp2040-lora-lf --variant LINK \
   --bootsel-volume /dev/<initiator-partition>
 
 vscode/entry/jh-vscode upload \
   --project examples/27_lora_point_to_point \
-  --target rp2040 --board rp2040-lora-lf --variant link-responder \
+  --target rp2040 --board rp2040-lora-lf --variant LINK_RESPONDER \
   --bootsel-volume /dev/<responder-partition>
 ```
 

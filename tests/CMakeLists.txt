@@ -56,6 +56,13 @@ target_include_directories(test_host_compiler_smoke PRIVATE
 jh_enable_host_warnings(test_host_compiler_smoke ERRORS)
 add_test(NAME test_host_compiler_smoke COMMAND test_host_compiler_smoke)
 
+add_executable(test_cpu_only_bss
+    test_cpu_only_bss.c test_cpu_only_bss.cpp)
+target_compile_definitions(test_cpu_only_bss PRIVATE HAL_TARGET_MOCK=1)
+target_include_directories(test_cpu_only_bss PRIVATE ${CMAKE_SOURCE_DIR}/src)
+jh_enable_host_warnings(test_cpu_only_bss ERRORS)
+add_test(NAME test_cpu_only_bss COMMAND test_cpu_only_bss)
+
 add_test(NAME test_atomic_abstraction
     COMMAND ${CMAKE_COMMAND}
         "-DJH_ROOT=${CMAKE_SOURCE_DIR}"
@@ -1060,6 +1067,10 @@ add_test(NAME test_system_architecture_metadata_contract
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 if(UNIX AND NOT APPLE)
+    add_test(NAME test_cpu_only_bss_placement
+        COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_cpu_only_bss.py
+            ${CMAKE_CURRENT_SOURCE_DIR}/..)
     add_test(NAME test_ram_functions
         COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/test_ram_functions.py
@@ -1089,6 +1100,15 @@ add_test(NAME test_generated_artifacts
         ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/sync_generated.py
         --check
 )
+# Compares the hal_project_config.h reader with the compiler's preprocessor
+# (GCC/Clang -E -dM).
+add_test(NAME test_project_config
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_project_config.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+        ${CMAKE_C_COMPILER}
+)
+
 add_test(NAME test_vscode_native_workflow
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_vscode_native_workflow.py

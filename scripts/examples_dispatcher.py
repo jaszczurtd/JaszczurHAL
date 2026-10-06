@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Generate and build dispatcher-backed JaszczurHAL examples."""
+"""Generate the VS Code files of the JaszczurHAL examples and build them.
+
+Each directory under examples/ is an ordinary JaszczurHAL project: its
+hal_project_config.h declares targets, features and variants, and its
+checked-in .vscode/jaszczurhal.project.json holds the tooling metadata. This
+script keeps the derived VS Code files in sync with those two and builds every
+configuration through jh-vscode, like any other project.
+"""
 
 from __future__ import annotations
 
@@ -14,11 +21,6 @@ import tempfile
 import time
 from typing import Any
 
-from tooling_contract import (
-    ToolingContractError,
-    load_tooling_contract,
-    require_list,
-)
 from vscode_task_config import write_text_lf
 
 
@@ -28,30 +30,20 @@ JH_VSCODE = REPO_ROOT / "vscode" / "entry" / (
     "jh-vscode.cmd" if os.name == "nt" else "jh-vscode"
 )
 REFERENCE_VSCODE_DIR = REPO_ROOT / "vscode" / "examples"
-
-RP_PICO_TARGETS = ["rp2040", "rp2350-arm", "rp2350-riscv"]
-ESP_IDF_TARGETS = ["esp32s3"]
-GATE_PRIMARY_TARGETS = ["rp2040", "stm32g474", *ESP_IDF_TARGETS]
-DEFAULT_ESP32S3_BOARD = "waveshare-esp32-s3-zero"
-_EXAMPLE_CONTRACT = load_tooling_contract("examples.json")
-if set(_EXAMPLE_CONTRACT) != {"schemaVersion", "examples"}:
-    raise ToolingContractError(
-        "examples.json: only schemaVersion and examples are allowed"
-    )
-_EXAMPLE_RECORDS = require_list(
-    _EXAMPLE_CONTRACT, "examples", source="examples.json"
-)
-if any(not isinstance(entry, dict) for entry in _EXAMPLE_RECORDS):
-    raise ToolingContractError("examples.json: examples must contain objects")
-if any("covers" in entry for entry in _EXAMPLE_RECORDS):
-    raise ToolingContractError(
-        "examples.json: active examples must not contain historical covers"
-    )
-EXAMPLES: list[dict[str, Any]] = [dict(entry) for entry in _EXAMPLE_RECORDS]
+MANIFEST = Path(".vscode") / "jaszczurhal.project.json"
+BUILD_TARGETS = ["rp2040", "rp2350-arm", "rp2350-riscv", "stm32g474", "esp32s3"]
 
 
 def json_text(data: Any) -> str:
     return json.dumps(data, indent=4, ensure_ascii=False) + "\n"
+
+
+def workflow() -> Any:
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    from vscode.runtime import jh_vscode
+
+    return jh_vscode
 
 
 def target_registry() -> dict[str, dict[str, Any]]:
@@ -60,158 +52,32 @@ def target_registry() -> dict[str, dict[str, Any]]:
     return tooling_target_registry(REPO_ROOT)
 
 
-def example_cache(entry: dict[str, Any], module: str) -> dict[str, Any]:
-    cache: dict[str, Any] = {
-        "JH_ARTIFACT_DIR": "${buildDir}",
-        "JH_PROJECT_DIR": "${project}",
-        "JH_MODULE_NAME": module,
-    }
-    if entry.get("sources"):
-        cache["JH_PROJECT_SOURCES"] = ";".join(str(item) for item in entry["sources"])
-    if entry.get("extraDefines"):
-        cache["JH_EXTRA_DEFINES"] = ";".join(str(item) for item in entry["extraDefines"])
-    cache.update(entry.get("cache") or {})
-    return cache
+def example_dirs() -> list[Path]:
+    """Every example project: each directory directly under examples/."""
+    return sorted(path for path in EXAMPLES_DIR.iterdir() if path.is_dir())
 
 
-def example_targets(entry: dict[str, Any], targets: list[str] | None = None) -> list[str]:
-    declared = [str(item) for item in (targets if targets is not None else entry["targets"])]
-    if "rp2040" not in declared or not entry.get("expandRpTargets", True):
-        return declared
-
-    expanded = [target for target in declared if target != "rp2040"]
-    expanded.extend(
-        target
-        for target in RP_PICO_TARGETS
-        if target != "rp2350-riscv" or entry.get("board") != "picow"
-    )
-    return expanded
+def read_manifest(example_dir: Path) -> dict[str, Any]:
+    path = example_dir / MANIFEST
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"{path}: {error}") from error
+    if not isinstance(document, dict):
+        raise ValueError(f"{path}: the manifest must be an object")
+    return document
 
 
-def example_boards(entry: dict[str, Any]) -> dict[str, str]:
-    boards: dict[str, str] = {}
-    targets = example_targets(entry)
-    rp_board = str(entry.get("board") or "pico")
-    if "rp2040" in targets:
-        boards["rp2040"] = rp_board
-    if "rp2350-arm" in targets:
-        boards["rp2350-arm"] = "pico2w" if rp_board == "picow" else "pico2"
-    if "rp2350-riscv" in targets:
-        boards["rp2350-riscv"] = "pico2"
-    if "stm32g474" in targets:
-        boards["stm32g474"] = str(entry.get("stm32Board") or "nucleo-g474re")
-    if "esp32s3" in targets:
-        boards["esp32s3"] = str(entry.get("esp32Board") or DEFAULT_ESP32S3_BOARD)
-    return boards
-
-
-def gate_targets(
-    supported_targets: list[str], configured_targets: Any = None
-) -> list[str]:
-    if configured_targets is None:
-        return [
-            target for target in supported_targets if target in GATE_PRIMARY_TARGETS
-        ]
-    if not isinstance(configured_targets, list):
-        raise ValueError("gateTargets must be an array")
-
-    requested = [str(item) for item in configured_targets]
-    unknown = sorted(set(requested).difference(supported_targets))
-    if unknown:
-        raise ValueError(
-            "gateTargets escape supported targets: " + ", ".join(unknown)
-        )
-    return [target for target in supported_targets if target in requested]
-
-
-def validate_example_registry() -> None:
-    directories: set[str] = set()
-    for entry in EXAMPLES:
-        name = str(entry["dir"])
-        if name in directories:
-            raise ValueError(f"duplicate example directory: {name}")
-        directories.add(name)
-
-        supported = example_targets(entry)
-        gate_targets(supported, entry.get("gateTargets"))
-
-        for variant in entry.get("variants", []):
-            variant_supported = example_targets(
-                entry,
-                [str(target) for target in variant.get("targets", entry["targets"])],
-            )
-            gate_targets(variant_supported, variant.get("gateTargets"))
-
-def default_target_board(entry: dict[str, Any]) -> tuple[str, str]:
-    targets = example_targets(entry)
-    target = str(entry.get("target") or "rp2040")
-    if target not in targets:
-        target = targets[0]
-    return target, example_boards(entry).get(
-        target,
-        "nucleo-g474re" if target == "stm32g474" else "pico",
-    )
-
-
-def manifest_for(entry: dict[str, Any]) -> dict[str, Any]:
-    name = str(entry["dir"])
-    module = str(entry.get("module") or name)
-    target, board = default_target_board(entry)
-    example = {
-        "targets": example_targets(entry),
-        "boards": example_boards(entry),
-        "gateTargets": gate_targets(
-            example_targets(entry), entry.get("gateTargets")
-        ),
-    }
-    if entry.get("variants"):
-        variants = []
-        for item in entry["variants"]:
-            variant = dict(item)
-            variant["targets"] = example_targets(
-                entry,
-                [str(target) for target in item.get("targets", entry["targets"])],
-            )
-            variant["gateTargets"] = gate_targets(
-                variant["targets"], item.get("gateTargets")
-            )
-            variants.append(variant)
-        example["variants"] = variants
-    manifest = {
-        "$schema": "../../../vscode/schema/jh_vscode_project.schema.json",
-        "project": "JaszczurHAL examples",
-        "module": module,
-        "example": example,
-        "toolchain": "cmake",
-        "target": target,
-        "board": board,
-        "buildDir": f"${{jhRoot}}/.build/examples/{name}",
-        "cmakeBuildDir": "${buildDir}/cmake",
-        "cmake": {
-            "sourceDir": "${project}/../../cmake/jh_firmware_project",
-            "cache": example_cache(entry, module),
-        },
-        "artifacts": {
-            "elf": "${buildDir}/firmware.elf",
-            "uf2": "${buildDir}/firmware.uf2",
-            "compileCommands": "${buildDir}/compile_commands_patched.json",
-        },
-    }
-    if entry.get("ota"):
-        manifest["ota"] = dict(entry["ota"])
-        manifest["artifacts"]["ota"] = "${buildDir}/firmware.ota"
-    return manifest
-
-
-def settings_for(entry: dict[str, Any]) -> dict[str, Any]:
+def settings_for(example_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
     from vscode_task_config import (
         cmake_tools_configure_settings,
         vscode_entry_settings,
     )
 
-    name = str(entry["dir"])
-    module = str(entry.get("module") or name)
-    target, board = default_target_board(entry)
+    name = example_dir.name
+    module = str(manifest["module"])
+    target = str(manifest["target"])
+    board = str(manifest["board"])
     build_dir = f"${{workspaceFolder}}/../../.build/examples/{name}"
     return {
         "jaszczurhal.buildDir": build_dir,
@@ -231,21 +97,18 @@ def settings_for(entry: dict[str, Any]) -> dict[str, Any]:
             module=module,
             jh_root_ref="${workspaceFolder}/../..",
             build_ref=build_dir,
-            project_cache=example_cache(entry, module),
+            project_cache=dict(manifest["cmake"]["cache"]),
         ),
         "files.exclude": {"**/.build": True},
         "search.exclude": {"**/.build": True},
     }
 
 
-def base_tasks(default_target: str, default_board: str, variants: list[dict[str, Any]]) -> dict[str, Any]:
+def tasks_for(target: str, board: str, project_dir: Path | None) -> dict[str, Any]:
     from vscode_task_config import project_tasks_document
 
     return project_tasks_document(
-        target_registry(),
-        default_target,
-        default_board,
-        variants=variants,
+        target_registry(), target, board, project_dir=project_dir
     )
 
 
@@ -313,7 +176,7 @@ def reference_template_files() -> dict[str, Any]:
 
     return {
         "settings.json": reference_settings(),
-        "tasks.json": base_tasks("rp2040", "pico", []),
+        "tasks.json": tasks_for("rp2040", "pico", None),
         "launch.json": cortex_debug_launch_document(
             "${workspaceFolder}/.build/firmware.elf"
         ),
@@ -322,82 +185,83 @@ def reference_template_files() -> dict[str, Any]:
     }
 
 
-def example_vscode_files(entry: dict[str, Any]) -> dict[str, Any]:
-    target, board = default_target_board(entry)
-    variants = entry.get("variants") if isinstance(entry.get("variants"), list) else []
+def example_vscode_files(example_dir: Path) -> dict[str, Any]:
+    """VS Code files derived from the example's manifest and header; the
+    manifest itself is written by hand."""
+    manifest = read_manifest(example_dir)
+    findings = workflow().manifest_configuration_findings(
+        manifest, str(example_dir / MANIFEST)
+    )
+    if findings:
+        raise ValueError("\n".join(findings))
     return {
-        "jaszczurhal.project.json": manifest_for(entry),
-        "settings.json": settings_for(entry),
-        "tasks.json": base_tasks(target, board, variants),
-        "launch.json": launch_for(str(entry["dir"])),
+        "settings.json": settings_for(example_dir, manifest),
+        "tasks.json": tasks_for(
+            str(manifest["target"]), str(manifest["board"]), example_dir
+        ),
+        "launch.json": launch_for(example_dir.name),
         "keybindings.reference.json": keybindings_for(),
         "extensions.json": extensions_for(),
     }
 
 
-def generated_file_mismatches() -> list[str]:
-    mismatches: list[str] = []
-    for name, data in reference_template_files().items():
-        path = REFERENCE_VSCODE_DIR / name
-        actual = path.read_text(encoding="utf-8") if path.is_file() else ""
-        if actual != json_text(data):
-            mismatches.append(path.relative_to(REPO_ROOT).as_posix())
-    for entry in EXAMPLES:
-        vscode_dir = EXAMPLES_DIR / str(entry["dir"]) / ".vscode"
-        for name, data in example_vscode_files(entry).items():
-            path = vscode_dir / name
-            actual = path.read_text(encoding="utf-8") if path.is_file() else ""
-            if actual != json_text(data):
-                mismatches.append(path.relative_to(REPO_ROOT).as_posix())
-    return mismatches
+def generated_files() -> dict[Path, Any]:
+    files = {
+        REFERENCE_VSCODE_DIR / name: data
+        for name, data in reference_template_files().items()
+    }
+    for example_dir in example_dirs():
+        for name, data in example_vscode_files(example_dir).items():
+            files[example_dir / ".vscode" / name] = data
+    return files
 
 
-def sync_reference_template(*, check: bool) -> int:
+def sync_generated_files(*, check: bool) -> int:
+    try:
+        files = generated_files()
+    except ValueError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
     if check:
-        mismatches = generated_file_mismatches()
+        mismatches = [
+            path.relative_to(REPO_ROOT).as_posix()
+            for path, data in files.items()
+            if (path.read_text(encoding="utf-8") if path.is_file() else "")
+            != json_text(data)
+        ]
         if mismatches:
             print(
                 "error: generated VS Code file drift: " + ", ".join(mismatches),
                 file=sys.stderr,
             )
-            print(
-                "Run: scripts/examples_dispatcher.py generate-template && "
-                "scripts/examples_dispatcher.py generate",
-                file=sys.stderr,
-            )
+            print("Run: scripts/examples_dispatcher.py generate", file=sys.stderr)
             return 1
         return 0
-
-    for name, data in reference_template_files().items():
-        path = REFERENCE_VSCODE_DIR / name
-        expected = json_text(data)
-        write_text_lf(path, expected)
-        print(f"generated {path.relative_to(REPO_ROOT)}", flush=True)
+    for path, data in files.items():
+        path.parent.mkdir(exist_ok=True)
+        write_text_lf(path, json_text(data))
+    print(f"generated {len(files)} VS Code files", flush=True)
     return 0
 
 
-def generate() -> int:
-    for entry in EXAMPLES:
-        example_dir = EXAMPLES_DIR / str(entry["dir"])
-        if not example_dir.is_dir():
-            print(f"error: missing example directory: {example_dir}", file=sys.stderr)
-            return 1
-        vscode_dir = example_dir / ".vscode"
-        vscode_dir.mkdir(exist_ok=True)
-        for name, data in example_vscode_files(entry).items():
-            write_text_lf(vscode_dir / name, json_text(data))
-        print(f"generated {example_dir.relative_to(REPO_ROOT)}", flush=True)
-    return 0
+def example_builds(example_dir: Path) -> list[Any]:
+    """Every configuration the example builds, from its header and manifest."""
+    return workflow().project_builds(example_dir, read_manifest(example_dir))
 
 
-def read_manifest(example_dir: Path) -> dict[str, Any]:
-    return json.loads((example_dir / ".vscode" / "jaszczurhal.project.json").read_text(encoding="utf-8"))
+def manifest_board(example_dir: Path, target: str) -> str:
+    """Board the manifest selects for ``target``, ignoring the gitignored
+    local selection so every machine builds the same configurations."""
+    config = workflow().load_project_config(
+        example_dir, target_override=target, use_local_state=False
+    )
+    return str(config["board"])
 
 
 def selected_example_dirs(names: list[str]) -> list[Path]:
     if names:
         return [EXAMPLES_DIR / name for name in names]
-    return [EXAMPLES_DIR / str(entry["dir"]) for entry in EXAMPLES]
+    return example_dirs()
 
 
 def command_label(example_dir: Path, target: str, variant: str | None) -> str:
@@ -422,9 +286,8 @@ def dispatcher_log_path(target: str, example_name: str) -> Path:
 def run_one_example(
     example_dir: Path,
     target: str,
-    board: str | None,
-    include_base: bool,
-    variants: list[str],
+    board: str,
+    variants: list[str | None],
     parallel_level: int,
     verbose: bool,
 ) -> tuple[bool, str, Path, float]:
@@ -438,19 +301,16 @@ def run_one_example(
         str(example_dir),
         "--target",
         target,
+        "--board",
+        board,
     ]
-    if board:
-        base_command.extend(["--board", board])
-    commands: list[list[str]] = [base_command] if include_base else []
-    for variant in variants:
-        commands.append([*base_command, "--variant", variant])
-
     with log_path.open("w", encoding="utf-8") as log:
-        for cmd in commands:
+        for variant in variants:
+            command = [*base_command, "--variant", variant] if variant else base_command
             if verbose:
-                print("+ " + " ".join(cmd), file=log)
+                print("+ " + " ".join(command), file=log)
             result = subprocess.run(
-                cmd,
+                command,
                 cwd=REPO_ROOT,
                 stdout=log,
                 stderr=subprocess.STDOUT,
@@ -463,10 +323,9 @@ def run_one_example(
                 check=False,
             )
             if result.returncode != 0:
-                failed_variant = cmd[cmd.index("--variant") + 1] if "--variant" in cmd else None
                 return (
                     False,
-                    command_label(example_dir, target, failed_variant),
+                    command_label(example_dir, target, variant),
                     log_path,
                     time.monotonic() - started,
                 )
@@ -474,49 +333,30 @@ def run_one_example(
 
 
 def build(args: argparse.Namespace) -> int:
-    examples = selected_example_dirs(args.example or [])
-    groups: list[tuple[Path, str | None, bool, list[str]]] = []
+    groups: list[tuple[Path, str, list[str | None]]] = []
     skipped: list[str] = []
-    for example_dir in examples:
-        if not example_dir.is_dir():
-            print(f"error: missing example directory: {example_dir}", file=sys.stderr)
-            return 1
-        manifest = read_manifest(example_dir)
-        example_meta = manifest.get("example") if isinstance(manifest.get("example"), dict) else {}
-        targets = [str(item) for item in example_meta.get("targets", [])]
-        if args.target not in targets:
-            skipped.append(command_label(example_dir, args.target, None))
-            continue
-        declared_gate_targets = [
-            str(item) for item in example_meta.get("gateTargets", targets)
-        ]
-        include_base = not args.gate or args.target in declared_gate_targets
-        variants: list[str] = []
-        for variant in example_meta.get("variants", []) if isinstance(example_meta.get("variants"), list) else []:
-            if not isinstance(variant, dict) or not variant.get("id"):
-                continue
-            variant_targets = [str(item) for item in variant.get("targets", targets)]
-            variant_gate_targets = [
-                str(item)
-                for item in variant.get("gateTargets", variant_targets)
+    try:
+        for example_dir in selected_example_dirs(args.example or []):
+            if not example_dir.is_dir():
+                print(f"error: missing example directory: {example_dir}", file=sys.stderr)
+                return 1
+            variants = [
+                build.variant.id if build.variant else None
+                for build in example_builds(example_dir)
+                if build.target.id == args.target
             ]
-            if args.target in variant_targets and (
-                not args.gate or args.target in variant_gate_targets
-            ):
-                variants.append(str(variant["id"]))
-        if not include_base and not variants:
-            skipped.append(command_label(example_dir, args.target, None))
-            continue
-        boards = example_meta.get("boards")
-        board = str(boards.get(args.target)) if isinstance(boards, dict) and boards.get(args.target) else None
-        groups.append((example_dir, board, include_base, variants))
-
-    if skipped:
-        for item in skipped:
-            print(
-                f"skip {item} (unsupported target or outside gate)",
-                flush=True,
+            if not variants:
+                skipped.append(command_label(example_dir, args.target, None))
+                continue
+            groups.append(
+                (example_dir, manifest_board(example_dir, args.target), variants)
             )
+    except ValueError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+
+    for item in skipped:
+        print(f"skip {item} (the example does not build for this target)", flush=True)
     if not groups:
         print(f"no examples to build for target {args.target}")
         return 0
@@ -537,12 +377,11 @@ def build(args: argparse.Namespace) -> int:
                 example_dir,
                 args.target,
                 board,
-                include_base,
                 variants,
                 parallel_level,
                 args.verbose,
             ): example_dir
-            for example_dir, board, include_base, variants in groups
+            for example_dir, board, variants in groups
         }
         for future in as_completed(futures):
             ok, label, log_path, elapsed = future.result()
@@ -560,10 +399,7 @@ def build(args: argparse.Namespace) -> int:
         print(f"\nfirst failure: {label}", file=sys.stderr)
         print(tail(log_path), file=sys.stderr)
         return 1
-    configurations = sum(
-        (1 if include_base else 0) + len(variants)
-        for _, _, include_base, variants in groups
-    )
+    configurations = sum(len(variants) for _, _, variants in groups)
     print(
         f"built {configurations} configuration(s) from {len(groups)} "
         f"example project(s) for {args.target}",
@@ -573,56 +409,53 @@ def build(args: argparse.Namespace) -> int:
 
 
 def list_examples() -> int:
-    for entry in EXAMPLES:
-        supported = example_targets(entry)
-        selected_gate_targets = gate_targets(supported, entry.get("gateTargets"))
-        print(
-            f"{entry['dir']}: {', '.join(supported)} "
-            f"(gate: {', '.join(selected_gate_targets)})"
-        )
+    try:
+        for example_dir in example_dirs():
+            by_target: dict[str, list[str]] = {}
+            for item in example_builds(example_dir):
+                by_target.setdefault(item.target.id, []).append(
+                    item.variant.id if item.variant else "base"
+                )
+            print(
+                f"{example_dir.name}: "
+                + "; ".join(
+                    f"{target} ({', '.join(variants)})"
+                    for target, variants in by_target.items()
+                )
+            )
+    except ValueError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
     return 0
 
 
 def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("generate", help="Generate .vscode project files for all examples.")
     sub.add_parser(
-        "generate-template",
-        help="Regenerate shared files under vscode/examples.",
+        "generate",
+        help="Write the derived VS Code files of every example and vscode/examples.",
     )
     sub.add_parser(
-        "check-template",
-        help="Fail when shared or checked-in example VS Code files have drifted.",
+        "check",
+        help="Fail when a derived VS Code file differs from its manifest and header.",
     )
-    sub.add_parser("list", help="List known examples and supported targets.")
-    build_parser = sub.add_parser("build", help="Build examples through jh-vscode and the dispatcher.")
+    sub.add_parser("list", help="List every example with its targets and variants.")
+    build_parser = sub.add_parser(
+        "build", help="Build every configuration of the examples for one target."
+    )
+    build_parser.add_argument("--target", required=True, choices=BUILD_TARGETS)
     build_parser.add_argument(
-        "--target",
-        required=True,
-        choices=[*RP_PICO_TARGETS, "stm32g474", *ESP_IDF_TARGETS],
+        "--example", action="append", help="Build only this example directory name."
     )
-    build_parser.add_argument("--example", action="append", help="Build only this example directory name.")
     build_parser.add_argument("--jobs", type=int, default=1)
-    build_parser.add_argument(
-        "--gate",
-        action="store_true",
-        help="Build only the representative gateTargets matrix.",
-    )
     build_parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
 
-    try:
-        validate_example_registry()
-    except ValueError as error:
-        parser.error(str(error))
-
     if args.command == "generate":
-        return generate()
-    if args.command == "generate-template":
-        return sync_reference_template(check=False)
-    if args.command == "check-template":
-        return sync_reference_template(check=True)
+        return sync_generated_files(check=False)
+    if args.command == "check":
+        return sync_generated_files(check=True)
     if args.command == "build":
         return build(args)
     if args.command == "list":

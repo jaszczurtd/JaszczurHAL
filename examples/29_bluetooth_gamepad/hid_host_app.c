@@ -5,6 +5,10 @@
  * consent mechanism.
  */
 
+#include <hal/core/hal_config.h>
+
+#if defined(EXAMPLE_BLUETOOTH_HID_HOST)
+
 #include <hal/bluetooth/hal_bluetooth_classic.h>
 #include <hal/bluetooth/hal_bluetooth_hid_host.h>
 #include <hal/core/hal_app.h>
@@ -271,3 +275,5 @@ void app_task0(void) {
   saveValidatedPeer();
   hal_delay_ms(1u);
 }
+
+#endif /* defined(EXAMPLE_BLUETOOTH_HID_HOST) */

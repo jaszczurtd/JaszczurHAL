@@ -4,6 +4,10 @@
  * with a date.
  */
 
+#include <hal/core/hal_config.h>
+
+#if defined(EXAMPLE_RTC_DISPLAY_CLOCK)
+
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_array.h>
 #include <hal/display/hal_display.h>
@@ -241,3 +245,5 @@ void app_task0(void) {
         (unsigned)value.month, (unsigned)value.day, text);
   }
 }
+
+#endif /* defined(EXAMPLE_RTC_DISPLAY_CLOCK) */

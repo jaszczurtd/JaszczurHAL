@@ -1,4 +1,4 @@
-#include "device_profile.h"
+#include "profile/device_profile.h"
 
 #include <hal/core/hal_app.h>
 #include <hal/serial/hal_serial.h>

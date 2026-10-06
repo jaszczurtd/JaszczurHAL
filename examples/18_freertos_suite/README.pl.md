@@ -3,14 +3,14 @@
 # 18 - Zadania FreeRTOS i usługi sieciowe
 
 Przykład podstawowy pokazuje pracę zadań FreeRTOS i synchronizację dostępu
-do wspólnych danych. Wariant `network` dodaje usługi sieciowe, aby można
+do wspólnych danych. Wariant `NETWORK` dodaje usługi sieciowe, aby można
 było sprawdzić ich współpracę w jednym programie.
 
 `app.c` uruchamia dwa zadania aplikacji i dwa dodatkowe zadania robocze.
 Używa muteksów HAL oraz FreeRTOS, opóźnień, obsługi bezczynności i GPIO.
 Jest to podstawowy test działania, dostępny także dla RP2350 RISC-V.
 
-Wariant `network` kompiluje `network_app.c` dla RP2040/RP2350 ARM z WiFi
+Wariant `NETWORK` kompiluje `network_app.c` dla RP2040/RP2350 ARM z WiFi
 oraz STM32G474 z PIM730. Udostępnia serwer HTTP, WebSocket, pliki w RAM,
 polecenia i konsolę sieciową. Osobne zadania obsługują gniazda BSD TCP/UDP
 oraz klienta HTTP/HTTPS. Nadal działają dwa zadania aplikacji. W programie

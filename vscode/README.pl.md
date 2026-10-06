@@ -151,7 +151,7 @@ systemach Unix korzysta z `jaszczurhal.vscodeEntry`, a wariant dla Windows - z
 | `Project: Select board` | `select-board --interactive` | Pozwala wybrać target i płytkę w terminalu, a następnie zapisuje ten wybór lokalnie. |
 | `Project: Select board (GUI)` | `select-board --selection ...` | Korzysta z wygenerowanego selektora VS Code i zapisuje lokalnie wybraną parę target/płytka. |
 | `Project: Sync board picker` | `sync-board-picker` | Uruchamia się raz po otwarciu zaufanego katalogu, odświeża wartości selektora i tworzy lub naprawia zarządzane profile debugowe dla RP2040, RP2350 Arm i STM32G474, pozostawiając profile użytkownika bez zmian. |
-| `Project: Build variant: <id>` | `build --variant <id>` | Pojawia się dla każdego wariantu zadeklarowanego w `variants` albo `example.variants` i buduje go do `<buildDir>/variants/<id>` za pośrednictwem standardowego procesu publikowania artefaktów. |
+| `Project: Build variant: <id>` | `build --variant <id>` | Pojawia się dla każdego wariantu zadeklarowanego przez `JH_PROJECT_VARIANTS` w `hal_project_config.h`, z opisem "Build the <id> variant: <description>.", i buduje go jako moduł `<module>_<id>` do `<buildDir>/variants/<id>` za pośrednictwem standardowego procesu publikowania artefaktów. |
 | `Project: Upload variant: <id>` | `upload --variant <id>` | Buduje i wgrywa ten wariant przez backend aktywnego targetu, tak jak `Project: Upload`. |
 
 Panel Run and Debug udostępnia trzy konfiguracje Cortex-Debug:
@@ -169,7 +169,7 @@ Wspólne opcje:
 --project <path>       Katalog modułu firmware.
 --target <id>          Zastąp aktywną rodzinę targetu w tym wywołaniu.
 --board <id>           Zastąp aktywną płytkę w obrębie targetu.
---variant <id>         Wybierz wariant zadeklarowany w manifeście.
+--variant <id>         Wybierz wariant zadeklarowany w hal_project_config.h.
 --selection <t:b>      Zapisz wybór targetu i płytki; etykiety GUI są dozwolone.
 --interactive          Zapytaj o target i płytkę w terminalu.
 --port <port>          Zastąp skonfigurowany port wgrywania lub monitora.
@@ -265,7 +265,7 @@ zarządzanych profili Cortex-Debug.
 
 ## Dodawanie plików źródłowych projektu
 
-Wykrywanie źródeł i kompletne reguły `JH_PROJECT_SOURCES` opisano w
+Wykrywanie źródeł i reguły `JH_EXTRA_SOURCES` opisano w
 [sekcji o dodawaniu plików źródłowych](../doc/pl/FwProjectWorkflow.md#dodawanie-plików-źródłowych-projektu).
 Jest to jedyne źródło przykładów układu projektu i manifestu.
 
@@ -296,18 +296,18 @@ libraries/JaszczurHAL/vscode/tools/create-vscode-example.py \
   --board nucleo-g474re
 ```
 
-Flagi funkcji w nagłówku projektu, wynikowym profilu targetu i aktywnym
-wariancie przykładu mogą mieć postać samego `HAL_ENABLE_X` albo
-`HAL_ENABLE_X=1`. Jeszcze przed konfiguracją CMake `jh-vscode` odrzuca wartość
-`=0` i wyrażenia generatora CMake, zgłaszając `[JH-CFG-VALUE]`. W danych
-wejściowych będących listami definicji każdy wpis `HAL_ENABLE_*` musi być
-osobnym prostym tokenem, a kolejne wpisy należy rozdzielać średnikami. Białe
-znaki nie rozdzielają wielu definicji funkcji.
+Flagi funkcji w nagłówku projektu i w aktywnym wariancie mogą mieć postać
+samego `HAL_ENABLE_X` albo `HAL_ENABLE_X=1`. Jeszcze przed konfiguracją CMake
+`jh-vscode` odrzuca wartość `=0`, zgłaszając `[JH-CFG-VALUE]`. Odrzuca też,
+z diagnostyką `[JH-CFG-MANIFEST]`, manifest zawierający konfigurację projektu:
+pola `variants` lub `example` albo wpisy `JH_EXTRA_DEFINES`,
+`EXTRA_HAL_DEFINES`, `JH_PROJECT_SOURCES`, `JH_VARIANT`, `HAL_ENABLE_*` lub
+`HAL_DISABLE_*` w pamięci podręcznej CMake.
 
-Po zastosowaniu aktywnego profilu targetu i wariantu `jh-vscode` sprawdza, czy
-nie użyto symboli nieznanych lub pochodnych, oblicza wynikające z nich
-zależności przechodnie oraz weryfikuje wymagania i konflikty zapisane w
-rejestrze. Wynik jest widoczny w danych `featureResolution` zwracanych przez
+Po przetworzeniu nagłówka projektu dla aktywnego targetu i wariantu
+`jh-vscode` sprawdza, czy nie użyto symboli nieznanych lub pochodnych, oblicza
+wynikające z nich zależności przechodnie oraz weryfikuje wymagania i konflikty
+zapisane w rejestrze. Wynik jest widoczny w danych `featureResolution` zwracanych przez
 `config-dump`. Obejmują one
 `registryDigest`, `requestedFeatures`, `resolvedFeatures`,
 `resolvedFeaturesDigest` oraz informację `provenance` o pochodzeniu każdego
@@ -325,12 +325,10 @@ znajdują się na liście dozwolonej przez deskryptor, zgłaszając
 
 Nagłówek projektu zawiera wyłącznie makra i jest wczytywany przed automatycznym
 wykrywaniem targetu. Nie należy dołączać w nim nagłówków JaszczurHAL ani używać
-pochodnych selektorów targetu lub płytki. Definicje funkcji wpływające na wybór
-plików źródłowych muszą mieć bezwarunkową postać `#define HAL_ENABLE_X` albo
-`#define HAL_ENABLE_X 1`. Dozwolony jest jedynie warunek `#ifndef HAL_ENABLE_X`
-chroniący definicję tego samego symbolu. Nie należy umieszczać definicji funkcji
-w żadnej innej gałęzi warunkowej, ponieważ mechanizm wstępnego zbierania
-definicji analizuje plik tekstowo.
+pochodnych selektorów targetu lub płytki. Warunki zależne od makra platformy
+i definicji wariantu są dozwolone, a sam nagłówek deklaruje platformy
+i warianty projektu. Zasady opisuje część
+[platformy i warianty](../doc/pl/FwProjectWorkflow.md#platformy-i-warianty).
 
 Wygenerowany projekt korzysta z `jh-vscode` do tych samych operacji co projekty
 po migracji:
@@ -373,8 +371,10 @@ Kompletny wygenerowany projekt należy umieścić poza
 niewielkich przykładów konfiguracji, a nie do przechowywania pełnego projektu
 firmware w repozytorium.
 
-Wspólne fragmenty konfiguracji i wszystkie przykładowe pliki `.vscode` śledzone
-w repozytorium korzystają ze wspólnego narzędzia do generowania artefaktów:
+Wspólne fragmenty konfiguracji i generowane pliki `.vscode` przykładów
+z repozytorium korzystają ze wspólnego narzędzia do generowania artefaktów.
+Manifest przykładu pisze się ręcznie; narzędzie tylko go sprawdza i nigdy go
+nie nadpisuje:
 
 ```bash
 python3 scripts/sync_generated.py --check
@@ -382,7 +382,7 @@ python3 scripts/sync_generated.py --write
 ```
 
 Pierwsze polecenie nie modyfikuje plików i nadaje się do CI. Drugie odświeża
-wszystkie śledzone pliki wygenerowane z rejestru.
+wszystkie śledzone pliki generowane na podstawie ich źródeł.
 
 ## Rozszerzenia VS Code
 

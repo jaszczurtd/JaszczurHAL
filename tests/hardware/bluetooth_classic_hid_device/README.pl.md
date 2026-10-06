@@ -4,7 +4,7 @@
 testowym urządzeniem HID opartym na BTstack. Pico W ogłasza standardową mysz
 Classic HID z deskryptorem Generic Desktop i wysyła naprzemienne raporty
 względnego ruchu. Nie jest to publiczne API urządzenia HID. Zbuduj fixture
-RP2040 i publiczny przykład `hid-host` dla hosta RP2350 ARM:
+RP2040 i publiczny przykład `HID_HOST` dla hosta RP2350 ARM:
 
 ```sh
 vscode/entry/jh-vscode build \
@@ -12,7 +12,7 @@ vscode/entry/jh-vscode build \
   --target rp2040 --board picow
 vscode/entry/jh-vscode build \
   --project examples/29_bluetooth_gamepad \
-  --target rp2350-arm --board pico2w --variant hid-host
+  --target rp2350-arm --board pico2w --variant HID_HOST
 ```
 
 Każdy obraz wgraj wyłącznie do przeznaczonej dla niego płytki. `INFO` na

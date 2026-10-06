@@ -18,6 +18,7 @@ from typing import Any, Mapping, Sequence
 import component_manager
 import generate_board_config
 import generate_hal_features
+import project_config
 
 
 MANIFEST_NAME = "jh_esp_idf_artifacts.json"
@@ -36,9 +37,6 @@ DEFAULT_BOARD = "waveshare-esp32-s3-zero"
 EXPORT_KEY = re.compile(r"^[A-Z][A-Z0-9_]*$")
 PROJECT_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*$")
 DEFINITION_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-FEATURE_DEFINITION_PATTERN = re.compile(
-    r"^(HAL_(?:ENABLE|DISABLE)_[A-Z0-9_]+)(?:=1)?$"
-)
 SOURCE_SUFFIXES = frozenset({".c", ".cc", ".cpp", ".cxx", ".s", ".S"})
 PARTITION_PROFILE_SYMBOLS = (
     "CONFIG_PARTITION_TABLE_SINGLE_APP",
@@ -984,61 +982,40 @@ def _normalize_definition(value: str) -> str:
 def collect_project_features(
     repo_root: Path,
     config_dir: Path,
+    target: str,
+    variant: str | None,
     features: Sequence[str],
     definitions: Sequence[str],
-) -> tuple[list[str], set[str], list[str], set[str]]:
+) -> tuple[project_config.BuildConfig, list[str]]:
+    """Evaluate hal_project_config.h for the target and variant with the
+    command-line definitions (``features`` are bare feature definitions) and
+    return the build with the features it requests explicitly."""
     normalized_definitions = [_normalize_definition(item) for item in definitions]
     try:
         generate_board_config.validate_definitions(normalized_definitions)
         normalized_features = generate_board_config.normalize_features(list(features))
     except generate_board_config.DescriptorError as error:
         raise EspIdfError(str(error)) from error
-
-    requests = generate_hal_features.collect_header_requests(
-        config_dir / "hal_project_config.h", "hal_project_config.h"
-    )
-    header_symbols = {request.symbol for request in requests}
-    command_line_symbols: set[str] = set()
-    for index, item in enumerate(normalized_features):
-        symbol = item.removesuffix("=1")
-        command_line_symbols.add(symbol)
-        requests.append(
-            generate_hal_features.FeatureRequest(
-                symbol=symbol,
-                value="1",
-                source=f"command-line:--feature[{index}]",
-            )
-        )
-    non_feature_definitions: list[str] = []
-    for index, definition in enumerate(normalized_definitions):
-        match = FEATURE_DEFINITION_PATTERN.fullmatch(definition)
-        if match is None:
-            non_feature_definitions.append(definition)
-            continue
-        symbol = match.group(1)
-        command_line_symbols.add(symbol)
-        requests.append(
-            generate_hal_features.FeatureRequest(
-                symbol=symbol,
-                value="1",
-                source=f"command-line:--define[{index}]",
-            )
-        )
+    extra_definitions = [
+        *normalized_definitions,
+        *(
+            item.removesuffix("=1")
+            for item in normalized_features
+            if item.removesuffix("=1") not in normalized_definitions
+        ),
+    ]
     try:
-        model = generate_hal_features.load_registry(repo_root / "config")
-        resolution, findings = generate_hal_features.resolve_feature_requests(
-            requests, model, "ESP-IDF project configuration"
+        targets = project_config.load_targets(repo_root)
+        build = project_config.evaluate_build(
+            config_dir, targets[target], variant, extra_definitions
         )
-    except generate_hal_features.RegistryError as error:
+        model = generate_hal_features.load_registry(repo_root / "config")
+        resolution, findings = project_config.resolve_build_features(build, model)
+    except (project_config.ProjectConfigError, generate_hal_features.RegistryError) as error:
         raise EspIdfError(str(error)) from error
     if findings:
         raise EspIdfError("\n".join(findings))
-    return (
-        list(resolution.requested),
-        header_symbols,
-        non_feature_definitions,
-        command_line_symbols,
-    )
+    return build, list(resolution.requested)
 
 
 def validate_supported_features(
@@ -1109,21 +1086,6 @@ def resolve_component_build_inputs(
     )
 
 
-def _header_defines(config_dir: Path, name: str) -> bool:
-    path = config_dir / "hal_project_config.h"
-    if not path.is_file():
-        return False
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError as error:
-        raise EspIdfError(f"Cannot read {path}: {error}") from error
-    pattern = re.compile(rf"^[ \t]*#[ \t]*define[ \t]+{re.escape(name)}(?:[ \t(]|$)")
-    return any(
-        pattern.match(line)
-        for _, line in generate_hal_features.preprocessor_logical_lines(text)
-    )
-
-
 def all_features_for_target(
     target: Mapping[str, Any],
     feature_model: generate_hal_features.FeatureModel,
@@ -1157,6 +1119,7 @@ def resolve_build_model(
     definitions: Sequence[str],
     project_config_dir: Path | None = None,
     all_features: bool = False,
+    variant: str | None = None,
 ) -> dict[str, Any]:
     repo_root = _canonical_path(repo_root)
     project_dir = _canonical_path(project_dir)
@@ -1206,12 +1169,9 @@ def resolve_build_model(
             # HAL_ENABLE_TFT needs one concrete facade selection even though
             # every TFT driver is enabled; mirror jh_all_features_for_target.
             definitions = [*definitions, "HAL_DISPLAY_ILI9341"]
-    (
-        requested_features,
-        header_symbols,
-        non_feature_definitions,
-        command_line_features,
-    ) = collect_project_features(repo_root, config_dir, features, definitions)
+    build, requested_features = collect_project_features(
+        repo_root, config_dir, target, variant, features, definitions
+    )
     try:
         _, resolved_features, _ = generate_board_config.resolve_features(
             requested_features, target_descriptor
@@ -1226,21 +1186,25 @@ def resolve_build_model(
         component_dependencies,
         private_component_dependencies,
     ) = resolve_component_build_inputs(resolved_features, feature_model)
-    compile_features = set(command_line_features)
-    for required in target_descriptor.get("requiredFeatures", []):
-        symbol = required.removesuffix("=1")
-        if symbol not in header_symbols:
-            compile_features.add(symbol)
-
+    # The header defines its own features; a required feature it leaves out
+    # reaches the compiler as a definition, like the variant's definitions.
+    header_features = {macro.name for macro in build.config.features()}
     compile_definitions = {
         target_descriptor["hal"]["targetSelector"],
-        *compile_features,
+        *build.definitions,
+        *(
+            symbol
+            for symbol in (
+                item.removesuffix("=1")
+                for item in target_descriptor.get("requiredFeatures", [])
+            )
+            if symbol not in header_features
+        ),
         *generate_board_config.board_compile_definitions(
             target_descriptor, board_descriptor
         ),
-        *non_feature_definitions,
     }
-    if not _header_defines(config_dir, "HAL_PROVIDE_APP_ENTRY"):
+    if not build.config.defined("HAL_PROVIDE_APP_ENTRY"):
         compile_definitions.add("HAL_PROVIDE_APP_ENTRY")
     include_dirs = sorted(
         {project_dir, config_dir, *(source.parent for source in sources)},
@@ -2312,8 +2276,17 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--name", default="")
     parser.add_argument("--output", default="")
     parser.add_argument("--source", action="append", default=[])
-    parser.add_argument("--feature", action="append", default=[])
-    parser.add_argument("--define", action="append", default=[])
+    parser.add_argument(
+        "--variant",
+        default="",
+        help="Variant declared by JH_PROJECT_VARIANTS in hal_project_config.h",
+    )
+    parser.add_argument(
+        "--define",
+        action="append",
+        default=[],
+        help="Compile definition of a static library build",
+    )
     parser.add_argument("--port", default="")
     parser.add_argument("--clean", action="store_true")
     parser.add_argument(
@@ -2347,7 +2320,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             board=arguments.board,
             project_name=project_name,
             requested_sources=arguments.source,
-            features=arguments.feature,
+            features=[],
             definitions=arguments.define,
             project_config_dir=(
                 arguments.project_config.expanduser()
@@ -2355,6 +2328,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 else None
             ),
             all_features=arguments.all_features,
+            variant=arguments.variant or None,
         )
         stage = "resolve-build-directory"
         build_dir = resolve_build_dir(

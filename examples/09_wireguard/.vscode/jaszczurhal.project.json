@@ -2,28 +2,17 @@
     "$schema": "../../../vscode/schema/jh_vscode_project.schema.json",
     "project": "JaszczurHAL examples",
     "module": "09_wireguard",
-    "example": {
-        "targets": [
-            "stm32g474",
-            "esp32s3",
-            "rp2040",
-            "rp2350-arm"
-        ],
-        "boards": {
-            "rp2040": "picow",
-            "rp2350-arm": "pico2w",
-            "stm32g474": "nucleo-g474re-pim730",
-            "esp32s3": "waveshare-esp32-s3-zero"
-        },
-        "gateTargets": [
-            "stm32g474",
-            "esp32s3",
-            "rp2040"
-        ]
-    },
     "toolchain": "cmake",
     "target": "rp2040",
     "board": "picow",
+    "targetProfiles": {
+        "rp2350-arm": {
+            "board": "pico2w"
+        },
+        "stm32g474": {
+            "board": "nucleo-g474re-pim730"
+        }
+    },
     "buildDir": "${jhRoot}/.build/examples/09_wireguard",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

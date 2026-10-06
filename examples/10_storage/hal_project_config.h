@@ -1,5 +1,12 @@
 #pragma once
 
+/* Targets this example builds for. */
+#define JH_PROJECT_TARGETS(X)                                                  \
+  X(HAL_TARGET_RP2040)                                                         \
+  X(HAL_TARGET_RP2350_ARM)                                                     \
+  X(HAL_TARGET_RP2350_RISCV)                                                   \
+  X(HAL_TARGET_STM32G474)
+
 #define HAL_ENABLE_KV
 #define HAL_ENABLE_LITTLEFS
 #define HAL_ENABLE_SDLOGGER

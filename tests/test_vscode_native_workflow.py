@@ -24,8 +24,10 @@ CORE_RUNTIME = ROOT / "examples" / "01_core_runtime"
 FREERTOS_SUITE = ROOT / "examples" / "18_freertos_suite"
 
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT))
 import examples_dispatcher
 import generate_hal_features
+from vscode.runtime import jh_vscode as workflow_runtime
 
 
 def require(condition: bool, message: str) -> None:
@@ -39,6 +41,17 @@ def load_json(path: Path) -> dict:
 
 def same_path(actual: str, expected: str | Path) -> bool:
     return Path(actual).resolve() == Path(expected).resolve()
+
+
+def builds_of(project: Path) -> dict[str, list[str | None]]:
+    """Variants (None for the base) each target of a project builds."""
+    manifest = load_json(project / ".vscode" / "jaszczurhal.project.json")
+    result: dict[str, list[str | None]] = {}
+    for build in workflow_runtime.project_builds(project, manifest):
+        result.setdefault(build.target.id, []).append(
+            build.variant.id if build.variant else None
+        )
+    return result
 
 
 def resolved(target: str, board: str) -> dict:
@@ -136,44 +149,34 @@ require(
     "stm32g474: cross toolchain must be selected before CMake project()",
 )
 
-core_runtime = load_json(
-    CORE_RUNTIME / ".vscode" / "jaszczurhal.project.json"
-)
-core_runtime_targets = set(core_runtime["example"]["targets"])
 require(
     {
         "rp2040",
         "rp2350-arm",
         "rp2350-riscv",
         "stm32g474",
-    }.issubset(core_runtime_targets),
+    }.issubset(builds_of(CORE_RUNTIME)),
     "01_core_runtime does not expose the complete target matrix",
 )
 
 freertos_suite = load_json(
     FREERTOS_SUITE / ".vscode" / "jaszczurhal.project.json"
 )
-freertos_metadata = freertos_suite["example"]
-network_variant = next(
-    variant
-    for variant in freertos_metadata["variants"]
-    if variant["id"] == "network"
-)
+freertos_builds = builds_of(FREERTOS_SUITE)
 require(
-    freertos_metadata["boards"]["rp2350-arm"] == "pico2w",
-    "WiFi example does not map RP2350 ARM to Pico 2 W",
-)
-require(
-    "rp2350-riscv" not in network_variant["targets"],
+    "NETWORK" not in freertos_builds["rp2350-riscv"]
+    and all(
+        "NETWORK" in freertos_builds[target]
+        for target in ("rp2040", "rp2350-arm", "stm32g474", "esp32s3")
+    ),
     "unsupported RP2350 RISC-V + CYW43 combination is selectable",
 )
 require(
-    "HAL_ENABLE_WIFI" in network_variant["extraDefines"],
-    "FreeRTOS network variant lost its WiFi feature",
-)
-require(
-    freertos_metadata["boards"]["stm32g474"] == "nucleo-g474re-pim730",
-    "WiFi example does not map STM32G474 to NUCLEO-G474RE with PIM730",
+    workflow_runtime.load_project_config(
+        FREERTOS_SUITE, target_override="rp2350-arm", use_local_state=False
+    )["board"]
+    == "pico2w",
+    "WiFi example does not map RP2350 ARM to Pico 2 W",
 )
 stm32_wifi = subprocess.run(
     [
@@ -186,7 +189,7 @@ stm32_wifi = subprocess.run(
         "--board",
         "nucleo-g474re-pim730",
         "--variant",
-        "network",
+        "NETWORK",
         "--json",
     ],
     check=True,
@@ -199,22 +202,20 @@ require(
     "WiFi resolver changed the STM32G474 PIM730 board profile",
 )
 require(
-    "HAL_ENABLE_WIFI"
-    in stm32_wifi_config["cmake"]["cache"]["JH_EXTRA_DEFINES"].split(";"),
+    stm32_wifi_config["cmake"]["cache"]["JH_VARIANT"] == "NETWORK"
+    and "HAL_ENABLE_WIFI"
+    in stm32_wifi_config["featureResolution"]["requestedFeatures"],
     "FreeRTOS network variant does not enable WiFi",
 )
 require(
     not any(
-        define.startswith("HAL_CYW43_")
-        for define in stm32_wifi_config["cmake"]["cache"][
-            "JH_EXTRA_DEFINES"
-        ].split(";")
+        name.startswith("HAL_CYW43_")
+        for name in workflow_runtime.project_build(
+            stm32_wifi_config, FREERTOS_SUITE
+        ).config.macros
     ),
     "FreeRTOS network variant duplicates PIM730 wiring outside the board profile",
 )
-sys.path.insert(0, str(ROOT))
-from vscode.runtime import jh_vscode as workflow_runtime
-
 require(
     not workflow_runtime.build_preflight_diagnostics(
         stm32_wifi_config, FREERTOS_SUITE
@@ -234,7 +235,7 @@ lora_responder_result = subprocess.run(
         "--board",
         "rp2040-lora-lf",
         "--variant",
-        "responder",
+        "RESPONDER",
         "--json",
     ],
     check=True,
@@ -243,7 +244,7 @@ lora_responder_result = subprocess.run(
 )
 lora_responder = json.loads(lora_responder_result.stdout)
 lora_base_build_dir = ROOT / ".build" / "examples" / "27_lora_point_to_point"
-lora_responder_build_dir = lora_base_build_dir / "variants" / "responder"
+lora_responder_build_dir = lora_base_build_dir / "variants" / "RESPONDER"
 require(
     same_path(lora_responder["buildDir"], lora_responder_build_dir),
     "example variant shares the base stable artifact directory",
@@ -265,7 +266,7 @@ require(
 require(
     same_path(
         lora_responder["cmakeBuildDir"],
-        lora_base_build_dir / "cmake" / "variants" / "responder",
+        lora_base_build_dir / "cmake" / "variants" / "RESPONDER",
     ),
     "example variant lost its isolated CMake directory",
 )
@@ -280,7 +281,7 @@ def variant_dump(project: Path, variant: str | None) -> dict:
     return json.loads(result.stdout)
 
 
-# A firmware project declares variants at the top level. Its manifest leaves
+# A project declares its variants in hal_project_config.h. Its manifest leaves
 # JH_ARTIFACT_DIR to the CMake default, which is the base .build directory, so
 # the variant must still publish into its own directory.
 with tempfile.TemporaryDirectory(prefix="jh-vscode-variants-") as temp_dir:
@@ -301,14 +302,17 @@ with tempfile.TemporaryDirectory(prefix="jh-vscode-variants-") as temp_dir:
     manifest_path = variant_project / ".vscode" / "jaszczurhal.project.json"
     manifest = load_json(manifest_path)
     manifest["cmake"]["cache"].pop("JH_ARTIFACT_DIR", None)
-    manifest["variants"] = [
-        {"id": "bench", "module": "firmware", "extraDefines": ["BENCH=1"]}
-    ]
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    header_path = variant_project / "hal_project_config.h"
+    header_path.write_text(
+        header_path.read_text(encoding="utf-8")
+        + '\n#define JH_PROJECT_VARIANTS(X) X(BENCH, "Bench test build", BENCH=1)\n',
+        encoding="utf-8",
+    )
 
     base = variant_dump(variant_project, None)
-    bench = variant_dump(variant_project, "bench")
-    bench_dir = Path(base["buildDir"]) / "variants" / "bench"
+    bench = variant_dump(variant_project, "BENCH")
+    bench_dir = Path(base["buildDir"]) / "variants" / "BENCH"
     require(
         same_path(bench["buildDir"], bench_dir),
         "project variant shares the base build directory",
@@ -318,12 +322,15 @@ with tempfile.TemporaryDirectory(prefix="jh-vscode-variants-") as temp_dir:
         "project variant without a base JH_ARTIFACT_DIR publishes into the base directory",
     )
     require(
-        bench["cmake"]["cache"]["JH_EXTRA_DEFINES"] == "BENCH=1",
-        "project variant lost its definitions",
+        bench["cmake"]["cache"]["JH_VARIANT"] == "BENCH"
+        and bench["module"] == f"{base['module']}_BENCH"
+        and bench["cmake"]["cache"]["JH_MODULE_NAME"] == bench["module"],
+        "project variant is not selected through JH_VARIANT under <module>_<id>",
     )
     require(
-        "JH_ARTIFACT_DIR" not in base["cmake"]["cache"],
-        "base build gained an artifact directory it did not declare",
+        "JH_ARTIFACT_DIR" not in base["cmake"]["cache"]
+        and "JH_VARIANT" not in base["cmake"]["cache"],
+        "base build gained an artifact directory or a variant it did not declare",
     )
 
     custom_dir = Path(temp_dir) / "artifacts"
@@ -331,56 +338,55 @@ with tempfile.TemporaryDirectory(prefix="jh-vscode-variants-") as temp_dir:
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     require(
         same_path(
-            variant_dump(variant_project, "bench")["cmake"]["cache"]["JH_ARTIFACT_DIR"],
-            custom_dir / "variants" / "bench",
+            variant_dump(variant_project, "BENCH")["cmake"]["cache"]["JH_ARTIFACT_DIR"],
+            custom_dir / "variants" / "BENCH",
         ),
         "project variant publishes into a custom base artifact directory",
     )
 
-    manifest["example"] = {"variants": [{"id": "bench"}]}
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-    duplicate = subprocess.run(
-        [str(ENTRY), "config-dump", "--project", str(variant_project), "--variant", "bench"],
+    unknown_variant = subprocess.run(
+        [str(ENTRY), "config-dump", "--project", str(variant_project), "--variant", "OTHER"],
         capture_output=True,
         text=True,
     )
     require(
-        duplicate.returncode != 0 and "declared more than once" in duplicate.stderr,
-        "a variant id declared twice was accepted",
+        unknown_variant.returncode != 0
+        and "unknown variant 'OTHER'; known variants: BENCH" in unknown_variant.stderr,
+        "an undeclared variant was accepted",
     )
 
-from vscode_task_config import project_tasks_document  # noqa: E402
+    from vscode_task_config import project_tasks_document  # noqa: E402
 
-variant_tasks = {
-    task["label"]: task
-    for task in project_tasks_document(
-        workflow_runtime.load_target_registry(),
-        "rp2040",
-        "pico",
-        module="ECU",
-        variants=[{"id": "bench", "module": "ECU"}],
-    )["tasks"]
-}
-for action, label in (
-    ("build", "Project: Build variant: bench"),
-    ("upload", "Project: Upload variant: bench"),
-):
+    variant_tasks = {
+        task["label"]: task
+        for task in project_tasks_document(
+            workflow_runtime.load_target_registry(),
+            "rp2040",
+            "pico",
+            module="ECU",
+            project_dir=variant_project,
+        )["tasks"]
+    }
+    for action, label in (
+        ("build", "Project: Build variant: BENCH"),
+        ("upload", "Project: Upload variant: BENCH"),
+    ):
+        require(
+            variant_tasks.get(label, {}).get("args")
+            == [action, "--project", "${workspaceFolder}", "--variant", "BENCH"],
+            f"variant task '{label}' is missing or runs the wrong action",
+        )
     require(
-        variant_tasks.get(label, {}).get("args")
-        == [action, "--project", "${workspaceFolder}", "--variant", "bench"],
-        f"variant task '{label}' is missing or runs the wrong action",
+        variant_tasks["Project: Upload variant: BENCH"]["detail"]
+        == "Build and upload the BENCH variant: Bench test build.",
+        "project variant upload task lost its description from the header",
     )
-require(
-    variant_tasks["Project: Upload variant: bench"]["detail"]
-    == "Build and upload the ECU variant bench.",
-    "project variant upload task lost its module in the description",
-)
 
 storage = load_json(
     ROOT / "examples" / "10_storage" / ".vscode" / "jaszczurhal.project.json"
 )
 require(
-    set(expected).issubset(storage["example"]["targets"]),
+    set(expected).issubset(builds_of(ROOT / "examples" / "10_storage")),
     "10_storage: native storage target matrix is incomplete",
 )
 require(
@@ -389,7 +395,7 @@ require(
 )
 
 require(
-    set(expected).issubset(freertos_metadata["targets"]),
+    set(expected).issubset(freertos_builds),
     "18_freertos_suite does not expose the native RP target matrix",
 )
 require(
@@ -404,12 +410,10 @@ require(
     "18_freertos_suite does not enable FreeRTOS through project configuration",
 )
 
-example_dirs = examples_dispatcher.selected_example_dirs([])
+example_dirs = examples_dispatcher.example_dirs()
 manifest_example_names = {
     path.parent.parent.name
-    for path in (ROOT / "examples").glob(
-        "[0-9][0-9]_*/.vscode/jaszczurhal.project.json"
-    )
+    for path in (ROOT / "examples").glob("*/.vscode/jaszczurhal.project.json")
 }
 listed_examples = subprocess.run(
     [sys.executable, str(ROOT / "scripts" / "examples_dispatcher.py"), "list"],
@@ -417,120 +421,38 @@ listed_examples = subprocess.run(
     capture_output=True,
     text=True,
 )
-registered_names = {
+listed_names = {
     line.split(":", 1)[0] for line in listed_examples.stdout.splitlines()
 }
-examples_dispatcher.validate_example_registry()
 require(
-    len(examples_dispatcher.EXAMPLES) == 30 and len(registered_names) == 30,
-    "dispatcher registry must contain exactly 30 active examples",
-)
-require(
-    registered_names == manifest_example_names,
-    "dispatcher registry and generated example manifests differ",
+    len(example_dirs) == 30 and listed_names == manifest_example_names
+    and {path.name for path in example_dirs} == manifest_example_names,
+    "every directory under examples/ must be one of the 30 example projects",
 )
 
 example_counts = {target: 0 for target in known_targets}
 full_configuration_counts = {target: 0 for target in known_targets}
-gate_configuration_counts = {target: 0 for target in known_targets}
 requested_example_features: set[str] = set()
 for example_dir in example_dirs:
-    manifest_path = example_dir / ".vscode" / "jaszczurhal.project.json"
-    require(manifest_path.is_file(), f"{example_dir.name}: missing manifest")
-    manifest = load_json(manifest_path)
-    requested_example_features.update(
-        re.findall(
-            r"^\s*#\s*define\s+(HAL_ENABLE_[A-Z0-9_]+)",
-            (example_dir / "hal_project_config.h").read_text(encoding="utf-8"),
-            flags=re.MULTILINE,
-        )
-    )
-    base_defines = manifest.get("cmake", {}).get("cache", {}).get(
-        "JH_EXTRA_DEFINES", ""
-    )
-    requested_example_features.update(
-        token.split("=", 1)[0]
-        for token in str(base_defines).split(";")
-        if token.startswith("HAL_ENABLE_")
-    )
-    metadata = manifest.get("example")
+    manifest = load_json(example_dir / ".vscode" / "jaszczurhal.project.json")
+    builds = workflow_runtime.project_builds(example_dir, manifest)
+    targets = {build.target.id for build in builds}
     require(
-        isinstance(metadata, dict),
-        f"{example_dir.name}: missing explicit target classification",
-    )
-    targets = {str(target) for target in metadata.get("targets", [])}
-    require(targets, f"{example_dir.name}: empty target classification")
-    require(
-        targets.issubset(known_targets),
+        targets and targets.issubset(known_targets),
         f"{example_dir.name}: unknown target classification {targets}",
-    )
-    gate_targets = {
-        str(target) for target in metadata.get("gateTargets", targets)
-    }
-    require(
-        gate_targets.issubset(targets),
-        f"{example_dir.name}: gateTargets escape supported targets",
-    )
-    boards = metadata.get("boards")
-    require(
-        isinstance(boards, dict),
-        f"{example_dir.name}: missing board classification",
-    )
-    require(
-        set(boards) == targets,
-        f"{example_dir.name}: board classification does not match targets",
     )
     for target in targets:
         example_counts[target] += 1
-        full_configuration_counts[target] += 1
-        if target in gate_targets:
-            gate_configuration_counts[target] += 1
+        board = workflow_runtime.load_project_config(
+            example_dir, target_override=target, use_local_state=False
+        )["board"]
         require(
-            boards[target] in target_boards[target],
-            f"{example_dir.name}: invalid {target} board {boards[target]}",
+            board in target_boards[target],
+            f"{example_dir.name}: invalid {target} board {board}",
         )
-    variants = metadata.get("variants", [])
-    require(
-        isinstance(variants, list),
-        f"{example_dir.name}: invalid variant classification",
-    )
-    variant_ids = []
-    for variant in variants:
-        require(
-            isinstance(variant, dict) and variant.get("id"),
-            f"{example_dir.name}: variant is missing an id",
-        )
-        variant_ids.append(str(variant["id"]))
-        requested_example_features.update(
-            str(token).split("=", 1)[0]
-            for token in variant.get("extraDefines", [])
-            if str(token).startswith("HAL_ENABLE_")
-        )
-        variant_targets = {
-            str(target) for target in variant.get("targets", targets)
-        }
-        require(
-            variant_targets.issubset(targets),
-            f"{example_dir.name}:{variant.get('id')}: variant target "
-            "classification escapes its example",
-        )
-        variant_gate_targets = {
-            str(target)
-            for target in variant.get("gateTargets", variant_targets)
-        }
-        require(
-            variant_gate_targets.issubset(variant_targets),
-            f"{example_dir.name}:{variant.get('id')}: gateTargets escape "
-            "variant targets",
-        )
-        for target in variant_targets:
-            full_configuration_counts[target] += 1
-            if target in variant_gate_targets:
-                gate_configuration_counts[target] += 1
-    require(
-        len(variant_ids) == len(set(variant_ids)),
-        f"{example_dir.name}: duplicate variant id",
-    )
+    for build in builds:
+        full_configuration_counts[build.target.id] += 1
+        requested_example_features.update(build.requested_features())
 
 require(
     example_counts
@@ -556,18 +478,11 @@ require(
     "full example build matrix must contain exactly 178 configurations: "
     f"{full_configuration_counts}",
 )
+# The examples gate builds every configuration on its three targets.
 require(
-    gate_configuration_counts
-    == {
-        "rp2040": 44,
-        "rp2350-arm": 4,
-        "rp2350-riscv": 0,
-        "stm32g474": 33,
-        "esp32s3": 26,
-    }
-    and sum(gate_configuration_counts.values()) == 107,
-    "example gate matrix must contain exactly 107 configurations: "
-    f"{gate_configuration_counts}",
+    sum(full_configuration_counts[target] for target in ("rp2040", "stm32g474", "esp32s3"))
+    == 114,
+    "example gate matrix must contain exactly 114 configurations",
 )
 required_feature_surface = {
     "HAL_ENABLE_A7670",
@@ -653,26 +568,15 @@ require(
     + ", ".join(missing_required_features),
 )
 
-serial_gps = load_json(
-    ROOT / "examples" / "05_serial_gps" / ".vscode" / "jaszczurhal.project.json"
-)
-serial_variants = {
-    variant["id"]: variant for variant in serial_gps["example"]["variants"]
-}
+serial_gps_builds = builds_of(ROOT / "examples" / "05_serial_gps")
 require(
-    set(serial_variants["swserial"]["targets"])
-    == {"rp2040", "rp2350-arm", "rp2350-riscv"}
-    and set(serial_variants["swserial"]["gateTargets"]) == {"rp2040"},
+    {target for target, variants in serial_gps_builds.items() if "SWSERIAL" in variants}
+    == {"rp2040", "rp2350-arm", "rp2350-riscv"},
     "05_serial_gps:swserial must remain RP-only",
 )
 
-ble_stream = load_json(
-    ROOT / "examples" / "26_ble_stream" / ".vscode" / "jaszczurhal.project.json"
-)
 require(
-    set(ble_stream["example"]["targets"])
-    == {"rp2040", "rp2350-arm", "stm32g474"}
-    and set(ble_stream["example"]["gateTargets"])
+    set(builds_of(ROOT / "examples" / "26_ble_stream"))
     == {"rp2040", "rp2350-arm", "stm32g474"},
     "26_ble_stream no longer represents the supported BLE targets",
 )
@@ -936,7 +840,7 @@ def write_feature_value_fixture(
     *,
     cache: dict[str, object] | None = None,
     target_profiles: dict[str, object] | None = None,
-    variants: list[dict[str, object]] | None = None,
+    manifest_fields: dict[str, object] | None = None,
     header: str = "#pragma once\n",
     board: str = "pico",
 ) -> None:
@@ -959,8 +863,7 @@ def write_feature_value_fixture(
     }
     if target_profiles is not None:
         manifest["targetProfiles"] = target_profiles
-    if variants is not None:
-        manifest["example"] = {"variants": variants}
+    manifest.update(manifest_fields or {})
     vscode_dir = project_dir / ".vscode"
     vscode_dir.mkdir(parents=True)
     (vscode_dir / "jaszczurhal.project.json").write_text(
@@ -988,6 +891,19 @@ def run_feature_value_dump(
     )
 
 
+def require_manifest_rejection(
+    result: subprocess.CompletedProcess[str], location: str
+) -> None:
+    require(
+        result.returncode == workflow_runtime.EXIT_CONFIG,
+        f"a manifest carrying {location} returned {result.returncode}: {result.stderr}",
+    )
+    require(
+        "[JH-CFG-MANIFEST]" in result.stderr and location in result.stderr,
+        f"{location}: missing manifest diagnostic: {result.stderr}",
+    )
+
+
 def require_value_rejection(
     result: subprocess.CompletedProcess[str], symbol: str, source: str
 ) -> None:
@@ -1003,62 +919,27 @@ def require_value_rejection(
 with tempfile.TemporaryDirectory(prefix="jh-vscode-feature-values-") as temp_dir:
     fixture_root = Path(temp_dir)
 
-    base_invalid = fixture_root / "base-invalid"
-    write_feature_value_fixture(
-        base_invalid,
-        cache={"JH_EXTRA_DEFINES": "HAL_ENABLE_WIFI=0"},
+    # The manifest holds tooling metadata only; project configuration in it is
+    # an error, wherever it sits.
+    manifest_cases = (
+        ({"cache": {"JH_EXTRA_DEFINES": "HAL_ENABLE_WIFI"}}, "cmake.cache.JH_EXTRA_DEFINES"),
+        ({"cache": {"EXTRA_HAL_DEFINES": "HAL_ENABLE_UDP"}}, "cmake.cache.EXTRA_HAL_DEFINES"),
+        ({"cache": {"JH_PROJECT_SOURCES": "app.c"}}, "cmake.cache.JH_PROJECT_SOURCES"),
+        ({"cache": {"HAL_ENABLE_WIFI": 1}}, "cmake.cache.HAL_ENABLE_WIFI"),
+        ({"cache": {"HAL_DISABLE_ASSERTS": 1}}, "cmake.cache.HAL_DISABLE_ASSERTS"),
+        ({"cache": {"JH_VARIANT": "BENCH"}}, "cmake.cache.JH_VARIANT"),
+        (
+            {"target_profiles": {"rp2350-arm": {"cmake": {"cache": {"EXTRA_HAL_DEFINES": "HAL_ENABLE_TLS"}}}}},
+            "targetProfiles.rp2350-arm.cmake.cache.EXTRA_HAL_DEFINES",
+        ),
+        ({"manifest_fields": {"variants": [{"id": "bench"}]}}, "'variants' is not a manifest field"),
+        ({"manifest_fields": {"example": {"targets": ["rp2040"]}}}, "'example' is not a manifest field"),
     )
-    require_value_rejection(
-        run_feature_value_dump(base_invalid),
-        "HAL_ENABLE_WIFI",
-        "cmake.cache.JH_EXTRA_DEFINES",
-    )
-
-    genex_invalid = fixture_root / "genex-invalid"
-    write_feature_value_fixture(
-        genex_invalid,
-        cache={
-            "JH_EXTRA_DEFINES": "$<1:HAL_$<1:ENABLE>_MQTT=0>",
-        },
-    )
-    require_value_rejection(
-        run_feature_value_dump(genex_invalid),
-        "HAL_$<1:ENABLE>_MQTT",
-        "cmake.cache.JH_EXTRA_DEFINES",
-    )
-
-    whitespace_invalid = fixture_root / "whitespace-invalid"
-    write_feature_value_fixture(
-        whitespace_invalid,
-        cache={"EXTRA_HAL_DEFINES": "HAL_ENABLE_UDP=1 HAL_ENABLE_TCP"},
-    )
-    require_value_rejection(
-        run_feature_value_dump(whitespace_invalid),
-        "HAL_ENABLE_UDP",
-        "cmake.cache.EXTRA_HAL_DEFINES",
-    )
-
-    spaced_assignment_invalid = fixture_root / "spaced-assignment-invalid"
-    write_feature_value_fixture(
-        spaced_assignment_invalid,
-        cache={"JH_EXTRA_DEFINES": "HAL_ENABLE_WIFI = 1"},
-    )
-    require_value_rejection(
-        run_feature_value_dump(spaced_assignment_invalid),
-        "HAL_ENABLE_WIFI",
-        "cmake.cache.JH_EXTRA_DEFINES",
-    )
-
-    direct_cache_invalid = fixture_root / "direct-cache-invalid"
-    write_feature_value_fixture(
-        direct_cache_invalid,
-        cache={"HAL_ENABLE_WIFI": 0},
-    )
-    require_value_rejection(
-        run_feature_value_dump(direct_cache_invalid),
-        "HAL_ENABLE_WIFI",
-        "cmake.cache.HAL_ENABLE_WIFI",
-    )
+    for index, (fields, location) in enumerate(manifest_cases):
+        project = fixture_root / f"manifest-{index}"
+        write_feature_value_fixture(project, **fields)
+        require_manifest_rejection(run_feature_value_dump(project), location)
+    base_invalid = fixture_root / "manifest-0"
     for action in ("build", "upload"):
         args = workflow_runtime.build_parser().parse_args(
             [action, "--project", str(base_invalid)]
@@ -1070,50 +951,24 @@ with tempfile.TemporaryDirectory(prefix="jh-vscode-feature-values-") as temp_dir
                 status = workflow_runtime.dispatch(args)
         require(
             status == workflow_runtime.EXIT_CONFIG,
-            f"{action}: invalid feature value did not return EXIT_CONFIG: "
-            f"{stderr.getvalue()}",
+            f"{action}: a manifest with project configuration did not return "
+            f"EXIT_CONFIG: {stderr.getvalue()}",
         )
         configure.assert_not_called()
-
-    profile_invalid = fixture_root / "profile-invalid"
-    write_feature_value_fixture(
-        profile_invalid,
-        target_profiles={
-            "rp2350-arm": {
-                "cmake": {
-                    "cache": {
-                        "EXTRA_HAL_DEFINES": "-DHAL_ENABLE_TLS=2",
-                    }
-                }
-            }
-        },
-    )
-    require_value_rejection(
-        run_feature_value_dump(
-            profile_invalid,
-            "--target",
-            "rp2350-arm",
-            "--board",
-            "pico2",
-        ),
-        "HAL_ENABLE_TLS",
-        "cmake.cache.EXTRA_HAL_DEFINES",
-    )
 
     variant_invalid = fixture_root / "variant-invalid"
     write_feature_value_fixture(
         variant_invalid,
-        variants=[
-            {
-                "id": "invalid",
-                "extraDefines": ["HAL_ENABLE_UDP", "HAL_ENABLE_TCP=false"],
-            }
-        ],
+        header=(
+            "#pragma once\n"
+            "#define JH_PROJECT_VARIANTS(X) \\\n"
+            "    X(INVALID, \"Invalid\", HAL_ENABLE_UDP, HAL_ENABLE_TCP=false)\n"
+        ),
     )
     require_value_rejection(
-        run_feature_value_dump(variant_invalid, "--variant", "invalid"),
+        run_feature_value_dump(variant_invalid, "--variant", "INVALID"),
         "HAL_ENABLE_TCP",
-        "cmake.cache.JH_EXTRA_DEFINES",
+        "JH_PROJECT_VARIANTS(INVALID)",
     )
 
     header_invalid = fixture_root / "header-invalid"
@@ -1136,25 +991,10 @@ with tempfile.TemporaryDirectory(prefix="jh-vscode-feature-values-") as temp_dir
     valid = fixture_root / "valid"
     write_feature_value_fixture(
         valid,
-        cache={
-            "JH_EXTRA_DEFINES": "HAL_ENABLE_WIFI;-DHAL_ENABLE_TLS=1",
-            "EXTRA_HAL_DEFINES": "HAL_ENABLE_UDP=1;HAL_ENABLE_TCP",
-        },
-        target_profiles={
-            "rp2350-arm": {
-                "cmake": {
-                    "cache": {"JH_EXTRA_DEFINES": "HAL_ENABLE_TIME=0"}
-                }
-            }
-        },
-        variants=[
-            {
-                "id": "inactive-invalid",
-                "extraDefines": ["HAL_ENABLE_HTTP_SERVER=0"],
-            }
-        ],
         header=(
             "#pragma once\n"
+            "#define JH_PROJECT_VARIANTS(X) \\\n"
+            "    X(INACTIVE_INVALID, \"Not built\", HAL_ENABLE_HTTP_SERVER=0)\n"
             "#define HAL_ENABLE_MQTT\n"
             "#define HAL_ENABLE_TIME 1 // explicit enabled value\n"
             "// hidden by a continued line comment \\\n"
@@ -1228,25 +1068,6 @@ with tempfile.TemporaryDirectory(prefix="jh-vscode-feature-values-") as temp_dir
             for diagnostic in network_diagnostics
         ),
         "STM32 preflight ignored an implied network feature",
-    )
-
-    overridden = fixture_root / "overridden"
-    write_feature_value_fixture(
-        overridden,
-        cache={"JH_EXTRA_DEFINES": "HAL_ENABLE_WIFI=0"},
-        target_profiles={
-            "rp2040": {
-                "cmake": {
-                    "cache": {"JH_EXTRA_DEFINES": "HAL_ENABLE_WIFI=1"}
-                }
-            }
-        },
-    )
-    overridden_result = run_feature_value_dump(overridden)
-    require(
-        overridden_result.returncode == 0,
-        "feature values were validated before the active target profile merge: "
-        f"{overridden_result.stderr}",
     )
 
 
@@ -1389,17 +1210,15 @@ with tempfile.TemporaryDirectory(prefix="jh-vscode-board-selection-") as temp_di
     pinned_cache = fixture_root / "pinned-cache"
     write_feature_value_fixture(
         pinned_cache,
-        cache={"JH_BOARD": "pico"},
+        cache={"JH_BOARD": "pico", "JH_TARGET": "stm32g474"},
         target_profiles={"rp2040": {"board": "rp2040-zero"}},
-        variants=[
-            {"id": "pinned", "cmake": {"cache": {"JH_BOARD": "pico", "JH_TARGET": "stm32g474"}}}
-        ],
+        header='#pragma once\n#define JH_PROJECT_VARIANTS(X) X(PINNED, "Pinned", PINNED=1)\n',
     )
-    pinned_variant = run_feature_value_dump(pinned_cache, "--variant", "pinned")
+    pinned_variant = run_feature_value_dump(pinned_cache, "--variant", "PINNED")
     require_board(pinned_variant, "rp2040-zero", f"{MANIFEST_SOURCE} targetProfiles.rp2040")
     require(
         json.loads(pinned_variant.stdout)["cmake"]["cache"]["JH_TARGET"] == "rp2040",
-        "a variant cache replaced the resolved JH_TARGET",
+        "a cached JH_TARGET replaced the resolved target",
     )
     require_board(
         run_feature_value_dump(pinned_cache),

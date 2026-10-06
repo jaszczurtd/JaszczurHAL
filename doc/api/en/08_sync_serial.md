@@ -551,6 +551,14 @@ Vocabulary-driven commands (R1.0 + R1.6 + R1.7):
 
 Since R1.6, JaszczurHAL no longer hard-codes these command and response strings. The application supplies a `hal_serial_session_vocabulary_t` to `hal_serial_session_init_with_vocabulary`. A `NULL` field disables recognition of that command. These commands are also unrecognized when using the classic `hal_serial_session_init`; the frame payload then reaches the unknown-command handler. Fiesta provides an example vocabulary in `Fiesta/src/common/scDefinitions/sc_session_vocabulary.h` (`fiesta_default_vocabulary`).
 
+`HAL_SERIAL_SESSION_VOCAB_FIELD(vocab_ptr, field)` reads a named member of the
+vocabulary. A `NULL` vocabulary pointer or member falls back to the same
+member of `hal_serial_session_vocabulary_default`, currently always `NULL`.
+An empty string is returned as supplied. `HAL_SERIAL_SESSION_VOCAB(session,
+field)` reads the member through a non-`NULL` session's `vocab` pointer.
+Both macros may evaluate their pointer argument up to three times; pass
+an expression without side effects. Returned strings remain borrowed.
+
 Unrecognised inner payloads:
 - if a user callback is registered via
   `hal_serial_session_set_unknown_handler`, it receives the unwrapped

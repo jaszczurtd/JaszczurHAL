@@ -175,7 +175,16 @@ programem rozruchowym instalującym aktualizację a aplikacją może spowodować
 
 ## Manifest projektu dla RP
 
-Włącz OTA w `.vscode/jaszczurhal.project.json`. Podaj ścieżki do plików wynikowych oraz ustawienia wykrywania urządzeń i uwierzytelniania używane przez hosta:
+Włącz OTA w pliku `hal_project_config.h` projektu:
+
+```c
+#define HAL_ENABLE_OTA
+```
+
+`HAL_ENABLE_OTA` automatycznie włącza wymagane moduły WiFi, UDP, TCP,
+kryptografii i CRC. W `.vscode/jaszczurhal.project.json` podaj ścieżki do
+plików wynikowych oraz ustawienia wykrywania urządzeń i uwierzytelniania
+używane przez hosta:
 
 ```json
 {
@@ -189,7 +198,6 @@ Włącz OTA w `.vscode/jaszczurhal.project.json`. Podaj ścieżki do plików wyn
     "cache": {
       "JH_PROJECT_DIR": "${project}",
       "JH_MODULE_NAME": "tracker",
-      "JH_EXTRA_DEFINES": "HAL_ENABLE_OTA",
       "JH_OTA_GENERATION": 7,
       "JH_OTA_VERSION": "1.4.0"
     }
@@ -208,11 +216,6 @@ Włącz OTA w `.vscode/jaszczurhal.project.json`. Podaj ścieżki do plików wyn
   }
 }
 ```
-
-`JH_EXTRA_DEFINES` to lista CMake rozdzielona średnikami. Zachowaj inne
-definicje projektu przy dodawaniu OTA, na przykład
-`"HAL_ENABLE_OTA;HAL_ENABLE_FREERTOS"`. `HAL_ENABLE_OTA` automatycznie
-włącza wymagane moduły WiFi, UDP, TCP, kryptografii i CRC.
 
 Metadane obrazu i ścieżki do plików wynikowych:
 
@@ -401,9 +404,8 @@ Dodatkowe reguły API:
   poprzedniej wersji lub odzyskiwania wraz z generacją, wersją, liczbą prób i
   ich limitem.
 - `HAL_RP_OTA_MAX_BOOT_ATTEMPTS` domyślnie wynosi `3` i akceptuje wartości
-  od 1 do 255. Nadpisuj go przez `JH_EXTRA_DEFINES` lub
-  `hal_project_config.h` tylko wtedy, gdy produkt ma jawnie określoną politykę
-  rozruchu.
+  od 1 do 255. Nadpisuj go w `hal_project_config.h` tylko wtedy, gdy produkt ma jawnie
+  określoną politykę rozruchu.
 
 W aplikacji FreeRTOS uruchamiaj usługę z jednego zadania. Przydziel mu stos
 wystarczający do inicjalizacji CYW43 i obsługi OTA. Stanowisko do sprzętowych
@@ -540,8 +542,9 @@ W projekcie z kilkoma platformami lub płytkami najpierw wybierz właściwy prof
   --target rp2350-arm --board pico2w --host 192.168.2.200
 ```
 
-`--variant` ma zastosowanie tylko wtedy, gdy manifest deklaruje dany wariant.
-Na przykład wariant `freertos` wybiera się za pomocą `--variant freertos`.
+`--variant` ma zastosowanie tylko wtedy, gdy `hal_project_config.h` deklaruje
+dany wariant w `JH_PROJECT_VARIANTS`. Na przykład wariant `FREERTOS` wybiera
+się za pomocą `--variant FREERTOS`.
 
 ## Zadania VS Code i skróty klawiszowe dla RP
 

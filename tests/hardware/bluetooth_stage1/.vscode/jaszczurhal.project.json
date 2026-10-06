@@ -2,39 +2,17 @@
     "$schema": "../../../../vscode/schema/jh_vscode_project.schema.json",
     "project": "JaszczurHAL hardware tests",
     "module": "bluetooth_stage1",
-    "example": {
-        "targets": [
-            "stm32g474",
-            "rp2350-arm",
-            "rp2040"
-        ],
-        "boards": {
-            "stm32g474": "nucleo-g474re-pim730",
-            "rp2350-arm": "pico2w",
-            "rp2040": "picow"
-        },
-        "variants": [
-            {
-                "id": "bluetooth",
-                "module": "bluetooth_stage1",
-                "sources": ["app.c"],
-                "extraDefines": ["JH_BLUETOOTH_STAGE1_PROBE"],
-                "targets": ["stm32g474", "rp2350-arm", "rp2040"]
-            },
-            {
-                "id": "wifi-only",
-                "module": "bluetooth_stage1_wifi_baseline",
-                "sources": ["app_wifi_baseline.c"],
-                "targets": ["stm32g474", "rp2350-arm", "rp2040"],
-                "cmake": {
-                    "cache": {"JH_EXTRA_DEFINES": ""}
-                }
-            }
-        ]
-    },
     "toolchain": "cmake",
     "target": "stm32g474",
     "board": "nucleo-g474re-pim730",
+    "targetProfiles": {
+        "rp2040": {
+            "board": "picow"
+        },
+        "rp2350-arm": {
+            "board": "pico2w"
+        }
+    },
     "buildDir": "${jhRoot}/.build/hardware/bluetooth_stage1",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {
@@ -42,9 +20,7 @@
         "cache": {
             "JH_ARTIFACT_DIR": "${buildDir}",
             "JH_PROJECT_DIR": "${project}",
-            "JH_MODULE_NAME": "bluetooth_stage1",
-            "JH_PROJECT_SOURCES": "app.c",
-            "JH_EXTRA_DEFINES": "JH_BLUETOOTH_STAGE1_PROBE"
+            "JH_MODULE_NAME": "bluetooth_stage1"
         }
     },
     "artifacts": {

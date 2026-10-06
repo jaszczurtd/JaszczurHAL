@@ -12,9 +12,10 @@
  * Lightweight assert for HAL resource exhaustion.
  *
  * When the condition is false the macro calls @c hal_assert_fail(), whose
- * implementation is selected by the exact HAL target. Hardware builds print
- * @p msg through the target debug channel and enter an infinite loop so the
- * watchdog can reset the system; mock/test builds call @c abort().
+ * implementation is selected by the exact HAL target. RP and hardware STM32
+ * builds print @p msg through the target debug channel and enter an infinite
+ * loop so the watchdog can reset the system. ESP32, mock and host STM32 builds
+ * print to stderr and call @c abort().
  *
  * Define @c HAL_DISABLE_ASSERTS before including this header (or via a
  * compiler flag) to compile all HAL_ASSERTs to no-ops, removing both the text

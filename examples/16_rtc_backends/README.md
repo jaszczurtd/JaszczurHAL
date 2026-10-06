@@ -48,13 +48,15 @@ clears the retained wake record instead of repeating the sleep sequence.
 
 ## Build and source selection
 
-Run the commands below from the repository root. Each configuration selects
-exactly one application source:
+Run the commands below from the repository root. Every configuration
+compiles both application files, but each one is wrapped in a condition on
+`EXAMPLE_RTC_DISPLAY_CLOCK`, which only the `DISPLAY_CLOCK` variant defines.
+Exactly one of them therefore provides `app_start()` and `app_task0()`:
 
 | Selection | Application source | Targets |
 |---|---|---|
 | Base project | `app.c` | RP2040, RP2350 ARM, RP2350 RISC-V, STM32G474 |
-| `display-clock` variant | `display_clock_app.c` | STM32G474 |
+| `DISPLAY_CLOCK` variant | `display_clock_app.c` | STM32G474 |
 
 Build the base STM32G474 example:
 
@@ -65,7 +67,7 @@ vscode/entry/jh-vscode build \
   --board nucleo-g474re
 ```
 
-This uses `JH_PROJECT_SOURCES=app.c` and writes the output to
+The base build runs `app.c` and writes the output to
 `.build/examples/16_rtc_backends/firmware.elf`.
 
 Build the display clock:
@@ -75,29 +77,31 @@ vscode/entry/jh-vscode build \
   --project examples/16_rtc_backends \
   --target stm32g474 \
   --board nucleo-g474re \
-  --variant display-clock
+  --variant DISPLAY_CLOCK
 ```
 
-The variant sets `JH_PROJECT_SOURCES=display_clock_app.c` and enables
-ILI9341 support. It excludes `app.c`, avoiding duplicate definitions of
-`app_start()` and `app_task0()`. Its output is
-`.build/examples/16_rtc_backends/variants/display-clock/firmware.elf`.
+The variant defines `EXAMPLE_RTC_DISPLAY_CLOCK=1`. That selects
+`display_clock_app.c` instead of `app.c`, and `hal_project_config.h` then
+enables ILI9341 support and stops any target other than STM32G474 with
+`#error`. The variant builds as module `16_rtc_backends_display_clock`, and
+its output is
+`.build/examples/16_rtc_backends/variants/display_clock/firmware.elf`.
 
 Both commands use the shared CMake firmware project through `jh-vscode`.
-CMake adds the selected application source, STM32 startup code, STM32G474
+CMake adds the application sources, STM32 startup code, STM32G474
 support, and enabled JaszczurHAL drivers and utilities. The HAL-provided
 `main()` calls `app_start()` once and then repeatedly calls `app_task0()`.
 
 In VS Code, use `Project: Build` or
-`Project: Build variant: display-clock`. Select `stm32g474:nucleo-g474re`
+`Project: Build variant: display_clock`. Select `stm32g474:nucleo-g474re`
 before building the display variant.
 
 ## STM32G474 DS3231 retention clock
 
-The `display-clock` variant displays DS3231 time as `HH:MM:SS` in the center
+The `DISPLAY_CLOCK` variant displays DS3231 time as `HH:MM:SS` in the center
 of a landscape ILI9341 screen, using `draw7SegString()`. Connect the DS3231
 to PB9/PB8 and wire the display as described in `examples/07_display_media`.
-Add `--variant display-clock` when building or uploading.
+Add `--variant DISPLAY_CLOCK` when building or uploading.
 
 Build and upload through ST-LINK/OpenOCD:
 
@@ -106,7 +110,7 @@ vscode/entry/jh-vscode upload \
   --project examples/16_rtc_backends \
   --target stm32g474 \
   --board nucleo-g474re \
-  --variant display-clock \
+  --variant DISPLAY_CLOCK \
   --port /dev/ttyACM0 \
   --allow-unverified-port
 ```

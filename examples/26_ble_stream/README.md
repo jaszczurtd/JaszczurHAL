@@ -13,7 +13,7 @@ authenticated, the application sends a telemetry line every second and prints
 received data to the console. If transmission is temporarily unavailable,
 it retains at most one sample for retry.
 
-The `commands` and `commands-freertos` variants advertise as `JH Commands`.
+The `COMMANDS` and `COMMANDS_FREERTOS` variants advertise as `JH Commands`.
 They exchange binary command requests, responses, and events with an
 authenticated client. `hal_ble_commands` has exclusive access to Stream
 payloads, while command handlers remain independent of the transport.
@@ -33,9 +33,9 @@ variants. To build only one variant, use:
 
 ```bash
 vscode/entry/jh-vscode build --project examples/26_ble_stream \
-  --target rp2040 --board picow --variant commands
+  --target rp2040 --board picow --variant COMMANDS
 vscode/entry/jh-vscode build --project examples/26_ble_stream \
-  --target rp2040 --board picow --variant commands-freertos
+  --target rp2040 --board picow --variant COMMANDS_FREERTOS
 ```
 
 The default boards are `picow` for RP2040, `pico2w` for RP2350 ARM, and
@@ -96,7 +96,7 @@ python3 tests/hardware/bluetooth_stream/verify_commands.py \
 It tests a fragmented 500-byte binary `echo`, handler and security metadata,
 source restrictions, unknown commands, an outbound event, a
 Peripheral-originated request, and one reconnect. Use `--runtime freertos`
-with the `commands-freertos` image.
+with the `COMMANDS_FREERTOS` image.
 
 ## What the example shows
 

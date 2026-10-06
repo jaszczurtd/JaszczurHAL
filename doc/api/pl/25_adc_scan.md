@@ -31,7 +31,7 @@ if (status == HAL_OK && hal_adc_scan_take(&block) == HAL_OK) {
 }
 ```
 
-Wariant `scan` przykładu [13_adc](../../../examples/13_adc/) wypisuje
+Wariant `SCAN` przykładu [13_adc](../../../examples/13_adc/) wypisuje
 statystyki bloków na targetach RP i STM32G474.
 
 ## Bloki, pozycje i znacznik

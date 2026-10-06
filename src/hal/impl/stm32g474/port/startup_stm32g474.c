@@ -5,7 +5,7 @@
  * Replaces ST's assembler startup with a small, readable C equivalent:
  *   1. hardware loads the initial MSP from vector[0] and jumps to
  * Reset_Handler,
- *   2. Reset_Handler copies .data from flash to RAM, zeroes .bss,
+ *   2. Reset_Handler copies .data from flash to RAM, zeroes .bss and CCM BSS,
  *   3. calls SystemInit() (clock/SysTick/FPU/fault enables), runs global C++
  *      constructors, then calls main().
  *
@@ -16,12 +16,14 @@
 #include <stdint.h>
 
 /* Symbols provided by the linker script. */
-extern uint32_t _sidata; /* .data init values in flash      */
-extern uint32_t _sdata;  /* .data start in RAM              */
-extern uint32_t _edata;  /* .data end in RAM                */
-extern uint32_t _sbss;   /* .bss start                      */
-extern uint32_t _ebss;   /* .bss end                        */
-extern uint32_t _estack; /* top of stack                    */
+extern uint32_t _sidata;  /* .data init values in flash      */
+extern uint32_t _sdata;   /* .data start in RAM              */
+extern uint32_t _edata;   /* .data end in RAM                */
+extern uint32_t _sbss;    /* .bss start                      */
+extern uint32_t _ebss;    /* .bss end                        */
+extern uint32_t _sccmbss; /* zero-initialized CCM start      */
+extern uint32_t _eccmbss; /* zero-initialized CCM end        */
+extern uint32_t _estack;  /* top of stack                    */
 
 typedef void (*init_function_t)(void);
 extern init_function_t __preinit_array_start[];
@@ -198,6 +200,10 @@ void Reset_Handler(void) {
 
   /* Zero the .bss segment. */
   for (dst = &_sbss; dst < &_ebss;) {
+    *dst++ = 0u;
+  }
+
+  for (dst = &_sccmbss; dst < &_eccmbss;) {
     *dst++ = 0u;
   }
 

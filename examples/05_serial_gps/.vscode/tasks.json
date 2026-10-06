@@ -331,8 +331,8 @@
             "problemMatcher": []
         },
         {
-            "label": "Project: Build variant: swserial",
-            "detail": "Build the GPS and loopback example with software serial (swserial).",
+            "label": "Project: Build variant: SWSERIAL",
+            "detail": "Build the SWSERIAL variant: GPS and loopback example with software serial.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -343,14 +343,14 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "swserial"
+                "SWSERIAL"
             ],
             "group": "build",
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Project: Upload variant: swserial",
-            "detail": "Build and upload the GPS and loopback example with software serial (swserial).",
+            "label": "Project: Upload variant: SWSERIAL",
+            "detail": "Build and upload the SWSERIAL variant: GPS and loopback example with software serial.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -361,7 +361,7 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "swserial"
+                "SWSERIAL"
             ],
             "problemMatcher": "$gcc"
         }

@@ -108,12 +108,11 @@ skrypt linkera STM32. Domyślna rezerwacja ma
 `HAL_STM32_FLASH_EEPROM_SIZE = 4096` bajtów, a rozmiar strony
 `HAL_STM32_FLASH_PAGE_SIZE = 2048` bajtów. Zmniejsza to
 pamięć flash dostępną dla kodu aplikacji o 4 KB. Aby go zmienić, ustaw
-`HAL_STM32_FLASH_EEPROM_SIZE` jako definicję budowania (`EXTRA_HAL_DEFINES`
-przy budowaniu biblioteki, definicje projektu przy projekcie firmware) na
-wielokrotność rozmiaru strony flash; budowanie przekazuje tę samą wartość do
-linkera. Każdy bank `hal_kv` zajmuje połowę rezerwacji. Rozmiar ustawiony
-tylko w `hal_project_config.h` trafia do kompilatora, ale nie do linkera, i
-linkowanie kończy się błędem.
+`HAL_STM32_FLASH_EEPROM_SIZE` na wielokrotność rozmiaru strony flash
+w `hal_project_config.h`, bezpośrednio lub przez wariant, albo przez
+`-D`/`EXTRA_HAL_DEFINES` przy kompilacji biblioteki statycznej. Kompilacja
+odczytuje tę wartość przez mechanizm odczytu konfiguracji projektu i przekazuje
+ją także do linkera. Każdy bank `hal_kv` zajmuje połowę rezerwacji.
 
 Linker STM32 obsługuje też osobną rezerwację LittleFS przed EEPROM. Utrzymuj
 `HAL_STM32_FLASH_EEPROM_SIZE` i `HAL_STM32_FLASH_LITTLEFS_SIZE`
@@ -508,9 +507,8 @@ kontroluje rozmiar rezerwacji i musi być wielokrotnością
 `HAL_STM32_FLASH_PAGE_SIZE` (2048 bajtów). Rozmiar może wynosić zero, gdy
 backend jest skompilowany, ale nieużywany; niezerowa rezerwacja musi zawierać
 co najmniej dwie strony. Montowanie pustej partycji zawodzi bezpiecznie.
-Pomocnicy CMake dla STM32 automatycznie rezerwują 64 KB, gdy
-`HAL_ENABLE_LITTLEFS` jest przekazane przez ich listy definicji i nie podano
-jawnego rozmiaru.
+Skrypty CMake dla STM32 automatycznie rezerwują 64 KB, gdy
+`HAL_ENABLE_LITTLEFS` jest włączone i nie podano jawnego rozmiaru.
 
 Rozmiar bloku kasowania LittleFS to jedna strona flash STM32; granularność
 programowania to jedno podwójne słowo STM32 (doubleword, 8 bajtów). Operacje

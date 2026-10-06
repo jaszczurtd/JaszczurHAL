@@ -44,7 +44,6 @@ W katalogu `config/tooling/` znajdują się wersjonowane dane konfiguracyjne uż
 |---|---|
 | `artifacts.json` | Określa nazwy plików metadanych archiwów oraz wersjonowanych plików generowanych. |
 | `board_components.json` | Definiuje prawidłowe komponenty płytek, providerów i wzajemnie wykluczające się grupy. |
-| `examples.json` | Definiuje rejestr aktywnych przykładów przechowywanych w repozytorium. |
 | `managed_components.json` | Definiuje zarządzane komponenty źródłowe/narzędziowe, metadane walidacji, domyślną kolejność oraz skrypty startowe zgodności. |
 
 Skrypty Pythona odczytują tę konfigurację przez `scripts/tooling_contract.py`, a ścieżki nazwanych plików wynikowych ustalają przez `scripts/repository_layout.py`. Podczas zwykłej konfiguracji CMake nie odczytuje tych plików JSON: korzysta z `cmake/generated/jh_board_components_registry.cmake`, który generator płytek tworzy na podstawie `board_components.json`.
@@ -274,7 +273,10 @@ opcje są przekazywane bez zmian. Mock hosta nie ma runnera i jest odrzucany.
 Każdy runner przyjmuje `--target`, `--board`, `--all-features`,
 `--library-only`, `--freertos`, `--project-config`, powtarzalne `-D`,
 `--output`, `--clean` oraz `--jobs`; domyślny katalog wyjściowy to
-`.build/static/<target>/<board>/`.
+`.build/static/<target>/<board>/`. `--project-config` wskazuje jeden katalog.
+Jego `hal_project_config.h` i definicje `-D` przetwarza
+`scripts/project_config.py`, ten sam mechanizm, którego używają kompilacje
+projektów.
 
 ### `scripts/build_rp_pico_lib.sh`
 
@@ -286,7 +288,7 @@ Kompiluje JaszczurHAL przy użyciu oficjalnego Pico SDK dla następujących plat
 | `rp2350-arm` | `rp2350-arm-s` | `pico2` |
 | `rp2350-riscv` | `rp2350-riscv` | `pico2` |
 
-Przed kompilacją przygotowuje Pico SDK i picotool. Opcja `--freertos` dodatkowo przygotowuje FreeRTOS-Kernel, a platforma `rp2350-riscv` wymaga przygotowania narzędzi RISC-V. Argument `--example <directory>` pozwala także skompilować przenośną aplikację.
+Przed kompilacją przygotowuje Pico SDK i picotool. Opcja `--freertos` dodatkowo przygotowuje FreeRTOS-Kernel, a platforma `rp2350-riscv` wymaga przygotowania narzędzi RISC-V. Argument `--example <directory>` pozwala także skompilować przenośną aplikację; kompilowane są wtedy wszystkie pliki źródłowe przykładu z jego własnym `hal_project_config.h`.
 
 Domyślnie każda kompilacja sprawdza bibliotekę statyczną, artefakty ELF/BIN/UF2,
 symbole punktu wejścia rdzenia oraz opcjonalny firmware przykładu.
@@ -347,8 +349,9 @@ targetu wybiera `waveshare-esp32-s3-zero`, gdy pominięto `--board`.
 `--output` musi pozostać poniżej katalogu głównego `.build` projektu lub
 repozytorium. Powtarzalne argumenty `--source` zastępują automatyczne
 wykrywanie; w przeciwnym razie skrypt uwzględnia obsługiwane pliki w
-katalogu głównym projektu i rekurencyjnie pod `src/`. Powtarzalne argumenty
-`--feature` i `--define` rozszerzają konfigurację projektu, `--all-features`
+katalogu głównym projektu i rekurencyjnie pod `src/`. `--variant <id>`
+wybiera wariant zadeklarowany w nagłówku projektu. Powtarzalne argumenty
+`--define` służą kompilacjom bibliotek statycznych, `--all-features`
 żąda każdej funkcji z `supportedFeatures` targetu, którą można wskazać
 bezpośrednio, a `--project-config DIR` czyta `hal_project_config.h` z katalogu
 spoza projektu. Funkcje opakowujące cJSON, LodePNG, TJpgDec lub FatFs
@@ -603,30 +606,31 @@ natywnego Windows AMD64.
 
 ### `scripts/examples_dispatcher.py`
 
-Używa wersjonowanego rejestru przykładów z `config/tooling/examples.json` i
-udostępnia pięć subpoleceń:
+Traktuje każdy katalog w `examples/` jak zwykły projekt: jego
+`hal_project_config.h` deklaruje platformy, funkcje i warianty, a pisany
+ręcznie `.vscode/jaszczurhal.project.json` zawiera ustawienia narzędzi.
+Skrypt udostępnia cztery subpolecenia:
 
 | Polecenie | Zachowanie |
 |---|---|
-| `generate` | Regeneruje manifest, ustawienia VS Code, zadania, konfigurację uruchamiania oraz referencję skrótów klawiszowych każdego przykładu. |
-| `generate-template` | Regeneruje współdzielone fragmenty ustawień, zadań, rozszerzeń oraz skrótów klawiszowych pod `vscode/examples`. |
-| `check-template` | Kończy się niepowodzeniem, gdy współdzielone fragmenty lub plik `.vscode` któregokolwiek przykładu w rejestrze różni się od wyniku współdzielonych generatorów. |
-| `list` | Wypisuje każdy zarejestrowany projekt z rozwiniętymi `targets` i `gateTargets`. |
-| `build` | Kompiluje obsługiwane przykłady i warianty przez `vscode/entry/jh-vscode`. |
+| `generate` | Zapisuje `settings.json`, `tasks.json`, `launch.json`, `keybindings.reference.json` i `extensions.json` każdego przykładu oraz `vscode/examples`. Nigdy nie zapisuje manifestu. |
+| `check` | Kończy się niepowodzeniem, gdy któryś z tych plików różni się od wyniku `generate` albo gdy manifest zawiera konfigurację projektu. |
+| `list` | Wypisuje każdy przykład z platformami i wariantami, dla których się kompiluje. |
+| `build` | Kompiluje przez `vscode/entry/jh-vscode` wszystkie konfiguracje wybranych przykładów dla jednej platformy. |
 
 `build` wymaga `--target` z jedną z wartości `rp2040`, `rp2350-arm`,
-`rp2350-riscv` lub `stm32g474`. Powtarzalne `--example` ogranicza
-uruchomienie, `--gate` ogranicza je do konfiguracji bazowych/wariantów,
-których generowane `gateTargets` zawierają żądany target, `--jobs`
-kontroluje równoległe projekty przykładów, a `--verbose` zapisuje wywołane
-polecenia w zarządzanych logach na przykład poniżej `.build/examples`.
+`rp2350-riscv`, `stm32g474` lub `esp32s3`. Powtarzalne `--example` ogranicza
+uruchomienie, `--jobs` kontroluje równoległe projekty przykładów, a
+`--verbose` zapisuje wywołane polecenia w logach poszczególnych przykładów.
+Konfiguracja to zadeklarowana platforma z kompilacją bazową albo jednym
+wariantem; pary zatrzymane w nagłówku przez `#error` są pomijane. Każdy
+przykład kompiluje się dla płytki, którą jego manifest wybiera dla danej
+platformy.
 
-Polecenie `generate` korzysta z rejestru JSON, natomiast `build` odczytuje
-wygenerowane manifesty. Akcja `list` wyświetla aktualne pełne
-macierze oraz macierze domyślnej bramki bez utrzymywania tutaj duplikatów
-liczników.
-Przykłady RISC-V WiFi pozostają wykluczone, dopóki RP2350 RISC-V + CYW43 jest
-nieobsługiwane.
+Etap 9 skryptu `runalltests.sh` uruchamia `build` dla `rp2040`, `stm32g474`
+i `esp32s3`. Aktualną macierz pokazuje `list`, dlatego ta strona nie podaje
+liczby konfiguracji. Przykłady RISC-V WiFi pozostają wykluczone, dopóki
+RP2350 RISC-V + CYW43 jest nieobsługiwane.
 
 Macierz targetów, interfejs aplikacji i polecenia kompilacji opisano w dokumencie
 [Przykłady JaszczurHAL](../../../examples/README.pl.md).
@@ -685,15 +689,16 @@ niezależny od targetu graf zależności pod `config/features/`. `--write`
 atomowo odświeża wersjonowany, produkcyjny nagłówek C oraz mechanizm
 rozwiązywania zależności w CMake,
 natomiast `--check` porównuje je bez zapisywania. `--lint` akceptuje
-powtarzalne argumenty `--input-root` i sprawdza bezpośrednio pliki
-`hal_project_config.h` oraz manifesty projektów pod kątem nieznanych
-symboli, nieobsługiwanych wartości `=0` oraz bezpośrednich żądań symboli
-pochodnych. Odrzuca również warunkowe definicje modułów poza pasującym
-strażnikiem `#ifndef` oraz nieskalarne listy definicji CMake. Wykryte problemy
-domyślnie kończą polecenie niepowodzeniem; `--report-only` jest jawnym,
-ręcznym trybem diagnostycznym.
+powtarzalne argumenty `--input-root`. Sprawdza definicje modułów w każdym
+`hal_project_config.h`, we wszystkich gałęziach i wariantach, pod kątem
+nieznanych symboli, nieobsługiwanych wartości `=0` oraz bezpośrednich żądań
+symboli pochodnych. Zgłasza też nagłówki, których mechanizm odczytu
+konfiguracji projektu nie potrafi przetworzyć. Manifest projektu zawierający
+konfigurację projektu jest zgłaszany z diagnostyką `[JH-CFG-MANIFEST]`.
+Wykryte problemy domyślnie kończą polecenie niepowodzeniem; `--report-only`
+jest jawnym, ręcznym trybem diagnostycznym.
 
-`--effective` korzysta z mechanizmu `jh-vscode`, aby ustalić konfiguracje zadeklarowanych platform, ich profili i wariantów. Nie odczytuje lokalnego stanu płytki ignorowanego przez Git. Sprawdza ograniczenia oraz powtórzone żądania modułów po uwzględnieniu pierwszeństwa warstw konfiguracji. Plik `.vscode/jaszczurhal.project.json` określa osie konfiguracji; niepowiązany z manifestem `hal_project_config.h`, który żąda co najmniej jednego modułu HAL, tworzy pojedynczą konfigurację bez osi. Samodzielne nagłówki bez żądań modułów i manifesty referencyjne są jedynie analizowane składniowo, bez rozwiązywania konfiguracji.
+`--effective` korzysta z mechanizmu `jh-vscode`, aby ustalić każdą konfigurację, dla której projekt się kompiluje: każdą zadeklarowaną platformę z kompilacją bazową i każdym wariantem, bez par zatrzymanych w nagłówku przez `#error`. Płytki pochodzą z manifestu; lokalny stan płytki ignorowany przez Git nie jest odczytywany. Dla każdej konfiguracji sprawdza ograniczenia oraz powtórzone żądania modułów. Plik `.vscode/jaszczurhal.project.json` oznacza projekt. Niepowiązany z manifestem `hal_project_config.h`, który żąda co najmniej jednego modułu HAL, jest przetwarzany dla każdej zadeklarowanej w nim platformy (bez platformy, gdy nie deklaruje żadnej), z kompilacją bazową i każdym wariantem. Samodzielne nagłówki bez żądań modułów i manifesty referencyjne są jedynie analizowane składniowo, bez rozwiązywania konfiguracji.
 
 `--resolution-output <path>` zapisuje deterministyczne `requestedFeatures`,
 `resolvedFeatures`, skróty pełnego zbioru zależności oraz pochodzenie żądań
@@ -715,7 +720,8 @@ Generowanie płytki
 używa rozwiązanego zestawu dla `featureHash` i sygnatury linkowania,
 zachowując przy tym zestaw bezpośredni jako `requestedFeatures`.
 
-`jh-vscode` rozwiązuje rejestr po nałożeniu profilu manifestu i wariantu,
+`jh-vscode` rozwiązuje rejestr dla nagłówka projektu przetworzonego dla
+aktywnej platformy i wariantu,
 udostępnia wynik przez `featureResolution` i używa ostatecznego zestawu podczas
 wstępnej kontroli oraz podejmowania decyzji OTA. Bezpośrednie żądania przekazuje do
 CMake.
@@ -727,6 +733,18 @@ deterministyczny raport. Zainstalowane pakiety RP i STM32G474 zawierają
 generowane nagłówki modułów i płytki, rozwiązany JSON płytki, nagłówek sygnatury
 linkowania oraz źródło referencyjne; projekt korzystający bezpośrednio z
 kompilatora może skompilować i zlinkować te artefakty bez wywoływania Pythona.
+
+### `scripts/project_config.py`
+
+Odczytuje `hal_project_config.h` projektu tak, jak zrobiłby to preprocesor C
+dla jednej platformy i jednego wariantu. Konfigurację projektu odczytują przez
+niego CMake (dispatcher firmware i kompilacje bibliotek statycznych),
+`jh-vscode`, linter rejestru funkcji, skrypt ESP-IDF, generator zadań VS Code i dispatcher
+przykładów. Polecenie `cmake` zapisuje funkcje, definicje, platformy, warianty
+i wartości makr jednej kompilacji jako plik CMake. Diagnostyka używa prefiksów
+`[JH-CFG-TARGET]`, `[JH-CFG-VARIANT]`, `[JH-CFG-ERROR]` i `[JH-CFG-SCOPE]`.
+Zasady dotyczące nagłówka opisuje część
+[platformy i warianty](../../pl/FwProjectWorkflow.md#platformy-i-warianty).
 
 ### `scripts/board_registry.py`
 
@@ -1074,7 +1092,7 @@ Użycie JPEG jest udokumentowane w
 - [Natywny neutralny firmware RP](../../../vscode/neutral_fw/rp_pico/README.pl.md)
   wyjaśnia obraz domyślnej tożsamości używany przez
   `jh-vscode clear-identity`.
-- [Przykłady JaszczurHAL](../../../examples/README.pl.md) dokumentują rejestr
+- [Przykłady JaszczurHAL](../../../examples/README.pl.md) dokumentują katalog
   przykładów, pokrycie targetów, interfejs wejścia aplikacji, warianty oraz
   polecenia kompilacji.
 - [Zarządzane komponenty zewnętrzne](../../../third_party/README.pl.md)

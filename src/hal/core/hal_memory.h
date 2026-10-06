@@ -1,7 +1,7 @@
 #pragma once
 
 /** @file hal_memory.h
- * @brief Placement of time-sensitive functions in executable RAM.
+ * @brief Placement of functions and static data in backend-selected RAM.
  */
 #include "hal/core/hal_compiler.h"
 #include "hal/core/hal_target.h"
@@ -32,4 +32,27 @@
   __attribute__((section(".iram1." #name), noinline)) name
 #else
 #error "HAL_RAM_FUNC has no mapping for this target"
+#endif
+
+/** @def HAL_CPU_ONLY_BSS(name)
+ * @brief Place a zero-initialized static object in RAM selected for CPU access.
+ * @param name Object identifier, used in its declaration or definition.
+ * @note Use as `static uint8_t HAL_CPU_ONLY_BSS(buffer)[256];` at file scope.
+ * The object keeps its type's alignment and is zeroed before constructors.
+ * Omit its initializer or use an all-zero constant initializer; do not use
+ * dynamic initialization. The caller must never pass this object's storage
+ * to DMA. Ordinary SRAM is a valid backend mapping. STM32 builds select CCM
+ * when TLS is disabled and SRAM when TLS needs CCM. RP and ESP32 use their
+ * normal BSS; mock builds use host storage. Requires supported linker/startup.
+ * Placement does not provide synchronization or make DMA access safe.
+ */
+#ifndef JH_CPU_ONLY_BSS_SECTION
+#define JH_CPU_ONLY_BSS_SECTION ".bss.hal_cpu.sram"
+#endif
+
+#if HAL_COMPILER_IS_GNU_LIKE && !defined(__APPLE__)
+#define HAL_CPU_ONLY_BSS(name)                                                 \
+  __attribute__((section(JH_CPU_ONLY_BSS_SECTION "." #name))) name
+#else
+#define HAL_CPU_ONLY_BSS(name) name
 #endif

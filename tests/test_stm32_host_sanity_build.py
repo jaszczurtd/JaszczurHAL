@@ -183,7 +183,20 @@ try:
         "#define HAL_ENABLE_BLE 1\n"
         "#define HAL_ENABLE_FREERTOS 1\n"
         "#define HAL_ENABLE_LITTLEFS 1\n"
-        "#define HAL_ENABLE_UNITY 1\n",
+        "#define HAL_ENABLE_UNITY 1\n"
+        "#define HAL_STM32_FLASH_EEPROM_SIZE 16384u\n"
+        "#define HAL_STM32_FLASH_LITTLEFS_SIZE (96 * 1024)\n",
+        encoding="utf-8",
+    )
+    # Record the link options the library hands to firmware once the
+    # configure has created its targets.
+    link_probe = project_config / "link_probe.cmake"
+    link_probe.write_text(
+        "function(jh_record_link_options)\n"
+        "  get_target_property(_options JaszczurHAL INTERFACE_LINK_OPTIONS)\n"
+        '  file(WRITE "${CMAKE_BINARY_DIR}/link_options.txt" "${_options}")\n'
+        "endfunction()\n"
+        'cmake_language(DEFER DIRECTORY "${CMAKE_SOURCE_DIR}" CALL jh_record_link_options)\n',
         encoding="utf-8",
     )
     project_feature_configure = subprocess.run(
@@ -197,6 +210,7 @@ try:
             "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
             "-DJH_BOARD=nucleo-g474re-pim730",
             f"-DHAL_PROJECT_CONFIG_DIR={project_config}",
+            f"-DCMAKE_PROJECT_INCLUDE={link_probe}",
         ],
         check=False,
         capture_output=True,
@@ -207,6 +221,14 @@ try:
         "project-header STM32 sanity configure failed:\n"
         f"{project_feature_configure.stdout}\n"
         f"{project_feature_configure.stderr}",
+    )
+    link_options = (project_features / "link_options.txt").read_text(
+        encoding="utf-8"
+    ).split(";")
+    require(
+        "-Wl,--defsym=HAL_STM32_FLASH_EEPROM_SIZE=16384" in link_options
+        and "-Wl,--defsym=HAL_STM32_FLASH_LITTLEFS_SIZE=98304" in link_options,
+        f"flash sizes from the project header did not reach the linker: {link_options}",
     )
     compile_commands = json.loads(
         (project_features / "compile_commands.json").read_text(encoding="utf-8")
@@ -574,22 +596,29 @@ jh_target_enable_cyw43_feature_stack(probe GAMEPAD TRUE)
 
     incremental_source.mkdir(parents=True)
     incremental_config.mkdir(parents=True)
-    incremental_header = incremental_config / "hal_project_config.h"
-    incremental_header.write_text(
-        "#define HAL_ENABLE_WIFI 1\n", encoding="utf-8"
+    (incremental_config / "hal_project_config.h").write_text(
+        '#define HAL_ENABLE_WIFI 1\n#include "network.h"\n', encoding="utf-8"
     )
+    # A file the header includes is a configuration input like the header.
+    incremental_header = incremental_config / "network.h"
+    incremental_header.write_text("#pragma once\n", encoding="utf-8")
     incremental_cmake = """\
 cmake_minimum_required(VERSION 3.20)
 project(jh_project_config_dependency NONE)
 include("@HELPER@")
-jh_collect_project_feature_defines(_features "@CONFIG@")
-file(WRITE "${CMAKE_BINARY_DIR}/features.txt" "${_features}\\n")
+jh_read_project_config(ROOT "@ROOT@" CONFIG_DIR "@CONFIG@" TARGET rp2040
+    OUTPUT_DIR "${CMAKE_BINARY_DIR}/project")
+file(WRITE "${CMAKE_BINARY_DIR}/features.txt" "${JH_PROJECT_FEATURES}\\n")
 add_custom_target(config_dependency_probe ALL
     COMMAND "${CMAKE_COMMAND}" -E true)
 """
-    incremental_cmake = incremental_cmake.replace(
-        "@HELPER@", (ROOT / "cmake/jh_project_features.cmake").as_posix()
-    ).replace("@CONFIG@", incremental_config.as_posix())
+    incremental_cmake = (
+        incremental_cmake.replace(
+            "@HELPER@", (ROOT / "cmake/jh_project_config.cmake").as_posix()
+        )
+        .replace("@ROOT@", ROOT.as_posix())
+        .replace("@CONFIG@", incremental_config.as_posix())
+    )
     (incremental_source / "CMakeLists.txt").write_text(
         incremental_cmake, encoding="utf-8"
     )
@@ -610,7 +639,7 @@ add_custom_target(config_dependency_probe ALL
         "incremental fixture did not collect its initial feature",
     )
     incremental_header.write_text(
-        "#define HAL_ENABLE_TLS 1\n", encoding="utf-8"
+        "#pragma once\n#define HAL_ENABLE_TLS 1\n", encoding="utf-8"
     )
     # CMAKE_CONFIGURE_DEPENDS re-checks by timestamp. The edit lands in the same
     # second as the generated build system, so push the header clearly ahead of
@@ -638,8 +667,8 @@ add_custom_target(config_dependency_probe ALL
     )
     require(
         (incremental_build / "features.txt").read_text(encoding="utf-8").strip()
-        == "HAL_ENABLE_TLS",
-        "project-header change did not trigger CMake reconfigure",
+        == "HAL_ENABLE_WIFI;HAL_ENABLE_TLS",
+        "an included configuration file change did not trigger CMake reconfigure",
     )
 
     without_flag = subprocess.run(

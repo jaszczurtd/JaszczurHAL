@@ -331,8 +331,8 @@
             "problemMatcher": []
         },
         {
-            "label": "Project: Build variant: classic-scan",
-            "detail": "Build the Classic Bluetooth device and service discovery example (classic-scan).",
+            "label": "Project: Build variant: CLASSIC_SCAN",
+            "detail": "Build the CLASSIC_SCAN variant: Classic Bluetooth device and service discovery example.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -343,14 +343,14 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "classic-scan"
+                "CLASSIC_SCAN"
             ],
             "group": "build",
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Project: Upload variant: classic-scan",
-            "detail": "Build and upload the Classic Bluetooth device and service discovery example (classic-scan).",
+            "label": "Project: Upload variant: CLASSIC_SCAN",
+            "detail": "Build and upload the CLASSIC_SCAN variant: Classic Bluetooth device and service discovery example.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -361,13 +361,13 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "classic-scan"
+                "CLASSIC_SCAN"
             ],
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Project: Build variant: hid-host",
-            "detail": "Build the generic Classic HID descriptor and report example (hid-host).",
+            "label": "Project: Build variant: HID_HOST",
+            "detail": "Build the HID_HOST variant: Generic Classic HID descriptor and report example.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -378,14 +378,14 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "hid-host"
+                "HID_HOST"
             ],
             "group": "build",
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Project: Upload variant: hid-host",
-            "detail": "Build and upload the generic Classic HID descriptor and report example (hid-host).",
+            "label": "Project: Upload variant: HID_HOST",
+            "detail": "Build and upload the HID_HOST variant: Generic Classic HID descriptor and report example.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -396,13 +396,13 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "hid-host"
+                "HID_HOST"
             ],
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Project: Build variant: ble",
-            "detail": "Build the Classic gamepad example with a BLE observer (ble).",
+            "label": "Project: Build variant: BLE",
+            "detail": "Build the BLE variant: Classic gamepad example with a BLE observer.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -413,14 +413,14 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "ble"
+                "BLE"
             ],
             "group": "build",
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Project: Upload variant: ble",
-            "detail": "Build and upload the Classic gamepad example with a BLE observer (ble).",
+            "label": "Project: Upload variant: BLE",
+            "detail": "Build and upload the BLE variant: Classic gamepad example with a BLE observer.",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "windows": {
@@ -431,7 +431,7 @@
                 "--project",
                 "${workspaceFolder}",
                 "--variant",
-                "ble"
+                "BLE"
             ],
             "problemMatcher": "$gcc"
         }

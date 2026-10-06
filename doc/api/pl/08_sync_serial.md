@@ -587,6 +587,15 @@ Polecenia sterowane słownikiem (R1.0 + R1.6 + R1.7):
 
 Od R1.6 nazwy tych poleceń i odpowiedzi nie są zapisane na stałe w JaszczurHAL. Aplikacja przekazuje je w `hal_serial_session_vocabulary_t` do `hal_serial_session_init_with_vocabulary`. Pole równe `NULL` wyłącza rozpoznawanie danego polecenia. Przy klasycznej inicjalizacji przez `hal_serial_session_init` te polecenia również nie są rozpoznawane, a treść ramki trafia do funkcji obsługującej nieznane polecenia. Przykładowy słownik projektu Fiesta znajduje się w `Fiesta/src/common/scDefinitions/sc_session_vocabulary.h` (`fiesta_default_vocabulary`).
 
+`HAL_SERIAL_SESSION_VOCAB_FIELD(vocab_ptr, field)` odczytuje wskazane pole
+słownika. Wskaźnik słownika lub pole równe `NULL` wybiera to samo pole
+z `hal_serial_session_vocabulary_default`, obecnie zawsze równe `NULL`.
+Pusty tekst jest zwracany bez zmian. `HAL_SERIAL_SESSION_VOCAB(session,
+field)` odczytuje pole przez wskaźnik `vocab` sesji; `session` nie może być
+`NULL`. Oba makra mogą obliczyć argument wskaźnikowy do trzech razy, więc
+przekazuj wyrażenie bez efektów ubocznych. Zwrócone teksty nadal należą
+do właściciela słownika.
+
 Nierozpoznane wewnętrzne payloady są obsługiwane następująco:
 - jeśli callback użytkownika jest zarejestrowany przez
   `hal_serial_session_set_unknown_handler`, otrzymuje rozpakowaną zawartość ramki

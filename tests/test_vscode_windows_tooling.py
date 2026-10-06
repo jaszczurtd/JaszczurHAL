@@ -276,162 +276,8 @@ with tempfile.TemporaryDirectory(prefix="jh dispatcher logs ") as temp_dir:
         "example dispatcher log name changed unexpectedly",
     )
 require(
-    examples_dispatcher.base_tasks("rp2040", "pico", []) == expected_tasks,
+    examples_dispatcher.tasks_for("rp2040", "pico", None) == expected_tasks,
     "example dispatcher bypasses the shared task builder",
-)
-require(
-    examples_dispatcher.gate_targets(
-        ["rp2040", "rp2350-arm", "rp2350-riscv"]
-    )
-    == ["rp2040"],
-    "default example gate targets escape an RP-only target set",
-)
-require(
-    examples_dispatcher.gate_targets(["stm32g474"]) == ["stm32g474"],
-    "default example gate targets escape an STM32-only target set",
-)
-try:
-    examples_dispatcher.gate_targets(["rp2040"], ["stm32g474"])
-except ValueError as error:
-    require(
-        str(error) == "gateTargets escape supported targets: stm32g474",
-        "explicit gate target validation returned the wrong diagnostic",
-    )
-else:
-    raise RuntimeError("explicit gate targets may escape supported targets")
-
-examples_dispatcher.validate_example_registry()
-registry_names = [str(entry["dir"]) for entry in examples_dispatcher.EXAMPLES]
-expected_registry_names = [
-    "01_core_runtime",
-    "02_crypto",
-    "03_modem_A7670E",
-    "04_sensor_hub",
-    "05_serial_gps",
-    "06_thermocouple",
-    "07_display_media",
-    "08_mqtt",
-    "09_wireguard",
-    "10_storage",
-    "11_i2c_slave",
-    "12_i2c_scan",
-    "13_adc",
-    "14_can_mcp2515",
-    "15_display_oled_lcd",
-    "16_rtc_backends",
-    "17_audio_output",
-    "18_freertos_suite",
-    "19_touch",
-    "20_irsmall_decoder",
-    "21_stm32g474_fdcan_native",
-    "22_rfid_nfc",
-    "23_io_pmic",
-    "24_epd_display",
-    "25_ota",
-    "26_ble_stream",
-    "27_lora_point_to_point",
-    "28_serial_commands",
-    "29_bluetooth_gamepad",
-    "30_bluetooth_speaker",
-]
-active_example_names = sorted(
-    path.parent.parent.name
-    for path in (ROOT / "examples").glob(
-        "[0-9][0-9]_*/.vscode/jaszczurhal.project.json"
-    )
-)
-require(
-    registry_names == expected_registry_names
-    and len(set(registry_names)) == 30,
-    "example registry must contain the ordered 01..30 active catalog",
-)
-
-full_configuration_counts = {
-    target: 0
-    for target in ("rp2040", "rp2350-arm", "rp2350-riscv", "stm32g474", "esp32s3")
-}
-gate_configuration_counts = dict.fromkeys(full_configuration_counts, 0)
-for entry in examples_dispatcher.EXAMPLES:
-    supported_targets = examples_dispatcher.example_targets(entry)
-    selected_gate_targets = examples_dispatcher.gate_targets(
-        supported_targets, entry.get("gateTargets")
-    )
-    require(
-        set(selected_gate_targets).issubset(supported_targets),
-        f"{entry['dir']}: gateTargets escape supported targets",
-    )
-    for target in supported_targets:
-        full_configuration_counts[target] += 1
-        if target in selected_gate_targets:
-            gate_configuration_counts[target] += 1
-
-    for variant in entry.get("variants", []):
-        variant_targets = examples_dispatcher.example_targets(
-            entry,
-            [
-                str(target)
-                for target in variant.get("targets", entry["targets"])
-            ],
-        )
-        variant_gate_targets = examples_dispatcher.gate_targets(
-            variant_targets, variant.get("gateTargets")
-        )
-        require(
-            set(variant_targets).issubset(supported_targets),
-            f"{entry['dir']}:{variant['id']}: targets escape the base example",
-        )
-        require(
-            set(variant_gate_targets).issubset(variant_targets),
-            f"{entry['dir']}:{variant['id']}: gateTargets escape variant targets",
-        )
-        for target in variant_targets:
-            full_configuration_counts[target] += 1
-            if target in variant_gate_targets:
-                gate_configuration_counts[target] += 1
-
-require(
-    full_configuration_counts
-    == {
-        "rp2040": 46,
-        "rp2350-arm": 39,
-        "rp2350-riscv": 25,
-        "stm32g474": 42,
-        "esp32s3": 26,
-    }
-    and sum(full_configuration_counts.values()) == 178,
-    f"full dispatcher matrix changed: {full_configuration_counts}",
-)
-require(
-    gate_configuration_counts
-    == {
-        "rp2040": 44,
-        "rp2350-arm": 4,
-        "rp2350-riscv": 0,
-        "stm32g474": 33,
-        "esp32s3": 26,
-    }
-    and sum(gate_configuration_counts.values()) == 107,
-    f"dispatcher gate matrix changed: {gate_configuration_counts}",
-)
-
-serial_entry = next(
-    entry
-    for entry in examples_dispatcher.EXAMPLES
-    if entry["dir"] == "05_serial_gps"
-)
-swserial_variant = next(
-    variant
-    for variant in serial_entry["variants"]
-    if variant["id"] == "swserial"
-)
-require(
-    set(
-        examples_dispatcher.example_targets(
-            serial_entry, swserial_variant["targets"]
-        )
-    )
-    == {"rp2040", "rp2350-arm", "rp2350-riscv"},
-    "05_serial_gps:swserial must remain RP-only",
 )
 
 with tempfile.TemporaryDirectory(prefix="jh dispatcher runner ") as temp_dir:
@@ -453,8 +299,7 @@ with tempfile.TemporaryDirectory(prefix="jh dispatcher runner ") as temp_dir:
             ROOT / "examples" / "05_serial_gps",
             "rp2040",
             "pico",
-            True,
-            ["swserial"],
+            [None, "SWSERIAL"],
             3,
             False,
         )
@@ -463,9 +308,13 @@ with tempfile.TemporaryDirectory(prefix="jh dispatcher runner ") as temp_dir:
         == (True, "05_serial_gps@rp2040", log_path, 2.5),
         f"dispatcher worker returned an invalid result tuple: {runner_result}",
     )
+    commands = [call.args[0] for call in dispatcher_run.call_args_list]
     require(
-        len(dispatcher_run.call_args_list) == 2,
-        "dispatcher worker did not build the base and selected variant",
+        len(commands) == 2
+        and "--variant" not in commands[0]
+        and commands[1][-2:] == ["--variant", "SWSERIAL"]
+        and all(command[command.index("--board") + 1] == "pico" for command in commands),
+        "dispatcher worker did not build the base and the variant on the manifest board",
     )
     for call in dispatcher_run.call_args_list:
         require(
@@ -474,28 +323,13 @@ with tempfile.TemporaryDirectory(prefix="jh dispatcher runner ") as temp_dir:
             "dispatcher worker did not propagate the bounded parallel environment",
         )
 
-serial_manifest = examples_dispatcher.manifest_for(serial_entry)
-core_entry = next(
-    entry
-    for entry in examples_dispatcher.EXAMPLES
-    if entry["dir"] == "01_core_runtime"
-)
-build_manifests = {
-    "01_core_runtime": examples_dispatcher.manifest_for(core_entry),
-    "05_serial_gps": serial_manifest,
-}
 build_args = SimpleNamespace(
     example=["01_core_runtime", "05_serial_gps"],
     target="rp2040",
     jobs=6,
-    gate=True,
     verbose=False,
 )
 with mock.patch.object(
-    examples_dispatcher,
-    "read_manifest",
-    side_effect=lambda example_dir: build_manifests[example_dir.name],
-), mock.patch.object(
     examples_dispatcher,
     "run_one_example",
     return_value=(
@@ -515,8 +349,7 @@ scheduled_runner.assert_has_calls(
             ROOT / "examples" / "01_core_runtime",
             "rp2040",
             "pico",
-            True,
-            ["capture"],
+            [None, "CAPTURE"],
             3,
             False,
         ),
@@ -524,8 +357,7 @@ scheduled_runner.assert_has_calls(
             ROOT / "examples" / "05_serial_gps",
             "rp2040",
             "pico",
-            True,
-            ["swserial"],
+            [None, "SWSERIAL"],
             3,
             False,
         ),
@@ -536,10 +368,6 @@ require(
     scheduled_runner.call_count == 2,
     "dispatcher scheduler did not use the two-project worker budget",
 )
-require(
-    active_example_names == sorted(registry_names),
-    "generated example manifests differ from the dispatcher registry",
-)
 
 for task in expected_tasks["tasks"]:
     require(task.get("command") == VSCODE_ENTRY_CONFIG, f"Unix command missing in {task['label']}")
@@ -548,56 +376,53 @@ for task in expected_tasks["tasks"]:
         f"Windows command missing in {task['label']}",
     )
 
-run_checked([sys.executable, str(SCRIPTS_DIR / "examples_dispatcher.py"), "check-template"])
-require(
-    not examples_dispatcher.generated_file_mismatches(),
-    "checked-in example VS Code files are outside the generator drift gate",
-)
-require(len(examples_dispatcher.EXAMPLES) == 30, "example registry size changed unexpectedly")
-for entry in examples_dispatcher.EXAMPLES:
-    vscode_dir = ROOT / "examples" / str(entry["dir"]) / ".vscode"
+run_checked([sys.executable, str(SCRIPTS_DIR / "examples_dispatcher.py"), "check"])
+for example_dir in examples_dispatcher.example_dirs():
+    name = example_dir.name
+    vscode_dir = example_dir / ".vscode"
+    manifest = load_json(vscode_dir / "jaszczurhal.project.json")
     tasks = load_json(vscode_dir / "tasks.json")
     settings = load_json(vscode_dir / "settings.json")
-    target, board = examples_dispatcher.default_target_board(entry)
-    build_dir = f"${{workspaceFolder}}/../../.build/examples/{entry['dir']}"
+    target, board = str(manifest["target"]), str(manifest["board"])
+    build_dir = f"${{workspaceFolder}}/../../.build/examples/{name}"
     launch_path = vscode_dir / "launch.json"
     launch_text = launch_path.read_text(encoding="utf-8")
     require_launch_contract(
         json.loads(launch_text),
-        f"${{workspaceFolder}}/../../.build/examples/{entry['dir']}/firmware.elf",
-        f"checked-in example {entry['dir']}",
+        f"${{workspaceFolder}}/../../.build/examples/{name}/firmware.elf",
+        f"checked-in example {name}",
     )
     require(
         all(task.get("windows", {}).get("command") == VSCODE_ENTRY_WINDOWS_CONFIG
             for task in tasks["tasks"]),
-        f"checked-in example {entry['dir']} omits Windows task commands",
+        f"checked-in example {name} omits Windows task commands",
     )
     require(
         settings.get("jaszczurhal.vscodeEntryWindows", "").endswith("jh-vscode.cmd"),
-        f"checked-in example {entry['dir']} omits the Windows launcher setting",
+        f"checked-in example {name} omits the Windows launcher setting",
     )
     require(
         settings.get("cortex-debug.gdbPath.linux") == "gdb-multiarch",
-        f"checked-in example {entry['dir']} omits Linux Arm GDB selection",
+        f"checked-in example {name} omits Linux Arm GDB selection",
     )
     require(
         settings.get("cmake.generator") == "Ninja",
-        f"checked-in example {entry['dir']} omits the CMake Tools generator",
+        f"checked-in example {name} omits the CMake Tools generator",
     )
     require(
         settings.get("cmake.buildDirectory")
         == f"{build_dir}/cmake-tools/{target}-{board}",
-        f"checked-in example {entry['dir']} does not isolate the CMake Tools cache",
+        f"checked-in example {name} does not isolate the CMake Tools cache",
     )
     configure_settings = settings.get("cmake.configureSettings")
     require(
         isinstance(configure_settings, dict),
-        f"checked-in example {entry['dir']} omits CMake Tools configure settings",
+        f"checked-in example {name} omits CMake Tools configure settings",
     )
     required_settings = {
         "JH_ROOT": "${workspaceFolder}/../..",
         "JH_PROJECT_DIR": "${workspaceFolder}",
-        "JH_MODULE_NAME": str(entry.get("module") or entry["dir"]),
+        "JH_MODULE_NAME": str(manifest["module"]),
         "JH_TARGET": target,
         "JH_BOARD": board,
         "JH_ARTIFACT_DIR": build_dir,
@@ -605,35 +430,23 @@ for entry in examples_dispatcher.EXAMPLES:
     for key, expected in required_settings.items():
         require(
             configure_settings.get(key) == expected,
-            f"checked-in example {entry['dir']} has incorrect {key} for CMake Tools",
+            f"checked-in example {name} has incorrect {key} for CMake Tools",
         )
     if target.startswith("rp"):
         require(
             configure_settings.get("PICO_SDK_PATH")
             == "${workspaceFolder}/../../third_party/pico-sdk",
-            f"checked-in example {entry['dir']} omits PICO_SDK_PATH for CMake Tools",
+            f"checked-in example {name} omits PICO_SDK_PATH for CMake Tools",
         )
     elif target == "stm32g474":
         require(
             configure_settings.get("CMAKE_TOOLCHAIN_FILE")
             == "${workspaceFolder}/../../link_libraries/stm32_lib/toolchain_stm32g474.cmake",
-            f"checked-in example {entry['dir']} omits the STM32 toolchain for CMake Tools",
-        )
-    if entry.get("sources"):
-        require(
-            configure_settings.get("JH_PROJECT_SOURCES")
-            == ";".join(str(item) for item in entry["sources"]),
-            f"checked-in example {entry['dir']} omits project sources for CMake Tools",
-        )
-    if entry.get("extraDefines"):
-        require(
-            configure_settings.get("JH_EXTRA_DEFINES")
-            == ";".join(str(item) for item in entry["extraDefines"]),
-            f"checked-in example {entry['dir']} omits compile definitions for CMake Tools",
+            f"checked-in example {name} omits the STM32 toolchain for CMake Tools",
         )
     require(
         "${config:cortex-debug." not in launch_text,
-        f"checked-in example {entry['dir']} requires private Cortex-Debug settings",
+        f"checked-in example {name} requires private Cortex-Debug settings",
     )
 reference_tasks = load_json(ROOT / "vscode" / "examples" / "tasks.json")
 require(reference_tasks == expected_tasks, "checked-in VS Code task template drifted")

@@ -64,16 +64,19 @@ vscode/entry/jh-vscode upload \
   --target stm32g474 --board nucleo-g474re-canhat
 ```
 
-Dla wersji z FreeRTOS dodaj tymczasowy wpis cache do manifestu projektu
-(`.vscode/jaszczurhal.project.json`, `cmake.cache`):
+Wersję z FreeRTOS daje wariant `FREERTOS` (`HAL_ENABLE_FREERTOS=1`,
+`HAL_ENABLE_APP_TASK1=1`). Dodaj `--variant FREERTOS` do obu poleceń:
 
-```json
-"JH_EXTRA_DEFINES": "HAL_ENABLE_FREERTOS=1;HAL_ENABLE_APP_TASK1=1"
+```sh
+vscode/entry/jh-vscode upload \
+  --project tests/hardware/stm32_uart \
+  --target stm32g474 --board nucleo-g474re-canhat --variant FREERTOS
 ```
 
 Aby uruchomić profil `nucleo-g474re` (170 MHz) na Nucleo z nakładką, użyj
-`"JH_EXTRA_DEFINES": "UART_FIXTURE_HAT_RELAYS=1"`, żeby sterowanie
-przekaźników pozostało wyłączone.
+`--board nucleo-g474re --variant HAT_RELAYS`. Wariant definiuje
+`UART_FIXTURE_HAT_RELAYS=1`, więc sterowanie przekaźników pozostaje
+wyłączone.
 
 Opcjonalnie odczytaj słowa UID bez resetowania płytki:
 

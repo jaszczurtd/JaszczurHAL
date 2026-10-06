@@ -2,7 +2,7 @@
 
 *Dostępne również [po angielsku](../en/FwProjectWorkflow.md).*
 
-Ten rozdział opisuje tworzenie, konfigurowanie, kompilowanie i wgrywanie projektów firmware korzystających z JaszczurHAL. Te same zasady obowiązują w projektach użytkownika i przykładach z repozytorium. Omówiono manifest przechowywany w Git, wybór platformy i płytki, dodawanie źródeł, pliki generowane oraz rozdzielenie pamięci podręcznej CMake między konfiguracjami.
+Ten rozdział opisuje tworzenie, konfigurowanie, kompilowanie i wgrywanie projektów firmware korzystających z JaszczurHAL. Te same zasady obowiązują w projektach użytkownika i przykładach z repozytorium. Omówiono nagłówek projektu z listą platform i wariantów, manifest przechowywany w Git, wybór platformy i płytki, dodawanie źródeł, pliki generowane oraz rozdzielenie pamięci podręcznej CMake między konfiguracjami.
 
 Opis poleceń CLI i kontroli urządzenia przed wgrywaniem znajdziesz w [instrukcji narzędzia JaszczurHAL dla VS Code](../../vscode/README.pl.md). Pola deskryptorów i generowane metadane opisują [profile platform i płytek](boards_profiles_howto.md), a aktualizacje przez sieć - [instrukcja OTA](OTAWorkflow.md).
 
@@ -49,7 +49,7 @@ Wygenerowany `tasks.json` udostępnia wybór płytki w GUI lub terminalu, wykryw
 
 Zadanie terminala `Project: Select board` odczytuje rejestr przy każdym uruchomieniu. Wygenerowane zadania korzystają z ustawienia `jaszczurhal.vscodeEntry` w systemach Unix i zastępującego je `jaszczurhal.vscodeEntryWindows` w Windows. Ustawienia wskazują umieszczone obok siebie skrypty `jh-vscode` i `jh-vscode.cmd`, które uruchamiają ten sam kod Pythona.
 
-Aby sprawdzić lub odtworzyć pliki generowane przechowywane w repozytorium, w tym wspólne fragmenty konfiguracji i projekty przykładowe, uruchom:
+Aby sprawdzić lub odtworzyć pliki generowane przechowywane w repozytorium, w tym wspólne fragmenty konfiguracji i generowane pliki VS Code przykładów, uruchom:
 
 ```bash
 python3 scripts/sync_generated.py --check
@@ -67,7 +67,9 @@ Opcja `--install` wymaga potwierdzenia przed instalacją brakujących rozszerze�
 ## Podstawowe pojęcia
 
 - **Katalog projektu**: ścieżka przekazywana do `--project`, zwykle zapisana jako `JH_PROJECT_DIR`.
-- **Manifest**: plik `.vscode/jaszczurhal.project.json` przechowywany w Git.
+- **Nagłówek projektu**: `hal_project_config.h`, cała konfiguracja HAL projektu: funkcje, wartości odczytywane przez kompilację, platformy i warianty.
+- **Manifest**: plik `.vscode/jaszczurhal.project.json` przechowywany w Git, z ustawieniami narzędzi: ścieżkami, platformą, płytką, wgrywaniem, OTA, tożsamością USB i hookami.
+- **Wariant**: nazwana konfiguracja kompilacji zadeklarowana w nagłówku projektu; dodaje własne definicje do konfiguracji bazowej.
 - **Stan lokalny**: ignorowany przez Git plik `.vscode/jaszczurhal.local.json`, zawierający wybrane lokalnie platformę, płytkę i port szeregowy.
 - **Platforma docelowa (target)**: stały identyfikator konfiguracji kompilacji: `rp2040`, `rp2350-arm`, `rp2350-riscv`, `stm32g474`, `esp32`, `esp32s3` lub `mock`.
 - **Płytka (board)**: stały identyfikator profilu sprzętu, np. `pico`, `picow`, `pico2`, `pico2w`, `pico-rm2`, `rp2040-zero`, `rp2040-plus-4mb`, `nucleo-g474re`, `esp32-devkitc-v4` lub `waveshare-esp32-s3-zero`.
@@ -87,6 +89,10 @@ Platforma jest wybierana według następujących priorytetów, od najwyższego:
 2. `.vscode/jaszczurhal.local.json`;
 3. pole `target` w manifeście;
 4. `rp2040`.
+
+Gdy nagłówek deklaruje platformy, wybrana platforma musi być jedną z nich;
+w przeciwnym razie kompilacja kończy się błędem `[JH-CFG-TARGET]` (zobacz
+[platformy i warianty](#platformy-i-warianty)).
 
 Płytkę dla tej platformy wskazuje pierwsze z poniższych źródeł, które ją podaje:
 
@@ -118,7 +124,7 @@ Następnie ustawienia są łączone w poniższej kolejności. Wartości z późn
 5. opcje właściwe dla danej akcji, takie jak `--port`, `--host`, `--verbose` i
    `--allow-unverified-port`.
 
-Plik `.vscode/settings.json` zawiera ścieżki i ustawienia edytora. Tożsamość projektu, katalogi kompilacji, układ źródeł, profile platform, pliki wynikowe i ustawienia OTA zapisuj w manifeście. W samodzielnych projektach tworzonych przez `create-vscode-example.py` początkowe ustawienia wspólnej konfiguracji są dodatkowo kopiowane do `cmake.configureSettings`. Dzięki temu CMake Tools może skonfigurować projekt bez wywoływania `jh-vscode`.
+Plik `.vscode/settings.json` zawiera ścieżki i ustawienia edytora. Tożsamość projektu, katalogi kompilacji, dodatkowe ścieżki źródeł, profile platform, pliki wynikowe i ustawienia OTA zapisuj w manifeście, a konfigurację HAL w `hal_project_config.h`. W samodzielnych projektach tworzonych przez `create-vscode-example.py` początkowe ustawienia wspólnej konfiguracji są dodatkowo kopiowane do `cmake.configureSettings`. Dzięki temu CMake Tools może skonfigurować projekt bez wywoływania `jh-vscode`.
 
 Przed diagnozowaniem problemów z kompilacją lub wgrywaniem sprawdź pełną konfigurację po połączeniu wszystkich źródeł ustawień:
 
@@ -179,19 +185,25 @@ Wspólne ustawienia zapisuj w bazowym manifeście, a różnice między platforma
 ```json
 {
   "targetProfiles": {
+    "rp2350-arm": {
+      "board": "pico2w"
+    },
     "stm32g474": {
-      "board": "nucleo-g474re",
-      "cmake": {
-        "cache": {
-          "JH_EXTRA_DEFINES": "APP_STM32_BUILD=1"
-        }
-      }
+      "board": "nucleo-g474re"
     }
   }
 }
 ```
 
 Wybór ustalony na podstawie rejestru jest zawsze zapisywany w końcowych wartościach `JH_TARGET` i `JH_BOARD`.
+
+Manifest zawiera wyłącznie ustawienia narzędzi. `jh-vscode` i linter rejestru funkcji
+odrzucają z diagnostyką `[JH-CFG-MANIFEST]` usunięte pola `variants`
+i `example` oraz następujące klucze w `cmake.cache` lub
+`targetProfiles.<target>.cmake.cache`: `JH_EXTRA_DEFINES`, `EXTRA_HAL_DEFINES`,
+`JH_PROJECT_SOURCES`, `JH_VARIANT` i dowolne `HAL_ENABLE_*` lub
+`HAL_DISABLE_*`. Definicję zależną od platformy umieść w nagłówku, pod
+warunkiem `#if defined(HAL_TARGET_STM32G474)` lub podobnym.
 
 Dla ESP32-S3 użyj uproszczonego manifestu dostosowanego do ESP-IDF:
 
@@ -210,8 +222,8 @@ Rejestr platform i płytek dostarcza skrypt kompilacji, manifest plików wynikow
 
 ## Dodawanie plików źródłowych projektu
 
-Wspólny projekt CMake automatycznie wykrywa `*.c`, `*.cpp`, `*.h` i
-`*.hpp` bezpośrednio w `JH_PROJECT_DIR`.
+Wspólny projekt CMake kompiluje wszystkie pliki `*.c` i `*.cpp` leżące
+bezpośrednio w `JH_PROJECT_DIR`.
 
 ```text
 tracker/
@@ -221,33 +233,24 @@ tracker/
   gps_filter.h
 ```
 
-Jeżeli źródła znajdują się w podkatalogach, podaj ich pełną listę:
+Pliki z innych miejsc, w tym z podkatalogów projektu, dołącz przez
+`JH_EXTRA_SOURCES`, czyli listę ścieżek względem `JH_PROJECT_DIR` rozdzielonych
+średnikami:
 
 ```json
 {
   "cmake": {
     "cache": {
-      "JH_PROJECT_SOURCES": "app.cpp;hal_project_config.h;filters/gps.c;filters/gps.h"
-    }
-  }
-}
-```
-
-`JH_PROJECT_SOURCES` jest listą ścieżek względem `JH_PROJECT_DIR`, rozdzielonych średnikami. Jej podanie zastępuje automatyczne wykrywanie plików w katalogu głównym.
-
-Dodatkowe wspólne pliki można dołączyć przez `JH_EXTRA_SOURCES`:
-
-```json
-{
-  "cmake": {
-    "cache": {
-      "JH_EXTRA_SOURCES": "../common/product_identity.cpp"
+      "JH_EXTRA_SOURCES": "filters/gps.c;../common/product_identity.cpp"
     }
   }
 }
 ```
 
 Wspólna konfiguracja CMake normalizuje ścieżki i usuwa powtórzone wpisy.
+Wszystkie warianty kompilują ten sam zestaw plików. Wariant z inną aplikacją
+osłania jej pliki warunkiem, jak opisano w części
+[platformy i warianty](#platformy-i-warianty).
 
 Skrypt ESP-IDF wykrywa pliki C, C++ i asemblera w katalogu projektu oraz rekurencyjnie w `src/`. Przy bezpośrednim wywołaniu skryptu można zastąpić wykrywanie listą powtarzanych argumentów `--source <relative-path>`. Wszystkie wskazane pliki muszą znajdować się wewnątrz projektu.
 
@@ -255,7 +258,7 @@ Skrypt ESP-IDF wykrywa pliki C, C++ i asemblera w katalogu projektu oraz rekuren
 
 ## Wybór funkcji i konfiguracji wykonawczej
 
-Flagi funkcji projektu zapisuj w `hal_project_config.h`:
+Flagi funkcji i parametry aplikacji zapisuj w `hal_project_config.h`:
 
 ```c
 #pragma once
@@ -263,23 +266,14 @@ Flagi funkcji projektu zapisuj w `hal_project_config.h`:
 #define HAL_ENABLE_WIFI
 #define HAL_ENABLE_MQTT
 #define HAL_ENABLE_APP_TASK1
+#define APP_DIAGNOSTICS 1
+
+#if defined(HAL_TARGET_STM32G474)
+#define HAL_ENABLE_FREERTOS
+#endif
 ```
 
-Dla profili platform, wariantów kompilacji i CI można użyć `JH_EXTRA_DEFINES`:
-
-```json
-{
-  "cmake": {
-    "cache": {
-      "JH_EXTRA_DEFINES": "HAL_ENABLE_FREERTOS;APP_DIAGNOSTICS=1"
-    }
-  }
-}
-```
-
-Funkcję włącza zapis `HAL_ENABLE_X` albo `HAL_ENABLE_X=1`. Po ustaleniu aktywnego profilu platformy i wariantu wspólna konfiguracja oraz `jh-vscode` odrzucają `HAL_ENABLE_X=0` i inne jawne wartości, zgłaszając `[JH-CFG-VALUE]`. Aby wyłączyć funkcję, pomiń jej symbol.
-
-Ta reguła nie dotyczy zwykłych parametrów, takich jak `APP_DIAGNOSTICS=0`. Na listach definicji każdy wpis `HAL_ENABLE_*` musi być osobnym, prostym tokenem, a wpisy muszą być rozdzielone średnikami. Białe znaki nie są separatorami definicji. Wyrażenia generatora CMake nie są obsługiwane.
+Funkcję włącza zapis `HAL_ENABLE_X` albo `HAL_ENABLE_X=1`. Po ustaleniu aktywnej platformy i wariantu wspólna konfiguracja oraz `jh-vscode` odrzucają `HAL_ENABLE_X=0` i inne jawne wartości, zgłaszając `[JH-CFG-VALUE]`. Aby wyłączyć funkcję, pomiń jej symbol. Ta reguła nie dotyczy zwykłych parametrów, takich jak `APP_DIAGNOSTICS=0`.
 
 Deskryptor `esp32s3` wymaga `HAL_ENABLE_FREERTOS` i obsługuje peryferia oraz usługi sieciowe opisane w dokumentacji jako zakres faz 2 i 3. Zestaw obejmuje APP_TASK1, UART, tryby kontrolera i urządzenia podrzędnego I2C, SPI, PWM_FREQ, RGB_LED, PCNT, STACK_GUARD, BLE, WiFi, TCP/UDP, gniazda BSD, TLS, klienta i serwer HTTP, pliki HTTP, serwer WebSocket, MQTT, czas, OTA oraz WireGuard.
 
@@ -295,9 +289,114 @@ Reguły zależne od parametrów konfiguracji, systemu kompilacji, możliwości p
 
 Plik `hal_project_config.h` jest odczytywany przed automatycznym wykryciem platformy i utworzeniem pochodnych makr platformy oraz płytki. Umieszczaj w nim wyłącznie makra: bezpośrednie definicje `HAL_TARGET_*`, `HAL_BOARD_PROFILE_*`, `HAL_ENABLE_*` i parametrów konfiguracji. Nie dołączaj nagłówków JaszczurHAL ani nie uzależniaj zawartości od `HAL_TARGET_IS_*` / `HAL_BOARD_IS_*`.
 
-Definicje używane do wyboru źródeł muszą mieć bezwarunkową postać `#define HAL_ENABLE_X` lub `#define HAL_ENABLE_X 1`. Jedyny dozwolony wyjątek to osłona `#ifndef HAL_ENABLE_X` dotycząca tego samego symbolu. Żadne inne `#if`/`#ifdef`, również oparte na bezpośrednich lub pochodnych makrach platformy i płytki, nie są obsługiwane: na tym etapie narzędzie analizuje treść pliku, a nie wynik działania preprocesora.
+Wszystkie narzędzia odczytują nagłówek przez `scripts/project_config.py`, który przetwarza go tak jak preprocesor C dla wybranej platformy i wariantu. Warunki mogą korzystać z makra wybranej platformy (`HAL_TARGET_RP2040`, `HAL_TARGET_STM32G474` itd.), definicji wariantu, `defined()`, wyrażeń całkowitych i makr zdefiniowanych w samym nagłówku. Dyrektywa `#include "..."` w cudzysłowie szuka pliku względem pliku, który go dołącza. Jeżeli funkcja HAL albo wartość odczytywana przez kompilację, np. rozmiar stosu lub rezerwacji flash, zależy od identyfikatora, którego kompilacja nie przekazuje do kompilatora, także przez lokalny alias, kompilacja i linter rejestru funkcji kończą się błędem `[JH-CFG-SCOPE]`. To samo dotyczy takiej wartości obliczanej z nazwy, której nagłówek nie definiuje, np. `(PICO_FLASH_SIZE_BYTES / 256)`: tę wartość zna tylko kompilator, więc wpisz w nagłówku liczbę.
+
+Czytnik oblicza liczby całkowite ze znakiem, bez zawijania po 64 bitach.
+Warunki nie powinny zależeć od konwersji do liczb bez znaku ani przepełnienia.
+Ujemna liczba bitów w wykonywanym przesunięciu jest interpretowana według
+rozszerzenia GCC; Clang daje inny wynik. W przenośnych nagłówkach używaj
+nieujemnej liczby bitów. Operandy pominięte przez `&&`, `||` i `?:` są
+analizowane bez wykonywania ich działań arytmetycznych.
 
 Platformę i fizyczną płytkę wybieraj w polach `target` i `board`. Projekt określa połączenia aplikacji, tożsamość USB, sekrety, zasady podziału pamięci na partycje i włączone funkcje.
+
+<a id="platformy-i-warianty"></a>
+
+## Platformy i warianty
+
+`hal_project_config.h` deklaruje platformy, dla których projekt się kompiluje,
+oraz jego nazwane warianty za pomocą dwóch makr X:
+
+```c
+#pragma once
+
+#define JH_PROJECT_TARGETS(X)                                         \
+    X(HAL_TARGET_RP2040)                                              \
+    X(HAL_TARGET_STM32G474)
+
+#define JH_PROJECT_VARIANTS(X)                                        \
+    X(BENCH, "Bench firmware with test hooks", BENCH_TESTS=1)         \
+    X(DISPLAY, "Status display on ILI9341", APP_DISPLAY=1,            \
+      HAL_ENABLE_ILI9341, HAL_DISPLAY_ILI9341)
+
+#define HAL_ENABLE_I2C
+
+#if defined(APP_DISPLAY) && !defined(HAL_TARGET_STM32G474)
+#error "DISPLAY: STM32G474 only"
+#endif
+```
+
+`JH_PROJECT_TARGETS` wymienia makra platform: `HAL_TARGET_RP2040`,
+`HAL_TARGET_RP2350_ARM`, `HAL_TARGET_RP2350_RISCV`, `HAL_TARGET_STM32G474`,
+`HAL_TARGET_ESP32_S3` i `HAL_TARGET_ESP32`. Kompilacja dla platformy spoza
+tej listy kończy się błędem `[JH-CFG-TARGET]`. Bez tego makra platformami
+projektu są te skonfigurowane w manifeście: z pola `target` i kluczy
+`targetProfiles`.
+
+Każdy wpis `JH_PROJECT_VARIANTS` ma postać
+`X(id, "description", NAME[=VALUE], ...)`. Zapis ze spacjami, `NAME = VALUE`,
+taki jak po clang-format, też działa. Identyfikator składa się z wielkich
+liter, cyfr i `_` oraz zaczyna się literą, dzięki czemu tworzone z niego
+katalogi i nazwy modułów pozostają rozróżnialne także w systemach plików, które
+nie rozróżniają wielkości liter. Kompilacja przekazuje definicje wariantu do
+kompilatora jako `-D`, zarówno dla HAL, jak i dla aplikacji. Docierają więc
+przed nagłówkiem i uzupełniają konfigurację bazową, a nie ją zastępują.
+Nagłówek może je sprawdzać, tak jak `#error` w przykładzie powyżej: para
+platforma-wariant, która dochodzi do `#error`, nie jest kompilowana. Sama
+kompilacja kończy się wtedy błędem `[JH-CFG-ERROR]`, a dispatcher przykładów
+i linter rejestru funkcji pomijają tę parę.
+
+Oba makra zdefiniuj raz, bez warunków, bezpośrednio w `hal_project_config.h`,
+a nie w dołączanym pliku. Klasyczna osłona `#ifndef` obejmująca cały plik jest
+dozwolona.
+
+Wariant wybierasz przez `jh-vscode build --variant <id>` lub
+`jh-vscode upload --variant <id>`, w samym CMake przez `-DJH_VARIANT=<id>`,
+a w skrypcie ESP-IDF przez `--variant <id>`. W VS Code to samo robią
+wygenerowane zadania `Project: Build variant: <id>` i
+`Project: Upload variant: <id>`. `jh-vscode` kompiluje wariant jako moduł
+`<module>_<id>` do `<buildDir>/variants/<id>`, z własnym drzewem CMake
+i plikami wynikowymi. Wariant nigdy więc nie zastępuje firmware bazowego,
+także gdy manifest zostawia `JH_ARTIFACT_DIR` z wartością domyślną.
+
+Wszystkie warianty kompilują te same pliki źródłowe. Wariant z inną aplikacją
+trzyma ją w osobnym pliku, który najpierw dołącza `<hal/core/hal_config.h>`,
+a resztę treści obejmuje warunkiem na definicji wariantu. Aplikacja bazowa
+używa warunku przeciwnego:
+
+```c
+/* display_app.c */
+#include <hal/core/hal_config.h>
+
+#if defined(APP_DISPLAY)
+#include <hal/core/hal_app.h>
+
+void app_start(void) { /* ... */ }
+void app_task0(void) { /* ... */ }
+#endif
+```
+
+```c
+/* app.c */
+#include <hal/core/hal_config.h>
+
+#if !defined(APP_DISPLAY)
+#include <hal/core/hal_app.h>
+
+void app_start(void) { /* ... */ }
+void app_task0(void) { /* ... */ }
+#endif
+```
+
+Przykłady z repozytorium działają według tych samych zasad. Dispatcher
+przykładów wyświetla i kompiluje wszystkie zadeklarowane w nich konfiguracje:
+
+```bash
+scripts/examples_dispatcher.py list
+scripts/examples_dispatcher.py build --target rp2040 --example 01_core_runtime
+```
+
+Zobacz [przykłady JaszczurHAL](../../examples/README.pl.md).
 
 <a id="katalogi-budowania-i-pliki-generowane"></a>
 
@@ -367,13 +466,12 @@ Na ESP32-S3 zadanie `Project: Serial Monitor` wybiera jedno urządzenie zgodne z
 
 ## Konfiguracja manifestu OTA
 
-W projektach RP korzystających z CMake manifest wskazuje wygenerowany kontener OTA i jego metadane kompilacji oraz wspólne ustawienia połączenia OTA:
+OTA włącza `#define HAL_ENABLE_OTA` w `hal_project_config.h`. W projektach RP korzystających z CMake manifest wskazuje wygenerowany kontener OTA i jego metadane kompilacji oraz wspólne ustawienia połączenia OTA:
 
 ```json
 {
   "cmake": {
     "cache": {
-      "JH_EXTRA_DEFINES": "HAL_ENABLE_OTA",
       "JH_OTA_GENERATION": 7,
       "JH_OTA_VERSION": "1.4.0"
     }
@@ -395,22 +493,3 @@ Projekty ESP-IDF nie używają wpisów `cmake` i `artifacts.ota` przeznaczonych 
 `ota.broadcast` wskazuje adres wyszukiwania urządzeń przez UDP, a `ota.host` - stały adres konkretnego urządzenia. `ota.listenPort` określa port, na którym komputer oczekuje na zwrotne połączenie TCP i na odpowiedzi na wyszukiwanie urządzeń przez UDP. Domyślne `8266` odpowiada trwałym regułom zapory ograniczonym do LAN, tworzonym przez `runmefirst.sh`. Wartość `0` wybiera porty efemeryczne. `ota.passwordEnv` pozwala przechowywać sekret w zmiennej środowiskowej zamiast w manifeście śledzonym przez Git.
 
 Nazwa hosta urządzenia, port UDP i hasło muszą być zgodne z konfiguracją firmware. [Instrukcja OTA](OTAWorkflow.md) opisuje pliki wynikowe poszczególnych platform, pierwsze programowanie, zadania, uwierzytelnianie, zaporę komputera, potwierdzanie rozruchu próbnego, wycofanie aktualizacji i odzyskiwanie. Przy aktualizacji RP narzędzie podpisuje kontener JaszczurHAL. Przy aktualizacji ESP-IDF sprawdza manifest kompilacji i przesyła wskazany surowy obraz aplikacji bez konwersji do kontenera RP.
-
-## Przykłady i warianty
-
-Manifesty przykładów mogą zawierać `example.targets` i `example.variants`. Wariant może zastąpić nazwę modułu, źródła, definicje funkcji, obsługiwane platformy i wpisy pamięci podręcznej CMake.
-
-Warianty może też deklarować każdy projekt firmware, w tablicy `variants` na najwyższym poziomie manifestu, z tymi samymi polami; dany identyfikator może wystąpić tylko raz w obu listach. `--variant <id>` wybiera wariant, a wygenerowane zadania `Project: Build variant: <id>` i `Project: Upload variant: <id>` go uruchamiają. Wariant buduje się do `<buildDir>/variants/<id>`, z własnym drzewem CMake i artefaktami, więc nigdy nie zastępuje firmware bazowego, także gdy manifest zostawia `JH_ARTIFACT_DIR` domyślne. Jego `extraDefines` zastępują bazowe `JH_EXTRA_DEFINES`, więc lista musi zawierać wszystkie definicje potrzebne wariantowi.
-
-```json
-"variants": [
-  { "id": "bench", "module": "ECU", "extraDefines": ["BENCH_TESTS=1"] }
-]
-```
-
-```bash
-scripts/examples_dispatcher.py list
-scripts/examples_dispatcher.py build --target rp2040 --example 01_core_runtime
-```
-
-Wygenerowane manifesty przykładów są używane przez zestaw kontroli jakości jako dane wejściowe kompilacji. Zobacz [przykłady JaszczurHAL](../../examples/README.pl.md).

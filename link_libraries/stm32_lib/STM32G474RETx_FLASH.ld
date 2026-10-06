@@ -149,6 +149,16 @@ SECTIONS
     } >RAM AT> FLASH
     PROVIDE(__jh_stm32_flash_load_end = LOADADDR(.data) + SIZEOF(.data));
 
+    /* Consume CPU-only CCM inputs before the general .bss wildcard. */
+    .ccmram_bss (NOLOAD) :
+    {
+        . = ALIGN(8);
+        _sccmbss = .;
+        *(.bss.hal_cpu.ccm .bss.hal_cpu.ccm.*)
+        . = ALIGN(8);
+        _eccmbss = .;
+    } >CCMRAM
+
     .bss :
     {
         . = ALIGN(4);

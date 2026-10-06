@@ -28,6 +28,36 @@ This attribute alone does not permit calls while flash is unavailable.
 Measure the complete path and leave room for stacks and heap; RAM code
 consumes SRAM as well as its load image in flash.
 
+## Static buffers for CPU access
+
+`HAL_CPU_ONLY_BSS(name)` from `<hal/core/hal_memory.h>` lets the backend
+choose RAM for a static buffer that will never be passed to DMA:
+
+```c
+static uint8_t HAL_CPU_ONLY_BSS(work_buffer)[1024];
+```
+
+Use it at file scope without an initializer, or with an all-zero constant
+initializer. The buffer keeps its alignment and is zeroed before constructors
+run. Dynamic initialization is unsupported. Firmware builds use the object
+name in the input-section suffix so the linker can remove unused buffers.
+
+STM32G474 builds place these buffers in CCM when TLS is disabled. With TLS,
+they stay in SRAM, leaving CCM for the TLS provider. Both STM32 build helpers
+apply this policy; use the supported HAL linker and startup files. RP2040,
+RP2350 and ESP32 keep them in normal BSS, and mock builds use host storage.
+Ordinary SRAM is a valid mapping; the annotation grants no DMA access or
+synchronization. Check the ELF/map for the total RAM, heap and stack budget.
+
+## Assertions
+
+`HAL_ASSERT(cond, msg)` from `<hal/core/hal_assert.h>` checks `cond` once
+and calls `hal_assert_fail(msg)` on failure. RP and hardware STM32 builds
+print the message and stop in a loop; ESP32 and host builds print to stderr
+and call `abort()`. A `NULL` message is printed as `(null)`.
+Assertions are enabled by default. Defining `HAL_DISABLE_ASSERTS` removes
+the check, and neither argument is evaluated; keep side effects out of them.
+
 ## `hal_status` - Shared status codes
 
 ```c
@@ -509,7 +539,8 @@ Interval helpers run periodic work from a loop without blocking waits or a hardw
 
 **Concurrency:** RP and ESP32-S3 timing and watchdog APIs can be called from both cores. Feeding the STM32G474 watchdog is an atomic register write, but the application must serialize reconfiguration. In FreeRTOS on RP, STM32G474, and ESP32-S3, `hal_delay_ms()` blocks only the calling task when the context permits scheduler use. Before scheduler startup, in an ISR, or in a HAL critical section, it busy-waits instead. `hal_delay_us()` blocks the calling core. Mock state is intended for single-threaded tests.
 
-> **Note:** `COUNTOF(arr)` works only with statically-allocated arrays (not pointers).
+> **Note:** `COUNTOF(arr)` works with actual arrays, including local arrays.
+> A pointer, including an array parameter of a function, gives an incorrect count.
 
 > **Note:** `NONULL(x)` is a null-pointer guard for functions that use a shared
 > `error:` cleanup path. Uses `NULL` (safe in both C and C++ translation units).
@@ -1138,6 +1169,7 @@ Use common macros instead of repeating compiler-specific conditions. The header 
 #define HAL_COMPILER_IS_MSVC      0 or 1
 
 #define HAL_NORETURN          ...  // function never returns
+#define HAL_NO_STACK_PROTECTOR ... // omit stack-canary instrumentation
 #define HAL_FORCE_INLINE      ...  // inline specifier plus a forced-inline request
 #define HAL_TRAP()            ...  // stop immediately at an unrecoverable point
 #define HAL_UNREACHABLE()     ...  // path the program must never take
@@ -1192,15 +1224,52 @@ HAL_PACKED_END
 
 Writing `inline` next to `HAL_FORCE_INLINE` duplicates the specifier on GNU and raises C4141 on MSVC, so the macro carries it.
 
-The atomic macros support 1-, 2-, 4-, and 8-byte scalar values. C++ can use the scalar operations with object and function pointers; portable C code uses the dedicated object-pointer load and compare-exchange macros. Compare-exchange is strong: when it fails, it writes the observed value through `expected`. Use acquire or a weaker order for failure, never release or acquire-release. Load and store accept only the orderings allowed for those operation types.
+`HAL_NO_STACK_PROTECTOR` excludes a function from GCC/Clang stack-canary
+instrumentation; it is empty on other compilers. Use it only in the
+stack-protector runtime and its terminal fault/reset path, which must remain
+callable after detecting a damaged stack frame. Normal application functions
+keep the build's protection setting.
+
+`HAL_TRAP()` terminates execution: GCC/Clang emit a trap, MSVC breaks into the
+debugger and then aborts, and the portable fallback calls `abort()`.
+`HAL_UNREACHABLE()` tells GCC/Clang/MSVC that execution cannot reach this point;
+reaching it is undefined behavior. Use `HAL_TRAP()` when a failure can occur
+at runtime and needs a definite stop.
+
+The atomic macros support 1-, 2-, 4-, and 8-byte integer values, including
+`bool`. In C++, load, store, exchange and compare-exchange also support object
+and function pointers; portable C code uses the dedicated object-pointer load
+and compare-exchange macros. Arithmetic and bitwise operations take integers;
+test-and-set and clear take a `bool` or byte flag.
+
+| Macros | Result |
+| --- | --- |
+| `HAL_ATOMIC_LOAD`, `HAL_ATOMIC_POINTER_LOAD` | Loaded value |
+| `HAL_ATOMIC_EXCHANGE`, `HAL_ATOMIC_FETCH_ADD`, `HAL_ATOMIC_FETCH_SUB`, `HAL_ATOMIC_FETCH_OR` | Value before the update |
+| `HAL_ATOMIC_ADD_FETCH`, `HAL_ATOMIC_SUB_FETCH` | Value after the update |
+| `HAL_ATOMIC_COMPARE_EXCHANGE`, `HAL_ATOMIC_POINTER_COMPARE_EXCHANGE` | `true` on success; on failure, `false` and the observed value written through `expected` |
+| `HAL_ATOMIC_TEST_AND_SET` | Whether the flag was already set |
+| `HAL_ATOMIC_STORE`, `HAL_ATOMIC_CLEAR`, `HAL_ATOMIC_THREAD_FENCE` | No return value |
+
+Compare-exchange is strong. Its failure order accepts `HAL_ATOMIC_RELAXED`,
+`HAL_ATOMIC_ACQUIRE` or `HAL_ATOMIC_SEQ_CST` and must not be stronger than the
+success order. Load accepts those same three orders; store and clear accept
+`HAL_ATOMIC_RELAXED`, `HAL_ATOMIC_RELEASE` or `HAL_ATOMIC_SEQ_CST`.
 
 GNU and Clang map the calls directly to `__atomic_*`, preserving the requested compile-time ordering. The MSVC host path uses Interlocked intrinsics, which can provide a stronger barrier than requested. The STM32G474 Cortex-M4 file keeps the three 64-bit GNU runtime entry points required by the linker; normal HAL sources still use only this header. The cppcheck model in `config/tooling/cppcheck-atomics.cfg` lets value-flow analysis interpret atomic loads and compare-exchange conditions.
 
-Both identity macros can be pre-defined to `0`, which selects the portable fallback: `HAL_TRAP()` becomes `abort()`, `hal_clz32()` uses a loop, and the attribute macros expand to nothing. Atomic use is rejected at compile time because that branch cannot provide synchronization. The host compiler test builds one translation unit that way and compares its `hal_clz32()` against the builtin path, so the branch no real compiler selects stays covered. An exotic port can use the same switch before its own mapping exists.
+Both identity macros can be pre-defined to `0`, which selects the portable fallback: `HAL_TRAP()` becomes `abort()`, `hal_clz32()` uses a loop, attributes are omitted, and `HAL_FORCE_INLINE` keeps ordinary `inline`. Atomic use is rejected at compile time because that branch cannot provide synchronization. The host compiler test builds one translation unit that way and compares its `hal_clz32()` against the builtin path, so the branch no real compiler selects stays covered. An exotic port can use the same switch before its own mapping exists.
 
-**Out of scope by design:** linker-level attributes (`section`, `naked`, `constructor`) and inline assembly stay explicit at their target-specific call sites, where a wrong mapping would silently corrupt the memory map; vendored third-party sources keep their upstream form.
+Memory placement belongs to [`hal_memory`](#functions-in-ram).
+Other linker attributes (`naked`, `constructor`) and inline assembly stay
+explicit in their target code. Vendored third-party sources keep their
+upstream form.
 
-**Thread safety:** The attribute macros and `hal_clz32()` are stateless. Atomic operations synchronize only the object passed by the caller and only according to the selected memory ordering.
+**Thread safety:** The attribute macros and `hal_clz32()` are stateless.
+Atomic accesses protect the supplied object; the chosen ordering can also
+publish other data through a matching synchronization operation. A thread
+fence orders memory accesses without updating an object. Callers must arrange
+the synchronization and avoid concurrent non-atomic access to atomic storage.
 
 ### Examples
 

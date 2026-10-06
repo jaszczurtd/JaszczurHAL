@@ -2,27 +2,6 @@
     "$schema": "../../../vscode/schema/jh_vscode_project.schema.json",
     "project": "JaszczurHAL examples",
     "module": "04_sensor_hub",
-    "example": {
-        "targets": [
-            "stm32g474",
-            "esp32s3",
-            "rp2040",
-            "rp2350-arm",
-            "rp2350-riscv"
-        ],
-        "boards": {
-            "rp2040": "pico",
-            "rp2350-arm": "pico2",
-            "rp2350-riscv": "pico2",
-            "stm32g474": "nucleo-g474re",
-            "esp32s3": "waveshare-esp32-s3-zero"
-        },
-        "gateTargets": [
-            "stm32g474",
-            "esp32s3",
-            "rp2040"
-        ]
-    },
     "toolchain": "cmake",
     "target": "rp2040",
     "board": "pico",

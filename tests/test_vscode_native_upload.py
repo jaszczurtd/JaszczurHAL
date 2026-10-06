@@ -681,7 +681,7 @@ neutral_config = module.neutral_firmware_config(
             "cache": {
                 "JH_TARGET": "rp2040",
                 "PICO_BOARD": "pico",
-                "JH_EXTRA_DEFINES": "HAL_ENABLE_FREERTOS=1",
+                "JH_VARIANT": "FREERTOS",
                 "JH_USB_PRODUCT": "Named module",
             },
         },
@@ -699,7 +699,7 @@ assert neutral_cache["JH_TARGET"] == "rp2040"
 assert neutral_cache["PICO_BOARD"] == "pico"
 assert neutral_cache["JH_PROJECT_DIR"] == str(module.neutral_firmware_source_dir())
 assert neutral_cache["JH_MODULE_NAME"] == "neutral_identity"
-assert "JH_EXTRA_DEFINES" not in neutral_cache
+assert "JH_VARIANT" not in neutral_cache
 assert "JH_USB_PRODUCT" not in neutral_cache
 assert Path(neutral_config["artifacts"]["uf2"]).name == "firmware.uf2"
 
@@ -874,14 +874,14 @@ assert candidates == [str(new_mount)]
 with TemporaryDirectory() as temporary_dir:
     build_dir = Path(temporary_dir)
     empty_config = {"cmake": {"cache": {}}}
-    assert "-UJH_EXTRA_DEFINES" in module.removed_cmake_cache_args(
+    assert "-UJH_VARIANT" in module.removed_cmake_cache_args(
         empty_config, build_dir
     )
 
     configured = {
         "cmake": {
             "cache": {
-                "JH_EXTRA_DEFINES": "HAL_ENABLE_FREERTOS=1",
+                "JH_VARIANT": "FREERTOS",
                 "JH_CUSTOM_OPTION": "enabled",
             }
         }
@@ -890,7 +890,7 @@ with TemporaryDirectory() as temporary_dir:
     assert module.removed_cmake_cache_args(configured, build_dir) == []
 
     removed = module.removed_cmake_cache_args(empty_config, build_dir)
-    assert "-UJH_EXTRA_DEFINES" in removed
+    assert "-UJH_VARIANT" in removed
     assert "-UJH_CUSTOM_OPTION" in removed
 
     payload = b"native-rp-ota-payload"

@@ -99,7 +99,7 @@ endforeach()
 
 foreach(_stm32_mdns_contract IN ITEMS
         "HAL_ENABLE_OTA \${_feature_defines}|OTA \"\${_stm32_has_ota}\""
-        "HAL_ENABLE_OTA \${_jh_stm32_selection_defines}|OTA \"\${_jh_stm32_has_ota}\"")
+        "HAL_ENABLE_OTA \${JH_RESOLVED_FEATURES}|OTA \"\${_jh_stm32_has_ota}\"")
     string(REPLACE "|" ";" _stm32_mdns_parts
         "${_stm32_mdns_contract}")
     list(GET _stm32_mdns_parts 0 _stm32_ota_detection)

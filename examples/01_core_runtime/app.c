@@ -3,6 +3,10 @@
  * Software timers schedule the work; a separate timer counts 250 ms intervals.
  */
 
+#include <hal/core/hal_config.h>
+
+#if !defined(HAL_ENABLE_PULSE_CAPTURE)
+
 #include <hal/control/hal_pid_controller.h>
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_array.h>
@@ -162,3 +166,5 @@ void app_task0(void) {
 
   hal_idle();
 }
+
+#endif /* !defined(HAL_ENABLE_PULSE_CAPTURE) */

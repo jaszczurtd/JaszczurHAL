@@ -7,8 +7,8 @@ receiver named `JaszczurHAL Speaker`. It accepts SBC audio at 44.1 or 48 kHz
 in mono, stereo, or joint-stereo mode, decodes it to signed mono PCM, and
 plays it through PWM on GP6. A timer and DMA control sample delivery.
 
-The base version supports A2DP. The `avrcp` variant adds absolute volume
-control, while `ble-a2dp` compiles BLE and Classic/A2DP support together
+The base version supports A2DP. The `AVRCP` variant adds absolute volume
+control, while `BLE_A2DP` compiles BLE and Classic/A2DP support together
 for the shared CYW43 controller. This example is available only for RP
 boards.
 
@@ -46,9 +46,9 @@ Run from the repository root:
   --example 30_bluetooth_speaker
 
 vscode/entry/jh-vscode build --project examples/30_bluetooth_speaker \
-  --target rp2040 --board picow --variant avrcp
+  --target rp2040 --board picow --variant AVRCP
 vscode/entry/jh-vscode build --project examples/30_bluetooth_speaker \
-  --target rp2350-arm --board pico2w --variant ble-a2dp
+  --target rp2350-arm --board pico2w --variant BLE_A2DP
 ```
 
 ## Pair and play audio

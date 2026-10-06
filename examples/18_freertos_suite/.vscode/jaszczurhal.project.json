@@ -2,73 +2,17 @@
     "$schema": "../../../vscode/schema/jh_vscode_project.schema.json",
     "project": "JaszczurHAL examples",
     "module": "18_freertos_suite",
-    "example": {
-        "targets": [
-            "rp2040",
-            "rp2350-arm",
-            "rp2350-riscv",
-            "stm32g474",
-            "esp32s3"
-        ],
-        "boards": {
-            "rp2040": "picow",
-            "rp2350-arm": "pico2w",
-            "rp2350-riscv": "pico2",
-            "stm32g474": "nucleo-g474re-pim730",
-            "esp32s3": "waveshare-esp32-s3-zero"
-        },
-        "gateTargets": [
-            "rp2040",
-            "stm32g474",
-            "esp32s3"
-        ],
-        "variants": [
-            {
-                "id": "network",
-                "module": "18_freertos_network",
-                "sources": [
-                    "network_app.c"
-                ],
-                "targets": [
-                    "rp2040",
-                    "rp2350-arm",
-                    "stm32g474",
-                    "esp32s3"
-                ],
-                "extraDefines": [
-                    "HAL_ENABLE_BSD_SOCKETS",
-                    "HAL_ENABLE_CJSON",
-                    "HAL_ENABLE_HTTP_CLIENT",
-                    "HAL_ENABLE_HTTP_FILES",
-                    "HAL_ENABLE_HTTP_SERVER",
-                    "HAL_ENABLE_NET_COMMANDS",
-                    "HAL_ENABLE_NET_CONSOLE",
-                    "HAL_ENABLE_NOTIFY_TELEGRAM",
-                    "HAL_ENABLE_TIME",
-                    "HAL_ENABLE_TLS",
-                    "HAL_ENABLE_WEBSOCKET",
-                    "HAL_ENABLE_WIFI",
-                    "HAL_FREERTOS_TASK0_STACK=1536",
-                    "HAL_FREERTOS_TASK1_STACK=384",
-                    "HAL_HTTP_SERVER_MAX_CLIENTS=1",
-                    "HAL_NET_CONSOLE_MAX_CLIENTS=1",
-                    "HAL_TCP_LISTENER_MAX_INSTANCES=4",
-                    "HAL_TCP_LISTENER_BACKLOG_MAX=2",
-                    "HAL_TCP_SOCKET_MAX_INSTANCES=6",
-                    "HAL_TLS_MAX_CLIENTS=1",
-                    "HAL_WEBSOCKET_MAX_CLIENTS=1"
-                ],
-                "gateTargets": [
-                    "rp2040",
-                    "stm32g474",
-                    "esp32s3"
-                ]
-            }
-        ]
-    },
     "toolchain": "cmake",
     "target": "rp2040",
     "board": "picow",
+    "targetProfiles": {
+        "rp2350-arm": {
+            "board": "pico2w"
+        },
+        "stm32g474": {
+            "board": "nucleo-g474re-pim730"
+        }
+    },
     "buildDir": "${jhRoot}/.build/examples/18_freertos_suite",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {
@@ -76,8 +20,7 @@
         "cache": {
             "JH_ARTIFACT_DIR": "${buildDir}",
             "JH_PROJECT_DIR": "${project}",
-            "JH_MODULE_NAME": "18_freertos_suite",
-            "JH_PROJECT_SOURCES": "app.c"
+            "JH_MODULE_NAME": "18_freertos_suite"
         }
     },
     "artifacts": {

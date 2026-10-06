@@ -48,11 +48,8 @@ GENERATOR_STEPS = (
     ),
     GeneratorStep(
         "example VS Code files",
-        (
-            ("scripts/examples_dispatcher.py", "generate-template"),
-            ("scripts/examples_dispatcher.py", "generate"),
-        ),
-        (("scripts/examples_dispatcher.py", "check-template"),),
+        (("scripts/examples_dispatcher.py", "generate"),),
+        (("scripts/examples_dispatcher.py", "check"),),
     ),
     GeneratorStep(
         "root VS Code files",

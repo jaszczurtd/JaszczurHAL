@@ -2,17 +2,6 @@
     "$schema": "../../../vscode/schema/jh_vscode_project.schema.json",
     "project": "JaszczurHAL examples",
     "module": "21_stm32g474_fdcan_native",
-    "example": {
-        "targets": [
-            "stm32g474"
-        ],
-        "boards": {
-            "stm32g474": "nucleo-g474re-canhat"
-        },
-        "gateTargets": [
-            "stm32g474"
-        ]
-    },
     "toolchain": "cmake",
     "target": "stm32g474",
     "board": "nucleo-g474re-canhat",

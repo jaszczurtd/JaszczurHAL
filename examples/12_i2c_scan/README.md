@@ -20,10 +20,10 @@ The PB9/PB8 connection was previously tested with PCF8563 (`0x51`) and
 DS3231 (`0x68`) modules. This scanner uses 100 kHz;
 `examples/16_rtc_backends` uses the same connection at 400 kHz.
 
-**Configuration scope:** the manifest also lists RP targets, but `app.c`
-hard-codes pins `25u`/`24u` and STM32G474 diagnostic text. On STM32 those
-values mean PB9/PB8. Check the pin configuration before running on RP;
-a target listed in the manifest is not evidence that this wiring works on it.
+**Configuration scope:** `hal_project_config.h` also declares RP targets, but
+`app.c` hard-codes pins `25u`/`24u` and STM32G474 diagnostic text. On STM32
+those values mean PB9/PB8. Check the pin configuration before running on RP;
+a declared target is not evidence that this wiring works on it.
 
 ## Hardware wiring
 

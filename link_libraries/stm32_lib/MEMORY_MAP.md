@@ -10,12 +10,17 @@ FreeRTOS backends. The authoritative source is
 |---|---:|---:|---|
 | Internal flash | `0x08000000` - `0x08080000` | 512 KB | STM32G474RE |
 | SRAM1 + SRAM2 | `0x20000000` - `0x20018000` | 96 KB | STM32G474RE |
-| CCM SRAM | `0x10000000` - `0x10008000` | 32 KB | CPU-only `.ccmram`, including emergency fault stack |
+| CCM SRAM | `0x10000000` - `0x10008000` | 32 KB | CPU-only BSS, TLS workspace, emergency fault stack |
 
 Normal heap and application-stack allocation stays in the 96 KB SRAM window at
 `0x20000000`. CPU-only objects may use `.ccmram`; fault handling reserves a
 512-byte emergency stack there so diagnostics do not continue on an exhausted
-main stack. The switch happens after Cortex-M exception entry; if the core
+main stack. `HAL_CPU_ONLY_BSS(name)` uses the separately zeroed `.ccmram_bss`
+section when TLS is disabled. Both STM32 CMake helpers keep these objects in
+ordinary SRAM when `HAL_ENABLE_TLS` is enabled, leaving CCM for TLS storage.
+The direct `0x10000000` mapping is for CPU access. The device also has a DMA
+alias at `0x20018000`; the HAL keeps it outside the normal SRAM allocation.
+The switch happens after Cortex-M exception entry; if the core
 cannot create even the initial exception frame on an exhausted MSP, software
 cannot guarantee capture without a larger Thread-mode PSP redesign.
 
@@ -44,8 +49,8 @@ programs its publication prefix after the verified body. By
 default no flash is reserved for LittleFS, so enabling `HAL_ENABLE_LITTLEFS`
 must be paired with a non-zero `HAL_STM32_FLASH_LITTLEFS_SIZE` at compile and
 link time. The STM32 CMake helpers automatically reserve 64 KB when
-`HAL_ENABLE_LITTLEFS` is passed through `EXTRA_HAL_DEFINES` and no explicit
-LittleFS size is provided.
+`HAL_ENABLE_LITTLEFS` is enabled (in `hal_project_config.h` or
+`EXTRA_HAL_DEFINES`) and no explicit LittleFS size is provided.
 
 The linker exports:
 
@@ -92,6 +97,8 @@ Important symbols and sections:
 | `_estack` | `ORIGIN(RAM) + LENGTH(RAM)` | Initial MSP; default `0x20018000` |
 | `.data` | RAM, loaded from flash | Initialized globals copied by `Reset_Handler` |
 | `.bss` | RAM | Zeroed globals |
+| `.ccmram_bss` | CCMRAM | CPU-only globals, zeroed before constructors |
+| `_sccmbss` / `_eccmbss` | CCMRAM | Bounds of the startup zeroing range |
 | `.noinit` | RAM | Retained across reset; used for fault handoff data |
 | `.ccmram.jh_fault_stack` | CCMRAM | 512-byte emergency fault-handler stack |
 | `end` / `_end` | after `.noinit` | Heap base used by `_sbrk` |
@@ -156,6 +163,8 @@ RAM-backed sections:
 ```text
 .data        -> RAM, initialized from flash
 .bss         -> RAM
+.ccmram_bss  -> CCMRAM, zeroed at startup
+.ccmram      -> CCMRAM, initialized by its owner
 .noinit      -> RAM, retained across reset
 heap         -> RAM, grows upward from end/_end
 stack        -> RAM, grows downward from _estack

@@ -1,3 +1,7 @@
+#include <hal/core/hal_config.h>
+
+#if !defined(JH_BLUETOOTH_STAGE1_WIFI_ONLY)
+
 #include <hal/bluetooth/jh_bluetooth_stage1_probe.h>
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_status.h>
@@ -56,3 +60,5 @@ void app_task0(void) {
   }
   hal_delay_ms(1u);
 }
+
+#endif /* !defined(JH_BLUETOOTH_STAGE1_WIFI_ONLY) */

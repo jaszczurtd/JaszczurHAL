@@ -104,12 +104,11 @@ reservation from firmware.
 STM32 linker script. The
 default reservation is `HAL_STM32_FLASH_EEPROM_SIZE = 4096` bytes, with
 `HAL_STM32_FLASH_PAGE_SIZE = 2048` bytes. This reduces the flash available for
-application code by 4 KB. To change it, set `HAL_STM32_FLASH_EEPROM_SIZE` as a
-build define (`EXTRA_HAL_DEFINES` for the library build, the project's defines
-for a firmware project) to a multiple of the flash page size; the build passes
-the same value to the linker. Each `hal_kv` bank takes half of the reservation.
-A size set only in `hal_project_config.h` reaches the compiler but not the
-linker, and the link stops with an error.
+application code by 4 KB. To change it, set `HAL_STM32_FLASH_EEPROM_SIZE` to a
+multiple of the flash page size in `hal_project_config.h`, directly or through
+a variant, or as `-D`/`EXTRA_HAL_DEFINES` for a static library build. The build
+reads the value through the project configuration reader and passes the same
+value to the linker. Each `hal_kv` bank takes half of the reservation.
 
 The STM32 linker also supports a separate LittleFS reservation before EEPROM.
 Keep `HAL_STM32_FLASH_EEPROM_SIZE` and `HAL_STM32_FLASH_LITTLEFS_SIZE`
@@ -496,8 +495,7 @@ and must be a multiple of `HAL_STM32_FLASH_PAGE_SIZE` (2048 bytes). The size
 may be zero when the backend is compiled but not used; a nonzero reservation
 must contain at least two pages. Mounting an empty partition fails safely. The
 STM32 CMake helpers reserve 64 KB automatically when
-`HAL_ENABLE_LITTLEFS` is passed through their define lists and no explicit
-size is provided.
+`HAL_ENABLE_LITTLEFS` is enabled and no explicit size is provided.
 
 LittleFS erase block size is one STM32 flash page; program granularity is one
 STM32 doubleword (8 bytes). EEPROM/KV and LittleFS flash mutations share one

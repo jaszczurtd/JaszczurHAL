@@ -2,63 +2,17 @@
     "$schema": "../../../vscode/schema/jh_vscode_project.schema.json",
     "project": "JaszczurHAL examples",
     "module": "26_ble_stream",
-    "example": {
-        "targets": [
-            "rp2040",
-            "rp2350-arm",
-            "stm32g474"
-        ],
-        "boards": {
-            "rp2040": "picow",
-            "rp2350-arm": "pico2w",
-            "stm32g474": "nucleo-g474re-pim730"
-        },
-        "gateTargets": [
-            "rp2040",
-            "rp2350-arm",
-            "stm32g474"
-        ],
-        "variants": [
-            {
-                "id": "commands",
-                "module": "26_ble_stream_commands",
-                "targets": [
-                    "rp2040",
-                    "rp2350-arm",
-                    "stm32g474"
-                ],
-                "gateTargets": [
-                    "rp2040"
-                ],
-                "extraDefines": [
-                    "HAL_ENABLE_BLE_COMMANDS=1",
-                    "HAL_ENABLE_CRC=1",
-                    "HAL_BLE_STREAM_EXAMPLE_COMMANDS=1"
-                ]
-            },
-            {
-                "id": "commands-freertos",
-                "module": "26_ble_stream_commands_freertos",
-                "targets": [
-                    "rp2040",
-                    "rp2350-arm",
-                    "stm32g474"
-                ],
-                "gateTargets": [
-                    "rp2040"
-                ],
-                "extraDefines": [
-                    "HAL_ENABLE_BLE_COMMANDS=1",
-                    "HAL_ENABLE_CRC=1",
-                    "HAL_BLE_STREAM_EXAMPLE_COMMANDS=1",
-                    "HAL_ENABLE_FREERTOS=1"
-                ]
-            }
-        ]
-    },
     "toolchain": "cmake",
     "target": "rp2040",
     "board": "picow",
+    "targetProfiles": {
+        "rp2350-arm": {
+            "board": "pico2w"
+        },
+        "stm32g474": {
+            "board": "nucleo-g474re-pim730"
+        }
+    },
     "buildDir": "${jhRoot}/.build/examples/26_ble_stream",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

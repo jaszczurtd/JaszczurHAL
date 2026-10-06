@@ -27,24 +27,24 @@ ELF/map oraz dokładną płytkę/okablowanie testowane. Przebieg STM32
 dodatkowo sprawdza, czy na zmontowanym stanowisku sygnał `BT_ON` modułu PIM730
 nadal jest połączony z `WL_ON`.
 
-Wariant `bluetooth` służy do właściwego testu, a `wifi-only` jest równoważnym
-punktem odniesienia dla pomiaru pamięci. Oba warianty należy mierzyć na
-podstawie plików ELF/map, przy tym samym układzie docelowym, tej samej płytce,
-wersji kompilatora i konfiguracji kompilacji.
+Kompilacja podstawowa służy do właściwego testu, a wariant `WIFI_ONLY` jest
+równoważnym punktem odniesienia dla pomiaru pamięci. Oba obrazy należy mierzyć
+na podstawie plików ELF/map, przy tym samym układzie docelowym, tej samej
+płytce, wersji kompilatora i konfiguracji kompilacji.
 
-Obraz `wifi-only` nie zawiera BTstack, firmware Bluetooth ani pul Bluetooth
+Obraz `WIFI_ONLY` nie zawiera BTstack, firmware Bluetooth ani pul Bluetooth
 na współdzielonej magistrali.
 
 Zbuduj sondę dla każdej płytki, a następnie powtórz kompilację z
-`--variant wifi-only`, aby uzyskać punkt odniesienia:
+`--variant WIFI_ONLY`, aby uzyskać punkt odniesienia:
 
 ```sh
 vscode/entry/jh-vscode build \
   --project tests/hardware/bluetooth_stage1 \
-  --target stm32g474 --board nucleo-g474re-pim730 --variant bluetooth
+  --target stm32g474 --board nucleo-g474re-pim730
 vscode/entry/jh-vscode build \
   --project tests/hardware/bluetooth_stage1 \
-  --target rp2040 --board picow --variant bluetooth
+  --target rp2040 --board picow
 ```
 
 ## Podetap sprzętowy 1.a - okablowanie i procedura
@@ -66,6 +66,6 @@ przecięcia ścieżka łącząca `BT_ON` z `WL_ON` na PIM730 jest nienaruszona.
 Wyprowadzenia `BT_ON` i `BL_ON` pozostaw niepodłączone. Dopiero po sprawdzeniu
 okablowania i ścieżki wgraj obraz Bluetooth STM32 przez ST-Link płytki Nucleo.
 Przed sprawdzeniem wykrywania urządzenia, połączenia, odczytu i zapisu
-charakterystyki, ponownego połączenia oraz regresji wariantu `wifi-only`
+charakterystyki, ponownego połączenia oraz regresji wariantu `WIFI_ONLY`
 zarejestruj cykliczne komunikaty `JHBT1`. Drugim profilem sprzętowym jest test
 radia wbudowanego w Pico W.

@@ -34,7 +34,6 @@ Options:
   --picotool-build-dir PATH
                            picotool build directory below .build/
   --example NAME           Build examples/NAME through the native app entry
-  --example-source FILE    Select one source from the example (repeatable)
   --freertos               Enable the pinned native FreeRTOS SMP kernel
   --all-features           Enable every feature supported by the target
   --library-only           Build only the linkable libJaszczurHAL.a archive
@@ -55,7 +54,6 @@ TOOLCHAIN_DIR=""
 PICOTOOL_DIR="${REPO_ROOT}/third_party/picotool"
 PICOTOOL_BUILD_DIR="${JH_PICOTOOL_BUILD_DIR:-${REPO_ROOT}/.build/tools/picotool}"
 EXAMPLE=""
-EXAMPLE_SOURCES=()
 PROJECT_CONFIG_DIR=""
 EXTRA_DEFS=()
 FREERTOS=0
@@ -74,7 +72,6 @@ while [[ $# -gt 0 ]]; do
         --picotool-dir) PICOTOOL_DIR="$2"; shift 2 ;;
         --picotool-build-dir) PICOTOOL_BUILD_DIR="$2"; shift 2 ;;
         --example) EXAMPLE="$2"; shift 2 ;;
-        --example-source) EXAMPLE_SOURCES+=("$2"); shift 2 ;;
         --freertos) FREERTOS=1; shift ;;
         --all-features) ALL_FEATURES=1; FREERTOS=1; shift ;;
         --library-only) LIBRARY_ONLY=1; shift ;;
@@ -146,15 +143,6 @@ if [[ -n "${EXAMPLE}" ]]; then
         die "--example uses its own hal_project_config.h; remove -p or select ${APP_DIR}"
     fi
 fi
-if [[ ${#EXAMPLE_SOURCES[@]} -gt 0 ]]; then
-    [[ -n "${APP_DIR}" ]] || die "--example-source requires --example"
-    for source in "${EXAMPLE_SOURCES[@]}"; do
-        if [[ -z "${source}" || "${source}" == */* || "${source}" == "." ||
-              "${source}" == ".." || ! -f "${APP_DIR}/${source}" ]]; then
-            die "Example source must be a file directly under ${APP_DIR}: ${source}"
-        fi
-    done
-fi
 if [[ ${LIBRARY_ONLY} -eq 1 && -n "${APP_DIR}" ]]; then
     die "--library-only cannot be combined with --example"
 fi
@@ -216,10 +204,6 @@ if [[ -n "${PROJECT_CONFIG_DIR}" ]]; then
 fi
 if [[ -n "${APP_DIR}" ]]; then
     CMAKE_ARGS+=("-DJH_RP_PICO_APP_DIR=${APP_DIR}")
-fi
-if [[ ${#EXAMPLE_SOURCES[@]} -gt 0 ]]; then
-    joined_sources="$(IFS=';'; echo "${EXAMPLE_SOURCES[*]}")"
-    CMAKE_ARGS+=("-DJH_RP_PICO_APP_SOURCES=${joined_sources}")
 fi
 if [[ ${#EXTRA_DEFS[@]} -gt 0 ]]; then
     joined="$(IFS=';'; echo "${EXTRA_DEFS[*]}")"

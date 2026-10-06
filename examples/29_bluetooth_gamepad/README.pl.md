@@ -10,9 +10,9 @@ odczytywać surowe raporty HID albo skanować BLE podczas pracy gamepada.
 | Wariant | Działanie |
 |---|---|
 | Podstawowy | Łączy gamepad, odczytuje stan wejść i zapisuje zaakceptowane urządzenie do ponownego połączenia po restarcie. |
-| `classic-scan` | Wykrywa urządzenia Classic i ich usługi za pomocą inquiry oraz SDP. |
-| `hid-host` | Łączy się z wykrytą usługą HID, kopiuje deskryptor i odbiera surowe raporty, bez interpretowania ich jako stanu gamepada. |
-| `ble` | Dodaje pasywne skanowanie BLE do obsługi gamepada Classic na wspólnym kontrolerze CYW43. |
+| `CLASSIC_SCAN` | Wykrywa urządzenia Classic i ich usługi za pomocą inquiry oraz SDP. |
+| `HID_HOST` | Łączy się z wykrytą usługą HID, kopiuje deskryptor i odbiera surowe raporty, bez interpretowania ich jako stanu gamepada. |
+| `BLE` | Dodaje pasywne skanowanie BLE do obsługi gamepada Classic na wspólnym kontrolerze CYW43. |
 
 ## Kompilacja i uruchomienie
 
@@ -36,13 +36,13 @@ Wskazany wariant można zbudować osobno:
 ```bash
 vscode/entry/jh-vscode build \
   --project examples/29_bluetooth_gamepad \
-  --target rp2040 --board picow --variant classic-scan
+  --target rp2040 --board picow --variant CLASSIC_SCAN
 vscode/entry/jh-vscode build \
   --project examples/29_bluetooth_gamepad \
-  --target rp2040 --board picow --variant hid-host
+  --target rp2040 --board picow --variant HID_HOST
 vscode/entry/jh-vscode build \
   --project examples/29_bluetooth_gamepad \
-  --target rp2040 --board picow --variant ble
+  --target rp2040 --board picow --variant BLE
 ```
 
 Implementacja oparta na Bluedroid dla oryginalnego ESP32 ma osobny projekt
@@ -74,7 +74,7 @@ przez obraz doomConsole do testów regresji na sprzęcie.
 
 ## Wykrywanie urządzeń i usług
 
-Wariant `classic-scan` po starcie wykonuje dziesięciosekundowe wyszukiwanie
+Wariant `CLASSIC_SCAN` po starcie wykonuje dziesięciosekundowe wyszukiwanie
 inquiry. Po jego zakończeniu kolejno odpytuje urządzenia o usługi przez SDP.
 Każdemu wykrytemu urządzeniu nadaje tymczasowy indeks `n`; nie wypisuje
 adresów Bluetooth.
@@ -96,7 +96,7 @@ profilu. Samo wykrycie urządzenia ani wywołanie `SAVE` nie zastępuje tej ocen
 
 ## Odbiór surowych raportów HID
 
-Wariant `hid-host` wybiera wykrytą usługę HID i udostępnia aplikacji kopię
+Wariant `HID_HOST` wybiera wykrytą usługę HID i udostępnia aplikacji kopię
 deskryptora oraz surowe raporty. Żądanie parowania pozostaje do decyzji
 operatora: konsola udostępnia `AUTHORIZE` i `REJECT`. Dodatkowe polecenia to
 `SCAN` i `INFO`. Samo wykrycie usługi nie zatwierdza parowania; w tej implementacji zgodę
@@ -127,7 +127,7 @@ stanu oraz obsługę przepełnienia kolejki.
 
 ## Równoczesna obsługa BLE i Classic
 
-Wariant `ble` skanuje pasywnie jako BLE Observer; nie ogłasza usługi BLE.
+Wariant `BLE` skanuje pasywnie jako BLE Observer; nie ogłasza usługi BLE.
 Podczas startu zamyka i ponownie otwiera każdy profil, gdy drugi nadal
 korzysta ze wspólnego kontrolera CYW43 i stosu BTstack. Polecenia `INFO`,
 `BLE_START`, `BLE_STOP` oraz `DISCONNECT` służą do sprawdzenia skanowania

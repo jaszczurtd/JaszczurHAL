@@ -11,9 +11,10 @@ jh_require_managed_build_dir()
 #                       stm32g474 (default: rp2040)
 #     JH_PROJECT_DIR  = <the project's source dir> (required)
 #     JH_MODULE_NAME  = firmware/sketch name      (optional; default: dir name)
+#     JH_VARIANT      = a variant from JH_PROJECT_VARIANTS (optional)
 # plus target-specific cache (PICO_PLATFORM/PICO_SDK_PATH for RP or
-# CMAKE_TOOLCHAIN_FILE for stm32g474) and
-# any project DEFINES/options.
+# CMAKE_TOOLCHAIN_FILE for stm32g474). The project's HAL configuration,
+# including its variants and targets, lives only in hal_project_config.h.
 #
 # Whatever the target, this produces the stable jh-vscode target contract:
 #     firmware / firmware_debug / firmware_upload / firmware_compile_db
@@ -26,8 +27,8 @@ set(JH_TARGET "rp2040" CACHE STRING
     "Target backend: rp2040 | rp2350-arm | rp2350-riscv | stm32g474")
 set(JH_BOARD "" CACHE STRING
     "Physical board profile; defaults to the selected target's defaultBoard")
-set(JH_EXTRA_DEFINES "" CACHE STRING
-    "Extra compile definitions for the selected firmware")
+set(JH_VARIANT "" CACHE STRING
+    "Build variant declared by JH_PROJECT_VARIANTS in hal_project_config.h")
 set(JH_PROJECT_DIR "" CACHE PATH "Client project source directory")
 
 if(NOT JH_PROJECT_DIR)
@@ -44,17 +45,39 @@ if(NOT EXISTS "${JH_ROOT}/src/JaszczurHAL.h")
     message(FATAL_ERROR "JaszczurHAL root not found at '${JH_ROOT}'")
 endif()
 
+# The project configuration lives only in hal_project_config.h; the channels
+# that used to carry parts of it are refused, not ignored.
+foreach(_jh_removed_input JH_EXTRA_DEFINES JH_PROJECT_SOURCES EXTRA_HAL_DEFINES)
+    if(NOT "${${_jh_removed_input}}" STREQUAL "")
+        message(FATAL_ERROR
+            "[JH-CFG-MANIFEST] ${_jh_removed_input} is not a project build "
+            "input; put the configuration in hal_project_config.h and select "
+            "a variant with JH_VARIANT")
+    endif()
+endforeach()
+get_cmake_property(_jh_feature_variables VARIABLES)
+list(FILTER _jh_feature_variables INCLUDE REGEX "^HAL_(ENABLE|DISABLE)_[A-Z0-9_]+$")
+if(_jh_feature_variables)
+    message(FATAL_ERROR
+        "[JH-CFG-MANIFEST] HAL features are requested in hal_project_config.h, "
+        "not as CMake variables: ${_jh_feature_variables}")
+endif()
+
 include("${JH_ROOT}/cmake/jh_project_features.cmake")
-jh_collect_cmake_feature_defines(_jh_cmake_feature_defines)
-list(APPEND JH_EXTRA_DEFINES ${_jh_cmake_feature_defines})
-jh_normalize_feature_defines(JH_EXTRA_DEFINES ${JH_EXTRA_DEFINES})
-jh_collect_project_feature_defines(
-    _jh_project_feature_defines "${JH_PROJECT_DIR}")
+include("${JH_ROOT}/cmake/jh_project_config.cmake")
+jh_read_project_config(
+    ROOT "${JH_ROOT}"
+    CONFIG_DIR "${JH_PROJECT_DIR}"
+    TARGET "${JH_TARGET}"
+    VARIANT "${JH_VARIANT}"
+    OUTPUT_DIR "${CMAKE_BINARY_DIR}/generated/project")
 jh_resolve_feature_defines(
     JH_REQUESTED_FEATURES
     JH_RESOLVED_FEATURES
-    ${JH_EXTRA_DEFINES}
-    ${_jh_project_feature_defines})
+    ${JH_PROJECT_FEATURES})
+jh_split_project_definitions(
+    _jh_project_plain_definitions _jh_project_feature_definitions
+    ${JH_PROJECT_DEFINITIONS})
 
 set(_jh_requested_pico_platform "")
 set(_jh_requested_pico_board "")
@@ -73,10 +96,10 @@ jh_generate_board_config(
     OUTPUT_DIR
         "${CMAKE_BINARY_DIR}/generated/boards/${JH_TARGET}/${JH_BOARD}"
     OUTPUT_ROOT "${CMAKE_BINARY_DIR}"
-    DEFINES ${JH_EXTRA_DEFINES} ${_jh_project_feature_defines}
+    DEFINES ${_jh_project_plain_definitions}
     REQUESTED_FEATURES ${JH_REQUESTED_FEATURES}
     RESOLVED_FEATURES ${JH_RESOLVED_FEATURES})
-set(JH_RESOLVED_FEATURES ${JH_BOARD_RESOLVED_FEATURES})
+set(JH_RESOLVED_FEATURES "${JH_BOARD_RESOLVED_FEATURES}")
 set(JH_BOARD "${JH_RESOLVED_BOARD}" CACHE STRING
     "Resolved physical board profile" FORCE)
 
@@ -159,7 +182,6 @@ else()
 endif()
 
 set(JH_MODULE_NAME "" CACHE STRING "Client firmware module/sketch name")
-set(JH_PROJECT_SOURCES "" CACHE STRING "Optional ';'-separated project sources; relative paths resolve from JH_PROJECT_DIR")
 set(JH_EXTRA_SOURCES "" CACHE STRING "Optional additional ';'-separated sources; relative paths resolve from JH_PROJECT_DIR")
 set(JH_PROJECT_RECIPE "" CACHE FILEPATH "Optional project-specific recipe included after target selection")
 set(JH_ARTIFACT_DIR "" CACHE PATH
@@ -175,34 +197,20 @@ get_filename_component(JH_ARTIFACT_DIR "${JH_ARTIFACT_DIR}" ABSOLUTE)
 file(MAKE_DIRECTORY "${JH_ARTIFACT_DIR}")
 
 message(STATUS
-    "jh-firmware: target=${JH_TARGET} board=${JH_BOARD} module=${JH_MODULE_NAME} "
+    "jh-firmware: target=${JH_TARGET} board=${JH_BOARD} "
+    "variant=${JH_PROJECT_VARIANT} module=${JH_MODULE_NAME} "
     "artifacts=${JH_ARTIFACT_DIR}")
 message(STATUS
     "jh-firmware: requestedFeatures=${JH_REQUESTED_FEATURES} "
     "resolvedFeatures=${JH_RESOLVED_FEATURES}")
 
 function(jh_resolve_project_sources OUT_VAR)
-    set(_sources "")
-    if(JH_PROJECT_SOURCES)
-        foreach(_src IN LISTS JH_PROJECT_SOURCES)
-            if(IS_ABSOLUTE "${_src}")
-                set(_src_abs "${_src}")
-            else()
-                get_filename_component(_src_abs "${JH_PROJECT_DIR}/${_src}" ABSOLUTE)
-            endif()
-            if(NOT EXISTS "${_src_abs}")
-                message(FATAL_ERROR "JH_PROJECT_SOURCES entry not found: ${_src_abs}")
-            endif()
-            list(APPEND _sources "${_src_abs}")
-        endforeach()
-    else()
-        file(GLOB _sources CONFIGURE_DEPENDS
-            "${JH_PROJECT_DIR}/*.c"
-            "${JH_PROJECT_DIR}/*.cpp"
-            "${JH_PROJECT_DIR}/*.h"
-            "${JH_PROJECT_DIR}/*.hpp"
-        )
-    endif()
+    file(GLOB _sources CONFIGURE_DEPENDS
+        "${JH_PROJECT_DIR}/*.c"
+        "${JH_PROJECT_DIR}/*.cpp"
+        "${JH_PROJECT_DIR}/*.h"
+        "${JH_PROJECT_DIR}/*.hpp"
+    )
     foreach(_src IN LISTS JH_EXTRA_SOURCES)
         if(IS_ABSOLUTE "${_src}")
             set(_src_abs "${_src}")

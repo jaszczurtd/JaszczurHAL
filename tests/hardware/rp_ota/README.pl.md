@@ -42,7 +42,7 @@ python3 tests/hardware/rp_ota/verify_ota.py \
 ```
 
 Użyj `--target rp2350-arm --board pico2w` dla Pico 2 W. Dodaj
-`--variant freertos` zarówno do kompilacji, jak i wgrywania, a następnie
+`--variant FREERTOS` zarówno do kompilacji, jak i wgrywania, a następnie
 przekaż `--runtime freertos` do weryfikatora dla wariantu FreeRTOS. Stanowisko
 przydziela zadaniu aplikacji stos 8 KiB w konfiguracjach FreeRTOS, ponieważ
 inicjalizacja CYW43 i obsługa OTA przekraczają ogólny domyślny rozmiar 2 KiB.
@@ -81,7 +81,7 @@ oraz automatyczną telemetrię zegara gSPI bez generowania ani przesyłania
 obrazów OTA. Ten tryb diagnostyczny nie wymaga hasła OTA ani artefaktów
 kompilacji.
 
-Użyj `--variant freertos`, `--runtime freertos` oraz katalogu artefaktów
+Użyj `--variant FREERTOS`, `--runtime freertos` oraz katalogu artefaktów
 `.build/hardware/rp_ota/cmake/variants/freertos/rp2040/pico-rm2` dla
 przebiegu FreeRTOS.
 

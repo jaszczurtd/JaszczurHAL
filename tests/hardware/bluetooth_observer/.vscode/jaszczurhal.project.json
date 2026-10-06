@@ -2,21 +2,17 @@
     "$schema": "../../../../vscode/schema/jh_vscode_project.schema.json",
     "project": "JaszczurHAL hardware tests",
     "module": "bluetooth_observer",
-    "example": {
-        "targets": [
-            "stm32g474",
-            "rp2350-arm",
-            "rp2040"
-        ],
-        "boards": {
-            "stm32g474": "nucleo-g474re-pim730",
-            "rp2350-arm": "pico2w",
-            "rp2040": "picow"
-        }
-    },
     "toolchain": "cmake",
     "target": "stm32g474",
     "board": "nucleo-g474re-pim730",
+    "targetProfiles": {
+        "rp2040": {
+            "board": "picow"
+        },
+        "rp2350-arm": {
+            "board": "pico2w"
+        }
+    },
     "buildDir": "${jhRoot}/.build/hardware/bluetooth_observer",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {
@@ -24,8 +20,7 @@
         "cache": {
             "JH_ARTIFACT_DIR": "${buildDir}",
             "JH_PROJECT_DIR": "${project}",
-            "JH_MODULE_NAME": "bluetooth_observer",
-            "JH_PROJECT_SOURCES": "app.cpp"
+            "JH_MODULE_NAME": "bluetooth_observer"
         }
     },
     "artifacts": {

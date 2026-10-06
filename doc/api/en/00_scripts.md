@@ -44,7 +44,6 @@ The version-controlled files in `config/tooling/` supply configuration to script
 |---|---|
 | `artifacts.json` | Names archive metadata files and tracked generated outputs. |
 | `board_components.json` | Defines valid board components, providers, and exclusive slots. |
-| `examples.json` | Defines the checked-in active example registry. |
 | `managed_components.json` | Defines managed source/tool components, validation metadata, default order, and compatibility launchers. |
 
 Python scripts read this configuration through `scripts/tooling_contract.py` and resolve named output paths through `scripts/repository_layout.py`. Normal CMake configuration does not parse these JSON files. Instead, it uses `cmake/generated/jh_board_components_registry.cmake`, which the board generator creates from `board_components.json`.
@@ -252,6 +251,9 @@ options are forwarded unchanged. The host mock has no runner and is rejected.
 Every runner accepts `--target`, `--board`, `--all-features`, `--library-only`,
 `--freertos`, `--project-config`, repeatable `-D`, `--output`, `--clean`, and
 `--jobs`; the default output is `.build/static/<target>/<board>/`.
+`--project-config` names one directory. Its `hal_project_config.h` and the
+`-D` definitions are evaluated by `scripts/project_config.py`, the same reader
+that project builds use.
 
 ### `scripts/build_rp_pico_lib.sh`
 
@@ -263,7 +265,7 @@ Builds JaszczurHAL with the official Pico SDK for the following targets:
 | `rp2350-arm` | `rp2350-arm-s` | `pico2` |
 | `rp2350-riscv` | `rp2350-riscv` | `pico2` |
 
-Prepares Pico SDK and picotool before building. The `--freertos` option also prepares FreeRTOS-Kernel; `rp2350-riscv` additionally needs the RISC-V toolchain. Use `--example <directory>` to build a portable application as well.
+Prepares Pico SDK and picotool before building. The `--freertos` option also prepares FreeRTOS-Kernel; `rp2350-riscv` additionally needs the RISC-V toolchain. Use `--example <directory>` to build a portable application as well; it compiles every source file of that example with the example's own `hal_project_config.h`.
 
 By default, each build verifies the static library, ELF/BIN/UF2 artifact
 probes, core-entry symbols, and optional example firmware. `--library-only`
@@ -321,8 +323,9 @@ Builds, validates, and flashes projects whose board descriptor selects the `esp-
 selects `waveshare-esp32-s3-zero` when `--board` is omitted. `--output` must
 remain below either the project or repository `.build` root. Repeatable
 `--source` arguments replace automatic discovery; otherwise the runner includes
-supported files in the project root and recursively under `src/`. Repeatable
-`--feature` and `--define` arguments extend the project configuration,
+supported files in the project root and recursively under `src/`.
+`--variant <id>` selects a variant declared in the project header. Repeatable
+`--define` arguments belong to static library builds,
 `--all-features` requests every directly requestable feature from the target's
 `supportedFeatures`, and `--project-config DIR` reads `hal_project_config.h`
 from a directory outside the project. Features wrapping cJSON, LodePNG,
@@ -560,28 +563,29 @@ x86-64 and AArch64 Linux plus native AMD64 Windows.
 
 ### `scripts/examples_dispatcher.py`
 
-Consumes the checked-in example registry from `config/tooling/examples.json`
-and exposes five subcommands:
+Treats every directory under `examples/` as an ordinary project: its
+`hal_project_config.h` declares targets, features, and variants, and its
+hand-written `.vscode/jaszczurhal.project.json` holds the tooling metadata.
+The script exposes four subcommands:
 
 | Command | Behavior |
 |---|---|
-| `generate` | Regenerates each example's manifest, VS Code settings, tasks, launch configuration, and keybinding reference. |
-| `generate-template` | Regenerates the shared settings, tasks, extension, and keybinding snippets under `vscode/examples`. |
-| `check-template` | Fails when the shared snippets or any checked-in example `.vscode` file differs from the shared generators. |
-| `list` | Prints every registered project with expanded `targets` and `gateTargets`. |
-| `build` | Builds supported examples and variants through `vscode/entry/jh-vscode`. |
+| `generate` | Writes `settings.json`, `tasks.json`, `launch.json`, `keybindings.reference.json`, and `extensions.json` of every example and of `vscode/examples`. It never writes the manifest. |
+| `check` | Fails when any of those files differs from what `generate` would write, or when a manifest carries project configuration. |
+| `list` | Prints every example with the targets and variants it builds. |
+| `build` | Builds every configuration of the selected examples for one target through `vscode/entry/jh-vscode`. |
 
 `build` requires `--target` with one of `rp2040`, `rp2350-arm`,
-`rp2350-riscv`, or `stm32g474`. Repeatable `--example` limits the run,
-`--gate` restricts it to base/variant configurations whose generated
-`gateTargets` contain the requested target, `--jobs` controls parallel example
-projects, and `--verbose` records invoked commands in managed per-example logs
-below `.build/examples`.
+`rp2350-riscv`, `stm32g474`, or `esp32s3`. Repeatable `--example` limits the
+run, `--jobs` controls parallel example projects, and `--verbose` records
+invoked commands in the per-example logs. A configuration is a declared target
+with the base build or one variant; pairs the header stops with `#error` are
+skipped. Each example builds with the board its manifest selects for the
+target.
 
-The JSON registry is the source used by `generate`; the generated manifests are
-the source consumed by `build`. The `list` action reports the current full and
-default-gate matrices without maintaining duplicate counts here.
-RISC-V WiFi examples remain excluded while RP2350 RISC-V + CYW43 is
+Gate 9 of `runalltests.sh` runs `build` for `rp2040`, `stm32g474`, and
+`esp32s3`. `list` reports the current matrix, so this page does not keep
+counts. RISC-V WiFi examples remain excluded while RP2350 RISC-V + CYW43 is
 unsupported.
 
 See [JaszczurHAL Examples](../../../examples/README.md) for the target matrix,
@@ -632,13 +636,15 @@ Validates the closed `HAL_ENABLE_*` / `HAL_DISABLE_*` namespace and the
 target-independent dependency graph under `config/features/`. `--write`
 atomically refreshes the tracked production C header and CMake resolver, while
 `--check` compares them without writing. `--lint` accepts repeatable
-`--input-root` arguments and checks raw `hal_project_config.h` files and project
-manifests for unknown symbols, unsupported `=0` values, and direct requests for
-derived symbols. It also rejects conditional feature definitions outside a
-matching `#ifndef` guard and non-scalar CMake definition lists. Findings fail
-the command by default; `--report-only` is an explicit manual diagnostic mode.
+`--input-root` arguments. It checks the feature definitions of every
+`hal_project_config.h`, in every branch and every variant, for unknown
+symbols, unsupported `=0` values, and direct requests for derived symbols, and
+reports headers the project configuration reader cannot evaluate. A project
+manifest that carries project configuration is reported with
+`[JH-CFG-MANIFEST]`. Findings fail the command by default; `--report-only` is
+an explicit manual diagnostic mode.
 
-`--effective` uses `jh-vscode` to resolve configurations for the declared targets, target profiles, and variants. It does not read the ignored local board-selection state. It checks constraints and duplicate active feature requests after applying configuration precedence. A `.vscode/jaszczurhal.project.json` manifest defines the configuration axes. An unpaired `hal_project_config.h` that requests at least one HAL feature defines a single configuration without axes. Standalone headers without feature requests and reference manifests are parsed but not resolved.
+`--effective` uses `jh-vscode` to resolve every configuration a project builds: each declared target with the base build and each variant, without the pairs the header stops with `#error`. Boards come from the manifest; the ignored local board-selection state is not read. It checks constraints and duplicate active feature requests for each configuration. A `.vscode/jaszczurhal.project.json` manifest marks a project. An unpaired `hal_project_config.h` that requests at least one HAL feature is evaluated for each target it declares, or without a target when it declares none, with the base build and each variant. Standalone headers without feature requests and reference manifests are parsed but not resolved.
 
 `--resolution-output <path>`
 writes deterministic
@@ -660,8 +666,8 @@ Board
 generation uses the resolved set for `featureHash` and the link signature, while
 retaining the direct set as `requestedFeatures`.
 
-`jh-vscode` resolves the registry after
-manifest profile and variant overlays, exposes the result through
+`jh-vscode` resolves the registry for the project header evaluated with the
+active target and variant, exposes the result through
 `featureResolution`, and uses the resolved set for preflight and OTA decisions
 while passing direct requests to CMake.
 
@@ -671,6 +677,18 @@ lint, and uploads the deterministic resolution report. Installed RP and
 STM32G474 packages carry the generated feature/board headers, resolved board
 JSON, link-signature header, and reference source; a direct compiler consumer
 can compile and link those package artifacts without invoking Python.
+
+### `scripts/project_config.py`
+
+Reads a project's `hal_project_config.h` the way the C preprocessor does, for
+one target and variant. CMake (the firmware dispatcher and the static library
+builds), `jh-vscode`, the feature lint, the ESP-IDF runner, the VS Code task
+generator, and the examples dispatcher all read project configuration through
+it. Its `cmake` command writes one build's features, definitions, targets,
+variants, and macro values as a CMake file. Diagnostics use the
+`[JH-CFG-TARGET]`, `[JH-CFG-VARIANT]`, `[JH-CFG-ERROR]`, and `[JH-CFG-SCOPE]`
+prefixes. The header rules are described in
+[Targets and variants](../../en/FwProjectWorkflow.md#targets-and-variants).
 
 ### `scripts/board_registry.py`
 
@@ -988,7 +1006,7 @@ JPEG use is documented in [JPEG API](19_JPEG.md#asset-script-jpeg-to-base64).
   Windows runtime boundary and remaining device-adapter work.
 - [Native RP Neutral Firmware](../../../vscode/neutral_fw/rp_pico/README.md)
   explains the default-identity image used by `jh-vscode clear-identity`.
-- [JaszczurHAL Examples](../../../examples/README.md) documents the example registry,
+- [JaszczurHAL Examples](../../../examples/README.md) documents the example catalog,
   target coverage, application entry interface, variants, and build commands.
 - [Managed Third-Party Components](../../../third_party/README.md) documents tracked
   pins, ignored installations, updater behavior, and external checkout policy.

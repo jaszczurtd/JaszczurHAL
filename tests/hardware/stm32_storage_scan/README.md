@@ -26,9 +26,8 @@ vscode/entry/jh-vscode upload \
   --target stm32g474 --board nucleo-g474re
 ```
 
-To check a larger EEPROM/KV reservation, add a temporary cache entry such as
-`"JH_EXTRA_DEFINES": "HAL_STM32_FLASH_EEPROM_SIZE=16384u"` to the project
-manifest (`.vscode/jaszczurhal.project.json`, `cmake.cache`).
+To check a larger EEPROM/KV reservation, add `--variant EEPROM_16K` to both
+commands; the variant sets `HAL_STM32_FLASH_EEPROM_SIZE=16384u`.
 
 Run the verifier right after the upload (the board restarts and runs both
 phases on its own; press the reset button to repeat). The ST-LINK may still

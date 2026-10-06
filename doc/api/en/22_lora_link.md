@@ -203,7 +203,7 @@ retransmissions, duplicates, malformed/authentication/integrity failures,
 reassembly drops/timeouts, queue drops, send timeouts, cancellation and recent
 address/RF observations.
 
-`examples/27_lora_point_to_point` provides `link` and `link-responder`
+`examples/27_lora_point_to_point` provides `LINK` and `LINK_RESPONDER`
 variants. They exchange a correlated 500-byte command request and response
 through `hal_lora_commands`, forcing three fragments in each direction over
 the same SX1262 fixtures used by the raw-radio example. The example uses

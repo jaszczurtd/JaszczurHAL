@@ -31,14 +31,16 @@ vscode/entry/jh-vscode upload \
   --port /dev/serial/by-id/<device>
 ```
 
-For the FreeRTOS SMP variant, add the following temporary cache entry to the
-manifest and run the same build/upload commands:
+For the FreeRTOS SMP run, add `--variant FREERTOS` to the same build and
+upload commands. The variant defines `HAL_ENABLE_FREERTOS=1` and builds into
+its own directory, so the bare-metal image stays as it is:
 
-```json
-"JH_EXTRA_DEFINES": "HAL_ENABLE_FREERTOS=1"
+```sh
+vscode/entry/jh-vscode upload \
+  --project tests/hardware/rp_flash_transaction \
+  --target rp2040 --board pico --variant FREERTOS \
+  --port /dev/serial/by-id/<device>
 ```
-
-Remove the cache entry before rebuilding the bare-metal variant.
 
 Run the verifier; it queries the status, runs the transaction probes, then
 the load probe, and expects a clean fault record and running tasks after each

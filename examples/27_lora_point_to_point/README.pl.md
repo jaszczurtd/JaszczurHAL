@@ -4,15 +4,15 @@
 
 Przykład pozwala połączyć dwa urządzenia z radiem SX1262. W wersji podstawowej
 jedno wysyła pakiet, a drugie odpowiada - zbuduj je odpowiednio jako
-inicjator i wariant `responder`. Obsługa nadawania i odbioru jest
+inicjator i wariant `RESPONDER`. Obsługa nadawania i odbioru jest
 asynchroniczna, wykorzystuje DIO1 i funkcje zwrotne. Kod pokazuje też
 anulowanie operacji, odczyt informacji o pakiecie, odbiór z limitem czasu
 oraz odbiór ciągły.
 
-Wariant `probe` nie nadaje. Sprawdza dostępne funkcje radia, kalibrację,
+Wariant `PROBE` nie nadaje. Sprawdza dostępne funkcje radia, kalibrację,
 bieżące RSSI, wykrywanie aktywności w kanale (CAD) i tryb czuwania.
 
-Warianty `link` i `link-responder` zamiast prostego ping/pong przesyłają
+Warianty `LINK` i `LINK_RESPONDER` zamiast prostego ping/pong przesyłają
 polecenia przez `hal_lora_commands` i `hal_lora_link`. Inicjator wysyła
 500-bajtowe binarne żądanie `echo` na adres `0x1002`. Drugie urządzenie
 wykonuje polecenie przez wspólny router i zwraca te same bajty w odpowiedzi
@@ -49,10 +49,9 @@ Uruchom z głównego katalogu repozytorium:
   --target stm32g474 --example 27_lora_point_to_point
 ```
 
-Podstawowy zestaw kontroli kompilacji obejmuje inicjator oraz `probe`,
-`responder`, `link` i `link-responder`. Warianty sprzętowe `sf7` oraz
-`responder-sf7` można zbudować przez `jh-vscode`, ale nie należą do tego
-zestawu.
+Dispatcher kompiluje inicjator i wszystkie warianty zadeklarowane
+w `hal_project_config.h`: `PROBE`, `RESPONDER`, parę do testów sprzętowych
+`SF7` i `RESPONDER_SF7` oraz `LINK` i `LINK_RESPONDER`.
 
 Aby zbudować tylko parę wymieniającą polecenia, wybierz warianty w VS Code
 lub uruchom:
@@ -60,15 +59,15 @@ lub uruchom:
 ```bash
 vscode/entry/jh-vscode build \
   --project examples/27_lora_point_to_point \
-  --target rp2040 --variant link
+  --target rp2040 --variant LINK
 vscode/entry/jh-vscode build \
   --project examples/27_lora_point_to_point \
-  --target stm32g474 --variant link-responder
+  --target stm32g474 --variant LINK_RESPONDER
 ```
 
 Dla dwóch zintegrowanych płytek Waveshare LF wybierz
-`--target rp2040 --board rp2040-lora-lf` oraz warianty `link` i
-`link-responder`. Procedurę wgrywania, stały wybór portu szeregowego i kryteria
+`--target rp2040 --board rp2040-lora-lf` oraz warianty `LINK` i
+`LINK_RESPONDER`. Procedurę wgrywania, stały wybór portu szeregowego i kryteria
 `JHCMD1` opisują
 [testy sprzętowe poleceń przesyłanych przez LoRa](../../tests/hardware/lora_sx1262/README.pl.md).
 

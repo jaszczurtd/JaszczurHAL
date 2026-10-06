@@ -22,7 +22,7 @@ import tempfile
 import time
 import sys
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from vscode.runtime.exit_codes import (
     EXIT_BUILD,
@@ -124,13 +124,12 @@ MONITOR_RELEASE_TIMEOUT_S = 3.0
 MONITOR_TERMINATE_TIMEOUT_S = 1.0
 CMAKE_TRANSIENT_CACHE_KEYS = {
     "JH_ARTIFACT_DIR",
-    "JH_EXTRA_DEFINES",
     "JH_EXTRA_INCLUDES",
     "JH_EXTRA_LIBRARIES",
     "JH_EXTRA_SOURCES",
     "JH_LINK_LIBRARIES",
     "JH_PROJECT_RECIPE",
-    "JH_PROJECT_SOURCES",
+    "JH_VARIANT",
     "JH_OTA_GENERATION",
     "JH_OTA_VERSION",
     "JH_USB_MANUFACTURER",
@@ -146,15 +145,17 @@ SECTION_HEADER_RE = re.compile(
     r"(?P<fileoff>[0-9a-fA-F]+)\s+"
     r"2\*\*(?P<align>\d+)"
 )
-HAL_FEATURE_RE = re.compile(
-    r"^\s*#\s*define\s+(HAL_(?:ENABLE|DISABLE)_[A-Z0-9_]+)\b(?P<tail>.*)$"
-)
-HAL_DEFINE_TOKEN_RE = re.compile(
-    r"(?:^|(?<=[;\s]))(?:-D)?"
-    r"(?P<symbol>HAL_(?:ENABLE|DISABLE)_[A-Z0-9_]+)"
-    r"(?P<assignment>=(?P<value>[^;\s]*))?"
-    r"(?=[;\s]|$)"
-)
+MANIFEST_NAME = ".vscode/jaszczurhal.project.json"
+# The project configuration lives only in hal_project_config.h; a manifest
+# that tries to carry it is rejected.
+PROJECT_CONFIGURATION_MANIFEST_FIELDS = ("variants", "example")
+PROJECT_CONFIGURATION_CACHE_KEYS = {
+    "EXTRA_HAL_DEFINES",
+    "JH_EXTRA_DEFINES",
+    "JH_PROJECT_SOURCES",
+    "JH_VARIANT",
+}
+HAL_FEATURE_SYMBOL_RE = re.compile(r"HAL_(?:ENABLE|DISABLE)_[A-Z0-9_]+")
 REGION_OVERFLOW_RE = re.compile(r"region [`'](?P<region>[^`']+)[`'] overflowed by (?P<bytes>\d+) bytes")
 SECTION_WILL_NOT_FIT_RE = re.compile(
     r"section [`'](?P<section>[^`']+)[`'] will not fit in region [`'](?P<region>[^`']+)[`']"
@@ -802,8 +803,6 @@ def normalize_manifest(data: dict[str, Any]) -> dict[str, Any]:
     for key in (
         "project",
         "module",
-        "example",
-        "variants",
         "toolchain",
         "target",
         "board",
@@ -823,45 +822,116 @@ def normalize_manifest(data: dict[str, Any]) -> dict[str, Any]:
     return config
 
 
-def manifest_variants(config: dict[str, Any]) -> list[dict[str, Any]]:
-    """Build variants a manifest declares: top-level ``variants`` of a firmware
-    project followed by ``example.variants`` of a checked-in example."""
-    example = config.get("example")
-    sources = (
-        config.get("variants"),
-        example.get("variants") if isinstance(example, dict) else None,
-    )
-    return [
-        variant
-        for source in sources
-        if isinstance(source, list)
-        for variant in source
-        if isinstance(variant, dict)
+def manifest_configuration_findings(
+    manifest: dict[str, Any], label: str = MANIFEST_NAME
+) -> list[str]:
+    """Project configuration a manifest carries although it belongs in
+    hal_project_config.h: removed fields and CMake cache entries that would
+    define HAL features, pass definitions or pick sources and variants."""
+    findings = [
+        f"{label}: [JH-CFG-MANIFEST] '{field}' is not a manifest "
+        "field; declare targets with JH_PROJECT_TARGETS(X) and variants with "
+        "JH_PROJECT_VARIANTS(X) in hal_project_config.h"
+        for field in PROJECT_CONFIGURATION_MANIFEST_FIELDS
+        if field in manifest
     ]
+    caches: list[tuple[str, Any]] = [("cmake.cache", manifest.get("cmake"))]
+    profiles = manifest.get("targetProfiles")
+    if isinstance(profiles, dict):
+        caches.extend(
+            (f"targetProfiles.{target}.cmake.cache", profile.get("cmake"))
+            for target, profile in profiles.items()
+            if isinstance(profile, dict)
+        )
+    for location, cmake in caches:
+        cache = cmake.get("cache") if isinstance(cmake, dict) else None
+        if not isinstance(cache, dict):
+            continue
+        for key in cache:
+            if key == "JH_VARIANT":
+                findings.append(
+                    f"{label}: {location}.{key}: [JH-CFG-MANIFEST] "
+                    "the manifest does not pick a variant; pass --variant"
+                )
+            elif key in PROJECT_CONFIGURATION_CACHE_KEYS or HAL_FEATURE_SYMBOL_RE.fullmatch(
+                str(key)
+            ):
+                findings.append(
+                    f"{label}: {location}.{key}: [JH-CFG-MANIFEST] "
+                    "project configuration belongs in hal_project_config.h"
+                )
+    return findings
+
+
+_HAL_SCRIPTS: dict[str, Any] = {}
+
+
+def hal_script(name: str) -> Any:
+    """Import a module from <JaszczurHAL>/scripts once."""
+    if name not in _HAL_SCRIPTS:
+        scripts_dir = jaszczurhal_root() / "scripts"
+        if str(scripts_dir) not in sys.path:
+            sys.path.insert(0, str(scripts_dir))
+        _HAL_SCRIPTS[name] = importlib.import_module(name)
+    return _HAL_SCRIPTS[name]
+
+
+_PROJECT_TARGETS: dict[str, Any] | None = None
+
+
+def project_targets() -> dict[str, Any]:
+    """Registry targets the project configuration reader evaluates for."""
+    global _PROJECT_TARGETS
+    if _PROJECT_TARGETS is None:
+        _PROJECT_TARGETS = hal_script("project_config").load_targets(jaszczurhal_root())
+    return _PROJECT_TARGETS
+
+
+def manifest_target_ids(manifest: dict[str, Any]) -> list[str]:
+    """Targets a manifest configures: its target and every targetProfiles
+    entry; "" when it names none, which builds with no target selected."""
+    targets = [str(manifest["target"])] if manifest.get("target") else []
+    profiles = manifest.get("targetProfiles")
+    if isinstance(profiles, dict):
+        targets.extend(str(name) for name in profiles if str(name))
+    return sorted(set(targets)) or [""]
+
+
+def project_builds(project_dir: Path, manifest: dict[str, Any]) -> list[Any]:
+    """Every build a project configures: the targets JH_PROJECT_TARGETS
+    declares in hal_project_config.h (the manifest's targets when it declares
+    none) times the base and each variant, without the builds the header
+    stops on #error."""
+    return hal_script("project_config").available_builds(
+        project_dir, project_targets(), manifest_target_ids(manifest)
+    )
+
+
+def project_variants(project_dir: Path) -> tuple[Any, ...]:
+    """Variants declared by the project's hal_project_config.h."""
+    reader = hal_script("project_config")
+    return reader.read_project_config(project_dir / reader.HEADER_NAME).variants
 
 
 def apply_variant(config: dict[str, Any], variant_id: str | None) -> None:
-    """Overlay one declared variant on a loaded manifest.
+    """Select one variant declared by the project's hal_project_config.h.
 
-    The variant builds into ``<buildDir>/variants/<id>`` with its own CMake
-    tree and artifact directory, so it never replaces the base firmware.
+    The variant builds as ``<module>_<id>`` into ``<buildDir>/variants/<id>``
+    with its own CMake tree and artifact directory, so it never replaces the
+    base firmware; CMake receives it as ``JH_VARIANT``.
     """
     if not variant_id:
         return
+    project_dir = Path(str(config.get("_projectDir") or "."))
+    variants = project_variants(project_dir)
+    if variant_id not in {variant.id for variant in variants}:
+        known = ", ".join(variant.id for variant in variants)
+        raise ValueError(
+            f"unknown variant '{variant_id}'"
+            + (f"; known variants: {known}" if known else "")
+        )
 
-    matches = [
-        candidate
-        for candidate in manifest_variants(config)
-        if str(candidate.get("id") or "") == variant_id
-    ]
-    if len(matches) > 1:
-        raise ValueError(f"variant '{variant_id}' is declared more than once")
-    if not matches:
-        known = ", ".join(str(item.get("id")) for item in manifest_variants(config) if item.get("id"))
-        raise ValueError(f"unknown variant '{variant_id}'" + (f"; known variants: {known}" if known else ""))
-    variant = matches[0]
-
-    module = str(variant.get("module") or f"{config.get('module', 'firmware')}_{variant_id}")
+    module = f"{config.get('module', 'firmware')}_{variant_id}"
     config["module"] = module
     base_build_dir = str(config.get("buildDir") or "")
     if base_build_dir:
@@ -895,27 +965,11 @@ def apply_variant(config: dict[str, Any], variant_id: str | None) -> None:
     elif base_build_dir:
         cache["JH_ARTIFACT_DIR"] = config["buildDir"]
     cache["JH_MODULE_NAME"] = module
-    sources = variant.get("sources")
-    if isinstance(sources, list) and sources:
-        cache["JH_PROJECT_SOURCES"] = ";".join(str(source) for source in sources)
-    extra_defines = variant.get("extraDefines")
-    if isinstance(extra_defines, list) and extra_defines:
-        cache["JH_EXTRA_DEFINES"] = ";".join(str(item) for item in extra_defines)
-    if isinstance(variant.get("cmake"), dict):
-        variant_cmake = variant["cmake"]
-        if isinstance(variant_cmake.get("cache"), dict):
-            cache = deep_merge(cache, {str(k): v for k, v in variant_cmake["cache"].items()})
-        cmake = deep_merge(cmake, {k: v for k, v in variant_cmake.items() if k != "cache"})
+    cache["JH_VARIANT"] = variant_id
     cmake["cache"] = cache
     config["cmake"] = cmake
-    pin_resolved_target_board(config)
-
-    example = dict(config.get("example") or {})
-    example["activeVariant"] = variant_id
-    if isinstance(variant.get("targets"), list):
-        example["activeTargets"] = [str(target) for target in variant["targets"]]
-    config["example"] = example
-    config.setdefault("_sources", {})["example.activeVariant"] = "cli"
+    config["variant"] = variant_id
+    config.setdefault("_sources", {})["variant"] = "cli"
 
 
 def settings_value(settings: dict[str, Any], semantic_key: str) -> Any:
@@ -949,6 +1003,9 @@ def load_project_config(
     vscode_dir = project_dir / ".vscode"
     manifest = load_json_file(vscode_dir / "jaszczurhal.project.json")
     settings = load_json_file(vscode_dir / "settings.json")
+    findings = manifest_configuration_findings(manifest)
+    if findings:
+        raise ValueError("\n".join(findings))
 
     config = normalize_manifest(manifest)
     sources: dict[str, str] = {}
@@ -1231,289 +1288,38 @@ def ensure_local_state_gitignored(project_dir: Path) -> None:
         pass
 
 
-def preprocessor_logical_lines(text: str) -> Iterable[tuple[int, str]]:
-    """Yield comment-free preprocessing lines and their source line."""
-    text = text.replace("\r\n", "\n").replace("\r", "\n")
-    spliced: list[str] = []
-    source_lines: list[int] = []
-    source_line = 1
-    source_offset = 0
-    while source_offset < len(text):
-        if text.startswith("\\\n", source_offset):
-            source_line += 1
-            source_offset += 2
-            continue
-        character = text[source_offset]
-        spliced.append(character)
-        source_lines.append(source_line)
-        if character == "\n":
-            source_line += 1
-        source_offset += 1
-    text = "".join(spliced)
-
-    buffer: list[str] = []
-    origin_line: int | None = None
-    offset = 0
-    quote: str | None = None
-
-    def append(character: str) -> None:
-        nonlocal origin_line
-        if origin_line is None and not character.isspace():
-            origin_line = source_lines[offset]
-        buffer.append(character)
-
-    while offset < len(text):
-        character = text[offset]
-        if quote is not None:
-            append(character)
-            if character == "\\" and offset + 1 < len(text):
-                offset += 1
-                append(text[offset])
-            elif character == quote:
-                quote = None
-            elif character == "\n":
-                yield origin_line or source_lines[offset], "".join(buffer)
-                buffer.clear()
-                origin_line = None
-                quote = None
-            offset += 1
-            continue
-
-        if text.startswith("//", offset):
-            append(" ")
-            newline = text.find("\n", offset + 2)
-            offset = len(text) if newline < 0 else newline
-            continue
-        if text.startswith("/*", offset):
-            append(" ")
-            block_end = text.find("*/", offset + 2)
-            if block_end < 0:
-                offset = len(text)
-                continue
-            offset = block_end + 2
-            continue
-        if character in {'"', "'"}:
-            quote = character
-            append(character)
-            offset += 1
-            continue
-        if character == "\n":
-            yield origin_line or source_lines[offset], "".join(buffer)
-            buffer.clear()
-            origin_line = None
-            offset += 1
-            continue
-        append(character)
-        offset += 1
-
-    if buffer:
-        final_line = source_lines[-1] if source_lines else 1
-        yield origin_line or final_line, "".join(buffer)
-
-
-def header_hal_feature_definitions(
-    project_dir: Path,
-) -> list[tuple[str, str | None, str]]:
-    definitions: list[tuple[str, str | None, str]] = []
-    hal_project_config = project_dir / "hal_project_config.h"
-    if not hal_project_config.is_file():
-        return definitions
-    try:
-        text = hal_project_config.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return definitions
-    for line_number, line in preprocessor_logical_lines(text):
-        match = HAL_FEATURE_RE.match(line)
-        if not match:
-            continue
-        raw_value = match.group("tail").strip()
-        definitions.append(
-            (
-                match.group(1),
-                raw_value if raw_value else None,
-                f"hal_project_config.h:{line_number}",
-            )
-        )
-    return definitions
-
-
-def cache_hal_feature_definitions(
-    config: dict[str, Any],
-) -> list[tuple[str, str | None, str]]:
-    definitions: list[tuple[str, str | None, str]] = []
-    cmake = config.get("cmake")
-    cache = cmake.get("cache") if isinstance(cmake, dict) else None
-    if not isinstance(cache, dict):
-        return definitions
-    for key, value in cache.items():
-        if re.fullmatch(
-            r"HAL_(?:ENABLE|DISABLE)_[A-Z0-9_]+", str(key)
-        ) is None:
-            continue
-        definitions.append(
-            (
-                str(key),
-                str(value) if value is not None else "",
-                f"cmake.cache.{key}",
-            )
-        )
-    for key in ("JH_EXTRA_DEFINES", "EXTRA_HAL_DEFINES"):
-        value = cache.get(key)
-        if value is None or value == "":
-            continue
-        raw_value = str(value)
-        for raw_token in raw_value.split(";"):
-            token = raw_token.strip()
-            if not token:
-                continue
-            if "$<" in token:
-                raise ValueError(
-                    f"cmake.cache.{key}: [JH-CFG-VALUE] compile definition "
-                    f"{token!r} uses an unsupported generator expression"
-                )
-            match = HAL_DEFINE_TOKEN_RE.fullmatch(token)
-            if (
-                "HAL_ENABLE_" in token or "HAL_DISABLE_" in token
-            ) and match is None:
-                raise ValueError(
-                    f"cmake.cache.{key}: [JH-CFG-VALUE] compile definition "
-                    f"{token!r} embeds a HAL feature in an unsupported "
-                    "expression"
-                )
-            if match is None:
-                continue
-            definitions.append(
-                (
-                    match.group("symbol"),
-                    match.group("value")
-                    if match.group("assignment") is not None
-                    else None,
-                    f"cmake.cache.{key}",
-                )
-            )
-    return definitions
-
-
-def validate_hal_enable_values(config: dict[str, Any], project_dir: Path) -> None:
-    definitions = [
-        *header_hal_feature_definitions(project_dir),
-        *cache_hal_feature_definitions(config),
-    ]
-    for symbol, value, source in definitions:
-        if value in {None, "1"}:
-            continue
-        if value == "0":
-            raise ValueError(
-                f"{source}: [JH-CFG-VALUE] {symbol}=0 is unsupported; "
-                "omit the symbol to disable it"
-            )
-        raise ValueError(
-            f"{source}: [JH-CFG-VALUE] {symbol} has unsupported value "
-            f"{value!r}; use the bare symbol or {symbol}=1"
-        )
-
-
-def collect_hal_features(
-    config: dict[str, Any], project_dir: Path
-) -> dict[str, str]:
-    features: dict[str, str] = {}
-    for symbol, value, source in header_hal_feature_definitions(project_dir):
-        if value in {None, "1"}:
-            features.setdefault(symbol, source.split(":", 1)[0])
-    for symbol, value, source in cache_hal_feature_definitions(config):
-        if value in {None, "1"}:
-            features.setdefault(symbol, source)
-    return features
-
-
-def collect_hal_enables(
-    config: dict[str, Any], project_dir: Path
-) -> dict[str, str]:
-    return {
-        symbol: source
-        for symbol, source in collect_hal_features(config, project_dir).items()
-        if symbol.startswith("HAL_ENABLE_")
-    }
-
-
-_HAL_FEATURE_SUPPORT: tuple[Any, Any] | None = None
-
-
-def hal_feature_support() -> tuple[Any, Any]:
-    global _HAL_FEATURE_SUPPORT
-    if _HAL_FEATURE_SUPPORT is None:
-        scripts_dir = jaszczurhal_root() / "scripts"
-        if str(scripts_dir) not in sys.path:
-            sys.path.insert(0, str(scripts_dir))
-        module = importlib.import_module("generate_hal_features")
-        model = module.load_registry(jaszczurhal_root() / "config")
-        _HAL_FEATURE_SUPPORT = module, model
-    return _HAL_FEATURE_SUPPORT
+def project_build(config: dict[str, Any], project_dir: Path) -> Any:
+    """The project's hal_project_config.h evaluated for the active target and
+    variant, as the compiler sees it."""
+    reader = hal_script("project_config")
+    target = str(config.get("target") or "")
+    facts = project_targets().get(target) if target else reader.TargetFacts("", "", ())
+    if facts is None:
+        raise ValueError(f"[JH-CFG-TARGET] unknown target {target!r}")
+    return reader.evaluate_build(project_dir, facts, config.get("variant") or None)
 
 
 def resolve_hal_features(
     config: dict[str, Any], project_dir: Path
 ) -> dict[str, Any]:
-    validate_hal_enable_values(config, project_dir)
-    module, model = hal_feature_support()
-    definitions: list[tuple[str, str | None, str]] = [
-        *header_hal_feature_definitions(project_dir),
-        *cache_hal_feature_definitions(config),
-    ]
-    requested_symbols = {symbol for symbol, _, _ in definitions}
-    target = str(config.get("target") or "")
-    descriptor = target_descriptor(config)
-    required_features = (
-        descriptor.get("requiredFeatures", [])
-        if isinstance(descriptor, dict)
-        else []
-    )
-    for index, raw_feature in enumerate(required_features):
-        symbol = str(raw_feature).removesuffix("=1")
-        disabled = symbol.replace("HAL_ENABLE_", "HAL_DISABLE_", 1)
-        if disabled in requested_symbols:
-            raise ValueError(
-                f"[JH-CFG-TARGET-REQUIRED] {target} requires {symbol}; "
-                f"{disabled} cannot be requested"
-            )
-        if symbol not in requested_symbols:
-            definitions.append(
-                (
-                    symbol,
-                    "1",
-                    f"target:{target}:requiredFeatures[{index}]",
-                )
-            )
-    requests = [
-        module.FeatureRequest(symbol, value, source)
-        for symbol, value, source in definitions
-    ]
-    resolution, findings = module.resolve_feature_requests(
-        requests, model, str(project_dir)
+    features = hal_script("generate_hal_features")
+    model = features.load_registry(jaszczurhal_root() / "config")
+    resolution, findings = hal_script("project_config").resolve_build_features(
+        project_build(config, project_dir), model
     )
     if findings:
         raise ValueError("\n".join(sorted(set(findings))))
-    requested = [
-        symbol
-        for symbol in resolution.requested
-        if symbol in requested_symbols
-    ]
-    provenance = {
-        symbol: list(sources)
-        for symbol, sources in resolution.provenance.items()
-    }
-    for index, raw_feature in enumerate(required_features):
-        symbol = str(raw_feature).removesuffix("=1")
-        source = f"target:{target}:requiredFeatures[{index}]"
-        provenance[symbol] = sorted({*provenance.get(symbol, []), source})
     return {
         "registryDigest": model.digest,
-        "requestedFeatures": requested,
+        "requestedFeatures": list(resolution.requested),
         "resolvedFeatures": list(resolution.resolved),
-        "resolvedFeaturesDigest": module.resolved_features_digest(
+        "resolvedFeaturesDigest": features.resolved_features_digest(
             resolution.resolved
         ),
-        "provenance": provenance,
+        "provenance": {
+            symbol: list(sources)
+            for symbol, sources in resolution.provenance.items()
+        },
     }
 
 
@@ -1552,19 +1358,6 @@ def target_display_name(config: dict[str, Any]) -> str:
 def build_preflight_diagnostics(config: dict[str, Any], project_dir: Path) -> list[str]:
     messages: list[str] = []
     target = str(config.get("target") or "")
-    example = config.get("example")
-    if isinstance(example, dict):
-        supported_targets = example.get("activeTargets") or example.get("targets")
-        if isinstance(supported_targets, list) and target and target not in [str(item) for item in supported_targets]:
-            variant = example.get("activeVariant")
-            suffix = f" variant '{variant}'" if variant else ""
-            messages.append(
-                f"axis-2: project {config.get('module', project_dir.name)}{suffix} "
-                f"does not declare support for target {target_display_name(config)}; "
-                f"supported targets: {', '.join(str(item) for item in supported_targets)}."
-            )
-            return messages
-
     desc = target_descriptor(config)
     if isinstance(desc, dict) and desc.get("status") == "skeleton":
         messages.append(
@@ -1576,14 +1369,7 @@ def build_preflight_diagnostics(config: dict[str, Any], project_dir: Path) -> li
     enabled = resolved_hal_feature_names(config, project_dir)
     if target == "stm32g474":
         network = sorted(module for module in enabled if module in STM32G474_NETWORK_MODULES)
-        project_config = project_dir / "hal_project_config.h"
-        try:
-            project_defines = project_config.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            project_defines = ""
-        cmake = config.get("cmake")
-        cache = cmake.get("cache") if isinstance(cmake, dict) else {}
-        cache_defines = str(cache.get("JH_EXTRA_DEFINES", "")) if isinstance(cache, dict) else ""
+        project_config = project_build(config, project_dir).config
         selected_board = str(config.get("board") or "")
         board_components: set[str] = set()
         if isinstance(desc, dict):
@@ -1595,7 +1381,7 @@ def build_preflight_diagnostics(config: dict[str, Any], project_dir: Path) -> li
                     }
                     break
         configured_cyw43 = all(
-            symbol in project_defines or symbol in cache_defines
+            project_config.defined(symbol)
             for symbol in (
                 "HAL_NETWORK_BACKEND_CYW43",
                 "HAL_CYW43_BUS_STM32_GSPI",
@@ -2713,79 +2499,6 @@ def esp_idf_manifest_path(config: dict[str, Any], project_dir: Path) -> Path:
     return path.resolve()
 
 
-def esp_idf_extra_arguments(config: dict[str, Any]) -> list[str]:
-    """Translate manifest-only build definitions to the ESP-IDF runner CLI.
-
-    ``hal_project_config.h`` remains owned by the project and is read by the
-    runner directly. Only definitions introduced through the VS Code manifest
-    are forwarded here.
-    """
-    cmake = config.get("cmake")
-    cache = cmake.get("cache") if isinstance(cmake, dict) else None
-    if not isinstance(cache, dict):
-        return []
-
-    features: list[str] = []
-    defines: list[str] = []
-
-    def add_unique(values: list[str], value: str) -> None:
-        if value not in values:
-            values.append(value)
-
-    for key, value in cache.items():
-        symbol = str(key)
-        if re.fullmatch(r"HAL_ENABLE_[A-Z0-9_]+", symbol):
-            if value is None or str(value) in {"", "1"}:
-                add_unique(features, symbol)
-        elif re.fullmatch(r"HAL_DISABLE_[A-Z0-9_]+", symbol):
-            suffix = "" if value is None or str(value) == "" else f"={value}"
-            add_unique(defines, f"{symbol}{suffix}")
-
-    for key in ("JH_EXTRA_DEFINES", "EXTRA_HAL_DEFINES"):
-        raw = cache.get(key)
-        if raw is None or raw == "":
-            continue
-        for item in str(raw).split(";"):
-            token = item.strip()
-            if not token:
-                continue
-            match = HAL_DEFINE_TOKEN_RE.fullmatch(token)
-            if match is not None and match.group("symbol").startswith(
-                "HAL_ENABLE_"
-            ):
-                add_unique(features, match.group("symbol"))
-            else:
-                add_unique(defines, token)
-
-    arguments: list[str] = []
-    for feature in features:
-        arguments.extend(["--feature", feature])
-    for define in defines:
-        arguments.extend(["--define", define])
-    return arguments
-
-
-def esp_idf_project_sources(config: dict[str, Any]) -> list[str]:
-    """Forward the manifest's explicit source list to the ESP-IDF runner.
-
-    Without it the runner compiles every source in the project directory,
-    which breaks examples whose variants select alternative entry files.
-    """
-    cmake = config.get("cmake")
-    cache = cmake.get("cache") if isinstance(cmake, dict) else None
-    if not isinstance(cache, dict):
-        return []
-    raw = cache.get("JH_PROJECT_SOURCES")
-    if raw is None or raw == "":
-        return []
-    arguments: list[str] = []
-    for item in str(raw).split(";"):
-        source = item.strip()
-        if source:
-            arguments.extend(["--source", source])
-    return arguments
-
-
 def esp_idf_runner_command(
     config: dict[str, Any],
     project_dir: Path,
@@ -2812,8 +2525,8 @@ def esp_idf_runner_command(
     ]
     if port is not None:
         command.extend(["--port", port])
-    command.extend(esp_idf_project_sources(config))
-    command.extend(esp_idf_extra_arguments(config))
+    if config.get("variant"):
+        command.extend(["--variant", str(config["variant"])])
     return command
 
 
@@ -5198,7 +4911,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override active target family (e.g. rp2040, rp2350-arm, stm32g474).",
     )
     parser.add_argument("--board", help="Override active board/variant within the target.")
-    parser.add_argument("--variant", help="Variant id from the manifest's variants or example.variants list.")
+    parser.add_argument("--variant", help="Variant id declared by JH_PROJECT_VARIANTS in hal_project_config.h.")
     parser.add_argument("--selection", help="Board selection in '<target>:<board>' form (for VS Code pickers).")
     parser.add_argument("--interactive", action="store_true", help="Prompt for a target/board selection in the terminal.")
     parser.add_argument("--port", help="Override serial upload/monitor port.")

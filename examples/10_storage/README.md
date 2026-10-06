@@ -40,5 +40,5 @@ the next attempt.
 
 Formatting is disabled by default so a mount error cannot erase existing
 data. Set `EXAMPLE_STORAGE_ALLOW_LITTLEFS_FORMAT=1` in
-`hal_project_config.h` or as a compiler definition only when erasing the
+`hal_project_config.h`, directly or through a variant, only when erasing the
 reserved LittleFS partition is acceptable.

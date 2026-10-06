@@ -28,6 +28,38 @@ wywołań przy niedostępnym flash. Zmierz całą ścieżkę i zostaw miejsce na
 stosy oraz heap; kod w RAM zajmuje SRAM, a jego obraz do załadowania także
 flash.
 
+## Bufory statyczne dostępne przez CPU
+
+`HAL_CPU_ONLY_BSS(name)` z `<hal/core/hal_memory.h>` pozwala backendowi
+wybrać RAM dla statycznego bufora, który nigdy nie będzie przekazywany do DMA:
+
+```c
+static uint8_t HAL_CPU_ONLY_BSS(work_buffer)[1024];
+```
+
+Używaj makra na poziomie pliku, bez inicjalizatora albo z inicjalizatorem
+stałym wypełnionym zerami. Bufor zachowuje wyrównanie i jest zerowany przed
+uruchomieniem konstruktorów. Inicjalizacja dynamiczna nie jest obsługiwana.
+W firmware nazwa obiektu tworzy sufiks sekcji wejściowej, dzięki czemu
+linker może usunąć nieużywane bufory.
+
+Buildy STM32G474 umieszczają te bufory w CCM przy wyłączonym TLS. Z TLS
+bufory pozostają w SRAM, a CCM jest dostępny dla providera TLS. Oba helpery
+builda STM32 stosują ten wybór; wymagane są pliki linkera i startup HAL.
+RP2040, RP2350 i ESP32 pozostawiają bufory w zwykłym BSS, a mock używa
+pamięci hosta. Zwykły SRAM jest poprawnym wyborem; makro nie zapewnia dostępu
+DMA ani synchronizacji. Sprawdź w ELF/mapie łączne zużycie RAM, heap i stosów.
+
+## Asercje
+
+`HAL_ASSERT(cond, msg)` z `<hal/core/hal_assert.h>` sprawdza `cond` raz
+i przy niepowodzeniu wywołuje `hal_assert_fail(msg)`. RP i sprzętowy STM32
+wypisują komunikat i zatrzymują się w pętli; ESP32 i buildy hostowe wypisują
+go na stderr i wywołują `abort()`. Komunikat `NULL` jest wypisywany jako `(null)`.
+Asercje są domyślnie włączone. Zdefiniowanie `HAL_DISABLE_ASSERTS` usuwa
+sprawdzenie; żaden z argumentów nie jest obliczany. Unikaj w nich efektów
+ubocznych.
+
 ## `hal_status` - Współdzielone kody statusu
 
 ```c
@@ -549,8 +581,8 @@ Funkcje interwałowe pozwalają uruchamiać czynności okresowo w pętli, bez bl
 
 **Współbieżność:** Funkcje czasu i watchdoga na RP oraz ESP32-S3 można wywoływać z obu rdzeni. Na STM32G474 odświeżenie watchdoga jest atomowym zapisem rejestru, ale jego rekonfigurację musi synchronizować aplikacja. W FreeRTOS na RP, STM32G474 i ESP32-S3 `hal_delay_ms()` blokuje tylko zadanie wywołujące, o ile kontekst pozwala użyć schedulera. Przed jego uruchomieniem, w ISR i w sekcjach krytycznych HAL stosowane jest aktywne oczekiwanie. `hal_delay_us()` blokuje wywołujący rdzeń. Stan mocka jest przeznaczony do testów jednowątkowych.
 
-> **Uwaga:** `COUNTOF(arr)` działa wyłącznie z tablicami alokowanymi statycznie
-> (nie ze wskaźnikami).
+> **Uwaga:** `COUNTOF(arr)` działa z tablicami, także lokalnymi.
+> Wskaźnik, w tym parametr tablicowy funkcji, daje błędną liczbę elementów.
 
 > **Uwaga:** `NONULL(x)` sprawdza wskaźnik w funkcjach, które w razie błędu
 > przechodzą do wspólnej sekcji `error:`. Makro używa `NULL`, dlatego działa
@@ -1217,6 +1249,7 @@ Używaj wspólnych makr zamiast powielać warunki zależne od kompilatora. Nagł
 #define HAL_COMPILER_IS_MSVC      0 or 1
 
 #define HAL_NORETURN          ...  // function never returns
+#define HAL_NO_STACK_PROTECTOR ... // omit stack-canary instrumentation
 #define HAL_FORCE_INLINE      ...  // inline specifier plus a forced-inline request
 #define HAL_TRAP()            ...  // stop immediately at an unrecoverable point
 #define HAL_UNREACHABLE()     ...  // path the program must never take
@@ -1279,14 +1312,39 @@ Napisanie `inline` obok `HAL_FORCE_INLINE` powoduje zduplikowanie
 specyfikatora na GNU i podnosi ostrzeżenie C4141 na MSVC, dlatego to makro
 zawiera ten specyfikator.
 
-Makra operacji atomowych obsługują wartości skalarne o rozmiarze 1, 2, 4 lub
-8 bajtów. W C++ operacji skalarnych można używać także ze wskaźnikami do
-obiektów i funkcji. Przenośny kod C korzysta z osobnych makr do odczytu i
-porównania z wymianą wskaźnika do obiektu. Porównanie z wymianą jest silne:
-po niepowodzeniu zapisuje zaobserwowaną wartość przez `expected`. Dla
-niepowodzenia wybieraj porządek acquire lub słabszy, nigdy release ani
-acquire-release. Odczyt i zapis przyjmują wyłącznie porządki dozwolone dla
-danego rodzaju operacji.
+`HAL_NO_STACK_PROTECTOR` wyłącza dodawanie canary do funkcji przez GCC/Clang;
+na pozostałych kompilatorach jest pusty. Używaj go wyłącznie w runtime
+stack-protectora oraz końcowej ścieżce fault/reset, które muszą działać
+po wykryciu uszkodzonej ramki stosu. Zwykłe funkcje aplikacji zachowują
+ustawienie ochrony wybrane dla builda.
+
+`HAL_TRAP()` zatrzymuje wykonanie: GCC/Clang emitują pułapkę, MSVC zatrzymuje się
+w debuggerze i następnie wywołuje `abort()`, a fallback wywołuje `abort()`.
+`HAL_UNREACHABLE()` informuje GCC/Clang/MSVC, że wykonanie nie może dotrzeć do tego
+miejsca; dotarcie tam powoduje niezdefiniowane zachowanie. Użyj `HAL_TRAP()`,
+gdy błąd może wystąpić w runtime i wymaga pewnego zatrzymania.
+
+Makra operacji atomowych obsługują wartości całkowite o rozmiarze 1, 2, 4 lub
+8 bajtów, w tym `bool`. W C++ odczyt, zapis, wymiana i porównanie z wymianą
+obsługują również wskaźniki do obiektów i funkcji; przenośny kod C korzysta
+z osobnych makr do odczytu i porównania z wymianą wskaźnika do obiektu.
+Operacje arytmetyczne i bitowe przyjmują liczby całkowite; test-and-set
+oraz clear przyjmują flagę typu `bool` lub bajt.
+
+| Makra | Wynik |
+| --- | --- |
+| `HAL_ATOMIC_LOAD`, `HAL_ATOMIC_POINTER_LOAD` | Odczytana wartość |
+| `HAL_ATOMIC_EXCHANGE`, `HAL_ATOMIC_FETCH_ADD`, `HAL_ATOMIC_FETCH_SUB`, `HAL_ATOMIC_FETCH_OR` | Wartość sprzed zmiany |
+| `HAL_ATOMIC_ADD_FETCH`, `HAL_ATOMIC_SUB_FETCH` | Wartość po zmianie |
+| `HAL_ATOMIC_COMPARE_EXCHANGE`, `HAL_ATOMIC_POINTER_COMPARE_EXCHANGE` | `true` po sukcesie; po niepowodzeniu `false` i zapis zaobserwowanej wartości przez `expected` |
+| `HAL_ATOMIC_TEST_AND_SET` | Czy flaga była już ustawiona |
+| `HAL_ATOMIC_STORE`, `HAL_ATOMIC_CLEAR`, `HAL_ATOMIC_THREAD_FENCE` | Bez wartości zwracanej |
+
+Porównanie z wymianą jest silne. Porządek niepowodzenia przyjmuje
+`HAL_ATOMIC_RELAXED`, `HAL_ATOMIC_ACQUIRE` lub `HAL_ATOMIC_SEQ_CST` i nie może
+być silniejszy niż porządek sukcesu. Odczyt przyjmuje te same trzy porządki;
+zapis i clear przyjmują `HAL_ATOMIC_RELAXED`, `HAL_ATOMIC_RELEASE` lub
+`HAL_ATOMIC_SEQ_CST`.
 
 GNU i Clang odwzorowują wywołania bezpośrednio na `__atomic_*`, zachowując
 żądany porządek znany podczas kompilacji. Wariant hostowy MSVC używa funkcji
@@ -1299,7 +1357,8 @@ compare-exchange.
 
 Obydwa makra tożsamości można wstępnie zdefiniować jako `0`, co wybiera
 przenośny wariant awaryjny: `HAL_TRAP()` staje się `abort()`,
-`hal_clz32()` używa pętli, a makra atrybutów rozwijają się do niczego. Użycie
+`hal_clz32()` używa pętli, a atrybuty są pomijane. `HAL_FORCE_INLINE`
+zachowuje zwykłe `inline`. Użycie
 operacji atomowej jest wtedy odrzucane podczas kompilacji, ponieważ ten wariant
 nie może zapewnić synchronizacji. Test
 kompilatora hostowego buduje w ten sposób jedną jednostkę translacji i
@@ -1309,14 +1368,17 @@ obsługiwany kompilator.
 Egzotyczny port może użyć tego samego przełącznika, zanim powstanie jego
 własne mapowanie.
 
-**Celowo poza zakresem:** atrybuty wpływające na linker (`section`,
-`naked`, `constructor`) i asembler inline są zapisane bezpośrednio w kodzie
-właściwym dla targetu. Ich błędne odwzorowanie mogłoby niezauważenie uszkodzić
-układ pamięci. Źródła firm trzecich zachowują oryginalną postać.
+Rozmieszczenie w pamięci opisuje [`hal_memory`](#funkcje-w-ram).
+Pozostałe atrybuty linkera (`naked`, `constructor`) i asembler inline są
+zapisane bezpośrednio w kodzie targetu. Źródła firm trzecich zachowują
+oryginalną postać.
 
 **Wielowątkowość:** Makra atrybutów oraz `hal_clz32()` nie przechowują stanu.
-Operacja atomowa synchronizuje tylko obiekt przekazany przez kod wywołujący i
-tylko zgodnie z wybranym porządkiem pamięci.
+Atomowy dostęp chroni przekazany obiekt; wybrany porządek może również
+udostępnić inne dane przez odpowiadającą mu operację synchronizacji. Bariera
+porządkuje dostęp do pamięci bez zmiany obiektu. Kod wywołujący musi zapewnić
+synchronizację i unikać równoczesnego nieatomowego dostępu do obiektu
+obsługiwanego atomowo.
 
 ### Przykłady
 

@@ -21,10 +21,10 @@ Feature flags use presence semantics. Supported project definitions are
 generation, CMake helpers, static-library scripts, and `jh-vscode` reject `=0`
 and other explicit values with `[JH-CFG-VALUE]`. Arbitrary direct compiler
 invocations retain preprocessor presence semantics. The feature-registry lint
-also reports unknown or derived symbols. In definition-list inputs, every
-`HAL_ENABLE_*` entry must be a standalone simple token separated with
-semicolons. Whitespace does not separate multiple feature definitions, and
-CMake generator expressions are rejected.
+also reports unknown or derived symbols. In the `EXTRA_HAL_DEFINES` list of a
+static library build, every `HAL_ENABLE_*` entry must be a standalone simple
+token separated with semicolons. Whitespace does not separate multiple feature
+definitions, and CMake generator expressions are rejected.
 
 The registry in `config/features/` defines module dependencies and generates the C header included by `hal_config.h`. CMake, board and link metadata generation, and `jh-vscode` use the same rules and record the `requestedFeatures` and `resolvedFeatures` sets.
 
@@ -325,11 +325,12 @@ The target-selection path detects it via
 `__has_include("hal_project_config.h")` before target auto-detection. Keep the
 header macro-only and avoid includes or conditions based on derived
 `HAL_TARGET_IS_*` and `HAL_BOARD_IS_*` macros, which are resolved afterward.
-Feature definitions used for source selection must be unconditional
-`#define HAL_ENABLE_X` or `#define HAL_ENABLE_X 1`; the only supported
-conditional form is a same-symbol `#ifndef HAL_ENABLE_X` guard. Do not put
-feature definitions under any other `#if`/`#ifdef`, including raw or derived
-target/board branches, because the early collector reads the file textually.
+Feature definitions may depend on the target selector (`HAL_TARGET_RP2040`,
+`HAL_TARGET_STM32G474`, and so on) and on the definitions of the selected
+variant, because every tool evaluates the header like the preprocessor for one
+target and variant. A feature that depends on anything the build does not pass
+to the compiler stops the build with `[JH-CFG-SCOPE]`. See
+[Targets and variants](../../en/FwProjectWorkflow.md#targets-and-variants).
 
 <a id="freertos-availability-flag"></a>
 

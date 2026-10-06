@@ -62,16 +62,18 @@ vscode/entry/jh-vscode upload \
   --target stm32g474 --board nucleo-g474re-canhat
 ```
 
-For the FreeRTOS build add the following temporary cache entry to the project
-manifest (`.vscode/jaszczurhal.project.json`, `cmake.cache`):
+The `FREERTOS` variant (`HAL_ENABLE_FREERTOS=1`, `HAL_ENABLE_APP_TASK1=1`)
+is the FreeRTOS build. Add `--variant FREERTOS` to both commands:
 
-```json
-"JH_EXTRA_DEFINES": "HAL_ENABLE_FREERTOS=1;HAL_ENABLE_APP_TASK1=1"
+```sh
+vscode/entry/jh-vscode upload \
+  --project tests/hardware/stm32_uart \
+  --target stm32g474 --board nucleo-g474re-canhat --variant FREERTOS
 ```
 
 To run the 170 MHz `nucleo-g474re` profile on a Nucleo that carries the HAT,
-use `"JH_EXTRA_DEFINES": "UART_FIXTURE_HAT_RELAYS=1"` so that the relay
-drivers stay off.
+use `--board nucleo-g474re --variant HAT_RELAYS`; the variant defines
+`UART_FIXTURE_HAT_RELAYS=1` so that the relay drivers stay off.
 
 Optionally read the UID words without resetting the board:
 

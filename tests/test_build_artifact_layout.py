@@ -6,8 +6,10 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
+import tempfile
 
 
 from repo_root import repo_root  # noqa: E402
@@ -139,6 +141,49 @@ require(
     and "Commit blocked: generated artifacts are missing or stale."
     in pre_commit_hook,
     "pre-commit hook does not block stale generated artifacts with repair guidance",
+)
+
+
+def commit_through_hook(work: Path) -> subprocess.CompletedProcess[str]:
+    """Commit one header in a scratch repository that runs the real hook with
+    a clang-format which rewrites the file and a generated-artifact check that
+    refuses the rewritten text."""
+    repo = work / "repo"
+    (repo / ".githooks").mkdir(parents=True)
+    shutil.copy2(ROOT / ".githooks" / "pre-commit", repo / ".githooks" / "pre-commit")
+    (repo / "scripts").mkdir()
+    (repo / "scripts" / "sync_generated.py").write_text(
+        "import pathlib, sys\n"
+        "sys.exit('FORMATTED' in pathlib.Path('config.h').read_text())\n",
+        encoding="utf-8",
+    )
+    tools = work / "bin"
+    tools.mkdir()
+    formatter = tools / "clang-format"
+    formatter.write_text('#!/bin/sh\necho FORMATTED >> "$2"\n', encoding="utf-8")
+    formatter.chmod(0o755)
+    (repo / "config.h").write_text("#define A 1\n", encoding="utf-8")
+    environment = {**os.environ, "PATH": f"{tools}{os.pathsep}{os.environ['PATH']}"}
+
+    def git(*arguments: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@t", *arguments],
+            cwd=repo, env=environment, capture_output=True, text=True, check=False,
+        )
+
+    for arguments in (("init", "-q"), ("config", "core.hooksPath", ".githooks"),
+                      ("add", "config.h")):
+        require(git(*arguments).returncode == 0, f"scratch repository: git {arguments}")
+    return git("commit", "-q", "-m", "feat: probe")
+
+
+# The check runs after formatting, so it sees what the commit records.
+with tempfile.TemporaryDirectory() as hook_work:
+    hook_commit = commit_through_hook(Path(hook_work))
+require(
+    hook_commit.returncode != 0 and "Commit blocked" in hook_commit.stderr,
+    "pre-commit hook checks generated artifacts before formatting the commit:\n"
+    f"{hook_commit.stdout}{hook_commit.stderr}",
 )
 for duplicated_generator in (
     "scripts/generate_hal_features.py --write",

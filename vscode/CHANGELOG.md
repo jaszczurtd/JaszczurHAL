@@ -2,6 +2,22 @@
 
 ## 0.1.0 - Unreleased
 
+- Read the whole HAL configuration of a project from its `hal_project_config.h`
+  through `scripts/project_config.py`, which evaluates the header like the C
+  preprocessor for the selected target and variant. The header declares its
+  targets with `JH_PROJECT_TARGETS(X)` and its variants with
+  `JH_PROJECT_VARIANTS(X)`; variant ids use capital letters, digits, and `_`,
+  variant definitions add to the base configuration, and `#error` keeps a
+  variant off a target. `--variant <id>` builds module
+  `<module>_<id>` into `<buildDir>/variants/<id>`, and the generated variant
+  tasks take their detail from the variant description. The manifest keeps
+  tooling metadata only: `variants`, `example`, and the cache keys
+  `JH_EXTRA_DEFINES`, `EXTRA_HAL_DEFINES`, `JH_PROJECT_SOURCES`, `JH_VARIANT`,
+  `HAL_ENABLE_*`, and `HAL_DISABLE_*` are rejected with `[JH-CFG-MANIFEST]`.
+  Projects compile every `*.c`/`*.cpp` file in their directory plus
+  `JH_EXTRA_SOURCES`. Examples are ordinary projects with hand-written
+  manifests; `config/tooling/examples.json` and the `examples/` CMake wrapper
+  are gone.
 - Stop with `[JH-CFG-BOARD]` when the CLI, local state, or manifest names a
   board that no target registers, when `--board` names a board of another
   target, or when any manifest board does not belong to its target, instead of

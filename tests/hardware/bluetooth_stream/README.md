@@ -18,8 +18,10 @@ Build and upload all eight target, board, and runtime combinations separately:
 | `rp2350-arm` | `pico2w` | bare-metal, FreeRTOS |
 | `stm32g474` | `nucleo-g474re-pim730` | bare-metal, FreeRTOS |
 
-The same eight tuples are declared as `example.hardwareMatrix` in the fixture
-manifest and are checked by the repository artifact-layout test.
+This table is the fixture's hardware matrix. `hal_project_config.h` declares
+the targets and the `FREERTOS` variant, the manifest selects the default
+boards, and `tests/test_hardware_fixture_files.py` checks that the fixture
+builds each of the eight tuples.
 
 Bare-metal builds:
 
@@ -38,7 +40,7 @@ vscode/entry/jh-vscode build \
   --target stm32g474 --board nucleo-g474re-pim730
 ```
 
-Append `--variant freertos` to each build and upload command for the FreeRTOS
+Append `--variant FREERTOS` to each build and upload command for the FreeRTOS
 image. The fixture initializes BLE from the first `app_task0()` call, after the
 FreeRTOS scheduler has started. Its task-0 stack is 1024 words because the
 authenticated handshake and its cryptographic temporaries exceed the generic
@@ -47,12 +49,13 @@ A successful build is a software result; it does not count as a hardware pass.
 
 ## STM32G474 PIM730 plus ILI9341 load variants
 
-The optional `display` and `display-freertos` variants keep the same BLE Stream
+The optional `DISPLAY` and `DISPLAY_FREERTOS` variants keep the same BLE Stream
 protocol and host verifier while continuously updating an ILI9341 connected to
 the NUCLEO-G474RE Arduino SPI header. They exercise SPI1 in parallel with the
 dedicated PIM730 gSPI transport on PB12-PB15. These variants are additional
 coexistence/load evidence and do not replace either of the two base STM32 gate
-images declared in `example.hardwareMatrix`.
+images listed in the build matrix. `hal_project_config.h` stops them with
+`#error` on any target other than STM32G474.
 
 Build the separate artifacts with:
 
@@ -60,12 +63,12 @@ Build the separate artifacts with:
 vscode/entry/jh-vscode build \
   --project tests/hardware/bluetooth_stream \
   --target stm32g474 --board nucleo-g474re-pim730 \
-  --variant display
+  --variant DISPLAY
 
 vscode/entry/jh-vscode build \
   --project tests/hardware/bluetooth_stream \
   --target stm32g474 --board nucleo-g474re-pim730 \
-  --variant display-freertos
+  --variant DISPLAY_FREERTOS
 ```
 
 The ILI9341 uses the wiring already validated by `examples/07_display_media`:
@@ -142,7 +145,7 @@ python3 tests/hardware/bluetooth_stream/verify.py \
 300, and `--stream-rate` cannot be lower than 10. A gate also fails if the
 observed authenticated-message rate is below 90% of `--stream-rate`. Increase
 the stream duration for an overnight soak. Use runtime `baremetal` for the
-base image and `freertos` for the `freertos` manifest variant. The verifier
+base image and `freertos` for the `FREERTOS` variant. The verifier
 explicitly selects LE discovery, so a stale BlueZ alias does not affect
 address-based selection. It requires the system Python packages for D-Bus and
 GLib plus the `cryptography` package.
@@ -156,7 +159,7 @@ watchdog command resets the MCU but does not cut VBUS, so it does not replace
 a physical power-loss test.
 
 Not yet run on hardware: RP2040 Pico with RM2/PIM730 in both runtimes, and the
-base STM32G474 + RM2/PIM730 images in both runtimes. The STM32G474 `display`
+base STM32G474 + RM2/PIM730 images in both runtimes. The STM32G474 `DISPLAY`
 variants have been run. The host side runs only on Linux with BlueZ; native
 Windows is not covered.
 
@@ -207,7 +210,7 @@ secret delivered out of band and stored through its provisioning flow.
 
 ## BLE command-router smoke
 
-The `commands` variants of `examples/26_ble_stream` exercise the separate
+The `COMMANDS` variants of `examples/26_ble_stream` exercise the separate
 `hal_ble_commands` adapter while this fixture's base firmware continues to
 exercise raw Stream payloads. Linux/BlueZ is the Central and each board remains
 a Peripheral.
@@ -218,12 +221,12 @@ both boards are already in BOOTSEL, select each volume explicitly:
 ```bash
 vscode/entry/jh-vscode upload \
   --project examples/26_ble_stream \
-  --target rp2040 --board picow --variant commands \
+  --target rp2040 --board picow --variant COMMANDS \
   --bootsel-volume /dev/<baremetal-partition>
 
 vscode/entry/jh-vscode upload \
   --project examples/26_ble_stream \
-  --target rp2040 --board picow --variant commands-freertos \
+  --target rp2040 --board picow --variant COMMANDS_FREERTOS \
   --bootsel-volume /dev/<freertos-partition>
 ```
 

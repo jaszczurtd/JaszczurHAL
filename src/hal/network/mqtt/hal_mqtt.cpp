@@ -5,6 +5,7 @@
 #ifdef HAL_ENABLE_MQTT
 
 #include "../jh_network_runtime.h"
+#include "hal/core/hal_memory.h"
 #include "hal/core/hal_mutex_once.h"
 #include "hal/network/mqtt/PubSubClient/src/PubSubClient.h"
 #include "hal/network/mqtt/hal_mqtt.h"
@@ -41,7 +42,7 @@ typedef struct {
   uint16_t length;
 } hal_mqtt_rx_slot_t;
 
-static hal_mqtt_rx_slot_t s_rx_queue[HAL_MQTT_RX_QUEUE_DEPTH];
+static hal_mqtt_rx_slot_t HAL_CPU_ONLY_BSS(s_rx_queue)[HAL_MQTT_RX_QUEUE_DEPTH];
 static hal_mqtt_rx_slot_t s_dispatch_slot;
 static uint8_t s_rx_head = 0; // next slot to read
 static uint8_t s_rx_tail = 0; // next slot to write

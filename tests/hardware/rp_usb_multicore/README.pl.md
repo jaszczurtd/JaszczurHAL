@@ -23,7 +23,7 @@ python3 tests/hardware/rp_usb_multicore/verify_usb_multicore.py \
 ```
 
 Dla Pico 2 wybierz `rp2350-arm` lub `rp2350-riscv`, użyj płytki kompilacji
-`pico2` i przekaż `--board pico2` do weryfikatora. Dodaj `--variant freertos`
+`pico2` i przekaż `--board pico2` do weryfikatora. Dodaj `--variant FREERTOS`
 do komend kompilacji i wgrywania oraz użyj `--runtime freertos` dla przebiegu
 FreeRTOS SMP.
 

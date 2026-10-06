@@ -15,6 +15,8 @@ from repo_root import repo_root  # noqa: E402
 
 ROOT = repo_root(sys.argv, __file__)
 FIXTURE = ROOT / "tests" / "hardware" / "bluetooth_classic_hci_trace"
+sys.path.insert(0, str(ROOT))
+from vscode.runtime import jh_vscode as workflow  # noqa: E402
 
 
 def require(condition: bool, message: str) -> None:
@@ -27,15 +29,20 @@ manifest = json.loads(
         encoding="utf-8"
     )
 )
+builds = workflow.project_builds(FIXTURE, manifest)
 require(
-    manifest["example"]["targets"] == ["rp2040", "rp2350-arm"]
-    and manifest["example"]["boards"]
-    == {"rp2040": "picow", "rp2350-arm": "pico2w"},
+    {
+        build.target.id: workflow.load_project_config(
+            FIXTURE, target_override=build.target.id, use_local_state=False
+        )["board"]
+        for build in builds
+    }
+    == {"rp2040": "picow", "rp2350-arm": "pico2w"}
+    and all(build.variant is None for build in builds),
     "HCI trace fixture must compare Pico W and Pico 2 W",
 )
 require(
-    manifest["cmake"]["cache"]["JH_EXTRA_DEFINES"]
-    == "HAL_ENABLE_BLUETOOTH_CLASSIC=1",
+    all(build.requested_features() == ["HAL_ENABLE_BLUETOOTH_CLASSIC"] for build in builds),
     "HCI trace fixture must use only the public Classic profile",
 )
 

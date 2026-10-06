@@ -3,6 +3,10 @@
  * Internal measurements continue while the external converter is unavailable.
  */
 
+#include <hal/core/hal_config.h>
+
+#if !defined(HAL_ENABLE_ADC_SCAN)
+
 #include <hal/analog/hal_adc.h>
 #include <hal/analog/hal_external_adc.h>
 #include <hal/core/hal_app.h>
@@ -120,3 +124,5 @@ void app_task0(void) {
   }
   hal_delay_ms(20u);
 }
+
+#endif /* !defined(HAL_ENABLE_ADC_SCAN) */

@@ -30,6 +30,7 @@ include_guard(GLOBAL)
 set(_JH_STM32_MODULE_DIR "${CMAKE_CURRENT_LIST_DIR}" CACHE INTERNAL "")
 include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/jh_project_features.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/jh_stack_protector.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/jh_stm32g474_memory.cmake")
 
 # jh_add_stm32g474_firmware(<target>
 #     SOURCES  <portable app sources (.c/.cpp)>
@@ -138,6 +139,9 @@ function(jh_add_stm32g474_firmware TARGET)
         ${_hal_common}
         ${_utils}
     )
+
+    jh_stm32g474_configure_memory(${TARGET} PRIVATE
+        FEATURES ${_jh_selection_features})
 
     set_target_properties(${TARGET} PROPERTIES
         OUTPUT_NAME "${TARGET}"

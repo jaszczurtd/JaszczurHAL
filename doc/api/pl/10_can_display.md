@@ -863,6 +863,10 @@ int  hal_display_prepare_text_v(char *display_txt, size_t display_txt_size,
   lub selektora `HAL_COLOR(name)`, na przykład `HAL_COLOR(ORANGE)`.
 - **Pomocnicy trybu wyświetlacza:** `HAL_DISPLAY_ROTATION_*`, `HAL_DISPLAY_ROTATION(deg)`,
   `HAL_DISPLAY_INVERT_ON/OFF`, `HAL_DISPLAY_COLOR_ORDER_RGB/BGR`.
+- **Maski obrotu:** `HAL_DISPLAY_ROTATION_MASK(rotation)` zamienia wartość enum
+  obrotu (0..3) na bit w `supported_rotations`; przekaż enum zamiast kąta
+  w stopniach. `HAL_DISPLAY_ROTATION_MASK_ALL` obejmuje wszystkie cztery bity.
+  Sprawdź maskę zwróconą przez backend przed wyborem obrotu.
 - **Obsługiwane formaty i bezpośredni zapis bufora:** Pobierz właściwości aktywnego
   backendu przez `hal_display_get_capabilities_ex()`, a w
   `hal_display_write_raw_ex()` używaj wyłącznie zadeklarowanych formatów i wyrównań.

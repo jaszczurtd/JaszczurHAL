@@ -2,25 +2,14 @@
     "$schema": "../../../vscode/schema/jh_vscode_project.schema.json",
     "project": "JaszczurHAL examples",
     "module": "25_ota",
-    "example": {
-        "targets": [
-            "esp32s3",
-            "rp2040",
-            "rp2350-arm"
-        ],
-        "boards": {
-            "rp2040": "picow",
-            "rp2350-arm": "pico2w",
-            "esp32s3": "waveshare-esp32-s3-zero"
-        },
-        "gateTargets": [
-            "esp32s3",
-            "rp2040"
-        ]
-    },
     "toolchain": "cmake",
     "target": "rp2040",
     "board": "picow",
+    "targetProfiles": {
+        "rp2350-arm": {
+            "board": "pico2w"
+        }
+    },
     "buildDir": "${jhRoot}/.build/examples/25_ota",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {
