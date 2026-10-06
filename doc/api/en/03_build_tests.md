@@ -149,7 +149,8 @@ only the example builds (`examples-<target>`) run locally alone.
 apart. A local run therefore checks everything Linux CI checks on the same
 commit. Add a new check to a stage, never to the workflow alone.
 
-`--commit [REV]` checks out `REV` (default `HEAD`) into `.build/commit-gate`,
+`--commit [REV]` checks out `REV` (default `HEAD`) into
+`~/.cache/jaszczurhal/commit-gate/<id>`, outside the repository,
 without untracked files or unstaged edits, and runs the gate there. The
 pinned git components come from this tree with `rsync`, and before any stage
 runs, whichever were selected with `--stage`, their verification rejects any

@@ -5,6 +5,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SBOM="${REPO_ROOT}/security/sbom.cdx.json"
+# Findings with a recorded decision (security/vulnerability_log.md).
+OSV_CONFIG="${REPO_ROOT}/security/osv-scanner.toml"
 
 CVE_DB="${HOME}/.cache/cve-bin-tool/cve.db"
 CVE_REFRESH_ATTEMPTS="${JH_CVE_REFRESH_ATTEMPTS:-3}"
@@ -58,10 +60,10 @@ ran_scanner=0
 # when it cannot finish, e.g. without network. Findings fail at once; other
 # failures get retried and still fail the scan if they last.
 run_osv_scanner() {
-    local scanner="$1" attempt status
+    local attempt status
     for ((attempt = 1; attempt <= CVE_REFRESH_ATTEMPTS; attempt++)); do
         status=0
-        "${scanner}" scan source --recursive "${REPO_ROOT}" || status=$?
+        "$@" || status=$?
         if [[ "${status}" -le 1 ]]; then
             return "${status}"
         fi
@@ -75,8 +77,20 @@ run_osv_scanner() {
 
 if scanner="$(find_tool osv-scanner)"; then
     ran_scanner=1
+    # The repository's own files: manifests and the SBOM, honouring
+    # .gitignore. The vendored-directory heuristic stays off; it guesses
+    # components from file hashes, cannot hash ESP-IDF and mismatches others.
     info "Running osv-scanner against repository sources"
-    run_osv_scanner "${scanner}"
+    run_osv_scanner "${scanner}" scan source --config "${OSV_CONFIG}" \
+        --experimental-disable-plugins filesystem/vendored \
+        --recursive "${REPO_ROOT}"
+    # The pinned components (git-ignored checkouts with their submodules),
+    # identified by their commits; build trees stay out.
+    info "Running osv-scanner against the pinned component commits"
+    run_osv_scanner "${scanner}" scan source --config "${OSV_CONFIG}" \
+        --experimental-no-default-plugins --experimental-plugins vcs/gitrepo \
+        --include-git-root --no-ignore --experimental-exclude .build \
+        --recursive "${REPO_ROOT}"
 else
     warn "osv-scanner not found; skipping OSV vulnerability scan"
 fi

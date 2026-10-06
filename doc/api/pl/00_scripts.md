@@ -198,7 +198,9 @@ linuksowe joby CI uruchamiają te same etapy przez
 `scripts/install_host_tools.sh`. Wyjątkiem są kompilacje przykładów:
 wypisuje je `--list-local-stages` i działają wyłącznie lokalnie. `tests/test_ci_gate_stages.py` kończy się
 błędem, gdy workflow i lista się rozjadą. `--commit [REV]` uruchamia kontrolę
-na czystym checkoucie `REV` (domyślnie `HEAD`) w `.build/commit-gate`;
+na czystym checkoucie `REV` (domyślnie `HEAD`) w
+`~/.cache/jaszczurhal/commit-gate/<id>`, poza repozytorium, żeby narzędzia
+uwzględniające `.gitignore` katalogów nadrzędnych go widziały;
 uruchamiaj go przed wysłaniem zmian. Komponenty z Gita w wersjach wskazanych
 przez repozytorium trafiają tam z tego drzewa przez `rsync`, a zanim ruszy
 którykolwiek etap, niezależnie od wyboru, ich weryfikacja odrzuca każdą

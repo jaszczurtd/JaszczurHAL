@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import datetime
 import os
 from pathlib import Path
 import shutil
@@ -10,6 +11,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 
 from repo_root import repo_root  # noqa: E402
@@ -32,6 +34,7 @@ exit "${code:-0}"
 # Fake osv-scanner: one exit code per run, taken from osv.codes.
 FAKE_OSV = """#!/usr/bin/env bash
 echo "osv $*" >> "${FAKE_DIR}/calls.log"
+[[ -f "${FAKE_DIR}/osv.output" ]] && cat "${FAKE_DIR}/osv.output"
 code="$(head -n 1 "${FAKE_DIR}/osv.codes")"
 tail -n +2 "${FAKE_DIR}/osv.codes" > "${FAKE_DIR}/osv.next"
 mv "${FAKE_DIR}/osv.next" "${FAKE_DIR}/osv.codes"
@@ -51,6 +54,7 @@ class CveScanTests(unittest.TestCase):
         scripts.mkdir(parents=True)
         (self.work / "repo" / "security").mkdir()
         shutil.copy(ROOT / "scripts" / "check_vulnerabilities.sh", scripts)
+        shutil.copy(ROOT / "security" / "osv-scanner.toml", self.work / "repo" / "security")
         executable(
             scripts / "generate_sbom.py",
             "#!/usr/bin/env bash\necho '{}' > \"$2\"\n",
@@ -122,21 +126,101 @@ class CveScanTests(unittest.TestCase):
     def osv_runs(self) -> int:
         return sum(call.startswith("osv ") for call in self.calls())
 
+    def osv_calls(self) -> list[str]:
+        return [call for call in self.calls() if call.startswith("osv ")]
+
+    def test_osv_scans_own_files_then_component_commits(self) -> None:
+        result = self.run_scan([0], 0, cached_db=True, osv_codes=[0, 0])
+        self.assertEqual(0, result.returncode, result.stderr)
+        own, components = self.osv_calls()
+        config = self.work / "repo" / "security" / "osv-scanner.toml"
+        for call in (own, components):
+            self.assertIn(f"--config {config}", call)
+        # Own files honour .gitignore and skip the file-hash heuristic.
+        self.assertIn("--experimental-disable-plugins filesystem/vendored", own)
+        self.assertNotIn("--no-ignore", own)
+        # Components by commit only, build trees out.
+        for flag in ("--experimental-no-default-plugins",
+                     "--experimental-plugins vcs/gitrepo", "--include-git-root",
+                     "--no-ignore", "--experimental-exclude .build"):
+            self.assertIn(flag, components)
+
     def test_osv_findings_fail_without_retry(self) -> None:
         result = self.run_scan([0], 0, cached_db=True, osv_codes=[1])
         self.assertNotEqual(0, result.returncode)
         self.assertEqual(1, self.osv_runs())
 
-    def test_osv_unfinished_run_is_retried(self) -> None:
-        result = self.run_scan([0], 0, cached_db=True, osv_codes=[127, 0])
-        self.assertEqual(0, result.returncode, result.stderr)
+    def test_osv_component_findings_fail(self) -> None:
+        result = self.run_scan([0], 0, cached_db=True, osv_codes=[0, 1])
+        self.assertNotEqual(0, result.returncode)
         self.assertEqual(2, self.osv_runs())
+
+    def test_osv_unfinished_run_is_retried(self) -> None:
+        result = self.run_scan([0], 0, cached_db=True, osv_codes=[127, 0, 0])
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(3, self.osv_runs())
         self.assertIn("could not finish", result.stderr)
 
-    def test_osv_lasting_failure_fails_the_scan(self) -> None:
+    def test_osv_accepts_no_scanner_error(self) -> None:
+        # The ESP-IDF hashing error was once accepted; no error is now.
+        (self.fake / "osv.output").write_text(
+            "Error during extraction: (extracting as filesystem/vendored) "
+            "repo/third_party/esp-idf: failed during hashing: too many files to hash\n",
+            encoding="utf-8")
         result = self.run_scan([0], 0, cached_db=True, osv_codes=[127, 127, 127])
         self.assertNotEqual(0, result.returncode)
         self.assertEqual(3, self.osv_runs())
+
+    def test_osv_lasting_failure_fails_the_scan(self) -> None:
+        result = self.run_scan([0], 0, cached_db=True, osv_codes=[0, 127, 127, 127])
+        self.assertNotEqual(0, result.returncode)
+        self.assertEqual(4, self.osv_runs())
+
+
+class RecordedDecisionTests(unittest.TestCase):
+    """security/osv-scanner.toml only silences findings that have a decision
+    row in security/vulnerability_log.md, and every such row is listed."""
+
+    def test_ignored_findings_match_the_log(self) -> None:
+        config = tomllib.loads(
+            (ROOT / "security" / "osv-scanner.toml").read_text(encoding="utf-8"))
+        log_rows = [
+            [cell.strip() for cell in line.strip().strip("|").split("|")]
+            for line in (ROOT / "security" / "vulnerability_log.md")
+            .read_text(encoding="utf-8").splitlines()
+            if line.startswith("| 20")
+        ]
+        by_id = {}
+        for date, ids, *_, status, _cvss, _reach, decision in (
+            (row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7])
+            for row in log_rows
+        ):
+            for vuln in ids.split(","):
+                by_id[vuln.strip()] = (date, status, decision)
+        ignored = {entry["id"]: entry for entry in config["IgnoredVulns"]}
+        for vuln, entry in ignored.items():
+            self.assertIn(vuln, by_id, f"{vuln} is ignored without a log row")
+            date, status, _ = by_id[vuln]
+            self.assertTrue(entry["reason"].startswith(f"{date}: "), vuln)
+            self.assertIn(status, {"not_affected", "fixed", "mitigated"}, vuln)
+            self.assertEqual(status == "mitigated", "ignoreUntil" in entry,
+                             f"{vuln}: mitigated entries, and only they, expire")
+        listed = {vuln for vuln, (_, _, decision) in by_id.items()
+                  if "security/osv-scanner.toml" in decision}
+        self.assertEqual(listed, set(ignored),
+                         "log rows naming osv-scanner.toml and its entries differ")
+
+    def test_mitigated_decisions_are_reviewed_on_time(self) -> None:
+        # Scanner-independent: a commit-identified component can stop being
+        # reported while its upstream issue stays open. Due on the date itself,
+        # as osv-scanner reports the finding again from that day.
+        config = tomllib.loads(
+            (ROOT / "security" / "osv-scanner.toml").read_text(encoding="utf-8"))
+        for entry in config["IgnoredVulns"]:
+            if "ignoreUntil" in entry:
+                self.assertGreater(
+                    entry["ignoreUntil"], datetime.date.today(),
+                    f"{entry['id']}: review due; update security/vulnerability_log.md")
 
 
 if __name__ == "__main__":
