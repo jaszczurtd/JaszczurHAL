@@ -1067,6 +1067,11 @@ add_test(NAME test_system_architecture_metadata_contract
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 if(UNIX AND NOT APPLE)
+    add_test(NAME test_stm32_crypto_entropy
+        COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_stm32_crypto_entropy.py
+            ${CMAKE_CURRENT_SOURCE_DIR}/..
+            ${CMAKE_CXX_COMPILER})
     add_test(NAME test_cpu_only_bss_placement
         COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/test_cpu_only_bss.py

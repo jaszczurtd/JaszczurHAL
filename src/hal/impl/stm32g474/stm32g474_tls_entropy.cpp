@@ -3,8 +3,8 @@
 #if HAL_TARGET_IS_STM32G474
 #include "hal/core/hal_config.h"
 
-#if defined(HAL_ENABLE_TLS) || defined(HAL_ENABLE_WIREGUARD) ||                \
-    defined(HAL_ENABLE_BLE_STREAM)
+#if defined(HAL_ENABLE_CRYPTO) || defined(HAL_ENABLE_TLS) ||                   \
+    defined(HAL_ENABLE_WIREGUARD) || defined(HAL_ENABLE_BLE_STREAM)
 
 #include "hal/core/hal_status.h"
 #include "hal/security/jh_secure_random.h"
@@ -25,9 +25,9 @@
 
 namespace {
 
+#if defined(JH_STM32G474_HW)
 hal_mutex_t s_rng_mutex;
 
-#if defined(JH_STM32G474_HW)
 #if defined(HAL_ENABLE_TLS)
 hal_mutex_t s_tls_provider_mutex;
 bool s_tls_provider_in_use;
