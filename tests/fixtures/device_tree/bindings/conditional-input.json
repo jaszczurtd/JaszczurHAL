@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "compatible": "test,conditional-input",
+  "description": "Synthetic conditional interrupt and open unit vocabulary.",
+  "domain": "custom",
+  "signals": {
+    "irq": {
+      "direction": "input",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ],
+      "when": {
+        "property": "irqEnabled",
+        "equals": true
+      }
+    }
+  },
+  "properties": {
+    "irqEnabled": {
+      "type": "boolean",
+      "cType": "bool",
+      "description": "Synthetic format example.",
+      "default": false
+    },
+    "voltage": {
+      "type": "number",
+      "cType": "float",
+      "description": "Synthetic format example.",
+      "default": 3.3,
+      "unit": "V"
+    },
+    "temperature": {
+      "type": "number",
+      "cType": "float",
+      "description": "Synthetic format example.",
+      "default": 20,
+      "unit": "°C"
+    },
+    "absoluteTemperature": {
+      "type": "number",
+      "cType": "double",
+      "description": "Synthetic format example.",
+      "default": 293.15,
+      "unit": "K"
+    },
+    "timeout": {
+      "type": "number",
+      "cType": "float",
+      "description": "Synthetic format example.",
+      "default": 2.5,
+      "unit": "ms"
+    },
+    "pressure": {
+      "type": "number",
+      "cType": "float",
+      "description": "Synthetic format example.",
+      "default": 1.01,
+      "unit": "bar"
+    }
+  }
+}

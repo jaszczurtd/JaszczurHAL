@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "bindings": [
+    "../bindings/unknown-polarity.json"
+  ],
+  "nodes": {
+    "led": {
+      "compatible": "test,unknown-polarity"
+    }
+  },
+  "assemblies": {
+    "pico": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "led"
+      },
+      "nodes": {
+        "led": {
+          "present": true,
+          "pins": {
+            "out": 14
+          }
+        }
+      }
+    }
+  }
+}

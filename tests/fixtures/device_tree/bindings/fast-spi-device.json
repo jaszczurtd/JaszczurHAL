@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "compatible": "test,fast-spi-device",
+  "description": "Synthetic SPI consumer allowing independent 10 MHz transactions.",
+  "domain": "spi",
+  "bus": {
+    "kind": "spi",
+    "required": true,
+    "maximumFrequencyHz": 16000000
+  },
+  "signals": {
+    "cs": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "int": {
+      "direction": "input",
+      "required": false,
+      "domains": [
+        "soc-gpio"
+      ]
+    }
+  },
+  "requiresFeatures": [
+    "HAL_ENABLE_SPI"
+  ]
+}

@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "JaszczurHAL target clock trees, version 1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "target": {
+      "$ref": "common.schema.json#/$defs/registryId"
+    },
+    "trees": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "common.schema.json#/$defs/registryId"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "backend": {
+            "$ref": "common.schema.json#/$defs/registryId"
+          },
+          "requiredSources": {
+            "type": "object",
+            "propertyNames": {
+              "$ref": "common.schema.json#/$defs/registryId"
+            },
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "crystal",
+                    "external-clock"
+                  ]
+                },
+                "frequencyHz": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4294967295
+                }
+              },
+              "required": [
+                "kind",
+                "frequencyHz"
+              ]
+            }
+          },
+          "frequenciesHz": {
+            "type": "object",
+            "propertyNames": {
+              "$ref": "common.schema.json#/$defs/identifier"
+            },
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295
+            }
+          },
+          "parameters": {
+            "$ref": "common.schema.json#/$defs/properties"
+          }
+        },
+        "required": [
+          "description",
+          "backend",
+          "requiredSources",
+          "frequenciesHz",
+          "parameters"
+        ]
+      },
+      "minProperties": 1,
+      "required": [
+        "default"
+      ]
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "target",
+    "trees"
+  ]
+}

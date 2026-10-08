@@ -7,11 +7,15 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 SBOM="${REPO_ROOT}/security/sbom.cdx.json"
 # Findings with a recorded decision (security/vulnerability_log.md).
 OSV_CONFIG="${REPO_ROOT}/security/osv-scanner.toml"
+CVE_TRIAGE="${REPO_ROOT}/security/cve-bin-tool-triage.toml"
+WORK_DIR="$(mktemp -d)"
+trap 'rm -rf "${WORK_DIR}"' EXIT
 
 # shellcheck source=scanner_pins.sh
 source "${SCRIPT_DIR}/scanner_pins.sh"
 
-CVE_DB="${HOME}/.cache/cve-bin-tool/cve.db"
+CVE_DB="${XDG_CACHE_HOME-${HOME}/.cache}"
+CVE_DB="${CVE_DB:-.}/cve-bin-tool/cve.db"
 CVE_REFRESH_ATTEMPTS="${JH_CVE_REFRESH_ATTEMPTS:-3}"
 CVE_REFRESH_DELAY_S="${JH_CVE_REFRESH_DELAY_S:-20}"
 CVE_COMMON=(--disable-data-source OSV --disable-version-check)
@@ -96,8 +100,7 @@ if scanner="$(scanner_path osv-scanner)"; then
     # A component pinned to a commit after a release: advisories end at the
     # releases they name, so osv-scanner reports nothing for that commit. The
     # release it descends from, its SBOM pedigree, is checked as well.
-    release_input="$(mktemp)"
-    trap 'rm -f "${release_input}"' EXIT
+    release_input="${WORK_DIR}/releases.json"
     releases="$(python3 - "${SBOM}" "${release_input}" <<'RELEASES'
 import json
 import re
@@ -145,11 +148,18 @@ if [[ "${JH_SECURITY_SCAN_SOURCE:-0}" == "1" ]]; then
                 printf '::warning title=CVE database::%s\n' "${stale}"
             fi
         fi
+        # Recorded decisions become an OpenVEX file (the parser needs a .json
+        # name); the scan then drops the findings they cover.
+        triage_vex="${WORK_DIR}/cve-bin-tool-triage.json"
+        python3 "${SCRIPT_DIR}/cve_bin_tool_triage.py" \
+            --triage "${CVE_TRIAGE}" --sbom "${SBOM}" --output "${triage_vex}"
         info "Running cve-bin-tool against ${SBOM}"
         "${scanner}" "${CVE_COMMON[@]}" \
             --update never \
             --sbom cyclonedx \
-            --sbom-file "${SBOM}"
+            --sbom-file "${SBOM}" \
+            --vex-file "${triage_vex}" \
+            --filter-triage
     else
         warn "cve-bin-tool not found at $(scanner_bin cve-bin-tool); skipping SBOM CVE scan"
     fi

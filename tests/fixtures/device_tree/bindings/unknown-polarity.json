@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "compatible": "test,unknown-polarity",
+  "description": "Synthetic GPIO output without declared active polarity.",
+  "domain": "gpio",
+  "signals": {
+    "out": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    }
+  }
+}

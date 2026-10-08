@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "compatible": "test,spi-device",
+  "description": "Synthetic SPI device with an optional interrupt.",
+  "domain": "spi",
+  "bus": {
+    "kind": "spi",
+    "required": true,
+    "maximumFrequencyHz": 8000000
+  },
+  "signals": {
+    "cs": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "int": {
+      "direction": "input",
+      "required": false,
+      "domains": [
+        "soc-gpio"
+      ]
+    }
+  },
+  "requiresFeatures": [
+    "HAL_ENABLE_SPI"
+  ]
+}

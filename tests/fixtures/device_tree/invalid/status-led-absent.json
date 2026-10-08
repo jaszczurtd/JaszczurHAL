@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "bindings": [
+    "../bindings/gpio-output.json"
+  ],
+  "nodes": {
+    "led": {
+      "compatible": "test,gpio-output"
+    }
+  },
+  "assemblies": {
+    "pico": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "led"
+      },
+      "nodes": {
+        "led": {
+          "present": false
+        }
+      }
+    }
+  }
+}

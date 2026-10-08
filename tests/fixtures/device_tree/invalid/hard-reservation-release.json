@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "nodes": {},
+  "assemblies": {
+    "nucleo": {
+      "target": "stm32g474",
+      "board": "nucleo-g474re",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "board.statusLed"
+      },
+      "nodes": {},
+      "releaseReservations": [
+        "swd"
+      ]
+    }
+  }
+}

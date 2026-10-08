@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "compatible": "test,expander",
+  "description": "Synthetic eight-pin I2C expander.",
+  "domain": "expander",
+  "bus": {
+    "kind": "i2c",
+    "required": true
+  },
+  "pinCount": 8,
+  "properties": {
+    "inputOnly": {
+      "type": "boolean",
+      "cType": "bool",
+      "description": "Whether outputs are forbidden.",
+      "default": false
+    }
+  },
+  "requiresFeatures": [
+    "HAL_ENABLE_I2C"
+  ]
+}

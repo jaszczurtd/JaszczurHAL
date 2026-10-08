@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "compatible": "test,cyw43",
+  "description": "Synthetic CYW43 provider; GSPI wiring is independent of a generic SPI controller.",
+  "domain": "radio",
+  "signals": {
+    "clock": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "data": {
+      "direction": "bidirectional",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "cs": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "wlRegOn": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    }
+  },
+  "provides": [
+    "cyw43"
+  ],
+  "requiresFeatures": [
+    "HAL_ENABLE_WIFI"
+  ]
+}

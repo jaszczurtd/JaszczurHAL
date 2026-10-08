@@ -77,3 +77,4 @@ cve-bin-tool*.pdf
 *.vex.json
 *.vex.yaml
 !security/sbom.cdx.json
+/NOW.md

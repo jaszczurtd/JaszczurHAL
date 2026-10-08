@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "compatible": "test,alias-module",
+  "description": "Synthetic shared control output with a read-only monitor.",
+  "domain": "module",
+  "signals": {
+    "control": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    }
+  },
+  "children": {
+    "driver": {
+      "compatible": "test,gpio-output",
+      "required": true,
+      "properties": {
+        "activeLow": true
+      }
+    },
+    "monitor": {
+      "compatible": "test,gpio-input",
+      "required": true
+    }
+  },
+  "connections": {
+    "control": {
+      "owner": "driver.out",
+      "aliases": [
+        "monitor.in"
+      ]
+    }
+  }
+}

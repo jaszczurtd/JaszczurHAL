@@ -1,0 +1,460 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "JaszczurHAL project device tree, version 1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "bindings": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/sourcePath"
+      },
+      "uniqueItems": true
+    },
+    "nodes": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "common.schema.json#/$defs/identifier"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "compatible": {
+            "type": "string",
+            "minLength": 1
+          },
+          "properties": {
+            "$ref": "common.schema.json#/$defs/properties"
+          },
+          "children": {
+            "type": "object",
+            "propertyNames": {
+              "$ref": "common.schema.json#/$defs/identifier"
+            },
+            "additionalProperties": {
+              "$ref": "#/$defs/child"
+            }
+          }
+        },
+        "required": [
+          "compatible"
+        ]
+      }
+    },
+    "assemblies": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "common.schema.json#/$defs/registryId"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "target": {
+            "$ref": "common.schema.json#/$defs/registryId"
+          },
+          "board": {
+            "$ref": "common.schema.json#/$defs/registryId"
+          },
+          "clock": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "tree": {
+                "$ref": "common.schema.json#/$defs/registryId"
+              }
+            },
+            "required": [
+              "tree"
+            ]
+          },
+          "statusLed": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "node": {
+                "oneOf": [
+                  {
+                    "$ref": "common.schema.json#/$defs/nodePath"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "pixelOrder": {
+                "enum": [
+                  "RGB",
+                  "RBG",
+                  "GRB",
+                  "GBR",
+                  "BRG",
+                  "BGR"
+                ]
+              }
+            },
+            "required": [
+              "node"
+            ]
+          },
+          "nodes": {
+            "type": "object",
+            "propertyNames": {
+              "$ref": "common.schema.json#/$defs/nodePath"
+            },
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "present": {
+                  "type": "boolean"
+                },
+                "properties": {
+                  "$ref": "common.schema.json#/$defs/properties"
+                },
+                "pins": {
+                  "type": "object",
+                  "propertyNames": {
+                    "$ref": "common.schema.json#/$defs/identifier"
+                  },
+                  "additionalProperties": {
+                    "$ref": "common.schema.json#/$defs/endpoint"
+                  }
+                },
+                "bus": {
+                  "oneOf": [
+                    {
+                      "$ref": "common.schema.json#/$defs/identifier"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "controller": {
+                  "oneOf": [
+                    {
+                      "$ref": "common.schema.json#/$defs/controller"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "address": {
+                  "oneOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 127
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "transport": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "minProperties": 1,
+                  "properties": {
+                    "frequencyHz": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 4294967295
+                    },
+                    "mode": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 3
+                    },
+                    "bitOrder": {
+                      "enum": [
+                        "msb",
+                        "lsb"
+                      ]
+                    }
+                  }
+                }
+              },
+              "allOf": [
+                {
+                  "if": {
+                    "required": [
+                      "present"
+                    ],
+                    "properties": {
+                      "present": {
+                        "const": false
+                      }
+                    }
+                  },
+                  "then": {
+                    "maxProperties": 1
+                  }
+                }
+              ]
+            }
+          },
+          "buses": {
+            "type": "object",
+            "propertyNames": {
+              "$ref": "common.schema.json#/$defs/identifier"
+            },
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "spi",
+                    "i2c",
+                    "uart"
+                  ]
+                },
+                "index": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 254
+                },
+                "pins": {
+                  "type": "object",
+                  "propertyNames": {
+                    "$ref": "common.schema.json#/$defs/identifier"
+                  },
+                  "additionalProperties": {
+                    "$ref": "common.schema.json#/$defs/endpoint"
+                  }
+                },
+                "frequencyHz": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4294967295
+                },
+                "mode": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 3
+                },
+                "bitOrder": {
+                  "enum": [
+                    "msb",
+                    "lsb"
+                  ]
+                },
+                "baudRate": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4294967295
+                },
+                "frame": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "dataBits": {
+                      "enum": [
+                        5,
+                        6,
+                        7,
+                        8
+                      ]
+                    },
+                    "parity": {
+                      "enum": [
+                        "none",
+                        "even",
+                        "odd"
+                      ]
+                    },
+                    "stopBits": {
+                      "enum": [
+                        1,
+                        2
+                      ]
+                    }
+                  },
+                  "required": [
+                    "dataBits",
+                    "parity",
+                    "stopBits"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "index",
+                "pins"
+              ],
+              "allOf": [
+                {
+                  "if": {
+                    "properties": {
+                      "kind": {
+                        "const": "spi"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  "then": {
+                    "required": [
+                      "frequencyHz"
+                    ],
+                    "properties": {
+                      "baudRate": {
+                        "not": {}
+                      },
+                      "frame": {
+                        "not": {}
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "kind": {
+                        "const": "i2c"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  "then": {
+                    "required": [
+                      "frequencyHz"
+                    ],
+                    "properties": {
+                      "mode": {
+                        "not": {}
+                      },
+                      "bitOrder": {
+                        "not": {}
+                      },
+                      "baudRate": {
+                        "not": {}
+                      },
+                      "frame": {
+                        "not": {}
+                      }
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "kind": {
+                        "const": "uart"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  "then": {
+                    "required": [
+                      "baudRate",
+                      "frame"
+                    ],
+                    "properties": {
+                      "frequencyHz": {
+                        "not": {}
+                      },
+                      "mode": {
+                        "not": {}
+                      },
+                      "bitOrder": {
+                        "not": {}
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "nets": {
+            "type": "object",
+            "propertyNames": {
+              "$ref": "common.schema.json#/$defs/identifier"
+            },
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "endpoint": {
+                  "$ref": "common.schema.json#/$defs/physicalEndpoint"
+                },
+                "owner": {
+                  "$ref": "common.schema.json#/$defs/signalPath"
+                }
+              },
+              "required": [
+                "endpoint",
+                "owner"
+              ]
+            }
+          },
+          "releaseReservations": {
+            "type": "array",
+            "items": {
+              "$ref": "common.schema.json#/$defs/registryId"
+            },
+            "uniqueItems": true
+          },
+          "providers": {
+            "type": "object",
+            "propertyNames": {
+              "$ref": "common.schema.json#/$defs/identifier"
+            },
+            "additionalProperties": {
+              "$ref": "common.schema.json#/$defs/nodePath"
+            }
+          }
+        },
+        "required": [
+          "target",
+          "board",
+          "clock",
+          "statusLed",
+          "nodes"
+        ]
+      },
+      "minProperties": 1
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "nodes",
+    "assemblies"
+  ],
+  "$defs": {
+    "child": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "properties": {
+          "$ref": "common.schema.json#/$defs/properties"
+        },
+        "children": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "common.schema.json#/$defs/identifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/child"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "target": "stm32g474",
+  "trees": {
+    "default": {
+      "description": "Existing HSI16 tree.",
+      "backend": "stm32g474",
+      "requiredSources": {},
+      "frequenciesHz": {
+        "sysclk": 170000000,
+        "fdcan": 170000000
+      },
+      "parameters": {
+        "pllSource": "hsi16",
+        "pllM": 4,
+        "pllN": 85,
+        "pllR": 2,
+        "fdcanSource": "pclk1"
+      }
+    },
+    "hse-160mhz": {
+      "description": "Existing HSE tree with HSI16 fallback.",
+      "backend": "stm32g474",
+      "requiredSources": {
+        "hse": {
+          "kind": "crystal",
+          "frequencyHz": -1
+        }
+      },
+      "frequenciesHz": {
+        "sysclk": 160000000,
+        "fdcan": 80000000
+      },
+      "parameters": {
+        "pllSource": "hse",
+        "pllM": 6,
+        "pllN": 80,
+        "pllR": 2,
+        "pllQ": 4,
+        "fdcanSource": "pll-q",
+        "fallback": "hsi16-same-frequencies"
+      }
+    }
+  }
+}

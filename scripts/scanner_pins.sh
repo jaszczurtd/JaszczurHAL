@@ -1,5 +1,5 @@
 # Sourced by scripts/install_host_tools.sh and scripts/check_vulnerabilities.sh:
-# the scanner releases pinned in third_party/osv_scanner_version.conf and
+# the scanner builds pinned in third_party/osv_scanner_version.conf and
 # third_party/cve_bin_tool_version.conf.
 
 PINS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -42,18 +42,45 @@ scanner_version() {
 scanner_pin() {
     case "$1" in
         osv-scanner) printf '%s\n' "${OSV_SCANNER_VERSION}" ;;
-        cve-bin-tool) printf '%s\n' "${CVE_BIN_TOOL_VERSION}" ;;
+        cve-bin-tool) printf '%s@%s\n' "${CVE_BIN_TOOL_VERSION}" "${CVE_BIN_TOOL_COMMIT}" ;;
     esac
 }
 
+# Verify pip's source-archive record using the scanner's own Python environment.
+cve_source_is_pinned() {
+    local python
+    python="$(dirname "$(readlink -f "$1")")/python"
+    [[ -x "${python}" ]] || return 1
+    "${python}" -I - "${CVE_BIN_TOOL_SHA256}" <<'PY'
+import json
+import sys
+from importlib.metadata import PackageNotFoundError, distribution
+
+try:
+    record = json.loads(distribution("cve-bin-tool").read_text("direct_url.json"))
+    archive = record["archive_info"]
+    digest = archive.get("hashes", {}).get("sha256")
+    if digest is None:
+        digest = archive.get("hash", "").removeprefix("sha256=")
+except (PackageNotFoundError, OSError, ValueError, TypeError, KeyError, AttributeError):
+    sys.exit(1)
+sys.exit(0 if digest == sys.argv[1] else 1)
+PY
+}
+
 # Fails, printing "<scanner> <version> at <path>, pinned <version>", when
-# scanner $1 at path $2 is not its pinned release.
+# scanner $1 at path $2 is not its pinned build.
 scanner_is_pinned() {
     local version pin
     version="$(scanner_version "$1" "$2")"
     pin="$(scanner_pin "$1")"
-    if [[ "${version}" != "${pin}" ]]; then
-        printf '%s %s at %s, pinned %s\n' "$1" "${version:-unknown}" "$2" "${pin}"
-        return 1
+    if [[ "$1" == cve-bin-tool ]]; then
+        if [[ "${version}" == "${CVE_BIN_TOOL_VERSION}" ]] && cve_source_is_pinned "$2"; then
+            return 0
+        fi
+    elif [[ "${version}" == "${pin}" ]]; then
+        return 0
     fi
+    printf '%s %s at %s, pinned %s\n' "$1" "${version:-unknown}" "$2" "${pin}"
+    return 1
 }

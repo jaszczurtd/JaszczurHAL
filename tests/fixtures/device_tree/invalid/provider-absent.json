@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "bindings": [
+    "../bindings/cyw43.json"
+  ],
+  "nodes": {
+    "radio0": {
+      "compatible": "test,cyw43"
+    },
+    "radio1": {
+      "compatible": "test,cyw43"
+    }
+  },
+  "assemblies": {
+    "nucleo": {
+      "target": "stm32g474",
+      "board": "nucleo-g474re",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "board.statusLed"
+      },
+      "nodes": {
+        "radio0": {
+          "present": true,
+          "pins": {
+            "clock": "PC6",
+            "data": "PC7",
+            "cs": "PC8",
+            "wlRegOn": "PC9"
+          }
+        },
+        "radio1": {
+          "present": false
+        }
+      },
+      "providers": {
+        "cyw43": "radio1"
+      }
+    }
+  }
+}

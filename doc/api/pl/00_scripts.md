@@ -97,13 +97,15 @@ i fuzzowania, clang-tidy, clang-format, toolchain Arm z newlib, OpenOCD,
 `cve-bin-tool`. Potem uruchamia `third_party/update_components.sh`, który
 buduje też przypięty cppcheck, a na końcu sprawdza każde wymagane polecenie
 i moduł Pythona. Wołają go `runmefirst.sh` i każdy linuksowy job CI, więc
-lokalna kontrola i CI pracują na tym samym zestawie narzędzi. `osv-scanner`
-i `cve-bin-tool` to wydania przypięte w `third_party/osv_scanner_version.conf`
+lokalna kontrola i CI pracują na tym samym zestawie narzędzi. Wydanie `osv-scanner`
+i commit upstream `cve-bin-tool` są przypięte w `third_party/osv_scanner_version.conf`
 i `third_party/cve_bin_tool_version.conf`, instalowane po sprawdzeniu SHA-256
-i wymieniane, gdy zainstalowane jest inne; `osv-scanner` trafia do
+i wymieniane, gdy zainstalowany jest inny kod; `osv-scanner` trafia do
 `/usr/local/bin`, a `cve-bin-tool` przez pipx do `~/.local/bin`, skąd uruchamia
-je skan. Opcja `--check` tylko zgłasza brakujące narzędzia i skanery w innym
-wydaniu; tak uruchamia go etap `tools`.
+je skan. `cve-bin-tool` jest instalowany z archiwum źródeł; kontrola sprawdza
+wersję i skrót archiwum zapisany przez pip w metadanych instalacji.
+Opcja `--check` tylko zgłasza brakujące narzędzia i skanery pochodzące z innego
+kodu; tak uruchamia go etap `tools`.
 
 ### `runmefirst.ps1`
 
@@ -1056,6 +1058,16 @@ Adapter zgodności wywołujący `scripts/generate_sbom.py --check`.
 Wspólny skrypt `scripts/sync_generated.py --check` sprawdza aktualność tych
 danych lokalnie i w CI.
 
+### `scripts/cve_bin_tool_triage.py`
+
+Zapisuje plik OpenVEX, który `scripts/check_vulnerabilities.sh` przekazuje do
+`cve-bin-tool`. Odczytuje decyzje z `security/cve-bin-tool-triage.toml` oraz
+SBOM (`--triage`, `--sbom`) i zapisuje plik wskazany przez `--output`; skaner
+wymaga nazwy z rozszerzeniem `.json`. Decyzja zostaje pominięta z ostrzeżeniem,
+gdy komponent jest już przypięty do innego commita albo nadeszła data
+`reviewUntil` (datę ustawia `--today`). Błędny wpis albo komponent, którego nie
+ma w SBOM, kończy skrypt błędem.
+
 ### `scripts/check_vulnerabilities.sh`
 
 Regeneruje wersjonowany SBOM, a następnie uruchamia skanery, które są już
@@ -1067,7 +1079,9 @@ zainstalowane:
   których pochodzą komponenty ustawione na późniejszy commit (ich `pedigree`
   w SBOM);
 - gdy `JH_SECURITY_SCAN_SOURCE=1`, `cve-bin-tool` skanuje generowany SBOM
-  CycloneDX.
+  CycloneDX i pomija znaleziska rozstrzygnięte w
+  `security/cve-bin-tool-triage.toml`, przekazane jako OpenVEX z
+  `--filter-triage`.
 
 `cve-bin-tool` zwraca ten sam kod zarówno po wykryciu CVE, jak i po nieudanym
 pobraniu danych. Dlatego skrypt najpierw odświeża bazę na pustym katalogu, a
@@ -1075,15 +1089,18 @@ potem skanuje SBOM bez dostępu do sieci. Nieudane odświeżenie jest ponawiane
 (`JH_CVE_REFRESH_ATTEMPTS`, domyślnie 3). Jeśli źródło danych pozostaje
 niedostępne, skan korzysta z bazy zapisanej w `~/.cache/cve-bin-tool` i
 zgłasza ostrzeżenie; bez takiej bazy skrypt kończy się błędem.
+`XDG_CACHE_HOME` zmienia katalog główny cache zarówno dla skanera, jak i tego fallbacku.
 
 Skrypt uruchamia skanery tam, gdzie instaluje je
 `scripts/install_host_tools.sh`: `/usr/local/bin/osv-scanner` (katalog zmienia
 `JH_OSV_SCANNER_DIR`) i `~/.local/bin/cve-bin-tool`, niezależnie od tego, co
 jeszcze jest w `PATH`. Nie instaluje skanerów i ostrzega zamiast kończyć się
 niepowodzeniem wyłącznie z powodu braku dostępnego skanera. Wykryte podatności i błędy działania skanerów nadal
-powodują niepowodzenie polecenia. `osv-scanner` lub `cve-bin-tool` w wydaniu
-innym niż przypięte w `third_party/osv_scanner_version.conf` lub
+powodują niepowodzenie polecenia. `osv-scanner` lub `cve-bin-tool` w wersji
+innej niż przypięta w `third_party/osv_scanner_version.conf` lub
 `third_party/cve_bin_tool_version.conf` kończy skrypt błędem przed skanem.
+Dla `cve-bin-tool` dotyczy to także zgodnej wersji z innego archiwum źródeł
+albo bez metadanych pochodzenia zapisanych przez pip.
 
 Wykaz komponentów, tworzenie SBOM, kontrole w CI oraz zasady oceny podatności
 i aktualizowania zależności opisano w rozdziale

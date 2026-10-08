@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "compatible": "test,can-module",
+  "description": "Synthetic module with two independent CAN channels.",
+  "domain": "module",
+  "children": {
+    "can1": {
+      "compatible": "test,can-channel",
+      "required": true
+    },
+    "can2": {
+      "compatible": "test,can-channel",
+      "required": true
+    }
+  }
+}

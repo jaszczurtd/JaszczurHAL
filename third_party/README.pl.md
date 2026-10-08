@@ -60,9 +60,9 @@ zmiany lokalne i pliki nieśledzone przez Git w każdym z nich, także
 w submodułach. Skrypty cJSON, LodePNG, TJpg_Decoder, Unity i SX126x dodatkowo
 przywracają taki checkout w trybie normalnym. Sprawdzany
 jest również adres repozytorium źródłowego, w tym repozytoriów BearSSL, LodePNG,
-FatFs i Unity utrzymywanych przez projekt. `jaszczurtd/ff16` jest bezpośrednią
-kopią lustrzaną niezmienionego archiwum ChaN R0.16 i zastępuje zawodny mechanizm
-pobierania z `elm-chan.org`.
+FatFs i Unity utrzymywanych przez projekt. `jaszczurtd/ff16` jest forkiem
+archiwum ChaN R0.16 z poprawkami CVE-2026-6682 i CVE-2026-6686 i zastępuje
+zawodny mechanizm pobierania z `elm-chan.org`.
 
 Z jednej kopii littlefs korzystają wspólny provider systemu plików,
 konfiguracje CMake natywnych targetów RP i STM32G474 oraz osobny test
@@ -201,11 +201,13 @@ ustalone ścieżki do plików wykonywalnych w `resolved-tools.json`.
 
 Linuksowe skanery etapu bezpieczeństwa są przypięte z adresami i SHA-256:
 `osv-scanner` w `osv_scanner_version.conf` (binarki dla x86-64 i AArch64),
-a `cve-bin-tool` w `cve_bin_tool_version.conf` (koło z PyPI; zależności
+a `cve-bin-tool` w `cve_bin_tool_version.conf` (archiwum źródeł commita upstream; zależności
 rozwiązuje pip). `scripts/install_host_tools.sh` instaluje je po sprawdzeniu
 skrótu, `osv-scanner` do `/usr/local/bin`, a `cve-bin-tool` przez pipx do
 `~/.local/bin`. Jego `--check` i `scripts/check_vulnerabilities.sh` uruchamiają
-je stamtąd, niezależnie od zawartości `PATH`, i odrzucają każde inne wydanie.
+je stamtąd, niezależnie od zawartości `PATH`, i odrzucają inne wersje.
+Dla `cve-bin-tool` sprawdzają także skrót archiwum źródeł zapisany przez pip
+w metadanych instalacji; sam numer wersji nie potwierdza przypiętego commita.
 
 picotool wymaga `libusb-1.0-0-dev` i `pkg-config`, aby uzyskać dostęp do USB.
 Jest budowany z Pico SDK w ustalonej wersji i używa zawartego w SDK submodułu

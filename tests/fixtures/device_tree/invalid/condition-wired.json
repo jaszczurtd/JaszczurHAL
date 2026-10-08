@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "bindings": [
+    "../bindings/gpio-output.json",
+    "../bindings/gpio-input.json",
+    "../bindings/alias-module.json",
+    "../bindings/conditional-input.json"
+  ],
+  "nodes": {
+    "defaultModule": {
+      "compatible": "test,alias-module"
+    },
+    "projectModule": {
+      "compatible": "test,alias-module",
+      "children": {
+        "driver": {
+          "properties": {
+            "activeLow": false
+          }
+        }
+      }
+    },
+    "assemblyModule": {
+      "compatible": "test,alias-module",
+      "children": {
+        "driver": {
+          "properties": {
+            "activeLow": false
+          }
+        }
+      }
+    },
+    "disabledSensor": {
+      "compatible": "test,conditional-input"
+    },
+    "enabledSensor": {
+      "compatible": "test,conditional-input",
+      "properties": {
+        "irqEnabled": true
+      }
+    }
+  },
+  "assemblies": {
+    "pico": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "board.statusLed"
+      },
+      "nodes": {
+        "defaultModule": {
+          "present": true,
+          "pins": {
+            "control": 14
+          }
+        },
+        "projectModule": {
+          "present": true,
+          "pins": {
+            "control": 15
+          }
+        },
+        "assemblyModule": {
+          "present": true,
+          "pins": {
+            "control": 16
+          }
+        },
+        "assemblyModule.driver": {
+          "properties": {
+            "activeLow": true
+          }
+        },
+        "disabledSensor": {
+          "present": true,
+          "pins": {
+            "irq": 18
+          }
+        },
+        "enabledSensor": {
+          "present": true,
+          "pins": {
+            "irq": 17
+          }
+        }
+      }
+    }
+  }
+}
