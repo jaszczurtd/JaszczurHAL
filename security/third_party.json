@@ -303,7 +303,7 @@
       "supplier": "ChaN",
       "licenses": ["BSD-1-Clause"],
       "purl": "pkg:generic/fatfs@R0.16",
-      "commit": "5a2def719940c2fbe3f6592a220ec4e3f2fb9e6b",
+      "commit": "fbcba2fa0a6710336308da5f8ebc0bbd63396cab",
       "paths": [
         "third_party/FatFs",
         "third_party/fatfs_version.conf",
@@ -311,7 +311,7 @@
       ],
       "upstream": "https://github.com/jaszczurtd/ff16",
       "feature_flags": ["HAL_ENABLE_FAT", "HAL_ENABLE_SDLOGGER"],
-      "notes": "Exact-commit checkout of the project-owned mirror of ChaN's unchanged R0.16 archive, plus tracked JaszczurHAL feature, configuration and SD-over-SPI integration wrappers."
+      "notes": "Exact-commit checkout of the project-owned fork of ChaN's R0.16 archive with the CVE-2026-6682 and CVE-2026-6686 fixes, plus tracked JaszczurHAL feature, configuration and SD-over-SPI integration wrappers."
     },
     {
       "name": "littlefs",

@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "bindings": [
+    "../bindings/gpio-output.json",
+    "../bindings/spi-device.json",
+    "../bindings/radio-module.json",
+    "../bindings/can-channel.json",
+    "../bindings/can-module.json",
+    "../bindings/power-stage.json",
+    "../bindings/expander.json"
+  ],
+  "nodes": {
+    "stage": {
+      "compatible": "test,power-stage"
+    },
+    "display": {
+      "compatible": "test,spi-device"
+    },
+    "radioModule": {
+      "compatible": "test,radio-module"
+    },
+    "canModule": {
+      "compatible": "test,can-module"
+    }
+  },
+  "assemblies": {
+    "pico2-riscv": {
+      "target": "rp2040",
+      "board": "pico2",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "board.statusLed"
+      },
+      "buses": {
+        "peripheralSpi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 4000000,
+          "pins": {
+            "sck": 2,
+            "mosi": 3,
+            "miso": 0
+          }
+        }
+      },
+      "nodes": {
+        "stage": {
+          "present": true,
+          "pins": {
+            "driveA": 13,
+            "driveB": 14,
+            "feedback": 28
+          }
+        },
+        "display": {
+          "present": true,
+          "bus": "peripheralSpi",
+          "pins": {
+            "cs": 6,
+            "int": null
+          }
+        },
+        "radioModule": {
+          "present": true,
+          "pins": {
+            "chipSelect": 1
+          }
+        },
+        "radioModule.radio": {
+          "bus": "peripheralSpi",
+          "pins": {
+            "int": 4
+          }
+        },
+        "radioModule.indicator": {
+          "pins": {
+            "out": 8
+          }
+        },
+        "canModule": {
+          "present": false
+        }
+      }
+    }
+  }
+}

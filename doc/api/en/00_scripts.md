@@ -94,13 +94,15 @@ tooling, clang-tidy, clang-format, the Arm toolchain with newlib, OpenOCD,
 `third_party/update_components.sh`, which also builds the pinned cppcheck, and
 ends by checking every required command and Python module. `runmefirst.sh` and
 every Linux CI job call it, so a local gate and CI run with the same tool set.
-`osv-scanner` and `cve-bin-tool` are the releases pinned in
+The `osv-scanner` release and `cve-bin-tool` upstream commit are pinned in
 `third_party/osv_scanner_version.conf` and
 `third_party/cve_bin_tool_version.conf`, installed after a SHA-256 check and
-replaced when another release is found; `osv-scanner` goes into
+replaced when another build is found; `osv-scanner` goes into
 `/usr/local/bin`, `cve-bin-tool` through pipx into `~/.local/bin`, the places
-the scan runs them from. `--check` only reports missing tools and scanners of
-another release; the gate's `tools` stage runs it so.
+the scan runs them from. `cve-bin-tool` is installed from the source archive;
+its check verifies both the version and the archive hash recorded by pip.
+`--check` only reports missing tools and scanners from another build; the
+gate's `tools` stage runs it so.
 
 ### `runmefirst.ps1`
 
@@ -981,6 +983,16 @@ Compatibility wrapper that delegates to `scripts/generate_sbom.py --check`.
 The shared `scripts/sync_generated.py --check` runner is the repository and CI
 freshness gate.
 
+### `scripts/cve_bin_tool_triage.py`
+
+Writes the OpenVEX file that `scripts/check_vulnerabilities.sh` passes to
+`cve-bin-tool`. It reads the decisions in `security/cve-bin-tool-triage.toml`
+and the SBOM (`--triage`, `--sbom`), and writes the file given by `--output`;
+the scanner needs a `.json` name. A decision is left out, with a warning, when
+the component is now pinned to another commit or its `reviewUntil` date has
+come (`--today` sets the date). A malformed entry or a component missing from
+the SBOM ends the script with an error.
+
 ### `scripts/check_vulnerabilities.sh`
 
 Regenerates the tracked SBOM, then runs scanners that are already installed:
@@ -990,7 +1002,9 @@ Regenerates the tracked SBOM, then runs scanners that are already installed:
   and last the releases that components pinned after a release descend from
   (their SBOM `pedigree`);
 - when `JH_SECURITY_SCAN_SOURCE=1`, `cve-bin-tool` scans the generated
-  CycloneDX SBOM.
+  CycloneDX SBOM and drops the findings decided in
+  `security/cve-bin-tool-triage.toml`, passed as OpenVEX with
+  `--filter-triage`.
 
 `cve-bin-tool` returns the same status for found CVEs and for a failed data
 download, so the script first refreshes its database against an empty
@@ -998,6 +1012,7 @@ directory and then scans the SBOM offline. A failed refresh is retried
 (`JH_CVE_REFRESH_ATTEMPTS`, default 3). When the data source stays
 unreachable, the scan uses the cached database from `~/.cache/cve-bin-tool`
 with a warning; without a cached database the script fails.
+`XDG_CACHE_HOME` changes the cache root for both the scanner and this fallback.
 
 The script runs the scanners where `scripts/install_host_tools.sh` installs
 them, `/usr/local/bin/osv-scanner` (`JH_OSV_SCANNER_DIR` overrides the
@@ -1005,9 +1020,11 @@ directory) and `~/.local/bin/cve-bin-tool`, whatever else `PATH` holds. It
 does not install scanners and warns rather than failing solely because no
 scanner is available. Scanner
 findings and scanner execution failures still propagate as command failures.
-An `osv-scanner` or `cve-bin-tool` other than the release pinned in
+An `osv-scanner` or `cve-bin-tool` other than the build pinned in
 `third_party/osv_scanner_version.conf` or
 `third_party/cve_bin_tool_version.conf` fails the script before it scans.
+For `cve-bin-tool`, this includes a matching version installed from a different
+source archive or without pip's source metadata.
 
 See [Security Supply Chain](../../en/security_supply_chain.md) for inventory, SBOM, CI,
 triage, and component-update policy.

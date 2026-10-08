@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "compatible": "test,power-stage",
+  "description": "Synthetic application binding with shared electrical data.",
+  "domain": "custom",
+  "signals": {
+    "driveA": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "driveB": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "feedback": {
+      "direction": "input",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    }
+  },
+  "properties": {
+    "shuntOhms": {
+      "type": "number",
+      "cType": "float",
+      "description": "Shunt resistance.",
+      "default": 0.22,
+      "minimum": 0.001
+    },
+    "upperOhms": {
+      "type": "integer",
+      "cType": "uint32",
+      "unit": "ohm",
+      "description": "Upper divider resistance.",
+      "default": 47000,
+      "minimum": 1
+    },
+    "lowerOhms": {
+      "type": "integer",
+      "cType": "uint32",
+      "unit": "ohm",
+      "description": "Lower divider resistance.",
+      "default": 10000,
+      "minimum": 1
+    },
+    "feedForward": {
+      "type": "number",
+      "cType": "float",
+      "unit": "1",
+      "description": "Feedforward correction; independent of ADC gain.",
+      "default": 1.08,
+      "minimum": 0.01
+    }
+  }
+}

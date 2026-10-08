@@ -1,0 +1,16 @@
+{
+  "hse": {
+    "kind": "crystal",
+    "frequencyHz": 25000000,
+    "pins": [
+      {
+        "domain": "soc-gpio",
+        "id": "PF0"
+      },
+      {
+        "domain": "soc-gpio",
+        "id": "PF1"
+      }
+    ]
+  }
+}

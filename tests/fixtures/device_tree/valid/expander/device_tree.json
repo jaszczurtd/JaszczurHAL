@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "bindings": [
+    "../../bindings/gpio-output.json",
+    "../../bindings/expander.json"
+  ],
+  "nodes": {
+    "io0": {
+      "compatible": "test,expander"
+    },
+    "led": {
+      "compatible": "test,gpio-output"
+    }
+  },
+  "assemblies": {
+    "pico": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "board.statusLed"
+      },
+      "nodes": {
+        "io0": {
+          "present": true,
+          "bus": "sensors",
+          "address": 32
+        },
+        "led": {
+          "present": true,
+          "pins": {
+            "out": {
+              "domain": "device-pin",
+              "node": "io0",
+              "index": 0
+            }
+          }
+        }
+      },
+      "buses": {
+        "sensors": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": {
+            "sda": 0,
+            "scl": 1
+          }
+        }
+      }
+    }
+  }
+}

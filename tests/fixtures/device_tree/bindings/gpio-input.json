@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "compatible": "test,gpio-input",
+  "description": "Synthetic read-only GPIO consumer.",
+  "domain": "gpio",
+  "signals": {
+    "in": {
+      "direction": "input",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    }
+  }
+}

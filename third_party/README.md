@@ -58,8 +58,9 @@ included. The cJSON, LodePNG, TJpg_Decoder, Unity and SX126x helpers also
 restore such a checkout in normal mode.
 Configured repository origins are enforced, including the project-owned
 BearSSL, LodePNG, FatFs and Unity repositories. The `jaszczurtd/ff16` checkout
-is a direct mirror of ChaN's unchanged R0.16 archive and replaces the unreliable
-runtime download from `elm-chan.org`. The littlefs checkout is consumed by one
+is a fork of ChaN's R0.16 archive with fixes for CVE-2026-6682 and
+CVE-2026-6686, and replaces the unreliable runtime download from
+`elm-chan.org`. The littlefs checkout is consumed by one
 shared filesystem provider, native RP and STM32G474 CMake recipes, and a
 dedicated host RAM-flash integration test. Target backends provide only flash
 geometry and checked read/program/erase/sync operations.
@@ -182,12 +183,14 @@ executables in `resolved-tools.json`.
 
 The Linux scanners of the security stage are pinned with their URLs and
 SHA-256: `osv-scanner` in `osv_scanner_version.conf` (x86-64 and AArch64
-binaries) and `cve-bin-tool` in `cve_bin_tool_version.conf` (the PyPI wheel;
-pip resolves its dependencies). `scripts/install_host_tools.sh` installs them,
+binaries) and `cve-bin-tool` in `cve_bin_tool_version.conf` (an upstream
+commit's source archive; pip resolves its dependencies). `scripts/install_host_tools.sh` installs them,
 `osv-scanner` into `/usr/local/bin` and `cve-bin-tool` with pipx into
 `~/.local/bin`, after checking the digest. Its `--check` and
 `scripts/check_vulnerabilities.sh` run them from there, whatever else `PATH`
-holds, and refuse any other release.
+holds, and refuse another version. For `cve-bin-tool`, they also verify pip's
+installed source-archive hash; a matching version alone does not select the
+pinned commit.
 
 picotool needs `libusb-1.0-0-dev` and `pkg-config` for USB access. It builds
 against the pinned Pico SDK and uses the SDK's Mbed TLS submodule for RP2350

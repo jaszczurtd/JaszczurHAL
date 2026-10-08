@@ -8,6 +8,7 @@
 - [Możliwości JaszczurHAL](pl/features.md)
 - [JaszczurHAL - Dokumentacja API](pl/JaszczurHAL_API.md)
 - [Profile platform i płytek](pl/boards_profiles_howto.md)
+- [Specyfikacja formatu device tree](pl/device_tree_format.md)
 - [Praca z projektem firmware](pl/FwProjectWorkflow.md)
 - [Kompilacja biblioteki JaszczurHAL](pl/lib_compilation.md)
 - [Przygotowanie środowiska Windows](pl/windows_setup.md)

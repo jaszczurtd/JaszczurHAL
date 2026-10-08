@@ -1,0 +1,191 @@
+# Format device tree, wersja 1
+
+Ta specyfikacja określa wejścia i wynik generatora sprzętu projektu. Schematy i niezależne przykłady są dostępne; rozwiązywanie sprzętu i integracja z buildem należą do kolejnych etapów. JSON nie konfiguruje jeszcze obecnego buildu.
+
+## Pliki i walidacja
+
+Jedna aplikacja firmware, również podprojekt, ma własny `device_tree.json`. Samodzielny katalog konfiguracji biblioteki może mieć taki sam plik bez źródeł firmware'u. Pliki nie dołączają ani nie dziedziczą okablowania innej aplikacji. Identyczne połączenia niezależnych projektów pozostają świadomie niezależne.
+
+| Plik | Zawartość |
+|---|---|
+| [device_tree.schema.json](../../config/hardware/device_tree.schema.json) | węzły i montaże projektu |
+| [binding.schema.json](../../config/hardware/binding.schema.json) | typy komponentów HAL i projektu |
+| [clock_tree.schema.json](../../config/hardware/clock_tree.schema.json) | zamknięta lista drzew zegara jednego targetu |
+| [clock_sources.schema.json](../../config/hardware/clock_sources.schema.json) | fizyczne źródła w polu `clockSources` płytki |
+| [common.schema.json](../../config/hardware/common.schema.json) | wspólne identyfikatory, końcówki i wartości proste |
+| [cases.json](../../tests/fixtures/device_tree/cases.json) | poprawne i błędne przykłady z oczekiwaną diagnostyką |
+
+Schematy używają JSON Schema 2020-12. Wejście to JSON w UTF-8, z unikalnymi kluczami obiektów, skończonymi liczbami, `schemaVersion: 1` i bez nieznanych pól. Wartość boolowska nie jest liczbą całkowitą. `$schema` jest opcjonalną informacją dla edytora, nie pobieraną zależnością. Inna wersja kończy się błędem zamiast przejścia na build bez JSON-a.
+
+Walidacja schematu sprawdza strukturę. Przyszły resolver sprawdza dodatkowo odwołania, typy bindings, zgodność płytki z targetem, właścicieli, zajęcie zasobów i obsługiwane zegary. Przykład `semantic` w indeksie celowo przechodzi sprawdzanie struktury i określa błąd przyszłego resolvera; Etap A nie oznacza wdrożenia tego sprawdzenia.
+
+## Węzły i montaże
+
+Pola główne to `schemaVersion`, opcjonalne `$schema` i `bindings`, `nodes` oraz niepuste `assemblies`. Główne `nodes` określa nazwy, `compatible`, wspólne `properties` i opcjonalne `children`. Magistrale, kontrolery, adresy i GPIO przypisuje się w węzłach montażu. Montaże nie dziedziczą po sobie.
+
+Każdy montaż wymaga `target`, `board`, `clock.tree`, `statusLed.node` i `nodes`. Opcjonalne pola to `buses`, `nets`, `releaseReservations` oraz `providers`. ID targetu i płytki pochodzą wyłącznie z obecnego board registry; target musi należeć do `compatibleTargets` tej płytki. Klucz montażu jest nazwą projektu, nie nowym ID płytki.
+
+Każdy główny węzeł musi mieć jawne boolowskie `present` w każdym montażu. Przy `false` dopuszczalne jest tylko pole `present`: węzeł nie zajmuje magistrali, kontrolera, adresu ani pinu. Przy `true` urządzenie pozostaje fizycznie obecne również wtedy, gdy program wyłącza sterownik. Podłączony sygnał nadal zajmuje wtedy swoją końcówkę.
+
+Binding określa dzieci i ich `compatible`; projektowe `children` podaje jedynie właściwości tych zadeklarowanych dzieci. `nodes` montażu używa pełnych ścieżek, np. `radioModule.radio`. Pominięte `present` dziecka dziedziczy wartość rodzica. Wymaganego dziecka nie można wyłączyć przy obecnym rodzicu; dziecko nie może być obecne pod nieobecnym rodzicem. Nieznane ścieżki, niezadeklarowane dzieci i cykliczne rozwijanie bindings są błędami.
+
+Kolejność ustalania właściwości: wartość domyślna typu, domyślna właściwość dziecka w typie rodzica, właściwość węzła lub dziecka projektu, a na końcu właściwość węzła montażu. Każdy krok zastępuje pojedyncze klucze z wartościami prostymi; nie ma scalania tablic ani obiektów lub usuwania wartości. `null` nie jest wartością właściwości. `compatible` pozostaje taki sam między montażami; alternatywne urządzenia otrzymują osobne węzły z jawną obecnością.
+
+Ścieżki `board.*` są zarezerwowane dla urządzeń płytki importowanych przez resolver. Główny węzeł `board` jest zabroniony. Ich fizyczna obecność, połączenia i dane elektryczne pochodzą z board registry i nie mogą być zmieniane właściwościami montażu. Wybór diody statusu lub przejęcie miękkiej rezerwacji zmienia jej użycie, a nie te fakty fizyczne.
+
+## Końcówki, magistrale i wspólne sygnały
+
+Końcówka sygnału to numer GPIO, nazwa pinu targetu taka jak `PB12`, `{ "domain": "soc-gpio", "id": ... }`, `{ "domain": "device-pin", "node": "io0", "index": 0 }`, `{ "net": "indicator" }` albo `null`. Numer i obiekt SoC oznaczają to samo. Zapis STM32 obejmuje `PA0`-`PZ15`; dane targetu określają, które piny istnieją. GPIO 0 jest podłączonym, prawidłowym pinem; nigdy nie oznacza braku połączenia.
+
+Pin urządzenia identyfikuje węzeł dostawcy i indeks, nie numer GPIO MCU. Dostawca musi być obecny, udostępniać przestrzeń pinów i zawierać ten indeks poniżej `pinCount`. Adaptery obecnych GPIO komponentów zachowują kodowanie HAL podane przez płytkę; kodowanie nie zmienia pinu urządzenia w GPIO SoC. Konfiguracje HAL przyjmujące tylko piny SoC odrzucają niezgodne końcówki zamiast tworzyć sztuczny alias liczbowy.
+
+Pominięty opcjonalny sygnał przyjmuje `null`. Wymagany sygnał musi być opisany jawnie, bezpośrednio lub przez połączenie typu, lecz może być jawnie niepodłączony. Obecny sprzęt z niekompletnym połączeniem jest dopuszczalny, dopóki nie zostanie wybrany do roli wymagającej kompletu połączeń lub użyty przez inicjalizator. Udostępnia `CONFIG_AVAILABLE` równe 0, bez `CONFIG_INIT`. Obecne globalne sprawdzenia radia i transportu nadal odrzucają WiFi bez użytecznego wybranego radia. Włączenie ogólnego sterownika CAN nie wymusza użycia wszystkich nieużywanych kanałów CAN.
+
+Magistrala deklaruje `kind`, `index` od zera i jawne `pins`. Piny SPI to `sck`, `mosi`, `miso`; I2C to `sda`, `scl`; UART to `tx`, `rx`. Wymagane klucze mogą zawierać `null` dla nieużywanego kierunku. Dostępność kontrolera i kierunki potrzebne urządzeniom sprawdza adapter targetu. Nie ma niejawnych domyślnych pinów płytki. Opcjonalne UART `cts`/`rts` opisują połączenia fizyczne; obecne ogólne API UART nie ustawia sprzętowej kontroli przepływu, więc aplikacja wymagająca jej korzysta z obsługiwanego API targetu.
+
+| Transport | Ustawienia magistrali | Ustawienia urządzenia i renderer |
+|---|---|---|
+| SPI | dodatnie `frequencyHz`, opcjonalne `mode` 0-3 (domyślnie 0), `bitOrder` `msb`/`lsb` (domyślnie `msb`) | opcjonalne `transport` węzła nadpisuje poszczególne ustawienia; pominięte wartości dziedziczy z magistrali |
+| I2C | dodatnie `frequencyHz`, wspólne dla wszystkich urządzeń | opcjonalne `transport.frequencyHz` węzła musi być równe zegarowi magistrali; `mode`/`bitOrder` są zabronione |
+| UART | dodatnie `baudRate`, wymagane `frame: {dataBits, parity, stopBits}` | wszystkie urządzenia używają baud/frame kontrolera; `transport` węzła jest zabronione |
+
+`frequencyHz` i `baudRate` to uint32, nigdy zero oznaczające domyślne ustawienie backendu. UART zabrania `frequencyHz`; SPI/I2C zabraniają `baudRate`/`frame`. UART ma 5-8 bitów danych, parity `none`, `even` lub `odd` i 1 albo 2 bity stopu. Adapter targetu sprawdza obsługiwane kombinacje; przykładowo STM32 obecnie odrzuca ramki 5-bitowe i 6-bitowe bez parity. Baud rate opisuje żądaną szybkość, z ograniczeniami dzielników kontrolera.
+
+SPI `frequencyHz` jest domyślnym zegarem transakcji, a nie stałym zegarem magistrali. Rozwiązane ustawienia węzła trafiają odpowiednio do `hal_spi_settings_t.clock_hz`, `data_mode` i `bit_order`, `clock_hz` wyświetlacza albo `spi_clock_hz` LoRa/MCP251XFD. Ogólne węzły SPI udostępniają odroczone `SPI_SETTINGS_INIT`. Opcjonalne `bus.maximumFrequencyHz` bindingu ogranicza rozwiązany zegar; przekroczenie jest błędem bez cichego obniżania częstotliwości. Zegarów transportu nie powtarza się we właściwościach węzła; częstotliwości oscylatora i RF pozostają oddzielnymi właściwościami elektrycznymi.
+
+Obecny driver MCP2515 ustawia stałe SPI 10 MHz, MSB first, mode 0, a jego konfiguracja CAN nie ma pola zegara SPI. Pierwszy renderer przyjmuje tylko te rozwiązane ustawienia, a inne zgłoszenie odrzuca jako `JH-HW-TRANSPORT`; nie może udawać ustawienia nieistniejącego pola API. To ograniczenie obecnego drivera, a nie stałe okablowanie modułu. Renderery odrzucają też ustawienia nieobecne w innych aktualnych API: ILI9341, LoRa i MCP251XFD wymagają MSB/mode 0; SSD1306 dopuszcza mode, ale ma stałe MSB. Udostępnienie makra nie sprawi, że driver zastosuje nieobsługiwane ustawienie. Na jednym SPI MCP2515 może jawnie żądać 10 MHz, a ILI9341 innego zegara transakcji.
+
+I2C ma w wersji 1 jeden efektywny zegar kontrolera. SSD1306 zmienia go podczas konfiguracji i nie przywraca między transakcjami, więc jego `clock_hz` musi odpowiadać magistrali. Maksymalne częstotliwości bindings sprawdza się dla wszystkich obecnych urządzeń, także przy wyłączonym sterowniku. Różne zegary I2C wymagają późniejszego API transakcji; kolejność inicjalizacji nie może decydować o zegarze. UART udostępnia rozwiązane baud/frame do jawnego `hal_uart_begin()`, bez tworzenia nieistniejącego typu konfiguracji HAL. Nieobsługiwane ustawienia transportu są błędem również przy wyłączonym sterowniku.
+
+Wszystkie indeksy kontrolerów device tree zaczynają się od zera. Na przykład SPI 0 oznacza RP SPI0, STM32 SPI1 lub ESP32-S3 SPI2; FDCAN 0 przechodzi na `instance: 1` obecnej struktury. Przelicza to adapter targetu. Węzły wskazują jedną nazwaną magistralę zamiast powtarzać jej połączenia. Dwie deklaracje magistrali nie mogą zająć tej samej pary `(kind, index)`. UART index 0/1 odpowiada `HAL_UART_PORT_1`/`HAL_UART_PORT_2`; wygenerowane liczbowe `JH_HW_BUS_<BUS>_UART_PORT` udostępnia tę konwersję. Samodzielne `controller` węzła również zajmuje wyłączną parę `(kind, index)`; typy PWM/ADC mogą zamiast tego opisywać wyjścia wybierane pinem, gdy API HAL nie udostępnia niezależnego wyboru kontrolera.
+
+Każde urządzenie SPI ma unikalny podłączony CS swojej magistrali. Adresy I2C są jawnymi, nieprzesuniętymi siedmiobitowymi liczbami całkowitymi, unikalnymi na wybranej magistrali; binding nie podaje domyślnego adresu. `address: null` oznacza węzeł bez adresu, z niekompletną konfiguracją. Adresy dziesięciobitowe i multipleksery zmieniające przestrzeń adresów wymagają przyszłego rozszerzenia formatu.
+
+`nets` montażu przypisuje nazwie jedną fizyczną `endpoint` i ścieżkę sygnału `owner`. Użytkownicy wskazują nazwę; końcówka jest zapisana raz. Właściciel musi wskazywać tę sieć i odpowiada za sterowanie sprzętem. Pozostali uczestnicy są aliasami, a nie niezależnymi sterownikami: udostępniają tę samą końcówkę i informację o właścicielu, lecz nie drugi inicjalizator sterujący. Magistrala osobno zajmuje swoje wspólne linie; ścieżki jej sygnałów to `bus.<name>.<signal>`, a nazwa węzła głównego `bus` jest zastrzeżona. Współdzielone wyjścia wymagają zgodnej polaryzacji i właściwości elektrycznych; sama sieć nie zezwala na dwa niezależne aktywne sterowniki. Dwa równe numery GPIO bez magistrali, połączenia typu lub nazwanej sieci oznaczają kolizję.
+
+Twarde rezerwacje są dostępne wyłącznie dla zadeklarowanego właściciela na płytce. Projekt może jawnie zwolnić miękką rezerwację kluczem z rejestru w `releaseReservations`; klucz nieznany lub twardy jest błędem. Fizycznie podłączone urządzenie płytki współdzielące pin nadal wymaga opisu wspólnego sygnału. Piny źródła zegara wymaganego przez wybrane drzewo również są zajęte. Sprawdzanie obejmuje wszystkie GPIO targetu, nie pojedynczą maskę 64-bitową. AF, IOMUX i szczegółowe funkcje pinów ADC/PWM należą do dalszych etapów.
+
+Sygnał płytki może należeć do jawnie zadeklarowanej sieci, gdy jej końcówka zgadza się z jego niezmienną końcówką z rejestru. Członkostwo wynika z tej jawnej deklaracji; nie trzeba nadpisywać połączeń płytki w montażu. Gdy taki sygnał jest właścicielem, nie musi zastępować końcówki płytki odwołaniem do sieci projektu. Diody GPIO płytki udostępniają `out`, diody adresowalne `data`, a przyciski `in`; adapter płytki wiąże obecnych właścicieli rezerwacji z tymi ścieżkami urządzeń. Sieć kilku niezmiennych sygnałów płytki nadal ma dokładnie jednego właściciela sterującego. Ten wyjątek nie pozwala współdzielić pinów zegara.
+
+## Bindings i dostawcy sprzętu
+
+Plik bindingu definiuje dokładnie jedno `compatible`, domenę, opis oraz opcjonalne sygnały, właściwości, wymagania magistrali lub kontrolera, dzieci, wewnętrzne `connections`, `provides`, `requiresFeatures` i `pinCount`. Typy HAL znajdą się w `config/hardware/bindings/`. Główne `bindings` wskazuje pojedyncze pliki projektu względem `device_tree.json`, używając ukośników; `../` jest dopuszczalne dla wspólnych typów. Nie ma globów, skanowania katalogów, URI, ścieżek bezwzględnych ani kopii rejestru HAL. Rozwiązane ścieżki plików są deduplikowane; powtórne `compatible`, również przesłaniające HAL, jest błędem.
+
+Właściwość deklaruje JSON `type`, `cType`, opis, opcjonalną wymagalność lub wartość domyślną i granice albo enum. Właściwości liczbowe wymagają jednostki. Zbiór jednostek jest otwarty: `Hz`, `ohm`, `us`, `ms`, `V`, `°C`, `K`, `bar`, `pixels` i bezwymiarowe `1` są przykładami, nie enum. Jednostka to niepusty drukowalny tekst NFC UTF-8 bez skrajnych białych znaków, z rozróżnieniem wielkości liter, zachowany w modelu. Nie ma aliasów, skalowania ani automatycznej konwersji; wartość zawsze podaje się w jednostce zadeklarowanej przez binding. `cType` to `bool`, typ od `int8`/`uint8` do `int64`/`uint64`, `float`, `double` albo `string`, zgodny z typem JSON. Granice, wartości domyślne i elementy enum muszą pasować do obu typów. Nieznane właściwości są błędem. Rezystancje dzielnika podaje się jawnie w omach, bez nieopisanej skali.
+
+`required` właściwości domyślnie wynosi false. Wymagana właściwość musi mieć wartość po rozwiązaniu wartości domyślnych i nadpisań; domyślna wartość bindingu spełnia to wymaganie. Pominięta opcjonalna właściwość bez wartości domyślnej nie udostępnia makra. Granice dotyczą tylko właściwości liczbowych. Przy fałszywym warunku sygnał można pominąć lub jawnie podać `null`; jego wymagalność obowiązuje tylko przy prawdziwym warunku.
+
+Kierunek sygnału jest opisany od strony MCU: `input`, `output` albo `bidirectional`. Sygnał określa dozwolone domeny końcówek, `required` i opcjonalnie jeden warunek `when`, porównujący zadeklarowaną rozwiązaną właściwość z prostą wartością `equals`. Warunki nie odwołują się do wariantów ani flag funkcji. Przy fałszywym warunku sygnał musi być niepodłączony. Binding nie może zawierać map montaży, numerów GPIO, indeksów magistral ani dowolnych wyrażeń C.
+
+Wewnętrzne `connections` przypisuje sygnał modułu sygnałowi dziecka `owner` i tablicy `aliases`. Ścieżki są względne wobec dzieci modułu. Projekt raz podłącza zewnętrzny sygnał modułu; rozwinięcie przekazuje go dzieciom. Właściciel w podzespole steruje końcówką; zewnętrzny sygnał modułu i pozostałe dzieci są aliasami. Sprzeczne bezpośrednie przypisania dzieci, nieznane sygnały lub cykle są błędami. Ten zapis opisuje połączenia PCB bez wyboru pinów MCU. Mapowanie pokazuje [przykład modułu](../../tests/fixtures/device_tree/bindings/radio-module.json).
+
+`provides` wymienia istniejące capabilities rejestru, nie definiuje nowych funkcji. `requiresFeatures` zapisuje wymagania HAL przy użyciu konfiguracji danego węzła; sama obecność ich nie włącza. Sprzęt wybierany globalnie dla buildu, np. CYW43, wskazuje `providers` montażu, np. `cyw43: radioModule.radio`. Jeden obecny kandydat może być wybrany automatycznie, kilku wymaga jawnego wskazania, a nieobecny lub niekompletny wybór kończy się błędem przy użyciu. Jest to wybór fizycznego sprzętu; sterowniki programu nadal wybiera `hal_project_config.h`.
+
+## Zegary i dioda statusu
+
+Przyszły rejestr HAL zawiera po jednym `config/hardware/clocks/<target>.json` na target. Plik deklaruje ten target i niepustą mapę `trees`, zawierającą `default`. Wpis podaje zarejestrowany `backend`, stałe `requiredSources`, wynikowe `frequenciesHz` i `parameters` backendu. Montaż wybiera jedynie klucz drzewa, bez nadpisywania MHz ani parametrów. Backend sprawdza parametry wobec rzeczywiście obsługiwanych ustawień startupu lub SDK; schemat nie obiecuje obsługi dowolnego wpisu.
+
+Fizyczne `clockSources` należy do `boards/profiles/<board>.json`: klucz źródła, `kind` (`crystal` albo `external-clock`), dodatnie `frequencyHz` i piny SoC w `pins`. Wymagany rodzaj i częstotliwość źródła muszą zgadzać się z płytką. Oscylatory wewnętrzne należą do targetu lub backendu, nie do dopisanych faktów płytki. Mock ma puste źródła i częstotliwości wyjściowe. Każda ISA ma własny wpis rejestru. Obsługa w schemacie i loaderze płytki oraz rzeczywiste wpisy targetów należą do Etapu B.
+
+`pins` wymienia GPIO zajęte przez źródło. Dedykowane wyprowadzenia oscylatora poza przestrzenią GPIO mają pustą listę; format nie przypisuje fikcyjnego numeru GPIO wyprowadzeniom kwarcu RP/ESP. Backend targetu sprawdza wymagane piny wejść zegarowych korzystających z GPIO, takich jak HSE STM32; pusta lista nie omija ich rezerwacji.
+
+Pierwsze drzewa STM32 zachowują HSI16/170 MHz z FDCAN z PCLK1 oraz HSE24/160 MHz z FDCAN80 z PLL Q, wraz z obecnym fallbackiem HSI16. Domyślne zegary targetów SDK trzeba sprawdzić wobec wybranego SDK i jego wejść zegarowych; nieoczekiwane częstotliwości są błędem zamiast cichej zmiany wygenerowanych faktów. [Przykłady zegarów](../../tests/fixtures/device_tree/valid/clock-trees.json) są niezależnymi danymi specyfikacji, a nie rejestrem produkcyjnym.
+
+`statusLed.node` jawnie wybiera obecną diodę płytki lub aplikacji. Musi ona mieć użyteczną końcówkę i znaną polaryzację; opcjonalne `pixelOrder` jest prawidłowe tylko dla adresowalnej diody RGB i zastępuje jej domyślną kolejność kolorów. Wybór nie zmienia fizycznej polaryzacji. `node: null` jest zarezerwowane dla mocka bez fizycznej diody. Obecne przykłady i fixture'y sprzętowe zachowują swoją sygnalizację podczas migracji.
+
+## Generowane makra i inicjalizatory
+
+Jedynym wczesnym nagłówkiem jest `jh_hardware.h`, zawierający makra `JH_HW_*`, bez nagłówków HAL, obiektów typowanych ani wywołań uruchamiających sprzęt. Udostępnia rozwiązany sprzęt niezależnie od flag programu. `hal_project_config_hook.h` i narzędzie odczytujące konfigurację wczytują dokładnie jawnie podany nagłówek przed `hal_project_config.h`. Przy JSON-ie brak nagłówka jest błędem; plik znaleziony na zwykłej ścieżce include nie włącza mechanizmu.
+
+| Rodzina | Znaczenie |
+|---|---|
+| `JH_HW_SCHEMA_VERSION`, `JH_HW_TARGET_NAME`, `JH_HW_BOARD_NAME`, `JH_HW_ASSEMBLY_NAME`, `JH_HW_HARDWARE_SHA256` | wersja i tożsamość rozwiązanego sprzętu |
+| `JH_HW_HAS_<CAPABILITY>` | efektywne capabilities sprzętu, liczbowe 0/1 |
+| `JH_HW_NODE_<PATH>_PRESENT`, `JH_HW_NODE_<PATH>_CONFIG_AVAILABLE` | liczbowe 0/1 dla każdego zadeklarowanego lub rozwiniętego węzła |
+| `JH_HW_NODE_<PATH>_PROP_<PROPERTY>` | rozwiązana wartość prosta z typem |
+| `JH_HW_NODE_<PATH>_PIN_<SIGNAL>_CONNECTED`, `JH_HW_NODE_<PATH>_PIN_<SIGNAL>_DOMAIN` | liczbowy stan połączenia i domena (0 brak, 1 SoC, 2 urządzenie) |
+| `JH_HW_NODE_<PATH>_PIN_<SIGNAL>`, `JH_HW_NODE_<PATH>_PIN_<SIGNAL>_OWNER` | kodowanie HAL SoC, gdy dostępne; liczbowa flaga właściciela |
+| `JH_HW_NODE_<PATH>_PIN_<SIGNAL>_PROVIDER`, `JH_HW_NODE_<PATH>_PIN_<SIGNAL>_INDEX` | ścieżka dostawcy przestrzeni pinów i indeks |
+| `JH_HW_NODE_<PATH>_BUS_INDEX`, `JH_HW_NODE_<PATH>_CONTROLLER_INDEX`, `JH_HW_NODE_<PATH>_ADDRESS` | jawny rozwiązany wybór, jeśli występuje |
+| `JH_HW_BUS_<BUS>_INDEX`, `JH_HW_BUS_<BUS>_FREQUENCY_HZ`, `JH_HW_BUS_<BUS>_PIN_<SIGNAL>` | wybór magistrali, domyślny zegar SPI/I2C i połączenia |
+| `JH_HW_NODE_<PATH>_FREQUENCY_HZ`, `JH_HW_NODE_<PATH>_SPI_MODE`, `JH_HW_NODE_<PATH>_SPI_BIT_ORDER`, `JH_HW_NODE_<PATH>_SPI_SETTINGS_INIT` | efektywne ustawienia transakcji urządzenia; mode 0-3, bit order 0 LSB / 1 MSB |
+| `JH_HW_BUS_<BUS>_UART_PORT`, `JH_HW_BUS_<BUS>_BAUD_RATE`, `JH_HW_BUS_<BUS>_DATA_BITS`, `JH_HW_BUS_<BUS>_PARITY`, `JH_HW_BUS_<BUS>_STOP_BITS`, `JH_HW_BUS_<BUS>_FRAME_CONFIG` | ustawienia UART; parity 0 none / 1 even / 2 odd; odroczony token ramki `HAL_UART_CFG_*` |
+| `JH_HW_NODE_<PATH>_CONFIG_INIT` | odroczony inicjalizator obsługiwanej konfiguracji HAL |
+
+Nieobecny węzeł udostępnia jedynie obecność i dostępność konfiguracji. Obecny niepodłączony sygnał udostępnia flagi połączenia, domeny i właściciela, bez zgadywanego numeru pinu. Końcówka urządzenia podaje dostawcę i indeks; makro liczbowe pinu istnieje tylko wtedy, gdy adapter ma rzeczywiste kodowanie HAL. Flagi preprocesora są literałami liczbowymi, nigdy identyfikatorami enum HAL. Tekst jest escapowanym literałem C; liczby całkowite mają przyrostki zgodne z `cType`; float/double są skończone, mają sprawdzony zakres i zapis pozwalający odtworzyć wartość.
+
+Zapis literałów jest ustalony; sprawdzenie zakresu poprzedza renderer i nie polega na zwężaniu typu przez przyrostek:
+
+| `cType` | Literał |
+|---|---|
+| `bool` | `0` / `1` |
+| `uint8`, `uint16`, `uint32` | dziesiętny z `U` |
+| `uint64` | dziesiętny z `ULL` |
+| `int8`, `int16`, `int32` | dziesiętny bez przyrostka; ujemne wyrażenie w nawiasach |
+| `int64` | dziesiętny z `LL`; ujemne wyrażenie w nawiasach |
+| `float` | wartość binary32, zapis naukowy z 9 cyframi znaczącymi i `f` |
+| `double` | wartość binary64, zapis naukowy z 17 cyframi znaczącymi, bez przyrostka |
+| `string` | escapowany literał tekstu C w UTF-8 |
+
+Minimalne wartości ze znakiem to `(-2147483647 - 1)` i `(-9223372036854775807LL - 1LL)` dla int32/int64. Literały zmiennoprzecinkowe używają `.`, małego `e`, jawnego znaku wykładnika i co najmniej dwóch cyfr wykładnika, niezależnie od locale. Liczby dziesiętne wejścia parsuje się dokładnie, następnie raz zaokrągla do zadeklarowanego IEEE-754, do najbliższej wartości z rozstrzyganiem remisu do parzystej. Overflow, wartości nieskończone i niezerowe wartości zaokrąglone do zera są błędem; reprezentowalne wartości subnormal są dozwolone. Ujemne zero staje się dodatnim. Wejścia całkowite zachowują pełną precyzję, także uint64 powyżej 2^53. Przykładowo float `0.22` daje `2.19999999e-01f`.
+
+Zamiana na token rozdziela granice akronim-słowo oraz mała litera lub cyfra-wielka litera, zastępuje interpunkcję przez `_`, scala powtórzone `_` i zamienia litery na wielkie. Segmenty ścieżki węzła łączy `_`. Zatem `radioModule.radio` daje `RADIO_MODULE_RADIO`, a `fooBar` i `fooBAR` kolidują. Nazwy są sprawdzane dla wszystkich montaży, rozwiniętych dzieci, sygnałów, właściwości i zarezerwowanych rodzin makr przed zapisem wyniku. Kolizja jest błędem; generator nie dodaje automatycznego przyrostka ani zmiennego indeksu.
+
+Inicjalizator jest używany po udostępnieniu odpowiednich typów HAL. Przy tworzeniu UART liczbowe makro portu rzutuje się na `hal_uart_port_t`; `FRAME_CONFIG` pozostaje odroczonym tokenem `HAL_UART_CFG_*`, użytecznym w C i C++. Renderery domen HAL odpowiadają za kolejność pól, wartości domyślne i wybór części unii; bindings nie wstawia kodu C. Własny typ projektu udostępnia makra wartości i pinów, bez tworzenia nowego typu HAL czy inicjalizatora; `CONFIG_AVAILABLE` jest równe 0, gdy nie ma renderera HAL. Dla obsługiwanych typów ta flaga opisuje kompletne połączenia i własność, niezależnie od flag programu. C11 używa inicjalizatorów agregatów lub nazwanych pól. C++17 używa agregatów albo czystej, od razu wywoływanej lambdy przy wyborze dalszego elementu unii `hal_can_config_t` lub `hal_lora_radio_config_t`. Lambda jedynie tworzy wartość, bez heapu i uruchamiania sprzętu; konfiguracja unii w globalnym C++ `const` nie musi być `constexpr`. Aplikacja oszczędzająca stos może wypełnić statyczny obiekt podczas swojego jawnego startu.
+
+```c
+#include <JaszczurHAL.h>
+
+static const hal_can_config_t can0_config = JH_HW_NODE_CAN0_CONFIG_INIT;
+/* The application explicitly creates/starts CAN and handles errors. */
+```
+
+Renderer odrzuca jawną końcówkę, jeśli pole docelowe HAL odczytałoby jej wartość jako domyślną lub niepodłączoną. Inicjalizator nie zastępuje po cichu połączeń domyślnymi ustawieniami backendu. Komentarze definicji makr opisują jednostki, brakujące wartości i wymagane funkcje oraz widoczność typów.
+
+Makra sprzętu wewnętrzne dla HAL definiuje wyłącznie `jh_board_config.h`: `HAL_LED_BUILTIN`, `HAL_BOARD_STATUS_LED_*`, `HAL_BOARD_HAS_*`, maski capabilities, `HAL_BOARD_CAN_CHANNELS` i `HAL_STM32G474_CLOCK_HSE_160MHZ`. Korzystają z rozwiązanego montażu i odwołują się do wczesnych makr przy udostępnieniu tej samej wartości. Flagi funkcji programu nadal należą do projektu. Startup i FreeRTOS wczytują nagłówek właściciela przed użyciem zegara; `-D` ani drugi nagłówek nie definiuje ponownie tych makr sprzętu.
+
+## Wybór i kolejność buildu
+
+Nazwy selektorów są ustalone: CMake `JH_ASSEMBLY`, CLI `--assembly`, `assembly` w manifeście i stanie lokalnym; program korzysta z obecnych `JH_PROJECT_VARIANTS` i `--variant`. Jawne argumenty polecenia lub buildu mają pierwszeństwo przed lokalnym wyborem interaktywnym, a następnie domyślnym wyborem manifestu. Macierze pomijają stan lokalny i jawnie wybierają każdy montaż i wariant. Wybrany montaż określa target i płytkę; dodatkowo podany target musi się zgadzać.
+
+Dla wybranego targetu jeden montaż jest automatyczny, kilka wymaga jawnego klucza, a brak jest błędem. Bez wyboru targetu i montażu jedyny montaż może określić oba; w pozostałych przypadkach trzeba wskazać target lub montaż, bez dobierania domyślnej płytki. Nieznany jawny klucz nie uruchamia fallbacku. Wejściowe selektory płytki (`JH_BOARD`, `--board`, `board` manifestu lub `targetProfiles.*.board`) są odrzucane w trybie JSON-a. Dawny lokalny wybór płytki jest pomijany; wewnętrzny rozwiązany wybór płytki nie jest drugim wejściem.
+
+Przy JSON-ie każda projektowa definicja `JH_PROJECT_TARGETS` jest odrzucana, również w nieaktywnej gałęzi warunkowej. Targety wynikają z montaży. Deklaracje wariantów muszą być niezależne od targetu, montażu i `JH_HW_*`, żeby listowanie działało przed buildem. Warunki konfiguracji programu wybranego wariantu mogą nadal sprawdzać sprzęt.
+
+Planowany generator to `scripts/generate_hardware_config.py`. `list --config-dir DIR` odczytuje montaże bez generowania wyników. `resolve --config-dir DIR [--target ID] [--assembly ID] --output-dir DIR` rozwiązuje sprzęt i zapisuje `jh_hardware.h` oraz `jh_hardware_resolved.json`. `finalize --hardware FILE --hardware-header FILE --config-dir DIR [--variant ID] [--define NAME[=VALUE]] --output-dir DIR` odczytuje ten sam model, przekazuje jego dokładny nagłówek przed konfiguracją projektu, rozwiązuje funkcje i tunables oraz emituje późniejsze dane buildu. Polecenia są interfejsem do późniejszego wdrożenia, nie obecnie działającymi narzędziami.
+
+Końcowy krok dodaje konfigurację programu do istniejącego rozwiązanego modelu; nie rozwiązuje osobno sprzętu ani nie zmienia wczesnych faktów. Zapisuje `jh_board_config.h`, `jh_hardware_config.cmake`, obecne nagłówki i źródła sygnatury linkowania oraz `generation.d`. Pliki są zapisywane atomowo; build używa ich po udanej generacji. Skróty zawartości zależności chronią przed końcową generacją z nieaktualnego modelu. Oba kroki zależą od wybranego JSON-a, wszystkich bindings, danych płytki i targetu, rejestru zegarów oraz wejść generatora i schematu.
+
+`jh_hardware_resolved.json` ma `schemaVersion: 1`, `selection` (`target`, `board`, `assembly`), `hardware`, `hardwareSha256` i `dependencies`. `hardware` zawiera rozwiniętą płaską mapę `nodes`, nazwane `buses` i `nets`, rozwiązane `clock` i `statusLed`, efektywne `capabilities`, wybrane `providers` oraz zajęte `reservations`. Węzeł zapisuje `compatible`, `domain`, obecność, typowane właściwości, końcówki i właścicieli sygnałów oraz opcjonalną magistralę, kontroler, adres i rozwiązane ustawienia transportu. Nazwane magistrale i sieci zachowują pojedynczą deklarację. Właściwość ma `value`, `cType` i jednostkę `unit` dla wartości liczbowych; końcówki GPIO używają jawnej domeny. Nieobecny węzeł zapisuje jedynie tożsamość i obecność. Zegar zawiera stałe parametry, częstotliwości i użyte źródła fizyczne. Zależności zapisują ścieżki względem wejścia i SHA-256 zawartości, z przestrzenią względną wobec rejestru dla wejść HAL; ich położenie wpływa na przebudowę, nie tożsamość sprzętu.
+
+Końcowy krok dodaje `software` (wariant, efektywne funkcje, tunables, jawne pozostałe definicje, wejścia ABI, providera i toolchaina) oraz `configSha256`. Skrót sprzętu obejmuje `selection` i `hardware`; końcowy skrót obejmuje ten skrót i `software`. Nazwy wyników, położenie zależności i opisy są pomijane. Jawnie wskazany wczesny nagłówek musi odpowiadać skrótowi sprzętu w modelu. `list` zwraca JSON z `schemaVersion` i tablicą `assemblies` o elementach `{name, target, board}`, sortowaną po nazwie. Błędne polecenie zwraca niezerowy status z diagnostyką na stderr, bez użytecznych wyników.
+
+Wyniki aplikacji zachowują `<target>/<assembly>` z osobnymi podkatalogami wariantu lub konfiguracji. Wspólne cache i instalacje bibliotek uwzględniają również pełny skrót konfiguracji. Niezależne projekty o równych kluczach montaży nie nadpisują się. Tożsamość sprzętu obejmuje cały rozwiązany model, również nieużywane podłączone węzły; końcowa tożsamość uwzględnia efektywne flagi i tunables HAL, wejścia ABI oraz tożsamość providera i toolchaina. Liczby normalizuje się do rozwiązanych typów C przed hashowaniem. Wyłącznie we wejściu hasha typowane float/double `value` zastępuje tekst bitów IEEE-754: małe cyfry hex, dokładnie 8/16 znaków, najbardziej znacząca cyfra pierwsza; `cType` pozostaje. Float `0.22` to `"3e6147ae"`, double `1` to `"3ff0000000000000"`. Rozwiązany JSON zachowuje wartości liczbowe z cyframi naukowego literału bez przyrostka C. Inne niecałkowite wartości backendu/programu dostają `cType: double` przed tą transformacją; wejście hasha nie zawiera zmiennoprzecinkowych tokenów JSON. Liczby całkowite są dokładnymi dziesiętnymi liczbami JSON, boolean to `true`/`false`. Skrót to SHA-256 zwartego JSON z kluczami sortowanymi po kodach Unicode, tekstem UTF-8 bez zamiany na ASCII, separatorami `,` i `:`, bez whitespace/BOM/końcowego newline. Tekst JSON escapuje cudzysłów/backslash, używa `\b`, `\f`, `\n`, `\r`, `\t` dla tych znaków kontrolnych i małego `\u00xx` dla innych C0; slash i pozostałe skalarne znaki Unicode pozostają jawne. Nieparzyste surogaty Unicode są błędem wejścia. Ścieżki bezwzględne, daty i opisy nie wpływają na tożsamość.
+
+Tylko brak `device_tree.json` wybiera dawny build płytki. Błędny istniejący plik lub brak wygenerowanego wyniku jest błędem. Zmiana trybu usuwa nieaktualne wyniki i wpisy cache danego buildu. Bez JSON-a obecne wartości i selektory płytki pozostają obsługiwane.
+
+## Pakiet samodzielnej biblioteki
+
+`--project-config DIR` / `HAL_PROJECT_CONFIG_DIR` wybiera katalog konfiguracji niezależnie od źródeł aplikacji. Zawiera on `device_tree.json`, `hal_project_config.h` i wskazane bindings. Biblioteka dla istniejącej aplikacji odczytuje pliki u jej właściciela; samodzielny preset ma własny katalog. Żaden nie wymaga `app.c`, `app.cpp` ani `app_start()`. Runnery bibliotek otrzymują `--assembly` i `--variant` i korzystają ze wspólnego wyboru oraz generacji z firmware'em.
+
+Buildy z JSON-em wyliczają funkcje i tunables HAL dokładnie jak firmware, bez dodawania domyślnego presetu funkcji runnera. Wymagania platformy i jawne `-D` uczestniczą we wspólnych obliczeniach i tożsamości. `--all-features` nadal jest błędem przy nieobsługiwanym sprzęcie lub transporcie. Dawny build bez JSON-a zachowuje wartości domyślne. ESP-IDF może zachować wewnętrzną aplikację kontrolną; zgodne SDK i `sdkconfig` pozostają wymagane.
+
+Pakiet zawiera archiwum, publiczne nagłówki HAL, `include/generated/jh_hardware.h`, `jh_board_config.h` i obecny nagłówek sygnatury linkowania oraz rozwiązany JSON, `jh_hardware_config.cmake` i źródło odwołania do sygnatury w `share/JaszczurHAL/generated/`. Dane CMake udostępniają `JH_HARDWARE_HEADER`, `JH_HARDWARE_RESOLVED_FILE`, `JH_HARDWARE_SHA256` i `JH_CONFIG_SHA256`, a dla efektywnych funkcji, pozostałych definicji HAL i tunables używają obecnych zmiennych konfiguracji projektu. Zapisują także wejścia ABI i providera oraz przenośne ścieżki pakietu. Globalne rejestry HAL mają pojedyncze źródła instalowane z biblioteką; pakiet nie tworzy drugiej wygenerowanej kopii.
+
+Build aplikacji z JSON-em oblicza oczekiwaną tożsamość ze swoich wejść przed linkowaniem archiwum. Samo odwołanie dostarczone w pakiecie nie potwierdza tej zgodności. Przy bezpośrednim użyciu kompilatora obowiązuje ustalona konfiguracja pakietu, bez redefiniowania sprzętu i parametrów kompilacji HAL. Przy przyjętym pełnym skrócie sprzętu również zmiana pinu używanego tylko przez aplikację wymaga pasującego archiwum. Współdzielenie jednego archiwum między różnymi opisami sprzętu pozostaje poza wersją 1.
+
+## Diagnostyka i przykłady
+
+Diagnostyka podaje kod błędu, plik i JSON Pointer, a przy kolizji zasobu obu właścicieli. Stałe kategorie to `JH-HW-SCHEMA`, `JH-HW-BINDING`, `JH-HW-PRESENCE`, `JH-HW-TARGET-BOARD`, `JH-HW-BOARD`, `JH-HW-PIN-CONFLICT`, `JH-HW-PIN-RANGE`, `JH-HW-RESERVATION`, `JH-HW-TRANSPORT`, `JH-HW-TARGETS`, `JH-HW-CONTROLLER`, `JH-HW-ADDRESS`, `JH-HW-NET-OWNER`, `JH-HW-PROPERTY`, `JH-HW-CLOCK`, `JH-HW-STATUS-LED`, `JH-HW-MACRO-NAME`, `JH-HW-ASSEMBLY`, `JH-HW-FEATURE`, `JH-HW-GENERATION` i `JH-HW-PACKAGE`. Błędy walidacji nie pozostawiają częściowo użytecznej konfiguracji.
+
+Resolver zwraca tylko pierwszy błąd, bez kolejnych błędów z nierozwiązanych danych. Kolejność faz: wejście/schemat, deklaracje bindings i nazwy makr, wybór montażu/targetu/płytki, obecność i referencje węzłów, właściwości/warunki, zegary, końcówki/sieci/rezerwacje/kontrolery/adresy/transport, dioda statusu, a następnie program/funkcje i tożsamość pakietu. Poprawność kluczy rezerwacji sprawdza się przed użyciem końcówek; właściciele płytki i zadeklarowane magistrale zajmują zasoby przed węzłami projektu. W fazie sortuje się po ścieżce źródła względem wejścia i JSON Pointer według kodów Unicode (indeksy tablic liczbowo), a kod błędu rozstrzyga remis. Błędy schematu wskazują liść zamiast zbiorczych miejsc `oneOf`/`maxProperties`. Kolejność wpisania pól nie zmienia diagnostyki.
+
+`at` jest JSON Pointer: błędna wartość albo zabronione/nadmiarowe pole wskazuje to pole; brak wymaganego pola wskazuje jego docelową ścieżkę, nawet gdy nie istnieje. Błąd całego obiektu wskazuje obiekt tylko wtedy, gdy nie ma dokładniejszego pola. Obowiązuje escapowanie RFC 6901 `~0`/`~1`. Dla `present: false` z dodatkowymi polami wskazuje się pierwsze zabronione pole; brak obecności węzła głównego wskazuje `/present`. Wartość odziedziczona lub domyślna wskazuje binding albo nadpisanie, które ją wprowadziło. Kolizja wskazuje późniejszego właściciela w ustalonej kolejności, z wcześniejszym źródłem w `related`. Błędy nagłówka/CLI mają `at: ""`, źródło i linię (nagłówek) albo `argument` (CLI), bez wymyślonej ścieżki JSON. Błędne dziecko pod nieobecnym rodzicem kończy sprawdzanie w fazie obecności, przed rozwinięciem okablowania. Te reguły obowiązują również oczekiwania w `cases.json`.
+
+[Przykład kilku targetów](../../tests/fixtures/device_tree/valid/project/device_tree.json) pokazuje niezależne montaże ARM/RISC-V, wspólne dane elektryczne, dzieci, nadpisanie właściwości, zegary i wybór diody. Pozostałe przykłady obejmują [wspólne sygnały](../../tests/fixtures/device_tree/valid/shared/device_tree.json), [brak urządzenia i brak połączenia](../../tests/fixtures/device_tree/valid/presence/device_tree.json), [przestrzenie pinów expandera](../../tests/fixtures/device_tree/valid/expander/device_tree.json) i [konfiguracje ESP/mock](../../tests/fixtures/device_tree/valid/backends/device_tree.json). Ich sztuczne bindings są niezależnymi danymi hostowymi. Nie potwierdzają obsługi sprzętu ani nie zastępują przyszłych rejestrów HAL bindings i zegarów.
+
+Indeks obejmuje też rezerwacje i współdzielenie LD2 płytki, jawny wybór CYW43 i oba kierunki obecność/flaga, błędy diody statusu, pierwszeństwo właściwości dzieci, sygnały warunkowe i niepuste aliasy modułu, odrębne zegary urządzeń, ramki UART, wybór bez argumentów i zabronione deklaracje targetów. `resolutionCases`, `featureCases`, `headerCases`, `numericCases` i `rendererCases` opisują oczekiwane późniejsze wyniki resolvera. Próbki nagłówków mają `.h.txt`, by obecne wykrywanie projektów nie uznało celowo błędnych danych za prawdziwe konfiguracje.
+
+Walidacja strukturalna czyta całe wejście; każde `resolve` sprawdza sprzęt wybranego montażu. Poprawne przypadki podają `resolveAssemblies` do osobnego sprawdzenia każdego montażu, a błędne przypadki semantyczne jawne `input.assembly`, by błąd wyboru nie zasłonił badanego defektu. Oczekiwania wyboru mają osobną grupę.
+
+`rendererCases` wyodrębniają ograniczenia aktualnego API bez deklaracji istnienia produkcyjnego bindingu. Wektory float zawierają dokładny dziesiętny remis i wartość tuż powyżej, która dałaby błędny wynik przy wcześniejszym zaokrągleniu przez binary64, oraz wartość subnormal binary32.

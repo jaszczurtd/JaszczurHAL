@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "compatible": "test,uart-device",
+  "description": "Synthetic UART consumer.",
+  "domain": "uart",
+  "bus": {
+    "kind": "uart",
+    "required": true
+  },
+  "requiresFeatures": [
+    "HAL_ENABLE_UART"
+  ]
+}

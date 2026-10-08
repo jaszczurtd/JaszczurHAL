@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Physical board clockSources object, version 1",
+  "type": "object",
+  "propertyNames": {
+    "$ref": "common.schema.json#/$defs/registryId"
+  },
+  "additionalProperties": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "kind": {
+        "enum": [
+          "crystal",
+          "external-clock"
+        ]
+      },
+      "frequencyHz": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 4294967295
+      },
+      "pins": {
+        "type": "array",
+        "items": {
+          "$ref": "common.schema.json#/$defs/socEndpoint"
+        },
+        "uniqueItems": true
+      }
+    },
+    "required": [
+      "kind",
+      "frequencyHz",
+      "pins"
+    ]
+  }
+}

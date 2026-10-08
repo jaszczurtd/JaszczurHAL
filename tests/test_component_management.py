@@ -145,7 +145,7 @@ require(
     "FatFs pin does not use the project ff16 repository",
 )
 require(
-    "FATFS_REF=5a2def719940c2fbe3f6592a220ec4e3f2fb9e6b" in fatfs_pin,
+    "FATFS_REF=fbcba2fa0a6710336308da5f8ebc0bbd63396cab" in fatfs_pin,
     "FatFs commit is not pinned",
 )
 require(

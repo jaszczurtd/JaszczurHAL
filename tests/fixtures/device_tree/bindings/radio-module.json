@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "compatible": "test,radio-module",
+  "description": "Synthetic compound module; its children carry no MCU wiring.",
+  "domain": "module",
+  "children": {
+    "radio": {
+      "compatible": "test,spi-device",
+      "required": true
+    },
+    "indicator": {
+      "compatible": "test,gpio-output",
+      "required": false
+    }
+  },
+  "signals": {
+    "chipSelect": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    }
+  },
+  "connections": {
+    "chipSelect": {
+      "owner": "radio.cs",
+      "aliases": []
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "nodes": {},
+  "assemblies": {
+    "esp32s3": {
+      "target": "esp32s3",
+      "board": "waveshare-esp32-s3-zero",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "board.statusLed",
+        "pixelOrder": "GRB"
+      },
+      "nodes": {}
+    },
+    "esp32": {
+      "target": "esp32",
+      "board": "esp32-devkitc-v4",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "board.statusLed"
+      },
+      "nodes": {}
+    },
+    "host": {
+      "target": "mock",
+      "board": "host-mock",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": null
+      },
+      "nodes": {}
+    }
+  }
+}

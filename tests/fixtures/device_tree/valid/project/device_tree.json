@@ -1,0 +1,262 @@
+{
+  "schemaVersion": 1,
+  "bindings": [
+    "../../bindings/gpio-output.json",
+    "../../bindings/spi-device.json",
+    "../../bindings/radio-module.json",
+    "../../bindings/can-channel.json",
+    "../../bindings/can-module.json",
+    "../../bindings/power-stage.json",
+    "../../bindings/expander.json"
+  ],
+  "nodes": {
+    "stage": {
+      "compatible": "test,power-stage"
+    },
+    "display": {
+      "compatible": "test,spi-device"
+    },
+    "radioModule": {
+      "compatible": "test,radio-module"
+    },
+    "canModule": {
+      "compatible": "test,can-module"
+    }
+  },
+  "assemblies": {
+    "pico-rp2040": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "board.statusLed"
+      },
+      "buses": {
+        "peripheralSpi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 4000000,
+          "pins": {
+            "sck": 2,
+            "mosi": 3,
+            "miso": 0
+          }
+        }
+      },
+      "nodes": {
+        "stage": {
+          "present": true,
+          "pins": {
+            "driveA": 9,
+            "driveB": 10,
+            "feedback": 26
+          }
+        },
+        "display": {
+          "present": true,
+          "bus": "peripheralSpi",
+          "pins": {
+            "cs": 6,
+            "int": null
+          }
+        },
+        "radioModule": {
+          "present": true,
+          "pins": {
+            "chipSelect": 1
+          }
+        },
+        "radioModule.radio": {
+          "bus": "peripheralSpi",
+          "pins": {
+            "int": 4
+          }
+        },
+        "radioModule.indicator": {
+          "pins": {
+            "out": 8
+          }
+        },
+        "canModule": {
+          "present": false
+        }
+      }
+    },
+    "pico2-arm": {
+      "target": "rp2350-arm",
+      "board": "pico2",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "board.statusLed"
+      },
+      "buses": {
+        "peripheralSpi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 4000000,
+          "pins": {
+            "sck": 2,
+            "mosi": 3,
+            "miso": 0
+          }
+        }
+      },
+      "nodes": {
+        "stage": {
+          "present": true,
+          "pins": {
+            "driveA": 11,
+            "driveB": 12,
+            "feedback": 27
+          }
+        },
+        "display": {
+          "present": true,
+          "bus": "peripheralSpi",
+          "pins": {
+            "cs": 6,
+            "int": null
+          }
+        },
+        "radioModule": {
+          "present": true,
+          "pins": {
+            "chipSelect": 1
+          }
+        },
+        "radioModule.radio": {
+          "bus": "peripheralSpi",
+          "pins": {
+            "int": 4
+          }
+        },
+        "radioModule.indicator": {
+          "pins": {
+            "out": 8
+          }
+        },
+        "canModule": {
+          "present": false
+        }
+      }
+    },
+    "pico2-riscv": {
+      "target": "rp2350-riscv",
+      "board": "pico2",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "board.statusLed"
+      },
+      "buses": {
+        "peripheralSpi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 4000000,
+          "pins": {
+            "sck": 2,
+            "mosi": 3,
+            "miso": 0
+          }
+        }
+      },
+      "nodes": {
+        "stage": {
+          "present": true,
+          "pins": {
+            "driveA": 13,
+            "driveB": 14,
+            "feedback": 28
+          }
+        },
+        "display": {
+          "present": true,
+          "bus": "peripheralSpi",
+          "pins": {
+            "cs": 6,
+            "int": null
+          }
+        },
+        "radioModule": {
+          "present": true,
+          "pins": {
+            "chipSelect": 1
+          }
+        },
+        "radioModule.radio": {
+          "bus": "peripheralSpi",
+          "pins": {
+            "int": 4
+          }
+        },
+        "radioModule.indicator": {
+          "pins": {
+            "out": 8
+          }
+        },
+        "canModule": {
+          "present": false
+        }
+      }
+    },
+    "nucleo": {
+      "target": "stm32g474",
+      "board": "nucleo-g474re",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "board.statusLed"
+      },
+      "nodes": {
+        "stage": {
+          "present": true,
+          "pins": {
+            "driveA": "PC6",
+            "driveB": "PC7",
+            "feedback": "PA0"
+          },
+          "properties": {
+            "shuntOhms": 0.25
+          }
+        },
+        "display": {
+          "present": false
+        },
+        "radioModule": {
+          "present": false
+        },
+        "canModule": {
+          "present": true
+        },
+        "canModule.can1": {
+          "controller": {
+            "kind": "fdcan",
+            "index": 0
+          },
+          "pins": {
+            "rx": "PA11",
+            "tx": "PA12",
+            "standby": "PB0"
+          }
+        },
+        "canModule.can2": {
+          "controller": {
+            "kind": "fdcan",
+            "index": 1
+          },
+          "pins": {
+            "rx": "PB12",
+            "tx": "PB13",
+            "standby": "PB6"
+          }
+        }
+      }
+    }
+  }
+}

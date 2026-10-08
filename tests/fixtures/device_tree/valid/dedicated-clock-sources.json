@@ -1,0 +1,7 @@
+{
+  "xosc": {
+    "kind": "crystal",
+    "frequencyHz": 12000000,
+    "pins": []
+  }
+}

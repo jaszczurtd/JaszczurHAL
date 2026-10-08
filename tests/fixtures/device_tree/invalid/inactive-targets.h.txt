@@ -1,0 +1,4 @@
+#pragma once
+#if 0
+#define JH_PROJECT_TARGETS "rp2040"
+#endif

@@ -8,6 +8,7 @@
 - [JaszczurHAL capabilities](en/features.md)
 - [JaszczurHAL - API Reference](en/JaszczurHAL_API.md)
 - [Target and board profiles](en/boards_profiles_howto.md)
+- [Device tree format specification](en/device_tree_format.md)
 - [Working with firmware projects](en/FwProjectWorkflow.md)
 - [Building JaszczurHAL](en/lib_compilation.md)
 - [Setting up a native Windows environment](en/windows_setup.md)

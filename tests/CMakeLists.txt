@@ -2109,7 +2109,12 @@ foreach(I2C_BACKEND IN ITEMS rp stm32)
         add_test(NAME ${I2C_TEST} COMMAND ${I2C_TEST})
         if(I2C_BACKEND STREQUAL "stm32")
             # Exercise the real polling budget, including under Valgrind.
-            set_tests_properties(${I2C_TEST} PROPERTIES TIMEOUT 240)
+            # The 10-bit executable covers both addressing modes on each bus.
+            if(I2C_VARIANT)
+                set_tests_properties(${I2C_TEST} PROPERTIES TIMEOUT 480)
+            else()
+                set_tests_properties(${I2C_TEST} PROPERTIES TIMEOUT 240)
+            endif()
         else()
             set_tests_properties(${I2C_TEST} PROPERTIES TIMEOUT 20)
         endif()

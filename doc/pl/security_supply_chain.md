@@ -66,6 +66,8 @@ instalację, wycofywanie aktualizacji i odzyskiwanie opisano w dokumencie
 | `security/sbom.cdx.json` | Generowany SBOM CycloneDX dla repozytorium biblioteki. |
 | `security/esp_idf_tools.json` | Zweryfikowany wykaz dokładnych wersji narzędzi dla platform ESP-IDF, ich licencji i projektów źródłowych, rewizji frameworka oraz skrótu `tools.json`. |
 | `security/vulnerability_log.md` | Ręcznie utrzymywany rejestr oceny podatności i poprawek. |
+| `security/osv-scanner.toml` | Znaleziska `osv-scanner` z zapisaną decyzją. |
+| `security/cve-bin-tool-triage.toml` | Znaleziska `cve-bin-tool` z zapisaną decyzją, każda powiązana z commitem komponentu, dla którego ją podjęto. |
 | `third_party/cyw43_driver_version.conf` | Wersja, na której przypięty jest dołączony import CYW43, razem z osobną wersją Pico SDK, z której pochodzą pliki shared-bus Bluetooth. |
 | `src/hal/network/cyw43/vendor/SHA256SUMS` | Manifest SHA-256 wszystkich dołączonych plików CYW43, pilnowany przez `test_cyw43_dependency_boundary`. |
 | `SECURITY.md` | Zasady zgłaszania, wstępnej oceny, klasyfikacji ważności i utrzymania. |
@@ -73,6 +75,7 @@ instalację, wycofywanie aktualizacji i odzyskiwanie opisano w dokumencie
 | `scripts/sync_generated.py` | Wspólny skrypt odświeżający wszystkie generowane artefakty przechowywane w repozytorium, w tym SBOM, i weryfikujący je w trybie tylko do odczytu. |
 | `scripts/check_release_metadata.py` | Kontrola zgodności VERSION, SBOM, nazwy tagu i przynależności commitu do historii głównej gałęzi. |
 | `scripts/check_vulnerabilities.sh` | Opcjonalny skrypt uruchamiający dostępne lokalnie skanery podatności. |
+| `scripts/cve_bin_tool_triage.py` | Zamienia `security/cve-bin-tool-triage.toml` na plik OpenVEX, z którego korzysta skan `cve-bin-tool`. |
 
 ## Generowanie SBOM
 
@@ -154,10 +157,11 @@ tygodniowego i na żądanie. Zadanie testowe uruchamia etap `repository` skryptu
 a po etapie `esp-idf` także etap `security`, ten sam, który wykonuje lokalne
 `./runalltests.sh`. Etap wymaga ESP-IDF, więc w obu miejscach skan go obejmuje:
 
-- `scripts/install_host_tools.sh` instaluje wydania `osv-scanner`
-  i `cve-bin-tool` przypięte w `third_party/osv_scanner_version.conf`
+- `scripts/install_host_tools.sh` instaluje wydanie `osv-scanner`
+  i commit upstream `cve-bin-tool` przypięte w `third_party/osv_scanner_version.conf`
   i `third_party/cve_bin_tool_version.conf`, sprawdzone po SHA-256; skan
-  odrzuca każde inne wydanie,
+  odrzuca inną wersję albo instalację `cve-bin-tool` bez przypiętego skrótu
+  archiwum źródeł w metadanych pip,
 - `osv-scanner` sprawdza własne pliki repozytorium (manifesty i SBOM),
   z uwzględnieniem `.gitignore` i bez heurystyki katalogów vendored, która
   rozpoznaje komponenty po skrótach plików, nie radzi sobie z ESP-IDF
@@ -182,9 +186,23 @@ w `security/vulnerability_log.md`. Wpisy o statusie `mitigated` mają
 jeśli skaner nie zgłasza już znaleziska, jak dla commita, którego nie wymienia
 żadne zgłoszenie podatności.
 
+Decyzje dla `cve-bin-tool` trafiają do `security/cve-bin-tool-triage.toml`,
+również z datą wiersza w dzienniku. `cve-bin-tool` dopasowuje produkty po
+nazwie, więc potrafi zgłosić produkt innego producenta o tej samej nazwie albo
+porównać commit z datą. Wpis podaje parę producent/produkt zgłoszoną przez
+skaner, status `not_affected` lub `fixed` oraz commit komponentu, dla którego
+podjęto decyzję. `scripts/cve_bin_tool_triage.py` zamienia plik na OpenVEX,
+a skan pomija pasujące znaleziska dzięki `--filter-triage`. Po przepięciu
+komponentu wpis przestaje działać: skan znów zgłasza znaleziska, a test kończy
+się błędem, dopóki ktoś nie przejrzy decyzji. Wpisy o statusie `mitigated` mają
+`reviewUntil`, które działa tak samo jak `ignoreUntil`. Błędny wpis albo wpis
+dla komponentu, którego nie ma w SBOM, zatrzymuje skan przed jego rozpoczęciem.
+
 Baza CVE jest przechowywana w pamięci podręcznej przez dzień. Gdy lustro NVD
 jest niedostępne, skan korzysta z ostatniej zapisanej bazy i zgłasza
 ostrzeżenie; bez żadnej zapisanej bazy kończy się błędem.
+Domyślny katalog główny cache to `~/.cache`; `XDG_CACHE_HOME` zmienia go
+zarówno dla skanera, jak i fallbacku.
 
 Skanowanie podatności jest osobnym etapem, więc błędy skanera są zgłaszane oddzielnie od kompilacji, testów i analizy statycznej. Uruchomienia cykliczne wykrywają również nowe CVE opublikowane od poprzedniego skanowania, nawet jeśli kod repozytorium się nie zmienił.
 

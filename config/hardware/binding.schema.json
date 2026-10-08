@@ -1,0 +1,323 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "JaszczurHAL component binding, version 1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "compatible": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "domain": {
+      "enum": [
+        "module",
+        "gpio",
+        "spi",
+        "i2c",
+        "uart",
+        "adc",
+        "pwm",
+        "can",
+        "radio",
+        "display",
+        "expander",
+        "custom"
+      ]
+    },
+    "properties": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "common.schema.json#/$defs/identifier"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "enum": [
+              "boolean",
+              "integer",
+              "number",
+              "string"
+            ]
+          },
+          "cType": {
+            "enum": [
+              "bool",
+              "uint8",
+              "uint16",
+              "uint32",
+              "uint64",
+              "int8",
+              "int16",
+              "int32",
+              "int64",
+              "float",
+              "double",
+              "string"
+            ]
+          },
+          "unit": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Open, case-sensitive unit annotation; no conversion. Printable NFC text with no surrounding whitespace.",
+            "pattern": "^[^\\s\\u0000-\\u001f\\u007f](?:[^\\u0000-\\u001f\\u007f]*[^\\s\\u0000-\\u001f\\u007f])?$"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "default": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          },
+          "minimum": {
+            "type": "number"
+          },
+          "maximum": {
+            "type": "number"
+          },
+          "enum": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "type",
+          "cType",
+          "description"
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "enum": [
+                    "integer",
+                    "number"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "unit"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "signals": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "common.schema.json#/$defs/identifier"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "direction": {
+            "enum": [
+              "input",
+              "output",
+              "bidirectional"
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "domains": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "soc-gpio",
+                "device-pin"
+              ]
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "when": {
+            "$ref": "common.schema.json#/$defs/condition"
+          }
+        },
+        "required": [
+          "direction",
+          "required",
+          "domains"
+        ]
+      }
+    },
+    "bus": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "spi",
+            "i2c",
+            "uart"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "maximumFrequencyHz": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        }
+      },
+      "required": [
+        "kind",
+        "required"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "uart"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "maximumFrequencyHz": {
+                "not": {}
+              }
+            }
+          }
+        }
+      ]
+    },
+    "controller": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "fdcan",
+            "adc",
+            "pwm",
+            "pio"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "required"
+      ]
+    },
+    "children": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "common.schema.json#/$defs/identifier"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "compatible": {
+            "type": "string",
+            "minLength": 1
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "properties": {
+            "$ref": "common.schema.json#/$defs/properties"
+          }
+        },
+        "required": [
+          "compatible",
+          "required"
+        ]
+      }
+    },
+    "connections": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "common.schema.json#/$defs/identifier"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "owner",
+          "aliases"
+        ],
+        "properties": {
+          "owner": {
+            "$ref": "common.schema.json#/$defs/signalPath"
+          },
+          "aliases": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "$ref": "common.schema.json#/$defs/signalPath"
+            }
+          }
+        }
+      }
+    },
+    "provides": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/registryId"
+      },
+      "uniqueItems": true
+    },
+    "requiresFeatures": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^HAL_(ENABLE|DISABLE)_[A-Z0-9_]+$"
+      },
+      "uniqueItems": true
+    },
+    "pinCount": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4294967295
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "compatible",
+    "description",
+    "domain"
+  ]
+}

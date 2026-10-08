@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "bindings": [
+    "../bindings/gpio-output.json",
+    "../bindings/spi-device.json",
+    "../bindings/radio-module.json",
+    "../bindings/can-channel.json",
+    "../bindings/can-module.json",
+    "../bindings/power-stage.json",
+    "../bindings/expander.json"
+  ],
+  "nodes": {
+    "stage": {
+      "compatible": "test,power-stage"
+    },
+    "display": {
+      "compatible": "test,spi-device"
+    },
+    "radioModule": {
+      "compatible": "test,radio-module"
+    },
+    "canModule": {
+      "compatible": "test,can-module"
+    }
+  },
+  "assemblies": {
+    "nucleo": {
+      "target": "stm32g474",
+      "board": "nucleo-g474re",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "board.statusLed"
+      },
+      "nodes": {
+        "stage": {
+          "present": true,
+          "pins": {
+            "driveA": "PC6",
+            "driveB": "PC7",
+            "feedback": "PA0"
+          },
+          "properties": {
+            "shuntOhms": 0.25
+          }
+        },
+        "display": {
+          "present": false
+        },
+        "radioModule": {
+          "present": false
+        },
+        "canModule": {
+          "present": true
+        },
+        "canModule.can1": {
+          "controller": {
+            "kind": "fdcan",
+            "index": 0
+          },
+          "pins": {
+            "rx": "PA11",
+            "tx": "PA12",
+            "standby": "PB0"
+          }
+        },
+        "canModule.can2": {
+          "controller": {
+            "kind": "fdcan",
+            "index": 0
+          },
+          "pins": {
+            "rx": "PB12",
+            "tx": "PB13",
+            "standby": "PB6"
+          }
+        }
+      }
+    }
+  }
+}

@@ -43,7 +43,7 @@ PYTHON_MODULES=(serial yaml)
 # shellcheck source=scanner_pins.sh
 source "${SCRIPT_DIR}/scanner_pins.sh"
 
-# True when scanner $1 is installed at its pinned release.
+# True when scanner $1 is installed at its pinned build.
 scanner_current() {
     local path
     path="$(scanner_path "$1")" && scanner_is_pinned "$1" "${path}" >/dev/null
@@ -95,18 +95,20 @@ install_cve_bin_tool() {
         return
     fi
 
-    # pip reads the version from the wheel's file name, so the download keeps it.
-    local dir wheel
+    local dir archive
     dir="$(mktemp -d)"
-    wheel="${dir}/${CVE_BIN_TOOL_URL##*/}"
-    if ! fetch_pinned "${CVE_BIN_TOOL_URL}" "${CVE_BIN_TOOL_SHA256}" "${wheel}"; then
+    archive="${dir}/cve-bin-tool-${CVE_BIN_TOOL_COMMIT}.tar.gz"
+    if ! fetch_pinned "${CVE_BIN_TOOL_URL}" "${CVE_BIN_TOOL_SHA256}" "${archive}"; then
         rm -rf "${dir}"
         return 1
     fi
     # Into the directory the scan runs it from, whatever PIPX_BIN_DIR says
     # (GitHub runners point it at /opt/pipx_bin).
-    PIPX_BIN_DIR="$(dirname "$(scanner_bin cve-bin-tool)")" \
-        python3 -m pipx install --force "${wheel}"
+    if ! PIPX_BIN_DIR="$(dirname "$(scanner_bin cve-bin-tool)")" \
+        python3 -m pipx install --force "${archive}"; then
+        rm -rf "${dir}"
+        return 1
+    fi
     rm -rf "${dir}"
 }
 
@@ -126,7 +128,7 @@ check_tools() {
             missing=1
         fi
     done
-    # The scanners scripts/check_vulnerabilities.sh runs: the pinned releases
+    # The scanners scripts/check_vulnerabilities.sh runs: the pinned builds
     # where this script installs them, whatever else PATH holds.
     for tool in osv-scanner cve-bin-tool; do
         if ! path="$(scanner_path "${tool}")"; then

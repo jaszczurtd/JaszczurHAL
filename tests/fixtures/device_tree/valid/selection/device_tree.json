@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "bindings": [
+    "../../bindings/gpio-output.json"
+  ],
+  "nodes": {
+    "led": {
+      "compatible": "test,gpio-output"
+    }
+  },
+  "assemblies": {
+    "desk": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "board.statusLed"
+      },
+      "nodes": {
+        "led": {
+          "present": true,
+          "pins": {
+            "out": 14
+          }
+        }
+      }
+    },
+    "vehicle": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "board.statusLed"
+      },
+      "nodes": {
+        "led": {
+          "present": true,
+          "pins": {
+            "out": 15
+          }
+        }
+      }
+    },
+    "nucleo": {
+      "target": "stm32g474",
+      "board": "nucleo-g474re",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "board.statusLed"
+      },
+      "nodes": {
+        "led": {
+          "present": true,
+          "pins": {
+            "out": "PC8"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "bindings": [
+    "../bindings/gpio-output.json"
+  ],
+  "nodes": {
+    "absentLed": {
+      "compatible": "test,gpio-output"
+    },
+    "unconnectedLed": {
+      "compatible": "test,gpio-output"
+    }
+  },
+  "assemblies": {
+    "pico": {
+      "target": "rp2040",
+      "board": "unknown-board",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "board.statusLed"
+      },
+      "nodes": {
+        "absentLed": {
+          "present": false
+        },
+        "unconnectedLed": {
+          "present": true,
+          "pins": {
+            "out": null
+          }
+        }
+      }
+    }
+  }
+}

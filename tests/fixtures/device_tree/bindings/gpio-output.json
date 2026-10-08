@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "compatible": "test,gpio-output",
+  "description": "Synthetic GPIO consumer for format examples.",
+  "domain": "gpio",
+  "signals": {
+    "out": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio",
+        "device-pin"
+      ]
+    }
+  },
+  "properties": {
+    "activeLow": {
+      "type": "boolean",
+      "cType": "bool",
+      "description": "Active output polarity.",
+      "default": false
+    }
+  }
+}

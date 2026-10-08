@@ -1,0 +1,929 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "file": "valid/project/device_tree.json",
+      "schema": "device_tree.schema.json",
+      "expected": "accept",
+      "resolveAssemblies": [
+        "nucleo",
+        "pico-rp2040",
+        "pico2-arm",
+        "pico2-riscv"
+      ]
+    },
+    {
+      "file": "valid/shared/device_tree.json",
+      "schema": "device_tree.schema.json",
+      "expected": "accept",
+      "resolveAssemblies": [
+        "pico"
+      ]
+    },
+    {
+      "file": "valid/presence/device_tree.json",
+      "schema": "device_tree.schema.json",
+      "expected": "accept",
+      "resolveAssemblies": [
+        "pico"
+      ]
+    },
+    {
+      "file": "valid/expander/device_tree.json",
+      "schema": "device_tree.schema.json",
+      "expected": "accept",
+      "resolveAssemblies": [
+        "pico"
+      ]
+    },
+    {
+      "file": "invalid/bad-version.json",
+      "schema": "device_tree.schema.json",
+      "expected": "schema",
+      "error": "JH-HW-SCHEMA",
+      "at": "/schemaVersion"
+    },
+    {
+      "file": "invalid/missing-presence.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-PRESENCE",
+      "at": "/assemblies/pico2-arm/nodes/stage/present",
+      "input": {
+        "assembly": "pico2-arm"
+      }
+    },
+    {
+      "file": "invalid/pin-conflict.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-PIN-CONFLICT",
+      "at": "/assemblies/pico-rp2040/nodes/radioModule/pins/chipSelect",
+      "related": [
+        "/assemblies/pico-rp2040/nodes/display/pins/cs"
+      ],
+      "input": {
+        "assembly": "pico-rp2040"
+      }
+    },
+    {
+      "file": "invalid/duplicate-controller.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-CONTROLLER",
+      "at": "/assemblies/nucleo/nodes/canModule.can2/controller",
+      "input": {
+        "assembly": "nucleo"
+      }
+    },
+    {
+      "file": "invalid/target-board.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-TARGET-BOARD",
+      "at": "/assemblies/pico2-riscv/target",
+      "input": {
+        "assembly": "pico2-riscv"
+      }
+    },
+    {
+      "file": "invalid/absent-wiring.json",
+      "schema": "device_tree.schema.json",
+      "expected": "schema",
+      "error": "JH-HW-SCHEMA",
+      "at": "/assemblies/pico/nodes/absentLed/pins"
+    },
+    {
+      "file": "invalid/pin-spelling.json",
+      "schema": "device_tree.schema.json",
+      "expected": "schema",
+      "error": "JH-HW-SCHEMA",
+      "at": "/assemblies/nucleo/nodes/stage/pins/feedback"
+    },
+    {
+      "file": "invalid/expander-range.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-PIN-RANGE",
+      "at": "/assemblies/pico/nodes/led/pins/out/index",
+      "input": {
+        "assembly": "pico"
+      }
+    },
+    {
+      "file": "invalid/net-owner.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-NET-OWNER",
+      "at": "/assemblies/pico/nets/indicator/owner",
+      "input": {
+        "assembly": "pico"
+      }
+    },
+    {
+      "file": "invalid/macro-collision.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-MACRO-NAME",
+      "at": "/nodes/fooBar",
+      "related": [
+        "/nodes/fooBAR"
+      ],
+      "input": {
+        "assembly": "pico"
+      }
+    },
+    {
+      "file": "invalid/i2c-address.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-ADDRESS",
+      "at": "/assemblies/pico/nodes/io1/address",
+      "input": {
+        "assembly": "pico"
+      }
+    },
+    {
+      "file": "invalid/unknown-board.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-BOARD",
+      "at": "/assemblies/pico/board",
+      "input": {
+        "assembly": "pico"
+      }
+    },
+    {
+      "file": "invalid/absent-parent.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-PRESENCE",
+      "at": "/assemblies/nucleo/nodes/radioModule.radio/present",
+      "input": {
+        "assembly": "nucleo"
+      }
+    },
+    {
+      "file": "invalid/unknown-field.json",
+      "schema": "device_tree.schema.json",
+      "expected": "schema",
+      "error": "JH-HW-SCHEMA",
+      "at": "/assemblies/pico/profiles"
+    },
+    {
+      "file": "invalid/null-property.json",
+      "schema": "device_tree.schema.json",
+      "expected": "schema",
+      "error": "JH-HW-SCHEMA",
+      "at": "/nodes/unconnectedLed/properties/activeLow"
+    },
+    {
+      "file": "valid/clock-sources.json",
+      "schema": "clock_sources.schema.json",
+      "expected": "accept"
+    },
+    {
+      "file": "valid/clock-trees.json",
+      "schema": "clock_tree.schema.json",
+      "expected": "accept"
+    },
+    {
+      "file": "invalid/clock-frequency.json",
+      "schema": "clock_tree.schema.json",
+      "expected": "schema",
+      "error": "JH-HW-SCHEMA",
+      "at": "/trees/hse-160mhz/requiredSources/hse/frequencyHz"
+    },
+    {
+      "file": "invalid/binding-wiring.json",
+      "schema": "binding.schema.json",
+      "expected": "schema",
+      "error": "JH-HW-SCHEMA",
+      "at": "/pins"
+    },
+    {
+      "file": "invalid/binding-unit.json",
+      "schema": "binding.schema.json",
+      "expected": "schema",
+      "error": "JH-HW-SCHEMA",
+      "at": "/properties/shuntOhms/unit"
+    },
+    {
+      "file": "valid/backends/device_tree.json",
+      "schema": "device_tree.schema.json",
+      "expected": "accept",
+      "resolveAssemblies": [
+        "esp32",
+        "esp32s3",
+        "host"
+      ]
+    },
+    {
+      "file": "valid/selection/device_tree.json",
+      "schema": "device_tree.schema.json",
+      "expected": "accept",
+      "resolveAssemblies": [
+        "desk",
+        "nucleo",
+        "vehicle"
+      ]
+    },
+    {
+      "file": "invalid/binding-path.json",
+      "schema": "device_tree.schema.json",
+      "expected": "schema",
+      "error": "JH-HW-SCHEMA",
+      "at": "/bindings/0"
+    },
+    {
+      "file": "invalid/property-range.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-PROPERTY",
+      "at": "/assemblies/nucleo/nodes/stage/properties/shuntOhms",
+      "input": {
+        "assembly": "nucleo"
+      }
+    },
+    {
+      "file": "invalid/unknown-clock.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-CLOCK",
+      "at": "/assemblies/pico/clock/tree",
+      "input": {
+        "assembly": "pico"
+      }
+    },
+    {
+      "file": "invalid/missing-default-clock.json",
+      "schema": "clock_tree.schema.json",
+      "expected": "schema",
+      "error": "JH-HW-SCHEMA",
+      "at": "/trees/default"
+    },
+    {
+      "file": "invalid/clock-source-missing.json",
+      "schema": "clock_sources.schema.json",
+      "expected": "semantic",
+      "clockRegistry": "valid/clock-trees.json",
+      "clockTree": "hse-160mhz",
+      "error": "JH-HW-CLOCK",
+      "at": "/hse"
+    },
+    {
+      "file": "invalid/clock-source-frequency.json",
+      "schema": "clock_sources.schema.json",
+      "expected": "semantic",
+      "clockRegistry": "valid/clock-trees.json",
+      "clockTree": "hse-160mhz",
+      "error": "JH-HW-CLOCK",
+      "at": "/hse/frequencyHz"
+    },
+    {
+      "file": "valid/dedicated-clock-sources.json",
+      "schema": "clock_sources.schema.json",
+      "expected": "accept"
+    },
+    {
+      "file": "valid/children/device_tree.json",
+      "schema": "device_tree.schema.json",
+      "expected": "accept",
+      "resolveAssemblies": [
+        "pico"
+      ]
+    },
+    {
+      "file": "invalid/condition-wired.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-PROPERTY",
+      "at": "/assemblies/pico/nodes/disabledSensor/pins/irq",
+      "input": {
+        "assembly": "pico"
+      }
+    },
+    {
+      "file": "invalid/child-connection-override.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-NET-OWNER",
+      "at": "/assemblies/pico/nodes/defaultModule.driver/pins/out",
+      "input": {
+        "assembly": "pico"
+      }
+    },
+    {
+      "file": "valid/reservations/device_tree.json",
+      "schema": "device_tree.schema.json",
+      "expected": "accept",
+      "resolveAssemblies": [
+        "nucleo"
+      ]
+    },
+    {
+      "file": "invalid/hard-reservation-release.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-RESERVATION",
+      "at": "/assemblies/nucleo/releaseReservations/0",
+      "input": {
+        "assembly": "nucleo"
+      }
+    },
+    {
+      "file": "invalid/hard-reservation-use.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-RESERVATION",
+      "at": "/assemblies/nucleo/nodes/probe/pins/in",
+      "input": {
+        "assembly": "nucleo"
+      }
+    },
+    {
+      "file": "invalid/unknown-reservation.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-RESERVATION",
+      "at": "/assemblies/nucleo/releaseReservations/0",
+      "input": {
+        "assembly": "nucleo"
+      }
+    },
+    {
+      "file": "valid/transports/device_tree.json",
+      "schema": "device_tree.schema.json",
+      "expected": "accept",
+      "resolveAssemblies": [
+        "pico"
+      ]
+    },
+    {
+      "file": "invalid/i2c-device-clock.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-TRANSPORT",
+      "at": "/assemblies/pico/nodes/io1/transport/frequencyHz",
+      "input": {
+        "assembly": "pico"
+      }
+    },
+    {
+      "file": "invalid/spi-device-clock.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-TRANSPORT",
+      "at": "/assemblies/pico/nodes/display/transport/frequencyHz",
+      "input": {
+        "assembly": "pico"
+      }
+    },
+    {
+      "file": "invalid/uart-frequency.json",
+      "schema": "device_tree.schema.json",
+      "expected": "schema",
+      "error": "JH-HW-SCHEMA",
+      "at": "/assemblies/pico/buses/uart/frequencyHz"
+    },
+    {
+      "file": "invalid/uart-missing-frame.json",
+      "schema": "device_tree.schema.json",
+      "expected": "schema",
+      "error": "JH-HW-SCHEMA",
+      "at": "/assemblies/pico/buses/uart/frame"
+    },
+    {
+      "file": "invalid/uart-device-transport.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-TRANSPORT",
+      "at": "/assemblies/pico/nodes/serial/transport",
+      "input": {
+        "assembly": "pico"
+      }
+    },
+    {
+      "file": "valid/providers/device_tree.json",
+      "schema": "device_tree.schema.json",
+      "expected": "accept",
+      "resolveAssemblies": [
+        "nucleo"
+      ]
+    },
+    {
+      "file": "invalid/provider-absent.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-FEATURE",
+      "at": "/assemblies/nucleo/providers/cyw43",
+      "input": {
+        "assembly": "nucleo"
+      },
+      "phase": "finalize",
+      "definitions": {
+        "HAL_ENABLE_WIFI": 1,
+        "HAL_NETWORK_BACKEND_CYW43": 1,
+        "HAL_CYW43_BUS_STM32_GSPI": 1,
+        "HAL_CYW43_STACK_LWIP": 1
+      }
+    },
+    {
+      "file": "invalid/provider-incomplete.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-FEATURE",
+      "at": "/assemblies/nucleo/providers/cyw43",
+      "input": {
+        "assembly": "nucleo"
+      },
+      "phase": "finalize",
+      "definitions": {
+        "HAL_ENABLE_WIFI": 1,
+        "HAL_NETWORK_BACKEND_CYW43": 1,
+        "HAL_CYW43_BUS_STM32_GSPI": 1,
+        "HAL_CYW43_STACK_LWIP": 1
+      }
+    },
+    {
+      "file": "valid/status/device_tree.json",
+      "schema": "device_tree.schema.json",
+      "expected": "accept",
+      "resolveAssemblies": [
+        "pico"
+      ]
+    },
+    {
+      "file": "invalid/status-led-absent.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-STATUS-LED",
+      "at": "/assemblies/pico/statusLed/node",
+      "input": {
+        "assembly": "pico"
+      }
+    },
+    {
+      "file": "invalid/status-led-unconnected.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-STATUS-LED",
+      "at": "/assemblies/pico/statusLed/node",
+      "input": {
+        "assembly": "pico"
+      }
+    },
+    {
+      "file": "invalid/status-led-null.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-STATUS-LED",
+      "at": "/assemblies/pico/statusLed/node",
+      "input": {
+        "assembly": "pico"
+      }
+    },
+    {
+      "file": "invalid/status-led-pixel-order.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-STATUS-LED",
+      "at": "/assemblies/pico/statusLed/pixelOrder",
+      "input": {
+        "assembly": "pico"
+      }
+    },
+    {
+      "file": "invalid/first-error.json",
+      "schema": "device_tree.schema.json",
+      "expected": "schema",
+      "error": "JH-HW-SCHEMA",
+      "at": "/assemblies/pico/nodes/led/pins"
+    },
+    {
+      "file": "invalid/status-led-polarity.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-STATUS-LED",
+      "at": "/assemblies/pico/statusLed/node",
+      "input": {
+        "assembly": "pico"
+      }
+    }
+  ],
+  "selectionCases": [
+    {
+      "file": "valid/project/device_tree.json",
+      "input": {
+        "target": "rp2350-arm"
+      },
+      "assembly": "pico2-arm"
+    },
+    {
+      "file": "valid/selection/device_tree.json",
+      "input": {
+        "target": "rp2040"
+      },
+      "error": "JH-HW-ASSEMBLY"
+    },
+    {
+      "file": "valid/selection/device_tree.json",
+      "input": {
+        "target": "rp2040",
+        "assembly": "vehicle"
+      },
+      "assembly": "vehicle"
+    },
+    {
+      "file": "valid/selection/device_tree.json",
+      "input": {
+        "assembly": "desk"
+      },
+      "assembly": "desk"
+    },
+    {
+      "file": "valid/selection/device_tree.json",
+      "input": {
+        "assembly": "missing"
+      },
+      "error": "JH-HW-ASSEMBLY"
+    },
+    {
+      "file": "valid/project/device_tree.json",
+      "input": {
+        "target": "esp32s3"
+      },
+      "error": "JH-HW-ASSEMBLY"
+    },
+    {
+      "file": "valid/selection/device_tree.json",
+      "input": {
+        "target": "stm32g474",
+        "assembly": "desk"
+      },
+      "error": "JH-HW-ASSEMBLY"
+    },
+    {
+      "file": "valid/status/device_tree.json",
+      "input": {},
+      "assembly": "pico"
+    },
+    {
+      "file": "valid/project/device_tree.json",
+      "input": {},
+      "error": "JH-HW-ASSEMBLY"
+    },
+    {
+      "file": "valid/selection/device_tree.json",
+      "input": {},
+      "error": "JH-HW-ASSEMBLY"
+    }
+  ],
+  "resolutionCases": [
+    {
+      "file": "valid/children/device_tree.json",
+      "assembly": "pico",
+      "properties": {
+        "defaultModule.driver.activeLow": true,
+        "projectModule.driver.activeLow": false,
+        "assemblyModule.driver.activeLow": true,
+        "disabledSensor.irqEnabled": false,
+        "enabledSensor.irqEnabled": true
+      },
+      "owners": {
+        "defaultModule.control": "defaultModule.driver.out",
+        "defaultModule.monitor.in": "defaultModule.driver.out"
+      },
+      "unconnected": [
+        "disabledSensor.irq"
+      ]
+    },
+    {
+      "file": "valid/reservations/device_tree.json",
+      "assembly": "nucleo",
+      "releasedReservations": [
+        "user-button"
+      ],
+      "owners": {
+        "ledMirror.out": "board.statusLed.out",
+        "board.userButton.in": "button.in"
+      },
+      "noDrivingInitializer": [
+        "ledMirror"
+      ]
+    },
+    {
+      "file": "valid/transports/device_tree.json",
+      "assembly": "pico",
+      "transport": {
+        "fast": {
+          "frequencyHz": 10000000,
+          "mode": 0,
+          "bitOrder": "msb"
+        },
+        "display": {
+          "frequencyHz": 8000000,
+          "mode": 3,
+          "bitOrder": "msb"
+        },
+        "io0": {
+          "frequencyHz": 400000
+        },
+        "io1": {
+          "frequencyHz": 400000
+        }
+      },
+      "uart": {
+        "baudRate": 115200,
+        "frameConfig": "HAL_UART_CFG_8N1"
+      }
+    },
+    {
+      "file": "valid/providers/device_tree.json",
+      "assembly": "nucleo",
+      "providers": {
+        "cyw43": "radio1"
+      },
+      "boardMacros": {
+        "HAL_BOARD_HAS_CYW43": 1
+      }
+    },
+    {
+      "file": "valid/status/device_tree.json",
+      "assembly": "pico",
+      "statusLed": {
+        "node": "led",
+        "endpoint": {
+          "domain": "soc-gpio",
+          "id": 14
+        },
+        "activeLow": false
+      }
+    }
+  ],
+  "featureCases": [
+    {
+      "file": "valid/selection/device_tree.json",
+      "assembly": "nucleo",
+      "definitions": {
+        "HAL_ENABLE_WIFI": 1,
+        "HAL_NETWORK_BACKEND_CYW43": 1,
+        "HAL_CYW43_BUS_STM32_GSPI": 1,
+        "HAL_CYW43_STACK_LWIP": 1
+      },
+      "error": "JH-HW-FEATURE",
+      "at": "",
+      "definition": "HAL_ENABLE_WIFI",
+      "boardMacros": {
+        "HAL_BOARD_HAS_CYW43": 0
+      },
+      "argument": "--define"
+    },
+    {
+      "file": "valid/providers/device_tree.json",
+      "assembly": "nucleo",
+      "definitions": {
+        "HAL_ENABLE_WIFI": 1,
+        "HAL_NETWORK_BACKEND_CYW43": 1,
+        "HAL_CYW43_BUS_STM32_GSPI": 1,
+        "HAL_CYW43_STACK_LWIP": 1
+      },
+      "expected": "accept",
+      "boardMacros": {
+        "HAL_BOARD_HAS_CYW43": 1
+      }
+    },
+    {
+      "file": "valid/providers/device_tree.json",
+      "assembly": "nucleo",
+      "definitions": {},
+      "expected": "accept",
+      "boardMacros": {
+        "HAL_BOARD_HAS_CYW43": 1
+      },
+      "doesNotEnable": [
+        "HAL_ENABLE_WIFI"
+      ]
+    },
+    {
+      "file": "valid/transports/device_tree.json",
+      "assembly": "pico",
+      "definitions": {},
+      "expected": "accept",
+      "doesNotEnable": [
+        "HAL_ENABLE_SPI",
+        "HAL_ENABLE_I2C",
+        "HAL_ENABLE_UART"
+      ]
+    }
+  ],
+  "headerCases": [
+    {
+      "file": "invalid/targets.h.txt",
+      "deviceTree": "valid/status/device_tree.json",
+      "error": "JH-HW-TARGETS",
+      "at": "",
+      "line": 2
+    },
+    {
+      "file": "invalid/inactive-targets.h.txt",
+      "deviceTree": "valid/status/device_tree.json",
+      "error": "JH-HW-TARGETS",
+      "at": "",
+      "line": 3
+    }
+  ],
+  "numericCases": [
+    {
+      "cType": "bool",
+      "input": true,
+      "literal": "1"
+    },
+    {
+      "cType": "uint8",
+      "input": 255,
+      "literal": "255U"
+    },
+    {
+      "cType": "uint16",
+      "input": 65535,
+      "literal": "65535U"
+    },
+    {
+      "cType": "uint32",
+      "input": 4294967295,
+      "literal": "4294967295U"
+    },
+    {
+      "cType": "uint64",
+      "input": 18446744073709551615,
+      "literal": "18446744073709551615ULL"
+    },
+    {
+      "cType": "int8",
+      "input": -128,
+      "literal": "(-128)"
+    },
+    {
+      "cType": "int16",
+      "input": -32768,
+      "literal": "(-32768)"
+    },
+    {
+      "cType": "int32",
+      "input": -2147483648,
+      "literal": "(-2147483647 - 1)"
+    },
+    {
+      "cType": "int64",
+      "input": -9223372036854775808,
+      "literal": "(-9223372036854775807LL - 1LL)"
+    },
+    {
+      "cType": "float",
+      "input": 0.22,
+      "literal": "2.19999999e-01f",
+      "hashValue": "3e6147ae"
+    },
+    {
+      "cType": "double",
+      "input": 0.22,
+      "literal": "2.2000000000000000e-01",
+      "hashValue": "3fcc28f5c28f5c29"
+    },
+    {
+      "cType": "float",
+      "input": -0.0,
+      "literal": "0.00000000e+00f",
+      "hashValue": "00000000"
+    },
+    {
+      "cType": "double",
+      "input": -0.0,
+      "literal": "0.0000000000000000e+00",
+      "hashValue": "0000000000000000"
+    },
+    {
+      "cType": "float",
+      "input": "0.22",
+      "inputEncoding": "json-number-token",
+      "literal": "2.19999999e-01f",
+      "hashValue": "3e6147ae"
+    },
+    {
+      "cType": "float",
+      "input": "0.22000000000000000",
+      "inputEncoding": "json-number-token",
+      "literal": "2.19999999e-01f",
+      "hashValue": "3e6147ae"
+    },
+    {
+      "cType": "double",
+      "input": 1,
+      "literal": "1.0000000000000000e+00",
+      "hashValue": "3ff0000000000000"
+    },
+    {
+      "cType": "float",
+      "input": "1e39",
+      "inputEncoding": "json-number-token",
+      "error": "JH-HW-PROPERTY"
+    },
+    {
+      "cType": "float",
+      "input": "1e-50",
+      "inputEncoding": "json-number-token",
+      "error": "JH-HW-PROPERTY"
+    },
+    {
+      "cType": "float",
+      "input": "1.000000059604644775390625",
+      "inputEncoding": "json-number-token",
+      "literal": "1.00000000e+00f",
+      "hashValue": "3f800000"
+    },
+    {
+      "cType": "float",
+      "input": "1.0000000596046447753906250000000000000000001",
+      "inputEncoding": "json-number-token",
+      "literal": "1.00000012e+00f",
+      "hashValue": "3f800001"
+    },
+    {
+      "cType": "float",
+      "input": "1.4012984643248170709237295832899161312802619418765e-45",
+      "inputEncoding": "json-number-token",
+      "literal": "1.40129846e-45f",
+      "hashValue": "00000001"
+    },
+    {
+      "cType": "bool",
+      "input": false,
+      "literal": "0"
+    }
+  ],
+  "rendererCases": [
+    {
+      "renderer": "mcp2515",
+      "transport": {
+        "frequencyHz": 10000000,
+        "mode": 0,
+        "bitOrder": "msb"
+      },
+      "expected": "accept",
+      "configType": "hal_can_mcp2515_config_t",
+      "hasSpiClockField": false
+    },
+    {
+      "renderer": "mcp2515",
+      "transport": {
+        "frequencyHz": 4000000,
+        "mode": 0,
+        "bitOrder": "msb"
+      },
+      "error": "JH-HW-TRANSPORT",
+      "at": "/transport/frequencyHz"
+    },
+    {
+      "renderer": "ili9341",
+      "transport": {
+        "frequencyHz": 8000000,
+        "mode": 0,
+        "bitOrder": "msb"
+      },
+      "expected": "accept",
+      "configType": "jh_ili9341_config_t",
+      "clockField": "clock_hz"
+    },
+    {
+      "renderer": "ili9341",
+      "transport": {
+        "frequencyHz": 8000000,
+        "mode": 3,
+        "bitOrder": "msb"
+      },
+      "error": "JH-HW-TRANSPORT",
+      "at": "/transport/mode"
+    },
+    {
+      "renderer": "mcp251xfd",
+      "transport": {
+        "frequencyHz": 10000000,
+        "mode": 0,
+        "bitOrder": "lsb"
+      },
+      "error": "JH-HW-TRANSPORT",
+      "at": "/transport/bitOrder"
+    },
+    {
+      "renderer": "uart-stm32g474",
+      "frame": {
+        "dataBits": 5,
+        "parity": "none",
+        "stopBits": 1
+      },
+      "error": "JH-HW-TRANSPORT",
+      "at": "/frame/dataBits"
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "bindings": [
+    "../bindings/gpio-output.json"
+  ],
+  "nodes": {
+    "fooBar": {
+      "compatible": "test,gpio-output"
+    },
+    "fooBAR": {
+      "compatible": "test,gpio-output"
+    }
+  },
+  "assemblies": {
+    "pico": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "board.statusLed"
+      },
+      "nodes": {
+        "fooBar": {
+          "present": true,
+          "pins": {
+            "out": 14
+          }
+        },
+        "fooBAR": {
+          "present": true,
+          "pins": {
+            "out": 15
+          }
+        }
+      }
+    }
+  }
+}

@@ -74,6 +74,8 @@ and recovery are documented in
 | `security/sbom.cdx.json` | Generated CycloneDX SBOM for the library repository. |
 | `security/esp_idf_tools.json` | Reviewed snapshot of the exact ESP-IDF target-tool versions, licenses, upstreams, framework commit, and `tools.json` digest. |
 | `security/vulnerability_log.md` | Human-maintained vulnerability assessment and patch log. |
+| `security/osv-scanner.toml` | `osv-scanner` findings with a recorded decision. |
+| `security/cve-bin-tool-triage.toml` | `cve-bin-tool` findings with a recorded decision, each tied to the component commit it was made for. |
 | `third_party/cyw43_driver_version.conf` | Pinned revision of the vendored CYW43 import, including the separate Pico SDK revision behind its Bluetooth shared-bus files. |
 | `src/hal/network/cyw43/vendor/SHA256SUMS` | SHA-256 manifest of every vendored CYW43 file, enforced by `test_cyw43_dependency_boundary`. |
 | `SECURITY.md` | Reporting, triage, severity and maintenance policy. |
@@ -81,6 +83,7 @@ and recovery are documented in
 | `scripts/sync_generated.py` | Shared refresh and read-only verification runner for all tracked generated artifacts, including the SBOM. |
 | `scripts/check_release_metadata.py` | Release gate for VERSION, SBOM, tag name and mainline ancestry. |
 | `scripts/check_vulnerabilities.sh` | Optional scanner wrapper for local vulnerability checks. |
+| `scripts/cve_bin_tool_triage.py` | Turns `security/cve-bin-tool-triage.toml` into the OpenVEX file that the `cve-bin-tool` scan uses. |
 
 ## Generate the SBOM
 
@@ -165,10 +168,11 @@ including the SBOM, and, after the `esp-idf` stage, the `security` stage, the
 same one a local `./runalltests.sh` runs. The stage needs ESP-IDF, so the scan
 covers it in both places:
 
-- `scripts/install_host_tools.sh` installs the `osv-scanner` and
-  `cve-bin-tool` releases pinned in `third_party/osv_scanner_version.conf` and
+- `scripts/install_host_tools.sh` installs the `osv-scanner` release and
+  `cve-bin-tool` upstream commit pinned in `third_party/osv_scanner_version.conf` and
   `third_party/cve_bin_tool_version.conf`, checked by SHA-256; the scan
-  refuses any other release,
+  refuses another version or a `cve-bin-tool` installation without the pinned
+  source-archive hash in pip's metadata,
 - `osv-scanner` scans the repository's own files (manifests and the SBOM) with
   `.gitignore` honoured and without its vendored-directory heuristic, which
   guesses components from file hashes, cannot hash ESP-IDF and matches some
@@ -191,9 +195,23 @@ recognize, an accepted risk, code that no target compiles) goes to
 review date: a test fails on that date even when the scanner no longer reports
 the finding, as for a commit that no advisory names.
 
+`cve-bin-tool` decisions go to `security/cve-bin-tool-triage.toml`, also with
+the date of their log row. `cve-bin-tool` matches products by name, so it can
+report another vendor's product with the same name, or compare a commit with
+a date. An entry names the vendor/product pair the scanner reports, the
+`not_affected` or `fixed` status and the component commit it was decided for.
+`scripts/cve_bin_tool_triage.py` turns the file into OpenVEX, and the scan drops
+the matching findings with `--filter-triage`. After a new pin the entry no
+longer applies: the scan reports the findings again and a test fails until the
+decision is reviewed. Mitigated entries carry `reviewUntil`, with the same
+meaning as `ignoreUntil`. A malformed entry, or one for a component missing
+from the SBOM, stops the scan before it starts.
+
 The CVE database is cached for a day. When the NVD mirror is unreachable, the
 scan uses the most recent cached database and reports a warning; without any
 cached database it fails.
+The default cache root is `~/.cache`; `XDG_CACHE_HOME` overrides it for both
+the scanner and the fallback.
 
 Vulnerability scanning is a stage of its own, so scanner failures are reported apart from compilation, tests, and static analysis. Scheduled scans also detect newly published CVEs when the repository code has not changed.
 

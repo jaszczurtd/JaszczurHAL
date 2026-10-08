@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "bindings": [
+    "../bindings/spi-device.json",
+    "../bindings/fast-spi-device.json",
+    "../bindings/expander.json",
+    "../bindings/uart-device.json"
+  ],
+  "nodes": {
+    "fast": {
+      "compatible": "test,fast-spi-device"
+    },
+    "display": {
+      "compatible": "test,spi-device"
+    },
+    "io0": {
+      "compatible": "test,expander"
+    },
+    "io1": {
+      "compatible": "test,expander"
+    },
+    "serial": {
+      "compatible": "test,uart-device"
+    }
+  },
+  "assemblies": {
+    "pico": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "board.statusLed"
+      },
+      "nodes": {
+        "fast": {
+          "present": true,
+          "bus": "spi",
+          "pins": {
+            "cs": 1
+          },
+          "transport": {
+            "frequencyHz": 10000000
+          }
+        },
+        "display": {
+          "present": true,
+          "bus": "spi",
+          "pins": {
+            "cs": 6
+          },
+          "transport": {
+            "frequencyHz": 8000000,
+            "mode": 3
+          }
+        },
+        "io0": {
+          "present": true,
+          "bus": "i2c",
+          "address": 32
+        },
+        "io1": {
+          "present": true,
+          "bus": "i2c",
+          "address": 33,
+          "transport": {
+            "frequencyHz": 100000
+          }
+        },
+        "serial": {
+          "present": true,
+          "bus": "uart"
+        }
+      },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "pins": {
+            "sck": 2,
+            "mosi": 3,
+            "miso": 0
+          },
+          "frequencyHz": 4000000
+        },
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "pins": {
+            "sda": 4,
+            "scl": 5
+          },
+          "frequencyHz": 400000
+        },
+        "uart": {
+          "kind": "uart",
+          "index": 0,
+          "pins": {
+            "tx": 12,
+            "rx": 13
+          },
+          "baudRate": 115200,
+          "frame": {
+            "dataBits": 8,
+            "parity": "none",
+            "stopBits": 1
+          }
+        }
+      }
+    }
+  }
+}

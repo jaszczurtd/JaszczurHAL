@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "bindings": [
+    "../../bindings/gpio-input.json",
+    "../../bindings/gpio-output.json"
+  ],
+  "nodes": {
+    "button": {
+      "compatible": "test,gpio-input"
+    },
+    "ledMirror": {
+      "compatible": "test,gpio-output"
+    }
+  },
+  "assemblies": {
+    "nucleo": {
+      "target": "stm32g474",
+      "board": "nucleo-g474re",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "board.statusLed"
+      },
+      "nodes": {
+        "button": {
+          "present": true,
+          "pins": {
+            "in": {
+              "net": "button"
+            }
+          }
+        },
+        "ledMirror": {
+          "present": true,
+          "pins": {
+            "out": {
+              "net": "ld2"
+            }
+          }
+        }
+      },
+      "releaseReservations": [
+        "user-button"
+      ],
+      "nets": {
+        "button": {
+          "endpoint": {
+            "domain": "soc-gpio",
+            "id": "PC13"
+          },
+          "owner": "button.in"
+        },
+        "ld2": {
+          "endpoint": {
+            "domain": "soc-gpio",
+            "id": "PA5"
+          },
+          "owner": "board.statusLed.out"
+        }
+      }
+    }
+  }
+}

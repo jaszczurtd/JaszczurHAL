@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Shared device-tree vocabulary, version 1",
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-zA-Z0-9_-]*$"
+    },
+    "registryId": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "nodePath": {
+      "type": "string",
+      "pattern": "^[a-z][a-zA-Z0-9_-]*(?:\\.[a-z][a-zA-Z0-9_-]*)*$"
+    },
+    "signalPath": {
+      "type": "string",
+      "pattern": "^[a-z][a-zA-Z0-9_-]*(?:\\.[a-z][a-zA-Z0-9_-]*)+$"
+    },
+    "scalar": {
+      "type": [
+        "string",
+        "number",
+        "boolean"
+      ]
+    },
+    "properties": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "common.schema.json#/$defs/identifier"
+      },
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number",
+          "boolean"
+        ]
+      }
+    },
+    "sourcePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*[:\\\\*?\\[\\]\\x00-\\x1f]).+\\.json$"
+    },
+    "gpioId": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        {
+          "type": "string",
+          "pattern": "^P[A-Z](?:[0-9]|1[0-5])$"
+        }
+      ]
+    },
+    "physicalEndpoint": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/socEndpoint"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "domain": {
+              "const": "device-pin"
+            },
+            "node": {
+              "$ref": "#/$defs/nodePath"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295
+            }
+          },
+          "required": [
+            "domain",
+            "node",
+            "index"
+          ]
+        }
+      ]
+    },
+    "endpoint": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/gpioId"
+        },
+        {
+          "$ref": "#/$defs/physicalEndpoint"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "net": {
+              "$ref": "#/$defs/identifier"
+            }
+          },
+          "required": [
+            "net"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "controller": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "spi",
+            "i2c",
+            "uart",
+            "fdcan",
+            "adc",
+            "pwm",
+            "pio"
+          ]
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 254
+        }
+      },
+      "required": [
+        "kind",
+        "index"
+      ]
+    },
+    "condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "property": {
+          "$ref": "#/$defs/identifier"
+        },
+        "equals": {
+          "type": [
+            "string",
+            "number",
+            "boolean"
+          ]
+        }
+      },
+      "required": [
+        "property",
+        "equals"
+      ]
+    },
+    "socEndpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "domain": {
+          "const": "soc-gpio"
+        },
+        "id": {
+          "$ref": "#/$defs/gpioId"
+        }
+      },
+      "required": [
+        "domain",
+        "id"
+      ]
+    }
+  }
+}
