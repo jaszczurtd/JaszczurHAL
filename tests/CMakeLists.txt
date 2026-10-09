@@ -1283,6 +1283,21 @@ add_test(NAME test_check_vulnerabilities
         ${CMAKE_CURRENT_SOURCE_DIR}/test_check_vulnerabilities.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
+add_test(NAME test_clock_registry
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_clock_registry.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_hardware_data
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_hardware_data.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_device_defaults
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_device_defaults.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
 add_test(NAME test_install_host_tools
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_install_host_tools.py

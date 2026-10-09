@@ -1,0 +1,22 @@
+{
+  "$schema": "../../binding.schema.json",
+  "schemaVersion": 1,
+  "compatible": "nxp,pcf8574",
+  "description": "NXP PCF8574 8-bit I2C quasi-bidirectional I/O expander.",
+  "domain": "expander",
+  "bus": {
+    "kind": "i2c",
+    "required": true,
+    "maximumFrequencyHz": 100000
+  },
+  "pinCount": 8,
+  "signals": {
+    "int": {
+      "direction": "input",
+      "required": false,
+      "domains": [
+        "soc-gpio"
+      ]
+    }
+  }
+}

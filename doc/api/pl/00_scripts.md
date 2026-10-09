@@ -18,7 +18,7 @@ Uruchamiaj polecenia z katalogu głównego repozytorium, chyba że instrukcja ws
 | Przygotowanie natywnej stacji roboczej Windows | `powershell -NoProfile -ExecutionPolicy Bypass -File .\runmefirst.ps1` | Przygotowuje zarządzane środowisko Pythona w wersji wskazanej przez repozytorium, natywne toolchainy, komponenty źródłowe i ścieżki użytkownika Cortex-Debug, a następnie sprawdza konfigurację hosta Windows. |
 | Synchronizacja zarządzanych zależności | `./third_party/update_components.sh` | Pobiera brakujące komponenty i zastępuje zarządzane instalacje niezgodne z wersjami zapisanymi w repozytorium. |
 | Weryfikacja zależności bez ich zmiany | `./third_party/update_components.sh --verify-only` | Sprawdza wersje wszystkich zarządzanych komponentów, commity, wymagane pliki, brak lokalnych zmian w przypiętych checkoutach (także w submodułach), stan archiwum PMD, zbudowane picotool i cppcheck oraz stempel łańcucha narzędzi RISC-V. |
-| Odświeżenie wszystkich wersjonowanych plików generowanych | `python3 scripts/sync_generated.py --write` | Uruchamia generatory funkcji, płytek, przykładów, głównego VS Code oraz SBOM i wypisuje każdy plik zmieniony podczas synchronizacji. |
+| Odświeżenie wszystkich wersjonowanych plików generowanych | `python3 scripts/sync_generated.py --write` | Uruchamia generatory funkcji, płytek, wartości domyślnych urządzeń, przykładów, głównego VS Code oraz SBOM i wypisuje każdy plik zmieniony podczas synchronizacji. |
 | Weryfikacja wszystkich wersjonowanych plików generowanych | `python3 scripts/sync_generated.py --check` | Uruchamia każdy generator w trybie weryfikacji tylko do odczytu i zgłasza błąd, gdy pliku wynikowego brakuje lub jest on nieaktualny. |
 | Pełna kontrola jakości repozytorium | `./runalltests.sh`; przed wysłaniem zmian `./runalltests.sh --commit` | Czyści katalogi robocze bramki i uruchamia wszystkie etapy: testy, kontrole Clang ASan/UBSan/TSan/libFuzzer, Valgrind, analizę statyczną, CPD, kompilacje targetów, bibliotek i przykładów oraz skan podatności. Linuksowe CI wykonuje te same etapy poza kompilacją przykładów. |
 | Testy z sanitizerami i fuzzingiem | `scripts/run_sanitizer_fuzz.sh` | Odtwarza konfigurację testów na komputerze z instrumentacją Clang, uruchamia wszystkie testy pod ASan/UBSan, testy natywne pod TSan i wykonuje krótkie fuzzowanie parserów sieciowych. |
@@ -216,7 +216,8 @@ w checkoucie z przypiętych archiwów, a cppcheck i picotool budowane na
 miejscu; wszystko zostaje na kolejny przebieg. `--list-libraries` wypisuje target i
 płytkę każdego etapu bibliotek. Opcje `-j N`, `--jobs N` i `-jN` określają
 liczbę równoległych zadań kompilacji. Kontrola sprawdza wersjonowane pliki
-modułów, płytek, przykładów, głównej konfiguracji VS Code i SBOM przez
+modułów, płytek, wartości domyślnych urządzeń, przykładów, głównej
+konfiguracji VS Code i SBOM przez
 `scripts/sync_generated.py --check` i nigdy ich nie przepisuje. Etapy:
 
 1. `tools`: weryfikacja wymaganych narzędzi i zarządzanych komponentów;
@@ -235,8 +236,9 @@ modułów, płytek, przykładów, głównej konfiguracji VS Code i SBOM przez
 9. `stm32`: biblioteki STM32G474 dla kompilatora hosta, ARM i SX1276/SX1278;
 10. `rp`: kompilacje RP2040/RP2350, natywnego FreeRTOS i profili funkcji
     RP2040 z walidacją artefaktów;
-11. `esp-idf`: czyste kompilacje fixture'ów ESP-IDF dla ESP32-S3/ESP32 i
-    biblioteka ESP32-S3 ze wszystkimi funkcjami;
+11. `esp-idf`: czyste kompilacje fixture'ów ESP-IDF dla ESP32-S3/ESP32,
+    z porównaniem ich `sdkconfig` z rejestrem zegarów, oraz biblioteka
+    ESP32-S3 ze wszystkimi funkcjami;
 12. `library-<target>`: biblioteki ze wszystkimi funkcjami dla każdego targetu
     RP i STM32, bez nagłówka projektu oraz dla aplikacji w ścieżce ze spacjami;
 13. `examples-<target>`: każda zadeklarowana konfiguracja przykładów dla
@@ -676,8 +678,8 @@ Macierz targetów, interfejs aplikacji i polecenia kompilacji opisano w dokumenc
 ### `scripts/sync_generated.py`
 
 Jeden skrypt obsługuje wszystkie wersjonowane pliki generowane. `--write`
-odświeża rejestr funkcji, statyczny rejestr płytek,
-pliki VS Code przykładów, główne pliki VS Code oraz SBOM repozytorium.
+odświeża rejestr funkcji, statyczny rejestr płytek, wartości domyślne typów
+urządzeń, pliki VS Code przykładów, główne pliki VS Code oraz SBOM repozytorium.
 `--check` wywołuje ich tryby weryfikacji tylko do odczytu
 i kończy się niepowodzeniem, jeśli brakuje pliku wyjściowego albo jest on
 nieaktualny. Przed uruchomieniem skrypt zapisuje stan plików wersjonowanych oraz
@@ -789,6 +791,58 @@ Zasady dotyczące nagłówka opisuje część
 Udostępnia innym skryptom sprawdzone dane platform i płytek z `boards/`. Korzystają z niego `jh-vscode`, generatory projektów i narzędzia obsługujące przykłady. Moduł nie ma własnego rejestru; źródłem danych pozostają deskryptory.
 
 Dwa polecenia służą skryptom budującym biblioteki: `target-facts <target>` wypisuje dane kompilacji jednej platformy jako wiersze `KLUCZ=WARTOŚĆ`, a `list-targets` wypisuje wszystkie platformy, dla których istnieje skrypt budujący bibliotekę, razem ze środowiskiem kompilacji (`provider`) i statusem. Oba wywołuje `build_link_library.sh`.
+
+### `scripts/hardware_schema.py` oraz `scripts/hardware_model.py`
+
+Moduły do wczytywania danych opisu sprzętu z `config/hardware/`.
+`hardware_schema.py` sprawdza JSON według schematów z tego katalogu i nie
+potrzebuje zewnętrznego pakietu JSON Schema. Zna tylko słowa kluczowe używane
+przez te schematy, a każde inne odrzuca, więc schemat nie zgubi po cichu
+żadnej reguły. Powtórzone klucze i liczby nieskończone kończą się błędem
+jeszcze przed walidacją. Każdy błąd wskazuje JSON Pointer opisany w
+[formacie drzewa urządzeń](../../pl/device_tree_format.md).
+
+`hardware_model.py` wczytuje typy komponentów: typy HAL z
+`config/hardware/bindings/`, w których nazwa pliku odpowiada `compatible`,
+oraz bindings projektu wymienione w `device_tree.json`. Sprawdza to, czego
+schemat nie wyrazi: typy C i zakresy właściwości, typy dzieci i wartości
+ustawiane im przez moduł, połączenia modułu, flagi funkcji, cechy sprzętowe
+oraz rozwijanie dzieci, które zapętliłoby się w nieskończoność. Błędy mają kody
+`JH-HW-*` ze specyfikacji.
+
+### `scripts/generate_device_defaults.py`
+
+Zapisuje `src/hal/generated/jh_device_defaults.h` na podstawie typów HAL
+z `config/hardware/bindings/`. Wartość domyślna jest więc zapisana raz,
+w typie. Nagłówek definiuje:
+
+- `JH_DEFAULT_<TYPE>_<PROPERTY>` dla wartości domyślnej każdej właściwości;
+- `JH_DEFAULT_<MODULE>_<CHILD>_<PROPERTY>` dla każdego dziecka modułu, już po
+  uwzględnieniu wartości, które moduł ustawia temu dziecku;
+- `JH_ENUM_<TYPE>_<PROPERTY>_<VALUE>` z pozycją każdej wartości tekstowego
+  enuma.
+
+Helpery HAL, np. `hal_lora_sx126x_core1262_hf_defaults()`
+i `hal_can_default_config()`, czytają te makra, a `static_assert` pilnuje, żeby
+enumy HAL miały tę samą kolejność co typ. Literały mają zapis z tabeli formatu
+drzewa urządzeń. Gdy dwie nazwy po zamianie na token makra stają się
+identyczne, generator kończy się błędem zamiast zmieniać nazwę. Wartości
+domyślne typu float i double są na razie odrzucane. `--write` odświeża
+nagłówek, a `--check` zgłasza błąd, gdy go brakuje albo jest nieaktualny;
+oba tryby uruchamia `sync_generated.py`.
+
+### `scripts/clock_registry.py`
+
+Sprawdza drzewa zegarów w `config/hardware/clocks/<target>.json`. Potwierdza,
+że każdy target ma swój rejestr, że częstotliwości wyjściowe każdego drzewa
+wynikają z jego parametrów i że każda płytka ma źródła zegara, których
+potrzebuje domyślne drzewo każdego z jej targetów. Porównuje też drzewa
+z kodem, który faktycznie ustawia zegary: z nagłówkami startowymi STM32G474
+i domyślnymi ustawieniami przypiętego Pico SDK. Zgłasza błąd, gdy plik
+kompilacji HAL albo przykład nadpisuje makro zegara Pico SDK. Opcja
+`--esp-sdkconfig TARGET=PATH`, którą można powtórzyć, porównuje dodatkowo
+`sdkconfig` kompilacji ESP-IDF z domyślnym drzewem `TARGET`. Etap bramki
+`esp-idf` przekazuje konfiguracje swoich kompilacji fixture'ów.
 
 ### `scripts/tooling_contract.py` oraz `scripts/repository_layout.py`
 

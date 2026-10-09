@@ -104,6 +104,19 @@ uses `component-gpio`, so it does not inflate the SoC GPIO namespace.
 
 A `hard` reservation prevents application use of a pin. A `soft` reservation assigns a board function while allowing the application to take control deliberately. The board descriptor does not define application wiring, partition layout, firmware-defined USB product identity, clock choice, secrets, or WS2812 color order. The programming interface's fixed USB identity is a hardware property and belongs in `programming.usb`.
 
+A board device may use a `hard`-reserved pin only when it owns that reservation: `board.<device-id>` with the device ID in kebab case, or `board.can` for CAN channels. Any other use fails generation, so the reset pin of the NUCLEO-G474RE cannot become a status LED.
+
+`clockSources` describes the oscillators fitted on the board, one entry per source, with `kind` (`crystal` or `external-clock`), `frequencyHz` and the SoC `pins` the source occupies. Each of these pins needs a `hard` reservation owned by `clock.<source>`. Oscillator pads outside the GPIO namespace use an empty list. The board does not choose a clock tree; the registry in `config/hardware/clocks/` states which sources each tree needs.
+
+```json
+"clockSources": {
+  "hse": { "kind": "crystal", "frequencyHz": 24000000, "pins": [{ "domain": "soc-gpio", "id": "PF0" }, { "domain": "soc-gpio", "id": "PF1" }] },
+  "lse": { "kind": "crystal", "frequencyHz": 32768, "pins": [{ "domain": "soc-gpio", "id": "PC14" }, { "domain": "soc-gpio", "id": "PC15" }] }
+}
+```
+
+Each generated GPIO set (exposed pins, `hard` and `soft` reservations, the target's valid pins and traits) is written as 64-bit words in the HAL pin encoding, `port * 16 + pin` on STM32: `<NAME>_WORDS` gives the number of words and `<NAME>_0`, `<NAME>_1` and so on the bits of pins 0-63, 64-127 and further. When all pins of the target fit the first word, the single `<NAME>` macro remains as well.
+
 A profile combining a base board with an add-on module must preserve the base board's physical devices, aliases, and public HAL definitions. Do not remove a device such as `HAL_LED_BUILTIN` merely to reuse its pin: the device remains electrically connected and may load or switch the shared line. Choose non-conflicting wiring instead. A PCB modification, such as opening a solder bridge, requires a separate profile that explicitly describes the modification.
 
 ## Board-owned devices

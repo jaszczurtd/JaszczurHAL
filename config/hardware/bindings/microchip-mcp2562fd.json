@@ -1,0 +1,51 @@
+{
+  "$schema": "../../binding.schema.json",
+  "schemaVersion": 1,
+  "compatible": "microchip,mcp2562fd",
+  "description": "Microchip MCP2562FD CAN FD transceiver.",
+  "domain": "can",
+  "controller": {
+    "kind": "fdcan",
+    "required": true
+  },
+  "signals": {
+    "rx": {
+      "direction": "input",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "tx": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "standby": {
+      "direction": "output",
+      "required": false,
+      "domains": [
+        "soc-gpio"
+      ]
+    }
+  },
+  "properties": {
+    "maxBitrateHz": {
+      "type": "integer",
+      "cType": "uint32",
+      "description": "Highest specified data bit rate.",
+      "unit": "Hz",
+      "default": 5000000,
+      "minimum": 1,
+      "maximum": 5000000
+    },
+    "standbyActiveHigh": {
+      "type": "boolean",
+      "cType": "bool",
+      "description": "STBY high selects standby mode.",
+      "default": true
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "../../binding.schema.json",
+  "schemaVersion": 1,
+  "compatible": "jaszczurhal,adc-input",
+  "description": "Generic analog input on an MCU ADC pin.",
+  "domain": "adc",
+  "signals": {
+    "in": {
+      "direction": "input",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    }
+  }
+}

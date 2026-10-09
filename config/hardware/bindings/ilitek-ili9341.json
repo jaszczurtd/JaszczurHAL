@@ -1,0 +1,65 @@
+{
+  "$schema": "../../binding.schema.json",
+  "schemaVersion": 1,
+  "compatible": "ilitek,ili9341",
+  "description": "Ilitek ILI9341 TFT display controller on SPI with a data/command line.",
+  "domain": "display",
+  "bus": {
+    "kind": "spi",
+    "required": true
+  },
+  "signals": {
+    "cs": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "dc": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "reset": {
+      "direction": "output",
+      "required": false,
+      "domains": [
+        "soc-gpio"
+      ]
+    }
+  },
+  "properties": {
+    "width": {
+      "type": "integer",
+      "cType": "uint16",
+      "description": "Panel width in the native orientation.",
+      "unit": "pixels",
+      "default": 240,
+      "minimum": 1
+    },
+    "height": {
+      "type": "integer",
+      "cType": "uint16",
+      "description": "Panel height in the native orientation.",
+      "unit": "pixels",
+      "default": 320,
+      "minimum": 1
+    },
+    "rotation": {
+      "type": "integer",
+      "cType": "uint16",
+      "description": "Display rotation.",
+      "unit": "degrees",
+      "default": 0,
+      "enum": [
+        0,
+        90,
+        180,
+        270
+      ]
+    }
+  }
+}

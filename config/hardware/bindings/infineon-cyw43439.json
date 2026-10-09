@@ -1,0 +1,49 @@
+{
+  "$schema": "../../binding.schema.json",
+  "schemaVersion": 1,
+  "compatible": "infineon,cyw43439",
+  "description": "Infineon CYW43439 Wi-Fi and Bluetooth radio on its gSPI host interface.",
+  "domain": "radio",
+  "signals": {
+    "wlOn": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "btOn": {
+      "direction": "output",
+      "required": false,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "cs": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "data": {
+      "direction": "bidirectional",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "clock": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    }
+  },
+  "provides": [
+    "cyw43",
+    "external-radio-frontend",
+    "bluetooth-controller"
+  ]
+}

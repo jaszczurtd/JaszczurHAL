@@ -42,5 +42,6 @@ FEATURE_CMAKE_OUTPUT = _generated_path("featureCmake")
 BOARD_REGISTRY_HEADER_OUTPUT = _generated_path("boardRegistryHeader")
 BOARD_FALLBACK_HEADER_OUTPUT = _generated_path("boardFallbackHeader")
 BOARD_COMPONENTS_CMAKE_OUTPUT = _generated_path("boardComponentsCmake")
+DEVICE_DEFAULTS_HEADER_OUTPUT = _generated_path("deviceDefaultsHeader")
 
 FEATURE_OUTPUTS = (FEATURE_HEADER_OUTPUT, FEATURE_CMAKE_OUTPUT)

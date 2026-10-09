@@ -1243,6 +1243,105 @@ require(
     in run("--validate-only", boards_root=unknown_capability, expected_success=False).stderr,
     "unknown capability was not diagnosed",
 )
+
+# NUCLEO-G474RE as delivered (ST UM2505): the LQFP64 pins on the connectors,
+# without SWD, the HSE crystal X3 (PF0/PF1), the LSE crystal X2 (PC14/PC15)
+# and NRST (PG10). Every profile built on the board keeps these facts.
+NUCLEO_EXPOSED = (
+    [f"PA{index}" for index in range(13)] + ["PA15"]
+    + [f"PB{index}" for index in range(16)]
+    + [f"PC{index}" for index in range(14)] + ["PD2"]
+)
+for profile in ("nucleo-g474re", "nucleo-g474re-canhat", "nucleo-g474re-pim730"):
+    descriptor = load(BOARDS / "profiles" / f"{profile}.json")
+    require(
+        descriptor["gpio"]["exposedPins"] == {"values": NUCLEO_EXPOSED},
+        f"{profile} exposes pins the NUCLEO-G474RE does not route",
+    )
+    hard_owners = {
+        endpoint["id"]: reservation["owner"]
+        for reservation in descriptor["gpio"]["reservations"].values()
+        if reservation["strength"] == "hard"
+        for endpoint in reservation["pins"]
+    }
+    for pin, owner in (("PG10", "board.reset"), ("PF0", "clock.hse"), ("PF1", "clock.hse"),
+                       ("PC14", "clock.lse"), ("PC15", "clock.lse")):
+        require(hard_owners.get(pin) == owner, f"{profile}: {pin} is not hard-reserved by {owner}")
+    require(
+        {key: (source["kind"], source["frequencyHz"])
+         for key, source in descriptor["clockSources"].items()}
+        == {"hse": ("crystal", 24000000), "lse": ("crystal", 32768)},
+        f"{profile}: crystals X3 and X2 are not described",
+    )
+
+nucleo_words_output = TEST_ROOT / "generated/nucleo-words"
+run("--target", "stm32g474", "--board", "nucleo-g474re", "--output-dir",
+    str(nucleo_words_output))
+nucleo_words = (nucleo_words_output / "jh_board_config.h").read_text(encoding="utf-8")
+for expected in (
+    "#define HAL_BOARD_GPIO_HARD_RESERVED_MASK_WORDS 2u",
+    # PA13/PA14 (13, 14) and PC14/PC15 (46, 47) in the first word.
+    "#define HAL_BOARD_GPIO_HARD_RESERVED_MASK_0 UINT64_C(0x0000c00000006000)",
+    # PF0/PF1 (80, 81) and PG10 (106) in the second word.
+    "#define HAL_BOARD_GPIO_HARD_RESERVED_MASK_1 UINT64_C(0x0000040000030000)",
+    "#define HAL_BOARD_GPIO_EXPOSED_MASK_1 UINT64_C(0x0000000000000000)",
+    "#define HAL_TARGET_GPIO_VALID_MASK_WORDS 2u",
+):
+    require(expected in nucleo_words, f"NUCLEO GPIO words lack {expected!r}")
+require(
+    "#define HAL_BOARD_GPIO_HARD_RESERVED_MASK " not in nucleo_words,
+    "a two-word GPIO set must not also emit a truncated single mask",
+)
+require(
+    load(nucleo_words_output / "jh_board_resolved.json")["clockSources"]["hse"]["frequencyHz"]
+    == 24000000,
+    "resolved board JSON lost the clock sources",
+)
+
+# A board device may use a hard-reserved pin only when it owns the
+# reservation, so the reset pin cannot become a status LED in the base board
+# or in a profile derived from it.
+for profile in ("nucleo-g474re", "nucleo-g474re-pim730"):
+    reset_led = mutate(
+        f"reset-led-{profile}",
+        f"profiles/{profile}.json",
+        lambda value: value["devices"]["statusLed"]["endpoint"].update(id="PG10"),
+    )
+    require(
+        "owned by board.status-led"
+        in run("--validate-only", boards_root=reset_led, expected_success=False).stderr,
+        f"{profile}: the reset pin was accepted as a status LED",
+    )
+for case, change, diagnostic in (
+    (
+        "clock-pin-unreserved",
+        lambda value: value["gpio"]["reservations"].pop("hse-crystal"),
+        "owned by clock.hse",
+    ),
+    (
+        "clock-pin-foreign-owner",
+        lambda value: value["gpio"]["reservations"]["lse-crystal"].update(owner="board.lse"),
+        "owned by clock.lse",
+    ),
+    (
+        "clock-source-kind",
+        lambda value: value["clockSources"]["hse"].update(kind="oscillator"),
+        "$.clockSources.hse.kind",
+    ),
+    (
+        "clock-source-frequency",
+        lambda value: value["clockSources"]["lse"].update(frequencyHz=0),
+        "$.clockSources.lse.frequencyHz",
+    ),
+):
+    clock_case = mutate(case, "profiles/nucleo-g474re.json", change)
+    require(
+        diagnostic
+        in run("--validate-only", boards_root=clock_case, expected_success=False).stderr,
+        f"{case} was not diagnosed",
+    )
+
+
 def can_channel_case(case: str, change) -> str:
     """Validate the CAN-FD HAT profile after one change to its channels."""
     root = mutate(

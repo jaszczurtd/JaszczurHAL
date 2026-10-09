@@ -17,6 +17,7 @@
     },
     "aliases": { "status-led": { "endpoint": { "domain": "component-gpio", "component": "cyw43", "id": 0, "halPin": 64 } } }
   },
+  "clockSources": { "xosc": { "kind": "crystal", "frequencyHz": 12000000, "pins": [] } },
   "capabilities": { "usb-device": { "present": true }, "cyw43": { "present": true }, "native-wifi": { "present": false }, "external-radio-frontend": { "present": false }, "bluetooth-controller": { "present": true }, "bluetooth-le-controller": { "present": true }, "bluetooth-classic-controller": { "present": true }, "sx1262-radio": { "present": false } },
   "devices": { "statusLed": { "kind": "component-gpio", "endpoint": { "domain": "component-gpio", "component": "cyw43", "id": 0, "halPin": 64 }, "activeLevel": "high" } },
   "peripherals": { "defaultsSource": "pico-sdk" },

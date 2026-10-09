@@ -1,0 +1,25 @@
+{
+  "$schema": "../../binding.schema.json",
+  "schemaVersion": 1,
+  "compatible": "jaszczurhal,gpio-output",
+  "description": "Generic output driven by one GPIO, such as an LED, relay driver or enable line.",
+  "domain": "gpio",
+  "signals": {
+    "out": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio",
+        "device-pin"
+      ]
+    }
+  },
+  "properties": {
+    "activeLow": {
+      "type": "boolean",
+      "cType": "bool",
+      "description": "The line is active when driven or read low.",
+      "default": false
+    }
+  }
+}

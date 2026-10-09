@@ -1,0 +1,50 @@
+{
+  "$schema": "../../binding.schema.json",
+  "schemaVersion": 1,
+  "compatible": "jaszczurhal,can-transceiver",
+  "description": "CAN or CAN FD transceiver between an MCU CAN controller and the bus.",
+  "domain": "can",
+  "controller": {
+    "kind": "fdcan",
+    "required": true
+  },
+  "signals": {
+    "rx": {
+      "direction": "input",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "tx": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "standby": {
+      "direction": "output",
+      "required": false,
+      "domains": [
+        "soc-gpio"
+      ]
+    }
+  },
+  "properties": {
+    "maxBitrateHz": {
+      "type": "integer",
+      "cType": "uint32",
+      "description": "Highest bit rate the transceiver supports.",
+      "unit": "Hz",
+      "required": true,
+      "minimum": 1
+    },
+    "standbyActiveHigh": {
+      "type": "boolean",
+      "cType": "bool",
+      "description": "A high standby line puts the transceiver in standby.",
+      "default": true
+    }
+  }
+}

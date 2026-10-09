@@ -22,6 +22,7 @@ from codegen_support import (
     write_generated_outputs,
 )
 import generate_hal_features
+import hardware_schema
 from repository_layout import (
     BOARD_COMPONENTS_CMAKE_OUTPUT,
     BOARD_FALLBACK_HEADER_OUTPUT,
@@ -80,6 +81,7 @@ BOARD_FIELDS = COMMON_FIELDS | {
     "constraints",
     "programming",
     "can",
+    "clockSources",
 }
 
 
@@ -343,6 +345,28 @@ def validate_endpoint(
         fail(path, f"{json_path}.domain", domain, "soc-gpio or component-gpio")
 
 
+def board_device_owner(device_id: str) -> str:
+    """Reservation owner of a board device: board.<device-id in kebab case>."""
+    return "board." + re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "-", device_id).lower()
+
+
+def require_hard_owner(
+    path: Path,
+    json_path: str,
+    pin: Any,
+    hard_reserved: dict[Any, str],
+    owner: str,
+) -> None:
+    """A board consumer may use a hard-reserved pin only when it owns it."""
+    if hard_reserved.get(pin) != owner:
+        fail(
+            path,
+            json_path,
+            pin,
+            f"a pin covered by a hard gpio reservation owned by {owner}",
+        )
+
+
 def validate_role_registry() -> None:
     """Guard the declarative role specs against unreachable conditionals."""
     for role, spec in DEVICE_ROLE_REGISTRY.items():
@@ -475,7 +499,8 @@ def validate_bus_device(
     device: dict[str, Any],
     valid_pins: set[Any],
     components: set[str],
-    hard_reserved: set[Any],
+    hard_reserved: dict[Any, str],
+    owner: str,
 ) -> None:
     exact_fields(
         path,
@@ -561,13 +586,8 @@ def validate_bus_device(
         if key in seen:
             fail(path, signal_path, endpoint, f"a pin not already used by {seen[key]}")
         seen[key] = name
-        if endpoint["domain"] == "soc-gpio" and endpoint["id"] not in hard_reserved:
-            fail(
-                path,
-                signal_path,
-                endpoint["id"],
-                "a pin covered by a hard gpio reservation",
-            )
+        if endpoint["domain"] == "soc-gpio":
+            require_hard_owner(path, signal_path, endpoint["id"], hard_reserved, owner)
 
 
 def validate_device(
@@ -576,14 +596,15 @@ def validate_device(
     device: Any,
     valid_pins: set[Any],
     components: set[str],
-    hard_reserved: set[Any],
+    hard_reserved: dict[Any, str],
+    owner: str,
 ) -> None:
     if not isinstance(device, dict) or not isinstance(device.get("kind"), str):
         fail(path, json_path, device, "a device object with a kind")
     kind = device["kind"]
     if kind == BUS_DEVICE_KIND:
         validate_bus_device(
-            path, json_path, device, valid_pins, components, hard_reserved
+            path, json_path, device, valid_pins, components, hard_reserved, owner
         )
         return
     if kind not in SINGLE_ENDPOINT_DEVICE_KINDS:
@@ -600,9 +621,10 @@ def validate_device(
         {"kind", "endpoint"},
         {"kind", "endpoint", *SINGLE_ENDPOINT_DEVICE_KINDS[kind]},
     )
-    validate_endpoint(
-        path, f"{json_path}.endpoint", device["endpoint"], valid_pins, components
-    )
+    endpoint = device["endpoint"]
+    validate_endpoint(path, f"{json_path}.endpoint", endpoint, valid_pins, components)
+    if endpoint["domain"] == "soc-gpio" and endpoint["id"] in hard_reserved:
+        require_hard_owner(path, f"{json_path}.endpoint", endpoint["id"], hard_reserved, owner)
 
 
 def validate_can_channel(
@@ -688,7 +710,7 @@ def validate_can(
     board: dict[str, Any],
     valid_pins: set[Any],
     components: set[str],
-    hard_reserved: set[Any],
+    hard_reserved: dict[Any, str],
 ) -> None:
     """Validate the CAN channels a board wires to its controllers.
 
@@ -732,13 +754,7 @@ def validate_can(
                     f"a pin not already used by {pins_seen[endpoint['id']]}",
                 )
             pins_seen[endpoint["id"]] = signal_path
-            if endpoint["id"] not in hard_reserved:
-                fail(
-                    path,
-                    signal_path,
-                    endpoint["id"],
-                    "a pin covered by a hard gpio reservation",
-                )
+            require_hard_owner(path, signal_path, endpoint["id"], hard_reserved, "board.can")
 
 
 def validate_components(
@@ -1059,6 +1075,28 @@ def validate_target(path: Path, target: dict[str, Any]) -> set[Any]:
     return valid_pins
 
 
+def validate_clock_sources(
+    path: Path,
+    board: dict[str, Any],
+    valid_pins: set[Any],
+    components: set[str],
+    hard_reserved: dict[Any, str],
+) -> None:
+    """Oscillators fitted on the board, in the device tree specification's
+    form; each GPIO a source occupies is hard-reserved by clock.<source>."""
+    sources = board.get("clockSources")
+    if sources is None:
+        return
+    error = hardware_schema.SchemaSet().first_error("clock_sources.schema.json", sources)
+    if error is not None:
+        fail(path, "$.clockSources" + error.pointer.replace("/", "."), sources, error.message)
+    for key, source in sources.items():
+        for index, endpoint in enumerate(source["pins"]):
+            json_path = f"$.clockSources.{key}.pins[{index}]"
+            validate_endpoint(path, json_path, endpoint, valid_pins, components)
+            require_hard_owner(path, json_path, endpoint["id"], hard_reserved, f"clock.{key}")
+
+
 def validate_board(
     path: Path,
     board: dict[str, Any],
@@ -1272,7 +1310,7 @@ def validate_board(
             )
     if not isinstance(gpio["reservations"], dict):
         fail(path, "$.gpio.reservations", gpio["reservations"], "an object")
-    hard_reserved: set[Any] = set()
+    hard_reserved: dict[Any, str] = {}
     for reservation_id, reservation in gpio["reservations"].items():
         exact_fields(
             path,
@@ -1299,7 +1337,7 @@ def validate_board(
                 resolved_components,
             )
             if reservation["strength"] == "hard" and endpoint["domain"] == "soc-gpio":
-                hard_reserved.add(endpoint["id"])
+                hard_reserved[endpoint["id"]] = reservation["owner"]
     if not isinstance(gpio["aliases"], dict):
         fail(path, "$.gpio.aliases", gpio["aliases"], "an object")
     for alias_id, alias in gpio["aliases"].items():
@@ -1358,6 +1396,7 @@ def validate_board(
             valid_union,
             resolved_components,
             hard_reserved,
+            board_device_owner(device_id),
         )
         role = device.get("role")
         if role is not None:
@@ -1372,6 +1411,7 @@ def validate_board(
     if not isinstance(board["peripherals"], dict):
         fail(path, "$.peripherals", board["peripherals"], "an object")
     validate_can(path, board, valid_union, resolved_components, hard_reserved)
+    validate_clock_sources(path, board, valid_union, resolved_components, hard_reserved)
 
 
 def load_registry(
@@ -1651,30 +1691,48 @@ def encode_hal_pin(endpoint: dict[str, Any]) -> int | None:
     return endpoint.get("halPin")
 
 
-def integer_pin_mask(pins: set[Any]) -> int | None:
-    """Encode an integer GPIO set into the generated 64-bit target mask."""
-    if any(not isinstance(pin, int) or pin < 0 or pin >= 64 for pin in pins):
-        return None
-    mask = 0
+def encoded_gpio_pins(pins: set[Any]) -> set[int]:
+    """HAL encoding of SoC GPIO IDs (STM32: port * 16 + pin)."""
+    return {encode_hal_pin({"domain": "soc-gpio", "id": pin}) for pin in pins}
+
+
+def endpoint_gpio_pins(endpoints: list[dict[str, Any]]) -> set[int]:
+    return encoded_gpio_pins(
+        {endpoint["id"] for endpoint in endpoints if endpoint["domain"] == "soc-gpio"}
+    )
+
+
+def gpio_word_count(targets: list[dict[str, Any]]) -> int:
+    """64-bit words that hold every valid pin of the given targets."""
+    highest = max(
+        max(
+            encoded_gpio_pins(
+                expand_pin_set(
+                    Path(f"boards/targets/{target['id']}.json"),
+                    "$.gpio.validPins",
+                    target["gpio"]["validPins"],
+                )
+            ),
+            default=0,
+        )
+        for target in targets
+    )
+    return highest // 64 + 1
+
+
+def append_gpio_mask(
+    lines: list[str], name: str, pins: set[int], words: int
+) -> None:
+    """Write a GPIO set as 64-bit words, <name>_0 holding pins 0-63; a target
+    whose pins fit one word also keeps the single <name> mask."""
+    values = [0] * words
     for pin in pins:
-        mask |= 1 << pin
-    return mask
-
-
-def endpoint_pin_mask(endpoints: list[dict[str, Any]]) -> int | None:
-    """Encode SoC GPIO endpoints when every HAL pin fits the common mask."""
-    pins: set[int] = set()
-    for endpoint in endpoints:
-        pin = encode_hal_pin(endpoint)
-        if pin is None or pin < 0 or pin >= 64:
-            return None
-        pins.add(pin)
-    return integer_pin_mask(pins)
-
-
-def append_gpio_mask(lines: list[str], name: str, mask: int | None) -> None:
-    if mask is not None:
-        lines.append(f"#define {name} UINT64_C(0x{mask:016x})")
+        values[pin // 64] |= 1 << (pin % 64)
+    if words == 1:
+        lines.append(f"#define {name} UINT64_C(0x{values[0]:016x})")
+    lines.append(f"#define {name}_WORDS {words}u")
+    for index, value in enumerate(values):
+        lines.append(f"#define {name}_{index} UINT64_C(0x{value:016x})")
 
 
 def device_config_lines(board: dict[str, Any]) -> list[str]:
@@ -1851,6 +1909,7 @@ def selected_board_fact_lines(
     capabilities: dict[str, Any],
     compile_definitions: list[str],
     target_value: str,
+    gpio_words: int,
     *,
     define_selector: bool,
     define_is_macros: bool,
@@ -1936,17 +1995,19 @@ def selected_board_fact_lines(
         )
         destination.extend(reservation["pins"])
     append_gpio_mask(
-        lines, "HAL_BOARD_GPIO_EXPOSED_MASK", integer_pin_mask(exposed)
+        lines, "HAL_BOARD_GPIO_EXPOSED_MASK", encoded_gpio_pins(exposed), gpio_words
     )
     append_gpio_mask(
         lines,
         "HAL_BOARD_GPIO_HARD_RESERVED_MASK",
-        endpoint_pin_mask(hard_reserved),
+        endpoint_gpio_pins(hard_reserved),
+        gpio_words,
     )
     append_gpio_mask(
         lines,
         "HAL_BOARD_GPIO_SOFT_RESERVED_MASK",
-        endpoint_pin_mask(soft_reserved),
+        endpoint_gpio_pins(soft_reserved),
+        gpio_words,
     )
     status_led = board["devices"].get("statusLed")
     if status_led:
@@ -2002,8 +2063,9 @@ def selected_target_fact_lines(target: dict[str, Any]) -> list[str]:
     valid_pins = expand_pin_set(
         descriptor_path, "$.gpio.validPins", target["gpio"]["validPins"]
     )
+    words = gpio_word_count([target])
     append_gpio_mask(
-        lines, "HAL_TARGET_GPIO_VALID_MASK", integer_pin_mask(valid_pins)
+        lines, "HAL_TARGET_GPIO_VALID_MASK", encoded_gpio_pins(valid_pins), words
     )
     for trait_id, macro_name in (
         ("input-only", "HAL_TARGET_GPIO_INPUT_ONLY_MASK"),
@@ -2015,7 +2077,7 @@ def selected_target_fact_lines(target: dict[str, Any]) -> list[str]:
         pins = expand_pin_set(
             descriptor_path, f"$.gpio.traits.{trait_id}", trait
         )
-        append_gpio_mask(lines, macro_name, integer_pin_mask(pins))
+        append_gpio_mask(lines, macro_name, encoded_gpio_pins(pins), words)
     return lines
 
 
@@ -2198,6 +2260,9 @@ def render_board_fallback_config(
                 capabilities,
                 fallback_compile_definitions(board, targets),
                 "HAL_TARGET_NAME",
+                gpio_word_count(
+                    [targets[target_id] for target_id in board["compatibleTargets"]]
+                ),
                 define_selector=False,
                 define_is_macros=False,
             )
@@ -2318,6 +2383,7 @@ def generate(
         "contractSymbol": contract_symbol,
         "capabilities": board["capabilities"],
         "gpio": board["gpio"],
+        "clockSources": board.get("clockSources", {}),
         "targetGpio": target["gpio"],
         "devices": board["devices"],
         "peripherals": board["peripherals"],
@@ -2358,6 +2424,7 @@ def generate(
             capabilities,
             compile_definitions,
             f'"{target["id"]}"',
+            gpio_word_count([target]),
             define_selector=True,
             define_is_macros=True,
         )

@@ -1,0 +1,49 @@
+{
+  "$schema": "../../binding.schema.json",
+  "schemaVersion": 1,
+  "compatible": "jaszczurhal,addressable-led",
+  "description": "Chain of addressable RGB LEDs on one data line, such as WS2812.",
+  "domain": "gpio",
+  "signals": {
+    "data": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    }
+  },
+  "properties": {
+    "protocol": {
+      "type": "string",
+      "cType": "string",
+      "description": "Serial LED protocol.",
+      "default": "ws2812",
+      "enum": [
+        "ws2812"
+      ]
+    },
+    "pixelOrder": {
+      "type": "string",
+      "cType": "string",
+      "description": "Colour order of each pixel.",
+      "default": "GRB",
+      "enum": [
+        "RGB",
+        "RBG",
+        "GRB",
+        "GBR",
+        "BRG",
+        "BGR"
+      ]
+    },
+    "count": {
+      "type": "integer",
+      "cType": "uint16",
+      "description": "Number of LEDs in the chain.",
+      "unit": "1",
+      "default": 1,
+      "minimum": 1
+    }
+  }
+}

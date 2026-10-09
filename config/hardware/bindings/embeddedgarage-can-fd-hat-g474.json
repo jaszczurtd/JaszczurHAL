@@ -1,0 +1,127 @@
+{
+  "$schema": "../../binding.schema.json",
+  "schemaVersion": 1,
+  "compatible": "embeddedgarage,can-fd-hat-g474",
+  "description": "EmbeddedGarage CAN-FD HAT for the NUCLEO-G474RE: three MCP2562FD transceivers, relays K1-K4, 12 V inputs I1-I4, buttons SW1-SW6 with pull-ups on the HAT and eight indicator LEDs.",
+  "domain": "module",
+  "children": {
+    "can1": {
+      "compatible": "microchip,mcp2562fd",
+      "required": true
+    },
+    "can2": {
+      "compatible": "microchip,mcp2562fd",
+      "required": true
+    },
+    "can3": {
+      "compatible": "microchip,mcp2562fd",
+      "required": true
+    },
+    "relay1": {
+      "compatible": "jaszczurhal,gpio-output",
+      "required": true
+    },
+    "relay2": {
+      "compatible": "jaszczurhal,gpio-output",
+      "required": true
+    },
+    "relay3": {
+      "compatible": "jaszczurhal,gpio-output",
+      "required": true
+    },
+    "relay4": {
+      "compatible": "jaszczurhal,gpio-output",
+      "required": true
+    },
+    "input1": {
+      "compatible": "jaszczurhal,gpio-input",
+      "required": true
+    },
+    "input2": {
+      "compatible": "jaszczurhal,gpio-input",
+      "required": true
+    },
+    "input3": {
+      "compatible": "jaszczurhal,gpio-input",
+      "required": true
+    },
+    "input4": {
+      "compatible": "jaszczurhal,gpio-input",
+      "required": true
+    },
+    "button1": {
+      "compatible": "jaszczurhal,gpio-input",
+      "required": true,
+      "properties": {
+        "activeLow": true
+      }
+    },
+    "button2": {
+      "compatible": "jaszczurhal,gpio-input",
+      "required": true,
+      "properties": {
+        "activeLow": true
+      }
+    },
+    "button3": {
+      "compatible": "jaszczurhal,gpio-input",
+      "required": true,
+      "properties": {
+        "activeLow": true
+      }
+    },
+    "button4": {
+      "compatible": "jaszczurhal,gpio-input",
+      "required": true,
+      "properties": {
+        "activeLow": true
+      }
+    },
+    "button5": {
+      "compatible": "jaszczurhal,gpio-input",
+      "required": true,
+      "properties": {
+        "activeLow": true
+      }
+    },
+    "button6": {
+      "compatible": "jaszczurhal,gpio-input",
+      "required": true,
+      "properties": {
+        "activeLow": true
+      }
+    },
+    "ledReady": {
+      "compatible": "jaszczurhal,gpio-output",
+      "required": true
+    },
+    "ledBusy": {
+      "compatible": "jaszczurhal,gpio-output",
+      "required": true
+    },
+    "ledCan1Tx": {
+      "compatible": "jaszczurhal,gpio-output",
+      "required": true
+    },
+    "ledCan1Rx": {
+      "compatible": "jaszczurhal,gpio-output",
+      "required": true
+    },
+    "ledCan2Tx": {
+      "compatible": "jaszczurhal,gpio-output",
+      "required": true
+    },
+    "ledCan2Rx": {
+      "compatible": "jaszczurhal,gpio-output",
+      "required": true
+    },
+    "ledCan3Tx": {
+      "compatible": "jaszczurhal,gpio-output",
+      "required": true
+    },
+    "ledCan3Rx": {
+      "compatible": "jaszczurhal,gpio-output",
+      "required": true
+    }
+  }
+}

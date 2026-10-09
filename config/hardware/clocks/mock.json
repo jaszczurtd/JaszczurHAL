@@ -1,0 +1,14 @@
+{
+  "$schema": "../clock_tree.schema.json",
+  "schemaVersion": 1,
+  "target": "mock",
+  "trees": {
+    "default": {
+      "description": "Host mock: no physical clock.",
+      "backend": "mock",
+      "requiredSources": {},
+      "frequenciesHz": {},
+      "parameters": {}
+    }
+  }
+}

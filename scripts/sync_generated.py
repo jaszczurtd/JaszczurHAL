@@ -47,6 +47,11 @@ GENERATOR_STEPS = (
         ),),
     ),
     GeneratorStep(
+        "device type defaults",
+        (("scripts/generate_device_defaults.py", "--write"),),
+        (("scripts/generate_device_defaults.py", "--check"),),
+    ),
+    GeneratorStep(
         "example VS Code files",
         (("scripts/examples_dispatcher.py", "generate"),),
         (("scripts/examples_dispatcher.py", "check"),),

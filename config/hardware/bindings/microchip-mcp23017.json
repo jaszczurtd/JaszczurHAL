@@ -1,0 +1,36 @@
+{
+  "$schema": "../../binding.schema.json",
+  "schemaVersion": 1,
+  "compatible": "microchip,mcp23017",
+  "description": "Microchip MCP23017 16-bit I2C I/O expander.",
+  "domain": "expander",
+  "bus": {
+    "kind": "i2c",
+    "required": true,
+    "maximumFrequencyHz": 1700000
+  },
+  "pinCount": 16,
+  "signals": {
+    "reset": {
+      "direction": "output",
+      "required": false,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "intA": {
+      "direction": "input",
+      "required": false,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "intB": {
+      "direction": "input",
+      "required": false,
+      "domains": [
+        "soc-gpio"
+      ]
+    }
+  }
+}

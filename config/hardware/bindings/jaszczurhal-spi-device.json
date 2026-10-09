@@ -1,0 +1,27 @@
+{
+  "$schema": "../../binding.schema.json",
+  "schemaVersion": 1,
+  "compatible": "jaszczurhal,spi-device",
+  "description": "Generic SPI device with a chip-select line.",
+  "domain": "spi",
+  "bus": {
+    "kind": "spi",
+    "required": true
+  },
+  "signals": {
+    "cs": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "int": {
+      "direction": "input",
+      "required": false,
+      "domains": [
+        "soc-gpio"
+      ]
+    }
+  }
+}

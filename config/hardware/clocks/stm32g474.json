@@ -1,0 +1,54 @@
+{
+  "$schema": "../clock_tree.schema.json",
+  "schemaVersion": 1,
+  "target": "stm32g474",
+  "trees": {
+    "default": {
+      "description": "HSI16 / 4 * 85 / 2 = 170 MHz; FDCAN on PCLK1, I2C on HSI16.",
+      "backend": "stm32g474",
+      "requiredSources": {},
+      "frequenciesHz": {
+        "sysclk": 170000000,
+        "hclk": 170000000,
+        "pclk1": 170000000,
+        "pclk2": 170000000,
+        "fdcan": 170000000,
+        "i2c": 16000000
+      },
+      "parameters": {
+        "pllSource": "hsi16",
+        "pllM": 4,
+        "pllN": 85,
+        "pllR": 2,
+        "fdcanSource": "pclk1"
+      }
+    },
+    "hse-160mhz": {
+      "description": "HSE 24 MHz / 6 * 80 / 2 = 160 MHz; FDCAN on PLL Q at 80 MHz; HSI16 fallback with the same frequencies.",
+      "backend": "stm32g474",
+      "requiredSources": {
+        "hse": {
+          "kind": "crystal",
+          "frequencyHz": 24000000
+        }
+      },
+      "frequenciesHz": {
+        "sysclk": 160000000,
+        "hclk": 160000000,
+        "pclk1": 160000000,
+        "pclk2": 160000000,
+        "fdcan": 80000000,
+        "i2c": 16000000
+      },
+      "parameters": {
+        "pllSource": "hse",
+        "pllM": 6,
+        "pllN": 80,
+        "pllR": 2,
+        "pllQ": 4,
+        "fdcanSource": "pll-q",
+        "fallback": "hsi16-same-frequencies"
+      }
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "$schema": "../../binding.schema.json",
+  "schemaVersion": 1,
+  "compatible": "jaszczurhal,pwm-output",
+  "description": "Generic PWM output, such as a backlight, buzzer or valve driver.",
+  "domain": "pwm",
+  "signals": {
+    "out": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    }
+  },
+  "properties": {
+    "activeLow": {
+      "type": "boolean",
+      "cType": "bool",
+      "description": "The line is active when driven or read low.",
+      "default": false
+    },
+    "frequencyHz": {
+      "type": "integer",
+      "cType": "uint32",
+      "description": "PWM frequency.",
+      "unit": "Hz",
+      "minimum": 1
+    },
+    "resolutionBits": {
+      "type": "integer",
+      "cType": "uint8",
+      "description": "Duty-cycle resolution.",
+      "unit": "1",
+      "minimum": 1,
+      "maximum": 16
+    }
+  }
+}

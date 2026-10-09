@@ -1,0 +1,97 @@
+{
+  "$schema": "../../binding.schema.json",
+  "schemaVersion": 1,
+  "compatible": "waveshare,core1262-hf",
+  "description": "Waveshare Core1262-HF: SX1262 with a 1.8 V TCXO and an RF switch on RXEN/TXEN. RXEN is high while transmitting and TXEN while receiving.",
+  "domain": "module",
+  "children": {
+    "radio": {
+      "compatible": "semtech,sx1262",
+      "required": true,
+      "properties": {
+        "rfSwitchMode": "dual-gpio",
+        "rfSwitchRxLevelB": true,
+        "rfSwitchTxLevelA": true,
+        "regulator": "dcdc",
+        "tcxoControl": "dio3",
+        "tcxoVoltage": "1v8",
+        "tcxoStartupUs": 5000,
+        "minFrequencyHz": 850000000,
+        "maxFrequencyHz": 930000000,
+        "maxSpiClockHz": 18000000,
+        "minTxPowerDbm": -9,
+        "maxTxPowerDbm": 22
+      }
+    }
+  },
+  "signals": {
+    "cs": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "reset": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "busy": {
+      "direction": "input",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "dio1": {
+      "direction": "input",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "rxen": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "txen": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    }
+  },
+  "connections": {
+    "cs": {
+      "owner": "radio.cs",
+      "aliases": []
+    },
+    "reset": {
+      "owner": "radio.reset",
+      "aliases": []
+    },
+    "busy": {
+      "owner": "radio.busy",
+      "aliases": []
+    },
+    "dio1": {
+      "owner": "radio.dio1",
+      "aliases": []
+    },
+    "rxen": {
+      "owner": "radio.rfSwitchA",
+      "aliases": []
+    },
+    "txen": {
+      "owner": "radio.rfSwitchB",
+      "aliases": []
+    }
+  }
+}

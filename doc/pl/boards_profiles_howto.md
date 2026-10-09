@@ -114,6 +114,19 @@ Piny STM32 mają identyfikatory symboliczne, np. `PA5`. Linie GPIO udostępniane
 
 Rezerwacja `hard` wyklucza użycie pinu przez aplikację. Rezerwacja `soft` oznacza funkcję przypisaną płytce, z możliwością świadomego sterowania pinem przez aplikację. Deskryptor płytki nie określa połączeń aplikacji, układu partycji, tożsamości produktu USB nadawanej przez firmware, wyboru zegara, sekretów ani kolejności kolorów WS2812. Stały identyfikator USB interfejsu programowania jest natomiast cechą sprzętu i należy do `programming.usb`.
 
+Urządzenie płytki może użyć pinu z rezerwacją `hard` tylko wtedy, gdy jest jej właścicielem: `board.<id-urządzenia>` z identyfikatorem zapisanym małymi literami z myślnikami albo `board.can` dla kanałów CAN. Każde inne użycie kończy generowanie błędem, więc pin resetu NUCLEO-G474RE nie zostanie diodą statusu.
+
+`clockSources` opisuje oscylatory zamontowane na płytce, po jednym wpisie na źródło: `kind` (`crystal` albo `external-clock`), `frequencyHz` i piny SoC zajęte przez źródło w `pins`. Każdy z tych pinów wymaga rezerwacji `hard` z właścicielem `clock.<źródło>`. Wyprowadzenia oscylatora spoza przestrzeni GPIO mają pustą listę. Płytka nie wybiera drzewa zegara; rejestr w `config/hardware/clocks/` określa, jakich źródeł potrzebuje każde drzewo.
+
+```json
+"clockSources": {
+  "hse": { "kind": "crystal", "frequencyHz": 24000000, "pins": [{ "domain": "soc-gpio", "id": "PF0" }, { "domain": "soc-gpio", "id": "PF1" }] },
+  "lse": { "kind": "crystal", "frequencyHz": 32768, "pins": [{ "domain": "soc-gpio", "id": "PC14" }, { "domain": "soc-gpio", "id": "PC15" }] }
+}
+```
+
+Każdy wygenerowany zbiór GPIO (piny wyprowadzone, rezerwacje `hard` i `soft`, prawidłowe piny targetu i ich cechy) jest zapisany jako słowa 64-bitowe w kodowaniu pinów HAL, na STM32 `port * 16 + pin`: `<NAZWA>_WORDS` podaje liczbę słów, a `<NAZWA>_0`, `<NAZWA>_1` itd. bity pinów 0-63, 64-127 i dalszych. Gdy wszystkie piny targetu mieszczą się w pierwszym słowie, zostaje także pojedyncze makro `<NAZWA>`.
+
 Profil złożony z płytki bazowej i dodatkowego modułu musi zachować fizyczne urządzenia płytki, aliasy i publiczne definicje HAL. Nie usuwaj np. `HAL_LED_BUILTIN` tylko po to, aby przeznaczyć jego pin dla modułu: dioda nadal jest elektrycznie podłączona i może obciążać lub przełączać wspólną linię. Wybierz połączenia bez konfliktów. Modyfikacja PCB, np. rozwarcie mostka lutowniczego, wymaga osobnego profilu z jednoznacznym opisem przeróbki.
 
 ## Urządzenia zdefiniowane w profilu płytki

@@ -342,6 +342,34 @@
       }
     },
     {
+      "file": "invalid/reserved-before-exposure.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-RESERVATION",
+      "at": "/assemblies/nucleo/nodes/led/pins/out",
+      "input": {
+        "assembly": "nucleo"
+      }
+    },
+    {
+      "file": "invalid/unexposed-pin.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-PIN-RANGE",
+      "at": "/assemblies/nucleo/nodes/led/pins/out",
+      "input": {
+        "assembly": "nucleo"
+      }
+    },
+    {
+      "file": "valid/released-pin/device_tree.json",
+      "schema": "device_tree.schema.json",
+      "expected": "accept",
+      "resolveAssemblies": [
+        "pico"
+      ]
+    },
+    {
       "file": "invalid/unknown-reservation.json",
       "schema": "device_tree.schema.json",
       "expected": "semantic",
@@ -656,6 +684,24 @@
         "endpoint": {
           "domain": "soc-gpio",
           "id": 14
+        },
+        "activeLow": false
+      }
+    },
+    {
+      "file": "valid/released-pin/device_tree.json",
+      "assembly": "pico",
+      "releasedReservations": [
+        "status-led"
+      ],
+      "owners": {
+        "board.statusLed.out": "led.out"
+      },
+      "statusLed": {
+        "node": "led",
+        "endpoint": {
+          "domain": "soc-gpio",
+          "id": 25
         },
         "activeLow": false
       }

@@ -36,6 +36,7 @@
       "uart0-tx": { "endpoint": { "domain": "soc-gpio", "id": 1 } }
     }
   },
+  "clockSources": { "xtal": { "kind": "crystal", "frequencyHz": 40000000, "pins": [] } },
   "capabilities": { "usb-device": { "present": false }, "cyw43": { "present": false }, "native-wifi": { "present": true }, "external-radio-frontend": { "present": false }, "bluetooth-controller": { "present": true }, "bluetooth-le-controller": { "present": true }, "bluetooth-classic-controller": { "present": true }, "sx1262-radio": { "present": false } },
   "devices": {
     "bootButton": { "kind": "gpio", "endpoint": { "domain": "soc-gpio", "id": 0 }, "activeLevel": "low" },
