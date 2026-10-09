@@ -15,7 +15,7 @@
     {
       "if": { "properties": { "kind": { "const": "target" } } },
       "then": {
-        "required": ["architecture", "memory"],
+        "required": ["architecture", "clockInputs", "memory"],
         "properties": {
           "architecture": {
             "type": "object",
@@ -33,6 +33,7 @@
               "backendName": { "type": "string", "minLength": 1 }
             }
           },
+          "clockInputs": { "$ref": "../config/hardware/clock_inputs.schema.json" },
           "memory": {
             "type": "object",
             "required": ["regions", "ramUsableBytes"],

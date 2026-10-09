@@ -43,6 +43,8 @@ Target descriptors additionally define:
   when required;
 - `gpio`: pin ID format, exact valid pins, optional pin traits, and HAL
   encoding;
+- `clockInputs`: the SoC inputs a board oscillator can drive and, for each
+  source kind, the GPIOs it occupies; `{}` when there are none;
 - `memory.regions` plus `memory.ramUsableBytes`; total RAM is generated from
   every RAM region, while usable RAM describes the region normally exposed by
   the default application linker;
@@ -106,7 +108,7 @@ A `hard` reservation prevents application use of a pin. A `soft` reservation ass
 
 A board device may use a `hard`-reserved pin only when it owns that reservation: `board.<device-id>` with the device ID in kebab case, or `board.can` for CAN channels. Any other use fails generation, so the reset pin of the NUCLEO-G474RE cannot become a status LED.
 
-`clockSources` describes the oscillators fitted on the board, one entry per source, with `kind` (`crystal` or `external-clock`), `frequencyHz` and the SoC `pins` the source occupies. Each of these pins needs a `hard` reservation owned by `clock.<source>`. Oscillator pads outside the GPIO namespace use an empty list. The board does not choose a clock tree; the registry in `config/hardware/clocks/` states which sources each tree needs.
+`clockSources` describes the oscillators fitted on the board, one entry per source, with `kind` (`crystal` or `external-clock`), `frequencyHz` and the SoC `pins` the source occupies. Each of these pins needs a `hard` reservation owned by `clock.<source>`. Oscillator pads outside the GPIO namespace use an empty list. The pins must be exactly those that `clockInputs` of each board target gives the source's kind, so the NUCLEO-G474RE HSE crystal lists `PF0` and `PF1`. The board does not choose a clock tree; the registry in `config/hardware/clocks/` states which sources each tree needs.
 
 ```json
 "clockSources": {

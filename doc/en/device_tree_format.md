@@ -12,10 +12,11 @@ One firmware application, including a subproject, owns one `device_tree.json`. A
 | [binding.schema.json](../../config/hardware/binding.schema.json) | HAL and project component types |
 | [clock_tree.schema.json](../../config/hardware/clock_tree.schema.json) | closed clock-tree list for one target |
 | [clock_sources.schema.json](../../config/hardware/clock_sources.schema.json) | physical board `clockSources` object |
+| [clock_inputs.schema.json](../../config/hardware/clock_inputs.schema.json) | target `clockInputs` object |
 | [common.schema.json](../../config/hardware/common.schema.json) | shared identifiers, endpoints and scalar values |
 | [cases.json](../../tests/fixtures/device_tree/cases.json) | valid and invalid format examples, with expected diagnostics |
 
-Schemas use JSON Schema 2020-12. Input is UTF-8 JSON with unique object keys, finite numbers, `schemaVersion: 1`, and no unknown fields. Boolean values do not count as integers. `$schema` is optional editor metadata, never a fetched dependency. Other versions fail rather than falling back to a build without JSON.
+Schemas use JSON Schema 2020-12. Input is UTF-8 JSON with unique object keys, finite numbers, `schemaVersion: 1`, and no unknown fields. A nonzero decimal number that binary64 would turn into infinity or zero fails when read. Boolean values do not count as integers. `$schema` is optional editor metadata, never a fetched dependency. Other versions fail rather than falling back to a build without JSON.
 
 Schema validation checks structure. The future resolver additionally checks references, binding types, board/target compatibility, ownership, resource use and supported clocks. A `semantic` case in the example index deliberately passes structural validation and specifies a later resolver rejection; Stage A does not claim that rejection is implemented.
 
@@ -85,11 +86,11 @@ Intrinsic `connections` maps a module signal to a child `owner` signal and an `a
 
 ## Clocks and status LED
 
-The HAL registry contains one `config/hardware/clocks/<target>.json` per target. Each file declares that target and a nonempty `trees` map including `default`. Entries declare a `backend` (`pico-sdk`, `stm32g474`, `esp-idf` or `mock`), fixed `requiredSources`, output `frequenciesHz` and backend `parameters`. Assemblies choose only the tree key, never override its MHz or parameters. `scripts/clock_registry.py` checks that each tree's frequencies follow from its parameters and match what actually sets the clocks: the STM32G474 startup headers, the pinned Pico SDK defaults with no HAL override, and the sdkconfig of the ESP-IDF builds in the `esp-idf` gate stage. The schema alone does not promise support for an arbitrary entry.
+The HAL registry contains one `config/hardware/clocks/<target>.json` per target. Each file declares that target and a nonempty `trees` map including `default`. Entries declare a `backend` (`pico-sdk`, `stm32g474`, `esp-idf` or `mock`), fixed `requiredSources`, output `frequenciesHz` and backend `parameters`. Assemblies choose only the tree key, never override its MHz or parameters. `scripts/clock_registry.py` checks that each tree's frequencies follow from its parameters and match what actually sets the clocks: the STM32G474 startup headers, the pinned Pico SDK defaults with no HAL override, and the sdkconfig of the ESP-IDF builds in the `esp-idf` gate stage. Every required source must be a clock input of the target. The schema alone does not promise support for an arbitrary entry: the registry lists only trees with backend code. The HAL never sets the Pico SDK, ESP-IDF or mock clock, so those targets have `default` alone, and STM32G474 has the two trees its startup code builds. Any other tree fails, even with consistent frequencies.
 
 Physical `clockSources` belongs in `boards/profiles/<board>.json`: source key, `kind` (`crystal` or `external-clock`), positive `frequencyHz` and SoC `pins`. Required source kind and frequency must match the board. Internal oscillators belong to the target/backend, not to fabricated board facts. Mock has empty sources and output frequencies. Each ISA has its own registry entry. Every board declares the sources the default tree of each of its targets needs, and the board generator validates `clockSources` with the same schema.
 
-`pins` lists GPIOs occupied by the source. Dedicated oscillator pads outside the GPIO namespace use an empty list; no GPIO number is invented for RP/ESP crystal pads. The target backend checks that GPIO clock inputs such as STM32 HSE declare the required pins; an empty list cannot bypass their reservations.
+`pins` lists GPIOs occupied by the source. The target descriptor's `clockInputs` names the inputs a board oscillator can drive and, for each source kind, the GPIOs it occupies. Dedicated oscillator pads outside the GPIO namespace use an empty list; no GPIO number is invented for RP/ESP crystal pads. On STM32G474 an HSE crystal takes `PF0` and `PF1`, while an HSE bypass clock takes only `PF0` and leaves `PF1` a GPIO; LSE uses `PC14`/`PC15` and `PC14` the same way. A board source must use an input of each of its targets and list exactly the pins of its kind there, so an empty list cannot bypass their reservations.
 
 Initial STM32 trees preserve HSI16/170 MHz with FDCAN from PCLK1 and HSE24/160 MHz with FDCAN80 from PLL Q, including the existing HSI16 fallback. SDK target defaults must be checked against the selected SDK and its clock inputs; unexpected frequencies fail rather than silently changing generated facts. [Clock examples](../../tests/fixtures/device_tree/valid/clock-trees.json) are independent specification data, not the production registry.
 
@@ -127,7 +128,7 @@ Literal spelling is fixed; range checking precedes rendering and does not rely o
 | `int64` | decimal with `LL`; negative expression in parentheses |
 | `float` | binary32 value, scientific notation with 9 significant decimal digits and `f` |
 | `double` | binary64 value, scientific notation with 17 significant decimal digits, no suffix |
-| `string` | escaped UTF-8 C string literal |
+| `string` | UTF-8 C string literal; `"`, `\` and `?` get a backslash, other bytes outside printable ASCII a three-digit octal escape |
 
 The minimum signed values are `(-2147483647 - 1)` and `(-9223372036854775807LL - 1LL)` for int32/int64. Floating literals use `.` and lowercase `e`, an explicit exponent sign and at least two exponent digits, independently of locale. Input decimal numbers are parsed exactly, then rounded once to the declared IEEE-754 type using round-to-nearest, ties-to-even. Overflow, nonfinite values and nonzero values rounding to zero fail; representable subnormals are allowed. Negative zero becomes positive zero. Integer inputs retain exact precision, including uint64 values above 2^53. For example float `0.22` emits `2.19999999e-01f`.
 

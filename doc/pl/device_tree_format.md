@@ -12,10 +12,11 @@ Jedna aplikacja firmware, również podprojekt, ma własny `device_tree.json`. S
 | [binding.schema.json](../../config/hardware/binding.schema.json) | typy komponentów HAL i projektu |
 | [clock_tree.schema.json](../../config/hardware/clock_tree.schema.json) | zamknięta lista drzew zegara jednego targetu |
 | [clock_sources.schema.json](../../config/hardware/clock_sources.schema.json) | fizyczne źródła w polu `clockSources` płytki |
+| [clock_inputs.schema.json](../../config/hardware/clock_inputs.schema.json) | wejścia zegara w polu `clockInputs` targetu |
 | [common.schema.json](../../config/hardware/common.schema.json) | wspólne identyfikatory, końcówki i wartości proste |
 | [cases.json](../../tests/fixtures/device_tree/cases.json) | poprawne i błędne przykłady z oczekiwaną diagnostyką |
 
-Schematy używają JSON Schema 2020-12. Wejście to JSON w UTF-8, z unikalnymi kluczami obiektów, skończonymi liczbami, `schemaVersion: 1` i bez nieznanych pól. Wartość boolowska nie jest liczbą całkowitą. `$schema` jest opcjonalną informacją dla edytora, nie pobieraną zależnością. Inna wersja kończy się błędem zamiast przejścia na build bez JSON-a.
+Schematy używają JSON Schema 2020-12. Wejście to JSON w UTF-8, z unikalnymi kluczami obiektów, skończonymi liczbami, `schemaVersion: 1` i bez nieznanych pól. Niezerowa liczba dziesiętna, która w binary64 stałaby się nieskończonością albo zerem, kończy odczyt błędem. Wartość boolowska nie jest liczbą całkowitą. `$schema` jest opcjonalną informacją dla edytora, nie pobieraną zależnością. Inna wersja kończy się błędem zamiast przejścia na build bez JSON-a.
 
 Walidacja schematu sprawdza strukturę. Przyszły resolver sprawdza dodatkowo odwołania, typy bindings, zgodność płytki z targetem, właścicieli, zajęcie zasobów i obsługiwane zegary. Przykład `semantic` w indeksie celowo przechodzi sprawdzanie struktury i określa błąd przyszłego resolvera; Etap A nie oznacza wdrożenia tego sprawdzenia.
 
@@ -85,11 +86,11 @@ Wewnętrzne `connections` przypisuje sygnał modułu sygnałowi dziecka `owner` 
 
 ## Zegary i dioda statusu
 
-Rejestr HAL zawiera po jednym `config/hardware/clocks/<target>.json` na target. Plik deklaruje ten target i niepustą mapę `trees`, zawierającą `default`. Wpis podaje `backend` (`pico-sdk`, `stm32g474`, `esp-idf` albo `mock`), stałe `requiredSources`, wynikowe `frequenciesHz` i `parameters` backendu. Montaż wybiera jedynie klucz drzewa, bez nadpisywania MHz ani parametrów. `scripts/clock_registry.py` sprawdza, czy częstotliwości każdego drzewa wynikają z jego parametrów i zgadzają się z tym, co faktycznie ustawia zegary: nagłówkami startupu STM32G474, domyślnymi wartościami przypiętego Pico SDK bez nadpisań w HAL oraz sdkconfig buildów ESP-IDF z etapu bramki `esp-idf`. Sam schemat nie obiecuje obsługi dowolnego wpisu.
+Rejestr HAL zawiera po jednym `config/hardware/clocks/<target>.json` na target. Plik deklaruje ten target i niepustą mapę `trees`, zawierającą `default`. Wpis podaje `backend` (`pico-sdk`, `stm32g474`, `esp-idf` albo `mock`), stałe `requiredSources`, wynikowe `frequenciesHz` i `parameters` backendu. Montaż wybiera jedynie klucz drzewa, bez nadpisywania MHz ani parametrów. `scripts/clock_registry.py` sprawdza, czy częstotliwości każdego drzewa wynikają z jego parametrów i zgadzają się z tym, co faktycznie ustawia zegary: nagłówkami startupu STM32G474, domyślnymi wartościami przypiętego Pico SDK bez nadpisań w HAL oraz sdkconfig buildów ESP-IDF z etapu bramki `esp-idf`. Każde wymagane źródło musi być wejściem zegara targetu. Sam schemat nie obiecuje obsługi dowolnego wpisu: rejestr zawiera tylko drzewa, które mają kod w backendzie. HAL nie ustawia zegara Pico SDK, ESP-IDF ani mocka, więc te targety mają wyłącznie `default`, a STM32G474 dwa drzewa budowane przez kod startowy. Każde inne drzewo kończy się błędem, nawet przy spójnych częstotliwościach.
 
 Fizyczne `clockSources` należy do `boards/profiles/<board>.json`: klucz źródła, `kind` (`crystal` albo `external-clock`), dodatnie `frequencyHz` i piny SoC w `pins`. Wymagany rodzaj i częstotliwość źródła muszą zgadzać się z płytką. Oscylatory wewnętrzne należą do targetu lub backendu, nie do dopisanych faktów płytki. Mock ma puste źródła i częstotliwości wyjściowe. Każda ISA ma własny wpis rejestru. Każda płytka deklaruje źródła, których potrzebuje drzewo `default` każdego jej targetu, a generator płytek sprawdza `clockSources` tym samym schematem.
 
-`pins` wymienia GPIO zajęte przez źródło. Dedykowane wyprowadzenia oscylatora poza przestrzenią GPIO mają pustą listę; format nie przypisuje fikcyjnego numeru GPIO wyprowadzeniom kwarcu RP/ESP. Backend targetu sprawdza wymagane piny wejść zegarowych korzystających z GPIO, takich jak HSE STM32; pusta lista nie omija ich rezerwacji.
+`pins` wymienia GPIO zajęte przez źródło. Pole `clockInputs` deskryptora targetu podaje wejścia, które może zasilać oscylator płytki, a dla każdego rodzaju źródła zajmowane przez nie GPIO. Dedykowane wyprowadzenia oscylatora poza przestrzenią GPIO mają pustą listę; format nie przypisuje fikcyjnego numeru GPIO wyprowadzeniom kwarcu RP/ESP. Na STM32G474 kwarc HSE zajmuje `PF0` i `PF1`, a zewnętrzny zegar HSE (bypass) tylko `PF0`, więc `PF1` pozostaje zwykłym GPIO; LSE analogicznie używa `PC14`/`PC15` albo `PC14`. Źródło płytki musi korzystać z wejścia każdego z jej targetów i wymieniać dokładnie piny swojego rodzaju, więc pusta lista nie omija ich rezerwacji.
 
 Pierwsze drzewa STM32 zachowują HSI16/170 MHz z FDCAN z PCLK1 oraz HSE24/160 MHz z FDCAN80 z PLL Q, wraz z obecnym fallbackiem HSI16. Domyślne zegary targetów SDK trzeba sprawdzić wobec wybranego SDK i jego wejść zegarowych; nieoczekiwane częstotliwości są błędem zamiast cichej zmiany wygenerowanych faktów. [Przykłady zegarów](../../tests/fixtures/device_tree/valid/clock-trees.json) są niezależnymi danymi specyfikacji, a nie rejestrem produkcyjnym.
 
@@ -127,7 +128,7 @@ Zapis literałów jest ustalony; sprawdzenie zakresu poprzedza renderer i nie po
 | `int64` | dziesiętny z `LL`; ujemne wyrażenie w nawiasach |
 | `float` | wartość binary32, zapis naukowy z 9 cyframi znaczącymi i `f` |
 | `double` | wartość binary64, zapis naukowy z 17 cyframi znaczącymi, bez przyrostka |
-| `string` | escapowany literał tekstu C w UTF-8 |
+| `string` | literał tekstu C w UTF-8; `"`, `\` i `?` dostają ukośnik wsteczny, pozostałe bajty spoza drukowalnego ASCII trzycyfrowy escape ósemkowy |
 
 Minimalne wartości ze znakiem to `(-2147483647 - 1)` i `(-9223372036854775807LL - 1LL)` dla int32/int64. Literały zmiennoprzecinkowe używają `.`, małego `e`, jawnego znaku wykładnika i co najmniej dwóch cyfr wykładnika, niezależnie od locale. Liczby dziesiętne wejścia parsuje się dokładnie, następnie raz zaokrągla do zadeklarowanego IEEE-754, do najbliższej wartości z rozstrzyganiem remisu do parzystej. Overflow, wartości nieskończone i niezerowe wartości zaokrąglone do zera są błędem; reprezentowalne wartości subnormal są dozwolone. Ujemne zero staje się dodatnim. Wejścia całkowite zachowują pełną precyzję, także uint64 powyżej 2^53. Przykładowo float `0.22` daje `2.19999999e-01f`.
 

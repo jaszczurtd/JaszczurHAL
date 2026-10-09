@@ -27,6 +27,10 @@
     },
     "halEncoding": { "kind": "stm32-port-index-u8" }
   },
+  "clockInputs": {
+    "hse": { "crystal": ["PF0", "PF1"], "external-clock": ["PF0"] },
+    "lse": { "crystal": ["PC14", "PC15"], "external-clock": ["PC14"] }
+  },
   "memory": {
     "regions": {
       "flash": { "kind": "flash", "sizeBytes": 524288, "dmaCapable": false },

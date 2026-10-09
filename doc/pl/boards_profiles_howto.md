@@ -46,6 +46,8 @@ Deskryptor platformy określa ponadto:
   recepturę oraz platformę lub `idfTarget`, gdy są wymagane;
 - `gpio`: format identyfikatora pinu, pełną listę prawidłowych pinów, opcjonalne
   cechy pinów oraz kodowanie HAL;
+- `clockInputs`: wejścia SoC, które może zasilać oscylator płytki, a dla
+  każdego rodzaju źródła zajmowane przez nie GPIO; `{}`, gdy takich wejść nie ma;
 - `memory.regions` oraz `memory.ramUsableBytes`; całkowity rozmiar RAM jest
   obliczany ze wszystkich regionów RAM, natomiast użyteczna pamięć RAM opisuje
   obszar standardowo udostępniany przez domyślny skrypt linkera aplikacji;
@@ -116,7 +118,7 @@ Rezerwacja `hard` wyklucza użycie pinu przez aplikację. Rezerwacja `soft` ozna
 
 Urządzenie płytki może użyć pinu z rezerwacją `hard` tylko wtedy, gdy jest jej właścicielem: `board.<id-urządzenia>` z identyfikatorem zapisanym małymi literami z myślnikami albo `board.can` dla kanałów CAN. Każde inne użycie kończy generowanie błędem, więc pin resetu NUCLEO-G474RE nie zostanie diodą statusu.
 
-`clockSources` opisuje oscylatory zamontowane na płytce, po jednym wpisie na źródło: `kind` (`crystal` albo `external-clock`), `frequencyHz` i piny SoC zajęte przez źródło w `pins`. Każdy z tych pinów wymaga rezerwacji `hard` z właścicielem `clock.<źródło>`. Wyprowadzenia oscylatora spoza przestrzeni GPIO mają pustą listę. Płytka nie wybiera drzewa zegara; rejestr w `config/hardware/clocks/` określa, jakich źródeł potrzebuje każde drzewo.
+`clockSources` opisuje oscylatory zamontowane na płytce, po jednym wpisie na źródło: `kind` (`crystal` albo `external-clock`), `frequencyHz` i piny SoC zajęte przez źródło w `pins`. Każdy z tych pinów wymaga rezerwacji `hard` z właścicielem `clock.<źródło>`. Wyprowadzenia oscylatora spoza przestrzeni GPIO mają pustą listę. Lista musi zawierać dokładnie te piny, które `clockInputs` każdego targetu płytki podaje dla rodzaju źródła, więc kwarc HSE płytki NUCLEO-G474RE wymienia `PF0` i `PF1`. Płytka nie wybiera drzewa zegara; rejestr w `config/hardware/clocks/` określa, jakich źródeł potrzebuje każde drzewo.
 
 ```json
 "clockSources": {

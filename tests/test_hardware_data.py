@@ -56,6 +56,30 @@ class SchemaReaderTests(unittest.TestCase):
             infinite.write_text('{"a": Infinity}', encoding="utf-8")
             with self.assertRaises(hardware_schema.InputError):
                 hardware_schema.load_json(infinite)
+            # Python reads 1e400 as inf and 1e-400 as 0 unless the reader stops it.
+            numbers = Path(directory) / "numbers.json"
+            for token in ("1e400", "-1e400", "1e-400", "-2.5e-999"):
+                with self.subTest(token=token):
+                    numbers.write_text(f'{{"a": [{token}]}}', encoding="utf-8")
+                    with self.assertRaisesRegex(hardware_schema.InputError, "binary64"):
+                        hardware_schema.load_json(numbers)
+            numbers.write_text('{"a": [4.9e-324, 0e400, -0.0, 1.7976931348623157e308]}',
+                               encoding="utf-8")
+            self.assertEqual({"a": [5e-324, 0.0, 0.0, 1.7976931348623157e308]},
+                             hardware_schema.load_json(numbers))
+            surrogate = Path(directory) / "surrogate.json"
+            surrogate.write_text('{"a": ["\\ud800"]}', encoding="utf-8")
+            with self.assertRaisesRegex(hardware_schema.InputError, "surrogate"):
+                hardware_schema.load_json(surrogate)
+            surrogate.write_text('{"a": "\\ud83d\\ude00"}', encoding="utf-8")
+            self.assertEqual({"a": "\U0001f600"}, hardware_schema.load_json(surrogate))
+
+    def test_a_schema_number_is_finite(self) -> None:
+        for value in (float("inf"), float("-inf"), float("nan")):
+            with self.subTest(value=value):
+                self.assertFalse(hardware_schema.type_matches(value, "number"))
+        self.assertTrue(hardware_schema.type_matches(10**400, "number"))
+        self.assertTrue(hardware_schema.type_matches(1.5, "number"))
 
     def test_booleans_are_not_integers_and_equality_is_json(self) -> None:
         self.assertFalse(hardware_schema.type_matches(True, "integer"))
@@ -128,6 +152,16 @@ class CatalogueRuleTests(HalTypeCopies):
         self.change("jaszczurhal-pwm-output.json",
                     lambda d: d["properties"]["frequencyHz"].update(unit="Hz "))
         self.expect("JH-HW-SCHEMA", "jaszczurhal-pwm-output.json", "/properties/frequencyHz/unit")
+
+    def test_overflowing_number_fails_when_read(self) -> None:
+        # Read as inf, 1e400 would pass the schema and fail only the default check.
+        def add(data: dict) -> None:
+            data["properties"]["gain"] = {"type": "number", "cType": "double",
+                                          "description": "Gain.", "unit": "1", "default": 0.125}
+        self.change("jaszczurhal-pwm-output.json", add)
+        path = self.work / "jaszczurhal-pwm-output.json"
+        path.write_text(path.read_text(encoding="utf-8").replace("0.125", "1e400"), encoding="utf-8")
+        self.expect("JH-HW-SCHEMA", "jaszczurhal-pwm-output.json", "")
 
     def test_unit_is_nfc_text(self) -> None:
         # U+2126 OHM SIGN passes the schema pattern; NFC turns it into U+03A9.
