@@ -3,11 +3,12 @@
 
 config/hardware/clocks/<target>.json lists the trees a target supports. The
 check confirms that every target has its registry, that each tree's output
-frequencies follow from its parameters, that every board can run the default
-tree of each of its targets, and that the trees match what actually sets the
-clocks: the STM32G474 startup headers, the pinned Pico SDK defaults and,
-given an ESP-IDF build's sdkconfig, the ESP-IDF configuration. Nothing in
-the HAL build may override the Pico SDK clock defaults.
+frequencies follow from its parameters and its sources from the target's
+clockInputs, that every board can run the default tree of each of its
+targets, and that the trees match what actually sets the clocks: the
+STM32G474 startup headers, the pinned Pico SDK defaults and, given an ESP-IDF
+build's sdkconfig, the ESP-IDF configuration. A tree without backend code
+fails. Nothing in the HAL build may override the Pico SDK clock defaults.
 """
 
 from __future__ import annotations
@@ -40,6 +41,10 @@ PARAMETERS = {
     "esp-idf": {"cpuFreqMhz", "xtalFreqMhz"},
     "mock": set(),
 }
+# The HAL selects no clock here: RP and ESP builds keep the SDK configuration
+# (check_no_hal_override, check_esp_sdkconfig) and the mock has none, so only
+# the default tree runs. The STM32G474 trees are checked in check_stm32g474.
+DEFAULT_ONLY_BACKENDS = {"pico-sdk", "esp-idf", "mock"}
 # Pico SDK settings the HAL must leave at their defaults.
 SDK_CLOCK_MACRO = (r"(?:SYS_CLK_(?:HZ|KHZ|MHZ)|XOSC_(?:HZ|KHZ|MHZ)|PLL_(?:SYS|USB|COMMON)_\w+|"
                    r"USB_CLK_(?:HZ|KHZ|MHZ)|PICO_USE_FASTEST_SUPPORTED_CLOCK)")
@@ -61,7 +66,10 @@ def load_registry(directory: Path = CLOCKS) -> dict[str, dict[str, Any]]:
     schemas = hardware_schema.SchemaSet()
     registry: dict[str, dict[str, Any]] = {}
     for path in sorted(directory.glob("*.json")):
-        data = hardware_schema.load_json(path)
+        try:
+            data = hardware_schema.load_json(path)
+        except hardware_schema.InputError as error:
+            raise ClockError(str(error)) from error
         first = schemas.first_error("clock_tree.schema.json", data)
         require(first is None, f"[JH-HW-SCHEMA] {path}:{first.pointer if first else ''}: "
                                f"{first.message if first else ''}")
@@ -75,6 +83,8 @@ def check_tree(target: str, name: str, tree: dict[str, Any]) -> None:
     where = f"{target}/{name}"
     backend = tree["backend"]
     require(target in BACKENDS.get(backend, set()), f"{where}: backend {backend} does not drive {target}")
+    require(name == "default" or backend not in DEFAULT_ONLY_BACKENDS,
+            f"{where}: the HAL does not set the {backend} clock, so only its default tree runs")
     params, freq, sources = tree["parameters"], tree["frequenciesHz"], tree["requiredSources"]
     missing = PARAMETERS[backend] - set(params)
     require(not missing, f"{where}: missing parameters {sorted(missing)}")
@@ -102,14 +112,34 @@ def check_tree(target: str, name: str, tree: dict[str, Any]) -> None:
     require(freq == expected, f"{where}: frequencies {freq} do not follow from the parameters {expected}")
 
 
-def check_registry(registry: dict[str, dict[str, Any]], targets: set[str]) -> None:
-    require(set(registry) == targets, f"clock registries {sorted(registry)} differ from targets {sorted(targets)}")
+def check_registry(registry: dict[str, dict[str, Any]], targets: dict[str, dict[str, Any]]) -> None:
+    """Each tree against its backend and the clock inputs of its target."""
+    require(set(registry) == set(targets),
+            f"clock registries {sorted(registry)} differ from targets {sorted(targets)}")
     for target, data in sorted(registry.items()):
+        inputs = targets[target].get("clockInputs", {})
         for name, tree in sorted(data["trees"].items()):
             check_tree(target, name, tree)
+            for key, source in sorted(tree["requiredSources"].items()):
+                require(source["kind"] in inputs.get(key, {}),
+                        f"{target}/{name}: {target} has no {key} input for the {source['kind']}")
 
 
-def board_sources_satisfy(board: dict[str, Any], tree: dict[str, Any]) -> list[str]:
+def source_problems(inputs: dict[str, Any], key: str, source: dict[str, Any]) -> list[str]:
+    """A board source against the target clock input it drives: the input
+    takes that kind and the source lists exactly the GPIOs the kind occupies."""
+    required = inputs.get(key, {}).get(source["kind"])
+    if required is None:
+        return [f"the target has no {key} input for the {source['kind']}"]
+    declared = [endpoint["id"] for endpoint in source["pins"]]
+    if len(declared) != len(required) or set(declared) != set(required):
+        return [f"the {source['kind']} on {key} occupies {required}, the board lists {declared}"]
+    return []
+
+
+def board_sources_satisfy(board: dict[str, Any], tree: dict[str, Any],
+                          inputs: dict[str, Any]) -> list[str]:
+    """Why the board cannot run the tree on a target with these clock inputs."""
     available = board.get("clockSources", {})
     problems = []
     for key, required in sorted(tree["requiredSources"].items()):
@@ -119,13 +149,17 @@ def board_sources_satisfy(board: dict[str, Any], tree: dict[str, Any]) -> list[s
         elif (source["kind"], source["frequencyHz"]) != (required["kind"], required["frequencyHz"]):
             problems.append(f"{key} is a {source['kind']} at {source['frequencyHz']} Hz, "
                             f"the tree needs a {required['kind']} at {required['frequencyHz']} Hz")
+        else:
+            problems.extend(source_problems(inputs, key, source))
     return problems
 
 
-def check_boards(registry: dict[str, dict[str, Any]], boards: dict[str, dict[str, Any]]) -> None:
+def check_boards(registry: dict[str, dict[str, Any]], boards: dict[str, dict[str, Any]],
+                 targets: dict[str, dict[str, Any]]) -> None:
     for board_id, board in sorted(boards.items()):
         for target in board["compatibleTargets"]:
-            problems = board_sources_satisfy(board, registry[target]["trees"]["default"])
+            problems = board_sources_satisfy(board, registry[target]["trees"]["default"],
+                                             targets[target].get("clockInputs", {}))
             require(not problems, f"{board_id}: default {target} tree: {'; '.join(problems)}")
 
 
@@ -140,6 +174,8 @@ def check_stm32g474(registry: dict[str, dict[str, Any]], port: Path = STM32_PORT
     clock = (port / "stm32g474_clock.h").read_text(encoding="utf-8")
     tree_h = (port / "stm32g474_clock_tree.h").read_text(encoding="utf-8")
     trees = registry["stm32g474"]["trees"]
+    require(set(trees) == {"default", "hse-160mhz"},
+            f"stm32g474 trees {sorted(trees)}: the startup code builds default and hse-160mhz only")
     default, hse = trees["default"], trees["hse-160mhz"]
     require(int(_value(clock, r"#define JH_G474_HSI_CLOCK_HZ (\d+)u", "stm32g474_clock.h")) == HSI16_HZ,
             "HSI16 frequency changed")
@@ -228,11 +264,11 @@ def main() -> int:
     boards_root = REPO_ROOT / "boards"
     try:
         registry = load_registry()
-        targets = {path.stem for path in (boards_root / "targets").glob("*.json")}
-        boards = {path.stem: json.loads(path.read_text(encoding="utf-8"))
-                  for path in (boards_root / "profiles").glob("*.json")}
+        targets, boards = ({path.stem: json.loads(path.read_text(encoding="utf-8"))
+                            for path in (boards_root / kind).glob("*.json")}
+                           for kind in ("targets", "profiles"))
         check_registry(registry, targets)
-        check_boards(registry, boards)
+        check_boards(registry, boards, targets)
         check_stm32g474(registry)
         check_pico_sdk(registry)
         check_no_hal_override()

@@ -39,14 +39,18 @@ def macro_token(name: str) -> str:
 
 
 def c_string(value: str) -> str:
+    """UTF-8 C literal. A byte outside printable ASCII becomes a three-digit
+    octal escape, which cannot take in the next character the way \\x takes
+    a following hex digit; '?' is escaped so no trigraph forms."""
     escaped = []
-    for char in value:
-        if char in '"\\':
+    for byte in value.encode("utf-8"):
+        char = chr(byte)
+        if char in '"\\?':
             escaped.append("\\" + char)
-        elif 0x20 <= ord(char) < 0x7F:
+        elif 0x20 <= byte < 0x7F:
             escaped.append(char)
         else:
-            escaped.extend(f"\\x{byte:02x}" for byte in char.encode("utf-8"))
+            escaped.append(f"\\{byte:03o}")
     return '"' + "".join(escaped) + '"'
 
 

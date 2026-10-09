@@ -33,6 +33,7 @@
       "usb": { "values": [19, 20] }
     }
   },
+  "clockInputs": { "xtal": { "crystal": [] } },
   "memory": {
     "regions": {
       "internal-sram": { "kind": "ram", "sizeBytes": 524288, "dmaCapable": true }

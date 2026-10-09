@@ -39,7 +39,10 @@ class LiteralTests(unittest.TestCase):
                 self.assertEqual(expected, defaults.c_literal(c_type, value))
 
     def test_strings_are_escaped_utf8(self) -> None:
-        self.assertEqual('"a\\"b\\\\c\\x0a\\xc2\\xb5"', defaults.c_literal("string", 'a"b\\c\nµ'))
+        # Octal escapes end after three digits; \xb5 would also take the A.
+        # CTest test_device_defaults_literals_{c,cpp} compile such literals.
+        self.assertEqual('"a\\"b\\\\c\\012\\302\\265A\\?"',
+                         defaults.c_literal("string", 'a"b\\c\nµA?'))
 
     def test_floating_defaults_are_refused(self) -> None:
         with self.assertRaises(defaults.DefaultsError):

@@ -1342,6 +1342,83 @@ for case, change, diagnostic in (
     )
 
 
+def clock_pins(*pins) -> list[dict]:
+    return [{"domain": "soc-gpio", "id": pin} for pin in pins]
+
+
+# A source lists exactly the GPIOs the target gives its kind (RM0440 7.2:
+# a crystal takes OSC_IN and OSC_OUT, bypass only OSC_IN); an empty or
+# partial list would keep the crystal pins out of the reservation check.
+for profile in ("nucleo-g474re", "nucleo-g474re-canhat", "nucleo-g474re-pim730"):
+    for case, change, diagnostic in (
+        (
+            "hse-without-pins",
+            lambda value: value["clockSources"]["hse"].update(pins=[]),
+            "the crystal on hse occupies ['PF0', 'PF1'], the board lists []",
+        ),
+        (
+            "lse-one-pin",
+            lambda value: value["clockSources"]["lse"].update(pins=clock_pins("PC14")),
+            "the crystal on lse occupies ['PC14', 'PC15'], the board lists ['PC14']",
+        ),
+        (
+            "hse-bypass-two-pins",
+            lambda value: value["clockSources"]["hse"].update(kind="external-clock"),
+            "the external-clock on hse occupies ['PF0'], the board lists ['PF0', 'PF1']",
+        ),
+        (
+            "unknown-clock-input",
+            lambda value: value["clockSources"].update(
+                xosc={"kind": "crystal", "frequencyHz": 8000000, "pins": []}),
+            "the target has no xosc input for the crystal",
+        ),
+    ):
+        clock_case = mutate(f"{case}-{profile}", f"profiles/{profile}.json", change)
+        require(
+            diagnostic
+            in run("--validate-only", boards_root=clock_case, expected_success=False).stderr,
+            f"{profile}: {case} was not diagnosed",
+        )
+# An HSE bypass drives OSC_IN alone.
+run("--validate-only", boards_root=mutate(
+    "hse-bypass",
+    "profiles/nucleo-g474re.json",
+    lambda value: value["clockSources"]["hse"].update(kind="external-clock", pins=clock_pins("PF0")),
+))
+for case, relative_path, change, diagnostic in (
+    (
+        "xosc-invented-gpio",
+        "profiles/pico.json",
+        lambda value: value["clockSources"]["xosc"].update(pins=clock_pins(0)),
+        "the crystal on xosc occupies [], the board lists [0]",
+    ),
+    (
+        "target-without-clock-inputs",
+        "targets/stm32g474.json",
+        lambda value: value.pop("clockInputs"),
+        "$.clockInputs: got None",
+    ),
+    (
+        "target-clock-input-kind",
+        "targets/stm32g474.json",
+        lambda value: value["clockInputs"]["hse"].update(oscillator=["PF0"]),
+        "$.clockInputs.hse.oscillator",
+    ),
+    (
+        "target-clock-input-pin",
+        "targets/stm32g474.json",
+        lambda value: value["clockInputs"]["hse"].update(crystal=["PF0", "PZ1"]),
+        "$.clockInputs.hse.crystal: got ['PF0', 'PZ1']; expected target valid pins",
+    ),
+):
+    clock_case = mutate(case, relative_path, change)
+    require(
+        diagnostic
+        in run("--validate-only", boards_root=clock_case, expected_success=False).stderr,
+        f"{case} was not diagnosed",
+    )
+
+
 def can_channel_case(case: str, change) -> str:
     """Validate the CAN-FD HAT profile after one change to its channels."""
     root = mutate(

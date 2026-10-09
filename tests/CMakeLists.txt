@@ -1298,6 +1298,25 @@ add_test(NAME test_device_defaults
         ${CMAKE_CURRENT_SOURCE_DIR}/test_device_defaults.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
+# String literals of generate_device_defaults.py built as C and C++ with the
+# host warning policy as errors (GCC, Clang and MSVC alike); each program
+# checks the bytes its literals hold.
+set(_jh_literal_probe ${CMAKE_CURRENT_BINARY_DIR}/c_literal_probe)
+add_custom_command(
+    OUTPUT ${_jh_literal_probe}.c ${_jh_literal_probe}.cpp
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/write_c_literal_probe.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/.. ${_jh_literal_probe}.c ${_jh_literal_probe}.cpp
+    DEPENDS
+        ${CMAKE_CURRENT_SOURCE_DIR}/write_c_literal_probe.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/generate_device_defaults.py
+    VERBATIM)
+foreach(_jh_language c cpp)
+    add_executable(test_device_defaults_literals_${_jh_language}
+        ${_jh_literal_probe}.${_jh_language})
+    jh_enable_host_warnings(test_device_defaults_literals_${_jh_language} ERRORS)
+    add_test(NAME test_device_defaults_literals_${_jh_language}
+        COMMAND test_device_defaults_literals_${_jh_language})
+endforeach()
 add_test(NAME test_install_host_tools
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_install_host_tools.py

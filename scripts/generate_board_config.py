@@ -21,6 +21,7 @@ from codegen_support import (
     validation_error,
     write_generated_outputs,
 )
+import clock_registry
 import generate_hal_features
 import hardware_schema
 from repository_layout import (
@@ -61,6 +62,7 @@ TARGET_FIELDS = COMMON_FIELDS | {
     "hal",
     "build",
     "gpio",
+    "clockInputs",
     "memory",
     "defaultBoard",
     "sourceFallbackBoard",
@@ -920,6 +922,7 @@ def validate_target(path: Path, target: dict[str, Any]) -> set[Any]:
         trait_pins = expand_pin_set(path, f"$.gpio.traits.{trait_id}", pin_set)
         if not trait_pins <= valid_pins:
             fail(path, f"$.gpio.traits.{trait_id}", sorted(trait_pins - valid_pins), "target valid pins")
+    validate_clock_inputs(path, target, valid_pins)
     memory = exact_fields(
         path,
         "$.memory",
@@ -1075,15 +1078,33 @@ def validate_target(path: Path, target: dict[str, Any]) -> set[Any]:
     return valid_pins
 
 
+def validate_clock_inputs(path: Path, target: dict[str, Any], valid_pins: set[Any]) -> None:
+    """SoC clock inputs, with the GPIOs each kind of source occupies; an
+    oscillator pad outside the GPIO namespace has an empty list."""
+    if "clockInputs" not in target:
+        fail(path, "$.clockInputs", None, "the SoC clock inputs, {} when there are none")
+    inputs = target["clockInputs"]
+    error = hardware_schema.SchemaSet().first_error("clock_inputs.schema.json", inputs)
+    if error is not None:
+        fail(path, "$.clockInputs" + error.pointer.replace("/", "."), inputs, error.message)
+    for key, kinds in inputs.items():
+        for kind, pins in kinds.items():
+            if not set(pins) <= valid_pins:
+                fail(path, f"$.clockInputs.{key}.{kind}", pins, "target valid pins")
+
+
 def validate_clock_sources(
     path: Path,
     board: dict[str, Any],
+    targets: dict[str, dict[str, Any]],
     valid_pins: set[Any],
     components: set[str],
     hard_reserved: dict[Any, str],
 ) -> None:
     """Oscillators fitted on the board, in the device tree specification's
-    form; each GPIO a source occupies is hard-reserved by clock.<source>."""
+    form. A source drives a clock input of every board target and lists
+    exactly the GPIOs its kind occupies there, each hard-reserved by
+    clock.<source>."""
     sources = board.get("clockSources")
     if sources is None:
         return
@@ -1091,6 +1112,11 @@ def validate_clock_sources(
     if error is not None:
         fail(path, "$.clockSources" + error.pointer.replace("/", "."), sources, error.message)
     for key, source in sources.items():
+        for target_id in board["compatibleTargets"]:
+            problems = clock_registry.source_problems(targets[target_id]["clockInputs"], key, source)
+            if problems:
+                fail(path, f"$.clockSources.{key}", source,
+                     f"a source on a {target_id} clock input ({problems[0]})")
         for index, endpoint in enumerate(source["pins"]):
             json_path = f"$.clockSources.{key}.pins[{index}]"
             validate_endpoint(path, json_path, endpoint, valid_pins, components)
@@ -1411,7 +1437,7 @@ def validate_board(
     if not isinstance(board["peripherals"], dict):
         fail(path, "$.peripherals", board["peripherals"], "an object")
     validate_can(path, board, valid_union, resolved_components, hard_reserved)
-    validate_clock_sources(path, board, valid_union, resolved_components, hard_reserved)
+    validate_clock_sources(path, board, targets, valid_union, resolved_components, hard_reserved)
 
 
 def load_registry(

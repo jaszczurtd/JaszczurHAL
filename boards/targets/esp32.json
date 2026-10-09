@@ -32,6 +32,7 @@
       "touch": { "values": [0, 2, 4, 12, 13, 14, 15, 27, 32, 33] }
     }
   },
+  "clockInputs": { "xtal": { "crystal": [] } },
   "memory": {
     "regions": {
       "internal-sram": { "kind": "ram", "sizeBytes": 532480, "dmaCapable": true }

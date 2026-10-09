@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Target clockInputs object, version 1",
+  "type": "object",
+  "propertyNames": {
+    "$ref": "common.schema.json#/$defs/registryId"
+  },
+  "additionalProperties": {
+    "type": "object",
+    "minProperties": 1,
+    "propertyNames": {
+      "$ref": "clock_sources.schema.json#/additionalProperties/properties/kind"
+    },
+    "additionalProperties": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/gpioId"
+      },
+      "uniqueItems": true
+    }
+  }
+}
