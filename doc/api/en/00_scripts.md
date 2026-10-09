@@ -18,7 +18,7 @@ Run commands from the repository root unless a section states otherwise. Use `--
 | Prepare a native Windows workstation | `powershell -NoProfile -ExecutionPolicy Bypass -File .\runmefirst.ps1` | Prepares the pinned managed Python environment, native toolchains, source components, Cortex-Debug user paths, and the Windows host self-check. |
 | Synchronize managed dependencies | `./third_party/update_components.sh` | Fetches missing components and replaces managed installations that differ from tracked pins. |
 | Verify dependencies without changing them | `./third_party/update_components.sh --verify-only` | Checks all managed component versions, commits, required files, that no pinned checkout has local edits (submodules included), PMD archive state, the built picotool and cppcheck, and the RISC-V toolchain stamp. |
-| Refresh all tracked generated files | `python3 scripts/sync_generated.py --write` | Runs the feature, board, example, root VS Code, and SBOM generators and lists every file changed during synchronization. |
+| Refresh all tracked generated files | `python3 scripts/sync_generated.py --write` | Runs the feature, board, device default, example, root VS Code, and SBOM generators and lists every file changed during synchronization. |
 | Verify all tracked generated files | `python3 scripts/sync_generated.py --check` | Runs every generator in read-only verification mode and fails on missing or stale output. |
 | Run the complete repository gate | `./runalltests.sh`; before a push `./runalltests.sh --commit` | Cleans managed gate outputs and runs every stage: tests, Clang ASan/UBSan/TSan/libFuzzer checks, Valgrind, static analysis, CPD, target, library and example builds, and the vulnerability scan. Linux CI runs the same stages except the example builds. |
 | Run the sanitizer/fuzz gate | `scripts/run_sanitizer_fuzz.sh` | Recreates a Clang-instrumented host build, runs all tests under ASan/UBSan and the native tests under TSan, and smoke-fuzzes the network parsers. |
@@ -199,8 +199,8 @@ PMD and the RISC-V toolchain are installed in the
 checkout from their pinned archives, and cppcheck and picotool are built
 there; all of them are kept for the next run. `--list-libraries` prints the
 target and board of each library stage. `-j N`, `--jobs N`, and `-jN` select
-build parallelism. The gate verifies tracked feature, board, example, root VS
-Code, and SBOM projections through `scripts/sync_generated.py --check` and
+build parallelism. The gate verifies tracked feature, board, device default,
+example, root VS Code, and SBOM projections through `scripts/sync_generated.py --check` and
 never rewrites them. The stages are:
 
 1. `tools`: required tools and managed-component verification;
@@ -219,8 +219,9 @@ never rewrites them. The stages are:
 9. `stm32`: STM32G474 host-compiler, ARM, and SX1276/SX1278 libraries;
 10. `rp`: RP2040/RP2350, native FreeRTOS, and RP2040 feature-profile builds
     with artifact validation;
-11. `esp-idf`: clean ESP32-S3/ESP32 ESP-IDF fixture builds and the ESP32-S3
-    all-features library;
+11. `esp-idf`: clean ESP32-S3/ESP32 ESP-IDF fixture builds, whose `sdkconfig`
+    is checked against the clock registry, and the ESP32-S3 all-features
+    library;
 12. `library-<target>`: all-features libraries for each RP and STM32 target,
     without a project header and for an application in a path with spaces;
 13. `examples-<target>`: every declared example configuration for RP2040,
@@ -632,8 +633,8 @@ application interface, and build commands.
 ### `scripts/sync_generated.py`
 
 Single repository-level runner for every tracked generated artifact. `--write`
-refreshes the feature registry, static board registry, example VS Code files,
-root VS Code files, and repository SBOM. `--check` invokes their read-only
+refreshes the feature registry, static board registry, device type defaults,
+example VS Code files, root VS Code files, and repository SBOM. `--check` invokes their read-only
 verification modes
 and fails on missing or stale output. The runner snapshots tracked and
 non-ignored files before execution, then prints the paths changed during the
@@ -734,6 +735,56 @@ prefixes. The header rules are described in
 Provides other scripts with validated target and board data from `boards/`. It is used by `jh-vscode`, project generators, and example tools. The module keeps no registry of its own; the descriptor files remain the source of truth.
 
 Two commands serve the library build scripts: `target-facts <target>` prints the build facts of one target as `KEY=VALUE` lines, and `list-targets` prints every target that has a library runner, with its provider and status. `build_link_library.sh` uses both.
+
+### `scripts/hardware_schema.py` and `scripts/hardware_model.py`
+
+Import-only readers of the hardware description data in `config/hardware/`.
+`hardware_schema.py` validates JSON against the schemas in that directory
+without a third-party JSON Schema package. It knows only the keywords those
+schemas use and refuses any other, so a schema cannot quietly lose a rule.
+Duplicate keys and non-finite numbers fail before validation. Each error
+carries the JSON Pointer the [device tree format](../../en/device_tree_format.md)
+names.
+
+`hardware_model.py` loads component types: the HAL types in
+`config/hardware/bindings/`, each file named after its `compatible`, plus the
+project bindings a `device_tree.json` lists. It checks what a schema cannot
+express: C types and bounds of properties, child types and the values a
+module sets for them, module connections, feature flags, capabilities, and
+child expansion that would loop. Errors use the specification's `JH-HW-*`
+codes.
+
+### `scripts/generate_device_defaults.py`
+
+Writes `src/hal/generated/jh_device_defaults.h` from the HAL types in
+`config/hardware/bindings/`, so a default value is written down once, in the
+type. The header defines:
+
+- `JH_DEFAULT_<TYPE>_<PROPERTY>` for each property default;
+- `JH_DEFAULT_<MODULE>_<CHILD>_<PROPERTY>` for each child of a module, after
+  the values the module sets for that child;
+- `JH_ENUM_<TYPE>_<PROPERTY>_<VALUE>` with the position of each string enum
+  value.
+
+HAL helpers such as `hal_lora_sx126x_core1262_hf_defaults()` and
+`hal_can_default_config()` read these macros, and static assertions keep the
+HAL enums in the order of the type. Literals follow the table of the device
+tree format. Two names that meet after token conversion fail the run instead
+of being renamed. Floating-point defaults are refused for now. `--write`
+refreshes the header and `--check` fails when it is missing or stale;
+`sync_generated.py` runs both.
+
+### `scripts/clock_registry.py`
+
+Checks the clock trees in `config/hardware/clocks/<target>.json`. It confirms
+that every target has a registry, that the output frequencies of each tree
+follow from its parameters, and that every board provides the clock sources
+the default tree of each of its targets needs. It also compares the trees with
+the code that sets the clocks, the STM32G474 startup headers and the pinned
+Pico SDK defaults, and fails when a HAL build file or example overrides a Pico
+SDK clock macro. `--esp-sdkconfig TARGET=PATH`, which may be repeated, also
+compares an ESP-IDF build's `sdkconfig` with the default tree of `TARGET`. The
+`esp-idf` gate stage passes the configurations of its fixture builds.
 
 ### `scripts/tooling_contract.py` and `scripts/repository_layout.py`
 

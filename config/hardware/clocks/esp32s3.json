@@ -1,0 +1,24 @@
+{
+  "$schema": "../clock_tree.schema.json",
+  "schemaVersion": 1,
+  "target": "esp32s3",
+  "trees": {
+    "default": {
+      "description": "ESP-IDF default: 40 MHz crystal, CPU at 160 MHz.",
+      "backend": "esp-idf",
+      "requiredSources": {
+        "xtal": {
+          "kind": "crystal",
+          "frequencyHz": 40000000
+        }
+      },
+      "frequenciesHz": {
+        "cpu": 160000000
+      },
+      "parameters": {
+        "cpuFreqMhz": 160,
+        "xtalFreqMhz": 40
+      }
+    }
+  }
+}

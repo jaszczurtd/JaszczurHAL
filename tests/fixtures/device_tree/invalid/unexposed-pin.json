@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "bindings": [
+    "../bindings/gpio-output.json"
+  ],
+  "nodes": {
+    "led": {
+      "compatible": "test,gpio-output"
+    }
+  },
+  "assemblies": {
+    "nucleo": {
+      "target": "stm32g474",
+      "board": "nucleo-g474re",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "board.statusLed"
+      },
+      "nodes": {
+        "led": {
+          "present": true,
+          "pins": {
+            "out": "PD0"
+          }
+        }
+      }
+    }
+  }
+}

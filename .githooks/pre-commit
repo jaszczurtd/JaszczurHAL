@@ -58,7 +58,8 @@ format_cpp_file() {
     case "$file" in
         src/hal/generated/jh_hal_features.h|\
         src/hal/generated/jh_board_registry.h|\
-        src/hal/generated/jh_board_fallback_config.h)
+        src/hal/generated/jh_board_fallback_config.h|\
+        src/hal/generated/jh_device_defaults.h)
             # Generated artifacts must remain byte-for-byte identical to the
             # generator output verified by the corresponding --check command.
             return 0

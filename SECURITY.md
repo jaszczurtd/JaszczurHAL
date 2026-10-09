@@ -60,5 +60,5 @@ when the scanner tools are installed:
 ```
 
 Known vulnerability assessments and patch decisions should be recorded in
-`security/vulnerability_log.md`, especially when a CVE exists but the affected
+[security/vulnerability_log.md](security/vulnerability_log.md), especially when a CVE exists but the affected
 code path is not compiled, not reachable, or locally patched.

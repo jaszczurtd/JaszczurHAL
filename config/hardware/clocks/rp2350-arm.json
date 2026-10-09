@@ -1,0 +1,32 @@
+{
+  "$schema": "../clock_tree.schema.json",
+  "schemaVersion": 1,
+  "target": "rp2350-arm",
+  "trees": {
+    "default": {
+      "description": "Pico SDK default for RP2350: XOSC 12 MHz, PLL_SYS 1500 MHz / 5 / 2, PLL_USB 1200 MHz / 5 / 5.",
+      "backend": "pico-sdk",
+      "requiredSources": {
+        "xosc": {
+          "kind": "crystal",
+          "frequencyHz": 12000000
+        }
+      },
+      "frequenciesHz": {
+        "ref": 12000000,
+        "sys": 150000000,
+        "peri": 150000000,
+        "usb": 48000000,
+        "adc": 48000000
+      },
+      "parameters": {
+        "pllSysVcoHz": 1500000000,
+        "pllSysPostdiv1": 5,
+        "pllSysPostdiv2": 2,
+        "pllUsbVcoHz": 1200000000,
+        "pllUsbPostdiv1": 5,
+        "pllUsbPostdiv2": 5
+      }
+    }
+  }
+}

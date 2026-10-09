@@ -1,0 +1,63 @@
+{
+  "$schema": "../../binding.schema.json",
+  "schemaVersion": 1,
+  "compatible": "pimoroni,pim730",
+  "description": "Pimoroni RM2 breakout (PIM730): Raspberry Pi Radio Module 2 with a CYW43439; BT_ON is bridged to WL_ON as delivered.",
+  "domain": "module",
+  "children": {
+    "radio": {
+      "compatible": "infineon,cyw43439",
+      "required": true
+    }
+  },
+  "signals": {
+    "wlOn": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "cs": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "data": {
+      "direction": "bidirectional",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "clock": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    }
+  },
+  "connections": {
+    "wlOn": {
+      "owner": "radio.wlOn",
+      "aliases": [
+        "radio.btOn"
+      ]
+    },
+    "cs": {
+      "owner": "radio.cs",
+      "aliases": []
+    },
+    "data": {
+      "owner": "radio.data",
+      "aliases": []
+    },
+    "clock": {
+      "owner": "radio.clock",
+      "aliases": []
+    }
+  }
+}

@@ -4,6 +4,7 @@
 
 #include "hal/core/hal_mutex_once.h"
 #include "hal/core/jh_handle_pool.h"
+#include "hal/generated/jh_device_defaults.h"
 #include "hal/radio/jh_lora_modem.h"
 #include "hal/radio/jh_lora_radio_internal.h"
 #include "hal/system/hal_board.h"
@@ -562,29 +563,83 @@ hal_lora_radio_config_from_board(hal_lora_radio_config_t *out_config) {
 #endif
 }
 
+/* The semtech,sx1262 type lists its enum values in the order of these HAL
+ * enums, so the generated positions convert directly. */
+static_assert(JH_ENUM_SEMTECH_SX1262_RF_SWITCH_MODE_NONE ==
+                      HAL_LORA_RF_SWITCH_NONE &&
+                  JH_ENUM_SEMTECH_SX1262_RF_SWITCH_MODE_DIO2 ==
+                      HAL_LORA_RF_SWITCH_DIO2 &&
+                  JH_ENUM_SEMTECH_SX1262_RF_SWITCH_MODE_SINGLE_GPIO ==
+                      HAL_LORA_RF_SWITCH_SINGLE_GPIO &&
+                  JH_ENUM_SEMTECH_SX1262_RF_SWITCH_MODE_DIO2_SINGLE_GPIO ==
+                      HAL_LORA_RF_SWITCH_DIO2_SINGLE_GPIO &&
+                  JH_ENUM_SEMTECH_SX1262_RF_SWITCH_MODE_DUAL_GPIO ==
+                      HAL_LORA_RF_SWITCH_DUAL_GPIO,
+              "sx1262 rfSwitchMode differs from hal_lora_rf_switch_mode_t");
+static_assert(JH_ENUM_SEMTECH_SX1262_REGULATOR_LDO == HAL_LORA_REGULATOR_LDO &&
+                  JH_ENUM_SEMTECH_SX1262_REGULATOR_DCDC ==
+                      HAL_LORA_REGULATOR_DCDC,
+              "sx1262 regulator differs from hal_lora_regulator_mode_t");
+static_assert(JH_ENUM_SEMTECH_SX1262_TCXO_CONTROL_NONE ==
+                      HAL_LORA_TCXO_CONTROL_NONE &&
+                  JH_ENUM_SEMTECH_SX1262_TCXO_CONTROL_DIO3 ==
+                      HAL_LORA_TCXO_CONTROL_DIO3,
+              "sx1262 tcxoControl differs from hal_lora_tcxo_control_t");
+static_assert(
+    JH_ENUM_SEMTECH_SX1262_TCXO_VOLTAGE_1V6 == HAL_LORA_TCXO_1V6 &&
+        JH_ENUM_SEMTECH_SX1262_TCXO_VOLTAGE_1V7 == HAL_LORA_TCXO_1V7 &&
+        JH_ENUM_SEMTECH_SX1262_TCXO_VOLTAGE_1V8 == HAL_LORA_TCXO_1V8 &&
+        JH_ENUM_SEMTECH_SX1262_TCXO_VOLTAGE_2V2 == HAL_LORA_TCXO_2V2 &&
+        JH_ENUM_SEMTECH_SX1262_TCXO_VOLTAGE_2V4 == HAL_LORA_TCXO_2V4 &&
+        JH_ENUM_SEMTECH_SX1262_TCXO_VOLTAGE_2V7 == HAL_LORA_TCXO_2V7 &&
+        JH_ENUM_SEMTECH_SX1262_TCXO_VOLTAGE_3V0 == HAL_LORA_TCXO_3V0 &&
+        JH_ENUM_SEMTECH_SX1262_TCXO_VOLTAGE_3V3 == HAL_LORA_TCXO_3V3,
+    "sx1262 tcxoVoltage differs from hal_lora_tcxo_voltage_t");
+
 hal_status_t hal_lora_sx126x_core1262_hf_defaults(
     hal_lora_sx126x_hardware_config_t *out_hardware) {
   if (out_hardware == NULL) {
     return HAL_EINVAL;
   }
+  /* Values of the waveshare,core1262-hf type in config/hardware/bindings. */
   memset(out_hardware, 0, sizeof(*out_hardware));
   out_hardware->reset_pin = HAL_LORA_PIN_NONE;
   out_hardware->dio1_pin = HAL_LORA_PIN_NONE;
   out_hardware->busy_pin = HAL_LORA_PIN_NONE;
-  out_hardware->rf_switch_mode = HAL_LORA_RF_SWITCH_DUAL_GPIO;
+  out_hardware->rf_switch_mode = static_cast<hal_lora_rf_switch_mode_t>(
+      JH_DEFAULT_WAVESHARE_CORE1262_HF_RADIO_RF_SWITCH_MODE);
   out_hardware->rf_switch_pin_a = HAL_LORA_PIN_NONE;
   out_hardware->rf_switch_pin_b = HAL_LORA_PIN_NONE;
-  out_hardware->rf_switch_rx_level_b = true;
-  out_hardware->rf_switch_tx_level_a = true;
-  out_hardware->regulator_mode = HAL_LORA_REGULATOR_DCDC;
-  out_hardware->tcxo_control = HAL_LORA_TCXO_CONTROL_DIO3;
-  out_hardware->tcxo_voltage = HAL_LORA_TCXO_1V8;
-  out_hardware->tcxo_startup_us = UINT32_C(5000);
-  out_hardware->min_frequency_hz = UINT32_C(850000000);
-  out_hardware->max_frequency_hz = UINT32_C(930000000);
-  out_hardware->max_spi_clock_hz = UINT32_C(18000000);
-  out_hardware->min_tx_power_dbm = -9;
-  out_hardware->max_tx_power_dbm = 22;
+  out_hardware->rf_switch_idle_level_a =
+      JH_DEFAULT_WAVESHARE_CORE1262_HF_RADIO_RF_SWITCH_IDLE_LEVEL_A != 0;
+  out_hardware->rf_switch_idle_level_b =
+      JH_DEFAULT_WAVESHARE_CORE1262_HF_RADIO_RF_SWITCH_IDLE_LEVEL_B != 0;
+  out_hardware->rf_switch_rx_level_a =
+      JH_DEFAULT_WAVESHARE_CORE1262_HF_RADIO_RF_SWITCH_RX_LEVEL_A != 0;
+  out_hardware->rf_switch_rx_level_b =
+      JH_DEFAULT_WAVESHARE_CORE1262_HF_RADIO_RF_SWITCH_RX_LEVEL_B != 0;
+  out_hardware->rf_switch_tx_level_a =
+      JH_DEFAULT_WAVESHARE_CORE1262_HF_RADIO_RF_SWITCH_TX_LEVEL_A != 0;
+  out_hardware->rf_switch_tx_level_b =
+      JH_DEFAULT_WAVESHARE_CORE1262_HF_RADIO_RF_SWITCH_TX_LEVEL_B != 0;
+  out_hardware->regulator_mode = static_cast<hal_lora_regulator_mode_t>(
+      JH_DEFAULT_WAVESHARE_CORE1262_HF_RADIO_REGULATOR);
+  out_hardware->tcxo_control = static_cast<hal_lora_tcxo_control_t>(
+      JH_DEFAULT_WAVESHARE_CORE1262_HF_RADIO_TCXO_CONTROL);
+  out_hardware->tcxo_voltage = static_cast<hal_lora_tcxo_voltage_t>(
+      JH_DEFAULT_WAVESHARE_CORE1262_HF_RADIO_TCXO_VOLTAGE);
+  out_hardware->tcxo_startup_us =
+      JH_DEFAULT_WAVESHARE_CORE1262_HF_RADIO_TCXO_STARTUP_US;
+  out_hardware->min_frequency_hz =
+      JH_DEFAULT_WAVESHARE_CORE1262_HF_RADIO_MIN_FREQUENCY_HZ;
+  out_hardware->max_frequency_hz =
+      JH_DEFAULT_WAVESHARE_CORE1262_HF_RADIO_MAX_FREQUENCY_HZ;
+  out_hardware->max_spi_clock_hz =
+      JH_DEFAULT_WAVESHARE_CORE1262_HF_RADIO_MAX_SPI_CLOCK_HZ;
+  out_hardware->min_tx_power_dbm =
+      JH_DEFAULT_WAVESHARE_CORE1262_HF_RADIO_MIN_TX_POWER_DBM;
+  out_hardware->max_tx_power_dbm =
+      JH_DEFAULT_WAVESHARE_CORE1262_HF_RADIO_MAX_TX_POWER_DBM;
   return HAL_OK;
 }
 

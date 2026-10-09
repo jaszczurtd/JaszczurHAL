@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "bindings": [
+    "../../bindings/gpio-output.json"
+  ],
+  "nodes": {
+    "led": {
+      "compatible": "test,gpio-output"
+    }
+  },
+  "assemblies": {
+    "pico": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "led"
+      },
+      "releaseReservations": [
+        "status-led"
+      ],
+      "nets": {
+        "led25": {
+          "endpoint": {
+            "domain": "soc-gpio",
+            "id": 25
+          },
+          "owner": "led.out"
+        }
+      },
+      "nodes": {
+        "led": {
+          "present": true,
+          "pins": {
+            "out": {
+              "net": "led25"
+            }
+          }
+        }
+      }
+    }
+  }
+}

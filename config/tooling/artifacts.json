@@ -11,6 +11,7 @@
     "featureCmake": "cmake/generated/jh_hal_features.cmake",
     "boardRegistryHeader": "src/hal/generated/jh_board_registry.h",
     "boardFallbackHeader": "src/hal/generated/jh_board_fallback_config.h",
-    "boardComponentsCmake": "cmake/generated/jh_board_components_registry.cmake"
+    "boardComponentsCmake": "cmake/generated/jh_board_components_registry.cmake",
+    "deviceDefaultsHeader": "src/hal/generated/jh_device_defaults.h"
   }
 }

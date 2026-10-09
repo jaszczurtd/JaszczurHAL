@@ -1,0 +1,11 @@
+{
+  "$schema": "../../binding.schema.json",
+  "schemaVersion": 1,
+  "compatible": "jaszczurhal,uart-device",
+  "description": "Generic device on a UART; the bus gives baud rate and frame.",
+  "domain": "uart",
+  "bus": {
+    "kind": "uart",
+    "required": true
+  }
+}

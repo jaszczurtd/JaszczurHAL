@@ -640,6 +640,11 @@ stage_esp_idf() {
             --output "${gamepad}" \
             --clean
 
+    info "Checking the ESP-IDF clock configuration against the clock registry..."
+    python3 "${SCRIPT_DIR}/scripts/clock_registry.py" \
+        --esp-sdkconfig "esp32s3=${phase3}/sdkconfig" \
+        --esp-sdkconfig "esp32=${gamepad}/sdkconfig"
+
     info "Building the ESP32-S3 all-features linkable library with pinned ESP-IDF..."
     run_esp_build "${LOG_ROOT}/jh_esp32s3_link_library.log" "${library}" \
         "${SCRIPT_DIR}/scripts/build_esp32_lib.sh" \

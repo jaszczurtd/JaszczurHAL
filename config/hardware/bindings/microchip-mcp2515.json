@@ -1,0 +1,55 @@
+{
+  "$schema": "../../binding.schema.json",
+  "schemaVersion": 1,
+  "compatible": "microchip,mcp2515",
+  "description": "Microchip MCP2515 stand-alone CAN controller on SPI.",
+  "domain": "can",
+  "bus": {
+    "kind": "spi",
+    "required": true,
+    "maximumFrequencyHz": 10000000
+  },
+  "signals": {
+    "cs": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "int": {
+      "direction": "input",
+      "required": false,
+      "domains": [
+        "soc-gpio"
+      ]
+    }
+  },
+  "properties": {
+    "oscillatorHz": {
+      "type": "integer",
+      "cType": "uint32",
+      "description": "Crystal or clock input of the controller.",
+      "unit": "Hz",
+      "default": 8000000,
+      "enum": [
+        8000000,
+        16000000,
+        20000000
+      ]
+    },
+    "bitrateHz": {
+      "type": "integer",
+      "cType": "uint32",
+      "description": "CAN bit rate.",
+      "unit": "Hz",
+      "default": 500000,
+      "minimum": 1,
+      "maximum": 1000000
+    }
+  },
+  "requiresFeatures": [
+    "HAL_ENABLE_CAN",
+    "HAL_ENABLE_MCP2515"
+  ]
+}

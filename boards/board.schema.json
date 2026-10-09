@@ -90,7 +90,8 @@
               "boot": { "enum": ["usb-serial-jtag-control-lines", "dtr-rts-io0"] }
             },
             "additionalProperties": false
-          }
+          },
+          "clockSources": { "$ref": "../config/hardware/clock_sources.schema.json" }
         }
       }
     }

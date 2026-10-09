@@ -140,6 +140,18 @@ require(
     in pre_commit_hook,
     "pre-commit hook does not block stale generated artifacts with repair guidance",
 )
+# clang-format would rewrap generated headers and make the committed bytes
+# differ from the generator output.
+formatter_skips = shell_function_body(pre_commit_hook, "format_cpp_file")
+unformatted = sorted(
+    path.relative_to(ROOT).as_posix()
+    for path in (ROOT / "src" / "hal" / "generated").glob("*.h")
+    if path.relative_to(ROOT).as_posix() not in formatter_skips
+)
+require(
+    not unformatted,
+    f"pre-commit hook would clang-format generated headers: {unformatted}",
+)
 
 
 def hook_scenarios(work: Path) -> None:

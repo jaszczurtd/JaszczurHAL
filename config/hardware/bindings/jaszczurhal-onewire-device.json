@@ -1,0 +1,16 @@
+{
+  "$schema": "../../binding.schema.json",
+  "schemaVersion": 1,
+  "compatible": "jaszczurhal,onewire-device",
+  "description": "Device on a 1-Wire data line, such as a DS18B20 sensor.",
+  "domain": "gpio",
+  "signals": {
+    "data": {
+      "direction": "bidirectional",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    }
+  }
+}

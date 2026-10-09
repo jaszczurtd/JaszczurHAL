@@ -1,0 +1,11 @@
+{
+  "$schema": "../../binding.schema.json",
+  "schemaVersion": 1,
+  "compatible": "jaszczurhal,i2c-device",
+  "description": "Generic device on an I2C bus; the assembly gives its address.",
+  "domain": "i2c",
+  "bus": {
+    "kind": "i2c",
+    "required": true
+  }
+}

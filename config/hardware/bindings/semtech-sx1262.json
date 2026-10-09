@@ -1,0 +1,192 @@
+{
+  "$schema": "../../binding.schema.json",
+  "schemaVersion": 1,
+  "compatible": "semtech,sx1262",
+  "description": "Semtech SX1262 sub-GHz LoRa transceiver on SPI.",
+  "domain": "radio",
+  "bus": {
+    "kind": "spi",
+    "required": true
+  },
+  "signals": {
+    "cs": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "reset": {
+      "direction": "output",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "busy": {
+      "direction": "input",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "dio1": {
+      "direction": "input",
+      "required": true,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "rfSwitchA": {
+      "direction": "output",
+      "required": false,
+      "domains": [
+        "soc-gpio"
+      ]
+    },
+    "rfSwitchB": {
+      "direction": "output",
+      "required": false,
+      "domains": [
+        "soc-gpio"
+      ]
+    }
+  },
+  "properties": {
+    "rfSwitchMode": {
+      "type": "string",
+      "cType": "string",
+      "description": "How the antenna switch is driven.",
+      "default": "none",
+      "enum": [
+        "none",
+        "dio2",
+        "single-gpio",
+        "dio2-single-gpio",
+        "dual-gpio"
+      ]
+    },
+    "rfSwitchIdleLevelA": {
+      "type": "boolean",
+      "cType": "bool",
+      "description": "RF switch line A level while idle.",
+      "default": false
+    },
+    "rfSwitchIdleLevelB": {
+      "type": "boolean",
+      "cType": "bool",
+      "description": "RF switch line B level while idle.",
+      "default": false
+    },
+    "rfSwitchRxLevelA": {
+      "type": "boolean",
+      "cType": "bool",
+      "description": "RF switch line A level while receiving.",
+      "default": false
+    },
+    "rfSwitchRxLevelB": {
+      "type": "boolean",
+      "cType": "bool",
+      "description": "RF switch line B level while receiving.",
+      "default": false
+    },
+    "rfSwitchTxLevelA": {
+      "type": "boolean",
+      "cType": "bool",
+      "description": "RF switch line A level while transmitting.",
+      "default": false
+    },
+    "rfSwitchTxLevelB": {
+      "type": "boolean",
+      "cType": "bool",
+      "description": "RF switch line B level while transmitting.",
+      "default": false
+    },
+    "regulator": {
+      "type": "string",
+      "cType": "string",
+      "description": "Power regulator mode.",
+      "default": "ldo",
+      "enum": [
+        "ldo",
+        "dcdc"
+      ]
+    },
+    "tcxoControl": {
+      "type": "string",
+      "cType": "string",
+      "description": "How the TCXO is powered.",
+      "default": "none",
+      "enum": [
+        "none",
+        "dio3"
+      ]
+    },
+    "tcxoVoltage": {
+      "type": "string",
+      "cType": "string",
+      "description": "TCXO supply voltage set through DIO3.",
+      "enum": [
+        "1v6",
+        "1v7",
+        "1v8",
+        "2v2",
+        "2v4",
+        "2v7",
+        "3v0",
+        "3v3"
+      ]
+    },
+    "tcxoStartupUs": {
+      "type": "integer",
+      "cType": "uint32",
+      "description": "TCXO start-up time.",
+      "unit": "us",
+      "minimum": 0
+    },
+    "minFrequencyHz": {
+      "type": "integer",
+      "cType": "uint32",
+      "description": "Lowest supported RF frequency.",
+      "unit": "Hz",
+      "default": 150000000,
+      "minimum": 1
+    },
+    "maxFrequencyHz": {
+      "type": "integer",
+      "cType": "uint32",
+      "description": "Highest supported RF frequency.",
+      "unit": "Hz",
+      "default": 960000000,
+      "minimum": 1
+    },
+    "maxSpiClockHz": {
+      "type": "integer",
+      "cType": "uint32",
+      "description": "Highest SPI clock of the module.",
+      "unit": "Hz",
+      "minimum": 1
+    },
+    "minTxPowerDbm": {
+      "type": "integer",
+      "cType": "int8",
+      "description": "Lowest transmit power.",
+      "unit": "dBm",
+      "default": -9,
+      "minimum": -128,
+      "maximum": 127
+    },
+    "maxTxPowerDbm": {
+      "type": "integer",
+      "cType": "int8",
+      "description": "Highest transmit power.",
+      "unit": "dBm",
+      "default": 22,
+      "minimum": -128,
+      "maximum": 127
+    }
+  },
+  "requiresFeatures": [
+    "HAL_ENABLE_SX126X"
+  ]
+}

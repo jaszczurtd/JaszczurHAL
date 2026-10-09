@@ -1,0 +1,36 @@
+{
+  "$schema": "../../binding.schema.json",
+  "schemaVersion": 1,
+  "compatible": "jaszczurhal,gpio-input",
+  "description": "Generic digital input, such as a button or logic-level sensor output.",
+  "domain": "gpio",
+  "signals": {
+    "in": {
+      "direction": "input",
+      "required": true,
+      "domains": [
+        "soc-gpio",
+        "device-pin"
+      ]
+    }
+  },
+  "properties": {
+    "activeLow": {
+      "type": "boolean",
+      "cType": "bool",
+      "description": "The line is active when driven or read low.",
+      "default": false
+    },
+    "pull": {
+      "type": "string",
+      "cType": "string",
+      "description": "Pull resistor the MCU must enable; external resistors use none.",
+      "default": "none",
+      "enum": [
+        "none",
+        "up",
+        "down"
+      ]
+    }
+  }
+}
