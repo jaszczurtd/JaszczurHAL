@@ -44,6 +44,8 @@
   "provides": [
     "cyw43",
     "external-radio-frontend",
-    "bluetooth-controller"
+    "bluetooth-controller",
+    "bluetooth-le-controller",
+    "bluetooth-classic-controller"
   ]
 }

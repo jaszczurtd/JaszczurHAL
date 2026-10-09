@@ -22,39 +22,6 @@ SCRIPT = ROOT / "scripts" / "generate_device_defaults.py"
 HEADER = ROOT / "src" / "hal" / "generated" / "jh_device_defaults.h"
 
 
-class LiteralTests(unittest.TestCase):
-    """Spelling fixed by the literal table of the device tree specification."""
-
-    def test_integer_and_bool_literals(self) -> None:
-        cases = [
-            ("bool", True, "1"), ("bool", False, "0"),
-            ("uint8", 255, "255U"), ("uint32", 2.0, "2U"),
-            ("uint64", 2**64 - 1, "18446744073709551615ULL"),
-            ("int8", -9, "(-9)"), ("int16", 7, "7"),
-            ("int32", -2**31, "(-2147483647 - 1)"),
-            ("int64", -5, "(-5LL)"), ("int64", -2**63, "(-9223372036854775807LL - 1LL)"),
-        ]
-        for c_type, value, expected in cases:
-            with self.subTest(c_type=c_type, value=value):
-                self.assertEqual(expected, defaults.c_literal(c_type, value))
-
-    def test_strings_are_escaped_utf8(self) -> None:
-        # Octal escapes end after three digits; \xb5 would also take the A.
-        # CTest test_device_defaults_literals_{c,cpp} compile such literals.
-        self.assertEqual('"a\\"b\\\\c\\012\\302\\265A\\?"',
-                         defaults.c_literal("string", 'a"b\\c\nµA?'))
-
-    def test_floating_defaults_are_refused(self) -> None:
-        with self.assertRaises(defaults.DefaultsError):
-            defaults.c_literal("float", 0.5)
-
-    def test_tokens_follow_the_specification(self) -> None:
-        self.assertEqual("RADIO_MODULE_RADIO", defaults.macro_token("radioModule.radio"))
-        self.assertEqual(defaults.macro_token("fooBar"), defaults.macro_token("fooBAR"))
-        self.assertEqual("WAVESHARE_CORE1262_HF", defaults.macro_token("waveshare,core1262-hf"))
-        self.assertEqual("1V8", defaults.macro_token("1v8"))
-
-
 class HeaderTests(unittest.TestCase):
     def test_header_holds_the_module_values(self) -> None:
         text = HEADER.read_text(encoding="utf-8")
@@ -119,13 +86,34 @@ class CollisionTests(HalTypeCopies):
                                     "JH_DEFAULT_WAVESHARE_CORE1262_HF_RADIO_MAX_TX_POWER_DBM"):
             self.render()
 
-    def test_floating_default_in_a_type_is_refused(self) -> None:
+
+class FloatingDefaultTests(HalTypeCopies):
+    """Float and double defaults are rounded once from the decimal in the type."""
+
+    bindings = hardware_model.HAL_BINDINGS
+
+    def render_with(self, c_type: str, token: str) -> str:
         def add(data: dict) -> None:
-            data["properties"]["gain"] = {"type": "number", "cType": "float",
+            data["properties"]["gain"] = {"type": "number", "cType": c_type,
                                           "description": "Gain.", "unit": "1", "default": 0.5}
         self.change("jaszczurhal-pwm-output.json", add)
-        with self.assertRaises(defaults.DefaultsError):
-            self.render()
+        path = self.work / "jaszczurhal-pwm-output.json"
+        path.write_text(path.read_text(encoding="utf-8").replace("0.5", token), encoding="utf-8")
+        return defaults.render(hardware_model.load_hal_catalogue(self.work))
+
+    def test_float_and_double_defaults_use_the_literal_table(self) -> None:
+        macro = "#define JH_DEFAULT_JASZCZURHAL_PWM_OUTPUT_GAIN "
+        for c_type, token, literal in (
+                ("float", "0.22", "2.19999999e-01f"),
+                ("double", "0.22", "2.2000000000000000e-01"),
+                # Just above a binary32 halfway point; rounding through binary64 would lose it.
+                ("float", "1.0000000596046447753906250000000000000000001", "1.00000012e+00f")):
+            with self.subTest(c_type=c_type, token=token):
+                self.assertIn(macro + literal + "\n", self.render_with(c_type, token))
+
+    def test_float_default_rounding_to_zero_is_refused(self) -> None:
+        with self.assertRaisesRegex(defaults.DefaultsError, "gain: 1e-50 rounds to zero in float"):
+            self.render_with("float", "1e-50")
 
 
 if __name__ == "__main__":

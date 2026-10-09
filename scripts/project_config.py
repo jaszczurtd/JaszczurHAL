@@ -872,20 +872,29 @@ def _scan(path: Path, scan: _Scan | None = None, seen: set[Path] | None = None, 
 
 
 def read_project_config(
-    header: Path | None, predefined: Iterable[str] = ()
+    header: Path | None, predefined: Iterable[str] = (), preinclude: Path | None = None
 ) -> ProjectConfig:
     """Evaluate ``header`` with the given -D definitions (``NAME`` or
-    ``NAME=VALUE``). A missing header is an empty configuration."""
+    ``NAME=VALUE``). ``preinclude`` is read first, as the hook loads the
+    generated jh_hardware.h before the project header. A missing header is an
+    empty configuration."""
     macros = predefined_macros(predefined)
+    early = _scan(preinclude).defined if preinclude is not None else set()
     if header is None or not header.is_file():
-        return ProjectConfig(macros, (), ())
+        if preinclude is None:
+            return ProjectConfig(macros, (), ())
+        reader = _Reader(macros, early | set(macros))
+        reader.read(preinclude)
+        return ProjectConfig(reader.macros, (), tuple(reader.files), reader.error)
     scan = _scan(header)
     variants = parse_variants(scan.declarations.get(VARIANTS_MACRO))
     targets = parse_targets(scan.declarations.get(TARGETS_MACRO))
     switches = {
         item.split("=", 1)[0] for variant in variants for item in variant.definitions
     }
-    reader = _Reader(macros, scan.defined | set(macros) | set(TARGET_SELECTORS) | switches)
+    reader = _Reader(macros, scan.defined | early | set(macros) | set(TARGET_SELECTORS) | switches)
+    if preinclude is not None:
+        reader.read(preinclude)
     reader.read(header)
     return ProjectConfig(
         reader.macros,
@@ -981,11 +990,34 @@ def project_target_ids(config: ProjectConfig, targets: dict[str, TargetFacts]) -
     return [by_selector[selector] for selector in config.targets if selector in by_selector]
 
 
+def macro_directives(path: Path) -> list[tuple[int, str, str]]:
+    """(line, "define" or "undef", macro) of every directive of one file,
+    active or not."""
+    if not path.is_file():
+        return []
+    found = []
+    for number, text in preprocessor_logical_lines(path.read_text(encoding="utf-8")):
+        match = _DIRECTIVE.match(text)
+        if match is not None and match.group(1) in ("define", "undef"):
+            named = _DEFINE.match(match.group(2))
+            if named is not None:
+                found.append((number, match.group(1), named.group(1)))
+    return found
+
+
+def target_declarations(header: Path) -> list[int]:
+    """Lines defining JH_PROJECT_TARGETS, active or not; a device tree takes
+    the targets from its assemblies, so any definition is rejected there."""
+    return [line for line, kind, name in macro_directives(header)
+            if kind == "define" and name == TARGETS_MACRO]
+
+
 def evaluate_build(
     config_dir: Path | None,
     target: TargetFacts,
     variant_id: str | None = None,
     extra_definitions: Sequence[str] = (),
+    hardware_header: Path | None = None,
 ) -> BuildConfig:
     """Evaluate ``config_dir/hal_project_config.h`` for one build.
 
@@ -996,7 +1028,7 @@ def evaluate_build(
     """
     header = None if config_dir is None else config_dir / HEADER_NAME
     selector = [target.selector] if target.selector else []
-    declarations = read_project_config(header, selector)
+    declarations = read_project_config(header, selector, hardware_header)
     if declarations.targets and target.selector not in declarations.targets:
         declared = ", ".join(declarations.targets)
         raise ProjectConfigError(
@@ -1015,7 +1047,7 @@ def evaluate_build(
         variant = matches[0]
     definitions = (*extra_definitions, *(variant.definitions if variant else ()))
     config = read_project_config(
-        header, [*selector, *target.required_features, *definitions]
+        header, [*selector, *target.required_features, *definitions], hardware_header
     )
     build = BuildConfig(header, target, variant, tuple(extra_definitions), config)
     if config.error is not None:

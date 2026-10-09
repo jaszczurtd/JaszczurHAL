@@ -1,0 +1,153 @@
+{
+  "schemaVersion": 1,
+  "nodes": {
+    "lora": {
+      "compatible": "waveshare,core1262-hf"
+    },
+    "can": {
+      "compatible": "microchip,mcp2515"
+    },
+    "io": {
+      "compatible": "nxp,pcf8574"
+    },
+    "serial": {
+      "compatible": "jaszczurhal,uart-device"
+    },
+    "lamp": {
+      "compatible": "jaszczurhal,gpio-output",
+      "properties": {
+        "activeLow": true
+      }
+    }
+  },
+  "assemblies": {
+    "pico": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "board.statusLed"
+      },
+      "buses": {
+        "radio": {
+          "kind": "spi",
+          "index": 1,
+          "frequencyHz": 8000000,
+          "pins": {
+            "sck": 10,
+            "mosi": 11,
+            "miso": 12
+          }
+        },
+        "can": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 10000000,
+          "pins": {
+            "sck": 2,
+            "mosi": 3,
+            "miso": 4
+          }
+        },
+        "sensors": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": {
+            "sda": 20,
+            "scl": 21
+          }
+        },
+        "console": {
+          "kind": "uart",
+          "index": 1,
+          "baudRate": 115200,
+          "frame": {
+            "dataBits": 8,
+            "parity": "even",
+            "stopBits": 1
+          },
+          "pins": {
+            "tx": 8,
+            "rx": 9
+          }
+        }
+      },
+      "nodes": {
+        "lora": {
+          "present": true,
+          "pins": {
+            "cs": 13,
+            "reset": 14,
+            "busy": 15,
+            "dio1": 16,
+            "rxen": 17,
+            "txen": 18
+          }
+        },
+        "lora.radio": {
+          "bus": "radio"
+        },
+        "can": {
+          "present": true,
+          "bus": "can",
+          "pins": {
+            "cs": 5,
+            "int": 6
+          }
+        },
+        "io": {
+          "present": true,
+          "bus": "sensors",
+          "address": 32,
+          "pins": {
+            "int": null
+          }
+        },
+        "serial": {
+          "present": true,
+          "bus": "console"
+        },
+        "lamp": {
+          "present": true,
+          "pins": {
+            "out": {
+              "domain": "device-pin",
+              "node": "io",
+              "index": 3
+            }
+          }
+        }
+      }
+    },
+    "lora-lf": {
+      "target": "rp2040",
+      "board": "rp2040-lora-lf",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "board.statusLed"
+      },
+      "nodes": {
+        "lora": {
+          "present": false
+        },
+        "can": {
+          "present": false
+        },
+        "io": {
+          "present": false
+        },
+        "serial": {
+          "present": false
+        },
+        "lamp": {
+          "present": false
+        }
+      }
+    }
+  }
+}

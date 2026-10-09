@@ -39,6 +39,21 @@ class InputError(ValueError):
     """Input JSON that the specification rejects before schema validation."""
 
 
+class JsonNumber(float):
+    """A JSON number with a fraction or exponent, keeping its source token so
+    a float can be rounded once from the exact decimal value."""
+
+    __slots__ = ("token",)
+
+    def __new__(cls, token: str) -> "JsonNumber":
+        self = super().__new__(cls, token)
+        self.token = token
+        return self
+
+    def __reduce__(self) -> tuple:
+        return (JsonNumber, (self.token,))
+
+
 def pointer_join(base: str, token: Any) -> str:
     text = str(token).replace("~", "~0").replace("/", "~1")
     return f"{base}/{text}"
@@ -55,7 +70,7 @@ def pointer_key(pointer: str) -> tuple:
 def load_json(path: Path) -> Any:
     """Read UTF-8 JSON with unique keys, finite numbers and paired surrogates
     only. A decimal number must keep its magnitude in binary64: one that would
-    become infinite or zero fails instead."""
+    become infinite or zero fails instead. It is read as a JsonNumber."""
 
     def pairs(items: list[tuple[str, Any]]) -> dict[str, Any]:
         result: dict[str, Any] = {}
@@ -68,8 +83,8 @@ def load_json(path: Path) -> Any:
     def constant(name: str) -> Any:
         raise InputError(f"{path}: non-finite number {name}")
 
-    def number(token: str) -> float:
-        value = float(token)
+    def number(token: str) -> JsonNumber:
+        value = JsonNumber(token)
         if not math.isfinite(value) or (value == 0.0 and Decimal(token) != 0):
             raise InputError(f"{path}: number {token} is outside the binary64 range")
         return value

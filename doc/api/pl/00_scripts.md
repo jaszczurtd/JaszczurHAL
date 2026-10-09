@@ -825,11 +825,29 @@ w typie. Nagłówek definiuje:
 Helpery HAL, np. `hal_lora_sx126x_core1262_hf_defaults()`
 i `hal_can_default_config()`, czytają te makra, a `static_assert` pilnuje, żeby
 enumy HAL miały tę samą kolejność co typ. Literały mają zapis z tabeli formatu
-drzewa urządzeń. Gdy dwie nazwy po zamianie na token makra stają się
-identyczne, generator kończy się błędem zamiast zmieniać nazwę. Wartości
-domyślne typu float i double są na razie odrzucane. `--write` odświeża
-nagłówek, a `--check` zgłasza błąd, gdy go brakuje albo jest nieaktualny;
+drzewa urządzeń i pochodzą z `scripts/hardware_literals.py`. Wartość
+domyślna float lub double jest zaokrąglana raz, z liczby dziesiętnej zapisanej
+w typie; przepełnienie albo zaokrąglenie do zera kończy generator błędem. Gdy
+dwie nazwy po zamianie na token makra stają się identyczne, generator kończy
+się błędem zamiast zmieniać nazwę. `--write` odświeża nagłówek, a `--check`
+zgłasza błąd, gdy go brakuje albo jest nieaktualny;
 oba tryby uruchamia `sync_generated.py`.
+
+### `scripts/generate_hardware_config.py`
+
+Rozwiązuje `device_tree.json` z katalogu konfiguracji do sprzętu jednego
+montażu, według [formatu drzewa urządzeń](../../pl/device_tree_format.md).
+`list --config-dir DIR` wypisuje montaże jako JSON. `resolve` wybiera montaż
+(`--assembly` albo `--target`, gdy pasuje jeden montaż) i zapisuje
+`jh_hardware.h` oraz `jh_hardware_resolved.json`. `finalize` czyta ten model
+i odrzuca go, gdy któreś wejście zmieniło się od `resolve` albo nagłówek nie
+jest tym, który daje model. Potem odczytuje
+`hal_project_config.h` po `jh_hardware.h`, z `--variant` i `--define`,
+sprawdza, czy żądane funkcje mają swój sprzęt, i zapisuje `jh_board_config.h`,
+`jh_hardware_config.cmake`, `jh_hardware_config.json`, sygnaturę linkowania
+oraz `generation.d`. Nieudane polecenie wypisuje jedną diagnostykę (kod, plik,
+wskaźnik JSON) i usuwa wyniki, które miało zapisać. Wyniki muszą leżeć
+w katalogu `.build`. Build jeszcze nie wywołuje generatora.
 
 ### `scripts/clock_registry.py`
 

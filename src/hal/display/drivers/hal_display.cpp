@@ -854,9 +854,38 @@ static bool fill_round_rect_unlocked(int x, int y, int w, int h, int r,
 /* ---- Init / control ------------------------------------------------------ */
 
 #ifdef HAL_ENABLE_TFT
-hal_status_t hal_display_init(uint8_t cs, uint8_t dc, uint8_t rst) {
+#if defined(HAL_DISPLAY_ILI9341)
+static hal_status_t tft_init_ili9341(const jh_ili9341_config_t *config) {
   DisplayLock guard;
   s_backend = DISPLAY_BACKEND_TFT;
+  s_tft_ready = jh_ili9341_init(&s_tft, config);
+  if (!s_tft_ready) {
+    hal_derr("hal_display_init: ILI9341 init failed");
+  }
+  s_width = 0;
+  s_height = 0;
+  return s_tft_ready ? HAL_OK : HAL_EIO;
+}
+#endif
+
+hal_status_t
+jh_hal_display_init_ili9341(const hal_display_ili9341_config_t *config) {
+#if defined(HAL_DISPLAY_ILI9341)
+  jh_ili9341_config_t driver = {};
+  driver.bus = config->bus;
+  driver.cs_pin = config->cs_pin;
+  driver.dc_pin = config->dc_pin;
+  driver.rst_pin = config->rst_pin;
+  driver.clock_hz =
+      config->clock_hz != 0u ? config->clock_hz : JH_ILI9341_SPI_DEFAULT_HZ;
+  return tft_init_ili9341(&driver);
+#else
+  (void)config;
+  return HAL_EUNSUPPORTED;
+#endif
+}
+
+hal_status_t hal_display_init(uint8_t cs, uint8_t dc, uint8_t rst) {
 #if defined(HAL_DISPLAY_ILI9341)
   jh_ili9341_config_t config = {};
   config.bus = 0u;
@@ -864,11 +893,10 @@ hal_status_t hal_display_init(uint8_t cs, uint8_t dc, uint8_t rst) {
   config.dc_pin = dc == 0xFFu ? -1 : (int16_t)dc;
   config.rst_pin = rst == 0xFFu ? -1 : (int16_t)rst;
   config.clock_hz = JH_ILI9341_SPI_DEFAULT_HZ;
-  s_tft_ready = jh_ili9341_init(&s_tft, &config);
-  if (!s_tft_ready) {
-    hal_derr("hal_display_init: ILI9341 init failed");
-  }
+  return tft_init_ili9341(&config);
 #else
+  DisplayLock guard;
+  s_backend = DISPLAY_BACKEND_TFT;
   memset(&s_tft, 0, sizeof(s_tft));
   memset(&s_tft_config, 0, sizeof(s_tft_config));
   s_tft_config.bus = 0u;
@@ -880,12 +908,8 @@ hal_status_t hal_display_init(uint8_t cs, uint8_t dc, uint8_t rst) {
   s_tft_config.st7735_tab = JH_ST7735_TAB_BLACKTAB;
   s_tft_pins_configured = true;
   s_tft_ready = false;
-#endif
   s_width = 0;
   s_height = 0;
-#if defined(HAL_DISPLAY_ILI9341)
-  return s_tft_ready ? HAL_OK : HAL_EIO;
-#else
   return HAL_OK;
 #endif
 }

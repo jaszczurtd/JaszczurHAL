@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
-import math
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -20,6 +19,7 @@ from typing import Any
 import unicodedata
 
 import generate_hal_features
+from hardware_literals import LiteralError, exact_value, ieee_value, integer_value
 import hardware_schema
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -40,12 +40,20 @@ C_TYPES = {
 class HardwareError(ValueError):
     """A rejected input, reported as code, source and JSON Pointer."""
 
-    def __init__(self, code: str, source: Path | str, pointer: str, message: str) -> None:
-        super().__init__(f"[{code}] {source}:{pointer or '/'}: {message}")
+    def __init__(self, code: str, source: Path | str, pointer: str, message: str, *,
+                 related: tuple[str, ...] = (), line: int | None = None,
+                 argument: str | None = None) -> None:
+        where = f"{source}:{line}" if line is not None else f"{source}:{pointer or '/'}"
+        extra = f" (earlier: {', '.join(related)})" if related else ""
+        extra += f" (argument {argument})" if argument else ""
+        super().__init__(f"[{code}] {where}: {message}{extra}")
         self.code = code
         self.source = str(source)
         self.pointer = pointer
         self.detail = message
+        self.related = tuple(related)
+        self.line = line
+        self.argument = argument
 
 
 @dataclass
@@ -145,20 +153,20 @@ def load_catalogue(device_tree: Path, entries: list[str],
 
 
 def _value_fits(value: Any, c_type: str) -> bool:
+    """The exact value fits the type; a float or double must round to a
+    finite, nonzero (unless zero) value of that format."""
     json_type, low, high = C_TYPES[c_type]
     if json_type == "boolean":
         return isinstance(value, bool)
     if json_type == "string":
         return isinstance(value, str)
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    try:
+        if json_type == "integer":
+            return low <= integer_value(value) <= high
+        ieee_value(c_type, value)
+    except LiteralError:
         return False
-    if json_type == "integer":
-        if isinstance(value, float) and not value.is_integer():
-            return False
-        return low <= int(value) <= high
-    if not math.isfinite(value):
-        return False
-    return c_type == "double" or abs(value) <= 3.4028234663852886e38
+    return True
 
 
 def check_property_definitions(binding: Binding) -> None:
@@ -194,9 +202,9 @@ def check_property_value(binding: Binding, definition: dict, value: Any, pointer
         raise HardwareError("JH-HW-PROPERTY", source, pointer, f"one of {definition['enum']}")
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return
-    if "minimum" in definition and value < definition["minimum"]:
+    if "minimum" in definition and exact_value(value) < exact_value(definition["minimum"]):
         raise HardwareError("JH-HW-PROPERTY", source, pointer, f"at least {definition['minimum']}")
-    if "maximum" in definition and value > definition["maximum"]:
+    if "maximum" in definition and exact_value(value) > exact_value(definition["maximum"]):
         raise HardwareError("JH-HW-PROPERTY", source, pointer, f"at most {definition['maximum']}")
 
 

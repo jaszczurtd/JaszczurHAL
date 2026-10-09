@@ -729,6 +729,18 @@ typedef enum {
 // For ILI9341: also calls begin(). For other drivers: init is deferred to configure().
 hal_status_t hal_display_init(uint8_t cs, uint8_t dc, uint8_t rst);
 
+// ILI9341 on a chosen SPI bus and clock. Pins use -1 for "not connected";
+// clock_hz 0 keeps JH_ILI9341_SPI_DEFAULT_HZ. Open the bus with hal_spi_init()
+// first. HAL_EUNSUPPORTED when the build selects another TFT driver.
+typedef struct {
+    uint8_t bus;       // 0 or 1
+    int16_t cs_pin;    // -1 when CS is tied low
+    int16_t dc_pin;    // required
+    int16_t rst_pin;   // -1 resets by command
+    uint32_t clock_hz;
+} hal_display_ili9341_config_t;
+hal_status_t hal_display_init_ili9341_ex(const hal_display_ili9341_config_t *config);
+
 // Construct and initialise an SSD1306 OLED connected via I2C.
 bool hal_display_init_ssd1306_i2c(int width, int height, uint8_t i2c_addr,
                                   int8_t rst_pin, uint8_t switchvcc,

@@ -66,6 +66,12 @@ hal_status_t hal_display_init(uint8_t cs, uint8_t dc, uint8_t rst) {
   (void)rst;
   return HAL_OK;
 }
+
+hal_status_t
+jh_hal_display_init_ili9341(const hal_display_ili9341_config_t *config) {
+  (void)config;
+  return HAL_OK;
+}
 #endif /* HAL_ENABLE_TFT */
 #ifdef HAL_ENABLE_SSD1306
 hal_status_t

@@ -758,6 +758,19 @@ typedef enum {
 // Dla ILI9341: wywołuje też begin(). Dla innych driverów: inicjalizacja jest odłożona do configure().
 hal_status_t hal_display_init(uint8_t cs, uint8_t dc, uint8_t rst);
 
+// ILI9341 na wybranej magistrali SPI i z wybranym zegarem. Pin -1 oznacza
+// brak połączenia; clock_hz 0 zostawia JH_ILI9341_SPI_DEFAULT_HZ. Magistralę
+// otwiera wcześniej hal_spi_init(). HAL_EUNSUPPORTED, gdy build wybiera inny
+// driver TFT.
+typedef struct {
+    uint8_t bus;       // 0 albo 1
+    int16_t cs_pin;    // -1, gdy CS jest na stałe w stanie niskim
+    int16_t dc_pin;    // wymagany
+    int16_t rst_pin;   // -1 resetuje panel komendą
+    uint32_t clock_hz;
+} hal_display_ili9341_config_t;
+hal_status_t hal_display_init_ili9341_ex(const hal_display_ili9341_config_t *config);
+
 // Tworzy i inicjalizuje OLED SSD1306 podłączony przez I2C.
 bool hal_display_init_ssd1306_i2c(int width, int height, uint8_t i2c_addr,
                                   int8_t rst_pin, uint8_t switchvcc,
