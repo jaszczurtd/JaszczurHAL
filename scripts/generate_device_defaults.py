@@ -15,11 +15,11 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-import re
 import sys
 from typing import Any
 
 from codegen_support import check_generated_outputs, write_generated_outputs
+from hardware_literals import LiteralError, c_literal, macro_token
 import hardware_model
 from repository_layout import DEVICE_DEFAULTS_HEADER_OUTPUT as OUTPUT
 
@@ -28,49 +28,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 class DefaultsError(ValueError):
     """A default the header cannot express."""
-
-
-def macro_token(name: str) -> str:
-    """Token conversion of the device tree specification."""
-    text = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", name)
-    text = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", text)
-    text = re.sub(r"[^A-Za-z0-9]+", "_", text)
-    return re.sub(r"_+", "_", text).strip("_").upper()
-
-
-def c_string(value: str) -> str:
-    """UTF-8 C literal. A byte outside printable ASCII becomes a three-digit
-    octal escape, which cannot take in the next character the way \\x takes
-    a following hex digit; '?' is escaped so no trigraph forms."""
-    escaped = []
-    for byte in value.encode("utf-8"):
-        char = chr(byte)
-        if char in '"\\?':
-            escaped.append("\\" + char)
-        elif 0x20 <= byte < 0x7F:
-            escaped.append(char)
-        else:
-            escaped.append(f"\\{byte:03o}")
-    return '"' + "".join(escaped) + '"'
-
-
-def c_literal(c_type: str, value: Any) -> str:
-    """C spelling of one value of a non-enum property."""
-    if c_type == "bool":
-        return "1" if value else "0"
-    if c_type == "string":
-        return c_string(value)
-    if c_type in ("float", "double"):
-        raise DefaultsError("floating-point defaults need the exact renderer of Stage C")
-    value = int(value)
-    if c_type.startswith("uint"):
-        return f"{value}{'ULL' if c_type == 'uint64' else 'U'}"
-    if c_type == "int32" and value == -2**31:
-        return "(-2147483647 - 1)"
-    if c_type == "int64" and value == -2**63:
-        return "(-9223372036854775807LL - 1LL)"
-    text = f"{value}{'LL' if c_type == 'int64' else ''}"
-    return f"({text})" if value < 0 else text
 
 
 def is_string_enum(definition: dict[str, Any]) -> bool:
@@ -98,8 +55,11 @@ def render(catalogue: hardware_model.Catalogue) -> str:
         properties = catalogue.bindings[compatible].data.get("properties", {})
         for prop, value in sorted(values.items()):
             definition = properties[prop]
-            literal = (enum_macro(compatible, prop, value) if is_string_enum(definition)
-                       else c_literal(definition["cType"], value))
+            try:
+                literal = (enum_macro(compatible, prop, value) if is_string_enum(definition)
+                           else c_literal(definition["cType"], value))
+            except LiteralError as error:
+                raise DefaultsError(f"{origin}.{prop}: {error}") from error
             define(f"{prefix}_{macro_token(prop)}", literal, f"{origin}.{prop}")
 
     for compatible, binding in sorted(catalogue.bindings.items()):

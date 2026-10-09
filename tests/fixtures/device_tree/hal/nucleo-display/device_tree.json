@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "nodes": {
+    "wifi": {
+      "compatible": "pimoroni,pim730"
+    },
+    "display": {
+      "compatible": "ilitek,ili9341"
+    }
+  },
+  "assemblies": {
+    "display": {
+      "target": "stm32g474",
+      "board": "nucleo-g474re",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "board.statusLed"
+      },
+      "nodes": {
+        "wifi": {
+          "present": true,
+          "pins": {
+            "cs": "PB12",
+            "clock": "PB13",
+            "wlOn": "PB14",
+            "data": "PB15"
+          }
+        },
+        "display": {
+          "present": true,
+          "bus": "lcd",
+          "pins": {
+            "cs": "PB6",
+            "dc": "PB7",
+            "reset": "PB8"
+          }
+        }
+      },
+      "buses": {
+        "lcd": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 8000000,
+          "pins": {
+            "sck": "PB3",
+            "mosi": "PB5",
+            "miso": "PB4"
+          }
+        }
+      },
+      "providers": {
+        "cyw43": "wifi.radio"
+      }
+    }
+  }
+}

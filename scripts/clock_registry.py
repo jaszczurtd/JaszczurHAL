@@ -45,6 +45,8 @@ PARAMETERS = {
 # (check_no_hal_override, check_esp_sdkconfig) and the mock has none, so only
 # the default tree runs. The STM32G474 trees are checked in check_stm32g474.
 DEFAULT_ONLY_BACKENDS = {"pico-sdk", "esp-idf", "mock"}
+# The board component that makes the STM32G474 startup build each tree.
+STM32G474_TREE_COMPONENTS = {"default": None, "hse-160mhz": "stm32g474-hse-24mhz"}
 # Pico SDK settings the HAL must leave at their defaults.
 SDK_CLOCK_MACRO = (r"(?:SYS_CLK_(?:HZ|KHZ|MHZ)|XOSC_(?:HZ|KHZ|MHZ)|PLL_(?:SYS|USB|COMMON)_\w+|"
                    r"USB_CLK_(?:HZ|KHZ|MHZ)|PICO_USE_FASTEST_SUPPORTED_CLOCK)")
@@ -137,21 +139,31 @@ def source_problems(inputs: dict[str, Any], key: str, source: dict[str, Any]) ->
     return []
 
 
-def board_sources_satisfy(board: dict[str, Any], tree: dict[str, Any],
-                          inputs: dict[str, Any]) -> list[str]:
-    """Why the board cannot run the tree on a target with these clock inputs."""
-    available = board.get("clockSources", {})
+def source_errors(available: dict[str, Any], tree: dict[str, Any],
+                  inputs: dict[str, Any]) -> list[tuple[str, str]]:
+    """(JSON Pointer into clockSources, message) for each source the tree
+    needs and the board does not provide as required."""
     problems = []
     for key, required in sorted(tree["requiredSources"].items()):
         source = available.get(key)
         if source is None:
-            problems.append(f"no {key} source")
-        elif (source["kind"], source["frequencyHz"]) != (required["kind"], required["frequencyHz"]):
-            problems.append(f"{key} is a {source['kind']} at {source['frequencyHz']} Hz, "
-                            f"the tree needs a {required['kind']} at {required['frequencyHz']} Hz")
+            problems.append((f"/{key}", f"no {key} source"))
+            continue
+        for field in ("kind", "frequencyHz"):
+            if source[field] != required[field]:
+                problems.append((f"/{key}/{field}",
+                                 f"{key} is a {source['kind']} at {source['frequencyHz']} Hz, "
+                                 f"the tree needs a {required['kind']} at {required['frequencyHz']} Hz"))
+                break
         else:
-            problems.extend(source_problems(inputs, key, source))
+            problems.extend((f"/{key}/pins", message) for message in source_problems(inputs, key, source))
     return problems
+
+
+def board_sources_satisfy(board: dict[str, Any], tree: dict[str, Any],
+                          inputs: dict[str, Any]) -> list[str]:
+    """Why the board cannot run the tree on a target with these clock inputs."""
+    return [message for _, message in source_errors(board.get("clockSources", {}), tree, inputs)]
 
 
 def check_boards(registry: dict[str, dict[str, Any]], boards: dict[str, dict[str, Any]],
@@ -174,8 +186,9 @@ def check_stm32g474(registry: dict[str, dict[str, Any]], port: Path = STM32_PORT
     clock = (port / "stm32g474_clock.h").read_text(encoding="utf-8")
     tree_h = (port / "stm32g474_clock_tree.h").read_text(encoding="utf-8")
     trees = registry["stm32g474"]["trees"]
-    require(set(trees) == {"default", "hse-160mhz"},
-            f"stm32g474 trees {sorted(trees)}: the startup code builds default and hse-160mhz only")
+    require(set(trees) == set(STM32G474_TREE_COMPONENTS),
+            f"stm32g474 trees {sorted(trees)}: the startup code builds "
+            f"{sorted(STM32G474_TREE_COMPONENTS)} only")
     default, hse = trees["default"], trees["hse-160mhz"]
     require(int(_value(clock, r"#define JH_G474_HSI_CLOCK_HZ (\d+)u", "stm32g474_clock.h")) == HSI16_HZ,
             "HSI16 frequency changed")

@@ -1,0 +1,191 @@
+{
+  "schemaVersion": 1,
+  "nodes": {
+    "hat": {
+      "compatible": "embeddedgarage,can-fd-hat-g474"
+    },
+    "wifi": {
+      "compatible": "pimoroni,pim730"
+    }
+  },
+  "assemblies": {
+    "canhat": {
+      "target": "stm32g474",
+      "board": "nucleo-g474re",
+      "clock": {
+        "tree": "hse-160mhz"
+      },
+      "statusLed": {
+        "node": "board.statusLed"
+      },
+      "nodes": {
+        "hat": {
+          "present": true
+        },
+        "hat.can1": {
+          "controller": {
+            "kind": "fdcan",
+            "index": 0
+          },
+          "pins": {
+            "rx": "PA11",
+            "tx": "PA12",
+            "standby": "PB11"
+          }
+        },
+        "hat.can2": {
+          "controller": {
+            "kind": "fdcan",
+            "index": 1
+          },
+          "pins": {
+            "rx": "PB12",
+            "tx": "PB13",
+            "standby": "PC7"
+          }
+        },
+        "hat.can3": {
+          "controller": {
+            "kind": "fdcan",
+            "index": 2
+          },
+          "pins": {
+            "rx": "PA8",
+            "tx": "PB4",
+            "standby": "PB6"
+          }
+        },
+        "hat.relay1": {
+          "pins": {
+            "out": "PC3"
+          }
+        },
+        "hat.relay2": {
+          "pins": {
+            "out": "PC0"
+          }
+        },
+        "hat.relay3": {
+          "pins": {
+            "out": "PA10"
+          }
+        },
+        "hat.relay4": {
+          "pins": {
+            "out": "PB3"
+          }
+        },
+        "hat.input1": {
+          "pins": {
+            "in": "PC10"
+          }
+        },
+        "hat.input2": {
+          "pins": {
+            "in": "PC11"
+          }
+        },
+        "hat.input3": {
+          "pins": {
+            "in": "PC8"
+          }
+        },
+        "hat.input4": {
+          "pins": {
+            "in": "PC9"
+          }
+        },
+        "hat.button1": {
+          "pins": {
+            "in": "PB0"
+          }
+        },
+        "hat.button2": {
+          "pins": {
+            "in": "PB7"
+          }
+        },
+        "hat.button3": {
+          "pins": {
+            "in": "PB5"
+          }
+        },
+        "hat.button4": {
+          "pins": {
+            "in": "PB1"
+          }
+        },
+        "hat.button5": {
+          "pins": {
+            "in": "PA9"
+          }
+        },
+        "hat.button6": {
+          "pins": {
+            "in": "PB2"
+          }
+        },
+        "hat.ledReady": {
+          "pins": {
+            "out": "PC1"
+          }
+        },
+        "hat.ledBusy": {
+          "pins": {
+            "out": "PC2"
+          }
+        },
+        "hat.ledCan1Tx": {
+          "pins": {
+            "out": "PA7"
+          }
+        },
+        "hat.ledCan1Rx": {
+          "pins": {
+            "out": "PC12"
+          }
+        },
+        "hat.ledCan2Tx": {
+          "pins": {
+            "out": {
+              "net": "ld2"
+            }
+          }
+        },
+        "hat.ledCan2Rx": {
+          "pins": {
+            "out": "PA6"
+          }
+        },
+        "hat.ledCan3Tx": {
+          "pins": {
+            "out": "PB9"
+          }
+        },
+        "hat.ledCan3Rx": {
+          "pins": {
+            "out": "PC6"
+          }
+        },
+        "wifi": {
+          "present": true,
+          "pins": {
+            "wlOn": "PA0",
+            "cs": "PA1",
+            "data": "PA4",
+            "clock": "PB10"
+          }
+        }
+      },
+      "nets": {
+        "ld2": {
+          "endpoint": {
+            "domain": "soc-gpio",
+            "id": "PA5"
+          },
+          "owner": "board.statusLed.out"
+        }
+      }
+    }
+  }
+}

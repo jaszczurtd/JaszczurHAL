@@ -1717,6 +1717,12 @@ def encode_hal_pin(endpoint: dict[str, Any]) -> int | None:
     return endpoint.get("halPin")
 
 
+def pin_text(endpoint: dict[str, Any]) -> str:
+    """C spelling of a pin: the early hardware macro when an assembly names
+    one, otherwise the HAL encoding."""
+    return endpoint.get("macro") or f"{encode_hal_pin(endpoint)}u"
+
+
 def encoded_gpio_pins(pins: set[Any]) -> set[int]:
     """HAL encoding of SoC GPIO IDs (STM32: port * 16 + pin)."""
     return {encode_hal_pin({"domain": "soc-gpio", "id": pin}) for pin in pins}
@@ -1822,14 +1828,12 @@ def can_config_lines(board: dict[str, Any]) -> list[str]:
     for channel in channels:
         standby = channel.get("standby")
         standby_pin = (
-            f"{encode_hal_pin(standby)}u"
-            if standby is not None
-            else "HAL_BOARD_DEVICE_PIN_NONE"
+            pin_text(standby) if standby is not None else "HAL_BOARD_DEVICE_PIN_NONE"
         )
         rows.append(
             f"X({CAN_CONTROLLERS[channel['controller']]['backend']}, "
-            f"{channel['instance']}u, {encode_hal_pin(channel['rx'])}u, "
-            f"{encode_hal_pin(channel['tx'])}u, {standby_pin}, "
+            f"{channel['instance']}u, {pin_text(channel['rx'])}, "
+            f"{pin_text(channel['tx'])}, {standby_pin}, "
             f"{1 if channel.get('standbyActiveHigh') else 0}, "
             f"UINT32_C({channel['maxBitrateHz']}))"
         )
@@ -1995,10 +1999,11 @@ def selected_board_fact_lines(
         )
     capability_mask = 0
     for capability_id, config in sorted(capabilities.items()):
-        present = board["capabilities"].get(capability_id, {}).get("present", False)
+        entry = board["capabilities"].get(capability_id, {})
+        present = entry.get("present", False)
         lines.append(
             f"#define HAL_BOARD_HAS_{macro_suffix(capability_id)} "
-            f"{1 if present else 0}"
+            f"{entry.get('macro') or (1 if present else 0)}"
         )
         if present and config.get("status") != "reserved":
             capability_mask |= 1 << config["bit"]
@@ -2041,16 +2046,20 @@ def selected_board_fact_lines(
             f"#define HAL_BOARD_STATUS_LED_KIND_"
             f"{macro_suffix(status_led['kind'])} 1"
         )
-        pin = encode_hal_pin(status_led["endpoint"])
-        if pin is not None:
-            lines.append(f"#define HAL_BOARD_STATUS_LED_PIN {pin}u")
+        if encode_hal_pin(status_led["endpoint"]) is not None:
+            lines.append(
+                f"#define HAL_BOARD_STATUS_LED_PIN {pin_text(status_led['endpoint'])}"
+            )
         if status_led["kind"] in ("gpio", "component-gpio"):
             lines.append("#define HAL_LED_BUILTIN HAL_BOARD_STATUS_LED_PIN")
         if status_led["kind"] == "addressable":
+            # A board leaves the order to the project; an assembly chooses it.
+            order = status_led.get("pixelOrder")
+            order = order if isinstance(order, str) else "PROJECT_DEFINED"
             lines.extend(
                 [
                     "#define HAL_BOARD_STATUS_LED_PROTOCOL_WS2812 1",
-                    "#define HAL_BOARD_STATUS_LED_PIXEL_ORDER_PROJECT_DEFINED 1",
+                    f"#define HAL_BOARD_STATUS_LED_PIXEL_ORDER_{order} 1",
                 ]
             )
     lines.extend(device_config_lines(board))
@@ -2365,6 +2374,36 @@ def generate(
     requested_feature_inputs: list[str],
     boards_root: Path | None = None,
 ) -> None:
+    outputs = build_outputs(
+        target, board, boards, capabilities, requested_feature_inputs, boards_root
+    )
+    try:
+        (output_dir / "jh_board_registry.h").unlink()
+    except FileNotFoundError:
+        pass
+    for name, content in outputs.items():
+        atomic_write(output_dir / name, content)
+
+
+def build_outputs(
+    target: dict[str, Any],
+    board: dict[str, Any],
+    boards: dict[str, dict[str, Any]],
+    capabilities: dict[str, Any],
+    requested_feature_inputs: list[str],
+    boards_root: Path | None = None,
+    *,
+    header_definitions: list[str] | None = None,
+    cmake_definitions: list[str] | None = None,
+    components: list[str] | None = None,
+    contract_hash: str | None = None,
+    header_prelude: list[str] = (),
+    generation_extra: list[Path] = (),
+) -> dict[str, str]:
+    """Text of every per-build output. An assembly passes the board it
+    resolved and the values it owns: the definitions its header carries,
+    those still passed to the compiler, its components and its digest for
+    the link signature. Without them the outputs are the board's."""
     requested_features, resolved_features, feature_provenance = resolve_features(
         requested_feature_inputs, target
     )
@@ -2380,10 +2419,15 @@ def generate(
     ).hexdigest()[:12]
     contract_symbol = (
         f"jh_board_contract_{c_symbol_part(target['id'])}_"
-        f"{c_symbol_part(board['id'])}_{feature_hash}"
+        f"{c_symbol_part(board['id'])}_{(contract_hash or feature_hash)[:12]}"
     )
-    components = sorted(set(target["components"]) | set(board["components"]))
+    if components is None:
+        components = sorted(set(target["components"]) | set(board["components"]))
     compile_definitions = board_compile_definitions(target, board)
+    if header_definitions is None:
+        header_definitions = compile_definitions
+    if cmake_definitions is None:
+        cmake_definitions = compile_definitions
     resolved = {
         "schemaVersion": 1,
         "target": target["id"],
@@ -2399,7 +2443,7 @@ def generate(
         "flashBytes": board["memory"]["flash"]["expectedBytes"],
         "psram": board["memory"].get("psram"),
         "components": components,
-        "boardCompileDefinitions": compile_definitions,
+        "boardCompileDefinitions": cmake_definitions,
         "requestedFeatures": requested_features,
         "resolvedFeatures": resolved_features,
         "featureProvenance": feature_provenance,
@@ -2421,7 +2465,7 @@ def generate(
         f'set(JH_BOARD_PROVIDER "{board["build"]["provider"]}")',
         f'set(JH_BOARD_RECIPE "{target["build"]["recipe"]}")',
         f'set(JH_BOARD_COMPONENTS "{";".join(components)}")',
-        f'set(JH_BOARD_COMPILE_DEFINITIONS "{";".join(compile_definitions)}")',
+        f'set(JH_BOARD_COMPILE_DEFINITIONS "{";".join(cmake_definitions)}")',
         f'set(JH_BOARD_EXPECTED_FLASH_BYTES "{board["memory"]["flash"]["expectedBytes"]}")',
         f'set(JH_BOARD_REQUESTED_FEATURES "{";".join(requested_features)}")',
         f'set(JH_BOARD_RESOLVED_FEATURES "{";".join(resolved_features)}")',
@@ -2441,6 +2485,7 @@ def generate(
         "#pragma once",
         "/* Generated by generate_board_config.py; do not edit. */",
         "#include <stdint.h>",
+        *header_prelude,
     ]
     config_lines.extend(selected_target_fact_lines(target))
     config_lines.extend(
@@ -2448,7 +2493,7 @@ def generate(
             board,
             boards,
             capabilities,
-            compile_definitions,
+            header_definitions,
             f'"{target["id"]}"',
             gpio_word_count([target]),
             define_selector=True,
@@ -2496,23 +2541,16 @@ def generate(
             "",
         ]
     )
-    try:
-        (output_dir / "jh_board_registry.h").unlink()
-    except FileNotFoundError:
-        pass
-    atomic_write(output_dir / "jh_board_config.cmake", "\n".join(cmake_lines) + "\n")
-    atomic_write(output_dir / "jh_board_config.h", "\n".join(config_lines) + "\n")
-    atomic_write(output_dir / "jh_link_contract.h", link_header)
-    atomic_write(output_dir / "jh_link_contract_definition.c", link_definition)
-    atomic_write(output_dir / "jh_link_contract_reference.c", link_reference)
-    atomic_write(
-        output_dir / "jh_board_resolved.json",
-        json.dumps(resolved, indent=2, sort_keys=True) + "\n",
-    )
-    atomic_write(
-        output_dir / "generation.d",
-        "\n".join(path.as_posix() for path in generation_inputs(boards_root)) + "\n",
-    )
+    inputs = [*generation_inputs(boards_root), *generation_extra]
+    return {
+        "jh_board_config.cmake": "\n".join(cmake_lines) + "\n",
+        "jh_board_config.h": "\n".join(config_lines) + "\n",
+        "jh_link_contract.h": link_header,
+        "jh_link_contract_definition.c": link_definition,
+        "jh_link_contract_reference.c": link_reference,
+        "jh_board_resolved.json": json.dumps(resolved, indent=2, sort_keys=True) + "\n",
+        "generation.d": "\n".join(path.as_posix() for path in inputs) + "\n",
+    }
 
 
 GENERATION_INPUT_PATTERN = "*.json"
@@ -2554,6 +2592,41 @@ def generation_inputs(boards_root: Path | None = None) -> list[Path]:
             for path in sorted(root.rglob(GENERATION_INPUT_PATTERN))
         ),
     ]
+
+
+def require_managed_output(
+    output_dir: Path, output_root: Path | None, repository_root: Path
+) -> Path:
+    """The resolved output directory, which must lie below a .build directory
+    or the runtime-managed build root."""
+    output_dir = output_dir.resolve()
+    managed_root = (
+        output_root.resolve()
+        if output_root is not None
+        else repository_root / ".build"
+    )
+    host_build_root = os.environ.get("JH_MANAGED_BUILD_ROOT")
+    matches_host_build_root = False
+    if host_build_root:
+        normalized_managed = os.path.normcase(str(managed_root))
+        normalized_host = os.path.normcase(str(Path(host_build_root).resolve()))
+        try:
+            matches_host_build_root = (
+                os.path.commonpath((normalized_managed, normalized_host))
+                == normalized_host
+            )
+        except ValueError:
+            matches_host_build_root = False
+    if ".build" not in managed_root.parts and not matches_host_build_root:
+        raise DescriptorError(
+            f"output root must be a .build directory, one of its "
+            f"descendants, or the runtime-managed build root; got {managed_root}"
+        )
+    if output_dir != managed_root and managed_root not in output_dir.parents:
+        raise DescriptorError(
+            f"output directory must be below {managed_root}, got {output_dir}"
+        )
+    return output_dir
 
 
 def parse_args() -> argparse.Namespace:
@@ -2657,34 +2730,9 @@ def main() -> int:
                     f"compile definition {selector!r} conflicts with "
                     f"resolved board {args.board!r}"
                 )
-        output_dir = args.output_dir.resolve()
-        repository_root = boards_root.parent
-        managed_root = (
-            args.output_root.resolve()
-            if args.output_root is not None
-            else repository_root / ".build"
+        output_dir = require_managed_output(
+            args.output_dir, args.output_root, boards_root.parent
         )
-        host_build_root = os.environ.get("JH_MANAGED_BUILD_ROOT")
-        matches_host_build_root = False
-        if host_build_root:
-            normalized_managed = os.path.normcase(str(managed_root))
-            normalized_host = os.path.normcase(str(Path(host_build_root).resolve()))
-            try:
-                matches_host_build_root = (
-                    os.path.commonpath((normalized_managed, normalized_host))
-                    == normalized_host
-                )
-            except ValueError:
-                matches_host_build_root = False
-        if ".build" not in managed_root.parts and not matches_host_build_root:
-            raise DescriptorError(
-                f"output root must be a .build directory, one of its "
-                f"descendants, or the runtime-managed build root; got {managed_root}"
-            )
-        if output_dir != managed_root and managed_root not in output_dir.parents:
-            raise DescriptorError(
-                f"output directory must be below {managed_root}, got {output_dir}"
-            )
         generate(
             target,
             board,

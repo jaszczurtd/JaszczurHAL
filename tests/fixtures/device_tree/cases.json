@@ -938,7 +938,7 @@
         "bitOrder": "msb"
       },
       "expected": "accept",
-      "configType": "jh_ili9341_config_t",
+      "configType": "hal_display_ili9341_config_t",
       "clockField": "clock_hz"
     },
     {

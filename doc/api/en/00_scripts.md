@@ -769,10 +769,29 @@ type. The header defines:
 HAL helpers such as `hal_lora_sx126x_core1262_hf_defaults()` and
 `hal_can_default_config()` read these macros, and static assertions keep the
 HAL enums in the order of the type. Literals follow the table of the device
-tree format. Two names that meet after token conversion fail the run instead
-of being renamed. Floating-point defaults are refused for now. `--write`
+tree format and come from `scripts/hardware_literals.py`. A float or double
+default is rounded once from the decimal written in the type; one that
+overflows or rounds to zero fails the run. Two names that meet after token
+conversion fail the run instead of being renamed. `--write`
 refreshes the header and `--check` fails when it is missing or stale;
 `sync_generated.py` runs both.
+
+### `scripts/generate_hardware_config.py`
+
+Resolves the `device_tree.json` of a configuration directory into the
+hardware of one assembly, following the [device tree format](../../en/device_tree_format.md).
+`list --config-dir DIR` prints the assemblies as JSON. `resolve` picks an
+assembly (`--assembly`, or `--target` when one assembly fits) and writes
+`jh_hardware.h` and `jh_hardware_resolved.json`. `finalize` reads that model,
+refuses it when an input changed since `resolve` or the header is not the one
+the model produces, evaluates
+`hal_project_config.h` after `jh_hardware.h` with `--variant` and `--define`,
+checks that the requested features have their hardware, and writes
+`jh_board_config.h`, `jh_hardware_config.cmake`, `jh_hardware_config.json`,
+the link signature and `generation.d`. A failed command prints one diagnostic
+(code, file, JSON Pointer) and removes the outputs it would have written.
+Outputs must lie below a `.build` directory. The build does not call the
+generator yet.
 
 ### `scripts/clock_registry.py`
 

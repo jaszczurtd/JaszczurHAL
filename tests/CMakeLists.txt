@@ -1298,9 +1298,19 @@ add_test(NAME test_device_defaults
         ${CMAKE_CURRENT_SOURCE_DIR}/test_device_defaults.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
-# String literals of generate_device_defaults.py built as C and C++ with the
-# host warning policy as errors (GCC, Clang and MSVC alike); each program
-# checks the bytes its literals hold.
+add_test(NAME test_hardware_literals
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_hardware_literals.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_hardware_config
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_hardware_config.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+# String and float/double literals of hardware_literals.py built as C and C++
+# with the host warning policy as errors (GCC, Clang and MSVC alike); each
+# program checks the bytes and bit patterns its literals hold.
 set(_jh_literal_probe ${CMAKE_CURRENT_BINARY_DIR}/c_literal_probe)
 add_custom_command(
     OUTPUT ${_jh_literal_probe}.c ${_jh_literal_probe}.cpp
@@ -1308,15 +1318,78 @@ add_custom_command(
         ${CMAKE_CURRENT_SOURCE_DIR}/.. ${_jh_literal_probe}.c ${_jh_literal_probe}.cpp
     DEPENDS
         ${CMAKE_CURRENT_SOURCE_DIR}/write_c_literal_probe.py
-        ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/generate_device_defaults.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/hardware_literals.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/hardware_schema.py
     VERBATIM)
+# One target runs the generator; with the Makefile generator a rule listed by
+# two targets would run twice in parallel and race on its outputs.
+add_custom_target(test_device_defaults_literals_sources
+    DEPENDS ${_jh_literal_probe}.c ${_jh_literal_probe}.cpp)
 foreach(_jh_language c cpp)
     add_executable(test_device_defaults_literals_${_jh_language}
         ${_jh_literal_probe}.${_jh_language})
+    add_dependencies(test_device_defaults_literals_${_jh_language}
+        test_device_defaults_literals_sources)
     jh_enable_host_warnings(test_device_defaults_literals_${_jh_language} ERRORS)
     add_test(NAME test_device_defaults_literals_${_jh_language}
         COMMAND test_device_defaults_literals_${_jh_language})
 endforeach()
+
+# Device tree examples resolved by generate_hardware_config.py; each probe
+# fills the HAL types from the generated initializers as C and C++ with the
+# host warning policy as errors and compares them with the pin macros.
+file(GLOB _jh_hardware_inputs CONFIGURE_DEPENDS
+    ${CMAKE_SOURCE_DIR}/scripts/*.py
+    ${CMAKE_SOURCE_DIR}/config/hardware/*.json
+    ${CMAKE_SOURCE_DIR}/config/hardware/bindings/*.json
+    ${CMAKE_SOURCE_DIR}/config/hardware/clocks/*.json
+    ${CMAKE_SOURCE_DIR}/boards/*.json
+    ${CMAKE_SOURCE_DIR}/boards/*/*.json)
+function(jh_hardware_config_probe NAME FIXTURE ASSEMBLY)
+    cmake_parse_arguments(PROBE "FINALIZE" "" "DEFINITIONS" ${ARGN})
+    set(_dir ${CMAKE_CURRENT_BINARY_DIR}/hardware_config/${NAME})
+    set(_config ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/device_tree/hal/${FIXTURE})
+    set(_generator ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/generate_hardware_config.py)
+    set(_outputs ${_dir}/jh_hardware.h)
+    set(_commands COMMAND ${_generator} resolve --config-dir ${_config} --assembly ${ASSEMBLY}
+        --output-dir ${_dir} --output-root ${CMAKE_BINARY_DIR})
+    if(PROBE_FINALIZE)
+        list(APPEND _outputs ${_dir}/jh_board_config.h)
+        list(APPEND _commands COMMAND ${_generator} finalize
+            --hardware ${_dir}/jh_hardware_resolved.json --hardware-header ${_dir}/jh_hardware.h
+            --config-dir ${_config} --output-dir ${_dir} --output-root ${CMAKE_BINARY_DIR})
+    endif()
+    add_custom_command(OUTPUT ${_outputs} ${_commands}
+        DEPENDS ${_config}/device_tree.json ${_jh_hardware_inputs} VERBATIM)
+    # Only this target generates the headers; the probes wait for it.
+    add_custom_target(test_hardware_config_${NAME}_headers DEPENDS ${_outputs})
+    set(_source ${CMAKE_CURRENT_SOURCE_DIR}/hardware_config/probe_${NAME}.c)
+    add_custom_command(OUTPUT ${_dir}/probe.cpp
+        COMMAND ${CMAKE_COMMAND} -E copy ${_source} ${_dir}/probe.cpp
+        DEPENDS ${_source} VERBATIM)
+    foreach(_language c cpp)
+        set(_target test_hardware_config_${NAME}_${_language})
+        if(_language STREQUAL "c")
+            add_executable(${_target} ${_source})
+        else()
+            add_executable(${_target} ${_dir}/probe.cpp)
+        endif()
+        add_dependencies(${_target} test_hardware_config_${NAME}_headers)
+        target_include_directories(${_target} PRIVATE ${_dir} ${CMAKE_SOURCE_DIR}/src)
+        target_compile_definitions(${_target} PRIVATE ${PROBE_DEFINITIONS})
+        jh_enable_host_warnings(${_target} ERRORS)
+        add_test(NAME ${_target} COMMAND ${_target})
+    endforeach()
+endfunction()
+jh_hardware_config_probe(pico_lora pico-lora pico
+    DEFINITIONS HAL_TARGET_MOCK=1 HAL_ENABLE_MCP2515=1 HAL_ENABLE_SX126X=1 HAL_ENABLE_UART=1)
+jh_hardware_config_probe(lora_lf pico-lora lora-lf
+    DEFINITIONS HAL_TARGET_MOCK=1 HAL_ENABLE_SX126X=1)
+jh_hardware_config_probe(nucleo_canhat nucleo-canhat canhat
+    DEFINITIONS HAL_TARGET_MOCK=1 HAL_ENABLE_MCP2515=1)
+jh_hardware_config_probe(nucleo_canhat_board nucleo-canhat canhat FINALIZE)
+jh_hardware_config_probe(nucleo_display nucleo-display display
+    DEFINITIONS HAL_TARGET_MOCK=1 HAL_ENABLE_ILI9341=1 HAL_DISPLAY_ILI9341=1)
 add_test(NAME test_install_host_tools
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_install_host_tools.py
@@ -1780,6 +1853,34 @@ target_compile_definitions(test_epd_drivers PRIVATE
 )
 target_link_libraries(test_epd_drivers PRIVATE hal_mock)
 add_test(NAME test_epd_drivers COMMAND test_epd_drivers)
+
+add_executable(test_hal_display_ili9341_facade
+    test_hal_display_ili9341_facade.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/hal_display.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/hal_display.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/ili9341_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/jh_gfx.cpp
+)
+target_include_directories(test_hal_display_ili9341_facade PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils
+)
+target_compile_definitions(test_hal_display_ili9341_facade PRIVATE
+    HAL_TARGET_RP2040=1
+    HAL_BOARD_PROFILE_RP_PICO=1
+    HAL_ENABLE_ILI9341
+    HAL_DISPLAY_ILI9341
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+jh_enable_host_warnings(test_hal_display_ili9341_facade)
+target_link_libraries(test_hal_display_ili9341_facade PRIVATE
+    $<TARGET_FILE:hal_mock>
+    Threads::Threads
+)
+add_dependencies(test_hal_display_ili9341_facade hal_mock)
+add_test(NAME test_hal_display_ili9341_facade
+         COMMAND test_hal_display_ili9341_facade)
 
 add_executable(test_hal_display_rgb_oled_facade
     test_hal_display_rgb_oled_facade.cpp

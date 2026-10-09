@@ -3,6 +3,7 @@
 #include "hal/core/hal_config.h"
 #ifdef HAL_ENABLE_DISPLAY
 
+#include "hal/display/drivers/display_spi_transport.h"
 #include "hal/display/hal_display.h"
 #include "hal/display/hal_display_internal.h"
 #include "hal/serial/hal_serial.h"
@@ -23,6 +24,23 @@ bool hal_display_init_ssd1306_i2c_ex(int width, int height, uint8_t i2c_bus,
                                      uint8_t switchvcc, bool periph_begin) {
   return hal_status_to_bool(hal_display_init_ssd1306_i2c_status_ex(
       width, height, i2c_bus, i2c_addr, rst_pin, switchvcc, periph_begin));
+}
+#endif
+
+#ifdef HAL_ENABLE_TFT
+static bool ili9341_pin_valid(int16_t pin) {
+  return pin == -1 || jh_display_pin_connected(pin);
+}
+
+hal_status_t
+hal_display_init_ili9341_ex(const hal_display_ili9341_config_t *config) {
+  if (config == nullptr || config->bus > 1u ||
+      !jh_display_pin_connected(config->dc_pin) ||
+      !ili9341_pin_valid(config->cs_pin) ||
+      !ili9341_pin_valid(config->rst_pin)) {
+    return HAL_EINVAL;
+  }
+  return jh_hal_display_init_ili9341(config);
 }
 #endif
 

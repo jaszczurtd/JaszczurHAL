@@ -539,6 +539,37 @@ typedef enum {
  *         initialisation failed.
  */
 hal_status_t hal_display_init(uint8_t cs, uint8_t dc, uint8_t rst);
+
+/**
+ * @brief ILI9341 wiring and SPI clock for hal_display_init_ili9341_ex().
+ *
+ * Pins use -1 for "not connected". The application opens the SPI bus with
+ * hal_spi_init() first; the display driver does not choose bus pins.
+ */
+typedef struct {
+  uint8_t bus;     /**< SPI bus, 0 or 1. */
+  int16_t cs_pin;  /**< Chip select; -1 when CS is tied low. */
+  int16_t dc_pin;  /**< Data/command; required. */
+  int16_t rst_pin; /**< Reset; -1 resets the panel by command. */
+  uint32_t
+      clock_hz; /**< SPI clock in Hz; 0 selects JH_ILI9341_SPI_DEFAULT_HZ. */
+} hal_display_ili9341_config_t;
+
+/**
+ * @brief Start an ILI9341 panel on a chosen SPI bus and clock.
+ *
+ * hal_display_init() always uses bus 0 and the default clock; this variant
+ * takes both from @p config, for example from the generated
+ * JH_HW_NODE_<PATH>_CONFIG_INIT of a device tree.
+ *
+ * @param config Panel wiring; must not be NULL.
+ * @return HAL_OK when the panel started, HAL_EINVAL for a NULL config, a bus
+ *         other than 0 or 1, a missing DC pin or a pin outside -1..255,
+ *         HAL_EUNSUPPORTED when the build selects another TFT driver, and
+ *         HAL_EIO when the panel did not initialise.
+ */
+hal_status_t
+hal_display_init_ili9341_ex(const hal_display_ili9341_config_t *config);
 #endif /* HAL_ENABLE_TFT */
 
 #ifdef HAL_ENABLE_SSD1306

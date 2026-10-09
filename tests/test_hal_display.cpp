@@ -1,3 +1,4 @@
+#include "hal/core/hal_array.h"
 #include "hal/display/hal_display.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "utils/unity.h"
@@ -423,6 +424,21 @@ void test_status_init_and_soft_init_return_real_results(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_soft_init(0));
 }
 
+void test_ili9341_ex_validates_its_config(void) {
+  hal_display_ili9341_config_t config = {1u, 5, 6, -1, 8000000u};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_init_ili9341_ex(&config));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_display_init_ili9341_ex(NULL));
+  const hal_display_ili9341_config_t invalid[] = {
+      {2u, 5, 6, -1, 0u},  /* no third SPI bus */
+      {0u, 5, -1, -1, 0u}, /* DC is required */
+      {0u, -2, 6, -1, 0u}, /* below "not connected" */
+      {0u, 5, 6, 256, 0u}, /* above the HAL pin range */
+  };
+  for (size_t i = 0; i < COUNTOF(invalid); ++i) {
+    TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_display_init_ili9341_ex(&invalid[i]));
+  }
+}
+
 void test_status_stream_distinguishes_busy_and_invalid_state(void) {
   const uint8_t pixels_be[2] = {0x12, 0x34};
   TEST_ASSERT_EQUAL_INT(HAL_ESTATE,
@@ -450,6 +466,7 @@ void test_status_prepare_text_reports_overflow(void) {
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_configure_sets_dimensions);
+  RUN_TEST(test_ili9341_ex_validates_its_config);
   RUN_TEST(test_ssd1306_init_sets_dimensions);
   RUN_TEST(test_ssd1306_init_ex_sets_dimensions_on_selected_bus);
   RUN_TEST(test_ssd1306_init_ex_rejects_invalid_size);
