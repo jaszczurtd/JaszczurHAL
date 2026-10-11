@@ -9,6 +9,8 @@
  * Backend-specific TCP/IP stack objects must stay in implementation files.
  */
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/core/hal_status.h"
 #include <stdbool.h>
 #include <stddef.h>

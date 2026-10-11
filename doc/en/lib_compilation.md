@@ -166,6 +166,23 @@ If the requested features include `HAL_ENABLE_STACK_PROTECTOR`, add `-fstack-pro
 
 The generated signature reference uses GCC/Clang `constructor, used` attributes. The compatibility check remains active under `--gc-sections` when the supported linker script retains constructor arrays. The target SDK, startup objects, linker script, and platform libraries are still required.
 
+### Package from a device tree
+
+When the `--project-config` directory holds `device_tree.json`, select the assembly instead of the board:
+
+```bash
+./scripts/build_link_library.sh --target stm32g474 \
+  --assembly canhat -p path/to/config --library-only
+cmake --install .build/static/stm32g474/canhat/<key> --prefix <prefix>
+```
+
+The package then also contains `include/generated/jh_hardware.h`, and `share/JaszczurHAL/generated/` holds `jh_hardware_resolved.json`, `jh_hardware_config.json` and `jh_hardware_config.cmake` instead of `jh_board_resolved.json`. Its configuration comes from the directory alone: the runner adds no default features and no `-D` board definitions of its own.
+
+An application using the package computes the configuration it expects from its own `device_tree.json` and `hal_project_config.h`:
+
+- In CMake, include `cmake/jh_hal_package.cmake` from the JaszczurHAL checkout and call `jh_link_hal_package(app PACKAGE <prefix> CONFIG_DIR <config> ASSEMBLY <key>)`. Call it after setting the target's compile options: the expected configuration includes the ABI the compiler reports for them, together with `CMAKE_C_FLAGS` and `CMAKE_C_FLAGS_<CONFIG>`. Options in generator expressions are checked when the application's link-signature reference compiles; a different ABI then stops the build with `#error`. The package's `jh_board_config.h` also checks the struct layout in every unit that includes HAL headers, so packing or enum size set for a single source file, or a `#pragma pack` around the include, stops the compile as well. A package built for other hardware, features, ABI or struct layout stops the configure with `JH-HW-PACKAGE`.
+- With the compiler alone, run `scripts/generate_hardware_config.py resolve` and `finalize` on the application's configuration, passing `--compiler` and every ABI flag as `--compiler-flag=...`, and compile the `jh_link_contract_reference.c` they produce instead of the package's copy. Add `include/`, `include/generated/` and the configuration directory to the include paths and define the target selector, `JH_HARDWARE_HEADER="<prefix>/include/generated/jh_hardware.h"` and the `JH_BOARD_COMPILE_DEFINITIONS` from the package record. Another package then fails to link with an undefined `jh_board_contract_*` symbol.
+
 <a id="host-mock"></a>
 
 ## Host tests with the mock implementation

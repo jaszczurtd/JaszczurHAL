@@ -5,6 +5,8 @@
  * @brief Minimal POSIX select declarations used by the BSD socket adapter.
  */
 
+#include "hal/core/hal_layout_check.h"
+
 #include <stdint.h>
 
 #if defined(__has_include_next)

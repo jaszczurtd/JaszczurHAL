@@ -37,6 +37,8 @@
 #ifndef _WIREGUARDIF_H_
 #define _WIREGUARDIF_H_
 
+#include "hal/core/hal_layout_check.h"
+
 #include "lwip/arch.h"
 #include "lwip/ip_addr.h"
 #include "lwip/netif.h"

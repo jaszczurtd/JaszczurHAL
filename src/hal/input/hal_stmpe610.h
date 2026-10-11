@@ -1,6 +1,8 @@
 #ifndef JASZCZUR_HAL_STMPE610_H
 #define JASZCZUR_HAL_STMPE610_H
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/core/hal_status.h"
 #include "hal/system/hal_sync.h"
 

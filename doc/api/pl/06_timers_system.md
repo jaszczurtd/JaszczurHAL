@@ -1312,6 +1312,15 @@ Napisanie `inline` obok `HAL_FORCE_INLINE` powoduje zduplikowanie
 specyfikatora na GNU i podnosi ostrzeżenie C4141 na MSVC, dlatego to makro
 zawiera ten specyfikator.
 
+`HAL_PACKED` celowo pakuje jedną strukturę. `#pragma pack` pozostawione
+otwarte wokół include'ów HAL spakowałoby też typy HAL, dlatego każdy nagłówek
+HAL, który definiuje strukturę albo unię, dołącza przed swoimi definicjami
+`hal/core/hal_layout_check.h`. Ten plik nie ma strażnika include'ów: przy
+każdym dołączeniu porównuje bieżące pakowanie z pakowaniem przy pierwszym
+nagłówku HAL i przerywa kompilację, gdy się różnią. Test
+`tests/test_layout_check_headers.py` pilnuje, żeby nowy nagłówek go nie
+pominął.
+
 `HAL_NO_STACK_PROTECTOR` wyłącza dodawanie canary do funkcji przez GCC/Clang;
 na pozostałych kompilatorach jest pusty. Używaj go wyłącznie w runtime
 stack-protectora oraz końcowej ścieżce fault/reset, które muszą działać

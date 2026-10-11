@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/core/hal_compiler.h"
 #include "hal/core/hal_mutex_once.h"
 #include "hal/core/hal_status.h"

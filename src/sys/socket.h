@@ -8,6 +8,8 @@
  * IPv4-only runtime rejects AF_INET6 deterministically.
  */
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/core/hal_config.h"
 
 #if defined(HAL_NETWORK_BACKEND_ESP_IDF)

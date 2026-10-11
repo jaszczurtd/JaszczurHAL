@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/core/hal_target.h"
 
 #if HAL_TARGET_IS_STM32G474

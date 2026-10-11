@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/i2c/hal_i2c_slave.h"
 #include <string.h>
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/bluetooth/hal_bluetooth_classic.h"
 
 #if defined(HAL_ENABLE_BLUETOOTH_CLASSIC) && defined(HAL_ENABLE_KV)

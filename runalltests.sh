@@ -73,6 +73,9 @@ LIBRARY_BOARDS=(
     stm32g474:nucleo-g474re-pim730
 )
 EXAMPLE_TARGETS=(rp2040 stm32g474 esp32s3)
+# The device tree configuration of the library stages: one assembly per
+# target, so the target alone selects it.
+DEVICE_TREE_LIBRARY_CONFIG="tests/fixtures/device_tree/hal/library"
 
 STAGES=(
     tools repository host sanitizer-fuzz memcheck cppcheck clang-tidy cpd
@@ -657,6 +660,33 @@ stage_esp_idf() {
         fail "ESP32-S3 library runner did not publish libJaszczurHAL.a with its generated headers"
         exit 1
     fi
+
+    local device_tree_library="${GATE_BUILD_ROOT}/link-libraries/esp32s3-device-tree"
+    local device_tree_firmware="${GATE_BUILD_ROOT}/esp-idf/esp32s3-device-tree"
+    info "Building the ESP32-S3 all-features library from a device tree..."
+    run_esp_build "${LOG_ROOT}/jh_esp32s3_device_tree_library.log" "${device_tree_library}" \
+        "${SCRIPT_DIR}/scripts/build_esp32_lib.sh" \
+            --target esp32s3 \
+            --all-features \
+            --clean \
+            --project-config "${DEVICE_TREE_LIBRARY_CONFIG}" \
+            --output "${device_tree_library}"
+    if [[ ! -f "${device_tree_library}/libJaszczurHAL.a" ||
+          ! -f "${device_tree_library}/include/generated/jh_hardware.h" ]]; then
+        fail "ESP32-S3 device tree library lacks libJaszczurHAL.a or jh_hardware.h"
+        exit 1
+    fi
+    if ! grep -q "HAL_BOARD_LAYOUT_ASSERT(" "${device_tree_library}/include/generated/jh_board_config.h"; then
+        fail "ESP32-S3 device tree library was finalized without the struct layout of its compile flags"
+        exit 1
+    fi
+    info "Building ESP32-S3 firmware from a device tree..."
+    run_esp_build "${LOG_ROOT}/jh_esp32s3_device_tree_firmware.log" "${device_tree_firmware}" \
+        python3 "${SCRIPT_DIR}/scripts/build_esp_idf.py" build \
+            --project "${SCRIPT_DIR}/${DEVICE_TREE_LIBRARY_CONFIG}" \
+            --target esp32s3 \
+            --output "${device_tree_firmware}" \
+            --clean
 }
 
 # build_library TARGET BOARD OUTPUT [RUNNER_ARGS...]: one all-features library.
@@ -694,6 +724,45 @@ stage_library() {
         --board "${board}"
     build_library "${target}" "${board}" "${libraries}/application" \
         --project-config "${consumer}"
+
+    info "Building the ${target} library from a device tree..."
+    build_library "${target}" "" "${libraries}/device-tree" \
+        --project-config "${SCRIPT_DIR}/${DEVICE_TREE_LIBRARY_CONFIG}"
+    if [[ ! -f "${libraries}/device-tree/include/generated/jh_hardware.h" ]]; then
+        fail "${target} device tree library lacks include/generated/jh_hardware.h"
+        exit 1
+    fi
+
+    info "Building ${target} firmware from a device tree..."
+    local firmware="${libraries}/device-tree-firmware"
+    local firmware_args=(
+        -S "${SCRIPT_DIR}/cmake/jh_firmware_project" -B "${firmware}"
+        "-DJH_PROJECT_DIR=${SCRIPT_DIR}/${DEVICE_TREE_LIBRARY_CONFIG}"
+        "-DJH_TARGET=${target}"
+        "-DJH_ARTIFACT_DIR=${firmware}/artifacts"
+    )
+    case "${target}" in
+        stm32g474)
+            firmware_args+=("-DCMAKE_TOOLCHAIN_FILE=${SCRIPT_DIR}/link_libraries/stm32_lib/toolchain_stm32g474.cmake")
+            ;;
+        *)
+            firmware_args+=(
+                "-DPICO_SDK_PATH=${SCRIPT_DIR}/third_party/pico-sdk"
+                "-DJH_PICOTOOL_EXECUTABLE=${SCRIPT_DIR}/.build/tools/picotool/picotool"
+            )
+            [[ "${target}" != rp2350-riscv ]] ||
+                firmware_args+=("-DPICO_TOOLCHAIN_PATH=${SCRIPT_DIR}/third_party/riscv-toolchain")
+            ;;
+    esac
+    rm -rf -- "${firmware}"
+    run_logged "${LOG_ROOT}/jh_firmware_${target}_device_tree.log" \
+        cmake "${firmware_args[@]}"
+    run_logged "${LOG_ROOT}/jh_firmware_${target}_device_tree_build.log" \
+        cmake --build "${firmware}" --parallel "${JOBS}"
+    if [[ ! -f "${firmware}/artifacts/firmware.elf" ]]; then
+        fail "${target} device tree firmware did not produce firmware.elf"
+        exit 1
+    fi
 }
 
 stage_examples() {

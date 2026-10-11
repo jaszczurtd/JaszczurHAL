@@ -219,6 +219,11 @@ endif()
 if(DEFINED EXTRA_HAL_DEFINES)
     target_compile_definitions(JaszczurHAL PUBLIC ${EXTRA_HAL_DEFINES})
 endif()
+# A device tree build names its jh_hardware.h for the hook; the application
+# gets it with the library.
+if(JH_HARDWARE_DEFINITION)
+    target_compile_definitions(JaszczurHAL PUBLIC "${JH_HARDWARE_DEFINITION}")
+endif()
 if(_jh_rp_stack_guard)
     target_compile_definitions(JaszczurHAL PUBLIC PICO_USE_STACK_GUARDS=1)
 endif()
@@ -375,6 +380,7 @@ function(jh_add_rp_ota_boot_target BOOT_TARGET)
     target_compile_definitions("${BOOT_TARGET}" PRIVATE
         ${JH_RP_TARGET_DEFINE}=1
         ${JH_RP_BOARD_DEFINES}
+        ${JH_HARDWARE_DEFINITION}
         NDEBUG
         JH_RP_OTA_BOOT_IMAGE=1
         HAL_ENABLE_CRYPTO=1

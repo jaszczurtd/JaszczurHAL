@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/network/tls/hal_tls.h"
 
 #ifdef HAL_ENABLE_TLS

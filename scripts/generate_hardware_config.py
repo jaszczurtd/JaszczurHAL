@@ -5,8 +5,10 @@ list      prints the assemblies of a configuration directory as JSON;
 resolve   resolves one assembly and writes jh_hardware.h and
           jh_hardware_resolved.json;
 finalize  adds the program configuration and writes jh_board_config.h, the
-          CMake record, jh_hardware_config.json, the link signature and
-          generation.d.
+          CMake records of the build and of an installed package,
+          jh_hardware_config.json, the link signature and generation.d;
+identity  prints the selection and digests one resolve and finalize give,
+          without writing outputs.
 A failed command prints its diagnostic on stderr, returns nonzero and leaves
 no output of that command behind.
 """
@@ -20,12 +22,15 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
 import sys
+import tempfile
 from typing import Any, Sequence
 
 import clock_registry
 from codegen_support import atomic_write_text
 import generate_board_config as boards_module
+import generate_hal_features
 from hardware_literals import macro_token, node_token
 from hardware_model import HardwareError
 import hardware_output
@@ -41,9 +46,12 @@ RESOLVED_JSON = "jh_hardware_resolved.json"
 RESOLVE_OUTPUTS = (HARDWARE_HEADER, RESOLVED_JSON)
 BOARD_HEADER = "jh_board_config.h"
 CMAKE_RECORD = "jh_hardware_config.cmake"
+# The record an installed package carries, with paths relative to itself;
+# installation names it jh_hardware_config.cmake.
+PACKAGE_RECORD = "jh_hardware_package.cmake"
 CONFIG_JSON = "jh_hardware_config.json"
 LINK_OUTPUTS = ("jh_link_contract.h", "jh_link_contract_definition.c", "jh_link_contract_reference.c")
-FINALIZE_OUTPUTS = (BOARD_HEADER, CMAKE_RECORD, *LINK_OUTPUTS, CONFIG_JSON, "generation.d")
+FINALIZE_OUTPUTS = (BOARD_HEADER, CMAKE_RECORD, PACKAGE_RECORD, *LINK_OUTPUTS, CONFIG_JSON, "generation.d")
 # Program definitions that need hardware, as hal_config.h checks them against
 # the board macros; WiFi needs one of its radios.
 HARDWARE_DEFINITIONS = {
@@ -61,6 +69,33 @@ CYW43_COMPONENTS = {"pico-sdk": "cyw43-pico-pio", "jh-stm32-baremetal": "cyw43-s
 # Component slots the assembly decides: the clock tree and the selected radio.
 ASSEMBLY_SLOTS = {"system-clock", "network-radio-transport", "network-stack", "bluetooth-host-stack"}
 CYW43_PINS = {"WL_ON": "wlOn", "CHIP_SELECT": "cs", "DATA": "data", "CLOCK": "clock"}
+# Predefined compiler macros that fix the ABI of compiled code: calling
+# convention and FPU, architecture, type sizes, byte order and char sign. A
+# closed list, so a check can also require the macros a build lacks.
+ABI_MACROS = (
+    "__ARM_PCS", "__ARM_PCS_VFP", "__SOFTFP__", "__ARM_FP", "__ARM_ARCH", "__ARM_ARCH_PROFILE",
+    "__ARM_EABI__", "__ARM_SIZEOF_WCHAR_T", "__ARM_SIZEOF_MINIMAL_ENUM", "__thumb__", "__thumb2__",
+    "__riscv_xlen", "__riscv_flen", "__riscv_float_abi_soft", "__riscv_float_abi_single",
+    "__riscv_float_abi_double", "__riscv_float_abi_quad", "__riscv_abi_rve",
+    "__XTENSA_CALL0_ABI__", "__XTENSA_WINDOWED_ABI__",
+    "__SIZEOF_SHORT__", "__SIZEOF_INT__", "__SIZEOF_LONG__", "__SIZEOF_LONG_LONG__",
+    "__SIZEOF_POINTER__", "__SIZEOF_SIZE_T__", "__SIZEOF_PTRDIFF_T__", "__SIZEOF_WCHAR_T__",
+    "__SIZEOF_FLOAT__", "__SIZEOF_DOUBLE__", "__SIZEOF_LONG_DOUBLE__",
+    "__BYTE_ORDER__", "__CHAR_UNSIGNED__")
+# Struct layout that flags change without any predefined macro (-fpack-struct,
+# -fshort-enums, -mstructure-size-boundary) and #pragma pack changes in one
+# unit: the offset of each basic type after a char, the size of small
+# structures and of an enum. A closed list of (name, declaration, expression).
+LAYOUT_MEMBERS = {"short": "short", "int": "int", "long": "long", "long_long": "long long",
+                  "pointer": "void *", "float": "float", "double": "double", "long_double": "long double"}
+LAYOUT_PROBES = (
+    *((f"member_{key}", f"struct jh_abi_layout_member_{key} {{ char c; {ctype} x; }};",
+       f"offsetof(struct jh_abi_layout_member_{key}, x)") for key, ctype in LAYOUT_MEMBERS.items()),
+    ("struct_char", "struct jh_abi_layout_struct_char { char c; };",
+     "sizeof(struct jh_abi_layout_struct_char)"),
+    ("struct_bitfield", "struct jh_abi_layout_struct_bitfield { char c; unsigned int x : 4; };",
+     "sizeof(struct jh_abi_layout_struct_bitfield)"),
+    ("enum", "enum jh_abi_layout_enum { JH_ABI_LAYOUT_ENUM = 1 };", "sizeof(enum jh_abi_layout_enum)"))
 
 
 def file_digest(path: Path) -> str:
@@ -78,6 +113,89 @@ def dependency_name(path: Path, config_dir: Path, project: bool) -> str:
 
 def os_relpath(path: Path, start: Path) -> str:
     return os.path.relpath(path, start)
+
+
+def run_compiler(command: Sequence[str], arguments: Sequence[str], what: str, cwd: Path | None = None) -> str:
+    """The standard output of ``command`` (GCC or Clang with the build's
+    flags) run with ``arguments``."""
+    try:
+        result = subprocess.run([*command, *arguments], capture_output=True, text=True, check=False, cwd=cwd)
+    except OSError as error:
+        raise HardwareError("JH-HW-GENERATION", command[0], "", f"cannot run the compiler: {error}") from error
+    if result.returncode:
+        raise HardwareError("JH-HW-GENERATION", command[0], "",
+                            f"the compiler cannot report {what}: {result.stderr.strip()}")
+    return result.stdout
+
+
+def compiler_abi(command: Sequence[str]) -> dict[str, str]:
+    """The ABI macros the compiler predefines with the build's flags: what
+    really separates a hard-float from a soft-float build, whatever selected
+    it. ``command`` is the compiler and its flags (GCC or Clang)."""
+    macros = {}
+    for line in run_compiler(command, ["-dM", "-E", "-x", "c", os.devnull], "its macros").splitlines():
+        parts = line.split(None, 2)
+        if len(parts) >= 2 and parts[0] == "#define" and parts[1] in ABI_MACROS:
+            macros[parts[1]] = parts[2] if len(parts) == 3 else ""
+    return dict(sorted(macros.items()))
+
+
+def compiler_layout(command: Sequence[str]) -> dict[str, int]:
+    """The struct layout the compiler gives with the build's flags. Each probe
+    value reaches the assembly of one function as a constant operand."""
+    marks = [f'  __asm__ volatile(".ascii \\"JH_ABI_LAYOUT {name} %c0\\"" : : "i"({expression}));'
+             for name, _, expression in LAYOUT_PROBES]
+    source = "\n".join(["#include <stddef.h>", *(declaration for _, declaration, _ in LAYOUT_PROBES),
+                        "void jh_abi_layout_probe(void);", "void jh_abi_layout_probe(void) {", *marks, "}", ""])
+    # Flags such as -fstack-usage write next to the compile, so it runs in a
+    # scratch directory; LTO would leave no assembly to read.
+    with tempfile.TemporaryDirectory(prefix="jh-abi-layout-") as scratch:
+        probe = Path(scratch) / "probe.c"
+        probe.write_text(source, encoding="utf-8")
+        text = run_compiler(command, ["-w", "-fno-lto", "-S", "-o", "-", str(probe)], "its struct layout",
+                            Path(scratch))
+    values = dict(re.findall(r"JH_ABI_LAYOUT (\w+) (\d+)", text))
+    missing = [name for name, _, _ in LAYOUT_PROBES if name not in values]
+    if missing:
+        raise HardwareError("JH-HW-GENERATION", command[0], "",
+                            f"the compiler output has no struct layout for {', '.join(missing)}")
+    return {name: int(values[name]) for name, _, _ in LAYOUT_PROBES}
+
+
+def layout_checks(layout: dict[str, int]) -> list[str]:
+    """Static assertions of the recorded struct layout for jh_board_config.h.
+    Every unit that sees HAL types includes it, so one with other packing or
+    enum size stops there, whether target or source flags or a #pragma pack
+    around the include changed them."""
+    lines = ["/* The struct layout this configuration was finalized with. */", "#include <stddef.h>",
+             *(declaration for _, declaration, _ in LAYOUT_PROBES),
+             "#ifdef __cplusplus", "#define HAL_BOARD_LAYOUT_ASSERT static_assert", "#else",
+             "#define HAL_BOARD_LAYOUT_ASSERT _Static_assert", "#endif"]
+    lines += [f'HAL_BOARD_LAYOUT_ASSERT({expression} == {layout[name]}u, "compiled with another struct layout '
+              f'than the configuration ({name}={layout[name]}); packing or enum size differ");'
+              for name, _, expression in LAYOUT_PROBES]
+    return [*lines, "#undef HAL_BOARD_LAYOUT_ASSERT"]
+
+
+def abi_checks(macros: dict[str, str]) -> list[str]:
+    """Preprocessor checks of the recorded compiler ABI. The link-signature
+    sources carry them, so a unit compiled with other ABI flags than the
+    configuration was finalized with, wherever those flags came from, stops
+    the build before anything links."""
+    lines = ["/* The compiler ABI this configuration was finalized with. */"]
+    for name in ABI_MACROS:
+        value = macros.get(name)
+        if value is None:
+            condition, expected = f"defined({name})", f"{name} undefined"
+        elif value:
+            condition, expected = f"!defined({name}) || ({name}) != ({value})", f"{name}={value}"
+        else:
+            condition, expected = f"!defined({name})", f"{name} defined"
+        lines += [f"#if {condition}",
+                  f'#error "compiled with another ABI than the configuration ({expected}); '
+                  'finalize it with the flags this unit compiles with"',
+                  "#endif"]
+    return lines
 
 
 def dependency_path(name: str, config_dir: Path) -> Path:
@@ -118,9 +236,13 @@ class Finalize:
     """Add the program configuration to one resolved model."""
 
     def __init__(self, hardware_file: Path, header_file: Path, config_dir: Path,
-                 variant: str | None, defines: Sequence[str]) -> None:
+                 variant: str | None, defines: Sequence[str], output_dir: Path | None = None,
+                 compiler: Sequence[str] = ()) -> None:
         self.hardware_file, self.header_file = hardware_file.resolve(), header_file.resolve()
         self.config_dir, self.variant, self.defines = config_dir.resolve(), variant, list(defines)
+        self.output_dir = (output_dir or self.hardware_file.parent).resolve()
+        # The compiler and flags of the build, when it measures its ABI.
+        self.compiler = list(compiler)
 
     def fail(self, code: str, message: str, source: Path | None = None, **where: Any) -> HardwareError:
         return HardwareError(code, source or self.hardware_file, where.pop("at", ""), message, **where)
@@ -153,10 +275,16 @@ class Finalize:
                             "remove JH_PROJECT_TARGETS", header, line=lines[0])
         facts = project_config.load_targets()[target_id]
         try:
-            return project_config.evaluate_build(self.config_dir, facts, self.variant, self.defines,
-                                                 self.header_file)
-        except project_config.ProjectConfigError as error:
+            build = project_config.evaluate_build(self.config_dir, facts, self.variant, self.defines,
+                                                  self.header_file)
+            # Feature values are checked as in any project build: 0 is no request.
+            _, findings = project_config.resolve_build_features(
+                build, generate_hal_features.load_registry(REPO_ROOT / "config"))
+        except (project_config.ProjectConfigError, generate_hal_features.RegistryError) as error:
             raise self.fail("JH-HW-FEATURE", str(error), header) from error
+        if findings:
+            raise self.fail("JH-HW-FEATURE", "; ".join(findings), header)
+        return build
 
     def origin(self, build: project_config.BuildConfig, name: str) -> dict[str, Any]:
         """Where a definition came from: --define, --variant or a header line."""
@@ -229,34 +357,111 @@ class Finalize:
                                  if name.startswith("HAL_") and macro.source != "predefined"
                                  and not macro.function_like
                                  and not project_config.FEATURE_PATTERN.fullmatch(name)},
-                    "provider": target["build"]["provider"]}
+                    "provider": target["build"]["provider"],
+                    "abi": {**target_abi(target),
+                            **({"compiler": compiler_abi(self.compiler), "layout": compiler_layout(self.compiler)}
+                               if self.compiler else {})}}
         config_digest = hardware_output.digest({"hardwareSha256": document["hardwareSha256"],
                                                 "software": software})
         board, header_definitions, components = assembly_board(document, registry, target)
+        identity = hardware_output.hardware_id(document["hardwareSha256"])
         outputs = boards_module.build_outputs(
             target, board, registry.boards, registry.capabilities, requested, registry.boards_root,
-            header_definitions=header_definitions, cmake_definitions=[], components=components,
-            contract_hash=config_digest,
+            header_definitions=header_definitions,
+            cmake_definitions=compiler_definitions(header_definitions),
+            components=components, contract_hash=config_digest,
             header_prelude=["#ifndef JH_HW_SCHEMA_VERSION",
                             '#error "jh_hardware.h must be loaded before jh_board_config.h"',
-                            "#endif"],
+                            "#endif",
+                            f"#if JH_HW_HARDWARE_ID != {identity}",
+                            '#error "jh_board_config.h and jh_hardware.h come from different generations"',
+                            "#endif",
+                            f"#define HAL_BOARD_HARDWARE_ID {identity}",
+                            *(layout_checks(software["abi"]["layout"]) if self.compiler else [])],
             generation_extra=[self.hardware_file, self.header_file,
                               *(Path(f) for f in build.config.files),
                               *(dependency_path(item["path"], self.config_dir)
                                 for item in document["dependencies"])])
-        cmake = outputs.pop("jh_board_config.cmake").splitlines()
-        cmake[0] = "# Generated by generate_hardware_config.py; do not edit."
-        cmake += [f'set(JH_HARDWARE_HEADER "{self.header_file.as_posix()}")',
-                  f'set(JH_HARDWARE_RESOLVED_FILE "{self.hardware_file.as_posix()}")',
-                  f'set(JH_HARDWARE_SHA256 "{document["hardwareSha256"]}")',
-                  f'set(JH_CONFIG_SHA256 "{config_digest}")',
-                  f'set(JH_ASSEMBLY "{selection["assembly"]}")',
-                  f'set(JH_PROJECT_VARIANT "{software["variant"] or ""}")']
+        if self.compiler:
+            checks = abi_checks(software["abi"]["compiler"])
+            for name in ("jh_link_contract_definition.c", "jh_link_contract_reference.c"):
+                first, _, rest = outputs[name].partition("\n")
+                outputs[name] = "\n".join([first, *checks, rest])
+        board_record = outputs.pop("jh_board_config.cmake").splitlines()[1:]
+        identity_record = [cmake_set("JH_TARGET_SELECTOR", target["hal"]["targetSelector"]),
+                           cmake_set("JH_HARDWARE_SHA256", document["hardwareSha256"]),
+                           cmake_set("JH_CONFIG_SHA256", config_digest),
+                           cmake_set("JH_ASSEMBLY", selection["assembly"]),
+                           cmake_set("JH_PROJECT_VARIANT", software["variant"] or ""),
+                           cmake_set("JH_PROJECT_FEATURES", ";".join(software["requestedFeatures"])),
+                           cmake_set("JH_PROJECT_DEFINITIONS", ";".join(build.definitions)),
+                           cmake_set("JH_PROJECT_TUNABLES", ";".join(
+                               f"{name}={value}" for name, value in software["tunables"].items())),
+                           cmake_set("JH_HARDWARE_ABI", ";".join(abi_entries(software["abi"])))]
+        build_record = ["# Generated by generate_hardware_config.py; do not edit.", *board_record,
+                        cmake_set("JH_HARDWARE_HEADER", self.header_file.as_posix()),
+                        cmake_set("JH_HARDWARE_RESOLVED_FILE", self.hardware_file.as_posix()),
+                        cmake_set("JH_HARDWARE_CONFIG_FILE", (self.output_dir / CONFIG_JSON).as_posix()),
+                        *identity_record]
+        package = "${_jh_package_prefix}"
+        package_record = [
+            "# Generated by generate_hardware_config.py; do not edit.",
+            "# The configuration of an installed JaszczurHAL package; paths follow this file.",
+            'get_filename_component(_jh_package_prefix "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)',
+            *(line for line in board_record if not line.startswith("set(JH_BOARD_INPUT_GLOBS ")),
+            f'set(JH_HAL_PACKAGE_PREFIX "{package}")',
+            f'set(JH_HAL_PACKAGE_LIBRARY "{package}/lib/libJaszczurHAL.a")',
+            f'set(JH_HAL_PACKAGE_INCLUDE_DIRS "{package}/include;{package}/include/generated")',
+            f'set(JH_HAL_PACKAGE_REFERENCE_SOURCE "{package}/share/JaszczurHAL/generated/jh_link_contract_reference.c")',
+            f'set(JH_HARDWARE_HEADER "{package}/include/generated/{HARDWARE_HEADER}")',
+            f'set(JH_HARDWARE_RESOLVED_FILE "{package}/share/JaszczurHAL/generated/{RESOLVED_JSON}")',
+            f'set(JH_HARDWARE_CONFIG_FILE "{package}/share/JaszczurHAL/generated/{CONFIG_JSON}")',
+            *identity_record,
+            "unset(_jh_package_prefix)"]
         outputs.pop("jh_board_resolved.json")
         final = {key: value for key, value in document.items() if key not in ("software", "configSha256")}
         final.update(software=software, configSha256=config_digest)
-        return {**outputs, CMAKE_RECORD: "\n".join(cmake) + "\n",
+        return {**outputs, CMAKE_RECORD: "\n".join(build_record) + "\n",
+                PACKAGE_RECORD: "\n".join(package_record) + "\n",
                 CONFIG_JSON: hardware_output.dump_json(final)}
+
+
+def compiler_definitions(definitions: Sequence[str]) -> list[str]:
+    """The board definitions a build passes with -D: the ones no generated
+    header owns. An owned macro never reaches the compiler a second time."""
+    return [item for item in definitions if not OWNED_MACROS.fullmatch(item.split("=", 1)[0])]
+
+
+def write_model(directory: Path, document: dict[str, Any], header: str) -> tuple[Path, Path]:
+    """The resolve outputs of one model in a directory, for finalize."""
+    hardware_file, header_file = directory / RESOLVED_JSON, directory / HARDWARE_HEADER
+    atomic_write_text(hardware_file, hardware_output.dump_json(document), error_type=HardwareError)
+    atomic_write_text(header_file, header, error_type=HardwareError)
+    return hardware_file, header_file
+
+
+def cmake_set(name: str, value: str) -> str:
+    """A CMake set() whose value keeps quotes, backslashes and $ literally."""
+    fence = "="
+    while f"]{fence}]" in value:
+        fence += "="
+    return f"set({name} [{fence}[{value}]{fence}])"
+
+
+def abi_entries(abi: dict[str, Any]) -> list[str]:
+    """KEY=VALUE entries of the ABI record: target facts, compiler macros and
+    the struct layout as layout.<probe>."""
+    entries = [f"{key}={value}" for key, value in abi.items() if key not in ("compiler", "layout")]
+    entries += [f"{key}={value}" for key, value in abi.get("compiler", {}).items()]
+    return entries + [f"layout.{key}={value}" for key, value in abi.get("layout", {}).items()]
+
+
+def target_abi(target: dict[str, Any]) -> dict[str, Any]:
+    """Target facts fixing the compiled ABI: instruction set, FPU and the
+    build recipe that selects compiler flags."""
+    architecture = target["architecture"]
+    return {"isa": architecture["isa"], "fpu": int(bool(architecture["hasFpu"])),
+            **{key: target["build"][key] for key in sorted(target["build"]) if key != "provider"}}
 
 
 def assembly_board(document: dict[str, Any], registry: hardware_resolver.Registry,
@@ -273,7 +478,6 @@ def assembly_board(document: dict[str, Any], registry: hardware_resolver.Registr
                            if slot(key) not in ASSEMBLY_SLOTS or (radio == "board" and slot(key) != "system-clock")}
     if tree_component:
         board["components"][tree_component] = {"mode": "board-owned"}
-    definitions = boards_module.board_compile_definitions(target, board)
     board["capabilities"] = {cap: {"present": bool(hardware["capabilities"].get(cap)),
                                    "macro": f"JH_HW_HAS_{macro_token(cap)}"}
                              for cap in registry.capabilities}
@@ -295,14 +499,17 @@ def assembly_board(document: dict[str, Any], registry: hardware_resolver.Registr
     board["can"]["channels"] = [*board["can"].get("channels", []), *can_channels(hardware)]
     components = sorted(set(target["components"]) | set(board["components"]))
     if radio not in (None, "board"):
-        token = node_token(radio)
-        definitions += [f"HAL_CYW43_PIN_{name}=JH_HW_NODE_{token}_PIN_{macro_token(signal)}"
-                        for name, signal in CYW43_PINS.items()]
-        definitions.append("HAL_CYW43_MAX_TRANSACTION_BYTES=2048u")
-        if target["build"]["provider"] == "pico-sdk":
-            definitions.append("HAL_CYW43_GSPI_TARGET_HZ=31250000u")
         components = sorted({*components, CYW43_COMPONENTS[target["build"]["provider"]],
                              "cyw43-lwip", "btstack-host"})
+    # A module radio brings the transport of its component, wired to its own pins.
+    definitions = boards_module.board_compile_definitions(target, {"components": dict.fromkeys(components)})
+    if radio not in (None, "board"):
+        token = node_token(radio)
+        definitions = [d for d in definitions if not d.startswith("HAL_CYW43_PIN_")]
+        definitions += [f"HAL_CYW43_PIN_{name}=JH_HW_NODE_{token}_PIN_{macro_token(signal)}"
+                        for name, signal in CYW43_PINS.items()]
+        if target["build"]["provider"] == "pico-sdk":
+            definitions.append("HAL_CYW43_GSPI_TARGET_HZ=31250000u")
     return board, definitions, components
 
 
@@ -338,6 +545,8 @@ def write_outputs(output_dir: Path, outputs: dict[str, str], names: Sequence[str
 
 
 def remove_outputs(output_dir: Path, names: Sequence[str]) -> None:
+    if not output_dir.is_dir():
+        return
     for name in names:
         (output_dir / name).unlink(missing_ok=True)
 
@@ -361,46 +570,83 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     finalizing.add_argument("--define", action="append", default=[])
     finalizing.add_argument("--output-dir", type=Path, required=True)
     finalizing.add_argument("--output-root", type=Path)
+    identifying = commands.add_parser("identity", help="print the selection and the digests")
+    identifying.add_argument("--config-dir", type=Path, required=True)
+    identifying.add_argument("--target")
+    identifying.add_argument("--assembly")
+    identifying.add_argument("--variant")
+    identifying.add_argument("--define", action="append", default=[])
+    for command in (finalizing, identifying):
+        # The ABI joins the identity as the build's compiler reports it.
+        command.add_argument("--compiler")
+        command.add_argument("--compiler-flag", action="append", default=[])
     return parser.parse_args(argv)
 
 
-def report(error: HardwareError) -> int:
+def compiler_command(args: argparse.Namespace) -> list[str]:
+    if args.compiler_flag and not args.compiler:
+        raise HardwareError("JH-HW-GENERATION", "", "", "--compiler-flag needs --compiler",
+                            argument="--compiler-flag")
+    return [args.compiler, *args.compiler_flag] if args.compiler else []
+
+
+def report(error: Exception) -> int:
+    """A diagnostic on stderr; registry and write failures get the generation code."""
+    if not isinstance(error, HardwareError):
+        error = HardwareError("JH-HW-GENERATION", "", "", str(error))
     print(f"error: {error}", file=sys.stderr)
     return 2
+
+
+def identity(config_dir: Path, target: str | None, assembly: str | None, variant: str | None,
+             defines: Sequence[str], compiler: Sequence[str] = ()) -> dict[str, Any]:
+    """What resolve and finalize give one configuration, computed in a
+    scratch directory: a build directory or cache can be named by it."""
+    document, header = resolve(config_dir, target, assembly)
+    with tempfile.TemporaryDirectory(prefix="jh-hardware-identity-") as text:
+        scratch = Path(text)
+        hardware_file, header_file = write_model(scratch, document, header)
+        final = json.loads(Finalize(hardware_file, header_file, config_dir, variant, defines,
+                                    scratch, compiler).run()[CONFIG_JSON])
+    return {"schemaVersion": hardware_output.SCHEMA_VERSION, "selection": final["selection"],
+            "variant": final["software"]["variant"], "hardwareSha256": final["hardwareSha256"],
+            "configSha256": final["configSha256"]}
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     config_dir = args.config_dir.resolve()
-    if args.command == "list":
+    if args.command in ("list", "identity"):
         try:
-            data = hardware_resolver.load_device_tree(config_dir / DEVICE_TREE)
-        except HardwareError as error:
+            if args.command == "identity":
+                result = identity(config_dir, args.target, args.assembly, args.variant, args.define,
+                                  compiler_command(args))
+            else:
+                data = hardware_resolver.load_device_tree(config_dir / DEVICE_TREE)
+                result = {"schemaVersion": hardware_output.SCHEMA_VERSION,
+                          "assemblies": hardware_resolver.list_assemblies(data)}
+        except (HardwareError, boards_module.DescriptorError) as error:
             return report(error)
-        print(json.dumps({"schemaVersion": hardware_output.SCHEMA_VERSION,
-                          "assemblies": hardware_resolver.list_assemblies(data)}, indent=2))
+        print(json.dumps(result, indent=2))
         return 0
     try:
         output_dir = boards_module.require_managed_output(args.output_dir, args.output_root, REPO_ROOT)
     except boards_module.DescriptorError as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
-    if args.command == "finalize":
-        try:
-            outputs = Finalize(args.hardware, args.hardware_header, config_dir, args.variant,
-                               args.define).run()
-        except HardwareError as error:
-            remove_outputs(output_dir, FINALIZE_OUTPUTS)
-            return report(error)
-        write_outputs(output_dir, outputs, FINALIZE_OUTPUTS)
-        return 0
+    names = FINALIZE_OUTPUTS if args.command == "finalize" else RESOLVE_OUTPUTS
     try:
-        document, header = resolve(config_dir, args.target, args.assembly)
-    except HardwareError as error:
-        remove_outputs(output_dir, RESOLVE_OUTPUTS)
+        if args.command == "finalize":
+            outputs = Finalize(args.hardware, args.hardware_header, config_dir, args.variant,
+                               args.define, output_dir, compiler_command(args)).run()
+        else:
+            document, header = resolve(config_dir, args.target, args.assembly)
+            outputs = {HARDWARE_HEADER: header, RESOLVED_JSON: hardware_output.dump_json(document)}
+        write_outputs(output_dir, outputs, names)
+    except (HardwareError, boards_module.DescriptorError, OSError) as error:
+        # A failed resolve also drops what finalize made of the earlier model.
+        remove_outputs(output_dir, names if args.command == "finalize" else (*names, *FINALIZE_OUTPUTS))
         return report(error)
-    write_outputs(output_dir, {HARDWARE_HEADER: header, RESOLVED_JSON: hardware_output.dump_json(document)},
-                  RESOLVE_OUTPUTS)
     return 0
 
 

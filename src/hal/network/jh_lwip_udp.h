@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/core/hal_status.h"
 #include <lwip/ip4_addr.h>
 #include <lwip/pbuf.h>

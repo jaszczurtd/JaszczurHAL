@@ -12,6 +12,9 @@ jh_require_managed_build_dir()
 #     JH_PROJECT_DIR  = <the project's source dir> (required)
 #     JH_MODULE_NAME  = firmware/sketch name      (optional; default: dir name)
 #     JH_VARIANT      = a variant from JH_PROJECT_VARIANTS (optional)
+#     JH_ASSEMBLY     = an assembly of the project's device_tree.json; the
+#                       assembly gives target and board, JH_TARGET then only
+#                       narrows the choice and JH_BOARD is refused
 # plus target-specific cache (PICO_PLATFORM/PICO_SDK_PATH for RP or
 # CMAKE_TOOLCHAIN_FILE for stm32g474). The project's HAL configuration,
 # including its variants and targets, lives only in hal_project_config.h.
@@ -23,10 +26,12 @@ jh_require_managed_build_dir()
 # proven examples/CMakeLists.txt and keeps each carrier in one target recipe.
 # ─────────────────────────────────────────────────────────────────────────────
 
-set(JH_TARGET "rp2040" CACHE STRING
-    "Target backend: rp2040 | rp2350-arm | rp2350-riscv | stm32g474")
+set(JH_TARGET "" CACHE STRING
+    "Target backend: rp2040 | rp2350-arm | rp2350-riscv | stm32g474; rp2040 without a device tree")
 set(JH_BOARD "" CACHE STRING
     "Physical board profile; defaults to the selected target's defaultBoard")
+set(JH_ASSEMBLY "" CACHE STRING
+    "Assembly of the project's device_tree.json")
 set(JH_VARIANT "" CACHE STRING
     "Build variant declared by JH_PROJECT_VARIANTS in hal_project_config.h")
 set(JH_PROJECT_DIR "" CACHE PATH "Client project source directory")
@@ -65,19 +70,7 @@ endif()
 
 include("${JH_ROOT}/cmake/jh_project_features.cmake")
 include("${JH_ROOT}/cmake/jh_project_config.cmake")
-jh_read_project_config(
-    ROOT "${JH_ROOT}"
-    CONFIG_DIR "${JH_PROJECT_DIR}"
-    TARGET "${JH_TARGET}"
-    VARIANT "${JH_VARIANT}"
-    OUTPUT_DIR "${CMAKE_BINARY_DIR}/generated/project")
-jh_resolve_feature_defines(
-    JH_REQUESTED_FEATURES
-    JH_RESOLVED_FEATURES
-    ${JH_PROJECT_FEATURES})
-jh_split_project_definitions(
-    _jh_project_plain_definitions _jh_project_feature_definitions
-    ${JH_PROJECT_DEFINITIONS})
+include("${JH_ROOT}/cmake/jh_hardware_config.cmake")
 
 set(_jh_requested_pico_platform "")
 set(_jh_requested_pico_board "")
@@ -88,20 +81,62 @@ if(DEFINED PICO_BOARD)
     set(_jh_requested_pico_board "${PICO_BOARD}")
 endif()
 
-include("${JH_ROOT}/cmake/jh_board_profiles.cmake")
-jh_generate_board_config(
-    ROOT "${JH_ROOT}"
-    TARGET "${JH_TARGET}"
-    BOARD "${JH_BOARD}"
-    OUTPUT_DIR
-        "${CMAKE_BINARY_DIR}/generated/boards/${JH_TARGET}/${JH_BOARD}"
-    OUTPUT_ROOT "${CMAKE_BINARY_DIR}"
-    DEFINES ${_jh_project_plain_definitions}
-    REQUESTED_FEATURES ${JH_REQUESTED_FEATURES}
-    RESOLVED_FEATURES ${JH_RESOLVED_FEATURES})
-set(JH_RESOLVED_FEATURES "${JH_BOARD_RESOLVED_FEATURES}")
-set(JH_BOARD "${JH_RESOLVED_BOARD}" CACHE STRING
-    "Resolved physical board profile" FORCE)
+# A device tree gives target and board through its assembly and the
+# generated headers; outputs of the other mode never stay on the include path.
+jh_device_tree_build(JH_DEVICE_TREE_BUILD "${JH_PROJECT_DIR}")
+jh_settle_build_mode(${JH_DEVICE_TREE_BUILD} "${JH_PROJECT_DIR}" BOARD_VARIABLE JH_BOARD)
+if(JH_DEVICE_TREE_BUILD)
+    file(REMOVE_RECURSE
+        "${CMAKE_BINARY_DIR}/generated/boards" "${CMAKE_BINARY_DIR}/generated/project")
+    jh_generate_hardware_config(
+        ROOT "${JH_ROOT}"
+        CONFIG_DIR "${JH_PROJECT_DIR}"
+        TARGET "${JH_TARGET}"
+        ASSEMBLY "${JH_ASSEMBLY}"
+        VARIANT "${JH_VARIANT}"
+        OUTPUT_DIR "${CMAKE_BINARY_DIR}/generated/hardware"
+        OUTPUT_ROOT "${CMAKE_BINARY_DIR}"
+        ABI_LATER)
+    set(JH_TARGET "${JH_RESOLVED_TARGET}")
+    set(JH_BOARD "${JH_RESOLVED_BOARD}")
+    jh_remember_build_mode(TRUE)
+else()
+    if("${JH_TARGET}" STREQUAL "")
+        set(JH_TARGET "rp2040")
+    endif()
+    file(REMOVE_RECURSE "${CMAKE_BINARY_DIR}/generated/hardware")
+    jh_read_project_config(
+        ROOT "${JH_ROOT}"
+        CONFIG_DIR "${JH_PROJECT_DIR}"
+        TARGET "${JH_TARGET}"
+        VARIANT "${JH_VARIANT}"
+        OUTPUT_DIR "${CMAKE_BINARY_DIR}/generated/project")
+    jh_resolve_feature_defines(
+        JH_REQUESTED_FEATURES
+        JH_RESOLVED_FEATURES
+        ${JH_PROJECT_FEATURES})
+    jh_split_project_definitions(
+        _jh_board_plain_definitions _jh_board_feature_definitions
+        ${JH_PROJECT_DEFINITIONS})
+    include("${JH_ROOT}/cmake/jh_board_profiles.cmake")
+    jh_generate_board_config(
+        ROOT "${JH_ROOT}"
+        TARGET "${JH_TARGET}"
+        BOARD "${JH_BOARD}"
+        OUTPUT_DIR
+            "${CMAKE_BINARY_DIR}/generated/boards/${JH_TARGET}/${JH_BOARD}"
+        OUTPUT_ROOT "${CMAKE_BINARY_DIR}"
+        DEFINES ${_jh_board_plain_definitions}
+        REQUESTED_FEATURES ${JH_REQUESTED_FEATURES}
+        RESOLVED_FEATURES ${JH_RESOLVED_FEATURES})
+    set(JH_RESOLVED_FEATURES "${JH_BOARD_RESOLVED_FEATURES}")
+    set(JH_BOARD "${JH_RESOLVED_BOARD}" CACHE STRING
+        "Resolved physical board profile" FORCE)
+    jh_remember_build_mode(FALSE BOARD "${JH_BOARD}")
+endif()
+jh_split_project_definitions(
+    _jh_project_plain_definitions _jh_project_feature_definitions
+    ${JH_PROJECT_DEFINITIONS})
 
 if(_jh_requested_pico_platform AND
    NOT "${_jh_requested_pico_platform}" STREQUAL "${PICO_PLATFORM}")
@@ -198,8 +233,8 @@ file(MAKE_DIRECTORY "${JH_ARTIFACT_DIR}")
 
 message(STATUS
     "jh-firmware: target=${JH_TARGET} board=${JH_BOARD} "
-    "variant=${JH_PROJECT_VARIANT} module=${JH_MODULE_NAME} "
-    "artifacts=${JH_ARTIFACT_DIR}")
+    "assembly=${JH_ASSEMBLY} variant=${JH_PROJECT_VARIANT} "
+    "module=${JH_MODULE_NAME} artifacts=${JH_ARTIFACT_DIR}")
 message(STATUS
     "jh-firmware: requestedFeatures=${JH_REQUESTED_FEATURES} "
     "resolvedFeatures=${JH_RESOLVED_FEATURES}")

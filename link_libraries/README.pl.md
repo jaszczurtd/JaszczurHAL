@@ -25,7 +25,9 @@ rodzinę:
 Każdy runner przyjmuje `--target`, `--board`, `--all-features`,
 `--library-only`, `--freertos`, `-p`/`--project-config`, `-D`, `-o`/`--output`,
 `--clean` i `-j`/`--jobs`. Opcje właściwe dla rodziny wypisuje `--help`
-danego runnera.
+danego runnera. Gdy w katalogu `--project-config` leży `device_tree.json`,
+zamiast `--board` wybierz montaż przez `--assembly` (oraz `--variant`); opis
+w [formacie drzewa urządzeń](../doc/pl/device_tree_format.md#pakiet-samodzielnej-biblioteki).
 
 `rp_pico_lib/` i `stm32_lib/` to projekty CMake. `esp32_lib/` to minimalna
 aplikacja ESP-IDF; jej archiwum komponentu JaszczurHAL jest publikowane jako

@@ -5,6 +5,8 @@
  * @brief IPv4/IPv6 socket address definitions for JaszczurHAL BSD sockets.
  */
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/core/hal_config.h"
 
 #if defined(HAL_NETWORK_BACKEND_ESP_IDF)

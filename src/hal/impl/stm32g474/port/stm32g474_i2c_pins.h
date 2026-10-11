@@ -1,6 +1,8 @@
 #ifndef JH_STM32G474_I2C_PINS_H
 #define JH_STM32G474_I2C_PINS_H
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/core/hal_array.h"
 #include "hal/gpio/hal_gpio.h"
 

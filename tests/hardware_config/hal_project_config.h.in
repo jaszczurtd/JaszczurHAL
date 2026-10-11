@@ -1,0 +1,8 @@
+/* Program configuration of the HAL-order probes: it chooses WiFi from an
+ * early hardware macro, so the build tools and the compiler can only agree
+ * when both read the generated jh_hardware.h first. */
+#pragma once
+
+#if JH_HW_HAS_CYW43
+#define HAL_ENABLE_WIFI
+#endif

@@ -14,6 +14,8 @@
  * second consumer must be serialized by the caller.
  */
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/core/hal_compiler.h"
 
 #include <stdbool.h>

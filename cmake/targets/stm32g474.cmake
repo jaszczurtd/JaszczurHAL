@@ -26,6 +26,11 @@ include("${JH_ROOT}/link_libraries/stm32_lib/freertos_stm32g474.cmake")
 include("${JH_ROOT}/cmake/jh_entry_adapter.cmake")
 include("${JH_ROOT}/cmake/jh_cyw43_driver.cmake")
 
+# A device tree build signs its configuration with the ABI of these flags.
+if(JH_DEVICE_TREE_BUILD)
+    jh_finalize_hardware_abi(FLAGS ${JH_STM32G474_ARCH_FLAGS})
+endif()
+
 set(JH_EXTRA_INCLUDES "" CACHE STRING "Extra include dirs for the firmware")
 set(JH_EXTRA_LIBRARIES "" CACHE STRING "Extra flat library dirs to compile+include (';'-separated), e.g. Credentials")
 set(JH_LINK_LIBRARIES "" CACHE STRING "Precompiled static archives or CMake library targets (';'-separated)")
@@ -55,6 +60,10 @@ set(_defines
     HAL_PROVIDE_APP_ENTRY=1
     ${JH_BOARD_COMPILE_DEFINITIONS}
     ${_jh_project_plain_definitions})
+# A device tree build names its jh_hardware.h for the hook in every unit.
+if(JH_HARDWARE_DEFINITION)
+    list(APPEND _defines "${JH_HARDWARE_DEFINITION}")
+endif()
 set(_feature_defines ${JH_RESOLVED_FEATURES})
 list(APPEND _sources "${JH_BOARD_GENERATED_DIR}/jh_link_contract_reference.c")
 list(APPEND _sources "${JH_BOARD_GENERATED_DIR}/jh_link_contract_definition.c")

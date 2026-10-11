@@ -5,6 +5,8 @@
  * @brief Internal validation and transition ownership helpers for hal_power.
  */
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/core/hal_compiler.h"
 #include "hal/power/hal_power.h"
 #include "hal/system/hal_sync.h"

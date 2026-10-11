@@ -10,6 +10,8 @@
  * bus.
  */
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/can/hal_can.h"
 #include "hal/can/jh_can_provider.h"
 

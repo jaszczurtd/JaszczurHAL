@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/network/cyw43/jh_cyw43_gspi_transport.h"
 #include "rp2040_cyw43_gspi_clock.h"
 

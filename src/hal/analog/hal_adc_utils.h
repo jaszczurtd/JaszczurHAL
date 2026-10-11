@@ -2,6 +2,8 @@
 
 /** @file Portable ADC conversion and repeated-sampling helpers. */
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/core/hal_status.h"
 
 #include <stdbool.h>

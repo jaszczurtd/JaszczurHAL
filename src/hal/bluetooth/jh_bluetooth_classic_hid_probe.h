@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/bluetooth/hal_gamepad.h"
 #include "hal/core/hal_status.h"
 #include "jh_bluetooth_classic_hid_memory_probe.h"

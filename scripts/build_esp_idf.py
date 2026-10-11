@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path, PureWindowsPath
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -18,6 +19,9 @@ from typing import Any, Mapping, Sequence
 import component_manager
 import generate_board_config
 import generate_hal_features
+import generate_hardware_config as hardware_generator
+from hardware_model import HardwareError
+import hardware_resolver
 import project_config
 
 
@@ -197,6 +201,18 @@ ESP_IDF_MANAGED_FRAMEWORKS = {
 GENERATED_BOARD_CONTRACT_INPUTS = (
     "jh_board_resolved.json",
     "jh_board_config.cmake",
+    "jh_board_config.h",
+    "jh_link_contract.h",
+    "jh_link_contract_definition.c",
+    "jh_link_contract_reference.c",
+)
+# The generated inputs of a device tree build; the build record and
+# generation.d name the build directory and are not compared.
+DEVICE_TREE_CONTRACT_INPUTS = (
+    hardware_generator.HARDWARE_HEADER,
+    hardware_generator.RESOLVED_JSON,
+    hardware_generator.CONFIG_JSON,
+    hardware_generator.PACKAGE_RECORD,
     "jh_board_config.h",
     "jh_link_contract.h",
     "jh_link_contract_definition.c",
@@ -994,10 +1010,12 @@ def collect_project_features(
     variant: str | None,
     features: Sequence[str],
     definitions: Sequence[str],
+    hardware_header: Path | None = None,
 ) -> tuple[project_config.BuildConfig, list[str]]:
     """Evaluate hal_project_config.h for the target and variant with the
     command-line definitions (``features`` are bare feature definitions) and
-    return the build with the features it requests explicitly."""
+    return the build with the features it requests explicitly. A device tree
+    build reads its generated ``hardware_header`` first, like the hook."""
     normalized_definitions = [_normalize_definition(item) for item in definitions]
     try:
         generate_board_config.validate_definitions(normalized_definitions)
@@ -1015,7 +1033,7 @@ def collect_project_features(
     try:
         targets = project_config.load_targets(repo_root)
         build = project_config.evaluate_build(
-            config_dir, targets[target], variant, extra_definitions
+            config_dir, targets[target], variant, extra_definitions, hardware_header
         )
         model = generate_hal_features.load_registry(repo_root / "config")
         resolution, findings = project_config.resolve_build_features(build, model)
@@ -1128,6 +1146,7 @@ def resolve_build_model(
     project_config_dir: Path | None = None,
     all_features: bool = False,
     variant: str | None = None,
+    assembly: str | None = None,
 ) -> dict[str, Any]:
     repo_root = _canonical_path(repo_root)
     project_dir = _canonical_path(project_dir)
@@ -1145,7 +1164,27 @@ def resolve_build_model(
     if target not in targets:
         raise EspIdfError(f"Unknown JaszczurHAL target: {target!r}")
     target_descriptor = targets[target]
-    selected_board = board or target_descriptor["defaultBoard"]
+    # A device tree selects target and board through its assemblies; only the
+    # absence of the file keeps the board path.
+    device_tree = None
+    if (config_dir / hardware_generator.DEVICE_TREE).is_file():
+        if board:
+            raise EspIdfError(
+                f"[JH-HW-BOARD] {config_dir / hardware_generator.DEVICE_TREE} selects "
+                "the board through its assemblies; use --assembly instead of --board"
+            )
+        try:
+            document, hardware_header = hardware_generator.resolve(config_dir, target, assembly)
+        except (HardwareError, generate_board_config.DescriptorError) as error:
+            raise EspIdfError(str(error)) from error
+        device_tree = {"document": document, "header": hardware_header}
+        selected_board = document["selection"]["board"]
+    else:
+        if assembly:
+            raise EspIdfError(
+                f"[JH-HW-ASSEMBLY] --assembly needs {config_dir / hardware_generator.DEVICE_TREE}"
+            )
+        selected_board = board or target_descriptor["defaultBoard"]
     if selected_board not in boards:
         raise EspIdfError(f"Unknown JaszczurHAL board: {selected_board!r}")
     board_descriptor = boards[selected_board]
@@ -1177,9 +1216,14 @@ def resolve_build_model(
             # HAL_ENABLE_TFT needs one concrete facade selection even though
             # every TFT driver is enabled; mirror jh_all_features_for_target.
             definitions = [*definitions, "HAL_DISPLAY_ILI9341"]
-    build, requested_features = collect_project_features(
-        repo_root, config_dir, target, variant, features, definitions
-    )
+    with tempfile.TemporaryDirectory(prefix="jh-hardware-header-") as scratch:
+        header_path = None
+        if device_tree is not None:
+            header_path = Path(scratch) / hardware_generator.HARDWARE_HEADER
+            header_path.write_text(device_tree["header"], encoding="utf-8")
+        build, requested_features = collect_project_features(
+            repo_root, config_dir, target, variant, features, definitions, header_path
+        )
     try:
         _, resolved_features, _ = generate_board_config.resolve_features(
             requested_features, target_descriptor
@@ -1208,9 +1252,7 @@ def resolve_build_model(
             )
             if symbol not in header_features
         ),
-        *generate_board_config.board_compile_definitions(
-            target_descriptor, board_descriptor
-        ),
+        *board_definitions(target_descriptor, board_descriptor, device_tree),
     }
     if not build.config.defined("HAL_PROVIDE_APP_ENTRY"):
         compile_definitions.add("HAL_PROVIDE_APP_ENTRY")
@@ -1247,7 +1289,34 @@ def resolve_build_model(
         "boardDescriptor": board_descriptor,
         "boards": boards,
         "capabilities": capabilities,
+        # A device tree build: its resolved model, header and the -D requests
+        # finalize reads the program configuration with.
+        "deviceTree": None if device_tree is None else {
+            **device_tree,
+            "variant": variant,
+            "definitions": list(build.extra_definitions),
+        },
+        "buildKey": selected_board if device_tree is None
+        else device_tree["document"]["selection"]["assembly"],
     }
+
+
+def board_definitions(
+    target: Mapping[str, Any],
+    board: Mapping[str, Any],
+    device_tree: Mapping[str, Any] | None,
+) -> list[str]:
+    """Board definitions the compiler gets with -D. A device tree build takes
+    them from its assembly, without the macros the generated headers own."""
+    if device_tree is None:
+        return generate_board_config.board_compile_definitions(target, board)
+    try:
+        _, definitions, _ = hardware_generator.assembly_board(
+            device_tree["document"], hardware_resolver.load_registry(), dict(target)
+        )
+    except generate_board_config.DescriptorError as error:
+        raise EspIdfError(str(error)) from error
+    return hardware_generator.compiler_definitions(definitions)
 
 
 def _cmake_quote(value: str) -> str:
@@ -1382,6 +1451,24 @@ def _project_sdkconfig_defaults(project_dir: Path, build_dir: Path) -> list[Path
     return defaults
 
 
+def _resolved_board(record: Mapping[str, Any], model: Mapping[str, Any]) -> dict[str, Any]:
+    """The resolved board facts a build checks, from jh_board_resolved.json on
+    the board path or jh_hardware_config.json of a device tree build."""
+    if model.get("deviceTree") is None:
+        return dict(record)
+    software = record.get("software") or {}
+    digest = str(record.get("configSha256") or "")
+    return {
+        "target": (record.get("selection") or {}).get("target"),
+        "board": (record.get("selection") or {}).get("board"),
+        "idfTarget": model["idfTarget"],
+        "requestedFeatures": software.get("requestedFeatures"),
+        "resolvedFeatures": software.get("resolvedFeatures"),
+        "featureHash": digest[:12],
+        "configSha256": digest,
+    }
+
+
 def _render_project_cmake(
     model: Mapping[str, Any], sdkconfig_defaults: Sequence[Path]
 ) -> str:
@@ -1391,6 +1478,9 @@ def _render_project_cmake(
         f"set(JH_ESP_IDF_BOARD {_cmake_quote(model['board'])})",
         f"set(JH_ESP_IDF_PROJECT_NAME {_cmake_quote(model['projectName'])})",
     ]
+    if model.get("deviceTree") is not None:
+        # The components then name the generated jh_hardware.h for the hook.
+        lines.append("set(JH_ESP_IDF_DEVICE_TREE TRUE)")
     lines.extend(
         _render_cmake_list(
             "JH_ESP_IDF_PROJECT_SOURCES",
@@ -1532,17 +1622,7 @@ def materialize_build_inputs(
     build_dir = _canonical_path(build_dir)
     generated_dir = build_dir / GENERATED_DIR_NAME
     generated_dir.mkdir(parents=True, exist_ok=True)
-    try:
-        generate_board_config.generate(
-            model["targetDescriptor"],
-            model["boardDescriptor"],
-            model["boards"],
-            model["capabilities"],
-            generated_dir,
-            list(model["requestedFeatures"]),
-        )
-    except generate_board_config.DescriptorError as error:
-        raise EspIdfError(str(error)) from error
+    generate_board_inputs(generated_dir, model, configured_abi_command(build_dir, model))
 
     generated_defaults = generated_dir / SDKCONFIG_DEFAULTS_NAME
     generated_defaults.write_text(
@@ -1563,28 +1643,146 @@ def materialize_build_inputs(
     return generated_dir
 
 
-def validate_generated_board_contract(
-    build_dir: Path, model: Mapping[str, Any]
-) -> None:
-    """Reject artifacts built from a stale target or board model."""
-    generated_dir = build_dir / GENERATED_DIR_NAME
-    with tempfile.TemporaryDirectory(
-        prefix=".jh-board-contract-check-", dir=build_dir
-    ) as temporary:
-        expected_dir = Path(temporary)
-        try:
+# The HAL component source whose compile command a device tree build
+# measures its ABI and struct layout with.
+ABI_SOURCE_NAME = "jh_link_contract_definition.c"
+# Options that name the files of one compile or only feed the preprocessor:
+# with a separate value, and as prefixes of a joined one.
+COMPILE_FILE_OPTIONS = frozenset({
+    "-o", "-MF", "-MT", "-MQ", "-I", "-D", "-U", "-include", "-imacros",
+    "-isystem", "-iquote", "-idirafter",
+})
+COMPILE_STEP_OPTIONS = frozenset({"-c", "-S", "-E", "-M", "-MM", "-MD", "-MMD", "-MP"})
+
+
+def split_compile_command(command: str) -> list[str]:
+    """The arguments of one compile_commands.json command string, split by
+    the rules of the host's shell."""
+    if os.name != "nt":
+        return shlex.split(command)
+    import ctypes  # pylint: disable=import-outside-toplevel
+
+    count = ctypes.c_int()
+    split = ctypes.windll.shell32.CommandLineToArgvW
+    split.restype = ctypes.POINTER(ctypes.c_wchar_p)
+    argv = split(command, ctypes.byref(count))
+    try:
+        return [argv[index] for index in range(count.value)]
+    finally:
+        ctypes.windll.kernel32.LocalFree(argv)
+
+
+def abi_compile_command(build_dir: Path) -> list[str]:
+    """The compiler and the flags the HAL component compiles its C sources
+    with, read from compile_commands.json after configure: every option
+    except the files of that compile and the preprocessor inputs."""
+    database = build_dir / "compile_commands.json"
+    source = _canonical_path(build_dir / GENERATED_DIR_NAME / ABI_SOURCE_NAME)
+    try:
+        entries = json.loads(database.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise EspIdfError(f"Cannot read {database}: {error}") from error
+    for entry in entries if isinstance(entries, list) else []:
+        directory = Path(entry.get("directory", build_dir))
+        if _canonical_path(directory / entry.get("file", "")) != source:
+            continue
+        arguments = list(entry.get("arguments") or split_compile_command(entry["command"]))
+        if Path(arguments[0]).stem in ("ccache", "sccache"):
+            arguments.pop(0)
+        command, skip = [arguments[0]], False
+        for argument in arguments[1:]:
+            if skip:
+                skip = False
+            elif argument in COMPILE_FILE_OPTIONS:
+                skip = True
+            elif argument in COMPILE_STEP_OPTIONS or argument.startswith(
+                    tuple(option for option in COMPILE_FILE_OPTIONS if len(option) == 2)):
+                continue
+            elif _canonical_path(directory / argument) == source:
+                continue
+            elif argument.startswith("@"):
+                command.append("@" + str(directory / argument[1:]))
+            else:
+                command.append(argument)
+        return command
+    raise EspIdfError(f"{database} has no compile command for {source}")
+
+
+def configured_abi_command(build_dir: Path, model: Mapping[str, Any]) -> list[str]:
+    """The HAL compile command of the last configure of a device tree build,
+    so an unchanged build writes the same files; none before the first
+    configure, whose finalize then runs again before anything compiles."""
+    if model.get("deviceTree") is None or not (build_dir / "compile_commands.json").is_file():
+        return []
+    try:
+        return abi_compile_command(build_dir)
+    except EspIdfError:
+        return []
+
+
+def generate_board_inputs(directory: Path, model: Mapping[str, Any], compiler: Sequence[str] = ()) -> None:
+    """The generated board inputs of one build in ``directory``: the board
+    path writes them from the registry, a device tree build resolves and
+    finalizes its assembly, with the ABI and struct layout ``compiler`` (the
+    HAL component's compile command) reports. Files of the other path are
+    removed."""
+    device_tree = model.get("deviceTree")
+    stale = (
+        GENERATED_BOARD_CONTRACT_INPUTS
+        if device_tree is not None
+        else (*DEVICE_TREE_CONTRACT_INPUTS, hardware_generator.CMAKE_RECORD)
+    )
+    for name in stale:
+        if name not in ("jh_board_config.h", "jh_link_contract.h",
+                        "jh_link_contract_definition.c", "jh_link_contract_reference.c"):
+            (directory / name).unlink(missing_ok=True)
+    try:
+        if device_tree is None:
             generate_board_config.generate(
                 model["targetDescriptor"],
                 model["boardDescriptor"],
                 model["boards"],
                 model["capabilities"],
-                expected_dir,
+                directory,
                 list(model["requestedFeatures"]),
             )
-        except generate_board_config.DescriptorError as error:
-            raise EspIdfError(str(error)) from error
+            return
+        hardware_file, header_file = hardware_generator.write_model(
+            directory, device_tree["document"], device_tree["header"]
+        )
+        outputs = hardware_generator.Finalize(
+            hardware_file,
+            header_file,
+            model["projectConfigDir"],
+            device_tree["variant"],
+            device_tree["definitions"],
+            directory,
+            compiler,
+        ).run()
+        hardware_generator.write_outputs(
+            directory, outputs, hardware_generator.FINALIZE_OUTPUTS
+        )
+    except (HardwareError, generate_board_config.DescriptorError) as error:
+        raise EspIdfError(str(error)) from error
 
-        for name in GENERATED_BOARD_CONTRACT_INPUTS:
+
+def validate_generated_board_contract(
+    build_dir: Path, model: Mapping[str, Any]
+) -> None:
+    """Reject artifacts built from a stale target, board or assembly model."""
+    generated_dir = build_dir / GENERATED_DIR_NAME
+    with tempfile.TemporaryDirectory(
+        prefix=".jh-board-contract-check-", dir=build_dir
+    ) as temporary:
+        expected_dir = Path(temporary)
+        generate_board_inputs(expected_dir, model, [] if model.get("deviceTree") is None
+                              else abi_compile_command(build_dir))
+        names = (
+            GENERATED_BOARD_CONTRACT_INPUTS
+            if model.get("deviceTree") is None
+            else DEVICE_TREE_CONTRACT_INPUTS
+        )
+        for name in names:
             actual = generated_dir / name
             expected = expected_dir / name
             if not actual.is_file():
@@ -1945,7 +2143,12 @@ def validate_artifacts(
         "buildLog": LOG_NAME,
         "generatedConfig": f"{GENERATED_DIR_NAME}/{GENERATED_CONFIG_NAME}",
         "generatedLinkContract": f"{GENERATED_DIR_NAME}/jh_link_contract.h",
-        "resolvedBoardConfig": f"{GENERATED_DIR_NAME}/jh_board_resolved.json",
+        "resolvedBoardConfig": f"{GENERATED_DIR_NAME}/"
+        + (
+            "jh_board_resolved.json"
+            if model.get("deviceTree") is None
+            else hardware_generator.CONFIG_JSON
+        ),
         "projectConfig": f"{GENERATED_DIR_NAME}/{PROJECT_CONFIG_JSON_NAME}",
         "toolchainProvenance": (
             f"{GENERATED_DIR_NAME}/{TOOLCHAIN_PROVENANCE_NAME}"
@@ -2028,7 +2231,9 @@ def validate_artifacts(
             + ", ".join(missing_sources)
         )
 
-    resolved_board = _load_object(build_dir / required["resolvedBoardConfig"])
+    resolved_board = _resolved_board(
+        _load_object(build_dir / required["resolvedBoardConfig"]), model
+    )
     for key, expected in (
         ("target", model["target"]),
         ("board", model["board"]),
@@ -2036,7 +2241,11 @@ def validate_artifacts(
         ("requestedFeatures", model["requestedFeatures"]),
         ("resolvedFeatures", model["resolvedFeatures"]),
     ):
-        if resolved_board.get(key) != expected:
+        actual = resolved_board.get(key)
+        if model.get("deviceTree") is not None and isinstance(expected, list):
+            # finalize records the feature lists sorted.
+            expected, actual = sorted(expected), sorted(actual or [])
+        if actual != expected:
             raise EspIdfError(
                 f"Resolved board config {key} mismatch: expected {expected!r}, "
                 f"found {resolved_board.get(key)!r}"
@@ -2281,6 +2490,11 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--idf-dir", default="")
     parser.add_argument("--target", default=DEFAULT_TARGET)
     parser.add_argument("--board", default="")
+    parser.add_argument(
+        "--assembly",
+        default="",
+        help="Assembly of the device_tree.json in the configuration directory",
+    )
     parser.add_argument("--name", default="")
     parser.add_argument("--output", default="")
     parser.add_argument("--source", action="append", default=[])
@@ -2337,6 +2551,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             ),
             all_features=arguments.all_features,
             variant=arguments.variant or None,
+            assembly=arguments.assembly or None,
         )
         stage = "resolve-build-directory"
         build_dir = resolve_build_dir(
@@ -2344,7 +2559,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             project_dir,
             arguments.output,
             model["target"],
-            model["board"],
+            model.get("buildKey") or model["board"],
         )
         stage = "validate-command"
         if arguments.action != "build" and arguments.clean:
@@ -2388,6 +2603,22 @@ def main(argv: Sequence[str] | None = None) -> int:
             build_environment = exported_environment(idf_dir)
 
         if arguments.action == "build":
+            if model.get("deviceTree") is not None:
+                # The configured build names the flags the HAL compiles
+                # with; finalize measures their ABI before anything compiles.
+                stage = "idf-configure"
+                run_idf(
+                    repo_root,
+                    build_dir,
+                    idf_dir,
+                    model["idfTarget"],
+                    build_environment,
+                    "reconfigure",
+                )
+                stage = "device-tree-abi"
+                generate_board_inputs(
+                    build_dir / GENERATED_DIR_NAME, model, abi_compile_command(build_dir)
+                )
             stage = "idf-build"
             run_idf(
                 repo_root,

@@ -7,6 +7,8 @@
  * HAL_TARGET_* selects the MCU/ISA. JH_BOARD selects the physical board.
  */
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/core/hal_status.h"
 #include "hal/core/hal_target.h"
 #include "hal/generated/jh_board_registry.h"
@@ -20,8 +22,19 @@
 #endif
 
 #ifndef JH_HAS_GENERATED_BOARD_CONFIG
+#if defined(JH_HARDWARE_HEADER)
+#error                                                                         \
+    "a device tree build needs the jh_board_config.h generated with its jh_hardware.h"
+#endif
 #define JH_HAS_GENERATED_BOARD_CONFIG 0
 #include "hal/generated/jh_board_fallback_config.h"
+#endif
+
+/* The generated board header of a device tree build checks that it matches
+ * jh_hardware.h; a board-only header from another build never stands in. */
+#if defined(JH_HARDWARE_HEADER) && !defined(HAL_BOARD_HARDWARE_ID)
+#error                                                                         \
+    "jh_board_config.h on the include path was not generated from the device tree"
 #endif
 
 typedef uint32_t hal_board_capabilities_t;

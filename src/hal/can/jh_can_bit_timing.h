@@ -13,6 +13,8 @@
  * as both phase segments allow.
  */
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/core/hal_status.h"
 
 #include <stdbool.h>

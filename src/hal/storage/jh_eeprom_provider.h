@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/storage/hal_eeprom.h"
 
 #ifdef HAL_ENABLE_EEPROM

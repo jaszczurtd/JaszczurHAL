@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import sys
+from typing import Sequence
 import unittest
 
 from repo_root import repo_root  # noqa: E402
@@ -71,8 +72,9 @@ def run(*arguments: str) -> subprocess.CompletedProcess:
 
 
 def generate(name: str, config_dir: Path, assembly: str, *defines: str,
-             variant: str | None = None) -> tuple[Path, subprocess.CompletedProcess]:
-    """resolve then finalize into one output directory."""
+             variant: str | None = None, compiler: Sequence[str] = ()) -> tuple[Path, subprocess.CompletedProcess]:
+    """resolve then finalize into one output directory; ``compiler`` is the
+    compiler and its flags whose ABI finalize measures."""
     out = workdir(name)
     resolved = run("resolve", "--config-dir", str(config_dir), "--assembly", assembly,
                    "--output-dir", str(out))
@@ -85,6 +87,8 @@ def generate(name: str, config_dir: Path, assembly: str, *defines: str,
         arguments += ["--define", definition]
     if variant:
         arguments += ["--variant", variant]
+    if compiler:
+        arguments += ["--compiler", compiler[0], *(f"--compiler-flag={flag}" for flag in compiler[1:])]
     return out, run(*arguments)
 
 
@@ -282,14 +286,15 @@ class CommandLine(unittest.TestCase):
                          listing["assemblies"][1])
 
     def test_a_failed_resolve_leaves_no_output(self) -> None:
-        out = workdir("failed-resolve")
         config = FIXTURES / "valid" / "selection"
-        self.assertEqual(0, run("resolve", "--config-dir", str(config), "--assembly", "desk",
-                                "--output-dir", str(out)).returncode)
+        out, generated = generate("failed-resolve", config, "desk")
+        self.assertEqual(0, generated.returncode, generated.stderr)
         result = run("resolve", "--config-dir", str(config), "--target", "rp2040", "--output-dir", str(out))
         self.assertNotEqual(0, result.returncode)
         self.assertIn("[JH-HW-ASSEMBLY]", result.stderr)
-        self.assertFalse(any((out / name).exists() for name in generator.RESOLVE_OUTPUTS))
+        # Nothing the earlier model produced survives either.
+        self.assertEqual([], [name for name in (*generator.RESOLVE_OUTPUTS, *generator.FINALIZE_OUTPUTS)
+                              if (out / name).exists()])
 
     def test_outputs_stay_in_a_managed_build_directory(self) -> None:
         result = run("resolve", "--config-dir", str(FIXTURES / "valid" / "status"),
@@ -428,10 +433,185 @@ class Identity(unittest.TestCase):
         self.assertEqual(0.25, json.loads(text)["hardware"]["nodes"]["stage"]["properties"]["shuntOhms"]["value"])
 
 
+class BuildRecords(unittest.TestCase):
+    """What finalize gives a build and an installed package."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.out, result = generate("records", FIXTURES / "hal" / "nucleo-canhat", "canhat", "HAL_ENABLE_WIFI")
+        assert result.returncode == 0, result.stderr
+        cls.config = json.loads((cls.out / generator.CONFIG_JSON).read_text(encoding="utf-8"))
+
+    def record(self, name: str) -> dict[str, str]:
+        text = (self.out / name).read_text(encoding="utf-8")
+        return {match.group(1): match.group(2) or match.group(3)
+                for match in re.finditer(r'set\((\w+) (?:"([^"]*)"|\[=*\[(.*?)\]=*\])\)', text)}
+
+    def test_a_disabled_feature_value_is_refused(self) -> None:
+        _, result = generate("records-zero", FIXTURES / "hal" / "nucleo-canhat", "canhat", "HAL_ENABLE_WIFI=0")
+        self.assertEqual(2, result.returncode)
+        self.assertIn("JH-HW-FEATURE", result.stderr)
+        self.assertIn("JH-CFG-VALUE", result.stderr)
+
+    def test_the_board_header_belongs_to_one_hardware_generation(self) -> None:
+        early = macros(self.out / generator.HARDWARE_HEADER)
+        text = (self.out / generator.BOARD_HEADER).read_text(encoding="utf-8")
+        identity = hardware_output.hardware_id(self.config["hardwareSha256"])
+        self.assertEqual(identity, early["JH_HW_HARDWARE_ID"])
+        self.assertIn(f"#if JH_HW_HARDWARE_ID != {identity}\n#error", text)
+        self.assertIn(f"#define HAL_BOARD_HARDWARE_ID {identity}\n", text)
+
+    def test_identity_names_the_finalized_configuration(self) -> None:
+        result = run("identity", "--config-dir", str(FIXTURES / "hal" / "nucleo-canhat"),
+                     "--assembly", "canhat", "--define", "HAL_ENABLE_WIFI")
+        self.assertEqual(0, result.returncode, result.stderr)
+        identity = json.loads(result.stdout)
+        record = self.record(generator.CMAKE_RECORD)
+        self.assertEqual(identity["configSha256"], record["JH_CONFIG_SHA256"])
+        self.assertEqual(identity["selection"], self.config["selection"])
+        self.assertTrue(record["JH_BOARD_CONTRACT_SYMBOL"].endswith(identity["configSha256"][:12]))
+        other = json.loads(run("identity", "--config-dir", str(FIXTURES / "hal" / "nucleo-canhat"),
+                               "--assembly", "canhat").stdout)
+        self.assertNotEqual(identity["configSha256"], other["configSha256"])
+        self.assertEqual(identity["hardwareSha256"], other["hardwareSha256"])
+
+    def test_the_abi_is_part_of_the_configuration(self) -> None:
+        self.assertEqual({"isa": "armv7e-m", "fpu": 1, "recipe": "stm32g474"}, self.config["software"]["abi"])
+        self.assertEqual("isa=armv7e-m;fpu=1;recipe=stm32g474", self.record(generator.CMAKE_RECORD)["JH_HARDWARE_ABI"])
+
+    def test_the_package_record_follows_its_installation(self) -> None:
+        text = (self.out / generator.PACKAGE_RECORD).read_text(encoding="utf-8")
+        self.assertNotIn(str(ROOT), text)
+        self.assertNotIn("JH_BOARD_INPUT_GLOBS", text)
+        prefix = workdir("records-package") / "prefix with space"
+        share = prefix / "share" / "JaszczurHAL" / "generated"
+        share.mkdir(parents=True)
+        shutil.copy2(self.out / generator.PACKAGE_RECORD, share / generator.CMAKE_RECORD)
+        script = prefix.parent / "print.cmake"
+        script.write_text(f'include("{(share / generator.CMAKE_RECORD).as_posix()}")\n'
+                          'foreach(name JH_HARDWARE_HEADER JH_HAL_PACKAGE_LIBRARY JH_CONFIG_SHA256 JH_ASSEMBLY)\n'
+                          '  message("${name}=${${name}}")\n'
+                          'endforeach()\n', encoding="utf-8")
+        result = subprocess.run(["cmake", "-P", str(script)], capture_output=True, text=True)
+        self.assertEqual(0, result.returncode, result.stderr)
+        printed = dict(line.split("=", 1) for line in result.stderr.splitlines() if "=" in line)
+        self.assertEqual((prefix / "include" / "generated" / "jh_hardware.h").as_posix(),
+                         printed["JH_HARDWARE_HEADER"])
+        self.assertEqual((prefix / "lib" / "libJaszczurHAL.a").as_posix(), printed["JH_HAL_PACKAGE_LIBRARY"])
+        self.assertEqual(self.config["configSha256"], printed["JH_CONFIG_SHA256"])
+        self.assertEqual("canhat", printed["JH_ASSEMBLY"])
+
+    def test_a_variant_joins_the_configuration(self) -> None:
+        config = workdir("records-variant") / "config"
+        config.mkdir()
+        shutil.copy2(FIXTURES / "hal" / "nucleo-canhat" / "device_tree.json", config)
+        (config / "hal_project_config.h").write_text(
+            '#define JH_PROJECT_VARIANTS(X) X(SERIAL, "Adds the UART", HAL_ENABLE_UART)\n',
+            encoding="utf-8")
+        out, result = generate("records-variant-out", config, "canhat", variant="SERIAL")
+        self.assertEqual(0, result.returncode, result.stderr)
+        final = json.loads((out / generator.CONFIG_JSON).read_text(encoding="utf-8"))
+        self.assertEqual("SERIAL", final["software"]["variant"])
+        self.assertIn("HAL_ENABLE_UART", final["software"]["resolvedFeatures"])
+        self.assertIn("set(JH_PROJECT_VARIANT [=[SERIAL]=])",
+                      (out / generator.CMAKE_RECORD).read_text(encoding="utf-8"))
+        variant = json.loads(run("identity", "--config-dir", str(config), "--assembly", "canhat",
+                                 "--variant", "SERIAL").stdout)
+        base = json.loads(run("identity", "--config-dir", str(config), "--assembly", "canhat").stdout)
+        self.assertEqual(final["configSha256"], variant["configSha256"])
+        self.assertNotEqual(base["configSha256"], variant["configSha256"])
+        self.assertEqual(base["hardwareSha256"], variant["hardwareSha256"])
+
+    def test_compiler_flags_need_the_compiler(self) -> None:
+        result = run("identity", "--config-dir", str(FIXTURES / "hal" / "nucleo-canhat"),
+                     "--assembly", "canhat", "--compiler-flag=-mfloat-abi=soft")
+        self.assertEqual(2, result.returncode)
+        self.assertIn("--compiler-flag needs --compiler", result.stderr)
+
+
+@unittest.skipUnless(shutil.which("cc") and shutil.which("c++"), "the layout checks need a host C and C++ compiler")
+class StructLayout(unittest.TestCase):
+    """Packing and enum size change no predefined macro; the measured layout
+    tells such builds apart and the board header refuses a unit with another."""
+
+    FLAGS = {"natural": (), "packed": ("-fpack-struct=1",), "short enums": ("-fshort-enums",)}
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.out, cls.config = {}, {}
+        for name, flags in cls.FLAGS.items():
+            out, result = generate(f"layout {name}", FIXTURES / "hal" / "nucleo-canhat", "canhat",
+                                   compiler=("cc", *flags))
+            assert result.returncode == 0, result.stderr
+            cls.out[name] = out
+            cls.config[name] = json.loads((out / generator.CONFIG_JSON).read_text(encoding="utf-8"))
+
+    def test_the_layout_joins_the_configuration(self) -> None:
+        abi = {name: config["software"]["abi"] for name, config in self.config.items()}
+        # The premise: the compiler macros alone do not see these flags.
+        self.assertEqual(abi["natural"]["compiler"], abi["packed"]["compiler"])
+        self.assertEqual(abi["natural"]["compiler"], abi["short enums"]["compiler"])
+        self.assertEqual(4, abi["natural"]["layout"]["member_int"])
+        self.assertEqual(1, abi["packed"]["layout"]["member_int"])
+        self.assertEqual(4, abi["natural"]["layout"]["enum"])
+        self.assertEqual(1, abi["short enums"]["layout"]["enum"])
+        self.assertEqual(3, len({config["configSha256"] for config in self.config.values()}))
+        record = (self.out["packed"] / generator.CMAKE_RECORD).read_text(encoding="utf-8")
+        self.assertIn("layout.member_int=1", record)
+
+    def compile(self, name: str, language: str, *flags: str, prelude: str = "") -> subprocess.CompletedProcess:
+        """A unit that includes the board header of the natural build."""
+        source = workdir(f"layout unit {name}") / ("unit.cpp" if language == "c++" else "unit.c")
+        source.write_text(f'{prelude}#include "jh_hardware.h"\n#include "jh_board_config.h"\n'
+                          "int main(void) { return 0; }\n", encoding="utf-8")
+        compiler, standard = ("c++", "-std=c++17") if language == "c++" else ("cc", "-std=c11")
+        return subprocess.run([compiler, standard, "-Wall", "-Wextra", "-Wpedantic", "-Werror", *flags,
+                               f"-I{self.out['natural']}", "-fsyntax-only", str(source)],
+                              capture_output=True, text=True)
+
+    def test_a_unit_with_the_same_layout_compiles(self) -> None:
+        for language in ("c", "c++"):
+            with self.subTest(language=language):
+                result = self.compile(f"same {language}", language)
+                self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_a_unit_with_another_layout_stops(self) -> None:
+        cases = {"packed": ("-fpack-struct=1",), "short enums": ("-fshort-enums",), "pragma": ()}
+        for language in ("c", "c++"):
+            for name, flags in cases.items():
+                with self.subTest(language=language, case=name):
+                    # A #pragma pack around the include changes the layout without a flag.
+                    prelude = "#pragma pack(push, 1)\n" if name == "pragma" else ""
+                    result = self.compile(f"{name} {language}", language, *flags, prelude=prelude)
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn("another struct layout than the configuration", result.stderr)
+
+    def test_the_measurement_writes_nothing_where_it_runs(self) -> None:
+        # Flags such as -fstack-usage write files next to the compile.
+        out = workdir("layout cwd")
+        here = out / "cwd"
+        here.mkdir()
+        result = subprocess.run([sys.executable, str(SCRIPT), "identity", "--config-dir",
+                                 str(FIXTURES / "hal" / "nucleo-canhat"), "--assembly", "canhat",
+                                 "--compiler", "cc", "--compiler-flag=-fstack-usage",
+                                 "--compiler-flag=-save-temps"], capture_output=True, text=True, cwd=here)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual([], list(here.iterdir()))
+
+    def test_a_failed_write_is_a_diagnostic(self) -> None:
+        blocker = workdir("records-blocked") / "file"
+        blocker.write_text("not a directory\n", encoding="utf-8")
+        result = run("resolve", "--config-dir", str(FIXTURES / "hal" / "nucleo-canhat"), "--assembly",
+                     "canhat", "--output-dir", str(blocker / "out"))
+        self.assertEqual(2, result.returncode)
+        self.assertIn("[JH-HW-GENERATION]", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+
 class Headers(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.out, result = generate("headers", FIXTURES / "hal" / "nucleo-canhat", "canhat", *CYW43_DEFINITIONS)
+        cls.out, result = generate("headers", FIXTURES / "hal" / "nucleo-canhat", "canhat", "HAL_ENABLE_WIFI")
         assert result.returncode == 0, result.stderr
         cls.early = macros(cls.out / "jh_hardware.h")
         cls.late = macros(cls.out / "jh_board_config.h")
@@ -450,7 +630,13 @@ class Headers(unittest.TestCase):
                       if "HAL_BOARD_CAN_CHANNELS(X)" in self.late else
                       (self.out / "jh_board_config.h").read_text(encoding="utf-8"))
         cmake = (self.out / generator.CMAKE_RECORD).read_text(encoding="utf-8")
-        self.assertIn('set(JH_BOARD_COMPILE_DEFINITIONS "")', cmake)
+        compiled = re.search(r'set\(JH_BOARD_COMPILE_DEFINITIONS "([^"]*)"\)', cmake).group(1).split(";")
+        # The module radio brings its component's transport to the compiler;
+        # the macros the header owns, such as its pins and the clock, stay off -D.
+        self.assertEqual({"HAL_NETWORK_BACKEND_CYW43", "HAL_CYW43_BUS_STM32_GSPI", "HAL_CYW43_STACK_LWIP",
+                          "HAL_CYW43_MAX_TRANSACTION_BYTES=2048u"}, set(compiled))
+        self.assertEqual("JH_HW_NODE_WIFI_RADIO_PIN_WL_ON", self.late["HAL_CYW43_PIN_WL_ON"])
+        self.assertEqual("1", self.late["HAL_CYW43_BUS_STM32_GSPI"])
         self.assertIn("cyw43-stm32-gspi", cmake)
         self.assertIn("stm32g474-hse-24mhz", cmake)
 

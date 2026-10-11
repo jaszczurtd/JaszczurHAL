@@ -9,6 +9,8 @@
  * hal/display/hd44780/hd44780.h.
  */
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/core/hal_config.h"
 
 #if defined(HAL_ENABLE_HD44780)

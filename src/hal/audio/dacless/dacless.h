@@ -13,6 +13,8 @@
  * Original license: MIT, Copyright (c) 2025 brian sullivan.
  */
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/audio/hal_dacless.h"
 #include "hal/core/hal_compiler.h"
 #include "hal/core/hal_config.h"

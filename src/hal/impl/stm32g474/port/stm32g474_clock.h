@@ -11,7 +11,14 @@
  *   the HSE does not start, startup builds the same frequencies from HSI16.
  * AHB, APB1 and APB2 run undivided in both. stm32g474_clock_tree.h programs
  * the tree these values describe.
+ *
+ * A device tree build selects the tree in its generated jh_board_config.h;
+ * startup, FreeRTOS and the backends read it here, before any clock value.
  */
+
+#if defined(JH_HARDWARE_HEADER)
+#include "hal/system/hal_board.h"
+#endif
 
 #define JH_G474_HSI_CLOCK_HZ 16000000u
 

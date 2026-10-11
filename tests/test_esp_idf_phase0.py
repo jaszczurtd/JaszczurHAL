@@ -1072,8 +1072,61 @@ class SupplyChainContractTests(unittest.TestCase):
                 esp_idf.collect_python_tools(Path("/idf/python"), {}, contract)
 
 
+class AbiCommandTests(unittest.TestCase):
+    """The flags a device tree build measures, from compile_commands.json."""
+
+    def database(self, root: Path, entries: list[dict]) -> Path:
+        build_dir = root / "build dir"
+        (build_dir / esp_idf.GENERATED_DIR_NAME).mkdir(parents=True)
+        (build_dir / "compile_commands.json").write_text(json.dumps(entries), encoding="utf-8")
+        return build_dir
+
+    def test_the_hal_command_keeps_every_codegen_flag(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="jh-esp-abi-") as text:
+            root = Path(text)
+            build_dir = root / "build dir"
+            source = build_dir / esp_idf.GENERATED_DIR_NAME / esp_idf.ABI_SOURCE_NAME
+            command = (
+                f"/idf/bin/xtensa-esp32s3-elf-gcc -DESP_PLATFORM -DIDF_VER=\\\"v6\\\" "
+                f"-I/idf/include -I \"{root}/inc dir\" -isystem /sys -include cfg.h "
+                f"@toolchain/cflags -mlongcalls -fpack-struct=1 -Os -std=gnu23 "
+                f"-MD -MT obj.o -MF obj.d -o esp-idf/jaszczurhal/x.c.obj -c \"{source}\""
+            )
+            build_dir = self.database(root, [
+                # Another component's flags never decide the HAL's ABI.
+                {"directory": str(build_dir), "file": str(build_dir / "main.c"),
+                 "command": "/idf/bin/xtensa-esp32s3-elf-gcc -fshort-enums -c main.c"},
+                {"directory": str(build_dir), "file": str(source), "command": command},
+            ])
+            self.assertEqual(
+                ["/idf/bin/xtensa-esp32s3-elf-gcc", f"@{build_dir / 'toolchain/cflags'}",
+                 "-mlongcalls", "-fpack-struct=1", "-Os", "-std=gnu23"],
+                esp_idf.abi_compile_command(build_dir))
+
+    def test_arguments_and_a_launcher(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="jh-esp-abi-") as text:
+            root = Path(text)
+            build_dir = root / "build dir"
+            relative = f"{esp_idf.GENERATED_DIR_NAME}/{esp_idf.ABI_SOURCE_NAME}"
+            build_dir = self.database(root, [{
+                "directory": str(build_dir), "file": relative,
+                "arguments": ["/usr/bin/ccache", "/idf/bin/riscv32-esp-elf-gcc", "-march=rv32imc",
+                              "-o", "x.obj", "-c", relative]}])
+            self.assertEqual(["/idf/bin/riscv32-esp-elf-gcc", "-march=rv32imc"],
+                             esp_idf.abi_compile_command(build_dir))
+
+    def test_a_missing_hal_command_is_an_error(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="jh-esp-abi-") as text:
+            build_dir = self.database(Path(text), [{"directory": "/", "file": "/main.c", "command": "cc -c main.c"}])
+            with self.assertRaisesRegex(esp_idf.EspIdfError, "has no compile command"):
+                esp_idf.abi_compile_command(build_dir)
+            model = {"deviceTree": {}}
+            # Before the first configure the build finalizes without a compiler.
+            self.assertEqual([], esp_idf.configured_abi_command(build_dir, model))
+
+
 class CommandContractTests(unittest.TestCase):
-    def _run_mocked_main(self, root: Path, action: str):
+    def _run_mocked_main(self, root: Path, action: str, model=None, run_idf=None):
         project = root / "project"
         build_dir = root / ".build/esp-idf/firmware"
         environment = {
@@ -1081,7 +1134,7 @@ class CommandContractTests(unittest.TestCase):
             "IDF_PYTHON_ENV_PATH": str(root / "python"),
             "PATH": "/idf/tools",
         }
-        model = {
+        model = model or {
             "target": "esp32s3",
             "board": "waveshare-esp32-s3-zero",
             "idfTarget": "esp32s3",
@@ -1134,7 +1187,7 @@ class CommandContractTests(unittest.TestCase):
                 "exported_environment",
                 return_value=environment,
             ),
-            mock.patch.object(esp_idf, "run_idf") as run_idf,
+            mock.patch.object(esp_idf, "run_idf", run_idf or mock.Mock()) as run_idf,
             mock.patch.object(esp_idf, "_validate_clean_build_log"),
             mock.patch.object(esp_idf, "collect_toolchain_provenance"),
             mock.patch.object(
@@ -1144,6 +1197,27 @@ class CommandContractTests(unittest.TestCase):
         ):
             result = esp_idf.main(arguments)
         return result, environment, run_idf, validate
+
+    def test_a_device_tree_build_measures_the_abi_after_configure(self) -> None:
+        # The configured build names the HAL compile command; finalize runs
+        # with it before anything compiles.
+        with tempfile.TemporaryDirectory(prefix="jh-esp-main-") as text:
+            root = Path(text)
+            calls = mock.Mock()
+            command = ["/idf/xtensa-esp32s3-elf-gcc", "-mlongcalls"]
+            model = {"target": "esp32s3", "board": "waveshare-esp32-s3-zero",
+                     "idfTarget": "esp32s3", "deviceTree": {}}
+            with (
+                mock.patch.object(esp_idf, "abi_compile_command", return_value=command),
+                mock.patch.object(esp_idf, "generate_board_inputs", calls.generate),
+            ):
+                result, _, run_idf, _ = self._run_mocked_main(root, "build", model, calls.run_idf)
+            self.assertEqual(result, 0)
+            self.assertEqual(["reconfigure", "build"],
+                             [call.args[5] for call in run_idf.call_args_list])
+            names = [call[0] for call in calls.mock_calls]
+            self.assertEqual(["run_idf", "generate", "run_idf"], names)
+            self.assertEqual(command, calls.generate.call_args.args[2])
 
     def test_main_passes_exported_environment_to_artifact_validation(self) -> None:
         with tempfile.TemporaryDirectory(prefix="jh-esp-main-") as text:

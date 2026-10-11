@@ -1166,17 +1166,26 @@ def main(argv: Sequence[str] | None = None) -> int:
     cmake.add_argument("--target", required=True)
     cmake.add_argument("--variant", default="")
     cmake.add_argument("--define", action="append", default=[])
+    # The generated jh_hardware.h of a device tree build, read before the
+    # header exactly as the hook loads it for the compiler.
+    cmake.add_argument("--hardware-header", type=Path)
     cmake.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
         targets = load_targets()
         if args.target not in targets:
             raise ProjectConfigError(f"[JH-CFG-TARGET] unknown target {args.target!r}")
+        if args.hardware_header is not None and not args.hardware_header.is_file():
+            raise ProjectConfigError(
+                f"[JH-HW-GENERATION] {args.hardware_header} does not exist; "
+                "a device tree build reads its generated header"
+            )
         build = evaluate_build(
             args.config_dir.resolve() if args.config_dir else None,
             targets[args.target],
             args.variant or None,
             [definition.removeprefix("-D") for definition in args.define],
+            args.hardware_header.resolve() if args.hardware_header else None,
         )
         import generate_hal_features
 

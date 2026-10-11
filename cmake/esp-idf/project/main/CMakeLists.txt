@@ -6,6 +6,10 @@ file(TO_CMAKE_PATH "$ENV{JH_ESP_IDF_PROJECT_CONFIG}"
 include("${_jh_esp_idf_project_config}")
 file(TO_CMAKE_PATH "$ENV{JH_ESP_IDF_GENERATED_DIR}"
     _jh_esp_idf_generated_dir)
+if(JH_ESP_IDF_DEVICE_TREE)
+    list(APPEND JH_ESP_IDF_COMPILE_DEFINITIONS
+        "JH_HARDWARE_HEADER=\"${_jh_esp_idf_generated_dir}/jh_hardware.h\"")
+endif()
 
 set(_jh_project_sources
     ${JH_ESP_IDF_PROJECT_SOURCES}

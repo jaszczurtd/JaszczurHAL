@@ -6,6 +6,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include "hal/core/hal_layout_check.h"
+
 #include "epd_spi_transport.h"
 
 #include <stdbool.h>
