@@ -13,6 +13,7 @@ import subprocess
 import sys
 from typing import Sequence
 import unittest
+from unittest import mock
 
 from repo_root import repo_root  # noqa: E402
 
@@ -386,6 +387,26 @@ class Identity(unittest.TestCase):
         moved.write_text(json.dumps(data, separators=(",", ":"), sort_keys=True), encoding="utf-8")
         self.assertEqual(hardware_output.hardware_digest(here),
                          hardware_output.hardware_digest(resolve(moved, "nucleo")))
+
+    def test_a_project_on_another_drive_resolves(self) -> None:
+        # Windows has no relative path between drives: os.path.relpath raises
+        # ValueError for a HAL file and a project directory on another drive.
+        project = workdir("other-drive") / "nucleo-canhat"
+        shutil.copytree(FIXTURES / "hal" / "nucleo-canhat", project)
+        relpath = resolver.os.path.relpath
+
+        def drive(path) -> str:
+            return "project" if Path(path).resolve().is_relative_to(WORK) else "hal"
+
+        def across_drives(path, start=resolver.os.curdir):
+            if drive(path) != drive(start):
+                raise ValueError("path is on another drive")
+            return relpath(path, start)
+
+        here = resolve(FIXTURES / "hal" / "nucleo-canhat" / "device_tree.json", "canhat")
+        with mock.patch.object(resolver.os.path, "relpath", across_drives):
+            moved = resolve(project / "device_tree.json", "canhat")
+        self.assertEqual(hardware_output.hardware_digest(here), hardware_output.hardware_digest(moved))
 
     def test_a_pin_or_an_unused_node_changes_the_hash(self) -> None:
         base = hardware_output.hardware_digest(resolve(FIXTURES / "valid" / "project" / "device_tree.json",

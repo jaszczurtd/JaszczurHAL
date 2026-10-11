@@ -15,7 +15,9 @@ deklaruje funkcje HAL, platformy (`JH_PROJECT_TARGETS`) i warianty
 zawiera ustawienia narzędzi, np. domyślną płytkę dla każdej platformy. Skrypt
 `scripts/examples_dispatcher.py` generuje na ich podstawie pozostałe pliki
 VS Code i kompiluje wszystkie konfiguracje przez `vscode/entry/jh-vscode`.
-Zasady opisuje część
+Przykład z `device_tree.json` bierze platformy i płytki z montaży: dispatcher
+kompiluje każdy montaż danej platformy razy każdy wariant, a manifest może
+wskazać domyślne `assembly` dla generowanych plików. Zasady opisuje część
 [platformy i warianty](../doc/pl/FwProjectWorkflow.md#platformy-i-warianty).
 
 ## Katalog projektów
@@ -186,7 +188,10 @@ z pozostałymi generatorami repozytorium.
 
 Pliki wynikowe trafiają do `.build/examples/<example>/`, a pliki wariantu do
 `.build/examples/<example>/variants/<id>/`. Katalogi robocze CMake mają postać
-`.build/examples/<example>/cmake/<target>/<board>/`.
+`.build/examples/<example>/cmake/<target>/<board>/`. Przykład
+z `device_tree.json` trzyma wszystko, co dotyczy jednego montażu,
+w `.build/examples/<example>/<target>/<assembly>/`, z katalogiem CMake
+w `cmake/` i wariantami w `variants/<id>/` pod nim.
 
 ## Struktura aplikacji
 

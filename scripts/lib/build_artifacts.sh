@@ -94,15 +94,7 @@ jh_device_tree_library() {
 # variant and requests>, so independent projects with the same assembly key
 # never share a build, while edits of one rebuild in place.
 jh_device_tree_build_key() {
-    python3 - "$@" <<'PY'
-import hashlib
-import sys
-from pathlib import Path
-
-config_dir, assembly, *rest = sys.argv[1:]
-text = "\0".join([Path(config_dir).resolve().as_posix(), assembly, *sorted(rest)])
-print(f"{assembly or 'auto'}/{hashlib.sha256(text.encode()).hexdigest()[:16]}")
-PY
+    python3 "$(dirname "${BASH_SOURCE[0]}")/../device_tree_project.py" build-key -- "$@"
 }
 
 # The generated headers of a library build in <output>/include/generated: the

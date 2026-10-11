@@ -482,7 +482,9 @@ def resolve_target_profile(
 
 def pin_resolved_target_board(config: dict[str, Any]) -> None:
     """Make the resolved target and board win over JH_TARGET/JH_BOARD set in
-    the manifest, a targetProfiles overlay, or a variant's CMake cache."""
+    the manifest, a targetProfiles overlay, or a variant's CMake cache. A
+    device tree build passes its assembly instead: CMake resolves the board
+    from it and refuses a JH_BOARD set by the caller."""
     cmake = config.get("cmake")
     if config.get("toolchain") != "cmake" or not isinstance(cmake, dict):
         return
@@ -490,7 +492,12 @@ def pin_resolved_target_board(config: dict[str, Any]) -> None:
     if not isinstance(cache, dict):
         cache = {}
         cmake["cache"] = cache
-    for key, field in (("JH_TARGET", "target"), ("JH_BOARD", "board")):
+    if config.get("assembly"):
+        cache.pop("JH_BOARD", None)
+        fields = (("JH_TARGET", "target"), ("JH_ASSEMBLY", "assembly"))
+    else:
+        fields = (("JH_TARGET", "target"), ("JH_BOARD", "board"))
+    for key, field in fields:
         if config.get(field):
             cache[key] = config[field]
 
@@ -806,6 +813,7 @@ def normalize_manifest(data: dict[str, Any]) -> dict[str, Any]:
         "toolchain",
         "target",
         "board",
+        "assembly",
         "targetProfiles",
         "buildDir",
         "cmakeBuildDir",
@@ -994,11 +1002,135 @@ def settings_value(settings: dict[str, Any], semantic_key: str) -> Any:
     return None
 
 
+def device_tree_selector_findings(
+    config: dict[str, Any], local_state: dict[str, Any], board_override: str | None
+) -> list[str]:
+    """Board selectors a project with device_tree.json may not use: its
+    assemblies choose the target and the board, and only their key is stored.
+    ``local_state`` is the local selection the build would consult."""
+    label = ".vscode/jaszczurhal.project.json"
+    hint = "device_tree.json selects target and board through its assemblies"
+    findings = []
+    if board_override is not None:
+        findings.append(f"[JH-HW-BOARD] --board {board_override}: {hint}; use --assembly")
+    findings.extend(
+        f"[JH-HW-BOARD] {label}: '{key}': {hint}; store the assembly key as 'assembly'"
+        for key in ("target", "board") if config.get(key) is not None
+    )
+    profiles = config.get("targetProfiles")
+    profiles = profiles if isinstance(profiles, dict) else {}
+    findings.extend(
+        f"[JH-HW-BOARD] {label}: targetProfiles.{name}.board: {hint}"
+        for name, profile in profiles.items()
+        if isinstance(profile, dict) and "board" in profile
+    )
+    caches = [("cmake.cache", config.get("cmake")), *(
+        (f"targetProfiles.{name}.cmake.cache", profile.get("cmake"))
+        for name, profile in profiles.items() if isinstance(profile, dict))]
+    for location, cmake in caches:
+        cache = cmake.get("cache") if isinstance(cmake, dict) else None
+        findings.extend(
+            f"[JH-HW-BOARD] {label}: {location}.{key}: {hint}; store the assembly key as 'assembly'"
+            for key in ("JH_BOARD", "JH_ASSEMBLY") if isinstance(cache, dict) and key in cache
+        )
+    findings.extend(
+        f"[JH-HW-BOARD] .vscode/{LOCAL_STATE_FILENAME}: '{key}' was selected for the board "
+        "path; select an assembly: jh-vscode select-board --project <path> --assembly <key>"
+        for key in ("target", "board") if local_state.get(key) is not None
+    )
+    return findings
+
+
+def choose_assembly(
+    config: dict[str, Any],
+    project_dir: Path,
+    *,
+    target_override: str | None,
+    assembly_override: str | None,
+    board_override: str | None,
+    local_state: dict[str, Any],
+) -> tuple[dict[str, str], str]:
+    """The assembly of a project with device_tree.json and where the choice
+    came from.
+
+    Explicit --assembly and --target come first, then the assembly stored in
+    the gitignored .vscode/jaszczurhal.local.json, then the manifest's
+    'assembly'; without any, the only assembly (for the target) is used.
+    """
+    # An explicit choice never consults the local selection, so a stale one
+    # from the board path stops only the builds that would use it.
+    explicit = assembly_override is not None or target_override is not None
+    findings = device_tree_selector_findings(
+        config, {} if explicit else local_state, board_override
+    )
+    if findings:
+        raise ValueError("\n".join(findings))
+    return hal_script("device_tree_project").choose(
+        project_dir,
+        target_override,
+        assembly_override,
+        [
+            (local_state.get("assembly"), f".vscode/{LOCAL_STATE_FILENAME}"),
+            (config.get("assembly"), ".vscode/jaszczurhal.project.json"),
+        ],
+    )
+
+
+def place_assembly_build_dir(config: dict[str, Any], target: str, assembly: str) -> None:
+    """Give the assembly its own buildDir, <buildDir>/<target>/<assembly>,
+    before ${buildDir} is expanded: the artifacts, cmakeBuildDir and
+    JH_ARTIFACT_DIR the manifest derives from it follow. A buildDir of the
+    target's targetProfiles entry is the base, never the result."""
+    config["buildDir"] = hal_script("vscode_task_config").assembly_build_dir(
+        config, target, assembly
+    )
+    profiles = config.get("targetProfiles")
+    overlay = profiles.get(target) if isinstance(profiles, dict) else None
+    if isinstance(overlay, dict) and "buildDir" in overlay:
+        config["targetProfiles"] = {
+            **profiles,
+            target: {key: value for key, value in overlay.items() if key != "buildDir"},
+        }
+
+
+def resolve_assembly_profile(
+    config: dict[str, Any],
+    project_dir: Path,
+    sources: dict[str, str],
+    chosen: dict[str, str],
+    origin: str,
+) -> None:
+    """Resolve the target profile of the chosen assembly, in place. The
+    assembly fixes target and board; the CMake build gets JH_ASSEMBLY and
+    publishes into the assembly's own directory."""
+    target, assembly = chosen["target"], chosen["name"]
+    config["assembly"] = assembly
+    resolve_target_profile(config, project_dir, sources, target_override=target,
+                           board_override=chosen["board"])
+    build_dir = str(config["buildDir"])
+    config["_assemblyBuildDir"] = build_dir
+    cmake = config.get("cmake")
+    if config.get("toolchain") == "cmake" and isinstance(cmake, dict):
+        # Without its own value CMake publishes into <project>/.build, which
+        # every assembly shares; a custom directory gets <target>/<assembly>.
+        cache = cmake.setdefault("cache", {})
+        artifacts = cache.get("JH_ARTIFACT_DIR")
+        if not artifacts:
+            cache["JH_ARTIFACT_DIR"] = build_dir
+        elif not path_within(Path(str(artifacts)), Path(build_dir)):
+            cache["JH_ARTIFACT_DIR"] = os.path.join(str(artifacts), target, assembly)
+    origin = {"explicit": "cli", "automatic": "only assembly"}.get(origin, origin)
+    for key in ("target", "board", "assembly"):
+        sources[key] = f"device_tree.json assemblies.{assembly} ({origin})"
+    sources["buildDir"] = f"{sources.get('buildDir', 'default')} + <target>/<assembly>"
+
+
 def load_project_config(
     project_dir: Path,
     target_override: str | None = None,
     board_override: str | None = None,
     use_local_state: bool = True,
+    assembly_override: str | None = None,
 ) -> dict[str, Any]:
     vscode_dir = project_dir / ".vscode"
     manifest = load_json_file(vscode_dir / "jaszczurhal.project.json")
@@ -1062,7 +1194,6 @@ def load_project_config(
         config["buildDir"] = str(project_dir / ".build")
         sources["buildDir"] = "default"
 
-    expand_config_sections(config, project_dir)
     # User-local active board selection (gitignored). CLI overrides win over it;
     # it wins over the manifest default. Absent -> no effect (parity preserved).
     local_state = (
@@ -1070,6 +1201,17 @@ def load_project_config(
         if use_local_state
         else {}
     )
+    device_tree = hal_script("device_tree_project").device_tree_path(project_dir) is not None
+    if device_tree:
+        chosen, origin = choose_assembly(
+            config, project_dir,
+            target_override=target_override,
+            assembly_override=assembly_override,
+            board_override=board_override,
+            local_state=local_state if isinstance(local_state, dict) else {},
+        )
+        place_assembly_build_dir(config, chosen["target"], chosen["name"])
+    expand_config_sections(config, project_dir)
     local_target = local_state.get("target") if isinstance(local_state, dict) else None
     local_board = local_state.get("board") if isinstance(local_state, dict) else None
     local_port = local_state.get("uploadPort") if isinstance(local_state, dict) else None
@@ -1087,13 +1229,25 @@ def load_project_config(
         upload["bootselVolume"] = str(local_bootsel_volume)
         config["upload"] = upload
         sources["upload.bootselVolume"] = ".vscode/jaszczurhal.local.json"
-    resolve_target_profile(
-        config, project_dir, sources,
-        target_override=target_override or local_target,
-        board_override=board_override,
-        override_source="cli" if target_override else ".vscode/jaszczurhal.local.json",
-        local_board=local_board,
-    )
+    if device_tree:
+        resolve_assembly_profile(config, project_dir, sources, chosen, origin)
+    else:
+        # A local assembly is the tool's own record of an earlier device tree
+        # and is dropped with it; one the caller sets needs the file.
+        for value, where in ((assembly_override, "--assembly"),
+                             (config.get("assembly"), ".vscode/jaszczurhal.project.json")):
+            if value:
+                raise ValueError(
+                    f"[JH-HW-ASSEMBLY] {where}: assembly {value!r} needs "
+                    f"{project_dir / 'device_tree.json'}"
+                )
+        resolve_target_profile(
+            config, project_dir, sources,
+            target_override=target_override or local_target,
+            board_override=board_override,
+            override_source="cli" if target_override else ".vscode/jaszczurhal.local.json",
+            local_board=local_board,
+        )
     config["_projectDir"] = str(project_dir)
     config["_sources"] = sources
     return config
@@ -1151,6 +1305,7 @@ def command_config_dump(args: argparse.Namespace) -> int:
             project_dir,
             target_override=getattr(args, "target", None),
             board_override=getattr(args, "board", None),
+            assembly_override=getattr(args, "assembly", None),
         )
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -1296,6 +1451,10 @@ def project_build(config: dict[str, Any], project_dir: Path) -> Any:
     facts = project_targets().get(target) if target else reader.TargetFacts("", "", ())
     if facts is None:
         raise ValueError(f"[JH-CFG-TARGET] unknown target {target!r}")
+    if config.get("assembly"):
+        return hal_script("device_tree_project").evaluate(
+            project_dir, str(config["assembly"]), facts, config.get("variant") or None
+        )
     return reader.evaluate_build(project_dir, facts, config.get("variant") or None)
 
 
@@ -1349,7 +1508,7 @@ def target_descriptor(config: dict[str, Any]) -> dict[str, Any] | None:
 
 def target_display_name(config: dict[str, Any]) -> str:
     target = str(config.get("target") or "default")
-    board = config.get("board")
+    board = config.get("assembly") or config.get("board")
     if board:
         return f"{target}/{board}"
     return target
@@ -1372,7 +1531,12 @@ def build_preflight_diagnostics(config: dict[str, Any], project_dir: Path) -> li
         project_config = project_build(config, project_dir).config
         selected_board = str(config.get("board") or "")
         board_components: set[str] = set()
-        if isinstance(desc, dict):
+        if config.get("assembly"):
+            # The assembly decides the radio, not the board alone.
+            board_components = hal_script("device_tree_project").components(
+                project_dir, str(config["assembly"])
+            )
+        elif isinstance(desc, dict):
             for board_desc in desc.get("boards") or []:
                 if isinstance(board_desc, dict) and board_desc.get("id") == selected_board:
                     board_components = {
@@ -1590,6 +1754,124 @@ def interactive_board_selection(
     return target, board, 0
 
 
+def stored_assembly(project_dir: Path, manifest: dict[str, Any]) -> tuple[str | None, str]:
+    """The assembly the manifest selects (or the only one), without local
+    state: what generated files and matrices use. None when several
+    assemblies need a choice."""
+    try:
+        chosen, origin = hal_script("device_tree_project").choose(
+            project_dir, None, None,
+            [(manifest.get("assembly"), ".vscode/jaszczurhal.project.json")],
+        )
+    except ValueError:
+        if manifest.get("assembly"):
+            raise
+        return None, ""
+    return chosen["name"], origin
+
+
+def command_select_assembly(args: argparse.Namespace, project_dir: Path) -> int:
+    """select-board of a project with device_tree.json: list, choose or store
+    one assembly in the gitignored local state."""
+    tools = hal_script("device_tree_project")
+    vscode_dir = project_dir / ".vscode"
+    local_state = load_json_file(vscode_dir / LOCAL_STATE_FILENAME)
+    manifest = load_json_file(vscode_dir / "jaszczurhal.project.json")
+    try:
+        items = tools.assemblies(project_dir)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_CONFIG
+    if args.board:
+        print(
+            f"error: [JH-HW-BOARD] --board {args.board}: device_tree.json selects target and "
+            "board through its assemblies; use --assembly",
+            file=sys.stderr,
+        )
+        return EXIT_CONFIG
+    try:
+        current, origin = tools.choose(
+            project_dir, None, None,
+            [(local_state.get("assembly"), f".vscode/{LOCAL_STATE_FILENAME}"),
+             (manifest.get("assembly"), ".vscode/jaszczurhal.project.json")],
+        )
+        current_name = current["name"]
+    except ValueError:
+        current_name, origin = None, ""
+
+    assembly = args.assembly
+    if args.selection:
+        assembly = args.selection.split(" - ", 1)[0].strip() or None
+    elif args.interactive and not (assembly or args.target):
+        print(f"Current assembly: {current_name or '(none selected)'}")
+        print("Select assembly:")
+        for index, item in enumerate(items, start=1):
+            marker = "*" if item["name"] == current_name else " "
+            print(f"  {index:2d}. {marker} {item['name']} - {item['target']}/{item['board']}")
+        print("  q. cancel")
+        try:
+            answer = input("Assembly selection> ").strip()
+        except EOFError:
+            print("error: no interactive input available", file=sys.stderr)
+            return EXIT_USAGE
+        if answer.lower() in {"", "q", "quit", "cancel"}:
+            print("Selection cancelled.")
+            return 0
+        if answer.isdigit():
+            if not 1 <= int(answer) <= len(items):
+                print(f"error: selection out of range: {answer}", file=sys.stderr)
+                return EXIT_USAGE
+            assembly = items[int(answer) - 1]["name"]
+        else:
+            assembly = answer.split(" - ", 1)[0].strip()
+
+    if not (assembly or args.target):
+        if args.json:
+            listing = {
+                "current": {"assembly": current_name, "source": origin},
+                "assemblies": items,
+            }
+            print(json.dumps(listing, ensure_ascii=False, indent=2, sort_keys=True))
+            return 0
+        print(f"Current assembly: {current_name or '(none selected)'}"
+              + (f" ({origin})" if origin else ""))
+        print("Assemblies of device_tree.json:")
+        for item in items:
+            mark = "*" if item["name"] == current_name else " "
+            print(f"   {mark} {item['name']} - {item['target']}/{item['board']}")
+        print("Select: jh-vscode select-board --project <p> --assembly <key>")
+        print("        jh-vscode select-board --project <p> --interactive")
+        return 0
+
+    # Store only a selection the whole configuration resolves with.
+    try:
+        resolved = load_project_config(
+            project_dir,
+            target_override=args.target,
+            assembly_override=assembly,
+            use_local_state=False,
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_CONFIG
+    new_state = {
+        key: value for key, value in (local_state if isinstance(local_state, dict) else {}).items()
+        if key not in ("target", "board")
+    }
+    new_state["assembly"] = resolved["assembly"]
+    vscode_dir.mkdir(parents=True, exist_ok=True)
+    (vscode_dir / LOCAL_STATE_FILENAME).write_text(
+        json.dumps(new_state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    ensure_local_state_gitignored(project_dir)
+    print(
+        f"Selected assembly={resolved['assembly']} "
+        f"(target={resolved['target']} board={resolved['board']})"
+    )
+    print(f"Persisted to .vscode/{LOCAL_STATE_FILENAME} (gitignored; the manifest keeps its own choice).")
+    return 0
+
+
 def command_select_board(args: argparse.Namespace) -> int:
     project_dir = resolve_project(args)
     if project_dir is None:
@@ -1597,6 +1879,15 @@ def command_select_board(args: argparse.Namespace) -> int:
         return EXIT_USAGE
     if not project_dir.is_dir():
         print(f"error: project directory does not exist: {project_dir}", file=sys.stderr)
+        return EXIT_CONFIG
+    if hal_script("device_tree_project").device_tree_path(project_dir) is not None:
+        return command_select_assembly(args, project_dir)
+    if args.assembly:
+        print(
+            f"error: [JH-HW-ASSEMBLY] --assembly {args.assembly} needs "
+            f"{project_dir / 'device_tree.json'}",
+            file=sys.stderr,
+        )
         return EXIT_CONFIG
 
     registry = load_target_registry()
@@ -1747,15 +2038,28 @@ def command_sync_board_picker(args: argparse.Namespace) -> int:
         launch_document = load_json_file(launch_path)
         manifest = load_json_file(manifest_path)
         registry = load_target_registry()
-        selected_target, selected_board, _ = current_board_selection(
-            registry,
-            {},
-            manifest,
-        )
-        if selected_board is None:
-            raise ValueError(
-                f"target '{selected_target}' does not define a selectable board"
+        selected_assembly = None
+        launch_assembly = None
+        if hal_script("device_tree_project").device_tree_path(project_dir) is not None:
+            # The picker lists the assemblies; the manifest's choice (or the
+            # first assembly) is the default and names the debugged ELF, never
+            # the local one.
+            selected_assembly, _ = stored_assembly(project_dir, manifest)
+            items = hal_script("device_tree_project").assemblies(project_dir)
+            default = next(item for item in items
+                           if item["name"] == (selected_assembly or items[0]["name"]))
+            launch_assembly = (default["target"], default["name"])
+            selected_target, selected_board = "", ""
+        else:
+            selected_target, selected_board, _ = current_board_selection(
+                registry,
+                {},
+                manifest,
             )
+            if selected_board is None:
+                raise ValueError(
+                    f"target '{selected_target}' does not define a selectable board"
+                )
 
         from vscode_task_config import (
             sync_board_picker_document,
@@ -1768,6 +2072,8 @@ def command_sync_board_picker(args: argparse.Namespace) -> int:
             registry,
             selected_target,
             selected_board,
+            project_dir,
+            selected_assembly,
         )
         launch_changed = sync_cortex_debug_launch_document(
             launch_document,
@@ -1775,6 +2081,7 @@ def command_sync_board_picker(args: argparse.Namespace) -> int:
                 manifest,
                 workspace_dir=project_dir,
                 jh_root=jaszczurhal_root(),
+                assembly=launch_assembly,
             ),
         )
     except (OSError, ValueError) as exc:
@@ -1987,6 +2294,7 @@ def command_list_ports(args: argparse.Namespace) -> int:
             project_dir,
             target_override=getattr(args, "target", None),
             board_override=getattr(args, "board", None),
+            assembly_override=getattr(args, "assembly", None),
         )
         except ValueError as exc:
             print(f"error: {exc}", file=sys.stderr)
@@ -2510,6 +2818,8 @@ def esp_idf_runner_command(
     board = str(config.get("board") or "").strip()
     if not target or not board:
         raise ValueError("ESP-IDF runner requires a resolved target and board")
+    # A device tree build names its assembly; the runner resolves the board.
+    selector = ["--assembly", str(config["assembly"])] if config.get("assembly") else ["--board", board]
     command = [
         sys.executable,
         str(esp_idf_runner(config, project_dir)),
@@ -2518,8 +2828,7 @@ def esp_idf_runner_command(
         str(project_dir),
         "--target",
         target,
-        "--board",
-        board,
+        *selector,
         "--output",
         str(get_build_dir(config, project_dir)),
     ]
@@ -2593,6 +2902,8 @@ def validate_esp_idf_artifact_manifest(
         raise ValueError("ESP-IDF artifact manifest target does not match the build")
     if manifest.get("board") != config.get("board"):
         raise ValueError("ESP-IDF artifact manifest board does not match the build")
+    if manifest.get("assembly") != config.get("assembly"):
+        raise ValueError("ESP-IDF artifact manifest assembly does not match the build")
 
     build_dir = get_build_dir(config, project_dir).resolve()
     artifacts_raw = manifest.get("artifacts")
@@ -2886,6 +3197,7 @@ def load_config_for_action(args: argparse.Namespace) -> tuple[Path, dict[str, An
             project_dir,
             target_override=getattr(args, "target", None),
             board_override=getattr(args, "board", None),
+            assembly_override=getattr(args, "assembly", None),
         )
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -2921,11 +3233,16 @@ def get_cmake_build_dir(config: dict[str, Any], project_dir: Path) -> Path:
             build_dir = project_dir / build_dir
     # When a target is active, isolate the CMake cache per target/board: RP2040
     # (project NONE) and STM32 (cross toolchain) must never share one cache dir.
-    # Manifests without a resolved target keep the flat path -> pico parity.
+    # A device tree build keeps the tree inside the assembly's own buildDir,
+    # or adds <target>/<assembly> where cmakeBuildDir lies elsewhere, so two
+    # assemblies of one board never share it. Manifests without a resolved
+    # target keep the flat path -> pico parity.
     target = config.get("target")
-    if target:
+    assembly_root = config.get("_assemblyBuildDir")
+    # A tree already inside the assembly's own buildDir is isolated by it.
+    if target and not (assembly_root and path_within(build_dir, Path(str(assembly_root)))):
         build_dir = build_dir / str(target)
-        board = config.get("board")
+        board = config.get("assembly") or config.get("board")
         if board:
             build_dir = build_dir / str(board)
     configuration = config.get("_cmakeBuildConfiguration")
@@ -4911,6 +5228,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override active target family (e.g. rp2040, rp2350-arm, stm32g474).",
     )
     parser.add_argument("--board", help="Override active board/variant within the target.")
+    parser.add_argument(
+        "--assembly",
+        help="Assembly key of the project's device_tree.json; it fixes target and board.",
+    )
     parser.add_argument("--variant", help="Variant id declared by JH_PROJECT_VARIANTS in hal_project_config.h.")
     parser.add_argument("--selection", help="Board selection in '<target>:<board>' form (for VS Code pickers).")
     parser.add_argument("--interactive", action="store_true", help="Prompt for a target/board selection in the terminal.")

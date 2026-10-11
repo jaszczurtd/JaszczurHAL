@@ -27,6 +27,11 @@
       "minLength": 1,
       "description": "Active physical board profile id within the active target (resolved against boards/targets and boards/profiles)."
     },
+    "assembly": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Assembly key of the project's device_tree.json; the assembly fixes target and board. Valid only with device_tree.json, which rejects 'target' and 'board'."
+    },
     "buildDir": {
       "type": "string",
       "minLength": 1

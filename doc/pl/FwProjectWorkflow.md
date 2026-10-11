@@ -115,12 +115,44 @@ platformie są pomijane, więc `--target` zmienia platformę bez edycji manifest
 i domyślna płytka z rejestru. Polecenie zastępuje zepsuty wybór lokalny, ale
 błąd w manifeście trzeba poprawić w samym manifeście.
 
+<a id="projekty-z-device-tree"></a>
+
+### Projekty z device_tree.json
+
+Projekt z [`device_tree.json`](device_tree_format.md) zamiast platformy
+i płytki wybiera jeden ze swoich montaży, a montaż ustala obie te rzeczy.
+Montaż wskazuje pierwsze z poniższych źródeł:
+
+1. `--assembly` albo `--target` jako filtr, który może wybrać jedyny montaż
+   tej platformy;
+2. pole `assembly` w `.vscode/jaszczurhal.local.json`, pomijane, gdy należy
+   do innej platformy niż `--target`;
+3. pole `assembly` w manifeście;
+4. jedyny montaż w pliku.
+
+Przy kilku montażach i braku wyboru polecenie zatrzymuje się i podaje ich
+listę. Nieznany montaż albo montaż innej platformy niż `--target` również
+kończy polecenie (`[JH-HW-ASSEMBLY]`). Selektory ścieżki płytek są odrzucane
+z diagnostyką `[JH-HW-BOARD]`: `--board`, pola `target`, `board`
+i `targetProfiles.<target>.board` w manifeście, `JH_BOARD` albo `JH_ASSEMBLY`
+w pamięci podręcznej CMake manifestu oraz platforma lub płytka zapisana
+w stanie lokalnym, o ile polecenie samo nie podaje `--assembly` ani
+`--target`. Pozostałe ustawienia `targetProfiles.<target>` nadal działają dla
+tej platformy. CMake dostaje `JH_ASSEMBLY` zamiast `JH_BOARD`.
+
+`select-board` wypisuje montaże, przyjmuje wybór przez `--assembly`,
+`--selection` albo `--interactive` i zapisuje w stanie lokalnym tylko klucz
+montażu, usuwając pozostawioną tam platformę i płytkę. `--assembly` albo pole
+`assembly` manifestu bez `device_tree.json` kończy się błędem
+`[JH-HW-ASSEMBLY]`; montaż pozostawiony w stanie lokalnym po usunięciu pliku
+jest pomijany.
+
 Następnie ustawienia są łączone w poniższej kolejności. Wartości z późniejszych pozycji zastępują wcześniejsze:
 
 1. domyślne wartości rejestru targetu i płytki;
 2. bazowy manifest;
 3. aktywna nakładka `targetProfiles.<target>`;
-4. ustalone wartości `JH_TARGET` i `JH_BOARD`;
+4. ustalone wartości `JH_TARGET` i `JH_BOARD` (przy device tree `JH_ASSEMBLY`);
 5. opcje właściwe dla danej akcji, takie jak `--port`, `--host`, `--verbose` i
    `--allow-unverified-port`.
 
@@ -331,7 +363,12 @@ oraz jego nazwane warianty za pomocą dwóch makr X:
 `HAL_TARGET_ESP32_S3` i `HAL_TARGET_ESP32`. Kompilacja dla platformy spoza
 tej listy kończy się błędem `[JH-CFG-TARGET]`. Bez tego makra platformami
 projektu są te skonfigurowane w manifeście: z pola `target` i kluczy
-`targetProfiles`.
+`targetProfiles`. Projekt z `device_tree.json` bierze platformy z montaży
+i odrzuca `JH_PROJECT_TARGETS` błędem `[JH-HW-TARGETS]`. Jego konfiguracje to
+każdy montaż razy wariant bazowy i każdy wariant, a nagłówek jest odczytywany
+z `jh_hardware.h` danego montażu, więc wariant może zatrzymać się na `#error`
+tylko dla jednego montażu. Żadna z tych list nie zależy od stanu lokalnego
+i obie działają przed pierwszą kompilacją.
 
 Każdy wpis `JH_PROJECT_VARIANTS` ma postać
 `X(id, "description", NAME[=VALUE], ...)`. Zapis ze spacjami, `NAME = VALUE`,
@@ -417,17 +454,17 @@ W systemach Unix pamięć podręczna CMake jest oddzielna dla każdej pary platf
 <cmakeBuildDir>/<target>/<board>/
 ```
 
-Dzięki temu różne zestawy narzędzi, platformy systemów kompilacji, wygenerowane nagłówki i układy pamięci linkera nie współdzielą jednej pamięci podręcznej. Natywne środowisko Windows używa zamiast tego krótkiej ścieżki przygotowanej przez skrypt inicjalizacyjny:
+Dzięki temu różne zestawy narzędzi, platformy systemów kompilacji, wygenerowane nagłówki i układy pamięci linkera nie współdzielą jednej pamięci podręcznej. Projekt z `device_tree.json` daje zamiast tego każdemu montażowi własny `buildDir`: `<buildDir>/<target>/<assembly>`, gdzie bazą jest `targetProfiles.<target>.buildDir`, jeśli istnieje. Pliki wynikowe, `cmakeBuildDir` i `JH_ARTIFACT_DIR`, które manifest wyprowadza z `${buildDir}`, podążają za nim, `JH_ARTIFACT_DIR` domyślnie na niego wskazuje (także w generowanych ustawieniach CMake Tools), a katalog CMake albo `JH_ARTIFACT_DIR` położony gdzie indziej dostaje dopisane `<target>/<assembly>`. Dwa montaże tej samej płytki nigdy więc nie dzielą wyników; warianty dostają pod spodem `variants/<id>`. Natywne środowisko Windows używa zamiast tego krótkiej ścieżki przygotowanej przez skrypt inicjalizacyjny:
 
 ```text
-<BuildRoot>/<project-name>-<path-hash>/cmake/<target>/<board>/
+<BuildRoot>/<project-name>-<path-hash>/cmake/<target>/<board albo assembly>/
 ```
 
 Oryginalny `compile_commands.json` znajduje się w odpowiednim katalogu CMake. Narzędzie zapisuje dostosowany `compile_commands_patched.json` w stałym `buildDir` i po każdej kompilacji odświeża pliki firmware wybranej platformy. Robi to również po powrocie do wcześniej skonfigurowanej platformy, gdy Ninja nie musi ponownie kompilować źródeł.
 
 `jh-vscode` zapisuje klucze pamięci podręcznej zarządzane przez manifest w `.jh-vscode-cache-keys.json`. Usunięcie klucza z manifestu powoduje jego usunięcie z pamięci podręcznej przy następnej konfiguracji. Zmiana katalogu źródłowego CMake powoduje odtworzenie nieaktualnej pamięci podręcznej, jeśli znajduje się ona w zarządzanym katalogu wynikowym.
 
-W projektach ESP-IDF `buildDir` jest bezpośrednio katalogiem kompilacji IDF. Musi znajdować się w `.build` projektu lub repozytorium JaszczurHAL, ewentualnie w podkatalogu jednej z tych lokalizacji. Skrypt zarządza tam wygenerowaną konfiguracją projektu i SDK; nie tworzy drugiego rejestru płytek.
+W projektach ESP-IDF `buildDir` jest bezpośrednio katalogiem kompilacji IDF, przy `device_tree.json` katalogiem danego montażu. Musi znajdować się w `.build` projektu lub repozytorium JaszczurHAL, ewentualnie w podkatalogu jednej z tych lokalizacji. Skrypt zarządza tam wygenerowaną konfiguracją projektu i SDK; nie tworzy drugiego rejestru płytek.
 
 Generowane pliki obejmują:
 

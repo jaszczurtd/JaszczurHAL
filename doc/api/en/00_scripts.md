@@ -633,7 +633,9 @@ run, `--jobs` controls parallel example projects, and `--verbose` records
 invoked commands in the per-example logs. A configuration is a declared target
 with the base build or one variant; pairs the header stops with `#error` are
 skipped. Each example builds with the board its manifest selects for the
-target.
+target. An example with `device_tree.json` builds every assembly of the target
+with each variant through `jh-vscode build --assembly`; `list` shows those as
+`<target>/<assembly>`. The local selection never narrows either list.
 
 The `examples-<target>` stages of `runalltests.sh` run `build` for `rp2040`,
 `stm32g474`, and `esp32s3`. `list` reports the current matrix, so this page does not keep
@@ -697,7 +699,7 @@ manifest that carries project configuration is reported with
 `[JH-CFG-MANIFEST]`. Findings fail the command by default; `--report-only` is
 an explicit manual diagnostic mode.
 
-`--effective` uses `jh-vscode` to resolve every configuration a project builds: each declared target with the base build and each variant, without the pairs the header stops with `#error`. Boards come from the manifest; the ignored local board-selection state is not read. It checks constraints and duplicate active feature requests for each configuration. A `.vscode/jaszczurhal.project.json` manifest marks a project. An unpaired `hal_project_config.h` that requests at least one HAL feature is evaluated for each target it declares, or without a target when it declares none, with the base build and each variant. Standalone headers without feature requests and reference manifests are parsed but not resolved.
+`--effective` uses `jh-vscode` to resolve every configuration a project builds: each declared target with the base build and each variant, without the pairs the header stops with `#error`. Boards come from the manifest; the ignored local board-selection state is not read. A project with `device_tree.json` contributes each assembly with each variant, and its records also name the `assembly`. It checks constraints and duplicate active feature requests for each configuration. A `.vscode/jaszczurhal.project.json` manifest marks a project. An unpaired `hal_project_config.h` that requests at least one HAL feature is evaluated for each target it declares, or without a target when it declares none, with the base build and each variant. Standalone headers without feature requests and reference manifests are parsed but not resolved.
 
 `--resolution-output <path>`
 writes deterministic
@@ -742,6 +744,18 @@ variants, and macro values as a CMake file. Diagnostics use the
 `[JH-CFG-TARGET]`, `[JH-CFG-VARIANT]`, `[JH-CFG-ERROR]`, and `[JH-CFG-SCOPE]`
 prefixes. The header rules are described in
 [Targets and variants](../../en/FwProjectWorkflow.md#targets-and-variants).
+
+### `scripts/device_tree_project.py`
+
+What the tools read from a configuration directory with `device_tree.json`:
+its assemblies, the choice of one by the rules of
+[Projects with device_tree.json](../../en/FwProjectWorkflow.md#device-tree-projects),
+the project configuration read with an assembly's `jh_hardware.h`, and the
+assembly-times-variant list of builds that `project_config.py` returns for
+such a directory. `jh-vscode`, the examples dispatcher, the feature lint and
+the library workspace use it. Its `build-key <dir> <assembly> [requests...]`
+command prints the `<assembly or "auto">/<16 hex digits>` name of a library
+build directory, which `scripts/lib/build_artifacts.sh` uses for the runners.
 
 ### `scripts/board_registry.py`
 
@@ -948,8 +962,12 @@ around these artifacts.
 
 Owns the repository-root VS Code static-library workflow. The `select` action
 validates target/board pairs against `boards/` and stores the active profile in
-gitignored local state. `build`, `refresh-intellisense`, `install`, `clean`, and
-`config-dump` then resolve the same build and install paths from that profile.
+gitignored local state. `select --config-dir <dir> [--assembly <key>]
+[--variant <id>]` stores a device tree profile instead, and `--interactive`
+with `--config-dir` lists the directory's assemblies and variants. `build`,
+`refresh-intellisense`, `install`, `clean`, and `config-dump` then resolve the
+same build and install paths from that profile; the same three options given
+to them replace the stored profile for one command.
 
 Hardware profiles delegate to `build_link_library.sh --library-only`, which
 selects the family runner from the registry; mock builds select the root

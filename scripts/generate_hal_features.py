@@ -22,6 +22,7 @@ from codegen_support import (
     validation_error,
     write_generated_outputs,
 )
+import device_tree_project
 import project_config
 from project_config import preprocessor_logical_lines
 from repository_layout import FEATURE_CMAKE_OUTPUT, FEATURE_HEADER_OUTPUT
@@ -1065,6 +1066,8 @@ def effective_matrix_digest(records: list[dict[str, Any]]) -> str:
             "project": record["project"],
             "target": record["target"],
             "board": record["board"],
+            # Two assemblies of one board are two configurations.
+            **({"assembly": record["assembly"]} if record.get("assembly") else {}),
             "variant": record["variant"],
             "requestedFeatures": record["requestedFeatures"],
             "resolvedFeatures": record["resolvedFeatures"],
@@ -1083,12 +1086,15 @@ def feature_resolution_record(
     board: str | None,
     variant: str | None,
     resolution: FeatureResolution,
+    assembly: str | None = None,
 ) -> dict[str, Any]:
-    """Serialize one effective feature resolution for the lint report."""
+    """Serialize one effective feature resolution for the lint report; a
+    device tree build also names its assembly."""
     return {
         "project": project,
         "target": target,
         "board": board,
+        **({"assembly": assembly} if assembly else {}),
         "variant": variant,
         "requestedFeatures": list(resolution.requested),
         "resolvedFeatures": list(resolution.resolved),
@@ -1156,6 +1162,7 @@ def lint_effective_inputs(
                 board,
                 build.variant.id if build.variant else None,
                 resolution,
+                build.assembly,
             )
         )
 
@@ -1174,14 +1181,14 @@ def lint_effective_inputs(
             variant_id = available.variant.id if available.variant else None
             try:
                 config = workflow.load_project_config(
-                    project, target_override=target or None, use_local_state=False
+                    project, target_override=target or None, use_local_state=False,
+                    assembly_override=available.assembly,
                 )
                 workflow.apply_variant(config, variant_id)
                 build = workflow.project_build(config, project)
             except (OSError, ValueError) as error:
-                axis = f"target={target or 'default'}, variant={variant_id or 'base'}"
                 findings.append(
-                    f"{project_display} [{axis}]: [JH-CFG-EFFECTIVE] {error}"
+                    f"{project_display} [{available.label()}]: [JH-CFG-EFFECTIVE] {error}"
                 )
                 continue
             record(project_display, build, str(config["board"]) if config.get("board") else None)
@@ -1194,15 +1201,21 @@ def lint_effective_inputs(
         except ValueError as error:
             findings.append(f"{project_display}: [JH-CFG-EFFECTIVE] {error}")
             continue
+        boards = (
+            {item["name"]: item["board"] for item in device_tree_project.assemblies(project)}
+            if device_tree_project.device_tree_path(project) is not None
+            else {}
+        )
         for build in builds:
             if build.requested_features():
-                record(project_display, build, None)
+                record(project_display, build, boards.get(build.assembly))
 
     records.sort(
         key=lambda item: (
             item["project"],
             item["target"] or "",
             item["board"] or "",
+            item.get("assembly") or "",
             item["variant"] or "",
         )
     )

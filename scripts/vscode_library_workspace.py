@@ -20,6 +20,7 @@ CPP_PROPERTIES = Path(".vscode/c_cpp_properties.json")
 MANAGED_BUILD_ROOT = Path(".build/vscode/library")
 MANAGED_INSTALL_ROOT = Path(".build/install")
 SELECTION_INPUT_ID = "libraryBoardSelection"
+CONFIG_DIR_INPUT_ID = "libraryConfigDir"
 
 
 class WorkspaceError(RuntimeError):
@@ -37,9 +38,17 @@ class LibraryProfile:
     provider: str
     target_display_name: str
     board_display_name: str
+    # A configuration directory with device_tree.json, its assembly and the
+    # program variant; the assembly fixes target and board.
+    config_dir: Path | None = None
+    assembly: str | None = None
+    variant: str | None = None
 
     @property
     def selection(self) -> str:
+        if self.config_dir is not None:
+            variant = f" variant {self.variant}" if self.variant else ""
+            return f"{self.config_dir} assembly {self.assembly}{variant}"
         return f"{self.target}:{self.board}"
 
 
@@ -107,6 +116,43 @@ def profile_from_selection(
     )
 
 
+def device_tree_profile(
+    registry: dict[str, dict[str, Any]],
+    config_dir: Path,
+    assembly: str | None,
+    variant: str | None,
+) -> LibraryProfile:
+    """The profile of a configuration directory with device_tree.json: one
+    of its assemblies (the only one may be implied) and a declared variant."""
+    import device_tree_project
+    import project_config
+
+    config_dir = config_dir.resolve()
+    if device_tree_project.device_tree_path(config_dir) is None:
+        raise WorkspaceError(f"{config_dir} has no device_tree.json")
+    try:
+        item, _ = device_tree_project.choose(config_dir, None, assembly)
+        variants = project_config.read_project_config(
+            config_dir / project_config.HEADER_NAME
+        ).variants
+    except ValueError as exc:
+        raise WorkspaceError(str(exc)) from exc
+    if variant and variant not in {entry.id for entry in variants}:
+        known = ", ".join(entry.id for entry in variants) or "none"
+        raise WorkspaceError(f"unknown variant '{variant}' in {config_dir}; declared: {known}")
+    profile = profile_from_selection(registry, item["target"], item["board"])
+    return LibraryProfile(
+        target=profile.target,
+        board=profile.board,
+        provider=profile.provider,
+        target_display_name=profile.target_display_name,
+        board_display_name=profile.board_display_name,
+        config_dir=config_dir,
+        assembly=item["name"],
+        variant=variant or None,
+    )
+
+
 def default_profile(registry: dict[str, dict[str, Any]]) -> LibraryProfile:
     target_desc = registry[DEFAULT_TARGET]
     return profile_from_selection(
@@ -129,6 +175,12 @@ def load_active_profile(
         raise WorkspaceError(f"cannot read {state_path}: {exc}") from exc
     if not isinstance(state, dict) or state.get("schemaVersion") != 1:
         raise WorkspaceError(f"unsupported library workspace state in {state_path}")
+    if "configDir" in state:
+        # A device tree profile stores only what selects it; target and
+        # board come from the assembly every time.
+        return device_tree_profile(
+            registry, Path(str(state["configDir"])), state.get("assembly"), state.get("variant")
+        )
     target = state.get("target")
     board = state.get("board")
     if not isinstance(target, str) or not isinstance(board, str):
@@ -139,17 +191,28 @@ def load_active_profile(
 def save_active_profile(repo_root: Path, profile: LibraryProfile) -> None:
     state_path = repo_root / LOCAL_STATE
     state_path.parent.mkdir(parents=True, exist_ok=True)
-    state = {
-        "schemaVersion": 1,
-        "target": profile.target,
-        "board": profile.board,
-    }
+    state: dict[str, Any] = {"schemaVersion": 1}
+    if profile.config_dir is not None:
+        state.update(configDir=str(profile.config_dir), assembly=profile.assembly)
+        if profile.variant:
+            state["variant"] = profile.variant
+    else:
+        state.update(target=profile.target, board=profile.board)
     state_path.write_text(json.dumps(state, indent=4) + "\n", encoding="utf-8")
 
 
 def profile_paths(repo_root: Path, profile: LibraryProfile) -> ProfilePaths:
-    build_dir = repo_root / MANAGED_BUILD_ROOT / profile.target / profile.board
-    install_dir = repo_root / MANAGED_INSTALL_ROOT / profile.target / profile.board
+    key = profile.board
+    if profile.config_dir is not None:
+        import device_tree_project
+
+        # <assembly>/<digest of the configuration directory and variant>:
+        # two projects or variants never share a build or an installation.
+        key = device_tree_project.build_key(
+            profile.config_dir, str(profile.assembly), [f"variant={profile.variant or ''}"]
+        )
+    build_dir = repo_root / MANAGED_BUILD_ROOT / profile.target / key
+    install_dir = repo_root / MANAGED_INSTALL_ROOT / profile.target / key
     archive_name = "libhal_mock.a" if profile.provider == "host" else "libJaszczurHAL.a"
     return ProfilePaths(
         build_dir=build_dir,
@@ -244,13 +307,17 @@ def build_commands(
     from board_registry import LINK_LIBRARY_PROVIDERS
 
     if profile.provider in LINK_LIBRARY_PROVIDERS:
+        selector = ["--board", profile.board]
+        if profile.config_dir is not None:
+            selector = ["--assembly", str(profile.assembly), "-p", str(profile.config_dir)]
+            if profile.variant:
+                selector += ["--variant", profile.variant]
         return [
             [
                 str(repo_root / "scripts/build_link_library.sh"),
                 "--target",
                 profile.target,
-                "--board",
-                profile.board,
+                *selector,
                 "--library-only",
                 "--output",
                 str(paths.build_dir),
@@ -504,6 +571,16 @@ def root_tasks_document(
             ["select", "--interactive"],
         ),
         task(
+            "Library: Select device tree configuration",
+            "Select an assembly and variant of a configuration directory with device_tree.json",
+            [
+                "select",
+                "--config-dir",
+                f"${{input:{CONFIG_DIR_INPUT_ID}}}",
+                "--interactive",
+            ],
+        ),
+        task(
             "Library: Show active profile",
             "Print the active target, board, build paths, and install paths",
             ["config-dump"],
@@ -537,7 +614,12 @@ def root_tasks_document(
                     for option in selection_options(registry)
                     if option.startswith(f"{default.selection} - ")
                 ),
-            }
+            },
+            {
+                "id": CONFIG_DIR_INPUT_ID,
+                "description": "Configuration directory with device_tree.json and hal_project_config.h",
+                "type": "promptString",
+            },
         ],
         "tasks": tasks,
     }
@@ -599,11 +681,47 @@ def sync_vscode_documents(repo_root: Path, check: bool) -> None:
         )
 
 
+def select_device_tree_interactively(
+    registry: dict[str, dict[str, Any]], config_dir: Path
+) -> LibraryProfile:
+    """Choose one build of the directory's matrix: assembly and variant."""
+    import device_tree_project
+    import project_config
+
+    try:
+        builds = device_tree_project.builds(config_dir, project_config.load_targets())
+    except ValueError as exc:
+        raise WorkspaceError(str(exc)) from exc
+    for index, build in enumerate(builds, start=1):
+        variant = build.variant.id if build.variant else "base"
+        print(f"{index:2d}. {build.assembly} ({build.target.id}) variant {variant}")
+    try:
+        answer = input("Select assembly/variant number: ").strip()
+        selected = builds[int(answer) - 1] if int(answer) >= 1 else None
+    except (EOFError, ValueError, IndexError) as exc:
+        raise WorkspaceError("selection cancelled or invalid") from exc
+    if selected is None:
+        raise WorkspaceError(f"selection must be between 1 and {len(builds)}")
+    return device_tree_profile(
+        registry, config_dir, selected.assembly,
+        selected.variant.id if selected.variant else None,
+    )
+
+
 def config_dump(repo_root: Path, profile: LibraryProfile) -> None:
     paths = profile_paths(repo_root, profile)
     document = {
         "target": profile.target,
         "board": profile.board,
+        **(
+            {
+                "configDir": str(profile.config_dir),
+                "assembly": profile.assembly,
+                "variant": profile.variant,
+            }
+            if profile.config_dir is not None
+            else {}
+        ),
         "provider": profile.provider,
         "state": str(repo_root / LOCAL_STATE),
         "buildDir": str(paths.build_dir),
@@ -625,17 +743,38 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         help="JaszczurHAL repository root",
     )
     subparsers = parser.add_subparsers(dest="action", required=True)
-    subparsers.add_parser("build", help="Build the active linkable static library")
+    # Explicit inputs of one action win over the stored profile.
+    explicit = argparse.ArgumentParser(add_help=False)
+    explicit.add_argument(
+        "--config-dir", type=Path,
+        help="Configuration directory with device_tree.json and hal_project_config.h",
+    )
+    explicit.add_argument("--assembly", help="Assembly key of device_tree.json")
+    explicit.add_argument("--variant", help="Program variant of hal_project_config.h")
+    subparsers.add_parser(
+        "build", parents=[explicit], help="Build the active linkable static library"
+    )
     subparsers.add_parser(
         "refresh-intellisense",
+        parents=[explicit],
         help="Build the active profile and write c_cpp_properties.json",
     )
-    subparsers.add_parser("clean", help="Clean only the active managed profile")
-    subparsers.add_parser("install", help="Install the active production library")
-    subparsers.add_parser("config-dump", help="Print the resolved active profile")
+    subparsers.add_parser(
+        "clean", parents=[explicit], help="Clean only the active managed profile"
+    )
+    subparsers.add_parser(
+        "install", parents=[explicit], help="Install the active production library"
+    )
+    subparsers.add_parser(
+        "config-dump", parents=[explicit], help="Print the resolved active profile"
+    )
 
-    select_parser = subparsers.add_parser("select", help="Select target and board")
-    select_group = select_parser.add_mutually_exclusive_group(required=True)
+    select_parser = subparsers.add_parser(
+        "select",
+        parents=[explicit],
+        help="Select target and board, or a device tree assembly and variant",
+    )
+    select_group = select_parser.add_mutually_exclusive_group()
     select_group.add_argument("--selection", help="Selection as <target>:<board>")
     select_group.add_argument("--interactive", action="store_true")
 
@@ -656,22 +795,41 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
 
         registry = load_registry(repo_root)
-        profile = load_active_profile(repo_root, registry)
+        config_dir = getattr(args, "config_dir", None)
+        if config_dir is None and (getattr(args, "assembly", None) or getattr(args, "variant", None)):
+            raise WorkspaceError("--assembly and --variant need --config-dir with device_tree.json")
+        explicit = (
+            device_tree_profile(registry, config_dir, args.assembly, args.variant)
+            if config_dir is not None and not (args.action == "select" and args.interactive)
+            else None
+        )
         if args.action == "select":
-            selected = (
-                parse_selection(registry, args.selection)
-                if args.selection is not None
-                else select_interactively(registry, profile)
-            )
-            clear_managed_cpp_properties(
-                repo_root,
-                profile,
-                profile_paths(repo_root, profile),
-            )
+            # A stored profile that no longer resolves (its configuration
+            # directory is gone) never blocks choosing a new one.
+            try:
+                previous = load_active_profile(repo_root, registry)
+            except WorkspaceError:
+                previous = None
+            if config_dir is not None:
+                selected = explicit or select_device_tree_interactively(registry, config_dir)
+            elif args.selection is not None:
+                selected = parse_selection(registry, args.selection)
+            elif args.interactive:
+                selected = select_interactively(registry, previous or default_profile(registry))
+            else:
+                raise WorkspaceError("select needs --selection, --interactive or --config-dir")
+            if previous is not None:
+                clear_managed_cpp_properties(
+                    repo_root,
+                    previous,
+                    profile_paths(repo_root, previous),
+                )
             save_active_profile(repo_root, selected)
             print(f"Selected JaszczurHAL library profile {selected.selection}")
             print("Run Project: Refresh IntelliSense for the new profile.")
             return 0
+        # Explicit inputs replace the stored profile, which is then not read.
+        profile = explicit or load_active_profile(repo_root, registry)
         if args.action == "build":
             paths = build_profile(repo_root, profile)
             write_cpp_properties(repo_root, profile, paths)
