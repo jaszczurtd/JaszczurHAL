@@ -147,8 +147,16 @@ def cmake_tools_configure_settings(
     project_ref: str = "${workspaceFolder}",
     build_ref: str = "${workspaceFolder}/.build",
     project_cache: dict[str, Any] | None = None,
+    assembly: str | None = None,
 ) -> dict[str, Any]:
-    """Build the initial dispatcher cache consumed directly by CMake Tools."""
+    """Build the initial dispatcher cache consumed directly by CMake Tools.
+    A device tree project passes its ``assembly``: CMake resolves the board
+    from it and refuses JH_BOARD, and like jh-vscode the build publishes into
+    the assembly's own <build_ref>/<target>/<assembly>, so two assemblies never
+    share artifacts."""
+    artifacts = (project_cache or {}).get("JH_ARTIFACT_DIR")
+    if assembly:
+        build_ref = f"{build_ref}/{target}/{assembly}"
 
     def translate(cache: dict[str, Any]) -> dict[str, Any]:
         return {
@@ -169,10 +177,35 @@ def cmake_tools_configure_settings(
             "JH_PROJECT_DIR": project_ref,
             "JH_MODULE_NAME": module,
             "JH_TARGET": target,
-            "JH_BOARD": board,
         }
     )
+    if assembly:
+        settings.pop("JH_BOARD", None)
+        settings["JH_ASSEMBLY"] = assembly
+        # Without its own value CMake publishes into <project>/.build, which
+        # every assembly shares; a directory outside buildDir gets the suffix.
+        if not artifacts:
+            settings["JH_ARTIFACT_DIR"] = build_ref
+        elif "${buildDir}" not in str(artifacts):
+            settings["JH_ARTIFACT_DIR"] = f"{settings['JH_ARTIFACT_DIR']}/{target}/{assembly}"
+    else:
+        settings["JH_BOARD"] = board
     return settings
+
+
+def assembly_build_dir(manifest: dict[str, Any], target: str, assembly: str) -> str:
+    """The unexpanded buildDir of one assembly of a device tree project:
+    <base>/<target>/<assembly>, where the base is the target's targetProfiles
+    buildDir, else the manifest's, else ${project}/.build. Each assembly then
+    keeps its artifacts and everything else derived from ${buildDir}."""
+    base = manifest.get("buildDir") or "${project}/.build"
+    profiles = manifest.get("targetProfiles")
+    overlay = profiles.get(target) if isinstance(profiles, dict) else None
+    if isinstance(overlay, dict) and overlay.get("buildDir"):
+        base = overlay["buildDir"]
+    if not isinstance(base, str):
+        raise ValueError("project manifest field 'buildDir' must be a string")
+    return os.path.join(base, target, assembly)
 
 
 def vscode_launch_executable(
@@ -180,9 +213,13 @@ def vscode_launch_executable(
     *,
     workspace_dir: Path | None = None,
     jh_root: Path | None = None,
+    assembly: tuple[str, str] | None = None,
 ) -> str:
-    """Translate the tracked manifest artifact path into VS Code variables."""
+    """Translate the tracked manifest artifact path into VS Code variables;
+    ``assembly`` is the (target, key) whose own buildDir holds the ELF."""
     build_dir = manifest.get("buildDir") or "${project}/.build"
+    if assembly is not None:
+        build_dir = assembly_build_dir(manifest, *assembly)
     if not isinstance(build_dir, str):
         raise ValueError("project manifest field 'buildDir' must be a string")
     artifacts = manifest.get("artifacts") or {}
@@ -338,6 +375,41 @@ def board_selection_input(
     }
 
 
+def assembly_selection_input(project_dir: Path, selected_assembly: str | None) -> dict[str, Any]:
+    """The picker of a project with device_tree.json: its assemblies, each
+    with the target and board it fixes. Without a selected assembly the first
+    one is the default."""
+    import device_tree_project
+
+    items = device_tree_project.assemblies(project_dir)
+    names = [item["name"] for item in items]
+    if selected_assembly is not None and selected_assembly not in names:
+        raise ValueError(f"assembly '{selected_assembly}' is not in {project_dir}/device_tree.json")
+    options = [f"{item['name']} - {item['target']}/{item['board']}" for item in items]
+    return {
+        "id": BOARD_SELECTION_INPUT_ID,
+        "description": "Select an assembly of device_tree.json",
+        "type": "pickString",
+        "options": options,
+        "default": options[names.index(selected_assembly or names[0])],
+    }
+
+
+def selection_input(
+    registry: dict[str, dict[str, Any]],
+    selected_target: str,
+    selected_board: str,
+    project_dir: Path | None,
+    selected_assembly: str | None,
+) -> dict[str, Any]:
+    """The assembly picker with device_tree.json, the board picker without."""
+    import device_tree_project
+
+    if device_tree_project.device_tree_path(project_dir) is not None:
+        return assembly_selection_input(Path(project_dir), selected_assembly)
+    return board_selection_input(registry, selected_target, selected_board)
+
+
 def sync_board_picker_task() -> dict[str, Any]:
     return vscode_entry_task(
         label=SYNC_BOARD_PICKER_LABEL,
@@ -368,10 +440,20 @@ def project_tasks_document(
     module: str = "",
     usb_product: str = "",
     project_dir: Path | None = None,
+    selected_assembly: str | None = None,
 ) -> dict[str, Any]:
     """Tasks of one project; ``project_dir`` adds a build and an upload task
-    for each variant its hal_project_config.h declares."""
+    for each variant its hal_project_config.h declares. With device_tree.json
+    in ``project_dir`` the selector offers its assemblies, defaulting to
+    ``selected_assembly``."""
+    import device_tree_project
+
     subject = f" the {module}" if module else ""
+    choice = (
+        "an assembly of device_tree.json (it fixes target and board)"
+        if device_tree_project.device_tree_path(project_dir) is not None
+        else "a target architecture and board"
+    )
     tasks = [
         vscode_entry_task(
             label="Project: Build",
@@ -507,9 +589,7 @@ def project_tasks_document(
         ),
         vscode_entry_task(
             label="Project: Select board",
-            detail=(
-                "Choose a target architecture and board in the interactive selector."
-            ),
+            detail=f"Choose {choice} in the interactive selector.",
             args=["select-board", "--project", "${workspaceFolder}", "--interactive"],
             presentation={
                 "echo": True,
@@ -523,9 +603,7 @@ def project_tasks_document(
         ),
         vscode_entry_task(
             label="Project: Select board (GUI)",
-            detail=(
-                "Choose a target architecture and board from the VS Code menu."
-            ),
+            detail=f"Choose {choice} from the VS Code menu.",
             args=[
                 "select-board",
                 "--project",
@@ -565,7 +643,11 @@ def project_tasks_document(
         )
     return {
         "version": "2.0.0",
-        "inputs": [board_selection_input(registry, selected_target, selected_board)],
+        "inputs": [
+            selection_input(
+                registry, selected_target, selected_board, project_dir, selected_assembly
+            )
+        ],
         "tasks": tasks,
     }
 
@@ -575,6 +657,8 @@ def sync_board_picker_document(
     registry: dict[str, dict[str, Any]],
     selected_target: str,
     selected_board: str,
+    project_dir: Path | None = None,
+    selected_assembly: str | None = None,
 ) -> bool:
     inputs = document.get("inputs")
     changed = False
@@ -588,7 +672,9 @@ def sync_board_picker_document(
     if not isinstance(tasks, list):
         raise ValueError("tasks.json field 'tasks' must be an array")
 
-    desired_input = board_selection_input(registry, selected_target, selected_board)
+    desired_input = selection_input(
+        registry, selected_target, selected_board, project_dir, selected_assembly
+    )
     matching_inputs = [
         item
         for item in inputs

@@ -679,7 +679,9 @@ uruchomienie, `--jobs` kontroluje równoległe projekty przykładów, a
 Konfiguracja to zadeklarowana platforma z kompilacją bazową albo jednym
 wariantem; pary zatrzymane w nagłówku przez `#error` są pomijane. Każdy
 przykład kompiluje się dla płytki, którą jego manifest wybiera dla danej
-platformy.
+platformy. Przykład z `device_tree.json` kompiluje każdy montaż tej platformy
+z każdym wariantem przez `jh-vscode build --assembly`, a `list` pokazuje je
+jako `<target>/<assembly>`. Lokalny wybór nie zawęża żadnej z tych list.
 
 Etapy `examples-<target>` skryptu `runalltests.sh` uruchamiają `build` dla
 `rp2040`, `stm32g474` i `esp32s3`. Aktualną macierz pokazuje `list`, dlatego ta strona nie podaje
@@ -752,7 +754,7 @@ konfigurację projektu jest zgłaszany z diagnostyką `[JH-CFG-MANIFEST]`.
 Wykryte problemy domyślnie kończą polecenie niepowodzeniem; `--report-only`
 jest jawnym, ręcznym trybem diagnostycznym.
 
-`--effective` korzysta z mechanizmu `jh-vscode`, aby ustalić każdą konfigurację, dla której projekt się kompiluje: każdą zadeklarowaną platformę z kompilacją bazową i każdym wariantem, bez par zatrzymanych w nagłówku przez `#error`. Płytki pochodzą z manifestu; lokalny stan płytki ignorowany przez Git nie jest odczytywany. Dla każdej konfiguracji sprawdza ograniczenia oraz powtórzone żądania modułów. Plik `.vscode/jaszczurhal.project.json` oznacza projekt. Niepowiązany z manifestem `hal_project_config.h`, który żąda co najmniej jednego modułu HAL, jest przetwarzany dla każdej zadeklarowanej w nim platformy (bez platformy, gdy nie deklaruje żadnej), z kompilacją bazową i każdym wariantem. Samodzielne nagłówki bez żądań modułów i manifesty referencyjne są jedynie analizowane składniowo, bez rozwiązywania konfiguracji.
+`--effective` korzysta z mechanizmu `jh-vscode`, aby ustalić każdą konfigurację, dla której projekt się kompiluje: każdą zadeklarowaną platformę z kompilacją bazową i każdym wariantem, bez par zatrzymanych w nagłówku przez `#error`. Płytki pochodzą z manifestu; lokalny stan płytki ignorowany przez Git nie jest odczytywany. Projekt z `device_tree.json` daje każdy montaż z każdym wariantem, a jego rekordy podają też `assembly`. Dla każdej konfiguracji sprawdza ograniczenia oraz powtórzone żądania modułów. Plik `.vscode/jaszczurhal.project.json` oznacza projekt. Niepowiązany z manifestem `hal_project_config.h`, który żąda co najmniej jednego modułu HAL, jest przetwarzany dla każdej zadeklarowanej w nim platformy (bez platformy, gdy nie deklaruje żadnej), z kompilacją bazową i każdym wariantem. Samodzielne nagłówki bez żądań modułów i manifesty referencyjne są jedynie analizowane składniowo, bez rozwiązywania konfiguracji.
 
 `--resolution-output <path>` zapisuje deterministyczne `requestedFeatures`,
 `resolvedFeatures`, skróty pełnego zbioru zależności oraz pochodzenie żądań
@@ -799,6 +801,19 @@ i wartości makr jednej kompilacji jako plik CMake. Diagnostyka używa prefiksó
 `[JH-CFG-TARGET]`, `[JH-CFG-VARIANT]`, `[JH-CFG-ERROR]` i `[JH-CFG-SCOPE]`.
 Zasady dotyczące nagłówka opisuje część
 [platformy i warianty](../../pl/FwProjectWorkflow.md#platformy-i-warianty).
+
+### `scripts/device_tree_project.py`
+
+Udostępnia narzędziom to, co odczytują z katalogu konfiguracji
+z `device_tree.json`: listę montaży, wybór jednego według zasad z części
+[projekty z device_tree.json](../../pl/FwProjectWorkflow.md#projekty-z-device-tree),
+konfigurację projektu odczytaną z `jh_hardware.h` danego montażu oraz listę
+kompilacji montaż razy wariant, którą `project_config.py` zwraca dla takiego
+katalogu. Korzystają z niego `jh-vscode`, dispatcher przykładów, linter
+funkcji i obsługa bibliotek w VS Code. Polecenie
+`build-key <katalog> <montaż> [żądania...]` wypisuje nazwę katalogu kompilacji
+biblioteki w postaci `<montaż albo "auto">/<16 cyfr szesnastkowych>`; używa
+jej `scripts/lib/build_artifacts.sh` w skryptach budujących biblioteki.
 
 ### `scripts/board_registry.py`
 
@@ -1019,9 +1034,12 @@ z tymi artefaktami.
 Obsługuje bibliotekę statyczną z poziomu głównego katalogu repozytorium w VS
 Code. Akcja `select` sprawdza pary target/płytka
 względem `boards/` i zapisuje aktywny profil w lokalnym stanie ignorowanym
-przez git. `build`, `refresh-intellisense`, `install`, `clean` oraz
-`config-dump` używają następnie tych samych ścieżek kompilacji i instalacji z
-tego profilu.
+przez git. `select --config-dir <katalog> [--assembly <klucz>]
+[--variant <id>]` zapisuje zamiast tego profil z device tree, a `--interactive`
+razem z `--config-dir` wypisuje montaże i warianty katalogu. `build`,
+`refresh-intellisense`, `install`, `clean` oraz `config-dump` używają
+następnie tych samych ścieżek kompilacji i instalacji z tego profilu; te same
+trzy opcje podane tym poleceniom zastępują zapisany profil w jednym wywołaniu.
 
 Profile sprzętowe wywołują `build_link_library.sh --library-only`, który
 wybiera runner rodziny z rejestru, a kompilacje mock wybierają główny target

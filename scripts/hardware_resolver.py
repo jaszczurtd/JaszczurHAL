@@ -46,6 +46,17 @@ BOARD_GPIO_TYPES = {"statusLed": ("jaszczurhal,gpio-output", "out"),
 BOARD_ROLE_TYPES = {"sx1262-radio": "semtech,sx1262"}
 
 
+def source_key(source: Path | str, base: Path) -> str:
+    """Sort key of a source file: its path relative to the device tree's
+    directory, so diagnostics come in one order wherever the project lives.
+    A file on another Windows drive (HAL and project apart) has no relative
+    path and sorts by its absolute one."""
+    try:
+        return os.path.relpath(source, base)
+    except ValueError:
+        return Path(source).resolve().as_posix()
+
+
 class Collector:
     """Errors of one phase; the first by source, JSON Pointer and code wins."""
 
@@ -59,7 +70,7 @@ class Collector:
 
     def check(self) -> None:
         if self.errors:
-            raise min(self.errors, key=lambda e: (os.path.relpath(e.source, self.base),
+            raise min(self.errors, key=lambda e: (source_key(e.source, self.base),
                                                   hardware_schema.pointer_key(e.pointer), e.code))
 
 
@@ -208,7 +219,7 @@ class Resolver:
         """Every name any assembly may produce, from distinct sources, is unique."""
         names: dict[str, tuple[tuple, tuple[Path, str], tuple[Path, str]]] = {}
         errors = Collector(self.base)
-        order = lambda o: (os.path.relpath(o[0], self.base), hardware_schema.pointer_key(o[1]))
+        order = lambda o: (source_key(o[0], self.base), hardware_schema.pointer_key(o[1]))
 
         def claim(name: str, entity: tuple, origin: tuple[Path, str],
                   member: tuple[Path, str] | None = None) -> None:
@@ -886,7 +897,7 @@ class WiringCheck:
             if (node.binding.data["signals"][signal]["direction"] != "input"
                     and "activeLow" in node.properties):
                 pin = node.pins[signal]
-                outputs.append((os.path.relpath(pin["source"], self.r.base),
+                outputs.append((source_key(pin["source"], self.r.base),
                                 hardware_schema.pointer_key(pin["at"]), pin, node.properties["activeLow"][0], member))
         outputs.sort(key=lambda item: item[:2])
         for item in outputs[1:]:

@@ -68,6 +68,22 @@ def read_manifest(example_dir: Path) -> dict[str, Any]:
     return document
 
 
+def manifest_selection(example_dir: Path, manifest: dict[str, Any]) -> tuple[str, str, str | None]:
+    """Target, board and assembly the generated files use: the manifest's
+    target and board, or with device_tree.json the assembly the manifest
+    selects (the first one when it selects none). Local state never counts."""
+    if not (example_dir / "device_tree.json").is_file():
+        return str(manifest["target"]), str(manifest["board"]), None
+    import device_tree_project
+
+    items = device_tree_project.assemblies(example_dir)
+    chosen = manifest.get("assembly") or items[0]["name"]
+    item = next((item for item in items if item["name"] == chosen), None)
+    if item is None:
+        raise ValueError(f"{example_dir / MANIFEST}: unknown assembly {chosen!r}")
+    return item["target"], item["board"], item["name"]
+
+
 def settings_for(example_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
     from vscode_task_config import (
         cmake_tools_configure_settings,
@@ -76,19 +92,20 @@ def settings_for(example_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
 
     name = example_dir.name
     module = str(manifest["module"])
-    target = str(manifest["target"])
-    board = str(manifest["board"])
+    target, board, assembly = manifest_selection(example_dir, manifest)
     build_dir = f"${{workspaceFolder}}/../../.build/examples/{name}"
+    # A device tree example publishes into <buildDir>/<target>/<assembly>.
+    output_dir = f"{build_dir}/{target}/{assembly}" if assembly else build_dir
     return {
         "jaszczurhal.buildDir": build_dir,
         "jaszczurhal.verbose": False,
         "jaszczurhal.root": "../..",
         **vscode_entry_settings("../../vscode/entry/jh-vscode"),
         "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
-        "C_Cpp.default.compileCommands": f"{build_dir}/compile_commands_patched.json",
+        "C_Cpp.default.compileCommands": f"{output_dir}/compile_commands_patched.json",
         "C_Cpp.errorSquiggles": "enabled",
         "cmake.sourceDirectory": "${workspaceFolder}/../../cmake/jh_firmware_project",
-        "cmake.buildDirectory": f"{build_dir}/cmake-tools/{target}-{board}",
+        "cmake.buildDirectory": f"{build_dir}/cmake-tools/{target}-{assembly or board}",
         "cmake.generator": "Ninja",
         "cmake.configureSettings": cmake_tools_configure_settings(
             target_registry(),
@@ -98,24 +115,29 @@ def settings_for(example_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
             jh_root_ref="${workspaceFolder}/../..",
             build_ref=build_dir,
             project_cache=dict(manifest["cmake"]["cache"]),
+            assembly=assembly,
         ),
         "files.exclude": {"**/.build": True},
         "search.exclude": {"**/.build": True},
     }
 
 
-def tasks_for(target: str, board: str, project_dir: Path | None) -> dict[str, Any]:
+def tasks_for(
+    target: str, board: str, project_dir: Path | None, assembly: str | None = None
+) -> dict[str, Any]:
     from vscode_task_config import project_tasks_document
 
     return project_tasks_document(
-        target_registry(), target, board, project_dir=project_dir
+        target_registry(), target, board, project_dir=project_dir,
+        selected_assembly=assembly,
     )
 
 
-def launch_for(name: str) -> dict[str, Any]:
+def launch_for(name: str, target: str = "", assembly: str | None = None) -> dict[str, Any]:
     from vscode_task_config import cortex_debug_launch_document
 
-    executable = f"${{workspaceFolder}}/../../.build/examples/{name}/firmware.elf"
+    output = f"/{target}/{assembly}" if assembly else ""
+    executable = f"${{workspaceFolder}}/../../.build/examples/{name}{output}/firmware.elf"
     return cortex_debug_launch_document(executable)
 
 
@@ -194,12 +216,11 @@ def example_vscode_files(example_dir: Path) -> dict[str, Any]:
     )
     if findings:
         raise ValueError("\n".join(findings))
+    target, board, assembly = manifest_selection(example_dir, manifest)
     return {
         "settings.json": settings_for(example_dir, manifest),
-        "tasks.json": tasks_for(
-            str(manifest["target"]), str(manifest["board"]), example_dir
-        ),
-        "launch.json": launch_for(example_dir.name),
+        "tasks.json": tasks_for(target, board, example_dir, assembly),
+        "launch.json": launch_for(example_dir.name, target, assembly),
         "keybindings.reference.json": keybindings_for(),
         "extensions.json": extensions_for(),
     }
@@ -286,14 +307,17 @@ def dispatcher_log_path(target: str, example_name: str) -> Path:
 def run_one_example(
     example_dir: Path,
     target: str,
-    board: str,
+    selector: list[str],
     variants: list[str | None],
     parallel_level: int,
     verbose: bool,
 ) -> tuple[bool, str, Path, float]:
+    """Build the variants of one example for one board or assembly;
+    ``selector`` is ``["--board", id]`` or ``["--assembly", key]``."""
     started = time.monotonic()
-    log_path = dispatcher_log_path(target, example_dir.name)
-    label = f"{example_dir.name}@{target}"
+    where = f"{target}/{selector[1]}" if selector[0] == "--assembly" else target
+    log_path = dispatcher_log_path(where.replace("/", "-"), example_dir.name)
+    label = f"{example_dir.name}@{where}"
     base_command = [
         str(JH_VSCODE),
         "build",
@@ -301,8 +325,7 @@ def run_one_example(
         str(example_dir),
         "--target",
         target,
-        "--board",
-        board,
+        *selector,
     ]
     with log_path.open("w", encoding="utf-8") as log:
         for variant in variants:
@@ -325,7 +348,7 @@ def run_one_example(
             if result.returncode != 0:
                 return (
                     False,
-                    command_label(example_dir, target, variant),
+                    command_label(example_dir, where, variant),
                     log_path,
                     time.monotonic() - started,
                 )
@@ -333,24 +356,32 @@ def run_one_example(
 
 
 def build(args: argparse.Namespace) -> int:
-    groups: list[tuple[Path, str, list[str | None]]] = []
+    groups: list[tuple[Path, list[str], list[str | None]]] = []
     skipped: list[str] = []
     try:
         for example_dir in selected_example_dirs(args.example or []):
             if not example_dir.is_dir():
                 print(f"error: missing example directory: {example_dir}", file=sys.stderr)
                 return 1
-            variants = [
-                build.variant.id if build.variant else None
-                for build in example_builds(example_dir)
-                if build.target.id == args.target
-            ]
-            if not variants:
+            # A device tree example builds every assembly of the target; the
+            # board path builds the manifest's board.
+            by_selector: dict[tuple[str, ...], list[str | None]] = {}
+            for item in example_builds(example_dir):
+                if item.target.id != args.target:
+                    continue
+                selector = ("--assembly", item.assembly) if item.assembly else ()
+                by_selector.setdefault(selector, []).append(
+                    item.variant.id if item.variant else None
+                )
+            if not by_selector:
                 skipped.append(command_label(example_dir, args.target, None))
                 continue
-            groups.append(
-                (example_dir, manifest_board(example_dir, args.target), variants)
-            )
+            for selector, variants in by_selector.items():
+                groups.append((
+                    example_dir,
+                    list(selector) or ["--board", manifest_board(example_dir, args.target)],
+                    variants,
+                ))
     except ValueError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
@@ -376,12 +407,12 @@ def build(args: argparse.Namespace) -> int:
                 run_one_example,
                 example_dir,
                 args.target,
-                board,
+                selector,
                 variants,
                 parallel_level,
                 args.verbose,
             ): example_dir
-            for example_dir, board, variants in groups
+            for example_dir, selector, variants in groups
         }
         for future in as_completed(futures):
             ok, label, log_path, elapsed = future.result()
@@ -400,8 +431,9 @@ def build(args: argparse.Namespace) -> int:
         print(tail(log_path), file=sys.stderr)
         return 1
     configurations = sum(len(variants) for _, _, variants in groups)
+    projects = len({example_dir for example_dir, _, _ in groups})
     print(
-        f"built {configurations} configuration(s) from {len(groups)} "
+        f"built {configurations} configuration(s) from {projects} "
         f"example project(s) for {args.target}",
         flush=True,
     )
@@ -413,7 +445,8 @@ def list_examples() -> int:
         for example_dir in example_dirs():
             by_target: dict[str, list[str]] = {}
             for item in example_builds(example_dir):
-                by_target.setdefault(item.target.id, []).append(
+                axis = f"{item.target.id}/{item.assembly}" if item.assembly else item.target.id
+                by_target.setdefault(axis, []).append(
                     item.variant.id if item.variant else "base"
                 )
             print(

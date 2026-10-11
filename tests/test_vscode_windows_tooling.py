@@ -298,7 +298,7 @@ with tempfile.TemporaryDirectory(prefix="jh dispatcher runner ") as temp_dir:
         runner_result = examples_dispatcher.run_one_example(
             ROOT / "examples" / "05_serial_gps",
             "rp2040",
-            "pico",
+            ["--board", "pico"],
             [None, "SWSERIAL"],
             3,
             False,
@@ -348,7 +348,7 @@ scheduled_runner.assert_has_calls(
         mock.call(
             ROOT / "examples" / "01_core_runtime",
             "rp2040",
-            "pico",
+            ["--board", "pico"],
             [None, "CAPTURE"],
             3,
             False,
@@ -356,7 +356,7 @@ scheduled_runner.assert_has_calls(
         mock.call(
             ROOT / "examples" / "05_serial_gps",
             "rp2040",
-            "pico",
+            ["--board", "pico"],
             [None, "SWSERIAL"],
             3,
             False,

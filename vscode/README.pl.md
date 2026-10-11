@@ -115,7 +115,8 @@ system plików, o ile platforma udostępnia te dane.
 
 Akcja `sync-board-picker` odświeża dane wejściowe `boardSelection` oraz
 powiązane zadanie uruchamiane automatycznie po otwarciu katalogu, korzystając z
-bieżącego rejestru `boards/`. Tworzy też lub naprawia zarządzane profile
+bieżącego rejestru `boards/`. W projekcie z `device_tree.json` lista zawiera
+jego montaże, a domyślny jest montaż z pola `assembly` manifestu. Tworzy też lub naprawia zarządzane profile
 Cortex-Debug w `launch.json` dla RP2040, RP2350 ARM oraz STM32G474/ST-Link.
 Ścieżka pliku ELF pochodzi ze śledzonego manifestu projektu. Starsze profile
 JaszczurHAL są migrowane, a konfiguracje o nazwach należących do użytkownika
@@ -148,8 +149,8 @@ systemach Unix korzysta z `jaszczurhal.vscodeEntry`, a wariant dla Windows - z
 | `Project: Clean` | `clean` | Po sprawdzeniu bezpieczeństwa ścieżek usuwa artefakty projektu i odpowiadające mu zarządzane drzewa CMake. |
 | `Project: Clear USB Identity` | `clear-identity` | Buduje neutralny firmware RP i wgrywa go dopiero po zweryfikowaniu bieżącej tożsamości USB lub wybranego woluminu BOOTSEL zgodnie ze standardowymi zasadami bezpieczeństwa. |
 | `Project: Config Dump` | `config-dump` | Wyświetla manifest po rozstrzygnięciu wszystkich wartości, lokalne nadpisania, target, płytkę, ścieżki, konfigurację wgrywania i wynik rozwiązywania zależności funkcji HAL. |
-| `Project: Select board` | `select-board --interactive` | Pozwala wybrać target i płytkę w terminalu, a następnie zapisuje ten wybór lokalnie. |
-| `Project: Select board (GUI)` | `select-board --selection ...` | Korzysta z wygenerowanego selektora VS Code i zapisuje lokalnie wybraną parę target/płytka. |
+| `Project: Select board` | `select-board --interactive` | Pozwala wybrać w terminalu target i płytkę albo montaż z `device_tree.json`, a następnie zapisuje ten wybór lokalnie. |
+| `Project: Select board (GUI)` | `select-board --selection ...` | Korzysta z wygenerowanego selektora VS Code i zapisuje lokalnie wybraną parę target/płytka albo montaż. |
 | `Project: Sync board picker` | `sync-board-picker` | Uruchamia się raz po otwarciu zaufanego katalogu, odświeża wartości selektora i tworzy lub naprawia zarządzane profile debugowe dla RP2040, RP2350 Arm i STM32G474, pozostawiając profile użytkownika bez zmian. |
 | `Project: Build variant: <id>` | `build --variant <id>` | Pojawia się dla każdego wariantu zadeklarowanego przez `JH_PROJECT_VARIANTS` w `hal_project_config.h`, z opisem "Build the <id> variant: <description>.", i buduje go jako moduł `<module>_<id>` do `<buildDir>/variants/<id>` za pośrednictwem standardowego procesu publikowania artefaktów. |
 | `Project: Upload variant: <id>` | `upload --variant <id>` | Buduje i wgrywa ten wariant przez backend aktywnego targetu, tak jak `Project: Upload`. |
@@ -170,8 +171,11 @@ Wspólne opcje:
 --target <id>          Zastąp aktywną rodzinę targetu w tym wywołaniu.
 --board <id>           Zastąp aktywną płytkę w obrębie targetu.
 --variant <id>         Wybierz wariant zadeklarowany w hal_project_config.h.
---selection <t:b>      Zapisz wybór targetu i płytki; etykiety GUI są dozwolone.
---interactive          Zapytaj o target i płytkę w terminalu.
+--assembly <klucz>     Wybierz montaż z device_tree.json; ustala on target
+                       i płytkę.
+--selection <t:b>      Zapisz wybór targetu i płytki albo klucz montażu;
+                       etykiety GUI są dozwolone.
+--interactive          Zapytaj w terminalu o target i płytkę albo montaż.
 --port <port>          Zastąp skonfigurowany port wgrywania lub monitora.
 --bootsel-volume <id>  Wybierz katalog główny dysku BOOTSEL lub GUID woluminu Windows.
 --host <address>       Pomiń wykrywanie OTA i użyj tego adresu urządzenia.

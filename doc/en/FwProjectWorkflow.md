@@ -127,12 +127,43 @@ stores just the target, leaving the board to `targetProfiles` and the registry
 default. It replaces a broken local selection, but a broken manifest has to be
 fixed in the manifest.
 
+<a id="device-tree-projects"></a>
+
+### Projects with device_tree.json
+
+A project with [`device_tree.json`](device_tree_format.md) picks one of its
+assemblies instead of a target and board; the assembly fixes both. The
+assembly is taken from the first of these:
+
+1. `--assembly`, or `--target` as a filter that may pick the only assembly of
+   that target;
+2. `assembly` in `.vscode/jaszczurhal.local.json`, skipped when it belongs to
+   another target than `--target`;
+3. tracked manifest `assembly`;
+4. the only assembly of the file.
+
+With several assemblies and no choice, the command stops and lists them. An
+unknown assembly, or one for another target than `--target`, stops it as well
+(`[JH-HW-ASSEMBLY]`). The board path's selectors are refused with
+`[JH-HW-BOARD]`: `--board`, the manifest `target`, `board` and
+`targetProfiles.<target>.board`, `JH_BOARD` or `JH_ASSEMBLY` in a manifest
+CMake cache, and a target or board kept in local state, unless the command
+names `--assembly` or `--target` itself. `targetProfiles.<target>` keeps its
+other settings for that target. CMake receives `JH_ASSEMBLY` instead of
+`JH_BOARD`.
+
+`select-board` lists the assemblies, takes one with `--assembly`,
+`--selection` or `--interactive`, and stores only its key in local state,
+dropping a target or board left there. `--assembly` or a manifest `assembly`
+without `device_tree.json` stops with `[JH-HW-ASSEMBLY]`; an assembly left in
+local state after the file is removed is ignored.
+
 Settings are then merged in this order. Later values override earlier ones:
 
 1. target and board registry defaults;
 2. base manifest;
 3. active `targetProfiles.<target>` overlay;
-4. resolved `JH_TARGET` and `JH_BOARD`;
+4. resolved `JH_TARGET` and `JH_BOARD` (`JH_ASSEMBLY` with a device tree);
 5. action-specific options such as `--port`, `--host`, `--verbose`, and
    `--allow-unverified-port`.
 
@@ -342,7 +373,12 @@ named variants with two X-macros:
 `HAL_TARGET_ESP32_S3`, and `HAL_TARGET_ESP32`. A build for a target the macro
 does not list stops with `[JH-CFG-TARGET]`. Without the macro, the project's
 targets are the ones its manifest configures: `target` and the keys of
-`targetProfiles`.
+`targetProfiles`. A project with `device_tree.json` takes its targets from the
+assemblies and refuses `JH_PROJECT_TARGETS` with `[JH-HW-TARGETS]`; its builds
+are each assembly times the base and each variant, and the header is read with
+that assembly's `jh_hardware.h`, so a variant may stop with `#error` on one
+assembly only. Neither list depends on local state, and both work before the
+first build.
 
 Each `JH_PROJECT_VARIANTS` entry is `X(id, "description", NAME[=VALUE], ...)`;
 `NAME = VALUE` with spaces, as clang-format writes it, works too. The id uses capital letters, digits, and `_`, and starts with a letter, so the
@@ -422,17 +458,17 @@ manifest `cmakeBuildDir`:
 <cmakeBuildDir>/<target>/<board>/
 ```
 
-This keeps toolchains, build-provider platforms, generated board headers, and linker layouts from sharing one cache. Native Windows instead uses the short path prepared during setup:
+This keeps toolchains, build-provider platforms, generated board headers, and linker layouts from sharing one cache. A project with `device_tree.json` gives each assembly its own `buildDir` instead: `<buildDir>/<target>/<assembly>`, where `targetProfiles.<target>.buildDir`, when present, is the base. The artifacts, `cmakeBuildDir` and `JH_ARTIFACT_DIR` the manifest derives from `${buildDir}` follow it, `JH_ARTIFACT_DIR` defaults to it (also in the generated CMake Tools settings), and a CMake tree or `JH_ARTIFACT_DIR` placed elsewhere gets `<target>/<assembly>` added, so two assemblies of one board never share results; variants get `variants/<id>` below that. Native Windows instead uses the short path prepared during setup:
 
 ```text
-<BuildRoot>/<project-name>-<path-hash>/cmake/<target>/<board>/
+<BuildRoot>/<project-name>-<path-hash>/cmake/<target>/<board or assembly>/
 ```
 
 The original `compile_commands.json` resides in the relevant CMake tree. The tool writes the adjusted `compile_commands_patched.json` to the stable `buildDir` and refreshes the selected target's firmware artifacts after every build. This also happens when switching back to a previously configured target and Ninja has nothing to rebuild.
 
 `jh-vscode` records manifest-managed cache keys in `.jh-vscode-cache-keys.json`. Removing a key from the manifest removes it from the cache on the next configure. Changing the CMake source directory recreates a stale cache if that cache is inside the managed artifact directory.
 
-For ESP-IDF projects, `buildDir` is the IDF build tree itself. It must be inside the project's or JaszczurHAL repository's `.build` directory, or one of their subdirectories. The runner manages generated project and SDK settings there without creating a second board registry.
+For ESP-IDF projects, `buildDir` is the IDF build tree itself, with `device_tree.json` the assembly's own one. It must be inside the project's or JaszczurHAL repository's `.build` directory, or one of their subdirectories. The runner manages generated project and SDK settings there without creating a second board registry.
 
 Generated outputs include:
 

@@ -943,6 +943,9 @@ class BuildConfig:
     variant: ProjectVariant | None
     extra_definitions: tuple[str, ...]
     config: ProjectConfig
+    # The assembly of a device tree build, whose jh_hardware.h the header
+    # was read with.
+    assembly: str | None = None
 
     @property
     def definitions(self) -> tuple[str, ...]:
@@ -981,7 +984,8 @@ class BuildConfig:
 
     def label(self) -> str:
         target = self.target.id or "default"
-        return f"target={target}, variant={self.variant.id if self.variant else 'base'}"
+        assembly = f", assembly={self.assembly}" if self.assembly else ""
+        return f"target={target}{assembly}, variant={self.variant.id if self.variant else 'base'}"
 
 
 def project_target_ids(config: ProjectConfig, targets: dict[str, TargetFacts]) -> list[str]:
@@ -1073,7 +1077,12 @@ def available_builds(
 ) -> list[BuildConfig]:
     """Every build the project configures: the declared targets (or the given
     candidates when the header declares none; "" builds with no target) times
-    the base and each variant, without the builds that stop on ``#error``."""
+    the base and each variant, without the builds that stop on ``#error``.
+    With device_tree.json the assemblies replace the targets."""
+    import device_tree_project
+
+    if device_tree_project.device_tree_path(config_dir) is not None:
+        return device_tree_project.builds(config_dir, targets)
     declarations = read_project_config(config_dir / HEADER_NAME)
     target_ids = project_target_ids(declarations, targets) or list(candidate_targets)
     builds: list[BuildConfig] = []

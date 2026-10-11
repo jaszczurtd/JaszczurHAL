@@ -257,6 +257,9 @@ jobs:
         run: |
           $state = Get-Content .build/windows/host-environment.json -Raw |
             ConvertFrom-Json
+          # The host tests generate device tree configurations while CMake
+          # configures; their output lies below the managed build root.
+          $env:JH_MANAGED_BUILD_ROOT = $state.buildRoot
           & $state.tools.cmake "-DJH_ROOT=$env:GITHUB_WORKSPACE" `
             -P tests/test_host_warning_profiles.cmake
           if ($LASTEXITCODE -ne 0) { throw 'Warning-profile test failed.' }

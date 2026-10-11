@@ -2321,6 +2321,12 @@ def validate_artifacts(
         "project": project_name,
         "target": model["target"],
         "board": model["board"],
+        # A device tree build also names the assembly that fixed both.
+        **(
+            {"assembly": model["deviceTree"]["document"]["selection"]["assembly"]}
+            if model.get("deviceTree") is not None
+            else {}
+        ),
         "espIdf": {"version": idf_version, "commit": idf_commit},
         "toolchain": toolchain_provenance,
         "configuration": configuration,

@@ -100,7 +100,9 @@ Cortex-Debug user settings. The command output remains available for diagnosis.
 Windows volume GUID, label, and filesystem when the platform exposes them.
 
 `sync-board-picker` refreshes the `boardSelection` input and its automatic
-folder-open task from the current `boards/` registry. It also creates or repairs
+folder-open task from the current `boards/` registry; in a project with
+`device_tree.json` the input lists its assemblies, with the manifest's
+`assembly` as default. It also creates or repairs
 the managed Cortex-Debug profiles in `launch.json` for RP2040, RP2350 ARM, and
 STM32G474/ST-Link. The ELF path comes from the tracked project manifest, legacy
 JaszczurHAL profiles are migrated, and configurations with consumer-owned names
@@ -131,8 +133,8 @@ uses `jaszczurhal.vscodeEntry`; the Windows override uses
 | `Project: Clean` | `clean` | Removes the project artifacts and its matching managed CMake trees after path-safety validation. |
 | `Project: Clear USB Identity` | `clear-identity` | Builds neutral RP firmware and flashes it only after the current USB identity or BOOTSEL selection passes the normal safety checks. |
 | `Project: Config Dump` | `config-dump` | Prints the fully resolved manifest, local overrides, target, board, paths, upload configuration, and HAL feature resolution. |
-| `Project: Select board` | `select-board --interactive` | Selects the target and board in the terminal and persists the selection locally. |
-| `Project: Select board (GUI)` | `select-board --selection ...` | Uses the generated VS Code picker and persists the selected target/board pair locally. |
+| `Project: Select board` | `select-board --interactive` | Selects the target and board in the terminal, or an assembly of `device_tree.json`, and persists the selection locally. |
+| `Project: Select board (GUI)` | `select-board --selection ...` | Uses the generated VS Code picker and persists the selected target/board pair, or assembly, locally. |
 | `Project: Sync board picker` | `sync-board-picker` | Runs once on trusted folder open, refreshes picker values, and creates or repairs the managed RP2040, RP2350 Arm, and STM32G474 debug profiles while preserving consumer-owned profiles. |
 | `Project: Build variant: <id>` | `build --variant <id>` | Appears for each variant declared by `JH_PROJECT_VARIANTS` in `hal_project_config.h`, with the detail "Build the <id> variant: <description>.", and builds it as module `<module>_<id>` into `<buildDir>/variants/<id>` through the normal artifact pipeline. |
 | `Project: Upload variant: <id>` | `upload --variant <id>` | Builds and uploads that variant through the active target backend, like `Project: Upload`. |
@@ -152,9 +154,12 @@ Common options:
 --project <path>       Firmware module directory.
 --target <id>          Override active target family for this invocation.
 --board <id>           Override active board within the target.
+--assembly <key>       Select an assembly of device_tree.json; it fixes target
+                       and board.
 --variant <id>         Select a variant declared in hal_project_config.h.
---selection <t:b>      Persist target/board selection; GUI labels are accepted.
---interactive          Prompt for target/board selection in the terminal.
+--selection <t:b>      Persist target/board selection, or an assembly key;
+                       GUI labels are accepted.
+--interactive          Prompt for target/board or assembly selection.
 --port <port>          Override configured upload/monitor port.
 --bootsel-volume <id>  Select one BOOTSEL drive root or Windows volume GUID.
 --host <address>       Bypass OTA discovery and use this device address.

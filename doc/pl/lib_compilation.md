@@ -470,6 +470,19 @@ Domyślny profil to `rp2040:pico`. Dane platformy i płytki pochodzą z `boards/
 .build/vscode/library/<target>/<board>/
 ```
 
+Profil może też pochodzić z katalogu konfiguracji z `device_tree.json`.
+Zadanie `Library: Select device tree configuration` pyta o katalog i wypisuje
+jego montaże z wariantami, a z terminala to samo robi
+`python3 scripts/vscode_library_workspace.py select --config-dir <katalog>
+--assembly <klucz> [--variant <id>]`. Stan lokalny przechowuje wtedy tylko
+katalog, montaż i wariant; platformę i płytkę ustala montaż. Taki profil
+buduje i instaluje do `<target>/<assembly>/<skrót>/`, gdzie skrót wynika
+z katalogu i wariantu, więc dwa projekty ani dwa warianty nie dzielą katalogu.
+`--config-dir`, `--assembly` i `--variant` podane do `build`, `install`,
+`clean`, `refresh-intellisense` albo `config-dump` zastępują zapisany profil
+w tym jednym poleceniu i wtedy nie jest on odczytywany; `select` zastępuje
+zapisany profil także wtedy, gdy nie da się go już rozwiązać.
+
 `Project: Build` tworzy bibliotekę dla aktywnego profilu i wybiera jej bazę poleceń kompilacji dla cpptools. `Project: Refresh IntelliSense` wykonuje tę samą kompilację przyrostową, a następnie odtwarza ignorowany przez Git `.vscode/c_cpp_properties.json`. Konfiguracje sprzętowe tworzą `libJaszczurHAL.a`, a mock - `libhal_mock.a`.
 
 `Project: Install library` kompiluje aktywny profil sprzętowy i instaluje bibliotekę, publiczne i wygenerowane nagłówki oraz dane sygnatury w `.build/install/<target>/<board>/`. Mock i profile ESP-IDF nie obsługują instalacji; archiwum i nagłówki ESP-IDF pozostają w katalogu builda. `Project: Clean` usuwa tylko katalog kompilacji i instalacji aktywnego profilu oraz odpowiadający mu wygenerowany plik IntelliSense. Nie usuwa innych konfiguracji, zarządzanych narzędzi ani źródeł zależności.

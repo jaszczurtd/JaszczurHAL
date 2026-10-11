@@ -1323,6 +1323,16 @@ add_test(NAME test_layout_check_headers
         ${CMAKE_CURRENT_SOURCE_DIR}/test_layout_check_headers.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
+add_test(NAME test_device_tree_tools
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_device_tree_tools.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_device_tree_matrix_build
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_device_tree_matrix_build.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
 # String and float/double literals of hardware_literals.py built as C and C++
 # with the host warning policy as errors (GCC, Clang and MSVC alike); each
 # program checks the bytes and bit patterns its literals hold.

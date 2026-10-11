@@ -13,7 +13,10 @@ variants (`JH_PROJECT_VARIANTS`). Its hand-written
 `.vscode/jaszczurhal.project.json` holds the tooling metadata, such as the
 default board for each target. `scripts/examples_dispatcher.py` generates the
 other VS Code files from these two and builds every configuration through
-`vscode/entry/jh-vscode`. The rules are described in
+`vscode/entry/jh-vscode`. An example with `device_tree.json` takes its
+targets and boards from the assemblies instead: the dispatcher builds every
+assembly of the target times each variant, and the manifest may name the
+default `assembly` for the generated files. The rules are described in
 [Targets and variants](../doc/en/FwProjectWorkflow.md#targets-and-variants).
 
 ## Project catalog
@@ -180,7 +183,10 @@ other repository generators.
 
 Final build outputs are stored in `.build/examples/<example>/`, and a
 variant's in `.build/examples/<example>/variants/<id>/`. CMake working
-directories use `.build/examples/<example>/cmake/<target>/<board>/`.
+directories use `.build/examples/<example>/cmake/<target>/<board>/`. An
+example with `device_tree.json` keeps everything of one assembly in
+`.build/examples/<example>/<target>/<assembly>/`, with its CMake tree in
+`cmake/` and variants in `variants/<id>/` below it.
 
 ## Application structure
 

@@ -475,6 +475,20 @@ stay in:
 .build/vscode/library/<target>/<board>/
 ```
 
+A profile can also come from a configuration directory with
+`device_tree.json`: `Library: Select device tree configuration` asks for the
+directory and lists its assemblies with their variants, and
+`python3 scripts/vscode_library_workspace.py select --config-dir <dir>
+--assembly <key> [--variant <id>]` does the same from a terminal. The state
+then keeps only the directory, assembly and variant; target and board come
+from the assembly. Such a profile builds and installs into
+`<target>/<assembly>/<digest>/`, where the digest names the directory and
+variant, so two projects or variants never share a tree. `--config-dir`,
+`--assembly` and `--variant` given to `build`, `install`, `clean`,
+`refresh-intellisense` or `config-dump` replace the stored profile for that
+command, which is then not read; `select` replaces a stored profile even when
+it no longer resolves.
+
 `Project: Build` creates the library for the active profile and selects its compilation database for cpptools. `Project: Refresh IntelliSense` performs the same incremental build, then regenerates the gitignored `.vscode/c_cpp_properties.json`. Hardware configurations produce `libJaszczurHAL.a`; the mock produces `libhal_mock.a`.
 
 `Project: Install library` builds the active hardware profile and installs the library, public and generated headers, and signature data to `.build/install/<target>/<board>/`. The mock and ESP-IDF profiles do not support installation; the ESP-IDF archive and headers stay in the build directory. `Project: Clean` removes only the active profile's build and installation directories and its generated IntelliSense file. Other configurations, managed tools, and dependency sources are preserved.
