@@ -8,6 +8,8 @@
  * so ECU modules can use PID logic without direct C++ class coupling.
  */
 
+#include "hal/core/hal_layout_check.h"
+
 #include <hal/core/hal_status.h>
 #include <stdbool.h>
 #include <stdint.h>

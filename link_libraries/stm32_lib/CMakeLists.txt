@@ -23,7 +23,12 @@ endif()
 
 set(JH_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 set(JH_TARGET "stm32g474" CACHE STRING "JaszczurHAL target ID")
-set(JH_BOARD "nucleo-g474re" CACHE STRING "Physical board profile")
+set(JH_BOARD "" CACHE STRING
+    "Physical board profile; defaults to the target defaultBoard")
+set(JH_ASSEMBLY "" CACHE STRING
+    "Assembly of HAL_PROJECT_CONFIG_DIR/device_tree.json")
+set(JH_VARIANT "" CACHE STRING
+    "Variant declared by JH_PROJECT_VARIANTS, for a device tree configuration")
 set(EXTRA_HAL_DEFINES "" CACHE STRING "Extra HAL compile definitions")
 option(JH_ENABLE_ALL_FEATURES
     "Enable every feature supported by the selected production target"
@@ -53,29 +58,42 @@ set(_jh_stm32_default_features
     HAL_ENABLE_DHT
     HAL_ENABLE_GPS
     HAL_ENABLE_HD44780)
-set(_jh_library_defines ${_jh_stm32_default_features} ${EXTRA_HAL_DEFINES})
-if(JH_ENABLE_ALL_FEATURES)
-    jh_all_features_for_target(_jh_all_features "${JH_TARGET}")
-    list(APPEND _jh_library_defines ${_jh_all_features})
+include("${JH_ROOT}/cmake/jh_hardware_config.cmake")
+jh_device_tree_build(JH_DEVICE_TREE_BUILD "${HAL_PROJECT_CONFIG_DIR}")
+jh_settle_build_mode(${JH_DEVICE_TREE_BUILD} "${HAL_PROJECT_CONFIG_DIR}"
+    BOARD_VARIABLE JH_BOARD)
+if(JH_DEVICE_TREE_BUILD)
+    # The configuration directory alone selects the features.
+    set(_jh_stm32_default_features "")
+    jh_configure_device_tree_library("${JH_ROOT}")
+    jh_finalize_hardware_abi()
+else()
+    file(REMOVE_RECURSE "${CMAKE_BINARY_DIR}/generated/hardware")
+    set(_jh_library_defines ${_jh_stm32_default_features} ${EXTRA_HAL_DEFINES})
+    if(JH_ENABLE_ALL_FEATURES)
+        jh_all_features_for_target(_jh_all_features "${JH_TARGET}")
+        list(APPEND _jh_library_defines ${_jh_all_features})
+    endif()
+    jh_read_library_config(
+        ROOT "${JH_ROOT}"
+        TARGET "${JH_TARGET}"
+        OUTPUT_DIR "${CMAKE_BINARY_DIR}/generated/project"
+        DEFINES ${_jh_library_defines})
+    include("${JH_ROOT}/cmake/jh_board_profiles.cmake")
+    jh_split_project_definitions(
+        _jh_library_plain_defines _jh_library_feature_defines ${EXTRA_HAL_DEFINES})
+    jh_generate_board_config(
+        ROOT "${JH_ROOT}"
+        TARGET "${JH_TARGET}"
+        BOARD "${JH_BOARD}"
+        OUTPUT_DIR
+            "${CMAKE_BINARY_DIR}/generated/boards/${JH_TARGET}/${JH_BOARD}"
+        OUTPUT_ROOT "${CMAKE_BINARY_DIR}"
+        DEFINES ${_jh_library_plain_defines}
+        REQUESTED_FEATURES ${JH_REQUESTED_FEATURES}
+        RESOLVED_FEATURES ${JH_RESOLVED_FEATURES})
+    jh_remember_build_mode(FALSE BOARD "${JH_RESOLVED_BOARD}")
 endif()
-jh_read_library_config(
-    ROOT "${JH_ROOT}"
-    TARGET "${JH_TARGET}"
-    OUTPUT_DIR "${CMAKE_BINARY_DIR}/generated/project"
-    DEFINES ${_jh_library_defines})
-include("${JH_ROOT}/cmake/jh_board_profiles.cmake")
-jh_split_project_definitions(
-    _jh_library_plain_defines _jh_library_feature_defines ${EXTRA_HAL_DEFINES})
-jh_generate_board_config(
-    ROOT "${JH_ROOT}"
-    TARGET "${JH_TARGET}"
-    BOARD "${JH_BOARD}"
-    OUTPUT_DIR
-        "${CMAKE_BINARY_DIR}/generated/boards/${JH_TARGET}/${JH_BOARD}"
-    OUTPUT_ROOT "${CMAKE_BINARY_DIR}"
-    DEFINES ${_jh_library_plain_defines}
-    REQUESTED_FEATURES ${JH_REQUESTED_FEATURES}
-    RESOLVED_FEATURES ${JH_RESOLVED_FEATURES})
 if(NOT JH_RESOLVED_TARGET STREQUAL "stm32g474")
     message(FATAL_ERROR "link_libraries/stm32_lib requires target stm32g474")
 endif()
@@ -174,15 +192,8 @@ target_include_directories(JaszczurHAL PUBLIC
     ${_jh_stm32_build_effects_INCLUDE_DIRS}
     ${_jh_stm32_framework_include_dirs}
 )
-file(REMOVE "${CMAKE_BINARY_DIR}/include/generated/jh_board_registry.h")
-add_custom_command(TARGET JaszczurHAL POST_BUILD
-    COMMAND "${CMAKE_COMMAND}" -E make_directory
-        "${CMAKE_BINARY_DIR}/include/generated"
-    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-        "${JH_BOARD_GENERATED_DIR}/jh_board_config.h"
-        "${JH_BOARD_GENERATED_DIR}/jh_link_contract.h"
-        "${CMAKE_BINARY_DIR}/include/generated"
-    VERBATIM)
+include("${JH_ROOT}/cmake/jh_library_package.cmake")
+jh_add_library_package(JaszczurHAL "${SRC}")
 
 set(_jh_stm32_littlefs_link_size "")
 if(_jh_stm32_has_littlefs)
@@ -212,6 +223,10 @@ target_compile_definitions(JaszczurHAL PUBLIC
 
 if(_jh_extra_hal_defines)
     target_compile_definitions(JaszczurHAL PUBLIC ${_jh_extra_hal_defines})
+endif()
+# A device tree build names its jh_hardware.h for the hook.
+if(JH_HARDWARE_DEFINITION)
+    target_compile_definitions(JaszczurHAL PUBLIC "${JH_HARDWARE_DEFINITION}")
 endif()
 
 jh_build_defined(_jh_stm32_has_cyw43_gspi HAL_CYW43_BUS_STM32_GSPI
@@ -301,21 +316,3 @@ if(_jh_stm32_stack_protector_enabled)
         "${SRC}/hal/impl/stm32g474/drivers/stm32g474/stm32g474_fault.cpp"
         "${SRC}/hal/impl/stm32g474/freertos/freertos_hooks.c")
 endif()
-
-install(TARGETS JaszczurHAL ARCHIVE DESTINATION lib)
-install(DIRECTORY ${SRC}/ DESTINATION include
-        FILES_MATCHING
-        PATTERN "*.h"
-        PATTERN "impl/.mock" EXCLUDE)
-install(CODE [[
-    file(REMOVE
-        "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/include/generated/jh_board_registry.h")
-]])
-install(FILES
-        "${JH_BOARD_GENERATED_DIR}/jh_board_config.h"
-        "${JH_BOARD_GENERATED_DIR}/jh_link_contract.h"
-        DESTINATION include/generated)
-install(FILES
-        "${JH_BOARD_GENERATED_DIR}/jh_link_contract_reference.c"
-        "${JH_BOARD_GENERATED_DIR}/jh_board_resolved.json"
-        DESTINATION share/JaszczurHAL/generated)

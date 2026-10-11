@@ -166,6 +166,23 @@ Jeżeli żądane funkcje obejmują `HAL_ENABLE_STACK_PROTECTOR`, dodaj `-fstack-
 
 Wygenerowane odwołanie do sygnatury korzysta z atrybutów GCC/Clang `constructor, used`. Kontrola zgodności pozostaje aktywna przy `--gc-sections`, o ile obsługiwany skrypt linkera zachowuje tablice konstruktorów. Nadal wymagane są SDK platformy, pliki startowe, skrypt linkera i biblioteki właściwe dla używanych narzędzi.
 
+### Pakiet z device tree
+
+Gdy w katalogu `--project-config` leży `device_tree.json`, zamiast płytki wybierz montaż:
+
+```bash
+./scripts/build_link_library.sh --target stm32g474 \
+  --assembly canhat -p sciezka/do/konfiguracji --library-only
+cmake --install .build/static/stm32g474/canhat/<klucz> --prefix <prefix>
+```
+
+Pakiet zawiera wtedy także `include/generated/jh_hardware.h`, a w `share/JaszczurHAL/generated/` zamiast `jh_board_resolved.json` leżą `jh_hardware_resolved.json`, `jh_hardware_config.json` i `jh_hardware_config.cmake`. Konfiguracja pochodzi wyłącznie z katalogu: runner nie dokłada własnych domyślnych funkcji ani definicji płytki przez `-D`.
+
+Aplikacja korzystająca z pakietu sama wylicza oczekiwaną konfigurację ze swoich `device_tree.json` i `hal_project_config.h`:
+
+- W CMake dołącz `cmake/jh_hal_package.cmake` z repozytorium JaszczurHAL i wywołaj `jh_link_hal_package(app PACKAGE <prefix> CONFIG_DIR <konfiguracja> ASSEMBLY <klucz>)`. Wywołaj ją po ustawieniu opcji kompilacji celu, bo oczekiwana konfiguracja obejmuje ABI, które kompilator zgłasza dla tych opcji oraz `CMAKE_C_FLAGS` i `CMAKE_C_FLAGS_<CONFIG>`. Opcje zapisane w wyrażeniach generatora sprawdza kompilacja odwołania do sygnatury w aplikacji; inne ABI zatrzymuje wtedy build na `#error`. Dodatkowo `jh_board_config.h` z pakietu sprawdza układ struktur w każdej jednostce, która dołącza nagłówki HAL, więc pakowanie albo rozmiar typu wyliczeniowego ustawione dla jednego pliku, a także `#pragma pack` wokół dołączenia, również zatrzymują kompilację. Pakiet zbudowany dla innego sprzętu, innych funkcji, innego ABI albo innego układu struktur przerywa konfigurację błędem `JH-HW-PACKAGE`.
+- Przy samym kompilatorze uruchom `scripts/generate_hardware_config.py resolve` i `finalize` dla konfiguracji aplikacji, podając `--compiler` i każdą flagę ABI jako `--compiler-flag=...`, i skompiluj zapisany przez nie `jh_link_contract_reference.c` zamiast kopii z pakietu. Do ścieżek include dodaj `include/`, `include/generated/` i katalog konfiguracji, a zdefiniuj selektor targetu, `JH_HARDWARE_HEADER="<prefix>/include/generated/jh_hardware.h"` oraz definicje `JH_BOARD_COMPILE_DEFINITIONS` z danych pakietu. Inny pakiet nie zlinkuje się wtedy, bo zabraknie symbolu `jh_board_contract_*`.
+
 <a id="mock-hosta"></a>
 
 ## Testy na komputerze z implementacją mock

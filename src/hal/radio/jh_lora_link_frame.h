@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/radio/hal_lora_link.h"
 
 #ifdef HAL_ENABLE_LORA_LINK

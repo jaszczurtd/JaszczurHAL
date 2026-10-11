@@ -40,6 +40,8 @@
 #ifndef _CHACHA20_H_
 #define _CHACHA20_H_
 
+#include "hal/core/hal_layout_check.h"
+
 #include <stdint.h>
 
 #define CHACHA20_BLOCK_SIZE (64)

@@ -123,6 +123,11 @@ def pin_macros(header: Header, prefix: str, endpoint: dict[str, Any] | None, own
         header.define(f"{prefix}_INDEX", c_literal("uint32", endpoint["id"]))
 
 
+def hardware_id(digest: str) -> str:
+    """The preprocessor-comparable identity of one hardware digest."""
+    return f"0x{digest[:16]}ULL"
+
+
 def render_header(model: dict[str, Any], capabilities: list[str]) -> str:
     """jh_hardware.h: only JH_HW_* macros, no includes and no HAL types."""
     selection, hardware = model["selection"], model["hardware"]
@@ -139,6 +144,8 @@ def render_header(model: dict[str, Any], capabilities: list[str]) -> str:
     header.define("JH_HW_BOARD_NAME", c_string(selection["board"]))
     header.define("JH_HW_ASSEMBLY_NAME", c_string(selection["assembly"]))
     header.define("JH_HW_HARDWARE_SHA256", c_string(model["hardwareSha256"]))
+    header.define("JH_HW_HARDWARE_ID", hardware_id(model["hardwareSha256"]),
+                  "first 64 bits of the digest, for #if checks")
     header.blank("effective capabilities")
     for capability in capabilities:
         header.define(f"JH_HW_HAS_{macro_token(capability)}",

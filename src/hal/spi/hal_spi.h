@@ -17,6 +17,8 @@
  * synchronization and cleanup helpers retain HAL_ASSERT checks.
  */
 
+#include "hal/core/hal_layout_check.h"
+
 #include <stddef.h>
 #include <stdint.h>
 

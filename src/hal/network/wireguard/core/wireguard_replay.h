@@ -1,6 +1,8 @@
 #ifndef WIREGUARD_REPLAY_H
 #define WIREGUARD_REPLAY_H
 
+#include "hal/core/hal_layout_check.h"
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>

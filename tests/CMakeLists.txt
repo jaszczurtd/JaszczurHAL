@@ -1308,6 +1308,21 @@ add_test(NAME test_hardware_config
         ${CMAKE_CURRENT_SOURCE_DIR}/test_hardware_config.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
+add_test(NAME test_hardware_package
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_hardware_package.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_hardware_build
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_hardware_build.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_layout_check_headers
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_layout_check_headers.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
 # String and float/double literals of hardware_literals.py built as C and C++
 # with the host warning policy as errors (GCC, Clang and MSVC alike); each
 # program checks the bytes and bit patterns its literals hold.
@@ -1390,6 +1405,86 @@ jh_hardware_config_probe(nucleo_canhat nucleo-canhat canhat
 jh_hardware_config_probe(nucleo_canhat_board nucleo-canhat canhat FINALIZE)
 jh_hardware_config_probe(nucleo_display nucleo-display display
     DEFINITIONS HAL_TARGET_MOCK=1 HAL_ENABLE_ILI9341=1 HAL_DISPLAY_ILI9341=1)
+
+# A device tree configuration through the production build module: the probes
+# compile the HAL headers in their real order with the definitions a firmware
+# build passes, and check that the compiler sees the features the build tools
+# read. hal_project_config.h.in chooses WiFi from an early hardware macro.
+include(${CMAKE_SOURCE_DIR}/cmake/jh_hardware_config.cmake)
+function(jh_hardware_order_probe NAME FIXTURE ASSEMBLY SELECTOR)
+    cmake_parse_arguments(PROBE "" "" "SOURCES" ${ARGN})
+    set(_dir ${CMAKE_CURRENT_BINARY_DIR}/hardware_config/${NAME})
+    set(_config ${_dir}/config)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/fixtures/device_tree/hal/${FIXTURE}/device_tree.json
+        ${_config}/device_tree.json COPYONLY)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/hardware_config/hal_project_config.h.in
+        ${_config}/hal_project_config.h COPYONLY)
+    jh_generate_hardware_config(
+        ROOT ${CMAKE_SOURCE_DIR}
+        CONFIG_DIR ${_config}
+        ASSEMBLY ${ASSEMBLY}
+        OUTPUT_DIR ${_dir}/generated
+        OUTPUT_ROOT ${CMAKE_BINARY_DIR})
+    set(_tool_features "")
+    foreach(_feature IN LISTS JH_RESOLVED_FEATURES)
+        list(APPEND _tool_features PROBE_TOOL_${_feature}=1)
+    endforeach()
+    foreach(_probe IN LISTS PROBE_SOURCES)
+        set(_source ${CMAKE_CURRENT_SOURCE_DIR}/hardware_config/probe_${_probe}.c)
+        configure_file(${_source} ${_dir}/probe_${_probe}.cpp COPYONLY)
+        foreach(_language c cpp)
+            set(_target test_hardware_config_${NAME}_${_probe}_${_language})
+            if(_language STREQUAL "c")
+                add_executable(${_target} ${_source})
+            else()
+                add_executable(${_target} ${_dir}/probe_${_probe}.cpp)
+            endif()
+            target_include_directories(${_target} PRIVATE
+                ${JH_BOARD_GENERATED_DIR} ${_config} ${CMAKE_SOURCE_DIR}/src)
+            target_compile_definitions(${_target} PRIVATE
+                ${SELECTOR}=1 "${JH_HARDWARE_DEFINITION}"
+                ${JH_BOARD_COMPILE_DEFINITIONS} ${_tool_features})
+            jh_enable_host_warnings(${_target} ERRORS)
+            add_test(NAME ${_target} COMMAND ${_target})
+        endforeach()
+    endforeach()
+endfunction()
+jh_hardware_order_probe(order_canhat nucleo-canhat canhat HAL_TARGET_STM32G474
+    SOURCES hal_order clock_first)
+jh_hardware_order_probe(order_pico pico-lora pico HAL_TARGET_RP2040
+    SOURCES hal_order)
+
+# The hal_config.h checks keep working with the capabilities of an assembly:
+# the CAN-HAT assembly without its PIM730 has no CYW43, so selecting the CYW43
+# network backend for the compiler must stop the build in hal_config.h.
+function(jh_hardware_capability_probe)
+    set(_jh_no_radio_dir ${CMAKE_CURRENT_BINARY_DIR}/hardware_config/no_radio)
+    file(READ ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/device_tree/hal/nucleo-canhat/device_tree.json
+        _jh_no_radio_tree)
+    string(JSON _jh_no_radio_tree SET "${_jh_no_radio_tree}"
+        assemblies canhat nodes wifi "{\"present\": false}")
+    file(CONFIGURE OUTPUT ${_jh_no_radio_dir}/config/device_tree.json
+        CONTENT "${_jh_no_radio_tree}" @ONLY)
+    jh_generate_hardware_config(
+        ROOT ${CMAKE_SOURCE_DIR}
+        CONFIG_DIR ${_jh_no_radio_dir}/config
+        ASSEMBLY canhat
+        OUTPUT_DIR ${_jh_no_radio_dir}/generated
+        OUTPUT_ROOT ${CMAKE_BINARY_DIR})
+    add_executable(test_hardware_config_no_radio_backend EXCLUDE_FROM_ALL
+        ${CMAKE_CURRENT_SOURCE_DIR}/hardware_config/probe_hal_order.c)
+    target_include_directories(test_hardware_config_no_radio_backend PRIVATE
+        ${JH_BOARD_GENERATED_DIR} ${_jh_no_radio_dir}/config ${CMAKE_SOURCE_DIR}/src)
+    target_compile_definitions(test_hardware_config_no_radio_backend PRIVATE
+        HAL_TARGET_STM32G474=1 "${JH_HARDWARE_DEFINITION}"
+        HAL_NETWORK_BACKEND_CYW43 HAL_CYW43_BUS_STM32_GSPI HAL_CYW43_STACK_LWIP)
+    add_test(NAME test_hardware_config_no_radio_backend
+        COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR}
+            --target test_hardware_config_no_radio_backend)
+    set_tests_properties(test_hardware_config_no_radio_backend PROPERTIES
+        PASS_REGULAR_EXPRESSION "requires a board profile with CYW43")
+endfunction()
+jh_hardware_capability_probe()
 add_test(NAME test_install_host_tools
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_install_host_tools.py

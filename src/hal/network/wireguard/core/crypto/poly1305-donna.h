@@ -3,6 +3,8 @@
 #ifndef POLY1305_DONNA_H
 #define POLY1305_DONNA_H
 
+#include "hal/core/hal_layout_check.h"
+
 #include <stddef.h>
 
 typedef struct poly1305_context {

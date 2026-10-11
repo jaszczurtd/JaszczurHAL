@@ -28,6 +28,8 @@ Options:
   --target NAME            rp2040, rp2350-arm, or rp2350-riscv
                            (default: rp2040)
   --board NAME             JaszczurHAL board profile (target default if omitted)
+  --assembly KEY           Assembly of the device_tree.json in -p DIR
+  --variant ID             Variant declared by JH_PROJECT_VARIANTS (device tree)
   --sdk-dir PATH           Pico SDK checkout
   --toolchain PATH         Toolchain root containing bin/
   --picotool-dir PATH      picotool source checkout directory
@@ -40,7 +42,9 @@ Options:
   -p, --project-config DIR Directory containing hal_project_config.h
   -D KEY=VALUE             Extra HAL compile definition (repeatable)
   -o, --output DIR         Build directory below .build/
-                           (default: .build/static/<target>/<board>)
+                           (default: .build/static/<target>/<board>, or
+                           .build/static/<target>/<assembly>/<key> with a
+                           device tree)
   --clean                  Remove the selected build directory first
   -j, --jobs N             Parallel jobs (default: nproc)
   -h, --help               Show this help
@@ -49,6 +53,8 @@ USAGE
 
 TARGET="rp2040"
 BOARD=""
+ASSEMBLY=""
+VARIANT=""
 SDK_DIR="${JH_PICO_SDK_DIR:-${REPO_ROOT}/third_party/pico-sdk}"
 TOOLCHAIN_DIR=""
 PICOTOOL_DIR="${REPO_ROOT}/third_party/picotool"
@@ -67,6 +73,8 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --target) TARGET="$2"; shift 2 ;;
         --board) BOARD="$2"; shift 2 ;;
+        --assembly) ASSEMBLY="$2"; shift 2 ;;
+        --variant) VARIANT="$2"; shift 2 ;;
         --sdk-dir) SDK_DIR="$2"; shift 2 ;;
         --toolchain) TOOLCHAIN_DIR="$2"; shift 2 ;;
         --picotool-dir) PICOTOOL_DIR="$2"; shift 2 ;;
@@ -101,7 +109,6 @@ while IFS='=' read -r key value; do
 done <<< "${facts}"
 [[ "${TARGET_PROVIDER}" == "pico-sdk" ]] ||
     die "Target '${TARGET}' is not built with the Pico SDK; use scripts/build_link_library.sh"
-: "${BOARD:=${TARGET_DEFAULT_BOARD}}"
 RISCV=0
 if [[ "${TARGET_ISA}" == "riscv32" ]]; then
     RISCV=1
@@ -121,10 +128,6 @@ if [[ -n "${PROJECT_CONFIG_DIR}" && "${PROJECT_CONFIG_DIR}" != /* ]]; then
     PROJECT_CONFIG_DIR="${REPO_ROOT}/${PROJECT_CONFIG_DIR}"
 fi
 
-if ! OUTPUT_DIR="$(jh_resolve_build_output \
-    "${REPO_ROOT}" "${OUTPUT_DIR}" "static/${TARGET}/${BOARD}")"; then
-    die "Build output must be inside ${REPO_ROOT}/.build"
-fi
 if ! PICOTOOL_BUILD_DIR="$(jh_resolve_build_output \
     "${REPO_ROOT}" "${PICOTOOL_BUILD_DIR}" "tools/picotool")"; then
     die "picotool build output must be inside ${REPO_ROOT}/.build"
@@ -145,6 +148,23 @@ if [[ -n "${EXAMPLE}" ]]; then
 fi
 if [[ ${LIBRARY_ONLY} -eq 1 && -n "${APP_DIR}" ]]; then
     die "--library-only cannot be combined with --example"
+fi
+
+DEVICE_TREE=0
+if jh_device_tree_library "${PROJECT_CONFIG_DIR}" "${BOARD}" "${ASSEMBLY}" "${VARIANT}"; then
+    DEVICE_TREE=1
+    OUTPUT_KEY="$(jh_device_tree_build_key "${PROJECT_CONFIG_DIR}" "${ASSEMBLY}" \
+        "variant=${VARIANT}" "all=${ALL_FEATURES}" "freertos=${FREERTOS}" \
+        "${EXTRA_DEFS[@]}")"
+elif [[ $? -ne 1 ]]; then
+    exit 2
+else
+    : "${BOARD:=${TARGET_DEFAULT_BOARD}}"
+    OUTPUT_KEY="${BOARD}"
+fi
+if ! OUTPUT_DIR="$(jh_resolve_build_output \
+    "${REPO_ROOT}" "${OUTPUT_DIR}" "static/${TARGET}/${OUTPUT_KEY}")"; then
+    die "Build output must be inside ${REPO_ROOT}/.build"
 fi
 
 case "${OUTPUT_DIR}" in
@@ -180,6 +200,8 @@ CMAKE_ARGS=(
     "-DPICO_SDK_PATH=${SDK_DIR}"
     "-DJH_TARGET=${TARGET}"
     "-DJH_BOARD=${BOARD}"
+    "-DJH_ASSEMBLY=${ASSEMBLY}"
+    "-DJH_VARIANT=${VARIANT}"
     "-DCMAKE_BUILD_TYPE=Release"
     "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
 )
@@ -210,7 +232,7 @@ if [[ ${#EXTRA_DEFS[@]} -gt 0 ]]; then
     CMAKE_ARGS+=("-DEXTRA_HAL_DEFINES=${joined}")
 fi
 
-info "Configuring Pico SDK build (${TARGET}, board ${BOARD})..."
+info "Configuring Pico SDK build (${TARGET}, $(jh_build_selection "${DEVICE_TREE}" "${BOARD}" "${ASSEMBLY}"))..."
 cmake -S "${REPO_ROOT}/link_libraries/rp_pico_lib" -B "${OUTPUT_DIR}" "${CMAKE_ARGS[@]}"
 
 info "Building with ${JOBS} parallel jobs..."
@@ -221,15 +243,8 @@ else
 fi
 
 LIB_FILE="${OUTPUT_DIR}/libJaszczurHAL.a"
-GENERATED_SOURCE="${OUTPUT_DIR}/generated/boards/${TARGET}/${BOARD}"
-GENERATED_INCLUDE="${OUTPUT_DIR}/include/generated"
-mkdir -p "${GENERATED_INCLUDE}"
-for generated_header in \
-    jh_board_config.h jh_link_contract.h; do
-    [[ -f "${GENERATED_SOURCE}/${generated_header}" ]] ||
-        die "Generated board header not found: ${GENERATED_SOURCE}/${generated_header}"
-    cp -f "${GENERATED_SOURCE}/${generated_header}" "${GENERATED_INCLUDE}/"
-done
+jh_collect_generated_headers "${OUTPUT_DIR}" "${TARGET}" "${BOARD}" "${DEVICE_TREE}" ||
+    die "Generated headers are missing from ${OUTPUT_DIR}"
 [[ -f "${LIB_FILE}" ]] || die "Static library not found: ${LIB_FILE}"
 ok "Pico SDK library built: ${LIB_FILE}"
 if [[ ${LIBRARY_ONLY} -eq 0 ]]; then

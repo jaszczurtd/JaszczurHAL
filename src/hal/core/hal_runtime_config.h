@@ -22,6 +22,8 @@
  *   hal_setup(&cfg);
  * @endcode
  */
+#include "hal/core/hal_layout_check.h"
+
 typedef struct {
   int pwm_freq_max_channels;  /**< Effective PWM-freq channel limit. */
   int can_max_instances;      /**< Effective CAN instance limit. */

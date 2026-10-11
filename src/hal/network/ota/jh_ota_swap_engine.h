@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/core/hal_status.h"
 #include "hal/network/ota/jh_ota_image.h"
 

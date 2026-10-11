@@ -32,6 +32,8 @@
  *   undefined behaviour.
  */
 
+#include "hal/core/hal_layout_check.h"
+
 #include <stddef.h>
 
 #ifdef __cplusplus

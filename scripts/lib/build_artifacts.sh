@@ -65,3 +65,80 @@ jh_link_library_runner() {
         *) return 1 ;;
     esac
 }
+
+# A device tree in the configuration directory selects the assembly path of a
+# library build. Returns 0 for that path. Checks the selectors of both paths:
+# a board with a device tree, or an assembly or variant without one, is an
+# error printed on stderr (exit status 2).
+jh_device_tree_library() {
+    local config_dir="$1"
+    local board="$2"
+    local assembly="$3"
+    local variant="$4"
+    if [[ -n "${config_dir}" && -f "${config_dir}/device_tree.json" ]]; then
+        if [[ -n "${board}" ]]; then
+            echo "[JH-HW-BOARD] ${config_dir}/device_tree.json selects the board through its assemblies; use --assembly instead of --board" >&2
+            return 2
+        fi
+        return 0
+    fi
+    if [[ -n "${assembly}" || -n "${variant}" ]]; then
+        echo "[JH-HW-ASSEMBLY] --assembly and --variant need -p DIR with device_tree.json" >&2
+        return 2
+    fi
+    return 1
+}
+
+# Build directory of a device tree library below .build/static/<target>:
+# <assembly or "auto">/<16 hex digits naming the configuration directory,
+# variant and requests>, so independent projects with the same assembly key
+# never share a build, while edits of one rebuild in place.
+jh_device_tree_build_key() {
+    python3 - "$@" <<'PY'
+import hashlib
+import sys
+from pathlib import Path
+
+config_dir, assembly, *rest = sys.argv[1:]
+text = "\0".join([Path(config_dir).resolve().as_posix(), assembly, *sorted(rest)])
+print(f"{assembly or 'auto'}/{hashlib.sha256(text.encode()).hexdigest()[:16]}")
+PY
+}
+
+# The generated headers of a library build in <output>/include/generated: the
+# board path copies them from its board directory, a device tree build gets
+# them from the CMake project and adds jh_hardware.h. Fails when one is missing.
+jh_collect_generated_headers() {
+    local output="$1"
+    local target="$2"
+    local board="$3"
+    local device_tree="$4"
+    local include="${output}/include/generated"
+    local header
+    mkdir -p "${include}"
+    if [[ "${device_tree}" -eq 1 ]]; then
+        for header in jh_board_config.h jh_link_contract.h jh_hardware.h; do
+            [[ -f "${include}/${header}" ]] || {
+                echo "Generated header not found: ${include}/${header}" >&2
+                return 1
+            }
+        done
+        return 0
+    fi
+    for header in jh_board_config.h jh_link_contract.h; do
+        [[ -f "${output}/generated/boards/${target}/${board}/${header}" ]] || {
+            echo "Generated board header not found: ${output}/generated/boards/${target}/${board}/${header}" >&2
+            return 1
+        }
+        cp -f "${output}/generated/boards/${target}/${board}/${header}" "${include}/"
+    done
+}
+
+# The selection a runner reports: the board, or the assembly of a device tree.
+jh_build_selection() {
+    if [[ "$1" -eq 1 ]]; then
+        echo "assembly ${3:-chosen by the target}"
+    else
+        echo "board $2"
+    fi
+}

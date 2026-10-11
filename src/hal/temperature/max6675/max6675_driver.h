@@ -10,6 +10,8 @@
  * depending on Arduino.h, SPI.h, or a target-specific SPI object.
  */
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/core/hal_config.h"
 
 #if defined(HAL_ENABLE_MAX6675)

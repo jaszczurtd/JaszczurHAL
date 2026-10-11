@@ -7,6 +7,8 @@
  *        oscillation detection and error-stability checks.
  */
 
+#include "hal/core/hal_layout_check.h"
+
 #include "libConfig.h"
 #include <float.h>
 #include <hal/control/hal_pid_controller.h>

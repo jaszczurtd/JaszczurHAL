@@ -16,6 +16,8 @@
  * longer calls receive_frame() or available().
  */
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/can/hal_can.h"
 #include "hal/core/hal_status.h"
 #include "hal/core/jh_spsc_ring.h"

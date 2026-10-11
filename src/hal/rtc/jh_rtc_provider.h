@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/rtc/hal_rtc.h"
 
 #ifdef HAL_ENABLE_RTC

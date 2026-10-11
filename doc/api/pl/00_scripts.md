@@ -318,6 +318,15 @@ Jego `hal_project_config.h` i definicje `-D` przetwarza
 `scripts/project_config.py`, ten sam mechanizm, którego używają kompilacje
 projektów.
 
+Gdy w tym katalogu leży `device_tree.json`, runner buduje z niego bibliotekę
+tak jak projekt firmware: wybór należy do `--assembly` i `--variant`,
+`--target` tylko zawęża wybór montażu, a `--board` jest odrzucany. Biblioteka
+nie dostaje wtedy domyślnego zestawu funkcji runnera, `--all-features` nie
+dodaje sprzętu, a domyślnym katalogiem staje się
+`.build/static/<target>/<assembly>/<klucz>/`; klucz wynika z katalogu
+konfiguracji, wariantu i żądanych definicji. Obok archiwum leży też
+`include/generated/jh_hardware.h`.
+
 ### `scripts/build_rp_pico_lib.sh`
 
 Kompiluje JaszczurHAL przy użyciu oficjalnego Pico SDK dla następujących platform:
@@ -381,7 +390,7 @@ Kompiluje, sprawdza i wgrywa projekty korzystające z ESP-IDF. Obsługuje konfig
 | Akcja | Zachowanie |
 |---|---|
 | `build` | Opcjonalnie usuwa wybrane wyjście przy `--clean`, generuje wejścia projektu/płytki/SDK, kompiluje przy użyciu ESP-IDF w wersji wskazanej przez repozytorium, zapisuje informacje o pochodzeniu toolchainu oraz waliduje artefakty. |
-| `artifacts` | Ponownie waliduje dotychczasowe wyniki kompilacji i zapisuje deterministyczny manifest `jh_esp_idf_artifacts.json` bez wywoływania kompilatora. |
+| `artifacts` | Ponownie waliduje dotychczasowe wyniki kompilacji i zapisuje deterministyczny manifest `jh_esp_idf_artifacts.json` bez kompilowania projektu; build z device tree uruchamia jedynie ponownie próby ABI w kompilatorze. |
 | `flash` | Ponownie sprawdza dotychczasowe wyniki kompilacji, wymaga `--port` i uruchamia flashowanie ESP-IDF z pełnym zestawem obrazów i przesunięć. Następnie sprawdza log flashowania i manifest. |
 
 `--project` jest wymagane. `--target` domyślnie to `esp32s3`; jego deskryptor
@@ -398,6 +407,11 @@ spoza projektu. Funkcje opakowujące cJSON, LodePNG, TJpgDec lub FatFs
 sprawiają, że skrypt przygotowuje te zarządzane źródła i dodaje ich katalogi
 include do komponentu. `--idf-dir` lub
 `JH_ESP_IDF_DIR` wybiera dokładny, zgodny zewnętrzny checkout.
+Przy `device_tree.json` akcja `build` najpierw konfiguruje projekt, odczytuje
+z `compile_commands.json` polecenie kompilacji komponentu HAL i kończy
+konfigurację z ABI i układem struktur, które zgłasza to polecenie, zanim
+cokolwiek się skompiluje. Sprawdzenie wygenerowanych plików powtarza pomiar
+z tym samym poleceniem.
 
 Skrypt odczytuje bezpośrednio `boards/` i rejestr modułów. Moduły wymagane
 przez target są dodawane do ostatecznego zestawu. Moduł żądany bezpośrednio
@@ -844,10 +858,20 @@ i odrzuca go, gdy któreś wejście zmieniło się od `resolve` albo nagłówek 
 jest tym, który daje model. Potem odczytuje
 `hal_project_config.h` po `jh_hardware.h`, z `--variant` i `--define`,
 sprawdza, czy żądane funkcje mają swój sprzęt, i zapisuje `jh_board_config.h`,
-`jh_hardware_config.cmake`, `jh_hardware_config.json`, sygnaturę linkowania
-oraz `generation.d`. Nieudane polecenie wypisuje jedną diagnostykę (kod, plik,
-wskaźnik JSON) i usuwa wyniki, które miało zapisać. Wyniki muszą leżeć
-w katalogu `.build`. Build jeszcze nie wywołuje generatora.
+`jh_hardware_config.cmake`, `jh_hardware_config.json`, sygnaturę linkowania,
+przenośne dane pakietu `jh_hardware_package.cmake` oraz `generation.d`.
+`identity` wypisuje wybór, `hardwareSha256` i `configSha256` jednej
+konfiguracji bez zapisywania wyników. Z `--compiler` i `--compiler-flag=...`
+`finalize` i `identity` dodają do konfiguracji ABI i układ struktur, które
+kompilator zgłasza dla tych flag. Nieudane polecenie wypisuje jedną
+diagnostykę (kod, plik, wskaźnik JSON) i usuwa wyniki, które miało zapisać;
+nieudane `resolve` usuwa też to, co `finalize` zapisało dla wcześniejszego
+modelu. Wyniki muszą leżeć w katalogu `.build`.
+
+Buildy wywołują generator przez `cmake/jh_hardware_config.cmake`. Aplikacja
+linkująca zainstalowany pakiet z device tree korzysta z `jh_link_hal_package()`
+z `cmake/jh_hal_package.cmake`, które porównuje skrót konfiguracji pakietu
+z tym, który generuje sama aplikacja.
 
 ### `scripts/clock_registry.py`
 

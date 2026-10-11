@@ -22,10 +22,12 @@ endmacro()
 
 # jh_read_project_config(ROOT <JaszczurHAL root> CONFIG_DIR <dir>
 #     TARGET <registry id> OUTPUT_DIR <dir> [VARIANT <id>]
+#     [HARDWARE_HEADER <generated jh_hardware.h>]
 #     [DEFINES <NAME or NAME=VALUE>...])
 #
 # DEFINES are the -D values a static library build passes; a project build
-# selects a VARIANT instead. Sets in the caller's scope JH_PROJECT_FEATURES,
+# selects a VARIANT instead. A device tree build names its HARDWARE_HEADER,
+# which the reader loads before the header like the hook does. Sets in the caller's scope JH_PROJECT_FEATURES,
 # JH_PROJECT_DEFINITIONS (to compile with), JH_PROJECT_TARGETS,
 # JH_PROJECT_VARIANTS, JH_PROJECT_VARIANT and the macro values read through
 # jh_project_defined() and jh_project_value(). A function, so arguments such
@@ -33,7 +35,7 @@ endmacro()
 # reader read changes or the header appears.
 function(jh_read_project_config)
     cmake_parse_arguments(PARSE_ARGV 0 _JH_PC ""
-        "ROOT;CONFIG_DIR;TARGET;VARIANT;OUTPUT_DIR" "DEFINES")
+        "ROOT;CONFIG_DIR;TARGET;VARIANT;OUTPUT_DIR;HARDWARE_HEADER" "DEFINES")
     jh_find_python(_jh_pc_python)
     set(_jh_pc_command
         "${_jh_pc_python}" "${_JH_PC_ROOT}/scripts/project_config.py" cmake
@@ -49,6 +51,9 @@ function(jh_read_project_config)
     foreach(_jh_pc_define IN LISTS _JH_PC_DEFINES)
         list(APPEND _jh_pc_command "--define=${_jh_pc_define}")
     endforeach()
+    if(NOT "${_JH_PC_HARDWARE_HEADER}" STREQUAL "")
+        list(APPEND _jh_pc_command --hardware-header "${_JH_PC_HARDWARE_HEADER}")
+    endif()
     execute_process(
         COMMAND ${_jh_pc_command}
         RESULT_VARIABLE _jh_pc_result
@@ -85,25 +90,7 @@ function(jh_read_library_config)
             "HAL_PROJECT_CONFIG_DIR names one directory, got "
             "'${HAL_PROJECT_CONFIG_DIR}'")
     endif()
-    jh_collect_cmake_feature_defines(_jh_lc_cmake_features)
-    jh_normalize_feature_defines(EXTRA_HAL_DEFINES
-        ${_JH_LC_DEFINES} ${_jh_lc_cmake_features})
-    # The build merges several lists (target defaults, --freertos, all
-    # features, HAL_ENABLE_* variables), so a feature can arrive twice and in
-    # both spellings. The first one stays as written; the reader then reports
-    # repeats only in the project's own configuration.
-    set(_jh_lc_defines "")
-    set(_jh_lc_seen "")
-    foreach(_jh_lc_define IN LISTS EXTRA_HAL_DEFINES)
-        string(REGEX REPLACE "^(HAL_(ENABLE|DISABLE)_[A-Z0-9_]+)=1$" "\\1"
-            _jh_lc_key "${_jh_lc_define}")
-        list(FIND _jh_lc_seen "${_jh_lc_key}" _jh_lc_index)
-        if(_jh_lc_index EQUAL -1)
-            list(APPEND _jh_lc_seen "${_jh_lc_key}")
-            list(APPEND _jh_lc_defines "${_jh_lc_define}")
-        endif()
-    endforeach()
-    set(EXTRA_HAL_DEFINES ${_jh_lc_defines})
+    jh_merge_library_defines(EXTRA_HAL_DEFINES ${_JH_LC_DEFINES})
     jh_read_project_config(
         ROOT "${_JH_LC_ROOT}"
         CONFIG_DIR "${HAL_PROJECT_CONFIG_DIR}"
@@ -114,6 +101,30 @@ function(jh_read_library_config)
         JH_REQUESTED_FEATURES JH_RESOLVED_FEATURES ${JH_PROJECT_FEATURES})
     _jh_project_config_export(
         EXTRA_HAL_DEFINES JH_REQUESTED_FEATURES JH_RESOLVED_FEATURES)
+endfunction()
+
+# jh_merge_library_defines(<out-var> <definitions>...)
+#
+# The -D inputs of a static library build with its HAL_ENABLE_* CMake
+# variables, normalized. The build merges several lists (target defaults,
+# --freertos, all features, HAL_ENABLE_* variables), so a feature can arrive
+# twice and in both spellings. The first one stays as written; the reader then
+# reports repeats only in the project's own configuration.
+function(jh_merge_library_defines OUT_VAR)
+    jh_collect_cmake_feature_defines(_jh_md_cmake_features)
+    jh_normalize_feature_defines(_jh_md_defines ${ARGN} ${_jh_md_cmake_features})
+    set(_jh_md_result "")
+    set(_jh_md_seen "")
+    foreach(_jh_md_define IN LISTS _jh_md_defines)
+        string(REGEX REPLACE "^(HAL_(ENABLE|DISABLE)_[A-Z0-9_]+)=1$" "\\1"
+            _jh_md_key "${_jh_md_define}")
+        list(FIND _jh_md_seen "${_jh_md_key}" _jh_md_index)
+        if(_jh_md_index EQUAL -1)
+            list(APPEND _jh_md_seen "${_jh_md_key}")
+            list(APPEND _jh_md_result "${_jh_md_define}")
+        endif()
+    endforeach()
+    set(${OUT_VAR} ${_jh_md_result} PARENT_SCOPE)
 endfunction()
 
 function(_jh_project_require_certain NAME)

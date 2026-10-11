@@ -7,6 +7,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/generated/jh_hal_features.cmake")
 # features automatically enter this CI-oriented profile unless the target
 # cannot support them or the registry declares an exclusive provider choice.
 function(jh_all_features_for_target OUT_VAR TARGET_NAME)
+    cmake_parse_arguments(_JH_AF "FEATURES_ONLY" "" "" ${ARGN})
     if(NOT TARGET_NAME MATCHES
        "^(rp2040|rp2350-arm|rp2350-riscv|stm32g474)$")
         message(FATAL_ERROR
@@ -58,7 +59,10 @@ function(jh_all_features_for_target OUT_VAR TARGET_NAME)
     # build intentionally uses the plain pico2 profile and therefore exercises
     # the same no-physical-radio compile path as a consumer-provided CYW43
     # frontend. Boards with an owned CYW43 component produce the same defines.
-    if(TARGET_NAME STREQUAL "stm32g474")
+    # A device tree brings the radio of its assembly instead: FEATURES_ONLY
+    # leaves out this hardware, which the features never declare.
+    if(_JH_AF_FEATURES_ONLY)
+    elseif(TARGET_NAME STREQUAL "stm32g474")
         list(APPEND _jh_all_features
             HAL_NETWORK_BACKEND_CYW43
             HAL_CYW43_BUS_STM32_GSPI

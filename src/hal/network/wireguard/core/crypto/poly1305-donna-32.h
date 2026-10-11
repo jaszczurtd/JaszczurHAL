@@ -5,6 +5,8 @@
    and 64 bit addition
 */
 
+#include "hal/core/hal_layout_check.h"
+
 #if defined(_MSC_VER)
 #define POLY1305_NOINLINE __declspec(noinline)
 #elif defined(__GNUC__)

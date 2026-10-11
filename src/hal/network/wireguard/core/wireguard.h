@@ -36,6 +36,8 @@
 #ifndef _WIREGUARD_H_
 #define _WIREGUARD_H_
 
+#include "hal/core/hal_layout_check.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>

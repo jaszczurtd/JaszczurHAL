@@ -10,6 +10,11 @@ if(NOT _jh_project_config OR NOT EXISTS "${_jh_project_config}")
         "JH_ESP_IDF_PROJECT_CONFIG must name the generated project config")
 endif()
 include("${_jh_project_config}")
+# A device tree build names its generated jh_hardware.h for the hook.
+if(JH_ESP_IDF_DEVICE_TREE)
+    list(APPEND JH_ESP_IDF_COMPILE_DEFINITIONS
+        "JH_HARDWARE_HEADER=\"${_jh_generated_dir}/jh_hardware.h\"")
+endif()
 
 get_filename_component(JH_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../.." ABSOLUTE)
 if(NOT JH_ESP_IDF_COMPONENT_SOURCES)

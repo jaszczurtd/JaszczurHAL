@@ -1224,6 +1224,14 @@ HAL_PACKED_END
 
 Writing `inline` next to `HAL_FORCE_INLINE` duplicates the specifier on GNU and raises C4141 on MSVC, so the macro carries it.
 
+`HAL_PACKED` packs one structure on purpose. A `#pragma pack` left open around
+HAL includes would pack HAL types as well, so every HAL header that defines a
+structure or a union includes `hal/core/hal_layout_check.h` before its
+definitions. The file has no include guard: each inclusion compares the
+packing in effect with the one at the first HAL include and stops the
+compilation when they differ. `tests/test_layout_check_headers.py` keeps a new
+header from skipping it.
+
 `HAL_NO_STACK_PROTECTOR` excludes a function from GCC/Clang stack-canary
 instrumentation; it is empty on other compilers. Use it only in the
 stack-protector runtime and its terminal fault/reset path, which must remain

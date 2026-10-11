@@ -2,6 +2,8 @@
 
 /** @file Beta-model NTC conversion helpers. */
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/analog/hal_adc_utils.h"
 #include "hal/core/hal_status.h"
 

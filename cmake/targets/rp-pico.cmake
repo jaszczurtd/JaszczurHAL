@@ -10,6 +10,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON CACHE BOOL
     "Generate compile_commands.json for VS Code" FORCE)
 
+# A device tree build signs its configuration with the ABI of the SDK flags.
+if(JH_DEVICE_TREE_BUILD)
+    jh_finalize_hardware_abi()
+endif()
+
 set(JH_EXTRA_INCLUDES "" CACHE STRING
     "Extra include directories for native RP firmware")
 set(JH_LINK_LIBRARIES "" CACHE STRING

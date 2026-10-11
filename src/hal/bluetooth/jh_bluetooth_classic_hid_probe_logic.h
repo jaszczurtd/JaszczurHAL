@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hal/core/hal_layout_check.h"
+
 #include "jh_bluetooth_gamepad_identity.h"
 #include "jh_bluetooth_gamepad_parser.h"
 #include "jh_gamepad_bond_codec.h"

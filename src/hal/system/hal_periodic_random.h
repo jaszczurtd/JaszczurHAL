@@ -2,6 +2,8 @@
 
 /** @file Stateful pseudo-random values refreshed at a fixed interval. */
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/core/hal_status.h"
 
 #include <stdbool.h>

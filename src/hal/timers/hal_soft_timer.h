@@ -7,6 +7,8 @@
  * This API exposes non-blocking software timers as opaque C handles.
  */
 
+#include "hal/core/hal_layout_check.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 

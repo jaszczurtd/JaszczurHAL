@@ -37,7 +37,7 @@ PIN_SUFFIXES = ("", "_CONNECTED", "_DOMAIN", "_OWNER", "_PROVIDER", "_INDEX")
 BUS_SUFFIXES = ("INDEX", "FREQUENCY_HZ", "UART_PORT", "BAUD_RATE", "DATA_BITS", "PARITY",
                 "STOP_BITS", "FRAME_CONFIG")
 GLOBAL_MACROS = ("JH_HW_SCHEMA_VERSION", "JH_HW_TARGET_NAME", "JH_HW_BOARD_NAME",
-                 "JH_HW_ASSEMBLY_NAME", "JH_HW_HARDWARE_SHA256")
+                 "JH_HW_ASSEMBLY_NAME", "JH_HW_HARDWARE_SHA256", "JH_HW_HARDWARE_ID")
 RESERVED_ROOTS = ("board", "bus")
 # Board GPIO devices by role: LEDs expose "out", buttons "in".
 BOARD_GPIO_TYPES = {"statusLed": ("jaszczurhal,gpio-output", "out"),

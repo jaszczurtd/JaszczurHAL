@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/temperature/hal_thermocouple.h"
 
 #ifdef HAL_ENABLE_THERMOCOUPLE

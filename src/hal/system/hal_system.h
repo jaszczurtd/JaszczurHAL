@@ -21,6 +21,8 @@
  *   - Type-conversion macros: @ref SECS, @ref MINS, @ref HOURS.
  */
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/core/hal_array.h"
 #include "hal/core/hal_math.h"
 #include "hal/core/hal_status.h"

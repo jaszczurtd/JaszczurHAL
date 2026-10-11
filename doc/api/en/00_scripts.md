@@ -294,6 +294,14 @@ Every runner accepts `--target`, `--board`, `--all-features`, `--library-only`,
 `-D` definitions are evaluated by `scripts/project_config.py`, the same reader
 that project builds use.
 
+When that directory holds `device_tree.json`, the runner builds from it like a
+firmware project: `--assembly` and `--variant` select, `--target` only narrows
+the choice of assembly, and `--board` is refused. The library then gets no
+default feature preset of its runner, `--all-features` adds no hardware, and
+the default output becomes `.build/static/<target>/<assembly>/<key>/`, where
+the key derives from the configuration directory, variant and requests. The
+package next to the archive also holds `include/generated/jh_hardware.h`.
+
 ### `scripts/build_rp_pico_lib.sh`
 
 Builds JaszczurHAL with the official Pico SDK for the following targets:
@@ -355,7 +363,7 @@ Builds, validates, and flashes projects whose board descriptor selects the `esp-
 | Action | Behavior |
 |---|---|
 | `build` | Optionally removes the selected output with `--clean`, generates project/board/SDK inputs, builds with the pinned ESP-IDF, captures toolchain provenance, and validates artifacts. |
-| `artifacts` | Revalidates an existing build and rewrites the deterministic `jh_esp_idf_artifacts.json` manifest without invoking the compiler. |
+| `artifacts` | Revalidates an existing build and rewrites the deterministic `jh_esp_idf_artifacts.json` manifest without compiling the project; a device tree build only runs the compiler's ABI probes again. |
 | `flash` | Revalidates the existing build, requires `--port`, and invokes ESP-IDF flash with the complete image/offset set before validating the flash log and manifest again. |
 
 `--project` is required. `--target` defaults to `esp32s3`; its target descriptor
@@ -371,6 +379,11 @@ from a directory outside the project. Features wrapping cJSON, LodePNG,
 TJpgDec or FatFs make the runner prepare those managed sources and add their
 include directories to the component.
 `--idf-dir` or `JH_ESP_IDF_DIR` selects an exact compatible external checkout.
+With `device_tree.json` the `build` action configures the project first,
+reads the compile command of the HAL component from `compile_commands.json`
+and finalizes the configuration with the ABI and struct layout that command
+reports, before anything compiles. The check of the generated files repeats
+the measurement with the same command.
 
 The runner consumes `boards/` and the feature registry directly. Target-
 required features participate in the resolved set, while requested or
@@ -788,10 +801,20 @@ the model produces, evaluates
 `hal_project_config.h` after `jh_hardware.h` with `--variant` and `--define`,
 checks that the requested features have their hardware, and writes
 `jh_board_config.h`, `jh_hardware_config.cmake`, `jh_hardware_config.json`,
-the link signature and `generation.d`. A failed command prints one diagnostic
-(code, file, JSON Pointer) and removes the outputs it would have written.
-Outputs must lie below a `.build` directory. The build does not call the
-generator yet.
+the link signature, the relocatable package record `jh_hardware_package.cmake`
+and `generation.d`. `identity` prints the selection, `hardwareSha256` and
+`configSha256` of one configuration without writing outputs. With
+`--compiler` and `--compiler-flag=...`, `finalize` and `identity` add the ABI
+and the struct layout the compiler reports for those flags to the
+configuration. A failed command
+prints one diagnostic (code, file, JSON Pointer) and removes the outputs it
+would have written; a failed `resolve` also removes what `finalize` made of
+the earlier model. Outputs must lie below a `.build` directory.
+
+Builds call the generator through `cmake/jh_hardware_config.cmake`; an
+application linking an installed device tree package uses
+`jh_link_hal_package()` from `cmake/jh_hal_package.cmake`, which compares the
+package's configuration digest with the one the application generates.
 
 ### `scripts/clock_registry.py`
 

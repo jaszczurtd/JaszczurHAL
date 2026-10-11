@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hal/core/hal_layout_check.h"
+
 #include "../ff16/ff.h"
 
 #include <stdbool.h>

@@ -87,6 +87,8 @@
 #ifndef MFRC522_h
 #define MFRC522_h
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/core/hal_status.h"
 #include "hal/gpio/hal_gpio.h"
 #include "hal/i2c/hal_i2c.h"

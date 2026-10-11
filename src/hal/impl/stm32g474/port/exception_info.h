@@ -21,6 +21,8 @@
  * Only meaningful on the ARM target (JH_STM32G474_HW).
  */
 
+#include "hal/core/hal_layout_check.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 

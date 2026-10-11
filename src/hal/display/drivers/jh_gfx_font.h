@@ -13,6 +13,8 @@
 #ifndef JH_GFX_FONT_H
 #define JH_GFX_FONT_H
 
+#include "hal/core/hal_layout_check.h"
+
 #include <stdint.h>
 
 // PROGMEM is an AVR/Arduino concept; on other platforms it is a no-op.

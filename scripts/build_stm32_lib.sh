@@ -29,6 +29,8 @@ Usage:
 Options:
   --target NAME            stm32g474 (default) or another STM32 registry target
   --board NAME             JaszczurHAL board profile (target default if omitted)
+  --assembly KEY           Assembly of the device_tree.json in -p DIR
+  --variant ID             Variant declared by JH_PROJECT_VARIANTS (device tree)
   --freertos               Define HAL_ENABLE_FREERTOS and ensure FreeRTOS-Kernel
   --all-features           Enable every feature supported by the target
   --library-only           Accepted for parity; this runner only builds the archive
@@ -38,7 +40,9 @@ Options:
   -t, --toolchain FILE     CMake toolchain file
                            (default: link_libraries/stm32_lib/toolchain_stm32g474.cmake)
   -o, --output DIR         Build directory below .build/
-                           (default: .build/static/<target>/<board>)
+                           (default: .build/static/<target>/<board>, or
+                           .build/static/<target>/<assembly>/<key> with a
+                           device tree)
   --clean                  Remove the selected build directory first
   -j, --jobs N             Parallel jobs (default: nproc)
   -h, --help               Show this help
@@ -48,6 +52,8 @@ USAGE
 TARGET="stm32g474"
 PROJECT_CONFIG_DIR=""
 BOARD=""
+ASSEMBLY=""
+VARIANT=""
 EXTRA_DEFS=()
 FREERTOS=0
 ALL_FEATURES=0
@@ -63,6 +69,8 @@ while [[ $# -gt 0 ]]; do
         -p|--project-config) PROJECT_CONFIG_DIR="$2"; shift 2 ;;
         -D) EXTRA_DEFS+=("$2"); shift 2 ;;
         --board) BOARD="$2"; shift 2 ;;
+        --assembly) ASSEMBLY="$2"; shift 2 ;;
+        --variant) VARIANT="$2"; shift 2 ;;
         --library-only) shift ;;
         --freertos) FREERTOS=1; shift ;;
         --all-features) ALL_FEATURES=1; FREERTOS=1; shift ;;
@@ -92,10 +100,22 @@ while IFS='=' read -r key value; do
 done <<< "${facts}"
 [[ "${TARGET_PROVIDER}" == "jh-stm32-baremetal" ]] ||
     die "Target '${TARGET}' is not an STM32 bare-metal target; use scripts/build_link_library.sh"
-: "${BOARD:=${TARGET_DEFAULT_BOARD}}"
 
+DEVICE_TREE=0
+if jh_device_tree_library "${PROJECT_CONFIG_DIR}" "${BOARD}" "${ASSEMBLY}" "${VARIANT}"; then
+    DEVICE_TREE=1
+    PROJECT_CONFIG_DIR="$(realpath -m -- "${PROJECT_CONFIG_DIR}")"
+    OUTPUT_KEY="$(jh_device_tree_build_key "${PROJECT_CONFIG_DIR}" "${ASSEMBLY}" \
+        "variant=${VARIANT}" "all=${ALL_FEATURES}" "freertos=${FREERTOS}" \
+        "${EXTRA_DEFS[@]}")"
+elif [[ $? -ne 1 ]]; then
+    exit 2
+else
+    : "${BOARD:=${TARGET_DEFAULT_BOARD}}"
+    OUTPUT_KEY="${BOARD}"
+fi
 if ! OUTPUT_DIR="$(jh_resolve_build_output \
-    "${REPO_ROOT}" "${OUTPUT_DIR}" "static/${TARGET}/${BOARD}")"; then
+    "${REPO_ROOT}" "${OUTPUT_DIR}" "static/${TARGET}/${OUTPUT_KEY}")"; then
     die "Build output must be inside ${REPO_ROOT}/.build"
 fi
 
@@ -153,12 +173,14 @@ if [[ ${#EXTRA_DEFS[@]} -gt 0 ]]; then
     CMAKE_EXTRA_ARGS+=("-DEXTRA_HAL_DEFINES=${joined}")
 fi
 
-info "Configuring CMake..."
+info "Configuring CMake (${TARGET}, $(jh_build_selection "${DEVICE_TREE}" "${BOARD}" "${ASSEMBLY}"))..."
 cmake -S "${REPO_ROOT}/link_libraries/stm32_lib" -B "${OUTPUT_DIR}" \
     -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}" \
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
     -DJH_TARGET="${TARGET}" \
     -DJH_BOARD="${BOARD}" \
+    -DJH_ASSEMBLY="${ASSEMBLY}" \
+    -DJH_VARIANT="${VARIANT}" \
     "${CMAKE_EXTRA_ARGS[@]}"
 
 info "Building with ${JOBS} parallel jobs..."
@@ -166,15 +188,8 @@ cmake --build "${OUTPUT_DIR}" --target JaszczurHAL -j "${JOBS}"
 
 LIB_FILE=$(find "${OUTPUT_DIR}" -name "libJaszczurHAL.a" -print -quit 2>/dev/null)
 if [[ -n "${LIB_FILE}" ]]; then
-    GENERATED_SOURCE="${OUTPUT_DIR}/generated/boards/${TARGET}/${BOARD}"
-    GENERATED_INCLUDE="${OUTPUT_DIR}/include/generated"
-    mkdir -p "${GENERATED_INCLUDE}"
-    for generated_header in \
-        jh_board_config.h jh_link_contract.h; do
-        [[ -f "${GENERATED_SOURCE}/${generated_header}" ]] ||
-            die "Generated board header not found: ${GENERATED_SOURCE}/${generated_header}"
-        cp -f "${GENERATED_SOURCE}/${generated_header}" "${GENERATED_INCLUDE}/"
-    done
+    jh_collect_generated_headers "${OUTPUT_DIR}" "${TARGET}" "${BOARD}" "${DEVICE_TREE}" ||
+        die "Generated headers are missing from ${OUTPUT_DIR}"
     SIZE=$(stat --printf="%s" "${LIB_FILE}" 2>/dev/null || stat -f "%z" "${LIB_FILE}" 2>/dev/null || echo "?")
     ok "Library built: ${LIB_FILE}  (${SIZE} bytes)"
     echo ""

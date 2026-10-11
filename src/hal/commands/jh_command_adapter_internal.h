@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/commands/hal_command_wire.h"
 #include "hal/core/jh_handle_pool.h"
 #include "hal/system/hal_sync.h"

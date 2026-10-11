@@ -1,6 +1,8 @@
 #ifndef JH_HAL_GPIO_COMMON_H
 #define JH_HAL_GPIO_COMMON_H
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/core/hal_compiler.h"
 #include "hal/gpio/hal_gpio.h"
 

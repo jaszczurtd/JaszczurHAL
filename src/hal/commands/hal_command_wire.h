@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/commands/hal_command_router.h"
 
 #ifdef HAL_ENABLE_COMMAND_ROUTER

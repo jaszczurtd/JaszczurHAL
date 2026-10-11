@@ -14,6 +14,8 @@
  * inner payloads can be delegated to a project callback.
  */
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/core/hal_config.h"
 #include "hal/core/hal_status.h"
 #include "hal/serial/hal_serial_session_vocabulary.h"

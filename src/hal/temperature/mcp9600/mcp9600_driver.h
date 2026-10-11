@@ -5,6 +5,8 @@
  * @brief Arduino-free MCP9600/MCP9601 thermocouple ADC driver over HAL I2C.
  */
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/core/hal_target.h"
 
 #include "hal/core/hal_config.h"

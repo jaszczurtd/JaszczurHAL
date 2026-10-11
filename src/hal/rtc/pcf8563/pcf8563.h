@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hal/core/hal_layout_check.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 

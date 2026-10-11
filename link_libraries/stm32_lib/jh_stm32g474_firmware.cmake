@@ -32,6 +32,10 @@ include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/jh_project_features.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/jh_stack_protector.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/jh_stm32g474_memory.cmake")
 
+# The architecture flags every firmware unit compiles with; they come last on
+# the command line and therefore fix the ABI.
+set(JH_STM32G474_ARCH_FLAGS -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard)
+
 # jh_add_stm32g474_firmware(<target>
 #     SOURCES  <portable app sources (.c/.cpp)>
 #     INCLUDES <extra include dirs>
@@ -163,7 +167,7 @@ function(jh_add_stm32g474_firmware TARGET)
         ${ARG_DEFINES}
     )
 
-    set(_arch -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard)
+    set(_arch ${JH_STM32G474_ARCH_FLAGS})
     target_compile_options(${TARGET} PRIVATE
         ${_arch}
         -g

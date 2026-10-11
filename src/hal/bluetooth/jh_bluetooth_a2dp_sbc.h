@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/bluetooth/hal_bluetooth_a2dp_sink.h"
 #include "hal/core/hal_status.h"
 

@@ -3,6 +3,8 @@
 #ifndef _BLAKE2S_H
 #define _BLAKE2S_H
 
+#include "hal/core/hal_layout_check.h"
+
 #define BLAKE2S_BLOCK_SIZE 64
 
 #include <stddef.h>

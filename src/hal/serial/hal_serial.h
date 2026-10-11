@@ -10,6 +10,8 @@
  * or the mock capture/RX transport.
  */
 
+#include "hal/core/hal_layout_check.h"
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
