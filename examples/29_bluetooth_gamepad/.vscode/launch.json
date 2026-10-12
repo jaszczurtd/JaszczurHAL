@@ -2,11 +2,11 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Project: Debug Firmware",
+            "name": "Project: Debug picow (RP2040)",
             "type": "cortex-debug",
             "request": "launch",
             "cwd": "${workspaceFolder}",
-            "executable": "${workspaceFolder}/../../.build/examples/29_bluetooth_gamepad/firmware.elf",
+            "executable": "${workspaceFolder}/../../.build/examples/29_bluetooth_gamepad/rp2040/picow/firmware.elf",
             "servertype": "openocd",
             "device": "RP2040",
             "configFiles": [
@@ -14,17 +14,139 @@
                 "target/rp2040.cfg"
             ],
             "runToEntryPoint": "main",
-            "preLaunchTask": "Project: Build (Debug)",
+            "preLaunchTask": "Project: Build (Debug) picow",
             "openOCDLaunchCommands": [
                 "adapter speed 5000"
             ]
         },
         {
-            "name": "Project: Debug Firmware (RP2350 ARM)",
+            "name": "Project: Debug picow variant: CLASSIC_SCAN (RP2040)",
             "type": "cortex-debug",
             "request": "launch",
             "cwd": "${workspaceFolder}",
-            "executable": "${workspaceFolder}/../../.build/examples/29_bluetooth_gamepad/firmware.elf",
+            "executable": "${workspaceFolder}/../../.build/examples/29_bluetooth_gamepad/rp2040/picow/variants/CLASSIC_SCAN/firmware.elf",
+            "servertype": "openocd",
+            "device": "RP2040",
+            "configFiles": [
+                "interface/cmsis-dap.cfg",
+                "target/rp2040.cfg"
+            ],
+            "runToEntryPoint": "main",
+            "preLaunchTask": "Project: Build (Debug) picow variant: CLASSIC_SCAN",
+            "openOCDLaunchCommands": [
+                "adapter speed 5000"
+            ]
+        },
+        {
+            "name": "Project: Debug picow variant: HID_HOST (RP2040)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/../../.build/examples/29_bluetooth_gamepad/rp2040/picow/variants/HID_HOST/firmware.elf",
+            "servertype": "openocd",
+            "device": "RP2040",
+            "configFiles": [
+                "interface/cmsis-dap.cfg",
+                "target/rp2040.cfg"
+            ],
+            "runToEntryPoint": "main",
+            "preLaunchTask": "Project: Build (Debug) picow variant: HID_HOST",
+            "openOCDLaunchCommands": [
+                "adapter speed 5000"
+            ]
+        },
+        {
+            "name": "Project: Debug picow variant: BLE (RP2040)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/../../.build/examples/29_bluetooth_gamepad/rp2040/picow/variants/BLE/firmware.elf",
+            "servertype": "openocd",
+            "device": "RP2040",
+            "configFiles": [
+                "interface/cmsis-dap.cfg",
+                "target/rp2040.cfg"
+            ],
+            "runToEntryPoint": "main",
+            "preLaunchTask": "Project: Build (Debug) picow variant: BLE",
+            "openOCDLaunchCommands": [
+                "adapter speed 5000"
+            ]
+        },
+        {
+            "name": "Project: Debug nucleo-pim730 (STM32G474 / ST-Link)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/../../.build/examples/29_bluetooth_gamepad/stm32g474/nucleo-pim730/firmware.elf",
+            "servertype": "openocd",
+            "device": "STM32G474RE",
+            "configFiles": [
+                "board/st_nucleo_g4.cfg"
+            ],
+            "runToEntryPoint": "main",
+            "preLaunchTask": "Project: Build (Debug) nucleo-pim730",
+            "openOCDLaunchCommands": [
+                "reset_config srst_only srst_nogate connect_assert_srst"
+            ]
+        },
+        {
+            "name": "Project: Debug nucleo-pim730 variant: CLASSIC_SCAN (STM32G474 / ST-Link)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/../../.build/examples/29_bluetooth_gamepad/stm32g474/nucleo-pim730/variants/CLASSIC_SCAN/firmware.elf",
+            "servertype": "openocd",
+            "device": "STM32G474RE",
+            "configFiles": [
+                "board/st_nucleo_g4.cfg"
+            ],
+            "runToEntryPoint": "main",
+            "preLaunchTask": "Project: Build (Debug) nucleo-pim730 variant: CLASSIC_SCAN",
+            "openOCDLaunchCommands": [
+                "reset_config srst_only srst_nogate connect_assert_srst"
+            ]
+        },
+        {
+            "name": "Project: Debug nucleo-pim730 variant: HID_HOST (STM32G474 / ST-Link)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/../../.build/examples/29_bluetooth_gamepad/stm32g474/nucleo-pim730/variants/HID_HOST/firmware.elf",
+            "servertype": "openocd",
+            "device": "STM32G474RE",
+            "configFiles": [
+                "board/st_nucleo_g4.cfg"
+            ],
+            "runToEntryPoint": "main",
+            "preLaunchTask": "Project: Build (Debug) nucleo-pim730 variant: HID_HOST",
+            "openOCDLaunchCommands": [
+                "reset_config srst_only srst_nogate connect_assert_srst"
+            ]
+        },
+        {
+            "name": "Project: Debug nucleo-pim730 variant: BLE (STM32G474 / ST-Link)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/../../.build/examples/29_bluetooth_gamepad/stm32g474/nucleo-pim730/variants/BLE/firmware.elf",
+            "servertype": "openocd",
+            "device": "STM32G474RE",
+            "configFiles": [
+                "board/st_nucleo_g4.cfg"
+            ],
+            "runToEntryPoint": "main",
+            "preLaunchTask": "Project: Build (Debug) nucleo-pim730 variant: BLE",
+            "openOCDLaunchCommands": [
+                "reset_config srst_only srst_nogate connect_assert_srst"
+            ]
+        },
+        {
+            "name": "Project: Debug pico2w (RP2350 ARM)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/../../.build/examples/29_bluetooth_gamepad/rp2350-arm/pico2w/firmware.elf",
             "servertype": "openocd",
             "device": "RP2350",
             "configFiles": [
@@ -32,26 +154,63 @@
                 "target/rp2350.cfg"
             ],
             "runToEntryPoint": "main",
-            "preLaunchTask": "Project: Build (Debug)",
+            "preLaunchTask": "Project: Build (Debug) pico2w",
             "openOCDLaunchCommands": [
                 "adapter speed 2000"
             ]
         },
         {
-            "name": "Project: Debug Firmware (STM32G474 / ST-Link)",
+            "name": "Project: Debug pico2w variant: CLASSIC_SCAN (RP2350 ARM)",
             "type": "cortex-debug",
             "request": "launch",
             "cwd": "${workspaceFolder}",
-            "executable": "${workspaceFolder}/../../.build/examples/29_bluetooth_gamepad/firmware.elf",
+            "executable": "${workspaceFolder}/../../.build/examples/29_bluetooth_gamepad/rp2350-arm/pico2w/variants/CLASSIC_SCAN/firmware.elf",
             "servertype": "openocd",
-            "device": "STM32G474RE",
+            "device": "RP2350",
             "configFiles": [
-                "board/st_nucleo_g4.cfg"
+                "interface/cmsis-dap.cfg",
+                "target/rp2350.cfg"
             ],
             "runToEntryPoint": "main",
-            "preLaunchTask": "Project: Build (Debug)",
+            "preLaunchTask": "Project: Build (Debug) pico2w variant: CLASSIC_SCAN",
             "openOCDLaunchCommands": [
-                "reset_config srst_only srst_nogate connect_assert_srst"
+                "adapter speed 2000"
+            ]
+        },
+        {
+            "name": "Project: Debug pico2w variant: HID_HOST (RP2350 ARM)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/../../.build/examples/29_bluetooth_gamepad/rp2350-arm/pico2w/variants/HID_HOST/firmware.elf",
+            "servertype": "openocd",
+            "device": "RP2350",
+            "configFiles": [
+                "interface/cmsis-dap.cfg",
+                "target/rp2350.cfg"
+            ],
+            "runToEntryPoint": "main",
+            "preLaunchTask": "Project: Build (Debug) pico2w variant: HID_HOST",
+            "openOCDLaunchCommands": [
+                "adapter speed 2000"
+            ]
+        },
+        {
+            "name": "Project: Debug pico2w variant: BLE (RP2350 ARM)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/../../.build/examples/29_bluetooth_gamepad/rp2350-arm/pico2w/variants/BLE/firmware.elf",
+            "servertype": "openocd",
+            "device": "RP2350",
+            "configFiles": [
+                "interface/cmsis-dap.cfg",
+                "target/rp2350.cfg"
+            ],
+            "runToEntryPoint": "main",
+            "preLaunchTask": "Project: Build (Debug) pico2w variant: BLE",
+            "openOCDLaunchCommands": [
+                "adapter speed 2000"
             ]
         }
     ]

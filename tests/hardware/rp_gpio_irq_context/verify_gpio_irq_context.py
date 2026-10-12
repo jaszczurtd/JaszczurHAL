@@ -9,8 +9,11 @@ import time
 
 import serial
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+FIXTURE_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(FIXTURE_DIR.parents[2]))
+sys.path.insert(0, str(FIXTURE_DIR.parent))
 from vscode.runtime.serial_io import read_line  # noqa: E402
+import fixture_hardware  # noqa: E402
 
 
 RESULT_PATTERN = re.compile(
@@ -36,8 +39,6 @@ KEYS = (
 )
 
 EXPECTED_CHECKS = 16
-PIN_CTX_A = 2
-PIN_CTX_B = 3
 
 
 def open_port(path: str) -> serial.Serial:
@@ -62,12 +63,13 @@ def run_probe(port: serial.Serial, timeout_s: float) -> dict:
     return dict(zip(KEYS, values))
 
 
-def evaluate(result: dict) -> list[str]:
+def evaluate(result: dict, pin_a: int, pin_b: int) -> list[str]:
     """Judge the run from the firmware's own verdict.
 
     The statuses in the line are diagnostics: the firmware compares them
     against the hal_status_t enum it was built with, so repeating those values
-    here would only add a second place to keep them correct.
+    here would only add a second place to keep them correct. The context pins
+    come from the assembly in device_tree.json.
     """
     problems = []
     if result["checks"] != EXPECTED_CHECKS:
@@ -76,10 +78,10 @@ def evaluate(result: dict) -> list[str]:
         )
     if result["failed"] != 0:
         problems.append(f"failed checks bitmask 0x{result['failed']:08x}")
-    if result["a_pin"] != PIN_CTX_A or result["b_pin"] != PIN_CTX_B:
+    if result["a_pin"] != pin_a or result["b_pin"] != pin_b:
         problems.append(
             f"handler saw pins {result['a_pin']}/{result['b_pin']}, "
-            f"expected {PIN_CTX_A}/{PIN_CTX_B}"
+            f"expected {pin_a}/{pin_b}"
         )
     for name in ("a_hits", "b_hits", "swap_hits", "plain_hits"):
         if result[name] == 0:
@@ -92,14 +94,24 @@ def main() -> int:
         description="Verify context-aware GPIO interrupts on RP hardware"
     )
     parser.add_argument("--port", required=True)
+    parser.add_argument(
+        "--assembly",
+        help="assembly of device_tree.json the firmware was built for",
+    )
     parser.add_argument("--timeout", type=float, default=20.0)
     parser.add_argument("--json", type=Path)
     args = parser.parse_args()
+    try:
+        assembly = fixture_hardware.select(FIXTURE_DIR, args.assembly)
+    except ValueError as error:
+        parser.error(str(error))
+    pin_a = fixture_hardware.pin(FIXTURE_DIR, assembly, "ctxA", "in")
+    pin_b = fixture_hardware.pin(FIXTURE_DIR, assembly, "ctxB", "in")
 
     with open_port(args.port) as port:
         result = run_probe(port, args.timeout)
 
-    problems = evaluate(result)
+    problems = evaluate(result, pin_a, pin_b)
     if args.json is not None:
         args.json.write_text(
             json.dumps({"result": result, "problems": problems}, indent=2)

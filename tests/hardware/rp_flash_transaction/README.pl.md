@@ -20,15 +20,20 @@ Sonda zawłaszcza rezerwację EEPROM/KV na końcu flash płytki i sektor tuż po
 nią. Nie uruchamiaj jej na firmware, które przechowuje tam niepowiązane dane.
 LED płytki przełącza się przy każdym zapisie KV.
 
-Zbuduj i wgraj wariant bare-metal zgodnie ze zwykłym procesem:
+Plik `device_tree.json` opisuje sprzęt każdego montażu: `pico` dla Pico oraz
+`pico2-arm` i `pico2-riscv` dla Pico 2. Skanowane wejścia GPIO 26-28 to jego
+węzły `adc0`-`adc2`; do tych pinów nie trzeba niczego podłączać.
+
+Zbuduj i wgraj wariant bare-metal zgodnie ze zwykłym procesem. Dla Pico 2
+zamień `pico` na `pico2-arm` albo `pico2-riscv`:
 
 ```sh
 vscode/entry/jh-vscode build \
   --project tests/hardware/rp_flash_transaction \
-  --target rp2040 --board pico
+  --assembly pico
 vscode/entry/jh-vscode upload \
   --project tests/hardware/rp_flash_transaction \
-  --target rp2040 --board pico \
+  --assembly pico \
   --port /dev/serial/by-id/<device>
 ```
 
@@ -40,7 +45,7 @@ zmian:
 ```sh
 vscode/entry/jh-vscode upload \
   --project tests/hardware/rp_flash_transaction \
-  --target rp2040 --board pico --variant FREERTOS \
+  --assembly pico --variant FREERTOS \
   --port /dev/serial/by-id/<device>
 ```
 

@@ -99,7 +99,7 @@ Cortex-Debug uses the verified paths recorded during setup. To inspect the tools
 ```powershell
 .\vscode\entry\jh-vscode.cmd debug-tools `
   --project .\examples\01_core_runtime `
-  --target rp2350-arm --board pico2w --json
+  --assembly pico2-arm --json
 ```
 
 The result contains `openocd`, `gdb`, `armToolchainPath`, the OpenOCD scripts

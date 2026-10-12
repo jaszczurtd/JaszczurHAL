@@ -8,40 +8,17 @@
 
 #include <hal/can/hal_can.h>
 #include <hal/core/hal_app.h>
-#include <hal/core/hal_target.h>
 #include <hal/gpio/hal_gpio.h>
 #include <hal/serial/hal_serial.h>
 #include <hal/spi/hal_spi.h>
 #include <hal/system/hal_system.h>
 
-#if HAL_TARGET_IS_RP
-#define EXAMPLE_SPI_MISO 16u
-#define EXAMPLE_SPI_MOSI 19u
-#define EXAMPLE_SPI_SCK 18u
-#define EXAMPLE_CAN_CS 17u
-#elif HAL_TARGET_IS_STM32G474
-#define EXAMPLE_SPI_MISO 6u
-#define EXAMPLE_SPI_MOSI 7u
-#define EXAMPLE_SPI_SCK 5u
-#define EXAMPLE_CAN_CS 22u
-#else
-#define EXAMPLE_SPI_MISO 6u
-#define EXAMPLE_SPI_MOSI 7u
-#define EXAMPLE_SPI_SCK 5u
-#define EXAMPLE_CAN_CS 4u
-#endif
-
-/* On NUCLEO-G474RE the LD2 LED is PA5, the SPI clock; the LED is left to it. */
-#if defined(HAL_LED_BUILTIN) && HAL_LED_BUILTIN != EXAMPLE_SPI_SCK
-#define EXAMPLE_LED HAL_LED_BUILTIN
-#endif
-
 static hal_can_t s_can = NULL;
 static uint32_t s_counter = 0u;
 
 static void show_send(bool sent) {
-#if defined(EXAMPLE_LED)
-  hal_gpio_write(EXAMPLE_LED, sent && (s_counter & 1u) == 0u);
+#if defined(HAL_LED_BUILTIN)
+  hal_gpio_write(HAL_LED_BUILTIN, sent && (s_counter & 1u) == 0u);
 #else
   (void)sent;
 #endif
@@ -52,13 +29,14 @@ void app_start(void) {
   deb("");
   deb("=== JaszczurHAL MCP2515 CAN example ===");
   deb("Initialising SPI bus and MCP2515 on CS pin...");
-#if defined(EXAMPLE_LED)
-  hal_gpio_set_mode(EXAMPLE_LED, HAL_GPIO_OUTPUT_LOW);
+#if defined(HAL_LED_BUILTIN)
+  hal_gpio_set_mode(HAL_LED_BUILTIN, HAL_GPIO_OUTPUT_LOW);
 #endif
 
-  hal_spi_init(0u, EXAMPLE_SPI_MISO, EXAMPLE_SPI_MOSI, EXAMPLE_SPI_SCK);
-  hal_can_config_t can_cfg = hal_can_default_config();
-  can_cfg.mcp2515.cs_pin = EXAMPLE_CAN_CS;
+  /* Bus, pins and controller settings come from device_tree.json. */
+  hal_spi_init(JH_HW_BUS_SPI_INDEX, JH_HW_BUS_SPI_PIN_MISO,
+               JH_HW_BUS_SPI_PIN_MOSI, JH_HW_BUS_SPI_PIN_SCK);
+  const hal_can_config_t can_cfg = JH_HW_NODE_CAN_CONFIG_INIT;
   const hal_status_t st = hal_can_create_with_retry(
       &can_cfg, HAL_CAN_NO_INT_PIN, NULL, 2, NULL, &s_can);
   if (st == HAL_OK) {

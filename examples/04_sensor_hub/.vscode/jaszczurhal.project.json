@@ -3,8 +3,7 @@
     "project": "JaszczurHAL examples",
     "module": "04_sensor_hub",
     "toolchain": "cmake",
-    "target": "rp2040",
-    "board": "pico",
+    "assembly": "pico",
     "buildDir": "${jhRoot}/.build/examples/04_sensor_hub",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

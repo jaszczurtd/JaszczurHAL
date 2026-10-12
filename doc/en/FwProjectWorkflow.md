@@ -158,6 +158,14 @@ dropping a target or board left there. `--assembly` or a manifest `assembly`
 without `device_tree.json` stops with `[JH-HW-ASSEMBLY]`; an assembly left in
 local state after the file is removed is ignored.
 
+`check-hardware` resolves every assembly as a build does and names the line
+and column of each problem in `device_tree.json`. In VS Code the
+`Project: Check device tree` task runs it in the background and repeats it
+after each save, so the Problems panel shows the errors before a build. The
+Run and Debug panel has one profile for each assembly and variant of a
+debugged target, which builds and loads exactly that configuration; see
+[Generated VS Code Tasks](../../vscode/README.md#generated-vs-code-tasks).
+
 Settings are then merged in this order. Later values override earlier ones:
 
 1. target and board registry defaults;
@@ -432,8 +440,9 @@ void app_task0(void) { /* ... */ }
 #endif
 ```
 
-The checked-in examples follow the same rules. The examples dispatcher lists
-and builds every configuration they declare:
+The checked-in examples follow the same rules and describe their hardware in
+`device_tree.json`. The examples dispatcher lists and builds every assembly
+with each variant:
 
 ```bash
 scripts/examples_dispatcher.py list
@@ -447,8 +456,8 @@ See [JaszczurHAL Examples](../../examples/README.md).
 External firmware projects store outputs in `${project}/.build`. Checked-in examples and hardware test configurations use stable locations relative to the JaszczurHAL root:
 
 ```text
-.build/examples/<example>/
-.build/hardware/<fixture>/
+.build/examples/<example>/<target>/<assembly>/
+.build/hardware/<fixture>/<target>/<assembly>/
 ```
 
 On Unix, each project CMake cache is isolated by target and board below the

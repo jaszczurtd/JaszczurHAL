@@ -3,16 +3,7 @@
     "project": "JaszczurHAL examples",
     "module": "18_freertos_suite",
     "toolchain": "cmake",
-    "target": "rp2040",
-    "board": "picow",
-    "targetProfiles": {
-        "rp2350-arm": {
-            "board": "pico2w"
-        },
-        "stm32g474": {
-            "board": "nucleo-g474re-pim730"
-        }
-    },
+    "assembly": "picow",
     "buildDir": "${jhRoot}/.build/examples/18_freertos_suite",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

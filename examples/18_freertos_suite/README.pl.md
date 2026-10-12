@@ -23,6 +23,19 @@ tras: `/`, `/api/status`, adresu obsługi poleceń HTTP i czterech tras plików
 w RAM. WebSocket oraz konsola korzystają ze wspólnych procedur obsługi
 poleceń `status` i `echo`.
 
+`device_tree.json` opisuje sprzęt każdego montażu: `picow` (Pico W,
+domyślny), `pico2w` (Pico 2 W), `pico2-riscv` (Pico 2 na rdzeniach RISC-V,
+tylko przykład podstawowy), `esp32s3-zero` (ESP32-S3-Zero) i `nucleo-pim730`.
+`nucleo-pim730` to zwykła NUCLEO-G474RE z zewnętrznym modułem PIM730/RM2,
+bez osobnego profilu płytki. Tabela poniżej powtarza połączenia modułu.
+
+| Sygnał PIM730/RM2 | NUCLEO-G474RE |
+|---|---|
+| CS | PB12, pin 16 CN10 |
+| DAT | PB15, pin 26 CN10 |
+| WL_ON | PB14, pin 28 CN10 |
+| CLK | PB13, pin 30 CN10 |
+
 ## Konfiguracja sieci
 
 Przed uruchomieniem ustaw definicje kompilacji:

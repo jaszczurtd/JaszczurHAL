@@ -1,0 +1,53 @@
+{
+  "$schema": "../../../config/hardware/device_tree.schema.json",
+  "schemaVersion": 1,
+  "nodes": {
+    "adc0": {
+      "compatible": "jaszczurhal,adc-input"
+    },
+    "adc1": {
+      "compatible": "jaszczurhal,adc-input"
+    },
+    "adc2": {
+      "compatible": "jaszczurhal,adc-input"
+    }
+  },
+  "assemblies": {
+    "pico": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {},
+      "nodes": {
+        "adc0": { "present": true, "pins": { "in": 26 } },
+        "adc1": { "present": true, "pins": { "in": 27 } },
+        "adc2": { "present": true, "pins": { "in": 28 } }
+      }
+    },
+    "pico2-arm": {
+      "target": "rp2350-arm",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {},
+      "nodes": {
+        "adc0": { "present": true, "pins": { "in": 26 } },
+        "adc1": { "present": true, "pins": { "in": 27 } },
+        "adc2": { "present": true, "pins": { "in": 28 } }
+      }
+    },
+    "pico2-riscv": {
+      "target": "rp2350-riscv",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {},
+      "nodes": {
+        "adc0": { "present": true, "pins": { "in": 26 } },
+        "adc1": { "present": true, "pins": { "in": 27 } },
+        "adc2": { "present": true, "pins": { "in": 28 } }
+      }
+    }
+  }
+}

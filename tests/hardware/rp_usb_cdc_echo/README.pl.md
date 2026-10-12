@@ -12,13 +12,17 @@ Skompiluj i wykonaj pierwsze wgranie BOOTSEL:
 ```sh
 vscode/entry/jh-vscode build \
   --project tests/hardware/rp_usb_cdc_echo \
-  --target rp2040 --board pico
+  --assembly pico
 vscode/entry/jh-vscode upload-uf2 \
   --project tests/hardware/rp_usb_cdc_echo \
-  --target rp2040 --board pico
+  --assembly pico
 ```
 
-Dla Pico W i Pico 2 W użyj odpowiednio `--board picow` i `--board pico2w`.
+Plik `device_tree.json` opisuje sprzęt każdego montażu: `pico` dla Pico,
+`pico2-arm` i `pico2-riscv` dla Pico 2, `picow` dla Pico W oraz `pico2w` dla
+Pico 2 W. Test potrzebuje tylko samej płytki; odpowiedni klucz podaj
+w `--assembly`.
+
 Gdy inna płytka jest już w trybie BOOTSEL, niezależna od targetu akcja
 `upload` najpierw zapamiętuje listę istniejących dysków, następnie wyzwala
 reset przez 1200 bps i zapisuje plik wyłącznie na nowo wykrytym dysku.
@@ -56,7 +60,7 @@ do BOOTSEL przez dotknięcie DTR 1200 bps i wrócić z tą samą tożsamością 
 ```sh
 vscode/entry/jh-vscode upload \
   --project tests/hardware/rp_usb_cdc_echo \
-  --target rp2040 --board pico \
+  --assembly pico \
   --port /dev/serial/by-id/<device>
 ```
 

@@ -1,0 +1,23 @@
+{
+  "$schema": "../../../config/hardware/device_tree.schema.json",
+  "schemaVersion": 1,
+  "nodes": {
+    "scanA": {"compatible": "jaszczurhal,adc-input"},
+    "scanB": {"compatible": "jaszczurhal,adc-input"},
+    "unscanned": {"compatible": "jaszczurhal,adc-input"}
+  },
+  "assemblies": {
+    "esp32s3-zero": {
+      "target": "esp32s3",
+      "board": "waveshare-esp32-s3-zero",
+      "clock": {"tree": "default"},
+      "statusLed": {"node": "board.statusLed"},
+      "buses": {},
+      "nodes": {
+        "scanA": {"present": true, "pins": {"in": 3}},
+        "scanB": {"present": true, "pins": {"in": 4}},
+        "unscanned": {"present": true, "pins": {"in": 5}}
+      }
+    }
+  }
+}

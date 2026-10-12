@@ -18,8 +18,8 @@ Run from the repository root:
 
 ```bash
 vscode/entry/jh-vscode build \
-  --project examples/02_crypto --target rp2040 --board pico
+  --project examples/02_crypto --assembly pico
 ```
 
-The project configuration also includes RP2350 ARM, RP2350 RISC-V, and
-STM32G474. No additional hardware is required.
+`device_tree.json` lists the assemblies (boards) the example builds for.
+No additional hardware is required.

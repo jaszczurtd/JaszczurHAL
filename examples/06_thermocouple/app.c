@@ -4,29 +4,10 @@
  */
 
 #include <hal/core/hal_app.h>
-#include <hal/core/hal_target.h>
-#include <hal/gpio/hal_gpio.h>
 #include <hal/i2c/hal_i2c.h>
 #include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
 #include <hal/temperature/hal_thermocouple.h>
-
-#if HAL_TARGET_IS_STM32G474
-#define MCP9600_SDA_PIN HAL_GPIO_STM32_PIN('B', 9u) /* PB9  = I2C1_SDA */
-#define MCP9600_SCL_PIN HAL_GPIO_STM32_PIN('B', 8u) /* PB8  = I2C1_SCL */
-#define MAX6675_SCLK_PIN                                                       \
-  HAL_GPIO_STM32_PIN('A', 5u)                      /* PA5, CN10 pin 11 / D13 */
-#define MAX6675_CS_PIN HAL_GPIO_STM32_PIN('B', 6u) /* PB6, CN10 pin 17 / D10   \
-                                                    */
-#define MAX6675_MISO_PIN                                                       \
-  HAL_GPIO_STM32_PIN('A', 6u) /* PA6, CN10 pin 13 / D12 */
-#else
-#define MCP9600_SDA_PIN 4u
-#define MCP9600_SCL_PIN 5u
-#define MAX6675_SCLK_PIN 18u
-#define MAX6675_CS_PIN 17u
-#define MAX6675_MISO_PIN 16u
-#endif
 
 #if defined(HAL_ENABLE_MCP9600)
 static hal_thermocouple_t mcp9600 = NULL;
@@ -44,11 +25,12 @@ void app_start(void) {
 #if defined(HAL_ENABLE_MCP9600)
   hal_thermocouple_config_t mcp_cfg = {};
   mcp_cfg.chip = HAL_THERMOCOUPLE_CHIP_MCP9600;
-  mcp_cfg.bus.i2c.sda_pin = MCP9600_SDA_PIN;
-  mcp_cfg.bus.i2c.scl_pin = MCP9600_SCL_PIN;
-  mcp_cfg.bus.i2c.clock_hz = HAL_I2C_CLOCK_STANDARD_HZ;
-  mcp_cfg.bus.i2c.i2c_bus = 0;
-  mcp_cfg.bus.i2c.i2c_addr = 0x67;
+  /* Bus, pins and address come from device_tree.json. */
+  mcp_cfg.bus.i2c.sda_pin = JH_HW_BUS_I2C_PIN_SDA;
+  mcp_cfg.bus.i2c.scl_pin = JH_HW_BUS_I2C_PIN_SCL;
+  mcp_cfg.bus.i2c.clock_hz = JH_HW_BUS_I2C_FREQUENCY_HZ;
+  mcp_cfg.bus.i2c.i2c_bus = JH_HW_BUS_I2C_INDEX;
+  mcp_cfg.bus.i2c.i2c_addr = JH_HW_NODE_MCP9600_ADDRESS;
 
   mcp9600 = hal_thermocouple_init(&mcp_cfg);
   if (mcp9600) {
@@ -62,9 +44,10 @@ void app_start(void) {
 #if defined(HAL_ENABLE_MAX6675)
   hal_thermocouple_config_t max_cfg = {};
   max_cfg.chip = HAL_THERMOCOUPLE_CHIP_MAX6675;
-  max_cfg.bus.spi.sclk_pin = MAX6675_SCLK_PIN;
-  max_cfg.bus.spi.cs_pin = MAX6675_CS_PIN;
-  max_cfg.bus.spi.miso_pin = MAX6675_MISO_PIN;
+  /* Bit-banged lines from device_tree.json. */
+  max_cfg.bus.spi.sclk_pin = JH_HW_NODE_MAX6675_SCLK_PIN_OUT;
+  max_cfg.bus.spi.cs_pin = JH_HW_NODE_MAX6675_CS_PIN_OUT;
+  max_cfg.bus.spi.miso_pin = JH_HW_NODE_MAX6675_SO_PIN_IN;
 
   max6675 = hal_thermocouple_init(&max_cfg);
   if (!max6675) {

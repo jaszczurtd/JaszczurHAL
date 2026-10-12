@@ -27,14 +27,14 @@ Reguła dla `echo` dopuszcza źródła `LORA_LINK` i `BLE_STREAM`. Ten projekt
 uruchamia tylko komunikację LoRa. Wariant poleceń z przykładu 26 używa tej
 samej reguły dla uwierzytelnionego BLE Stream.
 
-Jeżeli profil płytki udostępnia diodę stanu GPIO, świeci ona podczas nadawania
+Jeżeli diodą statusu montażu jest dioda GPIO, świeci ona podczas nadawania
 i zapala się na 120 ms po odebraniu pakietu. Brak takiej diody nie zmienia
 pracy radia.
 
-Przykład buduje się dla zwykłych płytek `pico` i `nucleo-g474re`
-i zakłada zewnętrzny moduł Waveshare Core1262-HF podłączony jak w tabeli
-poniżej. Dla zintegrowanej płytki LF wybierz `rp2040-lora-lf`; jej profil
-opisuje już radio. Jej częstotliwość 434,0 MHz jest ustawieniem testowym,
+`device_tree.json` ma trzy montaże. `pico-core1262-hf`
+i `nucleo-core1262-hf` używają zewnętrznego modułu Waveshare Core1262-HF
+podłączonego jak w tabeli poniżej. `rp2040-lora-lf` to zintegrowana płytka LF,
+której opis zawiera już radio. Jej częstotliwość 434,0 MHz jest ustawieniem testowym,
 a nie deklaracją zgodności z przepisami w dowolnym regionie.
 Nie łącz w jednej parze radiowej urządzeń LF i HF.
 
@@ -49,8 +49,9 @@ Uruchom z głównego katalogu repozytorium:
   --target stm32g474 --example 27_lora_point_to_point
 ```
 
-Dispatcher kompiluje inicjator i wszystkie warianty zadeklarowane
-w `hal_project_config.h`: `PROBE`, `RESPONDER`, parę do testów sprzętowych
+Dispatcher kompiluje każdy montaż danego targetu, także oba montaże RP2040,
+z inicjatorem i wszystkimi wariantami zadeklarowanymi w
+`hal_project_config.h`: `PROBE`, `RESPONDER`, parę do testów sprzętowych
 `SF7` i `RESPONDER_SF7` oraz `LINK` i `LINK_RESPONDER`.
 
 Aby zbudować tylko parę wymieniającą polecenia, wybierz warianty w VS Code
@@ -59,14 +60,14 @@ lub uruchom:
 ```bash
 vscode/entry/jh-vscode build \
   --project examples/27_lora_point_to_point \
-  --target rp2040 --variant LINK
+  --assembly pico-core1262-hf --variant LINK
 vscode/entry/jh-vscode build \
   --project examples/27_lora_point_to_point \
-  --target stm32g474 --variant LINK_RESPONDER
+  --assembly nucleo-core1262-hf --variant LINK_RESPONDER
 ```
 
 Dla dwóch zintegrowanych płytek Waveshare LF wybierz
-`--target rp2040 --board rp2040-lora-lf` oraz warianty `LINK` i
+`--assembly rp2040-lora-lf` oraz warianty `LINK` i
 `LINK_RESPONDER`. Procedurę wgrywania, stały wybór portu szeregowego i kryteria
 `JHCMD1` opisują
 [testy sprzętowe poleceń przesyłanych przez LoRa](../../tests/hardware/lora_sx1262/README.pl.md).
@@ -80,9 +81,10 @@ i klucza. Przed włączeniem AEAD przeczytaj
 
 ## Połączenia zewnętrznego Core1262-HF
 
-Piny są zapisane w `lora_example_radio.h`; zmień je tam, jeśli moduł jest
-podłączony inaczej. Parametry elektryczne samego modułu daje
-`hal_lora_sx126x_core1262_hf_defaults()`.
+Piny są zapisane w `device_tree.json`; zmień je tam, jeśli moduł jest
+podłączony inaczej. Parametry elektryczne samego modułu pochodzą z jego typu
+komponentu HAL `waveshare,core1262-hf`, czyli z tych samych danych, które
+zwraca `hal_lora_sx126x_core1262_hf_defaults()`.
 
 | Sygnał | Rodzina RP | STM32G474 |
 |---|---|---|

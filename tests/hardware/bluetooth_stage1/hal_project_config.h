@@ -1,10 +1,6 @@
 #pragma once
 
-/* Targets this fixture builds for. */
-#define JH_PROJECT_TARGETS(X)                                                  \
-  X(HAL_TARGET_RP2040)                                                         \
-  X(HAL_TARGET_RP2350_ARM)                                                     \
-  X(HAL_TARGET_STM32G474)
+/* Targets and wiring come from the assemblies in device_tree.json. */
 
 /* Variants: id, description and the definitions each one adds to this
  * configuration. */
@@ -18,7 +14,8 @@
 
 #define HAL_ENABLE_WIFI
 
-/* The stage-1 Bluetooth probe, unless the Wi-Fi baseline is built. */
+/* The stage-1 Bluetooth probe, unless the Wi-Fi baseline is built. The value
+ * matches the definition the BTstack build adds, so it is not redefined. */
 #if !defined(JH_BLUETOOTH_STAGE1_WIFI_ONLY)
-#define JH_BLUETOOTH_STAGE1_PROBE
+#define JH_BLUETOOTH_STAGE1_PROBE 1
 #endif

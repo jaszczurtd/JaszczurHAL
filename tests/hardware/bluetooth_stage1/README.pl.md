@@ -29,22 +29,25 @@ nadal jest połączony z `WL_ON`.
 
 Kompilacja podstawowa służy do właściwego testu, a wariant `WIFI_ONLY` jest
 równoważnym punktem odniesienia dla pomiaru pamięci. Oba obrazy należy mierzyć
-na podstawie plików ELF/map, przy tym samym układzie docelowym, tej samej
-płytce, wersji kompilatora i konfiguracji kompilacji.
+na podstawie plików ELF/map, przy tym samym montażu, wersji kompilatora
+i konfiguracji kompilacji.
 
 Obraz `WIFI_ONLY` nie zawiera BTstack, firmware Bluetooth ani pul Bluetooth
 na współdzielonej magistrali.
 
-Zbuduj sondę dla każdej płytki, a następnie powtórz kompilację z
+`device_tree.json` opisuje sprzęt każdego montażu: `nucleo-pim730`
+(domyślny), `picow` (Pico W) i `pico2w` (Pico 2 W). `nucleo-pim730` to zwykła
+NUCLEO-G474RE z zewnętrznym modułem PIM730; tabela w podetapie 1.a powtarza
+jego połączenia.
+
+Zbuduj sondę dla każdego montażu, a następnie powtórz kompilację z
 `--variant WIFI_ONLY`, aby uzyskać punkt odniesienia:
 
 ```sh
 vscode/entry/jh-vscode build \
-  --project tests/hardware/bluetooth_stage1 \
-  --target stm32g474 --board nucleo-g474re-pim730
+  --project tests/hardware/bluetooth_stage1 --assembly nucleo-pim730
 vscode/entry/jh-vscode build \
-  --project tests/hardware/bluetooth_stage1 \
-  --target rp2040 --board picow
+  --project tests/hardware/bluetooth_stage1 --assembly picow
 ```
 
 ## Podetap sprzętowy 1.a - okablowanie i procedura

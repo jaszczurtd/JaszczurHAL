@@ -6,20 +6,29 @@ pasywne skanowanie w starszym trybie, opróżnia kolejkę raportów o ograniczon
 pojemności, analizuje struktury AD i zapisuje dane producenta Teltonika oraz
 sygnatury iBeacon i Eddystone bez inicjowania połączenia BLE.
 
-Skompiluj i wgraj każdą płytkę osobno:
+`device_tree.json` opisuje sprzęt każdego montażu: `picow` (Pico W),
+`pico2w` (Pico 2 W) i `nucleo-pim730` (domyślny). `nucleo-pim730` to zwykła
+NUCLEO-G474RE z zewnętrznym modułem PIM730/RM2; tabela poniżej powtarza
+połączenia modułu.
+
+| Sygnał PIM730/RM2 | NUCLEO-G474RE |
+|---|---|
+| CS | PB12, pin 16 CN10 |
+| DAT | PB15, pin 26 CN10 |
+| WL_ON | PB14, pin 28 CN10 |
+| CLK | PB13, pin 30 CN10 |
+
+Skompiluj i wgraj każdy montaż osobno:
 
 ```bash
 vscode/entry/jh-vscode build \
-  --project tests/hardware/bluetooth_observer \
-  --target rp2040 --board picow
+  --project tests/hardware/bluetooth_observer --assembly picow
 
 vscode/entry/jh-vscode build \
-  --project tests/hardware/bluetooth_observer \
-  --target rp2350-arm --board pico2w
+  --project tests/hardware/bluetooth_observer --assembly pico2w
 
 vscode/entry/jh-vscode build \
-  --project tests/hardware/bluetooth_observer \
-  --target stm32g474 --board nucleo-g474re-pim730
+  --project tests/hardware/bluetooth_observer --assembly nucleo-pim730
 ```
 
 Udane wyjście używa prefiksu `JHBL4A`. Zarejestruj co najmniej jeden raport

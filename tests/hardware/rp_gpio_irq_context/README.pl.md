@@ -9,6 +9,12 @@ Test nie wymaga żadnego zworkowania i nie steruje pinem: zbocza powstają z
 przełączania wewnętrznego pull-a między dołem a górą, więc jest bezpieczny na
 płytce o nieznanym otoczeniu. Używa GP2, GP3, GP4 i GP5.
 
+Plik `device_tree.json` opisuje sprzęt każdego montażu: `pico` dla Pico,
+`pico2-arm` i `pico2-riscv` dla Pico 2, `picow` dla Pico W oraz `pico2w` dla
+Pico 2 W. Piny sondy to jego węzły wejściowe `ctxA` (GP2), `ctxB` (GP3),
+`plain` (GP4) i `swap` (GP5), które między impulsami trzyma wewnętrzny
+pull-up. Firmware i weryfikator biorą piny z tego pliku.
+
 Co firmware sprawdza na krzemie:
 
 - dwa piny na wspólnym handlerze trafiają we własny kontekst i raportują własny
@@ -23,21 +29,21 @@ Skompiluj i wykonaj pierwsze wgranie BOOTSEL:
 ```sh
 vscode/entry/jh-vscode build \
   --project tests/hardware/rp_gpio_irq_context \
-  --target rp2040 --board pico
+  --assembly pico
 vscode/entry/jh-vscode upload-uf2 \
   --project tests/hardware/rp_gpio_irq_context \
-  --target rp2040 --board pico
+  --assembly pico
 ```
 
-Dla Pico W i Pico 2 W użyj `--board picow` i `--board pico2w`. Dla Pico 2 użyj
-targetu `rp2350-arm` albo `rp2350-riscv` z płytką `pico2`.
+Dla innej płytki podaj w `--assembly` klucz jej montażu, także weryfikatorowi.
 
-Uruchom weryfikator:
+Uruchom weryfikator z montażem, dla którego zbudowano firmware; piny zgłoszone
+dla `ctxA` i `ctxB` porównuje właśnie z tym montażem:
 
 ```sh
 python3 -m pip install pyserial
 python3 tests/hardware/rp_gpio_irq_context/verify_gpio_irq_context.py \
-  --port /dev/serial/by-id/<urządzenie>
+  --port /dev/serial/by-id/<urządzenie> --assembly pico
 ```
 
 Firmware odpowiada na pojedynczą komendę `T` jedną linią wyniku. `checks` to

@@ -19,15 +19,20 @@ The probe owns the EEPROM/KV reservation at the end of the board flash and the
 sector right below it. Do not run it on firmware that stores unrelated data
 there. The board LED toggles once per KV write.
 
-Build and upload the bare-metal variant through the regular workflow:
+`device_tree.json` describes the hardware of every assembly: `pico` for Pico,
+`pico2-arm` and `pico2-riscv` for Pico 2. Its nodes `adc0`-`adc2` are the
+scanned inputs GPIO 26-28; the probe needs nothing connected to them.
+
+Build and upload the bare-metal variant through the regular workflow. For
+Pico 2 replace `pico` with `pico2-arm` or `pico2-riscv`:
 
 ```sh
 vscode/entry/jh-vscode build \
   --project tests/hardware/rp_flash_transaction \
-  --target rp2040 --board pico
+  --assembly pico
 vscode/entry/jh-vscode upload \
   --project tests/hardware/rp_flash_transaction \
-  --target rp2040 --board pico \
+  --assembly pico \
   --port /dev/serial/by-id/<device>
 ```
 
@@ -38,7 +43,7 @@ its own directory, so the bare-metal image stays as it is:
 ```sh
 vscode/entry/jh-vscode upload \
   --project tests/hardware/rp_flash_transaction \
-  --target rp2040 --board pico --variant FREERTOS \
+  --assembly pico --variant FREERTOS \
   --port /dev/serial/by-id/<device>
 ```
 

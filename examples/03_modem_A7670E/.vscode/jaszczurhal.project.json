@@ -3,8 +3,7 @@
     "project": "JaszczurHAL examples",
     "module": "03_modem_A7670E",
     "toolchain": "cmake",
-    "target": "rp2040",
-    "board": "pico",
+    "assembly": "pico",
     "buildDir": "${jhRoot}/.build/examples/03_modem_A7670E",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

@@ -13,27 +13,28 @@ and that stop hands the converter back to one-shot reads and a second start
 works. The WS2812 on GPIO21 is blue during the checks, green on PASS and red
 on FAIL. Nothing needs to be wired; only the ring's geometry is judged.
 
+`device_tree.json` describes the one assembly, `esp32s3-zero`: the scan
+inputs `scanA` (GPIO3) and `scanB` (GPIO4), the input `unscanned` (GPIO5)
+outside the scan, and the board's WS2812 (GPIO21) as the status LED.
+
 Build, materialize the artifacts and flash through the native USB Serial/JTAG
 port, as for the Phase 2 probe:
 
 ```bash
 python3 scripts/build_esp_idf.py build \
   --project tests/hardware/esp32s3_adc_scan \
-  --target esp32s3 \
-  --board waveshare-esp32-s3-zero \
+  --assembly esp32s3-zero \
   --name jh_esp32_adc_scan_hardware \
   --clean
 
 python3 scripts/build_esp_idf.py artifacts \
   --project tests/hardware/esp32s3_adc_scan \
-  --target esp32s3 \
-  --board waveshare-esp32-s3-zero \
+  --assembly esp32s3-zero \
   --name jh_esp32_adc_scan_hardware
 
 python3 scripts/build_esp_idf.py flash \
   --project tests/hardware/esp32s3_adc_scan \
-  --target esp32s3 \
-  --board waveshare-esp32-s3-zero \
+  --assembly esp32s3-zero \
   --name jh_esp32_adc_scan_hardware \
   --port /dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_SERIAL-if00
 

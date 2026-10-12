@@ -1,5 +1,7 @@
 #pragma once
 
+/* Targets and wiring come from the assemblies in device_tree.json. */
+
 /* Variants: id, description and the definitions each one adds to this
  * configuration. */
 #define JH_PROJECT_VARIANTS(X)                                                 \

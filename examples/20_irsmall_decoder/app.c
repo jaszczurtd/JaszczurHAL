@@ -5,7 +5,6 @@
  */
 
 #include <hal/core/hal_app.h>
-#include <hal/core/hal_target.h>
 #include <hal/input/hal_irsmall_decoder.h>
 #include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
@@ -14,13 +13,8 @@
 
 static hal_irsmall_decoder_t ir;
 
-#if HAL_TARGET_IS_RP
-static const uint8_t IR_INPUT_PIN = 16u; /* GP16 */
-#elif HAL_TARGET_IS_STM32G474
-static const uint8_t IR_INPUT_PIN = 16u; /* PB0 */
-#else
-static const uint8_t IR_INPUT_PIN = 16u;
-#endif
+/* The receiver pin comes from device_tree.json. */
+static const uint8_t IR_INPUT_PIN = JH_HW_NODE_IR_RECEIVER_PIN_IN;
 
 void app_start(void) {
   hal_debug_init_default();

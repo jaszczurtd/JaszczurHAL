@@ -28,9 +28,19 @@ własnych obszarów pamięci na dane aplikacji.
 
 ## Karta SD
 
-Karta korzysta z SPI0. Połączenia MISO/MOSI/SCK/CS to GPIO 16/19/18/17
-na płytkach RP oraz PA6/PA7/PA5/PB6 na NUCLEO-G474RE. Na NUCLEO są to
-odpowiednio piny 13/15/11/17 złącza CN10, czyli D12/D11/D13/D10.
+Karta korzysta z magistrali SPI 0. Połączenia każdego montażu opisuje
+`device_tree.json`, a program bierze magistralę, jej piny i linię CS karty
+z wygenerowanego nagłówka. Poniższa tabela powtarza te połączenia.
+
+| Sygnał karty SD | Pico / Pico 2 | NUCLEO-G474RE |
+|---|---|---|
+| MISO | GPIO16 | PA6, pin 13 CN10 / D12 |
+| MOSI | GPIO19 | PA7, pin 15 CN10 / D11 |
+| SCK | GPIO18 | PB3, pin 31 CN10 / D3 |
+| CS | GPIO17 | PB6, pin 17 CN10 / D10 |
+
+Na NUCLEO-G474RE zegar SPI idzie przez PB3 zamiast D13 (PA5), bo PA5 steruje
+diodą LD2.
 
 Po błędzie operacji SDLogger aplikacja zamyka bieżący dziennik przez publiczne
 API i co pięć sekund ponawia inicjalizację. Nieudany zapis raportu startowego

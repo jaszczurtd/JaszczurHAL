@@ -10,24 +10,11 @@
 #include <hal/analog/hal_adc.h>
 #include <hal/analog/hal_external_adc.h>
 #include <hal/core/hal_app.h>
-#include <hal/core/hal_target.h>
 #include <hal/i2c/hal_i2c.h>
 #include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
 
-#if HAL_TARGET_IS_RP
-#define INTERNAL_ADC_PIN_0 26u
-#define INTERNAL_ADC_PIN_1 27u
-#define ADS_I2C_SDA_PIN 4u
-#define ADS_I2C_SCL_PIN 5u
-#else
-#define INTERNAL_ADC_PIN_0 0u
-#define INTERNAL_ADC_PIN_1 1u
-#define ADS_I2C_SDA_PIN 25u
-#define ADS_I2C_SCL_PIN 24u
-#endif
-
-#define ADS1115_ADDRESS 0x48u
+/* Inputs, bus and ADS1115 address come from device_tree.json. */
 #define ADS1115_MV_PER_LSB 0.1875f
 #define ADC_REPORT_PERIOD_MS 1000u
 #define ADS_RETRY_PERIOD_MS 5000u
@@ -49,21 +36,23 @@ static int32_t ads_scaled_to_mv(float volts) {
 static void init_ads1115(uint32_t now) {
   s_last_ads_retry_ms = now;
   const hal_status_t status =
-      hal_ext_adc_init(ADS1115_ADDRESS, ADS1115_MV_PER_LSB);
+      hal_ext_adc_init_bus(JH_HW_NODE_ADS1115_BUS_INDEX,
+                           JH_HW_NODE_ADS1115_ADDRESS, ADS1115_MV_PER_LSB);
   s_ads1115_ready = status == HAL_OK;
   if (s_ads1115_ready) {
-    deb("ADS1115 ready at address 0x48");
+    deb("ADS1115 ready at address 0x%02X",
+        (unsigned)JH_HW_NODE_ADS1115_ADDRESS);
   } else {
     derr("ADS1115 unavailable: %s", hal_status_to_string(status));
   }
 }
 
 static void report_internal_adc(void) {
-  const int raw0 = hal_adc_read(INTERNAL_ADC_PIN_0);
-  const int raw1 = hal_adc_read(INTERNAL_ADC_PIN_1);
+  const int raw0 = hal_adc_read(JH_HW_NODE_ADC0_PIN_IN);
+  const int raw1 = hal_adc_read(JH_HW_NODE_ADC1_PIN_IN);
   deb("Internal ADC: pin %u raw=%d (~%ld mV), pin %u raw=%d (~%ld mV)",
-      (unsigned)INTERNAL_ADC_PIN_0, raw0, (long)(raw0 * 3300L / 4095L),
-      (unsigned)INTERNAL_ADC_PIN_1, raw1, (long)(raw1 * 3300L / 4095L));
+      (unsigned)JH_HW_NODE_ADC0_PIN_IN, raw0, (long)(raw0 * 3300L / 4095L),
+      (unsigned)JH_HW_NODE_ADC1_PIN_IN, raw1, (long)(raw1 * 3300L / 4095L));
 }
 
 static void report_ads1115(uint32_t now) {
@@ -108,7 +97,8 @@ void app_start(void) {
 
   hal_adc_set_resolution(12u);
   const hal_status_t i2c_status =
-      hal_i2c_init(ADS_I2C_SDA_PIN, ADS_I2C_SCL_PIN, HAL_I2C_CLOCK_STANDARD_HZ);
+      hal_i2c_init_bus(JH_HW_BUS_I2C_INDEX, JH_HW_BUS_I2C_PIN_SDA,
+                       JH_HW_BUS_I2C_PIN_SCL, JH_HW_BUS_I2C_FREQUENCY_HZ);
   if (i2c_status != HAL_OK) {
     derr("ADS1115 I2C init failed: %s", hal_status_to_string(i2c_status));
   }

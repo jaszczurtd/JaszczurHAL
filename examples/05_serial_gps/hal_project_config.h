@@ -1,12 +1,6 @@
 #pragma once
 
-/* Targets this example builds for. */
-#define JH_PROJECT_TARGETS(X)                                                  \
-  X(HAL_TARGET_RP2040)                                                         \
-  X(HAL_TARGET_RP2350_ARM)                                                     \
-  X(HAL_TARGET_RP2350_RISCV)                                                   \
-  X(HAL_TARGET_STM32G474)                                                      \
-  X(HAL_TARGET_ESP32_S3)
+/* Targets and wiring come from the assemblies in device_tree.json. */
 
 /* Variants: id, description and the definitions each one adds to this
  * configuration. */
@@ -28,6 +22,8 @@
 #define HAL_GPS_TRANSPORT_SWSERIAL
 #else
 #define HAL_GPS_TRANSPORT_UART
+/* The GPS opens the UART port of the gpsUart bus in device_tree.json. */
+#define HAL_GPS_UART_PORT ((hal_uart_port_t)JH_HW_BUS_GPS_UART_UART_PORT)
 #endif
 
 #ifndef HAL_DEBUG_DEFAULT_BAUD

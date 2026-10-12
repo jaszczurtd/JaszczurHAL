@@ -3,8 +3,7 @@
     "project": "JaszczurHAL examples",
     "module": "27_lora_point_to_point",
     "toolchain": "cmake",
-    "target": "rp2040",
-    "board": "pico",
+    "assembly": "pico-core1262-hf",
     "buildDir": "${jhRoot}/.build/examples/27_lora_point_to_point",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

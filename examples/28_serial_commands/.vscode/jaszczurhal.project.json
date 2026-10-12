@@ -3,8 +3,7 @@
     "project": "JaszczurHAL examples",
     "module": "28_serial_commands",
     "toolchain": "cmake",
-    "target": "rp2040",
-    "board": "pico",
+    "assembly": "pico",
     "buildDir": "${jhRoot}/.build/examples/28_serial_commands",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

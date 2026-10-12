@@ -3,8 +3,7 @@
     "project": "JaszczurHAL examples",
     "module": "16_rtc_backends",
     "toolchain": "cmake",
-    "target": "rp2040",
-    "board": "pico",
+    "assembly": "pico",
     "buildDir": "${jhRoot}/.build/examples/16_rtc_backends",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

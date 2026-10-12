@@ -16,7 +16,9 @@ import time
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
-from vscode.runtime.serial_io import (
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import fixture_hardware  # noqa: E402
+from vscode.runtime.serial_io import (  # noqa: E402
     open_serial_port,
     read_line,
     serial_error_types,
@@ -29,11 +31,8 @@ HAL_ENOENT = -6
 BOOT_STABLE = 0
 BOOT_TRIAL = 2
 LOCAL_SECRETS = Path(__file__).with_name("ota_test_secrets.h")
-BOARD_PROFILES = {
-    ("rp2040", "picow"): "picow",
-    ("rp2040", "pico-rm2"): "pico-rm2",
-    ("rp2350-arm", "pico2w"): "pico2w",
-}
+FIXTURE_DIR = Path(__file__).resolve().parent
+BUILD_DIR = ROOT / ".build" / "hardware" / "rp_ota"
 
 STATUS_PATTERN = re.compile(rb"^JHOTA-HW1 (.+)\n$")
 CONFIRM_PATTERN = re.compile(rb"^JHOTA-CONFIRM status=(-?\d+)\n$")
@@ -219,15 +218,19 @@ def ota_password(env_name: str) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", required=True)
-    parser.add_argument("--target", choices=("rp2040", "rp2350-arm"), required=True)
     parser.add_argument(
-        "--board", choices=("picow", "pico2w", "pico-rm2"), required=True
+        "--assembly",
+        choices=sorted(fixture_hardware.assemblies(FIXTURE_DIR)),
+        required=True,
+        help="assembly of the uploaded image (device_tree.json)",
     )
     parser.add_argument(
         "--runtime", choices=("baremetal", "freertos"), required=True
     )
     parser.add_argument(
-        "--artifact-dir", type=Path, default=ROOT / ".build" / "hardware" / "rp_ota"
+        "--artifact-dir",
+        type=Path,
+        help="build output of the image (default: that of --assembly and --runtime)",
     )
     parser.add_argument("--password-env", default="JH_OTA_TEST_PASSWORD")
     parser.add_argument("--ota-port", type=int, default=8266)
@@ -243,12 +246,12 @@ def main() -> int:
         "--expected-gspi-program", type=int, choices=(0, 1), default=0
     )
     args = parser.parse_args()
-    try:
-        expected_board_profile = BOARD_PROFILES[(args.target, args.board)]
-    except KeyError:
-        parser.error(
-            f"board {args.board!r} is incompatible with target {args.target!r}"
-        )
+    args.target = fixture_hardware.assemblies(FIXTURE_DIR)[args.assembly]["target"]
+    if args.artifact_dir is None:
+        # Each assembly and variant builds into its own directory.
+        args.artifact_dir = BUILD_DIR / args.target / args.assembly
+        if args.runtime == "freertos":
+            args.artifact_dir = args.artifact_dir / "variants" / "FREERTOS"
 
     expected_hostname = (
         "jh-ota-rp2040" if args.target == "rp2040" else "jh-ota-rp2350-arm"
@@ -262,7 +265,7 @@ def main() -> int:
     )
     if (
         ready["target"] != args.target
-        or ready["board"] != expected_board_profile
+        or ready["board"] != args.assembly
         or ready["runtime"] != args.runtime
     ):
         raise RuntimeError(f"unexpected fixture identity: {ready}")
@@ -281,8 +284,7 @@ def main() -> int:
                 {
                     "port": args.port,
                     "target": args.target,
-                    "board": args.board,
-                    "boardProfile": expected_board_profile,
+                    "assembly": args.assembly,
                     "runtime": args.runtime,
                     "ipv4": ready["ipv4"],
                     "gspiClock": gspi_clock(ready),
@@ -471,8 +473,7 @@ def main() -> int:
             {
                 "port": args.port,
                 "target": args.target,
-                "board": args.board,
-                "boardProfile": expected_board_profile,
+                "assembly": args.assembly,
                 "runtime": args.runtime,
                 "gspiClock": gspi_clock(ready),
                 "device": recovered_device,

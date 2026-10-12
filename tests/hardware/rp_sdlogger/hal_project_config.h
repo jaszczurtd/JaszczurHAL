@@ -1,10 +1,6 @@
 #pragma once
 
-/* Targets this fixture builds for. */
-#define JH_PROJECT_TARGETS(X)                                                  \
-  X(HAL_TARGET_RP2040)                                                         \
-  X(HAL_TARGET_RP2350_ARM)                                                     \
-  X(HAL_TARGET_RP2350_RISCV)
+/* Targets and wiring come from the assemblies in device_tree.json. */
 
 /* Variants: id, description and the definitions each one adds to this
  * configuration. */
@@ -14,6 +10,9 @@
 #ifndef HAL_ENABLE_SDLOGGER
 #define HAL_ENABLE_SDLOGGER
 #endif
+
+/* SDLogger opens the card on the bus of the sd node in device_tree.json. */
+#define HAL_SDLOGGER_SPI_BUS JH_HW_NODE_SD_BUS_INDEX
 
 #ifndef HAL_SDLOGGER_WRITE_INTERVAL_MS
 #define HAL_SDLOGGER_WRITE_INTERVAL_MS 60000u

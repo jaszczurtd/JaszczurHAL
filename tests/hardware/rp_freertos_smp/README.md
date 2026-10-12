@@ -10,10 +10,10 @@ Build and upload through the regular native VS Code workflow:
 ```sh
 vscode/entry/jh-vscode build \
   --project tests/hardware/rp_freertos_smp \
-  --target rp2040 --board pico
+  --assembly pico
 vscode/entry/jh-vscode upload \
   --project tests/hardware/rp_freertos_smp \
-  --target rp2040 --board pico \
+  --assembly pico \
   --port /dev/serial/by-id/<device>
 ```
 
@@ -24,6 +24,7 @@ python3 tests/hardware/rp_freertos_smp/verify_freertos_smp.py \
   --port /dev/serial/by-id/<device>
 ```
 
-Use `rp2350-arm` or `rp2350-riscv` with board `pico2` for Pico 2. When the
-device has no running CDC firmware yet, use `upload-uf2` while it is in
-BOOTSEL.
+`device_tree.json` describes the hardware of every assembly: `pico` for Pico,
+`pico2-arm` and `pico2-riscv` for Pico 2. The test needs only the board. For
+Pico 2 use `--assembly pico2-arm` or `--assembly pico2-riscv`. When the device
+has no running CDC firmware yet, use `upload-uf2` while it is in BOOTSEL.

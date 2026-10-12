@@ -27,9 +27,19 @@ memory regions for application data.
 
 ## SD card
 
-The card uses SPI0. MISO/MOSI/SCK/CS connect to GPIO 16/19/18/17 on RP boards
-and PA6/PA7/PA5/PB6 on NUCLEO-G474RE. The NUCLEO connections are CN10 pins
-13/15/11/17, equivalent to D12/D11/D13/D10.
+The card uses SPI bus 0. `device_tree.json` describes the wiring of every
+assembly, and the program takes the bus, its pins and the card's chip select
+from the generated header. The table below repeats that wiring.
+
+| SD card signal | Pico / Pico 2 | NUCLEO-G474RE |
+|---|---|---|
+| MISO | GPIO16 | PA6, CN10 pin 13 / D12 |
+| MOSI | GPIO19 | PA7, CN10 pin 15 / D11 |
+| SCK | GPIO18 | PB3, CN10 pin 31 / D3 |
+| CS | GPIO17 | PB6, CN10 pin 17 / D10 |
+
+On NUCLEO-G474RE the SPI clock uses PB3 rather than D13 (PA5), because PA5
+drives the LD2 LED.
 
 After an SDLogger operation fails, the application closes the current log
 through the public API and retries initialization every five seconds.

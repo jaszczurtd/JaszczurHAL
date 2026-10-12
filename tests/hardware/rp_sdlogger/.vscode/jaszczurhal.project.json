@@ -3,8 +3,7 @@
     "project": "JaszczurHAL hardware tests",
     "module": "rp_sdlogger",
     "toolchain": "cmake",
-    "target": "rp2040",
-    "board": "pico",
+    "assembly": "pico",
     "buildDir": "${jhRoot}/.build/hardware/rp_sdlogger",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

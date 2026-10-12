@@ -7,13 +7,14 @@ the measured CYW43 gSPI clock. Bluetooth addresses are masked, unknown command
 payloads and ACL bodies are hidden, and Extended Inquiry Result is retained
 only through its RSSI byte; its EIR data body is redacted.
 
+`device_tree.json` describes the hardware of both assemblies: `picow`
+(Pico W, the default) and `pico2w` (Pico 2 W). Neither needs external wiring.
+
 ```sh
 vscode/entry/jh-vscode build \
-  --project tests/hardware/bluetooth_classic_hci_trace \
-  --target rp2040 --board picow
+  --project tests/hardware/bluetooth_classic_hci_trace --assembly picow
 vscode/entry/jh-vscode build \
-  --project tests/hardware/bluetooth_classic_hci_trace \
-  --target rp2350-arm --board pico2w
+  --project tests/hardware/bluetooth_classic_hci_trace --assembly pico2w
 ```
 
 Use `SCAN` for one ten-second scan or `SCAN30` for three consecutive inquiry

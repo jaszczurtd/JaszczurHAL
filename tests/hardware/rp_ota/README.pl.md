@@ -26,24 +26,26 @@ Weryfikator odczytuje hasło OTA z tego ignorowanego nagłówka. Zmienna
 export JH_OTA_TEST_PASSWORD='the-value-from-ota_test_secrets.h'
 ```
 
-Skompiluj, wgraj i zweryfikuj wariant bare-metal RP2040:
+`device_tree.json` opisuje sprzęt każdego montażu: `picow` (Pico W,
+domyślny), `pico2w` (Pico 2 W) i `pico-rm2`, czyli zwykłe Pico z zewnętrznym
+modułem PIM730/RM2 podłączonym według tabeli poniżej.
+
+Skompiluj, wgraj i zweryfikuj wariant bare-metal dla Pico W:
 
 ```sh
 vscode/entry/jh-vscode build \
-  --project tests/hardware/rp_ota \
-  --target rp2040 --board picow
+  --project tests/hardware/rp_ota --assembly picow
 vscode/entry/jh-vscode upload \
-  --project tests/hardware/rp_ota \
-  --target rp2040 --board picow \
+  --project tests/hardware/rp_ota --assembly picow \
   --port /dev/serial/by-id/<device>
 python3 tests/hardware/rp_ota/verify_ota.py \
   --port /dev/serial/by-id/<device> \
-  --target rp2040 --board picow --runtime baremetal
+  --assembly picow --runtime baremetal
 ```
 
-Użyj `--target rp2350-arm --board pico2w` dla Pico 2 W. Dodaj
-`--variant FREERTOS` zarówno do kompilacji, jak i wgrywania, a następnie
-przekaż `--runtime freertos` do weryfikatora dla wariantu FreeRTOS. Stanowisko
+Dla Pico 2 W użyj `--assembly pico2w`. Dodaj `--variant FREERTOS` zarówno do
+kompilacji, jak i wgrywania, a następnie przekaż `--runtime freertos` do
+weryfikatora dla wariantu FreeRTOS. Stanowisko
 przydziela zadaniu aplikacji stos 8 KiB w konfiguracjach FreeRTOS, ponieważ
 inicjalizacja CYW43 i obsługa OTA przekraczają ogólny domyślny rozmiar 2 KiB.
 
@@ -60,52 +62,40 @@ Dla Pico+PIM730 podłącz moduł do zwykłego Pico w następujący sposób:
 
 `DAT` to połączony dwukierunkowy sygnał danych/wybudzania hosta. Pozostaw
 `BL_ON`, `GPIO0..2` oraz `N/C` niepodłączone. Skompiluj i zweryfikuj ten
-profil jawnie:
+montaż jawnie:
 
 ```sh
 vscode/entry/jh-vscode build \
-  --project tests/hardware/rp_ota \
-  --target rp2040 --board pico-rm2
+  --project tests/hardware/rp_ota --assembly pico-rm2
 vscode/entry/jh-vscode upload \
-  --project tests/hardware/rp_ota \
-  --target rp2040 --board pico-rm2 \
+  --project tests/hardware/rp_ota --assembly pico-rm2 \
   --port /dev/serial/by-id/<device>
 python3 tests/hardware/rp_ota/verify_ota.py \
   --port /dev/serial/by-id/<device> \
-  --target rp2040 --board pico-rm2 --runtime baremetal \
-  --artifact-dir .build/hardware/rp_ota/cmake/rp2040/pico-rm2
+  --assembly pico-rm2 --runtime baremetal
 ```
 
-Dodaj `--status-only`, aby zweryfikować tożsamość płytki, gotowość sieci
+Dodaj `--status-only`, aby zweryfikować tożsamość stanowiska, gotowość sieci
 oraz automatyczną telemetrię zegara gSPI bez generowania ani przesyłania
 obrazów OTA. Ten tryb diagnostyczny nie wymaga hasła OTA ani artefaktów
 kompilacji.
 
-Użyj `--variant FREERTOS`, `--runtime freertos` oraz katalogu artefaktów
-`.build/hardware/rp_ota/cmake/variants/freertos/rp2040/pico-rm2` dla
-przebiegu FreeRTOS.
+Dla przebiegu FreeRTOS użyj `--variant FREERTOS` i `--runtime freertos`.
 
-Gdy istnieje jednocześnie kilka kompilacji dla różnych kombinacji target/runtime, wskaż
-weryfikatorowi pasujące dane wyjściowe CMake zamiast ostatnio opublikowanego
-katalogu artefaktów:
-
-```sh
-python3 tests/hardware/rp_ota/verify_ota.py \
-  --port /dev/serial/by-id/<device> \
-  --target rp2350-arm --board pico2w --runtime freertos \
-  --artifact-dir \
-    .build/hardware/rp_ota/cmake/variants/freertos/rp2350-arm/pico2w
-```
+Każdy montaż i wariant kompiluje się do własnego katalogu,
+`.build/hardware/rp_ota/<target>/<assembly>`, a FreeRTOS do
+`variants/FREERTOS` pod nim. Weryfikator czyta stamtąd artefakty wybranego
+montażu i runtime; `--artifact-dir` wskazuje mu inne wyjście kompilacji.
 
 Pico W i Pico 2 W mogą pozostać podłączone razem. Ich nazwy hostów OTA to
 `jh-ota-rp2040` i `jh-ota-rp2350-arm`, więc odkrywanie nigdy nie zgaduje
 między nimi. Pico W i Pico+PIM730 współdzielą nazwę hosta RP2040; gdy oba są
 zasilone, przekaż adres IP wybranego urządzenia do `--broadcast`. Odpowiedź
-statusu CDC zawiera i weryfikator sprawdza profil płytki, aktualny adres
+statusu CDC zawiera i weryfikator sprawdza nazwę montażu, aktualny adres
 IPv4, target, runtime i stan rozruchu OTA, plus aktywne `clk_sys`, żądaną i
 efektywną szybkość gSPI, dzielnik 16,8, wybrany program timingu PIO, licznik
 rozruchów w KV oraz stan montowania/formatowania LittleFS.
-Weryfikator tworzy podpisane kontenery A/B poniżej `.build/hardware/rp_ota`
+Weryfikator tworzy podpisane kontenery A/B w katalogu artefaktów
 i pozostawia urządzenie w stabilnym obrazie A po udowodnieniu wycofania z
 obrazu B.
 

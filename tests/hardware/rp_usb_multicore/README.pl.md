@@ -12,18 +12,21 @@ Skompiluj i wgraj wariant bare-metal RP2040:
 ```sh
 vscode/entry/jh-vscode build \
   --project tests/hardware/rp_usb_multicore \
-  --target rp2040 --board pico
+  --assembly pico
 vscode/entry/jh-vscode upload \
   --project tests/hardware/rp_usb_multicore \
-  --target rp2040 --board pico \
+  --assembly pico \
   --port /dev/serial/by-id/<device>
 python3 tests/hardware/rp_usb_multicore/verify_usb_multicore.py \
   --port /dev/serial/by-id/<device> \
   --target rp2040 --board pico --runtime baremetal
 ```
 
-Dla Pico 2 wybierz `rp2350-arm` lub `rp2350-riscv`, użyj płytki kompilacji
-`pico2` i przekaż `--board pico2` do weryfikatora. Dodaj `--variant FREERTOS`
+Plik `device_tree.json` opisuje sprzęt każdego montażu: `pico` dla Pico oraz
+`pico2-arm` i `pico2-riscv` dla Pico 2. Test potrzebuje tylko samej płytki.
+Dla Pico 2 zbuduj firmware z `--assembly pico2-arm` albo
+`--assembly pico2-riscv`, a weryfikatorowi przekaż `--target rp2350-arm` albo
+`--target rp2350-riscv` razem z `--board pico2`. Dodaj `--variant FREERTOS`
 do komend kompilacji i wgrywania oraz użyj `--runtime freertos` dla przebiegu
 FreeRTOS SMP.
 

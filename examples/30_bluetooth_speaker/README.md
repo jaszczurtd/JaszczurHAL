@@ -14,6 +14,10 @@ boards.
 
 ## Wiring
 
+`device_tree.json` describes the wiring of both assemblies, `picow` (Pico W,
+the default) and `pico2w` (Pico 2 W): its `speakerPwm` node puts the PWM
+audio output on GP6, and the drawing below repeats that connection.
+
 **Do not connect a passive speaker directly to the Pico.** GP6 provides a
 signal for an amplifier; it cannot power a loudspeaker. Each PCM sample
 maps to one of 256 PWM duty-cycle levels. The PWM carrier is 44.1 or 48 kHz,
@@ -46,9 +50,9 @@ Run from the repository root:
   --example 30_bluetooth_speaker
 
 vscode/entry/jh-vscode build --project examples/30_bluetooth_speaker \
-  --target rp2040 --board picow --variant AVRCP
+  --assembly picow --variant AVRCP
 vscode/entry/jh-vscode build --project examples/30_bluetooth_speaker \
-  --target rp2350-arm --board pico2w --variant BLE_A2DP
+  --assembly pico2w --variant BLE_A2DP
 ```
 
 ## Pair and play audio

@@ -5,11 +5,14 @@ monitor plumbing for the Waveshare ESP32-S3-Zero SKU 25081. It intentionally
 does not exercise the GPIO, serial, bus, networking, or storage HAL APIs
 assigned to later phases.
 
-The firmware reports the exact generated target and board identity, then checks
-the detected chip model, core count, physical flash size, PSRAM initialization,
-and physical PSRAM size against the board registry. `verify_phase1.py` obtains
-its expectations from the same target and board descriptors and waits for the
-repeated report on the native USB Serial/JTAG port.
+`device_tree.json` describes the one assembly, `esp32s3-zero`: the board with
+no external hardware. The firmware reports the exact generated target and board
+identity, then checks the detected chip model, core count, physical flash size,
+PSRAM initialization, and physical PSRAM size against the board registry.
+`verify_phase1.py` takes the target and board of the assembly from
+`device_tree.json`, obtains its expectations from the same target and board
+descriptors and waits for the repeated report on the native USB Serial/JTAG
+port.
 
 Use the stable `/dev/serial/by-id/` path when available. Build and validate the
 artifacts through the production ESP-IDF runner:
@@ -17,11 +20,11 @@ artifacts through the production ESP-IDF runner:
 ```bash
 python3 scripts/build_esp_idf.py build \
   --project tests/hardware/esp32s3_phase1 \
-  --target esp32s3 --board waveshare-esp32-s3-zero \
+  --assembly esp32s3-zero \
   --output .build/hardware/esp32s3_phase1 --clean
 python3 scripts/build_esp_idf.py artifacts \
   --project tests/hardware/esp32s3_phase1 \
-  --target esp32s3 --board waveshare-esp32-s3-zero \
+  --assembly esp32s3-zero \
   --output .build/hardware/esp32s3_phase1
 ```
 

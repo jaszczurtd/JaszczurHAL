@@ -15,6 +15,7 @@ from unittest import mock
 
 
 from repo_root import repo_root  # noqa: E402
+from source_assertions import unbound_bus_settings  # noqa: E402
 
 ROOT = repo_root(sys.argv, __file__)
 ENTRY = ROOT / "vscode" / "entry" / (
@@ -54,24 +55,42 @@ def builds_of(project: Path) -> dict[str, list[str | None]]:
     return result
 
 
-def resolved(target: str, board: str) -> dict:
+def config_dump(project: Path, *selection: str) -> dict:
     result = subprocess.run(
-        [
-            str(ENTRY),
-            "config-dump",
-            "--project",
-            str(CORE_RUNTIME),
-            "--target",
-            target,
-            "--board",
-            board,
-            "--json",
-        ],
+        [str(ENTRY), "config-dump", "--project", str(project), *selection, "--json"],
         check=True,
         capture_output=True,
         text=True,
     )
     return json.loads(result.stdout)
+
+
+# The examples describe their hardware in device_tree.json. A standalone
+# project from create-vscode-example.py has none, so it keeps the board path
+# (target and board selectors) under test.
+_board_project_dir = tempfile.TemporaryDirectory(prefix="jh-vscode-board-path-")
+BOARD_PROJECT = Path(_board_project_dir.name) / "consumer"
+subprocess.run(
+    [
+        sys.executable,
+        str(ROOT / "vscode" / "tools" / "create-vscode-example.py"),
+        "--output",
+        str(BOARD_PROJECT),
+        "--name",
+        "Board path test",
+    ],
+    check=True,
+    capture_output=True,
+    text=True,
+)
+require(
+    not (BOARD_PROJECT / "device_tree.json").exists(),
+    "the generated standalone project must stay on the board path",
+)
+
+
+def resolved(target: str, board: str) -> dict:
+    return config_dump(BOARD_PROJECT, "--target", target, "--board", board)
 
 
 expected = {
@@ -100,54 +119,80 @@ target_boards = {
     }
     for target in known_targets
 }
+core_runtime_assemblies = {
+    "rp2040": "pico",
+    "rp2350-arm": "pico2-arm",
+    "rp2350-riscv": "pico2-riscv",
+}
 for target, (board, toolchain) in expected.items():
-    config = resolved(target, board)
-    cache = config["cmake"]["cache"]
+    assembly = core_runtime_assemblies[target]
+    board_config = resolved(target, board)
+    assembly_config = config_dump(CORE_RUNTIME, "--assembly", assembly)
     require(
         same_path(
-            config["buildDir"], ROOT / ".build" / "examples" / "01_core_runtime"
+            assembly_config["buildDir"],
+            ROOT / ".build" / "examples" / "01_core_runtime" / target / assembly,
         ),
         f"{target}: buildDir escaped the central artifact tree",
     )
     require(
-        cache["JH_ARTIFACT_DIR"] == config["buildDir"],
+        same_path(board_config["buildDir"], BOARD_PROJECT / ".build"),
+        f"{target}: board-path buildDir moved",
+    )
+    require(
+        assembly_config["cmake"]["cache"]["JH_ARTIFACT_DIR"]
+        == assembly_config["buildDir"],
         f"{target}: firmware artifacts do not follow buildDir",
     )
-    require(config["target"] == target, f"{target}: resolver changed target")
-    require(config["board"] == board, f"{target}: resolver changed board")
-    require(cache["JH_TARGET"] == target, f"{target}: JH_TARGET mismatch")
-    require(cache["JH_BOARD"] == board, f"{target}: JH_BOARD mismatch")
-    require(
-        "PICO_PLATFORM" not in cache and "PICO_BOARD" not in cache,
-        f"{target}: raw Pico SDK selectors leaked from the authoritative registry",
-    )
-    require(
-        same_path(cache["PICO_SDK_PATH"], ROOT / "third_party" / "pico-sdk"),
-        f"{target}: Pico SDK path mismatch",
-    )
-    require(
-        "JH_PICOTOOL_EXECUTABLE" not in cache,
-        f"{target}: target registry leaked a host-specific picotool path",
-    )
-    if toolchain is not None:
+    for config in (board_config, assembly_config):
+        cache = config["cmake"]["cache"]
+        require(config["target"] == target, f"{target}: resolver changed target")
+        require(config["board"] == board, f"{target}: resolver changed board")
+        require(cache["JH_TARGET"] == target, f"{target}: JH_TARGET mismatch")
         require(
-            same_path(cache["PICO_TOOLCHAIN_PATH"], toolchain),
-            f"{target}: RISC-V toolchain path mismatch",
+            "PICO_PLATFORM" not in cache and "PICO_BOARD" not in cache,
+            f"{target}: raw Pico SDK selectors leaked from the authoritative registry",
         )
+        require(
+            same_path(cache["PICO_SDK_PATH"], ROOT / "third_party" / "pico-sdk"),
+            f"{target}: Pico SDK path mismatch",
+        )
+        require(
+            "JH_PICOTOOL_EXECUTABLE" not in cache,
+            f"{target}: target registry leaked a host-specific picotool path",
+        )
+        if toolchain is not None:
+            require(
+                same_path(cache["PICO_TOOLCHAIN_PATH"], toolchain),
+                f"{target}: RISC-V toolchain path mismatch",
+            )
+    require(
+        board_config["cmake"]["cache"]["JH_BOARD"] == board
+        and "JH_ASSEMBLY" not in board_config["cmake"]["cache"],
+        f"{target}: JH_BOARD mismatch",
+    )
+    require(
+        assembly_config["cmake"]["cache"].get("JH_ASSEMBLY") == assembly
+        and "JH_BOARD" not in assembly_config["cmake"]["cache"],
+        f"{target}: a device tree build must select JH_ASSEMBLY, not JH_BOARD",
+    )
 
-stm32 = resolved("stm32g474", "nucleo-g474re")
-stm32_cache = stm32["cmake"]["cache"]
-require(
-    stm32_cache["JH_BOARD"] == "nucleo-g474re",
-    "stm32g474: JH_BOARD mismatch",
-)
-require(
-    same_path(
-        stm32_cache["CMAKE_TOOLCHAIN_FILE"],
-        ROOT / "link_libraries/stm32_lib" / "toolchain_stm32g474.cmake",
-    ),
-    "stm32g474: cross toolchain must be selected before CMake project()",
-)
+for stm32 in (
+    resolved("stm32g474", "nucleo-g474re"),
+    config_dump(CORE_RUNTIME, "--assembly", "nucleo"),
+):
+    stm32_cache = stm32["cmake"]["cache"]
+    require(
+        stm32["board"] == "nucleo-g474re",
+        "stm32g474: board mismatch",
+    )
+    require(
+        same_path(
+            stm32_cache["CMAKE_TOOLCHAIN_FILE"],
+            ROOT / "link_libraries/stm32_lib" / "toolchain_stm32g474.cmake",
+        ),
+        "stm32g474: cross toolchain must be selected before CMake project()",
+    )
 
 require(
     {
@@ -184,10 +229,8 @@ stm32_wifi = subprocess.run(
         "config-dump",
         "--project",
         str(FREERTOS_SUITE),
-        "--target",
-        "stm32g474",
-        "--board",
-        "nucleo-g474re-pim730",
+        "--assembly",
+        "nucleo-pim730",
         "--variant",
         "NETWORK",
         "--json",
@@ -198,8 +241,9 @@ stm32_wifi = subprocess.run(
 )
 stm32_wifi_config = json.loads(stm32_wifi.stdout)
 require(
-    stm32_wifi_config["board"] == "nucleo-g474re-pim730",
-    "WiFi resolver changed the STM32G474 PIM730 board profile",
+    stm32_wifi_config["board"] == "nucleo-g474re"
+    and stm32_wifi_config["assembly"] == "nucleo-pim730",
+    "the STM32G474 network build is not the PIM730 assembly on NUCLEO-G474RE",
 )
 require(
     stm32_wifi_config["cmake"]["cache"]["JH_VARIANT"] == "NETWORK"
@@ -214,13 +258,13 @@ require(
             stm32_wifi_config, FREERTOS_SUITE
         ).config.macros
     ),
-    "FreeRTOS network variant duplicates PIM730 wiring outside the board profile",
+    "FreeRTOS network variant duplicates PIM730 wiring outside device_tree.json",
 )
 require(
     not workflow_runtime.build_preflight_diagnostics(
         stm32_wifi_config, FREERTOS_SUITE
     ),
-    "WiFi preflight does not accept the registry-owned PIM730 backend",
+    "WiFi preflight does not accept the PIM730 backend from device_tree.json",
 )
 
 lora_project = ROOT / "examples" / "27_lora_point_to_point"
@@ -230,9 +274,7 @@ lora_responder_result = subprocess.run(
         "config-dump",
         "--project",
         str(lora_project),
-        "--target",
-        "rp2040",
-        "--board",
+        "--assembly",
         "rp2040-lora-lf",
         "--variant",
         "RESPONDER",
@@ -243,7 +285,9 @@ lora_responder_result = subprocess.run(
     text=True,
 )
 lora_responder = json.loads(lora_responder_result.stdout)
-lora_base_build_dir = ROOT / ".build" / "examples" / "27_lora_point_to_point"
+lora_base_build_dir = (
+    ROOT / ".build" / "examples" / "27_lora_point_to_point" / "rp2040" / "rp2040-lora-lf"
+)
 lora_responder_build_dir = lora_base_build_dir / "variants" / "RESPONDER"
 require(
     same_path(lora_responder["buildDir"], lora_responder_build_dir),
@@ -390,7 +434,8 @@ require(
     "10_storage: native storage target matrix is incomplete",
 )
 require(
-    storage["target"] == "rp2040",
+    storage["assembly"] == "pico"
+    and config_dump(ROOT / "examples" / "10_storage")["target"] == "rp2040",
     "10_storage: native RP2040 is not the project default",
 )
 
@@ -399,7 +444,8 @@ require(
     "18_freertos_suite does not expose the native RP target matrix",
 )
 require(
-    freertos_suite["target"] == "rp2040",
+    freertos_suite["assembly"] == "picow"
+    and config_dump(FREERTOS_SUITE)["target"] == "rp2040",
     "18_freertos_suite does not default to the native RP2040 target",
 )
 require(
@@ -443,14 +489,15 @@ for example_dir in example_dirs:
     )
     for target in targets:
         example_counts[target] += 1
-        board = workflow_runtime.load_project_config(
-            example_dir, target_override=target, use_local_state=False
-        )["board"]
-        require(
-            board in target_boards[target],
-            f"{example_dir.name}: invalid {target} board {board}",
-        )
+    assemblies = load_json(example_dir / "device_tree.json")["assemblies"]
     for build in builds:
+        assembly = assemblies.get(build.assembly or "")
+        require(
+            assembly is not None
+            and assembly["target"] == build.target.id
+            and assembly["board"] in target_boards[build.target.id],
+            f"{example_dir.name}: build {build.label} has no valid assembly",
+        )
         full_configuration_counts[build.target.id] += 1
         requested_example_features.update(build.requested_features())
 
@@ -468,21 +515,23 @@ require(
 require(
     full_configuration_counts
     == {
-        "rp2040": 46,
+        # rp2040 includes the second assemblies of 26 (pico-rm2) and 27
+        # (rp2040-lora-lf), which the matrix builds like any other.
+        "rp2040": 56,
         "rp2350-arm": 39,
         "rp2350-riscv": 25,
         "stm32g474": 42,
         "esp32s3": 26,
     }
-    and sum(full_configuration_counts.values()) == 178,
-    "full example build matrix must contain exactly 178 configurations: "
+    and sum(full_configuration_counts.values()) == 188,
+    "full example build matrix must contain exactly 188 configurations: "
     f"{full_configuration_counts}",
 )
 # The examples gate builds every configuration on its three targets.
 require(
     sum(full_configuration_counts[target] for target in ("rp2040", "stm32g474", "esp32s3"))
-    == 114,
-    "example gate matrix must contain exactly 114 configurations",
+    == 124,
+    "example gate matrix must contain exactly 124 configurations",
 )
 required_feature_surface = {
     "HAL_ENABLE_A7670",
@@ -574,6 +623,16 @@ require(
     == {"rp2040", "rp2350-arm", "rp2350-riscv"},
     "05_serial_gps:swserial must remain RP-only",
 )
+
+# Library modules that open their bus through a compile-time setting take it
+# from the generated macros, so a bus changed in device_tree.json reaches them.
+# test_hardware_fixture_files checks the hardware fixtures the same way.
+for project_config in sorted(ROOT.glob("examples/*/hal_project_config.h")):
+    if not (project_config.parent / "device_tree.json").is_file():
+        continue
+    unbound = unbound_bus_settings(project_config.read_text(encoding="utf-8"))
+    require(not unbound, f"{project_config.relative_to(ROOT)}: {', '.join(unbound)} "
+            "must come from the bus in device_tree.json")
 
 require(
     set(builds_of(ROOT / "examples" / "26_ble_stream"))

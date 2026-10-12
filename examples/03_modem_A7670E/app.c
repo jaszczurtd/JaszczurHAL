@@ -15,10 +15,7 @@
 #include <hal/system/hal_system.h>
 #include <string.h>
 
-static const uint8_t PIN_MODEM_TX = 4;
-static const uint8_t PIN_MODEM_RX = 5;
-static const uint8_t PIN_MODEM_PWR = 6;
-static const uint32_t MODEM_BAUD_RATE = 115200;
+/* UART and power-key wiring come from device_tree.json. */
 static const uint32_t MODEM_WARMUP_MS = 15000;
 static const uint32_t MODEM_PWR_PULSE_MS = 1500;
 
@@ -62,8 +59,9 @@ static void onMqttMessage(int client_index, const char *topic,
 }
 
 static void modemPowerInit(void) {
-  hal_gpio_set_mode(PIN_MODEM_PWR, HAL_GPIO_OUTPUT);
-  hal_gpio_write(PIN_MODEM_PWR, true);
+  /* The power key is active low: idle high, the driver pulses it low. */
+  hal_gpio_set_mode(JH_HW_NODE_MODEM_POWER_PIN_OUT, HAL_GPIO_OUTPUT);
+  hal_gpio_write(JH_HW_NODE_MODEM_POWER_PIN_OUT, true);
 }
 
 static bool modemPowerCycle(void) {
@@ -82,20 +80,23 @@ static bool modemPowerCycle(void) {
 
 static bool modemInit(void) {
   if (modem_serial == NULL) {
-    modem_serial = hal_uart_create(HAL_UART_PORT_2, PIN_MODEM_RX, PIN_MODEM_TX);
+    modem_serial = hal_uart_create(
+        (hal_uart_port_t)JH_HW_BUS_MODEM_UART_UART_PORT,
+        JH_HW_BUS_MODEM_UART_PIN_RX, JH_HW_BUS_MODEM_UART_PIN_TX);
   }
   if (modem_serial == NULL) {
     return false;
   }
 
-  hal_uart_set_tx(modem_serial, PIN_MODEM_TX);
-  hal_uart_set_rx(modem_serial, PIN_MODEM_RX);
-  hal_uart_begin(modem_serial, MODEM_BAUD_RATE, SERIAL_8N1);
+  hal_uart_set_tx(modem_serial, JH_HW_BUS_MODEM_UART_PIN_TX);
+  hal_uart_set_rx(modem_serial, JH_HW_BUS_MODEM_UART_PIN_RX);
+  hal_uart_begin(modem_serial, JH_HW_BUS_MODEM_UART_BAUD_RATE,
+                 JH_HW_BUS_MODEM_UART_FRAME_CONFIG);
 
   if (modem == NULL) {
     hal_simcom_a76xx_config_t cfg = {};
     cfg.uart = modem_serial;
-    cfg.pwr_pin = PIN_MODEM_PWR;
+    cfg.pwr_pin = JH_HW_NODE_MODEM_POWER_PIN_OUT;
     cfg.rx_buf = modem_rx_buf;
     cfg.rx_buf_size = sizeof(modem_rx_buf);
     cfg.default_at_timeout_ms = 3000;

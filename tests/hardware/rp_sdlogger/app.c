@@ -15,11 +15,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#define SD_SPI_BUS 0u
-#define SD_MISO_PIN 16u
-#define SD_MOSI_PIN 19u
-#define SD_SCK_PIN 18u
-#define SD_CS_PIN 17u
 #define EEPROM_BYTES 512u
 #define CONTENT_RECORDS 3u
 #define USB_WRITE_TIMEOUT_MS 5000u
@@ -90,7 +85,8 @@ static void handle_write(void) {
   const size_t expected_length =
       build_expected_content(before, expected, sizeof(expected));
   hal_status_t append_status[CONTENT_RECORDS] = {HAL_NONE, HAL_NONE, HAL_NONE};
-  const hal_status_t init_status = hal_sdlogger_init_ex((int)SD_CS_PIN);
+  const hal_status_t init_status =
+      hal_sdlogger_init_ex((int)JH_HW_NODE_SD_PIN_CS);
 
   if (init_status == HAL_OK && expected_length != 0u) {
     const unsigned file_number = bounded_log_number(before);
@@ -133,7 +129,8 @@ static void handle_verify(void) {
   char filename[sizeof("log00000.txt")] = {};
   make_filename(log_number, filename, sizeof(filename));
 
-  const bool mounted = hal_sd_file_begin(SD_SPI_BUS, SD_CS_PIN);
+  const bool mounted =
+      hal_sd_file_begin(JH_HW_BUS_SPI_INDEX, JH_HW_NODE_SD_PIN_CS);
   hal_sd_file_t file = {};
   const bool opened =
       mounted && hal_sd_file_open(&file, filename, HAL_SD_FILE_READ);
@@ -162,7 +159,8 @@ static void handle_verify(void) {
 
 void app_start(void) {
   s_eeprom_status = hal_eeprom_init(HAL_EEPROM_FLASH, EEPROM_BYTES, 0u);
-  s_spi_status = hal_spi_init(SD_SPI_BUS, SD_MISO_PIN, SD_MOSI_PIN, SD_SCK_PIN);
+  s_spi_status = hal_spi_init(JH_HW_BUS_SPI_INDEX, JH_HW_BUS_SPI_PIN_MISO,
+                              JH_HW_BUS_SPI_PIN_MOSI, JH_HW_BUS_SPI_PIN_SCK);
 }
 
 void app_task0(void) {

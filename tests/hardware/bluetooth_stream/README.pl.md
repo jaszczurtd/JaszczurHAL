@@ -9,36 +9,42 @@ Linuksie rolę urządzenia centralnego za pośrednictwem BlueZ.
 
 ## Warianty kompilacji
 
-Skompiluj i wgraj osobno każdą z ośmiu kombinacji układu docelowego, płytki i
-środowiska wykonawczego:
+Skompiluj i wgraj osobno każdą z ośmiu kombinacji montażu i środowiska
+wykonawczego:
 
-| Target | Board | Runtime |
+| Montaż | Target | Sprzęt | Runtime |
+|---|---|---|---|
+| `picow` | `rp2040` | Pico W | bare-metal, FreeRTOS |
+| `pico-rm2` | `rp2040` | Pico + PIM730/RM2 | bare-metal, FreeRTOS |
+| `pico2w` | `rp2350-arm` | Pico 2 W | bare-metal, FreeRTOS |
+| `nucleo-pim730` | `stm32g474` | NUCLEO-G474RE + PIM730/RM2 | bare-metal, FreeRTOS |
+
+Ta tabela jest macierzą sprzętową stanowiska. `device_tree.json` opisuje
+sprzęt każdego montażu, a domyślnym jest `nucleo-pim730`;
+`hal_project_config.h` deklaruje wariant `FREERTOS`, a
+`tests/test_hardware_fixture_files.py` sprawdza, czy stanowisko kompiluje się
+do każdego z ośmiu obrazów. `pico-rm2` i `nucleo-pim730` to zwykłe Pico
+i zwykła NUCLEO-G474RE z zewnętrznym modułem PIM730/RM2; tabela poniżej
+powtarza połączenia modułu.
+
+| Sygnał PIM730/RM2 | Pico (`pico-rm2`) | NUCLEO-G474RE (`nucleo-pim730`) |
 |---|---|---|
-| `rp2040` | `picow` | bare-metal, FreeRTOS |
-| `rp2040` | `pico-rm2` | bare-metal, FreeRTOS |
-| `rp2350-arm` | `pico2w` | bare-metal, FreeRTOS |
-| `stm32g474` | `nucleo-g474re-pim730` | bare-metal, FreeRTOS |
-
-Ta tabela jest macierzą sprzętową stanowiska. `hal_project_config.h`
-deklaruje platformy i wariant `FREERTOS`, manifest wybiera domyślne płytki,
-a `tests/test_hardware_fixture_files.py` sprawdza, czy stanowisko kompiluje się
-dla każdej z ośmiu kombinacji.
+| CS | GPIO3 | PB12, pin 16 CN10 |
+| DAT | GPIO4 | PB15, pin 26 CN10 |
+| WL_ON | GPIO2 | PB14, pin 28 CN10 |
+| CLK | GPIO5 | PB13, pin 30 CN10 |
 
 Warianty bare-metal zbudujesz następująco:
 
 ```bash
 vscode/entry/jh-vscode build \
-  --project tests/hardware/bluetooth_stream \
-  --target rp2040 --board picow
+  --project tests/hardware/bluetooth_stream --assembly picow
 vscode/entry/jh-vscode build \
-  --project tests/hardware/bluetooth_stream \
-  --target rp2040 --board pico-rm2
+  --project tests/hardware/bluetooth_stream --assembly pico-rm2
 vscode/entry/jh-vscode build \
-  --project tests/hardware/bluetooth_stream \
-  --target rp2350-arm --board pico2w
+  --project tests/hardware/bluetooth_stream --assembly pico2w
 vscode/entry/jh-vscode build \
-  --project tests/hardware/bluetooth_stream \
-  --target stm32g474 --board nucleo-g474re-pim730
+  --project tests/hardware/bluetooth_stream --assembly nucleo-pim730
 ```
 
 Dołącz `--variant FREERTOS` do każdej komendy kompilacji i wgrywania dla
@@ -46,9 +52,8 @@ obrazu FreeRTOS. Firmware testowy inicjalizuje BLE przy pierwszym wywołaniu
 `app_task0()`, już po uruchomieniu schedulera FreeRTOS. Stos zadania 0 ma
 1024 słowa, ponieważ uwierzytelnione uzgadnianie połączenia i używane przez nie
 kryptograficzne
-zmienne tymczasowe przekraczają ogólny domyślny rozmiar stanowiska. Użyj tego
-samego jawnie wskazanego układu docelowego, płytki i wariantu podczas
-wgrywania. Udana kompilacja potwierdza zbudowanie firmware, nie jego działanie na urządzeniu
+zmienne tymczasowe przekraczają ogólny domyślny rozmiar stanowiska. Podczas
+wgrywania podaj ten sam montaż i wariant. Udana kompilacja potwierdza zbudowanie firmware, nie jego działanie na urządzeniu
 i nie liczy się jako test sprzętowy.
 
 ## Warianty obciążeniowe STM32G474 PIM730 + ILI9341
@@ -59,33 +64,35 @@ ILI9341 podłączony do złącza SPI Arduino NUCLEO-G474RE. Wykorzystują SPI1
 równolegle z dedykowanym transportem gSPI PIM730 na PB12-PB15. Te warianty
 stanowią dodatkowy dowód współistnienia/obciążenia i nie zastępują żadnego z
 dwóch bazowych obrazów bramki STM32 wymienionych w macierzy kompilacji.
-`hal_project_config.h` zatrzymuje je przez `#error` na platformach innych niż
-STM32G474.
+Wyświetlacz ma tylko montaż `nucleo-pim730`; w pozostałych
+`hal_project_config.h` zatrzymuje te warianty przez `#error`.
 
 Skompiluj osobne artefakty za pomocą:
 
 ```bash
 vscode/entry/jh-vscode build \
   --project tests/hardware/bluetooth_stream \
-  --target stm32g474 --board nucleo-g474re-pim730 \
-  --variant DISPLAY
+  --assembly nucleo-pim730 --variant DISPLAY
 
 vscode/entry/jh-vscode build \
   --project tests/hardware/bluetooth_stream \
-  --target stm32g474 --board nucleo-g474re-pim730 \
-  --variant DISPLAY_FREERTOS
+  --assembly nucleo-pim730 --variant DISPLAY_FREERTOS
 ```
 
-ILI9341 używa okablowania już zwalidowanego przez `examples/07_display_media`:
+ILI9341 jest podłączony tak samo jak w `examples/07_display_media`.
+W `device_tree.json` to węzeł `display` na magistrali `spi` montażu
+`nucleo-pim730`; tabela powtarza te połączenia:
 
-| ILI9341 | STM32G474 | Złącze Nucleo |
-|---|---|---|
-| `SCK` | `PA5` | CN5 pin 6 (`D13`) |
-| `MISO` | `PA6` | CN5 pin 5 (`D12`) |
-| `MOSI` | `PA7` | CN5 pin 4 (`D11`) |
-| `CS` | `PB6` | CN5 pin 3 (`D10`) |
-| `DC` | `PC7` | CN5 pin 2 (`D9`) |
-| `RESET` | `PA9` | CN5 pin 1 (`D8`) |
+| ILI9341 | STM32G474 | Morpho | Arduino |
+|---|---|---|---|
+| `SCK` | `PB3` | pin 31 CN10 | pin 4 CN9 (`D3`) |
+| `MISO` | `PA6` | pin 13 CN10 | pin 5 CN5 (`D12`) |
+| `MOSI` | `PA7` | pin 15 CN10 | pin 4 CN5 (`D11`) |
+| `CS` | `PB6` | pin 17 CN10 | pin 3 CN5 (`D10`) |
+| `DC` | `PC7` | pin 19 CN10 | pin 2 CN5 (`D9`) |
+| `RESET` | `PA9` | pin 21 CN10 | pin 1 CN5 (`D8`) |
+
+Zegar SPI idzie przez PB3 zamiast D13 (PA5), bo PA5 steruje diodą LD2.
 
 Ekran wyświetla adres kontrolera, stan BLE/Stream, MTU, RX/TX, liczniki
 odrzuceń/przepełnień/bezpieczeństwa, restarty cyklu życia, status i czas
@@ -103,14 +110,14 @@ włączony dla tego targetu.
 ## Weryfikator sprzętowy
 
 Uruchom weryfikator po wgraniu każdego obrazu, używając adresu wypisanego
-przez stanowisko. `--target`, `--board` i `--runtime` są wymagane i muszą
-opisywać wgrany obraz:
+przez stanowisko. `--assembly` i `--runtime` są wymagane i muszą opisywać
+wgrany obraz. Nazwy montaży i ich targety weryfikator bierze
+z `device_tree.json`:
 
 ```bash
 python3 tests/hardware/bluetooth_stream/verify.py \
   --address XX:XX:XX:XX:XX:XX \
-  --target rp2040 \
-  --board picow \
+  --assembly picow \
   --runtime baremetal
 ```
 
@@ -140,8 +147,7 @@ Główne parametry obciążenia są jawne i wymuszają minima akceptacji:
 ```bash
 python3 tests/hardware/bluetooth_stream/verify.py \
   --address XX:XX:XX:XX:XX:XX \
-  --target rp2040 \
-  --board picow \
+  --assembly picow \
   --runtime baremetal \
   --reconnects 50 \
   --stream-seconds 300 \
@@ -168,9 +174,9 @@ być dowolny. Sam restart BLE nie może więc zostać uznany za reset MCU. Komen
 watchdoga resetuje MCU, ale nie odcina VBUS, dlatego nie zastępuje fizycznego
 testu utraty zasilania.
 
-Jeszcze nie uruchomiono na sprzęcie: RP2040 Pico z RM2/PIM730 w obu runtime
-oraz podstawowych obrazów STM32G474 + RM2/PIM730 w obu runtime. Warianty
-`DISPLAY` dla STM32G474 zostały uruchomione. Strona hosta działa wyłącznie na
+Jeszcze nie uruchomiono na sprzęcie: RP2040 Pico z RM2/PIM730 w obu runtime,
+podstawowych obrazów STM32G474 + RM2/PIM730 w obu runtime ani wariantów
+`DISPLAY` dla STM32G474 z zegarem SPI na PB3. Strona hosta działa wyłącznie na
 Linuksie z BlueZ; natywny Windows nie jest objęty testem.
 
 ## Polecenia stanowiska testowego i zasady identyfikacji
@@ -193,7 +199,7 @@ zakończenie żądania jest obserwowalne.
 
 | Uwierzytelniony ładunek polecenia | Odpowiedź lub efekt stanowiska |
 |---|---|
-| `JHBL5/IDENTITY` | `J5I1\|<target>\|<board>\|<runtime>` |
+| `JHBL5/IDENTITY` | `J5I1\|<target>\|<assembly>\|<runtime>` |
 | `JHBL5/RESTART` | `JHBL5/RESTARTING`, następnie pełny restart Stream i BLE |
 | `JHBL5/BOOT` | `J5B1` z następującym po nim jednym bajtem powodu resetu i 64-bitowym losowym identyfikatorem rozruchu w formacie little-endian |
 | `JHBL5/POWER-LOSS` (RP i STM32G474) | `JHBL5/POWER-LOSS-ARMED`, następnie reset watchdoga bez interwencji hosta lub użytkownika |
@@ -201,10 +207,13 @@ zakończenie żądania jest obserwowalne.
 | `JHBL5/STATS` | zwarty binarny rekord `J5S1` potwierdzający odzyskanie |
 
 Odpowiedź tożsamości jest kompilowana bezpośrednio z `HAL_TARGET_NAME`,
-`HAL_BOARD_PROFILE_NAME` i `HAL_ENABLE_FREERTOS`; runtime to dokładnie
-`baremetal` lub `freertos`. Weryfikator porównuje ją z wszystkimi trzema
-wymaganymi wartościami CLI przed akceptacją wyników obciążenia. Na przykład
-odpowiedź Pico W bare-metal to `J5I1|rp2040|picow|baremetal`.
+`JH_HW_ASSEMBLY_NAME` i `HAL_ENABLE_FREERTOS`; runtime to dokładnie
+`baremetal` lub `freertos`. Nazwa montażu zastępuje nazwę płytki, bo
+`pico-rm2` i `nucleo-pim730` nie mają własnego profilu płytki. Przed
+akceptacją wyników obciążenia weryfikator porównuje odpowiedź z wybranym
+montażem, jego targetem i wartością `--runtime`. Na przykład odpowiedź Pico W
+bare-metal to `J5I1|rp2040|picow|baremetal`, a Nucleo z PIM730 odpowiada
+`J5I1|stm32g474|nucleo-pim730|baremetal`.
 
 Udany przebieg fizyczny kończy się `JHBL5 HOST PASS`. Log urządzenia używa
 prefiksu `JHBL5` i rejestruje wynegocjowane MTU, liczniki, błędy
@@ -237,26 +246,28 @@ już w BOOTSEL, wybierz jawnie każdy wolumin:
 ```bash
 vscode/entry/jh-vscode upload \
   --project examples/26_ble_stream \
-  --target rp2040 --board picow --variant COMMANDS \
+  --assembly picow --variant COMMANDS \
   --bootsel-volume /dev/<baremetal-partition>
 
 vscode/entry/jh-vscode upload \
   --project examples/26_ble_stream \
-  --target rp2040 --board picow --variant COMMANDS_FREERTOS \
+  --assembly picow --variant COMMANDS_FREERTOS \
   --bootsel-volume /dev/<freertos-partition>
 ```
 
 Odczytaj adres BLE każdej płytki z logu USB CDC i uruchom krótki program
-weryfikujący dla obu jawnie podanych adresów:
+weryfikujący dla obu jawnie podanych adresów. `--assembly` wskazuje montaż
+z `examples/26_ble_stream/device_tree.json`; weryfikator oczekuje
+w zdarzeniu gotowości przykładu targetu i płytki tego montażu:
 
 ```bash
 python3 tests/hardware/bluetooth_stream/verify_commands.py \
   --address XX:XX:XX:XX:XX:XX \
-  --target rp2040 --board picow --runtime baremetal
+  --assembly picow --runtime baremetal
 
 python3 tests/hardware/bluetooth_stream/verify_commands.py \
   --address YY:YY:YY:YY:YY:YY \
-  --target rp2040 --board picow --runtime freertos
+  --assembly picow --runtime freertos
 ```
 
 Zaliczenie wymaga dokładnego złożenia binarnego echo o rozmiarze 500 bajtów w

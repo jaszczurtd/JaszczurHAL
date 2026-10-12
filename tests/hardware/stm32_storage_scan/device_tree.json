@@ -1,0 +1,21 @@
+{
+  "$schema": "../../../config/hardware/device_tree.schema.json",
+  "schemaVersion": 1,
+  "nodes": {
+    "scanA": {"compatible": "jaszczurhal,adc-input"},
+    "scanB": {"compatible": "jaszczurhal,adc-input"}
+  },
+  "assemblies": {
+    "nucleo": {
+      "target": "stm32g474",
+      "board": "nucleo-g474re",
+      "clock": {"tree": "default"},
+      "statusLed": {"node": "board.statusLed"},
+      "buses": {},
+      "nodes": {
+        "scanA": {"present": true, "pins": {"in": "PA0"}},
+        "scanB": {"present": true, "pins": {"in": "PA1"}}
+      }
+    }
+  }
+}

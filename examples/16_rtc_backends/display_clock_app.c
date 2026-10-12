@@ -14,19 +14,15 @@
 #include <hal/i2c/hal_i2c.h>
 #include <hal/rtc/hal_rtc.h>
 #include <hal/serial/hal_serial.h>
+#include <hal/spi/hal_spi.h>
 #include <hal/system/hal_system.h>
 #include <utils/draw7Segment.h>
 
 #include <string.h>
 
-static const uint8_t kRtcSdaPin = 25u; /* PB9, D14. */
-static const uint8_t kRtcSclPin = 24u; /* PB8, D15. */
-static const uint8_t kTftCsPin = 22u;  /* PB6, D10. */
-static const uint8_t kTftDcPin = 39u;  /* PC7, D9. */
-static const uint8_t kTftRstPin = 9u;  /* PA9, D8. */
-
-static const int kPanelWidth = 240;
-static const int kPanelHeight = 320;
+/* Wiring and panel geometry come from device_tree.json. */
+static const int kPanelWidth = (int)JH_HW_NODE_DISPLAY_PROP_WIDTH;
+static const int kPanelHeight = (int)JH_HW_NODE_DISPLAY_PROP_HEIGHT;
 static const int kDigitWidth = 36;
 static const int kDigitSlotWidth = 42;
 static const int kColonSlotWidth = 22;
@@ -124,10 +120,17 @@ static void render_clock(const char *text, uint16_t color) {
 }
 
 static bool initialize_display(void) {
-  hal_status_t status = hal_display_init(kTftCsPin, kTftDcPin, kTftRstPin);
+  const hal_display_ili9341_config_t config = JH_HW_NODE_DISPLAY_CONFIG_INIT;
+  hal_status_t status =
+      hal_spi_init(JH_HW_BUS_SPI_INDEX, JH_HW_BUS_SPI_PIN_MISO,
+                   JH_HW_BUS_SPI_PIN_MOSI, JH_HW_BUS_SPI_PIN_SCK);
+  if (status == HAL_OK) {
+    status = hal_display_init_ili9341_ex(&config);
+  }
   if (status == HAL_OK) {
     status = hal_display_configure_ex(
-        kPanelWidth, kPanelHeight, HAL_DISPLAY_ROTATION(90),
+        kPanelWidth, kPanelHeight,
+        HAL_DISPLAY_ROTATION(JH_HW_NODE_DISPLAY_PROP_ROTATION),
         HAL_DISPLAY_INVERT_OFF, HAL_DISPLAY_COLOR_ORDER_RGB);
   }
   if (status != HAL_OK) {
@@ -145,11 +148,11 @@ static bool initialize_display(void) {
 static bool initialize_rtc(void) {
   const hal_rtc_config_t config = {
       .chip = HAL_RTC_CHIP_DS3231,
-      .bus = {.i2c = {.sda_pin = kRtcSdaPin,
-                      .scl_pin = kRtcSclPin,
-                      .clock_hz = HAL_I2C_CLOCK_FAST_HZ,
-                      .i2c_bus = 0u,
-                      .i2c_addr = HAL_RTC_DS3231_DEFAULT_I2C_ADDR}},
+      .bus = {.i2c = {.sda_pin = JH_HW_BUS_I2C_PIN_SDA,
+                      .scl_pin = JH_HW_BUS_I2C_PIN_SCL,
+                      .clock_hz = JH_HW_BUS_I2C_FREQUENCY_HZ,
+                      .i2c_bus = JH_HW_BUS_I2C_INDEX,
+                      .i2c_addr = JH_HW_NODE_DS3231_ADDRESS}},
   };
   hal_status_t status = hal_rtc_init_ex(&config, &s_rtc);
   if (status != HAL_OK) {
@@ -196,7 +199,8 @@ void app_start(void) {
   deb("=== DS3231 battery-retention clock ===");
 
   (void)initialize_display();
-  (void)hal_i2c_init(kRtcSdaPin, kRtcSclPin, HAL_I2C_CLOCK_FAST_HZ);
+  (void)hal_i2c_init_bus(JH_HW_BUS_I2C_INDEX, JH_HW_BUS_I2C_PIN_SDA,
+                         JH_HW_BUS_I2C_PIN_SCL, JH_HW_BUS_I2C_FREQUENCY_HZ);
   if (!initialize_rtc()) {
     hal_rtc_deinit(s_rtc);
     s_rtc = NULL;

@@ -133,12 +133,26 @@ def tasks_for(
     )
 
 
-def launch_for(name: str, target: str = "", assembly: str | None = None) -> dict[str, Any]:
-    from vscode_task_config import cortex_debug_launch_document
+def launch_for(example_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
+    """Debug profiles of an example, as sync-board-picker writes them: one
+    per debugged assembly and variant with device_tree.json, else one per
+    target for the board's ELF."""
+    from vscode_task_config import (
+        assembly_debug_builds,
+        assembly_launch_document,
+        cortex_debug_launch_document,
+        vscode_launch_executable,
+    )
 
-    output = f"/{target}/{assembly}" if assembly else ""
-    executable = f"${{workspaceFolder}}/../../.build/examples/{name}{output}/firmware.elf"
-    return cortex_debug_launch_document(executable)
+    if (example_dir / "device_tree.json").is_file():
+        return assembly_launch_document(
+            manifest, assembly_debug_builds(example_dir),
+            workspace_dir=example_dir, jh_root=REPO_ROOT,
+            default_assembly=manifest_selection(example_dir, manifest)[2],
+        )
+    return cortex_debug_launch_document(
+        vscode_launch_executable(manifest, workspace_dir=example_dir, jh_root=REPO_ROOT)
+    )
 
 
 def extensions_for() -> dict[str, Any]:
@@ -220,7 +234,7 @@ def example_vscode_files(example_dir: Path) -> dict[str, Any]:
     return {
         "settings.json": settings_for(example_dir, manifest),
         "tasks.json": tasks_for(target, board, example_dir, assembly),
-        "launch.json": launch_for(example_dir.name, target, assembly),
+        "launch.json": launch_for(example_dir, manifest),
         "keybindings.reference.json": keybindings_for(),
         "extensions.json": extensions_for(),
     }

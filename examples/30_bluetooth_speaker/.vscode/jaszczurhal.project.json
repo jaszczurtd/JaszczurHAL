@@ -3,13 +3,7 @@
     "project": "JaszczurHAL examples",
     "module": "30_bluetooth_speaker",
     "toolchain": "cmake",
-    "target": "rp2040",
-    "board": "picow",
-    "targetProfiles": {
-        "rp2350-arm": {
-            "board": "pico2w"
-        }
-    },
+    "assembly": "picow",
     "buildDir": "${jhRoot}/.build/examples/30_bluetooth_speaker",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

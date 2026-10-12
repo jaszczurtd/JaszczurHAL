@@ -1,0 +1,69 @@
+{
+  "$schema": "../../config/hardware/device_tree.schema.json",
+  "schemaVersion": 1,
+  "nodes": {
+    "capture": {
+      "compatible": "jaszczurhal,gpio-input",
+      "properties": { "pull": "up" }
+    }
+  },
+  "assemblies": {
+    "pico": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {},
+      "nodes": {
+        "capture": { "present": true, "pins": { "in": 0 } }
+      }
+    },
+    "pico2-arm": {
+      "target": "rp2350-arm",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {},
+      "nodes": {
+        "capture": { "present": true, "pins": { "in": 0 } }
+      }
+    },
+    "pico2-riscv": {
+      "target": "rp2350-riscv",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {},
+      "nodes": {
+        "capture": { "present": true, "pins": { "in": 0 } }
+      }
+    },
+    "nucleo": {
+      "target": "stm32g474",
+      "board": "nucleo-g474re",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {},
+      "nodes": {
+        "capture": { "present": true, "pins": { "in": "PA0" } }
+      }
+    },
+    "esp32s3-zero": {
+      "target": "esp32s3",
+      "board": "waveshare-esp32-s3-zero",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "releaseReservations": ["boot-button"],
+      "nets": {
+        "boot": {
+          "endpoint": { "domain": "soc-gpio", "id": 0 },
+          "owner": "capture.in"
+        }
+      },
+      "buses": {},
+      "nodes": {
+        "capture": { "present": true, "pins": { "in": { "net": "boot" } } }
+      }
+    }
+  }
+}

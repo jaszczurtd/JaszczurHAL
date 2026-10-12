@@ -27,9 +27,19 @@ Run from the repository root:
 
 ```bash
 vscode/entry/jh-vscode build \
-  --project examples/08_mqtt --target rp2040 --board picow
+  --project examples/08_mqtt --assembly picow
 ```
 
-The default boards are `picow` for RP2040, `pico2w` for RP2350 ARM, and
-`nucleo-g474re-pim730` for STM32G474 with an external PIM730/RM2 module.
-The project does not include RP2350 RISC-V.
+`device_tree.json` describes the hardware of every assembly: `picow`
+(Pico W, the default), `pico2w` (Pico 2 W), `esp32s3-zero` (ESP32-S3-Zero
+with its own WiFi) and `nucleo-pim730`. `nucleo-pim730` is a plain
+NUCLEO-G474RE with an external PIM730/RM2 module, without a separate board
+profile; the table below repeats the module wiring. The project does not
+include RP2350 RISC-V.
+
+| PIM730/RM2 signal | NUCLEO-G474RE |
+|---|---|
+| CS | PB12, CN10 pin 16 |
+| DAT | PB15, CN10 pin 26 |
+| WL_ON | PB14, CN10 pin 28 |
+| CLK | PB13, CN10 pin 30 |

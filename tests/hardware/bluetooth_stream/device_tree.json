@@ -1,0 +1,74 @@
+{
+  "$schema": "../../../config/hardware/device_tree.schema.json",
+  "schemaVersion": 1,
+  "nodes": {
+    "wifi": {
+      "compatible": "pimoroni,pim730"
+    },
+    "display": {
+      "compatible": "ilitek,ili9341",
+      "properties": { "width": 240, "height": 320, "rotation": 0 }
+    }
+  },
+  "assemblies": {
+    "picow": {
+      "target": "rp2040",
+      "board": "picow",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "nodes": {
+        "wifi": { "present": false },
+        "display": { "present": false }
+      }
+    },
+    "pico2w": {
+      "target": "rp2350-arm",
+      "board": "pico2w",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "nodes": {
+        "wifi": { "present": false },
+        "display": { "present": false }
+      }
+    },
+    "pico-rm2": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "nodes": {
+        "wifi": {
+          "present": true,
+          "pins": { "wlOn": 2, "cs": 3, "data": 4, "clock": 5 }
+        },
+        "display": { "present": false }
+      }
+    },
+    "nucleo-pim730": {
+      "target": "stm32g474",
+      "board": "nucleo-g474re",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 24000000,
+          "pins": { "sck": "PB3", "mosi": "PA7", "miso": "PA6" }
+        }
+      },
+      "nodes": {
+        "wifi": {
+          "present": true,
+          "pins": { "wlOn": "PB14", "cs": "PB12", "data": "PB15", "clock": "PB13" }
+        },
+        "display": {
+          "present": true,
+          "bus": "spi",
+          "transport": { "frequencyHz": 24000000 },
+          "pins": { "cs": "PB6", "dc": "PC7", "reset": "PA9" }
+        }
+      }
+    }
+  }
+}

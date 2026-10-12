@@ -3,8 +3,7 @@
     "project": "JaszczurHAL examples",
     "module": "17_audio_output",
     "toolchain": "cmake",
-    "target": "rp2040",
-    "board": "pico",
+    "assembly": "pico",
     "buildDir": "${jhRoot}/.build/examples/17_audio_output",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

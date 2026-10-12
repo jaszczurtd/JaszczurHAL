@@ -1,0 +1,115 @@
+{
+  "$schema": "../../config/hardware/device_tree.schema.json",
+  "schemaVersion": 1,
+  "nodes": {
+    "epd": { "compatible": "jaszczurhal,spi-device" },
+    "epdDc": { "compatible": "jaszczurhal,gpio-output" },
+    "epdReset": {
+      "compatible": "jaszczurhal,gpio-output",
+      "properties": { "activeLow": true }
+    },
+    "epdBusy": { "compatible": "jaszczurhal,gpio-input" }
+  },
+  "assemblies": {
+    "pico": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 4000000,
+          "pins": { "sck": 18, "mosi": 19, "miso": 16 }
+        }
+      },
+      "nodes": {
+        "epd": { "present": true, "bus": "spi", "pins": { "cs": 17 } },
+        "epdDc": { "present": true, "pins": { "out": 20 } },
+        "epdReset": { "present": true, "pins": { "out": 21 } },
+        "epdBusy": { "present": true, "pins": { "in": 22 } }
+      }
+    },
+    "pico2-arm": {
+      "target": "rp2350-arm",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 4000000,
+          "pins": { "sck": 18, "mosi": 19, "miso": 16 }
+        }
+      },
+      "nodes": {
+        "epd": { "present": true, "bus": "spi", "pins": { "cs": 17 } },
+        "epdDc": { "present": true, "pins": { "out": 20 } },
+        "epdReset": { "present": true, "pins": { "out": 21 } },
+        "epdBusy": { "present": true, "pins": { "in": 22 } }
+      }
+    },
+    "pico2-riscv": {
+      "target": "rp2350-riscv",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 4000000,
+          "pins": { "sck": 18, "mosi": 19, "miso": 16 }
+        }
+      },
+      "nodes": {
+        "epd": { "present": true, "bus": "spi", "pins": { "cs": 17 } },
+        "epdDc": { "present": true, "pins": { "out": 20 } },
+        "epdReset": { "present": true, "pins": { "out": 21 } },
+        "epdBusy": { "present": true, "pins": { "in": 22 } }
+      }
+    },
+    "nucleo": {
+      "target": "stm32g474",
+      "board": "nucleo-g474re",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 4000000,
+          "pins": { "sck": "PB3", "mosi": "PA7", "miso": "PA6" }
+        }
+      },
+      "nodes": {
+        "epd": { "present": true, "bus": "spi", "pins": { "cs": "PB6" } },
+        "epdDc": { "present": true, "pins": { "out": "PC7" } },
+        "epdReset": { "present": true, "pins": { "out": "PA9" } },
+        "epdBusy": { "present": true, "pins": { "in": "PA8" } }
+      }
+    },
+    "esp32s3-zero": {
+      "target": "esp32s3",
+      "board": "waveshare-esp32-s3-zero",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 4000000,
+          "pins": { "sck": 5, "mosi": 7, "miso": 6 }
+        }
+      },
+      "nodes": {
+        "epd": { "present": true, "bus": "spi", "pins": { "cs": 4 } },
+        "epdDc": { "present": true, "pins": { "out": 3 } },
+        "epdReset": { "present": true, "pins": { "out": 2 } },
+        "epdBusy": { "present": true, "pins": { "in": 1 } }
+      }
+    }
+  }
+}

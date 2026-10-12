@@ -6,15 +6,18 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import sys
 import time
 
 import serial
 
+FIXTURE_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(FIXTURE_DIR.parent))
+
+import fixture_hardware  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[3]
 REPORT_PREFIX = "JH_ESP32_PHASE2 "
-CTX_PIN_A = 13
-CTX_PIN_B = 14
 
 INTEGER_FIELDS = {
     "sequence",
@@ -64,7 +67,12 @@ BOOLEAN_FIELDS = {
 }
 
 
-def load_expected_contract(target: str, board: str) -> dict[str, int | str]:
+def load_expected_contract(
+    target: str, board: str, assembly: str | None = None
+) -> dict[str, int | str]:
+    """Identity and task cores from the target and board descriptors; the
+    context-interrupt pins from the assembly (default: the only one)."""
+    selected = fixture_hardware.select(FIXTURE_DIR, assembly)
     target_desc = json.loads(
         (ROOT / "boards" / "targets" / f"{target}.json").read_text(
             encoding="utf-8"
@@ -83,6 +91,8 @@ def load_expected_contract(target: str, board: str) -> dict[str, int | str]:
         "board": board_desc["id"],
         "task0_core": 0,
         "task1_core": 1 if cores > 1 else 0,
+        "ctx_a_pin": fixture_hardware.pin(FIXTURE_DIR, selected, "ctxA", "out"),
+        "ctx_b_pin": fixture_hardware.pin(FIXTURE_DIR, selected, "ctxB", "out"),
     }
 
 
@@ -158,7 +168,10 @@ def validate_report(
         raise RuntimeError(f"both application tasks must execute: {report}")
     if report["irq"] < 2 or report["timer_count"] < 3:
         raise RuntimeError(f"IRQ/timer callbacks did not repeat: {report}")
-    if report["ctx_a_pin"] != CTX_PIN_A or report["ctx_b_pin"] != CTX_PIN_B:
+    if (
+        report["ctx_a_pin"] != expected["ctx_a_pin"]
+        or report["ctx_b_pin"] != expected["ctx_b_pin"]
+    ):
         raise RuntimeError(
             f"context handler saw the wrong pin: {report}"
         )
@@ -230,12 +243,19 @@ def wait_for_report(path: str, timeout_s: float) -> dict[str, int | str]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", required=True)
-    parser.add_argument("--target", default="esp32s3")
-    parser.add_argument("--board", default="waveshare-esp32-s3-zero")
+    parser.add_argument(
+        "--assembly",
+        help="assembly of device_tree.json the firmware was built for "
+        "(default: the only one)",
+    )
     parser.add_argument("--timeout", type=float, default=45.0)
     args = parser.parse_args()
 
-    expected = load_expected_contract(args.target, args.board)
+    assembly = fixture_hardware.select(FIXTURE_DIR, args.assembly)
+    selection = fixture_hardware.assemblies(FIXTURE_DIR)[assembly]
+    expected = load_expected_contract(
+        selection["target"], selection["board"], assembly
+    )
     report = wait_for_report(args.port, args.timeout)
     validate_report(report, expected)
     print(json.dumps(report, sort_keys=True))

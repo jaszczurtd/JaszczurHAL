@@ -7,10 +7,15 @@ import argparse
 import json
 from pathlib import Path
 import re
+import sys
 import time
 
 import serial
 
+FIXTURE_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(FIXTURE_DIR.parent))
+
+import fixture_hardware  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[3]
 REPORT_PATTERN = re.compile(
@@ -150,12 +155,17 @@ def wait_for_report(path: str, timeout_s: float) -> dict[str, int | str]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", required=True)
-    parser.add_argument("--target", default="esp32s3")
-    parser.add_argument("--board", default="waveshare-esp32-s3-zero")
+    parser.add_argument(
+        "--assembly",
+        help="assembly of device_tree.json the firmware was built for "
+        "(default: the only one)",
+    )
     parser.add_argument("--timeout", type=float, default=30.0)
     args = parser.parse_args()
 
-    expected = load_expected_contract(args.target, args.board)
+    assembly = fixture_hardware.select(FIXTURE_DIR, args.assembly)
+    selection = fixture_hardware.assemblies(FIXTURE_DIR)[assembly]
+    expected = load_expected_contract(selection["target"], selection["board"])
     report = wait_for_report(args.port, args.timeout)
     validate_report(report, expected)
     print(json.dumps(report, sort_keys=True))

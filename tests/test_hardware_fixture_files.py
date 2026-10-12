@@ -11,7 +11,7 @@ import subprocess
 import sys
 from unittest import mock
 
-from source_assertions import source_has_fragment
+from source_assertions import source_has_fragment, unbound_bus_settings
 
 
 from repo_root import repo_root  # noqa: E402
@@ -70,6 +70,38 @@ def fixture_builds(name: str) -> dict[tuple[str, str | None], object]:
     }
 
 
+def fixture_assembly_builds(name: str) -> dict[tuple[str, str | None], object]:
+    """Every build of a device tree fixture, keyed by assembly and variant."""
+    project = HARDWARE / name
+    manifest = load_json(project / ".vscode" / "jaszczurhal.project.json")
+    return {
+        (build.assembly, build.variant.id if build.variant else None): build
+        for build in workflow.project_builds(project, manifest)
+    }
+
+
+def fixture_assemblies(name: str) -> dict[str, dict]:
+    """Assemblies of the fixture's device_tree.json."""
+    return load_json(HARDWARE / name / "device_tree.json")["assemblies"]
+
+
+def require_assemblies(name: str, expected: dict[str, tuple[str, str]]) -> None:
+    """Assembly name -> (target, board), with the PIM730 module wherever the
+    old composite boards carried it."""
+    assemblies = fixture_assemblies(name)
+    require(
+        {key: (item["target"], item["board"]) for key, item in assemblies.items()}
+        == expected,
+        f"{name}: assemblies changed",
+    )
+    for key in ("pico-rm2", "nucleo-pim730"):
+        if key in assemblies:
+            require(
+                assemblies[key]["nodes"].get("wifi", {}).get("present") is True,
+                f"{name}: {key} lost its PIM730 module",
+            )
+
+
 def fixture_board(name: str, target: str, board: str | None = None) -> str:
     """Board the fixture builds for ``target``; ``board`` must be selectable."""
     return str(
@@ -93,7 +125,7 @@ def check_documentation_index() -> None:
         ).read_text(encoding="utf-8"),
     }
     for fixture_dir in sorted(HARDWARE.iterdir()):
-        if not fixture_dir.is_dir():
+        if not fixture_dir.is_dir() or fixture_dir.name == "__pycache__":
             continue
         for readme_name, guide in guides.items():
             readme_path = fixture_dir / readme_name
@@ -143,51 +175,56 @@ def check_build_layout() -> None:
 
 
 def check_bluetooth_stream() -> None:
-    builds = fixture_builds("bluetooth_stream")
-    # The physical gate needs these eight target, board and runtime images.
-    for target, board, runtime in (
-        ("rp2040", "picow", "baremetal"),
-        ("rp2040", "picow", "freertos"),
-        ("rp2040", "pico-rm2", "baremetal"),
-        ("rp2040", "pico-rm2", "freertos"),
-        ("rp2350-arm", "pico2w", "baremetal"),
-        ("rp2350-arm", "pico2w", "freertos"),
-        ("stm32g474", "nucleo-g474re-pim730", "baremetal"),
-        ("stm32g474", "nucleo-g474re-pim730", "freertos"),
-    ):
-        variant = None if runtime == "baremetal" else "FREERTOS"
-        require(
-            (target, variant) in builds and fixture_board("bluetooth_stream", target, board) == board,
-            f"bluetooth_stream: no {runtime} image for {target}/{board}",
-        )
+    builds = fixture_assembly_builds("bluetooth_stream")
+    # The physical gate needs these eight assembly and runtime images.
+    require_assemblies(
+        "bluetooth_stream",
+        {
+            "picow": ("rp2040", "picow"),
+            "pico-rm2": ("rp2040", "pico"),
+            "pico2w": ("rp2350-arm", "pico2w"),
+            "nucleo-pim730": ("stm32g474", "nucleo-g474re"),
+        },
+    )
+    for assembly in ("picow", "pico-rm2", "pico2w", "nucleo-pim730"):
+        for runtime, variant in (("baremetal", None), ("freertos", "FREERTOS")):
+            require(
+                (assembly, variant) in builds,
+                f"bluetooth_stream: no {runtime} image for {assembly}",
+            )
     display = {"JHBL5_ENABLE_DISPLAY=1", "HAL_ENABLE_ILI9341", "HAL_DISPLAY_ILI9341"}
     for variant, definitions in (
         ("DISPLAY", display),
         ("DISPLAY_FREERTOS", display | {"HAL_ENABLE_FREERTOS"}),
     ):
         require(
-            {target for target, item in builds if item == variant} == {"stm32g474"}
-            and set(builds[("stm32g474", variant)].definitions) == definitions,
+            {assembly for assembly, item in builds if item == variant} == {"nucleo-pim730"}
+            and set(builds[("nucleo-pim730", variant)].definitions) == definitions,
             f"bluetooth_stream:{variant} changed",
         )
 
 
 def check_rp_manifests() -> None:
-    ota = fixture_builds("rp_ota")
+    ota = fixture_assembly_builds("rp_ota")
+    assemblies = ("picow", "pico2w", "pico-rm2")
     require(
-        set(ota) == {(target, variant) for target in ("rp2040", "rp2350-arm") for variant in (None, "FREERTOS")},
-        "rp_ota: target or variant matrix changed",
+        set(ota) == {(assembly, variant) for assembly in assemblies for variant in (None, "FREERTOS")},
+        "rp_ota: assembly or variant matrix changed",
+    )
+    require_assemblies(
+        "rp_ota",
+        {
+            "picow": ("rp2040", "picow"),
+            "pico2w": ("rp2350-arm", "pico2w"),
+            "pico-rm2": ("rp2040", "pico"),
+        },
     )
     require(
-        {target: fixture_board("rp_ota", target) for target in ("rp2040", "rp2350-arm")}
-        == {"rp2040": "picow", "rp2350-arm": "pico2w"},
-        "rp_ota: default boards changed",
-    )
-    require(
-        ota[("rp2040", "FREERTOS")].definitions == ("HAL_ENABLE_FREERTOS",),
+        ota[("picow", "FREERTOS")].definitions == ("HAL_ENABLE_FREERTOS",),
         "rp_ota: FreeRTOS variant changed",
     )
     manifest = load_json(HARDWARE / "rp_ota" / ".vscode" / "jaszczurhal.project.json")
+    require(manifest["assembly"] == "picow", "rp_ota: default assembly changed")
     require(
         manifest["ota"]["passwordEnv"] == "JH_OTA_TEST_PASSWORD",
         "rp_ota: a tracked password replaced the environment variable",
@@ -218,27 +255,26 @@ def check_rp_manifests() -> None:
 
 
 def check_bluetooth_stage1() -> None:
-    builds = fixture_builds("bluetooth_stage1")
-    targets = ("stm32g474", "rp2350-arm", "rp2040")
+    builds = fixture_assembly_builds("bluetooth_stage1")
+    assemblies = ("nucleo-pim730", "pico2w", "picow")
     require(
-        set(builds) == {(target, variant) for target in targets for variant in (None, "WIFI_ONLY")},
-        "bluetooth_stage1: targets or variants changed",
+        set(builds) == {(assembly, variant) for assembly in assemblies for variant in (None, "WIFI_ONLY")},
+        "bluetooth_stage1: assemblies or variants changed",
     )
-    require(
-        {target: fixture_board("bluetooth_stage1", target) for target in targets}
-        == {
-            "stm32g474": "nucleo-g474re-pim730",
-            "rp2350-arm": "pico2w",
-            "rp2040": "picow",
+    require_assemblies(
+        "bluetooth_stage1",
+        {
+            "nucleo-pim730": ("stm32g474", "nucleo-g474re"),
+            "pico2w": ("rp2350-arm", "pico2w"),
+            "picow": ("rp2040", "picow"),
         },
-        "bluetooth_stage1: boards changed",
     )
     require(
-        builds[("rp2040", None)].config.defined("JH_BLUETOOTH_STAGE1_PROBE"),
+        builds[("picow", None)].config.defined("JH_BLUETOOTH_STAGE1_PROBE"),
         "bluetooth_stage1: Bluetooth selector is missing",
     )
     require(
-        not builds[("rp2040", "WIFI_ONLY")].config.defined("JH_BLUETOOTH_STAGE1_PROBE"),
+        not builds[("picow", "WIFI_ONLY")].config.defined("JH_BLUETOOTH_STAGE1_PROBE"),
         "bluetooth_stage1: WiFi-only variant enables Bluetooth",
     )
 
@@ -309,12 +345,12 @@ def check_bluetooth_gamepad() -> None:
 
     manifest = load_json(fixture / ".vscode" / "jaszczurhal.project.json")
     require(
-        manifest["target"] == "rp2350-arm"
+        manifest["assembly"] == "pico2w"
         and fixture_board("bluetooth_gamepad", "rp2350-arm") == "pico2w",
         "bluetooth_gamepad: default board changed",
     )
     require(
-        fixture_builds("bluetooth_gamepad")[("rp2350-arm", None)].config.defined(
+        fixture_assembly_builds("bluetooth_gamepad")[("pico2w", None)].config.defined(
             "JH_BLUETOOTH_CLASSIC_HID_PROBE"
         ),
         "bluetooth_gamepad: private selector changed",
@@ -422,6 +458,17 @@ def check_fixture_documentation() -> None:
                "--include-hardware-fixtures")
 
 
+def check_compile_time_buses() -> None:
+    """Fixtures with device_tree.json take the bus of a library module that
+    opens it through a compile-time setting from the generated macros."""
+    for project_config in sorted(HARDWARE.glob("*/hal_project_config.h")):
+        if not (project_config.parent / "device_tree.json").is_file():
+            continue
+        unbound = unbound_bus_settings(project_config.read_text(encoding="utf-8"))
+        require(not unbound, f"{project_config.relative_to(ROOT)}: {', '.join(unbound)} "
+                "must come from the bus in device_tree.json")
+
+
 def check_line_verifiers() -> None:
     """Verifiers give up at their deadline even while bytes keep arriving."""
     for relative in LINE_VERIFIERS:
@@ -446,4 +493,5 @@ check_bluetooth_gamepad()
 check_esp32s3_phase2()
 check_feature_configs()
 check_fixture_documentation()
+check_compile_time_buses()
 check_line_verifiers()

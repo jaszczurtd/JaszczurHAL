@@ -3,7 +3,6 @@
   "project": "JaszczurHAL hardware tests",
   "module": "esp32s3_phase1",
   "toolchain": "esp-idf",
-  "target": "esp32s3",
-  "board": "waveshare-esp32-s3-zero",
+  "assembly": "esp32s3-zero",
   "buildDir": "${jhRoot}/.build/hardware/esp32s3_phase1"
 }

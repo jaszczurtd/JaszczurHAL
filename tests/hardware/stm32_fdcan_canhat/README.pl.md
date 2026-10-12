@@ -2,8 +2,10 @@
 
 `tests/hardware/stm32_fdcan_canhat` sprawdza natywny backend FDCAN na
 NUCLEO-G474RE z nakładką CAN-FD HAT v1.2 od
-[Embedded Garage](https://www.youtube.com/@embeddedGarage) (profil płytki
-`nucleo-g474re-canhat`). Po resecie stanowisko raz wykonuje wszystkie
+[Embedded Garage](https://www.youtube.com/@embeddedGarage). `device_tree.json`
+opisuje ten zestaw jako montaż `nucleo-canhat`: połączenia nakładki,
+drzewo zegarów 160 MHz z kwarcu 24 MHz i diodę RDY jako wbudowaną diodę
+płytki. Po resecie stanowisko raz wykonuje wszystkie
 sprawdzenia, a potem co dwie sekundy drukuje raport: `JHCANHAT begin` z
 podsumowaniem, po jednej linii `JHCANHAT <nazwa> <PASS|FAIL|SKIP> <szczegóły>`
 na sprawdzenie i `JHCANHAT end`. Dioda BUSY (PC2) świeci w czasie sprawdzeń;
@@ -12,7 +14,7 @@ a 5 Hz w przeciwnym razie.
 
 Bez żadnego okablowania stanowisko sprawdza:
 
-- profil płytki (trzy kanały CAN) i drzewo zegarów: PLL z kwarcu HSE 24 MHz,
+- montaż (trzy kanały CAN) i drzewo zegarów: PLL z kwarcu HSE 24 MHz,
   zegar jądra FDCAN 80 MHz z PLL Q, wyłączone rezystory „dead battery" UCPD;
 - wewnętrzną i zewnętrzną pętlę zwrotną ramek klasycznych przy 125k, 500k i
   1M oraz ramek CAN FD przy 500k/2M, 500k/4M i 1M/5M na FDCAN1, a także
@@ -49,10 +51,10 @@ Zbuduj i wgraj przez ST-LINK (OpenOCD):
 ```sh
 vscode/entry/jh-vscode build \
   --project tests/hardware/stm32_fdcan_canhat \
-  --target stm32g474 --board nucleo-g474re-canhat
+  --assembly nucleo-canhat
 vscode/entry/jh-vscode upload \
   --project tests/hardware/stm32_fdcan_canhat \
-  --target stm32g474 --board nucleo-g474re-canhat
+  --assembly nucleo-canhat
 ```
 
 Uruchom weryfikator (przycisk reset powtarza sprawdzenia):

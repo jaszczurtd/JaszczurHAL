@@ -3,16 +3,7 @@
     "project": "JaszczurHAL hardware tests",
     "module": "bluetooth_observer",
     "toolchain": "cmake",
-    "target": "stm32g474",
-    "board": "nucleo-g474re-pim730",
-    "targetProfiles": {
-        "rp2040": {
-            "board": "picow"
-        },
-        "rp2350-arm": {
-            "board": "pico2w"
-        }
-    },
+    "assembly": "nucleo-pim730",
     "buildDir": "${jhRoot}/.build/hardware/bluetooth_observer",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

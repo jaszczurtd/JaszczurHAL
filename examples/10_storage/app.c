@@ -16,23 +16,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#if HAL_TARGET_IS_RP
-#define SD_MISO_PIN 16u
-#define SD_MOSI_PIN 19u
-#define SD_SCK_PIN 18u
-#define SD_CS_PIN 17u
-#elif HAL_TARGET_IS_STM32G474
-#define SD_MISO_PIN 6u
-#define SD_MOSI_PIN 7u
-#define SD_SCK_PIN 5u
-#define SD_CS_PIN 22u
-#else
-#define SD_MISO_PIN 6u
-#define SD_MOSI_PIN 7u
-#define SD_SCK_PIN 5u
-#define SD_CS_PIN 4u
-#endif
-
 /* Native builds select the EEPROM size through HAL and use that region for KV.
  */
 #if HAL_TARGET_IS_RP
@@ -186,7 +169,8 @@ static void write_boot_crash_report(uint32_t now) {
   }
   s_last_crash_retry_ms = now;
 
-  hal_status_t status = hal_sdlogger_crash_init_ex("boot", (int)SD_CS_PIN);
+  hal_status_t status =
+      hal_sdlogger_crash_init_ex("boot", (int)JH_HW_NODE_SD_PIN_CS);
   if (status == HAL_OK) {
     status = hal_sdlogger_crash_report("boot ms=%lu heap=%lu",
                                        (unsigned long)hal_millis(),
@@ -219,7 +203,7 @@ static void start_sdlogger(uint32_t now) {
   }
 
   const int next_log_number = hal_sdlogger_get_log_number();
-  const hal_status_t status = hal_sdlogger_init_ex((int)SD_CS_PIN);
+  const hal_status_t status = hal_sdlogger_init_ex((int)JH_HW_NODE_SD_PIN_CS);
   s_logger_ready = status == HAL_OK;
   if (!s_logger_ready) {
     derr("SDLogger unavailable: %s", hal_status_to_string(status));
@@ -322,8 +306,10 @@ void app_start(void) {
   init_eeprom_and_kv();
   init_littlefs();
 
+  /* SD card bus, pins and chip select come from device_tree.json. */
   const hal_status_t spi_status =
-      hal_spi_init(0u, SD_MISO_PIN, SD_MOSI_PIN, SD_SCK_PIN);
+      hal_spi_init(JH_HW_BUS_SPI_INDEX, JH_HW_BUS_SPI_PIN_MISO,
+                   JH_HW_BUS_SPI_PIN_MOSI, JH_HW_BUS_SPI_PIN_SCK);
   s_spi_ready = spi_status == HAL_OK;
   if (!s_spi_ready) {
     derr("SD SPI unavailable: %s", hal_status_to_string(spi_status));

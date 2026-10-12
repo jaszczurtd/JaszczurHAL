@@ -7,48 +7,11 @@
 #include <hal/audio/hal_pga2311.h>
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_array.h>
-#include <hal/core/hal_target.h>
 #include <hal/serial/hal_serial.h>
 #include <hal/spi/hal_spi.h>
 #include <hal/system/hal_system.h>
 
 #include <stdint.h>
-
-#if HAL_TARGET_IS_RP
-#define EXAMPLE_PGA_BUS 0u
-#define EXAMPLE_PGA_MISO 16u
-#define EXAMPLE_PGA_MOSI 19u
-#define EXAMPLE_PGA_SCK 18u
-#define EXAMPLE_PGA_CS 17u
-#define EXAMPLE_AUDIO_PWM 6u
-#define EXAMPLE_AUDIO_ADC 26u
-#elif HAL_TARGET_IS_STM32G474
-/* SPI1 uses Nucleo D13/D12/D11/D10. PWM audio uses the separate PB0 pin. */
-#define EXAMPLE_PGA_BUS 0u
-#define EXAMPLE_PGA_MISO 6u
-#define EXAMPLE_PGA_MOSI 7u
-#define EXAMPLE_PGA_SCK 5u
-#define EXAMPLE_PGA_CS 22u
-#define EXAMPLE_AUDIO_PWM 16u
-#define EXAMPLE_AUDIO_ADC 0u
-#elif HAL_TARGET_IS_ESP32_FAMILY
-/* Waveshare ESP32-S3-Zero castellated pins; ADC1 covers GPIO1..GPIO10. */
-#define EXAMPLE_PGA_BUS 0u
-#define EXAMPLE_PGA_MISO 13u
-#define EXAMPLE_PGA_MOSI 11u
-#define EXAMPLE_PGA_SCK 12u
-#define EXAMPLE_PGA_CS 14u
-#define EXAMPLE_AUDIO_PWM 15u
-#define EXAMPLE_AUDIO_ADC 4u
-#else
-#define EXAMPLE_PGA_BUS 1u
-#define EXAMPLE_PGA_MISO 30u
-#define EXAMPLE_PGA_MOSI 31u
-#define EXAMPLE_PGA_SCK 29u
-#define EXAMPLE_PGA_CS 28u
-#define EXAMPLE_AUDIO_PWM 6u
-#define EXAMPLE_AUDIO_ADC 0u
-#endif
 
 #define EXAMPLE_AUDIO_BLOCK_SIZE 64u
 
@@ -77,11 +40,15 @@ static void fill_audio_block(void *context, uint16_t *buffer,
 }
 
 static void start_pga2311(void) {
-  (void)hal_spi_init(EXAMPLE_PGA_BUS, EXAMPLE_PGA_MISO, EXAMPLE_PGA_MOSI,
-                     EXAMPLE_PGA_SCK);
+  /* Bus, pins and SPI settings come from device_tree.json. */
+  (void)hal_spi_init(JH_HW_BUS_SPI_INDEX, JH_HW_BUS_SPI_PIN_MISO,
+                     JH_HW_BUS_SPI_PIN_MOSI, JH_HW_BUS_SPI_PIN_SCK);
   hal_pga2311_config_t config = hal_pga2311_default_config();
-  config.spi_bus = EXAMPLE_PGA_BUS;
-  config.cs_pin = EXAMPLE_PGA_CS;
+  config.spi_bus = JH_HW_NODE_PGA2311_BUS_INDEX;
+  config.cs_pin = JH_HW_NODE_PGA2311_PIN_CS;
+  config.spi_clock_hz = JH_HW_NODE_PGA2311_FREQUENCY_HZ;
+  config.spi_bit_order = JH_HW_NODE_PGA2311_SPI_BIT_ORDER;
+  config.spi_mode = JH_HW_NODE_PGA2311_SPI_MODE;
   config.mute_pin = HAL_PGA2311_MUTE_PIN_NONE;
   config.start_muted = false;
   if (hal_pga2311_init_ex(&config, &s_pga) != HAL_OK) {
@@ -94,12 +61,12 @@ static void start_pga2311(void) {
 
 static void start_dacless(void) {
   hal_dacless_config_t config = hal_dacless_default_config();
-  config.pwm_pin = EXAMPLE_AUDIO_PWM;
-  config.pwm_bits = 12u;
+  config.pwm_pin = JH_HW_NODE_AUDIO_PWM_PIN_OUT;
+  config.pwm_bits = JH_HW_NODE_AUDIO_PWM_PROP_RESOLUTION_BITS;
   config.block_size = EXAMPLE_AUDIO_BLOCK_SIZE;
   config.adc_input_count = 1u;
   config.use_dma = true;
-  config.adc_pins[0] = EXAMPLE_AUDIO_ADC;
+  config.adc_pins[0] = JH_HW_NODE_AUDIO_ADC_PIN_IN;
 
   hal_status_t status = hal_dacless_create(&config, &s_audio);
   if (status == HAL_OK) {

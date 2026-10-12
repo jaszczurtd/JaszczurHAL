@@ -14,6 +14,10 @@ wspólnie dla kontrolera CYW43. Przykład jest dostępny tylko dla rodziny RP.
 
 ## Połączenie
 
+Połączenia obu montaży, `picow` (Pico W, domyślny) i `pico2w` (Pico 2 W),
+opisuje `device_tree.json`: węzeł `speakerPwm` wyprowadza sygnał PWM na GP6,
+a poniższy schemat powtarza to połączenie.
+
 **Nie podłączaj pasywnego głośnika bezpośrednio do Pico.** Wyjście GP6
 przekazuje sygnał do wzmacniacza, a nie zasila głośnik. Każda próbka PCM
 jest zamieniana na jeden z 256 poziomów wypełnienia PWM. Częstotliwość
@@ -48,9 +52,9 @@ Uruchom z głównego katalogu repozytorium:
   --example 30_bluetooth_speaker
 
 vscode/entry/jh-vscode build --project examples/30_bluetooth_speaker \
-  --target rp2040 --board picow --variant AVRCP
+  --assembly picow --variant AVRCP
 vscode/entry/jh-vscode build --project examples/30_bluetooth_speaker \
-  --target rp2350-arm --board pico2w --variant BLE_A2DP
+  --assembly pico2w --variant BLE_A2DP
 ```
 
 ## Parowanie i odtwarzanie

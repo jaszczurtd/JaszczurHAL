@@ -12,10 +12,41 @@ import project_config
 
 BOARD_SELECTION_INPUT_ID = "boardSelection"
 SYNC_BOARD_PICKER_LABEL = "Project: Sync board picker"
+CHECK_DEVICE_TREE_LABEL = "Project: Check device tree"
+DEBUG_BUILD_LABEL = "Project: Build (Debug)"
+# Every Cortex-Debug profile JaszczurHAL writes starts with this prefix; the
+# synchronization replaces them and keeps profiles with other names.
+DEBUG_PROFILE_PREFIX = "Project: Debug "
+# Probe settings of each target a profile debugs: label, Cortex-Debug device,
+# OpenOCD configuration files and launch commands. ESP32-S3 and RP2350
+# RISC-V have no profile.
+DEBUG_TARGETS = {
+    "rp2040": (
+        "RP2040",
+        "RP2040",
+        ("interface/cmsis-dap.cfg", "target/rp2040.cfg"),
+        ("adapter speed 5000",),
+    ),
+    "rp2350-arm": (
+        "RP2350 ARM",
+        "RP2350",
+        ("interface/cmsis-dap.cfg", "target/rp2350.cfg"),
+        ("adapter speed 2000",),
+    ),
+    "stm32g474": (
+        "STM32G474 / ST-Link",
+        "STM32G474RE",
+        ("board/st_nucleo_g4.cfg",),
+        ("reset_config srst_only srst_nogate connect_assert_srst",),
+    ),
+}
+BOARD_DEBUG_PROFILE_NAMES = {
+    "rp2040": "Project: Debug Firmware",
+    "rp2350-arm": "Project: Debug Firmware (RP2350 ARM)",
+    "stm32g474": "Project: Debug Firmware (STM32G474 / ST-Link)",
+}
 MANAGED_DEBUG_PROFILE_NAMES = {
-    "Project: Debug Firmware",
-    "Project: Debug Firmware (RP2350 ARM)",
-    "Project: Debug Firmware (STM32G474 / ST-Link)",
+    *BOARD_DEBUG_PROFILE_NAMES.values(),
     "Debug: RP2040 (Pico/Pico W/Zero/Plus)",
     "Debug: RP2350 (Pico 2/Pico 2W)",
     "Debug: Attach RP2040 (no upload)",
@@ -47,49 +78,114 @@ def extensions_recommendations() -> dict[str, Any]:
     return {"recommendations": list(VSCODE_EXTENSION_RECOMMENDATIONS)}
 
 
+def cortex_debug_configuration(
+    name: str,
+    target: str,
+    executable: str,
+    pre_launch_task: str,
+    *,
+    run_to_entry_point: str = "main",
+) -> dict[str, Any]:
+    """One Cortex-Debug profile with the probe settings of ``target``."""
+    _, device, config_files, openocd_launch_commands = DEBUG_TARGETS[target]
+    configuration = {
+        "name": name,
+        "type": "cortex-debug",
+        "request": "launch",
+        "cwd": "${workspaceFolder}",
+        "executable": executable,
+        "servertype": "openocd",
+        "device": device,
+        "configFiles": list(config_files),
+        "runToEntryPoint": run_to_entry_point,
+        "preLaunchTask": pre_launch_task,
+    }
+    if openocd_launch_commands:
+        configuration["openOCDLaunchCommands"] = list(openocd_launch_commands)
+    return configuration
+
+
 def cortex_debug_launch_document(
     executable: str,
     *,
     run_to_entry_point: str = "main",
 ) -> dict[str, Any]:
-    profiles = (
-        (
-            "Project: Debug Firmware",
-            "RP2040",
-            ["interface/cmsis-dap.cfg", "target/rp2040.cfg"],
-            ["adapter speed 5000"],
-        ),
-        (
-            "Project: Debug Firmware (RP2350 ARM)",
-            "RP2350",
-            ["interface/cmsis-dap.cfg", "target/rp2350.cfg"],
-            ["adapter speed 2000"],
-        ),
-        (
-            "Project: Debug Firmware (STM32G474 / ST-Link)",
-            "STM32G474RE",
-            ["board/st_nucleo_g4.cfg"],
-            ["reset_config srst_only srst_nogate connect_assert_srst"],
-        ),
-    )
-    configurations = []
-    for name, device, config_files, openocd_launch_commands in profiles:
-        configuration = {
-            "name": name,
-            "type": "cortex-debug",
-            "request": "launch",
-            "cwd": "${workspaceFolder}",
-            "executable": executable,
-            "servertype": "openocd",
-            "device": device,
-            "configFiles": config_files,
-            "runToEntryPoint": run_to_entry_point,
-            "preLaunchTask": "Project: Build (Debug)",
-        }
-        if openocd_launch_commands:
-            configuration["openOCDLaunchCommands"] = openocd_launch_commands
-        configurations.append(configuration)
+    """The profiles of a project without device_tree.json: one per debugged
+    target, all for the ELF of the selected board."""
+    configurations = [
+        cortex_debug_configuration(
+            name,
+            target,
+            executable,
+            DEBUG_BUILD_LABEL,
+            run_to_entry_point=run_to_entry_point,
+        )
+        for target, name in BOARD_DEBUG_PROFILE_NAMES.items()
+    ]
     return {"version": "0.2.0", "configurations": configurations}
+
+
+def debug_build_label(assembly: str, variant: str | None) -> str:
+    suffix = f" variant: {variant}" if variant else ""
+    return f"{DEBUG_BUILD_LABEL} {assembly}{suffix}"
+
+
+def debug_profile_name(target: str, assembly: str, variant: str | None) -> str:
+    suffix = f" variant: {variant}" if variant else ""
+    return f"{DEBUG_PROFILE_PREFIX}{assembly}{suffix} ({DEBUG_TARGETS[target][0]})"
+
+
+def assembly_debug_builds(project_dir: Path) -> list[tuple[str, str, str | None]]:
+    """(target, assembly, variant) of every build of a device tree project
+    that a probe debugs: each assembly of a debugged target with the base and
+    every variant its configuration accepts."""
+    import device_tree_project
+
+    return [
+        (build.target.id, build.assembly, build.variant.id if build.variant else None)
+        for build in device_tree_project.builds(project_dir, project_config.load_targets())
+        if build.target.id in DEBUG_TARGETS
+    ]
+
+
+def assembly_launch_document(
+    manifest: dict[str, Any],
+    debug_builds: list[tuple[str, str, str | None]],
+    *,
+    workspace_dir: Path | None = None,
+    jh_root: Path | None = None,
+    default_assembly: str | None = None,
+) -> dict[str, Any]:
+    """The profiles of a device tree project: one per debugged assembly and
+    variant, each for that build's own ELF and built first by its own task,
+    so a profile never loads an image of another assembly or MCU. The
+    ``default_assembly`` comes first, as VS Code preselects the first."""
+    ordered = sorted(debug_builds, key=lambda build: build[1] != default_assembly)
+    configurations = [
+        cortex_debug_configuration(
+            debug_profile_name(target, assembly, variant),
+            target,
+            vscode_launch_executable(
+                manifest,
+                workspace_dir=workspace_dir,
+                jh_root=jh_root,
+                assembly=(target, assembly),
+                variant=variant,
+            ),
+            debug_build_label(assembly, variant),
+        )
+        for target, assembly, variant in ordered
+    ]
+    return {"version": "0.2.0", "configurations": configurations}
+
+
+def is_managed_debug_profile(configuration: Any) -> bool:
+    if not isinstance(configuration, dict):
+        return False
+    name = configuration.get("name")
+    return isinstance(name, str) and (
+        name in MANAGED_DEBUG_PROFILE_NAMES or name.startswith(DEBUG_PROFILE_PREFIX)
+    )
 
 
 def vscode_workspace_path(path: Path, workspace_dir: Path) -> str:
@@ -214,14 +310,18 @@ def vscode_launch_executable(
     workspace_dir: Path | None = None,
     jh_root: Path | None = None,
     assembly: tuple[str, str] | None = None,
+    variant: str | None = None,
 ) -> str:
     """Translate the tracked manifest artifact path into VS Code variables;
-    ``assembly`` is the (target, key) whose own buildDir holds the ELF."""
+    ``assembly`` is the (target, key) whose own buildDir holds the ELF, and a
+    ``variant`` builds into its variants/<id> below it."""
     build_dir = manifest.get("buildDir") or "${project}/.build"
     if assembly is not None:
         build_dir = assembly_build_dir(manifest, *assembly)
     if not isinstance(build_dir, str):
         raise ValueError("project manifest field 'buildDir' must be a string")
+    if variant:
+        build_dir = f"{build_dir}/variants/{variant}"
     artifacts = manifest.get("artifacts") or {}
     if not isinstance(artifacts, dict):
         raise ValueError("project manifest field 'artifacts' must be an object")
@@ -247,9 +347,10 @@ def vscode_launch_executable(
 
 def sync_cortex_debug_launch_document(
     document: dict[str, Any],
-    executable: str,
+    desired: dict[str, Any],
 ) -> bool:
-    """Replace JaszczurHAL-owned profiles while preserving consumer profiles."""
+    """Replace JaszczurHAL-owned profiles with the ``desired`` launch
+    document's while preserving consumer profiles."""
     configurations = document.get("configurations")
     if configurations is None:
         configurations = []
@@ -259,12 +360,8 @@ def sync_cortex_debug_launch_document(
     custom_configurations = [
         configuration
         for configuration in configurations
-        if not (
-            isinstance(configuration, dict)
-            and configuration.get("name") in MANAGED_DEBUG_PROFILE_NAMES
-        )
+        if not is_managed_debug_profile(configuration)
     ]
-    desired = cortex_debug_launch_document(executable)
     desired_configurations = desired["configurations"] + custom_configurations
     changed = False
     if document.get("version") != desired["version"]:
@@ -432,6 +529,87 @@ def sync_board_picker_task() -> dict[str, Any]:
     )
 
 
+# Problems of check-hardware: "<file>:<line>:<column>: error: <message>",
+# replaced after every check the task reports between its two markers.
+DEVICE_TREE_PROBLEM_MATCHER = {
+    "owner": "jaszczurhal-device-tree",
+    "source": "device_tree.json",
+    "fileLocation": ["autoDetect", "${workspaceFolder}"],
+    "pattern": {
+        "regexp": r"^(.+?):(\d+):(\d+): (error|warning): (.*)$",
+        "file": 1,
+        "line": 2,
+        "column": 3,
+        "severity": 4,
+        "message": 5,
+    },
+    "background": {
+        "activeOnStart": True,
+        "beginsPattern": r"^jh-vscode check-hardware: checking ",
+        "endsPattern": r"^jh-vscode check-hardware: (no problems|\d+ problems?)$",
+    },
+}
+
+
+def check_device_tree_task() -> dict[str, Any]:
+    return vscode_entry_task(
+        label=CHECK_DEVICE_TREE_LABEL,
+        detail=(
+            "Check every assembly of device_tree.json after each save and list "
+            "the problems at their place in the file."
+        ),
+        args=["check-hardware", "--project", "${workspaceFolder}", "--watch"],
+        isBackground=True,
+        runOptions={
+            "runOn": "folderOpen",
+            "instanceLimit": 1,
+        },
+        presentation={
+            "reveal": "never",
+            "panel": "dedicated",
+            "showReuseMessage": False,
+        },
+        problemMatcher=DEVICE_TREE_PROBLEM_MATCHER,
+    )
+
+
+def debug_build_task(assembly: str, variant: str | None) -> dict[str, Any]:
+    """The hidden pre-launch task of one assembly's debug profile."""
+    subject = f"the {assembly} assembly" + (f", variant {variant}," if variant else "")
+    return vscode_entry_task(
+        label=debug_build_label(assembly, variant),
+        detail=f"Build {subject} with debug settings for its debug profile.",
+        args=[
+            "build-debug",
+            "--project",
+            "${workspaceFolder}",
+            "--assembly",
+            assembly,
+            *(["--variant", variant] if variant else []),
+        ],
+        hide=True,
+        problemMatcher="$gcc",
+    )
+
+
+def assembly_tasks(debug_builds: list[tuple[str, str, str | None]]) -> list[dict[str, Any]]:
+    """Tasks only a device tree project has: the device tree check and the
+    debug build of each debugged assembly and variant."""
+    return [
+        check_device_tree_task(),
+        *(debug_build_task(assembly, variant) for _, assembly, variant in debug_builds),
+    ]
+
+
+def is_assembly_task(task: Any) -> bool:
+    if not isinstance(task, dict):
+        return False
+    label = task.get("label")
+    return isinstance(label, str) and (
+        label == CHECK_DEVICE_TREE_LABEL or label.startswith(f"{DEBUG_BUILD_LABEL} ")
+    )
+
+
 def project_tasks_document(
     registry: dict[str, dict[str, Any]],
     selected_target: str,
@@ -463,7 +641,7 @@ def project_tasks_document(
             problemMatcher="$gcc",
         ),
         vscode_entry_task(
-            label="Project: Build (Debug)",
+            label=DEBUG_BUILD_LABEL,
             detail=f"Build{subject} firmware with debug settings.",
             args=["build-debug", "--project", "${workspaceFolder}"],
             group="build",
@@ -641,6 +819,8 @@ def project_tasks_document(
                 problemMatcher="$gcc",
             )
         )
+    if device_tree_project.device_tree_path(project_dir) is not None:
+        tasks.extend(assembly_tasks(assembly_debug_builds(Path(project_dir))))
     return {
         "version": "2.0.0",
         "inputs": [
@@ -659,7 +839,11 @@ def sync_board_picker_document(
     selected_board: str,
     project_dir: Path | None = None,
     selected_assembly: str | None = None,
+    managed_tasks: list[dict[str, Any]] | None = None,
 ) -> bool:
+    """Update the picker input, the synchronization task and the
+    ``managed_tasks`` of a device tree project (none without one) in place;
+    other tasks stay as they are."""
     inputs = document.get("inputs")
     changed = False
     if inputs is None:
@@ -710,5 +894,15 @@ def sync_board_picker_document(
                 changed = True
     else:
         tasks.append(desired_task)
+        changed = True
+
+    # Device tree tasks follow the assemblies: when they differ, the current
+    # ones go and the desired ones are appended, as the full document lists
+    # them last.
+    desired_managed = list(managed_tasks or [])
+    current_managed = [task for task in tasks if is_assembly_task(task)]
+    if current_managed != desired_managed:
+        tasks[:] = [task for task in tasks if not is_assembly_task(task)]
+        tasks.extend(desired_managed)
         changed = True
     return changed

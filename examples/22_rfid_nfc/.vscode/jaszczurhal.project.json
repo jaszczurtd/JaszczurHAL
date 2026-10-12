@@ -3,8 +3,7 @@
     "project": "JaszczurHAL examples",
     "module": "22_rfid_nfc",
     "toolchain": "cmake",
-    "target": "rp2040",
-    "board": "pico",
+    "assembly": "pico",
     "buildDir": "${jhRoot}/.build/examples/22_rfid_nfc",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

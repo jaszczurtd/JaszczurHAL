@@ -6,6 +6,9 @@ This example enables OTA updates on Pico W and Pico 2 W using the Pico SDK
 integration. Set the WiFi credentials and replace the example OTA password
 in `app.c`. The hostname, port, and password must match
 `.vscode/jaszczurhal.project.json`.
+`device_tree.json` lists the assemblies: `picow` (Pico W, the default),
+`pico2w` (Pico 2 W) and `esp32s3-zero` (ESP32-S3-Zero); none of them needs
+external hardware.
 
 The computer listens for callback connections on TCP port `8266` and for
 discovery replies on UDP port `8266`. A firewall that blocks inbound

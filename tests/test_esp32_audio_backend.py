@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import build_esp_idf
 import generate_hal_features
-import project_config
+import hardware_resolver
 
 
 def require(condition: bool, message: str) -> None:
@@ -198,19 +198,34 @@ for relative in (
     )
 
 example = read("examples/17_audio_output/app.c")
+# The example takes its pins from device_tree.json; its esp32s3 assembly
+# must wire every audio signal, and the code must use those macros.
+audio_tree = ROOT / "examples/17_audio_output/device_tree.json"
+esp_assemblies = [
+    item["name"]
+    for item in hardware_resolver.list_assemblies(
+        hardware_resolver.load_device_tree(audio_tree)
+    )
+    if item["target"] == "esp32s3"
+]
 require(
-    "HAL_TARGET_IS_ESP32_FAMILY" in example,
-    "17_audio_output has no ESP32 pin assignment",
+    len(esp_assemblies) == 1,
+    "17_audio_output does not declare one esp32s3 assembly",
 )
-require(
-    "esp32s3"
-    in project_config.project_target_ids(
-        project_config.read_project_config(
-            ROOT / "examples/17_audio_output/hal_project_config.h"
-        ),
-        project_config.load_targets(ROOT),
-    ),
-    "17_audio_output does not declare esp32s3",
-)
+audio_nodes = hardware_resolver.Resolver(audio_tree).resolve(
+    assembly=esp_assemblies[0]
+)["hardware"]["nodes"]
+for path, signal in (("audioPwm", "out"), ("audioAdc", "in"), ("pga2311", "cs")):
+    require(
+        audio_nodes[path]["present"]
+        and audio_nodes[path]["signals"][signal]["endpoint"] is not None,
+        f"17_audio_output has no ESP32 pin for {path}.{signal}",
+    )
+for macro in (
+    "JH_HW_NODE_AUDIO_PWM_PIN_OUT",
+    "JH_HW_NODE_AUDIO_ADC_PIN_IN",
+    "JH_HW_NODE_PGA2311_PIN_CS",
+):
+    require(macro in example, f"17_audio_output does not use {macro}")
 
 print("ESP32 PWM audio backend contracts verified")

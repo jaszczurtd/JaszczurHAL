@@ -3,8 +3,7 @@
     "project": "JaszczurHAL examples",
     "module": "20_irsmall_decoder",
     "toolchain": "cmake",
-    "target": "rp2040",
-    "board": "pico",
+    "assembly": "pico",
     "buildDir": "${jhRoot}/.build/examples/20_irsmall_decoder",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

@@ -28,22 +28,32 @@ Run from the repository root:
   --example 29_bluetooth_gamepad
 ```
 
-The default boards are `picow` for RP2040, `pico2w` for RP2350 ARM, and
-`nucleo-g474re-pim730` for STM32G474. RP2350 RISC-V is not supported because
-CYW43 Bluetooth transport is not enabled for that target.
+`device_tree.json` describes the hardware of every assembly: `picow`
+(Pico W, the default), `pico2w` (Pico 2 W) and `nucleo-pim730`.
+`nucleo-pim730` is a plain NUCLEO-G474RE with an external PIM730/RM2 module,
+without a separate board profile; the table below repeats the module wiring.
+RP2350 RISC-V is not supported because CYW43 Bluetooth transport is not
+enabled for that target.
+
+| PIM730/RM2 signal | NUCLEO-G474RE |
+|---|---|
+| CS | PB12, CN10 pin 16 |
+| DAT | PB15, CN10 pin 26 |
+| WL_ON | PB14, CN10 pin 28 |
+| CLK | PB13, CN10 pin 30 |
 
 To build a specific variant:
 
 ```bash
 vscode/entry/jh-vscode build \
   --project examples/29_bluetooth_gamepad \
-  --target rp2040 --board picow --variant CLASSIC_SCAN
+  --assembly picow --variant CLASSIC_SCAN
 vscode/entry/jh-vscode build \
   --project examples/29_bluetooth_gamepad \
-  --target rp2040 --board picow --variant HID_HOST
+  --assembly picow --variant HID_HOST
 vscode/entry/jh-vscode build \
   --project examples/29_bluetooth_gamepad \
-  --target rp2040 --board picow --variant BLE
+  --assembly picow --variant BLE
 ```
 
 The Bluedroid implementation for the original ESP32 has a separate

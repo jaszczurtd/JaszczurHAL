@@ -2,7 +2,9 @@
 
 `tests/hardware/stm32_fdcan_canhat` validates the native FDCAN backend on a
 NUCLEO-G474RE with the [Embedded Garage](https://www.youtube.com/@embeddedGarage)
-CAN-FD HAT v1.2 (`nucleo-g474re-canhat` board profile). After reset the
+CAN-FD HAT v1.2. `device_tree.json` describes this pair as the
+`nucleo-canhat` assembly: the HAT wiring, the 160 MHz clock tree from the
+24 MHz crystal and the RDY LED as the board's built-in LED. After reset the
 fixture runs every check once, then prints the report every two seconds:
 `JHCANHAT begin` with the totals, one `JHCANHAT <name> <PASS|FAIL|SKIP>
 <detail>` line per check, and `JHCANHAT end`. The BUSY LED (PC2) shines while
@@ -11,7 +13,7 @@ at 1 Hz when nothing failed and at 5 Hz otherwise.
 
 Without any wiring the fixture checks:
 
-- the board profile (three CAN channels) and the clock tree: PLL from the
+- the assembly (three CAN channels) and the clock tree: PLL from the
   24 MHz HSE, FDCAN kernel clock 80 MHz from PLL Q, UCPD dead-battery pull-downs
   off;
 - internal and external loopback of classic frames at 125k, 500k and 1M, and
@@ -47,10 +49,10 @@ Build and upload through the ST-LINK (OpenOCD):
 ```sh
 vscode/entry/jh-vscode build \
   --project tests/hardware/stm32_fdcan_canhat \
-  --target stm32g474 --board nucleo-g474re-canhat
+  --assembly nucleo-canhat
 vscode/entry/jh-vscode upload \
   --project tests/hardware/stm32_fdcan_canhat \
-  --target stm32g474 --board nucleo-g474re-canhat
+  --assembly nucleo-canhat
 ```
 
 Run the verifier (press the reset button to repeat the checks):

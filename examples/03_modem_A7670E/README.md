@@ -20,12 +20,18 @@ The example sets `ignore_local_time = true` and `enable_sni = false`.
 These are not a ready-to-use TLS configuration for every broker. Check the
 requirements of the server and modem you use.
 
-| Signal on the RP microcontroller | Pin / setting |
-|---|---|
-| UART TX, to modem RX | GP4 |
-| UART RX, from modem TX | GP5 |
-| Modem power-control signal | GP6 |
-| Serial port | `HAL_UART_PORT_2`, 115200 baud, 8N1 |
+`device_tree.json` describes the wiring of every assembly, and the program
+takes the serial port, its settings and the power-control pin from the
+generated header. The table below repeats that wiring.
+
+| Signal on the microcontroller | Pico / Pico 2 | ESP32-S3-Zero |
+|---|---|---|
+| UART TX, to modem RX | GP4 | GPIO4 |
+| UART RX, from modem TX | GP5 | GPIO5 |
+| Modem power-control signal, active low | GP6 | GPIO6 |
+
+On every board the modem uses serial port `HAL_UART_PORT_2` at 115200 baud,
+8N1.
 
 Use the power supply and logic levels specified for your module. The code
 uses a 1500 ms control pulse and waits 15 s after toggling power. Check the
@@ -37,9 +43,10 @@ Run from the repository root:
 
 ```bash
 vscode/entry/jh-vscode build \
-  --project examples/03_modem_A7670E --target rp2040 --board pico
+  --project examples/03_modem_A7670E --assembly pico
 ```
 
-The project includes RP2040, RP2350 ARM, and RP2350 RISC-V configurations.
+The other assemblies in `device_tree.json` cover Pico 2 (ARM and RISC-V)
+and ESP32-S3-Zero.
 Modem and MQTT startup errors are reported to the console;
 the example does not implement recovery from every possible failure.

@@ -11,7 +11,9 @@ static uint32_t reported_ms;
 void app_start(void) {
   hal_debug_init_default();
   hal_debug_set_module_prefix("capture");
-  const hal_pulse_capture_config_t config = {0U, true, 10000U};
+  /* The input pin and its pull-up come from device_tree.json. */
+  const hal_pulse_capture_config_t config = {JH_HW_NODE_CAPTURE_PIN_IN, true,
+                                             10000U};
   hal_gpio_set_mode(config.pin, HAL_GPIO_INPUT_PULLUP);
   capture_status = hal_pulse_capture_init(&config);
   if (capture_status != HAL_OK)

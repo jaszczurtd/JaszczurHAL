@@ -2,11 +2,13 @@
 
 # 21 - CAN FD with the STM32G474 built-in controller
 
-This example runs every CAN channel the board profile describes through the
-STM32G474 built-in FDCAN controllers. Its default board is
-`nucleo-g474re-canhat`, a NUCLEO-G474RE with the
+This example runs every CAN channel of the selected assembly through the
+STM32G474 built-in FDCAN controllers. Its `device_tree.json` has one
+assembly, `nucleo-canhat`: a NUCLEO-G474RE with the
 [Embedded Garage](https://www.youtube.com/@embeddedGarage) CAN-FD HAT, which
-has three channels (CN5, CN6, CN7) with MCP2562FD transceivers.
+has three channels (CN5, CN6, CN7) with MCP2562FD transceivers. The file also
+describes the rest of the HAT wiring and selects the `hse-160mhz` clock tree:
+SYSCLK 160 MHz and an 80 MHz FDCAN clock from the board's 24 MHz crystal.
 
 Each channel takes its settings from `hal_can_board_config()`: pins,
 transceiver standby line, 500 kbit/s arbitration and 2 Mbit/s data phase.
@@ -18,7 +20,7 @@ The built-in LED (RDY on the HAT) toggles after every second in which each
 channel received a frame and stays off otherwise.
 
 `HAL_ENABLE_STM32G474_FDCAN` enables the controller. This example is for
-STM32G474 boards whose profile has CAN channels.
+STM32G474 assemblies with CAN channels.
 
 ## Loopback or shared bus
 

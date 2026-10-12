@@ -3,13 +3,7 @@
     "project": "JaszczurHAL hardware tests",
     "module": "bluetooth_classic_hci_trace",
     "toolchain": "cmake",
-    "target": "rp2040",
-    "board": "picow",
-    "targetProfiles": {
-        "rp2350-arm": {
-            "board": "pico2w"
-        }
-    },
+    "assembly": "picow",
     "buildDir": "${jhRoot}/.build/hardware/bluetooth_classic_hci_trace",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

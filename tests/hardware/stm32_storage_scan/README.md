@@ -12,6 +12,10 @@ seconds. The LED (PA5) toggles per scan block during the checks and blinks at
 1 Hz while reporting. PA0 and PA1 may stay open; only the ring geometry is
 judged, not the voltages.
 
+`device_tree.json` describes the one assembly, `nucleo`: the scan inputs
+`scanA` on PA0 (CN7 pin 28 / A0) and `scanB` on PA1 (CN7 pin 30 / A1), and LD2
+(PA5) as the built-in LED.
+
 The fixture owns the EEPROM/KV reservation at the end of the flash. The boot
 counter keeps counting across uploads, which is further persistence evidence.
 
@@ -20,10 +24,10 @@ Build and upload through the ST-LINK (OpenOCD):
 ```sh
 vscode/entry/jh-vscode build \
   --project tests/hardware/stm32_storage_scan \
-  --target stm32g474 --board nucleo-g474re
+  --assembly nucleo
 vscode/entry/jh-vscode upload \
   --project tests/hardware/stm32_storage_scan \
-  --target stm32g474 --board nucleo-g474re
+  --assembly nucleo
 ```
 
 To check a larger EEPROM/KV reservation, add `--variant EEPROM_16K` to both

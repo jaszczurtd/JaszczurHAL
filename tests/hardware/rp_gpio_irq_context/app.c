@@ -17,10 +17,11 @@
  * pin keeps its input direction the whole time; only the weak pull moves.
  */
 
-#define PIN_CTX_A 2u
-#define PIN_CTX_B 3u
-#define PIN_PLAIN 4u
-#define PIN_SWAP 5u
+/* Probe pins come from device_tree.json. */
+#define PIN_CTX_A JH_HW_NODE_CTX_A_PIN_IN
+#define PIN_CTX_B JH_HW_NODE_CTX_B_PIN_IN
+#define PIN_PLAIN JH_HW_NODE_PLAIN_PIN_IN
+#define PIN_SWAP JH_HW_NODE_SWAP_PIN_IN
 
 #define SETTLE_MS 3u
 #define CHECK_COUNT 16u

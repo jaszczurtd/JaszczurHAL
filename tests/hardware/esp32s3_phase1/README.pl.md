@@ -6,11 +6,13 @@ ESP32-S3-Zero SKU 25081. Celowo nie obejmuje API HAL dla GPIO, portu
 szeregowego, magistral, sieci ani pamięci masowej; przewidziano je w późniejszych
 fazach.
 
-Firmware podaje dokładną, wygenerowaną tożsamość układu docelowego i płytki, a
-następnie sprawdza wykryty model chipu, liczbę rdzeni, fizyczny rozmiar
-flash, inicjalizację PSRAM oraz fizyczny rozmiar PSRAM z danymi zapisanymi w
-rejestrze płytek. Skrypt `verify_phase1.py` wyznacza oczekiwane wartości na
-podstawie tych samych deskryptorów układu i płytki, po czym czeka na cykliczny raport na natywnym
+`device_tree.json` opisuje jedyny montaż, `esp32s3-zero`: samą płytkę, bez
+zewnętrznego sprzętu. Firmware podaje dokładną, wygenerowaną tożsamość układu
+docelowego i płytki, a następnie sprawdza wykryty model chipu, liczbę rdzeni,
+fizyczny rozmiar flash, inicjalizację PSRAM oraz fizyczny rozmiar PSRAM z
+danymi zapisanymi w rejestrze płytek. Skrypt `verify_phase1.py` bierze układ
+docelowy i płytkę montażu z `device_tree.json`, wyznacza oczekiwane wartości
+na podstawie ich deskryptorów, po czym czeka na cykliczny raport na natywnym
 porcie USB Serial/JTAG.
 
 Użyj stabilnej ścieżki `/dev/serial/by-id/`, gdy jest dostępna. Skompiluj i
@@ -19,11 +21,11 @@ zwaliduj artefakty za pomocą produkcyjnego skryptu ESP-IDF:
 ```bash
 python3 scripts/build_esp_idf.py build \
   --project tests/hardware/esp32s3_phase1 \
-  --target esp32s3 --board waveshare-esp32-s3-zero \
+  --assembly esp32s3-zero \
   --output .build/hardware/esp32s3_phase1 --clean
 python3 scripts/build_esp_idf.py artifacts \
   --project tests/hardware/esp32s3_phase1 \
-  --target esp32s3 --board waveshare-esp32-s3-zero \
+  --assembly esp32s3-zero \
   --output .build/hardware/esp32s3_phase1
 ```
 

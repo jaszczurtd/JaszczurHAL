@@ -37,20 +37,20 @@ przepełnienie kolejki oraz brak alokacji dynamicznej podczas działania
 parsera.
 
 Sondą jest kompilacja podstawowa: `hal_project_config.h` definiuje
-`JH_BLUETOOTH_CLASSIC_HID_PROBE`. Zbuduj wymagany obraz Pico 2 W:
+`JH_BLUETOOTH_CLASSIC_HID_PROBE`. `device_tree.json` opisuje sprzęt obu
+montaży: `pico2w` (Pico 2 W, domyślny) i `picow` (Pico W). Żaden z nich nie
+wymaga zewnętrznych połączeń. Zbuduj wymagany obraz Pico 2 W:
 
 ```sh
 vscode/entry/jh-vscode build \
-  --project tests/hardware/bluetooth_gamepad \
-  --target rp2350-arm --board pico2w
+  --project tests/hardware/bluetooth_gamepad --assembly pico2w
 ```
 
 Wgraj go i uruchom weryfikator sprzętowy na powstałym porcie CDC:
 
 ```sh
 vscode/entry/jh-vscode upload \
-  --project tests/hardware/bluetooth_gamepad \
-  --target rp2350-arm --board pico2w \
+  --project tests/hardware/bluetooth_gamepad --assembly pico2w \
   --port /dev/ttyACM0
 
 python3 tests/hardware/bluetooth_gamepad/verify_zero2.py \

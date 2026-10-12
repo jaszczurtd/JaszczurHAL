@@ -1,0 +1,143 @@
+{
+  "$schema": "../../config/hardware/device_tree.schema.json",
+  "schemaVersion": 1,
+  "nodes": {
+    "mfrc522": { "compatible": "jaszczurhal,spi-device" },
+    "mfrc522Reset": {
+      "compatible": "jaszczurhal,gpio-output",
+      "properties": { "activeLow": true }
+    },
+    "pn532": { "compatible": "jaszczurhal,spi-device" },
+    "pn532Reset": {
+      "compatible": "jaszczurhal,gpio-output",
+      "properties": { "activeLow": true }
+    }
+  },
+  "assemblies": {
+    "pico": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 4000000,
+          "pins": { "sck": 18, "mosi": 19, "miso": 16 }
+        }
+      },
+      "nodes": {
+        "mfrc522": { "present": true, "bus": "spi", "pins": { "cs": 17 } },
+        "mfrc522Reset": { "present": true, "pins": { "out": 20 } },
+        "pn532": {
+          "present": true,
+          "bus": "spi",
+          "transport": { "frequencyHz": 1000000, "bitOrder": "lsb" },
+          "pins": { "cs": 21 }
+        },
+        "pn532Reset": { "present": true, "pins": { "out": 22 } }
+      }
+    },
+    "pico2-arm": {
+      "target": "rp2350-arm",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 4000000,
+          "pins": { "sck": 18, "mosi": 19, "miso": 16 }
+        }
+      },
+      "nodes": {
+        "mfrc522": { "present": true, "bus": "spi", "pins": { "cs": 17 } },
+        "mfrc522Reset": { "present": true, "pins": { "out": 20 } },
+        "pn532": {
+          "present": true,
+          "bus": "spi",
+          "transport": { "frequencyHz": 1000000, "bitOrder": "lsb" },
+          "pins": { "cs": 21 }
+        },
+        "pn532Reset": { "present": true, "pins": { "out": 22 } }
+      }
+    },
+    "pico2-riscv": {
+      "target": "rp2350-riscv",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 4000000,
+          "pins": { "sck": 18, "mosi": 19, "miso": 16 }
+        }
+      },
+      "nodes": {
+        "mfrc522": { "present": true, "bus": "spi", "pins": { "cs": 17 } },
+        "mfrc522Reset": { "present": true, "pins": { "out": 20 } },
+        "pn532": {
+          "present": true,
+          "bus": "spi",
+          "transport": { "frequencyHz": 1000000, "bitOrder": "lsb" },
+          "pins": { "cs": 21 }
+        },
+        "pn532Reset": { "present": true, "pins": { "out": 22 } }
+      }
+    },
+    "nucleo": {
+      "target": "stm32g474",
+      "board": "nucleo-g474re",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 4000000,
+          "pins": { "sck": "PB3", "mosi": "PA7", "miso": "PA6" }
+        }
+      },
+      "nodes": {
+        "mfrc522": { "present": true, "bus": "spi", "pins": { "cs": "PB6" } },
+        "mfrc522Reset": { "present": true, "pins": { "out": "PB1" } },
+        "pn532": {
+          "present": true,
+          "bus": "spi",
+          "transport": { "frequencyHz": 1000000, "bitOrder": "lsb" },
+          "pins": { "cs": "PB2" }
+        },
+        "pn532Reset": { "present": true, "pins": { "out": "PB10" } }
+      }
+    },
+    "esp32s3-zero": {
+      "target": "esp32s3",
+      "board": "waveshare-esp32-s3-zero",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 4000000,
+          "pins": { "sck": 5, "mosi": 7, "miso": 6 }
+        }
+      },
+      "nodes": {
+        "mfrc522": { "present": true, "bus": "spi", "pins": { "cs": 16 } },
+        "mfrc522Reset": { "present": true, "pins": { "out": 17 } },
+        "pn532": {
+          "present": true,
+          "bus": "spi",
+          "transport": { "frequencyHz": 1000000, "bitOrder": "lsb" },
+          "pins": { "cs": 18 }
+        },
+        "pn532Reset": { "present": true, "pins": { "out": 15 } }
+      }
+    }
+  }
+}

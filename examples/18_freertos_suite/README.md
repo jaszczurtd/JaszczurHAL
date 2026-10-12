@@ -22,6 +22,20 @@ Each service has one instance. The HTTP server uses seven of the default
 eight routes: `/`, `/api/status`, the HTTP command endpoint, and four RAM-file
 routes. WebSocket and console messages share the `status` and `echo` handlers.
 
+`device_tree.json` describes the hardware of every assembly: `picow`
+(Pico W, the default), `pico2w` (Pico 2 W), `pico2-riscv` (Pico 2 on its
+RISC-V cores, base example only), `esp32s3-zero` (ESP32-S3-Zero) and
+`nucleo-pim730`. `nucleo-pim730` is a plain NUCLEO-G474RE with an external
+PIM730/RM2 module, without a separate board profile; the table below repeats
+the module wiring.
+
+| PIM730/RM2 signal | NUCLEO-G474RE |
+|---|---|
+| CS | PB12, CN10 pin 16 |
+| DAT | PB15, CN10 pin 26 |
+| WL_ON | PB14, CN10 pin 28 |
+| CLK | PB13, CN10 pin 30 |
+
 ## Network configuration
 
 Set these compile definitions before running:

@@ -1,0 +1,69 @@
+{
+  "$schema": "../../config/hardware/device_tree.schema.json",
+  "schemaVersion": 1,
+  "nodes": {
+    "radioModule": {
+      "compatible": "waveshare,core1262-hf"
+    }
+  },
+  "assemblies": {
+    "pico-core1262-hf": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "loraSpi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 8000000,
+          "pins": { "sck": 18, "mosi": 19, "miso": 16 }
+        }
+      },
+      "nodes": {
+        "radioModule": {
+          "present": true,
+          "pins": { "cs": 17, "reset": 20, "busy": 21, "dio1": 22, "rxen": 10, "txen": 11 }
+        },
+        "radioModule.radio": { "bus": "loraSpi" }
+      }
+    },
+    "rp2040-lora-lf": {
+      "target": "rp2040",
+      "board": "rp2040-lora-lf",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "nodes": {
+        "radioModule": { "present": false }
+      }
+    },
+    "nucleo-core1262-hf": {
+      "target": "stm32g474",
+      "board": "nucleo-g474re",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "loraSpi": {
+          "kind": "spi",
+          "index": 1,
+          "frequencyHz": 8000000,
+          "pins": { "sck": "PB13", "mosi": "PB15", "miso": "PB14" }
+        }
+      },
+      "nodes": {
+        "radioModule": {
+          "present": true,
+          "pins": {
+            "cs": "PB0",
+            "reset": "PB1",
+            "busy": "PB2",
+            "dio1": "PB3",
+            "rxen": "PB4",
+            "txen": "PB5"
+          }
+        },
+        "radioModule.radio": { "bus": "loraSpi" }
+      }
+    }
+  }
+}

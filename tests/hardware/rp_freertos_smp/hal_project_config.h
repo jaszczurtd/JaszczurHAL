@@ -1,5 +1,7 @@
 #pragma once
 
+/* Targets and wiring come from the assemblies in device_tree.json. */
+
 #ifndef HAL_ENABLE_FREERTOS
 #define HAL_ENABLE_FREERTOS
 #endif

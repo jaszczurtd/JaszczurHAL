@@ -3,8 +3,9 @@
  * ring while interrupts stay masked and while KV publishes to flash. The
  * fixture drives itself: an odd boot runs the checks, stores its verdict in
  * KV and resets through the watchdog; an even boot confirms what survived and
- * reports every two seconds. The LED (PA5) toggles per scan block during the
- * checks and blinks at 1 Hz while reporting. */
+ * reports every two seconds. The built-in LED (LD2, PA5) toggles per scan
+ * block during the checks and blinks at 1 Hz while reporting. The scan pins
+ * come from device_tree.json. */
 
 #include <hal/analog/hal_adc_scan.h>
 #include <hal/core/hal_app.h>
@@ -26,9 +27,8 @@
 #include "hal/impl/stm32g474/port/stm32g474_regs.h"
 #endif
 
-#define LED_PIN 5u    /* PA5, LD2 */
-#define SCAN_PIN_A 0u /* PA0, Arduino A0 */
-#define SCAN_PIN_B 1u /* PA1, Arduino A1 */
+#define SCAN_PIN_A JH_HW_NODE_SCAN_A_PIN_IN
+#define SCAN_PIN_B JH_HW_NODE_SCAN_B_PIN_IN
 #define SCAN_PINS 3u
 #define SCAN_CONVERSION_NS 15000u
 #define SCAN_BLOCK_FRAMES 444u /* 3 x 15 us x 444 = 20 ms per block */
@@ -93,7 +93,7 @@ static bool s_led;
 
 static void led(bool on) {
   s_led = on;
-  hal_gpio_write(LED_PIN, on);
+  hal_gpio_write(HAL_LED_BUILTIN, on);
 }
 
 static const uint16_t *half(uint8_t index) {
@@ -309,7 +309,7 @@ static void report(void) {
 }
 
 void app_start(void) {
-  hal_gpio_set_mode(LED_PIN, HAL_GPIO_OUTPUT);
+  hal_gpio_set_mode(HAL_LED_BUILTIN, HAL_GPIO_OUTPUT);
   led(true);
   s_watchdog_reboot = hal_watchdog_caused_reboot();
   init_storage();

@@ -6,19 +6,19 @@
     "jaszczurhal.vscodeEntryWindows": "../../vscode/entry/jh-vscode.cmd",
     "cortex-debug.gdbPath.linux": "gdb-multiarch",
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
-    "C_Cpp.default.compileCommands": "${workspaceFolder}/../../.build/examples/21_stm32g474_fdcan_native/compile_commands_patched.json",
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/../../.build/examples/21_stm32g474_fdcan_native/stm32g474/nucleo-canhat/compile_commands_patched.json",
     "C_Cpp.errorSquiggles": "enabled",
     "cmake.sourceDirectory": "${workspaceFolder}/../../cmake/jh_firmware_project",
-    "cmake.buildDirectory": "${workspaceFolder}/../../.build/examples/21_stm32g474_fdcan_native/cmake-tools/stm32g474-nucleo-g474re-canhat",
+    "cmake.buildDirectory": "${workspaceFolder}/../../.build/examples/21_stm32g474_fdcan_native/cmake-tools/stm32g474-nucleo-canhat",
     "cmake.generator": "Ninja",
     "cmake.configureSettings": {
         "JH_TARGET": "stm32g474",
         "CMAKE_TOOLCHAIN_FILE": "${workspaceFolder}/../../link_libraries/stm32_lib/toolchain_stm32g474.cmake",
-        "JH_BOARD": "nucleo-g474re-canhat",
-        "JH_ARTIFACT_DIR": "${workspaceFolder}/../../.build/examples/21_stm32g474_fdcan_native",
+        "JH_ARTIFACT_DIR": "${workspaceFolder}/../../.build/examples/21_stm32g474_fdcan_native/stm32g474/nucleo-canhat",
         "JH_PROJECT_DIR": "${workspaceFolder}",
         "JH_MODULE_NAME": "21_stm32g474_fdcan_native",
-        "JH_ROOT": "${workspaceFolder}/../.."
+        "JH_ROOT": "${workspaceFolder}/../..",
+        "JH_ASSEMBLY": "nucleo-canhat"
     },
     "files.exclude": {
         "**/.build": true

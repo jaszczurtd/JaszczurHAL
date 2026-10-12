@@ -10,6 +10,26 @@ _SOURCE_FRAGMENT_TOKEN = re.compile(
 )
 
 
+# Library modules that open their bus through a compile-time setting. A
+# project with device_tree.json takes each setting from the generated macros,
+# so a bus changed in the file reaches the module.
+COMPILE_TIME_BUS_SETTINGS = {
+    "HAL_ENABLE_GPS": "HAL_GPS_UART_PORT",
+    "HAL_ENABLE_SDLOGGER": "HAL_SDLOGGER_SPI_BUS",
+}
+
+
+def unbound_bus_settings(project_config: str) -> list[str]:
+    """Settings of COMPILE_TIME_BUS_SETTINGS whose module the project
+    configuration enables without taking the setting from a JH_HW_* macro."""
+    return [
+        setting
+        for feature, setting in COMPILE_TIME_BUS_SETTINGS.items()
+        if re.search(rf"#\s*define\s+{feature}\b", project_config)
+        and not re.search(rf"#\s*define\s+{setting}\b[^\n]*\bJH_HW_", project_config)
+    ]
+
+
 def source_fragment_pattern(fragment: str) -> re.Pattern[str]:
     """Build a pattern that preserves tokens but accepts formatting whitespace."""
     tokens = _SOURCE_FRAGMENT_TOKEN.findall(fragment)

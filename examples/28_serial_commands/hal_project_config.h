@@ -1,11 +1,5 @@
 #pragma once
 
-/* Targets this example builds for. */
-#define JH_PROJECT_TARGETS(X)                                                  \
-  X(HAL_TARGET_RP2040)                                                         \
-  X(HAL_TARGET_RP2350_ARM)                                                     \
-  X(HAL_TARGET_RP2350_RISCV)                                                   \
-  X(HAL_TARGET_STM32G474)                                                      \
-  X(HAL_TARGET_ESP32_S3)
+/* Targets and wiring come from the assemblies in device_tree.json. */
 
 #define HAL_ENABLE_SERIAL_COMMANDS

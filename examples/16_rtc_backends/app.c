@@ -20,13 +20,8 @@
 #include <stdint.h>
 
 #if HAL_TARGET_IS_RP
-#define EXAMPLE_I2C_SDA 4u
-#define EXAMPLE_I2C_SCL 5u
 #define INTERNAL_RTC_NAME "RP AON"
 #else
-/* STM32 pin numbers use port * 16 + pin; these values select PB9 and PB8. */
-#define EXAMPLE_I2C_SDA 25u
-#define EXAMPLE_I2C_SCL 24u
 #define INTERNAL_RTC_NAME "STM32 internal"
 #endif
 
@@ -213,12 +208,14 @@ static bool ensure_external_datetime(const char *name, hal_rtc_t rtc) {
 
 static hal_rtc_t init_rtc(hal_rtc_chip_t chip, uint8_t address,
                           const char *name) {
-  hal_rtc_config_t config = {.chip = chip,
-                             .bus = {.i2c = {.sda_pin = EXAMPLE_I2C_SDA,
-                                             .scl_pin = EXAMPLE_I2C_SCL,
-                                             .clock_hz = HAL_I2C_CLOCK_FAST_HZ,
-                                             .i2c_bus = 0u,
-                                             .i2c_addr = address}}};
+  /* Bus, pins and clock come from device_tree.json. */
+  hal_rtc_config_t config = {
+      .chip = chip,
+      .bus = {.i2c = {.sda_pin = JH_HW_BUS_I2C_PIN_SDA,
+                      .scl_pin = JH_HW_BUS_I2C_PIN_SCL,
+                      .clock_hz = JH_HW_BUS_I2C_FREQUENCY_HZ,
+                      .i2c_bus = JH_HW_BUS_I2C_INDEX,
+                      .i2c_addr = address}}};
   hal_rtc_t rtc = NULL;
   const hal_status_t status = hal_rtc_init_ex(&config, &rtc);
   if (status != HAL_OK) {
@@ -380,14 +377,14 @@ void app_start(void) {
         wake_reason_name(boot_wake.reason),
         (unsigned long)(boot_wake.elapsed_us / 1000u));
   }
-  (void)hal_i2c_init(EXAMPLE_I2C_SDA, EXAMPLE_I2C_SCL, HAL_I2C_CLOCK_FAST_HZ);
+  (void)hal_i2c_init_bus(JH_HW_BUS_I2C_INDEX, JH_HW_BUS_I2C_PIN_SDA,
+                         JH_HW_BUS_I2C_PIN_SCL, JH_HW_BUS_I2C_FREQUENCY_HZ);
 
   s_internal = init_internal_rtc();
 
-  s_pcf8563 = init_rtc(HAL_RTC_CHIP_PCF8563, HAL_RTC_PCF8563_DEFAULT_I2C_ADDR,
-                       "PCF8563");
-  s_ds3231 =
-      init_rtc(HAL_RTC_CHIP_DS3231, HAL_RTC_DS3231_DEFAULT_I2C_ADDR, "DS3231");
+  s_pcf8563 =
+      init_rtc(HAL_RTC_CHIP_PCF8563, JH_HW_NODE_PCF8563_ADDRESS, "PCF8563");
+  s_ds3231 = init_rtc(HAL_RTC_CHIP_DS3231, JH_HW_NODE_DS3231_ADDRESS, "DS3231");
   if (s_pcf8563 != NULL) {
     exercise_pcf8563_timer(s_pcf8563);
   }

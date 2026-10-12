@@ -1,0 +1,29 @@
+{
+  "$schema": "../../config/hardware/device_tree.schema.json",
+  "schemaVersion": 1,
+  "nodes": {
+    "speakerPwm": {
+      "compatible": "jaszczurhal,pwm-output"
+    }
+  },
+  "assemblies": {
+    "picow": {
+      "target": "rp2040",
+      "board": "picow",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "nodes": {
+        "speakerPwm": { "present": true, "pins": { "out": 6 } }
+      }
+    },
+    "pico2w": {
+      "target": "rp2350-arm",
+      "board": "pico2w",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "nodes": {
+        "speakerPwm": { "present": true, "pins": { "out": 6 } }
+      }
+    }
+  }
+}

@@ -27,12 +27,13 @@ Uruchom z głównego katalogu repozytorium:
   --target stm32g474 --example 28_serial_commands
 ```
 
-Dostępne są także konfiguracje RP2350 ARM i RISC-V. Aby skompilować
-pojedynczą konfigurację, użyj:
+Montaże wymienia `device_tree.json`: `pico` (domyślny), `pico2-arm`,
+`pico2-riscv`, `nucleo` i `esp32s3-zero`. Żaden z nich nie wymaga
+dodatkowego sprzętu. Aby skompilować pojedynczą konfigurację, użyj:
 
 ```bash
 vscode/entry/jh-vscode build \
-  --project examples/28_serial_commands --target rp2040 --board pico
+  --project examples/28_serial_commands --assembly pico
 ```
 
 ## Wymiana danych przez port szeregowy

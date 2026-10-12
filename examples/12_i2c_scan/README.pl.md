@@ -3,29 +3,38 @@
 # 12 - Wykrywanie urządzeń I2C na STM32G474
 
 Przykład skanuje adresy I2C `0x08`-`0x77` i wypisuje urządzenia odpowiadające
-sygnałem ACK. Służy do sprawdzenia połączeń i podstawowej komunikacji I2C1 na
-STMG474. Oczywiście po dostosowaniu połączeń będzie działał na reszcie
-wspieranych architektur.
+sygnałem ACK. Służy do sprawdzenia połączeń i podstawowej komunikacji I2C
+w każdym montażu z `device_tree.json`, w tym I2C1 na STM32G474.
 
-SCL jest na PB8 (D15), a SDA na PB9 (D14). Magistrala pracuje z częstotliwością
-100 kHz. Ustawienia TIMINGR korzystają z zegara HSI16 wybranego dla I2C,
-niezależnie od SYSCLK/PCLK1. Konsola używa USART2 przez ST-Link Virtual COM
-Port, z ustawieniem **115200 8N1**.
+Na NUCLEO-G474RE SCL jest na PB8 (D15), a SDA na PB9 (D14). Magistrala pracuje
+z częstotliwością 100 kHz. Na STM32G474 ustawienia TIMINGR korzystają
+z zegara HSI16 wybranego dla I2C, niezależnie od SYSCLK/PCLK1. Konsola NUCLEO
+używa USART2 przez ST-Link Virtual COM Port, z ustawieniem **115200 8N1**.
 
-Aplikacja wywołuje `hal_i2c_scan()` i przekazuje `hal_watchdog_feed`, aby
-obsłużyć watchdog przy każdej próbie. Po skanowaniu wypisuje wyniki i czeka
-dwie sekundy przed kolejnym odczytem.
+Aplikacja wywołuje `hal_i2c_scan_bus()` i przekazuje `hal_watchdog_feed`,
+aby obsłużyć watchdog przy każdej próbie. Po skanowaniu wypisuje wyniki
+i czeka dwie sekundy przed kolejnym odczytem.
 
 Połączenie PB9/PB8 sprawdzono wcześniej z PCF8563 (`0x51`) i DS3231 (`0x68`).
 Ten przykład używa 100 kHz; przykład `examples/16_rtc_backends` korzysta
 z tego samego połączenia przy 400 kHz.
 
-**Zakres konfiguracji:** `hal_project_config.h` deklaruje również platformy
-RP, ale `app.c` ma na stałe wpisane piny `25u`/`24u` i opis STM32G474. W STM32
-oznaczają one PB9/PB8. Przed uruchomieniem na RP sprawdź konfigurację pinów;
-sama deklaracja platformy nie potwierdza działania tego połączenia.
-
 ## Połączenia sprzętowe
+
+Połączenia każdego montażu opisuje `device_tree.json`, a program bierze
+magistralę, jej piny i częstotliwość z wygenerowanego nagłówka. Poniższa
+tabela powtarza te połączenia.
+
+| Sygnał | Pico / Pico 2 | NUCLEO-G474RE | ESP32-S3-Zero |
+|---|---|---|---|
+| SDA | GPIO4 | PB9, pin 5 CN10 / D14 | GPIO4 |
+| SCL | GPIO5 | PB8, pin 3 CN10 / D15 | GPIO5 |
+
+Na Pico i Pico 2 magistrala korzysta z GPIO4/GPIO5 zamiast GPIO25/GPIO24,
+które sterują tam diodą i wykrywają napięcie VBUS. Na ESP32-S3-Zero również
+używa GPIO4/GPIO5, bo ESP32-S3 nie ma GPIO24 ani GPIO25.
+
+Połączenie z NUCLEO-G474RE:
 
 ```
 Nucleo-G474RE                 Urządzenie I2C (np. PCF8563 RTC, AT24C256, BME280)
@@ -67,7 +76,7 @@ vscode/entry/jh-vscode build \
 
 st-info --probe                       # sprawdź, czy ST-Link widzi G474
 st-flash --reset write \
-  .build/examples/12_i2c_scan/firmware.bin 0x08000000
+  .build/examples/12_i2c_scan/stm32g474/nucleo/firmware.bin 0x08000000
 tio /dev/ttyACM0 -b 115200
 ```
 
@@ -81,8 +90,8 @@ Możesz też wgrać program przez OpenOCD:
 Przy podłączonym PCF8563 pod adresem `0x51`:
 
 ```
-=== JaszczurHAL G474 I2C scanner ===
-I2C1: SCL=PB8, SDA=PB9 (external pull-ups to 3V3 required)
+=== JaszczurHAL I2C scanner ===
+assembly nucleo: I2C bus 0 at 100000 Hz (external pull-ups to 3V3 required)
 scanning 0x08..0x77 ...
   device @ 0x51
 scanning 0x08..0x77 ...

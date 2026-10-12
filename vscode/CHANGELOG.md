@@ -2,6 +2,15 @@
 
 ## 0.1.0 - Unreleased
 
+- In a project with `device_tree.json`, write one Cortex-Debug profile for
+  each assembly and variant of an RP2040, RP2350 ARM, or STM32G474 target,
+  with a hidden `Project: Build (Debug) <assembly>[ variant: <id>]`
+  pre-launch task, so a profile always builds and loads the ELF of its own
+  assembly and MCU instead of the manifest's assembly. Add
+  `check-hardware [--watch]`, which resolves every assembly as a build does
+  and prints each problem at its line and column of `device_tree.json`, and
+  the background `Project: Check device tree` task that reports them in the
+  Problems panel after each save.
 - Read the whole HAL configuration of a project from its `hal_project_config.h`
   through `scripts/project_config.py`, which evaluates the header like the C
   preprocessor for the selected target and variant. The header declares its

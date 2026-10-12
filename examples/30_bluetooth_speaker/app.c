@@ -29,7 +29,6 @@
 #include <string.h>
 
 enum {
-  SPEAKER_PWM_PIN = 6u,
   SPEAKER_PWM_PERIOD = 256u,
   SPEAKER_PWM_IDLE = 128u,
   SPEAKER_DMA_FRAMES = 128u,
@@ -201,7 +200,8 @@ static hal_status_t prepare_audio(uint32_t sample_rate_hz) {
   fill_silence(s_dma_a);
   fill_silence(s_dma_b);
   const hal_dma_pwm_audio_config_t config = {
-      .pwm_pin = SPEAKER_PWM_PIN,
+      /* The PWM output pin comes from device_tree.json. */
+      .pwm_pin = JH_HW_NODE_SPEAKER_PWM_PIN_OUT,
       .sample_rate_hz = sample_rate_hz,
       .period_ticks = SPEAKER_PWM_PERIOD,
       .buffer_a = s_dma_a,
@@ -558,7 +558,7 @@ void app_start(void) {
   s_boot_reset_reason = hal_get_reset_reason();
   s_boot_watchdog = hal_watchdog_caused_reboot();
   deb("JHC95 Bluetooth speaker target=%s board=%s pwm=GP%u", HAL_TARGET_NAME,
-      HAL_BOARD_PROFILE_NAME, SPEAKER_PWM_PIN);
+      HAL_BOARD_PROFILE_NAME, JH_HW_NODE_SPEAKER_PWM_PIN_OUT);
   deb("JHC95 Reset reason=%s watchdog=%u",
       hal_reset_reason_str(s_boot_reset_reason), s_boot_watchdog ? 1u : 0u);
   deb("JHC95 Commands: INFO, PAIR, RESET, WATCHDOG");

@@ -7,6 +7,7 @@
 // here) run while the scan continues, then the scan is stopped and
 // restarted. The
 // WS2812 on GPIO21 is blue during the checks, green on PASS, red on FAIL.
+// The pins come from device_tree.json.
 
 #include "hal/analog/hal_adc.h"
 #include "hal/analog/hal_adc_scan.h"
@@ -38,10 +39,10 @@
 
 namespace {
 
-constexpr uint8_t kPinA = 3u; /* ADC1 channel 2, pulled down and up */
-constexpr uint8_t kPinB = 4u; /* ADC1 channel 3 */
-constexpr uint8_t kPinUnscanned = 5u;
-constexpr uint8_t kLedPin = 21u;
+constexpr uint8_t kPinA = JH_HW_NODE_SCAN_A_PIN_IN; /* pulled down and up */
+constexpr uint8_t kPinB = JH_HW_NODE_SCAN_B_PIN_IN;
+constexpr uint8_t kPinUnscanned = JH_HW_NODE_UNSCANNED_PIN_IN;
+constexpr uint8_t kLedPin = JH_HW_NODE_BOARD_STATUS_LED_PIN_DATA;
 constexpr uint8_t kPins = 2u;
 constexpr uint32_t kConversionNs = 12000u;
 constexpr uint32_t kBlockFrames = 400u; /* 2 x 12 us x 400 = 9.6 ms */

@@ -1,0 +1,115 @@
+{
+  "$schema": "../../config/hardware/device_tree.schema.json",
+  "schemaVersion": 1,
+  "nodes": {
+    "mcp9600": { "compatible": "jaszczurhal,i2c-device" },
+    "max6675Sclk": { "compatible": "jaszczurhal,gpio-output" },
+    "max6675Cs": {
+      "compatible": "jaszczurhal,gpio-output",
+      "properties": { "activeLow": true }
+    },
+    "max6675So": { "compatible": "jaszczurhal,gpio-input" }
+  },
+  "assemblies": {
+    "pico": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": 4, "scl": 5 }
+        }
+      },
+      "nodes": {
+        "mcp9600": { "present": true, "bus": "i2c", "address": 103 },
+        "max6675Sclk": { "present": true, "pins": { "out": 18 } },
+        "max6675Cs": { "present": true, "pins": { "out": 17 } },
+        "max6675So": { "present": true, "pins": { "in": 16 } }
+      }
+    },
+    "pico2-arm": {
+      "target": "rp2350-arm",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": 4, "scl": 5 }
+        }
+      },
+      "nodes": {
+        "mcp9600": { "present": true, "bus": "i2c", "address": 103 },
+        "max6675Sclk": { "present": true, "pins": { "out": 18 } },
+        "max6675Cs": { "present": true, "pins": { "out": 17 } },
+        "max6675So": { "present": true, "pins": { "in": 16 } }
+      }
+    },
+    "pico2-riscv": {
+      "target": "rp2350-riscv",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": 4, "scl": 5 }
+        }
+      },
+      "nodes": {
+        "mcp9600": { "present": true, "bus": "i2c", "address": 103 },
+        "max6675Sclk": { "present": true, "pins": { "out": 18 } },
+        "max6675Cs": { "present": true, "pins": { "out": 17 } },
+        "max6675So": { "present": true, "pins": { "in": 16 } }
+      }
+    },
+    "nucleo": {
+      "target": "stm32g474",
+      "board": "nucleo-g474re",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": "PB9", "scl": "PB8" }
+        }
+      },
+      "nodes": {
+        "mcp9600": { "present": true, "bus": "i2c", "address": 103 },
+        "max6675Sclk": { "present": true, "pins": { "out": "PB3" } },
+        "max6675Cs": { "present": true, "pins": { "out": "PB6" } },
+        "max6675So": { "present": true, "pins": { "in": "PA6" } }
+      }
+    },
+    "esp32s3-zero": {
+      "target": "esp32s3",
+      "board": "waveshare-esp32-s3-zero",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": 4, "scl": 5 }
+        }
+      },
+      "nodes": {
+        "mcp9600": { "present": true, "bus": "i2c", "address": 103 },
+        "max6675Sclk": { "present": true, "pins": { "out": 18 } },
+        "max6675Cs": { "present": true, "pins": { "out": 17 } },
+        "max6675So": { "present": true, "pins": { "in": 16 } }
+      }
+    }
+  }
+}

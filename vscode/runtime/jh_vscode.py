@@ -88,6 +88,7 @@ SUPPORTED_ACTIONS = {
     "clear-identity",
     "config-dump",
     "debug-tools",
+    "check-hardware",
 }
 
 BOOTSEL_LABELS = {"RPI-RP2", "RP2350", "RPI-RP2350"}
@@ -2014,6 +2015,60 @@ def write_text_atomic(path: Path, content: str) -> None:
             temp_path.unlink()
 
 
+CHECK_HARDWARE_POLL_SECONDS = 0.5
+
+
+def report_device_tree_problems(project_dir: Path) -> int:
+    """Print the problems of the project's device_tree.json between the
+    markers the VS Code problem matcher waits for; return their number."""
+    check = hal_script("device_tree_check")
+    print(f"jh-vscode check-hardware: checking {project_dir / check.DEVICE_TREE}", flush=True)
+    try:
+        lines = [check.format_problem(problem, project_dir)
+                 for problem in check.problems(project_dir)]
+    except Exception as exc:  # the watcher outlives a failed check
+        lines = [f"{check.DEVICE_TREE}:1:1: error: check failed: {exc}"]
+    for line in lines:
+        print(line, flush=True)
+    summary = f"{len(lines)} problem{'' if len(lines) == 1 else 's'}" if lines else "no problems"
+    print(f"jh-vscode check-hardware: {summary}", flush=True)
+    return len(lines)
+
+
+def device_tree_file_states(project_dir: Path) -> tuple[Any, ...]:
+    states = []
+    for path in hal_script("device_tree_check").watched_files(project_dir):
+        try:
+            stat = path.stat()
+        except OSError:
+            states.append((str(path), None, None))
+        else:
+            states.append((str(path), stat.st_mtime_ns, stat.st_size))
+    return tuple(states)
+
+
+def command_check_hardware(args: argparse.Namespace) -> int:
+    """Resolve every assembly of device_tree.json as a build does; --watch
+    repeats the check after each change of the file or its bindings."""
+    project_dir = resolve_project(args)
+    if project_dir is None:
+        print("error: check-hardware requires --project <path>", file=sys.stderr)
+        return EXIT_USAGE
+    if not project_dir.is_dir():
+        print(f"error: project directory does not exist: {project_dir}", file=sys.stderr)
+        return EXIT_CONFIG
+    if not args.watch:
+        return EXIT_CONFIG if report_device_tree_problems(project_dir) else 0
+    # The state is read before each check, so a save during the check starts
+    # the next one at once.
+    state = device_tree_file_states(project_dir)
+    while True:
+        report_device_tree_problems(project_dir)
+        while (current := device_tree_file_states(project_dir)) == state:
+            time.sleep(CHECK_HARDWARE_POLL_SECONDS)
+        state = current
+
+
 def command_sync_board_picker(args: argparse.Namespace) -> int:
     project_dir = resolve_project(args)
     if project_dir is None:
@@ -2039,16 +2094,13 @@ def command_sync_board_picker(args: argparse.Namespace) -> int:
         manifest = load_json_file(manifest_path)
         registry = load_target_registry()
         selected_assembly = None
-        launch_assembly = None
+        debug_builds = None
         if hal_script("device_tree_project").device_tree_path(project_dir) is not None:
-            # The picker lists the assemblies; the manifest's choice (or the
-            # first assembly) is the default and names the debugged ELF, never
-            # the local one.
+            # The picker lists the assemblies with the manifest's choice (never
+            # the local one) as default; each debugged assembly and variant
+            # gets its own profile and pre-launch build.
             selected_assembly, _ = stored_assembly(project_dir, manifest)
-            items = hal_script("device_tree_project").assemblies(project_dir)
-            default = next(item for item in items
-                           if item["name"] == (selected_assembly or items[0]["name"]))
-            launch_assembly = (default["target"], default["name"])
+            debug_builds = hal_script("vscode_task_config").assembly_debug_builds(project_dir)
             selected_target, selected_board = "", ""
         else:
             selected_target, selected_board, _ = current_board_selection(
@@ -2062,6 +2114,9 @@ def command_sync_board_picker(args: argparse.Namespace) -> int:
                 )
 
         from vscode_task_config import (
+            assembly_launch_document,
+            assembly_tasks,
+            cortex_debug_launch_document,
             sync_board_picker_document,
             sync_cortex_debug_launch_document,
             vscode_launch_executable,
@@ -2074,16 +2129,25 @@ def command_sync_board_picker(args: argparse.Namespace) -> int:
             selected_board,
             project_dir,
             selected_assembly,
+            assembly_tasks(debug_builds) if debug_builds is not None else None,
         )
-        launch_changed = sync_cortex_debug_launch_document(
-            launch_document,
-            vscode_launch_executable(
+        if debug_builds is not None:
+            desired_launch = assembly_launch_document(
                 manifest,
+                debug_builds,
                 workspace_dir=project_dir,
                 jh_root=jaszczurhal_root(),
-                assembly=launch_assembly,
-            ),
-        )
+                default_assembly=selected_assembly,
+            )
+        else:
+            desired_launch = cortex_debug_launch_document(
+                vscode_launch_executable(
+                    manifest,
+                    workspace_dir=project_dir,
+                    jh_root=jaszczurhal_root(),
+                )
+            )
+        launch_changed = sync_cortex_debug_launch_document(launch_document, desired_launch)
     except (OSError, ValueError) as exc:
         print(f"error: cannot synchronize VS Code project files: {exc}", file=sys.stderr)
         return EXIT_CONFIG
@@ -5253,6 +5317,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="wait",
         help="Serial monitor port lock policy.",
     )
+    parser.add_argument(
+        "--watch",
+        action="store_true",
+        help="check-hardware: check again after each change of device_tree.json.",
+    )
     parser.add_argument("--verbose", action="store_true", help="Enable verbose output.")
     parser.add_argument("--json", action="store_true", help="Emit JSON where supported.")
     parser.add_argument("--version", action="store_true", help="Show version and exit.")
@@ -5296,6 +5365,8 @@ def dispatch(args: argparse.Namespace) -> int:
         return command_select_board(args)
     if args.action == "sync-board-picker":
         return command_sync_board_picker(args)
+    if args.action == "check-hardware":
+        return command_check_hardware(args)
     return command_stub(args)
 
 

@@ -1,0 +1,89 @@
+{
+  "$schema": "../../config/hardware/device_tree.schema.json",
+  "schemaVersion": 1,
+  "nodes": {
+    "modem": { "compatible": "jaszczurhal,uart-device" },
+    "modemPower": {
+      "compatible": "jaszczurhal,gpio-output",
+      "properties": { "activeLow": true }
+    }
+  },
+  "assemblies": {
+    "pico": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "modemUart": {
+          "kind": "uart",
+          "index": 1,
+          "baudRate": 115200,
+          "frame": { "dataBits": 8, "parity": "none", "stopBits": 1 },
+          "pins": { "tx": 4, "rx": 5 }
+        }
+      },
+      "nodes": {
+        "modem": { "present": true, "bus": "modemUart" },
+        "modemPower": { "present": true, "pins": { "out": 6 } }
+      }
+    },
+    "pico2-arm": {
+      "target": "rp2350-arm",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "modemUart": {
+          "kind": "uart",
+          "index": 1,
+          "baudRate": 115200,
+          "frame": { "dataBits": 8, "parity": "none", "stopBits": 1 },
+          "pins": { "tx": 4, "rx": 5 }
+        }
+      },
+      "nodes": {
+        "modem": { "present": true, "bus": "modemUart" },
+        "modemPower": { "present": true, "pins": { "out": 6 } }
+      }
+    },
+    "pico2-riscv": {
+      "target": "rp2350-riscv",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "modemUart": {
+          "kind": "uart",
+          "index": 1,
+          "baudRate": 115200,
+          "frame": { "dataBits": 8, "parity": "none", "stopBits": 1 },
+          "pins": { "tx": 4, "rx": 5 }
+        }
+      },
+      "nodes": {
+        "modem": { "present": true, "bus": "modemUart" },
+        "modemPower": { "present": true, "pins": { "out": 6 } }
+      }
+    },
+    "esp32s3-zero": {
+      "target": "esp32s3",
+      "board": "waveshare-esp32-s3-zero",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "modemUart": {
+          "kind": "uart",
+          "index": 1,
+          "baudRate": 115200,
+          "frame": { "dataBits": 8, "parity": "none", "stopBits": 1 },
+          "pins": { "tx": 4, "rx": 5 }
+        }
+      },
+      "nodes": {
+        "modem": { "present": true, "bus": "modemUart" },
+        "modemPower": { "present": true, "pins": { "out": 6 } }
+      }
+    }
+  }
+}

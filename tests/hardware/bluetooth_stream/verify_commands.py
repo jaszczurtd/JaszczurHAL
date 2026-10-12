@@ -12,8 +12,12 @@ from pathlib import Path
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import fixture_hardware  # noqa: E402
 import verify as stream_verify  # noqa: E402
 
+# The command router runs in example 26; its ready event names the board.
+EXAMPLE_DIR = Path(__file__).resolve().parents[3] / "examples" / "26_ble_stream"
 
 WIRE_MAGIC = b"JC"
 WIRE_VERSION = 1
@@ -407,7 +411,8 @@ def run(args: argparse.Namespace) -> None:
             print(f"JHBC1 reconnect PASS cycle={generation - 1}/{args.reconnects}")
         print(
             "JHBC1 HOST PASS "
-            f"target={args.target} board={args.board} runtime={args.runtime} "
+            f"assembly={args.assembly} target={args.target} board={args.board} "
+            f"runtime={args.runtime} "
             f"reconnects={args.reconnects} sessions={history.count}"
         )
     finally:
@@ -420,18 +425,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--address", help="public BLE address")
     parser.add_argument("--name", default="JH Commands")
     parser.add_argument(
-        "--target",
-        choices=sorted(stream_verify.SUPPORTED_HARDWARE),
+        "--assembly",
+        choices=sorted(fixture_hardware.assemblies(EXAMPLE_DIR)),
         required=True,
-    )
-    parser.add_argument(
-        "--board",
-        choices=sorted(
-            board
-            for boards in stream_verify.SUPPORTED_HARDWARE.values()
-            for board in boards
-        ),
-        required=True,
+        help="assembly of the uploaded example 26 image",
     )
     parser.add_argument(
         "--runtime",
@@ -449,10 +446,9 @@ def parse_args() -> argparse.Namespace:
         default=1,
     )
     args = parser.parse_args()
-    if args.board not in stream_verify.SUPPORTED_HARDWARE[args.target]:
-        parser.error(
-            f"board {args.board!r} is not valid for target {args.target!r}"
-        )
+    selected = fixture_hardware.assemblies(EXAMPLE_DIR)[args.assembly]
+    args.target = selected["target"]
+    args.board = selected["board"]
     return args
 
 

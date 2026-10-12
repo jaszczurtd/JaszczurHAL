@@ -91,7 +91,17 @@ parity = (ROOT / "scripts" / "build_rp_pico_parity_fixtures.sh").read_text(
 )
 for expected in (
     '"bluetooth_classic_hci_trace"',
-    '"rp2040 picow"',
-    '"rp2350-arm pico2w"',
+    '"picow"',
+    '"pico2w"',
 ):
     require(expected in parity, f"RP parity build is missing {expected}")
+trace_assemblies = json.loads(
+    (ROOT / "tests/hardware/bluetooth_classic_hci_trace/device_tree.json").read_text(
+        encoding="utf-8"
+    )
+)["assemblies"]
+require(
+    {name: (item["target"], item["board"]) for name, item in trace_assemblies.items()}
+    == {"picow": ("rp2040", "picow"), "pico2w": ("rp2350-arm", "pico2w")},
+    "HCI trace assemblies no longer match the RP parity build",
+)

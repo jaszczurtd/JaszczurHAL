@@ -3,8 +3,7 @@
     "project": "JaszczurHAL hardware tests",
     "module": "stm32_storage_scan",
     "toolchain": "cmake",
-    "target": "stm32g474",
-    "board": "nucleo-g474re",
+    "assembly": "nucleo",
     "buildDir": "${jhRoot}/.build/hardware/stm32_storage_scan",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

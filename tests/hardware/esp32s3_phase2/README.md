@@ -26,20 +26,31 @@ The firmware checks:
 - bidirectional debug traffic over the startup console's native USB
   Serial/JTAG VFS.
 
+`device_tree.json` describes the pins of the one assembly, `esp32s3-zero`, and
+the table below repeats them. Nothing needs to be connected to them.
+
+| Check | In `device_tree.json` | GPIO |
+|---|---|---|
+| output, readback and interrupt | node `gpioSmoke` | 18 |
+| context-aware interrupts | nodes `ctxA`, `ctxB` | 13, 14 |
+| input with pull-up | node `gpioInput`, on the BOOT button line (net `boot`) | 0 |
+| ADC | node `adc` | 3 |
+| UART1 loopback | bus `loopUart`, TX only: TX and RX meet inside the GPIO matrix | 17 |
+| I2C, 100 kHz | bus `i2c`, SDA / SCL | 8 / 9 |
+| SPI2, 2 MHz | bus `spi`, MISO / MOSI / SCK | 10 / 11 / 12 |
+
 Build and materialize the relocatable artifact manifest:
 
 ```bash
 python3 scripts/build_esp_idf.py build \
   --project tests/hardware/esp32s3_phase2 \
-  --target esp32s3 \
-  --board waveshare-esp32-s3-zero \
+  --assembly esp32s3-zero \
   --name jh_esp32_phase2_hardware \
   --clean
 
 python3 scripts/build_esp_idf.py artifacts \
   --project tests/hardware/esp32s3_phase2 \
-  --target esp32s3 \
-  --board waveshare-esp32-s3-zero \
+  --assembly esp32s3-zero \
   --name jh_esp32_phase2_hardware
 ```
 
@@ -49,8 +60,7 @@ port on Windows) for both flash and verification:
 ```bash
 python3 scripts/build_esp_idf.py flash \
   --project tests/hardware/esp32s3_phase2 \
-  --target esp32s3 \
-  --board waveshare-esp32-s3-zero \
+  --assembly esp32s3-zero \
   --name jh_esp32_phase2_hardware \
   --port /dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_SERIAL-if00
 

@@ -43,10 +43,11 @@ if [[ ! "${JOBS}" =~ ^[1-9][0-9]*$ ]]; then
     exit 2
 fi
 
-selections=(
-    "rp2040 pico"
-    "rp2350-arm pico2"
-    "rp2350-riscv pico2"
+# Assemblies of the fixtures' device_tree.json files.
+assemblies=(
+    "pico"
+    "pico2-arm"
+    "pico2-riscv"
 )
 fixtures=(
     "rp_usb_multicore"
@@ -58,18 +59,16 @@ export CMAKE_BUILD_PARALLEL_LEVEL="${JOBS}"
 for fixture in "${fixtures[@]}"; do
     project="${REPO_ROOT}/tests/hardware/${fixture}"
     "${JH_VSCODE}" clean --project "${project}"
-    for selection in "${selections[@]}"; do
-        read -r target board <<<"${selection}"
+    for assembly in "${assemblies[@]}"; do
+        "${JH_VSCODE}" build --project "${project}" --assembly "${assembly}"
         "${JH_VSCODE}" build --project "${project}" \
-            --target "${target}" --board "${board}"
-        "${JH_VSCODE}" build --project "${project}" \
-            --target "${target}" --board "${board}" --variant FREERTOS
+            --assembly "${assembly}" --variant FREERTOS
     done
 done
 
-bluetooth_selections=(
-    "rp2040 picow"
-    "rp2350-arm pico2w"
+bluetooth_assemblies=(
+    "picow"
+    "pico2w"
 )
 bluetooth_fixtures=(
     "bluetooth_classic_hid_device"
@@ -79,9 +78,7 @@ bluetooth_fixtures=(
 for fixture in "${bluetooth_fixtures[@]}"; do
     project="${REPO_ROOT}/tests/hardware/${fixture}"
     "${JH_VSCODE}" clean --project "${project}"
-    for selection in "${bluetooth_selections[@]}"; do
-        read -r target board <<<"${selection}"
-        "${JH_VSCODE}" build --project "${project}" \
-            --target "${target}" --board "${board}"
+    for assembly in "${bluetooth_assemblies[@]}"; do
+        "${JH_VSCODE}" build --project "${project}" --assembly "${assembly}"
     done
 done
