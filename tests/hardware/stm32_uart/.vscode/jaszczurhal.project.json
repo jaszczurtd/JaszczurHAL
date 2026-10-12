@@ -3,8 +3,7 @@
     "project": "JaszczurHAL hardware tests",
     "module": "stm32_uart",
     "toolchain": "cmake",
-    "target": "stm32g474",
-    "board": "nucleo-g474re-canhat",
+    "assembly": "nucleo-canhat",
     "buildDir": "${jhRoot}/.build/hardware/stm32_uart",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

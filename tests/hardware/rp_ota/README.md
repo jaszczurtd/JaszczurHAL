@@ -25,24 +25,26 @@ variable can override it when needed:
 export JH_OTA_TEST_PASSWORD='the-value-from-ota_test_secrets.h'
 ```
 
-Build, upload, and verify the bare-metal RP2040 variant:
+`device_tree.json` describes the hardware of every assembly: `picow` (Pico W,
+the default), `pico2w` (Pico 2 W) and `pico-rm2`, a plain Pico with an
+external PIM730/RM2 module wired as in the table below.
+
+Build, upload, and verify the bare-metal Pico W variant:
 
 ```sh
 vscode/entry/jh-vscode build \
-  --project tests/hardware/rp_ota \
-  --target rp2040 --board picow
+  --project tests/hardware/rp_ota --assembly picow
 vscode/entry/jh-vscode upload \
-  --project tests/hardware/rp_ota \
-  --target rp2040 --board picow \
+  --project tests/hardware/rp_ota --assembly picow \
   --port /dev/serial/by-id/<device>
 python3 tests/hardware/rp_ota/verify_ota.py \
   --port /dev/serial/by-id/<device> \
-  --target rp2040 --board picow --runtime baremetal
+  --assembly picow --runtime baremetal
 ```
 
-Use `--target rp2350-arm --board pico2w` for Pico 2 W. Add
-`--variant FREERTOS` to both build and upload, then pass `--runtime freertos`
-to the verifier for the FreeRTOS variant. The fixture gives its application
+Use `--assembly pico2w` for Pico 2 W. Add `--variant FREERTOS` to both build
+and upload, then pass `--runtime freertos` to the verifier for the FreeRTOS
+variant. The fixture gives its application
 task an 8 KiB stack in FreeRTOS builds because CYW43 initialization and OTA
 handling exceed the general-purpose 2 KiB default.
 
@@ -58,50 +60,39 @@ For Pico+PIM730, connect the breakout to an ordinary Pico as follows:
 | `3V3` | 3V3(OUT) | 36 |
 
 `DAT` is the combined bidirectional data/host-wake signal. Leave `BL_ON`,
-`GPIO0..2`, and `N/C` disconnected. Build and verify this profile explicitly:
+`GPIO0..2`, and `N/C` disconnected. Build and verify this assembly explicitly:
 
 ```sh
 vscode/entry/jh-vscode build \
-  --project tests/hardware/rp_ota \
-  --target rp2040 --board pico-rm2
+  --project tests/hardware/rp_ota --assembly pico-rm2
 vscode/entry/jh-vscode upload \
-  --project tests/hardware/rp_ota \
-  --target rp2040 --board pico-rm2 \
+  --project tests/hardware/rp_ota --assembly pico-rm2 \
   --port /dev/serial/by-id/<device>
 python3 tests/hardware/rp_ota/verify_ota.py \
   --port /dev/serial/by-id/<device> \
-  --target rp2040 --board pico-rm2 --runtime baremetal \
-  --artifact-dir .build/hardware/rp_ota/cmake/rp2040/pico-rm2
+  --assembly pico-rm2 --runtime baremetal
 ```
 
-Add `--status-only` to validate the board identity, network readiness, and
+Add `--status-only` to validate the fixture identity, network readiness, and
 automatic gSPI clock telemetry without generating or transferring OTA images.
 This diagnostic mode does not require the OTA password or build artifacts.
 
-Use `--variant FREERTOS`, `--runtime freertos`, and the artifact directory
-`.build/hardware/rp_ota/cmake/variants/freertos/rp2040/pico-rm2` for the
-FreeRTOS run.
+Use `--variant FREERTOS` and `--runtime freertos` for the FreeRTOS run.
 
-When several target/runtime builds exist at once, point the verifier at the
-matching CMake output instead of the last published artifact directory:
-
-```sh
-python3 tests/hardware/rp_ota/verify_ota.py \
-  --port /dev/serial/by-id/<device> \
-  --target rp2350-arm --board pico2w --runtime freertos \
-  --artifact-dir \
-    .build/hardware/rp_ota/cmake/variants/freertos/rp2350-arm/pico2w
-```
+Each assembly and variant builds into its own directory,
+`.build/hardware/rp_ota/<target>/<assembly>`, with `variants/FREERTOS` below
+it for FreeRTOS. The verifier reads the artifacts of the selected assembly and
+runtime from there; `--artifact-dir` points it at another build output.
 
 Pico W and Pico 2 W may remain connected together. Their OTA hostnames are
 `jh-ota-rp2040` and `jh-ota-rp2350-arm`, so discovery never guesses between
 them. Pico W and Pico+PIM730 share the RP2040 hostname; when both are powered,
 pass the selected device's IP to `--broadcast`. The CDC status response
-includes and the verifier checks the board profile, current IPv4 address,
+includes and the verifier checks the assembly name, current IPv4 address,
 target, runtime and OTA boot state, plus the live `clk_sys`, requested and
 effective gSPI rates, 16.8 divider, selected PIO timing program, KV boot count
 and LittleFS mount/format state. The
-verifier creates signed A/B containers below `.build/hardware/rp_ota` and
+verifier creates signed A/B containers in the artifact directory and
 leaves the device in stable image A after proving rollback from image B.
 
 `hal_ota_begin()` also publishes the configured hostname through mDNS. While

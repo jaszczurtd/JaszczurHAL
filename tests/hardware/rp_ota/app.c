@@ -7,7 +7,6 @@
 #include <hal/storage/hal_eeprom.h>
 #include <hal/storage/hal_kv.h>
 #include <hal/storage/hal_littlefs.h>
-#include <hal/system/hal_board.h>
 #include <hal/system/hal_system.h>
 #include <hal/usb/hal_usb.h>
 
@@ -113,6 +112,7 @@ static void prepare_status(void) {
   jh_rp2040_cyw43_gspi_clock_t gspi_clock;
   memset(&gspi_clock, 0, sizeof(gspi_clock));
   const hal_status_t gspi_status = jh_rp2040_cyw43_gspi_get_clock(&gspi_clock);
+  /* board= names the assembly: Pico+PIM730 has no board profile of its own. */
   const int length = snprintf(
       (char *)s_response, sizeof(s_response),
       "JHOTA-HW1 target=%s board=%s runtime=%s ipv4=%s config=%u wifi=%u "
@@ -123,7 +123,7 @@ static void prepare_status(void) {
       "gspi_target=%lu gspi_actual=%lu gspi_div_int=%u gspi_div_frac8=%u "
       "gspi_program=%u kv_status=%d kv_count=%lu littlefs=%d "
       "littlefs_format=%u storage_total=%lu\n",
-      HAL_TARGET_NAME, HAL_BOARD_PROFILE_NAME, JH_OTA_TEST_RUNTIME, local_ip,
+      HAL_TARGET_NAME, JH_HW_ASSEMBLY_NAME, JH_OTA_TEST_RUNTIME, local_ip,
       configuration_available() ? 1u : 0u, hal_wifi_is_connected() ? 1u : 0u,
       s_ota_started ? 1u : 0u, (int)s_wifi_begin_status, (int)wifi_state_status,
       (int)wifi_state, (int)state_status, (int)info.mode,

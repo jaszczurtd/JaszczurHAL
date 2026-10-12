@@ -7,10 +7,14 @@ prints the I2C transaction count to the console.
 
 ## Wiring
 
-| Signal | RP family | STM32G474 |
-|---|---|---|
-| SDA | GP4 | PB9 |
-| SCL | GP5 | PB8 |
+`device_tree.json` describes the wiring of every assembly, and the program
+takes the bus and its pins from the generated header. The table below
+repeats that wiring.
+
+| Signal | Pico / Pico 2 | NUCLEO-G474RE | ESP32-S3-Zero |
+|---|---|---|---|
+| SDA | GPIO4 | PB9, CN10 pin 5 / D14 | GPIO4 |
+| SCL | GPIO5 | PB8, CN10 pin 3 / D15 | GPIO5 |
 
 Connect a second I2C controller, connect the grounds, and provide pull-ups
 compatible with the devices' logic voltages. `HAL_ENABLE_I2C_SLAVE` enables
@@ -31,7 +35,8 @@ Run from the repository root:
 
 ```bash
 vscode/entry/jh-vscode build \
-  --project examples/11_i2c_slave --target rp2040 --board pico
+  --project examples/11_i2c_slave --assembly pico
 ```
 
-The configuration also includes RP2350 ARM, RP2350 RISC-V, and STM32G474.
+The other assemblies are `pico2-arm`, `pico2-riscv`, `nucleo` and
+`esp32s3-zero`.

@@ -6,6 +6,9 @@ Przykład umożliwia aktualizację OTA na Pico W i Pico 2 W, korzystając z obs�
 OTA opartej na Pico SDK. W `app.c` ustaw dane sieci WiFi i zastąp przykładowe
 hasło OTA. Nazwa hosta, port i hasło muszą odpowiadać ustawieniom
 w `.vscode/jaszczurhal.project.json`.
+Montaże wymienia `device_tree.json`: `picow` (Pico W, domyślny), `pico2w`
+(Pico 2 W) i `esp32s3-zero` (ESP32-S3-Zero). Żaden z nich nie wymaga
+dodatkowego sprzętu.
 
 Komputer nasłuchuje połączeń zwrotnych na porcie TCP `8266` i odpowiedzi na
 wyszukiwanie urządzeń na porcie UDP `8266`. Jeżeli zapora blokuje połączenia

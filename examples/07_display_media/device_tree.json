@@ -1,0 +1,122 @@
+{
+  "$schema": "../../config/hardware/device_tree.schema.json",
+  "schemaVersion": 1,
+  "nodes": {
+    "display": {
+      "compatible": "ilitek,ili9341",
+      "properties": { "width": 240, "height": 320, "rotation": 0 }
+    }
+  },
+  "assemblies": {
+    "pico": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 24000000,
+          "pins": { "sck": 18, "mosi": 19, "miso": 16 }
+        }
+      },
+      "nodes": {
+        "display": {
+          "present": true,
+          "bus": "spi",
+          "transport": { "frequencyHz": 24000000 },
+          "pins": { "cs": 17, "dc": 20, "reset": 21 }
+        }
+      }
+    },
+    "pico2-arm": {
+      "target": "rp2350-arm",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 24000000,
+          "pins": { "sck": 18, "mosi": 19, "miso": 16 }
+        }
+      },
+      "nodes": {
+        "display": {
+          "present": true,
+          "bus": "spi",
+          "transport": { "frequencyHz": 24000000 },
+          "pins": { "cs": 17, "dc": 20, "reset": 21 }
+        }
+      }
+    },
+    "pico2-riscv": {
+      "target": "rp2350-riscv",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 24000000,
+          "pins": { "sck": 18, "mosi": 19, "miso": 16 }
+        }
+      },
+      "nodes": {
+        "display": {
+          "present": true,
+          "bus": "spi",
+          "transport": { "frequencyHz": 24000000 },
+          "pins": { "cs": 17, "dc": 20, "reset": 21 }
+        }
+      }
+    },
+    "nucleo": {
+      "target": "stm32g474",
+      "board": "nucleo-g474re",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 24000000,
+          "pins": { "sck": "PB3", "mosi": "PA7", "miso": "PA6" }
+        }
+      },
+      "nodes": {
+        "display": {
+          "present": true,
+          "bus": "spi",
+          "transport": { "frequencyHz": 24000000 },
+          "pins": { "cs": "PB6", "dc": "PC7", "reset": "PA9" }
+        }
+      }
+    },
+    "esp32s3-zero": {
+      "target": "esp32s3",
+      "board": "waveshare-esp32-s3-zero",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 24000000,
+          "pins": { "sck": 12, "mosi": 11, "miso": 13 }
+        }
+      },
+      "nodes": {
+        "display": {
+          "present": true,
+          "bus": "spi",
+          "transport": { "frequencyHz": 24000000 },
+          "pins": { "cs": 17, "dc": 15, "reset": 16 }
+        }
+      }
+    }
+  }
+}

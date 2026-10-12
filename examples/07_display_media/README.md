@@ -12,7 +12,24 @@ The project enables `HAL_ENABLE_ILI9341`, `HAL_DISPLAY_ILI9341`,
 
 ## Wiring
 
-The application uses SPI bus 0.
+The application uses SPI bus 0. `device_tree.json` describes the wiring of
+every assembly, and the program takes the bus, the panel pins, the 24 MHz
+panel clock and the panel size from the generated header. The table below
+repeats that wiring.
+
+| ILI9341 signal | Pico / Pico 2 | NUCLEO-G474RE | ESP32-S3-Zero |
+|---|---|---|---|
+| `SCK` | GPIO18 | PB3 | GPIO12 |
+| `MOSI` | GPIO19 | PA7 | GPIO11 |
+| `MISO` | GPIO16 | PA6 | GPIO13 |
+| `CS` | GPIO17 | PB6 | GPIO17 |
+| `DC` | GPIO20 | PC7 | GPIO15 |
+| `RESET` | GPIO21 | PA9 | GPIO16 |
+
+On NUCLEO-G474RE the SPI clock uses PB3 rather than D13 (PA5), because PA5
+drives the LD2 LED. On ESP32-S3-Zero `DC` uses GPIO15 rather than GPIO20,
+which is the USB D+ line, and `RESET` uses GPIO16 rather than GPIO21, which
+drives the on-board LED.
 
 ### NUCLEO-G474RE
 
@@ -24,7 +41,7 @@ for connector orientation and numbering.
 
 | ILI9341 module signal | STM32G474RE signal | ST morpho connection | Arduino Uno V3 alternative |
 |---|---|---|---|
-| `SCK` / `CLK` | `PA5` (`SPI1_SCK`) | `CN10` pin 11 | `CN5` pin 6 (`D13`) |
+| `SCK` / `CLK` | `PB3` (`SPI1_SCK`) | `CN10` pin 31 | `CN9` pin 4 (`D3`) |
 | `MOSI` / `SDI` / `SDA` | `PA7` (`SPI1_MOSI`) | `CN10` pin 15 | `CN5` pin 4 (`D11`) |
 | `MISO` / `SDO` | `PA6` (`SPI1_MISO`) | `CN10` pin 13 | `CN5` pin 5 (`D12`) |
 | `CS` | `PB6` | `CN10` pin 17 | `CN5` pin 3 (`D10`) |
@@ -36,8 +53,8 @@ for connector orientation and numbering.
 
 The application only writes to the display, so `MISO` / `SDO` can remain
 unconnected. SPI and control signals are grouped on CN10; the Arduino
-alternatives use the standard SPI pins plus D10, D9, and D8. PA5 is also
-connected to the on-board LD2 LED, which may flicker during SPI transfers.
+alternatives use D11 and D12 for data, D3 for the clock, plus D10, D9, and
+D8.
 
 GPIO signals use 3.3 V logic. Do not connect 5 V logic outputs to them.
 If the display module has its own regulator or backlight resistor, follow
@@ -45,8 +62,8 @@ its schematic rather than bypassing those components.
 
 ### RP family
 
-`CS` uses GPIO 17, `DC` GPIO 20, and `RESET` GPIO 21. Connect the panel's
-clock and data signals to the SPI bus-0 pins selected for the target.
+On Pico and Pico 2 the panel uses SPI0: `SCK` GPIO 18, `MOSI` GPIO 19 and
+`MISO` GPIO 16. `CS` uses GPIO 17, `DC` GPIO 20, and `RESET` GPIO 21.
 
 ## Memory limits
 

@@ -8,33 +8,20 @@
 #include <hal/codecs/hal_image.h>
 #include <hal/codecs/lodepng/lodepng.h>
 #include <hal/core/hal_app.h>
-#include <hal/core/hal_target.h>
 #include <hal/display/hal_display.h>
 #include <hal/display/hal_pixel.h>
 #include <hal/security/hal_crypto.h>
 #include <hal/serial/hal_serial.h>
+#include <hal/spi/hal_spi.h>
 #include <hal/system/hal_system.h>
 
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
-#if HAL_TARGET_IS_RP
-static const uint8_t kTftCsPin = 17u;
-static const uint8_t kTftDcPin = 20u;
-static const uint8_t kTftRstPin = 21u;
-#elif HAL_TARGET_IS_STM32G474
-static const uint8_t kTftCsPin = 22u; /* PB6, CN10 pin 17 / CN5 D10 */
-static const uint8_t kTftDcPin = 39u; /* PC7, CN10 pin 19 / CN5 D9 */
-static const uint8_t kTftRstPin = 9u; /* PA9, CN10 pin 21 / CN5 D8 */
-#else
-static const uint8_t kTftCsPin = 17u;
-static const uint8_t kTftDcPin = 20u;
-static const uint8_t kTftRstPin = 21u;
-#endif
-
-static const int kDisplayWidth = 240;
-static const int kDisplayHeight = 320;
+/* Panel geometry comes from the display node in device_tree.json. */
+static const int kDisplayWidth = (int)JH_HW_NODE_DISPLAY_PROP_WIDTH;
+static const int kDisplayHeight = (int)JH_HW_NODE_DISPLAY_PROP_HEIGHT;
 #define MEDIA_MAX_DIMENSION 64u
 #define MEDIA_MAX_PIXELS (MEDIA_MAX_DIMENSION * MEDIA_MAX_DIMENSION)
 #define MEDIA_MAX_ENCODED_BYTES 4096u
@@ -272,15 +259,25 @@ static bool decode_jpeg_asset(unsigned *out_width, unsigned *out_height) {
 }
 
 static bool initialize_display(void) {
-  const hal_status_t init_status =
-      hal_display_init(kTftCsPin, kTftDcPin, kTftRstPin);
+  /* Bus, pins and SPI clock come from device_tree.json. */
+  const hal_status_t spi_status =
+      hal_spi_init(JH_HW_BUS_SPI_INDEX, JH_HW_BUS_SPI_PIN_MISO,
+                   JH_HW_BUS_SPI_PIN_MOSI, JH_HW_BUS_SPI_PIN_SCK);
+  if (spi_status != HAL_OK) {
+    derr("SPI init failed: %s", hal_status_to_string(spi_status));
+    return false;
+  }
+  const hal_display_ili9341_config_t display_cfg =
+      JH_HW_NODE_DISPLAY_CONFIG_INIT;
+  const hal_status_t init_status = hal_display_init_ili9341_ex(&display_cfg);
   if (init_status != HAL_OK) {
     derr("ILI9341 init failed: %s", hal_status_to_string(init_status));
     return false;
   }
-  if (!hal_display_configure(kDisplayWidth, kDisplayHeight,
-                             HAL_DISPLAY_ROTATION(0), HAL_DISPLAY_INVERT_OFF,
-                             HAL_DISPLAY_COLOR_ORDER_RGB)) {
+  if (!hal_display_configure(
+          kDisplayWidth, kDisplayHeight,
+          HAL_DISPLAY_ROTATION(JH_HW_NODE_DISPLAY_PROP_ROTATION),
+          HAL_DISPLAY_INVERT_OFF, HAL_DISPLAY_COLOR_ORDER_RGB)) {
     derr("ILI9341 configure failed");
     return false;
   }

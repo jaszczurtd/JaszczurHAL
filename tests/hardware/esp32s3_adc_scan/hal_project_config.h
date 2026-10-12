@@ -1,5 +1,7 @@
 #pragma once
 
+/* Targets and wiring come from the assemblies in device_tree.json. */
+
 /* The continuous ADC scan on the exact esp32s3 target, with the board's
  * WS2812 as the status light and a flash write during the scan. */
 #define HAL_ENABLE_ADC_SCAN 1

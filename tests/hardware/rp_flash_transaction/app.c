@@ -394,9 +394,10 @@ static hal_status_t core1_scan(uint8_t request) {
 static hal_status_t start_scan_here(void) {
   hal_adc_scan_config_t config;
   memset(&config, 0, sizeof(config));
-  config.pins[0] = 26u;
-  config.pins[1] = 27u;
-  config.pins[2] = 28u;
+  /* Inputs from device_tree.json; the probe needs nothing connected. */
+  config.pins[0] = JH_HW_NODE_ADC0_PIN_IN;
+  config.pins[1] = JH_HW_NODE_ADC1_PIN_IN;
+  config.pins[2] = JH_HW_NODE_ADC2_PIN_IN;
   config.pin_count = SCAN_PINS;
   config.conversion_period_ns = SCAN_CONVERSION_NS;
   config.buffer = s_scan.buffer;

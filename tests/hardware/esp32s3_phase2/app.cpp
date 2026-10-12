@@ -31,18 +31,24 @@
 
 namespace {
 
-constexpr uint8_t kGpioSmokePin = 18u;
-constexpr uint8_t kGpioCtxPinA = 13u;
-constexpr uint8_t kGpioCtxPinB = 14u;
-constexpr uint8_t kGpioInputPin = 0u;
-constexpr uint8_t kAdcSmokePin = 3u;
-constexpr uint8_t kUartLoopPin = 17u;
-constexpr uint8_t kI2cSdaPin = 8u;
-constexpr uint8_t kI2cSclPin = 9u;
-constexpr uint8_t kSpiMisoPin = 10u;
-constexpr uint8_t kSpiMosiPin = 11u;
-constexpr uint8_t kSpiClockPin = 12u;
+/* Pins and bus settings come from device_tree.json. */
+constexpr uint8_t kGpioSmokePin = JH_HW_NODE_GPIO_SMOKE_PIN_OUT;
+constexpr uint8_t kGpioCtxPinA = JH_HW_NODE_CTX_A_PIN_OUT;
+constexpr uint8_t kGpioCtxPinB = JH_HW_NODE_CTX_B_PIN_OUT;
+constexpr uint8_t kGpioInputPin = JH_HW_NODE_GPIO_INPUT_PIN_IN;
+constexpr uint8_t kAdcSmokePin = JH_HW_NODE_ADC_PIN_IN;
+/* The loop runs inside the GPIO matrix: TX and RX share the TX pin. */
+constexpr uint8_t kUartLoopPin = JH_HW_BUS_LOOP_UART_PIN_TX;
+constexpr uint8_t kI2cSdaPin = JH_HW_BUS_I2C_PIN_SDA;
+constexpr uint8_t kI2cSclPin = JH_HW_BUS_I2C_PIN_SCL;
+constexpr uint8_t kSpiBus = JH_HW_BUS_SPI_INDEX;
+constexpr uint8_t kSpiMisoPin = JH_HW_BUS_SPI_PIN_MISO;
+constexpr uint8_t kSpiMosiPin = JH_HW_BUS_SPI_PIN_MOSI;
+constexpr uint8_t kSpiClockPin = JH_HW_BUS_SPI_PIN_SCK;
 constexpr uint32_t kReportPeriodMs = 500u;
+
+/* test_i2c() checks the I2C calls without a bus argument, which drive bus 0. */
+static_assert(JH_HW_BUS_I2C_INDEX == 0u, "the i2c bus must be I2C bus 0");
 
 struct Phase2Results {
   bool system;
@@ -288,10 +294,12 @@ bool test_adc(void) {
 bool test_uart(void) {
   static const uint8_t kPattern[] = {'J', 'H', 'U', '2'};
   uint8_t received[sizeof(kPattern)] = {};
-  hal_uart_t uart =
-      hal_uart_create(HAL_UART_PORT_1, kUartLoopPin, kUartLoopPin);
+  hal_uart_t uart = hal_uart_create(
+      static_cast<hal_uart_port_t>(JH_HW_BUS_LOOP_UART_UART_PORT), kUartLoopPin,
+      kUartLoopPin);
   if (uart == nullptr ||
-      hal_uart_begin(uart, 115200u, HAL_UART_CFG_8N1) != HAL_OK) {
+      hal_uart_begin(uart, JH_HW_BUS_LOOP_UART_BAUD_RATE,
+                     JH_HW_BUS_LOOP_UART_FRAME_CONFIG) != HAL_OK) {
     if (uart != nullptr) {
       hal_uart_destroy(uart);
     }
@@ -323,7 +331,7 @@ bool test_uart(void) {
 bool test_i2c(void) {
   const hal_status_t clear_status = hal_i2c_bus_clear(kI2cSdaPin, kI2cSclPin);
   const hal_status_t init_status =
-      hal_i2c_init(kI2cSdaPin, kI2cSclPin, HAL_I2C_CLOCK_STANDARD_HZ);
+      hal_i2c_init(kI2cSdaPin, kI2cSclPin, JH_HW_BUS_I2C_FREQUENCY_HZ);
   uint8_t addresses[16] = {};
   size_t found = 0u;
   const hal_status_t scan_status =
@@ -339,7 +347,7 @@ bool test_i2c(void) {
 
 bool test_spi(void) {
   const hal_spi_settings_t settings = {
-      .clock_hz = 2000000u,
+      .clock_hz = JH_HW_BUS_SPI_FREQUENCY_HZ,
       .bit_order = HAL_SPI_MSBFIRST,
       .data_mode = HAL_SPI_MODE0,
   };
@@ -347,21 +355,22 @@ bool test_spi(void) {
   uint8_t rx[sizeof(kTx)] = {};
   uint8_t received = 0u;
 
-  bool ok = hal_spi_init(0u, kSpiMisoPin, kSpiMosiPin, kSpiClockPin) == HAL_OK;
+  bool ok =
+      hal_spi_init(kSpiBus, kSpiMisoPin, kSpiMosiPin, kSpiClockPin) == HAL_OK;
   if (!ok) {
     return false;
   }
-  hal_spi_lock(0u);
-  ok = hal_spi_begin_transaction(0u, &settings) == HAL_OK &&
-       hal_spi_transfer_ex(0u, 0xA5u, &received) == HAL_OK &&
-       hal_spi_transfer_txrx(0u, kTx, rx, sizeof(kTx)) == HAL_OK &&
-       hal_spi_write_dma_ex(0u, kTx, sizeof(kTx)) == HAL_OK &&
-       hal_spi_write_dma_async_start_ex(0u, kTx, sizeof(kTx)) == HAL_OK &&
-       !hal_spi_write_dma_async_busy(0u) &&
-       hal_spi_write_dma_async_wait_ex(0u) == HAL_OK &&
-       hal_spi_end_transaction(0u) == HAL_OK;
-  hal_spi_unlock(0u);
-  hal_spi_deinit(0u);
+  hal_spi_lock(kSpiBus);
+  ok = hal_spi_begin_transaction(kSpiBus, &settings) == HAL_OK &&
+       hal_spi_transfer_ex(kSpiBus, 0xA5u, &received) == HAL_OK &&
+       hal_spi_transfer_txrx(kSpiBus, kTx, rx, sizeof(kTx)) == HAL_OK &&
+       hal_spi_write_dma_ex(kSpiBus, kTx, sizeof(kTx)) == HAL_OK &&
+       hal_spi_write_dma_async_start_ex(kSpiBus, kTx, sizeof(kTx)) == HAL_OK &&
+       !hal_spi_write_dma_async_busy(kSpiBus) &&
+       hal_spi_write_dma_async_wait_ex(kSpiBus) == HAL_OK &&
+       hal_spi_end_transaction(kSpiBus) == HAL_OK;
+  hal_spi_unlock(kSpiBus);
+  hal_spi_deinit(kSpiBus);
   return ok;
 }
 

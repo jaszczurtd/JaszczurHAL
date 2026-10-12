@@ -3,8 +3,7 @@
     "project": "JaszczurHAL hardware tests",
     "module": "rp_kv_power_loss",
     "toolchain": "cmake",
-    "target": "rp2040",
-    "board": "pico",
+    "assembly": "pico",
     "buildDir": "${jhRoot}/.build/hardware/rp_kv_power_loss",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

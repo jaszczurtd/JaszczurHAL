@@ -1,0 +1,15 @@
+{
+  "$schema": "../../../config/hardware/device_tree.schema.json",
+  "schemaVersion": 1,
+  "nodes": {},
+  "assemblies": {
+    "esp32s3-zero": {
+      "target": "esp32s3",
+      "board": "waveshare-esp32-s3-zero",
+      "clock": {"tree": "default"},
+      "statusLed": {"node": "board.statusLed"},
+      "buses": {},
+      "nodes": {}
+    }
+  }
+}

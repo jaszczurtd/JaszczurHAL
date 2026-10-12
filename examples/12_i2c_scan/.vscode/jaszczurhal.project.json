@@ -3,8 +3,7 @@
     "project": "JaszczurHAL examples",
     "module": "12_i2c_scan",
     "toolchain": "cmake",
-    "target": "rp2040",
-    "board": "pico",
+    "assembly": "pico",
     "buildDir": "${jhRoot}/.build/examples/12_i2c_scan",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

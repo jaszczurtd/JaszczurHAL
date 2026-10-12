@@ -1,10 +1,6 @@
 #pragma once
 
-/* Targets this fixture builds for. */
-#define JH_PROJECT_TARGETS(X)                                                  \
-  X(HAL_TARGET_RP2040)                                                         \
-  X(HAL_TARGET_RP2350_ARM)                                                     \
-  X(HAL_TARGET_STM32G474)
+/* Targets and wiring come from the assemblies in device_tree.json. */
 
 /* Variants: id, description and the definitions each one adds to this
  * configuration. */
@@ -27,6 +23,7 @@
 
 #define HAL_ENABLE_BLE_STREAM
 
-#if defined(JHBL5_ENABLE_DISPLAY) && !defined(HAL_TARGET_STM32G474)
-#error "bluetooth_stream DISPLAY: STM32G474 with PIM730 only"
+#if defined(JHBL5_ENABLE_DISPLAY) && !JH_HW_NODE_DISPLAY_PRESENT
+#error                                                                         \
+    "bluetooth_stream DISPLAY: needs the ILI9341 of the nucleo-pim730 assembly"
 #endif

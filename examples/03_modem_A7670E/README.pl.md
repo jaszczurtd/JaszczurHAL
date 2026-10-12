@@ -21,12 +21,18 @@ Ustawienia TLS w przykładzie obejmują `ignore_local_time = true` i
 `enable_sni = false`. Nie traktuj ich jako gotowej konfiguracji dla dowolnego
 brokera; sprawdź wymagania serwera i używanego modemu.
 
-| Sygnał po stronie mikrokontrolera RP | Pin / ustawienie |
-|---|---|
-| UART TX, do RX modemu | GP4 |
-| UART RX, z TX modemu | GP5 |
-| Sterowanie włączaniem modemu | GP6 |
-| Port szeregowy | `HAL_UART_PORT_2`, 115200 baud, 8N1 |
+Połączenia każdego montażu opisuje `device_tree.json`, a program bierze port
+szeregowy, jego ustawienia i pin sterowania włączaniem z wygenerowanego
+nagłówka. Poniższa tabela powtarza te połączenia.
+
+| Sygnał po stronie mikrokontrolera | Pico / Pico 2 | ESP32-S3-Zero |
+|---|---|---|
+| UART TX, do RX modemu | GP4 | GPIO4 |
+| UART RX, z TX modemu | GP5 | GPIO5 |
+| Sterowanie włączaniem modemu, aktywne stanem niskim | GP6 | GPIO6 |
+
+Na każdej płytce modem pracuje na porcie `HAL_UART_PORT_2` z prędkością
+115200 baud, 8N1.
 
 Dobierz zasilanie i poziomy logiczne zgodnie z dokumentacją konkretnego modułu.
 Kod używa impulsu sterującego 1500 ms i czeka 15 s po przełączeniu zasilania.
@@ -38,8 +44,11 @@ Z głównego katalogu repozytorium uruchom:
 
 ```bash
 vscode/entry/jh-vscode build \
-  --project examples/03_modem_A7670E --target rp2040 --board pico
+  --project examples/03_modem_A7670E --assembly pico
 ```
+
+Pozostałe montaże z `device_tree.json` obejmują Pico 2 (ARM i RISC-V)
+oraz ESP32-S3-Zero.
 
 Błędy uruchomienia modemu i MQTT są zgłaszane w konsoli; jednakże przykład nie
 implementuje pełnej odporności na możliwe błędy transmisji / komunikacji.

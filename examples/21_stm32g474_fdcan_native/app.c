@@ -3,8 +3,8 @@
  * @brief CAN FD on every channel of the board with the STM32G474 built-in
  *        FDCAN controllers.
  *
- * Opens the CAN channels the board profile describes (three on the CAN-FD HAT
- * of the nucleo-g474re-canhat profile) and sends one CAN FD frame per channel
+ * Opens the CAN channels of the selected assembly (three on the CAN-FD HAT
+ * described in device_tree.json) and sends one CAN FD frame per channel
  * every second through the send queue. Received frames and failed sends
  * arrive through callbacks run by hal_can_service(). By default each channel
  * runs in internal loopback and receives its own frames, which needs no
@@ -25,7 +25,7 @@
 #error "21_stm32g474_fdcan_native is only supported on HAL_TARGET_STM32G474"
 #endif
 #if HAL_BOARD_CAN_CHANNEL_COUNT < 1
-#error "21_stm32g474_fdcan_native needs a board profile with CAN channels"
+#error "21_stm32g474_fdcan_native needs an assembly with CAN channels"
 #endif
 
 /* 0: internal loopback, no wiring. 1: the channels share a terminated bus

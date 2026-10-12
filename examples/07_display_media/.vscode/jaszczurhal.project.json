@@ -3,8 +3,7 @@
     "project": "JaszczurHAL examples",
     "module": "07_display_media",
     "toolchain": "cmake",
-    "target": "rp2040",
-    "board": "pico",
+    "assembly": "pico",
     "buildDir": "${jhRoot}/.build/examples/07_display_media",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

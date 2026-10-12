@@ -9,7 +9,15 @@ For devices that support it, it also reads and writes epoch timestamps.
 
 The drivers are compiled together. The `chip` field of `hal_rtc_config_t`
 selects the hardware, and an absent external RTC does not stop the other one.
-I2C bus 0 uses GP4/GP5 on RP boards and PB9/PB8 on STM32G474.
+`device_tree.json` describes the wiring of every assembly, and the program
+takes the I2C bus, pins, clock and RTC addresses from the generated header.
+The table below repeats that wiring. The bus runs at 400 kHz, PCF8563
+answers at `0x51` and DS3231 at `0x68`.
+
+| Signal | Pico / Pico 2 | NUCLEO-G474RE |
+|---|---|---|
+| I2C SDA | GP4 | PB9, CN10 pin 5 / D14 |
+| I2C SCL | GP5 | PB8, CN10 pin 3 / D15 |
 
 Before changing an external clock, the application reads its state and keeps
 an existing valid time. It writes the fixed test value `2026-08-20 12:34:50`
@@ -53,39 +61,37 @@ compiles both application files, but each one is wrapped in a condition on
 `EXAMPLE_RTC_DISPLAY_CLOCK`, which only the `DISPLAY_CLOCK` variant defines.
 Exactly one of them therefore provides `app_start()` and `app_task0()`:
 
-| Selection | Application source | Targets |
+| Selection | Application source | Assemblies |
 |---|---|---|
-| Base project | `app.c` | RP2040, RP2350 ARM, RP2350 RISC-V, STM32G474 |
-| `DISPLAY_CLOCK` variant | `display_clock_app.c` | STM32G474 |
+| Base project | `app.c` | `pico`, `pico2-arm`, `pico2-riscv`, `nucleo` |
+| `DISPLAY_CLOCK` variant | `display_clock_app.c` | `nucleo` |
 
 Build the base STM32G474 example:
 
 ```bash
 vscode/entry/jh-vscode build \
   --project examples/16_rtc_backends \
-  --target stm32g474 \
-  --board nucleo-g474re
+  --assembly nucleo
 ```
 
 The base build runs `app.c` and writes the output to
-`.build/examples/16_rtc_backends/firmware.elf`.
+`.build/examples/16_rtc_backends/stm32g474/nucleo/firmware.elf`.
 
 Build the display clock:
 
 ```bash
 vscode/entry/jh-vscode build \
   --project examples/16_rtc_backends \
-  --target stm32g474 \
-  --board nucleo-g474re \
+  --assembly nucleo \
   --variant DISPLAY_CLOCK
 ```
 
 The variant defines `EXAMPLE_RTC_DISPLAY_CLOCK=1`. That selects
 `display_clock_app.c` instead of `app.c`, and `hal_project_config.h` then
 enables ILI9341 support and stops any target other than STM32G474 with
-`#error`. The variant builds as module `16_rtc_backends_display_clock`, and
+`#error`. The variant builds as module `16_rtc_backends_DISPLAY_CLOCK`, and
 its output is
-`.build/examples/16_rtc_backends/variants/display_clock/firmware.elf`.
+`.build/examples/16_rtc_backends/stm32g474/nucleo/variants/DISPLAY_CLOCK/firmware.elf`.
 
 Both commands use the shared CMake firmware project through `jh-vscode`.
 CMake adds the application sources, STM32 startup code, STM32G474
@@ -93,23 +99,34 @@ support, and enabled JaszczurHAL drivers and utilities. The HAL-provided
 `main()` calls `app_start()` once and then repeatedly calls `app_task0()`.
 
 In VS Code, use `Project: Build` or
-`Project: Build variant: display_clock`. Select `stm32g474:nucleo-g474re`
-before building the display variant.
+`Project: Build variant: DISPLAY_CLOCK`. Select the `nucleo` assembly with
+`Project: Select board` before building the display variant.
 
 ## STM32G474 DS3231 retention clock
 
 The `DISPLAY_CLOCK` variant displays DS3231 time as `HH:MM:SS` in the center
 of a landscape ILI9341 screen, using `draw7SegString()`. Connect the DS3231
-to PB9/PB8 and wire the display as described in `examples/07_display_media`.
-Add `--variant DISPLAY_CLOCK` when building or uploading.
+to PB9/PB8 as in the table above. The `display` node of the `nucleo`
+assembly describes the screen wiring, and its SPI clock is 24 MHz:
+
+| ILI9341 signal | NUCLEO-G474RE |
+|---|---|
+| SCK | PB3, CN10 pin 31 / D3 |
+| MOSI | PA7, CN10 pin 15 / D11 |
+| MISO | PA6, CN10 pin 13 / D12 |
+| CS | PB6, CN10 pin 17 / D10 |
+| DC | PC7, CN10 pin 19 / D9 |
+| RESET | PA9, CN10 pin 21 / D8 |
+
+The SPI clock uses PB3 rather than D13 (PA5), because PA5 drives the LD2
+LED. Add `--variant DISPLAY_CLOCK` when building or uploading.
 
 Build and upload through ST-LINK/OpenOCD:
 
 ```bash
 vscode/entry/jh-vscode upload \
   --project examples/16_rtc_backends \
-  --target stm32g474 \
-  --board nucleo-g474re \
+  --assembly nucleo \
   --variant DISPLAY_CLOCK \
   --port /dev/ttyACM0 \
   --allow-unverified-port

@@ -45,8 +45,10 @@ constexpr char kDisplayRuntimeName[] = "FreeRTOS";
 constexpr char kDisplayRuntimeName[] = "bare-metal";
 #endif
 #endif
+/* The board field names the assembly: Pico and Nucleo with a PIM730 have no
+ * board profile of their own. */
 constexpr char kIdentityResponse[] =
-    "J5I1|" HAL_TARGET_NAME "|" HAL_BOARD_PROFILE_NAME
+    "J5I1|" HAL_TARGET_NAME "|" JH_HW_ASSEMBLY_NAME
     "|" JHBL5_FIXTURE_RUNTIME_NAME;
 #undef JHBL5_FIXTURE_RUNTIME_NAME
 constexpr size_t kStatsFieldCount = 11u;
@@ -55,13 +57,12 @@ constexpr size_t kStatsPayloadLength =
 constexpr size_t kBootPayloadLength =
     (sizeof(kBootResponse) - 1u) + sizeof(uint8_t) + kBootIdLength;
 #if defined(JHBL5_ENABLE_DISPLAY)
-static_assert(HAL_TARGET_IS_STM32G474,
-              "the BLE Stream display load variant is STM32G474-only");
-constexpr uint8_t kDisplayCsPin = 22u; /* PB6, CN5 D10 */
-constexpr uint8_t kDisplayDcPin = 39u; /* PC7, CN5 D9 */
-constexpr uint8_t kDisplayRstPin = 9u; /* PA9, CN5 D8 */
-constexpr int kDisplayWidth = 240;
-constexpr int kDisplayHeight = 320;
+static_assert(JH_HW_NODE_DISPLAY_PRESENT,
+              "the BLE Stream display load variant needs the ILI9341 of "
+              "the nucleo-pim730 assembly");
+/* Panel wiring and geometry come from the display node in device_tree.json. */
+constexpr int kDisplayWidth = (int)JH_HW_NODE_DISPLAY_PROP_WIDTH;
+constexpr int kDisplayHeight = (int)JH_HW_NODE_DISPLAY_PROP_HEIGHT;
 constexpr int kDisplayLineHeight = 20;
 constexpr size_t kDisplayLineCapacity = 48u;
 #endif
@@ -139,11 +140,18 @@ hal_status_t display_printf_line(int line, uint16_t color, const char *format,
 }
 
 hal_status_t initialize_display(void) {
+  /* The SPI bus opens explicitly; the panel driver does not choose pins. */
   hal_status_t status =
-      hal_display_init(kDisplayCsPin, kDisplayDcPin, kDisplayRstPin);
+      hal_spi_init(JH_HW_BUS_SPI_INDEX, JH_HW_BUS_SPI_PIN_MISO,
+                   JH_HW_BUS_SPI_PIN_MOSI, JH_HW_BUS_SPI_PIN_SCK);
+  if (status == HAL_OK) {
+    const hal_display_ili9341_config_t config = JH_HW_NODE_DISPLAY_CONFIG_INIT;
+    status = hal_display_init_ili9341_ex(&config);
+  }
   if (status == HAL_OK) {
     status = hal_display_configure_ex(
-        kDisplayWidth, kDisplayHeight, HAL_DISPLAY_ROTATION_0,
+        kDisplayWidth, kDisplayHeight,
+        HAL_DISPLAY_ROTATION(JH_HW_NODE_DISPLAY_PROP_ROTATION),
         HAL_DISPLAY_INVERT_OFF, HAL_DISPLAY_COLOR_ORDER_RGB);
   }
   if (status == HAL_OK) {
@@ -161,7 +169,7 @@ hal_status_t initialize_display(void) {
   }
   s_display_ready = status == HAL_OK;
   if (status == HAL_OK) {
-    deb("JHBL5 display ready SPI1 PA5/PA6/PA7 CS=PB6 DC=PC7 RST=PA9");
+    deb("JHBL5 display ready SPI1 PB3/PA6/PA7 CS=PB6 DC=PC7 RST=PA9");
   } else {
     derr("JHBL5 display init=%s", hal_status_to_string(status));
   }

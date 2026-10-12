@@ -3,8 +3,19 @@
 `tests/hardware/stm32_uart` checks `hal_uart` on a NUCLEO-G474RE: PORT_2
 (USART2 on PA2/PA3), which reaches the host through the ST-LINK virtual COM
 port, and PORT_1 (USART1) through a single-wire self-test on PC4 that needs no
-wire. It runs on the bare Nucleo and with the CAN-FD HAT (`nucleo-g474re-canhat`
-profile, 160 MHz clock tree, relay drivers held off).
+wire.
+
+`device_tree.json` describes the wiring of both assemblies, and the table
+below repeats it. `nucleo-canhat` (the default) is the Nucleo with the CAN-FD
+HAT: 160 MHz clock tree, the HAT's RDY LED (PC1) as the built-in LED and the
+relay drivers held off. `nucleo` is the bare Nucleo: 170 MHz clock tree and
+LD2 (PA5). The `nucleo` image leaves the relay lines alone, so use
+`nucleo-canhat` whenever the HAT is fitted.
+
+| Port | Bus in `device_tree.json` | Pins | Setting |
+|---|---|---|---|
+| PORT_2 (USART2) | `consoleUart` | TX PA2, RX PA3 (ST-LINK virtual COM port) | 3 Mbaud 8N1 after the boot window |
+| PORT_1 (USART1) | `loopUart` | TX PC4 (the single wire), RX PC5 (unused) | rate and format of each `Q` command |
 
 After reset the debug console prints a boot line at 115200 for three seconds:
 reset reason, serial number and UID. Then the fixture takes USART2 at
@@ -50,16 +61,16 @@ zero-length non-blocking writes, at 1 Mbaud and 3 Mbaud. Both streams must
 arrive intact, the probe must be refused while the writer holds the queue and
 must return within a scheduler tick.
 
-Build and upload through the ST-LINK (OpenOCD); use `--board nucleo-g474re`
+Build and upload through the ST-LINK (OpenOCD); use `--assembly nucleo`
 for a Nucleo without the HAT:
 
 ```sh
 vscode/entry/jh-vscode build \
   --project tests/hardware/stm32_uart \
-  --target stm32g474 --board nucleo-g474re-canhat
+  --assembly nucleo-canhat
 vscode/entry/jh-vscode upload \
   --project tests/hardware/stm32_uart \
-  --target stm32g474 --board nucleo-g474re-canhat
+  --assembly nucleo-canhat
 ```
 
 The `FREERTOS` variant (`HAL_ENABLE_FREERTOS=1`, `HAL_ENABLE_APP_TASK1=1`)
@@ -68,12 +79,8 @@ is the FreeRTOS build. Add `--variant FREERTOS` to both commands:
 ```sh
 vscode/entry/jh-vscode upload \
   --project tests/hardware/stm32_uart \
-  --target stm32g474 --board nucleo-g474re-canhat --variant FREERTOS
+  --assembly nucleo-canhat --variant FREERTOS
 ```
-
-To run the 170 MHz `nucleo-g474re` profile on a Nucleo that carries the HAT,
-use `--board nucleo-g474re --variant HAT_RELAYS`; the variant defines
-`UART_FIXTURE_HAT_RELAYS=1` so that the relay drivers stay off.
 
 Optionally read the UID words without resetting the board:
 

@@ -29,26 +29,34 @@ Uruchom z głównego katalogu repozytorium:
 ./scripts/examples_dispatcher.py build --target stm32g474 --example 26_ble_stream
 ```
 
-Dla tego projektu skrypt kompiluje wersję podstawową i oba warianty poleceń.
-Aby zbudować tylko wskazany wariant, użyj:
+Dla każdego montażu wybranej platformy skrypt kompiluje wersję podstawową
+i oba warianty poleceń. Aby zbudować tylko wskazany wariant, użyj:
 
 ```bash
 vscode/entry/jh-vscode build --project examples/26_ble_stream \
-  --target rp2040 --board picow --variant COMMANDS
+  --assembly picow --variant COMMANDS
 vscode/entry/jh-vscode build --project examples/26_ble_stream \
-  --target rp2040 --board picow --variant COMMANDS_FREERTOS
+  --assembly picow --variant COMMANDS_FREERTOS
 ```
 
-Domyślne płytki to `picow` dla RP2040, `pico2w` dla RP2350 ARM oraz
-`nucleo-g474re-pim730` dla STM32G474. Można też jawnie wybrać `pico-rm2`
-dla RP2040; konfiguracja kompilacji jest dostępna, ale jej osobny test
+`device_tree.json` opisuje sprzęt każdego montażu: `picow` (Pico W,
+domyślny), `pico2w` (Pico 2 W), `nucleo-pim730` i `pico-rm2`. Dwa ostatnie to
+zwykła NUCLEO-G474RE i zwykłe Pico z zewnętrznym modułem PIM730/RM2, bez
+osobnego profilu płytki. Tabela poniżej powtarza połączenia modułu.
+Konfiguracja kompilacji `pico-rm2` jest dostępna, ale jej osobny test
 sprzętowy pozostaje do wykonania:
 
 ```bash
 vscode/entry/jh-vscode build \
-  --project examples/26_ble_stream \
-  --target rp2040 --board pico-rm2
+  --project examples/26_ble_stream --assembly pico-rm2
 ```
+
+| Sygnał PIM730/RM2 | Pico (`pico-rm2`) | NUCLEO-G474RE (`nucleo-pim730`) |
+|---|---|---|
+| CS | GPIO3 | PB12, pin 16 CN10 |
+| DAT | GPIO4 | PB15, pin 26 CN10 |
+| WL_ON | GPIO2 | PB14, pin 28 CN10 |
+| CLK | GPIO5 | PB13, pin 30 CN10 |
 
 RP2350 RISC-V nie jest obsługiwany, ponieważ nie włączono dla niego
 komunikacji Bluetooth przez CYW43.

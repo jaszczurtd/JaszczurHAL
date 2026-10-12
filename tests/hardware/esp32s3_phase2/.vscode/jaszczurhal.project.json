@@ -1,5 +1,4 @@
 {
   "schemaVersion": 1,
-  "target": "esp32s3",
-  "board": "waveshare-esp32-s3-zero"
+  "assembly": "esp32s3-zero"
 }

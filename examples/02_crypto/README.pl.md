@@ -19,8 +19,8 @@ Z głównego katalogu repozytorium uruchom:
 
 ```bash
 vscode/entry/jh-vscode build \
-  --project examples/02_crypto --target rp2040 --board pico
+  --project examples/02_crypto --assembly pico
 ```
 
-Konfiguracja projektu obejmuje także RP2350 ARM, RP2350 RISC-V i STM32G474.
-Przykład nie wymaga dodatkowego sprzętu.
+Montaże (płytki), dla których przykład się kompiluje, wymienia
+`device_tree.json`. Przykład nie wymaga dodatkowego sprzętu.

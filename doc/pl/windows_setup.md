@@ -111,7 +111,7 @@ Konfiguracja Cortex-Debug korzysta ze zweryfikowanych ścieżek zapisanych przez
 ```powershell
 .\vscode\entry\jh-vscode.cmd debug-tools `
   --project .\examples\01_core_runtime `
-  --target rp2350-arm --board pico2w --json
+  --assembly pico2-arm --json
 ```
 
 Wynik zawiera `openocd`, `gdb`, `armToolchainPath`, katalog główny skryptów

@@ -17,7 +17,7 @@ odpytuje także poziom DIO1, więc link działa nawet przy martwym przerwaniu. �
 odizolować przerwanie, zbuduj wariant bez odpytywania poziomu i sprawdź, czy link
 nadal chodzi.
 
-W profilach ze sprzętową diodą stanu jej ciągłe świecenie oznacza
+W montażach ze sprzętową diodą stanu jej ciągłe świecenie oznacza
 aktywność nadawania, a impuls 120 ms potwierdza odebrany pakiet.
 
 Nie paruj urządzenia LF z urządzeniem HF. Potwierdź etykiety na obu
@@ -33,18 +33,18 @@ respondera na drugą płytkę:
 ```bash
 vscode/entry/jh-vscode build \
   --project examples/27_lora_point_to_point \
-  --target rp2040 --board rp2040-lora-lf
+  --assembly rp2040-lora-lf
 vscode/entry/jh-vscode upload \
   --project examples/27_lora_point_to_point \
-  --target rp2040 --board rp2040-lora-lf \
+  --assembly rp2040-lora-lf \
   --port /dev/serial/by-id/<lf-initiator>
 
 vscode/entry/jh-vscode build \
   --project examples/27_lora_point_to_point \
-  --target rp2040 --board rp2040-lora-lf --variant RESPONDER
+  --assembly rp2040-lora-lf --variant RESPONDER
 vscode/entry/jh-vscode upload \
   --project examples/27_lora_point_to_point \
-  --target rp2040 --board rp2040-lora-lf --variant RESPONDER \
+  --assembly rp2040-lora-lf --variant RESPONDER \
   --port /dev/serial/by-id/<lf-responder>
 ```
 
@@ -54,23 +54,25 @@ regionu.
 
 ### Para HF: zewnętrzny Core1262-HF na RP2040 i STM32G474
 
-Podłącz oba moduły zgodnie z README przykładu, który trzyma to okablowanie
-w `lora_example_radio.h`. Skompiluj RP2040/Pico jako inicjatora oraz
-NUCLEO-G474RE jako respondera (lub odwróć obie role):
+Podłącz oba moduły zgodnie z README przykładu. To okablowanie opisują montaże
+`pico-core1262-hf` i `nucleo-core1262-hf` w `device_tree.json` przykładu.
+Skompiluj Pico jako inicjatora oraz NUCLEO-G474RE jako respondera (lub odwróć
+obie role):
 
 ```bash
 vscode/entry/jh-vscode build \
   --project examples/27_lora_point_to_point \
-  --target rp2040
+  --assembly pico-core1262-hf
 vscode/entry/jh-vscode build \
   --project examples/27_lora_point_to_point \
-  --target stm32g474 --variant RESPONDER
+  --assembly nucleo-core1262-hf --variant RESPONDER
 ```
 
 Oba urządzenia Core1262-HF używają tego samego profilu elektrycznego modułu i
-konfiguracji technicznej EU868 z `hal_lora_sx126x_core1262_hf_defaults()`.
-Mapowania pinów hosta należą do przykładu, osobno dla każdej platformy.
-Okablowanie Nucleo używa SPI2 na PB13/PB14/PB15 i pozostawia
+konfiguracji technicznej EU868. Dane modułu pochodzą z typu komponentu HAL
+`waveshare,core1262-hf`, tych samych, które zwraca
+`hal_lora_sx126x_core1262_hf_defaults()`; połączenia hosta należą do montaży
+przykładu. Okablowanie Nucleo używa SPI2 na PB13/PB14/PB15 i pozostawia
 LD2/`HAL_LED_BUILTIN` na PA5.
 
 Przed próbą transmisji radiowej można zbudować i wgrać na dowolnym hoście
@@ -126,12 +128,12 @@ dysk jawnie:
 ```bash
 vscode/entry/jh-vscode upload \
   --project examples/27_lora_point_to_point \
-  --target rp2040 --board rp2040-lora-lf --variant LINK \
+  --assembly rp2040-lora-lf --variant LINK \
   --bootsel-volume /dev/<initiator-partition>
 
 vscode/entry/jh-vscode upload \
   --project examples/27_lora_point_to_point \
-  --target rp2040 --board rp2040-lora-lf --variant LINK_RESPONDER \
+  --assembly rp2040-lora-lf --variant LINK_RESPONDER \
   --bootsel-volume /dev/<responder-partition>
 ```
 

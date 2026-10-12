@@ -24,21 +24,24 @@ PIM730 `BT_ON` trace still follows `WL_ON` in the assembled setup.
 
 The base build is the probe; the `WIFI_ONLY` variant is the otherwise
 equivalent memory baseline. Both images must be measured from their ELF/map
-files with the same target, board, compiler, and build type.
+files with the same assembly, compiler, and build type.
 
 The `WIFI_ONLY` image excludes BTstack, the Bluetooth firmware, and the
 Bluetooth pools on the shared bus.
 
-Build the probe for each board, and repeat with `--variant WIFI_ONLY` for the
-baseline:
+`device_tree.json` describes the hardware of every assembly:
+`nucleo-pim730` (the default), `picow` (Pico W) and `pico2w` (Pico 2 W).
+`nucleo-pim730` is a plain NUCLEO-G474RE with an external PIM730 module; the
+table in substage 1.a repeats its wiring.
+
+Build the probe for each assembly, and repeat with `--variant WIFI_ONLY` for
+the baseline:
 
 ```sh
 vscode/entry/jh-vscode build \
-  --project tests/hardware/bluetooth_stage1 \
-  --target stm32g474 --board nucleo-g474re-pim730
+  --project tests/hardware/bluetooth_stage1 --assembly nucleo-pim730
 vscode/entry/jh-vscode build \
-  --project tests/hardware/bluetooth_stage1 \
-  --target rp2040 --board picow
+  --project tests/hardware/bluetooth_stage1 --assembly picow
 ```
 
 ## Hardware substage 1.a wiring and procedure

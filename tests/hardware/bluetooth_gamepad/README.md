@@ -32,20 +32,20 @@ and usages, duplicate usages, queue overflow, and the absence of dynamic
 allocation during parser operation.
 
 The base build is the probe: `hal_project_config.h` defines
-`JH_BLUETOOTH_CLASSIC_HID_PROBE`. Build the required Pico 2 W image:
+`JH_BLUETOOTH_CLASSIC_HID_PROBE`. `device_tree.json` describes the hardware of
+both assemblies: `pico2w` (Pico 2 W, the default) and `picow` (Pico W).
+Neither needs external wiring. Build the required Pico 2 W image:
 
 ```sh
 vscode/entry/jh-vscode build \
-  --project tests/hardware/bluetooth_gamepad \
-  --target rp2350-arm --board pico2w
+  --project tests/hardware/bluetooth_gamepad --assembly pico2w
 ```
 
 Upload it and run the hardware verifier on the resulting CDC port:
 
 ```sh
 vscode/entry/jh-vscode upload \
-  --project tests/hardware/bluetooth_gamepad \
-  --target rp2350-arm --board pico2w \
+  --project tests/hardware/bluetooth_gamepad --assembly pico2w \
   --port /dev/ttyACM0
 
 python3 tests/hardware/bluetooth_gamepad/verify_zero2.py \

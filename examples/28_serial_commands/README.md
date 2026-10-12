@@ -26,12 +26,13 @@ Run from the repository root:
   --target stm32g474 --example 28_serial_commands
 ```
 
-RP2350 ARM and RISC-V configurations are also available. To build a single
-configuration, use:
+`device_tree.json` lists the assemblies: `pico` (the default), `pico2-arm`,
+`pico2-riscv`, `nucleo` and `esp32s3-zero`; none of them needs external
+hardware. To build a single configuration, use:
 
 ```bash
 vscode/entry/jh-vscode build \
-  --project examples/28_serial_commands --target rp2040 --board pico
+  --project examples/28_serial_commands --assembly pico
 ```
 
 ## Serial exchange

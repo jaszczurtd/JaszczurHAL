@@ -172,7 +172,6 @@ jobs:
           function Invoke-FreeRtosConfigure {
             param(
               [string]$TargetName,
-              [string]$BoardName,
               [string]$BuildDirectory,
               [string]$ExpectedPort,
               [string[]]$ExtraArguments
@@ -187,7 +186,6 @@ jobs:
               "-DJH_PROJECT_DIR=$project",
               '-DJH_MODULE_NAME=18_freertos_suite',
               "-DJH_TARGET=$TargetName",
-              "-DJH_BOARD=$BoardName",
               "-DJH_ARTIFACT_DIR=$BuildDirectory\artifacts",
               '-DCMAKE_BUILD_TYPE=Release',
               '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON'
@@ -235,7 +233,6 @@ jobs:
 
           Invoke-FreeRtosConfigure `
             -TargetName 'rp2040' `
-            -BoardName 'pico' `
             -BuildDirectory (Join-Path $buildRoot 'rp2040') `
             -ExpectedPort 'portable/ThirdParty/GCC/RP2040/port.c' `
             -ExtraArguments @(
@@ -245,7 +242,6 @@ jobs:
 
           Invoke-FreeRtosConfigure `
             -TargetName 'stm32g474' `
-            -BoardName 'nucleo-g474re' `
             -BuildDirectory (Join-Path $buildRoot 'stm32g474') `
             -ExpectedPort 'portable/GCC/ARM_CM4F/port.c' `
             -ExtraArguments @(

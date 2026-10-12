@@ -11,6 +11,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -23,6 +24,7 @@ ROOT = repo_root(sys.argv, __file__)
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT))
 
+import device_tree_check  # noqa: E402
 import device_tree_project  # noqa: E402
 import examples_dispatcher  # noqa: E402
 import generate_hal_features  # noqa: E402
@@ -333,17 +335,55 @@ class VsCodeFiles(unittest.TestCase):
         tasks = {task["label"]: task for task in document["tasks"]}
         self.assertIn("assembly of device_tree.json", tasks["Project: Select board (GUI)"]["detail"])
         self.assertIn("Project: Build variant: SERIAL", tasks)
-        # sync-board-picker writes the same picker, from the manifest only.
+        # sync-board-picker writes the same picker, from the manifest only,
+        # and the same device tree tasks; it drops stale ones and keeps the
+        # consumer's.
+        consumer_task = {"label": "Consumer: task", "type": "shell", "command": "true"}
+        stale_task = {"label": "Project: Build (Debug) gone", "type": "shell", "command": "true"}
         write_json(directory / ".vscode" / "jaszczurhal.local.json", {"assembly": "canhat"})
-        write_json(directory / ".vscode" / "tasks.json", {"version": "2.0.0", "tasks": []})
+        write_json(directory / ".vscode" / "tasks.json",
+                   {"version": "2.0.0", "tasks": [stale_task, consumer_task]})
+        consumer_profile = {"name": "Consumer: debugger", "type": "cppdbg", "request": "launch"}
+        write_json(directory / ".vscode" / "launch.json", {"version": "0.2.0", "configurations": [
+            {"name": "Project: Debug gone (RP2040)", "type": "cortex-debug"}, consumer_profile]})
         result = run("sync-board-picker", "--project", directory)
         self.assertEqual(0, result.returncode, result.stderr)
         synced = json.loads((directory / ".vscode" / "tasks.json").read_text(encoding="utf-8"))
         self.assertEqual(picker, synced["inputs"][0])
-        # The debugged ELF is the one the manifest's assembly publishes.
+        managed = [task for task in document["tasks"] if vscode_task_config.is_assembly_task(task)]
+        self.assertEqual(["Project: Check device tree", "Project: Build (Debug) canhat",
+                          "Project: Build (Debug) canhat variant: SERIAL",
+                          "Project: Build (Debug) canhat-b"], [task["label"] for task in managed])
+        self.assertEqual([consumer_task, vscode_task_config.sync_board_picker_task(), *managed],
+                         synced["tasks"])
+        hidden = {task["label"]: task for task in managed}["Project: Build (Debug) canhat variant: SERIAL"]
+        self.assertTrue(hidden["hide"])
+        self.assertEqual(["build-debug", "--project", "${workspaceFolder}", "--assembly", "canhat",
+                          "--variant", "SERIAL"], hidden["args"])
+        check = managed[0]
+        self.assertTrue(check["isBackground"])
+        self.assertEqual("folderOpen", check["runOptions"]["runOn"])
+        self.assertEqual(["check-hardware", "--project", "${workspaceFolder}", "--watch"], check["args"])
+        # Each debugged assembly and variant has its own profile for its own
+        # ELF, built first by its own task; the manifest's assembly comes
+        # first and the consumer's profile stays.
         launch = json.loads((directory / ".vscode" / "launch.json").read_text(encoding="utf-8"))
-        executables = {item.get("executable") for item in launch["configurations"]}
-        self.assertEqual({"${workspaceFolder}/.build/stm32g474/canhat-b/firmware.elf"}, executables)
+        output = "${workspaceFolder}/.build/stm32g474"
+        self.assertEqual([
+            ("Project: Debug canhat-b (STM32G474 / ST-Link)", f"{output}/canhat-b/firmware.elf",
+             "Project: Build (Debug) canhat-b"),
+            ("Project: Debug canhat (STM32G474 / ST-Link)", f"{output}/canhat/firmware.elf",
+             "Project: Build (Debug) canhat"),
+            ("Project: Debug canhat variant: SERIAL (STM32G474 / ST-Link)",
+             f"{output}/canhat/variants/SERIAL/firmware.elf",
+             "Project: Build (Debug) canhat variant: SERIAL"),
+        ], [(item["name"], item["executable"], item["preLaunchTask"])
+            for item in launch["configurations"][:-1]])
+        self.assertEqual(consumer_profile, launch["configurations"][-1])
+        self.assertTrue(all(item["configFiles"] == ["board/st_nucleo_g4.cfg"]
+                            for item in launch["configurations"][:-1]))
+        rerun = run("sync-board-picker", "--project", directory)
+        self.assertIn("are current", rerun.stdout)
 
     def test_cmake_tools_settings_name_the_assembly(self) -> None:
         registry = jh_vscode.load_target_registry()
@@ -394,9 +434,125 @@ class VsCodeFiles(unittest.TestCase):
         self.assertEqual("canhat", settings["cmake.configureSettings"]["JH_ASSEMBLY"])
         self.assertTrue(settings["C_Cpp.default.compileCommands"].endswith(
             "/70_device_tree/stm32g474/canhat/compile_commands_patched.json"))
-        launch = examples_dispatcher.launch_for("70_device_tree", "stm32g474", "canhat")
-        self.assertTrue(all(item["executable"].endswith("/70_device_tree/stm32g474/canhat/firmware.elf")
-                            for item in launch["configurations"]))
+        launch = examples_dispatcher.launch_for(
+            examples / "70_device_tree", examples_dispatcher.read_manifest(examples / "70_device_tree"))
+        self.assertEqual(["stm32g474/canhat/firmware.elf", "stm32g474/canhat/variants/SERIAL/firmware.elf",
+                          "stm32g474/canhat-b/firmware.elf"],
+                         [item["executable"].split("/.build/", 1)[1] for item in launch["configurations"]])
+
+
+class DeviceTreeCheck(unittest.TestCase):
+    """check-hardware resolves every assembly as a build does and names
+    each problem's line and column for the VS Code problem matcher."""
+
+    def edit(self, directory: Path, change) -> Path:
+        path = directory / "device_tree.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        change(data)
+        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        return path
+
+    @staticmethod
+    def place(path: Path, fragment: str, after: str = "") -> tuple[int, int]:
+        text = path.read_text(encoding="utf-8")
+        offset = text.index(fragment, text.index(after) if after else 0)
+        return text.count("\n", 0, offset) + 1, offset - text.rfind("\n", 0, offset)
+
+    def test_locate_finds_members_by_pointer(self) -> None:
+        text = '{\r\n  "a/b": [1, {"c~d": true}],\r\n  "e": {}\r\n}'
+        self.assertEqual((2, 3), device_tree_check.locate(text, "/a~1b"))
+        self.assertEqual((2, 15), device_tree_check.locate(text, "/a~1b/1/c~0d"))
+        self.assertEqual((2, 11), device_tree_check.locate(text, "/a~1b/0"))
+        # A pointer the text lacks falls back to its nearest parent.
+        self.assertEqual((3, 3), device_tree_check.locate(text, "/e/missing"))
+        self.assertEqual((1, 1), device_tree_check.locate(text, ""))
+        self.assertEqual((1, 1), device_tree_check.locate("{", "/a"))
+
+    def test_problems_name_their_place_and_assemblies(self) -> None:
+        directory = project("check")
+        self.assertEqual([], device_tree_check.problems(directory))
+        path = self.edit(directory, lambda data: data["assemblies"]["canhat-b"].update(board="nucleo-g4"))
+        [problem] = device_tree_check.problems(directory)
+        self.assertEqual(("JH-HW-BOARD", ("canhat-b",)), (problem.code, problem.assemblies))
+        self.assertEqual(self.place(path, '"board"', '"canhat-b"'), (problem.line, problem.column))
+        # An error every assembly shares is reported once, with all names.
+        path = self.edit(directory, lambda data: data["nodes"]["hat"].update(compatible="vendor,none"))
+        [problem] = device_tree_check.problems(directory)
+        self.assertEqual(("JH-HW-BINDING", ("canhat", "canhat-b")), (problem.code, problem.assemblies))
+        self.assertEqual(self.place(path, '"compatible": "vendor,none"'), (problem.line, problem.column))
+        self.assertEqual(f"device_tree.json:{problem.line}:{problem.column}: error: [JH-HW-BINDING] "
+                         f"{problem.message} (assemblies canhat, canhat-b)",
+                         device_tree_check.format_problem(problem, directory))
+        # Schema and syntax errors stop before the assemblies.
+        path = self.edit(directory, lambda data: data["assemblies"]["canhat"].update(statusLedd={}))
+        [problem] = device_tree_check.problems(directory)
+        self.assertEqual(("JH-HW-SCHEMA", ()), (problem.code, problem.assemblies))
+        self.assertEqual(self.place(path, '"statusLedd"'), (problem.line, problem.column))
+        path.write_text('{\n  "schemaVersion": 1\n  "nodes": {}\n}\n', encoding="utf-8")
+        [problem] = device_tree_check.problems(directory)
+        self.assertEqual(("JH-HW-SCHEMA", 3, 3), (problem.code, problem.line, problem.column))
+
+    def test_the_command_prints_what_the_problem_matcher_reads(self) -> None:
+        matcher = vscode_task_config.DEVICE_TREE_PROBLEM_MATCHER
+        directory = project("check command")
+        clean = run("check-hardware", "--project", directory)
+        self.assertEqual(0, clean.returncode, clean.stderr)
+        self.edit(directory, lambda data: data["assemblies"]["canhat-b"].update(board="nucleo-g4"))
+        broken = run("check-hardware", "--project", directory)
+        self.assertNotEqual(0, broken.returncode)
+        for result in (clean, broken):
+            first, *problems, last = result.stdout.splitlines()
+            self.assertRegex(first, matcher["background"]["beginsPattern"])
+            self.assertRegex(last, matcher["background"]["endsPattern"])
+            self.assertTrue(all(re.match(matcher["pattern"]["regexp"], line) for line in problems))
+        self.assertEqual(1, len(broken.stdout.splitlines()) - 2)
+        self.assertTrue(broken.stdout.splitlines()[1].startswith("device_tree.json:"))
+
+    def test_watch_checks_again_after_an_edit(self) -> None:
+        directory = project("check watch")
+        sleeps = []
+
+        def sleep(_seconds: float) -> None:
+            sleeps.append(_seconds)
+            if len(sleeps) == 1:
+                self.edit(directory, lambda data: data["assemblies"]["canhat-b"].update(board="nucleo-g4"))
+            else:
+                raise KeyboardInterrupt
+
+        args = jh_vscode.build_parser().parse_args(
+            ["check-hardware", "--project", str(directory), "--watch"])
+        with mock.patch.object(jh_vscode.time, "sleep", side_effect=sleep), \
+             redirect_stdout(io.StringIO()) as output, self.assertRaises(KeyboardInterrupt):
+            jh_vscode.command_check_hardware(args)
+        self.assertEqual(["no problems", "1 problem"], self.summaries(output.getvalue()))
+
+    def test_watch_checks_a_save_made_during_a_check(self) -> None:
+        directory = project("check watch race")
+        real_problems = device_tree_check.problems
+        checks = []
+
+        def problems(config_dir: Path) -> list:
+            found = real_problems(config_dir)
+            if not checks:
+                # Saved while the resolver ran: the result above predates it.
+                self.edit(directory, lambda data: data["assemblies"]["canhat-b"].update(board="nucleo-g4"))
+            checks.append(found)
+            return found
+
+        args = jh_vscode.build_parser().parse_args(
+            ["check-hardware", "--project", str(directory), "--watch"])
+        with mock.patch.object(device_tree_check, "problems", side_effect=problems), \
+             mock.patch.object(jh_vscode.time, "sleep", side_effect=KeyboardInterrupt), \
+             redirect_stdout(io.StringIO()) as output, self.assertRaises(KeyboardInterrupt):
+            jh_vscode.command_check_hardware(args)
+        # The second check starts without waiting for another save.
+        self.assertEqual(["no problems", "1 problem"], self.summaries(output.getvalue()))
+
+    @staticmethod
+    def summaries(output: str) -> list[str]:
+        prefix = "jh-vscode check-hardware: "
+        return [line[len(prefix):] for line in output.splitlines()
+                if line.startswith(prefix) and not line.startswith(f"{prefix}checking ")]
 
 
 class FeatureLint(unittest.TestCase):

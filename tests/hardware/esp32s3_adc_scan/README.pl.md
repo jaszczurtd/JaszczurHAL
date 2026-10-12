@@ -13,27 +13,28 @@ odczytom jednorazowym, a drugi start działa. Dioda WS2812 na GPIO21 świeci
 niebiesko w czasie sprawdzeń, zielono przy PASS i czerwono przy FAIL. Nic nie
 trzeba podłączać; oceniana jest geometria pierścienia.
 
+`device_tree.json` opisuje jedyny montaż, `esp32s3-zero`: wejścia skanu
+`scanA` (GPIO3) i `scanB` (GPIO4), wejście `unscanned` (GPIO5) poza skanem
+oraz diodę WS2812 płytki (GPIO21) jako diodę stanu.
+
 Zbuduj, zmaterializuj artefakty i wgraj przez natywny port USB Serial/JTAG, jak
 dla sondy fazy 2:
 
 ```bash
 python3 scripts/build_esp_idf.py build \
   --project tests/hardware/esp32s3_adc_scan \
-  --target esp32s3 \
-  --board waveshare-esp32-s3-zero \
+  --assembly esp32s3-zero \
   --name jh_esp32_adc_scan_hardware \
   --clean
 
 python3 scripts/build_esp_idf.py artifacts \
   --project tests/hardware/esp32s3_adc_scan \
-  --target esp32s3 \
-  --board waveshare-esp32-s3-zero \
+  --assembly esp32s3-zero \
   --name jh_esp32_adc_scan_hardware
 
 python3 scripts/build_esp_idf.py flash \
   --project tests/hardware/esp32s3_adc_scan \
-  --target esp32s3 \
-  --board waveshare-esp32-s3-zero \
+  --assembly esp32s3-zero \
   --name jh_esp32_adc_scan_hardware \
   --port /dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_SERIAL-if00
 

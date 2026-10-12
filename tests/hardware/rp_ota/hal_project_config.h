@@ -1,9 +1,6 @@
 #pragma once
 
-/* Targets this fixture builds for. */
-#define JH_PROJECT_TARGETS(X)                                                  \
-  X(HAL_TARGET_RP2040)                                                         \
-  X(HAL_TARGET_RP2350_ARM)
+/* Targets and wiring come from the assemblies in device_tree.json. */
 
 /* Variants: id, description and the definitions each one adds to this
  * configuration. */

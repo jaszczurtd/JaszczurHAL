@@ -11,10 +11,19 @@ The PWM output uses DACless. The `use_dma` field of `hal_dacless_config_t`
 selects DMA transfers or polling in the application configuration; it does
 not require a separate firmware build. `use_dma` is set to `true` by default.
 
-| Signal | RP family | NUCLEO-G474RE |
-|---|---|---|
-| SPI MISO / MOSI / SCK | GP16 / GP19 / GP18 | PA6 / PA7 / PA5, CN10 pins 13 / 15 / 11 (D12 / D11 / D13) |
-| PGA2311 CS | GP17 | PB6, CN10 pin 17 (D10) |
+`device_tree.json` describes the wiring of every assembly, and the program
+takes its SPI bus, pins, PGA2311 SPI settings (1 MHz) and the 12-bit PWM
+resolution from the generated header. The table below repeats that wiring.
 
-On NUCLEO-G474RE, PWM audio uses PB0 (CN7 pin 34 / A3), and the ADC input
-uses PA0 (A0). PWM and ADC pin assignments for other targets are in `app.c`.
+| Signal | Pico / Pico 2 | NUCLEO-G474RE | ESP32-S3-Zero |
+|---|---|---|---|
+| SPI MISO | GP16 | PA6, CN10 pin 13 / D12 | GPIO13 |
+| SPI MOSI | GP19 | PA7, CN10 pin 15 / D11 | GPIO11 |
+| SPI SCK | GP18 | PB3, CN10 pin 31 / D3 | GPIO12 |
+| PGA2311 CS | GP17 | PB6, CN10 pin 17 / D10 | GPIO14 |
+| PWM audio output | GP6 | PB0, CN7 pin 34 / A3 | GPIO15 |
+| ADC input | GP26 | PA0, CN7 pin 28 / A0 | GPIO4 |
+
+On NUCLEO-G474RE the SPI clock uses PB3 rather than D13 (PA5), because PA5
+drives the LD2 LED. On ESP32-S3 the ADC input must be an ADC1 pin, GPIO1 to
+GPIO10.

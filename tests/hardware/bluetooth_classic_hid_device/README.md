@@ -3,16 +3,17 @@
 `tests/hardware/bluetooth_classic_hid_device` is a private, test-only BTstack
 HID Device fixture. A Pico W advertises a standards-based Classic HID mouse
 with a Generic Desktop descriptor and emits alternating relative-motion input
-reports. This is not a public HID-device API. Build the RP2040 fixture and the
-public `HID_HOST` example for the RP2350 ARM host:
+reports. This is not a public HID-device API. `device_tree.json` describes
+the hardware of both assemblies: `picow` (Pico W, the default) and `pico2w`
+(Pico 2 W). Neither needs external wiring. Build the Pico W fixture and the
+public `HID_HOST` example for the Pico 2 W host:
 
 ```sh
 vscode/entry/jh-vscode build \
-  --project tests/hardware/bluetooth_classic_hid_device \
-  --target rp2040 --board picow
+  --project tests/hardware/bluetooth_classic_hid_device --assembly picow
 vscode/entry/jh-vscode build \
   --project examples/29_bluetooth_gamepad \
-  --target rp2350-arm --board pico2w --variant HID_HOST
+  --assembly pico2w --variant HID_HOST
 ```
 
 Flash each image only to its designated board. `INFO` on the fixture must show

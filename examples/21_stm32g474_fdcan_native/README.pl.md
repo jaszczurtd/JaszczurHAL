@@ -2,11 +2,13 @@
 
 # 21 - CAN FD z wbudowanym kontrolerem STM32G474
 
-Przykład obsługuje wszystkie kanały CAN opisane w profilu płytki przez
-wbudowane kontrolery FDCAN w STM32G474. Domyślną płytką jest
-`nucleo-g474re-canhat`, czyli NUCLEO-G474RE z nakładką CAN-FD HAT od
+Przykład obsługuje wszystkie kanały CAN wybranego montażu przez wbudowane
+kontrolery FDCAN w STM32G474. Jego `device_tree.json` ma jeden montaż,
+`nucleo-canhat`: NUCLEO-G474RE z nakładką CAN-FD HAT od
 [Embedded Garage](https://www.youtube.com/@embeddedGarage), która ma trzy
-kanały (CN5, CN6, CN7) z transceiverami MCP2562FD.
+kanały (CN5, CN6, CN7) z transceiverami MCP2562FD. Plik opisuje też pozostałe
+połączenia nakładki i wybiera drzewo zegara `hse-160mhz`: SYSCLK 160 MHz
+i zegar FDCAN 80 MHz z kwarcu 24 MHz na płytce.
 
 Każdy kanał bierze ustawienia z `hal_can_board_config()`: piny, linię standby
 transceivera, 500 kbit/s w fazie arbitrażu i 2 Mbit/s w fazie danych. Co
@@ -18,7 +20,7 @@ dioda (RDY na nakładce) zmienia stan po każdej sekundzie, w której każdy kan
 odebrał ramkę, a w przeciwnym razie pozostaje zgaszona.
 
 Kontroler jest włączany flagą `HAL_ENABLE_STM32G474_FDCAN`. Przykład jest
-przeznaczony dla płytek STM32G474, których profil ma kanały CAN.
+przeznaczony dla montaży STM32G474 z kanałami CAN.
 
 ## Pętla zwrotna albo wspólna magistrala
 

@@ -4,7 +4,8 @@
  *        NUCLEO-G474RE with the Embedded Garage CAN-FD HAT.
  *
  * Runs once after reset, then reports every check every two seconds over the
- * ST-LINK virtual COM port for verify_stm32_fdcan_canhat.py. Everything except
+ * ST-LINK virtual COM port for verify_stm32_fdcan_canhat.py. The HAT wiring
+ * comes from the nucleo-canhat assembly in device_tree.json. Everything except
  * the shared-bus section works without wiring; that section passes when CN5,
  * CN6 and CN7 form one terminated bus and is skipped when they do not. The
  * BUSY LED (PC2) shines while the checks run; afterwards the RDY LED
@@ -24,8 +25,8 @@
 /* Fixture-only peeks at the clock setup and the FDCAN1 INIT bit. */
 #include "hal/impl/stm32g474/port/stm32g474_regs.h"
 
-#define PIN(port, n) ((uint8_t)((port) * 16u + (n)))
-#define LED_BUSY PIN(2u, 2u) /* PC2 */
+/* The HAT LEDs come from device_tree.json. */
+#define LED_BUSY JH_HW_NODE_HAT_LED_BUSY_PIN_OUT
 
 enum { CHECK_FAIL = 0, CHECK_PASS = 1, CHECK_SKIP = 2 };
 

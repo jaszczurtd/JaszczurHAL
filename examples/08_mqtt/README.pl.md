@@ -28,9 +28,18 @@ Z głównego katalogu repozytorium uruchom:
 
 ```bash
 vscode/entry/jh-vscode build \
-  --project examples/08_mqtt --target rp2040 --board picow
+  --project examples/08_mqtt --assembly picow
 ```
 
-Domyślne płytki to `picow` dla RP2040, `pico2w` dla RP2350 ARM
-oraz `nucleo-g474re-pim730` dla STM32G474 z zewnętrznym modułem PIM730/RM2.
-Projekt nie obejmuje RP2350 RISC-V.
+`device_tree.json` opisuje sprzęt każdego montażu: `picow` (Pico W,
+domyślny), `pico2w` (Pico 2 W), `esp32s3-zero` (ESP32-S3-Zero z własnym
+WiFi) i `nucleo-pim730`. `nucleo-pim730` to zwykła NUCLEO-G474RE
+z zewnętrznym modułem PIM730/RM2, bez osobnego profilu płytki. Tabela poniżej
+powtarza połączenia modułu. Projekt nie obejmuje RP2350 RISC-V.
+
+| Sygnał PIM730/RM2 | NUCLEO-G474RE |
+|---|---|
+| CS | PB12, pin 16 CN10 |
+| DAT | PB15, pin 26 CN10 |
+| WL_ON | PB14, pin 28 CN10 |
+| CLK | PB13, pin 30 CN10 |

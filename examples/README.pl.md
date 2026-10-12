@@ -7,18 +7,18 @@ w `README.pl.md` i po angielsku w `README.md`.
 
 Otwórz katalog wybranego projektu w VS Code, aby korzystać z jego zadań
 `Build`, `Upload`, `Serial Monitor`, `Clean`, `Config Dump`, `OTA` i wyboru
-płytki.
+montażu.
 
-Każdy przykład jest zwykłym projektem firmware. Jego `hal_project_config.h`
-deklaruje funkcje HAL, platformy (`JH_PROJECT_TARGETS`) i warianty
-(`JH_PROJECT_VARIANTS`). Pisany ręcznie `.vscode/jaszczurhal.project.json`
-zawiera ustawienia narzędzi, np. domyślną płytkę dla każdej platformy. Skrypt
-`scripts/examples_dispatcher.py` generuje na ich podstawie pozostałe pliki
-VS Code i kompiluje wszystkie konfiguracje przez `vscode/entry/jh-vscode`.
-Przykład z `device_tree.json` bierze platformy i płytki z montaży: dispatcher
-kompiluje każdy montaż danej platformy razy każdy wariant, a manifest może
-wskazać domyślne `assembly` dla generowanych plików. Zasady opisuje część
-[platformy i warianty](../doc/pl/FwProjectWorkflow.md#platformy-i-warianty).
+Każdy przykład jest zwykłym projektem firmware. Jego `device_tree.json`
+opisuje sprzęt każdego obsługiwanego montażu: platformę, płytkę, podłączone
+urządzenia z ich połączeniami, diodę statusu i drzewo zegara. Plik
+`hal_project_config.h` deklaruje funkcje HAL i warianty (`JH_PROJECT_VARIANTS`).
+Pisany ręcznie `.vscode/jaszczurhal.project.json` zawiera ustawienia narzędzi,
+np. domyślny montaż (`assembly`). Skrypt `scripts/examples_dispatcher.py`
+generuje na ich podstawie pozostałe pliki VS Code i kompiluje każdy montaż
+z każdym wariantem przez `vscode/entry/jh-vscode`. Zasady opisują część
+[platformy i warianty](../doc/pl/FwProjectWorkflow.md#platformy-i-warianty)
+oraz [format device tree](../doc/pl/device_tree_format.md).
 
 ## Katalog projektów
 
@@ -28,7 +28,8 @@ dla wszystkich platform projektu, chyba że tabela wymienia konkretne
 platformy. Etap 9 skryptu `runalltests.sh` kompiluje wszystkie konfiguracje
 dla `rp2040`, `stm32g474` i `esp32s3`. **Dostępna konfiguracja kompilacji nie
 oznacza potwierdzenia działania na każdej płytce.** Zakres testów i wymagane
-połączenia opisują README poszczególnych projektów.
+połączenia opisują README poszczególnych projektów. Montaże każdego projektu
+pokazuje `scripts/examples_dispatcher.py list`.
 
 | Projekt | Co pokazuje przykład | Obsługiwane platformy | Warianty |
 |---|---|---|---|
@@ -63,15 +64,16 @@ połączenia opisują README poszczególnych projektów.
 | `29_bluetooth_gamepad` | Odczyt gamepada, wykrywanie urządzeń Classic i odbiór surowych raportów HID. | R0, RA, S | `CLASSIC_SCAN`, `HID_HOST`, `BLE` |
 | `30_bluetooth_speaker` | Odbiór dźwięku A2DP i odtwarzanie przez PWM; opcjonalna regulacja głośności AVRCP i kompilacja z BLE. | R0, RA | `AVRCP`, `BLE_A2DP` |
 
-Projekty sieciowe na RP używają domyślnie `picow` dla RP2040 i `pico2w`
+Projekty sieciowe na RP używają montażu `picow` dla RP2040 i `pico2w`
 dla RP2350 ARM. Konfiguracje RP2350 RISC-V wymagające CYW43 nie są
-obsługiwane. Dla sieci i Bluetooth na STM32G474 wybierany jest profil
-NUCLEO-G474RE z zewnętrznym modułem PIM730/RM2.
+obsługiwane. Sieć i Bluetooth na STM32G474 korzystają z montażu
+`nucleo-pim730`: NUCLEO-G474RE z zewnętrznym modułem PIM730/RM2 podłączonym
+tak, jak opisuje `device_tree.json` projektu.
 
-Projekt LoRa buduje się dla zwykłych płytek `pico` i `nucleo-g474re`
-z zewnętrznym modułem Waveshare Core1262-HF podłączonym zgodnie z jego README.
-Dla zintegrowanej płytki Waveshare LF wybierz jawnie `rp2040-lora-lf`. Urządzenia LF i HF pracują w różnych pasmach;
-nie zestawiaj z nich jednej pary radiowej. Wariant `PROBE` sprawdza funkcje
+Projekt LoRa ma montaże `pico-core1262-hf` i `nucleo-core1262-hf`
+z zewnętrznym modułem Waveshare Core1262-HF oraz `rp2040-lora-lf` dla
+zintegrowanej płytki Waveshare LF. Urządzenia LF i HF pracują w różnych
+pasmach; nie zestawiaj z nich jednej pary radiowej. Wariant `PROBE` sprawdza funkcje
 układu, kalibrację, bieżące RSSI i CAD bez nadawania. Wersja podstawowa
 i `RESPONDER` używają SF9/10 dBm, a `SF7` i `RESPONDER_SF7` tworzą parę
 testową z SF7/6 dBm.
@@ -89,7 +91,7 @@ potwierdzenia działania na sprzęcie.
 
 ## Platformy obsługiwane podczas kompilacji
 
-| Platforma | Domyślna płytka | Narzędzia kompilacji | Pliki wynikowe firmware |
+| Platforma | Płytka podstawowych montaży | Narzędzia kompilacji | Pliki wynikowe firmware |
 |---|---|---|---|
 | `rp2040` | `pico` | oficjalny Pico SDK + GNU Arm | ELF, BIN, HEX, UF2, MAP |
 | `rp2350-arm` | `pico2` | oficjalny Pico SDK + GNU Arm | ELF, BIN, HEX, UF2, MAP |
@@ -98,17 +100,16 @@ potwierdzenia działania na sprzęcie.
 | `esp32s3` | `waveshare-esp32-s3-zero` | ESP-IDF w ustalonej wersji | ELF, BIN, MAP, bootloader, tabela partycji, `jh_esp_idf_artifacts.json` |
 
 Dla `esp32s3` `jh-vscode` uruchamia `scripts/build_esp_idf.py` z nagłówkiem
-projektu i wybranym wariantem zamiast dispatchera CMake. Przykład umieszcza
-`HAL_TARGET_ESP32_S3` w `JH_PROJECT_TARGETS` tylko wtedy, gdy każda żądana
-przez niego funkcja jest na liście `supportedFeatures` targetu; lista obejmuje backendy ESP-IDF oraz przenośne
+projektu i wybranym wariantem zamiast dispatchera CMake. Przykład ma montaż
+`esp32s3` tylko wtedy, gdy każda żądana przez niego funkcja jest na liście
+`supportedFeatures` targetu; lista obejmuje backendy ESP-IDF oraz przenośne
 sterowniki magistral, czujników, wyświetlaczy, kodeków i komend, a poza nią
 pozostają pamięć flash, audio, zasilanie, wewnętrzny RTC, LoRa, BLE Stream
 i Bluetooth Classic. Projekt `tests/fixtures/esp32s3_phase3`
 nadal sprawdza pełne domknięcie funkcji z etapów 2 i 3, a raporty testów
 sprzętowych znajdują się w `tests/hardware/esp32s3_phase1`
-i `tests/hardware/esp32s3_phase2`. Połączenia w źródłach przykładów są
-dobrane pod płytki RP i STM32; przed uruchomieniem sprawdź numery pinów
-względem profilu płytki ESP32-S3.
+i `tests/hardware/esp32s3_phase2`. Montaże `esp32s3-zero` używają wyłącznie
+pinów wyprowadzonych na ESP32-S3-Zero; generator odrzuca każdy inny pin.
 
 ## Wymagania
 
@@ -128,8 +129,8 @@ Utwórz osobny projekt, gdy połączenie nie jest praktyczne ze względu na
 platformę, narzędzia kompilacji, sposób wykonywania zadań, profil płytki,
 konflikt zasobów lub wymagania sprzętowe, i opisz przyczynę w tym katalogu.
 Nowy przykład to katalog w `examples/` z ręcznie napisanym
-`.vscode/jaszczurhal.project.json` i plikiem `hal_project_config.h`, który
-deklaruje platformy w `JH_PROJECT_TARGETS`. Pozostałe pliki VS Code zapisze
+`.vscode/jaszczurhal.project.json`, plikiem `device_tree.json` z montażami
+i plikiem `hal_project_config.h`. Pozostałe pliki VS Code zapisze
 `scripts/examples_dispatcher.py generate`.
 
 Wariant dodawaj do `JH_PROJECT_VARIANTS` tylko wtedy, gdy zachowania nie można
@@ -155,7 +156,7 @@ Jeden projekt, z użyciem tego samego narzędzia co VS Code:
 
 ```bash
 vscode/entry/jh-vscode build \
-  --project examples/01_core_runtime --target rp2040 --board pico
+  --project examples/01_core_runtime --assembly pico
 ```
 
 Wybrane projekty:
@@ -171,7 +172,7 @@ Jeden wariant:
 ```bash
 vscode/entry/jh-vscode build \
   --project examples/16_rtc_backends \
-  --target stm32g474 --board nucleo-g474re --variant DISPLAY_CLOCK
+  --assembly nucleo --variant DISPLAY_CLOCK
 ```
 
 Wyświetlenie zestawu konfiguracji i odświeżenie wygenerowanych plików VS Code
@@ -186,18 +187,16 @@ scripts/examples_dispatcher.py check
 `python3 scripts/sync_generated.py --write` uruchamia `generate` razem
 z pozostałymi generatorami repozytorium.
 
-Pliki wynikowe trafiają do `.build/examples/<example>/`, a pliki wariantu do
-`.build/examples/<example>/variants/<id>/`. Katalogi robocze CMake mają postać
-`.build/examples/<example>/cmake/<target>/<board>/`. Przykład
-z `device_tree.json` trzyma wszystko, co dotyczy jednego montażu,
-w `.build/examples/<example>/<target>/<assembly>/`, z katalogiem CMake
-w `cmake/` i wariantami w `variants/<id>/` pod nim.
+Wszystko, co dotyczy jednego montażu, trafia do
+`.build/examples/<example>/<target>/<assembly>/`: pliki wynikowe, katalog
+roboczy CMake w `cmake/` i każdy wariant w `variants/<id>/` pod nim.
 
 ## Struktura aplikacji
 
 ```text
 NN_example_name/
   app.c
+  device_tree.json
   hal_project_config.h
   .vscode/
     jaszczurhal.project.json
@@ -257,10 +256,9 @@ przed ustaleniem końcowej konfiguracji platformy i płytki. Definicje mogą
 zależeć od makra platformy lub definicji wariantu; zobacz
 [platformy i warianty](../doc/pl/FwProjectWorkflow.md#platformy-i-warianty).
 
-Proces kompilacji ustawia `HAL_PROVIDE_APP_ENTRY`. Przypisanie pinów
-pochodzi z wybranego, wygenerowanego profilu płytki. Gdy żaden gotowy
-profil zestawu nie odpowiada połączeniom aplikacji, można opisać je
-własnym deskryptorem sprzętu.
+Proces kompilacji ustawia `HAL_PROVIDE_APP_ENTRY`. Piny, magistrale
+i ustawienia urządzeń pochodzą z wygenerowanych makr `JH_HW_*` wybranego
+montażu, a `HAL_LED_BUILTIN` z jego diody statusu.
 
 ## VS Code
 
@@ -271,7 +269,8 @@ przedstawia [praca z projektem firmware](../doc/pl/FwProjectWorkflow.md).
 
 Manifest pisze się ręcznie. Pliki `settings.json`, `tasks.json`,
 `launch.json`, `keybindings.reference.json` i `extensions.json` generuje
-na podstawie manifestu i nagłówka `scripts/examples_dispatcher.py generate`.
+na podstawie manifestu, nagłówka i `device_tree.json`
+`scripts/examples_dispatcher.py generate`.
 Trwałą zmianę opisu w tych plikach wprowadź w źródle generatora; ręczna
 edycja zostanie nadpisana przy kolejnym odświeżeniu.
 

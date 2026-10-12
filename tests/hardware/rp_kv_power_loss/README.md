@@ -32,10 +32,10 @@ Build and upload with the regular workflow:
 ```sh
 vscode/entry/jh-vscode build \
   --project tests/hardware/rp_kv_power_loss \
-  --target rp2040 --board pico
+  --assembly pico
 vscode/entry/jh-vscode upload \
   --project tests/hardware/rp_kv_power_loss \
-  --target rp2040 --board pico \
+  --assembly pico \
   --port /dev/serial/by-id/<device>
 ```
 
@@ -46,5 +46,7 @@ python3 tests/hardware/rp_kv_power_loss/verify_kv_power_loss.py \
   --port /dev/serial/by-id/<device> --target rp2040
 ```
 
-Use `--target rp2350-arm --board pico2` for Pico 2 and pass the same target to
-the verifier.
+`device_tree.json` describes the hardware of every assembly: `pico` for Pico
+and `pico2-arm` for Pico 2. The test needs only the board. For Pico 2 build and
+upload with `--assembly pico2-arm` and pass `--target rp2350-arm` to the
+verifier.

@@ -9,43 +9,35 @@
 #if !defined(EXAMPLE_SERIAL_GPS_USE_SWSERIAL)
 
 #include <hal/core/hal_app.h>
-#include <hal/core/hal_target.h>
 #include <hal/gps/hal_gps.h>
 #include <hal/serial/hal_serial.h>
 #include <hal/serial/hal_uart.h>
 #include <hal/system/hal_system.h>
 #include <stdio.h>
 
-#if HAL_TARGET_IS_RP
-#define GPS_RX_PIN 1u
-#define GPS_TX_PIN 0u
-#define ECHO_RX_PIN 5u
-#define ECHO_TX_PIN 4u
-#else
-#define GPS_RX_PIN 10u
-#define GPS_TX_PIN 9u
-#endif
-
-#define GPS_BAUD 9600u
-#define ECHO_BAUD 115200u
+/* Ports, pins and serial settings come from device_tree.json. Only the RP
+ * assemblies wire the test port (testUart). */
 #define REPORT_PERIOD_MS 1000u
 #define ECHO_TX_PERIOD_MS 2000u
 
 static uint32_t s_last_report_ms = 0u;
-#if HAL_TARGET_IS_RP
+#if defined(JH_HW_BUS_TEST_UART_UART_PORT)
 static hal_uart_t s_echo_uart = NULL;
 static uint32_t s_last_echo_tx_ms = 0u;
 static uint32_t s_echo_line = 0u;
 
 static void init_uart_echo(void) {
-  s_echo_uart = hal_uart_create(HAL_UART_PORT_2, ECHO_RX_PIN, ECHO_TX_PIN);
+  s_echo_uart =
+      hal_uart_create((hal_uart_port_t)JH_HW_BUS_TEST_UART_UART_PORT,
+                      JH_HW_BUS_TEST_UART_PIN_RX, JH_HW_BUS_TEST_UART_PIN_TX);
   if (s_echo_uart == NULL) {
     derr("UART echo unavailable");
     return;
   }
 
   const hal_status_t status =
-      hal_uart_begin(s_echo_uart, ECHO_BAUD, HAL_UART_CFG_8N1);
+      hal_uart_begin(s_echo_uart, JH_HW_BUS_TEST_UART_BAUD_RATE,
+                     JH_HW_BUS_TEST_UART_FRAME_CONFIG);
   if (status != HAL_OK) {
     derr("UART echo init failed: %s", hal_status_to_string(status));
     hal_uart_destroy(s_echo_uart);
@@ -123,8 +115,9 @@ void app_start(void) {
   deb("");
   deb("=== JaszczurHAL hardware UART and GPS ===");
 
-  hal_gps_init(GPS_RX_PIN, GPS_TX_PIN, GPS_BAUD, HAL_UART_CFG_8N1);
-#if HAL_TARGET_IS_RP
+  hal_gps_init(JH_HW_BUS_GPS_UART_PIN_RX, JH_HW_BUS_GPS_UART_PIN_TX,
+               JH_HW_BUS_GPS_UART_BAUD_RATE, JH_HW_BUS_GPS_UART_FRAME_CONFIG);
+#if defined(JH_HW_BUS_TEST_UART_UART_PORT)
   init_uart_echo();
 #else
   deb("STM32G474: GPS uses USART1; USART2 remains reserved for debug output");
@@ -134,7 +127,7 @@ void app_start(void) {
 void app_task0(void) {
   const uint32_t now = hal_millis();
   hal_gps_update();
-#if HAL_TARGET_IS_RP
+#if defined(JH_HW_BUS_TEST_UART_UART_PORT)
   service_uart_echo(now);
 #endif
   report_gps(now);

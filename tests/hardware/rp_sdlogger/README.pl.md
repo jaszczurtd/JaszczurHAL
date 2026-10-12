@@ -7,6 +7,12 @@ plik, wywołuje reset przez watchdog, ponownie montuje kartę, sprawdza dokładn
 dopisany fragment na końcu pliku oraz potwierdza, że licznik logów w EEPROM
 został zachowany.
 
+Plik `device_tree.json` opisuje połączenia każdego montażu: `pico` dla Pico
+oraz `pico2-arm` i `pico2-riscv` dla Pico 2. Karta to węzeł `sd` na magistrali
+SPI0 z zegarem 12 MHz, którym sterownik SD przesyła dane. Program bierze
+magistralę, jej piny i linię CS karty z wygenerowanego nagłówka, a poniższa
+tabela powtarza te połączenia.
+
 Podłącz moduł SD SPI 3,3 V do Pico lub Pico 2:
 
 | Sygnał SD | GPIO RP | Fizyczny pin Pico |
@@ -23,18 +29,19 @@ Skompiluj, wgraj i zweryfikuj wariant bare-metal RP2040:
 ```sh
 vscode/entry/jh-vscode build \
   --project tests/hardware/rp_sdlogger \
-  --target rp2040 --board pico
+  --assembly pico
 vscode/entry/jh-vscode upload \
   --project tests/hardware/rp_sdlogger \
-  --target rp2040 --board pico \
+  --assembly pico \
   --port /dev/serial/by-id/<device>
 python3 tests/hardware/rp_sdlogger/verify_sdlogger.py \
   --port /dev/serial/by-id/<device> \
   --target rp2040 --board pico --runtime baremetal
 ```
 
-Dla Pico 2 wybierz `rp2350-arm` lub `rp2350-riscv`, użyj płytki kompilacji
-`pico2` i przekaż `--board pico2` do weryfikatora. Dodaj `--variant FREERTOS`
+Dla Pico 2 zbuduj firmware z `--assembly pico2-arm` albo
+`--assembly pico2-riscv`, a weryfikatorowi przekaż `--target rp2350-arm` albo
+`--target rp2350-riscv` razem z `--board pico2`. Dodaj `--variant FREERTOS`
 do komend kompilacji i wgrywania oraz użyj `--runtime freertos` dla przebiegu
 FreeRTOS.
 

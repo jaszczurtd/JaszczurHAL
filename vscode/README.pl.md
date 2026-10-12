@@ -86,6 +86,7 @@ change-port
 clear-identity
 config-dump
 debug-tools
+check-hardware
 ```
 
 Ze względu na zgodność wsteczną `debug` jest akceptowane jako alias
@@ -125,6 +126,26 @@ po otwarciu zaufanego obszaru roboczego. VS Code może jednorazowo poprosić o
 zgodę za pomocą polecenia `Tasks: Manage Automatic Tasks`. W razie potrzeby
 target i płytkę można nadal
 wybrać dynamicznie w terminalu przez `Project: Select board`.
+W projekcie z `device_tree.json` synchronizacja zapisuje też po jednym profilu
+debugowym na każdy montaż i wariant debugowanego targetu, razem z ukrytym
+zadaniem budującym go przed uruchomieniem, oraz zadanie
+`Project: Check device tree`. Profile i zadania wynikają z pliku, a nie
+z lokalnego wyboru, więc `select-board` nie zmienia śledzonych plików. Nazwa
+każdego profilu zaczyna się od `Project: Debug `, a nazwa zarządzanego zadania
+od `Project: Build (Debug) ` albo brzmi `Project: Check device tree`;
+synchronizacja zastępuje je i zostawia pozostałe.
+
+Akcja `check-hardware --project <path>` rozwiązuje każdy montaż
+z `device_tree.json` tak jak build i wypisuje pierwszy błąd każdego z nich jako
+`<plik>:<linia>:<kolumna>: error: [<kod>] <komunikat> (assembly <klucz>)`,
+podając linię i kolumnę elementu JSON, którego dotyczy błąd. Błąd wspólny dla
+kilku montaży pojawia się raz, z kluczami wszystkich. Gdy akcja znajdzie
+problem, kończy się niezerowym kodem. Z `--watch` sprawdza plik ponownie po
+każdej zmianie `device_tree.json` albo wymienionych w nim bindingów projektu,
+a przed każdym sprawdzeniem wypisuje `jh-vscode check-hardware: checking
+<path>`, po nim zaś liczbę problemów. Schemat JSON wskazany przez `$schema`
+nadal oznacza błędy struktury podczas pisania; reguły płytek, pinów, rezerwacji,
+magistral, węzłów i zegarów sprawdza tylko resolver.
 
 ## Generowane zadania VS Code
 
@@ -135,7 +156,7 @@ systemach Unix korzysta z `jaszczurhal.vscodeEntry`, a wariant dla Windows - z
 | Zadanie | Akcja CLI | Działanie |
 |---|---|---|
 | `Project: Build` | `build` | Buduje aktywny target i płytkę w trybie Release, a następnie publikuje ich stabilne artefakty. Jest to domyślne zadanie budowania w VS Code. |
-| `Project: Build (Debug)` | `build-debug` | Korzysta z osobnego cache CMake dla trybu Debug, publikuje plik ELF z symbolami debugowymi i poprzedza uruchomienie każdego zarządzanego profilu Cortex-Debug. |
+| `Project: Build (Debug)` | `build-debug` | Korzysta z osobnego cache CMake dla trybu Debug, publikuje plik ELF z symbolami debugowymi i poprzedza uruchomienie każdego zarządzanego profilu Cortex-Debug w projekcie bez `device_tree.json`. |
 | `Project: Upload` | `upload` | Buduje projekt i wgrywa go za pośrednictwem backendu aktywnego targetu: dla RP jest to plik UF2 po zweryfikowanym przejściu z CDC do BOOTSEL, dla STM32G474 - OpenOCD, a dla ESP32-S3 - zweryfikowany port USB Serial/JTAG. |
 | `Project: Upload (UF2 / BOOTSEL)` | `upload-uf2` | Buduje obraz RP, sprawdza plik UF2 i kopiuje go na jeden zweryfikowany wolumin BOOTSEL. Odmawia działania, jeśli wybór woluminu jest niejednoznaczny. |
 | `Project: Upload (OTA)` | `upload-ota --interactive` | Buduje obraz OTA właściwy dla targetu, wykrywa zgodne urządzenia z natywnym RP lub ESP-IDF, przeprowadza uwierzytelnienie, jeśli je skonfigurowano, i pyta o wybór, gdy trzeba jawnie wskazać urządzenie. |
@@ -154,8 +175,11 @@ systemach Unix korzysta z `jaszczurhal.vscodeEntry`, a wariant dla Windows - z
 | `Project: Sync board picker` | `sync-board-picker` | Uruchamia się raz po otwarciu zaufanego katalogu, odświeża wartości selektora i tworzy lub naprawia zarządzane profile debugowe dla RP2040, RP2350 Arm i STM32G474, pozostawiając profile użytkownika bez zmian. |
 | `Project: Build variant: <id>` | `build --variant <id>` | Pojawia się dla każdego wariantu zadeklarowanego przez `JH_PROJECT_VARIANTS` w `hal_project_config.h`, z opisem "Build the <id> variant: <description>.", i buduje go jako moduł `<module>_<id>` do `<buildDir>/variants/<id>` za pośrednictwem standardowego procesu publikowania artefaktów. |
 | `Project: Upload variant: <id>` | `upload --variant <id>` | Buduje i wgrywa ten wariant przez backend aktywnego targetu, tak jak `Project: Upload`. |
+| `Project: Check device tree` | `check-hardware --watch` | Pojawia się przy `device_tree.json`. Działa w tle od otwarcia zaufanego katalogu, po każdym zapisie sprawdza wszystkie montaże i pokazuje problemy w panelu Problems, w miejscu, którego dotyczą. |
+| `Project: Build (Debug) <montaż>[ variant: <id>]` | `build-debug --assembly <montaż> [--variant <id>]` | Ukryte. Pojawia się przy `device_tree.json` dla każdego montażu i wariantu debugowanego targetu i buduje dokładnie tę konfigurację dla jej profilu debugowego. |
 
-Panel Run and Debug udostępnia trzy konfiguracje Cortex-Debug:
+Bez `device_tree.json` panel Run and Debug udostępnia trzy konfiguracje
+Cortex-Debug:
 
 - `Project: Debug Firmware` dla RP2040 przez CMSIS-DAP/Picoprobe;
 - `Project: Debug Firmware (RP2350 ARM)` przez CMSIS-DAP/Picoprobe;
@@ -163,6 +187,15 @@ Panel Run and Debug udostępnia trzy konfiguracje Cortex-Debug:
 
 Każda z nich najpierw uruchamia `Project: Build (Debug)`, a następnie ładuje
 powstały plik ELF z ustawieniami sondy, OpenOCD i resetu właściwymi dla profilu.
+
+Z `device_tree.json` każdy montaż i wariant targetu RP2040, RP2350 ARM albo
+STM32G474 ma własny profil, na przykład `Project: Debug pico (RP2040)` albo
+`Project: Debug pico variant: SWSERIAL (RP2040)`. Profil korzysta z ustawień
+sondy swojego targetu, najpierw buduje swój montaż i wariant, a potem ładuje
+plik ELF tego builda z `<buildDir>/<target>/<montaż>[/variants/<id>]`, więc
+nigdy nie wgra obrazu innego montażu ani innego MCU. Profil montażu z pola
+`assembly` manifestu jest na liście pierwszy. Montaże ESP32-S3 i RP2350 RISC-V
+nie mają profilu.
 
 Wspólne opcje:
 
@@ -186,6 +219,8 @@ Wspólne opcje:
                        który nie pasuje do skonfigurowanej tożsamości USB.
 --verbose              Włącz szczegółowe komunikaty.
 --json                 Zwracaj dane w formacie maszynowym, jeśli jest obsługiwany.
+--watch                check-hardware: sprawdzaj ponownie po każdej zmianie
+                       device_tree.json.
 --help                 Wyświetl pomoc.
 --version              Wyświetl wersję narzędzia.
 ```
@@ -200,8 +235,8 @@ jh-vscode clear-identity --project /home/user/projects/Fiesta/src/ECU
 ```
 
 Akcje `build`, `build-debug`, `debug-tools`, `upload`, `upload-uf2`, `upload-ota`,
-`ota-discover`, `refresh-intellisense`, `clean`, `change-port` i
-`clear-identity` wymagają `--project`. Jeśli nie można jednoznacznie ustalić
+`ota-discover`, `refresh-intellisense`, `clean`, `change-port`,
+`clear-identity` i `check-hardware` wymagają `--project`. Jeśli nie można jednoznacznie ustalić
 modułu docelowego, akcje komunikujące się z urządzeniem muszą zakończyć się
 błędem, zanim uzyskają dostęp do portów szeregowych, dysków BOOTSEL lub
 artefaktów builda.

@@ -3,8 +3,7 @@
     "project": "JaszczurHAL hardware tests",
     "module": "rp_usb_cdc_echo",
     "toolchain": "cmake",
-    "target": "rp2040",
-    "board": "pico",
+    "assembly": "pico",
     "buildDir": "${jhRoot}/.build/hardware/rp_usb_cdc_echo",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

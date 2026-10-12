@@ -3,8 +3,7 @@
     "project": "JaszczurHAL examples",
     "module": "13_adc",
     "toolchain": "cmake",
-    "target": "rp2040",
-    "board": "pico",
+    "assembly": "pico",
     "buildDir": "${jhRoot}/.build/examples/13_adc",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

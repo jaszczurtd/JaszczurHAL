@@ -289,10 +289,10 @@ link-key material from its log. Build, upload, and open its serial console:
 ```sh
 vscode/entry/jh-vscode build \
   --project examples/29_bluetooth_gamepad \
-  --target rp2350-arm --board pico2w --variant CLASSIC_SCAN
+  --assembly pico2w --variant CLASSIC_SCAN
 vscode/entry/jh-vscode upload \
   --project examples/29_bluetooth_gamepad \
-  --target rp2350-arm --board pico2w --variant CLASSIC_SCAN \
+  --assembly pico2w --variant CLASSIC_SCAN \
   --port /dev/ttyACM0
 ```
 
@@ -315,10 +315,10 @@ Classic HID/gamepad profile on the shared CYW43 host:
 ```sh
 vscode/entry/jh-vscode build \
   --project examples/29_bluetooth_gamepad \
-  --target rp2350-arm --board pico2w --variant BLE
+  --assembly pico2w --variant BLE
 vscode/entry/jh-vscode upload \
   --project examples/29_bluetooth_gamepad \
-  --target rp2350-arm --board pico2w --variant BLE \
+  --assembly pico2w --variant BLE \
   --port /dev/ttyACM0
 ```
 
@@ -338,17 +338,17 @@ Example 30 is the public A2DP/AVRCP hardware exercise for Pico W and Pico 2 W:
 ```sh
 vscode/entry/jh-vscode build \
   --project examples/30_bluetooth_speaker \
-  --target rp2040 --board picow --variant AVRCP
+  --assembly picow --variant AVRCP
 vscode/entry/jh-vscode upload \
   --project examples/30_bluetooth_speaker \
-  --target rp2040 --board picow --variant AVRCP \
+  --assembly picow --variant AVRCP \
   --port /dev/ttyACM0
 vscode/entry/jh-vscode build \
   --project examples/30_bluetooth_speaker \
-  --target rp2350-arm --board pico2w --variant AVRCP
+  --assembly pico2w --variant AVRCP
 vscode/entry/jh-vscode upload \
   --project examples/30_bluetooth_speaker \
-  --target rp2350-arm --board pico2w --variant AVRCP \
+  --assembly pico2w --variant AVRCP \
   --port /dev/ttyACM0
 ```
 

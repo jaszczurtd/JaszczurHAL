@@ -30,20 +30,31 @@ Firmware sprawdza:
 - dwukierunkowy ruch debugowania przez natywny VFS USB Serial/JTAG konsoli
   startowej.
 
+Piny jedynego montażu, `esp32s3-zero`, opisuje `device_tree.json`, a tabela
+niżej je powtarza. Nic nie trzeba do nich podłączać.
+
+| Sprawdzenie | W `device_tree.json` | GPIO |
+|---|---|---|
+| wyjście, odczyt zwrotny i przerwanie | węzeł `gpioSmoke` | 18 |
+| przerwania z kontekstem | węzły `ctxA`, `ctxB` | 13, 14 |
+| wejście z podciągnięciem | węzeł `gpioInput`, na linii przycisku BOOT (sieć `boot`) | 0 |
+| ADC | węzeł `adc` | 3 |
+| pętla zwrotna UART1 | magistrala `loopUart`, tylko TX: TX i RX spotykają się w macierzy GPIO | 17 |
+| I2C, 100 kHz | magistrala `i2c`, SDA / SCL | 8 / 9 |
+| SPI2, 2 MHz | magistrala `spi`, MISO / MOSI / SCK | 10 / 11 / 12 |
+
 Skompiluj projekt i wygeneruj przenośny manifest artefaktów:
 
 ```bash
 python3 scripts/build_esp_idf.py build \
   --project tests/hardware/esp32s3_phase2 \
-  --target esp32s3 \
-  --board waveshare-esp32-s3-zero \
+  --assembly esp32s3-zero \
   --name jh_esp32_phase2_hardware \
   --clean
 
 python3 scripts/build_esp_idf.py artifacts \
   --project tests/hardware/esp32s3_phase2 \
-  --target esp32s3 \
-  --board waveshare-esp32-s3-zero \
+  --assembly esp32s3-zero \
   --name jh_esp32_phase2_hardware
 ```
 
@@ -53,8 +64,7 @@ portu COM na Windows) zarówno dla flashowania, jak i weryfikacji:
 ```bash
 python3 scripts/build_esp_idf.py flash \
   --project tests/hardware/esp32s3_phase2 \
-  --target esp32s3 \
-  --board waveshare-esp32-s3-zero \
+  --assembly esp32s3-zero \
   --name jh_esp32_phase2_hardware \
   --port /dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_SERIAL-if00
 

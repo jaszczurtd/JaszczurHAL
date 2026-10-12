@@ -3,8 +3,7 @@
     "project": "JaszczurHAL examples",
     "module": "21_stm32g474_fdcan_native",
     "toolchain": "cmake",
-    "target": "stm32g474",
-    "board": "nucleo-g474re-canhat",
+    "assembly": "nucleo-canhat",
     "buildDir": "${jhRoot}/.build/examples/21_stm32g474_fdcan_native",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

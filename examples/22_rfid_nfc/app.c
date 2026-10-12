@@ -7,7 +7,6 @@
  */
 
 #include <hal/core/hal_app.h>
-#include <hal/core/hal_target.h>
 #include <hal/nfc/hal_mfrc522.h>
 #include <hal/nfc/hal_pn532.h>
 #include <hal/serial/hal_serial.h>
@@ -15,34 +14,6 @@
 #include <hal/system/hal_system.h>
 
 #include <stdio.h>
-
-#if HAL_TARGET_IS_RP
-#define EXAMPLE_SPI_MISO 16u
-#define EXAMPLE_SPI_MOSI 19u
-#define EXAMPLE_SPI_SCK 18u
-#define EXAMPLE_MFRC522_CS 17u
-#define EXAMPLE_MFRC522_RST 20u
-#define EXAMPLE_PN532_CS 21u
-#define EXAMPLE_PN532_RST 22u
-#elif HAL_TARGET_IS_STM32G474
-/* STM32 pin numbers use port * 16 + pin. SPI1 and the MFRC522 CS use the Nucleo
- * SPI/D10 pins. */
-#define EXAMPLE_SPI_MISO 6u
-#define EXAMPLE_SPI_MOSI 7u
-#define EXAMPLE_SPI_SCK 5u
-#define EXAMPLE_MFRC522_CS 22u
-#define EXAMPLE_MFRC522_RST 17u
-#define EXAMPLE_PN532_CS 18u
-#define EXAMPLE_PN532_RST 19u
-#else
-#define EXAMPLE_SPI_MISO 6u
-#define EXAMPLE_SPI_MOSI 7u
-#define EXAMPLE_SPI_SCK 5u
-#define EXAMPLE_MFRC522_CS 16u
-#define EXAMPLE_MFRC522_RST 17u
-#define EXAMPLE_PN532_CS 18u
-#define EXAMPLE_PN532_RST 19u
-#endif
 
 static hal_mfrc522_transport_t s_mfrc_transport = NULL;
 static hal_mfrc522_t s_mfrc = NULL;
@@ -114,11 +85,17 @@ void app_start(void) {
   hal_debug_init_default();
   deb("");
   deb("=== JaszczurHAL RFID + NFC example ===");
-  hal_spi_init(0u, EXAMPLE_SPI_MISO, EXAMPLE_SPI_MOSI, EXAMPLE_SPI_SCK);
+  /* Bus, pins and SPI settings come from device_tree.json. The PN532 driver
+   * sets its own SPI clock and bit order, which the pn532 node repeats. */
+  hal_spi_init(JH_HW_BUS_SPI_INDEX, JH_HW_BUS_SPI_PIN_MISO,
+               JH_HW_BUS_SPI_PIN_MOSI, JH_HW_BUS_SPI_PIN_SCK);
 
   hal_mfrc522_spi_config_t mfrc_config =
-      hal_mfrc522_spi_default_config(EXAMPLE_MFRC522_CS);
-  mfrc_config.reset_pin = EXAMPLE_MFRC522_RST;
+      hal_mfrc522_spi_default_config(JH_HW_NODE_MFRC522_PIN_CS);
+  mfrc_config.reset_pin = JH_HW_NODE_MFRC522_RESET_PIN_OUT;
+  mfrc_config.spi_bus = JH_HW_NODE_MFRC522_BUS_INDEX;
+  mfrc_config.settings =
+      (hal_spi_settings_t)JH_HW_NODE_MFRC522_SPI_SETTINGS_INIT;
   hal_status_t status =
       hal_mfrc522_transport_create_spi(&mfrc_config, &s_mfrc_transport);
   if (status == HAL_OK) {
@@ -148,8 +125,9 @@ void app_start(void) {
   }
 
   hal_pn532_spi_config_t pn532_config =
-      hal_pn532_spi_default_config(EXAMPLE_PN532_CS);
-  pn532_config.reset_pin = EXAMPLE_PN532_RST;
+      hal_pn532_spi_default_config(JH_HW_NODE_PN532_PIN_CS);
+  pn532_config.reset_pin = JH_HW_NODE_PN532_RESET_PIN_OUT;
+  pn532_config.spi_bus = JH_HW_NODE_PN532_BUS_INDEX;
   status = hal_pn532_transport_create_spi(&pn532_config, &s_pn532_transport);
   if (status == HAL_OK) {
     status = hal_pn532_create(s_pn532_transport, &s_pn532);

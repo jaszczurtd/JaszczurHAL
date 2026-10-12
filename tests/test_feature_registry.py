@@ -12,6 +12,7 @@ import shutil
 import stat
 import subprocess
 import sys
+from typing import NamedTuple
 
 
 def require(condition: bool, message: str) -> None:
@@ -195,7 +196,11 @@ def preprocess_feature_set(
     features: tuple[str, ...],
     target: str | None,
     board: str | None,
+    assembly: "AssemblyInputs | None" = None,
 ) -> set[str]:
+    """Feature closure of ``header`` for one configuration. A device tree
+    assembly brings its generated headers and board definitions instead of
+    the board profile's components."""
     target_macros = {
         "rp2040": "HAL_TARGET_RP2040",
         "rp2350-arm": "HAL_TARGET_RP2350_ARM",
@@ -214,7 +219,13 @@ def preprocess_feature_set(
         )
     board_macro: str | None = None
     board_defines: list[str] = []
-    if board is not None:
+    include_dirs: list[str] = []
+    header_lines: list[str] = []
+    if assembly is not None:
+        board_defines = list(assembly.definitions)
+        include_dirs = ["-I", str(assembly.include_dir)]
+        header_lines = [f'#define JH_HARDWARE_HEADER "{assembly.header.as_posix()}"']
+    elif board is not None:
         board_descriptor = load(ROOT / f"boards/profiles/{board}.json")
         board_macro = board_descriptor["hal"]["selector"]
         components = set(board_descriptor["components"])
@@ -251,6 +262,7 @@ def preprocess_feature_set(
         ),
         *([f"#define {board_macro} 1"] if board_macro else []),
         *(f"#define {definition.replace('=', ' ', 1)}" for definition in board_defines),
+        *header_lines,
         *(f"#define {feature} 1" for feature in sorted(compile_features)),
         f'#include "{header}"',
         "",
@@ -263,6 +275,7 @@ def preprocess_feature_set(
             "-dM",
             "-x",
             "c",
+            *include_dirs,
             "-I",
             str(ROOT / "src"),
             "-I",
@@ -297,24 +310,67 @@ def preprocess_feature_set(
     }
 
 
+class AssemblyInputs(NamedTuple):
+    """What the build of one device tree assembly gives the compiler."""
+
+    header: Path
+    include_dir: Path
+    definitions: tuple[str, ...]
+
+
+def assembly_inputs(record: dict) -> AssemblyInputs:
+    """Generate the headers of a record's assembly as the build does
+    (resolve, then finalize with its variant) and read its board definitions."""
+    name = "-".join(
+        part.replace("/", "_")
+        for part in (record["project"], record["assembly"], record["variant"] or "base")
+    )
+    output = TEST_ROOT / "assemblies" / name
+    generator = ROOT / "scripts/generate_hardware_config.py"
+    config_dir = ROOT / record["project"]
+    for arguments in (
+        ["resolve", "--config-dir", str(config_dir), "--assembly", record["assembly"],
+         "--output-dir", str(output / "early")],
+        ["finalize", "--hardware", str(output / "early/jh_hardware_resolved.json"),
+         "--hardware-header", str(output / "early/jh_hardware.h"),
+         "--config-dir", str(config_dir), "--output-dir", str(output / "final"),
+         *(["--variant", record["variant"]] if record["variant"] else [])],
+    ):
+        result = subprocess.run([sys.executable, str(generator), *arguments],
+                                check=False, capture_output=True, text=True)
+        require(result.returncode == 0, f"{name}: {arguments[0]} failed:\n{result.stderr}")
+    cmake = (output / "final/jh_hardware_config.cmake").read_text(encoding="utf-8")
+    match = re.search(r'set\(JH_BOARD_COMPILE_DEFINITIONS "([^"]*)"\)', cmake)
+    require(match is not None, f"{name}: no JH_BOARD_COMPILE_DEFINITIONS")
+    return AssemblyInputs(
+        output / "early/jh_hardware.h",
+        output / "final",
+        tuple(item for item in match.group(1).split(";") if item),
+    )
+
+
 def check_effective_matrix_parity(compiler: str, report: dict) -> None:
     if Path(compiler).stem.lower() in {"cl", "cl.exe"}:
         return
     registered = set(generate_hal_features.load_registry(CONFIG).features)
-    checked: set[tuple[str | None, str | None, tuple[str, ...]]] = set()
+    checked: set[tuple] = set()
     for record in report["configurations"]:
         requested = tuple(record["requestedFeatures"])
-        key = (record["target"], record["board"], requested)
+        # Device tree records differ by assembly hardware as well.
+        key = (record["target"], record["board"], record.get("assembly") and
+               (record["project"], record["assembly"], record["variant"]), requested)
         if key in checked:
             continue
         checked.add(key)
         expected = set(record["resolvedFeatures"])
+        inputs = assembly_inputs(record) if record.get("assembly") else None
         legacy = preprocess_feature_set(
             compiler,
             "hal/core/hal_config.h",
             requested,
             record["target"],
             record["board"],
+            inputs,
         ) & registered
         generated = preprocess_feature_set(
             compiler,
@@ -322,6 +378,7 @@ def check_effective_matrix_parity(compiler: str, report: dict) -> None:
             requested,
             record["target"],
             record["board"],
+            inputs,
         ) & registered
         require(
             legacy == expected,

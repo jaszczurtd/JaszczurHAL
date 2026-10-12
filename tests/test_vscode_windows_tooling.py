@@ -33,6 +33,7 @@ from vscode_task_config import (
     VSCODE_ENTRY_CONFIG,
     VSCODE_ENTRY_WINDOWS_CONFIG,
     VSCODE_EXTENSION_RECOMMENDATIONS,
+    assembly_debug_builds,
     cortex_debug_launch_document,
     project_tasks_document,
     sync_cortex_debug_launch_document,
@@ -96,6 +97,55 @@ def run_checked(command: list[str], **kwargs) -> subprocess.CompletedProcess[str
     return result
 
 
+# Validated probe settings of each Cortex-Debug device.
+VALIDATED_PROBES = {
+    "rp2040": ("RP2040", ["interface/cmsis-dap.cfg", "target/rp2040.cfg"],
+               ["adapter speed 5000"]),
+    "rp2350-arm": ("RP2350", ["interface/cmsis-dap.cfg", "target/rp2350.cfg"],
+                   ["adapter speed 2000"]),
+    "stm32g474": ("STM32G474RE", ["board/st_nucleo_g4.cfg"],
+                  ["reset_config srst_only srst_nogate connect_assert_srst"]),
+}
+
+
+def require_assembly_debug_profiles(
+    document: dict, tasks: dict, example_dir: Path, build_dir: str, context: str
+) -> None:
+    """Each profile debugs one assembly and variant: the probe of its target,
+    its own ELF, and a hidden pre-launch task that builds exactly it."""
+    assemblies = load_json(example_dir / "device_tree.json")["assemblies"]
+    manifest = load_json(example_dir / ".vscode" / "jaszczurhal.project.json")
+    by_label = {task["label"]: task for task in tasks["tasks"]}
+    debugged = []
+    for profile in document["configurations"]:
+        task = by_label.get(profile.get("preLaunchTask"))
+        require(task is not None and task.get("hide") is True,
+                f"{context}: {profile['name']} has no hidden pre-launch task")
+        arguments = task["args"]
+        require(arguments[:3] == ["build-debug", "--project", "${workspaceFolder}"]
+                and arguments[3] == "--assembly",
+                f"{context}: {task['label']} does not build one assembly")
+        assembly = arguments[4]
+        variant = arguments[6] if arguments[5:6] == ["--variant"] else None
+        target = assemblies[assembly]["target"]
+        device, config_files, commands = VALIDATED_PROBES[target]
+        output = f"{build_dir}/{target}/{assembly}" + (f"/variants/{variant}" if variant else "")
+        require(
+            profile["type"] == "cortex-debug" and profile["device"] == device
+            and profile["configFiles"] == config_files
+            and profile.get("openOCDLaunchCommands") == commands
+            and profile["runToEntryPoint"] == "main"
+            and profile["executable"] == f"{output}/firmware.elf",
+            f"{context}: {profile['name']} does not debug {output} with the validated probe",
+        )
+        debugged.append((target, assembly, variant))
+    require(sorted(debugged, key=str) == sorted(assembly_debug_builds(example_dir), key=str),
+            f"{context}: the debug profiles do not cover every debugged build")
+    require(not debugged or debugged[0][1] == manifest["assembly"]
+            or manifest["assembly"] not in {item[1] for item in debugged},
+            f"{context}: the manifest's assembly is not the first debug profile")
+
+
 launch_executable = vscode_launch_executable(
     {
         "buildDir": "${projectDir}/output/debug",
@@ -129,7 +179,9 @@ launch_document = {
     "configurations": [legacy_profile, custom_profile],
 }
 require(
-    sync_cortex_debug_launch_document(launch_document, launch_executable),
+    sync_cortex_debug_launch_document(
+        launch_document, cortex_debug_launch_document(launch_executable)
+    ),
     "debug profile synchronization did not repair a legacy launch document",
 )
 require(
@@ -139,7 +191,9 @@ require(
     "debug profile synchronization removed a custom consumer configuration",
 )
 require(
-    not sync_cortex_debug_launch_document(launch_document, launch_executable),
+    not sync_cortex_debug_launch_document(
+        launch_document, cortex_debug_launch_document(launch_executable)
+    ),
     "debug profile synchronization is not idempotent",
 )
 
@@ -348,7 +402,7 @@ scheduled_runner.assert_has_calls(
         mock.call(
             ROOT / "examples" / "01_core_runtime",
             "rp2040",
-            ["--board", "pico"],
+            ["--assembly", "pico"],
             [None, "CAPTURE"],
             3,
             False,
@@ -356,7 +410,7 @@ scheduled_runner.assert_has_calls(
         mock.call(
             ROOT / "examples" / "05_serial_gps",
             "rp2040",
-            ["--board", "pico"],
+            ["--assembly", "pico"],
             [None, "SWSERIAL"],
             3,
             False,
@@ -383,13 +437,21 @@ for example_dir in examples_dispatcher.example_dirs():
     manifest = load_json(vscode_dir / "jaszczurhal.project.json")
     tasks = load_json(vscode_dir / "tasks.json")
     settings = load_json(vscode_dir / "settings.json")
-    target, board = str(manifest["target"]), str(manifest["board"])
+    # Examples select an assembly of their device_tree.json; it fixes the
+    # target, and each assembly builds in <target>/<assembly>.
+    assembly = str(manifest["assembly"])
+    target = str(
+        load_json(example_dir / "device_tree.json")["assemblies"][assembly]["target"]
+    )
     build_dir = f"${{workspaceFolder}}/../../.build/examples/{name}"
+    assembly_dir = f"{build_dir}/{target}/{assembly}"
     launch_path = vscode_dir / "launch.json"
     launch_text = launch_path.read_text(encoding="utf-8")
-    require_launch_contract(
+    require_assembly_debug_profiles(
         json.loads(launch_text),
-        f"${{workspaceFolder}}/../../.build/examples/{name}/firmware.elf",
+        tasks,
+        example_dir,
+        build_dir,
         f"checked-in example {name}",
     )
     require(
@@ -411,7 +473,7 @@ for example_dir in examples_dispatcher.example_dirs():
     )
     require(
         settings.get("cmake.buildDirectory")
-        == f"{build_dir}/cmake-tools/{target}-{board}",
+        == f"{build_dir}/cmake-tools/{target}-{assembly}",
         f"checked-in example {name} does not isolate the CMake Tools cache",
     )
     configure_settings = settings.get("cmake.configureSettings")
@@ -424,9 +486,13 @@ for example_dir in examples_dispatcher.example_dirs():
         "JH_PROJECT_DIR": "${workspaceFolder}",
         "JH_MODULE_NAME": str(manifest["module"]),
         "JH_TARGET": target,
-        "JH_BOARD": board,
-        "JH_ARTIFACT_DIR": build_dir,
+        "JH_ASSEMBLY": assembly,
+        "JH_ARTIFACT_DIR": assembly_dir,
     }
+    require(
+        "JH_BOARD" not in configure_settings,
+        f"checked-in example {name} selects a board next to its assembly",
+    )
     for key, expected in required_settings.items():
         require(
             configure_settings.get(key) == expected,

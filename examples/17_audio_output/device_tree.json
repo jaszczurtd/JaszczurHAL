@@ -1,0 +1,109 @@
+{
+  "$schema": "../../config/hardware/device_tree.schema.json",
+  "schemaVersion": 1,
+  "nodes": {
+    "pga2311": { "compatible": "jaszczurhal,spi-device" },
+    "audioPwm": {
+      "compatible": "jaszczurhal,pwm-output",
+      "properties": { "resolutionBits": 12 }
+    },
+    "audioAdc": { "compatible": "jaszczurhal,adc-input" }
+  },
+  "assemblies": {
+    "pico": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 1000000,
+          "pins": { "sck": 18, "mosi": 19, "miso": 16 }
+        }
+      },
+      "nodes": {
+        "pga2311": { "present": true, "bus": "spi", "pins": { "cs": 17 } },
+        "audioPwm": { "present": true, "pins": { "out": 6 } },
+        "audioAdc": { "present": true, "pins": { "in": 26 } }
+      }
+    },
+    "pico2-arm": {
+      "target": "rp2350-arm",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 1000000,
+          "pins": { "sck": 18, "mosi": 19, "miso": 16 }
+        }
+      },
+      "nodes": {
+        "pga2311": { "present": true, "bus": "spi", "pins": { "cs": 17 } },
+        "audioPwm": { "present": true, "pins": { "out": 6 } },
+        "audioAdc": { "present": true, "pins": { "in": 26 } }
+      }
+    },
+    "pico2-riscv": {
+      "target": "rp2350-riscv",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 1000000,
+          "pins": { "sck": 18, "mosi": 19, "miso": 16 }
+        }
+      },
+      "nodes": {
+        "pga2311": { "present": true, "bus": "spi", "pins": { "cs": 17 } },
+        "audioPwm": { "present": true, "pins": { "out": 6 } },
+        "audioAdc": { "present": true, "pins": { "in": 26 } }
+      }
+    },
+    "nucleo": {
+      "target": "stm32g474",
+      "board": "nucleo-g474re",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 1000000,
+          "pins": { "sck": "PB3", "mosi": "PA7", "miso": "PA6" }
+        }
+      },
+      "nodes": {
+        "pga2311": { "present": true, "bus": "spi", "pins": { "cs": "PB6" } },
+        "audioPwm": { "present": true, "pins": { "out": "PB0" } },
+        "audioAdc": { "present": true, "pins": { "in": "PA0" } }
+      }
+    },
+    "esp32s3-zero": {
+      "target": "esp32s3",
+      "board": "waveshare-esp32-s3-zero",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 1000000,
+          "pins": { "sck": 12, "mosi": 11, "miso": 13 }
+        }
+      },
+      "nodes": {
+        "pga2311": { "present": true, "bus": "spi", "pins": { "cs": 14 } },
+        "audioPwm": { "present": true, "pins": { "out": 15 } },
+        "audioAdc": { "present": true, "pins": { "in": 4 } }
+      }
+    }
+  }
+}

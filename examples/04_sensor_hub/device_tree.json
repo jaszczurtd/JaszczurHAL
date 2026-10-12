@@ -1,0 +1,106 @@
+{
+  "$schema": "../../config/hardware/device_tree.schema.json",
+  "schemaVersion": 1,
+  "nodes": {
+    "bh1750": { "compatible": "jaszczurhal,i2c-device" },
+    "dht": { "compatible": "jaszczurhal,onewire-device" },
+    "ds18b20": { "compatible": "jaszczurhal,onewire-device" }
+  },
+  "assemblies": {
+    "pico": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": 4, "scl": 5 }
+        }
+      },
+      "nodes": {
+        "bh1750": { "present": true, "bus": "i2c", "address": 35 },
+        "dht": { "present": true, "pins": { "data": 14 } },
+        "ds18b20": { "present": true, "pins": { "data": 16 } }
+      }
+    },
+    "pico2-arm": {
+      "target": "rp2350-arm",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": 4, "scl": 5 }
+        }
+      },
+      "nodes": {
+        "bh1750": { "present": true, "bus": "i2c", "address": 35 },
+        "dht": { "present": true, "pins": { "data": 14 } },
+        "ds18b20": { "present": true, "pins": { "data": 16 } }
+      }
+    },
+    "pico2-riscv": {
+      "target": "rp2350-riscv",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": 4, "scl": 5 }
+        }
+      },
+      "nodes": {
+        "bh1750": { "present": true, "bus": "i2c", "address": 35 },
+        "dht": { "present": true, "pins": { "data": 14 } },
+        "ds18b20": { "present": true, "pins": { "data": 16 } }
+      }
+    },
+    "nucleo": {
+      "target": "stm32g474",
+      "board": "nucleo-g474re",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": "PB9", "scl": "PB8" }
+        }
+      },
+      "nodes": {
+        "bh1750": { "present": true, "bus": "i2c", "address": 35 },
+        "dht": { "present": true, "pins": { "data": "PA8" } },
+        "ds18b20": { "present": true, "pins": { "data": "PB0" } }
+      }
+    },
+    "esp32s3-zero": {
+      "target": "esp32s3",
+      "board": "waveshare-esp32-s3-zero",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": 4, "scl": 5 }
+        }
+      },
+      "nodes": {
+        "bh1750": { "present": true, "bus": "i2c", "address": 35 },
+        "dht": { "present": true, "pins": { "data": 8 } },
+        "ds18b20": { "present": true, "pins": { "data": 16 } }
+      }
+    }
+  }
+}

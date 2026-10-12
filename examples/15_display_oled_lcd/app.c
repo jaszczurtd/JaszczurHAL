@@ -7,38 +7,16 @@
  */
 
 #include <hal/core/hal_app.h>
-#include <hal/core/hal_target.h>
 #include <hal/display/hal_display.h>
 #include <hal/display/hal_hd44780.h>
 #include <hal/i2c/hal_i2c.h>
 #include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
 
-#if HAL_TARGET_IS_RP
-#define EXAMPLE_I2C_SDA 4u
-#define EXAMPLE_I2C_SCL 5u
-#define EXAMPLE_LCD_RS 12u
-#define EXAMPLE_LCD_EN 11u
-#define EXAMPLE_LCD_D4 10u
-#define EXAMPLE_LCD_D5 9u
-#define EXAMPLE_LCD_D6 8u
-#define EXAMPLE_LCD_D7 7u
-#else
-/* STM32 pin numbers use port * 16 + pin. This example uses PB9/PB8 and
- * PC0..PC5. */
-#define EXAMPLE_I2C_SDA 25u
-#define EXAMPLE_I2C_SCL 24u
-#define EXAMPLE_LCD_RS 32u
-#define EXAMPLE_LCD_EN 33u
-#define EXAMPLE_LCD_D4 34u
-#define EXAMPLE_LCD_D5 35u
-#define EXAMPLE_LCD_D6 36u
-#define EXAMPLE_LCD_D7 37u
-#endif
-
+/* The I2C bus, the OLED address and the LCD lines come from
+ * device_tree.json. */
 static const int OLED_WIDTH = 128;
 static const int OLED_HEIGHT = 64;
-static const uint8_t OLED_I2C_ADDR = 0x3cu;
 
 static hal_hd44780_t s_lcd = NULL;
 static bool s_oled_ready = false;
@@ -72,11 +50,12 @@ void app_start(void) {
   deb("");
   deb("=== JaszczurHAL OLED + LCD example ===");
 
-  hal_i2c_init_bus(0u, EXAMPLE_I2C_SDA, EXAMPLE_I2C_SCL, HAL_I2C_CLOCK_FAST_HZ);
+  hal_i2c_init_bus(JH_HW_BUS_I2C_INDEX, JH_HW_BUS_I2C_PIN_SDA,
+                   JH_HW_BUS_I2C_PIN_SCL, JH_HW_BUS_I2C_FREQUENCY_HZ);
 
-  s_oled_ready =
-      hal_display_init_ssd1306_i2c(OLED_WIDTH, OLED_HEIGHT, OLED_I2C_ADDR, -1,
-                                   HAL_DISPLAY_VCC_SWITCHCAP, true);
+  s_oled_ready = hal_display_init_ssd1306_i2c_ex(
+      OLED_WIDTH, OLED_HEIGHT, JH_HW_NODE_SSD1306_BUS_INDEX,
+      JH_HW_NODE_SSD1306_ADDRESS, -1, HAL_DISPLAY_VCC_SWITCHCAP, true);
   if (s_oled_ready) {
     s_oled_ready = hal_display_configure(
         OLED_WIDTH, OLED_HEIGHT, HAL_DISPLAY_ROTATION(0),
@@ -91,13 +70,13 @@ void app_start(void) {
   }
 
   hal_hd44780_config_t lcd_config = {0};
-  lcd_config.rs_pin = EXAMPLE_LCD_RS;
+  lcd_config.rs_pin = JH_HW_NODE_LCD_RS_PIN_OUT;
   lcd_config.rw_pin = HAL_HD44780_PIN_NONE;
-  lcd_config.enable_pin = EXAMPLE_LCD_EN;
-  lcd_config.data_pins[0] = EXAMPLE_LCD_D4;
-  lcd_config.data_pins[1] = EXAMPLE_LCD_D5;
-  lcd_config.data_pins[2] = EXAMPLE_LCD_D6;
-  lcd_config.data_pins[3] = EXAMPLE_LCD_D7;
+  lcd_config.enable_pin = JH_HW_NODE_LCD_EN_PIN_OUT;
+  lcd_config.data_pins[0] = JH_HW_NODE_LCD_D4_PIN_OUT;
+  lcd_config.data_pins[1] = JH_HW_NODE_LCD_D5_PIN_OUT;
+  lcd_config.data_pins[2] = JH_HW_NODE_LCD_D6_PIN_OUT;
+  lcd_config.data_pins[3] = JH_HW_NODE_LCD_D7_PIN_OUT;
   lcd_config.bus_width = HAL_HD44780_BUS_4_BIT;
 
   hal_status_t lcd_status = hal_hd44780_create(&lcd_config, &s_lcd);

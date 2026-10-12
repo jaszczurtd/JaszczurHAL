@@ -9,33 +9,6 @@
 
 #include <string.h>
 
-#if HAL_TARGET_IS_RP
-#define EPD_SPI_MISO 16u
-#define EPD_SPI_MOSI 19u
-#define EPD_SPI_SCK 18u
-#define EPD_CS 17
-#define EPD_DC 20
-#define EPD_RST 21
-#define EPD_BUSY 22
-#elif HAL_TARGET_IS_STM32G474
-/* STM32 pin numbers use port * 16 + pin; SPI1 uses PA6/PA7/PA5. */
-#define EPD_SPI_MISO 6u
-#define EPD_SPI_MOSI 7u
-#define EPD_SPI_SCK 5u
-#define EPD_CS 22u
-#define EPD_DC 39u
-#define EPD_RST 9u
-#define EPD_BUSY 8u
-#else
-#define EPD_SPI_MISO 6u
-#define EPD_SPI_MOSI 7u
-#define EPD_SPI_SCK 5u
-#define EPD_CS 4
-#define EPD_DC 3
-#define EPD_RST 2
-#define EPD_BUSY 1
-#endif
-
 #define EPD_WIDTH 200u
 #define EPD_HEIGHT 200u
 
@@ -54,8 +27,10 @@ void app_start(void) {
   hal_debug_init_default();
   deb("=== JaszczurHAL SSD1681 EPD example ===");
 
+  /* Bus, pins and SPI clock come from device_tree.json. */
   hal_status_t status =
-      hal_spi_init(0u, EPD_SPI_MISO, EPD_SPI_MOSI, EPD_SPI_SCK);
+      hal_spi_init(JH_HW_BUS_SPI_INDEX, JH_HW_BUS_SPI_PIN_MISO,
+                   JH_HW_BUS_SPI_PIN_MOSI, JH_HW_BUS_SPI_PIN_SCK);
   if (status != HAL_OK) {
     derr("SPI init failed: %s", hal_status_to_string(status));
     return;
@@ -63,14 +38,15 @@ void app_start(void) {
 
   hal_display_ssd16xx_config_t config = {0};
   config.controller = HAL_DISPLAY_SSD16XX_SSD1681;
-  config.transport.bus = 0u;
-  config.transport.cs_pin = EPD_CS;
-  config.transport.dc_pin = EPD_DC;
-  config.transport.rst_pin = EPD_RST;
-  config.transport.busy_pin = EPD_BUSY;
-  config.transport.clock_hz = 4000000u;
+  config.transport.bus = JH_HW_NODE_EPD_BUS_INDEX;
+  config.transport.cs_pin = JH_HW_NODE_EPD_PIN_CS;
+  config.transport.dc_pin = JH_HW_NODE_EPD_DC_PIN_OUT;
+  config.transport.rst_pin = JH_HW_NODE_EPD_RESET_PIN_OUT;
+  config.transport.busy_pin = JH_HW_NODE_EPD_BUSY_PIN_IN;
+  config.transport.clock_hz = JH_HW_NODE_EPD_FREQUENCY_HZ;
+  config.transport.spi_mode = JH_HW_NODE_EPD_SPI_MODE;
   config.transport.busy_timeout_ms = 30000u;
-  config.transport.busy_active_high = true;
+  config.transport.busy_active_high = !JH_HW_NODE_EPD_BUSY_PROP_ACTIVE_LOW;
   config.width = EPD_WIDTH;
   config.height = EPD_HEIGHT;
   config.rotation = HAL_DISPLAY_ROTATION_0;

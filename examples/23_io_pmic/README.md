@@ -14,13 +14,23 @@ Set the expander address pins to match the application: MCP23017 at `0x20`,
 PCA9654E at `0x21`, and PCF8574 at `0x22`. The distinct addresses prevent
 conflicts on the shared bus.
 
-| Bus or signal | RP family | STM32G474 |
-| --- | --- | --- |
-| I2C SDA / SCL | GP4 / GP5 | PB9 / PB8 (D14 / D15) |
-| SPI MISO / MOSI / SCK | GP16 / GP19 / GP18 | PA6 / PA7 / PA5 |
-| 74HC595 CS | GP17 | PB6 |
-| RGB data | GP22 | PA8 |
+`device_tree.json` describes the wiring of every assembly, and the program
+takes its buses, pins, device addresses and the 74HC595 SPI clock (4 MHz)
+from the generated header. I2C runs at 100 kHz, the highest rate PCF8574
+accepts. MCP3221 answers at `0x4D`, MCP4725 at `0x60` and ADP5360 at `0x46`.
+The table below repeats the wiring.
 
-On NUCLEO-G474RE, SPI MISO/MOSI/SCK and the 74HC595 `CS` are on CN10 pins
-13/15/11/17, equivalent to D12/D11/D13/D10. Check the addresses of the other
-modules and use external pull-up resistors on the I2C lines.
+| Bus or signal | Pico / Pico 2 | NUCLEO-G474RE | ESP32-S3-Zero |
+| --- | --- | --- | --- |
+| I2C SDA | GP4 | PB9, CN10 pin 5 / D14 | GPIO1 |
+| I2C SCL | GP5 | PB8, CN10 pin 3 / D15 | GPIO2 |
+| SPI MISO | GP16 | PA6, CN10 pin 13 / D12 | GPIO6 |
+| SPI MOSI | GP19 | PA7, CN10 pin 15 / D11 | GPIO7 |
+| SPI SCK | GP18 | PB3, CN10 pin 31 / D3 | GPIO5 |
+| 74HC595 CS | GP17 | PB6, CN10 pin 17 / D10 | GPIO16 |
+| RGB data | GP22 | PA8, CN10 pin 23 / D7 | GPIO8 |
+
+On NUCLEO-G474RE the SPI clock uses PB3 rather than D13 (PA5), because PA5
+drives the LD2 LED. On ESP32-S3-Zero I2C uses GPIO1/GPIO2 rather than
+GPIO23/GPIO22, because the board does not have those pins. Use external
+pull-up resistors on the I2C lines.

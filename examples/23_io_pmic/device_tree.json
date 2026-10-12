@@ -1,0 +1,169 @@
+{
+  "$schema": "../../config/hardware/device_tree.schema.json",
+  "schemaVersion": 1,
+  "nodes": {
+    "mcp23017": { "compatible": "microchip,mcp23017" },
+    "pca9654e": { "compatible": "jaszczurhal,i2c-device" },
+    "pcf8574": { "compatible": "nxp,pcf8574" },
+    "mcp3221": { "compatible": "jaszczurhal,i2c-device" },
+    "mcp4725": { "compatible": "jaszczurhal,i2c-device" },
+    "adp5360": { "compatible": "jaszczurhal,i2c-device" },
+    "hc595": { "compatible": "jaszczurhal,spi-device" },
+    "rgbLed": {
+      "compatible": "jaszczurhal,addressable-led",
+      "properties": { "pixelOrder": "GRB", "count": 1 }
+    }
+  },
+  "assemblies": {
+    "pico": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": 4, "scl": 5 }
+        },
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 4000000,
+          "pins": { "sck": 18, "mosi": 19, "miso": 16 }
+        }
+      },
+      "nodes": {
+        "mcp23017": { "present": true, "bus": "i2c", "address": 32 },
+        "pca9654e": { "present": true, "bus": "i2c", "address": 33 },
+        "pcf8574": { "present": true, "bus": "i2c", "address": 34 },
+        "mcp3221": { "present": true, "bus": "i2c", "address": 77 },
+        "mcp4725": { "present": true, "bus": "i2c", "address": 96 },
+        "adp5360": { "present": true, "bus": "i2c", "address": 70 },
+        "hc595": { "present": true, "bus": "spi", "pins": { "cs": 17 } },
+        "rgbLed": { "present": true, "pins": { "data": 22 } }
+      }
+    },
+    "pico2-arm": {
+      "target": "rp2350-arm",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": 4, "scl": 5 }
+        },
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 4000000,
+          "pins": { "sck": 18, "mosi": 19, "miso": 16 }
+        }
+      },
+      "nodes": {
+        "mcp23017": { "present": true, "bus": "i2c", "address": 32 },
+        "pca9654e": { "present": true, "bus": "i2c", "address": 33 },
+        "pcf8574": { "present": true, "bus": "i2c", "address": 34 },
+        "mcp3221": { "present": true, "bus": "i2c", "address": 77 },
+        "mcp4725": { "present": true, "bus": "i2c", "address": 96 },
+        "adp5360": { "present": true, "bus": "i2c", "address": 70 },
+        "hc595": { "present": true, "bus": "spi", "pins": { "cs": 17 } },
+        "rgbLed": { "present": true, "pins": { "data": 22 } }
+      }
+    },
+    "pico2-riscv": {
+      "target": "rp2350-riscv",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": 4, "scl": 5 }
+        },
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 4000000,
+          "pins": { "sck": 18, "mosi": 19, "miso": 16 }
+        }
+      },
+      "nodes": {
+        "mcp23017": { "present": true, "bus": "i2c", "address": 32 },
+        "pca9654e": { "present": true, "bus": "i2c", "address": 33 },
+        "pcf8574": { "present": true, "bus": "i2c", "address": 34 },
+        "mcp3221": { "present": true, "bus": "i2c", "address": 77 },
+        "mcp4725": { "present": true, "bus": "i2c", "address": 96 },
+        "adp5360": { "present": true, "bus": "i2c", "address": 70 },
+        "hc595": { "present": true, "bus": "spi", "pins": { "cs": 17 } },
+        "rgbLed": { "present": true, "pins": { "data": 22 } }
+      }
+    },
+    "nucleo": {
+      "target": "stm32g474",
+      "board": "nucleo-g474re",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": "PB9", "scl": "PB8" }
+        },
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 4000000,
+          "pins": { "sck": "PB3", "mosi": "PA7", "miso": "PA6" }
+        }
+      },
+      "nodes": {
+        "mcp23017": { "present": true, "bus": "i2c", "address": 32 },
+        "pca9654e": { "present": true, "bus": "i2c", "address": 33 },
+        "pcf8574": { "present": true, "bus": "i2c", "address": 34 },
+        "mcp3221": { "present": true, "bus": "i2c", "address": 77 },
+        "mcp4725": { "present": true, "bus": "i2c", "address": 96 },
+        "adp5360": { "present": true, "bus": "i2c", "address": 70 },
+        "hc595": { "present": true, "bus": "spi", "pins": { "cs": "PB6" } },
+        "rgbLed": { "present": true, "pins": { "data": "PA8" } }
+      }
+    },
+    "esp32s3-zero": {
+      "target": "esp32s3",
+      "board": "waveshare-esp32-s3-zero",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": 1, "scl": 2 }
+        },
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 4000000,
+          "pins": { "sck": 5, "mosi": 7, "miso": 6 }
+        }
+      },
+      "nodes": {
+        "mcp23017": { "present": true, "bus": "i2c", "address": 32 },
+        "pca9654e": { "present": true, "bus": "i2c", "address": 33 },
+        "pcf8574": { "present": true, "bus": "i2c", "address": 34 },
+        "mcp3221": { "present": true, "bus": "i2c", "address": 77 },
+        "mcp4725": { "present": true, "bus": "i2c", "address": 96 },
+        "adp5360": { "present": true, "bus": "i2c", "address": 70 },
+        "hc595": { "present": true, "bus": "spi", "pins": { "cs": 16 } },
+        "rgbLed": { "present": true, "pins": { "data": 8 } }
+      }
+    }
+  }
+}

@@ -6,20 +6,29 @@ passive legacy scanning, drains the bounded report queue, parses AD structures,
 and records Teltonika company data, iBeacon, and Eddystone signatures without
 initiating a BLE connection.
 
-Build and upload each board separately:
+`device_tree.json` describes the hardware of every assembly: `picow`
+(Pico W), `pico2w` (Pico 2 W) and `nucleo-pim730` (the default).
+`nucleo-pim730` is a plain NUCLEO-G474RE with an external PIM730/RM2 module;
+the table below repeats the module wiring.
+
+| PIM730/RM2 signal | NUCLEO-G474RE |
+|---|---|
+| CS | PB12, CN10 pin 16 |
+| DAT | PB15, CN10 pin 26 |
+| WL_ON | PB14, CN10 pin 28 |
+| CLK | PB13, CN10 pin 30 |
+
+Build and upload each assembly separately:
 
 ```bash
 vscode/entry/jh-vscode build \
-  --project tests/hardware/bluetooth_observer \
-  --target rp2040 --board picow
+  --project tests/hardware/bluetooth_observer --assembly picow
 
 vscode/entry/jh-vscode build \
-  --project tests/hardware/bluetooth_observer \
-  --target rp2350-arm --board pico2w
+  --project tests/hardware/bluetooth_observer --assembly pico2w
 
 vscode/entry/jh-vscode build \
-  --project tests/hardware/bluetooth_observer \
-  --target stm32g474 --board nucleo-g474re-pim730
+  --project tests/hardware/bluetooth_observer --assembly nucleo-pim730
 ```
 
 Successful output uses the `JHBL4A` prefix. Record at least one Teltonika EYE

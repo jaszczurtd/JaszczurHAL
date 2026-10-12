@@ -12,13 +12,17 @@ Build and perform the first BOOTSEL upload:
 ```sh
 vscode/entry/jh-vscode build \
   --project tests/hardware/rp_usb_cdc_echo \
-  --target rp2040 --board pico
+  --assembly pico
 vscode/entry/jh-vscode upload-uf2 \
   --project tests/hardware/rp_usb_cdc_echo \
-  --target rp2040 --board pico
+  --assembly pico
 ```
 
-For Pico W and Pico 2 W use `--board picow` and `--board pico2w`, respectively.
+`device_tree.json` describes the hardware of every assembly: `pico` for Pico,
+`pico2-arm` and `pico2-riscv` for Pico 2, `picow` for Pico W and `pico2w` for
+Pico 2 W. The test needs only the board; pass the matching key to
+`--assembly`.
+
 When another board is already in BOOTSEL, target-neutral `upload` snapshots the
 existing drives before the 1200-bps touch and writes only to the newly appeared
 drive.
@@ -56,7 +60,7 @@ through the 1200-bps DTR touch and return with the same CDC identity:
 ```sh
 vscode/entry/jh-vscode upload \
   --project tests/hardware/rp_usb_cdc_echo \
-  --target rp2040 --board pico \
+  --assembly pico \
   --port /dev/serial/by-id/<device>
 ```
 

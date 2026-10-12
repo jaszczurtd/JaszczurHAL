@@ -5,7 +5,7 @@
 
 #include <hal/analog/hal_adc.h>
 #include <hal/core/hal_app.h>
-#include <hal/core/hal_target.h>
+#include <hal/core/hal_config.h>
 #include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
 
@@ -13,14 +13,7 @@
 #ifdef HAL_ENABLE_ADC_SCAN
 #include <hal/analog/hal_adc_scan.h>
 
-#if HAL_TARGET_IS_RP
-#define SCAN_PIN_0 26u
-#define SCAN_PIN_1 27u
-#else
-#define SCAN_PIN_0 0u
-#define SCAN_PIN_1 1u
-#endif
-
+/* The two inputs come from device_tree.json. */
 #define SCAN_PIN_COUNT 3u
 #define SCAN_CONVERSION_PERIOD_NS 4000u /* each pin every 12 us */
 #define SCAN_BLOCK_FRAMES 400u          /* one block every 4.8 ms */
@@ -63,7 +56,8 @@ static void accumulate(const hal_adc_scan_block_t *block) {
 }
 
 static void report(void) {
-  static const uint8_t pins[SCAN_PIN_COUNT] = {SCAN_PIN_0, SCAN_PIN_1,
+  static const uint8_t pins[SCAN_PIN_COUNT] = {JH_HW_NODE_ADC0_PIN_IN,
+                                               JH_HW_NODE_ADC1_PIN_IN,
                                                HAL_ADC_SCAN_PIN_TEMPERATURE};
   if (s_scan_status != HAL_OK) {
     derr("scan: %s", hal_status_to_string(s_scan_status));
@@ -96,8 +90,8 @@ void app_start(void) {
   deb("=== JaszczurHAL ADC scan ===");
 
   hal_adc_scan_config_t config = {0};
-  config.pins[0] = SCAN_PIN_0;
-  config.pins[1] = SCAN_PIN_1;
+  config.pins[0] = JH_HW_NODE_ADC0_PIN_IN;
+  config.pins[1] = JH_HW_NODE_ADC1_PIN_IN;
   config.pins[2] = HAL_ADC_SCAN_PIN_TEMPERATURE;
   config.pin_count = SCAN_PIN_COUNT;
   config.conversion_period_ns = SCAN_CONVERSION_PERIOD_NS;

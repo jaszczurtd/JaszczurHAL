@@ -1,0 +1,59 @@
+{
+  "$schema": "../../config/hardware/device_tree.schema.json",
+  "schemaVersion": 1,
+  "nodes": {
+    "wifi": {
+      "compatible": "pimoroni,pim730"
+    }
+  },
+  "assemblies": {
+    "picow": {
+      "target": "rp2040",
+      "board": "picow",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "nodes": {
+        "wifi": { "present": false }
+      }
+    },
+    "pico2w": {
+      "target": "rp2350-arm",
+      "board": "pico2w",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "nodes": {
+        "wifi": { "present": false }
+      }
+    },
+    "pico2-riscv": {
+      "target": "rp2350-riscv",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "nodes": {
+        "wifi": { "present": false }
+      }
+    },
+    "nucleo-pim730": {
+      "target": "stm32g474",
+      "board": "nucleo-g474re",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "nodes": {
+        "wifi": {
+          "present": true,
+          "pins": { "wlOn": "PB14", "cs": "PB12", "data": "PB15", "clock": "PB13" }
+        }
+      }
+    },
+    "esp32s3-zero": {
+      "target": "esp32s3",
+      "board": "waveshare-esp32-s3-zero",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "nodes": {
+        "wifi": { "present": false }
+      }
+    }
+  }
+}

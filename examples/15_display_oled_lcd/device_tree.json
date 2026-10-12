@@ -1,0 +1,144 @@
+{
+  "$schema": "../../config/hardware/device_tree.schema.json",
+  "schemaVersion": 1,
+  "nodes": {
+    "ssd1306": {
+      "compatible": "jaszczurhal,i2c-device"
+    },
+    "lcdRs": {
+      "compatible": "jaszczurhal,gpio-output"
+    },
+    "lcdEn": {
+      "compatible": "jaszczurhal,gpio-output"
+    },
+    "lcdD4": {
+      "compatible": "jaszczurhal,gpio-output"
+    },
+    "lcdD5": {
+      "compatible": "jaszczurhal,gpio-output"
+    },
+    "lcdD6": {
+      "compatible": "jaszczurhal,gpio-output"
+    },
+    "lcdD7": {
+      "compatible": "jaszczurhal,gpio-output"
+    }
+  },
+  "assemblies": {
+    "pico": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 400000,
+          "pins": { "sda": 4, "scl": 5 }
+        }
+      },
+      "nodes": {
+        "ssd1306": { "present": true, "bus": "i2c", "address": 60 },
+        "lcdRs": { "present": true, "pins": { "out": 12 } },
+        "lcdEn": { "present": true, "pins": { "out": 11 } },
+        "lcdD4": { "present": true, "pins": { "out": 10 } },
+        "lcdD5": { "present": true, "pins": { "out": 9 } },
+        "lcdD6": { "present": true, "pins": { "out": 8 } },
+        "lcdD7": { "present": true, "pins": { "out": 7 } }
+      }
+    },
+    "pico2-arm": {
+      "target": "rp2350-arm",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 400000,
+          "pins": { "sda": 4, "scl": 5 }
+        }
+      },
+      "nodes": {
+        "ssd1306": { "present": true, "bus": "i2c", "address": 60 },
+        "lcdRs": { "present": true, "pins": { "out": 12 } },
+        "lcdEn": { "present": true, "pins": { "out": 11 } },
+        "lcdD4": { "present": true, "pins": { "out": 10 } },
+        "lcdD5": { "present": true, "pins": { "out": 9 } },
+        "lcdD6": { "present": true, "pins": { "out": 8 } },
+        "lcdD7": { "present": true, "pins": { "out": 7 } }
+      }
+    },
+    "pico2-riscv": {
+      "target": "rp2350-riscv",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 400000,
+          "pins": { "sda": 4, "scl": 5 }
+        }
+      },
+      "nodes": {
+        "ssd1306": { "present": true, "bus": "i2c", "address": 60 },
+        "lcdRs": { "present": true, "pins": { "out": 12 } },
+        "lcdEn": { "present": true, "pins": { "out": 11 } },
+        "lcdD4": { "present": true, "pins": { "out": 10 } },
+        "lcdD5": { "present": true, "pins": { "out": 9 } },
+        "lcdD6": { "present": true, "pins": { "out": 8 } },
+        "lcdD7": { "present": true, "pins": { "out": 7 } }
+      }
+    },
+    "nucleo": {
+      "target": "stm32g474",
+      "board": "nucleo-g474re",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 400000,
+          "pins": { "sda": "PB9", "scl": "PB8" }
+        }
+      },
+      "nodes": {
+        "ssd1306": { "present": true, "bus": "i2c", "address": 60 },
+        "lcdRs": { "present": true, "pins": { "out": "PC0" } },
+        "lcdEn": { "present": true, "pins": { "out": "PC1" } },
+        "lcdD4": { "present": true, "pins": { "out": "PC2" } },
+        "lcdD5": { "present": true, "pins": { "out": "PC3" } },
+        "lcdD6": { "present": true, "pins": { "out": "PC4" } },
+        "lcdD7": { "present": true, "pins": { "out": "PC5" } }
+      }
+    },
+    "esp32s3-zero": {
+      "target": "esp32s3",
+      "board": "waveshare-esp32-s3-zero",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 400000,
+          "pins": { "sda": 4, "scl": 5 }
+        }
+      },
+      "nodes": {
+        "ssd1306": { "present": true, "bus": "i2c", "address": 60 },
+        "lcdRs": { "present": true, "pins": { "out": 12 } },
+        "lcdEn": { "present": true, "pins": { "out": 11 } },
+        "lcdD4": { "present": true, "pins": { "out": 10 } },
+        "lcdD5": { "present": true, "pins": { "out": 9 } },
+        "lcdD6": { "present": true, "pins": { "out": 8 } },
+        "lcdD7": { "present": true, "pins": { "out": 7 } }
+      }
+    }
+  }
+}

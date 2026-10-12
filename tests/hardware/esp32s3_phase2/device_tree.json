@@ -1,0 +1,57 @@
+{
+  "$schema": "../../../config/hardware/device_tree.schema.json",
+  "schemaVersion": 1,
+  "nodes": {
+    "gpioSmoke": {"compatible": "jaszczurhal,gpio-output"},
+    "ctxA": {"compatible": "jaszczurhal,gpio-output"},
+    "ctxB": {"compatible": "jaszczurhal,gpio-output"},
+    "gpioInput": {
+      "compatible": "jaszczurhal,gpio-input",
+      "properties": {"pull": "up"}
+    },
+    "adc": {"compatible": "jaszczurhal,adc-input"}
+  },
+  "assemblies": {
+    "esp32s3-zero": {
+      "target": "esp32s3",
+      "board": "waveshare-esp32-s3-zero",
+      "clock": {"tree": "default"},
+      "statusLed": {"node": "board.statusLed"},
+      "releaseReservations": ["boot-button"],
+      "nets": {
+        "boot": {
+          "endpoint": {"domain": "soc-gpio", "id": 0},
+          "owner": "gpioInput.in"
+        }
+      },
+      "buses": {
+        "loopUart": {
+          "kind": "uart",
+          "index": 0,
+          "baudRate": 115200,
+          "frame": {"dataBits": 8, "parity": "none", "stopBits": 1},
+          "pins": {"tx": 17, "rx": null}
+        },
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": {"sda": 8, "scl": 9}
+        },
+        "spi": {
+          "kind": "spi",
+          "index": 0,
+          "frequencyHz": 2000000,
+          "pins": {"sck": 12, "mosi": 11, "miso": 10}
+        }
+      },
+      "nodes": {
+        "gpioSmoke": {"present": true, "pins": {"out": 18}},
+        "ctxA": {"present": true, "pins": {"out": 13}},
+        "ctxB": {"present": true, "pins": {"out": 14}},
+        "gpioInput": {"present": true, "pins": {"in": {"net": "boot"}}},
+        "adc": {"present": true, "pins": {"in": 3}}
+      }
+    }
+  }
+}

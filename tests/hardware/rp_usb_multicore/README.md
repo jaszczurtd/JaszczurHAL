@@ -11,19 +11,22 @@ Build and upload the bare-metal RP2040 variant:
 ```sh
 vscode/entry/jh-vscode build \
   --project tests/hardware/rp_usb_multicore \
-  --target rp2040 --board pico
+  --assembly pico
 vscode/entry/jh-vscode upload \
   --project tests/hardware/rp_usb_multicore \
-  --target rp2040 --board pico \
+  --assembly pico \
   --port /dev/serial/by-id/<device>
 python3 tests/hardware/rp_usb_multicore/verify_usb_multicore.py \
   --port /dev/serial/by-id/<device> \
   --target rp2040 --board pico --runtime baremetal
 ```
 
-For Pico 2, select `rp2350-arm` or `rp2350-riscv`, use the `pico2` build board,
-and pass `--board pico2` to the verifier. Add `--variant FREERTOS` to build and
-upload commands and use `--runtime freertos` for the FreeRTOS SMP run.
+`device_tree.json` describes the hardware of every assembly: `pico` for Pico,
+`pico2-arm` and `pico2-riscv` for Pico 2. The test needs only the board. For
+Pico 2 build with `--assembly pico2-arm` or `--assembly pico2-riscv` and pass
+`--target rp2350-arm` or `--target rp2350-riscv` with `--board pico2` to the
+verifier. Add `--variant FREERTOS` to build and upload commands and use
+`--runtime freertos` for the FreeRTOS SMP run.
 
 The verifier's default `--records 4096` must match
 `JH_USB_MULTICORE_RECORDS` in the firmware build.

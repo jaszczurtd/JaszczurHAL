@@ -1,0 +1,82 @@
+{
+  "$schema": "../../config/hardware/device_tree.schema.json",
+  "schemaVersion": 1,
+  "nodes": {},
+  "assemblies": {
+    "pico": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": 4, "scl": 5 }
+        }
+      },
+      "nodes": {}
+    },
+    "pico2-arm": {
+      "target": "rp2350-arm",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": 4, "scl": 5 }
+        }
+      },
+      "nodes": {}
+    },
+    "pico2-riscv": {
+      "target": "rp2350-riscv",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": 4, "scl": 5 }
+        }
+      },
+      "nodes": {}
+    },
+    "nucleo": {
+      "target": "stm32g474",
+      "board": "nucleo-g474re",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": "PB9", "scl": "PB8" }
+        }
+      },
+      "nodes": {}
+    },
+    "esp32s3-zero": {
+      "target": "esp32s3",
+      "board": "waveshare-esp32-s3-zero",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": 4, "scl": 5 }
+        }
+      },
+      "nodes": {}
+    }
+  }
+}

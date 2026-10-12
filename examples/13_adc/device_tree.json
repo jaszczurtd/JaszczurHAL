@@ -1,0 +1,112 @@
+{
+  "$schema": "../../config/hardware/device_tree.schema.json",
+  "schemaVersion": 1,
+  "nodes": {
+    "adc0": {
+      "compatible": "jaszczurhal,adc-input"
+    },
+    "adc1": {
+      "compatible": "jaszczurhal,adc-input"
+    },
+    "ads1115": {
+      "compatible": "jaszczurhal,i2c-device"
+    }
+  },
+  "assemblies": {
+    "pico": {
+      "target": "rp2040",
+      "board": "pico",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": 4, "scl": 5 }
+        }
+      },
+      "nodes": {
+        "adc0": { "present": true, "pins": { "in": 26 } },
+        "adc1": { "present": true, "pins": { "in": 27 } },
+        "ads1115": { "present": true, "bus": "i2c", "address": 72 }
+      }
+    },
+    "pico2-arm": {
+      "target": "rp2350-arm",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": 4, "scl": 5 }
+        }
+      },
+      "nodes": {
+        "adc0": { "present": true, "pins": { "in": 26 } },
+        "adc1": { "present": true, "pins": { "in": 27 } },
+        "ads1115": { "present": true, "bus": "i2c", "address": 72 }
+      }
+    },
+    "pico2-riscv": {
+      "target": "rp2350-riscv",
+      "board": "pico2",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": 4, "scl": 5 }
+        }
+      },
+      "nodes": {
+        "adc0": { "present": true, "pins": { "in": 26 } },
+        "adc1": { "present": true, "pins": { "in": 27 } },
+        "ads1115": { "present": true, "bus": "i2c", "address": 72 }
+      }
+    },
+    "nucleo": {
+      "target": "stm32g474",
+      "board": "nucleo-g474re",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": "PB9", "scl": "PB8" }
+        }
+      },
+      "nodes": {
+        "adc0": { "present": true, "pins": { "in": "PA0" } },
+        "adc1": { "present": true, "pins": { "in": "PA1" } },
+        "ads1115": { "present": true, "bus": "i2c", "address": 72 }
+      }
+    },
+    "esp32s3-zero": {
+      "target": "esp32s3",
+      "board": "waveshare-esp32-s3-zero",
+      "clock": { "tree": "default" },
+      "statusLed": { "node": "board.statusLed" },
+      "buses": {
+        "i2c": {
+          "kind": "i2c",
+          "index": 0,
+          "frequencyHz": 100000,
+          "pins": { "sda": 4, "scl": 5 }
+        }
+      },
+      "nodes": {
+        "adc0": { "present": true, "pins": { "in": 2 } },
+        "adc1": { "present": true, "pins": { "in": 1 } },
+        "ads1115": { "present": true, "bus": "i2c", "address": 72 }
+      }
+    }
+  }
+}

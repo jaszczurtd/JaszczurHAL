@@ -147,6 +147,14 @@ montażu, usuwając pozostawioną tam platformę i płytkę. `--assembly` albo p
 `[JH-HW-ASSEMBLY]`; montaż pozostawiony w stanie lokalnym po usunięciu pliku
 jest pomijany.
 
+`check-hardware` rozwiązuje każdy montaż tak jak build i podaje linię oraz
+kolumnę każdego problemu w `device_tree.json`. W VS Code zadanie
+`Project: Check device tree` uruchamia je w tle i powtarza po każdym zapisie,
+więc panel Problems pokazuje błędy jeszcze przed buildem. Panel Run and Debug
+ma osobny profil dla każdego montażu i wariantu debugowanego targetu, który
+buduje i ładuje dokładnie tę konfigurację; zobacz
+[Generowane zadania VS Code](../../vscode/README.pl.md#generowane-zadania-vs-code).
+
 Następnie ustawienia są łączone w poniższej kolejności. Wartości z późniejszych pozycji zastępują wcześniejsze:
 
 1. domyślne wartości rejestru targetu i płytki;
@@ -425,8 +433,9 @@ void app_task0(void) { /* ... */ }
 #endif
 ```
 
-Przykłady z repozytorium działają według tych samych zasad. Dispatcher
-przykładów wyświetla i kompiluje wszystkie zadeklarowane w nich konfiguracje:
+Przykłady z repozytorium działają według tych samych zasad, a ich sprzęt
+opisuje `device_tree.json`. Dispatcher przykładów wyświetla i kompiluje każdy
+montaż z każdym wariantem:
 
 ```bash
 scripts/examples_dispatcher.py list
@@ -444,8 +453,8 @@ Zobacz [przykłady JaszczurHAL](../../examples/README.pl.md).
 Zewnętrzny projekt firmware zapisuje wyniki w `${project}/.build`. Przykłady z repozytorium i konfiguracje testów sprzętowych używają stałych lokalizacji względem katalogu głównego JaszczurHAL:
 
 ```text
-.build/examples/<example>/
-.build/hardware/<fixture>/
+.build/examples/<example>/<target>/<assembly>/
+.build/hardware/<fixture>/<target>/<assembly>/
 ```
 
 W systemach Unix pamięć podręczna CMake jest oddzielna dla każdej pary platforma-płytka i znajduje się pod `cmakeBuildDir` wskazanym w manifeście:

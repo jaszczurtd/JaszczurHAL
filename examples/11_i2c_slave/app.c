@@ -5,20 +5,13 @@
  */
 
 #include <hal/core/hal_app.h>
-#include <hal/core/hal_target.h>
-#include <hal/gpio/hal_gpio.h>
 #include <hal/i2c/hal_i2c_slave.h>
 #include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
 
-#if HAL_TARGET_IS_STM32G474
-#define I2C_SLAVE_SDA_PIN HAL_GPIO_STM32_PIN('B', 9u) /* PB9 = I2C1_SDA */
-#define I2C_SLAVE_SCL_PIN HAL_GPIO_STM32_PIN('B', 8u) /* PB8 = I2C1_SCL */
-#else
-#define I2C_SLAVE_SDA_PIN 4u
-#define I2C_SLAVE_SCL_PIN 5u
-#endif
-
+/* The bus and its pins come from device_tree.json; the address is this
+ * application's own. */
+#define I2C_SLAVE_BUS JH_HW_BUS_I2C_INDEX
 #define I2C_SLAVE_ADDR 0x42u
 
 static const uint8_t REG_STATUS = 0;
@@ -32,8 +25,9 @@ static uint16_t counter = 0;
 void app_start(void) {
   hal_debug_init_default();
 
-  hal_i2c_slave_init(I2C_SLAVE_SDA_PIN, I2C_SLAVE_SCL_PIN, I2C_SLAVE_ADDR);
-  hal_i2c_slave_reg_write8(REG_STATUS, 0xA5);
+  hal_i2c_slave_init_bus(I2C_SLAVE_BUS, JH_HW_BUS_I2C_PIN_SDA,
+                         JH_HW_BUS_I2C_PIN_SCL, I2C_SLAVE_ADDR);
+  hal_i2c_slave_reg_write8_bus(I2C_SLAVE_BUS, REG_STATUS, 0xA5);
   deb("I2C slave ready at 0x%02X", I2C_SLAVE_ADDR);
 }
 
@@ -44,10 +38,12 @@ void app_task0(void) {
   }
   last_update_ms = now;
 
-  hal_i2c_slave_reg_write16(REG_COUNTER, counter++);
-  hal_i2c_slave_reg_write16(REG_MILLIS_HI, (uint16_t)(now >> 16));
-  hal_i2c_slave_reg_write16(REG_MILLIS_LO, (uint16_t)(now & 0xFFFFu));
+  hal_i2c_slave_reg_write16_bus(I2C_SLAVE_BUS, REG_COUNTER, counter++);
+  hal_i2c_slave_reg_write16_bus(I2C_SLAVE_BUS, REG_MILLIS_HI,
+                                (uint16_t)(now >> 16));
+  hal_i2c_slave_reg_write16_bus(I2C_SLAVE_BUS, REG_MILLIS_LO,
+                                (uint16_t)(now & 0xFFFFu));
 
   deb("I2C slave transactions=%lu",
-      (unsigned long)hal_i2c_slave_get_transaction_count());
+      (unsigned long)hal_i2c_slave_get_transaction_count_bus(I2C_SLAVE_BUS));
 }

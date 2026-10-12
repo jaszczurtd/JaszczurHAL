@@ -7,13 +7,14 @@ HCI i zmierzony zegar gSPI CYW43. Adresy Bluetooth są maskowane, treść
 nieznanych komend i ciała ACL są ukrywane, a Extended Inquiry Result jest
 zachowywany tylko do bajtu RSSI; jego treść EIR jest ukrywana.
 
+`device_tree.json` opisuje sprzęt obu montaży: `picow` (Pico W, domyślny)
+i `pico2w` (Pico 2 W). Żaden z nich nie wymaga zewnętrznych połączeń.
+
 ```sh
 vscode/entry/jh-vscode build \
-  --project tests/hardware/bluetooth_classic_hci_trace \
-  --target rp2040 --board picow
+  --project tests/hardware/bluetooth_classic_hci_trace --assembly picow
 vscode/entry/jh-vscode build \
-  --project tests/hardware/bluetooth_classic_hci_trace \
-  --target rp2350-arm --board pico2w
+  --project tests/hardware/bluetooth_classic_hci_trace --assembly pico2w
 ```
 
 `SCAN` uruchamia jeden dziesięciosekundowy skan, a `SCAN30` trzy kolejne cykle

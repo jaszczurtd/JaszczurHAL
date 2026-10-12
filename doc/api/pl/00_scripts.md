@@ -815,6 +815,15 @@ funkcji i obsługa bibliotek w VS Code. Polecenie
 biblioteki w postaci `<montaż albo "auto">/<16 cyfr szesnastkowych>`; używa
 jej `scripts/lib/build_artifacts.sh` w skryptach budujących biblioteki.
 
+### `scripts/device_tree_check.py`
+
+Moduł importowany przez `jh-vscode check-hardware`. Rozwiązuje każdy montaż
+z `device_tree.json` projektu tak jak build, zachowuje pierwszy błąd każdego
+z nich, błąd wspólny dla kilku montaży zgłasza raz i umieszcza każdy błąd
+w linii i kolumnie elementu JSON wskazanego przez jego JSON Pointer. Podaje też
+pliki, które obserwuje kontrola w trybie `--watch`: `device_tree.json`
+i wymienione w nim bindingi projektu.
+
 ### `scripts/board_registry.py`
 
 Udostępnia innym skryptom sprawdzone dane platform i płytek z `boards/`. Korzystają z niego `jh-vscode`, generatory projektów i narzędzia obsługujące przykłady. Moduł nie ma własnego rejestru; źródłem danych pozostają deskryptory.

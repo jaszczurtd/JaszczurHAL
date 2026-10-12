@@ -1,5 +1,6 @@
 /* STM32G474 hardware UART test on USART2 (hal_uart PORT_2, PA2/PA3), which
- * the NUCLEO-G474RE routes to the ST-LINK virtual COM port. After reset the
+ * the NUCLEO-G474RE routes to the ST-LINK virtual COM port. Both ports, their
+ * pins and the boot rate come from device_tree.json. After reset the
  * debug console prints a boot line at 115200 for three seconds (reset
  * reason, serial number, UID); then the application takes USART2 at
  * 3 Mbaud 8N1 and answers line commands from the host verifier:
@@ -27,8 +28,8 @@
  *             the writer lock with zero-length non-blocking writes
  *
  * The built-in LED toggles on every command and blinks while the boot line
- * repeats. On the CAN-FD HAT the relay drivers are held low (also with
- * UART_FIXTURE_HAT_RELAYS on another board profile). */
+ * repeats. When the assembly carries the CAN-FD HAT, its relay drivers are
+ * held low. */
 
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_array.h>
@@ -49,11 +50,19 @@
  * masked, and single-wire mode for the USART1 self-test. */
 #include "hal/impl/stm32g474/port/stm32g474_regs.h"
 
-#define PIN(port, n) ((uint8_t)((port) * 16u + (n)))
-#define UART_TX PIN(0u, 2u) /* PA2 */
-#define UART_RX PIN(0u, 3u) /* PA3 */
+/* USART2 carries the debug console handed over by the C command; the
+ * single-wire switch of the Q command writes USART1 registers. */
+#if JH_HW_BUS_CONSOLE_UART_INDEX != 1 || JH_HW_BUS_LOOP_UART_INDEX != 0
+#error "stm32_uart needs consoleUart on USART2 and loopUart on USART1"
+#endif
+/* The port boots in kFormats[0], the 8N1 frame of consoleUart. */
+#if JH_HW_BUS_CONSOLE_UART_DATA_BITS != 8 ||                                   \
+    JH_HW_BUS_CONSOLE_UART_PARITY != 0 ||                                      \
+    JH_HW_BUS_CONSOLE_UART_STOP_BITS != 1
+#error "consoleUart boots in 8N1"
+#endif
 
-#define APP_BAUD 3000000u
+#define APP_BAUD JH_HW_BUS_CONSOLE_UART_BAUD_RATE
 #define BOOT_WINDOW_MS 3000u
 #define BOOT_LINE_MS 250u
 #define CONSOLE_WINDOW_MS 1500u
@@ -65,8 +74,9 @@
 #define FORMAT_REVERT_MS 5000u
 #define MASK_SETTLE_MS 5u
 
-#define LOOP_TX PIN(2u, 4u) /* PC4, USART1 TX: the single wire */
-#define LOOP_RX PIN(2u, 5u) /* PC5, USART1 RX: unused in single-wire mode */
+/* loopUart TX is the single wire; RX stays unused in single-wire mode. */
+#define LOOP_TX JH_HW_BUS_LOOP_UART_PIN_TX
+#define LOOP_RX JH_HW_BUS_LOOP_UART_PIN_RX
 #define LOOP_BYTES 4096u
 #define LOOP_RX_OFFSET 512u
 #define USART_CR3_HDSEL (1u << 3)
@@ -75,12 +85,11 @@
 #define FIXTURE_DUPLEX 1
 #endif
 
-#if defined(HAL_BOARD_PROFILE_STM32G474_NUCLEO_CANHAT) ||                      \
-    defined(UART_FIXTURE_HAT_RELAYS)
-#define FIXTURE_HAT_RELAYS 1
+#if JH_HW_NODE_HAT_PRESENT
 /* Relay drivers K1-K4 have no gate pull-down: drive them off. */
-static const uint8_t kRelayPins[] = {PIN(2u, 3u), PIN(2u, 0u), PIN(0u, 10u),
-                                     PIN(1u, 3u)};
+static const uint8_t kRelayPins[] = {
+    JH_HW_NODE_HAT_RELAY1_PIN_OUT, JH_HW_NODE_HAT_RELAY2_PIN_OUT,
+    JH_HW_NODE_HAT_RELAY3_PIN_OUT, JH_HW_NODE_HAT_RELAY4_PIN_OUT};
 #endif
 
 typedef struct {
@@ -151,7 +160,9 @@ static void reply(const char *format, ...) {
 
 static bool start_port(uint32_t baud, const frame_format_t *format) {
   if (s_uart == NULL) {
-    s_uart = hal_uart_create(HAL_UART_PORT_2, UART_RX, UART_TX);
+    s_uart = hal_uart_create((hal_uart_port_t)JH_HW_BUS_CONSOLE_UART_UART_PORT,
+                             JH_HW_BUS_CONSOLE_UART_PIN_RX,
+                             JH_HW_BUS_CONSOLE_UART_PIN_TX);
     if (s_uart == NULL) {
       return false;
     }
@@ -428,7 +439,8 @@ static void cmd_loop1(const char *args) {
     reply("ERR loop1 arguments");
     return;
   }
-  hal_uart_t loop = hal_uart_create(HAL_UART_PORT_1, LOOP_RX, LOOP_TX);
+  hal_uart_t loop = hal_uart_create(
+      (hal_uart_port_t)JH_HW_BUS_LOOP_UART_UART_PORT, LOOP_RX, LOOP_TX);
   if (loop == NULL) {
     reply("ERR loop1 create");
     return;
@@ -442,7 +454,10 @@ static void cmd_loop1(const char *args) {
   USART_CR1(USART1_BASE) &= ~USART_CR1_UE;
   USART_CR3(USART1_BASE) |= USART_CR3_HDSEL;
   USART_CR1(USART1_BASE) |= USART_CR1_UE;
-  GPIO_PUPDR(2u) = (GPIO_PUPDR(2u) & ~(0x3u << 8u)) | (GPIO_PUPD_UP << 8u);
+  const uint32_t port = LOOP_TX / 16u;
+  const uint32_t shift = (LOOP_TX % 16u) * 2u;
+  GPIO_PUPDR(port) =
+      (GPIO_PUPDR(port) & ~(0x3u << shift)) | (GPIO_PUPD_UP << shift);
   hal_delay_ms(2u);
   size_t got = 0u;
   uint8_t *rx = &s_buffer[LOOP_RX_OFFSET];
@@ -682,7 +697,7 @@ void app_start(void) {
 #if defined(HAL_ENABLE_STACK_GUARD)
   (void)hal_stack_guard_init_ex();
 #endif
-#if FIXTURE_HAT_RELAYS
+#if JH_HW_NODE_HAT_PRESENT
   for (size_t i = 0u; i < COUNTOF(kRelayPins); i++) {
     hal_gpio_set_mode(kRelayPins[i], HAL_GPIO_OUTPUT_LOW);
   }

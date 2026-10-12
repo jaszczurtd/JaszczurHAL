@@ -2,9 +2,8 @@
  * @file app.c
  * @brief Find I2C devices that acknowledge addresses 0x08 through 0x77.
  *
- * This application is wired for NUCLEO-G474RE: I2C1 SCL on PB8 and SDA on PB9,
- * with external pull-ups to 3.3 V. Check the hard-coded pins before using an
- * RP build listed in the project manifest. See README.md for wiring and limits.
+ * The bus, its pins and its rate come from device_tree.json. The lines need
+ * external pull-ups to 3.3 V. See README.md for wiring and limits.
  */
 
 #include <hal/core/hal_app.h>
@@ -15,10 +14,14 @@
 void app_start(void) {
   hal_debug_init_default();
   deb("");
-  deb("=== JaszczurHAL G474 I2C scanner ===");
-  deb("I2C1: SCL=PB8, SDA=PB9 (external pull-ups to 3V3 required)");
+  deb("=== JaszczurHAL I2C scanner ===");
+  deb("assembly %s: I2C bus %u at %lu Hz (external pull-ups to 3V3 required)",
+      JH_HW_ASSEMBLY_NAME, (unsigned)JH_HW_BUS_I2C_INDEX,
+      (unsigned long)JH_HW_BUS_I2C_FREQUENCY_HZ);
 
-  const hal_status_t status = hal_i2c_init(25u, 24u, 100000u);
+  const hal_status_t status =
+      hal_i2c_init_bus(JH_HW_BUS_I2C_INDEX, JH_HW_BUS_I2C_PIN_SDA,
+                       JH_HW_BUS_I2C_PIN_SCL, JH_HW_BUS_I2C_FREQUENCY_HZ);
   if (status != HAL_OK) {
     deb("I2C init failed: %s", hal_status_to_string(status));
   }
@@ -28,8 +31,9 @@ void app_task0(void) {
   uint8_t addresses[HAL_I2C_SCAN_ADDRESS_COUNT];
   size_t found = 0u;
   deb("scanning 0x08..0x77 ...");
-  const hal_status_t status = hal_i2c_scan(
-      addresses, HAL_I2C_SCAN_ADDRESS_COUNT, &found, hal_watchdog_feed);
+  const hal_status_t status =
+      hal_i2c_scan_bus(JH_HW_BUS_I2C_INDEX, addresses,
+                       HAL_I2C_SCAN_ADDRESS_COUNT, &found, hal_watchdog_feed);
   if (status != HAL_OK) {
     deb("  scan failed: %s", hal_status_to_string(status));
   } else {

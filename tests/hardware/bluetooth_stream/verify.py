@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import math
 import os
+from pathlib import Path
 import struct
 import sys
 import time
@@ -17,6 +18,9 @@ import dbus
 from dbus.mainloop.glib import DBusGMainLoop
 from gi.repository import GLib
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import fixture_hardware  # noqa: E402
 
 
 BLUEZ = "org.bluez"
@@ -74,11 +78,7 @@ RESPONSE_BOOT = b"J5B1"
 CMD_POWER_LOSS = b"JHBL5/POWER-LOSS"
 RESPONSE_POWER_LOSS_ARMED = b"JHBL5/POWER-LOSS-ARMED"
 RESET_REASON_WATCHDOG = 4
-SUPPORTED_HARDWARE = {
-    "rp2040": {"picow", "pico-rm2"},
-    "rp2350-arm": {"pico2w"},
-    "stm32g474": {"nucleo-g474re-pim730"},
-}
+FIXTURE_DIR = Path(__file__).resolve().parent
 SUPPORTED_RUNTIMES = ("baremetal", "freertos")
 REQUIRED_CHARACTERISTIC_FLAGS = {
     RX_UUID: {"write", "write-without-response"},
@@ -729,22 +729,22 @@ def parse_identity(payload: bytes) -> tuple[str, str, str]:
         raise AssertionError("fixture identity is not ASCII") from exc
     if len(fields) != 4 or fields[0] != RESPONSE_IDENTITY:
         raise AssertionError(f"malformed fixture identity: {payload!r}")
-    target, board, runtime = fields[1:]
-    if not target or not board or not runtime:
+    target, assembly, runtime = fields[1:]
+    if not target or not assembly or not runtime:
         raise AssertionError(f"incomplete fixture identity: {payload!r}")
-    return target, board, runtime
+    return target, assembly, runtime
 
 
 def verify_identity(args, session: Session) -> tuple[str, str, str]:
     actual = parse_identity(session.send(CMD_IDENTITY))
-    expected = (args.target, args.board, args.runtime)
+    expected = (args.target, args.assembly, args.runtime)
     if actual != expected:
         raise AssertionError(
             f"fixture identity mismatch: expected={expected}, actual={actual}"
         )
     print(
         "JHBL5 identity PASS "
-        f"target={actual[0]} board={actual[1]} runtime={actual[2]}"
+        f"target={actual[0]} assembly={actual[1]} runtime={actual[2]}"
     )
     return actual
 
@@ -1100,7 +1100,7 @@ def verify_security(
 def run(args) -> None:
     client = None
     stream_messages = 0
-    identity = (args.target, args.board, args.runtime)
+    identity = (args.target, args.assembly, args.runtime)
     history = HandshakeHistory()
     try:
         client, session = connect_authenticated(args, history)
@@ -1165,7 +1165,7 @@ def run(args) -> None:
         client.assert_connected("final security recovery")
         print(
             "JHBL5 HOST PASS "
-            f"target={identity[0]} board={identity[1]} "
+            f"target={identity[0]} assembly={identity[1]} "
             f"runtime={identity[2]} burst={args.burst} "
             f"reconnects={args.reconnects} "
             f"stream_messages={stream_messages} "
@@ -1211,20 +1211,10 @@ def parse_args():
     parser.add_argument("--address", help="public BLE address")
     parser.add_argument("--name", default="JH Stream HW")
     parser.add_argument(
-        "--target",
-        choices=sorted(SUPPORTED_HARDWARE),
+        "--assembly",
+        choices=sorted(fixture_hardware.assemblies(FIXTURE_DIR)),
         required=True,
-        help="expected firmware target identity",
-    )
-    parser.add_argument(
-        "--board",
-        choices=sorted(
-            board
-            for boards in SUPPORTED_HARDWARE.values()
-            for board in boards
-        ),
-        required=True,
-        help="expected firmware board identity",
+        help="assembly of the uploaded image (device_tree.json)",
     )
     parser.add_argument(
         "--runtime",
@@ -1273,10 +1263,7 @@ def parse_args():
         help="firmware RX pause in seconds",
     )
     args = parser.parse_args()
-    if args.board not in SUPPORTED_HARDWARE[args.target]:
-        parser.error(
-            f"board {args.board!r} is not valid for target {args.target!r}"
-        )
+    args.target = fixture_hardware.assemblies(FIXTURE_DIR)[args.assembly]["target"]
     return args
 
 

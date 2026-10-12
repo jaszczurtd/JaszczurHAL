@@ -26,14 +26,14 @@ The `echo` route allows `LORA_LINK` and `BLE_STREAM` sources. This project
 starts only the LoRa transport; the command variant of example 26 uses the
 same rule with authenticated BLE Stream.
 
-If the board profile provides a GPIO status LED, it stays on during
+If the assembly's status LED is a GPIO LED, it stays on during
 transmission and lights for 120 ms after a packet arrives. Radio behavior
 is unchanged on boards without that LED.
 
-The example builds for the plain `pico` and `nucleo-g474re` boards and expects
-an external Waveshare Core1262-HF wired as shown below. Select
-`rp2040-lora-lf` for the integrated LF board; its profile already describes
-the radio. Its 434.0 MHz frequency is a test setting, not a declaration of
+`device_tree.json` has three assemblies. `pico-core1262-hf` and
+`nucleo-core1262-hf` use an external Waveshare Core1262-HF wired as shown
+below. `rp2040-lora-lf` is the integrated LF board, whose board description
+already includes the radio. Its 434.0 MHz frequency is a test setting, not a declaration of
 regulatory compliance in every region. Do not pair LF and HF devices over
 the radio link.
 
@@ -48,7 +48,8 @@ Run from the repository root:
   --target stm32g474 --example 27_lora_point_to_point
 ```
 
-The dispatcher builds the initiator and every variant declared in
+The dispatcher builds every assembly of the target, both RP2040 assemblies
+included, with the initiator and every variant declared in
 `hal_project_config.h`: `PROBE`, `RESPONDER`, the hardware-test pair `SF7` and
 `RESPONDER_SF7`, `LINK`, and `LINK_RESPONDER`.
 
@@ -57,14 +58,14 @@ To build only the command pair, choose the variants in VS Code or run:
 ```bash
 vscode/entry/jh-vscode build \
   --project examples/27_lora_point_to_point \
-  --target rp2040 --variant LINK
+  --assembly pico-core1262-hf --variant LINK
 vscode/entry/jh-vscode build \
   --project examples/27_lora_point_to_point \
-  --target stm32g474 --variant LINK_RESPONDER
+  --assembly nucleo-core1262-hf --variant LINK_RESPONDER
 ```
 
 For two integrated Waveshare LF boards, select
-`--target rp2040 --board rp2040-lora-lf` with `LINK` and `LINK_RESPONDER`.
+`--assembly rp2040-lora-lf` with `LINK` and `LINK_RESPONDER`.
 See the
 [LoRa command hardware tests](../../tests/hardware/lora_sx1262/README.md)
 for uploading, stable serial-port selection, and `JHCMD1` acceptance criteria.
@@ -77,9 +78,10 @@ that is never reused with the same address and key. Read the
 
 ## External Core1262-HF wiring
 
-The pins live in `lora_example_radio.h`; change them there to match your own
-wiring. Electrical facts of the module come from
-`hal_lora_sx126x_core1262_hf_defaults()`.
+The pins live in `device_tree.json`; change them there to match your own
+wiring. Electrical facts of the module come from its HAL component type
+`waveshare,core1262-hf`, the same data `hal_lora_sx126x_core1262_hf_defaults()`
+returns.
 
 | Signal | RP family | STM32G474 |
 |---|---|---|

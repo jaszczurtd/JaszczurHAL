@@ -13,6 +13,10 @@ się co blok skanu w czasie sprawdzeń, a w czasie raportowania miga 1 Hz. PA0 i
 PA1 mogą pozostać niepodłączone; oceniana jest geometria pierścienia, nie
 napięcia.
 
+`device_tree.json` opisuje jedyny montaż, `nucleo`: wejścia skanu `scanA` na
+PA0 (CN7 pin 28 / A0) i `scanB` na PA1 (CN7 pin 30 / A1) oraz LD2 (PA5) jako
+wbudowaną diodę.
+
 Stanowisko jest właścicielem rezerwacji EEPROM/KV na końcu flash. Licznik
 rozruchów rośnie także między kolejnymi wgraniami, co jest dodatkowym dowodem
 trwałości.
@@ -22,10 +26,10 @@ Zbuduj i wgraj przez ST-LINK (OpenOCD):
 ```sh
 vscode/entry/jh-vscode build \
   --project tests/hardware/stm32_storage_scan \
-  --target stm32g474 --board nucleo-g474re
+  --assembly nucleo
 vscode/entry/jh-vscode upload \
   --project tests/hardware/stm32_storage_scan \
-  --target stm32g474 --board nucleo-g474re
+  --assembly nucleo
 ```
 
 Aby sprawdzić większą rezerwację EEPROM/KV, dodaj `--variant EEPROM_16K` do

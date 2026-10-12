@@ -13,7 +13,24 @@ Projekt włącza `HAL_ENABLE_ILI9341`, `HAL_DISPLAY_ILI9341`,
 
 ## Połączenia
 
-Aplikacja używa magistrali SPI 0.
+Aplikacja używa magistrali SPI 0. Połączenia każdego montażu opisuje
+`device_tree.json`, a program bierze z wygenerowanego nagłówka magistralę,
+piny panelu, jego zegar 24 MHz i rozmiar. Poniższa tabela powtarza te
+połączenia.
+
+| Sygnał ILI9341 | Pico / Pico 2 | NUCLEO-G474RE | ESP32-S3-Zero |
+|---|---|---|---|
+| `SCK` | GPIO18 | PB3 | GPIO12 |
+| `MOSI` | GPIO19 | PA7 | GPIO11 |
+| `MISO` | GPIO16 | PA6 | GPIO13 |
+| `CS` | GPIO17 | PB6 | GPIO17 |
+| `DC` | GPIO20 | PC7 | GPIO15 |
+| `RESET` | GPIO21 | PA9 | GPIO16 |
+
+Na NUCLEO-G474RE zegar SPI idzie przez PB3 zamiast D13 (PA5), bo PA5 steruje
+diodą LD2. Na ESP32-S3-Zero `DC` jest na GPIO15 zamiast GPIO20, który jest
+linią USB D+, a `RESET` na GPIO16 zamiast GPIO21, który steruje diodą na
+płytce.
 
 ### NUCLEO-G474RE
 
@@ -24,7 +41,7 @@ w [instrukcji STM32G4 Nucleo-64 (UM2505)](https://www.st.com/resource/en/user_ma
 
 | Sygnał modułu ILI9341 | Sygnał STM32G474RE | Złącze ST morpho | Alternatywa Arduino Uno V3 |
 |---|---|---|---|
-| `SCK` / `CLK` | `PA5` (`SPI1_SCK`) | pin 11 `CN10` | pin 6 `CN5` (`D13`) |
+| `SCK` / `CLK` | `PB3` (`SPI1_SCK`) | pin 31 `CN10` | pin 4 `CN9` (`D3`) |
 | `MOSI` / `SDI` / `SDA` | `PA7` (`SPI1_MOSI`) | pin 15 `CN10` | pin 4 `CN5` (`D11`) |
 | `MISO` / `SDO` | `PA6` (`SPI1_MISO`) | pin 13 `CN10` | pin 5 `CN5` (`D12`) |
 | `CS` | `PB6` | pin 17 `CN10` | pin 3 `CN5` (`D10`) |
@@ -36,8 +53,8 @@ w [instrukcji STM32G4 Nucleo-64 (UM2505)](https://www.st.com/resource/en/user_ma
 
 Przykład tylko wysyła dane do wyświetlacza, dlatego `MISO` / `SDO` może
 pozostać niepodłączone. Sygnały SPI i sterujące są dostępne na CN10;
-na złączach Arduino odpowiadają im standardowe piny SPI oraz D10, D9 i D8.
-PA5 jest też połączony z diodą LD2, która może migotać podczas transmisji SPI.
+na złączach Arduino odpowiadają im D11 i D12 dla danych, D3 dla zegara oraz
+D10, D9 i D8.
 
 Sygnały GPIO mają poziom 3,3 V. Nie podłączaj do nich wyjść logicznych 5 V.
 Jeżeli moduł wyświetlacza ma własny regulator lub rezystor podświetlenia,
@@ -45,8 +62,9 @@ postępuj zgodnie z jego schematem i nie omijaj tych elementów.
 
 ### Rodzina RP
 
-`CS` jest na GPIO 17, `DC` na GPIO 20, a `RESET` na GPIO 21.
-Podłącz zegar i dane panelu do pinów SPI 0 wybranych dla danej platformy.
+Na Pico i Pico 2 panel korzysta z SPI0: `SCK` na GPIO 18, `MOSI` na GPIO 19
+i `MISO` na GPIO 16. `CS` jest na GPIO 17, `DC` na GPIO 20, a `RESET`
+na GPIO 21.
 
 ## Limity pamięci
 

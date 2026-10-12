@@ -6,7 +6,7 @@
     "jaszczurhal.vscodeEntryWindows": "../../vscode/entry/jh-vscode.cmd",
     "cortex-debug.gdbPath.linux": "gdb-multiarch",
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
-    "C_Cpp.default.compileCommands": "${workspaceFolder}/../../.build/examples/30_bluetooth_speaker/compile_commands_patched.json",
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/../../.build/examples/30_bluetooth_speaker/rp2040/picow/compile_commands_patched.json",
     "C_Cpp.errorSquiggles": "enabled",
     "cmake.sourceDirectory": "${workspaceFolder}/../../cmake/jh_firmware_project",
     "cmake.buildDirectory": "${workspaceFolder}/../../.build/examples/30_bluetooth_speaker/cmake-tools/rp2040-picow",
@@ -14,11 +14,11 @@
     "cmake.configureSettings": {
         "JH_TARGET": "rp2040",
         "PICO_SDK_PATH": "${workspaceFolder}/../../third_party/pico-sdk",
-        "JH_BOARD": "picow",
-        "JH_ARTIFACT_DIR": "${workspaceFolder}/../../.build/examples/30_bluetooth_speaker",
+        "JH_ARTIFACT_DIR": "${workspaceFolder}/../../.build/examples/30_bluetooth_speaker/rp2040/picow",
         "JH_PROJECT_DIR": "${workspaceFolder}",
         "JH_MODULE_NAME": "30_bluetooth_speaker",
-        "JH_ROOT": "${workspaceFolder}/../.."
+        "JH_ROOT": "${workspaceFolder}/../..",
+        "JH_ASSEMBLY": "picow"
     },
     "files.exclude": {
         "**/.build": true

@@ -9,42 +9,48 @@ BlueZ.
 
 ## Build matrix
 
-Build and upload all eight target, board, and runtime combinations separately:
+Build and upload all eight assembly and runtime combinations separately:
 
-| Target | Board | Runtime |
+| Assembly | Target | Hardware | Runtime |
+|---|---|---|---|
+| `picow` | `rp2040` | Pico W | bare-metal, FreeRTOS |
+| `pico-rm2` | `rp2040` | Pico + PIM730/RM2 | bare-metal, FreeRTOS |
+| `pico2w` | `rp2350-arm` | Pico 2 W | bare-metal, FreeRTOS |
+| `nucleo-pim730` | `stm32g474` | NUCLEO-G474RE + PIM730/RM2 | bare-metal, FreeRTOS |
+
+This table is the fixture's hardware matrix. `device_tree.json` describes the
+hardware of every assembly, `nucleo-pim730` being the default;
+`hal_project_config.h` declares the `FREERTOS` variant, and
+`tests/test_hardware_fixture_files.py` checks that the fixture builds each of
+the eight images. `pico-rm2` and `nucleo-pim730` are a plain Pico and a plain
+NUCLEO-G474RE with an external PIM730/RM2 module; the table below repeats the
+module wiring.
+
+| PIM730/RM2 signal | Pico (`pico-rm2`) | NUCLEO-G474RE (`nucleo-pim730`) |
 |---|---|---|
-| `rp2040` | `picow` | bare-metal, FreeRTOS |
-| `rp2040` | `pico-rm2` | bare-metal, FreeRTOS |
-| `rp2350-arm` | `pico2w` | bare-metal, FreeRTOS |
-| `stm32g474` | `nucleo-g474re-pim730` | bare-metal, FreeRTOS |
-
-This table is the fixture's hardware matrix. `hal_project_config.h` declares
-the targets and the `FREERTOS` variant, the manifest selects the default
-boards, and `tests/test_hardware_fixture_files.py` checks that the fixture
-builds each of the eight tuples.
+| CS | GPIO3 | PB12, CN10 pin 16 |
+| DAT | GPIO4 | PB15, CN10 pin 26 |
+| WL_ON | GPIO2 | PB14, CN10 pin 28 |
+| CLK | GPIO5 | PB13, CN10 pin 30 |
 
 Bare-metal builds:
 
 ```bash
 vscode/entry/jh-vscode build \
-  --project tests/hardware/bluetooth_stream \
-  --target rp2040 --board picow
+  --project tests/hardware/bluetooth_stream --assembly picow
 vscode/entry/jh-vscode build \
-  --project tests/hardware/bluetooth_stream \
-  --target rp2040 --board pico-rm2
+  --project tests/hardware/bluetooth_stream --assembly pico-rm2
 vscode/entry/jh-vscode build \
-  --project tests/hardware/bluetooth_stream \
-  --target rp2350-arm --board pico2w
+  --project tests/hardware/bluetooth_stream --assembly pico2w
 vscode/entry/jh-vscode build \
-  --project tests/hardware/bluetooth_stream \
-  --target stm32g474 --board nucleo-g474re-pim730
+  --project tests/hardware/bluetooth_stream --assembly nucleo-pim730
 ```
 
 Append `--variant FREERTOS` to each build and upload command for the FreeRTOS
 image. The fixture initializes BLE from the first `app_task0()` call, after the
 FreeRTOS scheduler has started. Its task-0 stack is 1024 words because the
 authenticated handshake and its cryptographic temporaries exceed the generic
-fixture default. Use the same explicit target, board, and variant for upload.
+fixture default. Use the same explicit assembly and variant for upload.
 A successful build is a software result; it does not count as a hardware pass.
 
 ## STM32G474 PIM730 plus ILI9341 load variants
@@ -54,33 +60,35 @@ protocol and host verifier while continuously updating an ILI9341 connected to
 the NUCLEO-G474RE Arduino SPI header. They exercise SPI1 in parallel with the
 dedicated PIM730 gSPI transport on PB12-PB15. These variants are additional
 coexistence/load evidence and do not replace either of the two base STM32 gate
-images listed in the build matrix. `hal_project_config.h` stops them with
-`#error` on any target other than STM32G474.
+images listed in the build matrix. Only the `nucleo-pim730` assembly has the
+display; `hal_project_config.h` stops them with `#error` in the others.
 
 Build the separate artifacts with:
 
 ```bash
 vscode/entry/jh-vscode build \
   --project tests/hardware/bluetooth_stream \
-  --target stm32g474 --board nucleo-g474re-pim730 \
-  --variant DISPLAY
+  --assembly nucleo-pim730 --variant DISPLAY
 
 vscode/entry/jh-vscode build \
   --project tests/hardware/bluetooth_stream \
-  --target stm32g474 --board nucleo-g474re-pim730 \
-  --variant DISPLAY_FREERTOS
+  --assembly nucleo-pim730 --variant DISPLAY_FREERTOS
 ```
 
-The ILI9341 uses the wiring already validated by `examples/07_display_media`:
+The ILI9341 uses the wiring of `examples/07_display_media`. In
+`device_tree.json` it is the `display` node on the `spi` bus of the
+`nucleo-pim730` assembly; the table repeats it:
 
-| ILI9341 | STM32G474 | Nucleo connector |
-|---|---|---|
-| `SCK` | `PA5` | CN5 pin 6 (`D13`) |
-| `MISO` | `PA6` | CN5 pin 5 (`D12`) |
-| `MOSI` | `PA7` | CN5 pin 4 (`D11`) |
-| `CS` | `PB6` | CN5 pin 3 (`D10`) |
-| `DC` | `PC7` | CN5 pin 2 (`D9`) |
-| `RESET` | `PA9` | CN5 pin 1 (`D8`) |
+| ILI9341 | STM32G474 | Morpho | Arduino |
+|---|---|---|---|
+| `SCK` | `PB3` | CN10 pin 31 | CN9 pin 4 (`D3`) |
+| `MISO` | `PA6` | CN10 pin 13 | CN5 pin 5 (`D12`) |
+| `MOSI` | `PA7` | CN10 pin 15 | CN5 pin 4 (`D11`) |
+| `CS` | `PB6` | CN10 pin 17 | CN5 pin 3 (`D10`) |
+| `DC` | `PC7` | CN10 pin 19 | CN5 pin 2 (`D9`) |
+| `RESET` | `PA9` | CN10 pin 21 | CN5 pin 1 (`D8`) |
+
+The SPI clock uses PB3 rather than D13 (PA5), because PA5 drives the LD2 LED.
 
 The screen reports the controller address, BLE/Stream state, MTU, RX/TX,
 drop/overflow/security counters, lifecycle restarts, status and uptime. Static
@@ -97,14 +105,14 @@ enabled for that target.
 ## Hardware verifier
 
 Run the verifier after uploading each image, using the address printed by the
-fixture. `--target`, `--board`, and `--runtime` are required and must describe
-the uploaded image:
+fixture. `--assembly` and `--runtime` are required and must describe the
+uploaded image. The verifier takes the assembly names and their targets from
+`device_tree.json`:
 
 ```bash
 python3 tests/hardware/bluetooth_stream/verify.py \
   --address XX:XX:XX:XX:XX:XX \
-  --target rp2040 \
-  --board picow \
+  --assembly picow \
   --runtime baremetal
 ```
 
@@ -131,8 +139,7 @@ minimums:
 ```bash
 python3 tests/hardware/bluetooth_stream/verify.py \
   --address XX:XX:XX:XX:XX:XX \
-  --target rp2040 \
-  --board picow \
+  --assembly picow \
   --runtime baremetal \
   --reconnects 50 \
   --stream-seconds 300 \
@@ -158,10 +165,10 @@ anything. A restart of BLE alone therefore cannot pass as an MCU reset. The
 watchdog command resets the MCU but does not cut VBUS, so it does not replace
 a physical power-loss test.
 
-Not yet run on hardware: RP2040 Pico with RM2/PIM730 in both runtimes, and the
-base STM32G474 + RM2/PIM730 images in both runtimes. The STM32G474 `DISPLAY`
-variants have been run. The host side runs only on Linux with BlueZ; native
-Windows is not covered.
+Not yet run on hardware: RP2040 Pico with RM2/PIM730 in both runtimes, the
+base STM32G474 + RM2/PIM730 images in both runtimes, and the STM32G474
+`DISPLAY` variants with the SPI clock on PB3. The host side runs only on Linux
+with BlueZ; native Windows is not covered.
 
 ## Fixture command and identity rules
 
@@ -181,7 +188,7 @@ commands use `type=request` so their request completion is observable.
 
 | Authenticated command payload | Fixture response or effect |
 |---|---|
-| `JHBL5/IDENTITY` | `J5I1\|<target>\|<board>\|<runtime>` |
+| `JHBL5/IDENTITY` | `J5I1\|<target>\|<assembly>\|<runtime>` |
 | `JHBL5/RESTART` | `JHBL5/RESTARTING`, then full Stream and BLE restart |
 | `JHBL5/BOOT` | `J5B1` followed by one reset-reason byte and a little-endian random 64-bit boot identifier |
 | `JHBL5/POWER-LOSS` (RP and STM32G474) | `JHBL5/POWER-LOSS-ARMED`, then a watchdog reset without host or user intervention |
@@ -189,10 +196,13 @@ commands use `type=request` so their request completion is observable.
 | `JHBL5/STATS` | compact `J5S1` binary recovery oracle |
 
 The identity response is compiled directly from `HAL_TARGET_NAME`,
-`HAL_BOARD_PROFILE_NAME`, and `HAL_ENABLE_FREERTOS`; runtime is exactly
-`baremetal` or `freertos`. The verifier compares it with all three required CLI
-values before accepting workload results. For example, the Pico W bare-metal
-response is `J5I1|rp2040|picow|baremetal`.
+`JH_HW_ASSEMBLY_NAME`, and `HAL_ENABLE_FREERTOS`; runtime is exactly
+`baremetal` or `freertos`. The assembly name stands in for the board because
+`pico-rm2` and `nucleo-pim730` have no board profile of their own. The
+verifier compares the response with the selected assembly, its target and
+`--runtime` before accepting workload results. For example, the Pico W
+bare-metal response is `J5I1|rp2040|picow|baremetal`, and the Nucleo with
+PIM730 answers `J5I1|stm32g474|nucleo-pim730|baremetal`.
 
 A passing physical run ends with `JHBL5 HOST PASS`. The device log uses the
 `JHBL5` prefix and records negotiated MTU, counters, authentication failures,
@@ -221,26 +231,28 @@ both boards are already in BOOTSEL, select each volume explicitly:
 ```bash
 vscode/entry/jh-vscode upload \
   --project examples/26_ble_stream \
-  --target rp2040 --board picow --variant COMMANDS \
+  --assembly picow --variant COMMANDS \
   --bootsel-volume /dev/<baremetal-partition>
 
 vscode/entry/jh-vscode upload \
   --project examples/26_ble_stream \
-  --target rp2040 --board picow --variant COMMANDS_FREERTOS \
+  --assembly picow --variant COMMANDS_FREERTOS \
   --bootsel-volume /dev/<freertos-partition>
 ```
 
 Read each BLE address from its USB CDC log and run the short verifier against
-the two explicit addresses:
+the two explicit addresses. `--assembly` names an assembly of
+`examples/26_ble_stream/device_tree.json`; the verifier expects the target and
+board of that assembly in the example's ready event:
 
 ```bash
 python3 tests/hardware/bluetooth_stream/verify_commands.py \
   --address XX:XX:XX:XX:XX:XX \
-  --target rp2040 --board picow --runtime baremetal
+  --assembly picow --runtime baremetal
 
 python3 tests/hardware/bluetooth_stream/verify_commands.py \
   --address YY:YY:YY:YY:YY:YY \
-  --target rp2040 --board picow --runtime freertos
+  --assembly picow --runtime freertos
 ```
 
 A pass requires exact reassembly of a 500-byte binary echo in both directions,

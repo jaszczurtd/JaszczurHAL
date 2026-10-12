@@ -3,9 +3,19 @@
 `tests/hardware/stm32_uart` sprawdza `hal_uart` na NUCLEO-G474RE: PORT_2
 (USART2 na PA2/PA3), który dochodzi do hosta przez wirtualny port COM
 ST-LINK, oraz PORT_1 (USART1) przez samotest w trybie jednoprzewodowym na
-PC4, bez żadnego przewodu. Działa na samej Nucleo i z nakładką CAN-FD (profil
-`nucleo-g474re-canhat`, drzewo zegarów 160 MHz, sterowanie przekaźników
-trzymane w stanie wyłączonym).
+PC4, bez żadnego przewodu.
+
+Połączenia obu montaży opisuje `device_tree.json`, a tabela niżej je
+powtarza. `nucleo-canhat` (domyślny) to Nucleo z nakładką CAN-FD: drzewo
+zegarów 160 MHz, dioda RDY nakładki (PC1) jako wbudowana dioda i sterowanie
+przekaźników trzymane w stanie wyłączonym. `nucleo` to sama Nucleo: drzewo
+zegarów 170 MHz i dioda LD2 (PA5). Obraz `nucleo` nie steruje liniami
+przekaźników, więc przy założonej nakładce używaj `nucleo-canhat`.
+
+| Port | Magistrala w `device_tree.json` | Piny | Ustawienia |
+|---|---|---|---|
+| PORT_2 (USART2) | `consoleUart` | TX PA2, RX PA3 (wirtualny port COM ST-LINK) | 3 Mbaud 8N1 po oknie startowym |
+| PORT_1 (USART1) | `loopUart` | TX PC4 (linia trybu jednoprzewodowego), RX PC5 (nieużywany) | prędkość i format z każdej komendy `Q` |
 
 Po resecie konsola debug przez trzy sekundy wypisuje linię startową przy
 115200: przyczynę resetu, numer seryjny i UID. Potem fixture przejmuje USART2
@@ -53,15 +63,15 @@ Oba strumienie muszą dojść bez błędów, próba musi być odrzucana, gdy pis
 trzyma kolejkę, i wracać w ciągu jednego taktu planisty.
 
 Budowanie i wgrywanie przez ST-LINK (OpenOCD); dla Nucleo bez nakładki użyj
-`--board nucleo-g474re`:
+`--assembly nucleo`:
 
 ```sh
 vscode/entry/jh-vscode build \
   --project tests/hardware/stm32_uart \
-  --target stm32g474 --board nucleo-g474re-canhat
+  --assembly nucleo-canhat
 vscode/entry/jh-vscode upload \
   --project tests/hardware/stm32_uart \
-  --target stm32g474 --board nucleo-g474re-canhat
+  --assembly nucleo-canhat
 ```
 
 Wersję z FreeRTOS daje wariant `FREERTOS` (`HAL_ENABLE_FREERTOS=1`,
@@ -70,13 +80,8 @@ Wersję z FreeRTOS daje wariant `FREERTOS` (`HAL_ENABLE_FREERTOS=1`,
 ```sh
 vscode/entry/jh-vscode upload \
   --project tests/hardware/stm32_uart \
-  --target stm32g474 --board nucleo-g474re-canhat --variant FREERTOS
+  --assembly nucleo-canhat --variant FREERTOS
 ```
-
-Aby uruchomić profil `nucleo-g474re` (170 MHz) na Nucleo z nakładką, użyj
-`--board nucleo-g474re --variant HAT_RELAYS`. Wariant definiuje
-`UART_FIXTURE_HAT_RELAYS=1`, więc sterowanie przekaźników pozostaje
-wyłączone.
 
 Opcjonalnie odczytaj słowa UID bez resetowania płytki:
 

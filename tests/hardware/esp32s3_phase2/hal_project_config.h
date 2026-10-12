@@ -1,5 +1,7 @@
 #pragma once
 
+/* Targets and wiring come from the assemblies in device_tree.json. */
+
 /* Phase 2 exercises both ESP32-S3 application tasks and every optional bus
  * backend implemented in this phase. FreeRTOS itself is target-required. */
 #define HAL_ENABLE_APP_TASK1 1

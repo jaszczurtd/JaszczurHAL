@@ -7,10 +7,14 @@ licznik i czas działania oraz wypisuje liczbę transakcji I2C w konsoli.
 
 ## Połączenia
 
-| Sygnał | Rodzina RP | STM32G474 |
-|---|---|---|
-| SDA | GP4 | PB9 |
-| SCL | GP5 | PB8 |
+Połączenia każdego montażu opisuje `device_tree.json`, a program bierze
+magistralę i jej piny z wygenerowanego nagłówka. Poniższa tabela powtarza te
+połączenia.
+
+| Sygnał | Pico / Pico 2 | NUCLEO-G474RE | ESP32-S3-Zero |
+|---|---|---|---|
+| SDA | GPIO4 | PB9, pin 5 CN10 / D14 | GPIO4 |
+| SCL | GPIO5 | PB8, pin 3 CN10 / D15 | GPIO5 |
 
 Podłącz drugi kontroler I2C, połącz masy i zapewnij podciąganie linii zgodne
 z napięciami użytych urządzeń. Obsługę włącza `HAL_ENABLE_I2C_SLAVE`.
@@ -30,7 +34,7 @@ Z głównego katalogu repozytorium uruchom:
 
 ```bash
 vscode/entry/jh-vscode build \
-  --project examples/11_i2c_slave --target rp2040 --board pico
+  --project examples/11_i2c_slave --assembly pico
 ```
 
-Konfiguracja obejmuje również RP2350 ARM, RP2350 RISC-V i STM32G474.
+Pozostałe montaże to `pico2-arm`, `pico2-riscv`, `nucleo` i `esp32s3-zero`.

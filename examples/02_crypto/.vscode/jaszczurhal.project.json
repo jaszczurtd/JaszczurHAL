@@ -3,8 +3,7 @@
     "project": "JaszczurHAL examples",
     "module": "02_crypto",
     "toolchain": "cmake",
-    "target": "rp2040",
-    "board": "pico",
+    "assembly": "pico",
     "buildDir": "${jhRoot}/.build/examples/02_crypto",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

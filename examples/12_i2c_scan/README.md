@@ -3,29 +3,38 @@
 # 12 - Finding I2C devices on STM32G474
 
 This example scans I2C addresses `0x08`-`0x77` and prints the devices that
-acknowledge. Use it to check wiring and basic I2C1 on STMG474.
-Of course, once the connections have been adjusted, it will work on the rest
-of the supported architectures.
+acknowledge. Use it to check wiring and basic I2C operation on every
+assembly in `device_tree.json`, including I2C1 on STM32G474.
 
-SCL uses PB8 (D15), and SDA uses PB9 (D14). The bus runs at 100 kHz.
-TIMINGR settings use the HSI16 clock selected for I2C, independently of
-SYSCLK/PCLK1. The console uses USART2 through the ST-Link Virtual COM Port
-at **115200 8N1**.
+On NUCLEO-G474RE SCL uses PB8 (D15), and SDA uses PB9 (D14). The bus runs at
+100 kHz. On STM32G474 the TIMINGR settings use the HSI16 clock selected for
+I2C, independently of SYSCLK/PCLK1. The NUCLEO console uses USART2 through
+the ST-Link Virtual COM Port at **115200 8N1**.
 
-The application calls `hal_i2c_scan()` with `hal_watchdog_feed` to service
-the watchdog after each probe. It prints the results and waits two seconds
-before scanning again.
+The application calls `hal_i2c_scan_bus()` with `hal_watchdog_feed` to
+service the watchdog after each probe. It prints the results and waits two
+seconds before scanning again.
 
 The PB9/PB8 connection was previously tested with PCF8563 (`0x51`) and
 DS3231 (`0x68`) modules. This scanner uses 100 kHz;
 `examples/16_rtc_backends` uses the same connection at 400 kHz.
 
-**Configuration scope:** `hal_project_config.h` also declares RP targets, but
-`app.c` hard-codes pins `25u`/`24u` and STM32G474 diagnostic text. On STM32
-those values mean PB9/PB8. Check the pin configuration before running on RP;
-a declared target is not evidence that this wiring works on it.
-
 ## Hardware wiring
+
+`device_tree.json` describes the wiring of every assembly, and the program
+takes the bus, its pins and its rate from the generated header. The table
+below repeats that wiring.
+
+| Signal | Pico / Pico 2 | NUCLEO-G474RE | ESP32-S3-Zero |
+|---|---|---|---|
+| SDA | GPIO4 | PB9, CN10 pin 5 / D14 | GPIO4 |
+| SCL | GPIO5 | PB8, CN10 pin 3 / D15 | GPIO5 |
+
+On Pico and Pico 2 the bus uses GPIO4/GPIO5 rather than GPIO25/GPIO24, which
+drive the LED and sense VBUS there. On ESP32-S3-Zero it uses GPIO4/GPIO5,
+because GPIO24 and GPIO25 do not exist on the ESP32-S3.
+
+NUCLEO-G474RE connection:
 
 ```
 Nucleo-G474RE                 I2C device (e.g. PCF8563 RTC, AT24C256, BME280)
@@ -67,7 +76,7 @@ vscode/entry/jh-vscode build \
 
 st-info --probe                       # confirm the ST-Link sees the G474
 st-flash --reset write \
-  .build/examples/12_i2c_scan/firmware.bin 0x08000000
+  .build/examples/12_i2c_scan/stm32g474/nucleo/firmware.bin 0x08000000
 tio /dev/ttyACM0 -b 115200
 ```
 
@@ -79,8 +88,8 @@ Alternatively, upload through OpenOCD:
 With a PCF8563 connected at `0x51`:
 
 ```
-=== JaszczurHAL G474 I2C scanner ===
-I2C1: SCL=PB8, SDA=PB9 (external pull-ups to 3V3 required)
+=== JaszczurHAL I2C scanner ===
+assembly nucleo: I2C bus 0 at 100000 Hz (external pull-ups to 3V3 required)
 scanning 0x08..0x77 ...
   device @ 0x51
 scanning 0x08..0x77 ...

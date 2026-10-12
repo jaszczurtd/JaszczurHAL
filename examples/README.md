@@ -5,19 +5,19 @@ from sensors and displays to networking, Bluetooth, and firmware updates.
 Each project has an English `README.md` and a Polish `README.pl.md`.
 
 Open a project directory in VS Code to use its `Build`, `Upload`,
-`Serial Monitor`, `Clean`, `Config Dump`, `OTA`, and board-selection tasks.
+`Serial Monitor`, `Clean`, `Config Dump`, `OTA`, and assembly-selection tasks.
 
-Every example is an ordinary firmware project. Its `hal_project_config.h`
-declares the HAL features, the targets (`JH_PROJECT_TARGETS`), and the
-variants (`JH_PROJECT_VARIANTS`). Its hand-written
-`.vscode/jaszczurhal.project.json` holds the tooling metadata, such as the
-default board for each target. `scripts/examples_dispatcher.py` generates the
-other VS Code files from these two and builds every configuration through
-`vscode/entry/jh-vscode`. An example with `device_tree.json` takes its
-targets and boards from the assemblies instead: the dispatcher builds every
-assembly of the target times each variant, and the manifest may name the
-default `assembly` for the generated files. The rules are described in
-[Targets and variants](../doc/en/FwProjectWorkflow.md#targets-and-variants).
+Every example is an ordinary firmware project. Its `device_tree.json`
+describes the hardware of each supported assembly: target, board, attached
+devices with their wiring, status LED and clock tree. Its
+`hal_project_config.h` declares the HAL features and the variants
+(`JH_PROJECT_VARIANTS`). Its hand-written `.vscode/jaszczurhal.project.json`
+holds the tooling metadata, such as the default `assembly`.
+`scripts/examples_dispatcher.py` generates the other VS Code files from these
+files and builds every assembly with each variant through
+`vscode/entry/jh-vscode`. The rules are described in
+[Targets and variants](../doc/en/FwProjectWorkflow.md#targets-and-variants)
+and in the [device tree format](../doc/en/device_tree_format.md).
 
 ## Project catalog
 
@@ -27,7 +27,8 @@ on every target of its project unless the table names the targets. Gate 9 of
 `runalltests.sh` builds every configuration for `rp2040`, `stm32g474`, and
 `esp32s3`. **An available build configuration is not proof that the example
 works on every board.** See each project's README for wiring and hardware test
-coverage.
+coverage. `scripts/examples_dispatcher.py list` shows the assemblies of each
+project.
 
 | Project | Purpose | Supported targets | Variants |
 |---|---|---|---|
@@ -62,14 +63,15 @@ coverage.
 | `29_bluetooth_gamepad` | Read gamepad input, discover Classic devices, and receive raw HID reports. | R0, RA, S | `CLASSIC_SCAN`, `HID_HOST`, `BLE` |
 | `30_bluetooth_speaker` | Receive A2DP audio and play it over PWM, with optional AVRCP volume control and a build that includes BLE. | R0, RA | `AVRCP`, `BLE_A2DP` |
 
-RP network examples default to `picow` for RP2040 and `pico2w` for
+RP network examples use the `picow` assembly for RP2040 and `pico2w` for
 RP2350 ARM. RP2350 RISC-V configurations that require CYW43 are not
-supported. STM32G474 network and Bluetooth projects use the NUCLEO-G474RE
-profile with an external PIM730/RM2 module.
+supported. STM32G474 network and Bluetooth projects use the `nucleo-pim730`
+assembly: a NUCLEO-G474RE with an external PIM730/RM2 module wired as its
+`device_tree.json` describes.
 
-The LoRa project builds for the plain `pico` and `nucleo-g474re` boards with an
-external Waveshare Core1262-HF wired as described in its README. Explicitly
-select `rp2040-lora-lf` for the integrated Waveshare LF board. LF and HF devices use different bands;
+The LoRa project has the `pico-core1262-hf` and `nucleo-core1262-hf`
+assemblies with an external Waveshare Core1262-HF, and `rp2040-lora-lf` for
+the integrated Waveshare LF board. LF and HF devices use different bands;
 do not combine them as one radio pair. The `PROBE` variant checks chip
 capabilities, calibration, current RSSI, and CAD without transmitting.
 The base and `RESPONDER` variants use SF9/10 dBm; `SF7` and
@@ -85,7 +87,7 @@ claims of verified hardware operation for this example.
 
 ## Supported build targets
 
-| Target | Default board | Toolchain | Firmware artifacts |
+| Target | Board of the plain assemblies | Toolchain | Firmware artifacts |
 |---|---|---|---|
 | `rp2040` | `pico` | official Pico SDK + GNU Arm | ELF, BIN, HEX, UF2, MAP |
 | `rp2350-arm` | `pico2` | official Pico SDK + GNU Arm | ELF, BIN, HEX, UF2, MAP |
@@ -95,15 +97,15 @@ claims of verified hardware operation for this example.
 
 For `esp32s3`, `jh-vscode` runs `scripts/build_esp_idf.py` with the
 project header and the selected variant instead of the CMake dispatcher. An
-example lists `HAL_TARGET_ESP32_S3` in `JH_PROJECT_TARGETS` only when every
-feature it requests is on the target's `supportedFeatures` list; that list holds the ESP-IDF backends and
+example has an `esp32s3` assembly only when every feature it requests is on
+the target's `supportedFeatures` list; that list holds the ESP-IDF backends and
 the portable bus, sensor, display, codec and command drivers, while flash
 storage, audio, power, internal RTC, LoRa, BLE Stream and Bluetooth Classic
 stay outside it. `tests/fixtures/esp32s3_phase3`
 still checks the complete Phase 2/3 feature closure, and hardware reports are
 in `tests/hardware/esp32s3_phase1` and `tests/hardware/esp32s3_phase2`.
-Wiring in the example sources targets RP and STM32 boards; check pin numbers
-against the ESP32-S3 board profile before running them.
+The `esp32s3-zero` assemblies use only pins the ESP32-S3-Zero brings out;
+the generator rejects any other pin.
 
 ## Requirements
 
@@ -124,9 +126,9 @@ Create a separate project when the target, build tools, execution model,
 board profile, resource conflicts, or hardware requirements make a
 combined application impractical, and explain the constraint in this
 catalog. A new example is a directory under `examples/` with a hand-written
-`.vscode/jaszczurhal.project.json` and a `hal_project_config.h` that declares
-its targets in `JH_PROJECT_TARGETS`. Run
-`scripts/examples_dispatcher.py generate` to write its other VS Code files.
+`.vscode/jaszczurhal.project.json`, a `device_tree.json` with its assemblies
+and a `hal_project_config.h`. Run `scripts/examples_dispatcher.py generate`
+to write its other VS Code files.
 
 Add a variant to `JH_PROJECT_VARIANTS` only when the behavior cannot be
 selected while the program runs, and limit it to some targets with `#error`
@@ -150,7 +152,7 @@ Build one project with the same tool used by VS Code:
 
 ```bash
 vscode/entry/jh-vscode build \
-  --project examples/01_core_runtime --target rp2040 --board pico
+  --project examples/01_core_runtime --assembly pico
 ```
 
 Select projects:
@@ -166,7 +168,7 @@ Build one variant:
 ```bash
 vscode/entry/jh-vscode build \
   --project examples/16_rtc_backends \
-  --target stm32g474 --board nucleo-g474re --variant DISPLAY_CLOCK
+  --assembly nucleo --variant DISPLAY_CLOCK
 ```
 
 List configurations, and refresh the generated VS Code files after changing
@@ -181,18 +183,17 @@ scripts/examples_dispatcher.py check
 `python3 scripts/sync_generated.py --write` runs `generate` together with the
 other repository generators.
 
-Final build outputs are stored in `.build/examples/<example>/`, and a
-variant's in `.build/examples/<example>/variants/<id>/`. CMake working
-directories use `.build/examples/<example>/cmake/<target>/<board>/`. An
-example with `device_tree.json` keeps everything of one assembly in
-`.build/examples/<example>/<target>/<assembly>/`, with its CMake tree in
-`cmake/` and variants in `variants/<id>/` below it.
+Everything of one assembly is stored in
+`.build/examples/<example>/<target>/<assembly>/`: the final build outputs,
+the CMake working directory in `cmake/`, and each variant in
+`variants/<id>/` below it.
 
 ## Application structure
 
 ```text
 NN_example_name/
   app.c
+  device_tree.json
   hal_project_config.h
   .vscode/
     jaszczurhal.project.json
@@ -251,10 +252,9 @@ are finalized. Definitions may depend on the target selector or on a
 variant's definitions; see
 [Targets and variants](../doc/en/FwProjectWorkflow.md#targets-and-variants).
 
-The build sets `HAL_PROVIDE_APP_ENTRY`. Pin assignments come from the
-selected generated board profile. When no predefined composite profile
-matches the application wiring, describe it with an explicit hardware
-descriptor.
+The build sets `HAL_PROVIDE_APP_ENTRY`. Pins, buses and device settings come
+from the generated `JH_HW_*` macros of the selected assembly, and
+`HAL_LED_BUILTIN` from its status LED.
 
 ## VS Code
 
@@ -265,7 +265,7 @@ see [Firmware Project Workflow](../doc/en/FwProjectWorkflow.md).
 
 The manifest is written by hand. `settings.json`, `tasks.json`,
 `launch.json`, `keybindings.reference.json`, and `extensions.json` are
-generated from the manifest and the header by
+generated from the manifest, the header, and `device_tree.json` by
 `scripts/examples_dispatcher.py generate`. To keep a wording change in them,
 update the generator source; a hand edit is overwritten on the next refresh.
 

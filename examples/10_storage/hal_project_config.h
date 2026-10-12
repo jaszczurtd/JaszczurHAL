@@ -1,15 +1,13 @@
 #pragma once
 
-/* Targets this example builds for. */
-#define JH_PROJECT_TARGETS(X)                                                  \
-  X(HAL_TARGET_RP2040)                                                         \
-  X(HAL_TARGET_RP2350_ARM)                                                     \
-  X(HAL_TARGET_RP2350_RISCV)                                                   \
-  X(HAL_TARGET_STM32G474)
+/* Targets and wiring come from the assemblies in device_tree.json. */
 
 #define HAL_ENABLE_KV
 #define HAL_ENABLE_LITTLEFS
 #define HAL_ENABLE_SDLOGGER
+
+/* SDLogger opens the card on the bus of the sd node in device_tree.json. */
+#define HAL_SDLOGGER_SPI_BUS JH_HW_NODE_SD_BUS_INDEX
 
 #define HAL_EEPROM_TYPE EEPROM_TYPE_FLASH
 

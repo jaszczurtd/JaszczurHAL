@@ -6,14 +6,23 @@ This example uses MFRC522 and PN532 readers on a shared SPI bus. Each reader
 has its own `CS` and `RST` pins and is initialized independently. An absent
 reader does not stop the other one.
 
-| Signal | RP family | STM32G474 |
-| --- | --- | --- |
-| SPI MISO / MOSI / SCK | GP16 / GP19 / GP18 | PA6 / PA7 / PA5 |
-| MFRC522 CS / RST | GP17 / GP20 | PB6 / PB1 |
-| PN532 CS / RST | GP21 / GP22 | PB2 / PB3 |
+`device_tree.json` describes the wiring of every assembly, and the program
+takes its SPI bus, pins and MFRC522 SPI settings (4 MHz) from the generated
+header. The PN532 driver sets its own SPI clock of 1 MHz, LSB first, and the
+`pn532` node states the same settings. The table below repeats the wiring.
 
-On NUCLEO-G474RE, SPI MISO/MOSI/SCK and the MFRC522 `CS` are available on
-CN10 pins 13/15/11/17, equivalent to D12/D11/D13/D10. PB1, PB2, and PB3
-are on CN10 pins 24, 22, and 31; PB3 is also available as D3.
+| Signal | Pico / Pico 2 | NUCLEO-G474RE | ESP32-S3-Zero |
+| --- | --- | --- | --- |
+| SPI MISO | GP16 | PA6, CN10 pin 13 / D12 | GPIO6 |
+| SPI MOSI | GP19 | PA7, CN10 pin 15 / D11 | GPIO7 |
+| SPI SCK | GP18 | PB3, CN10 pin 31 / D3 | GPIO5 |
+| MFRC522 CS | GP17 | PB6, CN10 pin 17 / D10 | GPIO16 |
+| MFRC522 RST | GP20 | PB1, CN10 pin 24 | GPIO17 |
+| PN532 CS | GP21 | PB2, CN10 pin 22 | GPIO18 |
+| PN532 RST | GP22 | PB10, CN10 pin 25 / D6 | GPIO15 |
+
+On NUCLEO-G474RE the SPI clock uses PB3 rather than D13 (PA5), because PA5
+drives the LD2 LED, so PN532 RST moved from PB3 to PB10. On ESP32-S3-Zero
+PN532 RST uses GPIO15 rather than GPIO19, because GPIO19 is the USB D- line.
 
 Set the PN532 module to SPI mode. Both readers use 3.3 V logic.

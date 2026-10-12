@@ -11,7 +11,6 @@
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_array.h>
 #include <hal/core/hal_status.h>
-#include <hal/core/hal_target.h>
 #include <hal/gpio/hal_hc595.h>
 #include <hal/gpio/hal_mcp23017.h>
 #include <hal/gpio/hal_pca9654e.h>
@@ -22,34 +21,6 @@
 #include <hal/serial/hal_serial.h>
 #include <hal/spi/hal_spi.h>
 #include <hal/system/hal_system.h>
-
-#if HAL_TARGET_IS_RP
-#define EXAMPLE_I2C_SDA 4u
-#define EXAMPLE_I2C_SCL 5u
-#define EXAMPLE_SPI_MISO 16u
-#define EXAMPLE_SPI_MOSI 19u
-#define EXAMPLE_SPI_SCK 18u
-#define EXAMPLE_HC595_CS 17u
-#define EXAMPLE_RGB_PIN 22u
-#elif HAL_TARGET_IS_STM32G474
-/* STM32 pin numbers use port * 16 + pin: I2C uses PB9/PB8,
- * SPI1 uses PA6/PA7/PA5 with CS on PB6, and RGB data uses PA8. */
-#define EXAMPLE_I2C_SDA 25u
-#define EXAMPLE_I2C_SCL 24u
-#define EXAMPLE_SPI_MISO 6u
-#define EXAMPLE_SPI_MOSI 7u
-#define EXAMPLE_SPI_SCK 5u
-#define EXAMPLE_HC595_CS 22u
-#define EXAMPLE_RGB_PIN 8u
-#else
-#define EXAMPLE_I2C_SDA 23u
-#define EXAMPLE_I2C_SCL 22u
-#define EXAMPLE_SPI_MISO 6u
-#define EXAMPLE_SPI_MOSI 7u
-#define EXAMPLE_SPI_SCK 5u
-#define EXAMPLE_HC595_CS 16u
-#define EXAMPLE_RGB_PIN 8u
-#endif
 
 static hal_mcp23017_t s_mcp23017;
 static hal_pca9654e_t s_pca9654e;
@@ -83,35 +54,46 @@ static void log_status(const char *name, hal_status_t status) {
   }
 }
 
+/* Buses, pins, addresses and SPI settings come from device_tree.json. */
 static void init_i2c_devices(void) {
   hal_mcp23017_config_t mcp23017_cfg = hal_mcp23017_default_config();
-  mcp23017_cfg.i2c_addr = 0x20u;
+  mcp23017_cfg.i2c_bus = JH_HW_NODE_MCP23017_BUS_INDEX;
+  mcp23017_cfg.i2c_addr = JH_HW_NODE_MCP23017_ADDRESS;
   hal_status_t status = hal_mcp23017_init_ex(&s_mcp23017, &mcp23017_cfg);
   s_mcp23017_ready = status == HAL_OK;
   log_status("MCP23017", status);
 
   hal_pca9654e_config_t pca9654e_cfg = hal_pca9654e_default_config();
-  pca9654e_cfg.i2c_addr = 0x21u;
+  pca9654e_cfg.i2c_bus = JH_HW_NODE_PCA9654E_BUS_INDEX;
+  pca9654e_cfg.i2c_addr = JH_HW_NODE_PCA9654E_ADDRESS;
   status = hal_pca9654e_init_ex(&s_pca9654e, &pca9654e_cfg);
   s_pca9654e_ready = status == HAL_OK;
   log_status("PCA9654E", status);
 
   hal_pcf8574_config_t pcf8574_cfg = hal_pcf8574_default_config();
-  pcf8574_cfg.i2c_addr = 0x22u;
+  pcf8574_cfg.i2c_bus = JH_HW_NODE_PCF8574_BUS_INDEX;
+  pcf8574_cfg.i2c_addr = JH_HW_NODE_PCF8574_ADDRESS;
   status = hal_pcf8574_init_ex(&s_pcf8574, &pcf8574_cfg);
   s_pcf8574_ready = status == HAL_OK;
   log_status("PCF8574", status);
 
-  status = hal_mcp3221_init_ex(&s_mcp3221, NULL);
+  hal_mcp3221_config_t mcp3221_cfg = hal_mcp3221_default_config();
+  mcp3221_cfg.i2c_bus = JH_HW_NODE_MCP3221_BUS_INDEX;
+  mcp3221_cfg.i2c_addr = JH_HW_NODE_MCP3221_ADDRESS;
+  status = hal_mcp3221_init_ex(&s_mcp3221, &mcp3221_cfg);
   s_mcp3221_ready = status == HAL_OK;
   log_status("MCP3221", status);
 
-  status = hal_mcp4725_init_ex(&s_mcp4725, NULL);
+  hal_mcp4725_config_t mcp4725_cfg = hal_mcp4725_default_config();
+  mcp4725_cfg.i2c_bus = JH_HW_NODE_MCP4725_BUS_INDEX;
+  mcp4725_cfg.i2c_addr = JH_HW_NODE_MCP4725_ADDRESS;
+  status = hal_mcp4725_init_ex(&s_mcp4725, &mcp4725_cfg);
   s_mcp4725_ready = status == HAL_OK;
   log_status("MCP4725", status);
 
   hal_adp5360_config_t pmic_cfg = hal_adp5360_default_config();
-  pmic_cfg.i2c_addr = HAL_ADP5360_I2C_ADDR_DEFAULT;
+  pmic_cfg.i2c_bus = JH_HW_NODE_ADP5360_BUS_INDEX;
+  pmic_cfg.i2c_addr = JH_HW_NODE_ADP5360_ADDRESS;
   pmic_cfg.charger.i_fast_charge_ua = 10000u;
   pmic_cfg.charger.i_input_limit_ua = 50000u;
   pmic_cfg.fuel_gauge.battery_capacity_mah = 100u;
@@ -130,23 +112,30 @@ void app_start(void) {
   deb("");
   deb("=== JaszczurHAL external I/O + PMIC example ===");
 
-  hal_i2c_init(EXAMPLE_I2C_SDA, EXAMPLE_I2C_SCL, HAL_I2C_CLOCK_STANDARD_HZ);
-  hal_spi_init(0u, EXAMPLE_SPI_MISO, EXAMPLE_SPI_MOSI, EXAMPLE_SPI_SCK);
+  hal_i2c_init_bus(JH_HW_BUS_I2C_INDEX, JH_HW_BUS_I2C_PIN_SDA,
+                   JH_HW_BUS_I2C_PIN_SCL, JH_HW_BUS_I2C_FREQUENCY_HZ);
+  hal_spi_init(JH_HW_BUS_SPI_INDEX, JH_HW_BUS_SPI_PIN_MISO,
+               JH_HW_BUS_SPI_PIN_MOSI, JH_HW_BUS_SPI_PIN_SCK);
   init_i2c_devices();
 
-  hal_hc595_config_t hc595_cfg = hal_hc595_default_config(EXAMPLE_HC595_CS);
+  hal_hc595_config_t hc595_cfg =
+      hal_hc595_default_config(JH_HW_NODE_HC595_PIN_CS);
+  hc595_cfg.spi_bus = JH_HW_NODE_HC595_BUS_INDEX;
+  hc595_cfg.clock_hz = JH_HW_NODE_HC595_FREQUENCY_HZ;
   hc595_cfg.chips = 1u;
   const hal_status_t status = hal_hc595_init_ex(&s_hc595, &hc595_cfg);
   s_hc595_ready = status == HAL_OK;
   log_status("74HC595", status);
 
-  const hal_status_t rgb_status =
-      hal_rgb_led_init_ex(EXAMPLE_RGB_PIN, 1u, HAL_RGB_LED_PIXEL_GRB_KHZ800);
+  /* GRB matches pixelOrder of the rgbLed node. */
+  const hal_status_t rgb_status = hal_rgb_led_init_ex(
+      JH_HW_NODE_RGB_LED_PIN_DATA, JH_HW_NODE_RGB_LED_PROP_COUNT,
+      HAL_RGB_LED_PIXEL_GRB_KHZ800);
   s_rgb_ready = rgb_status == HAL_OK;
   log_status("RGB LED", rgb_status);
   if (s_rgb_ready) {
     hal_rgb_led_set_brightness(24u);
-    deb("RGB LED data pin=%u", (unsigned)EXAMPLE_RGB_PIN);
+    deb("RGB LED data pin=%u", (unsigned)JH_HW_NODE_RGB_LED_PIN_DATA);
   }
 }
 

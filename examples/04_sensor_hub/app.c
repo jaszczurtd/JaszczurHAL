@@ -5,25 +5,12 @@
  */
 
 #include <hal/core/hal_app.h>
-#include <hal/core/hal_target.h>
 #include <hal/i2c/hal_i2c.h>
 #include <hal/sensors/hal_bh1750.h>
 #include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
 #include <hal/temperature/hal_dht.h>
 #include <hal/temperature/hal_ds18b20.h>
-
-#if HAL_TARGET_IS_RP
-#define SENSOR_I2C_SDA_PIN 4u
-#define SENSOR_I2C_SCL_PIN 5u
-#define SENSOR_DHT_PIN 14u
-#define SENSOR_DS18B20_PIN 16u
-#else
-#define SENSOR_I2C_SDA_PIN 25u
-#define SENSOR_I2C_SCL_PIN 24u
-#define SENSOR_DHT_PIN 8u
-#define SENSOR_DS18B20_PIN 16u
-#endif
 
 #define BH1750_PERIOD_MS 1000u
 #define DHT_PERIOD_MS 2000u
@@ -39,7 +26,8 @@ static uint32_t s_last_ds18b20_request_ms = 0u;
 
 static void init_bh1750(void) {
   hal_bh1750_config_t cfg = hal_bh1750_default_config();
-  cfg.i2c_addr = HAL_BH1750_I2C_ADDR_LOW;
+  cfg.i2c_bus = JH_HW_NODE_BH1750_BUS_INDEX;
+  cfg.i2c_addr = JH_HW_NODE_BH1750_ADDRESS;
 
   const hal_status_t status = hal_bh1750_init_ex(&s_bh1750, &cfg);
   s_bh1750_ready = status == HAL_OK;
@@ -49,7 +37,7 @@ static void init_bh1750(void) {
 }
 
 static void init_dht(void) {
-  hal_dht_config_t cfg = hal_dht_default_config(SENSOR_DHT_PIN);
+  hal_dht_config_t cfg = hal_dht_default_config(JH_HW_NODE_DHT_PIN_DATA);
   cfg.sensor = HAL_DHT_SENSOR_DHT11;
 
   const hal_status_t status = hal_dht_init_ex(&cfg, &s_dht);
@@ -73,7 +61,7 @@ static void request_ds18b20(uint32_t now) {
 
 static void init_ds18b20(void) {
   hal_ds18b20_config_t cfg = {0};
-  cfg.data_pin = SENSOR_DS18B20_PIN;
+  cfg.data_pin = JH_HW_NODE_DS18B20_PIN_DATA;
   cfg.resolution_hint = HAL_DS18B20_RES_12_BIT;
 
   const hal_status_t status = hal_ds18b20_init_ex(&cfg, &s_ds18b20);
@@ -149,8 +137,10 @@ void app_start(void) {
   deb("");
   deb("=== JaszczurHAL sensor hub ===");
 
-  const hal_status_t i2c_status = hal_i2c_init(
-      SENSOR_I2C_SDA_PIN, SENSOR_I2C_SCL_PIN, HAL_I2C_CLOCK_STANDARD_HZ);
+  /* Bus, pins and sensor wiring come from device_tree.json. */
+  const hal_status_t i2c_status =
+      hal_i2c_init_bus(JH_HW_BUS_I2C_INDEX, JH_HW_BUS_I2C_PIN_SDA,
+                       JH_HW_BUS_I2C_PIN_SCL, JH_HW_BUS_I2C_FREQUENCY_HZ);
   if (i2c_status != HAL_OK) {
     derr("Sensor I2C init failed: %s", hal_status_to_string(i2c_status));
   }

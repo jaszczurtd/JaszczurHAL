@@ -1,4 +1,5 @@
 #include <hal/core/hal_app.h>
+#include <hal/core/hal_compiler.h>
 #include <hal/core/hal_status.h>
 #include <hal/core/hal_target.h>
 #include <hal/system/hal_board.h>

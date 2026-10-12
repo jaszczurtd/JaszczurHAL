@@ -757,6 +757,15 @@ the library workspace use it. Its `build-key <dir> <assembly> [requests...]`
 command prints the `<assembly or "auto">/<16 hex digits>` name of a library
 build directory, which `scripts/lib/build_artifacts.sh` uses for the runners.
 
+### `scripts/device_tree_check.py`
+
+Import-only source of `jh-vscode check-hardware`: it resolves every assembly
+of a project's `device_tree.json` as a build does, keeps the first error of
+each one, reports an error shared by several assemblies once, and places each
+error at the line and column of the JSON member its JSON Pointer names. It
+also lists the files a watching check follows: `device_tree.json` and the
+project bindings it names.
+
 ### `scripts/board_registry.py`
 
 Provides other scripts with validated target and board data from `boards/`. It is used by `jh-vscode`, project generators, and example tools. The module keeps no registry of its own; the descriptor files remain the source of truth.

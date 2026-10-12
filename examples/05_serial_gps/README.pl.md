@@ -7,15 +7,20 @@ szeregowy do sprawdzania nadawania i odbioru. Brak odbiornika GPS lub połączen
 na drugim porcie nie zatrzymuje obsługi pozostałego urządzenia.
 
 Wersja podstawowa korzysta ze sprzętowego UART. GPS pracuje z prędkością
-9600 baud, a port testowy - 115200 baud.
+9600 baud, a port testowy - 115200 baud. Połączenia każdego montażu opisuje
+`device_tree.json`, a program bierze porty, piny i ustawienia transmisji
+z wygenerowanego nagłówka. Poniższa tabela powtarza te połączenia.
 
-| Platforma | GPS: port, RX / TX | Port testowy: port, RX / TX |
+| Montaż | GPS: port, RX / TX | Port testowy: port, RX / TX |
 |---|---|---|
-| Rodzina RP | UART 1, GP1 / GP0 | UART 2, GP5 / GP4 |
-| STM32G474 | USART1, PA10 / PA9 | Niedostępny; USART2 na PA3 / PA2 służy konsoli diagnostycznej ST-Link VCP. |
+| Pico / Pico 2 | UART 1, GP1 / GP0 | UART 2, GP5 / GP4 |
+| NUCLEO-G474RE | USART1, PA10 / PA9 | Niedostępny; USART2 na PA3 / PA2 służy konsoli diagnostycznej ST-Link VCP. |
+| ESP32-S3-Zero | UART 1, GPIO10 / GPIO9 | Niedostępny |
 
 Wariant `SWSERIAL` jest dostępny tylko dla rodziny RP i realizuje oba porty
-programowo. GPS używa RX/TX na GP5/GP4, a port testowy na GP9/GP8.
+programowo na tych samych liniach: GPS na GP1/GP0, a port testowy na GP5/GP4,
+z prędkością 9600 baud. Obie wersje działają więc na jednym, niezmienionym
+stanowisku.
 Definicja `EXAMPLE_SERIAL_GPS_USE_SWSERIAL=1` wybiera programową obsługę
 portu także dla modułu GPS; jest ustawiana w konfiguracji tego wariantu.
 

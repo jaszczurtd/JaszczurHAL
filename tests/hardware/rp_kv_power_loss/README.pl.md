@@ -34,10 +34,10 @@ Zbuduj i wgraj przez zwykły workflow:
 ```sh
 vscode/entry/jh-vscode build \
   --project tests/hardware/rp_kv_power_loss \
-  --target rp2040 --board pico
+  --assembly pico
 vscode/entry/jh-vscode upload \
   --project tests/hardware/rp_kv_power_loss \
-  --target rp2040 --board pico \
+  --assembly pico \
   --port /dev/serial/by-id/<device>
 ```
 
@@ -48,5 +48,7 @@ python3 tests/hardware/rp_kv_power_loss/verify_kv_power_loss.py \
   --port /dev/serial/by-id/<device> --target rp2040
 ```
 
-Dla Pico 2 użyj `--target rp2350-arm --board pico2` i przekaż ten sam target
-weryfikatorowi.
+Plik `device_tree.json` opisuje sprzęt każdego montażu: `pico` dla Pico
+i `pico2-arm` dla Pico 2. Test potrzebuje tylko samej płytki. Dla Pico 2 zbuduj
+i wgraj firmware z `--assembly pico2-arm`, a weryfikatorowi przekaż
+`--target rp2350-arm`.

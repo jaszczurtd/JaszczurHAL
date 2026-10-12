@@ -4,7 +4,6 @@
  */
 
 #include <hal/core/hal_app.h>
-#include <hal/core/hal_target.h>
 #include <hal/i2c/hal_i2c.h>
 #include <hal/input/hal_stmpe610.h>
 #include <hal/input/hal_tsc2007.h>
@@ -12,15 +11,6 @@
 #include <hal/system/hal_system.h>
 
 #include <stdint.h>
-
-#if HAL_TARGET_IS_RP
-#define EXAMPLE_I2C_SDA_PIN 4u
-#define EXAMPLE_I2C_SCL_PIN 5u
-#else
-/* STM32 pin numbers use port * 16 + pin; these values select PB9 and PB8. */
-#define EXAMPLE_I2C_SDA_PIN 25u
-#define EXAMPLE_I2C_SCL_PIN 24u
-#endif
 
 static hal_tsc2007_t s_tsc2007;
 static hal_stmpe610_t s_stmpe610;
@@ -33,24 +23,25 @@ void app_start(void) {
   deb("");
   deb("=== JaszczurHAL touch controllers ===");
 
-  hal_i2c_init_bus(0u, EXAMPLE_I2C_SDA_PIN, EXAMPLE_I2C_SCL_PIN,
-                   HAL_I2C_CLOCK_STANDARD_HZ);
+  /* Bus, pins, clock and addresses come from device_tree.json. */
+  hal_i2c_init_bus(JH_HW_BUS_I2C_INDEX, JH_HW_BUS_I2C_PIN_SDA,
+                   JH_HW_BUS_I2C_PIN_SCL, JH_HW_BUS_I2C_FREQUENCY_HZ);
 
   hal_tsc2007_config_t tsc_cfg = hal_tsc2007_default_config();
-  tsc_cfg.i2c_bus = 0u;
-  tsc_cfg.i2c_addr = HAL_TSC2007_I2C_ADDR_DEFAULT;
+  tsc_cfg.i2c_bus = JH_HW_NODE_TSC2007_BUS_INDEX;
+  tsc_cfg.i2c_addr = JH_HW_NODE_TSC2007_ADDRESS;
   s_tsc2007_ready = hal_tsc2007_init(&s_tsc2007, &tsc_cfg);
   if (s_tsc2007_ready) {
-    deb("TSC2007 ready at 0x%02X", HAL_TSC2007_I2C_ADDR_DEFAULT);
+    deb("TSC2007 ready at 0x%02X", (unsigned)JH_HW_NODE_TSC2007_ADDRESS);
   } else {
     derr("TSC2007 init failed; continuing with STMPE610");
   }
 
-  const hal_stmpe610_config_t stmpe_cfg =
-      hal_stmpe610_i2c_config(0u, HAL_STMPE610_I2C_ADDR_DEFAULT);
+  const hal_stmpe610_config_t stmpe_cfg = hal_stmpe610_i2c_config(
+      JH_HW_NODE_STMPE610_BUS_INDEX, JH_HW_NODE_STMPE610_ADDRESS);
   s_stmpe610_ready = hal_stmpe610_init(&s_stmpe610, &stmpe_cfg);
   if (s_stmpe610_ready) {
-    deb("STMPE610 ready at 0x%02X", HAL_STMPE610_I2C_ADDR_DEFAULT);
+    deb("STMPE610 ready at 0x%02X", (unsigned)JH_HW_NODE_STMPE610_ADDRESS);
   } else {
     derr("STMPE610 init failed; TSC2007 state is unchanged");
   }

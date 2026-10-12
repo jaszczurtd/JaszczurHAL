@@ -3,8 +3,7 @@
     "project": "JaszczurHAL examples",
     "module": "05_serial_gps",
     "toolchain": "cmake",
-    "target": "rp2040",
-    "board": "pico",
+    "assembly": "pico",
     "buildDir": "${jhRoot}/.build/examples/05_serial_gps",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {
