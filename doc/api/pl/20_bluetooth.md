@@ -121,7 +121,7 @@ Zdarzenia można odbierać na dwa sposoby: przez funkcję zwrotną wywoływaną 
 
 Zdarzenie gotowości nie zawiera adresu drugiej strony połączenia; wywołaj
 `hal_ble_get_local_address()` po jego otrzymaniu. Zdarzenie połączenia
-zawiera jej adres i nowy nieprzezroczysty uchwyt połączenia.
+zawiera jej adres i nowy uchwyt połączenia.
 Zdarzenia MTU i rozłączenia odnoszą się do tego samego uchwytu.
 
 <a id="advertising"></a>
@@ -139,7 +139,7 @@ poczekaj na `HAL_BLE_EVENT_ADVERTISING_STARTED`.
 Jeśli advertising zostanie zlecony przed osiągnięciem gotowości przez kontroler,
 rozpocznie się później automatycznie. Udane połączenie wstrzymuje go, a rozłączenie
 uruchamia go ponownie, dopóki pierwotne żądanie pozostaje aktywne. Aby je
-zatrzymać, przekaż nieprzezroczysty uchwyt advertisingu. Po
+zatrzymać, przekaż uchwyt advertisingu. Po
 `HAL_BLE_EVENT_DISCONNECTED` nie wysyłaj kolejnego żądania uruchomienia;
 automatyczne wznowienie wynika już z pierwotnego żądania.
 
@@ -249,7 +249,7 @@ extern "C" void app_task0(void) {
 ## Połączenia i MTU
 
 Obsługiwane jest tylko jedno połączenie Peripheral. Uchwyty połączenia
-i advertisingu są niezerowe i nieprzezroczyste. Tracą ważność po zdarzeniu
+i advertisingu są niezerowe. Nie interpretuj ich wartości. Tracą ważność po zdarzeniu
 kończącym ich cykl życia, po deinicjalizacji oraz po awarii kontrolera.
 Przekazanie nieaktualnego uchwytu powoduje zwrócenie `HAL_ENOENT`.
 
@@ -291,7 +291,7 @@ Operacje zwracają `hal_status_t`. Najczęstsze wyniki:
 | `HAL_EUNINIT` | BLE nie zostało zainicjalizowane |
 | `HAL_EAGAIN` | informacja o gotowości lub dane zdarzenia nie są jeszcze dostępne |
 | `HAL_EBUSY` | żądania są ze sobą sprzeczne albo funkcja zwrotna próbuje ponownie uruchomić odpytywanie |
-| `HAL_ENOENT` | nieaktualny lub nieznany nieprzezroczysty uchwyt |
+| `HAL_ENOENT` | nieaktualny lub nieznany uchwyt |
 | `HAL_EOVERFLOW` | ograniczona kolejka zdarzeń lub raportów skanowania odrzuciła dane |
 | `HAL_EUNSUPPORTED` | wybrana płytka nie ma wymaganego sprzętu radiowego |
 | `HAL_EHW` / `HAL_EIO` | awaria kontrolera lub transportu |
@@ -400,7 +400,7 @@ kompilują te warstwy bez `HAL_ENABLE_BLUETOOTH_GAMEPAD`.
 
 API gamepada jest adapterem managera Classic i ogólnego HID Host. Wewnętrznie
 posiada ich uchwyty i zwraca jeden
-nieprzezroczysty uchwyt `hal_gamepad_t`. `hal_gamepad_open()` uruchamia profil
+uchwyt `hal_gamepad_t` wskazujący strukturę z ukrytymi polami (ang. opaque handle). `hal_gamepad_open()` uruchamia profil
 asynchronicznie. Od tego momentu trzeba często wywoływać `hal_gamepad_poll()`
 z jednego zadania lub z pętli kooperacyjnej. `hal_gamepad_get_info()` zwraca
 stan publiczny, ostatni status, bieżący numer generacji połączenia, flagi

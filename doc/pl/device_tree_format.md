@@ -74,6 +74,8 @@ Sygnał płytki może należeć do jawnie zadeklarowanej sieci, gdy jej końców
 
 Plik bindingu definiuje dokładnie jedno `compatible`, domenę, opis oraz opcjonalne sygnały, właściwości, wymagania magistrali lub kontrolera, dzieci, wewnętrzne `connections`, `provides`, `requiresFeatures` i `pinCount`. Typy HAL leżą w `config/hardware/bindings/`, po jednym pliku na typ, nazwanym od jego `compatible` z `,` zamienionym na `-`. Ich wartości domyślne trafiają do C przez `src/hal/generated/jh_device_defaults.h`, który generuje `scripts/generate_device_defaults.py`; helpery HAL czytają ten nagłówek zamiast trzymać drugą tabelę. Główne `bindings` wskazuje pojedyncze pliki projektu względem `device_tree.json`, używając ukośników; `../` jest dopuszczalne dla wspólnych typów. Nie ma globów, skanowania katalogów, URI, ścieżek bezwzględnych ani kopii rejestru HAL. Rozwiązane ścieżki plików są deduplikowane; powtórne `compatible`, również przesłaniające HAL, jest błędem.
 
+Typ projektu niczego nie dziedziczy po podobnym typie HAL, a ograniczenia, których nie zapisze, po prostu nie są sprawdzane. Bez `bus.maximumFrequencyHz` węzeł nie ogranicza zegara swojej magistrali, a bez `minimum`/`maximum` właściwość przyjmie każdą wartość swojego typu. Łatwo to przeoczyć, gdy typ projektu zastępuje typ HAL dla układu pracującego poza parametrami z datasheetu, np. ekspandera taktowanego szybciej, niż dopuszcza producent. Wpisz wtedy limit, który faktycznie akceptujesz, zamiast usuwać pole.
+
 Właściwość deklaruje JSON `type`, `cType`, opis, opcjonalną wymagalność lub wartość domyślną i granice albo enum. Właściwości liczbowe wymagają jednostki. Zbiór jednostek jest otwarty: `Hz`, `ohm`, `us`, `ms`, `V`, `°C`, `K`, `bar`, `pixels` i bezwymiarowe `1` są przykładami, nie enum. Jednostka to niepusty drukowalny tekst NFC UTF-8 bez skrajnych białych znaków, z rozróżnieniem wielkości liter, zachowany w modelu. Nie ma aliasów, skalowania ani automatycznej konwersji; wartość zawsze podaje się w jednostce zadeklarowanej przez binding. `cType` to `bool`, typ od `int8`/`uint8` do `int64`/`uint64`, `float`, `double` albo `string`, zgodny z typem JSON. Granice, wartości domyślne i elementy enum muszą pasować do obu typów. Nieznane właściwości są błędem. Rezystancje dzielnika podaje się jawnie w omach, bez nieopisanej skali.
 
 `required` właściwości domyślnie wynosi false. Wymagana właściwość musi mieć wartość po rozwiązaniu wartości domyślnych i nadpisań; domyślna wartość bindingu spełnia to wymaganie. Pominięta opcjonalna właściwość bez wartości domyślnej nie udostępnia makra. Granice dotyczą tylko właściwości liczbowych. Przy fałszywym warunku sygnał można pominąć lub jawnie podać `null`; jego wymagalność obowiązuje tylko przy prawdziwym warunku.
@@ -116,7 +118,13 @@ Jedynym wczesnym nagłówkiem jest `jh_hardware.h`, zawierający makra `JH_HW_*`
 | `JH_HW_BUS_<BUS>_UART_PORT`, `JH_HW_BUS_<BUS>_BAUD_RATE`, `JH_HW_BUS_<BUS>_DATA_BITS`, `JH_HW_BUS_<BUS>_PARITY`, `JH_HW_BUS_<BUS>_STOP_BITS`, `JH_HW_BUS_<BUS>_FRAME_CONFIG` | ustawienia UART; parity 0 none / 1 even / 2 odd; odroczony token ramki `HAL_UART_CFG_*` |
 | `JH_HW_NODE_<PATH>_CONFIG_INIT` | odroczony inicjalizator obsługiwanej konfiguracji HAL |
 
-Nieobecny węzeł udostępnia jedynie obecność i dostępność konfiguracji. Obecny niepodłączony sygnał udostępnia flagi połączenia, domeny i właściciela, bez zgadywanego numeru pinu. Końcówka urządzenia podaje dostawcę i indeks; makro liczbowe pinu istnieje tylko wtedy, gdy adapter ma rzeczywiste kodowanie HAL. Flagi preprocesora są literałami liczbowymi, nigdy identyfikatorami enum HAL. Tekst jest escapowanym literałem C; liczby całkowite mają przyrostki zgodne z `cType`; float/double są skończone, mają sprawdzony zakres i zapis pozwalający odtworzyć wartość.
+Nieobecny węzeł udostępnia jedynie obecność i dostępność konfiguracji. Obecny niepodłączony sygnał udostępnia flagi połączenia, domeny i właściciela, bez zgadywanego numeru pinu.
+
+Końcówka urządzenia podaje dostawcę i indeks; makro liczbowe pinu istnieje tylko wtedy, gdy adapter ma rzeczywiste kodowanie HAL.
+
+Flagi preprocesora są literałami liczbowymi, nigdy identyfikatorami enum HAL.
+
+Tekst jest literałem C ze znakami specjalnymi zapisanymi przez sekwencje escape; liczby całkowite mają przyrostki zgodne z `cType`; float/double są skończone, mają sprawdzony zakres i zapis pozwalający odtworzyć wartość.
 
 Zapis literałów jest ustalony; sprawdzenie zakresu poprzedza renderer i nie polega na zwężaniu typu przez przyrostek:
 

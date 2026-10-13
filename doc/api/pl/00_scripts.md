@@ -754,7 +754,11 @@ konfigurację projektu jest zgłaszany z diagnostyką `[JH-CFG-MANIFEST]`.
 Wykryte problemy domyślnie kończą polecenie niepowodzeniem; `--report-only`
 jest jawnym, ręcznym trybem diagnostycznym.
 
-`--effective` korzysta z mechanizmu `jh-vscode`, aby ustalić każdą konfigurację, dla której projekt się kompiluje: każdą zadeklarowaną platformę z kompilacją bazową i każdym wariantem, bez par zatrzymanych w nagłówku przez `#error`. Płytki pochodzą z manifestu; lokalny stan płytki ignorowany przez Git nie jest odczytywany. Projekt z `device_tree.json` daje każdy montaż z każdym wariantem, a jego rekordy podają też `assembly`. Dla każdej konfiguracji sprawdza ograniczenia oraz powtórzone żądania modułów. Plik `.vscode/jaszczurhal.project.json` oznacza projekt. Niepowiązany z manifestem `hal_project_config.h`, który żąda co najmniej jednego modułu HAL, jest przetwarzany dla każdej zadeklarowanej w nim platformy (bez platformy, gdy nie deklaruje żadnej), z kompilacją bazową i każdym wariantem. Samodzielne nagłówki bez żądań modułów i manifesty referencyjne są jedynie analizowane składniowo, bez rozwiązywania konfiguracji.
+`--effective` korzysta z mechanizmu `jh-vscode`, aby ustalić każdą konfigurację, dla której projekt się kompiluje: każdą zadeklarowaną platformę z kompilacją bazową i każdym wariantem, bez par zatrzymanych w nagłówku przez `#error`. Płytki pochodzą z manifestu; lokalny stan płytki ignorowany przez Git nie jest odczytywany. Projekt z `device_tree.json` daje każdy montaż z każdym wariantem, a jego rekordy podają też `assembly`.
+
+Dla każdej konfiguracji sprawdza ograniczenia oraz powtórzone żądania modułów. Plik `.vscode/jaszczurhal.project.json` oznacza projekt.
+
+Niepowiązany z manifestem `hal_project_config.h`, który żąda co najmniej jednego modułu HAL, jest przetwarzany dla każdej zadeklarowanej w nim platformy (bez platformy, gdy nie deklaruje żadnej), z kompilacją bazową i każdym wariantem. Samodzielne nagłówki bez żądań modułów i manifesty referencyjne są jedynie analizowane składniowo, bez rozwiązywania konfiguracji.
 
 `--resolution-output <path>` zapisuje deterministyczne `requestedFeatures`,
 `resolvedFeatures`, skróty pełnego zbioru zależności oraz pochodzenie żądań
@@ -804,16 +808,17 @@ Zasady dotyczące nagłówka opisuje część
 
 ### `scripts/device_tree_project.py`
 
-Udostępnia narzędziom to, co odczytują z katalogu konfiguracji
-z `device_tree.json`: listę montaży, wybór jednego według zasad z części
-[projekty z device_tree.json](../../pl/FwProjectWorkflow.md#projekty-z-device-tree),
-konfigurację projektu odczytaną z `jh_hardware.h` danego montażu oraz listę
-kompilacji montaż razy wariant, którą `project_config.py` zwraca dla takiego
-katalogu. Korzystają z niego `jh-vscode`, dispatcher przykładów, linter
-funkcji i obsługa bibliotek w VS Code. Polecenie
-`build-key <katalog> <montaż> [żądania...]` wypisuje nazwę katalogu kompilacji
-biblioteki w postaci `<montaż albo "auto">/<16 cyfr szesnastkowych>`; używa
-jej `scripts/lib/build_artifacts.sh` w skryptach budujących biblioteki.
+Moduł odczytuje listę montaży z katalogu konfiguracji z `device_tree.json`
+i wybiera jeden według zasad z części
+[projekty z device_tree.json](../../pl/FwProjectWorkflow.md#projekty-z-device-tree).
+Odczytuje konfigurację projektu z `jh_hardware.h` wybranego montażu i udostępnia
+macierz kompilacji montaż × wariant zwracaną przez `project_config.py`.
+Korzystają z niego `jh-vscode`, dispatcher przykładów, linter funkcji
+oraz obsługa bibliotek w VS Code.
+
+Polecenie `build-key <katalog> <montaż> [żądania...]` wypisuje nazwę katalogu
+kompilacji biblioteki w postaci `<montaż albo "auto">/<16 cyfr szesnastkowych>`.
+`scripts/lib/build_artifacts.sh` używa tej nazwy w skryptach budujących biblioteki.
 
 ### `scripts/device_tree_check.py`
 

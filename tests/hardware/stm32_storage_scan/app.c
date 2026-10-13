@@ -27,8 +27,6 @@
 #include "hal/impl/stm32g474/port/stm32g474_regs.h"
 #endif
 
-#define SCAN_PIN_A JH_HW_NODE_SCAN_A_PIN_IN
-#define SCAN_PIN_B JH_HW_NODE_SCAN_B_PIN_IN
 #define SCAN_PINS 3u
 #define SCAN_CONVERSION_NS 15000u
 #define SCAN_BLOCK_FRAMES 444u /* 3 x 15 us x 444 = 20 ms per block */
@@ -184,8 +182,8 @@ static void init_storage(void) {
 static void start_scan(void) {
   hal_adc_scan_config_t config;
   memset(&config, 0, sizeof(config));
-  config.pins[0] = SCAN_PIN_A;
-  config.pins[1] = SCAN_PIN_B;
+  config.pins[0] = JH_HW_NODE_SCAN_A_PIN_IN;
+  config.pins[1] = JH_HW_NODE_SCAN_B_PIN_IN;
   config.pins[2] = HAL_ADC_SCAN_PIN_TEMPERATURE;
   config.pin_count = SCAN_PINS;
   config.conversion_period_ns = SCAN_CONVERSION_NS;
@@ -244,7 +242,8 @@ static void run_kv_check(uint32_t index) {
   hal_delay_ms(50u);
   const bool advanced = drain_blocks() && s_last_sequence > before;
   uint16_t raw = 0u;
-  const hal_status_t latest = hal_adc_scan_latest(SCAN_PIN_A, &raw);
+  const hal_status_t latest =
+      hal_adc_scan_latest(JH_HW_NODE_SCAN_A_PIN_IN, &raw);
   ++s_kv_runs;
   const bool ok = status == HAL_OK && back == HAL_OK && readback == value &&
                   advanced && latest == HAL_OK;

@@ -699,7 +699,11 @@ manifest that carries project configuration is reported with
 `[JH-CFG-MANIFEST]`. Findings fail the command by default; `--report-only` is
 an explicit manual diagnostic mode.
 
-`--effective` uses `jh-vscode` to resolve every configuration a project builds: each declared target with the base build and each variant, without the pairs the header stops with `#error`. Boards come from the manifest; the ignored local board-selection state is not read. A project with `device_tree.json` contributes each assembly with each variant, and its records also name the `assembly`. It checks constraints and duplicate active feature requests for each configuration. A `.vscode/jaszczurhal.project.json` manifest marks a project. An unpaired `hal_project_config.h` that requests at least one HAL feature is evaluated for each target it declares, or without a target when it declares none, with the base build and each variant. Standalone headers without feature requests and reference manifests are parsed but not resolved.
+`--effective` uses `jh-vscode` to resolve every configuration a project builds: each declared target with the base build and each variant, without the pairs the header stops with `#error`. Boards come from the manifest; the ignored local board-selection state is not read. A project with `device_tree.json` contributes each assembly with each variant, and its records also name the `assembly`.
+
+It checks constraints and duplicate active feature requests for each configuration. A `.vscode/jaszczurhal.project.json` manifest marks a project.
+
+An unpaired `hal_project_config.h` that requests at least one HAL feature is evaluated for each target it declares, or without a target when it declares none, with the base build and each variant. Standalone headers without feature requests and reference manifests are parsed but not resolved.
 
 `--resolution-output <path>`
 writes deterministic
@@ -747,19 +751,22 @@ prefixes. The header rules are described in
 
 ### `scripts/device_tree_project.py`
 
-What the tools read from a configuration directory with `device_tree.json`:
-its assemblies, the choice of one by the rules of
-[Projects with device_tree.json](../../en/FwProjectWorkflow.md#device-tree-projects),
-the project configuration read with an assembly's `jh_hardware.h`, and the
-assembly-times-variant list of builds that `project_config.py` returns for
-such a directory. `jh-vscode`, the examples dispatcher, the feature lint and
-the library workspace use it. Its `build-key <dir> <assembly> [requests...]`
-command prints the `<assembly or "auto">/<16 hex digits>` name of a library
-build directory, which `scripts/lib/build_artifacts.sh` uses for the runners.
+The module lists assemblies from a configuration directory with
+`device_tree.json` and selects one according to
+[Projects with device_tree.json](../../en/FwProjectWorkflow.md#device-tree-projects).
+It reads the project configuration with the selected assembly's `jh_hardware.h`
+and supplies the assembly × variant build matrix returned by `project_config.py`.
+`jh-vscode`, the examples dispatcher, the feature lint and the library workspace
+use it.
+
+Its `build-key <dir> <assembly> [requests...]` command prints the library build
+directory name as `<assembly or "auto">/<16 hex digits>`.
+`scripts/lib/build_artifacts.sh` uses this name in the library runners.
 
 ### `scripts/device_tree_check.py`
 
-Import-only source of `jh-vscode check-hardware`: it resolves every assembly
+The module implements `jh-vscode check-hardware` and is imported by its caller.
+It resolves every assembly
 of a project's `device_tree.json` as a build does, keeps the first error of
 each one, reports an error shared by several assemblies once, and places each
 error at the line and column of the JSON member its JSON Pointer names. It

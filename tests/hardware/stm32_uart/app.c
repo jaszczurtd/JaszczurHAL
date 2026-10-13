@@ -62,7 +62,6 @@
 #error "consoleUart boots in 8N1"
 #endif
 
-#define APP_BAUD JH_HW_BUS_CONSOLE_UART_BAUD_RATE
 #define BOOT_WINDOW_MS 3000u
 #define BOOT_LINE_MS 250u
 #define CONSOLE_WINDOW_MS 1500u
@@ -74,9 +73,6 @@
 #define FORMAT_REVERT_MS 5000u
 #define MASK_SETTLE_MS 5u
 
-/* loopUart TX is the single wire; RX stays unused in single-wire mode. */
-#define LOOP_TX JH_HW_BUS_LOOP_UART_PIN_TX
-#define LOOP_RX JH_HW_BUS_LOOP_UART_PIN_RX
 #define LOOP_BYTES 4096u
 #define LOOP_RX_OFFSET 512u
 #define USART_CR3_HDSEL (1u << 3)
@@ -107,7 +103,7 @@ static const frame_format_t kFormats[] = {
 };
 
 static hal_uart_t s_uart;
-static uint32_t s_baud = APP_BAUD;
+static uint32_t s_baud = JH_HW_BUS_CONSOLE_UART_BAUD_RATE;
 static const frame_format_t *s_format = &kFormats[0];
 static bool s_booting = true;
 static uint32_t s_boot_started;
@@ -439,8 +435,10 @@ static void cmd_loop1(const char *args) {
     reply("ERR loop1 arguments");
     return;
   }
-  hal_uart_t loop = hal_uart_create(
-      (hal_uart_port_t)JH_HW_BUS_LOOP_UART_UART_PORT, LOOP_RX, LOOP_TX);
+  /* loopUart TX is the single wire; RX stays unused in single-wire mode. */
+  hal_uart_t loop =
+      hal_uart_create((hal_uart_port_t)JH_HW_BUS_LOOP_UART_UART_PORT,
+                      JH_HW_BUS_LOOP_UART_PIN_RX, JH_HW_BUS_LOOP_UART_PIN_TX);
   if (loop == NULL) {
     reply("ERR loop1 create");
     return;
@@ -454,8 +452,8 @@ static void cmd_loop1(const char *args) {
   USART_CR1(USART1_BASE) &= ~USART_CR1_UE;
   USART_CR3(USART1_BASE) |= USART_CR3_HDSEL;
   USART_CR1(USART1_BASE) |= USART_CR1_UE;
-  const uint32_t port = LOOP_TX / 16u;
-  const uint32_t shift = (LOOP_TX % 16u) * 2u;
+  const uint32_t port = JH_HW_BUS_LOOP_UART_PIN_TX / 16u;
+  const uint32_t shift = (JH_HW_BUS_LOOP_UART_PIN_TX % 16u) * 2u;
   GPIO_PUPDR(port) =
       (GPIO_PUPDR(port) & ~(0x3u << shift)) | (GPIO_PUPD_UP << shift);
   hal_delay_ms(2u);
@@ -717,7 +715,7 @@ void app_task0(void) {
     }
     if (hal_elapsed_u32(now, s_boot_started, BOOT_WINDOW_MS)) {
       s_booting = false;
-      if (!start_port(APP_BAUD, &kFormats[0])) {
+      if (!start_port(JH_HW_BUS_CONSOLE_UART_BAUD_RATE, &kFormats[0])) {
         hal_deb("JHUARTBOOT port start failed");
       }
     }

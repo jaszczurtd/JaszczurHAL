@@ -25,9 +25,6 @@
 /* Fixture-only peeks at the clock setup and the FDCAN1 INIT bit. */
 #include "hal/impl/stm32g474/port/stm32g474_regs.h"
 
-/* The HAT LEDs come from device_tree.json. */
-#define LED_BUSY JH_HW_NODE_HAT_LED_BUSY_PIN_OUT
-
 enum { CHECK_FAIL = 0, CHECK_PASS = 1, CHECK_SKIP = 2 };
 
 typedef struct {
@@ -690,15 +687,15 @@ static void run_checks(void) {
 void app_start(void) {
   hal_debug_init_default();
   hal_gpio_set_mode(HAL_LED_BUILTIN, HAL_GPIO_OUTPUT_LOW);
-  hal_gpio_set_mode(LED_BUSY, HAL_GPIO_OUTPUT_LOW);
+  hal_gpio_set_mode(JH_HW_NODE_HAT_LED_BUSY_PIN_OUT, HAL_GPIO_OUTPUT_LOW);
 }
 
 void app_task0(void) {
   static uint32_t last_report, last_blink;
   if (!s_done) {
-    hal_gpio_write(LED_BUSY, true);
+    hal_gpio_write(JH_HW_NODE_HAT_LED_BUSY_PIN_OUT, true);
     run_checks();
-    hal_gpio_write(LED_BUSY, false);
+    hal_gpio_write(JH_HW_NODE_HAT_LED_BUSY_PIN_OUT, false);
     s_done = true;
   }
   unsigned pass = 0, fail = 0, skip = 0;

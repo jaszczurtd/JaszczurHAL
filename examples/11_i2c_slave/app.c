@@ -11,7 +11,6 @@
 
 /* The bus and its pins come from device_tree.json; the address is this
  * application's own. */
-#define I2C_SLAVE_BUS JH_HW_BUS_I2C_INDEX
 #define I2C_SLAVE_ADDR 0x42u
 
 static const uint8_t REG_STATUS = 0;
@@ -25,9 +24,9 @@ static uint16_t counter = 0;
 void app_start(void) {
   hal_debug_init_default();
 
-  hal_i2c_slave_init_bus(I2C_SLAVE_BUS, JH_HW_BUS_I2C_PIN_SDA,
+  hal_i2c_slave_init_bus(JH_HW_BUS_I2C_INDEX, JH_HW_BUS_I2C_PIN_SDA,
                          JH_HW_BUS_I2C_PIN_SCL, I2C_SLAVE_ADDR);
-  hal_i2c_slave_reg_write8_bus(I2C_SLAVE_BUS, REG_STATUS, 0xA5);
+  hal_i2c_slave_reg_write8_bus(JH_HW_BUS_I2C_INDEX, REG_STATUS, 0xA5);
   deb("I2C slave ready at 0x%02X", I2C_SLAVE_ADDR);
 }
 
@@ -38,12 +37,13 @@ void app_task0(void) {
   }
   last_update_ms = now;
 
-  hal_i2c_slave_reg_write16_bus(I2C_SLAVE_BUS, REG_COUNTER, counter++);
-  hal_i2c_slave_reg_write16_bus(I2C_SLAVE_BUS, REG_MILLIS_HI,
+  hal_i2c_slave_reg_write16_bus(JH_HW_BUS_I2C_INDEX, REG_COUNTER, counter++);
+  hal_i2c_slave_reg_write16_bus(JH_HW_BUS_I2C_INDEX, REG_MILLIS_HI,
                                 (uint16_t)(now >> 16));
-  hal_i2c_slave_reg_write16_bus(I2C_SLAVE_BUS, REG_MILLIS_LO,
+  hal_i2c_slave_reg_write16_bus(JH_HW_BUS_I2C_INDEX, REG_MILLIS_LO,
                                 (uint16_t)(now & 0xFFFFu));
 
   deb("I2C slave transactions=%lu",
-      (unsigned long)hal_i2c_slave_get_transaction_count_bus(I2C_SLAVE_BUS));
+      (unsigned long)hal_i2c_slave_get_transaction_count_bus(
+          JH_HW_BUS_I2C_INDEX));
 }

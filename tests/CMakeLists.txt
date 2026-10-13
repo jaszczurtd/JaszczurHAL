@@ -1495,6 +1495,25 @@ function(jh_hardware_capability_probe)
         PASS_REGULAR_EXPRESSION "requires a board profile with CYW43")
 endfunction()
 jh_hardware_capability_probe()
+
+# Each backend's FreeRTOSConfig.h applies the HAL_FREERTOS_* tunables of the
+# project configuration, which the kernel sources see only through it.
+function(jh_freertos_config_probe NAME CONFIG_DIR)
+    set(_target test_freertos_config_${NAME})
+    add_executable(${_target}
+        ${CMAKE_CURRENT_SOURCE_DIR}/freertos_config/probe_freertos_config.c)
+    target_include_directories(${_target} PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/freertos_config/project
+        ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/freertos_config/sdk
+        ${CMAKE_SOURCE_DIR}/src)
+    target_compile_definitions(${_target} PRIVATE
+        "FREERTOS_CONFIG_UNDER_TEST=\"${CONFIG_DIR}/FreeRTOSConfig.h\"" ${ARGN})
+    jh_enable_host_warnings(${_target} ERRORS)
+    add_test(NAME ${_target} COMMAND ${_target})
+endfunction()
+jh_freertos_config_probe(rp ${CMAKE_SOURCE_DIR}/src/hal/impl/rp2040/freertos
+    PROBE_CORE_COUNT=1)
+jh_freertos_config_probe(stm32 ${CMAKE_SOURCE_DIR}/src/hal/impl/stm32g474/freertos)
 add_test(NAME test_install_host_tools
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_install_host_tools.py
