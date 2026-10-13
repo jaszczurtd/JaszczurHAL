@@ -10,7 +10,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* The HAL_FREERTOS_* tunables below come from the project configuration; the
+ * kernel sources load it through the same hook as the HAL headers. */
 #include "../port/stm32g474_clock.h"
+#include "hal/core/hal_project_config_hook.h"
 
 #define configUSE_PREEMPTION 1
 #define configUSE_PORT_OPTIMISED_TASK_SELECTION 1

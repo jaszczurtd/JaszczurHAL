@@ -4,6 +4,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* The HAL_FREERTOS_* tunables below come from the project configuration; the
+ * kernel sources load it through the same hook as the HAL headers. */
+#include "hal/core/hal_project_config_hook.h"
+
 #ifndef HAL_FREERTOS_CORE_COUNT
 #define HAL_FREERTOS_CORE_COUNT 2
 #endif

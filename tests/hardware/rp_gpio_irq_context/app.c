@@ -17,12 +17,6 @@
  * pin keeps its input direction the whole time; only the weak pull moves.
  */
 
-/* Probe pins come from device_tree.json. */
-#define PIN_CTX_A JH_HW_NODE_CTX_A_PIN_IN
-#define PIN_CTX_B JH_HW_NODE_CTX_B_PIN_IN
-#define PIN_PLAIN JH_HW_NODE_PLAIN_PIN_IN
-#define PIN_SWAP JH_HW_NODE_SWAP_PIN_IN
-
 #define SETTLE_MS 3u
 #define CHECK_COUNT 16u
 
@@ -89,17 +83,18 @@ static void reset_counters(void) {
 
 static hal_status_t attach_all(void) {
   hal_status_t status = hal_gpio_attach_interrupt_ctx(
-      PIN_CTX_A, ctx_isr, &s_probe_a, HAL_GPIO_IRQ_RISING);
+      JH_HW_NODE_CTX_A_PIN_IN, ctx_isr, &s_probe_a, HAL_GPIO_IRQ_RISING);
   if (status == HAL_OK) {
-    status = hal_gpio_attach_interrupt_ctx(PIN_CTX_B, ctx_isr, &s_probe_b,
-                                           HAL_GPIO_IRQ_RISING);
+    status = hal_gpio_attach_interrupt_ctx(JH_HW_NODE_CTX_B_PIN_IN, ctx_isr,
+                                           &s_probe_b, HAL_GPIO_IRQ_RISING);
   }
   if (status == HAL_OK) {
-    status = hal_gpio_attach_interrupt_ctx(PIN_SWAP, ctx_isr, &s_probe_swap,
-                                           HAL_GPIO_IRQ_RISING);
+    status = hal_gpio_attach_interrupt_ctx(JH_HW_NODE_SWAP_PIN_IN, ctx_isr,
+                                           &s_probe_swap, HAL_GPIO_IRQ_RISING);
   }
   if (status == HAL_OK) {
-    hal_gpio_attach_interrupt(PIN_PLAIN, plain_isr, HAL_GPIO_IRQ_RISING);
+    hal_gpio_attach_interrupt(JH_HW_NODE_PLAIN_PIN_IN, plain_isr,
+                              HAL_GPIO_IRQ_RISING);
   }
   return status;
 }
@@ -107,20 +102,20 @@ static hal_status_t attach_all(void) {
 /* Each context reaches its own probe and reports its own pin. */
 static void run_routing_phase(void) {
   const uint32_t plain_before = s_plain_hits;
-  pulse_pin(PIN_CTX_A);
+  pulse_pin(JH_HW_NODE_CTX_A_PIN_IN);
   check(s_probe_a.hits > 0u);
-  check(s_probe_a.last_pin == PIN_CTX_A);
+  check(s_probe_a.last_pin == JH_HW_NODE_CTX_A_PIN_IN);
   check(s_probe_b.hits == 0u);
   check(s_plain_hits == plain_before);
 
   const uint32_t a_hits = s_probe_a.hits;
-  pulse_pin(PIN_CTX_B);
+  pulse_pin(JH_HW_NODE_CTX_B_PIN_IN);
   check(s_probe_b.hits > 0u);
-  check(s_probe_b.last_pin == PIN_CTX_B);
+  check(s_probe_b.last_pin == JH_HW_NODE_CTX_B_PIN_IN);
   check(s_probe_a.hits == a_hits);
 
   const uint32_t b_hits = s_probe_b.hits;
-  pulse_pin(PIN_PLAIN);
+  pulse_pin(JH_HW_NODE_PLAIN_PIN_IN);
   check(s_plain_hits > plain_before);
   check(s_probe_a.hits == a_hits);
   check(s_probe_b.hits == b_hits);
@@ -128,42 +123,44 @@ static void run_routing_phase(void) {
 
 /* Both handler kinds replace each other on one pin. */
 static void run_swap_phase(void) {
-  pulse_pin(PIN_SWAP);
+  pulse_pin(JH_HW_NODE_SWAP_PIN_IN);
   const uint32_t swap_ctx = s_probe_swap.hits;
   const uint32_t plain_before = s_plain_hits;
   check(swap_ctx > 0u);
 
-  hal_gpio_attach_interrupt(PIN_SWAP, plain_isr, HAL_GPIO_IRQ_RISING);
-  pulse_pin(PIN_SWAP);
+  hal_gpio_attach_interrupt(JH_HW_NODE_SWAP_PIN_IN, plain_isr,
+                            HAL_GPIO_IRQ_RISING);
+  pulse_pin(JH_HW_NODE_SWAP_PIN_IN);
   check(s_plain_hits > plain_before && s_probe_swap.hits == swap_ctx);
 
-  (void)hal_gpio_attach_interrupt_ctx(PIN_SWAP, ctx_isr, &s_probe_swap,
-                                      HAL_GPIO_IRQ_RISING);
-  pulse_pin(PIN_SWAP);
+  (void)hal_gpio_attach_interrupt_ctx(JH_HW_NODE_SWAP_PIN_IN, ctx_isr,
+                                      &s_probe_swap, HAL_GPIO_IRQ_RISING);
+  pulse_pin(JH_HW_NODE_SWAP_PIN_IN);
   check(s_probe_swap.hits > swap_ctx);
 }
 
 /* Nothing fires once every pin is detached. */
 static void run_detach_phase(void) {
-  s_owner_status = hal_gpio_get_interrupt_owner_ex(PIN_CTX_A, &s_owner_core);
+  s_owner_status =
+      hal_gpio_get_interrupt_owner_ex(JH_HW_NODE_CTX_A_PIN_IN, &s_owner_core);
 
-  hal_gpio_detach_interrupt(PIN_CTX_A);
-  hal_gpio_detach_interrupt(PIN_CTX_B);
-  hal_gpio_detach_interrupt(PIN_PLAIN);
-  hal_gpio_detach_interrupt(PIN_SWAP);
+  hal_gpio_detach_interrupt(JH_HW_NODE_CTX_A_PIN_IN);
+  hal_gpio_detach_interrupt(JH_HW_NODE_CTX_B_PIN_IN);
+  hal_gpio_detach_interrupt(JH_HW_NODE_PLAIN_PIN_IN);
+  hal_gpio_detach_interrupt(JH_HW_NODE_SWAP_PIN_IN);
 
   uint8_t detached_core = 0u;
   s_detached_status =
-      hal_gpio_get_interrupt_owner_ex(PIN_CTX_A, &detached_core);
+      hal_gpio_get_interrupt_owner_ex(JH_HW_NODE_CTX_A_PIN_IN, &detached_core);
 
   const uint32_t a_hits = s_probe_a.hits;
   const uint32_t b_hits = s_probe_b.hits;
   const uint32_t swap_hits = s_probe_swap.hits;
   const uint32_t plain_hits = s_plain_hits;
-  pulse_pin(PIN_CTX_A);
-  pulse_pin(PIN_CTX_B);
-  pulse_pin(PIN_PLAIN);
-  pulse_pin(PIN_SWAP);
+  pulse_pin(JH_HW_NODE_CTX_A_PIN_IN);
+  pulse_pin(JH_HW_NODE_CTX_B_PIN_IN);
+  pulse_pin(JH_HW_NODE_PLAIN_PIN_IN);
+  pulse_pin(JH_HW_NODE_SWAP_PIN_IN);
   check(s_probe_a.hits == a_hits && s_probe_b.hits == b_hits &&
         s_probe_swap.hits == swap_hits && s_plain_hits == plain_hits);
 }
@@ -176,10 +173,10 @@ static void run_probe(void) {
   s_detached_status = HAL_NONE;
   reset_counters();
 
-  release_pin(PIN_CTX_A);
-  release_pin(PIN_CTX_B);
-  release_pin(PIN_PLAIN);
-  release_pin(PIN_SWAP);
+  release_pin(JH_HW_NODE_CTX_A_PIN_IN);
+  release_pin(JH_HW_NODE_CTX_B_PIN_IN);
+  release_pin(JH_HW_NODE_PLAIN_PIN_IN);
+  release_pin(JH_HW_NODE_SWAP_PIN_IN);
 
   s_attach_status = attach_all();
   check(s_attach_status == HAL_OK);

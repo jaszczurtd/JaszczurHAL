@@ -393,7 +393,7 @@ Default parameters for FreeRTOS application tasks created by HAL:
 | `HAL_FREERTOS_TASK1_STACK` | `512` | FreeRTOS stack words for `app_task1()` |
 | `HAL_FREERTOS_TASK0_PRIORITY` | `tskIDLE_PRIORITY + 1` | FreeRTOS priority for `app_task0()` |
 | `HAL_FREERTOS_TASK1_PRIORITY` | `tskIDLE_PRIORITY + 1` | FreeRTOS priority for `app_task1()` |
-| `HAL_FREERTOS_HEAP_SIZE` | `164 * 1024` | RP `heap_4` pool size in bytes |
+| `HAL_FREERTOS_HEAP_SIZE` | RP `164 * 1024`, STM32G474 `24 * 1024` | `heap_4` pool size in bytes; the kernel reads it from `hal_project_config.h` |
 | `HAL_USB_FREERTOS_TASK_STACK` | `512` | RP core-0 USB worker stack in FreeRTOS words |
 | `HAL_USB_FREERTOS_TASK_PRIORITY` | `tskIDLE_PRIORITY + 2` | RP core-0 USB worker priority |
 
