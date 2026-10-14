@@ -103,7 +103,8 @@ Windows volume GUID, label, and filesystem when the platform exposes them.
 `sync-board-picker` refreshes the `boardSelection` input and its automatic
 folder-open task from the current `boards/` registry; in a project with
 `device_tree.json` the input lists its assemblies, with the manifest's
-`assembly` as default. It also creates or repairs
+`assembly` as default, and a target or board left in local state by the board
+path is removed. It also creates or repairs
 the managed Cortex-Debug profiles in `launch.json` for RP2040, RP2350 ARM, and
 STM32G474/ST-Link. The ELF path comes from the tracked project manifest, legacy
 JaszczurHAL profiles are migrated, and configurations with consumer-owned names

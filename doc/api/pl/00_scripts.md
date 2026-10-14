@@ -398,7 +398,11 @@ targetu wybiera `waveshare-esp32-s3-zero`, gdy pominięto `--board`.
 `--output` musi pozostać poniżej katalogu głównego `.build` projektu lub
 repozytorium. Powtarzalne argumenty `--source` zastępują automatyczne
 wykrywanie; w przeciwnym razie skrypt uwzględnia obsługiwane pliki w
-katalogu głównym projektu i rekurencyjnie pod `src/`. `--variant <id>`
+katalogu głównym projektu i rekurencyjnie pod `src/`. Powtarzalne
+`--include-dir` i `--link-library` dodają katalogi nagłówków dla aplikacji
+i gotowe archiwa, które mogą leżeć poza projektem; jh-vscode przekazuje
+przez nie `JH_EXTRA_INCLUDES` i `JH_LINK_LIBRARIES` z manifestu, a generowany
+opis projektu podaje każde archiwum z jego SHA-256. `--variant <id>`
 wybiera wariant zadeklarowany w nagłówku projektu. Powtarzalne argumenty
 `--define` służą kompilacjom bibliotek statycznych, `--all-features`
 żąda każdej funkcji z `supportedFeatures` targetu, którą można wskazać

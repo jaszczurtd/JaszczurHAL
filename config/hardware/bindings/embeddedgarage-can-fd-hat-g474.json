@@ -2,7 +2,7 @@
   "$schema": "../../binding.schema.json",
   "schemaVersion": 1,
   "compatible": "embeddedgarage,can-fd-hat-g474",
-  "description": "EmbeddedGarage CAN-FD HAT for the NUCLEO-G474RE: three MCP2562FD transceivers, relays K1-K4, 12 V inputs I1-I4, buttons SW1-SW6 with pull-ups on the HAT and eight indicator LEDs.",
+  "description": "EmbeddedGarage CAN-FD HAT for the NUCLEO-G474RE: three MCP2562FD transceivers, relays K1-K4, 12 V inputs I1-I4 that need the MCU pull-down, buttons SW1-SW6 with pull-ups on the HAT and eight indicator LEDs.",
   "domain": "module",
   "children": {
     "can1": {
@@ -35,19 +35,31 @@
     },
     "input1": {
       "compatible": "jaszczurhal,gpio-input",
-      "required": true
+      "required": true,
+      "properties": {
+        "pull": "down"
+      }
     },
     "input2": {
       "compatible": "jaszczurhal,gpio-input",
-      "required": true
+      "required": true,
+      "properties": {
+        "pull": "down"
+      }
     },
     "input3": {
       "compatible": "jaszczurhal,gpio-input",
-      "required": true
+      "required": true,
+      "properties": {
+        "pull": "down"
+      }
     },
     "input4": {
       "compatible": "jaszczurhal,gpio-input",
-      "required": true
+      "required": true,
+      "properties": {
+        "pull": "down"
+      }
     },
     "button1": {
       "compatible": "jaszczurhal,gpio-input",

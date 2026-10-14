@@ -2,6 +2,24 @@
 
 ## 0.1.0 - Unreleased
 
+- ESP-IDF builds take the project's `JH_EXTRA_INCLUDES` and
+  `JH_LINK_LIBRARIES` like RP and STM32 builds: `build_esp_idf.py` gains
+  `--include-dir` and `--link-library`, the header directories reach only
+  the application, and every archive is linked and recorded with its SHA-256
+  in the generated project record (schema 3) and `jh_esp_idf_artifacts.json`.
+  `JH_EXTRA_SOURCES` and `JH_EXTRA_LIBRARIES`, which an ESP-IDF build cannot
+  honour, now stop it instead of being ignored.
+- Keep IntelliSense of projects outside the library on the compile database
+  that `Project: Refresh IntelliSense` writes: generated `settings.json`
+  leaves `C_Cpp.default.configurationProvider` empty, so CMake Tools can no
+  longer replace it with another `CMakeLists.txt` it configured, such as host
+  tests. `.build` is visible in the explorer and stays out of search, also in
+  the examples. In a project with `device_tree.json`, `sync-board-picker`
+  removes a `target` or `board` left in `.vscode/jaszczurhal.local.json` by
+  the board path, so actions no longer stop with `[JH-HW-BOARD]` after the
+  folder opens; other local keys stay. Existing projects update
+  `settings.json` with `apply_project_view_settings()` from
+  `scripts/vscode_task_config.py` or by hand.
 - In a project with `device_tree.json`, write one Cortex-Debug profile for
   each assembly and variant of an RP2040, RP2350 ARM, or STM32G474 target,
   with a hidden `Project: Build (Debug) <assembly>[ variant: <id>]`

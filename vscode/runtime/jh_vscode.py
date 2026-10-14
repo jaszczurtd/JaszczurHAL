@@ -1771,6 +1771,25 @@ def stored_assembly(project_dir: Path, manifest: dict[str, Any]) -> tuple[str | 
     return chosen["name"], origin
 
 
+def drop_board_path_selection(project_dir: Path) -> None:
+    """Remove 'target' and 'board' from the local state of a project with
+    device_tree.json. They come from the board path, which such a project
+    refuses (JH-HW-BOARD); without them the stored assembly, the manifest's
+    or the only one applies. Other local keys, such as the port, stay."""
+    path = project_dir / ".vscode" / LOCAL_STATE_FILENAME
+    state = load_json_file(path)
+    stale = {key: state[key] for key in ("target", "board") if key in state}
+    if not stale:
+        return
+    kept = {key: value for key, value in state.items() if key not in stale}
+    if kept:
+        write_text_atomic(path, json.dumps(kept, ensure_ascii=False, indent=2) + "\n")
+    else:
+        path.unlink()
+    removed = " ".join(f"{key}={value}" for key, value in stale.items())
+    print(f"Removed the board path selection ({removed}) from .vscode/{LOCAL_STATE_FILENAME}")
+
+
 def command_select_assembly(args: argparse.Namespace, project_dir: Path) -> int:
     """select-board of a project with device_tree.json: list, choose or store
     one assembly in the gitignored local state."""
@@ -2096,6 +2115,9 @@ def command_sync_board_picker(args: argparse.Namespace) -> int:
         selected_assembly = None
         debug_builds = None
         if hal_script("device_tree_project").device_tree_path(project_dir) is not None:
+            # This task runs on folder open, so a selection left from the
+            # board path goes before any action can refuse it.
+            drop_board_path_selection(project_dir)
             # The picker lists the assemblies with the manifest's choice (never
             # the local one) as default; each debugged assembly and variant
             # gets its own profile and pre-launch build.
@@ -2900,7 +2922,40 @@ def esp_idf_runner_command(
         command.extend(["--port", port])
     if config.get("variant"):
         command.extend(["--variant", str(config["variant"])])
+    command.extend(esp_idf_project_input_args(config))
     return command
+
+
+# Project keys of the manifest's CMake cache and the ESP-IDF runner options
+# that carry them; an ESP-IDF build takes its sources from the project.
+ESP_IDF_PROJECT_INPUT_OPTIONS = {
+    "JH_EXTRA_INCLUDES": "--include-dir",
+    "JH_LINK_LIBRARIES": "--link-library",
+}
+ESP_IDF_UNSUPPORTED_PROJECT_KEYS = ("JH_EXTRA_SOURCES", "JH_EXTRA_LIBRARIES")
+
+
+def esp_idf_project_input_args(config: dict[str, Any]) -> list[str]:
+    """Runner options for the extra header directories and precompiled
+    archives the manifest gives the target, as RP and STM32 builds use them;
+    a key an ESP-IDF build cannot honour stops the build instead of being
+    dropped."""
+    cmake = config.get("cmake")
+    cache = cmake.get("cache") if isinstance(cmake, dict) else None
+    if not isinstance(cache, dict):
+        return []
+    for key in ESP_IDF_UNSUPPORTED_PROJECT_KEYS:
+        if str(cache.get(key) or "").strip():
+            raise ValueError(
+                f"{key} is not supported by ESP-IDF builds; keep the sources "
+                "in the project directory or its src/"
+            )
+    args: list[str] = []
+    for key, option in ESP_IDF_PROJECT_INPUT_OPTIONS.items():
+        for item in str(cache.get(key) or "").split(";"):
+            if item.strip():
+                args.extend([option, item.strip()])
+    return args
 
 
 def run_esp_idf_action(

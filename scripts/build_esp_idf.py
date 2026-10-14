@@ -14,7 +14,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 import component_manager
 import generate_board_config
@@ -933,6 +933,27 @@ def _display_path(path: Path, project_dir: Path) -> str:
     return _canonical_path(path).as_posix()
 
 
+def resolve_project_inputs(
+    project_dir: Path,
+    requested: Sequence[str],
+    kind: str,
+    exists: Callable[[Path], bool],
+) -> list[Path]:
+    """Existing paths of ``requested``, relative ones from the project, in
+    the given order without repeats; they may lie outside the project."""
+    paths: list[Path] = []
+    for item in requested:
+        candidate = Path(item).expanduser()
+        path = _canonical_path(
+            candidate if candidate.is_absolute() else project_dir / candidate
+        )
+        if not exists(path):
+            raise EspIdfError(f"Project {kind} does not exist: {path}")
+        if path not in paths:
+            paths.append(path)
+    return paths
+
+
 def resolve_project_sources(
     project_dir: Path, requested_sources: Sequence[str]
 ) -> list[Path]:
@@ -1147,7 +1168,13 @@ def resolve_build_model(
     all_features: bool = False,
     variant: str | None = None,
     assembly: str | None = None,
+    include_dirs: Sequence[str] = (),
+    link_libraries: Sequence[str] = (),
 ) -> dict[str, Any]:
+    """The ESP-IDF build of one project. ``include_dirs`` and
+    ``link_libraries`` are the project's JH_EXTRA_INCLUDES and
+    JH_LINK_LIBRARIES: extra header directories and precompiled archives,
+    which may lie outside the project."""
     repo_root = _canonical_path(repo_root)
     project_dir = _canonical_path(project_dir)
     config_dir = (
@@ -1256,6 +1283,12 @@ def resolve_build_model(
     }
     if not build.config.defined("HAL_PROVIDE_APP_ENTRY"):
         compile_definitions.add("HAL_PROVIDE_APP_ENTRY")
+    extra_include_dirs = resolve_project_inputs(
+        project_dir, include_dirs, "include directory", Path.is_dir
+    )
+    project_link_libraries = resolve_project_inputs(
+        project_dir, link_libraries, "link library", Path.is_file
+    )
     include_dirs = sorted(
         {project_dir, config_dir, *(source.parent for source in sources)},
         key=lambda path: path.as_posix(),
@@ -1279,6 +1312,9 @@ def resolve_build_model(
         "projectName": project_name,
         "projectSources": sources,
         "projectIncludeDirs": include_dirs,
+        # Like JH_EXTRA_INCLUDES on RP and STM32: the application's only.
+        "projectExtraIncludeDirs": extra_include_dirs,
+        "projectLinkLibraries": project_link_libraries,
         "requestedFeatures": requested_features,
         "resolvedFeatures": resolved_features,
         "integrationSources": integration_sources,
@@ -1501,6 +1537,24 @@ def _render_project_cmake(
     )
     lines.extend(
         _render_cmake_list(
+            "JH_ESP_IDF_PROJECT_EXTRA_INCLUDE_DIRS",
+            [
+                _canonical_path(path).as_posix()
+                for path in model["projectExtraIncludeDirs"]
+            ],
+        )
+    )
+    lines.extend(
+        _render_cmake_list(
+            "JH_ESP_IDF_PROJECT_LINK_LIBRARIES",
+            [
+                _canonical_path(path).as_posix()
+                for path in model["projectLinkLibraries"]
+            ],
+        )
+    )
+    lines.extend(
+        _render_cmake_list(
             "JH_ESP_IDF_COMPILE_DEFINITIONS", model["compileDefinitions"]
         )
     )
@@ -1592,7 +1646,7 @@ def _project_config_contract(
         else None
     )
     return {
-        "schemaVersion": 2,
+        "schemaVersion": 3,
         "target": model["target"],
         "board": model["board"],
         "idfTarget": model["idfTarget"],
@@ -1604,6 +1658,18 @@ def _project_config_contract(
             for path in model["projectIncludeDirs"]
         ],
         "projectConfigHeader": config_header,
+        "projectExtraIncludeDirs": [
+            _display_path(path, project_dir)
+            for path in model["projectExtraIncludeDirs"]
+        ],
+        # Precompiled archives; their content decides the image too.
+        "projectLinkLibraries": [
+            {
+                "path": _display_path(path, project_dir),
+                "sha256": _project_input_digest(path, "link library"),
+            }
+            for path in model["projectLinkLibraries"]
+        ],
         "requestedFeatures": model["requestedFeatures"],
         "compileDefinitions": model["compileDefinitions"],
         "sdkconfigDefaults": list(default_paths),
@@ -2334,6 +2400,7 @@ def validate_artifacts(
             "component": "jaszczurhal",
             "sources": list(model["integrationSources"]),
             "projectSources": project_config["projectSources"],
+            "projectLinkLibraries": project_config["projectLinkLibraries"],
             "featureHash": resolved_board["featureHash"],
             "requestedFeatures": resolved_board["requestedFeatures"],
             "resolvedFeatures": resolved_board["resolvedFeatures"],
@@ -2505,6 +2572,18 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", default="")
     parser.add_argument("--source", action="append", default=[])
     parser.add_argument(
+        "--include-dir",
+        action="append",
+        default=[],
+        help="Extra header directory of the project (JH_EXTRA_INCLUDES)",
+    )
+    parser.add_argument(
+        "--link-library",
+        action="append",
+        default=[],
+        help="Precompiled archive linked into the firmware (JH_LINK_LIBRARIES)",
+    )
+    parser.add_argument(
         "--variant",
         default="",
         help="Variant declared by JH_PROJECT_VARIANTS in hal_project_config.h",
@@ -2558,6 +2637,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             all_features=arguments.all_features,
             variant=arguments.variant or None,
             assembly=arguments.assembly or None,
+            include_dirs=arguments.include_dir,
+            link_libraries=arguments.link_library,
         )
         stage = "resolve-build-directory"
         build_dir = resolve_build_dir(

@@ -25,12 +25,20 @@ my-device/
 
 Plik `extensions.json` zawiera listę zalecanych rozszerzeń, od których zależą
 pliki projektu:
-`ms-vscode.cpptools` do IntelliSense, `ms-vscode.cmake-tools` jako
-`C_Cpp.default.configurationProvider` ustawiony w `settings.json`,
+`ms-vscode.cpptools` do IntelliSense, `ms-vscode.cmake-tools` do ustawień
+`cmake.*` projektu CMake firmware'u,
 `marus25.cortex-debug` do konfiguracji debugowania w `launch.json` oraz
 `ms-vscode.vscode-serial-monitor` używane razem z akcjami monitora
 `jh-vscode`.
 VS Code proponuje instalację brakujących pozycji przy otwarciu folderu.
+
+IntelliSense korzysta z bazy poleceń kompilacji, którą `Project: Refresh
+IntelliSense` zapisuje dla wybranej płytki albo montażu. W `settings.json`
+pole `C_Cpp.default.configurationProvider` jest puste, więc CMake Tools nie
+podmienia tej bazy konfiguracją `CMakeLists.txt`, który skonfigurował na
+własną rękę, na przykład projektu testów hostowych. Do pierwszego odświeżenia
+obowiązuje `C_Cpp.default.compileCommands`. Katalog `.build` widać
+w eksploratorze, ale wyszukiwanie go pomija.
 
 Wygenerowane pliki `launch.json` wskazują skrypty interfejsu i układu docelowego OpenOCD. W Windows uruchom `jh-vscode debug-tools --project <path> --json`, a następnie w ustawieniach użytkownika Cortex-Debug podaj wskazany plik wykonywalny OpenOCD i katalog narzędzi Arm. Rozszerzenie znajdzie w nim GDB. Ścieżki właściwe dla danego komputera nie są zapisywane w plikach projektu przechowywanych w Git.
 
@@ -142,7 +150,9 @@ tej platformy. CMake dostaje `JH_ASSEMBLY` zamiast `JH_BOARD`.
 
 `select-board` wypisuje montaże, przyjmuje wybór przez `--assembly`,
 `--selection` albo `--interactive` i zapisuje w stanie lokalnym tylko klucz
-montażu, usuwając pozostawioną tam platformę i płytkę. `--assembly` albo pole
+montażu, usuwając pozostawioną tam platformę i płytkę. Taką pozostałość
+usuwa też `Project: Sync board picker` uruchamiany przy otwarciu katalogu;
+pozostałe wpisy, na przykład port, zostają. `--assembly` albo pole
 `assembly` manifestu bez `device_tree.json` kończy się błędem
 `[JH-HW-ASSEMBLY]`; montaż pozostawiony w stanie lokalnym po usunięciu pliku
 jest pomijany.
@@ -293,6 +303,32 @@ osłania jej pliki warunkiem, jak opisano w części
 [platformy i warianty](#platformy-i-warianty).
 
 Skrypt ESP-IDF wykrywa pliki C, C++ i asemblera w katalogu projektu oraz rekurencyjnie w `src/`. Przy bezpośrednim wywołaniu skryptu można zastąpić wykrywanie listą powtarzanych argumentów `--source <relative-path>`. Wszystkie wskazane pliki muszą znajdować się wewnątrz projektu.
+
+Katalogi nagłówków i gotowe archiwa spoza projektu, na przykład bibliotekę
+z danymi logowania, podaj w `JH_EXTRA_INCLUDES` i `JH_LINK_LIBRARIES`, w obu
+przypadkach rozdzielając wpisy średnikami. Archiwum jest zbudowane dla
+jednego ABI, więc wskazuj je osobno dla każdej platformy:
+
+```json
+{
+  "targetProfiles": {
+    "esp32s3": {
+      "cmake": {
+        "cache": {
+          "JH_EXTRA_INCLUDES": "${project}/../libraries/Credentials/src",
+          "JH_LINK_LIBRARIES": "${project}/../libraries/Credentials/build/esp32s3/libCredentials.a"
+        }
+      }
+    }
+  }
+}
+```
+
+Te katalogi nagłówków widzi aplikacja, a biblioteka HAL nie. Oba klucze
+działają w buildach RP, STM32 i ESP-IDF. Build ESP-IDF zapisuje każde archiwum
+wraz z jego SHA-256 w `jh_esp_idf_artifacts.json` i linkuje firmware od nowa,
+gdy archiwum się zmieni. Na `JH_EXTRA_SOURCES` build ESP-IDF zatrzymuje się
+z błędem zamiast go pomijać, bo jego źródła muszą leżeć w projekcie.
 
 <a id="konfiguracja-funkcji-i-runtime"></a>
 

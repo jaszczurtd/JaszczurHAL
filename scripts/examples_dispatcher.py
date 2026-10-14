@@ -117,7 +117,6 @@ def settings_for(example_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
             project_cache=dict(manifest["cmake"]["cache"]),
             assembly=assembly,
         ),
-        "files.exclude": {"**/.build": True},
         "search.exclude": {"**/.build": True},
     }
 
@@ -170,6 +169,7 @@ def keybindings_for() -> list[dict[str, str]]:
 def reference_settings() -> dict[str, Any]:
     from vscode_task_config import (
         cmake_tools_configure_settings,
+        project_view_settings,
         vscode_entry_settings,
     )
 
@@ -181,11 +181,9 @@ def reference_settings() -> dict[str, Any]:
         ),
         "jaszczurhal.buildDir": "${workspaceFolder}/.build",
         "jaszczurhal.verbose": False,
-        "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
-        "C_Cpp.default.compileCommands": (
+        **project_view_settings(
             "${workspaceFolder}/.build/compile_commands_patched.json"
         ),
-        "C_Cpp.errorSquiggles": "enabled",
         "cmake.sourceDirectory": (
             "${workspaceFolder}/../../libraries/JaszczurHAL/cmake/jh_firmware_project"
         ),
@@ -202,8 +200,6 @@ def reference_settings() -> dict[str, Any]:
                 "JH_MODULE_NAME": "firmware",
             },
         ),
-        "files.exclude": {"**/.build": True},
-        "search.exclude": {"**/.build": True},
     }
 
 
