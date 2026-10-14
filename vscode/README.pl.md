@@ -117,7 +117,9 @@ system plików, o ile platforma udostępnia te dane.
 Akcja `sync-board-picker` odświeża dane wejściowe `boardSelection` oraz
 powiązane zadanie uruchamiane automatycznie po otwarciu katalogu, korzystając z
 bieżącego rejestru `boards/`. W projekcie z `device_tree.json` lista zawiera
-jego montaże, a domyślny jest montaż z pola `assembly` manifestu. Tworzy też lub naprawia zarządzane profile
+jego montaże, a domyślny jest montaż z pola `assembly` manifestu; platforma
+i płytka pozostawione w stanie lokalnym przez ścieżkę płytek są usuwane.
+Tworzy też lub naprawia zarządzane profile
 Cortex-Debug w `launch.json` dla RP2040, RP2350 ARM oraz STM32G474/ST-Link.
 Ścieżka pliku ELF pochodzi ze śledzonego manifestu projektu. Starsze profile
 JaszczurHAL są migrowane, a konfiguracje o nazwach należących do użytkownika

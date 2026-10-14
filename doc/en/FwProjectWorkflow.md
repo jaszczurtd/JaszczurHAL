@@ -26,11 +26,19 @@ my-device/
 ```
 
 `extensions.json` recommends the extensions the project files depend on:
-`ms-vscode.cpptools` for IntelliSense, `ms-vscode.cmake-tools` as the
-`C_Cpp.default.configurationProvider` set in `settings.json`,
+`ms-vscode.cpptools` for IntelliSense, `ms-vscode.cmake-tools` for the
+`cmake.*` settings of the firmware CMake project,
 `marus25.cortex-debug` for the `launch.json` debug configuration and
 `ms-vscode.vscode-serial-monitor` alongside the `jh-vscode` monitor actions.
 VS Code offers to install missing entries when the folder is opened.
+
+IntelliSense reads the compile database that `Project: Refresh IntelliSense`
+writes for the selected board or assembly. `settings.json` leaves
+`C_Cpp.default.configurationProvider` empty, so CMake Tools never replaces
+that database with a `CMakeLists.txt` it configured on its own, such as the
+project's host tests. `C_Cpp.default.compileCommands` applies until the first
+refresh. The `.build` directory is visible in the explorer and left out of
+search.
 
 Generated `launch.json` files specify the OpenOCD interface and target scripts. On Windows, run `jh-vscode debug-tools --project <path> --json`, then set the reported OpenOCD executable and Arm toolchain directory in the Cortex-Debug user settings. The extension locates GDB in that directory. These machine-specific paths are not stored in version-controlled project files.
 
@@ -154,7 +162,9 @@ other settings for that target. CMake receives `JH_ASSEMBLY` instead of
 
 `select-board` lists the assemblies, takes one with `--assembly`,
 `--selection` or `--interactive`, and stores only its key in local state,
-dropping a target or board left there. `--assembly` or a manifest `assembly`
+dropping a target or board left there. `Project: Sync board picker`, which
+runs when the folder opens, drops such a leftover target or board too and
+keeps the other local keys, such as the port. `--assembly` or a manifest `assembly`
 without `device_tree.json` stops with `[JH-HW-ASSEMBLY]`; an assembly left in
 local state after the file is removed is ignored.
 
@@ -304,6 +314,32 @@ application guards its files as described in
 [Targets and variants](#targets-and-variants).
 
 The ESP-IDF runner discovers C, C++, and assembly files in the project root and recursively under `src/`. When invoking the runner directly, repeated `--source <relative-path>` arguments can replace automatic discovery. Every source path must stay within the project.
+
+Header directories and precompiled archives from outside the project, such as
+a credentials library, go to `JH_EXTRA_INCLUDES` and `JH_LINK_LIBRARIES`,
+both semicolon-separated. An archive is built for one ABI, so name it per
+target:
+
+```json
+{
+  "targetProfiles": {
+    "esp32s3": {
+      "cmake": {
+        "cache": {
+          "JH_EXTRA_INCLUDES": "${project}/../libraries/Credentials/src",
+          "JH_LINK_LIBRARIES": "${project}/../libraries/Credentials/build/esp32s3/libCredentials.a"
+        }
+      }
+    }
+  }
+}
+```
+
+The application sees these header directories; the HAL library does not. RP,
+STM32 and ESP-IDF builds use both keys. An ESP-IDF build records each archive
+with its SHA-256 in `jh_esp_idf_artifacts.json` and relinks when it changes.
+It stops on `JH_EXTRA_SOURCES` instead of ignoring it, because its sources
+stay within the project.
 
 <a id="feature-and-runtime-configuration"></a>
 

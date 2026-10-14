@@ -18,8 +18,16 @@ set(_jh_project_sources
 idf_component_register(
     SRCS ${_jh_project_sources}
     INCLUDE_DIRS ${JH_ESP_IDF_PROJECT_INCLUDE_DIRS}
+    # The project's JH_EXTRA_INCLUDES, for the application only.
+    PRIV_INCLUDE_DIRS ${JH_ESP_IDF_PROJECT_EXTRA_INCLUDE_DIRS}
     REQUIRES jaszczurhal esp_system esp_psram spi_flash)
 
 target_compile_definitions(${COMPONENT_LIB} PRIVATE
     ${JH_ESP_IDF_COMPILE_DEFINITIONS})
+# Precompiled archives of the project (JH_LINK_LIBRARIES); they follow the
+# application in the link and the build relinks when one changes.
+if(JH_ESP_IDF_PROJECT_LINK_LIBRARIES)
+    target_link_libraries(${COMPONENT_LIB} PRIVATE
+        ${JH_ESP_IDF_PROJECT_LINK_LIBRARIES})
+endif()
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wall -Wextra -Werror)

@@ -58,10 +58,11 @@ VSCODE_ENTRY_CONFIG = "${config:jaszczurhal.vscodeEntry}"
 VSCODE_ENTRY_WINDOWS_CONFIG = "${config:jaszczurhal.vscodeEntryWindows}"
 
 # Single source of truth for .vscode/extensions.json across every generator.
-# cpptools drives IntelliSense over the patched compile database, cmake-tools is
-# the C_Cpp.default.configurationProvider written into settings.json,
-# cortex-debug owns the launch.json configuration and serial-monitor sits beside
-# the jh-vscode monitor actions.
+# cpptools drives IntelliSense over the patched compile database, cmake-tools
+# configures the firmware CMake project (and is the examples'
+# C_Cpp.default.configurationProvider; projects outside the library have none,
+# see project_view_settings), cortex-debug owns the launch.json configuration
+# and serial-monitor sits beside the jh-vscode monitor actions.
 VSCODE_EXTENSION_RECOMMENDATIONS = [
     "ms-vscode.cpptools",
     "ms-vscode.cmake-tools",
@@ -404,6 +405,43 @@ def vscode_entry_settings(unix_entry: str) -> dict[str, str]:
         "jaszczurhal.vscodeEntryWindows": f"{unix_entry}.cmd",
         "cortex-debug.gdbPath.linux": "gdb-multiarch",
     }
+
+
+BUILD_DIR_GLOB = "**/.build"
+
+
+def project_view_settings(compile_commands: str) -> dict[str, Any]:
+    """settings.json keys of a firmware project outside the library.
+
+    IntelliSense reads only the compile database written by Project: Refresh
+    IntelliSense. Without a configuration provider, CMake Tools never
+    replaces it with a CMakeLists.txt it configured on its own, such as the
+    project's host tests. ``compile_commands`` applies until the first
+    refresh writes c_cpp_properties.json, and its presence keeps cpptools
+    from picking a provider by itself. .build is visible in the explorer and
+    left out of search."""
+    return {
+        "C_Cpp.default.configurationProvider": "",
+        "C_Cpp.default.compileCommands": compile_commands,
+        "C_Cpp.errorSquiggles": "enabled",
+        "search.exclude": {BUILD_DIR_GLOB: True},
+    }
+
+
+def apply_project_view_settings(settings: dict[str, Any], compile_commands: str) -> None:
+    """Bring an existing settings.json document to project_view_settings(),
+    keeping the project's other keys and exclusions; .build leaves
+    files.exclude."""
+    desired = project_view_settings(compile_commands)
+    search = settings.get("search.exclude")
+    desired["search.exclude"] = {**(search if isinstance(search, dict) else {}),
+                                 **desired["search.exclude"]}
+    settings.update(desired)
+    hidden = settings.get("files.exclude")
+    if isinstance(hidden, dict):
+        hidden.pop(BUILD_DIR_GLOB, None)
+        if not hidden:
+            del settings["files.exclude"]
 
 
 def vscode_entry_task(

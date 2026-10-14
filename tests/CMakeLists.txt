@@ -2529,6 +2529,16 @@ add_hal_test(test_hal_i2c)
 add_hal_test(test_hal_i2c_slave)
 add_hal_test(test_i2c_recursive_lock)
 add_hal_test(test_hal_rgb_led)
+# The board status LED helper, once per description it reads.
+foreach(_jh_source BOARD_RGB BOARD_GRB ASSEMBLY)
+    add_executable(test_hal_rgb_led_board_status_${_jh_source}
+        test_hal_rgb_led_board_status.cpp)
+    target_link_libraries(test_hal_rgb_led_board_status_${_jh_source} PRIVATE hal_mock)
+    target_compile_definitions(test_hal_rgb_led_board_status_${_jh_source} PRIVATE
+        TEST_STATUS_LED_${_jh_source}=1)
+    add_test(NAME test_hal_rgb_led_board_status_${_jh_source}
+        COMMAND test_hal_rgb_led_board_status_${_jh_source})
+endforeach()
 add_hal_test(test_hal_serial)
 add_hal_test(test_hal_sc_auth)
 add_hal_test(test_hal_serial_session)

@@ -58,7 +58,7 @@ $REQUIRED_VSCODE = @(
 
 # Referenced but not load-bearing for build/upload/monitor.
 $OPTIONAL_VSCODE = @{
-    'ms-vscode.cmake-tools'          = 'Named as C_Cpp.default.configurationProvider in settings.json. Without it cpptools falls back to compileCommands.'
+    'ms-vscode.cmake-tools'          = 'Configures the firmware CMake project; the examples also name it as C_Cpp.default.configurationProvider. IntelliSense works from compileCommands without it.'
     'ms-vscode.vscode-serial-monitor' = 'Convenience only; tasks use the jh-vscode monitor actions.'
 }
 

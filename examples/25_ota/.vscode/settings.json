@@ -22,9 +22,6 @@
         "JH_ROOT": "${workspaceFolder}/../..",
         "JH_ASSEMBLY": "picow"
     },
-    "files.exclude": {
-        "**/.build": true
-    },
     "search.exclude": {
         "**/.build": true
     }

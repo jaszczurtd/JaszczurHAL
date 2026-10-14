@@ -14,6 +14,7 @@
  */
 
 #include <stdint.h>
+#include <string.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -73,6 +74,49 @@ hal_status_t hal_rgb_led_init(uint8_t pin, uint8_t num_pixels);
  */
 hal_status_t hal_rgb_led_init_ex(uint8_t pin, uint8_t num_pixels,
                                  hal_rgb_led_pixel_type_t pixel_type);
+
+#if (defined(JH_HW_NODE_BOARD_STATUS_LED_PIN_DATA) &&                          \
+     defined(JH_HW_NODE_BOARD_STATUS_LED_PROP_PIXEL_ORDER)) ||                 \
+    (defined(HAL_BOARD_STATUS_LED_KIND_ADDRESSABLE) &&                         \
+     (defined(HAL_BOARD_STATUS_LED_PIXEL_ORDER_RGB) ||                         \
+      defined(HAL_BOARD_STATUS_LED_PIXEL_ORDER_GRB)))
+/**
+ * @brief Initialise the board's addressable status LED.
+ *
+ * With the assembly's `board.statusLed` node (jh_hardware.h of a device tree
+ * build, also loaded by host tests) the function uses its data pin, pixel
+ * count and colour order. Otherwise it starts HAL_BOARD_STATUS_LED_PIN as one
+ * pixel in the colour order of the board, or of the assembly when the board
+ * leaves it to the project (`statusLed.pixelOrder`). Defined only when one of
+ * them describes an addressable LED with a known colour order, so on a board
+ * with a plain GPIO LED the call fails at compile time.
+ *
+ * @return The status of hal_rgb_led_init_ex().
+ */
+static inline hal_status_t hal_rgb_led_init_board_status(void) {
+#if defined(JH_HW_NODE_BOARD_STATUS_LED_PIN_DATA) &&                           \
+    defined(JH_HW_NODE_BOARD_STATUS_LED_PROP_PIXEL_ORDER)
+  /* The board allows "RGB" or "GRB"; the comparison folds at compile time. */
+  const hal_rgb_led_pixel_type_t type =
+      (strcmp(JH_HW_NODE_BOARD_STATUS_LED_PROP_PIXEL_ORDER, "RGB") == 0)
+          ? HAL_RGB_LED_PIXEL_RGB_KHZ800
+          : HAL_RGB_LED_PIXEL_GRB_KHZ800;
+#if defined(JH_HW_NODE_BOARD_STATUS_LED_PROP_COUNT)
+  const uint8_t pixels = (uint8_t)JH_HW_NODE_BOARD_STATUS_LED_PROP_COUNT;
+#else
+  const uint8_t pixels = 1u;
+#endif
+  return hal_rgb_led_init_ex((uint8_t)JH_HW_NODE_BOARD_STATUS_LED_PIN_DATA,
+                             pixels, type);
+#elif defined(HAL_BOARD_STATUS_LED_PIXEL_ORDER_RGB)
+  return hal_rgb_led_init_ex((uint8_t)HAL_BOARD_STATUS_LED_PIN, 1u,
+                             HAL_RGB_LED_PIXEL_RGB_KHZ800);
+#else
+  return hal_rgb_led_init_ex((uint8_t)HAL_BOARD_STATUS_LED_PIN, 1u,
+                             HAL_RGB_LED_PIXEL_GRB_KHZ800);
+#endif
+}
+#endif
 
 /**
  * @brief Set the brightness used by hal_rgb_led_set_color().

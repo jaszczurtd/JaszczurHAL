@@ -60,6 +60,9 @@ hal_status_t hal_rgb_led_init(uint8_t pin, uint8_t num_pixels);
 hal_status_t hal_rgb_led_init_ex(uint8_t pin, uint8_t num_pixels,
                                  hal_rgb_led_pixel_type_t pixel_type);
 
+// Inicjalizacja adresowalnej diody statusu płytki (inline; opis niżej)
+static inline hal_status_t hal_rgb_led_init_board_status(void);
+
 // Ustaw jasność [1, 255]; domyślnie 30. Efekt widoczny przy następnym wywołaniu set_color().
 void hal_rgb_led_set_brightness(uint8_t brightness);
 
@@ -77,6 +80,24 @@ koloru przed inicjalizacją zwracają `HAL_EUNINIT`, błędy alokacji/zasobów
 zwracają `HAL_ENOMEM`, a błędy transportu zwracają `HAL_EIO`.
 `hal_rgb_led_init_ex()` zachowuje dotychczasową nazwę, ponieważ `_ex` już
 oznacza wariant z jawnym typem pikseli.
+
+`hal_rgb_led_init_board_status()` uruchamia diodę statusu płytki, gdy jest
+adresowalna. Jeśli montaż ma węzeł `board.statusLed`, funkcja bierze z niego
+pin danych, liczbę pikseli i kolejność kolorów; ten sam węzeł widzą testy
+hostowe, które wczytują `jh_hardware.h`. W przeciwnym razie uruchamia
+`HAL_BOARD_STATUS_LED_PIN` jako jeden piksel w kolejności kolorów płytki albo
+montażu, jeśli płytka zostawia ją projektowi (`statusLed.pixelOrder`).
+Funkcja istnieje tylko wtedy, gdy build zna pin i kolejność kolorów, więc na
+płytce ze zwykłą diodą GPIO wywołanie kończy się błędem kompilacji.
+
+```c
+#if defined(HAL_BOARD_STATUS_LED_KIND_ADDRESSABLE)
+  (void)hal_rgb_led_init_board_status();
+  (void)hal_rgb_led_set_color(HAL_RGB_LED_GREEN);
+#else
+  hal_gpio_set_mode(HAL_LED_BUILTIN, HAL_GPIO_OUTPUT);
+#endif
+```
 
 - **impl/rp2040:** wspólny rdzeń `hal/gpio/neopixel/jh_neopixel.*` + transport PIO RP2040 (`hal/gpio/neopixel/rp2040_pio.h`).
 - **impl/stm32g474:** wspólny rdzeń `hal/gpio/neopixel/jh_neopixel.*` + transport GPIO synchronizowany cyklami w `impl/stm32g474/hal_rgb_led.cpp`.

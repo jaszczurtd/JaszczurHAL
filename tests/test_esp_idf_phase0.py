@@ -163,6 +163,69 @@ class ProjectModelTests(unittest.TestCase):
             with self.assertRaisesRegex(esp_idf.EspIdfError, "escapes"):
                 esp_idf.resolve_project_sources(project, [str(outside)])
 
+    def test_external_headers_and_archives_reach_only_the_application(self) -> None:
+        # JH_EXTRA_INCLUDES and JH_LINK_LIBRARIES may lie outside the project,
+        # as on RP and STM32; the contract records each archive's hash.
+        with tempfile.TemporaryDirectory(prefix="jh-esp-root-") as text:
+            root = Path(text)
+            project = root / "project"
+            project.mkdir()
+            (project / "app.c").write_text(
+                "void app_start(void) {}\nvoid app_task0(void) {}\n", encoding="utf-8"
+            )
+            headers = root / "Credentials" / "src"
+            headers.mkdir(parents=True)
+            archive = root / "Credentials" / "libCredentials.a"
+            archive.write_bytes(b"!<arch>\n")
+
+            def model(**inputs):
+                return esp_idf.resolve_build_model(
+                    ROOT,
+                    project,
+                    target="esp32s3",
+                    board="waveshare-esp32-s3-zero",
+                    project_name="firmware",
+                    requested_sources=[],
+                    features=[],
+                    definitions=[],
+                    **inputs,
+                )
+
+            resolved = model(
+                include_dirs=[str(headers)], link_libraries=[str(archive), str(archive)]
+            )
+            canonical_headers = esp_idf._canonical_path(headers)
+            canonical_archive = esp_idf._canonical_path(archive)
+            self.assertEqual([canonical_headers], resolved["projectExtraIncludeDirs"])
+            self.assertNotIn(canonical_headers, resolved["projectIncludeDirs"])
+            self.assertEqual([canonical_archive], resolved["projectLinkLibraries"])
+
+            build_dir = project / ".build/esp-idf/esp32s3/waveshare-esp32-s3-zero"
+            generated = esp_idf.materialize_build_inputs(ROOT, project, build_dir, resolved)
+            cmake = (generated / esp_idf.PROJECT_CONFIG_CMAKE_NAME).read_text(encoding="utf-8")
+            for name, path in (
+                ("JH_ESP_IDF_PROJECT_EXTRA_INCLUDE_DIRS", canonical_headers),
+                ("JH_ESP_IDF_PROJECT_LINK_LIBRARIES", canonical_archive),
+            ):
+                block = cmake.split(f"set({name}", 1)[1].split(")", 1)[0]
+                self.assertIn(path.as_posix(), block)
+            contract = json.loads(
+                (generated / esp_idf.PROJECT_CONFIG_JSON_NAME).read_text(encoding="utf-8")
+            )
+            self.assertEqual([canonical_headers.as_posix()], contract["projectExtraIncludeDirs"])
+            self.assertEqual(
+                [{"path": canonical_archive.as_posix(), "sha256": esp_idf._sha256(archive)}],
+                contract["projectLinkLibraries"],
+            )
+            # A rebuilt archive no longer matches the generated inputs.
+            archive.write_bytes(b"!<arch>\nchanged\n")
+            with self.assertRaisesRegex(esp_idf.EspIdfError, "projectLinkLibraries mismatch"):
+                esp_idf.validate_generated_project_contract(project, build_dir, resolved)
+            with self.assertRaisesRegex(esp_idf.EspIdfError, "link library does not exist"):
+                model(link_libraries=[str(root / "missing.a")])
+            with self.assertRaisesRegex(esp_idf.EspIdfError, "include directory does not exist"):
+                model(include_dirs=[str(archive)])
+
     def test_model_resolves_supported_target_required_feature(self) -> None:
         with tempfile.TemporaryDirectory(prefix="jh-esp-project-") as text:
             project = Path(text)
@@ -532,12 +595,15 @@ class ArtifactTests(unittest.TestCase):
                     / esp_idf.PROJECT_CONFIG_JSON_NAME
                 ).read_text(encoding="utf-8")
             )
-            self.assertEqual(project_config["schemaVersion"], 2)
+            self.assertEqual(project_config["schemaVersion"], 3)
             self.assertEqual(
                 project_config["projectSourceSha256"],
                 {"app.c": esp_idf._sha256(project / "app.c")},
             )
             self.assertEqual(project_config["projectIncludeDirs"], ["."])
+            self.assertEqual(project_config["projectExtraIncludeDirs"], [])
+            self.assertEqual(project_config["projectLinkLibraries"], [])
+            self.assertEqual(manifest["integration"]["projectLinkLibraries"], [])
             self.assertIsNone(project_config["projectConfigHeader"])
             self.validate_ninja_freshness.assert_called_once_with(
                 build_dir.resolve(), "firmware", manifest["toolchain"], None

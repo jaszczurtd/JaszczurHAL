@@ -60,6 +60,9 @@ hal_status_t hal_rgb_led_init(uint8_t pin, uint8_t num_pixels);
 hal_status_t hal_rgb_led_init_ex(uint8_t pin, uint8_t num_pixels,
                                  hal_rgb_led_pixel_type_t pixel_type);
 
+// Init the board's addressable status LED (inline; see below)
+static inline hal_status_t hal_rgb_led_init_board_status(void);
+
 // Set brightness [1, 255]; default is 30. Takes effect on next set_color() call.
 void hal_rgb_led_set_brightness(uint8_t brightness);
 
@@ -76,6 +79,24 @@ counts/types or colours return `HAL_EINVAL`, colour writes before init return
 `HAL_EUNINIT`, allocation/resource failures return `HAL_ENOMEM`, and transport
 failures return `HAL_EIO`. `hal_rgb_led_init_ex()` keeps its historical name
 because `_ex` already denotes the explicit pixel-type variant.
+
+`hal_rgb_led_init_board_status()` starts the board's status LED when it is
+addressable. With the assembly's `board.statusLed` node it uses that node's
+data pin, pixel count and colour order; host tests that load `jh_hardware.h`
+see the same node. Otherwise it starts `HAL_BOARD_STATUS_LED_PIN` as one
+pixel in the colour order of the board, or of the assembly when the board
+leaves it to the project (`statusLed.pixelOrder`). The function exists only
+when the build knows the pin and the colour order, so on a board with a plain
+GPIO LED the call fails at compile time.
+
+```c
+#if defined(HAL_BOARD_STATUS_LED_KIND_ADDRESSABLE)
+  (void)hal_rgb_led_init_board_status();
+  (void)hal_rgb_led_set_color(HAL_RGB_LED_GREEN);
+#else
+  hal_gpio_set_mode(HAL_LED_BUILTIN, HAL_GPIO_OUTPUT);
+#endif
+```
 
 - **impl/rp2040:** shared `hal/gpio/neopixel/jh_neopixel.*` core + RP2040 PIO transport (`hal/gpio/neopixel/rp2040_pio.h`).
 - **impl/stm32g474:** shared `hal/gpio/neopixel/jh_neopixel.*` core + cycle-timed GPIO transport in `impl/stm32g474/hal_rgb_led.cpp`.

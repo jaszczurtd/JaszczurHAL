@@ -163,6 +163,7 @@ def build_files(
         cmake_tools_configure_settings,
         cortex_debug_launch_document,
         project_tasks_document,
+        project_view_settings,
         vscode_entry_settings,
     )
 
@@ -237,8 +238,9 @@ def build_files(
                 "jaszczurhal.verbose": False,
                 "jaszczurhal.root": values["JH_ROOT_REL"],
                 **vscode_entry_settings(values["JH_ENTRY_REL"]),
-                "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
-                "C_Cpp.default.compileCommands": "${workspaceFolder}/.build/compile_commands_patched.json",
+                **project_view_settings(
+                    "${workspaceFolder}/.build/compile_commands_patched.json"
+                ),
                 "cmake.sourceDirectory": variable_path(
                     "workspaceFolder", values["JH_DISPATCHER_REL"]
                 ),

@@ -20,9 +20,6 @@
         "JH_ROOT": "${workspaceFolder}/../..",
         "JH_ASSEMBLY": "nucleo-canhat"
     },
-    "files.exclude": {
-        "**/.build": true
-    },
     "search.exclude": {
         "**/.build": true
     }

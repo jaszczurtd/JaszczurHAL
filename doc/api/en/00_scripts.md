@@ -371,6 +371,11 @@ selects `waveshare-esp32-s3-zero` when `--board` is omitted. `--output` must
 remain below either the project or repository `.build` root. Repeatable
 `--source` arguments replace automatic discovery; otherwise the runner includes
 supported files in the project root and recursively under `src/`.
+Repeatable `--include-dir` and `--link-library` add header directories for
+the application and precompiled archives, which may lie outside the project;
+jh-vscode passes the manifest's `JH_EXTRA_INCLUDES` and `JH_LINK_LIBRARIES`
+through them, and the generated project record lists each archive with its
+SHA-256.
 `--variant <id>` selects a variant declared in the project header. Repeatable
 `--define` arguments belong to static library builds,
 `--all-features` requests every directly requestable feature from the target's

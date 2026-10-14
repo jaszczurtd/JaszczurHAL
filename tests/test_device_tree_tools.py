@@ -230,6 +230,29 @@ class Workflow(unittest.TestCase):
             self.config()
         self.assertEqual("canhat", self.config(assembly_override="canhat")["assembly"])
 
+    def test_sync_drops_a_local_board_path_selection(self) -> None:
+        write_json(self.dir / ".vscode" / "jaszczurhal.project.json", {**MANIFEST, "assembly": "canhat"})
+        write_json(self.dir / ".vscode" / "tasks.json", {"version": "2.0.0", "tasks": []})
+        write_json(self.local, {"target": "stm32g474", "board": "nucleo-g474re",
+                                "uploadPort": "/dev/ttyACM0"})
+        result = run("sync-board-picker", "--project", self.dir)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("target=stm32g474 board=nucleo-g474re", result.stdout)
+        self.assertEqual({"uploadPort": "/dev/ttyACM0"}, json.loads(self.local.read_text(encoding="utf-8")))
+        self.assertEqual("canhat", self.config()["assembly"])
+        # Nothing but the board path selection: the file goes.
+        write_json(self.local, {"target": "stm32g474"})
+        self.assertEqual(0, run("sync-board-picker", "--project", self.dir).returncode)
+        self.assertFalse(self.local.exists())
+        # The board path keeps its selection.
+        (self.dir / "device_tree.json").unlink()
+        write_json(self.dir / ".vscode" / "jaszczurhal.project.json", MANIFEST)
+        board_path = {"target": "stm32g474", "board": "nucleo-g474re"}
+        write_json(self.local, board_path)
+        result = run("sync-board-picker", "--project", self.dir)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(board_path, json.loads(self.local.read_text(encoding="utf-8")))
+
     def test_an_assembly_needs_the_device_tree(self) -> None:
         (self.dir / "device_tree.json").unlink()
         with self.assertRaisesRegex(ValueError, r"JH-HW-ASSEMBLY\] --assembly"):
@@ -266,6 +289,34 @@ class Workflow(unittest.TestCase):
         command = jh_vscode.esp_idf_runner_command(config, directory, "build")
         self.assertEqual("esp32s3-zero", command[command.index("--assembly") + 1])
         self.assertNotIn("--board", command)
+
+    def test_esp_builds_take_the_project_headers_and_archives(self) -> None:
+        directory = WORK / "esp inputs project"
+        if directory.exists():
+            shutil.rmtree(directory)
+        shutil.copytree(LIBRARY, directory)
+        (directory / ".vscode").mkdir()
+        cache = {"JH_EXTRA_INCLUDES": "${project}/inc;${project}/more inc",
+                 "JH_LINK_LIBRARIES": "${project}/lib/libsecret.a"}
+        write_json(directory / ".vscode" / "jaszczurhal.project.json",
+                   {"project": "esp", "module": "app", "toolchain": "cmake",
+                    "targetProfiles": {"esp32s3": {"cmake": {"cache": cache}}}})
+        config = jh_vscode.load_project_config(directory, assembly_override="esp32s3-zero",
+                                               use_local_state=False)
+        command = jh_vscode.esp_idf_runner_command(config, directory, "build")
+        pairs = list(zip(command, command[1:]))
+        self.assertIn(("--include-dir", f"{directory}/inc"), pairs)
+        self.assertIn(("--include-dir", f"{directory}/more inc"), pairs)
+        self.assertIn(("--link-library", f"{directory}/lib/libsecret.a"), pairs)
+        # A key the ESP-IDF build cannot honour stops it instead of vanishing.
+        cache["JH_EXTRA_SOURCES"] = "${project}/../common/shared.c"
+        write_json(directory / ".vscode" / "jaszczurhal.project.json",
+                   {"project": "esp", "module": "app", "toolchain": "cmake",
+                    "targetProfiles": {"esp32s3": {"cmake": {"cache": cache}}}})
+        config = jh_vscode.load_project_config(directory, assembly_override="esp32s3-zero",
+                                               use_local_state=False)
+        with self.assertRaisesRegex(ValueError, "JH_EXTRA_SOURCES is not supported by ESP-IDF"):
+            jh_vscode.esp_idf_runner_command(config, directory, "build")
 
     def test_a_target_overlay_build_dir_is_the_base(self) -> None:
         directory = WORK / "esp overlay project"
@@ -384,6 +435,40 @@ class VsCodeFiles(unittest.TestCase):
                             for item in launch["configurations"][:-1]))
         rerun = run("sync-board-picker", "--project", directory)
         self.assertIn("are current", rerun.stdout)
+
+    def test_projects_read_intellisense_from_the_compile_database(self) -> None:
+        # A project outside the library has no configuration provider, so
+        # CMake Tools never replaces the database the refresh writes; .build
+        # stays in the explorer and out of search.
+        directory = WORK / "generated project"
+        if directory.exists():
+            shutil.rmtree(directory)
+        subprocess.run([sys.executable, str(ROOT / "vscode" / "tools" / "create-vscode-example.py"),
+                        "--output", str(directory), "--name", "Generated"],
+                       check=True, capture_output=True, text=True)
+        generated = json.loads((directory / ".vscode" / "settings.json").read_text(encoding="utf-8"))
+        for settings in (generated, examples_dispatcher.reference_settings()):
+            self.assertEqual("", settings["C_Cpp.default.configurationProvider"])
+            self.assertTrue(settings["C_Cpp.default.compileCommands"])
+            self.assertNotIn(".build", json.dumps(settings.get("files.exclude", {})))
+            self.assertEqual({"**/.build": True}, settings["search.exclude"])
+        example = examples_dispatcher.settings_for(
+            ROOT / "examples" / "13_adc", examples_dispatcher.read_manifest(ROOT / "examples" / "13_adc"))
+        self.assertNotIn(".build", json.dumps(example.get("files.exclude", {})))
+        # An existing project keeps its own keys and exclusions.
+        settings = {"C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+                    "files.exclude": {"**/.build": True, "**/*.o": True},
+                    "search.exclude": {"**/logs": True}, "files.autoSave": "afterDelay"}
+        vscode_task_config.apply_project_view_settings(settings, "${workspaceFolder}/db.json")
+        self.assertEqual({"C_Cpp.default.configurationProvider": "",
+                          "C_Cpp.default.compileCommands": "${workspaceFolder}/db.json",
+                          "C_Cpp.errorSquiggles": "enabled",
+                          "files.exclude": {"**/*.o": True},
+                          "search.exclude": {"**/logs": True, "**/.build": True},
+                          "files.autoSave": "afterDelay"}, settings)
+        settings = {"files.exclude": {"**/.build": True}}
+        vscode_task_config.apply_project_view_settings(settings, "db.json")
+        self.assertNotIn("files.exclude", settings)
 
     def test_cmake_tools_settings_name_the_assembly(self) -> None:
         registry = jh_vscode.load_target_registry()
