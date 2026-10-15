@@ -14,12 +14,110 @@ import sys
 from repo_root import repo_root  # noqa: E402
 
 ROOT = repo_root(sys.argv, __file__)
+# The device tree of the library stages; for STM32 its nucleo-pim730 assembly.
+LIBRARY_DEVICE_TREE = ROOT / "tests/fixtures/device_tree/hal/library/device_tree.json"
 HOST_SANITY_FLAG = "-DJH_STM32_HOST_SANITY=ON"
 
 
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise AssertionError(message)
+
+
+def build_package(build: Path, *arguments: str) -> None:
+    """Configure link_libraries/stm32_lib for the cross toolchain and build it."""
+    configure = subprocess.run(
+        [
+            cmake,
+            "-S",
+            str(ROOT / "link_libraries/stm32_lib"),
+            "-B",
+            str(build),
+            f"-DCMAKE_TOOLCHAIN_FILE={ROOT / 'link_libraries/stm32_lib/toolchain_stm32g474.cmake'}",
+            *arguments,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    require(
+        configure.returncode == 0,
+        f"STM32 package configure failed ({build.name}):\n"
+        f"{configure.stdout}\n{configure.stderr}",
+    )
+    compiled = subprocess.run(
+        [cmake, "--build", str(build), "--parallel", "4"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    require(
+        compiled.returncode == 0,
+        f"STM32 package build failed ({build.name}):\n"
+        f"{compiled.stdout}\n{compiled.stderr}",
+    )
+
+
+def install_package(build: Path, prefix: Path) -> None:
+    installed = subprocess.run(
+        [cmake, "--install", str(build), "--prefix", str(prefix)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    require(
+        installed.returncode == 0,
+        f"STM32 package install failed ({build.name}):\n"
+        f"{installed.stdout}\n{installed.stderr}",
+    )
+
+
+def link_installed_consumer(
+    prefix: Path, source: Path, definitions: list[str], output: Path
+) -> None:
+    """Compile and link source against an installed package only: its headers,
+    archive and link reference, with cc and no Python in PATH."""
+    command = [
+        arm_cc,
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-mcpu=cortex-m4",
+        "-mthumb",
+        "-mfpu=fpv4-sp-d16",
+        "-mfloat-abi=hard",
+        "-ffunction-sections",
+        "-fdata-sections",
+        f"-I{prefix / 'include'}",
+        f"-I{prefix / 'include/generated'}",
+        "-DHAL_TARGET_STM32G474=1",
+        *(f"-D{definition}" for definition in definitions),
+        str(source),
+        str(prefix / "share/JaszczurHAL/generated/jh_link_contract_reference.c"),
+        str(prefix / "lib/libJaszczurHAL.a"),
+        "-nostdlib",
+        "-Wl,-e,main",
+        "-Wl,--gc-sections",
+        "-o",
+        str(output),
+    ]
+    environment = os.environ.copy()
+    tool_path = output.parent / "compiler-tools"
+    tool_path.mkdir()
+    for tool_name in ("arm-none-eabi-as", "arm-none-eabi-ld"):
+        tool = shutil.which(tool_name)
+        require(tool is not None, f"{tool_name} is required for the package probe")
+        (tool_path / tool_name).symlink_to(tool)
+    environment["PATH"] = str(tool_path)
+    compiled = subprocess.run(
+        command, env=environment, check=False, capture_output=True, text=True
+    )
+    require(
+        compiled.returncode == 0,
+        f"installed package ({prefix.name}) did not compile/link with cc and "
+        f"no Python in PATH:\n{compiled.stdout}\n{compiled.stderr}",
+    )
 
 
 recipe = (ROOT / "link_libraries/stm32_lib" / "CMakeLists.txt").read_text(encoding="utf-8")
@@ -98,14 +196,19 @@ rejected = scratch / "without-flag"
 project_config = scratch / "project-config"
 project_features = scratch / "project-features"
 classic_features = scratch / "classic-features"
+classic_config = scratch / "classic-config"
 invalid_cyw43_keyword_source = scratch / "invalid-cyw43-keyword-source"
 invalid_cyw43_keyword_build = scratch / "invalid-cyw43-keyword-build"
 invalid_unity = scratch / "invalid-unity"
 invalid_unity_list = scratch / "invalid-unity-list"
 direct_unity = scratch / "direct-unity"
-radio_package = scratch / "radio-package"
+board_package = scratch / "board-package"
 install_prefix = scratch / "install-prefix"
 direct_consumer = scratch / "direct-consumer"
+radio_config = scratch / "radio-config"
+radio_package = scratch / "radio-package"
+radio_prefix = scratch / "radio-prefix"
+radio_consumer = scratch / "radio-consumer"
 incremental_source = scratch / "incremental-source"
 incremental_config = scratch / "incremental-config"
 incremental_build = scratch / "incremental-build"
@@ -149,7 +252,10 @@ try:
             f"disabled LittleFS selected an STM32 source: {suffix}",
         )
 
+    # No STM32 board carries a radio: MQTT, TLS and BLE need the PIM730 of the
+    # device tree the library stages use (its nucleo-pim730 assembly).
     project_config.mkdir(parents=True)
+    shutil.copy(LIBRARY_DEVICE_TREE, project_config / "device_tree.json")
     (project_config / "hal_project_config.h").write_text(
         "#define HAL_ENABLE_MQTT 1\n"
         "#define HAL_ENABLE_TLS 1\n"
@@ -181,7 +287,6 @@ try:
             str(project_features),
             HOST_SANITY_FLAG,
             "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
-            "-DJH_BOARD=nucleo-g474re-pim730",
             f"-DHAL_PROJECT_CONFIG_DIR={project_config}",
             f"-DCMAKE_PROJECT_INCLUDE={link_probe}",
         ],
@@ -227,6 +332,9 @@ try:
             f"project-header feature did not select STM32 source: {suffix}",
         )
 
+    classic_config.mkdir(parents=True)
+    shutil.copy(LIBRARY_DEVICE_TREE, classic_config / "device_tree.json")
+    (classic_config / "hal_project_config.h").write_text("#pragma once\n", encoding="utf-8")
     classic_feature_configure = subprocess.run(
         [
             cmake,
@@ -236,7 +344,7 @@ try:
             str(classic_features),
             HOST_SANITY_FLAG,
             "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
-            "-DJH_BOARD=nucleo-g474re-pim730",
+            f"-DHAL_PROJECT_CONFIG_DIR={classic_config}",
             "-DEXTRA_HAL_DEFINES=HAL_ENABLE_BLUETOOTH_GAMEPAD",
         ],
         check=False,
@@ -397,39 +505,10 @@ jh_target_enable_cyw43_feature_stack(probe GAMEPAD TRUE)
     arm_cc = shutil.which("arm-none-eabi-gcc")
     require(
         arm_cc is not None,
-        "arm-none-eabi-gcc is required for the installed radio-package probe",
+        "arm-none-eabi-gcc is required for the installed package probes",
     )
-    radio_package_configure = subprocess.run(
-        [
-            cmake,
-            "-S",
-            str(ROOT / "link_libraries/stm32_lib"),
-            "-B",
-            str(radio_package),
-            f"-DCMAKE_TOOLCHAIN_FILE={ROOT / 'link_libraries/stm32_lib/toolchain_stm32g474.cmake'}",
-            "-DJH_BOARD=nucleo-g474re-pim730",
-            "-DEXTRA_HAL_DEFINES=HAL_ENABLE_WIFI",
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    require(
-        radio_package_configure.returncode == 0,
-        "STM32 radio package configure failed:\n"
-        f"{radio_package_configure.stdout}\n{radio_package_configure.stderr}",
-    )
-    package_build = subprocess.run(
-        [cmake, "--build", str(radio_package), "--parallel", "4"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    require(
-        package_build.returncode == 0,
-        "STM32 package build failed:\n"
-        f"{package_build.stdout}\n{package_build.stderr}",
-    )
+    # The base board: the installed package without a device tree.
+    build_package(board_package, "-DJH_BOARD=nucleo-g474re")
     stale_installed_registry = (
         install_prefix / "include/generated/jh_board_registry.h"
     )
@@ -437,17 +516,7 @@ jh_target_enable_cyw43_feature_stack(probe GAMEPAD TRUE)
     stale_installed_registry.write_text(
         "stale installed registry\n", encoding="utf-8"
     )
-    package_install = subprocess.run(
-        [cmake, "--install", str(radio_package), "--prefix", str(install_prefix)],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    require(
-        package_install.returncode == 0,
-        "STM32 package install failed:\n"
-        f"{package_install.stdout}\n{package_install.stderr}",
-    )
+    install_package(board_package, install_prefix)
     installed_paths = (
         install_prefix / "include/hal/generated/jh_hal_features.h",
         install_prefix / "include/hal/generated/jh_board_registry.h",
@@ -477,22 +546,8 @@ jh_target_enable_cyw43_feature_stack(probe GAMEPAD TRUE)
         "installed feature resolution lacks the DS18B20 closure",
     )
     require(
-        installed_resolution["board"] == "nucleo-g474re-pim730"
-        and "HAL_ENABLE_WIFI" in installed_resolution["requestedFeatures"],
-        "installed package is not the radio-board WiFi probe",
-    )
-    require(
-        {
-            "HAL_NETWORK_BACKEND_CYW43",
-            "HAL_CYW43_BUS_STM32_GSPI",
-            "HAL_CYW43_STACK_LWIP",
-            "HAL_CYW43_PIN_WL_ON=30u",
-            "HAL_CYW43_PIN_CHIP_SELECT=28u",
-            "HAL_CYW43_PIN_DATA=31u",
-            "HAL_CYW43_PIN_CLOCK=29u",
-        }
-        <= set(installed_resolution["boardCompileDefinitions"]),
-        "installed resolution lacks radio-board provider definitions",
+        installed_resolution["board"] == "nucleo-g474re",
+        "installed package is not the NUCLEO-G474RE board probe",
     )
     direct_consumer.mkdir(parents=True)
     consumer_source = direct_consumer / "consumer.c"
@@ -505,66 +560,81 @@ jh_target_enable_cyw43_feature_stack(probe GAMEPAD TRUE)
         "#if !defined(HAL_ENABLE_ONEWIRE) || !defined(HAL_ENABLE_CRC)\n"
         '#error "missing generated DS18B20 closure"\n'
         "#endif\n"
+        "int main(void) { return 0; }\n",
+        encoding="utf-8",
+    )
+    link_installed_consumer(
+        install_prefix,
+        consumer_source,
+        [f"{feature}=1" for feature in installed_resolution["requestedFeatures"]],
+        direct_consumer / "consumer",
+    )
+
+    # No STM32 board carries a radio: the radio configuration of an installed
+    # package comes from the nucleo-pim730 assembly of the library device tree.
+    # An application built from the installed headers alone gets the CYW43
+    # backend, its bus and the pins of that assembly.
+    radio_config.mkdir(parents=True)
+    shutil.copy(LIBRARY_DEVICE_TREE, radio_config / "device_tree.json")
+    (radio_config / "hal_project_config.h").write_text(
+        "#define HAL_ENABLE_WIFI 1\n", encoding="utf-8"
+    )
+    build_package(radio_package, f"-DHAL_PROJECT_CONFIG_DIR={radio_config}")
+    install_package(radio_package, radio_prefix)
+    radio_header = radio_prefix / "include/generated/jh_hardware.h"
+    radio_record_path = (
+        radio_prefix / "share/JaszczurHAL/generated/jh_hardware_config.json"
+    )
+    for installed_path in (
+        radio_header,
+        radio_record_path,
+        radio_prefix / "include/generated/jh_board_config.h",
+    ):
+        require(
+            installed_path.is_file(),
+            f"STM32 radio package is missing {installed_path.relative_to(radio_prefix)}",
+        )
+    radio_record = json.loads(radio_record_path.read_text(encoding="utf-8"))
+    require(
+        radio_record["selection"]
+        == {"assembly": "nucleo-pim730", "board": "nucleo-g474re", "target": "stm32g474"}
+        and "HAL_ENABLE_WIFI" in radio_record["software"]["requestedFeatures"],
+        "installed radio package is not the nucleo-pim730 WiFi build",
+    )
+
+    def hal_pin(name: str) -> int:
+        """HAL encoding of an STM32 pin name: port * 16 + number."""
+        return (ord(name[1]) - ord("A")) * 16 + int(name[2:])
+
+    radio_pins = json.loads(LIBRARY_DEVICE_TREE.read_text(encoding="utf-8"))[
+        "assemblies"
+    ]["nucleo-pim730"]["nodes"]["wifi"]["pins"]
+    radio_consumer.mkdir(parents=True)
+    radio_source = radio_consumer / "consumer.c"
+    radio_source.write_text(
+        "#include <hal/core/hal_config.h>\n"
         "#if !defined(HAL_NETWORK_BACKEND_CYW43) || "
         "!defined(HAL_CYW43_BUS_STM32_GSPI) || "
         "!defined(HAL_CYW43_STACK_LWIP)\n"
-        '#error "missing generated radio-board provider selection"\n'
+        '#error "missing generated radio provider selection"\n'
         "#endif\n"
-        "#if HAL_CYW43_PIN_WL_ON != 30u || "
-        "HAL_CYW43_PIN_CHIP_SELECT != 28u || "
-        "HAL_CYW43_PIN_DATA != 31u || HAL_CYW43_PIN_CLOCK != 29u\n"
-        '#error "missing generated radio-board pin contract"\n'
+        f"#if HAL_CYW43_PIN_WL_ON != {hal_pin(radio_pins['wlOn'])}u || "
+        f"HAL_CYW43_PIN_CHIP_SELECT != {hal_pin(radio_pins['cs'])}u || "
+        f"HAL_CYW43_PIN_DATA != {hal_pin(radio_pins['data'])}u || "
+        f"HAL_CYW43_PIN_CLOCK != {hal_pin(radio_pins['clock'])}u\n"
+        '#error "radio pins are not those of the nucleo-pim730 assembly"\n'
         "#endif\n"
         "int main(void) { return 0; }\n",
         encoding="utf-8",
     )
-    direct_command = [
-        arm_cc,
-        "-std=c11",
-        "-Wall",
-        "-Wextra",
-        "-Werror",
-        "-mcpu=cortex-m4",
-        "-mthumb",
-        "-mfpu=fpv4-sp-d16",
-        "-mfloat-abi=hard",
-        "-ffunction-sections",
-        "-fdata-sections",
-        f"-I{install_prefix / 'include'}",
-        f"-I{install_prefix / 'include/generated'}",
-        "-DHAL_TARGET_STM32G474=1",
-        *(
-            f"-D{feature}=1"
-            for feature in installed_resolution["requestedFeatures"]
-        ),
-        str(consumer_source),
-        str(installed_paths[-3]),
-        str(installed_paths[-1]),
-        "-nostdlib",
-        "-Wl,-e,main",
-        "-Wl,--gc-sections",
-        "-o",
-        str(direct_consumer / "consumer"),
-    ]
-    direct_environment = os.environ.copy()
-    direct_tool_path = direct_consumer / "compiler-tools"
-    direct_tool_path.mkdir()
-    for tool_name in ("arm-none-eabi-as", "arm-none-eabi-ld"):
-        tool = shutil.which(tool_name)
-        require(tool is not None, f"{tool_name} is required for the package probe")
-        (direct_tool_path / tool_name).symlink_to(tool)
-    direct_environment["PATH"] = str(direct_tool_path)
-    direct_compile = subprocess.run(
-        direct_command,
-        env=direct_environment,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    require(
-        direct_compile.returncode == 0,
-        "installed package did not compile/link with cc and no Python in PATH:\n"
-        f"{direct_compile.stdout}\n{direct_compile.stderr}",
+    link_installed_consumer(
+        radio_prefix,
+        radio_source,
+        [
+            f'JH_HARDWARE_HEADER="{radio_header}"',
+            *(f"{feature}=1" for feature in radio_record["software"]["requestedFeatures"]),
+        ],
+        radio_consumer / "consumer",
     )
 
     incremental_source.mkdir(parents=True)

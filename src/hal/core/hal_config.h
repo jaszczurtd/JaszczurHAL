@@ -247,25 +247,6 @@
 #endif
 #endif
 
-#if defined(HAL_CYW43_PROFILE_PIM730)
-#ifndef HAL_CYW43_PIN_WL_ON
-#define HAL_CYW43_PIN_WL_ON 2u
-#endif
-#ifndef HAL_CYW43_PIN_CHIP_SELECT
-#define HAL_CYW43_PIN_CHIP_SELECT 3u
-#endif
-#ifndef HAL_CYW43_PIN_DATA
-#define HAL_CYW43_PIN_DATA 4u
-#endif
-#ifndef HAL_CYW43_PIN_CLOCK
-#define HAL_CYW43_PIN_CLOCK 5u
-#endif
-/* The PIO divider is derived from the live clk_sys by the RP transport. */
-#ifndef HAL_CYW43_GSPI_TARGET_HZ
-#define HAL_CYW43_GSPI_TARGET_HZ 31250000u
-#endif
-#endif
-
 #if defined(HAL_CYW43_PROFILE_PICOW)
 #ifndef HAL_CYW43_PIN_WL_ON
 #define HAL_CYW43_PIN_WL_ON 23u

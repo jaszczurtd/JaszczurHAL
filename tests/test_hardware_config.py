@@ -35,6 +35,8 @@ SCRIPT = ROOT / "scripts" / "generate_hardware_config.py"
 REGISTRY = resolver.load_registry()
 CYW43_DEFINITIONS = ["HAL_ENABLE_WIFI", "HAL_NETWORK_BACKEND_CYW43", "HAL_CYW43_BUS_STM32_GSPI",
                      "HAL_CYW43_STACK_LWIP"]
+RP_CYW43_DEFINITIONS = ["HAL_ENABLE_WIFI", "HAL_NETWORK_BACKEND_CYW43", "HAL_CYW43_BUS_PICO_PIO",
+                        "HAL_CYW43_STACK_LWIP"]
 
 
 def resolve(path: Path, assembly: str | None = None, target: str | None = None,
@@ -278,6 +280,47 @@ class SpecificationCases(unittest.TestCase):
 
 
 class CommandLine(unittest.TestCase):
+    def test_gpio_input_modes_compile_in_c_and_cpp(self) -> None:
+        config = workdir("gpio-input-modes")
+        nodes = {name: {"compatible": "jaszczurhal,gpio-input"}
+                 for name in ("floating", "up", "down", "absent")}
+        nodes["up"]["properties"] = {"pull": "down"}
+        assembly_nodes = {
+            "floating": {"present": True, "pins": {"in": 2}},
+            "up": {"present": True, "pins": {"in": 3}, "properties": {"pull": "up"}},
+            "down": {"present": True, "pins": {"in": 4}, "properties": {"pull": "down"}},
+            "absent": {"present": False},
+        }
+        (config / "device_tree.json").write_text(json.dumps({
+            "schemaVersion": 1, "nodes": nodes,
+            "assemblies": {"pico": {"target": "rp2040", "board": "pico",
+                                      "clock": {"tree": "default"},
+                                      "statusLed": {"node": "board.statusLed"},
+                                      "nodes": assembly_nodes}},
+        }), encoding="utf-8")
+        output = config / "output"
+        result = run("resolve", "--config-dir", str(config), "--output-dir", str(output))
+        self.assertEqual(0, result.returncode, result.stderr)
+        header = macros(output / "jh_hardware.h")
+        self.assertNotIn("JH_HW_NODE_ABSENT_INPUT_MODE", header)
+        self.assertEqual("0", header["JH_HW_NODE_UP_CONFIG_AVAILABLE"])
+        for compiler, standard, suffix, assertion in (
+                ("cc", "c11", "c", "_Static_assert"),
+                ("c++", "c++17", "cpp", "static_assert")):
+            with self.subTest(language=standard):
+                source = config / f"probe.{suffix}"
+                source.write_text(
+                    '#include "jh_hardware.h"\n#include "hal/gpio/hal_gpio.h"\n'
+                    + "\n".join(f'{assertion}(JH_HW_NODE_{node}_INPUT_MODE == {mode}, "pull");'
+                                for node, mode in (("FLOATING", "HAL_GPIO_INPUT"),
+                                                   ("UP", "HAL_GPIO_INPUT_PULLUP"),
+                                                   ("DOWN", "HAL_GPIO_INPUT_PULLDOWN")))
+                    + '\nconst hal_gpio_mode_t mode = JH_HW_NODE_DOWN_INPUT_MODE;\n', encoding="utf-8")
+                result = subprocess.run([compiler, f"-std={standard}", "-Wall", "-Wextra", "-Werror",
+                                         "-DHAL_TARGET_MOCK=1", f"-I{ROOT / 'src'}", f"-I{output}",
+                                         "-fsyntax-only", str(source)], capture_output=True, text=True)
+                self.assertEqual(0, result.returncode, result.stderr)
+
     def test_list_prints_the_assemblies(self) -> None:
         result = run("list", "--config-dir", str(FIXTURES / "valid" / "selection"))
         self.assertEqual(0, result.returncode, result.stderr)
@@ -642,6 +685,16 @@ class Headers(unittest.TestCase):
         self.assertFalse(any(name.startswith("JH_HW_") for name in self.late))
         self.assertNotIn("#include", (self.out / "jh_hardware.h").read_text(encoding="utf-8"))
 
+    def test_canhat_example_signals_on_the_hat_ready_led(self) -> None:
+        # CAN-HAT projects signal on the RDY LED of the HAT (PC1), chosen as
+        # the status LED of their assembly.
+        out, result = generate("canhat-example", ROOT / "examples" / "21_stm32g474_fdcan_native",
+                               "nucleo-canhat")
+        self.assertEqual(0, result.returncode, result.stderr)
+        early, late = macros(out / "jh_hardware.h"), macros(out / "jh_board_config.h")
+        self.assertEqual("JH_HW_NODE_HAT_LED_READY_PIN_OUT", late["HAL_BOARD_STATUS_LED_PIN"])
+        self.assertEqual("33U", value("HAL_LED_BUILTIN", early, late))
+
     def test_late_values_refer_to_the_early_ones(self) -> None:
         self.assertEqual("JH_HW_NODE_BOARD_STATUS_LED_PIN_OUT", self.late["HAL_BOARD_STATUS_LED_PIN"])
         self.assertEqual("JH_HW_HAS_CYW43", self.late["HAL_BOARD_HAS_CYW43"])
@@ -658,8 +711,11 @@ class Headers(unittest.TestCase):
                           "HAL_CYW43_MAX_TRANSACTION_BYTES=2048u"}, set(compiled))
         self.assertEqual("JH_HW_NODE_WIFI_RADIO_PIN_WL_ON", self.late["HAL_CYW43_PIN_WL_ON"])
         self.assertEqual("1", self.late["HAL_CYW43_BUS_STM32_GSPI"])
-        self.assertIn("cyw43-stm32-gspi", cmake)
-        self.assertIn("stm32g474-hse-24mhz", cmake)
+        # The PIM730 adds the STM32 transport, lwIP and the Bluetooth host to
+        # the components of the board and its HSE.
+        components = re.search(r'set\(JH_BOARD_COMPONENTS "([^"]*)"\)', cmake).group(1).split(";")
+        self.assertEqual(["btstack-host", "cyw43-lwip", "cyw43-stm32-gspi", "stm32g474",
+                          "stm32g474-hse-24mhz"], components)
 
     def test_absent_and_disconnected_nodes(self) -> None:
         out, result = generate("presence", FIXTURES / "valid" / "presence", "pico")
@@ -836,32 +892,34 @@ class ModuleCombinations(unittest.TestCase):
                          (raised.exception.code, raised.exception.pointer))
 
     def test_a_board_radio_and_a_module_radio_need_a_choice(self) -> None:
-        def on_pim730_board(data: dict) -> None:
-            data["assemblies"]["display"]["board"] = "nucleo-g474re-pim730"
-            data["assemblies"]["display"]["nodes"]["wifi"]["pins"] = {
-                "cs": "PA0", "clock": "PA1", "wlOn": "PA4", "data": "PB10"}
-            del data["assemblies"]["display"]["providers"]
-        path = self.hal_mutate("two-radios", "nucleo-display", on_pim730_board)
-        hardware = resolve(path, "display")["hardware"]
+        # The Pico W carries a CYW43; a PIM730 module on free pins adds another.
+        def module_on_pico_w(data: dict) -> None:
+            data["assemblies"] = {"picow": data["assemblies"]["picow"]}
+            data["assemblies"]["picow"]["nodes"]["wifi"] = {
+                "present": True, "pins": {"wlOn": 2, "cs": 3, "data": 4, "clock": 5}}
+        path = self.hal_mutate("two-radios", "library", module_on_pico_w)
+        hardware = resolve(path, "picow")["hardware"]
         self.assertIsNone(hardware["providers"].get("cyw43"))
         self.assertFalse(hardware["capabilities"]["cyw43"])
         for choice in ("board", "wifi.radio"):
             with self.subTest(choice=choice):
                 data = json.loads(path.read_text(encoding="utf-8"))
-                data["assemblies"]["display"]["providers"] = {"cyw43": choice}
+                data["assemblies"]["picow"]["providers"] = {"cyw43": choice}
                 path.write_text(json.dumps(data), encoding="utf-8")
-                hardware = resolve(path, "display")["hardware"]
+                hardware = resolve(path, "picow")["hardware"]
                 self.assertEqual(choice, hardware["providers"]["cyw43"])
                 self.assertTrue(hardware["capabilities"]["cyw43"])
-                out, result = generate(f"two-radios-{choice}", path.parent, "display", *CYW43_DEFINITIONS)
+                out, result = generate(f"two-radios-{choice}", path.parent, "picow", *RP_CYW43_DEFINITIONS)
                 self.assertEqual(0, result.returncode, result.stderr)
                 late = macros(out / "jh_board_config.h")
-                expected = "30u" if choice == "board" else "JH_HW_NODE_WIFI_RADIO_PIN_WL_ON"
-                self.assertEqual(expected, late["HAL_CYW43_PIN_WL_ON"])
+                # The board radio keeps the pins of its board; the module's
+                # come from its node.
+                expected = None if choice == "board" else "JH_HW_NODE_WIFI_RADIO_PIN_WL_ON"
+                self.assertEqual(expected, late.get("HAL_CYW43_PIN_WL_ON"))
         data = json.loads(path.read_text(encoding="utf-8"))
-        del data["assemblies"]["display"]["providers"]
+        del data["assemblies"]["picow"]["providers"]
         path.write_text(json.dumps(data), encoding="utf-8")
-        out, result = generate("two-radios-none", path.parent, "display")
+        out, result = generate("two-radios-none", path.parent, "picow")
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertNotIn("HAL_NETWORK_BACKEND_CYW43", macros(out / "jh_board_config.h"))
 

@@ -1588,12 +1588,6 @@ def load_registry(
                 source_fallback_board,
                 "a compatible board ID",
             )
-    pico_reservations = set(boards["pico"]["gpio"]["reservations"])
-    rm2_reservations = set(boards["pico-rm2"]["gpio"]["reservations"])
-    if not pico_reservations <= rm2_reservations:
-        fail(boards_root / "profiles/pico-rm2.json", "$.gpio.reservations", sorted(rm2_reservations), "a superset of pico reservations")
-    if not set(boards["pico"]["devices"]) <= set(boards["pico-rm2"]["devices"]):
-        fail(boards_root / "profiles/pico-rm2.json", "$.devices", boards["pico-rm2"]["devices"], "a superset of pico devices")
     return targets, boards, capabilities
 
 
@@ -1882,10 +1876,6 @@ def board_compile_definitions(
                 "HAL_NETWORK_BACKEND_CYW43",
                 "HAL_CYW43_BUS_STM32_GSPI",
                 "HAL_CYW43_STACK_LWIP",
-                "HAL_CYW43_PIN_WL_ON=30u",
-                "HAL_CYW43_PIN_CHIP_SELECT=28u",
-                "HAL_CYW43_PIN_DATA=31u",
-                "HAL_CYW43_PIN_CLOCK=29u",
                 "HAL_CYW43_MAX_TRANSACTION_BYTES=2048u",
             ]
         )

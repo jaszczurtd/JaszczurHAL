@@ -21,10 +21,11 @@ Build and upload all eight assembly and runtime combinations separately:
 This table is the fixture's hardware matrix. `device_tree.json` describes the
 hardware of every assembly, `nucleo-pim730` being the default;
 `hal_project_config.h` declares the `FREERTOS` variant, and
-`tests/test_hardware_fixture_files.py` checks that the fixture builds each of
-the eight images. `pico-rm2` and `nucleo-pim730` are a plain Pico and a plain
+`tests/test_hardware_fixture_files.py`, run explicitly, checks that all eight
+assembly/runtime combinations are listed; it does not compile the firmware. `pico-rm2` and `nucleo-pim730` are a plain Pico and a plain
 NUCLEO-G474RE with an external PIM730/RM2 module; the table below repeats the
-module wiring.
+module wiring. These names select assemblies, not board profiles;
+use `--assembly` even when an assembly shares an old profile name.
 
 | PIM730/RM2 signal | Pico (`pico-rm2`) | NUCLEO-G474RE (`nucleo-pim730`) |
 |---|---|---|

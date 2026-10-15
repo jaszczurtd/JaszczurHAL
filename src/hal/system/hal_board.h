@@ -14,6 +14,32 @@
 #include "hal/generated/jh_board_registry.h"
 #include <stdint.h>
 
+/* Composite board profiles (a base board plus a module) were replaced by
+ * device_tree.json assemblies. Without these errors a removed selector would
+ * be ignored and the build would quietly get the base board without the
+ * module. */
+#if defined(HAL_BOARD_PROFILE_RP_PICO_PIM730) ||                               \
+    defined(HAL_CYW43_PROFILE_PIM730)
+#error                                                                         \
+    "JaszczurHAL: the pico-rm2 profile was removed. Describe board pico with a pimoroni,pim730 node in device_tree.json and build that assembly (example: examples/26_ble_stream, assembly pico-rm2)."
+#endif
+#if defined(HAL_BOARD_PROFILE_STM32G474_NUCLEO_PIM730)
+#error                                                                         \
+    "JaszczurHAL: the nucleo-g474re-pim730 profile was removed. Describe board nucleo-g474re with a pimoroni,pim730 node in device_tree.json and build that assembly (example: examples/08_mqtt, assembly nucleo-pim730)."
+#endif
+#if defined(HAL_BOARD_PROFILE_STM32G474_NUCLEO_CANHAT)
+#error                                                                         \
+    "JaszczurHAL: the nucleo-g474re-canhat profile was removed. Describe board nucleo-g474re with an embeddedgarage,can-fd-hat-g474 node in device_tree.json and build that assembly (example: examples/21_stm32g474_fdcan_native, assembly nucleo-canhat)."
+#endif
+#if defined(HAL_BOARD_PROFILE_RP_PICO_CORE1262_HF)
+#error                                                                         \
+    "JaszczurHAL: the pico-core1262-hf profile was removed. Describe board pico with a waveshare,core1262-hf node in device_tree.json and build that assembly (example: examples/27_lora_point_to_point, assembly pico-core1262-hf)."
+#endif
+#if defined(HAL_BOARD_PROFILE_STM32G474_NUCLEO_CORE1262_HF)
+#error                                                                         \
+    "JaszczurHAL: the nucleo-g474re-core1262-hf profile was removed. Describe board nucleo-g474re with a waveshare,core1262-hf node in device_tree.json and build that assembly (example: examples/27_lora_point_to_point, assembly nucleo-core1262-hf)."
+#endif
+
 #if defined(__has_include)
 #if __has_include("jh_board_config.h")
 #define JH_HAS_GENERATED_BOARD_CONFIG 1

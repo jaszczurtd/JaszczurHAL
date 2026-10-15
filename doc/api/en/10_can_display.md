@@ -148,10 +148,11 @@ typedef struct {
 // the compatibility default, followed by MCP251XFD, then STM32G474 FDCAN.
 // MCP2515: SPI bus 0, CS pin 0, 500 kbps / 8 MHz crystal.
 // MCP251XFD: SPI bus 0, CS pin 0, 500 kbit/s arbitration, 2 Mbit/s data.
-// STM32G474 FDCAN: FDCAN1 on PA11/PA12, 500 kbit/s arbitration, 2 Mbit/s data.
+// STM32G474 FDCAN: FDCAN1, 500 kbit/s arbitration, 2 Mbit/s data; pins unset.
+// Set RX/TX explicitly or use hal_can_board_config() before creating it.
 hal_can_config_t hal_can_default_config(void);
 
-// Config of CAN channel `channel` (0-based) the board profile declares:
+// Config of CAN channel `channel` (0-based) from generated hardware data:
 // controller, instance, pins, standby, transceiver limit, 500 kbit/s with a
 // 2 Mbit/s FD data phase. HAL_ENOENT when the board has no such channel.
 hal_status_t hal_can_board_config(uint8_t channel, hal_can_config_t *out);
@@ -280,16 +281,19 @@ uint8_t hal_can_encode_temp_i8(float temp_c);
   a bus analyser but does not test the receive path through the transceiver.
   State/error-counter APIs map backend controller registers into
   `hal_can_state_t` and `hal_can_error_counters_t`.
-- **Board channels:** a board profile with a `can.channels` section (such as
-  `nucleo-g474re-canhat`) lists its wired channels; `hal_can_board_config()`
+- **Board channels:** the device-tree generator records the channels declared by
+  the selected assembly, such as `nucleo-canhat` in example 21; `hal_can_board_config()`
   turns channel *n* into a ready config, which the application can adjust
   before `hal_can_create()`. `HAL_CAN_MAX_INSTANCES` defaults to the number of
   board channels when that exceeds 2; with every handle in use
   `hal_can_create()` returns `HAL_ENOMEM`.
 - **STM32G474 FDCAN:** `instance` selects FDCAN1..3 (0 means FDCAN1); one
   handle per instance, a second `hal_can_create()` for the same instance
-  returns `HAL_EBUSY`. `rx_pin`/`tx_pin` 0 select PA11/PA12, PB12/PB13 or PA8/PB4;
-  other pins must be ones the instance can be routed to. With `has_standby`
+  returns `HAL_EBUSY`. `rx_pin` and `tx_pin` must name valid routes for the
+  selected instance. Zero leaves a pin unset and makes `hal_can_create()`
+  return `HAL_EINVAL`. The defaults, including those used for a `NULL` config,
+  do not select pins. Obtain them through `hal_can_board_config()` from an
+  assembly with CAN channels, or set them explicitly for your wiring. With `has_standby`
   the backend drives the transceiver standby input: standby while the channel
   is configured, stopped, asleep or destroyed, active 40 µs before the
   controller joins the bus. Bit timing comes from the FDCAN kernel clock
@@ -321,6 +325,23 @@ uint8_t hal_can_encode_temp_i8(float temp_c);
   `hal_can_create_with_retry()` retries init up to `max_retries + 1` attempts and can auto-attach an IRQ handler when `int_pin != HAL_CAN_NO_INT_PIN`.
   `hal_can_process_all()` repeatedly calls `hal_can_receive()` and forwards only frames with `id != 0` and `len > 0`; a receive error other than `HAL_EAGAIN` ends the drain and comes back as its result.
   `hal_can_encode_temp_i8()` is a small shared wire-format helper for signed 1-byte temperature fields on CAN frames. It truncates the float input toward zero, saturates to `int8_t` range, and returns the matching two's complement payload byte.
+
+For the `nucleo-canhat` assembly, channel 0 is CN5 (1 is CN6, 2 is CN7).
+Use the generated channel configuration so the pins, standby polarity, and
+transceiver limit match the selected hardware:
+
+```c
+#include <hal/can/hal_can.h>
+
+hal_status_t open_can_channel(uint8_t channel, hal_can_t *out) {
+    hal_can_config_t config;
+    hal_status_t status = hal_can_board_config(channel, &config);
+    if (hal_status_is_error(status)) {
+        return status;
+    }
+    return hal_can_create(&config, out);
+}
+```
 
 **Filters beyond the classic slots** (STM32G474 FDCAN):
 

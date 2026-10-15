@@ -147,28 +147,10 @@ aktualnymi instrukcjami producenta sondy dla Windows i uzyskaj zgodę przed
 jej zmianą. Nie stosuj sterownika USB do interfejsu pamięci masowej Pico
 BOOTSEL.
 
-Podstawowy test sprzętowy w natywnym środowisku Windows przeprowadzono z użyciem
-oficjalnej sondy Raspberry Pi Debug Probe z firmware'em 2.3.1 oraz Pico 2 W
-jako targetu RP2350 Arm. Podłącz `SWDIO` sondy do `SWDIO` targetu, `SWCLK`
-sondy do `SWCLK` targetu oraz połącz ich masy. Windows obsłużył sondę za pomocą
-sterownika Microsoft WinUSB. Nie było potrzebne ani instalowanie sterownika, ani
-zmiana jego powiązania (`rebind`). Zarządzany OpenOCD wykrył oba rdzenie
-Cortex-M33, a GDB z zarządzanej instalacji GNU Arm załadował obraz ELF z kompilacji
-Debug, zatrzymał się na `main`, wznowił wykonanie do `app_start` i odłączył się.
-Po końcowym `reset run` ponownie pojawił się port USB CDC aplikacji. W kolejnym
-teście DoomConsole również załadowano obraz ELF z kompilacji Debug i zatrzymano
-wykonanie na `app_start` przy tych samych ustawieniach profilu uruchomieniowego.
-
-Podstawowy test sprzętowy STM32 przeprowadzono w Windows 10 LTSC z użyciem
-NUCLEO-G474RE z wbudowanym ST-Linkiem V3J9M3 (`0483:374e`). Zarządzany OpenOCD
-`0.12.0+dev (2026-07-01-10:44)` wykrył Cortex-M4 r0p1, 512 KiB
-dwubankowej pamięci flash, sześć punktów przerwania (breakpointów) i cztery
-punkty obserwacji (watchpointy). GDB z zarządzanej instalacji GNU Arm wgrał
-reprezentatywny obraz `01_core_runtime` z kompilacji Debug, zatrzymał się najpierw
-na `main`, a potem na `app_start`, po czym poprawnie się odłączył i wykonał
-`reset run`. Dla tej płytki użyj wygenerowanego profilu
-`board/st_nucleo_g4.cfg`. Konfiguracja ograniczona do `interface/stlink.cfg` i
-`target/stm32g4x.cfg` może nie wykryć targetu, jeśli płytka wymaga konfiguracji
+Połącz `SWDIO` i `SWCLK` sondy z odpowiednimi pinami płytki oraz połącz
+ich masy. Dla NUCLEO-G474RE użyj wygenerowanego profilu
+`board/st_nucleo_g4.cfg`. Sesja korzystająca tylko z `interface/stlink.cfg`
+i `target/stm32g4x.cfg` może nie wykryć płytki wymagającej konfiguracji
 sprzętowego resetu Nucleo.
 
 OpenOCD może zgłosić przestarzały firmware Debug Probe/Picoprobe i
@@ -296,3 +278,28 @@ Testy sprzętowe OTA wymagają lokalnych danych uwierzytelniających stanowiska;
 debugowanie sprzętowe wymaga dodatkowo podłączonej sondy SWD. Desktopowy
 SerialConfigurator Fiesta pozostaje aplikacją linuksową i znajduje się
 poza zakresem natywnej obsługi firmware'u w Windows.
+
+## Zapisane próby SWD na sprzęcie
+
+Wyniki dotyczą sprawdzonych konfiguracji; nie potwierdzają działania każdej
+sondy, płytki ani wersji Windows.
+
+Podstawowy test sprzętowy w natywnym środowisku Windows przeprowadzono z użyciem
+oficjalnej sondy Raspberry Pi Debug Probe z firmware'em 2.3.1 oraz Pico 2 W
+jako targetu RP2350 Arm. Windows obsłużył sondę za pomocą
+sterownika Microsoft WinUSB. Nie było potrzebne ani instalowanie sterownika, ani
+zmiana jego powiązania (`rebind`). Zarządzany OpenOCD wykrył oba rdzenie
+Cortex-M33, a GDB z zarządzanej instalacji GNU Arm załadował obraz ELF z kompilacji
+Debug, zatrzymał się na `main`, wznowił wykonanie do `app_start` i odłączył się.
+Po końcowym `reset run` ponownie pojawił się port USB CDC aplikacji. W kolejnym
+teście DoomConsole również załadowano obraz ELF z kompilacji Debug i zatrzymano
+wykonanie na `app_start` przy tych samych ustawieniach profilu uruchomieniowego.
+
+Podstawowy test sprzętowy STM32 przeprowadzono w Windows 10 LTSC z użyciem
+NUCLEO-G474RE z wbudowanym ST-Linkiem V3J9M3 (`0483:374e`). Zarządzany OpenOCD
+`0.12.0+dev (2026-07-01-10:44)` wykrył Cortex-M4 r0p1, 512 KiB
+dwubankowej pamięci flash, sześć punktów przerwania (breakpointów) i cztery
+punkty obserwacji (watchpointy). GDB z zarządzanej instalacji GNU Arm wgrał
+reprezentatywny obraz `01_core_runtime` z kompilacji Debug, zatrzymał się najpierw
+na `main`, a potem na `app_start`, po czym poprawnie się odłączył i wykonał
+`reset run`.

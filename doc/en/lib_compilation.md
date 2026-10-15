@@ -35,6 +35,20 @@ The linkable-library runners live in [`link_libraries/`](../../link_libraries/RE
 Repository-produced artifacts stay below `.build/`. The helper scripts reject
 an output path outside this directory.
 
+`--all-features` selects the target's requestable features within its hardware
+limits. On STM32G474 without `device_tree.json`, it omits networking and
+Bluetooth and any features that depend on them: no base STM32 board carries
+a radio. To include them, provide an assembly with PIM730, for example:
+
+```bash
+./scripts/build_link_library.sh --target stm32g474 \
+  --project-config examples/08_mqtt --assembly nucleo-pim730 \
+  --all-features --library-only
+```
+
+An explicit request for CYW43 on a base Nucleo without the radio node is an
+error; `--all-features` does not invent wiring.
+
 ## Target and board compatibility
 
 The public target selectors live in `src/hal/core/hal_target.h`. Define exactly one
@@ -121,7 +135,9 @@ Both commands fail on invalid configuration. Use `--report-only` for temporary m
 
 After configuring and building the static library for the selected platform, create a complete installation from that same configuration:
 
-```bash
+Template - replace the values in `<...>` before running:
+
+```text
 cmake --install .build/static/<target>/<board> \
   --prefix .build/install/<target>/<board>
 ```
@@ -147,7 +163,9 @@ share/JaszczurHAL/generated/
 
 Other public HAL headers are installed under `include/`. Treat the entire installation as one package. For direct compiler use, add `include/` and `include/generated/` to the include paths and define the target selector and requested features recorded in `jh_board_resolved.json`. Also compile `share/JaszczurHAL/generated/jh_link_contract_reference.c` and link the resulting object with `lib/libJaszczurHAL.a`. For example:
 
-```bash
+Template - replace the values in `<...>` before running:
+
+```text
 "${CXX}" <target compile flags> \
   -I<prefix>/include -I<prefix>/include/generated \
   -DHAL_TARGET_<TARGET>=1 -D<REQUESTED_FEATURE>=1 \
@@ -170,7 +188,9 @@ The generated signature reference uses GCC/Clang `constructor, used` attributes.
 
 When the `--project-config` directory holds `device_tree.json`, select the assembly instead of the board:
 
-```bash
+Template - replace the values in `<...>` before running:
+
+```text
 ./scripts/build_link_library.sh --target stm32g474 \
   --assembly canhat -p path/to/config --library-only
 cmake --install .build/static/stm32g474/canhat/<key> --prefix <prefix>
@@ -213,7 +233,7 @@ From the repository root:
 # RP2040 / Pico with an example application
 ./scripts/build_rp_pico_lib.sh \
   --target rp2040 \
-  --board pico \
+  --assembly pico \
   --example 01_core_runtime
 
 # RP2350 ARM
@@ -403,7 +423,9 @@ Without `-p` the probe's own `hal_project_config.h` requests no features, so the
 
 Firmware projects use `scripts/build_esp_idf.py` directly. It supports `build`, `artifacts`, and `flash`:
 
-```bash
+Template - replace the values in `<...>` before running:
+
+```text
 # Clean build using the target's default board.
 python3 scripts/build_esp_idf.py build \
   --project tests/fixtures/esp32s3_phase3 \

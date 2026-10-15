@@ -505,7 +505,6 @@ def assembly_board(document: dict[str, Any], registry: hardware_resolver.Registr
     definitions = boards_module.board_compile_definitions(target, {"components": dict.fromkeys(components)})
     if radio not in (None, "board"):
         token = node_token(radio)
-        definitions = [d for d in definitions if not d.startswith("HAL_CYW43_PIN_")]
         definitions += [f"HAL_CYW43_PIN_{name}=JH_HW_NODE_{token}_PIN_{macro_token(signal)}"
                         for name, signal in CYW43_PINS.items()]
         if target["build"]["provider"] == "pico-sdk":

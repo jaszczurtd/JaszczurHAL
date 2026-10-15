@@ -37,8 +37,7 @@
   "peripherals": {
     "defaults": {
       "i2c1": { "sda": { "domain": "soc-gpio", "id": "PB9" }, "scl": { "domain": "soc-gpio", "id": "PB8" } },
-      "spi1": { "sck": { "domain": "soc-gpio", "id": "PA5" }, "miso": { "domain": "soc-gpio", "id": "PA6" }, "mosi": { "domain": "soc-gpio", "id": "PA7" }, "cs": { "domain": "soc-gpio", "id": "PB6" } },
-      "fdcan1": { "rx": { "domain": "soc-gpio", "id": "PA11" }, "tx": { "domain": "soc-gpio", "id": "PA12" } }
+      "spi1": { "sck": { "domain": "soc-gpio", "id": "PA5" }, "miso": { "domain": "soc-gpio", "id": "PA6" }, "mosi": { "domain": "soc-gpio", "id": "PA7" }, "cs": { "domain": "soc-gpio", "id": "PB6" } }
     }
   },
   "components": {}

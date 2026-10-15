@@ -1150,6 +1150,9 @@ python3 scripts/check_documentation_links.py .
 ```
 
 Opcjonalny argument pozycyjny wybiera inny katalog główny repozytorium.
+W repozytorium Git skrypt sprawdza objęte zakresem dokumentacji pliki Markdown,
+zarówno zapisane w Git, jak i nowe, ale pomija pliki ignorowane, np. lokalne
+notatki. Bez metadanych Git przegląda te same katalogi w systemie plików.
 
 ### `scripts/check_documentation_i18n_parity.py`
 

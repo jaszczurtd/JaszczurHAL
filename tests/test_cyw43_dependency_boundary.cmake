@@ -370,16 +370,12 @@ foreach(_removed_path IN ITEMS
     endif()
 endforeach()
 
-file(READ "${JH_ROOT}/boards/profiles/pico-rm2.json" _rp2040_profiles)
-file(READ "${JH_ROOT}/boards/profiles/picow.json" _picow_profile)
+file(READ "${JH_ROOT}/boards/profiles/picow.json" _rp2040_profiles)
 file(READ "${JH_ROOT}/boards/profiles/pico2w.json" _pico2w_profile)
-string(APPEND _rp2040_profiles
-    "\n${_picow_profile}\n${_pico2w_profile}")
+string(APPEND _rp2040_profiles "\n${_pico2w_profile}")
 foreach(_required IN ITEMS
-        "\"id\": \"pico-rm2\""
         "\"id\": \"picow\""
         "\"id\": \"pico2w\""
-        "HAL_BOARD_PROFILE_RP_PICO_PIM730"
         "HAL_BOARD_PROFILE_RP_PICO_W"
         "HAL_BOARD_PROFILE_RP_PICO_2_W"
         "\"cyw43-lwip\"")

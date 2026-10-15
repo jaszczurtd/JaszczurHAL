@@ -1,6 +1,9 @@
-if(NOT JH_CXX OR NOT JH_ROOT)
-    message(FATAL_ERROR "JH_CXX and JH_ROOT are required")
+if(NOT JH_CXX OR NOT JH_ROOT OR NOT JH_ASSEMBLY_ARGUMENTS)
+    message(FATAL_ERROR "JH_CXX, JH_ROOT and JH_ASSEMBLY_ARGUMENTS are required")
 endif()
+# Compiler arguments of the generated PIM730 assemblies (tests/CMakeLists.txt):
+# JH_PICO_PIM730_ARGUMENTS and JH_NUCLEO_PIM730_ARGUMENTS.
+include("${JH_ASSEMBLY_ARGUMENTS}")
 
 set(_probe "${JH_ROOT}/tests/fixtures/network_config_probe.cpp")
 set(_architecture_probe
@@ -92,17 +95,17 @@ check_config(wireguard_offload FALSE "requires a host-stack L3 backend"
     -DHAL_TARGET_RP2040=1 -DHAL_BOARD_PROFILE_RP_PICO=1
     -DHAL_ENABLE_WIREGUARD=1
     -DHAL_NETWORK_BACKEND_ESP_AT=1 -DHAL_ESP_AT_PROFILE_ESP8266=1)
+# The PIM730 assemblies: their generated configuration selects the CYW43, its
+# transport and its pins.
 check_config(stm32_cyw43_gspi_lwip TRUE ""
-    -DHAL_TARGET_STM32G474=1
-    -DHAL_BOARD_PROFILE_STM32G474_NUCLEO_PIM730=1
+    -DHAL_TARGET_STM32G474=1 ${JH_NUCLEO_PIM730_ARGUMENTS}
     -DHAL_ENABLE_WIFI=1 -DHAL_ENABLE_TCP=1
     -DHAL_ENABLE_UDP=1 -DHAL_ENABLE_BSD_SOCKETS=1)
 check_config(rp2040_network_without_board_profile FALSE
     "unknown board"
     -DHAL_TARGET_RP2040=1 -DHAL_ENABLE_WIFI=1)
 check_config(rp2040_cyw43_pim730 TRUE ""
-    -DHAL_TARGET_RP2040=1 -DHAL_ENABLE_WIFI=1
-    -DHAL_CYW43_PROFILE_PIM730=1
+    -DHAL_TARGET_RP2040=1 -DHAL_ENABLE_WIFI=1 ${JH_PICO_PIM730_ARGUMENTS}
     -DJH_EXPECT_CYW43_GSPI_TARGET_HZ=31250000u
     -DJH_EXPECT_CYW43_PIO_CLOCK_DIV_OVERRIDE_X256=0u)
 check_config(rp2040_cyw43_picow TRUE ""
@@ -117,7 +120,7 @@ check_config(rp2350_arm_cyw43_picow TRUE ""
     -DJH_EXPECT_CYW43_PIO_CLOCK_DIV_OVERRIDE_X256=0u)
 check_config(rp2040_cyw43_legacy_divider_override TRUE ""
     -DHAL_TARGET_RP2040=1 -DHAL_ENABLE_WIFI=1
-    -DHAL_CYW43_PROFILE_PIM730=1
+    -DHAL_CYW43_PROFILE_PICOW=1
     -DHAL_CYW43_PIO_CLOCK_DIV_INT=4u
     -DHAL_CYW43_PIO_CLOCK_DIV_FRAC8=0u
     -DJH_EXPECT_CYW43_GSPI_TARGET_HZ=31250000u
@@ -148,11 +151,13 @@ check_architecture_identity(mock_host_stack
     -DHAL_TARGET_MOCK=1 -DHAL_ENABLE_TCP=1 -DJH_EXPECT_NETWORK_MOCK=1)
 check_architecture_identity(cyw43_host_stack
     -DHAL_TARGET_RP2040=1 -DHAL_ENABLE_TCP=1
-    -DHAL_CYW43_PROFILE_PIM730=1
+    -DHAL_CYW43_PROFILE_PICOW=1
+    -DJH_EXPECT_NETWORK_CYW43=1)
+check_architecture_identity(pim730_host_stack
+    -DHAL_TARGET_RP2040=1 ${JH_PICO_PIM730_ARGUMENTS} -DHAL_ENABLE_TCP=1
     -DJH_EXPECT_NETWORK_CYW43=1)
 check_architecture_identity(stm32_cyw43_host_stack
-    -DHAL_TARGET_STM32G474=1
-    -DHAL_BOARD_PROFILE_STM32G474_NUCLEO_PIM730=1 -DHAL_ENABLE_TCP=1
+    -DHAL_TARGET_STM32G474=1 ${JH_NUCLEO_PIM730_ARGUMENTS} -DHAL_ENABLE_TCP=1
     -DJH_EXPECT_NETWORK_CYW43=1)
 
 file(READ "${JH_ROOT}/link_libraries/stm32_lib/CMakeLists.txt" _stm32_library_cmake)

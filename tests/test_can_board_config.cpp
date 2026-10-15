@@ -1,7 +1,7 @@
 // hal_can_board_config() over the generated board facts. Built twice: on the
-// host mock board, which declares no CAN channels, and with the
-// nucleo-g474re-canhat profile selected, whose channels are written out here
-// from the CAN-FD HAT schematic.
+// host mock board, which declares no CAN channels, and with the configuration
+// generated for the canhat assembly of the nucleo-canhat device tree, whose
+// channels are written out here from the CAN-FD HAT schematic.
 
 #include "hal/can/hal_can.h"
 #include "hal/gpio/hal_gpio.h"
@@ -32,7 +32,7 @@ void test_null_output_is_refused(void) {
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_can_board_config(0u, nullptr));
 }
 
-#if defined(HAL_BOARD_PROFILE_STM32G474_NUCLEO_CANHAT)
+#if defined(JH_TEST_CANHAT_ASSEMBLY)
 
 #include "hal/impl/stm32g474/port/stm32g474_clock.h"
 
@@ -73,10 +73,10 @@ void test_canhat_has_three_channels_and_room_for_them(void) {
   TEST_ASSERT_EQUAL_INT(3, HAL_CAN_MAX_INSTANCES);
 }
 
-void test_canhat_runs_the_hse_tree_with_its_rdy_led(void) {
+void test_canhat_runs_the_hse_tree_with_the_assembly_led(void) {
   TEST_ASSERT_EQUAL_UINT32(160000000u, JH_G474_CORE_CLOCK_HZ);
   TEST_ASSERT_EQUAL_UINT32(80000000u, JH_G474_FDCAN_CLOCK_HZ);
-  TEST_ASSERT_EQUAL_UINT8(33u, HAL_LED_BUILTIN); /* PC1, LED RDY */
+  TEST_ASSERT_EQUAL_UINT8(5u, HAL_LED_BUILTIN); /* board.statusLed: PA5, LD2 */
 }
 
 #else
@@ -92,10 +92,10 @@ void test_board_without_can_channels_has_none(void) {
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_null_output_is_refused);
-#if defined(HAL_BOARD_PROFILE_STM32G474_NUCLEO_CANHAT)
+#if defined(JH_TEST_CANHAT_ASSEMBLY)
   RUN_TEST(test_canhat_channels_follow_the_hat_wiring);
   RUN_TEST(test_canhat_has_three_channels_and_room_for_them);
-  RUN_TEST(test_canhat_runs_the_hse_tree_with_its_rdy_led);
+  RUN_TEST(test_canhat_runs_the_hse_tree_with_the_assembly_led);
 #else
   RUN_TEST(test_board_without_can_channels_has_none);
 #endif

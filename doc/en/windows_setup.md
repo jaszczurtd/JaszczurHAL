@@ -132,25 +132,11 @@ interface, review the probe vendor's current Windows instructions, and obtain
 consent before changing it. Do not apply a USB driver to the Pico BOOTSEL mass
 storage interface.
 
-The native Windows hardware smoke used an official Raspberry Pi Debug Probe
-running firmware 2.3.1 and a Pico 2 W as the RP2350 Arm target. Wire probe
-`SWDIO` to target `SWDIO`, probe `SWCLK` to target `SWCLK`, and connect their
-grounds. Windows exposed the probe through the Microsoft WinUSB driver; no
-driver installation or rebinding was required. Managed OpenOCD detected both
-Cortex-M33 cores, and managed GNU Arm GDB loaded a Debug ELF, stopped at
-`main`, resumed to `app_start`, and detached. A final OpenOCD `reset run`
-returned the application USB CDC port. A DoomConsole follow-up also loaded its
-Debug ELF and stopped at `app_start` through the same launch-profile settings.
-
-The native STM32 hardware smoke used a NUCLEO-G474RE with its on-board ST-Link
-V3J9M3 (`0483:374e`) on Windows 10 LTSC. Managed OpenOCD
-`0.12.0+dev (2026-07-01-10:44)` detected a Cortex-M4 r0p1, 512 KiB of dual-bank
-flash, six breakpoints, and four watchpoints. Managed GNU Arm GDB programmed
-the representative `01_core_runtime` Debug image, stopped first at `main` and
-then at `app_start`, detached cleanly, and issued `reset run`. Use the generated
-`board/st_nucleo_g4.cfg` profile for this board: a bare
-`interface/stlink.cfg` plus `target/stm32g4x.cfg` session may fail target
-examination when the board needs the Nucleo hardware-reset configuration.
+Connect the probe's `SWDIO` and `SWCLK` to the matching target pins and
+connect their grounds. For NUCLEO-G474RE use the generated
+`board/st_nucleo_g4.cfg` profile. A session using only `interface/stlink.cfg`
+and `target/stm32g4x.cfg` may fail to detect a board that needs Nucleo's
+hardware-reset configuration.
 
 OpenOCD may report an old Debug Probe/Picoprobe firmware and enable a slower
 compatibility workaround. This warning does not prevent SWD debugging. Update
@@ -274,3 +260,24 @@ rollback have been validated on Pico 2 W over a trusted `Private` LAN.
 OTA hardware requires local fixture credentials; hardware debug additionally
 requires a connected SWD probe. The Fiesta desktop SerialConfigurator remains
 a Linux application and is outside the native Windows firmware-workflow scope.
+
+## Recorded SWD hardware checks
+
+These results describe the tested setups; they do not establish support for
+every probe, board, or Windows version.
+
+The native Windows hardware smoke used an official Raspberry Pi Debug Probe
+running firmware 2.3.1 and a Pico 2 W as the RP2350 Arm target. Windows exposed the probe through the Microsoft WinUSB driver;
+no
+driver installation or rebinding was required. Managed OpenOCD detected both
+Cortex-M33 cores, and managed GNU Arm GDB loaded a Debug ELF, stopped at
+`main`, resumed to `app_start`, and detached. A final OpenOCD `reset run`
+returned the application USB CDC port. A DoomConsole follow-up also loaded its
+Debug ELF and stopped at `app_start` through the same launch-profile settings.
+
+The native STM32 hardware smoke used a NUCLEO-G474RE with its on-board ST-Link
+V3J9M3 (`0483:374e`) on Windows 10 LTSC. Managed OpenOCD
+`0.12.0+dev (2026-07-01-10:44)` detected a Cortex-M4 r0p1, 512 KiB of dual-bank
+flash, six breakpoints, and four watchpoints. Managed GNU Arm GDB programmed
+the representative `01_core_runtime` Debug image, stopped first at `main` and
+then at `app_start`, detached cleanly, and issued `reset run`.

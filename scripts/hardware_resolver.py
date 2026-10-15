@@ -32,7 +32,8 @@ HAL_BUS_COUNT = {"spi": 2, "i2c": 2, "uart": 2}
 BUS_PINS = {"spi": ({"sck", "mosi", "miso"}, set()), "i2c": ({"sda", "scl"}, set()),
             "uart": ({"tx", "rx"}, {"cts", "rts"})}
 NODE_SUFFIXES = ("PRESENT", "CONFIG_AVAILABLE", "CONFIG_INIT", "BUS_INDEX", "CONTROLLER_INDEX",
-                 "ADDRESS", "FREQUENCY_HZ", "SPI_MODE", "SPI_BIT_ORDER", "SPI_SETTINGS_INIT")
+                 "ADDRESS", "FREQUENCY_HZ", "SPI_MODE", "SPI_BIT_ORDER", "SPI_SETTINGS_INIT",
+                 "INPUT_MODE")
 PIN_SUFFIXES = ("", "_CONNECTED", "_DOMAIN", "_OWNER", "_PROVIDER", "_INDEX")
 BUS_SUFFIXES = ("INDEX", "FREQUENCY_HZ", "UART_PORT", "BAUD_RATE", "DATA_BITS", "PARITY",
                 "STOP_BITS", "FRAME_CONFIG")

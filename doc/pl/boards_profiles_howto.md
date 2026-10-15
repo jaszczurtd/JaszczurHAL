@@ -19,6 +19,11 @@ Dostępne profile są zapisane w `boards/profiles/*.json`. Ich identyfikatory wy
 
 Przed załadowaniem narzędzi kompilacji generator sprawdza zgodność platformy, rozmiar pamięci flash, piny, komponenty i zależności funkcji. Z tych samych deskryptorów tworzy również konfigurację zastępczą do bezpośredniego wyboru płytki w kodzie. Nazwy płytek i ustawienia kompilacji pozostają dzięki temu jednakowe także bez konfiguracji wygenerowanej dla konkretnej kompilacji.
 
+Dla modułów zewnętrznych zachowaj identyfikator płytki bazowej, a połączenia
+opisz w `device_tree.json` aplikacji. Kompilacja wybiera przez `--assembly`
+montaż należący do projektu; to on określa platformę i płytkę. Format device
+tree opisuje [poradnik projektu firmware](FwProjectWorkflow.md).
+
 ## Pliki źródłowe
 
 Źródłowe dane przechowywane w systemie kontroli wersji znajdują się w `boards/`:
@@ -292,25 +297,32 @@ Przykładowe polecenia kompilacji:
 ```bash
 ./scripts/build_link_library.sh --target rp2040 --board rp2040-plus-4mb
 ./scripts/build_link_library.sh --target stm32g474 --board nucleo-g474re
-./scripts/build_link_library.sh --target stm32g474 --board nucleo-g474re-pim730
+./scripts/build_link_library.sh --target stm32g474 \
+  --project-config examples/08_mqtt --assembly nucleo-pim730 --library-only
 ./scripts/build_link_library.sh --target esp32s3 --board waveshare-esp32-s3-zero
 ```
 
-`nucleo-g474re` opisuje samą płytkę Nucleo. Projekty używające zewnętrznego
-radia PIM730/RM2 muszą wybrać obsługiwany profil `nucleo-g474re-pim730`;
-profil określa stałe piny gSPI CYW43 i udostępnia cechy oraz komponenty
-radiowe wymagane przez kompilacje sieciowe. Wygenerowany nagłówek płytki zawiera
-też definicje backendu CYW43, magistrali gSPI, stosu i pinów; projekty
-korzystające bezpośrednio z kompilatora nie mogą duplikować tych
-definicji opcjami `-D` z wiersza poleceń. Okablowanie i ograniczenia
-elektryczne są udokumentowane w
-[Łączności](../api/pl/15_connectivity.md#konfiguracja-i-cykl-życia-backendu-cyw43).
-Profile `picow`, `pico2w`, `pico-rm2` oraz `nucleo-g474re-pim730` deklarują
-też cechę `bluetooth-controller` obsługiwaną przez mechanizm cyklu życia oraz
-komponent `btstack-host`, włączany po wybraniu odpowiedniej funkcji HAL. Włączenie
-`HAL_ENABLE_BLE` powoduje skompilowanie tego komponentu; sama cecha fizyczna
-nigdy nie włącza
-Bluetooth. Zobacz [API Bluetooth](../api/pl/20_bluetooth.md).
+`nucleo-g474re` opisuje samą płytkę Nucleo. Zewnętrzny PIM730/RM2 dodaj
+jako węzeł `pimoroni,pim730` w `device_tree.json` aplikacji, a następnie
+wybierz ten montaż. Na przykład `examples/08_mqtt` udostępnia
+`nucleo-pim730`. Generator wyprowadza z tej konfiguracji cechy radia,
+komponenty, backend, magistralę, stos i piny; nie powtarzaj tych definicji
+w opcjach kompilatora `-D`. Połączenia i ograniczenia elektryczne opisuje
+rozdział [Łączność](../api/pl/15_connectivity.md#konfiguracja-i-cykl-życia-backendu-cyw43).
+
+Płytki `picow` i `pico2w` mają wbudowany kontroler Bluetooth. W zwykłym
+Pico lub Nucleo dodaje go do montażu węzeł PIM730. Komponent `btstack-host`
+jest kompilowany, gdy wymaga go wybrana funkcja, np. `HAL_ENABLE_BLE`;
+sama obecność radia nie włącza Bluetooth. Zobacz
+[API Bluetooth](../api/pl/20_bluetooth.md).
+
+Dawne identyfikatory płytek `pico-rm2`, `nucleo-g474re-pim730`,
+`nucleo-g474re-canhat`, `pico-core1262-hf` i `nucleo-g474re-core1262-hf`
+zostały usunięte. Wybierz płytkę bazową i opisz moduł w montażu device tree.
+Dawne selektory `HAL_BOARD_PROFILE_*` tych profili oraz
+`HAL_CYW43_PROFILE_PIM730` zatrzymują kompilację z instrukcją migracji.
+Nazwa montażu należy do projektu: `pico-rm2` nadal jest prawidłowym montażem
+w `examples/26_ble_stream`, ale nie jest identyfikatorem płytki dla `--board`.
 
 Eksperymentalny profil `rp2040-lora-lf` opisuje Waveshare SKU 26592. Używa
 istniejącego targetu `rp2040` i definicji płytki `pico` z Pico SDK,
@@ -329,16 +341,20 @@ profilu płytki, bo ten sam moduł można podpiąć pod dowolne wolne piny. Wybi
 zwykłą płytkę hosta i opisz okablowanie w aplikacji; dla Core1262-HF opisuje
 to rozdział [LoRa](../api/pl/21_lora.md#zewnętrzny-moduł-waveshare-core1262-hf).
 
-Eksperymentalny profil `nucleo-g474re-canhat` opisuje NUCLEO-G474RE z nakładką
-CAN-FD HAT v1.2 od [Embedded Garage](https://www.youtube.com/@embeddedGarage)
-([sklep](https://sklep.embeddedgarage.com/)). Deklaruje trzy kanały FDCAN
-złączy CN5-CN7 z liniami standby MCP2562FD i twardo rezerwuje je, sterowanie
-przekaźników K1-K4 (bramki nie mają rezystora do masy, więc każde inne użycie
-przełącza przekaźniki) oraz kwarc na PF0/PF1; diody, wejścia 12 V i przyciski
-rezerwuje miękko. `HAL_LED_BUILTIN` to dioda RDY na PC1; PA5 steruje
-jednocześnie LD2 i diodą CAN2. Komponent płytki `stm32g474-hse-24mhz` wybiera
-drzewo zegara 160 MHz z HSE 24 MHz z zegarem jądra FDCAN 80 MHz
-(`HAL_STM32G474_CLOCK_HSE_160MHZ`).
+Eksperymentalny montaż `nucleo-canhat` w
+[`examples/21_stm32g474_fdcan_native`](../../examples/21_stm32g474_fdcan_native/)
+łączy `nucleo-g474re` z węzłem `embeddedgarage,can-fd-hat-g474`.
+Węzeł opisuje kanały CN5-CN7 nakładki Embedded Garage CAN-FD HAT v1.2,
+linie standby MCP2562FD, przekaźniki, diody, wejścia 12 V i przyciski.
+Device tree rezerwuje te połączenia. Bramki przekaźników nie mają rezystorów
+do masy, więc aplikacja nie może używać ich pinów do innych celów.
+Montaż wybiera diodę RDY na PC1 jako `HAL_LED_BUILTIN`; PA5 steruje także
+LD2 i diodą CAN2.
+
+Drzewo zegara `stm32g474-hse-24mhz` w montażu rezerwuje PF0/PF1 i włącza
+`HAL_STM32G474_CLOCK_HSE_160MHZ`: SYSCLK wynosi 160 MHz z HSE 24 MHz,
+a zegar jądra FDCAN 80 MHz. `hal_can_board_config()` odczytuje konfiguracje
+trzech kanałów wygenerowane z tego samego montażu.
 
 Archiwum definiuje:
 
@@ -362,7 +378,9 @@ Dwie warunkowe reguły zgodności pozostają poza zestawem zależności rejestru
 
 Zainstaluj skonfigurowaną bibliotekę statyczną dla RP lub STM32 przez CMake:
 
-```bash
+Szablon - przed uruchomieniem zastąp wartości w `<...>`:
+
+```text
 cmake --install .build/static/<target>/<board> \
   --prefix .build/install/<target>/<board>
 ```

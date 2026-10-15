@@ -1,6 +1,9 @@
-if(NOT JH_CXX OR NOT JH_ROOT)
-    message(FATAL_ERROR "JH_CXX and JH_ROOT are required")
+if(NOT JH_CXX OR NOT JH_ROOT OR NOT JH_ASSEMBLY_ARGUMENTS)
+    message(FATAL_ERROR "JH_CXX, JH_ROOT and JH_ASSEMBLY_ARGUMENTS are required")
 endif()
+# Compiler arguments of the generated PIM730 assemblies (tests/CMakeLists.txt):
+# JH_PICO_PIM730_ARGUMENTS and JH_NUCLEO_PIM730_ARGUMENTS.
+include("${JH_ASSEMBLY_ARGUMENTS}")
 
 set(_probe "${JH_ROOT}/tests/fixtures/board_selection_probe.cpp")
 set(_include "${JH_ROOT}/src")
@@ -48,11 +51,6 @@ set(_pico_2_w
     -DJH_EXPECT_CYW43=1 -DJH_EXPECT_LED=64 -DJH_EXPECT_BLUETOOTH=1
     -DJH_EXPECT_NAME="pico2w"
     -DJH_EXPECT_LEGACY_PICOW=1)
-set(_pim730
-    -DJH_EXPECT_PROFILE=HAL_BOARD_RP_PICO_PIM730 -DJH_EXPECT_USB=1
-    -DJH_EXPECT_CYW43=1 -DJH_EXPECT_EXTERNAL_RADIO=1 -DJH_EXPECT_LED=25
-    -DJH_EXPECT_BLUETOOTH=1 -DJH_EXPECT_NAME="pico-rm2"
-    -DJH_EXPECT_LEGACY_PIM730=1)
 set(_rp2040_zero
     -DJH_EXPECT_PROFILE=HAL_BOARD_RP2040_ZERO -DJH_EXPECT_USB=1
     -DJH_EXPECT_NAME="rp2040-zero" -DJH_EXPECT_NO_LED_BUILTIN=1)
@@ -66,14 +64,6 @@ set(_rp2040_lora
 set(_nucleo
     -DJH_EXPECT_PROFILE=HAL_BOARD_STM32G474_NUCLEO_G474RE
     -DJH_EXPECT_LED=5 -DJH_EXPECT_NAME="nucleo-g474re")
-set(_nucleo_pim730
-    -DJH_EXPECT_PROFILE=HAL_BOARD_STM32G474_NUCLEO_PIM730
-    -DJH_EXPECT_CYW43=1 -DJH_EXPECT_EXTERNAL_RADIO=1
-    -DJH_EXPECT_BLUETOOTH=1 -DJH_EXPECT_LED=5
-    -DJH_EXPECT_NAME="nucleo-g474re-pim730")
-set(_nucleo_canhat
-    -DJH_EXPECT_PROFILE=HAL_BOARD_STM32G474_NUCLEO_CANHAT -DJH_EXPECT_LED=33
-    -DJH_EXPECT_NAME="nucleo-g474re-canhat")
 set(_host_mock
     -DJH_EXPECT_PROFILE=HAL_BOARD_HOST_MOCK -DJH_EXPECT_BLUETOOTH=1
     -DJH_EXPECT_NAME="host-mock")
@@ -87,8 +77,6 @@ check_board(explicit_pico_2_arm TRUE ""
 check_board(explicit_pico_2_w_arm TRUE ""
     -DHAL_TARGET_RP2350_ARM=1 -DHAL_BOARD_PROFILE_RP_PICO_2_W=1
     ${_pico_2_w})
-check_board(explicit_pim730 TRUE ""
-    -DHAL_TARGET_RP2040=1 -DHAL_BOARD_PROFILE_RP_PICO_PIM730=1 ${_pim730})
 check_board(explicit_rp2040_zero TRUE ""
     -DHAL_TARGET_RP2040=1 -DHAL_BOARD_PROFILE_RP2040_ZERO=1 ${_rp2040_zero})
 check_board(explicit_rp2040_plus TRUE ""
@@ -100,12 +88,6 @@ check_board(explicit_rp2040_lora TRUE ""
 check_board(explicit_nucleo TRUE ""
     -DHAL_TARGET_STM32G474=1
     -DHAL_BOARD_PROFILE_STM32G474_NUCLEO_G474RE=1 ${_nucleo})
-check_board(explicit_nucleo_pim730 TRUE ""
-    -DHAL_TARGET_STM32G474=1
-    -DHAL_BOARD_PROFILE_STM32G474_NUCLEO_PIM730=1 ${_nucleo_pim730})
-check_board(explicit_nucleo_canhat TRUE ""
-    -DHAL_TARGET_STM32G474=1
-    -DHAL_BOARD_PROFILE_STM32G474_NUCLEO_CANHAT=1 ${_nucleo_canhat})
 
 check_board(default_rp2040 FALSE "unknown board" -DHAL_TARGET_RP2040=1)
 check_board(default_rp2350 FALSE "unknown board" -DHAL_TARGET_RP2350_ARM=1)
@@ -121,8 +103,6 @@ check_board(legacy_picow_rp2040 TRUE ""
     -DHAL_TARGET_RP2040=1 -DHAL_CYW43_PROFILE_PICOW=1 ${_pico_w})
 check_board(legacy_picow_rp2350_arm TRUE ""
     -DHAL_TARGET_RP2350_ARM=1 -DHAL_CYW43_PROFILE_PICOW=1 ${_pico_2_w})
-check_board(legacy_pim730 TRUE ""
-    -DHAL_TARGET_RP2040=1 -DHAL_CYW43_PROFILE_PIM730=1 ${_pim730})
 check_board(stm32_generic TRUE ""
     -DHAL_TARGET_STM32G474=1
     -DHAL_BOARD_PROFILE_STM32G474_GENERIC=1 ${_nucleo})
@@ -150,3 +130,53 @@ check_board(multiple_provider_selectors FALSE
     "multiple provider board selectors"
     -DHAL_TARGET_RP2040=1 -DRASPBERRYPI_PICO=1
     -DRASPBERRYPI_PICO_W=1)
+
+# A module assembly keeps the identity of its base board and adds the radio of
+# the module: CYW43, the external frontend and Bluetooth.
+check_board(assembly_pico_pim730 TRUE ""
+    -DHAL_TARGET_RP2040=1 ${JH_PICO_PIM730_ARGUMENTS}
+    -DJH_EXPECT_PROFILE=HAL_BOARD_RP_PICO -DJH_EXPECT_USB=1
+    -DJH_EXPECT_CYW43=1 -DJH_EXPECT_EXTERNAL_RADIO=1 -DJH_EXPECT_LED=25
+    -DJH_EXPECT_BLUETOOTH=1 -DJH_EXPECT_NAME="pico")
+check_board(assembly_nucleo_pim730 TRUE ""
+    -DHAL_TARGET_STM32G474=1 ${JH_NUCLEO_PIM730_ARGUMENTS}
+    -DJH_EXPECT_PROFILE=HAL_BOARD_STM32G474_NUCLEO_G474RE
+    -DJH_EXPECT_CYW43=1 -DJH_EXPECT_EXTERNAL_RADIO=1
+    -DJH_EXPECT_BLUETOOTH=1 -DJH_EXPECT_LED=5
+    -DJH_EXPECT_NAME="nucleo-g474re")
+
+# Removed composite profiles fail with their migration. Without the check each
+# case builds the base board it expects, without the module.
+check_board(removed_nucleo_canhat FALSE
+    "the nucleo-g474re-canhat profile was removed"
+    -DHAL_TARGET_STM32G474=1 -DHAL_BOARD_PROFILE_STM32G474_NUCLEO_CANHAT=1
+    ${_nucleo})
+check_board(removed_nucleo_pim730 FALSE
+    "the nucleo-g474re-pim730 profile was removed"
+    -DHAL_TARGET_STM32G474=1 -DHAL_BOARD_PROFILE_STM32G474_NUCLEO_PIM730=1
+    ${_nucleo})
+check_board(removed_nucleo_core1262 FALSE
+    "the nucleo-g474re-core1262-hf profile was removed"
+    -DHAL_TARGET_STM32G474=1
+    -DHAL_BOARD_PROFILE_STM32G474_NUCLEO_CORE1262_HF=1 ${_nucleo})
+check_board(removed_pico_pim730 FALSE "the pico-rm2 profile was removed"
+    -DHAL_TARGET_RP2040=1 -DRASPBERRYPI_PICO=1
+    -DHAL_BOARD_PROFILE_RP_PICO_PIM730=1 ${_pico})
+check_board(removed_legacy_pim730 FALSE "the pico-rm2 profile was removed"
+    -DHAL_TARGET_RP2040=1 -DRASPBERRYPI_PICO=1 -DHAL_CYW43_PROFILE_PIM730=1
+    ${_pico})
+check_board(removed_pico_core1262 FALSE
+    "the pico-core1262-hf profile was removed"
+    -DHAL_TARGET_RP2040=1 -DRASPBERRYPI_PICO=1
+    -DHAL_BOARD_PROFILE_RP_PICO_CORE1262_HF=1 ${_pico})
+
+# A generated jh_board_config.h replaces the fallback, so the check must not
+# live only there.
+set(_generated "${_artifact_dir}/removed-selector-generated")
+file(MAKE_DIRECTORY "${_generated}")
+file(WRITE "${_generated}/jh_board_config.h"
+    "#pragma once\n#define HAL_BOARD_PROFILE_STM32G474_NUCLEO_G474RE 1\n")
+check_board(removed_selector_with_generated_config FALSE
+    "the nucleo-g474re-canhat profile was removed"
+    -DHAL_TARGET_STM32G474=1 "-I${_generated}"
+    -DHAL_BOARD_PROFILE_STM32G474_NUCLEO_CANHAT=1)

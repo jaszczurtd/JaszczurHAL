@@ -140,10 +140,10 @@ require("hal_mock" in mock_commands[1], "mock build does not select hal_mock")
 
 experimental = workspace.parse_selection(
     registry,
-    "rp2040:pico-rm2 - Raspberry Pi Pico with PIM730/RM2 (experimental)",
+    "rp2040:rp2040-lora-lf - Waveshare RP2040-LoRa-LF (experimental)",
 )
 require(
-    experimental.selection == "rp2040:pico-rm2",
+    experimental.selection == "rp2040:rp2040-lora-lf",
     "GUI selection label was not normalized",
 )
 

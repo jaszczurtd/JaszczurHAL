@@ -87,11 +87,18 @@ pinu jest obsługiwane tak samo.
 
 | Target | Okres | Piny | Uwagi |
 | --- | --- | --- | --- |
-| RP2040 / RP2350 | od 2 µs, w pełnych cyklach 48 MHz | do 5 (GPIO26..29 i temperatura) | dwa kanały DMA, `DMA_IRQ_0` na wyłączność |
-| STM32G474 | kroki czasu próbkowania od ok. 0,35 µs; 5,8 µs z czujnikiem temperatury | do 8 | sekwencja regularna ADC1, DMA1 kanał 3 kołowo |
+| RP2040 / RP2350 | od 2 µs, w pełnych cyklach 48 MHz | do 5 (GPIO26..29 i temperatura) | cztery kanały DMA, `DMA_IRQ_0` na wyłączność |
+| STM32G474 | żądany okres od 1 µs; zaokrąglany w górę do sprzętowego kroku | do 8 | sekwencja regularna ADC1, DMA1 kanał 3 kołowo |
 | ESP32-S3 | od 12 µs (83,3 kS/s) | tylko pady ADC1, bez temperatury | sterownik ciągły ESP-IDF |
 
-`hal_adc_scan_start()` zwraca `HAL_EUNSUPPORTED` dla okresu lub pinu, którego
+Na STM32G474 obecność czujnika temperatury wydłuża czas próbkowania całej
+sekwencji do co najmniej 247,5 cyklu ADC. Razem z 12,5 cyklu konwersji daje
+to około 6,12 µs na pin przy zegarze ADC 42,5 MHz albo 6,5 µs przy 40 MHz.
+Wynikowy okres ramki odczytasz przez `hal_adc_scan_frame_period_ns()`.
+
+`hal_adc_scan_start()` odrzuca okres poniżej
+`HAL_ADC_SCAN_MIN_CONVERSION_NS` (1000 ns) przez `HAL_EINVAL`, zanim wywoła
+backend. Zwraca `HAL_EUNSUPPORTED` dla okresu lub pinu, którego
 backend nie obsłuży, `HAL_EBUSY`, gdy przetwornik albo przerwanie są już zajęte,
 i `HAL_ENOMEM`, gdy nie ma wolnego kanału DMA. Stop jest idempotentny i zwalnia
 wszystko, także po nieudanym starcie.

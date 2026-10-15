@@ -109,6 +109,7 @@ The only early header is `jh_hardware.h`, containing `JH_HW_*` macros and no HAL
 | `JH_HW_HAS_<CAPABILITY>` | effective hardware capabilities, numeric 0/1 |
 | `JH_HW_NODE_<PATH>_PRESENT`, `JH_HW_NODE_<PATH>_CONFIG_AVAILABLE` | numeric 0/1, defined for every declared/expanded node |
 | `JH_HW_NODE_<PATH>_PROP_<PROPERTY>` | resolved typed scalar |
+| `JH_HW_NODE_<PATH>_INPUT_MODE` | GPIO input mode derived from `pull`; needs `hal_gpio.h` |
 | `JH_HW_NODE_<PATH>_PIN_<SIGNAL>_CONNECTED`, `JH_HW_NODE_<PATH>_PIN_<SIGNAL>_DOMAIN` | numeric connection flag and domain (0 none, 1 SoC, 2 device) |
 | `JH_HW_NODE_<PATH>_PIN_<SIGNAL>`, `JH_HW_NODE_<PATH>_PIN_<SIGNAL>_OWNER` | SoC HAL encoding when available; numeric owner flag |
 | `JH_HW_NODE_<PATH>_PIN_<SIGNAL>_PROVIDER`, `JH_HW_NODE_<PATH>_PIN_<SIGNAL>_INDEX` | device namespace path and index |
@@ -117,6 +118,13 @@ The only early header is `jh_hardware.h`, containing `JH_HW_*` macros and no HAL
 | `JH_HW_NODE_<PATH>_FREQUENCY_HZ`, `JH_HW_NODE_<PATH>_SPI_MODE`, `JH_HW_NODE_<PATH>_SPI_BIT_ORDER`, `JH_HW_NODE_<PATH>_SPI_SETTINGS_INIT` | effective device transaction settings; mode 0-3, bit order 0 LSB / 1 MSB |
 | `JH_HW_BUS_<BUS>_UART_PORT`, `JH_HW_BUS_<BUS>_BAUD_RATE`, `JH_HW_BUS_<BUS>_DATA_BITS`, `JH_HW_BUS_<BUS>_PARITY`, `JH_HW_BUS_<BUS>_STOP_BITS`, `JH_HW_BUS_<BUS>_FRAME_CONFIG` | UART settings; parity 0 none / 1 even / 2 odd; deferred `HAL_UART_CFG_*` frame token |
 | `JH_HW_NODE_<PATH>_CONFIG_INIT` | deferred initializer for a supported HAL configuration |
+
+For present `jaszczurhal,gpio-input` nodes, `INPUT_MODE` expands to
+`HAL_GPIO_INPUT`, `HAL_GPIO_INPUT_PULLUP` or `HAL_GPIO_INPUT_PULLDOWN` for
+`pull: none`, `up` or `down`. Use it with `hal_gpio_set_mode()` for SoC pins.
+It is an enum token, so do not test it with `#if`. The application still
+interprets `PROP_ACTIVE_LOW`; GPIO reads and writes use electrical levels.
+Device pins require an API for their provider.
 
 An absent node exports only presence/config-availability flags. A present disconnected signal exports connection/domain/owner flags, not a guessed pin number.
 

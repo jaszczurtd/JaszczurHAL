@@ -176,7 +176,7 @@ typedef struct {
   bool
       ignore_local_time; /**< Skip cert expiry check if modem clock is unset. */
   bool enable_sni;       /**< Send TLS SNI extension. */
-  int sslversion;        /**< 0..4 (default 4 = TLS 1.2). */
+  int sslversion;        /**< 0..4: 0 uses 4 (All), 3 selects TLS 1.2. */
   int authmode;          /**< 0..3 (default 1 = server only). */
 } hal_simcom_a76xx_ssl_config_t;
 

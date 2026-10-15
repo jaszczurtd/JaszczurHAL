@@ -28,7 +28,9 @@ export JH_OTA_TEST_PASSWORD='the-value-from-ota_test_secrets.h'
 
 `device_tree.json` opisuje sprzęt każdego montażu: `picow` (Pico W,
 domyślny), `pico2w` (Pico 2 W) i `pico-rm2`, czyli zwykłe Pico z zewnętrznym
-modułem PIM730/RM2 podłączonym według tabeli poniżej.
+modułem PIM730/RM2 podłączonym według tabeli poniżej. `pico-rm2` to nazwa
+montażu w tym projekcie, a nie profil płytki; użyj `--assembly pico-rm2`.
+Płytką bazową nadal jest `pico`.
 
 Skompiluj, wgraj i zweryfikuj wariant bare-metal dla Pico W:
 

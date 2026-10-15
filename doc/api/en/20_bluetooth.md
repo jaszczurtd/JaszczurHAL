@@ -18,20 +18,25 @@ The base API does not support active scanning, Scan Response requests, arbitrary
 
 ## Platforms and validation scope
 
-| API | Target | Board | Radio/host | Validation |
+| API | Target | Board or assembly | Radio/host | Validation |
 |---|---|---|---|---|
 | BLE | `rp2040` | `picow` | onboard CYW43439 with BTstack | Observer and bare-metal/FreeRTOS Stream hardware gates passed |
 | BLE | `rp2350-arm` | `pico2w` | onboard CYW43439 with BTstack | Observer, Stream, and active Stream+WiFi/MQTT hardware gates passed |
 | BLE | `rp2040` | `pico-rm2` | external PIM730/RM2 CYW43439 over PIO | build-supported; dedicated hardware gate pending |
-| BLE | `stm32g474` | `nucleo-g474re-pim730` | external PIM730/RM2 CYW43439 over gSPI | Peripheral and Observer gates plus full bare-metal/FreeRTOS Stream display-load gates passed |
+| BLE | `stm32g474` | `nucleo-pim730` | external PIM730/RM2 CYW43439 over gSPI | Peripheral and Observer gates plus full bare-metal/FreeRTOS Stream display-load gates passed |
 | BLE | `esp32s3` | `waveshare-esp32-s3-zero` | integrated LE controller with ESP-IDF NimBLE | complete compile/link fixture; radio hardware gate pending |
 | Classic / HID Host / gamepad | `rp2350-arm` | `pico2w` | onboard CYW43439 with BTstack | manager, raw HID, and gamepad hardware gates passed |
-| Classic / HID Host / gamepad | `rp2040` / `stm32g474` | `picow` / `pico-rm2` / `nucleo-g474re-pim730` | CYW43439 with BTstack | build-supported; a dedicated HID/gamepad radio gate has not been passed on these hosts |
+| Classic / HID Host / gamepad | `rp2040` / `stm32g474` | `picow` / `pico-rm2` / `nucleo-pim730` | CYW43439 with BTstack | build-supported; a dedicated HID/gamepad radio gate has not been passed on these hosts |
 | Classic / HID Host / gamepad | `esp32` | `esp32-devkitc-v4` | integrated BR/EDR controller with ESP-IDF Bluedroid and ESP HID Host | complete compile/link fixture; generic radio hardware gate pending |
 | BLE + Classic HID/gamepad | `rp2350-arm` | `pico2w` | shared onboard CYW43439 with BTstack | passive Observer and a connected gamepad passed the active coexistence gate, including HID disconnect/reconnect while scanning continued |
 | A2DP Sink / AVRCP Target | `rp2040` | `picow` | onboard CYW43439 with BTstack and Bluedroid SBC decoder | A2DP/AVRCP, PWM output, and bonded-reconnect hardware gates passed |
 | A2DP Sink / AVRCP Target | `rp2350-arm` | `pico2w` | onboard CYW43439 with BTstack and Bluedroid SBC decoder | A2DP/AVRCP and reconnect hardware gates passed; a product must still validate its selected physical audio output |
 | BLE and Classic profiles | `mock` | `host-mock` | deterministic test backends | BLE, Classic, HID, gamepad, A2DP, and AVRCP host regression coverage |
+
+`pico-rm2` and `nucleo-pim730` are assembly names from
+[`examples/26_ble_stream`](../../../examples/26_ble_stream/). They combine
+base boards `pico` and `nucleo-g474re` with a `pimoroni,pim730` node in
+`device_tree.json`; select them with `--assembly`, not `--board`.
 
 The RP2350 backend supports Pico 2 W only with the `rp2350-arm` target. Pico 2
 W with `rp2350-riscv` is unsupported because the CYW43 Bluetooth transport is

@@ -44,12 +44,6 @@ static const fdcan_pin_t kPins[] = {
     {2u, PIN(PORT_B, 3u), false, 11u}, {2u, PIN(PORT_B, 4u), true, 11u},
 };
 
-/* Default RX/TX per instance: the pins of the NUCLEO CAN-FD HAT. */
-static const uint8_t kDefaultRx[FDCAN_INSTANCE_COUNT] = {
-    PIN(PORT_A, 11u), PIN(PORT_B, 12u), PIN(PORT_A, 8u)};
-static const uint8_t kDefaultTx[FDCAN_INSTANCE_COUNT] = {
-    PIN(PORT_A, 12u), PIN(PORT_B, 13u), PIN(PORT_B, 4u)};
-
 /* Classic-API filter slots. */
 #define LEGACY_SLOTS HAL_CAN_MAX_FILTERS
 
@@ -826,13 +820,19 @@ static hal_status_t check_config(const hal_can_stm32g474_fdcan_config_t *c,
       c->arbitration_bitrate_hz > MAX_NOMINAL_BITRATE_HZ) {
     return HAL_EINVAL;
   }
-  const uint8_t rx = c->rx_pin ? c->rx_pin : kDefaultRx[index];
-  const uint8_t tx = c->tx_pin ? c->tx_pin : kDefaultTx[index];
-  const fdcan_pin_t *rx_pin = find_pin(index, rx, false);
-  const fdcan_pin_t *tx_pin = find_pin(index, tx, true);
+  /* The backend has no pins of its own: the board channel of
+   * hal_can_board_config() or the application gives them. */
+  if (c->rx_pin == 0u || c->tx_pin == 0u) {
+    hal_derr_limited("can", "FDCAN%u: RX/TX pins not set",
+                     (unsigned)index + 1u);
+    return HAL_EINVAL;
+  }
+  const fdcan_pin_t *rx_pin = find_pin(index, c->rx_pin, false);
+  const fdcan_pin_t *tx_pin = find_pin(index, c->tx_pin, true);
   if (rx_pin == NULL || tx_pin == NULL) {
     hal_derr_limited("can", "FDCAN%u: pins %u/%u not routable",
-                     (unsigned)index + 1u, (unsigned)rx, (unsigned)tx);
+                     (unsigned)index + 1u, (unsigned)c->rx_pin,
+                     (unsigned)c->tx_pin);
     return HAL_EINVAL;
   }
   const uint32_t data_hz = (c->enable_fd && c->data_bitrate_hz)
@@ -946,8 +946,8 @@ static hal_status_t fdcan_init(void *ctx, const hal_can_config_t *cfg,
     hal_gpio_set_mode(fd->standby_pin, fd->standby_high ? HAL_GPIO_OUTPUT_HIGH
                                                         : HAL_GPIO_OUTPUT_LOW);
   }
-  jh_stm32g474_gpio_set_af(c->rx_pin ? c->rx_pin : kDefaultRx[index], rx_af);
-  jh_stm32g474_gpio_set_af(c->tx_pin ? c->tx_pin : kDefaultTx[index], tx_af);
+  jh_stm32g474_gpio_set_af(c->rx_pin, rx_af);
+  jh_stm32g474_gpio_set_af(c->tx_pin, tx_af);
 
   /* One bus clock and one reset bit serve all three instances; the kernel
    * clock (JH_G474_FDCAN_CLOCK_HZ) is selected by the clock tree. */

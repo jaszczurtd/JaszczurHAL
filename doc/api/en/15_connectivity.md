@@ -245,16 +245,17 @@ behavior.
 
 ## `hal_wifi` - WiFi connections  *(optional - `HAL_ENABLE_WIFI`)*
 
-RP builds that need WiFi select a radio-capable profile: `picow`, `pico2w`, or
-`pico-rm2`. ESP32-S3 uses the native radio declared by its board profile.
-`HAL_ENABLE_WIFI` selects the facade; dependent modules such as MQTT and
-WireGuard propagate it.
-Network modules may also be compiled for a plain Pico profile; public calls
-then return `HAL_EUNSUPPORTED` without accessing CYW43 pins. On a capable
-profile, `hal_wifi_set_mode_ex(HAL_WIFI_MODE_STA)` and
-`hal_wifi_begin_station_ex(...)` are the explicit initialization entry points.
-State queries, scans and transport opens do not initialize the radio
-implicitly.
+For RP WiFi, select a board with an onboard radio (`picow` or `pico2w`),
+or add a `pimoroni,pim730` node to a plain Pico assembly in `device_tree.json`.
+ESP32-S3 uses the native radio declared by its board profile.
+`HAL_ENABLE_WIFI` enables the shared API; dependent modules such as MQTT and
+WireGuard enable it automatically. Network modules can also be compiled for
+a plain Pico without a radio, but public calls then return `HAL_EUNSUPPORTED`
+without accessing CYW43 pins.
+
+With a radio present, `hal_wifi_set_mode_ex(HAL_WIFI_MODE_STA)` and
+`hal_wifi_begin_station_ex(...)` explicitly initialize it. State queries,
+scans and transport opens do not initialize the radio implicitly.
 
 CYW43 profiles keep the radio's factory MAC address when it is present in the
 module OTP. This includes Raspberry Pi-assigned addresses such as
@@ -274,10 +275,12 @@ advance the polling backend and expose connecting, no-network, authentication,
 DHCP and connected states. Passing `false` retains the bounded blocking join
 that waits for a DHCP lease.
 
-STM32G474 supports an external CYW43/PIM730 through the experimental
-`nucleo-g474re-pim730` profile, its one-wire gSPI transport, and the same pinned
-lwIP stack. The plain `nucleo-g474re` profile deliberately has no radio
-capability and rejects a CYW43 network build. Station join on STM32G474 accepts
+Experimental STM32G474 support uses an external CYW43/PIM730 declared in
+`device_tree.json`,
+using one-wire gSPI and the same pinned lwIP stack. For example,
+`examples/08_mqtt` provides the `nucleo-pim730` assembly. The base
+`nucleo-g474re` board has no radio and rejects a CYW43 network build
+without such a node. Station join on STM32G474 accepts
 both forms: the blocking one is bounded by the configured timeout, and the
 non-blocking one starts the association and reports progress through
 `hal_wifi_get_state_ex()` while the service loop advances it.
@@ -395,7 +398,8 @@ A CYW43 hardware configuration selects the shared API implementation, one bus, a
 #define HAL_CYW43_STACK_LWIP
 ```
 
-RP board profiles emit `HAL_CYW43_BUS_PICO_PIO` and the matching pins. Pico W,
+The RP board or device-tree configuration generates
+`HAL_CYW43_BUS_PICO_PIO` and the matching pins. Pico W,
 Pico 2 W, and Pico+PIM730 use the same provider lifecycle. The PIO transport
 derives its 16.8 clock divider from the live `clk_sys` and
 `HAL_CYW43_GSPI_TARGET_HZ` (31.25 MHz by default), selecting the matching
@@ -403,10 +407,10 @@ high/low-speed sampling program without exceeding the target. Changing
 `clk_sys` while the provider is active is rejected; deinitialize the network,
 change the clock, and initialize it again.
 
-STM32G474 projects with an external PIM730 select board profile
-`nucleo-g474re-pim730`. The generated profile supplies the backend, bus, stack,
-and encoded pins; applications must not reproduce these definitions manually.
-The fixed wiring is:
+For STM32G474, declare a `pimoroni,pim730` node on `nucleo-g474re` and
+select its assembly. The generated headers supply the backend, bus, stack,
+and encoded pins; applications must not repeat these definitions manually.
+The `nucleo-pim730` assembly in `examples/08_mqtt` uses these connections:
 
 | PIM730 | STM32G474 | Nucleo connector |
 |---|---|---|
@@ -419,10 +423,10 @@ The fixed wiring is:
 
 PIM730 is a 3.0-3.3 V device; never connect it to 5 V. `DAT` is the combined
 data input/output and host-wake line. Use short, direct wiring. The supported
-profile assumes that the PIM730 cuttable `BT_ON`-to-`WL_ON` trace is intact, so
+PIM730 binding assumes that the PIM730 cuttable `BT_ON`-to-`WL_ON` trace is intact, so
 `BT_ON`/`BL_ON` remains otherwise unconnected. Inspect that trace before using
-the profile; a cut trace is a different hardware topology and is not currently
-described by a board profile.
+the assembly; a cut trace requires separate Bluetooth power control, which
+the PIM730 binding does not currently support.
 
 The equivalent generated configuration is:
 

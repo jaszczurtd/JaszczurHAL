@@ -148,7 +148,7 @@ typedef struct {
     const char *ca_cert_name;       // pre-uploaded via AT+CCERTDOWN, or NULL
     bool        ignore_local_time;
     bool        enable_sni;
-    int         sslversion;         // 0..4, default 4 (TLS 1.2)
+    int         sslversion;         // 0..4: 0 selects 4 (All); 3 selects TLS 1.2
     int         authmode;           // 0..3, default 1 (server only)
 } hal_simcom_a76xx_ssl_config_t;
 

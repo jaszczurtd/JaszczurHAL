@@ -42,7 +42,9 @@ vscode/entry/jh-vscode build --project examples/26_ble_stream \
 `device_tree.json` opisuje sprzęt każdego montażu: `picow` (Pico W,
 domyślny), `pico2w` (Pico 2 W), `nucleo-pim730` i `pico-rm2`. Dwa ostatnie to
 zwykła NUCLEO-G474RE i zwykłe Pico z zewnętrznym modułem PIM730/RM2, bez
-osobnego profilu płytki. Tabela poniżej powtarza połączenia modułu.
+osobnego profilu płytki. Tabela poniżej powtarza połączenia modułu. Nazwa montażu
+`pico-rm2` pozostaje prawidłowa po usunięciu dawnego profilu płytki; wybieraj
+ją przez `--assembly`, a nie `--board`.
 Konfiguracja kompilacji `pico-rm2` jest dostępna, ale jej osobny test
 sprzętowy pozostaje do wykonania:
 

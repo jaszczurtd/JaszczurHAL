@@ -35,6 +35,20 @@ Skrypty pomocnicze odrzucają ścieżki wyjściowe prowadzące poza ten katalog.
 
 <a id="zgodność-targetu-i-płytki"></a>
 
+`--all-features` wybiera dostępne funkcje platformy z uwzględnieniem sprzętu.
+Na STM32G474 bez `device_tree.json` pomija sieć, Bluetooth i funkcje od nich
+zależne: żadna bazowa płytka STM32 nie ma radia. Aby je uwzględnić, wskaż
+montaż z PIM730, na przykład:
+
+```bash
+./scripts/build_link_library.sh --target stm32g474 \
+  --project-config examples/08_mqtt --assembly nucleo-pim730 \
+  --all-features --library-only
+```
+
+Jawne żądanie CYW43 na bazowym Nucleo bez węzła radia jest błędem;
+`--all-features` nie dobiera połączeń modułu.
+
 ## Zgodność platformy i płytki
 
 Makra wybierające platformę są zdefiniowane w `src/hal/core/hal_target.h`. Gdy narzędzia kompilacji nie dostarczają danych wystarczających do automatycznego wykrycia platformy, zdefiniuj dokładnie jedno z tych makr:
@@ -121,7 +135,9 @@ Oba polecenia zgłaszają błąd przy nieprawidłowej konfiguracji. Opcja `--rep
 
 Po skonfigurowaniu i skompilowaniu biblioteki statycznej dla wybranej platformy utwórz kompletny pakiet instalacyjny z tej samej konfiguracji:
 
-```bash
+Szablon - przed uruchomieniem zastąp wartości w `<...>`:
+
+```text
 cmake --install .build/static/<target>/<board> \
   --prefix .build/install/<target>/<board>
 ```
@@ -147,7 +163,9 @@ share/JaszczurHAL/generated/
 
 Pozostałe nagłówki publiczne HAL są instalowane w `include/`. Traktuj całe drzewo instalacji jako jeden pakiet. Przy bezpośrednim wywołaniu kompilatora dodaj `include/` i `include/generated/` do ścieżek nagłówków, a do definicji - makro platformy i żądane funkcje zapisane w `jh_board_resolved.json`. Skompiluj także `share/JaszczurHAL/generated/jh_link_contract_reference.c` i zlinkuj otrzymany plik obiektowy z `lib/libJaszczurHAL.a`. Przykładowy układ poleceń:
 
-```bash
+Szablon - przed uruchomieniem zastąp wartości w `<...>`:
+
+```text
 "${CXX}" <target compile flags> \
   -I<prefix>/include -I<prefix>/include/generated \
   -DHAL_TARGET_<TARGET>=1 -D<REQUESTED_FEATURE>=1 \
@@ -170,7 +188,9 @@ Wygenerowane odwołanie do sygnatury korzysta z atrybutów GCC/Clang `constructo
 
 Gdy w katalogu `--project-config` leży `device_tree.json`, zamiast płytki wybierz montaż:
 
-```bash
+Szablon - przed uruchomieniem zastąp wartości w `<...>`:
+
+```text
 ./scripts/build_link_library.sh --target stm32g474 \
   --assembly canhat -p sciezka/do/konfiguracji --library-only
 cmake --install .build/static/stm32g474/canhat/<klucz> --prefix <prefix>
@@ -212,7 +232,7 @@ Z katalogu głównego repozytorium:
 # RP2040 / Pico z przykładową aplikacją
 ./scripts/build_rp_pico_lib.sh \
   --target rp2040 \
-  --board pico \
+  --assembly pico \
   --example 01_core_runtime
 
 # RP2350 ARM
@@ -399,7 +419,9 @@ Bez `-p` własny `hal_project_config.h` aplikacji kontrolnej nie żąda żadnych
 
 Projekty firmware używają `scripts/build_esp_idf.py` bezpośrednio. Skrypt obsługuje polecenia `build`, `artifacts` i `flash`:
 
-```bash
+Szablon - przed uruchomieniem zastąp wartości w `<...>`:
+
+```text
 # Czysty build z domyślną płytką targetu.
 python3 scripts/build_esp_idf.py build \
   --project tests/fixtures/esp32s3_phase3 \

@@ -88,11 +88,18 @@ and `hal_adc_read()` of a scanned pin is served the same way.
 
 | Target | Period | Pins | Notes |
 | --- | --- | --- | --- |
-| RP2040 / RP2350 | 2 us and up, whole 48 MHz cycles | up to 5 (GPIO26..29 and temperature) | two DMA channels, `DMA_IRQ_0` exclusively |
-| STM32G474 | sample-time steps from about 0.35 us; 5.8 us with the temperature sensor | up to 8 | ADC1 regular sequence, DMA1 channel 3 circular |
+| RP2040 / RP2350 | 2 us and up, whole 48 MHz cycles | up to 5 (GPIO26..29 and temperature) | four DMA channels, `DMA_IRQ_0` exclusively |
+| STM32G474 | request at least 1 us; rounded up to a hardware sample-time step | up to 8 | ADC1 regular sequence, DMA1 channel 3 circular |
 | ESP32-S3 | 12 us and up (83.3 kS/s) | ADC1 pads only, no temperature | ESP-IDF continuous driver |
 
-`hal_adc_scan_start()` reports `HAL_EUNSUPPORTED` for a period or pin the
+On STM32G474, including the temperature sensor raises the sample time for
+the sequence to at least 247.5 ADC cycles. With the 12.5 conversion cycles,
+that is about 6.12 us per pin at a 42.5 MHz ADC clock, or 6.5 us at 40 MHz.
+Read `hal_adc_scan_frame_period_ns()` for the resulting frame period.
+
+`hal_adc_scan_start()` rejects periods below
+`HAL_ADC_SCAN_MIN_CONVERSION_NS` (1000 ns) with `HAL_EINVAL` before calling
+the backend. It reports `HAL_EUNSUPPORTED` for a period or pin the
 backend cannot serve, `HAL_EBUSY` when the converter or the interrupt is
 already taken, and `HAL_ENOMEM` when no DMA channel is free. Stop is
 idempotent and releases everything, also after a failed start.

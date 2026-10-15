@@ -42,7 +42,9 @@ vscode/entry/jh-vscode build --project examples/26_ble_stream \
 (Pico W, the default), `pico2w` (Pico 2 W), `nucleo-pim730` and `pico-rm2`.
 The last two are a plain NUCLEO-G474RE and a plain Pico with an external
 PIM730/RM2 module, without a separate board profile; the table below repeats
-the module wiring. The `pico-rm2` build configuration is available, but its
+the module wiring. The assembly name `pico-rm2` remains valid after removal
+of the old board profile; select it with `--assembly`, not `--board`.
+The `pico-rm2` build configuration is available, but its
 separate hardware test remains pending:
 
 ```bash

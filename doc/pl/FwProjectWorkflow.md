@@ -80,7 +80,7 @@ Opcja `--install` wymaga potwierdzenia przed instalacją brakujących rozszerze�
 - **Wariant**: nazwana konfiguracja kompilacji zadeklarowana w nagłówku projektu; dodaje własne definicje do konfiguracji bazowej.
 - **Stan lokalny**: ignorowany przez Git plik `.vscode/jaszczurhal.local.json`, zawierający wybrane lokalnie platformę, płytkę i port szeregowy.
 - **Platforma docelowa (target)**: stały identyfikator konfiguracji kompilacji: `rp2040`, `rp2350-arm`, `rp2350-riscv`, `stm32g474`, `esp32`, `esp32s3` lub `mock`.
-- **Płytka (board)**: stały identyfikator profilu sprzętu, np. `pico`, `picow`, `pico2`, `pico2w`, `pico-rm2`, `rp2040-zero`, `rp2040-plus-4mb`, `nucleo-g474re`, `esp32-devkitc-v4` lub `waveshare-esp32-s3-zero`.
+- **Płytka (board)**: stały identyfikator profilu sprzętu, np. `pico`, `picow`, `pico2`, `pico2w`, `rp2040-zero`, `rp2040-plus-4mb`, `nucleo-g474re`, `esp32-devkitc-v4` lub `waveshare-esp32-s3-zero`.
 - **Rejestr płytek**: generowane dane dla narzędzi w `boards/targets/*.json`, `boards/profiles/*.json` i `boards/capabilities.json`.
 - **`JH_TARGET` / `JH_BOARD`**: wartości w pamięci podręcznej CMake ustalane przed importem SDK i narzędzi kompilacji.
 - **`HAL_TARGET_*`**: makro wybierające implementację HAL podczas kompilacji, generowane lub ustalane na podstawie wybranej platformy.
@@ -499,7 +499,21 @@ W systemach Unix pamięć podręczna CMake jest oddzielna dla każdej pary platf
 <cmakeBuildDir>/<target>/<board>/
 ```
 
-Dzięki temu różne zestawy narzędzi, platformy systemów kompilacji, wygenerowane nagłówki i układy pamięci linkera nie współdzielą jednej pamięci podręcznej. Projekt z `device_tree.json` daje zamiast tego każdemu montażowi własny `buildDir`: `<buildDir>/<target>/<assembly>`, gdzie bazą jest `targetProfiles.<target>.buildDir`, jeśli istnieje. Pliki wynikowe, `cmakeBuildDir` i `JH_ARTIFACT_DIR`, które manifest wyprowadza z `${buildDir}`, podążają za nim, `JH_ARTIFACT_DIR` domyślnie na niego wskazuje (także w generowanych ustawieniach CMake Tools), a katalog CMake albo `JH_ARTIFACT_DIR` położony gdzie indziej dostaje dopisane `<target>/<assembly>`. Dwa montaże tej samej płytki nigdy więc nie dzielą wyników; warianty dostają pod spodem `variants/<id>`. Natywne środowisko Windows używa zamiast tego krótkiej ścieżki przygotowanej przez skrypt inicjalizacyjny:
+Osobne katalogi rozdzielają zestawy narzędzi, nagłówki płytek i układy pamięci
+linkera. Dla projektów z `device_tree.json` obowiązują następujące reguły:
+
+- Każdy montaż otrzymuje `<buildDir>/<target>/<assembly>`. Jeśli istnieje
+  `targetProfiles.<target>.buildDir`, to ono wskazuje katalog bazowy.
+- Ścieżki wyprowadzone z `${buildDir}`, w tym pliki wynikowe i `cmakeBuildDir`,
+  wskazują odpowiedni katalog montażu.
+- `JH_ARTIFACT_DIR` domyślnie wskazuje katalog montażu, również w generowanych
+  ustawieniach CMake Tools. Niezależnie ustawiony katalog CMake albo
+  `JH_ARTIFACT_DIR` otrzymuje dopisek `<target>/<assembly>`.
+- Warianty dodają pod tymi katalogami `variants/<id>`. Dwa montaże tej samej
+  płytki mają więc osobne wyniki kompilacji.
+
+W Windows katalog CMake znajduje się pod krótką ścieżką przygotowaną podczas
+konfiguracji środowiska:
 
 ```text
 <BuildRoot>/<project-name>-<path-hash>/cmake/<target>/<board albo assembly>/

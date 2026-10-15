@@ -17,6 +17,11 @@ Available profiles are stored in `boards/profiles/*.json`. List their IDs with `
 
 Before importing the toolchain, the generator checks target compatibility, flash size, pins, components, and feature dependencies. It also generates a fallback configuration for direct source-level selection from the same descriptors. Board names and compile-time settings therefore remain consistent without a configuration generated for a particular build.
 
+For external modules, keep the base board ID and describe wiring in the
+application's `device_tree.json`. The build selects a project-local assembly
+with `--assembly`; that assembly determines the target and board. See the
+[firmware project guide](FwProjectWorkflow.md) for the device-tree format.
+
 ## Source files
 
 Version-controlled source data is stored in `boards/`:
@@ -285,23 +290,32 @@ Build examples:
 ```bash
 ./scripts/build_link_library.sh --target rp2040 --board rp2040-plus-4mb
 ./scripts/build_link_library.sh --target stm32g474 --board nucleo-g474re
-./scripts/build_link_library.sh --target stm32g474 --board nucleo-g474re-pim730
+./scripts/build_link_library.sh --target stm32g474 \
+  --project-config examples/08_mqtt --assembly nucleo-pim730 --library-only
 ./scripts/build_link_library.sh --target esp32s3 --board waveshare-esp32-s3-zero
 ```
 
-`nucleo-g474re` describes the Nucleo board alone. Projects using the external
-PIM730/RM2 radio must select the supported `nucleo-g474re-pim730` profile; it
-owns the fixed CYW43 gSPI pins and exports the radio capabilities and components
-required by network builds. Its generated board header also owns the CYW43
-backend, gSPI bus, stack, and pin definitions; direct compiler consumers must
-not duplicate those definitions with command-line `-D` options. The wiring and
-electrical constraints are documented in
+`nucleo-g474re` describes the base Nucleo board. Add an external PIM730/RM2
+as a `pimoroni,pim730` node in the application's `device_tree.json`, then
+select that assembly. For example, `examples/08_mqtt` provides
+`nucleo-pim730`. The generator supplies radio capabilities, components,
+backend, bus, stack, and pins from that configuration; do not repeat them
+with compiler `-D` options. Wiring and electrical limits are described in
 [Connectivity](../api/en/15_connectivity.md#cyw43-backend-configuration-and-lifecycle).
-The `picow`, `pico2w`, `pico-rm2`, and `nucleo-g474re-pim730` profiles also
-declare the lifecycle-owned `bluetooth-controller` capability and
-feature-gated `btstack-host` component. Enabling `HAL_ENABLE_BLE` compiles
-that component; the physical capability alone never enables Bluetooth. See the
+
+The `picow` and `pico2w` boards carry a Bluetooth controller. On a plain
+Pico or Nucleo, the PIM730 node adds it to the assembly. The `btstack-host`
+component is compiled when requested by a feature such as `HAL_ENABLE_BLE`;
+the presence of a radio alone does not enable Bluetooth. See the
 [Bluetooth API](../api/en/20_bluetooth.md).
+
+The former `pico-rm2`, `nucleo-g474re-pim730`, `nucleo-g474re-canhat`,
+`pico-core1262-hf` and `nucleo-g474re-core1262-hf` board IDs are removed.
+Use the base board and describe the module in a device-tree assembly.
+Their old `HAL_BOARD_PROFILE_*` selectors and `HAL_CYW43_PROFILE_PIM730`
+stop compilation with migration instructions. An assembly name is local to
+its project: `pico-rm2` remains a valid assembly in `examples/26_ble_stream`,
+but is not a board ID accepted by `--board`.
 
 The experimental `rp2040-lora-lf` profile describes Waveshare SKU 26592. It
 uses the existing `rp2040` target and Pico SDK `pico` board definition, reserves
@@ -317,16 +331,19 @@ profile, because the same module can sit on any free pins. Select the plain
 host board and describe the wiring in the application; for the Core1262-HF see
 [LoRa](../api/en/21_lora.md#external-waveshare-core1262-hf).
 
-The experimental `nucleo-g474re-canhat` profile describes a NUCLEO-G474RE with
-the [Embedded Garage](https://www.youtube.com/@embeddedGarage) CAN-FD HAT v1.2
-([shop](https://sklep.embeddedgarage.com/)). It declares the three FDCAN
-channels of CN5-CN7 with their MCP2562FD standby lines, hard-reserves them,
-the relay drivers K1-K4 (the gates have no pull-down, so any other use
-switches the relays) and the PF0/PF1 crystal, and soft-reserves the LEDs,
-12 V inputs and buttons. `HAL_LED_BUILTIN` is the RDY LED on PC1; PA5 drives
-both LD2 and a CAN2 LED. The board-owned `stm32g474-hse-24mhz` component
-selects the 160 MHz clock tree from the 24 MHz HSE with the FDCAN kernel
-clock at 80 MHz (`HAL_STM32G474_CLOCK_HSE_160MHZ`).
+The experimental `nucleo-canhat` assembly in
+[`examples/21_stm32g474_fdcan_native`](../../examples/21_stm32g474_fdcan_native/)
+combines `nucleo-g474re` with an `embeddedgarage,can-fd-hat-g474` node.
+The node describes the Embedded Garage CAN-FD HAT v1.2 channels CN5-CN7,
+MCP2562FD standby lines, relays, LEDs, 12 V inputs, and buttons. Its wiring
+is reserved by the device tree. The relay gates have no pull-down resistors,
+so the application must not repurpose their pins. The assembly selects RDY
+on PC1 as `HAL_LED_BUILTIN`; PA5 also drives LD2 and a CAN2 LED.
+
+The assembly's `stm32g474-hse-24mhz` clock tree reserves PF0/PF1 and enables
+`HAL_STM32G474_CLOCK_HSE_160MHZ`: SYSCLK is 160 MHz from the 24 MHz HSE,
+and the FDCAN kernel clock is 80 MHz. `hal_can_board_config()` reads the
+three channel configurations generated from this same assembly.
 
 The archive defines:
 
@@ -350,7 +367,9 @@ Two conditional compatibility rules remain outside the v1 registry's dependency 
 
 Install a configured RP or STM32 static build with CMake:
 
-```bash
+Template - replace the values in `<...>` before running:
+
+```text
 cmake --install .build/static/<target>/<board> \
   --prefix .build/install/<target>/<board>
 ```

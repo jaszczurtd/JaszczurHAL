@@ -516,8 +516,9 @@ Funkcje interwałowe pozwalają uruchamiać czynności okresowo w pętli, bez bl
   aplikacji, więc późniejsze włączenie watchdoga nie usuwa informacji o
   przyczynie poprzedniego restartu.
 - **impl/stm32g474:** Podczas uruchamiania PLL generuje SYSCLK 170 MHz z HSI16.
-  Magistrale AHB, APB1 i APB2 pracują bez preskalera. Płytki, których profil
-  wybiera komponent `stm32g474-hse-24mhz` (`nucleo-g474re-canhat`), definiują
+  Magistrale AHB, APB1 i APB2 pracują bez preskalera. Montaże wybierające
+  `stm32g474-hse-24mhz` w `device_tree.json` (np. `nucleo-canhat`
+  w przykładzie 21) definiują
   `HAL_STM32G474_CLOCK_HSE_160MHZ` i pracują zamiast tego z 160 MHz z kwarcu
   HSE 24 MHz, z zegarem jądra FDCAN 80 MHz z PLL Q; gdy HSE nie
   wstanie w ciągu 100 ms, start buduje te same częstotliwości z HSI16.
