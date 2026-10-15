@@ -548,7 +548,11 @@ class Resolver:
         model = {"node": path, "endpoint": endpoint, "signal": signal,
                  "kind": "addressable" if addressable else "gpio"}
         if addressable:
-            model["pixelOrder"] = order or node.properties["pixelOrder"][0]
+            # The assembly's order is the node's property too, so jh_hardware.h
+            # and the late header carry one value; else the binding default.
+            if order is not None:
+                node.properties["pixelOrder"] = (order, self.path, self.at + "/statusLed/pixelOrder")
+            model["pixelOrder"] = node.properties["pixelOrder"][0]
         else:
             model["activeLow"] = node.properties["activeLow"][0]
         self.status_model = model
