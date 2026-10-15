@@ -505,7 +505,20 @@ target_link_libraries(test_spsc_ring PRIVATE Threads::Threads)
 add_test(NAME test_spsc_ring COMMAND test_spsc_ring)
 
 # hal_can_board_config() over generated board facts: the host mock board
-# declares no CAN channel, the CAN-FD HAT profile three.
+# declares no CAN channel, the canhat assembly of the nucleo-canhat device tree
+# three.
+include(${CMAKE_SOURCE_DIR}/cmake/jh_hardware_config.cmake)
+set(_jh_canhat_dir ${CMAKE_CURRENT_BINARY_DIR}/hardware_config/can_board_canhat)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/fixtures/device_tree/hal/nucleo-canhat/device_tree.json
+    ${_jh_canhat_dir}/config/device_tree.json COPYONLY)
+file(WRITE ${_jh_canhat_dir}/config/hal_project_config.h "#pragma once\n")
+jh_generate_hardware_config(
+    ROOT ${CMAKE_SOURCE_DIR}
+    CONFIG_DIR ${_jh_canhat_dir}/config
+    ASSEMBLY canhat
+    OUTPUT_DIR ${_jh_canhat_dir}/generated
+    OUTPUT_ROOT ${CMAKE_BINARY_DIR}
+    DEFINES HAL_ENABLE_CAN HAL_ENABLE_STM32G474_FDCAN)
 foreach(_jh_can_board IN ITEMS mock canhat)
     set(_jh_can_board_test test_can_board_config_${_jh_can_board})
     add_executable(${_jh_can_board_test}
@@ -517,9 +530,12 @@ foreach(_jh_can_board IN ITEMS mock canhat)
     target_compile_definitions(${_jh_can_board_test} PRIVATE
         HAL_ENABLE_CAN HAL_ENABLE_UNITY UNITY_INCLUDE_CONFIG_H)
     if(_jh_can_board STREQUAL "canhat")
+        target_include_directories(${_jh_can_board_test} PRIVATE
+            ${JH_BOARD_GENERATED_DIR})
         target_compile_definitions(${_jh_can_board_test} PRIVATE
             HAL_TARGET_STM32G474=1 HAL_ENABLE_STM32G474_FDCAN
-            HAL_BOARD_PROFILE_STM32G474_NUCLEO_CANHAT=1)
+            JH_TEST_CANHAT_ASSEMBLY=1 "${JH_HARDWARE_DEFINITION}"
+            ${JH_BOARD_COMPILE_DEFINITIONS})
     else()
         target_compile_definitions(${_jh_can_board_test} PRIVATE
             HAL_ENABLE_MCP2515)
@@ -974,25 +990,11 @@ add_test(NAME test_network_backend_contract_offload
     COMMAND test_network_backend_contract_offload
 )
 
-add_test(NAME test_network_backend_selection
-    COMMAND ${CMAKE_COMMAND}
-        -DJH_CXX=${CMAKE_CXX_COMPILER}
-        -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
-        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_network_backend_selection.cmake
-)
-
 add_test(NAME test_target_selection
     COMMAND ${CMAKE_COMMAND}
         -DJH_CXX=${CMAKE_CXX_COMPILER}
         -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
         -P ${CMAKE_CURRENT_SOURCE_DIR}/test_target_selection.cmake
-)
-
-add_test(NAME test_board_selection
-    COMMAND ${CMAKE_COMMAND}
-        -DJH_CXX=${CMAKE_CXX_COMPILER}
-        -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
-        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_board_selection.cmake
 )
 
 add_test(NAME test_board_config_dependencies
@@ -1529,6 +1531,12 @@ add_test(NAME test_documentation_links
         ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/check_documentation_links.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
+# Files Git ignores (a local NOW.md) are left out; runs on throwaway trees.
+add_test(NAME test_documentation_link_scope
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_documentation_link_scope.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
 add_test(NAME test_documentation_i18n_parity
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/check_documentation_i18n_parity.py
@@ -1562,7 +1570,11 @@ target_compile_definitions(test_hal_board_runtime PRIVATE
 jh_enable_host_warnings(test_hal_board_runtime ERRORS)
 add_test(NAME test_hal_board_runtime COMMAND test_hal_board_runtime)
 
-function(add_network_board_runtime_test NAME BOARD_DEFINE TEST_DEFINE)
+# The board, its CYW43 transport and the include directories come with each
+# variant: a board profile for the Pico W radio, a generated device tree
+# configuration for a module radio.
+function(add_network_board_runtime_test NAME TEST_DEFINE)
+    cmake_parse_arguments(_NBR "" "" "DEFINITIONS;INCLUDES" ${ARGN})
     set(SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../src")
     add_executable(${NAME}
         test_network_board_runtime.cpp
@@ -1577,19 +1589,15 @@ function(add_network_board_runtime_test NAME BOARD_DEFINE TEST_DEFINE)
         ${SRC_DIR}/hal/network/jh_network_handle_pool.cpp
         ${SRC_DIR}/utils/unity.c
     )
-    target_include_directories(${NAME} PRIVATE ${SRC_DIR})
+    target_include_directories(${NAME} PRIVATE ${SRC_DIR} ${_NBR_INCLUDES})
     target_compile_definitions(${NAME} PRIVATE
         HAL_TARGET_RP2040=1
-        ${BOARD_DEFINE}=1
         ${TEST_DEFINE}=1
         HAL_ENABLE_WIFI=1
         HAL_ENABLE_TCP=1
         HAL_ENABLE_UDP=1
         JH_HAL_UDP_SOCKET_API_ONLY=1
-        HAL_NETWORK_BACKEND_CYW43=1
-        HAL_CYW43_BUS_PICO_PIO=1
-        HAL_CYW43_STACK_LWIP=1
-        HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
+        ${_NBR_DEFINITIONS}
         HAL_ENABLE_UNITY
         UNITY_INCLUDE_CONFIG_H
     )
@@ -1599,14 +1607,72 @@ endfunction()
 
 add_network_board_runtime_test(
     test_network_board_runtime_picow
-    HAL_BOARD_PROFILE_RP_PICO_W
     JH_TEST_NETWORK_BOARD_PICOW
+    DEFINITIONS
+        HAL_BOARD_PROFILE_RP_PICO_W=1
+        HAL_NETWORK_BACKEND_CYW43=1
+        HAL_CYW43_BUS_PICO_PIO=1
+        HAL_CYW43_STACK_LWIP=1
+        HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
 )
+# A PIM730 on a plain Pico: the assembly brings the CYW43 and the external
+# radio frontend, its transport and its pins.
+set(_jh_pim730_dir ${CMAKE_CURRENT_BINARY_DIR}/hardware_config/network_pim730)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/fixtures/device_tree/hal/pico-pim730/device_tree.json
+    ${_jh_pim730_dir}/config/device_tree.json COPYONLY)
+file(WRITE ${_jh_pim730_dir}/config/hal_project_config.h "#pragma once\n")
+jh_generate_hardware_config(
+    ROOT ${CMAKE_SOURCE_DIR}
+    CONFIG_DIR ${_jh_pim730_dir}/config
+    ASSEMBLY pico-pim730
+    OUTPUT_DIR ${_jh_pim730_dir}/generated
+    OUTPUT_ROOT ${CMAKE_BINARY_DIR}
+    DEFINES HAL_ENABLE_WIFI HAL_ENABLE_TCP HAL_ENABLE_UDP)
 add_network_board_runtime_test(
     test_network_board_runtime_pim730
-    HAL_BOARD_PROFILE_RP_PICO_PIM730
     JH_TEST_NETWORK_BOARD_PIM730
+    DEFINITIONS "${JH_HARDWARE_DEFINITION}" ${JH_BOARD_COMPILE_DEFINITIONS}
+    INCLUDES ${JH_BOARD_GENERATED_DIR}
 )
+
+# The board and network selection cases of the PIM730 assemblies compile
+# against their generated configuration with the definitions a firmware build
+# of the assembly gets: pico-pim730 above, and nucleo-pim730 of the library
+# device tree (no STM32 board carries a radio).
+function(jh_pim730_assembly_arguments OUT)
+    set(_arguments "-I${JH_BOARD_GENERATED_DIR}" "-D${JH_HARDWARE_DEFINITION}")
+    foreach(_definition IN LISTS JH_BOARD_COMPILE_DEFINITIONS)
+        list(APPEND _arguments "-D${_definition}")
+    endforeach()
+    set(${OUT} "${_arguments}" PARENT_SCOPE)
+endfunction()
+jh_pim730_assembly_arguments(_jh_pico_pim730_arguments)
+set(_jh_nucleo_pim730_dir ${CMAKE_CURRENT_BINARY_DIR}/hardware_config/network_nucleo_pim730)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/fixtures/device_tree/hal/library/device_tree.json
+    ${_jh_nucleo_pim730_dir}/config/device_tree.json COPYONLY)
+file(WRITE ${_jh_nucleo_pim730_dir}/config/hal_project_config.h "#pragma once\n")
+jh_generate_hardware_config(
+    ROOT ${CMAKE_SOURCE_DIR}
+    CONFIG_DIR ${_jh_nucleo_pim730_dir}/config
+    ASSEMBLY nucleo-pim730
+    OUTPUT_DIR ${_jh_nucleo_pim730_dir}/generated
+    OUTPUT_ROOT ${CMAKE_BINARY_DIR}
+    DEFINES HAL_ENABLE_WIFI HAL_ENABLE_TCP HAL_ENABLE_UDP HAL_ENABLE_BSD_SOCKETS)
+jh_pim730_assembly_arguments(_jh_nucleo_pim730_arguments)
+set(_jh_pim730_assembly_file
+    ${CMAKE_CURRENT_BINARY_DIR}/hardware_config/pim730_assembly_arguments.cmake)
+file(WRITE ${_jh_pim730_assembly_file}
+    "set(JH_PICO_PIM730_ARGUMENTS [==[${_jh_pico_pim730_arguments}]==])\n"
+    "set(JH_NUCLEO_PIM730_ARGUMENTS [==[${_jh_nucleo_pim730_arguments}]==])\n")
+foreach(_jh_selection_test IN ITEMS board_selection network_backend_selection)
+    add_test(NAME test_${_jh_selection_test}
+        COMMAND ${CMAKE_COMMAND}
+            -DJH_CXX=${CMAKE_CXX_COMPILER}
+            -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
+            -DJH_ASSEMBLY_ARGUMENTS=${_jh_pim730_assembly_file}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/test_${_jh_selection_test}.cmake
+    )
+endforeach()
 
 add_library(test_hal_http_client_plaintext_compile OBJECT
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/http/hal_http_client.cpp

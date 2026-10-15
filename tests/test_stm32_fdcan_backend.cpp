@@ -430,6 +430,14 @@ hal_can_config_t config(uint8_t instance, uint32_t arb, uint32_t data,
   hal_can_config_t cfg = {};
   cfg.backend = HAL_CAN_BACKEND_STM32G474_FDCAN;
   cfg.stm32g474_fdcan.instance = instance;
+  /* The backend has no default pins: these are the CN5-CN7 channels of the
+   * NUCLEO CAN-FD HAT, as its board channels give them. */
+  if (instance >= 1u && instance <= 3u) {
+    static const uint8_t kRx[3] = {PA11, PB12, PA8};
+    static const uint8_t kTx[3] = {PA12, PB13, PB4};
+    cfg.stm32g474_fdcan.rx_pin = kRx[instance - 1u];
+    cfg.stm32g474_fdcan.tx_pin = kTx[instance - 1u];
+  }
   cfg.stm32g474_fdcan.arbitration_bitrate_hz = arb;
   cfg.stm32g474_fdcan.data_bitrate_hz = data;
   cfg.stm32g474_fdcan.enable_fd = fd;
@@ -611,6 +619,15 @@ void test_instance_pins_get_their_alternate_function(void) {
   TEST_ASSERT_EQUAL_UINT32(9u, gpio_afr(kGpioB, PB13 - 16u));
   TEST_ASSERT_EQUAL_UINT32(11u, gpio_afr(kGpioA, PA8));
   TEST_ASSERT_EQUAL_UINT32(11u, gpio_afr(kGpioB, PB4 - 16u));
+}
+
+void test_missing_pins_are_refused(void) {
+  hal_can_config_t cfg = config(1u, 500000u, 0u, false);
+  cfg.stm32g474_fdcan.rx_pin = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, open(0, cfg));
+  cfg = config(1u, 500000u, 0u, false);
+  cfg.stm32g474_fdcan.tx_pin = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, open(0, cfg));
 }
 
 void test_pins_of_another_instance_are_refused(void) {
@@ -1663,6 +1680,7 @@ int main(void) {
   RUN_TEST(test_invalid_rates_are_refused_before_the_hardware_is_touched);
   RUN_TEST(test_an_instance_opens_once_until_released);
   RUN_TEST(test_instance_pins_get_their_alternate_function);
+  RUN_TEST(test_missing_pins_are_refused);
   RUN_TEST(test_pins_of_another_instance_are_refused);
   RUN_TEST(test_timing_at_170mhz_is_exact_and_leaves_tdc_off);
   RUN_TEST(test_classic_channel_below_the_data_phase_range_starts);

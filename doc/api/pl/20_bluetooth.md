@@ -18,20 +18,25 @@ Podstawowe API BLE nie obsługuje aktywnego skanowania, żądań Scan Response, 
 
 ## Platformy i zakres weryfikacji
 
-| API | Target | Płytka | Radio/host | Walidacja |
+| API | Target | Płytka lub montaż | Radio/host | Walidacja |
 |---|---|---|---|---|
 | BLE | `rp2040` | `picow` | wbudowany CYW43439 z BTstack | zaliczone testy sprzętowe Observera oraz Stream w trybach bare metal i FreeRTOS |
 | BLE | `rp2350-arm` | `pico2w` | wbudowany CYW43439 z BTstack | zaliczone bramki Observera, Stream i aktywnego współistnienia Stream+WiFi/MQTT |
 | BLE | `rp2040` | `pico-rm2` | zewnętrzny CYW43439 PIM730/RM2 przez PIO | kompilacja została sprawdzona; dedykowany test sprzętowy oczekuje na wykonanie |
-| BLE | `stm32g474` | `nucleo-g474re-pim730` | zewnętrzny CYW43439 PIM730/RM2 przez gSPI | zaliczone testy Peripheral i Observer oraz pełne testy obciążeniowe Stream z wyświetlaczem w trybach bare metal i FreeRTOS |
+| BLE | `stm32g474` | `nucleo-pim730` | zewnętrzny CYW43439 PIM730/RM2 przez gSPI | zaliczone testy Peripheral i Observer oraz pełne testy obciążeniowe Stream z wyświetlaczem w trybach bare metal i FreeRTOS |
 | BLE | `esp32s3` | `waveshare-esp32-s3-zero` | zintegrowany kontroler LE z ESP-IDF NimBLE | pełny test kompilacji i linkowania; test radia na sprzęcie oczekuje na wykonanie |
 | Classic / HID Host / gamepad | `rp2350-arm` | `pico2w` | wbudowany CYW43439 z BTstack | zaliczone bramki sprzętowe managera, surowego HID i gamepada |
-| Classic / HID Host / gamepad | `rp2040` / `stm32g474` | `picow` / `pico-rm2` / `nucleo-g474re-pim730` | CYW43439 z BTstack | sprawdzono kompilację; te hosty nie przeszły dedykowanej sprzętowej bramki HID/gamepada |
+| Classic / HID Host / gamepad | `rp2040` / `stm32g474` | `picow` / `pico-rm2` / `nucleo-pim730` | CYW43439 z BTstack | sprawdzono kompilację; te hosty nie przeszły dedykowanej sprzętowej bramki HID/gamepada |
 | Classic / HID Host / gamepad | `esp32` | `esp32-devkitc-v4` | zintegrowany kontroler BR/EDR z ESP-IDF Bluedroid i ESP HID Host | pełny test kompilacji i linkowania; ogólna bramka radia na sprzęcie oczekuje |
 | BLE + Classic HID/gamepad | `rp2350-arm` | `pico2w` | wspólny wbudowany CYW43439 z BTstack | pasywny Observer i połączony gamepad zaliczyły aktywną bramkę współistnienia, wraz z rozłączeniem i ponownym połączeniem HID podczas ciągłego skanowania |
 | A2DP Sink / AVRCP Target | `rp2040` | `picow` | wbudowany CYW43439 z BTstack i dekoderem SBC Bluedroid | zaliczone bramki sprzętowe A2DP/AVRCP, wyjścia PWM i ponownego połączenia z bondem |
 | A2DP Sink / AVRCP Target | `rp2350-arm` | `pico2w` | wbudowany CYW43439 z BTstack i dekoderem SBC Bluedroid | zaliczone bramki sprzętowe A2DP/AVRCP i ponownego połączenia; produkt nadal musi sprawdzić wybrane fizyczne wyjście audio |
 | BLE i profile Classic | `mock` | `host-mock` | deterministyczne backendy testowe | regresja hostowa BLE, Classic, HID, gamepada, A2DP i AVRCP |
+
+`pico-rm2` i `nucleo-pim730` to nazwy montaży z
+[`examples/26_ble_stream`](../../../examples/26_ble_stream/). Łączą płytki
+bazowe `pico` i `nucleo-g474re` z węzłem `pimoroni,pim730` w `device_tree.json`;
+wybieraj je przez `--assembly`, a nie `--board`.
 
 Backend RP2350 obsługuje wyłącznie Pico 2 W z targetem `rp2350-arm`. Pico 2 W
 z `rp2350-riscv` jest nieobsługiwane, ponieważ transport Bluetooth CYW43 nie

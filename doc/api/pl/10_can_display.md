@@ -150,10 +150,11 @@ typedef struct {
 // z MCP251XFD, a na końcu ze STM32G474 FDCAN.
 // MCP2515: magistrala SPI 0, pin CS 0, 500 kbps / kryształ 8 MHz.
 // MCP251XFD: magistrala SPI 0, pin CS 0, arbitraż 500 kbit/s, dane 2 Mbit/s.
-// STM32G474 FDCAN: FDCAN1 na PA11/PA12, arbitraż 500 kbit/s, dane 2 Mbit/s.
+// STM32G474 FDCAN: FDCAN1, arbitraż 500 kbit/s, dane 2 Mbit/s; piny nieustawione.
+// Ustaw RX/TX jawnie albo użyj hal_can_board_config() przed utworzeniem kanału.
 hal_can_config_t hal_can_default_config(void);
 
-// Konfiguracja kanału CAN `channel` (od 0) zadeklarowanego w profilu płytki:
+// Konfiguracja kanału CAN `channel` (od 0) z wygenerowanych danych sprzętu:
 // kontroler, instancja, piny, standby, limit transceivera, 500 kbit/s z fazą
 // danych FD 2 Mbit/s. HAL_ENOENT, gdy płytka nie ma takiego kanału.
 hal_status_t hal_can_board_config(uint8_t channel, hal_can_config_t *out);
@@ -290,17 +291,19 @@ uint8_t hal_can_encode_temp_i8(float temp_c);
   transceiver.
   API stanu i liczników błędów przekształca zawartość rejestrów kontrolera do
   `hal_can_state_t` i `hal_can_error_counters_t`.
-- **Kanały płytki:** profil płytki z sekcją `can.channels` (np.
-  `nucleo-g474re-canhat`) wymienia podłączone kanały; `hal_can_board_config()`
+- **Kanały płytki:** generator device tree zapisuje kanały zadeklarowane
+  w wybranym montażu, np. `nucleo-canhat` z przykładu 21; `hal_can_board_config()`
   zamienia kanał *n* w gotową konfigurację, którą aplikacja może zmienić przed
   `hal_can_create()`. `HAL_CAN_MAX_INSTANCES` domyślnie równa się liczbie
   kanałów płytki, gdy przekracza ona 2; przy zajętych wszystkich uchwytach
   `hal_can_create()` zwraca `HAL_ENOMEM`.
 - **STM32G474 FDCAN:** `instance` wybiera FDCAN1..3 (0 oznacza FDCAN1); na
   instancję przypada jeden uchwyt, drugie `hal_can_create()` dla tej samej
-  instancji zwraca `HAL_EBUSY`. `rx_pin`/`tx_pin` równe 0 wybierają PA11/PA12,
-  PB12/PB13 albo PA8/PB4; inne piny muszą być takimi, do których instancję da
-  się poprowadzić. Przy `has_standby` backend steruje wejściem standby
+  instancji zwraca `HAL_EBUSY`. `rx_pin` i `tx_pin` muszą wskazywać prawidłowe piny
+  wybranej instancji. Zero oznacza nieustawiony pin i powoduje zwrócenie
+  `HAL_EINVAL` przez `hal_can_create()`. Konfiguracja domyślna, także używana
+  dla `NULL`, nie wybiera pinów. Pobierz je przez `hal_can_board_config()`
+  z montażu z kanałami CAN albo ustaw jawnie zgodnie ze swoim okablowaniem. Przy `has_standby` backend steruje wejściem standby
   transceivera: standby przy konfiguracji, zatrzymaniu, uśpieniu i zniszczeniu
   kanału, praca 40 µs przed wejściem kontrolera na magistralę. Bit timing
   wynika z zegara jądra FDCAN (PCLK1 170 MHz albo PLL Q 80 MHz w drzewie
@@ -339,6 +342,23 @@ uint8_t hal_can_encode_temp_i8(float temp_c);
   jednobajtowych pól temperatury ze znakiem w ramkach CAN. Obcina wejściową
   wartość typu `float` w stronę zera, nasyca ją do zakresu `int8_t` i zwraca
   odpowiadający bajt payloadu w zapisie uzupełnienia do dwóch.
+
+W montażu `nucleo-canhat` kanał 0 odpowiada CN5 (1 to CN6, 2 to CN7).
+Pobierz wygenerowaną konfigurację kanału, aby piny, polaryzacja standby
+oraz limit transceivera odpowiadały wybranemu sprzętowi:
+
+```c
+#include <hal/can/hal_can.h>
+
+hal_status_t open_can_channel(uint8_t channel, hal_can_t *out) {
+    hal_can_config_t config;
+    hal_status_t status = hal_can_board_config(channel, &config);
+    if (hal_status_is_error(status)) {
+        return status;
+    }
+    return hal_can_create(&config, out);
+}
+```
 
 **Filtry ponad klasyczne sloty** (STM32G474 FDCAN):
 

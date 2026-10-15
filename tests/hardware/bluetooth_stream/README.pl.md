@@ -22,10 +22,11 @@ wykonawczego:
 Ta tabela jest macierzą sprzętową stanowiska. `device_tree.json` opisuje
 sprzęt każdego montażu, a domyślnym jest `nucleo-pim730`;
 `hal_project_config.h` deklaruje wariant `FREERTOS`, a
-`tests/test_hardware_fixture_files.py` sprawdza, czy stanowisko kompiluje się
-do każdego z ośmiu obrazów. `pico-rm2` i `nucleo-pim730` to zwykłe Pico
+jawnie uruchamiany `tests/test_hardware_fixture_files.py` sprawdza obecność
+wszystkich ośmiu par montaż/tryb działania na liście; nie kompiluje firmware. `pico-rm2` i `nucleo-pim730` to zwykłe Pico
 i zwykła NUCLEO-G474RE z zewnętrznym modułem PIM730/RM2; tabela poniżej
-powtarza połączenia modułu.
+powtarza połączenia modułu. Te nazwy wybierają montaże, a nie profile
+płytek; używaj `--assembly` także wtedy, gdy montaż ma nazwę dawnego profilu.
 
 | Sygnał PIM730/RM2 | Pico (`pico-rm2`) | NUCLEO-G474RE (`nucleo-pim730`) |
 |---|---|---|

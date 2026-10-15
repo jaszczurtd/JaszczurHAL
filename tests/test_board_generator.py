@@ -72,6 +72,29 @@ def mutate(
     return destination
 
 
+def with_can_channels(value: dict) -> None:
+    """Give a NUCLEO-G474RE profile the CAN channels of a board with its own
+    transceivers: the CN5-CN7 wiring of the CAN-FD HAT, with its HSE crystal."""
+    def pin(name: str) -> dict:
+        return {"domain": "soc-gpio", "id": name}
+
+    channels = [(1, "PA11", "PA12", "PB11"), (2, "PB12", "PB13", "PC7"), (3, "PA8", "PB4", "PB6")]
+    value["can"] = {"channels": [
+        {"controller": "stm32g474-fdcan", "instance": instance, "rx": pin(rx), "tx": pin(tx),
+         "standby": pin(standby), "standbyActiveHigh": True, "transceiver": "mcp2562fd",
+         "maxBitrateHz": 5000000}
+        for instance, rx, tx, standby in channels]}
+    value["gpio"]["reservations"]["can-channels"] = {
+        "pins": [pin(name) for _, rx, tx, standby in channels for name in (rx, tx, standby)],
+        "owner": "board.can",
+        "strength": "hard",
+        "reason": "FDCAN1-3 RX/TX and the transceiver standby inputs.",
+    }
+    # The channels take the pins of the default SPI1 chip select and FDCAN1.
+    value["peripherals"]["defaults"] = {}
+    value["components"]["stm32g474-hse-24mhz"] = {"mode": "board-owned"}
+
+
 if TEST_ROOT.exists():
     shutil.rmtree(TEST_ROOT)
 TEST_ROOT.mkdir(parents=True)
@@ -90,7 +113,7 @@ require(
 
 validated = run("--validate-only")
 require(
-    validated.stdout.strip() == "validated 7 targets and 14 boards",
+    validated.stdout.strip() == "validated 7 targets and 11 boards",
     "unexpected validated registry size",
 )
 require(
@@ -112,10 +135,7 @@ require(
         "esp32-devkitc-v4",
         "host-mock",
         "nucleo-g474re",
-        "nucleo-g474re-canhat",
-        "nucleo-g474re-pim730",
         "pico",
-        "pico-rm2",
         "pico2",
         "pico2w",
         "picow",
@@ -634,41 +654,40 @@ run(
 )
 nucleo_config = (nucleo_output / "jh_board_config.h").read_text(encoding="utf-8")
 
-nucleo_canhat_output = TEST_ROOT / "generated/nucleo-canhat"
+# Board-level CAN channels: the generator keeps them for a board with its own
+# transceivers. The CN5-CN7 wiring of the CAN-FD HAT on the NUCLEO-G474RE pins
+# stands in for such a board, with the HSE crystal component of its clock.
+can_board_root = mutate("can-board", "profiles/nucleo-g474re.json", with_can_channels)
+# The generator writes below the .build next to the boards root it reads.
+can_board_output = can_board_root.parent / ".build" / "can-board"
 run(
     "--target",
     "stm32g474",
     "--board",
-    "nucleo-g474re-canhat",
+    "nucleo-g474re",
     "--output-dir",
-    str(nucleo_canhat_output),
+    str(can_board_output),
+    boards_root=can_board_root,
 )
-nucleo_canhat_resolved = load(nucleo_canhat_output / "jh_board_resolved.json")
-nucleo_canhat_config = (nucleo_canhat_output / "jh_board_config.h").read_text(
-    encoding="utf-8"
-)
-require(nucleo_canhat_resolved["profileId"] == 16, "NUCLEO CAN-FD HAT profile ID changed")
+can_board_resolved = load(can_board_output / "jh_board_resolved.json")
+can_board_config = (can_board_output / "jh_board_config.h").read_text(encoding="utf-8")
 require(
-    nucleo_canhat_resolved["components"] == ["stm32g474", "stm32g474-hse-24mhz"],
-    "NUCLEO CAN-FD HAT component contract changed",
+    can_board_resolved["components"] == ["stm32g474", "stm32g474-hse-24mhz"],
+    "board-level CAN component set changed",
 )
 require(
-    "HAL_STM32G474_CLOCK_HSE_160MHZ"
-    in nucleo_canhat_resolved["boardCompileDefinitions"],
+    "HAL_STM32G474_CLOCK_HSE_160MHZ" in can_board_resolved["boardCompileDefinitions"],
     "the HSE crystal component must select the 160 MHz clock tree",
 )
 for expected in (
-    "#define HAL_BOARD_PROFILE_STM32G474_NUCLEO_CANHAT 1",
     "#define HAL_STM32G474_CLOCK_HSE_160MHZ 1",
-    "#define HAL_BOARD_STATUS_LED_PIN 33u",
-    "#define HAL_LED_BUILTIN HAL_BOARD_STATUS_LED_PIN",
     "#define HAL_BOARD_CAN_CHANNEL_COUNT 3\n",
     "#define HAL_BOARD_CAN_CHANNELS(X) "
     "X(STM32G474_FDCAN, 1u, 11u, 12u, 27u, 1, UINT32_C(5000000)) "
     "X(STM32G474_FDCAN, 2u, 28u, 29u, 39u, 1, UINT32_C(5000000)) "
     "X(STM32G474_FDCAN, 3u, 8u, 20u, 22u, 1, UINT32_C(5000000))",
 ):
-    require(expected in nucleo_canhat_config, f"NUCLEO CAN-FD HAT lacks {expected!r}")
+    require(expected in can_board_config, f"board-level CAN channels lack {expected!r}")
 for expected in (
     "#define HAL_BOARD_CAN_CHANNEL_COUNT 0\n",
     "#define HAL_BOARD_CAN_CHANNELS(X)\n",
@@ -724,57 +743,35 @@ for target_fact in (
 ):
     require(target_fact in nucleo_config, f"missing generated STM32 fact: {target_fact}")
 
-pim730_output = TEST_ROOT / "generated/nucleo-pim730"
-run(
-    "--target",
-    "stm32g474",
-    "--board",
-    "nucleo-g474re-pim730",
-    "--output-dir",
-    str(pim730_output),
-)
-pim730_resolved = load(pim730_output / "jh_board_resolved.json")
+# Board components select their transport: the Pico W radio.
+picow_resolved = load(picow_output / "jh_board_resolved.json")
 require(
-    pim730_resolved["components"]
-    == ["btstack-host", "cyw43-lwip", "cyw43-stm32-gspi", "stm32g474"],
-    "NUCLEO PIM730 component set mismatch",
+    picow_resolved["components"] == ["btstack-host", "cyw43-lwip", "cyw43-pico-pio", "rp-pico"],
+    "Pico W component set mismatch",
 )
 require(
-    pim730_resolved["capabilities"]["cyw43"]["present"] is True,
-    "NUCLEO PIM730 lost its CYW43 capability",
+    picow_resolved["capabilities"]["cyw43"]["present"] is True
+    and picow_resolved["capabilities"]["bluetooth-controller"]["present"] is True,
+    "Pico W lost its CYW43 or Bluetooth controller capability",
 )
-require(
-    pim730_resolved["capabilities"]["bluetooth-controller"]["present"] is True,
-    "NUCLEO PIM730 lost its Bluetooth controller capability",
-)
-expected_pim730_definitions = [
+expected_picow_definitions = [
     "HAL_NETWORK_BACKEND_CYW43",
-    "HAL_CYW43_BUS_STM32_GSPI",
+    "HAL_CYW43_BUS_PICO_PIO",
     "HAL_CYW43_STACK_LWIP",
-    "HAL_CYW43_PIN_WL_ON=30u",
-    "HAL_CYW43_PIN_CHIP_SELECT=28u",
-    "HAL_CYW43_PIN_DATA=31u",
-    "HAL_CYW43_PIN_CLOCK=29u",
     "HAL_CYW43_MAX_TRANSACTION_BYTES=2048u",
 ]
 require(
-    pim730_resolved["boardCompileDefinitions"]
-    == expected_pim730_definitions,
-    "NUCLEO PIM730 resolved JSON lost provider compile definitions",
+    picow_resolved["boardCompileDefinitions"] == expected_picow_definitions,
+    "Pico W resolved JSON lost provider compile definitions",
 )
-pim730_cmake = (pim730_output / "jh_board_config.cmake").read_text(
-    encoding="utf-8"
-)
-for expected_define in expected_pim730_definitions:
-    require(expected_define in pim730_cmake, f"missing {expected_define}")
-pim730_header = (pim730_output / "jh_board_config.h").read_text(
-    encoding="utf-8"
-)
-for expected_define in expected_pim730_definitions:
+picow_cmake = (picow_output / "jh_board_config.cmake").read_text(encoding="utf-8")
+picow_header = (picow_output / "jh_board_config.h").read_text(encoding="utf-8")
+for expected_define in expected_picow_definitions:
+    require(expected_define in picow_cmake, f"missing {expected_define}")
     name, separator, value = expected_define.partition("=")
     expected_header_define = f"#define {name} {value if separator else '1'}"
     require(
-        expected_header_define in pim730_header,
+        expected_header_define in picow_header,
         f"installed board header would omit {expected_header_define}",
     )
 
@@ -1171,7 +1168,7 @@ require(
 )
 ambiguous_legacy_selector = mutate(
     "ambiguous-legacy-selector",
-    "profiles/pico-rm2.json",
+    "profiles/pico.json",
     lambda value: value["hal"].update(
         legacySelectors=["HAL_CYW43_PROFILE_PICOW"]
     ),
@@ -1201,7 +1198,7 @@ require(
 )
 missing_cyw43_component = mutate(
     "missing-cyw43-component",
-    "profiles/nucleo-g474re-pim730.json",
+    "profiles/picow.json",
     lambda value: value["components"].pop("cyw43-lwip"),
 )
 require(
@@ -1252,7 +1249,7 @@ NUCLEO_EXPOSED = (
     + [f"PB{index}" for index in range(16)]
     + [f"PC{index}" for index in range(14)] + ["PD2"]
 )
-for profile in ("nucleo-g474re", "nucleo-g474re-canhat", "nucleo-g474re-pim730"):
+for profile in ("nucleo-g474re",):
     descriptor = load(BOARDS / "profiles" / f"{profile}.json")
     require(
         descriptor["gpio"]["exposedPins"] == {"values": NUCLEO_EXPOSED},
@@ -1300,8 +1297,8 @@ require(
 
 # A board device may use a hard-reserved pin only when it owns the
 # reservation, so the reset pin cannot become a status LED in the base board
-# or in a profile derived from it.
-for profile in ("nucleo-g474re", "nucleo-g474re-pim730"):
+# as in any board.
+for profile in ("nucleo-g474re",):
     reset_led = mutate(
         f"reset-led-{profile}",
         f"profiles/{profile}.json",
@@ -1349,7 +1346,7 @@ def clock_pins(*pins) -> list[dict]:
 # A source lists exactly the GPIOs the target gives its kind (RM0440 7.2:
 # a crystal takes OSC_IN and OSC_OUT, bypass only OSC_IN); an empty or
 # partial list would keep the crystal pins out of the reservation check.
-for profile in ("nucleo-g474re", "nucleo-g474re-canhat", "nucleo-g474re-pim730"):
+for profile in ("nucleo-g474re",):
     for case, change, diagnostic in (
         (
             "hse-without-pins",
@@ -1420,12 +1417,12 @@ for case, relative_path, change, diagnostic in (
 
 
 def can_channel_case(case: str, change) -> str:
-    """Validate the CAN-FD HAT profile after one change to its channels."""
-    root = mutate(
-        case,
-        "profiles/nucleo-g474re-canhat.json",
-        lambda value: change(value["can"]["channels"], value),
-    )
+    """Validate a board with CAN channels after one change to them."""
+    def apply(value: dict) -> None:
+        with_can_channels(value)
+        change(value["can"]["channels"], value)
+
+    root = mutate(case, "profiles/nucleo-g474re.json", apply)
     return run("--validate-only", boards_root=root, expected_success=False).stderr
 
 
@@ -1870,28 +1867,6 @@ for expected in (
         f"dual-GPIO switch board config lacks {expected!r}",
     )
 
-
-pico_output = TEST_ROOT / "generated/drift-pico"
-rm2_output = TEST_ROOT / "generated/drift-pico-rm2"
-run("--target", "rp2040", "--board", "pico", "--output-dir", str(pico_output))
-run("--target", "rp2040", "--board", "pico-rm2", "--output-dir", str(rm2_output))
-pico_resolved = load(pico_output / "jh_board_resolved.json")
-rm2_resolved = load(rm2_output / "jh_board_resolved.json")
-for section in ("reservations", "aliases"):
-    for entry_id, entry in pico_resolved["gpio"][section].items():
-        require(
-            rm2_resolved["gpio"][section].get(entry_id) == entry,
-            f"pico-rm2 drifted from pico: gpio.{section}.{entry_id}",
-        )
-for device_id, device in pico_resolved["devices"].items():
-    require(
-        rm2_resolved["devices"].get(device_id) == device,
-        f"pico-rm2 drifted from pico: devices.{device_id}",
-    )
-require(
-    rm2_resolved["capabilities"]["external-radio-frontend"]["present"] is True,
-    "pico-rm2 lost its external radio frontend capability",
-)
 
 sys.path.insert(0, str(ROOT / "scripts"))
 import generate_board_config  # noqa: E402

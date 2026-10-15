@@ -91,7 +91,7 @@ Automation can use `--install --yes` after obtaining consent.
 - **Target**: stable build ID: `rp2040`, `rp2350-arm`, `rp2350-riscv`,
   `stm32g474`, `esp32`, `esp32s3`, or `mock`.
 - **Board**: stable physical profile ID such as `pico`, `picow`, `pico2`,
-  `pico2w`, `pico-rm2`, `rp2040-zero`, `rp2040-plus-4mb`,
+  `pico2w`, `rp2040-zero`, `rp2040-plus-4mb`,
   `nucleo-g474re`, `esp32-devkitc-v4`, or `waveshare-esp32-s3-zero`.
 - **Board registry**: generated tooling view of `boards/targets/*.json`,
   `boards/profiles/*.json`, and `boards/capabilities.json`.
@@ -503,7 +503,20 @@ manifest `cmakeBuildDir`:
 <cmakeBuildDir>/<target>/<board>/
 ```
 
-This keeps toolchains, build-provider platforms, generated board headers, and linker layouts from sharing one cache. A project with `device_tree.json` gives each assembly its own `buildDir` instead: `<buildDir>/<target>/<assembly>`, where `targetProfiles.<target>.buildDir`, when present, is the base. The artifacts, `cmakeBuildDir` and `JH_ARTIFACT_DIR` the manifest derives from `${buildDir}` follow it, `JH_ARTIFACT_DIR` defaults to it (also in the generated CMake Tools settings), and a CMake tree or `JH_ARTIFACT_DIR` placed elsewhere gets `<target>/<assembly>` added, so two assemblies of one board never share results; variants get `variants/<id>` below that. Native Windows instead uses the short path prepared during setup:
+Separate caches keep toolchains, board headers, and linker layouts apart.
+Projects with `device_tree.json` use these rules:
+
+- Each assembly gets `<buildDir>/<target>/<assembly>`. If present,
+  `targetProfiles.<target>.buildDir` supplies the base directory.
+- Paths derived from `${buildDir}`, including artifacts and `cmakeBuildDir`,
+  follow that assembly directory.
+- `JH_ARTIFACT_DIR` defaults to the assembly directory, including in generated
+  CMake Tools settings. An independently configured CMake tree or
+  `JH_ARTIFACT_DIR` gets `<target>/<assembly>` appended.
+- Variants add `variants/<id>` below these directories. Two assemblies of
+  the same board therefore keep separate build results.
+
+Native Windows places the CMake tree under the short path prepared during setup:
 
 ```text
 <BuildRoot>/<project-name>-<path-hash>/cmake/<target>/<board or assembly>/

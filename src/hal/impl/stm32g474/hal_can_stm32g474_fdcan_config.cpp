@@ -11,8 +11,8 @@ hal_can_config_t hal_can_default_config(void) {
   hal_can_config_t cfg = {};
   cfg.backend = HAL_CAN_BACKEND_STM32G474_FDCAN;
   cfg.stm32g474_fdcan.instance = 1u;
-  cfg.stm32g474_fdcan.rx_pin = 11u; /* PA11 AF9 */
-  cfg.stm32g474_fdcan.tx_pin = 12u; /* PA12 AF9 */
+  /* No pins: the board channel (hal_can_board_config()) or the application
+   * gives them. */
   cfg.stm32g474_fdcan.arbitration_bitrate_hz = 500000u;
   cfg.stm32g474_fdcan.data_bitrate_hz = 2000000u;
   cfg.stm32g474_fdcan.enable_fd = true;

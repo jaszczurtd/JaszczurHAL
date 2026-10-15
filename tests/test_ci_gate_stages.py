@@ -31,7 +31,7 @@ EXPECTED_LIBRARIES = [
     "rp2040:picow",
     "rp2350-arm:pico2w",
     "rp2350-riscv:pico2",
-    "stm32g474:nucleo-g474re-pim730",
+    "stm32g474:nucleo-g474re",
 ]
 EXPECTED_LOCAL_ONLY = ["examples-rp2040", "examples-stm32g474", "examples-esp32s3"]
 EXPECTED_STAGES = [
@@ -157,6 +157,29 @@ require(
      for row in windows_library["strategy"]["matrix"]["include"]] == EXPECTED_LIBRARIES,
     f"windows-static-library must build exactly {EXPECTED_LIBRARIES}",
 )
+# No STM32 board carries a radio, so Windows builds the STM32 library from the
+# device tree of the library stages, whose assembly brings the PIM730.
+require(
+    {row["target"]: row.get("deviceTree") for row in windows_library["strategy"]["matrix"]["include"]}
+    == {"rp2040": None, "rp2350-arm": None, "rp2350-riscv": None,
+        "stm32g474": "tests/fixtures/device_tree/hal/library"},
+    "windows-static-library must build STM32 from the device tree of the library stages",
+)
+require('DEVICE_TREE_LIBRARY_CONFIG="tests/fixtures/device_tree/hal/library"'
+        in (ROOT / "runalltests.sh").read_text(encoding="utf-8"),
+        "the Windows STM32 library and the library stages must share one device tree")
+# Every row, the device tree one included, configures the library from a
+# project in a path with spaces; the device tree is copied there.
+windows_steps = {step.get("name"): step for step in windows_library["steps"]}
+consumer_dir = "'stage5 consumer with spaces'"
+prepare = windows_steps.get("Prepare consumer project in a path with spaces", {})
+require("if" not in prepare and consumer_dir in prepare.get("run", "")
+        and "Copy-Item" in prepare.get("run", ""),
+        "every Windows library row must prepare its project in a path with spaces")
+library_build = windows_steps["Build linkable static library with Ninja"]["run"]
+require(re.findall(r"^[ \t]*\$project = (.*)$", library_build, re.MULTILINE)
+        == [f"Join-Path $env:GITHUB_WORKSPACE {consumer_dir}"],
+        "the Windows library build must take its configuration from the path with spaces")
 windows_library_text = yaml.safe_dump(windows_library)
 require("-DJH_ENABLE_ALL_FEATURES=ON" in windows_library_text,
         "the Windows library matrix does not enable all features")

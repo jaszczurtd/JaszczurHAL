@@ -109,6 +109,7 @@ Jedynym wczesnym nagłówkiem jest `jh_hardware.h`, zawierający makra `JH_HW_*`
 | `JH_HW_HAS_<CAPABILITY>` | efektywne capabilities sprzętu, liczbowe 0/1 |
 | `JH_HW_NODE_<PATH>_PRESENT`, `JH_HW_NODE_<PATH>_CONFIG_AVAILABLE` | liczbowe 0/1 dla każdego zadeklarowanego lub rozwiniętego węzła |
 | `JH_HW_NODE_<PATH>_PROP_<PROPERTY>` | rozwiązana wartość prosta z typem |
+| `JH_HW_NODE_<PATH>_INPUT_MODE` | tryb wejścia GPIO wynikający z `pull`; wymaga `hal_gpio.h` |
 | `JH_HW_NODE_<PATH>_PIN_<SIGNAL>_CONNECTED`, `JH_HW_NODE_<PATH>_PIN_<SIGNAL>_DOMAIN` | liczbowy stan połączenia i domena (0 brak, 1 SoC, 2 urządzenie) |
 | `JH_HW_NODE_<PATH>_PIN_<SIGNAL>`, `JH_HW_NODE_<PATH>_PIN_<SIGNAL>_OWNER` | kodowanie HAL SoC, gdy dostępne; liczbowa flaga właściciela |
 | `JH_HW_NODE_<PATH>_PIN_<SIGNAL>_PROVIDER`, `JH_HW_NODE_<PATH>_PIN_<SIGNAL>_INDEX` | ścieżka dostawcy przestrzeni pinów i indeks |
@@ -117,6 +118,13 @@ Jedynym wczesnym nagłówkiem jest `jh_hardware.h`, zawierający makra `JH_HW_*`
 | `JH_HW_NODE_<PATH>_FREQUENCY_HZ`, `JH_HW_NODE_<PATH>_SPI_MODE`, `JH_HW_NODE_<PATH>_SPI_BIT_ORDER`, `JH_HW_NODE_<PATH>_SPI_SETTINGS_INIT` | efektywne ustawienia transakcji urządzenia; mode 0-3, bit order 0 LSB / 1 MSB |
 | `JH_HW_BUS_<BUS>_UART_PORT`, `JH_HW_BUS_<BUS>_BAUD_RATE`, `JH_HW_BUS_<BUS>_DATA_BITS`, `JH_HW_BUS_<BUS>_PARITY`, `JH_HW_BUS_<BUS>_STOP_BITS`, `JH_HW_BUS_<BUS>_FRAME_CONFIG` | ustawienia UART; parity 0 none / 1 even / 2 odd; odroczony token ramki `HAL_UART_CFG_*` |
 | `JH_HW_NODE_<PATH>_CONFIG_INIT` | odroczony inicjalizator obsługiwanej konfiguracji HAL |
+
+Dla obecnych węzłów `jaszczurhal,gpio-input` makro `INPUT_MODE` rozwija się do
+`HAL_GPIO_INPUT`, `HAL_GPIO_INPUT_PULLUP` lub `HAL_GPIO_INPUT_PULLDOWN` dla
+`pull: none`, `up` lub `down`. Dla pinów SoC używaj go z `hal_gpio_set_mode()`.
+To token enum, więc nie sprawdzaj go przez `#if`. Aplikacja nadal interpretuje
+`PROP_ACTIVE_LOW`; odczyt i zapis GPIO operują na poziomach elektrycznych.
+Piny urządzeń wymagają API ich dostawcy.
 
 Nieobecny węzeł udostępnia jedynie obecność i dostępność konfiguracji. Obecny niepodłączony sygnał udostępnia flagi połączenia, domeny i właściciela, bez zgadywanego numeru pinu.
 

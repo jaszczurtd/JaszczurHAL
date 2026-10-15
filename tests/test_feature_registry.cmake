@@ -198,15 +198,43 @@ foreach(_unsupported IN ITEMS
     endif()
 endforeach()
 
-jh_all_features_for_target(_stm32_features stm32g474)
+# A device tree brings the radio of its assembly, so the STM32 feature list
+# keeps networking and Bluetooth. No STM32 board carries a radio: without a
+# device tree they stay out, together with every backend define.
+jh_all_features_for_target(_stm32_tree_features stm32g474 FEATURES_ONLY)
 foreach(_supported IN ITEMS
         HAL_ENABLE_BLE
         HAL_ENABLE_BLE_COMMANDS
         HAL_ENABLE_OTA
         HAL_ENABLE_STM32G474_FDCAN)
-    list(FIND _stm32_features "${_supported}" _supported_index)
+    list(FIND _stm32_tree_features "${_supported}" _supported_index)
     if(_supported_index EQUAL -1)
         message(FATAL_ERROR
-            "STM32G474 all-features profile omitted ${_supported}")
+            "STM32G474 device-tree feature list omitted ${_supported}")
+    endif()
+endforeach()
+
+jh_all_features_for_target(_stm32_features stm32g474)
+list(FIND _stm32_features HAL_ENABLE_STM32G474_FDCAN _stm32_fdcan_index)
+if(_stm32_fdcan_index EQUAL -1)
+    message(FATAL_ERROR "STM32G474 all-features profile omitted FDCAN")
+endif()
+foreach(_radio IN ITEMS
+        HAL_ENABLE_NETWORK_CORE
+        HAL_ENABLE_WIFI
+        HAL_ENABLE_OTA
+        HAL_ENABLE_BLE
+        HAL_ENABLE_BLE_COMMANDS
+        HAL_ENABLE_BLUETOOTH_CLASSIC)
+    list(FIND _stm32_features "${_radio}" _radio_index)
+    if(NOT _radio_index EQUAL -1)
+        message(FATAL_ERROR
+            "STM32G474 all-features profile kept ${_radio} without a radio")
+    endif()
+endforeach()
+foreach(_feature IN LISTS _stm32_features)
+    if(_feature MATCHES "^HAL_(NETWORK_BACKEND|CYW43)_")
+        message(FATAL_ERROR
+            "STM32G474 all-features profile defines ${_feature} without a radio")
     endif()
 endforeach()

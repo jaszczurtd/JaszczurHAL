@@ -1076,7 +1076,10 @@ Run it directly with:
 python3 scripts/check_documentation_links.py .
 ```
 
-An optional positional argument selects a different repository root.
+An optional positional argument selects a different repository root. In a Git
+checkout, the scan includes tracked and untracked Markdown within its
+documentation scope, but skips Git-ignored files such as local notes. Without
+Git metadata, it scans the same directories from the filesystem.
 
 ### `scripts/check_documentation_i18n_parity.py`
 

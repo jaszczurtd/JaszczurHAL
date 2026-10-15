@@ -104,11 +104,13 @@ projektu i wybranym wariantem zamiast dispatchera CMake. Przykład ma montaż
 `esp32s3` tylko wtedy, gdy każda żądana przez niego funkcja jest na liście
 `supportedFeatures` targetu; lista obejmuje backendy ESP-IDF oraz przenośne
 sterowniki magistral, czujników, wyświetlaczy, kodeków i komend, a poza nią
-pozostają pamięć flash, audio, zasilanie, wewnętrzny RTC, LoRa, BLE Stream
+pozostają pamięć flash, zasilanie, wewnętrzny RTC, LoRa, BLE Stream
 i Bluetooth Classic. Projekt `tests/fixtures/esp32s3_phase3`
 nadal sprawdza pełne domknięcie funkcji z etapów 2 i 3, a raporty testów
 sprzętowych znajdują się w `tests/hardware/esp32s3_phase1`
-i `tests/hardware/esp32s3_phase2`. Montaże `esp32s3-zero` używają wyłącznie
+i `tests/hardware/esp32s3_phase2`. Audio PWM jest dostępne w montażu
+`esp32s3-zero` przykładu [`17_audio_output`](17_audio_output/); odtwarzanie
+odmierza timer zamiast DMA używanego na RP. Montaże `esp32s3-zero` używają wyłącznie
 pinów wyprowadzonych na ESP32-S3-Zero; generator odrzuca każdy inny pin.
 
 ## Wymagania

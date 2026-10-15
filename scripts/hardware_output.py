@@ -189,6 +189,11 @@ def render_node(header: Header, path: str, node: dict[str, Any], hardware: dict[
         value = item["value"]
         literal = c_string(value) if item["cType"] == "string" else c_literal(item["cType"], value)
         header.define(f"{prefix}_PROP_{macro_token(name)}", literal, item.get("unit"))
+    if node["compatible"] == "jaszczurhal,gpio-input":
+        modes = {"none": "HAL_GPIO_INPUT", "up": "HAL_GPIO_INPUT_PULLUP",
+                 "down": "HAL_GPIO_INPUT_PULLDOWN"}
+        header.lines.append("/** GPIO input mode from pull; requires hal_gpio.h. */")
+        header.define(f"{prefix}_INPUT_MODE", modes[node["properties"]["pull"]["value"]])
     for name, signal in sorted(node["signals"].items()):
         pin_macros(header, f"{prefix}_PIN_{macro_token(name)}", signal["endpoint"],
                    signal["owner"] == f"{path}.{name}")

@@ -64,8 +64,12 @@ Każdą instancję chroni muteks utworzony przez `SmartTimers`.
 
 **Przykład: cykliczna funkcja zwrotna przez interfejs C**
 
+Włącz `HAL_ENABLE_WIFI` i wybierz sprzęt z obsługiwanym radiem.
+
 ```c
 #include <hal/timers/hal_soft_timer.h>
+#include <hal/network/hal_wifi.h>
+#include <hal/serial/hal_serial.h>
 
 static hal_soft_timer_t status_timer;
 
@@ -77,7 +81,7 @@ static void check_connection(void) {
 }
 
 void app_start(void) {
-    hal_debug_init(115200);
+    hal_debug_init_default();
     hal_wifi_begin_station("MySSID", "password", false);
 
     status_timer = hal_soft_timer_create();
@@ -531,7 +535,7 @@ niezależnie, bez zmieniania istniejących funkcji.
 
 Planowanie wywołań funkcji zwrotnych przez obiekty timerów. Aplikacja regularnie wykonuje `tick`; dostępne funkcje tabelaryczne pozwalają obsłużyć kilka timerów razem.
 
-```c
+```cpp
 #include <hal/timers/smart_timers/SmartTimers.h>
 
 SmartTimers timer;
@@ -569,7 +573,7 @@ timer.abort();
 
 **Przykład: tabela wielu timerów**
 
-```c
+```cpp
 #include <hal/timers/smart_timers/SmartTimers.h>
 
 SmartTimers heartbeat_timer;
@@ -589,7 +593,7 @@ static void on_led_blink(void) {
 }
 
 void app_start(void) {
-    hal_debug_init(115200);
+    hal_debug_init_default();
     hal_gpio_set_mode(LED_PIN, HAL_GPIO_OUTPUT);
 
     // Uruchom trzy niezależne timery
@@ -620,7 +624,7 @@ void app_task0(void) {
 
 Interfejs klasy `PIDController` dla pętli regulacji pisanych w C++. Każda pętla powinna korzystać z osobnej instancji.
 
-```c
+```cpp
 #include <utils/pidController.h>
 
 // Struktura parametrów strojenia
@@ -767,7 +771,7 @@ void on_watchdog_reboot(int *values, int size) {
 }
 
 void app_start(void) {
-    hal_debug_init(115200);
+    hal_debug_init_default();
 
     bool was_watchdog = setupWatchdog(on_watchdog_reboot, 10000);  // 10 sek
     if (was_watchdog) {

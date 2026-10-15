@@ -58,20 +58,25 @@ function(jh_all_features_for_target OUT_VAR TARGET_NAME)
     # A full network feature set needs an explicit backend. The RP RISC-V
     # build intentionally uses the plain pico2 profile and therefore exercises
     # the same no-physical-radio compile path as a consumer-provided CYW43
-    # frontend. Boards with an owned CYW43 component produce the same defines.
-    # A device tree brings the radio of its assembly instead: FEATURES_ONLY
-    # leaves out this hardware, which the features never declare.
+    # frontend. A device tree brings the radio of its assembly instead:
+    # FEATURES_ONLY leaves out this hardware, which the features never declare.
+    # No STM32 board carries a radio and CYW43 on STM32 needs one, so without
+    # a device tree the features that need networking or Bluetooth stay out.
     if(_JH_AF_FEATURES_ONLY)
     elseif(TARGET_NAME STREQUAL "stm32g474")
-        list(APPEND _jh_all_features
-            HAL_NETWORK_BACKEND_CYW43
-            HAL_CYW43_BUS_STM32_GSPI
-            HAL_CYW43_STACK_LWIP
-            HAL_CYW43_PIN_WL_ON=30u
-            HAL_CYW43_PIN_CHIP_SELECT=28u
-            HAL_CYW43_PIN_DATA=31u
-            HAL_CYW43_PIN_CLOCK=29u
-            HAL_CYW43_MAX_TRANSACTION_BYTES=2048u)
+        set(_jh_radio_roots
+            HAL_ENABLE_NETWORK_CORE HAL_ENABLE_BLE HAL_ENABLE_BLUETOOTH_CLASSIC)
+        foreach(_jh_symbol IN LISTS _jh_all_features)
+            set(_jh_needs ${_jh_symbol}
+                ${JH_HAL_FEATURE_${_jh_symbol}_TRANSITIVE_IMPLIES})
+            foreach(_jh_root IN LISTS _jh_radio_roots)
+                list(FIND _jh_needs "${_jh_root}" _jh_root_index)
+                if(NOT _jh_root_index EQUAL -1)
+                    list(REMOVE_ITEM _jh_all_features "${_jh_symbol}")
+                    break()
+                endif()
+            endforeach()
+        endforeach()
     else()
         list(APPEND _jh_all_features
             HAL_NETWORK_BACKEND_CYW43

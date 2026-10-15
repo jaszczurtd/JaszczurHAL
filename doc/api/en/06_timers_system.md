@@ -491,8 +491,9 @@ Interval helpers run periodic work from a loop without blocking waits or a hardw
   latched before application entry so enabling the watchdog later cannot erase
   the previous-boot result.
 - **impl/stm32g474:** Startup derives a 170 MHz SYSCLK from HSI16 through the PLL
-  and runs AHB, APB1, and APB2 without a prescaler. Boards whose profile
-  selects the `stm32g474-hse-24mhz` component (`nucleo-g474re-canhat`) define
+  and runs AHB, APB1, and APB2 without a prescaler. Assemblies selecting
+  `stm32g474-hse-24mhz` in `device_tree.json` (such as `nucleo-canhat`
+  in example 21) define
   `HAL_STM32G474_CLOCK_HSE_160MHZ` and run 160 MHz from the 24 MHz HSE
   crystal instead, with the FDCAN kernel clock at 80 MHz from PLL Q; if the
   HSE is not ready within 100 ms, startup builds the same frequencies from

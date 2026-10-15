@@ -100,10 +100,12 @@ project header and the selected variant instead of the CMake dispatcher. An
 example has an `esp32s3` assembly only when every feature it requests is on
 the target's `supportedFeatures` list; that list holds the ESP-IDF backends and
 the portable bus, sensor, display, codec and command drivers, while flash
-storage, audio, power, internal RTC, LoRa, BLE Stream and Bluetooth Classic
+storage, power, internal RTC, LoRa, BLE Stream and Bluetooth Classic
 stay outside it. `tests/fixtures/esp32s3_phase3`
 still checks the complete Phase 2/3 feature closure, and hardware reports are
 in `tests/hardware/esp32s3_phase1` and `tests/hardware/esp32s3_phase2`.
+PWM audio is available in the `esp32s3-zero` assembly of
+[`17_audio_output`](17_audio_output/), with timer-paced playback instead of RP DMA.
 The `esp32s3-zero` assemblies use only pins the ESP32-S3-Zero brings out;
 the generator rejects any other pin.
 

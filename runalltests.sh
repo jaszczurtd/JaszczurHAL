@@ -65,12 +65,13 @@ run_logged() {
 
 # ── Stages ───────────────────────────────────────────────────────────────────
 # Target and board of each all-features library stage. The Windows CI matrix
-# builds the same pairs through CMake.
+# builds the same pairs through CMake; for STM32, whose boards carry no radio,
+# it builds the device tree library below, which brings the PIM730 module.
 LIBRARY_BOARDS=(
     rp2040:picow
     rp2350-arm:pico2w
     rp2350-riscv:pico2
-    stm32g474:nucleo-g474re-pim730
+    stm32g474:nucleo-g474re
 )
 EXAMPLE_TARGETS=(rp2040 stm32g474 esp32s3)
 # The device tree configuration of the library stages: one assembly per
@@ -541,9 +542,13 @@ rp_profile_flags() {
                 -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
             ;;
         pim730-owned)
+            # A PIM730 on a plain Pico, its pins given by the consumer.
             echo -D HAL_ENABLE_WIFI -D HAL_ENABLE_TCP -D HAL_ENABLE_UDP \
                 -D HAL_NETWORK_BACKEND_CYW43 -D HAL_CYW43_BUS_PICO_PIO \
-                -D HAL_CYW43_STACK_LWIP -D HAL_BOARD_PROFILE_RP_PICO_PIM730 \
+                -D HAL_CYW43_STACK_LWIP -D HAL_BOARD_PROFILE_RP_PICO \
+                -D HAL_CYW43_PIN_WL_ON=2u -D HAL_CYW43_PIN_CHIP_SELECT=3u \
+                -D HAL_CYW43_PIN_DATA=4u -D HAL_CYW43_PIN_CLOCK=5u \
+                -D HAL_CYW43_GSPI_TARGET_HZ=31250000u \
                 -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
             ;;
         sdlogger)
@@ -576,7 +581,6 @@ rp_profile_flags() {
 rp_profile_board() {
     case "$1" in
         typical-set|udp-wireguard|all-enabled) echo picow ;;
-        pim730-owned) echo pico-rm2 ;;
         *) echo pico ;;
     esac
 }

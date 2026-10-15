@@ -238,19 +238,6 @@ def preprocess_feature_set(
                     "HAL_CYW43_MAX_TRANSACTION_BYTES=2048u",
                 ]
             )
-        if "cyw43-stm32-gspi" in components:
-            board_defines.extend(
-                [
-                    "HAL_NETWORK_BACKEND_CYW43",
-                    "HAL_CYW43_BUS_STM32_GSPI",
-                    "HAL_CYW43_STACK_LWIP",
-                    "HAL_CYW43_PIN_WL_ON=30u",
-                    "HAL_CYW43_PIN_CHIP_SELECT=28u",
-                    "HAL_CYW43_PIN_DATA=31u",
-                    "HAL_CYW43_PIN_CLOCK=29u",
-                    "HAL_CYW43_MAX_TRANSACTION_BYTES=2048u",
-                ]
-            )
     source = [
         "#define HAL_EEPROM_TYPE 4",
         f"#define {target_macro} 1",

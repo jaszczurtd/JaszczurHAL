@@ -58,10 +58,4 @@ static_assert(board_name_is(HAL_BOARD_PROFILE_NAME, JH_EXPECT_NAME));
 #endif
 #endif
 
-#if defined(JH_EXPECT_LEGACY_PIM730)
-#ifndef HAL_CYW43_PROFILE_PIM730
-#error "PIM730 compatibility profile was not derived."
-#endif
-#endif
-
 int main(void) { return 0; }

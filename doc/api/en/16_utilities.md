@@ -54,8 +54,13 @@ bool hal_soft_timer_tick_table(const hal_soft_timer_table_entry_t *table,
 - **Validation rules:** table helpers validate `table != NULL` and `count > 0`. For invalid input they log via `hal_derr(...)` and return `false`.
 
 **Example: periodic callback with C wrapper**
+
+Enable `HAL_ENABLE_WIFI` and select hardware with a supported radio.
+
 ```c
 #include <hal/timers/hal_soft_timer.h>
+#include <hal/network/hal_wifi.h>
+#include <hal/serial/hal_serial.h>
 
 static hal_soft_timer_t status_timer;
 
@@ -67,7 +72,7 @@ static void check_connection(void) {
 }
 
 void app_start(void) {
-    hal_debug_init(115200);
+    hal_debug_init_default();
     hal_wifi_begin_station("MySSID", "password", false);
 
     status_timer = hal_soft_timer_create();
@@ -508,7 +513,7 @@ addition here; it never disturbs the existing entries.
 
 Schedule callbacks through timer objects. The application calls `tick` regularly; table-based functions can service several timers together.
 
-```c
+```cpp
 #include <hal/timers/smart_timers/SmartTimers.h>
 
 SmartTimers timer;
@@ -544,7 +549,7 @@ timer.abort();
 **Thread safety:** Thread-safe and multicore-safe after construction. Each instance eagerly creates a per-instance `hal_mutex_t` that serializes all method calls. Callbacks passed to `begin()` are invoked outside the mutex to prevent deadlock.
 
 **Example: multi-timer table**
-```c
+```cpp
 #include <hal/timers/smart_timers/SmartTimers.h>
 
 SmartTimers heartbeat_timer;
@@ -564,7 +569,7 @@ static void on_led_blink(void) {
 }
 
 void app_start(void) {
-    hal_debug_init(115200);
+    hal_debug_init_default();
     hal_gpio_set_mode(LED_PIN, HAL_GPIO_OUTPUT);
 
     // Start three independent timers
@@ -595,7 +600,7 @@ void app_task0(void) {
 
 Use the `PIDController` class for C++ control loops. Each loop should have a separate instance.
 
-```c
+```cpp
 #include <utils/pidController.h>
 
 // Tuning parameters struct
@@ -737,7 +742,7 @@ void on_watchdog_reboot(int *values, int size) {
 }
 
 void app_start(void) {
-    hal_debug_init(115200);
+    hal_debug_init_default();
 
     bool was_watchdog = setupWatchdog(on_watchdog_reboot, 10000);  // 10 sec
     if (was_watchdog) {

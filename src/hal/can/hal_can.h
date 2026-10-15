@@ -189,11 +189,12 @@ enum {
 typedef struct {
   /** FDCAN instance 1..3; 0 selects FDCAN1. */
   uint8_t instance;
-  /** RX pin (port * 16 + pin); 0 selects the instance default: PA11, PB12 or
-   *  PA8. Allowed: FDCAN1 PA11/PB8/PD0, FDCAN2 PB12/PB5, FDCAN3 PA8/PB3. */
+  /** RX pin (port * 16 + pin), required: hal_can_board_config() gives the
+   *  pin of a board channel. Allowed: FDCAN1 PA11/PB8/PD0, FDCAN2 PB12/PB5,
+   *  FDCAN3 PA8/PB3. */
   uint8_t rx_pin;
-  /** TX pin; 0 selects the instance default: PA12, PB13 or PB4. Allowed:
-   *  FDCAN1 PA12/PB9/PD1, FDCAN2 PB13/PB6, FDCAN3 PA15/PB4. */
+  /** TX pin, required like rx_pin. Allowed: FDCAN1 PA12/PB9/PD1, FDCAN2
+   *  PB13/PB6, FDCAN3 PA15/PB4. */
   uint8_t tx_pin;
   /** Drive the transceiver standby pin; false leaves standby_pin alone. */
   bool has_standby;
@@ -235,7 +236,10 @@ typedef struct {
  * followed by MCP251XFD, then STM32G474 native FDCAN.
  * @return Configuration of the default backend: MCP2515 on SPI bus 0, CS 0,
  *         500 kbit/s with an 8 MHz crystal and one-shot TX; MCP251XFD and
- *         FDCAN with 500 kbit/s arbitration and a 2 Mbit/s data phase.
+ *         FDCAN with 500 kbit/s arbitration and a 2 Mbit/s data phase. The
+ *         FDCAN pins stay 0, so hal_can_create() refuses the configuration
+ *         until the application sets them; hal_can_board_config() gives a
+ *         complete one for a board channel.
  */
 hal_can_config_t hal_can_default_config(void);
 

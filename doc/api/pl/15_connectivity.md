@@ -257,15 +257,17 @@ w negatywnych testach bezpieczeństwa.
 
 ## `hal_wifi` - łączenie z siecią WiFi  *(opcjonalny - `HAL_ENABLE_WIFI`)*
 
-Konfiguracje RP korzystające z WiFi wybierają profil obsługujący radio:
-`picow`, `pico2w` lub `pico-rm2`. ESP32-S3 używa natywnego radia
-zadeklarowanego przez profil płytki. `HAL_ENABLE_WIFI` włącza wspólne API,
-a moduły zależne, takie jak MQTT i WireGuard, automatycznie włączają tę flagę. Moduły
-sieciowe mogą też być budowane dla zwykłego profilu Pico; wywołania
-publiczne zwracają wtedy `HAL_EUNSUPPORTED` bez dostępu do pinów CYW43. W
-profilu z obsługą radia `hal_wifi_set_mode_ex(HAL_WIFI_MODE_STA)` i
-`hal_wifi_begin_station_ex(...)` są jawnymi punktami wejścia inicjalizacji.
-Zapytania o stan, skanowania i otwarcia transportu nie inicjalizują radia
+Dla WiFi na RP wybierz płytkę z wbudowanym radiem (`picow` lub `pico2w`)
+albo dodaj węzeł `pimoroni,pim730` do montażu zwykłego Pico w `device_tree.json`.
+ESP32-S3 korzysta z natywnego radia zadeklarowanego przez profil płytki.
+`HAL_ENABLE_WIFI` włącza wspólne API; moduły zależne, takie jak MQTT
+czy WireGuard, włączają tę flagę automatycznie. Moduły sieciowe można również
+skompilować dla zwykłego Pico bez radia, lecz publiczne wywołania zwracają
+wtedy `HAL_EUNSUPPORTED` bez dostępu do pinów CYW43.
+
+Gdy radio jest obecne, inicjalizują je jawnie
+`hal_wifi_set_mode_ex(HAL_WIFI_MODE_STA)` i `hal_wifi_begin_station_ex(...)`.
+Zapytania o stan, skanowanie i otwieranie połączeń nie inicjalizują radia
 niejawnie.
 
 Profile CYW43 zachowują fabryczny adres MAC radia, gdy jest on obecny w
@@ -289,10 +291,12 @@ backendu i udostępnia jeden ze stanów: łączenie, brak sieci, uwierzytelniani
 DHCP lub połączenie. Przekazanie `false` wybiera blokujący wariant z timeoutem,
 który czeka na uzyskanie dzierżawy DHCP.
 
-STM32G474 obsługuje zewnętrzny CYW43/PIM730 przez eksperymentalny profil
-`nucleo-g474re-pim730`, jego jednoprzewodowy transport gSPI oraz ten sam
-stos lwIP w wersji ustalonej w projekcie. Zwykły profil `nucleo-g474re` celowo nie ma możliwości
-radiowych i odrzuca konfigurację sieciową CYW43. Łączenie stacji na STM32G474
+Eksperymentalna implementacja dla STM32G474 obsługuje zewnętrzny CYW43/PIM730
+zadeklarowany w `device_tree.json`. Komunikuje się z nim przez jednoprzewodowy
+gSPI i korzysta z tego samego stosu lwIP w wersji ustalonej w projekcie.
+Na przykład `examples/08_mqtt` udostępnia montaż `nucleo-pim730`. Bazowa
+płytka `nucleo-g474re` nie ma radia i odrzuca kompilację sieci CYW43
+bez takiego węzła. Łączenie stacji na STM32G474
 przyjmuje oba warianty: blokujący jest ograniczony ustawionym timeoutem, a
 nieblokujący rozpoczyna asocjację i raportuje postęp przez
 `hal_wifi_get_state_ex()`, podczas gdy pętla serwisowa ją posuwa.
@@ -414,7 +418,8 @@ Konfiguracja sprzętowa CYW43 wybiera wspólną implementację API, jedną magis
 #define HAL_CYW43_STACK_LWIP
 ```
 
-Profile płytek RP definiują `HAL_CYW43_BUS_PICO_PIO` oraz odpowiednie piny.
+Konfiguracja płytki RP lub device tree generuje
+`HAL_CYW43_BUS_PICO_PIO` i pasujące piny.
 Pico W, Pico 2 W i Pico+PIM730 korzystają z tego samego mechanizmu obsługi
 cyklu życia backendu. Transport PIO wylicza swój dzielnik zegara 16.8 na
 podstawie bieżącego `clk_sys` i `HAL_CYW43_GSPI_TARGET_HZ` (domyślnie
@@ -423,10 +428,10 @@ lub niskiej prędkości, nie przekraczając częstotliwości docelowej. Próba
 zmiany `clk_sys` przy aktywnym backendzie jest odrzucana. Najpierw wyłącz
 sieć, potem zmień zegar i ponownie ją zainicjalizuj.
 
-Projekty STM32G474 z zewnętrznym PIM730 wybierają profil płytki
-`nucleo-g474re-pim730`. Wygenerowany profil dostarcza backend, magistralę,
-stos oraz zakodowane piny; aplikacje nie mogą ręcznie powielać tych
-definicji. Stałe okablowanie wygląda następująco:
+Dla STM32G474 zadeklaruj węzeł `pimoroni,pim730` na `nucleo-g474re`
+i wybierz jego montaż. Wygenerowane nagłówki dostarczają backend, magistralę,
+stos i zakodowane piny; aplikacja nie może ręcznie powielać tych definicji.
+Montaż `nucleo-pim730` w `examples/08_mqtt` używa następujących połączeń:
 
 | PIM730 | STM32G474 | Złącze Nucleo |
 |---|---|---|
@@ -439,11 +444,12 @@ definicji. Stałe okablowanie wygląda następująco:
 
 PIM730 to urządzenie 3,0-3,3 V; nigdy nie podłączaj go do 5 V. `DAT` to
 połączona linia wejścia/wyjścia danych oraz wybudzania hosta (host-wake).
-Używaj krótkiego, bezpośredniego okablowania. Obsługiwany profil zakłada, że
+Używaj krótkiego, bezpośredniego okablowania. Obsługiwany opis PIM730 zakłada, że
 ścieżka `BT_ON`-`WL_ON` na PIM730, przeznaczona w razie potrzeby do przecięcia,
 pozostaje nienaruszona. Pin `BT_ON`/`BL_ON` nie wymaga wtedy żadnego innego
-połączenia. Sprawdź tę ścieżkę przed użyciem profilu. Jej przecięcie tworzy
-inną topologię sprzętową, której nie opisuje obecnie żaden profil płytki.
+połączenia. Sprawdź tę ścieżkę przed użyciem montażu. Jej przecięcie wymaga
+osobnego sterowania zasilaniem Bluetooth, którego opis PIM730 obecnie
+nie obsługuje.
 
 Równoważna wygenerowana konfiguracja wygląda następująco:
 

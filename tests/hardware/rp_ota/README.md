@@ -27,7 +27,9 @@ export JH_OTA_TEST_PASSWORD='the-value-from-ota_test_secrets.h'
 
 `device_tree.json` describes the hardware of every assembly: `picow` (Pico W,
 the default), `pico2w` (Pico 2 W) and `pico-rm2`, a plain Pico with an
-external PIM730/RM2 module wired as in the table below.
+external PIM730/RM2 module wired as in the table below. `pico-rm2` is a
+project-local assembly name, not a board profile; use `--assembly pico-rm2`.
+The underlying board remains `pico`.
 
 Build, upload, and verify the bare-metal Pico W variant:
 

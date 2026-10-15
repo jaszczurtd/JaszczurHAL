@@ -409,7 +409,8 @@ void test_pim730_requires_the_external_radio_frontend(void) {
                                     HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND));
   TEST_ASSERT_EQUAL_INT(HAL_EHW, hal_wifi_get_state_ex(&state));
 #else
-  TEST_IGNORE_MESSAGE("Only the PIM730 profile has an external radio frontend");
+  TEST_IGNORE_MESSAGE(
+      "Only the PIM730 assembly has an external radio frontend");
 #endif
 }
 

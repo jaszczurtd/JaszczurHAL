@@ -351,8 +351,11 @@ jobs:
             board: pico2w
           - target: rp2350-riscv
             board: pico2
+          # No STM32 board carries a radio: the device tree library of the
+          # stages, whose nucleo-pim730 assembly brings the PIM730 module.
           - target: stm32g474
-            board: nucleo-g474re-pim730
+            board: nucleo-g474re
+            deviceTree: tests/fixtures/device_tree/hal/library
     name: "Windows all-features library (${{ matrix.target }})"
 
     steps:
@@ -371,17 +374,28 @@ jobs:
           -ToolsRoot C:\jh\tools
           -BuildRoot C:\jh\build
 
-      - name: Generate consumer project in a path with spaces
+      - name: Prepare consumer project in a path with spaces
         shell: powershell
         run: |
-          $python = '.\.build\windows\venv\Scripts\python.exe'
           $project = Join-Path $env:GITHUB_WORKSPACE 'stage5 consumer with spaces'
-          & $python vscode/tools/create-vscode-example.py `
-            --output $project `
-            --name 'Stage 5 Windows Consumer' `
-            --target '${{ matrix.target }}' `
-            --board '${{ matrix.board }}'
-          if ($LASTEXITCODE -ne 0) { throw 'Consumer project generation failed.' }
+          if ('${{ matrix.deviceTree }}') {
+            # The device tree configuration is copied, so the library build
+            # still reads its configuration from a path with spaces.
+            $tree = Join-Path $env:GITHUB_WORKSPACE '${{ matrix.deviceTree }}'
+            New-Item -ItemType Directory -Path $project -Force | Out-Null
+            Copy-Item -Path (Join-Path $tree '*') -Destination $project -Recurse
+            if (-not (Test-Path (Join-Path $project 'device_tree.json') -PathType Leaf)) {
+              throw 'Device tree consumer copy failed.'
+            }
+          } else {
+            $python = '.\.build\windows\venv\Scripts\python.exe'
+            & $python vscode/tools/create-vscode-example.py `
+              --output $project `
+              --name 'Stage 5 Windows Consumer' `
+              --target '${{ matrix.target }}' `
+              --board '${{ matrix.board }}'
+            if ($LASTEXITCODE -ne 0) { throw 'Consumer project generation failed.' }
+          }
 
       - name: Build linkable static library with Ninja
         shell: powershell
@@ -395,7 +409,7 @@ jobs:
           $env:JH_MANAGED_BUILD_ROOT = $state.buildRoot
 
           $project = Join-Path $env:GITHUB_WORKSPACE 'stage5 consumer with spaces'
-          $build = Join-Path $state.buildRoot 'ci-static-${{ matrix.target }}'
+          $build =Join-Path $state.buildRoot 'ci-static-${{ matrix.target }}'
           if ('${{ matrix.target }}' -eq 'stm32g474') {
             $source = Join-Path $env:GITHUB_WORKSPACE 'link_libraries\stm32_lib'
           } else {
@@ -409,11 +423,14 @@ jobs:
             "-DPython3_EXECUTABLE=$($state.python)",
             "-DHAL_PROJECT_CONFIG_DIR=$project",
             '-DJH_TARGET=${{ matrix.target }}',
-            '-DJH_BOARD=${{ matrix.board }}',
             '-DJH_ENABLE_ALL_FEATURES=ON',
             '-DCMAKE_BUILD_TYPE=Release',
             '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON'
           )
+          if (-not '${{ matrix.deviceTree }}') {
+            # A device tree selects its assembly; the board is no second choice.
+            $arguments += '-DJH_BOARD=${{ matrix.board }}'
+          }
           if ('${{ matrix.target }}' -eq 'stm32g474') {
             $arguments += "-DCMAKE_TOOLCHAIN_FILE=$env:GITHUB_WORKSPACE\link_libraries\stm32_lib\toolchain_stm32g474.cmake"
           } else {

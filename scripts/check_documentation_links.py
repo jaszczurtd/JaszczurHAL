@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 from urllib.parse import unquote
 
+from sync_generated import SyncError, repository_files
+
 
 DOCUMENTATION_GLOBS = (
     "*.md",
@@ -38,10 +40,20 @@ EXPLICIT_ANCHOR_RE = re.compile(
 
 
 def documentation_files(root: Path, include_hardware: bool = False) -> list[Path]:
+    """Documentation files of the repository, without those Git ignores.
+
+    Ignored files, such as a local NOW.md, are not part of the repository,
+    so the working tree gives the same result as a clean clone. Outside a
+    Git work tree, or without Git, every matching file counts.
+    """
     files: set[Path] = set()
     patterns = DOCUMENTATION_GLOBS + ((HARDWARE_GLOB,) if include_hardware else ())
     for pattern in patterns:
         files.update(path for path in root.glob(pattern) if path.is_file())
+    try:
+        files.intersection_update(repository_files(root))
+    except (SyncError, OSError):
+        pass
     return sorted(files)
 
 
