@@ -193,7 +193,50 @@ typedef enum {
   HAL_DISPLAY_CAP_ASYNC_DMA_WRITE = (1u << 3),
   HAL_DISPLAY_CAP_LEGACY_GFX = (1u << 4),
   HAL_DISPLAY_CAP_BUFFERED = (1u << 5),
+  HAL_DISPLAY_CAP_MONO_TEXT = (1u << 6), /**< Opaque fixed-cell bitmap text. */
 } hal_display_capability_flags_t;
+
+/** Storage used for drawing. Zero preserves the existing framebuffer path. */
+typedef enum {
+  HAL_DISPLAY_BUFFERED = 0,
+  HAL_DISPLAY_UNBUFFERED, /**< Immediate writes, without a shadow framebuffer.
+                           */
+} hal_display_buffer_mode_t;
+
+/** Fixed-width, eight-pixel-high font. Each glyph has width consecutive bytes,
+ * one vertical column per byte, with bit 0 at the top. Include spacing in the
+ * glyph itself. The descriptor and data are borrowed only during drawing. */
+typedef struct {
+  const uint8_t *data; /**< Non-NULL glyph bytes, in character-code order. */
+  size_t
+      data_size; /**< Available bytes; at least (last - first + 1) * width. */
+  uint8_t first; /**< First supported byte code, inclusive. */
+  uint8_t last;  /**< Last supported byte code, inclusive. */
+  uint8_t width; /**< Cell width in pixels, 1..16. Height is always 8. */
+} hal_display_mono_font_t;
+
+/** Draw one line with a caller-supplied bitmap font, including its background.
+ * Does not change the selected GFX font, cursor or text settings. Unsupported
+ * character codes draw a blank cell. Text is byte-encoded, without UTF-8
+ * decoding or line breaks. Only complete cells fitting the right edge are
+ * drawn; an empty string succeeds without output.
+ * @param x Nonnegative pixel column, at most the display width.
+ * @param y Nonnegative top pixel row; the scaled height must fit the display.
+ * Unbuffered OLEDs require a multiple of 8.
+ * @param text Non-NULL NUL-terminated string; CR/LF are invalid.
+ * @param font Non-NULL descriptor and glyph data, valid until return.
+ * @param scale Integer enlargement in both axes, 1..8.
+ * @param foreground RGB565 foreground; monochrome panels map nonzero to white.
+ * @param background RGB565 opaque background, including spacing columns.
+ * @return HAL_OK, HAL_EINVAL for invalid arguments, HAL_EUNINIT before init,
+ * HAL_EUNSUPPORTED for an unsupported backend/alignment, or HAL_EIO on a bus
+ * failure. Unbuffered writes update controller RAM even while display-off.
+ * Earlier cells may already be visible after an I/O failure.
+ */
+hal_status_t hal_display_draw_mono_text_ex(int x, int y, const char *text,
+                                           const hal_display_mono_font_t *font,
+                                           uint8_t scale, uint16_t foreground,
+                                           uint16_t background);
 
 typedef enum {
   HAL_DISPLAY_SCREEN_INFO_NONE = 0u,
@@ -481,6 +524,21 @@ typedef enum {
   HAL_DISPLAY_OLED_ORIENTATION_ROTATED_180,
 } hal_display_oled_orientation_t;
 
+/** Optional SSD1306-family power-on register values. Consult the panel's
+ * controller documentation; voltage and timing encodings vary by controller.
+ * Used only when override_panel is true; otherwise historical defaults apply.
+ */
+typedef struct {
+  uint8_t contrast;  /**< Value following command 0x81, including valid zero. */
+  uint8_t clock_div; /**< Oscillator/divider register, command 0xD5. */
+  uint8_t precharge; /**< Precharge phases, command 0xD9. */
+  uint8_t vcomh;     /**< VCOMH register, command 0xDB. */
+  uint8_t pump_voltage_command; /**< 0 omits it; 0x30..0x33 selects pump voltage
+                                 * on SSD1306/SSD1315. Ignored by the other
+                                 * family members. */
+  bool deactivate_scroll; /**< Send 0x2E during initialization when true. */
+} hal_display_oled_panel_t;
+
 typedef struct {
   hal_display_oled_controller_t controller;
   hal_display_oled_bus_t bus_type;
@@ -500,6 +558,13 @@ typedef struct {
   hal_display_oled_orientation_t orientation;
   bool internal_iref;
   bool periphBegin; /* Retained for Arduino-era I2C source compatibility. */
+  /** Buffered by default. Unbuffered mode uses page addressing and supports
+   * opaque mono text, raw page writes and page-aligned fills. GFX drawing,
+   * printing and software rotation require buffered mode. Hardware
+   * orientation remains available. */
+  hal_display_buffer_mode_t buffer_mode;
+  bool override_panel;            /**< Apply all values from panel when true. */
+  hal_display_oled_panel_t panel; /**< Copied during initialization. */
 } hal_display_ssd1306_family_config_t;
 #endif /* HAL_ENABLE_SSD1306 */
 

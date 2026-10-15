@@ -744,6 +744,9 @@ typedef struct {
     hal_display_oled_orientation_t orientation;
     bool internal_iref;
     bool periphBegin;
+    hal_display_buffer_mode_t buffer_mode;
+    bool override_panel;
+    hal_display_oled_panel_t panel;
 } hal_display_ssd1306_family_config_t;
 
 typedef enum {
@@ -812,7 +815,7 @@ hal_status_t hal_display_epd_refresh_ex(
 
 // --- Ekran ---
 bool hal_display_fill_screen(uint16_t color);
-bool hal_display_flush(void); // SSD1306: wysyła bufor ramki; EPD: odświeża oczekujące dane
+bool hal_display_flush(void); // Buforowany SSD1306: wysyła bufor ramki; EPD: odświeża oczekujące dane
 bool hal_display_draw_image(int x, int y, int w, int h, uint16_t background, uint16_t *data);
 
 // --- Geometria ---
@@ -981,6 +984,47 @@ if (status == HAL_OK) {
   tekstu działają przez wspólny silnik `jh_gfx`.
 - **impl/stm32g474:** Korzysta z tego samego wspólnego stosu HAL display co RP2040.
 - **impl/.mock:** deterministyczny mock hosta, którego stan można sprawdzać w testach.
+
+### Parametry panelu i tekst bez bufora obrazu
+
+Wyzerowana `hal_display_ssd1306_family_config_t` zachowuje dotychczasowy tryb
+buforowany i wartości rejestrów. `override_panel = true` wybiera wszystkie
+wartości z `panel`: `contrast` (0x81), `clock_div` (0xD5), `precharge`
+(0xD9), `vcomh` (0xDB), `pump_voltage_command` i `deactivate_scroll`.
+Zero jest poprawną wartością rejestru. Zerowa komenda pompy jest pomijana;
+SSD1306/SSD1315 przyjmują 0x30..0x33, a pozostałe układy rodziny ignorują to
+pole. Inicjalizacja kopiuje profil. Dobierz wartości do fizycznego panelu;
+kodowanie czasów i napięć zależy od jego kontrolera.
+
+`buffer_mode = HAL_DISPLAY_UNBUFFERED` włącza bezpośredni zapis stron przez
+I2C lub SPI, bez alokacji bufora obrazu. Inicjalizacja czyści pamięć panelu.
+`hal_display_flush_ex()` zwraca wtedy sukces bez transmisji. Bufory `MONO01`
+i wypełniane prostokąty muszą zaczynać się w wierszu podzielnym przez osiem
+oraz mieć wysokość podzielną przez osiem. Bezpośredni zapis wymaga
+`pitch == width` i `frame_incomplete == false`. Przezroczysty tekst,
+rysowanie GFX i obrót programowy zwracają `HAL_EUNSUPPORTED`; orientację
+sprzętową nadal wybiera się przy inicjalizacji. Uśpienie zachowuje pamięć
+kontrolera. Bezpośredni zapis może ją aktualizować także przy wygaszonym
+panelu, bez jego włączania.
+
+`hal_display_draw_mono_text_ex(x, y, text, font, scale, foreground, background)`
+rysuje tekst wraz z tłem przez to samo API na buforowanych i bezbuforowych
+panelach rodziny SSD1306, TFT, RGB OLED oraz w mocku. Obsługę wskazuje
+`HAL_DISPLAY_CAP_MONO_TEXT`; sterowniki LCD/EPD udostępniające wyłącznie
+bezpośredni zapis jej nie obsługują. Funkcja nie zmienia fontu GFX, kursora
+ani ustawień tekstu.
+
+`hal_display_mono_font_t` zawiera `data`, `data_size`, `first`, `last` i
+`width`. Znaki mają osiem pikseli wysokości i 1..16 kolumn szerokości.
+Każdy bajt opisuje pionową kolumnę, z bitem 0 u góry. Odstępy umieść w danych
+znaku. Kody spoza fontu tworzą puste pola. Tekst składa się z bajtów, bez
+dekodowania UTF-8; CR/LF zwracają `HAL_EINVAL`. Skala 1..8 powiększa obie
+osie. Cała wysokość musi mieścić się na ekranie, a przy prawej krawędzi
+rysowane są tylko pełne znaki. Bezbuforowy OLED wymaga też `y` podzielnego
+przez osiem. Dane fontu muszą pozostać dostępne do powrotu funkcji. Rysowanie
+używa najwyżej 128 bajtów tymczasowych danych znaku, bez alokacji na heap.
+Błąd magistrali zwraca `HAL_EIO`; wcześniejsze znaki mogą być już widoczne.
+Po przywróceniu magistrali ponów zapis danego pola.
 
 **Współbieżność:** Backendy sprzętowe chronią operacje wyświetlacza wewnętrznym
 `hal_mutex_t`. Podczas strumieniowania TFT muteks pozostaje zablokowany między

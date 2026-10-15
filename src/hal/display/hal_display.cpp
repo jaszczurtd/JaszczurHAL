@@ -11,7 +11,92 @@
 #include <stdarg.h>
 #include <stdio.h>
 
+hal_status_t jh_display_mono_text(int x, int y, const char *text,
+                                  const hal_display_mono_font_t *font,
+                                  uint8_t scale, uint16_t foreground,
+                                  uint16_t background, int width, int height,
+                                  jh_display_mono_page_fn write_page,
+                                  void *context) {
+  if (!text || !font || !font->data || font->first > font->last ||
+      font->width == 0u || font->width > 16u || scale == 0u || scale > 8u ||
+      font->data_size < (size_t)(font->last - font->first + 1u) * font->width ||
+      x < 0 || x > width || y < 0 || y > height || 8 * scale > height - y) {
+    return HAL_EINVAL;
+  }
+  for (const char *p = text; *p; ++p) {
+    if (*p == '\r' || *p == '\n') {
+      return HAL_EINVAL;
+    }
+  }
+  const uint16_t cell_width = (uint16_t)(font->width * scale);
+  uint8_t columns[128]; /* At most one enlarged glyph page, never a frame. */
+  for (; *text && cell_width <= width - x; ++text, x += cell_width) {
+    const uint8_t code = (uint8_t)*text;
+    const uint8_t *glyph =
+        code >= font->first && code <= font->last
+            ? font->data + (size_t)(code - font->first) * font->width
+            : nullptr;
+    for (uint8_t page = 0u; page < scale; ++page) {
+      for (uint16_t col = 0u; col < cell_width; ++col) {
+        const uint8_t source = glyph ? glyph[col / scale] : 0u;
+        uint8_t bits = 0u;
+        for (uint8_t bit = 0u; bit < 8u; ++bit) {
+          if (source & (1u << ((page * 8u + bit) / scale))) {
+            bits |= (uint8_t)(1u << bit);
+          }
+        }
+        columns[col] = bits;
+      }
+      const hal_status_t status =
+          write_page(context, x, y + page * 8, columns, cell_width, foreground,
+                     background);
+      if (hal_status_is_error(status)) {
+        return status;
+      }
+    }
+  }
+  return HAL_OK;
+}
+
 #ifdef HAL_ENABLE_SSD1306
+hal_status_t jh_display_validate_oled_config(
+    const hal_display_ssd1306_family_config_t *config) {
+  if (!config || config->width <= 0 || config->width > INT16_MAX ||
+      config->height <= 0 || config->height > INT16_MAX ||
+      config->controller < HAL_DISPLAY_OLED_CONTROLLER_SSD1306 ||
+      config->controller > HAL_DISPLAY_OLED_CONTROLLER_CH1115 ||
+      config->bus_type < HAL_DISPLAY_OLED_BUS_I2C ||
+      config->bus_type > HAL_DISPLAY_OLED_BUS_SPI ||
+      config->orientation < HAL_DISPLAY_OLED_ORIENTATION_NATIVE ||
+      config->orientation > HAL_DISPLAY_OLED_ORIENTATION_ROTATED_180 ||
+      config->buffer_mode < HAL_DISPLAY_BUFFERED ||
+      config->buffer_mode > HAL_DISPLAY_UNBUFFERED) {
+    return HAL_EINVAL;
+  }
+  const uint8_t pump = config->panel.pump_voltage_command;
+  if (config->override_panel && pump != 0u && (pump < 0x30u || pump > 0x33u)) {
+    return HAL_EINVAL;
+  }
+  if (config->buffer_mode == HAL_DISPLAY_UNBUFFERED &&
+      (config->height % 8 != 0 ||
+       config->height / 8 + config->page_offset > 8 ||
+       config->width + config->segment_offset +
+               (config->width == 64 &&
+                        config->controller < HAL_DISPLAY_OLED_CONTROLLER_SH1106
+                    ? 32
+                    : 0) >
+           (config->controller >= HAL_DISPLAY_OLED_CONTROLLER_SH1106 ? 132
+                                                                     : 128))) {
+    return HAL_EINVAL;
+  }
+#ifndef HAL_ENABLE_SPI
+  if (config->bus_type == HAL_DISPLAY_OLED_BUS_SPI) {
+    return HAL_EUNSUPPORTED;
+  }
+#endif
+  return HAL_OK;
+}
+
 bool hal_display_init_ssd1306_i2c(int width, int height, uint8_t i2c_addr,
                                   int8_t rst_pin, uint8_t switchvcc,
                                   bool periph_begin) {

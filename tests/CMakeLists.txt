@@ -1978,6 +1978,37 @@ target_compile_definitions(test_epd_drivers PRIVATE
 target_link_libraries(test_epd_drivers PRIVATE hal_mock)
 add_test(NAME test_epd_drivers COMMAND test_epd_drivers)
 
+add_executable(test_hal_display_ssd1306_facade
+    test_hal_display_ssd1306_facade.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/hal_display.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/hal_display.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/ssd1306_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/jh_gfx.cpp
+)
+target_include_directories(test_hal_display_ssd1306_facade PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils
+)
+target_compile_definitions(test_hal_display_ssd1306_facade PRIVATE
+    HAL_TARGET_RP2040=1
+    HAL_BOARD_PROFILE_RP_PICO=1
+    HAL_ENABLE_SSD1306
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+jh_enable_host_warnings(test_hal_display_ssd1306_facade)
+target_link_libraries(test_hal_display_ssd1306_facade PRIVATE
+    $<TARGET_FILE:hal_mock>
+    Threads::Threads
+)
+if(UNIX AND NOT APPLE)
+    target_link_options(test_hal_display_ssd1306_facade PRIVATE "-Wl,--wrap=malloc")
+    target_compile_definitions(test_hal_display_ssd1306_facade PRIVATE JH_TEST_WRAP_MALLOC=1)
+endif()
+add_dependencies(test_hal_display_ssd1306_facade hal_mock)
+add_test(NAME test_hal_display_ssd1306_facade
+         COMMAND test_hal_display_ssd1306_facade)
+
 add_executable(test_hal_display_ili9341_facade
     test_hal_display_ili9341_facade.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/hal_display.cpp

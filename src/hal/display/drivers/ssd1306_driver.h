@@ -1,6 +1,12 @@
 #pragma once
 
 #include "hal/core/hal_layout_check.h"
+#include "hal/display/hal_display.h"
+
+/* The configuration embeds hal_display_oled_panel_t, which hal_display.h
+ * declares only for SSD1306 builds; ssd1306_driver.cpp includes this header
+ * in every build. */
+#if defined(HAL_ENABLE_DISPLAY) && defined(HAL_ENABLE_SSD1306)
 
 #include "hal/spi/hal_spi_device.h"
 
@@ -72,7 +78,10 @@ typedef struct {
   uint8_t page_offset;    /* Vertical page offset for SH/CH/variant panels. */
   uint8_t display_offset; /* Hardware display offset command value. */
   jh_ssd1306_orientation_t orientation;
-  bool internal_iref; /* SSD1315/CH1115 current-reference mode. */
+  bool internal_iref;   /* SSD1315/CH1115 current-reference mode. */
+  bool page_addressing; /* Immediate writes to complete 8-pixel pages. */
+  bool override_panel;
+  hal_display_oled_panel_t panel;
 } jh_ssd1306_config_t;
 
 typedef struct {
@@ -90,6 +99,9 @@ typedef struct {
   jh_ssd1306_orientation_t orientation;
   bool initialized;
   bool suspended;
+  bool page_position_valid;
+  uint16_t next_column;
+  uint16_t current_page;
 } jh_ssd1306_t;
 
 /**
@@ -112,6 +124,24 @@ bool jh_ssd1306_init(jh_ssd1306_t *dev, const jh_ssd1306_config_t *config);
  * @return true on success.
  */
 bool jh_ssd1306_display(jh_ssd1306_t *dev, const uint8_t *buffer);
+
+/** Write one page span, without retaining pixels. Requires page_addressing
+ * (or an SH1106/CH1115 controller). x/page are logical column/page offsets;
+ * width must fit the panel, columns must contain width bytes.
+ * Page-addressed direct writes also update RAM while the display is off.
+ * @return HAL_OK, HAL_EINVAL, HAL_EUNINIT, HAL_EUNSUPPORTED, HAL_ESTATE for a
+ * suspended device without page_addressing, or HAL_EIO. Earlier bytes may have
+ * reached the panel on failure.
+ */
+hal_status_t jh_ssd1306_write_page(jh_ssd1306_t *dev, uint16_t x, uint16_t page,
+                                   const uint8_t *columns, uint16_t width);
+
+/** Immediately fill a page-aligned rectangle; y and height are in pixels.
+ * @return The same statuses as jh_ssd1306_write_page; no framebuffer allocated.
+ */
+hal_status_t jh_ssd1306_fill_pages(jh_ssd1306_t *dev, uint16_t x, uint16_t y,
+                                   uint16_t width, uint16_t height,
+                                   uint8_t value);
 
 /**
  * @brief Enable or disable hardware colour inversion.
@@ -159,3 +189,5 @@ size_t jh_ssd1306_buffer_size(const jh_ssd1306_t *dev);
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* HAL_ENABLE_DISPLAY && HAL_ENABLE_SSD1306 */
