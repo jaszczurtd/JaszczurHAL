@@ -463,8 +463,40 @@ void test_status_prepare_text_reports_overflow(void) {
   TEST_ASSERT_EQUAL_INT(0, width);
 }
 
+void test_custom_mono_text_and_direct_mode_statuses(void) {
+  const uint8_t bytes[] = {0x81, 0x42};
+  const hal_display_mono_font_t font = {bytes, sizeof(bytes), 'A', 'A', 2};
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_display_draw_mono_text_ex(0, 0, "A", &font, 1, 1, 0));
+  TEST_ASSERT_EQUAL_STRING("A", hal_mock_display_last_print());
+  hal_display_ssd1306_family_config_t config = {};
+  config.width = 128;
+  config.height = 32;
+  config.rst_pin = -1;
+  config.buffer_mode = HAL_DISPLAY_UNBUFFERED;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_init_ssd1306_family_ex(&config));
+  hal_display_capabilities_t caps = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_get_capabilities_ex(&caps));
+  TEST_ASSERT_BITS_HIGH(HAL_DISPLAY_CAP_MONO_TEXT, caps.flags);
+  TEST_ASSERT_BITS_LOW(HAL_DISPLAY_CAP_BUFFERED | HAL_DISPLAY_CAP_LEGACY_GFX,
+                       caps.flags);
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, hal_display_print_ex("A"));
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, hal_display_draw_mono_text_ex(
+                                              0, 1, "A", &font, 1, 1, 0));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL, hal_display_draw_mono_text_ex(0, 0, "A", nullptr, 1, 1, 0));
+  hal_mock_display_fail_next_io();
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EIO, hal_display_draw_mono_text_ex(0, 0, "A", &font, 1, 1, 0));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_suspend_ex());
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_display_draw_mono_text_ex(0, 0, "A", &font, 1, 1, 0));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_resume_ex());
+}
+
 int main(void) {
   UNITY_BEGIN();
+  RUN_TEST(test_custom_mono_text_and_direct_mode_statuses);
   RUN_TEST(test_configure_sets_dimensions);
   RUN_TEST(test_ili9341_ex_validates_its_config);
   RUN_TEST(test_ssd1306_init_sets_dimensions);

@@ -715,6 +715,9 @@ typedef struct {
     hal_display_oled_orientation_t orientation;
     bool internal_iref;
     bool periphBegin;
+    hal_display_buffer_mode_t buffer_mode;
+    bool override_panel;
+    hal_display_oled_panel_t panel;
 } hal_display_ssd1306_family_config_t;
 
 typedef enum {
@@ -782,7 +785,7 @@ hal_status_t hal_display_epd_refresh_ex(
 
 // --- Screen ---
 bool hal_display_fill_screen(uint16_t color);
-bool hal_display_flush(void); // SSD1306: sends framebuffer; EPD: refreshes pending RAM
+bool hal_display_flush(void); // Buffered SSD1306: sends framebuffer; EPD: refreshes pending RAM
 bool hal_display_draw_image(int x, int y, int w, int h, uint16_t background, uint16_t *data);
 
 // --- Geometry ---
@@ -940,6 +943,44 @@ if (status == HAL_OK) {
   engine.
 - **impl/stm32g474:** Uses the same shared HAL display stack as RP2040.
 - **impl/.mock:** deterministic host mock with inspectable state for tests.
+
+### Panel settings and text without a framebuffer
+
+Zero-initialize `hal_display_ssd1306_family_config_t` to keep the existing
+buffered behavior and register defaults. Set `override_panel = true` to use
+all values in `panel`: `contrast` (0x81), `clock_div` (0xD5), `precharge`
+(0xD9), `vcomh` (0xDB), `pump_voltage_command` and `deactivate_scroll`.
+Zero is a valid register value. A zero pump command omits it; 0x30..0x33
+are accepted for SSD1306/SSD1315. Other family members ignore that field.
+The profile is copied during initialization. Choose values for the actual
+panel; timing and voltage encodings depend on its controller.
+
+`buffer_mode = HAL_DISPLAY_UNBUFFERED` selects immediate page writes on
+I2C or SPI, without allocating a framebuffer. Initialization clears panel
+RAM. `hal_display_flush_ex()` then succeeds without sending anything.
+Raw `MONO01` buffers and filled rectangles must start on an eight-pixel row
+and have a height divisible by eight. Raw writes require `pitch == width`
+and `frame_incomplete == false`. Transparent text, GFX drawing and software
+rotation return `HAL_EUNSUPPORTED`; hardware orientation remains part of
+initialization. Display-off retains controller RAM; direct writes can update it while the
+panel is off, without turning the panel on.
+
+`hal_display_draw_mono_text_ex(x, y, text, font, scale, foreground, background)`
+draws opaque text through the same API on buffered/unbuffered SSD1306-family
+panels, TFT and RGB OLED backends, and the mock. Capabilities advertise
+`HAL_DISPLAY_CAP_MONO_TEXT`; raw-only LCD/EPD backends do not support it.
+It leaves the GFX font, cursor and text settings unchanged.
+
+Pass a `hal_display_mono_font_t` containing `data`, `data_size`, `first`,
+`last` and `width`. Glyphs are eight pixels high and 1..16 columns wide;
+each byte is a vertical column with bit 0 at the top. Include spacing in
+the glyph data. Codes outside the font become blank cells. This is byte text,
+without UTF-8 decoding; CR/LF return `HAL_EINVAL`. Scale is 1..8 in both axes.
+The complete height must fit; only whole cells fitting the right edge are
+drawn. Unbuffered OLEDs also require `y` divisible by eight. The font is
+borrowed until return. Rendering uses at most 128 bytes of temporary glyph
+data, with no heap allocation. Bus errors return `HAL_EIO`; preceding cells
+may already be visible. Retry the affected field after restoring the bus.
 
 **Thread safety:** Hardware backends serialize display operations with an internal `hal_mutex_t`. During TFT streaming the mutex stays held between `hal_display_begin_write()` and `hal_display_end_write()`, including any async DMA wait. Mock backend is unsynchronized and intended for single-threaded tests.
 

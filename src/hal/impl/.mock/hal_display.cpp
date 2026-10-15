@@ -8,6 +8,8 @@
 #include <stdio.h>
 #include <string.h>
 
+static bool s_oled = false;
+static bool s_unbuffered = false;
 static int s_width = 0;
 static int s_height = 0;
 static hal_font_id_t s_font = HAL_FONT_DEFAULT;
@@ -61,6 +63,7 @@ static void copy_text(char *dst, size_t dst_size, const char *src) {
 
 #ifdef HAL_ENABLE_TFT
 hal_status_t hal_display_init(uint8_t cs, uint8_t dc, uint8_t rst) {
+  s_oled = s_unbuffered = false;
   (void)cs;
   (void)dc;
   (void)rst;
@@ -69,6 +72,7 @@ hal_status_t hal_display_init(uint8_t cs, uint8_t dc, uint8_t rst) {
 
 hal_status_t
 jh_hal_display_init_ili9341(const hal_display_ili9341_config_t *config) {
+  s_oled = s_unbuffered = false;
   (void)config;
   return HAL_OK;
 }
@@ -89,23 +93,21 @@ hal_display_init_ssd1306_i2c_status_ex(int width, int height, uint8_t i2c_bus,
   (void)periph_begin;
   s_width = width;
   s_height = height;
+  s_oled = true;
+  s_unbuffered = false;
+  s_rotation = 0u;
   return HAL_OK;
 }
 
 hal_status_t hal_display_init_ssd1306_family_ex(
     const hal_display_ssd1306_family_config_t *config) {
-  if (config == NULL || config->width <= 0 || config->height <= 0 ||
-      config->controller > HAL_DISPLAY_OLED_CONTROLLER_CH1115 ||
-      config->bus_type > HAL_DISPLAY_OLED_BUS_SPI ||
-      config->orientation > HAL_DISPLAY_OLED_ORIENTATION_ROTATED_180) {
-    hal_derr("hal_display_init_ssd1306_family: invalid config");
-    return HAL_EINVAL;
+  const hal_status_t valid = jh_display_validate_oled_config(config);
+  if (hal_status_is_error(valid)) {
+    return valid;
   }
-#ifndef HAL_ENABLE_SPI
-  if (config->bus_type == HAL_DISPLAY_OLED_BUS_SPI) {
-    return HAL_EUNSUPPORTED;
-  }
-#endif
+  s_oled = true;
+  s_unbuffered = config->buffer_mode == HAL_DISPLAY_UNBUFFERED;
+  s_rotation = 0u;
   s_width = config->width;
   s_height = config->height;
   return HAL_OK;
@@ -117,6 +119,9 @@ hal_status_t hal_display_configure_ex(int w, int h, uint8_t r, bool inv,
   if (w <= 0 || h <= 0) {
     hal_derr("hal_display_configure: invalid size %dx%d", w, h);
     return HAL_EINVAL;
+  }
+  if (s_unbuffered && (w != s_width || h != s_height || r != 0u || bgr)) {
+    return HAL_EUNSUPPORTED;
   }
   s_width = w;
   s_height = h;
@@ -143,6 +148,9 @@ hal_status_t hal_display_resume_ex(void) {
 hal_status_t hal_display_set_rotation_ex(uint8_t r) {
   if (!s_display_ready()) {
     return HAL_EUNINIT;
+  }
+  if (s_unbuffered && r != 0u) {
+    return HAL_EUNSUPPORTED;
   }
   s_rotation = r & 0x03u;
   return HAL_OK;
@@ -181,7 +189,20 @@ hal_status_t hal_display_get_capabilities_ex(hal_display_capabilities_t *out) {
   out->height_alignment = 1u;
   out->flags = HAL_DISPLAY_CAP_RAW_WRITE | HAL_DISPLAY_CAP_STREAM_WRITE |
                HAL_DISPLAY_CAP_DMA_WRITE | HAL_DISPLAY_CAP_ASYNC_DMA_WRITE |
-               HAL_DISPLAY_CAP_LEGACY_GFX;
+               HAL_DISPLAY_CAP_LEGACY_GFX | HAL_DISPLAY_CAP_MONO_TEXT;
+  if (s_oled) {
+    out->supported_pixel_formats = HAL_DISPLAY_PIXEL_FORMAT_MONO01;
+    out->current_pixel_format = HAL_DISPLAY_PIXEL_FORMAT_MONO01;
+    out->screen_info = HAL_DISPLAY_SCREEN_INFO_MONO_VTILED;
+    out->flags = HAL_DISPLAY_CAP_BUFFERED | HAL_DISPLAY_CAP_LEGACY_GFX |
+                 HAL_DISPLAY_CAP_MONO_TEXT;
+    if (s_unbuffered) {
+      out->flags = HAL_DISPLAY_CAP_RAW_WRITE | HAL_DISPLAY_CAP_MONO_TEXT;
+      out->y_alignment = out->height_alignment = 8u;
+      out->supported_rotations =
+          HAL_DISPLAY_ROTATION_MASK(HAL_DISPLAY_ROTATION_0);
+    }
+  }
   return HAL_OK;
 }
 
@@ -189,6 +210,10 @@ hal_status_t
 hal_display_set_pixel_format_ex(hal_display_pixel_format_t pixel_format) {
   if (!s_display_ready()) {
     return HAL_EUNINIT;
+  }
+  if (s_oled) {
+    return pixel_format == HAL_DISPLAY_PIXEL_FORMAT_MONO01 ? HAL_OK
+                                                           : HAL_EUNSUPPORTED;
   }
   if (pixel_format != HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE &&
       pixel_format != HAL_DISPLAY_PIXEL_FORMAT_RGB565_NATIVE) {
@@ -212,16 +237,26 @@ hal_status_t hal_display_write_raw_ex(uint16_t x, uint16_t y,
       (uint32_t)y + desc->height > (uint32_t)s_height) {
     return HAL_EINVAL;
   }
-  if (desc->pixel_format != HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE &&
-      desc->pixel_format != HAL_DISPLAY_PIXEL_FORMAT_RGB565_NATIVE) {
-    return HAL_EUNSUPPORTED;
-  }
-  const size_t bytes_per_desc_row = (size_t)desc->width * 2u;
-  const size_t bytes_per_pitch_row = (size_t)desc->pitch * 2u;
-  const size_t required =
-      (size_t)(desc->height - 1u) * bytes_per_pitch_row + bytes_per_desc_row;
-  if (desc->buf_size < required) {
-    return HAL_EINVAL;
+  if (s_oled) {
+    if (!s_unbuffered ||
+        desc->pixel_format != HAL_DISPLAY_PIXEL_FORMAT_MONO01 ||
+        desc->pitch != desc->width || desc->frame_incomplete) {
+      return HAL_EUNSUPPORTED;
+    }
+    if (y % 8u || desc->height % 8u ||
+        desc->buf_size < (size_t)desc->width * (desc->height / 8u)) {
+      return HAL_EINVAL;
+    }
+  } else {
+    if (desc->pixel_format != HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE &&
+        desc->pixel_format != HAL_DISPLAY_PIXEL_FORMAT_RGB565_NATIVE) {
+      return HAL_EUNSUPPORTED;
+    }
+    const size_t required = (size_t)(desc->height - 1u) * desc->pitch * 2u +
+                            (size_t)desc->width * 2u;
+    if (desc->buf_size < required) {
+      return HAL_EINVAL;
+    }
   }
   if (s_fail_next_io) {
     s_fail_next_io = false;
@@ -246,6 +281,9 @@ hal_status_t hal_display_flush_ex(void) {
   if (!s_display_ready()) {
     return HAL_EUNINIT;
   }
+  if (s_unbuffered) {
+    return HAL_OK;
+  }
   if (s_fail_next_io) {
     s_fail_next_io = false;
     return HAL_EIO;
@@ -265,6 +303,15 @@ hal_status_t hal_display_fill_rect_ex(int x, int y, int w, int h,
   if (!s_display_ready()) {
     return HAL_EUNINIT;
   }
+  if (s_unbuffered) {
+    if (x < 0 || y < 0 || x > s_width || y > s_height || w > s_width - x ||
+        h > s_height - y) {
+      return HAL_EINVAL;
+    }
+    if (y % 8 || h % 8) {
+      return HAL_EUNSUPPORTED;
+    }
+  }
   s_last_fill_rect_x = x;
   s_last_fill_rect_y = y;
   s_last_fill_rect_w = w;
@@ -278,6 +325,9 @@ bool hal_display_fill_rect(int x, int y, int w, int h, uint16_t color) {
 
 hal_status_t hal_display_draw_rect_ex(int x, int y, int w, int h,
                                       uint16_t color) {
+  if (s_unbuffered) {
+    return HAL_EUNSUPPORTED;
+  }
   if (w <= 0 || h <= 0) {
     hal_derr("hal_display_draw_rect: invalid size %dx%d", w, h);
     return HAL_EINVAL;
@@ -295,6 +345,9 @@ bool hal_display_draw_rect(int x, int y, int w, int h, uint16_t color) {
 }
 
 hal_status_t hal_display_fill_circle_ex(int x, int y, int r, uint16_t color) {
+  if (s_unbuffered) {
+    return HAL_EUNSUPPORTED;
+  }
   if (r < 0) {
     hal_derr("hal_display_fill_circle: invalid radius %d", r);
     return HAL_EINVAL;
@@ -312,6 +365,9 @@ bool hal_display_fill_circle(int x, int y, int r, uint16_t color) {
 }
 
 hal_status_t hal_display_draw_circle_ex(int x, int y, int r, uint16_t color) {
+  if (s_unbuffered) {
+    return HAL_EUNSUPPORTED;
+  }
   if (r < 0) {
     hal_derr("hal_display_draw_circle: invalid radius %d", r);
     return HAL_EINVAL;
@@ -330,6 +386,9 @@ bool hal_display_draw_circle(int x, int y, int r, uint16_t color) {
 
 hal_status_t hal_display_fill_round_rect_ex(int x, int y, int w, int h, int r,
                                             uint16_t color) {
+  if (s_unbuffered) {
+    return HAL_EUNSUPPORTED;
+  }
   if (w <= 0 || h <= 0 || r < 0) {
     hal_derr("hal_display_fill_round_rect: invalid size/radius w=%d h=%d r=%d",
              w, h, r);
@@ -351,6 +410,9 @@ bool hal_display_fill_round_rect(int x, int y, int w, int h, int r,
 
 hal_status_t hal_display_draw_line_ex(int x0, int y0, int x1, int y1,
                                       uint16_t color) {
+  if (s_unbuffered) {
+    return HAL_EUNSUPPORTED;
+  }
   if (!s_display_ready()) {
     return HAL_EUNINIT;
   }
@@ -367,6 +429,9 @@ bool hal_display_draw_line(int x0, int y0, int x1, int y1, uint16_t color) {
 
 hal_status_t hal_display_draw_rgb_bitmap_ex(int x, int y, uint16_t *data, int w,
                                             int h) {
+  if (s_unbuffered) {
+    return HAL_EUNSUPPORTED;
+  }
   if (!data) {
     hal_derr("hal_display_draw_rgb_bitmap: data pointer is NULL");
     return HAL_EINVAL;
@@ -389,6 +454,9 @@ bool hal_display_draw_rgb_bitmap(int x, int y, uint16_t *data, int w, int h) {
   return hal_status_to_bool(hal_display_draw_rgb_bitmap_ex(x, y, data, w, h));
 }
 hal_status_t hal_display_begin_write_ex(int x, int y, int w, int h) {
+  if (s_unbuffered) {
+    return HAL_EUNSUPPORTED;
+  }
   if (w <= 0 || h <= 0) {
     hal_derr("hal_display_begin_write: invalid size %dx%d", w, h);
     return HAL_EINVAL;
@@ -502,7 +570,42 @@ hal_status_t hal_display_end_write_ex(void) {
 bool hal_display_end_write(void) {
   return hal_status_to_bool(hal_display_end_write_ex());
 }
+static hal_status_t mono_text_page(void *, int x, int y, uint8_t *,
+                                   uint16_t width, uint16_t, uint16_t) {
+  if (s_fail_next_io) {
+    s_fail_next_io = false;
+    return HAL_EIO;
+  }
+  s_last_bitmap_x = x;
+  s_last_bitmap_y = y;
+  s_last_bitmap_w = width;
+  s_last_bitmap_h = 8;
+  return HAL_OK;
+}
+
+hal_status_t hal_display_draw_mono_text_ex(int x, int y, const char *text,
+                                           const hal_display_mono_font_t *font,
+                                           uint8_t scale, uint16_t foreground,
+                                           uint16_t background) {
+  if (!s_display_ready()) {
+    return HAL_EUNINIT;
+  }
+  if (s_unbuffered && y >= 0 && y % 8) {
+    return HAL_EUNSUPPORTED;
+  }
+  const hal_status_t status =
+      jh_display_mono_text(x, y, text, font, scale, foreground, background,
+                           s_width, s_height, mono_text_page, nullptr);
+  if (hal_status_is_ok(status)) {
+    copy_text(s_last_print, sizeof(s_last_print), text);
+  }
+  return status;
+}
+
 hal_status_t hal_display_set_font_ex(hal_font_id_t font) {
+  if (s_unbuffered) {
+    return HAL_EUNSUPPORTED;
+  }
   if (!s_display_ready()) {
     return HAL_EUNINIT;
   }
@@ -514,6 +617,9 @@ bool hal_display_set_font(hal_font_id_t font) {
 }
 
 hal_status_t hal_display_set_text_color_ex(uint16_t color) {
+  if (s_unbuffered) {
+    return HAL_EUNSUPPORTED;
+  }
   if (!s_display_ready()) {
     return HAL_EUNINIT;
   }
@@ -525,6 +631,9 @@ bool hal_display_set_text_color(uint16_t color) {
 }
 
 hal_status_t hal_display_set_text_size_ex(uint8_t size) {
+  if (s_unbuffered) {
+    return HAL_EUNSUPPORTED;
+  }
   if (size == 0) {
     hal_derr("hal_display_set_text_size: size must be > 0");
     return HAL_EINVAL;
@@ -540,6 +649,9 @@ bool hal_display_set_text_size(uint8_t size) {
 }
 
 hal_status_t hal_display_set_cursor_ex(int x, int y) {
+  if (s_unbuffered) {
+    return HAL_EUNSUPPORTED;
+  }
   if (!s_display_ready()) {
     return HAL_EUNINIT;
   }
@@ -552,6 +664,9 @@ bool hal_display_set_cursor(int x, int y) {
 }
 
 hal_status_t hal_display_print_ex(const char *s) {
+  if (s_unbuffered) {
+    return HAL_EUNSUPPORTED;
+  }
   if (!s) {
     hal_derr("hal_display_print: text pointer is NULL");
     return HAL_EINVAL;
@@ -567,6 +682,9 @@ bool hal_display_print(const char *s) {
 }
 
 hal_status_t hal_display_println_ex(const char *s) {
+  if (s_unbuffered) {
+    return HAL_EUNSUPPORTED;
+  }
   if (!s) {
     hal_derr("hal_display_println: text pointer is NULL");
     return HAL_EINVAL;
@@ -621,6 +739,9 @@ bool hal_display_draw_text_centered(const char *text, uint16_t fg_color,
 }
 
 hal_status_t hal_display_get_text_bounds_ex(const char *s, int *w, int *h) {
+  if (s_unbuffered) {
+    return HAL_EUNSUPPORTED;
+  }
   int dummy_w = 0;
   int dummy_h = 0;
   int *out_w = w ? w : &dummy_w;
@@ -648,6 +769,7 @@ hal_status_t hal_display_get_text_bounds_ex(const char *s, int *w, int *h) {
   return HAL_OK;
 }
 void hal_mock_display_reset(void) {
+  s_oled = s_unbuffered = false;
   s_width = 0;
   s_height = 0;
   s_font = HAL_FONT_DEFAULT;

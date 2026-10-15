@@ -246,7 +246,12 @@ static bool set_power_settings(jh_ssd1306_t *dev, uint8_t vcc) {
     ok = ok && ssd1306_command(dev, SSD1306_CHARGEPUMP);
     ok = ok &&
          ssd1306_command(dev, (vcc == JH_SSD1306_EXTERNALVCC) ? 0x10u : 0x14u);
-    ok = ok && ssd1306_command(dev, SSD1306_SET_PUMP_VOLTAGE_90);
+    const uint8_t pump = dev->config.override_panel
+                             ? dev->config.panel.pump_voltage_command
+                             : SSD1306_SET_PUMP_VOLTAGE_90;
+    if (pump != 0u) {
+      ok = ok && ssd1306_command(dev, pump);
+    }
   } else if (dev->controller == JH_SSD1306_CONTROLLER_SH1106 ||
              dev->controller == JH_SSD1306_CONTROLLER_CH1115) {
     ok = ok && ssd1306_command(dev, SH1106_SETDCDC);
@@ -262,7 +267,9 @@ static bool set_power_settings(jh_ssd1306_t *dev, uint8_t vcc) {
   }
 
   ok = ok && ssd1306_command(dev, SSD1306_SETVCOMDETECT);
-  ok = ok && ssd1306_command(dev, vcom_level_for(dev));
+  ok = ok &&
+       ssd1306_command(dev, dev->config.override_panel ? dev->config.panel.vcomh
+                                                       : vcom_level_for(dev));
   return ok;
 }
 
@@ -297,12 +304,14 @@ bool jh_ssd1306_init(jh_ssd1306_t *dev, const jh_ssd1306_config_t *config) {
   dev->config.vccstate = vcc;
 
   const uint8_t com_pins = default_com_pins(dev);
-  const uint8_t contrast = default_contrast(dev, vcc);
+  const uint8_t contrast = config->override_panel ? config->panel.contrast
+                                                  : default_contrast(dev, vcc);
 
   bool ok = true;
   ok = ok && ssd1306_command(dev, SSD1306_DISPLAYOFF);
   ok = ok && ssd1306_command(dev, SSD1306_SETDISPLAYCLOCKDIV);
-  ok = ok && ssd1306_command(dev, 0x80u);
+  ok = ok && ssd1306_command(
+                 dev, config->override_panel ? config->panel.clock_div : 0x80u);
   ok = ok && ssd1306_command(dev, SSD1306_SETMULTIPLEX);
   ok = ok && ssd1306_command(dev, (uint8_t)(dev->height - 1u));
 
@@ -313,7 +322,7 @@ bool jh_ssd1306_init(jh_ssd1306_t *dev, const jh_ssd1306_config_t *config) {
 
   if (!uses_page_addressing(dev->controller)) {
     ok = ok && ssd1306_command(dev, SSD1306_MEMORYMODE);
-    ok = ok && ssd1306_command(dev, 0x00u);
+    ok = ok && ssd1306_command(dev, config->page_addressing ? 0x02u : 0x00u);
   }
 
   ok = ok && set_panel_orientation(dev, dev->orientation);
@@ -324,11 +333,15 @@ bool jh_ssd1306_init(jh_ssd1306_t *dev, const jh_ssd1306_config_t *config) {
   dev->contrast = contrast;
 
   ok = ok && ssd1306_command(dev, SSD1306_SETPRECHARGE);
-  ok = ok &&
-       ssd1306_command(dev, (vcc == JH_SSD1306_EXTERNALVCC) ? 0x22u : 0xF1u);
+  ok = ok && ssd1306_command(
+                 dev, config->override_panel
+                          ? config->panel.precharge
+                          : ((vcc == JH_SSD1306_EXTERNALVCC) ? 0x22u : 0xF1u));
   ok = ok && ssd1306_command(dev, SSD1306_DISPLAYALLON_RESUME);
   ok = ok && ssd1306_command(dev, SSD1306_NORMALDISPLAY);
-  ok = ok && ssd1306_command(dev, SSD1306_DEACTIVATE_SCROLL);
+  if (!config->override_panel || config->panel.deactivate_scroll) {
+    ok = ok && ssd1306_command(dev, SSD1306_DEACTIVATE_SCROLL);
+  }
   ok = ok && ssd1306_command(dev, SSD1306_DISPLAYON);
 
   dev->initialized = ok;
@@ -401,11 +414,102 @@ static bool display_page_addressed(jh_ssd1306_t *dev, const uint8_t *buffer) {
   return true;
 }
 
+static hal_status_t write_page_span(jh_ssd1306_t *dev, uint16_t x,
+                                    uint16_t page, const uint8_t *columns,
+                                    uint16_t width, uint8_t fill) {
+  if (!dev || !dev->initialized) {
+    return HAL_EUNINIT;
+  }
+  if (width == 0u || x >= dev->width || width > dev->width - x ||
+      page >= (dev->height + 7u) / 8u) {
+    return HAL_EINVAL;
+  }
+  if (!dev->config.page_addressing && !uses_page_addressing(dev->controller)) {
+    return HAL_EUNSUPPORTED;
+  }
+  if (dev->suspended && !dev->config.page_addressing) {
+    return HAL_ESTATE;
+  }
+  const uint16_t column =
+      x + dev->segment_offset +
+      (!uses_page_addressing(dev->controller) && dev->width == 64u ? 32u : 0u);
+  const uint16_t ram_page = page + dev->page_offset;
+  if (ram_page > 7u ||
+      column + width > (uses_page_addressing(dev->controller) ? 132u : 128u)) {
+    return HAL_EINVAL;
+  }
+  const uint8_t commands[] = {
+      (uint8_t)(SSD1306_SETLOWCOLUMN | (column & 0x0fu)),
+      (uint8_t)(SSD1306_SETHIGHCOLUMN | (column >> 4u)),
+      (uint8_t)(SSD1306_SETPAGESTART | ram_page)};
+  const bool positioned = dev->page_position_valid &&
+                          dev->next_column == column &&
+                          dev->current_page == ram_page;
+  dev->page_position_valid = false;
+  if (!positioned) {
+    if (!bus_write_control(dev, true, commands, sizeof(commands))) {
+      return HAL_EIO;
+    }
+  }
+  uint8_t solid[SSD1306_I2C_CHUNK];
+  if (!columns) {
+    memset(solid, fill, sizeof(solid));
+  }
+  for (uint16_t offset = 0u; offset < width;) {
+    const uint16_t left = width - offset;
+    const uint16_t chunk = left < SSD1306_I2C_CHUNK ? left : SSD1306_I2C_CHUNK;
+    if (!ssd1306_data(dev, columns ? columns + offset : solid, chunk)) {
+      return HAL_EIO;
+    }
+    offset += chunk;
+  }
+  dev->page_position_valid = true;
+  dev->next_column = column + width;
+  dev->current_page = ram_page;
+  return HAL_OK;
+}
+
+hal_status_t jh_ssd1306_write_page(jh_ssd1306_t *dev, uint16_t x, uint16_t page,
+                                   const uint8_t *columns, uint16_t width) {
+  return columns ? write_page_span(dev, x, page, columns, width, 0u)
+                 : HAL_EINVAL;
+}
+
+hal_status_t jh_ssd1306_fill_pages(jh_ssd1306_t *dev, uint16_t x, uint16_t y,
+                                   uint16_t width, uint16_t height,
+                                   uint8_t value) {
+  if (!dev || !dev->initialized) {
+    return HAL_EUNINIT;
+  }
+  if (y % 8u || height == 0u || height % 8u || y > dev->height ||
+      height > dev->height - y) {
+    return HAL_EINVAL;
+  }
+  for (uint16_t page = y / 8u; page < (y + height) / 8u; ++page) {
+    const hal_status_t status =
+        write_page_span(dev, x, page, nullptr, width, value);
+    if (hal_status_is_error(status)) {
+      return status;
+    }
+  }
+  return HAL_OK;
+}
+
 bool jh_ssd1306_display(jh_ssd1306_t *dev, const uint8_t *buffer) {
   if (dev == NULL || !dev->initialized || dev->suspended || buffer == NULL) {
     return false;
   }
 
+  dev->page_position_valid = false;
+  if (dev->config.page_addressing) {
+    for (uint16_t page = 0u; page < (dev->height + 7u) / 8u; ++page) {
+      if (hal_status_is_error(jh_ssd1306_write_page(
+              dev, 0u, page, buffer + (size_t)page * dev->width, dev->width))) {
+        return false;
+      }
+    }
+    return true;
+  }
   if (uses_page_addressing(dev->controller)) {
     return display_page_addressed(dev, buffer);
   }

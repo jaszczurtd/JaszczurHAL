@@ -329,8 +329,35 @@ void test_rejects_invalid_arguments(void) {
   TEST_ASSERT_FALSE(jh_ssd1306_display(&good, NULL));
 }
 
+void test_direct_spi_pages_keep_offsets_and_release_on_error(void) {
+  jh_ssd1306_t dev = {};
+  auto config = make_config(64u, 32u, 0u);
+  config.bus_type = JH_SSD1306_BUS_SPI;
+  config.spi_dc_pin = 5;
+  config.spi_cs_pin = 6;
+  config.page_addressing = true;
+  config.page_offset = 1;
+  TEST_ASSERT_TRUE(jh_ssd1306_init(&dev, &config));
+  const uint8_t pixels[] = {0xa5, 0x5a};
+  hal_mock_spi_reset();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_ssd1306_write_page(&dev, 7, 1, pixels, 2));
+  uint8_t tx[8] = {};
+  TEST_ASSERT_EQUAL_size_t(5, hal_mock_spi_get_tx(0, tx, sizeof(tx)));
+  const uint8_t expected[] = {0x07, 0x12, 0xb2, 0xa5, 0x5a};
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, tx, COUNTOF(expected));
+  hal_mock_spi_fail_next_write(0, true);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, jh_ssd1306_write_page(&dev, 9, 1, pixels, 2));
+  TEST_ASSERT_FALSE(dev.page_position_valid);
+  TEST_ASSERT_FALSE(hal_mock_spi_transaction_active(0));
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_spi_get_lock_depth(0));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_ssd1306_write_page(&dev, 9, 1, pixels, 2));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        jh_ssd1306_write_page(&dev, 63, 0, pixels, 2));
+}
+
 int main(void) {
   UNITY_BEGIN();
+  RUN_TEST(test_direct_spi_pages_keep_offsets_and_release_on_error);
   RUN_TEST(test_init_sends_ssd1306_command_sequence);
   RUN_TEST(test_default_address_for_32px_panel);
   RUN_TEST(test_buffer_size_matches_geometry);

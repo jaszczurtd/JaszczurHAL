@@ -12,8 +12,7 @@
  * the shared panel drivers, which in turn talk to the panels exclusively over
  * the JaszczurHAL SPI / I2C / GPIO buses. TFT panels (ILI9341, ST7735,
  * ST7789, ST7796S, GC9A01) are driven in immediate mode; the SSD1306 OLED is
- * rendered into an in-RAM framebuffer that hal_display_flush() pushes to the
- * panel.
+ * buffered by default, with optional immediate page/text writes.
  */
 
 #include "hal/core/hal_mutex_once.h"
@@ -162,19 +161,23 @@ static TftGfx s_tft_gfx;
 
 #ifdef HAL_ENABLE_SSD1306
 static jh_ssd1306_t s_oled = {};
+static bool s_oled_unbuffered = false;
 
 /* GFX engine subclass backed by an in-RAM monochrome framebuffer. */
 class Ssd1306Gfx : public JHGfx {
 public:
   Ssd1306Gfx() : JHGfx(1, 1), buffer(NULL), buffer_bytes(0u) {}
 
-  bool allocate(int16_t w, int16_t h) {
+  bool allocate(int16_t w, int16_t h, bool unbuffered) {
     release();
     WIDTH = w;
     HEIGHT = h;
     _width = w;
     _height = h;
     rotation = 0u;
+    if (unbuffered) {
+      return true;
+    }
     buffer_bytes = (size_t)w * (((size_t)h + 7u) / 8u);
     buffer = (uint8_t *)malloc(buffer_bytes);
     if (buffer == NULL) {
@@ -260,16 +263,6 @@ static inline uint16_t oled_color(uint16_t color) {
   return (color == HAL_COLOR_BLACK) ? JH_SSD1306_BLACK : JH_SSD1306_WHITE;
 }
 
-static bool oled_controller_valid(hal_display_oled_controller_t controller) {
-  return controller >= HAL_DISPLAY_OLED_CONTROLLER_SSD1306 &&
-         controller <= HAL_DISPLAY_OLED_CONTROLLER_CH1115;
-}
-
-static bool oled_bus_type_valid(hal_display_oled_bus_t bus_type) {
-  return bus_type == HAL_DISPLAY_OLED_BUS_I2C ||
-         bus_type == HAL_DISPLAY_OLED_BUS_SPI;
-}
-
 static jh_ssd1306_controller_t
 map_oled_controller(hal_display_oled_controller_t controller) {
   switch (controller) {
@@ -306,7 +299,12 @@ static hal_status_t oled_init_locked(const jh_ssd1306_config_t *config,
     return HAL_EINVAL;
   }
 
-  if (!s_oled_gfx.allocate((int16_t)config->width, (int16_t)config->height)) {
+  s_backend = DISPLAY_BACKEND_NONE;
+  s_width = s_height = 0;
+  s_rotation = HAL_DISPLAY_ROTATION_0;
+  s_oled_unbuffered = config->page_addressing;
+  if (!s_oled_gfx.allocate((int16_t)config->width, (int16_t)config->height,
+                           s_oled_unbuffered)) {
     hal_derr("%s: framebuffer allocation failed", fn_name);
     return HAL_ENOMEM;
   }
@@ -325,7 +323,17 @@ static hal_status_t oled_init_locked(const jh_ssd1306_config_t *config,
   s_oled_gfx.fillScreen(JH_SSD1306_BLACK);
   s_width = s_oled_gfx.width();
   s_height = s_oled_gfx.height();
-  return jh_ssd1306_display(&s_oled, s_oled_gfx.data()) ? HAL_OK : HAL_EIO;
+  const hal_status_t status =
+      s_oled_unbuffered
+          ? jh_ssd1306_fill_pages(&s_oled, 0u, 0u, s_oled.width, s_oled.height,
+                                  0u)
+          : (jh_ssd1306_display(&s_oled, s_oled_gfx.data()) ? HAL_OK : HAL_EIO);
+  if (hal_status_is_error(status)) {
+    s_oled_gfx.release();
+    s_backend = DISPLAY_BACKEND_NONE;
+    s_width = s_height = 0;
+  }
+  return status;
 }
 #endif /* HAL_ENABLE_SSD1306 */
 
@@ -423,7 +431,7 @@ static bool ensure_display_ready(const char *fn) {
 
 static JHGfx *active_gfx(void) {
 #ifdef HAL_ENABLE_SSD1306
-  if (using_oled()) {
+  if (using_oled() && !s_oled_unbuffered) {
     return &s_oled_gfx;
   }
 #endif
@@ -949,21 +957,10 @@ hal_display_init_ssd1306_i2c_status_ex(int width, int height, uint8_t i2c_bus,
 hal_status_t hal_display_init_ssd1306_family_ex(
     const hal_display_ssd1306_family_config_t *config) {
   DisplayLock guard;
-  if (config == NULL) {
-    return HAL_EINVAL;
+  const hal_status_t valid = jh_display_validate_oled_config(config);
+  if (hal_status_is_error(valid)) {
+    return valid;
   }
-  if (config->width <= 0 || config->height <= 0 ||
-      !oled_controller_valid(config->controller) ||
-      !oled_bus_type_valid(config->bus_type) ||
-      config->orientation > HAL_DISPLAY_OLED_ORIENTATION_ROTATED_180) {
-    hal_derr("hal_display_init_ssd1306_family: invalid config");
-    return HAL_EINVAL;
-  }
-#ifndef HAL_ENABLE_SPI
-  if (config->bus_type == HAL_DISPLAY_OLED_BUS_SPI) {
-    return HAL_EUNSUPPORTED;
-  }
-#endif
 
   (void)config->periphBegin;
 
@@ -985,6 +982,9 @@ hal_status_t hal_display_init_ssd1306_family_ex(
   driver_config.display_offset = config->display_offset;
   driver_config.orientation = map_oled_orientation(config->orientation);
   driver_config.internal_iref = config->internal_iref;
+  driver_config.page_addressing = config->buffer_mode == HAL_DISPLAY_UNBUFFERED;
+  driver_config.override_panel = config->override_panel;
+  driver_config.panel = config->panel;
 
   return oled_init_locked(&driver_config, "hal_display_init_ssd1306_family");
 }
@@ -1259,6 +1259,10 @@ hal_status_t hal_display_configure_ex(int width, int height, uint8_t rotation,
 
 #ifdef HAL_ENABLE_SSD1306
   if (using_oled()) {
+    if (s_oled_unbuffered &&
+        (rotation != 0u || width != s_width || height != s_height || bgr)) {
+      return HAL_EUNSUPPORTED;
+    }
     s_oled_gfx.setRotation(rotation);
     if (!jh_ssd1306_invert(&s_oled, invert)) {
       return HAL_EIO;
@@ -1452,6 +1456,9 @@ hal_status_t hal_display_set_rotation_ex(uint8_t r) {
   }
 #ifdef HAL_ENABLE_SSD1306
   if (using_oled()) {
+    if (s_oled_unbuffered && r != 0u) {
+      return HAL_EUNSUPPORTED;
+    }
     s_oled_gfx.setRotation(r);
     s_width = s_oled_gfx.width();
     s_height = s_oled_gfx.height();
@@ -1548,7 +1555,7 @@ hal_status_t hal_display_get_capabilities_ex(hal_display_capabilities_t *out) {
     out->supported_rotations = HAL_DISPLAY_ROTATION_MASK_ALL;
     out->flags = HAL_DISPLAY_CAP_RAW_WRITE | HAL_DISPLAY_CAP_STREAM_WRITE |
                  HAL_DISPLAY_CAP_DMA_WRITE | HAL_DISPLAY_CAP_ASYNC_DMA_WRITE |
-                 HAL_DISPLAY_CAP_LEGACY_GFX;
+                 HAL_DISPLAY_CAP_LEGACY_GFX | HAL_DISPLAY_CAP_MONO_TEXT;
     return HAL_OK;
   }
   if (using_rgb_oled()) {
@@ -1558,7 +1565,7 @@ hal_status_t hal_display_get_capabilities_ex(hal_display_capabilities_t *out) {
     out->supported_rotations =
         HAL_DISPLAY_ROTATION_MASK(HAL_DISPLAY_ROTATION_0);
     out->flags = HAL_DISPLAY_CAP_RAW_WRITE | HAL_DISPLAY_CAP_STREAM_WRITE |
-                 HAL_DISPLAY_CAP_LEGACY_GFX;
+                 HAL_DISPLAY_CAP_LEGACY_GFX | HAL_DISPLAY_CAP_MONO_TEXT;
     return HAL_OK;
   }
   if (using_oled()) {
@@ -1566,7 +1573,16 @@ hal_status_t hal_display_get_capabilities_ex(hal_display_capabilities_t *out) {
     out->current_pixel_format = HAL_DISPLAY_PIXEL_FORMAT_MONO01;
     out->supported_rotations = HAL_DISPLAY_ROTATION_MASK_ALL;
     out->screen_info = HAL_DISPLAY_SCREEN_INFO_MONO_VTILED;
-    out->flags = HAL_DISPLAY_CAP_BUFFERED | HAL_DISPLAY_CAP_LEGACY_GFX;
+    out->flags = HAL_DISPLAY_CAP_BUFFERED | HAL_DISPLAY_CAP_LEGACY_GFX |
+                 HAL_DISPLAY_CAP_MONO_TEXT;
+#ifdef HAL_ENABLE_SSD1306
+    if (s_oled_unbuffered) {
+      out->flags = HAL_DISPLAY_CAP_RAW_WRITE | HAL_DISPLAY_CAP_MONO_TEXT;
+      out->y_alignment = out->height_alignment = 8u;
+      out->supported_rotations =
+          HAL_DISPLAY_ROTATION_MASK(HAL_DISPLAY_ROTATION_0);
+    }
+#endif
     return HAL_OK;
   }
 #ifdef HAL_ENABLE_ST7567
@@ -1673,6 +1689,27 @@ hal_status_t hal_display_write_raw_ex(uint16_t x, uint16_t y,
     return HAL_EINVAL;
   }
 
+#ifdef HAL_ENABLE_SSD1306
+  if (using_oled() && s_oled_unbuffered) {
+    if (desc->pixel_format != HAL_DISPLAY_PIXEL_FORMAT_MONO01 ||
+        desc->pitch != desc->width || desc->frame_incomplete) {
+      return HAL_EUNSUPPORTED;
+    }
+    if (y % 8u || desc->height % 8u ||
+        desc->buf_size < (size_t)desc->width * (desc->height / 8u)) {
+      return HAL_EINVAL;
+    }
+    for (uint16_t page = 0u; page < desc->height / 8u; ++page) {
+      const hal_status_t status = jh_ssd1306_write_page(
+          &s_oled, x, y / 8u + page,
+          (const uint8_t *)buffer + (size_t)page * desc->width, desc->width);
+      if (hal_status_is_error(status)) {
+        return status;
+      }
+    }
+    return HAL_OK;
+  }
+#endif
 #ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
   if (using_immediate_rgb()) {
     if (desc->pixel_format != HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE &&
@@ -1814,6 +1851,10 @@ hal_status_t hal_display_fill_screen_ex(uint16_t color) {
   }
 #ifdef HAL_ENABLE_SSD1306
   if (using_oled()) {
+    if (s_oled_unbuffered) {
+      return jh_ssd1306_fill_pages(&s_oled, 0u, 0u, s_oled.width, s_oled.height,
+                                   color == HAL_COLOR_BLACK ? 0u : 0xffu);
+    }
     s_oled_gfx.fillScreen(oled_color(color));
     return HAL_OK;
   }
@@ -1842,6 +1883,9 @@ hal_status_t hal_display_flush_ex(void) {
   }
 #ifdef HAL_ENABLE_SSD1306
   if (using_oled()) {
+    if (s_oled_unbuffered) {
+      return HAL_OK;
+    }
     return jh_ssd1306_display(&s_oled, s_oled_gfx.data()) ? HAL_OK : HAL_EIO;
   }
 #endif
@@ -1885,6 +1929,18 @@ hal_status_t hal_display_fill_rect_ex(int x, int y, int w, int h,
   }
 #ifdef HAL_ENABLE_SSD1306
   if (using_oled()) {
+    if (s_oled_unbuffered) {
+      if (x < 0 || y < 0 || x > s_width || y > s_height || w > s_width - x ||
+          h > s_height - y) {
+        return HAL_EINVAL;
+      }
+      if (y % 8 || h % 8) {
+        return HAL_EUNSUPPORTED;
+      }
+      return jh_ssd1306_fill_pages(&s_oled, (uint16_t)x, (uint16_t)y,
+                                   (uint16_t)w, (uint16_t)h,
+                                   color == HAL_COLOR_BLACK ? 0u : 0xffu);
+    }
     s_oled_gfx.fillRect(x, y, w, h, oled_color(color));
     return HAL_OK;
   }
@@ -1916,6 +1972,9 @@ hal_status_t hal_display_draw_rect_ex(int x, int y, int w, int h,
   }
 #ifdef HAL_ENABLE_SSD1306
   if (using_oled()) {
+    if (s_oled_unbuffered) {
+      return HAL_EUNSUPPORTED;
+    }
     s_oled_gfx.drawRect(x, y, w, h, oled_color(color));
     return HAL_OK;
   }
@@ -1951,6 +2010,9 @@ hal_status_t hal_display_fill_circle_ex(int x, int y, int r, uint16_t color) {
   }
 #ifdef HAL_ENABLE_SSD1306
   if (using_oled()) {
+    if (s_oled_unbuffered) {
+      return HAL_EUNSUPPORTED;
+    }
     s_oled_gfx.fillCircle(x, y, r, oled_color(color));
     return HAL_OK;
   }
@@ -1981,6 +2043,9 @@ hal_status_t hal_display_draw_circle_ex(int x, int y, int r, uint16_t color) {
   }
 #ifdef HAL_ENABLE_SSD1306
   if (using_oled()) {
+    if (s_oled_unbuffered) {
+      return HAL_EUNSUPPORTED;
+    }
     s_oled_gfx.drawCircle(x, y, r, oled_color(color));
     return HAL_OK;
   }
@@ -2013,6 +2078,9 @@ hal_status_t hal_display_fill_round_rect_ex(int x, int y, int w, int h, int r,
   }
 #ifdef HAL_ENABLE_SSD1306
   if (using_oled()) {
+    if (s_oled_unbuffered) {
+      return HAL_EUNSUPPORTED;
+    }
     s_oled_gfx.fillRoundRect(x, y, w, h, r, oled_color(color));
     return HAL_OK;
   }
@@ -2044,6 +2112,9 @@ hal_status_t hal_display_draw_line_ex(int x0, int y0, int x1, int y1,
   }
 #ifdef HAL_ENABLE_SSD1306
   if (using_oled()) {
+    if (s_oled_unbuffered) {
+      return HAL_EUNSUPPORTED;
+    }
     s_oled_gfx.drawLine(x0, y0, x1, y1, oled_color(color));
     return HAL_OK;
   }
@@ -2313,6 +2384,70 @@ bool hal_display_end_write(void) {
 
 /* ---- Text ---------------------------------------------------------------- */
 
+static hal_status_t mono_text_page(void *, int x, int y, uint8_t *columns,
+                                   uint16_t width, uint16_t foreground,
+                                   uint16_t background) {
+#ifdef HAL_ENABLE_SSD1306
+  if (using_oled() && s_oled_unbuffered) {
+    const uint8_t fg = foreground == HAL_COLOR_BLACK ? 0u : 0xffu;
+    const uint8_t bg = background == HAL_COLOR_BLACK ? 0u : 0xffu;
+    for (uint16_t col = 0u; col < width; ++col) {
+      columns[col] =
+          (uint8_t)((columns[col] & fg) | ((uint8_t)~columns[col] & bg));
+    }
+    return jh_ssd1306_write_page(&s_oled, (uint16_t)x, (uint16_t)(y / 8),
+                                 columns, width);
+  }
+#endif
+  JHGfx *gfx = active_gfx();
+  if (!gfx) {
+    return HAL_EUNSUPPORTED;
+  }
+  if (using_oled()) {
+    foreground = foreground == HAL_COLOR_BLACK ? 0u : 1u;
+    background = background == HAL_COLOR_BLACK ? 0u : 1u;
+  }
+  for (uint16_t col = 0u; col < width; ++col) {
+    for (uint8_t bit = 0u; bit < 8u; ++bit) {
+      const uint16_t color =
+          columns[col] & (1u << bit) ? foreground : background;
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
+      if (using_immediate_rgb()) {
+        if (!draw_pixel_unlocked(x + col, y + bit, color)) {
+          return HAL_EIO;
+        }
+      } else
+#endif
+      {
+        gfx->drawPixel((int16_t)(x + col), (int16_t)(y + bit), color);
+      }
+    }
+  }
+  return HAL_OK;
+}
+
+hal_status_t hal_display_draw_mono_text_ex(int x, int y, const char *text,
+                                           const hal_display_mono_font_t *font,
+                                           uint8_t scale, uint16_t foreground,
+                                           uint16_t background) {
+  DisplayLock guard;
+  if (!has_active_display()) {
+    return HAL_EUNINIT;
+  }
+#ifdef HAL_ENABLE_SSD1306
+  if (using_oled() && s_oled_unbuffered) {
+    if (y >= 0 && y % 8) {
+      return HAL_EUNSUPPORTED;
+    }
+  } else
+#endif
+      if (!active_gfx()) {
+    return HAL_EUNSUPPORTED;
+  }
+  return jh_display_mono_text(x, y, text, font, scale, foreground, background,
+                              s_width, s_height, mono_text_page, nullptr);
+}
+
 static void apply_font_to(JHGfx *gfx, hal_font_id_t font) {
   switch (font) {
   case HAL_FONT_SANS_BOLD_9PT:
@@ -2349,6 +2484,9 @@ hal_status_t hal_display_set_text_color_ex(uint16_t color) {
   s_text_color = color;
 #ifdef HAL_ENABLE_SSD1306
   if (using_oled()) {
+    if (s_oled_unbuffered) {
+      return HAL_EUNSUPPORTED;
+    }
     s_oled_gfx.setTextColor(oled_color(color));
     return HAL_OK;
   }
