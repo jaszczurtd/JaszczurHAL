@@ -349,8 +349,13 @@ bool jh_ssd1306_init(jh_ssd1306_t *dev, const jh_ssd1306_config_t *config) {
   return ok;
 }
 
+/* Eight-pixel pages covering the panel height. */
+static uint16_t page_count(const jh_ssd1306_t *dev) {
+  return (uint16_t)((dev->height + 7u) / 8u);
+}
+
 static bool display_default(jh_ssd1306_t *dev, const uint8_t *buffer) {
-  const uint16_t pages = (uint16_t)((dev->height + 7u) / 8u);
+  const uint16_t pages = page_count(dev);
   const uint8_t page_start = dev->page_offset;
   const uint8_t page_end = (uint8_t)(page_start + pages - 1u);
   const uint8_t column_start =
@@ -383,7 +388,7 @@ static bool display_default(jh_ssd1306_t *dev, const uint8_t *buffer) {
 }
 
 static bool display_page_addressed(jh_ssd1306_t *dev, const uint8_t *buffer) {
-  const uint16_t pages = (uint16_t)((dev->height + 7u) / 8u);
+  const uint16_t pages = page_count(dev);
   const uint8_t column_start = dev->segment_offset;
 
   for (uint16_t page = 0u; page < pages; ++page) {
@@ -421,7 +426,7 @@ static hal_status_t write_page_span(jh_ssd1306_t *dev, uint16_t x,
     return HAL_EUNINIT;
   }
   if (width == 0u || x >= dev->width || width > dev->width - x ||
-      page >= (dev->height + 7u) / 8u) {
+      page >= page_count(dev)) {
     return HAL_EINVAL;
   }
   if (!dev->config.page_addressing && !uses_page_addressing(dev->controller)) {
@@ -485,7 +490,8 @@ hal_status_t jh_ssd1306_fill_pages(jh_ssd1306_t *dev, uint16_t x, uint16_t y,
       height > dev->height - y) {
     return HAL_EINVAL;
   }
-  for (uint16_t page = y / 8u; page < (y + height) / 8u; ++page) {
+  const uint16_t end_page = (uint16_t)((y + height) / 8u);
+  for (uint16_t page = (uint16_t)(y / 8u); page < end_page; ++page) {
     const hal_status_t status =
         write_page_span(dev, x, page, nullptr, width, value);
     if (hal_status_is_error(status)) {
@@ -502,7 +508,8 @@ bool jh_ssd1306_display(jh_ssd1306_t *dev, const uint8_t *buffer) {
 
   dev->page_position_valid = false;
   if (dev->config.page_addressing) {
-    for (uint16_t page = 0u; page < (dev->height + 7u) / 8u; ++page) {
+    const uint16_t pages = page_count(dev);
+    for (uint16_t page = 0u; page < pages; ++page) {
       if (hal_status_is_error(jh_ssd1306_write_page(
               dev, 0u, page, buffer + (size_t)page * dev->width, dev->width))) {
         return false;
@@ -571,7 +578,7 @@ size_t jh_ssd1306_buffer_size(const jh_ssd1306_t *dev) {
   if (dev == NULL || dev->width == 0u || dev->height == 0u) {
     return 0u;
   }
-  return (size_t)dev->width * (((size_t)dev->height + 7u) / 8u);
+  return (size_t)dev->width * page_count(dev);
 }
 
 #endif /* HAL_ENABLE_DISPLAY && HAL_ENABLE_SSD1306 */

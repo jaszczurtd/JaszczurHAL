@@ -686,6 +686,22 @@ class Headers(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertNotIn("HAL_LED_BUILTIN", macros(out / "jh_board_config.h"))
 
+    def test_status_led_order_is_one_value_in_both_headers(self) -> None:
+        # The binding default is GRB; an assembly choosing RGB must reach the
+        # node property that hal_rgb_led_init_board_status() reads, not only
+        # the late header.
+        config = copy_fixture("status-led-rgb", "valid/backends")
+        tree = json.loads((config / "device_tree.json").read_text(encoding="utf-8"))
+        tree["assemblies"]["esp32s3"]["statusLed"]["pixelOrder"] = "RGB"
+        (config / "device_tree.json").write_text(json.dumps(tree), encoding="utf-8")
+        out, result = generate("status-led-rgb-out", config, "esp32s3")
+        self.assertEqual(0, result.returncode, result.stderr)
+        early = macros(out / "jh_hardware.h")
+        late = macros(out / "jh_board_config.h")
+        self.assertEqual('"RGB"', early["JH_HW_NODE_BOARD_STATUS_LED_PROP_PIXEL_ORDER"])
+        self.assertIn("HAL_BOARD_STATUS_LED_PIXEL_ORDER_RGB", late)
+        self.assertNotIn("HAL_BOARD_STATUS_LED_PIXEL_ORDER_GRB", late)
+
     def test_released_soft_reservation_leaves_the_mask(self) -> None:
         out, result = generate("released", FIXTURES / "valid" / "released-pin", "pico")
         self.assertEqual(0, result.returncode, result.stderr)
