@@ -61,7 +61,7 @@ instalację, wycofywanie aktualizacji i odzyskiwanie opisano w dokumencie
 
 | Plik | Przeznaczenie |
 |------|---------------|
-| `security/third_party.json` | Ręcznie utrzymywane, miarodajne źródło informacji o dołączonych komponentach i ich ściśle określonych wersjach. |
+| `security/third_party.json` | Ręcznie utrzymywany inwentarz dołączonych komponentów i komponentów o ściśle określonej wersji: tożsamość, licencja, ścieżki i uwagi. Wersje i commity tych drugich pochodzą z `third_party/*_version.conf` przez pole `pin` każdego wpisu. |
 | `security/third_party.schema.json` | Schemat JSON używany podczas przeglądu struktury spisu. |
 | `security/sbom.cdx.json` | Generowany SBOM CycloneDX dla repozytorium biblioteki. |
 | `security/esp_idf_tools.json` | Zweryfikowany wykaz dokładnych wersji narzędzi dla platform ESP-IDF, ich licencji i projektów źródłowych, rewizji frameworka oraz skrótu `tools.json`. |
@@ -236,9 +236,11 @@ Utwórz tag dopiero po włączeniu commitu wydania do `main`. CI uruchamiane prz
    W przypadku kodu dołączonego do repozytorium zaktualizuj źródła w ich
    dotychczasowej lokalizacji.
 2. Zachowaj oryginalne pliki licencji i informacje o autorstwie.
-3. Zaktualizuj w `security/third_party.json` wersję, tag, rewizję, purl lub
-   odwołanie do projektu źródłowego. Dla pinu po wydaniu `release` podaje
-   wersję i commit tego wydania; gdy pin jest wydaniem, usuń to pole.
+3. Dla komponentu z polem `pin` wersja, commit i purl wynikają z pliku
+   `*_version.conf` automatycznie; `security/third_party.json` zmieniaj tylko
+   przy nowym odwołaniu do projektu źródłowego, licencji lub `release`. Dla
+   pinu po wydaniu `release` podaje wersję i commit tego wydania; gdy pin jest
+   wydaniem, usuń to pole.
 4. Dla ESP-IDF odśwież `security/esp_idf_tools.json` na podstawie pliku
    `tools.json` z ustalonej wersji frameworka i zarządzanego środowiska Python,
    a następnie sprawdź licencję każdego narzędzia.

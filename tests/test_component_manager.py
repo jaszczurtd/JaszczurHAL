@@ -7,6 +7,7 @@ import contextlib
 import hashlib
 import importlib.util
 import io
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -26,6 +27,29 @@ assert SPEC and SPEC.loader
 manager = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = manager
 SPEC.loader.exec_module(manager)
+
+
+# Fixture roots ship their own jhbase layout; a developer's JH_JHBASE_DIR must
+# not redirect them. The real-pin test restores the override explicitly.
+_JHBASE_OVERRIDE = os.environ.pop("JH_JHBASE_DIR", None)
+
+
+def write_supplied_pins(root: Path, **pins: str) -> Path:
+    """Give ROOT a jhbase component layout that ships PINS; return its third_party."""
+    third_party = root / "third_party"
+    third_party.mkdir(exist_ok=True)
+    (third_party / "jhbase_version.conf").write_text(
+        "JHBASE_REPO=https://example.invalid/jhbase.git\n"
+        f"JHBASE_REF={'0' * 40}\n"
+        "JHBASE_VERSION=0.1.0\n"
+        "JHBASE_DIR=third_party/jhbase\n",
+        encoding="utf-8",
+    )
+    supplied = third_party / "jhbase/third_party"
+    supplied.mkdir(parents=True, exist_ok=True)
+    for keyword, text in pins.items():
+        (supplied / keyword.replace("_conf", ".conf")).write_text(text, encoding="utf-8")
+    return third_party
 
 
 def git(directory: Path, *arguments: str) -> str:
@@ -173,14 +197,13 @@ class ArchiveManagerTests(unittest.TestCase):
         self.assertIn("pmd", manager.SOURCE_COMPONENT_ORDER)
         with tempfile.TemporaryDirectory(prefix="jh-pmd-component-") as text:
             root = Path(text)
-            third_party = root / "third_party"
-            third_party.mkdir()
-            (third_party / "pmd_version.conf").write_text(
-                "PMD_VERSION=7.26.0\n"
-                "PMD_URL=https://example.invalid/pmd.zip\n"
-                f"PMD_SHA256={'a' * 64}\n"
-                "PMD_DIR=third_party/pmd\n",
-                encoding="utf-8",
+            write_supplied_pins(
+                root,
+                pmd_version_conf=(
+                    "PMD_VERSION=7.26.0\n"
+                    "PMD_URL=https://example.invalid/pmd.zip\n"
+                    f"PMD_SHA256={'a' * 64}\n"
+                ),
             )
             executable_name = "pmd.bat" if sys.platform == "win32" else "pmd"
 
@@ -212,14 +235,13 @@ class ArchiveManagerTests(unittest.TestCase):
     def test_pmd_verify_only_does_not_change_launcher_mode(self) -> None:
         with tempfile.TemporaryDirectory(prefix="jh-pmd-verify-") as text:
             root = Path(text)
-            third_party = root / "third_party"
-            third_party.mkdir()
-            (third_party / "pmd_version.conf").write_text(
-                "PMD_VERSION=7.26.0\n"
-                "PMD_URL=https://example.invalid/pmd.zip\n"
-                f"PMD_SHA256={'a' * 64}\n"
-                "PMD_DIR=third_party/pmd\n",
-                encoding="utf-8",
+            third_party = write_supplied_pins(
+                root,
+                pmd_version_conf=(
+                    "PMD_VERSION=7.26.0\n"
+                    "PMD_URL=https://example.invalid/pmd.zip\n"
+                    f"PMD_SHA256={'a' * 64}\n"
+                ),
             )
             executable = third_party / "pmd/pmd-bin-7.26.0/bin/pmd"
             executable.parent.mkdir(parents=True)
@@ -645,11 +667,28 @@ class TrackedContractTests(unittest.TestCase):
             for suffix in ("VERSION", "URL", "SHA256", "EXECUTABLE"):
                 self.assertTrue(windows[f"WINDOWS_{prefix}_{suffix}"])
             self.assertRegex(windows[f"WINDOWS_{prefix}_SHA256"], r"^[0-9a-f]{64}$")
-        riscv = manager.parse_config(ROOT / "third_party/riscv_toolchain_version.conf")
+        # The tool pins come from the jhbase checkout; HAL adds only its directories.
+        override = {"JH_JHBASE_DIR": _JHBASE_OVERRIDE} if _JHBASE_OVERRIDE else {}
+        with mock.patch.dict(os.environ, override):
+            riscv, riscv_path = manager.supplied_pin(ROOT, "riscv-toolchain")
+            self.assertEqual("riscv_toolchain_version.conf", riscv_path.name)
+            self.assertEqual("third_party/riscv-toolchain", riscv["RISCV_TOOLCHAIN_DIR"])
+            for name, pin in manager.JHBASE_PINS.items():
+                shipped = manager.parse_config(manager.supplied_pin(ROOT, name)[1])
+                self.assertNotIn(pin.dir_key, shipped, f"{name}: jhbase pins carry no directory")
+                self.assertFalse(
+                    (ROOT / "third_party" / pin.config).exists(), f"{name}: duplicate pin in HAL"
+                )
         for suffix in ("X86_64_LIN", "AARCH64_LIN", "X64_WIN"):
             self.assertRegex(
                 riscv[f"RISCV_TOOLCHAIN_SHA256_{suffix}"], r"^[0-9a-f]{64}$"
             )
+        # Shape only: a bump in jhbase must not require editing this test.
+        self.assertRegex(riscv["RISCV_TOOLCHAIN_TAG"], r"^v\d+\.\d+\.\d+-\d+$")
+        self.assertRegex(riscv["RISCV_TOOLCHAIN_GCC_MAJOR"], r"^\d+$")
+        self.assertRegex(riscv["RISCV_TOOLCHAIN_ASSET_STEM"], r"^riscv-toolchain-\d+$")
+        # HAL policy, not a pin value: the pinned Pico SDK auto-detects this triple.
+        self.assertEqual("riscv32-unknown-elf", riscv["RISCV_TOOLCHAIN_TRIPLE"])
 
     def test_cli_keeps_legacy_flags_and_custom_directory(self) -> None:
         parser = manager.build_parser()
@@ -797,14 +836,13 @@ class TrackedContractTests(unittest.TestCase):
 
     @staticmethod
     def _cppcheck_root(root: Path) -> Path:
-        third_party = root / "third_party"
-        third_party.mkdir()
-        (third_party / "cppcheck_version.conf").write_text(
-            "CPPCHECK_REPO=https://example.invalid/cppcheck.git\n"
-            "CPPCHECK_REF=0123456789abcdef\n"
-            "CPPCHECK_VERSION=2.13.0\n"
-            "CPPCHECK_DIR=third_party/cppcheck\n",
-            encoding="utf-8",
+        third_party = write_supplied_pins(
+            root,
+            cppcheck_version_conf=(
+                "CPPCHECK_REPO=https://example.invalid/cppcheck.git\n"
+                "CPPCHECK_REF=0123456789abcdef\n"
+                "CPPCHECK_VERSION=2.13.0\n"
+            ),
         )
         (third_party / "cppcheck").mkdir()
         return root / ".build/tools/cppcheck"

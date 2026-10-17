@@ -114,6 +114,16 @@ public:
                     float deadband, hal_pid_terms_t *terms);
 
   /**
+   * @brief Shift I in output units; see hal_pid_controller_shift_integral_ex.
+   * @param outputDelta Finite requested change in the integral contribution.
+   * @param appliedDelta Non-NULL accepted change, unchanged on error.
+   * @param terms Non-NULL updated terms, unchanged on error.
+   * @return HAL_OK, HAL_EINVAL, HAL_ESTATE or HAL_EOVERFLOW.
+   */
+  hal_status_t shiftIntegral(float outputDelta, float *appliedDelta,
+                             hal_pid_terms_t *terms);
+
+  /**
    * @brief Set the output clamping range.
    * @param min Minimum output value.
    * @param max Maximum output value.
@@ -148,6 +158,8 @@ public:
   bool isOscillating(float currentError, int windowSize = 20);
 
 private:
+  hal_pid_terms_t explicitTerms = {};
+  bool explicitStepReady = false;
   float filteredDerivative(float sample, float previousSample,
                            float seconds) const;
   bool measurementInitialized = false;

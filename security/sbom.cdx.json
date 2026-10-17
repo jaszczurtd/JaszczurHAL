@@ -79,6 +79,10 @@
           "value": "Pinned external checkout for STM32G474 and native RP FreeRTOS builds; RP2350 uses its release-pinned Community-Supported-Ports submodule."
         },
         {
+          "name": "jaszczurhal:pin",
+          "value": "third_party/freertos_core_version.conf"
+        },
+        {
           "name": "jaszczurhal:feature_flags",
           "value": "HAL_ENABLE_FREERTOS"
         },
@@ -131,6 +135,10 @@
           "value": "Pinned official SDK for native RP2040, RP2350 ARM and RP2350 Hazard3 RISC-V builds. The configured checkout also initializes the upstream TinyUSB and Mbed TLS submodules used by later native USB work and picotool signing support."
         },
         {
+          "name": "jaszczurhal:pin",
+          "value": "third_party/pico_sdk_version.conf"
+        },
+        {
           "name": "jaszczurhal:paths",
           "value": "third_party/pico-sdk,third_party/pico_sdk_version.conf"
         }
@@ -177,6 +185,10 @@
         {
           "name": "jaszczurhal:notes",
           "value": "Exact official ESP-IDF release used by the supported native ESP32-S3 target. The checkout remains fetched on demand; its recursive submodules and target-specific tools are managed by the official framework. Bundled third-party components retain their upstream licenses."
+        },
+        {
+          "name": "jaszczurhal:pin",
+          "value": "third_party/esp_idf_version.conf"
         },
         {
           "name": "jaszczurhal:paths",
@@ -984,6 +996,10 @@
           "value": "Exact revision of the project-maintained BlueKitchen BTstack fork, including the reviewed Classic incoming/outgoing connection collision fix and BlueDroid SBC undefined-behavior hardening. JaszczurHAL compiles it directly without local source patches. The standard BlueKitchen grant is limited to personal, non-commercial use and imposes notice conditions. A separate Raspberry Pi grant permits a Customer to use and distribute BTstack only with the Products and Customer Products defined in src/hal/bluetooth/LICENSE.RP; it is not a general CYW43 permission. The applicable grant and notice obligations depend on the hardware and distribution. The separately inventoried Bluedroid SBC codec bundled in this revision retains Apache-2.0 terms."
         },
         {
+          "name": "jaszczurhal:pin",
+          "value": "third_party/btstack_version.conf"
+        },
+        {
           "name": "jaszczurhal:feature_flags",
           "value": "HAL_ENABLE_BLE,HAL_ENABLE_BLUETOOTH_CLASSIC,HAL_ENABLE_BLUETOOTH_A2DP_SINK,HAL_ENABLE_BLUETOOTH_AVRCP_TARGET"
         },
@@ -1029,6 +1045,10 @@
         {
           "name": "jaszczurhal:notes",
           "value": "SBC decoder sources bundled with the pinned BTstack fork. Source headers retain Android Open Source Project, Broadcom and Open Interface copyright notices. The A2DP host fixture also compiles the bundled encoder to produce deterministic decoder vectors; firmware includes the decoder only."
+        },
+        {
+          "name": "jaszczurhal:pin",
+          "value": "third_party/btstack_version.conf"
         },
         {
           "name": "jaszczurhal:feature_flags",
@@ -1101,6 +1121,10 @@
           "value": "Host stack for the CYW43xx radio, vendored in the source tree instead of fetched because the bundled firmware images must stay byte-identical for RP2040 and STM32G474 builds. Upstream translation units are stored as *.c.upstream so recursive source discovery cannot compile them without an explicit target manifest. Every vendored file is checksummed in src/hal/network/cyw43/vendor/SHA256SUMS and verified by test_cyw43_dependency_boundary. The import ships two license alternatives and the applicable one depends on the target: the George Robotics grant permits redistribution solely for personal, non-commercial benefit, while the Raspberry Pi grant in LICENSE.RP covers use only with RP2040 or other Raspberry Pi silicon. STM32G474 builds compile the same manifest, so that second grant does not reach them."
         },
         {
+          "name": "jaszczurhal:pin",
+          "value": "third_party/cyw43_driver_version.conf"
+        },
+        {
           "name": "jaszczurhal:feature_flags",
           "value": "HAL_ENABLE_WIFI,HAL_ENABLE_NETWORK_CORE"
         },
@@ -1149,6 +1173,10 @@
         {
           "name": "jaszczurhal:notes",
           "value": "Radio firmware and NVRAM images bundled with the pinned driver, stored as C arrays and downloaded to the SoC at startup. WiFi images cover 7.95.49.00 for the 43439A0, 7.95.59 for the 1YN SDIO part and 7.45.98.50 with 7.45.98.102 for the 4343W A1; Bluetooth patch images cover the 43439, 4343A1 and 1YN, next to three NVRAM tables. At roughly 9.6 MB this is the largest redistributed artifact in the repository, which is why the license alternatives recorded on cyw43-driver apply to every image that embeds WiFi."
+        },
+        {
+          "name": "jaszczurhal:pin",
+          "value": "third_party/cyw43_driver_version.conf"
         },
         {
           "name": "jaszczurhal:feature_flags",
@@ -1217,6 +1245,10 @@
           "value": "Bluetooth shared-bus transport taken from the pinned Pico SDK revision rather than from the driver upstream, and carrying a local safety delta: fatal shared-bus assertions and corruption panics become bounded CYBT errors, public buffer and index arguments are validated, and wake, queue-full and read or write failures propagate to the HCI adapter. Checksums live in the same manifest as the rest of the CYW43 import."
         },
         {
+          "name": "jaszczurhal:pin",
+          "value": "third_party/cyw43_driver_version.conf"
+        },
+        {
           "name": "jaszczurhal:feature_flags",
           "value": "HAL_ENABLE_BLE,HAL_ENABLE_BLUETOOTH_CLASSIC"
         },
@@ -1274,6 +1306,10 @@
           "value": "Clean exact-commit checkout of Semtech's portable SX126x radio driver. Stage 1 will compile the base LoRa source set behind HAL_ENABLE_SX126X through a tracked JaszczurHAL HAL adapter; optional LR-FHSS and BPSK sources remain excluded unless separately reviewed."
         },
         {
+          "name": "jaszczurhal:pin",
+          "value": "third_party/sx126x_driver_version.conf"
+        },
+        {
           "name": "jaszczurhal:feature_flags",
           "value": "HAL_ENABLE_SX126X"
         },
@@ -1326,6 +1362,10 @@
           "value": "Pinned host tool used by the official Pico SDK build for binary metadata, RP2350 post-processing and UF2 generation."
         },
         {
+          "name": "jaszczurhal:pin",
+          "value": "third_party/picotool_version.conf"
+        },
+        {
           "name": "jaszczurhal:paths",
           "value": "third_party/picotool,third_party/picotool_version.conf"
         }
@@ -1360,7 +1400,7 @@
         },
         {
           "type": "other",
-          "url": "third_party/pmd_version.conf",
+          "url": "third_party/jhbase/third_party/pmd_version.conf",
           "comment": "repository path"
         }
       ],
@@ -1370,8 +1410,12 @@
           "value": "Authenticated upstream binary distribution used only for the C/C++ CPD quality gate; the archive and version are pinned and verified by the component manager."
         },
         {
+          "name": "jaszczurhal:pin",
+          "value": "third_party/jhbase/third_party/pmd_version.conf"
+        },
+        {
           "name": "jaszczurhal:paths",
-          "value": "third_party/pmd,third_party/pmd_version.conf"
+          "value": "third_party/pmd,third_party/jhbase/third_party/pmd_version.conf"
         }
       ]
     },
@@ -1404,7 +1448,7 @@
         },
         {
           "type": "other",
-          "url": "third_party/cppcheck_version.conf",
+          "url": "third_party/jhbase/third_party/cppcheck_version.conf",
           "comment": "repository path"
         }
       ],
@@ -1418,8 +1462,12 @@
           "value": "Host analyzer built from its pinned tag for the cppcheck quality gate and consumers' MISRA scans; it is not linked into firmware."
         },
         {
+          "name": "jaszczurhal:pin",
+          "value": "third_party/jhbase/third_party/cppcheck_version.conf"
+        },
+        {
           "name": "jaszczurhal:paths",
-          "value": "third_party/cppcheck,third_party/cppcheck_version.conf"
+          "value": "third_party/cppcheck,third_party/jhbase/third_party/cppcheck_version.conf"
         }
       ]
     },
@@ -1450,7 +1498,7 @@
         },
         {
           "type": "other",
-          "url": "third_party/riscv_toolchain_version.conf",
+          "url": "third_party/jhbase/third_party/riscv_toolchain_version.conf",
           "comment": "repository path"
         }
       ],
@@ -1460,16 +1508,20 @@
           "value": "Pinned prebuilt riscv32-unknown-elf GCC 15 toolchain for RP2350 Hazard3 firmware builds; distributed as part of the official Pico SDK tools release."
         },
         {
+          "name": "jaszczurhal:pin",
+          "value": "third_party/jhbase/third_party/riscv_toolchain_version.conf"
+        },
+        {
           "name": "jaszczurhal:paths",
-          "value": "third_party/riscv-toolchain,third_party/riscv_toolchain_version.conf"
+          "value": "third_party/riscv-toolchain,third_party/jhbase/third_party/riscv_toolchain_version.conf"
         }
       ]
     },
     {
       "type": "library",
-      "bom-ref": "pkg:bearssl@aca13833b6f9ddffaea2041a01facc76829dc03b",
+      "bom-ref": "pkg:bearssl@2024-09-23",
       "name": "BearSSL",
-      "version": "aca13833b6f9ddffaea2041a01facc76829dc03b",
+      "version": "2024-09-23",
       "scope": "optional",
       "licenses": [
         {
@@ -1511,6 +1563,10 @@
         {
           "name": "jaszczurhal:notes",
           "value": "Git-ignored exact-commit BearSSL checkout plus tracked JaszczurHAL transport/provider adapters. Host, RP and STM32 builds compile the managed upstream sources."
+        },
+        {
+          "name": "jaszczurhal:pin",
+          "value": "third_party/bearssl_version.conf"
         },
         {
           "name": "jaszczurhal:feature_flags",
@@ -1568,6 +1624,10 @@
         {
           "name": "jaszczurhal:notes",
           "value": "Git-ignored exact-commit lwIP checkout with tracked JaszczurHAL architecture and options port files. Native RP and STM32 CYW43 networking compile this managed source tree."
+        },
+        {
+          "name": "jaszczurhal:pin",
+          "value": "third_party/lwip_version.conf"
         },
         {
           "name": "jaszczurhal:feature_flags",
@@ -1637,6 +1697,10 @@
           "value": "Git-ignored exact-commit cJSON checkout plus tracked JaszczurHAL feature-gating wrappers. Pinned to master after the 1.7.19 release for its security fixes; see security/vulnerability_log.md."
         },
         {
+          "name": "jaszczurhal:pin",
+          "value": "third_party/cjson_version.conf"
+        },
+        {
           "name": "jaszczurhal:feature_flags",
           "value": "HAL_ENABLE_CJSON,HAL_ENABLE_NET_COMMANDS"
         },
@@ -1692,6 +1756,10 @@
         {
           "name": "jaszczurhal:notes",
           "value": "Clean git-ignored exact-commit checkout from the JaszczurHAL fork plus tracked wrappers that keep disk and C++ std APIs disabled by default. The GCC 15 RISC-V optimizer workaround is scoped to the wrapper source in CMake."
+        },
+        {
+          "name": "jaszczurhal:pin",
+          "value": "third_party/lodepng_version.conf"
         },
         {
           "name": "jaszczurhal:feature_flags",
@@ -1751,6 +1819,10 @@
           "value": "Exact-commit checkout of the project-owned fork of ChaN's R0.16 archive with the CVE-2026-6682 and CVE-2026-6686 fixes, plus tracked JaszczurHAL feature, configuration and SD-over-SPI integration wrappers."
         },
         {
+          "name": "jaszczurhal:pin",
+          "value": "third_party/fatfs_version.conf"
+        },
+        {
           "name": "jaszczurhal:feature_flags",
           "value": "HAL_ENABLE_FAT,HAL_ENABLE_SDLOGGER"
         },
@@ -1806,6 +1878,10 @@
         {
           "name": "jaszczurhal:notes",
           "value": "Git-ignored exact-commit littlefs checkout used by the shared provider, native RP/STM32G474 internal-flash builds, and the dedicated host RAM-flash integration test."
+        },
+        {
+          "name": "jaszczurhal:pin",
+          "value": "third_party/littlefs_version.conf"
         },
         {
           "name": "jaszczurhal:feature_flags",
@@ -2036,12 +2112,68 @@
           "value": "Clean git-ignored exact-commit checkout from the JaszczurHAL fork. Builds compile only the TJpgDec core through tracked memory-input and RGB565-output wrappers; the library's Arduino-facing wrapper is excluded."
         },
         {
+          "name": "jaszczurhal:pin",
+          "value": "third_party/jpeg_version.conf"
+        },
+        {
           "name": "jaszczurhal:feature_flags",
           "value": "HAL_ENABLE_JPEG"
         },
         {
           "name": "jaszczurhal:paths",
           "value": "third_party/TJpg_Decoder,third_party/jpeg_version.conf,src/hal/codecs/jpeg"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:jhbase@0.1.0",
+      "name": "jhbase",
+      "version": "0.1.0",
+      "scope": "development",
+      "licenses": [
+        {
+          "license": {
+            "id": "LicenseRef-JaszczurHAL-Attribution"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "jaszczurtd"
+      },
+      "purl": "pkg:github/jaszczurtd/jhbase@c19ec20487ffe6f877619096faf68c55aa192357",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/jaszczurtd/jhbase"
+        },
+        {
+          "type": "other",
+          "url": "third_party/jhbase",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/jhbase_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:commit",
+          "value": "c19ec20487ffe6f877619096faf68c55aa192357"
+        },
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Basics library of the C tooling plan (UTF-8, JSON, exact numbers, C literals, writer) pinned as a clean exact-commit checkout; its third_party/*_version.conf files are the only pins of Unity, cppcheck, PMD and the RISC-V toolchain. Not linked into firmware yet."
+        },
+        {
+          "name": "jaszczurhal:pin",
+          "value": "third_party/jhbase_version.conf"
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "third_party/jhbase,third_party/jhbase_version.conf"
         }
       ]
     },
@@ -2074,7 +2206,7 @@
         },
         {
           "type": "other",
-          "url": "third_party/unity_version.conf",
+          "url": "third_party/jhbase/third_party/unity_version.conf",
           "comment": "repository path"
         },
         {
@@ -2108,12 +2240,16 @@
           "value": "Clean git-ignored exact-commit checkout from the JaszczurHAL fork plus tracked feature-gating and configuration wrappers used by host and target-side test builds."
         },
         {
+          "name": "jaszczurhal:pin",
+          "value": "third_party/jhbase/third_party/unity_version.conf"
+        },
+        {
           "name": "jaszczurhal:feature_flags",
           "value": "HAL_ENABLE_UNITY"
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "third_party/Unity,third_party/unity_version.conf,src/utils/unity.c,src/utils/unity.h,src/utils/unity_internals.h,src/utils/unity_config.h"
+          "value": "third_party/Unity,third_party/jhbase/third_party/unity_version.conf,src/utils/unity.c,src/utils/unity.h,src/utils/unity_internals.h,src/utils/unity_config.h"
         }
       ]
     },
@@ -2166,5 +2302,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:09479e14-2d65-e82d-9c10-0deef79fe96a"
+  "serialNumber": "urn:uuid:ba3503cf-bfad-a5b4-5aeb-5681d17aa49a"
 }

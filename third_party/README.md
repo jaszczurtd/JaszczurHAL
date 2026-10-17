@@ -2,7 +2,9 @@
 
 This directory contains two kinds of entries:
 
-- tracked `*_version.conf` files that pin every managed component;
+- tracked `*_version.conf` files that pin the managed components; the Unity,
+  cppcheck, PMD and RISC-V toolchain pins are not among them, because the
+  pinned jhbase checkout supplies them from its own `third_party/`;
 - git-ignored source, tool, and toolchain installations reconstructed from
   those pins.
 
@@ -30,12 +32,13 @@ entry point.
 
 | Component | Pin | Managed checkout | Purpose |
 |-----------|-----|------------------|---------|
+| jhbase | `jhbase_version.conf` | `jhbase/` | Basics library of the C tooling plan (UTF-8, JSON, exact numbers, writer); its `third_party/*_version.conf` are the only pins of Unity, cppcheck, PMD and the RISC-V toolchain |
 | BearSSL | `bearssl_version.conf` | `BearSSL/` | TLS engine used by host, RP and STM32 builds |
 | cJSON | `cjson_version.conf` | `cJSON/` | JSON parser and utility API |
 | LodePNG | `lodepng_version.conf` | `lodepng/` | Memory-oriented PNG codec |
 | TJpg_Decoder | `jpeg_version.conf` | `TJpg_Decoder/` | Tiny JPEG Decompressor core for RGB565 output |
 | FatFs | `fatfs_version.conf` | `FatFs/` | FAT filesystem core used by shared SD storage |
-| Unity | `unity_version.conf` | `Unity/` | Test framework used by host and target-side test builds |
+| Unity | `jhbase/third_party/unity_version.conf` | `Unity/` | Test framework used by host and target-side test builds |
 | lwIP | `lwip_version.conf` | `lwip/` | TCP/IP stack used by the JaszczurHAL CYW43 integration |
 | littlefs | `littlefs_version.conf` | `littlefs/` | Filesystem core used by the shared provider, host integration test, and native RP/STM32G474 storage |
 | BTstack | `btstack_version.conf` | `BTstack/` | BLE and Classic host stack used by the CYW43 Bluetooth integration |
@@ -46,7 +49,7 @@ entry point.
 | Pico SDK | `pico_sdk_version.conf` | `pico-sdk/` | Native RP2040/RP2350 SDK |
 | ESP-IDF | `esp_idf_version.conf` | `esp-idf/` | Native ESP32-family SDK and tool bootstrap |
 | picotool | `picotool_version.conf` | `picotool/` | Source for the native RP upload/metadata utility |
-| cppcheck | `cppcheck_version.conf` | `cppcheck/` | Source of the static analyzer and MISRA addon used by the cppcheck gates |
+| cppcheck | `jhbase/third_party/cppcheck_version.conf` | `cppcheck/` | Source of the static analyzer and MISRA addon used by the cppcheck gates |
 
 JaszczurHAL-owned BearSSL, cJSON, LodePNG, JPEG and FatFs integration wrappers,
 along with the lwIP port configuration, remain tracked in their thematic
@@ -144,8 +147,8 @@ snapshot directly; the tool entries are not duplicated in
 
 ## Built tools and toolchains
 
-PMD 7.26.0 is installed from its authenticated binary ZIP below
-`third_party/pmd/`. The component manager verifies the archive digest, complete
+PMD 7.26.0, pinned by jhbase's `pmd_version.conf`, is installed from its
+authenticated binary ZIP below `third_party/pmd/`. The component manager verifies the archive digest, complete
 extracted-file manifest, and reported PMD version. A system Java runtime is the
 only host requirement; `runmefirst.sh` installs `default-jre-headless`.
 `scripts/run_cpd.py` owns the source scope and thresholds used identically by
@@ -158,12 +161,13 @@ artifacts and the executable live under:
 .build/tools/picotool/
 ```
 
-cppcheck is built the same way from `third_party/cppcheck` into
+cppcheck, pinned by jhbase's `cppcheck_version.conf`, is built the same way
+from `third_party/cppcheck` into
 `.build/tools/cppcheck/`; `bin/` there holds the executable with its `cfg/`,
 `addons/` and `platforms/`. Gates run it through `scripts/cppcheck.sh`, which
 refuses a build that does not match the pin.
 
-The `rp2350-riscv` target uses the prebuilt toolchain pinned by
+The `rp2350-riscv` target uses the prebuilt toolchain pinned by jhbase's
 `riscv_toolchain_version.conf` and installed at:
 
 ```text

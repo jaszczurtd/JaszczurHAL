@@ -18,14 +18,13 @@ ROOT = repo_root(sys.argv, __file__)
 sys.path.insert(0, str(ROOT / "scripts"))
 import generate_sbom  # noqa: E402
 import build_esp_idf  # noqa: E402
-from component_manager import parse_config  # noqa: E402
+import component_manager  # noqa: E402
+from component_manager import JHBASE_PINS, parse_config, supplied_pin  # noqa: E402
 
 
 class SbomInventoryTests(unittest.TestCase):
     def test_runtime_components_have_verified_versions_and_licenses(self) -> None:
-        inventory = json.loads(
-            (ROOT / "security/third_party.json").read_text(encoding="utf-8")
-        )
+        inventory = generate_sbom.load_inventory(ROOT / "security/third_party.json")
         generate_sbom.validate_inventory(inventory)
         self.assertEqual(
             "LicenseRef-JaszczurHAL-Attribution",
@@ -70,14 +69,12 @@ class SbomInventoryTests(unittest.TestCase):
             "development", components["PMD Copy/Paste Detector"]["scope"]
         )
         self.assertIn(
-            "third_party/pmd_version.conf",
+            "third_party/jhbase/third_party/pmd_version.conf",
             components["PMD Copy/Paste Detector"]["paths"],
         )
 
     def test_cyw43_vendor_pin_matches_inventory_and_provenance(self) -> None:
-        inventory = json.loads(
-            (ROOT / "security/third_party.json").read_text(encoding="utf-8")
-        )
+        inventory = generate_sbom.load_inventory(ROOT / "security/third_party.json")
         pin = parse_config(ROOT / "third_party/cyw43_driver_version.conf")
         components = {item["name"]: item for item in inventory["components"]}
 
@@ -120,9 +117,7 @@ class SbomInventoryTests(unittest.TestCase):
         self.assertTrue((ROOT / pin["CYW43_DRIVER_DIR"]).is_dir())
 
     def test_pico_sdk_and_picotool_pins_match_inventory(self) -> None:
-        inventory = json.loads(
-            (ROOT / "security/third_party.json").read_text(encoding="utf-8")
-        )
+        inventory = generate_sbom.load_inventory(ROOT / "security/third_party.json")
         components = {item["name"]: item for item in inventory["components"]}
         for name, conf, prefix, repository in (
             ("Raspberry Pi Pico SDK", "pico_sdk_version.conf", "PICO_SDK", "pico-sdk"),
@@ -140,22 +135,41 @@ class SbomInventoryTests(unittest.TestCase):
                 self.assertIn(f"third_party/{conf}", component["paths"])
 
     def test_cppcheck_pin_matches_inventory(self) -> None:
-        inventory = json.loads(
-            (ROOT / "security/third_party.json").read_text(encoding="utf-8")
-        )
+        inventory = generate_sbom.load_inventory(ROOT / "security/third_party.json")
         component = {item["name"]: item for item in inventory["components"]}["Cppcheck"]
-        pin = parse_config(ROOT / "third_party/cppcheck_version.conf")
+        pin = supplied_pin(ROOT, "cppcheck")[0]
         self.assertEqual(pin["CPPCHECK_REF"], component["commit"])
         self.assertEqual(pin["CPPCHECK_VERSION"], component["version"])
         # CVE scanners compare the purl version with affected ranges; a commit
         # there matches every range of an unrelated product named cppcheck.
         self.assertEqual(f"pkg:generic/cppcheck@{pin['CPPCHECK_VERSION']}", component["purl"])
-        self.assertIn("third_party/cppcheck_version.conf", component["paths"])
+        self.assertIn("third_party/jhbase/third_party/cppcheck_version.conf", component["paths"])
+
+    def test_jhbase_pin_and_supplied_tool_pins_match_inventory(self) -> None:
+        inventory = generate_sbom.load_inventory(ROOT / "security/third_party.json")
+        components = {item["name"]: item for item in inventory["components"]}
+        pin = parse_config(ROOT / "third_party/jhbase_version.conf")
+        jhbase = components["jhbase"]
+        self.assertEqual(pin["JHBASE_REF"], jhbase["commit"])
+        self.assertEqual(pin["JHBASE_VERSION"], jhbase["version"])
+        self.assertEqual(f"pkg:github/jaszczurtd/jhbase@{pin['JHBASE_REF']}", jhbase["purl"])
+        self.assertEqual(["LicenseRef-JaszczurHAL-Attribution"], jhbase["licenses"])
+        self.assertIn("third_party/jhbase_version.conf", jhbase["paths"])
+        # Every tool jhbase pins names that pin file, not a copy, as its provenance.
+        names = {
+            "unity": "Unity",
+            "pmd": "PMD Copy/Paste Detector",
+            "cppcheck": "Cppcheck",
+            "riscv-toolchain": "Raspberry Pi RISC-V toolchain",
+        }
+        for component, supplied in JHBASE_PINS.items():
+            with self.subTest(component=component):
+                paths = components[names[component]]["paths"]
+                self.assertIn(f"third_party/jhbase/third_party/{supplied.config}", paths)
+                self.assertNotIn(f"third_party/{supplied.config}", paths)
 
     def test_esp_idf_tool_inventory_matches_the_pinned_tool_snapshot(self) -> None:
-        inventory = json.loads(
-            (ROOT / "security/third_party.json").read_text(encoding="utf-8")
-        )
+        inventory = generate_sbom.load_inventory(ROOT / "security/third_party.json")
         snapshot_path = ROOT / "security/esp_idf_tools.json"
         snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
         pin = parse_config(ROOT / "third_party/esp_idf_version.conf")
@@ -319,9 +333,7 @@ class SbomInventoryTests(unittest.TestCase):
 
     def test_cjson_pin_and_release_match_inventory(self) -> None:
         pin = parse_config(ROOT / "third_party/cjson_version.conf")
-        inventory = json.loads(
-            (ROOT / "security/third_party.json").read_text(encoding="utf-8")
-        )
+        inventory = generate_sbom.load_inventory(ROOT / "security/third_party.json")
         cjson = next(item for item in inventory["components"]
                      if item["name"] == "cJSON")
         self.assertEqual(pin["CJSON_REF"], cjson["commit"])
@@ -332,6 +344,53 @@ class SbomInventoryTests(unittest.TestCase):
              "commit": "c859b25da02955fef659d658b8f324b5cde87be3"},
             cjson["release"],
         )
+
+    def test_pinned_entries_derive_from_their_pin_files(self) -> None:
+        raw = json.loads((ROOT / "security/third_party.json").read_text(encoding="utf-8"))
+        pinned = [item for item in raw["components"] if "pin" in item]
+        self.assertGreaterEqual(len(pinned), 20)
+        referenced = set()
+        for item in pinned:
+            with self.subTest(component=item["name"]):
+                for field in generate_sbom.PIN_FIELDS:
+                    if field in item:
+                        self.assertRegex(item[field], generate_sbom.PLACEHOLDER.pattern)
+                pin = item["pin"]
+                referenced.add(pin.get("file") or f"component:{pin['component']}")
+                expanded = generate_sbom.expand_pin(item, ROOT)
+                self.assertNotIn("pin", expanded)
+                self.assertFalse(generate_sbom.PLACEHOLDER.search(expanded["version"]))
+                if "commit" in expanded:
+                    self.assertRegex(expanded["commit"], r"^[0-9a-f]{40}$")
+        # Every managed component's pin is the source of at least one entry.
+        for name, spec in component_manager.GIT_COMPONENTS.items():
+            expected = f"component:{name}" if name in JHBASE_PINS else f"third_party/{spec.config}"
+            self.assertIn(expected, referenced, name)
+        for name in JHBASE_PINS:
+            self.assertIn(f"component:{name}", referenced, name)
+        self.assertIn("third_party/picotool_version.conf", referenced)
+        # The SBOM names the pin file an entry was read from, repository-relative.
+        unity = generate_sbom.expand_pin(
+            next(item for item in pinned if item["name"] == "Unity"), ROOT
+        )
+        self.assertEqual("third_party/jhbase/third_party/unity_version.conf", unity["pin_file"])
+        self.assertEqual(parse_config(supplied_pin(ROOT, "unity")[1])["UNITY_REF"], unity["commit"])
+
+    def test_literal_copies_of_pinned_values_are_rejected(self) -> None:
+        raw = json.loads((ROOT / "security/third_party.json").read_text(encoding="utf-8"))
+        sdk = next(item for item in raw["components"] if item["name"] == "Raspberry Pi Pico SDK")
+        copied = dict(sdk, commit="0" * 40)
+        with self.assertRaisesRegex(ValueError, "derived from third_party/pico_sdk_version.conf"):
+            generate_sbom.expand_pin(copied, ROOT)
+        unknown = dict(sdk, version="{PICO_SDK_NO_SUCH_KEY}")
+        with self.assertRaisesRegex(ValueError, "does not define"):
+            generate_sbom.expand_pin(unknown, ROOT)
+        unpinned = {key: value for key, value in sdk.items() if key != "pin"}
+        with self.assertRaisesRegex(ValueError, "without a pin"):
+            generate_sbom.expand_pin(unpinned, ROOT)
+        bad_pin = dict(sdk, pin={"file": "third_party/missing_version.conf"})
+        with self.assertRaisesRegex(ValueError, "missing"):
+            generate_sbom.expand_pin(bad_pin, ROOT)
 
     def test_release_becomes_the_sbom_pedigree(self) -> None:
         component = {
@@ -353,9 +412,7 @@ class SbomInventoryTests(unittest.TestCase):
         self.assertNotIn("pedigree", generate_sbom.make_component(component))
 
     def test_inventory_rejects_unusable_releases(self) -> None:
-        inventory = json.loads(
-            (ROOT / "security/third_party.json").read_text(encoding="utf-8")
-        )
+        inventory = generate_sbom.load_inventory(ROOT / "security/third_party.json")
         cases = {
             "pinned to its release": lambda item: item["release"].update(
                 commit=item["commit"]),

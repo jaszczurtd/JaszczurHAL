@@ -193,9 +193,10 @@ All build and test outputs go in the ignored `.build/` directory. CMake compiler
 
 The clang-tidy stage creates a separate compilation database for each profile, with one entry per source file. This avoids repeated analysis of a shared driver that API tests compile with several feature sets. Normal target builds still compile every configured variant.
 
-The cppcheck stage runs the cppcheck build pinned in
-`third_party/cppcheck_version.conf` (see `scripts/ensure_cppcheck.sh`), not the
-distribution package, so its findings do not depend on the host.
+The cppcheck stage runs the cppcheck build pinned by jhbase in
+`third_party/jhbase/third_party/cppcheck_version.conf` (see
+`scripts/ensure_cppcheck.sh`), not the distribution package, so its findings do
+not depend on the host.
 
 The CPD stage uses the authenticated PMD 7.26.0 distribution managed under
 `third_party/pmd`. It scans C/C++ implementation files rather than headers and

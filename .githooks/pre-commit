@@ -88,6 +88,12 @@ fi
 # check reads exactly the files the commit records: a staged input whose
 # regenerated output is left unstaged must not pass.
 echo "[pre-commit] Checking generated artifacts..."
+# The SBOM reads the Unity, cppcheck, PMD and RISC-V pins from the jhbase
+# checkout, which is git-ignored and therefore not part of the exported tree.
+if [ -z "${JH_JHBASE_DIR:-}" ] && [ -d "$repo_root/third_party/jhbase" ]; then
+    JH_JHBASE_DIR="$repo_root/third_party/jhbase"
+    export JH_JHBASE_DIR
+fi
 staged_tree="$repo_root/.build/pre-commit/staged"
 rm -rf "$staged_tree"
 mkdir -p "$staged_tree"

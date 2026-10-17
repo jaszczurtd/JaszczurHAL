@@ -263,6 +263,120 @@ void test_invalid_step_preserves_integral_and_derivative_state(void) {
   TEST_ASSERT_FLOAT_WITHIN(.001f, 0, terms.derivative);
 }
 
+void test_integral_shift_preserves_real_p_and_measurement_history(void) {
+  hal_pid_controller_t pid =
+      hal_pid_controller_create_with_gains(0.05f, 0.001f, 0.1f, 100000);
+  TEST_ASSERT_NOT_NULL(pid);
+  hal_pid_controller_set_output_limits(pid, -100, 100);
+  hal_pid_terms_t terms = {};
+  TEST_ASSERT_EQUAL(
+      HAL_OK, hal_pid_controller_step_ex(pid, 10, 500, .005f, 20, &terms));
+  float applied = 0;
+  TEST_ASSERT_EQUAL(
+      HAL_OK, hal_pid_controller_shift_integral_ex(pid, 2, &applied, &terms));
+  TEST_ASSERT_FLOAT_WITHIN(.001f, 2, applied);
+  TEST_ASSERT_FLOAT_WITHIN(.001f, .5f, terms.proportional);
+  TEST_ASSERT_FLOAT_WITHIN(.001f, 0, terms.derivative);
+  TEST_ASSERT_FLOAT_WITHIN(.001f, 2.5f, terms.output);
+  TEST_ASSERT_EQUAL(HAL_OK,
+                    hal_pid_controller_step_ex(pid, 0, 500, .005f, 20, &terms));
+  TEST_ASSERT_FLOAT_WITHIN(.001f, 2, terms.integral);
+  TEST_ASSERT_FLOAT_WITHIN(.001f, 0, terms.derivative);
+  hal_pid_controller_destroy(pid);
+}
+
+void test_integral_shift_reports_partial_acceptance_at_both_integral_limits(
+    void) {
+  const float gains[] = {0.2f, -0.2f};
+  for (float ki : gains) {
+    PIDController pid(0, ki, 0, 5);
+    hal_pid_terms_t terms = {};
+    TEST_ASSERT_EQUAL(HAL_OK, pid.step(0, 0, .005f, 0, &terms));
+    float applied = 0;
+    TEST_ASSERT_EQUAL(HAL_OK, pid.shiftIntegral(2, &applied, &terms));
+    TEST_ASSERT_FLOAT_WITHIN(.001f, 1, applied);
+    TEST_ASSERT_FLOAT_WITHIN(.001f, 1, terms.integral);
+    TEST_ASSERT_EQUAL(HAL_OK, pid.shiftIntegral(1, &applied, &terms));
+    TEST_ASSERT_FLOAT_WITHIN(.001f, 0, applied);
+    TEST_ASSERT_EQUAL(HAL_OK, pid.shiftIntegral(-3, &applied, &terms));
+    TEST_ASSERT_FLOAT_WITHIN(.001f, -2, applied);
+    TEST_ASSERT_FLOAT_WITHIN(.001f, -1, terms.integral);
+  }
+}
+
+void test_integral_shift_takes_output_headroom_and_allows_saturation_recovery(
+    void) {
+  PIDController pid(1, 1, 0, 100);
+  pid.setOutputLimits(-10, 10);
+  hal_pid_terms_t terms = {};
+  TEST_ASSERT_EQUAL(HAL_OK, pid.step(8, 0, .005f, 8, &terms));
+  float applied = 0;
+  TEST_ASSERT_EQUAL(HAL_OK, pid.shiftIntegral(5, &applied, &terms));
+  TEST_ASSERT_FLOAT_WITHIN(.001f, 2, applied);
+  TEST_ASSERT_FLOAT_WITHIN(.001f, 10, terms.output);
+  TEST_ASSERT_TRUE(terms.saturated_high);
+  TEST_ASSERT_EQUAL(HAL_OK, pid.shiftIntegral(1, &applied, &terms));
+  TEST_ASSERT_FLOAT_WITHIN(.001f, 0, applied);
+  TEST_ASSERT_EQUAL(HAL_OK, pid.step(-20, 0, .005f, 20, &terms));
+  TEST_ASSERT_TRUE(terms.saturated_low);
+  TEST_ASSERT_EQUAL(HAL_OK, pid.shiftIntegral(-1, &applied, &terms));
+  TEST_ASSERT_FLOAT_WITHIN(.001f, 0, applied);
+  TEST_ASSERT_EQUAL(HAL_OK, pid.shiftIntegral(3, &applied, &terms));
+  TEST_ASSERT_FLOAT_WITHIN(.001f, 3, applied);
+  TEST_ASSERT_FLOAT_WITHIN(.001f, -15, terms.unconstrained);
+}
+
+void test_integral_shift_is_separate_from_a_clamped_position_increment(void) {
+  PIDController pid(0, 1, 0, 1);
+  hal_pid_terms_t terms = {};
+  TEST_ASSERT_EQUAL(HAL_OK, pid.step(-100, 0, 1, 0, &terms));
+  TEST_ASSERT_FLOAT_WITHIN(.001f, -1, terms.integral);
+  float applied = 0;
+  TEST_ASSERT_EQUAL(HAL_OK, pid.shiftIntegral(.1f, &applied, &terms));
+  TEST_ASSERT_FLOAT_WITHIN(.001f, .1f, applied);
+  TEST_ASSERT_FLOAT_WITHIN(.001f, -.9f, terms.integral);
+}
+
+void test_integral_shift_with_zero_ki_accepts_nothing(void) {
+  PIDController pid(1, 0, 0, 100);
+  hal_pid_terms_t terms = {};
+  TEST_ASSERT_EQUAL(HAL_OK, pid.step(5, 0, .005f, 0, &terms));
+  float applied = -1;
+  TEST_ASSERT_EQUAL(HAL_OK, pid.shiftIntegral(10, &applied, &terms));
+  TEST_ASSERT_EQUAL_FLOAT(0, applied);
+  TEST_ASSERT_EQUAL_FLOAT(0, terms.integral);
+  TEST_ASSERT_EQUAL_FLOAT(5, terms.output);
+}
+
+void test_integral_shift_errors_preserve_state_and_outputs(void) {
+  PIDController pid(1, 1, 0, 100);
+  hal_pid_terms_t terms = {};
+  terms.output = 123;
+  float applied = 123;
+  TEST_ASSERT_EQUAL(HAL_ESTATE, pid.shiftIntegral(1, &applied, &terms));
+  TEST_ASSERT_EQUAL_FLOAT(123, applied);
+  TEST_ASSERT_EQUAL_FLOAT(123, terms.output);
+  TEST_ASSERT_EQUAL(HAL_OK, pid.step(0, 0, .005f, 0, &terms));
+  TEST_ASSERT_EQUAL(HAL_EINVAL, pid.shiftIntegral(NAN, &applied, &terms));
+  TEST_ASSERT_EQUAL_FLOAT(123, applied);
+  TEST_ASSERT_EQUAL_FLOAT(0, terms.output);
+  TEST_ASSERT_EQUAL(HAL_EINVAL, pid.shiftIntegral(1, nullptr, &terms));
+  TEST_ASSERT_EQUAL(HAL_EINVAL, pid.shiftIntegral(1, &applied, nullptr));
+  TEST_ASSERT_EQUAL(HAL_EINVAL, hal_pid_controller_shift_integral_ex(
+                                    nullptr, 1, &applied, &terms));
+  pid.setKi(.001f);
+  TEST_ASSERT_EQUAL(HAL_ESTATE, pid.shiftIntegral(1, &applied, &terms));
+  TEST_ASSERT_EQUAL(HAL_OK, pid.step(0, 0, .005f, 0, &terms));
+  TEST_ASSERT_EQUAL(HAL_EOVERFLOW,
+                    pid.shiftIntegral(FLT_MAX, &applied, &terms));
+  TEST_ASSERT_EQUAL_FLOAT(123, applied);
+  TEST_ASSERT_EQUAL_FLOAT(0, terms.output);
+  TEST_ASSERT_EQUAL(HAL_OK, pid.shiftIntegral(.01f, &applied, &terms));
+  TEST_ASSERT_FLOAT_WITHIN(.0001f, .01f, applied);
+  pid.reset();
+  TEST_ASSERT_EQUAL(HAL_ESTATE, pid.shiftIntegral(1, &applied, &terms));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_proportional_output);
@@ -287,5 +401,13 @@ int main(void) {
   RUN_TEST(test_integral_deadband_preserves_proportional_response);
   RUN_TEST(test_current_saturation_blocks_windup_and_allows_recovery);
   RUN_TEST(test_invalid_step_preserves_integral_and_derivative_state);
+  RUN_TEST(test_integral_shift_preserves_real_p_and_measurement_history);
+  RUN_TEST(
+      test_integral_shift_reports_partial_acceptance_at_both_integral_limits);
+  RUN_TEST(
+      test_integral_shift_takes_output_headroom_and_allows_saturation_recovery);
+  RUN_TEST(test_integral_shift_is_separate_from_a_clamped_position_increment);
+  RUN_TEST(test_integral_shift_with_zero_ki_accepts_nothing);
+  RUN_TEST(test_integral_shift_errors_preserve_state_and_outputs);
   return UNITY_END();
 }

@@ -130,6 +130,8 @@ float hal_pid_controller_update(hal_pid_controller_t controller, float error);
 hal_status_t hal_pid_controller_step_ex(hal_pid_controller_t controller,
     float error, float measurement, float dt_s, float integral_deadband,
     hal_pid_terms_t *terms);
+hal_status_t hal_pid_controller_shift_integral_ex(hal_pid_controller_t controller,
+    float output_delta, float *applied_delta, hal_pid_terms_t *terms);
 void  hal_pid_controller_set_output_limits(hal_pid_controller_t controller, float min_output, float max_output);
 void  hal_pid_controller_reset(hal_pid_controller_t controller);
 void  hal_pid_controller_set_direction(hal_pid_controller_t controller, hal_pid_direction_t direction);
@@ -174,6 +176,17 @@ Funkcja zapisuje w strukturze hal_pid_terms_t wartości członów P, I i D, ich 
 Jeżeli aplikacja dodaje sterowanie wyprzedzające (feedforward), przelicza sygnał sterujący zależnie od napięcia lub wymusza jego minimalną wartość na dalszym etapie sterowania, uwzględnij te operacje przy ustawianiu limitów korekcji PID.
 
 **Wymagania i obsługa błędów**
+
+Po udanym kroku z jawnym czasem `hal_pid_controller_shift_integral_ex()`
+przesuwa I o wartość w jednostkach wyjścia, zachowując P, D i historię pomiaru.
+Osobno podaje przyjętą zmianę: ograniczenia całki i dostępny zakres wyjścia
+mogą dopuścić tylko część żądania. Przy nasyceniu suma może wracać do zakresu,
+ale nie może oddalać się od niego; zerowe Ki nie przyjmuje zmiany. Zwrócone
+składniki zawierają już przesunięcie. Funkcja nie całkuje ponownie błędu pozycji.
+Po zmianie dowolnej nastawy, resecie lub starszym update trzeba wykonać nowy
+krok z jawnym czasem; inaczej przesunięcie zwraca `HAL_ESTATE`. Błędne argumenty
+dają `HAL_EINVAL`, przepełnienie obliczeń `HAL_EOVERFLOW`; przy błędzie stan
+i oba wyniki pozostają bez zmian. Oba wskaźniki wynikowe muszą być różne od NULL.
 
 Uchwyt regulatora i wskaźnik do struktury wynikowej nie mogą mieć wartości NULL.
 

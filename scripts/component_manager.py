@@ -74,6 +74,15 @@ class GitComponent:
 
 
 @dataclass(frozen=True)
+class SuppliedPin:
+    """A tool pin shipped by the jhbase component; this repository only picks
+    the installation directory it is read into."""
+    config: str
+    dir_key: str
+    directory: str
+
+
+@dataclass(frozen=True)
 class ToolArchive:
     name: str
     version: str
@@ -870,11 +879,27 @@ def ensure_esp_idf_tools(
 
 
 def _load_managed_component_catalog() -> tuple[
-    dict[str, GitComponent], tuple[str, ...], tuple[str, ...], dict[str, str]
+    dict[str, GitComponent], tuple[str, ...], tuple[str, ...], dict[str, str],
+    dict[str, SuppliedPin],
 ]:
     source = "managed_components.json"
     document = load_tooling_contract(source)
     records = require_list(document, "gitComponents", source=source)
+    raw_pins = document.get("jhbasePins", {})
+    if not isinstance(raw_pins, dict):
+        raise ToolingContractError(f"{source}: jhbasePins must be an object")
+    pins: dict[str, SuppliedPin] = {}
+    for identifier, raw_pin in raw_pins.items():
+        pin_source = f"{source}: jhbasePins.{identifier}"
+        if not isinstance(raw_pin, dict):
+            raise ToolingContractError(f"{pin_source} must be an object")
+        pins[identifier] = SuppliedPin(
+            config=require_string(raw_pin.get("config"), "config", source=pin_source),
+            dir_key=require_string(raw_pin.get("dirKey"), "dirKey", source=pin_source),
+            directory=require_string(
+                raw_pin.get("directory"), "directory", source=pin_source
+            ),
+        )
     validators: dict[str, Callable[[Path, str], None]] = {
         "littlefs": _version_littlefs,
         "lwip": _version_lwip,
@@ -903,10 +928,19 @@ def _load_managed_component_catalog() -> tuple[
             submodules_key = require_string(
                 submodules_key, "submodulesKey", source=record_source
             )
+        if name in pins:
+            if "config" in raw_record:
+                raise ToolingContractError(
+                    f"{record_source}: config must be omitted; jhbase supplies "
+                    f"{pins[name].config}"
+                )
+            config = pins[name].config
+        else:
+            config = require_string(raw_record.get("config"), "config", source=record_source)
         components[name] = GitComponent(
             name=name,
             label=require_string(raw_record.get("label"), "label", source=record_source),
-            config=require_string(raw_record.get("config"), "config", source=record_source),
+            config=config,
             prefix=require_string(raw_record.get("prefix"), "prefix", source=record_source),
             required_paths=require_string_list(
                 raw_record.get("requiredPaths"), "requiredPaths", source=record_source
@@ -935,6 +969,21 @@ def _load_managed_component_catalog() -> tuple[
         raise ToolingContractError(
             f"{source}: optional esp-idf must not be in defaultOrder"
         )
+    if pins:
+        unknown_pins = sorted((set(pins) - known) | ({"jhbase"} & set(pins)))
+        if "jhbase" not in components or unknown_pins:
+            raise ToolingContractError(
+                f"{source}: jhbasePins need the jhbase git component and may only "
+                f"name other managed components (unknown: {unknown_pins})"
+            )
+        supplied_first = min(
+            (default_order.index(name) for name in pins if name in default_order),
+            default=len(default_order),
+        )
+        if "jhbase" not in default_order or default_order.index("jhbase") > supplied_first:
+            raise ToolingContractError(
+                f"{source}: defaultOrder must synchronize jhbase before the pins it supplies"
+            )
     raw_launchers = require_object(document, "launchers", source=source)
     launchers = {
         require_string(identifier, "launcher id", source=source): require_string(
@@ -946,12 +995,13 @@ def _load_managed_component_catalog() -> tuple[
         raise ToolingContractError(
             f"{source}: launchers must cover every managed component"
         )
-    return components, tools, default_order, launchers
+    return components, tools, default_order, launchers, pins
 
 
-GIT_COMPONENTS, TOOL_COMPONENTS, SOURCE_COMPONENT_ORDER, COMPONENT_LAUNCHERS = (
-    _load_managed_component_catalog()
-)
+(
+    GIT_COMPONENTS, TOOL_COMPONENTS, SOURCE_COMPONENT_ORDER, COMPONENT_LAUNCHERS,
+    JHBASE_PINS,
+) = _load_managed_component_catalog()
 ALL_COMPONENT_NAMES = (*GIT_COMPONENTS, *TOOL_COMPONENTS)
 
 
@@ -960,6 +1010,35 @@ def _resolve_component_dir(repo_root: Path, configured: str, override: str) -> P
     if not path.is_absolute():
         path = repo_root / path
     return path.resolve(strict=False)
+
+
+def jhbase_root(repo_root: Path) -> Path:
+    """Directory of the jhbase checkout, the source of the supplied tool pins.
+
+    JH_JHBASE_DIR selects an external checkout, like the other *_DIR overrides.
+    """
+    spec = GIT_COMPONENTS["jhbase"]
+    config_path = repo_root / "third_party" / spec.config
+    config = parse_config(config_path)
+    require_values(config, (f"{spec.prefix}_DIR",), config_path)
+    return _resolve_component_dir(
+        repo_root, config[f"{spec.prefix}_DIR"], os.environ.get("JH_JHBASE_DIR", "")
+    )
+
+
+def supplied_pin(repo_root: Path, name: str) -> tuple[dict[str, str], Path]:
+    """Read a tool pin shipped by jhbase, adding this repository's install directory."""
+    pin = JHBASE_PINS[name]
+    path = jhbase_root(repo_root) / "third_party" / pin.config
+    if not path.is_file():
+        raise ComponentError(
+            f"{pin.config} is supplied by the jhbase component and is missing at {path}. "
+            "Run scripts/ensure_jhbase.sh; when jhbase is synchronized, JHBASE_REF in "
+            "third_party/jhbase_version.conf must name a commit that ships this pin."
+        )
+    config = parse_config(path)
+    config[pin.dir_key] = pin.directory
+    return config, path
 
 
 def ensure_git_component(
@@ -971,8 +1050,11 @@ def ensure_git_component(
     submodule_override: Optional[str] = None,
 ) -> Path:
     spec = GIT_COMPONENTS[name]
-    config_path = repo_root / "third_party" / spec.config
-    config = parse_config(config_path)
+    if name in JHBASE_PINS:
+        config, config_path = supplied_pin(repo_root, name)
+    else:
+        config_path = repo_root / "third_party" / spec.config
+        config = parse_config(config_path)
     required = (
         f"{spec.prefix}_REPO", f"{spec.prefix}_REF",
         f"{spec.prefix}_VERSION", f"{spec.prefix}_DIR",
@@ -991,7 +1073,7 @@ def ensure_git_component(
         submodules_text = submodule_override
     submodules = tuple(shlex.split(submodules_text))
     external = bool(directory_override) and name in (
-        "freertos", "pico-sdk", "esp-idf"
+        "freertos", "pico-sdk", "esp-idf", "jhbase"
     )
     if external:
         actual = _git_head(destination)
@@ -1057,8 +1139,7 @@ def ensure_riscv_toolchain(
     verify_only: bool,
     directory_override: str = "",
 ) -> Path:
-    config_path = repo_root / "third_party/riscv_toolchain_version.conf"
-    config = parse_config(config_path)
+    config, config_path = supplied_pin(repo_root, "riscv-toolchain")
     required = (
         "RISCV_TOOLCHAIN_RELEASE_BASE", "RISCV_TOOLCHAIN_TAG",
         "RISCV_TOOLCHAIN_ASSET_STEM", "RISCV_TOOLCHAIN_GCC_MAJOR",
@@ -1108,8 +1189,7 @@ def ensure_pmd(
     verify_only: bool,
     directory_override: str = "",
 ) -> Path:
-    config_path = repo_root / "third_party/pmd_version.conf"
-    config = parse_config(config_path)
+    config, config_path = supplied_pin(repo_root, "pmd")
     required = ("PMD_VERSION", "PMD_URL", "PMD_SHA256", "PMD_DIR")
     require_values(config, required, config_path)
     destination = _resolve_component_dir(
@@ -1311,8 +1391,7 @@ _CPPCHECK_SUPPORT_FILES = ("cfg/std.cfg", "addons/misra.py", "addons/cppcheckdat
 
 
 def _cppcheck_config(repo_root: Path) -> dict[str, str]:
-    config_path = repo_root / "third_party/cppcheck_version.conf"
-    config = parse_config(config_path)
+    config, config_path = supplied_pin(repo_root, "cppcheck")
     require_values(
         config,
         ("CPPCHECK_REPO", "CPPCHECK_REF", "CPPCHECK_VERSION", "CPPCHECK_DIR"),
@@ -1602,7 +1681,10 @@ def ensure_windows_tools(
                     + ", ".join(issues)
                 )
 
-    riscv_dir = tools_root / "riscv-toolchain-15"
+    # The managed directory is named after the pinned release asset, so the
+    # name follows the jhbase pin instead of repeating its GCC major here.
+    riscv_stem = supplied_pin(repo_root, "riscv-toolchain")[0]["RISCV_TOOLCHAIN_ASSET_STEM"]
+    riscv_dir = tools_root / riscv_stem
     riscv = ensure_riscv_toolchain(
         repo_root, verify_only=verify_only, directory_override=str(riscv_dir)
     )
@@ -1708,6 +1790,8 @@ def ensure_component(arguments: argparse.Namespace) -> None:
         directory = os.environ["JH_PICO_SDK_DIR"]
     if name == "esp-idf" and os.environ.get("JH_ESP_IDF_DIR"):
         directory = os.environ["JH_ESP_IDF_DIR"]
+    if name == "jhbase" and not directory and os.environ.get("JH_JHBASE_DIR"):
+        directory = os.environ["JH_JHBASE_DIR"]
     submodules = None
     if arguments.no_submodules:
         submodules = ""

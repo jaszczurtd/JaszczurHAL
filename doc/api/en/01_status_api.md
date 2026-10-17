@@ -47,9 +47,15 @@ In this API, success values are positive and error values are negative. Use `sta
 | `HAL_EUNINIT` | Operation on an uninitialised object/subsystem. |
 | `HAL_EDEPRECATED` | Operation is deprecated. |
 | `HAL_EUNKNOWN` | Unknown error. |
+| `HAL_ETYPE` | Type or exact value has no requested representation. |
 
 Names use the `HAL_` prefix instead of POSIX `errno` names to avoid collisions
 with `errno.h` and the BSD-sockets compatibility layer.
+
+Consumers requiring a 32-bit status enum can define `HAL_STATUS_FIXED_32`
+consistently before the first include. GCC/Clang then fix this enum's width
+without changing global enum flags; MSVC already uses a 32-bit enum. Without
+the selector, HAL retains the compiler's default layout.
 
 ## Helper functions
 

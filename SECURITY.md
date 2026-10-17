@@ -46,7 +46,9 @@ Suggested handling targets:
 ## Third-party and SBOM maintenance
 
 Bundled or pinned third-party components are tracked in
-`security/third_party.json`. The CycloneDX SBOM is generated from that inventory:
+`security/third_party.json`. Versions and commits of pinned components are not
+written there: each entry names its `*_version.conf` pin and the generator reads
+them from it. The CycloneDX SBOM is generated from that inventory:
 
 ```bash
 python3 scripts/sync_generated.py --write

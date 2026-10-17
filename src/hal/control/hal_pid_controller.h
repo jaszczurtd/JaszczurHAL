@@ -142,6 +142,25 @@ hal_status_t hal_pid_controller_step_ex(hal_pid_controller_t controller,
                                         hal_pid_terms_t *terms);
 
 /**
+ * @brief Shift the integral contribution after an explicit-time step.
+ * @param controller Non-NULL instance; serialize access as for step_ex().
+ * @param output_delta Finite requested change in controller output units.
+ * @param applied_delta Non-NULL output receiving the change actually accepted.
+ * @param terms Non-NULL output receiving the updated terms.
+ * @return HAL_OK, HAL_EINVAL for invalid arguments, HAL_ESTATE before a
+ * successful step_ex() or after settings/reset/legacy update, or HAL_EOVERFLOW
+ * for arithmetic overflow. Errors preserve state and both outputs.
+ * @note Keeps P, D and measurement history from the last step. Integral and
+ * output limits may accept only part of the request; an existing output
+ * saturation may unwind but cannot deepen. Zero Ki accepts no change. Repeat
+ * shifts are allowed until settings change or another step is performed.
+ */
+hal_status_t
+hal_pid_controller_shift_integral_ex(hal_pid_controller_t controller,
+                                     float output_delta, float *applied_delta,
+                                     hal_pid_terms_t *terms);
+
+/**
  * @brief Set output clamping range.
  * @param controller Controller handle.
  * @param min_output Minimum output value.

@@ -16,6 +16,18 @@
 extern "C" {
 #endif
 
+/** @def HAL_STATUS_FIXED_32
+ * Define for a 32-bit status enum on GCC/Clang, independently of the global
+ * enum-size flags. Other compilers use their native enum layout. Consumers
+ * requiring a fixed ABI must define this consistently before the first include.
+ * Without it, HAL keeps the compiler's existing default enum layout.
+ */
+#if defined(HAL_STATUS_FIXED_32) && defined(__GNUC__)
+#define JH_STATUS_ENUM_MODE __attribute__((mode(SI)))
+#else
+#define JH_STATUS_ENUM_MODE
+#endif
+
 /**
  * @brief Common HAL operation status.
  *
@@ -54,8 +66,10 @@ typedef enum {
   HAL_EUNINIT =
       -21, /**< Operation attempted on uninitialized object or subsystem. */
   HAL_EDEPRECATED = -22, /**< Operation is deprecated and should not be used. */
-  HAL_EUNKNOWN = -23     /**< Unknown error. */
-} hal_status_t;
+  HAL_EUNKNOWN = -23,    /**< Unknown error. */
+  HAL_ETYPE = -24 /**< Type or exact value has no requested representation. */
+} JH_STATUS_ENUM_MODE hal_status_t;
+#undef JH_STATUS_ENUM_MODE
 
 /**
  * @brief Return a stable symbolic name for a HAL status code.
@@ -114,6 +128,8 @@ static inline const char *hal_status_to_string(hal_status_t status) {
     return "HAL_EDEPRECATED";
   case HAL_EUNKNOWN:
     return "HAL_EUNKNOWN";
+  case HAL_ETYPE:
+    return "HAL_ETYPE";
   default:
     return "HAL_STATUS_UNKNOWN";
   }

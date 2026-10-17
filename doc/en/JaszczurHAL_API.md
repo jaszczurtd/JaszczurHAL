@@ -228,7 +228,7 @@ link the fixed package without invoking Python.
   integration, target-specific artifacts, VS Code upload, firewall, trial
   confirmation, rollback, and recovery.
 - `SECURITY.md` - vulnerability reporting, triage and maintenance policy.
-- `security/third_party.json` - human-maintained third-party inventory.
+- `security/third_party.json` - third-party inventory; pinned versions come from `third_party/*_version.conf`.
 - `security/sbom.cdx.json` - generated CycloneDX SBOM.
 - `security/vulnerability_log.md` - CVE/CVSS assessment and patch-decision log.
 - `src/JaszczurHAL.h` - umbrella include for HAL + utility modules.

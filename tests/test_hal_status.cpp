@@ -35,6 +35,7 @@ void test_hal_status_values_are_stable(void) {
   TEST_ASSERT_EQUAL_INT(-21, (int)HAL_EUNINIT);
   TEST_ASSERT_EQUAL_INT(-22, (int)HAL_EDEPRECATED);
   TEST_ASSERT_EQUAL_INT(-23, (int)HAL_EUNKNOWN);
+  TEST_ASSERT_EQUAL_INT(-24, (int)HAL_ETYPE);
 }
 
 void test_hal_status_failure_values_are_negative(void) {
@@ -94,6 +95,7 @@ void test_hal_status_to_string_returns_symbolic_names(void) {
   TEST_ASSERT_EQUAL_STRING("HAL_EDEPRECATED",
                            hal_status_to_string(HAL_EDEPRECATED));
   TEST_ASSERT_EQUAL_STRING("HAL_EUNKNOWN", hal_status_to_string(HAL_EUNKNOWN));
+  TEST_ASSERT_EQUAL_STRING("HAL_ETYPE", hal_status_to_string(HAL_ETYPE));
   TEST_ASSERT_EQUAL_STRING("HAL_STATUS_UNKNOWN",
                            hal_status_to_string((hal_status_t)-1000));
 }

@@ -279,10 +279,10 @@ if ($armPath) {
 $rvPath = Get-ToolPath 'riscv32-unknown-elf-gcc'
 if ($rvPath) {
     $rVer = Get-FirstVersion (Invoke-Tool 'riscv32-unknown-elf-gcc' @('-dumpversion'))
-    Add-Result 'GNU RISC-V' 'optional' 'ok' "$rVer ($rvPath)" 'pinned GCC' 'Only needed for rp2350-riscv; see third_party/riscv_toolchain_version.conf.'
+    Add-Result 'GNU RISC-V' 'optional' 'ok' "$rVer ($rvPath)" 'pinned GCC' 'Only needed for rp2350-riscv; pinned by jhbase (third_party/jhbase/third_party/riscv_toolchain_version.conf).'
 } else {
     Add-Result 'GNU RISC-V' 'optional' 'absent' 'not found' 'riscv32-unknown-elf-gcc' `
-        'Managed asset pinned in third_party/riscv_toolchain_version.conf.'
+        'Managed asset pinned by jhbase (third_party/jhbase/third_party/riscv_toolchain_version.conf).'
 }
 
 foreach ($t in @(

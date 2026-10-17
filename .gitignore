@@ -22,6 +22,7 @@ third_party/picotool/
 third_party/pmd/
 third_party/cppcheck/
 third_party/riscv-toolchain/
+third_party/jhbase/
 
 # IDE / editor
 .vscode/

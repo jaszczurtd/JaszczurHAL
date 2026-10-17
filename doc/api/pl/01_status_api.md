@@ -47,9 +47,15 @@ W tym API powodzenie ma wartość dodatnią, a błędy - ujemne. `status == HAL_
 | `HAL_EUNINIT` | Operacja na niezainicjalizowanym obiekcie/podsystemie. |
 | `HAL_EDEPRECATED` | Operacja jest przestarzała. |
 | `HAL_EUNKNOWN` | Nieznany błąd. |
+| `HAL_ETYPE` | Typ lub dokładna wartość nie ma żądanej reprezentacji. |
 
 Nazwy używają prefiksu `HAL_` zamiast nazw `errno` z POSIX, aby uniknąć
 kolizji z `errno.h` oraz warstwą zgodności z gniazdami BSD.
+
+Konsumenci wymagający enuma statusów o szerokości 32 bitów mogą zdefiniować
+`HAL_STATUS_FIXED_32` spójnie przed pierwszym include. GCC/Clang ustalają wtedy
+szerokość tego enuma bez zmiany globalnych flag enumów; MSVC już używa enuma
+32-bitowego. Bez selektora HAL zachowuje domyślny układ kompilatora.
 
 ## Funkcje pomocnicze
 
