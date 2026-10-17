@@ -3,7 +3,9 @@
 Ten katalog zawiera dwa rodzaje wpisów:
 
 - przechowywane w repozytorium pliki `*_version.conf`, które określają dokładną
-  wersję każdego zarządzanego komponentu;
+  wersję zarządzanych komponentów; pinów Unity, cppcheck, PMD i toolchainu
+  RISC-V nie ma wśród nich, bo dostarcza je przypięty checkout jhbase ze
+  swojego `third_party/`;
 - ignorowane przez Git instalacje źródeł, narzędzi i toolchainów, odtwarzane na
   podstawie tych plików.
 
@@ -32,12 +34,13 @@ aktualizujący.
 
 | Komponent | Plik wersji | Katalog utrzymywany przez projekt | Zastosowanie |
 |-----------|-------------|--------------------------------------|---------------|
+| jhbase | `jhbase_version.conf` | `jhbase/` | Biblioteka podstaw planu narzędzi w C (UTF-8, JSON, dokładne liczby, writer); jej `third_party/*_version.conf` są jedynymi pinami Unity, cppcheck, PMD i toolchainu RISC-V |
 | BearSSL | `bearssl_version.conf` | `BearSSL/` | Silnik TLS używany w kompilacjach dla hosta, RP i STM32 |
 | cJSON | `cjson_version.conf` | `cJSON/` | Parser JSON i pomocnicze API |
 | LodePNG | `lodepng_version.conf` | `lodepng/` | Kodek PNG operujący na pamięci |
 | TJpg_Decoder | `jpeg_version.conf` | `TJpg_Decoder/` | Mały rdzeń dekompresji JPEG dla wyjścia RGB565 |
 | FatFs | `fatfs_version.conf` | `FatFs/` | Rdzeń systemu plików FAT dla wspólnej obsługi kart SD |
-| Unity | `unity_version.conf` | `Unity/` | Framework testów uruchamianych na hoście i targetach |
+| Unity | `jhbase/third_party/unity_version.conf` | `Unity/` | Framework testów uruchamianych na hoście i targetach |
 | lwIP | `lwip_version.conf` | `lwip/` | Stos TCP/IP używany przez integrację CYW43 w JaszczurHAL |
 | littlefs | `littlefs_version.conf` | `littlefs/` | Rdzeń systemu plików używany przez wspólny provider, test integracyjny na hoście oraz natywną pamięć masową RP i STM32G474 |
 | BTstack | `btstack_version.conf` | `BTstack/` | Stos hosta BLE i Classic używany przez integrację Bluetooth CYW43 |
@@ -48,7 +51,7 @@ aktualizujący.
 | Pico SDK | `pico_sdk_version.conf` | `pico-sdk/` | Natywne SDK dla RP2040/RP2350 |
 | ESP-IDF | `esp_idf_version.conf` | `esp-idf/` | Natywne SDK dla rodziny ESP32 i narzędzia do przygotowania środowiska |
 | picotool | `picotool_version.conf` | `picotool/` | Źródła natywnego narzędzia RP do wgrywania i odczytu metadanych |
-| cppcheck | `cppcheck_version.conf` | `cppcheck/` | Źródła analizatora statycznego i addonu MISRA używanych przez bramki cppcheck |
+| cppcheck | `jhbase/third_party/cppcheck_version.conf` | `cppcheck/` | Źródła analizatora statycznego i addonu MISRA używanych przez bramki cppcheck |
 
 Wrappery integracyjne BearSSL, cJSON, LodePNG, JPEG i FatFs należące do
 JaszczurHAL, a także konfiguracja portu lwIP, pozostają w odpowiednich
@@ -158,7 +161,8 @@ bezpośrednio; wpisy nie są powielane w `security/third_party.json`.
 
 ## Budowane narzędzia i toolchainy
 
-PMD 7.26.0 jest instalowany w `third_party/pmd/` ze zweryfikowanego archiwum
+PMD 7.26.0, przypięty w `pmd_version.conf` jhbase, jest instalowany
+w `third_party/pmd/` ze zweryfikowanego archiwum
 binarnego ZIP. Menedżer komponentów sprawdza skrót archiwum, pełny wykaz
 rozpakowanych plików i wersję podawaną przez PMD. Jedynym wymaganiem po stronie
 hosta jest systemowy runtime Java; `runmefirst.sh` instaluje
@@ -173,13 +177,14 @@ buildu i plik wykonywalny trafiają do:
 .build/tools/picotool/
 ```
 
-cppcheck budowany jest tak samo, z `third_party/cppcheck` do
+cppcheck, przypięty w `cppcheck_version.conf` jhbase, budowany jest tak samo,
+z `third_party/cppcheck` do
 `.build/tools/cppcheck/`; jego `bin/` zawiera plik wykonywalny razem z `cfg/`,
 `addons/` i `platforms/`. Bramki uruchamiają go przez `scripts/cppcheck.sh`,
 który odrzuca build niezgodny z pinem.
 
 Target `rp2350-riscv` używa gotowego toolchainu w wersji określonej przez
-`riscv_toolchain_version.conf`, instalowanego jako:
+`riscv_toolchain_version.conf` z jhbase, instalowanego jako:
 
 ```text
 third_party/riscv-toolchain/bin/riscv32-unknown-elf-gcc

@@ -15,7 +15,13 @@ import uuid
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
+if str(REPO_ROOT / "scripts") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+import component_manager  # noqa: E402
+
 DEFAULT_INVENTORY = REPO_ROOT / "security" / "third_party.json"
+PLACEHOLDER = re.compile(r"\{([A-Z][A-Z0-9_]*)\}")
+PIN_FIELDS = ("version", "commit", "purl")
 DEFAULT_ESP_IDF_TOOLS = REPO_ROOT / "security" / "esp_idf_tools.json"
 DEFAULT_OUTPUT = REPO_ROOT / "security" / "sbom.cdx.json"
 
@@ -30,6 +36,86 @@ def read_project_version(repo_root: pathlib.Path, version_file: str) -> str:
         if match:
             return match.group(1)
     return "unknown"
+
+
+def pin_values(pin: object, repo_root: pathlib.Path) -> tuple[dict[str, str], str]:
+    """Read the *_version.conf an inventory entry names and its repository path.
+
+    `file` is a tracked pin of this repository; `component` is a managed
+    component whose pin the component manager locates, including the pins the
+    jhbase checkout supplies. The returned path is repository-relative so the
+    SBOM stays identical whichever checkout JH_JHBASE_DIR selects.
+    """
+    if not isinstance(pin, dict) or set(pin) not in ({"file"}, {"component"}):
+        raise ValueError('pin must be {"file": path} or {"component": id}')
+    if "file" in pin:
+        relative = str(pin["file"])
+        path = repo_root / relative
+        if not path.is_file():
+            raise ValueError(f"pin file is missing: {relative}")
+        return component_manager.parse_config(path), relative
+    name = str(pin["component"])
+    if name in component_manager.JHBASE_PINS:
+        supplied = component_manager.JHBASE_PINS[name]
+        values, _ = component_manager.supplied_pin(repo_root, name)
+        values.pop(supplied.dir_key, None)
+        jhbase = component_manager.GIT_COMPONENTS["jhbase"]
+        jhbase_pin = component_manager.parse_config(repo_root / "third_party" / jhbase.config)
+        return values, f"{jhbase_pin[f'{jhbase.prefix}_DIR']}/third_party/{supplied.config}"
+    if name in component_manager.GIT_COMPONENTS:
+        spec = component_manager.GIT_COMPONENTS[name]
+        relative = f"third_party/{spec.config}"
+        return component_manager.parse_config(repo_root / relative), relative
+    raise ValueError(f"pin names an unknown managed component: {name}")
+
+
+def expand_pin(component: dict[str, object], repo_root: pathlib.Path) -> dict[str, object]:
+    """Return the entry with version, commit and purl taken from its pin file.
+
+    A pinned entry writes those fields as templates over the pin's keys, such as
+    `{PICO_SDK_REF}`; a literal copy of a pinned value is rejected so that the
+    pin file stays the only place that states it.
+    """
+    name = str(component.get("name", "unnamed component"))
+    pin = component.get("pin")
+    if pin is None:
+        for field in PIN_FIELDS:
+            if PLACEHOLDER.search(str(component.get(field, ""))):
+                raise ValueError(f"{name} {field} uses a {{KEY}} placeholder without a pin")
+        return component
+    values, source = pin_values(pin, repo_root)
+    expanded = {key: value for key, value in component.items() if key != "pin"}
+    for field in PIN_FIELDS:
+        if field not in component:
+            continue
+        text = str(component[field])
+        if not PLACEHOLDER.search(text):
+            raise ValueError(f"{name} {field} must be derived from {source}, not written literally")
+
+        def substitute(match: "re.Match[str]") -> str:
+            key = match.group(1)
+            if not values.get(key):
+                raise ValueError(f"{name} {field} names {key}, which {source} does not define")
+            return values[key]
+
+        expanded[field] = PLACEHOLDER.sub(substitute, text)
+    expanded["pin_file"] = source
+    return expanded
+
+
+def load_inventory(
+    inventory_path: pathlib.Path, repo_root: pathlib.Path = REPO_ROOT
+) -> dict[str, object]:
+    """Load the inventory with every pinned entry expanded and validated."""
+    inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+    components = inventory.get("components")
+    if isinstance(components, list):
+        inventory["components"] = [
+            expand_pin(item, repo_root) if isinstance(item, dict) else item
+            for item in components
+        ]
+    validate_inventory(inventory)
+    return inventory
 
 
 def license_entries(licenses: list[str]) -> list[dict[str, object]]:
@@ -102,6 +188,11 @@ def make_component(component: dict[str, object]) -> dict[str, object]:
         value = component.get(key)
         if isinstance(value, str) and value:
             properties.append({"name": f"jaszczurhal:{key}", "value": value})
+
+    pin_file = component.get("pin_file")
+    if isinstance(pin_file, str) and pin_file:
+        # The *_version.conf this entry's version and commit were read from.
+        properties.append({"name": "jaszczurhal:pin", "value": pin_file})
 
     flags = component.get("feature_flags", [])
     if isinstance(flags, list) and flags:
@@ -285,8 +376,7 @@ def generate(
     output_path: pathlib.Path,
     esp_idf_tools_path: pathlib.Path = DEFAULT_ESP_IDF_TOOLS,
 ) -> None:
-    inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
-    validate_inventory(inventory)
+    inventory = load_inventory(inventory_path)
     project = inventory["project"]
     project_version = read_project_version(REPO_ROOT, str(project["version_file"]))
 

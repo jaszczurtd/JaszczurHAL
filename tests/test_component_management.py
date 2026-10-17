@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -13,6 +14,8 @@ from repo_root import repo_root  # noqa: E402
 
 ROOT = repo_root(sys.argv, __file__)
 THIRD_PARTY = ROOT / "third_party"
+sys.path.insert(0, str(ROOT / "scripts"))
+import component_manager  # noqa: E402
 
 
 def require(condition: bool, message: str) -> None:
@@ -21,6 +24,7 @@ def require(condition: bool, message: str) -> None:
 
 
 configs = (
+    "jhbase_version.conf",
     "bearssl_version.conf",
     "cjson_version.conf",
     "fatfs_version.conf",
@@ -34,23 +38,53 @@ configs = (
     "pico_sdk_version.conf",
     "esp_idf_version.conf",
     "picotool_version.conf",
-    "pmd_version.conf",
-    "cppcheck_version.conf",
-    "riscv_toolchain_version.conf",
-    "unity_version.conf",
     "windows_tools_version.conf",
 )
 for name in configs:
     require((THIRD_PARTY / name).is_file(), f"missing tracked component pin: {name}")
     require(not (ROOT / name).exists(), f"component pin remains in repository root: {name}")
 
-pmd_pin = (THIRD_PARTY / "pmd_version.conf").read_text(encoding="utf-8")
-require("PMD_VERSION=7.26.0" in pmd_pin, "PMD CPD version is not pinned to 7.26.0")
+# Unity, cppcheck, PMD and the RISC-V toolchain are pinned by the jhbase
+# component alone; a copy here would be a second source of truth.
+for name, pin in component_manager.JHBASE_PINS.items():
+    require(
+        not (THIRD_PARTY / pin.config).exists(),
+        f"{name}: {pin.config} must come from jhbase only",
+    )
+jhbase_pin = (THIRD_PARTY / "jhbase_version.conf").read_text(encoding="utf-8")
 require(
-    "PMD_SHA256=9f55cb7ff0e9f9a66dd2f005eaa370e84c8a4cd971b134aa14a930c4a283ebc9"
-    in pmd_pin,
-    "PMD CPD archive digest is not pinned",
+    "JHBASE_REPO=https://github.com/jaszczurtd/jhbase.git" in jhbase_pin,
+    "jhbase pin does not use the project repository",
 )
+require(
+    "defaultOrder" in (ROOT / "config/tooling/managed_components.json").read_text(encoding="utf-8")
+    and component_manager.SOURCE_COMPONENT_ORDER[0] == "jhbase",
+    "jhbase is not synchronized before the pins it supplies",
+)
+
+
+
+def supplied(name: str) -> dict[str, str]:
+    return component_manager.parse_config(component_manager.supplied_pin(ROOT, name)[1])
+
+
+def shaped(pin: dict[str, str], key: str, pattern: str) -> bool:
+    return re.fullmatch(pattern, pin.get(key, "")) is not None
+
+
+# The pins jhbase supplies are checked for shape, never for their current
+# values: a bump in jhbase must not require editing this test. HAL policy
+# (which repository a pin may use) stays explicit below.
+pmd_pin = supplied("pmd")
+require(shaped(pmd_pin, "PMD_VERSION", r"\d+\.\d+\.\d+"), "PMD version is not a release number")
+require(shaped(pmd_pin, "PMD_SHA256", r"[0-9a-f]{64}"), "PMD archive digest is not a SHA-256")
+require(
+    pmd_pin.get("PMD_URL", "").startswith("https://") and pmd_pin["PMD_VERSION"] in pmd_pin["PMD_URL"],
+    "PMD URL does not name the pinned release over HTTPS",
+)
+cppcheck_pin = supplied("cppcheck")
+require(shaped(cppcheck_pin, "CPPCHECK_REF", r"[0-9a-f]{40}"), "cppcheck commit is not an exact SHA-1")
+require(shaped(cppcheck_pin, "CPPCHECK_VERSION", r"\d+\.\d+(\.\d+)?"), "cppcheck version is not a release number")
 
 updater = (THIRD_PARTY / "update_components.sh").read_text(encoding="utf-8")
 require(
@@ -130,15 +164,13 @@ require(
     in (THIRD_PARTY / "jpeg_version.conf").read_text(encoding="utf-8"),
     "JPEG pin does not use the project TJpg_Decoder fork",
 )
-unity_pin = (THIRD_PARTY / "unity_version.conf").read_text(encoding="utf-8")
+unity_pin = supplied("unity")
 require(
-    "https://github.com/jaszczurtd/Unity.git" in unity_pin,
+    unity_pin.get("UNITY_REPO") == "https://github.com/jaszczurtd/Unity.git",
     "Unity pin does not use the project fork",
 )
-require(
-    "UNITY_REF=f9879bf7d82108c3eefd5fc378983317898616f3" in unity_pin,
-    "Unity commit is not pinned",
-)
+require(shaped(unity_pin, "UNITY_REF", r"[0-9a-f]{40}"), "Unity commit is not an exact SHA-1")
+require(shaped(unity_pin, "UNITY_VERSION", r"\d+\.\d+\.\d+"), "Unity version is not a release number")
 fatfs_pin = (THIRD_PARTY / "fatfs_version.conf").read_text(encoding="utf-8")
 require(
     "FATFS_REPO=https://github.com/jaszczurtd/ff16.git" in fatfs_pin,
@@ -193,6 +225,7 @@ require(
 )
 
 for component in (
+    "jhbase",
     "BearSSL",
     "cJSON",
     "lodepng",

@@ -537,11 +537,24 @@ archiwum R0.16 autorstwa ChaN. Skrypt weryfikuje pochodzenie repozytorium,
 dokładny commit, wymagane pliki źródłowe oraz licencyjne i obsługuje
 `--verify-only`, `--repo-root` oraz `--dir`.
 
+### `scripts/ensure_jhbase.sh`
+
+Synchronizuje `third_party/jhbase` z `third_party/jhbase_version.conf`:
+czysty checkout dokładnego commita biblioteki podstaw jhbase. Jej własne
+pliki `third_party/*_version.conf` są jedynymi pinami Unity, cppcheck, PMD
+i toolchainu RISC-V; to repozytorium nie ma ich kopii i wybiera tylko
+katalog instalacji każdego narzędzia (`jhbasePins` w
+`config/tooling/managed_components.json`). Skrypt aktualizujący synchronizuje
+jhbase przed nimi. `--dir` albo `JH_JHBASE_DIR` wskazuje zewnętrzny checkout,
+który jest weryfikowany (dokładny commit, wymagane pliki pinów), lecz nie
+zastępowany. HAL nie buduje ani nie linkuje jeszcze samej biblioteki.
+
 ### `scripts/ensure_unity.sh`
 
-Synchronizuje `third_party/Unity` z `third_party/unity_version.conf` i
-weryfikuje czysty, dokładny commit, pochodzenie repozytorium, licencję oraz
-źródła rdzenia frameworka. Opcje są takie same jak w skrypcie BearSSL.
+Synchronizuje `third_party/Unity` z pinu Unity dostarczanego przez jhbase
+(`third_party/jhbase/third_party/unity_version.conf`) i weryfikuje czysty,
+dokładny commit, pochodzenie repozytorium, licencję oraz źródła rdzenia
+frameworka. Opcje są takie same jak w skrypcie BearSSL.
 
 ### `scripts/ensure_lwip.sh`
 
@@ -620,8 +633,8 @@ kompilacji musi pozostać poniżej `.build/`.
 
 ### `scripts/ensure_pmd.sh`
 
-Instaluje lub weryfikuje binarną dystrybucję PMD 7.26.0 wskazaną w
-`third_party/pmd_version.conf`. Menedżer weryfikuje plik ZIP na podstawie
+Instaluje lub weryfikuje binarną dystrybucję PMD 7.26.0 wskazaną przez jhbase w
+`third_party/jhbase/third_party/pmd_version.conf`. Menedżer weryfikuje plik ZIP na podstawie
 SHA-256,
 śledzi pełny manifest rozpakowanych plików, wybiera skrypt startowy dla danej
 platformy i sprawdza wersję podaną przez PMD. Wymagane jest środowisko Java;
@@ -630,8 +643,8 @@ graficznego.
 
 ### `scripts/ensure_cppcheck.sh`
 
-Buduje cppcheck z commita tagu przypiętego w
-`third_party/cppcheck_version.conf`. Źródła trafiają do `third_party/cppcheck`,
+Buduje cppcheck z commita tagu przypiętego przez jhbase w
+`third_party/jhbase/third_party/cppcheck_version.conf`. Źródła trafiają do `third_party/cppcheck`,
 a build do `.build/tools/cppcheck/`; jego `bin/` zawiera plik wykonywalny razem
 z `cfg/`, `addons/` i `platforms/`. Wyniki analizy i addon MISRA zmieniają się
 między wydaniami cppcheck, dlatego bramki używają tego builda zamiast pakietu
@@ -645,9 +658,10 @@ tylko na Linuksie.
 
 ### `scripts/ensure_riscv_toolchain.sh`
 
-Instaluje gotowy łańcuch narzędzi `riscv32-unknown-elf` w wersji wskazanej
-przez repozytorium,
-firmy Raspberry Pi dla natywnego targetu `rp2350-riscv`. Dobiera archiwum
+Instaluje gotowy łańcuch narzędzi `riscv32-unknown-elf` firmy Raspberry Pi
+w wersji, którą jhbase wskazuje w
+`third_party/jhbase/third_party/riscv_toolchain_version.conf`, dla natywnego
+targetu `rp2350-riscv`. Dobiera archiwum
 wydania do architektury hosta i rozpakowuje je do
 `third_party/riscv-toolchain`, zapisuje stempel komponentu oraz weryfikuje
 główną wersję GCC.
@@ -1179,7 +1193,12 @@ Opcjonalny argument pozycyjny wybiera inny katalog główny repozytorium.
 
 Generuje deterministyczny SBOM CycloneDX 1.5. Odczytuje
 `security/third_party.json`, rozwiązuje wersję JaszczurHAL z pliku
-`VERSION` i zapisuje `security/sbom.cdx.json`.
+`VERSION` i zapisuje `security/sbom.cdx.json`. Wpis inwentarza z polem `pin`
+bierze wersję, commit i końcówkę purl ze wskazanego
+`third_party/*_version.conf` (albo, przez menedżer komponentów, z pinu
+dostarczanego przez checkout jhbase): te pola są szablonami `{KLUCZ}` nad
+kluczami pinu, dosłowna kopia jest odrzucana, a SBOM zapisuje plik pinu jako
+`jaszczurhal:pin`.
 
 `--inventory` oraz `--output` zastępują domyślne ścieżki wejścia i wyjścia.
 `--check` generuje tymczasowy plik wynikowy, porównuje go z wybranym wyjściem

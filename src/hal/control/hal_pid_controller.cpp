@@ -110,6 +110,15 @@ hal_status_t hal_pid_controller_step_ex(hal_pid_controller_t controller,
              : HAL_EINVAL;
 }
 
+hal_status_t
+hal_pid_controller_shift_integral_ex(hal_pid_controller_t controller,
+                                     float output_delta, float *applied_delta,
+                                     hal_pid_terms_t *terms) {
+  PIDController *pid = hal_pid_get(controller);
+  return pid != nullptr ? pid->shiftIntegral(output_delta, applied_delta, terms)
+                        : HAL_EINVAL;
+}
+
 void hal_pid_controller_set_output_limits(hal_pid_controller_t controller,
                                           float min_output, float max_output) {
   PIDController *pid = hal_pid_get(controller);

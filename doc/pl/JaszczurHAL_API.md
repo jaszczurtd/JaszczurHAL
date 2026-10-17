@@ -240,8 +240,8 @@ bezpośrednio mogą zbudować i zlinkować ustalony pakiet bez uruchamiania Pyth
   sieciowa, potwierdzenie próbne, wycofanie aktualizacji i odzyskiwanie.
 - `SECURITY.md` - zgłaszanie i wstępna ocena podatności oraz polityka
   utrzymania.
-- `security/third_party.json` - ręcznie utrzymywany inwentarz komponentów firm
-  trzecich.
+- `security/third_party.json` - inwentarz komponentów firm trzecich; wersje
+  komponentów z polem `pin` pochodzą z `third_party/*_version.conf`.
 - `security/sbom.cdx.json` - wygenerowany SBOM CycloneDX.
 - `security/vulnerability_log.md` - dziennik oceny CVE/CVSS i decyzji
   o poprawkach.

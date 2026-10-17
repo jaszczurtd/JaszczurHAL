@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Runs the cppcheck build pinned in third_party/cppcheck_version.conf with the
+# Runs the cppcheck build pinned by the jhbase component (cppcheck_version.conf
+# in third_party/jhbase/third_party) with the
 # given arguments; fails with the repair command when it is missing or stale.
 set -euo pipefail
 

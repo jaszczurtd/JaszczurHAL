@@ -18,11 +18,26 @@ PIDController::PIDController(float kp, float ki, float kd, float mi) {
   setOutputLimits(PID_UNINITIALIZED, PID_UNINITIALIZED);
 }
 
-void PIDController::setKp(float kp) { pid_kp = kp; }
-void PIDController::setKi(float ki) { pid_ki = ki; }
-void PIDController::setKd(float kd) { pid_kd = kd; }
-void PIDController::setTf(float tf) { Tf = tf; }
-void PIDController::setMaxIntegral(float mi) { max_integral = mi; }
+void PIDController::setKp(float kp) {
+  pid_kp = kp;
+  explicitStepReady = false;
+}
+void PIDController::setKi(float ki) {
+  pid_ki = ki;
+  explicitStepReady = false;
+}
+void PIDController::setKd(float kd) {
+  pid_kd = kd;
+  explicitStepReady = false;
+}
+void PIDController::setTf(float tf) {
+  Tf = tf;
+  explicitStepReady = false;
+}
+void PIDController::setMaxIntegral(float mi) {
+  max_integral = mi;
+  explicitStepReady = false;
+}
 
 void PIDController::updatePIDtime(float timeDivider) {
   const uint32_t now_ms = hal_millis();
@@ -96,11 +111,68 @@ hal_status_t PIDController::step(float error, float measurement, float seconds,
   measurementInitialized = true;
   previous_derivative = derivative;
   output = next.output;
+  explicitTerms = next;
+  explicitStepReady = true;
   *terms = next;
   return HAL_OK;
 }
 
+hal_status_t PIDController::shiftIntegral(float outputDelta,
+                                          float *appliedDelta,
+                                          hal_pid_terms_t *terms) {
+  if (!isfinite(outputDelta) || appliedDelta == nullptr || terms == nullptr) {
+    return HAL_EINVAL;
+  }
+  if (!explicitStepReady) {
+    return HAL_ESTATE;
+  }
+  hal_pid_terms_t next = explicitTerms;
+  float accepted = integral;
+  if (pid_ki != 0.0f && outputDelta != 0.0f) {
+    const float increment = outputDelta / pid_ki;
+    const float requested = integral + increment;
+    if (!isfinite(increment) || !isfinite(requested)) {
+      return HAL_EOVERFLOW;
+    }
+    accepted = hal_constrain(requested, -max_integral, max_integral);
+    float change = pid_ki * (accepted - integral);
+    if (!isfinite(change)) {
+      return HAL_EOVERFLOW;
+    }
+    if (outputMax != PID_UNINITIALIZED) {
+      // Take available headroom, or move an already saturated sum inward.
+      change =
+          hal_constrain(change, fminf(0.0f, outputMin - next.unconstrained),
+                        fmaxf(0.0f, outputMax - next.unconstrained));
+      accepted = hal_constrain(integral + (change / pid_ki), -max_integral,
+                               max_integral);
+    }
+    next.integral = pid_ki * accepted;
+    next.unconstrained = next.proportional + next.integral + next.derivative;
+    if (!isfinite(accepted) || !isfinite(next.unconstrained)) {
+      return HAL_EOVERFLOW;
+    }
+    const bool limited = outputMax != PID_UNINITIALIZED;
+    next.output = limited
+                      ? hal_constrain(next.unconstrained, outputMin, outputMax)
+                      : next.unconstrained;
+    next.saturated_high = limited && next.unconstrained >= outputMax;
+    next.saturated_low = limited && next.unconstrained <= outputMin;
+  }
+  const float applied = next.integral - explicitTerms.integral;
+  if (!isfinite(applied)) {
+    return HAL_EOVERFLOW;
+  }
+  integral = accepted;
+  output = next.output;
+  explicitTerms = next;
+  *terms = next;
+  *appliedDelta = applied;
+  return HAL_OK;
+}
+
 float PIDController::updatePIDcontroller(float error) {
+  explicitStepReady = false;
   float proportional = error;
 
   // Block integration that would deepen saturation, including negative Ki.
@@ -135,9 +207,11 @@ float PIDController::updatePIDcontroller(float error) {
 void PIDController::setOutputLimits(float min, float max) {
   outputMin = min;
   outputMax = max;
+  explicitStepReady = false;
 }
 
 void PIDController::reset() {
+  explicitStepReady = false;
   measurementInitialized = false;
   previousMeasurement = 0.0f;
   last_time_ms = hal_millis();
@@ -149,6 +223,7 @@ void PIDController::reset() {
 
 void PIDController::setDirection(Direction d) {
   if (dir != (int)d) {
+    explicitStepReady = false;
     pid_kp = -pid_kp;
     pid_ki = -pid_ki;
     pid_kd = -pid_kd;

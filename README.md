@@ -211,8 +211,9 @@ Hardware tests require a separate, explicit procedure. See the
 See [SECURITY.md](SECURITY.md) for vulnerability reporting and the
 [dependency security guide](doc/en/security_supply_chain.md) for checks and
 SBOM maintenance. The [component inventory](security/third_party.json) records
-managed dependencies; [sbom.cdx.json](security/sbom.cdx.json) is generated from
-project data.
+managed dependencies and points each pinned one at its `*_version.conf`, which
+supplies the version and commit; [sbom.cdx.json](security/sbom.cdx.json) is
+generated from project data.
 
 <a id="vs-code-development-environment"></a>
 
@@ -270,8 +271,8 @@ And the amount of fighting I had to do with AI just to make the documentation re
 
 - SmartTimers is based on [Nettigo Timers](https://github.com/nettigo/Timers),
   a fork of [garthoff/Timers](https://github.com/garthoff/Timers).
-- Tests use the project's Unity fork. The selected version is recorded in
-  the [Unity version file](third_party/unity_version.conf).
+- Tests use the project's Unity fork. The selected version is the Unity pin
+  of the [jhbase component](third_party/jhbase_version.conf).
 - The shared display implementation (`src/hal/display/drivers/`) was
   rewritten as portable code using HAL. The GFX module (`jh_gfx.*`) adapts
   drawing algorithms from the
@@ -288,7 +289,7 @@ And the amount of fighting I had to do with AI just to make the documentation re
   [LodePNG version](third_party/lodepng_version.conf),
   [TJpgDec version](third_party/jpeg_version.conf),
   [FatFs version](third_party/fatfs_version.conf),
-  [Unity version](third_party/unity_version.conf),
+  [Unity version through jhbase](third_party/jhbase_version.conf),
   [FreeRTOS-Kernel version](third_party/freertos_core_version.conf),
   [BearSSL version](third_party/bearssl_version.conf),
   [lwIP version](third_party/lwip_version.conf),

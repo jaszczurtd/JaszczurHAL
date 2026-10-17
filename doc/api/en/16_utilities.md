@@ -121,6 +121,8 @@ float hal_pid_controller_update(hal_pid_controller_t controller, float error);
 hal_status_t hal_pid_controller_step_ex(hal_pid_controller_t controller,
     float error, float measurement, float dt_s, float integral_deadband,
     hal_pid_terms_t *terms);
+hal_status_t hal_pid_controller_shift_integral_ex(hal_pid_controller_t controller,
+    float output_delta, float *applied_delta, hal_pid_terms_t *terms);
 void  hal_pid_controller_set_output_limits(hal_pid_controller_t controller, float min_output, float max_output);
 void  hal_pid_controller_reset(hal_pid_controller_t controller);
 void  hal_pid_controller_set_direction(hal_pid_controller_t controller, hal_pid_direction_t direction);
@@ -157,6 +159,17 @@ The function writes the P, I and D terms, their sum before limiting, and the lim
 If the application adds feedforward, scales the control signal according to voltage, or enforces a minimum command value at a later stage, account for these operations when setting the PID correction limits.
 
 **Requirements and error handling**
+
+After a successful explicit-time step, `hal_pid_controller_shift_integral_ex()`
+can shift I by an amount in output units while keeping P, D and measurement
+history. It reports the accepted change separately: integral limits and output
+headroom can accept only part of the request. An already saturated sum can move
+inward but cannot be pushed further out; zero Ki accepts nothing. The returned
+terms include the shift. This operation does not integrate the position error
+again. Call a fresh explicit-time step after any setting change, reset or legacy
+update; otherwise shifting returns `HAL_ESTATE`. Invalid arguments return
+`HAL_EINVAL`, arithmetic overflow returns `HAL_EOVERFLOW`, and errors preserve
+state and both outputs. Both output pointers must be non-NULL.
 
 The controller handle and the pointer to the result structure must not be NULL.
 

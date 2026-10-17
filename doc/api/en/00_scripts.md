@@ -501,11 +501,24 @@ That repository mirrors ChaN's unchanged R0.16 archive. The helper verifies the
 repository origin, exact commit, required source and license files, and supports
 `--verify-only`, `--repo-root`, and `--dir`.
 
+### `scripts/ensure_jhbase.sh`
+
+Synchronizes `third_party/jhbase` from `third_party/jhbase_version.conf`: a
+clean exact-commit checkout of the jhbase basics library. Its own
+`third_party/*_version.conf` files are the only pins of Unity, cppcheck, PMD
+and the RISC-V toolchain; this repository keeps no copy of those four and only
+chooses where it installs each tool (`jhbasePins` in
+`config/tooling/managed_components.json`). The updater synchronizes jhbase
+before them. `--dir` or `JH_JHBASE_DIR` selects an external checkout, which is
+verified (exact commit, required pin files) but not replaced. HAL does not
+build or link the library yet.
+
 ### `scripts/ensure_unity.sh`
 
-Synchronizes `third_party/Unity` from `third_party/unity_version.conf` and
-verifies the clean exact commit, repository origin, license and core framework
-sources. Options mirror the BearSSL helper.
+Synchronizes `third_party/Unity` from the Unity pin that jhbase supplies
+(`third_party/jhbase/third_party/unity_version.conf`) and verifies the clean
+exact commit, repository origin, license and core framework sources. Options
+mirror the BearSSL helper.
 
 ### `scripts/ensure_lwip.sh`
 
@@ -579,16 +592,16 @@ required to stay below `.build/`.
 
 ### `scripts/ensure_pmd.sh`
 
-Installs or verifies the PMD 7.26.0 binary distribution pinned in
-`third_party/pmd_version.conf`. The manager authenticates the ZIP SHA-256,
+Installs or verifies the PMD 7.26.0 binary distribution pinned by jhbase in
+`third_party/jhbase/third_party/pmd_version.conf`. The manager authenticates the ZIP SHA-256,
 tracks the complete extracted-file manifest, resolves the platform launcher,
 and checks the reported PMD version. A Java runtime is required; Linux
 `runmefirst.sh` installs the headless default runtime.
 
 ### `scripts/ensure_cppcheck.sh`
 
-Builds cppcheck from the tag commit pinned in
-`third_party/cppcheck_version.conf`. The source is checked out into
+Builds cppcheck from the tag commit pinned by jhbase in
+`third_party/jhbase/third_party/cppcheck_version.conf`. The source is checked out into
 `third_party/cppcheck` and built in `.build/tools/cppcheck/`; `bin/` there holds
 the executable together with its `cfg/`, `addons/` and `platforms/`. Analysis
 results and the MISRA addon change between cppcheck releases, so gates use this
@@ -603,8 +616,9 @@ CMake, a C++ compiler, and Python, and runs on Linux only.
 
 ### `scripts/ensure_riscv_toolchain.sh`
 
-Installs the pinned Raspberry Pi prebuilt
-`riscv32-unknown-elf` toolchain for the native `rp2350-riscv` target. It maps
+Installs the Raspberry Pi prebuilt `riscv32-unknown-elf` toolchain that
+jhbase pins in `third_party/jhbase/third_party/riscv_toolchain_version.conf`,
+for the native `rp2350-riscv` target. It maps
 the host architecture to the matching release asset, extracts the archive into
 `third_party/riscv-toolchain`, records a component stamp, and verifies the GCC
 major version.
@@ -1105,7 +1119,12 @@ An optional positional argument selects a different repository root.
 
 Generates a deterministic CycloneDX 1.5 SBOM. It reads
 `security/third_party.json`, resolves the JaszczurHAL version from
-`VERSION`, and writes `security/sbom.cdx.json`.
+`VERSION`, and writes `security/sbom.cdx.json`. An inventory entry with a
+`pin` takes its version, commit and purl suffix from the named
+`third_party/*_version.conf` (or, through the component manager, from a pin
+the jhbase checkout supplies): those fields are `{KEY}` templates over the
+pin's keys, a literal copy is rejected, and the SBOM records the pin file as
+`jaszczurhal:pin`.
 
 `--inventory` and `--output` override the default input and output paths.
 `--check` generates a temporary candidate, compares it with the selected

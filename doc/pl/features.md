@@ -164,7 +164,7 @@ Aby zachować przenośność, korzystaj z publicznego API JaszczurHAL zarówno w
 | cJSON | Biblioteki cJSON i cJSON_Utils do pracy z JSON w środowiskach o ograniczonych zasobach; ich wersją zarządza repozytorium. | [API cJSON](../api/pl/17_cJSON.md) |
 | PNG | Biblioteka LodePNG skonfigurowana do pracy przy ograniczonej pamięci, z wersją zarządzaną przez repozytorium. Dostępne są opcjonalne funkcje Base64. | [API LodePNG](../api/pl/18_LodePNG.md) |
 | JPEG | Dekodowanie podstawowego profilu JPEG do RGB565 przez TJpgDec, z wersją zarządzaną przez repozytorium i opcjonalnymi funkcjami Base64. | [API JPEG](../api/pl/19_JPEG.md) |
-| Unity | Framework Unity 2.5.4 do testów na komputerze i urządzeniu docelowym, z wersją zarządzaną przez repozytorium. | [plik wersji Unity](../../third_party/unity_version.conf) |
+| Unity | Framework Unity 2.5.4 do testów na komputerze i urządzeniu docelowym, z wersją wskazywaną przez jhbase. | [plik wersji jhbase](../../third_party/jhbase_version.conf) |
 
 ## Przykłady i dokumentacja
 

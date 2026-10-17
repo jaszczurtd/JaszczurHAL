@@ -35,6 +35,17 @@
         "required": ["name", "version", "type", "scope", "licenses", "paths"],
         "properties": {
           "name": {"type": "string"},
+          "pin": {
+            "description": "The *_version.conf that supplies version, commit and the purl suffix; those fields are {KEY} templates over its keys.",
+            "type": "object",
+            "properties": {
+              "file": {"type": "string"},
+              "component": {"type": "string"}
+            },
+            "minProperties": 1,
+            "maxProperties": 1,
+            "additionalProperties": false
+          },
           "version": {"type": "string"},
           "commit": {"type": "string"},
           "type": {"type": "string"},

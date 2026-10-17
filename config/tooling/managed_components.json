@@ -2,6 +2,22 @@
   "schemaVersion": 1,
   "gitComponents": [
     {
+      "id": "jhbase",
+      "label": "jhbase",
+      "config": "jhbase_version.conf",
+      "prefix": "JHBASE",
+      "requiredPaths": [
+        "LICENSE",
+        "README.md",
+        "include/jb/json.h",
+        "third_party/unity_version.conf",
+        "third_party/cppcheck_version.conf",
+        "third_party/pmd_version.conf",
+        "third_party/riscv_toolchain_version.conf"
+      ],
+      "clean": true
+    },
+    {
       "id": "bearssl",
       "label": "BearSSL",
       "config": "bearssl_version.conf",
@@ -71,7 +87,6 @@
     {
       "id": "unity",
       "label": "Unity",
-      "config": "unity_version.conf",
       "prefix": "UNITY",
       "requiredPaths": [
         "LICENSE.txt",
@@ -204,7 +219,30 @@
     "picotool",
     "riscv-toolchain"
   ],
+  "jhbasePins": {
+    "unity": {
+      "config": "unity_version.conf",
+      "dirKey": "UNITY_DIR",
+      "directory": "third_party/Unity"
+    },
+    "pmd": {
+      "config": "pmd_version.conf",
+      "dirKey": "PMD_DIR",
+      "directory": "third_party/pmd"
+    },
+    "cppcheck": {
+      "config": "cppcheck_version.conf",
+      "dirKey": "CPPCHECK_DIR",
+      "directory": "third_party/cppcheck"
+    },
+    "riscv-toolchain": {
+      "config": "riscv_toolchain_version.conf",
+      "dirKey": "RISCV_TOOLCHAIN_DIR",
+      "directory": "third_party/riscv-toolchain"
+    }
+  },
   "defaultOrder": [
+    "jhbase",
     "bearssl",
     "cjson",
     "lodepng",
@@ -223,6 +261,7 @@
     "riscv-toolchain"
   ],
   "launchers": {
+    "jhbase": "ensure_jhbase.sh",
     "bearssl": "ensure_bearssl.sh",
     "cjson": "ensure_cjson.sh",
     "lodepng": "ensure_lodepng.sh",

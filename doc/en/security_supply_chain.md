@@ -69,7 +69,7 @@ and recovery are documented in
 
 | File | Purpose |
 |------|---------|
-| `security/third_party.json` | Human-maintained source of truth for bundled and pinned components. |
+| `security/third_party.json` | Human-maintained inventory of bundled and pinned components: identity, license, paths and notes. Versions and commits of pinned components come from `third_party/*_version.conf` through each entry's `pin`. |
 | `security/third_party.schema.json` | JSON schema for reviewing the inventory shape. |
 | `security/sbom.cdx.json` | Generated CycloneDX SBOM for the library repository. |
 | `security/esp_idf_tools.json` | Reviewed snapshot of the exact ESP-IDF target-tool versions, licenses, upstreams, framework commit, and `tools.json` digest. |
@@ -245,9 +245,11 @@ Create the release tag only after its commit has been merged into `main`. Tag-tr
    `./third_party/update_components.sh`. For bundled code, update the source in
    its existing location.
 2. Preserve upstream license files and attribution.
-3. Update `security/third_party.json` with the new version, tag, commit, purl
-   or upstream reference. For a pin after a release, `release` names that
-   release's version and commit; drop it when the pin is a release.
+3. For a pinned component the version, commit and purl follow the
+   `*_version.conf` automatically; update `security/third_party.json` only for
+   a new upstream reference, license or `release`. For a pin after a release,
+   `release` names that release's version and commit; drop it when the pin is
+   a release.
 4. For ESP-IDF, refresh `security/esp_idf_tools.json` from the pinned
    `tools.json` and managed Python environment, then review every tool license.
 5. Run `python3 scripts/sync_generated.py --write` and review the generated

@@ -162,7 +162,7 @@ Use the public JaszczurHAL API in application code and reusable drivers to prese
 | cJSON | Repository-managed cJSON and cJSON_Utils for JSON processing in resource-constrained environments. | [cJSON API](../api/en/17_cJSON.md) |
 | PNG | A repository-managed LodePNG configuration for memory-constrained use, with optional Base64 helpers. | [LodePNG API](../api/en/18_LodePNG.md) |
 | JPEG | Baseline JPEG decoding to RGB565 through repository-managed TJpgDec, with optional Base64 helpers. | [JPEG API](../api/en/19_JPEG.md) |
-| Unity | Repository-managed Unity 2.5.4 for tests on the host and target hardware. | [Unity pin](../../third_party/unity_version.conf) |
+| Unity | Repository-managed Unity 2.5.4 for tests on the host and target hardware, pinned through jhbase. | [jhbase pin](../../third_party/jhbase_version.conf) |
 
 ## Examples and documentation
 

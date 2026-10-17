@@ -204,8 +204,9 @@ jawnie wybranej procedury. Wymagania i zakres opisuje
 
 Zgłaszanie podatności opisuje [SECURITY.md](SECURITY.md), a kontrole zależności
 i utrzymanie SBOM - [poradnik bezpieczeństwa](doc/pl/security_supply_chain.md).
-[Wykaz komponentów](security/third_party.json) zapisuje zarządzane zależności;
-[sbom.cdx.json](security/sbom.cdx.json) jest generowany z danych projektu.
+[Wykaz komponentów](security/third_party.json) zapisuje zarządzane zależności
+i wskazuje dla każdej z nich plik `*_version.conf`, z którego pochodzą wersja
+i commit; [sbom.cdx.json](security/sbom.cdx.json) jest generowany z danych projektu.
 
 <a id="środowisko-programistyczne-vs-code"></a>
 
@@ -265,7 +266,7 @@ A już ile się nawalczyłem z AI by dokumentację w ogóle dało się czytać, 
   [Nettigo Timers](https://github.com/nettigo/Timers), forka
   [garthoff/Timers](https://github.com/garthoff/Timers).
 - Testy korzystają z forka Unity utrzymywanego przez projekt. Używaną wersję
-  wskazuje [plik wersji Unity](third_party/unity_version.conf).
+  wskazuje pin Unity w [komponencie jhbase](third_party/jhbase_version.conf).
 - Współdzielona obsługa wyświetlaczy (`src/hal/display/drivers/`) została
   zaimplementowana od zera jako przenośny kod korzystający z HAL. Moduł
   graficzny GFX (`jh_gfx.*`) wykorzystuje dostosowane algorytmy rysowania z
@@ -283,7 +284,7 @@ A już ile się nawalczyłem z AI by dokumentację w ogóle dało się czytać, 
   [plik wersji LodePNG](third_party/lodepng_version.conf),
   [plik wersji TJpgDec](third_party/jpeg_version.conf),
   [plik wersji FatFs](third_party/fatfs_version.conf),
-  [plik wersji Unity](third_party/unity_version.conf),
+  [plik wersji Unity przez jhbase](third_party/jhbase_version.conf),
   [plik wersji FreeRTOS-Kernel](third_party/freertos_core_version.conf),
   [plik wersji BearSSL](third_party/bearssl_version.conf),
   [plik wersji lwIP](third_party/lwip_version.conf),
