@@ -126,12 +126,15 @@ Configures your local environment for the first time:
 - Sets up build directories and initial CMake configuration
 - Run this once when cloning the repository or after environment changes
 
-The pre-commit hook normalizes and formats staged files, then verifies all
-tracked generated artifacts in the staged content, after formatting, so the
-check sees exactly what the commit records. If any output is missing or stale,
-it blocks the commit and asks you to run
-`python3 scripts/sync_generated.py --write`, review the changes, and stage them
-before retrying.
+The pre-commit hook normalizes and formats staged files, then runs every
+generator of tracked artifacts on the staged content, after formatting, so the
+generators see exactly what the commit records. Refreshed outputs are written
+to the working tree and added to the commit; the hook names each of them, so
+review them in the commit. It blocks the commit instead when a generator fails,
+when the working copy of a refreshed file holds unstaged edits of its own, or
+when the commit names paths (`git commit <path>`), whose temporary index
+cannot take extra files. Then run `python3 scripts/sync_generated.py --write`,
+review and stage the changes, and retry.
 
 **`runalltests.sh`** - Full validation gate
 ```bash

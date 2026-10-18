@@ -6,9 +6,10 @@ cd "$repo_root"
 
 # Git passes GIT_INDEX_FILE relative to the top of the work tree for a plain
 # commit (an absolute temporary index for a commit naming paths); make it
-# absolute for the generator check below, which runs in another directory.
+# absolute for the generators below, which run in another directory. Git for
+# Windows passes absolute paths with a drive letter.
 case "${GIT_INDEX_FILE:-}" in
-    "" | /*) ;;
+    "" | /* | [A-Za-z]:[\\/]*) ;;
     *)
         GIT_INDEX_FILE="$repo_root/$GIT_INDEX_FILE"
         export GIT_INDEX_FILE
@@ -85,9 +86,10 @@ if [ -n "$staged_files" ]; then
 fi
 
 # After formatting, on the staged tree rather than the working tree, so the
-# check reads exactly the files the commit records: a staged input whose
-# regenerated output is left unstaged must not pass.
-echo "[pre-commit] Checking generated artifacts..."
+# generators read exactly the files the commit records. Their refreshed output
+# joins the commit. A working copy holding a third version of such a file, or
+# a commit naming paths (a temporary index), blocks the commit instead.
+echo "[pre-commit] Refreshing generated artifacts..."
 # The SBOM reads the Unity, cppcheck, PMD and RISC-V pins from the jhbase
 # checkout, which is git-ignored and therefore not part of the exported tree.
 if [ -z "${JH_JHBASE_DIR:-}" ] && [ -d "$repo_root/third_party/jhbase" ]; then
@@ -95,20 +97,74 @@ if [ -z "${JH_JHBASE_DIR:-}" ] && [ -d "$repo_root/third_party/jhbase" ]; then
     export JH_JHBASE_DIR
 fi
 staged_tree="$repo_root/.build/pre-commit/staged"
-rm -rf "$staged_tree"
+report="$repo_root/.build/pre-commit/generated.txt"
+rm -rf "$staged_tree" "$report"
 mkdir -p "$staged_tree"
 git checkout-index --all --prefix="$staged_tree/"
-if ! GIT_DIR="$(git rev-parse --absolute-git-dir)" GIT_WORK_TREE="$staged_tree" \
-        PYTHONDONTWRITEBYTECODE=1 \
-        python3 "$staged_tree/scripts/sync_generated.py" --check; then
-    rm -rf "$staged_tree"
+
+blocked() {
+    rm -rf "$staged_tree" "$report"
     echo >&2
-    echo "[pre-commit] Commit blocked: generated artifacts are missing or stale." >&2
-    echo "[pre-commit] Refresh them with:" >&2
+    echo "[pre-commit] Commit blocked: $1" >&2
+    echo "[pre-commit] Refresh the generated artifacts with:" >&2
     echo "  python3 scripts/sync_generated.py --write" >&2
     echo "[pre-commit] Review and stage the generated changes, then retry the commit." >&2
     exit 1
+}
+
+if ! GIT_DIR="$(git rev-parse --absolute-git-dir)" GIT_WORK_TREE="$staged_tree" \
+        PYTHONDONTWRITEBYTECODE=1 \
+        python3 "$staged_tree/scripts/sync_generated.py" --write --report-file "$report"; then
+    blocked "generated artifacts are missing or stale and could not be refreshed."
 fi
-rm -rf "$staged_tree"
+# The report also lists files whose mode alone changed in the export; only
+# content that differs from the index needs staging.
+refreshed=""
+while IFS= read -r file; do
+    [ -n "$file" ] || continue
+    if [ -f "$staged_tree/$file" ] &&
+            [ "$(git hash-object --path="$file" "$staged_tree/$file")" = \
+              "$(git rev-parse -q --verify ":$file" || true)" ]; then
+        continue
+    fi
+    refreshed="$refreshed$file
+"
+done <<REPORT
+$(sed -n 's/^  - //p' "$report")
+REPORT
+if [ -n "$refreshed" ]; then
+    # Files staged in the temporary index of a commit naming paths would not
+    # reach the real index after the commit.
+    real_index="$(env -u GIT_INDEX_FILE git rev-parse --path-format=absolute --git-path index)"
+    case "${GIT_INDEX_FILE:-$real_index}" in
+        "$real_index" | "$real_index.lock") ;;
+        *) blocked "generated artifacts are stale; a commit naming paths cannot take them." ;;
+    esac
+    # Check every file before touching any: only a working copy equal to its
+    # staged version, or already equal to the fresh output, is replaced.
+    while IFS= read -r file; do
+        [ -n "$file" ] || continue
+        [ -f "$staged_tree/$file" ] ||
+            blocked "a generator removed $file; remove it from the commit yourself."
+        if [ -e "$file" ] && ! cmp -s "$staged_tree/$file" "$file"; then
+            if ! git ls-files --error-unmatch -- "$file" >/dev/null 2>&1 ||
+                    ! git diff --quiet -- "$file"; then
+                blocked "$file has unstaged changes that differ from the generated output."
+            fi
+        fi
+    done <<REFRESHED
+$refreshed
+REFRESHED
+    while IFS= read -r file; do
+        [ -n "$file" ] || continue
+        mkdir -p "$(dirname "$file")"
+        cat "$staged_tree/$file" > "$file"
+        git add -- "$file"
+        echo "[pre-commit] Refreshed and staged $file"
+    done <<REFRESHED
+$refreshed
+REFRESHED
+fi
+rm -rf "$staged_tree" "$report"
 
 echo "[pre-commit] Done."

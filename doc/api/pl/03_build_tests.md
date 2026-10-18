@@ -130,11 +130,15 @@ Przygotowuje lokalne środowisko:
 Uruchom go po sklonowaniu repozytorium oraz po zmianie środowiska.
 
 Hook pre-commit normalizuje i formatuje pliki dodane do commita, a następnie
-sprawdza wszystkie wersjonowane artefakty generowane w zawartości commita, już
-po formatowaniu, więc kontrola widzi dokładnie to, co trafi do commita. Jeśli
-któregoś brakuje albo jest nieaktualny, blokuje commit i prosi o uruchomienie
-`python3 scripts/sync_generated.py --write`, przejrzenie zmian oraz dodanie ich
-do commita przed kolejną próbą.
+uruchamia wszystkie generatory wersjonowanych artefaktów na zawartości commita,
+już po formatowaniu, więc generatory widzą dokładnie to, co trafi do commita.
+Odświeżone wyniki zapisuje w drzewie roboczym i dodaje do commita, wypisując
+każdy z nich, więc przejrzyj je w commicie. Commit zostaje zablokowany, gdy
+generator zgłosi błąd, gdy kopia odświeżanego pliku w drzewie roboczym ma
+własne, niedodane zmiany albo gdy commit wskazuje ścieżki (`git commit
+<ścieżka>`), bo jego tymczasowy indeks nie przyjmie dodatkowych plików.
+Wtedy uruchom `python3 scripts/sync_generated.py --write`, przejrzyj zmiany,
+dodaj je do commita i spróbuj ponownie.
 
 **`runalltests.sh`** - pełna kontrola jakości
 ```bash

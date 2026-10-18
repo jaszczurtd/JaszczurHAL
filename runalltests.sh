@@ -22,7 +22,8 @@
 #   ./runalltests.sh -j8                # parallel jobs
 #
 # Generated files are checked, never rewritten; refresh them with
-# python3 scripts/sync_generated.py --write.
+# python3 scripts/sync_generated.py --write (the pre-commit hook does it for
+# the staged content).
 #
 # Prerequisites: ./runmefirst.sh once (CI: scripts/install_host_tools.sh).
 # =============================================================================

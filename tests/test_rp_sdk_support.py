@@ -4,13 +4,15 @@
 Each case configures a small CMake project that includes the real module with a
 fake JaszczurHAL root, fake picotool and fake Pico SDK tree, then checks what
 the configure reports or where it stops. The last cases run the pinned SDK and
-picotool, when present, on the flash layout that the OTA build produces.
+picotool, when present, on the flash layout that the OTA build produces, and
+check the RISC-V toolchain pinned in jhbase against the pinned SDK.
 """
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
+import re
 import shutil
 import struct
 import subprocess
@@ -30,6 +32,8 @@ CMAKE = shutil.which("cmake") or "cmake"
 SUPPORT_MODULE = ROOT / "cmake" / "jh_rp_sdk_support.cmake"
 FLASH_MEMORY = Path("src/rp2_common/pico_standard_link/script_include/memory_flash.incl")
 MANAGED_PICOTOOL = ROOT / ".build" / "tools" / "picotool" / "picotool"
+SDK_RISCV_TOOLCHAIN = ROOT / "third_party/pico-sdk/cmake/preload/toolchains/pico_riscv_gcc.cmake"
+MANAGED_RISCV = ROOT / "third_party" / "riscv-toolchain"
 
 PROBE = textwrap.dedent(
     """\
@@ -69,6 +73,14 @@ PROBE = textwrap.dedent(
     endif()
     """
 )
+
+
+def cmake_set_items(text: str, name: str) -> list[str]:
+    """Items of the set(NAME ...) call in a CMake file: words and quoted strings."""
+    match = re.search(rf"^set\(\s*{name}\s+(.*?)\)\s*$", text, re.M | re.S)
+    if match is None:
+        raise AssertionError(f"set({name} ...) is missing")
+    return [quoted or word for quoted, word in re.findall(r'"([^"]*)"|(\S+)', match.group(1))]
 
 
 def write_fake_picotool(path: Path, version: str) -> Path:
@@ -303,6 +315,55 @@ class RpSdkSupportTests(unittest.TestCase):
                 )
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 rp_ota_artifacts.check_range(uf2, 0x10004000, 0x10004100)
+
+    # The RISC-V toolchain pin lives in jhbase, shared by both gates; HAL pins
+    # the Pico SDK, which must still find and accept that compiler.
+    @unittest.skipUnless(SDK_RISCV_TOOLCHAIN.is_file(), "pinned Pico SDK checkout is not present")
+    def test_pinned_sdk_detects_the_riscv_triple_pinned_in_jhbase(self) -> None:
+        pin = component_manager.supplied_pin(ROOT, "riscv-toolchain")[0]
+        triples = cmake_set_items(
+            SDK_RISCV_TOOLCHAIN.read_text(encoding="utf-8"), "PICO_DEFAULT_GCC_TRIPLE"
+        )
+        self.assertIn(pin["RISCV_TOOLCHAIN_TRIPLE"], triples)
+
+    @unittest.skipUnless(
+        SDK_RISCV_TOOLCHAIN.is_file() and MANAGED_RISCV.is_dir(),
+        "pinned Pico SDK or managed RISC-V toolchain is not present",
+    )
+    def test_riscv_toolchain_pinned_in_jhbase_takes_the_sdk_zcmp_flags(self) -> None:
+        # The SDK uses the first flag set whose probe compiles; without Zcmp
+        # support it would quietly fall back to the plain rv32imac set.
+        pin = component_manager.supplied_pin(ROOT, "riscv-toolchain")[0]
+        gcc = MANAGED_RISCV / "bin" / f"{pin['RISCV_TOOLCHAIN_TRIPLE']}-gcc"
+        version = subprocess.run(
+            [str(gcc), "-dumpversion"], capture_output=True, text=True, check=True
+        ).stdout.strip()
+        self.assertEqual(pin["RISCV_TOOLCHAIN_GCC_MAJOR"], version.split(".")[0])
+        text = SDK_RISCV_TOOLCHAIN.read_text(encoding="utf-8")
+        extra = re.search(
+            r'set\(PICO_RISCV_LANG_FLAGS_EXTRA "\$\{PICO_RISCV_LANG_FLAGS_EXTRA\}([^"]*)"\)', text
+        )
+        self.assertIsNotNone(extra)
+        flag_sets = [
+            item.replace("${PICO_RISCV_LANG_FLAGS_EXTRA}", extra.group(1))
+            for item in cmake_set_items(text, "PICO_COMMON_LANG_FLAGS_LIST")
+        ]
+        probes = [
+            Path(item.replace("${CMAKE_CURRENT_LIST_DIR}", str(SDK_RISCV_TOOLCHAIN.parent)))
+            for item in cmake_set_items(text, "PICO_COMMON_LANG_FLAGS_TEST_FILES")
+        ]
+        self.assertEqual(len(flag_sets), len(probes))
+        zcmp = [(flags, probe) for flags, probe in zip(flag_sets, probes)
+                if probe.name == "riscv_zcmp_test.c"]
+        self.assertTrue(zcmp, "the pinned SDK no longer probes Zcmp")
+        accepted = [
+            flags for flags, probe in zcmp
+            if subprocess.run(
+                [str(gcc), *flags.split(), "-c", str(probe), "-o", os.devnull],
+                capture_output=True, check=False,
+            ).returncode == 0
+        ]
+        self.assertTrue(accepted, f"{gcc} rejects every Zcmp flag set of the SDK")
 
 
 if __name__ == "__main__":
