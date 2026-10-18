@@ -7,8 +7,10 @@ import contextlib
 import hashlib
 import importlib.util
 import io
+import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tarfile
@@ -689,6 +691,39 @@ class TrackedContractTests(unittest.TestCase):
         self.assertRegex(riscv["RISCV_TOOLCHAIN_ASSET_STEM"], r"^riscv-toolchain-\d+$")
         # HAL policy, not a pin value: the pinned Pico SDK auto-detects this triple.
         self.assertEqual("riscv32-unknown-elf", riscv["RISCV_TOOLCHAIN_TRIPLE"])
+
+    def test_jhbase_xtensa_pin_matches_the_esp_idf_tools(self) -> None:
+        # jhbase builds its ESP32-S3 device archive with its own Xtensa pin and
+        # links it into ESP-IDF firmware, so both must name one toolchain.
+        # HAL installs that compiler through ESP-IDF, not from this pin.
+        tools_json = ROOT / "third_party/esp-idf/tools/tools.json"
+        if not tools_json.is_file():
+            self.skipTest("pinned ESP-IDF checkout is not present")
+        override = {"JH_JHBASE_DIR": _JHBASE_OVERRIDE} if _JHBASE_OVERRIDE else {}
+        with mock.patch.dict(os.environ, override):
+            pin = manager.parse_config(
+                manager.jhbase_root(ROOT) / "third_party/xtensa_toolchain_version.conf"
+            )
+        tool = next(
+            item for item in json.loads(tools_json.read_text(encoding="utf-8"))["tools"]
+            if item["name"] == "xtensa-esp-elf"
+        )
+        version = next(item for item in tool["versions"] if item.get("status") == "recommended")
+        self.assertEqual(version["name"], pin["XTENSA_TOOLCHAIN_VERSION"])
+        self.assertEqual(
+            re.match(r"esp-(\d+)\.", version["name"]).group(1), pin["XTENSA_TOOLCHAIN_GCC_MAJOR"]
+        )
+        for platform, host, key in (
+            ("linux-amd64", "x86_64-linux-gnu", "X86_64_LIN"),
+            ("linux-arm64", "aarch64-linux-gnu", "AARCH64_LIN"),
+        ):
+            with self.subTest(platform=platform):
+                asset = f"{pin['XTENSA_TOOLCHAIN_ASSET_STEM']}-{host}.tar.xz"
+                self.assertEqual(
+                    f"{pin['XTENSA_TOOLCHAIN_RELEASE_BASE']}/{version['name']}/{asset}",
+                    version[platform]["url"],
+                )
+                self.assertEqual(version[platform]["sha256"], pin[f"XTENSA_TOOLCHAIN_SHA256_{key}"])
 
     def test_cli_keeps_legacy_flags_and_custom_directory(self) -> None:
         parser = manager.build_parser()

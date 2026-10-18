@@ -252,8 +252,10 @@ Create the release tag only after its commit has been merged into `main`. Tag-tr
    a release.
 4. For ESP-IDF, refresh `security/esp_idf_tools.json` from the pinned
    `tools.json` and managed Python environment, then review every tool license.
-5. Run `python3 scripts/sync_generated.py --write` and review the generated
-   artifact diff.
+5. Commit the change: the pre-commit hook regenerates the generated
+   artifacts, including the SBOM, from the staged pins and adds them to the
+   commit. Review the generated artifact diff it names. Without a commit,
+   `python3 scripts/sync_generated.py --write` refreshes them.
 6. Run focused tests for the affected module and the relevant build target.
 7. If the update fixes or assesses a CVE, add an entry to
    `security/vulnerability_log.md` with CVSS, affected flags and decision.

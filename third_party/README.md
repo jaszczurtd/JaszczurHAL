@@ -178,7 +178,13 @@ Its release identity and complete extracted-file manifest are recorded inside
 the ignored installation so the updater can replace stale or modified content.
 The pin includes authenticated x86-64/AArch64 Linux assets and the native AMD64
 Windows ZIP. Native ARM targets continue to use `arm-none-eabi`; they do not
-consume this RISC-V toolchain.
+consume this RISC-V toolchain. A bump of this pin in jhbase has to suit the
+Pico SDK pinned here: `tests/test_rp_sdk_support.py` checks that the SDK
+detects the pinned triple and that the compiler accepts one of the Zcmp flag
+sets the SDK probes. jhbase also pins the Xtensa toolchain of its ESP32-S3
+profile. HAL takes its Xtensa compiler from ESP-IDF instead, and
+`tests/test_component_manager.py` checks that the jhbase pin names the same
+release and SHA-256 sums as the ESP-IDF tools manifest.
 
 Native Windows host archives are pinned in `windows_tools_version.conf`.
 `runmefirst.ps1` places managed Python, CMake, Ninja, GNU Arm, OpenOCD,

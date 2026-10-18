@@ -196,7 +196,13 @@ nieaktualną lub zmienioną zawartość. Plik wersji wskazuje zweryfikowane plik
 dystrybucyjne dla Linuksa x86-64/AArch64 oraz archiwum ZIP dla natywnego
 środowiska Windows na AMD64.
 Natywne targety ARM nadal używają `arm-none-eabi` i nie korzystają z tego
-toolchainu RISC-V.
+toolchainu RISC-V. Podbicie tego pinu w jhbase musi pasować do przypiętego tu
+Pico SDK: `tests/test_rp_sdk_support.py` sprawdza, czy SDK wykrywa przypięty
+triple i czy kompilator przyjmuje któryś z zestawów flag Zcmp testowanych
+przez SDK. jhbase przypina też toolchain Xtensa dla swojego profilu ESP32-S3.
+HAL bierze kompilator Xtensa z ESP-IDF, a `tests/test_component_manager.py`
+sprawdza, czy pin jhbase wskazuje to samo wydanie i te same sumy SHA-256 co
+manifest narzędzi ESP-IDF.
 
 Wersje archiwów dla natywnego środowiska Windows określa
 `windows_tools_version.conf`. `runmefirst.ps1` umieszcza instalacje Pythona,
