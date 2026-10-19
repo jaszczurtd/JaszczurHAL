@@ -81,7 +81,7 @@ działa na różnych platformach, zacznij od
 Aby rozpocząć własny projekt w VS Code, użyj generatora:
 
 ```bash
-libraries/JaszczurHAL/vscode/tools/create-vscode-example.py \
+JaszczurHAL/vscode/tools/create-vscode-example.py \
   --output your-example-project-name
 ```
 

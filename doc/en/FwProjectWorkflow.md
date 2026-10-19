@@ -47,12 +47,12 @@ generated settings select it through `cortex-debug.gdbPath.linux`. The
 STM32G474 profile uses `board/st_nucleo_g4.cfg` with connect-under-reset so the
 on-board ST-Link can recover a running target before GDB attaches.
 
-For RP and STM32, set `toolchain: "cmake"` and point `cmake.sourceDir` to `libraries/JaszczurHAL/cmake/jh_firmware_project`. `JH_PROJECT_DIR` identifies the application directory. For ESP32 and ESP32-S3, select `toolchain: "esp-idf"`; the target registry supplies the build runner and artifact-manifest path. The shared tool selects the appropriate build system, so no project-local CMake configuration is needed.
+For RP and STM32, set `toolchain: "cmake"` and point `cmake.sourceDir` to the HAL dispatcher `${jhRoot}/cmake/jh_firmware_project` (`${jhRoot}` is the HAL checkout that runs `jh-vscode`). `JH_PROJECT_DIR` identifies the application directory. For ESP32 and ESP32-S3, select `toolchain: "esp-idf"`; the target registry supplies the build runner and artifact-manifest path. The shared tool selects the appropriate build system, so no project-local CMake configuration is needed.
 
 Generate a working standalone project with:
 
 ```bash
-libraries/JaszczurHAL/vscode/tools/create-vscode-example.py \
+JaszczurHAL/vscode/tools/create-vscode-example.py \
   --output my-device --target rp2040 --board pico
 ```
 
@@ -190,7 +190,7 @@ Settings are then merged in this order. Later values override earlier ones:
 Before diagnosing a build or upload problem, inspect the complete configuration after all settings have been merged:
 
 ```bash
-../libraries/JaszczurHAL/vscode/entry/jh-vscode \
+../JaszczurHAL/vscode/entry/jh-vscode \
   config-dump --project "$PWD"
 ```
 
@@ -224,7 +224,7 @@ The board registry checks whether the board is compatible with the target. It al
   "buildDir": "${project}/.build",
   "cmakeBuildDir": "${buildDir}/cmake",
   "cmake": {
-    "sourceDir": "${project}/../libraries/JaszczurHAL/cmake/jh_firmware_project",
+    "sourceDir": "${jhRoot}/cmake/jh_firmware_project",
     "cache": {
       "JH_PROJECT_DIR": "${project}",
       "JH_MODULE_NAME": "tracker"
@@ -316,24 +316,27 @@ application guards its files as described in
 The ESP-IDF runner discovers C, C++, and assembly files in the project root and recursively under `src/`. When invoking the runner directly, repeated `--source <relative-path>` arguments can replace automatic discovery. Every source path must stay within the project.
 
 Header directories and precompiled archives from outside the project, such as
-a credentials library, go to `JH_EXTRA_INCLUDES` and `JH_LINK_LIBRARIES`,
-both semicolon-separated. An archive is built for one ABI, so name it per
-target:
+a prebuilt private library, go to `JH_EXTRA_INCLUDES` and `JH_LINK_LIBRARIES`,
+both semicolon-separated. An archive is built for one ABI. `${target}` in a
+manifest path becomes the target of the selected build, so one entry serves
+every target:
 
 ```json
 {
-  "targetProfiles": {
-    "esp32s3": {
-      "cmake": {
-        "cache": {
-          "JH_EXTRA_INCLUDES": "${project}/../libraries/Credentials/src",
-          "JH_LINK_LIBRARIES": "${project}/../libraries/Credentials/build/esp32s3/libCredentials.a"
-        }
-      }
+  "cmake": {
+    "cache": {
+      "JH_EXTRA_INCLUDES": "${project}/../mylib/include",
+      "JH_LINK_LIBRARIES": "${project}/../mylib/build/${target}/libmylib.a"
     }
   }
 }
 ```
+
+`${target}` is replaced once the target is resolved from the assembly,
+`--target`, the local selection or the manifest, in `buildDir`,
+`cmakeBuildDir`, `cmake.sourceDir`, `cmake.cache`, `artifacts`, `upload`,
+`ota`, `hooks` and `espIdf`. A value that differs per target in another way
+still goes to `targetProfiles.<target>`.
 
 The application sees these header directories; the HAL library does not. RP,
 STM32 and ESP-IDF builds use both keys. An ESP-IDF build records each archive
@@ -368,7 +371,7 @@ The baseline always includes simple PWM and core system, synchronization, GPIO, 
 
 The initial `esp32` descriptor deliberately supports fewer features. It includes the required FreeRTOS runtime and `HAL_ENABLE_BLUETOOTH_GAMEPAD`, which selects Bluedroid, BR/EDR, and ESP HID Host. Features available only on ESP32-S3, including the public BLE API, are rejected during preflight.
 
-With a Fiesta-convention `firmware_entry.h`, setting `FIESTA_ENABLE_CORE1=1` also requires `HAL_ENABLE_APP_TASK1` in `hal_project_config.h` or another standard feature-configuration input. This keeps the generated entry adapter, requested and resolved feature sets, and link signature consistent.
+In a project with a `firmware_entry.h` (an `initialization`/`looper` entry that a generated adapter bridges to `app_*`), setting `FIESTA_ENABLE_CORE1=1` also requires `HAL_ENABLE_APP_TASK1` in `hal_project_config.h` or another standard feature-configuration input. This keeps the generated entry adapter, requested and resolved feature sets, and link signature consistent.
 
 The feature registry resolves all transitive dependencies consistently across targets and tools. The generated C header defines the implied macros, CMake selects sources and dependencies, and the board generator calculates `featureHash` and the link signature from the same result. `jh-vscode` uses that result for preflight and OTA eligibility while passing the original feature requests to CMake. Define `HAL_CONFIG_VERBOSE` to print a report of all active registered features during compilation.
 
@@ -545,10 +548,10 @@ Tracked configuration remains in the manifest and `hal_project_config.h`.
 ## Build and upload actions
 
 ```bash
-../libraries/JaszczurHAL/vscode/entry/jh-vscode build --project "$PWD"
-../libraries/JaszczurHAL/vscode/entry/jh-vscode upload --project "$PWD"
-../libraries/JaszczurHAL/vscode/entry/jh-vscode monitor --project "$PWD"
-../libraries/JaszczurHAL/vscode/entry/jh-vscode clean --project "$PWD"
+../JaszczurHAL/vscode/entry/jh-vscode build --project "$PWD"
+../JaszczurHAL/vscode/entry/jh-vscode upload --project "$PWD"
+../JaszczurHAL/vscode/entry/jh-vscode monitor --project "$PWD"
+../JaszczurHAL/vscode/entry/jh-vscode clean --project "$PWD"
 ```
 
 `Project: Upload` selects the upload method from the registry. On RP with running firmware, it verifies the device over USB CDC, switches to BOOTSEL, and uploads the UF2. For a blank board, use `Project: Upload (UF2 / BOOTSEL)`. STM32G474 invokes the OpenOCD upload target.

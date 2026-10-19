@@ -7,7 +7,7 @@ JaszczurHAL provides a common hardware API for embedded applications. This guide
 **Author:** Marcin 'Jaszczur' Kielesiński
 
 - **Repository:** `git@github.com:jaszczurtd/JaszczurHAL.git`
-- **Include root:** `libraries/JaszczurHAL/src/` (registered in `otherLibrariesFolders`)
+- **Include root:** `src/` of the HAL checkout
 
 ---
 

@@ -173,11 +173,11 @@ def reference_settings() -> dict[str, Any]:
         vscode_entry_settings,
     )
 
-    jh_root = "${workspaceFolder}/../../libraries/JaszczurHAL"
+    jh_root = "${workspaceFolder}/../../JaszczurHAL"
     return {
-        "jaszczurhal.root": "../../libraries/JaszczurHAL",
+        "jaszczurhal.root": "../../JaszczurHAL",
         **vscode_entry_settings(
-            "../../libraries/JaszczurHAL/vscode/entry/jh-vscode"
+            "../../JaszczurHAL/vscode/entry/jh-vscode"
         ),
         "jaszczurhal.buildDir": "${workspaceFolder}/.build",
         "jaszczurhal.verbose": False,
@@ -185,7 +185,7 @@ def reference_settings() -> dict[str, Any]:
             "${workspaceFolder}/.build/compile_commands_patched.json"
         ),
         "cmake.sourceDirectory": (
-            "${workspaceFolder}/../../libraries/JaszczurHAL/cmake/jh_firmware_project"
+            "${workspaceFolder}/../../JaszczurHAL/cmake/jh_firmware_project"
         ),
         "cmake.buildDirectory": "${workspaceFolder}/.build/cmake-tools/rp2040-pico",
         "cmake.generator": "Ninja",

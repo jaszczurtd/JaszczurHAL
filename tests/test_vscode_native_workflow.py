@@ -1305,3 +1305,32 @@ with tempfile.TemporaryDirectory(prefix="jh-vscode-board-selection-") as temp_di
         not (overlay_foreign / ".vscode" / "jaszczurhal.local.json").exists(),
         "select-board persisted a selection that does not resolve",
     )
+
+# ${target} names the resolved target: one manifest entry serves every target,
+# and the base pass must not bake in the manifest's default target.
+with tempfile.TemporaryDirectory(prefix="jh-vscode-target-token-") as temp_dir:
+    project = Path(temp_dir) / "target-token"
+    write_feature_value_fixture(
+        project,
+        cache={"JH_LINK_LIBRARIES": "${project}/../Credentials/build/${target}/libCredentials.a"},
+    )
+
+    def linked_archive(*selection: str) -> str:
+        result = run_feature_value_dump(project, *selection)
+        require(result.returncode == 0, f"config-dump {selection} failed: {result.stderr}")
+        return json.loads(result.stdout)["cmake"]["cache"]["JH_LINK_LIBRARIES"]
+
+    expected = project / ".." / "Credentials" / "build" / "{}" / "libCredentials.a"
+    for selection, target in (((), "rp2040"), (("--target", "stm32g474"), "stm32g474"),
+                              (("--target", "esp32s3"), "esp32s3")):
+        archive = linked_archive(*selection)
+        require(
+            same_path(archive, str(expected).format(target)),
+            f"${{target}} expanded to {archive!r} for {target}",
+        )
+    write_local_state(project, {"target": "rp2350-arm", "board": "pico2w"})
+    archive = linked_archive()
+    require(
+        same_path(archive, str(expected).format("rp2350-arm")),
+        f"${{target}} ignored the local target selection: {archive!r}",
+    )

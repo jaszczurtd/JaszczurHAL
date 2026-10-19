@@ -79,8 +79,7 @@ Nie uruchamiaj ponownie trybu parowania, gdy chcesz jedynie wznowić połączeni
 Funkcje zapisu przekazane do `hal_gamepad_open_ex()` zachowują zaakceptowane
 urządzenie w pamięci nieulotnej. Interfejs zgodności gamepada udostępnia
 jedno miejsce na taki zapis, korzystając z indeksowanej listy urządzeń
-Bluetooth Classic. Klucz KV `0xd001` zachowuje zgodność z zapisem używanym
-przez obraz doomConsole do testów regresji na sprzęcie.
+Bluetooth Classic, i przechowuje go pod kluczem KV `0xd001`.
 
 ## Wykrywanie urządzeń i usług
 

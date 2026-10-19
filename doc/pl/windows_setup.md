@@ -275,9 +275,7 @@ wersji zostały zweryfikowane na Pico 2 W w zaufanej sieci LAN o profilu
 `Private`.
 
 Testy sprzętowe OTA wymagają lokalnych danych uwierzytelniających stanowiska;
-debugowanie sprzętowe wymaga dodatkowo podłączonej sondy SWD. Desktopowy
-SerialConfigurator Fiesta pozostaje aplikacją linuksową i znajduje się
-poza zakresem natywnej obsługi firmware'u w Windows.
+debugowanie sprzętowe wymaga dodatkowo podłączonej sondy SWD.
 
 ## Zapisane próby SWD na sprzęcie
 
@@ -291,9 +289,7 @@ sterownika Microsoft WinUSB. Nie było potrzebne ani instalowanie sterownika, an
 zmiana jego powiązania (`rebind`). Zarządzany OpenOCD wykrył oba rdzenie
 Cortex-M33, a GDB z zarządzanej instalacji GNU Arm załadował obraz ELF z kompilacji
 Debug, zatrzymał się na `main`, wznowił wykonanie do `app_start` i odłączył się.
-Po końcowym `reset run` ponownie pojawił się port USB CDC aplikacji. W kolejnym
-teście DoomConsole również załadowano obraz ELF z kompilacji Debug i zatrzymano
-wykonanie na `app_start` przy tych samych ustawieniach profilu uruchomieniowego.
+Po końcowym `reset run` ponownie pojawił się port USB CDC aplikacji.
 
 Podstawowy test sprzętowy STM32 przeprowadzono w Windows 10 LTSC z użyciem
 NUCLEO-G474RE z wbudowanym ST-Linkiem V3J9M3 (`0483:374e`). Zarządzany OpenOCD

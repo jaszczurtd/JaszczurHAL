@@ -1217,8 +1217,6 @@ JPEG use is documented in [JPEG API](19_JPEG.md#asset-script-jpeg-to-base64).
   `jh-vscode` CLI and VS Code task interface.
 - [Target and board profiles](../../en/boards_profiles_howto.md) documents descriptor
   fields and how registry defaults merge with project manifests.
-- [VS Code Entry Changelog](../../../vscode/CHANGELOG.md) records implemented
-  workflow capabilities and compatibility decisions.
 - [Windows Runtime](../../../vscode/windows/runtime/README.md) records the native
   Windows runtime boundary and remaining device-adapter work.
 - [Native RP Neutral Firmware](../../../vscode/neutral_fw/rp_pico/README.md)

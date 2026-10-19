@@ -230,10 +230,7 @@ kompletnej bramki jakości dla Linuksa:
 Inwentarz CTest dla Windows utrzymuje adapter BSD POSIX, integrację
 Bash/POSIX BearSSL oraz runtime FreeRTOS GCC/POSIX jako
 widoczne, wyłączone testy. Ich aktywne pokrycie, wraz z Valgrind, cppcheck,
-clang-tidy i PMD CPD, pozostaje w bramce dla Linuksa. Fiesta, DoomConsole i
-Ford DPF Tracker mają osobne natywne procesy CI firmware dla Windows. Każdy z
-nich uruchamia właściwe dla danego projektu testy integracyjne, niezależnie od
-projektu testowego generowanego przez JaszczurHAL.
+clang-tidy i PMD CPD, pozostaje w bramce dla Linuksa.
 
 <a id="stanowiska-sprzętowe"></a>
 

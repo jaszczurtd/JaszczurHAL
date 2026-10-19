@@ -235,9 +235,7 @@ the complete Linux quality gate:
 The Windows CTest inventory keeps the POSIX BSD adapter, Bash/POSIX BearSSL
 integration, and FreeRTOS GCC/POSIX runtime visible as disabled tests. Their
 active coverage, together with Valgrind, cppcheck, clang-tidy, and PMD CPD,
-remains in the Linux gate. Fiesta, DoomConsole, and Ford DPF Tracker own separate native
-Windows firmware workflows, which provide consumer-specific integration
-coverage in addition to JaszczurHAL's generated-consumer fixture.
+remains in the Linux gate.
 
 <a id="hardware-fixtures"></a>
 
