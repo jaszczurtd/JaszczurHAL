@@ -33,3 +33,7 @@ reason = "2026-10-06: no upstream fix; HAL never applies JSON Patch; mitigated"
 [[IgnoredVulns]]
 id = "CVE-2026-8836"
 reason = "2026-10-06: SNMPv3 agent, compiled on no target; not_affected"
+
+[[IgnoredVulns]]
+id = "CVE-2026-112062"
+reason = "2026-10-19: mDNS service search, compiled on no target; not_affected"
