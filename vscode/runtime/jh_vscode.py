@@ -267,7 +267,15 @@ def load_json_file(path: Path) -> dict[str, Any]:
     return data
 
 
-def expand_project_vars(value: Any, project_dir: Path, config: dict[str, Any]) -> Any:
+TARGET_TOKEN = "${target}"
+
+
+def expand_project_vars(
+    value: Any, project_dir: Path, config: dict[str, Any], target: str | None = None
+) -> Any:
+    """Substitute the ${...} tokens of a manifest value. ${target} becomes the
+    active target only once it is resolved (`target`); before that it stays,
+    so an early pass cannot bake in the manifest's default target."""
     if not isinstance(value, str):
         return value
     build_dir = str(config.get("buildDir", project_dir / ".build"))
@@ -280,36 +288,40 @@ def expand_project_vars(value: Any, project_dir: Path, config: dict[str, Any]) -
         "${projectName}": str(config.get("project", project_dir.parent.name)),
         "${buildDir}": build_dir,
     }
+    if target is not None:
+        replacements[TARGET_TOKEN] = target
     for key, replacement in replacements.items():
         value = value.replace(key, replacement)
     return value
 
 
-def expand_config_sections(config: dict[str, Any], project_dir: Path) -> None:
+def expand_config_sections(
+    config: dict[str, Any], project_dir: Path, target: str | None = None
+) -> None:
     """Expand ${...} tokens in the path-bearing sections of config, in place.
 
     Idempotent: once tokens are substituted, re-running is a no-op. Called for the
     base manifest and again after a target overlay is merged in.
     """
     if "buildDir" in config:
-        config["buildDir"] = expand_project_vars(config["buildDir"], project_dir, config)
+        config["buildDir"] = expand_project_vars(config["buildDir"], project_dir, config, target)
     if "cmakeBuildDir" in config:
-        config["cmakeBuildDir"] = expand_project_vars(config["cmakeBuildDir"], project_dir, config)
+        config["cmakeBuildDir"] = expand_project_vars(config["cmakeBuildDir"], project_dir, config, target)
     for section_name in ("artifacts", "upload", "ota", "hooks", "espIdf"):
         section = config.get(section_name)
         if isinstance(section, dict):
             config[section_name] = {
-                key: expand_project_vars(value, project_dir, config)
+                key: expand_project_vars(value, project_dir, config, target)
                 for key, value in section.items()
             }
     cmake = config.get("cmake")
     if isinstance(cmake, dict):
         cmake = dict(cmake)
         if "sourceDir" in cmake:
-            cmake["sourceDir"] = expand_project_vars(cmake["sourceDir"], project_dir, config)
+            cmake["sourceDir"] = expand_project_vars(cmake["sourceDir"], project_dir, config, target)
         if isinstance(cmake.get("cache"), dict):
             cmake["cache"] = {
-                str(key): expand_project_vars(value, project_dir, config)
+                str(key): expand_project_vars(value, project_dir, config, target)
                 for key, value in cmake["cache"].items()
             }
         config["cmake"] = cmake
@@ -361,6 +373,8 @@ def resolve_target_profile(
         or manifest_target is not None
         or manifest_board is not None
         or isinstance(profiles, dict)
+        # A ${target} path needs the resolved target, the default included.
+        or TARGET_TOKEN in json.dumps(config, default=str)
     )
     if not has_any:
         return
@@ -432,8 +446,9 @@ def resolve_target_profile(
     config.clear()
     config.update(merged)
 
-    # Expand tokens the overlay may have introduced (idempotent on the base).
-    expand_config_sections(config, project_dir)
+    # Expand tokens the overlay may have introduced (idempotent on the base),
+    # and ${target} now that the active target is known.
+    expand_config_sections(config, project_dir, active)
 
 
     target_switched = active != (manifest_target or "rp2040")

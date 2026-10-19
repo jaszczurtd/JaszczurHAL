@@ -194,7 +194,7 @@ używane przez hosta:
   "buildDir": "${project}/.build",
   "cmakeBuildDir": "${buildDir}/cmake",
   "cmake": {
-    "sourceDir": "${project}/../libraries/JaszczurHAL/cmake/jh_firmware_project",
+    "sourceDir": "${jhRoot}/cmake/jh_firmware_project",
     "cache": {
       "JH_PROJECT_DIR": "${project}",
       "JH_MODULE_NAME": "tracker",
@@ -430,14 +430,14 @@ zakładać, że ta wartość wystarczy w każdym zastosowaniu.
 Przed pierwszą kompilacją sprawdź wybraną platformę, płytkę, ścieżki i ustawienia OTA po uwzględnieniu całej konfiguracji:
 
 ```bash
-../libraries/JaszczurHAL/vscode/entry/jh-vscode \
+../JaszczurHAL/vscode/entry/jh-vscode \
   config-dump --project "$PWD"
 ```
 
 Uruchom kompilację z katalogu projektu firmware:
 
 ```bash
-../libraries/JaszczurHAL/vscode/entry/jh-vscode \
+../JaszczurHAL/vscode/entry/jh-vscode \
   build --project "$PWD"
 ```
 
@@ -490,7 +490,7 @@ Dla niezaprogramowanej płytki:
 3. Uruchom:
 
    ```bash
-   ../libraries/JaszczurHAL/vscode/entry/jh-vscode \
+   ../JaszczurHAL/vscode/entry/jh-vscode \
      upload-uf2 --project "$PWD"
    ```
 
@@ -505,7 +505,7 @@ Poczekaj, aż firmware połączy się z WiFi, a `hal_ota_begin()` zakończy się
 powodzeniem. Następnie wyświetl listę urządzeń:
 
 ```bash
-../libraries/JaszczurHAL/vscode/entry/jh-vscode \
+../JaszczurHAL/vscode/entry/jh-vscode \
   ota-discover --project "$PWD"
 ```
 
@@ -516,14 +516,14 @@ target, port UDP, rozmiar slotu, aktywną generację oraz tryb rozruchu.
 Wgraj interaktywnie:
 
 ```bash
-../libraries/JaszczurHAL/vscode/entry/jh-vscode \
+../JaszczurHAL/vscode/entry/jh-vscode \
   upload-ota --project "$PWD" --interactive
 ```
 
 Jeśli znasz adres urządzenia, możesz pominąć wykrywanie:
 
 ```bash
-../libraries/JaszczurHAL/vscode/entry/jh-vscode \
+../JaszczurHAL/vscode/entry/jh-vscode \
   upload-ota --project "$PWD" --host 192.168.2.200
 ```
 
@@ -537,7 +537,7 @@ i skonfigurowanej nazwy hosta.
 W projekcie z kilkoma platformami lub płytkami najpierw wybierz właściwy profil. Możesz też jawnie nadpisać wybór w poleceniu:
 
 ```bash
-../libraries/JaszczurHAL/vscode/entry/jh-vscode \
+../JaszczurHAL/vscode/entry/jh-vscode \
   upload-ota --project "$PWD" \
   --target rp2350-arm --board pico2w --host 192.168.2.200
 ```

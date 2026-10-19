@@ -90,7 +90,7 @@ runs on different platforms, start with the
 To create your own project for VS Code, use the project generator:
 
 ```bash
-libraries/JaszczurHAL/vscode/tools/create-vscode-example.py \
+JaszczurHAL/vscode/tools/create-vscode-example.py \
   --output your-example-project-name
 ```
 

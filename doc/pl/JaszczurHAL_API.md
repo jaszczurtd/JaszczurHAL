@@ -7,7 +7,7 @@ JaszczurHAL udostępnia wspólne API do obsługi sprzętu w aplikacjach wbudowan
 **Autor:** Marcin 'Jaszczur' Kielesiński
 
 - **Repozytorium:** `git@github.com:jaszczurtd/JaszczurHAL.git`
-- **Główny katalog nagłówków:** `libraries/JaszczurHAL/src/` (zarejestrowany w `otherLibrariesFolders`)
+- **Główny katalog nagłówków:** `src/` w checkoucie HAL
 
 ---
 

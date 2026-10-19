@@ -604,8 +604,8 @@ Authentication (Phase 3) - opt-in:
   rest of the framed session (HELLO + project-defined commands routed
   through the unknown-line handler) is unaffected.
 - The actual command tokens (`cmd_auth_begin`, `cmd_auth_prove`) come
-  from the vocabulary instance - Fiesta supplies `"SC_AUTH_BEGIN"` /
-  `"SC_AUTH_PROVE"`; a different project can supply different names. A
+  from the vocabulary instance, for example `"SC_AUTH_BEGIN"` /
+  `"SC_AUTH_PROVE"`; each project supplies its own names. A
   NULL token field disables that command and routes the inner line to
   the unknown handler.
 - See [`hal_sc_auth`](#halscauth-auth-handshake-helper-opt-in-halenablecrypto)
@@ -922,7 +922,7 @@ If the host has a separate implementation of these calculations, test identical 
 The handshake itself is wired in
 [`hal_serial_session`](#halserialsession-framed-serial-session-helper)
 behind the vocabulary's `cmd_auth_begin` / `cmd_auth_prove` slots
-(Fiesta names them `SC_AUTH_BEGIN` / `SC_AUTH_PROVE`). Modules consume
+(for example `SC_AUTH_BEGIN` / `SC_AUTH_PROVE`). Modules consume
 authentication state through `hal_serial_session_is_authenticated(...)`
 and do not need to call the helpers below directly.
 

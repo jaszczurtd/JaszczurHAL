@@ -231,9 +231,9 @@ Dla akcji wykonywanych na module `--project` oznacza katalog modułu firmware,
 a nie główny katalog repozytorium. Przykłady:
 
 ```text
-jh-vscode build --project /home/user/projects/router-reset/reseter
-jh-vscode build --project /home/user/projects/Fiesta/src/Clocks
-jh-vscode clear-identity --project /home/user/projects/Fiesta/src/ECU
+jh-vscode build --project /home/user/projects/weather-station/firmware
+jh-vscode build --project /home/user/projects/home-hub/src/display
+jh-vscode clear-identity --project /home/user/projects/home-hub/src/controller
 ```
 
 Akcje `build`, `build-debug`, `debug-tools`, `upload`, `upload-uf2`, `upload-ota`,
@@ -260,7 +260,7 @@ poleceń kompilacji i jawnie przekazuje aktualnie używany interpreter Pythona.
 Wygenerowane i zmigrowane projekty ustawiają `cmake.sourceDir` w
 `.vscode/jaszczurhal.project.json` na wspólną konfigurację obsługującą wiele
 targetów, na przykład
-`${project}/../../libraries/JaszczurHAL/cmake/jh_firmware_project`, a katalog
+`${jhRoot}/cmake/jh_firmware_project`, a katalog
 modułu przekazują jako `JH_PROJECT_DIR`. Ustawienie `cmake.generator` pozwala
 jawnie wybrać generator. Samodzielne projekty utworzone przez
 `tools/create-vscode-example.py` oraz przykłady zapisane w repozytorium zapisują
@@ -317,7 +317,7 @@ VS Code, skonfigurowany przede wszystkim z myślą o CMake. Projekt można umie�
 obok pozostałych repozytoriów firmware:
 
 ```bash
-libraries/JaszczurHAL/vscode/tools/create-vscode-example.py \
+JaszczurHAL/vscode/tools/create-vscode-example.py \
   --output /home/user/projects/jaszczurhal-vscode-example
 ```
 
@@ -331,7 +331,7 @@ bezpośrednio. Inny początkowy target i płytkę można wybrać za pomocą `--t
 i `--board`:
 
 ```bash
-libraries/JaszczurHAL/vscode/tools/create-vscode-example.py \
+JaszczurHAL/vscode/tools/create-vscode-example.py \
   --output /home/user/projects/jaszczurhal-stm32-example \
   --target stm32g474 \
   --board nucleo-g474re
@@ -375,10 +375,10 @@ Wygenerowany projekt korzysta z `jh-vscode` do tych samych operacji co projekty
 po migracji:
 
 ```bash
-../libraries/JaszczurHAL/vscode/entry/jh-vscode build --project "$PWD"
-../libraries/JaszczurHAL/vscode/entry/jh-vscode build-debug --project "$PWD"
-../libraries/JaszczurHAL/vscode/entry/jh-vscode refresh-intellisense --project "$PWD"
-../libraries/JaszczurHAL/vscode/entry/jh-vscode select-board --project "$PWD" --interactive
+../JaszczurHAL/vscode/entry/jh-vscode build --project "$PWD"
+../JaszczurHAL/vscode/entry/jh-vscode build-debug --project "$PWD"
+../JaszczurHAL/vscode/entry/jh-vscode refresh-intellisense --project "$PWD"
+../JaszczurHAL/vscode/entry/jh-vscode select-board --project "$PWD" --interactive
 ```
 
 Akcja `build-debug` ustawia `CMAKE_BUILD_TYPE=Debug` w osobnym cache CMake dla
@@ -408,7 +408,7 @@ wykrywanie pamięci flash RP2350 może w Windows przekroczyć domyślny limit cz
 zdalnego połączenia GDB.
 
 Kompletny wygenerowany projekt należy umieścić poza
-`libraries/JaszczurHAL/vscode/`. Katalog `vscode/examples/` służy do
+checkoutem HAL. Katalog `vscode/examples/` służy do
 niewielkich przykładów konfiguracji, a nie do przechowywania pełnego projektu
 firmware w repozytorium.
 

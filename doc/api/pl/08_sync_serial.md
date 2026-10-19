@@ -643,8 +643,8 @@ Opcjonalna obsługa AUTH (Faza 3):
   część sesji ramkowanej działa bez zmian, w tym HELLO i polecenia projektu
   kierowane do handlera nierozpoznanych linii.
 - Rzeczywiste tokeny poleceń (`cmd_auth_begin`, `cmd_auth_prove`) pochodzą
-  z instancji słownika - Fiesta dostarcza `"SC_AUTH_BEGIN"` /
-  `"SC_AUTH_PROVE"`; inny projekt może dostarczyć inne nazwy. Pole tokenu
+  z instancji słownika, na przykład `"SC_AUTH_BEGIN"` /
+  `"SC_AUTH_PROVE"`; każdy projekt podaje własne nazwy. Pole tokenu
   równe NULL wyłącza dane polecenie i kieruje wewnętrzną linię do
   handlera nierozpoznanych linii.
 - Prymitywy soli i wyprowadzania klucza opisano w [`hal_sc_auth`](#halscauth-pomocnik-uzgadniania-uwierzytelniania-handshake-opt-in-halenablecrypto).
@@ -965,7 +965,7 @@ Jeżeli aplikacja hosta zawiera własną implementację tych obliczeń, sprawdza
 Sam handshake jest obsługiwany przez
 [`hal_serial_session`](#halserialsession-pomocnik-ramkowanej-sesji-szeregowej)
 za pośrednictwem pól `cmd_auth_begin` / `cmd_auth_prove` słownika
-(Fiesta nazywa je `SC_AUTH_BEGIN` / `SC_AUTH_PROVE`). Moduły odczytują
+(na przykład `SC_AUTH_BEGIN` / `SC_AUTH_PROVE`). Moduły odczytują
 stan uwierzytelnienia przez `hal_serial_session_is_authenticated(...)`
 i nie muszą wywoływać poniższych funkcji bezpośrednio.
 

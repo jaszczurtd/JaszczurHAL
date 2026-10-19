@@ -258,8 +258,7 @@ Linux-only. The native Windows OTA callback, trial confirmation, and automatic
 rollback have been validated on Pico 2 W over a trusted `Private` LAN.
 
 OTA hardware requires local fixture credentials; hardware debug additionally
-requires a connected SWD probe. The Fiesta desktop SerialConfigurator remains
-a Linux application and is outside the native Windows firmware-workflow scope.
+requires a connected SWD probe.
 
 ## Recorded SWD hardware checks
 
@@ -272,8 +271,7 @@ no
 driver installation or rebinding was required. Managed OpenOCD detected both
 Cortex-M33 cores, and managed GNU Arm GDB loaded a Debug ELF, stopped at
 `main`, resumed to `app_start`, and detached. A final OpenOCD `reset run`
-returned the application USB CDC port. A DoomConsole follow-up also loaded its
-Debug ELF and stopped at `app_start` through the same launch-profile settings.
+returned the application USB CDC port.
 
 The native STM32 hardware smoke used a NUCLEO-G474RE with its on-board ST-Link
 V3J9M3 (`0483:374e`) on Windows 10 LTSC. Managed OpenOCD

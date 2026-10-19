@@ -532,7 +532,7 @@ require(
 )
 require(
     reference_settings["cmake.configureSettings"]["PICO_SDK_PATH"]
-    == "${workspaceFolder}/../../libraries/JaszczurHAL/third_party/pico-sdk",
+    == "${workspaceFolder}/../../JaszczurHAL/third_party/pico-sdk",
     "checked-in VS Code settings omit PICO_SDK_PATH for CMake Tools",
 )
 require_launch_contract(

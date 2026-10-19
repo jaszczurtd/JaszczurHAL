@@ -1297,9 +1297,6 @@ Użycie JPEG jest udokumentowane w
 - [Profile targetów i płytek](../../pl/boards_profiles_howto.md) opisują
   pola deskryptora oraz sposób łączenia domyślnych wartości rejestru z
   manifestami projektu.
-- [Dziennik zmian wejścia VS Code](../../../vscode/CHANGELOG.md) rejestruje
-  zaimplementowane możliwości procesu oraz decyzje dotyczące
-  zgodności.
 - [Środowisko wykonawcze Windows](../../../vscode/windows/runtime/README.pl.md)
   opisuje obecny zakres natywnego runtime Windows oraz
   pozostałą pracę nad adapterem urządzenia.

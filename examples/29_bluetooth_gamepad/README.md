@@ -78,8 +78,8 @@ Once the device has been stored, power on the gamepad normally with `Start`.
 Do not enter pairing mode again just to reconnect. The storage callbacks
 passed to `hal_gamepad_open_ex()` retain the accepted device across restarts.
 The gamepad compatibility interface provides one storage slot through the
-indexed Bluetooth Classic device manager. KV key `0xd001` keeps the stored
-gamepad compatible with the doomConsole hardware-regression image.
+indexed Bluetooth Classic device manager and keeps the entry under KV key
+`0xd001`.
 
 ## Discover devices and services
 

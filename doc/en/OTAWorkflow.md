@@ -178,7 +178,7 @@ files and the discovery and authentication settings used by the host:
   "buildDir": "${project}/.build",
   "cmakeBuildDir": "${buildDir}/cmake",
   "cmake": {
-    "sourceDir": "${project}/../libraries/JaszczurHAL/cmake/jh_firmware_project",
+    "sourceDir": "${jhRoot}/cmake/jh_firmware_project",
     "cache": {
       "JH_PROJECT_DIR": "${project}",
       "JH_MODULE_NAME": "tracker",
@@ -417,14 +417,14 @@ universally sufficient.
 Before the first build, inspect the target, board, paths, and OTA settings selected by the complete project configuration:
 
 ```bash
-../libraries/JaszczurHAL/vscode/entry/jh-vscode \
+../JaszczurHAL/vscode/entry/jh-vscode \
   config-dump --project "$PWD"
 ```
 
 Build from the firmware project directory:
 
 ```bash
-../libraries/JaszczurHAL/vscode/entry/jh-vscode \
+../JaszczurHAL/vscode/entry/jh-vscode \
   build --project "$PWD"
 ```
 
@@ -478,7 +478,7 @@ For a blank board:
 3. Run:
 
    ```bash
-   ../libraries/JaszczurHAL/vscode/entry/jh-vscode \
+   ../JaszczurHAL/vscode/entry/jh-vscode \
      upload-uf2 --project "$PWD"
    ```
 
@@ -493,7 +493,7 @@ Wait until firmware has joined WiFi and `hal_ota_begin()` has succeeded, then
 list devices:
 
 ```bash
-../libraries/JaszczurHAL/vscode/entry/jh-vscode \
+../JaszczurHAL/vscode/entry/jh-vscode \
   ota-discover --project "$PWD"
 ```
 
@@ -504,14 +504,14 @@ generation, and boot mode.
 Upload interactively:
 
 ```bash
-../libraries/JaszczurHAL/vscode/entry/jh-vscode \
+../JaszczurHAL/vscode/entry/jh-vscode \
   upload-ota --project "$PWD" --interactive
 ```
 
 Or bypass discovery for a known address:
 
 ```bash
-../libraries/JaszczurHAL/vscode/entry/jh-vscode \
+../JaszczurHAL/vscode/entry/jh-vscode \
   upload-ota --project "$PWD" --host 192.168.2.200
 ```
 
@@ -525,7 +525,7 @@ For multiple target/board builds, select the intended profile first or pass
 the override explicitly:
 
 ```bash
-../libraries/JaszczurHAL/vscode/entry/jh-vscode \
+../JaszczurHAL/vscode/entry/jh-vscode \
   upload-ota --project "$PWD" \
   --target rp2350-arm --board pico2w --host 192.168.2.200
 ```
