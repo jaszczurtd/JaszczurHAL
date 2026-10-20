@@ -9,11 +9,14 @@
       "requiredPaths": [
         "LICENSE",
         "README.md",
+        "include/jb/array.h",
         "include/jb/json.h",
+        "include/jb/status.h",
         "third_party/unity_version.conf",
         "third_party/cppcheck_version.conf",
         "third_party/pmd_version.conf",
-        "third_party/riscv_toolchain_version.conf"
+        "third_party/riscv_toolchain_version.conf",
+        "third_party/cmake_minimum_version.conf"
       ],
       "clean": true
     },
@@ -217,7 +220,8 @@
     "pmd",
     "cppcheck",
     "picotool",
-    "riscv-toolchain"
+    "riscv-toolchain",
+    "cmake-minimum"
   ],
   "jhbasePins": {
     "unity": {
@@ -239,6 +243,11 @@
       "config": "riscv_toolchain_version.conf",
       "dirKey": "RISCV_TOOLCHAIN_DIR",
       "directory": "third_party/riscv-toolchain"
+    },
+    "cmake-minimum": {
+      "config": "cmake_minimum_version.conf",
+      "dirKey": "CMAKE_MINIMUM_DIR",
+      "directory": "third_party/cmake-minimum"
     }
   },
   "defaultOrder": [
@@ -258,7 +267,8 @@
     "pmd",
     "cppcheck",
     "picotool",
-    "riscv-toolchain"
+    "riscv-toolchain",
+    "cmake-minimum"
   ],
   "launchers": {
     "jhbase": "ensure_jhbase.sh",
@@ -278,6 +288,7 @@
     "pmd": "ensure_pmd.sh",
     "cppcheck": "ensure_cppcheck.sh",
     "picotool": "ensure_picotool.sh",
-    "riscv-toolchain": "ensure_riscv_toolchain.sh"
+    "riscv-toolchain": "ensure_riscv_toolchain.sh",
+    "cmake-minimum": "ensure_cmake_minimum.sh"
   }
 }

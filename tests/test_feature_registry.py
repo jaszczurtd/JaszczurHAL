@@ -14,6 +14,8 @@ import subprocess
 import sys
 from typing import NamedTuple
 
+from repo_root import hal_include_args
+
 
 def require(condition: bool, message: str) -> None:
     if not condition:
@@ -146,7 +148,7 @@ def preprocess_feature_macros(
         "",
     ]
     result = subprocess.run(
-        [compiler, "-std=c11", "-E", "-dM", "-x", "c", "-I", str(ROOT / "src"), "-"],
+        [compiler, "-std=c11", "-E", "-dM", "-x", "c", *hal_include_args(ROOT), "-"],
         input="\n".join(source),
         check=False,
         capture_output=True,
@@ -263,8 +265,7 @@ def preprocess_feature_set(
             "-x",
             "c",
             *include_dirs,
-            "-I",
-            str(ROOT / "src"),
+            *hal_include_args(ROOT),
             "-I",
             str(ROOT / "third_party/FreeRTOS-Kernel/include"),
             "-I",
@@ -396,8 +397,7 @@ def check_direct_compiler_zero_presence(compiler: str) -> None:
             "-dM",
             "-x",
             "c",
-            "-I",
-            str(ROOT / "src"),
+            *hal_include_args(ROOT),
             "-",
         ],
         input=source,
@@ -434,8 +434,7 @@ def preprocess_hal_config_features(
             "-dM",
             "-x",
             "c",
-            "-I",
-            str(ROOT / "src"),
+            *hal_include_args(ROOT),
             "-",
         ],
         input="\n".join(source),
@@ -470,8 +469,7 @@ def preprocess_hal_config_verbose(
             "-E",
             "-x",
             "c",
-            "-I",
-            str(ROOT / "src"),
+            *hal_include_args(ROOT),
             "-",
         ],
         input="\n".join(source),
@@ -501,8 +499,7 @@ def require_hal_config_failure(
             "-E",
             "-x",
             "c",
-            "-I",
-            str(ROOT / "src"),
+            *hal_include_args(ROOT),
             "-",
         ],
         input="\n".join(source),

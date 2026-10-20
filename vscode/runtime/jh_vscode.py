@@ -524,6 +524,41 @@ def jaszczurhal_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def configured_hal_root(config: dict[str, Any], project_dir: Path) -> Path | None:
+    """The checkout jaszczurhal.root names, resolved against the project."""
+    root = config.get("root")
+    if not isinstance(root, str) or not root:
+        return None
+    root_path = Path(os.path.expanduser(root))
+    if not root_path.is_absolute():
+        root_path = project_dir / root_path
+    return root_path.resolve()
+
+
+def foreign_checkout_findings(config: dict[str, Any], project_dir: Path) -> list[str]:
+    """[JH-HAL-ROOT] for jaszczurhal.root or a dispatcher sourceDir in another
+    JaszczurHAL checkout than this script's: one build would mix two."""
+    own = jaszczurhal_root()
+    sources = config.get("_sources", {})
+    fix = f"point it at {own} or run the jh-vscode of that checkout"
+    findings = []
+    root = configured_hal_root(config, project_dir)
+    if root is not None and root != own:
+        findings.append(
+            f"[JH-HAL-ROOT] {sources.get('root', '.vscode/settings.json')}: "
+            f"jaszczurhal.root is {root}, but this jh-vscode runs from {own}; {fix}"
+        )
+    source = get_cmake_source_dir(config, project_dir).resolve()
+    is_dispatcher = (source.parent.name, source.name) == ("cmake", "jh_firmware_project")
+    if is_dispatcher and source.parents[1] != own:
+        findings.append(
+            f"[JH-HAL-ROOT] {sources.get('cmake', '.vscode/jaszczurhal.project.json')}: "
+            f"cmake.sourceDir is the dispatcher of {source.parents[1]}, but this "
+            f"jh-vscode runs from {own}; use ${{jhRoot}}/cmake/jh_firmware_project"
+        )
+    return findings
+
+
 def windows_host_environment_path() -> Path:
     override = os.environ.get("JH_WINDOWS_HOST_ENVIRONMENT")
     if override:
@@ -1266,6 +1301,9 @@ def load_project_config(
         )
     config["_projectDir"] = str(project_dir)
     config["_sources"] = sources
+    findings = foreign_checkout_findings(config, project_dir)
+    if findings:
+        raise ValueError("\n".join(findings))
     return config
 
 
@@ -3555,12 +3593,9 @@ def normalize_cmake_cli_value(value: str) -> str:
 
 def cmake_cache_args(config: dict[str, Any], project_dir: Path) -> list[str]:
     args: list[str] = []
-    root = config.get("root")
-    if isinstance(root, str) and root:
-        root_path = Path(os.path.expanduser(root))
-        if not root_path.is_absolute():
-            root_path = project_dir / root_path
-        args.append(f"-DJH_ROOT={normalize_cmake_cli_value(str(root_path.resolve()))}")
+    root_path = configured_hal_root(config, project_dir)
+    if root_path is not None:
+        args.append(f"-DJH_ROOT={normalize_cmake_cli_value(str(root_path))}")
 
     identity = config.get("identity")
     if (

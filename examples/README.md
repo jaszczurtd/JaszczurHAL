@@ -111,7 +111,7 @@ the generator rejects any other pin.
 
 ## Requirements
 
-Install CMake 3.20 or newer, Python 3, and the appropriate compiler.
+Install CMake 3.22 or newer, Python 3, and the appropriate compiler.
 RP2040, RP2350 ARM, and STM32G474 use `arm-none-eabi-gcc`.
 Prepare the managed Pico SDK, picotool, FreeRTOS, lwIP, BearSSL, LittleFS,
 and RISC-V components with `./runmefirst.sh` or

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22)
 include("${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/jh_build_dir_guard.cmake")
 jh_require_managed_build_dir()
 

@@ -158,7 +158,7 @@ class Package(unittest.TestCase):
         # ``options`` are the target's compile options; they follow
         # CMAKE_C_FLAGS and CMAKE_C_FLAGS_<CONFIG> on the command line.
         (project / "CMakeLists.txt").write_text(
-            "cmake_minimum_required(VERSION 3.20)\n"
+            "cmake_minimum_required(VERSION 3.22)\n"
             "project(package_consumer C)\n"
             f'include("{(ROOT / "cmake" / "jh_hal_package.cmake").as_posix()}")\n'
             "add_executable(app app.c)\n"

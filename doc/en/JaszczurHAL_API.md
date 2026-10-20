@@ -7,7 +7,7 @@ JaszczurHAL provides a common hardware API for embedded applications. This guide
 **Author:** Marcin 'Jaszczur' Kielesiński
 
 - **Repository:** `git@github.com:jaszczurtd/JaszczurHAL.git`
-- **Include root:** `src/` of the HAL checkout
+- **Include roots:** `src/` of the HAL checkout and `third_party/jhbase/include` (status codes and `COUNTOF`; HAL's CMake builds add it)
 
 ---
 

@@ -52,10 +52,11 @@ W tym API powodzenie ma wartość dodatnią, a błędy - ujemne. `status == HAL_
 Nazwy używają prefiksu `HAL_` zamiast nazw `errno` z POSIX, aby uniknąć
 kolizji z `errno.h` oraz warstwą zgodności z gniazdami BSD.
 
-Konsumenci wymagający enuma statusów o szerokości 32 bitów mogą zdefiniować
-`HAL_STATUS_FIXED_32` spójnie przed pierwszym include. GCC/Clang ustalają wtedy
-szerokość tego enuma bez zmiany globalnych flag enumów; MSVC już używa enuma
-32-bitowego. Bez selektora HAL zachowuje domyślny układ kompilatora.
+`hal_status_t` ma 32 bity w każdym kompilatorze i na każdej platformie, także
+przy `-fshort-enums`, domyślnym w ARM EABI; pozostałe enumy zachowują swój
+rozmiar. Typ i opisane niżej funkcje są zdefiniowane raz, w bibliotece jhbase
+(`jb/status.h`), z której korzystają też narzędzia jh. `hal_status.h` dołącza
+ten nagłówek, więc nie trzeba niczego definiować.
 
 ## Funkcje pomocnicze
 

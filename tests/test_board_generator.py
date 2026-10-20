@@ -15,7 +15,7 @@ import sys
 import tempfile
 
 
-from repo_root import repo_root  # noqa: E402
+from repo_root import hal_include_dirs, repo_root  # noqa: E402
 
 ROOT = repo_root(sys.argv, __file__)
 GENERATOR = ROOT / "scripts/generate_board_config.py"
@@ -857,11 +857,11 @@ for board_id, descriptor in board_descriptors.items():
         target_selector = target_descriptors[target_id]["hal"]["targetSelector"]
         board_selector = descriptor["hal"]["selector"]
         generated_macros = board_contract_macros(
-            macro_dump([parity_output, ROOT / "src"], [f"{target_selector}=1"])
+            macro_dump([parity_output, *hal_include_dirs(ROOT)], [f"{target_selector}=1"])
         )
         fallback_macros = board_contract_macros(
             macro_dump(
-                [ROOT / "src"],
+                hal_include_dirs(ROOT),
                 [f"{target_selector}=1", f"{board_selector}=1"],
             )
         )

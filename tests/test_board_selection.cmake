@@ -6,6 +6,8 @@ endif()
 include("${JH_ASSEMBLY_ARGUMENTS}")
 
 set(_probe "${JH_ROOT}/tests/fixtures/board_selection_probe.cpp")
+include("${JH_ROOT}/cmake/jh_jhbase.cmake")
+jh_jhbase_include_dir(_jhbase_include)
 set(_include "${JH_ROOT}/src")
 include("${JH_ROOT}/tests/jh_test_artifacts.cmake")
 jh_test_artifact_dir(_artifact_dir board-selection)
@@ -14,7 +16,7 @@ function(check_board NAME EXPECT_SUCCESS EXPECT_TEXT)
     set(_object "${_artifact_dir}/board_selection_${NAME}.o")
     execute_process(
         COMMAND "${JH_CXX}" -std=c++17 -Wall -Wextra -Werror
-                "-I${_include}" ${ARGN} -c "${_probe}" -o "${_object}"
+                "-I${_include}" "-I${_jhbase_include}" ${ARGN} -c "${_probe}" -o "${_object}"
         RESULT_VARIABLE _result
         OUTPUT_VARIABLE _stdout
         ERROR_VARIABLE _stderr

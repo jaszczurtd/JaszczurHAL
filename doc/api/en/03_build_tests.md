@@ -167,9 +167,9 @@ refreshes them.
 
 | Stage | What it checks |
 | --- | --- |
-| `tools` | The tools `scripts/install_host_tools.sh` installs, the Clang sanitizer tools and the pinned components |
+| `tools` | The tools `scripts/install_host_tools.sh` installs, the Clang sanitizer tools and the pinned components; every `cmake_minimum_required` declares the oldest supported CMake |
 | `repository` | Tracked generated artifacts, release metadata and the effective feature configuration of every project |
-| `host` | Host/mock unit tests (`.build/gate/host/` + ctest, incl. FreeRTOS POSIX) |
+| `host` | Host/mock unit tests (`.build/gate/host/` + ctest, incl. FreeRTOS POSIX), configured, built and run with the oldest supported CMake |
 | `sanitizer-fuzz` | Clang ASan/UBSan tests, native tests under ThreadSanitizer and bounded libFuzzer smoke checks |
 | `memcheck` | Valgrind memcheck on all native C/C++ test executables |
 | `cppcheck` | The pinned cppcheck build (`scripts/run_cppcheck.sh`) |
@@ -178,7 +178,7 @@ refreshes them.
 | `stm32` | STM32G474 host-compiler, ARM and SX1276/SX1278 static libraries |
 | `rp` | Pico SDK RP2040/RP2350 ARM/RP2350 RISC-V entry/core probes, six representative `01_core_runtime`/`18_freertos_suite` ELF/BIN/UF2 builds and the RP2040 feature profiles |
 | `esp-idf` | One clean compile-only `tests/fixtures/esp32s3_phase3` build with the pinned ESP-IDF and its validated multi-image manifest, the ESP32 Classic gamepad fixture, and the ESP32-S3 all-features `libJaszczurHAL.a` covering the whole target allowlist |
-| `library-<target>` | Every feature for `rp2040`, `rp2350-arm`, `rp2350-riscv` and `stm32g474`: once without a project header and once for an application in a path with spaces |
+| `library-<target>` | Every feature for `rp2040`, `rp2350-arm`, `rp2350-riscv` and `stm32g474`: once without a project header and once for an application in a path with spaces, built with the oldest supported CMake |
 | `examples-<target>` | Every example configuration for `rp2040`, `stm32g474` and `esp32s3` through `scripts/examples_dispatcher.py`; local only, not in CI |
 | `security` | SBOM regeneration, osv-scanner and the cve-bin-tool SBOM scan |
 

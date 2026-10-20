@@ -1,3 +1,7 @@
+# Every HAL header includes jhbase (hal_status.h, hal_array.h), so every test
+# target below gets jb::status, also those that compile HAL sources directly.
+link_libraries(jb::status)
+
 # Helper: create a test executable linked against hal_mock
 function(add_hal_test NAME)
     add_executable(${NAME} ${NAME}.cpp)

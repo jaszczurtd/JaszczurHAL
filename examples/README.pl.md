@@ -115,7 +115,7 @@ pinów wyprowadzonych na ESP32-S3-Zero; generator odrzuca każdy inny pin.
 
 ## Wymagania
 
-Potrzebne są CMake 3.20 lub nowszy, Python 3 i odpowiedni kompilator.
+Potrzebne są CMake 3.22 lub nowszy, Python 3 i odpowiedni kompilator.
 Dla RP2040, RP2350 ARM i STM32G474 jest to `arm-none-eabi-gcc`.
 Komponenty Pico SDK, picotool, FreeRTOS, lwIP, BearSSL, LittleFS oraz
 narzędzia RISC-V przygotuj przez `./runmefirst.sh` albo

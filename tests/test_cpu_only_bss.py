@@ -6,6 +6,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from repo_root import hal_include_args
+
 ROOT = Path(sys.argv[1]).resolve()
 STM = ROOT / "link_libraries/stm32_lib"
 SOURCE = r'''
@@ -57,7 +59,7 @@ def check_initializers(work):
         source.write_text('#include "hal/core/hal_memory.h"\n'
                           'int HAL_CPU_ONLY_BSS(invalid_buffer) = 42;\n')
         for section in (".bss.hal_cpu.sram", ".bss.hal_cpu.ccm"):
-            command = [compiler, "-I", str(ROOT / "src"),
+            command = [compiler, *hal_include_args(ROOT),
                        f'-DJH_CPU_ONLY_BSS_SECTION="{section}"',
                        "-c", str(source), "-o", str(work / "invalid.o")]
             result = subprocess.run(command, text=True, stdout=subprocess.PIPE,
@@ -128,7 +130,7 @@ def check_targets(work):
     for target in ("MOCK", "RP2040", "RP2350_ARM", "RP2350_RISCV",
                    "ESP32", "ESP32_S3"):
         obj = work / f"{target}.o"
-        run("cc", "-Wall", "-Wextra", "-Werror", "-I", str(ROOT / "src"),
+        run("cc", "-Wall", "-Wextra", "-Werror", *hal_include_args(ROOT),
             f"-DHAL_TARGET_{target}", "-c", str(source), "-o", str(obj))
         table = run("objdump", "-t", str(obj))
         assert any(".bss.hal_cpu.sram.cpu_buffer" in line
@@ -145,7 +147,7 @@ def check_stm32(work):
     project.mkdir()
     (project / "probe.c").write_text(SOURCE)
     (project / "CMakeLists.txt").write_text(f'''
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.22)
 project(cpu_bss_probe C)
 include("{STM.as_posix()}/jh_stm32g474_memory.cmake")
 add_library(buffers STATIC probe.c)
@@ -199,7 +201,7 @@ def check_macho(work):
     for language in ("c", "c++"):
         run(clang, "--target=x86_64-apple-darwin", "-ffreestanding",
             "-Wall", "-Wextra", "-Werror", "-DHAL_TARGET_MOCK=1",
-            "-I", str(ROOT / "src"), "-x", language, "-c", str(source),
+            *hal_include_args(ROOT), "-x", language, "-c", str(source),
             "-o", str(work / f"macho-{language}.o"))
 
 

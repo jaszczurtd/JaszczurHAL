@@ -6,6 +6,7 @@ from __future__ import annotations
 from contextlib import redirect_stderr
 import io
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -1333,4 +1334,53 @@ with tempfile.TemporaryDirectory(prefix="jh-vscode-target-token-") as temp_dir:
     require(
         same_path(archive, str(expected).format("rp2350-arm")),
         f"${{target}} ignored the local target selection: {archive!r}",
+    )
+
+# jaszczurhal.root and a dispatcher sourceDir must name the checkout this
+# jh-vscode runs from: a second checkout would mix two HALs in one build.
+with tempfile.TemporaryDirectory(prefix="jh-vscode-two-checkouts-") as temp_dir:
+    workspace = Path(temp_dir)
+    other = workspace / "OtherHAL"
+    (other / "cmake" / "jh_firmware_project").mkdir(parents=True)
+    own_dispatcher = "${jhRoot}/cmake/jh_firmware_project"
+
+    def checkout_case(name: str, root: str | None, source_dir: str):
+        project = workspace / name
+        write_feature_value_fixture(project)
+        manifest_path = project / ".vscode" / "jaszczurhal.project.json"
+        manifest = load_json(manifest_path)
+        manifest["cmake"]["sourceDir"] = source_dir
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        if root is not None:
+            (project / ".vscode" / "settings.json").write_text(
+                json.dumps({"jaszczurhal.root": root}), encoding="utf-8"
+            )
+        return run_feature_value_dump(project)
+
+    def require_foreign(result, location: str, checkout: Path) -> None:
+        require(
+            result.returncode == workflow_runtime.EXIT_CONFIG
+            and "[JH-HAL-ROOT]" in result.stderr
+            and location in result.stderr and str(checkout) in result.stderr,
+            f"{location} in {checkout} was not refused: {result.stderr}",
+        )
+
+    try:
+        own_root = os.path.join("..", os.path.relpath(ROOT, workspace))
+    except ValueError:  # another Windows drive
+        own_root = str(ROOT)
+    result = checkout_case("own", own_root, own_dispatcher)
+    require(result.returncode == 0, f"the own checkout was refused: {result.stderr}")
+    require_foreign(
+        checkout_case("root", "../OtherHAL", own_dispatcher),
+        "jaszczurhal.root", other.resolve(),
+    )
+    require_foreign(
+        checkout_case("dispatcher", None, str(other / "cmake" / "jh_firmware_project")),
+        "cmake.sourceDir", other.resolve(),
+    )
+    # A project still on the layout before the move names a dispatcher that is gone.
+    require_foreign(
+        checkout_case("stale", None, "${project}/../libraries/JaszczurHAL/cmake/jh_firmware_project"),
+        "cmake.sourceDir", (workspace / "libraries" / "JaszczurHAL").resolve(),
     )

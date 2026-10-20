@@ -172,9 +172,9 @@ generowane; odświeża je `python3 scripts/sync_generated.py --write`.
 
 | Etap | Co sprawdza |
 | --- | --- |
-| `tools` | Narzędzia instalowane przez `scripts/install_host_tools.sh`, narzędzia sanitizerów Clang i komponenty w wersjach wskazanych przez repozytorium |
+| `tools` | Narzędzia instalowane przez `scripts/install_host_tools.sh`, narzędzia sanitizerów Clang i komponenty w wersjach wskazanych przez repozytorium; każde `cmake_minimum_required` deklaruje najstarszy obsługiwany CMake |
 | `repository` | Wersjonowane artefakty generowane, metadane wydania i efektywną konfigurację funkcji każdego projektu |
-| `host` | Testy jednostkowe hosta/mock (`.build/gate/host/` + ctest, w tym FreeRTOS POSIX) |
+| `host` | Testy jednostkowe hosta/mock (`.build/gate/host/` + ctest, w tym FreeRTOS POSIX), konfigurowane, budowane i uruchamiane najstarszym obsługiwanym CMake |
 | `sanitizer-fuzz` | Testy Clang ASan/UBSan, testy natywne pod ThreadSanitizerem i krótkie testy libFuzzer |
 | `memcheck` | Valgrind memcheck na wszystkich natywnych plikach wykonywalnych testów C/C++ |
 | `cppcheck` | Przypięty build cppcheck (`scripts/run_cppcheck.sh`) |
@@ -183,7 +183,7 @@ generowane; odświeża je `python3 scripts/sync_generated.py --write`.
 | `stm32` | Biblioteki statyczne STM32G474: kompilator hosta, ARM i SX1276/SX1278 |
 | `rp` | Testy startu i rdzenia Pico SDK dla RP2040/RP2350 ARM/RP2350 RISC-V, sześć reprezentatywnych kompilacji ELF/BIN/UF2 `01_core_runtime`/`18_freertos_suite` oraz profile funkcji RP2040 |
 | `esp-idf` | Jedna czysta kompilacja `tests/fixtures/esp32s3_phase3` z ESP-IDF w wersji wskazanej przez repozytorium i zwalidowanym manifestem wielu obrazów, fixture gamepada ESP32 Classic oraz `libJaszczurHAL.a` ESP32-S3 z pełnym zestawem funkcji, obejmująca całą allowlistę targetu |
-| `library-<target>` | Wszystkie funkcje dla `rp2040`, `rp2350-arm`, `rp2350-riscv` i `stm32g474`: raz bez nagłówka projektu i raz dla aplikacji w ścieżce ze spacjami |
+| `library-<target>` | Wszystkie funkcje dla `rp2040`, `rp2350-arm`, `rp2350-riscv` i `stm32g474`: raz bez nagłówka projektu i raz dla aplikacji w ścieżce ze spacjami, budowane najstarszym obsługiwanym CMake |
 | `examples-<target>` | Wszystkie konfiguracje przykładów dla `rp2040`, `stm32g474` i `esp32s3` przez `scripts/examples_dispatcher.py`; tylko lokalnie, nie w CI |
 | `security` | Odtworzenie SBOM, osv-scanner i skan SBOM przez cve-bin-tool |
 

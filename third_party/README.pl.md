@@ -34,7 +34,7 @@ aktualizujący.
 
 | Komponent | Plik wersji | Katalog utrzymywany przez projekt | Zastosowanie |
 |-----------|-------------|--------------------------------------|---------------|
-| jhbase | `jhbase_version.conf` | `jhbase/` | Biblioteka podstaw planu narzędzi w C (UTF-8, JSON, dokładne liczby, writer); jej `third_party/*_version.conf` są jedynymi pinami Unity, cppcheck, PMD i toolchainu RISC-V |
+| jhbase | `jhbase_version.conf` | `jhbase/` | Biblioteka podstaw planu narzędzi w C (UTF-8, JSON, dokładne liczby, writer); definiuje `hal_status_t` i `COUNTOF` dla każdego buildu HAL, a jej `third_party/*_version.conf` są jedynymi pinami Unity, cppcheck, PMD i toolchainu RISC-V |
 | BearSSL | `bearssl_version.conf` | `BearSSL/` | Silnik TLS używany w kompilacjach dla hosta, RP i STM32 |
 | cJSON | `cjson_version.conf` | `cJSON/` | Parser JSON i pomocnicze API |
 | LodePNG | `lodepng_version.conf` | `lodepng/` | Kodek PNG operujący na pamięci |
@@ -52,6 +52,7 @@ aktualizujący.
 | ESP-IDF | `esp_idf_version.conf` | `esp-idf/` | Natywne SDK dla rodziny ESP32 i narzędzia do przygotowania środowiska |
 | picotool | `picotool_version.conf` | `picotool/` | Źródła natywnego narzędzia RP do wgrywania i odczytu metadanych |
 | cppcheck | `jhbase/third_party/cppcheck_version.conf` | `cppcheck/` | Źródła analizatora statycznego i addonu MISRA używanych przez bramki cppcheck |
+| CMake (najstarszy obsługiwany) | `jhbase/third_party/cmake_minimum_version.conf` | `cmake-minimum/` | Oficjalne wydanie Kitware w wersji minimum deklarowanej przez każde `cmake_minimum_required`; etapy bramki `host` i `library-*` budują nim (Linux) |
 
 Wrappery integracyjne BearSSL, cJSON, LodePNG, JPEG i FatFs należące do
 JaszczurHAL, a także konfiguracja portu lwIP, pozostają w odpowiednich

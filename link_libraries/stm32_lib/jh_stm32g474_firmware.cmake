@@ -89,6 +89,8 @@ function(jh_add_stm32g474_firmware TARGET)
     include("${ARG_JH_ROOT}/cmake/jh_bearssl.cmake")
     include("${ARG_JH_ROOT}/cmake/jh_feature_build_effects.cmake")
     include("${ARG_JH_ROOT}/cmake/jh_managed_frameworks.cmake")
+    include("${ARG_JH_ROOT}/cmake/jh_jhbase.cmake")
+    jh_add_jhbase()
     jh_managed_framework_include_dirs(_jh_framework_include_dirs)
     jh_managed_framework_configure_sources()
     jh_collect_feature_build_effects(_jh_build_effects
@@ -161,6 +163,7 @@ function(jh_add_stm32g474_firmware TARGET)
         ${_jh_framework_include_dirs}
         ${ARG_INCLUDES}
     )
+    target_link_libraries(${TARGET} PRIVATE jb::status)
 
     target_compile_definitions(${TARGET} PRIVATE
         HAL_TARGET_STM32G474=1

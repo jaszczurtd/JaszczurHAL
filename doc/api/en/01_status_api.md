@@ -52,10 +52,11 @@ In this API, success values are positive and error values are negative. Use `sta
 Names use the `HAL_` prefix instead of POSIX `errno` names to avoid collisions
 with `errno.h` and the BSD-sockets compatibility layer.
 
-Consumers requiring a 32-bit status enum can define `HAL_STATUS_FIXED_32`
-consistently before the first include. GCC/Clang then fix this enum's width
-without changing global enum flags; MSVC already uses a 32-bit enum. Without
-the selector, HAL retains the compiler's default layout.
+`hal_status_t` is 32 bits wide on every compiler and target, also with
+`-fshort-enums`, the ARM EABI default; other enums keep their size. The type
+and the helpers below are defined once in the jhbase library
+(`jb/status.h`), which the jh tools share; `hal_status.h` includes it, so
+nothing has to be defined.
 
 ## Helper functions
 

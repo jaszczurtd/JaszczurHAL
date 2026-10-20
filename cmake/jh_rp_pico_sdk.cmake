@@ -30,7 +30,9 @@ include("${JH_ROOT}/cmake/jh_rp_hal_sources.cmake")
 include("${JH_ROOT}/cmake/jh_bearssl.cmake")
 include("${JH_ROOT}/cmake/jh_feature_build_effects.cmake")
 include("${JH_ROOT}/cmake/jh_managed_frameworks.cmake")
+include("${JH_ROOT}/cmake/jh_jhbase.cmake")
 include("${JH_ROOT}/cmake/jh_stack_protector.cmake")
+jh_add_jhbase()
 jh_managed_framework_include_dirs(_jh_rp_framework_include_dirs)
 jh_managed_framework_configure_sources()
 
@@ -189,6 +191,7 @@ target_include_directories(JaszczurHAL PUBLIC
     "${SRC}/hal/impl/rp2040/drivers/usb"
     ${_jh_rp_build_effects_INCLUDE_DIRS}
     ${_jh_rp_framework_include_dirs})
+target_link_libraries(JaszczurHAL PUBLIC jb::status)
 if(DEFINED HAL_PROJECT_CONFIG_DIR)
     target_include_directories(JaszczurHAL PUBLIC ${HAL_PROJECT_CONFIG_DIR})
 endif()
@@ -377,6 +380,7 @@ function(jh_add_rp_ota_boot_target BOOT_TARGET)
     target_include_directories("${BOOT_TARGET}" PRIVATE
         "${SRC}"
         "${JH_BOARD_GENERATED_DIR}")
+    target_link_libraries("${BOOT_TARGET}" PRIVATE jb::status)
     target_compile_definitions("${BOOT_TARGET}" PRIVATE
         ${JH_RP_TARGET_DEFINE}=1
         ${JH_RP_BOARD_DEFINES}
