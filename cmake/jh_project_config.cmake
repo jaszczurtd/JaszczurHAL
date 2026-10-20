@@ -1,6 +1,25 @@
 include_guard(GLOBAL)
 include("${CMAKE_CURRENT_LIST_DIR}/jh_python.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/jh_project_features.cmake")
+# An empty keyword value, such as VARIANT "" from the dispatcher, is an empty
+# string; every reader below tests it with STREQUAL "".
+if(POLICY CMP0174)
+    cmake_policy(SET CMP0174 NEW)
+endif()
+
+# jh_config_glob(<out-var> <config dir> <file name>)
+#
+# A CONFIGURE_DEPENDS pattern for a file in a configuration directory.
+# VerifyGlobs.cmake records the pattern as CMake code, where a backslash of a
+# Windows path starts an escape sequence; elsewhere a backslash is an ordinary
+# file name character and stays.
+function(jh_config_glob OUT_VAR CONFIG_DIR NAME)
+    set(_jh_cg_dir "${CONFIG_DIR}")
+    if(CMAKE_HOST_WIN32)
+        file(TO_CMAKE_PATH "${_jh_cg_dir}" _jh_cg_dir)
+    endif()
+    set(${OUT_VAR} "${_jh_cg_dir}/${NAME}" PARENT_SCOPE)
+endfunction()
 
 # The project's hal_project_config.h evaluated by scripts/project_config.py for
 # one target and variant, exactly as the compiler sees it before the HAL
@@ -64,8 +83,8 @@ function(jh_read_project_config)
     endif()
     include("${_JH_PC_OUTPUT_DIR}/jh_project_config.cmake")
     if(NOT CMAKE_SCRIPT_MODE_FILE AND NOT "${_JH_PC_CONFIG_DIR}" STREQUAL "")
-        file(GLOB _jh_pc_header CONFIGURE_DEPENDS
-            "${_JH_PC_CONFIG_DIR}/hal_project_config.h")
+        jh_config_glob(_jh_pc_pattern "${_JH_PC_CONFIG_DIR}" hal_project_config.h)
+        file(GLOB _jh_pc_header CONFIGURE_DEPENDS "${_jh_pc_pattern}")
         set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
             ${JH_PROJECT_CONFIG_FILES})
     endif()

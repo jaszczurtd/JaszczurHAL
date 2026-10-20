@@ -286,8 +286,9 @@ jobs:
           & $state.tools.cmake -S . -B $build `
             -G Ninja `
             "-DCMAKE_MAKE_PROGRAM=$($state.tools.ninja)" `
-            -DCMAKE_C_COMPILER=cl.exe `
-            -DCMAKE_CXX_COMPILER=cl.exe `
+            "-DPython3_EXECUTABLE=$($state.python)" `
+            '-DCMAKE_C_COMPILER=cl.exe' `
+            '-DCMAKE_CXX_COMPILER=cl.exe' `
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON `
             -DJH_ENABLE_FREERTOS_POSIX_TESTS=ON
@@ -445,6 +446,12 @@ jobs:
 
           & $state.tools.cmake @arguments
           if ($LASTEXITCODE -ne 0) { throw 'Static-library configure failed.' }
+          # VerifyGlobs.cmake is CMake code: a backslash of the Windows
+          # configuration directory would read as an escape sequence there.
+          if (Select-String -Path "$build\CMakeFiles\VerifyGlobs.cmake" `
+              -Pattern '\' -SimpleMatch -Quiet) {
+            throw 'VerifyGlobs.cmake holds a backslash path.'
+          }
           & $state.tools.cmake --build $build --target JaszczurHAL
           if ($LASTEXITCODE -ne 0) { throw 'Static-library build failed.' }
           if (-not (Test-Path "$build\libJaszczurHAL.a" -PathType Leaf)) {

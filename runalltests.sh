@@ -98,7 +98,7 @@ stage_title() {
     case "$1" in
         tools) echo "required tools, pinned components and the declared CMake minimum" ;;
         repository) echo "generated files, release metadata, effective features" ;;
-        host) echo "host unit tests (oldest supported CMake + ctest, FreeRTOS POSIX)" ;;
+        host) echo "host unit tests and the jh CLI (oldest supported CMake + ctest, FreeRTOS POSIX)" ;;
         sanitizer-fuzz) echo "Clang ASan/UBSan, TSan and parser fuzz smoke checks" ;;
         memcheck) echo "memory safety (Valgrind memcheck)" ;;
         cppcheck) echo "static analysis: cppcheck" ;;
@@ -396,6 +396,14 @@ stage_host() {
     ensure_host_build
     info "Running tests..."
     with_minimum_cmake ctest --test-dir "${HOST_BUILD}" --output-on-failure
+
+    # The jh host CLI is its own CMake project on the pinned jhbase.
+    local jh_build="${GATE_BUILD_ROOT}/jh"
+    rm -rf "${jh_build}"
+    info "Building and testing the jh host CLI..."
+    with_minimum_cmake ensure_cmake_build "${jh_build}" -S tools/jh \
+        -DCMAKE_BUILD_TYPE=Release
+    with_minimum_cmake ctest --test-dir "${jh_build}" --output-on-failure
 }
 
 stage_sanitizer_fuzz() {
