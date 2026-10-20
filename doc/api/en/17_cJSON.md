@@ -329,8 +329,9 @@ escape them as `~0` and `~1`.
   remain untouched.
 - Do not apply JSON Patch documents from outside the device with
   `cJSONUtils_ApplyPatches()` or `cJSONUtils_ApplyPatchesCaseSensitive()`:
-  upstream has no fix yet for unbounded recursion (CVE-2026-67215) and for
-  operations that destroy data before failing (CVE-2026-67217). Do not pass
+  upstream has no fix yet for unbounded recursion (CVE-2026-67215), for
+  operations that destroy data before failing (CVE-2026-67217) and for
+  `~1` escapes in patch paths that select the wrong key (CVE-2026-29036). Do not pass
   untrusted documents of unbounded nesting to `cJSON_Compare()`, whose running
   time grows exponentially with nesting (CVE-2026-67216). The HAL itself calls
   none of these functions; the decisions are recorded in

@@ -58,6 +58,18 @@ rozmiar. Typ i opisane niżej funkcje są zdefiniowane raz, w bibliotece jhbase
 (`jb/status.h`), z której korzystają też narzędzia jh. `hal_status.h` dołącza
 ten nagłówek, więc nie trzeba niczego definiować.
 
+`hal_status.h` udostępnia też `JB_STATIC_ASSERT(condition, message)` z
+`jb/abi.h`. Używaj go do kontroli w czasie kompilacji w kodzie budowanym
+jako C i jako C++, zamiast ręcznie przełączać `static_assert` i
+`_Static_assert`:
+
+```c
+#include <hal/core/hal_status.h>
+
+#define FRAME_BYTES 16
+JB_STATIC_ASSERT(FRAME_BYTES % 4 == 0, "ramki to pełne słowa");
+```
+
 ## Funkcje pomocnicze
 
 Funkcje są zdefiniowane jako `static inline` w [`hal_status.h`](../../../src/hal/core/hal_status.h) i dostępne w C oraz C++:

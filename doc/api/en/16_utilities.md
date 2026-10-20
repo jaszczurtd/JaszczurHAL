@@ -250,6 +250,7 @@ Choosing a header:
 | Domain | Header | Primary API |
 |---|---|---|
 | Arrays | `hal/core/hal_array.h` | `COUNTOF()` |
+| Compile-time checks | `hal/core/hal_status.h` | `JB_STATIC_ASSERT()` |
 | Integer serialization/endian | `hal/core/jh_endian.h` | `jh_load_*`, `jh_store_*`, `jh_bswap*`, `MSB()`, `LSB()` |
 | Numeric/signal helpers | `hal/core/hal_math.h` | `hal_math_*` |
 | Bounded text helpers | `hal/core/hal_text.h` | `hal_text_*` |

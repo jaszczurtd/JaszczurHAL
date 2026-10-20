@@ -18,6 +18,7 @@
 #define JH_LAYOUT_CHECK_DEFINED
 
 #if !defined(__ASSEMBLER__)
+#include <jb/abi.h>
 #include <stddef.h>
 
 /* Packing shows in the offset of the most aligned basic type. */
@@ -28,11 +29,6 @@ struct jh_layout_reference {
 
 #define JH_LAYOUT_JOIN_(a, b) a##b
 #define JH_LAYOUT_JOIN(a, b) JH_LAYOUT_JOIN_(a, b)
-#ifdef __cplusplus
-#define JH_LAYOUT_ASSERT static_assert
-#else
-#define JH_LAYOUT_ASSERT _Static_assert
-#endif
 
 /**
  * @brief Compares the packing in effect with the first HAL include.
@@ -45,7 +41,7 @@ struct jh_layout_reference {
     char c;                                                                    \
     long double x;                                                             \
   };                                                                           \
-  JH_LAYOUT_ASSERT(offsetof(struct JH_LAYOUT_JOIN(jh_layout_probe_, id), x) == \
+  JB_STATIC_ASSERT(offsetof(struct JH_LAYOUT_JOIN(jh_layout_probe_, id), x) == \
                        offsetof(struct jh_layout_reference, x),                \
                    "struct packing changed since the first HAL header; close " \
                    "#pragma pack before including HAL headers")
