@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22)
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/jh_build_dir_guard.cmake")
 jh_require_managed_build_dir()
 project(JaszczurHAL_Tests CXX C)
@@ -69,9 +69,11 @@ include(CTest)
 
 set(SRC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/jh_managed_frameworks.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/jh_jhbase.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/jh_host_warnings.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/jh_littlefs.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/jh_sx126x.cmake)
+jh_add_jhbase()
 jh_managed_framework_include_dirs(JH_MANAGED_FRAMEWORK_INCLUDE_DIRS)
 jh_managed_framework_configure_sources()
 jh_littlefs_source_manifest(JH_LITTLEFS_TEST_SOURCES
@@ -260,6 +262,7 @@ target_include_directories(hal_mock PUBLIC
     ${JH_MANAGED_FRAMEWORK_INCLUDE_DIRS}
     ${JH_SX126X_INCLUDE_DIRS}
 )
+target_link_libraries(hal_mock PUBLIC jb::status)
 
 if(MSVC)
     set_source_files_properties(${JH_SX126X_SOURCES}
@@ -452,6 +455,7 @@ if(JH_ENABLE_FREERTOS_POSIX_TESTS)
         ${SRC}
         ${JH_SX126X_INCLUDE_DIRS}
     )
+    target_link_libraries(hal_freertos_posix PUBLIC jb::status)
     target_compile_definitions(hal_freertos_posix PUBLIC
         HAL_TARGET_STM32G474=1
         JH_TARGET_STM32G474=1

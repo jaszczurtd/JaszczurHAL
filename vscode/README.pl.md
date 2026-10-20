@@ -270,6 +270,12 @@ ją bezpośrednio po otwarciu katalogu projektu. Osobny `cmake.buildDirectory`
 oddziela tę automatyczną konfigurację od buildów uruchamianych przez zadania
 `jh-vscode`.
 
+`jh-vscode` buduje wyłącznie z checkoutu, z którego go uruchomiono. Jeśli
+`jaszczurhal.root` w `.vscode/settings.json` albo `cmake.sourceDir` wskazujący
+wspólną konfigurację prowadzi do innego checkoutu JaszczurHAL, na przykład
+drugiego klonu, każda akcja kończy się błędem `[JH-HAL-ROOT]`, zanim dotknie
+CMake. Ustaw obie ścieżki na checkout uruchamianego `jh-vscode`.
+
 W natywnym środowisku Windows używane są zweryfikowane narzędzia i krótki
 katalog bazowy buildów przygotowane przez `runmefirst.ps1`. Cache CMake
 pozostaje pod tą krótką ścieżką, natomiast końcowe artefakty firmware trafiają

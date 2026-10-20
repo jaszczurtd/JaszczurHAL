@@ -37,7 +37,7 @@ MANAGED_RISCV = ROOT / "third_party" / "riscv-toolchain"
 
 PROBE = textwrap.dedent(
     """\
-    cmake_minimum_required(VERSION 3.20)
+    cmake_minimum_required(VERSION 3.22)
     project(jh_rp_sdk_support_probe NONE)
     include("${JH_SUPPORT_MODULE}")
     # Stand-in for the SDK function: records override paths on the target.

@@ -385,7 +385,7 @@ try:
 
     invalid_cyw43_keyword_source.mkdir(parents=True)
     invalid_cyw43_keyword_cmake = """\
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22)
 project(jh_invalid_cyw43_keyword NONE)
 include("@HELPER@")
 jh_target_enable_cyw43_feature_stack(probe GAMEPAD TRUE)
@@ -646,7 +646,7 @@ jh_target_enable_cyw43_feature_stack(probe GAMEPAD TRUE)
     incremental_header = incremental_config / "network.h"
     incremental_header.write_text("#pragma once\n", encoding="utf-8")
     incremental_cmake = """\
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.22)
 project(jh_project_config_dependency NONE)
 include("@HELPER@")
 jh_read_project_config(ROOT "@ROOT@" CONFIG_DIR "@CONFIG@" TARGET rp2040

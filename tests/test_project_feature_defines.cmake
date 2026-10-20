@@ -1,5 +1,5 @@
 # The policies of the builds that call these helpers.
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22)
 
 if(NOT DEFINED JH_ROOT)
     message(FATAL_ERROR "JH_ROOT is required")

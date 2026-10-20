@@ -15,7 +15,7 @@ from typing import Sequence
 import unittest
 from unittest import mock
 
-from repo_root import repo_root  # noqa: E402
+from repo_root import hal_include_dirs, repo_root  # noqa: E402
 
 ROOT = repo_root(sys.argv, __file__)
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -317,7 +317,7 @@ class CommandLine(unittest.TestCase):
                                                    ("DOWN", "HAL_GPIO_INPUT_PULLDOWN")))
                     + '\nconst hal_gpio_mode_t mode = JH_HW_NODE_DOWN_INPUT_MODE;\n', encoding="utf-8")
                 result = subprocess.run([compiler, f"-std={standard}", "-Wall", "-Wextra", "-Werror",
-                                         "-DHAL_TARGET_MOCK=1", f"-I{ROOT / 'src'}", f"-I{output}",
+                                         "-DHAL_TARGET_MOCK=1", *(f"-I{path}" for path in hal_include_dirs(ROOT)), f"-I{output}",
                                          "-fsyntax-only", str(source)], capture_output=True, text=True)
                 self.assertEqual(0, result.returncode, result.stderr)
 

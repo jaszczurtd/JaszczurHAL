@@ -12,7 +12,7 @@ import subprocess
 import sys
 import unittest
 
-from repo_root import repo_root  # noqa: E402
+from repo_root import hal_include_dirs, repo_root  # noqa: E402
 
 ROOT = repo_root(sys.argv, __file__)
 SOURCE = ROOT / "src"
@@ -84,7 +84,7 @@ class Compile(unittest.TestCase):
         source.write_text(self.UNIT.format(between=between), encoding="utf-8")
         compiler, standard = ("c++", "-std=c++17") if language == "c++" else ("cc", "-std=c11")
         return subprocess.run([compiler, standard, "-Wall", "-Wextra", "-Wpedantic", "-Werror",
-                               f"-I{SOURCE}", "-fsyntax-only", str(source)], capture_output=True, text=True)
+                               *(f"-I{path}" for path in hal_include_dirs(ROOT)), "-fsyntax-only", str(source)], capture_output=True, text=True)
 
     def test_a_pragma_left_open_between_hal_headers_stops_the_unit(self) -> None:
         for language in ("c", "c++"):

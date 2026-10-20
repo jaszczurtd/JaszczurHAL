@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22)
 include("${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/jh_build_dir_guard.cmake")
 jh_require_managed_build_dir()
 project(JaszczurHAL_STM32G474 C CXX)
@@ -112,8 +112,10 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/jh_stm32g474_memory.cmake)
 include(${JH_ROOT}/cmake/jh_bearssl.cmake)
 include(${JH_ROOT}/cmake/jh_feature_build_effects.cmake)
 include(${JH_ROOT}/cmake/jh_managed_frameworks.cmake)
+include(${JH_ROOT}/cmake/jh_jhbase.cmake)
 include(${JH_ROOT}/cmake/jh_cyw43_driver.cmake)
 include(${JH_ROOT}/cmake/jh_stack_protector.cmake)
+jh_add_jhbase()
 jh_managed_framework_include_dirs(_jh_stm32_framework_include_dirs)
 jh_managed_framework_configure_sources()
 set(_jh_extra_hal_defines
@@ -192,6 +194,7 @@ target_include_directories(JaszczurHAL PUBLIC
     ${_jh_stm32_build_effects_INCLUDE_DIRS}
     ${_jh_stm32_framework_include_dirs}
 )
+target_link_libraries(JaszczurHAL PUBLIC jb::status)
 include("${JH_ROOT}/cmake/jh_library_package.cmake")
 jh_add_library_package(JaszczurHAL "${SRC}")
 

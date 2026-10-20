@@ -44,10 +44,16 @@ foreach(_framework_dir ${JH_ESP_IDF_COMPONENT_INCLUDE_DIRS})
     endif()
 endforeach()
 
+# hal_status.h and hal_array.h include jhbase; the same module as the CMake
+# builds selects the checkout and stops when it is missing.
+include("${JH_ROOT}/cmake/jh_jhbase.cmake")
+jh_jhbase_include_dir(_jh_jhbase_include)
+
 idf_component_register(
     SRCS ${_jh_sources}
     INCLUDE_DIRS
         "${JH_ROOT}/src"
+        "${_jh_jhbase_include}"
         "${_jh_generated_dir}"
         ${JH_ESP_IDF_COMPONENT_INCLUDE_DIRS}
         ${JH_ESP_IDF_PROJECT_INCLUDE_DIRS}

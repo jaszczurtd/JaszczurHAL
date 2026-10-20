@@ -233,6 +233,20 @@
       "notes": "Pinned prebuilt riscv32-unknown-elf GCC 15 toolchain for RP2350 Hazard3 firmware builds; distributed as part of the official Pico SDK tools release."
     },
     {
+      "name": "CMake (oldest supported)",
+      "pin": {"component": "cmake-minimum"},
+      "version": "{CMAKE_MINIMUM_VERSION}",
+      "type": "application",
+      "scope": "development",
+      "supplier": "Kitware, Inc. and CMake contributors",
+      "licenses": ["BSD-3-Clause"],
+      "purl": "pkg:generic/cmake@{CMAKE_MINIMUM_VERSION}",
+      "paths": ["third_party/cmake-minimum", "third_party/jhbase/third_party/cmake_minimum_version.conf"],
+      "upstream": "https://github.com/Kitware/CMake",
+      "feature_flags": [],
+      "notes": "Official prebuilt release of the oldest CMake every cmake_minimum_required declares; the host and library-* gate stages build with it on Linux. It is not linked into firmware."
+    },
+    {
       "name": "BearSSL",
       "pin": {"file": "third_party/bearssl_version.conf"},
       "version": "{BEARSSL_VERSION}",

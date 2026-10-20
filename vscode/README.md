@@ -250,6 +250,12 @@ dispatcher directly when a project folder opens. Its isolated
 `cmake.buildDirectory` keeps that automatic configuration separate from builds
 started through `jh-vscode` tasks.
 
+`jh-vscode` builds only with the checkout it runs from. When `jaszczurhal.root`
+in `.vscode/settings.json` or a dispatcher `cmake.sourceDir` leads to another
+JaszczurHAL checkout, for example a second clone, every action stops with
+`[JH-HAL-ROOT]` before it touches CMake. Point both at the checkout of the
+`jh-vscode` you run.
+
 Native Windows reads the verified tool and short build-root state produced by
 `runmefirst.ps1`. CMake caches stay below that short root, while final firmware
 artifacts remain in the manifest `buildDir`. `refresh-intellisense` writes the

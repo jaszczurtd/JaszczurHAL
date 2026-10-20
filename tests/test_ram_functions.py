@@ -6,6 +6,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from repo_root import hal_include_args
+
 ROOT = Path(sys.argv[1]).resolve()
 SOURCE = r'''
 #include "hal/core/hal_memory.h"
@@ -38,12 +40,12 @@ def main():
             source = work / f"probe.{language}"
             source.write_text(SOURCE)
             output = work / f"host-{language}"
-            run(compiler, "-Wall", "-Wextra", "-Werror", "-O2", "-I", str(ROOT / "src"),
+            run(compiler, "-Wall", "-Wextra", "-Werror", "-O2", *hal_include_args(ROOT),
                 str(source), "-o", str(output))
             run(str(output))
             for target in ("ESP32", "ESP32_S3"):
                 obj = work / f"{target}-{language}.o"
-                run(compiler, "-Wall", "-Wextra", "-Werror", "-O2", "-I", str(ROOT / "src"),
+                run(compiler, "-Wall", "-Wextra", "-Werror", "-O2", *hal_include_args(ROOT),
                     f"-DHAL_TARGET_{target}", "-c", str(source), "-o", str(obj))
                 table = run("objdump", "-t", str(obj))
                 assert any(".iram1.ram_probe" in line and line.endswith(" ram_probe")
@@ -61,7 +63,7 @@ def main():
                 obj = work / f"{target}-{language}.o"
                 run(arm, "-Wall", "-Wextra", "-Werror", "-O2", "-ffreestanding",
                     "-fno-exceptions", "-mthumb", f"-mcpu={cpu}", f"-DHAL_TARGET_{target}",
-                    "-I", str(ROOT / "src"), "-c", str(work / f"probe.{language}"),
+                    *hal_include_args(ROOT), "-c", str(work / f"probe.{language}"),
                     "-o", str(obj))
                 table = run("arm-none-eabi-objdump", "-t", str(obj))
                 assert any(section in line and line.endswith(" ram_probe")
@@ -86,7 +88,7 @@ def main():
             for language in ("c", "cpp"):
                 obj = work / f"riscv-{language}.o"
                 run(str(riscv), "-Wall", "-Wextra", "-Werror", "-O2", "-ffreestanding",
-                    "-DHAL_TARGET_RP2350_RISCV", "-I", str(ROOT / "src"),
+                    "-DHAL_TARGET_RP2350_RISCV", *hal_include_args(ROOT),
                     "-c", str(work / f"probe.{language}"), "-o", str(obj))
                 objdump = riscv.with_name("riscv32-unknown-elf-objdump")
                 table = run(str(objdump), "-t", str(obj))

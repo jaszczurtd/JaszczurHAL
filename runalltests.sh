@@ -96,9 +96,9 @@ STAGES+=(security)
 
 stage_title() {
     case "$1" in
-        tools) echo "required tools and pinned components" ;;
+        tools) echo "required tools, pinned components and the declared CMake minimum" ;;
         repository) echo "generated files, release metadata, effective features" ;;
-        host) echo "host unit tests (CMake + ctest, FreeRTOS POSIX)" ;;
+        host) echo "host unit tests (oldest supported CMake + ctest, FreeRTOS POSIX)" ;;
         sanitizer-fuzz) echo "Clang ASan/UBSan, TSan and parser fuzz smoke checks" ;;
         memcheck) echo "memory safety (Valgrind memcheck)" ;;
         cppcheck) echo "static analysis: cppcheck" ;;
@@ -107,7 +107,7 @@ stage_title() {
         stm32) echo "STM32G474 static libraries" ;;
         rp) echo "native Pico SDK artifacts and RP2040 flag profiles" ;;
         esp-idf) echo "ESP-IDF fixtures and the ESP32-S3 library" ;;
-        library-*) echo "${1#library-} all-features libraries, plain and for an application" ;;
+        library-*) echo "${1#library-} all-features libraries, plain and for an application (oldest supported CMake)" ;;
         examples-*) echo "every ${1#examples-} example configuration" ;;
         security) echo "SBOM vulnerability scan" ;;
     esac
@@ -260,6 +260,47 @@ STM32_TOOLCHAIN="${SCRIPT_DIR}/link_libraries/stm32_lib/toolchain_stm32g474.cmak
 # ensure_cmake_build BUILD CONFIGURE_ARGS...: configure BUILD the first time,
 # then build it. Stages that share a build call this, so a full run builds it
 # once and a stage run alone still gets it.
+# The oldest CMake every cmake_minimum_required declares (jhbase pin,
+# third_party/cmake-minimum): the host build and the library-* stages run
+# with it; the other stages keep the system CMake.
+cmake_minimum_python() {
+    python3 - "${SCRIPT_DIR}" "$1" <<'PY'
+import sys
+from pathlib import Path
+root = Path(sys.argv[1])
+sys.path.insert(0, str(root / "scripts"))
+import component_manager
+if sys.argv[2] == "bin":
+    print(component_manager.cmake_minimum_bin(root))
+else:
+    pin = component_manager.supplied_pin(root, "cmake-minimum")[0]
+    print(pin["CMAKE_MINIMUM_VERSION"].rsplit(".", 1)[0])
+PY
+}
+
+# with_minimum_cmake COMMAND...: run COMMAND with the oldest CMake first in PATH.
+with_minimum_cmake() {
+    local bin
+    bin="$(cmake_minimum_python bin)"
+    if [[ ! -x "${bin}/cmake" ]]; then
+        fail "The oldest supported CMake is missing at ${bin}; run third_party/update_components.sh"
+        exit 1
+    fi
+    PATH="${bin}:${PATH}" "$@"
+}
+
+# Every cmake_minimum_required in the repository declares the pinned minimum.
+check_cmake_minimum_declarations() {
+    local minimum declared
+    minimum="$(cmake_minimum_python minimum)"
+    declared="$(git -C "${SCRIPT_DIR}" grep -h -o -E 'cmake_minimum_required\(VERSION [0-9.]+' \
+        | sed 's/.* //' | sort -u)"
+    if [[ "${declared}" != "${minimum}" ]]; then
+        fail "cmake_minimum_required must declare ${minimum}, found: ${declared//$'\n'/ }"
+        exit 1
+    fi
+}
+
 ensure_cmake_build() {
     local build="$1"
     shift
@@ -270,8 +311,8 @@ ensure_cmake_build() {
 }
 
 ensure_host_build() {
-    info "Building the host tests with ${JOBS} jobs..."
-    ensure_cmake_build "${HOST_BUILD}" -S . \
+    info "Building the host tests with ${JOBS} jobs and the oldest supported CMake..."
+    with_minimum_cmake ensure_cmake_build "${HOST_BUILD}" -S . \
         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
         -DJH_ENABLE_FREERTOS_POSIX_TESTS=ON
 }
@@ -327,6 +368,8 @@ stage_tools() {
     "${SCRIPT_DIR}/scripts/install_host_tools.sh" --check
     info "Verifying pinned third-party components..."
     "${SCRIPT_DIR}/third_party/update_components.sh" --verify-only
+    info "Checking the declared CMake minimum..."
+    check_cmake_minimum_declarations
 }
 
 stage_repository() {
@@ -352,7 +395,7 @@ stage_host() {
     rm -rf "${HOST_BUILD}"
     ensure_host_build
     info "Running tests..."
-    ctest --test-dir "${HOST_BUILD}" --output-on-failure
+    with_minimum_cmake ctest --test-dir "${HOST_BUILD}" --output-on-failure
 }
 
 stage_sanitizer_fuzz() {
@@ -388,7 +431,7 @@ stage_memcheck() {
     ensure_host_build
 
     info "Verifying native C/C++ memcheck coverage in CTest..."
-    memcheck_tests=$(ctest --test-dir "${HOST_BUILD}" -N \
+    memcheck_tests=$(with_minimum_cmake ctest --test-dir "${HOST_BUILD}" -N \
         -L '^memcheck$' 2>/dev/null || true)
     for test_name in "${MEMCHECK_REQUIRED_TESTS[@]}"; do
         if ! grep -qE ":[[:space:]]+${test_name}$" <<<"${memcheck_tests}"; then
@@ -404,7 +447,7 @@ stage_memcheck() {
     fi
 
     info "Running all ${memcheck_count} native C/C++ tests under Valgrind..."
-    if ! ctest --test-dir "${HOST_BUILD}" -T memcheck \
+    if ! with_minimum_cmake ctest --test-dir "${HOST_BUILD}" -T memcheck \
         -L '^memcheck$' --output-on-failure 2>&1 \
         | tee "${LOG_ROOT}/jh_memcheck.log"; then
         fail "Valgrind memcheck execution failed; see ${LOG_ROOT}/jh_memcheck.log"
@@ -699,7 +742,7 @@ build_library() {
     local target="$1" board="$2" output="$3"
     shift 3
     run_logged "${LOG_ROOT}/jh_library_${target}_$(basename "${output}").log" \
-        "${SCRIPT_DIR}/scripts/build_link_library.sh" \
+        with_minimum_cmake "${SCRIPT_DIR}/scripts/build_link_library.sh" \
             --target "${target}" --board "${board}" \
             --all-features --library-only --clean --jobs "${JOBS}" \
             --output "${output}" "$@"

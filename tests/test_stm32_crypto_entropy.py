@@ -6,6 +6,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from repo_root import hal_include_args
+
 
 ROOT = Path(sys.argv[1]).resolve()
 COMPILER = sys.argv[2] if len(sys.argv) > 2 else "c++"
@@ -56,7 +58,7 @@ with tempfile.TemporaryDirectory(prefix="jh-stm32-crypto-entropy-") as directory
     executable = work / "probe"
     subprocess.run(
         [COMPILER, "-std=c++17", "-Wall", "-Wextra", "-Werror",
-         "-DHAL_TARGET_STM32G474=1", "-I", str(work), "-I", str(ROOT / "src"),
+         "-DHAL_TARGET_STM32G474=1", "-I", str(work), *hal_include_args(ROOT),
          str(source), str(ROOT / "src/hal/security/jh_secure_random.cpp"),
          str(ROOT / "src/hal/impl/stm32g474/stm32g474_tls_entropy.cpp"),
          "-o", str(executable)],

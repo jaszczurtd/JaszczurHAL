@@ -1177,6 +1177,47 @@ def ensure_riscv_toolchain(
     return gcc
 
 
+def cmake_minimum_bin(repo_root: Path, directory_override: str = "") -> Path:
+    """bin directory of the oldest supported CMake (Linux only), the release
+    jhbase pins in cmake_minimum_version.conf; the gate builds with it."""
+    config, config_path = supplied_pin(repo_root, "cmake-minimum")
+    require_values(config, ("CMAKE_MINIMUM_VERSION", "CMAKE_MINIMUM_DIR"), config_path)
+    if sys.platform == "win32":
+        raise ComponentError("The oldest supported CMake is pinned for Linux hosts only.")
+    arch = _platform_asset()[0].removesuffix("-lin")
+    destination = _resolve_component_dir(repo_root, config["CMAKE_MINIMUM_DIR"], directory_override)
+    return destination / f"cmake-{config['CMAKE_MINIMUM_VERSION']}-linux-{arch}" / "bin"
+
+
+def ensure_cmake_minimum(
+    repo_root: Path,
+    *,
+    verify_only: bool,
+    directory_override: str = "",
+) -> Path | None:
+    if sys.platform == "win32":
+        info("The oldest supported CMake is a Linux gate tool; skipping on Windows.")
+        return None
+    config, config_path = supplied_pin(repo_root, "cmake-minimum")
+    asset_token, extension, checksum_suffix = _platform_asset()
+    checksum_key = f"CMAKE_MINIMUM_SHA256_{checksum_suffix}"
+    require_values(config, ("CMAKE_MINIMUM_RELEASE_BASE", checksum_key), config_path)
+    version = config["CMAKE_MINIMUM_VERSION"]
+    bin_dir = cmake_minimum_bin(repo_root, directory_override)
+    asset = f"{bin_dir.parent.name}{extension}"
+    url = f"{config['CMAKE_MINIMUM_RELEASE_BASE']}/v{version}/{asset}"
+    changed = sync_archive(
+        url, config[checksum_key], bin_dir.parents[1],
+        verify_only=verify_only, version_stamp=f"cmake-minimum|{version}|{asset}",
+    )
+    reported = _run((str(bin_dir / "cmake"), "--version")).stdout.splitlines()[0]
+    if reported != f"cmake version {version}":
+        raise ComponentError(f"Oldest CMake mismatch: expected {version}, got {reported}.")
+    status = "installed" if changed else "already installed"
+    ok(f"CMake {version} {status}: {bin_dir / 'cmake'}")
+    return bin_dir
+
+
 def _pmd_command(executable: Path, *arguments: str) -> tuple[str, ...]:
     if sys.platform == "win32":
         return ("cmd.exe", "/d", "/c", str(executable), *arguments)
@@ -1810,6 +1851,11 @@ def ensure_component(arguments: argparse.Namespace) -> None:
             )
     elif name == "riscv-toolchain":
         ensure_riscv_toolchain(
+            repo_root, verify_only=arguments.verify_only,
+            directory_override=directory,
+        )
+    elif name == "cmake-minimum":
+        ensure_cmake_minimum(
             repo_root, verify_only=arguments.verify_only,
             directory_override=directory,
         )

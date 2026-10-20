@@ -10,6 +10,8 @@ set(_architecture_probe
     "${JH_ROOT}/tests/fixtures/network_architecture_probe.cpp")
 set(_http_plaintext_probe
     "${JH_ROOT}/tests/fixtures/http_client_plaintext_config_probe.cpp")
+include("${JH_ROOT}/cmake/jh_jhbase.cmake")
+jh_jhbase_include_dir(_jhbase_include)
 set(_include "${JH_ROOT}/src")
 include("${JH_ROOT}/tests/jh_test_artifacts.cmake")
 jh_test_artifact_dir(_artifact_dir network-selection)
@@ -18,7 +20,7 @@ set(_architecture_executable "${_artifact_dir}/network_architecture_probe")
 
 function(check_config NAME EXPECT_SUCCESS EXPECT_TEXT)
     execute_process(
-        COMMAND "${JH_CXX}" -std=c++17 "-I${_include}" ${ARGN}
+        COMMAND "${JH_CXX}" -std=c++17 "-I${_include}" "-I${_jhbase_include}" ${ARGN}
                 -c "${_probe}" -o "${_object}"
         RESULT_VARIABLE _result
         OUTPUT_VARIABLE _stdout
@@ -43,7 +45,7 @@ endfunction()
 function(check_architecture_identity NAME)
     execute_process(
         COMMAND "${JH_CXX}" -std=c++17 -Wall -Wextra -Werror
-                "-I${_include}" ${ARGN}
+                "-I${_include}" "-I${_jhbase_include}" ${ARGN}
                 "${_architecture_probe}" -o "${_architecture_executable}"
         RESULT_VARIABLE _compile_result
         OUTPUT_VARIABLE _compile_stdout
@@ -64,7 +66,7 @@ endfunction()
 
 function(check_http_plaintext_config)
     execute_process(
-        COMMAND "${JH_CXX}" -std=c++17 "-I${_include}"
+        COMMAND "${JH_CXX}" -std=c++17 "-I${_include}" "-I${_jhbase_include}"
                 -DHAL_TARGET_MOCK=1 -DHAL_ENABLE_HTTP_CLIENT=1
                 -c "${_http_plaintext_probe}" -o "${_object}"
         RESULT_VARIABLE _result

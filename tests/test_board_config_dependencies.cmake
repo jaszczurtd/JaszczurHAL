@@ -13,7 +13,7 @@ file(COPY "${JH_ROOT}/boards" "${JH_ROOT}/config" DESTINATION "${_source}")
 file(COPY "${JH_ROOT}/scripts/" DESTINATION "${_source}/scripts"
     FILES_MATCHING PATTERN "*.py" PATTERN "__pycache__" EXCLUDE)
 file(WRITE "${_source}/CMakeLists.txt"
-    "cmake_minimum_required(VERSION 3.16)\n"
+    "cmake_minimum_required(VERSION 3.22)\n"
     "project(board_config_dependencies NONE)\n"
     "include(\"${JH_ROOT}/cmake/jh_board_profiles.cmake\")\n"
     "jh_generate_board_config(ROOT \"\${CMAKE_CURRENT_SOURCE_DIR}\"\n"

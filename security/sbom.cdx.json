@@ -1518,6 +1518,54 @@
       ]
     },
     {
+      "type": "application",
+      "bom-ref": "pkg:cmake-oldest-supported@3.22.0",
+      "name": "CMake (oldest supported)",
+      "version": "3.22.0",
+      "scope": "development",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Kitware, Inc. and CMake contributors"
+      },
+      "purl": "pkg:generic/cmake@3.22.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/Kitware/CMake"
+        },
+        {
+          "type": "other",
+          "url": "third_party/cmake-minimum",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/jhbase/third_party/cmake_minimum_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Official prebuilt release of the oldest CMake every cmake_minimum_required declares; the host and library-* gate stages build with it on Linux. It is not linked into firmware."
+        },
+        {
+          "name": "jaszczurhal:pin",
+          "value": "third_party/jhbase/third_party/cmake_minimum_version.conf"
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "third_party/cmake-minimum,third_party/jhbase/third_party/cmake_minimum_version.conf"
+        }
+      ]
+    },
+    {
       "type": "library",
       "bom-ref": "pkg:bearssl@2024-09-23",
       "name": "BearSSL",
@@ -2141,7 +2189,7 @@
       "supplier": {
         "name": "jaszczurtd"
       },
-      "purl": "pkg:github/jaszczurtd/jhbase@e240be87409f631009fa7475b68397e12edbf0d5",
+      "purl": "pkg:github/jaszczurtd/jhbase@70c0b446b78593762cd8fbcea4f32336fa4d444d",
       "externalReferences": [
         {
           "type": "website",
@@ -2161,7 +2209,7 @@
       "properties": [
         {
           "name": "jaszczurhal:commit",
-          "value": "e240be87409f631009fa7475b68397e12edbf0d5"
+          "value": "70c0b446b78593762cd8fbcea4f32336fa4d444d"
         },
         {
           "name": "jaszczurhal:notes",
@@ -2302,5 +2350,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:6cd096d3-0edb-4610-4a23-c6098abc693f"
+  "serialNumber": "urn:uuid:ab521b0b-3f0b-e26d-2414-b09f918207fc"
 }

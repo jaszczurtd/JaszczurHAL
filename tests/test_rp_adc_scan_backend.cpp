@@ -65,8 +65,15 @@ static void start(void) {
 // Cells the DMA never wrote keep a poison no sample index reaches here.
 #define UNWRITTEN 0xFFFFu
 
+static bool s_backend_used;
+
 static void fresh_ring(void) {
-  (void)jh_adc_scan_stop();
+  // The first test sees the backend as firmware does after reset: nothing
+  // has started or stopped it yet.
+  if (s_backend_used) {
+    (void)jh_adc_scan_stop();
+  }
+  s_backend_used = true;
   jh_fake_dma_reset();
   memset(&s_memory, 0xFF, sizeof(s_memory));
   for (uint32_t i = 0u; i < GUARD; ++i) {
@@ -98,6 +105,25 @@ static void assert_block_holds(const uint16_t *samples, uint32_t first) {
   for (uint32_t i = 0u; i < BLOCK; ++i) {
     TEST_ASSERT_EQUAL_HEX16((uint16_t)((first + i) & 0xFFFFu), samples[i]);
   }
+}
+
+// Audit F02: a stop before any start released DMA channel 0, which another
+// module had claimed and was running.
+void test_a_stop_before_any_start_leaves_other_channels_alone(void) {
+  static uint16_t source[4];
+  static uint16_t target[4];
+  const int other = dma_claim_unused_channel(true);
+  dma_channel_config cfg = dma_channel_get_default_config((uint)other);
+  channel_config_set_transfer_data_size(&cfg, DMA_SIZE_16);
+  channel_config_set_dreq(&cfg, DREQ_ADC); // paced: stays busy, writes nothing
+  dma_channel_configure((uint)other, &cfg, target, source, 4u, true);
+  TEST_ASSERT_TRUE(dma_channel_is_busy((uint)other));
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_adc_scan_stop());
+  TEST_ASSERT_EQUAL_UINT32(1u, jh_fake_dma_claimed_channels());
+  TEST_ASSERT_TRUE(dma_channel_is_busy((uint)other));
+  dma_channel_abort((uint)other);
+  dma_channel_unclaim((uint)other);
 }
 
 void test_start_claims_the_ring_and_stop_returns_everything(void) {
@@ -346,6 +372,8 @@ void test_latest_reads_the_block_in_progress_and_falls_back_to_the_other(void) {
 
 int main(void) {
   UNITY_BEGIN();
+  // First: every later setUp stops the backend, which hides a cold stop.
+  RUN_TEST(test_a_stop_before_any_start_leaves_other_channels_alone);
   RUN_TEST(test_start_claims_the_ring_and_stop_returns_everything);
   RUN_TEST(test_temperature_and_pin_order_follow_the_converter_inputs);
   RUN_TEST(test_start_without_channels_or_with_a_taken_interrupt_cleans_up);

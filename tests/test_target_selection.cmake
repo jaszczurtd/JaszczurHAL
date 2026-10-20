@@ -3,6 +3,8 @@ if(NOT JH_CXX OR NOT JH_ROOT)
 endif()
 
 set(_probe "${JH_ROOT}/tests/fixtures/target_selection_probe.cpp")
+include("${JH_ROOT}/cmake/jh_jhbase.cmake")
+jh_jhbase_include_dir(_jhbase_include)
 set(_include "${JH_ROOT}/src")
 include("${JH_ROOT}/tests/jh_test_artifacts.cmake")
 jh_test_artifact_dir(_artifact_dir target-selection)
@@ -11,7 +13,7 @@ function(check_target NAME EXPECT_SUCCESS EXPECT_TEXT)
     set(_object "${_artifact_dir}/target_selection_${NAME}.o")
     execute_process(
         COMMAND "${JH_CXX}" -std=c++17 -Wall -Wextra -Werror
-                "-I${_include}" ${ARGN} -c "${_probe}" -o "${_object}"
+                "-I${_include}" "-I${_jhbase_include}" ${ARGN} -c "${_probe}" -o "${_object}"
         RESULT_VARIABLE _result
         OUTPUT_VARIABLE _stdout
         ERROR_VARIABLE _stderr
@@ -45,7 +47,7 @@ function(check_project_target NAME CONFIG_DIR EXPECT_SUCCESS EXPECT_TEXT)
     set(_object "${_artifact_dir}/target_selection_project_${NAME}.o")
     execute_process(
         COMMAND "${JH_CXX}" -std=c++17 -Wall -Wextra -Werror
-                "-I${_include}" "-I${CONFIG_DIR}" ${ARGN}
+                "-I${_include}" "-I${_jhbase_include}" "-I${CONFIG_DIR}" ${ARGN}
                 -c "${_probe}" -o "${_object}"
         RESULT_VARIABLE _result
         OUTPUT_VARIABLE _stdout

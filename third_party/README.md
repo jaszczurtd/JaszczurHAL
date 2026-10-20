@@ -32,7 +32,7 @@ entry point.
 
 | Component | Pin | Managed checkout | Purpose |
 |-----------|-----|------------------|---------|
-| jhbase | `jhbase_version.conf` | `jhbase/` | Basics library of the C tooling plan (UTF-8, JSON, exact numbers, writer); its `third_party/*_version.conf` are the only pins of Unity, cppcheck, PMD and the RISC-V toolchain |
+| jhbase | `jhbase_version.conf` | `jhbase/` | Basics library of the C tooling plan (UTF-8, JSON, exact numbers, writer); defines `hal_status_t` and `COUNTOF` for every HAL build, and its `third_party/*_version.conf` are the only pins of Unity, cppcheck, PMD and the RISC-V toolchain |
 | BearSSL | `bearssl_version.conf` | `BearSSL/` | TLS engine used by host, RP and STM32 builds |
 | cJSON | `cjson_version.conf` | `cJSON/` | JSON parser and utility API |
 | LodePNG | `lodepng_version.conf` | `lodepng/` | Memory-oriented PNG codec |
@@ -50,6 +50,7 @@ entry point.
 | ESP-IDF | `esp_idf_version.conf` | `esp-idf/` | Native ESP32-family SDK and tool bootstrap |
 | picotool | `picotool_version.conf` | `picotool/` | Source for the native RP upload/metadata utility |
 | cppcheck | `jhbase/third_party/cppcheck_version.conf` | `cppcheck/` | Source of the static analyzer and MISRA addon used by the cppcheck gates |
+| CMake (oldest supported) | `jhbase/third_party/cmake_minimum_version.conf` | `cmake-minimum/` | Official Kitware release of the minimum every `cmake_minimum_required` declares; the `host` and `library-*` gate stages build with it (Linux) |
 
 JaszczurHAL-owned BearSSL, cJSON, LodePNG, JPEG and FatFs integration wrappers,
 along with the lwIP port configuration, remain tracked in their thematic

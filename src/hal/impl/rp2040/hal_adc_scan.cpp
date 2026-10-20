@@ -36,8 +36,8 @@ struct scan_state_t {
   uint8_t count;
   uint8_t input_mask;
   uint8_t input_of_position[kInputs];
-  int channel[2];
-  int control[2];
+  int channel[2] = {-1, -1}; /* -1: not claimed, also before the first start */
+  int control[2] = {-1, -1};
   uintptr_t reload_target[2]; /* half(b) as the register image a control
                                  channel copies into the trigger alias */
   uint32_t samples_per_block;

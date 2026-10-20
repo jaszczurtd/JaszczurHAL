@@ -7,7 +7,7 @@ JaszczurHAL udostępnia wspólne API do obsługi sprzętu w aplikacjach wbudowan
 **Autor:** Marcin 'Jaszczur' Kielesiński
 
 - **Repozytorium:** `git@github.com:jaszczurtd/JaszczurHAL.git`
-- **Główny katalog nagłówków:** `src/` w checkoucie HAL
+- **Katalogi nagłówków:** `src/` w checkoucie HAL oraz `third_party/jhbase/include` (kody statusów i `COUNTOF`; buildy CMake HAL dodają go same)
 
 ---
 
