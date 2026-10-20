@@ -335,8 +335,9 @@ JSON Pointer używa ścieżek rozdzielanych znakiem `/`. W nazwach kluczy znaki
 - Nie stosuj dokumentów JSON Patch pochodzących spoza urządzenia przez
   `cJSONUtils_ApplyPatches()` ani `cJSONUtils_ApplyPatchesCaseSensitive()`:
   upstream nie ma jeszcze poprawki nieograniczonej rekurencji
-  (CVE-2026-67215) ani operacji, które niszczą dane przed zgłoszeniem błędu
-  (CVE-2026-67217). Nie przekazuj niezaufanych dokumentów o nieograniczonym
+  (CVE-2026-67215), operacji, które niszczą dane przed zgłoszeniem błędu
+  (CVE-2026-67217), ani sekwencji `~1` w ścieżkach łatek, które wskazują
+  niewłaściwy klucz (CVE-2026-29036). Nie przekazuj niezaufanych dokumentów o nieograniczonym
   zagnieżdżeniu do `cJSON_Compare()`, której czas działania rośnie wykładniczo
   z głębokością (CVE-2026-67216). Sam HAL nie wywołuje żadnej z tych funkcji;
   decyzje opisuje `security/vulnerability_log.md`.

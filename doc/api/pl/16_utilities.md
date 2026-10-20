@@ -269,6 +269,7 @@ Wybór nagłówka:
 | Domena | Nagłówek | Główne API |
 |---|---|---|
 | Tablice | `hal/core/hal_array.h` | `COUNTOF()` |
+| Kontrole w czasie kompilacji | `hal/core/hal_status.h` | `JB_STATIC_ASSERT()` |
 | Serializacja liczb/endian | `hal/core/jh_endian.h` | `jh_load_*`, `jh_store_*`, `jh_bswap*`, `MSB()`, `LSB()` |
 | Obliczenia i sygnały | `hal/core/hal_math.h` | `hal_math_*` |
 | Ograniczone operacje tekstowe | `hal/core/hal_text.h` | `hal_text_*` |

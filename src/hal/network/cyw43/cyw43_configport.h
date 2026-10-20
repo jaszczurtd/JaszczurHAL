@@ -3,12 +3,11 @@
 
 #include "hal/core/hal_array.h"
 
+/* The vendored driver spells its checks static_assert; C11 <assert.h>
+ * provides that name for C, so the port does not redefine it. */
+#include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
-
-#ifndef __cplusplus
-#define static_assert _Static_assert
-#endif
 
 #ifndef MIN
 #define MIN(a, b) ((a) <= (b) ? (a) : (b))

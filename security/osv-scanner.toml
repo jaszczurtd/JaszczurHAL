@@ -20,6 +20,11 @@ ignoreUntil = 2027-01-06
 reason = "2026-10-06: no upstream fix; HAL never applies JSON Patch; mitigated"
 
 [[IgnoredVulns]]
+id = "CVE-2026-29036"
+ignoreUntil = 2027-01-20
+reason = "2026-10-20: no upstream fix; HAL never applies JSON Patch; mitigated"
+
+[[IgnoredVulns]]
 id = "CVE-2026-67216"
 ignoreUntil = 2027-01-06
 reason = "2026-10-06: no upstream fix; HAL never calls cJSON_Compare; mitigated"

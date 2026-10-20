@@ -58,6 +58,17 @@ and the helpers below are defined once in the jhbase library
 (`jb/status.h`), which the jh tools share; `hal_status.h` includes it, so
 nothing has to be defined.
 
+`hal_status.h` also brings `JB_STATIC_ASSERT(condition, message)` from
+`jb/abi.h`. Use it for compile-time checks in code built as both C and C++,
+instead of switching between `static_assert` and `_Static_assert` by hand:
+
+```c
+#include <hal/core/hal_status.h>
+
+#define FRAME_BYTES 16
+JB_STATIC_ASSERT(FRAME_BYTES % 4 == 0, "frames are whole words");
+```
+
 ## Helper functions
 
 All are `static inline` in [`hal_status.h`](../../../src/hal/core/hal_status.h) and are
