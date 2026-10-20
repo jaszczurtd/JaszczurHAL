@@ -470,6 +470,11 @@ class TrackedContractTests(unittest.TestCase):
             "bash", str(directory / "install.sh"), "esp32,esp32s3",
         )
         self.assertEqual(installer, commands[0])
+        # Without Python on the host PATH, install.bat failed with 9009.
+        self.assertEqual(
+            str(Path(sys.executable).parent),
+            run.call_args_list[0].kwargs["env"]["PATH"].split(os.pathsep)[0],
+        )
         self.assertEqual("check", commands[1][-1])
         self.assertEqual("check-python-dependencies", commands[2][-1])
 

@@ -1610,6 +1610,9 @@ class CommandContractTests(unittest.TestCase):
                     "-DJH_TARGET=esp32s3",
                     "-DJH_BOARD=waveshare-esp32-s3-zero",
                     f"-DJH_PROJECT_DIR={project}",
+                    # The configure generators run this interpreter, not
+                    # whichever python a host PATH happens to provide.
+                    f"-DPython3_EXECUTABLE={sys.executable}",
                 ],
                 check=False,
                 capture_output=True,

@@ -107,11 +107,13 @@ def _run(
     *,
     cwd: Optional[Path] = None,
     check: bool = True,
+    env: Optional[dict[str, str]] = None,
 ) -> subprocess.CompletedProcess[str]:
     try:
         result = subprocess.run(
             [str(item) for item in command],
             cwd=str(cwd) if cwd else None,
+            env=env,
             check=False,
             capture_output=True,
             text=True,
@@ -863,7 +865,13 @@ def ensure_esp_idf_tools(
             )
         else:
             command = ("bash", str(directory / "install.sh"), targets)
-        _run(command, cwd=directory)
+        # The installers run whichever python PATH finds first; put this
+        # managed interpreter there instead of relying on a host install.
+        environment = dict(os.environ)
+        environment["PATH"] = os.pathsep.join(
+            (str(Path(sys.executable).parent), environment.get("PATH", ""))
+        )
+        _run(command, cwd=directory, env=environment)
 
     idf_tools = directory / "tools/idf_tools.py"
     base_command = (

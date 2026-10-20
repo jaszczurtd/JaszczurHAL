@@ -2,6 +2,11 @@ include_guard(GLOBAL)
 include("${CMAKE_CURRENT_LIST_DIR}/jh_python.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/jh_project_config.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/jh_project_features.cmake")
+# Empty keyword values, such as ASSEMBLY "" or VARIANT "", are empty strings;
+# every reader below tests them with STREQUAL "".
+if(POLICY CMP0174)
+    cmake_policy(SET CMP0174 NEW)
+endif()
 
 # A configuration directory with device_tree.json builds from its assemblies
 # through scripts/generate_hardware_config.py; without the file the build
@@ -27,7 +32,8 @@ set(JH_HARDWARE_CONFIG_VARIABLES
 function(jh_device_tree_build OUT_VAR CONFIG_DIR)
     set(_jh_dt FALSE)
     if(NOT "${CONFIG_DIR}" STREQUAL "")
-        file(GLOB _jh_dt_file CONFIGURE_DEPENDS "${CONFIG_DIR}/device_tree.json")
+        jh_config_glob(_jh_dt_pattern "${CONFIG_DIR}" device_tree.json)
+        file(GLOB _jh_dt_file CONFIGURE_DEPENDS "${_jh_dt_pattern}")
         if(_jh_dt_file)
             set(_jh_dt TRUE)
         endif()
