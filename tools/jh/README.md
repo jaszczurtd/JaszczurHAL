@@ -4,7 +4,22 @@
 
 `jh json inspect` reads JSON, selects a value by JSON Pointer and optionally
 writes or checks an output file. It uses the jhbase parser and file API.
-Schema validation and the production generators are not implemented here yet.
+`jh json validate` checks a document against the hardware schema subset,
+including references between local files. Production generators still use Python.
+
+Prepare the pinned host dependencies explicitly before configuring:
+
+```sh
+python3 scripts/component_manager.py component jhbase
+python3 scripts/component_manager.py component pcre2
+```
+
+PCRE2 lives in an ignored checkout selected by `third_party/pcre2_version.conf`.
+Configure and build verify its revision and cleanliness without downloading or
+changing dependencies. The shared jhbase checker verifies origin and actual
+source bytes, including edits hidden by Git index flags. PCRE2's unused
+`deps/sljit` submodule must remain an empty directory. The executable statically
+links PCRE2-8 without JIT.
 
 Build from the JaszczurHAL checkout, with CMake 3.22 or later:
 
@@ -39,6 +54,7 @@ jh --version --json
 jh json inspect --file tests/fixtures/device_tree/cases.json --pointer /cases/0/expected --json
 jh json inspect --file input.json --pointer /limits/max --output result.json
 jh json inspect --file input.json --pointer /limits/max --output result.json --check --json
+jh json validate --file input.json --schema config/hardware/device_tree.schema.json --json
 ```
 
 Input paths are resolved against cwd captured once on entry. Windows arguments
@@ -65,17 +81,52 @@ message, the requested Pointer and, when available, source, byte offset, one-bas
 column, and the parser's `jsonError` code. Help and version also have JSON
 results. Human diagnostics go to stderr.
 
+Validation returns every selected error in Pointer order, comparing decimal
+tokens numerically and other tokens by Unicode code point. The JSON result has
+`command: "json.validate"`, `source`, `schema` and an `errors` array. Each error
+contains `instancePointer`, `schemaUri`, `schemaPointer`, `reason` and `message`.
+`schemaUri` percent-escapes filenames; rule locations refer to the actual
+keyword after resolving `$ref`. Human errors
+go to stderr; successful validation without `--json` writes nothing.
+
+The supported keywords are those used by `config/hardware/*.schema.json`;
+this is not a full JSON Schema implementation. Unknown keywords and unsupported
+regex constructs fail explicitly. References use local file paths with forward
+slashes, with percent-decoded JSON Pointer fragments. Network references are
+unsupported. Regex uses UTF-8 search with LF newlines and Python-compatible
+`\s`; the adapter accepts the production patterns, including lookahead and
+`\uXXXX`. PCRE2 carries Unicode 17.0 data; whitespace expansion is explicit.
+Classes such as `\w` and `\d`, backreferences and inline flags are unsupported.
+POSIX character classes and an unescaped `]` immediately after `[` or `[^`
+are also unsupported. Use `\]` for a literal closing bracket in a class.
+
+Numbers compare exactly in `const`, `enum`, `uniqueItems`, numeric bounds and
+`integer`. For example, `0.1` differs from `0.10000000000000001`; `1` equals
+`1.0`, while `true` differs from `1`. This can change results compared with the
+Python validator's binary64 rounding. Validation does not apply defaults or
+normalize strings. Conversion to a target floating type remains a separate step.
+
+Validation limits include 50 million work units, 64 nested schema evaluations,
+100000 schema values across unique loaded documents, 64 MiB of schema input,
+256 loaded files, 1024 retained errors,
+1 MiB of diagnostic text, 8192-byte Pointers and 32768-byte document identities.
+Decoded values are limited to 16 KiB and patterns to 4096 bytes. Regex has a
+2 MiB allocation arena, a 1 MiB match heap limit, one million match steps and
+depth 128. Exhaustion returns `HAL_EOVERFLOW` before publishing any error prefix.
+The internal C API in [jh_json_schema.h](json/jh_json_schema.h) accepts caller-owned
+scratch, custom limits and optional document/report callbacks.
+
 | Exit code | Meaning |
 |---|---|
 | 0 | Success, including an up-to-date output. |
 | 1 | `--check` found a missing or different output. |
-| 2 | Bad arguments, invalid JSON or an unresolved Pointer. |
+| 2 | Bad arguments, invalid JSON/schema, failed validation or an unresolved Pointer. |
 | 3 | Path, file, stdout or unexpected runtime failure. |
-| 4 | Allocation failure or an input/parser/output limit. |
+| 4 | Allocation failure or an input/parser/validator/output limit. |
 
 These codes belong to this CLI. Existing `jh-vscode` commands keep their
 current entrypoint and exit codes.
 
-Install only the executable with `cmake --install <build> --config Release
+Install the executable and its licenses with `cmake --install <build> --config Release
 --component jh --prefix <destination>`. The binary can be moved with its
 installation prefix; it does not require the source tree to run.

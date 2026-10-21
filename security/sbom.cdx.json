@@ -2175,6 +2175,56 @@
     },
     {
       "type": "library",
+      "bom-ref": "pkg:pcre2@10.49",
+      "name": "PCRE2",
+      "version": "10.49",
+      "scope": "development",
+      "licenses": [
+        {
+          "expression": "BSD-3-Clause WITH PCRE2-exception"
+        }
+      ],
+      "supplier": {
+        "name": "PCRE2Project"
+      },
+      "purl": "pkg:generic/pcre2@10.49",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/PCRE2Project/pcre2"
+        },
+        {
+          "type": "other",
+          "url": "third_party/pcre2",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/pcre2_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:commit",
+          "value": "6f9d7c1373262c541324a16a358785b33ef116cf"
+        },
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Host-only UTF-8 regex backend for jh schema validation. Static 8-bit library with Unicode properties, bounded allocation and matching, without JIT. Prepared explicitly as an ignored, clean exact-commit checkout."
+        },
+        {
+          "name": "jaszczurhal:pin",
+          "value": "third_party/pcre2_version.conf"
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "third_party/pcre2,third_party/pcre2_version.conf"
+        }
+      ]
+    },
+    {
+      "type": "library",
       "bom-ref": "pkg:jhbase@0.1.0",
       "name": "jhbase",
       "version": "0.1.0",
@@ -2189,7 +2239,7 @@
       "supplier": {
         "name": "jaszczurtd"
       },
-      "purl": "pkg:github/jaszczurtd/jhbase@c52728853eb43fc51a2f38cc35081a97adb1e1a4",
+      "purl": "pkg:github/jaszczurtd/jhbase@1d9fde4a3a50e612539da2d0159b4155d55181f1",
       "externalReferences": [
         {
           "type": "website",
@@ -2209,7 +2259,7 @@
       "properties": [
         {
           "name": "jaszczurhal:commit",
-          "value": "c52728853eb43fc51a2f38cc35081a97adb1e1a4"
+          "value": "1d9fde4a3a50e612539da2d0159b4155d55181f1"
         },
         {
           "name": "jaszczurhal:notes",
@@ -2350,5 +2400,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:c7bc05b4-d011-9122-ecf6-70be3f8df7d3"
+  "serialNumber": "urn:uuid:ef861c7e-0654-7410-84df-e03a74ad9480"
 }

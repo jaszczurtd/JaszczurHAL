@@ -134,16 +134,25 @@ class SbomInventoryTests(unittest.TestCase):
                 )
                 self.assertIn(f"third_party/{conf}", component["paths"])
 
-    def test_cppcheck_pin_matches_inventory(self) -> None:
+    def test_release_pins_use_cve_scannable_versions(self) -> None:
         inventory = generate_sbom.load_inventory(ROOT / "security/third_party.json")
-        component = {item["name"]: item for item in inventory["components"]}["Cppcheck"]
-        pin = supplied_pin(ROOT, "cppcheck")[0]
-        self.assertEqual(pin["CPPCHECK_REF"], component["commit"])
-        self.assertEqual(pin["CPPCHECK_VERSION"], component["version"])
-        # CVE scanners compare the purl version with affected ranges; a commit
-        # there matches every range of an unrelated product named cppcheck.
-        self.assertEqual(f"pkg:generic/cppcheck@{pin['CPPCHECK_VERSION']}", component["purl"])
-        self.assertIn("third_party/jhbase/third_party/cppcheck_version.conf", component["paths"])
+        components = {item["name"]: item for item in inventory["components"]}
+        cases = (
+            ("Cppcheck", supplied_pin(ROOT, "cppcheck")[0], "CPPCHECK", "cppcheck",
+             "third_party/jhbase/third_party/cppcheck_version.conf"),
+            ("PCRE2", parse_config(ROOT / "third_party/pcre2_version.conf"), "PCRE2", "pcre2",
+             "third_party/pcre2_version.conf"),
+        )
+        for name, pin, prefix, package, pin_file in cases:
+            with self.subTest(component=name):
+                component = components[name]
+                self.assertEqual(pin[f"{prefix}_REF"], component["commit"])
+                self.assertEqual(pin[f"{prefix}_VERSION"], component["version"])
+                # Scanners compare purl versions with release ranges. A commit
+                # hash here caused false matches; provenance stays separate.
+                self.assertEqual(f"pkg:generic/{package}@{pin[f'{prefix}_VERSION']}",
+                                 component["purl"])
+                self.assertIn(pin_file, component["paths"])
 
     def test_jhbase_pin_and_supplied_tool_pins_match_inventory(self) -> None:
         inventory = generate_sbom.load_inventory(ROOT / "security/third_party.json")
