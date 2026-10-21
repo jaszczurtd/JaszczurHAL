@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import sys
 import tarfile
@@ -62,6 +63,19 @@ def git(directory: Path, *arguments: str) -> str:
     return result.stdout.strip()
 
 
+def create_repository(path: Path) -> str:
+    path.mkdir()
+    git(path, "init", "-q")
+    git(path, "config", "user.name", "JaszczurHAL Test")
+    git(path, "config", "user.email", "test@jaszczurhal.invalid")
+    (path / ".gitattributes").write_text("*.txt text eol=crlf\n", encoding="utf-8")
+    (path / "payload.txt").write_text("one\n", encoding="utf-8")
+    (path / "source ż.txt").write_text("quoted path\n", encoding="utf-8")
+    git(path, "add", ".")
+    git(path, "commit", "-q", "-m", "fixture")
+    return git(path, "rev-parse", "HEAD")
+
+
 class GitManagerTests(unittest.TestCase):
     def test_verify_distinguishes_missing_and_non_git_checkouts(self) -> None:
         with tempfile.TemporaryDirectory(prefix="jh-component-state-") as text:
@@ -89,14 +103,7 @@ class GitManagerTests(unittest.TestCase):
             temporary = Path(text)
             upstream = temporary / "upstream"
             checkout = temporary / "checkout"
-            upstream.mkdir()
-            git(upstream, "init", "-q")
-            git(upstream, "config", "user.name", "JaszczurHAL Test")
-            git(upstream, "config", "user.email", "test@jaszczurhal.invalid")
-            (upstream / "payload.txt").write_text("one\n", encoding="utf-8")
-            git(upstream, "add", "payload.txt")
-            git(upstream, "commit", "-q", "-m", "one")
-            first_ref = git(upstream, "rev-parse", "HEAD")
+            first_ref = create_repository(upstream)
             (upstream / "payload.txt").write_text("two\n", encoding="utf-8")
             git(upstream, "commit", "-q", "-am", "two")
             second_ref = git(upstream, "rev-parse", "HEAD")
@@ -142,6 +149,45 @@ class GitManagerTests(unittest.TestCase):
                 manager.sync_git_checkout(repository, first_ref, checkout, verify_only=True)
             )
 
+            for flag in ("assume-unchanged", "skip-worktree"):
+                with self.subTest(flag=flag):
+                    try:
+                        marker = temporary / "clean-filter-ran"
+                        script = temporary / "clean-filter.py"
+                        script.write_text(
+                            "import pathlib, sys\n"
+                            f"pathlib.Path({str(marker)!r}).write_text('ran')\n"
+                            "sys.stdin.read()\nsys.stdout.write('quoted path\\n')\n",
+                            encoding="utf-8",
+                        )
+                        (checkout / ".git/info/attributes").write_text("source* filter=mask\n", encoding="utf-8")
+                        git(checkout, "config", "filter.mask.clean", shlex.join([Path(sys.executable).as_posix(), script.as_posix()]))
+                        git(checkout, "update-index", f"--{flag}", "source ż.txt")
+                        (checkout / "source ż.txt").write_text("hidden edit\n", encoding="utf-8")
+                        self.assertEqual(git(checkout, "status", "--porcelain"), "")
+                        marker.unlink(missing_ok=True)
+                        index = (checkout / ".git/index").read_bytes()
+                        with self.assertRaisesRegex(manager.ComponentError, "source bytes"):
+                            manager.sync_git_checkout(repository, first_ref, checkout, verify_only=True)
+                        self.assertEqual((checkout / ".git/index").read_bytes(), index)
+                        self.assertFalse(marker.exists(), "verification executed a Git clean filter")
+                        self.assertEqual((checkout / "source ż.txt").read_text(), "hidden edit\n")
+                        self.assertTrue(manager.sync_git_checkout(repository, first_ref, checkout, clean=True))
+                        self.assertEqual((checkout / "source ż.txt").read_text(), "quoted path\n")
+                    finally:
+                        (checkout / ".git/info/attributes").unlink(missing_ok=True)
+                        git(checkout, "update-index", "--no-assume-unchanged", "source ż.txt")
+                        git(checkout, "update-index", "--no-skip-worktree", "source ż.txt")
+                        git(checkout, "checkout", "--", "source ż.txt")
+
+            (checkout / ".git/info/exclude").write_text("ignored.c\n", encoding="utf-8")
+            (checkout / "ignored.c").write_text("#error unexpected source\n", encoding="utf-8")
+            self.assertEqual(git(checkout, "status", "--porcelain"), "")
+            with self.assertRaises(manager.ComponentError):
+                manager.sync_git_checkout(repository, first_ref, checkout, verify_only=True)
+            self.assertTrue(manager.sync_git_checkout(repository, first_ref, checkout, clean=True))
+            self.assertFalse((checkout / "ignored.c").exists())
+
             alternate = (temporary / "alternate").resolve().as_uri()
             git(checkout, "remote", "set-url", "origin", alternate)
             with self.assertRaises(manager.ComponentError):
@@ -157,6 +203,47 @@ class GitManagerTests(unittest.TestCase):
                 )
             self.assertTrue(manager.sync_git_checkout(repository, second_ref, checkout))
             self.assertEqual(git(checkout, "rev-parse", "HEAD"), second_ref)
+
+
+    def test_external_checkout_origin_and_hidden_edits_are_read_only(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="jh-component-external-") as text:
+            temporary = Path(text)
+            upstream = temporary / "upstream"
+            checkout = temporary / "checkout with spaces"
+            first_ref = create_repository(upstream)
+            repository = upstream.resolve().as_uri()
+            alternate = (temporary / "alternate").resolve().as_uri()
+            manager.sync_git_checkout(repository, first_ref, checkout, clean=True)
+            external_root = temporary / "HAL with spaces"
+            (external_root / "third_party").mkdir(parents=True)
+            (external_root / "third_party/jhbase_version.conf").write_text(
+                f"JHBASE_REPO={repository}\nJHBASE_REF={first_ref}\n"
+                "JHBASE_VERSION=0.1.0\nJHBASE_DIR=third_party/jhbase\n", encoding="utf-8",
+            )
+            spec = manager.GitComponent("jhbase", "fixture", "jhbase_version.conf", "JHBASE", ("payload.txt",), clean=True)
+            with mock.patch.dict(manager.GIT_COMPONENTS, {"jhbase": spec}):
+                for verify in (False, True):
+                    with self.subTest(external_verify=verify):
+                        manager.ensure_git_component("jhbase", external_root, verify_only=verify, directory_override=str(checkout))
+                        try:
+                            git(checkout, "update-index", "--assume-unchanged", "payload.txt")
+                            (checkout / "payload.txt").write_text("external edit\n", encoding="utf-8")
+                            index = (checkout / ".git/index").read_bytes()
+                            with self.assertRaisesRegex(manager.ComponentError, "source bytes"):
+                                manager.ensure_git_component("jhbase", external_root, verify_only=verify, directory_override=str(checkout))
+                            self.assertEqual((checkout / ".git/index").read_bytes(), index)
+                            self.assertEqual((checkout / "payload.txt").read_text(), "external edit\n")
+                        finally:
+                            git(checkout, "update-index", "--no-assume-unchanged", "payload.txt")
+                            git(checkout, "checkout", "--", "payload.txt")
+                        try:
+                            git(checkout, "remote", "set-url", "origin", alternate)
+                            with self.assertRaisesRegex(manager.ComponentError, "origin"):
+                                manager.ensure_git_component("jhbase", external_root, verify_only=verify, directory_override=str(checkout))
+                            self.assertEqual(git(checkout, "remote", "get-url", "origin"), alternate)
+                        finally:
+                            git(checkout, "remote", "set-url", "origin", repository)
+
 
 
 class ArchiveManagerTests(unittest.TestCase):
@@ -464,7 +551,7 @@ class TrackedContractTests(unittest.TestCase):
 
         commands = [call.args[0] for call in run.call_args_list]
         installer = (
-            "cmd.exe", "/d", "/s", "/c", str(directory / "install.bat"),
+            "cmd.exe", "/d", "/s", "/c", "install.bat",
             "esp32,esp32s3",
         ) if sys.platform == "win32" else (
             "bash", str(directory / "install.sh"), "esp32,esp32s3",
@@ -489,6 +576,26 @@ class TrackedContractTests(unittest.TestCase):
             ["check", "check-python-dependencies"],
             [call.args[0][-1] for call in run.call_args_list],
         )
+        for verify in (False, True):
+            with self.subTest(verify_bytecode=verify), tempfile.TemporaryDirectory(prefix="jh-idf-bytecode-") as text:
+                root = Path(text)
+                (root / "third_party").mkdir()
+                (root / "third_party/esp_idf_version.conf").write_text(
+                    "ESP_IDF_VERSION=6.0.2\nESP_IDF_TARGETS=esp32,esp32s3\n", encoding="utf-8",
+                )
+                sdk = root / "SDK with spaces"
+                (sdk / "tools").mkdir(parents=True)
+                (sdk / "tools/idf_tools.py").write_text("import sdk_payload\n", encoding="utf-8")
+                (sdk / "tools/sdk_payload.py").write_text("value = 1\n", encoding="utf-8")
+                (sdk / "install.sh").write_text("exit 0\n", encoding="utf-8")
+                (sdk / "install.bat").write_text("@exit /b 0\n", encoding="utf-8")
+                before = sorted(path.relative_to(sdk) for path in sdk.rglob("*"))
+                with mock.patch.dict(os.environ), mock.patch.object(manager, "_synchronize_esp_idf_python_tools"):
+                    os.environ.pop("PYTHONPYCACHEPREFIX", None)
+                    os.environ.pop("PYTHONDONTWRITEBYTECODE", None)
+                    manager.ensure_esp_idf_tools(root, sdk, verify_only=verify)
+                self.assertEqual(sorted(path.relative_to(sdk) for path in sdk.rglob("*")), before)
+                self.assertEqual((root / ".build/python-cache").exists(), not verify)
 
     def test_esp_idf_python_tools_are_pinned_by_reviewed_snapshot(self) -> None:
         pins = dict(manager._esp_idf_python_tool_pins(ROOT))
@@ -578,6 +685,49 @@ class TrackedContractTests(unittest.TestCase):
             ),
             git_output.mock_calls,
         )
+        with tempfile.TemporaryDirectory(prefix="jh-component-submodules-") as text:
+            temporary = Path(text)
+            leaf, middle, upstream, checkout = (temporary / name for name in ("leaf", "middle", "upstream", "checkout with spaces"))
+            for path in (leaf, middle, upstream):
+                create_repository(path)
+            for parent, child, name in ((middle, leaf, "leaf ż"), (upstream, middle, "middle")):
+                git(parent, "-c", "protocol.file.allow=always", "submodule", "add", "--", child.resolve().as_uri(), f"deps/{name}")
+                git(parent, "config", "-f", ".gitmodules", f"submodule.deps/{name}.url", f"../{child.name}")
+                git(parent, "commit", "-q", "-am", "submodule fixture")
+            reference = git(upstream, "rev-parse", "HEAD")
+            repository = upstream.resolve().as_uri()
+            with mock.patch.dict(os.environ, {"GIT_ALLOW_PROTOCOL": "file"}):
+                manager.sync_git_checkout(repository, reference, checkout, recursive_submodules=True)
+            nested = checkout / "deps/middle/deps/leaf ż"
+            for recursive in (False, True):
+                with self.subTest(recursive=recursive):
+                    options = dict(recursive_submodules=recursive, submodules=() if recursive else ("deps/middle",))
+                    manager.sync_git_checkout(repository, reference, checkout, verify_only=True, **options)
+                    try:
+                        git(nested, "update-index", "--assume-unchanged", "payload.txt")
+                        (nested / "payload.txt").write_text("nested hidden edit\n", encoding="utf-8")
+                        self.assertEqual(git(checkout, "status", "--porcelain"), "")
+                        with self.assertRaisesRegex(manager.ComponentError, "source bytes"):
+                            manager.sync_git_checkout(repository, reference, checkout, verify_only=True, **options)
+                        self.assertEqual((nested / "payload.txt").read_text(), "nested hidden edit\n")
+                    finally:
+                        git(nested, "update-index", "--no-assume-unchanged", "payload.txt")
+                        git(nested, "checkout", "--", "payload.txt")
+                    origin = git(nested, "remote", "get-url", "origin")
+                    try:
+                        git(nested, "remote", "set-url", "origin", "https://example.invalid/wrong.git")
+                        with self.assertRaisesRegex(manager.ComponentError, "origin"):
+                            manager.sync_git_checkout(repository, reference, checkout, verify_only=True, **options)
+                    finally:
+                        git(nested, "remote", "set-url", "origin", origin)
+            git(checkout, "submodule", "deinit", "--force", "--", "deps/middle")
+            manager.sync_git_checkout(repository, reference, checkout, verify_only=True)
+            (checkout / "deps/middle/.hidden.c").write_text("unexpected source\n", encoding="utf-8")
+            self.assertEqual(git(checkout, "status", "--porcelain"), "")
+            with self.assertRaises(manager.ComponentError):
+                manager.sync_git_checkout(repository, reference, checkout, verify_only=True)
+            self.assertTrue(manager.sync_git_checkout(repository, reference, checkout, clean=True))
+            self.assertEqual(list((checkout / "deps/middle").iterdir()), [])
 
     def test_sx126x_pin_and_license_are_exact(self) -> None:
         config = manager.parse_config(

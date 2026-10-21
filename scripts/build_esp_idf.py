@@ -345,6 +345,7 @@ def prepare_sdk(repo_root: Path, directory_override: str) -> Path:
 
 
 def exported_environment(idf_dir: Path) -> dict[str, str]:
+    baseline = component_manager.python_environment()
     command = (
         sys.executable,
         str(idf_dir / "tools/idf_tools.py"),
@@ -355,13 +356,13 @@ def exported_environment(idf_dir: Path) -> dict[str, str]:
         "key-value",
     )
     completed = subprocess.run(
-        command, check=False, capture_output=True, text=True, env=os.environ.copy()
+        command, check=False, capture_output=True, text=True, env=baseline
     )
     if completed.stderr:
         print(completed.stderr, file=sys.stderr, end="")
     if completed.returncode:
         raise EspIdfError("ESP-IDF environment export failed")
-    environment = parse_exported_environment(completed.stdout, os.environ)
+    environment = parse_exported_environment(completed.stdout, baseline)
     environment["IDF_PATH"] = str(idf_dir)
     python = idf_python(environment)
     if not python.is_file():

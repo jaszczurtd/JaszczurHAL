@@ -4,12 +4,14 @@
 from __future__ import annotations
 
 import argparse
+import ast
 from dataclasses import dataclass
 import hashlib
 import json
 import os
 from pathlib import Path
 import platform
+import posixpath
 import re
 import shlex
 import shutil
@@ -108,6 +110,8 @@ def _run(
     cwd: Optional[Path] = None,
     check: bool = True,
     env: Optional[dict[str, str]] = None,
+    input: Optional[str] = None,
+    encoding: Optional[str] = None,
 ) -> subprocess.CompletedProcess[str]:
     try:
         result = subprocess.run(
@@ -117,6 +121,9 @@ def _run(
             check=False,
             capture_output=True,
             text=True,
+            input=input,
+            encoding=encoding,
+            errors="surrogateescape" if encoding else None,
         )
     except OSError as error:
         if check:
@@ -219,7 +226,11 @@ def _atomic_replace(staging: Path, destination: Path) -> None:
 
 
 def _git_output(directory: Path, *arguments: str, check: bool = True) -> str:
-    return _run(("git", "-C", str(directory), *arguments), check=check).stdout.strip()
+    return _run(
+        ("git", "--no-optional-locks", "-c", "core.fsmonitor=false",
+         "-c", "core.untrackedCache=false", "-C", str(directory), *arguments),
+        check=check, encoding="utf-8",
+    ).stdout.strip()
 
 
 def _git_head(directory: Path) -> str:
@@ -240,8 +251,12 @@ def _clone_pinned(repository: str, reference: str, destination: Path) -> None:
     _remove_tree(staging)
     try:
         _run(("git", "init", "-q", str(staging)))
+        _git_output(staging, "config", "core.autocrlf", "false")
         _git_output(staging, "remote", "add", "origin", repository)
-        _git_output(staging, "fetch", "--depth", "1", "origin", reference)
+        # Replacing a dirty checkout at the same pin can reuse its objects
+        # offline. A fresh index discards hidden changes and their index flags.
+        source = str(destination) if _git_head(destination) == reference else "origin"
+        _git_output(staging, "fetch", "--depth", "1", source, reference)
         _git_output(staging, "checkout", "--detach", "FETCH_HEAD")
         _atomic_replace(staging, destination)
     except Exception:
@@ -254,6 +269,150 @@ def _verify_required_paths(directory: Path, required_paths: Iterable[str]) -> No
     if missing:
         formatted = "\n".join(f"  missing: {directory / path}" for path in missing)
         raise ComponentError(f"Checkout at {directory} is incomplete:\n{formatted}")
+
+
+def _git_path(quoted: str) -> str:
+    """Decode the ASCII C-quoted paths emitted with core.quotePath=true."""
+    return os.fsdecode(ast.literal_eval("b" + quoted)) if quoted.startswith('"') else quoted
+
+
+def _relative_git_url(repository: str, url: str) -> str:
+    if not url.startswith(("./", "../")):
+        return url
+    if "://" in repository:
+        parsed = urllib.parse.urlsplit(repository)
+        path = posixpath.normpath(parsed.path.rstrip("/") + "/" + url)
+        return urllib.parse.urlunsplit(parsed._replace(path=path))
+    prefix, separator, path = repository.rpartition(":")
+    return prefix + separator + posixpath.normpath(path.replace("\\", "/").rstrip("/") + "/" + url)
+
+
+def _git_submodule_urls(directory: Path, repository: str, reference: str) -> dict[str, str]:
+    entries = _git_output(
+        directory, "config", "--null", "--blob", f"{reference}:.gitmodules",
+        "--get-regexp", r"^submodule\..*\.(path|url)$",
+    )
+    modules: dict[str, dict[str, str]] = {}
+    for entry in entries.split("\0"):
+        if entry:
+            key, value = entry.split("\n", 1)
+            name, field = key.rsplit(".", 1)
+            modules.setdefault(name, {})[field] = value
+    return {
+        item["path"]: _relative_git_url(repository, item["url"])
+        for item in modules.values() if "path" in item and "url" in item
+    }
+
+
+def _git_blob_digest(payload: bytes, expected: str) -> str:
+    digest = hashlib.new("sha1" if len(expected) == 40 else "sha256")
+    digest.update(f"blob {len(payload)}\0".encode("ascii"))
+    digest.update(payload)
+    return digest.hexdigest()
+
+
+def _git_crlf_paths(directory: Path, names: Sequence[str]) -> set[str]:
+    # Large Windows checkouts can have thousands of CRLF files. Read all
+    # attributes in one process, with stdin avoiding the command-line limit.
+    fields = _run(
+        ("git", "-C", str(directory), "check-attr", "-z", "--stdin", "text", "eol"),
+        input="".join(name + "\0" for name in names), encoding="utf-8",
+    ).stdout.split("\0")
+    properties: dict[str, dict[str, str]] = {}
+    for name, attribute, value in zip(fields[0::3], fields[1::3], fields[2::3]):
+        properties.setdefault(name, {})[attribute] = value
+    autocrlf = _git_output(directory, "config", "--get", "core.autocrlf", check=False) == "true"
+    return {
+        name for name, attributes in properties.items()
+        if attributes["text"] != "unset" and attributes["eol"] != "lf"
+        and (attributes["eol"] == "crlf" or autocrlf)
+    }
+
+
+def _git_crlf_matches(directory: Path, name: str, expected: str) -> bool:
+    payload = (directory / name).read_bytes()
+    return (
+        b"\r\n" in payload and b"\0" not in payload
+        and _git_blob_digest(payload.replace(b"\r\n", b"\n"), expected) == expected
+    )
+
+
+def _git_source_problem(directory: Path, repository: str, reference: str) -> str:
+    """Check pinned content without refreshing the checkout's index."""
+    if _git_head(directory) != reference:
+        return f"Pinned checkout revision mismatch at {directory}: expected {reference}"
+    origin = _git_output(directory, "remote", "get-url", "origin", check=False)
+    if origin != repository:
+        return f"Pinned checkout origin mismatch at {directory}: expected {repository}, found {origin}"
+    staged = _git_output(
+        directory, "diff-index", "--cached", "--no-ext-diff", "--no-textconv",
+        "--name-status", reference, "--",
+    )
+    # No exclude rules: ignored files must also be reported. Unlike status,
+    # these index-only queries never run a source file through a clean filter.
+    untracked = _git_output(directory, "ls-files", "--others")
+    if staged or untracked:
+        return f"Pinned checkout has local changes at {directory}:\n{staged}\n{untracked}"
+    tree = _git_output(directory, "-c", "core.quotePath=true", "ls-tree", "-r", reference)
+    blobs: list[tuple[str, str]] = []
+    gitlinks: list[tuple[str, str]] = []
+    for entry in tree.splitlines():
+        metadata, quoted = entry.split("\t", 1)
+        mode, kind, expected = metadata.split()
+        path = directory / _git_path(quoted)
+        if kind == "commit" and mode == "160000":
+            gitlinks.append((quoted, expected))
+        elif kind == "blob" and mode == "120000":
+            if path.is_symlink():
+                payload = os.fsencode(os.readlink(path))
+            elif path.is_file() and _git_output(
+                directory, "config", "--bool", "core.symlinks", check=False
+            ) == "false":
+                payload = path.read_bytes()
+            else:
+                return f"Pinned checkout source bytes or symlink type differ: {path}"
+            if _git_blob_digest(payload, expected) != expected:
+                return f"Pinned checkout source bytes differ: {path}"
+        elif kind == "blob" and mode in ("100644", "100755"):
+            if path.is_symlink() or not path.is_file():
+                return f"Pinned checkout source bytes or file type differ: {path}"
+            blobs.append((quoted, expected))
+        else:
+            return f"Unsupported pinned tree entry at {directory}: {entry}"
+    if blobs:
+        # Read actual bytes; do not execute configured clean/process filters.
+        actual = _run(
+            ("git", "-C", str(directory), "hash-object", "--no-filters", "--stdin-paths"),
+            input="".join(quoted + "\n" for quoted, _expected in blobs),
+        ).stdout.splitlines()
+        if len(actual) != len(blobs):
+            return f"Pinned checkout source bytes differ from {reference}: {directory}"
+        differences = [
+            (_git_path(quoted), expected)
+            for found, (quoted, expected) in zip(actual, blobs) if found != expected
+        ]
+        crlf_paths = (
+            _git_crlf_paths(directory, [name for name, _expected in differences])
+            if differences else set()
+        )
+        for name, expected in differences:
+            if name not in crlf_paths or not _git_crlf_matches(directory, name, expected):
+                return f"Pinned checkout source bytes differ from {reference}: {directory / name}"
+    urls = _git_submodule_urls(directory, repository, reference) if gitlinks else {}
+    for quoted, expected in gitlinks:
+        name = _git_path(quoted)
+        path = directory / name
+        if path.is_symlink() or not path.is_dir():
+            return f"Pinned submodule directory is missing or replaced: {path}"
+        if (path / ".git").exists():
+            if name not in urls:
+                return f"Pinned submodule URL is missing: {path}"
+            problem = _git_source_problem(path, urls[name], expected)
+            if problem:
+                return problem
+        elif any(path.iterdir()):
+            return f"Unused submodule contains unverified files: {path}"
+    return ""
 
 
 def _sync_submodules(
@@ -352,15 +511,9 @@ def sync_git_checkout(
 
     # Verification wants the pinned sources exactly, submodules included: a
     # local edit would make a gate check other code than CI downloads.
-    if clean or verify_only:
+    if clean and not verify_only:
         status_text = _git_output(destination, "status", "--porcelain")
         if status_text:
-            if verify_only:
-                raise ComponentError(
-                    f"Pinned checkout has local changes at {destination} (verify-only); "
-                    f"`git -C {destination} status` lists them. Discard them or "
-                    "rerun third_party/update_components.sh after removing the checkout."
-                )
             _git_output(destination, "reset", "--hard", reference)
             _git_output(destination, "clean", "-fdx")
             changed = True
@@ -368,6 +521,15 @@ def sync_git_checkout(
     _sync_submodules(
         destination, submodules, verify_only, recursive=recursive_submodules
     )
+    if clean or verify_only:
+        problem = _git_source_problem(destination, repository, reference)
+        if problem and not verify_only:
+            _clone_pinned(repository, reference, destination)
+            _sync_submodules(destination, submodules, False, recursive=recursive_submodules)
+            changed = True
+            problem = _git_source_problem(destination, repository, reference)
+        if problem:
+            raise ComponentError(problem)
     _verify_required_paths(destination, required_paths)
     actual = _git_head(destination)
     if actual != reference:
@@ -787,6 +949,15 @@ def _query_esp_idf_python_tools(
     return versions
 
 
+def python_environment(repo_root: Path = SCRIPT_DIR.parent) -> dict[str, str]:
+    """Keep imported dependency bytecode outside the pinned source trees."""
+    environment = dict(os.environ)
+    environment["PYTHONPYCACHEPREFIX"] = (
+        environment.get("PYTHONPYCACHEPREFIX") or str(repo_root / ".build/python-cache")
+    )
+    return environment
+
+
 def _esp_idf_python_tool_drift(
     pins: Sequence[tuple[str, str]], versions: dict[str, str]
 ) -> list[str]:
@@ -855,19 +1026,23 @@ def ensure_esp_idf_tools(
         raise ComponentError(
             f"Invalid ESP_IDF_TARGETS in {config_path}: {targets}"
         )
+    environment = python_environment(repo_root)
+    if verify_only:
+        environment["PYTHONDONTWRITEBYTECODE"] = "1"
 
     if not verify_only:
         info(f"Installing ESP-IDF tools for: {targets}")
         if sys.platform == "win32":
+            # The working directory is the SDK; keep cmd.exe's command name
+            # free of spaces rather than relying on its extra quote parsing.
             command = (
-                "cmd.exe", "/d", "/s", "/c", str(directory / "install.bat"),
+                "cmd.exe", "/d", "/s", "/c", "install.bat",
                 targets,
             )
         else:
             command = ("bash", str(directory / "install.sh"), targets)
         # The installers run whichever python PATH finds first; put this
         # managed interpreter there instead of relying on a host install.
-        environment = dict(os.environ)
         environment["PATH"] = os.pathsep.join(
             (str(Path(sys.executable).parent), environment.get("PATH", ""))
         )
@@ -877,8 +1052,8 @@ def ensure_esp_idf_tools(
     base_command = (
         sys.executable, str(idf_tools), "--idf-path", str(directory)
     )
-    _run((*base_command, "check"), cwd=directory)
-    _run((*base_command, "check-python-dependencies"), cwd=directory)
+    _run((*base_command, "check"), cwd=directory, env=environment)
+    _run((*base_command, "check-python-dependencies"), cwd=directory, env=environment)
     _synchronize_esp_idf_python_tools(
         repo_root, config, verify_only=verify_only
     )
@@ -1095,6 +1270,11 @@ def ensure_git_component(
             destination, submodules, verify_only,
             recursive=spec.recursive_submodules,
         )
+        problem = _git_source_problem(
+            destination, config[f"{spec.prefix}_REPO"], config[f"{spec.prefix}_REF"]
+        )
+        if problem:
+            raise ComponentError(problem)
         _verify_required_paths(destination, spec.required_paths)
         changed = False
     else:
