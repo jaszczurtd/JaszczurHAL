@@ -1,3 +1,4 @@
+#include "../json/jh_json_schema.h"
 #include <algorithm>
 #include <array>
 #include <charconv>
@@ -12,6 +13,7 @@
 #include <jb/json_writer.h>
 #include <jb/utf8.h>
 #include <limits>
+#include <memory>
 #include <new>
 #include <stdexcept>
 #include <string>
@@ -26,6 +28,7 @@
 namespace {
 enum option_id {
   file,
+  schema,
   pointer,
   output,
   check,
@@ -39,7 +42,8 @@ struct option_spec {
   const char *name, *value, *description;
 };
 constexpr option_spec options[] = {
-    {"file", "<path>", "Read this JSON file (required for json inspect)"},
+    {"file", "<path>", "Read this JSON file"},
+    {"schema", "<path>", "Validate with this local schema (json validate)"},
     {"pointer", "<path>", "Select a plain RFC 6901 pointer (default: root)"},
     {"output", "<path>", "Atomically write the selected JSON value"},
     {"check", nullptr,
@@ -134,7 +138,8 @@ arguments parse_arguments(const std::vector<std::string> &argv) {
 std::string help_text() {
   std::string text =
       "Usage: jh [--help | --version] [--json]\n"
-      "       jh json inspect --file <path> [options]\n\n"
+      "       jh json inspect --file <path> [options]\n"
+      "       jh json validate --file <path> --schema <path> [--json]\n\n"
       "Read JSON, select a value and optionally compare or write it.\n";
   for (const auto &option : options) {
     text += "  --";
@@ -163,6 +168,9 @@ hal_status_t append(void *user, const char *data, size_t length) {
   }
 }
 
+struct schema_report {
+  std::string pointer, uri, rule, reason, message;
+};
 class result_writer {
   jb_json_writer_t writer{};
   std::vector<unsigned char> scratch;
@@ -208,6 +216,23 @@ public:
     require(jb_json_writer_node(&writer, value), 4,
             "cannot write selected JSON");
   }
+  void schema_errors(const std::vector<schema_report> &errors) {
+    key("errors");
+    require(jb_json_writer_array_begin(&writer), 4,
+            "cannot start schema errors");
+    for (const auto &error : errors) {
+      require(jb_json_writer_object_begin(&writer), 4,
+              "cannot start schema error");
+      string("instancePointer", error.pointer);
+      string("schemaUri", error.uri);
+      string("schemaPointer", error.rule);
+      string("reason", error.reason);
+      string("message", error.message);
+      require(jb_json_writer_object_end(&writer), 4,
+              "cannot close schema error");
+    }
+    require(jb_json_writer_array_end(&writer), 4, "cannot close schema errors");
+  }
   std::string finish() {
     require(jb_json_writer_object_end(&writer), 4, "cannot close result");
     size_t count;
@@ -234,12 +259,37 @@ std::string absolute_path(const std::string &path, const std::string &base) {
   return std::string(bytes.data(), needed - 1);
 }
 
-int inspect(context &ctx, const std::string &base) {
-  const arguments &args = ctx.args;
-  if (!args.present[file] || args.values[file].empty())
-    throw failure{HAL_EINVAL, 2, "json inspect requires --file"};
-  if (args.present[check] && !args.present[output])
-    throw failure{HAL_EINVAL, 2, "--check requires --output"};
+struct json_document {
+  file_owner input;
+  std::vector<jb_json_token_t> tokens;
+  jb_json_doc_t doc{};
+  std::string uri;
+  std::string identity;
+};
+
+std::string schema_identity(const std::string &path) {
+  constexpr char hex[] = "0123456789ABCDEF";
+  std::string result;
+  for (char byte : path) {
+    auto c = static_cast<unsigned char>(byte);
+#ifdef _WIN32
+    if (c == '\\')
+      c = '/';
+#endif
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+        (c >= '0' && c <= '9') || c == '-' || c == '.' || c == '_' ||
+        c == '~' || c == '/' || c == ':') {
+      result += static_cast<char>(c);
+    } else {
+      result += '%';
+      result += hex[c >> 4];
+      result += hex[c & 15];
+    }
+  }
+  return result;
+}
+
+size_t input_limit(const arguments &args) {
   size_t limit = 16 * 1024 * 1024;
   if (args.present[max_bytes]) {
     const std::string &value = args.values[max_bytes];
@@ -251,8 +301,16 @@ int inspect(context &ctx, const std::string &base) {
       throw failure{HAL_EINVAL, 2,
                     "--max-bytes requires an integer between 0 and 67108864"};
   }
-  ctx.source = absolute_path(args.values[file], base);
-  file_owner input;
+  return limit;
+}
+
+std::unique_ptr<json_document>
+read_document(context &ctx, const std::string &path, size_t limit) {
+  auto owned = std::make_unique<json_document>();
+  owned->uri = path;
+  owned->identity = schema_identity(path);
+  ctx.source = path;
+  auto &input = owned->input;
   const hal_status_t read_status =
       jb_file_read(ctx.source.c_str(), limit, &input.data);
   require(read_status,
@@ -277,12 +335,29 @@ int inspect(context &ctx, const std::string &base) {
   std::vector<unsigned char> scratch(scratch_bytes);
   parsed(jb_json_measure(bytes, &limits, {scratch.data(), scratch.size()},
                          &needed, &ctx.error));
-  std::vector<jb_json_token_t> tokens(needed.node_count);
-  jb_json_doc_t document;
+  owned->tokens.resize(needed.node_count);
+  auto &tokens = owned->tokens;
+  auto &document = owned->doc;
   parsed(jb_json_parse(bytes, &limits, tokens.data(), tokens.size(),
                        {scratch.data(), scratch.size()}, &document,
                        &ctx.error));
   ctx.located = false;
+  return owned;
+}
+
+int inspect(context &ctx, const std::string &base) {
+  const arguments &args = ctx.args;
+  if (!args.present[file] || args.values[file].empty())
+    throw failure{HAL_EINVAL, 2, "json inspect requires --file"};
+  if (args.present[schema])
+    throw failure{HAL_EINVAL, 2, "--schema requires json validate"};
+  if (args.present[check] && !args.present[output])
+    throw failure{HAL_EINVAL, 2, "--check requires --output"};
+  auto owned = read_document(ctx, absolute_path(args.values[file], base),
+                             input_limit(args));
+  const auto &document = owned->doc;
+  const auto &tokens = owned->tokens;
+  const auto bytes = document.input;
   jb_json_node_t selected;
   require(jb_json_pointer_get(&document, span(args.values[pointer]), &selected),
           2, "cannot resolve JSON Pointer");
@@ -323,6 +398,138 @@ int inspect(context &ctx, const std::string &base) {
   return stale ? 1 : 0;
 }
 
+struct schema_context {
+  context &cli;
+  size_t max_bytes, schema_bytes = 0;
+  std::vector<std::unique_ptr<json_document>> documents;
+  std::vector<schema_report> reports;
+};
+std::string copied(jb_json_span_t s) { return std::string(s.data, s.length); }
+
+hal_status_t load_schema(void *user, jb_json_span_t base_uri,
+                         jb_json_span_t reference,
+                         jh_json_schema_source_t *out) {
+  auto &state = *static_cast<schema_context *>(user);
+  try {
+    const std::string ref = copied(reference);
+    if (ref.find(':') != std::string::npos || ref.rfind("//", 0) == 0 ||
+        ref.find('\\') != std::string::npos ||
+        ref.find('\0') != std::string::npos)
+      return HAL_EUNSUPPORTED;
+    const json_document *base_document = nullptr;
+    const auto base_identifier = copied(base_uri);
+    for (const auto &doc : state.documents)
+      if (doc->identity == base_identifier) {
+        base_document = doc.get();
+        break;
+      }
+    if (base_document == nullptr)
+      return HAL_EINTERNAL;
+    const auto parent =
+        std::filesystem::u8path(base_document->uri).parent_path().u8string();
+    const auto path = absolute_path(ref, parent);
+    for (const auto &doc : state.documents) {
+      std::error_code error;
+      if (doc->uri == path ||
+          std::filesystem::equivalent(std::filesystem::u8path(doc->uri),
+                                      std::filesystem::u8path(path), error)) {
+        *out = {span(doc->identity), &doc->doc};
+        return HAL_OK;
+      }
+    }
+    if (state.documents.size() >= 256)
+      return HAL_EOVERFLOW;
+    constexpr size_t total_limit = 64 * 1024 * 1024;
+    if (state.schema_bytes >= total_limit)
+      return HAL_EOVERFLOW;
+    auto doc = read_document(
+        state.cli, path,
+        std::min(state.max_bytes, total_limit - state.schema_bytes));
+    state.schema_bytes += doc->doc.input.length;
+    *out = {span(doc->identity), &doc->doc};
+    state.documents.push_back(std::move(doc));
+    return HAL_OK;
+  } catch (const failure &e) {
+    return e.status;
+  } catch (const std::bad_alloc &) {
+    return HAL_ENOMEM;
+  } catch (...) {
+    return HAL_EINTERNAL;
+  }
+}
+hal_status_t schema_failure(void *user, const jh_json_schema_error_t *error) {
+  try {
+    auto &reports = static_cast<schema_context *>(user)->reports;
+    reports.push_back({copied(error->instance_pointer),
+                       copied(error->schema_uri), copied(error->schema_pointer),
+                       copied(error->reason_code), copied(error->message)});
+    return HAL_OK;
+  } catch (const std::bad_alloc &) {
+    return HAL_ENOMEM;
+  } catch (...) {
+    return HAL_EINTERNAL;
+  }
+}
+
+int validate(context &ctx, const std::string &base) {
+  const auto &args = ctx.args;
+  if (!args.present[file] || args.values[file].empty() ||
+      !args.present[schema] || args.values[schema].empty())
+    throw failure{HAL_EINVAL, 2, "json validate requires --file and --schema"};
+  if (args.present[pointer] || args.present[output] || args.present[check])
+    throw failure{
+        HAL_EINVAL, 2,
+        "json validate does not accept --pointer, --output or --check"};
+  const size_t max = input_limit(args);
+  const auto input_path = absolute_path(args.values[file], base);
+  auto input = read_document(ctx, input_path, max);
+  schema_context state{ctx, max, 0, {}, {}};
+  state.documents.push_back(
+      read_document(ctx, absolute_path(args.values[schema], base), max));
+  const auto &root = *state.documents.front();
+  state.schema_bytes = root.doc.input.length;
+  const jh_json_schema_source_t source{span(root.identity), &root.doc};
+  const jh_json_schema_limits_t limits{
+      50000000,        64,      1024,    8192,  32768,
+      1024 * 1024,     100000,  1000000, 16384, 4096,
+      2 * 1024 * 1024, 1000000, 128,     1024};
+  size_t needed;
+  require(jh_json_schema_workspace_size(&limits, &needed), 4,
+          "schema workspace overflow");
+  std::vector<unsigned char> scratch(needed);
+  const auto status = jh_json_schema_validate(
+      &input->doc, &source, load_schema, &state, schema_failure, &state,
+      {scratch.data(), scratch.size()}, &limits);
+  if (status != HAL_OK && status != HAL_ECONFIG)
+    require(status,
+            status == HAL_EOVERFLOW || status == HAL_ENOMEM ? 4
+            : status == HAL_ENOENT || status == HAL_EIO || status == HAL_EPERM
+                ? 3
+                : 2,
+            "cannot validate schema or validation limit exceeded");
+  ctx.source = input_path;
+  for (const auto &error : state.reports) {
+    std::fprintf(stderr, "%s:", input_path.c_str());
+    if (error.pointer.empty())
+      (void)std::fputc('/', stderr);
+    else
+      (void)std::fwrite(error.pointer.data(), 1, error.pointer.size(), stderr);
+    (void)std::fputs(": ", stderr);
+    (void)std::fwrite(error.message.data(), 1, error.message.size(), stderr);
+    (void)std::fputc('\n', stderr);
+  }
+  if (ctx.json) {
+    result_writer result(1024 * 1024, state.reports.size() * 8);
+    result.string("command", "json.validate");
+    result.string("status", hal_status_to_string(status));
+    result.string("source", input_path);
+    result.string("schema", root.uri);
+    result.schema_errors(state.reports);
+    stdout_bytes(result.finish());
+  }
+  return status == HAL_OK ? 0 : 2;
+}
+
 int run(const std::vector<std::string> &argv) {
   context ctx;
   ctx.json = std::find(argv.begin() + 1, argv.end(), "--json") != argv.end();
@@ -330,7 +537,8 @@ int run(const std::vector<std::string> &argv) {
     ctx.args = parse_arguments(argv);
     const auto &args = ctx.args;
     if (!args.command.empty() &&
-        args.command != std::vector<std::string>{"json", "inspect"})
+        args.command != std::vector<std::string>{"json", "inspect"} &&
+        args.command != std::vector<std::string>{"json", "validate"})
       throw failure{HAL_EINVAL, 2, "unknown command; use jh --help"};
     if (args.present[help] || (argv.size() == 1)) {
       const std::string text = help_text();
@@ -363,7 +571,9 @@ int run(const std::vector<std::string> &argv) {
     }
     if (args.command.empty())
       throw failure{HAL_EINVAL, 2, "a command is required"};
-    return inspect(ctx, std::filesystem::current_path().u8string());
+    const auto base = std::filesystem::current_path().u8string();
+    return args.command.back() == "validate" ? validate(ctx, base)
+                                             : inspect(ctx, base);
   } catch (const failure &error) {
     if (ctx.located) {
       std::fprintf(stderr, "%s:%zu:%zu: %s (%s)\n", ctx.source.c_str(),
@@ -375,11 +585,13 @@ int run(const std::vector<std::string> &argv) {
     }
     if (ctx.json) {
       result_writer result(ctx.source.size() + 1024);
-      result.string("command",
-                    ctx.args.command ==
-                            std::vector<std::string>{"json", "inspect"}
-                        ? "json.inspect"
-                        : "jh");
+      result.string(
+          "command",
+          ctx.args.command == std::vector<std::string>{"json", "inspect"}
+              ? "json.inspect"
+          : ctx.args.command == std::vector<std::string>{"json", "validate"}
+              ? "json.validate"
+              : "jh");
       result.string("status", hal_status_to_string(error.status));
       result.string("message", error.message);
       if (!ctx.source.empty())

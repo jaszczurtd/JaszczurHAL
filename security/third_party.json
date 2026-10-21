@@ -436,6 +436,21 @@
       "notes": "Clean git-ignored exact-commit checkout from the JaszczurHAL fork. Builds compile only the TJpgDec core through tracked memory-input and RGB565-output wrappers; the library's Arduino-facing wrapper is excluded."
     },
     {
+      "name": "PCRE2",
+      "pin": {"file": "third_party/pcre2_version.conf"},
+      "version": "{PCRE2_VERSION}",
+      "commit": "{PCRE2_REF}",
+      "type": "library",
+      "scope": "development",
+      "supplier": "PCRE2Project",
+      "licenses": ["BSD-3-Clause WITH PCRE2-exception"],
+      "purl": "pkg:generic/pcre2@{PCRE2_VERSION}",
+      "paths": ["third_party/pcre2", "third_party/pcre2_version.conf"],
+      "upstream": "https://github.com/PCRE2Project/pcre2",
+      "feature_flags": [],
+      "notes": "Host-only UTF-8 regex backend for jh schema validation. Static 8-bit library with Unicode properties, bounded allocation and matching, without JIT. Prepared explicitly as an ignored, clean exact-commit checkout."
+    },
+    {
       "name": "jhbase",
       "pin": {"file": "third_party/jhbase_version.conf"},
       "version": "{JHBASE_VERSION}",

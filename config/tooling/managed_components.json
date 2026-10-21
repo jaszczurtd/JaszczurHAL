@@ -2,6 +2,14 @@
   "schemaVersion": 1,
   "gitComponents": [
     {
+      "id": "pcre2",
+      "label": "PCRE2",
+      "config": "pcre2_version.conf",
+      "prefix": "PCRE2",
+      "requiredPaths": ["LICENCE.md", "CMakeLists.txt", "src/pcre2.h.generic", "src/pcre2_match.c"],
+      "clean": true
+    },
+    {
       "id": "jhbase",
       "label": "jhbase",
       "config": "jhbase_version.conf",
@@ -252,6 +260,7 @@
   },
   "defaultOrder": [
     "jhbase",
+    "pcre2",
     "bearssl",
     "cjson",
     "lodepng",
@@ -271,6 +280,7 @@
     "cmake-minimum"
   ],
   "launchers": {
+    "pcre2": "ensure_pcre2.sh",
     "jhbase": "ensure_jhbase.sh",
     "bearssl": "ensure_bearssl.sh",
     "cjson": "ensure_cjson.sh",

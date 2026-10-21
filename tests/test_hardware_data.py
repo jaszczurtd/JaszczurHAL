@@ -4,11 +4,14 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
+from urllib.parse import unquote
 
 from repo_root import repo_root  # noqa: E402
 
@@ -29,10 +32,36 @@ class SchemaReaderTests(unittest.TestCase):
     def setUp(self) -> None:
         self.schemas = hardware_schema.SchemaSet()
 
+    def native_errors(self, path: Path, schema: str,
+                      directory: Path = hardware_schema.SCHEMA_DIR) -> None:
+        """Compare the migrated validator with these existing regressions."""
+        executable = os.environ.get("JH_SCHEMA_TOOL")
+        if not executable:
+            return
+        schemas = self.schemas if directory == hardware_schema.SCHEMA_DIR else hardware_schema.SchemaSet(directory)
+        expected = schemas.validate(schema, hardware_schema.load_json(path))
+        expected.sort(key=lambda e: hardware_schema.pointer_key(e.pointer))
+        result = subprocess.run(
+            [executable, "json", "validate", "--file", str(path), "--schema",
+             str(directory / schema), "--json"],
+            capture_output=True, encoding="utf-8", check=False, timeout=30)
+        self.assertEqual(2 if expected else 0, result.returncode, result.stderr)
+        output = json.loads(result.stdout)
+        self.assertEqual("HAL_ECONFIG" if expected else "HAL_OK", output["status"])
+        self.assertEqual([(e.pointer, e.message) for e in expected],
+                         [(e["instancePointer"], e["message"]) for e in output["errors"]])
+        for error in expected:
+            self.assertIn(f":{error.pointer or '/'}: {error.message}", result.stderr)
+        for error in output["errors"]:
+            self.assertTrue(error["reason"])
+            self.assertTrue(Path(unquote(error["schemaUri"])).is_file())
+            self.assertTrue(error["schemaPointer"].startswith("/"))
+
     def test_every_index_case_is_classified_as_listed(self) -> None:
         for case in CASES["cases"]:
             with self.subTest(case=case["file"]):
                 data = hardware_schema.load_json(FIXTURES / case["file"])
+                self.native_errors(FIXTURES / case["file"], case["schema"])
                 first = self.schemas.first_error(case["schema"], data)
                 if case["expected"] == "schema":
                     self.assertIsNotNone(first)
@@ -41,10 +70,56 @@ class SchemaReaderTests(unittest.TestCase):
                     self.assertIsNone(first, first)
 
     def test_fixture_bindings_are_valid_types(self) -> None:
-        for path in sorted((FIXTURES / "bindings").glob("*.json")):
+        paths = sorted((FIXTURES / "bindings").glob("*.json"))
+        paths += sorted(hardware_model.HAL_BINDINGS.glob("*.json"))
+        for path in paths:
             with self.subTest(binding=path.name):
                 self.assertEqual([], self.schemas.validate(
                     "binding.schema.json", hardware_schema.load_json(path)))
+                self.native_errors(path, "binding.schema.json")
+        # The C regex backend once treated NBSP differently from Python re.
+        # Combining marks/new scalars remain legal at the schema layer; NFC and
+        # printable checks belong to the catalogue rules.
+        binding = hardware_schema.load_json(hardware_model.HAL_BINDINGS / "jaszczurhal-pwm-output.json")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "unit.json"
+            for unit in ("Hz", "Hz ", "\u00a0Hz", "Hz\u00a0", "\u001cHz",
+                         "Hz\u0085", "\tHz", "Hz\n", "e\u0301", "\U0001fae9"):
+                with self.subTest(unit=unit):
+                    binding["properties"]["frequencyHz"]["unit"] = unit
+                    path.write_text(json.dumps(binding, ensure_ascii=False), encoding="utf-8")
+                    self.native_errors(path, "binding.schema.json")
+            # printf("%s") used to truncate this valid JSON member's Pointer.
+            binding["properties"]["frequencyHz"]["unit"] = "Hz"
+            binding["a\0b"] = True
+            path.write_text(json.dumps(binding, ensure_ascii=False), encoding="utf-8")
+            self.native_errors(path, "binding.schema.json")
+            if os.environ.get("JH_SCHEMA_TOOL"):
+                # Every production pattern uses the same host adapter. Check
+                # its search/anchor, escape, lookahead and Unicode behavior.
+                patterns: set[str] = set()
+
+                def collect(value: object) -> None:
+                    if isinstance(value, dict):
+                        if "pattern" in value:
+                            patterns.add(value["pattern"])
+                        for child in value.values():
+                            collect(child)
+                    elif isinstance(value, list):
+                        for child in value:
+                            collect(child)
+
+                for document in self.schemas.documents.values():
+                    collect(document)
+                schema_path = Path(directory) / "pattern.schema.json"
+                for pattern in sorted(patterns):
+                    schema_path.write_text(json.dumps({"pattern": pattern}), encoding="utf-8")
+                    for value in ("", "abc", "a-b", "a.b", "a.b.c", "PA15", "HAL_ENABLE_SPI",
+                                  "file.json", "../file.json", "/file.json", "a:file.json",
+                                  "Hz\n", "\u00a0Hz", "Hz\u001c", "e\u0301", "\U0001fae9", "a\0b"):
+                        with self.subTest(pattern=pattern, value=value):
+                            path.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
+                            self.native_errors(path, schema_path.name, Path(directory))
 
     def test_json_rules_beyond_the_schemas(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
