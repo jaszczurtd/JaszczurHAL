@@ -35,6 +35,7 @@ aktualizujący.
 | Komponent | Plik wersji | Katalog utrzymywany przez projekt | Zastosowanie |
 |-----------|-------------|--------------------------------------|---------------|
 | jhbase | `jhbase_version.conf` | `jhbase/` | Biblioteka podstaw planu narzędzi w C (UTF-8, JSON, dokładne liczby, writer); definiuje `hal_status_t` i `COUNTOF` dla każdego buildu HAL, a jej `third_party/*_version.conf` są jedynymi pinami Unity, cppcheck, PMD i toolchainu RISC-V |
+| PCRE2 | `pcre2_version.conf` | `pcre2/` | Regex dla hostowego walidatora schematów `jh`; statyczne PCRE2-8 bez JIT |
 | BearSSL | `bearssl_version.conf` | `BearSSL/` | Silnik TLS używany w kompilacjach dla hosta, RP i STM32 |
 | cJSON | `cjson_version.conf` | `cJSON/` | Parser JSON i pomocnicze API |
 | LodePNG | `lodepng_version.conf` | `lodepng/` | Kodek PNG operujący na pamięci |
@@ -60,8 +61,14 @@ katalogach `src/hal/network/`, `src/hal/codecs/` i `src/hal/storage/`. Integracj
 Unity należy do infrastruktury testowej. W tym katalogu zarządzane są natomiast
 drzewa źródeł projektów zewnętrznych. Każdy przypięty checkout musi być czystym
 katalogiem roboczym z dokładnie wskazanym commitem: tryb `verify-only` odrzuca
-zmiany lokalne i pliki nieśledzone przez Git w każdym z nich, także
-w submodułach. Skrypty cJSON, LodePNG, TJpg_Decoder, Unity i SX126x dodatkowo
+zmiany lokalne oraz pliki nieśledzone i ignorowane przez Git, także w submodułach.
+Odczytuje rzeczywiste pliki i porównuje ich hashe blobów Git z pinem, więc
+`assume-unchanged` i `skip-worktree` nie ukrywają zmian. Obsługuje deklarowane
+checkouty z CRLF; nie uruchamia filtrów Git clean/process ani nie odświeża
+indeksu. Zainicjowane submoduły sprawdza rekurencyjnie względem przypiętych
+commitów i adresów repozytoriów. Niezainicjowane, nieużywane katalogi submodułów
+muszą pozostać puste.
+Skrypty cJSON, LodePNG, TJpg_Decoder, Unity i SX126x dodatkowo
 przywracają taki checkout w trybie normalnym. Sprawdzany
 jest również adres repozytorium źródłowego, w tym repozytoriów BearSSL, LodePNG,
 FatFs i Unity utrzymywanych przez projekt. `jaszczurtd/ff16` jest forkiem
@@ -109,7 +116,8 @@ wpis w SBOM.
 Zewnętrzne kopie FreeRTOS i Pico SDK można wskazać za pomocą udokumentowanych
 zmiennych `JH_FREERTOS_KERNEL_DIR`, `JH_PICO_SDK_DIR` oraz opcji ścieżek w
 skryptach pomocniczych. Takie katalogi zarządzane przez użytkownika są
-sprawdzane, ale nigdy zastępowane.
+sprawdzane pod względem origin, rewizji i zawartości, ale nigdy zastępowane
+ani czyszczone.
 
 ESP-IDF korzysta z dokładnie wskazanego commitu wydania i jest pobierany na
 żądanie przez `scripts/ensure_esp_idf.sh --enable`. Rekurencyjne submoduły są
@@ -119,6 +127,11 @@ a następnie sprawdza toolchain i środowisko Pythona. `JH_ESP_IDF_DIR` lub
 `--dir` pozwala wskazać i zweryfikować zewnętrzną kopię bez jej zastępowania.
 W każdym terminalu, w którym narzędzia ESP-IDF są używane bezpośrednio, należy
 wykonać `source third_party/esp-idf/export.sh`.
+
+Manager i skrypt buildu kierują bytecode Pythona do `.build/python-cache`
+(albo jawnie ustawionego `PYTHONPYCACHEPREFIX`), zamiast zapisywać go w SDK.
+Weryfikacja wyłącza zapis bytecode. Przed sprawdzeniem checkoutu usuń stare
+katalogi `__pycache__` znajdujące się wewnątrz zależności.
 
 Skrypt buildu produkcyjnego przyjmuje katalog projektu, wyznacza
 target `esp32s3` i płytkę `waveshare-esp32-s3-zero`, przygotowuje środowisko SDK

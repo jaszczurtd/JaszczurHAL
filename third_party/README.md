@@ -33,6 +33,7 @@ entry point.
 | Component | Pin | Managed checkout | Purpose |
 |-----------|-----|------------------|---------|
 | jhbase | `jhbase_version.conf` | `jhbase/` | Basics library of the C tooling plan (UTF-8, JSON, exact numbers, writer); defines `hal_status_t` and `COUNTOF` for every HAL build, and its `third_party/*_version.conf` are the only pins of Unity, cppcheck, PMD and the RISC-V toolchain |
+| PCRE2 | `pcre2_version.conf` | `pcre2/` | Host-only regex backend for `jh` schema validation; static PCRE2-8 without JIT |
 | BearSSL | `bearssl_version.conf` | `BearSSL/` | TLS engine used by host, RP and STM32 builds |
 | cJSON | `cjson_version.conf` | `cJSON/` | JSON parser and utility API |
 | LodePNG | `lodepng_version.conf` | `lodepng/` | Memory-oriented PNG codec |
@@ -57,8 +58,14 @@ along with the lwIP port configuration, remain tracked in their thematic
 `src/hal/network/`, `src/hal/codecs/`, and `src/hal/storage/` domains. Unity
 integration remains in the test infrastructure. Their upstream source trees
 are managed here. Every pinned checkout must be a clean exact-commit checkout:
-verify-only mode rejects local or untracked changes in any of them, submodules
-included. The cJSON, LodePNG, TJpg_Decoder, Unity and SX126x helpers also
+verify-only mode rejects local, untracked and ignored files in any of them,
+submodules included. It reads the actual tracked files and compares their Git
+blob hashes with the pin, so `assume-unchanged` and `skip-worktree` cannot hide
+edits. Declared CRLF checkouts remain supported; verification does not run Git
+clean/process filters or refresh the index. Initialized submodules are checked
+recursively against their pinned commits and repository URLs. Uninitialized,
+unused submodule directories must remain empty.
+The cJSON, LodePNG, TJpg_Decoder, Unity and SX126x helpers also
 restore such a checkout in normal mode.
 Configured repository origins are enforced, including the project-owned
 BearSSL, LodePNG, FatFs and Unity repositories. The `jaszczurtd/ff16` checkout
@@ -98,7 +105,8 @@ sources retain Apache-2.0 notices; the tracked license copy is
 
 External FreeRTOS or Pico SDK checkouts can still be selected through the
 documented `JH_FREERTOS_KERNEL_DIR`, `JH_PICO_SDK_DIR`, and helper-script path
-options. Such user-managed paths are verified but are never replaced.
+options. Such user-managed paths receive the same origin, revision and content
+checks but are never replaced or cleaned.
 
 ESP-IDF is pinned to an exact release commit and fetched on demand with
 `scripts/ensure_esp_idf.sh --enable`. Its recursive submodules are part of the
@@ -107,6 +115,11 @@ ESP-IDF installer for `ESP_IDF_TARGETS`, then verifies the toolchain and Python
 environment. Set `JH_ESP_IDF_DIR` or pass `--dir` to verify and use an external
 checkout without replacing it. Source `third_party/esp-idf/export.sh` in each
 terminal that invokes ESP-IDF tools directly.
+
+The manager and build runner keep Python bytecode below `.build/python-cache`
+(or an explicit `PYTHONPYCACHEPREFIX`) instead of writing it into the SDK.
+Verification disables bytecode writes. Remove any old `__pycache__` directories
+inside a dependency before verifying that checkout.
 
 The production runner accepts a project directory, resolves the
 `esp32s3` target and `waveshare-esp32-s3-zero` board descriptors, prepares the

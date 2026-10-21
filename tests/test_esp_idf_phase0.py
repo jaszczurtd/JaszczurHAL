@@ -6,6 +6,7 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -84,6 +85,27 @@ class EnvironmentTests(unittest.TestCase):
             esp_idf.idf_python(environment, platform="linux"),
             Path("/idf/python/bin/python"),
         )
+        with tempfile.TemporaryDirectory(prefix="jh-idf-export-bytecode-") as text:
+            root = Path(text)
+            sdk = root / "SDK with spaces"
+            (sdk / "tools").mkdir(parents=True)
+            python_root = root / "python env"
+            python = esp_idf.idf_python({"IDF_PYTHON_ENV_PATH": str(python_root)})
+            python.parent.mkdir(parents=True)
+            python.write_bytes(b"fixture")
+            (sdk / "tools/idf_tools.py").write_text(
+                "import export_payload\n"
+                f"print('IDF_PYTHON_ENV_PATH=' + {str(python_root)!r})\n",
+                encoding="utf-8",
+            )
+            (sdk / "tools/export_payload.py").write_text("value = 1\n", encoding="utf-8")
+            before = sorted(path.relative_to(sdk) for path in sdk.rglob("*"))
+            with mock.patch.dict(os.environ):
+                os.environ.pop("PYTHONPYCACHEPREFIX", None)
+                os.environ.pop("PYTHONDONTWRITEBYTECODE", None)
+                environment = esp_idf.exported_environment(sdk)
+            self.assertEqual(sorted(path.relative_to(sdk) for path in sdk.rglob("*")), before)
+            self.assertEqual(environment["PYTHONPYCACHEPREFIX"], str(ROOT / ".build/python-cache"))
 
     def test_export_parser_expands_windows_path(self) -> None:
         environment = esp_idf.parse_exported_environment(
