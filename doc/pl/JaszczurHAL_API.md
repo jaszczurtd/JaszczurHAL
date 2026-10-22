@@ -83,7 +83,7 @@ bezpośrednio implementację konkretnej platformy.
 | `src/utils/` | Narzędzia zgodnościowe C++, PID, watchdog, funkcje rysowania i integracja Unity. |
 | `boards/`, `config/` | Dane platform i płytek, zależności funkcji oraz schematy i typy sprzętu. |
 | `cmake/`, `link_libraries/` | Integracja firmware i konfiguracje kompilacji bibliotek statycznych. |
-| `tools/jh/` | Hostowe CLI do odczytu JSON i walidacji schematów. |
+| `tools/jh/` | Hostowe CLI: odczyt JSON, walidacja schematów i generator domyślnych wartości urządzeń na katalogu typów. |
 | `scripts/`, `vscode/` | Narzędzia konfiguracji, generowania, kompilacji, wgrywania, debugowania i kontroli. |
 | `tests/` | Testy hostowe i niezależne dane testowe; testy urządzeń wybiera się osobno z `tests/hardware/`. |
 | `third_party/` | Pliki wersji i ignorowane instalacje zarządzanych zależności. |

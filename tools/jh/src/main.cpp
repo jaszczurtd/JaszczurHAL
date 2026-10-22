@@ -1,4 +1,7 @@
-#include "../json/jh_json_schema.h"
+#include "../hardware/jh_device_defaults.h"
+#include "../hardware/jh_type_catalogue.h"
+#include "../json/jh_json_file.h"
+#include "jh_generated_output.h"
 #include <algorithm>
 #include <array>
 #include <charconv>
@@ -8,7 +11,6 @@
 #include <cwchar>
 #include <filesystem>
 #include <jb/array.h>
-#include <jb/file.h>
 #include <jb/json_pointer.h>
 #include <jb/json_writer.h>
 #include <jb/utf8.h>
@@ -26,11 +28,19 @@
 #endif
 
 namespace {
+using jh::failure;
+using jh::require;
+using jh::span;
+
 enum option_id {
   file,
   schema,
   pointer,
   output,
+  root,
+  bindings,
+  output_root,
+  write_mode,
   check,
   max_bytes,
   machine,
@@ -46,8 +56,14 @@ constexpr option_spec options[] = {
     {"schema", "<path>", "Validate with this local schema (json validate)"},
     {"pointer", "<path>", "Select a plain RFC 6901 pointer (default: root)"},
     {"output", "<path>", "Atomically write the selected JSON value"},
+    {"root", "<path>", "JaszczurHAL checkout the generator reads"},
+    {"bindings", "<path>",
+     "Directory of HAL types (default: <root>/config/hardware/bindings)"},
+    {"output-root", "<path>",
+     "Root the generated header path is relative to (default: <root>)"},
+    {"write", nullptr, "Refresh the generated artifact"},
     {"check", nullptr,
-     "Compare --output without changing files; exit 1 on drift"},
+     "Compare the output without changing files; exit 1 on drift"},
     {"max-bytes", "<count>",
      "Maximum input bytes (default 16777216, maximum 67108864)"},
     {"json", nullptr, "Write a versioned JSON result on stdout"},
@@ -55,38 +71,34 @@ constexpr option_spec options[] = {
     {"version", nullptr, "Show the tool version"},
 };
 static_assert(COUNTOF(options) == option_count);
+
+enum command_id { inspect_command, validate_command, defaults_command };
+struct command_spec {
+  const char *first, *second, *name;
+  std::vector<option_id> accepted;
+};
+const command_spec commands[] = {
+    {"json",
+     "inspect",
+     "json.inspect",
+     {file, pointer, output, check, max_bytes}},
+    {"json", "validate", "json.validate", {file, schema, max_bytes}},
+    {"generate",
+     "device-defaults",
+     "generate.device-defaults",
+     {root, bindings, output_root, write_mode, check}},
+};
+
 struct arguments {
   std::array<bool, option_count> present{};
   std::array<std::string, option_count> values;
   std::vector<std::string> command;
 };
-struct failure {
-  hal_status_t status;
-  int exit_code;
-  std::string message;
-};
-struct context {
+struct context : jh::parse_location {
   arguments args;
   bool json = false;
-  std::string source;
-  jb_json_error_t error{};
-  size_t line = 0, column = 0;
-  bool located = false;
+  const command_spec *command = nullptr;
 };
-struct file_owner {
-  jb_file_data_t data{};
-  ~file_owner() { jb_file_release(&data); }
-};
-
-void require(hal_status_t status, int exit_code, const char *message) {
-  if (status != HAL_OK)
-    throw failure{status, exit_code, message};
-}
-
-jb_json_span_t span(const std::string &text) {
-  return {text.data(), text.size()};
-}
-jb_json_span_t span(const char *text) { return {text, std::strlen(text)}; }
 
 arguments parse_arguments(const std::vector<std::string> &argv) {
   arguments result;
@@ -113,23 +125,26 @@ arguments parse_arguments(const std::vector<std::string> &argv) {
     while (id < option_count && name != std::string("--") + options[id].name)
       ++id;
     if (id == option_count)
-      throw failure{HAL_EINVAL, 2, "unknown option: " + text};
+      throw failure{HAL_EINVAL, 2, "unknown option: " + text, {}, {}, {}};
     if (result.present[id])
-      throw failure{HAL_EINVAL, 2, "option specified more than once: " + name};
+      throw failure{HAL_EINVAL, 2,  "option specified more than once: " + name,
+                    {},         {}, {}};
     result.present[id] = true;
     if (options[id].value != nullptr) {
       if (equal != std::string::npos) {
         result.values[id] = expanded.substr(equal + 1);
       } else {
         if (i + 1 == argv.size() || argv[i + 1].rfind("--", 0) == 0)
-          throw failure{HAL_EINVAL, 2, "option requires a value: " + name};
+          throw failure{HAL_EINVAL, 2,  "option requires a value: " + name,
+                        {},         {}, {}};
         result.values[id] = argv[++i];
         require(jb_utf8_validate(result.values[id].data(),
                                  result.values[id].size(), &bad),
                 2, "argument is not valid UTF-8");
       }
     } else if (equal != std::string::npos) {
-      throw failure{HAL_EINVAL, 2, "flag does not take a value: " + name};
+      throw failure{HAL_EINVAL, 2,  "flag does not take a value: " + name,
+                    {},         {}, {}};
     }
   }
   return result;
@@ -139,8 +154,11 @@ std::string help_text() {
   std::string text =
       "Usage: jh [--help | --version] [--json]\n"
       "       jh json inspect --file <path> [options]\n"
-      "       jh json validate --file <path> --schema <path> [--json]\n\n"
-      "Read JSON, select a value and optionally compare or write it.\n";
+      "       jh json validate --file <path> --schema <path> [--json]\n"
+      "       jh generate device-defaults --root <path> (--check | --write)"
+      " [options]\n\n"
+      "Read JSON, select a value and optionally compare or write it, or\n"
+      "generate the C defaults of the HAL component types.\n";
   for (const auto &option : options) {
     text += "  --";
     text += option.name;
@@ -168,9 +186,6 @@ hal_status_t append(void *user, const char *data, size_t length) {
   }
 }
 
-struct schema_report {
-  std::string pointer, uri, rule, reason, message;
-};
 class result_writer {
   jb_json_writer_t writer{};
   std::vector<unsigned char> scratch;
@@ -216,7 +231,7 @@ public:
     require(jb_json_writer_node(&writer, value), 4,
             "cannot write selected JSON");
   }
-  void schema_errors(const std::vector<schema_report> &errors) {
+  void schema_errors(const std::vector<jh::schema_report> &errors) {
     key("errors");
     require(jb_json_writer_array_begin(&writer), 4,
             "cannot start schema errors");
@@ -245,48 +260,7 @@ public:
 void stdout_bytes(const std::string &text) {
   if (std::fwrite(text.data(), 1, text.size(), stdout) != text.size() ||
       std::fflush(stdout) != 0)
-    throw failure{HAL_EIO, 3, "cannot write stdout"};
-}
-
-std::string absolute_path(const std::string &path, const std::string &base) {
-  size_t needed;
-  require(jb_path_resolve(base.c_str(), path.c_str(), nullptr, 0, &needed), 3,
-          "cannot resolve path");
-  std::vector<char> bytes(needed);
-  require(jb_path_resolve(base.c_str(), path.c_str(), bytes.data(),
-                          bytes.size(), &needed),
-          3, "cannot resolve path");
-  return std::string(bytes.data(), needed - 1);
-}
-
-struct json_document {
-  file_owner input;
-  std::vector<jb_json_token_t> tokens;
-  jb_json_doc_t doc{};
-  std::string uri;
-  std::string identity;
-};
-
-std::string schema_identity(const std::string &path) {
-  constexpr char hex[] = "0123456789ABCDEF";
-  std::string result;
-  for (char byte : path) {
-    auto c = static_cast<unsigned char>(byte);
-#ifdef _WIN32
-    if (c == '\\')
-      c = '/';
-#endif
-    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-        (c >= '0' && c <= '9') || c == '-' || c == '.' || c == '_' ||
-        c == '~' || c == '/' || c == ':') {
-      result += static_cast<char>(c);
-    } else {
-      result += '%';
-      result += hex[c >> 4];
-      result += hex[c & 15];
-    }
-  }
-  return result;
+    throw failure{HAL_EIO, 3, "cannot write stdout", {}, {}, {}};
 }
 
 size_t input_limit(const arguments &args) {
@@ -298,63 +272,28 @@ size_t input_limit(const arguments &args) {
     if (converted.ec != std::errc{} ||
         converted.ptr != value.data() + value.size() ||
         limit > 64 * 1024 * 1024)
-      throw failure{HAL_EINVAL, 2,
-                    "--max-bytes requires an integer between 0 and 67108864"};
+      throw failure{HAL_EINVAL,
+                    2,
+                    "--max-bytes requires an integer between 0 and 67108864",
+                    {},
+                    {},
+                    {}};
   }
   return limit;
 }
 
-std::unique_ptr<json_document>
-read_document(context &ctx, const std::string &path, size_t limit) {
-  auto owned = std::make_unique<json_document>();
-  owned->uri = path;
-  owned->identity = schema_identity(path);
-  ctx.source = path;
-  auto &input = owned->input;
-  const hal_status_t read_status =
-      jb_file_read(ctx.source.c_str(), limit, &input.data);
-  require(read_status,
-          read_status == HAL_EOVERFLOW || read_status == HAL_ENOMEM ? 4 : 3,
-          "cannot read input file");
-  const jb_json_span_t bytes{reinterpret_cast<const char *>(input.data.data),
-                             input.data.length};
-  const jb_json_limits_t limits{
-      limit, 1000000, 256, limit, 1048576, 100000, limit * 32 + 1048576};
-  jb_json_requirements_t needed;
-  const auto parsed = [&](hal_status_t status) {
-    if (status != HAL_OK) {
-      ctx.located = true;
-      (void)jb_json_locate(bytes, ctx.error.offset, &ctx.line, &ctx.column);
-      require(status, status == HAL_EOVERFLOW || status == HAL_ENOMEM ? 4 : 2,
-              "invalid JSON or parser limit exceeded");
-    }
-  };
-  size_t scratch_bytes;
-  require(jb_json_parse_workspace_size(&limits, &scratch_bytes), 4,
-          "parser workspace overflow");
-  std::vector<unsigned char> scratch(scratch_bytes);
-  parsed(jb_json_measure(bytes, &limits, {scratch.data(), scratch.size()},
-                         &needed, &ctx.error));
-  owned->tokens.resize(needed.node_count);
-  auto &tokens = owned->tokens;
-  auto &document = owned->doc;
-  parsed(jb_json_parse(bytes, &limits, tokens.data(), tokens.size(),
-                       {scratch.data(), scratch.size()}, &document,
-                       &ctx.error));
-  ctx.located = false;
-  return owned;
+void require_value(const arguments &args, option_id id, const char *message) {
+  if (!args.present[id] || args.values[id].empty())
+    throw failure{HAL_EINVAL, 2, message, {}, {}, {}};
 }
 
 int inspect(context &ctx, const std::string &base) {
   const arguments &args = ctx.args;
-  if (!args.present[file] || args.values[file].empty())
-    throw failure{HAL_EINVAL, 2, "json inspect requires --file"};
-  if (args.present[schema])
-    throw failure{HAL_EINVAL, 2, "--schema requires json validate"};
+  require_value(args, file, "json inspect requires --file");
   if (args.present[check] && !args.present[output])
-    throw failure{HAL_EINVAL, 2, "--check requires --output"};
-  auto owned = read_document(ctx, absolute_path(args.values[file], base),
-                             input_limit(args));
+    throw failure{HAL_EINVAL, 2, "--check requires --output", {}, {}, {}};
+  auto owned = jh::read_document(
+      ctx, jh::absolute_path(args.values[file], base), input_limit(args));
   const auto &document = owned->doc;
   const auto &tokens = owned->tokens;
   const auto bytes = document.input;
@@ -366,7 +305,7 @@ int inspect(context &ctx, const std::string &base) {
   bool changed = false;
   std::string destination;
   if (args.present[output]) {
-    destination = absolute_path(args.values[output], base);
+    destination = jh::absolute_path(args.values[output], base);
     std::string content(raw.data, raw.length);
     content += '\n';
     require(jb_file_write_atomic(destination.c_str(), content.data(),
@@ -398,115 +337,20 @@ int inspect(context &ctx, const std::string &base) {
   return stale ? 1 : 0;
 }
 
-struct schema_context {
-  context &cli;
-  size_t max_bytes, schema_bytes = 0;
-  std::vector<std::unique_ptr<json_document>> documents;
-  std::vector<schema_report> reports;
-};
-std::string copied(jb_json_span_t s) { return std::string(s.data, s.length); }
-
-hal_status_t load_schema(void *user, jb_json_span_t base_uri,
-                         jb_json_span_t reference,
-                         jh_json_schema_source_t *out) {
-  auto &state = *static_cast<schema_context *>(user);
-  try {
-    const std::string ref = copied(reference);
-    if (ref.find(':') != std::string::npos || ref.rfind("//", 0) == 0 ||
-        ref.find('\\') != std::string::npos ||
-        ref.find('\0') != std::string::npos)
-      return HAL_EUNSUPPORTED;
-    const json_document *base_document = nullptr;
-    const auto base_identifier = copied(base_uri);
-    for (const auto &doc : state.documents)
-      if (doc->identity == base_identifier) {
-        base_document = doc.get();
-        break;
-      }
-    if (base_document == nullptr)
-      return HAL_EINTERNAL;
-    const auto parent =
-        std::filesystem::u8path(base_document->uri).parent_path().u8string();
-    const auto path = absolute_path(ref, parent);
-    for (const auto &doc : state.documents) {
-      std::error_code error;
-      if (doc->uri == path ||
-          std::filesystem::equivalent(std::filesystem::u8path(doc->uri),
-                                      std::filesystem::u8path(path), error)) {
-        *out = {span(doc->identity), &doc->doc};
-        return HAL_OK;
-      }
-    }
-    if (state.documents.size() >= 256)
-      return HAL_EOVERFLOW;
-    constexpr size_t total_limit = 64 * 1024 * 1024;
-    if (state.schema_bytes >= total_limit)
-      return HAL_EOVERFLOW;
-    auto doc = read_document(
-        state.cli, path,
-        std::min(state.max_bytes, total_limit - state.schema_bytes));
-    state.schema_bytes += doc->doc.input.length;
-    *out = {span(doc->identity), &doc->doc};
-    state.documents.push_back(std::move(doc));
-    return HAL_OK;
-  } catch (const failure &e) {
-    return e.status;
-  } catch (const std::bad_alloc &) {
-    return HAL_ENOMEM;
-  } catch (...) {
-    return HAL_EINTERNAL;
-  }
-}
-hal_status_t schema_failure(void *user, const jh_json_schema_error_t *error) {
-  try {
-    auto &reports = static_cast<schema_context *>(user)->reports;
-    reports.push_back({copied(error->instance_pointer),
-                       copied(error->schema_uri), copied(error->schema_pointer),
-                       copied(error->reason_code), copied(error->message)});
-    return HAL_OK;
-  } catch (const std::bad_alloc &) {
-    return HAL_ENOMEM;
-  } catch (...) {
-    return HAL_EINTERNAL;
-  }
-}
-
 int validate(context &ctx, const std::string &base) {
   const auto &args = ctx.args;
   if (!args.present[file] || args.values[file].empty() ||
       !args.present[schema] || args.values[schema].empty())
-    throw failure{HAL_EINVAL, 2, "json validate requires --file and --schema"};
-  if (args.present[pointer] || args.present[output] || args.present[check])
-    throw failure{
-        HAL_EINVAL, 2,
-        "json validate does not accept --pointer, --output or --check"};
+    throw failure{HAL_EINVAL, 2,  "json validate requires --file and --schema",
+                  {},         {}, {}};
   const size_t max = input_limit(args);
-  const auto input_path = absolute_path(args.values[file], base);
-  auto input = read_document(ctx, input_path, max);
-  schema_context state{ctx, max, 0, {}, {}};
-  state.documents.push_back(
-      read_document(ctx, absolute_path(args.values[schema], base), max));
-  const auto &root = *state.documents.front();
-  state.schema_bytes = root.doc.input.length;
-  const jh_json_schema_source_t source{span(root.identity), &root.doc};
-  const jh_json_schema_limits_t limits{
-      50000000,        64,      1024,    8192,  32768,
-      1024 * 1024,     100000,  1000000, 16384, 4096,
-      2 * 1024 * 1024, 1000000, 128,     1024};
-  size_t needed;
-  require(jh_json_schema_workspace_size(&limits, &needed), 4,
-          "schema workspace overflow");
-  std::vector<unsigned char> scratch(needed);
-  const auto status = jh_json_schema_validate(
-      &input->doc, &source, load_schema, &state, schema_failure, &state,
-      {scratch.data(), scratch.size()}, &limits);
-  if (status != HAL_OK && status != HAL_ECONFIG)
-    require(status,
-            status == HAL_EOVERFLOW || status == HAL_ENOMEM ? 4
-            : status == HAL_ENOENT || status == HAL_EIO || status == HAL_EPERM
-                ? 3
-                : 2,
-            "cannot validate schema or validation limit exceeded");
+  const auto input_path = jh::absolute_path(args.values[file], base);
+  auto input = jh::read_document(ctx, input_path, max);
+  jh::schema_files state(ctx, max);
+  const auto &root_schema =
+      state.root(jh::absolute_path(args.values[schema], base));
+  std::vector<unsigned char> scratch;
+  const auto status = jh::validate_with(state, *input, scratch);
   ctx.source = input_path;
   for (const auto &error : state.reports) {
     std::fprintf(stderr, "%s:", input_path.c_str());
@@ -523,11 +367,119 @@ int validate(context &ctx, const std::string &base) {
     result.string("command", "json.validate");
     result.string("status", hal_status_to_string(status));
     result.string("source", input_path);
-    result.string("schema", root.uri);
+    result.string("schema", root_schema.uri);
     result.schema_errors(state.reports);
     stdout_bytes(result.finish());
   }
   return status == HAL_OK ? 0 : 2;
+}
+
+int generate_defaults(context &ctx, const std::string &base) {
+  const auto &args = ctx.args;
+  require_value(args, root, "generate device-defaults requires --root");
+  if (args.present[write_mode] == args.present[check])
+    throw failure{HAL_EINVAL,
+                  2,
+                  "generate device-defaults requires exactly one of --write "
+                  "and --check",
+                  {},
+                  {},
+                  {}};
+  constexpr size_t limit = 16 * 1024 * 1024;
+  auto hal_root = jh::absolute_path(args.values[root], base);
+  // A root given as "." resolves with a trailing separator; report it plain.
+  if (hal_root.size() > 1 &&
+      (hal_root.back() == '/' || hal_root.back() == '\\') &&
+      !(hal_root.size() == 3 && hal_root[1] == ':'))
+    hal_root.pop_back();
+  const auto bindings_dir =
+      args.present[bindings]
+          ? jh::absolute_path(args.values[bindings], base)
+          : jh::absolute_path("config/hardware/bindings", hal_root);
+  const auto out_root = args.present[output_root]
+                            ? jh::absolute_path(args.values[output_root], base)
+                            : hal_root;
+  const auto artifacts = jh::read_document(
+      ctx, jh::absolute_path("config/tooling/artifacts.json", hal_root), limit);
+  jb_json_node_t artifacts_root;
+  require(jb_json_root(&artifacts->doc, &artifacts_root), 2,
+          "artifacts.json has no root");
+  jh::hardware::view header_entry;
+  if (!jh::hardware::view{artifacts_root}.is(JB_JSON_OBJECT) ||
+      !jh::hardware::view{artifacts_root}
+           .member("generatedArtifacts")
+           .find("deviceDefaultsHeader", &header_entry) ||
+      !header_entry.is(JB_JSON_STRING))
+    throw failure{HAL_ECONFIG,
+                  2,
+                  "config/tooling/artifacts.json lacks "
+                  "generatedArtifacts.deviceDefaultsHeader",
+                  {},
+                  {},
+                  {}};
+  const std::string header_relative = header_entry.string();
+  const auto output_path = jh::absolute_path(header_relative, out_root);
+  const auto features = jh::hardware::hal_features(ctx, hal_root, limit);
+  const auto capabilities =
+      jh::hardware::board_capabilities(ctx, hal_root, limit);
+  const auto types = jh::hardware::load_hal_catalogue(
+      ctx, jh::absolute_path("config/hardware", hal_root), bindings_dir, limit);
+  jh::hardware::check_catalogue(types, &features, &capabilities);
+  const std::string content = jh::hardware::render_device_defaults(types);
+  ctx.source = output_path;
+  bool changed = false;
+  bool current = true;
+  if (args.present[write_mode]) {
+    changed = jh::write_generated(output_path, content);
+    if (!ctx.json)
+      stdout_bytes("generated 1 device defaults artifacts (" +
+                   std::to_string(changed ? 1 : 0) + " changed)\n");
+  } else {
+    current = jh::check_generated(output_path, content, 40,
+                                  "generated:" + header_relative);
+    changed = !current;
+    if (current && !ctx.json)
+      stdout_bytes("verified 1 generated device defaults artifacts\n");
+  }
+  if (ctx.json) {
+    result_writer result(output_path.size() + bindings_dir.size() + 1024);
+    result.string("command", "generate.device-defaults");
+    result.string("status", current ? "HAL_OK" : "HAL_ESTATE");
+    result.string("root", hal_root);
+    result.string("bindings", bindings_dir);
+    result.string("output", output_path);
+    result.boolean("changed", changed);
+    result.boolean("checkOnly", args.present[check]);
+    stdout_bytes(result.finish());
+  }
+  return current ? 0 : 1;
+}
+
+const command_spec *select_command(const std::vector<std::string> &words) {
+  if (words.empty())
+    return nullptr;
+  for (const auto &spec : commands)
+    if (words.size() == 2 && words[0] == spec.first && words[1] == spec.second)
+      return &spec;
+  throw failure{HAL_EINVAL, 2, "unknown command; use jh --help", {}, {}, {}};
+}
+
+void reject_foreign_options(const context &ctx) {
+  for (size_t id = 0; id < machine; ++id) {
+    if (!ctx.args.present[id])
+      continue;
+    const auto &accepted = ctx.command->accepted;
+    const auto wanted = static_cast<option_id>(id);
+    if (std::find(accepted.begin(), accepted.end(), wanted) == accepted.end())
+      throw failure{HAL_EINVAL,
+                    2,
+                    std::string("--") + options[id].name +
+                        " does not apply to " + ctx.command->first + " " +
+                        ctx.command->second,
+                    {},
+                    {},
+                    {}};
+  }
 }
 
 int run(const std::vector<std::string> &argv) {
@@ -536,10 +488,7 @@ int run(const std::vector<std::string> &argv) {
   try {
     ctx.args = parse_arguments(argv);
     const auto &args = ctx.args;
-    if (!args.command.empty() &&
-        args.command != std::vector<std::string>{"json", "inspect"} &&
-        args.command != std::vector<std::string>{"json", "validate"})
-      throw failure{HAL_EINVAL, 2, "unknown command; use jh --help"};
+    ctx.command = select_command(args.command);
     if (args.present[help] || (argv.size() == 1)) {
       const std::string text = help_text();
       if (ctx.json) {
@@ -555,10 +504,11 @@ int run(const std::vector<std::string> &argv) {
     if (args.present[version]) {
       for (size_t id = 0; id < machine; ++id)
         if (args.present[id])
-          throw failure{HAL_EINVAL, 2,
-                        "--version does not take command options"};
+          throw failure{
+              HAL_EINVAL, 2,  "--version does not take command options",
+              {},         {}, {}};
       if (!args.command.empty())
-        throw failure{HAL_EINVAL, 2, "--version is a root option"};
+        throw failure{HAL_EINVAL, 2, "--version is a root option", {}, {}, {}};
       if (ctx.json) {
         result_writer result(128);
         result.string("command", "version");
@@ -569,11 +519,15 @@ int run(const std::vector<std::string> &argv) {
         stdout_bytes("jh " JH_TOOL_VERSION "\n");
       return 0;
     }
-    if (args.command.empty())
-      throw failure{HAL_EINVAL, 2, "a command is required"};
+    if (ctx.command == nullptr)
+      throw failure{HAL_EINVAL, 2, "a command is required", {}, {}, {}};
+    reject_foreign_options(ctx);
     const auto base = std::filesystem::current_path().u8string();
-    return args.command.back() == "validate" ? validate(ctx, base)
-                                             : inspect(ctx, base);
+    if (ctx.command == &commands[validate_command])
+      return validate(ctx, base);
+    if (ctx.command == &commands[defaults_command])
+      return generate_defaults(ctx, base);
+    return inspect(ctx, base);
   } catch (const failure &error) {
     if (ctx.located) {
       std::fprintf(stderr, "%s:%zu:%zu: %s (%s)\n", ctx.source.c_str(),
@@ -584,20 +538,21 @@ int run(const std::vector<std::string> &argv) {
                    hal_status_to_string(error.status));
     }
     if (ctx.json) {
-      result_writer result(ctx.source.size() + 1024);
-      result.string(
-          "command",
-          ctx.args.command == std::vector<std::string>{"json", "inspect"}
-              ? "json.inspect"
-          : ctx.args.command == std::vector<std::string>{"json", "validate"}
-              ? "json.validate"
-              : "jh");
+      result_writer result(ctx.source.size() + error.message.size() + 1024);
+      result.string("command",
+                    ctx.command == nullptr ? "jh" : ctx.command->name);
       result.string("status", hal_status_to_string(error.status));
       result.string("message", error.message);
-      if (!ctx.source.empty())
-        result.string("source", ctx.source);
-      if (ctx.args.present[pointer])
-        result.string("pointer", ctx.args.values[pointer]);
+      if (!error.code.empty()) {
+        result.string("code", error.code);
+        result.string("source", error.source);
+        result.string("pointer", error.pointer);
+      } else {
+        if (!ctx.source.empty())
+          result.string("source", ctx.source);
+        if (ctx.args.present[pointer])
+          result.string("pointer", ctx.args.values[pointer]);
+      }
       if (ctx.located) {
         result.number("jsonError", ctx.error.code);
         result.number("offset", ctx.error.offset);
@@ -649,11 +604,13 @@ int main(int argc, char **argv) {
           WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, argv[i], -1,
                               nullptr, 0, nullptr, nullptr);
       if (length == 0)
-        throw failure{HAL_EPROTO, 2, "argument is not valid UTF-16"};
+        throw failure{HAL_EPROTO, 2,  "argument is not valid UTF-16",
+                      {},         {}, {}};
       std::string text(static_cast<size_t>(length), '\0');
       if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, argv[i], -1,
                               text.data(), length, nullptr, nullptr) != length)
-        throw failure{HAL_EPROTO, 2, "cannot convert argument to UTF-8"};
+        throw failure{HAL_EPROTO, 2,  "cannot convert argument to UTF-8",
+                      {},         {}, {}};
       text.pop_back();
       args.push_back(std::move(text));
 #else

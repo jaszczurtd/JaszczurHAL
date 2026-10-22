@@ -252,6 +252,38 @@ runs the native C/C++ tests under ThreadSanitizer and stops at the first
 reported race. `--build-dir`, `--jobs`, and `--fuzz-runs` select its
 managed output and workload; `--check-tools` only verifies Clang availability.
 
+### `scripts/jh`, `scripts/jh.ps1` and `scripts/jh_bootstrap.cmake`
+
+The launchers of the jh host CLI. Both build the tool first when any of its
+inputs changed, through the shared `cmake -P` bootstrap, then run the
+published executable with the given arguments; stdout stays with the tool
+and the bootstrap reports on stderr. The bootstrap needs CMake 3.22 or newer,
+Git and a host C11/C++17 compiler: GCC or Clang with Ninja or Make on Linux,
+Visual Studio 2022 or `cl.exe` in PATH with `-Generator Ninja` on Windows.
+It downloads nothing; the managed checkouts come from
+`scripts/ensure_jhbase.sh`, `scripts/ensure_utf8proc.sh` and
+`scripts/ensure_pcre2.sh`.
+
+The key of a build covers the `tools/jh` sources, the CMake modules and pin
+files they read, the bootstrap script itself, the verified revisions of
+jhbase, utf8proc and PCRE2, the host variant, the compiler, the generator,
+the build type and the CMake version. The result lives in
+`.build/host-tools/<variant>/<key>/bin` with a `manifest.json` that records
+those inputs and the SHA-256 of the executable; it is reused only when the
+manifest names the same key and the file still matches, never through PATH,
+a version number or a timestamp. A damaged executable or an interrupted
+build is rebuilt from a clean tree, and every key has its own lock, so
+concurrent launchers share one build. The variant is
+`linux-<target triple of the compiler>`, `windows-x64` or `windows-x86`
+(`-Arch x86` builds a 32-bit process on Windows x64), and the tool must run
+before it is published. `JH_DEPENDENCY_ROOT` takes the managed checkouts
+from another checkout, verified against this checkout's pins, so an exported
+tree such as the hook's index snapshot builds without them;
+`JH_JHBASE_DIR` selects an external jhbase whose content joins the key;
+`JH_BOOTSTRAP_CMAKE` selects the cmake executable.
+`tools/jh/tests/check_bootstrap.cmake` covers these scenarios in the
+`jh_bootstrap` test of the tool's CTest suite.
+
 ### `vscode/entry/jh-vscode` and `jh-vscode.cmd`
 
 The Unix and Windows launchers start one public Python entrypoint and shared

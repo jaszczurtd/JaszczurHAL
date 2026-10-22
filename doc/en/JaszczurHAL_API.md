@@ -79,7 +79,7 @@ implementation directly.
 | `src/utils/` | C++ compatibility utilities, PID, watchdog and drawing helpers, plus Unity integration. |
 | `boards/`, `config/` | Target and board facts, feature dependencies, and hardware schemas and bindings. |
 | `cmake/`, `link_libraries/` | Firmware integration and static-library build recipes. |
-| `tools/jh/` | Host JSON inspection and schema-validation CLI. |
+| `tools/jh/` | Host CLI: JSON inspection, schema validation and the device defaults generator over the type catalogue. |
 | `scripts/`, `vscode/` | Setup, generation, build, upload, debug and validation tools. |
 | `tests/` | Host tests and independent fixtures; device tests are selected separately under `tests/hardware/`. |
 | `third_party/` | Version pins and ignored managed installations. |

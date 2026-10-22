@@ -273,6 +273,37 @@ ThreadSanitizerem i zatrzymuje się na pierwszym zgłoszonym wyścigu.
 `--build-dir`, `--jobs` oraz `--fuzz-runs` wybierają zarządzane wyjście i
 obciążenie; `--check-tools` tylko sprawdza dostępność Clanga.
 
+### `scripts/jh`, `scripts/jh.ps1` oraz `scripts/jh_bootstrap.cmake`
+
+Launchery hostowego CLI jh. Oba najpierw budują narzędzie, gdy zmieniło się
+którekolwiek z jego wejść, przez wspólny bootstrap `cmake -P`, a potem
+uruchamiają opublikowany program z podanymi argumentami; stdout należy do
+narzędzia, a bootstrap raportuje na stderr. Bootstrap wymaga CMake co najmniej
+3.22, Gita i hostowego kompilatora C11/C++17: GCC albo Clang z Ninja lub Make
+na Linuksie, Visual Studio 2022 albo `cl.exe` w PATH z `-Generator Ninja` na
+Windows. Niczego nie pobiera; zarządzane checkouty przygotowują
+`scripts/ensure_jhbase.sh`, `scripts/ensure_utf8proc.sh`
+i `scripts/ensure_pcre2.sh`.
+
+Klucz buildu obejmuje źródła `tools/jh`, czytane przez nie moduły CMake
+i pliki pinów, sam skrypt bootstrapu, zweryfikowane rewizje jhbase, utf8proc
+i PCRE2, wariant hosta, kompilator, generator, typ buildu i wersję CMake.
+Wynik leży w `.build/host-tools/<wariant>/<klucz>/bin` razem z `manifest.json`
+zapisującym te wejścia i SHA-256 programu; ponowne użycie wymaga tego samego
+klucza w manifeście i zgodnej sumy pliku, nigdy PATH, numeru wersji ani
+czasu modyfikacji. Uszkodzony program albo przerwany build są odbudowywane
+od czystego drzewa, a każdy klucz ma własną blokadę, więc równoległe
+launchery dzielą jeden build. Wariant to `linux-<triple kompilatora>`,
+`windows-x64` albo `windows-x86` (`-Arch x86` buduje proces 32-bitowy na
+Windows x64); przed publikacją narzędzie musi się uruchomić.
+`JH_DEPENDENCY_ROOT` bierze zarządzane checkouty z innego checkoutu,
+sprawdzone względem pinów tego checkoutu, dzięki czemu wyeksportowane drzewo,
+np. migawka indeksu hooka, buduje się bez nich; `JH_JHBASE_DIR` wskazuje
+zewnętrzny jhbase, którego zawartość wchodzi do klucza; `JH_BOOTSTRAP_CMAKE`
+wybiera program cmake. Scenariusze te sprawdza
+`tools/jh/tests/check_bootstrap.cmake` w teście `jh_bootstrap` zestawu CTest
+narzędzia.
+
 ### `vscode/entry/jh-vscode` oraz `jh-vscode.cmd`
 
 Skrypty startowe dla Uniksa i Windows uruchamiają ten sam publiczny punkt

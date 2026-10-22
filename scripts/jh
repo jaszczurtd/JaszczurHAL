@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Run the jh host CLI of this checkout, building it first when its inputs
+# changed (scripts/jh_bootstrap.cmake). Needs CMake 3.22+, Git and a host
+# C/C++ compiler; the managed checkouts come from scripts/ensure_*.sh.
+#
+# Usage: scripts/jh [jh arguments...]
+# Environment: JH_BOOTSTRAP_CMAKE selects the cmake executable (default: cmake
+# in PATH); JH_DEPENDENCY_ROOT takes the managed checkouts from another
+# JaszczurHAL checkout; JH_JHBASE_DIR selects an external jhbase.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+CMAKE="${JH_BOOTSTRAP_CMAKE:-cmake}"
+
+if ! command -v "${CMAKE}" >/dev/null 2>&1; then
+    echo "jh: cmake is required to build the host CLI; install CMake 3.22 or newer" >&2
+    exit 3
+fi
+result="$(mktemp "${TMPDIR:-/tmp}/jh-bootstrap.XXXXXX")"
+trap 'rm -f "${result}"' EXIT
+# Progress goes to stderr; stdout stays with the tool's own output.
+"${CMAKE}" "-DJH_ROOT=${REPO_ROOT}" "-DJH_RESULT_FILE=${result}" \
+    -P "${SCRIPT_DIR}/jh_bootstrap.cmake" >&2
+executable="$(head -n 1 "${result}")"
+if [[ ! -x "${executable}" ]]; then
+    echo "jh: the bootstrap published no executable at ${executable}" >&2
+    exit 3
+fi
+exec "${executable}" "$@"

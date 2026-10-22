@@ -6,6 +6,20 @@ include_guard(GLOBAL)
 # JH_JHBASE_DIR selects another checkout, as for scripts/ensure_jhbase.sh.
 set(_jh_jhbase_hal_root "${CMAKE_CURRENT_LIST_DIR}/..")
 
+# jh_dependency_root(<out>): the checkout holding the managed third_party
+# directories. JH_DEPENDENCY_ROOT in the environment names another
+# JaszczurHAL checkout, so an exported tree (the pre-commit index snapshot,
+# a gate copy) builds with verified checkouts it does not contain; the pins
+# always come from this checkout.
+function(jh_dependency_root OUT_DIR)
+    if(DEFINED ENV{JH_DEPENDENCY_ROOT} AND NOT "$ENV{JH_DEPENDENCY_ROOT}" STREQUAL "")
+        get_filename_component(_jh_dep_root "$ENV{JH_DEPENDENCY_ROOT}" ABSOLUTE)
+    else()
+        get_filename_component(_jh_dep_root "${_jh_jhbase_hal_root}" ABSOLUTE)
+    endif()
+    set(${OUT_DIR} "${_jh_dep_root}" PARENT_SCOPE)
+endfunction()
+
 # jh_jhbase_dir(<out dir> [<out revision>]): the checkout and the revision its
 # package records (the pin, or empty for an external checkout, which then
 # reports its own git HEAD). Stops the configure when the checkout is missing.
@@ -20,8 +34,9 @@ function(jh_jhbase_dir OUT_DIR)
             if(_jh_jb_line MATCHES "^JHBASE_REF=(.+)$")
                 set(_jh_jb_revision "${CMAKE_MATCH_1}")
             elseif(_jh_jb_line MATCHES "^JHBASE_DIR=(.+)$")
+                jh_dependency_root(_jh_jb_base)
                 get_filename_component(_jh_jb_dir "${CMAKE_MATCH_1}" ABSOLUTE
-                    BASE_DIR "${_jh_jhbase_hal_root}")
+                    BASE_DIR "${_jh_jb_base}")
             endif()
         endforeach()
     endif()
@@ -57,8 +72,10 @@ macro(jh_add_jhbase)
                 _jh_jb_components)
             string(JSON _jh_jb_utf8proc_dir GET "${_jh_jb_components}"
                 jhbasePins utf8proc directory)
+            jh_dependency_root(_jh_jb_base)
             get_filename_component(JHBASE_UTF8PROC_DIR
-                "${_jh_jhbase_hal_root}/${_jh_jb_utf8proc_dir}" ABSOLUTE)
+                "${_jh_jb_base}/${_jh_jb_utf8proc_dir}" ABSOLUTE)
+            unset(_jh_jb_base)
             unset(_jh_jb_components)
             unset(_jh_jb_utf8proc_dir)
         endif()
