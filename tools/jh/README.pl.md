@@ -11,8 +11,12 @@ Przed konfiguracją przygotuj zależności hosta w wersjach wskazanych przez rep
 
 ```sh
 python3 scripts/component_manager.py component jhbase
+python3 scripts/component_manager.py component utf8proc
 python3 scripts/component_manager.py component pcre2
 ```
+
+Testy wymagają też utf8proc, którego pin dostarcza jhbase. Jego osobny checkout
+znajduje się w `third_party/utf8proc`.
 
 PCRE2 znajduje się w ignorowanym checkoutcie wskazanym przez
 `third_party/pcre2_version.conf`. Konfiguracja i build sprawdzają rewizję oraz

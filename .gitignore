@@ -24,6 +24,7 @@ third_party/cppcheck/
 third_party/riscv-toolchain/
 third_party/cmake-minimum/
 third_party/jhbase/
+third_party/utf8proc/
 third_party/pcre2/
 
 # IDE / editor

@@ -463,7 +463,22 @@
       "paths": ["third_party/jhbase", "third_party/jhbase_version.conf"],
       "upstream": "https://github.com/jaszczurtd/jhbase",
       "feature_flags": [],
-      "notes": "Basics library of the C tooling plan (UTF-8, JSON, exact numbers, C literals, writer) pinned as a clean exact-commit checkout; its third_party/*_version.conf files are the only pins of Unity, cppcheck, PMD and the RISC-V toolchain. Not linked into firmware yet."
+      "notes": "Basics library of the C tooling plan (UTF-8, JSON, exact numbers, C literals, writer) pinned as a clean exact-commit checkout; its third_party/*_version.conf files are the only pins of utf8proc, Unity, cppcheck, PMD and the RISC-V toolchain. Not linked into firmware yet."
+    },
+    {
+      "name": "utf8proc",
+      "pin": {"component": "utf8proc"},
+      "version": "{UTF8PROC_VERSION}",
+      "commit": "{UTF8PROC_REF}",
+      "type": "library",
+      "scope": "development",
+      "supplier": "JuliaStrings contributors and Public Software Group",
+      "licenses": ["MIT", "Unicode-DFS-2015"],
+      "purl": "pkg:github/JuliaStrings/utf8proc@{UTF8PROC_REF}",
+      "paths": ["third_party/utf8proc", "third_party/utf8proc/LICENSE.md", "third_party/jhbase/third_party/utf8proc_version.conf"],
+      "upstream": "https://github.com/JuliaStrings/utf8proc",
+      "feature_flags": [],
+      "notes": "Optional NFC and character properties for jb::unicode. The only pin, including the Unicode data version, comes from jhbase; HAL prepares a separate ignored exact-commit checkout so jhbase remains clean. Not linked into firmware by HAL."
     },
     {
       "name": "Unity",

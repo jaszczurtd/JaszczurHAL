@@ -11,8 +11,12 @@ Prepare the pinned host dependencies explicitly before configuring:
 
 ```sh
 python3 scripts/component_manager.py component jhbase
+python3 scripts/component_manager.py component utf8proc
 python3 scripts/component_manager.py component pcre2
 ```
+
+The tests also need utf8proc, pinned by jhbase and prepared separately in
+`third_party/utf8proc`.
 
 PCRE2 lives in an ignored checkout selected by `third_party/pcre2_version.conf`.
 Configure and build verify its revision and cleanliness without downloading or

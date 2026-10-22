@@ -226,6 +226,7 @@ require(
 
 for component in (
     "jhbase",
+    "utf8proc",
     "BearSSL",
     "cJSON",
     "lodepng",

@@ -166,6 +166,7 @@ class SbomInventoryTests(unittest.TestCase):
         self.assertIn("third_party/jhbase_version.conf", jhbase["paths"])
         # Every tool jhbase pins names that pin file, not a copy, as its provenance.
         names = {
+            "utf8proc": "utf8proc",
             "unity": "Unity",
             "pmd": "PMD Copy/Paste Detector",
             "cppcheck": "Cppcheck",
