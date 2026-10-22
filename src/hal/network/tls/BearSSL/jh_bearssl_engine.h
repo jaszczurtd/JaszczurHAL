@@ -26,7 +26,7 @@ typedef struct {
   int32_t engine_error;
 } jh_bearssl_poll_result_t;
 
-/* Private engine seam used to contract-test bounded progression without
+/* Private engine interface used to test bounded progression without
  * forging BearSSL internals. State bits match BR_SSL_* values. */
 typedef struct {
   unsigned (*current_state)(const void *engine);

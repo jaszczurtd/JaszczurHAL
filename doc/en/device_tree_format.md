@@ -4,7 +4,7 @@ This specification defines the inputs and generated interface for project hardwa
 
 ## Files and validation
 
-One firmware application, including a subproject, owns one `device_tree.json`. A configuration-only directory for a standalone library can own the same file without firmware sources. Files neither include nor inherit another application's wiring. Identical wiring in independent projects is intentionally independent.
+One firmware application, including a subproject, owns one `device_tree.json`. A configuration-only directory for a standalone library can own the same file without firmware sources. Files neither include nor inherit another application's wiring. Each project describes its own wiring, even when it matches another project.
 
 | File | Content |
 |---|---|

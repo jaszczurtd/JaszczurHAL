@@ -146,8 +146,27 @@ hal_status_t hal_http_server_route_prefix(hal_http_method_t method,
 /** @brief Remove all registered routes. Safe while the server is stopped. */
 void hal_http_server_clear_routes(void);
 
-/** @brief Start listening on all IPv4 interfaces at @p port. */
+/**
+ * @brief Start listening on all IPv4 interfaces at @p port.
+ *
+ * Same as hal_http_server_start_ex() with the address 0.0.0.0.
+ */
 hal_status_t hal_http_server_start(uint16_t port);
+
+/**
+ * @brief Start listening on one local address.
+ *
+ * A loopback address such as 127.0.0.1 keeps the server reachable only from
+ * the same machine. The unspecified address (0.0.0.0 or ::) listens on every
+ * interface of that family. Calling it while the server runs returns HAL_OK
+ * and keeps the current listener.
+ * @param local Local IPv4/IPv6 address and non-zero port; copied by the call.
+ * @return HAL_OK, HAL_EINVAL for a NULL or malformed endpoint or port 0,
+ *         HAL_EUNSUPPORTED when the backend lacks the address family,
+ *         HAL_EBUSY when the address is already in use, or another status of
+ *         the failed TCP listener step.
+ */
+hal_status_t hal_http_server_start_ex(const hal_net_endpoint_t *local);
 
 /** @brief Stop the listener and close active client sockets. */
 void hal_http_server_stop(void);

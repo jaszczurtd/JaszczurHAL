@@ -97,11 +97,31 @@ hal_websocket_server_set_callbacks(const hal_websocket_callbacks_t *callbacks,
                                    void *user);
 
 /**
- * @brief Start the server and copy the accepted request path.
+ * @brief Start the server on all IPv4 interfaces and copy the accepted path.
  *
- * The caller may release or modify @p path after this function returns.
+ * Same as hal_websocket_server_start_ex() with the address 0.0.0.0. The caller
+ * may release or modify @p path after this function returns.
  */
 hal_status_t hal_websocket_server_start(uint16_t port, const char *path);
+
+/**
+ * @brief Start the server on one local address and copy the accepted path.
+ *
+ * A loopback address such as 127.0.0.1 keeps the server reachable only from
+ * the same machine; the unspecified address (0.0.0.0 or ::) listens on every
+ * interface of that family. Calling it while the server runs returns HAL_OK
+ * and keeps the current listener and path.
+ * @param local Local IPv4/IPv6 address and non-zero port; copied by the call.
+ * @param path Upgrade request path starting with '/', shorter than
+ *        HAL_WEBSOCKET_PATH_MAX; copied by the call.
+ * @return HAL_OK, HAL_EINVAL for a NULL or malformed endpoint, port 0 or an
+ *         invalid path, HAL_EOVERFLOW for a too long path, HAL_EUNSUPPORTED
+ *         when the backend lacks the address family, HAL_EBUSY when the
+ *         address is already in use, or another status of the failed TCP
+ *         listener step.
+ */
+hal_status_t hal_websocket_server_start_ex(const hal_net_endpoint_t *local,
+                                           const char *path);
 void hal_websocket_server_stop(void);
 bool hal_websocket_server_is_running(void);
 void hal_websocket_server_poll(void);

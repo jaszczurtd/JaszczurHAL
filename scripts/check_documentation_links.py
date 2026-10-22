@@ -23,6 +23,8 @@ DOCUMENTATION_GLOBS = (
     "security/**/*.md",
     "src/**/*.md",
     "tests/fixtures/**/*.md",
+    "third_party/README*.md",
+    "tools/**/*.md",
     "vscode/**/*.md",
 )
 

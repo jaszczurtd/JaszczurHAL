@@ -6,11 +6,14 @@ Przetwornik obsługuje piny jeden po drugim, DMA zapisuje wyniki do dwóch poł�
 bufora, który należy do aplikacji, a aplikacja czyta tylko gotowe bloki. Każda
 próbka ma znane położenie w czasie, a CPU nigdy nie czeka na konwersję.
 
+Poniższy przykład używa GPIO26, GPIO28 i wewnętrznego czujnika temperatury
+na RP. Numery pinów i komentarze dotyczące czasu odnoszą się do tej platformy.
+
 ```c
 static uint16_t blocks[2u * 400u * 3u] __attribute__((aligned(4)));
 
 hal_adc_scan_config_t config = {0};
-config.pins[0] = 26u; /* GPIO26 na RP, PA0 (0) na STM32G474, pad ADC1 na ESP32-S3 */
+config.pins[0] = 26u;
 config.pins[1] = 28u;
 config.pins[2] = HAL_ADC_SCAN_PIN_TEMPERATURE;
 config.pin_count = 3u;
@@ -30,6 +33,14 @@ if (status == HAL_OK && hal_adc_scan_take(&block) == HAL_OK) {
     }
 }
 ```
+
+Na STM32G474 wybierz piny ADC1 w kodowaniu HAL, np. PA0 jako `0u` i PA1 jako
+`1u`, i zmień też pin przekazywany do `hal_adc_scan_pin_position()`.
+Dołączenie temperatury może wydłużyć rzeczywisty okres ramki. Na ESP32-S3
+wybierz dostępne GPIO ADC1, pomiń `HAL_ADC_SCAN_PIN_TEMPERATURE`, dostosuj
+`pin_count` i bufor oraz ustaw co najmniej 12000 ns na konwersję.
+Rzeczywisty okres na każdej platformie odczytasz przez
+`hal_adc_scan_frame_period_ns()`.
 
 Wariant `SCAN` przykładu [13_adc](../../../examples/13_adc/) wypisuje
 statystyki bloków na targetach RP i STM32G474.

@@ -879,7 +879,7 @@ bool hal_display_write_pixels_be(const uint8_t *pixels_be, size_t byte_count);
  * @brief Stream big-endian RGB565 bytes through the backend DMA fast path.
  *
  * On RP2040 this uses SPI TX DMA. Other backends fall back to a blocking SPI
- * write while preserving the same public contract.
+ * write while preserving the documented API behavior.
  *
  * @param pixels_be RGB565 bytes in controller order: high byte, low byte.
  * @param byte_count Number of bytes to write. Must be even.

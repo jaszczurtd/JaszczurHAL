@@ -9,6 +9,7 @@
 #include "hal/network/jh_lwip_status.h"
 #include "hal/network/jh_net_address_utils.h"
 #include "hal/network/jh_network_backend.h"
+#include "hal/network/native_sockets/jh_native_sockets.h"
 #include "hal/system/hal_board.h"
 #include "hal/system/hal_sync.h"
 #include "hal/system/jh_board_runtime.h"
@@ -79,13 +80,6 @@ bool stack_access_busy(void) {
   portEXIT_CRITICAL(&s_state_mux);
   return busy;
 }
-
-#if defined(HAL_ENABLE_TCP)
-extern "C" const jh_network_tcp_ops_t *jh_esp32_network_tcp_ops(void);
-#endif
-#if defined(HAL_ENABLE_UDP)
-extern "C" const jh_network_udp_ops_t *jh_esp32_network_udp_ops(void);
-#endif
 
 TickType_t timeout_to_ticks(uint32_t timeout_ms) {
   if (timeout_ms == HAL_NET_TIMEOUT_FOREVER) {
@@ -297,7 +291,7 @@ void clear_scan_snapshot_locked(void) {
 
 hal_status_t initialize_transport_sockets(void) {
 #if defined(HAL_ENABLE_TCP) || defined(HAL_ENABLE_UDP)
-  return jh_esp32_network_sockets_initialize();
+  return jh_native_sockets_initialize();
 #else
   return HAL_OK;
 #endif
@@ -305,7 +299,7 @@ hal_status_t initialize_transport_sockets(void) {
 
 hal_status_t shutdown_transport_sockets(void) {
 #if defined(HAL_ENABLE_TCP) || defined(HAL_ENABLE_UDP)
-  return jh_esp32_network_sockets_shutdown_all();
+  return jh_native_sockets_shutdown_all();
 #else
   return HAL_OK;
 #endif
@@ -1060,55 +1054,15 @@ hal_status_t wifi_get_scan_result(size_t index,
   return status;
 }
 
-hal_status_t endpoint_from_sockaddr(const sockaddr *address,
-                                    socklen_t address_length,
-                                    hal_net_endpoint_t *out_endpoint) {
-  if (address == nullptr || out_endpoint == nullptr) {
-    return HAL_EINVAL;
-  }
-  memset(out_endpoint, 0, sizeof(*out_endpoint));
-  if (address->sa_family == AF_INET &&
-      address_length >= static_cast<socklen_t>(sizeof(sockaddr_in))) {
-    const auto *ipv4 = reinterpret_cast<const sockaddr_in *>(address);
-    out_endpoint->family = HAL_NET_AF_INET;
-    out_endpoint->addr_len = HAL_NET_IPV4_ADDR_LEN;
-    memcpy(out_endpoint->addr, &ipv4->sin_addr.s_addr, HAL_NET_IPV4_ADDR_LEN);
-    out_endpoint->port = ntohs(ipv4->sin_port);
-    return HAL_OK;
-  }
-#if LWIP_IPV6
-  if (address->sa_family == AF_INET6 &&
-      address_length >= static_cast<socklen_t>(sizeof(sockaddr_in6))) {
-    const auto *ipv6 = reinterpret_cast<const sockaddr_in6 *>(address);
-    out_endpoint->family = HAL_NET_AF_INET6;
-    out_endpoint->addr_len = HAL_NET_IPV6_ADDR_LEN;
-    memcpy(out_endpoint->addr, ipv6->sin6_addr.s6_addr, HAL_NET_IPV6_ADDR_LEN);
-    out_endpoint->port = ntohs(ipv6->sin6_port);
-    out_endpoint->scope_id = ipv6->sin6_scope_id;
-    return HAL_OK;
-  }
-#endif
-  return HAL_EUNSUPPORTED;
-}
-
 hal_status_t resolver_resolve(const char *hostname,
                               hal_net_family_t family_hint,
                               hal_net_endpoint_t *results, size_t capacity,
                               size_t *out_count) {
-  if (hostname == nullptr || hostname[0] == '\0' || out_count == nullptr ||
-      (capacity > 0u && results == nullptr)) {
-    return HAL_EINVAL;
+  const hal_status_t argument_status = jh_native_sockets_resolve_validate(
+      hostname, family_hint, results, capacity, out_count);
+  if (argument_status != HAL_OK) {
+    return argument_status;
   }
-  if (family_hint != HAL_NET_AF_UNSPEC && family_hint != HAL_NET_AF_INET &&
-      family_hint != HAL_NET_AF_INET6) {
-    return HAL_EINVAL;
-  }
-#if !LWIP_IPV6
-  if (family_hint == HAL_NET_AF_INET6) {
-    return HAL_EUNSUPPORTED;
-  }
-#endif
-  *out_count = 0u;
   LifecycleGuard guard;
   if (guard.status() != HAL_OK) {
     return guard.status();
@@ -1121,67 +1075,8 @@ hal_status_t resolver_resolve(const char *hostname,
   if (!ipv4_ready) {
     return HAL_EUNINIT;
   }
-
-  addrinfo hints = {};
-  hints.ai_family = family_hint == HAL_NET_AF_INET    ? AF_INET
-                    : family_hint == HAL_NET_AF_INET6 ? AF_INET6
-                                                      : AF_UNSPEC;
-  addrinfo *addresses = nullptr;
-  const int resolve_status =
-      lwip_getaddrinfo(hostname, nullptr, &hints, &addresses);
-  if (resolve_status != 0) {
-    switch (resolve_status) {
-    case EAI_AGAIN:
-      return HAL_EAGAIN;
-    case EAI_MEMORY:
-      return HAL_ENOMEM;
-    case EAI_NONAME:
-      return HAL_ENOENT;
-    case EAI_FAMILY:
-      return HAL_EUNSUPPORTED;
-    default:
-      return HAL_EIO;
-    }
-  }
-
-  size_t count = 0u;
-  for (const addrinfo *current = addresses; current != nullptr;
-       current = current->ai_next) {
-    if (current->ai_family == AF_INET
-#if LWIP_IPV6
-        || current->ai_family == AF_INET6
-#endif
-    ) {
-      ++count;
-    }
-  }
-  *out_count = count;
-  if (count > capacity) {
-    lwip_freeaddrinfo(addresses);
-    return HAL_EOVERFLOW;
-  }
-
-  size_t index = 0u;
-  hal_status_t status = HAL_OK;
-  for (const addrinfo *current = addresses; current != nullptr && index < count;
-       current = current->ai_next) {
-    if (current->ai_family != AF_INET
-#if LWIP_IPV6
-        && current->ai_family != AF_INET6
-#endif
-    ) {
-      continue;
-    }
-    status = endpoint_from_sockaddr(current->ai_addr, current->ai_addrlen,
-                                    &results[index]);
-    if (status != HAL_OK) {
-      break;
-    }
-    results[index].port = 0u;
-    ++index;
-  }
-  lwip_freeaddrinfo(addresses);
-  return status;
+  return jh_native_sockets_resolve_lookup(hostname, family_hint, results,
+                                          capacity, out_count);
 }
 
 const jh_network_service_ops_t s_service_ops = {
@@ -1207,6 +1102,10 @@ const jh_network_wifi_ops_t s_wifi_ops = {
 const jh_network_resolver_ops_t s_resolver_ops = {resolver_resolve};
 
 } // namespace
+
+extern "C" hal_status_t jh_native_sockets_require_ready(void) {
+  return jh_esp32_network_require_ready();
+}
 
 extern "C" hal_status_t jh_esp32_network_require_ready(void) {
   portENTER_CRITICAL(&s_state_mux);
@@ -1358,12 +1257,12 @@ jh_network_backend_selected(void) {
       &s_wifi_ops,
       &s_resolver_ops,
 #if defined(HAL_ENABLE_TCP)
-      jh_esp32_network_tcp_ops(),
+      jh_native_sockets_tcp_ops(),
 #else
       nullptr,
 #endif
 #if defined(HAL_ENABLE_UDP)
-      jh_esp32_network_udp_ops(),
+      jh_native_sockets_udp_ops(),
 #else
       nullptr,
 #endif

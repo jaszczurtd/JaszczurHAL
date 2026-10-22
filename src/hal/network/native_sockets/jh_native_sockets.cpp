@@ -1,20 +1,15 @@
-#include "hal/core/hal_target.h"
-
-#if HAL_TARGET_IS_ESP32_FAMILY
 #include "hal/core/hal_config.h"
 
-#if defined(HAL_ENABLE_NETWORK_CORE) && defined(HAL_NETWORK_BACKEND_ESP_IDF)
+#if defined(HAL_ENABLE_NETWORK_CORE) &&                                        \
+    (defined(HAL_NETWORK_BACKEND_ESP_IDF) ||                                   \
+     defined(HAL_NETWORK_BACKEND_HOST))
 
 #include "hal/core/hal_mutex_once.h"
 #include "hal/network/jh_network_backend.h"
 #include "hal/system/hal_sync.h"
-#include "jh_esp32_network.h"
+#include "jh_native_socket_platform.h"
+#include "jh_native_sockets.h"
 
-#include <lwip/errno.h>
-#include <lwip/sockets.h>
-
-#include <errno.h>
-#include <fcntl.h>
 #include <string.h>
 
 namespace {
@@ -22,7 +17,7 @@ namespace {
 enum class SocketKind : uint8_t { kUnused, kTcp, kTcpListener, kUdp };
 
 struct NativeSocket {
-  int descriptor;
+  jh_native_fd_t descriptor;
   int family;
   SocketKind kind;
   uint32_t generation;
@@ -42,51 +37,40 @@ hal_status_t ensure_pool(void) {
                                                                    : HAL_ENOMEM;
 }
 
-hal_status_t status_from_errno(int error, bool timed_operation,
+hal_status_t status_from_class(jh_native_error_t error, bool timed_operation,
                                uint32_t timeout_ms) {
   switch (error) {
-  case 0:
+  case JH_NATIVE_ERR_NONE:
     return HAL_OK;
-  case EINVAL:
-  case EBADF:
-  case ENOTSOCK:
+  case JH_NATIVE_ERR_INVALID:
     return HAL_EINVAL;
-  case EAFNOSUPPORT:
-  case EPROTONOSUPPORT:
-  case EOPNOTSUPP:
+  case JH_NATIVE_ERR_UNSUPPORTED:
     return HAL_EUNSUPPORTED;
-  case ENOMEM:
-  case ENOBUFS:
-  case EMFILE:
-  case ENFILE:
+  case JH_NATIVE_ERR_NOMEM:
     return HAL_ENOMEM;
-  case EADDRINUSE:
-  case EALREADY:
-  case EINPROGRESS:
+  case JH_NATIVE_ERR_BUSY:
+  case JH_NATIVE_ERR_IN_PROGRESS:
     return HAL_EBUSY;
-  case EAGAIN:
-#if EWOULDBLOCK != EAGAIN
-  case EWOULDBLOCK:
-#endif
+  case JH_NATIVE_ERR_WOULD_BLOCK:
     return timed_operation && timeout_ms != 0u ? HAL_ETIMEOUT : HAL_EAGAIN;
-  case ETIMEDOUT:
+  case JH_NATIVE_ERR_TIMEOUT:
     return HAL_ETIMEOUT;
-  case ENOTCONN:
-  case EPIPE:
-  case ECONNABORTED:
-  case ECONNRESET:
-  case ECONNREFUSED:
-  case ENETDOWN:
-  case ENETUNREACH:
-  case EHOSTUNREACH:
-    return HAL_EIO;
+  case JH_NATIVE_ERR_INTERRUPTED:
+  case JH_NATIVE_ERR_IO:
   default:
     return HAL_EIO;
   }
 }
 
-hal_status_t status_from_last_errno(bool timed_operation, uint32_t timeout_ms) {
-  return status_from_errno(errno, timed_operation, timeout_ms);
+hal_status_t status_from_native(int error, bool timed_operation,
+                                uint32_t timeout_ms) {
+  return status_from_class(jh_native_classify(error), timed_operation,
+                           timeout_ms);
+}
+
+hal_status_t status_from_last_error(bool timed_operation, uint32_t timeout_ms) {
+  return status_from_native(jh_native_last_error(), timed_operation,
+                            timeout_ms);
 }
 
 NativeSocket *allocate_token(SocketKind kind) {
@@ -98,7 +82,7 @@ NativeSocket *allocate_token(SocketKind kind) {
   for (size_t index = 0u; index < kNativeSocketCapacity; ++index) {
     if (!s_sockets[index].in_use) {
       token = &s_sockets[index];
-      token->descriptor = -1;
+      token->descriptor = JH_NATIVE_FD_INVALID;
       token->family = AF_UNSPEC;
       token->kind = kind;
       token->generation = s_socket_generation;
@@ -127,6 +111,10 @@ bool token_is_valid_locked(const NativeSocket *token, SocketKind kind) {
          token->generation == s_socket_generation;
 }
 
+bool has_descriptor(const NativeSocket *token) {
+  return token->descriptor != JH_NATIVE_FD_INVALID;
+}
+
 void release_token(NativeSocket *token, SocketKind kind) {
   if (token == nullptr) {
     return;
@@ -136,10 +124,10 @@ void release_token(NativeSocket *token, SocketKind kind) {
   }
   hal_mutex_lock(s_socket_pool_mutex);
   if (token_is_member(token) && token->in_use && token->kind == kind) {
-    if (token->descriptor >= 0) {
-      (void)lwip_close(token->descriptor);
+    if (has_descriptor(token)) {
+      (void)jh_native_close(token->descriptor);
     }
-    token->descriptor = -1;
+    token->descriptor = JH_NATIVE_FD_INVALID;
     token->family = AF_UNSPEC;
     token->kind = SocketKind::kUnused;
     token->generation = 0u;
@@ -160,7 +148,7 @@ bool token_is_valid(const NativeSocket *token, SocketKind kind) {
 
 hal_status_t sockaddr_from_endpoint(const hal_net_endpoint_t *endpoint,
                                     sockaddr_storage *storage,
-                                    socklen_t *out_length) {
+                                    jh_native_socklen_t *out_length) {
   if (endpoint == nullptr || storage == nullptr || out_length == nullptr) {
     return HAL_EINVAL;
   }
@@ -171,10 +159,10 @@ hal_status_t sockaddr_from_endpoint(const hal_net_endpoint_t *endpoint,
     ipv4->sin_family = AF_INET;
     ipv4->sin_port = htons(endpoint->port);
     memcpy(&ipv4->sin_addr.s_addr, endpoint->addr, HAL_NET_IPV4_ADDR_LEN);
-    *out_length = sizeof(*ipv4);
+    *out_length = static_cast<jh_native_socklen_t>(sizeof(*ipv4));
     return HAL_OK;
   }
-#if LWIP_IPV6
+#if JH_NATIVE_HAS_IPV6
   if (endpoint->family == HAL_NET_AF_INET6 &&
       endpoint->addr_len == HAL_NET_IPV6_ADDR_LEN) {
     auto *ipv6 = reinterpret_cast<sockaddr_in6 *>(storage);
@@ -182,7 +170,7 @@ hal_status_t sockaddr_from_endpoint(const hal_net_endpoint_t *endpoint,
     ipv6->sin6_port = htons(endpoint->port);
     memcpy(ipv6->sin6_addr.s6_addr, endpoint->addr, HAL_NET_IPV6_ADDR_LEN);
     ipv6->sin6_scope_id = endpoint->scope_id;
-    *out_length = sizeof(*ipv6);
+    *out_length = static_cast<jh_native_socklen_t>(sizeof(*ipv6));
     return HAL_OK;
   }
 #endif
@@ -190,14 +178,14 @@ hal_status_t sockaddr_from_endpoint(const hal_net_endpoint_t *endpoint,
 }
 
 hal_status_t endpoint_from_sockaddr(const sockaddr *address,
-                                    socklen_t address_length,
+                                    jh_native_socklen_t address_length,
                                     hal_net_endpoint_t *endpoint) {
   if (address == nullptr || endpoint == nullptr) {
     return HAL_EINVAL;
   }
   memset(endpoint, 0, sizeof(*endpoint));
   if (address->sa_family == AF_INET &&
-      address_length >= static_cast<socklen_t>(sizeof(sockaddr_in))) {
+      address_length >= static_cast<jh_native_socklen_t>(sizeof(sockaddr_in))) {
     const auto *ipv4 = reinterpret_cast<const sockaddr_in *>(address);
     endpoint->family = HAL_NET_AF_INET;
     endpoint->addr_len = HAL_NET_IPV4_ADDR_LEN;
@@ -205,9 +193,10 @@ hal_status_t endpoint_from_sockaddr(const sockaddr *address,
     memcpy(endpoint->addr, &ipv4->sin_addr.s_addr, HAL_NET_IPV4_ADDR_LEN);
     return HAL_OK;
   }
-#if LWIP_IPV6
+#if JH_NATIVE_HAS_IPV6
   if (address->sa_family == AF_INET6 &&
-      address_length >= static_cast<socklen_t>(sizeof(sockaddr_in6))) {
+      address_length >=
+          static_cast<jh_native_socklen_t>(sizeof(sockaddr_in6))) {
     const auto *ipv6 = reinterpret_cast<const sockaddr_in6 *>(address);
     endpoint->family = HAL_NET_AF_INET6;
     endpoint->addr_len = HAL_NET_IPV6_ADDR_LEN;
@@ -224,7 +213,7 @@ int native_family(hal_net_family_t family) {
   if (family == HAL_NET_AF_INET) {
     return AF_INET;
   }
-#if LWIP_IPV6
+#if JH_NATIVE_HAS_IPV6
   if (family == HAL_NET_AF_INET6) {
     return AF_INET6;
   }
@@ -246,14 +235,20 @@ hal_status_t create_descriptor(NativeSocket *token, SocketKind kind, int family,
     hal_mutex_unlock(s_socket_pool_mutex);
     return HAL_ESTATE;
   }
-  if (token->descriptor >= 0) {
+  if (has_descriptor(token)) {
     const hal_status_t status = token->family == family ? HAL_OK : HAL_ESTATE;
     hal_mutex_unlock(s_socket_pool_mutex);
     return status;
   }
-  const int descriptor = lwip_socket(family, type, protocol);
-  if (descriptor < 0) {
-    const hal_status_t status = status_from_last_errno(false, 0u);
+  const jh_native_fd_t descriptor = jh_native_socket(family, type, protocol);
+  if (descriptor == JH_NATIVE_FD_INVALID) {
+    const hal_status_t status = status_from_last_error(false, 0u);
+    hal_mutex_unlock(s_socket_pool_mutex);
+    return status;
+  }
+  if (jh_native_make_nonblocking(descriptor) != 0) {
+    const hal_status_t status = status_from_last_error(false, 0u);
+    (void)jh_native_close(descriptor);
     hal_mutex_unlock(s_socket_pool_mutex);
     return status;
   }
@@ -265,8 +260,8 @@ hal_status_t create_descriptor(NativeSocket *token, SocketKind kind, int family,
 
 #if defined(HAL_ENABLE_TCP)
 hal_status_t adopt_descriptor(NativeSocket *token, SocketKind kind,
-                              int descriptor, int family) {
-  if (token == nullptr || descriptor < 0) {
+                              jh_native_fd_t descriptor, int family) {
+  if (token == nullptr || descriptor == JH_NATIVE_FD_INVALID) {
     return HAL_EINVAL;
   }
   const hal_status_t pool_status = ensure_pool();
@@ -274,7 +269,7 @@ hal_status_t adopt_descriptor(NativeSocket *token, SocketKind kind,
     return pool_status;
   }
   hal_mutex_lock(s_socket_pool_mutex);
-  if (!token_is_valid_locked(token, kind) || token->descriptor >= 0) {
+  if (!token_is_valid_locked(token, kind) || has_descriptor(token)) {
     hal_mutex_unlock(s_socket_pool_mutex);
     return HAL_ESTATE;
   }
@@ -285,115 +280,114 @@ hal_status_t adopt_descriptor(NativeSocket *token, SocketKind kind,
 }
 #endif
 
-timeval timeout_to_timeval(uint32_t timeout_ms) {
-  timeval timeout = {};
-  timeout.tv_sec = static_cast<long>(timeout_ms / 1000u);
-  timeout.tv_usec = static_cast<long>((timeout_ms % 1000u) * 1000u);
-  return timeout;
-}
-
-hal_status_t wait_for_descriptor(int descriptor, bool read, bool write,
-                                 uint32_t timeout_ms) {
-  fd_set read_set;
-  fd_set write_set;
-  fd_set error_set;
-  FD_ZERO(&read_set);
-  FD_ZERO(&write_set);
-  FD_ZERO(&error_set);
-  if (read) {
-    FD_SET(descriptor, &read_set);
-  }
-  if (write) {
-    FD_SET(descriptor, &write_set);
-  }
-  FD_SET(descriptor, &error_set);
-  timeval timeout = timeout_to_timeval(timeout_ms);
-  timeval *timeout_pointer =
-      timeout_ms == HAL_NET_TIMEOUT_FOREVER ? nullptr : &timeout;
+hal_status_t wait_for_descriptor(jh_native_fd_t descriptor, bool read,
+                                 bool write, uint32_t timeout_ms) {
+  bool failed = false;
   const int status =
-      lwip_select(descriptor + 1, read ? &read_set : nullptr,
-                  write ? &write_set : nullptr, &error_set, timeout_pointer);
+      jh_native_wait(descriptor, read, write, timeout_ms, &failed);
   if (status < 0) {
-    return status_from_last_errno(true, timeout_ms);
+    return status_from_last_error(true, timeout_ms);
   }
   if (status == 0) {
     return timeout_ms == 0u ? HAL_EAGAIN : HAL_ETIMEOUT;
   }
-  if (FD_ISSET(descriptor, &error_set)) {
+  if (failed) {
     int error = 0;
-    socklen_t size = sizeof(error);
-    if (lwip_getsockopt(descriptor, SOL_SOCKET, SO_ERROR, &error, &size) < 0) {
-      return status_from_last_errno(false, 0u);
+    if (jh_native_socket_error(descriptor, &error) != 0) {
+      return status_from_last_error(false, 0u);
     }
-    return status_from_errno(error == 0 ? EIO : error, false, 0u);
+    return error == 0 ? HAL_EIO : status_from_native(error, false, 0u);
   }
   return HAL_OK;
 }
 
-bool descriptor_ready(int descriptor, bool read, bool write) {
-  return descriptor >= 0 &&
+bool descriptor_ready(jh_native_fd_t descriptor, bool read, bool write) {
+  return descriptor != JH_NATIVE_FD_INVALID &&
          wait_for_descriptor(descriptor, read, write, 0u) == HAL_OK;
 }
 
-#if defined(HAL_ENABLE_TCP)
-hal_status_t connect_with_timeout(int descriptor, const sockaddr *address,
-                                  socklen_t address_length,
-                                  uint32_t timeout_ms) {
-  const int original_flags = lwip_fcntl(descriptor, F_GETFL, 0);
-  if (original_flags < 0 ||
-      lwip_fcntl(descriptor, F_SETFL, original_flags | O_NONBLOCK) < 0) {
-    return status_from_last_errno(false, 0u);
+hal_status_t open_token(SocketKind kind, void **out_token) {
+  if (out_token == nullptr) {
+    return HAL_EINVAL;
   }
+  *out_token = nullptr;
+  const hal_status_t ready = jh_native_sockets_require_ready();
+  if (ready != HAL_OK) {
+    return ready;
+  }
+  NativeSocket *token = allocate_token(kind);
+  if (token == nullptr) {
+    return HAL_ENOMEM;
+  }
+  const hal_status_t still_ready = jh_native_sockets_require_ready();
+  if (still_ready != HAL_OK) {
+    release_token(token, kind);
+    return still_ready;
+  }
+  *out_token = token;
+  return HAL_OK;
+}
 
-  int status = lwip_connect(descriptor, address, address_length);
-  int connect_error = status == 0 ? 0 : errno;
+hal_status_t bind_token(NativeSocket *token, SocketKind kind,
+                        const hal_net_endpoint_t *local, int type,
+                        int protocol) {
+  if (!token_is_valid(token, kind) || local == nullptr) {
+    return HAL_EINVAL;
+  }
+  const hal_status_t ready = jh_native_sockets_require_ready();
+  if (ready != HAL_OK) {
+    return ready;
+  }
+  sockaddr_storage address = {};
+  jh_native_socklen_t address_length = 0;
+  hal_status_t status =
+      sockaddr_from_endpoint(local, &address, &address_length);
+  if (status != HAL_OK) {
+    return status;
+  }
+  status = create_descriptor(token, kind, native_family(local->family), type,
+                             protocol);
+  if (status != HAL_OK) {
+    return status;
+  }
+  if (kind == SocketKind::kTcpListener) {
+    jh_native_prepare_listener(token->descriptor);
+  }
+  return jh_native_bind(token->descriptor,
+                        reinterpret_cast<sockaddr *>(&address),
+                        address_length) == 0
+             ? HAL_OK
+             : status_from_last_error(false, 0u);
+}
+
+#if defined(HAL_ENABLE_TCP)
+hal_status_t connect_with_timeout(jh_native_fd_t descriptor,
+                                  const sockaddr *address,
+                                  jh_native_socklen_t address_length,
+                                  uint32_t timeout_ms) {
+  const int status = jh_native_connect(descriptor, address, address_length);
+  const int connect_error = status == 0 ? 0 : jh_native_last_error();
+  const jh_native_error_t connect_class = jh_native_classify(connect_error);
   hal_status_t result = HAL_OK;
-  if (status != 0 && connect_error != EINPROGRESS &&
-      connect_error != EALREADY && connect_error != EAGAIN
-#if EWOULDBLOCK != EAGAIN
-      && connect_error != EWOULDBLOCK
-#endif
-  ) {
-    result = status_from_errno(connect_error, false, timeout_ms);
+  if (status != 0 && connect_class != JH_NATIVE_ERR_IN_PROGRESS &&
+      connect_class != JH_NATIVE_ERR_WOULD_BLOCK) {
+    result = status_from_class(connect_class, false, timeout_ms);
   } else if (status != 0) {
     result = wait_for_descriptor(descriptor, false, true, timeout_ms);
     if (result == HAL_OK) {
       int socket_error = 0;
-      socklen_t size = sizeof(socket_error);
-      if (lwip_getsockopt(descriptor, SOL_SOCKET, SO_ERROR, &socket_error,
-                          &size) < 0) {
-        result = status_from_last_errno(false, 0u);
+      if (jh_native_socket_error(descriptor, &socket_error) != 0) {
+        result = status_from_last_error(false, 0u);
       } else if (socket_error != 0) {
-        result = status_from_errno(socket_error, false, timeout_ms);
+        result = status_from_native(socket_error, false, timeout_ms);
       }
     }
   }
-  const int restore_status = lwip_fcntl(descriptor, F_SETFL, original_flags);
-  return result == HAL_OK && restore_status < 0
-             ? status_from_last_errno(false, 0u)
-             : result;
+  return result;
 }
 
 hal_status_t tcp_socket_open(void **out_socket) {
-  if (out_socket == nullptr) {
-    return HAL_EINVAL;
-  }
-  *out_socket = nullptr;
-  const hal_status_t ready = jh_esp32_network_require_ready();
-  if (ready != HAL_OK) {
-    return ready;
-  }
-  NativeSocket *token = allocate_token(SocketKind::kTcp);
-  if (token == nullptr) {
-    return HAL_ENOMEM;
-  }
-  const hal_status_t still_ready = jh_esp32_network_require_ready();
-  if (still_ready != HAL_OK) {
-    release_token(token, SocketKind::kTcp);
-    return still_ready;
-  }
-  *out_socket = token;
-  return HAL_OK;
+  return open_token(SocketKind::kTcp, out_socket);
 }
 
 hal_status_t tcp_socket_connect(void *socket, const hal_net_endpoint_t *remote,
@@ -402,12 +396,12 @@ hal_status_t tcp_socket_connect(void *socket, const hal_net_endpoint_t *remote,
   if (!token_is_valid(token, SocketKind::kTcp) || remote == nullptr) {
     return HAL_EINVAL;
   }
-  const hal_status_t ready = jh_esp32_network_require_ready();
+  const hal_status_t ready = jh_native_sockets_require_ready();
   if (ready != HAL_OK) {
     return ready;
   }
   sockaddr_storage address = {};
-  socklen_t address_length = 0u;
+  jh_native_socklen_t address_length = 0;
   hal_status_t status =
       sockaddr_from_endpoint(remote, &address, &address_length);
   if (status != HAL_OK) {
@@ -430,20 +424,15 @@ hal_status_t tcp_socket_send(void *socket, const void *data, size_t length,
     *out_sent = 0u;
   }
   if (!token_is_valid(token, SocketKind::kTcp) || out_sent == nullptr ||
-      (length > 0u && data == nullptr) || token->descriptor < 0) {
+      (length > 0u && data == nullptr) || !has_descriptor(token)) {
     return HAL_EINVAL;
   }
   if (length == 0u) {
     return HAL_OK;
   }
-#ifdef MSG_NOSIGNAL
-  constexpr int kSendFlags = MSG_NOSIGNAL;
-#else
-  constexpr int kSendFlags = 0;
-#endif
-  const ssize_t sent = lwip_send(token->descriptor, data, length, kSendFlags);
+  const intptr_t sent = jh_native_send(token->descriptor, data, length);
   if (sent < 0) {
-    return status_from_last_errno(false, 0u);
+    return status_from_last_error(false, 0u);
   }
   *out_sent = static_cast<size_t>(sent);
   return HAL_OK;
@@ -456,7 +445,7 @@ hal_status_t tcp_socket_recv(void *socket, void *buffer, size_t max_length,
     *out_received = 0u;
   }
   if (!token_is_valid(token, SocketKind::kTcp) || out_received == nullptr ||
-      (max_length > 0u && buffer == nullptr) || token->descriptor < 0) {
+      (max_length > 0u && buffer == nullptr) || !has_descriptor(token)) {
     return HAL_EINVAL;
   }
   if (max_length == 0u) {
@@ -467,10 +456,10 @@ hal_status_t tcp_socket_recv(void *socket, void *buffer, size_t max_length,
   if (ready != HAL_OK) {
     return ready;
   }
-  const ssize_t received =
-      lwip_recv(token->descriptor, buffer, max_length, MSG_DONTWAIT);
+  const intptr_t received =
+      jh_native_recv(token->descriptor, buffer, max_length);
   if (received < 0) {
-    return status_from_last_errno(true, timeout_ms);
+    return status_from_last_error(true, timeout_ms);
   }
   *out_received = static_cast<size_t>(received);
   return HAL_OK;
@@ -490,19 +479,19 @@ bool tcp_socket_can_send(void *socket) {
 
 bool tcp_socket_is_connected(void *socket) {
   auto *token = static_cast<NativeSocket *>(socket);
-  if (!token_is_valid(token, SocketKind::kTcp) || token->descriptor < 0) {
+  if (!token_is_valid(token, SocketKind::kTcp) || !has_descriptor(token)) {
     return false;
   }
   sockaddr_storage peer = {};
-  socklen_t size = sizeof(peer);
-  return lwip_getpeername(token->descriptor,
-                          reinterpret_cast<sockaddr *>(&peer), &size) == 0;
+  jh_native_socklen_t size = static_cast<jh_native_socklen_t>(sizeof(peer));
+  return jh_native_getpeername(token->descriptor,
+                               reinterpret_cast<sockaddr *>(&peer), &size) == 0;
 }
 
 void tcp_socket_shutdown(void *socket) {
   auto *token = static_cast<NativeSocket *>(socket);
-  if (token_is_valid(token, SocketKind::kTcp) && token->descriptor >= 0) {
-    (void)lwip_shutdown(token->descriptor, SHUT_RDWR);
+  if (token_is_valid(token, SocketKind::kTcp) && has_descriptor(token)) {
+    jh_native_shutdown(token->descriptor);
   }
 }
 
@@ -512,71 +501,27 @@ void tcp_socket_close(void *socket) {
 }
 
 hal_status_t tcp_listener_open(void **out_listener) {
-  if (out_listener == nullptr) {
-    return HAL_EINVAL;
-  }
-  *out_listener = nullptr;
-  const hal_status_t ready = jh_esp32_network_require_ready();
-  if (ready != HAL_OK) {
-    return ready;
-  }
-  NativeSocket *token = allocate_token(SocketKind::kTcpListener);
-  if (token == nullptr) {
-    return HAL_ENOMEM;
-  }
-  const hal_status_t still_ready = jh_esp32_network_require_ready();
-  if (still_ready != HAL_OK) {
-    release_token(token, SocketKind::kTcpListener);
-    return still_ready;
-  }
-  *out_listener = token;
-  return HAL_OK;
+  return open_token(SocketKind::kTcpListener, out_listener);
 }
 
 hal_status_t tcp_listener_bind(void *listener,
                                const hal_net_endpoint_t *local) {
-  auto *token = static_cast<NativeSocket *>(listener);
-  if (!token_is_valid(token, SocketKind::kTcpListener) || local == nullptr) {
-    return HAL_EINVAL;
-  }
-  const hal_status_t ready = jh_esp32_network_require_ready();
-  if (ready != HAL_OK) {
-    return ready;
-  }
-  sockaddr_storage address = {};
-  socklen_t address_length = 0u;
-  hal_status_t status =
-      sockaddr_from_endpoint(local, &address, &address_length);
-  if (status != HAL_OK) {
-    return status;
-  }
-  status =
-      create_descriptor(token, SocketKind::kTcpListener,
-                        native_family(local->family), SOCK_STREAM, IPPROTO_TCP);
-  if (status != HAL_OK) {
-    return status;
-  }
-  const int reuse = 1;
-  (void)lwip_setsockopt(token->descriptor, SOL_SOCKET, SO_REUSEADDR, &reuse,
-                        sizeof(reuse));
-  return lwip_bind(token->descriptor, reinterpret_cast<sockaddr *>(&address),
-                   address_length) == 0
-             ? HAL_OK
-             : status_from_last_errno(false, 0u);
+  return bind_token(static_cast<NativeSocket *>(listener),
+                    SocketKind::kTcpListener, local, SOCK_STREAM, IPPROTO_TCP);
 }
 
 hal_status_t tcp_listener_listen(void *listener, uint8_t backlog) {
   auto *token = static_cast<NativeSocket *>(listener);
   if (!token_is_valid(token, SocketKind::kTcpListener) ||
-      token->descriptor < 0 || backlog == 0u) {
+      !has_descriptor(token) || backlog == 0u) {
     return HAL_EINVAL;
   }
   const int capped = backlog > HAL_TCP_LISTENER_BACKLOG_MAX
                          ? static_cast<int>(HAL_TCP_LISTENER_BACKLOG_MAX)
                          : static_cast<int>(backlog);
-  return lwip_listen(token->descriptor, capped) == 0
+  return jh_native_listen(token->descriptor, capped) == 0
              ? HAL_OK
-             : status_from_last_errno(false, 0u);
+             : status_from_last_error(false, 0u);
 }
 
 hal_status_t tcp_listener_accept(void *listener, hal_net_endpoint_t *remote,
@@ -586,7 +531,7 @@ hal_status_t tcp_listener_accept(void *listener, hal_net_endpoint_t *remote,
     *out_socket = nullptr;
   }
   if (!token_is_valid(token, SocketKind::kTcpListener) ||
-      token->descriptor < 0 || out_socket == nullptr) {
+      !has_descriptor(token) || out_socket == nullptr) {
     return HAL_EINVAL;
   }
   const hal_status_t ready =
@@ -595,27 +540,33 @@ hal_status_t tcp_listener_accept(void *listener, hal_net_endpoint_t *remote,
     return ready;
   }
   sockaddr_storage address = {};
-  socklen_t address_length = sizeof(address);
-  const int descriptor =
-      lwip_accept(token->descriptor, reinterpret_cast<sockaddr *>(&address),
-                  &address_length);
-  if (descriptor < 0) {
-    return status_from_last_errno(true, timeout_ms);
+  jh_native_socklen_t address_length =
+      static_cast<jh_native_socklen_t>(sizeof(address));
+  const jh_native_fd_t descriptor =
+      jh_native_accept(token->descriptor,
+                       reinterpret_cast<sockaddr *>(&address), &address_length);
+  if (descriptor == JH_NATIVE_FD_INVALID) {
+    return status_from_last_error(true, timeout_ms);
   }
-  const hal_status_t network_ready = jh_esp32_network_require_ready();
+  if (jh_native_make_nonblocking(descriptor) != 0) {
+    const hal_status_t status = status_from_last_error(false, 0u);
+    (void)jh_native_close(descriptor);
+    return status;
+  }
+  const hal_status_t network_ready = jh_native_sockets_require_ready();
   if (network_ready != HAL_OK) {
-    (void)lwip_close(descriptor);
+    (void)jh_native_close(descriptor);
     return network_ready;
   }
   NativeSocket *accepted = allocate_token(SocketKind::kTcp);
   if (accepted == nullptr) {
-    (void)lwip_close(descriptor);
+    (void)jh_native_close(descriptor);
     return HAL_ENOMEM;
   }
   const hal_status_t adopt_status = adopt_descriptor(
       accepted, SocketKind::kTcp, descriptor, address.ss_family);
   if (adopt_status != HAL_OK) {
-    (void)lwip_close(descriptor);
+    (void)jh_native_close(descriptor);
     release_token(accepted, SocketKind::kTcp);
     return adopt_status;
   }
@@ -645,53 +596,12 @@ void tcp_listener_close(void *listener) {
 
 #if defined(HAL_ENABLE_UDP)
 hal_status_t udp_socket_open(void **out_socket) {
-  if (out_socket == nullptr) {
-    return HAL_EINVAL;
-  }
-  *out_socket = nullptr;
-  const hal_status_t ready = jh_esp32_network_require_ready();
-  if (ready != HAL_OK) {
-    return ready;
-  }
-  NativeSocket *token = allocate_token(SocketKind::kUdp);
-  if (token == nullptr) {
-    return HAL_ENOMEM;
-  }
-  const hal_status_t still_ready = jh_esp32_network_require_ready();
-  if (still_ready != HAL_OK) {
-    release_token(token, SocketKind::kUdp);
-    return still_ready;
-  }
-  *out_socket = token;
-  return HAL_OK;
+  return open_token(SocketKind::kUdp, out_socket);
 }
 
 hal_status_t udp_socket_bind(void *socket, const hal_net_endpoint_t *local) {
-  auto *token = static_cast<NativeSocket *>(socket);
-  if (!token_is_valid(token, SocketKind::kUdp) || local == nullptr) {
-    return HAL_EINVAL;
-  }
-  const hal_status_t ready = jh_esp32_network_require_ready();
-  if (ready != HAL_OK) {
-    return ready;
-  }
-  sockaddr_storage address = {};
-  socklen_t address_length = 0u;
-  hal_status_t status =
-      sockaddr_from_endpoint(local, &address, &address_length);
-  if (status != HAL_OK) {
-    return status;
-  }
-  status =
-      create_descriptor(token, SocketKind::kUdp, native_family(local->family),
-                        SOCK_DGRAM, IPPROTO_UDP);
-  if (status != HAL_OK) {
-    return status;
-  }
-  return lwip_bind(token->descriptor, reinterpret_cast<sockaddr *>(&address),
-                   address_length) == 0
-             ? HAL_OK
-             : status_from_last_errno(false, 0u);
+  return bind_token(static_cast<NativeSocket *>(socket), SocketKind::kUdp,
+                    local, SOCK_DGRAM, IPPROTO_UDP);
 }
 
 hal_status_t udp_socket_sendto(void *socket, const void *data, size_t length,
@@ -703,11 +613,11 @@ hal_status_t udp_socket_sendto(void *socket, const void *data, size_t length,
   }
   if (!token_is_valid(token, SocketKind::kUdp) || out_sent == nullptr ||
       (length > 0u && data == nullptr) || remote == nullptr ||
-      token->descriptor < 0) {
+      !has_descriptor(token)) {
     return HAL_EINVAL;
   }
   sockaddr_storage address = {};
-  socklen_t address_length = 0u;
+  jh_native_socklen_t address_length = 0;
   const hal_status_t status =
       sockaddr_from_endpoint(remote, &address, &address_length);
   if (status != HAL_OK) {
@@ -716,11 +626,11 @@ hal_status_t udp_socket_sendto(void *socket, const void *data, size_t length,
   if (native_family(remote->family) != token->family) {
     return HAL_EUNSUPPORTED;
   }
-  const ssize_t sent =
-      lwip_sendto(token->descriptor, data, length, 0,
-                  reinterpret_cast<sockaddr *>(&address), address_length);
+  const intptr_t sent =
+      jh_native_sendto(token->descriptor, data, length,
+                       reinterpret_cast<sockaddr *>(&address), address_length);
   if (sent < 0) {
-    return status_from_last_errno(false, 0u);
+    return status_from_last_error(false, 0u);
   }
   *out_sent = static_cast<size_t>(sent);
   return HAL_OK;
@@ -734,7 +644,7 @@ hal_status_t udp_socket_recvfrom(void *socket, void *buffer, size_t max_length,
     *out_received = 0u;
   }
   if (!token_is_valid(token, SocketKind::kUdp) || out_received == nullptr ||
-      (max_length > 0u && buffer == nullptr) || token->descriptor < 0) {
+      (max_length > 0u && buffer == nullptr) || !has_descriptor(token)) {
     return HAL_EINVAL;
   }
   if (max_length == 0u) {
@@ -746,12 +656,13 @@ hal_status_t udp_socket_recvfrom(void *socket, void *buffer, size_t max_length,
     return ready;
   }
   sockaddr_storage address = {};
-  socklen_t address_length = sizeof(address);
-  const ssize_t received =
-      lwip_recvfrom(token->descriptor, buffer, max_length, MSG_DONTWAIT,
-                    reinterpret_cast<sockaddr *>(&address), &address_length);
+  jh_native_socklen_t address_length =
+      static_cast<jh_native_socklen_t>(sizeof(address));
+  const intptr_t received = jh_native_recvfrom(
+      token->descriptor, buffer, max_length,
+      reinterpret_cast<sockaddr *>(&address), &address_length);
   if (received < 0) {
-    return status_from_last_errno(true, timeout_ms);
+    return status_from_last_error(true, timeout_ms);
   }
   if (remote != nullptr) {
     const hal_status_t status = endpoint_from_sockaddr(
@@ -772,7 +683,7 @@ bool udp_socket_can_recv(void *socket) {
 
 bool udp_socket_can_send(void *socket) {
   auto *token = static_cast<NativeSocket *>(socket);
-  return token_is_valid(token, SocketKind::kUdp) && token->descriptor >= 0 &&
+  return token_is_valid(token, SocketKind::kUdp) && has_descriptor(token) &&
          descriptor_ready(token->descriptor, false, true);
 }
 
@@ -800,13 +711,42 @@ const jh_network_udp_ops_t s_udp_ops = {
 };
 #endif
 
+bool resolvable_family(int family) {
+  return family == AF_INET
+#if JH_NATIVE_HAS_IPV6
+         || family == AF_INET6
+#endif
+      ;
+}
+
+hal_status_t status_from_resolver(int resolve_status) {
+  if (resolve_status == EAI_AGAIN) {
+    return HAL_EAGAIN;
+  }
+  if (resolve_status == EAI_MEMORY) {
+    return HAL_ENOMEM;
+  }
+  if (resolve_status == EAI_NONAME) {
+    return HAL_ENOENT;
+  }
+#if defined(EAI_NODATA)
+  if (resolve_status == EAI_NODATA) {
+    return HAL_ENOENT;
+  }
+#endif
+  if (resolve_status == EAI_FAMILY) {
+    return HAL_EUNSUPPORTED;
+  }
+  return HAL_EIO;
+}
+
 } // namespace
 
-extern "C" hal_status_t jh_esp32_network_sockets_initialize(void) {
+extern "C" hal_status_t jh_native_sockets_initialize(void) {
   return ensure_pool();
 }
 
-extern "C" hal_status_t jh_esp32_network_sockets_shutdown_all(void) {
+extern "C" hal_status_t jh_native_sockets_shutdown_all(void) {
   const hal_status_t pool_status = ensure_pool();
   if (pool_status != HAL_OK) {
     return pool_status;
@@ -822,8 +762,8 @@ extern "C" hal_status_t jh_esp32_network_sockets_shutdown_all(void) {
     }
   }
   for (size_t index = 0u; index < kNativeSocketCapacity; ++index) {
-    if (s_sockets[index].in_use && s_sockets[index].descriptor >= 0) {
-      (void)lwip_shutdown(s_sockets[index].descriptor, SHUT_RDWR);
+    if (s_sockets[index].in_use && has_descriptor(&s_sockets[index])) {
+      jh_native_shutdown(s_sockets[index].descriptor);
     }
   }
   hal_mutex_unlock(s_socket_pool_mutex);
@@ -831,16 +771,88 @@ extern "C" hal_status_t jh_esp32_network_sockets_shutdown_all(void) {
 }
 
 #if defined(HAL_ENABLE_TCP)
-extern "C" const jh_network_tcp_ops_t *jh_esp32_network_tcp_ops(void) {
+extern "C" const jh_network_tcp_ops_t *jh_native_sockets_tcp_ops(void) {
   return &s_tcp_ops;
 }
 #endif
 
 #if defined(HAL_ENABLE_UDP)
-extern "C" const jh_network_udp_ops_t *jh_esp32_network_udp_ops(void) {
+extern "C" const jh_network_udp_ops_t *jh_native_sockets_udp_ops(void) {
   return &s_udp_ops;
 }
 #endif
 
-#endif // HAL_ENABLE_NETWORK_CORE && HAL_NETWORK_BACKEND_ESP_IDF
-#endif // HAL_TARGET_IS_ESP32_FAMILY
+extern "C" hal_status_t jh_native_sockets_resolve_validate(
+    const char *hostname, hal_net_family_t family_hint,
+    const hal_net_endpoint_t *results, size_t capacity, size_t *out_count) {
+  if (out_count != nullptr) {
+    *out_count = 0u;
+  }
+  if (hostname == nullptr || hostname[0] == '\0' || out_count == nullptr ||
+      (capacity > 0u && results == nullptr)) {
+    return HAL_EINVAL;
+  }
+  if (family_hint != HAL_NET_AF_UNSPEC && family_hint != HAL_NET_AF_INET &&
+      family_hint != HAL_NET_AF_INET6) {
+    return HAL_EINVAL;
+  }
+#if !JH_NATIVE_HAS_IPV6
+  if (family_hint == HAL_NET_AF_INET6) {
+    return HAL_EUNSUPPORTED;
+  }
+#endif
+  return HAL_OK;
+}
+
+extern "C" hal_status_t jh_native_sockets_resolve_lookup(
+    const char *hostname, hal_net_family_t family_hint,
+    hal_net_endpoint_t *results, size_t capacity, size_t *out_count) {
+  *out_count = 0u;
+  addrinfo hints = {};
+  hints.ai_family = family_hint == HAL_NET_AF_INET    ? AF_INET
+                    : family_hint == HAL_NET_AF_INET6 ? AF_INET6
+                                                      : AF_UNSPEC;
+  // One entry per address: without a socket type, getaddrinfo() of a host C
+  // library repeats every address for each of its socket types.
+  hints.ai_socktype = SOCK_STREAM;
+  addrinfo *addresses = nullptr;
+  const int resolve_status =
+      jh_native_getaddrinfo(hostname, &hints, &addresses);
+  if (resolve_status != 0) {
+    return status_from_resolver(resolve_status);
+  }
+
+  size_t count = 0u;
+  for (const addrinfo *current = addresses; current != nullptr;
+       current = current->ai_next) {
+    if (resolvable_family(current->ai_family)) {
+      ++count;
+    }
+  }
+  *out_count = count;
+  if (count > capacity) {
+    jh_native_freeaddrinfo(addresses);
+    return HAL_EOVERFLOW;
+  }
+
+  size_t index = 0u;
+  hal_status_t status = HAL_OK;
+  for (const addrinfo *current = addresses; current != nullptr && index < count;
+       current = current->ai_next) {
+    if (!resolvable_family(current->ai_family)) {
+      continue;
+    }
+    status = endpoint_from_sockaddr(
+        current->ai_addr, static_cast<jh_native_socklen_t>(current->ai_addrlen),
+        &results[index]);
+    if (status != HAL_OK) {
+      break;
+    }
+    results[index].port = 0u;
+    ++index;
+  }
+  jh_native_freeaddrinfo(addresses);
+  return status;
+}
+
+#endif

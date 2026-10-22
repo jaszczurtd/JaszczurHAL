@@ -1,6 +1,7 @@
 #include "hal/impl/.mock/hal_mock.h"
 #include "hal/network/http/hal_http_server.h"
 #include "support/http_server_test_helpers.h"
+#include "support/network_test_helpers.h"
 #include "utils/unity.h"
 
 #include <string.h>
@@ -470,6 +471,39 @@ void test_body_boundary_and_size_overflow_preserve_accepted_bytes(void) {
   }
 }
 
+void test_start_ex_binds_the_requested_address(void) {
+  hal_net_endpoint_t local = make_endpoint(127u, 0u, 0u, 1u, 8190u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_http_server_start_ex(&local));
+  hal_net_endpoint_t bound = mock_listener_endpoint(8190u);
+  TEST_ASSERT_EQUAL_INT(HAL_NET_AF_INET, bound.family);
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(local.addr, bound.addr, HAL_NET_IPV4_ADDR_LEN);
+
+  // A running server keeps its listener.
+  hal_net_endpoint_t other = make_endpoint(127u, 0u, 0u, 1u, 8191u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_http_server_start_ex(&other));
+  TEST_ASSERT_NULL(hal_mock_tcp_listener_find_by_port(8191u));
+  hal_http_server_stop();
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_http_server_start(8192u));
+  bound = mock_listener_endpoint(8192u);
+  const uint8_t any[HAL_NET_IPV4_ADDR_LEN] = {0u, 0u, 0u, 0u};
+  TEST_ASSERT_EQUAL_INT(HAL_NET_AF_INET, bound.family);
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(any, bound.addr, HAL_NET_IPV4_ADDR_LEN);
+}
+
+void test_start_ex_rejects_invalid_endpoints(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_http_server_start_ex(NULL));
+  hal_net_endpoint_t local = make_endpoint(127u, 0u, 0u, 1u, 0u);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_http_server_start_ex(&local));
+  local = make_endpoint(127u, 0u, 0u, 1u, 8193u);
+  local.addr_len = HAL_NET_IPV6_ADDR_LEN;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_http_server_start_ex(&local));
+  local = make_endpoint(127u, 0u, 0u, 1u, 8193u);
+  local.family = HAL_NET_AF_UNSPEC;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_http_server_start_ex(&local));
+  TEST_ASSERT_FALSE(hal_http_server_is_running());
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_get_route_sends_ok_response);
@@ -478,6 +512,8 @@ int main(void) {
   RUN_TEST(test_head_sends_headers_without_body);
   RUN_TEST(test_handler_failure_returns_500);
   RUN_TEST(test_api_rejects_invalid_configuration);
+  RUN_TEST(test_start_ex_binds_the_requested_address);
+  RUN_TEST(test_start_ex_rejects_invalid_endpoints);
   RUN_TEST(test_prefix_route_matches_nested_path);
   RUN_TEST(test_content_length_overflow_is_rejected_before_body_indexing);
   RUN_TEST(test_ambiguous_request_framing_is_rejected);

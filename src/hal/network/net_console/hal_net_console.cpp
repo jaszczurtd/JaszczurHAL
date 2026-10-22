@@ -4,6 +4,7 @@
 #ifdef HAL_ENABLE_NET_CONSOLE
 
 #include "hal/network/hal_tcp.h"
+#include "hal/network/jh_net_listener.h"
 #include "hal/system/hal_system.h"
 
 #include <string.h>
@@ -382,26 +383,14 @@ extern "C" hal_status_t hal_net_console_start(uint16_t port,
   memcpy(s_password, password, password_len);
   s_password[password_len] = '\0';
 
-  s_listener = hal_tcp_listener_open();
-  if (!s_listener) {
+  hal_net_endpoint_t local;
+  jh_net_any_ipv4_endpoint(port, &local);
+  const hal_status_t status = jh_net_listener_start(
+      &local, HAL_NET_CONSOLE_DEFAULT_BACKLOG, &s_listener);
+  if (status != HAL_OK) {
     s_password[0] = '\0';
-    return HAL_ENOMEM;
   }
-
-  hal_net_endpoint_t local = {};
-  local.family = HAL_NET_AF_INET;
-  local.addr_len = HAL_NET_IPV4_ADDR_LEN;
-  local.port = port;
-
-  if (!hal_tcp_listener_bind(s_listener, &local) ||
-      !hal_tcp_listener_listen(s_listener, HAL_NET_CONSOLE_DEFAULT_BACKLOG)) {
-    hal_tcp_listener_close(s_listener);
-    s_listener = NULL;
-    s_password[0] = '\0';
-    return HAL_EIO;
-  }
-
-  return HAL_OK;
+  return status;
 }
 
 extern "C" void hal_net_console_stop(void) {

@@ -2,7 +2,7 @@
 
 /**
  * @file hal_app.h
- * @brief Portable application entry-point contract.
+ * @brief Portable application entry points.
  *
  * When the library is built with @c HAL_PROVIDE_APP_ENTRY defined, JaszczurHAL
  * supplies @c main() and dispatches to the three user-defined functions

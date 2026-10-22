@@ -61,7 +61,8 @@ are managed here. Every pinned checkout must be a clean exact-commit checkout:
 verify-only mode rejects local, untracked and ignored files in any of them,
 submodules included. It reads the actual tracked files and compares their Git
 blob hashes with the pin, so `assume-unchanged` and `skip-worktree` cannot hide
-edits. Declared CRLF checkouts remain supported; verification does not run Git
+edits. CRLF checkouts selected by Git's `text`/`eol` attributes and
+`core.autocrlf`/`core.eol` settings remain supported; verification does not run Git
 clean/process filters or refresh the index. Initialized submodules are checked
 recursively against their pinned commits and repository URLs. Uninitialized,
 unused submodule directories must remain empty.
@@ -118,8 +119,11 @@ terminal that invokes ESP-IDF tools directly.
 
 The manager and build runner keep Python bytecode below `.build/python-cache`
 (or an explicit `PYTHONPYCACHEPREFIX`) instead of writing it into the SDK.
-Verification disables bytecode writes. Remove any old `__pycache__` directories
-inside a dependency before verifying that checkout.
+Verification disables bytecode writes. Normal preparation of the managed
+ESP-IDF checkout removes old, untracked CPython cache files in `__pycache__`
+when their Python source is tracked, including in initialized submodules.
+It keeps unrelated files and local source edits; these still fail verification.
+Verify-only and external checkouts remain read-only.
 
 The production runner accepts a project directory, resolves the
 `esp32s3` target and `waveshare-esp32-s3-zero` board descriptors, prepares the

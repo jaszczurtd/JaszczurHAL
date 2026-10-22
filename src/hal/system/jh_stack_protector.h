@@ -2,7 +2,7 @@
 
 /**
  * @file jh_stack_protector.h
- * @brief Internal compiler stack-protector runtime contract.
+ * @brief Internal compiler stack-protector runtime interface.
  */
 
 #include "hal/core/hal_compiler.h"

@@ -152,8 +152,8 @@ See the public module headers for complete signatures.
 `hal_net.h` contains plain C value types shared by handle-based UDP, TCP, and
 BSD/POSIX compatibility layers. Endpoints have family-tagged storage for IPv4
 and IPv6. The current CYW43 backends advertise IPv4. ESP32-S3 advertises the
-families enabled in its ESP-IDF lwIP configuration; unsupported families return
-`HAL_EUNSUPPORTED`.
+families enabled in its ESP-IDF lwIP configuration, and the host backend
+advertises both. Unsupported families return `HAL_EUNSUPPORTED`.
 
 ```c
 #include <hal/network/hal_net.h>
@@ -215,6 +215,8 @@ field is in host byte order; POSIX adapters perform their own `htons()` /
   literal parsing does not.
 - ESP32-S3 resolves through the native ESP-IDF lwIP `getaddrinfo()` path after
   the WiFi/`esp_netif` lifecycle reaches a usable state.
+- The host backend parses IPv4 and IPv6 literals itself and resolves hostnames
+  through the operating system's `getaddrinfo()`.
 
 **Mock name-resolution functions:**
 ```c
@@ -229,7 +231,7 @@ the station netif, and the native WiFi driver behind the existing public HAL
 facades. Event handlers translate station start/connect/disconnect, IPv4 lease,
 scan, authentication, missing-network, reconnect, and teardown state. TCP and
 UDP handles use bounded generation-checked pools over native lwIP sockets and
-`select()`. `HAL_ENABLE_BSD_SOCKETS` exposes ESP-IDF's native BSD API instead of
+`select()`; the host backend shares this socket code. `HAL_ENABLE_BSD_SOCKETS` exposes ESP-IDF's native BSD API instead of
 defining the shared compatibility symbols a second time.
 
 The same graph builds the shared BearSSL TLS client, HTTP/HTTPS client,
@@ -239,7 +241,55 @@ extension port. The public API has no TLS server, HTTPS server, WSS, or
 WebSocket client. `tests/fixtures/esp32s3_phase3` proves feature resolution,
 source/dependency selection, compilation, linking, partitions, and artifacts;
 it does not prove runtime hardware, lifecycle, rollback, or negative-security
-behavior.
+behavior. The hardware test `tests/hardware/esp32s3_network` runs the WiFi
+lifecycle, the resolver, UDP and TCP sockets, and the HTTP and WebSocket
+servers on the board against a host fixture; TLS, MQTT, OTA and WireGuard
+still need hardware tests.
+
+### Host backend for programs and tools
+
+`HAL_NETWORK_BACKEND_HOST` runs the HAL network modules inside a program on the
+development machine: TCP and UDP handles, the resolver, the HTTP server, file
+serving and the WebSocket server work over the operating system's sockets on
+Linux (POSIX) and Windows (Winsock). It needs `HAL_TARGET_MOCK`, which supplies
+the rest of the host runtime. A tool can serve a page or stream data on
+`127.0.0.1` with the same API a device uses on WiFi.
+
+CMake builds the library with one call; the HAL host tests link the same
+library:
+
+```cmake
+include(${JASZCZURHAL_ROOT}/cmake/jh_jhbase.cmake)
+include(${JASZCZURHAL_ROOT}/cmake/jh_host_network.cmake)
+jh_add_jhbase()
+jh_add_host_network_library(my_tool_hal)
+target_link_libraries(my_tool PRIVATE my_tool_hal)
+```
+
+The library enables `HAL_ENABLE_TCP`, `HAL_ENABLE_UDP`,
+`HAL_ENABLE_HTTP_SERVER`, `HAL_ENABLE_HTTP_FILES` and `HAL_ENABLE_WEBSOCKET`,
+selects `HAL_HOST_REAL_TIME` and links `ws2_32` on Windows. A tool raises the
+static limits on its library target, for example
+`target_compile_definitions(my_tool_hal PUBLIC HAL_WEBSOCKET_MAX_PAYLOAD_SIZE=8192u)`.
+
+What differs from a device:
+
+- The operating system controls the network link. `hal_wifi` functions
+  return `HAL_EUNSUPPORTED` and `hal_wifi_is_connected()` returns `false`.
+- The program uses the system's own BSD socket API, so
+  `HAL_ENABLE_BSD_SOCKETS` is rejected at compile time. WireGuard is not
+  available.
+- Winsock starts on the first socket operation and stays up until the
+  process exits.
+- Child processes started by the program do not inherit HAL sockets.
+- A listener can bind its port again right after the previous one closed.
+  On Windows the bound address is exclusive, so another process cannot take
+  it over.
+- With `HAL_HOST_REAL_TIME`, `hal_millis()`, `hal_micros()` and
+  `hal_micros64()` count time since their first call on the host's monotonic
+  clock, and `hal_delay_ms()`/`hal_delay_us()` put the thread to sleep, so the
+  HTTP and WebSocket server timeouts run in real time. The mock time helpers
+  (`hal_mock_set_millis()` and the like) do not exist in this build.
 
 <a id="hal_wifi---wifi--optional---hal_enable_wifi"></a>
 
@@ -667,6 +717,7 @@ hal_status_t hal_http_server_route_prefix(hal_http_method_t method,
                                           void *user);
 void hal_http_server_clear_routes(void);
 hal_status_t hal_http_server_start(uint16_t port);
+hal_status_t hal_http_server_start_ex(const hal_net_endpoint_t *local);
 void hal_http_server_stop(void);
 bool hal_http_server_is_running(void);
 void hal_http_server_poll(void);
@@ -720,6 +771,26 @@ for (;;) {
 }
 ```
 
+`hal_http_server_start(port)` listens on every IPv4 interface.
+`hal_http_server_start_ex()` takes one local address instead; a loopback
+address keeps the server reachable only from the same machine, which suits
+host tools:
+
+```c
+hal_net_endpoint_t local = {0};
+local.family = HAL_NET_AF_INET;
+local.addr_len = HAL_NET_IPV4_ADDR_LEN;
+local.addr[0] = 127u;
+local.addr[3] = 1u;
+local.port = 8080u;
+hal_status_t status = hal_http_server_start_ex(&local);
+```
+
+Both return `HAL_EINVAL` for port 0 or a malformed address,
+`HAL_EUNSUPPORTED` when the backend lacks the address family and
+`HAL_EBUSY` when the address is already in use. While the server runs, a
+further start call returns `HAL_OK` and keeps the current listener.
+
 Default static limits can be overridden before including HAL headers:
 
 ```c
@@ -750,7 +821,8 @@ Rejected writes leave the existing body and its length unchanged.
 
 - **shared thematic implementation:** `hal/network/http/hal_http_server.cpp`.
 - **impl/.mock:** covered through the mock TCP listener/socket backend and
-  `test_hal_http_server`.
+  `test_hal_http_server`; `test_hal_host_network` serves a request over the
+  host backend on `127.0.0.1`.
 
 ---
 
@@ -951,6 +1023,8 @@ hal_status_t hal_websocket_server_set_callbacks(
     const hal_websocket_callbacks_t *callbacks,
     void *user);
 hal_status_t hal_websocket_server_start(uint16_t port, const char *path);
+hal_status_t hal_websocket_server_start_ex(const hal_net_endpoint_t *local,
+                                          const char *path);
 void hal_websocket_server_stop(void);
 bool hal_websocket_server_is_running(void);
 void hal_websocket_server_poll(void);
@@ -997,6 +1071,11 @@ for (;;) {
 }
 ```
 
+`hal_websocket_server_start(port, path)` listens on every IPv4 interface;
+`hal_websocket_server_start_ex(&local, path)` binds one local address, for
+example `127.0.0.1`, with the same results as `hal_http_server_start_ex()`.
+The server copies the endpoint and the path.
+
 Broadcasting telemetry:
 
 ```c
@@ -1017,7 +1096,8 @@ Default static limits can be overridden before including HAL headers:
 
 - **shared thematic implementation:** `hal/network/websocket/hal_websocket.cpp`.
 - **impl/.mock:** covered through the mock TCP listener/socket backend and
-  `test_hal_websocket`.
+  `test_hal_websocket`; `test_hal_host_network` completes a handshake and a
+  broadcast over the host backend on `127.0.0.1`.
 
 ---
 
@@ -1517,10 +1597,15 @@ bool     hal_udp_end_packet(void);
   and `select()` readiness/timeouts.
 - **impl/.mock:** deterministic multi-socket test double with injected inbound
   packets, captured outbound packet metadata and payload.
+- **host backend:** the socket pool shared with the ESP32 backend, over the
+  operating system's UDP sockets (POSIX `poll()` or Winsock `select()`); the
+  single-socket legacy API is not provided. A datagram longer than the buffer
+  is truncated to the buffer size and consumed, on Linux and Windows alike.
 
 **Thread safety:** RP-family and ESP32-S3 backends are thread-safe and
 multicore-safe for public APIs. Backend-local mutexes protect their static UDP
-pools and stack operations.
+pools and stack operations. The host backend uses the same facade and socket
+pool mutexes.
 
 **Mock helpers:**
 ```c
@@ -1638,13 +1723,20 @@ void hal_tcp_listener_close(hal_tcp_listener_t listener);
   listener pools.
 - **impl/esp32:** bounded HAL handle pool over native ESP-IDF lwIP TCP sockets,
   including timed connect, bind/listen/accept, shutdown, and `select()` readiness.
+  Sockets stay non-blocking: a send to a peer that stops reading returns a
+  partial count or `HAL_EAGAIN` instead of stalling the caller.
 - **impl/.mock:** deterministic client/listener test double with scripted
   connect result, injected RX bytes, captured TX payload, captured remote
   endpoint and per-listener pending-client queues.
+- **host backend:** the socket pool shared with the ESP32 backend, over the
+  operating system's TCP sockets, with the same timed connect,
+  bind/listen/accept, readiness checks and non-blocking send;
+  `test_hal_host_network` runs it over loopback.
 
 **Thread safety:** RP-family and ESP32-S3 backends are thread-safe and
 multicore-safe for public APIs. Backend-local mutexes protect their static TCP
-pools and stack operations.
+pools and stack operations. The host backend uses the same facade and socket
+pool mutexes.
 
 **Mock helpers:**
 ```c

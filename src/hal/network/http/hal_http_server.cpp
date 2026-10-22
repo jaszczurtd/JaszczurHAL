@@ -1,6 +1,7 @@
 /** @file Target-neutral HTTP server service over HAL TCP. */
 #include "hal/network/http/hal_http_server.h"
 #include "hal/network/http/jh_http_text.h"
+#include "hal/network/jh_net_listener.h"
 
 #ifdef HAL_ENABLE_HTTP_SERVER
 
@@ -536,36 +537,18 @@ void hal_http_server_clear_routes(void) {
   memset(s_routes, 0, sizeof(s_routes));
 }
 
-hal_status_t hal_http_server_start(uint16_t port) {
+hal_status_t hal_http_server_start_ex(const hal_net_endpoint_t *local) {
   if (s_listener) {
     return HAL_OK;
   }
-  if (port == 0u) {
-    return HAL_EINVAL;
-  }
+  return jh_net_listener_start(local, HAL_HTTP_SERVER_DEFAULT_BACKLOG,
+                               &s_listener);
+}
 
-  s_listener = hal_tcp_listener_open();
-  if (!s_listener) {
-    return HAL_ENOMEM;
-  }
-
-  hal_net_endpoint_t local = {};
-  local.family = HAL_NET_AF_INET;
-  local.addr_len = HAL_NET_IPV4_ADDR_LEN;
-  local.addr[0] = 0u;
-  local.addr[1] = 0u;
-  local.addr[2] = 0u;
-  local.addr[3] = 0u;
-  local.port = port;
-
-  if (!hal_tcp_listener_bind(s_listener, &local) ||
-      !hal_tcp_listener_listen(s_listener, HAL_HTTP_SERVER_DEFAULT_BACKLOG)) {
-    hal_tcp_listener_close(s_listener);
-    s_listener = NULL;
-    return HAL_EIO;
-  }
-
-  return HAL_OK;
+hal_status_t hal_http_server_start(uint16_t port) {
+  hal_net_endpoint_t local;
+  jh_net_any_ipv4_endpoint(port, &local);
+  return hal_http_server_start_ex(&local);
 }
 
 void hal_http_server_stop(void) {

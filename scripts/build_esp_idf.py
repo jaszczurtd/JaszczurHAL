@@ -116,6 +116,7 @@ ESP_IDF_TARGET_SOURCES = {
     "HAL_ENABLE_NETWORK_CORE": (
         "src/hal/impl/esp32/jh_esp32_nvs_runtime.cpp",
         "src/hal/impl/esp32/esp32_network_backend.cpp",
+        "src/hal/network/native_sockets/jh_native_sockets.cpp",
     ),
     "HAL_ENABLE_OTA": (
         "src/hal/impl/esp32/esp32_secure_random.cpp",
@@ -132,17 +133,11 @@ ESP_IDF_TARGET_SOURCES = {
     "HAL_ENABLE_SPI": (
         "src/hal/impl/esp32/hal_spi.cpp",
     ),
-    "HAL_ENABLE_TCP": (
-        "src/hal/impl/esp32/esp32_network_sockets.cpp",
-    ),
     "HAL_ENABLE_TIME": (
         "src/hal/impl/esp32/hal_time.cpp",
     ),
     "HAL_ENABLE_TLS": (
         "src/hal/impl/esp32/esp32_secure_random.cpp",
-    ),
-    "HAL_ENABLE_UDP": (
-        "src/hal/impl/esp32/esp32_network_sockets.cpp",
     ),
     "HAL_ENABLE_UART": ("src/hal/impl/esp32/hal_uart.cpp",),
     "HAL_ENABLE_WIREGUARD": (

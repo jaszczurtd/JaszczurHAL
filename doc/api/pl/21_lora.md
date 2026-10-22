@@ -12,7 +12,10 @@ SX1261/SX1262 korzystają z oficjalnego sterownika Semtech SX126x w wersji ustal
 
 API udostępnia blokujące i asynchroniczne nadawanie, asynchroniczny odbiór, wykrywanie aktywności kanału (CAD), bieżące RSSI, jawną kalibrację oraz informacje o limitach i dostępnych funkcjach. Aplikacja może odbierać zdarzenia, sprawdzać stan i anulować operacje. Obsługa zdarzeń DIO odbywa się w zadaniu, nie w przerwaniu.
 
-Aplikacja dostarcza i przechowuje deskryptory sprzętu i modemu. Każdy nieprzezroczysty uchwyt ma własne bufory TX/RX, stan, muteks i diagnostykę.
+Aplikacja dostarcza i przechowuje deskryptory sprzętu i modemu. Każda
+instancja radia ma własne bufory TX/RX, stan, muteks i diagnostykę. Uchwyt
+identyfikuje tę instancję i służy wyłącznie do wywołań API (ang. opaque
+handle); aplikacja nie może go dereferencjonować ani interpretować jego wartości.
 
 ## Włączanie modułu
 

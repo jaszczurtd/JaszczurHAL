@@ -61,7 +61,9 @@ uptime clock when encryption is enabled.
 
 An attached link takes exclusive control of the radio: it unregisters the low-level event callback and starts continuous reception. Retain the radio handle, but do not directly start TX, RX, CAD, sleep, or calibration until `hal_lora_link_destroy()` completes. Destroying the link cancels radio I/O, zeroizes its key copy, and leaves the radio in standby. It does not destroy the radio handle.
 
-Opaque link handles are generation-tagged. A stale handle returns
+Link handles identify instances and include a generation number. Use them
+only through the API; do not dereference them or interpret their values.
+A stale handle returns
 `HAL_EUNINIT`, and creating more than `HAL_LORA_LINK_MAX_INSTANCES` links
 returns `HAL_ENOMEM`.
 

@@ -4,7 +4,7 @@ Ta specyfikacja określa wejścia i wynik generatora sprzętu projektu. `scripts
 
 ## Pliki i walidacja
 
-Jedna aplikacja firmware, również podprojekt, ma własny `device_tree.json`. Samodzielny katalog konfiguracji biblioteki może mieć taki sam plik bez źródeł firmware'u. Pliki nie dołączają ani nie dziedziczą okablowania innej aplikacji. Identyczne połączenia niezależnych projektów pozostają świadomie niezależne.
+Jedna aplikacja firmware, również podprojekt, ma własny `device_tree.json`. Samodzielny katalog konfiguracji biblioteki może mieć taki sam plik bez źródeł firmware'u. Pliki nie dołączają ani nie dziedziczą okablowania innej aplikacji. Każdy projekt opisuje swoje połączenia osobno, także gdy są identyczne z połączeniami innego projektu.
 
 | Plik | Zawartość |
 |---|---|

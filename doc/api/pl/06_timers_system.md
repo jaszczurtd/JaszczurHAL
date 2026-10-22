@@ -64,50 +64,17 @@ ubocznych.
 
 ```c
 #include <hal/core/hal_status.h>
-
-typedef enum {
-    HAL_NONE = 0,
-    HAL_OK = 1,
-    HAL_EINVAL = -1,
-    HAL_EBUSY = -2,
-    HAL_ETIMEOUT = -3,
-    HAL_EIO = -4,
-    HAL_EUNSUPPORTED = -5,
-    HAL_ENOENT = -6,
-    HAL_EAGAIN = -7,
-    HAL_EOVERFLOW = -8,
-    HAL_ENOMEM = -9,
-    HAL_IGNORED = -10,
-    HAL_EEXIST = -11,
-    HAL_EPERM = -12,
-    HAL_EINTERNAL = -13,
-    HAL_ECANCELED = -14,
-    HAL_EPROTO = -15,
-    HAL_EAUTH = -16,
-    HAL_EBUS = -17,
-    HAL_EHW = -18,
-    HAL_ECONFIG = -19,
-    HAL_ESTATE = -20,
-    HAL_EUNINIT = -21,
-    HAL_EDEPRECATED = -22,
-    HAL_EUNKNOWN = -23,
-} hal_status_t;
-
-static inline const char *hal_status_to_string(hal_status_t status);
 ```
 
-Jest to wspólny zestaw statusów dla nowych publicznych API. Po migracji
-dotychczasowe funkcje zwracające wartość, uchwyt lub `bool` pozostają
-adapterami zgodności. Starsze operacje `void`, które mogą się nie powieść,
-mogą zacząć bezpośrednio zwracać `hal_status_t`, ponieważ istniejący kod nadal
-może ignorować wynik.
+`hal_status_t` opisuje wynik operacji. `HAL_OK` oznacza powodzenie,
+`HAL_NONE` brak wyniku, a wartości ujemne wskazują błędy.
+`hal_status_to_string()` zwraca nazwę symboliczną albo `"HAL_STATUS_UNKNOWN"`
+dla nierozpoznanej wartości.
 
-Używaj `HAL_OK` do oznaczania powodzenia, `status < 0` do wykrywania dowolnego
-błędu, a konkretnych kodów do diagnostyki pomiędzy modułami i backendami.
-`hal_status_to_string()` zwraca stabilne nazwy symboliczne, takie jak
-`"HAL_EIO"` i `"HAL_STATUS_UNKNOWN"` dla nierozpoznanych wartości liczbowych.
-Prefiks `HAL_` unika kolizji z nazwami POSIX `errno` używanymi przez warstwę
-zgodności z gniazdami BSD.
+Typ i funkcje pomocnicze są zdefiniowane raz, w `jb/status.h` biblioteki
+jhbase, dołączanym przez ten nagłówek HAL. Typ zachowuje rozmiar 32 bitów,
+także przy `-fshort-enums`. Pełną listę kodów i zasady migracji opisuje
+[rozdział o wynikach operacji i obsłudze błędów](01_status_api.md).
 
 ---
 

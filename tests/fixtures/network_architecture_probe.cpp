@@ -21,6 +21,11 @@ int main(void) {
   const char *expected_stack = "lwIP";
   const hal_system_network_stack_type_t expected_type =
       HAL_SYSTEM_NETWORK_STACK_TYPE_HOST;
+#elif defined(JH_EXPECT_NETWORK_HOST)
+  const char *expected_backend = "host-sockets";
+  const char *expected_stack = "host system";
+  const hal_system_network_stack_type_t expected_type =
+      HAL_SYSTEM_NETWORK_STACK_TYPE_SOCKET_OFFLOAD;
 #elif defined(JH_EXPECT_NETWORK_ESP_AT)
   const char *expected_backend = "esp-at";
   const char *expected_stack = "ESP-AT";

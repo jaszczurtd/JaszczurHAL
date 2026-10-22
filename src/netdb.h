@@ -9,9 +9,11 @@
 
 #include "hal/core/hal_config.h"
 
-#if defined(HAL_NETWORK_BACKEND_ESP_IDF)
+#if defined(HAL_NETWORK_BACKEND_ESP_IDF) ||                                    \
+    (defined(HAL_NETWORK_BACKEND_HOST) && !defined(_WIN32))
 
-/* Use ESP-IDF's lwIP-backed POSIX resolver declarations and inline adapter. */
+/* Use the native resolver declarations: ESP-IDF's lwIP-backed POSIX adapter
+ * or the host system's. */
 #include_next <netdb.h>
 
 #elif defined(HAL_ENABLE_BSD_SOCKETS)
@@ -86,4 +88,4 @@ const char *gai_strerror(int errcode);
 }
 #endif
 
-#endif /* HAL_NETWORK_BACKEND_ESP_IDF / HAL_ENABLE_BSD_SOCKETS */
+#endif /* native platform sockets / HAL_ENABLE_BSD_SOCKETS */

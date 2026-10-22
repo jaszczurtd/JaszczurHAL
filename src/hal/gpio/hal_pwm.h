@@ -5,7 +5,7 @@
  * @brief Hardware abstraction for simple PWM output (analogWrite style).
  *
  * This API is intentionally minimal and does not provide an independent
- * frequency/channel allocation contract. Use hal_pwm_freq.h when the
+ * API for frequency and channel allocation. Use hal_pwm_freq.h when the
  * application needs explicit frequency, resolution and channel lifetime.
  */
 

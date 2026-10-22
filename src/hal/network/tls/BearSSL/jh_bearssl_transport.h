@@ -9,7 +9,7 @@
 /**
  * Internal non-blocking transport seam used by the shared BearSSL engine.
  *
- * HAL TCP and BSD sockets provide independent adapters for this contract.
+ * HAL TCP and BSD sockets provide independent adapters for this interface.
  * A successful operation must transfer at least one byte; HAL_EAGAIN reports
  * that the caller should service the network and poll again.
  */

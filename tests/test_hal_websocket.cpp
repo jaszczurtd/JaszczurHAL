@@ -1,5 +1,6 @@
 #include "hal/impl/.mock/hal_mock.h"
 #include "hal/network/websocket/hal_websocket.h"
+#include "support/network_test_helpers.h"
 #include "utils/unity.h"
 
 #include <stdio.h>
@@ -37,19 +38,6 @@ void setUp(void) {
 void tearDown(void) {
   hal_websocket_server_stop();
   hal_websocket_server_set_callbacks(NULL, NULL);
-}
-
-static hal_net_endpoint_t make_endpoint(uint8_t a, uint8_t b, uint8_t c,
-                                        uint8_t d, uint16_t port) {
-  hal_net_endpoint_t endpoint = {};
-  endpoint.family = HAL_NET_AF_INET;
-  endpoint.addr_len = HAL_NET_IPV4_ADDR_LEN;
-  endpoint.addr[0] = a;
-  endpoint.addr[1] = b;
-  endpoint.addr[2] = c;
-  endpoint.addr[3] = d;
-  endpoint.port = port;
-  return endpoint;
 }
 
 static void on_connect(hal_websocket_client_t client, void *user) {
@@ -390,6 +378,50 @@ void test_incomplete_handshakes_time_out_and_release_slots(void) {
   TEST_ASSERT_EQUAL_UINT(1u, s_connected_count);
 }
 
+void test_start_ex_binds_the_requested_address(void) {
+  hal_net_endpoint_t local = make_endpoint(127u, 0u, 0u, 1u, 8196u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_websocket_server_start_ex(&local, "/ws"));
+  hal_net_endpoint_t bound = mock_listener_endpoint(8196u);
+  TEST_ASSERT_EQUAL_INT(HAL_NET_AF_INET, bound.family);
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(local.addr, bound.addr, HAL_NET_IPV4_ADDR_LEN);
+
+  // A running server keeps its listener.
+  hal_net_endpoint_t other = make_endpoint(127u, 0u, 0u, 1u, 8197u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_websocket_server_start_ex(&other, "/x"));
+  TEST_ASSERT_NULL(hal_mock_tcp_listener_find_by_port(8197u));
+  hal_websocket_server_stop();
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_websocket_server_start(8198u, "/ws"));
+  bound = mock_listener_endpoint(8198u);
+  const uint8_t any[HAL_NET_IPV4_ADDR_LEN] = {0u, 0u, 0u, 0u};
+  TEST_ASSERT_EQUAL_INT(HAL_NET_AF_INET, bound.family);
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(any, bound.addr, HAL_NET_IPV4_ADDR_LEN);
+}
+
+void test_start_ex_rejects_invalid_endpoints(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_websocket_server_start_ex(NULL, "/ws"));
+  hal_net_endpoint_t local = make_endpoint(127u, 0u, 0u, 1u, 0u);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_websocket_server_start_ex(&local, "/ws"));
+  local = make_endpoint(127u, 0u, 0u, 1u, 8199u);
+  local.addr_len = HAL_NET_IPV6_ADDR_LEN;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_websocket_server_start_ex(&local, "/ws"));
+  local = make_endpoint(127u, 0u, 0u, 1u, 8199u);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_websocket_server_start_ex(&local, "ws"));
+  // The endpoint is checked before the path, as by
+  // hal_websocket_server_start().
+  char overlong[HAL_WEBSOCKET_PATH_MAX + 1u];
+  memset(overlong, 'a', sizeof(overlong));
+  overlong[0] = '/';
+  overlong[sizeof(overlong) - 1u] = '\0';
+  local = make_endpoint(127u, 0u, 0u, 1u, 0u);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_websocket_server_start_ex(&local, overlong));
+  TEST_ASSERT_FALSE(hal_websocket_server_is_running());
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_handshake_accepts_upgrade_and_calls_connect);
@@ -399,6 +431,8 @@ int main(void) {
   RUN_TEST(test_close_frame_disconnects_and_reports_code);
   RUN_TEST(test_invalid_handshake_returns_bad_request);
   RUN_TEST(test_api_rejects_invalid_configuration);
+  RUN_TEST(test_start_ex_binds_the_requested_address);
+  RUN_TEST(test_start_ex_rejects_invalid_endpoints);
   RUN_TEST(
       test_message_callback_may_close_client_without_corrupting_frame_state);
   RUN_TEST(

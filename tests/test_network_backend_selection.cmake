@@ -81,6 +81,26 @@ endfunction()
 
 check_config(default_mock TRUE ""
     -DHAL_TARGET_MOCK=1 -DHAL_ENABLE_TCP=1)
+check_config(host_sockets TRUE ""
+    -DHAL_TARGET_MOCK=1 -DHAL_NETWORK_BACKEND_HOST=1 -DHAL_ENABLE_TCP=1
+    -DHAL_ENABLE_UDP=1 -DHAL_ENABLE_HTTP_SERVER=1 -DHAL_ENABLE_WEBSOCKET=1)
+check_config(host_real_time_on_device_target FALSE
+    "HAL_HOST_REAL_TIME requires HAL_TARGET_MOCK"
+    -DHAL_TARGET_STM32G474=1 -DHAL_HOST_REAL_TIME=1)
+check_config(host_sockets_on_device_target FALSE
+    "HAL_NETWORK_BACKEND_HOST requires HAL_TARGET_MOCK"
+    -DHAL_TARGET_STM32G474=1 -DHAL_NETWORK_BACKEND_HOST=1 -DHAL_ENABLE_TCP=1)
+check_config(host_sockets_with_bsd_adapter FALSE
+    "HAL_ENABLE_BSD_SOCKETS conflicts with HAL_NETWORK_BACKEND_HOST"
+    -DHAL_TARGET_MOCK=1 -DHAL_NETWORK_BACKEND_HOST=1
+    -DHAL_ENABLE_BSD_SOCKETS=1)
+check_config(host_sockets_with_wireguard FALSE
+    "requires a host-stack L3 backend"
+    -DHAL_TARGET_MOCK=1 -DHAL_NETWORK_BACKEND_HOST=1
+    -DHAL_ENABLE_WIREGUARD=1)
+check_config(host_and_mock_backends FALSE "Select exactly one HAL_NETWORK_BACKEND"
+    -DHAL_TARGET_MOCK=1 -DHAL_NETWORK_BACKEND_HOST=1
+    -DHAL_NETWORK_BACKEND_MOCK=1 -DHAL_ENABLE_TCP=1)
 check_http_plaintext_config()
 check_config(zero_backend FALSE "requires exactly one HAL_NETWORK_BACKEND"
     -DHAL_TARGET_STM32G474=1 -DHAL_ENABLE_WIFI=1)
@@ -151,6 +171,9 @@ check_architecture_identity(no_network
     -DHAL_TARGET_STM32G474=1 -DJH_EXPECT_NETWORK_NONE=1)
 check_architecture_identity(mock_host_stack
     -DHAL_TARGET_MOCK=1 -DHAL_ENABLE_TCP=1 -DJH_EXPECT_NETWORK_MOCK=1)
+check_architecture_identity(host_sockets
+    -DHAL_TARGET_MOCK=1 -DHAL_NETWORK_BACKEND_HOST=1 -DHAL_ENABLE_TCP=1
+    -DJH_EXPECT_NETWORK_HOST=1)
 check_architecture_identity(cyw43_host_stack
     -DHAL_TARGET_RP2040=1 -DHAL_ENABLE_TCP=1
     -DHAL_CYW43_PROFILE_PICOW=1

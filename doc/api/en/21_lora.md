@@ -12,7 +12,10 @@ SX1261/SX1262 use the official Semtech SX126x driver at the version pinned in th
 
 The API provides blocking and asynchronous transmission, asynchronous reception, channel activity detection (CAD), instantaneous RSSI, explicit calibration, and capability and limit queries. Applications can receive events, inspect state, and cancel operations. DIO events are processed in task context rather than in the interrupt handler.
 
-The application supplies and retains hardware and modem descriptors. Each opaque handle has its own TX/RX buffers, state, mutex, and diagnostics.
+The application supplies and retains hardware and modem descriptors. Each
+radio instance has its own TX/RX buffers, state, mutex, and diagnostics. Its
+handle is an opaque identifier used only through this API; the application
+must not dereference it or interpret its value.
 
 ## Enable the module
 

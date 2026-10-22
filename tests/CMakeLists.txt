@@ -2766,6 +2766,19 @@ add_hal_test(test_hal_tcp)
 add_hal_test(test_hal_http_server)
 add_hal_test(test_hal_http_files)
 add_hal_test(test_hal_websocket)
+# The host network backend over the build machine's loopback interface.
+add_executable(test_hal_host_network
+    test_hal_host_network.cpp
+    ${CMAKE_SOURCE_DIR}/src/utils/unity.c
+)
+target_compile_definitions(test_hal_host_network PRIVATE
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+target_link_libraries(test_hal_host_network PRIVATE hal_host_network)
+jh_enable_host_warnings(test_hal_host_network ERRORS)
+add_test(NAME test_hal_host_network COMMAND test_hal_host_network)
+set_tests_properties(test_hal_host_network PROPERTIES TIMEOUT 60)
 add_hal_test(test_hal_net_console)
 add_hal_test(test_hal_net_commands)
 add_hal_test(test_hal_notify)

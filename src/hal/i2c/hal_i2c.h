@@ -251,8 +251,8 @@ hal_status_t hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
  *        mode.
  *
  * Every address passed to a transfer on this bus is then interpreted as a
- * 10-bit address (0x000..0x3FF). See hal_i2c_address_t for the mode
- * contract. hal_i2c_scan()/hal_i2c_scan_bus() remain 7-bit-only and return
+ * 10-bit address (0x000..0x3FF). See hal_i2c_address_t for the addressing-mode
+ * rules. hal_i2c_scan()/hal_i2c_scan_bus() remain 7-bit-only and return
  * HAL_EUNSUPPORTED on a bus initialised this way.
  *
  * @param sda_pin  SDA pin number.

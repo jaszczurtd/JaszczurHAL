@@ -8,10 +8,15 @@
 
 #include <string.h>
 
+#if defined(HAL_HOST_REAL_TIME)
+#include <chrono>
+#include <thread>
+#else
 static uint32_t s_millis = 0;
 static uint32_t s_micros = 0;
 static uint32_t s_micros_step = 0;
 static uint64_t s_micros64 = 0;
+#endif
 static bool s_watchdog_fed = false;
 static bool s_caused_reboot = false;
 static uint32_t s_free_heap = 256 * 1024;
@@ -25,6 +30,34 @@ static size_t s_device_serial_len = 8u;
 static uint8_t s_device_uid[HAL_DEVICE_UID_BYTES] = {0xE6, 0x61, 0xA4, 0xD1,
                                                      0x23, 0x45, 0x67, 0xAB};
 
+#if defined(HAL_HOST_REAL_TIME)
+/* Host programs and tools: time since the first call on the host's monotonic
+ * clock, and delays that put the calling thread to sleep. */
+static uint64_t host_elapsed_us(void) {
+  static const std::chrono::steady_clock::time_point s_start =
+      std::chrono::steady_clock::now();
+  return static_cast<uint64_t>(
+      std::chrono::duration_cast<std::chrono::microseconds>(
+          std::chrono::steady_clock::now() - s_start)
+          .count());
+}
+
+uint32_t hal_millis(void) {
+  return static_cast<uint32_t>(host_elapsed_us() / UINT64_C(1000));
+}
+
+uint32_t hal_micros(void) { return static_cast<uint32_t>(host_elapsed_us()); }
+
+uint64_t hal_micros64(void) { return host_elapsed_us(); }
+
+void hal_delay_ms(uint32_t ms) {
+  std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+}
+
+void hal_delay_us(uint32_t us) {
+  std::this_thread::sleep_for(std::chrono::microseconds(us));
+}
+#else
 uint32_t hal_millis(void) { return s_millis; }
 
 uint32_t hal_micros(void) {
@@ -47,6 +80,7 @@ void hal_delay_us(uint32_t us) {
   s_micros += us;
   s_micros64 += us;
 }
+#endif
 
 void hal_watchdog_feed(void) { s_watchdog_fed = true; }
 
@@ -98,6 +132,9 @@ void hal_mock_set_in_isr(bool in_isr) { s_in_isr = in_isr; }
 // ── Mock helpers
 // ──────────────────────────────────────────────────────────────
 
+/* The simulated clock: with HAL_HOST_REAL_TIME time is the host's, and these
+ * test helpers do not exist. */
+#if !defined(HAL_HOST_REAL_TIME)
 void hal_mock_set_millis(uint32_t ms) {
   s_millis = ms;
   s_micros = ms * 1000;
@@ -131,6 +168,7 @@ void hal_mock_set_micros64(uint64_t us) {
 void hal_mock_advance_micros64(uint64_t us) {
   hal_mock_set_micros64(s_micros64 + us);
 }
+#endif
 
 bool hal_mock_watchdog_was_fed(void) { return s_watchdog_fed; }
 

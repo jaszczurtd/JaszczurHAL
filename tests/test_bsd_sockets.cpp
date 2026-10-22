@@ -1,4 +1,5 @@
 #include "hal/impl/.mock/hal_mock.h"
+#include "support/network_test_helpers.h"
 #include "utils/unity.h"
 
 #include <arpa/inet.h>
@@ -47,19 +48,6 @@ static struct sockaddr_in6 make_sockaddr6(const char *ip, uint16_t port,
   addr.sin6_scope_id = scope_id;
   TEST_ASSERT_EQUAL_INT(1, inet_pton(AF_INET6, ip, &addr.sin6_addr));
   return addr;
-}
-
-static hal_net_endpoint_t make_endpoint(uint8_t a, uint8_t b, uint8_t c,
-                                        uint8_t d, uint16_t port) {
-  hal_net_endpoint_t endpoint = {};
-  endpoint.family = HAL_NET_AF_INET;
-  endpoint.addr_len = HAL_NET_IPV4_ADDR_LEN;
-  endpoint.addr[0] = a;
-  endpoint.addr[1] = b;
-  endpoint.addr[2] = c;
-  endpoint.addr[3] = d;
-  endpoint.port = port;
-  return endpoint;
 }
 
 void test_inet_helpers_translate_ipv4_and_byte_order(void) {

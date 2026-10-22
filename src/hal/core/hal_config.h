@@ -420,7 +420,8 @@
  * explicit HAL_NETWORK_BACKEND_* definition always remains authoritative. */
 #if defined(HAL_ENABLE_NETWORK_CORE) && !defined(HAL_NETWORK_BACKEND_CYW43) && \
     !defined(HAL_NETWORK_BACKEND_ESP_IDF) &&                                   \
-    !defined(HAL_NETWORK_BACKEND_MOCK) && !defined(HAL_NETWORK_BACKEND_ESP_AT)
+    !defined(HAL_NETWORK_BACKEND_MOCK) &&                                      \
+    !defined(HAL_NETWORK_BACKEND_ESP_AT) && !defined(HAL_NETWORK_BACKEND_HOST)
 #if HAL_TARGET_IS_ESP32_FAMILY
 #define HAL_NETWORK_BACKEND_ESP_IDF 1
 #elif HAL_TARGET_IS_MOCK
@@ -448,10 +449,16 @@
 #else
 #define HAL_NETWORK_BACKEND_ESP_AT_SELECTED 0
 #endif
+#if defined(HAL_NETWORK_BACKEND_HOST)
+#define HAL_NETWORK_BACKEND_HOST_SELECTED 1
+#else
+#define HAL_NETWORK_BACKEND_HOST_SELECTED 0
+#endif
 
 #define HAL_NETWORK_BACKEND_SELECTION_COUNT                                    \
   (HAL_NETWORK_BACKEND_CYW43_SELECTED + HAL_NETWORK_BACKEND_ESP_IDF_SELECTED + \
-   HAL_NETWORK_BACKEND_MOCK_SELECTED + HAL_NETWORK_BACKEND_ESP_AT_SELECTED)
+   HAL_NETWORK_BACKEND_MOCK_SELECTED + HAL_NETWORK_BACKEND_ESP_AT_SELECTED +   \
+   HAL_NETWORK_BACKEND_HOST_SELECTED)
 
 #if defined(HAL_ENABLE_NETWORK_CORE) && HAL_NETWORK_BACKEND_SELECTION_COUNT == 0
 #error "JaszczurHAL network core requires exactly one HAL_NETWORK_BACKEND_*"
@@ -462,6 +469,21 @@
 
 #if defined(HAL_NETWORK_BACKEND_MOCK) && !HAL_TARGET_IS_MOCK
 #error "HAL_NETWORK_BACKEND_MOCK requires HAL_TARGET_MOCK"
+#endif
+/* The host backend runs HAL network code over the operating system's sockets
+ * (POSIX or Winsock) in host programs and tools; HAL_TARGET_MOCK provides the
+ * remaining host runtime. */
+#if defined(HAL_NETWORK_BACKEND_HOST) && !HAL_TARGET_IS_MOCK
+#error "HAL_NETWORK_BACKEND_HOST requires HAL_TARGET_MOCK"
+#endif
+/* Host programs take hal_millis()/hal_delay_ms() from the host's monotonic
+ * clock instead of the mock target's simulated one. */
+#if defined(HAL_HOST_REAL_TIME) && !HAL_TARGET_IS_MOCK
+#error "HAL_HOST_REAL_TIME requires HAL_TARGET_MOCK"
+#endif
+#if defined(HAL_NETWORK_BACKEND_HOST) && defined(HAL_ENABLE_BSD_SOCKETS)
+#error                                                                         \
+    "HAL_ENABLE_BSD_SOCKETS conflicts with HAL_NETWORK_BACKEND_HOST: the host system already provides the BSD socket API"
 #endif
 #if defined(HAL_NETWORK_BACKEND_ESP_IDF) && !HAL_TARGET_IS_ESP32_FAMILY
 #error "HAL_NETWORK_BACKEND_ESP_IDF requires an ESP32-family target"
@@ -505,6 +527,17 @@
 #define HAL_NETWORK_CORE_HAS_VIRTUAL_NETIF_ROUTE 1
 #define HAL_NETWORK_CORE_HAS_STACK_CONTEXT 1
 #define HAL_NETWORK_CORE_HAS_SECURE_ENTROPY 1
+#elif defined(HAL_NETWORK_BACKEND_HOST)
+/* The operating system controls the link; hal_wifi reports HAL_EUNSUPPORTED. */
+#define HAL_NETWORK_CORE_HAS_WIFI_CONTROL 0
+#define HAL_NETWORK_CORE_HAS_RESOLVER 1
+#define HAL_NETWORK_CORE_HAS_TCP_CLIENT 1
+#define HAL_NETWORK_CORE_HAS_TCP_LISTENER 1
+#define HAL_NETWORK_CORE_HAS_UDP 1
+#define HAL_NETWORK_CORE_HAS_HOST_STACK_L3 0
+#define HAL_NETWORK_CORE_HAS_VIRTUAL_NETIF_ROUTE 0
+#define HAL_NETWORK_CORE_HAS_STACK_CONTEXT 0
+#define HAL_NETWORK_CORE_HAS_SECURE_ENTROPY 0
 #elif defined(HAL_NETWORK_BACKEND_ESP_AT)
 #define HAL_NETWORK_CORE_HAS_WIFI_CONTROL 1
 #define HAL_NETWORK_CORE_HAS_RESOLVER 1
@@ -517,7 +550,10 @@
 #define HAL_NETWORK_CORE_HAS_SECURE_ENTROPY 0
 #endif
 
-#if defined(HAL_ENABLE_WIFI) && !HAL_NETWORK_CORE_HAS_WIFI_CONTROL
+/* Registry features such as TCP imply HAL_ENABLE_WIFI. The host backend keeps
+ * the hal_wifi facade, whose link-control calls report HAL_EUNSUPPORTED. */
+#if defined(HAL_ENABLE_WIFI) && !HAL_NETWORK_CORE_HAS_WIFI_CONTROL &&          \
+    !defined(HAL_NETWORK_BACKEND_HOST)
 #error "HAL_ENABLE_WIFI requires backend WiFi-control capability"
 #endif
 #if defined(HAL_ENABLE_TCP) &&                                                 \

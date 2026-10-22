@@ -2,7 +2,8 @@
 #if HAL_TARGET_IS_MOCK
 #include "hal/core/hal_config.h"
 
-#ifdef HAL_ENABLE_UDP
+/* The host backend uses the shared UDP facade over operating system sockets. */
+#if defined(HAL_ENABLE_UDP) && !defined(HAL_NETWORK_BACKEND_HOST)
 
 #include "hal/network/hal_udp.h"
 #include "hal/network/jh_net_address_utils.h"

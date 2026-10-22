@@ -39,7 +39,7 @@ public:
 
   /* Owns a raw hal_mutex_t freed in the destructor, so it must not be copied:
    * a copy would share the handle and double-free it (Rule of Three). Timers
-   * are used as long-lived singletons, so non-copyable is the correct contract.
+   * are used as long-lived singletons, so copying is disabled.
    */
   SmartTimers(const SmartTimers &) = delete;
   SmartTimers &operator=(const SmartTimers &) = delete;

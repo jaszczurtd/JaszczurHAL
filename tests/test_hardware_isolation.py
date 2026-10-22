@@ -72,6 +72,30 @@ class FeatureLintTests(unittest.TestCase):
 
 
 class DocumentationTests(unittest.TestCase):
+    def test_parity_checks_tool_and_library_readmes(self) -> None:
+        parity = load_script("check_documentation_i18n_parity")
+        with tempfile.TemporaryDirectory(prefix="jh-readme-parity-") as text:
+            repo = Path(text)
+            (repo / "doc").mkdir()
+            for directory in ("tools/jh", "link_libraries"):
+                with self.subTest(directory=directory):
+                    write(repo / directory / "README.md", "# Guide\n")
+                    relative = f"{directory}/README.pl.md"
+                    self.assertIn(
+                        f"{relative}: missing Polish README translation",
+                        parity.check(repo),
+                    )
+                    write(
+                        repo / relative,
+                        "# Poradnik\n\nPrzygotuj przypięte zależności.\n",
+                    )
+                    self.assertTrue(
+                        any(
+                            relative in failure and "unnatural Polish phrase" in failure
+                            for failure in parity.check(repo)
+                        )
+                    )
+
     def test_links_into_and_inside_fixtures_are_left_alone(self) -> None:
         links = load_script("check_documentation_links")
         with tempfile.TemporaryDirectory(prefix="jh-iso-links-") as text:

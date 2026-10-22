@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""The link check reads the files of the repository, not ignored local ones.
+"""The link check covers maintained guides and respects Git ignores.
 
-Every case builds a throwaway Git repository with a broken link in a file
-Git ignores and runs the real check against it.
+Cases run the real check on throwaway directories and Git repositories.
 """
 
 from __future__ import annotations
@@ -57,7 +56,7 @@ class LinkScopeTests(unittest.TestCase):
         git(self.repo, "init", "-q")
 
         self.assertEqual(
-            ["doc/en/draft.md: missing local link target: 'missing.md'"],
+            [f"{Path('doc/en/draft.md')}: missing local link target: 'missing.md'"],
             self.links.check_links(self.repo),
         )
         files = self.links.documentation_files(self.repo)
@@ -78,6 +77,17 @@ class LinkScopeTests(unittest.TestCase):
         found = self.links.check_links(self.repo)
         self.assertIn("NOW.md: local link escapes the repository: '../../NOW.md'", found)
         self.assertEqual(2, len(found))
+
+    def test_tool_and_dependency_guides_are_checked(self) -> None:
+        for directory in ("tools/jh", "third_party"):
+            for name in ("README.md", "README.pl.md"):
+                relative = Path(directory) / name
+                with self.subTest(path=relative):
+                    write(self.repo / relative, "[gone](missing.md)\n")
+                    self.assertIn(
+                        f"{relative}: missing local link target: 'missing.md'",
+                        self.links.check_links(self.repo),
+                    )
 
 
 if __name__ == "__main__":

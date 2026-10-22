@@ -1,7 +1,8 @@
 #include "jh_public_network_backend_adapter.h"
 
 #if defined(HAL_ENABLE_NETWORK_CORE) && !defined(HAL_NETWORK_BACKEND_CYW43) && \
-    !defined(HAL_NETWORK_BACKEND_ESP_IDF)
+    !defined(HAL_NETWORK_BACKEND_ESP_IDF) &&                                   \
+    !defined(HAL_NETWORK_BACKEND_HOST)
 
 #include "hal/network/hal_tcp.h"
 #include "hal/network/hal_udp.h"

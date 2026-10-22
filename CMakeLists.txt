@@ -380,6 +380,17 @@ target_link_libraries(hal_mock PUBLIC jh_bearssl_host)
 
 jh_enable_host_warnings(hal_mock)
 
+# ── Host network library ──────────────────────────────────────────────────────
+# HAL_NETWORK_BACKEND_HOST over the build machine's sockets; the same library
+# function serves host tools.
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/jh_host_network.cmake)
+jh_add_host_network_library(hal_host_network)
+jh_enable_host_warnings(hal_host_network ERRORS)
+# A short first-byte timeout lets test_hal_host_network watch the server
+# close a silent client on the real clock.
+target_compile_definitions(hal_host_network PUBLIC
+    HAL_HTTP_SERVER_FIRST_BYTE_TIMEOUT_MS=300u)
+
 # ── Host FreeRTOS POSIX test library ──────────────────────────────────────────
 if(JH_ENABLE_FREERTOS_POSIX_TESTS)
     include(${CMAKE_CURRENT_SOURCE_DIR}/link_libraries/stm32_lib/freertos_stm32g474.cmake)
