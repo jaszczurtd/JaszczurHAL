@@ -20,12 +20,21 @@
         "include/jb/array.h",
         "include/jb/json.h",
         "include/jb/status.h",
+        "include/jb/unicode.h",
+        "third_party/utf8proc_version.conf",
         "third_party/unity_version.conf",
         "third_party/cppcheck_version.conf",
         "third_party/pmd_version.conf",
         "third_party/riscv_toolchain_version.conf",
         "third_party/cmake_minimum_version.conf"
       ],
+      "clean": true
+    },
+    {
+      "id": "utf8proc",
+      "label": "utf8proc",
+      "prefix": "UTF8PROC",
+      "requiredPaths": ["LICENSE.md", "utf8proc.h", "utf8proc.c", "utf8proc_data.c"],
       "clean": true
     },
     {
@@ -232,6 +241,11 @@
     "cmake-minimum"
   ],
   "jhbasePins": {
+    "utf8proc": {
+      "config": "utf8proc_version.conf",
+      "dirKey": "UTF8PROC_DIR",
+      "directory": "third_party/utf8proc"
+    },
     "unity": {
       "config": "unity_version.conf",
       "dirKey": "UNITY_DIR",
@@ -260,6 +274,7 @@
   },
   "defaultOrder": [
     "jhbase",
+    "utf8proc",
     "pcre2",
     "bearssl",
     "cjson",
@@ -282,6 +297,7 @@
   "launchers": {
     "pcre2": "ensure_pcre2.sh",
     "jhbase": "ensure_jhbase.sh",
+    "utf8proc": "ensure_utf8proc.sh",
     "bearssl": "ensure_bearssl.sh",
     "cjson": "ensure_cjson.sh",
     "lodepng": "ensure_lodepng.sh",

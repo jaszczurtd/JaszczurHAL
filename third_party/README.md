@@ -2,8 +2,8 @@
 
 This directory contains two kinds of entries:
 
-- tracked `*_version.conf` files that pin the managed components; the Unity,
-  cppcheck, PMD and RISC-V toolchain pins are not among them, because the
+- tracked `*_version.conf` files that pin the managed components; the utf8proc,
+  Unity, cppcheck, PMD and RISC-V toolchain pins are not among them, because the
   pinned jhbase checkout supplies them from its own `third_party/`;
 - git-ignored source, tool, and toolchain installations reconstructed from
   those pins.
@@ -32,7 +32,8 @@ entry point.
 
 | Component | Pin | Managed checkout | Purpose |
 |-----------|-----|------------------|---------|
-| jhbase | `jhbase_version.conf` | `jhbase/` | Basics library of the C tooling plan (UTF-8, JSON, exact numbers, writer); defines `hal_status_t` and `COUNTOF` for every HAL build, and its `third_party/*_version.conf` are the only pins of Unity, cppcheck, PMD and the RISC-V toolchain |
+| jhbase | `jhbase_version.conf` | `jhbase/` | Basics library of the C tooling plan (UTF-8, JSON, exact numbers, writer); defines `hal_status_t` and `COUNTOF` for every HAL build, and its `third_party/*_version.conf` are the only pins of utf8proc, Unity, cppcheck, PMD and the RISC-V toolchain |
+| utf8proc | `jhbase/third_party/utf8proc_version.conf` | `utf8proc/` | Optional Unicode normalization and character properties in jhbase; kept outside its clean checkout |
 | PCRE2 | `pcre2_version.conf` | `pcre2/` | Host-only regex backend for `jh` schema validation; static PCRE2-8 without JIT |
 | BearSSL | `bearssl_version.conf` | `BearSSL/` | TLS engine used by host, RP and STM32 builds |
 | cJSON | `cjson_version.conf` | `cJSON/` | JSON parser and utility API |
@@ -52,6 +53,10 @@ entry point.
 | picotool | `picotool_version.conf` | `picotool/` | Source for the native RP upload/metadata utility |
 | cppcheck | `jhbase/third_party/cppcheck_version.conf` | `cppcheck/` | Source of the static analyzer and MISRA addon used by the cppcheck gates |
 | CMake (oldest supported) | `jhbase/third_party/cmake_minimum_version.conf` | `cmake-minimum/` | Official Kitware release of the minimum every `cmake_minimum_required` declares; the `host` and `library-*` gate stages build with it (Linux) |
+
+HAL's CMake integration selects `utf8proc/` when `JHBASE_UNICODE=ON`.
+An explicit `JHBASE_UTF8PROC_DIR` overrides that path. Prepare the checkout
+with `scripts/ensure_utf8proc.sh`; CMake only verifies it.
 
 JaszczurHAL-owned BearSSL, cJSON, LodePNG, JPEG and FatFs integration wrappers,
 along with the lwIP port configuration, remain tracked in their thematic

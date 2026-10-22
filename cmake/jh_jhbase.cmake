@@ -50,6 +50,18 @@ endfunction()
 macro(jh_add_jhbase)
     if(NOT TARGET jb::status)
         jh_jhbase_dir(_jh_jb_source JHBASE_REVISION)
+        # Keep the managed jhbase checkout clean when Unicode is enabled.
+        # Callers may still select an explicit checkout with the jhbase option.
+        if(JHBASE_UNICODE AND "${JHBASE_UTF8PROC_DIR}" STREQUAL "")
+            file(READ "${_jh_jhbase_hal_root}/config/tooling/managed_components.json"
+                _jh_jb_components)
+            string(JSON _jh_jb_utf8proc_dir GET "${_jh_jb_components}"
+                jhbasePins utf8proc directory)
+            get_filename_component(JHBASE_UTF8PROC_DIR
+                "${_jh_jhbase_hal_root}/${_jh_jb_utf8proc_dir}" ABSOLUTE)
+            unset(_jh_jb_components)
+            unset(_jh_jb_utf8proc_dir)
+        endif()
         add_subdirectory("${_jh_jb_source}" "${CMAKE_BINARY_DIR}/jhbase")
         unset(_jh_jb_source)
         unset(JHBASE_REVISION)

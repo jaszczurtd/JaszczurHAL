@@ -172,6 +172,71 @@ status(HAL_OK)
 invoke(0 json validate --file "${input}" --schema "${schema}" --json)
 status(HAL_OK)
 set(checkout "${JH_WORK}/dependency check")
+# HAL must select its own utf8proc checkout: preparing one inside the managed
+# jhbase tree would make that dependency fail its source verification.
+set(unicode_source "${JH_BUILD}/unicode consumer ż")
+file(REMOVE_RECURSE "${unicode_source}")
+file(MAKE_DIRECTORY "${unicode_source}")
+file(WRITE "${unicode_source}/CMakeLists.txt"
+  "cmake_minimum_required(VERSION 3.22)\nproject(unicode_consumer C)\n"
+  "include(\"${JH_HAL_SOURCE}/cmake/jh_jhbase.cmake\")\n"
+  "set(JHBASE_UNICODE ON)\njh_add_jhbase()\n"
+  "add_executable(unicode_consumer main.c)\n"
+  "target_link_libraries(unicode_consumer PRIVATE jb::unicode)\n"
+  "enable_testing()\nadd_test(NAME nfc COMMAND unicode_consumer)\n")
+file(WRITE "${unicode_source}/main.c" [=[
+#include <jb/array.h>
+#include <jb/unicode.h>
+#include <string.h>
+int main(void) {
+    const char input[] = "e\xCC\x81";
+    const char expected[] = "\xC3\xA9";
+    int32_t scratch[8];
+    size_t required = 0, length = 0;
+    const char *text = NULL;
+    if (jb_unicode_nfc_measure(input, COUNTOF(input) - 1, 64, &required) != HAL_OK ||
+        required > COUNTOF(scratch))
+        return 1;
+    if (jb_unicode_nfc(input, COUNTOF(input) - 1, scratch, COUNTOF(scratch), 64,
+                       &text, &length) != HAL_OK)
+        return 2;
+    return length != COUNTOF(expected) - 1 ||
+           memcmp(text, expected, COUNTOF(expected) - 1) != 0;
+}
+]=])
+set(unicode_generator -G "${JH_GENERATOR}")
+if(NOT JH_PLATFORM STREQUAL "")
+  list(APPEND unicode_generator -A "${JH_PLATFORM}")
+endif()
+if(NOT JH_TOOLSET STREQUAL "")
+  list(APPEND unicode_generator -T "${JH_TOOLSET}")
+endif()
+execute_process(COMMAND "${CMAKE_COMMAND}" ${unicode_generator} -S "${unicode_source}"
+    -B "${unicode_source}/.build/invalid" -DBUILD_TESTING=OFF
+    -DJHBASE_UTF8PROC_DIR:PATH=OFF
+  RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE output)
+if(result EQUAL 0 OR NOT output MATCHES "must be an absolute path")
+  message(FATAL_ERROR "Explicit invalid utf8proc path was not rejected: ${output}")
+endif()
+execute_process(COMMAND "${CMAKE_COMMAND}" ${unicode_generator} -S "${unicode_source}"
+    -B "${unicode_source}/.build/consumer" -DBUILD_TESTING=OFF
+  RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE output)
+if(NOT result EQUAL 0)
+  message(FATAL_ERROR "HAL Unicode configure failed: ${output}")
+endif()
+execute_process(COMMAND "${CMAKE_COMMAND}" --build "${unicode_source}/.build/consumer"
+    --config "${JH_CONFIG}" --target unicode_consumer
+  RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE output)
+if(NOT result EQUAL 0)
+  message(FATAL_ERROR "HAL Unicode build failed: ${output}")
+endif()
+find_program(ctest NAMES ctest REQUIRED)
+execute_process(COMMAND "${ctest}" --test-dir "${unicode_source}/.build/consumer"
+    -C "${JH_CONFIG}" --output-on-failure
+  RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE output)
+if(NOT result EQUAL 0)
+  message(FATAL_ERROR "HAL Unicode consumer failed: ${output}")
+endif()
 file(MAKE_DIRECTORY "${checkout}/cmake" "${checkout}/third_party")
 file(COPY "${JH_HAL_SOURCE}/cmake/jh_verify_pcre2.cmake" DESTINATION "${checkout}/cmake")
 file(COPY "${JH_HAL_SOURCE}/third_party/pcre2_version.conf" DESTINATION "${checkout}/third_party")

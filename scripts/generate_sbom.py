@@ -443,6 +443,7 @@ def generate(
     output_path.write_text(
         json.dumps(bom, indent=2, sort_keys=False, ensure_ascii=False) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
 
 

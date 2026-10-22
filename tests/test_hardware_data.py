@@ -316,7 +316,7 @@ class ProjectBindingTests(unittest.TestCase):
     def test_project_type_cannot_shadow_a_hal_type(self) -> None:
         self.write("shadow.json", "jaszczurhal,gpio-output")
         error = self.expect(["shadow.json"], "/compatible")
-        self.assertIn("config/hardware/bindings", error.detail)
+        self.assertIn(str(ROOT / "config/hardware/bindings"), error.detail)
 
     def test_only_relative_single_files_are_accepted(self) -> None:
         for entry in ("/abs/led.json", "https://example.invalid/led.json", "sub\\led.json",

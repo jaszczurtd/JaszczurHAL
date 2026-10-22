@@ -2239,7 +2239,7 @@
       "supplier": {
         "name": "jaszczurtd"
       },
-      "purl": "pkg:github/jaszczurtd/jhbase@1d9fde4a3a50e612539da2d0159b4155d55181f1",
+      "purl": "pkg:github/jaszczurtd/jhbase@b26dd68822f832b16b11f39bff7f82ad866fa49a",
       "externalReferences": [
         {
           "type": "website",
@@ -2259,11 +2259,11 @@
       "properties": [
         {
           "name": "jaszczurhal:commit",
-          "value": "1d9fde4a3a50e612539da2d0159b4155d55181f1"
+          "value": "b26dd68822f832b16b11f39bff7f82ad866fa49a"
         },
         {
           "name": "jaszczurhal:notes",
-          "value": "Basics library of the C tooling plan (UTF-8, JSON, exact numbers, C literals, writer) pinned as a clean exact-commit checkout; its third_party/*_version.conf files are the only pins of Unity, cppcheck, PMD and the RISC-V toolchain. Not linked into firmware yet."
+          "value": "Basics library of the C tooling plan (UTF-8, JSON, exact numbers, C literals, writer) pinned as a clean exact-commit checkout; its third_party/*_version.conf files are the only pins of utf8proc, Unity, cppcheck, PMD and the RISC-V toolchain. Not linked into firmware yet."
         },
         {
           "name": "jaszczurhal:pin",
@@ -2272,6 +2272,68 @@
         {
           "name": "jaszczurhal:paths",
           "value": "third_party/jhbase,third_party/jhbase_version.conf"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:utf8proc@2.12.0",
+      "name": "utf8proc",
+      "version": "2.12.0",
+      "scope": "development",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        },
+        {
+          "license": {
+            "id": "Unicode-DFS-2015"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "JuliaStrings contributors and Public Software Group"
+      },
+      "purl": "pkg:github/JuliaStrings/utf8proc@79cdd5ab40c79afa559f689ffc13b76812dee1ac",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/JuliaStrings/utf8proc"
+        },
+        {
+          "type": "other",
+          "url": "third_party/utf8proc",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/utf8proc/LICENSE.md",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/jhbase/third_party/utf8proc_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:commit",
+          "value": "79cdd5ab40c79afa559f689ffc13b76812dee1ac"
+        },
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Optional NFC and character properties for jb::unicode. The only pin, including the Unicode data version, comes from jhbase; HAL prepares a separate ignored exact-commit checkout so jhbase remains clean. Not linked into firmware by HAL."
+        },
+        {
+          "name": "jaszczurhal:pin",
+          "value": "third_party/jhbase/third_party/utf8proc_version.conf"
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "third_party/utf8proc,third_party/utf8proc/LICENSE.md,third_party/jhbase/third_party/utf8proc_version.conf"
         }
       ]
     },
@@ -2400,5 +2462,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:ef861c7e-0654-7410-84df-e03a74ad9480"
+  "serialNumber": "urn:uuid:807b925a-51c3-9cbc-d547-da4a18f18c0e"
 }
