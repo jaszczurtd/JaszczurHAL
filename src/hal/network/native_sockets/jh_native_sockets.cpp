@@ -774,7 +774,50 @@ hal_status_t status_from_resolver(int resolve_status) {
   return HAL_EIO;
 }
 
+// True when an earlier node of the getaddrinfo() list already names the
+// address of @p node. Host databases may list an address more than once
+// (duplicate hosts entries, one record per socket type); the HAL promises one
+// result per address.
+bool duplicate_of_earlier(const addrinfo *head, const addrinfo *node) {
+  hal_net_endpoint_t candidate = {};
+  if (endpoint_from_sockaddr(node->ai_addr,
+                             static_cast<jh_native_socklen_t>(node->ai_addrlen),
+                             &candidate) != HAL_OK) {
+    return false;
+  }
+  for (const addrinfo *earlier = head; earlier != nullptr && earlier != node;
+       earlier = earlier->ai_next) {
+    if (!resolvable_family(earlier->ai_family)) {
+      continue;
+    }
+    hal_net_endpoint_t seen = {};
+    if (endpoint_from_sockaddr(
+            earlier->ai_addr,
+            static_cast<jh_native_socklen_t>(earlier->ai_addrlen),
+            &seen) == HAL_OK &&
+        jh_native_sockets_same_address(&seen, &candidate)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 } // namespace
+
+extern "C" bool
+jh_native_sockets_same_address(const hal_net_endpoint_t *first,
+                               const hal_net_endpoint_t *second) {
+  if (first == nullptr || second == nullptr ||
+      first->family != second->family || first->addr_len != second->addr_len ||
+      first->addr_len > sizeof(first->addr)) {
+    return false;
+  }
+  if (first->family == HAL_NET_AF_INET6 &&
+      first->scope_id != second->scope_id) {
+    return false;
+  }
+  return memcmp(first->addr, second->addr, first->addr_len) == 0;
+}
 
 extern "C" hal_status_t jh_native_sockets_initialize(void) {
   return ensure_pool();
@@ -859,7 +902,8 @@ extern "C" hal_status_t jh_native_sockets_resolve_lookup(
   size_t count = 0u;
   for (const addrinfo *current = addresses; current != nullptr;
        current = current->ai_next) {
-    if (resolvable_family(current->ai_family)) {
+    if (resolvable_family(current->ai_family) &&
+        !duplicate_of_earlier(addresses, current)) {
       ++count;
     }
   }
@@ -873,7 +917,8 @@ extern "C" hal_status_t jh_native_sockets_resolve_lookup(
   hal_status_t status = HAL_OK;
   for (const addrinfo *current = addresses; current != nullptr && index < count;
        current = current->ai_next) {
-    if (!resolvable_family(current->ai_family)) {
+    if (!resolvable_family(current->ai_family) ||
+        duplicate_of_earlier(addresses, current)) {
       continue;
     }
     status = endpoint_from_sockaddr(

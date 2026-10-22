@@ -186,6 +186,8 @@ field is in host byte order; POSIX adapters perform their own `htons()` /
   required result count without writing a partial result.
 - `hal_net_resolve_ipv4(...)` accepts a dotted IPv4 literal or hostname and
   writes four IPv4 octets. The caller keeps the transport port separately.
+- The host backend returns each address once, also when the host database
+  lists it several times or the C library repeats it per socket type.
 - The mock backend resolves IPv4 literals, `localhost`, and test entries added
   with `hal_mock_net_set_dns_entry(...)`.
 - CYW43 backends resolve numeric literals locally and use their owned lwIP

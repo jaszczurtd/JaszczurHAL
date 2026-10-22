@@ -78,6 +78,43 @@ def create_repository(path: Path, *, attributes: str = "*.txt text eol=crlf\n") 
 
 
 class GitManagerTests(unittest.TestCase):
+    @unittest.skipIf(sys.platform == "win32", "fixture requires POSIX symlinks")
+    def test_pinned_symlink_matches_blob_also_with_windows_link_separators(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repository = root / "origin"
+            repository.mkdir()
+            git(repository, "init", "-q")
+            git(repository, "config", "user.name", "JaszczurHAL Test")
+            git(repository, "config", "user.email", "test@jaszczurhal.invalid")
+            (repository / "docs").mkdir()
+            (repository / "CODE_OF_CONDUCT.rst").write_text("conduct\n", encoding="utf-8")
+            (repository / "docs" / "conduct.rst").symlink_to("../CODE_OF_CONDUCT.rst")
+            git(repository, "add", ".")
+            git(repository, "commit", "-q", "-m", "fixture")
+            head = git(repository, "rev-parse", "HEAD")
+            checkout = root / "checkout"
+            git(root, "clone", "-q", str(repository), str(checkout))
+            problem = manager._git_source_problem(checkout, str(repository), head)
+            self.assertEqual("", problem)
+
+            # Git for Windows stores the link target with backslashes; the blob
+            # keeps '/'. The verifier must compare the Git form.
+            real_readlink = os.readlink
+
+            def windows_readlink(path, *arguments, **options):
+                return real_readlink(path, *arguments, **options).replace("/", "\\")
+
+            with mock.patch.object(manager, "_WINDOWS", True), \
+                    mock.patch.object(manager.os, "readlink", windows_readlink):
+                self.assertEqual("", manager._git_source_problem(checkout, str(repository), head))
+            with mock.patch.object(manager, "_WINDOWS", False), \
+                    mock.patch.object(manager.os, "readlink", windows_readlink):
+                self.assertIn(
+                    "source bytes differ",
+                    manager._git_source_problem(checkout, str(repository), head),
+                )
+
     def test_text_auto_respects_core_eol_without_relaxing_binary_or_lf_checks(self) -> None:
         with tempfile.TemporaryDirectory(prefix="jh-component-eol-") as text:
             root = Path(text)

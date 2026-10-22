@@ -195,6 +195,8 @@ granicy API.
 - `hal_net_resolve_ipv4(...)` przyjmuje dosłowny zapis IPv4 z kropkami lub
   nazwę hosta i zapisuje cztery oktety IPv4. Wywołujący przechowuje port
   transportowy osobno.
+- Backend hostowy zwraca każdy adres raz, także gdy baza hostów wymienia go
+  kilka razy albo biblioteka C powtarza go dla każdego typu gniazda.
 - Implementacja testowa rozpoznaje dosłowne adresy IPv4, `localhost` oraz wpisy
   testowe dodane przez `hal_mock_net_set_dns_entry(...)`.
 - Backendy CYW43 rozpoznają dosłowne adresy numeryczne lokalnie, natomiast

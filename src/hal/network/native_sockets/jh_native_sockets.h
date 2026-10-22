@@ -18,6 +18,7 @@
 
 #include "hal/network/jh_network_backend.h"
 
+#include <stdbool.h>
 #include <stddef.h>
 
 #ifdef __cplusplus
@@ -67,12 +68,23 @@ hal_status_t jh_native_sockets_resolve_validate(
     const hal_net_endpoint_t *results, size_t capacity, size_t *out_count);
 
 /**
+ * @brief Tell whether two endpoints name the same address.
+ *
+ * Compares the family, the address bytes and, for IPv6, the scope; ports are
+ * ignored. A NULL endpoint never equals anything.
+ */
+bool jh_native_sockets_same_address(const hal_net_endpoint_t *first,
+                                    const hal_net_endpoint_t *second);
+
+/**
  * @brief Resolve @p hostname through the native getaddrinfo().
  *
  * Call after jh_native_sockets_resolve_validate() and the backend's own
- * readiness checks. Results carry port 0.
- * @param out_count Number of IPv4/IPv6 addresses found, also on HAL_EOVERFLOW,
- *        where nothing is written to @p results.
+ * readiness checks. Results carry port 0 and hold each address once, also when
+ * the host database lists it several times (duplicate hosts entries, one
+ * record per socket type).
+ * @param out_count Number of distinct IPv4/IPv6 addresses found, also on
+ *        HAL_EOVERFLOW, where nothing is written to @p results.
  * @return HAL_OK, HAL_EOVERFLOW, HAL_ENOENT for an unknown name, HAL_EAGAIN
  *         for a temporary resolver failure, HAL_ENOMEM, HAL_EUNSUPPORTED or
  *         HAL_EIO.
