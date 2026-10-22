@@ -2,7 +2,8 @@
 #if HAL_TARGET_IS_MOCK
 #include "hal/core/hal_config.h"
 
-#ifdef HAL_ENABLE_TCP
+/* The host backend uses the shared TCP facade over operating system sockets. */
+#if defined(HAL_ENABLE_TCP) && !defined(HAL_NETWORK_BACKEND_HOST)
 
 #include "hal/network/hal_tcp.h"
 #include "hal/network/jh_net_address_utils.h"
@@ -613,6 +614,15 @@ uint16_t hal_mock_tcp_listener_get_local_port(hal_tcp_listener_t listener) {
     return 0u;
   }
   return listener->local_endpoint.port;
+}
+
+bool hal_mock_tcp_listener_get_local_endpoint(hal_tcp_listener_t listener,
+                                              hal_net_endpoint_t *out) {
+  if (!is_valid_listener(listener) || out == NULL) {
+    return false;
+  }
+  *out = listener->local_endpoint;
+  return true;
 }
 
 uint8_t hal_mock_tcp_listener_get_backlog(hal_tcp_listener_t listener) {

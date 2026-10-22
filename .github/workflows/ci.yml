@@ -33,7 +33,7 @@ jobs:
           path: |
             third_party/esp-idf
             ~/.espressif
-          key: esp-idf-${{ runner.os }}-${{ hashFiles('third_party/esp_idf_version.conf', 'security/esp_idf_tools.json') }}
+          key: esp-idf-${{ runner.os }}-${{ hashFiles('third_party/esp_idf_version.conf', 'security/esp_idf_tools.json', 'scripts/component_manager.py', 'scripts/build_esp_idf.py') }}
 
       - name: Cache authenticated Windows tools
         uses: actions/cache@v5
@@ -315,12 +315,12 @@ jobs:
           & $state.tools.cmake --build $build --parallel 2 `
             --target test_host_compiler_smoke test_cpu_only_bss `
               test_hal_config_headers_c test_hal_config_headers_cpp `
-              test_bsd_socket_headers_c
+              test_bsd_socket_headers_c test_hal_host_network
           if ($LASTEXITCODE -ne 0) { throw 'MSVC host API tests failed to compile.' }
 
           $ctest = Join-Path (Split-Path -Parent $state.tools.cmake) 'ctest.exe'
           & $ctest --test-dir $build --output-on-failure `
-            -R '^(test_host_compiler_smoke|test_cpu_only_bss|test_hal_config_headers_c|test_hal_config_headers_cpp|test_bsd_socket_headers_c)$'
+            -R '^(test_host_compiler_smoke|test_cpu_only_bss|test_hal_config_headers_c|test_hal_config_headers_cpp|test_bsd_socket_headers_c|test_hal_host_network)$'
           if ($LASTEXITCODE -ne 0) { throw 'MSVC host API tests failed.' }
           $inventory = (& $ctest --test-dir $build --show-only=json-v1 |
             Out-String) | ConvertFrom-Json
@@ -497,7 +497,7 @@ jobs:
           path: |
             third_party/esp-idf
             ~/.espressif
-          key: esp-idf-${{ runner.os }}-${{ hashFiles('third_party/esp_idf_version.conf', 'security/esp_idf_tools.json') }}
+          key: esp-idf-${{ runner.os }}-${{ hashFiles('third_party/esp_idf_version.conf', 'security/esp_idf_tools.json', 'scripts/component_manager.py', 'scripts/build_esp_idf.py') }}
 
       # The NVD mirror is not always reachable. A daily cache keeps the full
       # download to one per day, and restore-keys hand the scan the last good

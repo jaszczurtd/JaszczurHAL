@@ -10,6 +10,7 @@ import io
 import json
 import os
 from pathlib import Path
+import py_compile
 import re
 import shlex
 import subprocess
@@ -63,12 +64,12 @@ def git(directory: Path, *arguments: str) -> str:
     return result.stdout.strip()
 
 
-def create_repository(path: Path) -> str:
+def create_repository(path: Path, *, attributes: str = "*.txt text eol=crlf\n") -> str:
     path.mkdir()
     git(path, "init", "-q")
     git(path, "config", "user.name", "JaszczurHAL Test")
     git(path, "config", "user.email", "test@jaszczurhal.invalid")
-    (path / ".gitattributes").write_text("*.txt text eol=crlf\n", encoding="utf-8")
+    (path / ".gitattributes").write_text(attributes, encoding="utf-8")
     (path / "payload.txt").write_text("one\n", encoding="utf-8")
     (path / "source ż.txt").write_text("quoted path\n", encoding="utf-8")
     git(path, "add", ".")
@@ -77,6 +78,93 @@ def create_repository(path: Path) -> str:
 
 
 class GitManagerTests(unittest.TestCase):
+    def test_text_auto_respects_core_eol_without_relaxing_binary_or_lf_checks(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="jh-component-eol-") as text:
+            root = Path(text)
+            config = root / "gitconfig"
+            config.write_text("[core]\n\teol = crlf\n\tautocrlf = false\n", encoding="utf-8")
+            with mock.patch.dict(os.environ, {"GIT_CONFIG_GLOBAL": str(config), "GIT_CONFIG_NOSYSTEM": "1"}):
+                upstream = root / "upstream"
+                create_repository(upstream, attributes="* text=auto\nlf.txt text eol=lf\nbinary.bin -text\n")
+                for name in (".editorconfig", "lf.txt", "binary.bin"):
+                    (upstream / name).write_bytes(b"first\nsecond\n")
+                git(upstream, "add", ".")
+                git(upstream, "commit", "-q", "-m", "text attributes")
+                reference = git(upstream, "rev-parse", "HEAD")
+                repository = upstream.resolve().as_uri()
+                checkout = root / "checkout"
+                manager.sync_git_checkout(repository, reference, checkout, clean=True)
+                self.assertEqual((checkout / ".editorconfig").read_bytes(), b"first\r\nsecond\r\n")
+                self.assertEqual(git(checkout, "config", "core.autocrlf"), "false")
+                manager.sync_git_checkout(repository, reference, checkout, verify_only=True)
+                for name in ("lf.txt", "binary.bin"):
+                    with self.subTest(name=name):
+                        self.assertEqual((checkout / name).read_bytes(), b"first\nsecond\n")
+                        (checkout / name).write_bytes(b"first\r\nsecond\r\n")
+                        with self.assertRaisesRegex(manager.ComponentError, "source bytes"):
+                            manager.sync_git_checkout(repository, reference, checkout, verify_only=True)
+                        (checkout / name).write_bytes(b"first\nsecond\n")
+
+    def test_managed_sdk_recovers_legacy_bytecode_without_cleaning_source_edits(self) -> None:
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import build_esp_idf
+
+        with tempfile.TemporaryDirectory(prefix="jh-component-sdk-cache-") as text:
+            root = Path(text)
+            upstream = root / "upstream"
+            create_repository(upstream)
+            (upstream / ".gitignore").write_text("__pycache__/\n", encoding="utf-8")
+            (upstream / "module.py").write_text("VALUE = 1\n", encoding="utf-8")
+            git(upstream, "add", ".")
+            git(upstream, "commit", "-q", "-m", "SDK Python fixture")
+            repository = upstream.resolve().as_uri()
+            git(upstream, "-c", "protocol.file.allow=always", "submodule", "add", "-q", repository, "component")
+            git(upstream, "commit", "-q", "-am", "SDK submodule fixture")
+            reference = git(upstream, "rev-parse", "HEAD")
+            (root / "third_party").mkdir()
+            (root / "third_party/esp_idf_version.conf").write_text(
+                f"ESP_IDF_REPO={repository}\nESP_IDF_REF={reference}\n"
+                "ESP_IDF_VERSION=6.0.2\nESP_IDF_DIR=third_party/esp-idf\n", encoding="utf-8")
+            spec = manager.GitComponent("esp-idf", "SDK fixture", "esp_idf_version.conf", "ESP_IDF", ("module.py",), recursive_submodules=True)
+            with mock.patch.dict(manager.GIT_COMPONENTS, {"esp-idf": spec}), \
+                    mock.patch.dict(os.environ, {"GIT_ALLOW_PROTOCOL": "file"}), \
+                    mock.patch.object(build_esp_idf, "component_manager", manager), \
+                    mock.patch.object(manager, "ensure_esp_idf_tools"):
+                checkout = manager.ensure_git_component("esp-idf", root, verify_only=False)
+                cache = checkout / "__pycache__/module.cpython-312.pyc"
+                cache.parent.mkdir()
+                py_compile.compile(str(checkout / "module.py"), cfile=str(cache), doraise=True)
+                child_cache = checkout / "component/__pycache__/module.cpython-313.opt-1.pyc"
+                child_cache.parent.mkdir()
+                py_compile.compile(str(checkout / "component/module.py"), cfile=str(child_cache), doraise=True)
+                expected = cache.read_bytes()
+                for external in ("", str(checkout)):
+                    with self.subTest(external=external):
+                        with self.assertRaisesRegex(manager.ComponentError, "local changes"):
+                            manager.ensure_git_component("esp-idf", root, verify_only=True, directory_override=external)
+                        self.assertEqual(cache.read_bytes(), expected)
+                with self.assertRaisesRegex(manager.ComponentError, "local changes"):
+                    manager.ensure_git_component("esp-idf", root, verify_only=False, directory_override=str(checkout))
+                self.assertEqual(cache.read_bytes(), expected)
+                self.assertEqual(build_esp_idf.prepare_sdk(root, ""), checkout)
+                self.assertFalse(cache.exists())
+                self.assertFalse(child_cache.exists())
+                manager.ensure_git_component("esp-idf", root, verify_only=True)
+                # A cache entry may be removed; local sources and unrelated
+                # files must survive, and still prevent a build.
+                cache.parent.mkdir(exist_ok=True)
+                cache.write_bytes(expected)
+                (cache.parent / "keep.txt").write_text("local data", encoding="utf-8")
+                orphan = cache.parent / "missing.cpython-312.pyc"
+                orphan.write_bytes(expected)
+                git(checkout, "update-index", "--assume-unchanged", "module.py")
+                (checkout / "module.py").write_text("VALUE = 2\n", encoding="utf-8")
+                with self.assertRaises(manager.ComponentError):
+                    build_esp_idf.prepare_sdk(root, "")
+                self.assertEqual((checkout / "module.py").read_text(), "VALUE = 2\n")
+                self.assertEqual((cache.parent / "keep.txt").read_text(), "local data")
+                self.assertEqual(orphan.read_bytes(), expected)
+
     def test_verify_distinguishes_missing_and_non_git_checkouts(self) -> None:
         with tempfile.TemporaryDirectory(prefix="jh-component-state-") as text:
             temporary = Path(text)
@@ -1208,6 +1296,9 @@ class TrackedContractTests(unittest.TestCase):
         self.assertIn("test_host_compiler_smoke.cpp", workflow)
         self.assertIn("@('/W4', '/permissive-', '/WX')", workflow)
         self.assertIn("--target test_host_compiler_smoke", workflow)
+        # The host network backend runs over Winsock only in this job.
+        self.assertIn("test_bsd_socket_headers_c test_hal_host_network", workflow)
+        self.assertIn("|test_hal_host_network)$'", workflow)
 
     def test_source_component_command_excludes_host_tool_archives(self) -> None:
         parser = manager.build_parser()

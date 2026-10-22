@@ -18,6 +18,11 @@ jh_network_architecture_fill(hal_system_architecture_t *architecture) {
   architecture->network_backend_name = "mock-host-stack";
   architecture->network_stack_name = "mock";
   architecture->network_stack_type = HAL_SYSTEM_NETWORK_STACK_TYPE_HOST;
+#elif defined(HAL_ENABLE_NETWORK_CORE) && defined(HAL_NETWORK_BACKEND_HOST)
+  architecture->network_backend_name = "host-sockets";
+  architecture->network_stack_name = "host system";
+  architecture->network_stack_type =
+      HAL_SYSTEM_NETWORK_STACK_TYPE_SOCKET_OFFLOAD;
 #elif defined(HAL_ENABLE_NETWORK_CORE) && defined(HAL_NETWORK_BACKEND_ESP_AT)
   architecture->network_backend_name = "esp-at";
   architecture->network_stack_name = "ESP-AT";

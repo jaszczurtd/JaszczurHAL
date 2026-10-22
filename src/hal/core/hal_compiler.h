@@ -129,7 +129,7 @@
 /** @def HAL_PACKED
  *  @brief Removes padding from a structure definition.
  *
- *  MSVC has no packing attribute, so the pragma pair is part of the contract.
+ *  MSVC has no packing attribute, so use the pragma pair shown below.
  *  Wrap every packed definition:
  *  @code
  *  HAL_PACKED_BEGIN

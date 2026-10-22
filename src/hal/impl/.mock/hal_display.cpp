@@ -57,8 +57,7 @@ static void copy_text(char *dst, size_t dst_size, const char *src) {
     dst[0] = '\0';
     return;
   }
-  strncpy(dst, src, dst_size - 1);
-  dst[dst_size - 1] = '\0';
+  (void)snprintf(dst, dst_size, "%s", src);
 }
 
 #ifdef HAL_ENABLE_TFT

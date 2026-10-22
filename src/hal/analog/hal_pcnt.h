@@ -7,7 +7,7 @@
  * Opt-in module: enable with `HAL_ENABLE_PCNT`.
  *
  * Counts edges on an input pin into a free-running 32-bit counter. The backend
- * strategy differs per target but the contract is identical:
+ * strategy differs per target but the API behaves identically:
  *   - STM32G474 : hardware timer in external-clock mode (channel 0 = TIM2 on
  *                 PA0) - zero CPU per edge, high input frequency.
  *   - RP2040    : software counter driven by a GPIO edge interrupt - simple and

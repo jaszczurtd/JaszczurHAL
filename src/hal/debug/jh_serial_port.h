@@ -6,7 +6,7 @@
 
 /**
  * @file jh_serial_port.h
- * @brief Internal link-time transport contract for the shared serial/debug
+ * @brief Internal link-time transport interface for the shared serial/debug
  * core.
  *
  * Exactly one target port implements these operations in a firmware or host

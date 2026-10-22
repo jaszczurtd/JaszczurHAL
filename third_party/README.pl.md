@@ -63,8 +63,9 @@ drzewa źródeł projektów zewnętrznych. Każdy przypięty checkout musi być 
 katalogiem roboczym z dokładnie wskazanym commitem: tryb `verify-only` odrzuca
 zmiany lokalne oraz pliki nieśledzone i ignorowane przez Git, także w submodułach.
 Odczytuje rzeczywiste pliki i porównuje ich hashe blobów Git z pinem, więc
-`assume-unchanged` i `skip-worktree` nie ukrywają zmian. Obsługuje deklarowane
-checkouty z CRLF; nie uruchamia filtrów Git clean/process ani nie odświeża
+`assume-unchanged` i `skip-worktree` nie ukrywają zmian. Obsługuje
+checkouty z CRLF wybrane przez atrybuty Git `text`/`eol` i ustawienia
+`core.autocrlf`/`core.eol`; nie uruchamia filtrów Git clean/process ani nie odświeża
 indeksu. Zainicjowane submoduły sprawdza rekurencyjnie względem przypiętych
 commitów i adresów repozytoriów. Niezainicjowane, nieużywane katalogi submodułów
 muszą pozostać puste.
@@ -130,8 +131,11 @@ wykonać `source third_party/esp-idf/export.sh`.
 
 Manager i skrypt buildu kierują bytecode Pythona do `.build/python-cache`
 (albo jawnie ustawionego `PYTHONPYCACHEPREFIX`), zamiast zapisywać go w SDK.
-Weryfikacja wyłącza zapis bytecode. Przed sprawdzeniem checkoutu usuń stare
-katalogi `__pycache__` znajdujące się wewnątrz zależności.
+Weryfikacja wyłącza zapis bytecode. Zwykłe przygotowanie zarządzanego checkoutu
+ESP-IDF usuwa stare, nieśledzone pliki cache CPythona z `__pycache__`, jeśli
+ich źródło Python jest śledzone w Gicie; obejmuje to zainicjowane submoduły.
+Pozostawia inne pliki i lokalne edycje źródeł, które nadal zatrzymują weryfikację.
+Tryb verify-only i zewnętrzne checkouty pozostają tylko do odczytu.
 
 Skrypt buildu produkcyjnego przyjmuje katalog projektu, wyznacza
 target `esp32s3` i płytkę `waveshare-esp32-s3-zero`, przygotowuje środowisko SDK

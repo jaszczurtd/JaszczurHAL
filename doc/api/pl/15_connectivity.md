@@ -157,8 +157,8 @@ zgłaszane jako `HAL_EIO`. Pełne sygnatury znajdziesz w publicznych nagłówkac
 uchwytach API UDP i TCP oraz warstw zgodności BSD/POSIX. Struktura punktu
 końcowego przechowuje adres IPv4 lub IPv6 wraz z oznaczeniem jego rodziny.
 Obecne backendy CYW43 zgłaszają obsługę IPv4. ESP32-S3 zgłasza rodziny włączone w
-swojej konfiguracji ESP-IDF lwIP; nieobsługiwane rodziny zwracają
-`HAL_EUNSUPPORTED`.
+swojej konfiguracji ESP-IDF lwIP, a backend hostowy obie. Nieobsługiwane
+rodziny zwracają `HAL_EUNSUPPORTED`.
 
 ```c
 #include <hal/network/hal_net.h>
@@ -224,6 +224,8 @@ granicy API.
   wymaga zainicjalizowanego sprzętu; analiza adresu dosłownego go nie wymaga.
 - ESP32-S3 rozwiązuje nazwy przez natywną ścieżkę `getaddrinfo()` ESP-IDF
   lwIP, gdy WiFi/`esp_netif` osiągnie stan gotowości.
+- Backend hostowy sam rozpoznaje dosłowne adresy IPv4 i IPv6, a nazwy hostów
+  rozwiązuje przez `getaddrinfo()` systemu operacyjnego.
 
 **Funkcje testowe rozwiązywania nazw:**
 ```c
@@ -240,7 +242,7 @@ połączenia i rozłączenia stacji, przydzielenia adresu IPv4, skanowania,
 uwierzytelniania, braku sieci, ponownego łączenia i zamknięcia. Uchwyty TCP i UDP są przydzielane
 z pul o stałej pojemności, a liczniki generacji chronią przed użyciem
 nieaktualnego uchwytu. Pod tą warstwą działają natywne gniazda lwIP oraz
-`select()`. `HAL_ENABLE_BSD_SOCKETS` udostępnia natywne API BSD z ESP-IDF,
+`select()`; ten sam kod gniazd wykorzystuje backend hostowy. `HAL_ENABLE_BSD_SOCKETS` udostępnia natywne API BSD z ESP-IDF,
 zamiast ponownie definiować wspólne symbole warstwy zgodności.
 
 W ramach tego samego grafu zależności budowane są: wspólny klient TLS BearSSL,
@@ -251,7 +253,55 @@ API nie udostępnia serwera TLS, serwera HTTPS ani WSS, ani klienta WebSocket.
 `tests/fixtures/esp32s3_phase3` sprawdza wyliczanie zestawu funkcji, dobór
 plików źródłowych i zależności, kompilację, linkowanie, partycje oraz artefakty.
 Nie weryfikuje działania na sprzęcie, cyklu życia, rollbacku ani zachowania
-w negatywnych testach bezpieczeństwa.
+w negatywnych testach bezpieczeństwa. Test sprzętowy
+`tests/hardware/esp32s3_network` uruchamia na płytce cykl życia WiFi,
+resolver, gniazda UDP i TCP oraz serwery HTTP i WebSocket z fixture'em na
+komputerze; TLS, MQTT, OTA i WireGuard nadal wymagają testów sprzętowych.
+
+### Backend hostowy dla programów i narzędzi
+
+`HAL_NETWORK_BACKEND_HOST` uruchamia moduły sieciowe HAL w programie na
+komputerze deweloperskim. Uchwyty TCP i UDP, resolver, serwer HTTP,
+udostępnianie plików i serwer WebSocket działają wtedy na gniazdach systemu
+operacyjnego: POSIX w Linuksie i Winsock w Windows. Backend wymaga
+`HAL_TARGET_MOCK`, który dostarcza resztę środowiska hosta. Narzędzie może więc
+udostępnić stronę albo strumień danych na `127.0.0.1` tym samym API, którego
+urządzenie używa w sieci WiFi.
+
+CMake buduje bibliotekę jednym wywołaniem; testy hostowe HAL linkują tę samą
+bibliotekę:
+
+```cmake
+include(${JASZCZURHAL_ROOT}/cmake/jh_jhbase.cmake)
+include(${JASZCZURHAL_ROOT}/cmake/jh_host_network.cmake)
+jh_add_jhbase()
+jh_add_host_network_library(my_tool_hal)
+target_link_libraries(my_tool PRIVATE my_tool_hal)
+```
+
+Biblioteka włącza `HAL_ENABLE_TCP`, `HAL_ENABLE_UDP`,
+`HAL_ENABLE_HTTP_SERVER`, `HAL_ENABLE_HTTP_FILES` i `HAL_ENABLE_WEBSOCKET`,
+wybiera `HAL_HOST_REAL_TIME`, a w Windows linkuje `ws2_32`. Narzędzie podnosi
+statyczne limity na swoim targecie biblioteki, na przykład
+`target_compile_definitions(my_tool_hal PUBLIC HAL_WEBSOCKET_MAX_PAYLOAD_SIZE=8192u)`.
+
+Różnice względem urządzenia:
+
+- Łączem sieciowym zarządza system operacyjny. Funkcje `hal_wifi` zwracają
+  `HAL_EUNSUPPORTED`, a `hal_wifi_is_connected()` zwraca `false`.
+- Program korzysta z systemowego API gniazd BSD, dlatego kompilacja odrzuca
+  `HAL_ENABLE_BSD_SOCKETS`. WireGuard nie jest dostępny.
+- Winsock startuje przy pierwszej operacji na gnieździe i działa do końca
+  procesu.
+- Procesy potomne uruchamiane przez program nie dziedziczą gniazd HAL.
+- Nasłuchiwacz może ponownie zająć swój port zaraz po zamknięciu poprzedniego.
+  W Windows adres jest zajmowany na wyłączność, więc inny proces go nie
+  przejmie.
+- Z `HAL_HOST_REAL_TIME` funkcje `hal_millis()`, `hal_micros()`
+  i `hal_micros64()` liczą czas od pierwszego wywołania według monotonicznego
+  zegara hosta, a `hal_delay_ms()` i `hal_delay_us()` usypiają wątek, więc
+  timeouty serwerów HTTP i WebSocket biegną w czasie rzeczywistym. Funkcji
+  czasu mocka (`hal_mock_set_millis()` i podobnych) w tym buildzie nie ma.
 
 <a id="hal_wifi---wifi--opcjonalny---hal_enable_wifi"></a>
 
@@ -708,6 +758,7 @@ hal_status_t hal_http_server_route_prefix(hal_http_method_t method,
                                           void *user);
 void hal_http_server_clear_routes(void);
 hal_status_t hal_http_server_start(uint16_t port);
+hal_status_t hal_http_server_start_ex(const hal_net_endpoint_t *local);
 void hal_http_server_stop(void);
 bool hal_http_server_is_running(void);
 void hal_http_server_poll(void);
@@ -761,6 +812,26 @@ for (;;) {
 }
 ```
 
+`hal_http_server_start(port)` nasłuchuje na wszystkich interfejsach IPv4.
+`hal_http_server_start_ex()` przyjmuje jeden adres lokalny. Adres loopback
+sprawia, że serwer jest osiągalny tylko z tego samego komputera, co pasuje do
+narzędzi hostowych:
+
+```c
+hal_net_endpoint_t local = {0};
+local.family = HAL_NET_AF_INET;
+local.addr_len = HAL_NET_IPV4_ADDR_LEN;
+local.addr[0] = 127u;
+local.addr[3] = 1u;
+local.port = 8080u;
+hal_status_t status = hal_http_server_start_ex(&local);
+```
+
+Obie funkcje zwracają `HAL_EINVAL` dla portu 0 albo błędnego adresu,
+`HAL_EUNSUPPORTED`, gdy backend nie obsługuje rodziny adresów, oraz
+`HAL_EBUSY`, gdy adres jest już zajęty. Gdy serwer działa, kolejne
+uruchomienie zwraca `HAL_OK` i zachowuje dotychczasowy nasłuchiwacz.
+
 Domyślne limity statyczne można nadpisać przed dołączeniem nagłówków HAL:
 
 ```c
@@ -792,7 +863,8 @@ Odrzucony zapis pozostawia dotychczasową treść i jej długość bez zmian.
 
 - **Wspólna implementacja modułu:** `hal/network/http/hal_http_server.cpp`.
 - **impl/.mock:** `test_hal_http_server` korzysta z testowego backendu
-  nasłuchiwacza i gniazda TCP.
+  nasłuchiwacza i gniazda TCP; `test_hal_host_network` obsługuje żądanie przez
+  backend hostowy na `127.0.0.1`.
 
 ---
 
@@ -1000,6 +1072,8 @@ hal_status_t hal_websocket_server_set_callbacks(
     const hal_websocket_callbacks_t *callbacks,
     void *user);
 hal_status_t hal_websocket_server_start(uint16_t port, const char *path);
+hal_status_t hal_websocket_server_start_ex(const hal_net_endpoint_t *local,
+                                          const char *path);
 void hal_websocket_server_stop(void);
 bool hal_websocket_server_is_running(void);
 void hal_websocket_server_poll(void);
@@ -1046,6 +1120,11 @@ for (;;) {
 }
 ```
 
+`hal_websocket_server_start(port, path)` nasłuchuje na wszystkich interfejsach
+IPv4, a `hal_websocket_server_start_ex(&local, path)` na jednym adresie
+lokalnym, na przykład `127.0.0.1`, z takimi samymi wynikami jak
+`hal_http_server_start_ex()`. Serwer kopiuje adres i ścieżkę.
+
 Rozgłaszanie telemetrii:
 
 ```c
@@ -1066,7 +1145,8 @@ Domyślne limity statyczne można nadpisać przed dołączeniem nagłówków HAL
 
 - **Wspólna implementacja modułu:** `hal/network/websocket/hal_websocket.cpp`.
 - **impl/.mock:** `test_hal_websocket` korzysta z testowego backendu
-  nasłuchiwacza i gniazda TCP.
+  nasłuchiwacza i gniazda TCP; `test_hal_host_network` wykonuje handshake
+  i rozgłoszenie przez backend hostowy na `127.0.0.1`.
 
 ---
 
@@ -1595,10 +1675,16 @@ bool     hal_udp_end_packet(void);
 - **impl/.mock:** deterministyczna implementacja testowa obsługująca wiele
   gniazd, wstrzykiwane pakiety przychodzące oraz rejestrowanie metadanych
   i zawartości pakietów wychodzących.
+- **backend hostowy:** pula gniazd wspólna z backendem ESP32, działająca nad
+  gniazdami UDP systemu operacyjnego (`poll()` w POSIX albo `select()` w
+  Winsock). Starsze API jednego gniazda nie jest dostępne. Datagram dłuższy
+  niż bufor zostaje obcięty do rozmiaru bufora i usunięty z kolejki, tak samo
+  w Linuksie i Windows.
 
 **Współbieżność:** Backendy rodziny RP i ESP32-S3 pozwalają
 bezpiecznie korzystać z publicznego API z wielu wątków i rdzeni. Muteksy
 poszczególnych backendów chronią ich statyczne pule UDP oraz operacje stosu.
+Backend hostowy korzysta z tych samych muteksów fasady i puli gniazd.
 
 **Pomocnicy mock:**
 ```c
@@ -1720,14 +1806,22 @@ void hal_tcp_listener_close(hal_tcp_listener_t listener);
 - **impl/esp32:** ograniczona pula uchwytów HAL nad natywnymi gniazdami TCP
   lwIP z ESP-IDF. Obejmuje połączenie z timeoutem, operacje
   `bind`/`listen`/`accept`, zamykanie oraz sprawdzanie gotowości przez `select()`.
+  Gniazda pozostają nieblokujące: wysyłanie do odbiorcy, który przestał
+  czytać, zwraca częściową liczbę bajtów albo `HAL_EAGAIN`, zamiast wstrzymać
+  wywołującego.
 - **impl/.mock:** deterministyczna implementacja testowa klienta
   i nasłuchiwacza. Pozwala ustawić wynik połączenia, wstrzykiwać bajty RX,
   rejestrować zawartość TX i zdalny punkt końcowy oraz utrzymuje osobną kolejkę
   oczekujących klientów dla każdego nasłuchiwacza.
+- **backend hostowy:** pula gniazd wspólna z backendem ESP32, działająca nad
+  gniazdami TCP systemu operacyjnego, z tym samym połączeniem z timeoutem,
+  operacjami `bind`/`listen`/`accept`, sprawdzaniem gotowości i nieblokującym
+  wysyłaniem; `test_hal_host_network` uruchamia ją na loopbacku.
 
 **Współbieżność:** Backendy rodziny RP i ESP32-S3 pozwalają
 bezpiecznie korzystać z publicznego API z wielu wątków i rdzeni. Muteksy
 poszczególnych backendów chronią ich statyczne pule TCP oraz operacje stosu.
+Backend hostowy korzysta z tych samych muteksów fasady i puli gniazd.
 
 **Pomocnicy mock:**
 ```c

@@ -1,7 +1,8 @@
 #include "hal/core/hal_config.h"
 
 #if defined(HAL_ENABLE_WIFI) && (defined(HAL_NETWORK_BACKEND_CYW43) ||         \
-                                 defined(HAL_NETWORK_BACKEND_ESP_IDF))
+                                 defined(HAL_NETWORK_BACKEND_ESP_IDF) ||       \
+                                 defined(HAL_NETWORK_BACKEND_HOST))
 
 #include "hal/network/hal_net.h"
 #include "hal/network/jh_net_address_utils.h"
@@ -88,7 +89,7 @@ hal_status_t hal_net_resolve_ex(const char *host_or_ip,
     return HAL_OK;
   }
   if (strchr(host_or_ip, ':') != nullptr) {
-#if defined(HAL_NETWORK_BACKEND_ESP_IDF)
+#if defined(HAL_NETWORK_BACKEND_ESP_IDF) || defined(HAL_NETWORK_BACKEND_HOST)
     hal_net_endpoint_t ipv6_literal = {};
     if (!jh_net_parse_ipv6_literal(host_or_ip, ipv6_literal.addr,
                                    &ipv6_literal.scope_id, true)) {

@@ -321,11 +321,14 @@ def _git_crlf_paths(directory: Path, names: Sequence[str]) -> set[str]:
     properties: dict[str, dict[str, str]] = {}
     for name, attribute, value in zip(fields[0::3], fields[1::3], fields[2::3]):
         properties.setdefault(name, {})[attribute] = value
-    autocrlf = _git_output(directory, "config", "--get", "core.autocrlf", check=False) == "true"
+    autocrlf = _git_output(directory, "config", "--get", "core.autocrlf", check=False).lower()
+    eol = _git_output(directory, "config", "--get", "core.eol", check=False) or "native"
+    configured_crlf = eol == "crlf" or (eol == "native" and os.linesep == "\r\n")
     return {
         name for name, attributes in properties.items()
         if attributes["text"] != "unset" and attributes["eol"] != "lf"
-        and (attributes["eol"] == "crlf" or autocrlf)
+        and (attributes["eol"] == "crlf" or autocrlf in ("true", "yes", "on", "1")
+             or (autocrlf != "input" and configured_crlf and attributes["text"] in ("set", "auto")))
     }
 
 
@@ -413,6 +416,52 @@ def _git_source_problem(directory: Path, repository: str, reference: str) -> str
         elif any(path.iterdir()):
             return f"Unused submodule contains unverified files: {path}"
     return ""
+
+
+def _remove_legacy_python_bytecode(directory: Path) -> int:
+    """Remove only untracked CPython cache files of tracked SDK Python sources.
+
+    Preparation of the managed ESP-IDF checkout calls this migration; external
+    checkouts and verify-only calls never do. Keep unrelated files and links.
+    """
+    def local_path(path: Path) -> bool:
+        relative = path.relative_to(directory)
+        return not any((directory / parent).is_symlink() for parent in (relative, *relative.parents))
+
+    entries = _git_output(directory, "ls-files", "--stage", "-z").split("\0")
+    tracked: set[str] = set()
+    modules: list[Path] = []
+    for entry in entries:
+        if entry:
+            metadata, name = entry.split("\t", 1)
+            tracked.add(name)
+            if metadata.startswith("160000 "):
+                modules.append(directory / name)
+    removed = 0
+    for name in _git_output(directory, "ls-files", "--others", "-z").split("\0"):
+        path = directory / name
+        match = re.fullmatch(r"(.+)\.cpython-[0-9]+(?:\.opt-[0-9]+)?\.pyc", path.name)
+        if not match or path.parent.name != "__pycache__":
+            continue
+        if not local_path(path):
+            continue
+        source = path.parent.parent / (match[1] + ".py")
+        if source.relative_to(directory).as_posix() not in tracked or not source.is_file() or not path.is_file():
+            continue
+        try:
+            path.unlink()
+        except OSError as error:
+            raise ComponentError(f"Cannot remove legacy ESP-IDF Python cache {path}: {error}") from error
+        removed += 1
+        # Only the emptied cache directory; unrelated contents remain intact.
+        try:
+            path.parent.rmdir()
+        except OSError:
+            pass
+    for module in modules:
+        if local_path(module) and (module / ".git").exists():
+            removed += _remove_legacy_python_bytecode(module)
+    return removed
 
 
 def _sync_submodules(
@@ -1288,6 +1337,11 @@ def ensure_git_component(
             recursive_submodules=spec.recursive_submodules,
             required_paths=spec.required_paths,
         )
+        if name == "esp-idf" and not verify_only:
+            removed = _remove_legacy_python_bytecode(destination)
+            if removed:
+                info(f"Removed {removed} legacy ESP-IDF Python cache files from {destination}")
+                changed = True
     if spec.version_validator:
         spec.version_validator(destination, config[f"{spec.prefix}_VERSION"])
     status = "synchronized" if changed else "already synchronized"

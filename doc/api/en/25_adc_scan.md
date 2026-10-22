@@ -7,11 +7,14 @@ two halves of a buffer you own, and the application only ever reads finished
 blocks. Every sample has a known position in time, and the CPU never waits
 for a conversion.
 
+The following example uses RP GPIO26, GPIO28 and the internal temperature
+sensor. Its pin numbers and timing comments apply to RP builds.
+
 ```c
 static uint16_t blocks[2u * 400u * 3u] __attribute__((aligned(4)));
 
 hal_adc_scan_config_t config = {0};
-config.pins[0] = 26u; /* GPIO26 on RP, PA0 (0) on STM32G474, an ADC1 pad on ESP32-S3 */
+config.pins[0] = 26u;
 config.pins[1] = 28u;
 config.pins[2] = HAL_ADC_SCAN_PIN_TEMPERATURE;
 config.pin_count = 3u;
@@ -31,6 +34,14 @@ if (status == HAL_OK && hal_adc_scan_take(&block) == HAL_OK) {
     }
 }
 ```
+
+For STM32G474, choose ADC1 pins using the HAL encoding, for example PA0 as
+`0u` and PA1 as `1u`, and update the pin passed to
+`hal_adc_scan_pin_position()`. Including temperature can lengthen the actual
+frame period. For ESP32-S3, choose available ADC1 GPIOs, omit
+`HAL_ADC_SCAN_PIN_TEMPERATURE`, adjust `pin_count` and the buffer, and request
+at least 12000 ns per conversion. Read `hal_adc_scan_frame_period_ns()` for
+the effective timing on each platform.
 
 The `SCAN` variant of [13_adc](../../../examples/13_adc/) prints block
 statistics on RP and STM32G474 targets.

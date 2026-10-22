@@ -63,8 +63,9 @@ działania urządzenia.
 
 Po dołączeniu łącze przejmuje wyłączną obsługę radia: wyrejestrowuje callback niskopoziomowy i uruchamia ciągły odbiór. Zachowaj uchwyt radia, ale do zakończenia `hal_lora_link_destroy()` nie uruchamiaj bezpośrednio TX, RX, CAD, uśpienia ani kalibracji. Zniszczenie łącza anuluje operacje wejścia/wyjścia, zeruje kopię klucza i pozostawia radio w stanie standby. Nie niszczy uchwytu radia.
 
-Nieprzezroczyste uchwyty łączy zawierają numer generacji. Użycie nieaktualnego
-uchwytu powoduje zwrócenie `HAL_EUNINIT`, a próba utworzenia większej liczby
+Uchwyty identyfikują instancje łącza i zawierają numer generacji. Używaj ich
+wyłącznie przez API; nie dereferencjonuj ich ani nie interpretuj ich wartości.
+Użycie nieaktualnego uchwytu powoduje zwrócenie `HAL_EUNINIT`, a próba utworzenia większej liczby
 łączy niż `HAL_LORA_LINK_MAX_INSTANCES` kończy się błędem `HAL_ENOMEM`.
 
 ## Wysyłanie i odbieranie

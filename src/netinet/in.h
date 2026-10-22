@@ -9,10 +9,12 @@
 
 #include "hal/core/hal_config.h"
 
-#if defined(HAL_NETWORK_BACKEND_ESP_IDF)
+#if defined(HAL_NETWORK_BACKEND_ESP_IDF) ||                                    \
+    (defined(HAL_NETWORK_BACKEND_HOST) && !defined(_WIN32))
 
-/* Keep ESP-IDF's native sockaddr/in_addr layout; notably, lwIP's ESP32 ABI
- * includes the sa_len/sin_len fields that the portable shim omits. */
+/* Keep the native sockaddr/in_addr layout of ESP-IDF or the host system;
+ * notably, lwIP's ESP32 ABI includes the sa_len/sin_len fields that the
+ * portable shim omits. */
 #include_next <netinet/in.h>
 #include <sys/socket.h>
 
@@ -128,4 +130,4 @@ static inline uint32_t ntohl(uint32_t netlong) { return htonl(netlong); }
 }
 #endif
 
-#endif /* HAL_NETWORK_BACKEND_ESP_IDF / HAL_ENABLE_BSD_SOCKETS */
+#endif /* native platform sockets / HAL_ENABLE_BSD_SOCKETS */

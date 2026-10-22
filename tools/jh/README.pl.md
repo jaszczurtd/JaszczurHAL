@@ -7,7 +7,7 @@ zapisać albo sprawdzić plik wynikowy. Korzysta z parsera i API plików jhbase.
 `jh json validate` sprawdza dokument według podzbioru schematów sprzętowych,
 także z odwołaniami między lokalnymi plikami. Generatory nadal korzystają z Pythona.
 
-Przed konfiguracją jawnie przygotuj przypięte zależności hosta:
+Przed konfiguracją przygotuj zależności hosta w wersjach wskazanych przez repozytorium:
 
 ```sh
 python3 scripts/component_manager.py component jhbase

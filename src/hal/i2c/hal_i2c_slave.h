@@ -19,7 +19,7 @@ extern "C" {
  * master and survives STOP conditions, so a later bare read continues from
  * the last position. Reads must stay within the configured register map.
  *
- * The ESP32 backend preserves this wire-level contract with an ESP-IDF TX
+ * The ESP32 backend preserves this wire behavior with an ESP-IDF TX
  * FIFO/ring buffer. Its software producer advances by bytes accepted into
  * that queue; bytes not yet clocked remain queued across STOP. Writing a new
  * register address discards the old queued suffix and creates a fresh

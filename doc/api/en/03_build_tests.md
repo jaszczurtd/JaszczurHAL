@@ -398,8 +398,12 @@ The CMake build at the project root compiles a static library `hal_mock` from:
 The exact list is the `UTIL_SOURCES` set in `CMakeLists.txt` - treat that as the
 source of truth.
 
-Each test executable in `tests/` links against `hal_mock` only, with no
-headers, no pico SDK, no hardware.
+Tests registered with `add_hal_test(...)` link against `hal_mock`. Other
+executables compile selected production sources directly or check standalone
+headers without that library. FreeRTOS POSIX tests link against the separate
+`hal_freertos_posix` library. The exact sources and dependencies of each
+executable are declared in `tests/CMakeLists.txt`; none of the default tests
+requires a connected device.
 
 Tests use Unity 2.5.4 in `third_party/Unity/src`. The version-controlled JaszczurHAL integration consists of:
 

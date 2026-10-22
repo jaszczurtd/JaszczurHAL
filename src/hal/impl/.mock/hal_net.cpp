@@ -2,7 +2,8 @@
 #if HAL_TARGET_IS_MOCK
 #include "hal/core/hal_config.h"
 
-#ifdef HAL_ENABLE_WIFI
+/* The host backend uses the shared hal_net facade. */
+#if defined(HAL_ENABLE_WIFI) && !defined(HAL_NETWORK_BACKEND_HOST)
 
 #include "hal/network/hal_net.h"
 #include "hal/network/jh_net_address_utils.h"

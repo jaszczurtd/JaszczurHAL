@@ -2,7 +2,8 @@
 #include "hal/core/hal_target.h"
 
 #if defined(HAL_ENABLE_UDP) && (defined(HAL_NETWORK_BACKEND_CYW43) ||          \
-                                defined(HAL_NETWORK_BACKEND_ESP_IDF))
+                                defined(HAL_NETWORK_BACKEND_ESP_IDF) ||        \
+                                defined(HAL_NETWORK_BACKEND_HOST))
 
 #include "hal/core/hal_mutex_once.h"
 #include "hal/network/hal_udp.h"
@@ -284,7 +285,11 @@ extern "C" void jh_network_facade_udp_reset_all(void) {
 
 #endif
 
-#if defined(HAL_ENABLE_UDP) && (HAL_TARGET_IS_MOCK || HAL_TARGET_IS_RP) &&     \
+/* Value wrappers of the single-session API, which only the mock and RP
+ * implementations provide. */
+#if defined(HAL_ENABLE_UDP) &&                                                 \
+    ((HAL_TARGET_IS_MOCK && !defined(HAL_NETWORK_BACKEND_HOST)) ||             \
+     HAL_TARGET_IS_RP) &&                                                      \
     !defined(JH_HAL_UDP_SOCKET_API_ONLY)
 
 #include "hal/network/hal_udp.h"

@@ -34,8 +34,10 @@ PROJECT_README_DIRECTORIES = (
     "boards",
     "config",
     "examples",
+    "link_libraries",
     "src",
     "tests",
+    "tools",
     "vscode",
 )
 PROJECT_README_FILES = (

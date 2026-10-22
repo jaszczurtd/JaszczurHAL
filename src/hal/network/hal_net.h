@@ -11,6 +11,9 @@
 
 #include "hal/core/hal_layout_check.h"
 
+/* The functions below exist with HAL_ENABLE_WIFI, which other features such as
+ * TCP imply through the configuration. */
+#include "hal/core/hal_config.h"
 #include "hal/core/hal_status.h"
 #include <stdbool.h>
 #include <stddef.h>

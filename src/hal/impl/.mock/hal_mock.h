@@ -243,11 +243,14 @@ uint32_t hal_mock_pwm_get_value(uint8_t pin);
 uint8_t hal_mock_pwm_get_resolution(void);
 
 // ── PWM freq-controlled channels ─────────────────────────────────────────────
+#ifdef HAL_ENABLE_PWM_FREQ
 #include "hal/gpio/hal_pwm_freq.h"
 int hal_mock_pwm_freq_get_value(hal_pwm_freq_channel_t ch);
 uint32_t hal_mock_pwm_freq_get_frequency(hal_pwm_freq_channel_t ch);
 uint8_t hal_mock_pwm_freq_get_pin(hal_pwm_freq_channel_t ch);
 bool hal_mock_pwm_freq_is_running(hal_pwm_freq_channel_t ch);
+
+#endif
 
 // ── DMA PWM-audio ───────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_DMA_PWM_AUDIO
@@ -402,6 +405,7 @@ void hal_mock_debug_isr_set_test_capacity(size_t cap);
 /** @brief Restore the built-in default ISR ring. */
 void hal_mock_debug_isr_restore_default_ring(void);
 // ── CAN ──────────────────────────────────────────────────────────────────────
+#ifdef HAL_ENABLE_CAN
 #include "hal/can/hal_can.h"
 void hal_mock_can_inject(hal_can_t h, uint32_t id, uint8_t len,
                          const uint8_t *data);
@@ -443,6 +447,8 @@ void hal_mock_can_fail_sends(hal_can_t h, unsigned count);
  *        backend (by the simulated interrupt on a queued channel).
  */
 void hal_mock_can_report_ram_access_failure(hal_can_t h);
+
+#endif
 
 // ── ADC ──────────────────────────────────────────────────────────────────────
 uint8_t hal_mock_adc_get_resolution(void);
@@ -658,6 +664,7 @@ int hal_mock_onewire_get_max_lock_depth(hal_onewire_t h);
 
 // ── RGB LED
 // ───────────────────────────────────────────────────────────────────
+#ifdef HAL_ENABLE_RGB_LED
 #include "hal/gpio/hal_rgb_led.h"
 bool hal_mock_rgb_led_is_initialized(void);
 hal_rgb_led_color_t hal_mock_rgb_led_get_color(void);
@@ -668,6 +675,7 @@ uint8_t hal_mock_rgb_led_get_num_pixels(void);
 void hal_mock_rgb_led_reset(void);
 void hal_mock_rgb_led_fail_next_init(bool fail);
 void hal_mock_rgb_led_fail_next_write(bool fail);
+#endif
 
 // ── Display
 // ───────────────────────────────────────────────────────────────────
@@ -890,6 +898,12 @@ bool hal_mock_tcp_listener_inject_client(hal_tcp_listener_t listener,
                                          const hal_net_endpoint_t *remote);
 /** @brief Return the local port bound on a specific mock TCP listener. */
 uint16_t hal_mock_tcp_listener_get_local_port(hal_tcp_listener_t listener);
+/**
+ * @brief Copy the local endpoint bound on a specific mock TCP listener.
+ * @return false for an invalid listener or NULL @p out.
+ */
+bool hal_mock_tcp_listener_get_local_endpoint(hal_tcp_listener_t listener,
+                                              hal_net_endpoint_t *out);
 /** @brief Return the effective backlog set on a specific mock TCP listener. */
 uint8_t hal_mock_tcp_listener_get_backlog(hal_tcp_listener_t listener);
 /** @brief Return number of pending clients queued on a mock TCP listener. */

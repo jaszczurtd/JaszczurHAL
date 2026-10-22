@@ -6,6 +6,8 @@
 
 #include "hal/core/jh_endian.h"
 #include "hal/network/hal_tcp.h"
+#include "hal/network/jh_net_address_utils.h"
+#include "hal/network/jh_net_listener.h"
 #include "hal/system/hal_system.h"
 
 #include <string.h>
@@ -611,37 +613,36 @@ hal_websocket_server_set_callbacks(const hal_websocket_callbacks_t *callbacks,
   return HAL_OK;
 }
 
-hal_status_t hal_websocket_server_start(uint16_t port, const char *path) {
+hal_status_t hal_websocket_server_start_ex(const hal_net_endpoint_t *local,
+                                           const char *path) {
   if (s_listener) {
     return HAL_OK;
   }
-  if (port == 0u || !path || path[0] != '/') {
+  const hal_status_t endpoint_status =
+      jh_net_validate_endpoint_shape(local, true, true);
+  if (endpoint_status != HAL_OK) {
+    return endpoint_status;
+  }
+  if (!path || path[0] != '/') {
     return HAL_EINVAL;
   }
   const size_t path_len = strlen(path);
   if (path_len >= HAL_WEBSOCKET_PATH_MAX) {
     return HAL_EOVERFLOW;
   }
-
-  s_listener = hal_tcp_listener_open();
-  if (!s_listener) {
-    return HAL_ENOMEM;
+  const hal_status_t status =
+      jh_net_listener_start(local, HAL_WEBSOCKET_DEFAULT_BACKLOG, &s_listener);
+  if (status != HAL_OK) {
+    return status;
   }
-
-  hal_net_endpoint_t local = {};
-  local.family = HAL_NET_AF_INET;
-  local.addr_len = HAL_NET_IPV4_ADDR_LEN;
-  local.port = port;
-
-  if (!hal_tcp_listener_bind(s_listener, &local) ||
-      !hal_tcp_listener_listen(s_listener, HAL_WEBSOCKET_DEFAULT_BACKLOG)) {
-    hal_tcp_listener_close(s_listener);
-    s_listener = NULL;
-    return HAL_EIO;
-  }
-
   memcpy(s_path, path, path_len + 1u);
   return HAL_OK;
+}
+
+hal_status_t hal_websocket_server_start(uint16_t port, const char *path) {
+  hal_net_endpoint_t local;
+  jh_net_any_ipv4_endpoint(port, &local);
+  return hal_websocket_server_start_ex(&local, path);
 }
 
 void hal_websocket_server_stop(void) {

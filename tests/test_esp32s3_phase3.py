@@ -149,7 +149,7 @@ class Phase3RegistryAndBuildTests(unittest.TestCase):
         self.assertTrue(
             {
                 "src/hal/impl/esp32/esp32_network_backend.cpp",
-                "src/hal/impl/esp32/esp32_network_sockets.cpp",
+                "src/hal/network/native_sockets/jh_native_sockets.cpp",
                 "src/hal/impl/esp32/esp32_lwip_extension_port.cpp",
                 "src/hal/network/hal_net.cpp",
                 "src/hal/network/hal_tcp.cpp",
@@ -306,7 +306,7 @@ class Phase3RegistryAndBuildTests(unittest.TestCase):
             "src/hal/network/adapters/bsd/hal_bsd_sockets.cpp",
             "src/hal/time/hal_time_ntp.cpp",
             "src/hal/impl/esp32/esp32_network_backend.cpp",
-            "src/hal/impl/esp32/esp32_network_sockets.cpp",
+            "src/hal/network/native_sockets/jh_native_sockets.cpp",
         )
         for relative in sources:
             source = (ROOT / relative).read_text(encoding="utf-8")

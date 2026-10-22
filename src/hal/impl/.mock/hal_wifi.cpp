@@ -1,5 +1,9 @@
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_MOCK
+#include "hal/core/hal_config.h"
+
+/* The host backend uses the shared hal_wifi facade. */
+#if !defined(HAL_NETWORK_BACKEND_HOST)
 #include "hal/network/hal_wifi.h"
 #include "hal/serial/hal_serial.h"
 #include "hal_mock.h"
@@ -349,4 +353,5 @@ bool hal_mock_wifi_set_scan_result(size_t index, const char *ssid,
   }
   return true;
 }
+#endif // !HAL_NETWORK_BACKEND_HOST
 #endif // HAL_TARGET_IS_MOCK

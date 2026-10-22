@@ -1,7 +1,8 @@
 #include "hal/core/hal_config.h"
 
 #if defined(HAL_ENABLE_TCP) && (defined(HAL_NETWORK_BACKEND_CYW43) ||          \
-                                defined(HAL_NETWORK_BACKEND_ESP_IDF))
+                                defined(HAL_NETWORK_BACKEND_ESP_IDF) ||        \
+                                defined(HAL_NETWORK_BACKEND_HOST))
 
 #include "hal/core/hal_mutex_once.h"
 #include "hal/network/hal_tcp.h"

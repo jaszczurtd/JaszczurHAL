@@ -192,8 +192,7 @@ static void copy_source_label(char *dst, size_t dst_size, const char *src) {
   const char *safe = src ? src : "global";
   if (dst_size == 0u)
     return;
-  strncpy(dst, safe, dst_size - 1u);
-  dst[dst_size - 1u] = '\0';
+  (void)snprintf(dst, dst_size, "%s", safe);
 }
 
 static hal_error_slot_t *get_error_slot(const char *source) {

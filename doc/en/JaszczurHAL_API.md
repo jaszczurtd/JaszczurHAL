@@ -63,116 +63,39 @@ API recommended for new code first and lists the existing C++ API separately.
 
 ## Library structure
 
-```text
-CMakeLists.txt              # host/mock tests build
-VERSION                     # project version
-.build/                     # ignored root for all managed build artifacts
-boards/                     # target, board and capability descriptors
-config/                     # declarative HAL feature registry and schema
-link_libraries/             # linkable-library runners, one directory per build family
-  rp_pico_lib/              # Pico SDK RP2040/RP2350 static-library build
-    MEMORY_MAP.md           # RP firmware/storage/OTA layout
-  stm32_lib/                # STM32G474 static-library CMake, toolchain, linker script
-  esp32_lib/                # ESP-IDF library probe application
-cmake/
-  esp-idf/                  # controlled native ESP-IDF component recipe
-  generated/                # generated production CMake feature resolver
-  jh_rp_pico_sdk.cmake    # shared RP library/firmware CMake integration
-  targets/                  # VS Code dispatcher target recipes
-scripts/
-  # See doc/api/en/00_scripts.md for the complete process-script reference.
-  build_link_library.sh     # library build entry for any registry target
-  build_rp_pico_lib.sh      # RP library and ELF/BIN/UF2 probe runner
-  build_stm32_lib.sh        # STM32 library runner
-  build_esp32_lib.sh        # ESP-IDF library runner
-  build_esp_idf.py          # ESP-IDF project build/artifact/flash runner
-  check_documentation_links.py # local Markdown link/anchor validation
-  ensure_*.sh               # focused pinned-component fetch/verify helpers
-  generate_sbom.py          # CycloneDX SBOM generator
-  generate_hal_features.py  # feature registry validation, generation and lint
-  check_vulnerabilities.sh  # optional local vulnerability scanner wrapper
-runalltests.sh              # full local validation gate
-runmefirst.sh               # one-time local toolchain setup
-doc/
-  HAL_FLAGS.txt             # shared HAL_ENABLE_* flag summary
-  table_of_contents.md      # English documentation index
-  table_of_contents.pl.md   # Polish documentation index
-  en/                       # English reference docs
-    features.md             # high-level feature matrix
-    JaszczurHAL_API.md      # detailed API/reference
-    FwProjectWorkflow.md    # dispatcher-backed firmware project workflow
-    OTAWorkflow.md          # native RP/ESP OTA build, upload and recovery
-    lib_compilation.md      # static-library build guide
-    security_supply_chain.md # SBOM and vulnerability tracking process
-    boards_profiles_howto.md
-    windows_setup.md
-  pl/                       # Polish translations of the doc/en/ files above
-    features.md             # high-level feature matrix
-  api/
-    en/                     # split API chapters (English)
-      00_scripts.md         # essential process and orchestration architecture
-    pl/                     # split API chapters (Polish)
-examples/                   # buildable example apps for the RP family and STM32G474
-vscode/                     # shared jh-vscode entry, schema, docs, generator
-  entry/                    # Unix, Windows and public Python launchers
-  tools/create-vscode-example.py # standalone VS Code firmware project generator
-  tools/manage_vscode_extensions.py # checked/consented extension setup
-security/
-  third_party.json          # third-party component inventory
-  esp_idf_tools.json        # reviewed ESP-IDF target-tool snapshot
-  sbom.cdx.json             # generated CycloneDX SBOM
-  vulnerability_log.md      # CVE/CVSS assessment and patch log
-src/
-  JaszczurHAL.h             # primary public include
-  hal_app_entry.cpp         # optional portable app entry wrapper
-  libConfig.h               # backward-compat include
-  tools.h, tools_c.h        # utility aggregators (C++ / C)
-  arpa/, netinet/, sys/     # host/embedded socket compatibility headers
-  hal/                      # HAL umbrella + thematic shared domains
-    hal.h                   # HAL-only umbrella include
-    commands/               # transport-neutral command router and wire messages
-    core/                   # configuration, status, assertions, compatibility
-    bluetooth/              # BLE public API, facade, and shared BTstack support
-    i2c/, spi/, serial/     # bus and serial APIs with common implementations
-    time/, rtc/, power/     # wall time, RTC wake, and power management
-    timers/                 # hardware, extended, soft, and SmartTimers APIs
-    temperature/            # DHT, DS18B20, MAX6675, and MCP9600
-    network/                # core TCP/UDP/Wi-Fi and shared network runtime
-      http/, mqtt/, ota/    # co-located public APIs and implementations
-      tls/, wireguard/      # secure transports and reusable engines
-      websocket/            # WebSocket public API and implementation
-      net_console/          # remote console public API and implementation
-      net_commands/         # HTTP/WebSocket command adapter
-      cyw43/, lwip/         # radio and IP-stack integration
-    radio/                  # raw LoRa, reliable link, and command adapter
-    storage/                # EEPROM, KV, SD logger, filesystem, flash helpers
-    display/, gpio/         # display/GFX and GPIO-oriented drivers
-    analog/, audio/, can/   # additional thematic API and driver domains
-    generated/              # generated production C feature closure/report
-    impl/
-      .mock/                # deterministic host/test backend
-      rp2040/               # RP-family backend
-        drivers/flash/      # native RP flash coordinator and storage partitions
-        drivers/rp2040/     # RP2040 SoC services (fault/system)
-        drivers/usb/        # native TinyUSB CDC configuration/descriptors
-        freertos/           # native RP FreeRTOSConfig and hooks
-        frameworks/         # RP-specific framework integrations
-      stm32g474/            # STM32G474 backend
-        drivers/
-          stm32g474/        # STM32G474 SoC services (fault/system)
-        freertos/           # STM32 FreeRTOSConfig and hooks
-        port/               # startup, SystemInit, linker-facing low-level support
-  utils/                    # tools, PID, watchdog, draw helpers, Unity integration
-tests/                      # host unit tests (CMake + Unity)
-  freertos_posix/           # optional host-side FreeRTOS POSIX scheduler tests
-  hardware/                 # tracked RP fixture sources/manifests and host verifiers
-third_party/                # tracked pins + ignored managed component installs
-  update_components.sh      # synchronize every component to its tracked pin
-  *_version.conf            # tracked source/tool/toolchain version definitions
-  littlefs/                 # ignored pinned upstream filesystem checkout
-```
+Portable modules keep their public headers, shared implementations and device
+drivers together under `src/hal/<domain>/`. Platform-specific code belongs in
+`src/hal/impl/`. Shared code uses HAL APIs rather than calling a platform
+implementation directly.
 
-Portable code is grouped with its public API under `src/hal/<domain>/`. Each domain can contain public `hal_*.h` headers, shared implementations, private `jh_*` helpers, and device-driver subdirectories. `src/hal/impl/` is reserved for platform-specific implementations. Portable code must use HAL-level APIs rather than depend directly on those implementations.
+| Location | Purpose |
+|---|---|
+| `src/hal/core/` | Configuration, status codes, assertions, compiler helpers and runtime pool limits. |
+| `src/hal/<domain>/` | APIs and portable implementations for buses, sensors, storage, display, networking and other domains. |
+| `src/hal/impl/rp2040/` | RP2040 and RP2350 implementations, including flash coordination and USB integration. |
+| `src/hal/impl/stm32g474/` | STM32G474 peripheral implementations, startup code and FreeRTOS integration. |
+| `src/hal/impl/esp32/` | ESP32-family implementations using ESP-IDF. |
+| `src/hal/impl/.mock/` | Host implementations for tests, with an optional operating-system network backend. |
+| `src/utils/` | C++ compatibility utilities, PID, watchdog and drawing helpers, plus Unity integration. |
+| `boards/`, `config/` | Target and board facts, feature dependencies, and hardware schemas and bindings. |
+| `cmake/`, `link_libraries/` | Firmware integration and static-library build recipes. |
+| `tools/jh/` | Host JSON inspection and schema-validation CLI. |
+| `scripts/`, `vscode/` | Setup, generation, build, upload, debug and validation tools. |
+| `tests/` | Host tests and independent fixtures; device tests are selected separately under `tests/hardware/`. |
+| `third_party/` | Version pins and ignored managed installations. |
+| `security/` | Dependency inventory, generated SBOM and vulnerability assessments. |
+| `doc/` | Guides and API chapters in English and Polish. |
+
+The [feature overview](features.md) and [build and validation guide](../api/en/03_build_tests.md)
+describe platform support and its validation limits. Directory presence alone
+does not establish hardware support for every module.
+
+Use the [script reference](../api/en/00_scripts.md) for tool entry points,
+[the library build guide](lib_compilation.md) for archives and generated headers,
+and [the component guide](../../third_party/README.md) for dependency preparation.
+The [jh CLI guide](../../tools/jh/README.md) covers the separate host project.
+Core declarations are in `hal/core/hal_runtime_config.h`, `hal_assert.h` and
+`hal_compat.h`; their parameters and constraints are documented in those headers.
 
 ### Compile-time feature resolution
 
@@ -185,91 +108,6 @@ and raw/effective feature lint as errors. Installed RP and STM32G474 packages
 carry the generated feature/board headers, resolution JSON, link-signature
 header, and reference source, so direct compiler consumers can compile and
 link the fixed package without invoking Python.
-
-- `CMakeLists.txt` - repository-root host/mock tests build.
-- `link_libraries/` - linkable-library runners: `rp_pico_lib/` (official Pico
-  SDK static library and firmware probes), `stm32_lib/` (STM32G474 CMake,
-  toolchain file, and linker script) and `esp32_lib/` (ESP-IDF probe
-  application).
-- `scripts/build_link_library.sh` - selects the family runner for any registry
-  target and forwards the shared options.
-- `scripts/build_rp_pico_lib.sh` - RP2040/RP2350 static-library and optional
-  firmware-probe runner, including an archive-only `--library-only` mode and
-  the optional pinned FreeRTOS SMP matrix.
-- `scripts/build_stm32_lib.sh` - STM32 static-library runner.
-- `scripts/build_esp32_lib.sh` - ESP-IDF static-library runner publishing the
-  component archive and generated headers.
-- `scripts/build_esp_idf.py` - production ESP-IDF project build, artifact
-  validation, and flash helper with a relocatable multi-image manifest.
-- `third_party/update_components.sh` - synchronizes BearSSL, cJSON, LodePNG,
-  TJpgDec, FatFs, Unity, lwIP, littlefs, BTstack, the Semtech SX126x driver,
-  FreeRTOS, Pico SDK, picotool, PMD CPD and the RP2350 RISC-V toolchain to their
-  tracked `third_party/*_version.conf` pins. ESP-IDF is prepared on demand by
-  its production runner or focused ensure command.
-- `scripts/generate_sbom.py` - deterministic CycloneDX SBOM generator with a
-  read-only `--check` mode.
-- `scripts/check_sbom.sh` - compatibility wrapper for focused SBOM checking;
-  the shared generated-artifact runner owns repository-wide synchronization.
-- `scripts/check_vulnerabilities.sh` - optional local vulnerability scanner
-  wrapper that regenerates the SBOM and runs available source/vendored
-  dependency scanners.
-- `doc/api/en/00_scripts.md` - essential operational architecture reference for
-  repository process scripts, orchestration entrypoints, options, artifacts,
-  and their relationships.
-- `runalltests.sh` - full local validation gate.
-- `runmefirst.sh` - one-time local toolchain setup.
-- `doc/en/FwProjectWorkflow.md` - dispatcher-backed firmware project workflow:
-  manifest model, target/board selection, source discovery, upload/debug-build
-  behavior, build directories, and generated files.
-- `doc/en/boards_profiles_howto.md` - declarative target/board descriptors,
-  generated configuration, board-aware static libraries, and the procedure
-  for adding a physical board.
-- `doc/en/OTAWorkflow.md` - native RP and ESP32-S3 OTA requirements: firmware
-  integration, target-specific artifacts, VS Code upload, firewall, trial
-  confirmation, rollback, and recovery.
-- `SECURITY.md` - vulnerability reporting, triage and maintenance policy.
-- `security/third_party.json` - third-party inventory; pinned versions come from `third_party/*_version.conf`.
-- `security/sbom.cdx.json` - generated CycloneDX SBOM.
-- `security/vulnerability_log.md` - CVE/CVSS assessment and patch-decision log.
-- `src/JaszczurHAL.h` - umbrella include for HAL + utility modules.
-- `doc/HAL_FLAGS.txt` - concise `HAL_ENABLE_*` flag summary.
-- `src/libConfig.h` - backward-compat redirect to `hal/core/hal_config.h`.
-- `src/tools.h` - C++ utility aggregator.
-- `src/tools_c.h` - C-compatible utility declarations.
-- `src/hal/hal.h` - HAL-only umbrella include.
-- `src/hal/core/hal_config.h` - compatibility facade for build-time feature
-  selection, dependency propagation and project configuration.
-- `src/hal/core/hal_runtime_config.h` and `src/hal/core/hal_config.cpp` - runtime
-  pool-limit configuration API and implementation.
-- `src/hal/core/hal_assert.h` and `src/hal/core/hal_assert.cpp` - portable assertion API
-  and target-aware failure implementation.
-- `src/hal/core/hal_compat.h` - `PROGMEM`, `F()`, `hal_min()` and `hal_max()`
-  source-compatibility helpers.
-- `src/hal/<domain>/hal_*.h` - public HAL module interfaces grouped by topic,
-  such as GPIO, buses, serial, security, sensors, storage, display, and network.
-- `src/hal/can/hal_can_util.cpp`, `src/hal/security/hal_crypto.cpp`, `src/hal/security/hal_crc.cpp`, `src/hal/gps/hal_gps.cpp`, `src/hal/storage/hal_kv.cpp`, `src/hal/audio/hal_pga2311.cpp`, `src/hal/rtc/hal_rtc.cpp`, `src/hal/timers/hal_soft_timer.cpp`, `src/hal/control/hal_pid_controller.cpp` - shared HAL wrapper and facade implementations.
-- `src/hal/time/hal_time_ntp.cpp` and `src/hal/storage/hal_eeprom.cpp` - shared
-  thread-safe wall-clock/NTP/RTC integration and provider-dispatched EEPROM
-  facades; portable AT24C256 and
-  buffered-flash provider code stays beside the EEPROM API, while target
-  directories supply only physical flash mechanisms.
-- `src/hal/serial/hal_uart_config.h` - UART configuration constants and helpers.
-- `src/hal/core/hal_status.h` - shared `hal_status_t` result codes for new public
-  APIs.
-- `src/hal/system/hal_board.h` and `src/hal/system/hal_board.cpp` - board-profile identity,
-  compile-time physical facts and thread-safe runtime capability state.
-- `src/hal/impl/rp2040/` - RP-family backend.
-- `src/hal/impl/stm32g474/` - STM32G474 backend (real register-level core domains; remaining modules in progress).
-- `src/hal/impl/.mock/` - deterministic host-test backend.
-- `src/hal/<domain>/` - public headers and backend-agnostic implementations in
-  one thematic directory; examples include `bluetooth/`, `network/`, `time/`,
-  `timers/`, `temperature/`, `i2c/`, `spi/`, `display/`, and `storage/`.
-- `src/hal/impl/rp2040/drivers/` - bundled low-level third-party drivers used by optional HAL modules.
-- `src/hal/impl/rp2040/drivers/rp2040/` - SoC-specific drivers: `rp2040_fault.{h,cpp}` (HardFault capture, stack guard, reset-reason latch) and `rp2040_system.{h,cpp}` (watchdog, USB-boot entry, on-die temperature, free-heap, unique board id, idle hint).
-- `src/hal/impl/stm32g474/drivers/stm32g474/` - SoC-specific drivers: `stm32g474_fault.{h,cpp}` (reset-reason classification, retained fault handoff, stack guard) and `stm32g474_system.{h,cpp}` (time, delay, watchdog, temperature, UID, idle / ISR-sensitive helpers).
-- `src/hal/network/mqtt/PubSubClient/` and
-  `src/hal/network/wireguard/core/` - bundled target-neutral network engines.
-- `src/utils/` - higher-level utilities: `tools`, `pidController`, `multicoreWatchdog`, `draw7Segment`, and managed Unity integration.
 
 ---
 
@@ -394,34 +232,34 @@ The complete reference is split across the following focused documents:
 
 | # | File | Contents |
 |---|------|----------|
-| 0 | [Process scripts and orchestration](../api/en/00_scripts.md) | Essential operational architecture: workstation setup, managed dependencies, build entrypoints, examples, validation, security tooling, VS Code integration, artifact ownership, and the relationships between these processes |
+| 0 | [Process scripts and orchestration](../api/en/00_scripts.md) | Prepare the environment, run builds and checks, and locate each tool's inputs and outputs. |
 | 1 | [Library compilation guide](lib_compilation.md) | Building for all targets, generated board metadata, static-library helpers, FreeRTOS build variants, and firmware integration |
-| P | [Firmware project workflow](FwProjectWorkflow.md) | Dispatcher-backed VS Code firmware projects: manifest model, target/board selection, source discovery, per-target CMake cache layout, upload/debug-build behavior and generated files |
-| O | [Native OTA workflow](OTAWorkflow.md) | Target-specific RP and ESP32-S3 OTA project/firmware configuration, artifacts, first flash, VS Code integration, firewall, confirmation, rollback, recovery and security boundary |
+| P | [Firmware project workflow](FwProjectWorkflow.md) | Configure, build, upload and debug a firmware project through VS Code or the CLI. |
+| O | [Native OTA workflow](OTAWorkflow.md) | Prepare RP or ESP32-S3 for OTA, update firmware, confirm trial boots and recover failed updates. Includes security limits. |
 | 2 | [Module flags and configuration](../api/en/02_module_flags.md) | `HAL_ENABLE_*` opt-in flags, dependency propagation, FreeRTOS selection, stack-size overrides, and core modules |
-| A | [Status API](../api/en/01_status_api.md) | Foundational, cross-cutting: `hal_status_t` result codes, in-place migration of fallible `void` operations, `_ex` companions for retained value/handle/`bool` APIs, output-parameter forms and collision fallback. |
-| 3 | [Build dependencies, tests, and hardware fixtures](../api/en/03_build_tests.md) | Test architecture and sources of truth, dependencies, host/CI execution, extension rules, mock time control, and the index of hardware-fixture procedures |
-| 4 | [Multicore safety and drivers](../api/en/04_multicore_drivers_migration.md) | Multicore init/runtime rules, bundled driver inventory and licences, logging timestamp hook, time conversion helper, examples overview, host-test coverage, and portable API mapping |
+| A | [Status API](../api/en/01_status_api.md) | Interpret operation results and migrate calls to status-returning APIs. |
+| 3 | [Build dependencies, tests, and hardware fixtures](../api/en/03_build_tests.md) | Build and run host tests, understand CI coverage and select device-test procedures. |
+| 4 | [Multicore safety and drivers](../api/en/04_multicore_drivers_migration.md) | Share modules between cores and tasks, initialize resources and configure logging. |
 | S | [Security supply chain](security_supply_chain.md) | Third-party inventory, CycloneDX SBOM generation, vulnerability scanning and CVE/CVSS assessment workflow |
 | 5 | [GPIO, ADC and PWM](../api/en/05_gpio_adc_pwm.md) | `hal_gpio`, `hal_pwm`, `hal_dac`, `hal_pcnt`, `hal_pwm_freq`, `hal_dacless`, `hal_adc` |
-| 6 | [Timers and system](../api/en/06_timers_system.md) | `hal_timer` (alarms + managed timers), `hal_system` (millis/watchdog/crash diagnostics/UID), `hal_power` (Sleep/deep-sleep/power-down transitions), `hal_bits`, `hal_compiler` (portable attributes and builtins), `hal_math` |
+| 6 | [Timers and system](../api/en/06_timers_system.md) | Schedule timers, read clocks, control power modes and use system diagnostics and portable compiler helpers. |
 | 7 | [Cryptography](../api/en/07_crypto.md) | `hal_crypto` - Base64, MD5, SHA-256, HMAC-SHA256, ChaCha20, ChaCha20-Poly1305 |
-| 8 | [Sync, USB, serial, framing and auth](../api/en/08_sync_serial.md) | `hal_sync` (mutex/critical-section), `hal_usb` (status-first USB lifecycle and CDC), `hal_serial` (one TX-serialized core with link-time transport ports, streamed debug formatting, ISR-deferred logging and rate-limiter), `hal_serial_session` (framed SC protocol), `hal_serial_commands` (text router adapter), `hal_serial_frame` (wire codec), `hal_sc_auth` (HMAC challenge/response) |
-| 9 | [Communication buses](../api/en/09_buses.md) | `hal_spi` (status `_ex` transfer and DMA helpers), `hal_i2c` (status-first master API, bounded scanner with watchdog callback, one-shot helpers and bus clear), `hal_i2c_slave` (register map), `hal_uart`, `hal_swserial`, `hal_onewire` |
-| 10 | [CAN bus and display](../api/en/10_can_display.md) | `hal_can` (backend-selected CAN: MCP2515 classic CAN, MCP251XFD CAN FD, and STM32G474 native FDCAN), `hal_display` (status-first TFT/OLED/LCD/EPD facade, raw writes, EPD refresh, GFX primitives, streaming, text and fonts) |
-| 11 | [Sensors](../api/en/11_sensors.md) | `hal_thermocouple` (one provider-dispatched MCP9600/MAX6675/mock facade), `hal_ds18b20` (non-blocking workflow), `hal_dht` (DHT11/DHT22), `hal_bh1750` (ambient light), `hal_adp5360` (PMIC charger/fuel-gauge/regulators), `hal_mcp3221` (I2C 12-bit ADC), `hal_rtc` (PCF8563/DS3231/internal AON providers and relative wake), `hal_external_adc` (ADS1115), `hal_gps` (NMEA, auto-detect framing) |
+| 8 | [Sync, USB, serial, framing and auth](../api/en/08_sync_serial.md) | Synchronize work, use USB and serial diagnostics, and exchange framed or authenticated commands. |
+| 9 | [Communication buses](../api/en/09_buses.md) | Transfer data over SPI, I2C, UART and 1-Wire; check bus locking and transfer limits. |
+| 10 | [CAN bus and display](../api/en/10_can_display.md) | Use Classical CAN or CAN FD and draw text or images through the display API. |
+| 11 | [Sensors](../api/en/11_sensors.md) | Read sensors and GPS data, use RTCs and handle decoded input signals. |
 | 12 | [Cellular modem](../api/en/12_modem.md) | `hal_modem_at` (AT engine, URC, watchdog cooperation), `hal_simcom_a76xx` (A7670/A7672 - power, boot, SIM, PDP, LBS, GNSS, MQTT subscribe) |
-| 13 | [Output devices](../api/en/13_output_devices.md) | `hal_rgb_led` (NeoPixel, PIO/GPIO transport), `hal_digipot` (MCP401x/MAX5395 I2C digital potentiometers), `hal_pga2311` (stereo volume controller), `hal_mcp23017`/`hal_pca9654e`/`hal_pcf8574` (I2C GPIO/output expanders), `hal_hc595` (SPI shift-register output expander), `hal_mcp4725` (I2C 12-bit DAC), `hal_mfrc522`/`hal_pn532` (RFID/NFC readers), `hal_math` (constrain, map, hal_math_round_to_n) |
-| 14 | [Storage](../api/en/14_storage.md) | `hal_eeprom` (target flash / AT24C256), `hal_kv` (append-only KV store with GC), `hal_littlefs` (LittleFS mount/format helpers), `hal_sdlogger` (SD-card buffered logger and crash reporter) |
-| 15 | [Network connectivity](../api/en/15_connectivity.md) | status-returning `_ex` APIs for `hal_wifi`, resolver, `hal_udp`, `hal_tcp`, `hal_tls`, `hal_mqtt` and `hal_wireguard`; `hal_http_server`, `hal_http_files`, `hal_websocket`, `hal_net_console`, `hal_net_commands`, `hal_notify`, independent BSD sockets adapter with `getaddrinfo()` and optional TLS transport, `hal_ota`, always-available `hal_time` calendar helpers plus optional NTP/local time |
-| 16 | [Utilities](../api/en/16_utilities.md) | thematic array/endian/math/text/ADC/NTC/pixel/image/network/time helpers, compatibility utility headers, `hal_soft_timer`, `hal_pid_controller`, `hal_crc`, `SmartTimers`, `pidController`, `multicoreWatchdog`, `draw7Segment` |
-| 17 | [cJSON](../api/en/17_cJSON.md) | Managed `cJSON` / `cJSON_Utils`, include patterns, ownership rules, parsing, printing, JSON Pointer/Patch/Merge Patch examples |
-| 18 | [LodePNG](../api/en/18_LodePNG.md) | Managed `LodePNG`, include patterns, embedded profile, memory ownership, PNG/Base64 asset script and RGB565 examples |
-| 19 | [JPEG](../api/en/19_JPEG.md) | Managed `TJpgDec` core, embedded profile, memory ownership, JPEG/Base64 asset script and RGB565 examples |
-| 20 | [Bluetooth](../api/en/20_bluetooth.md) | BLE Peripheral/Observer, Classic discovery/pairing/peers, raw HID Host, normalized gamepad adapter, A2DP Sink, AVRCP Target, authenticated Stream, bounded queues, board support, coexistence, and BTstack distribution boundary |
-| 21 | [Raw LoRa radio](../api/en/21_lora.md) | Validated SX1262 profiles plus experimental software-only SX1261/SX1276/SX1278, asynchronous TX/RX/CAD, current RSSI, capabilities, callbacks, diagnostics and time-on-air |
-| 22 | [Reliable LoRa link](../api/en/22_lora_link.md) | 16-bit addressing, message sequences, ACK/retry, duplicate suppression, fragmentation and optional ChaCha20-Poly1305 over `hal_lora_radio` |
-| 23 | [Command routing](../api/en/23_commands.md) | Transport-neutral handler registration and policy, bounded request/response/event wire messages, network compatibility, framed serial, reliable LoRa and authenticated BLE Stream adapters |
+| 13 | [Output devices](../api/en/13_output_devices.md) | Control audio output, LEDs and output devices. |
+| 14 | [Storage](../api/en/14_storage.md) | Store settings and files, manage flash and record logs. Includes persistence and concurrency rules. |
+| 15 | [Network connectivity](../api/en/15_connectivity.md) | Use WiFi, TCP/UDP and network services, including TLS, HTTP, MQTT, OTA and NTP. |
+| 16 | [Utilities](../api/en/16_utilities.md) | Use domain helpers, software timers, PID control and C++ compatibility utilities. |
+| 17 | [cJSON](../api/en/17_cJSON.md) | Parse and write JSON, manage object ownership and apply Pointer or Patch operations. |
+| 18 | [LodePNG](../api/en/18_LodePNG.md) | Decode PNG images and prepare RGB565 assets within embedded memory limits. |
+| 19 | [JPEG](../api/en/19_JPEG.md) | Decode JPEG images and prepare RGB565 assets within embedded memory limits. |
+| 20 | [Bluetooth](../api/en/20_bluetooth.md) | Use BLE, Classic profiles, gamepads, audio and authenticated streams. Check board support and radio-sharing rules. |
+| 21 | [Raw LoRa radio](../api/en/21_lora.md) | Configure LoRa radios and transfer packets. SX1262 is hardware-validated; SX1261/SX1276/SX1278 remain experimental. |
+| 22 | [Reliable LoRa link](../api/en/22_lora_link.md) | Exchange addressed LoRa messages with acknowledgements, retries, fragmentation and optional encryption. |
+| 23 | [Command routing](../api/en/23_commands.md) | Register and dispatch commands, encode messages and connect serial, network, LoRa or BLE adapters. |
 | 24 | [Hardware period capture](../api/en/24_pulse_capture.md) | Hardware timestamps and 32-period frequency windows on RP, STM32G474, ESP32-S3, and mock |
 | 25 | [Hardware-paced ADC scan](../api/en/25_adc_scan.md) | Continuous DMA scan of a pin set into caller-owned blocks on RP, STM32G474, ESP32-S3, and mock |
 

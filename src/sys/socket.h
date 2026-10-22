@@ -12,11 +12,13 @@
 
 #include "hal/core/hal_config.h"
 
-#if defined(HAL_NETWORK_BACKEND_ESP_IDF)
+#if defined(HAL_NETWORK_BACKEND_ESP_IDF) ||                                    \
+    (defined(HAL_NETWORK_BACKEND_HOST) && !defined(_WIN32))
 
-/* ESP-IDF owns the POSIX socket ABI and provides inline adapters to lwIP.
- * The JaszczurHAL include root precedes IDF component roots, so explicitly
- * continue the lookup instead of publishing the compatibility ABI below. */
+/* ESP-IDF owns the POSIX socket ABI and provides inline adapters to lwIP; the
+ * host backend uses the operating system's sockets. The JaszczurHAL include
+ * root precedes the platform roots, so explicitly continue the lookup instead
+ * of publishing the compatibility ABI below. */
 #include_next <sys/socket.h>
 
 #elif defined(HAL_ENABLE_BSD_SOCKETS)
@@ -133,4 +135,4 @@ int shutdown(int sockfd, int how);
 }
 #endif
 
-#endif /* HAL_NETWORK_BACKEND_ESP_IDF / HAL_ENABLE_BSD_SOCKETS */
+#endif /* native platform sockets / HAL_ENABLE_BSD_SOCKETS */

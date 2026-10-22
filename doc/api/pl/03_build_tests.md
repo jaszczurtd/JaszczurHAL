@@ -218,7 +218,7 @@ kompletnej bramki jakości dla Linuksa:
 - `windows-tooling` przygotowuje uwierzytelnione zarządzane środowisko,
   powtarza `runmefirst.ps1 -VerifyOnly`, uruchamia współdzielone testy
   runtime/platform/bootstrap i generatora, weryfikuje wybór źródeł zależności
-  CMake dla FreeRTOS na RP i STM32, wykonuje czysty produkcyjna kompilacja
+  CMake dla FreeRTOS na RP i STM32, wykonuje czystą kompilację produkcyjną
   ESP32-S3/ESP-IDF i publikuje artefakty zawierające wiele obrazów, a następnie kompiluje
   i uruchamia przenośne testy hosta z MSVC `/W4 /permissive- /WX`;
 - `Windows firmware (<target>)` buduje wygenerowany projekt użytkownika ze
@@ -395,8 +395,12 @@ Konfiguracja CMake w katalogu głównym projektu kompiluje bibliotekę statyczn�
 Dokładną listę zawiera zbiór `UTIL_SOURCES` w `CMakeLists.txt`; jest on
 miarodajnym źródłem danych.
 
-Każdy program testowy w `tests/` jest linkowany wyłącznie z `hal_mock`, bez
-nagłówków Pico SDK i bez dostępu do sprzętu.
+Testy rejestrowane przez `add_hal_test(...)` są linkowane z `hal_mock`.
+Pozostałe programy kompilują wybrane źródła produkcyjne bezpośrednio albo
+sprawdzają samodzielne nagłówki bez tej biblioteki. Testy FreeRTOS POSIX
+korzystają z osobnej biblioteki `hal_freertos_posix`. Źródła i zależności
+każdego programu określa `tests/CMakeLists.txt`; żaden z domyślnych testów
+nie wymaga podłączonego urządzenia.
 
 Testy korzystają z Unity 2.5.4 w `third_party/Unity/src`. Wersjonowane pliki integracji z JaszczurHAL to:
 
@@ -411,7 +415,7 @@ dołączają `"utils/unity.h"` i używają lokalnego dla repozytorium
 `unity_config.h`. Uruchom `scripts/ensure_unity.sh` lub główny skrypt
 aktualizujący komponenty, aby odtworzyć wersję źródeł wskazaną przez
 repozytorium. Poza kompilacją
-testowym Unity pozostaje nieaktywne, chyba że jawnie włączono
+testów Unity pozostaje nieaktywne, chyba że jawnie włączono
 `HAL_ENABLE_UNITY`.
 
 Tematyczne moduły narzędziowe i ich adaptery zgodnościowe sprawdza

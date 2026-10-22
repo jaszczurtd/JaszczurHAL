@@ -15,7 +15,6 @@ Aplikacja wywołuje `hal_i2c_scan_bus()` i przekazuje `hal_watchdog_feed`,
 aby obsłużyć watchdog przy każdej próbie. Po skanowaniu wypisuje wyniki
 i czeka dwie sekundy przed kolejnym odczytem.
 
-Połączenie PB9/PB8 sprawdzono wcześniej z PCF8563 (`0x51`) i DS3231 (`0x68`).
 Ten przykład używa 100 kHz; przykład `examples/16_rtc_backends` korzysta
 z tego samego połączenia przy 400 kHz.
 

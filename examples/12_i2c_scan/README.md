@@ -15,8 +15,7 @@ The application calls `hal_i2c_scan_bus()` with `hal_watchdog_feed` to
 service the watchdog after each probe. It prints the results and waits two
 seconds before scanning again.
 
-The PB9/PB8 connection was previously tested with PCF8563 (`0x51`) and
-DS3231 (`0x68`) modules. This scanner uses 100 kHz;
+This scanner uses 100 kHz;
 `examples/16_rtc_backends` uses the same connection at 400 kHz.
 
 ## Hardware wiring

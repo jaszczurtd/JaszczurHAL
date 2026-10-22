@@ -468,9 +468,9 @@ hal_gamepad_open_ex(&gamepad, &provider);
 `jh_gamepad_bond_kv_provider()` (zadeklarowany w
 `hal/bluetooth/jh_gamepad_bond_kv_provider.h`, aktywny gdy włączone są
 zarówno `HAL_ENABLE_BLUETOOTH_GAMEPAD`, jak i `HAL_ENABLE_KV`) to gotowy
-adapter nad `hal_kv_set_blob_ex()`/`get_blob_ex()`/`delete_ex()`; konsument,
-który chce innego trwałego nośnika, implementuje bezpośrednio trzy funkcje
-providera. `hal_kv_init_ex()` musi się już powieść przed użyciem providera i
+adapter korzystający z `hal_kv_set_blob_ex()`/`get_blob_ex()`/`delete_ex()`.
+Aplikacja używająca innego trwałego nośnika implementuje bezpośrednio trzy
+funkcje providera. `hal_kv_init_ex()` musi się już powieść przed użyciem providera i
 pozostać zainicjalizowane tak długo, jak długo profil gamepada jest otwarty.
 Należący do wywołującego `bond_context` musi być ważny przez ten sam czas.
 
