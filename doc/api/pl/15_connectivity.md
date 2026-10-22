@@ -6,6 +6,10 @@
 
 Rozdział opisuje łączenie z siecią WiFi, komunikację TCP/UDP, klientów HTTP/HTTPS i MQTT, serwery HTTP i WebSocket, powiadomienia, konsolę diagnostyczną, aktualizacje OTA oraz tunel WireGuard. Wspólne typy sieciowe znajdują się w `hal_net.h`; zgodność z wybranymi funkcjami BSD/POSIX zapewnia opcjonalny adapter `HAL_ENABLE_BSD_SOCKETS`.
 
+JaszczurHAL wspiera sieć IPv4. IPv6 może działać przez natywny stos ESP32
+lub systemu hosta, w tym Windows, ale pozostaje poza zakresem wsparcia
+biblioteki. Przenośne aplikacje powinny korzystać z IPv4.
+
 ## Sieciowe API zwracające status
 
 W nowym kodzie wybieraj warianty `_ex`, aby otrzymać dokładny wynik `hal_status_t` dla WiFi, rozwiązywania nazw, TCP, UDP, MQTT i WireGuard. Dotychczasowe API pozostaje dostępne. Warianty statusowe przekazują właściwy wynik - liczbę bajtów, zaakceptowane gniazdo lub stan drugiej strony - przez jawny parametr wyjściowy. Zmiana jest rozszerzeniem API, nie wymusza migracji istniejącego kodu.
@@ -156,51 +160,25 @@ zgłaszane jako `HAL_EIO`. Pełne sygnatury znajdziesz w publicznych nagłówkac
 `hal_net.h` zawiera proste typy wartościowe C, wspólne dla opartych na
 uchwytach API UDP i TCP oraz warstw zgodności BSD/POSIX. Struktura punktu
 końcowego przechowuje adres IPv4 lub IPv6 wraz z oznaczeniem jego rodziny.
-Obecne backendy CYW43 zgłaszają obsługę IPv4. ESP32-S3 zgłasza rodziny włączone w
-swojej konfiguracji ESP-IDF lwIP, a backend hostowy obie. Nieobsługiwane
-rodziny zwracają `HAL_EUNSUPPORTED`.
+Pola IPv6 i bity możliwości odzwierciedlają zachowanie natywnego backendu
+i nie rozszerzają podanego wyżej zakresu wsparcia IPv4. Backend zwraca
+`HAL_EUNSUPPORTED` dla rodzin adresów, których nie implementuje.
+
+Dołącz wspólne typy przez publiczny nagłówek:
 
 ```c
 #include <hal/network/hal_net.h>
-
-#define HAL_NET_IPV4_ADDR_LEN 4u
-#define HAL_NET_IPV6_ADDR_LEN 16u
-#define HAL_NET_MAX_ADDR_LEN HAL_NET_IPV6_ADDR_LEN
-#define HAL_NET_TIMEOUT_FOREVER UINT32_MAX
-
-typedef enum {
-  HAL_NET_AF_UNSPEC = 0,
-  HAL_NET_AF_INET = 2,
-  HAL_NET_AF_INET6 = 10
-} hal_net_family_t;
-
-typedef struct {
-  hal_net_family_t family;
-  uint8_t addr[HAL_NET_MAX_ADDR_LEN];
-  uint8_t addr_len;
-  uint16_t port;
-  uint32_t scope_id;
-} hal_net_endpoint_t;
-
-#define HAL_NET_CAP_IPV4      (1u << 0u)
-#define HAL_NET_CAP_IPV6      (1u << 1u)
-#define HAL_NET_CAP_DUAL_STACK (1u << 2u)
-
-#ifdef HAL_ENABLE_WIFI
-hal_status_t hal_net_get_capabilities_ex(
-    hal_net_capabilities_t *out_capabilities);
-hal_status_t hal_net_service(void);
-hal_status_t hal_net_resolve_ex(const char *host_or_ip,
-                                hal_net_family_t family_hint,
-                                hal_net_endpoint_t *results,
-                                size_t capacity,
-                                size_t *out_count);
-bool hal_net_resolve_ipv4(const char *host_or_ip,
-                          uint8_t out_addr[HAL_NET_IPV4_ADDR_LEN]);
-hal_status_t hal_net_resolve_ipv4_ex(
-    const char *host_or_ip, uint8_t out_addr[HAL_NET_IPV4_ADDR_LEN]);
-#endif
 ```
+
+Nagłówek definiuje `hal_net_family_t`, `hal_net_endpoint_t` oraz
+`hal_net_capabilities_t`. Flagi możliwości to `HAL_NET_CAP_IPV4`,
+`HAL_NET_CAP_IPV6` i `HAL_NET_CAP_DUAL_STACK`; `HAL_NET_TIMEOUT_FOREVER`
+oznacza oczekiwanie bez ustalonego limitu czasu. [Pełne deklaracje](../../../src/hal/network/hal_net.h)
+znajdują się w nagłówku.
+
+Przy włączonym `HAL_ENABLE_WIFI` funkcja `hal_net_get_capabilities_ex(...)`
+podaje rodziny adresów obsługiwane przez wybrany backend. `hal_net_service()`
+pozwala mu wykonać ograniczoną porcję pracy; funkcje resolvera opisano poniżej.
 
 Bajty adresu są przechowywane w kolejności sieciowej (network byte order).
 `addr_len` wynosi cztery dla IPv4 i szesnaście dla IPv6; `scope_id` określa
@@ -253,10 +231,35 @@ API nie udostępnia serwera TLS, serwera HTTPS ani WSS, ani klienta WebSocket.
 `tests/fixtures/esp32s3_phase3` sprawdza wyliczanie zestawu funkcji, dobór
 plików źródłowych i zależności, kompilację, linkowanie, partycje oraz artefakty.
 Nie weryfikuje działania na sprzęcie, cyklu życia, rollbacku ani zachowania
-w negatywnych testach bezpieczeństwa. Test sprzętowy
-`tests/hardware/esp32s3_network` uruchamia na płytce cykl życia WiFi,
-resolver, gniazda UDP i TCP oraz serwery HTTP i WebSocket z fixture'em na
-komputerze; TLS, MQTT, OTA i WireGuard nadal wymagają testów sprzętowych.
+w negatywnych testach bezpieczeństwa.
+
+Zweryfikowane sprzętowo na Waveshare ESP32-S3-Zero z fixture'em na komputerze:
+
+- [`tests/hardware/esp32s3_network`](../../../tests/hardware/esp32s3_network/README.pl.md)
+  (zestaw podstawowy): cykl życia WiFi, skanowanie, błędy uwierzytelnienia
+  i braku sieci, DHCP, DNS, ping, UDP i TCP po IPv4,
+  gniazda używane z obu tasków aplikacji, teardown kończący odbiór
+  zablokowany w drugim tasku, natywne API BSD, trasy i pliki HTTP, polecenia
+  sieciowe, WebSocket, konsola sieciowa, błędni i powolni klienci,
+  wyczerpanie puli, restart oraz zatrzymanie przy połączonych klientach;
+- wariant `SERVICES` tego samego fixture'u: NTP z nieosiągalnym
+  i nierozwiązywalnym serwerem podstawowym, czas libc, klient TLS z
+  odrzuceniami błędnego hosta, obcego CA, certyfikatu wygasłego i jeszcze
+  nieważnego, braku czasu, błędu entropii, anulowania, zerwanego handshake'u
+  i timeoutu, klienci HTTP i HTTPS, MQTT i MQTTS oraz tunele WireGuard split
+  i pełny, cykle begin/end, endpoint jako nazwa hosta, zamknięcie tunelu przy
+  otwartych połączeniach i utrata WiFi pod tunelem;
+- [`tests/hardware/esp32s3_ota`](../../../tests/hardware/esp32s3_ota/README.pl.md):
+  OTA surowej aplikacji z odkrywaniem, odrzuceniami AUTH2, błędnymi obrazami
+  i przerwanym transferem, próbą, wycofaniem i potwierdzeniem;
+- długotrwały ruch TCP, UDP i DNS z obu tasków oraz UDP i TCP przez tunel
+  WireGuard z kolejnymi odnowieniami kluczy.
+
+Fixture ESP32-S3 sprawdza też natywne UDP i TCP po IPv6 link-local. Są to
+dodatkowe próby diagnostyczne backendu, poza zakresem wsparcia JaszczurHAL.
+
+Jeszcze niezweryfikowane sprzętowo: utrata adresu z DHCP bez rozłączenia,
+błąd entropii w WireGuard i zanik zasilania w trakcie OTA.
 
 ### Backend hostowy dla programów i narzędzi
 
@@ -1784,8 +1787,9 @@ void hal_tcp_listener_close(hal_tcp_listener_t listener);
 - `hal_tcp_listener_open()` alokuje nasłuchiwacz z puli mieszczącej
   `HAL_TCP_LISTENER_MAX_INSTANCES` instancji; zamykaj nieużywane nasłuchiwacze przez
   `hal_tcp_listener_close()`.
-- `hal_tcp_listener_bind(...)` wiąże lokalny punkt końcowy IPv4. Rodzina
-  adresów musi być `HAL_NET_AF_INET`, a port musi być niezerowy.
+- `hal_tcp_listener_bind(...)` wiąże lokalny punkt końcowy IPv4
+  (`HAL_NET_AF_INET`) z niezerowym portem. Niektóre natywne backendy przyjmują
+  też punkty końcowe IPv6, ale to zachowanie pozostaje poza zakresem wsparcia JaszczurHAL.
 - `hal_tcp_listener_listen(...)` rozpoczyna przyjmowanie klientów i wymaga
   niezerowego parametru `backlog`. Przenośna implementacja testowa ogranicza
   liczbę oczekujących klientów do `HAL_TCP_LISTENER_BACKLOG_MAX`; rzeczywiste
@@ -1808,7 +1812,9 @@ void hal_tcp_listener_close(hal_tcp_listener_t listener);
   `bind`/`listen`/`accept`, zamykanie oraz sprawdzanie gotowości przez `select()`.
   Gniazda pozostają nieblokujące: wysyłanie do odbiorcy, który przestał
   czytać, zwraca częściową liczbę bajtów albo `HAL_EAGAIN`, zamiast wstrzymać
-  wywołującego.
+  wywołującego. Rozłączenie lub wyłączenie WiFi kończy w ciągu około 50 ms
+  kodem `HAL_ECANCELED` odbiór, `accept` albo połączenie, na które czeka inny
+  task, także dla UDP, gdzie lwIP sam nie budzi czekającego.
 - **impl/.mock:** deterministyczna implementacja testowa klienta
   i nasłuchiwacza. Pozwala ustawić wynik połączenia, wstrzykiwać bajty RX,
   rejestrować zawartość TX i zdalny punkt końcowy oraz utrzymuje osobną kolejkę
@@ -2198,7 +2204,10 @@ bool hal_wireguard_kick_handshake_text(const char *probe_ip_text,
 - **impl/esp32:** wspólny silnik WireGuard nad natywną warstwą lwIP z ESP-IDF.
   Zapewnia jawne blokowanie stosu i dostęp do `netif`, natywny resolver,
   bezpieczną entropię ESP oraz zsynchronizowany czas libc dla uzgadniania
-  TAI64N.
+  TAI64N. `build_esp_idf.py` włącza `CONFIG_ESP_NETIF_BRIDGE_EN`, więc
+  `esp_netif` trzyma swój uchwyt w danych klienta netif i zostawia
+  `netif->state` interfejsowi tunelu. Zwiększa też stos wątku lwIP do 6 KiB
+  na potrzeby odszyfrowywania ruchu tunelu i odpowiedzi na handshake'i.
 - **impl/.mock:** deterministyczna implementacja testowa z zachowywaniem
   stanu. Rejestruje konfigurację, pozwala wstrzyknąć punkt końcowy peera
   i sprawdzić wyzwolenie uzgadniania.
@@ -2429,9 +2438,10 @@ muteksem, spójnych kopii stanu i obsługują współbieżne zadania oraz rdzeni
 nie wolno ich wywoływać z ISR. Operacje wejścia/wyjścia DNS, UDP i RTC
 odbywają się bez muteksu stanu zegara, dzięki czemu callback obsługi sieci może
 bez deadlocku ponownie wywołać funkcję odczytującą czas. Każde wywołanie takiej
-funkcji lub `hal_time_get_status_ex()` obsługuje oczekujące żądanie. Po
-5-sekundowym timeoucie serwera podstawowego rozpoczyna się próba z opcjonalnym
-serwerem zapasowym. Żądanie obsługuje w danej chwili tylko jeden wywołujący.
+funkcji lub `hal_time_get_status_ex()` obsługuje oczekujące żądanie.
+Opcjonalny serwer zapasowy przejmuje żądanie, gdy podstawowy nie odpowie w ciągu
+5 sekund albo nie da się go w ogóle zapytać, np. jego nazwa się nie rozwiązuje.
+Żądanie obsługuje w danej chwili tylko jeden wywołujący.
 Funkcja odczytu, która zastanie obsługę zajętą, pomija ją i zwraca ostatnią
 kopię stanu, a `hal_time_sync_ntp()` czeka, aż zajęty wywołujący skończy.
 

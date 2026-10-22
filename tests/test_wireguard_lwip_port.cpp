@@ -50,6 +50,9 @@ unsigned peer_remove_count;
 unsigned connect_count;
 unsigned poll_count;
 unsigned shutdown_count;
+// Device state netif_remove() found: removal aborts TCP connections and
+// sends their RSTs through the interface, so the device must still exist.
+void *state_at_remove;
 unsigned platform_init_count;
 
 hal_status_t fake_stack_enter(void *context, bool require_ipv4) {
@@ -159,6 +162,7 @@ netif *netif_add(netif *network_interface, const ip4_addr_t *address,
 
 void netif_remove(netif *network_interface) {
   ++netif_remove_count;
+  state_at_remove = network_interface->state;
   network_interface->added = false;
   if (netif_default == network_interface) {
     netif_default = nullptr;
@@ -272,6 +276,7 @@ void setUp(void) {
   peer_endpoint_port = 0u;
   netif_add_count = 0u;
   netif_remove_count = 0u;
+  state_at_remove = nullptr;
   netif_up_count = 0u;
   peer_add_count = 0u;
   peer_remove_count = 0u;
@@ -395,6 +400,7 @@ void test_full_tunnel_lifecycle_restores_route_and_resources(void) {
   TEST_ASSERT_EQUAL_UINT32(1u, peer_remove_count);
   TEST_ASSERT_EQUAL_UINT32(1u, netif_remove_count);
   TEST_ASSERT_EQUAL_UINT32(1u, shutdown_count);
+  TEST_ASSERT_EQUAL_PTR(&wireguard_device_token, state_at_remove);
   TEST_ASSERT_EQUAL_UINT32(2u, extension_state.enter_count);
   TEST_ASSERT_EQUAL_UINT32(2u, extension_state.leave_count);
 }

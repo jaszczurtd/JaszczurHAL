@@ -249,6 +249,8 @@ class Phase3RegistryAndBuildTests(unittest.TestCase):
         for line in (
             "CONFIG_LWIP_MAX_SOCKETS=16",
             "CONFIG_LWIP_TCPIP_CORE_LOCKING=y",
+            "CONFIG_ESP_NETIF_BRIDGE_EN=y",
+            "CONFIG_LWIP_TCPIP_TASK_STACK_SIZE=6144",
             "CONFIG_PARTITION_TABLE_TWO_OTA_LARGE=y",
             "CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y",
             "CONFIG_FREERTOS_CHECK_STACKOVERFLOW_CANARY=y",

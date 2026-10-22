@@ -11,8 +11,15 @@
 #include "hal/security/jh_secure_random.h"
 #include "jh_esp32_network.h"
 
+#include <lwip/opt.h>
 #include <string.h>
 #include <sys/time.h>
+
+// The WireGuard netif owns netif->state; esp_netif must keep its own handle
+// in netif client data or its lwIP callbacks misread the tunnel device.
+#if !LWIP_ESP_NETIF_DATA
+#error "HAL_ENABLE_WIREGUARD on ESP-IDF requires CONFIG_ESP_NETIF_BRIDGE_EN=y"
+#endif
 
 namespace {
 

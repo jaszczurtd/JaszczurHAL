@@ -51,14 +51,16 @@ void teardown_locked() {
   if (s_default_route_changed && s_previous_default_netif != nullptr) {
     netif_set_default(s_previous_default_netif);
   }
+  // Removal aborts the TCP connections still bound to the tunnel address and
+  // sends their RSTs through this netif, so the device must outlive it.
+  if (s_netif_added) {
+    netif_remove(&s_wg_netif);
+  }
   if (s_peer_index != WIREGUARDIF_INVALID_INDEX) {
     (void)wireguardif_remove_peer(&s_wg_netif, s_peer_index);
   }
   if (s_wg_netif.state != nullptr) {
     wireguardif_shutdown(&s_wg_netif);
-  }
-  if (s_netif_added) {
-    netif_remove(&s_wg_netif);
   }
 
   memset(&s_wg_netif, 0, sizeof(s_wg_netif));

@@ -7,6 +7,7 @@
 #include "hal/core/hal_mutex_once.h"
 #include "hal/network/jh_network_backend.h"
 #include "hal/system/hal_sync.h"
+#include "hal/system/hal_system.h"
 #include "jh_native_socket_platform.h"
 #include "jh_native_sockets.h"
 
@@ -301,6 +302,38 @@ hal_status_t wait_for_descriptor(jh_native_fd_t descriptor, bool read,
   return HAL_OK;
 }
 
+// Longest single native wait. Longer waits are split so that a teardown
+// (jh_native_sockets_shutdown_all) from another task ends them promptly: the
+// stack does not always wake a waiter on shutdown(), lwIP never for UDP.
+constexpr uint32_t kWaitSliceMs = 50u;
+
+// Wait for @p token like wait_for_descriptor(), but end with HAL_ECANCELED
+// once a teardown has invalidated the handle.
+hal_status_t wait_for_token(const NativeSocket *token, SocketKind kind,
+                            bool read, bool write, uint32_t timeout_ms) {
+  const bool forever = timeout_ms == HAL_NET_TIMEOUT_FOREVER;
+  const uint32_t started = hal_millis();
+  for (;;) {
+    uint32_t slice = kWaitSliceMs;
+    if (!forever) {
+      const uint32_t waited = hal_millis() - started;
+      const uint32_t left = waited < timeout_ms ? timeout_ms - waited : 0u;
+      slice = left < kWaitSliceMs ? left : kWaitSliceMs;
+    }
+    const hal_status_t status =
+        wait_for_descriptor(token->descriptor, read, write, slice);
+    if (!token_is_valid(token, kind)) {
+      return HAL_ECANCELED;
+    }
+    if (status != HAL_ETIMEOUT && status != HAL_EAGAIN) {
+      return status;
+    }
+    if (!forever && hal_millis_deadline_expired(started, timeout_ms)) {
+      return timeout_ms == 0u ? HAL_EAGAIN : HAL_ETIMEOUT;
+    }
+  }
+}
+
 bool descriptor_ready(jh_native_fd_t descriptor, bool read, bool write) {
   return descriptor != JH_NATIVE_FD_INVALID &&
          wait_for_descriptor(descriptor, read, write, 0u) == HAL_OK;
@@ -361,10 +394,11 @@ hal_status_t bind_token(NativeSocket *token, SocketKind kind,
 }
 
 #if defined(HAL_ENABLE_TCP)
-hal_status_t connect_with_timeout(jh_native_fd_t descriptor,
+hal_status_t connect_with_timeout(const NativeSocket *token,
                                   const sockaddr *address,
                                   jh_native_socklen_t address_length,
                                   uint32_t timeout_ms) {
+  const jh_native_fd_t descriptor = token->descriptor;
   const int status = jh_native_connect(descriptor, address, address_length);
   const int connect_error = status == 0 ? 0 : jh_native_last_error();
   const jh_native_error_t connect_class = jh_native_classify(connect_error);
@@ -373,7 +407,7 @@ hal_status_t connect_with_timeout(jh_native_fd_t descriptor,
       connect_class != JH_NATIVE_ERR_WOULD_BLOCK) {
     result = status_from_class(connect_class, false, timeout_ms);
   } else if (status != 0) {
-    result = wait_for_descriptor(descriptor, false, true, timeout_ms);
+    result = wait_for_token(token, SocketKind::kTcp, false, true, timeout_ms);
     if (result == HAL_OK) {
       int socket_error = 0;
       if (jh_native_socket_error(descriptor, &socket_error) != 0) {
@@ -411,7 +445,7 @@ hal_status_t tcp_socket_connect(void *socket, const hal_net_endpoint_t *remote,
   status = create_descriptor(token, SocketKind::kTcp, family, SOCK_STREAM,
                              IPPROTO_TCP);
   return status == HAL_OK
-             ? connect_with_timeout(token->descriptor,
+             ? connect_with_timeout(token,
                                     reinterpret_cast<sockaddr *>(&address),
                                     address_length, timeout_ms)
              : status;
@@ -452,7 +486,7 @@ hal_status_t tcp_socket_recv(void *socket, void *buffer, size_t max_length,
     return HAL_OK;
   }
   const hal_status_t ready =
-      wait_for_descriptor(token->descriptor, true, false, timeout_ms);
+      wait_for_token(token, SocketKind::kTcp, true, false, timeout_ms);
   if (ready != HAL_OK) {
     return ready;
   }
@@ -535,7 +569,7 @@ hal_status_t tcp_listener_accept(void *listener, hal_net_endpoint_t *remote,
     return HAL_EINVAL;
   }
   const hal_status_t ready =
-      wait_for_descriptor(token->descriptor, true, false, timeout_ms);
+      wait_for_token(token, SocketKind::kTcpListener, true, false, timeout_ms);
   if (ready != HAL_OK) {
     return ready;
   }
@@ -651,7 +685,7 @@ hal_status_t udp_socket_recvfrom(void *socket, void *buffer, size_t max_length,
     return HAL_OK;
   }
   const hal_status_t ready =
-      wait_for_descriptor(token->descriptor, true, false, timeout_ms);
+      wait_for_token(token, SocketKind::kUdp, true, false, timeout_ms);
   if (ready != HAL_OK) {
     return ready;
   }

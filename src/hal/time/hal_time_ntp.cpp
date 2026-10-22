@@ -785,6 +785,15 @@ hal_status_t hal_time_sync_ntp_ex(const char *primary_server,
 #endif
   hal_mutex_unlock(mutex);
   status = start_request(primary_server);
+  if (status != HAL_OK && secondary_server != nullptr &&
+      secondary_server[0] != '\0') {
+    // A primary that cannot be asked (no address, no socket) is as
+    // unavailable as one that never answers: the secondary takes over.
+    hal_mutex_lock(mutex);
+    s_state.ntp_secondary_attempted = true;
+    hal_mutex_unlock(mutex);
+    status = start_request(secondary_server);
+  }
   if (status != HAL_OK) {
     hal_mutex_lock(mutex);
     s_state.ntp_state = HAL_TIME_NTP_FAILED;

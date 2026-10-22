@@ -180,7 +180,9 @@ bool hal_time_set_timezone(const char *tz);
 /**
  * @brief Start NTP synchronization.
  * @param primary_server Primary NTP server hostname.
- * @param secondary_server Optional secondary NTP server hostname (can be NULL).
+ * @param secondary_server Optional secondary NTP server hostname (can be NULL),
+ *        asked when the primary does not answer within 5 s or cannot be
+ *        asked at all (for example, its name does not resolve).
  * @return true when request was accepted. Progress is serviced by subsequent
  *         hal_time_unix(), hal_time_is_synced(), hal_time_get_local(), or
  *         hal_time_format_local() calls. Use hal_time_get_status_ex() to
@@ -192,7 +194,8 @@ bool hal_time_sync_ntp(const char *primary_server,
 /**
  * @brief Start NTP synchronization and return a detailed status.
  * @param primary_server Primary NTP server hostname.
- * @param secondary_server Optional secondary hostname.
+ * @param secondary_server Optional secondary hostname, as in
+ * hal_time_sync_ntp().
  * @return HAL_OK when accepted, or a validation/service error.
  */
 hal_status_t hal_time_sync_ntp_ex(const char *primary_server,

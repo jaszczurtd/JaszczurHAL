@@ -15,7 +15,11 @@ Konfigurację projektu, wybór platformy i obsługę poleceń opisuje [Praca z p
 | Platforma | Wgrywany obraz | Sposób aktywacji | Stan weryfikacji |
 |---|---|---|---|
 | `rp2040`, `rp2350-arm` | Podpisany kontener `.ota` JaszczurHAL | HAL zamienia zawartość slotu programu i slotu przejściowego; uruchamia nowy obraz próbnie i w razie potrzeby przywraca poprzedni | Zweryfikowane sprzętowo na Pico W, Pico 2 W oraz Pico+PIM730/RM2 |
-| `esp32s3` | Obraz BIN aplikacji ESP-IDF wskazany w zweryfikowanym manifeście kompilacji | Partycje `two-ota-large` ESP-IDF; próbny rozruch obrazu oczekującego na weryfikację, potwierdzenie albo powrót do poprzedniego obrazu | Implementacja jest kompletna i przechodzi kompilację oraz linkowanie. Weryfikacja sprzętowa, pełnego cyklu aktualizacji i negatywnych scenariuszy bezpieczeństwa nie została jeszcze zakończona |
+| `esp32s3` | Obraz BIN aplikacji ESP-IDF wskazany w zweryfikowanym manifeście kompilacji | Partycje `two-ota-large` ESP-IDF; próbny rozruch obrazu oczekującego na weryfikację, potwierdzenie albo powrót do poprzedniego obrazu | Zweryfikowane sprzętowo na Waveshare ESP32-S3-Zero: odkrywanie, odrzucenia AUTH2, odrzucanie obrazów, przerwany transfer, próbny rozruch, rollback i potwierdzenie |
+
+Zanik zasilania podczas aktualizacji ESP32-S3 lub tuż po zmianie partycji
+rozruchowej pozostaje niezweryfikowany. Zakres i ograniczenia opisuje
+[procedura testu sprzętowego](../../tests/hardware/esp32s3_ota/README.pl.md).
 
 Obie platformy korzystają z tego samego protokołu transportowego i publicznych funkcji zwrotnych. Używają jednak różnych obrazów: kontener RP i plik BIN aplikacji ESP-IDF nie są zamienne ani wzajemnie konwertowane.
 

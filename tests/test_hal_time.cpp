@@ -290,6 +290,42 @@ void test_ntp_timeout_retries_secondary_server(void) {
   TEST_ASSERT_EQUAL_UINT64(UINT64_C(300000), hal_time_unix());
 }
 
+// A primary that cannot even be asked (its name does not resolve) moves on to
+// the secondary at once instead of failing the request.
+void test_unresolvable_primary_starts_secondary_server(void) {
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_time_sync_ntp_ex("absent.invalid", "time.nist.gov"));
+  TEST_ASSERT_EQUAL_STRING("192.0.2.20",
+                           hal_mock_udp_get_last_begin_packet_host());
+  hal_time_status_t status = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_time_get_status_ex(&status));
+  TEST_ASSERT_EQUAL_INT(HAL_TIME_NTP_IN_PROGRESS, status.ntp_state);
+
+  uint8_t response[JH_NTP_PACKET_SIZE] = {};
+  make_ntp_response(response, UINT64_C(310000), 0u);
+  hal_mock_udp_inject_packet("192.0.2.20", JH_NTP_PORT, response,
+                             sizeof(response));
+  TEST_ASSERT_EQUAL_UINT64(UINT64_C(310000), hal_time_unix());
+
+  // The secondary is the last server: a timeout there fails the request.
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_time_sync_ntp_ex("absent.invalid", "time.nist.gov"));
+  hal_mock_advance_millis(5000u);
+  (void)hal_time_unix();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_time_get_status_ex(&status));
+  TEST_ASSERT_EQUAL_INT(HAL_TIME_NTP_FAILED, status.ntp_state);
+  TEST_ASSERT_EQUAL_INT(HAL_ETIMEOUT, status.last_ntp_status);
+}
+
+void test_unresolvable_servers_fail_the_request(void) {
+  TEST_ASSERT_NOT_EQUAL(HAL_OK,
+                        hal_time_sync_ntp_ex("absent.invalid", "gone.invalid"));
+  hal_time_status_t status = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_time_get_status_ex(&status));
+  TEST_ASSERT_EQUAL_INT(HAL_TIME_NTP_FAILED, status.ntp_state);
+  TEST_ASSERT_NOT_EQUAL(HAL_OK, status.last_ntp_status);
+}
+
 void test_network_service_can_reenter_time_getter(void) {
   TEST_ASSERT_TRUE(hal_time_sync_ntp("pool.ntp.org", nullptr));
   bool callback_called = false;
@@ -479,6 +515,8 @@ int main(void) {
   RUN_TEST(test_ntp_status_distinguishes_pending_request_from_valid_clock);
   RUN_TEST(test_ntp_status_reports_final_timeout);
   RUN_TEST(test_ntp_timeout_retries_secondary_server);
+  RUN_TEST(test_unresolvable_primary_starts_secondary_server);
+  RUN_TEST(test_unresolvable_servers_fail_the_request);
   RUN_TEST(test_valid_rtc_restores_unset_wall_clock);
   RUN_TEST(test_invalid_rtc_attaches_without_seeding_wall_clock);
   RUN_TEST(test_rtc_restore_error_keeps_handle_attached_for_ntp_recovery);

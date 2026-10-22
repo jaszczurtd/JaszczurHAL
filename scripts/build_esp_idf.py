@@ -36,6 +36,7 @@ PROJECT_CONFIG_JSON_NAME = "jh_esp_idf_project.json"
 TOOLCHAIN_PROVENANCE_NAME = "jh_esp_idf_toolchain.json"
 SUPPLY_CHAIN_SNAPSHOT = "security/esp_idf_tools.json"
 SDKCONFIG_DEFAULTS_NAME = "sdkconfig.defaults"
+SDKCONFIG_DEFAULTS_STAMP_NAME = "sdkconfig.defaults.sha256"
 DEFAULT_TARGET = "esp32s3"
 DEFAULT_BOARD = "waveshare-esp32-s3-zero"
 EXPORT_KEY = re.compile(r"^[A-Z][A-Z0-9_]*$")
@@ -181,6 +182,8 @@ ESP_IDF_FEATURE_COMPONENT_DEPENDENCIES = {
     "HAL_ENABLE_RGB_LED": ("esp_driver_rmt",),
     "HAL_ENABLE_SPI": ("esp_driver_spi",),
     "HAL_ENABLE_UART": ("esp_driver_uart",),
+    # The bridge glue esp_netif compiles for WireGuard includes esp_eth.
+    "HAL_ENABLE_WIREGUARD": ("esp_eth",),
 }
 ESP_IDF_MANAGED_DEPENDENCIES = {
     "bearssl": ("jh_bearssl",),
@@ -1392,6 +1395,17 @@ def _render_sdkconfig_defaults(model: Mapping[str, Any]) -> str:
                 "CONFIG_LWIP_TCPIP_CORE_LOCKING=y",
             )
         )
+    if "HAL_ENABLE_WIREGUARD" in model["resolvedFeatures"]:
+        # esp_netif keeps its handle in netif->state unless a bridge or PPP
+        # build moves it to netif client data. The WireGuard netif owns its
+        # netif->state, so without this esp_netif's lwIP callbacks read the
+        # tunnel device as an esp_netif and fault on netif_add(). Bridge
+        # code is linked only when an application creates a bridge.
+        lines.append("CONFIG_ESP_NETIF_BRIDGE_EN=y")
+        # lwIP's thread decrypts tunnel traffic and answers handshakes; the
+        # handshake path peaked at 3.4 KiB on hardware, above the 3 KiB
+        # default, and overflowed into the heap.
+        lines.append("CONFIG_LWIP_TCPIP_TASK_STACK_SIZE=6144")
     if "HAL_ENABLE_PULSE_CAPTURE" in model["resolvedFeatures"]:
         lines.append("CONFIG_MCPWM_ISR_CACHE_SAFE=y")
     if "HAL_ENABLE_ADC_SCAN" in model["resolvedFeatures"]:
@@ -1673,6 +1687,29 @@ def _project_config_contract(
     }
 
 
+def _discard_stale_sdkconfig(
+    build_dir: Path, generated_dir: Path, sdkconfig_defaults: Sequence[Path]
+) -> None:
+    """Remove the build's sdkconfig when the defaults it came from changed.
+
+    ESP-IDF applies sdkconfig.defaults only to options the existing sdkconfig
+    does not set yet, so a changed default (another feature set, variant or
+    project default) would otherwise keep the old value. The sdkconfig is
+    derived from the defaults alone, and the next build regenerates it.
+    """
+    digest = hashlib.sha256()
+    for path in sdkconfig_defaults:
+        digest.update(_canonical_path(path).as_posix().encode("utf-8") + b"\0")
+        digest.update(path.read_bytes() + b"\0")
+    stamp = generated_dir / SDKCONFIG_DEFAULTS_STAMP_NAME
+    current = digest.hexdigest()
+    previous = stamp.read_text(encoding="utf-8").strip() if stamp.is_file() else ""
+    sdkconfig = build_dir / "sdkconfig"
+    if previous != current and sdkconfig.exists():
+        sdkconfig.unlink()
+    stamp.write_text(current + "\n", encoding="utf-8")
+
+
 def materialize_build_inputs(
     repo_root: Path,
     project_dir: Path,
@@ -1691,6 +1728,7 @@ def materialize_build_inputs(
         _render_sdkconfig_defaults(model), encoding="utf-8"
     )
     sdkconfig_defaults = _project_sdkconfig_defaults(project_dir, build_dir)
+    _discard_stale_sdkconfig(build_dir, generated_dir, sdkconfig_defaults)
     (generated_dir / PROJECT_CONFIG_CMAKE_NAME).write_text(
         _render_project_cmake(model, sdkconfig_defaults), encoding="utf-8"
     )

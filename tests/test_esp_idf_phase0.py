@@ -553,6 +553,26 @@ class ArtifactTests(unittest.TestCase):
         )
         return project, build_dir, model
 
+    def test_changed_sdkconfig_defaults_regenerate_the_sdkconfig(self) -> None:
+        # ESP-IDF keeps every option an existing sdkconfig already sets, so a
+        # changed default only takes effect once the sdkconfig is rebuilt.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project, build_dir, model = self._fixture(
+                root, sdkconfig_defaults="CONFIG_LOG_DEFAULT_LEVEL_INFO=y\n"
+            )
+            sdkconfig = build_dir / "sdkconfig"
+            sdkconfig.write_text("CONFIG_LOG_DEFAULT_LEVEL_INFO=y\n", encoding="utf-8")
+
+            esp_idf.materialize_build_inputs(ROOT, project, build_dir, model)
+            self.assertTrue(sdkconfig.is_file(), "unchanged defaults keep it")
+
+            (project / "sdkconfig.defaults").write_text(
+                "CONFIG_LOG_DEFAULT_LEVEL_WARN=y\n", encoding="utf-8"
+            )
+            esp_idf.materialize_build_inputs(ROOT, project, build_dir, model)
+            self.assertFalse(sdkconfig.exists(), "changed defaults discard it")
+
     def test_manifest_is_relocatable_and_complete(self) -> None:
         with tempfile.TemporaryDirectory(prefix="jh-esp-artifacts-") as text:
             project, build_dir, model = self._fixture(Path(text))
