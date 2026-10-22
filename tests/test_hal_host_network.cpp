@@ -491,7 +491,8 @@ void test_resolver_handles_names_literals_and_capacity(void) {
     TEST_ASSERT_EQUAL_UINT16(0u, results[index].port);
     found = found || memcmp(results[index].addr, loopback_address,
                             HAL_NET_IPV4_ADDR_LEN) == 0;
-    // One entry per address, not one per socket type.
+    // One entry per address: not one per socket type and not one per
+    // duplicate hosts-database line (GitHub runners list localhost twice).
     for (size_t other = 0u; other < index; ++other) {
       TEST_ASSERT_TRUE(memcmp(results[index].addr, results[other].addr,
                               HAL_NET_IPV4_ADDR_LEN) != 0);
@@ -731,6 +732,31 @@ void test_sockets_are_not_inherited_by_child_processes(void) {
   hal_tcp_socket_close(client);
 }
 
+void test_same_address_compares_family_bytes_and_scope(void) {
+  hal_net_endpoint_t first = {};
+  first.family = HAL_NET_AF_INET;
+  first.addr_len = HAL_NET_IPV4_ADDR_LEN;
+  memcpy(first.addr, "\x7f\x00\x00\x01", HAL_NET_IPV4_ADDR_LEN);
+  first.port = 80u;
+  hal_net_endpoint_t second = first;
+  second.port = 8080u;
+  // The port is not part of the address: duplicate lookups differ only there.
+  TEST_ASSERT_TRUE(jh_native_sockets_same_address(&first, &second));
+  second.addr[3] = 2u;
+  TEST_ASSERT_FALSE(jh_native_sockets_same_address(&first, &second));
+  // The same leading bytes in another family are another address.
+  hal_net_endpoint_t mapped = first;
+  mapped.family = HAL_NET_AF_INET6;
+  mapped.addr_len = HAL_NET_IPV6_ADDR_LEN;
+  TEST_ASSERT_FALSE(jh_native_sockets_same_address(&first, &mapped));
+  hal_net_endpoint_t scoped = mapped;
+  TEST_ASSERT_TRUE(jh_native_sockets_same_address(&mapped, &scoped));
+  scoped.scope_id = 2u;
+  TEST_ASSERT_FALSE(jh_native_sockets_same_address(&mapped, &scoped));
+  TEST_ASSERT_FALSE(jh_native_sockets_same_address(&first, NULL));
+  TEST_ASSERT_FALSE(jh_native_sockets_same_address(NULL, &first));
+}
+
 int main(void) {
   // Keep every result line when a test crashes the process.
   (void)setvbuf(stdout, NULL, _IONBF, 0);
@@ -745,6 +771,7 @@ int main(void) {
   RUN_TEST(test_tcp_connect_to_closed_port_is_refused);
   RUN_TEST(test_tcp_listener_address_in_use_and_rebind_after_close);
   RUN_TEST(test_udp_datagram_round_trip_reports_sender);
+  RUN_TEST(test_same_address_compares_family_bytes_and_scope);
   RUN_TEST(test_resolver_handles_names_literals_and_capacity);
   RUN_TEST(test_http_server_answers_on_loopback_address);
   RUN_TEST(test_websocket_broadcast_reaches_loopback_client);

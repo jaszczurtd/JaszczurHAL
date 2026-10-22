@@ -332,6 +332,21 @@ def _git_crlf_paths(directory: Path, names: Sequence[str]) -> set[str]:
     }
 
 
+_WINDOWS = os.name == "nt"
+
+
+def _symlink_target_payload(path: Path) -> bytes:
+    """Return the link target of PATH the way Git stores it in its blob.
+
+    Git for Windows creates symbolic links with backslash separators, and
+    os.readlink() returns them that way; the blob always holds '/'.
+    """
+    target = os.readlink(path)
+    if _WINDOWS:
+        target = target.replace("\\", "/")
+    return os.fsencode(target)
+
+
 def _git_crlf_matches(directory: Path, name: str, expected: str) -> bool:
     payload = (directory / name).read_bytes()
     return (
@@ -367,7 +382,7 @@ def _git_source_problem(directory: Path, repository: str, reference: str) -> str
             gitlinks.append((quoted, expected))
         elif kind == "blob" and mode == "120000":
             if path.is_symlink():
-                payload = os.fsencode(os.readlink(path))
+                payload = _symlink_target_payload(path)
             elif path.is_file() and _git_output(
                 directory, "config", "--bool", "core.symlinks", check=False
             ) == "false":
