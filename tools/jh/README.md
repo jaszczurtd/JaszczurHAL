@@ -5,7 +5,10 @@
 `jh json inspect` reads JSON, selects a value by JSON Pointer and optionally
 writes or checks an output file. It uses the jhbase parser and file API.
 `jh json validate` checks a document against the hardware schema subset,
-including references between local files. Production generators still use Python.
+including references between local files. `jh generate device-defaults` reads
+the catalogue of HAL component types and writes or checks the generated
+header of their defaults. The hooks and `scripts/sync_generated.py` still run
+the Python generator; the C generator reproduces its header byte for byte.
 
 Prepare the pinned host dependencies explicitly before configuring:
 
@@ -15,8 +18,9 @@ python3 scripts/component_manager.py component utf8proc
 python3 scripts/component_manager.py component pcre2
 ```
 
-The tests also need utf8proc, pinned by jhbase and prepared separately in
-`third_party/utf8proc`.
+The build also needs utf8proc, pinned by jhbase and prepared separately in
+`third_party/utf8proc`: the type catalogue checks units as printable NFC text
+through `jb::unicode`.
 
 PCRE2 lives in an ignored checkout selected by `third_party/pcre2_version.conf`.
 Configure and build verify its revision and cleanliness without downloading or
@@ -42,6 +46,12 @@ cmake --build .build/jh --config Release
 ctest --test-dir .build/jh -C Release --output-on-failure
 ```
 
+`scripts/jh` (Linux) and `scripts/jh.ps1` (Windows, `-Arch x64|x86`) build
+the tool on first use below `.build/host-tools/<variant>/<key>/bin` and run
+it, rebuilding only when an input changed; the
+[script reference](../../doc/api/en/00_scripts.md) describes the bootstrap.
+The manual build below is the same project the launchers build.
+
 This is a separate host project. It builds the same jhbase as the rest of the
 HAL: the pinned `third_party/jhbase` checkout (`scripts/ensure_jhbase.sh`), or
 the checkout named by the `JH_JHBASE_DIR` environment variable. It enables
@@ -59,6 +69,8 @@ jh json inspect --file tests/fixtures/device_tree/cases.json --pointer /cases/0/
 jh json inspect --file input.json --pointer /limits/max --output result.json
 jh json inspect --file input.json --pointer /limits/max --output result.json --check --json
 jh json validate --file input.json --schema config/hardware/device_tree.schema.json --json
+jh generate device-defaults --root . --check
+jh generate device-defaults --root . --write --json
 ```
 
 Input paths are resolved against cwd captured once on entry. Windows arguments
@@ -120,17 +132,62 @@ depth 128. Exhaustion returns `HAL_EOVERFLOW` before publishing any error prefix
 The internal C API in [jh_json_schema.h](json/jh_json_schema.h) accepts caller-owned
 scratch, custom limits and optional document/report callbacks.
 
+## Type catalogue and device defaults
+
+`jh generate device-defaults --root <checkout>` reads every `*.json` of
+`config/hardware/bindings` as a HAL type named after its compatible
+(`vendor,name` becomes `vendor-name.json`), validates each file with
+`config/hardware/binding.schema.json` and then applies the rules beyond the
+schema: a `cType` must hold the JSON `type`; `unit` is printable NFC text
+without surrounding whitespace, judged with the Unicode data pinned by jhbase;
+`minimum`, `maximum`, `default` and `enum` members fit the C type, with
+`float`/`double` rounded once from the exact decimal and refused on overflow
+or on a nonzero value rounding to zero; a `default` is an `enum` member within
+the bounds; `when.property` names a property of the type; a child names a
+known type and sets only its properties with fitting values; a connection
+names a signal of the module and targets signals of declared children, each
+owned once; `requiresFeatures` are flags of `config/features/*.json` and
+`provides` are capabilities of `boards/capabilities.json`; child expansion has
+no cycle. A number spelt with a fraction or exponent must also keep a finite,
+nonzero magnitude in binary64, as the Python loader required.
+
+The header path comes from `generatedArtifacts.deviceDefaultsHeader` in
+`config/tooling/artifacts.json`, relative to `--output-root` (default: the
+root). `--bindings <dir>` reads another directory of types, for tests on
+edited copies. Exactly one of `--write` and `--check` is required. `--write`
+publishes the header through the atomic file API, keeping an identical file
+untouched, and prints `generated 1 device defaults artifacts (N changed)`.
+`--check` changes nothing: an up-to-date header prints `verified 1 generated
+device defaults artifacts`, a missing or different one is reported on stderr
+with a unified diff of at most 40 lines, and the exit code is 1. The
+generated text is the one `scripts/generate_device_defaults.py` writes:
+enum positions `JH_ENUM_<TYPE>_<PROPERTY>_<VALUE>`, property defaults
+`JH_DEFAULT_<TYPE>_<PROPERTY>` and child defaults after the module's values,
+types and properties in code point order. A macro produced twice fails
+instead of being renamed.
+
+With `--json` the result has `command: "generate.device-defaults"`,
+`status` (`HAL_OK`, or `HAL_ESTATE` for a missing or stale header), `root`,
+`bindings`, `output`, `changed` and `checkOnly`. A rejected catalogue exits
+with 2 and `status: "HAL_ECONFIG"`; its result adds `code` (`JH-HW-SCHEMA`,
+`JH-HW-BINDING` or `JH-HW-PROPERTY`), `source` (the file) and `pointer` (the
+JSON Pointer of the failing value, empty for the whole file), and the message
+reads `[code] source:pointer: detail`. Only the first failure is reported,
+the one with the lowest Pointer of the first file in name order. A missing
+root, bindings directory or registry file exits with 3.
+
 | Exit code | Meaning |
 |---|---|
 | 0 | Success, including an up-to-date output. |
 | 1 | `--check` found a missing or different output. |
-| 2 | Bad arguments, invalid JSON/schema, failed validation or an unresolved Pointer. |
+| 2 | Bad arguments, invalid JSON/schema, failed validation, a rejected type catalogue or an unresolved Pointer. |
 | 3 | Path, file, stdout or unexpected runtime failure. |
 | 4 | Allocation failure or an input/parser/validator/output limit. |
 
 These codes belong to this CLI. Existing `jh-vscode` commands keep their
 current entrypoint and exit codes.
 
-Install the executable and its licenses with `cmake --install <build> --config Release
+Install the executable and the licenses of PCRE2, jhbase, Ryu, utf8proc and
+JaszczurHAL with `cmake --install <build> --config Release
 --component jh --prefix <destination>`. The binary can be moved with its
 installation prefix; it does not require the source tree to run.

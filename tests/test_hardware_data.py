@@ -207,6 +207,18 @@ class CatalogueRuleTests(HalTypeCopies):
         self.assertEqual((code, file, pointer), (raised.exception.code,
                                                  Path(raised.exception.source).name,
                                                  raised.exception.pointer))
+        executable = os.environ.get("JH_SCHEMA_TOOL")
+        if not executable:
+            return
+        # The migrated catalogue reports the same code, file and Pointer.
+        result = subprocess.run(
+            [executable, "generate", "device-defaults", "--root", str(ROOT), "--bindings",
+             str(self.work), "--output-root", str(self.work / "out"), "--check", "--json"],
+            capture_output=True, encoding="utf-8", check=False, timeout=120)
+        self.assertEqual(2, result.returncode, result.stderr)
+        output = json.loads(result.stdout)
+        self.assertEqual((code, file, pointer),
+                         (output["code"], Path(output["source"]).name, output["pointer"]))
 
     def test_file_is_named_after_its_compatible(self) -> None:
         (self.work / "nxp-pcf8574.json").rename(self.work / "pcf8574.json")
