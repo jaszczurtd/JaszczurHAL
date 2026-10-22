@@ -20,7 +20,7 @@ Aby zachować przenośność, korzystaj z publicznego API JaszczurHAL zarówno w
 | Profile płytek | Profile RP2040, RP2350, STM32G474, ESP32, ESP32-S3 i hosta są generowane z rejestru płytek. W obsługiwanych konfiguracjach aplikacja może odczytać informacje o płytce podczas działania. | [rejestr płytek](../../boards/README.pl.md), [hal_board.h](../../src/hal/system/hal_board.h) |
 | RP2040 / RP2350 | Obsługa RP2040, RP2350 ARM i RP2350 Hazard3 RISC-V, z jawnym wyborem układu i architektury zestawu instrukcji (ISA) oraz opcjonalnym FreeRTOS. Implementacja i natywna kompilacja korzystają z oficjalnego Pico SDK; kod aplikacji pozostaje oparty na API JaszczurHAL. | [implementacja RP](../../src/hal/impl/rp2040/), [kompilacja natywna](../../link_libraries/rp_pico_lib/) |
 | STM32G474 | Obsługa STM32G474 bez systemu operacyjnego (bare-metal) lub z FreeRTOS. Implementacja obejmuje kod startowy, skrypt linkera, skoordynowany dostęp do pamięci flash, wbudowane peryferia i opcjonalną łączność przez CYW43 podłączony do gSPI. | [implementacja STM32G474](../../src/hal/impl/stm32g474/) |
-| Rodzina ESP32 | Wspólne API JaszczurHAL oparte na ESP-IDF. ESP32-S3 ma zaimplementowane moduły podstawowe, peryferia, usługi sieciowe, podstawową obsługę BLE przez NimBLE oraz OTA. Dla ESP32 i ESP32-S3 narzędzia projektowe generują konfigurację płytki i pamięci oraz integrują kompilację, wgrywanie, monitor i IntelliSense. | [implementacja ESP32](../../src/hal/impl/esp32/), [stanowisko kompilacji ESP32-S3](../../tests/fixtures/esp32s3_phase3/) |
+| Rodzina ESP32 | Kompilacja z ESP-IDF i wspólnym API HAL. ESP32-S3 udostępnia moduły podstawowe, peryferia, usługi sieciowe, podstawową obsługę BLE oraz OTA; sieć i OTA są zweryfikowane sprzętowo na Waveshare ESP32-S3-Zero. Narzędzia projektowe obsługują kompilację, wgrywanie, monitor i IntelliSense dla ESP32 i ESP32-S3. | [implementacja ESP32](../../src/hal/impl/esp32/), [sieć i zakres weryfikacji](../api/pl/15_connectivity.md#natywny-backend-esp32-s3-i-zakres-objęty-weryfikacją) |
 | Testy bez sprzętu (mock) | Deterministyczna implementacja publicznego API JaszczurHAL do testów jednostkowych na komputerze i rozwijania przenośnego kodu bez urządzenia docelowego. | [implementacja mock](../../src/hal/impl/.mock/) |
 | Hostowy backend sieci | TCP, UDP, rozwiązywanie nazw oraz serwery HTTP i WebSocket z HAL działają w programach i narzędziach w Linuksie i Windows na gniazdach systemu operacyjnego. Łączem zarządza system, więc funkcje WiFi zwracają `HAL_EUNSUPPORTED`. | [API łączności](../api/pl/15_connectivity.md#backend-hostowy-dla-programów-i-narzędzi), [biblioteka CMake](../../cmake/jh_host_network.cmake) |
 | Moduły opcjonalne | Flagi `HAL_ENABLE_*` określają, które funkcje i ich zależności mają zostać dołączone podczas kompilacji. | [hal_config.h](../../src/hal/core/hal_config.h) |
@@ -51,6 +51,10 @@ Aby zachować przenośność, korzystaj z publicznego API JaszczurHAL zarówno w
 | Funkcje narzędziowe | Operacje na tablicach, liczbach, tekście, pikselach i obrazach, konwersja kolejności bajtów, przeliczenia ADC/NTC oraz funkcje sieciowe i czasowe. Dostępna jest również obsługa regulatora PID i watchdoga. | [Rdzeń HAL](../../src/hal/core/), [Moduły HAL](../../src/hal/), [Warstwa zgodności](../../src/utils/) |
 
 ## Komunikacja i łączność
+
+Wspierana sieć korzysta z IPv4. Działanie IPv6 przez natywny stos ESP32
+lub systemu hosta, w tym Windows, pozostaje poza zakresem wsparcia
+JaszczurHAL. Szczegóły opisuje [API sieciowe](../api/pl/15_connectivity.md).
 
 | Obszar | Co oferuje | Źródło |
 |---|---|---|

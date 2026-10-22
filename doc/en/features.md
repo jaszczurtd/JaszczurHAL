@@ -20,7 +20,7 @@ Use the public JaszczurHAL API in application code and reusable drivers to prese
 | Board profiles | Profiles for RP2040, RP2350, STM32G474, ESP32, ESP32-S3, and the host are generated from the board registry. Supported configurations let applications query board information at runtime. | [board registry](../../boards/README.md), [hal_board.h](../../src/hal/system/hal_board.h) |
 | RP2040 / RP2350 | Support for RP2040, RP2350 ARM, and RP2350 Hazard3 RISC-V, with explicit chip and instruction-set architecture (ISA) selection and optional FreeRTOS. The implementation and native build use the official Pico SDK, while application code uses the JaszczurHAL API. | [RP backend](../../src/hal/impl/rp2040/), [native build](../../link_libraries/rp_pico_lib/) |
 | STM32G474 | Support for STM32G474 in bare-metal or FreeRTOS configurations. The implementation includes startup code, a linker script, coordinated flash access, native peripherals, and optional networking through CYW43 over gSPI. | [STM32G474 backend](../../src/hal/impl/stm32g474/) |
-| ESP32 family | A common JaszczurHAL API built on ESP-IDF. ESP32-S3 implements core modules, peripherals, network services, base BLE through NimBLE, and OTA. For ESP32 and ESP32-S3, project tools generate board and memory configuration and integrate builds, upload, monitoring, and IntelliSense. | [ESP32 implementation](../../src/hal/impl/esp32/), [ESP32-S3 compile fixture](../../tests/fixtures/esp32s3_phase3/) |
+| ESP32 family | Build on ESP-IDF with the common HAL API. ESP32-S3 provides core modules, peripherals, network services, base BLE, and OTA; networking and OTA are hardware-validated on Waveshare ESP32-S3-Zero. Project tools support ESP32 and ESP32-S3 builds, upload, monitoring, and IntelliSense. | [ESP32 implementation](../../src/hal/impl/esp32/), [connectivity and validation scope](../api/en/15_connectivity.md#esp32-s3-native-backend-and-verification-boundary) |
 | Host testing (mock) | A deterministic implementation of the public JaszczurHAL API for host unit tests and portable development without target hardware. | [mock backend](../../src/hal/impl/.mock/) |
 | Host network backend | Run HAL TCP, UDP, name resolution, and the HTTP and WebSocket servers in programs and tools on Linux and Windows over the operating system's sockets. The operating system controls the link, so WiFi functions report `HAL_EUNSUPPORTED`. | [connectivity API](../api/en/15_connectivity.md#host-backend-for-programs-and-tools), [CMake library](../../cmake/jh_host_network.cmake) |
 | Optional modules | The `HAL_ENABLE_*` flags select which features and dependencies are included at build time. | [hal_config.h](../../src/hal/core/hal_config.h) |
@@ -51,6 +51,10 @@ Use the public JaszczurHAL API in application code and reusable drivers to prese
 | Utility functions | Array, math, text, pixel, and image operations; byte-order conversion; ADC/NTC conversion; and network and time utilities. PID and watchdog support are also available. | [HAL core](../../src/hal/core/), [HAL modules](../../src/hal/), [compatibility utils](../../src/utils/) |
 
 ## Communication and connectivity
+
+Supported networking uses IPv4. IPv6 behavior available through native ESP32
+or host stacks, including Windows, is outside JaszczurHAL's supported feature
+set. See the [connectivity API](../api/en/15_connectivity.md) for the scope.
 
 | Area | What it offers | Source |
 |---|---|---|

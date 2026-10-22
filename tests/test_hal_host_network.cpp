@@ -7,10 +7,12 @@
 #include "hal/network/hal_udp.h"
 #include "hal/network/hal_wifi.h"
 #include "hal/network/http/hal_http_server.h"
+#include "hal/network/native_sockets/jh_native_sockets.h"
 #include "hal/network/websocket/hal_websocket.h"
 #include "hal/system/hal_system.h"
 #include "utils/unity.h"
 
+#include <atomic>
 #include <chrono>
 #include <stdint.h>
 #include <stdio.h>
@@ -627,6 +629,71 @@ void stop_child(ChildProcess *child) {
 #endif
 }
 
+// A network teardown ends waits that other threads are blocked in, also
+// where shutdown() does not wake the waiter (UDP), instead of leaving them
+// blocked on a handle that is no longer valid.
+void test_teardown_ends_blocked_waits_in_other_threads(void) {
+  hal_udp_socket_t udp = NULL;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_udp_socket_open_ex(&udp));
+  (void)bind_udp_socket(udp);
+  hal_tcp_listener_t listener = NULL;
+  hal_tcp_socket_t client = NULL;
+  hal_tcp_socket_t server = NULL;
+  connected_pair(&listener, &client, &server);
+
+  constexpr int kWaits = 3;
+  std::atomic<int> statuses[kWaits];
+  std::atomic<uint32_t> returned_ms[kWaits];
+  for (int index = 0; index < kWaits; ++index) {
+    statuses[index].store(HAL_NONE);
+    returned_ms[index].store(UINT32_MAX);
+  }
+  const auto start = Clock::now();
+  std::thread waits[kWaits] = {
+      std::thread([&] {
+        char buffer[8];
+        hal_net_endpoint_t sender = {};
+        size_t received = 0u;
+        statuses[0].store(
+            hal_udp_socket_recvfrom_ex(udp, buffer, sizeof(buffer), &sender,
+                                       HAL_NET_TIMEOUT_FOREVER, &received));
+        returned_ms[0].store(elapsed_ms(start));
+      }),
+      std::thread([&] {
+        char buffer[8];
+        size_t received = 0u;
+        statuses[1].store(hal_tcp_socket_recv_ex(server, buffer, sizeof(buffer),
+                                                 HAL_NET_TIMEOUT_FOREVER,
+                                                 &received));
+        returned_ms[1].store(elapsed_ms(start));
+      }),
+      std::thread([&] {
+        hal_net_endpoint_t remote = {};
+        hal_tcp_socket_t accepted = NULL;
+        statuses[2].store(hal_tcp_listener_accept_ex(
+            listener, &remote, HAL_NET_TIMEOUT_FOREVER, &accepted));
+        returned_ms[2].store(elapsed_ms(start));
+      }),
+  };
+  std::this_thread::sleep_for(std::chrono::milliseconds(300));
+  for (int index = 0; index < kWaits; ++index) {
+    TEST_ASSERT_EQUAL_INT_MESSAGE(HAL_NONE, statuses[index].load(),
+                                  "a wait ended before the teardown");
+  }
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_native_sockets_shutdown_all());
+  for (std::thread &wait : waits) {
+    wait.join();
+  }
+  for (int index = 0; index < kWaits; ++index) {
+    TEST_ASSERT_EQUAL_INT(HAL_ECANCELED, statuses[index].load());
+    TEST_ASSERT_LESS_THAN_UINT32(1300u, returned_ms[index].load());
+  }
+  hal_tcp_socket_close(server);
+  hal_tcp_socket_close(client);
+  hal_tcp_listener_close(listener);
+  hal_udp_socket_close(udp);
+}
+
 void test_sockets_are_not_inherited_by_child_processes(void) {
   uint16_t port = 0u;
   hal_tcp_listener_t listener = open_listener(&port);
@@ -682,5 +749,7 @@ int main(void) {
   RUN_TEST(test_http_server_answers_on_loopback_address);
   RUN_TEST(test_websocket_broadcast_reaches_loopback_client);
   RUN_TEST(test_sockets_are_not_inherited_by_child_processes);
+  // Last: the teardown invalidates every open handle.
+  RUN_TEST(test_teardown_ends_blocked_waits_in_other_threads);
   return UNITY_END();
 }

@@ -15,7 +15,11 @@ For project configuration, target selection, and command handling, see [Firmware
 | Target | Uploaded image | Activation method | Validation status |
 |---|---|---|---|
 | `rp2040`, `rp2350-arm` | Signed JaszczurHAL `.ota` container | HAL swaps the program and staging slots, starts a trial boot, and restores the previous image if necessary | Hardware validated on Pico W, Pico 2 W, and Pico+PIM730/RM2 |
-| `esp32s3` | ESP-IDF application BIN selected from a validated build manifest | ESP-IDF `two-ota-large` partitions; pending-verification trial boot, confirmation, and rollback | Implementation is complete and passes compilation and linking. Hardware validation, full update-lifecycle testing, and negative security testing are still pending |
+| `esp32s3` | ESP-IDF application BIN selected from a validated build manifest | ESP-IDF `two-ota-large` partitions; pending-verification trial boot, confirmation, and rollback | Hardware validated on Waveshare ESP32-S3-Zero for discovery, AUTH2 rejections, image rejection, interrupted transfer, trial boot, rollback, and confirmation |
+
+Power loss during an ESP32-S3 update or immediately after switching the boot
+partition remains unverified. See the [hardware test procedure](../../tests/hardware/esp32s3_ota/README.md)
+for its scope and limitations.
 
 Both platforms use the same transport protocol and public callbacks. Their image formats differ: the RP container and ESP-IDF application BIN are neither interchangeable nor converted into one another.
 

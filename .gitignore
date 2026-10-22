@@ -44,6 +44,11 @@ tests/hardware/*/.vscode/*
 !tests/hardware/*/.vscode/jaszczurhal.project.json
 # Local network credentials of the ESP32-S3 network hardware test.
 tests/hardware/esp32s3_network/net_test_config.h
+# Test CA, server key and the firmware header made by prepare-tls.
+tests/hardware/esp32s3_network/.tls/
+tests/hardware/esp32s3_network/net_test_tls.h
+# Network credentials and OTA password of the ESP32-S3 OTA hardware test.
+tests/hardware/esp32s3_ota/ota_test_config.h
 # Keep the Phase 3 compile fixture's target/board contract tracked as well.
 !tests/fixtures/esp32s3_phase3/.vscode/
 tests/fixtures/esp32s3_phase3/.vscode/*
