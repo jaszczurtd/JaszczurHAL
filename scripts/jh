@@ -6,7 +6,9 @@
 # Usage: scripts/jh [jh arguments...]
 # Environment: JH_BOOTSTRAP_CMAKE selects the cmake executable (default: cmake
 # in PATH); JH_DEPENDENCY_ROOT takes the managed checkouts from another
-# JaszczurHAL checkout; JH_JHBASE_DIR selects an external jhbase.
+# JaszczurHAL checkout; JH_OUTPUT_ROOT publishes the build below another
+# directory (default: .build/host-tools of this checkout); JH_JHBASE_DIR
+# selects an external jhbase.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

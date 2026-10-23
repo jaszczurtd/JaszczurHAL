@@ -19,7 +19,10 @@ cmake_minimum_required(VERSION 3.22)
 # builds the 32-bit variant. JH_DEPENDENCY_ROOT in the environment takes the
 # managed checkouts (third_party/jhbase, utf8proc, pcre2) from another
 # JaszczurHAL checkout, verified against the pins of JH_ROOT; an index
-# snapshot of the hook uses it. JH_JHBASE_DIR selects an external jhbase.
+# snapshot of the hook uses it. JH_OUTPUT_ROOT in the environment, like the
+# -D option, publishes below another directory: the hook points its snapshot
+# at the checkout's own .build/host-tools, so an unchanged tool is reused.
+# JH_JHBASE_DIR selects an external jhbase.
 #
 # Prerequisites on the host: CMake 3.22+, Git, a C11/C++17 compiler (GCC or
 # Clang with Ninja or Make on Linux; Visual Studio 2022 or cl.exe with Ninja
@@ -121,6 +124,12 @@ endfunction()
 
 # ---------------------------------------------------------------------------
 # Inputs
+# The managed checkouts are repositories of their own: the Git environment of
+# a caller (the pre-commit hook exports GIT_DIR and GIT_WORK_TREE for its index
+# snapshot) must not redirect their verification to the caller's repository.
+foreach(variable GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE)
+  unset(ENV{${variable}})
+endforeach()
 if(NOT DEFINED JH_ROOT OR JH_ROOT STREQUAL "")
   jh_fail("JH_ROOT is required: the JaszczurHAL checkout to build jh from")
 endif()
@@ -133,7 +142,11 @@ if(DEFINED ENV{JH_DEPENDENCY_ROOT} AND NOT "$ENV{JH_DEPENDENCY_ROOT}" STREQUAL "
   get_filename_component(dependency_root "$ENV{JH_DEPENDENCY_ROOT}" ABSOLUTE)
 endif()
 if(NOT DEFINED JH_OUTPUT_ROOT OR JH_OUTPUT_ROOT STREQUAL "")
-  set(JH_OUTPUT_ROOT "${JH_ROOT}/.build/host-tools")
+  if(DEFINED ENV{JH_OUTPUT_ROOT} AND NOT "$ENV{JH_OUTPUT_ROOT}" STREQUAL "")
+    set(JH_OUTPUT_ROOT "$ENV{JH_OUTPUT_ROOT}")
+  else()
+    set(JH_OUTPUT_ROOT "${JH_ROOT}/.build/host-tools")
+  endif()
 endif()
 get_filename_component(JH_OUTPUT_ROOT "${JH_OUTPUT_ROOT}" ABSOLUTE)
 if(NOT DEFINED JH_BUILD_TYPE OR JH_BUILD_TYPE STREQUAL "")
@@ -365,10 +378,11 @@ jh_published_ok("${key_dir}" "${key}" "${exe_name}" reusable)
 if(NOT reusable)
   set(work "${key_dir}/work")
   set(marker "${key_dir}/work.inprogress")
-  if(EXISTS "${marker}" OR (EXISTS "${work}" AND NOT EXISTS "${work}/CMakeCache.txt"))
-    # An interrupted build left this tree; start it again from nothing.
-    file(REMOVE_RECURSE "${work}")
-  endif()
+  # A rebuild under an existing key follows a damaged or interrupted result,
+  # possibly from another checkout sharing this output root (the hook's
+  # snapshot), whose CMake cache names a source tree that no longer exists:
+  # it starts from nothing.
+  file(REMOVE_RECURSE "${work}")
   file(WRITE "${marker}" "${key}\n")
   set(configure_arguments -S "${JH_ROOT}/tools/jh" -B "${work}" -G "${JH_GENERATOR}"
     "-DCMAKE_BUILD_TYPE=${JH_BUILD_TYPE}" -DBUILD_TESTING=OFF)

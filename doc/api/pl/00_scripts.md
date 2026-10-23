@@ -298,7 +298,9 @@ launchery dzielą jeden build. Wariant to `linux-<triple kompilatora>`,
 Windows x64); przed publikacją narzędzie musi się uruchomić.
 `JH_DEPENDENCY_ROOT` bierze zarządzane checkouty z innego checkoutu,
 sprawdzone względem pinów tego checkoutu, dzięki czemu wyeksportowane drzewo,
-np. migawka indeksu hooka, buduje się bez nich; `JH_JHBASE_DIR` wskazuje
+np. migawka indeksu hooka, buduje się bez nich; `JH_OUTPUT_ROOT` publikuje
+wynik w innym katalogu, dzięki czemu taka migawka używa narzędzia zbudowanego
+już w tym checkoutcie dla tych samych wejść; `JH_JHBASE_DIR` wskazuje
 zewnętrzny jhbase, którego zawartość wchodzi do klucza; `JH_BOOTSTRAP_CMAKE`
 wybiera program cmake. Scenariusze te sprawdza
 `tools/jh/tests/check_bootstrap.cmake` w teście `jh_bootstrap` zestawu CTest
@@ -745,7 +747,10 @@ Macierz targetów, interfejs aplikacji i polecenia kompilacji opisano w dokumenc
 Jeden skrypt obsługuje wszystkie wersjonowane pliki generowane. `--write`
 odświeża rejestr funkcji, statyczny rejestr płytek, wartości domyślne typów
 urządzeń, pliki VS Code przykładów, główne pliki VS Code oraz SBOM repozytorium.
-`--check` wywołuje ich tryby weryfikacji tylko do odczytu
+Wartości domyślne typów urządzeń daje `jh generate device-defaults`,
+uruchamiane przez launcher `scripts/jh` (`scripts/jh.ps1` na Windows), który
+najpierw buduje narzędzie, gdy zmieniły się jego wejścia; pozostałe kroki to
+skrypty Pythona. `--check` wywołuje ich tryby weryfikacji tylko do odczytu
 i kończy się niepowodzeniem, jeśli brakuje pliku wyjściowego albo jest on
 nieaktualny. Przed uruchomieniem skrypt zapisuje stan plików wersjonowanych oraz
 nieignorowanych, a po zakończeniu wypisuje wykryte zmiany.
@@ -901,29 +906,6 @@ schemat nie wyrazi: typy C i zakresy właściwości, typy dzieci i wartości
 ustawiane im przez moduł, połączenia modułu, flagi funkcji, cechy sprzętowe
 oraz rozwijanie dzieci, które zapętliłoby się w nieskończoność. Błędy mają kody
 `JH-HW-*` ze specyfikacji.
-
-### `scripts/generate_device_defaults.py`
-
-Zapisuje `src/hal/generated/jh_device_defaults.h` na podstawie typów HAL
-z `config/hardware/bindings/`. Wartość domyślna jest więc zapisana raz,
-w typie. Nagłówek definiuje:
-
-- `JH_DEFAULT_<TYPE>_<PROPERTY>` dla wartości domyślnej każdej właściwości;
-- `JH_DEFAULT_<MODULE>_<CHILD>_<PROPERTY>` dla każdego dziecka modułu, już po
-  uwzględnieniu wartości, które moduł ustawia temu dziecku;
-- `JH_ENUM_<TYPE>_<PROPERTY>_<VALUE>` z pozycją każdej wartości tekstowego
-  enuma.
-
-Helpery HAL, np. `hal_lora_sx126x_core1262_hf_defaults()`
-i `hal_can_default_config()`, czytają te makra, a `static_assert` pilnuje, żeby
-enumy HAL miały tę samą kolejność co typ. Literały mają zapis z tabeli formatu
-drzewa urządzeń i pochodzą z `scripts/hardware_literals.py`. Wartość
-domyślna float lub double jest zaokrąglana raz, z liczby dziesiętnej zapisanej
-w typie; przepełnienie albo zaokrąglenie do zera kończy generator błędem. Gdy
-dwie nazwy po zamianie na token makra stają się identyczne, generator kończy
-się błędem zamiast zmieniać nazwę. `--write` odświeża nagłówek, a `--check`
-zgłasza błąd, gdy go brakuje albo jest nieaktualny;
-oba tryby uruchamia `sync_generated.py`.
 
 ### `scripts/generate_hardware_config.py`
 

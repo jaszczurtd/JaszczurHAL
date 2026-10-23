@@ -183,6 +183,18 @@ def hook_scenarios(work: Path) -> None:
         "                        capture_output=True, text=True).stdout.split()\n"
         "if 'scripts/sync_generated.py' not in cached:\n"
         "    sys.exit('the staged tree does not see the commit index')\n"
+        "# The snapshot has no managed checkouts: the hook names the checkout\n"
+        "# holding them and the home of the jh build, and leaves the pinned\n"
+        "# jhbase pinned rather than external.\n"
+        "def named(variable):\n"
+        "    return pathlib.Path(os.environ.get(variable, '')).resolve()\n"
+        f"checkout = pathlib.Path({str(repo)!r}).resolve()\n"
+        "if named('JH_DEPENDENCY_ROOT') != checkout:\n"
+        "    sys.exit('the snapshot does not see the managed checkouts')\n"
+        "if named('JH_OUTPUT_ROOT') != checkout / '.build' / 'host-tools':\n"
+        "    sys.exit('the jh build is not shared with the checkout')\n"
+        "if 'JH_JHBASE_DIR' in os.environ:\n"
+        "    sys.exit('the hook treats the pinned jhbase as external')\n"
         "layout = root / 'layout.h'\n"
         "if layout.exists() and 'formatted' in layout.read_text():\n"
         "    sys.exit('layout.h changed by formatting')\n"
@@ -212,7 +224,13 @@ def hook_scenarios(work: Path) -> None:
         encoding="utf-8",
     )
     formatter.chmod(0o755)
-    environment = {**os.environ, "PATH": f"{tools}{os.pathsep}{os.environ['PATH']}"}
+    # The hook keeps these when the caller sets them; the stub expects the
+    # hook's own values.
+    environment = {
+        name: value for name, value in os.environ.items()
+        if name not in ("JH_DEPENDENCY_ROOT", "JH_OUTPUT_ROOT", "JH_JHBASE_DIR")
+    }
+    environment["PATH"] = f"{tools}{os.pathsep}{os.environ['PATH']}"
 
     def git(*arguments: str, **extra: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -231,7 +249,8 @@ def hook_scenarios(work: Path) -> None:
     for arguments in (("init", "-q"), ("config", "core.hooksPath", ".githooks"),
                       ("add", "scripts")):
         require(git(*arguments).returncode == 0, f"scratch repository: git {arguments}")
-    require(commit().returncode == 0, "the first commit was refused")
+    first = commit()
+    require(first.returncode == 0, f"the first commit was refused:\n{first.stderr}")
 
     # The hook formats and normalizes the staged files and commits the result.
     stage("config.h", b"#define A 1\n")

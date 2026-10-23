@@ -13,6 +13,7 @@ from pathlib import Path
 import py_compile
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -971,6 +972,21 @@ class TrackedContractTests(unittest.TestCase):
         self.assertRegex(riscv["RISCV_TOOLCHAIN_ASSET_STEM"], r"^riscv-toolchain-\d+$")
         # HAL policy, not a pin value: the pinned Pico SDK auto-detects this triple.
         self.assertEqual("riscv32-unknown-elf", riscv["RISCV_TOOLCHAIN_TRIPLE"])
+        # The pre-commit hook runs the generators on an index snapshot that
+        # carries the pins but no managed checkouts; JH_DEPENDENCY_ROOT names
+        # the checkout holding them, the pin stays the snapshot's.
+        with tempfile.TemporaryDirectory(prefix="jh-snapshot-") as text:
+            snapshot = Path(text)
+            (snapshot / "third_party").mkdir()
+            shutil.copy2(ROOT / "third_party/jhbase_version.conf", snapshot / "third_party")
+            with mock.patch.dict(os.environ, {**override, "JH_DEPENDENCY_ROOT": str(ROOT)}):
+                self.assertEqual(manager.jhbase_root(ROOT), manager.jhbase_root(snapshot))
+                self.assertEqual(riscv, manager.supplied_pin(snapshot, "riscv-toolchain")[0])
+            if not _JHBASE_OVERRIDE:
+                with mock.patch.dict(os.environ, override):
+                    os.environ.pop("JH_DEPENDENCY_ROOT", None)
+                    with self.assertRaises(manager.ComponentError):
+                        manager.supplied_pin(snapshot, "riscv-toolchain")
 
     def test_jhbase_xtensa_pin_matches_the_esp_idf_tools(self) -> None:
         # jhbase builds its ESP32-S3 device archive with its own Xtensa pin and

@@ -7,8 +7,9 @@ writes or checks an output file. It uses the jhbase parser and file API.
 `jh json validate` checks a document against the hardware schema subset,
 including references between local files. `jh generate device-defaults` reads
 the catalogue of HAL component types and writes or checks the generated
-header of their defaults. The hooks and `scripts/sync_generated.py` still run
-the Python generator; the C generator reproduces its header byte for byte.
+header of their defaults. `scripts/sync_generated.py`, and through it the
+pre-commit hook and the gate, run that command through the launcher described
+below.
 
 Prepare the pinned host dependencies explicitly before configuring:
 
@@ -159,12 +160,17 @@ publishes the header through the atomic file API, keeping an identical file
 untouched, and prints `generated 1 device defaults artifacts (N changed)`.
 `--check` changes nothing: an up-to-date header prints `verified 1 generated
 device defaults artifacts`, a missing or different one is reported on stderr
-with a unified diff of at most 40 lines, and the exit code is 1. The
-generated text is the one `scripts/generate_device_defaults.py` writes:
-enum positions `JH_ENUM_<TYPE>_<PROPERTY>_<VALUE>`, property defaults
-`JH_DEFAULT_<TYPE>_<PROPERTY>` and child defaults after the module's values,
-types and properties in code point order. A macro produced twice fails
-instead of being renamed.
+with a unified diff of at most 40 lines, and the exit code is 1. The header
+holds the position of each string enum value as
+`JH_ENUM_<TYPE>_<PROPERTY>_<VALUE>`, so C code can `static_assert` that a HAL
+enum keeps the order of the type, each property default as
+`JH_DEFAULT_<TYPE>_<PROPERTY>` and each child default as
+`JH_DEFAULT_<MODULE>_<CHILD>_<PROPERTY>` after the values the module sets for
+that child, with types and properties in code point order. HAL helpers such
+as `hal_lora_sx126x_core1262_hf_defaults()` and `hal_can_default_config()`
+read these macros instead of keeping a second table. Literals follow the
+table of the [device tree format](../../doc/en/device_tree_format.md).
+A macro produced twice fails instead of being renamed.
 
 With `--json` the result has `command: "generate.device-defaults"`,
 `status` (`HAL_OK`, or `HAL_ESTATE` for a missing or stale header), `root`,

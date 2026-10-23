@@ -138,7 +138,11 @@ generator zgłosi błąd, gdy kopia odświeżanego pliku w drzewie roboczym ma
 własne, niedodane zmiany albo gdy commit wskazuje ścieżki (`git commit
 <ścieżka>`), bo jego tymczasowy indeks nie przyjmie dodatkowych plików.
 Wtedy uruchom `python3 scripts/sync_generated.py --write`, przejrzyj zmiany,
-dodaj je do commita i spróbuj ponownie.
+dodaj je do commita i spróbuj ponownie. Wartości domyślne typów urządzeń daje
+hostowe CLI jh, które hook buduje przy pierwszym użyciu z zawartości commita
+(CMake co najmniej 3.22, Git i hostowy kompilator C11/C++17) do
+`.build/host-tools` tego checkoutu, biorąc z niego zarządzane checkouty;
+kolejny commit z tymi samymi wejściami narzędzia używa gotowego programu.
 
 **`runalltests.sh`** - pełna kontrola jakości
 ```bash

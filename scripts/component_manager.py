@@ -1263,14 +1263,20 @@ def jhbase_root(repo_root: Path) -> Path:
     """Directory of the jhbase checkout, the source of the supplied tool pins.
 
     JH_JHBASE_DIR selects an external checkout, like the other *_DIR overrides.
+    JH_DEPENDENCY_ROOT names another JaszczurHAL checkout holding the managed
+    directories, as for the CMake modules: an exported tree such as the
+    pre-commit index snapshot carries the pins but no checkouts. The pin
+    always comes from repo_root.
     """
     spec = GIT_COMPONENTS["jhbase"]
     config_path = repo_root / "third_party" / spec.config
     config = parse_config(config_path)
     require_values(config, (f"{spec.prefix}_DIR",), config_path)
-    return _resolve_component_dir(
-        repo_root, config[f"{spec.prefix}_DIR"], os.environ.get("JH_JHBASE_DIR", "")
-    )
+    override = os.environ.get("JH_JHBASE_DIR", "")
+    base = repo_root
+    if not override and os.environ.get("JH_DEPENDENCY_ROOT"):
+        base = Path(os.environ["JH_DEPENDENCY_ROOT"]).expanduser().resolve(strict=False)
+    return _resolve_component_dir(base, config[f"{spec.prefix}_DIR"], override)
 
 
 def supplied_pin(repo_root: Path, name: str) -> tuple[dict[str, str], Path]:

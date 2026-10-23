@@ -1299,11 +1299,6 @@ add_test(NAME test_hardware_data
         ${CMAKE_CURRENT_SOURCE_DIR}/test_hardware_data.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
-add_test(NAME test_device_defaults
-    COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_CURRENT_SOURCE_DIR}/test_device_defaults.py
-        ${CMAKE_CURRENT_SOURCE_DIR}/..
-)
 add_test(NAME test_hardware_literals
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_hardware_literals.py

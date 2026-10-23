@@ -10,7 +10,9 @@ get_filename_component(JH_HAL_SOURCE "${JH_HAL_SOURCE}" ABSOLUTE)
 get_filename_component(JH_WORK "${JH_WORK}" ABSOLUTE)
 file(REMOVE_RECURSE "${JH_WORK}")
 set(copy "${JH_WORK}/exported tree ż")
-set(output "${JH_WORK}/host-tools")
+# The published path reaches the launchers through a result file; a non-ASCII
+# directory checks that the PowerShell launcher reads it as UTF-8.
+set(output "${JH_WORK}/host-tools ż")
 foreach(path tools/jh cmake/jh_jhbase.cmake cmake/jh_pcre2.cmake cmake/jh_verify_pcre2.cmake
     cmake/jh_build_dir_guard.cmake third_party/jhbase_version.conf third_party/pcre2_version.conf
     config/tooling/managed_components.json scripts/jh_bootstrap.cmake scripts/jh scripts/jh.ps1 LICENSE)
@@ -43,7 +45,8 @@ function(bootstrap expected prefix)
   endif()
   set(${prefix}_output "${out}${err}" PARENT_SCOPE)
   if(EXISTS "${result}")
-    file(STRINGS "${result}" lines LIMIT_COUNT 1)
+    # Without the encoding, file(STRINGS) ends a string at a non-ASCII byte.
+    file(STRINGS "${result}" lines LIMIT_COUNT 1 ENCODING UTF-8)
     set(${prefix}_exe "${lines}" PARENT_SCOPE)
   else()
     set(${prefix}_exe "" PARENT_SCOPE)
@@ -115,14 +118,18 @@ endif()
 expect_runs("${fourth_exe}")
 
 # 5. A pin whose checkout is missing or different is refused before any build.
-file(READ "${copy}/third_party/pcre2_version.conf" pin)
+# The pin is an input of the key, so it comes back byte for byte: file(READ)
+# and file(WRITE) would give it the host's line endings on Windows.
+set(pin_file "${copy}/third_party/pcre2_version.conf")
+file(COPY_FILE "${pin_file}" "${JH_WORK}/pcre2_version.conf.original")
+file(READ "${pin_file}" pin)
 string(REGEX REPLACE "PCRE2_REF=[0-9a-f]+" "PCRE2_REF=0123456789abcdef0123456789abcdef01234567" wrong_pin "${pin}")
-file(WRITE "${copy}/third_party/pcre2_version.conf" "${wrong_pin}")
+file(WRITE "${pin_file}" "${wrong_pin}")
 bootstrap(1 wrong_pin)
 if(NOT wrong_pin_output MATCHES "Wrong revision" OR NOT wrong_pin_exe STREQUAL "")
   message(FATAL_ERROR "A wrong PCRE2 pin was not refused: ${wrong_pin_output}")
 endif()
-file(WRITE "${copy}/third_party/pcre2_version.conf" "${pin}")
+file(COPY_FILE "${JH_WORK}/pcre2_version.conf.original" "${pin_file}")
 file(MAKE_DIRECTORY "${JH_WORK}/empty dependency root")
 set(ENV{JH_DEPENDENCY_ROOT} "${JH_WORK}/empty dependency root")
 execute_process(COMMAND "${CMAKE_COMMAND}" "-DJH_ROOT=${copy}" "-DJH_OUTPUT_ROOT=${output}"
@@ -133,22 +140,39 @@ if(code EQUAL 0 OR NOT "${out}${err}" MATCHES "jhbase is missing")
   message(FATAL_ERROR "Missing managed checkouts were not reported: ${out}${err}")
 endif()
 
-# 6. The launcher of this host runs the tool through the same bootstrap.
+# 6. The launcher of this host runs the tool through the same bootstrap, and
+# JH_OUTPUT_ROOT in the environment (the hook's snapshot) reuses the result
+# published above instead of building below the tree's own .build. The Git
+# environment the hook exports for its snapshot names another repository;
+# the checkouts are still verified as their own.
+find_program(git_program NAMES git REQUIRED)
+execute_process(COMMAND "${git_program}" init -q "${JH_WORK}/other repo" RESULT_VARIABLE code)
+if(NOT code EQUAL 0)
+  message(FATAL_ERROR "git init failed: ${code}")
+endif()
 if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
   find_program(powershell NAMES pwsh powershell REQUIRED)
   set(launcher "${powershell}" -NoProfile -ExecutionPolicy Bypass -File "${copy}/scripts/jh.ps1")
 else()
   set(launcher "${copy}/scripts/jh")
 endif()
-execute_process(COMMAND "${CMAKE_COMMAND}" -E env "JH_DEPENDENCY_ROOT=${JH_HAL_SOURCE}" --unset=JH_JHBASE_DIR
+# The launcher must run the bootstrap with the CMake of this test: the CMake
+# version is part of the key, so another cmake in PATH would build anew.
+set(launcher_environment "JH_DEPENDENCY_ROOT=${JH_HAL_SOURCE}" "JH_OUTPUT_ROOT=${output}" --unset=JH_JHBASE_DIR
+  "JH_BOOTSTRAP_CMAKE=${CMAKE_COMMAND}"
+  "GIT_DIR=${JH_WORK}/other repo/.git" "GIT_WORK_TREE=${JH_WORK}/other repo")
+execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${launcher_environment}
     ${launcher} --version --json
   RESULT_VARIABLE code OUTPUT_VARIABLE out ERROR_VARIABLE err)
 if(NOT code EQUAL 0 OR NOT out MATCHES "^{\"formatVersion\":1,\"command\":\"version\",\"status\":\"HAL_OK\"")
   message(FATAL_ERROR "The launcher did not run jh with a clean stdout: ${code}\n${out}\n${err}")
 endif()
+if(err MATCHES "Building jh" OR EXISTS "${copy}/.build/host-tools")
+  message(FATAL_ERROR "The launcher did not reuse the build below JH_OUTPUT_ROOT: ${err}")
+endif()
 # Command words and options reach jh unchanged; the exported tree has no
 # type catalogue, so the generator reports the missing directory itself.
-execute_process(COMMAND "${CMAKE_COMMAND}" -E env "JH_DEPENDENCY_ROOT=${JH_HAL_SOURCE}" --unset=JH_JHBASE_DIR
+execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${launcher_environment}
     ${launcher} generate device-defaults --root "${copy}" --check --json
   RESULT_VARIABLE code OUTPUT_VARIABLE out ERROR_VARIABLE err)
 if(NOT code EQUAL 3 OR NOT out MATCHES "\"command\":\"generate.device-defaults\",\"status\":\"HAL_ENOENT\"")
