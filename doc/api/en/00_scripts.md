@@ -279,6 +279,8 @@ concurrent launchers share one build. The variant is
 before it is published. `JH_DEPENDENCY_ROOT` takes the managed checkouts
 from another checkout, verified against this checkout's pins, so an exported
 tree such as the hook's index snapshot builds without them;
+`JH_OUTPUT_ROOT` publishes below another directory, which lets that snapshot
+reuse the tool this checkout already built for the same inputs;
 `JH_JHBASE_DIR` selects an external jhbase whose content joins the key;
 `JH_BOOTSTRAP_CMAKE` selects the cmake executable.
 `tools/jh/tests/check_bootstrap.cmake` covers these scenarios in the
@@ -700,9 +702,11 @@ application interface, and build commands.
 
 Single repository-level runner for every tracked generated artifact. `--write`
 refreshes the feature registry, static board registry, device type defaults,
-example VS Code files, root VS Code files, and repository SBOM. `--check` invokes their read-only
-verification modes
-and fails on missing or stale output. The runner snapshots tracked and
+example VS Code files, root VS Code files, and repository SBOM. The device
+type defaults come from `jh generate device-defaults` through the launcher
+`scripts/jh` (`scripts/jh.ps1` on Windows), which builds the tool first when
+its inputs changed; the other steps are Python scripts. `--check` invokes
+their read-only verification modes and fails on missing or stale output. The runner snapshots tracked and
 non-ignored files before execution, then prints the paths changed during the
 run. `--report-file <path>` also stores that final list for callers such as
 `runalltests.sh`.
@@ -847,28 +851,6 @@ express: C types and bounds of properties, child types and the values a
 module sets for them, module connections, feature flags, capabilities, and
 child expansion that would loop. Errors use the specification's `JH-HW-*`
 codes.
-
-### `scripts/generate_device_defaults.py`
-
-Writes `src/hal/generated/jh_device_defaults.h` from the HAL types in
-`config/hardware/bindings/`, so a default value is written down once, in the
-type. The header defines:
-
-- `JH_DEFAULT_<TYPE>_<PROPERTY>` for each property default;
-- `JH_DEFAULT_<MODULE>_<CHILD>_<PROPERTY>` for each child of a module, after
-  the values the module sets for that child;
-- `JH_ENUM_<TYPE>_<PROPERTY>_<VALUE>` with the position of each string enum
-  value.
-
-HAL helpers such as `hal_lora_sx126x_core1262_hf_defaults()` and
-`hal_can_default_config()` read these macros, and static assertions keep the
-HAL enums in the order of the type. Literals follow the table of the device
-tree format and come from `scripts/hardware_literals.py`. A float or double
-default is rounded once from the decimal written in the type; one that
-overflows or rounds to zero fails the run. Two names that meet after token
-conversion fail the run instead of being renamed. `--write`
-refreshes the header and `--check` fails when it is missing or stale;
-`sync_generated.py` runs both.
 
 ### `scripts/generate_hardware_config.py`
 

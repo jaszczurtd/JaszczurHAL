@@ -7,8 +7,9 @@ zapisać albo sprawdzić plik wynikowy. Korzysta z parsera i API plików jhbase.
 `jh json validate` sprawdza dokument według podzbioru schematów sprzętowych,
 także z odwołaniami między lokalnymi plikami. `jh generate device-defaults`
 czyta katalog typów komponentów HAL i zapisuje albo sprawdza generowany
-nagłówek ich wartości domyślnych. Hooki i `scripts/sync_generated.py` nadal
-uruchamiają generator Pythona; generator C odtwarza jego nagłówek co do bajtu.
+nagłówek ich wartości domyślnych. `scripts/sync_generated.py`, a przez niego
+hook pre-commit i bramka, uruchamiają to polecenie przez opisany niżej
+launcher.
 
 Przed konfiguracją przygotuj zależności hosta w wersjach wskazanych przez repozytorium:
 
@@ -164,11 +165,16 @@ publikuje nagłówek przez atomowe API plików, zostawia identyczny plik
 nietknięty i wypisuje `generated 1 device defaults artifacts (N changed)`.
 `--check` niczego nie zmienia: aktualny nagłówek daje `verified 1 generated
 device defaults artifacts`, brakujący albo inny jest zgłaszany na stderr
-z unified diff do 40 linii, a kod wyjścia to 1. Treść jest tą samą, którą
-pisze `scripts/generate_device_defaults.py`: pozycje enumów
-`JH_ENUM_<TYP>_<WŁAŚCIWOŚĆ>_<WARTOŚĆ>`, domyślne wartości właściwości
-`JH_DEFAULT_<TYP>_<WŁAŚCIWOŚĆ>` i domyślne wartości dzieci po wartościach
-ustawionych przez moduł, typy i właściwości w kolejności punktów kodowych.
+z unified diff do 40 linii, a kod wyjścia to 1. Nagłówek zawiera pozycję
+każdej tekstowej wartości enuma jako `JH_ENUM_<TYP>_<WŁAŚCIWOŚĆ>_<WARTOŚĆ>`,
+dzięki czemu kod C może sprawdzić przez `static_assert`, że enum HAL zachowuje
+kolejność z typu, domyślną wartość każdej właściwości jako
+`JH_DEFAULT_<TYP>_<WŁAŚCIWOŚĆ>` oraz domyślną wartość każdego dziecka jako
+`JH_DEFAULT_<MODUŁ>_<DZIECKO>_<WŁAŚCIWOŚĆ>`, już po wartościach, które moduł
+ustawia temu dziecku; typy i właściwości idą w kolejności punktów kodowych.
+Helpery HAL, np. `hal_lora_sx126x_core1262_hf_defaults()`
+i `hal_can_default_config()`, czytają te makra zamiast trzymać drugą tabelę.
+Literały mają zapis z tabeli [formatu drzewa urządzeń](../../doc/pl/device_tree_format.md).
 Makro wyprodukowane dwa razy kończy się błędem zamiast zmiany nazwy.
 
 Z `--json` wynik ma `command: "generate.device-defaults"`, `status`

@@ -44,6 +44,12 @@ add_executable(jh src/main.cpp)
 target_link_libraries(jh PRIVATE jh_host)
 target_compile_features(jh PRIVATE cxx_std_17)
 jh_tool_target(jh)
+if(MSVC)
+  # The same inputs give the same executable: the linker derives the PE and
+  # debug directory timestamps from the content instead of the clock, so the
+  # bootstrap's SHA-256 of a rebuilt tool stays comparable.
+  target_link_options(jh PRIVATE /Brepro)
+endif()
 target_compile_definitions(jh PRIVATE JH_TOOL_VERSION="${PROJECT_VERSION}")
 include(CTest)
 if(BUILD_TESTING)
@@ -56,11 +62,12 @@ if(BUILD_TESTING)
   add_test(NAME jh_schema_compat COMMAND "${CMAKE_COMMAND}" -E env
       "JH_SCHEMA_TOOL=$<TARGET_FILE:jh>" "${Python3_EXECUTABLE}"
       "${CMAKE_CURRENT_SOURCE_DIR}/../../tests/test_hardware_data.py")
-  # The Python generator's regressions also drive the migrated generator.
-  add_test(NAME jh_defaults_compat COMMAND "${CMAKE_COMMAND}" -E env
+  # The regressions of the device defaults generator run this tool; the
+  # host build of tests/ has no jh, so they live here.
+  add_test(NAME jh_device_defaults COMMAND "${CMAKE_COMMAND}" -E env
       "JH_SCHEMA_TOOL=$<TARGET_FILE:jh>" "${Python3_EXECUTABLE}"
       "${CMAKE_CURRENT_SOURCE_DIR}/../../tests/test_device_defaults.py")
-  set_tests_properties(jh_schema jh_schema_compat jh_defaults_compat PROPERTIES TIMEOUT 120)
+  set_tests_properties(jh_schema jh_schema_compat jh_device_defaults PROPERTIES TIMEOUT 120)
   add_test(NAME jh_cli COMMAND "${CMAKE_COMMAND}" "-DJH=$<TARGET_FILE:jh>"
     "-DJH_BUILD=${CMAKE_CURRENT_BINARY_DIR}" "-DJH_CONFIG=$<CONFIG>"
     "-DJH_SUFFIX=${CMAKE_EXECUTABLE_SUFFIX}"

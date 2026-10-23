@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 import hashlib
+import os
 from pathlib import Path
 import stat
 import subprocess
@@ -15,14 +16,29 @@ from typing import Iterable
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
+# The launcher of the jh host CLI of this checkout: it builds the tool first
+# when its inputs changed (scripts/jh_bootstrap.cmake). subprocess cannot run
+# a .ps1 file itself, so Windows goes through powershell.exe.
+JH_LAUNCHER: tuple[str, ...] = (
+    ("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+     str(REPO_ROOT / "scripts" / "jh.ps1"))
+    if os.name == "nt"
+    else (str(REPO_ROOT / "scripts" / "jh"),)
+)
+
 
 @dataclass(frozen=True)
 class GeneratorStep:
-    """Commands used to write and verify one group of generated files."""
+    """Commands used to write and verify one group of generated files.
+
+    Python scripts of this repository run through the current interpreter;
+    a step of the jh host CLI runs its command words through JH_LAUNCHER.
+    """
 
     name: str
     write_commands: tuple[tuple[str, ...], ...]
     check_commands: tuple[tuple[str, ...], ...]
+    host_cli: bool = False
 
 
 GENERATOR_STEPS = (
@@ -48,8 +64,9 @@ GENERATOR_STEPS = (
     ),
     GeneratorStep(
         "device type defaults",
-        (("scripts/generate_device_defaults.py", "--write"),),
-        (("scripts/generate_device_defaults.py", "--check"),),
+        (("generate", "device-defaults", "--root", str(REPO_ROOT), "--write"),),
+        (("generate", "device-defaults", "--root", str(REPO_ROOT), "--check"),),
+        host_cli=True,
     ),
     GeneratorStep(
         "example VS Code files",
@@ -190,11 +207,14 @@ def main() -> int:
         print(f"\n== {step.name} ==", flush=True)
         commands = step.check_commands if args.check else step.write_commands
         for command in commands:
-            printable = " ".join(("python3", *command))
+            if step.host_cli:
+                argv = (*JH_LAUNCHER, *command)
+                printable = " ".join(("scripts/jh", *command))
+            else:
+                argv = (sys.executable, *command)
+                printable = " ".join(("python3", *command))
             print(f"$ {printable}", flush=True)
-            result = subprocess.run(
-                (sys.executable, *command), cwd=REPO_ROOT, check=False
-            )
+            result = subprocess.run(argv, cwd=REPO_ROOT, check=False)
             if result.returncode != 0:
                 failure = command, result.returncode
                 break

@@ -6,7 +6,9 @@
 .DESCRIPTION
     Needs CMake 3.22+, Git and Visual Studio 2022 (or cl.exe in PATH with the
     Ninja generator). The managed checkouts come from the component manager.
-    Works in Windows PowerShell 5.1 and PowerShell 7.
+    Works in Windows PowerShell 5.1 and PowerShell 7. The environment variables
+    JH_BOOTSTRAP_CMAKE, JH_DEPENDENCY_ROOT, JH_OUTPUT_ROOT and JH_JHBASE_DIR
+    reach the bootstrap as for scripts/jh.
 
 .PARAMETER Arch
     Process architecture of jh on Windows x64: x64 (default) or x86.
@@ -47,7 +49,9 @@ try {
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
-    $Executable = (Get-Content -LiteralPath $Result -Raw).Trim()
+    # CMake writes the result as UTF-8; Windows PowerShell 5.1 would read it
+    # as ANSI and lose a non-ASCII path.
+    $Executable = (Get-Content -LiteralPath $Result -Raw -Encoding UTF8).Trim()
 } finally {
     Remove-Item -LiteralPath $Result -ErrorAction SilentlyContinue
 }

@@ -134,7 +134,11 @@ review them in the commit. It blocks the commit instead when a generator fails,
 when the working copy of a refreshed file holds unstaged edits of its own, or
 when the commit names paths (`git commit <path>`), whose temporary index
 cannot take extra files. Then run `python3 scripts/sync_generated.py --write`,
-review and stage the changes, and retry.
+review and stage the changes, and retry. The device type defaults come from
+the jh host CLI, which the hook builds on first use from the staged content
+(CMake 3.22 or newer, Git and a host C11/C++17 compiler) into this checkout's
+`.build/host-tools`, taking the managed checkouts from this checkout; a later
+commit with the same tool inputs reuses it.
 
 **`runalltests.sh`** - Full validation gate
 ```bash

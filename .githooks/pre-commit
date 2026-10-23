@@ -90,12 +90,15 @@ fi
 # joins the commit. A working copy holding a third version of such a file, or
 # a commit naming paths (a temporary index), blocks the commit instead.
 echo "[pre-commit] Refreshing generated artifacts..."
-# The SBOM reads the Unity, cppcheck, PMD and RISC-V pins from the jhbase
-# checkout, which is git-ignored and therefore not part of the exported tree.
-if [ -z "${JH_JHBASE_DIR:-}" ] && [ -d "$repo_root/third_party/jhbase" ]; then
-    JH_JHBASE_DIR="$repo_root/third_party/jhbase"
-    export JH_JHBASE_DIR
-fi
+# The index snapshot holds no managed checkouts (third_party is ignored by
+# Git): the generators take them from this checkout through
+# JH_DEPENDENCY_ROOT, verified against the snapshot's own pins, and the jh
+# bootstrap publishes below this checkout's .build, so the snapshot reuses
+# the tool built for the same inputs instead of building into a directory
+# this hook removes.
+JH_DEPENDENCY_ROOT="${JH_DEPENDENCY_ROOT:-$repo_root}"
+JH_OUTPUT_ROOT="${JH_OUTPUT_ROOT:-$repo_root/.build/host-tools}"
+export JH_DEPENDENCY_ROOT JH_OUTPUT_ROOT
 staged_tree="$repo_root/.build/pre-commit/staged"
 report="$repo_root/.build/pre-commit/generated.txt"
 rm -rf "$staged_tree" "$report"
