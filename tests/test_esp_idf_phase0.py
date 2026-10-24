@@ -95,15 +95,21 @@ class EnvironmentTests(unittest.TestCase):
             python.write_bytes(b"fixture")
             (sdk / "tools/idf_tools.py").write_text(
                 "import export_payload\n"
+                "print('IDF_CCACHE_ENABLE=1')\n"
                 f"print('IDF_PYTHON_ENV_PATH=' + {str(python_root)!r})\n",
                 encoding="utf-8",
             )
             (sdk / "tools/export_payload.py").write_text("value = 1\n", encoding="utf-8")
             before = sorted(path.relative_to(sdk) for path in sdk.rglob("*"))
-            with mock.patch.dict(os.environ):
-                os.environ.pop("PYTHONPYCACHEPREFIX", None)
-                os.environ.pop("PYTHONDONTWRITEBYTECODE", None)
-                environment = esp_idf.exported_environment(sdk)
+            for requested in (None, "0", "1"):
+                with self.subTest(ccache=requested), mock.patch.dict(os.environ):
+                    os.environ.pop("PYTHONPYCACHEPREFIX", None)
+                    os.environ.pop("PYTHONDONTWRITEBYTECODE", None)
+                    os.environ.pop("IDF_CCACHE_ENABLE", None)
+                    if requested is not None:
+                        os.environ["IDF_CCACHE_ENABLE"] = requested
+                    environment = esp_idf.exported_environment(sdk)
+                    self.assertEqual(environment["IDF_CCACHE_ENABLE"], requested or "1")
             self.assertEqual(sorted(path.relative_to(sdk) for path in sdk.rglob("*")), before)
             self.assertEqual(environment["PYTHONPYCACHEPREFIX"], str(ROOT / ".build/python-cache"))
 
@@ -678,6 +684,19 @@ class ArtifactTests(unittest.TestCase):
                 manifest["configuration"]["sdkconfigSha256"],
                 esp_idf._sha256(build_dir.resolve() / "sdkconfig"),
             )
+
+            # A subsequent validation must read a fresh index. Check both
+            # exact source paths and the generated-source suffix lookup.
+            database = build_dir / "compile_commands.json"
+            entries = json.loads(database.read_text(encoding="utf-8"))
+            database.write_text(json.dumps(entries[1:-1]), encoding="utf-8")
+            with self.assertRaisesRegex(esp_idf.EspIdfError, "missing integration sources") as error:
+                esp_idf.validate_artifacts(
+                    ROOT, project, build_dir.resolve(), model,
+                    idf_version=PIN["ESP_IDF_VERSION"], idf_commit=PIN["ESP_IDF_REF"],
+                )
+            self.assertIn("app.c", str(error.exception))
+            self.assertIn("jh_link_contract_definition.c", str(error.exception))
 
     def test_manifest_rejects_incomplete_flash_set(self) -> None:
         with tempfile.TemporaryDirectory(prefix="jh-esp-artifacts-") as text:
@@ -1358,6 +1377,7 @@ class CommandContractTests(unittest.TestCase):
             environment = {
                 "IDF_PYTHON_ENV_PATH": str(root / "python"),
                 "PATH": "/idf/tools",
+                "CMAKE_BUILD_PARALLEL_LEVEL": "3",
             }
             with mock.patch.object(
                 esp_idf.subprocess, "run", return_value=completed
@@ -1379,6 +1399,9 @@ class CommandContractTests(unittest.TestCase):
                 "configure\ncompile\n",
             )
             self.assertIs(run.call_args.kwargs["stdout"], subprocess.PIPE)
+            self.assertEqual(run.call_args.args[0], ["cmake", "--build", str(build_dir), "--parallel", "3"])
+            self.assertEqual(run.call_args.kwargs["env"]["CMAKE_BUILD_PARALLEL_LEVEL"], "1")
+            self.assertEqual(environment["CMAKE_BUILD_PARALLEL_LEVEL"], "3")
             self.assertIs(run.call_args.kwargs["stderr"], subprocess.STDOUT)
             self.assertEqual(run.call_args.kwargs["encoding"], "utf-8")
             self.assertEqual(run.call_args.kwargs["errors"], "replace")
@@ -1593,9 +1616,21 @@ class CommandContractTests(unittest.TestCase):
             "flash",
             port="/dev/ttyACM0",
         )
-        self.assertEqual(build[-1], "build")
+        self.assertEqual(build, ["cmake", "--build", str(Path("/build"))])
         self.assertEqual(flash[-3:], ["-p", "/dev/ttyACM0", "flash"])
-        self.assertIn("CMAKE_EXPORT_COMPILE_COMMANDS=ON", build)
+        configure = esp_idf.idf_command(
+            Path("/idf"), {**environment, "CMAKE_C_COMPILER_LAUNCHER": "C:/cache tools/ccache.exe"},
+            Path("/template"), Path("/build"), "esp32s3", "reconfigure"
+        )
+        self.assertEqual(configure[-1], "reconfigure")
+        self.assertIn("CMAKE_EXPORT_COMPILE_COMMANDS=ON", configure)
+        self.assertIn("CMAKE_C_COMPILER_LAUNCHER=C:/cache tools/ccache.exe", configure)
+        for jobs in ("0", "-1", "four", "2;echo"):
+            with self.subTest(jobs=jobs), self.assertRaisesRegex(esp_idf.EspIdfError, "positive integer"):
+                esp_idf.idf_command(
+                    Path("/idf"), {**environment, "CMAKE_BUILD_PARALLEL_LEVEL": jobs},
+                    Path("/template"), Path("/build"), "esp32s3", "build",
+                )
 
     def test_phase0_wrapper_only_forwards_to_production_runner(self) -> None:
         fixture = ROOT / "tests/fixtures/esp_idf_phase0"

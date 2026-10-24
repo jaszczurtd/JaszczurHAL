@@ -425,6 +425,15 @@ with tempfile.TemporaryDirectory(prefix="jh Linux debug tools ") as temporary_te
             "an incomplete RP2350 OpenOCD installation was accepted",
         )
 
+with mock.patch.dict(os.environ, {
+    "CMAKE_C_COMPILER_LAUNCHER": "C:/cache tools/ccache.exe",
+    "CMAKE_CXX_COMPILER_LAUNCHER": "C:/cache tools/ccache.exe",
+}):
+    launcher_args = runtime.platform_cmake_cache_args({"target": "stm32g474"})
+    for language in ("C", "CXX"):
+        require(f"-DCMAKE_{language}_COMPILER_LAUNCHER=C:/cache tools/ccache.exe" in launcher_args,
+                "an existing CMake configuration can ignore the selected compiler cache")
+
 if sys.platform != "win32":
     linux_args = runtime.platform_cmake_cache_args({"target": "rp2040"})
     require(

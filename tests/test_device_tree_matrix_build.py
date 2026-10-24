@@ -76,7 +76,8 @@ class MatrixBuild(unittest.TestCase):
         # A local choice must not narrow the matrix.
         (PROJECT / ".vscode" / "jaszczurhal.local.json").write_text(
             json.dumps({"assembly": "canhat-b"}), encoding="utf-8")
-        arguments = mock.Mock(example=None, target="stm32g474", jobs=os.cpu_count() or 2, verbose=False)
+        arguments = mock.Mock(example=None, target="stm32g474", jobs=os.cpu_count() or 2,
+                              verbose=False, compiler_cache=False)
         output = io.StringIO()
         with mock.patch.object(examples_dispatcher, "EXAMPLES_DIR", EXAMPLES), redirect_stdout(output):
             cls.status = examples_dispatcher.build(arguments)

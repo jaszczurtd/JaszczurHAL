@@ -276,3 +276,15 @@ for fragment in (
 
 print(f"Linux CI runs {len(ci_stages)} of {len(stages)} gate stages once; "
       f"{len(local_only)} run only locally")
+
+# Verification logs must not enter the shell assignments consumed by the gate.
+cache_setup = subprocess.run(
+    [sys.executable, str(ROOT / "scripts/compiler_cache.py"), "gate-regression"],
+    capture_output=True, text=True, check=True,
+)
+cache_query = subprocess.run(
+    ["bash", "-euc", cache_setup.stdout + '\n"$CMAKE_C_COMPILER_LAUNCHER" --get-config base_dir'],
+    capture_output=True, text=True, check=True,
+)
+require(cache_query.stdout.strip() == str(ROOT.resolve()),
+        f"the gate could not apply its private compiler cache settings: {cache_query.stdout}")

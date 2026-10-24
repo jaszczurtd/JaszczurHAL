@@ -172,6 +172,7 @@ class SbomInventoryTests(unittest.TestCase):
             "cppcheck": "Cppcheck",
             "riscv-toolchain": "Raspberry Pi RISC-V toolchain",
             "cmake-minimum": "CMake (oldest supported)",
+            "ccache": "ccache",
         }
         for component, supplied in JHBASE_PINS.items():
             with self.subTest(component=component):

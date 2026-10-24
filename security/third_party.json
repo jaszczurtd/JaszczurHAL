@@ -247,6 +247,20 @@
       "notes": "Official prebuilt release of the oldest CMake every cmake_minimum_required declares; the host and library-* gate stages build with it on Linux. It is not linked into firmware."
     },
     {
+      "name": "ccache",
+      "pin": {"component": "ccache"},
+      "version": "{CCACHE_VERSION}",
+      "type": "application",
+      "scope": "development",
+      "supplier": "ccache contributors",
+      "licenses": ["GPL-3.0-or-later"],
+      "purl": "pkg:generic/ccache@{CCACHE_VERSION}",
+      "paths": ["third_party/ccache", "third_party/jhbase/third_party/ccache_version.conf"],
+      "upstream": "https://github.com/ccache/ccache",
+      "feature_flags": [],
+      "notes": "Official compiler-cache binaries for the local example matrix. Archives and version come from jhbase; cached compilation results survive clean build directories. Not linked into firmware."
+    },
+    {
       "name": "BearSSL",
       "pin": {"file": "third_party/bearssl_version.conf"},
       "version": "{BEARSSL_VERSION}",

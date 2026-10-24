@@ -483,6 +483,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Cache pinned ccache binary
+        uses: actions/cache@v5
+        with:
+          path: third_party/ccache
+          key: ccache-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('third_party/jhbase_version.conf', 'scripts/component_manager.py') }}
+
       - name: Cache pinned cppcheck build
         uses: actions/cache@v5
         with:
@@ -615,6 +621,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+
+      - name: Cache pinned ccache binary
+        uses: actions/cache@v5
+        with:
+          path: third_party/ccache
+          key: ccache-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('third_party/jhbase_version.conf', 'scripts/component_manager.py') }}
 
       - name: Cache pinned cppcheck build
         uses: actions/cache@v5

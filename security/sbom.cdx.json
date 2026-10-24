@@ -1566,6 +1566,54 @@
       ]
     },
     {
+      "type": "application",
+      "bom-ref": "pkg:ccache@4.14.2",
+      "name": "ccache",
+      "version": "4.14.2",
+      "scope": "development",
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-3.0-or-later"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "ccache contributors"
+      },
+      "purl": "pkg:generic/ccache@4.14.2",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/ccache/ccache"
+        },
+        {
+          "type": "other",
+          "url": "third_party/ccache",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/jhbase/third_party/ccache_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Official compiler-cache binaries for the local example matrix. Archives and version come from jhbase; cached compilation results survive clean build directories. Not linked into firmware."
+        },
+        {
+          "name": "jaszczurhal:pin",
+          "value": "third_party/jhbase/third_party/ccache_version.conf"
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "third_party/ccache,third_party/jhbase/third_party/ccache_version.conf"
+        }
+      ]
+    },
+    {
       "type": "library",
       "bom-ref": "pkg:bearssl@2024-09-23",
       "name": "BearSSL",
@@ -2239,7 +2287,7 @@
       "supplier": {
         "name": "jaszczurtd"
       },
-      "purl": "pkg:github/jaszczurtd/jhbase@b26dd68822f832b16b11f39bff7f82ad866fa49a",
+      "purl": "pkg:github/jaszczurtd/jhbase@f9238f934bff9c8de6b90b7521dcb398a51e9388",
       "externalReferences": [
         {
           "type": "website",
@@ -2259,7 +2307,7 @@
       "properties": [
         {
           "name": "jaszczurhal:commit",
-          "value": "b26dd68822f832b16b11f39bff7f82ad866fa49a"
+          "value": "f9238f934bff9c8de6b90b7521dcb398a51e9388"
         },
         {
           "name": "jaszczurhal:notes",
@@ -2462,5 +2510,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:807b925a-51c3-9cbc-d547-da4a18f18c0e"
+  "serialNumber": "urn:uuid:2ff496ca-d52e-84f5-276b-b65a49ce2eb3"
 }

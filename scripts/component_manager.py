@@ -1481,6 +1481,33 @@ def ensure_cmake_minimum(
     return bin_dir
 
 
+def ensure_ccache(
+    repo_root: Path,
+    *,
+    verify_only: bool,
+    directory_override: str = "",
+) -> Path:
+    """Install or verify the official compiler-cache archive supplied by jhbase."""
+    config, config_path = supplied_pin(repo_root, "ccache")
+    suffix = _platform_asset()[2]
+    asset_key, checksum_key = f"CCACHE_ASSET_{suffix}", f"CCACHE_SHA256_{suffix}"
+    require_values(config, ("CCACHE_RELEASE_BASE", "CCACHE_VERSION", "CCACHE_DIR",
+                            asset_key, checksum_key), config_path)
+    version, asset = config["CCACHE_VERSION"], config[asset_key]
+    destination = _resolve_component_dir(repo_root, config["CCACHE_DIR"], directory_override)
+    changed = sync_archive(
+        f"{config['CCACHE_RELEASE_BASE']}/v{version}/{asset}", config[checksum_key], destination,
+        verify_only=verify_only, version_stamp=f"ccache|{version}|{asset}",
+    )
+    executable = _find_executable(destination, "ccache.exe" if sys.platform == "win32" else "ccache")
+    reported = _run((str(executable), "--version")).stdout.splitlines()[0]
+    if reported != f"ccache version {version}":
+        raise ComponentError(f"ccache version mismatch: expected {version}, got {reported}.")
+    status = "installed" if changed else "already installed"
+    ok(f"ccache {status}: {executable}")
+    return executable
+
+
 def _pmd_command(executable: Path, *arguments: str) -> tuple[str, ...]:
     if sys.platform == "win32":
         return ("cmd.exe", "/d", "/c", str(executable), *arguments)
@@ -2119,6 +2146,11 @@ def ensure_component(arguments: argparse.Namespace) -> None:
         )
     elif name == "cmake-minimum":
         ensure_cmake_minimum(
+            repo_root, verify_only=arguments.verify_only,
+            directory_override=directory,
+        )
+    elif name == "ccache":
+        ensure_ccache(
             repo_root, verify_only=arguments.verify_only,
             directory_override=directory,
         )

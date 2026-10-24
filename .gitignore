@@ -23,6 +23,7 @@ third_party/pmd/
 third_party/cppcheck/
 third_party/riscv-toolchain/
 third_party/cmake-minimum/
+third_party/ccache/
 third_party/jhbase/
 third_party/utf8proc/
 third_party/pcre2/

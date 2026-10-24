@@ -26,7 +26,8 @@
         "third_party/cppcheck_version.conf",
         "third_party/pmd_version.conf",
         "third_party/riscv_toolchain_version.conf",
-        "third_party/cmake_minimum_version.conf"
+        "third_party/cmake_minimum_version.conf",
+        "third_party/ccache_version.conf"
       ],
       "clean": true
     },
@@ -238,9 +239,15 @@
     "cppcheck",
     "picotool",
     "riscv-toolchain",
-    "cmake-minimum"
+    "cmake-minimum",
+    "ccache"
   ],
   "jhbasePins": {
+    "ccache": {
+      "config": "ccache_version.conf",
+      "dirKey": "CCACHE_DIR",
+      "directory": "third_party/ccache"
+    },
     "utf8proc": {
       "config": "utf8proc_version.conf",
       "dirKey": "UTF8PROC_DIR",
@@ -292,7 +299,8 @@
     "cppcheck",
     "picotool",
     "riscv-toolchain",
-    "cmake-minimum"
+    "cmake-minimum",
+    "ccache"
   ],
   "launchers": {
     "pcre2": "ensure_pcre2.sh",
@@ -315,6 +323,7 @@
     "cppcheck": "ensure_cppcheck.sh",
     "picotool": "ensure_picotool.sh",
     "riscv-toolchain": "ensure_riscv_toolchain.sh",
-    "cmake-minimum": "ensure_cmake_minimum.sh"
+    "cmake-minimum": "ensure_cmake_minimum.sh",
+    "ccache": "ensure_ccache.sh"
   }
 }
