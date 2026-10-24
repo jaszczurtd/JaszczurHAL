@@ -2,6 +2,7 @@
 // TCP and UDP through the shared native socket core, the resolver, and the
 // HTTP and WebSocket servers bound to 127.0.0.1. Real sockets and real time;
 // no other host is contacted.
+#include "hal/core/hal_array.h"
 #include "hal/network/hal_net.h"
 #include "hal/network/hal_tcp.h"
 #include "hal/network/hal_udp.h"
@@ -29,6 +30,12 @@
 #include <spawn.h>
 #include <sys/wait.h>
 extern char **environ;
+#endif
+#if defined(__linux__)
+#include <dirent.h>
+#include <initializer_list>
+#include <stdlib.h>
+#include <unistd.h>
 #endif
 
 namespace {
@@ -630,6 +637,106 @@ void stop_child(ChildProcess *child) {
 #endif
 }
 
+#if defined(__linux__)
+// The process holding the socket with @p inode, as "pid comm", or "-".
+void socket_owner(unsigned long inode, char *out, size_t size) {
+  snprintf(out, size, "-");
+  char wanted[48];
+  snprintf(wanted, sizeof(wanted), "socket:[%lu]", inode);
+  DIR *processes = inode != 0u ? opendir("/proc") : NULL;
+  if (processes == NULL) {
+    return;
+  }
+  for (struct dirent *process = readdir(processes); process != NULL;
+       process = readdir(processes)) {
+    char path[300];
+    snprintf(path, sizeof(path), "/proc/%s/fd", process->d_name);
+    DIR *fds = process->d_name[0] >= '0' && process->d_name[0] <= '9'
+                   ? opendir(path)
+                   : NULL;
+    if (fds == NULL) {
+      continue;
+    }
+    for (struct dirent *fd = readdir(fds); fd != NULL; fd = readdir(fds)) {
+      char link_path[600];
+      char target[64] = {};
+      snprintf(link_path, sizeof(link_path), "%s/%s", path, fd->d_name);
+      const ssize_t length = readlink(link_path, target, sizeof(target) - 1u);
+      if (length > 0 && strcmp(target, wanted) == 0) {
+        char comm[64] = "?";
+        snprintf(path, sizeof(path), "/proc/%s/comm", process->d_name);
+        FILE *file = fopen(path, "r");
+        if (file != NULL) {
+          if (fgets(comm, sizeof(comm), file) != NULL) {
+            comm[strcspn(comm, "\n")] = '\0';
+          }
+          fclose(file);
+        }
+        snprintf(out, size, "%s %s", process->d_name, comm);
+        break;
+      }
+    }
+    closedir(fds);
+  }
+  closedir(processes);
+}
+
+// A refused rebind: print the ephemeral port range and every kernel socket
+// still on @p port, with its TCP state and owner, so a CI log shows the cause.
+void report_port_holders(uint16_t port, const ChildProcess *child) {
+  static const char *const kTcpStates[] = {
+      "?",         "ESTABLISHED", "SYN_SENT",    "SYN_RECV",   "FIN_WAIT1",
+      "FIN_WAIT2", "TIME_WAIT",   "CLOSE",       "CLOSE_WAIT", "LAST_ACK",
+      "LISTEN",    "CLOSING",     "NEW_SYN_RECV"};
+  char range[64] = "?\n";
+  FILE *file = fopen("/proc/sys/net/ipv4/ip_local_port_range", "r");
+  if (file != NULL) {
+    if (fgets(range, sizeof(range), file) == NULL) {
+      snprintf(range, sizeof(range), "?\n");
+    }
+    fclose(file);
+  }
+  printf("port %u refused; child alive %d; ephemeral range %s",
+         static_cast<unsigned>(port), kill(child->pid, 0) == 0, range);
+  for (const char *table :
+       {"/proc/net/tcp", "/proc/net/tcp6", "/proc/net/udp", "/proc/net/udp6"}) {
+    file = fopen(table, "r");
+    if (file == NULL) {
+      continue;
+    }
+    const bool tcp = strstr(table, "tcp") != NULL;
+    char line[512];
+    while (fgets(line, sizeof(line), file) != NULL) {
+      char local[64];
+      char remote[64];
+      unsigned state = 0u;
+      unsigned long inode = 0u;
+      if (sscanf(line, "%*s %63s %63s %x %*s %*s %*s %*s %*s %lu", local,
+                 remote, &state, &inode) != 4) {
+        continue;
+      }
+      const char *local_port = strrchr(local, ':');
+      const char *remote_port = strrchr(remote, ':');
+      if (local_port == NULL || remote_port == NULL ||
+          (strtoul(local_port + 1, NULL, 16) != port &&
+           strtoul(remote_port + 1, NULL, 16) != port)) {
+        continue;
+      }
+      char owner[96];
+      socket_owner(inode, owner, sizeof(owner));
+      printf("  %s local %s remote %s state %s inode %lu owner %s\n",
+             table + strlen("/proc/net/"), local, remote,
+             tcp && state < COUNTOF(kTcpStates) ? kTcpStates[state] : "-",
+             inode, owner);
+    }
+    fclose(file);
+  }
+  fflush(stdout);
+}
+#else
+void report_port_holders(uint16_t, const ChildProcess *) {}
+#endif
+
 // A network teardown ends waits that other threads are blocked in, also
 // where shutdown() does not wake the waiter (UDP), instead of leaving them
 // blocked on a handle that is no longer valid.
@@ -721,10 +828,19 @@ void test_sockets_are_not_inherited_by_child_processes(void) {
 
   const hal_net_endpoint_t tcp_local = loopback(port);
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_tcp_listener_open_ex(&listener));
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_tcp_listener_bind_ex(listener, &tcp_local));
+  const hal_status_t tcp_rebind =
+      hal_tcp_listener_bind_ex(listener, &tcp_local);
+  if (tcp_rebind != HAL_OK) {
+    report_port_holders(port, &child);
+  }
+  TEST_ASSERT_EQUAL_INT(HAL_OK, tcp_rebind);
   const hal_net_endpoint_t udp_local = loopback(udp_port);
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_udp_socket_open_ex(&datagram));
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_udp_socket_bind_ex(datagram, &udp_local));
+  const hal_status_t udp_rebind = hal_udp_socket_bind_ex(datagram, &udp_local);
+  if (udp_rebind != HAL_OK) {
+    report_port_holders(udp_port, &child);
+  }
+  TEST_ASSERT_EQUAL_INT(HAL_OK, udp_rebind);
   stop_child(&child);
 
   hal_udp_socket_close(datagram);
