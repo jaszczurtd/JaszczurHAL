@@ -303,7 +303,7 @@ Write-Host "  tools root: $ToolsRoot"
 Write-Host "  build root: $BuildRoot"
 Write-Host "  Python env: $VenvRoot"
 Write-Host '  components: managed Python 3.12 + pyserial, source checkouts, CMake, Ninja,'
-Write-Host '              GNU Arm, GNU RISC-V, OpenOCD and picotool'
+Write-Host '              GNU Arm, GNU RISC-V, OpenOCD, picotool and ccache'
 Write-Host "  host changes allowed: $([bool]$ConfigureHost)"
 Write-Host "  extension installation allowed: $([bool]$InstallExtensions)"
 Write-Host "  firmware-only inventory: $([bool]$FirmwareOnly)"
@@ -328,6 +328,12 @@ Ensure-ManagedPython
 $componentArguments = @('source-components', '--repo-root', $RepoRoot)
 if ($VerifyOnly) { $componentArguments += '--verify-only' } else { $componentArguments += '--force' }
 Invoke-Checked $VenvPython (@($ComponentManager) + $componentArguments) 'Synchronizing source components'
+
+# The example matrix and its cache tests use the compiler cache pinned by
+# jhbase; on Linux component_manager.py all installs it.
+$ccacheArguments = @($ComponentManager, 'component', 'ccache', '--repo-root', $RepoRoot)
+if ($VerifyOnly) { $ccacheArguments += '--verify-only' }
+Invoke-Checked $VenvPython $ccacheArguments 'Preparing the pinned compiler cache'
 
 $toolArguments = @(
     $ComponentManager, 'windows-tools', '--repo-root', $RepoRoot,

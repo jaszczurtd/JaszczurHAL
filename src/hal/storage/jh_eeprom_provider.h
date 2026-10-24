@@ -52,6 +52,8 @@ typedef struct {
                         hal_eeprom_progress_callback_t progress, void *ctx);
   /* Report whether every byte of the range reads as erased (0xFF). */
   hal_status_t (*region_erased)(uint16_t addr, uint16_t len, bool *out_erased);
+  /* Read the medium itself, past any RAM mirror, without uncommitted writes. */
+  hal_status_t (*read_medium)(uint16_t addr, uint8_t *out, uint16_t len);
 } jh_eeprom_provider_ops_t;
 
 typedef struct {
@@ -113,6 +115,14 @@ hal_status_t jh_eeprom_erase_region(uint16_t addr, uint16_t len);
 /** Report whether every byte of a range reads as erased (0xFF). */
 hal_status_t jh_eeprom_region_erased(uint16_t addr, uint16_t len,
                                      bool *out_erased);
+/**
+ * Read bytes from the medium itself. Unlike hal_eeprom_read_bytes(), a flash
+ * provider does not serve them from its RAM mirror, so the result shows what
+ * the medium holds now and omits writes not committed yet.
+ * HAL_EUNINIT before hal_eeprom_init(), HAL_EOVERFLOW outside the EEPROM,
+ * HAL_EINVAL for a NULL buffer, otherwise the provider's read status.
+ */
+hal_status_t jh_eeprom_read_medium(uint16_t addr, uint8_t *out, uint16_t len);
 
 /** Report the active provider's append granularity in bytes. */
 hal_status_t jh_eeprom_append_size(uint16_t *out_size);

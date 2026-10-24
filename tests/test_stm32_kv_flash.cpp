@@ -141,10 +141,87 @@ void test_kv_on_freshly_erased_flash_never_erases_to_format(void) {
   TEST_ASSERT_EQUAL_UINT32(0u, s_erases);
 }
 
+/* Offset of the only copy of pattern in the flash model. */
+static uint32_t flash_offset_of(const uint8_t *pattern, uint32_t len) {
+  uint32_t found = FLASH_BYTES;
+  for (uint32_t offset = 0u; offset + len <= FLASH_BYTES; offset++) {
+    if (memcmp(jh_test_flash + offset, pattern, len) == 0) {
+      TEST_ASSERT_EQUAL_UINT32(FLASH_BYTES, found);
+      found = offset;
+    }
+  }
+  TEST_ASSERT_TRUE(found < FLASH_BYTES);
+  return found;
+}
+
+/* A record that fills a bank alone still leaves room to delete, shrink or
+ * rewrite it; each result survives a restart. */
+void test_kv_full_bank_deletes_shrinks_and_rewrites(void) {
+  start();
+  static uint8_t full[FLASH_BYTES / 2u - HAL_KV_PUBLISH_SIZE - 18u];
+  memset(full, 0x11, sizeof(full));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_blob_ex(17u, full, sizeof(full)));
+
+  memset(full, 0x22, sizeof(full));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_blob_ex(17u, full, sizeof(full)));
+  const uint8_t small[] = {0x33u};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_blob_ex(17u, small, sizeof(small)));
+  start();
+  uint8_t out[sizeof(small)] = {};
+  uint16_t len = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_kv_get_blob_ex(17u, out, sizeof(out), &len));
+  TEST_ASSERT_EQUAL_UINT16(sizeof(small), len);
+  TEST_ASSERT_EQUAL_HEX8(0x33u, out[0]);
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_blob_ex(17u, full, sizeof(full)));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_delete_ex(17u));
+  start();
+  TEST_ASSERT_EQUAL_INT(HAL_ENOENT, hal_kv_get_blob_ex(17u, nullptr, 0u, &len));
+  TEST_ASSERT_EQUAL_UINT32(0u, s_refused);
+}
+
+/* Read-through reads the flash, not the EEPROM mirror: a payload changed on
+ * the medium alone is rejected, while the cached read still serves it. */
+void test_kv_read_through_reads_the_flash_not_the_mirror(void) {
+  start();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_u32_ex(7u, 0x12345678u));
+  const uint8_t blob[] = {0xC1u, 0xC2u, 0xC3u, 0xC4u, 0xC5u};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_blob_ex(8u, blob, sizeof(blob)));
+  const uint8_t word[] = {0x78u, 0x56u, 0x34u, 0x12u};
+  const uint32_t word_at = flash_offset_of(word, sizeof(word));
+  const uint32_t blob_at = flash_offset_of(blob, sizeof(blob));
+  jh_test_flash[word_at] = 0x00u;
+  jh_test_flash[blob_at + 2u] = 0x00u;
+
+  TEST_ASSERT_EQUAL_HEX32(0x12345678u, value_of(7u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_read_through(true));
+  uint32_t value = 1u;
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, hal_kv_get_u32_ex(7u, &value));
+  TEST_ASSERT_EQUAL_HEX32(0u, value);
+  uint8_t out[sizeof(blob)] = {};
+  memset(out, 0xAAu, sizeof(out));
+  TEST_ASSERT_EQUAL_INT(HAL_EIO,
+                        hal_kv_get_blob_ex(8u, out, sizeof(out), nullptr));
+  for (uint8_t byte : out) {
+    TEST_ASSERT_EQUAL_HEX8(0u, byte);
+  }
+
+  jh_test_flash[word_at] = 0x78u;
+  jh_test_flash[blob_at + 2u] = 0xC3u;
+  TEST_ASSERT_EQUAL_HEX32(0x12345678u, value_of(7u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_kv_get_blob_ex(8u, out, sizeof(out), nullptr));
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(blob, out, sizeof(blob));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_read_through(false));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_kv_formats_over_flash_a_programmer_filled_with_ff);
   RUN_TEST(test_kv_appends_after_a_full_image_restore);
   RUN_TEST(test_kv_on_freshly_erased_flash_never_erases_to_format);
+  RUN_TEST(test_kv_full_bank_deletes_shrinks_and_rewrites);
+  RUN_TEST(test_kv_read_through_reads_the_flash_not_the_mirror);
   return UNITY_END();
 }

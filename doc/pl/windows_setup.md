@@ -9,7 +9,7 @@ Skrypt konfiguracyjny JaszczurHAL przygotowuje środowisko do tworzenia firmware
 Minimalna obsługiwana wersja systemu to Windows 10 1809 (build 17763) na
 platformie AMD64. Git for Windows oraz VS Code muszą być już zainstalowane,
 aby można było pobrać i otworzyć repozytorium. Skrypt zarządza Pythonem,
-CMake, Ninja, GNU Arm Embedded, GNU RISC-V, OpenOCD, picotoolem, pyserial oraz
+CMake, Ninja, GNU Arm Embedded, GNU RISC-V, OpenOCD, picotoolem, ccache, pyserial oraz
 zależnościami źródłowymi w ściśle określonych wersjach. Przy pierwszym użyciu
 narzędzie obsługujące ESP32-S3 przygotowuje ponadto dokładnie wskazany commit
 repozytorium ESP-IDF oraz jego oficjalne narzędzia dla wybranej platformy. Są one

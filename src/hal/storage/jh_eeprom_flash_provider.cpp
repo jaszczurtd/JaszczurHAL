@@ -89,6 +89,15 @@ hal_status_t read_bytes(uint16_t addr, uint8_t *out, uint16_t len) {
   return HAL_OK;
 }
 
+/* The mirror also holds writes not committed yet; this reads the flash. */
+hal_status_t read_medium(uint16_t addr, uint8_t *out, uint16_t len) {
+  if ((out == nullptr && len > 0u) || !range_valid(addr, len)) {
+    return s_ready ? HAL_EINVAL : HAL_EUNINIT;
+  }
+  return len > 0u ? s_backend->read(s_backend->context, addr, out, len)
+                  : HAL_OK;
+}
+
 hal_status_t write_bytes(uint16_t addr, const uint8_t *data, uint16_t len,
                          hal_eeprom_progress_callback_t progress, void *ctx) {
   (void)progress;
@@ -235,8 +244,8 @@ hal_status_t reset(hal_eeprom_progress_callback_t progress, void *ctx) {
 }
 
 const jh_eeprom_provider_ops_t kProvider = {
-    initialize, read_bytes, write_bytes, commit,       replace_region,
-    reset,      append,     erase,       region_erased};
+    initialize, read_bytes, write_bytes, commit,        replace_region,
+    reset,      append,     erase,       region_erased, read_medium};
 
 } // namespace
 

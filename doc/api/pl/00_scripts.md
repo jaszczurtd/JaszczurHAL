@@ -113,8 +113,8 @@ Idempotentna konfiguracja natywnego środowiska Windows. Przed wprowadzeniem
 zmian skrypt wyświetla pełny plan. Używa krótkich katalogów narzędzi i kompilacji
 w profilu użytkownika, tworzy środowisko Python 3.12 w wersji wskazanej przez
 repozytorium, ze sprawdzonym
-skrótem pakietu pyserial, synchronizuje komponenty źródłowe i odnajduje CMake,
-Ninja, GNU Arm, GNU RISC-V, OpenOCD oraz picotool. Zgodne narzędzia systemowe
+skrótem pakietu pyserial, synchronizuje komponenty źródłowe i przypięty ccache
+oraz odnajduje CMake, Ninja, GNU Arm, GNU RISC-V, OpenOCD i picotool. Zgodne narzędzia systemowe
 są używane ponownie, chyba że podano `-Force`. Systemowy OpenOCD jest używany
 tylko wtedy, gdy dostępne są także wymagane skrypty interfejsu i targetu. W
 przeciwnym razie instalowane jest zarządzane archiwum o zweryfikowanej

@@ -747,6 +747,56 @@ void test_at24_and_stm32_keep_their_own_bank_geometry(void) {
   }
 }
 
+/* A delete in a full bank needs no room for its tombstone: with deferred
+ * commit it is published together with the next write. */
+void test_full_bank_deferred_delete_and_insert_commit_together(void) {
+  static uint8_t full[4096u - HAL_KV_PUBLISH_SIZE - 18u];
+  memset(full, 0x5A, sizeof(full));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_blob_ex(300u, full, sizeof(full)));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_auto_commit(false));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_delete_ex(300u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_u32_ex(301u, 31u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_commit_ex());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_auto_commit(true));
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_init_ex(0u, 8192u));
+  uint16_t len = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_ENOENT,
+                        hal_kv_get_blob_ex(300u, nullptr, 0u, &len));
+  uint32_t value = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_u32_ex(301u, &value));
+  TEST_ASSERT_EQUAL_UINT32(31u, value);
+}
+
+/* Leaving the replaced record out of the compaction must not cost it when
+ * the new value does not fit even then. */
+void test_value_that_does_not_fit_keeps_the_old_one(void) {
+  static uint8_t other[1000u];
+  static uint8_t
+      first[4096u - HAL_KV_PUBLISH_SIZE - 18u - (sizeof(other) + 18u)];
+  static uint8_t bigger[sizeof(first) + 1u];
+  memset(first, 0x61, sizeof(first));
+  memset(other, 0x62, sizeof(other));
+  memset(bigger, 0x63, sizeof(bigger));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_blob_ex(310u, first, sizeof(first)));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_blob_ex(311u, other, sizeof(other)));
+
+  TEST_ASSERT_EQUAL_INT(HAL_ENOMEM,
+                        hal_kv_set_blob_ex(310u, bigger, sizeof(bigger)));
+  static uint8_t out[sizeof(bigger)];
+  uint16_t len = 0u;
+  for (int pass = 0; pass < 2; pass++) {
+    TEST_ASSERT_EQUAL_INT(HAL_OK,
+                          hal_kv_get_blob_ex(310u, out, sizeof(out), &len));
+    TEST_ASSERT_EQUAL_UINT16(sizeof(first), len);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(first, out, sizeof(first));
+    TEST_ASSERT_EQUAL_INT(HAL_OK,
+                          hal_kv_get_blob_ex(311u, out, sizeof(out), &len));
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(other, out, sizeof(other));
+    TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_init_ex(0u, 8192u));
+  }
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_set_get_u32_and_reinit);
@@ -777,6 +827,8 @@ int main(void) {
   RUN_TEST(test_bank_looks_present_detects_active_and_absent_banks);
   RUN_TEST(test_read_through_surfaces_live_eeprom_fault);
   RUN_TEST(test_read_through_rejects_unpublished_ram_image);
+  RUN_TEST(test_full_bank_deferred_delete_and_insert_commit_together);
+  RUN_TEST(test_value_that_does_not_fit_keeps_the_old_one);
   RUN_TEST(test_flash_rejects_unaligned_banks_without_writing);
   RUN_TEST(test_flash_rejects_misaligned_existing_bank_before_loading);
   RUN_TEST(test_at24_and_stm32_keep_their_own_bank_geometry);

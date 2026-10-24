@@ -136,14 +136,15 @@ bool hal_kv_commit(void);
  * a storage fault that develops *after* init (not caught at init or at the
  * next write) is invisible to a plain get.
  *
- * Enabling read-through (`enabled = true`) makes every get additionally
- * re-read the record's bytes live from the backing EEPROM before returning,
- * at the cost of one EEPROM read per get. A live medium fault then surfaces
- * as a real hal_status_t error from the get call instead of being served
- * from the (still valid) RAM copy. Callers that gate writes or other
- * decisions on "is storage currently healthy" should enable this; callers
- * that only care about the last successfully committed values should leave
- * it at the default.
+ * Enabling read-through (`enabled = true`) makes every get re-read the whole
+ * record from the medium itself before returning: on flash this bypasses the
+ * EEPROM driver's RAM mirror too. The record must still match the index and
+ * its CRCs. A read error is returned as is; HAL_EIO means the medium no
+ * longer holds the committed record, and hal_kv_get_blob_ex() then zeroes
+ * the output instead of handing out the rejected bytes. Callers that gate
+ * writes or other decisions on "is storage currently healthy" should enable
+ * this; callers that only care about the last successfully committed values
+ * should leave it at the default.
  *
  * Read-through cannot address records in a dirty RAM image because their
  * offsets point at storage that has not been written yet. In that state,

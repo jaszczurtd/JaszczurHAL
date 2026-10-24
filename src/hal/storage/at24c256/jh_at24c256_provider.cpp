@@ -289,9 +289,10 @@ hal_status_t erase(uint16_t addr, uint16_t len,
   return fill_region(addr, len, 0xFFu, progress, ctx);
 }
 
+/* Every read goes over I2C to the chip, so it already reads the medium. */
 const jh_eeprom_provider_ops_t kProvider = {
-    initialize, provider_read, provider_write, commit,       replace_region,
-    reset,      append,        erase,          region_erased};
+    initialize, provider_read, provider_write, commit,        replace_region,
+    reset,      append,        erase,          region_erased, provider_read};
 
 } // namespace
 

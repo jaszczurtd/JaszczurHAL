@@ -316,6 +316,36 @@ void test_rp_append_refuses_programmed_bytes(void) {
       data, test_rp_flash + s_partition.flash_offset + 4092u, 4u);
 }
 
+/* Read-through reads the flash through the RP backend, not the EEPROM
+ * mirror: a payload changed on the flash alone is rejected. */
+void test_rp_read_through_reads_the_flash_not_the_mirror(void) {
+  std::memset(test_rp_flash, 0xff, sizeof(test_rp_flash));
+  reload(4096u, 16384u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_u32_ex(9u, 0x0BADF00Du));
+  uint8_t *const eeprom = test_rp_flash + s_partition.flash_offset;
+  const uint8_t word[] = {0x0Du, 0xF0u, 0xADu, 0x0Bu};
+  uint8_t *stored = nullptr;
+  for (uint32_t offset = 0u; offset + sizeof(word) <= s_partition.size;
+       offset++) {
+    if (std::memcmp(eeprom + offset, word, sizeof(word)) == 0) {
+      TEST_ASSERT_NULL(stored);
+      stored = eeprom + offset;
+    }
+  }
+  TEST_ASSERT_NOT_NULL(stored);
+  stored[3] = 0x00u;
+
+  uint32_t value = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_u32_ex(9u, &value));
+  TEST_ASSERT_EQUAL_HEX32(0x0BADF00Du, value);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_read_through(true));
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, hal_kv_get_u32_ex(9u, &value));
+  TEST_ASSERT_EQUAL_HEX32(0u, value);
+  stored[3] = 0x0Bu;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_u32_ex(9u, &value));
+  TEST_ASSERT_EQUAL_HEX32(0x0BADF00Du, value);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_rp_rejects_old_offsets_before_write_callbacks);
@@ -327,5 +357,6 @@ int main(void) {
   RUN_TEST(test_rp_torn_append_recovers_through_a_compaction);
   RUN_TEST(test_rp_append_verifies_and_resyncs_after_stray_bits);
   RUN_TEST(test_rp_append_refuses_programmed_bytes);
+  RUN_TEST(test_rp_read_through_reads_the_flash_not_the_mirror);
   return UNITY_END();
 }

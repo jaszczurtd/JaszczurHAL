@@ -6,7 +6,7 @@
 
 The JaszczurHAL setup script prepares a firmware development environment directly on Windows. It installs pinned tools without WSL, Git Bash, winget, Chocolatey, or a globally installed toolchain.
 
-The minimum supported system is Windows 10 1809 (build 17763), AMD64. Install Git for Windows and VS Code before cloning and opening the repository. The setup script manages Python, CMake, Ninja, GNU Arm Embedded, GNU RISC-V, OpenOCD, picotool, pyserial, and pinned source dependencies. On first use, the ESP32-S3 runner also prepares the pinned ESP-IDF revision and its official target tools in `third_party\esp-idf` and `%USERPROFILE%\.espressif`. The GNU Arm check includes GDB. Reusing an OpenOCD installation requires the CMSIS-DAP, ST-Link, RP2040, RP2350, and STM32G4 scripts used by the generated debug configurations.
+The minimum supported system is Windows 10 1809 (build 17763), AMD64. Install Git for Windows and VS Code before cloning and opening the repository. The setup script manages Python, CMake, Ninja, GNU Arm Embedded, GNU RISC-V, OpenOCD, picotool, ccache, pyserial, and pinned source dependencies. On first use, the ESP32-S3 runner also prepares the pinned ESP-IDF revision and its official target tools in `third_party\esp-idf` and `%USERPROFILE%\.espressif`. The GNU Arm check includes GDB. Reusing an OpenOCD installation requires the CMSIS-DAP, ST-Link, RP2040, RP2350, and STM32G4 scripts used by the generated debug configurations.
 
 ## Host settings
 
