@@ -282,9 +282,10 @@ hal_status_t reset(hal_eeprom_progress_callback_t progress, void *ctx) {
   return commit(progress, ctx);
 }
 
+/* One memory stands for the medium, so the medium read is the plain read. */
 const jh_eeprom_provider_ops_t kProvider = {
-    initialize, read_bytes, write_bytes, commit,       replace_region,
-    reset,      append,     erase,       region_erased};
+    initialize, read_bytes, write_bytes, commit,        replace_region,
+    reset,      append,     erase,       region_erased, read_bytes};
 
 } // namespace
 

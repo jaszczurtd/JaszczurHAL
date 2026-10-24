@@ -375,7 +375,7 @@ class GitManagerTests(unittest.TestCase):
 class ArchiveManagerTests(unittest.TestCase):
     def test_ccache_uses_the_supplied_archive_and_rejects_another_version(self) -> None:
         with tempfile.TemporaryDirectory(prefix="jh-ccache-") as text:
-            root = Path(text)
+            root = Path(text).resolve()
             suffix = manager._platform_asset()[2]
             write_supplied_pins(root, ccache_version_conf=(
                 "CCACHE_RELEASE_BASE=https://example.invalid/ccache\n"
@@ -1129,7 +1129,7 @@ class TrackedContractTests(unittest.TestCase):
     @unittest.skipIf(sys.platform == "win32", "fixture uses a POSIX shell executable")
     def test_linux_picotool_rebuilds_when_new_capabilities_are_available(self) -> None:
         with tempfile.TemporaryDirectory(prefix="jh-picotool-repair-") as text:
-            root = Path(text)
+            root = Path(text).resolve()
             third_party = root / "third_party"
             third_party.mkdir()
             (third_party / "picotool_version.conf").write_text(
@@ -1216,7 +1216,7 @@ class TrackedContractTests(unittest.TestCase):
     @unittest.skipIf(sys.platform == "win32", "fixture uses a POSIX shell executable")
     def test_cppcheck_builds_once_and_rebuilds_a_stale_build(self) -> None:
         with tempfile.TemporaryDirectory(prefix="jh-cppcheck-build-") as text:
-            root = Path(text)
+            root = Path(text).resolve()
             build = self._cppcheck_root(root)
             real_run = manager._run
             cmake_calls = []
@@ -1250,7 +1250,7 @@ class TrackedContractTests(unittest.TestCase):
     @unittest.skipIf(sys.platform == "win32", "fixture uses a POSIX shell executable")
     def test_cppcheck_resolution_rejects_other_builds_and_names_the_repair(self) -> None:
         with tempfile.TemporaryDirectory(prefix="jh-cppcheck-resolve-") as text:
-            root = Path(text)
+            root = Path(text).resolve()
             build = self._cppcheck_root(root)
             config = manager._cppcheck_config(root)
             with self.assertRaisesRegex(manager.ComponentError, "no executable"):

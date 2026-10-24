@@ -108,8 +108,9 @@ gate's `tools` stage runs it so.
 
 Idempotent native Windows setup. It prints its complete plan before making a
 change, uses short user-local tool/build roots, creates the pinned Python 3.12
-environment with hash-verified pyserial, synchronizes source components, and
-resolves CMake, Ninja, GNU Arm, GNU RISC-V, OpenOCD, and picotool. Compatible
+environment with hash-verified pyserial, synchronizes source components and the
+pinned ccache, and resolves CMake, Ninja, GNU Arm, GNU RISC-V, OpenOCD, and
+picotool. Compatible
 system tools are reused unless `-Force` is selected. A system OpenOCD is reused
 only when its required interface and target scripts can also be resolved;
 otherwise setup falls back to the authenticated managed archive.

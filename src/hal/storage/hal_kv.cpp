@@ -596,20 +596,34 @@ static hal_status_t compact_locked(void) {
   return HAL_OK;
 }
 
-static hal_status_t ensure_space_locked(uint16_t len) {
+/* Bytes of a compacted bank without the live record at skip (-1: none). */
+static uint32_t compacted_size(int skip) {
+  uint32_t size = KV_PUBLISH_SIZE;
+  for (uint16_t i = 0u; i < KV_MAX_KEYS; i++) {
+    if (s_index[i].in_use && static_cast<int>(i) != skip) {
+      size += record_size(s_index[i].len);
+    }
+  }
+  return size;
+}
+
+/* Make room for a record of len bytes. The record at replaced (-1: none) is
+ * superseded by it, so the compaction leaves it out: a full bank can still
+ * delete or rewrite its own content. HAL_ENOMEM leaves the image untouched. */
+static hal_status_t ensure_space_locked(uint16_t len, int replaced) {
   const uint32_t required = record_size(len);
   if (static_cast<uint32_t>(s_used_offset) + required +
           commit_record_reserve() <=
       s_bank_size) {
     return HAL_OK;
   }
-  const hal_status_t status = compact_locked();
-  if (hal_status_is_error(status)) {
-    return status;
+  if (compacted_size(replaced) + required > s_bank_size) {
+    return HAL_ENOMEM;
   }
-  return static_cast<uint32_t>(s_used_offset) + required <= s_bank_size
-             ? HAL_OK
-             : HAL_ENOMEM;
+  if (replaced >= 0) {
+    s_index[replaced].in_use = false;
+  }
+  return compact_locked();
 }
 
 static hal_status_t set_blob_locked(uint16_t key, uint8_t type,
@@ -632,7 +646,7 @@ static hal_status_t set_blob_locked(uint16_t key, uint8_t type,
     return HAL_ENOMEM;
   }
 
-  const hal_status_t space_status = ensure_space_locked(len);
+  const hal_status_t space_status = ensure_space_locked(len, index);
   if (hal_status_is_error(space_status)) {
     return space_status;
   }
@@ -660,7 +674,7 @@ static hal_status_t delete_locked(uint16_t key) {
   if (index < 0) {
     return finish_no_change_locked();
   }
-  const hal_status_t space_status = ensure_space_locked(0u);
+  const hal_status_t space_status = ensure_space_locked(0u, index);
   if (hal_status_is_error(space_status)) {
     return space_status;
   }
@@ -671,6 +685,43 @@ static hal_status_t delete_locked(uint16_t key) {
   }
   s_index[index].in_use = false;
   return finish_mutation_locked();
+}
+
+/* Read-through: fetch the indexed record from the medium itself (past the
+ * EEPROM mirror) into out and check it against the index and its CRCs.
+ * HAL_EIO when the medium no longer holds the committed record. */
+static hal_status_t
+read_record_from_medium_locked(const kv_index_entry_t &entry, uint8_t *out) {
+  const uint16_t record = static_cast<uint16_t>(
+      bank_base(s_active_bank) + entry.payload_offset - KV_REC_HDR_SIZE);
+  uint8_t header_raw[KV_REC_HDR_SIZE] = {};
+  uint8_t footer_raw[KV_REC_FTR_SIZE] = {};
+  hal_status_t status =
+      jh_eeprom_read_medium(record, header_raw, KV_REC_HDR_SIZE);
+  if (status == HAL_OK) {
+    status = jh_eeprom_read_medium(
+        static_cast<uint16_t>(record + KV_REC_HDR_SIZE), out, entry.len);
+  }
+  if (status == HAL_OK) {
+    status = jh_eeprom_read_medium(
+        static_cast<uint16_t>(record + KV_REC_HDR_SIZE + entry.len), footer_raw,
+        KV_REC_FTR_SIZE);
+  }
+  if (status != HAL_OK) {
+    return status;
+  }
+  const kv_rec_hdr_t header = decode_record_header(header_raw);
+  if (header.magic != KV_REC_MAGIC || header.key != entry.key ||
+      header.type != entry.type || header.len != entry.len ||
+      header.seq != entry.seq ||
+      header.header_crc != record_header_crc(header) ||
+      header.payload_crc != crc16(out, entry.len) ||
+      jh_load_le16(footer_raw) != KV_REC_FOOTER) {
+    hal_derr("hal_kv: key %u differs on the medium",
+             static_cast<unsigned>(entry.key));
+    return HAL_EIO;
+  }
+  return HAL_OK;
 }
 
 static bool generation_newer(uint32_t lhs, uint32_t rhs) {
@@ -858,9 +909,8 @@ hal_status_t hal_kv_get_u32_ex(uint16_t key, uint32_t *out_value) {
   }
   if (s_read_through) {
     uint8_t raw[sizeof(uint32_t)] = {};
-    const uint16_t addr = static_cast<uint16_t>(bank_base(s_active_bank) +
-                                                s_index[index].payload_offset);
-    const hal_status_t status = hal_eeprom_read_bytes(addr, raw, sizeof(raw));
+    const hal_status_t status =
+        read_record_from_medium_locked(s_index[index], raw);
     hal_mutex_unlock(s_kv_mutex);
     if (hal_status_is_error(status)) {
       return status;
@@ -933,13 +983,14 @@ hal_status_t hal_kv_get_blob_ex(uint16_t key, uint8_t *out, uint16_t out_size,
     return HAL_EOVERFLOW;
   }
   if (s_read_through) {
-    hal_status_t status = HAL_OK;
-    if (s_index[index].len > 0u) {
-      const uint16_t addr = static_cast<uint16_t>(
-          bank_base(s_active_bank) + s_index[index].payload_offset);
-      status = hal_eeprom_read_bytes(addr, out, s_index[index].len);
-    }
+    const uint16_t len = s_index[index].len;
+    const hal_status_t status =
+        read_record_from_medium_locked(s_index[index], out);
     hal_mutex_unlock(s_kv_mutex);
+    if (status != HAL_OK && len > 0u) {
+      /* Do not hand out bytes the check rejected. */
+      memset(out, 0, len);
+    }
     return status;
   }
   if (s_index[index].len > 0u) {

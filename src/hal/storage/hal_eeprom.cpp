@@ -356,6 +356,20 @@ hal_status_t jh_eeprom_region_erased(uint16_t addr, uint16_t len,
   return status;
 }
 
+hal_status_t jh_eeprom_read_medium(uint16_t addr, uint8_t *out, uint16_t len) {
+  if (out == nullptr) {
+    return HAL_EINVAL;
+  }
+  hal_mutex_t mutex = eeprom_mutex();
+  hal_mutex_lock(mutex);
+  hal_status_t status = range_status(addr, len);
+  if (status == HAL_OK && len > 0u) {
+    status = s_provider->read_medium(addr, out, len);
+  }
+  hal_mutex_unlock(mutex);
+  return status;
+}
+
 hal_status_t jh_eeprom_append_size(uint16_t *out_size) {
   if (out_size == nullptr) {
     return HAL_EINVAL;
