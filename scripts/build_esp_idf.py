@@ -361,6 +361,10 @@ def exported_environment(idf_dir: Path) -> dict[str, str]:
     if completed.returncode:
         raise EspIdfError("ESP-IDF environment export failed")
     environment = parse_exported_environment(completed.stdout, baseline)
+    # The Windows SDK exports 1 even when the caller explicitly opted out.
+    # Preserve that choice so its ccache does not wrap our CMake launcher.
+    if "IDF_CCACHE_ENABLE" in baseline:
+        environment["IDF_CCACHE_ENABLE"] = baseline["IDF_CCACHE_ENABLE"]
     environment["IDF_PATH"] = str(idf_dir)
     python = idf_python(environment)
     if not python.is_file():
@@ -2041,21 +2045,18 @@ def validate_ninja_freshness(
         )
 
 
-def _compiled_source(entries: list[Any], source: Path | str) -> bool:
-    if isinstance(source, Path):
-        expected = _canonical_path(source)
-        return any(
-            isinstance(entry, dict)
-            and isinstance(entry.get("file"), str)
-            and _canonical_path(Path(entry["file"])) == expected
-            for entry in entries
+def _missing_compiled_sources(entries: list[Any], sources: Sequence[Path | str]) -> list[str]:
+    """Index this validation's compilation database once; never reuse it across builds."""
+    files = [entry.get("file", "") for entry in entries if isinstance(entry, dict)]
+    paths = {_canonical_path(Path(name)) for name in files if isinstance(name, str)}
+    names = tuple(str(name).replace("\\", "/") for name in files)
+    return [
+        str(source) for source in sources
+        if (
+            _canonical_path(source) not in paths if isinstance(source, Path)
+            else not any(name.endswith(str(source).replace("\\", "/")) for name in names)
         )
-    normalized = str(source).replace("\\", "/")
-    return any(
-        isinstance(entry, dict)
-        and str(entry.get("file", "")).replace("\\", "/").endswith(normalized)
-        for entry in entries
-    )
+    ]
 
 
 def _validate_clean_build_log(path: Path) -> None:
@@ -2320,11 +2321,7 @@ def validate_artifacts(
         f"/{GENERATED_DIR_NAME}/jh_link_contract_reference.c",
         f"/{GENERATED_DIR_NAME}/jh_link_contract_definition.c",
     ]
-    missing_sources = [
-        str(source)
-        for source in required_sources
-        if not _compiled_source(compile_commands, source)
-    ]
+    missing_sources = _missing_compiled_sources(compile_commands, required_sources)
     if missing_sources:
         raise EspIdfError(
             "compile_commands.json is missing integration sources: "
@@ -2472,6 +2469,15 @@ def idf_command(
     *,
     port: str = "",
 ) -> list[str]:
+    if action == "build":
+        # idf.py configures below; CMake forwards the job limit to Ninja.
+        command = ["cmake", "--build", str(build_dir)]
+        jobs = environment.get("CMAKE_BUILD_PARALLEL_LEVEL", "")
+        if jobs:
+            if not re.fullmatch(r"[1-9][0-9]*", jobs):
+                raise EspIdfError("CMAKE_BUILD_PARALLEL_LEVEL must be a positive integer")
+            command.extend(("--parallel", jobs))
+        return command
     command = [
         str(idf_python(environment)),
         str(idf_dir / "tools/idf.py"),
@@ -2486,6 +2492,10 @@ def idf_command(
         "-D",
         "CMAKE_EXPORT_COMPILE_COMMANDS=ON",
     ]
+    for language in ("C", "CXX"):
+        key = f"CMAKE_{language}_COMPILER_LAUNCHER"
+        if key in environment:
+            command.extend(("-D", f"{key}={environment[key]}"))
     if action == "flash":
         command.extend(("-p", port))
     command.append(action)
@@ -2515,11 +2525,16 @@ def run_idf(
     build_dir.mkdir(parents=True, exist_ok=True)
     log_name = FLASH_LOG_NAME if action == "flash" else LOG_NAME
     log_path = build_dir / log_name
+    build_environment = _idf_environment(environment, build_dir)
+    if action == "build" and environment.get("CMAKE_BUILD_PARALLEL_LEVEL"):
+        # The bootloader is an ExternalProject occupying one parent job.
+        # Its nested cmake --build must not start another full job pool.
+        build_environment["CMAKE_BUILD_PARALLEL_LEVEL"] = "1"
     try:
         completed = subprocess.run(
             command,
             cwd=repo_root,
-            env=_idf_environment(environment, build_dir),
+            env=build_environment,
             check=False,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -2724,18 +2739,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             build_environment = exported_environment(idf_dir)
 
         if arguments.action == "build":
+            stage = "idf-configure"
+            run_idf(
+                repo_root,
+                build_dir,
+                idf_dir,
+                model["idfTarget"],
+                build_environment,
+                "reconfigure",
+            )
             if model.get("deviceTree") is not None:
                 # The configured build names the flags the HAL compiles
                 # with; finalize measures their ABI before anything compiles.
-                stage = "idf-configure"
-                run_idf(
-                    repo_root,
-                    build_dir,
-                    idf_dir,
-                    model["idfTarget"],
-                    build_environment,
-                    "reconfigure",
-                )
                 stage = "device-tree-abi"
                 generate_board_inputs(
                     build_dir / GENERATED_DIR_NAME, model, abi_compile_command(build_dir)

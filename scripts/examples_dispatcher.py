@@ -22,6 +22,7 @@ import time
 from typing import Any
 
 from vscode_task_config import write_text_lf
+from compiler_cache import compiler_cache_environment
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -321,6 +322,7 @@ def run_one_example(
     variants: list[str | None],
     parallel_level: int,
     verbose: bool,
+    build_environment: dict[str, str] | None = None,
 ) -> tuple[bool, str, Path, float]:
     """Build the variants of one example for one board or assembly;
     ``selector`` is ``["--board", id]`` or ``["--assembly", key]``."""
@@ -349,7 +351,7 @@ def run_one_example(
                 stderr=subprocess.STDOUT,
                 text=True,
                 env={
-                    **os.environ,
+                    **(os.environ if build_environment is None else build_environment),
                     "CMAKE_BUILD_PARALLEL_LEVEL": str(parallel_level),
                     "JH_VSCODE_MEMORY_OVERVIEW": "0",
                 },
@@ -411,6 +413,14 @@ def build(args: argparse.Namespace) -> int:
         flush=True,
     )
     failures: list[tuple[str, Path]] = []
+    cache = None
+    if getattr(args, "compiler_cache", False):
+        try:
+            cache = compiler_cache_environment(REPO_ROOT, args.target)
+        except (ValueError, RuntimeError, OSError) as error:
+            print(f"error: {error}; run scripts/ensure_ccache.sh", file=sys.stderr)
+            return 1
+    worker_options = {"build_environment": cache[1]} if cache else {}
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
             pool.submit(
@@ -421,6 +431,7 @@ def build(args: argparse.Namespace) -> int:
                 variants,
                 parallel_level,
                 args.verbose,
+                **worker_options,
             ): example_dir
             for example_dir, selector, variants in groups
         }
@@ -435,6 +446,11 @@ def build(args: argparse.Namespace) -> int:
                 )
                 failures.append((label, log_path))
 
+    if cache:
+        result = subprocess.run([str(cache[0]), "--show-log-stats"], env=cache[1], check=False)
+        if result.returncode:
+            print("error: cannot read compiler cache statistics", file=sys.stderr)
+            return 1
     if failures:
         label, log_path = failures[0]
         print(f"\nfirst failure: {label}", file=sys.stderr)
@@ -492,6 +508,8 @@ def main(argv: list[str]) -> int:
         "--example", action="append", help="Build only this example directory name."
     )
     build_parser.add_argument("--jobs", type=int, default=1)
+    build_parser.add_argument("--compiler-cache", action="store_true",
+                              help="Use the pinned ccache and report this run's cache statistics.")
     build_parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
 

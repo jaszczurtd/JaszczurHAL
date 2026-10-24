@@ -23,8 +23,8 @@ and in the [device tree format](../doc/en/device_tree_format.md).
 
 The table uses `R0` for `rp2040`, `RA` for `rp2350-arm`, `RV` for
 `rp2350-riscv`, `S` for `stm32g474`, and `E` for `esp32s3`. A variant builds
-on every target of its project unless the table names the targets. Gate 9 of
-`runalltests.sh` builds every configuration for `rp2040`, `stm32g474`, and
+on every target of its project unless the table names the targets. The local `examples-<target>` stages of
+`runalltests.sh` build every configuration for `rp2040`, `stm32g474`, and
 `esp32s3`. **An available build configuration is not proof that the example
 works on every board.** See each project's README for wiring and hardware test
 coverage. `scripts/examples_dispatcher.py list` shows the assemblies of each
@@ -135,7 +135,7 @@ to write its other VS Code files.
 Add a variant to `JH_PROJECT_VARIANTS` only when the behavior cannot be
 selected while the program runs, and limit it to some targets with `#error`
 in the header. `scripts/examples_dispatcher.py list` shows the resulting
-configurations; after a change, update the full-matrix and gate 9
+configurations; after a change, update the full-matrix and gate
 configuration counts pinned in `tests/test_vscode_native_workflow.py`.
 
 ## Build commands
@@ -149,6 +149,31 @@ scripts/examples_dispatcher.py build --target rp2350-riscv --jobs "$(nproc)"
 scripts/examples_dispatcher.py build --target esp32s3 --jobs "$(nproc)"
 scripts/examples_dispatcher.py build --target stm32g474 --jobs "$(nproc)"
 ```
+
+Add `--compiler-cache` to use the ccache release pinned by jhbase. Prepare it
+with `scripts/ensure_ccache.sh` or the component updater. The quality gate
+applies the same cache to all CMake builds: host tests and sanitizers, firmware,
+libraries, examples, and CMake builds started by tests. Clean configuration,
+linking and test execution still run. Preprocessor-only probes (`-E`), including
+those in `test_feature_registry`, are not cached.
+
+The cache defaults to `${XDG_CACHE_HOME:-$HOME/.cache}/jaszczurhal/ccache` on
+Linux and `%LOCALAPPDATA%/jaszczurhal/ccache` on Windows. `JH_COMPILER_CACHE_DIR`
+selects another location; keep it outside the checkout so `--commit` retains
+it. The private configuration uses a 5 GB limit, compiler-content checks,
+`base_dir` set to the checkout root and `hash_dir = false`. Matching relative
+paths and compiler inputs can share results between build directories and
+checkouts. Cached debug information can refer to the original build directory;
+use a build without this option for interactive debugging.
+
+Lookups run the preprocessor: direct mode can miss a newly created header
+selected by `__has_include`, including `hal_project_config.h`. No header or
+compiler-option checks are relaxed. Each gate stage prints its cache statistics
+and records its duration in `.build/gate/logs/stage-times.tsv`.
+
+`--jobs` is the total build budget, divided between at most two projects.
+ESP-IDF configures with `idf.py`; CMake builds the resulting Ninja project
+with the explicit budget. Its nested bootloader build uses one job.
 
 Build one project with the same tool used by VS Code:
 

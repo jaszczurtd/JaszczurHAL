@@ -3641,6 +3641,11 @@ def platform_cmake_cache_args(config: dict[str, Any]) -> list[str]:
         "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
         f"-DPython3_EXECUTABLE={Path(sys.executable).resolve()}",
     ]
+    # An environment launcher must also replace a previous CMake cache value.
+    for language in ("C", "CXX"):
+        key = f"CMAKE_{language}_COMPILER_LAUNCHER"
+        if key in os.environ:
+            args.append(f"-D{key}={normalize_cmake_cli_value(os.environ[key])}")
     tools = resolved_windows_tools()
     ninja = tools.get("ninja")
     picotool = os.environ.get("JH_PICOTOOL_EXECUTABLE") or tools.get("picotool")

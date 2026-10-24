@@ -25,7 +25,7 @@ oraz [format device tree](../doc/pl/device_tree_format.md).
 Skróty w tabeli: `R0` oznacza `rp2040`, `RA` - `rp2350-arm`, `RV` -
 `rp2350-riscv`, `S` - `stm32g474`, a `E` - `esp32s3`. Wariant kompiluje się
 dla wszystkich platform projektu, chyba że tabela wymienia konkretne
-platformy. Etap 9 skryptu `runalltests.sh` kompiluje wszystkie konfiguracje
+platformy. Lokalne etapy `examples-<target>` skryptu `runalltests.sh` kompilują wszystkie konfiguracje
 dla `rp2040`, `stm32g474` i `esp32s3`. **Dostępna konfiguracja kompilacji nie
 oznacza potwierdzenia działania na każdej płytce.** Zakres testów i wymagane
 połączenia opisują README poszczególnych projektów. Montaże każdego projektu
@@ -139,7 +139,7 @@ Wariant dodawaj do `JH_PROJECT_VARIANTS` tylko wtedy, gdy zachowania nie można
 wybrać podczas działania programu. Ograniczenie wariantu do części platform
 zapisz w nagłówku przez `#error`. Wynikowe konfiguracje pokazuje
 `scripts/examples_dispatcher.py list`; po zmianie zaktualizuj liczby
-konfiguracji pełnej macierzy i etapu 9 zapisane w
+konfiguracji pełnej macierzy i bramki zapisane w
 `tests/test_vscode_native_workflow.py`.
 
 ## Polecenia kompilacji
@@ -153,6 +153,31 @@ scripts/examples_dispatcher.py build --target rp2350-riscv --jobs "$(nproc)"
 scripts/examples_dispatcher.py build --target esp32s3 --jobs "$(nproc)"
 scripts/examples_dispatcher.py build --target stm32g474 --jobs "$(nproc)"
 ```
+
+Dodaj `--compiler-cache`, aby używać wydania ccache przypiętego w jhbase.
+Przygotuj je przez `scripts/ensure_ccache.sh` lub updater komponentów. Bramka
+stosuje wspólny cache do wszystkich buildów CMake: testów hosta i sanitizerów,
+firmware, bibliotek, przykładów oraz buildów uruchamianych wewnątrz testów.
+Nadal wykonuje konfigurację od zera, linkowanie i testy. Sondy samego
+preprocessora (`-E`), w tym używane przez `test_feature_registry`, nie są cachowane.
+
+Domyślny cache znajduje się w `${XDG_CACHE_HOME:-$HOME/.cache}/jaszczurhal/ccache`
+na Linuksie oraz `%LOCALAPPDATA%/jaszczurhal/ccache` na Windows.
+`JH_COMPILER_CACHE_DIR` wybiera inny katalog; umieść go poza checkoutem, aby
+przetrwał `--commit`. Prywatna konfiguracja ustawia limit 5 GB, sprawdzanie
+zawartości kompilatora, `base_dir` na katalog checkoutu i `hash_dir = false`.
+Zgodne ścieżki względne i wejścia kompilatora pozwalają współdzielić wyniki między
+katalogami buildów i checkoutami. Zapisane informacje debugowania mogą wskazywać
+pierwotny katalog buildu; do pracy z debuggerem użyj buildu bez tej opcji.
+
+Wyszukiwanie wyniku używa preprocessora: tryb direct może pominąć nowo utworzony
+nagłówek wybierany przez `__has_include`, w tym `hal_project_config.h`.
+Sprawdzanie nagłówków i opcji kompilatora pozostaje ścisłe. Każdy etap bramki
+wypisuje statystyki cache i zapisuje swój czas w `.build/gate/logs/stage-times.tsv`.
+
+`--jobs` określa łączny budżet kompilacji, dzielony między najwyżej dwa
+projekty. ESP-IDF konfiguruje projekt przez `idf.py`, a CMake buduje go
+przez Ninja z jawnym limitem. Zagnieżdżony build bootloadera używa jednego zadania.
 
 Jeden projekt, z użyciem tego samego narzędzia co VS Code:
 

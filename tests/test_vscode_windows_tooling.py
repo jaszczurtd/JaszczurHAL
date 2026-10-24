@@ -9,6 +9,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -26,6 +27,8 @@ for import_dir in (str(SCRIPTS_DIR), str(TOOLS_DIR)):
         sys.path.insert(0, import_dir)
 
 import examples_dispatcher
+import component_manager
+import compiler_cache
 import configure_cortex_debug
 import manage_vscode_extensions
 from board_registry import tooling_target_registry
@@ -48,6 +51,18 @@ def require(condition: bool, message: str) -> None:
 
 def load_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def checkout_alias(temp_dir: str) -> Path:
+    """Spell a scratch checkout through a symlink; base_dir must keep that spelling."""
+    if os.name == "nt":
+        # Symlinks need privileges there; the CI runners' TEMP is an 8.3 alias.
+        return Path(temp_dir)
+    real = Path(temp_dir) / "real"
+    real.mkdir()
+    alias = Path(temp_dir) / "alias"
+    alias.symlink_to(real, target_is_directory=True)
+    return alias
 
 
 def require_launch_contract(document: dict, executable: str, context: str) -> None:
@@ -376,6 +391,107 @@ with tempfile.TemporaryDirectory(prefix="jh dispatcher runner ") as temp_dir:
             and call.kwargs["env"]["JH_VSCODE_MEMORY_OVERVIEW"] == "0",
             "dispatcher worker did not propagate the bounded parallel environment",
         )
+
+with tempfile.TemporaryDirectory(prefix="jh compiler cache ") as temp_dir:
+    scratch = checkout_alias(temp_dir)
+    pinned_ccache = scratch / "tool" / ("ccache.exe" if os.name == "nt" else "ccache")
+    with mock.patch.object(examples_dispatcher, "REPO_ROOT", scratch), \
+         mock.patch.object(component_manager, "ensure_ccache", return_value=pinned_ccache), \
+         mock.patch.dict(os.environ, {
+             "JH_COMPILER_CACHE_DIR": str(scratch / "persistent"),
+             "CCACHE_SLOPPINESS": "system_headers,time_macros",
+             "CCACHE_IGNOREHEADERS": "*",
+             "CCACHE_PREFIX": "untrusted-wrapper",
+             "CMAKE_C_COMPILER_LAUNCHER": "another-cache",
+         }), redirect_stdout(io.StringIO()):
+        for target in ("rp2040", "esp32s3"):
+            executable, cache_environment = compiler_cache.compiler_cache_environment(scratch, target)
+            require(executable == pinned_ccache, "matrix did not select the pinned compiler cache")
+            require(cache_environment["CCACHE_DIR"] == str((scratch / "persistent").resolve()),
+                    "matrix did not retain the explicit persistent cache directory")
+            require(not any(key in cache_environment for key in
+                            ("CCACHE_SLOPPINESS", "CCACHE_IGNOREHEADERS", "CCACHE_PREFIX")),
+                    "inherited ccache settings can bypass dependency checks")
+            configuration = Path(cache_environment["CCACHE_CONFIGPATH"]).read_text(encoding="utf-8")
+            require("compiler_check = content" in configuration and "direct_mode = false" in configuration,
+                    "matrix cache skips compiler or preprocessor checks")
+            require("hash_dir = false" in configuration
+                    and f"base_dir = {scratch.as_posix()}" in configuration,
+                    "cache keys still depend on the checkout's absolute path")
+            if target == "esp32s3":
+                require(cache_environment["IDF_CCACHE_ENABLE"] == "0",
+                        "ESP must not wrap CMake's cache launcher twice")
+            require(cache_environment["CMAKE_C_COMPILER_LAUNCHER"] == str(pinned_ccache)
+                    and cache_environment["CMAKE_CXX_COMPILER_LAUNCHER"] == str(pinned_ccache),
+                    "matrix compilers bypass the CMake cache launcher")
+        with mock.patch.dict(os.environ, {
+            "XDG_CACHE_HOME": "", "LOCALAPPDATA": "", "JH_COMPILER_CACHE_DIR": "",
+        }):
+            _, cache_environment = compiler_cache.compiler_cache_environment(scratch, "rp2040")
+            default_root = Path.home() / ("AppData/Local" if os.name == "nt" else ".cache")
+            require(cache_environment["CCACHE_DIR"] == str((default_root / "jaszczurhal/ccache").resolve()),
+                    "empty cache variables placed compiler results in the checkout")
+
+def check_cache_relocation() -> None:
+    """Debug builds share results; newly created HAL config headers invalidate them."""
+    executable = component_manager.ensure_ccache(ROOT, verify_only=True)
+    tool_environment = examples_dispatcher.workflow().cmake_process_environment() or os.environ
+    compiler = shutil.which("arm-none-eabi-gcc", path=tool_environment.get("PATH"))
+    objcopy = shutil.which("arm-none-eabi-objcopy", path=tool_environment.get("PATH"))
+    require(compiler is not None and objcopy is not None, "cache probe requires the Arm toolchain")
+    with tempfile.TemporaryDirectory(prefix="jh cache $ ") as temp_dir:
+        scratch = Path(temp_dir)
+        with mock.patch.object(component_manager, "ensure_ccache", return_value=executable), \
+             mock.patch.dict(os.environ, {"JH_COMPILER_CACHE_DIR": str(scratch / "cache")}):
+            for checkout, build_name, hit in (("one", "first", False), ("one", "second", True),
+                                              ("two", "second", True)):
+                root = scratch / checkout
+                root.mkdir(exist_ok=True)
+                source = root / "probe.c"
+                source.write_text('#include "hal/core/hal_project_config_hook.h"\n'
+                                  '#ifndef VALUE\n#define VALUE 17\n#endif\n'
+                                  'const unsigned value = VALUE + FACTOR;\n', encoding="utf-8")
+                build = root / ".build" / build_name
+                build.mkdir(parents=True)
+                _, environment = compiler_cache.compiler_cache_environment(root, "probe")
+
+                def compile_value(expected: int | None, factor: int = 1) -> None:
+                    output = build / "probe.o"
+                    output.unlink(missing_ok=True)
+                    result = subprocess.run(
+                        [str(executable), compiler, "-ggdb", "-I", str(root), "-I", str(ROOT / "src"),
+                         f"-DFACTOR={factor}", "-c", str(source), "-o", str(output)],
+                        cwd=build, env=environment, capture_output=True, text=True,
+                    )
+                    if expected is None:
+                        require(result.returncode != 0 and "cache_probe_failure" in result.stderr
+                                and not output.exists(), "cache concealed a compiler error")
+                        return
+                    require(result.returncode == 0, result.stderr)
+                    binary = build / "probe.bin"
+                    subprocess.run([objcopy, "-O", "binary", "--only-section=.rodata",
+                                    str(output), str(binary)], check=True, capture_output=True)
+                    require(int.from_bytes(binary.read_bytes(), "little") == expected,
+                            "cache returned stale source, header or flags")
+
+                compile_value(18)
+                stats = subprocess.check_output([str(executable), "--print-log-stats", "--format=json"],
+                                                env=environment, text=True)
+                require(json.loads(stats)["preprocessed_cache_hit"] == int(hit),
+                        f"debug object not shared between build directories/checkouts: {stats}")
+                if checkout == "two":
+                    header = root / "hal_project_config.h"
+                    header.write_text("#define VALUE 21\n", encoding="utf-8")
+                    compile_value(22)
+                    compile_value(24, factor=3)
+                    source.write_text(source.read_text(encoding="utf-8").replace("+ FACTOR", "- FACTOR"),
+                                      encoding="utf-8")
+                    compile_value(18, factor=3)
+                    header.write_text("#error cache_probe_failure\n", encoding="utf-8")
+                    compile_value(None)
+
+
+check_cache_relocation()
 
 build_args = SimpleNamespace(
     example=["01_core_runtime", "05_serial_gps"],

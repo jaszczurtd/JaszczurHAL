@@ -867,11 +867,24 @@ fi
 mkdir -p "${LOG_ROOT}"
 
 index=0
+stage_times=()
+printf 'stage\tseconds\n' > "${LOG_ROOT}/stage-times.tsv"
 for stage in "${SELECTED[@]}"; do
     index=$((index + 1))
     header "Stage ${index}/${#SELECTED[@]}: ${stage} - $(stage_title "${stage}")"
-    run_stage "${stage}"
-    pass "Stage ${stage} passed."
+    stage_started=${SECONDS}
+    # Keep every CMake build (including those launched by tests) on the
+    # verified cache. A subshell prevents settings leaking into later stages.
+    cache_environment="$(python3 scripts/compiler_cache.py "${stage}")"
+    (
+        eval "${cache_environment}"
+        run_stage "${stage}"
+        "${CMAKE_C_COMPILER_LAUNCHER}" --show-log-stats
+    )
+    stage_elapsed=$((SECONDS - stage_started))
+    stage_times+=("${stage_elapsed}")
+    printf '%s\t%s\n' "${stage}" "${stage_elapsed}" >> "${LOG_ROOT}/stage-times.tsv"
+    pass "Stage ${stage} passed in ${stage_elapsed}s."
 done
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -882,8 +895,8 @@ echo -e "${BOLD}═════════════════════�
 echo -e "${GREEN}${BOLD}  ALL STAGES PASSED ✓${NC}"
 echo -e "${BOLD}══════════════════════════════════════════════════════════════${NC}"
 echo ""
-for stage in "${SELECTED[@]}"; do
-    printf '  %-22s PASS\n' "${stage}"
+for index in "${!SELECTED[@]}"; do
+    printf '  %-22s PASS  %5ss\n' "${SELECTED[index]}" "${stage_times[index]}"
 done
 if [[ -f "${GENERATED_REPORT}" ]]; then
     echo ""

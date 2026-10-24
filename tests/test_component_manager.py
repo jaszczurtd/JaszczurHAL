@@ -373,6 +373,31 @@ class GitManagerTests(unittest.TestCase):
 
 
 class ArchiveManagerTests(unittest.TestCase):
+    def test_ccache_uses_the_supplied_archive_and_rejects_another_version(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="jh-ccache-") as text:
+            root = Path(text)
+            suffix = manager._platform_asset()[2]
+            write_supplied_pins(root, ccache_version_conf=(
+                "CCACHE_RELEASE_BASE=https://example.invalid/ccache\n"
+                "CCACHE_VERSION=4.14.2\n"
+                f"CCACHE_ASSET_{suffix}=tool.zip\n"
+                f"CCACHE_SHA256_{suffix}={'a' * 64}\n"
+            ))
+            binary = root / "third_party/ccache" / ("ccache.exe" if sys.platform == "win32" else "ccache")
+            binary.parent.mkdir()
+            binary.write_bytes(b"fixture")
+            version = subprocess.CompletedProcess([], 0, "ccache version 4.14.2\n", "")
+            with mock.patch.object(manager, "sync_archive", return_value=False) as sync, \
+                 mock.patch.object(manager, "_run", return_value=version):
+                self.assertEqual(binary, manager.ensure_ccache(root, verify_only=True))
+                sync.assert_called_once_with(
+                    "https://example.invalid/ccache/v4.14.2/tool.zip", "a" * 64, binary.parent,
+                    verify_only=True, version_stamp="ccache|4.14.2|tool.zip",
+                )
+                version.stdout = "ccache version 0.0\n"
+                with self.assertRaisesRegex(manager.ComponentError, "version mismatch"):
+                    manager.ensure_ccache(root, verify_only=True)
+
     def test_windows_https_download_uses_system_schannel_and_hashes_payload(self) -> None:
         with tempfile.TemporaryDirectory(prefix="jh-component-schannel-") as text:
             temporary = Path(text)
