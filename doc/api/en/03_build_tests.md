@@ -34,7 +34,7 @@ This chapter covers build dependencies, tests that run on a workstation, and pro
 | `hal_lora_radio` | Mutually exclusive family providers: the pinned official Semtech SX126x driver with the HAL adapter for validated SX1262 and experimental software-only SX1261, or the HAL-owned register provider for experimental software-only SX1276/SX1278; both compile for RP and STM32G474 and have deterministic mock coverage |
 | `hal_lora_link` | HAL-owned protocol over one configured `hal_lora_radio`; CRC-32 is internal, ChaCha20-Poly1305 uses the optional `hal_crypto` module, and no additional third-party dependency is introduced |
 | `hal_i2c` | RP2040 native Pico SDK `hardware/i2c.h`; STM32G474 register backend; ESP32-S3 ESP-IDF I2C master on I2C0/I2C1. |
-| `hal_swserial` | native Pico SDK PIO/DMA backend on RP2040; shared HAL GPIO/timing/sync backend on other targets |
+| `hal_swserial` | native Pico SDK PIO/DMA backend on RP2040/RP2350; shared HAL GPIO/timing/sync backend on other targets |
 | `hal_gps` | one portable facade selecting `hal_uart` / `hal_swserial` at compile time, plus the shared in-tree NMEA engine |
 | `hal_rgb_led` | shared NeoPixel core (`hal/gpio/neopixel/jh_neopixel.*`) + target transport implementation, including ESP32-S3 RMT |
 | `hal_thermocouple` (MCP9600/MCP9601) | shared driver (`hal/temperature/mcp9600/mcp9600_driver.*`) |

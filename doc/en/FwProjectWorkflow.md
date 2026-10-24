@@ -91,7 +91,7 @@ Automation can use `--install --yes` after obtaining consent.
 - **Target**: stable build ID: `rp2040`, `rp2350-arm`, `rp2350-riscv`,
   `stm32g474`, `esp32`, `esp32s3`, or `mock`.
 - **Board**: stable physical profile ID such as `pico`, `picow`, `pico2`,
-  `pico2w`, `rp2040-zero`, `rp2040-plus-4mb`,
+  `pico2w`, `rp2040-zero`, `rp2040-plus-4mb`, `rp2350-plus-4mb`,
   `nucleo-g474re`, `esp32-devkitc-v4`, or `waveshare-esp32-s3-zero`.
 - **Board registry**: generated tooling view of `boards/targets/*.json`,
   `boards/profiles/*.json`, and `boards/capabilities.json`.

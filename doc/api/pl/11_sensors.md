@@ -1096,7 +1096,7 @@ int      hal_gps_serial_available(void);   // bajty oczekujące w buforze RX por
 **Architektura:** Cała wspólna obsługa transportu znajduje się w
 `src/hal/gps/hal_gps.cpp`. Plik ten odpowiada za inicjalizację, polling, fallback formatu
 ramki SoftwareSerial, sprawdzanie dostępności portu oraz wybór `hal_uart` albo
-`hal_swserial` podczas kompilacji. RP2040 i STM32G474 używają tej samej implementacji;
+`hal_swserial` podczas kompilacji. RP2040, RP2350 i STM32G474 używają tej samej implementacji;
 różnice między targetami pozostają w wybranym transporcie HAL.
 
 `hal/gps/hal_gps_core.cpp` przekazuje bajty do `gps_nmea_parser.cpp`, oblicza wiek danych pozycji, zbiera diagnostykę i udostępnia wszystkie publiczne funkcje odczytu. Muteks chroni wspólny stan. Parser pochodzi z TinyGPS++ (LGPL); obsługę GSA/GSV/GST oparto na układzie pól z minmea. Funkcje testowe aktualizują stan tego samego parsera zamiast implementować osobne funkcje odczytu.
@@ -1111,7 +1111,7 @@ trakcie wywołania transportu GPS, wykonuje to wywołanie przy wyjściu, a
 wywoływać z różnych rdzeni, np. wstrzymać GPS na czas zapisu flash na
 rdzeniu, który zapisuje.
 
-**Transport RP2040 i przypisanie do rdzenia:**
+**Transport RP2040/RP2350 i przypisanie do rdzenia:**
 
 - Z `HAL_GPS_TRANSPORT_SWSERIAL` odbiór działa w maszynach stanów PIO, a
   DMA zapisuje dane do surowego bufora pierścieniowego. Żaden z dwóch rdzeni

@@ -80,7 +80,7 @@ Opcja `--install` wymaga potwierdzenia przed instalacją brakujących rozszerze�
 - **Wariant**: nazwana konfiguracja kompilacji zadeklarowana w nagłówku projektu; dodaje własne definicje do konfiguracji bazowej.
 - **Stan lokalny**: ignorowany przez Git plik `.vscode/jaszczurhal.local.json`, zawierający wybrane lokalnie platformę, płytkę i port szeregowy.
 - **Platforma docelowa (target)**: stały identyfikator konfiguracji kompilacji: `rp2040`, `rp2350-arm`, `rp2350-riscv`, `stm32g474`, `esp32`, `esp32s3` lub `mock`.
-- **Płytka (board)**: stały identyfikator profilu sprzętu, np. `pico`, `picow`, `pico2`, `pico2w`, `rp2040-zero`, `rp2040-plus-4mb`, `nucleo-g474re`, `esp32-devkitc-v4` lub `waveshare-esp32-s3-zero`.
+- **Płytka (board)**: stały identyfikator profilu sprzętu, np. `pico`, `picow`, `pico2`, `pico2w`, `rp2040-zero`, `rp2040-plus-4mb`, `rp2350-plus-4mb`, `nucleo-g474re`, `esp32-devkitc-v4` lub `waveshare-esp32-s3-zero`.
 - **Rejestr płytek**: generowane dane dla narzędzi w `boards/targets/*.json`, `boards/profiles/*.json` i `boards/capabilities.json`.
 - **`JH_TARGET` / `JH_BOARD`**: wartości w pamięci podręcznej CMake ustalane przed importem SDK i narzędzi kompilacji.
 - **`HAL_TARGET_*`**: makro wybierające implementację HAL podczas kompilacji, generowane lub ustalane na podstawie wybranej platformy.

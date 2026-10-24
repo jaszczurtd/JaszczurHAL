@@ -455,6 +455,37 @@ target_compile_definitions(test_rp_flash_dma_guard PRIVATE
 jh_enable_host_warnings(test_rp_flash_dma_guard ERRORS)
 add_test(NAME test_rp_flash_dma_guard COMMAND test_rp_flash_dma_guard)
 
+# The RP software UART backend on simulated PIO and DMA, once per chip: the
+# DMA transfer count differs (RP2350 keeps a MODE field in its top bits).
+foreach(_jh_swserial_chip IN ITEMS rp2040 rp2350)
+    set(_jh_swserial_test test_rp_swserial_backend_${_jh_swserial_chip})
+    add_executable(${_jh_swserial_test}
+        test_rp_swserial_backend.cpp
+        fakes/host_sync/hal_sync_host.cpp
+        fakes/rp_pio_sdk/rp_pio_fake.cpp
+        ${CMAKE_SOURCE_DIR}/src/hal/core/hal_config.cpp
+        ${CMAKE_SOURCE_DIR}/src/hal/impl/rp2040/hal_swserial.cpp
+        ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+    target_include_directories(${_jh_swserial_test} PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/fakes/rp_pio_sdk
+        ${CMAKE_SOURCE_DIR}/src)
+    if(_jh_swserial_chip STREQUAL "rp2040")
+        target_compile_definitions(${_jh_swserial_test} PRIVATE
+            HAL_TARGET_RP2040=1 HAL_BOARD_PROFILE_RP_PICO=1
+            PICO_RP2040=1 PICO_PIO_VERSION=0)
+    else()
+        target_compile_definitions(${_jh_swserial_test} PRIVATE
+            HAL_TARGET_RP2350_ARM=1 HAL_BOARD_PROFILE_RP_PICO_2=1
+            PICO_RP2040=0 PICO_RP2350=1 PICO_PIO_VERSION=1)
+    endif()
+    target_compile_definitions(${_jh_swserial_test} PRIVATE
+        PICO_NO_HARDWARE=0 HAL_ENABLE_SWSERIAL
+        HAL_ENABLE_UNITY UNITY_INCLUDE_CONFIG_H)
+    jh_enable_host_warnings(${_jh_swserial_test} ERRORS)
+    target_link_libraries(${_jh_swserial_test} PRIVATE Threads::Threads)
+    add_test(NAME ${_jh_swserial_test} COMMAND ${_jh_swserial_test})
+endforeach()
+
 # The RP debug serial port on a fake hal_usb CDC: a host holding DTR without
 # reading costs one bounded write timeout, then debug writes drop until the
 # host drains data or releases DTR.

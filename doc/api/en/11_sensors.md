@@ -1058,8 +1058,8 @@ int      hal_gps_serial_available(void);   // bytes waiting in the serial RX buf
 
 **Architecture:** `src/hal/gps/hal_gps.cpp` is the only transport facade. It owns
 initialization, polling, SoftwareSerial framing fallback, serial availability
-and compile-time selection between `hal_uart` and `hal_swserial`. RP2040 and
-STM32G474 use the same file and only the selected HAL transport supplies
+and compile-time selection between `hal_uart` and `hal_swserial`. RP2040, RP2350
+and STM32G474 use the same file and only the selected HAL transport supplies
 target-specific behavior.
 
 `hal/gps/hal_gps_core.cpp` feeds bytes to `gps_nmea_parser.cpp`, calculates position-data age, collects diagnostics, and provides all public getters. A mutex protects the shared state. The parser comes from TinyGPS++ (LGPL); GSA/GSV/GST support follows the field layout in minmea. Mock functions update that same parser state rather than providing a separate set of getters.
@@ -1073,7 +1073,7 @@ by that call as it returns, and an update made during a pause skips reading.
 They may therefore run on different cores, e.g. a pause around a flash write
 on the core that writes.
 
-**RP2040 transport and core affinity:**
+**RP2040/RP2350 transport and core affinity:**
 
 - With `HAL_GPS_TRANSPORT_SWSERIAL`, reception runs in PIO state machines and
   DMA writes the raw ring. There is no GPS RX ISR on either CPU core;

@@ -23,7 +23,7 @@
 #include <string.h>
 
 /*
- * RP2040 software UART.
+ * RP2040/RP2350 software UART.
  *
  * RX and TX are performed entirely by PIO state machines. RX words are moved
  * into a power-of-two raw ring by DMA, so a continuous NMEA burst does not run
@@ -37,13 +37,26 @@
 #define HAL_SWSERIAL_RX_BUF_SIZE 64u
 #define HAL_SWSERIAL_DMA_WORD_COUNT 64u
 #define HAL_SWSERIAL_DMA_RING_BITS 8u /* 64 * sizeof(uint32_t) == 256 */
+/*
+ * Longest DMA run in normal mode. RP2350 keeps a MODE field in TRANS_COUNT
+ * bits 31:28, where all ones selects ENDLESS: that channel never counts down,
+ * so received words would never become visible. Its run must fit the 28-bit
+ * COUNT field; RP2040 counts all 32 bits.
+ */
+#if HAL_TARGET_IS_RP2040
 #define HAL_SWSERIAL_DMA_TRANSFER_COUNT UINT32_MAX
+#else
+#define HAL_SWSERIAL_DMA_TRANSFER_COUNT DMA_CH0_TRANS_COUNT_COUNT_BITS
+#endif
 #define HAL_SWSERIAL_DMA_REARM_THRESHOLD (1u << 20u)
 #define HAL_SWSERIAL_PIO_PIN_COUNT 32u
 
 static_assert((HAL_SWSERIAL_RX_BUF_SIZE & (HAL_SWSERIAL_RX_BUF_SIZE - 1u)) ==
                   0u,
               "SoftwareSerial RX ring must be a power of two");
+static_assert(HAL_SWSERIAL_DMA_TRANSFER_COUNT >
+                  HAL_SWSERIAL_DMA_REARM_THRESHOLD,
+              "SoftwareSerial DMA run must outlast its rearm threshold");
 static_assert(HAL_SWSERIAL_DMA_WORD_COUNT * sizeof(uint32_t) ==
                   (1u << HAL_SWSERIAL_DMA_RING_BITS),
               "SoftwareSerial DMA ring size/alignment mismatch");
@@ -347,12 +360,14 @@ static void swserial_configure_tx(hal_swserial_t h, float divider) {
   pio_sm_set_enabled(h->pio, sm, true);
 }
 
-static uint64_t swserial_dma_produced(const hal_swserial_t h) {
-  if (!h->rx_dma_active) {
-    return h->dma_epoch_base;
-  }
-  const uint32_t remaining =
-      dma_channel_hw_addr((uint)h->dma_channel)->transfer_count;
+/* Transfers left in the current run; RP2350 MODE bits are not part of it. */
+static uint32_t swserial_dma_remaining(const hal_swserial_t h) {
+  return dma_channel_hw_addr((uint)h->dma_channel)->transfer_count &
+         HAL_SWSERIAL_DMA_TRANSFER_COUNT;
+}
+
+static uint64_t swserial_dma_produced_at(const hal_swserial_t h,
+                                         uint32_t remaining) {
   return h->dma_epoch_base +
          ((uint64_t)HAL_SWSERIAL_DMA_TRANSFER_COUNT - remaining);
 }
@@ -417,10 +432,9 @@ static void swserial_service_rx(hal_swserial_t h) {
     return;
   }
 
-  const uint32_t remaining =
-      dma_channel_hw_addr((uint)h->dma_channel)->transfer_count;
+  const uint32_t remaining = swserial_dma_remaining(h);
   if (remaining > HAL_SWSERIAL_DMA_REARM_THRESHOLD) {
-    swserial_consume_rx(h, swserial_dma_produced(h));
+    swserial_consume_rx(h, swserial_dma_produced_at(h, remaining));
     return;
   }
 
@@ -432,11 +446,8 @@ static void swserial_service_rx(hal_swserial_t h) {
    */
   dma_channel_abort((uint)h->dma_channel);
   h->rx_dma_active = false;
-  const uint32_t final_remaining =
-      dma_channel_hw_addr((uint)h->dma_channel)->transfer_count;
   const uint64_t final_produced =
-      h->dma_epoch_base +
-      ((uint64_t)HAL_SWSERIAL_DMA_TRANSFER_COUNT - final_remaining);
+      swserial_dma_produced_at(h, swserial_dma_remaining(h));
   swserial_consume_rx(h, final_produced);
   h->dma_epoch_base = final_produced;
   swserial_configure_rx_dma(h);

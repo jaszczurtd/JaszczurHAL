@@ -113,7 +113,7 @@ require(
 
 validated = run("--validate-only")
 require(
-    validated.stdout.strip() == "validated 7 targets and 11 boards",
+    validated.stdout.strip() == "validated 7 targets and 12 boards",
     "unexpected validated registry size",
 )
 require(
@@ -142,6 +142,7 @@ require(
         "rp2040-lora-lf",
         "rp2040-plus-4mb",
         "rp2040-zero",
+        "rp2350-plus-4mb",
         "waveshare-esp32-s3-zero",
     ],
     "board list is not deterministic",
@@ -359,6 +360,20 @@ run(
 require(
     load(plus_output / "jh_board_resolved.json")["flashBytes"] == 4194304,
     "RP2040-Plus flash golden mismatch",
+)
+
+plus2350_output = TEST_ROOT / "generated/plus2350"
+run(
+    "--target",
+    "rp2350-arm",
+    "--board",
+    "rp2350-plus-4mb",
+    "--output-dir",
+    str(plus2350_output),
+)
+require(
+    load(plus2350_output / "jh_board_resolved.json")["flashBytes"] == 4194304,
+    "RP2350-Plus flash golden mismatch",
 )
 require(
     "#define HAL_LED_BUILTIN HAL_BOARD_STATUS_LED_PIN"

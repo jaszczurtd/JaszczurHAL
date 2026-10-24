@@ -100,7 +100,7 @@ Stack protection uses two independent opt-ins:
 | `HAL_ENABLE_FAT` | FatFs `ff.h` | managed FatFs sources and target disk I/O | Shared FatFs filesystem support used by SD-backed modules |
 | `HAL_ENABLE_SDLOGGER` | `hal_sdlogger.h` | `hal/storage/filesystem/sdlogger/hal_sdlogger.cpp` | SD logger over shared FatFs (propagates FAT + EEPROM + SPI) |
 | `HAL_ENABLE_UART` | `hal_uart.h` | `hal_uart.cpp` | Hardware UART. STM32G474 tunables `HAL_UART_RX_BUFFER_SIZE`, `HAL_UART_TX_BUFFER_SIZE`: [Buses API](09_buses.md) |
-| `HAL_ENABLE_SWSERIAL` | `hal_swserial.h` | target `hal_swserial.cpp` | Native Pico SDK PIO/DMA software UART on RP2040; shared HAL GPIO backend on other targets |
+| `HAL_ENABLE_SWSERIAL` | `hal_swserial.h` | target `hal_swserial.cpp` | Native Pico SDK PIO/DMA software UART on RP2040/RP2350; shared HAL GPIO backend on other targets |
 | `HAL_ENABLE_I2C` | `hal_i2c.h` | `hal_i2c.cpp` | I2C master/controller bus |
 | `HAL_ENABLE_I2C_10BIT` | `hal_i2c.h` | `hal_i2c.cpp` + target backends | Opt-in 10-bit I2C master addressing via `hal_i2c_init_10bit()`/`hal_i2c_init_bus_10bit()` and `hal_i2c_address_t` (propagates I2C); `hal_i2c_scan()` stays 7-bit-only |
 | `HAL_ENABLE_I2C_SLAVE` | `hal_i2c_slave.h` | `hal_i2c_slave.cpp` | I2C slave/target register-map mode |
@@ -128,7 +128,7 @@ Stack protection uses two independent opt-ins:
 | `HAL_ENABLE_IRSMALL_DECODER` | `hal_irsmall_decoder.h` | `hal/input/irsmall_decoder/irsmall_decoder.cpp` | shared HAL GPIO interrupt infrared receiver decoder |
 | `HAL_ENABLE_ONEWIRE` | `hal_onewire.h` + `hal/onewire/onewire_driver.h` | `hal/onewire/hal_onewire.cpp` + `hal/onewire/onewire_driver.cpp` | shared HAL-only 1-Wire bit-bang driver (propagates CRC) |
 | `HAL_ENABLE_EXTERNAL_ADC` | `hal_external_adc.h` + `hal/analog/ads1x15/ads1x15_driver.h` | `hal/analog/ads1x15/hal_external_adc_ads1x15.cpp` + `hal/analog/ads1x15/ads1x15_driver.cpp` | shared HAL-only ADS1X15/ADS1115 driver (propagates I2C) |
-| `HAL_ENABLE_GPS` | `hal_gps.h` | `hal_gps.cpp` + `hal/gps/` | portable facade and NMEA engine (RP2040 + STM32G474); needs a transport: SWSERIAL or UART |
+| `HAL_ENABLE_GPS` | `hal_gps.h` | `hal_gps.cpp` + `hal/gps/` | portable facade and NMEA engine (RP2040/RP2350 + STM32G474); needs a transport: SWSERIAL or UART |
 | `HAL_ENABLE_DIGIPOT` | `hal_digipot.h` + `hal/analog/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `hal/analog/digipot/*.cpp` | facade/pool/dispatch; needs MCP401X or MAX5395 backend |
 | `HAL_ENABLE_MCP401X` | `hal_digipot.h` + `hal/analog/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `hal/analog/digipot/digipot_mcp401x.cpp` | MCP4017/4018/4019 shared HAL I2C driver (propagates DIGIPOT + I2C) |
 | `HAL_ENABLE_MAX5395` | `hal_digipot.h` + `hal/analog/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `hal/analog/digipot/digipot_max5395.cpp` | MAX5395 shared HAL I2C driver (propagates DIGIPOT + I2C) |

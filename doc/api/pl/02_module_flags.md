@@ -107,7 +107,7 @@ Ochronę stosu włączają dwie niezależne opcje:
 | `HAL_ENABLE_FAT` | FatFs `ff.h` | zarządzane źródła FatFs oraz we/wy dysku targetu | Współdzielone wsparcie systemu plików FatFs, wykorzystywane przez moduły oparte na SD |
 | `HAL_ENABLE_SDLOGGER` | `hal_sdlogger.h` | `hal/storage/filesystem/sdlogger/hal_sdlogger.cpp` | Logger SD przez współdzielony FatFs (propaguje FAT + EEPROM + SPI) |
 | `HAL_ENABLE_UART` | `hal_uart.h` | `hal_uart.cpp` | Sprzętowy UART. Parametry STM32G474 `HAL_UART_RX_BUFFER_SIZE`, `HAL_UART_TX_BUFFER_SIZE`: [API magistral](09_buses.md) |
-| `HAL_ENABLE_SWSERIAL` | `hal_swserial.h` | `hal_swserial.cpp` specyficzny dla targetu | Natywny programowy UART PIO/DMA Pico SDK na RP2040; współdzielony backend HAL GPIO na pozostałych targetach |
+| `HAL_ENABLE_SWSERIAL` | `hal_swserial.h` | `hal_swserial.cpp` specyficzny dla targetu | Natywny programowy UART PIO/DMA Pico SDK na RP2040/RP2350; współdzielony backend HAL GPIO na pozostałych targetach |
 | `HAL_ENABLE_I2C` | `hal_i2c.h` | `hal_i2c.cpp` | Magistrala I2C master/kontroler |
 | `HAL_ENABLE_I2C_10BIT` | `hal_i2c.h` | `hal_i2c.cpp` + backendy targetów | Opcjonalne 10-bitowe adresowanie I2C master przez `hal_i2c_init_10bit()`/`hal_i2c_init_bus_10bit()` i `hal_i2c_address_t` (propaguje I2C); `hal_i2c_scan()` pozostaje wyłącznie 7-bitowy |
 | `HAL_ENABLE_I2C_SLAVE` | `hal_i2c_slave.h` | `hal_i2c_slave.cpp` | Tryb I2C slave/target z mapą rejestrów |
@@ -135,7 +135,7 @@ Ochronę stosu włączają dwie niezależne opcje:
 | `HAL_ENABLE_IRSMALL_DECODER` | `hal_irsmall_decoder.h` | `hal/input/irsmall_decoder/irsmall_decoder.cpp` | współdzielony dekoder odbiornika podczerwieni oparty na przerwaniu HAL GPIO |
 | `HAL_ENABLE_ONEWIRE` | `hal_onewire.h` + `hal/onewire/onewire_driver.h` | `hal/onewire/hal_onewire.cpp` + `hal/onewire/onewire_driver.cpp` | współdzielony sterownik bit-bang 1-Wire wyłącznie HAL (propaguje CRC) |
 | `HAL_ENABLE_EXTERNAL_ADC` | `hal_external_adc.h` + `hal/analog/ads1x15/ads1x15_driver.h` | `hal/analog/ads1x15/hal_external_adc_ads1x15.cpp` + `hal/analog/ads1x15/ads1x15_driver.cpp` | współdzielony sterownik ADS1X15/ADS1115 wyłącznie HAL (propaguje I2C) |
-| `HAL_ENABLE_GPS` | `hal_gps.h` | `hal_gps.cpp` + `hal/gps/` | przenośna fasada oraz silnik NMEA (RP2040 + STM32G474); wymaga transportu: SWSERIAL lub UART |
+| `HAL_ENABLE_GPS` | `hal_gps.h` | `hal_gps.cpp` + `hal/gps/` | przenośna fasada oraz silnik NMEA (RP2040/RP2350 + STM32G474); wymaga transportu: SWSERIAL lub UART |
 | `HAL_ENABLE_DIGIPOT` | `hal_digipot.h` + `hal/analog/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `hal/analog/digipot/*.cpp` | fasada, pula i mechanizm wyboru backendu; wymaga backendu MCP401X lub MAX5395 |
 | `HAL_ENABLE_MCP401X` | `hal_digipot.h` + `hal/analog/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `hal/analog/digipot/digipot_mcp401x.cpp` | współdzielony sterownik HAL I2C MCP4017/4018/4019 (propaguje DIGIPOT + I2C) |
 | `HAL_ENABLE_MAX5395` | `hal_digipot.h` + `hal/analog/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `hal/analog/digipot/digipot_max5395.cpp` | współdzielony sterownik HAL I2C MAX5395 (propaguje DIGIPOT + I2C) |

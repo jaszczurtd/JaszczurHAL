@@ -16,7 +16,9 @@
                 "rp2040:rp2040-zero - Waveshare RP2040-Zero compatible",
                 "rp2350-arm:pico2 - Raspberry Pi Pico 2",
                 "rp2350-arm:pico2w - Raspberry Pi Pico 2 W",
+                "rp2350-arm:rp2350-plus-4mb - Waveshare RP2350-Plus 4 MB",
                 "rp2350-riscv:pico2 - Raspberry Pi Pico 2",
+                "rp2350-riscv:rp2350-plus-4mb - Waveshare RP2350-Plus 4 MB",
                 "stm32g474:nucleo-g474re - ST NUCLEO-G474RE"
             ],
             "default": "rp2040:pico - Raspberry Pi Pico"

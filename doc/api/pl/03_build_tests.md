@@ -34,7 +34,7 @@ Ten rozdział opisuje zależności potrzebne do kompilacji, uruchamianie testów
 | `hal_lora_radio` | Wzajemnie wykluczające się backendy rodzin układów: oficjalny sterownik Semtech SX126x w wersji wskazanej przez repozytorium, z adapterem HAL dla zwalidowanego SX1262 i eksperymentalnego SX1261, sprawdzonego wyłącznie programowo, albo własny backend rejestrowy HAL dla eksperymentalnych SX1276/SX1278, również sprawdzonych wyłącznie programowo. Oba kompilują się dla RP i STM32G474 i są deterministycznie testowane z użyciem mocka. |
 | `hal_lora_link` | Własny protokół HAL nad jednym skonfigurowanym `hal_lora_radio`; CRC-32 jest wewnętrzne, ChaCha20-Poly1305 używa opcjonalnego modułu `hal_crypto`, i nie wprowadza się żadnej dodatkowej zależności zewnętrznej |
 | `hal_i2c` | natywny `hardware/i2c.h` Pico SDK dla RP2040; backend rejestrowy STM32G474; ESP-IDF I2C master na I2C0/I2C1 dla ESP32-S3. |
-| `hal_swserial` | natywny backend PIO/DMA Pico SDK na RP2040; współdzielony backend HAL GPIO/timing/sync na pozostałych targetach |
+| `hal_swserial` | natywny backend PIO/DMA Pico SDK na RP2040/RP2350; współdzielony backend HAL GPIO/timing/sync na pozostałych targetach |
 | `hal_gps` | jedna przenośna fasada wybierająca `hal_uart` / `hal_swserial` podczas kompilacji, plus współdzielony wbudowany silnik NMEA |
 | `hal_rgb_led` | współdzielony rdzeń NeoPixel (`hal/gpio/neopixel/jh_neopixel.*`) + implementacja transportu targetowego, w tym RMT na ESP32-S3 |
 | `hal_thermocouple` (MCP9600/MCP9601) | współdzielony sterownik (`hal/temperature/mcp9600/mcp9600_driver.*`) |
