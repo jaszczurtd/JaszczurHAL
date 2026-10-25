@@ -1,6 +1,6 @@
 include_guard(GLOBAL)
 
-# jh_add_library_package(<library target> <HAL source dir>)
+# jh_add_library_package(<library target> <HAL source dir> [ARCHIVE_NAME <name>])
 #
 # The headers of one static library build next to the archive
 # (<build>/include/generated, refreshed on every configure) and its installation: public HAL headers, the
@@ -9,6 +9,7 @@ include_guard(GLOBAL)
 # and final JSON and a relocatable jh_hardware_config.cmake. Files the other
 # mode left there are removed, so a package never mixes two builds.
 function(jh_add_library_package LIBRARY SOURCE_DIR)
+    cmake_parse_arguments(PARSE_ARGV 2 _JH_LP "" "ARCHIVE_NAME" "")
     set(_jh_lp_headers
         "${JH_BOARD_GENERATED_DIR}/jh_board_config.h"
         "${JH_BOARD_GENERATED_DIR}/jh_link_contract.h")
@@ -44,7 +45,12 @@ function(jh_add_library_package LIBRARY SOURCE_DIR)
             file(REMOVE "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/${_jh_lp_stale}")
         endforeach()
     ]])
-    install(TARGETS ${LIBRARY} ARCHIVE DESTINATION lib)
+    if(_JH_LP_ARCHIVE_NAME)
+        install(FILES "$<TARGET_FILE:${LIBRARY}>" DESTINATION lib
+            RENAME "${_JH_LP_ARCHIVE_NAME}")
+    else()
+        install(TARGETS ${LIBRARY} ARCHIVE DESTINATION lib)
+    endif()
     install(DIRECTORY "${SOURCE_DIR}/" DESTINATION include
         FILES_MATCHING
         PATTERN "*.h"

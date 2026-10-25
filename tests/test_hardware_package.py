@@ -142,6 +142,15 @@ class Package(unittest.TestCase):
         result = self.direct_link("direct match", config("app a"))
         self.assertEqual(0, result.returncode, result.stderr)
 
+    def test_installed_status_package_survives_upgrade_and_relocation(self) -> None:
+        pin = (ROOT / "third_party/jhbase_version.conf").read_text(encoding="utf-8")
+        revision = re.search(r"^JHBASE_REF=(\w+)$", pin, re.MULTILINE).group(1)
+        result = run("cmake", f"-DJH_PACKAGE_BUILD={self.build}",
+                     f"-DJH_PACKAGE_WORK={WORK / 'status consumer'}",
+                     f"-DJH_PACKAGE_JHBASE_REF={revision}",
+                     "-P", ROOT / "tests/check_library_package.cmake")
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
     def test_the_linker_refuses_another_package(self) -> None:
         other = config("app b", relay_pin="PC4")
         expected = identity(other)["configSha256"][:12]

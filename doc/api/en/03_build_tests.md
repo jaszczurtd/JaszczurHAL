@@ -140,6 +140,11 @@ the jh host CLI, which the hook builds on first use from the staged content
 `.build/host-tools`, taking the managed checkouts from this checkout; a later
 commit with the same tool inputs reuses it.
 
+For Python steps, the hook uses `JH_COMPONENT_PYTHON` or `JH_VSCODE_PYTHON`
+when set, in that order. On Windows it otherwise selects
+`.build/windows/venv/Scripts/python.exe` when present. The default in other
+environments is `python3`.
+
 **`runalltests.sh`** - Full validation gate
 ```bash
 ./runalltests.sh                  # every stage on the working tree

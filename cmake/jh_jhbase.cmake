@@ -4,7 +4,6 @@ include_guard(GLOBAL)
 # hal/core/hal_array.h, so every HAL compile needs its headers. The managed
 # checkout third_party/jhbase follows third_party/jhbase_version.conf;
 # JH_JHBASE_DIR selects another checkout, as for scripts/ensure_jhbase.sh.
-set(_jh_jhbase_hal_root "${CMAKE_CURRENT_LIST_DIR}/..")
 
 # jh_dependency_root(<out>): the checkout holding the managed third_party
 # directories. JH_DEPENDENCY_ROOT in the environment names another
@@ -15,7 +14,7 @@ function(jh_dependency_root OUT_DIR)
     if(DEFINED ENV{JH_DEPENDENCY_ROOT} AND NOT "$ENV{JH_DEPENDENCY_ROOT}" STREQUAL "")
         get_filename_component(_jh_dep_root "$ENV{JH_DEPENDENCY_ROOT}" ABSOLUTE)
     else()
-        get_filename_component(_jh_dep_root "${_jh_jhbase_hal_root}" ABSOLUTE)
+        get_filename_component(_jh_dep_root "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/.." ABSOLUTE)
     endif()
     set(${OUT_DIR} "${_jh_dep_root}" PARENT_SCOPE)
 endfunction()
@@ -28,7 +27,7 @@ function(jh_jhbase_dir OUT_DIR)
         get_filename_component(_jh_jb_dir "$ENV{JH_JHBASE_DIR}" ABSOLUTE)
         set(_jh_jb_revision "")
     else()
-        file(STRINGS "${_jh_jhbase_hal_root}/third_party/jhbase_version.conf"
+        file(STRINGS "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../third_party/jhbase_version.conf"
             _jh_jb_pin REGEX "^JHBASE_(REF|DIR)=")
         foreach(_jh_jb_line IN LISTS _jh_jb_pin)
             if(_jh_jb_line MATCHES "^JHBASE_REF=(.+)$")
@@ -62,13 +61,16 @@ endfunction()
 # and jb::base. The library builds only when linked; installing the build
 # writes the status headers and the jhbase package with the recorded revision
 # into the install prefix.
-macro(jh_add_jhbase)
+function(jh_add_jhbase)
     if(NOT TARGET jb::status)
         jh_jhbase_dir(_jh_jb_source JHBASE_REVISION)
+        # ESP-IDF's project() wrapper does not propagate this variable.
+        # jhbase is always a dependency here, never the top-level project.
+        set(PROJECT_IS_TOP_LEVEL FALSE)
         # Keep the managed jhbase checkout clean when Unicode is enabled.
         # Callers may still select an explicit checkout with the jhbase option.
         if(JHBASE_UNICODE AND "${JHBASE_UTF8PROC_DIR}" STREQUAL "")
-            file(READ "${_jh_jhbase_hal_root}/config/tooling/managed_components.json"
+            file(READ "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../config/tooling/managed_components.json"
                 _jh_jb_components)
             string(JSON _jh_jb_utf8proc_dir GET "${_jh_jb_components}"
                 jhbasePins utf8proc directory)
@@ -80,7 +82,11 @@ macro(jh_add_jhbase)
             unset(_jh_jb_utf8proc_dir)
         endif()
         add_subdirectory("${_jh_jb_source}" "${CMAKE_BINARY_DIR}/jhbase")
+        # The CLI also installs the license from the selected Unicode source.
+        if(JHBASE_UNICODE)
+            set(JHBASE_UTF8PROC_DIR "${JHBASE_UTF8PROC_DIR}" PARENT_SCOPE)
+        endif()
         unset(_jh_jb_source)
         unset(JHBASE_REVISION)
     endif()
-endmacro()
+endfunction()

@@ -420,7 +420,9 @@ flash, SRAM, pamięci trwałej i OTA.
   esp-idf/, bootloader/, ... # drzewo builda ESP-IDF
 ```
 
-Bez `-p` własny `hal_project_config.h` aplikacji kontrolnej nie żąda żadnych funkcji, więc archiwum zawiera sam rdzeń runtime; FreeRTOS zawsze dostarcza ESP-IDF. `--all-features` żąda każdej funkcji z listy `supportedFeatures` targetu, którą można wskazać bezpośrednio. `--library-only` i `--freertos` są przyjmowane dla zgodności z pozostałymi runnerami: ESP-IDF zawsze linkuje aplikację kontrolną i zawsze dostarcza FreeRTOS. Archiwum zależy od komponentów ESP-IDF i `sdkconfig` builda, który je utworzył, więc linkuj je z projektu ESP-IDF skonfigurowanego dla tego samego targetu, płytki i zestawu funkcji. Ta rodzina nie ma kroku `cmake --install`.
+Bez `-p` własny `hal_project_config.h` aplikacji kontrolnej nie żąda żadnych funkcji, więc archiwum zawiera sam rdzeń runtime; FreeRTOS zawsze dostarcza ESP-IDF. `--all-features` żąda każdej funkcji z listy `supportedFeatures` targetu, którą można wskazać bezpośrednio. `--library-only` i `--freertos` są przyjmowane dla zgodności z pozostałymi runnerami: ESP-IDF zawsze linkuje aplikację kontrolną i zawsze dostarcza FreeRTOS.
+
+Po zbudowaniu użyj `cmake --install` zgodnie z sekcją "Zainstalowany pakiet i bezpośrednie użycie kompilatora". Instalacja zawiera archiwum HAL, nagłówki publiczne i generowane, pakiet statusów jhbase z rewizją i profilem ABI oraz dane konfiguracji tego buildu. Archiwum nadal zależy od komponentów ESP-IDF i `sdkconfig`, które je utworzyły. Cały firmware linkuj z projektu ESP-IDF skonfigurowanego dla tego samego targetu, płytki i zestawu funkcji.
 
 Projekty firmware używają `scripts/build_esp_idf.py` bezpośrednio. Skrypt obsługuje polecenia `build`, `artifacts` i `flash`:
 
@@ -512,7 +514,7 @@ zapisany profil także wtedy, gdy nie da się go już rozwiązać.
 
 `Project: Build` tworzy bibliotekę dla aktywnego profilu i wybiera jej bazę poleceń kompilacji dla cpptools. `Project: Refresh IntelliSense` wykonuje tę samą kompilację przyrostową, a następnie odtwarza ignorowany przez Git `.vscode/c_cpp_properties.json`. Konfiguracje sprzętowe tworzą `libJaszczurHAL.a`, a mock - `libhal_mock.a`.
 
-`Project: Install library` kompiluje aktywny profil sprzętowy i instaluje bibliotekę, publiczne i wygenerowane nagłówki oraz dane sygnatury w `.build/install/<target>/<board>/`. Mock i profile ESP-IDF nie obsługują instalacji; archiwum i nagłówki ESP-IDF pozostają w katalogu builda. `Project: Clean` usuwa tylko katalog kompilacji i instalacji aktywnego profilu oraz odpowiadający mu wygenerowany plik IntelliSense. Nie usuwa innych konfiguracji, zarządzanych narzędzi ani źródeł zależności.
+`Project: Install library` kompiluje aktywny profil RP lub STM32 i instaluje bibliotekę, publiczne i wygenerowane nagłówki oraz dane sygnatury w `.build/install/<target>/<board>/`. Mock i profile ESP-IDF nie obsługują tego zadania IDE. Dla ESP-IDF zainstaluj gotowy build poleceniem `cmake --install`, zgodnie z opisem powyżej. `Project: Clean` usuwa tylko katalog kompilacji i instalacji aktywnego profilu oraz odpowiadający mu wygenerowany plik IntelliSense. Nie usuwa innych konfiguracji, zarządzanych narzędzi ani źródeł zależności.
 
 Pliki `.vscode` przechowywane w katalogu głównym repozytorium są generowane na podstawie rejestru płytek. Po zmianie rejestru lub zadań sprawdź albo odtwórz pliki generowane:
 

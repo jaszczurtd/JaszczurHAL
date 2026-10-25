@@ -4,6 +4,15 @@ set -eu
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
+hook_python="${JH_COMPONENT_PYTHON:-${JH_VSCODE_PYTHON:-}}"
+if [ -z "$hook_python" ]; then
+    hook_python=python3
+    if [ "${OS:-}" = Windows_NT ] &&
+            [ -f "$repo_root/.build/windows/venv/Scripts/python.exe" ]; then
+        hook_python="$repo_root/.build/windows/venv/Scripts/python.exe"
+    fi
+fi
+
 # Git passes GIT_INDEX_FILE relative to the top of the work tree for a plain
 # commit (an absolute temporary index for a commit naming paths); make it
 # absolute for the generators below, which run in another directory. Git for
@@ -110,14 +119,14 @@ blocked() {
     echo >&2
     echo "[pre-commit] Commit blocked: $1" >&2
     echo "[pre-commit] Refresh the generated artifacts with:" >&2
-    echo "  python3 scripts/sync_generated.py --write" >&2
+    printf '%s\n' "  \"$hook_python\" scripts/sync_generated.py --write" >&2
     echo "[pre-commit] Review and stage the generated changes, then retry the commit." >&2
     exit 1
 }
 
 if ! GIT_DIR="$(git rev-parse --absolute-git-dir)" GIT_WORK_TREE="$staged_tree" \
         PYTHONDONTWRITEBYTECODE=1 \
-        python3 "$staged_tree/scripts/sync_generated.py" --write --report-file "$report"; then
+        "$hook_python" "$staged_tree/scripts/sync_generated.py" --write --report-file "$report"; then
     blocked "generated artifacts are missing or stale and could not be refreshed."
 fi
 # The report also lists files whose mode alone changed in the export; only

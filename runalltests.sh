@@ -676,6 +676,11 @@ stage_rp() {
     check_native_link_inputs "${GATE_BUILD_ROOT}/rp-pico" "${GATE_BUILD_ROOT}/rp-pico-flags"
 }
 
+check_library_package() {
+    with_minimum_cmake cmake "-DJH_PACKAGE_BUILD=$1" "-DJH_PACKAGE_WORK=$1/package-check" \
+        -P "${SCRIPT_DIR}/tests/check_library_package.cmake"
+}
+
 stage_esp_idf() {
     local phase3="${GATE_BUILD_ROOT}/esp-idf/esp32s3-phase3"
     local gamepad="${GATE_BUILD_ROOT}/esp-idf/esp32-gamepad"
@@ -716,6 +721,7 @@ stage_esp_idf() {
         fail "ESP32-S3 library runner did not publish libJaszczurHAL.a with its generated headers"
         exit 1
     fi
+    check_library_package "${library}"
 
     local device_tree_library="${GATE_BUILD_ROOT}/link-libraries/esp32s3-device-tree"
     local device_tree_firmware="${GATE_BUILD_ROOT}/esp-idf/esp32s3-device-tree"
@@ -736,6 +742,7 @@ stage_esp_idf() {
         fail "ESP32-S3 device tree library was finalized without the struct layout of its compile flags"
         exit 1
     fi
+    check_library_package "${device_tree_library}"
     info "Building ESP32-S3 firmware from a device tree..."
     run_esp_build "${LOG_ROOT}/jh_esp32s3_device_tree_firmware.log" "${device_tree_firmware}" \
         python3 "${SCRIPT_DIR}/scripts/build_esp_idf.py" build \
@@ -759,6 +766,7 @@ build_library() {
         exit 1
     fi
     check_native_link_inputs "${output}"
+    check_library_package "${output}"
 }
 
 stage_library() {

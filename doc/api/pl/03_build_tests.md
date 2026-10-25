@@ -144,6 +144,12 @@ hostowe CLI jh, które hook buduje przy pierwszym użyciu z zawartości commita
 `.build/host-tools` tego checkoutu, biorąc z niego zarządzane checkouty;
 kolejny commit z tymi samymi wejściami narzędzia używa gotowego programu.
 
+Do kroków w Pythonie hook wybiera interpreter ze zmiennej
+`JH_COMPONENT_PYTHON` lub `JH_VSCODE_PYTHON`, w tej kolejności. Gdy żadna
+z nich nie jest ustawiona, na Windows korzysta z
+`.build/windows/venv/Scripts/python.exe`, jeśli ten plik istnieje.
+W pozostałych środowiskach domyślnie używa `python3`.
+
 **`runalltests.sh`** - pełna kontrola jakości
 ```bash
 ./runalltests.sh                  # wszystkie etapy na drzewie roboczym

@@ -173,6 +173,8 @@ def hook_scenarios(work: Path) -> None:
     repo = work / "repo"
     (repo / ".githooks").mkdir(parents=True)
     shutil.copy2(ROOT / ".githooks" / "pre-commit", repo / ".githooks" / "pre-commit")
+    # Keep the real checkout rules, including LF with Windows core.autocrlf.
+    shutil.copy2(ROOT / ".gitattributes", repo / ".gitattributes")
     (repo / "scripts").mkdir()
     # Like the real runner, the stub lists the tree through git; it must see
     # the commit's index there, not an empty one.
@@ -202,7 +204,7 @@ def hook_scenarios(work: Path) -> None:
         "stale = config.exists() and (not generated.exists()"
         " or generated.read_text() != config.read_text())\n"
         "if '--write' in sys.argv and stale:\n"
-        "    generated.write_text(config.read_text())\n"
+        "    generated.write_bytes(config.read_bytes())\n"
         "# Like the real runner, a mode change alone is reported too.\n"
         "touched = stale\n"
         "if os.environ.get('JH_STUB_MODE_ONLY') and generated.exists() and not stale:\n"
@@ -211,7 +213,8 @@ def hook_scenarios(work: Path) -> None:
         "if '--report-file' in sys.argv:\n"
         "    listed = '  - generated.txt\\n' if touched else '  (none)\\n'\n"
         "    pathlib.Path(sys.argv[sys.argv.index('--report-file') + 1]).write_text(\n"
-        "        f'Mode: write\\nGenerated artifacts changed: {int(touched)}\\n{listed}')\n"
+        "        f'Mode: write\\nGenerated artifacts changed: {int(touched)}\\n{listed}',\n"
+        "        encoding='utf-8', newline='\\n')\n"
         "sys.exit(stale and '--check' in sys.argv)\n",
         encoding="utf-8",
     )
@@ -228,9 +231,11 @@ def hook_scenarios(work: Path) -> None:
     # hook's own values.
     environment = {
         name: value for name, value in os.environ.items()
-        if name not in ("JH_DEPENDENCY_ROOT", "JH_OUTPUT_ROOT", "JH_JHBASE_DIR")
+        if name not in ("JH_DEPENDENCY_ROOT", "JH_OUTPUT_ROOT", "JH_JHBASE_DIR",
+                        "JH_COMPONENT_PYTHON", "JH_VSCODE_PYTHON")
     }
     environment["PATH"] = f"{tools}{os.pathsep}{os.environ['PATH']}"
+    environment["JH_COMPONENT_PYTHON"] = sys.executable
 
     def git(*arguments: str, **extra: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -247,10 +252,22 @@ def hook_scenarios(work: Path) -> None:
         return git("commit", "-q", "-m", "feat: probe")
 
     for arguments in (("init", "-q"), ("config", "core.hooksPath", ".githooks"),
-                      ("add", "scripts")):
+                      ("add", "scripts", ".gitattributes")):
         require(git(*arguments).returncode == 0, f"scratch repository: git {arguments}")
     first = commit()
     require(first.returncode == 0, f"the first commit was refused:\n{first.stderr}")
+
+    # Windows may resolve python3 to the Store alias despite a prepared Python.
+    alias = tools / "python3"
+    alias.write_text("#!/bin/sh\nexit 91\n", encoding="utf-8")
+    alias.chmod(0o755)
+    for variable in ("JH_COMPONENT_PYTHON", "JH_VSCODE_PYTHON"):
+        overrides = {"JH_COMPONENT_PYTHON": "", "JH_VSCODE_PYTHON": ""}
+        overrides[variable] = sys.executable
+        selected = git("hook", "run", "pre-commit", **overrides)
+        require(selected.returncode == 0,
+                f"the hook ignored {variable} and used the broken python3 alias:\n{selected.stderr}")
+    alias.unlink()
 
     # The hook formats and normalizes the staged files and commits the result.
     stage("config.h", b"#define A 1\n")
@@ -267,7 +284,7 @@ def hook_scenarios(work: Path) -> None:
 
     def guidance(result: subprocess.CompletedProcess[str], reason: str) -> bool:
         return (result.returncode != 0 and reason in result.stderr
-                and "python3 scripts/sync_generated.py --write" in result.stderr)
+                and f'"{sys.executable}" scripts/sync_generated.py --write' in result.stderr)
 
     # The generators read the files after formatting, so a formatting change
     # a generator rejects blocks the commit.
@@ -308,8 +325,10 @@ def hook_scenarios(work: Path) -> None:
     # An unstaged working copy already holding the fresh output is taken as is.
     stage("config.txt", b"c\n")
     (repo / "generated.txt").write_bytes(b"c\n")
-    require(commit().returncode == 0 and committed("generated.txt") == "c\n",
-            "a working copy equal to the fresh output was not committed")
+    fresh_output = commit()
+    require(fresh_output.returncode == 0 and committed("generated.txt") == "c\n",
+            "a working copy equal to the fresh output was not committed:\n"
+            f"{fresh_output.stderr}")
     # A third version in the working copy blocks the commit and stays as it is.
     stage("config.txt", b"d\n")
     (repo / "generated.txt").write_bytes(b"edited\n")

@@ -27,3 +27,15 @@ set(SDKCONFIG_DEFAULTS ${JH_ESP_IDF_SDKCONFIG_DEFAULTS})
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 idf_build_set_property(MINIMAL_BUILD ON)
 project(${JH_ESP_IDF_PROJECT_NAME})
+
+# Share the status package and HAL installation with the other build families.
+include("${JH_ROOT}/cmake/jh_jhbase.cmake")
+jh_add_jhbase()
+file(TO_CMAKE_PATH "$ENV{JH_ESP_IDF_GENERATED_DIR}" JH_BOARD_GENERATED_DIR)
+set(JH_DEVICE_TREE_BUILD "${JH_ESP_IDF_DEVICE_TREE}")
+if(JH_DEVICE_TREE_BUILD)
+    include("${JH_BOARD_GENERATED_DIR}/jh_hardware_config.cmake")
+endif()
+include("${JH_ROOT}/cmake/jh_library_package.cmake")
+jh_add_library_package(__idf_jaszczurhal "${JH_ROOT}/src"
+    ARCHIVE_NAME libJaszczurHAL.a)
