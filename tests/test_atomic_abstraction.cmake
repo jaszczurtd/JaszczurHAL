@@ -24,6 +24,9 @@ file(GLOB_RECURSE _jh_source_files
 set(_allowed_files
     "${JH_ROOT}/src/hal/core/hal_compiler.h"
     "${JH_ROOT}/src/hal/impl/stm32g474/port/atomic_stubs_cm4.c"
+    # Names the toolchain atomic helpers as symbols of its probe images; it
+    # performs no atomic operation.
+    "${JH_ROOT}/tests/test_check_rp_ram_paths.py"
     "${JH_ROOT}/tests/test_atomic_abstraction.cmake")
 
 foreach(_source_file IN LISTS _jh_source_files)

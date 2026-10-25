@@ -328,6 +328,20 @@ ensure_stm32_builds() {
 }
 
 # check_native_link_inputs DIR...: native builds link no Arduino carrier.
+# check_rp_ram_paths TARGET ELF: the RAM functions of the HAL in a linked RP
+# image reach no flash code but the atomic helpers that core needs.
+check_rp_ram_paths() {
+    local target="$1" elf="$2" tools="arm-none-eabi-" atomics="wide"
+    case "${target}" in
+        rp2040) atomics="all" ;;
+        rp2350-riscv)
+            tools="${SCRIPT_DIR}/third_party/riscv-toolchain/bin/riscv32-unknown-elf-"
+            ;;
+    esac
+    python3 "${SCRIPT_DIR}/scripts/check_rp_ram_paths.py" "${elf}" \
+        --nm "${tools}nm" --objdump "${tools}objdump" --atomic-helpers "${atomics}"
+}
+
 check_native_link_inputs() {
     if find "$@" -type f -name core.a -print -quit | grep -q .; then
         fail "Native build produced an unexpected core.a"
@@ -646,6 +660,8 @@ stage_rp() {
                 --target "${target}" --example 01_core_runtime \
                 --clean --jobs "${JOBS}" \
                 --output "${GATE_BUILD_ROOT}/rp-pico/${target}/bare"
+        check_rp_ram_paths "${target}" \
+            "${GATE_BUILD_ROOT}/rp-pico/${target}/bare/jh_rp_pico_firmware.elf"
     done
 
     for target in "${RP_PICO_TARGETS[@]}"; do
@@ -655,6 +671,8 @@ stage_rp() {
                 --target "${target}" --example 18_freertos_suite \
                 --freertos --clean --jobs "${JOBS}" \
                 --output "${GATE_BUILD_ROOT}/rp-pico/${target}/freertos"
+        check_rp_ram_paths "${target}" \
+            "${GATE_BUILD_ROOT}/rp-pico/${target}/freertos/jh_rp_pico_firmware.elf"
     done
 
     for profile in "${RP_FLAG_PROFILES[@]}"; do

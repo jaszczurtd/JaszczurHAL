@@ -9,6 +9,7 @@
 #include "hal/system/hal_system_common.h"
 #include <hardware/clocks.h>
 #include <hardware/regs/addressmap.h>
+#include <hardware/timer.h>
 #include <hardware/watchdog.h>
 #include <pico/time.h>
 
@@ -46,10 +47,28 @@ static bool hal_rp2040_can_sleep_current_context(void) {
 
 uint32_t hal_millis(void) { return to_ms_since_boot(get_absolute_time()); }
 
-// In RAM: interrupt handlers such as the timer callbacks read the clock.
-uint32_t HAL_RAM_FUNC(hal_micros)(void) { return (uint32_t)time_us_64(); }
+// In RAM and without calls: interrupt handlers such as the timer callbacks
+// read the clock, and time_us_64() of the SDK runs from flash. Both read the
+// timer registers through the instance macro, which stays a plain address
+// also in a build without inlining.
+uint32_t HAL_RAM_FUNC(hal_micros)(void) {
+  return PICO_DEFAULT_TIMER_INSTANCE()->timerawl;
+}
 
-uint64_t HAL_RAM_FUNC(hal_micros64)(void) { return time_us_64(); }
+uint64_t HAL_RAM_FUNC(hal_micros64)(void) {
+  // As timer_time_us_64() of the SDK: the high word must stay the same
+  // around the read of the low word.
+  const timer_hw_t *const timer = PICO_DEFAULT_TIMER_INSTANCE();
+  uint32_t high = timer->timerawh;
+  for (;;) {
+    const uint32_t low = timer->timerawl;
+    const uint32_t next = timer->timerawh;
+    if (next == high) {
+      return ((uint64_t)high << 32u) | low;
+    }
+    high = next;
+  }
+}
 
 void hal_delay_ms(uint32_t ms) {
 #if JH_RP_HAL_SYSTEM_FREERTOS

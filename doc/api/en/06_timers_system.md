@@ -152,10 +152,17 @@ not sufficient; pool destruction from an alarm callback/ISR is unsupported.
   slot in the pool: the firing alarm keeps its slot until the callback returns.
 - **Callback path in RAM:** the managed-timer alarm callback and the RP alarm
   dispatcher are `HAL_RAM_FUNC` functions, and on RP so are `hal_micros()`,
-  `hal_micros64()` and `hal_gpio_write()`. A timer callback that toggles an
-  output then keeps its timing while another core reads large data from flash
-  and empties the XIP cache. The Pico SDK alarm interrupt handler stays in
-  flash. Mark a time-critical callback with `HAL_RAM_FUNC` too and check its
+  `hal_micros64()` and `hal_gpio_write()`; the two clock functions read the
+  timer registers without a call. A timer callback that toggles an output
+  then keeps its timing while another core reads large data from flash and
+  empties the XIP cache. Atomics the core has no instructions for still call
+  helpers in flash: on RP2040 the read-modify-write ones (exchange,
+  compare-and-exchange, fetch-and-add and the like) and 64-bit loads and
+  stores, on RP2350 the 64-bit ones. Aligned loads and stores up to 32 bits
+  need no helper.
+  The Pico SDK alarm interrupt handler stays in flash too.
+  `scripts/check_rp_ram_paths.py` checks these HAL functions in a linked
+  image. Mark a time-critical callback with `HAL_RAM_FUNC` too and check its
   callees in the ELF/map.
 - **Error model:** `_ex` functions return detailed `hal_timer_result_t` diagnostics (`INVALID_ARG`, `TIME_PASSED`, `POOL_FULL`, `NO_RESOURCE`, etc.) while legacy non-`_ex` variants preserve `HAL_ALARM_INVALID` compatibility.
 - **impl/rp2040:** Pico SDK alarm pools (`pico/time.h`) and callback scheduling

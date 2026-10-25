@@ -1117,6 +1117,10 @@ if(UNIX AND NOT APPLE)
         COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/test_ram_functions.py
             ${CMAKE_CURRENT_SOURCE_DIR}/..)
+    add_test(NAME test_check_rp_ram_paths
+        COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_check_rp_ram_paths.py
+            ${CMAKE_CURRENT_SOURCE_DIR}/..)
 endif()
 option(JH_ENABLE_HARDWARE_FIXTURE_CHECKS
     "Register host-side checks of manually invoked hardware fixtures" OFF)
