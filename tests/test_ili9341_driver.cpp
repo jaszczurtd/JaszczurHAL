@@ -3,6 +3,7 @@
 #include "hal/display/drivers/display_spi_transport.h"
 #include "hal/display/drivers/ili9341_driver.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "support/display_spi_panel_model.h"
 #include "support/display_spi_test_helpers.h"
 
 #include <string.h>
@@ -103,6 +104,23 @@ void test_fill_rect_falls_back_to_spi_write_when_dma_fails(void) {
   TEST_ASSERT_EQUAL_UINT32(1u, hal_mock_spi_get_dma_write_count(config.bus));
 }
 
+static panel_model_t s_panel;
+
+void test_fill_rect_keeps_the_whole_area_in_one_transaction_by_default(void) {
+  jh_ili9341_t dev = {};
+  const jh_ili9341_config_t config = make_config();
+  TEST_ASSERT_TRUE(jh_ili9341_init(&dev, &config));
+  panel_model_attach(&s_panel, config.bus, (uint8_t)config.cs_pin,
+                     (uint8_t)config.dc_pin);
+
+  TEST_ASSERT_TRUE(jh_ili9341_fill_rect(&dev, 1u, 2u, 40u, 20u, 0x07E0u));
+
+  TEST_ASSERT_EQUAL_size_t(1u, s_panel.pixel_selections);
+  TEST_ASSERT_EQUAL_size_t(1600u, s_panel.max_select_pixel_bytes);
+  TEST_ASSERT_EQUAL_HEX16(0x07E0u, s_panel.pixels[21][40]);
+  hal_mock_spi_reset();
+}
+
 void test_stream_dma_failure_aborts_and_releases_device(void) {
   jh_ili9341_t dev = {};
   const jh_ili9341_config_t config = make_config();
@@ -126,6 +144,7 @@ int main(void) {
   RUN_TEST(test_set_rotation_writes_madctl_and_updates_dimensions);
   RUN_TEST(test_addr_window_and_bitmap_write_big_endian_pixels);
   RUN_TEST(test_fill_rect_falls_back_to_spi_write_when_dma_fails);
+  RUN_TEST(test_fill_rect_keeps_the_whole_area_in_one_transaction_by_default);
   RUN_TEST(test_stream_dma_failure_aborts_and_releases_device);
   return UNITY_END();
 }

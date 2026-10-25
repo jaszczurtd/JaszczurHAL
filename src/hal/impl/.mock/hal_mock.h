@@ -187,6 +187,9 @@ typedef struct {
 } hal_mock_gpio_event_t;
 
 bool hal_mock_gpio_get_state(uint8_t pin);
+/** @return Low-to-high writes of @p pin by hal_gpio_write() so far; 0 for an
+ *          invalid pin. */
+uint32_t hal_mock_gpio_rise_count(uint8_t pin);
 bool hal_mock_gpio_is_output(uint8_t pin);
 hal_gpio_mode_t hal_mock_gpio_get_mode(uint8_t pin);
 void hal_mock_gpio_inject_level(uint8_t pin, bool high);
@@ -568,8 +571,10 @@ typedef struct {
  *        bytes of hal_mock_spi_push_rx().
  *
  * The device sees the bytes sent while @p cs_pin is low; an instruction starts
- * with the first such byte and ends at hal_spi_end_transaction(). Bytes sent
- * with the pin high read 0xFF and do not reach it. hal_mock_spi_reset()
+ * with the first such byte and ends at hal_spi_end_transaction() or when the
+ * pin went high before the next byte, as a driver that toggles chip select
+ * inside one transaction does. Bytes sent with the pin high read 0xFF and do
+ * not reach it. hal_mock_spi_reset()
  * detaches it.
  * @param bus SPI bus.
  * @param cs_pin GPIO the driver uses as chip select (active low).
@@ -1073,7 +1078,9 @@ void hal_mock_thermocouple_set_ambient(hal_thermocouple_t h, float temp);
 /** @brief Inject the raw ADC value returned by hal_thermocouple_read_adc_raw().
  */
 void hal_mock_thermocouple_set_adc_raw(hal_thermocouple_t h, int32_t raw);
-/** @brief Inject the status byte returned by hal_thermocouple_get_status(). */
+/** @brief Inject the status byte returned by hal_thermocouple_get_status();
+ * with HAL_MCP9600_STATUS_INPUTRANGE set hal_thermocouple_read_ex() fails
+ * with HAL_EHW, as on the device. */
 void hal_mock_thermocouple_set_status(hal_thermocouple_t h, uint8_t status);
 #endif
 #endif

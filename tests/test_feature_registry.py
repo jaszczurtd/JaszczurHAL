@@ -673,6 +673,17 @@ def check_production_feature_facade(compiler: str) -> None:
             ("HAL_TARGET_MOCK=1", f"HAL_RP_I2C_TIMEOUT_US={timeout}"),
             "HAL_RP_I2C_TIMEOUT_US must be in 1..1000000",
         )
+    for transfer in (63, 1048577):
+        require_hal_config_failure(
+            compiler,
+            ("HAL_TARGET_MOCK=1", f"HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES={transfer}"),
+            "HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES must be 0 or in range 64..1048576",
+        )
+    for transfer in (0, 64, 1048576):
+        preprocess_hal_config_verbose(
+            compiler,
+            ("HAL_TARGET_MOCK=1", f"HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES={transfer}"),
+        )
     require_hal_config_failure(
         compiler,
         ("HAL_TARGET_MOCK=1", "HAL_COMMAND_ROUTER_MAX_COMMANDS=65"),
@@ -1012,8 +1023,8 @@ for facade in facade_provider_checks:
     )
 require(
     len(re.findall(r"^#error(?:\s|$)", hal_config_text, flags=re.MULTILINE))
-    == 80,
-    "hal_config.h retained validation inventory drifted from 80 #error checks",
+    == 81,
+    "hal_config.h retained validation inventory drifted from 81 #error checks",
 )
 
 checked = run_generator("--check")

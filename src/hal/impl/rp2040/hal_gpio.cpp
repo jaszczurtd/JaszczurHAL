@@ -1,5 +1,6 @@
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_RP
+#include "hal/core/hal_memory.h"
 #include "hal/gpio/hal_gpio.h"
 #include "hal/gpio/hal_gpio_common.h"
 #if HAL_BOARD_HAS_CYW43 && defined(HAL_LED_BUILTIN)
@@ -190,7 +191,8 @@ void hal_gpio_set_mode(uint8_t pin, hal_gpio_mode_t mode) {
   }
 }
 
-void hal_gpio_write(uint8_t pin, bool high) {
+// In RAM: timer and GPIO interrupt handlers drive outputs with it.
+void HAL_RAM_FUNC(hal_gpio_write)(uint8_t pin, bool high) {
   if (!rp2040_hal_pin_valid(pin)) {
     HAL_ASSERT(false, "hal_gpio_write: invalid pin");
     return;

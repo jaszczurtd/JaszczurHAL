@@ -272,6 +272,9 @@ that many floats for its table. If omitted, the older
 `HAL_TOOLS_TEMPERATURE_TABLES_SIZE` setting is still accepted. The `_ex`
 variant takes an explicit table size instead.
 
+`HAL_MATH_PI` is pi as a `double` literal for C and C++ code; `M_PI` is not
+part of ISO C or C++. Cast it to `float` for single precision.
+
 `hal_text_format_mac_ex()` formats a six-byte hardware address as uppercase `XX:XX:XX:XX:XX:XX`. The destination must hold `HAL_TEXT_MAC_STRING_SIZE` bytes. The compatibility function `hal_network_format_mac_ex()` remains available and delegates to the same operation.
 
 ### Bit-manipulation helpers (`hal_bits`)

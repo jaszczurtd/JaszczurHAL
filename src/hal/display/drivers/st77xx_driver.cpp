@@ -989,18 +989,32 @@ bool jh_st77xx_end_write(jh_st77xx_t *dev) {
   return hal_status_is_ok(hal_spi_device_release(&dev->spi_device));
 }
 
+static bool writer_begin(void *dev, uint16_t x, uint16_t y, uint16_t w,
+                         uint16_t h) {
+  return jh_st77xx_begin_write((jh_st77xx_t *)dev, x, y, w, h);
+}
+
+static bool writer_end(void *dev) {
+  return jh_st77xx_end_write((jh_st77xx_t *)dev);
+}
+
+static bool writer_pixels(void *dev, const uint16_t *pixels, size_t count) {
+  return jh_st77xx_write_pixels_fast((jh_st77xx_t *)dev, pixels, count);
+}
+
+static jh_display_spi_writer_t area_writer(jh_st77xx_t *dev) {
+  const jh_display_spi_writer_t writer = {dev, &dev->spi_device, writer_begin,
+                                          writer_end, writer_pixels};
+  return writer;
+}
+
 bool jh_st77xx_fill_rect(jh_st77xx_t *dev, uint16_t x, uint16_t y, uint16_t w,
                          uint16_t h, uint16_t color) {
   if (dev == NULL || !dev->initialized || w == 0u || h == 0u) {
     return false;
   }
-  if (!jh_st77xx_begin_write(dev, x, y, w, h)) {
-    return false;
-  }
-
-  const bool ok =
-      jh_display_spi_fill_color(&dev->spi_device, color, (size_t)w * (size_t)h);
-  return jh_st77xx_end_write(dev) && ok;
+  const jh_display_spi_writer_t writer = area_writer(dev);
+  return jh_display_spi_write_area(&writer, x, y, w, h, NULL, color);
 }
 
 bool jh_st77xx_draw_rgb_bitmap(jh_st77xx_t *dev, uint16_t x, uint16_t y,
@@ -1008,12 +1022,8 @@ bool jh_st77xx_draw_rgb_bitmap(jh_st77xx_t *dev, uint16_t x, uint16_t y,
   if (dev == NULL || pixels == NULL || w == 0u || h == 0u) {
     return false;
   }
-  if (!jh_st77xx_begin_write(dev, x, y, w, h)) {
-    return false;
-  }
-  const bool ok =
-      jh_st77xx_write_pixels_fast(dev, pixels, (size_t)w * (size_t)h);
-  return jh_st77xx_end_write(dev) && ok;
+  const jh_display_spi_writer_t writer = area_writer(dev);
+  return jh_display_spi_write_area(&writer, x, y, w, h, pixels, 0u);
 }
 
 #endif /* HAL_ENABLE_DISPLAY && HAL_ENABLE_TFT && any ST77xx/GC9A01 backend */

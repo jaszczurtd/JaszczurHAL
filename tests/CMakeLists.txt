@@ -2037,6 +2037,20 @@ target_compile_definitions(test_st77xx_driver PRIVATE
 )
 target_link_libraries(test_st77xx_driver PRIVATE hal_mock)
 add_test(NAME test_st77xx_driver COMMAND test_st77xx_driver)
+add_executable(test_display_spi_bands
+    test_display_spi_bands.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/ili9341_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/st77xx_driver.cpp
+)
+target_compile_definitions(test_display_spi_bands PRIVATE
+    HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES=256u
+    HAL_ENABLE_ST7735
+    HAL_ENABLE_ST7789
+    HAL_ENABLE_ST7796S
+    HAL_ENABLE_GC9A01
+)
+target_link_libraries(test_display_spi_bands PRIVATE hal_mock)
+add_test(NAME test_display_spi_bands COMMAND test_display_spi_bands)
 add_executable(test_ssd1306_driver
     test_ssd1306_driver.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/ssd1306_driver.cpp

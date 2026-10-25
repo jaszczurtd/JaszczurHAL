@@ -231,6 +231,16 @@ void hal_thermocouple_deinit(hal_thermocouple_t h);
  * @return Temperature in °C, or NAN on fault / invalid handle.
  */
 float hal_thermocouple_read(hal_thermocouple_t h);
+/**
+ * @brief Read the hot-junction temperature with the reason of a failure.
+ * @param h Thermocouple handle.
+ * @param out_c Receives degrees Celsius, or NAN on any error.
+ * @return HAL_OK; HAL_EINVAL for a NULL or invalid argument; HAL_EIO when the
+ *         bus transfer fails, an MCP9600 sleeps or a MAX6675 reports an open
+ *         thermocouple; HAL_EHW when an MCP9600 reports its input out of
+ *         range or an MCP9601 an open or shorted thermocouple. The MCP960x
+ *         keeps its last temperature then, which is no measurement.
+ */
 hal_status_t hal_thermocouple_read_ex(hal_thermocouple_t h, float *out_c);
 
 #ifdef HAL_ENABLE_MCP9600

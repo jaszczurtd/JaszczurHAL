@@ -2,6 +2,9 @@
 #include "hal/impl/.mock/hal_mock.h"
 #include "hal/temperature/hal_thermocouple.h"
 #include "hal/temperature/jh_thermocouple_provider.h"
+#ifdef HAL_ENABLE_MCP9600
+#include "hal/temperature/mcp9600/mcp9600_driver.h"
+#endif
 #include "utils/unity.h"
 #include <math.h>
 
@@ -168,6 +171,19 @@ void test_mcp_inject_temp(void) {
   TEST_ASSERT_FLOAT_WITHIN(0.01f, 150.5f, hal_thermocouple_read(mcp));
 }
 
+void test_mcp_input_fault_is_no_measurement(void) {
+  float temp = 0.0f;
+  hal_mock_thermocouple_set_temp(mcp, 400.0f);
+  hal_mock_thermocouple_set_status(mcp, HAL_MCP9600_STATUS_INPUTRANGE);
+  TEST_ASSERT_EQUAL_INT(HAL_EHW, hal_thermocouple_read_ex(mcp, &temp));
+  TEST_ASSERT_TRUE(isnan(temp));
+  TEST_ASSERT_TRUE(isnan(hal_thermocouple_read(mcp)));
+
+  hal_mock_thermocouple_set_status(mcp, HAL_MCP9600_STATUS_THUPDATE);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_thermocouple_read_ex(mcp, &temp));
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 400.0f, temp);
+}
+
 void test_mcp_inject_ambient(void) {
   hal_mock_thermocouple_set_ambient(mcp, 30.0f);
   TEST_ASSERT_FLOAT_WITHIN(0.01f, 30.0f, hal_thermocouple_read_ambient(mcp));
@@ -309,6 +325,7 @@ int main(void) {
 #endif
 #ifdef HAL_ENABLE_MCP9600
   RUN_TEST(test_mcp_inject_temp);
+  RUN_TEST(test_mcp_input_fault_is_no_measurement);
   RUN_TEST(test_mcp_inject_ambient);
 #endif
 #if defined(HAL_ENABLE_MAX6675) && defined(HAL_ENABLE_MCP9600)

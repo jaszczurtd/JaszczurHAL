@@ -45,8 +45,7 @@ hal_status_t mcp_initialize(void *context,
 void mcp_deinitialize(void *context) { hal_mcp9600_deinit(as_mcp(context)); }
 
 hal_status_t mcp_read(void *context, float *out_c) {
-  *out_c = hal_mcp9600_read_thermocouple(as_mcp(context));
-  return isnan(*out_c) ? HAL_EIO : HAL_OK;
+  return hal_mcp9600_read_thermocouple_ex(as_mcp(context), out_c);
 }
 
 hal_status_t mcp_get_type(void *context, hal_thermocouple_type_t *out_type) {

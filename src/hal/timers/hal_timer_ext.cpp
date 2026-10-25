@@ -1,4 +1,5 @@
 #include "hal/core/hal_compiler.h"
+#include "hal/core/hal_memory.h"
 #include "hal/system/hal_sync.h"
 #include "hal/system/hal_system.h"
 #include "hal/timers/hal_timer.h"
@@ -75,17 +76,21 @@ static inline bool timer_alarm_is_real(hal_alarm_id_t id) {
   return id != HAL_ALARM_INVALID && id != kAlarmArming;
 }
 
+// The alarm callback path below runs in interrupt context from RAM, so a
+// flash cache flushed by the other core does not delay periodic outputs.
+
 // true when alarm @p id owns the timer; adopts an alarm that fired before its
 // arming call published the id.
-static bool timer_alarm_owned(hal_timer_impl_t *t, hal_alarm_id_t id) {
+static bool HAL_RAM_FUNC(timer_alarm_owned)(hal_timer_impl_t *t,
+                                            hal_alarm_id_t id) {
   hal_alarm_id_t owner = kAlarmArming;
   return HAL_ATOMIC_COMPARE_EXCHANGE(&t->alarm_id, &owner, id,
                                      HAL_ATOMIC_ACQ_REL, HAL_ATOMIC_ACQUIRE) ||
          owner == id;
 }
 
-static int64_t timer_internal_alarm_cb_body(hal_timer_impl_t *t,
-                                            hal_alarm_id_t id) {
+static int64_t HAL_RAM_FUNC(timer_internal_alarm_cb_body)(hal_timer_impl_t *t,
+                                                          hal_alarm_id_t id) {
   if (!timer_alarm_owned(t, id)) {
     return 0;
   }
@@ -120,7 +125,8 @@ static int64_t timer_internal_alarm_cb_body(hal_timer_impl_t *t,
   return (int64_t)period;
 }
 
-static int64_t timer_internal_alarm_cb(hal_alarm_id_t id, void *user_data) {
+static int64_t HAL_RAM_FUNC(timer_internal_alarm_cb)(hal_alarm_id_t id,
+                                                     void *user_data) {
   hal_timer_impl_t *t = (hal_timer_impl_t *)user_data;
   if (!t) {
     return 0;

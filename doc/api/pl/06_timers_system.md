@@ -158,6 +158,13 @@ obsługiwane.
   nie jest planowany ponownie. Ponowne uruchomienie timera jednorazowego z
   jego własnego callbacku wymaga wolnego miejsca w puli, bo wyzwolony alarm
   zajmuje swój slot do końca callbacku.
+- **Ścieżka callbacku w RAM:** callback alarmu zarządzanych timerów
+  i dyspozytor alarmów RP są funkcjami `HAL_RAM_FUNC`, a na RP także
+  `hal_micros()`, `hal_micros64()` i `hal_gpio_write()`. Callback timera,
+  który przełącza wyjście, zachowuje wtedy swoje czasy, nawet gdy drugi rdzeń
+  czyta z flasha duże dane i opróżnia pamięć podręczną XIP. Procedura obsługi
+  przerwania alarmu w Pico SDK pozostaje we flashu. Callback wrażliwy na czas
+  również oznacz `HAL_RAM_FUNC` i sprawdź wywoływane z niego funkcje w ELF/map.
 - **Obsługa błędów:** funkcje `_ex` zwracają szczegółowy wynik typu
   `hal_timer_result_t` (`INVALID_ARG`, `TIME_PASSED`, `POOL_FULL`,
   `NO_RESOURCE` itd.). Starsze warianty bez `_ex` zachowują zgodność przez

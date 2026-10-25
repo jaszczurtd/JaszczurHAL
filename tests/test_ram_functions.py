@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Compile RAM functions in C/C++ and check STM32's startup copy range."""
+"""Compile RAM functions in C/C++ and check STM32's startup copy range.
+
+Also checks that the shared timer alarm path stays in RAM on the ARM targets,
+so a flash cache flushed by another core does not delay timer callbacks."""
 import shutil
 import subprocess
 import sys
@@ -83,6 +86,22 @@ def main():
                             symbols[parts[2]] = int(parts[0], 16)
                     assert 0x20000000 <= symbols["_sdata"] <= symbols["ram_probe"] < symbols["_edata"]
                     assert 0x08000000 <= symbols["_sidata"] < 0x08080000
+        timer_source = ROOT / "src/hal/timers/hal_timer_ext.cpp"
+        for target, cpu, section in (
+            ("RP2040", "cortex-m0plus", ".time_critical."),
+            ("RP2350_ARM", "cortex-m33", ".time_critical."),
+            ("STM32G474", "cortex-m4", ".ram_func."),
+        ):
+            obj = work / f"timer-{target}.o"
+            run(arm.replace("gcc", "g++"), "-std=gnu++17", "-Wall", "-Wextra",
+                "-Werror", "-O2", "-ffreestanding", "-fno-exceptions",
+                "-fno-rtti", "-mthumb", f"-mcpu={cpu}", f"-DHAL_TARGET_{target}",
+                *hal_include_args(ROOT), "-c", str(timer_source), "-o", str(obj))
+            table = run("arm-none-eabi-objdump", "-t", "-C", str(obj))
+            for function in ("timer_internal_alarm_cb", "timer_internal_alarm_cb_body",
+                             "timer_alarm_owned"):
+                assert any(section in line and f" {function}(" in line
+                           for line in table.splitlines()), (target, function, table)
         riscv = ROOT / "third_party/riscv-toolchain/bin/riscv32-unknown-elf-gcc"
         if riscv.exists():
             for language in ("c", "cpp"):
@@ -94,7 +113,8 @@ def main():
                 table = run(str(objdump), "-t", str(obj))
                 assert any(".time_critical.ram_probe" in line and line.endswith(" ram_probe")
                            for line in table.splitlines()), table
-        print("RAM functions: C/C++ host, target sections and STM32 copy range PASS")
+        print("RAM functions: C/C++ host, target sections, timer alarm path and "
+              "STM32 copy range PASS")
 
 
 if __name__ == "__main__":

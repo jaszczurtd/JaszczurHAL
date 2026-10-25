@@ -1,6 +1,8 @@
 #ifndef JH_DISPLAY_SPI_TRANSPORT_H
 #define JH_DISPLAY_SPI_TRANSPORT_H
 
+#include "hal/core/hal_config.h"
+#include "hal/core/hal_layout_check.h"
 #include "hal/core/jh_endian.h"
 #include "hal/gpio/hal_gpio.h"
 #include "hal/spi/hal_spi.h"
@@ -200,6 +202,71 @@ static inline bool jh_display_spi_fill_color(hal_spi_device_t *device,
       return false;
     }
     pixel_count -= count;
+  }
+  return true;
+}
+
+/** @brief Driver operations used by the banded fill and bitmap helpers. */
+typedef struct {
+  void *dev;                    /**< Driver instance passed to each call. */
+  hal_spi_device_t *spi_device; /**< SPI device of that instance. */
+  bool (*begin_write)(void *dev, uint16_t x, uint16_t y, uint16_t w,
+                      uint16_t h); /**< Set the window, acquire the device. */
+  bool (*end_write)(void *dev);    /**< Release the device. */
+  bool (*write_pixels)(void *dev, const uint16_t *pixels,
+                       size_t count); /**< Native RGB565 words. */
+} jh_display_spi_writer_t;
+
+/**
+ * @brief Rows of a @p width wide RGB565 area sent in one transaction.
+ *
+ * At most HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES of pixels, but at least one row;
+ * with the default 0 the whole @p height goes at once.
+ */
+static inline uint32_t jh_display_spi_band_rows(uint16_t width,
+                                                uint16_t height) {
+#if HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES > 0u
+  (void)height;
+  const uint32_t rows =
+      (uint32_t)(HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES / ((uint32_t)width * 2u));
+  return (rows == 0u) ? 1u : rows;
+#else
+  (void)width;
+  return height;
+#endif
+}
+
+/**
+ * @brief Fill or draw an area in bands of whole rows, each in its own
+ *        transaction, so other devices on the bus get it between two bands.
+ * @param writer Driver operations.
+ * @param pixels Native RGB565 bitmap of @p w x @p h, or NULL to fill.
+ * @param color Fill color when @p pixels is NULL.
+ * @return true when every band was sent; stops at the first failed band.
+ */
+static inline bool
+jh_display_spi_write_area(const jh_display_spi_writer_t *writer, uint16_t x,
+                          uint16_t y, uint16_t w, uint16_t h,
+                          const uint16_t *pixels, uint16_t color) {
+  if (writer == NULL || w == 0u || h == 0u) {
+    return false;
+  }
+  const uint32_t band = jh_display_spi_band_rows(w, h);
+  for (uint32_t row = 0u; row < h; row += band) {
+    const uint32_t left = (uint32_t)h - row;
+    const uint16_t rows = (uint16_t)(left < band ? left : band);
+    if (!writer->begin_write(writer->dev, x, (uint16_t)(y + row), w, rows)) {
+      return false;
+    }
+    const size_t count = (size_t)w * (size_t)rows;
+    const bool ok =
+        (pixels == NULL)
+            ? jh_display_spi_fill_color(writer->spi_device, color, count)
+            : writer->write_pixels(writer->dev, &pixels[(size_t)row * w],
+                                   count);
+    if (!writer->end_write(writer->dev) || !ok) {
+      return false;
+    }
   }
   return true;
 }

@@ -500,6 +500,18 @@ hal_status_t hal_can_recover(hal_can_t h, uint32_t timeout_ms);
   outcome event (4 events by default), `hal_can_service()` reads frames from
   the controller and reports state changes it sees, and
   `hal_can_set_isr_notify()` returns `HAL_EUNSUPPORTED`.
+- **MCP2515 reception:** the driver reads a frame with one status read and
+  one READ RX BUFFER transaction, followed by a status read with interrupts
+  off and the bus still taken. That status tells whether a frame reached
+  RXB1 during the read, so frames from RXB0 and RXB1 come out in the order
+  they arrived. The order holds while RXB1 fills only when RXB0 is full,
+  that is while every frame filter slots 2 to 5 accept is also accepted by
+  slot 0 or 1, as with `hal_can_set_std_filters()` or one filter in all six
+  slots. A frame only slots 2 to 5 accept goes straight to RXB1 and can come
+  out after a newer RXB0 frame; the controller does not time its buffers. While a send waits for its frame to leave, the driver moves
+  arriving frames into a ring of 8, so a busy bus does not overflow the two
+  receive buffers during that wait. The receive calls return those frames
+  first. Frames that arrive while the ring is full stay in the controller.
 - **Host tests:** `hal_mock_can_set_queued(true)` makes mock handles created
   afterwards queued like FDCAN; `hal_mock_can_fail_sends()` ends the next
   queued sends as failed.
@@ -948,6 +960,16 @@ if (status == HAL_OK) {
   is truly asynchronous, keep `pixels_be` valid and keep the display write stream
   open until `_wait()` completes. `hal_display_end_write()` waits for any active
   async pixel DMA before closing the TFT transaction.
+- **Shared SPI bus:** ILI9341 and ST77xx/GC9A01 rectangle fills and bitmaps,
+  including `hal_display_fill_screen()`, `hal_display_draw_image()` and the
+  rectangles that shapes and text are drawn with, normally send the whole area
+  in one SPI transaction. Set `HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES` in
+  `hal_project_config.h` to split the area into bands of whole rows. Each band
+  carries at most that many bytes of pixels, but always at least one row, and
+  ends its own transaction. Another device on the same bus, for example a CAN
+  controller served by the other core, can then use the bus between two bands.
+  Valid values are 0 (default, whole area) and 64..1048576. A stream opened
+  with `hal_display_begin_write()` keeps the bus until `hal_display_end_write()`.
 - **ST77xx/GC9A01 notes:** `HAL_DISPLAY_ST7735`, `HAL_DISPLAY_ST7789`,
   `HAL_DISPLAY_ST7796S`, and `HAL_DISPLAY_GC9A01` share the ST77xx-style backend.
   `JH_ST77XX_SPI_DEFAULT_HZ` can be overridden before including/building the

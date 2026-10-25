@@ -28,6 +28,14 @@ extern "C" {
 #endif
 
 /**
+ * @brief The number pi as a double literal, for C and C++ alike.
+ *
+ * `M_PI` is not part of ISO C or C++ and some toolchains hide it behind
+ * feature macros. Cast to float where single precision is wanted.
+ */
+#define HAL_MATH_PI 3.14159265358979323846
+
+/**
  * @brief Clamp a value to the range [lo, hi] (type-independent).
  *
  * Generic replacement for Arduino constrain().

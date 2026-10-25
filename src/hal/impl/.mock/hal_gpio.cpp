@@ -13,6 +13,7 @@
 #define MOCK_GPIO_TRACE_MAX 768u
 
 static bool s_state[64] = {};
+static uint32_t s_rises[64] = {};
 static hal_gpio_mode_t s_mode[64] = {};
 static jh_gpio_irq_slot_t s_irq_slot[64] = {};
 static hal_gpio_irq_mode_t s_irq_mode[64] = {};
@@ -75,6 +76,9 @@ void hal_gpio_write(uint8_t pin, bool high) {
   if (!gpio_pin_valid(pin)) {
     HAL_ASSERT(false, "hal_gpio_write: invalid pin");
     return;
+  }
+  if (high && !s_state[pin]) {
+    s_rises[pin]++;
   }
   s_state[pin] = high;
   hal_mock_gpio_trace_push(HAL_MOCK_GPIO_EVENT_WRITE, pin, high ? 1 : 0);
@@ -200,6 +204,10 @@ void hal_gpio_set_irq_priority(hal_irq_priority_t priority) {
 
 bool hal_mock_gpio_get_state(uint8_t pin) {
   return gpio_pin_valid(pin) ? s_state[pin] : false;
+}
+
+uint32_t hal_mock_gpio_rise_count(uint8_t pin) {
+  return gpio_pin_valid(pin) ? s_rises[pin] : 0u;
 }
 
 bool hal_mock_gpio_is_output(uint8_t pin) {

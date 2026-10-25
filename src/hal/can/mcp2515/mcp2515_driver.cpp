@@ -485,11 +485,9 @@ void JHMCP2515::mcp2515_write_mf(const INT8U mcp_addr, const INT8U ext,
   mcp2515_setRegisterS(mcp_addr, tbufdata, 4);
 }
 
-void JHMCP2515::mcp2515_read_id(const INT8U mcp_addr, INT8U *ext, INT32U *id) {
-  INT8U tbufdata[4];
+/* Identifier from the SIDH, SIDL, EID8 and EID0 register bytes. */
+static void decode_id(const INT8U tbufdata[4], INT8U *ext, INT32U *id) {
   *ext = 0;
-  *id = 0;
-  mcp2515_readRegisterS(mcp_addr, tbufdata, 4);
   *id = ((INT32U)tbufdata[MCP_SIDH] << 3) + (tbufdata[MCP_SIDL] >> 5);
   if ((tbufdata[MCP_SIDL] & MCP_TXB_EXIDE_M) == MCP_TXB_EXIDE_M) {
     *id = (*id << 2) + (tbufdata[MCP_SIDL] & 0x03u);
@@ -497,6 +495,12 @@ void JHMCP2515::mcp2515_read_id(const INT8U mcp_addr, INT8U *ext, INT32U *id) {
     *id = (*id << 8) + tbufdata[MCP_EID0];
     *ext = 1;
   }
+}
+
+void JHMCP2515::mcp2515_read_id(const INT8U mcp_addr, INT8U *ext, INT32U *id) {
+  INT8U tbufdata[4];
+  mcp2515_readRegisterS(mcp_addr, tbufdata, 4);
+  decode_id(tbufdata, ext, id);
 }
 
 void JHMCP2515::mcp2515_write_canMsg(const INT8U buffer_sidh_addr) {
@@ -509,18 +513,87 @@ void JHMCP2515::mcp2515_write_canMsg(const INT8U buffer_sidh_addr) {
   mcp2515_write_id(mcp_addr, m_nExtFlg, m_nID);
 }
 
-void JHMCP2515::mcp2515_read_canMsg(const INT8U buffer_sidh_addr) {
-  INT8U ctrl, sidl;
-  mcp2515_read_id(buffer_sidh_addr, &m_nExtFlg, &m_nID);
-  ctrl = mcp2515_readRegister((INT8U)(buffer_sidh_addr - 1));
-  sidl = mcp2515_readRegister((INT8U)(buffer_sidh_addr + MCP_SIDL));
-  m_nDlc = mcp2515_readRegister((INT8U)(buffer_sidh_addr + 4));
-  m_nRtr = ((ctrl & 0x08u) || ((m_nExtFlg == 0u) && (sidl & 0x10u))) ? 1u : 0u;
-  m_nDlc &= MCP_DLC_MASK;
-  if (m_nDlc > MAX_CHAR_IN_MESSAGE) {
-    m_nDlc = MAX_CHAR_IN_MESSAGE;
+/* Read the oldest receive buffer that *status reports as full and replace
+ * *status with a READ STATUS taken right after that buffer was freed. With
+ * rollover a frame lands in RXB1 only while RXB0 is full, so RXB1 is older
+ * than the next RXB0 frame when it holds a frame right after RXB0 is freed;
+ * it may have filled during the read itself. Interrupts stay off and the bus
+ * stays taken from the release until that status answers, too short for one
+ * frame to reach the freed RXB0 and a newer one RXB1 (a CAN frame lasts at
+ * least 47 bit times). This order needs RXB1 to fill by rollover only: a
+ * frame that only its own filters (slots 2..5) accept lands there at once
+ * and may come out after a newer RXB0 frame, since the chip does not time
+ * its buffers. READ RX BUFFER sends SIDH, SIDL, EID8, EID0, DLC and
+ * the data in one transaction, and raising CS clears that buffer's RXnIF.
+ * RTR comes from SIDL.SRR for a standard frame and from DLC.RTR for an
+ * extended one. */
+bool JHMCP2515::mcp2515_read_rx(INT8U *status, jh_mcp2515_rx_frame_t *frame) {
+  const bool rx0 = (*status & MCP_STAT_RX0IF) != 0u;
+  const bool rx1 = (*status & MCP_STAT_RX1IF) != 0u;
+  INT8U instruction = 0u;
+  if (rx1 && (!rx0 || m_rxb1Older)) {
+    instruction = MCP_READ_RX1;
+  } else if (rx0) {
+    instruction = MCP_READ_RX0;
+  } else {
+    return false;
   }
-  mcp2515_readRegisterS((INT8U)(buffer_sidh_addr + 5), &m_nDta[0], m_nDlc);
+
+  INT8U header[5];
+  spi_begin_();
+  hal_spi_transfer(m_spiBus, instruction);
+  for (INT8U i = 0; i < (INT8U)sizeof(header); ++i) {
+    header[i] = hal_spi_transfer(m_spiBus, 0x00u);
+  }
+  INT8U dlc = (INT8U)(header[4] & MCP_DLC_MASK);
+  if (dlc > MAX_CHAR_IN_MESSAGE) {
+    dlc = MAX_CHAR_IN_MESSAGE;
+  }
+  for (INT8U i = 0; i < dlc; ++i) {
+    frame->data[i] = hal_spi_transfer(m_spiBus, 0x00u);
+  }
+  hal_critical_section_enter();
+  hal_gpio_write(m_csPin, true);
+  hal_delay_us(1u);
+  hal_gpio_write(m_csPin, false);
+  hal_spi_transfer(m_spiBus, MCP_READ_STATUS);
+  *status = hal_spi_transfer(m_spiBus, 0x00u);
+  hal_critical_section_exit();
+  spi_end_();
+  m_rxb1Older =
+      (instruction == MCP_READ_RX0) && ((*status & MCP_STAT_RX1IF) != 0u);
+  frame->dlc = dlc;
+
+  decode_id(header, &frame->ext, &frame->id);
+  frame->rtr = (frame->ext != 0u) ? (INT8U)((header[4] & MCP_RTR_MASK) != 0u)
+                                  : (INT8U)((header[MCP_SIDL] & 0x10u) != 0u);
+  return true;
+}
+
+/* Move one waiting frame into the ring while a transmit occupies the caller;
+ * a full ring leaves it in the hardware buffer. True when a frame moved, and
+ * *status is then the fresh status that followed it. */
+bool JHMCP2515::mcp2515_keep_rx(INT8U *status) {
+  if (m_rxRingCount >= MCP2515_RX_RING_FRAMES) {
+    return false;
+  }
+  const INT8U slot =
+      (INT8U)((m_rxRingHead + m_rxRingCount) % MCP2515_RX_RING_FRAMES);
+  if (!mcp2515_read_rx(status, &m_rxRing[slot])) {
+    return false;
+  }
+  m_rxRingCount++;
+  return true;
+}
+
+void JHMCP2515::mcp2515_load_rx(const jh_mcp2515_rx_frame_t *frame) {
+  m_nID = frame->id;
+  m_nExtFlg = frame->ext;
+  m_nRtr = frame->rtr;
+  m_nDlc = frame->dlc;
+  for (INT8U i = 0; i < frame->dlc; ++i) {
+    m_nDta[i] = frame->data[i];
+  }
 }
 
 INT8U JHMCP2515::mcp2515_getNextFreeTXBuf(INT8U *txbuf_n) {
@@ -539,7 +612,8 @@ INT8U JHMCP2515::mcp2515_getNextFreeTXBuf(INT8U *txbuf_n) {
 JHMCP2515::JHMCP2515(INT8U cs_pin, INT8U spi_bus)
     : m_nExtFlg(0), m_nID(0), m_nDlc(0), m_nRtr(0), m_nfilhit(0),
       m_csPin(cs_pin), mcpMode(MCP_NORMAL), m_spiBus(spi_bus),
-      m_driver_mutex(hal_mutex_create()) {
+      m_driver_mutex(hal_mutex_create()), m_rxRing(), m_rxRingHead(0),
+      m_rxRingCount(0), m_rxb1Older(false) {
   hal_gpio_set_mode(m_csPin, HAL_GPIO_OUTPUT);
   hal_gpio_write(m_csPin, true);
 }
@@ -553,6 +627,9 @@ JHMCP2515::~JHMCP2515() {
 
 INT8U JHMCP2515::begin(INT8U idmodeset, INT8U speedset, INT8U clockset) {
   JHMCP2515Guard guard(*this);
+  m_rxRingHead = 0u;
+  m_rxRingCount = 0u;
+  m_rxb1Older = false;
   INT8U res = mcp2515_init(idmodeset, speedset, clockset);
   return (res == MCP2515_OK) ? CAN_OK : CAN_FAILINIT;
 }
@@ -660,11 +737,18 @@ INT8U JHMCP2515::sendMsg() {
   mcp2515_write_canMsg(txbuf_n);
   mcp2515_modifyRegister((INT8U)(txbuf_n - 1), MCP_TXB_TXREQ_M,
                          MCP_TXB_TXREQ_M);
+  /* READ STATUS shows the TXREQ of this buffer and both receive flags, so
+   * frames arriving during the wait go to the ring and not to an overflow.
+   * Reading a frame ends with a fresh status; without one, ask again. */
+  const INT8U txreq = (INT8U)MCP_STAT_TXREQ((txbuf_n - 1 - MCP_TXB0CTRL) >> 4);
   temp = hal_micros();
-  do {
-    txctrl = mcp2515_readRegister((INT8U)(txbuf_n - 1));
-    uiTimeOut = hal_micros() - temp;
-  } while ((txctrl & MCP_TXB_TXREQ_M) != 0u && (uiTimeOut < TIMEOUTVALUE));
+  INT8U status = mcp2515_readStatus();
+  while ((status & txreq) != 0u && (hal_micros() - temp) < TIMEOUTVALUE) {
+    if (!mcp2515_keep_rx(&status)) {
+      status = mcp2515_readStatus();
+    }
+  }
+  txctrl = mcp2515_readRegister((INT8U)(txbuf_n - 1));
   /* The register decides, not the clock: a task preempted past the timeout
    * after the frame went out must not report a failure. */
   if ((txctrl & MCP_TXB_TXREQ_M) != 0u) {
@@ -703,26 +787,28 @@ INT8U JHMCP2515::sendMsgBuf(INT32U id, INT8U len, INT8U *buf) {
   return sendMsg();
 }
 
+/* Frames kept during a transmit are older than those still in hardware. */
 INT8U JHMCP2515::readMsg() {
-  INT8U stat = mcp2515_readStatus();
-  if (stat & MCP_STAT_RX0IF) {
-    mcp2515_read_canMsg(MCP_RXBUF_0);
-    mcp2515_modifyRegister(MCP_CANINTF, MCP_RX0IF, 0);
+  if (m_rxRingCount > 0u) {
+    mcp2515_load_rx(&m_rxRing[m_rxRingHead]);
+    m_rxRingHead = (INT8U)((m_rxRingHead + 1u) % MCP2515_RX_RING_FRAMES);
+    m_rxRingCount--;
     return CAN_OK;
   }
-  if (stat & MCP_STAT_RX1IF) {
-    mcp2515_read_canMsg(MCP_RXBUF_1);
-    mcp2515_modifyRegister(MCP_CANINTF, MCP_RX1IF, 0);
-    return CAN_OK;
+  jh_mcp2515_rx_frame_t frame;
+  INT8U status = mcp2515_readStatus();
+  if (!mcp2515_read_rx(&status, &frame)) {
+    return CAN_NOMSG;
   }
-  return CAN_NOMSG;
+  mcp2515_load_rx(&frame);
+  return CAN_OK;
 }
 
 INT8U JHMCP2515::readMsgBuf(INT32U *id, INT8U *ext, INT8U *len, INT8U buf[]) {
   JHMCP2515Guard guard(*this);
   if (readMsg() == CAN_NOMSG)
     return CAN_NOMSG;
-  *id = m_nID;
+  *id = m_nRtr ? (m_nID | CAN_IS_REMOTE_REQUEST) : m_nID;
   *len = m_nDlc;
   *ext = m_nExtFlg;
   for (int i = 0; i < m_nDlc; ++i)
@@ -747,6 +833,9 @@ INT8U JHMCP2515::readMsgBuf(INT32U *id, INT8U *len, INT8U buf[]) {
 
 INT8U JHMCP2515::checkReceive(void) {
   JHMCP2515Guard guard(*this);
+  if (m_rxRingCount > 0u) {
+    return CAN_MSGAVAIL;
+  }
   return (mcp2515_readStatus() & MCP_STAT_RXIF_MASK) ? CAN_MSGAVAIL : CAN_NOMSG;
 }
 

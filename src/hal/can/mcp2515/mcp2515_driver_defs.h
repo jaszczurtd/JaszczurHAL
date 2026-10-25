@@ -45,6 +45,11 @@ typedef uint32_t INT32U;
 #define MCP_STAT_RXIF_MASK 0x03
 #define MCP_STAT_RX0IF (1 << 0)
 #define MCP_STAT_RX1IF (1 << 1)
+/* READ STATUS also reports TXBnCTRL.TXREQ of buffer n at bit 2 + 2n. */
+#define MCP_STAT_TXREQ(n) (1 << (2 + 2 * (n)))
+
+/* Frames the driver keeps when they arrive while it waits for a transmit. */
+#define MCP2515_RX_RING_FRAMES 8u
 
 #define MCP_EFLG_RX1OVR (1 << 7)
 #define MCP_EFLG_RX0OVR (1 << 6)

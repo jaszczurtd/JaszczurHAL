@@ -138,7 +138,13 @@ sprawdzają numer magistrali i w takim przypadku inicjalizacja kończy się bł�
 o tym pamiętać również przy przenoszeniu kodu, który wcześniej korzystał z łagodniejszych
 wartości domyślnych I2C.
 
-Na RP2040/RP2350 i STM32G474 wspólne API korzysta z tych samych przenośnych sterowników MCP9600/MCP9601 oraz MAX6675. W testach hostowych funkcje `hal_mock_thermocouple_*()` pozwalają ustawiać wyniki bez powielania publicznego API.
+`hal_thermocouple_read_ex()` zwraca `HAL_EHW`, gdy MCP9600 zgłasza wejście
+poza zakresem, a MCP9601 przerwaną lub zwartą termoparę. Układ przestaje wtedy
+aktualizować rejestr temperatury, więc funkcja podaje `NAN` zamiast ostatniej
+wartości. `HAL_EIO` oznacza nieudaną transmisję, uśpiony MCP9600 albo
+przerwaną termoparę MAX6675.
+
+Na RP2040/RP2350 i STM32G474 wspólne API korzysta z tych samych przenośnych sterowników MCP9600/MCP9601 oraz MAX6675. W testach hostowych funkcje `hal_mock_thermocouple_*()` pozwalają ustawiać wyniki bez powielania publicznego API; status z `HAL_MCP9600_STATUS_INPUTRANGE` sprawia, że odczyt w mocku kończy się `HAL_EHW`.
 
 **Współbieżność:** API obsługuje współbieżne wywołania z wielu rdzeni. Sekcja krytyczna
 chroni przydział z puli, a każda aktywna instancja ma własny `hal_mutex_t`. Muteks

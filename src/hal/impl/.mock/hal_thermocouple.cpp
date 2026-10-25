@@ -5,6 +5,9 @@
 #ifdef HAL_ENABLE_THERMOCOUPLE
 
 #include "hal/temperature/jh_thermocouple_provider.h"
+#ifdef HAL_ENABLE_MCP9600
+#include "hal/temperature/mcp9600/mcp9600_driver.h"
+#endif
 
 #include <math.h>
 
@@ -45,7 +48,15 @@ hal_status_t mock_initialize(void *context, const hal_thermocouple_config_t *) {
 void mock_deinitialize(void *) {}
 
 hal_status_t mock_read(void *context, float *out_c) {
-  *out_c = as_mock(context)->temperature;
+  const MockThermocoupleContext *mock = as_mock(context);
+#ifdef HAL_ENABLE_MCP9600
+  // As on the device: an input fault leaves no valid temperature.
+  if ((mock->status & HAL_MCP9600_STATUS_INPUTRANGE) != 0u) {
+    *out_c = NAN;
+    return HAL_EHW;
+  }
+#endif
+  *out_c = mock->temperature;
   return isnan(*out_c) ? HAL_EIO : HAL_OK;
 }
 

@@ -355,7 +355,7 @@ class Phase3RegistryAndBuildTests(unittest.TestCase):
 
         callback = source_section(
             source,
-            "static int64_t timer_dispatch_callback(",
+            "static int64_t HAL_RAM_FUNC(timer_dispatch_callback)(",
             "static inline void timer_store_result(",
         )
         self.assertTrue(

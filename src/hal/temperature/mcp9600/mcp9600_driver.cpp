@@ -153,29 +153,51 @@ uint8_t hal_mcp9600_device_id(hal_mcp9600_t *dev) {
   return mcp9600_valid(dev) ? dev->device_id : 0u;
 }
 
-float hal_mcp9600_read_thermocouple(hal_mcp9600_t *dev) {
+/* STATUS bits after which the hot-junction register holds a stale value. */
+static uint8_t mcp9600_input_fault_mask(const hal_mcp9600_t *dev) {
+  return (dev->device_id == MCP9601_DEVICE_ID)
+             ? (uint8_t)(HAL_MCP9601_STATUS_OPENCIRCUIT |
+                         HAL_MCP9601_STATUS_SHORTCIRCUIT)
+             : HAL_MCP9600_STATUS_INPUTRANGE;
+}
+
+hal_status_t hal_mcp9600_read_thermocouple_ex(hal_mcp9600_t *dev,
+                                              float *out_c) {
+  if (out_c == NULL) {
+    return HAL_EINVAL;
+  }
+  *out_c = NAN;
   if (!mcp9600_valid(dev)) {
-    return NAN;
+    return HAL_EINVAL;
   }
   hal_mutex_lock(dev->mutex);
 
   uint8_t config = 0u;
-  if (!mcp9600_read_u8(dev, MCP9600_DEVICECONFIG, &config) ||
-      (config & 0x03u) != 0u) {
-    hal_mutex_unlock(dev->mutex);
-    return NAN;
-  }
-
+  uint8_t status = 0u;
   uint8_t raw[2] = {0u, 0u};
-  if (!mcp9600_read_register(dev, MCP9600_HOTJUNCTION, raw, 2u)) {
-    hal_mutex_unlock(dev->mutex);
-    return NAN;
+  hal_status_t result = HAL_OK;
+  if (!mcp9600_read_u8(dev, MCP9600_DEVICECONFIG, &config) ||
+      (config & 0x03u) != 0u ||
+      !mcp9600_read_u8(dev, MCP9600_STATUS, &status)) {
+    result = HAL_EIO;
+  } else if ((status & mcp9600_input_fault_mask(dev)) != 0u) {
+    result = HAL_EHW;
+  } else if (!mcp9600_read_register(dev, MCP9600_HOTJUNCTION, raw, 2u)) {
+    result = HAL_EIO;
   }
 
   hal_mutex_unlock(dev->mutex);
 
-  int16_t therm = (int16_t)jh_load_be16(raw);
-  return (float)therm * 0.0625f;
+  if (result == HAL_OK) {
+    *out_c = (float)(int16_t)jh_load_be16(raw) * 0.0625f;
+  }
+  return result;
+}
+
+float hal_mcp9600_read_thermocouple(hal_mcp9600_t *dev) {
+  float value = NAN;
+  (void)hal_mcp9600_read_thermocouple_ex(dev, &value);
+  return value;
 }
 
 float hal_mcp9600_read_ambient(hal_mcp9600_t *dev) {

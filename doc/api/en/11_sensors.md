@@ -138,7 +138,13 @@ Native backends validate the bus index and initialization then fails. This
 also applies when migrating code that previously relied on permissive
 I2C defaults.
 
-RP2040/RP2350 and STM32G474 use the same portable MCP9600/MCP9601 and MAX6675 drivers through the shared API. Host tests can set deterministic results through `hal_mock_thermocouple_*()` without a separate copy of the public API.
+`hal_thermocouple_read_ex()` returns `HAL_EHW` when an MCP9600 reports its
+input out of range or an MCP9601 an open or shorted thermocouple. The chip
+stops updating its temperature register then, so the call gives `NAN`
+instead of the last value. `HAL_EIO` means a failed bus transfer, a sleeping
+MCP9600 or an open MAX6675 thermocouple.
+
+RP2040/RP2350 and STM32G474 use the same portable MCP9600/MCP9601 and MAX6675 drivers through the shared API. Host tests can set deterministic results through `hal_mock_thermocouple_*()` without a separate copy of the public API; a status with `HAL_MCP9600_STATUS_INPUTRANGE` makes the mock read fail with `HAL_EHW`.
 
 **Thread safety:** Thread-safe and multicore-safe. Pool allocation is protected
 by a critical section. Each live instance owns a `hal_mutex_t`; read,

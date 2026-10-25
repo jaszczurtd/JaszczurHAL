@@ -37,6 +37,12 @@ void test_tools_config_macro_aliases(void) {
 #endif
 }
 
+// The literal is the double nearest pi, also after rounding to float.
+void test_hal_math_pi_matches_the_math_library(void) {
+  TEST_ASSERT_TRUE(HAL_MATH_PI == acos(-1.0));
+  TEST_ASSERT_TRUE((float)HAL_MATH_PI == acosf(-1.0f));
+}
+
 /* ── hal_math_split_decimal_tenths / hal_math_join_decimal_tenths
  * ───────────────────────────────────────────── */
 
@@ -1087,6 +1093,7 @@ int main(void) {
   RUN_TEST(test_hal_math_split_decimal_tenths_null_pointers);
   RUN_TEST(test_hal_math_join_decimal_tenths_basic);
   RUN_TEST(test_hal_math_join_decimal_tenths_roundtrip);
+  RUN_TEST(test_hal_math_pi_matches_the_math_library);
 
   RUN_TEST(test_hal_math_low_pass_alpha_one);
   RUN_TEST(test_hal_math_low_pass_alpha_zero);

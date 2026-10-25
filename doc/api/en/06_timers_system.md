@@ -150,6 +150,13 @@ not sufficient; pool destruction from an alarm callback/ISR is unsupported.
   a periodic callback stops, pauses or re-arms the timer, the finished alarm is
   not rescheduled. Restarting a one-shot from its own callback needs a free
   slot in the pool: the firing alarm keeps its slot until the callback returns.
+- **Callback path in RAM:** the managed-timer alarm callback and the RP alarm
+  dispatcher are `HAL_RAM_FUNC` functions, and on RP so are `hal_micros()`,
+  `hal_micros64()` and `hal_gpio_write()`. A timer callback that toggles an
+  output then keeps its timing while another core reads large data from flash
+  and empties the XIP cache. The Pico SDK alarm interrupt handler stays in
+  flash. Mark a time-critical callback with `HAL_RAM_FUNC` too and check its
+  callees in the ELF/map.
 - **Error model:** `_ex` functions return detailed `hal_timer_result_t` diagnostics (`INVALID_ARG`, `TIME_PASSED`, `POOL_FULL`, `NO_RESOURCE`, etc.) while legacy non-`_ex` variants preserve `HAL_ALARM_INVALID` compatibility.
 - **impl/rp2040:** Pico SDK alarm pools (`pico/time.h`) and callback scheduling
   (`alarm_pool_add_alarm_in_us`, cancel APIs). `add_alarm_in_us()` outcomes `<= 0`

@@ -33,6 +33,7 @@ typedef struct {
   void *device_user;
   uint8_t device_cs;
   bool device_selected;
+  uint32_t device_cs_rises; /* hal_mock_gpio_rise_count() at the select */
 } mock_spi_bus_t;
 
 static uint8_t s_last_bus = 0;
@@ -55,8 +56,14 @@ static uint8_t spi_next_rx(mock_spi_bus_t *st, uint8_t tx) {
     if (hal_mock_gpio_get_state(st->device_cs)) {
       return 0xFFu; /* not selected */
     }
+    const uint32_t rises = hal_mock_gpio_rise_count(st->device_cs);
+    if (st->device_selected && rises != st->device_cs_rises) {
+      st->device_selected = false; /* chip select went high and low again */
+      st->device->deselect(st->device_user);
+    }
     if (!st->device_selected) {
       st->device_selected = true;
+      st->device_cs_rises = rises;
       st->device->select(st->device_user);
     }
     return st->device->exchange(st->device_user, tx);

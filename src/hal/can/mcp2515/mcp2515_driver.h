@@ -3,15 +3,28 @@
 /*
  * HAL-only MCP2515 driver derived from the working register/SPI logic of the
  * Seeed/Loovee MCP_CAN library, with contributions by Cory J. Fowler.
- * The behavior and register programming flow are intentionally kept aligned
- * with the upstream implementation while using only HAL runtime dependencies.
+ * The register programming flow stays aligned with the upstream
+ * implementation while using only HAL runtime dependencies. Received frames
+ * are read with the READ RX BUFFER instruction, and frames that arrive while
+ * a transmit waits for the bus are kept in a small ring instead of
+ * overflowing the two hardware buffers.
  */
 
+#include "hal/core/hal_layout_check.h"
 #include "hal/spi/hal_spi.h"
 #include "hal/system/hal_sync.h"
 #include "mcp2515_driver_defs.h"
 
 class JHMCP2515Guard;
+
+/** @brief One received frame as the driver keeps it. */
+typedef struct {
+  INT32U id;
+  INT8U ext;
+  INT8U rtr;
+  INT8U dlc;
+  INT8U data[MAX_CHAR_IN_MESSAGE];
+} jh_mcp2515_rx_frame_t;
 
 class JHMCP2515 {
 private:
@@ -25,6 +38,10 @@ private:
   INT8U mcpMode;
   INT8U m_spiBus;
   hal_mutex_t m_driver_mutex;
+  jh_mcp2515_rx_frame_t m_rxRing[MCP2515_RX_RING_FRAMES];
+  INT8U m_rxRingHead;
+  INT8U m_rxRingCount;
+  bool m_rxb1Older;
 
   void mcp2515_reset(void);
   INT8U mcp2515_readRegister(INT8U address);
@@ -42,7 +59,9 @@ private:
   void mcp2515_write_id(INT8U mcp_addr, INT8U ext, INT32U id);
   void mcp2515_read_id(INT8U mcp_addr, INT8U *ext, INT32U *id);
   void mcp2515_write_canMsg(INT8U buffer_sidh_addr);
-  void mcp2515_read_canMsg(INT8U buffer_sidh_addr);
+  bool mcp2515_read_rx(INT8U *status, jh_mcp2515_rx_frame_t *frame);
+  bool mcp2515_keep_rx(INT8U *status);
+  void mcp2515_load_rx(const jh_mcp2515_rx_frame_t *frame);
   INT8U mcp2515_getNextFreeTXBuf(INT8U *txbuf_n);
   void spi_begin_(void);
   void spi_end_(void);

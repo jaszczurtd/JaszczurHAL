@@ -1,6 +1,7 @@
 #include "hal/core/hal_compiler.h"
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_RP
+#include "hal/core/hal_memory.h"
 #include "hal/core/hal_mutex_once.h"
 #include "hal/system/hal_sync.h"
 #include "hal/timers/hal_timer.h"
@@ -67,7 +68,10 @@ static inline int16_t timer_alarm_index(hal_alarm_id_t id) {
   return (int16_t)(id >> 16);
 }
 
-static int64_t timer_dispatch_callback(alarm_id_t alarm_id, void *context) {
+// Runs in the alarm interrupt; RAM keeps it off the flash cache, so drawing
+// from flash on the other core does not delay periodic outputs.
+static int64_t HAL_RAM_FUNC(timer_dispatch_callback)(alarm_id_t alarm_id,
+                                                     void *context) {
   rp_alarm_dispatch_s *dispatch = (rp_alarm_dispatch_s *)context;
   const int16_t index = timer_alarm_index((hal_alarm_id_t)alarm_id);
   if (!dispatch || index < 0 || (uint16_t)index >= dispatch->entry_count) {

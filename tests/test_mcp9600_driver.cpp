@@ -62,23 +62,25 @@ void test_init_rejects_unknown_device_id(void) {
 
 void test_read_thermocouple_decodes_signed_fixed_point(void) {
   TEST_ASSERT_TRUE(init_with_id(0x40u));
-  const uint8_t rx[] = {0x00u, 0x01u, 0x90u}; /* active, 25.0 C */
+  const uint8_t rx[] = {0x00u, 0x00u, 0x01u, 0x90u}; /* active, 25.0 C */
   hal_mock_i2c_inject_rx(rx, sizeof(rx));
   hal_mock_i2c_reset_write_log();
 
   TEST_ASSERT_FLOAT_WITHIN(0.01f, 25.0f, hal_mcp9600_read_thermocouple(&dev));
 
   uint8_t f[4] = {};
-  TEST_ASSERT_EQUAL_INT(2, hal_mock_i2c_get_write_frame_count());
+  TEST_ASSERT_EQUAL_INT(3, hal_mock_i2c_get_write_frame_count());
   TEST_ASSERT_EQUAL_INT(1, get_frame(0, f, sizeof(f)));
   TEST_ASSERT_EQUAL_UINT8(0x06u, f[0]);
   TEST_ASSERT_EQUAL_INT(1, get_frame(1, f, sizeof(f)));
+  TEST_ASSERT_EQUAL_UINT8(0x04u, f[0]);
+  TEST_ASSERT_EQUAL_INT(1, get_frame(2, f, sizeof(f)));
   TEST_ASSERT_EQUAL_UINT8(0x00u, f[0]);
 }
 
 void test_read_thermocouple_decodes_negative_twos_complement(void) {
   TEST_ASSERT_TRUE(init_with_id(0x40u));
-  const uint8_t rx[] = {0x00u, 0xFFu, 0x60u}; /* active, -10.0 C */
+  const uint8_t rx[] = {0x00u, 0x00u, 0xFFu, 0x60u}; /* active, -10.0 C */
   hal_mock_i2c_inject_rx(rx, sizeof(rx));
 
   TEST_ASSERT_FLOAT_WITHIN(0.01f, -10.0f, hal_mcp9600_read_thermocouple(&dev));
@@ -94,6 +96,55 @@ void test_read_thermocouple_returns_nan_when_sleeping(void) {
   float value = hal_mcp9600_read_thermocouple(&dev);
   TEST_ASSERT_TRUE(isnan(value));
   TEST_ASSERT_EQUAL_UINT32(before + 2u, hal_i2c_get_transaction_count());
+}
+
+/* Read with DEVICE CFG active and @p status in STATUS; the hot-junction
+ * register holds 400 C, the value the device keeps after an input fault. */
+static hal_status_t read_with_status(uint8_t id, uint8_t status, float *out_c) {
+  TEST_ASSERT_TRUE(init_with_id(id));
+  const uint8_t rx[] = {0x00u, status, 0x19u, 0x00u};
+  hal_mock_i2c_inject_rx(rx, sizeof(rx));
+  return hal_mcp9600_read_thermocouple_ex(&dev, out_c);
+}
+
+void test_read_ex_reports_input_out_of_range_as_hardware_fault(void) {
+  float value = 0.0f;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EHW, read_with_status(0x40u, HAL_MCP9600_STATUS_INPUTRANGE, &value));
+  TEST_ASSERT_TRUE(isnan(value));
+  TEST_ASSERT_TRUE(isnan(hal_mcp9600_read_thermocouple(&dev)));
+}
+
+void test_read_ex_reports_open_or_shorted_mcp9601_input(void) {
+  float value = 0.0f;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EHW, read_with_status(0x41u, HAL_MCP9601_STATUS_OPENCIRCUIT, &value));
+  TEST_ASSERT_TRUE(isnan(value));
+  hal_mcp9600_deinit(&dev);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EHW,
+      read_with_status(0x41u, HAL_MCP9601_STATUS_SHORTCIRCUIT, &value));
+  TEST_ASSERT_TRUE(isnan(value));
+}
+
+void test_read_ex_ignores_status_bits_that_keep_the_reading(void) {
+  float value = 0.0f;
+  const uint8_t kept =
+      (uint8_t)(HAL_MCP9600_STATUS_BURST | HAL_MCP9600_STATUS_THUPDATE |
+                HAL_MCP9600_STATUS_ALERT1 | HAL_MCP9600_STATUS_ALERT2 |
+                HAL_MCP9600_STATUS_ALERT3 | HAL_MCP9600_STATUS_ALERT4);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, read_with_status(0x40u, kept, &value));
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 400.0f, value);
+}
+
+void test_read_ex_rejects_null_arguments(void) {
+  float value = 0.0f;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_mcp9600_read_thermocouple_ex(NULL, &value));
+  TEST_ASSERT_TRUE(isnan(value));
+  TEST_ASSERT_TRUE(init_with_id(0x40u));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_mcp9600_read_thermocouple_ex(&dev, NULL));
 }
 
 void test_read_ambient_decodes_negative_temperature(void) {
@@ -341,6 +392,10 @@ int main(void) {
   RUN_TEST(test_read_thermocouple_decodes_signed_fixed_point);
   RUN_TEST(test_read_thermocouple_decodes_negative_twos_complement);
   RUN_TEST(test_read_thermocouple_returns_nan_when_sleeping);
+  RUN_TEST(test_read_ex_reports_input_out_of_range_as_hardware_fault);
+  RUN_TEST(test_read_ex_reports_open_or_shorted_mcp9601_input);
+  RUN_TEST(test_read_ex_ignores_status_bits_that_keep_the_reading);
+  RUN_TEST(test_read_ex_rejects_null_arguments);
   RUN_TEST(test_read_ambient_decodes_negative_temperature);
   RUN_TEST(test_read_adc_sign_extends_24_bit_value);
   RUN_TEST(test_set_thermocouple_type_preserves_filter_bits);

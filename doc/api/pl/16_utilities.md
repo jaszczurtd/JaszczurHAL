@@ -291,6 +291,9 @@ elementów `float` na tablicę tej funkcji. Jeśli makro nie jest zdefiniowane,
 obsługiwane jest starsze ustawienie `HAL_TOOLS_TEMPERATURE_TABLES_SIZE`.
 Wariant `_ex` przyjmuje rozmiar tablicy jawnie.
 
+`HAL_MATH_PI` to liczba pi jako literał `double` dla kodu C i C++; `M_PI` nie
+należy do ISO C ani C++. Dla pojedynczej precyzji rzutuj ją na `float`.
+
 `hal_text_format_mac_ex()` zapisuje sześciobajtowy adres sprzętowy w formacie `XX:XX:XX:XX:XX:XX`, używając wielkich liter. Bufor musi mieścić `HAL_TEXT_MAC_STRING_SIZE` bajtów. Funkcja zgodności `hal_network_format_mac_ex()` pozostaje dostępna i wywołuje tę samą operację.
 
 ### Funkcje pomocnicze do manipulacji bitami (`hal_bits`)

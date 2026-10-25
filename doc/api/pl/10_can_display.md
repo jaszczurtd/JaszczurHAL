@@ -522,6 +522,21 @@ hal_status_t hal_can_recover(hal_can_t h, uint32_t timeout_ms);
   i tak trafia do kolejki (domyślnie 4 zdarzenia), `hal_can_service()` czyta
   ramki z kontrolera i zgłasza zauważone zmiany stanu, a
   `hal_can_set_isr_notify()` zwraca `HAL_EUNSUPPORTED`.
+- **Odbiór MCP2515:** sterownik czyta ramkę jednym odczytem statusu i jedną
+  transakcją READ RX BUFFER, po której odczytuje status jeszcze raz, przy
+  wyłączonych przerwaniach i bez zwalniania magistrali. Ten status pokazuje,
+  czy w trakcie odczytu ramka trafiła do RXB1, więc ramki z RXB0 i RXB1
+  wychodzą w kolejności przyjścia. Kolejność obowiązuje, dopóki RXB1
+  zapełnia się tylko przy pełnym RXB0, czyli dopóki każdą ramkę przyjętą
+  przez sloty filtrów od 2 do 5 przyjmuje też slot 0 lub 1, jak przy
+  `hal_can_set_std_filters()` albo jednym filtrze we wszystkich sześciu
+  slotach. Ramka przyjęta tylko przez sloty od 2 do 5 trafia od razu do RXB1
+  i może wyjść po nowszej ramce z RXB0, bo kontroler nie zapisuje czasu
+  przyjęcia ramek. Gdy nadawanie czeka na wysłanie swojej
+  ramki, sterownik przenosi przychodzące ramki do bufora na 8 ramek, więc
+  zajęta magistrala nie przepełnia w tym czasie dwóch buforów odbiorczych.
+  Funkcje odbioru oddają najpierw te ramki. Ramki, które przyjdą przy pełnym
+  buforze, zostają w kontrolerze.
 - **Testy hostowe:** `hal_mock_can_set_queued(true)` sprawia, że uchwyty
   mocka tworzone później są kolejkowe jak FDCAN; `hal_mock_can_fail_sends()`
   kończy kolejne nadania kolejkowe porażką.
@@ -977,7 +992,7 @@ if (status == HAL_OK) {
   następnie `hal_display_end_write()`. `hal_display_write_pixels_fast()`
   przyjmuje natywne słowa `uint16_t` RGB565 i zamienia je wewnętrznie na
   kolejność bajtów kontrolera; `hal_display_write_pixels_be()` przyjmuje już
-  bajty RGB565 w kolejności big-endian; `hal_display_write_pixels_dma()` jest blokującym
+  bajty RGB565 w kolejności big-endian; `hal_display_write_pixels_dma()` jest blokującą
   funkcją zapisu strumienia przez DMA.
   Wariant asynchroniczny,
   `hal_display_write_pixels_dma_async_start()` / `_busy()` / `_wait()`, korzysta z
@@ -986,6 +1001,18 @@ if (status == HAL_OK) {
   strumień zapisu wyświetlacza otwarty do zakończenia `_wait()`.
   `hal_display_end_write()` czeka na aktywne asynchroniczne DMA pikseli przed
   zamknięciem transakcji TFT.
+- **Współdzielona magistrala SPI:** Wypełnienia prostokątów i bitmapy na
+  ILI9341 i ST77xx/GC9A01, także `hal_display_fill_screen()`,
+  `hal_display_draw_image()` i prostokąty, z których powstają kształty
+  i tekst, zwykle idą w jednej transakcji SPI. Ustaw
+  `HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES` w `hal_project_config.h`, a obszar
+  zostanie podzielony na pasy pełnych wierszy. Każdy pas niesie najwyżej tyle
+  bajtów pikseli, ale zawsze co najmniej jeden wiersz, i kończy własną
+  transakcję. Inne urządzenie na tej samej magistrali, np. kontroler CAN
+  obsługiwany przez drugi rdzeń, może wtedy skorzystać z niej między dwoma
+  pasami. Dozwolone wartości to 0 (domyślnie, cały obszar naraz) oraz
+  64..1048576. Strumień otwarty przez `hal_display_begin_write()` zajmuje
+  magistralę aż do `hal_display_end_write()`.
 - **Uwagi ST77xx/GC9A01:** `HAL_DISPLAY_ST7735`, `HAL_DISPLAY_ST7789`,
   `HAL_DISPLAY_ST7796S` i `HAL_DISPLAY_GC9A01` korzystają ze wspólnego backendu
   zgodnego z rodziną ST77xx. `JH_ST77XX_SPI_DEFAULT_HZ` można nadpisać przed

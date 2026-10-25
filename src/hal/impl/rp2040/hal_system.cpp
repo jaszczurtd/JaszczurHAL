@@ -3,6 +3,7 @@
 #include "drivers/rp2040/rp2040_fault.h"
 #include "drivers/rp2040/rp2040_system.h"
 #include "hal/core/hal_config.h"
+#include "hal/core/hal_memory.h"
 #include "hal/network/jh_network_architecture.h"
 #include "hal/system/hal_system.h"
 #include "hal/system/hal_system_common.h"
@@ -45,9 +46,10 @@ static bool hal_rp2040_can_sleep_current_context(void) {
 
 uint32_t hal_millis(void) { return to_ms_since_boot(get_absolute_time()); }
 
-uint32_t hal_micros(void) { return (uint32_t)time_us_64(); }
+// In RAM: interrupt handlers such as the timer callbacks read the clock.
+uint32_t HAL_RAM_FUNC(hal_micros)(void) { return (uint32_t)time_us_64(); }
 
-uint64_t hal_micros64(void) { return time_us_64(); }
+uint64_t HAL_RAM_FUNC(hal_micros64)(void) { return time_us_64(); }
 
 void hal_delay_ms(uint32_t ms) {
 #if JH_RP_HAL_SYSTEM_FREERTOS

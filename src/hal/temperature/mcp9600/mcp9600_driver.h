@@ -12,6 +12,7 @@
 #include "hal/core/hal_config.h"
 #if defined(HAL_ENABLE_MCP9600) && defined(HAL_ENABLE_I2C)
 
+#include "hal/core/hal_status.h"
 #include "hal/system/hal_sync.h"
 
 #include <stdbool.h>
@@ -74,6 +75,19 @@ bool hal_mcp9600_init(hal_mcp9600_t *dev, const hal_mcp9600_config_t *cfg);
 void hal_mcp9600_deinit(hal_mcp9600_t *dev);
 uint8_t hal_mcp9600_device_id(hal_mcp9600_t *dev);
 
+/**
+ * @brief Read the hot-junction temperature after checking the converter input.
+ * @param dev Initialised device.
+ * @param out_c Receives degrees Celsius, or NAN on any error.
+ * @return HAL_OK; HAL_EINVAL for a NULL argument or an uninitialised device;
+ *         HAL_EIO when an I2C transfer fails or the device is in shutdown or
+ *         burst mode; HAL_EHW when STATUS reports the input out of range
+ *         (MCP9600) or an open or shorted thermocouple (MCP9601). The device
+ *         stops updating its temperature registers then, so their last value
+ *         is no measurement.
+ */
+hal_status_t hal_mcp9600_read_thermocouple_ex(hal_mcp9600_t *dev, float *out_c);
+/** @return As hal_mcp9600_read_thermocouple_ex(), NAN on any error. */
 float hal_mcp9600_read_thermocouple(hal_mcp9600_t *dev);
 float hal_mcp9600_read_ambient(hal_mcp9600_t *dev);
 int32_t hal_mcp9600_read_adc(hal_mcp9600_t *dev);
