@@ -6,6 +6,10 @@ Przykład odczytuje dane GPS, a niezależnie od nich obsługuje drugi port
 szeregowy do sprawdzania nadawania i odbioru. Brak odbiornika GPS lub połączenia
 na drugim porcie nie zatrzymuje obsługi pozostałego urządzenia.
 
+Co sekundę program wypisuje pozycję, a bez fixa liczniki odebranych danych.
+W drugim wierszu podaje datę i czas UTC ostatniej ramki RMC z fixem oraz wiek
+tej wartości.
+
 Wersja podstawowa korzysta ze sprzętowego UART. GPS pracuje z prędkością
 9600 baud, a port testowy - 115200 baud. Połączenia każdego montażu opisuje
 `device_tree.json`, a program bierze porty, piny i ustawienia transmisji

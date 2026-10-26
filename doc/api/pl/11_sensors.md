@@ -1091,6 +1091,14 @@ int hal_gps_time_hour(void);   // 0-23
 int hal_gps_time_minute(void); // 0-59
 int hal_gps_time_second(void); // 0-59
 
+// Data i czas UTC z jednej ramki RMC z fixem oraz ich wiek
+typedef struct {
+  uint16_t year;   // 2000-2099
+  uint8_t  month, day, hour, minute, second;
+  uint32_t age_ms; // ms od przetworzenia ramki
+} hal_gps_utc_t;
+hal_status_t hal_gps_get_utc(hal_gps_utc_t *out_utc);
+
 // Diagnostyka
 uint32_t hal_gps_chars_processed(void);    // łączna liczba bajtów podanych do parsera
 uint32_t hal_gps_passed_checksum(void);    // ramki NMEA, które przeszły sumę kontrolną
@@ -1099,13 +1107,36 @@ uint32_t hal_gps_sentences_with_fix(void); // poprawne ramki zawierające fix lo
 int      hal_gps_serial_available(void);   // bajty oczekujące w buforze RX portu szeregowego
 ```
 
+**Data i czas z jednej ramki:** osobne funkcje daty i czasu zwracają ostatnio
+odczytane pola, a te mogą pochodzić z różnych ramek. GGA zmienia tylko czas,
+więc około północy para może wskazać zły dzień. `hal_gps_get_utc()` zwraca
+datę i czas jednej ramki RMC z fixem razem z wiekiem tej wartości. Ramka musi
+mieć status dokładnie `A`, czas `hhmmss` z opcjonalnym ułamkiem od 1 do
+6 cyfr i datę dokładnie `ddmmyy`. Brakujące lub źle zapisane pole, niemożliwa
+data i sekunda przestępna pozostawiają poprzednią wartość i jej wiek. Do nadejścia pierwszej takiej ramki funkcja zwraca `HAL_EAGAIN`,
+a dla wskaźnika `NULL` zwraca `HAL_EINVAL`.
+
+Wiek liczy się od przetworzenia ramki przez `hal_gps_update()`, więc bajty
+czekające w buforze transportu są starsze o czas tego oczekiwania. Po utracie
+fixa wiek dalej rośnie, a aplikacja sama decyduje, jak stary czas jeszcze
+przyjmuje.
+
+```c
+hal_gps_utc_t utc;
+if (hal_gps_get_utc(&utc) == HAL_OK && utc.age_ms <= 2000u) {
+  const uint32_t epoch = hal_time_from_components(
+      utc.year, utc.month, utc.day, utc.hour, utc.minute, utc.second);
+  deb("UTC epoch %lu", (unsigned long)epoch);
+}
+```
+
 **Architektura:** Cała wspólna obsługa transportu znajduje się w
 `src/hal/gps/hal_gps.cpp`. Plik ten odpowiada za inicjalizację, polling, fallback formatu
 ramki SoftwareSerial, sprawdzanie dostępności portu oraz wybór `hal_uart` albo
 `hal_swserial` podczas kompilacji. RP2040, RP2350 i STM32G474 używają tej samej implementacji;
 różnice między targetami pozostają w wybranym transporcie HAL.
 
-`hal/gps/hal_gps_core.cpp` przekazuje bajty do `gps_nmea_parser.cpp`, oblicza wiek danych pozycji, zbiera diagnostykę i udostępnia wszystkie publiczne funkcje odczytu. Muteks chroni wspólny stan. Parser pochodzi z TinyGPS++ (LGPL); obsługę GSA/GSV/GST oparto na układzie pól z minmea. Funkcje testowe aktualizują stan tego samego parsera zamiast implementować osobne funkcje odczytu.
+`hal/gps/hal_gps_core.cpp` przekazuje bajty do `gps_nmea_parser.cpp`, oblicza wiek danych pozycji i czasu UTC, zbiera diagnostykę i udostępnia wszystkie publiczne funkcje odczytu. Muteks chroni wspólny stan. Parser pochodzi z TinyGPS++ (LGPL); obsługę GSA/GSV/GST oparto na układzie pól z minmea. Funkcje testowe aktualizują stan tego samego parsera zamiast implementować osobne funkcje odczytu.
 
 **Współbieżność:** Jeden wewnętrzny `hal_mutex_t` chroni stan parsera, ustawianie danych
 mocka, przekazywanie bajtów i wszystkie gettery. Na sprzęcie inicjalizacja
@@ -1164,6 +1195,7 @@ void hal_mock_gps_set_age(uint32_t age_ms);                    // kontroluje hal
 void hal_mock_gps_set_speed(double kmph);                      // kontroluje hal_gps_speed_kmph()
 void hal_mock_gps_set_date(int year, int month, int day);      // kontroluje akcesory daty
 void hal_mock_gps_set_time(int hour, int minute, int second);  // kontroluje akcesory czasu
+void hal_mock_gps_set_utc(const hal_gps_utc_t *utc);           // kontroluje hal_gps_get_utc(); NULL = brak czasu
 void hal_mock_gps_set_altitude_m(double altitude_m);
 void hal_mock_gps_set_course_deg(double course_deg);
 void hal_mock_gps_set_dop(double hdop, double vdop, double pdop);

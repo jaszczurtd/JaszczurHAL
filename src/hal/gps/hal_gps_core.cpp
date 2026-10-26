@@ -3,9 +3,10 @@
 #ifdef HAL_ENABLE_GPS
 
 /* Shared GPS engine: wraps the portable gps_nmea_parser with a mutex and
- * hal_millis()-based position age, and implements every transport-independent
- * hal_gps_* getter plus hal_gps_encode(). The portable public facade supplies
- * compile-time UART/SoftwareSerial transport selection. */
+ * hal_millis()-based position and UTC age, and implements every
+ * transport-independent hal_gps_* getter plus hal_gps_encode(). The portable
+ * public facade supplies compile-time UART/SoftwareSerial transport
+ * selection. */
 
 #include "gps_nmea_parser.h"
 #include "hal/core/hal_mutex_once.h"
@@ -14,10 +15,16 @@
 #include "hal/system/hal_system.h" /* hal_millis() */
 #include "hal_gps_core.h"
 
+/* hal_millis() of the parse that last bumped a parser commit sequence. */
+typedef struct {
+  uint32_t seq;
+  uint32_t ms;
+} gps_commit_stamp_t;
+
 static gps_nmea_t s_p;
 static hal_mutex_t s_mutex = nullptr;
-static uint32_t s_last_seq = 0;  /* last seen parser commit sequence   */
-static uint32_t s_commit_ms = 0; /* hal_millis() at last location fix   */
+static gps_commit_stamp_t s_loc_stamp = {}; /* location commits */
+static gps_commit_stamp_t s_utc_stamp = {}; /* UTC commits      */
 
 #if HAL_TARGET_IS_MOCK
 typedef struct {
@@ -33,6 +40,8 @@ typedef struct {
   int hour;
   int minute;
   int second;
+  bool utc_available;
+  hal_gps_utc_t utc;
   double altitude_m;
   double course_deg;
   double hdop;
@@ -56,12 +65,24 @@ static bool s_mock_injection_active = false;
 
 static void gps_ensure_mutex(void) { (void)jh_hal_mutex_create_once(&s_mutex); }
 
+/* Caller holds s_mutex. */
+static void gps_reset_parser_locked(void) {
+  gps_nmea_init(&s_p);
+  s_loc_stamp = {};
+  s_utc_stamp = {};
+}
+
+static void gps_stamp_commit(gps_commit_stamp_t *stamp, uint32_t seq) {
+  if (seq != stamp->seq) {
+    stamp->seq = seq;
+    stamp->ms = hal_millis();
+  }
+}
+
 void hal_gps_engine_reset(void) {
   gps_ensure_mutex();
   hal_mutex_lock(s_mutex);
-  gps_nmea_init(&s_p);
-  s_last_seq = 0;
-  s_commit_ms = 0;
+  gps_reset_parser_locked();
 #if HAL_TARGET_IS_MOCK
   s_mock = {};
   s_mock_injection_active = false;
@@ -73,10 +94,8 @@ void hal_gps_encode(char c) {
   gps_ensure_mutex();
   hal_mutex_lock(s_mutex);
   gps_nmea_encode(&s_p, c);
-  if (s_p.loc_commit_seq != s_last_seq) { /* a new location was committed */
-    s_last_seq = s_p.loc_commit_seq;
-    s_commit_ms = hal_millis();
-  }
+  gps_stamp_commit(&s_loc_stamp, s_p.loc_commit_seq);
+  gps_stamp_commit(&s_utc_stamp, s_p.utc_commit_seq);
   hal_mutex_unlock(s_mutex);
 }
 
@@ -98,8 +117,9 @@ bool hal_gps_location_is_updated(void) {
 uint32_t hal_gps_location_age(void) {
   gps_ensure_mutex();
   hal_mutex_lock(s_mutex);
-  uint32_t v = GPS_SOURCE(
-      s_mock.age_ms, s_p.loc_valid ? (hal_millis() - s_commit_ms) : UINT32_MAX);
+  uint32_t v =
+      GPS_SOURCE(s_mock.age_ms,
+                 s_p.loc_valid ? (hal_millis() - s_loc_stamp.ms) : UINT32_MAX);
   hal_mutex_unlock(s_mutex);
   return v;
 }
@@ -183,6 +203,44 @@ int hal_gps_time_second(void) {
   GPS_GET(int, GPS_SOURCE(s_mock.second, gps_nmea_second(&s_p)));
 }
 
+/* Caller holds s_mutex. */
+static bool gps_parsed_utc_locked(hal_gps_utc_t *out_utc) {
+  if (!s_p.utc_valid) {
+    return false;
+  }
+  out_utc->year = s_p.utc.year;
+  out_utc->month = s_p.utc.month;
+  out_utc->day = s_p.utc.day;
+  out_utc->hour = s_p.utc.hour;
+  out_utc->minute = s_p.utc.minute;
+  out_utc->second = s_p.utc.second;
+  out_utc->age_ms = hal_millis() - s_utc_stamp.ms;
+  return true;
+}
+
+#if HAL_TARGET_IS_MOCK
+/* Caller holds s_mutex. */
+static bool gps_injected_utc_locked(hal_gps_utc_t *out_utc) {
+  if (!s_mock.utc_available) {
+    return false;
+  }
+  *out_utc = s_mock.utc;
+  return true;
+}
+#endif
+
+hal_status_t hal_gps_get_utc(hal_gps_utc_t *out_utc) {
+  if (out_utc == nullptr) {
+    return HAL_EINVAL;
+  }
+  gps_ensure_mutex();
+  hal_mutex_lock(s_mutex);
+  const bool available = GPS_SOURCE(gps_injected_utc_locked(out_utc),
+                                    gps_parsed_utc_locked(out_utc));
+  hal_mutex_unlock(s_mutex);
+  return available ? HAL_OK : HAL_EAGAIN;
+}
+
 uint32_t hal_gps_chars_processed(void) {
   GPS_GET(uint32_t, GPS_SOURCE(0u, s_p.chars_processed));
 }
@@ -240,6 +298,11 @@ void hal_gps_engine_mock_set_time(int hour, int minute, int second) {
                s_mock.second = second);
 }
 
+void hal_gps_engine_mock_set_utc(const hal_gps_utc_t *utc) {
+  GPS_MOCK_SET(s_mock.utc_available = utc != nullptr;
+               s_mock.utc = utc != nullptr ? *utc : hal_gps_utc_t{});
+}
+
 void hal_gps_engine_mock_set_altitude(double altitude_m) {
   GPS_MOCK_SET(s_mock.altitude_m = altitude_m);
 }
@@ -268,9 +331,7 @@ void hal_gps_engine_mock_set_horizontal_accuracy(double accuracy_m) {
 void hal_gps_engine_mock_reset(void) {
   gps_ensure_mutex();
   hal_mutex_lock(s_mutex);
-  gps_nmea_init(&s_p);
-  s_last_seq = 0u;
-  s_commit_ms = 0u;
+  gps_reset_parser_locked();
   s_mock = {};
   s_mock_injection_active = true;
   hal_mutex_unlock(s_mutex);

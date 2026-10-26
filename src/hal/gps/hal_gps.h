@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hal/core/hal_layout_check.h"
+
 #include "hal/core/hal_config.h"
 
 #ifdef __cplusplus
@@ -182,6 +184,45 @@ int hal_gps_time_hour(void);
 int hal_gps_time_minute(void);
 /** @brief Second (0-59). */
 int hal_gps_time_second(void);
+
+/**
+ * @brief UTC date and time reported by one RMC sentence.
+ *
+ * Filled by hal_gps_get_utc(). All calendar fields come from the same
+ * sentence.
+ */
+typedef struct {
+  uint16_t year;   /**< Four-digit year, 2000..2099. */
+  uint8_t month;   /**< Month, 1..12. */
+  uint8_t day;     /**< Day of the month, 1..31. */
+  uint8_t hour;    /**< Hour, 0..23. */
+  uint8_t minute;  /**< Minute, 0..59. */
+  uint8_t second;  /**< Second, 0..59. */
+  uint32_t age_ms; /**< Milliseconds since the sentence was parsed. */
+} hal_gps_utc_t;
+
+/**
+ * @brief Read the UTC date and time of the latest RMC sentence with a fix.
+ *
+ * Only an RMC sentence with a correct checksum, a status field of exactly `A`,
+ * a time of `hhmmss` with an optional fraction of 1 to 6 digits and a date of
+ * exactly `ddmmyy` updates the value, and only when they form a valid
+ * calendar date and time. GGA time, sentences without a fix and a sentence
+ * with a missing or malformed field keep the previous value and its age, so
+ * the date never comes from a different sentence than the time. A leap second
+ * (60) is not accepted.
+ *
+ * The age counts from the hal_gps_update() or hal_gps_encode() call that
+ * parsed the sentence. Bytes that waited in the transport buffer before that
+ * call make the data older by their waiting time. When the fix is lost no new
+ * value arrives and the age keeps growing, so compare it with the freshness
+ * the application needs.
+ *
+ * @param[out] out_utc Receives the date, time and age; unchanged on error.
+ * @return HAL_OK, HAL_EINVAL for a NULL @p out_utc, or HAL_EAGAIN when no
+ *         such sentence was parsed since init.
+ */
+hal_status_t hal_gps_get_utc(hal_gps_utc_t *out_utc);
 
 /* ── Diagnostics (for debugging GPS reception issues) ────────────────── */
 

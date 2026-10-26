@@ -6,6 +6,10 @@ This example reads GPS data and services a separate serial port for transmit
 and receive tests. A disconnected GPS receiver or test-port loop does not
 stop the other service.
 
+Once per second the program logs the position, or the reception counters
+while the receiver has no fix. A second line shows the UTC date and time of
+the latest RMC sentence with a fix and how old that value is.
+
 The base application uses hardware UARTs. The GPS runs at 9600 baud and the
 test port at 115200 baud. `device_tree.json` describes the wiring of every
 assembly, and the program takes ports, pins and serial settings from the

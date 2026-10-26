@@ -33,6 +33,10 @@ void hal_mock_gps_set_time(int hour, int minute, int second) {
   hal_gps_engine_mock_set_time(hour, minute, second);
 }
 
+void hal_mock_gps_set_utc(const hal_gps_utc_t *utc) {
+  hal_gps_engine_mock_set_utc(utc);
+}
+
 void hal_mock_gps_set_altitude_m(double altitude_m) {
   hal_gps_engine_mock_set_altitude(altitude_m);
 }

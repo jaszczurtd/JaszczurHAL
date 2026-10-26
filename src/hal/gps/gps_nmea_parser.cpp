@@ -11,12 +11,68 @@
  * No HAL/Arduino dependency: age and threading are handled by the facade. */
 
 #define GPS_KMPH_PER_KNOT 1.852
+/* Range of the two-digit RMC year. */
+#define GPS_UTC_MIN_YEAR 2000u
+#define GPS_UTC_MAX_YEAR (GPS_UTC_MIN_YEAR + 99u)
+/* Digits of the RMC hhmmss time and ddmmyy date. */
+#define GPS_RMC_FIELD_DIGITS 6u
+/* Longest fraction of seconds accepted in an RMC time. With hhmmss and the
+ * dot the term stays shorter than the term buffer holds, so a term cut short
+ * there never passes as well formed. */
+#define GPS_UTC_MAX_FRACTION_DIGITS 6u
+JB_STATIC_ASSERT(GPS_RMC_FIELD_DIGITS + 1u + GPS_UTC_MAX_FRACTION_DIGITS <
+                     GPS_NMEA_TERM_SIZE - 1u,
+                 "a cut RMC time term must not look well formed");
 
 enum { SENT_OTHER = 0, SENT_RMC, SENT_GGA, SENT_GSA, SENT_GSV, SENT_GST };
 
 static double raw_to_double(const gps_raw_degrees_t *d) {
   double v = d->deg + d->billionths / 1000000000.0;
   return d->negative ? -v : v;
+}
+
+/* Fields of the DDMMYY date and HHMMSScc time values. */
+static uint32_t date_year(uint32_t date) {
+  return (date % 100u) + GPS_UTC_MIN_YEAR;
+}
+static uint32_t date_month(uint32_t date) { return (date / 100u) % 100u; }
+static uint32_t date_day(uint32_t date) { return date / 10000u; }
+static uint32_t time_hour(uint32_t time) { return time / 1000000u; }
+static uint32_t time_minute(uint32_t time) { return (time / 10000u) % 100u; }
+static uint32_t time_second(uint32_t time) { return (time / 100u) % 100u; }
+
+/* True when @p t starts with @p n decimal digits. */
+static bool starts_with_digits(const char *t, size_t n) {
+  for (size_t i = 0u; i < n; ++i) {
+    if (isdigit((unsigned char)t[i]) == 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/* The field checks take the received length, not strlen(): a NUL byte inside
+ * a field must not end it early. */
+
+/* hhmmss, optionally followed by a dot and 1..GPS_UTC_MAX_FRACTION_DIGITS
+ * digits. */
+static bool rmc_time_is_well_formed(const char *t, size_t len) {
+  if (len < GPS_RMC_FIELD_DIGITS ||
+      !starts_with_digits(t, GPS_RMC_FIELD_DIGITS)) {
+    return false;
+  }
+  if (len == GPS_RMC_FIELD_DIGITS) {
+    return true;
+  }
+  const size_t fraction = len - GPS_RMC_FIELD_DIGITS - 1u;
+  return t[GPS_RMC_FIELD_DIGITS] == '.' && fraction >= 1u &&
+         fraction <= GPS_UTC_MAX_FRACTION_DIGITS &&
+         starts_with_digits(t + GPS_RMC_FIELD_DIGITS + 1u, fraction);
+}
+
+/* Exactly ddmmyy. */
+static bool rmc_date_is_well_formed(const char *t, size_t len) {
+  return len == GPS_RMC_FIELD_DIGITS && starts_with_digits(t, len);
 }
 
 /* ── Sentence-type detection by the 3-char suffix (any talker) ───────────── */
@@ -53,6 +109,31 @@ static uint8_t *inview_slot(gps_nmea_t *p) {
 
 /* ── Commit: copy staged values out once a sentence passes checksum ──────── */
 
+/* Commits the date and time of the current RMC sentence when its status is
+ * exactly A, its time and date fields are well formed and they form a valid
+ * calendar value. A leap second (60) is refused. */
+static void commit_utc(gps_nmea_t *p) {
+  if (!p->new_status_ok || !p->new_time_ok || !p->new_date_ok) {
+    return;
+  }
+  const jh_calendar_datetime_t utc = {
+      (uint16_t)date_year(p->new_date),
+      (uint8_t)date_month(p->new_date),
+      (uint8_t)date_day(p->new_date),
+      (uint8_t)time_hour(p->new_time),
+      (uint8_t)time_minute(p->new_time),
+      (uint8_t)time_second(p->new_time),
+      0u,
+  };
+  if (jh_calendar_validate_datetime(&utc, GPS_UTC_MIN_YEAR, GPS_UTC_MAX_YEAR) !=
+      HAL_OK) {
+    return;
+  }
+  p->utc = utc;
+  p->utc_valid = true;
+  ++p->utc_commit_seq;
+}
+
 static void commit_sentence(gps_nmea_t *p) {
   ++p->passed_checksum;
   if (p->sentence_has_fix)
@@ -72,6 +153,7 @@ static void commit_sentence(gps_nmea_t *p) {
       ++p->loc_commit_seq;
       p->speed = p->new_speed;
       p->course = p->new_course;
+      commit_utc(p);
     }
     break;
   case SENT_GGA:
@@ -113,15 +195,18 @@ static void commit_sentence(gps_nmea_t *p) {
 /* Decode one finished term given (sentence_type, term_number). */
 static void decode_term(gps_nmea_t *p) {
   const char *t = p->term;
+  const size_t len = p->term_offset; /* received bytes, NUL included */
   const uint8_t n = p->term_number;
   switch (p->sentence_type) {
   case SENT_RMC:
     switch (n) {
     case 1:
       p->new_time = (uint32_t)hal_gps_nmea_decimal_x100(t);
+      p->new_time_ok = rmc_time_is_well_formed(t, len);
       break;
     case 2:
       p->sentence_has_fix = (t[0] == 'A');
+      p->new_status_ok = len == 1u && t[0] == 'A';
       break;
     case 3:
       hal_gps_nmea_degrees(t, &p->new_lat.deg, &p->new_lat.billionths);
@@ -145,6 +230,7 @@ static void decode_term(gps_nmea_t *p) {
       break;
     case 9:
       p->new_date = (uint32_t)atol(t);
+      p->new_date_ok = rmc_date_is_well_formed(t, len);
       break;
     default:
       break;
@@ -282,6 +368,9 @@ bool gps_nmea_encode(gps_nmea_t *p, char c) {
     p->sentence_type = SENT_OTHER;
     p->is_checksum_term = false;
     p->sentence_has_fix = false;
+    p->new_status_ok = false;
+    p->new_time_ok = false;
+    p->new_date_ok = false;
     return false;
   default:
     if (p->term_offset < sizeof(p->term) - 1) {
@@ -321,13 +410,9 @@ uint8_t gps_nmea_satellites_in_view(const gps_nmea_t *p) {
   return (uint8_t)(total > 255u ? 255u : total);
 }
 
-int gps_nmea_year(const gps_nmea_t *p) { return (int)((p->date % 100) + 2000); }
-int gps_nmea_month(const gps_nmea_t *p) { return (int)((p->date / 100) % 100); }
-int gps_nmea_day(const gps_nmea_t *p) { return (int)(p->date / 10000); }
-int gps_nmea_hour(const gps_nmea_t *p) { return (int)(p->time / 1000000); }
-int gps_nmea_minute(const gps_nmea_t *p) {
-  return (int)((p->time / 10000) % 100);
-}
-int gps_nmea_second(const gps_nmea_t *p) {
-  return (int)((p->time / 100) % 100);
-}
+int gps_nmea_year(const gps_nmea_t *p) { return (int)date_year(p->date); }
+int gps_nmea_month(const gps_nmea_t *p) { return (int)date_month(p->date); }
+int gps_nmea_day(const gps_nmea_t *p) { return (int)date_day(p->date); }
+int gps_nmea_hour(const gps_nmea_t *p) { return (int)time_hour(p->time); }
+int gps_nmea_minute(const gps_nmea_t *p) { return (int)time_minute(p->time); }
+int gps_nmea_second(const gps_nmea_t *p) { return (int)time_second(p->time); }

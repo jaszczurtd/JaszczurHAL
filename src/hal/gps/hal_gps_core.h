@@ -13,6 +13,8 @@
 #include "hal/core/hal_target.h"
 #ifdef HAL_ENABLE_GPS
 
+#include "hal/gps/hal_gps.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -31,6 +33,7 @@ void hal_gps_engine_mock_set_age(uint32_t age_ms);
 void hal_gps_engine_mock_set_speed(double kmph);
 void hal_gps_engine_mock_set_date(int year, int month, int day);
 void hal_gps_engine_mock_set_time(int hour, int minute, int second);
+void hal_gps_engine_mock_set_utc(const hal_gps_utc_t *utc);
 void hal_gps_engine_mock_set_altitude(double altitude_m);
 void hal_gps_engine_mock_set_course(double course_deg);
 void hal_gps_engine_mock_set_dop(double hdop, double vdop, double pdop);

@@ -1142,6 +1142,15 @@ void hal_mock_gps_set_speed(double kmph);
 void hal_mock_gps_set_date(int year, int month, int day);
 /** @brief Set the mock GPS time fields (UTC). */
 void hal_mock_gps_set_time(int hour, int minute, int second);
+#ifdef HAL_ENABLE_GPS
+#include "hal/gps/hal_gps.h"
+/**
+ * @brief Set the value returned by hal_gps_get_utc(), including its age.
+ * @param utc Date, time and age to report, or NULL to make the getter return
+ *            HAL_EAGAIN.
+ */
+void hal_mock_gps_set_utc(const hal_gps_utc_t *utc);
+#endif
 /** @brief Set the mock GPS altitude (metres). */
 void hal_mock_gps_set_altitude_m(double altitude_m);
 /** @brief Set the mock GPS course over ground (degrees). */

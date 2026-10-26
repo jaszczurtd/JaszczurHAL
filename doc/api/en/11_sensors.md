@@ -1054,6 +1054,14 @@ int hal_gps_time_hour(void);   // 0-23
 int hal_gps_time_minute(void); // 0-59
 int hal_gps_time_second(void); // 0-59
 
+// UTC date and time of one RMC sentence with a fix, with its age
+typedef struct {
+  uint16_t year;   // 2000-2099
+  uint8_t  month, day, hour, minute, second;
+  uint32_t age_ms; // ms since the sentence was parsed
+} hal_gps_utc_t;
+hal_status_t hal_gps_get_utc(hal_gps_utc_t *out_utc);
+
 // Diagnostics
 uint32_t hal_gps_chars_processed(void);    // total bytes fed into the parser
 uint32_t hal_gps_passed_checksum(void);    // NMEA sentences that passed checksum
@@ -1062,13 +1070,38 @@ uint32_t hal_gps_sentences_with_fix(void); // valid sentences containing a locat
 int      hal_gps_serial_available(void);   // bytes waiting in the serial RX buffer
 ```
 
+**Date and time from one sentence:** the separate date and time getters return
+the latest parsed fields, and these may come from different sentences: GGA
+updates the time but not the date, so around midnight the pair can name the
+wrong day. `hal_gps_get_utc()` returns the date and time of one RMC sentence
+with a fix together with the age of that value. The sentence needs a status
+of exactly `A`, a time of `hhmmss` with an optional fraction of 1 to 6 digits
+and a date of exactly `ddmmyy`. A missing or malformed field, an impossible
+date and a leap second leave the previous value and its age unchanged. The call
+returns `HAL_EAGAIN` until the first such sentence arrives and `HAL_EINVAL`
+for a `NULL` pointer.
+
+The age starts when `hal_gps_update()` parses the sentence, so bytes that
+waited in the transport buffer are older by their waiting time. After the fix
+is lost the age keeps growing; the application decides how old a time it
+still accepts.
+
+```c
+hal_gps_utc_t utc;
+if (hal_gps_get_utc(&utc) == HAL_OK && utc.age_ms <= 2000u) {
+  const uint32_t epoch = hal_time_from_components(
+      utc.year, utc.month, utc.day, utc.hour, utc.minute, utc.second);
+  deb("UTC epoch %lu", (unsigned long)epoch);
+}
+```
+
 **Architecture:** `src/hal/gps/hal_gps.cpp` is the only transport facade. It owns
 initialization, polling, SoftwareSerial framing fallback, serial availability
 and compile-time selection between `hal_uart` and `hal_swserial`. RP2040, RP2350
 and STM32G474 use the same file and only the selected HAL transport supplies
 target-specific behavior.
 
-`hal/gps/hal_gps_core.cpp` feeds bytes to `gps_nmea_parser.cpp`, calculates position-data age, collects diagnostics, and provides all public getters. A mutex protects the shared state. The parser comes from TinyGPS++ (LGPL); GSA/GSV/GST support follows the field layout in minmea. Mock functions update that same parser state rather than providing a separate set of getters.
+`hal/gps/hal_gps_core.cpp` feeds bytes to `gps_nmea_parser.cpp`, calculates the age of the position and UTC data, collects diagnostics, and provides all public getters. A mutex protects the shared state. The parser comes from TinyGPS++ (LGPL); GSA/GSV/GST support follows the field layout in minmea. Mock functions update that same parser state rather than providing a separate set of getters.
 
 **Thread safety:** one internal `hal_mutex_t` protects parser state, mock
 injection, byte feeds and all accessors. Initialization remains a singleton
@@ -1124,6 +1157,7 @@ void hal_mock_gps_set_age(uint32_t age_ms);                    // control hal_gp
 void hal_mock_gps_set_speed(double kmph);                      // control hal_gps_speed_kmph()
 void hal_mock_gps_set_date(int year, int month, int day);      // control date accessors
 void hal_mock_gps_set_time(int hour, int minute, int second);  // control time accessors
+void hal_mock_gps_set_utc(const hal_gps_utc_t *utc);           // control hal_gps_get_utc(); NULL = no time
 void hal_mock_gps_set_altitude_m(double altitude_m);
 void hal_mock_gps_set_course_deg(double course_deg);
 void hal_mock_gps_set_dop(double hdop, double vdop, double pdop);

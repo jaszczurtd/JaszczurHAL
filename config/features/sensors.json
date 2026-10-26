@@ -64,7 +64,8 @@
           "src/hal/gps/gps_nmea_parser.cpp",
           "src/hal/gps/hal_gps.cpp",
           "src/hal/gps/hal_gps_core.cpp",
-          "src/hal/gps/hal_gps_nmea_utils.cpp"
+          "src/hal/gps/hal_gps_nmea_utils.cpp",
+          "src/hal/time/jh_calendar.c"
         ]
       }
     },

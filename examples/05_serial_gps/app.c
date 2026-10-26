@@ -8,6 +8,8 @@
 
 #if !defined(EXAMPLE_SERIAL_GPS_USE_SWSERIAL)
 
+#include "gps_report.h"
+
 #include <hal/core/hal_app.h>
 #include <hal/gps/hal_gps.h>
 #include <hal/serial/hal_serial.h>
@@ -17,10 +19,8 @@
 
 /* Ports, pins and serial settings come from device_tree.json. Only the RP
  * assemblies wire the test port (testUart). */
-#define REPORT_PERIOD_MS 1000u
 #define ECHO_TX_PERIOD_MS 2000u
 
-static uint32_t s_last_report_ms = 0u;
 #if defined(JH_HW_BUS_TEST_UART_UART_PORT)
 static hal_uart_t s_echo_uart = NULL;
 static uint32_t s_last_echo_tx_ms = 0u;
@@ -92,24 +92,6 @@ static void service_uart_echo(uint32_t now) {
 }
 #endif
 
-static void report_gps(uint32_t now) {
-  if ((uint32_t)(now - s_last_report_ms) < REPORT_PERIOD_MS) {
-    return;
-  }
-  s_last_report_ms = now;
-
-  if (hal_gps_location_is_valid()) {
-    deb("GPS: %.6f, %.6f speed=%.1f km/h sats=%lu", hal_gps_latitude(),
-        hal_gps_longitude(), hal_gps_speed_kmph(),
-        (unsigned long)hal_gps_satellites_used());
-  } else {
-    deb("GPS: waiting for fix, chars=%lu valid=%lu failed=%lu",
-        (unsigned long)hal_gps_chars_processed(),
-        (unsigned long)hal_gps_passed_checksum(),
-        (unsigned long)hal_gps_failed_checksum());
-  }
-}
-
 void app_start(void) {
   hal_debug_init_default();
   deb("");
@@ -130,7 +112,7 @@ void app_task0(void) {
 #if defined(JH_HW_BUS_TEST_UART_UART_PORT)
   service_uart_echo(now);
 #endif
-  report_gps(now);
+  gps_report(now, "GPS");
   hal_delay_ms(10u);
 }
 

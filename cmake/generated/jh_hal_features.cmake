@@ -3,7 +3,7 @@ include_guard(GLOBAL)
 
 set(JH_HAL_FEATURE_SCHEMA_VERSION 1)
 set(JH_HAL_FEATURE_GENERATOR_VERSION 2)
-set(JH_HAL_FEATURE_REGISTRY_DIGEST "02d4880a0171d68ce12b833dba51c53d21721edede51193a6cc0fe73ef73af92")
+set(JH_HAL_FEATURE_REGISTRY_DIGEST "d11cedd623c30e77f7d3456f2e88a318fb311e2cddb92f93772cdd0beeed692f")
 set(JH_HAL_FEATURE_SCHEMA_DIGEST "2c12d1033fd2d687c9cf3905c9ca9d67c41241930fc3cb7c31f9f2b3e7812e07")
 
 set(JH_HAL_FEATURE_SYMBOLS
@@ -576,6 +576,7 @@ set(JH_HAL_FEATURE_HAL_ENABLE_GPS_BUILD_EFFECT_PORTABLE_SOURCES
     "src/hal/gps/hal_gps.cpp"
     "src/hal/gps/hal_gps_core.cpp"
     "src/hal/gps/hal_gps_nmea_utils.cpp"
+    "src/hal/time/jh_calendar.c"
 )
 
 set(JH_HAL_FEATURE_HAL_ENABLE_HC595_DOMAIN "buses")

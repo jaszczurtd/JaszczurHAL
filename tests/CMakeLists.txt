@@ -2446,6 +2446,7 @@ add_executable(test_gps_transport_handoff
     ${CMAKE_SOURCE_DIR}/src/hal/gps/hal_gps_core.cpp
     ${CMAKE_SOURCE_DIR}/src/hal/gps/gps_nmea_parser.cpp
     ${CMAKE_SOURCE_DIR}/src/hal/gps/hal_gps_nmea_utils.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/time/jh_calendar.c
     ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
 target_include_directories(test_gps_transport_handoff PRIVATE
     ${CMAKE_SOURCE_DIR}/src)

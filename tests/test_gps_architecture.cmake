@@ -75,6 +75,7 @@ foreach(_owned_symbol IN ITEMS
         hal_gps_time_hour
         hal_gps_time_minute
         hal_gps_time_second
+        hal_gps_get_utc
         hal_gps_chars_processed
         hal_gps_passed_checksum
         hal_gps_failed_checksum

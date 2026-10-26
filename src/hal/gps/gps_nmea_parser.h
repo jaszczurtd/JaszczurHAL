@@ -17,6 +17,7 @@
  */
 
 #include "hal/core/hal_layout_check.h"
+#include "hal/time/jh_calendar.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -53,6 +54,8 @@ typedef struct {
   int32_t new_gst_smaj, new_gst_smin;          /* value * 100, metres */
   uint32_t new_date, new_time, new_sats_used;
   uint8_t new_fix_quality, new_fix_mode, new_sats_in_view;
+  /* RMC status, time and date fields of this sentence are well formed. */
+  bool new_status_ok, new_time_ok, new_date_ok;
 
   /* ── committed values (the public interface) ─────────────────────── */
   bool loc_valid, loc_updated;
@@ -61,6 +64,12 @@ typedef struct {
 
   bool date_valid, time_valid;
   uint32_t date, time; /* DDMMYY, HHMMSScc                 */
+
+  /* Date and time of the last RMC sentence with a fix whose own date and
+   * time fields form a valid calendar value. */
+  bool utc_valid;
+  uint32_t utc_commit_seq; /* bumped on each UTC commit             */
+  jh_calendar_datetime_t utc;
 
   int32_t speed, course, altitude; /* value * 100                      */
   int32_t hdop, vdop, pdop;        /* value * 100                      */
