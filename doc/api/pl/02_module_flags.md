@@ -480,6 +480,7 @@ Zestaw włączonych modułów decyduje, które zależności zostaną skompilowan
 oraz API czasu lokalnego. Z `HAL_ENABLE_RTC` może przywracać stan z RTC i
 zapisywać zwalidowane wyniki NTP. Czyste funkcje pomocnicze
 `hal_get_seconds()`, `hal_time_from_components(...)`,
+`hal_time_utc_to_cet_cest_ex(...)`,
 `hal_time_is_daylight_saving_time(...)`,
 `hal_time_adjust_cet_cest(...)`, `hal_time_is_in_range(...)` oraz
 `hal_time_extract_minutes(...)` pozostają dostępne bezwarunkowo, bez

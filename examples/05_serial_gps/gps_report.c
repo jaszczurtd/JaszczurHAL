@@ -7,6 +7,7 @@
 #include <hal/gps/hal_gps.h>
 #include <hal/serial/hal_serial.h>
 #include <hal/system/hal_system.h>
+#include <hal/time/hal_time.h>
 
 #define REPORT_PERIOD_MS 1000u
 /* A time older than this no longer names the current second. */
@@ -24,6 +25,20 @@ static void report_utc(const char *label) {
       (unsigned)utc.year, (unsigned)utc.month, (unsigned)utc.day,
       (unsigned)utc.hour, (unsigned)utc.minute, (unsigned)utc.second,
       (unsigned long)utc.age_ms, utc.age_ms > UTC_MAX_AGE_MS ? " (stale)" : "");
+  if (utc.age_ms <= UTC_MAX_AGE_MS) {
+    const uint32_t epoch = hal_time_from_components(
+        utc.year, utc.month, utc.day, utc.hour, utc.minute, utc.second);
+    if (epoch == 0u) {
+      return;
+    }
+    hal_time_local_datetime_t local;
+    if (hal_time_utc_to_cet_cest_ex(epoch, &local) == HAL_OK) {
+      deb("%s: %s %04u-%02u-%02u %02u:%02u:%02u", label,
+          local.utc_offset_minutes == 120u ? "CEST" : "CET",
+          (unsigned)local.year, (unsigned)local.month, (unsigned)local.day,
+          (unsigned)local.hour, (unsigned)local.minute, (unsigned)local.second);
+    }
+  }
 }
 
 void gps_report(uint32_t now, const char *label) {

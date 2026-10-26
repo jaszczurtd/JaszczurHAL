@@ -51,11 +51,9 @@ static bool hal_time_make_datetime(int year, int month, int day, int hour,
   return true;
 }
 
-bool hal_time_is_daylight_saving_time(int year, int month, int day) {
-  jh_calendar_datetime_t datetime = {};
-  if (!hal_time_make_datetime(year, month, day, 0, 0, &datetime)) {
-    return false;
-  }
+static bool hal_time_is_summer_time(const jh_calendar_datetime_t &datetime,
+                                    uint8_t transition_hour) {
+  const uint8_t month = datetime.month;
   if (month < 3 || month > 10) {
     return false;
   }
@@ -74,7 +72,45 @@ bool hal_time_is_daylight_saving_time(int year, int month, int day) {
     return false;
   }
   const int last_sunday = (int)days_in_month - (int)last_day_weekday;
-  return month == 3 ? day >= last_sunday : day < last_sunday;
+  if (datetime.day == last_sunday) {
+    return month == 3 ? datetime.hour >= transition_hour
+                      : datetime.hour < transition_hour;
+  }
+  return month == 3 ? datetime.day > last_sunday : datetime.day < last_sunday;
+}
+
+bool hal_time_is_daylight_saving_time(int year, int month, int day) {
+  jh_calendar_datetime_t datetime = {};
+  return hal_time_make_datetime(year, month, day, 0, 0, &datetime) &&
+         hal_time_is_summer_time(datetime, 0u);
+}
+
+hal_status_t hal_time_utc_to_cet_cest_ex(uint64_t utc_epoch,
+                                         hal_time_local_datetime_t *out_local) {
+  if (out_local == nullptr) {
+    return HAL_EINVAL;
+  }
+  jh_calendar_datetime_t datetime = {};
+  hal_status_t status =
+      jh_calendar_epoch_to_datetime(utc_epoch, JH_CALENDAR_MAX_YEAR, &datetime);
+  if (status != HAL_OK) {
+    return status;
+  }
+  const uint16_t offset_minutes =
+      hal_time_is_summer_time(datetime, 1u) ? 120u : 60u;
+  // The validated UTC epoch is bounded by the calendar, far below UINT64_MAX.
+  status =
+      jh_calendar_epoch_to_datetime(utc_epoch + (uint64_t)offset_minutes * 60u,
+                                    JH_CALENDAR_MAX_YEAR, &datetime);
+  if (status != HAL_OK) {
+    return status;
+  }
+  const hal_time_local_datetime_t local = {
+      datetime.year,   datetime.month,  datetime.day,     datetime.hour,
+      datetime.minute, datetime.second, datetime.weekday, offset_minutes,
+  };
+  *out_local = local;
+  return HAL_OK;
 }
 
 void hal_time_adjust_cet_cest(int *year, int *month, int *day, int *hour,

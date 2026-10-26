@@ -9,6 +9,10 @@ stop the other service.
 Once per second the program logs the position, or the reception counters
 while the receiver has no fix. A second line shows the UTC date and time of
 the latest RMC sentence with a fix and how old that value is.
+For UTC no older than two seconds, another line shows CET/CEST calculated by
+`hal_time_utc_to_cet_cest_ex()`. This presentation uses the exact UTC
+transition hour, preserves the original timestamp, and needs no system
+time service or timezone configuration.
 
 The base application uses hardware UARTs. The GPS runs at 9600 baud and the
 test port at 115200 baud. `device_tree.json` describes the wiring of every

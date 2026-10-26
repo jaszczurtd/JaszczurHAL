@@ -413,6 +413,10 @@ void test_daylight_saving_interval_uses_last_sundays(void) {
   TEST_ASSERT_FALSE(hal_time_is_daylight_saving_time(2024, 10, 27));
   TEST_ASSERT_FALSE(hal_time_is_daylight_saving_time(2024, 1, 15));
   TEST_ASSERT_TRUE(hal_time_is_daylight_saving_time(2024, 7, 15));
+  TEST_ASSERT_TRUE(hal_time_is_daylight_saving_time(2024, 4, 30));
+  TEST_ASSERT_TRUE(hal_time_is_daylight_saving_time(2024, 9, 30));
+  TEST_ASSERT_FALSE(hal_time_is_daylight_saving_time(2024, 11, 1));
+  TEST_ASSERT_FALSE(hal_time_is_daylight_saving_time(2024, 2, 1));
 }
 
 void test_daylight_saving_rejects_invalid_dates(void) {
@@ -486,6 +490,88 @@ void test_half_open_time_range_contract(void) {
   TEST_ASSERT_FALSE(hal_time_is_in_range(5, 10, 0));
 }
 
+void test_utc_cet_cest_offsets_and_calendar_rollover(void) {
+  const struct {
+    uint64_t epoch;
+    hal_time_local_datetime_t expected;
+  } cases[] = {
+      {0u, {1970u, 1u, 1u, 1u, 0u, 0u, 4u, 60u}},
+      {UINT64_C(1704067199), {2024u, 1u, 1u, 0u, 59u, 59u, 1u, 60u}},
+      {UINT64_C(1721086939), {2024u, 7u, 16u, 1u, 42u, 19u, 2u, 120u}},
+      {UINT64_C(4294967296), {2106u, 2u, 7u, 7u, 28u, 16u, 0u, 60u}},
+  };
+  for (const auto &item : cases) {
+    hal_time_local_datetime_t local = {};
+    TEST_ASSERT_EQUAL_INT(HAL_OK,
+                          hal_time_utc_to_cet_cest_ex(item.epoch, &local));
+    TEST_ASSERT_EQUAL_UINT16(item.expected.year, local.year);
+    TEST_ASSERT_EQUAL_UINT8(item.expected.month, local.month);
+    TEST_ASSERT_EQUAL_UINT8(item.expected.day, local.day);
+    TEST_ASSERT_EQUAL_UINT8(item.expected.hour, local.hour);
+    TEST_ASSERT_EQUAL_UINT8(item.expected.minute, local.minute);
+    TEST_ASSERT_EQUAL_UINT8(item.expected.second, local.second);
+    TEST_ASSERT_EQUAL_UINT8(item.expected.weekday, local.weekday);
+    TEST_ASSERT_EQUAL_UINT16(item.expected.utc_offset_minutes,
+                             local.utc_offset_minutes);
+  }
+}
+
+void test_utc_cet_cest_transitions_occur_at_one_utc(void) {
+  const struct {
+    uint64_t epoch;
+    uint8_t month, day, hour, minute, second;
+    uint16_t offset;
+  } cases[] = {
+      {UINT64_C(1711846799), 3u, 31u, 1u, 59u, 59u, 60u},
+      {UINT64_C(1711846800), 3u, 31u, 3u, 0u, 0u, 120u},
+      {UINT64_C(1711846801), 3u, 31u, 3u, 0u, 1u, 120u},
+      {UINT64_C(1729987200), 10u, 27u, 2u, 0u, 0u, 120u},
+      {UINT64_C(1729990799), 10u, 27u, 2u, 59u, 59u, 120u},
+      {UINT64_C(1729990800), 10u, 27u, 2u, 0u, 0u, 60u},
+      {UINT64_C(1729990801), 10u, 27u, 2u, 0u, 1u, 60u},
+  };
+  for (const auto &item : cases) {
+    hal_time_local_datetime_t local = {};
+    TEST_ASSERT_EQUAL_INT(HAL_OK,
+                          hal_time_utc_to_cet_cest_ex(item.epoch, &local));
+    TEST_ASSERT_EQUAL_UINT16(2024u, local.year);
+    TEST_ASSERT_EQUAL_UINT8(item.month, local.month);
+    TEST_ASSERT_EQUAL_UINT8(item.day, local.day);
+    TEST_ASSERT_EQUAL_UINT8(item.hour, local.hour);
+    TEST_ASSERT_EQUAL_UINT8(item.minute, local.minute);
+    TEST_ASSERT_EQUAL_UINT8(item.second, local.second);
+    TEST_ASSERT_EQUAL_UINT8(0u, local.weekday);
+    TEST_ASSERT_EQUAL_UINT16(item.offset, local.utc_offset_minutes);
+  }
+}
+
+void test_utc_cet_cest_errors_preserve_output(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_time_utc_to_cet_cest_ex(0u, nullptr));
+  const uint64_t maximum_epoch = UINT64_C(2005949145599);
+  hal_time_local_datetime_t local = {};
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_time_utc_to_cet_cest_ex(maximum_epoch - 3600u, &local));
+  TEST_ASSERT_EQUAL_UINT16(65535u, local.year);
+  TEST_ASSERT_EQUAL_UINT8(12u, local.month);
+  TEST_ASSERT_EQUAL_UINT8(31u, local.day);
+  TEST_ASSERT_EQUAL_UINT8(23u, local.hour);
+  TEST_ASSERT_EQUAL_UINT8(59u, local.minute);
+  TEST_ASSERT_EQUAL_UINT8(59u, local.second);
+  unsigned char before[sizeof(local)];
+  memcpy(before, &local, sizeof(local));
+  const uint64_t invalid[] = {
+      maximum_epoch - 3599u,
+      maximum_epoch,
+      maximum_epoch + 1u,
+      UINT64_MAX,
+  };
+  for (uint64_t epoch : invalid) {
+    TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW,
+                          hal_time_utc_to_cet_cest_ex(epoch, &local));
+    TEST_ASSERT_EQUAL_MEMORY(before, &local, sizeof(local));
+  }
+}
+
 void test_extract_minutes_handles_sign_and_optional_outputs(void) {
   int hours = 0;
   int minutes = 0;
@@ -534,6 +620,9 @@ int main(void) {
   RUN_TEST(
       test_cet_cest_adjustment_leaves_invalid_or_incomplete_input_unchanged);
   RUN_TEST(test_half_open_time_range_contract);
+  RUN_TEST(test_utc_cet_cest_offsets_and_calendar_rollover);
+  RUN_TEST(test_utc_cet_cest_transitions_occur_at_one_utc);
+  RUN_TEST(test_utc_cet_cest_errors_preserve_output);
   RUN_TEST(test_extract_minutes_handles_sign_and_optional_outputs);
   return UNITY_END();
 }

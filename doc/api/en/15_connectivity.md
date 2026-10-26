@@ -2227,6 +2227,19 @@ Calendar calculations and an optional application wall clock, set manually, rest
 
 // Always available; no network dependency.
 unsigned long hal_get_seconds(void);
+typedef struct {
+  uint16_t year;
+  uint8_t month;
+  uint8_t day;
+  uint8_t hour;
+  uint8_t minute;
+  uint8_t second;
+  uint8_t weekday;
+  uint16_t utc_offset_minutes;
+} hal_time_local_datetime_t;
+
+hal_status_t hal_time_utc_to_cet_cest_ex(
+    uint64_t utc_epoch, hal_time_local_datetime_t *out_local);
 uint32_t hal_time_from_components(int year, int month, int day,
                                   int hour, int minute, int second);
 bool     hal_time_is_daylight_saving_time(int year, int month, int day);
@@ -2278,6 +2291,31 @@ starts on the last Sunday in March (inclusive) and ends
 on the last Sunday in October (exclusive), with each transition taking effect
 at 00:00 because no time-of-day argument is available. Invalid dates are
 rejected, and adjustment normalizes day/month/year rollover.
+
+For timestamp conversion, `hal_time_utc_to_cet_cest_ex()` returns local
+`year`, `month`, `day`, `hour`, `minute`, `second`, `weekday` (Sunday = 0),
+and `utc_offset_minutes` (60 for CET, 120 for CEST). Both transitions occur
+at 01:00 UTC on the last Sundays of March and October, following
+[Directive 2000/84/EC, Articles 2-3](https://eur-lex.europa.eu/eli/dir/2000/84/oj/eng).
+The same rules apply throughout the supported years 1970-65535; historical
+timezone changes and leap seconds are not represented.
+
+The function needs neither `HAL_ENABLE_TIME` nor `HAL_ENABLE_RTC`, allocates
+no memory, uses integer arithmetic, and does not modify `TZ` or any clock.
+It returns `HAL_EINVAL` for a NULL output and `HAL_EOVERFLOW` when UTC or
+the resulting local date exceeds year 65535. Errors leave the output
+unchanged. Separate outputs allow concurrent calls. Use the returned offset
+to distinguish the repeated October hour, and keep timestamps in UTC:
+
+```c
+hal_time_local_datetime_t local;
+if (hal_time_utc_to_cet_cest_ex(utc_epoch, &local) == HAL_OK) {
+  // Render local.hour/local.minute; retain utc_epoch for storage and transport.
+}
+```
+
+The [serial GPS example](../../../examples/05_serial_gps/README.md) shows
+this conversion without enabling the system time service.
 
 `hal_time_is_in_range()` implements the half-open interval `[start, end)`.
 `hal_time_extract_minutes()` uses C quotient/remainder semantics and accepts

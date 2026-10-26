@@ -478,6 +478,7 @@ Actual compiled dependencies are controlled by the module set:
 local-time APIs. With `HAL_ENABLE_RTC`, it can restore from RTC and persist
 validated NTP results. The pure
 `hal_get_seconds()`, `hal_time_from_components(...)`,
+`hal_time_utc_to_cet_cest_ex(...)`,
 `hal_time_is_daylight_saving_time(...)`,
 `hal_time_adjust_cet_cest(...)`, `hal_time_is_in_range(...)`, and
 `hal_time_extract_minutes(...)` helpers remain available unconditionally with

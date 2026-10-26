@@ -9,6 +9,10 @@ na drugim porcie nie zatrzymuje obsługi pozostałego urządzenia.
 Co sekundę program wypisuje pozycję, a bez fixa liczniki odebranych danych.
 W drugim wierszu podaje datę i czas UTC ostatniej ramki RMC z fixem oraz wiek
 tej wartości.
+Jeżeli UTC ma najwyżej dwie sekundy, kolejny wiersz pokazuje CET/CEST
+obliczone przez `hal_time_utc_to_cet_cest_ex()`. Prezentacja uwzględnia
+dokładną godzinę zmiany czasu w UTC, zachowuje oryginalny znacznik czasu
+i nie wymaga usługi czasu systemowego ani konfiguracji strefy.
 
 Wersja podstawowa korzysta ze sprzętowego UART. GPS pracuje z prędkością
 9600 baud, a port testowy - 115200 baud. Połączenia każdego montażu opisuje

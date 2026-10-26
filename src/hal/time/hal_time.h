@@ -48,6 +48,38 @@ extern "C" {
 uint32_t hal_time_from_components(int year, int month, int day, int hour,
                                   int minute, int second);
 
+/** @brief Local Gregorian date/time and its offset from UTC. */
+typedef struct {
+  uint16_t year;   /**< Gregorian year in range 1970..65535. */
+  uint8_t month;   /**< Month in range 1..12. */
+  uint8_t day;     /**< Day in range 1..31, valid for the month. */
+  uint8_t hour;    /**< Local hour in range 0..23. */
+  uint8_t minute;  /**< Minute in range 0..59. */
+  uint8_t second;  /**< Second in range 0..59. */
+  uint8_t weekday; /**< Local weekday: Sunday == 0, Saturday == 6. */
+  uint16_t utc_offset_minutes; /**< 60 for CET or 120 for CEST. */
+} hal_time_local_datetime_t;
+
+/**
+ * @brief Convert UTC Unix seconds to local CET/CEST calendar fields.
+ *
+ * Uses the last Sundays of March and October, with both transitions at
+ * 01:00 UTC. These fixed EU rules apply to every accepted year; historical
+ * timezone changes and leap seconds are not represented. The returned offset
+ * distinguishes the repeated local hour at the October transition.
+ *
+ * Available without HAL_ENABLE_TIME or HAL_ENABLE_RTC. Stateless and safe
+ * for concurrent callers with separate outputs; does not change TZ, the
+ * system clock, or the input timestamp. Uses integer calendar arithmetic.
+ *
+ * @param utc_epoch Seconds since 1970-01-01 00:00:00 UTC.
+ * @param out_local Receives local fields and offset; unchanged on error.
+ * @return HAL_OK, HAL_EINVAL for NULL output, or HAL_EOVERFLOW if UTC or
+ * the resulting local date exceeds year 65535.
+ */
+hal_status_t hal_time_utc_to_cet_cest_ex(uint64_t utc_epoch,
+                                         hal_time_local_datetime_t *out_local);
+
 /**
  * @brief Check the Central European date-based daylight-saving interval.
  *
@@ -70,6 +102,8 @@ bool hal_time_is_daylight_saving_time(int year, int month, int day);
  * inside it, normalizing day, month, and year rollover. The minute value is
  * preserved. Invalid input, NULL pointers, and results beyond year 65535 leave
  * all values unchanged.
+ * For conversion of a UTC timestamp with exact transition hours, use
+ * hal_time_utc_to_cet_cest_ex().
  *
  * @param year In/out Gregorian year.
  * @param month In/out Gregorian month.
