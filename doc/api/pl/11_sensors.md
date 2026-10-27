@@ -847,7 +847,10 @@ backendu oddziela ten wspólny cykl życia od obsługi konkretnego układu:
   (`1 Hz`, `1,024 kHz`, `32,768 kHz`). Zapisy daty aktualizują pełny
   kalendarz i czyszczą OSF dopiero po udanym dostępie I2C; wyłączenie CLKOUT
   nie wyłącza podtrzymywanego bateryjnie odmierzania czasu. Błędy operacji I2C
-  są zwracane jako `HAL_EIO`. Funkcje timera oraz
+  są zwracane jako `HAL_EIO`. Bezpośredni odczyt `DS3231::getDateTimeEx()`
+  sprawdza kalendarz w latach 2000..2099 i zakres godzin w trybie 12 h.
+  Niepoprawne wartości dają `HAL_EPROTO`; błąd pozostawia wynik bez zmian.
+  Funkcje timera oraz
   `HAL_RTC_CLKOUT_32_HZ` nie są obsługiwane.
 - **Wewnętrzny RTC STM32G474:** kalendarz w domenie podtrzymywanej, obsługiwany
   bezpośrednio przez rejestry i taktowany z LSE lub LSI. Backend zachowuje informację o
@@ -943,6 +946,9 @@ void hal_mock_rtc_set_flags(hal_rtc_t h, uint8_t flags);
 void hal_mock_rtc_fire_wakeup(hal_rtc_t h);
 ```
 
+`hal_mock_rtc_set_datetime()` zapisuje także niemożliwą datę, więc test może
+odtworzyć nieustawiony RTC, którego odczyt zwraca `HAL_EPROTO`.
+
 **Warianty `_ex` zwracające status:** Każda z powyższych operacji zwracających uchwyt lub
 `bool`, która może zakończyć się błędem, ma dodatkowy wariant `_ex` zwracający
 `hal_status_t` (zobacz [API statusów](01_status_api.md)). `hal_rtc_init_ex()` zapisuje
@@ -956,7 +962,10 @@ przy konwersji czasu uniksowego poza lata 1970..2099. Backendy zwracają
 z zapisanym źródłem zegara, `HAL_ECONFIG` dla zachowanego kalendarza w niezgodnym trybie
 12-godzinnym, `HAL_ETIMEOUT` po przekroczeniu limitu czasu uruchamiania lub operacji na
 rejestrze oraz `HAL_EIO` dla pozostałych błędów backendu. Status inicjalizacji magistrali
-I2C jest przekazywany bez zmian.
+I2C jest przekazywany bez zmian. Odczyt daty, który dotarł do RTC, ale zastał w rejestrach
+niepoprawną datę, na przykład po utracie zasilania PCF8563, zwraca `HAL_EPROTO`. Pozwala
+to odróżnić nieustawiony zegar, który aplikacja może ustawić, od błędu magistrali,
+który warto ponowić.
 
 ```c
 hal_rtc_t rtc = NULL;
@@ -1116,10 +1125,13 @@ mieć status dokładnie `A`, czas `hhmmss` z opcjonalnym ułamkiem od 1 do
 data i sekunda przestępna pozostawiają poprzednią wartość i jej wiek. Do nadejścia pierwszej takiej ramki funkcja zwraca `HAL_EAGAIN`,
 a dla wskaźnika `NULL` zwraca `HAL_EINVAL`.
 
-Wiek liczy się od przetworzenia ramki przez `hal_gps_update()`, więc bajty
-czekające w buforze transportu są starsze o czas tego oczekiwania. Po utracie
-fixa wiek dalej rośnie, a aplikacja sama decyduje, jak stary czas jeszcze
-przyjmuje.
+Wiek liczy się od przetworzenia ramki przez `hal_gps_update()` lub
+`hal_gps_encode()`, więc bajty czekające w buforze transportu są starsze
+o czas tego oczekiwania. Po utracie fixa wiek rośnie modulo 2^32 milisekund
+i zawija się po około 49,7 dnia bez nowej poprawnej ramki RMC. Stara wartość
+może wtedy ponownie wyglądać na świeżą. Poniższe sprawdzenie wieku stosuj
+tylko wtedy, gdy aplikacja może niezależnie ustalić, że od ostatniej poprawnej
+ramki RMC upłynęło mniej niż pełny okres licznika.
 
 ```c
 hal_gps_utc_t utc;

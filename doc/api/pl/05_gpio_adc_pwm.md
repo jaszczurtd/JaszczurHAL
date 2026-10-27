@@ -158,7 +158,7 @@ zostanie wywołana z niewłaściwego rdzenia. Wywołanie zgodnościowej operacji
 [dokumentację magistrali `hal_uart`](09_buses.md) i
 [dokumentację czujnika `hal_gps`](11_sensors.md).
 
-RP2040 SoftwareSerial odbiera zamiast tego przez PIO/DMA i nie instaluje
+RP2040/RP2350 SoftwareSerial odbiera zamiast tego przez PIO/DMA i nie instaluje
 przerwania RX CPU.
 
 **Routing STM32G474:** Identyfikator pinu ma postać `port * 16 + pin`

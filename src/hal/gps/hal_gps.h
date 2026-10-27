@@ -214,9 +214,11 @@ typedef struct {
  *
  * The age counts from the hal_gps_update() or hal_gps_encode() call that
  * parsed the sentence. Bytes that waited in the transport buffer before that
- * call make the data older by their waiting time. When the fix is lost no new
- * value arrives and the age keeps growing, so compare it with the freshness
- * the application needs.
+ * call make the data older by their waiting time. When the fix is lost the
+ * age advances modulo 2^32 milliseconds and wraps after about 49.7 days
+ * without a new valid RMC. A freshness check based on age alone requires an
+ * independent guarantee that the last valid RMC is less than one full
+ * counter period old.
  *
  * @param[out] out_utc Receives the date, time and age; unchanged on error.
  * @return HAL_OK, HAL_EINVAL for a NULL @p out_utc, or HAL_EAGAIN when no

@@ -831,7 +831,10 @@ Internal provider operations separate that lifecycle from backend behavior:
   and partial CLKOUT mapping (`1 Hz`, `1.024 kHz`, `32.768 kHz`). Date writes
   update the complete calendar and clear OSF only after successful I2C access;
   disabling CLKOUT leaves battery-backed timekeeping enabled. Provider I2C
-  failures propagate as `HAL_EIO`. Timer functions and
+  failures propagate as `HAL_EIO`. Direct `DS3231::getDateTimeEx()` reads
+  validate the calendar in years 2000..2099 and the 12-hour range, returning
+  `HAL_EPROTO` for invalid values and leaving the output unchanged on error.
+  Timer functions and
   `HAL_RTC_CLKOUT_32_HZ` are not supported.
 - **STM32G474 internal RTC:** register-level backup-domain calendar using LSE
   or LSI, retained-time integrity, Alarm A polling and IRQ delivery through
@@ -916,6 +919,9 @@ void hal_mock_rtc_set_flags(hal_rtc_t h, uint8_t flags);
 void hal_mock_rtc_fire_wakeup(hal_rtc_t h);
 ```
 
+`hal_mock_rtc_set_datetime()` also stores an impossible date, so a test can
+model an unset RTC whose reads return `HAL_EPROTO`.
+
 **Status-returning `_ex` variants:** every fallible handle/bool operation above
 has an additive `_ex` counterpart returning `hal_status_t` (see
 [Status API](01_status_api.md)). `hal_rtc_init_ex()` produces the handle through
@@ -928,7 +934,10 @@ pool/mutex exhaustion (`HAL_ENOMEM`), and Unix epoch conversion outside
 features (`HAL_EUNSUPPORTED`), retained-source conflicts (`HAL_EBUSY`), an
 incompatible retained 12-hour calendar (`HAL_ECONFIG`), bounded
 startup/register waits (`HAL_ETIMEOUT`), and backend failures (`HAL_EIO`). I2C
-bus init status is propagated unchanged.
+bus init status is propagated unchanged. A date read that reaches the RTC but
+finds registers holding no valid date, for example after a PCF8563 supply loss,
+returns `HAL_EPROTO`. This tells an unset clock, which the application may set,
+from a bus failure worth retrying.
 
 ```c
 hal_rtc_t rtc = NULL;
@@ -1081,10 +1090,13 @@ date and a leap second leave the previous value and its age unchanged. The call
 returns `HAL_EAGAIN` until the first such sentence arrives and `HAL_EINVAL`
 for a `NULL` pointer.
 
-The age starts when `hal_gps_update()` parses the sentence, so bytes that
-waited in the transport buffer are older by their waiting time. After the fix
-is lost the age keeps growing; the application decides how old a time it
-still accepts.
+The age starts when `hal_gps_update()` or `hal_gps_encode()` parses the
+sentence, so bytes that waited in the transport buffer are older by their
+waiting time. After the fix is lost the age advances modulo 2^32 milliseconds
+and wraps after about 49.7 days without a new valid RMC. An old value can then
+look fresh again. Use the age check below only while the application can
+independently establish that the last valid RMC is less than one full counter
+period old.
 
 ```c
 hal_gps_utc_t utc;

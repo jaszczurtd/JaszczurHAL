@@ -88,6 +88,31 @@ void test_pcf8563_provider_translates_datetime_and_flags(void) {
   provider->deinitialize(s_context);
 }
 
+void test_pcf8563_provider_tells_invalid_contents_from_bus_errors(void) {
+  const jh_rtc_provider_ops_t *provider =
+      jh_rtc_i2c_provider_get_ops(HAL_RTC_CHIP_PCF8563);
+  hal_rtc_config_t config = config_for(
+      HAL_RTC_CHIP_PCF8563, (uint8_t)HAL_RTC_PCF8563_DEFAULT_I2C_ADDR);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, provider->initialize(s_context, &config));
+
+  const uint8_t month_13[] = {
+      0x00u, 0x00u, 0x00u, 0x01u, 0x00u, 0x13u, 0x26u,
+  };
+  hal_mock_i2c_inject_rx(month_13, (int)sizeof(month_13));
+  hal_rtc_datetime_t datetime = {};
+  datetime.month = 7u;
+  TEST_ASSERT_EQUAL_INT(HAL_EPROTO,
+                        provider->get_datetime(s_context, &datetime));
+  TEST_ASSERT_EQUAL_UINT8(7u, datetime.month);
+
+  hal_mock_i2c_set_busy(true);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, provider->get_datetime(s_context, &datetime));
+  hal_mock_i2c_set_busy(false);
+  TEST_ASSERT_EQUAL_UINT8(7u, datetime.month);
+
+  provider->deinitialize(s_context);
+}
+
 void test_ds3231_provider_translates_datetime_and_capabilities(void) {
   const jh_rtc_provider_ops_t *provider =
       jh_rtc_i2c_provider_get_ops(HAL_RTC_CHIP_DS3231);
@@ -172,6 +197,7 @@ int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_provider_selection_reports_chip_metadata);
   RUN_TEST(test_pcf8563_provider_translates_datetime_and_flags);
+  RUN_TEST(test_pcf8563_provider_tells_invalid_contents_from_bus_errors);
   RUN_TEST(test_ds3231_provider_translates_datetime_and_capabilities);
   RUN_TEST(test_ds3231_provider_propagates_i2c_failures);
   return UNITY_END();

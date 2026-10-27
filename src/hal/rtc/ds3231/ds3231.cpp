@@ -168,6 +168,9 @@ hal_status_t DS3231::getDateTimeEx(DateTime *out_datetime) {
   if ((buffer[2] & 0x40u) != 0u) {
     const bool pm = (buffer[2] & 0x20u) != 0u;
     const uint8_t hour12 = bcdToDec((byte)(buffer[2] & 0x1Fu));
+    if (hour12 < 1u || hour12 > 12u) {
+      return HAL_EPROTO;
+    }
     hh = hour12 == 12u ? (pm ? 12u : 0u) : (uint8_t)(hour12 + (pm ? 12u : 0u));
   } else {
     hh = bcdToDec((byte)(buffer[2] & 0x3Fu));
@@ -175,6 +178,11 @@ hal_status_t DS3231::getDateTimeEx(DateTime *out_datetime) {
   const uint8_t d = bcdToDec((byte)(buffer[4] & 0x3Fu));
   const uint8_t m = bcdToDec((byte)(buffer[5] & 0x1Fu));
   const uint16_t y = (uint16_t)(bcdToDec(buffer[6]) + 2000u);
+
+  const jh_calendar_datetime_t calendar = {y, m, d, hh, mm, ss, 0u};
+  if (jh_calendar_validate_datetime(&calendar, 2000u, 2099u) != HAL_OK) {
+    return HAL_EPROTO;
+  }
 
   *out_datetime = DateTime(y, m, d, hh, mm, ss);
   return HAL_OK;

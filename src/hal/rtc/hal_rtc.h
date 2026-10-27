@@ -225,7 +225,8 @@ void hal_rtc_deinit(hal_rtc_t h);
  *
  * @param h      Valid handle.
  * @param out_dt Output date-time struct.
- * @return true on successful read, false on communication/argument error.
+ * @return true on successful read, false on communication/argument error or
+ *         when the registers hold no valid date.
  */
 bool hal_rtc_get_datetime(hal_rtc_t h, hal_rtc_datetime_t *out_dt);
 
@@ -365,6 +366,14 @@ hal_status_t hal_rtc_wakeup_get_state_ex(hal_rtc_t h,
  */
 hal_status_t hal_rtc_init_ex(const hal_rtc_config_t *cfg,
                              hal_rtc_t *out_handle);
+/**
+ * @brief Read current date/time with a status.
+ * @param h      Valid handle.
+ * @param out_dt Output date-time struct; written only on success.
+ * @return HAL_OK, HAL_EINVAL for invalid arguments, HAL_EIO for a bus or
+ *         backend failure, or HAL_EPROTO when the RTC answered but its
+ *         registers hold no valid date, for example after a supply loss.
+ */
 hal_status_t hal_rtc_get_datetime_ex(hal_rtc_t h, hal_rtc_datetime_t *out_dt);
 hal_status_t hal_rtc_set_datetime_ex(hal_rtc_t h, const hal_rtc_datetime_t *dt);
 hal_status_t hal_rtc_get_epoch_ex(hal_rtc_t h, uint64_t *out_epoch);

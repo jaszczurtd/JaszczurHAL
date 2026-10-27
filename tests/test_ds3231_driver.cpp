@@ -265,10 +265,51 @@ void test_status_datetime_read_decodes_12h_pm_and_reports_bus_failure(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, s_rtc->getDateTimeEx(&now));
   TEST_ASSERT_EQUAL_UINT8(13u, now.hour());
 
+  const DateTime kept = now;
+  const uint8_t invalid[][7] = {
+      {0x56u, 0x34u, 0x12u, 0x02u, 0x24u, 0x13u, 0x26u}, /* month 13 */
+      {0x56u, 0x34u, 0x12u, 0x02u, 0x24u, 0x00u, 0x26u}, /* month 0 */
+      {0x56u, 0x34u, 0x12u, 0x02u, 0x30u, 0x02u, 0x26u}, /* February 30 */
+      {0x56u, 0x34u, 0x12u, 0x02u, 0x29u, 0x02u, 0x27u}, /* common year */
+      {0x56u, 0x34u, 0x12u, 0x02u, 0x00u, 0x05u, 0x26u}, /* day 0 */
+      {0x60u, 0x34u, 0x12u, 0x02u, 0x24u, 0x05u, 0x26u}, /* second 60 */
+      {0x56u, 0x60u, 0x12u, 0x02u, 0x24u, 0x05u, 0x26u}, /* minute 60 */
+      {0x56u, 0x34u, 0x24u, 0x02u, 0x24u, 0x05u, 0x26u}, /* hour 24 */
+      {0x56u, 0x34u, 0x40u, 0x02u, 0x24u, 0x05u, 0x26u}, /* 12h: hour 0 */
+      {0x56u, 0x34u, 0x53u, 0x02u, 0x24u, 0x05u, 0x26u}, /* 12h: hour 13 */
+      {0x56u, 0x34u, 0x12u, 0x02u, 0x24u, 0x05u, 0xa0u}, /* year 2100 */
+  };
+  for (const auto &value : invalid) {
+    hal_mock_i2c_inject_rx(value, (int)COUNTOF(value));
+    TEST_ASSERT_EQUAL_INT(HAL_EPROTO, s_rtc->getDateTimeEx(&now));
+    TEST_ASSERT_EQUAL_UINT32(kept.unixtime(), now.unixtime());
+  }
+
   hal_mock_i2c_set_busy(true);
   TEST_ASSERT_EQUAL_INT(HAL_EIO, s_rtc->getDateTimeEx(&now));
+  TEST_ASSERT_EQUAL_UINT32(kept.unixtime(), now.unixtime());
   hal_mock_i2c_set_busy(false);
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL, s_rtc->getDateTimeEx(nullptr));
+
+  const uint8_t leap_day[] = {0x59u, 0x59u, 0x23u, 0x03u, 0x29u, 0x02u, 0x00u};
+  hal_mock_i2c_inject_rx(leap_day, (int)COUNTOF(leap_day));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, s_rtc->getDateTimeEx(&now));
+  TEST_ASSERT_EQUAL_UINT16(2000u, now.year());
+  TEST_ASSERT_EQUAL_UINT8(29u, now.day());
+
+  const uint8_t last_year[] = {0x59u, 0x59u, 0x23u, 0x05u, 0x31u, 0x12u, 0x99u};
+  hal_mock_i2c_inject_rx(last_year, (int)COUNTOF(last_year));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, s_rtc->getDateTimeEx(&now));
+  TEST_ASSERT_EQUAL_UINT16(2099u, now.year());
+  TEST_ASSERT_EQUAL_UINT8(31u, now.day());
+
+  const uint8_t twelve_hour_edges[] = {0x52u, 0x72u}; /* 12 AM, 12 PM */
+  for (uint8_t hour : twelve_hour_edges) {
+    uint8_t value[] = {0x56u, 0x34u, hour, 0x02u, 0x24u, 0x05u, 0x26u};
+    hal_mock_i2c_inject_rx(value, (int)COUNTOF(value));
+    TEST_ASSERT_EQUAL_INT(HAL_OK, s_rtc->getDateTimeEx(&now));
+    TEST_ASSERT_EQUAL_UINT8(hour == 0x52u ? 0u : 12u, now.hour());
+  }
 }
 
 void test_alarm1_set_and_get_preserve_masks_and_day_mode(void) {

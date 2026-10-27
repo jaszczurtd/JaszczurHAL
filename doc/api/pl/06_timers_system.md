@@ -161,15 +161,17 @@ obsługiwane.
 - **Ścieżka callbacku w RAM:** callback alarmu zarządzanych timerów
   i dyspozytor alarmów RP są funkcjami `HAL_RAM_FUNC`, a na RP także
   `hal_micros()`, `hal_micros64()` i `hal_gpio_write()`; obie funkcje zegara
-  czytają rejestry timera bez wywołań. Callback timera, który przełącza
-  wyjście, zachowuje wtedy swoje czasy, nawet gdy drugi rdzeń czyta z flasha
-  duże dane i opróżnia pamięć podręczną XIP. Operacje atomowe, dla których
+  czytają rejestry timera bez wywołań. Ogranicza to wpływ chybień pamięci
+  podręcznej XIP, gdy callback przełącza GPIO mikrokontrolera. Zapis do GPIO
+  CYW43 nadal wywołuje kod z flasha. Czas wykonania callbacku zależy też od
+  procedury obsługi przerwania alarmu Pico SDK, która pozostaje we flashu.
+  Samo umieszczenie funkcji w RAM nie gwarantuje więc zachowania czasów przy
+  współbieżnym dostępie do flasha. Operacje atomowe, dla których
   rdzeń nie ma instrukcji, nadal wywołują funkcje pomocnicze z flasha: na
   RP2040 operacje odczyt-modyfikacja-zapis (zamiana, porównanie z zamianą,
   dodanie z odczytem i podobne) oraz 64-bitowe odczyty i zapisy, na RP2350
   operacje 64-bitowe. Wyrównane odczyty i zapisy do 32 bitów nie potrzebują
-  funkcji pomocniczych. Procedura obsługi przerwania
-  alarmu w Pico SDK również pozostaje we flashu. Skrypt
+  funkcji pomocniczych. Skrypt
   `scripts/check_rp_ram_paths.py` sprawdza te funkcje HAL w zlinkowanym
   obrazie. Callback wrażliwy na czas również oznacz `HAL_RAM_FUNC` i sprawdź
   wywoływane z niego funkcje w ELF/map.

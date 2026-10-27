@@ -1104,7 +1104,12 @@ uint32_t hal_mock_ds18b20_get_request_count(hal_ds18b20_t h);
 // ── RTC ─────────────────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_RTC
 #include "hal/rtc/hal_rtc.h"
-/** @brief Replace current mock RTC date-time payload. */
+/**
+ * @brief Replace current mock RTC date-time payload.
+ *
+ * An impossible date is stored as well, so reads return HAL_EPROTO like an
+ * unset RTC. The clock integrity flag stays unchanged.
+ */
 void hal_mock_rtc_set_datetime(hal_rtc_t h, const hal_rtc_datetime_t *dt);
 /** @brief Inject clock integrity state returned by
  * hal_rtc_get_clock_integrity(). */

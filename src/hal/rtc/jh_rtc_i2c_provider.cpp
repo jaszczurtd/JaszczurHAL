@@ -247,11 +247,12 @@ static hal_status_t pcf_get_datetime(void *context,
   }
 
   pcf8563_datetime_t datetime = {};
-  if (!pcf8563_get_datetime(&pcf_context(context)->device, &datetime)) {
-    return HAL_EIO;
+  const hal_status_t status =
+      pcf8563_get_datetime_ex(&pcf_context(context)->device, &datetime);
+  if (status == HAL_OK) {
+    pcf_to_rtc_datetime(&datetime, out_datetime);
   }
-  pcf_to_rtc_datetime(&datetime, out_datetime);
-  return HAL_OK;
+  return status;
 }
 
 static hal_status_t pcf_set_datetime(void *context,

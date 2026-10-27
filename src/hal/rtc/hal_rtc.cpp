@@ -268,7 +268,7 @@ hal_status_t hal_rtc_get_datetime_ex(hal_rtc_t handle,
       handle->provider->get_datetime(handle->provider_context, &datetime);
   hal_mutex_unlock(handle->mutex);
   if (status == HAL_OK && !rtc_validate_datetime(&datetime)) {
-    status = HAL_EIO;
+    status = HAL_EPROTO;
   }
   if (status == HAL_OK) {
     *out_datetime = datetime;
@@ -635,7 +635,7 @@ hal_status_t hal_rtc_wakeup_get_state_ex(hal_rtc_t handle,
 #if HAL_TARGET_IS_MOCK
 void hal_mock_rtc_set_datetime(hal_rtc_t handle,
                                const hal_rtc_datetime_t *datetime) {
-  if (!rtc_handle_valid(handle) || !rtc_validate_datetime(datetime)) {
+  if (!rtc_handle_valid(handle) || datetime == nullptr) {
     return;
   }
 

@@ -200,6 +200,41 @@ void test_get_datetime_returns_false_for_invalid_calendar_values(void) {
 
   pcf8563_datetime_t out = {};
   TEST_ASSERT_FALSE(pcf8563_get_datetime(&s_dev, &out));
+
+  /* The status variant names invalid contents and leaves the output alone. */
+  hal_mock_i2c_inject_rx(regs, (int)sizeof(regs));
+  out.month = 7u;
+  TEST_ASSERT_EQUAL_INT(HAL_EPROTO, pcf8563_get_datetime_ex(&s_dev, &out));
+  TEST_ASSERT_EQUAL_UINT8(7u, out.month);
+}
+
+void test_get_datetime_ex_reports_bus_error_and_valid_read(void) {
+  const uint8_t regs[] = {
+      0x45u, /* sec 45, VL clear */
+      0x30u, /* min */
+      0x12u, /* hour */
+      0x26u, /* day */
+      0x01u, /* weekday */
+      0x10u, /* month, century bit clear */
+      0x26u, /* year */
+  };
+
+  pcf8563_datetime_t out = {};
+  out.month = 7u;
+  hal_mock_i2c_set_busy(true);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, pcf8563_get_datetime_ex(&s_dev, &out));
+  TEST_ASSERT_EQUAL_UINT8(7u, out.month);
+  hal_mock_i2c_set_busy(false);
+
+  hal_mock_i2c_inject_rx(regs, (int)sizeof(regs));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, pcf8563_get_datetime_ex(&s_dev, &out));
+  TEST_ASSERT_EQUAL_UINT16(2026u, out.year);
+  TEST_ASSERT_EQUAL_UINT8(10u, out.month);
+  TEST_ASSERT_EQUAL_UINT8(26u, out.day);
+  TEST_ASSERT_EQUAL_UINT8(12u, out.hour);
+  TEST_ASSERT_EQUAL_UINT8(30u, out.minute);
+  TEST_ASSERT_EQUAL_UINT8(45u, out.second);
+  TEST_ASSERT_TRUE(out.clock_integrity);
 }
 
 void test_set_datetime_validates_ranges(void) {
@@ -409,6 +444,8 @@ void test_null_argument_guards_for_remaining_api(void) {
 
   TEST_ASSERT_FALSE(pcf8563_get_datetime(NULL, &dt));
   TEST_ASSERT_FALSE(pcf8563_get_datetime(&s_dev, NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, pcf8563_get_datetime_ex(NULL, &dt));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, pcf8563_get_datetime_ex(&s_dev, NULL));
   TEST_ASSERT_FALSE(pcf8563_set_datetime(NULL, &dt));
   TEST_ASSERT_FALSE(pcf8563_set_datetime(&s_dev, NULL));
   TEST_ASSERT_FALSE(pcf8563_get_clock_integrity(NULL, &b0));
@@ -441,6 +478,7 @@ int main(void) {
   RUN_TEST(test_get_datetime_century_bit_set_reads_1900s);
   RUN_TEST(test_set_then_get_roundtrip_preserves_2000s_year);
   RUN_TEST(test_get_datetime_returns_false_for_invalid_calendar_values);
+  RUN_TEST(test_get_datetime_ex_reports_bus_error_and_valid_read);
   RUN_TEST(test_set_datetime_validates_ranges);
   RUN_TEST(test_get_clock_integrity_reads_vl_bit);
   RUN_TEST(test_interrupt_enable_preserves_unrelated_bits_and_sets_aie_tie);

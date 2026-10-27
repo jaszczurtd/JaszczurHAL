@@ -2,6 +2,8 @@
 
 #include "hal/core/hal_layout_check.h"
 
+#include "hal/core/hal_status.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -78,6 +80,17 @@ bool pcf8563_probe(const pcf8563_t *dev);
  * @return true on success, false on I2C error or validation failure.
  */
 bool pcf8563_get_datetime(const pcf8563_t *dev, pcf8563_datetime_t *out_dt);
+
+/**
+ * @brief Read current date/time from RTC and tell a bus error from contents.
+ * @param dev Pointer to pcf8563_t device descriptor.
+ * @param out_dt Pointer to output pcf8563_datetime_t structure; written only
+ *               on success.
+ * @return HAL_OK, HAL_EINVAL for NULL arguments, HAL_EIO when the I2C read
+ *         failed, or HAL_EPROTO when the registers hold no valid date.
+ */
+hal_status_t pcf8563_get_datetime_ex(const pcf8563_t *dev,
+                                     pcf8563_datetime_t *out_dt);
 
 /**
  * @brief Write date/time to RTC.

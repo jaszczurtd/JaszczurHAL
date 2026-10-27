@@ -238,36 +238,44 @@ bool pcf8563_probe(const pcf8563_t *dev) {
   return pcf8563_read_regs(dev, PCF8563_REG_CONTROL_STATUS_1, &probe, 1u);
 }
 
-bool pcf8563_get_datetime(const pcf8563_t *dev, pcf8563_datetime_t *out_dt) {
+hal_status_t pcf8563_get_datetime_ex(const pcf8563_t *dev,
+                                     pcf8563_datetime_t *out_dt) {
   if (!dev || !out_dt) {
-    return false;
+    return HAL_EINVAL;
   }
 
   uint8_t buffer[7] = {};
   if (!pcf8563_read_regs(dev, PCF8563_REG_SECONDS, buffer,
                          (uint8_t)sizeof(buffer))) {
-    return false;
+    return HAL_EIO;
   }
 
-  out_dt->clock_integrity = (buffer[0] & PCF8563_SECONDS_VL_MASK) == 0u;
-  out_dt->second =
-      pcf8563_from_bcd((uint8_t)(buffer[0] & PCF8563_SECONDS_MASK));
-  out_dt->minute =
-      pcf8563_from_bcd((uint8_t)(buffer[1] & PCF8563_MINUTES_MASK));
-  out_dt->hour = pcf8563_from_bcd((uint8_t)(buffer[2] & PCF8563_HOURS_MASK));
-  out_dt->day = pcf8563_from_bcd((uint8_t)(buffer[3] & PCF8563_DAY_MASK));
-  out_dt->weekday = (uint8_t)(buffer[4] & PCF8563_WEEKDAY_MASK);
-  out_dt->month = pcf8563_from_bcd((uint8_t)(buffer[5] & PCF8563_MONTH_MASK));
+  pcf8563_datetime_t dt = {};
+  dt.clock_integrity = (buffer[0] & PCF8563_SECONDS_VL_MASK) == 0u;
+  dt.second = pcf8563_from_bcd((uint8_t)(buffer[0] & PCF8563_SECONDS_MASK));
+  dt.minute = pcf8563_from_bcd((uint8_t)(buffer[1] & PCF8563_MINUTES_MASK));
+  dt.hour = pcf8563_from_bcd((uint8_t)(buffer[2] & PCF8563_HOURS_MASK));
+  dt.day = pcf8563_from_bcd((uint8_t)(buffer[3] & PCF8563_DAY_MASK));
+  dt.weekday = (uint8_t)(buffer[4] & PCF8563_WEEKDAY_MASK);
+  dt.month = pcf8563_from_bcd((uint8_t)(buffer[5] & PCF8563_MONTH_MASK));
 
   /* PCF8563 century bit (Months/century reg, bit 7): C=0 -> 20xx, C=1 -> 19xx
    * (NXP PCF8563 datasheet, Table 13). */
   if ((buffer[5] & PCF8563_MONTH_CENTURY) == 0u) {
-    out_dt->year = (uint16_t)(2000u + pcf8563_from_bcd(buffer[6]));
+    dt.year = (uint16_t)(2000u + pcf8563_from_bcd(buffer[6]));
   } else {
-    out_dt->year = (uint16_t)(1900u + pcf8563_from_bcd(buffer[6]));
+    dt.year = (uint16_t)(1900u + pcf8563_from_bcd(buffer[6]));
   }
 
-  return pcf8563_validate_datetime(out_dt);
+  if (!pcf8563_validate_datetime(&dt)) {
+    return HAL_EPROTO;
+  }
+  *out_dt = dt;
+  return HAL_OK;
+}
+
+bool pcf8563_get_datetime(const pcf8563_t *dev, pcf8563_datetime_t *out_dt) {
+  return pcf8563_get_datetime_ex(dev, out_dt) == HAL_OK;
 }
 
 bool pcf8563_set_datetime(const pcf8563_t *dev, const pcf8563_datetime_t *dt) {

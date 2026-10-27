@@ -615,6 +615,18 @@ void test_ex_datetime_roundtrip_and_validation(void) {
   hal_rtc_datetime_t bad = in;
   bad.second = 60;
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_rtc_set_datetime_ex(s_rtc, &bad));
+
+  /* An RTC holding no valid date answers with HAL_EPROTO, not a bus error. */
+  hal_rtc_datetime_t unset = in;
+  unset.month = 13u;
+  hal_mock_rtc_set_datetime(s_rtc, &unset);
+  hal_rtc_datetime_t kept = out;
+  TEST_ASSERT_EQUAL_INT(HAL_EPROTO, hal_rtc_get_datetime_ex(s_rtc, &kept));
+  TEST_ASSERT_EQUAL_UINT8(out.month, kept.month);
+  TEST_ASSERT_EQUAL_UINT16(out.year, kept.year);
+  uint64_t epoch = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_EPROTO, hal_rtc_get_epoch_ex(s_rtc, &epoch));
+  TEST_ASSERT_FALSE(hal_rtc_get_datetime(s_rtc, &kept));
 }
 
 void test_ex_epoch_and_control_status(void) {

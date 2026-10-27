@@ -153,14 +153,15 @@ not sufficient; pool destruction from an alarm callback/ISR is unsupported.
 - **Callback path in RAM:** the managed-timer alarm callback and the RP alarm
   dispatcher are `HAL_RAM_FUNC` functions, and on RP so are `hal_micros()`,
   `hal_micros64()` and `hal_gpio_write()`; the two clock functions read the
-  timer registers without a call. A timer callback that toggles an output
-  then keeps its timing while another core reads large data from flash and
-  empties the XIP cache. Atomics the core has no instructions for still call
-  helpers in flash: on RP2040 the read-modify-write ones (exchange,
+  timer registers without a call. This reduces exposure to XIP cache misses
+  when a callback toggles an MCU GPIO. Writes to CYW43 GPIO still call code
+  in flash. Callback timing also depends on the Pico SDK alarm interrupt
+  handler, which stays in flash, so RAM placement alone does not guarantee
+  timing under flash contention. Atomics the core has no instructions for
+  still call helpers in flash: on RP2040 the read-modify-write ones (exchange,
   compare-and-exchange, fetch-and-add and the like) and 64-bit loads and
   stores, on RP2350 the 64-bit ones. Aligned loads and stores up to 32 bits
   need no helper.
-  The Pico SDK alarm interrupt handler stays in flash too.
   `scripts/check_rp_ram_paths.py` checks these HAL functions in a linked
   image. Mark a time-critical callback with `HAL_RAM_FUNC` too and check its
   callees in the ELF/map.

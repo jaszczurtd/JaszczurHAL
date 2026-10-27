@@ -56,6 +56,13 @@ class DS3231 {
 public:
   DS3231(uint8_t i2c_bus = 0u, uint8_t i2c_addr = 0x68u);
 
+  /**
+   * @brief Read and validate the calendar in years 2000..2099.
+   * @param out_datetime Required output; unchanged on error. Hours in 12-hour
+   *                     mode are converted to 0..23.
+   * @return HAL_OK, HAL_EINVAL for NULL, HAL_EIO for a failed I2C read, or
+   *         HAL_EPROTO for an invalid calendar or 12-hour value.
+   */
   hal_status_t getDateTimeEx(DateTime *out_datetime);
   hal_status_t adjustEx(const DateTime &dt);
   hal_status_t getTemperatureEx(float *out_temperature_c);

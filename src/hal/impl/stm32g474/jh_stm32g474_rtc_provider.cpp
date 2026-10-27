@@ -360,7 +360,7 @@ static hal_status_t internal_get_datetime(void *context,
   const uint32_t dr = RTC_DR;
   hal_rtc_datetime_t value = {};
   if (!jh_stm32g474_rtc_decode_datetime(tr, dr, &value)) {
-    return HAL_EIO;
+    return HAL_EPROTO;
   }
   value.clock_integrity = rtc_time_is_valid(rtc_context(context));
   *out_datetime = value;
