@@ -296,6 +296,8 @@ należy do ISO C ani C++. Dla pojedynczej precyzji rzutuj ją na `float`.
 
 `hal_text_format_mac_ex()` zapisuje sześciobajtowy adres sprzętowy w formacie `XX:XX:XX:XX:XX:XX`, używając wielkich liter. Bufor musi mieścić `HAL_TEXT_MAC_STRING_SIZE` bajtów. Funkcja zgodności `hal_network_format_mac_ex()` pozostaje dostępna i wywołuje tę samą operację.
 
+`hal_text_format_u32_ex()` i `hal_text_format_i32_ex()` zapisują wartość 32-bitową jako tekst dziesiętny bez `printf`, na przykład pole telemetrii w kodzie, który nie dołącza `<stdio.h>`. Bufor o `HAL_TEXT_U32_DECIMAL_SIZE` lub `HAL_TEXT_I32_DECIMAL_SIZE` bajtach mieści każdą wartość; krótszy, w którym cyfry z terminatorem się nie mieszczą, zostaje pusty, a funkcja zwraca `HAL_EOVERFLOW`.
+
 ### Funkcje pomocnicze do manipulacji bitami (`hal_bits`)
 
 Każdą definicję aliasu bitowego chroni `#ifndef`, dzięki czemu aplikacja może
@@ -409,6 +411,10 @@ uint16_t jh_u16_from_bytes(uint8_t msb, uint8_t lsb);
 hal_status_t hal_text_format_mac_ex(const uint8_t mac[6], char *buffer,
                                     size_t buffer_size);
 char *hal_text_format_binary_int(int value, char *buffer, size_t buffer_size);
+hal_status_t hal_text_format_u32_ex(uint32_t value, char *buffer,
+                                    size_t buffer_size);
+hal_status_t hal_text_format_i32_ex(int32_t value, char *buffer,
+                                    size_t buffer_size);
 hal_status_t hal_text_concat_ex(char *destination, size_t destination_size,
                                  const char *first, const char *second);
 bool hal_text_concat(char *destination, size_t destination_size,

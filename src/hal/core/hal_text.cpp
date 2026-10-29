@@ -125,6 +125,53 @@ char *hal_text_format_binary_int(int value, char *buffer, size_t buffer_size) {
   return buffer;
 }
 
+hal_status_t hal_text_format_u32_ex(uint32_t value, char *buffer,
+                                    size_t buffer_size) {
+  if (buffer == nullptr || buffer_size == 0u) {
+    return HAL_EINVAL;
+  }
+  char digits[HAL_TEXT_U32_DECIMAL_SIZE];
+  size_t length = 0u;
+  do {
+    digits[length] = (char)('0' + (char)(value % 10u));
+    length++;
+    value /= 10u;
+  } while (value != 0u);
+  if (length >= buffer_size) {
+    buffer[0] = '\0';
+    return HAL_EOVERFLOW;
+  }
+  for (size_t i = 0u; i < length; ++i) {
+    buffer[i] = digits[length - 1u - i];
+  }
+  buffer[length] = '\0';
+  return HAL_OK;
+}
+
+hal_status_t hal_text_format_i32_ex(int32_t value, char *buffer,
+                                    size_t buffer_size) {
+  if (buffer == nullptr || buffer_size == 0u) {
+    return HAL_EINVAL;
+  }
+  if (value >= 0) {
+    return hal_text_format_u32_ex((uint32_t)value, buffer, buffer_size);
+  }
+  if (buffer_size < 2u) {
+    buffer[0] = '\0';
+    return HAL_EOVERFLOW;
+  }
+  /* The magnitude of INT32_MIN only exists unsigned. */
+  const uint32_t magnitude = 0u - (uint32_t)value;
+  const hal_status_t status =
+      hal_text_format_u32_ex(magnitude, buffer + 1, buffer_size - 1u);
+  if (status != HAL_OK) {
+    buffer[0] = '\0';
+    return status;
+  }
+  buffer[0] = '-';
+  return HAL_OK;
+}
+
 hal_status_t hal_text_concat_ex(char *destination, size_t destination_size,
                                 const char *first, const char *second) {
   if (destination == nullptr || first == nullptr || second == nullptr ||

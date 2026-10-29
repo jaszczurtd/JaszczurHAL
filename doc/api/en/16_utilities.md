@@ -277,6 +277,8 @@ part of ISO C or C++. Cast it to `float` for single precision.
 
 `hal_text_format_mac_ex()` formats a six-byte hardware address as uppercase `XX:XX:XX:XX:XX:XX`. The destination must hold `HAL_TEXT_MAC_STRING_SIZE` bytes. The compatibility function `hal_network_format_mac_ex()` remains available and delegates to the same operation.
 
+`hal_text_format_u32_ex()` and `hal_text_format_i32_ex()` write a 32-bit value as decimal text without `printf`, for example a telemetry field in code that keeps `<stdio.h>` out. A buffer of `HAL_TEXT_U32_DECIMAL_SIZE` or `HAL_TEXT_I32_DECIMAL_SIZE` bytes holds every value; a shorter one that cannot take the digits and the terminator is left empty with `HAL_EOVERFLOW`.
+
 ### Bit-manipulation helpers (`hal_bits`)
 
 Bit aliases are defined with `#ifndef` guards so an application may provide
@@ -391,6 +393,10 @@ uint16_t jh_u16_from_bytes(uint8_t msb, uint8_t lsb);
 hal_status_t hal_text_format_mac_ex(const uint8_t mac[6], char *buffer,
                                     size_t buffer_size);
 char *hal_text_format_binary_int(int value, char *buffer, size_t buffer_size);
+hal_status_t hal_text_format_u32_ex(uint32_t value, char *buffer,
+                                    size_t buffer_size);
+hal_status_t hal_text_format_i32_ex(int32_t value, char *buffer,
+                                    size_t buffer_size);
 hal_status_t hal_text_concat_ex(char *destination, size_t destination_size,
                                  const char *first, const char *second);
 bool hal_text_concat(char *destination, size_t destination_size,

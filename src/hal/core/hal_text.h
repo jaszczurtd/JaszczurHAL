@@ -55,6 +55,38 @@ hal_status_t hal_text_format_hex_ex(const uint8_t *bytes, size_t length,
  */
 char *hal_text_format_binary_int(int value, char *buffer, size_t buffer_size);
 
+/** @brief Buffer size for any uint32_t in decimal, terminator included. */
+#define HAL_TEXT_U32_DECIMAL_SIZE 11u
+/** @brief Buffer size for any int32_t in decimal, terminator included. */
+#define HAL_TEXT_I32_DECIMAL_SIZE 12u
+
+/**
+ * @brief Write an unsigned 32-bit value as decimal text, without printf.
+ *
+ * @param value Value to format.
+ * @param buffer Destination; receives the digits and a terminator.
+ * @param buffer_size Destination capacity including the terminator;
+ *        HAL_TEXT_U32_DECIMAL_SIZE fits every value.
+ * @return HAL_OK; HAL_EINVAL for a NULL buffer or a zero capacity;
+ *         HAL_EOVERFLOW when the digits do not fit, the buffer is then empty.
+ */
+hal_status_t hal_text_format_u32_ex(uint32_t value, char *buffer,
+                                    size_t buffer_size);
+
+/**
+ * @brief Write a signed 32-bit value as decimal text, without printf.
+ *
+ * Negative values get a leading minus sign; INT32_MIN is formatted in full.
+ * @param value Value to format.
+ * @param buffer Destination; receives the sign, the digits and a terminator.
+ * @param buffer_size Destination capacity including the terminator;
+ *        HAL_TEXT_I32_DECIMAL_SIZE fits every value.
+ * @return HAL_OK; HAL_EINVAL for a NULL buffer or a zero capacity;
+ *         HAL_EOVERFLOW when the text does not fit, the buffer is then empty.
+ */
+hal_status_t hal_text_format_i32_ex(int32_t value, char *buffer,
+                                    size_t buffer_size);
+
 /**
  * @brief Concatenate two strings into a bounded destination.
  * @param destination Destination buffer.

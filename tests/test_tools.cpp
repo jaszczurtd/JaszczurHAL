@@ -389,6 +389,62 @@ void test_hal_text_concat_null_args(void) {
   TEST_ASSERT_FALSE(hal_text_concat(buf, sizeof(buf), "a", NULL));
 }
 
+/* ── hal_text_format_u32_ex / hal_text_format_i32_ex ───────────────────── */
+
+void test_hal_text_format_u32_writes_decimal_digits(void) {
+  char buf[HAL_TEXT_U32_DECIMAL_SIZE] = "xx";
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_text_format_u32_ex(0u, buf, sizeof(buf)));
+  TEST_ASSERT_EQUAL_STRING("0", buf);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_text_format_u32_ex(7u, buf, sizeof(buf)));
+  TEST_ASSERT_EQUAL_STRING("7", buf);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_text_format_u32_ex(3103u, buf, sizeof(buf)));
+  TEST_ASSERT_EQUAL_STRING("3103", buf);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_text_format_u32_ex(UINT32_MAX, buf, sizeof(buf)));
+  TEST_ASSERT_EQUAL_STRING("4294967295", buf);
+}
+
+void test_hal_text_format_u32_needs_room_for_the_terminator(void) {
+  char buf[4] = "abc";
+  /* Three digits and the terminator fit exactly. */
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_text_format_u32_ex(999u, buf, sizeof(buf)));
+  TEST_ASSERT_EQUAL_STRING("999", buf);
+  /* Four digits do not: the buffer is emptied, never left half written. */
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW,
+                        hal_text_format_u32_ex(1000u, buf, sizeof(buf)));
+  TEST_ASSERT_EQUAL_STRING("", buf);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_text_format_u32_ex(1u, NULL, 4u));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_text_format_u32_ex(1u, buf, 0u));
+}
+
+void test_hal_text_format_i32_signs_negative_values(void) {
+  char buf[HAL_TEXT_I32_DECIMAL_SIZE] = "xx";
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_text_format_i32_ex(0, buf, sizeof(buf)));
+  TEST_ASSERT_EQUAL_STRING("0", buf);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_text_format_i32_ex(-1, buf, sizeof(buf)));
+  TEST_ASSERT_EQUAL_STRING("-1", buf);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_text_format_i32_ex(INT32_MAX, buf, sizeof(buf)));
+  TEST_ASSERT_EQUAL_STRING("2147483647", buf);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_text_format_i32_ex(INT32_MIN, buf, sizeof(buf)));
+  TEST_ASSERT_EQUAL_STRING("-2147483648", buf);
+}
+
+void test_hal_text_format_i32_counts_the_sign_in_the_capacity(void) {
+  char buf[3] = "ab";
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_text_format_i32_ex(-9, buf, sizeof(buf)));
+  TEST_ASSERT_EQUAL_STRING("-9", buf);
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW,
+                        hal_text_format_i32_ex(-10, buf, sizeof(buf)));
+  TEST_ASSERT_EQUAL_STRING("", buf);
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW, hal_text_format_i32_ex(-1, buf, 1u));
+  TEST_ASSERT_EQUAL_STRING("", buf);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_text_format_i32_ex(-1, NULL, 3u));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_text_format_i32_ex(-1, buf, 0u));
+}
+
 void test_hal_debug_set_module_prefix_logs_module_prefix(void) {
   hal_mock_serial_reset();
 
@@ -1155,6 +1211,10 @@ int main(void) {
   RUN_TEST(test_hal_text_concat_too_small_buffer);
   RUN_TEST(test_hal_text_concat_zero_dest_size);
   RUN_TEST(test_hal_text_concat_null_args);
+  RUN_TEST(test_hal_text_format_u32_writes_decimal_digits);
+  RUN_TEST(test_hal_text_format_u32_needs_room_for_the_terminator);
+  RUN_TEST(test_hal_text_format_i32_signs_negative_values);
+  RUN_TEST(test_hal_text_format_i32_counts_the_sign_in_the_capacity);
   RUN_TEST(test_hal_debug_set_module_prefix_logs_module_prefix);
 
   RUN_TEST(test_hal_text_is_printable_valid);
