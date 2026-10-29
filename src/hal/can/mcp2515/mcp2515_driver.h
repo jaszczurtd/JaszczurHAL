@@ -26,7 +26,19 @@ typedef struct {
   INT8U data[MAX_CHAR_IN_MESSAGE];
 } jh_mcp2515_rx_frame_t;
 
+/** @brief Controller error registers and accumulated RX overflow indications.
+ */
+typedef struct {
+  INT8U error_flags;
+  INT8U transmit_errors;
+  INT8U receive_errors;
+  uint32_t rx_overflows;
+} jh_mcp2515_status_t;
+
 class JHMCP2515 {
+  // Keep the unit fixture's access from changing MSVC private-method linkage.
+  friend struct JHMCP2515TestAccess;
+
 private:
   INT8U m_nExtFlg;
   INT32U m_nID;
@@ -42,6 +54,8 @@ private:
   INT8U m_rxRingHead;
   INT8U m_rxRingCount;
   bool m_rxb1Older;
+  uint32_t m_rxHwLost;
+  bool m_spiLease;
 
   void mcp2515_reset(void);
   INT8U mcp2515_readRegister(INT8U address);
@@ -61,11 +75,13 @@ private:
   void mcp2515_write_canMsg(INT8U buffer_sidh_addr);
   bool mcp2515_read_rx(INT8U *status, jh_mcp2515_rx_frame_t *frame);
   bool mcp2515_keep_rx(INT8U *status);
+  void mcp2515_keep_pending(void);
   void mcp2515_load_rx(const jh_mcp2515_rx_frame_t *frame);
   INT8U mcp2515_getNextFreeTXBuf(INT8U *txbuf_n);
   void spi_begin_(void);
   void spi_end_(void);
-  void lock_driver_(void);
+  void lock_driver_(bool spi);
+  void lock_spi_(void);
   void unlock_driver_(void);
 
   INT8U setMsg(INT32U id, INT8U rtr, INT8U ext, INT8U len, INT8U *pData);
@@ -91,6 +107,10 @@ public:
   INT8U checkReceive(void);
   INT8U checkError(void);
   INT8U getError(void);
+  /** @brief Read error registers in one SPI lease and clear observed RX
+   * overflow flags. Non-NULL output; the lower-bound count resets in begin()
+   * and wraps modulo 2^32. */
+  void getStatus(jh_mcp2515_status_t *status);
   INT8U errorCountRX(void);
   INT8U errorCountTX(void);
   INT8U enOneShotTX(void);

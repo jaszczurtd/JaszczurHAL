@@ -102,6 +102,11 @@ write inside `_async_start()`, report `_async_busy() == false`, and let
 
 **Thread safety:** `hal_spi_begin_transaction()` applies bus settings but does not lock. Use `hal_spi_lock()` / `hal_spi_unlock()` around multi-step driver operations on shared buses. Treat async DMA lifetime as part of the same transaction/critical section: keep chip-select and bus ownership valid until `_async_wait()` completes.
 
+On bare-metal RP targets, waiting callers take the bus in request order;
+a driver releasing and reacquiring it cannot overtake another waiting core.
+FreeRTOS uses its mutex with priority inheritance. These locks are for task
+context.
+
 ---
 
 <a id="hal_spi_device---target-neutral-spi-device-descriptor"></a>

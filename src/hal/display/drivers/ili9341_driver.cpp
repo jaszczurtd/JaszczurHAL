@@ -1,5 +1,6 @@
 #include "ili9341_driver.h"
 #include "display_spi_transport.h"
+#include "hal/core/hal_memory.h"
 
 #include "hal/core/hal_config.h"
 
@@ -303,20 +304,17 @@ bool jh_ili9341_write_pixels(jh_ili9341_t *dev, const uint16_t *pixels,
                                      pixels, count);
 }
 
-bool jh_ili9341_begin_write(jh_ili9341_t *dev, uint16_t x, uint16_t y,
-                            uint16_t w, uint16_t h) {
+bool HAL_RAM_FUNC(jh_ili9341_begin_write)(jh_ili9341_t *dev, uint16_t x,
+                                          uint16_t y, uint16_t w, uint16_t h) {
   if (dev == NULL || !dev->initialized || w == 0u || h == 0u ||
       dev->write_active) {
     return false;
   }
-  if (!jh_ili9341_set_addr_window(dev, x, y, w, h)) {
+  if (!jh_display_spi_begin_window(&dev->spi_device, dev->config.dc_pin,
+                                   ILI9341_CASET, ILI9341_PASET, ILI9341_RAMWR,
+                                   x, y, w, h)) {
     return false;
   }
-
-  if (hal_status_is_error(hal_spi_device_acquire(&dev->spi_device))) {
-    return false;
-  }
-  hal_gpio_write(jh_display_pin_u8(dev->config.dc_pin), true);
   dev->write_active = true;
   return true;
 }
@@ -329,8 +327,9 @@ bool jh_ili9341_write_pixels_be(jh_ili9341_t *dev, const uint8_t *pixels_be,
                                      pixels_be, byte_count, false, false);
 }
 
-bool jh_ili9341_write_pixels_dma(jh_ili9341_t *dev, const uint8_t *pixels_be,
-                                 size_t byte_count) {
+bool HAL_RAM_FUNC(jh_ili9341_write_pixels_dma)(jh_ili9341_t *dev,
+                                               const uint8_t *pixels_be,
+                                               size_t byte_count) {
   return jh_display_spi_stream_write(dev != NULL ? &dev->spi_device : NULL,
                                      dev != NULL && dev->initialized,
                                      dev != NULL ? &dev->write_active : NULL,
@@ -363,8 +362,9 @@ bool jh_ili9341_write_pixels_dma_async_wait(jh_ili9341_t *dev) {
   return true;
 }
 
-bool jh_ili9341_write_pixels_fast(jh_ili9341_t *dev, const uint16_t *pixels,
-                                  size_t count) {
+bool HAL_RAM_FUNC(jh_ili9341_write_pixels_fast)(jh_ili9341_t *dev,
+                                                const uint16_t *pixels,
+                                                size_t count) {
   if (dev == NULL || !dev->initialized || !dev->write_active ||
       (pixels == NULL && count > 0u)) {
     return abort_write(dev, HAL_EINVAL);
@@ -389,7 +389,7 @@ bool jh_ili9341_write_pixels_fast(jh_ili9341_t *dev, const uint16_t *pixels,
   return true;
 }
 
-bool jh_ili9341_end_write(jh_ili9341_t *dev) {
+bool HAL_RAM_FUNC(jh_ili9341_end_write)(jh_ili9341_t *dev) {
   if (dev == NULL || !dev->initialized || !dev->write_active) {
     return false;
   }
@@ -417,8 +417,9 @@ static jh_display_spi_writer_t area_writer(jh_ili9341_t *dev) {
   return writer;
 }
 
-bool jh_ili9341_fill_rect(jh_ili9341_t *dev, uint16_t x, uint16_t y, uint16_t w,
-                          uint16_t h, uint16_t color) {
+bool HAL_RAM_FUNC(jh_ili9341_fill_rect)(jh_ili9341_t *dev, uint16_t x,
+                                        uint16_t y, uint16_t w, uint16_t h,
+                                        uint16_t color) {
   if (dev == NULL || !dev->initialized || w == 0u || h == 0u) {
     return false;
   }
@@ -426,9 +427,10 @@ bool jh_ili9341_fill_rect(jh_ili9341_t *dev, uint16_t x, uint16_t y, uint16_t w,
   return jh_display_spi_write_area(&writer, x, y, w, h, NULL, color);
 }
 
-bool jh_ili9341_draw_rgb_bitmap(jh_ili9341_t *dev, uint16_t x, uint16_t y,
-                                const uint16_t *pixels, uint16_t w,
-                                uint16_t h) {
+bool HAL_RAM_FUNC(jh_ili9341_draw_rgb_bitmap)(jh_ili9341_t *dev, uint16_t x,
+                                              uint16_t y,
+                                              const uint16_t *pixels,
+                                              uint16_t w, uint16_t h) {
   if (dev == NULL || pixels == NULL || w == 0u || h == 0u) {
     return false;
   }

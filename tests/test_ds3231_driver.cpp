@@ -278,6 +278,7 @@ void test_status_datetime_read_decodes_12h_pm_and_reports_bus_failure(void) {
       {0x56u, 0x34u, 0x40u, 0x02u, 0x24u, 0x05u, 0x26u}, /* 12h: hour 0 */
       {0x56u, 0x34u, 0x53u, 0x02u, 0x24u, 0x05u, 0x26u}, /* 12h: hour 13 */
       {0x56u, 0x34u, 0x12u, 0x02u, 0x24u, 0x05u, 0xa0u}, /* year 2100 */
+      {0x56u, 0x34u, 0x12u, 0x02u, 0x24u, 0x85u, 0x00u}, /* century 2100 */
   };
   for (const auto &value : invalid) {
     hal_mock_i2c_inject_rx(value, (int)COUNTOF(value));
@@ -496,6 +497,15 @@ void test_set_epoch_and_datetime_helpers(void) {
 }
 
 void test_datetime_helpers_use_full_gregorian_calendar(void) {
+  const DateTime build_time("Feb  9 2024", "1:02:3");
+  TEST_ASSERT_EQUAL_UINT16(2024u, build_time.year());
+  TEST_ASSERT_EQUAL_UINT8(2u, build_time.month());
+  TEST_ASSERT_EQUAL_UINT8(9u, build_time.day());
+  TEST_ASSERT_EQUAL_UINT8(1u, build_time.hour());
+  TEST_ASSERT_EQUAL_UINT8(2u, build_time.minute());
+  TEST_ASSERT_EQUAL_UINT8(3u, build_time.second());
+  const DateTime year_end("Dec 31 2099", "23:59:59");
+  TEST_ASSERT_EQUAL_UINT32(4102444799u, year_end.unixtime());
   TEST_ASSERT_TRUE(isleapYear(0u)); /* Legacy 2000-based year offset. */
   TEST_ASSERT_FALSE(isleapYear(1900u));
   TEST_ASSERT_TRUE(isleapYear(2000u));

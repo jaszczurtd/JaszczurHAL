@@ -6,7 +6,7 @@
 #include "support/display_spi_panel_model.h"
 
 /* Built with HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES = 256: fills and bitmaps
- * release the bus after every band of whole rows that fits 256 bytes. */
+ * release the bus after at most 256 bytes, including wide rows. */
 
 #define FILL_COLOR 0x1234u
 
@@ -69,6 +69,7 @@ void test_ili9341_fill_rect_sends_bands_within_the_limit(void) {
   TEST_ASSERT_TRUE(jh_ili9341_fill_rect(&s_ili, 5u, 7u, 40u, 20u, FILL_COLOR));
 
   TEST_ASSERT_EQUAL_size_t(7u, s_panel.pixel_selections);
+  TEST_ASSERT_EQUAL_size_t(7u, s_panel.selections);
   TEST_ASSERT_EQUAL_size_t(240u, s_panel.max_select_pixel_bytes);
   fill_expected(40u, 20u, false);
   TEST_ASSERT_TRUE(
@@ -87,19 +88,33 @@ void test_ili9341_bitmap_bands_keep_every_pixel_in_place(void) {
       jh_ili9341_draw_rgb_bitmap(&s_ili, 3u, 2u, s_expected, 40u, 20u));
 
   TEST_ASSERT_EQUAL_size_t(7u, s_panel.pixel_selections);
+  TEST_ASSERT_EQUAL_size_t(7u, s_panel.selections);
   TEST_ASSERT_TRUE(
       panel_model_area_equals(&s_panel, 3u, 2u, 40u, 20u, s_expected));
   expect_bus_released();
 }
 
-void test_ili9341_row_wider_than_the_limit_is_one_band(void) {
+void test_ili9341_wide_rows_release_the_bus_within_the_limit(void) {
   start_ili9341();
 
-  // 160 px are 320 bytes: one whole row per band, above the limit.
-  TEST_ASSERT_TRUE(jh_ili9341_fill_rect(&s_ili, 0u, 0u, 160u, 3u, FILL_COLOR));
+  // Each 160-pixel row must split into 128 and 32 pixels.
+  TEST_ASSERT_TRUE(jh_ili9341_fill_rect(&s_ili, 3u, 2u, 160u, 3u, FILL_COLOR));
 
-  TEST_ASSERT_EQUAL_size_t(3u, s_panel.pixel_selections);
-  TEST_ASSERT_EQUAL_size_t(320u, s_panel.max_select_pixel_bytes);
+  TEST_ASSERT_EQUAL_size_t(6u, s_panel.pixel_selections);
+  TEST_ASSERT_EQUAL_size_t(256u, s_panel.max_select_pixel_bytes);
+  fill_expected(160u, 3u, false);
+  TEST_ASSERT_TRUE(
+      panel_model_area_equals(&s_panel, 3u, 2u, 160u, 3u, s_expected));
+  fill_expected(160u, 3u, true);
+  TEST_ASSERT_TRUE(
+      jh_ili9341_draw_rgb_bitmap(&s_ili, 3u, 2u, s_expected, 160u, 3u));
+  TEST_ASSERT_EQUAL_size_t(12u, s_panel.pixel_selections);
+  TEST_ASSERT_EQUAL_size_t(256u, s_panel.max_select_pixel_bytes);
+  TEST_ASSERT_TRUE(
+      panel_model_area_equals(&s_panel, 3u, 2u, 160u, 3u, s_expected));
+  TEST_ASSERT_EQUAL_HEX16(0u, s_panel.pixels[2][2]);
+  TEST_ASSERT_EQUAL_HEX16(0u, s_panel.pixels[2][163]);
+  TEST_ASSERT_EQUAL_HEX16(0u, s_panel.pixels[5][3]);
   expect_bus_released();
 }
 
@@ -121,6 +136,7 @@ void test_st7789_fill_and_bitmap_are_split_into_bands(void) {
 
   TEST_ASSERT_TRUE(jh_st77xx_fill_rect(&s_st, 4u, 6u, 40u, 20u, FILL_COLOR));
   TEST_ASSERT_EQUAL_size_t(7u, s_panel.pixel_selections);
+  TEST_ASSERT_EQUAL_size_t(7u, s_panel.selections);
   fill_expected(40u, 20u, false);
   TEST_ASSERT_TRUE(
       panel_model_area_equals(&s_panel, x, y, 40u, 20u, s_expected));
@@ -129,9 +145,44 @@ void test_st7789_fill_and_bitmap_are_split_into_bands(void) {
   TEST_ASSERT_TRUE(
       jh_st77xx_draw_rgb_bitmap(&s_st, 4u, 6u, s_expected, 40u, 20u));
   TEST_ASSERT_EQUAL_size_t(14u, s_panel.pixel_selections);
+  TEST_ASSERT_EQUAL_size_t(14u, s_panel.selections);
   TEST_ASSERT_EQUAL_size_t(240u, s_panel.max_select_pixel_bytes);
   TEST_ASSERT_TRUE(
       panel_model_area_equals(&s_panel, x, y, 40u, 20u, s_expected));
+  expect_bus_released();
+}
+
+static uint8_t fail_pixels_exchange(void *user, uint8_t mosi) {
+  const uint8_t value = panel_model_exchange(user, mosi);
+  const panel_model_t *panel = (const panel_model_t *)user;
+  if (!hal_mock_gpio_get_state(panel->dc_pin) && mosi == 0x2Cu) {
+    hal_mock_spi_fail_next_dma_write(0u, true);
+    hal_mock_spi_fail_next_write(0u, true);
+  }
+  return value;
+}
+
+void test_pixel_failure_after_the_window_releases_the_single_lease(void) {
+  start_ili9341();
+  static const hal_mock_spi_device_t device = {
+      panel_model_select, fail_pixels_exchange, panel_model_deselect};
+  hal_mock_spi_attach_device(0u, 10u, &device, &s_panel);
+  TEST_ASSERT_FALSE(jh_ili9341_fill_rect(&s_ili, 0u, 0u, 40u, 2u, FILL_COLOR));
+  TEST_ASSERT_EQUAL_size_t(1u, s_panel.selections);
+  TEST_ASSERT_EQUAL_size_t(0u, s_panel.pixel_selections);
+  expect_bus_released();
+}
+
+void test_st7789_wide_rows_keep_offsets_and_bound_the_single_lease(void) {
+  start_st7789();
+  fill_expected(129u, 3u, true);
+  TEST_ASSERT_TRUE(
+      jh_st77xx_draw_rgb_bitmap(&s_st, 4u, 6u, s_expected, 129u, 3u));
+  TEST_ASSERT_EQUAL_size_t(6u, s_panel.selections);
+  TEST_ASSERT_EQUAL_size_t(256u, s_panel.max_select_pixel_bytes);
+  TEST_ASSERT_TRUE(panel_model_area_equals(
+      &s_panel, (uint16_t)(4u + s_st.x_start), (uint16_t)(6u + s_st.y_start),
+      129u, 3u, s_expected));
   expect_bus_released();
 }
 
@@ -139,8 +190,10 @@ int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_ili9341_fill_rect_sends_bands_within_the_limit);
   RUN_TEST(test_ili9341_bitmap_bands_keep_every_pixel_in_place);
-  RUN_TEST(test_ili9341_row_wider_than_the_limit_is_one_band);
+  RUN_TEST(test_ili9341_wide_rows_release_the_bus_within_the_limit);
   RUN_TEST(test_ili9341_failed_band_stops_the_area_and_releases_the_bus);
   RUN_TEST(test_st7789_fill_and_bitmap_are_split_into_bands);
+  RUN_TEST(test_st7789_wide_rows_keep_offsets_and_bound_the_single_lease);
+  RUN_TEST(test_pixel_failure_after_the_window_releases_the_single_lease);
   return UNITY_END();
 }

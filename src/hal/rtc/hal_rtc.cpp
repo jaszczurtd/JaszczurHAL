@@ -22,8 +22,12 @@ struct hal_rtc_impl_s {
   bool provider_active;
   hal_mutex_t mutex;
   const jh_rtc_provider_ops_t *provider;
-  alignas(std::max_align_t) uint8_t
-      provider_context[JH_RTC_PROVIDER_STORAGE_SIZE];
+  // Natural union alignment also covers 32-bit hosts without an over-aligned
+  // member that requires hidden padding around the provider storage.
+  union {
+    uint8_t provider_context[JH_RTC_PROVIDER_STORAGE_SIZE];
+    std::max_align_t provider_alignment;
+  };
 };
 
 static hal_rtc_impl_t s_pool[HAL_RTC_MAX_INSTANCES];

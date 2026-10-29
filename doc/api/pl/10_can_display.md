@@ -532,11 +532,19 @@ hal_status_t hal_can_recover(hal_can_t h, uint32_t timeout_ms);
   `hal_can_set_std_filters()` albo jednym filtrze we wszystkich sześciu
   slotach. Ramka przyjęta tylko przez sloty od 2 do 5 trafia od razu do RXB1
   i może wyjść po nowszej ramce z RXB0, bo kontroler nie zapisuje czasu
-  przyjęcia ramek. Gdy nadawanie czeka na wysłanie swojej
-  ramki, sterownik przenosi przychodzące ramki do bufora na 8 ramek, więc
-  zajęta magistrala nie przepełnia w tym czasie dwóch buforów odbiorczych.
-  Funkcje odbioru oddają najpierw te ramki. Ramki, które przyjdą przy pełnym
-  buforze, zostają w kontrolerze.
+  przyjęcia ramek. Podczas oczekiwania na wolny bufor TX lub zakończenie
+  nadawania sterownik przenosi przychodzące ramki do bufora na 8 ramek.
+  Zachowuje je również przed ustawieniem rejestrów TX. Polling odbioru
+  zachowuje oczekujące ramki przed zwolnieniem SPI
+  między sprawdzeniem a odczytem. Funkcje odbioru oddają najpierw zachowane
+  ramki. Ramki, które przyjdą przy pełnym buforze, zostają w kontrolerze.
+  MCP2515 zajmuje SPI na całą operację sprzętową: ustawienie rejestrów,
+  oczekiwanie na zakończenie nadawania i odbiór serii ramek. Odbiór zachowuje
+  oczekujące ramki przed wywołaniem aplikacji. Przekazanie ramek już obecnych
+  w RAM wymaga tylko mutexa drivera; SPI pozostaje dostępne dla innych urządzeń.
+  `hal_can_get_status()` zlicza zatrzaśnięte flagi RX0OVR i RX1OVR w
+  `rx_hw_lost` i kasuje tylko te flagi. Licznik jest dolną granicą liczby
+  utraconych ramek; ponowna inicjalizacja kontrolera go zeruje.
 - **Testy hostowe:** `hal_mock_can_set_queued(true)` sprawia, że uchwyty
   mocka tworzone później są kolejkowe jak FDCAN; `hal_mock_can_fail_sends()`
   kończy kolejne nadania kolejkowe porażką.
@@ -1006,9 +1014,9 @@ if (status == HAL_OK) {
   `hal_display_draw_image()` i prostokąty, z których powstają kształty
   i tekst, zwykle idą w jednej transakcji SPI. Ustaw
   `HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES` w `hal_project_config.h`, a obszar
-  zostanie podzielony na pasy pełnych wierszy. Każdy pas niesie najwyżej tyle
-  bajtów pikseli, ale zawsze co najmniej jeden wiersz, i kończy własną
-  transakcję. Inne urządzenie na tej samej magistrali, np. kontroler CAN
+  zostanie podzielony na pasy z ograniczoną liczbą bajtów pikseli. Wiersze
+  szersze od limitu są dzielone również w poziomie. Każdy pas wysyła swoje
+  okno adresowe i piksele w jednym przejęciu SPI, po czym zwalnia magistralę. Inne urządzenie na tej samej magistrali, np. kontroler CAN
   obsługiwany przez drugi rdzeń, może wtedy skorzystać z niej między dwoma
   pasami. Dozwolone wartości to 0 (domyślnie, cały obszar naraz) oraz
   64..1048576. Strumień otwarty przez `hal_display_begin_write()` zajmuje

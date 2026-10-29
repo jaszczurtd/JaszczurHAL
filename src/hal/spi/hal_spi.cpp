@@ -1,11 +1,12 @@
 #include "hal/core/hal_config.h"
+#include "hal/core/hal_memory.h"
 
 #ifdef HAL_ENABLE_SPI
 
 #include "hal/spi/hal_spi.h"
 #include "hal/spi/hal_spi_internal.h"
 
-uint8_t hal_spi_transfer(uint8_t bus, uint8_t data) {
+uint8_t HAL_RAM_FUNC(hal_spi_transfer)(uint8_t bus, uint8_t data) {
   uint8_t received = 0xFFu;
   (void)hal_spi_transfer_ex(bus, data, &received);
   return received;
@@ -25,14 +26,16 @@ uint16_t hal_spi_transfer16(uint8_t bus, uint16_t data) {
   return received;
 }
 
-hal_status_t hal_spi_transfer_buffer(uint8_t bus, uint8_t *buffer, size_t len) {
+hal_status_t HAL_RAM_FUNC(hal_spi_transfer_buffer)(uint8_t bus, uint8_t *buffer,
+                                                   size_t len) {
   if (bus > 1u || (len > 0u && buffer == nullptr)) {
     return HAL_EINVAL;
   }
   return hal_spi_transfer_txrx(bus, buffer, buffer, len);
 }
 
-hal_status_t hal_spi_write(uint8_t bus, const uint8_t *data, size_t len) {
+hal_status_t HAL_RAM_FUNC(hal_spi_write)(uint8_t bus, const uint8_t *data,
+                                         size_t len) {
   if (bus > 1u || (len > 0u && data == nullptr)) {
     return HAL_EINVAL;
   }

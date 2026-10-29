@@ -617,9 +617,10 @@ hal_status_t hal_can_send_frame_ex(hal_can_t h, const hal_can_frame_t *frame,
       /* No transmit queue: send now and still report the outcome. */
       const uint32_t sent_tag = take_tag(h);
       st = h->provider->send_frame(h->ctx, frame);
-      jh_can_queues_post_tx(h->queues, sent_tag, st,
-                            st == HAL_OK ? HAL_CAN_TX_DONE : HAL_CAN_TX_FAILED,
-                            hal_micros64());
+      jh_can_queues_post_tx(
+          h->queues, sent_tag, st,
+          (uint8_t)(st == HAL_OK ? HAL_CAN_TX_DONE : HAL_CAN_TX_FAILED),
+          hal_micros64());
       if (tag != NULL) {
         *tag = sent_tag;
       }

@@ -232,8 +232,8 @@ static hal_status_t mock_wakeup_cancel(void *context) {
   }
   jh_rtc_mock_context_t *mock = mock_context(context);
   mock->wakeup = {};
-  mock->flags &= (uint8_t)~HAL_RTC_FLAG_WAKEUP;
-  mock->irq_mask &= (uint8_t)~HAL_RTC_IRQ_WAKEUP;
+  mock->flags = (uint8_t)(mock->flags & ~HAL_RTC_FLAG_WAKEUP);
+  mock->irq_mask = (uint8_t)(mock->irq_mask & ~HAL_RTC_IRQ_WAKEUP);
   return mock->clock_source == HAL_RTC_CLOCK_SOURCE_EXTERNAL ? HAL_EUNSUPPORTED
                                                              : HAL_OK;
 }

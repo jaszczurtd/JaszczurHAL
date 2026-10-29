@@ -1,4 +1,5 @@
 #include "hal/spi/hal_spi_device.h"
+#include "hal/core/hal_memory.h"
 
 #include "hal/gpio/hal_gpio.h"
 
@@ -87,7 +88,7 @@ hal_status_t hal_spi_device_init(hal_spi_device_t *device, uint8_t bus,
   return HAL_OK;
 }
 
-hal_status_t hal_spi_device_acquire(hal_spi_device_t *device) {
+hal_status_t HAL_RAM_FUNC(hal_spi_device_acquire)(hal_spi_device_t *device) {
   if (!device_valid(device)) {
     return HAL_EINVAL;
   }
@@ -115,7 +116,7 @@ hal_status_t hal_spi_device_acquire(hal_spi_device_t *device) {
   return HAL_OK;
 }
 
-hal_status_t hal_spi_device_release(hal_spi_device_t *device) {
+hal_status_t HAL_RAM_FUNC(hal_spi_device_release)(hal_spi_device_t *device) {
   if (!device_valid(device)) {
     return HAL_EINVAL;
   }
@@ -132,8 +133,9 @@ hal_status_t hal_spi_device_release(hal_spi_device_t *device) {
   return status;
 }
 
-hal_status_t hal_spi_device_finish(hal_spi_device_t *device,
-                                   hal_status_t operation_status) {
+hal_status_t
+HAL_RAM_FUNC(hal_spi_device_finish)(hal_spi_device_t *device,
+                                    hal_status_t operation_status) {
   const hal_status_t release_status = hal_spi_device_release(device);
   return hal_status_is_error(operation_status) ? operation_status
                                                : release_status;

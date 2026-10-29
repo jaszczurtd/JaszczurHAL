@@ -18,7 +18,7 @@
 #include "hal/time/jh_calendar.h"
 
 #include <climits>
-#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #define CLOCK_ADDRESS 0x68u
@@ -58,15 +58,30 @@ DateTime::DateTime(uint16_t year, uint8_t month, uint8_t day, uint8_t hour,
   ss = sec;
 }
 
-DateTime::DateTime(const char *date, const char *time) {
+DateTime::DateTime(const char *date, const char *time)
+    : DateTime(2000u, 1u, 1u) {
   static const char month_names[] = "JanFebMarAprMayJunJulAugSepOctNovDec";
-  static char buff[4] = {'0', '0', '0', '0'};
-  int y = 0;
-  std::sscanf(date, "%3s %hhu %d", buff, &d, &y);
-  yOff = (uint8_t)(y >= 2000 ? (y - 2000) : y);
-  const char *found = std::strstr(month_names, buff);
-  m = (uint8_t)((found != nullptr) ? ((found - month_names) / 3 + 1) : 1);
-  std::sscanf(time, "%hhu:%hhu:%hhu", &hh, &mm, &ss);
+  if (date != nullptr && std::strlen(date) >= 3u) {
+    const char month[] = {date[0], date[1], date[2], '\0'};
+    const char *found = std::strstr(month_names, month);
+    m = (uint8_t)((found != nullptr) ? ((found - month_names) / 3 + 1) : 1);
+    char *next = nullptr;
+    d = (uint8_t)std::strtol(date + 3, &next, 10);
+    const long year = std::strtol(next, nullptr, 10);
+    yOff = (uint8_t)(year >= 2000 ? (year - 2000) : year);
+  }
+  if (time != nullptr) {
+    uint8_t *const components[] = {&hh, &mm, &ss};
+    const char *cursor = time;
+    for (size_t i = 0u; i < COUNTOF(components); ++i) {
+      char *next = nullptr;
+      *components[i] = (uint8_t)std::strtol(cursor, &next, 10);
+      if (*next != ':') {
+        break;
+      }
+      cursor = next + 1;
+    }
+  }
 }
 
 uint8_t DateTime::dayOfTheWeek() const {
@@ -161,6 +176,9 @@ hal_status_t DS3231::getDateTimeEx(DateTime *out_datetime) {
   if (!readBytes(0x00u, buffer, 7u)) {
     return HAL_EIO;
   }
+  if ((buffer[5] & 0x80u) != 0u) {
+    return HAL_EPROTO;
+  }
 
   const uint8_t ss = (uint8_t)bcdToDec((byte)(buffer[0] & 0x7Fu));
   const uint8_t mm = bcdToDec((byte)(buffer[1] & 0x7Fu));
@@ -243,12 +261,23 @@ void DS3231::setEpoch(time_t epoch, bool flag_localtime) {
 #if defined(__AVR__)
   epoch -= SECONDS_FROM_1970_TO_2000;
 #endif
-  struct tm tmnow;
-  if (flag_localtime) {
-    localtime_r(&epoch, &tmnow);
-  } else {
-    gmtime_r(&epoch, &tmnow);
+  struct tm tmnow = {};
+#if defined(_WIN32)
+  if ((flag_localtime ? localtime_s(&tmnow, &epoch)
+                      : gmtime_s(&tmnow, &epoch)) != 0) {
+    return;
   }
+#else
+  if (flag_localtime) {
+    if (localtime_r(&epoch, &tmnow) == nullptr) {
+      return;
+    }
+  } else {
+    if (gmtime_r(&epoch, &tmnow) == nullptr) {
+      return;
+    }
+  }
+#endif
   setSecond((byte)tmnow.tm_sec);
   setMinute((byte)tmnow.tm_min);
   setHour((byte)tmnow.tm_hour);
@@ -629,7 +658,7 @@ hal_status_t DS3231::setSquareWaveEx(bool enabled, bool battery,
     return HAL_EIO;
   }
 
-  control = (byte)(control & (byte) ~(0x80u | 0x40u | 0x18u | 0x04u));
+  control = (byte)(control & ~(0x80u | 0x40u | 0x18u | 0x04u));
   if (enabled) {
     control = (byte)(control | (byte)(frequency << 3u));
     if (battery) {

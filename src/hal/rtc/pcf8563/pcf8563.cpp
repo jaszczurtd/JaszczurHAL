@@ -330,7 +330,7 @@ bool pcf8563_set_interrupt_enable(const pcf8563_t *dev, bool alarm_irq_enabled,
     return false;
   }
 
-  cs2 = (uint8_t)(cs2 & (uint8_t) ~(PCF8563_CS2_AIE | PCF8563_CS2_TIE));
+  cs2 = (uint8_t)(cs2 & ~(PCF8563_CS2_AIE | PCF8563_CS2_TIE));
   if (alarm_irq_enabled) {
     cs2 = (uint8_t)(cs2 | PCF8563_CS2_AIE);
   }

@@ -55,6 +55,22 @@ static inline bool jh_display_spi_setup(hal_spi_device_t *device, uint8_t bus,
   return true;
 }
 
+static inline hal_status_t jh_display_spi_command_held(hal_spi_device_t *device,
+                                                       int16_t dc_pin,
+                                                       uint8_t command,
+                                                       const uint8_t *data,
+                                                       uint8_t data_len) {
+  hal_gpio_write(jh_display_pin_u8(dc_pin), false);
+  hal_status_t status = hal_spi_write(device->bus, &command, 1u);
+  if (hal_status_is_ok(status)) {
+    hal_gpio_write(jh_display_pin_u8(dc_pin), true);
+    if (data != NULL && data_len > 0u) {
+      status = hal_spi_write(device->bus, data, data_len);
+    }
+  }
+  return status;
+}
+
 static inline bool jh_display_spi_write_command(hal_spi_device_t *device,
                                                 int16_t dc_pin, uint8_t command,
                                                 const uint8_t *data,
@@ -62,19 +78,13 @@ static inline bool jh_display_spi_write_command(hal_spi_device_t *device,
   if (device == NULL || !jh_display_pin_connected(dc_pin)) {
     return false;
   }
-  hal_status_t status = hal_spi_device_acquire(device);
+  const hal_status_t status = hal_spi_device_acquire(device);
   if (hal_status_is_error(status)) {
     return false;
   }
-  hal_gpio_write(jh_display_pin_u8(dc_pin), false);
-  status = hal_spi_write(device->bus, &command, 1u);
-  if (hal_status_is_ok(status)) {
-    hal_gpio_write(jh_display_pin_u8(dc_pin), true);
-    if (data != NULL && data_len > 0u) {
-      status = hal_spi_write(device->bus, data, data_len);
-    }
-  }
-  return hal_status_is_ok(hal_spi_device_finish(device, status));
+  return hal_status_is_ok(hal_spi_device_finish(
+      device,
+      jh_display_spi_command_held(device, dc_pin, command, data, data_len)));
 }
 
 typedef bool (*jh_display_write_command_fn)(void *ctx, uint8_t command,
@@ -105,6 +115,42 @@ jh_display_set_addr_window(void *ctx, jh_display_write_command_fn write_command,
   jh_display_put_u16_be(&data[2], (uint16_t)(y + height - 1u));
   return write_command(ctx, row_command, data, sizeof(data)) &&
          write_command(ctx, write_command_code, NULL, 0u);
+}
+
+/** @brief Owned SPI device and DC pin for one address-window setup. */
+typedef struct {
+  hal_spi_device_t *device; /**< Acquired display device. */
+  int16_t dc_pin;           /**< Connected command/data GPIO. */
+} jh_display_spi_window_t;
+
+static inline bool jh_display_spi_window_command(void *ctx, uint8_t command,
+                                                 const uint8_t *data,
+                                                 uint8_t data_len) {
+  jh_display_spi_window_t *window = (jh_display_spi_window_t *)ctx;
+  return hal_status_is_ok(jh_display_spi_command_held(
+      window->device, window->dc_pin, command, data, data_len));
+}
+
+/** @brief Acquire SPI and send the address window under the same lease as
+ * its following pixels. A successful caller must finish the device. */
+static inline bool
+jh_display_spi_begin_window(hal_spi_device_t *device, int16_t dc_pin,
+                            uint8_t column_command, uint8_t row_command,
+                            uint8_t write_command, uint16_t x, uint16_t y,
+                            uint16_t w, uint16_t h) {
+  if (device == NULL || !jh_display_pin_connected(dc_pin) ||
+      hal_status_is_error(hal_spi_device_acquire(device))) {
+    return false;
+  }
+  jh_display_spi_window_t window = {device, dc_pin};
+  if (!jh_display_set_addr_window(&window, jh_display_spi_window_command,
+                                  column_command, row_command, write_command, x,
+                                  y, w, h)) {
+    (void)hal_spi_device_finish(device, HAL_EIO);
+    return false;
+  }
+  hal_gpio_write(jh_display_pin_u8(dc_pin), true);
+  return true;
 }
 
 static inline bool jh_display_spi_write_dma_or_fallback(uint8_t bus,
@@ -220,8 +266,8 @@ typedef struct {
 /**
  * @brief Rows of a @p width wide RGB565 area sent in one transaction.
  *
- * At most HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES of pixels, but at least one row;
- * with the default 0 the whole @p height goes at once.
+ * At least one row; write_area() splits rows wider than the byte limit.
+ * With the default 0 the whole @p height goes at once.
  */
 static inline uint32_t jh_display_spi_band_rows(uint16_t width,
                                                 uint16_t height) {
@@ -237,8 +283,8 @@ static inline uint32_t jh_display_spi_band_rows(uint16_t width,
 }
 
 /**
- * @brief Fill or draw an area in bands of whole rows, each in its own
- *        transaction, so other devices on the bus get it between two bands.
+ * @brief Fill or draw an area in bounded transactions. Split wide rows too,
+ *        so other devices on the bus can run within the configured byte limit.
  * @param writer Driver operations.
  * @param pixels Native RGB565 bitmap of @p w x @p h, or NULL to fill.
  * @param color Fill color when @p pixels is NULL.
@@ -252,20 +298,32 @@ jh_display_spi_write_area(const jh_display_spi_writer_t *writer, uint16_t x,
     return false;
   }
   const uint32_t band = jh_display_spi_band_rows(w, h);
+#if HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES > 0u
+  const uint32_t max_width = HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES / 2u;
+#else
+  const uint32_t max_width = w;
+#endif
   for (uint32_t row = 0u; row < h; row += band) {
     const uint32_t left = (uint32_t)h - row;
     const uint16_t rows = (uint16_t)(left < band ? left : band);
-    if (!writer->begin_write(writer->dev, x, (uint16_t)(y + row), w, rows)) {
-      return false;
-    }
-    const size_t count = (size_t)w * (size_t)rows;
-    const bool ok =
-        (pixels == NULL)
-            ? jh_display_spi_fill_color(writer->spi_device, color, count)
-            : writer->write_pixels(writer->dev, &pixels[(size_t)row * w],
-                                   count);
-    if (!writer->end_write(writer->dev) || !ok) {
-      return false;
+    // A partial-width tile has one row, so bitmap data stays contiguous.
+    for (uint32_t column = 0u; column < w; column += max_width) {
+      const uint32_t remaining = (uint32_t)w - column;
+      const uint16_t width =
+          (uint16_t)(remaining < max_width ? remaining : max_width);
+      if (!writer->begin_write(writer->dev, (uint16_t)(x + column),
+                               (uint16_t)(y + row), width, rows)) {
+        return false;
+      }
+      const size_t count = (size_t)width * (size_t)rows;
+      const bool ok =
+          (pixels == NULL)
+              ? jh_display_spi_fill_color(writer->spi_device, color, count)
+              : writer->write_pixels(writer->dev,
+                                     &pixels[(size_t)row * w + column], count);
+      if (!writer->end_write(writer->dev) || !ok) {
+        return false;
+      }
     }
   }
   return true;

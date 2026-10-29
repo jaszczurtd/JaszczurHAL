@@ -124,8 +124,8 @@ void test_receive_injected_frame(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_can_receive(can, &id, &len, buf));
   TEST_ASSERT_EQUAL_HEX32(0x200, id);
   TEST_ASSERT_EQUAL_UINT8(2, len);
-  TEST_ASSERT_EQUAL_HEX8(0xAB, buf[0]);
-  TEST_ASSERT_EQUAL_HEX8(0xCD, buf[1]);
+  TEST_ASSERT_EQUAL_UINT8(0xABu, buf[0]);
+  TEST_ASSERT_EQUAL_UINT8(0xCDu, buf[1]);
 }
 
 void test_available_says_eagain_when_empty(void) {
@@ -481,7 +481,7 @@ void test_process_all_drains_queue_and_skips_invalid_frames(void) {
   TEST_ASSERT_EQUAL_INT(2, s_frame_count);
   TEST_ASSERT_EQUAL_HEX32(0x321, s_last_id);
   TEST_ASSERT_EQUAL_UINT8(1, s_last_len);
-  TEST_ASSERT_EQUAL_HEX8(0xAA, s_last_payload[0]);
+  TEST_ASSERT_EQUAL_UINT8(0xAAu, s_last_payload[0]);
   TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, hal_can_available(can));
 }
 

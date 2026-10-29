@@ -539,6 +539,19 @@ jh_enable_host_warnings(test_spsc_ring ERRORS)
 target_link_libraries(test_spsc_ring PRIVATE Threads::Threads)
 add_test(NAME test_spsc_ring COMMAND test_spsc_ring)
 
+add_executable(test_jh_spi_ticket
+    test_jh_spi_ticket.cpp
+    ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+target_include_directories(test_jh_spi_ticket PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/third_party/jhbase/include)
+target_compile_definitions(test_jh_spi_ticket PRIVATE
+    HAL_ENABLE_UNITY UNITY_INCLUDE_CONFIG_H)
+jh_enable_host_warnings(test_jh_spi_ticket ERRORS)
+target_link_libraries(test_jh_spi_ticket PRIVATE Threads::Threads)
+add_test(NAME test_jh_spi_ticket COMMAND test_jh_spi_ticket)
+set_tests_properties(test_jh_spi_ticket PROPERTIES TIMEOUT 20)
+
 # hal_can_board_config() over generated board facts: the host mock board
 # declares no CAN channel, the canhat assembly of the nucleo-canhat device tree
 # three.

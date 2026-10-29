@@ -508,10 +508,19 @@ hal_status_t hal_can_recover(hal_can_t h, uint32_t timeout_ms);
   that is while every frame filter slots 2 to 5 accept is also accepted by
   slot 0 or 1, as with `hal_can_set_std_filters()` or one filter in all six
   slots. A frame only slots 2 to 5 accept goes straight to RXB1 and can come
-  out after a newer RXB0 frame; the controller does not time its buffers. While a send waits for its frame to leave, the driver moves
-  arriving frames into a ring of 8, so a busy bus does not overflow the two
-  receive buffers during that wait. The receive calls return those frames
-  first. Frames that arrive while the ring is full stay in the controller.
+  out after a newer RXB0 frame; the controller does not time its buffers.
+  While waiting for TX space or completion, the driver moves arriving frames
+  into a ring of 8. It also retains pending frames before TX register setup.
+  Receive polling retains pending
+  frames before releasing SPI between poll and read. The receive calls return
+  retained frames first. Frames arriving while the ring is full stay in the controller.
+  The MCP2515 holds SPI across each hardware operation, including register
+  setup, the TX completion wait and a receive burst. Receive calls retain
+  pending frames before invoking the application; delivering frames already
+  in RAM takes only the driver mutex, leaving SPI available to other devices.
+  `hal_can_get_status()` accumulates the latched RX0OVR and RX1OVR flags in
+  `rx_hw_lost` and clears only those flags. This is a lower bound of lost
+  frames, reset when the controller is initialized again.
 - **Host tests:** `hal_mock_can_set_queued(true)` makes mock handles created
   afterwards queued like FDCAN; `hal_mock_can_fail_sends()` ends the next
   queued sends as failed.
@@ -964,9 +973,9 @@ if (status == HAL_OK) {
   including `hal_display_fill_screen()`, `hal_display_draw_image()` and the
   rectangles that shapes and text are drawn with, normally send the whole area
   in one SPI transaction. Set `HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES` in
-  `hal_project_config.h` to split the area into bands of whole rows. Each band
-  carries at most that many bytes of pixels, but always at least one row, and
-  ends its own transaction. Another device on the same bus, for example a CAN
+  `hal_project_config.h` to bound each band's pixel bytes. Rows wider than the
+  limit split into columns too. Each band sends its address window and pixels
+  under one SPI lease, then releases the bus. Another device on the same bus, for example a CAN
   controller served by the other core, can then use the bus between two bands.
   Valid values are 0 (default, whole area) and 64..1048576. A stream opened
   with `hal_display_begin_write()` keeps the bus until `hal_display_end_write()`.

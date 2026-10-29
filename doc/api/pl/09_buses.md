@@ -121,6 +121,11 @@ Asynchroniczny transfer DMA należy do tej samej transakcji i sekcji krytycznej:
 chip-select musi pozostać aktywny, a magistrala zablokowana aż do zakończenia
 `_async_wait()`.
 
+Na RP bez FreeRTOS oczekujący uzyskują magistralę w kolejności zgłoszeń;
+sterownik zwalniający ją i ponownie zajmujący nie wyprzedzi drugiego rdzenia,
+który już czeka. FreeRTOS korzysta ze swojego mutexa z dziedziczeniem
+priorytetu. Blokady są przeznaczone dla kontekstu zadania.
+
 ---
 
 <a id="hal_spi_device---przenośny-deskryptor-urządzenia-spi"></a>

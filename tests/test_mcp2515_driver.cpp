@@ -1,11 +1,27 @@
 #include "hal/impl/.mock/hal_mock.h"
 #include "utils/unity.h"
 
-#include <string.h>
-#define private public
-#include "hal/can/mcp2515/mcp2515_driver.h"
-#undef private
 #include "hal/can/mcp2515/hal_can_mcp2515.h"
+#include "hal/can/mcp2515/mcp2515_driver.h"
+#include <string.h>
+
+struct JHMCP2515TestAccess {
+  static void writeId(JHMCP2515 &can, INT8U address, INT8U ext, INT32U id) {
+    can.mcp2515_write_id(address, ext, id);
+  }
+  static void readId(JHMCP2515 &can, INT8U address, INT8U *ext, INT32U *id) {
+    can.mcp2515_read_id(address, ext, id);
+  }
+  static void writeMessage(JHMCP2515 &can, INT8U address) {
+    can.mcp2515_write_canMsg(address);
+  }
+  static INT8U setMessage(JHMCP2515 &can, INT32U id, INT8U rtr, INT8U ext,
+                          INT8U length, INT8U *payload) {
+    return can.setMsg(id, rtr, ext, length, payload);
+  }
+  static INT8U length(const JHMCP2515 &can) { return can.m_nDlc; }
+  static INT8U mode(const JHMCP2515 &can) { return can.mcpMode; }
+};
 
 /* The provider operations the facade calls; their context is a JHMCP2515. */
 static const jh_can_provider_t &P = jh_can_mcp2515_provider;
@@ -68,7 +84,10 @@ void setUp(void) {
   hal_mock_set_micros_step(0u);
 }
 
-void tearDown(void) {}
+void tearDown(void) {
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_spi_get_lock_depth(0u));
+  TEST_ASSERT_FALSE(hal_mock_spi_transaction_active(0u));
+}
 
 void test_set_gpo_uses_hal_spi_and_configures_cs_pin(void) {
   JHMCP2515 can(10u, 0u);
@@ -92,7 +111,7 @@ void test_write_id_standard_11bit_uses_expected_register_encoding(void) {
   JHMCP2515 can(10u, 0u);
   hal_mock_spi_reset();
 
-  can.mcp2515_write_id((INT8U)(MCP_TXB0CTRL + 1u), 0u, 0x7DFu);
+  JHMCP2515TestAccess::writeId(can, (INT8U)(MCP_TXB0CTRL + 1u), 0u, 0x7DFu);
 
   const uint8_t expected[] = {
       MCP_WRITE, (uint8_t)(MCP_TXB0CTRL + 1u), 0xFBu, /* SIDH = 0x7DF >> 3 */
@@ -107,7 +126,7 @@ void test_write_id_extended_29bit_uses_expected_register_encoding(void) {
   JHMCP2515 can(10u, 0u);
   hal_mock_spi_reset();
 
-  can.mcp2515_write_id((INT8U)(MCP_TXB0CTRL + 1u), 1u, 0x1ABCDE3u);
+  JHMCP2515TestAccess::writeId(can, (INT8U)(MCP_TXB0CTRL + 1u), 1u, 0x1ABCDE3u);
 
   const uint8_t expected[] = {
       MCP_WRITE, (uint8_t)(MCP_TXB0CTRL + 1u), 0x0Du, /* SIDH */
@@ -130,7 +149,7 @@ void test_read_id_extended_29bit_decodes_from_raw_register_bytes(void) {
 
   INT8U ext = 0u;
   INT32U id = 0u;
-  can.mcp2515_read_id((INT8U)(MCP_TXB0CTRL + 1u), &ext, &id);
+  JHMCP2515TestAccess::readId(can, (INT8U)(MCP_TXB0CTRL + 1u), &ext, &id);
 
   TEST_ASSERT_EQUAL_UINT8(1u, ext);
   TEST_ASSERT_EQUAL_HEX32(0x1ABCDE3u, id);
@@ -148,7 +167,7 @@ void test_read_id_standard_11bit_decodes_from_raw_register_bytes(void) {
 
   INT8U ext = 1u;
   INT32U id = 0u;
-  can.mcp2515_read_id((INT8U)(MCP_TXB0CTRL + 1u), &ext, &id);
+  JHMCP2515TestAccess::readId(can, (INT8U)(MCP_TXB0CTRL + 1u), &ext, &id);
 
   TEST_ASSERT_EQUAL_UINT8(0u, ext);
   TEST_ASSERT_EQUAL_HEX32(0x7DFu, id);
@@ -160,9 +179,10 @@ void test_write_can_message_sets_rtr_bit_and_keeps_dlc_low_nibble(void) {
 
   INT8U payload[MAX_CHAR_IN_MESSAGE] = {0x11u, 0x22u, 0x33u, 0x44u,
                                         0x55u, 0x66u, 0x77u, 0x88u};
-  TEST_ASSERT_EQUAL_UINT8(MCP2515_OK, can.setMsg(0x123u, 1u, 0u, 3u, payload));
+  TEST_ASSERT_EQUAL_UINT8(MCP2515_OK, JHMCP2515TestAccess::setMessage(
+                                          can, 0x123u, 1u, 0u, 3u, payload));
 
-  can.mcp2515_write_canMsg((INT8U)(MCP_TXB0CTRL + 1u));
+  JHMCP2515TestAccess::writeMessage(can, (INT8U)(MCP_TXB0CTRL + 1u));
 
   const uint8_t expected[] = {
       MCP_WRITE,
@@ -189,11 +209,11 @@ void test_set_msg_clamps_dlc_to_8_and_write_does_not_overflow_payload(void) {
 
   INT8U payload[10] = {0x10u, 0x11u, 0x12u, 0x13u, 0x14u,
                        0x15u, 0x16u, 0x17u, 0x18u, 0x19u};
-  TEST_ASSERT_EQUAL_UINT8(MCP2515_OK,
-                          can.setMsg(0x321u, 0u, 0u, 0x0Fu, payload));
-  TEST_ASSERT_EQUAL_UINT8(8u, can.m_nDlc);
+  TEST_ASSERT_EQUAL_UINT8(MCP2515_OK, JHMCP2515TestAccess::setMessage(
+                                          can, 0x321u, 0u, 0u, 0x0Fu, payload));
+  TEST_ASSERT_EQUAL_UINT8(8u, JHMCP2515TestAccess::length(can));
 
-  can.mcp2515_write_canMsg((INT8U)(MCP_TXB0CTRL + 1u));
+  JHMCP2515TestAccess::writeMessage(can, (INT8U)(MCP_TXB0CTRL + 1u));
 
   const uint8_t expected[] = {
       MCP_WRITE,
@@ -252,7 +272,7 @@ void test_set_mode_caches_confirmed_hardware_mode(void) {
   hal_mock_spi_push_rx(0u, rx_script, sizeof(rx_script));
 
   TEST_ASSERT_EQUAL_UINT8(CAN_OK, can.setMode(MCP_LOOPBACK));
-  TEST_ASSERT_EQUAL_UINT8(MCP_LOOPBACK, can.mcpMode);
+  TEST_ASSERT_EQUAL_UINT8(MCP_LOOPBACK, JHMCP2515TestAccess::mode(can));
 }
 
 /* Register 10-1 CANCTRL.ABAT: while set, every pending and later transmission
@@ -330,9 +350,10 @@ static hal_status_t provider_init(const hal_can_config_t &cfg) {
 /* When a frame reaches the chip, counted in READ STATUS answers or in READ
  * RX BUFFER transactions before it. */
 enum ArrivalPoint : uint8_t {
-  ARRIVE_AT_STATUS_POLL, /* before READ STATUS answer number `at` */
-  ARRIVE_IN_RX_READ,     /* during RX read number `at`, before CS rises */
-  ARRIVE_AFTER_RX_READ,  /* as RX read number `at` frees its buffer */
+  ARRIVE_AT_STATUS_POLL,
+  ARRIVE_AT_TX_CTRL_READ, /* before READ STATUS answer number `at` */
+  ARRIVE_IN_RX_READ,      /* during RX read number `at`, before CS rises */
+  ARRIVE_AFTER_RX_READ,   /* as RX read number `at` frees its buffer */
 };
 
 /* A frame that reaches the chip from the bus while a test runs. */
@@ -370,6 +391,7 @@ struct RegisterChip {
   size_t arrival_count;
   size_t next_arrival;
   uint32_t overflows;
+  uint32_t busReleases;
 };
 
 static void chip_receive(RegisterChip *chip, const ChipArrival *frame) {
@@ -472,6 +494,7 @@ static uint8_t chip_exchange(void *user, uint8_t mosi) {
   switch (chip->instruction) {
   case MCP_READ:
     if ((chip->address & 0x7Fu) == MCP_TXB0CTRL) {
+      chip_arrive(chip, ARRIVE_AT_TX_CTRL_READ, 0u);
       chip_tx_tick(chip);
     }
     return chip->regs[chip->address++ & 0x7Fu];
@@ -499,6 +522,9 @@ static uint8_t chip_exchange(void *user, uint8_t mosi) {
 /* Raising CS after READ RX BUFFER frees that receive buffer. */
 static void chip_deselect(void *user) {
   RegisterChip *chip = static_cast<RegisterChip *>(user);
+  if (!hal_mock_spi_transaction_active(0u)) {
+    chip->busReleases++;
+  }
   if (chip->instruction == MCP_READ_RX0) {
     chip->regs[MCP_CANINTF] &= (uint8_t)~MCP_RX0IF;
   } else if (chip->instruction == MCP_READ_RX1) {
@@ -520,6 +546,29 @@ static RegisterChip s_chip;
 static void attach_chip(void) {
   memset(&s_chip, 0, sizeof(s_chip));
   hal_mock_spi_attach_device(0u, 10u, &kRegisterChip, &s_chip);
+}
+
+void test_backend_status_counts_latched_receive_overflows(void) {
+  JHMCP2515 can(10u, 0u);
+  attach_chip();
+  s_chip.regs[MCP_EFLG] = MCP_EFLG_RX0OVR | MCP_EFLG_RX1OVR | MCP_EFLG_EWARN;
+  s_chip.regs[MCP_TEC] = 7u;
+  s_chip.regs[MCP_REC] = 11u;
+  TEST_ASSERT_NOT_NULL(P.get_status);
+  hal_can_status_t status = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, P.get_status(&can, &status));
+  TEST_ASSERT_EQUAL_UINT32(1u, s_chip.busReleases);
+  TEST_ASSERT_EQUAL_UINT32(2u, status.rx_hw_lost);
+  TEST_ASSERT_EQUAL_UINT16(7u, status.tec);
+  TEST_ASSERT_EQUAL_UINT16(11u, status.rec);
+  TEST_ASSERT_EQUAL_INT(HAL_CAN_STATE_ERROR_WARNING, status.state);
+  TEST_ASSERT_EQUAL_UINT8(MCP_EFLG_EWARN, s_chip.regs[MCP_EFLG]);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, P.get_status(&can, &status));
+  TEST_ASSERT_EQUAL_UINT32(2u, status.rx_hw_lost);
+  s_chip.regs[MCP_EFLG] |= MCP_EFLG_RX1OVR;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, P.get_status(&can, &status));
+  TEST_ASSERT_EQUAL_UINT32(3u, status.rx_hw_lost);
+  TEST_ASSERT_EQUAL_UINT8(MCP_EFLG_EWARN, s_chip.regs[MCP_EFLG]);
 }
 
 /* Register chip that ends the next frame at the first status answer. */
@@ -710,9 +759,133 @@ void test_frames_arriving_during_a_send_wait_are_kept_in_order(void) {
 
   TEST_ASSERT_EQUAL_UINT8(CAN_OK, can.sendMsgBuf(0x123u, 0u, nullptr));
 
+  // A display cannot interleave pixel transfers between the status read,
+  // the RX drains and the next status read of this send.
+  TEST_ASSERT_EQUAL_UINT32(1u, s_chip.busReleases);
   TEST_ASSERT_EQUAL_UINT32(0u, s_chip.overflows);
   TEST_ASSERT_EQUAL_UINT8(CAN_MSGAVAIL, can.checkReceive());
   expect_frames_in_order(&can, 5u);
+}
+
+void test_receive_poll_frees_hardware_before_another_device_uses_spi(void) {
+  JHMCP2515 can(10u, 0u);
+  attach_chip();
+  const ChipArrival first[] = {arrival(0u, 0u), arrival(0u, 1u)};
+  s_chip.arrivals = first;
+  s_chip.arrival_count = COUNTOF(first);
+  TEST_ASSERT_EQUAL_UINT8(CAN_MSGAVAIL, can.checkReceive());
+  TEST_ASSERT_EQUAL_HEX8(0u,
+                         s_chip.regs[MCP_CANINTF] & (MCP_RX0IF | MCP_RX1IF));
+  TEST_ASSERT_EQUAL_UINT32(1u, s_chip.busReleases);
+  // Two more frames arrive while the caller releases SPI between poll and read.
+  const ChipArrival next[] = {arrival(0u, 2u), arrival(0u, 3u)};
+  chip_receive(&s_chip, &next[0]);
+  chip_receive(&s_chip, &next[1]);
+  TEST_ASSERT_EQUAL_UINT32(0u, s_chip.overflows);
+  expect_frames_in_order(&can, 4u);
+}
+
+void test_status_snapshot_retains_pending_frames_before_register_queries(void) {
+  JHMCP2515 can(10u, 0u);
+  attach_chip();
+  const ChipArrival frames[] = {arrival(0u, 0u), arrival(0u, 1u)};
+  chip_receive(&s_chip, &frames[0]);
+  chip_receive(&s_chip, &frames[1]);
+  jh_mcp2515_status_t status = {};
+  can.getStatus(&status);
+  TEST_ASSERT_EQUAL_HEX8(0u,
+                         s_chip.regs[MCP_CANINTF] & (MCP_RX0IF | MCP_RX1IF));
+  TEST_ASSERT_EQUAL_UINT32(1u, s_chip.busReleases);
+  expect_frames_in_order(&can, 2u);
+}
+
+void test_direct_receive_retains_the_batch_before_application_callbacks(void) {
+  JHMCP2515 can(10u, 0u);
+  attach_chip();
+  const ChipArrival frames[] = {arrival(0u, 0u), arrival(0u, 1u)};
+  s_chip.arrivals = frames;
+  s_chip.arrival_count = COUNTOF(frames);
+  INT32U id = 0u;
+  INT8U len = 0u;
+  INT8U data[8] = {};
+  TEST_ASSERT_EQUAL_UINT8(CAN_OK, can.readMsgBuf(&id, &len, data));
+  TEST_ASSERT_EQUAL_UINT8(0u, data[0]);
+  TEST_ASSERT_EQUAL_HEX8(0u,
+                         s_chip.regs[MCP_CANINTF] & (MCP_RX0IF | MCP_RX1IF));
+  const uint32_t releases = s_chip.busReleases;
+  TEST_ASSERT_EQUAL_UINT8(CAN_OK, can.readMsgBuf(&id, &len, data));
+  TEST_ASSERT_EQUAL_UINT8(1u, data[0]);
+  TEST_ASSERT_EQUAL_UINT32(releases, s_chip.busReleases);
+}
+
+void test_retained_receive_frames_do_not_take_the_spi_bus_again(void) {
+  JHMCP2515 can(10u, 0u);
+  attach_chip();
+  const ChipArrival frames[] = {arrival(0u, 0u), arrival(0u, 1u)};
+  s_chip.arrivals = frames;
+  s_chip.arrival_count = COUNTOF(frames);
+  TEST_ASSERT_EQUAL_UINT8(CAN_MSGAVAIL, can.checkReceive());
+  const uint32_t releases = s_chip.busReleases;
+  for (uint8_t number = 0u; number < 2u; ++number) {
+    TEST_ASSERT_EQUAL_UINT8(CAN_MSGAVAIL, can.checkReceive());
+    INT32U id = 0u;
+    INT8U len = 0u;
+    INT8U data[8] = {};
+    TEST_ASSERT_EQUAL_UINT8(CAN_OK, can.readMsgBuf(&id, &len, data));
+    TEST_ASSERT_EQUAL_UINT8(number, data[0]);
+    TEST_ASSERT_EQUAL_UINT32(releases, s_chip.busReleases);
+  }
+}
+
+void test_send_collects_frames_ready_when_transmission_finishes(void) {
+  JHMCP2515 can(10u, 0u);
+  attach_chip();
+  // TX already completed at the first status read: the polling loop never runs.
+  const ChipArrival frames[] = {arrival(0u, 0u), arrival(0u, 1u)};
+  s_chip.arrivals = frames;
+  s_chip.arrival_count = COUNTOF(frames);
+  s_chip.tx_reads = 1u;
+  uint8_t data[1] = {0u};
+  TEST_ASSERT_EQUAL_UINT8(CAN_OK, can.sendMsgBuf(0x120u, 0u, 1u, data));
+  TEST_ASSERT_EQUAL_HEX8(0u,
+                         s_chip.regs[MCP_CANINTF] & (MCP_RX0IF | MCP_RX1IF));
+  TEST_ASSERT_EQUAL_UINT32(1u, s_chip.busReleases);
+  expect_frames_in_order(&can, 2u);
+}
+
+void test_send_frees_receive_buffers_before_programming_transmit(void) {
+  JHMCP2515 can(10u, 0u);
+  prepare_send(0u, MODE_ONESHOT);
+  s_chip.tx_reads = 1u;
+  const ChipArrival first = arrival(0u, 0u);
+  const ChipArrival second = arrival(0u, 1u);
+  chip_receive(&s_chip, &first);
+  chip_receive(&s_chip, &second);
+  const ChipArrival next = arrival_at(ARRIVE_AT_TX_CTRL_READ, 0u, 2u);
+  s_chip.arrivals = &next;
+  s_chip.arrival_count = 1u;
+  TEST_ASSERT_EQUAL_UINT8(CAN_OK, can.sendMsgBuf(0x123u, 0u, nullptr));
+  TEST_ASSERT_EQUAL_UINT32(0u, s_chip.overflows);
+  TEST_ASSERT_EQUAL_size_t(1u, s_chip.next_arrival);
+  expect_frames_in_order(&can, 3u);
+}
+
+void test_send_keeps_receiving_while_all_transmit_buffers_are_busy(void) {
+  JHMCP2515 can(10u, 0u);
+  attach_chip();
+  s_chip.regs[MCP_TXB0CTRL] = MCP_TXB_TXREQ_M;
+  s_chip.regs[MCP_TXB1CTRL] = MCP_TXB_TXREQ_M;
+  s_chip.regs[MCP_TXB2CTRL] = MCP_TXB_TXREQ_M;
+  const ChipArrival frames[] = {arrival(0u, 0u), arrival(0u, 1u),
+                                arrival(3u, 2u), arrival(5u, 3u)};
+  s_chip.arrivals = frames;
+  s_chip.arrival_count = COUNTOF(frames);
+  hal_mock_set_micros_step(10u);
+  TEST_ASSERT_EQUAL_UINT8(CAN_GETTXBFTIMEOUT,
+                          can.sendMsgBuf(0x123u, 0u, nullptr));
+  TEST_ASSERT_EQUAL_UINT32(0u, s_chip.overflows);
+  TEST_ASSERT_EQUAL_size_t(COUNTOF(frames), s_chip.next_arrival);
+  expect_frames_in_order(&can, (uint8_t)COUNTOF(frames));
 }
 
 void test_a_full_receive_ring_leaves_frames_in_the_hardware(void) {
@@ -730,6 +903,10 @@ void test_a_full_receive_ring_leaves_frames_in_the_hardware(void) {
 
   TEST_ASSERT_EQUAL_UINT8(CAN_OK, can.sendMsgBuf(0x123u, 0u, nullptr));
 
+  TEST_ASSERT_EQUAL_UINT32(0u, s_chip.overflows);
+  TEST_ASSERT_EQUAL_HEX8(MCP_RX0IF | MCP_RX1IF,
+                         s_chip.regs[MCP_CANINTF] & (MCP_RX0IF | MCP_RX1IF));
+  TEST_ASSERT_EQUAL_UINT8(CAN_MSGAVAIL, can.checkReceive());
   TEST_ASSERT_EQUAL_UINT32(0u, s_chip.overflows);
   TEST_ASSERT_EQUAL_HEX8(MCP_RX0IF | MCP_RX1IF,
                          s_chip.regs[MCP_CANINTF] & (MCP_RX0IF | MCP_RX1IF));
@@ -809,7 +986,9 @@ void test_send_after_long_preemption_reports_success_when_txreq_cleared(void) {
   hal_mock_set_micros_step(3000u); /* every clock read jumps past 2.5 ms */
 
   TEST_ASSERT_EQUAL_UINT8(CAN_OK, can.sendMsgBuf(0x123u, 0u, nullptr));
-  TEST_ASSERT_EQUAL_UINT32(1u, s_chip.status_polls);
+  // One RX prefetch precedes the TX wait; only one status poll owns TXREQ.
+  TEST_ASSERT_EQUAL_UINT32(2u, s_chip.status_polls);
+  TEST_ASSERT_EQUAL_UINT32(0u, s_chip.txreq_reads_left);
 }
 
 void test_init_reaches_normal_mode_with_one_shot_on_a_working_chip(void) {
@@ -918,6 +1097,7 @@ void test_receive_without_a_frame_says_try_again(void) {
 
 int main(void) {
   UNITY_BEGIN();
+  RUN_TEST(test_backend_status_counts_latched_receive_overflows);
   RUN_TEST(test_set_gpo_uses_hal_spi_and_configures_cs_pin);
   RUN_TEST(test_write_id_standard_11bit_uses_expected_register_encoding);
   RUN_TEST(test_write_id_extended_29bit_uses_expected_register_encoding);
@@ -945,6 +1125,13 @@ int main(void) {
   RUN_TEST(test_frame_reaching_rxb1_during_a_read_stays_ahead_of_the_next);
   RUN_TEST(test_frame_reaching_rxb1_during_a_read_in_a_send_wait_stays_ahead);
   RUN_TEST(test_frames_arriving_during_a_send_wait_are_kept_in_order);
+  RUN_TEST(test_receive_poll_frees_hardware_before_another_device_uses_spi);
+  RUN_TEST(test_status_snapshot_retains_pending_frames_before_register_queries);
+  RUN_TEST(test_direct_receive_retains_the_batch_before_application_callbacks);
+  RUN_TEST(test_retained_receive_frames_do_not_take_the_spi_bus_again);
+  RUN_TEST(test_send_collects_frames_ready_when_transmission_finishes);
+  RUN_TEST(test_send_frees_receive_buffers_before_programming_transmit);
+  RUN_TEST(test_send_keeps_receiving_while_all_transmit_buffers_are_busy);
   RUN_TEST(test_a_full_receive_ring_leaves_frames_in_the_hardware);
   RUN_TEST(test_init_reaches_normal_mode_with_one_shot_on_a_working_chip);
   RUN_TEST(test_init_fails_when_one_shot_does_not_read_back);

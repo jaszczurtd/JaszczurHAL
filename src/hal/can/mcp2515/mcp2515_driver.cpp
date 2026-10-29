@@ -1,3 +1,4 @@
+#include "hal/core/hal_memory.h"
 #include "hal/core/hal_target.h"
 
 #include "hal/core/hal_config.h"
@@ -8,6 +9,7 @@
 #include "hal/gpio/hal_gpio.h"
 #include "hal/serial/hal_serial.h"
 #include "hal/system/hal_system.h"
+#include <string.h>
 
 static const hal_spi_settings_t kMcp2515SpiSettings = {
     10000000u,
@@ -17,26 +19,56 @@ static const hal_spi_settings_t kMcp2515SpiSettings = {
 
 class JHMCP2515Guard {
 public:
-  explicit JHMCP2515Guard(JHMCP2515 &driver) : d(driver) { d.lock_driver_(); }
+  explicit JHMCP2515Guard(JHMCP2515 &driver, bool spi = true) : d(driver) {
+    d.lock_driver_(spi);
+  }
   ~JHMCP2515Guard() { d.unlock_driver_(); }
 
 private:
   JHMCP2515 &d;
 };
 
-void JHMCP2515::lock_driver_(void) { hal_mutex_lock(m_driver_mutex); }
-void JHMCP2515::unlock_driver_(void) { hal_mutex_unlock(m_driver_mutex); }
-
-void JHMCP2515::spi_begin_(void) {
+void HAL_RAM_FUNC(JHMCP2515::lock_driver_)(bool spi) {
+  hal_mutex_lock(m_driver_mutex);
+  if (spi) {
+    lock_spi_();
+  }
+}
+void HAL_RAM_FUNC(JHMCP2515::lock_spi_)(void) {
+  // Keep register setup, RX reads and TX completion polls together. A
+  // display between these instructions can fill both receive buffers.
   hal_spi_lock(m_spiBus);
   hal_spi_begin_transaction(m_spiBus, &kMcp2515SpiSettings);
+  m_spiLease = true;
+}
+void HAL_RAM_FUNC(JHMCP2515::unlock_driver_)(void) {
+  if (m_spiLease) {
+    m_spiLease = false;
+    hal_spi_end_transaction(m_spiBus);
+    hal_spi_unlock(m_spiBus);
+  }
+  hal_mutex_unlock(m_driver_mutex);
+}
+
+void HAL_RAM_FUNC(JHMCP2515::spi_begin_)(void) {
+  if (!m_spiLease) {
+    hal_spi_lock(m_spiBus);
+    hal_spi_begin_transaction(m_spiBus, &kMcp2515SpiSettings);
+  }
   hal_gpio_write(m_csPin, false);
 }
 
-void JHMCP2515::spi_end_(void) {
+void HAL_RAM_FUNC(JHMCP2515::spi_end_)(void) {
   hal_gpio_write(m_csPin, true);
-  hal_spi_end_transaction(m_spiBus);
-  hal_spi_unlock(m_spiBus);
+  if (m_spiLease) {
+    // The next instruction can follow without ending the bus transaction.
+    // Preserve a CS-high interval between the two commands.
+    hal_delay_us(1u);
+  }
+  if (!m_spiLease) {
+    hal_spi_end_transaction(m_spiBus);
+    hal_spi_unlock(m_spiBus);
+  }
 }
 
 void JHMCP2515::mcp2515_reset(void) {
@@ -46,61 +78,57 @@ void JHMCP2515::mcp2515_reset(void) {
   hal_delay_ms(5);
 }
 
-INT8U JHMCP2515::mcp2515_readRegister(const INT8U address) {
+INT8U HAL_RAM_FUNC(JHMCP2515::mcp2515_readRegister)(const INT8U address) {
+  INT8U bytes[] = {MCP_READ, address, 0u};
   spi_begin_();
-  hal_spi_transfer(m_spiBus, MCP_READ);
-  hal_spi_transfer(m_spiBus, address);
-  INT8U ret = hal_spi_transfer(m_spiBus, 0x00u);
+  (void)hal_spi_transfer_buffer(m_spiBus, bytes, sizeof(bytes));
   spi_end_();
-  return ret;
+  return bytes[2];
 }
 
-void JHMCP2515::mcp2515_readRegisterS(const INT8U address, INT8U values[],
-                                      const INT8U n) {
+void HAL_RAM_FUNC(JHMCP2515::mcp2515_readRegisterS)(const INT8U address,
+                                                    INT8U values[],
+                                                    const INT8U n) {
+  const INT8U command[] = {MCP_READ, address};
   spi_begin_();
-  hal_spi_transfer(m_spiBus, MCP_READ);
-  hal_spi_transfer(m_spiBus, address);
-  for (INT8U i = 0; i < n; ++i) {
-    values[i] = hal_spi_transfer(m_spiBus, 0x00u);
-  }
-  spi_end_();
-}
-
-void JHMCP2515::mcp2515_setRegister(const INT8U address, const INT8U value) {
-  spi_begin_();
-  hal_spi_transfer(m_spiBus, MCP_WRITE);
-  hal_spi_transfer(m_spiBus, address);
-  hal_spi_transfer(m_spiBus, value);
+  (void)hal_spi_write(m_spiBus, command, sizeof(command));
+  (void)hal_spi_transfer_txrx(m_spiBus, NULL, values, n);
   spi_end_();
 }
 
-void JHMCP2515::mcp2515_setRegisterS(const INT8U address, const INT8U values[],
-                                     const INT8U n) {
+void HAL_RAM_FUNC(JHMCP2515::mcp2515_setRegister)(const INT8U address,
+                                                  const INT8U value) {
+  const INT8U bytes[] = {MCP_WRITE, address, value};
   spi_begin_();
-  hal_spi_transfer(m_spiBus, MCP_WRITE);
-  hal_spi_transfer(m_spiBus, address);
-  for (INT8U i = 0; i < n; ++i) {
-    hal_spi_transfer(m_spiBus, values[i]);
-  }
+  (void)hal_spi_write(m_spiBus, bytes, sizeof(bytes));
   spi_end_();
 }
 
-void JHMCP2515::mcp2515_modifyRegister(const INT8U address, const INT8U mask,
-                                       const INT8U data) {
+void HAL_RAM_FUNC(JHMCP2515::mcp2515_setRegisterS)(const INT8U address,
+                                                   const INT8U values[],
+                                                   const INT8U n) {
+  const INT8U command[] = {MCP_WRITE, address};
   spi_begin_();
-  hal_spi_transfer(m_spiBus, MCP_BITMOD);
-  hal_spi_transfer(m_spiBus, address);
-  hal_spi_transfer(m_spiBus, mask);
-  hal_spi_transfer(m_spiBus, data);
+  (void)hal_spi_write(m_spiBus, command, sizeof(command));
+  (void)hal_spi_write(m_spiBus, values, n);
   spi_end_();
 }
 
-INT8U JHMCP2515::mcp2515_readStatus(void) {
+void HAL_RAM_FUNC(JHMCP2515::mcp2515_modifyRegister)(const INT8U address,
+                                                     const INT8U mask,
+                                                     const INT8U data) {
+  const INT8U bytes[] = {MCP_BITMOD, address, mask, data};
   spi_begin_();
-  hal_spi_transfer(m_spiBus, MCP_READ_STATUS);
-  INT8U status = hal_spi_transfer(m_spiBus, 0x00u);
+  (void)hal_spi_write(m_spiBus, bytes, sizeof(bytes));
   spi_end_();
-  return status;
+}
+
+INT8U HAL_RAM_FUNC(JHMCP2515::mcp2515_readStatus)(void) {
+  INT8U bytes[] = {MCP_READ_STATUS, 0u};
+  spi_begin_();
+  (void)hal_spi_transfer_buffer(m_spiBus, bytes, sizeof(bytes));
+  spi_end_();
+  return bytes[1];
 }
 
 void JHMCP2515::setSleepWakeup(const INT8U enable) {
@@ -356,7 +384,7 @@ INT8U JHMCP2515::mcp2515_configRate(const INT8U canSpeed,
     return MCP2515_FAIL;
   }
   if (canClock & MCP_CLKOUT_ENABLE) {
-    cfg3 &= (INT8U)(~0x80u);
+    cfg3 = (INT8U)(cfg3 & ~0x80u);
   }
   mcp2515_setRegister(MCP_CNF1, cfg1);
   mcp2515_setRegister(MCP_CNF2, cfg2);
@@ -503,7 +531,8 @@ void JHMCP2515::mcp2515_read_id(const INT8U mcp_addr, INT8U *ext, INT32U *id) {
   decode_id(tbufdata, ext, id);
 }
 
-void JHMCP2515::mcp2515_write_canMsg(const INT8U buffer_sidh_addr) {
+void HAL_RAM_FUNC(JHMCP2515::mcp2515_write_canMsg)(
+    const INT8U buffer_sidh_addr) {
   INT8U mcp_addr = buffer_sidh_addr;
   mcp2515_setRegisterS((INT8U)(mcp_addr + 5), m_nDta, m_nDlc);
   if (m_nRtr == 1) {
@@ -527,7 +556,8 @@ void JHMCP2515::mcp2515_write_canMsg(const INT8U buffer_sidh_addr) {
  * the data in one transaction, and raising CS clears that buffer's RXnIF.
  * RTR comes from SIDL.SRR for a standard frame and from DLC.RTR for an
  * extended one. */
-bool JHMCP2515::mcp2515_read_rx(INT8U *status, jh_mcp2515_rx_frame_t *frame) {
+bool HAL_RAM_FUNC(JHMCP2515::mcp2515_read_rx)(INT8U *status,
+                                              jh_mcp2515_rx_frame_t *frame) {
   const bool rx0 = (*status & MCP_STAT_RX0IF) != 0u;
   const bool rx1 = (*status & MCP_STAT_RX1IF) != 0u;
   INT8U instruction = 0u;
@@ -539,25 +569,25 @@ bool JHMCP2515::mcp2515_read_rx(INT8U *status, jh_mcp2515_rx_frame_t *frame) {
     return false;
   }
 
-  INT8U header[5];
+  // One FIFO transfer avoids the per-byte HAL overhead while RX buffers fill.
+  // READ RX BUFFER permits clocking the full eight data registers for any DLC.
+  INT8U bytes[1u + 5u + MAX_CHAR_IN_MESSAGE] = {};
+  bytes[0] = instruction;
   spi_begin_();
-  hal_spi_transfer(m_spiBus, instruction);
-  for (INT8U i = 0; i < (INT8U)sizeof(header); ++i) {
-    header[i] = hal_spi_transfer(m_spiBus, 0x00u);
-  }
+  (void)hal_spi_transfer_buffer(m_spiBus, bytes, sizeof(bytes));
+  const INT8U *header = &bytes[1];
   INT8U dlc = (INT8U)(header[4] & MCP_DLC_MASK);
   if (dlc > MAX_CHAR_IN_MESSAGE) {
     dlc = MAX_CHAR_IN_MESSAGE;
   }
-  for (INT8U i = 0; i < dlc; ++i) {
-    frame->data[i] = hal_spi_transfer(m_spiBus, 0x00u);
-  }
+  memcpy(frame->data, &bytes[6], dlc);
   hal_critical_section_enter();
   hal_gpio_write(m_csPin, true);
   hal_delay_us(1u);
   hal_gpio_write(m_csPin, false);
-  hal_spi_transfer(m_spiBus, MCP_READ_STATUS);
-  *status = hal_spi_transfer(m_spiBus, 0x00u);
+  INT8U statusBytes[] = {MCP_READ_STATUS, 0u};
+  (void)hal_spi_transfer_buffer(m_spiBus, statusBytes, sizeof(statusBytes));
+  *status = statusBytes[1];
   hal_critical_section_exit();
   spi_end_();
   m_rxb1Older =
@@ -573,7 +603,7 @@ bool JHMCP2515::mcp2515_read_rx(INT8U *status, jh_mcp2515_rx_frame_t *frame) {
 /* Move one waiting frame into the ring while a transmit occupies the caller;
  * a full ring leaves it in the hardware buffer. True when a frame moved, and
  * *status is then the fresh status that followed it. */
-bool JHMCP2515::mcp2515_keep_rx(INT8U *status) {
+bool HAL_RAM_FUNC(JHMCP2515::mcp2515_keep_rx)(INT8U *status) {
   if (m_rxRingCount >= MCP2515_RX_RING_FRAMES) {
     return false;
   }
@@ -586,7 +616,14 @@ bool JHMCP2515::mcp2515_keep_rx(INT8U *status) {
   return true;
 }
 
-void JHMCP2515::mcp2515_load_rx(const jh_mcp2515_rx_frame_t *frame) {
+void HAL_RAM_FUNC(JHMCP2515::mcp2515_keep_pending)(void) {
+  INT8U status = mcp2515_readStatus();
+  while (mcp2515_keep_rx(&status)) {
+  }
+}
+
+void HAL_RAM_FUNC(JHMCP2515::mcp2515_load_rx)(
+    const jh_mcp2515_rx_frame_t *frame) {
   m_nID = frame->id;
   m_nExtFlg = frame->ext;
   m_nRtr = frame->rtr;
@@ -596,7 +633,7 @@ void JHMCP2515::mcp2515_load_rx(const jh_mcp2515_rx_frame_t *frame) {
   }
 }
 
-INT8U JHMCP2515::mcp2515_getNextFreeTXBuf(INT8U *txbuf_n) {
+INT8U HAL_RAM_FUNC(JHMCP2515::mcp2515_getNextFreeTXBuf)(INT8U *txbuf_n) {
   INT8U ctrlregs[MCP_N_TXBUFFERS] = {MCP_TXB0CTRL, MCP_TXB1CTRL, MCP_TXB2CTRL};
   *txbuf_n = 0x00;
   for (INT8U i = 0; i < MCP_N_TXBUFFERS; ++i) {
@@ -613,7 +650,7 @@ JHMCP2515::JHMCP2515(INT8U cs_pin, INT8U spi_bus)
     : m_nExtFlg(0), m_nID(0), m_nDlc(0), m_nRtr(0), m_nfilhit(0),
       m_csPin(cs_pin), mcpMode(MCP_NORMAL), m_spiBus(spi_bus),
       m_driver_mutex(hal_mutex_create()), m_rxRing(), m_rxRingHead(0),
-      m_rxRingCount(0), m_rxb1Older(false) {
+      m_rxRingCount(0), m_rxb1Older(false), m_rxHwLost(0u), m_spiLease(false) {
   hal_gpio_set_mode(m_csPin, HAL_GPIO_OUTPUT);
   hal_gpio_write(m_csPin, true);
 }
@@ -630,6 +667,7 @@ INT8U JHMCP2515::begin(INT8U idmodeset, INT8U speedset, INT8U clockset) {
   m_rxRingHead = 0u;
   m_rxRingCount = 0u;
   m_rxb1Older = false;
+  m_rxHwLost = 0u;
   INT8U res = mcp2515_init(idmodeset, speedset, clockset);
   return (res == MCP2515_OK) ? CAN_OK : CAN_FAILINIT;
 }
@@ -697,8 +735,8 @@ INT8U JHMCP2515::init_Filt(INT8U num, INT32U ulData) {
   return init_Filt(num, (ulData & CAN_IS_EXTENDED) ? 1u : 0u, ulData);
 }
 
-INT8U JHMCP2515::setMsg(INT32U id, INT8U rtr, INT8U ext, INT8U len,
-                        INT8U *pData) {
+INT8U HAL_RAM_FUNC(JHMCP2515::setMsg)(INT32U id, INT8U rtr, INT8U ext,
+                                      INT8U len, INT8U *pData) {
   m_nID = id;
   m_nRtr = rtr;
   m_nExtFlg = ext;
@@ -724,12 +762,18 @@ INT8U JHMCP2515::clearMsg() {
   return MCP2515_OK;
 }
 
-INT8U JHMCP2515::sendMsg() {
+INT8U HAL_RAM_FUNC(JHMCP2515::sendMsg)() {
+  // Free both RX buffers before register setup can delay the first TX poll.
+  mcp2515_keep_pending();
   INT8U res, txctrl, txbuf_n;
   uint32_t uiTimeOut, temp;
   temp = hal_micros();
   do {
     res = mcp2515_getNextFreeTXBuf(&txbuf_n);
+    if (res == MCP_ALLTXBUSY) {
+      // Waiting for TX space must keep receiving as well.
+      mcp2515_keep_pending();
+    }
     uiTimeOut = hal_micros() - temp;
   } while (res == MCP_ALLTXBUSY && (uiTimeOut < TIMEOUTVALUE));
   if (res == MCP_ALLTXBUSY)
@@ -747,6 +791,10 @@ INT8U JHMCP2515::sendMsg() {
     if (!mcp2515_keep_rx(&status)) {
       status = mcp2515_readStatus();
     }
+  }
+  // RX may be ready in the very status that clears TXREQ. Retain it before
+  // another SPI device can take the bus; the polling loop does not run then.
+  while (mcp2515_keep_rx(&status)) {
   }
   txctrl = mcp2515_readRegister((INT8U)(txbuf_n - 1));
   /* The register decides, not the clock: a task preempted past the timeout
@@ -766,13 +814,14 @@ INT8U JHMCP2515::sendMsg() {
   return CAN_OK;
 }
 
-INT8U JHMCP2515::sendMsgBuf(INT32U id, INT8U ext, INT8U len, INT8U *buf) {
+INT8U HAL_RAM_FUNC(JHMCP2515::sendMsgBuf)(INT32U id, INT8U ext, INT8U len,
+                                          INT8U *buf) {
   JHMCP2515Guard guard(*this);
   setMsg(id, 0, ext, len, buf);
   return sendMsg();
 }
 
-INT8U JHMCP2515::sendMsgBuf(INT32U id, INT8U len, INT8U *buf) {
+INT8U HAL_RAM_FUNC(JHMCP2515::sendMsgBuf)(INT32U id, INT8U len, INT8U *buf) {
   JHMCP2515Guard guard(*this);
   INT8U ext = 0, rtr = 0;
   if ((id & CAN_IS_EXTENDED) == CAN_IS_EXTENDED) {
@@ -788,24 +837,25 @@ INT8U JHMCP2515::sendMsgBuf(INT32U id, INT8U len, INT8U *buf) {
 }
 
 /* Frames kept during a transmit are older than those still in hardware. */
-INT8U JHMCP2515::readMsg() {
-  if (m_rxRingCount > 0u) {
-    mcp2515_load_rx(&m_rxRing[m_rxRingHead]);
-    m_rxRingHead = (INT8U)((m_rxRingHead + 1u) % MCP2515_RX_RING_FRAMES);
-    m_rxRingCount--;
-    return CAN_OK;
+INT8U HAL_RAM_FUNC(JHMCP2515::readMsg)() {
+  if (m_rxRingCount == 0u) {
+    mcp2515_keep_pending();
   }
-  jh_mcp2515_rx_frame_t frame;
-  INT8U status = mcp2515_readStatus();
-  if (!mcp2515_read_rx(&status, &frame)) {
+  if (m_rxRingCount == 0u) {
     return CAN_NOMSG;
   }
-  mcp2515_load_rx(&frame);
+  mcp2515_load_rx(&m_rxRing[m_rxRingHead]);
+  m_rxRingHead = (INT8U)((m_rxRingHead + 1u) % MCP2515_RX_RING_FRAMES);
+  m_rxRingCount--;
   return CAN_OK;
 }
 
-INT8U JHMCP2515::readMsgBuf(INT32U *id, INT8U *ext, INT8U *len, INT8U buf[]) {
-  JHMCP2515Guard guard(*this);
+INT8U HAL_RAM_FUNC(JHMCP2515::readMsgBuf)(INT32U *id, INT8U *ext, INT8U *len,
+                                          INT8U buf[]) {
+  JHMCP2515Guard guard(*this, false);
+  if (m_rxRingCount == 0u) {
+    lock_spi_();
+  }
   if (readMsg() == CAN_NOMSG)
     return CAN_NOMSG;
   *id = m_nRtr ? (m_nID | CAN_IS_REMOTE_REQUEST) : m_nID;
@@ -816,8 +866,11 @@ INT8U JHMCP2515::readMsgBuf(INT32U *id, INT8U *ext, INT8U *len, INT8U buf[]) {
   return CAN_OK;
 }
 
-INT8U JHMCP2515::readMsgBuf(INT32U *id, INT8U *len, INT8U buf[]) {
-  JHMCP2515Guard guard(*this);
+INT8U HAL_RAM_FUNC(JHMCP2515::readMsgBuf)(INT32U *id, INT8U *len, INT8U buf[]) {
+  JHMCP2515Guard guard(*this, false);
+  if (m_rxRingCount == 0u) {
+    lock_spi_();
+  }
   if (readMsg() == CAN_NOMSG)
     return CAN_NOMSG;
   if (m_nExtFlg)
@@ -831,12 +884,16 @@ INT8U JHMCP2515::readMsgBuf(INT32U *id, INT8U *len, INT8U buf[]) {
   return CAN_OK;
 }
 
-INT8U JHMCP2515::checkReceive(void) {
-  JHMCP2515Guard guard(*this);
+INT8U HAL_RAM_FUNC(JHMCP2515::checkReceive)(void) {
+  JHMCP2515Guard guard(*this, false);
   if (m_rxRingCount > 0u) {
     return CAN_MSGAVAIL;
   }
-  return (mcp2515_readStatus() & MCP_STAT_RXIF_MASK) ? CAN_MSGAVAIL : CAN_NOMSG;
+  lock_spi_();
+  // HAL callers poll and read in separate operations. Empty the hardware
+  // into the ring before SPI can pass to a display between those calls.
+  mcp2515_keep_pending();
+  return m_rxRingCount > 0u ? CAN_MSGAVAIL : CAN_NOMSG;
 }
 
 INT8U JHMCP2515::checkError(void) {
@@ -848,6 +905,26 @@ INT8U JHMCP2515::checkError(void) {
 INT8U JHMCP2515::getError(void) {
   JHMCP2515Guard guard(*this);
   return mcp2515_readRegister(MCP_EFLG);
+}
+
+void HAL_RAM_FUNC(JHMCP2515::getStatus)(jh_mcp2515_status_t *status) {
+  JHMCP2515Guard guard(*this);
+  mcp2515_keep_pending();
+  const INT8U error_flags = mcp2515_readRegister(MCP_EFLG);
+  INT8U counters[2];
+  mcp2515_readRegisterS(MCP_TEC, counters, (INT8U)COUNTOF(counters));
+  const INT8U flags =
+      (INT8U)(error_flags & (MCP_EFLG_RX0OVR | MCP_EFLG_RX1OVR));
+  if (flags != 0u) {
+    m_rxHwLost += ((flags & MCP_EFLG_RX0OVR) != 0u) ? 1u : 0u;
+    m_rxHwLost += ((flags & MCP_EFLG_RX1OVR) != 0u) ? 1u : 0u;
+    mcp2515_modifyRegister(MCP_EFLG, flags, 0u);
+  }
+  status->error_flags = error_flags;
+  status->transmit_errors = counters[0];
+  status->receive_errors = counters[1];
+  status->rx_overflows = m_rxHwLost;
+  mcp2515_keep_pending();
 }
 
 INT8U JHMCP2515::errorCountRX(void) {

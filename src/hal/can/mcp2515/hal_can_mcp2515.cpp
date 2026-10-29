@@ -295,17 +295,19 @@ static hal_status_t mcp2515_set_filter(void *ctx, uint8_t index,
   return st;
 }
 
-static hal_status_t mcp2515_get_state(void *ctx, hal_can_state_t *state) {
-  const uint8_t eflg = mcp_ctx(ctx)->getError();
+static hal_can_state_t mcp2515_decode_state(uint8_t eflg) {
   if ((eflg & MCP_EFLG_TXBO) != 0u) {
-    *state = HAL_CAN_STATE_BUS_OFF;
+    return HAL_CAN_STATE_BUS_OFF;
   } else if ((eflg & (MCP_EFLG_RXEP | MCP_EFLG_TXEP)) != 0u) {
-    *state = HAL_CAN_STATE_ERROR_PASSIVE;
+    return HAL_CAN_STATE_ERROR_PASSIVE;
   } else if ((eflg & MCP_EFLG_EWARN) != 0u) {
-    *state = HAL_CAN_STATE_ERROR_WARNING;
-  } else {
-    *state = HAL_CAN_STATE_ERROR_ACTIVE;
+    return HAL_CAN_STATE_ERROR_WARNING;
   }
+  return HAL_CAN_STATE_ERROR_ACTIVE;
+}
+
+static hal_status_t mcp2515_get_state(void *ctx, hal_can_state_t *state) {
+  *state = mcp2515_decode_state(mcp_ctx(ctx)->getError());
   return HAL_OK;
 }
 
@@ -314,6 +316,18 @@ static hal_status_t mcp2515_get_error_counters(void *ctx,
   JHMCP2515 *mcp = mcp_ctx(ctx);
   c->tx = mcp->errorCountTX();
   c->rx = mcp->errorCountRX();
+  return HAL_OK;
+}
+
+static hal_status_t mcp2515_get_status(void *ctx, hal_can_status_t *status) {
+  hal_can_status_t next = {};
+  jh_mcp2515_status_t registers;
+  mcp_ctx(ctx)->getStatus(&registers);
+  next.state = mcp2515_decode_state(registers.error_flags);
+  next.tec = registers.transmit_errors;
+  next.rec = registers.receive_errors;
+  next.rx_hw_lost = registers.rx_overflows;
+  *status = next;
   return HAL_OK;
 }
 
@@ -381,7 +395,7 @@ const jh_can_provider_t jh_can_mcp2515_provider = {HAL_CAN_BACKEND_MCP2515,
                                                    mcp2515_set_std_filters,
                                                    NULL,
                                                    NULL,
-                                                   NULL,
+                                                   mcp2515_get_status,
                                                    NULL,
                                                    NULL,
                                                    NULL,

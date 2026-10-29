@@ -1,3 +1,4 @@
+#include "hal/core/hal_memory.h"
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_RP
 
@@ -6,7 +7,9 @@
 #include "hal/spi/hal_spi.h"
 #include "hal/spi/hal_spi_internal.h"
 #include "hal/spi/hal_spi_settings.h"
+#include "hal/spi/jh_spi_ticket.h"
 #include "hal/system/hal_sync.h"
+#include "hal/system/hal_system.h"
 
 #include <hardware/dma.h>
 #include <hardware/gpio.h>
@@ -27,6 +30,7 @@ typedef struct {
   bool dma_tx_channel_claimed;
   bool dma_tx_active;
   hal_mutex_t mutex;
+  jh_spi_ticket_t admission;
 } hal_spi_bus_state_t;
 
 static hal_spi_bus_state_t s_spi[2] = {};
@@ -78,7 +82,7 @@ static spi_cpha_t spi_cpha_from_mode(uint8_t mode) {
   return (mode & 0x1u) ? SPI_CPHA_1 : SPI_CPHA_0;
 }
 
-static void spi_apply_settings(uint8_t idx, uint data_bits) {
+static void HAL_RAM_FUNC(spi_apply_settings)(uint8_t idx, uint data_bits) {
   hal_spi_bus_state_t *st = &s_spi[idx];
   spi_inst_t *hw = spi_hw(idx);
 
@@ -111,7 +115,7 @@ static void spi_hw_init(uint8_t idx) {
   spi_apply_settings(idx, 8u);
 }
 
-static hal_status_t spi_ensure_initialized(uint8_t idx) {
+static hal_status_t HAL_RAM_FUNC(spi_ensure_initialized)(uint8_t idx) {
   if (!s_spi[idx].initialized) {
     uint8_t rx = 0u;
     uint8_t tx = 0u;
@@ -122,7 +126,7 @@ static hal_status_t spi_ensure_initialized(uint8_t idx) {
   return HAL_OK;
 }
 
-static uint8_t spi_transfer8_fast(uint8_t idx, uint8_t data) {
+static uint8_t HAL_RAM_FUNC(spi_transfer8_fast)(uint8_t idx, uint8_t data) {
   spi_hw_t *hw = spi_get_hw(spi_hw(idx));
   while (!(hw->sr & SPI_SSPSR_TNF_BITS)) {
   }
@@ -132,7 +136,7 @@ static uint8_t spi_transfer8_fast(uint8_t idx, uint8_t data) {
   return (uint8_t)hw->dr;
 }
 
-static void spi_wait_idle_and_drain_rx(uint8_t idx) {
+static void HAL_RAM_FUNC(spi_wait_idle_and_drain_rx)(uint8_t idx) {
   spi_hw_t *hw = spi_get_hw(spi_hw(idx));
   while (hw->sr & SPI_SSPSR_BSY_BITS) {
   }
@@ -198,20 +202,33 @@ void hal_spi_deinit(uint8_t bus) {
   s_spi[idx].initialized = false;
 }
 
-void hal_spi_lock(uint8_t bus) {
+void HAL_RAM_FUNC(hal_spi_lock)(uint8_t bus) {
   const uint8_t idx = spi_bus_index(bus);
   spi_ensure_mutex(idx);
+#if !(defined(HAL_ENABLE_FREERTOS) && defined(__FREERTOS))
+  // A display must not reclaim the bus ahead of a waiting CAN reader after
+  // every pixel band. Bare-metal callers take turns; FreeRTOS retains its
+  // mutex and priority inheritance.
+  const uint32_t ticket = jh_spi_ticket_reserve(&s_spi[idx].admission);
+  while (!jh_spi_ticket_ready(&s_spi[idx].admission, ticket)) {
+    hal_idle();
+  }
+#endif
   hal_mutex_lock(s_spi[idx].mutex);
 }
 
-void hal_spi_unlock(uint8_t bus) {
+void HAL_RAM_FUNC(hal_spi_unlock)(uint8_t bus) {
   const uint8_t idx = spi_bus_index(bus);
   spi_ensure_mutex(idx);
   hal_mutex_unlock(s_spi[idx].mutex);
+#if !(defined(HAL_ENABLE_FREERTOS) && defined(__FREERTOS))
+  jh_spi_ticket_release(&s_spi[idx].admission);
+#endif
 }
 
-hal_status_t hal_spi_begin_transaction(uint8_t bus,
-                                       const hal_spi_settings_t *settings) {
+hal_status_t
+HAL_RAM_FUNC(hal_spi_begin_transaction)(uint8_t bus,
+                                        const hal_spi_settings_t *settings) {
   if (bus > 1u || !spi_settings_valid(settings)) {
     return HAL_EINVAL;
   }
@@ -226,7 +243,7 @@ hal_status_t hal_spi_begin_transaction(uint8_t bus,
   return HAL_OK;
 }
 
-hal_status_t hal_spi_end_transaction(uint8_t bus) {
+hal_status_t HAL_RAM_FUNC(hal_spi_end_transaction)(uint8_t bus) {
   if (bus > 1u) {
     return HAL_EINVAL;
   }
@@ -242,8 +259,8 @@ hal_status_t hal_spi_end_transaction(uint8_t bus) {
   return HAL_OK;
 }
 
-hal_status_t hal_spi_transfer_ex(uint8_t bus, uint8_t data,
-                                 uint8_t *out_received) {
+hal_status_t HAL_RAM_FUNC(hal_spi_transfer_ex)(uint8_t bus, uint8_t data,
+                                               uint8_t *out_received) {
   if (bus > 1u || out_received == nullptr) {
     return HAL_EINVAL;
   }
@@ -283,8 +300,8 @@ hal_status_t jh_hal_spi_transfer16_provider(uint8_t bus, uint16_t data,
   return HAL_OK;
 }
 
-hal_status_t hal_spi_transfer_txrx(uint8_t bus, const uint8_t *tx, uint8_t *rx,
-                                   size_t len) {
+hal_status_t HAL_RAM_FUNC(hal_spi_transfer_txrx)(uint8_t bus, const uint8_t *tx,
+                                                 uint8_t *rx, size_t len) {
   if (bus > 1u || (len > 0u && tx == nullptr && rx == nullptr)) {
     return HAL_EINVAL;
   }
@@ -323,13 +340,15 @@ hal_status_t hal_spi_transfer_txrx(uint8_t bus, const uint8_t *tx, uint8_t *rx,
   return transferred >= 0 && (size_t)transferred == len ? HAL_OK : HAL_EIO;
 }
 
-hal_status_t jh_hal_spi_write_provider(uint8_t bus, const uint8_t *data,
-                                       size_t len) {
+hal_status_t HAL_RAM_FUNC(jh_hal_spi_write_provider)(uint8_t bus,
+                                                     const uint8_t *data,
+                                                     size_t len) {
   return hal_spi_transfer_txrx(bus, data, nullptr, len);
 }
 
-hal_status_t hal_spi_write_dma_async_start_ex(uint8_t bus, const uint8_t *data,
-                                              size_t len) {
+hal_status_t HAL_RAM_FUNC(hal_spi_write_dma_async_start_ex)(uint8_t bus,
+                                                            const uint8_t *data,
+                                                            size_t len) {
   if (bus > 1u || (len > 0u && data == nullptr)) {
     return HAL_EINVAL;
   }
@@ -384,7 +403,7 @@ bool hal_spi_write_dma_async_busy(uint8_t bus) {
   return false;
 }
 
-hal_status_t hal_spi_write_dma_async_wait_ex(uint8_t bus) {
+hal_status_t HAL_RAM_FUNC(hal_spi_write_dma_async_wait_ex)(uint8_t bus) {
   if (bus > 1u) {
     return HAL_EINVAL;
   }

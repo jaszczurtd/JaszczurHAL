@@ -82,6 +82,9 @@ void hal_spi_deinit(uint8_t bus);
  *
  * Use this to guard multi-step interactions with drivers sharing the same SPI
  * controller (for example MCP2515).
+ * On bare-metal RP targets, waiting callers enter in request order so a
+ * driver cannot repeatedly reclaim the bus ahead of another core. FreeRTOS
+ * uses its mutex with priority inheritance. Call from task context only.
  *
  * @param bus SPI controller index (0 = SPI, 1 = SPI1).
  */

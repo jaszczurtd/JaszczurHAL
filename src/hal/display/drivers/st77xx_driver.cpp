@@ -439,7 +439,7 @@ bool jh_st77xx_run_sequence(const jh_st77xx_command_io_t *io,
     const uint8_t command = *sequence++;
     uint8_t arg_count = *sequence++;
     const bool has_delay = (arg_count & ST_CMD_DELAY) != 0u;
-    arg_count &= (uint8_t)~ST_CMD_DELAY;
+    arg_count = (uint8_t)(arg_count & ~ST_CMD_DELAY);
 
     if (!io->write_command(io->ctx, command, sequence, arg_count)) {
       return false;
@@ -900,14 +900,12 @@ bool jh_st77xx_begin_write(jh_st77xx_t *dev, uint16_t x, uint16_t y, uint16_t w,
       dev->write_active) {
     return false;
   }
-  if (!jh_st77xx_set_addr_window(dev, x, y, w, h)) {
+  if (!jh_display_spi_begin_window(&dev->spi_device, dev->config.dc_pin,
+                                   ST77XX_CASET, ST77XX_RASET, ST77XX_RAMWR,
+                                   (uint16_t)(x + dev->x_start),
+                                   (uint16_t)(y + dev->y_start), w, h)) {
     return false;
   }
-
-  if (hal_status_is_error(hal_spi_device_acquire(&dev->spi_device))) {
-    return false;
-  }
-  hal_gpio_write(jh_display_pin_u8(dev->config.dc_pin), true);
   dev->write_active = true;
   return true;
 }

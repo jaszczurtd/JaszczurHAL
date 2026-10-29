@@ -1,6 +1,7 @@
 #ifndef JH_DISPLAY_SPI_PANEL_MODEL_H
 #define JH_DISPLAY_SPI_PANEL_MODEL_H
 
+#include "hal/core/jh_endian.h"
 #include "hal/impl/.mock/hal_mock.h"
 
 #include <stdint.h>
@@ -27,14 +28,13 @@ typedef struct {
   size_t select_pixel_bytes;
   size_t max_select_pixel_bytes;
   size_t pixel_selections;
+  size_t selections;
 } panel_model_t;
 
-static uint16_t panel_model_u16(const uint8_t *bytes) {
-  return (uint16_t)(((uint16_t)bytes[0] << 8) | bytes[1]);
-}
-
 static void panel_model_select(void *user) {
-  ((panel_model_t *)user)->select_pixel_bytes = 0u;
+  panel_model_t *panel = (panel_model_t *)user;
+  panel->select_pixel_bytes = 0u;
+  panel->selections++;
 }
 
 static uint8_t panel_model_exchange(void *user, uint8_t mosi) {
@@ -53,8 +53,8 @@ static uint8_t panel_model_exchange(void *user, uint8_t mosi) {
       m->args[m->arg_count++] = mosi;
     }
     if (m->arg_count == sizeof(m->args)) {
-      const uint16_t first = panel_model_u16(&m->args[0]);
-      const uint16_t last = panel_model_u16(&m->args[2]);
+      const uint16_t first = jh_load_be16(&m->args[0]);
+      const uint16_t last = jh_load_be16(&m->args[2]);
       if (m->command == 0x2Au) {
         m->x0 = first;
         m->x1 = last;

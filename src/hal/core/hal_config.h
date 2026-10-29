@@ -78,8 +78,8 @@
 /** @brief Largest pixel transfer, in bytes, that an ILI9341 or ST77xx/GC9A01
  * rectangle fill or bitmap sends before releasing the shared SPI bus; 0 sends
  * the whole area in one transaction. A nonzero limit splits the area into
- * bands of whole rows, at least one row each. Override in
- * hal_project_config.h; valid values are 0 and 64..1048576. */
+ * bands of whole rows, splitting wide rows to respect the byte limit. Override
+ * in hal_project_config.h; valid values are 0 and 64..1048576. */
 #ifndef HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES
 #define HAL_DISPLAY_SPI_MAX_TRANSFER_BYTES 0u
 #endif
