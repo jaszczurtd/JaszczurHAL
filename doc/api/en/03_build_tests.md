@@ -76,6 +76,7 @@ SDK is required.
 |---|---|---|---|
 | Host/mock unit tests | `tests/CMakeLists.txt`, `tests/test_*.cpp`, root `CMakeLists.txt` | CMake plus CTest | Add a Unity suite and register it with `add_hal_test(...)`, or declare a dedicated executable for extra sources. |
 | Target backends on the host | `tests/fakes/<sdk>/` headers and fakes, a dedicated executable in `tests/CMakeLists.txt` | CMake plus CTest | Compile the real backend against the fake SDK and check its behaviour through the fake: recorded driver calls, injected failures, and simulated interrupts. |
+| Shared engines on the real lwIP core | `tests/lwip_host/` (`lwipopts.h`, `arch/cc.h`), lwIP sources from `third_party/lwip` built as `lwip_host_core`, a dedicated executable in `tests/CMakeLists.txt` | CMake plus CTest | Compile the engine against the real NO_SYS lwIP core and check what it takes from the lwIP heap and pools (`lwip_stats`) and what it gives back on shutdown. |
 | FreeRTOS POSIX host tests | `tests/freertos_posix/`, `JH_ENABLE_FREERTOS_POSIX_TESTS` | CTest through the host build or full gate | Add a target with `add_hal_freertos_posix_test(...)`. |
 | Repository quality gate | `runalltests.sh`, `.github/workflows/ci.yml`, and the tooling data described in `00_scripts.md` | `./runalltests.sh` | Extend the owning stage and its focused regression tests, never the workflow alone; keep generated artifacts below `.build/`. |
 | Firmware compile fixtures | `tests/fixtures/<fixture>/.vscode/jaszczurhal.project.json` | `jh-vscode` or the target production runner | Extend the targets and variants in the fixture's `hal_project_config.h`, the boards in its manifest, and its artifact-layout test. |
@@ -89,7 +90,7 @@ If the description disagrees with test behavior, check the configuration and exe
 
 ### Requirements
 
-- CMake ≥ 3.16
+- CMake ≥ 3.22
 - GCC / Clang with C++17
 
 ### Build and run

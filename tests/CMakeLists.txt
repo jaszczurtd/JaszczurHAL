@@ -2333,6 +2333,49 @@ target_compile_definitions(test_wireguard_pbuf PRIVATE
 )
 jh_enable_host_warnings(test_wireguard_pbuf ERRORS)
 add_test(NAME test_wireguard_pbuf COMMAND test_wireguard_pbuf)
+
+# The real WireGuard engine on the real lwIP core (NO_SYS, tests/lwip_host):
+# where wireguardif_init() keeps the device and what wireguardif_shutdown()
+# gives back to lwIP.
+set(_jh_lwip_host_src ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/lwip/src)
+add_library(lwip_host_core STATIC
+    ${_jh_lwip_host_src}/core/def.c
+    ${_jh_lwip_host_src}/core/inet_chksum.c
+    ${_jh_lwip_host_src}/core/init.c
+    ${_jh_lwip_host_src}/core/ip.c
+    ${_jh_lwip_host_src}/core/mem.c
+    ${_jh_lwip_host_src}/core/memp.c
+    ${_jh_lwip_host_src}/core/netif.c
+    ${_jh_lwip_host_src}/core/pbuf.c
+    ${_jh_lwip_host_src}/core/stats.c
+    ${_jh_lwip_host_src}/core/timeouts.c
+    ${_jh_lwip_host_src}/core/udp.c
+    ${_jh_lwip_host_src}/core/ipv4/ip4.c
+    ${_jh_lwip_host_src}/core/ipv4/ip4_addr.c
+)
+target_include_directories(lwip_host_core PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/lwip_host
+    ${_jh_lwip_host_src}/include
+)
+add_executable(test_wireguardif_lwip_heap
+    test_wireguardif_lwip_heap.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/wireguard/core/wireguardif.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/wireguard/core/wireguard.c
+)
+target_include_directories(test_wireguardif_lwip_heap BEFORE PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/lwip_host
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/wireguard/core
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_compile_definitions(test_wireguardif_lwip_heap PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_WIREGUARD
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+target_link_libraries(test_wireguardif_lwip_heap PRIVATE lwip_host_core hal_mock)
+jh_enable_host_warnings(test_wireguardif_lwip_heap ERRORS)
+add_test(NAME test_wireguardif_lwip_heap COMMAND test_wireguardif_lwip_heap)
 add_executable(test_ntp_client
     test_ntp_client.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c

@@ -614,7 +614,7 @@ wireguardif_check_initiation_message(struct wireguard_device *device,
 
   if (wireguard_check_mac1(device, data,
                            sizeof(struct message_handshake_initiation) -
-                               (2 * WIREGUARD_COOKIE_LEN),
+                               ((size_t)2 * WIREGUARD_COOKIE_LEN),
                            msg->mac1)) {
     // mac1 is valid!
     if (!wireguard_is_under_load()) {
@@ -659,7 +659,7 @@ wireguardif_check_response_message(struct wireguard_device *device,
 
   if (wireguard_check_mac1(device, data,
                            sizeof(struct message_handshake_response) -
-                               (2 * WIREGUARD_COOKIE_LEN),
+                               ((size_t)2 * WIREGUARD_COOKIE_LEN),
                            msg->mac1)) {
     // mac1 is valid!
     if (!wireguard_is_under_load()) {
@@ -1219,9 +1219,8 @@ void wireguardif_shutdown(struct netif *netif) {
     device->udp_pcb = NULL;
   }
   // remove device context. Must match the allocator used in
-  // wireguardif_init() (mem_calloc), otherwise freeing a lwIP-heap pointer
-  // with libc free() corrupts the heap when MEM_LIBC_MALLOC == 0.
-  mem_free(device);
+  // wireguardif_init() (calloc): the device never lives on the lwIP heap.
+  free(device);
   netif->state = NULL;
 }
 
@@ -1267,7 +1266,14 @@ err_t wireguardif_init(struct netif *netif) {
             init_data->listen_port); // Note this listens on all interfaces!
                                      // Really just want the passed netif
         if (result == ERR_OK) {
-          device = (struct wireguard_device *)mem_calloc(
+          // The device state (peers, keypairs with their replay windows,
+          // about 4 KB) goes to the system heap, as on ESP-IDF where
+          // mem_calloc() already resolves to it. On the ports with their own
+          // lwipopts.h the lwIP heap is 12 KB and sending through the tunnel
+          // needs most of it for tcp_write() copies and the encrypted copies
+          // made by wireguardif_output(); with the device in there as well
+          // tcp_output() runs out of heap and uploads stall.
+          device = (struct wireguard_device *)calloc(
               1, sizeof(struct wireguard_device));
           if (device) {
             device->netif = netif;
@@ -1305,7 +1311,7 @@ err_t wireguardif_init(struct netif *netif) {
               result = ERR_OK;
             } else {
               log_e(TAG "failed to initialize WireGuard device.");
-              mem_free(device);
+              free(device);
               device = NULL;
               udp_remove(udp);
               result = ERR_ARG;

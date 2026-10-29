@@ -76,6 +76,7 @@ SDK wbudowane nie jest wymagane.
 |---|---|---|---|
 | Testy jednostkowe hosta/mock | `tests/CMakeLists.txt`, `tests/test_*.cpp`, główny `CMakeLists.txt` | CMake plus CTest | Dodaj zestaw Unity i zarejestruj go przez `add_hal_test(...)`, lub zadeklaruj dedykowany plik wykonywalny dla dodatkowych źródeł. |
 | Implementacje sprzętowe na hoście | nagłówki i atrapy w `tests/fakes/<sdk>/`, osobny plik wykonywalny w `tests/CMakeLists.txt` | CMake plus CTest | Skompiluj prawdziwą implementację z atrapą SDK i sprawdzaj jej zachowanie przez atrapę: zarejestrowane wywołania sterownika, wstrzyknięte błędy i symulowane przerwania. |
+| Wspólne silniki na prawdziwym rdzeniu lwIP | `tests/lwip_host/` (`lwipopts.h`, `arch/cc.h`), źródła lwIP z `third_party/lwip` budowane jako `lwip_host_core`, osobny plik wykonywalny w `tests/CMakeLists.txt` | CMake plus CTest | Skompiluj silnik z prawdziwym rdzeniem lwIP (NO_SYS) i sprawdzaj, co bierze ze sterty i pul lwIP (`lwip_stats`) i co oddaje przy zamknięciu. |
 | Testy hosta FreeRTOS POSIX | `tests/freertos_posix/`, `JH_ENABLE_FREERTOS_POSIX_TESTS` | CTest w konfiguracji dla komputera lub pełną kontrolę jakości | Dodaj target przez `add_hal_freertos_posix_test(...)`. |
 | Kontrola jakości repozytorium | `runalltests.sh`, `.github/workflows/ci.yml` oraz dane narzędziowe opisane w `00_scripts.md` | `./runalltests.sh` | Rozszerz odpowiedni etap i jego ukierunkowane testy regresyjne, nigdy samego workflow; zapisuj generowane artefakty wyłącznie w `.build/`. |
 | Projekty sprawdzające kompilację firmware | `tests/fixtures/<fixture>/.vscode/jaszczurhal.project.json` | `jh-vscode` lub właściwy skrypt produkcyjny | Rozszerz platformy i warianty w `hal_project_config.h` projektu, płytki w jego manifeście oraz test układu artefaktów. |
@@ -89,7 +90,7 @@ W razie rozbieżności między opisem a działaniem sprawdź wskazane pliki konf
 
 ### Wymagania
 
-- CMake ≥ 3.16
+- CMake ≥ 3.22
 - GCC / Clang z C++17
 
 ### Kompilowanie i uruchamianie

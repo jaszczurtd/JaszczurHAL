@@ -912,7 +912,7 @@ bool wireguard_create_handshake_initiation(
     // The value Hash(Label-Mac1 || Spubm' ) above can be pre-computed
     wireguard_mac(dst->mac1, dst,
                   (sizeof(struct message_handshake_initiation) -
-                   (2 * WIREGUARD_COOKIE_LEN)),
+                   ((size_t)2 * WIREGUARD_COOKIE_LEN)),
                   peer->label_mac1_key, WIREGUARD_SESSION_KEY_LEN);
 
     // if Lm = E or Lm ≥ 120:
@@ -1020,7 +1020,7 @@ bool wireguard_create_handshake_response(
     // The value Hash(Label-Mac1 || Spubm' ) above can be pre-computed
     wireguard_mac(dst->mac1, dst,
                   (sizeof(struct message_handshake_response) -
-                   (2 * WIREGUARD_COOKIE_LEN)),
+                   ((size_t)2 * WIREGUARD_COOKIE_LEN)),
                   peer->label_mac1_key, WIREGUARD_SESSION_KEY_LEN);
 
     // if Lm = E or Lm ≥ 120:
@@ -1189,7 +1189,7 @@ bool wireguard_base64_decode(const char *str, uint8_t *out, size_t *outlen) {
     char_count++;
 
     if (char_count == 4) {
-      if ((size_t)(len + byte_count) > *outlen) {
+      if ((size_t)len + (size_t)byte_count > *outlen) {
         // Output buffer overflow
         result = false;
         break;
