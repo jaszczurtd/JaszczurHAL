@@ -263,6 +263,52 @@ static bool parse_size_header_value(const char *value, size_t *out_value) {
   return true;
 }
 
+/* Message framing once the status line and headers are in (RFC 9112 §6.3):
+ * a HEAD response and every 1xx, 204 and 304 response carry no body whatever
+ * the headers declare; Content-Length then describes the body a GET would
+ * return. *interim marks a 1xx response to skip; the final response follows
+ * on the same connection. */
+static hal_status_t parse_response_head(const char *response_headers,
+                                        bool head_request,
+                                        hal_http_client_response_t *out,
+                                        bool *body_expected, bool *interim) {
+  *body_expected = false;
+  *interim = false;
+  unsigned code = 0u;
+  if (sscanf(response_headers, "HTTP/%*u.%*u %u", &code) != 1 ||
+      code > UINT16_MAX) {
+    return HAL_EPROTO;
+  }
+  out->status_code = (uint16_t)code;
+  if (code >= 100u && code < 200u) {
+    /* 101 switches protocols, which this client never requests. */
+    if (code == 101u) {
+      return HAL_EPROTO;
+    }
+    *interim = true;
+    return HAL_OK;
+  }
+  const char *length = find_header_value(response_headers, "Content-Length");
+  if (length != NULL) {
+    size_t value = 0u;
+    if (!parse_size_header_value(length, &value)) {
+      return HAL_EPROTO;
+    }
+    out->content_length_known = true;
+    out->content_length = value;
+  }
+  if (head_request || code == 204u || code == 304u) {
+    return HAL_OK;
+  }
+  const char *transfer =
+      find_header_value(response_headers, "Transfer-Encoding");
+  if (transfer != NULL && strncasecmp(transfer, "chunked", 7u) == 0) {
+    return HAL_EUNSUPPORTED;
+  }
+  *body_expected = true;
+  return HAL_OK;
+}
+
 hal_status_t hal_http_client_request_init(hal_http_client_request_t *request) {
   if (request == NULL) {
     return HAL_EINVAL;
@@ -352,14 +398,17 @@ hal_http_client_perform_ex(const hal_http_client_request_t *request,
                          request->body_length, request->timeout_ms);
   }
 
+  const bool head_request = strcasecmp(request->method, "HEAD") == 0;
   char *const response_headers = buffers->response_headers;
   size_t response_header_used = 0u;
   size_t copied_body = 0u;
   size_t total_body = 0u;
   bool headers_complete = false;
+  bool body_expected = false;
+  bool complete = false;
   bool closed = false;
   const uint32_t started = hal_millis();
-  while (status == HAL_OK && !closed &&
+  while (status == HAL_OK && !complete && !closed &&
          !hal_millis_deadline_expired(started, request->timeout_ms)) {
     uint8_t *const chunk = buffers->chunk;
     size_t received = 0u;
@@ -372,46 +421,37 @@ hal_http_client_perform_ex(const hal_http_client_request_t *request,
       continue;
     }
     size_t offset = 0u;
-    if (status == HAL_OK && !headers_complete) {
-      while (offset < received && !headers_complete) {
-        if (response_header_used + 1u >= JH_HTTP_CLIENT_RESPONSE_HEADER_MAX) {
-          status = HAL_EOVERFLOW;
-          break;
-        }
-        response_headers[response_header_used++] = (char)chunk[offset++];
-        response_headers[response_header_used] = '\0';
-        headers_complete = response_header_used >= 4u &&
-                           memcmp(response_headers + response_header_used - 4u,
-                                  "\r\n\r\n", 4u) == 0;
+    while (status == HAL_OK && !headers_complete && offset < received) {
+      if (response_header_used + 1u >= JH_HTTP_CLIENT_RESPONSE_HEADER_MAX) {
+        status = HAL_EOVERFLOW;
+        break;
       }
-      if (headers_complete) {
-        unsigned code = 0u;
-        if (sscanf(response_headers, "HTTP/%*u.%*u %u", &code) != 1 ||
-            code > UINT16_MAX) {
-          status = HAL_EPROTO;
-        } else {
-          out_response->status_code = (uint16_t)code;
-        }
-        const char *transfer =
-            find_header_value(response_headers, "Transfer-Encoding");
-        if (status == HAL_OK && transfer != NULL &&
-            strncasecmp(transfer, "chunked", 7u) == 0) {
-          status = HAL_EUNSUPPORTED;
-        }
-        const char *length =
-            find_header_value(response_headers, "Content-Length");
-        if (status == HAL_OK && length != NULL) {
-          size_t value = 0u;
-          if (!parse_size_header_value(length, &value)) {
-            status = HAL_EPROTO;
-          } else {
-            out_response->content_length_known = true;
-            out_response->content_length = value;
-          }
-        }
+      response_headers[response_header_used++] = (char)chunk[offset++];
+      response_headers[response_header_used] = '\0';
+      headers_complete = response_header_used >= 4u &&
+                         memcmp(response_headers + response_header_used - 4u,
+                                "\r\n\r\n", 4u) == 0;
+      if (!headers_complete) {
+        continue;
+      }
+      bool interim = false;
+      status = parse_response_head(response_headers, head_request, out_response,
+                                   &body_expected, &interim);
+      if (interim) {
+        /* The final response follows; its head starts over. */
+        headers_complete = false;
+        response_header_used = 0u;
+        response_headers[0] = '\0';
       }
     }
-    if (status == HAL_OK && headers_complete && offset < received) {
+    if (status != HAL_OK || !headers_complete) {
+      continue;
+    }
+    if (!body_expected) {
+      complete = true;
+      continue;
+    }
+    if (offset < received) {
       const size_t body_part = received - offset;
       const size_t room = response_body_capacity - copied_body;
       const size_t copy = std::min(room, body_part);
@@ -421,19 +461,19 @@ hal_http_client_perform_ex(const hal_http_client_request_t *request,
       }
       copied_body += copy;
       total_body += body_part;
-      if (out_response->content_length_known &&
-          total_body >= out_response->content_length) {
-        closed = true;
-      }
+    }
+    if (out_response->content_length_known &&
+        total_body >= out_response->content_length) {
+      complete = true;
     }
   }
   if (status == HAL_OK && !headers_complete) {
     status = closed ? HAL_EPROTO : HAL_ETIMEOUT;
   }
-  if (status == HAL_OK && !closed) {
+  if (status == HAL_OK && !complete && !closed) {
     status = HAL_ETIMEOUT;
   }
-  if (status == HAL_OK && out_response->content_length_known &&
+  if (status == HAL_OK && body_expected && out_response->content_length_known &&
       total_body != out_response->content_length) {
     status = HAL_EPROTO;
   }

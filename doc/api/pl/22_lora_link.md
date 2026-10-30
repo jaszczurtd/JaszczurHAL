@@ -176,6 +176,14 @@ ponowne wysłanie potwierdzenia. Pozwala to zakończyć transmisję po utracie A
 Gdy brakuje miejsca w skonfigurowanej tablicy urządzeń, zgodnie z zasadą LRU
 usuwane jest najdłużej nieużywane okno.
 
+Potwierdzenie jest osobną ramką. Odbiornik numeruje je kolejnym numerem
+sekwencyjnym swojego łącza, tak jak własną wiadomość, a w 8-bajtowej treści
+zapisuje sesję i numer sekwencyjny potwierdzanej wiadomości. Nadawca uznaje
+tylko potwierdzenie, którego treść wskazuje jego sesję i właśnie wysyłaną
+wiadomość. Oba końce muszą pracować na tej samej wersji biblioteki: ramki
+niosą wersję protokołu 2, a ramki wcześniejszej wersji są odrzucane jako
+uszkodzone.
+
 ## Opcjonalna ochrona kryptograficzna
 
 Aby włączyć AEAD, zdefiniuj `HAL_ENABLE_CRYPTO`, przekaż 32-bajtowy klucz współdzielony (PSK) i wybierz odpowiedni tryb ochrony:
@@ -193,13 +201,15 @@ status = hal_lora_link_create(&config, &link);
 ```
 
 Klucz jest kopiowany do wewnętrznego bufora łącza. Wartość nonce składa się
-z sesji nadawcy, adresu źródłowego, sekwencji, indeksu fragmentu i typu ramki.
-Dlatego ta sama kombinacja klucza, adresu i sesji nie może zostać użyta
-ponownie, a szyfrowane
-łącze odmawia wysyłania po wyczerpaniu 32-bitowej przestrzeni sekwencji.
-Ponowienia zachowują identyfikator wiadomości, a więc wysyłają ponownie tę samą
-uwierzytelnioną ramkę. Ten sam nonce nigdy nie służy do zaszyfrowania różnych
-danych jawnych.
+z sesji i adresu nadawcy ramki, jej numeru sekwencyjnego, indeksu fragmentu
+i typu ramki. Wiadomości i potwierdzenia pobierają numery z jednego licznika
+łącza, więc żaden nonce sesji się nie powtarza. Dlatego ta sama kombinacja
+klucza, adresu i sesji nie może zostać użyta ponownie, a szyfrowane łącze po
+wyczerpaniu 32-bitowej przestrzeni sekwencji odmawia wysyłania i przestaje
+potwierdzać. Ponowienia zachowują identyfikator wiadomości, a więc wysyłają
+ponownie tę samą uwierzytelnioną ramkę; ponowne potwierdzenie takiej
+wiadomości dostaje nowy numer sekwencyjny. Ten sam nonce nigdy nie służy do
+zaszyfrowania różnych danych jawnych.
 
 AEAD uwierzytelnia cały nagłówek, szyfrogram i potwierdzenia. Nie ukrywa
 adresów, identyfikatorów sesji, sekwencji, rozmiarów ani liczby fragmentów.

@@ -20,9 +20,10 @@ typedef struct {
   hal_lora_link_t link;
 } endpoint_t;
 
-static endpoint_t create_endpoint(uint16_t address, uint32_t session_id,
-                                  bool encrypted, uint8_t max_retries,
-                                  uint32_t ack_timeout_ms) {
+static endpoint_t create_endpoint_from(uint16_t address, uint32_t session_id,
+                                       bool encrypted, uint8_t max_retries,
+                                       uint32_t ack_timeout_ms,
+                                       uint32_t initial_sequence) {
   endpoint_t endpoint = {};
   const hal_lora_radio_config_t hardware = jh_test_lora_radio_config();
   TEST_ASSERT_EQUAL_INT(HAL_OK,
@@ -35,6 +36,7 @@ static endpoint_t create_endpoint(uint16_t address, uint32_t session_id,
   link_config.max_retries = max_retries;
   link_config.acknowledgement_timeout_ms = ack_timeout_ms;
   link_config.retry_backoff_ms = 0u;
+  link_config.initial_sequence = initial_sequence;
   if (encrypted) {
     link_config.security = HAL_LORA_LINK_SECURITY_CHACHA20_POLY1305;
     link_config.key = kKey;
@@ -43,6 +45,13 @@ static endpoint_t create_endpoint(uint16_t address, uint32_t session_id,
   TEST_ASSERT_EQUAL_INT(HAL_OK,
                         hal_lora_link_create(&link_config, &endpoint.link));
   return endpoint;
+}
+
+static endpoint_t create_endpoint(uint16_t address, uint32_t session_id,
+                                  bool encrypted, uint8_t max_retries,
+                                  uint32_t ack_timeout_ms) {
+  return create_endpoint_from(address, session_id, encrypted, max_retries,
+                              ack_timeout_ms, 1u);
 }
 
 static void destroy_endpoint(endpoint_t *endpoint) {
@@ -464,6 +473,212 @@ void test_concurrent_send_start_serializes_one_link(void) {
   destroy_endpoint(&second);
 }
 
+/* Decode the acknowledgement the receiver transmitted last. */
+static jh_lora_link_frame_header_t
+last_acknowledgement(endpoint_t *receiver, bool encrypted,
+                     uint32_t *out_acknowledged_session,
+                     uint32_t *out_acknowledged_sequence) {
+  uint8_t frame[HAL_LORA_RADIO_MAX_PAYLOAD] = {};
+  size_t frame_length = 0u;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_mock_lora_get_last_transmit(receiver->radio, frame,
+                                              sizeof(frame), &frame_length));
+  jh_lora_link_frame_header_t header = {};
+  uint8_t body[JH_LORA_LINK_FRAME_ACK_PAYLOAD_SIZE] = {};
+  size_t body_length = 0u;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK,
+      jh_lora_link_frame_decode(frame, frame_length, encrypted ? kKey : NULL,
+                                &header, body, sizeof(body), &body_length));
+  TEST_ASSERT_EQUAL_HEX8(JH_LORA_LINK_FRAME_FLAG_ACK,
+                         header.flags & JH_LORA_LINK_FRAME_FLAG_ACK);
+  TEST_ASSERT_TRUE(jh_lora_link_frame_decode_ack_body(
+      body, body_length, out_acknowledged_session, out_acknowledged_sequence));
+  return header;
+}
+
+static void send_acknowledged_byte(endpoint_t *sender, endpoint_t *receiver,
+                                   uint8_t marker) {
+  const uint8_t message[] = {marker, 22u, 33u};
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_lora_link_send_start(sender->link, 2u, 9u, message,
+                                                 sizeof(message), true));
+  pump(sender, receiver, 16u);
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_OPERATION_SUCCEEDED, send_state(sender->link));
+  uint8_t received[8] = {};
+  size_t length = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_lora_link_receive(receiver->link, received,
+                                              sizeof(received), &length, NULL));
+  TEST_ASSERT_EQUAL_UINT8(marker, received[0]);
+}
+
+/* Audit F01: the acknowledgement nonce used to copy the acknowledged
+ * sequence, so a restarted sender (new session, sequence 1 again) made the
+ * receiver protect a different header under a nonce it had already used. */
+void test_acknowledgements_take_the_acknowledger_sequence(void) {
+  endpoint_t receiver = create_endpoint(2u, 202u, true, 0u, 20u);
+  endpoint_t sender = create_endpoint(1u, 101u, true, 0u, 20u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_mock_lora_connect(sender.radio, receiver.radio));
+  uint32_t acknowledged_session = 0u;
+  uint32_t acknowledged_sequence = 0u;
+  send_acknowledged_byte(&sender, &receiver, 1u);
+  const jh_lora_link_frame_header_t first = last_acknowledgement(
+      &receiver, true, &acknowledged_session, &acknowledged_sequence);
+  TEST_ASSERT_EQUAL_UINT32(101u, acknowledged_session);
+  TEST_ASSERT_EQUAL_UINT32(1u, acknowledged_sequence);
+  send_acknowledged_byte(&sender, &receiver, 2u);
+  const jh_lora_link_frame_header_t second = last_acknowledgement(
+      &receiver, true, &acknowledged_session, &acknowledged_sequence);
+  TEST_ASSERT_EQUAL_UINT32(2u, acknowledged_sequence);
+
+  destroy_endpoint(&sender);
+  sender = create_endpoint(1u, 303u, true, 0u, 20u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_mock_lora_connect(sender.radio, receiver.radio));
+  send_acknowledged_byte(&sender, &receiver, 3u);
+  const jh_lora_link_frame_header_t third = last_acknowledgement(
+      &receiver, true, &acknowledged_session, &acknowledged_sequence);
+  TEST_ASSERT_EQUAL_UINT32(303u, acknowledged_session);
+  TEST_ASSERT_EQUAL_UINT32(1u, acknowledged_sequence);
+
+  /* One acknowledger session and address, three distinct nonces. */
+  TEST_ASSERT_EQUAL_UINT32(202u, first.session_id);
+  TEST_ASSERT_EQUAL_UINT32(202u, third.session_id);
+  TEST_ASSERT_EQUAL_UINT16(2u, third.source);
+  TEST_ASSERT_NOT_EQUAL_UINT32(first.sequence, second.sequence);
+  TEST_ASSERT_NOT_EQUAL_UINT32(first.sequence, third.sequence);
+  TEST_ASSERT_NOT_EQUAL_UINT32(second.sequence, third.sequence);
+  TEST_ASSERT_EQUAL_UINT32(0u, third.integrity);
+  destroy_endpoint(&sender);
+  destroy_endpoint(&receiver);
+}
+
+/* Deliver one crafted acknowledgement to a waiting sender. */
+static void inject_acknowledgement(endpoint_t *sender,
+                                   uint32_t acknowledged_session,
+                                   uint32_t acknowledged_sequence,
+                                   uint32_t acknowledgement_sequence) {
+  uint8_t body[JH_LORA_LINK_FRAME_ACK_PAYLOAD_SIZE] = {};
+  jh_lora_link_frame_encode_ack_body(acknowledged_session,
+                                     acknowledged_sequence, body);
+  jh_lora_link_frame_header_t header = {};
+  header.flags =
+      JH_LORA_LINK_FRAME_FLAG_ACK | JH_LORA_LINK_FRAME_FLAG_ENCRYPTED;
+  header.source = 2u;
+  header.destination = 1u;
+  header.session_id = 202u;
+  header.sequence = acknowledgement_sequence;
+  header.fragment_count = 1u;
+  header.message_length = JH_LORA_LINK_FRAME_ACK_PAYLOAD_SIZE;
+  uint8_t frame[HAL_LORA_RADIO_MAX_PAYLOAD] = {};
+  size_t frame_length = 0u;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, jh_lora_link_frame_encode(&header, body, sizeof(body), kKey,
+                                        frame, sizeof(frame), &frame_length));
+  hal_lora_packet_info_t info = {};
+  info.rssi_dbm = -70;
+  info.snr_db = 8;
+  info.crc_valid = true;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_lora_inject_receive(
+                                    sender->radio, frame, frame_length, &info));
+  const hal_status_t status = hal_lora_link_process(sender->link);
+  TEST_ASSERT_TRUE(status == HAL_OK || status == HAL_EAGAIN);
+  hal_mock_advance_millis(1u);
+}
+
+/* Only the body naming this link's session and the message in flight
+ * completes the send; a valid acknowledgement of anything else is ignored. */
+void test_acknowledgement_of_another_session_or_message_is_ignored(void) {
+  endpoint_t sender = create_endpoint(1u, 101u, true, 0u, 50u);
+  endpoint_t receiver = create_endpoint(2u, 202u, true, 0u, 50u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_mock_lora_connect(sender.radio, receiver.radio));
+  /* The receiver's own acknowledgement is lost; crafted ones follow. */
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_mock_lora_drop_next_transmits(receiver.radio, 1u));
+  const uint8_t message[] = {5u, 6u, 7u};
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_lora_link_send_start(sender.link, 2u, 9u, message,
+                                                 sizeof(message), true));
+  hal_lora_link_state_t state = HAL_LORA_LINK_STATE_ERROR;
+  for (int iteration = 0;
+       iteration < 8 && state != HAL_LORA_LINK_STATE_WAITING_ACKNOWLEDGEMENT;
+       ++iteration) {
+    pump(&sender, &receiver, 1u);
+    TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_link_get_state(sender.link, &state));
+  }
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_LINK_STATE_WAITING_ACKNOWLEDGEMENT, state);
+  hal_lora_link_send_status_t send = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_lora_link_get_send_status(sender.link, &send));
+
+  inject_acknowledgement(&sender, 999u, send.sequence, 70u);
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_OPERATION_IN_PROGRESS,
+                        send_state(sender.link));
+  inject_acknowledgement(&sender, 101u, send.sequence + 1u, 71u);
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_OPERATION_IN_PROGRESS,
+                        send_state(sender.link));
+  inject_acknowledgement(&sender, 101u, send.sequence, 72u);
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_OPERATION_SUCCEEDED, send_state(sender.link));
+  hal_lora_link_diagnostics_t diagnostics = {};
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_lora_link_get_diagnostics(sender.link, &diagnostics));
+  TEST_ASSERT_EQUAL_UINT32(1u, diagnostics.acknowledgements_received);
+  destroy_endpoint(&sender);
+  destroy_endpoint(&receiver);
+}
+
+/* Acknowledgements spend the same sequence space as messages. Once an
+ * encrypted link has used UINT32_MAX it still delivers but no longer
+ * acknowledges or sends, instead of repeating a nonce. */
+void test_exhausted_sequence_space_stops_acknowledgements(void) {
+  endpoint_t receiver =
+      create_endpoint_from(2u, 202u, true, 0u, 20u, UINT32_MAX - 1u);
+  endpoint_t sender = create_endpoint(1u, 101u, true, 0u, 20u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_mock_lora_connect(sender.radio, receiver.radio));
+  send_acknowledged_byte(&sender, &receiver, 1u); /* ACK UINT32_MAX - 1 */
+  send_acknowledged_byte(&sender, &receiver, 2u); /* ACK UINT32_MAX */
+
+  const uint8_t message[] = {3u, 0u, 0u};
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_lora_link_send_start(sender.link, 2u, 9u, message,
+                                                 sizeof(message), true));
+  bool refused = false;
+  for (uint32_t iteration = 0u; iteration < 40u; ++iteration) {
+    (void)hal_lora_link_process(sender.link);
+    const hal_status_t receiver_status = hal_lora_link_process(receiver.link);
+    if (receiver_status == HAL_EOVERFLOW) {
+      refused = true;
+    } else {
+      TEST_ASSERT_TRUE(receiver_status == HAL_OK ||
+                       receiver_status == HAL_EAGAIN ||
+                       receiver_status == HAL_IGNORED);
+    }
+    hal_mock_advance_millis(1u);
+  }
+  TEST_ASSERT_TRUE(refused);
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_OPERATION_TIMED_OUT, send_state(sender.link));
+  uint8_t received[8] = {};
+  size_t length = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_lora_link_receive(receiver.link, received,
+                                              sizeof(received), &length, NULL));
+  TEST_ASSERT_EQUAL_UINT8(3u, received[0]);
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW,
+                        hal_lora_link_send_start(receiver.link, 1u, 9u, message,
+                                                 sizeof(message), false));
+  hal_lora_link_diagnostics_t diagnostics = {};
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_lora_link_get_diagnostics(receiver.link, &diagnostics));
+  TEST_ASSERT_EQUAL_UINT32(2u, diagnostics.acknowledgements_sent);
+  TEST_ASSERT_EQUAL_UINT32(3u, diagnostics.received_messages);
+  destroy_endpoint(&sender);
+  destroy_endpoint(&receiver);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_defaults_validation_lifecycle_and_stale_handles);
@@ -479,5 +694,8 @@ int main(void) {
   RUN_TEST(test_corrupt_packet_during_ack_wait_does_not_fail_send);
   RUN_TEST(test_maximum_retry_count_reports_all_attempts);
   RUN_TEST(test_concurrent_send_start_serializes_one_link);
+  RUN_TEST(test_acknowledgements_take_the_acknowledger_sequence);
+  RUN_TEST(test_acknowledgement_of_another_session_or_message_is_ignored);
+  RUN_TEST(test_exhausted_sequence_space_stops_acknowledgements);
   return UNITY_END();
 }

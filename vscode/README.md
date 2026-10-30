@@ -477,8 +477,10 @@ follow the single CDC device matching the project's verified USB identity when
 the saved path disappears or the host assigns a different `ttyACM` or COM
 number.
 This also covers replacing a board with another unit running the same firmware.
-The monitor waits instead of guessing when zero or multiple devices match. An
-explicit `--port` remains pinned to the requested path.
+The monitor verifies a saved port even when its path still exists. If no
+verified saved port is available, it opens exactly one matching device and
+waits when zero or multiple devices match. An explicit `--port` remains pinned
+to the requested path.
 
 For identity-enabled serial uploads, `upload` verifies the selected serial port
 before opening it. Linux combines pyserial metadata with by-id aliases and
@@ -491,13 +493,16 @@ by its existing firmware must be an explicit operation with
 `--allow-unverified-port --port <port>`. Default VS Code tasks must not pass
 this flag.
 
-ESP32-S3 programmer identity comes from the selected board descriptor rather
-than a project-local copy. For `waveshare-esp32-s3-zero`, the native USB
-Serial/JTAG endpoint is `303a:1001`. An explicit port must resolve to a device
-with that VID/PID; a stale path or mismatch is rejected. Without an explicit
-port, upload and monitor may select exactly one verified match and reject zero
-or multiple matches. `--allow-unverified-port` remains an expert-only override
-for an explicit `--port`.
+Default application USB IDs come from `usbDevice` in the selected target
+descriptor. Fixed programmer IDs come from the selected board's
+`programming.usb` descriptor. Projects inherit application defaults and may
+explicitly override them through `identity.usbVid` and `identity.usbPid`;
+remove duplicated platform defaults from a manifest when the project should
+follow board selection. Targets without USB metadata receive no invented IDs.
+The firmware's default USB IDs and the host tools consume the same registry.
+Project monitoring matches USB identity across native CDC and USB-UART bridges,
+independently of the legacy Pico/ESP port classification. `config-dump --json`
+shows the effective identity.
 
 ## Configuration Precedence
 
@@ -523,16 +528,22 @@ number is only a local selection stored in
 For ESP-IDF boards, `boards/profiles/<board>.json.programming.usb` describes
 the programmer endpoint's fixed VID/PID. `jh-vscode` projects that fact into
 the same verifier in memory; projects must not duplicate it in their manifest.
+Application manufacturer, product, and `byIdHint` do not describe that endpoint
+and are omitted. Serial number, interface, and USB location selectors remain
+available to distinguish programmers with the same VID/PID.
 
 For native RP builds, identity is injected through CMake cache entries:
 
 ```text
 -DJH_USB_MANUFACTURER="Jaszczur"
 -DJH_USB_PRODUCT="Router Reset"
+-DJH_USB_VID=11914
+-DJH_USB_PID=10
 ```
 
-If identity is disabled or incomplete, the build uses JaszczurHAL's default USB
-descriptors.
+Enabled identity supplies the configured VID/PID and, when both are present,
+manufacturer and product strings. Omitted fields use HAL defaults. Disabled
+identity uses HAL's default descriptors.
 
 `clear-identity` is a separate action. It requires `--project`, builds the
 neutral firmware from `neutral_fw/rp_pico/` through the selected native Pico

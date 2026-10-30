@@ -167,6 +167,13 @@ a 32-message sliding window. A retried message is not delivered twice, but its
 last fragment triggers another acknowledgement so a lost ACK can recover.
 Windows older than the configured peer table are evicted by least-recent use.
 
+An acknowledgement is a frame in its own right. The receiver numbers it with
+the next sequence of its link, exactly like a message it would send, and puts
+the acknowledged sender session and sequence into an 8-byte body. The sender
+accepts only a body that names its own session and the message in flight.
+Both ends must run the same library version: frames carry protocol version 2,
+and frames of an earlier version are rejected as malformed.
+
 ## Optional cryptographic protection
 
 To enable AEAD, define `HAL_ENABLE_CRYPTO`, supply a 32-byte pre-shared key (PSK), and select the security mode:
@@ -183,12 +190,15 @@ config.key_length = sizeof(provisioned_key);
 status = hal_lora_link_create(&config, &link);
 ```
 
-The key is copied into link-owned storage. The nonce combines sender session,
-source address, sequence, fragment index and frame type. Consequently the
-same key/address/session tuple must never be reused, and an encrypted link
-refuses to send after its 32-bit sequence space is exhausted. Retransmissions
-reuse the exact message identity and therefore the same authenticated frame;
-they never encrypt different plaintext under that nonce.
+The key is copied into link-owned storage. The nonce combines the session and
+address of the frame's sender, its sequence, the fragment index and the frame
+type. Messages and acknowledgements draw their sequences from one counter per
+link, so every nonce of a session is used once. Consequently the same
+key/address/session tuple must never be reused, and once its 32-bit sequence
+space is exhausted an encrypted link refuses to send and stops acknowledging.
+Retransmissions reuse the exact message identity and therefore the same
+authenticated frame; they never encrypt different plaintext under that nonce.
+A repeated acknowledgement of a retried message takes a fresh sequence.
 
 AEAD authenticates the full header, ciphertext and acknowledgements. It does
 not hide addresses, session IDs, sequences, sizes or fragment counts. Key

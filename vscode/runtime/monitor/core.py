@@ -138,15 +138,13 @@ def port_matches_identity(
 
 
 def matching_identity_ports(
-    mode: str,
     identity_tokens: list[str],
     expected: SerialIdentityExpectation | None = None,
 ):
     return [
         port
         for port in list_serial_ports()
-        if port_matches_mode(port, mode)
-        and port_matches_identity(port, identity_tokens, expected)
+        if port_matches_identity(port, identity_tokens, expected)
     ]
 
 
@@ -214,20 +212,26 @@ def find_port(
     follow_identity: bool = False,
     expected_identity: SerialIdentityExpectation | None = None,
 ) -> tuple[str | None, str]:
-    if preferred_port:
-        if serial_port_exists(preferred_port):
+    preferred_available = bool(preferred_port) and serial_port_exists(preferred_port)
+    if preferred_available:
+        if not follow_identity:
             return preferred_port, f"preferred:{preferred_port}"
-        if follow_identity and (identity_tokens or expected_identity is not None):
-            matches = matching_identity_ports(
-                mode,
-                identity_tokens,
-                expected_identity,
-            )
-            if len(matches) == 1:
-                match = matches[0]
-                return match.device, f"verified-identity:{format_port_info(match)}"
-            if len(matches) > 1:
-                return None, "identity-ambiguous"
+        record = get_platform_adapter().serial_port_record(preferred_port)
+        if (record is not None
+                and port_matches_identity(record, identity_tokens or [], expected_identity)):
+            return preferred_port, f"preferred:{preferred_port}"
+    if follow_identity:
+        matches = matching_identity_ports(identity_tokens or [], expected_identity)
+        if len(matches) == 1:
+            match = matches[0]
+            return match.device, f"verified-identity:{format_port_info(match)}"
+        if len(matches) > 1:
+            return None, "identity-ambiguous"
+        if preferred_available:
+            return None, f"preferred-unverified:{preferred_port}"
+        if not preferred_port:
+            return None, "identity-not-found"
+    if preferred_port:
         return None, f"preferred-missing:{preferred_port}"
     for port in list_serial_ports():
         if port_matches_mode(port, mode):

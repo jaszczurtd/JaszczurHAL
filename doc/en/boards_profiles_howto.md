@@ -126,6 +126,13 @@ Each generated GPIO set (exposed pins, `hard` and `soft` reservations, the targe
 
 A profile combining a base board with an add-on module must preserve the base board's physical devices, aliases, and public HAL definitions. Do not remove a device such as `HAL_LED_BUILTIN` merely to reuse its pin: the device remains electrically connected and may load or switch the shared line. Choose non-conflicting wiring instead. A PCB modification, such as opening a solder bridge, requires a separate profile that explicitly describes the modification.
 
+Targets may declare default application USB IDs in `usbDevice` (`vid` and
+`pid`, both 16-bit integers). Tooling inherits these defaults; firmware reads
+the generated `HAL_TARGET_USB_VID` and `HAL_TARGET_USB_PID` facts. Explicit
+project IDs override application defaults. Fixed programmer IDs come from
+the board's `programming.usb` instead. A target without USB metadata receives
+no inferred IDs; the metadata alone does not implement a USB backend.
+
 ## Board-owned devices
 
 Every entry under `devices` uses a camelCase ID and declares a `kind`. Devices

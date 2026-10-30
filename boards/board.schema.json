@@ -3,6 +3,17 @@
   "title": "JaszczurHAL target or board descriptor",
   "type": "object",
   "required": ["schemaVersion", "kind", "id", "displayName", "description", "status"],
+  "$defs": {
+    "usbIds": {
+      "type": "object",
+      "required": ["vid", "pid"],
+      "properties": {
+        "vid": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "pid": { "type": "integer", "minimum": 0, "maximum": 65535 }
+      },
+      "additionalProperties": false
+    }
+  },
   "properties": {
     "schemaVersion": { "const": 1 },
     "kind": { "enum": ["target", "board"] },
@@ -17,6 +28,7 @@
       "then": {
         "required": ["architecture", "clockInputs", "memory"],
         "properties": {
+          "usbDevice": { "$ref": "#/$defs/usbIds" },
           "architecture": {
             "type": "object",
             "required": ["vendor", "family", "soc", "isa", "cores", "mcuName", "mcuSubtype", "cpuArchName", "hasFpu", "backendName"],
@@ -78,15 +90,7 @@
             "required": ["transport", "usb", "reset", "boot"],
             "properties": {
               "transport": { "enum": ["usb-serial-jtag", "usb-uart-bridge"] },
-              "usb": {
-                "type": "object",
-                "required": ["vid", "pid"],
-                "properties": {
-                  "vid": { "type": "integer", "minimum": 0, "maximum": 65535 },
-                  "pid": { "type": "integer", "minimum": 0, "maximum": 65535 }
-                },
-                "additionalProperties": false
-              },
+              "usb": { "$ref": "#/$defs/usbIds" },
               "reset": { "enum": ["usb-serial-jtag-control-lines", "dtr-rts-en"] },
               "boot": { "enum": ["usb-serial-jtag-control-lines", "dtr-rts-io0"] }
             },

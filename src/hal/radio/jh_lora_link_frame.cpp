@@ -12,7 +12,10 @@
 
 #define JH_LORA_LINK_MAGIC_0 UINT8_C(0x4A)
 #define JH_LORA_LINK_MAGIC_1 UINT8_C(0x4C)
-#define JH_LORA_LINK_PROTOCOL_VERSION UINT8_C(1)
+/* Version 2: an acknowledgement is numbered by the acknowledger and carries
+ * the acknowledged session and sequence in an 8-byte body. Version 1 frames
+ * are rejected as malformed. */
+#define JH_LORA_LINK_PROTOCOL_VERSION UINT8_C(2)
 #define JH_LORA_LINK_FRAME_FLAGS                                               \
   (JH_LORA_LINK_FRAME_FLAG_ACK_REQUEST | JH_LORA_LINK_FRAME_FLAG_ACK |         \
    JH_LORA_LINK_FRAME_FLAG_ENCRYPTED)
@@ -77,8 +80,8 @@ static bool header_common_valid(const jh_lora_link_frame_header_t *header) {
   }
   if (ack) {
     return header->port == 0u && header->fragment_index == 0u &&
-           header->fragment_count == 0u && header->message_length == 0u &&
-           header->integrity != 0u;
+           header->fragment_count == 1u &&
+           header->message_length == JH_LORA_LINK_FRAME_ACK_PAYLOAD_SIZE;
   }
   return header->fragment_count > 0u &&
          header->fragment_index < header->fragment_count &&
@@ -88,7 +91,7 @@ static bool header_common_valid(const jh_lora_link_frame_header_t *header) {
 static bool payload_shape_valid(const jh_lora_link_frame_header_t *header,
                                 size_t payload_length) {
   if (is_ack(header)) {
-    return payload_length == 0u;
+    return payload_length == JH_LORA_LINK_FRAME_ACK_PAYLOAD_SIZE;
   }
   const size_t capacity =
       jh_lora_link_frame_payload_capacity(is_encrypted(header));
@@ -226,6 +229,26 @@ hal_status_t jh_lora_link_frame_decode(const uint8_t *frame,
 #else
   return HAL_EUNSUPPORTED;
 #endif
+}
+
+void jh_lora_link_frame_encode_ack_body(uint32_t acknowledged_session_id,
+                                        uint32_t acknowledged_sequence,
+                                        uint8_t *out_body) {
+  jh_store_be32(&out_body[0], acknowledged_session_id);
+  jh_store_be32(&out_body[4], acknowledged_sequence);
+}
+
+bool jh_lora_link_frame_decode_ack_body(const uint8_t *body, size_t body_length,
+                                        uint32_t *out_acknowledged_session_id,
+                                        uint32_t *out_acknowledged_sequence) {
+  if (body == NULL || body_length != JH_LORA_LINK_FRAME_ACK_PAYLOAD_SIZE ||
+      out_acknowledged_session_id == NULL ||
+      out_acknowledged_sequence == NULL) {
+    return false;
+  }
+  *out_acknowledged_session_id = jh_load_be32(&body[0]);
+  *out_acknowledged_sequence = jh_load_be32(&body[4]);
+  return true;
 }
 
 #endif /* HAL_ENABLE_LORA_LINK */

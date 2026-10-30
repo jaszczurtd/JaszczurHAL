@@ -135,6 +135,8 @@ CMAKE_TRANSIENT_CACHE_KEYS = {
     "JH_OTA_VERSION",
     "JH_USB_MANUFACTURER",
     "JH_USB_PRODUCT",
+    "JH_USB_VID",
+    "JH_USB_PID",
 }
 
 SECTION_HEADER_RE = re.compile(
@@ -403,7 +405,10 @@ def resolve_target_profile(
     # Effective overlay = registry family+board layer (build defaults) with the
     # manifest's own targetProfiles.<active> entry merged on top (project wins).
     registry_layer: dict[str, Any] = {}
+    board_identity: dict[str, Any] | None = None
     if isinstance(target_desc, dict):
+        if isinstance(target_desc.get("identity"), dict):
+            registry_layer["identity"] = dict(target_desc["identity"])
         if target_desc.get("toolchain"):
             registry_layer["toolchain"] = target_desc["toolchain"]
         reg_cache = resolve_registry_board_cache(target_desc, board)
@@ -417,7 +422,10 @@ def resolve_target_profile(
         if isinstance(board_desc, dict) and isinstance(
             board_desc.get("identity"), dict
         ):
-            registry_layer["identity"] = dict(board_desc["identity"])
+            board_identity = dict(board_desc["identity"])
+            registry_layer["identity"] = deep_merge(
+                registry_layer.get("identity", {}), board_identity
+            )
 
     # Precedence (low -> high): registry target/board defaults are the floor, the
     # base manifest overrides them, and the active target's targetProfiles overlay
@@ -434,10 +442,15 @@ def resolve_target_profile(
     if isinstance(registry_layer.get("espIdf"), dict):
         merged["espIdf"] = dict(registry_layer["espIdf"])
         sources["espIdf"] = f"registry:{active}.build.provider"
-    registry_identity = registry_layer.get("identity")
-    if isinstance(registry_identity, dict):
-        effective_identity = dict(merged.get("identity") or {})
-        effective_identity.update(registry_identity)
+    if isinstance(board_identity, dict):
+        # A fixed programmer exposes its own descriptors, not the application's.
+        project_identity = merged.get("identity") or {}
+        effective_identity = {
+            key: project_identity[key]
+            for key in ("usbSerialNumber", "usbInterface", "usbLocation")
+            if key in project_identity
+        }
+        effective_identity.update(board_identity)
         SerialIdentityExpectation.from_config(effective_identity)
         merged["identity"] = effective_identity
         sources["identity"] = (
@@ -3598,8 +3611,9 @@ def cmake_cache_args(config: dict[str, Any], project_dir: Path) -> list[str]:
         args.append(f"-DJH_ROOT={normalize_cmake_cli_value(str(root_path))}")
 
     identity = config.get("identity")
+    target = load_target_registry().get(config.get("target"), {})
     if (
-        config.get("target") in NATIVE_RP_TARGETS
+        isinstance(target.get("identity"), dict)
         and isinstance(identity, dict)
         and as_bool(identity.get("enabled"))
     ):
@@ -3608,6 +3622,10 @@ def cmake_cache_args(config: dict[str, Any], project_dir: Path) -> list[str]:
         if manufacturer and product:
             args.append(f"-DJH_USB_MANUFACTURER={manufacturer}")
             args.append(f"-DJH_USB_PRODUCT={product}")
+        expected = SerialIdentityExpectation.from_config(identity)
+        for value, key in ((expected.vid, "JH_USB_VID"), (expected.pid, "JH_USB_PID")):
+            if value is not None:
+                args.append(f"-D{key}={value}")
 
     cmake = config.get("cmake")
     if isinstance(cmake, dict) and isinstance(cmake.get("cache"), dict):

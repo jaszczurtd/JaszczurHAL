@@ -89,29 +89,58 @@ void test_encrypted_frame_authenticates_header_and_payload(void) {
 }
 
 void test_acknowledgement_and_fragment_shapes_are_strict(void) {
+  uint8_t body[JH_LORA_LINK_FRAME_ACK_PAYLOAD_SIZE] = {};
+  jh_lora_link_frame_encode_ack_body(UINT32_C(0x11223344), UINT32_C(0x55667788),
+                                     body);
   jh_lora_link_frame_header_t acknowledgement = {};
   acknowledgement.flags = JH_LORA_LINK_FRAME_FLAG_ACK;
   acknowledgement.source = 2u;
   acknowledgement.destination = 1u;
   acknowledgement.session_id = 22u;
   acknowledgement.sequence = 9u;
+  acknowledgement.fragment_count = 1u;
+  acknowledgement.message_length = JH_LORA_LINK_FRAME_ACK_PAYLOAD_SIZE;
   acknowledgement.integrity = 11u;
   uint8_t frame[HAL_LORA_RADIO_MAX_PAYLOAD] = {};
   size_t frame_length = 0u;
-  TEST_ASSERT_EQUAL_INT(
-      HAL_OK, jh_lora_link_frame_encode(&acknowledgement, NULL, 0u, NULL, frame,
-                                        sizeof(frame), &frame_length));
-  TEST_ASSERT_EQUAL_UINT(JH_LORA_LINK_FRAME_HEADER_SIZE, frame_length);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_lora_link_frame_encode(
+                                    &acknowledgement, body, sizeof(body), NULL,
+                                    frame, sizeof(frame), &frame_length));
+  TEST_ASSERT_EQUAL_UINT(JH_LORA_LINK_FRAME_HEADER_SIZE +
+                             JH_LORA_LINK_FRAME_ACK_PAYLOAD_SIZE,
+                         frame_length);
 
-  acknowledgement.port = 1u;
+  jh_lora_link_frame_header_t decoded = {};
+  uint8_t payload[JH_LORA_LINK_FRAME_ACK_PAYLOAD_SIZE] = {};
+  size_t payload_length = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_lora_link_frame_decode(
+                                    frame, frame_length, NULL, &decoded,
+                                    payload, sizeof(payload), &payload_length));
+  uint32_t acknowledged_session = 0u;
+  uint32_t acknowledged_sequence = 0u;
+  TEST_ASSERT_TRUE(jh_lora_link_frame_decode_ack_body(
+      payload, payload_length, &acknowledged_session, &acknowledged_sequence));
+  TEST_ASSERT_EQUAL_HEX32(0x11223344u, acknowledged_session);
+  TEST_ASSERT_EQUAL_HEX32(0x55667788u, acknowledged_sequence);
+  TEST_ASSERT_FALSE(jh_lora_link_frame_decode_ack_body(
+      payload, payload_length - 1u, &acknowledged_session,
+      &acknowledged_sequence));
+
+  /* Version 2 acknowledgements always carry their body. */
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL, jh_lora_link_frame_encode(
                                         &acknowledgement, NULL, 0u, NULL, frame,
                                         sizeof(frame), &frame_length));
+  acknowledgement.port = 1u;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL,
+      jh_lora_link_frame_encode(&acknowledgement, body, sizeof(body), NULL,
+                                frame, sizeof(frame), &frame_length));
   acknowledgement.port = 0u;
   acknowledgement.destination = HAL_LORA_LINK_ADDRESS_BROADCAST;
-  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, jh_lora_link_frame_encode(
-                                        &acknowledgement, NULL, 0u, NULL, frame,
-                                        sizeof(frame), &frame_length));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL,
+      jh_lora_link_frame_encode(&acknowledgement, body, sizeof(body), NULL,
+                                frame, sizeof(frame), &frame_length));
 
   jh_lora_link_frame_header_t fragmented = data_header(false);
   fragmented.fragment_count = 2u;
@@ -121,6 +150,26 @@ void test_acknowledgement_and_fragment_shapes_are_strict(void) {
   TEST_ASSERT_EQUAL_INT(
       HAL_EINVAL, jh_lora_link_frame_encode(&fragmented, &byte, 1u, NULL, frame,
                                             sizeof(frame), &frame_length));
+}
+
+/* Version 1 numbered acknowledgements by the acknowledged message, so a
+ * receiver reused nonces (audit F01). Mixed versions must not interoperate. */
+void test_decoder_rejects_the_previous_protocol_version(void) {
+  const jh_lora_link_frame_header_t header = data_header(false);
+  static const uint8_t payload[5] = {1u, 2u, 3u, 4u, 5u};
+  uint8_t frame[HAL_LORA_RADIO_MAX_PAYLOAD] = {};
+  size_t frame_length = 0u;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, jh_lora_link_frame_encode(&header, payload, sizeof(payload), NULL,
+                                        frame, sizeof(frame), &frame_length));
+  TEST_ASSERT_EQUAL_HEX8(2u, frame[2]);
+  frame[2] = 1u;
+  jh_lora_link_frame_header_t decoded = {};
+  uint8_t out[sizeof(payload)] = {};
+  size_t out_length = 0u;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EPROTO, jh_lora_link_frame_decode(frame, frame_length, NULL, &decoded,
+                                            out, sizeof(out), &out_length));
 }
 
 void test_decoder_rejects_truncation_magic_flags_and_small_output(void) {
@@ -160,6 +209,7 @@ int main(void) {
   RUN_TEST(test_plaintext_frame_round_trip_and_capacity);
   RUN_TEST(test_encrypted_frame_authenticates_header_and_payload);
   RUN_TEST(test_acknowledgement_and_fragment_shapes_are_strict);
+  RUN_TEST(test_decoder_rejects_the_previous_protocol_version);
   RUN_TEST(test_decoder_rejects_truncation_magic_flags_and_small_output);
   return UNITY_END();
 }

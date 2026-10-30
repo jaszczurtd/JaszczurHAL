@@ -34,6 +34,7 @@ with patch.dict(
     from vscode.runtime.monitor import core as module
     from vscode.linux.runtime import serial_persistent as compatibility
     from vscode.runtime.platform_api import SerialPortRecord
+    from vscode.runtime.serial_identity import SerialIdentityExpectation
 
 
 assert compatibility.find_port is module.find_port
@@ -115,6 +116,28 @@ assert port is None
 assert reason == "identity-ambiguous"
 
 unrelated = pico_port("/dev/ttyACM2", "Different Device")
+
+# With no configured port, following an identity must not open the first Pico.
+for ports, wanted, wanted_reason in (
+    ([unrelated, replacement], replacement.device, "verified-identity:"),
+    ([unrelated], None, "identity-not-found"),
+    ([replacement, second_match], None, "identity-ambiguous"),
+    ([], None, "identity-not-found"),
+):
+    with patch.object(module, "list_serial_ports", return_value=ports):
+        port, reason = module.find_port("pico", "", tokens, follow_identity=True)
+    assert port == wanted, (ports, port)
+    assert reason.startswith(wanted_reason), reason
+
+# Project identities also select USB-UART bridges and native non-RP CDC devices.
+for vid, pid in ((0x10C4, 0xEA60), (0x0483, 0x5740), (0x303A, 0x1001)):
+    device = SerialPortRecord(device="COM12", vid=vid, pid=pid)
+    expected_device = SerialIdentityExpectation(vid=vid, pid=pid)
+    with patch.object(module, "list_serial_ports", return_value=[unrelated, device]):
+        port, reason = module.find_port("pico", follow_identity=True,
+                                        expected_identity=expected_device)
+    assert port == device.device, (vid, pid, reason)
+
 with patch.object(module, "serial_port_exists", return_value=False), patch.object(
     module,
     "list_serial_ports",
@@ -137,7 +160,10 @@ with patch.object(
 ), patch.object(
     module,
     "list_serial_ports",
-) as preferred_scan:
+) as preferred_scan, patch.object(
+    module, "get_platform_adapter",
+    return_value=SimpleNamespace(serial_port_record=lambda port: replacement),
+):
     port, reason = module.find_port(
         "pico",
         old_port,
@@ -148,3 +174,37 @@ with patch.object(
 assert port == old_port
 assert reason == f"preferred:{old_port}"
 preferred_scan.assert_not_called()
+
+# A tty name can survive while its device identity changes after reconnection.
+for ports, wanted in (([unrelated, replacement], replacement.device),
+                      ([unrelated], None)):
+    with patch.object(module, "serial_port_exists", return_value=True), patch.object(
+        module, "get_platform_adapter",
+        return_value=SimpleNamespace(serial_port_record=lambda port: unrelated),
+    ), patch.object(module, "list_serial_ports", return_value=ports):
+        port, reason = module.find_port(
+            "pico", unrelated.device, tokens, follow_identity=True,
+        )
+    assert port == wanted, (ports, port)
+
+# Explicitly pinned monitoring keeps its requested port without following USB.
+with patch.object(module, "serial_port_exists", return_value=True), patch.object(
+    module, "list_serial_ports",
+) as pinned_scan:
+    port, reason = module.find_port("pico", unrelated.device, tokens,
+                                    follow_identity=False)
+assert port == unrelated.device
+pinned_scan.assert_not_called()
+
+ecu = SerialPortRecord(device="COM10", vid=0x2E8A, pid=0x0009,
+                       manufacturer="Jaszczur", product="Fiesta ECU")
+adjustometer = SerialPortRecord(device="COM2", vid=0x2E8A, pid=0x000A,
+                               manufacturer="Jaszczur", product="Fiesta Adjustometer")
+expected = SerialIdentityExpectation(vid=0x2E8A, pid=0x0009,
+                                     manufacturer="Jaszczur", product="Fiesta ECU")
+for ports, wanted in (([adjustometer, ecu], ecu.device),
+                      ([adjustometer], None)):
+    with patch.object(module, "list_serial_ports", return_value=ports):
+        port, reason = module.find_port("pico", follow_identity=True,
+                                        expected_identity=expected)
+    assert port == wanted, (ports, port)

@@ -568,6 +568,12 @@ connection close. Response bodies are copied without a terminator.
 `HAL_EOVERFLOW` reports the required body length when the caller buffer is too
 small. Chunked transfer encoding returns `HAL_EUNSUPPORTED`.
 
+A response to a HEAD request and every 204 or 304 response has no body,
+whatever `Content-Length` says: the call returns when the headers end, and
+`content_length` still reports the declared value. `Content-Length: 0` also
+completes at the end of the headers. Interim 1xx responses are skipped until
+the final response arrives; 101 is reported as `HAL_EPROTO`.
+
 - **Implementation:** `hal/network/http/hal_http_client.cpp`.
 - **Tests:** `test_hal_http_client` covers validation, fragmented response
   headers, response metadata, and bounded body copies.

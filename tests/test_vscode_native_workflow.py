@@ -94,6 +94,62 @@ def resolved(target: str, board: str) -> dict:
     return config_dump(BOARD_PROJECT, "--target", target, "--board", board)
 
 
+# Application USB defaults come from target metadata; explicit IDs stay explicit.
+_manifest_path = BOARD_PROJECT / ".vscode/jaszczurhal.project.json"
+_original_manifest = _manifest_path.read_text(encoding="utf-8")
+try:
+    for target, board, pid in (("rp2040", "pico", 0x000A),
+                               ("rp2350-arm", "pico2", 0x0009),
+                               ("rp2350-riscv", "pico2", 0x0009)):
+        config = workflow_runtime.load_project_config(
+            BOARD_PROJECT, target_override=target, board_override=board,
+        )
+        require(config["identity"]["usbVid"] == 0x2E8A, target)
+        require(config["identity"]["usbPid"] == pid,
+                f"{target}: USB identity differs from the target descriptor")
+    config = workflow_runtime.load_project_config(
+        BOARD_PROJECT, target_override="stm32g474", board_override="nucleo-g474re",
+    )
+    require("usbVid" not in config["identity"] and "usbPid" not in config["identity"],
+            "a target without USB metadata inherited another MCU's IDs")
+    registry = workflow_runtime.load_target_registry()
+    registry["stm32g474"]["identity"] = {"usbVid": 0x1234, "usbPid": 0x5678}
+    with mock.patch.object(workflow_runtime, "load_target_registry", return_value=registry):
+        config = workflow_runtime.load_project_config(
+            BOARD_PROJECT, target_override="stm32g474", board_override="nucleo-g474re",
+        )
+    require(config["identity"]["usbVid"] == 0x1234 and config["identity"]["usbPid"] == 0x5678,
+            "USB defaults depend on a hard-coded MCU name instead of its metadata")
+    for target, board, vid, pid in (
+        ("esp32s3", "waveshare-esp32-s3-zero", 0x303A, 0x1001),
+        ("esp32", "esp32-devkitc-v4", 0x10C4, 0xEA60),
+    ):
+        config = workflow_runtime.load_project_config(
+            BOARD_PROJECT, target_override=target, board_override=board,
+        )
+        require(config["identity"] == {"enabled": True, "usbVid": vid, "usbPid": pid},
+                "fixed programmer identity inherited application USB descriptors")
+    for identity in (
+        {"enabled": True, "usbVid": "0x2e8a", "usbPid": "0x000a"},
+        {"enabled": True, "usbVid": "0xcafe", "usbPid": "0x1234"},
+        {"enabled": False, "usbVid": "0x2e8a", "usbPid": "0x000a"},
+    ):
+        manifest = json.loads(_original_manifest)
+        manifest["identity"] = identity
+        _manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        config = workflow_runtime.load_project_config(
+            BOARD_PROJECT, target_override="rp2350-arm", board_override="pico2",
+        )
+        require(config["identity"] == identity,
+                "target defaults overwrote an explicit project USB identity")
+        if identity["enabled"]:
+            arguments = workflow_runtime.cmake_cache_args(config, BOARD_PROJECT)
+            require(f"-DJH_USB_VID={int(identity['usbVid'], 16)}" in arguments, arguments)
+            require(f"-DJH_USB_PID={int(identity['usbPid'], 16)}" in arguments, arguments)
+finally:
+    _manifest_path.write_text(_original_manifest, encoding="utf-8")
+
+
 expected = {
     "rp2040": ("pico", None),
     "rp2350-arm": ("pico2", None),

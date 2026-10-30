@@ -13,6 +13,7 @@
 #include "ff.h"
 #include "hal_sd_spi_diskio.h"
 
+#include "hal/core/hal_status.h"
 #include "hal/core/jh_endian.h"
 #include "hal/gpio/hal_gpio.h"
 #include "hal/spi/hal_spi.h"
@@ -70,6 +71,7 @@ typedef struct {
   hal_sd_spi_card_type_t card_type;
   uint32_t sector_count;
   DSTATUS status;
+  bool bus_fault; /* a transfer failed inside the open transaction */
 } hal_sd_spi_state_t;
 
 static hal_sd_spi_state_t s_sd = {
@@ -82,6 +84,7 @@ static hal_sd_spi_state_t s_sd = {
     HAL_SD_SPI_CARD_NONE,
     0u,
     STA_NOINIT,
+    false,
 };
 
 static hal_spi_settings_t sd_spi_settings(uint32_t clock_hz) {
@@ -93,42 +96,74 @@ static void sd_select(void) { hal_gpio_write(s_sd.cs_pin, false); }
 
 static void sd_unselect(void) { hal_gpio_write(s_sd.cs_pin, true); }
 
-static uint8_t sd_spi_rx(void) { return hal_spi_transfer(s_sd.spi_bus, 0xFFu); }
+/* Every transfer helper records a bus error in s_sd.bus_fault, so a sector
+ * operation fails even when the bytes read back looked like valid tokens. */
+static void sd_note(hal_status_t status) {
+  if (hal_status_is_error(status)) {
+    s_sd.bus_fault = true;
+  }
+}
+
+static uint8_t sd_spi_rx(void) {
+  uint8_t received = 0xFFu;
+  sd_note(hal_spi_transfer_ex(s_sd.spi_bus, 0xFFu, &received));
+  return s_sd.bus_fault ? 0xFFu : received;
+}
 
 static void sd_spi_tx(uint8_t data) {
-  (void)hal_spi_transfer(s_sd.spi_bus, data);
+  uint8_t received = 0u;
+  sd_note(hal_spi_transfer_ex(s_sd.spi_bus, data, &received));
 }
 
 static void sd_spi_rx_buf(uint8_t *dst, size_t len) {
-  hal_spi_transfer_txrx(s_sd.spi_bus, NULL, dst, len);
+  sd_note(hal_spi_transfer_txrx(s_sd.spi_bus, NULL, dst, len));
 }
 
 static void sd_spi_tx_buf(const uint8_t *src, size_t len) {
-  hal_spi_write(s_sd.spi_bus, src, len);
+  sd_note(hal_spi_write(s_sd.spi_bus, src, len));
 }
 
-static void sd_begin_transaction(uint32_t clock_hz) {
+/* Lock and configure the bus; the card stays deselected (the init clocks
+ * run with CS high). false leaves the bus unlocked. */
+static bool sd_begin_transaction(uint32_t clock_hz) {
   const hal_spi_settings_t settings = sd_spi_settings(clock_hz);
+  s_sd.bus_fault = false;
   hal_spi_lock(s_sd.spi_bus);
-  hal_spi_begin_transaction(s_sd.spi_bus, &settings);
+  if (hal_status_is_error(hal_spi_begin_transaction(s_sd.spi_bus, &settings))) {
+    hal_spi_unlock(s_sd.spi_bus);
+    return false;
+  }
+  return true;
+}
+
+/* Begin a transaction with the card selected for its first command. */
+static bool sd_begin_card_transaction(uint32_t clock_hz) {
+  if (!sd_begin_transaction(clock_hz)) {
+    return false;
+  }
+  sd_select();
+  return true;
 }
 
 static void sd_end_transaction(void) {
-  hal_spi_end_transaction(s_sd.spi_bus);
+  sd_note(hal_spi_end_transaction(s_sd.spi_bus));
   hal_spi_unlock(s_sd.spi_bus);
 }
 
-static void sd_stop_transaction(void) {
+/* Release the card and the bus; false when any transfer in the transaction
+ * failed. */
+static bool sd_stop_transaction(void) {
   sd_unselect();
   sd_spi_tx(0xFFu);
   sd_end_transaction();
+  return !s_sd.bus_fault;
 }
 
 static bool sd_wait_ready(uint32_t timeout_ms) {
   const uint32_t start = hal_millis();
   do {
     if (sd_spi_rx() == 0xFFu) {
-      return true;
+      return !s_sd.bus_fault;
     }
   } while (!hal_millis_deadline_expired(start, timeout_ms));
   return false;
@@ -181,9 +216,10 @@ static bool sd_read_data(uint8_t *dst, size_t len) {
       sd_spi_rx_buf(dst, len);
       (void)sd_spi_rx();
       (void)sd_spi_rx();
-      return true;
+      /* The token alone proves nothing when the payload transfer failed. */
+      return !s_sd.bus_fault;
     }
-  } while (token == 0xFFu &&
+  } while (token == 0xFFu && !s_sd.bus_fault &&
            !hal_millis_deadline_expired(start, SD_READ_TIMEOUT_MS));
   return false;
 }
@@ -199,7 +235,8 @@ static bool sd_write_data(const uint8_t *src) {
   sd_spi_tx(0xFFu);
 
   const uint8_t response = sd_spi_rx();
-  return (response & SD_DATA_RESPONSE_MASK) == SD_DATA_ACCEPTED;
+  return !s_sd.bus_fault &&
+         (response & SD_DATA_RESPONSE_MASK) == SD_DATA_ACCEPTED;
 }
 
 static bool sd_read_register(uint8_t cmd, uint8_t *dst, size_t len) {
@@ -229,12 +266,11 @@ static uint32_t sd_csd_sector_count(const uint8_t csd[16]) {
 
 static bool sd_refresh_sector_count(void) {
   uint8_t csd[16] = {};
-  sd_begin_transaction(s_sd.clock_hz);
-  sd_select();
+  if (!sd_begin_card_transaction(s_sd.clock_hz)) {
+    return false;
+  }
   const bool ok = sd_read_register(SD_CMD9, csd, sizeof(csd));
-  sd_stop_transaction();
-
-  if (!ok) {
+  if (!sd_stop_transaction() || !ok) {
     return false;
   }
 
@@ -251,7 +287,9 @@ static bool sd_card_init(void) {
   hal_gpio_set_mode(s_sd.cs_pin, HAL_GPIO_OUTPUT_HIGH);
   sd_unselect();
 
-  sd_begin_transaction(s_sd.init_clock_hz);
+  if (!sd_begin_transaction(s_sd.init_clock_hz)) {
+    return false;
+  }
   for (uint8_t i = 0u; i < 10u; ++i) {
     sd_spi_rx();
   }
@@ -312,7 +350,9 @@ static bool sd_card_init(void) {
     }
   }
 
-  sd_stop_transaction();
+  if (!sd_stop_transaction()) {
+    return false;
+  }
 
   s_sd.card_type = card_type;
   s_sd.initialized = true;
@@ -372,6 +412,40 @@ DSTATUS disk_status(BYTE pdrv) {
   return s_sd.status;
 }
 
+static bool sd_read_sector(BYTE *data, uint32_t arg) {
+  return sd_command(SD_CMD17, arg) == SD_R1_READY_STATE &&
+         sd_read_data(data, 512u);
+}
+
+static bool sd_write_sector(const BYTE *data, uint32_t arg) {
+  return sd_command(SD_CMD24, arg) == SD_R1_READY_STATE &&
+         sd_write_data(data) && sd_wait_ready(SD_WRITE_TIMEOUT_MS);
+}
+
+/* One transaction with the card selected for the first command; every
+ * sector runs the operation, and any failed transfer fails the result. */
+template <typename Byte>
+static DRESULT sd_sector_transaction(Byte *buff, LBA_t sector, UINT count,
+                                     bool (*operation)(Byte *, uint32_t)) {
+  if (!sd_begin_card_transaction(s_sd.clock_hz)) {
+    return RES_ERROR;
+  }
+  for (UINT i = 0u; i < count; ++i) {
+    uint32_t arg = (uint32_t)(sector + i);
+    if (s_sd.card_type != HAL_SD_SPI_CARD_SDHC) {
+      arg <<= 9;
+    }
+    if (!operation(buff + ((size_t)i * 512u), arg)) {
+      (void)sd_stop_transaction();
+      return RES_ERROR;
+    }
+    sd_unselect();
+    sd_spi_tx(0xFFu);
+    sd_select();
+  }
+  return sd_stop_transaction() ? RES_OK : RES_ERROR;
+}
+
 DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
   if (pdrv != HAL_SD_SPI_DRIVE || buff == NULL || count == 0u) {
     return RES_PARERR;
@@ -379,24 +453,7 @@ DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
   if (!s_sd.initialized) {
     return RES_NOTRDY;
   }
-
-  sd_begin_transaction(s_sd.clock_hz);
-  for (UINT i = 0u; i < count; ++i) {
-    uint32_t arg = (uint32_t)(sector + i);
-    if (s_sd.card_type != HAL_SD_SPI_CARD_SDHC) {
-      arg <<= 9;
-    }
-    if (sd_command(SD_CMD17, arg) != SD_R1_READY_STATE ||
-        !sd_read_data(buff + ((size_t)i * 512u), 512u)) {
-      sd_stop_transaction();
-      return RES_ERROR;
-    }
-    sd_unselect();
-    sd_spi_tx(0xFFu);
-    sd_select();
-  }
-  sd_stop_transaction();
-  return RES_OK;
+  return sd_sector_transaction(buff, sector, count, sd_read_sector);
 }
 
 DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
@@ -406,25 +463,7 @@ DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
   if (!s_sd.initialized) {
     return RES_NOTRDY;
   }
-
-  sd_begin_transaction(s_sd.clock_hz);
-  for (UINT i = 0u; i < count; ++i) {
-    uint32_t arg = (uint32_t)(sector + i);
-    if (s_sd.card_type != HAL_SD_SPI_CARD_SDHC) {
-      arg <<= 9;
-    }
-    if (sd_command(SD_CMD24, arg) != SD_R1_READY_STATE ||
-        !sd_write_data(buff + ((size_t)i * 512u)) ||
-        !sd_wait_ready(SD_WRITE_TIMEOUT_MS)) {
-      sd_stop_transaction();
-      return RES_ERROR;
-    }
-    sd_unselect();
-    sd_spi_tx(0xFFu);
-    sd_select();
-  }
-  sd_stop_transaction();
-  return RES_OK;
+  return sd_sector_transaction(buff, sector, count, sd_write_sector);
 }
 
 DRESULT disk_ioctl(BYTE pdrv, BYTE cmd, void *buff) {
@@ -437,14 +476,14 @@ DRESULT disk_ioctl(BYTE pdrv, BYTE cmd, void *buff) {
 
   switch (cmd) {
   case CTRL_SYNC:
-    sd_begin_transaction(s_sd.clock_hz);
-    sd_select();
-    if (!sd_wait_ready(SD_WRITE_TIMEOUT_MS)) {
-      sd_stop_transaction();
+    if (!sd_begin_card_transaction(s_sd.clock_hz)) {
       return RES_ERROR;
     }
-    sd_stop_transaction();
-    return RES_OK;
+    if (!sd_wait_ready(SD_WRITE_TIMEOUT_MS)) {
+      (void)sd_stop_transaction();
+      return RES_ERROR;
+    }
+    return sd_stop_transaction() ? RES_OK : RES_ERROR;
 
   case GET_SECTOR_COUNT:
     if (buff == NULL) {

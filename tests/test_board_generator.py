@@ -1524,6 +1524,28 @@ require(
     "unsupported PSRAM size was not diagnosed",
 )
 
+usb_defaults = mutate(
+    "usb-device-defaults-stm32", "targets/stm32g474.json",
+    lambda value: value.update(usbDevice={"vid": 0x1234, "pid": 0x5678}),
+)
+usb_output = TEST_ROOT / "fixtures/.build/usb-device-defaults-stm32"
+run("--target", "stm32g474", "--board", "nucleo-g474re",
+    "--output-dir", str(usb_output), boards_root=usb_defaults)
+usb_header = (usb_output / "jh_board_config.h").read_text()
+require("#define HAL_TARGET_USB_VID UINT16_C(4660)" in usb_header
+        and "#define HAL_TARGET_USB_PID UINT16_C(22136)" in usb_header,
+        "USB facts are tied to an MCU name instead of its descriptor")
+for name, usb in (
+    ("usb-device-bool", {"vid": True, "pid": 9}),
+    ("usb-device-overflow", {"vid": 0x2E8A, "pid": 0x10000}),
+    ("usb-device-negative", {"vid": -1, "pid": 9}),
+    ("usb-device-missing", {"vid": 0x2E8A}),
+):
+    invalid_usb = mutate(name, "targets/rp2350-arm.json",
+                         lambda value, usb=usb: value.update(usbDevice=usb))
+    failure = run("--validate-only", boards_root=invalid_usb, expected_success=False)
+    require("usbDevice" in failure.stderr, "invalid USB metadata failed elsewhere")
+
 programming_usb_mismatch = mutate(
     "programming-usb-mismatch",
     "profiles/waveshare-esp32-s3-zero.json",

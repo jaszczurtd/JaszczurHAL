@@ -2,6 +2,7 @@
 
 #if HAL_TARGET_IS_RP
 
+#include "hal/system/hal_board.h"
 #include <pico/unique_id.h>
 #include <tusb.h>
 
@@ -14,15 +15,11 @@
 #endif
 
 #ifndef JH_USB_VID
-#define JH_USB_VID 0x2E8Au
+#define JH_USB_VID HAL_TARGET_USB_VID
 #endif
 
 #ifndef JH_USB_PID
-#if HAL_TARGET_IS_RP2040
-#define JH_USB_PID 0x000Au
-#else
-#define JH_USB_PID 0x0009u
-#endif
+#define JH_USB_PID HAL_TARGET_USB_PID
 #endif
 
 enum {

@@ -2424,6 +2424,27 @@ target_compile_definitions(test_ff16_memdisk PRIVATE
 )
 jh_enable_host_warnings(test_ff16_memdisk ERRORS)
 add_test(NAME test_ff16_memdisk COMMAND test_ff16_memdisk)
+# The SD SPI adapter on a scripted card model: the test defines hal_spi,
+# hal_gpio and hal_millis itself, so it does not link hal_mock.
+add_executable(test_hal_sd_spi_diskio
+    test_hal_sd_spi_diskio.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/storage/filesystem/ff16/hal_sd_spi_diskio.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
+)
+target_include_directories(test_hal_sd_spi_diskio PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+    ${JH_MANAGED_FRAMEWORK_INCLUDE_DIRS}
+)
+target_link_libraries(test_hal_sd_spi_diskio PRIVATE jb::status)
+target_compile_definitions(test_hal_sd_spi_diskio PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_FAT
+    HAL_ENABLE_SPI
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+jh_enable_host_warnings(test_hal_sd_spi_diskio ERRORS)
+add_test(NAME test_hal_sd_spi_diskio COMMAND test_hal_sd_spi_diskio)
 add_hal_test(test_hal_ds18b20)
 add_hal_test(test_hal_dht)
 add_hal_test(test_hal_eeprom)

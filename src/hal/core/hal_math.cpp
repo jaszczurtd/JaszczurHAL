@@ -26,7 +26,18 @@ int hal_math_percent_to_value(float percent, int maximum) {
 }
 
 int hal_math_percent_from_value(int value, int maximum) {
-  return maximum == 0 ? 0 : (value * 100) / maximum;
+  if (maximum == 0) {
+    return 0;
+  }
+  /* 64-bit intermediate: value * 100 overflows int above ~21.4 million. */
+  const int64_t percent = ((int64_t)value * 100) / maximum;
+  if (percent > INT_MAX) {
+    return INT_MAX;
+  }
+  if (percent < INT_MIN) {
+    return INT_MIN;
+  }
+  return (int)percent;
 }
 
 float hal_math_low_pass(float alpha, float input, float previous_output) {

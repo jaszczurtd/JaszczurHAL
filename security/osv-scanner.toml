@@ -43,6 +43,10 @@ reason = "2026-10-06: SNMPv3 agent, compiled on no target; not_affected"
 id = "CVE-2026-112062"
 reason = "2026-10-19: mDNS service search, compiled on no target; not_affected"
 
+[[IgnoredVulns]]
+id = "CVE-2026-119053"
+reason = "2026-10-30: SNMP agent response stream, compiled on no target; not_affected"
+
 # PCRE2 10.49: upstream issue #918 was fixed in 10.48; jh links only PCRE2-8.
 [[IgnoredVulns]]
 id = "OSV-2026-343"

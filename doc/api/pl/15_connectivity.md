@@ -598,6 +598,13 @@ terminatora. Jeśli bufor wywołującego okaże się za mały, `HAL_EOVERFLOW`
 zwraca wymaganą długość treści. Kodowanie transferu `chunked` powoduje zwrot
 `HAL_EUNSUPPORTED`.
 
+Odpowiedź na żądanie HEAD oraz każda odpowiedź 204 lub 304 nie ma treści
+niezależnie od `Content-Length`: wywołanie kończy się po nagłówkach, a
+`content_length` nadal podaje zadeklarowaną wartość. `Content-Length: 0`
+również kończy odbiór na końcu nagłówków. Odpowiedzi pośrednie 1xx są
+pomijane aż do nadejścia odpowiedzi właściwej; 101 kończy się statusem
+`HAL_EPROTO`.
+
 - **Implementacja:** `hal/network/http/hal_http_client.cpp`.
 - **Testy:** `test_hal_http_client` obejmuje walidację, obsługę fragmentowanych
   nagłówków i metadanych odpowiedzi oraz kopiowanie treści do bufora o ograniczonym

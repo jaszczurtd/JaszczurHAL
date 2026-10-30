@@ -244,6 +244,10 @@
 #define HAL_TARGET_HAS_FPU 0
 #define HAL_TARGET_RAM_TOTAL_BYTES UINT32_C(270336)
 #define HAL_TARGET_RAM_USABLE_BYTES UINT32_C(262144)
+/** @brief Default USB device vendor ID of the selected target. */
+#define HAL_TARGET_USB_VID UINT16_C(11914)
+/** @brief Default USB device product ID of the selected target. */
+#define HAL_TARGET_USB_PID UINT16_C(10)
 #define HAL_TARGET_GPIO_VALID_MASK UINT64_C(0x000000003fffffff)
 #define HAL_TARGET_GPIO_VALID_MASK_WORDS 1u
 #define HAL_TARGET_GPIO_VALID_MASK_0 UINT64_C(0x000000003fffffff)
@@ -261,6 +265,10 @@
 #define HAL_TARGET_HAS_FPU 1
 #define HAL_TARGET_RAM_TOTAL_BYTES UINT32_C(532480)
 #define HAL_TARGET_RAM_USABLE_BYTES UINT32_C(532480)
+/** @brief Default USB device vendor ID of the selected target. */
+#define HAL_TARGET_USB_VID UINT16_C(11914)
+/** @brief Default USB device product ID of the selected target. */
+#define HAL_TARGET_USB_PID UINT16_C(9)
 #define HAL_TARGET_GPIO_VALID_MASK UINT64_C(0x0000ffffffffffff)
 #define HAL_TARGET_GPIO_VALID_MASK_WORDS 1u
 #define HAL_TARGET_GPIO_VALID_MASK_0 UINT64_C(0x0000ffffffffffff)
@@ -278,6 +286,10 @@
 #define HAL_TARGET_HAS_FPU 0
 #define HAL_TARGET_RAM_TOTAL_BYTES UINT32_C(532480)
 #define HAL_TARGET_RAM_USABLE_BYTES UINT32_C(532480)
+/** @brief Default USB device vendor ID of the selected target. */
+#define HAL_TARGET_USB_VID UINT16_C(11914)
+/** @brief Default USB device product ID of the selected target. */
+#define HAL_TARGET_USB_PID UINT16_C(9)
 #define HAL_TARGET_GPIO_VALID_MASK UINT64_C(0x0000ffffffffffff)
 #define HAL_TARGET_GPIO_VALID_MASK_WORDS 1u
 #define HAL_TARGET_GPIO_VALID_MASK_0 UINT64_C(0x0000ffffffffffff)

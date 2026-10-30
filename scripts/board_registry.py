@@ -24,17 +24,22 @@ def _registry_targets(
     ]
 
 
-def board_programming_identity(board: dict[str, Any]) -> dict[str, Any]:
-    """Return the exact USB identity declared by a board programmer."""
-    programming = board.get("programming")
-    usb = programming.get("usb") if isinstance(programming, dict) else None
+def _usb_identity(usb: Any) -> dict[str, Any]:
     if not isinstance(usb, dict):
         return {}
     vid = usb.get("vid")
     pid = usb.get("pid")
     if not isinstance(vid, int) or not isinstance(pid, int):
         return {}
-    return {"enabled": True, "usbVid": vid, "usbPid": pid}
+    return {"usbVid": vid, "usbPid": pid}
+
+
+def board_programming_identity(board: dict[str, Any]) -> dict[str, Any]:
+    """Return the exact USB identity declared by a board programmer."""
+    programming = board.get("programming")
+    usb = programming.get("usb") if isinstance(programming, dict) else None
+    identity = _usb_identity(usb)
+    return {"enabled": True, **identity} if identity else {}
 
 
 def library_target_registry(jh_root: Path) -> dict[str, dict[str, Any]]:
@@ -147,6 +152,8 @@ def tooling_target_registry(jh_root: Path) -> dict[str, dict[str, Any]]:
             "requiredFeatures": list(target.get("requiredFeatures", [])),
             "cache": cache,
             "upload": upload,
+            **({"identity": _usb_identity(target["usbDevice"])}
+               if "usbDevice" in target else {}),
             "boards": target_boards,
             **provider_config,
         }

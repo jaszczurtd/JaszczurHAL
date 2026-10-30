@@ -517,9 +517,21 @@ W projektach Pico z włączoną tożsamością USB monitor korzystający z portu
 wybranego niejawnie może połączyć się ponownie z jedynym urządzeniem CDC o
 zweryfikowanej tożsamości projektu, gdy zapisana ścieżka zniknie albo host
 przydzieli inny numer `ttyACM` lub COM. Obejmuje to również zastąpienie płytki
-innym egzemplarzem z tym samym firmware. Przy braku dopasowań lub więcej niż
-jednym dopasowaniu monitor czeka zamiast zgadywać. Port podany jawnie przez
-`--port` pozostaje przypięty do wskazanej ścieżki.
+innym egzemplarzem z tym samym firmware. Monitor sprawdza tożsamość zapisanego
+portu także wtedy, gdy jego ścieżka nadal istnieje. Jeśli zapisany port nie
+jest zweryfikowany, wybiera dokładnie jedno pasujące urządzenie; przy braku
+dopasowań lub wielu dopasowaniach czeka. Port podany jawnie przez `--port`
+pozostaje przypięty do wskazanej ścieżki.
+
+Domyślne ID aplikacyjnego USB pochodzą z `usbDevice` w opisie wybranego
+targetu. Stałe ID programatora pochodzą z `programming.usb` w opisie płytki.
+Projekt dziedziczy wartości aplikacyjne i może jawnie zastąpić je przez
+`identity.usbVid` oraz `identity.usbPid`. Usuń z manifestu zdublowane domyślne
+ID platformy, jeśli projekt ma podążać za wyborem płytki. Target bez metadanych
+USB nie otrzymuje wymyślonych ID. Domyślne ID firmware'u i narzędzia hostowe
+korzystają z tego samego rejestru. Monitor projektu dopasowuje tożsamość
+natywnego CDC i mostków USB-UART niezależnie od starszej klasyfikacji portów
+Pico/ESP. `config-dump --json` pokazuje wynikową tożsamość.
 
 Przy wgrywaniu szeregowym w projektach z tożsamością USB akcja `upload`
 sprawdza wybrany port przed jego otwarciem. W Linuksie łączy metadane pyserial z
@@ -570,16 +582,22 @@ Dla płytek ESP-IDF wpis
 programującego.
 `jh-vscode` przekazuje tę informację do wspólnego mechanizmu weryfikacji
 wyłącznie w pamięci. Projekty nie mogą powielać jej w swoich manifestach.
+Producent, nazwa produktu i `byIdHint` aplikacji nie opisują tego interfejsu
+i są pomijane. Numer seryjny, interfejs i lokalizacja USB nadal pozwalają
+rozróżniać programatory o tych samych VID/PID.
 
 W natywnych buildach RP tożsamość jest przekazywana przez zmienne cache CMake:
 
 ```text
 -DJH_USB_MANUFACTURER="Jaszczur"
 -DJH_USB_PRODUCT="Router Reset"
+-DJH_USB_VID=11914
+-DJH_USB_PID=10
 ```
 
-Jeśli tożsamość jest wyłączona lub niekompletna, build używa domyślnych
-deskryptorów USB JaszczurHAL.
+Włączona tożsamość przekazuje skonfigurowane VID/PID oraz producenta i nazwę
+produktu, gdy podano oba napisy. Pominięte pola używają wartości domyślnych HAL.
+Wyłączona tożsamość używa domyślnych deskryptorów HAL.
 
 `clear-identity` jest osobną akcją. Wymaga `--project`, buduje neutralny firmware
 z `neutral_fw/rp_pico/` za pomocą Pico SDK dla wybranego natywnego targetu i

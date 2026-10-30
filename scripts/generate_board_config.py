@@ -58,6 +58,7 @@ COMMON_FIELDS = {
     "status",
 }
 TARGET_FIELDS = COMMON_FIELDS | {
+    "usbDevice",
     "architecture",
     "hal",
     "build",
@@ -802,8 +803,19 @@ def validate_components(
     return set(components)
 
 
+def validate_usb_ids(path: Path, location: str, value: Any) -> dict[str, Any]:
+    usb = exact_fields(path, location, value, {"vid", "pid"}, {"vid", "pid"})
+    for field in ("vid", "pid"):
+        if (not isinstance(usb[field], int) or isinstance(usb[field], bool)
+                or not 0 <= usb[field] <= 0xFFFF):
+            fail(path, f"{location}.{field}", usb[field], "a 16-bit USB identifier")
+    return usb
+
+
 def validate_target(path: Path, target: dict[str, Any]) -> set[Any]:
     validate_common(path, target, "target")
+    if "usbDevice" in target:
+        validate_usb_ids(path, "$.usbDevice", target["usbDevice"])
     architecture = exact_fields(
         path,
         "$.architecture",
@@ -1266,25 +1278,7 @@ def validate_board(
                 programming["transport"],
                 "usb-serial-jtag or usb-uart-bridge",
             )
-        usb = exact_fields(
-            path,
-            "$.programming.usb",
-            programming["usb"],
-            {"vid", "pid"},
-            {"vid", "pid"},
-        )
-        for field in ("vid", "pid"):
-            if (
-                not isinstance(usb[field], int)
-                or isinstance(usb[field], bool)
-                or not 0 <= usb[field] <= 0xFFFF
-            ):
-                fail(
-                    path,
-                    f"$.programming.usb.{field}",
-                    usb[field],
-                    "a 16-bit USB identifier",
-                )
+        validate_usb_ids(path, "$.programming.usb", programming["usb"])
         expected_control = (
             {"reset": "usb-serial-jtag-control-lines", "boot": "usb-serial-jtag-control-lines"}
             if programming["transport"] == "usb-serial-jtag"
@@ -2084,6 +2078,14 @@ def selected_target_fact_lines(target: dict[str, Any]) -> list[str]:
         "#define HAL_TARGET_RAM_USABLE_BYTES "
         f'UINT32_C({target["memory"]["ramUsableBytes"]})',
     ]
+    if "usbDevice" in target:
+        usb = target["usbDevice"]
+        lines.extend([
+            "/** @brief Default USB device vendor ID of the selected target. */",
+            f"#define HAL_TARGET_USB_VID UINT16_C({usb['vid']})",
+            "/** @brief Default USB device product ID of the selected target. */",
+            f"#define HAL_TARGET_USB_PID UINT16_C({usb['pid']})",
+        ])
     descriptor_path = Path(f"boards/targets/{target['id']}.json")
     valid_pins = expand_pin_set(
         descriptor_path, "$.gpio.validPins", target["gpio"]["validPins"]

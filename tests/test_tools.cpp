@@ -163,6 +163,25 @@ void test_hal_math_percent_from_value_zero_max(void) {
   TEST_ASSERT_EQUAL_INT(0, hal_math_percent_from_value(50, 0));
 }
 
+/* Audit F11: value * 100 overflowed int for counters above ~21.4 million. */
+void test_hal_math_percent_from_value_large_operands(void) {
+  TEST_ASSERT_EQUAL_INT(50, hal_math_percent_from_value(30000000, 60000000));
+  TEST_ASSERT_EQUAL_INT(100, hal_math_percent_from_value(INT_MAX, INT_MAX));
+  TEST_ASSERT_EQUAL_INT(100, hal_math_percent_from_value(INT_MIN, INT_MIN));
+  TEST_ASSERT_EQUAL_INT(0, hal_math_percent_from_value(0, INT_MAX));
+  TEST_ASSERT_EQUAL_INT(99, hal_math_percent_from_value(INT_MAX - 1, INT_MAX));
+}
+
+void test_hal_math_percent_from_value_sign_and_saturation(void) {
+  TEST_ASSERT_EQUAL_INT(-50, hal_math_percent_from_value(-50, 100));
+  TEST_ASSERT_EQUAL_INT(-50, hal_math_percent_from_value(50, -100));
+  TEST_ASSERT_EQUAL_INT(50, hal_math_percent_from_value(-50, -100));
+  TEST_ASSERT_EQUAL_INT(INT_MAX, hal_math_percent_from_value(INT_MAX, 1));
+  TEST_ASSERT_EQUAL_INT(INT_MIN, hal_math_percent_from_value(INT_MIN, 1));
+  TEST_ASSERT_EQUAL_INT(INT_MAX, hal_math_percent_from_value(INT_MIN, -1));
+  TEST_ASSERT_EQUAL_INT(INT_MIN, hal_math_percent_from_value(INT_MAX, -1));
+}
+
 /* ── hal_math_nonnegative_average_i32 / hal_math_min_i32 /
  * hal_math_midpoint_min_max_i32 ─────────── */
 
@@ -1170,6 +1189,8 @@ int main(void) {
   RUN_TEST(test_hal_math_percent_to_value_zero);
   RUN_TEST(test_hal_math_percent_from_value_basic);
   RUN_TEST(test_hal_math_percent_from_value_zero_max);
+  RUN_TEST(test_hal_math_percent_from_value_large_operands);
+  RUN_TEST(test_hal_math_percent_from_value_sign_and_saturation);
 
   RUN_TEST(test_hal_math_nonnegative_average_i32_basic);
   RUN_TEST(test_hal_math_nonnegative_average_i32_size_zero);

@@ -136,6 +136,13 @@ Każdy wygenerowany zbiór GPIO (piny wyprowadzone, rezerwacje `hard` i `soft`, 
 
 Profil złożony z płytki bazowej i dodatkowego modułu musi zachować fizyczne urządzenia płytki, aliasy i publiczne definicje HAL. Nie usuwaj np. `HAL_LED_BUILTIN` tylko po to, aby przeznaczyć jego pin dla modułu: dioda nadal jest elektrycznie podłączona i może obciążać lub przełączać wspólną linię. Wybierz połączenia bez konfliktów. Modyfikacja PCB, np. rozwarcie mostka lutowniczego, wymaga osobnego profilu z jednoznacznym opisem przeróbki.
 
+Target może podać domyślne ID aplikacyjnego USB w `usbDevice` (`vid` i `pid`,
+obie wartości jako liczby 16-bitowe). Narzędzia dziedziczą te wartości,
+a firmware odczytuje wygenerowane `HAL_TARGET_USB_VID` i `HAL_TARGET_USB_PID`.
+Jawne ID projektu zastępują wartości domyślne aplikacji. Stałe ID programatora
+pochodzą z `programming.usb` w opisie płytki. Target bez metadanych USB nie
+otrzymuje odgadniętych ID; same metadane nie implementują backendu USB.
+
 ## Urządzenia zdefiniowane w profilu płytki
 
 Każdy wpis w sekcji `devices` ma identyfikator w formacie camelCase i określa

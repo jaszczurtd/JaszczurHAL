@@ -219,6 +219,12 @@ if(DEFINED JH_USB_PRODUCT AND NOT "${JH_USB_PRODUCT}" STREQUAL "")
     target_compile_definitions(JaszczurHAL PRIVATE
         "JH_USB_PRODUCT=\"${JH_USB_PRODUCT}\"")
 endif()
+foreach(_jh_usb_id JH_USB_VID JH_USB_PID)
+    if(DEFINED ${_jh_usb_id} AND NOT "${${_jh_usb_id}}" STREQUAL "")
+        target_compile_definitions(JaszczurHAL PRIVATE
+            "${_jh_usb_id}=${${_jh_usb_id}}")
+    endif()
+endforeach()
 if(DEFINED EXTRA_HAL_DEFINES)
     target_compile_definitions(JaszczurHAL PUBLIC ${EXTRA_HAL_DEFINES})
 endif()

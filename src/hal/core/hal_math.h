@@ -139,6 +139,11 @@ int hal_math_percent_to_value(float percent, int maximum);
 
 /**
  * @brief Express an integer value as a percentage of a maximum.
+ *
+ * The product is formed in 64 bits, so any @c int pair is accepted. The
+ * quotient is truncated toward zero and saturated to INT_MIN..INT_MAX when
+ * it does not fit.
+ *
  * @param value Value to convert.
  * @param maximum Value corresponding to 100 percent.
  * @return Integer percentage, or 0 when @p maximum is zero.

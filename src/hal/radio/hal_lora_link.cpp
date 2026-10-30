@@ -466,6 +466,17 @@ static hal_status_t finish_send(jh_lora_link_context_t *context,
   return receive_status == HAL_OK ? result : receive_status;
 }
 
+/* One counter numbers this link's messages and acknowledgements alike. With
+ * AEAD every value is an unrepeatable nonce input for the session, so the
+ * link stops at UINT32_MAX instead of wrapping. */
+static uint32_t take_sequence(jh_lora_link_context_t *context) {
+  const uint32_t sequence = context->config.initial_sequence++;
+  if (context_uses_crypto(context) && sequence == UINT32_MAX) {
+    context->sequence_exhausted = true;
+  }
+  return sequence;
+}
+
 hal_status_t hal_lora_link_send_start(hal_lora_link_t link,
                                       uint16_t destination, uint8_t port,
                                       const uint8_t *data, size_t length,
@@ -505,11 +516,7 @@ hal_status_t hal_lora_link_send_start(hal_lora_link_t link,
   context->tx_length = length;
   context->tx_destination = destination;
   context->tx_port = port;
-  context->tx_sequence = context->config.initial_sequence;
-  context->config.initial_sequence++;
-  if (context_uses_crypto(context) && context->tx_sequence == UINT32_MAX) {
-    context->sequence_exhausted = true;
-  }
+  context->tx_sequence = take_sequence(context);
   context->tx_integrity =
       context_uses_crypto(context) ? 0u : hal_crc32(data, length);
   context->tx_fragment_index = 0u;
@@ -657,13 +664,25 @@ static uint32_t fragment_mask(uint8_t fragment_count) {
                                : (UINT32_C(1) << fragment_count) - UINT32_C(1);
 }
 
+/* Acknowledge one received message. The acknowledgement takes the next
+ * sequence of this link, so its nonce is never shared with another
+ * acknowledgement; the acknowledged sender session and sequence travel in
+ * the authenticated body (audit F01). */
 static hal_status_t
 start_acknowledgement(jh_lora_link_context_t *context,
                       const jh_lora_link_frame_header_t *received) {
+  if (context->sequence_exhausted) {
+    /* No unused nonce is left in this session: the message stays delivered
+     * but unacknowledged, and the sender runs into its own timeout. */
+    return HAL_EOVERFLOW;
+  }
   hal_status_t status = stop_radio_operation(context);
   if (status != HAL_OK) {
     return status;
   }
+  uint8_t body[JH_LORA_LINK_FRAME_ACK_PAYLOAD_SIZE] = {};
+  jh_lora_link_frame_encode_ack_body(received->session_id, received->sequence,
+                                     body);
   jh_lora_link_frame_header_t acknowledgement = {};
   acknowledgement.flags = JH_LORA_LINK_FRAME_FLAG_ACK;
   if (context_uses_crypto(context)) {
@@ -672,12 +691,15 @@ start_acknowledgement(jh_lora_link_context_t *context,
   acknowledgement.source = context->config.local_address;
   acknowledgement.destination = received->source;
   acknowledgement.session_id = context->config.session_id;
-  acknowledgement.sequence = received->sequence;
-  acknowledgement.integrity = received->session_id;
+  acknowledgement.sequence = take_sequence(context);
+  acknowledgement.fragment_count = 1u;
+  acknowledgement.message_length = JH_LORA_LINK_FRAME_ACK_PAYLOAD_SIZE;
+  acknowledgement.integrity =
+      context_uses_crypto(context) ? 0u : hal_crc32(body, sizeof(body));
   size_t frame_length = 0u;
   status = jh_lora_link_frame_encode(
-      &acknowledgement, NULL, 0u, context_key(context), context->radio_frame,
-      sizeof(context->radio_frame), &frame_length);
+      &acknowledgement, body, sizeof(body), context_key(context),
+      context->radio_frame, sizeof(context->radio_frame), &frame_length);
   if (status == HAL_OK) {
     status = hal_lora_radio_transmit_start(context->config.radio,
                                            context->radio_frame, frame_length);
@@ -796,9 +818,10 @@ decode_received_frame(jh_lora_link_context_t *context, size_t frame_length,
   }
   const bool encrypted =
       (out_header->flags & JH_LORA_LINK_FRAME_FLAG_ENCRYPTED) != 0u;
+  /* Encrypted frames, acknowledgements included, leave integrity at zero:
+   * the AEAD tag covers the header and the body. */
   if (encrypted != context_uses_crypto(context) ||
-      (encrypted && (out_header->flags & JH_LORA_LINK_FRAME_FLAG_ACK) == 0u &&
-       out_header->integrity != 0u)) {
+      (encrypted && out_header->integrity != 0u)) {
     ++context->diagnostics.authentication_failures;
     return HAL_EAUTH;
   }
@@ -806,13 +829,24 @@ decode_received_frame(jh_lora_link_context_t *context, size_t frame_length,
   return HAL_OK;
 }
 
+/* An acknowledgement counts when its authenticated body names this link's
+ * session and the message in flight; a plaintext body must also match its
+ * CRC-32 like any other plaintext message. */
 static bool acknowledgement_matches(const jh_lora_link_context_t *context,
-                                    const jh_lora_link_frame_header_t *header) {
+                                    const jh_lora_link_frame_header_t *header,
+                                    const uint8_t *body, size_t body_length) {
+  uint32_t acknowledged_session = 0u;
+  uint32_t acknowledged_sequence = 0u;
   return (header->flags & JH_LORA_LINK_FRAME_FLAG_ACK) != 0u &&
          header->source == context->tx_destination &&
          header->destination == context->config.local_address &&
-         header->sequence == context->tx_sequence &&
-         header->integrity == context->config.session_id;
+         jh_lora_link_frame_decode_ack_body(body, body_length,
+                                            &acknowledged_session,
+                                            &acknowledged_sequence) &&
+         acknowledged_session == context->config.session_id &&
+         acknowledged_sequence == context->tx_sequence &&
+         (context_uses_crypto(context) ||
+          header->integrity == hal_crc32(body, body_length));
 }
 
 static hal_status_t schedule_retry(jh_lora_link_context_t *context) {
@@ -908,8 +942,9 @@ static hal_status_t process_ack_wait(jh_lora_link_context_t *context) {
   size_t payload_length = 0u;
   status =
       decode_received_frame(context, frame_length, &header, &payload_length);
-  if (status == HAL_OK && payload_length == 0u &&
-      acknowledgement_matches(context, &header)) {
+  if (status == HAL_OK &&
+      acknowledgement_matches(context, &header, context->frame_payload,
+                              payload_length)) {
     ++context->diagnostics.acknowledgements_received;
     return finish_send(context, HAL_OK);
   }
