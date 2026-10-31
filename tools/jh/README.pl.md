@@ -137,6 +137,29 @@ identyfikatory dokumentów do 32768 bajtów. Zdekodowana wartość ma najwyżej
 [jh_json_schema.h](json/jh_json_schema.h) przyjmuje scratch użytkownika,
 własne limity i opcjonalne callbacki dokumentów oraz raportów.
 
+
+`jh repository files --root <checkout> --git <bezwzględny-executable>` uruchamia
+Git bez powłoki przez `jb::host`. Przekazuje `-C <root> ls-files --cached
+--others --exclude-standard -z`, dziedziczy środowisko i cwd wywołującego.
+Surowy stdout zachowuje wszystkie bajty, w tym separatory NUL oraz nazwy
+plików POSIX spoza UTF-8. Stderr dziecka jest przekazywany bez zmian. `--json`
+zwraca tablicę UTF-8 `paths`, `root` i pola procesu `started`, `exited`,
+`exitCode`, `termSignal`, `nativeError`; nazwa spoza UTF-8 w tym trybie daje
+jawny błąd. `--max-bytes` ogranicza przechwycone bajty nazw w trybie JSON
+z domyślną wartością i maksimum jak przy inspekcji. `--timeout-ms` przyjmuje
+0-4294967295; zero oznacza oczekiwanie bez końca. SIGINT (Ctrl+C lub Ctrl+Break
+na Windows) żąda anulowania i czeka na cleanup procesu. Timeout daje kod 124,
+anulowanie 130; pozostałe kody wyjścia Gita są zachowane. Błąd uruchomienia
+lub przekazywania wyjścia daje kod 3 (4 przy alokacji lub limicie bajtów),
+a status JSON wskazuje przyczynę.
+Te kody procesów dotyczą wyłącznie `repository files`.
+
+Klient może podać `--json --json-version 1`. Nieobsługiwana wersja główna daje
+`HAL_EUNSUPPORTED` i kod 2 przed wykonaniem komendy, w aktualnie obsługiwanej
+kopercie wyniku. Brak opcji wybiera wersję 1. W obrębie wersji głównej klient
+musi ignorować nieznane pola; znaczenia i typy istniejących pól pozostają
+stałe. Zmiana zrywająca zgodność wymaga nowej wersji głównej.
+
 ## Katalog typów i wartości domyślne urządzeń
 
 `jh generate device-defaults --root <checkout>` czyta każdy `*.json`

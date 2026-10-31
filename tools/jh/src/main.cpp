@@ -13,6 +13,7 @@
 #include <jb/array.h>
 #include <jb/json_pointer.h>
 #include <jb/json_writer.h>
+#include <jb/process.h>
 #include <jb/utf8.h>
 #include <limits>
 #include <memory>
@@ -25,6 +26,9 @@
 #include <fcntl.h>
 #include <io.h>
 #include <windows.h>
+#else
+#include <cerrno>
+#include <signal.h>
 #endif
 
 namespace {
@@ -43,7 +47,10 @@ enum option_id {
   write_mode,
   check,
   max_bytes,
+  git,
+  timeout_ms,
   machine,
+  json_version,
   help,
   version,
   option_count
@@ -66,13 +73,22 @@ constexpr option_spec options[] = {
      "Compare the output without changing files; exit 1 on drift"},
     {"max-bytes", "<count>",
      "Maximum input bytes (default 16777216, maximum 67108864)"},
+    {"git", "<path>", "Absolute Git executable path (repository files)"},
+    {"timeout-ms", "<count>", "Child process timeout; zero waits indefinitely"},
     {"json", nullptr, "Write a versioned JSON result on stdout"},
+    {"json-version", "<major>",
+     "Require a supported JSON result major version (1)"},
     {"help", nullptr, "Show help"},
     {"version", nullptr, "Show the tool version"},
 };
 static_assert(COUNTOF(options) == option_count);
 
-enum command_id { inspect_command, validate_command, defaults_command };
+enum command_id {
+  inspect_command,
+  validate_command,
+  defaults_command,
+  repository_command
+};
 struct command_spec {
   const char *first, *second, *name;
   std::vector<option_id> accepted;
@@ -87,7 +103,42 @@ const command_spec commands[] = {
      "device-defaults",
      "generate.device-defaults",
      {root, bindings, output_root, write_mode, check}},
+    {"repository",
+     "files",
+     "repository.files",
+     {root, git, timeout_ms, max_bytes}},
 };
+
+#ifdef _WIN32
+volatile LONG interrupted = 0;
+BOOL WINAPI cancel_console(DWORD event) {
+  if (event != CTRL_C_EVENT && event != CTRL_BREAK_EVENT)
+    return FALSE;
+  InterlockedExchange(&interrupted, 1);
+  return TRUE;
+}
+bool canceled(void *) {
+  return InterlockedCompareExchange(&interrupted, 0, 0) != 0;
+}
+#else
+volatile std::sig_atomic_t interrupted = 0;
+void cancel_signal(int) { interrupted = 1; }
+bool canceled(void *) { return interrupted != 0; }
+#endif
+
+void install_cancellation() {
+#ifdef _WIN32
+  require(SetConsoleCtrlHandler(cancel_console, TRUE) != FALSE ? HAL_OK
+                                                               : HAL_EIO,
+          3, "cannot install console cancellation");
+#else
+  struct sigaction action {};
+  action.sa_handler = cancel_signal;
+  ::sigemptyset(&action.sa_mask);
+  if (::sigaction(SIGINT, &action, nullptr) != 0)
+    throw failure{HAL_EIO, 3, "cannot install SIGINT cancellation", {}, {}, {}};
+#endif
+}
 
 struct arguments {
   std::array<bool, option_count> present{};
@@ -98,6 +149,8 @@ struct context : jh::parse_location {
   arguments args;
   bool json = false;
   const command_spec *command = nullptr;
+  bool process_attempted = false;
+  jb_process_result_t process{};
 };
 
 arguments parse_arguments(const std::vector<std::string> &argv) {
@@ -156,7 +209,9 @@ std::string help_text() {
       "       jh json inspect --file <path> [options]\n"
       "       jh json validate --file <path> --schema <path> [--json]\n"
       "       jh generate device-defaults --root <path> (--check | --write)"
-      " [options]\n\n"
+      " [options]\n"
+      "       jh repository files --root <path> --git <executable> "
+      "[options]\n\n"
       "Read JSON, select a value and optionally compare or write it, or\n"
       "generate the C defaults of the HAL component types.\n";
   for (const auto &option : options) {
@@ -248,6 +303,33 @@ public:
     }
     require(jb_json_writer_array_end(&writer), 4, "cannot close schema errors");
   }
+  void paths(const std::string &bytes) {
+    key("paths");
+    require(jb_json_writer_array_begin(&writer), 4, "cannot start paths");
+    size_t begin = 0;
+    while (begin < bytes.size()) {
+      const size_t nul = bytes.find('\0', begin);
+      const size_t end = nul == std::string::npos ? bytes.size() : nul;
+      if (end != begin) {
+        size_t bad = 0;
+        const jb_json_span_t path{bytes.data() + begin, end - begin};
+        require(jb_utf8_validate(path.data, path.length, &bad), 2,
+                "repository path is not UTF-8; use raw output");
+        require(jb_json_writer_string(&writer, path), 4, "cannot write path");
+      }
+      if (nul == std::string::npos)
+        break;
+      begin = end + 1;
+    }
+    require(jb_json_writer_array_end(&writer), 4, "cannot close paths");
+  }
+  void process(const jb_process_result_t &value) {
+    boolean("started", value.started);
+    boolean("exited", value.exited);
+    number("exitCode", value.exit_code);
+    number("termSignal", static_cast<size_t>(value.term_signal));
+    number("nativeError", value.native_error);
+  }
   std::string finish() {
     require(jb_json_writer_object_end(&writer), 4, "cannot close result");
     size_t count;
@@ -263,23 +345,23 @@ void stdout_bytes(const std::string &text) {
     throw failure{HAL_EIO, 3, "cannot write stdout", {}, {}, {}};
 }
 
-size_t input_limit(const arguments &args) {
-  size_t limit = 16 * 1024 * 1024;
-  if (args.present[max_bytes]) {
-    const std::string &value = args.values[max_bytes];
+size_t count_option(const arguments &args, option_id id, size_t default_value,
+                    size_t maximum, const char *message) {
+  size_t limit = default_value;
+  if (args.present[id]) {
+    const std::string &value = args.values[id];
     const auto converted =
         std::from_chars(value.data(), value.data() + value.size(), limit);
     if (converted.ec != std::errc{} ||
-        converted.ptr != value.data() + value.size() ||
-        limit > 64 * 1024 * 1024)
-      throw failure{HAL_EINVAL,
-                    2,
-                    "--max-bytes requires an integer between 0 and 67108864",
-                    {},
-                    {},
-                    {}};
+        converted.ptr != value.data() + value.size() || limit > maximum)
+      throw failure{HAL_EINVAL, 2, message, {}, {}, {}};
   }
   return limit;
+}
+
+size_t input_limit(const arguments &args) {
+  return count_option(args, max_bytes, 16 * 1024 * 1024, 64 * 1024 * 1024,
+                      "--max-bytes requires an integer between 0 and 67108864");
 }
 
 void require_value(const arguments &args, option_id id, const char *message) {
@@ -455,6 +537,128 @@ int generate_defaults(context &ctx, const std::string &base) {
   return current ? 0 : 1;
 }
 
+hal_status_t stream_bytes(FILE *stream, const char *data, size_t length) {
+  while (length != 0) {
+    if (canceled(nullptr))
+      return HAL_ECANCELED;
+#ifdef _WIN32
+    const auto handle =
+        reinterpret_cast<HANDLE>(_get_osfhandle(_fileno(stream)));
+    const DWORD requested = static_cast<DWORD>(std::min(
+        length, static_cast<size_t>(std::numeric_limits<DWORD>::max())));
+    DWORD written = 0;
+    if (WriteFile(handle, data, requested, &written, nullptr) == FALSE ||
+        written == 0)
+      return canceled(nullptr) ? HAL_ECANCELED : HAL_EIO;
+    const size_t count = written;
+#else
+    const size_t count = std::fwrite(data, 1, length, stream);
+    if (count == 0) {
+      if (std::ferror(stream) != 0 && errno == EINTR) {
+        std::clearerr(stream);
+        continue;
+      }
+      return HAL_EIO;
+    }
+#endif
+    data += count;
+    length -= count;
+  }
+  return HAL_OK;
+}
+
+struct repository_output {
+  bool capture;
+  size_t limit;
+  std::string bytes;
+};
+
+hal_status_t repository_bytes(void *user, jb_process_stream_t stream,
+                              const unsigned char *data, size_t length) {
+  auto &output = *static_cast<repository_output *>(user);
+  const auto *bytes = reinterpret_cast<const char *>(data);
+  if (stream == JB_PROCESS_STDERR)
+    return stream_bytes(stderr, bytes, length);
+  if (!output.capture)
+    return stream_bytes(stdout, bytes, length);
+  if (length > output.limit - output.bytes.size())
+    return HAL_EOVERFLOW;
+  return append(&output.bytes, bytes, length);
+}
+
+int repository_files(context &ctx, const std::string &base) {
+  const auto &args = ctx.args;
+  require_value(args, root, "repository files requires --root");
+  require_value(args, git, "repository files requires --git");
+  if (!std::filesystem::u8path(args.values[git]).is_absolute())
+    throw failure{HAL_EINVAL, 2,  "--git requires an absolute executable path",
+                  {},         {}, {}};
+  if (args.present[max_bytes] && !ctx.json)
+    throw failure{HAL_EINVAL, 2,  "repository --max-bytes requires --json",
+                  {},         {}, {}};
+  const auto directory = jh::absolute_path(args.values[root], base);
+  const auto executable = jh::absolute_path(args.values[git], base);
+  const auto timeout = static_cast<uint32_t>(count_option(
+      args, timeout_ms, 0, UINT32_MAX,
+      "--timeout-ms requires an integer between 0 and 4294967295"));
+  repository_output output{ctx.json, ctx.json ? input_limit(args) : 0, {}};
+  const char *child_args[] = {
+      "-C",       directory.c_str(),    "ls-files", "--cached",
+      "--others", "--exclude-standard", "-z",       nullptr};
+  jb_process_options_t process_options{};
+  process_options.executable = executable.c_str();
+  process_options.arguments = child_args;
+  process_options.working_directory = base.c_str();
+  process_options.timeout_ms = timeout;
+  process_options.output = repository_bytes;
+  process_options.canceled = canceled;
+  process_options.context = &output;
+  ctx.source = directory;
+  install_cancellation();
+  if (std::fflush(stdout) != 0 || std::fflush(stderr) != 0)
+    throw failure{HAL_EIO, 3,  "cannot flush output before process launch",
+                  {},      {}, {}};
+  ctx.process_attempted = true;
+  const hal_status_t status = jb_process_run(&process_options, &ctx.process);
+  if (status != HAL_OK)
+    throw failure{status,
+                  status == HAL_ECANCELED                           ? 130
+                  : status == HAL_ETIMEOUT                          ? 124
+                  : status == HAL_ENOMEM || status == HAL_EOVERFLOW ? 4
+                                                                    : 3,
+                  "cannot enumerate repository files",
+                  {},
+                  {},
+                  {}};
+  if (ctx.process.term_signal != 0)
+    throw failure{HAL_EIO,
+                  128 + static_cast<int>(ctx.process.term_signal),
+                  "Git terminated by a signal",
+                  {},
+                  {},
+                  {}};
+  if (ctx.process.exit_code != 0)
+    throw failure{HAL_EIO,
+                  static_cast<int>(ctx.process.exit_code),
+                  "Git exited with code " +
+                      std::to_string(ctx.process.exit_code),
+                  {},
+                  {},
+                  {}};
+  if (ctx.json) {
+    result_writer result(output.bytes.size() + directory.size());
+    result.string("command", "repository.files");
+    result.string("status", "HAL_OK");
+    result.string("root", directory);
+    result.paths(output.bytes);
+    result.process(ctx.process);
+    stdout_bytes(result.finish());
+  } else if (std::fflush(stdout) != 0 || std::fflush(stderr) != 0) {
+    throw failure{HAL_EIO, 3, "cannot flush repository output", {}, {}, {}};
+  }
+  return 0;
+}
+
 const command_spec *select_command(const std::vector<std::string> &words) {
   if (words.empty())
     return nullptr;
@@ -489,6 +693,21 @@ int run(const std::vector<std::string> &argv) {
     ctx.args = parse_arguments(argv);
     const auto &args = ctx.args;
     ctx.command = select_command(args.command);
+    if (args.present[json_version]) {
+      if (!ctx.json)
+        throw failure{HAL_EINVAL, 2,  "--json-version requires --json",
+                      {},         {}, {}};
+      const size_t requested =
+          count_option(args, json_version, 1, UINT32_MAX,
+                       "--json-version requires an unsigned major version");
+      if (requested != 1)
+        throw failure{HAL_EUNSUPPORTED,
+                      2,
+                      "unsupported JSON result version; supported: 1",
+                      {},
+                      {},
+                      {}};
+    }
     if (args.present[help] || (argv.size() == 1)) {
       const std::string text = help_text();
       if (ctx.json) {
@@ -523,6 +742,8 @@ int run(const std::vector<std::string> &argv) {
       throw failure{HAL_EINVAL, 2, "a command is required", {}, {}, {}};
     reject_foreign_options(ctx);
     const auto base = std::filesystem::current_path().u8string();
+    if (ctx.command == &commands[repository_command])
+      return repository_files(ctx, base);
     if (ctx.command == &commands[validate_command])
       return validate(ctx, base);
     if (ctx.command == &commands[defaults_command])
@@ -543,6 +764,8 @@ int run(const std::vector<std::string> &argv) {
                     ctx.command == nullptr ? "jh" : ctx.command->name);
       result.string("status", hal_status_to_string(error.status));
       result.string("message", error.message);
+      if (ctx.process_attempted)
+        result.process(ctx.process);
       if (!error.code.empty()) {
         result.string("code", error.code);
         result.string("source", error.source);

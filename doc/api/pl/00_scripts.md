@@ -757,6 +757,11 @@ nieignorowanych, a po zakończeniu wypisuje wykryte zmiany.
 `--report-file <path>` zapisuje tę końcową listę również do pliku dla skryptów,
 takich jak `runalltests.sh`.
 
+Wyliczanie plików również przechodzi przez launcher: `jh repository files`
+otrzymuje bezwzględną ścieżkę Gita znalezioną w PATH. Wyjście rozdzielane NUL
+zachowuje bajty nazw, wybór plików wersjonowanych i niewersjonowanych oraz
+reguły ignorowania Gita.
+
 ### `scripts/generate_board_config.py`
 
 Sprawdza deskryptory JSON targetów, płytek i ich cech sprzętowych w `boards/`, a

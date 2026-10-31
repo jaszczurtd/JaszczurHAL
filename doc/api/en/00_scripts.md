@@ -712,6 +712,10 @@ non-ignored files before execution, then prints the paths changed during the
 run. `--report-file <path>` also stores that final list for callers such as
 `runalltests.sh`.
 
+File enumeration also runs through the launcher, using `jh repository files`
+and an absolute Git path resolved from PATH. Its NUL-separated output preserves
+Git's filename bytes, tracked/untracked selection and ignore rules.
+
 ### `scripts/generate_board_config.py`
 
 Validates the JSON target, board, and capability descriptors under `boards/`

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import hashlib
 import os
 from pathlib import Path
+import shutil
 import stat
 import subprocess
 import sys
@@ -92,17 +93,12 @@ class SyncError(RuntimeError):
 
 def repository_files(root: Path) -> list[Path]:
     """Return tracked and non-ignored untracked files known to Git."""
+    git = shutil.which("git")
+    if git is None:
+        raise SyncError("cannot enumerate repository files: Git is not available")
     result = subprocess.run(
-        (
-            "git",
-            "-C",
-            str(root),
-            "ls-files",
-            "--cached",
-            "--others",
-            "--exclude-standard",
-            "-z",
-        ),
+        (*JH_LAUNCHER, "repository", "files", "--root", str(root),
+         "--git", str(Path(git).resolve())),
         check=False,
         capture_output=True,
     )

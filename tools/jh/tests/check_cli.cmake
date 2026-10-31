@@ -37,6 +37,57 @@ invoke(0 json inspect --help --json)
 status(HAL_OK)
 invoke(0 --version --json)
 status(HAL_OK)
+# Unsupported majors must fail before writing the requested output.
+invoke(0 --version --json --json-version 1)
+status(HAL_OK)
+invoke(2 json inspect --file "${input}" --output "${output}" --json --json-version 2)
+status(HAL_EUNSUPPORTED)
+if(EXISTS "${output}")
+  message(FATAL_ERROR "Unsupported JSON version published output")
+endif()
+invoke(2 --version --json-version 1)
+invoke(2 --version --json --json-version -1)
+status(HAL_EINVAL)
+# Keep Git's tracked/untracked/ignored selection, order and raw NUL bytes.
+find_program(git NAMES git REQUIRED)
+set(repository "${JH_WORK}/repository ż")
+file(MAKE_DIRECTORY "${repository}")
+execute_process(COMMAND "${git}" init -q "${repository}" COMMAND_ERROR_IS_FATAL ANY)
+file(WRITE "${repository}/.gitignore" "ignored\n")
+file(WRITE "${repository}/tracked ż" "tracked")
+execute_process(COMMAND "${git}" -C "${repository}" add .gitignore "tracked ż"
+  COMMAND_ERROR_IS_FATAL ANY)
+file(WRITE "${repository}/untracked file" "untracked")
+file(WRITE "${repository}/ignored" "ignored")
+execute_process(COMMAND "${git}" -C "${repository}" ls-files --cached --others --exclude-standard -z
+  OUTPUT_FILE "${JH_WORK}/git.raw" COMMAND_ERROR_IS_FATAL ANY)
+execute_process(COMMAND "${JH}" repository files --root "${repository}" --git "${git}"
+  OUTPUT_FILE "${JH_WORK}/jh.raw" COMMAND_ERROR_IS_FATAL ANY)
+file(SHA256 "${JH_WORK}/git.raw" expected_raw)
+file(SHA256 "${JH_WORK}/jh.raw" actual_raw)
+if(NOT actual_raw STREQUAL expected_raw)
+  message(FATAL_ERROR "Native repository files changed Git's binary output")
+endif()
+invoke(0 repository files --root "${repository}" --git "${git}" --json --json-version 1)
+status(HAL_OK)
+string(JSON paths_count LENGTH "${stdout}" paths)
+string(JSON first GET "${stdout}" paths 0)
+string(JSON exit_code GET "${stdout}" exitCode)
+if(NOT paths_count EQUAL 3 OR NOT first STREQUAL "untracked file" OR NOT exit_code EQUAL 0)
+  message(FATAL_ERROR "Repository selection or process result changed: ${stdout}")
+endif()
+invoke(4 repository files --root "${repository}" --git "${git}" --max-bytes 0 --json)
+status(HAL_EOVERFLOW)
+invoke(3 repository files --root "${repository}" --git "${repository}/absent" --json)
+status(HAL_ENOENT)
+string(JSON native_error GET "${stdout}" nativeError)
+if(native_error EQUAL 0)
+  message(FATAL_ERROR "Missing executable lost its native error: ${stdout}")
+endif()
+file(MAKE_DIRECTORY "${JH_WORK}/not-repository")
+file(WRITE "${JH_WORK}/not-repository/.git" "gitdir: missing\n")
+invoke(128 repository files --root "${JH_WORK}/not-repository" --git "${git}" --json)
+# Git's own failure is returned unchanged (normally 128).
 set(schema "${JH_WORK}/schema ż.json")
 file(WRITE "${schema}" "{\"properties\":{\"~1\":{\"$ref\":\"rules.json#/$defs/flag\"}}}")
 file(WRITE "${JH_WORK}/rules.json" "{\"$defs\":{\"flag\":{\"type\":\"boolean\"}}}")
@@ -247,6 +298,9 @@ file(WRITE "${unicode_source}/CMakeLists.txt"
   "include(\"${JH_HAL_SOURCE}/cmake/jh_jhbase.cmake\")\n"
   "set(JHBASE_UNICODE ON)\njh_add_jhbase()\n"
   "add_executable(unicode_consumer main.c)\n"
+  "add_executable(process_fixture process.c)\n"
+  "target_link_libraries(process_fixture PRIVATE jb::base)\n"
+  "if(MSVC)\n  target_compile_options(process_fixture PRIVATE /W4 /WX /utf-8)\nendif()\n"
   "target_link_libraries(unicode_consumer PRIVATE jb::unicode)\n"
   "enable_testing()\nadd_test(NAME nfc COMMAND unicode_consumer)\n")
 file(WRITE "${unicode_source}/main.c" [=[
@@ -267,6 +321,69 @@ int main(void) {
         return 2;
     return length != COUNTOF(expected) - 1 ||
            memcmp(text, expected, COUNTOF(expected) - 1) != 0;
+}
+]=])
+# A stalled external tool must be stopped and reaped before the CLI returns.
+file(WRITE "${unicode_source}/process.c" [=[
+#include <jb/array.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
+#ifdef _WIN32
+int wmain(int argc, wchar_t **argv) {
+  wchar_t *ready = NULL;
+  size_t ready_length = 0;
+  if (_wdupenv_s(&ready, &ready_length, L"JH_CLI_PROCESS_READY")) return 20;
+#else
+int main(int argc, char **argv) {
+  const char *ready = getenv("JH_CLI_PROCESS_READY");
+#endif
+  const char *expected[] = {"-C", "", "ls-files", "--cached", "--others", "--exclude-standard", "-z"};
+  if (argc != (int)COUNTOF(expected) + 1) return 19;
+  for (int i = 1; i < argc; ++i) {
+    if (i == 2) continue;
+    size_t j = 0;
+    while (expected[i - 1][j] && argv[i][j] == expected[i - 1][j]) ++j;
+    if (argv[i][j] || expected[i - 1][j]) return 19;
+  }
+  if (!ready) {
+#ifdef _WIN32
+    FILE *cwd = NULL;
+    if (fopen_s(&cwd, "process-fixture-cwd", "w")) return 24;
+#else
+    FILE *cwd = fopen("process-fixture-cwd", "w");
+#endif
+    if (!cwd || fclose(cwd)) return 24;
+    fwrite("a\0", 1, 2, stdout);
+    fputs("fixture stderr\n", stderr);
+    return 23;
+  }
+#ifdef _WIN32
+  FILE *file = NULL;
+  const int open_error = _wfopen_s(&file, ready, L"w");
+  free(ready);
+  if (open_error) return 20;
+#else
+  FILE *file = fopen(ready, "w");
+#endif
+  if (!file) return 20;
+#ifdef _WIN32
+  fprintf(file, "%lu", (unsigned long)GetCurrentProcessId());
+#else
+  fprintf(file, "%ld", (long)getpid());
+#endif
+  if (fclose(file)) return 21;
+#ifdef _WIN32
+  Sleep(30000);
+#else
+  sleep(30);
+#endif
+  return 22;
 }
 ]=])
 set(unicode_generator -G "${JH_GENERATOR}")
@@ -290,7 +407,7 @@ if(NOT result EQUAL 0)
   message(FATAL_ERROR "HAL Unicode configure failed: ${output}")
 endif()
 execute_process(COMMAND "${CMAKE_COMMAND}" --build "${unicode_source}/.build/consumer"
-    --config "${JH_CONFIG}" --target unicode_consumer
+    --config "${JH_CONFIG}" --target unicode_consumer process_fixture
   RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE output)
 if(NOT result EQUAL 0)
   message(FATAL_ERROR "HAL Unicode build failed: ${output}")
@@ -301,6 +418,73 @@ execute_process(COMMAND "${ctest}" --test-dir "${unicode_source}/.build/consumer
   RESULT_VARIABLE result OUTPUT_VARIABLE output ERROR_VARIABLE output)
 if(NOT result EQUAL 0)
   message(FATAL_ERROR "HAL Unicode consumer failed: ${output}")
+endif()
+set(process_fixture "${unicode_source}/.build/consumer/process_fixture${JH_SUFFIX}")
+if(NOT EXISTS "${process_fixture}")
+  set(process_fixture "${unicode_source}/.build/consumer/${JH_CONFIG}/process_fixture${JH_SUFFIX}")
+endif()
+invoke(23 repository files --root "${repository}" --git "${process_fixture}" --json)
+status(HAL_EIO)
+string(JSON child_exit GET "${stdout}" exitCode)
+if(NOT child_exit EQUAL 23 OR NOT stderr MATCHES "fixture stderr"
+    OR NOT EXISTS "${JH_WORK}/cwd/process-fixture-cwd")
+  message(FATAL_ERROR "Child exit or stderr was lost: ${stdout} ${stderr}")
+endif()
+set(ENV{JH_CLI_PROCESS_READY} "${JH_WORK}/process-ready")
+invoke(124 repository files --root "${repository}" --git "${process_fixture}" --timeout-ms 1000 --json)
+status(HAL_ETIMEOUT)
+if(NOT EXISTS "$ENV{JH_CLI_PROCESS_READY}")
+  message(FATAL_ERROR "Timeout did not exercise a running child")
+endif()
+unset(ENV{JH_CLI_PROCESS_READY})
+if(UNIX)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  file(WRITE "${JH_WORK}/cancel.py" [=[
+import json, os, signal, subprocess, sys, time
+from pathlib import Path
+jh, child, root, work = sys.argv[1:]
+ready = Path(work) / "cancel-ready"
+env = dict(os.environ, JH_CLI_PROCESS_READY=str(ready))
+command = [jh, "repository", "files", "--root", root, "--git", child, "--json"]
+with subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as process:
+    try:
+        deadline = time.monotonic() + 10
+        while not ready.exists() or ready.stat().st_size == 0:
+            if process.poll() is not None or time.monotonic() >= deadline:
+                raise AssertionError("child did not start")
+            time.sleep(0.01)
+        child_pid = int(ready.read_text())
+        process.send_signal(signal.SIGINT)
+        output, errors = process.communicate(timeout=10)
+        assert process.returncode == 130, (process.returncode, output, errors)
+        assert json.loads(output)["status"] == "HAL_ECANCELED", output
+        try:
+            os.kill(child_pid, 0)
+        except ProcessLookupError:
+            pass
+        else:
+            raise AssertionError("SIGINT left the child alive")
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.communicate()
+# Invalid UTF-8 and LF in POSIX filenames remain exact bytes in raw mode.
+raw_name = os.fsencode(root) + b"/raw-\xff\n"
+with open(raw_name, "wb") as stream:
+    stream.write(b"x")
+try:
+    expected = subprocess.check_output([os.environ["JH_CLI_GIT"],
+        "-C", root, "ls-files", "--cached", "--others", "--exclude-standard", "-z"])
+    actual = subprocess.check_output([jh, 'repository', 'files', '--root', root, '--git', os.environ['JH_CLI_GIT']])
+    assert actual == expected, (actual, expected)
+finally:
+    os.unlink(raw_name)
+]=])
+  set(ENV{JH_CLI_GIT} "${git}")
+  execute_process(COMMAND "${Python3_EXECUTABLE}" "${JH_WORK}/cancel.py"
+      "${JH}" "${process_fixture}" "${repository}" "${JH_WORK}"
+    COMMAND_ERROR_IS_FATAL ANY)
+  unset(ENV{JH_CLI_GIT})
 endif()
 file(MAKE_DIRECTORY "${checkout}/cmake" "${checkout}/third_party")
 file(COPY "${JH_HAL_SOURCE}/cmake/jh_verify_pcre2.cmake" "${JH_HAL_SOURCE}/cmake/jh_jhbase.cmake"

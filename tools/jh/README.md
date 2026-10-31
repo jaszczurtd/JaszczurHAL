@@ -133,6 +133,29 @@ depth 128. Exhaustion returns `HAL_EOVERFLOW` before publishing any error prefix
 The internal C API in [jh_json_schema.h](json/jh_json_schema.h) accepts caller-owned
 scratch, custom limits and optional document/report callbacks.
 
+
+`jh repository files --root <checkout> --git <absolute-executable>` runs Git
+without a shell through `jb::host`. It uses `-C <root> ls-files --cached
+--others --exclude-standard -z`, inheriting the environment and the caller's
+cwd. Raw stdout retains every byte, including NUL separators and POSIX
+filenames outside UTF-8. Child stderr is forwarded. `--json` returns UTF-8
+`paths`, `root`, and the process fields `started`, `exited`, `exitCode`,
+`termSignal`, `nativeError`; a non-UTF-8 filename fails explicitly in this mode.
+`--max-bytes` bounds captured path bytes in JSON mode with the same default
+and ceiling as inspection. `--timeout-ms` accepts 0 through 4294967295;
+zero waits indefinitely. SIGINT (Ctrl+C or Ctrl+Break on Windows) requests
+cancellation and waits for process cleanup. Timeout exits with 124 and
+cancellation with 130; other Git exit codes are retained. A failure to launch
+or stream exits with 3 (4 for allocation or byte limits), and its JSON status
+identifies the cause. These process
+codes apply only to `repository files`.
+
+Clients may pass `--json --json-version 1`. An unsupported major gives
+`HAL_EUNSUPPORTED` and exit 2 before command execution, using the currently
+supported result envelope. Omitting the option selects major 1. Within a
+major, clients must ignore unknown fields; existing field meanings and types
+are stable. A breaking change requires a new major.
+
 ## Type catalogue and device defaults
 
 `jh generate device-defaults --root <checkout>` reads every `*.json` of

@@ -244,10 +244,11 @@ Utwórz tag dopiero po włączeniu commitu wydania do `main`. CI uruchamiane prz
 4. Dla ESP-IDF odśwież `security/esp_idf_tools.json` na podstawie pliku
    `tools.json` z ustalonej wersji frameworka i zarządzanego środowiska Python,
    a następnie sprawdź licencję każdego narzędzia.
-5. Zrób commit: hook pre-commit odświeża wygenerowane artefakty, w tym SBOM,
-   na podstawie pinów dodanych do commita i dołącza je do niego. Przejrzyj
-   zmiany artefaktów, które wypisze. Bez commita odświeża je
-   `python3 scripts/sync_generated.py --write`.
+5. Przed uruchomieniem `./runalltests.sh` na drzewie roboczym odśwież
+   wygenerowane artefakty, w tym SBOM, przez
+   `python3 scripts/sync_generated.py --write`: bramka odrzuca nieaktualne
+   artefakty. Przy commicie hook pre-commit powtarza to dla pinów dodanych
+   do commita i dołącza wynik; przejrzyj zmiany artefaktów, które wypisze.
 6. Uruchom testy właściwe dla zmienionego modułu i odpowiedniego targetu.
 7. Jeśli aktualizacja naprawia lub ocenia CVE, dodaj wpis do
    `security/vulnerability_log.md` zawierający CVSS, flagi, których dotyczy
