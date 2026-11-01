@@ -5,6 +5,7 @@ project(jh VERSION 0.1.0 LANGUAGES C CXX)
 if(CMAKE_CROSSCOMPILING)
   message(FATAL_ERROR "jh requires a native host compiler; configure it separately from firmware")
 endif()
+include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/jh_sanitizers.cmake")
 # The same jhbase as every HAL build: the pinned third_party/jhbase checkout,
 # or the one JH_JHBASE_DIR names.
 include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/jh_jhbase.cmake")
@@ -51,6 +52,7 @@ if(MSVC)
   target_link_options(jh PRIVATE /Brepro)
 endif()
 target_compile_definitions(jh PRIVATE JH_TOOL_VERSION="${PROJECT_VERSION}")
+include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/jh_memcheck.cmake")
 include(CTest)
 if(BUILD_TESTING)
   add_executable(jh_schema_test tests/test_schema.cpp tests/schema_callback.c)
@@ -67,7 +69,24 @@ if(BUILD_TESTING)
   add_test(NAME jh_device_defaults COMMAND "${CMAKE_COMMAND}" -E env
       "JH_SCHEMA_TOOL=$<TARGET_FILE:jh>" "${Python3_EXECUTABLE}"
       "${CMAKE_CURRENT_SOURCE_DIR}/../../tests/test_device_defaults.py")
-  set_tests_properties(jh_schema jh_schema_compat jh_device_defaults PROPERTIES TIMEOUT 120)
+  # VS Code files and manifests: jh_settings checks the reader itself,
+  # jh_settings_compat compares it with load_json_file of the Python tools on
+  # the files of this checkout outside tests/hardware and on edge cases.
+  add_executable(jh_settings_test tests/test_settings.cpp)
+  target_link_libraries(jh_settings_test PRIVATE jh_host)
+  jh_tool_target(jh_settings_test)
+  add_test(NAME jh_settings COMMAND jh_settings_test "${CMAKE_CURRENT_BINARY_DIR}")
+  add_executable(jh_settings_probe tests/settings_probe.cpp)
+  target_link_libraries(jh_settings_probe PRIVATE jh_host)
+  jh_tool_target(jh_settings_probe)
+  add_test(NAME jh_settings_compat COMMAND "${Python3_EXECUTABLE}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/settings_compat.py"
+      "$<TARGET_FILE:jh_settings_probe>" "${CMAKE_CURRENT_SOURCE_DIR}/../..")
+  set_tests_properties(jh_schema jh_schema_compat jh_device_defaults jh_settings
+    jh_settings_compat PROPERTIES TIMEOUT 120)
+  # The native test programs; the gate runs them under Valgrind (memcheck)
+  # and the sanitizers (sanitizer-fuzz).
+  set_tests_properties(jh_schema jh_settings PROPERTIES LABELS memcheck)
   add_test(NAME jh_cli COMMAND "${CMAKE_COMMAND}" "-DJH=$<TARGET_FILE:jh>"
     "-DJH_BUILD=${CMAKE_CURRENT_BINARY_DIR}" "-DJH_CONFIG=$<CONFIG>"
     "-DJH_SUFFIX=${CMAKE_EXECUTABLE_SUFFIX}"

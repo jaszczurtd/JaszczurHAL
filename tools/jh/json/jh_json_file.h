@@ -3,12 +3,14 @@
 
 /** @file jh_json_file.h
  * JSON files for the jh host commands: bounded reads, parsed documents that
- * keep their bytes alive, lexical path resolution and the schema document
- * loader shared by every command that validates. C++17; exceptions stay
- * inside the tool and never cross the jhbase C API.
+ * keep their bytes alive, VS Code files and project manifests, lexical path
+ * resolution and the schema document loader shared by every command that
+ * validates. C++17; exceptions stay inside the tool and never cross the jhbase
+ * C API.
  */
 #include "jh_json_schema.h"
 #include <jb/file.h>
+#include <jb/json_tree.h>
 #include <memory>
 #include <string>
 #include <vector>
@@ -30,6 +32,10 @@ void require(hal_status_t status, int exit_code, const char *message);
 jb_json_span_t span(const std::string &text);
 jb_json_span_t span(const char *text);
 std::string copied(jb_json_span_t text);
+/** Output sink of the jhbase writer and formatter that appends to the
+ * std::string at user. HAL_ENOMEM or HAL_EOVERFLOW when it cannot grow.
+ */
+hal_status_t append_text(void *user, const char *data, size_t length);
 /** Resolve path lexically against an absolute base (jb_path_resolve). */
 std::string absolute_path(const std::string &path, const std::string &base);
 /** Percent-escaped identity of a file path for schema URIs. */
@@ -71,6 +77,32 @@ std::unique_ptr<json_document> read_document(parse_location &where,
                                              const std::string &path,
                                              size_t limit,
                                              bool hardware_numbers = false);
+
+/** Destroys an owned jhbase tree. */
+struct tree_deleter {
+  void operator()(jb_json_tree_t *tree) const { jb_json_tree_destroy(tree); }
+};
+using tree_owner = std::unique_ptr<jb_json_tree_t, tree_deleter>;
+
+/** A VS Code file or project manifest and whether it exists. */
+struct settings_file {
+  tree_owner tree;
+  bool exists = false;
+};
+
+/** Read a file of at most limit bytes as load_json_file of the Python HAL
+ * tools reads VS Code files and project manifests: comments outside strings,
+ * the last value of a repeated name and NaN/Infinity are accepted, a missing
+ * file reads as an empty object and the root must be an object. Numbers keep
+ * their tokens. Unlike Python, a `\u` escape of an unpaired surrogate is
+ * rejected, the parser limits apply (256 nested containers, 100000 members
+ * each) and an integer keeps its token at any length, where int() of Python
+ * 3.11+ refuses more than 4300 digits. Failures throw with exit code 2
+ * (HAL_ETYPE for another root, otherwise invalid JSON), 3 (file) or 4 (limits);
+ * a parse error locates the place in the file, comments included.
+ */
+settings_file read_settings(parse_location &where, const std::string &path,
+                            size_t limit);
 
 /** One validation failure as the CLI reports it. */
 struct schema_report {

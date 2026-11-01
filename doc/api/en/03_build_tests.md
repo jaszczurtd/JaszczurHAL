@@ -195,12 +195,13 @@ refreshes them.
 Exits non-zero on the first failure; logs capture warnings/errors from both
 standard output and standard error.
 The memcheck stage selects every directly registered native C/C++ test executable
-through the CTest `memcheck` label. `MEMCHECK_REQUIRED_TESTS` in
-`runalltests.sh` is a critical subset checked before execution, not the complete
-selection. Python, CMake, and shell-driver tests remain outside memcheck. Fair
+through the CTest `memcheck` label, in the host build and in a Debug build of
+the jh host CLI (`tools/jh`). `MEMCHECK_REQUIRED_TESTS` and
+`JH_MEMCHECK_REQUIRED_TESTS` in `runalltests.sh` are critical subsets checked
+before execution, not the complete selection. Python, CMake, and shell-driver tests remain outside memcheck. Fair
 Valgrind thread scheduling keeps the native FreeRTOS POSIX scheduler tests in
 the selection. Live CTest/Valgrind progress is streamed to the terminal and
-`.build/gate/logs/jh_memcheck.log`.
+`.build/gate/logs/jh_memcheck.log` (`jh_cli_memcheck.log` for the jh host CLI).
 
 All build and test outputs go in the ignored `.build/` directory. CMake compiler probes run in script mode use `.build/tests/` and do not leave `.o` files in the repository root.
 

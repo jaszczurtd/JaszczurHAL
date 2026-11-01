@@ -21,7 +21,7 @@ Run commands from the repository root unless a section states otherwise. Use `--
 | Refresh all tracked generated files | `python3 scripts/sync_generated.py --write` | Runs the feature, board, device default, example, root VS Code, and SBOM generators and lists every file changed during synchronization. |
 | Verify all tracked generated files | `python3 scripts/sync_generated.py --check` | Runs every generator in read-only verification mode and fails on missing or stale output. |
 | Run the complete repository gate | `./runalltests.sh`; before a push `./runalltests.sh --commit` | Cleans managed gate outputs and runs every stage: tests, Clang ASan/UBSan/TSan/libFuzzer checks, Valgrind, static analysis, CPD, target, library and example builds, and the vulnerability scan. Linux CI runs the same stages except the example builds. |
-| Run the sanitizer/fuzz gate | `scripts/run_sanitizer_fuzz.sh` | Recreates a Clang-instrumented host build, runs all tests under ASan/UBSan and the native tests under TSan, and smoke-fuzzes the network parsers. |
+| Run the sanitizer/fuzz gate | `scripts/run_sanitizer_fuzz.sh` | Recreates Clang-instrumented host and jh CLI builds, runs all host tests and the native jh CLI tests under ASan/UBSan and the native host tests under TSan, and smoke-fuzzes the network parsers. |
 | Operate a firmware project | `vscode/entry/jh-vscode <action> --project <dir>` on Unix or `vscode/entry/jh-vscode.cmd ...` on Windows | Provides the stable build, upload, monitor, board-selection, IntelliSense, and clean CLI used by VS Code projects. |
 | Build a linkable library for any target | `scripts/build_link_library.sh --target <id>` | Selects the family runner under `link_libraries/` from the target's build provider and forwards the remaining options. |
 | Build or flash an ESP-IDF project | `python3 scripts/build_esp_idf.py <action> --project <dir>` | Runs the `build`, `artifacts`, or `flash` action; resolves the ESP target/board metadata; prepares the pinned SDK on demand; and validates the relocatable multi-image manifest. |
@@ -233,13 +233,16 @@ A full run removes only its managed `.build/gate`, `.build/examples`, and
 `.build/tests` trees at startup; a `--stage` run keeps them, so stages that
 share a build reuse it. The script exits on the first failed stage. The
 memcheck stage runs every directly registered native C/C++ test executable labelled
-`memcheck`. `MEMCHECK_REQUIRED_TESTS` remains a required critical subset and
-prevents those suites from silently leaving the selection. Python, CMake, and
+`memcheck`, in the host build and in a Debug build of the jh host CLI
+(`tools/jh`). `MEMCHECK_REQUIRED_TESTS` and `JH_MEMCHECK_REQUIRED_TESTS` remain
+required critical subsets and prevent those suites from silently leaving the
+selection. Python, CMake, and
 shell driver tests are excluded: wrapping their parent interpreter would
 measure that host tool rather than cross-compiled firmware or child processes.
 The Valgrind configuration uses fair thread scheduling so the native FreeRTOS
 POSIX scheduler tests are included without stalling. CTest progress is streamed
-unfiltered to both the terminal and `.build/gate/logs/jh_memcheck.log`.
+unfiltered to both the terminal and `.build/gate/logs/jh_memcheck.log`
+(`jh_cli_memcheck.log` for the jh host CLI).
 
 ### `scripts/run_sanitizer_fuzz.sh`
 
@@ -250,7 +253,8 @@ complete host CTest suite with leak detection and fail-fast undefined-behavior
 reporting, then executes bounded smoke runs for the HTTP, WebSocket and
 multipart fuzz targets. A second build next to the first (`<build-dir>-tsan`)
 runs the native C/C++ tests under ThreadSanitizer and stops at the first
-reported race. `--build-dir`, `--jobs`, and `--fuzz-runs` select its
+reported race. A third build (`<build-dir>-jh`) runs the native tests of the
+jh host CLI under ASan/UBSan. `--build-dir`, `--jobs`, and `--fuzz-runs` select its
 managed output and workload; `--check-tools` only verifies Clang availability.
 
 ### `scripts/jh`, `scripts/jh.ps1` and `scripts/jh_bootstrap.cmake`

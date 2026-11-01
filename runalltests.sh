@@ -448,14 +448,22 @@ MEMCHECK_REQUIRED_TESTS=(
     test_hal_rtc
 )
 
-stage_memcheck() {
-    local memcheck_tests memcheck_count test_name defects
-    ensure_host_build
+# The native tests of the jh host CLI (tools/jh), its own CMake project.
+JH_MEMCHECK_REQUIRED_TESTS=(
+    jh_schema
+    jh_settings
+)
+
+# run_memcheck BUILD LOG REQUIRED...: every native test labelled memcheck in
+# BUILD runs under Valgrind; the REQUIRED tests must be among them.
+run_memcheck() {
+    local build="$1" log="$2" memcheck_tests memcheck_count test_name defects
+    shift 2
 
     info "Verifying native C/C++ memcheck coverage in CTest..."
-    memcheck_tests=$(with_minimum_cmake ctest --test-dir "${HOST_BUILD}" -N \
+    memcheck_tests=$(with_minimum_cmake ctest --test-dir "${build}" -N \
         -L '^memcheck$' 2>/dev/null || true)
-    for test_name in "${MEMCHECK_REQUIRED_TESTS[@]}"; do
+    for test_name in "$@"; do
         if ! grep -qE ":[[:space:]]+${test_name}$" <<<"${memcheck_tests}"; then
             fail "Required test is missing from the native memcheck set: ${test_name}"
             exit 1
@@ -464,26 +472,39 @@ stage_memcheck() {
     memcheck_count=$(grep -cE '^[[:space:]]*Test[[:space:]]+#[0-9]+:' \
         <<<"${memcheck_tests}" || true)
     if [[ "${memcheck_count}" -eq 0 ]]; then
-        fail "CTest did not expose any native tests labelled memcheck"
+        fail "CTest did not expose any native tests labelled memcheck in ${build}"
         exit 1
     fi
 
     info "Running all ${memcheck_count} native C/C++ tests under Valgrind..."
-    if ! with_minimum_cmake ctest --test-dir "${HOST_BUILD}" -T memcheck \
+    if ! with_minimum_cmake ctest --test-dir "${build}" -T memcheck \
         -L '^memcheck$' --output-on-failure 2>&1 \
-        | tee "${LOG_ROOT}/jh_memcheck.log"; then
-        fail "Valgrind memcheck execution failed; see ${LOG_ROOT}/jh_memcheck.log"
+        | tee "${log}"; then
+        fail "Valgrind memcheck execution failed; see ${log}"
         exit 1
     fi
 
-    if grep -q "Memory checking results:" "${LOG_ROOT}/jh_memcheck.log"; then
-        defects=$(grep "Memory checking results:" "${LOG_ROOT}/jh_memcheck.log" | grep -oP '\d+ defect' | head -1 || true)
+    if grep -q "Memory checking results:" "${log}"; then
+        defects=$(grep "Memory checking results:" "${log}" | grep -oP '\d+ defect' | head -1 || true)
         if [[ -n "$defects" && "$defects" != "0 defect" ]]; then
             fail "Valgrind found memory defects!"
-            grep -A5 "Memory checking results:" "${LOG_ROOT}/jh_memcheck.log"
+            grep -A5 "Memory checking results:" "${log}"
             exit 1
         fi
     fi
+}
+
+stage_memcheck() {
+    ensure_host_build
+    run_memcheck "${HOST_BUILD}" "${LOG_ROOT}/jh_memcheck.log" \
+        "${MEMCHECK_REQUIRED_TESTS[@]}"
+
+    local jh_build="${GATE_BUILD_ROOT}/jh-memcheck"
+    info "Building the jh host CLI tests for Valgrind..."
+    with_minimum_cmake ensure_cmake_build "${jh_build}" -S tools/jh \
+        -DCMAKE_BUILD_TYPE=Debug
+    run_memcheck "${jh_build}" "${LOG_ROOT}/jh_cli_memcheck.log" \
+        "${JH_MEMCHECK_REQUIRED_TESTS[@]}"
 }
 
 stage_cppcheck() {

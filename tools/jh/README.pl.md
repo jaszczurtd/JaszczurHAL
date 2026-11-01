@@ -138,6 +138,18 @@ identyfikatory dokumentów do 32768 bajtów. Zdekodowana wartość ma najwyżej
 [jh_json_schema.h](json/jh_json_schema.h) przyjmuje scratch użytkownika,
 własne limity i opcjonalne callbacki dokumentów oraz raportów.
 
+`jh::read_settings` z [jh_json_file.h](json/jh_json_file.h) czyta pliki
+VS Code i manifesty projektów tak samo jak `load_json_file` w narzędziach
+Pythona. Przyjmuje komentarze poza stringami, ostatnią wartość powtórzonej
+nazwy oraz `NaN`/`Infinity`. Brakujący plik daje pusty obiekt, a korzeń musi
+być obiektem. Liczby zachowują oryginalne tokeny. W odróżnieniu od Pythona
+odrzuca escape `\u` niesparowanego surogatu, stosuje limity parsera (256
+zagnieżdżonych kontenerów, 100000 członków w każdym) i przyjmuje liczbę
+całkowitą dłuższą niż 4300 cyfr, na które pozwala `int()` w Pythonie 3.11+.
+Żadne polecenie `jh` jeszcze z niego nie korzysta. Test `jh_settings` sprawdza
+sam czytnik, a `jh_settings_compat` porównuje go z `load_json_file` na plikach
+`.vscode` checkoutu poza `tests/hardware` i na przypadkach brzegowych.
+
 
 `jh repository files --root <checkout> --git <bezwzględny-executable>` uruchamia
 Git bez powłoki przez `jb::host`. Przekazuje `-C <root> ls-files --cached

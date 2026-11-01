@@ -6,38 +6,10 @@ project(JaszczurHAL_Tests CXX C)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_C_STANDARD 11)
 
-option(JH_ENABLE_SANITIZERS
-    "Instrument host code with AddressSanitizer and UndefinedBehaviorSanitizer"
-    OFF)
-option(JH_ENABLE_THREAD_SANITIZER
-    "Instrument host code with ThreadSanitizer instead of ASan/UBSan"
-    OFF)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/jh_sanitizers.cmake")
 option(JH_ENABLE_FUZZING
     "Build Clang libFuzzer targets for network parsers"
     OFF)
-
-if(JH_ENABLE_SANITIZERS AND JH_ENABLE_THREAD_SANITIZER)
-    message(FATAL_ERROR
-        "JH_ENABLE_SANITIZERS and JH_ENABLE_THREAD_SANITIZER are mutually exclusive")
-endif()
-if((JH_ENABLE_SANITIZERS OR JH_ENABLE_THREAD_SANITIZER) AND MSVC)
-    message(FATAL_ERROR "Host sanitizer options require GCC or Clang")
-endif()
-if(JH_ENABLE_SANITIZERS)
-    # Public HAL entry points deliberately validate out-of-range enum values.
-    # Loading such a value is itself diagnosed by Clang's enum sanitizer before
-    # the validation can run, so keep the rest of UBSan enabled but exclude that
-    # incompatible check.
-    add_compile_options(
-        -fsanitize=address,undefined
-        -fno-sanitize=enum
-        -fno-omit-frame-pointer)
-    add_link_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
-endif()
-if(JH_ENABLE_THREAD_SANITIZER)
-    add_compile_options(-fsanitize=thread -fno-omit-frame-pointer)
-    add_link_options(-fsanitize=thread -fno-omit-frame-pointer)
-endif()
 if(JH_ENABLE_FUZZING)
     if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         message(FATAL_ERROR "JH_ENABLE_FUZZING requires Clang libFuzzer")
@@ -46,22 +18,7 @@ if(JH_ENABLE_FUZZING)
 endif()
 
 # ── Valgrind / CTest memcheck configuration ───────────────────────────────────
-# Host-only dynamic analysis for the unit-test suite (NOT firmware - Valgrind
-# cannot run on MCU targets). Run locally or in CI with:
-#
-#     ctest --test-dir .build/host -T memcheck --output-on-failure
-#
-# These variables must be set *before* include(CTest) so the CTest module bakes
-# them into DartConfiguration.tcl. --error-exitcode=1 makes Valgrind fail the
-# individual test (and therefore the whole ctest run) on a real defect, so the
-# CI memcheck job goes red instead of silently passing.
-find_program(MEMORYCHECK_COMMAND NAMES valgrind)
-set(MEMORYCHECK_COMMAND_OPTIONS
-    "--leak-check=full --show-leak-kinds=definite --errors-for-leak-kinds=definite --track-origins=yes --fair-sched=yes --error-exitcode=1"
-    CACHE STRING "Flags passed to Valgrind by 'ctest -T memcheck'")
-set(MEMORYCHECK_SUPPRESSIONS_FILE
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/valgrind.supp"
-    CACHE FILEPATH "Valgrind suppressions for known third-party/system noise")
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/jh_memcheck.cmake)
 
 # Include CTest to generate standard test metadata (including
 # DartConfiguration.tcl) and keep test tooling output clean.

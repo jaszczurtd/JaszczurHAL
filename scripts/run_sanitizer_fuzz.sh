@@ -13,8 +13,9 @@ usage() {
 Usage: scripts/run_sanitizer_fuzz.sh [options]
 
 Configure, build, and run the Clang ASan/UBSan host suite, parser fuzz smoke
-tests, and the native host tests under ThreadSanitizer. Build directories must
-stay below the repository .build/ tree; the TSan build uses PATH-tsan.
+tests, the native tests of the jh host CLI under ASan/UBSan, and the native
+host tests under ThreadSanitizer. Build directories must stay below the
+repository .build/ tree; the jh build uses PATH-jh, the TSan build PATH-tsan.
 
 Options:
   --build-dir PATH   Build directory (default: .build/sanitizer-fuzz)
@@ -172,6 +173,18 @@ for target in fuzz_http_server fuzz_websocket fuzz_http_multipart; do
         "-runs=${FUZZ_RUNS}" -max_len=1024
 done
 
+# The jh host CLI is its own CMake project; its native tests run with the same
+# instrumentation.
+JH_BUILD_DIR="${BUILD_DIR}-jh"
+cmake -E remove_directory "${JH_BUILD_DIR}"
+cmake -E env "CC=${CLANG_CC}" "CXX=${CLANG_CXX}" \
+    cmake -S "${REPO_ROOT}/tools/jh" -B "${JH_BUILD_DIR}" \
+        -DCMAKE_BUILD_TYPE=Debug \
+        -DJH_ENABLE_SANITIZERS=ON
+cmake --build "${JH_BUILD_DIR}" --parallel "${JOBS}"
+cmake -E env "${SANITIZER_ENV[@]}" \
+    ctest --test-dir "${JH_BUILD_DIR}" --output-on-failure -L '^memcheck$'
+
 # ThreadSanitizer cannot share a build with ASan. It covers the native tests;
 # the Python checks gain nothing from instrumentation.
 TSAN_BUILD_DIR="${BUILD_DIR}-tsan"
@@ -184,4 +197,4 @@ cmake -E env "TSAN_OPTIONS=halt_on_error=1:second_deadlock_stack=1" \
     ctest --test-dir "${TSAN_BUILD_DIR}" --output-on-failure \
         --parallel "${JOBS}" -L '^memcheck$'
 
-echo "[PASS] Clang ASan/UBSan, TSan and parser fuzz smoke checks passed."
+echo "[PASS] Clang ASan/UBSan (host and jh), TSan and parser fuzz smoke checks passed."

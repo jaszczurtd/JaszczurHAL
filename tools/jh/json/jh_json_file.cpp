@@ -21,6 +21,19 @@ std::string copied(jb_json_span_t text) {
   return std::string(text.data, text.length);
 }
 
+hal_status_t append_text(void *user, const char *data, size_t length) {
+  try {
+    static_cast<std::string *>(user)->append(data, length);
+    return HAL_OK;
+  } catch (const std::bad_alloc &) {
+    return HAL_ENOMEM;
+  } catch (const std::length_error &) {
+    return HAL_EOVERFLOW;
+  } catch (...) {
+    return HAL_EINTERNAL;
+  }
+}
+
 std::string absolute_path(const std::string &path, const std::string &base) {
   size_t needed;
   require(jb_path_resolve(base.c_str(), path.c_str(), nullptr, 0, &needed), 3,
@@ -55,6 +68,16 @@ std::string schema_identity(const std::string &path) {
 }
 
 namespace {
+/* Exit code 4 for an exhausted limit or allocation, otherwise the given one. */
+int exit_code_for(hal_status_t status, int otherwise) {
+  return status == HAL_EOVERFLOW || status == HAL_ENOMEM ? 4 : otherwise;
+}
+
+/* Parser limits of one file of at most limit bytes. */
+jb_json_limits_t file_limits(size_t limit) {
+  return {limit, 1000000, 256, limit, 1048576, 100000, limit * 32 + 1048576};
+}
+
 /* The hardware loader keeps the exact token, but a decimal or exponent
  * spelling must still have a finite, nonzero magnitude in binary64, as the
  * Python loader required. Plain integers are exact at any size. */
@@ -107,20 +130,17 @@ std::unique_ptr<json_document> read_document(parse_location &where,
   auto &input = owned->input;
   const hal_status_t read_status =
       jb_file_read(where.source.c_str(), limit, &input.data);
-  require(read_status,
-          read_status == HAL_EOVERFLOW || read_status == HAL_ENOMEM ? 4 : 3,
-          "cannot read input file");
+  require(read_status, exit_code_for(read_status, 3), "cannot read input file");
   const jb_json_span_t bytes{reinterpret_cast<const char *>(input.data.data),
                              input.data.length};
-  const jb_json_limits_t limits{
-      limit, 1000000, 256, limit, 1048576, 100000, limit * 32 + 1048576};
+  const jb_json_limits_t limits = file_limits(limit);
   jb_json_requirements_t needed;
   const auto parsed = [&](hal_status_t status) {
     if (status != HAL_OK) {
       where.located = true;
       (void)jb_json_locate(bytes, where.error.offset, &where.line,
                            &where.column);
-      require(status, status == HAL_EOVERFLOW || status == HAL_ENOMEM ? 4 : 2,
+      require(status, exit_code_for(status, 2),
               "invalid JSON or parser limit exceeded");
     }
   };
@@ -140,6 +160,53 @@ std::unique_ptr<json_document> read_document(parse_location &where,
   if (hardware_numbers)
     check_hardware_numbers(where, *owned);
   return owned;
+}
+
+settings_file read_settings(parse_location &where, const std::string &path,
+                            size_t limit) {
+  where.source = path;
+  where.located = false;
+  file_owner input;
+  const hal_status_t read_status =
+      jb_file_read(path.c_str(), limit, &input.data);
+  if (read_status != HAL_ENOENT)
+    require(read_status, exit_code_for(read_status, 3),
+            "cannot read input file");
+  // load_json_file reads a missing file as an empty object.
+  const jb_json_span_t bytes =
+      read_status == HAL_ENOENT
+          ? span("{}")
+          : jb_json_span_t{reinterpret_cast<const char *>(input.data.data),
+                           input.data.length};
+  const jb_json_limits_t limits = file_limits(limit);
+  const jb_json_tree_limits_t tree_limits{limits.max_nodes, limits.max_depth,
+                                          limit, limits.max_key_compare_bytes};
+  constexpr uint32_t python_reading = JB_JSON_TREE_COMMENTS |
+                                      JB_JSON_TREE_LAST_DUPLICATE |
+                                      JB_JSON_TREE_NONFINITE;
+  jb_json_tree_t *tree = nullptr;
+  const hal_status_t status = jb_json_tree_parse(
+      bytes, &limits, &tree_limits, python_reading, &tree, &where.error);
+  settings_file result{tree_owner(tree), read_status == HAL_OK};
+  if (status != HAL_OK) {
+    // The tree limits leave the code NONE and have no place in the file.
+    if (where.error.code != JB_JSON_ERROR_NONE) {
+      where.located = true;
+      (void)jb_json_locate(bytes, where.error.offset, &where.line,
+                           &where.column);
+    }
+    require(status, exit_code_for(status, 2),
+            "invalid JSON or parser limit exceeded");
+  }
+  jb_json_tree_view_t root;
+  jb_json_type_t type;
+  require(jb_json_tree_root(result.tree.get(), &root), 2,
+          "cannot read the settings root");
+  require(jb_json_tree_type(root, &type), 2, "cannot read the settings root");
+  if (type != JB_JSON_OBJECT)
+    throw failure{HAL_ETYPE, 2,  path + " must contain a JSON object",
+                  {},        {}, {}};
+  return result;
 }
 
 const json_document &schema_files::root(const std::string &path) {
@@ -242,10 +309,10 @@ hal_status_t validate_with(schema_files &state, const json_document &instance,
       {scratch.data(), scratch.size()}, &limits);
   if (status != HAL_OK && status != HAL_ECONFIG)
     require(status,
-            status == HAL_EOVERFLOW || status == HAL_ENOMEM ? 4
-            : status == HAL_ENOENT || status == HAL_EIO || status == HAL_EPERM
-                ? 3
-                : 2,
+            exit_code_for(status, status == HAL_ENOENT || status == HAL_EIO ||
+                                          status == HAL_EPERM
+                                      ? 3
+                                      : 2),
             "cannot validate schema or validation limit exceeded");
   return status;
 }

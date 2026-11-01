@@ -269,6 +269,7 @@ for fragment in (
     "UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1",
     "ASAN_OPTIONS=detect_leaks=1:strict_string_checks=1",
     "fuzz_http_server fuzz_websocket fuzz_http_multipart",
+    'cmake -S "${REPO_ROOT}/tools/jh" -B "${JH_BUILD_DIR}"',
     "-DJH_ENABLE_THREAD_SANITIZER=ON",
     "TSAN_OPTIONS=halt_on_error=1",
 ):

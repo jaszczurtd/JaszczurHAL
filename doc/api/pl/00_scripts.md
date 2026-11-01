@@ -21,7 +21,7 @@ Uruchamiaj polecenia z katalogu głównego repozytorium, chyba że instrukcja ws
 | Odświeżenie wszystkich wersjonowanych plików generowanych | `python3 scripts/sync_generated.py --write` | Uruchamia generatory funkcji, płytek, wartości domyślnych urządzeń, przykładów, głównego VS Code oraz SBOM i wypisuje każdy plik zmieniony podczas synchronizacji. |
 | Weryfikacja wszystkich wersjonowanych plików generowanych | `python3 scripts/sync_generated.py --check` | Uruchamia każdy generator w trybie weryfikacji tylko do odczytu i zgłasza błąd, gdy pliku wynikowego brakuje lub jest on nieaktualny. |
 | Pełna kontrola jakości repozytorium | `./runalltests.sh`; przed wysłaniem zmian `./runalltests.sh --commit` | Czyści katalogi robocze bramki i uruchamia wszystkie etapy: testy, kontrole Clang ASan/UBSan/TSan/libFuzzer, Valgrind, analizę statyczną, CPD, kompilacje targetów, bibliotek i przykładów oraz skan podatności. Linuksowe CI wykonuje te same etapy poza kompilacją przykładów. |
-| Testy z sanitizerami i fuzzingiem | `scripts/run_sanitizer_fuzz.sh` | Odtwarza konfigurację testów na komputerze z instrumentacją Clang, uruchamia wszystkie testy pod ASan/UBSan, testy natywne pod TSan i wykonuje krótkie fuzzowanie parserów sieciowych. |
+| Testy z sanitizerami i fuzzingiem | `scripts/run_sanitizer_fuzz.sh` | Odtwarza konfigurację testów na komputerze i CLI jh z instrumentacją Clang, uruchamia wszystkie testy hosta i natywne testy CLI jh pod ASan/UBSan, natywne testy hosta pod TSan i wykonuje krótkie fuzzowanie parserów sieciowych. |
 | Obsługa projektu firmware | `vscode/entry/jh-vscode <action> --project <dir>` w Uniksie lub `vscode/entry/jh-vscode.cmd ...` w Windows | Udostępnia stały interfejs poleceń do kompilacji, wgrywania, monitorowania, wyboru płytki, konfiguracji IntelliSense i czyszczenia używany przez projekty VS Code. |
 | Kompilacja biblioteki linkowalnej dla dowolnego targetu | `scripts/build_link_library.sh --target <id>` | Wybiera runner rodziny z `link_libraries/` na podstawie providera builda targetu i przekazuje pozostałe opcje. |
 | Kompilacja lub wgrywanie projektu ESP-IDF | `python3 scripts/build_esp_idf.py <action> --project <dir>` | Uruchamia akcję `build`, `artifacts` lub `flash`; ustala metadane targetu i płytki ESP, w razie potrzeby przygotowuje SDK w wersji wskazanej przez repozytorium oraz sprawdza przenośny manifest zawierający wiele obrazów. |
@@ -250,15 +250,18 @@ Pełne uruchomienie usuwa na starcie tylko zarządzane drzewa `.build/gate`,
 więc etapy korzystające z tego samego buildu używają go ponownie. Skrypt
 kończy działanie po pierwszym nieudanym etapie.
 Etap memcheck uruchamia każdy bezpośrednio zarejestrowany natywny test wykonywalny
-C/C++ oznaczony jako `memcheck`. `MEMCHECK_REQUIRED_TESTS` zawiera obowiązkowy,
-krytyczny podzbiór i zapobiega niezauważonemu pominięciu tych testów. Testy
+C/C++ oznaczony jako `memcheck`, w buildzie hosta i w buildzie Debug CLI jh
+(`tools/jh`). `MEMCHECK_REQUIRED_TESTS` i `JH_MEMCHECK_REQUIRED_TESTS` zawierają
+obowiązkowe, krytyczne podzbiory i zapobiegają niezauważonemu pominięciu tych
+testów. Testy
 skryptów w Pythonie, CMake i shellu są
 wykluczone: opakowanie ich interpretera nadrzędnego mierzyłoby to narzędzie
 hosta, a nie skompilowane krzyżowo firmware lub procesy potomne.
 Valgrind korzysta ze sprawiedliwego planowania wątków, dzięki
 czemu natywne testy schedulera FreeRTOS POSIX są uwzględnione bez zawieszania
 się. Postęp CTest jest wyświetlany bez filtrowania zarówno w terminalu,
-jak i do `.build/gate/logs/jh_memcheck.log`.
+jak i do `.build/gate/logs/jh_memcheck.log` (`jh_cli_memcheck.log` dla CLI
+jh).
 
 ### `scripts/run_sanitizer_fuzz.sh`
 
@@ -269,7 +272,8 @@ kompletny zestaw CTest hosta z wykrywaniem wycieków i natychmiastowym
 zatrzymaniem po wykryciu niezdefiniowanego zachowania, a następnie wykonuje
 krótkie testy fuzz dla parserów HTTP, WebSocket i multipart. Druga kompilacja
 obok pierwszej (`<build-dir>-tsan`) uruchamia natywne testy C/C++ pod
-ThreadSanitizerem i zatrzymuje się na pierwszym zgłoszonym wyścigu.
+ThreadSanitizerem i zatrzymuje się na pierwszym zgłoszonym wyścigu. Trzecia
+kompilacja (`<build-dir>-jh`) uruchamia natywne testy CLI jh pod ASan/UBSan.
 `--build-dir`, `--jobs` oraz `--fuzz-runs` wybierają zarządzane wyjście i
 obciążenie; `--check-tools` tylko sprawdza dostępność Clanga.
 

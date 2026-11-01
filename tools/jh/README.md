@@ -134,6 +134,18 @@ depth 128. Exhaustion returns `HAL_EOVERFLOW` before publishing any error prefix
 The internal C API in [jh_json_schema.h](json/jh_json_schema.h) accepts caller-owned
 scratch, custom limits and optional document/report callbacks.
 
+`jh::read_settings` in [jh_json_file.h](json/jh_json_file.h) reads VS Code
+files and project manifests the way `load_json_file` of the Python tools does.
+It accepts comments outside strings, the last value of a repeated name and
+`NaN`/`Infinity`. A missing file reads as an empty object, and the root must
+be an object. Numbers keep their original tokens. Unlike Python, it rejects a
+`\u` escape of an unpaired surrogate, applies the parser limits (256 nested
+containers, 100000 members each) and accepts an integer longer than the 4300
+digits `int()` of Python 3.11+ allows. No `jh` command exposes it yet. The
+`jh_settings` test checks the reader itself; `jh_settings_compat` compares it
+with `load_json_file` on the `.vscode` files of the checkout outside
+`tests/hardware` and on edge cases.
+
 
 `jh repository files --root <checkout> --git <absolute-executable>` runs Git
 without a shell through `jb::host`. It uses `-C <root> ls-files --cached

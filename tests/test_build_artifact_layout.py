@@ -90,17 +90,25 @@ require(
     "runalltests.sh does not keep CPD reports below .build/gate",
 )
 memcheck_gate = shell_function_body(quality_gate, "stage_memcheck")
+memcheck_run = shell_function_body(quality_gate, "run_memcheck")
 require(
-    'ctest --test-dir "${HOST_BUILD}" -N' in memcheck_gate
-    and "-L '^memcheck$'" in memcheck_gate
-    and "-LE '^no_memcheck$'" not in memcheck_gate
-    and '-R "${memcheck_regex}"' not in memcheck_gate,
+    'ctest --test-dir "${build}" -N' in memcheck_run
+    and "-L '^memcheck$'" in memcheck_run
+    and "-LE '^no_memcheck$'" not in memcheck_run
+    and '-R "${memcheck_regex}"' not in memcheck_run,
     "runalltests.sh memcheck does not select every labelled native test",
 )
 require(
-    '| tee "${LOG_ROOT}/jh_memcheck.log"' in memcheck_gate
+    'run_memcheck "${HOST_BUILD}" "${LOG_ROOT}/jh_memcheck.log"' in memcheck_gate
+    and "-S tools/jh" in memcheck_gate
+    and 'run_memcheck "${jh_build}" "${LOG_ROOT}/jh_cli_memcheck.log"'
+    in memcheck_gate,
+    "runalltests.sh memcheck does not cover the host build and the jh host CLI",
+)
+require(
+    '| tee "${log}"' in memcheck_run
     and "| grep -E '(^[0-9]|Memory|passed|failed|Defects)'"
-    not in memcheck_gate,
+    not in memcheck_run,
     "runalltests.sh memcheck progress is filtered or not logged live",
 )
 tests_cmake = (ROOT / "tests" / "CMakeLists.txt").read_text(encoding="utf-8")

@@ -32,6 +32,7 @@
 #endif
 
 namespace {
+using jh::append_text;
 using jh::failure;
 using jh::require;
 using jh::span;
@@ -228,19 +229,6 @@ std::string help_text() {
   return text;
 }
 
-hal_status_t append(void *user, const char *data, size_t length) {
-  try {
-    static_cast<std::string *>(user)->append(data, length);
-    return HAL_OK;
-  } catch (const std::bad_alloc &) {
-    return HAL_ENOMEM;
-  } catch (const std::length_error &) {
-    return HAL_EOVERFLOW;
-  } catch (...) {
-    return HAL_EINTERNAL;
-  }
-}
-
 class result_writer {
   jb_json_writer_t writer{};
   std::vector<unsigned char> scratch;
@@ -257,7 +245,7 @@ public:
             "result workspace overflow");
     scratch.resize(needed);
     require(jb_json_writer_init(&writer, &limits,
-                                {scratch.data(), scratch.size()}, append,
+                                {scratch.data(), scratch.size()}, append_text,
                                 &text),
             4, "cannot initialize result writer");
     require(jb_json_writer_object_begin(&writer), 4, "cannot start result");
@@ -583,7 +571,7 @@ hal_status_t repository_bytes(void *user, jb_process_stream_t stream,
     return stream_bytes(stdout, bytes, length);
   if (length > output.limit - output.bytes.size())
     return HAL_EOVERFLOW;
-  return append(&output.bytes, bytes, length);
+  return append_text(&output.bytes, bytes, length);
 }
 
 int repository_files(context &ctx, const std::string &base) {

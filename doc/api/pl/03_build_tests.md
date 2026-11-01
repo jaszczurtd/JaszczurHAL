@@ -202,12 +202,13 @@ Kończy działanie z niezerowym kodem przy pierwszym błędzie; logi rejestrują
 wszelkie ostrzeżenia/błędy zarówno ze standardowego wyjścia, jak i ze
 standardowego wyjścia błędów. Etap memcheck wybiera każdy bezpośrednio
 zarejestrowany natywny plik wykonywalny testu C/C++ przez etykietę CTest
-`memcheck`. `MEMCHECK_REQUIRED_TESTS` w `runalltests.sh` to krytyczny podzbiór
-sprawdzany przed wykonaniem, ale nie jest pełną listą. Testy Python, CMake i
+`memcheck`, w buildzie hosta i w buildzie Debug CLI jh (`tools/jh`).
+`MEMCHECK_REQUIRED_TESTS` i `JH_MEMCHECK_REQUIRED_TESTS` w `runalltests.sh` to
+krytyczne podzbiory sprawdzane przed wykonaniem, ale nie pełne listy. Testy Python, CMake i
 sterowane powłoką nie są uruchamiane przez memcheck. Sprawiedliwe planowanie
 wątków Valgrind pozwala uruchamiać natywne testy schedulera FreeRTOS POSIX bez
 ich zawieszania. Postęp CTest/Valgrind jest na bieżąco zapisywany w terminalu i w
-`.build/gate/logs/jh_memcheck.log`.
+`.build/gate/logs/jh_memcheck.log` (`jh_cli_memcheck.log` dla CLI jh).
 
 Pliki wynikowe kompilacji i testów trafiają do ignorowanego przez Git katalogu `.build/`. Testy kompilatora uruchamiane przez CMake w trybie skryptowym używają `.build/tests/`; nie zapisują plików `.o` w katalogu głównym repozytorium.
 
