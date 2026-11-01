@@ -25,10 +25,10 @@ cmake_minimum_required(VERSION 3.22)
 # JH_JHBASE_DIR selects an external jhbase.
 #
 # Prerequisites on the host: CMake 3.22+, Git, a C11/C++17 compiler (GCC or
-# Clang with Ninja or Make on Linux; Visual Studio 2022 or cl.exe with Ninja
-# on Windows). The managed checkouts come from scripts/ensure_jhbase.sh,
-# scripts/ensure_utf8proc.sh and scripts/ensure_pcre2.sh; this script never
-# downloads anything.
+# Clang with Ninja or Make on Linux; Visual Studio 2019, 2022 or 2026 (2026
+# needs CMake 4.2+), or cl.exe with Ninja, on Windows). The managed checkouts
+# come from scripts/ensure_jhbase.sh, scripts/ensure_utf8proc.sh and
+# scripts/ensure_pcre2.sh; this script never downloads anything.
 
 function(jh_fail message)
   message(FATAL_ERROR "[jh-bootstrap] ${message}")
@@ -241,7 +241,7 @@ elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
   else()
     set(vswhere "$ENV{ProgramFiles\(x86\)}/Microsoft Visual Studio/Installer/vswhere.exe")
     if(NOT EXISTS "${vswhere}")
-      jh_fail("vswhere.exe is missing; install Visual Studio 2022 Build Tools with the MSVC x64/x86 toolset")
+      jh_fail("vswhere.exe is missing; install Visual Studio Build Tools 2022 or 2026 with the MSVC x64/x86 toolset")
     endif()
     jh_first_line(vs_path "${vswhere}" -latest -products * -requires
       Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)
@@ -250,12 +250,18 @@ elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
     if(vs_path STREQUAL "" OR NOT vs_version MATCHES "^([0-9]+)\\.")
       jh_fail("No Visual Studio with the MSVC x64/x86 toolset was found")
     endif()
-    if(CMAKE_MATCH_1 EQUAL 17)
+    if(CMAKE_MATCH_1 EQUAL 18)
+      # CMake has the Visual Studio 2026 generator since 4.2.
+      if(CMAKE_VERSION VERSION_LESS 4.2)
+        jh_fail("Visual Studio ${vs_version} needs CMake 4.2 or newer, this is ${CMAKE_VERSION}; use a newer CMake or the Ninja generator in a developer shell")
+      endif()
+      set(JH_GENERATOR "Visual Studio 18 2026")
+    elseif(CMAKE_MATCH_1 EQUAL 17)
       set(JH_GENERATOR "Visual Studio 17 2022")
     elseif(CMAKE_MATCH_1 EQUAL 16)
       set(JH_GENERATOR "Visual Studio 16 2019")
     else()
-      jh_fail("Unsupported Visual Studio version ${vs_version}; 2019 or 2022 is required")
+      jh_fail("Unsupported Visual Studio version ${vs_version}; 2019, 2022 or 2026 is required")
     endif()
     file(TO_CMAKE_PATH "${vs_path}" vs_path)
     set(compiler_identity "msvc ${vs_version} ${vs_path} ${platform}")

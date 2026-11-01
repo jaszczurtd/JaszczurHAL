@@ -260,8 +260,8 @@ inputs changed, through the shared `cmake -P` bootstrap, then run the
 published executable with the given arguments; stdout stays with the tool
 and the bootstrap reports on stderr. The bootstrap needs CMake 3.22 or newer,
 Git and a host C11/C++17 compiler: GCC or Clang with Ninja or Make on Linux,
-Visual Studio 2022 or `cl.exe` in PATH with `-Generator Ninja` on Windows.
-It downloads nothing; the managed checkouts come from
+Visual Studio 2019, 2022 or 2026 or `cl.exe` in PATH with `-Generator Ninja`
+on Windows. Visual Studio 2026 needs CMake 4.2 or newer. It downloads nothing; the managed checkouts come from
 `scripts/ensure_jhbase.sh`, `scripts/ensure_utf8proc.sh` and
 `scripts/ensure_pcre2.sh`.
 

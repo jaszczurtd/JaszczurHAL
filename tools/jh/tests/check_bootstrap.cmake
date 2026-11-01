@@ -151,7 +151,8 @@ if(NOT code EQUAL 0)
   message(FATAL_ERROR "git init failed: ${code}")
 endif()
 if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
-  find_program(powershell NAMES pwsh powershell REQUIRED)
+  # Windows PowerShell 5.1, as the hook and sync_generated.py run the launcher.
+  find_program(powershell NAMES powershell pwsh REQUIRED)
   set(launcher "${powershell}" -NoProfile -ExecutionPolicy Bypass -File "${copy}/scripts/jh.ps1")
 else()
   set(launcher "${copy}/scripts/jh")
@@ -178,4 +179,18 @@ execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${launcher_environment}
 if(NOT code EQUAL 3 OR NOT out MATCHES "\"command\":\"generate.device-defaults\",\"status\":\"HAL_ENOENT\"")
   message(FATAL_ERROR "The launcher changed the command words: ${code}\n${out}\n${err}")
 endif()
+# The tool's stdout reaches the caller byte for byte: sync_generated.py splits
+# the NUL-separated names of `repository files`, which a PowerShell pipeline
+# would decode and re-encode as text. Without the hook's Git environment, which
+# would point Git at the other repository.
+include("${CMAKE_CURRENT_LIST_DIR}/repository_fixture.cmake")
+jh_repository_fixture("${git_program}" "${JH_WORK}/repository ż" "${JH_WORK}/git.raw")
+execute_process(COMMAND "${CMAKE_COMMAND}" -E env "JH_DEPENDENCY_ROOT=${JH_HAL_SOURCE}" "JH_OUTPUT_ROOT=${output}"
+    --unset=JH_JHBASE_DIR "JH_BOOTSTRAP_CMAKE=${CMAKE_COMMAND}"
+    ${launcher} repository files --root "${JH_WORK}/repository ż" --git "${git_program}"
+  RESULT_VARIABLE code OUTPUT_FILE "${JH_WORK}/launcher.raw" ERROR_VARIABLE err)
+if(NOT code EQUAL 0)
+  message(FATAL_ERROR "The launcher did not list the repository: ${code}\n${err}")
+endif()
+jh_expect_listing("${JH_WORK}/git.raw" "${JH_WORK}/launcher.raw" "The launcher changed the bytes of the tool's stdout")
 message(STATUS "jh bootstrap: PASS")

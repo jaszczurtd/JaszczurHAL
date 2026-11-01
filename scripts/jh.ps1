@@ -4,8 +4,8 @@
     changed (scripts\jh_bootstrap.cmake).
 
 .DESCRIPTION
-    Needs CMake 3.22+, Git and Visual Studio 2022 (or cl.exe in PATH with the
-    Ninja generator). The managed checkouts come from the component manager.
+    Needs CMake 3.22+, Git and Visual Studio 2019, 2022 or 2026 (2026 needs
+    CMake 4.2+), or cl.exe in PATH with the Ninja generator. The managed checkouts come from the component manager.
     Works in Windows PowerShell 5.1 and PowerShell 7. The environment variables
     JH_BOOTSTRAP_CMAKE, JH_DEPENDENCY_ROOT, JH_OUTPUT_ROOT and JH_JHBASE_DIR
     reach the bootstrap as for scripts/jh.

@@ -346,6 +346,29 @@ jobs:
             }
           }
 
+      - name: Build and test the jh host CLI as x64 and Win32 processes
+        shell: powershell
+        run: |
+          $state = Get-Content .build/windows/host-environment.json -Raw |
+            ConvertFrom-Json
+          # The runner's CMake: the Visual Studio generator of the installed
+          # release, as the launcher selects it (2026 needs CMake 4.2+).
+          & cmake --version
+          foreach ($platform in @('x64', 'Win32')) {
+            $build = Join-Path $state.buildRoot "jh-$platform"
+            & cmake -S tools/jh -B $build -A $platform `
+              "-DPython3_EXECUTABLE=$($state.python)"
+            if ($LASTEXITCODE -ne 0) { throw "jh $platform configure failed." }
+            & cmake --build $build --config Release --parallel 2
+            if ($LASTEXITCODE -ne 0) { throw "jh $platform build failed." }
+            # jh_bootstrap builds its own x64 tool whatever the platform of
+            # this tree, so it runs once.
+            $filter = @()
+            if ($platform -eq 'Win32') { $filter = @('-E', '^jh_bootstrap$') }
+            & ctest --test-dir $build -C Release --output-on-failure @filter
+            if ($LASTEXITCODE -ne 0) { throw "jh $platform tests failed." }
+          }
+
   windows-static-library:
     runs-on: windows-2025
     strategy:

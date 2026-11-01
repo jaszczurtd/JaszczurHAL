@@ -280,8 +280,9 @@ którekolwiek z jego wejść, przez wspólny bootstrap `cmake -P`, a potem
 uruchamiają opublikowany program z podanymi argumentami; stdout należy do
 narzędzia, a bootstrap raportuje na stderr. Bootstrap wymaga CMake co najmniej
 3.22, Gita i hostowego kompilatora C11/C++17: GCC albo Clang z Ninja lub Make
-na Linuksie, Visual Studio 2022 albo `cl.exe` w PATH z `-Generator Ninja` na
-Windows. Niczego nie pobiera; zarządzane checkouty przygotowują
+na Linuksie, Visual Studio 2019, 2022 lub 2026 albo `cl.exe` w PATH
+z `-Generator Ninja` na Windows. Visual Studio 2026 wymaga CMake co najmniej
+4.2. Niczego nie pobiera; zarządzane checkouty przygotowują
 `scripts/ensure_jhbase.sh`, `scripts/ensure_utf8proc.sh`
 i `scripts/ensure_pcre2.sh`.
 

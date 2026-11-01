@@ -39,7 +39,8 @@ cmake --build .build/jh
 ctest --test-dir .build/jh --output-on-failure
 ```
 
-On Windows, use a Visual Studio 2022 developer PowerShell:
+On Windows, use a Visual Studio developer PowerShell. With Visual Studio 2026
+the generator is `"Visual Studio 18 2026"`, which needs CMake 4.2 or newer:
 
 ```powershell
 cmake -S tools/jh -B .build/jh -G "Visual Studio 17 2022" -A x64
