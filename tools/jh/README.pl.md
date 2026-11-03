@@ -9,7 +9,8 @@ także z odwołaniami między lokalnymi plikami. `jh generate device-defaults`
 czyta katalog typów komponentów HAL i zapisuje albo sprawdza generowany
 nagłówek ich wartości domyślnych. `scripts/sync_generated.py`, a przez niego
 hook pre-commit i bramka, uruchamiają to polecenie przez opisany niżej
-launcher.
+launcher. `jh config inspect` odczytuje `hal_project_config.h` projektu tak,
+jak widzi go kompilacja.
 
 Przed konfiguracją przygotuj zależności hosta w wersjach wskazanych przez repozytorium:
 
@@ -73,12 +74,14 @@ jh json inspect --file input.json --pointer /limits/max --output result.json --c
 jh json validate --file input.json --schema config/hardware/device_tree.schema.json --json
 jh generate device-defaults --root . --check
 jh generate device-defaults --root . --write --json
+jh config inspect --header examples/13_adc/hal_project_config.h --define HAL_TARGET_RP2040 --json
 ```
 
 Ścieżki wejściowe są rozwiązywane względem cwd odczytanego raz na wejściu.
 Argumenty Windows pochodzą z `wmain` i są zamieniane z UTF-16 na UTF-8.
 Opcje przyjmują `--name value` albo `--name=value`; flagi nie mają wartości.
-Nieznane i powtórzone opcje oraz dodatkowe słowa polecenia dają błąd.
+Nieznane opcje, opcje powtórzone (poza `--define`) i dodatkowe słowa polecenia
+dają błąd.
 `-h` i `-V` oznaczają pomoc oraz wersję. `--` kończy analizę opcji.
 Wartość zaczynająca się od `--` wymaga zapisu `--name=value`.
 Brak `--pointer` wybiera root; nazwy nie są normalizowane do NFC.
@@ -173,6 +176,68 @@ kopercie wyniku. Brak opcji wybiera wersję 1. W obrębie wersji głównej klien
 musi ignorować nieznane pola; znaczenia i typy istniejących pól pozostają
 stałe. Zmiana zrywająca zgodność wymaga nowej wersji głównej.
 
+## Konfiguracja projektu
+
+`jh config inspect` odczytuje `hal_project_config.h` projektu tak samo jak
+`scripts/project_config.py`. `--header <ścieżka>` wskazuje nagłówek; brakujący
+plik daje pustą konfigurację. Każde `--define NAZWA[=WARTOŚĆ]` definiuje makro
+przed nagłówkiem, po kolei, tak jak `-D`. `--preinclude <ścieżka>` najpierw
+czyta inny nagłówek, tak jak kompilacja z device tree czyta wygenerowany
+`jh_hardware.h`. Czytnik obsługuje tę samą część preprocesora: makra obiektowe
+i funkcyjne w `#define`, `#undef`, dyrektywy z rodziny `#if` z `defined`
+i wyrażeniami całkowitymi, `#include` w cudzysłowie względem pliku, który go
+zawiera, `#pragma once` i `#error`; `#warning` i `#line` pomija.
+`scripts/project_config.py` uruchamia to polecenie dla CMake i narzędzi
+Pythona. Test `jh_config` sprawdza czytnik w jednym procesie, a
+`jh_config_preprocessor` porównuje go z preprocesorem kompilatora GCC albo
+Clang, także na każdym `hal_project_config.h` checkoutu poza `tests/hardware`.
+
+Bez `--json` polecenie wypisuje zdefiniowane makra jako wiersze `#define`
+w kolejności definicji, a `#error` zgłasza na stderr. Wynik `--json`
+(`command: "config.inspect"`) zawiera `header`, `preinclude`, przeczytane pliki
+(`files`), targety z `JH_PROJECT_TARGETS` (`targets`), warianty
+z `JH_PROJECT_VARIANTS` (`variants`) z definicjami w postaci `-D`, makra
+w kolejności definicji (`macros`), funkcje zdefiniowane w samym nagłówku
+(`features`), zależności, czyli nieznane identyfikatory rozstrzygające o danej
+nazwie (`dependencies`), dyrektywy `#define` i `#undef` przeczytanych plików
+z każdej gałęzi (`directives`: `file`, `line`, `directive`, `name` i `text` po
+nazwie) oraz `error` z treścią i miejscem `#error` albo `null`. Każde makro ma
+`name`, `body`, `source`, `functionLike`, `parameters`, `unresolved` (nazwy
+użyte w wartości, których konfiguracja nie definiuje) i `integerState`: `value`
+razem z `integer`, `none`, gdy kompilacja nie ma dla niego liczby,
+`outOfRange` albo `error` z `integerError` (`status`, `message`), gdy obliczenie
+wartości się nie udaje, np. przy błędnym literale albo wartości ponad limit
+opisany niżej; błąd dotyczy tylko tego makra. Nagłówek zatrzymany na `#error`
+nadal daje wynik i kod 0.
+
+`jh config directives --file <ścieżka>` wypisuje w tej samej postaci dyrektywy
+`#define` i `#undef` jednego pliku bez obliczania go, więc także dla nagłówka,
+którego czytnik nie przyjmuje; brakujący plik daje pustą listę.
+
+Arytmetyka liczb całkowitych jest 64-bitowa ze znakiem. Literał albo wynik
+spoza tego zakresu w operandzie, który warunek oblicza, daje `[JH-CFG-SCOPE]
+... exceeds the signed 64-bit range of jh` (`HAL_EOVERFLOW`, kod 4), podczas
+gdy czytnik Pythona liczy bez ograniczeń. Operandów, których C nie oblicza,
+kontrola nie dotyczy. Wartość makra spoza zakresu ma `outOfRange` zamiast
+liczby. Liczby i nazwy są w ASCII, tak jak w C, a inaczej niż w wyrażeniach
+regularnych czytnika Pythona: cyfry dziesiętnej spoza ASCII nie da się
+obliczyć, a nazwa dyrektywy, po której stoi znak spoza ASCII inny niż biały,
+jest odrzucana. Warunek może mieć najwyżej 256 poziomów zagnieżdżenia, makra
+rozwijają się przez najwyżej 1000 poziomów, a plik może mieć najwyżej 16 MiB.
+Rozwijanie warunków i śledzenie nazw, od których zależy wartość, odwiedza
+łącznie najwyżej 1000000 tokenów na jeden odczyt, a każda wartość zwracana
+przez polecenie ma własny budżet tej samej wielkości, więc żadna nie zabiera
+go innej. Przy pytaniu o zależności każde makro jest przeglądane raz, więc
+praca rośnie z rozmiarem nagłówka, a nie z liczbą ścieżek między makrami.
+Przekroczenie limitu daje `HAL_EOVERFLOW` i kod 4; Python kończy się w takich
+miejscach na limicie rekurencji albo limitu nie ma.
+
+Odrzucony nagłówek kończy się kodem 2 i `HAL_ECONFIG`. Komunikat to
+diagnostyka `[JH-CFG-*]` czytnika Pythona; `code` zawiera jej prefiks, a
+`source` plik i wiersz. Niepoprawny UTF-8 i literał ósemkowy z cyfrą 8 lub 9
+dają `HAL_EPROTO`. Plik, którego nie da się przeczytać, kończy polecenie
+kodem 3.
+
 ## Katalog typów i wartości domyślne urządzeń
 
 `jh generate device-defaults --root <checkout>` czyta każdy `*.json`
@@ -227,9 +292,9 @@ Brak roota, katalogu typów albo pliku rejestru daje kod 3.
 |---|---|
 | 0 | Sukces, także aktualny plik wynikowy. |
 | 1 | `--check` wykrył brak pliku albo różnicę. |
-| 2 | Błędne argumenty, niepoprawny JSON/schemat, nieudana walidacja, odrzucony katalog typów lub nierozwiązany Pointer. |
+| 2 | Błędne argumenty, niepoprawny JSON/schemat, nieudana walidacja, odrzucony katalog typów lub nagłówek projektu albo nierozwiązany Pointer. |
 | 3 | Błąd ścieżki, pliku, stdout lub nieoczekiwany błąd runtime. |
-| 4 | Brak pamięci albo przekroczony limit wejścia, parsera, walidatora lub wyjścia. |
+| 4 | Brak pamięci, przekroczony limit wejścia, parsera, walidatora lub wyjścia albo 64-bitowy zakres czytnika konfiguracji projektu. |
 
 To kody tego CLI. Dotychczasowe polecenia `jh-vscode` zachowują swój
 entrypoint i kody zakończenia.

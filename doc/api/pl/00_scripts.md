@@ -80,6 +80,8 @@ Przygotowuje środowisko na Debianie, Ubuntu i systemach zgodnych z tymi dystryb
   zwrotnych OTA przez TCP/8266 i odpowiedzi na wyszukiwanie urządzeń przez
   UDP/8266, i pyta przed zmianą zapory sieciowej lub instalacją
   `iptables-persistent`;
+- buduje CLI hosta `jh` (`scripts/jh --version`), które configure firmware
+  tylko sprawdza;
 - konfiguruje hooki Git repozytorium.
 
 Skrypt używa `sudo` dla pakietów systemowych, `/usr/local/bin`, reguły udev
@@ -114,7 +116,9 @@ zmian skrypt wyświetla pełny plan. Używa krótkich katalogów narzędzi i kom
 w profilu użytkownika, tworzy środowisko Python 3.12 w wersji wskazanej przez
 repozytorium, ze sprawdzonym
 skrótem pakietu pyserial, synchronizuje komponenty źródłowe i przypięty ccache
-oraz odnajduje CMake, Ninja, GNU Arm, GNU RISC-V, OpenOCD i picotool. Zgodne narzędzia systemowe
+oraz odnajduje CMake, Ninja, GNU Arm, GNU RISC-V, OpenOCD i picotool, a potem
+buduje CLI hosta `jh` odnalezionym CMake (`-VerifyOnly` tylko sprawdza, czy
+jest zbudowane z bieżących źródeł). Zgodne narzędzia systemowe
 są używane ponownie, chyba że podano `-Force`. Systemowy OpenOCD jest używany
 tylko wtedy, gdy dostępne są także wymagane skrypty interfejsu i targetu. W
 przeciwnym razie instalowane jest zarządzane archiwum o zweryfikowanej
@@ -203,7 +207,9 @@ to jedyna lista kontroli: lokalne uruchomienie wykonuje je po kolei, a
 linuksowe joby CI uruchamiają te same etapy przez
 `--stage NAZWA[,NAZWA...]`, każdy dokładnie raz, po instalacji narzędzi przez
 `scripts/install_host_tools.sh`. Wyjątkiem są kompilacje przykładów:
-wypisuje je `--list-local-stages` i działają wyłącznie lokalnie. `tests/test_ci_gate_stages.py` kończy się
+wypisuje je `--list-local-stages` i działają wyłącznie lokalnie. Przed
+pierwszym etapem bramka przygotowuje CLI hosta `jh`, które configure firmware
+i bibliotek w etapach tylko sprawdza. `tests/test_ci_gate_stages.py` kończy się
 błędem, gdy workflow i lista się rozjadą. `--commit [REV]` uruchamia kontrolę
 na czystym checkoucie `REV` (domyślnie `HEAD`) w
 `~/.cache/jaszczurhal/commit-gate/<id>`, poza repozytorium, żeby narzędzia
@@ -307,7 +313,20 @@ np. migawka indeksu hooka, buduje się bez nich; `JH_OUTPUT_ROOT` publikuje
 wynik w innym katalogu, dzięki czemu taka migawka używa narzędzia zbudowanego
 już w tym checkoutcie dla tych samych wejść; `JH_JHBASE_DIR` wskazuje
 zewnętrzny jhbase, którego zawartość wchodzi do klucza; `JH_BOOTSTRAP_CMAKE`
-wybiera program cmake. Scenariusze te sprawdza
+wybiera program cmake.
+
+`-DJH_VERIFY_ONLY=ON` niczego nie buduje ani nie tworzy: zwraca opublikowany
+program zbudowany z bieżących źródeł albo kończy się błędem z poleceniem, które
+go przygotuje. Najpierw szuka bieżącego klucza, a potem dowolnego wyniku tego
+samego wariantu hosta, którego manifest ma ten sam `sourceKey` (wejścia
+i zależności bez kompilatora, generatora, typu buildu i wersji CMake), więc
+configure z innym CMake albo `PATH` niż przy przygotowaniu nadal znajduje
+narzędzie. Z tego trybu korzystają configure firmware i bibliotek;
+`runmefirst.sh`, `runmefirst.ps1`, `runalltests.sh`, `jh-vscode` i dispatcher
+przykładów przygotowują narzędzie wcześniej i przekazują jego ścieżkę do CMake
+i uruchamianych procesów w `JH_EXECUTABLE`, a `JH_EXECUTABLE_ROOT` wskazuje
+checkout. Inny checkout, np. kopia tworzona przez test, pomija je i sprawdza
+własne narzędzie. Scenariusze te sprawdza
 `tools/jh/tests/check_bootstrap.cmake` w teście `jh_bootstrap` zestawu CTest
 narzędzia.
 
@@ -318,7 +337,9 @@ wejścia w Pythonie i wspólny interfejs CLI projektu firmware. Wersja dla
 Windows sprawdza Python 3 wraz z pyserial i przekazuje argumenty CLI oraz kod
 wyjścia. Konfiguracja firmware domyślnie używa Ninja, przekazuje
 aktywny interpreter Python, eksportuje bazę poleceń kompilacji oraz ustala
-ścieżki picotool i toolchainu właściwe dla platformy. Natywne drzewa CMake na
+ścieżki picotool i toolchainu właściwe dla platformy. Przed configure
+przygotowuje CLI hosta `jh` przez bootstrap, tym samym CMake i w tym samym
+środowisku, i przekazuje je do configure w `JH_EXECUTABLE`. Natywne drzewa CMake na
 Windows używają krótkiego katalogu kompilacji przygotowanego podczas konfiguracji
 hosta, a artefakty końcowe zachowują ścieżki zapisane w manifeście.
 
@@ -860,12 +881,23 @@ kompilatora może skompilować i zlinkować te artefakty bez wywoływania Python
 
 ### `scripts/project_config.py`
 
-Odczytuje `hal_project_config.h` projektu tak, jak zrobiłby to preprocesor C
-dla jednej platformy i jednego wariantu. Konfigurację projektu odczytują przez
-niego CMake (dispatcher firmware i kompilacje bibliotek statycznych),
-`jh-vscode`, linter rejestru funkcji, skrypt ESP-IDF, generator zadań VS Code i dispatcher
-przykładów. Polecenie `cmake` zapisuje funkcje, definicje, platformy, warianty
-i wartości makr jednej kompilacji jako plik CMake. Diagnostyka używa prefiksów
+Daje narzędziom Pythona i CMake konfigurację projektu jednej kompilacji. Sam
+nagłówek oblicza `jh config inspect`, tak jak zrobiłby to preprocesor C, dla
+jednej platformy i jednego wariantu; czytnik i jego 64-bitową arytmetykę opisuje
+[README jh](../../../tools/jh/README.pl.md#konfiguracja-projektu). Ten moduł
+zamienia wynik na obiekty i dokłada to, co zależy od rejestrów płytek i funkcji:
+kompilację dla platformy i wariantu, jej funkcje i polecenie `cmake`, które
+zapisuje funkcje, definicje, platformy, warianty i wartości makr jednej
+kompilacji jako plik CMake. Konfigurację projektu odczytują przez niego CMake
+(dispatcher firmware i kompilacje bibliotek statycznych), `jh-vscode`, linter
+rejestru funkcji, skrypt ESP-IDF, generator zadań VS Code i dispatcher
+przykładów. Narzędzie bierze z `JH_EXECUTABLE` (chyba że `JH_EXECUTABLE_ROOT`
+wskazuje inny checkout) albo przygotowuje przez bootstrap i udostępnia obie
+zmienne uruchamianym procesom. CMake przekazuje mu sprawdzone narzędzie razem
+z `JH_EXECUTABLE_ROOT`, więc configure nigdy go nie przygotowuje. Wartość spoza
+zakresu 64 bitów albo ponad limit `jh` nie ma liczby i błędem kończy się tylko
+odczyt tej wartości przez `jh_project_value()`; błędny literał w dowolnej
+wartości przerywa configure. Diagnostyka używa prefiksów
 `[JH-CFG-TARGET]`, `[JH-CFG-VARIANT]`, `[JH-CFG-ERROR]` i `[JH-CFG-SCOPE]`.
 Zasady dotyczące nagłówka opisuje część
 [platformy i warianty](../../pl/FwProjectWorkflow.md#platformy-i-warianty).

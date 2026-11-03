@@ -452,6 +452,7 @@ MEMCHECK_REQUIRED_TESTS=(
 JH_MEMCHECK_REQUIRED_TESTS=(
     jh_schema
     jh_settings
+    jh_config
 )
 
 # run_memcheck BUILD LOG REQUIRED...: every native test labelled memcheck in
@@ -912,6 +913,17 @@ if [[ "${#SELECTED[@]}" -eq 0 ]]; then
     SELECTED=("${STAGES[@]}")
 fi
 mkdir -p "${LOG_ROOT}"
+# Firmware and library configures in the stages only verify the jh host CLI
+# (scripts/jh_bootstrap.cmake with JH_VERIFY_ONLY); prepare it once here and
+# hand it to every stage, so the tests and tools of this checkout do not ask
+# the bootstrap again.
+info "Preparing the jh host CLI..."
+jh_result="$(mktemp)"
+cmake "-DJH_ROOT=${SCRIPT_DIR}" "-DJH_RESULT_FILE=${jh_result}" \
+    -P "${SCRIPT_DIR}/scripts/jh_bootstrap.cmake" >&2
+JH_EXECUTABLE="$(head -n 1 "${jh_result}")"
+rm -f "${jh_result}"
+export JH_EXECUTABLE JH_EXECUTABLE_ROOT="${SCRIPT_DIR}"
 
 index=0
 stage_times=()

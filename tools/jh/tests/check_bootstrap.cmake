@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.22)
 # The bootstrap builds jh from an exported tree with the managed checkouts of
 # another checkout, reuses an unchanged result, rebuilds a damaged or
 # interrupted one, keys every input and refuses a pin without its checkout.
+# JH_VERIFY_ONLY, which firmware configure uses, returns a ready result built
+# from the same sources and otherwise fails without building or creating
+# anything.
 # Arguments: JH_HAL_SOURCE (this checkout), JH_WORK (scratch directory).
 if(NOT IS_DIRECTORY "${JH_HAL_SOURCE}" OR JH_WORK STREQUAL "")
   message(FATAL_ERROR "JH_HAL_SOURCE and JH_WORK are required")
@@ -54,6 +57,15 @@ function(bootstrap expected prefix)
   endif()
 endfunction()
 
+# verify_fails(<prefix> <message part>): JH_VERIFY_ONLY fails with the part.
+function(verify_fails prefix part)
+  bootstrap(1 ${prefix} -DJH_VERIFY_ONLY=ON)
+  string(REGEX REPLACE "[ \t\r\n]+" " " text "${${prefix}_output}")
+  if(NOT text MATCHES "${part}" OR text MATCHES "Building jh")
+    message(FATAL_ERROR "verify-only ${prefix}: expected '${part}' without a build:\n${${prefix}_output}")
+  endif()
+endfunction()
+
 function(expect_runs exe)
   execute_process(COMMAND "${exe}" --version --json RESULT_VARIABLE code OUTPUT_VARIABLE out ERROR_VARIABLE err)
   if(NOT code EQUAL 0 OR NOT out MATCHES "\"status\":\"HAL_OK\"")
@@ -61,7 +73,12 @@ function(expect_runs exe)
   endif()
 endfunction()
 
-# 1. Empty cache: the tree without checkouts builds with the dependency root.
+# 1. Empty cache: verify-only refuses and creates nothing; the tree without
+# checkouts builds with the dependency root.
+verify_fails(verify_empty "jh is not prepared for this checkout and host")
+if(EXISTS "${output}")
+  message(FATAL_ERROR "verify-only created ${output}")
+endif()
 bootstrap(0 first)
 if(NOT first_exe MATCHES "^${output}/[a-z0-9-]+-[^/]+/[0-9a-f]+/bin/${exe_name}$")
   message(FATAL_ERROR "Unexpected executable location: ${first_exe}")
@@ -94,11 +111,22 @@ if(NOT second_exe STREQUAL first_exe OR NOT before STREQUAL after OR NOT manifes
     OR second_output MATCHES "Building jh")
   message(FATAL_ERROR "A reusable executable was rebuilt or replaced: ${second_output}")
 endif()
+bootstrap(0 verify_ready -DJH_VERIFY_ONLY=ON)
+if(NOT verify_ready_exe STREQUAL first_exe OR verify_ready_output MATCHES "Building jh")
+  message(FATAL_ERROR "verify-only did not return the ready executable: ${verify_ready_output}")
+endif()
+# Another build configuration is another key, but the same sources: configure
+# with another CMake or PATH than the preparation still finds the tool.
+bootstrap(0 verify_other -DJH_VERIFY_ONLY=ON -DJH_BUILD_TYPE=Debug)
+if(NOT verify_other_exe STREQUAL first_exe OR verify_other_output MATCHES "Building jh")
+  message(FATAL_ERROR "verify-only did not match the sources of the ready executable: ${verify_other_output}")
+endif()
 
 # 3. A damaged executable and an interrupted work tree are rebuilt cleanly.
 file(APPEND "${first_exe}" "x")
 file(WRITE "${first_key_dir}/work.inprogress" "stale\n")
 file(WRITE "${first_key_dir}/work/junk.txt" "stale\n")
+verify_fails(verify_damaged "is incomplete or damaged")
 bootstrap(0 third)
 file(SHA256 "${first_exe}" third_sha)
 if(NOT third_exe STREQUAL first_exe OR NOT third_sha STREQUAL first_sha OR EXISTS "${first_key_dir}/work/junk.txt"
@@ -109,6 +137,7 @@ expect_runs("${third_exe}")
 
 # 4. A changed source is a new key; the earlier result stays untouched.
 file(APPEND "${copy}/tools/jh/src/main.cpp" "\n// bootstrap check: changed input\n")
+verify_fails(verify_stale "jh is not prepared for this checkout and host")
 bootstrap(0 fourth)
 get_filename_component(fourth_bin "${fourth_exe}" DIRECTORY)
 get_filename_component(fourth_key_dir "${fourth_bin}" DIRECTORY)

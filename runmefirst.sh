@@ -70,6 +70,10 @@ install_pico_udev_rule() {
 install_pico_udev_rule
 python3 "${SCRIPT_DIR}/scripts/configure_ota_firewall.py"
 
+# Firmware configure only verifies the jh host CLI, so it is built here
+# (jh-vscode and the examples dispatcher also prepare it before configuring).
+"${SCRIPT_DIR}/scripts/jh" --version
+
 # Git hooks for formatting and commit-message validation.
 if [ -d "${SCRIPT_DIR}/.githooks" ]; then
   chmod +x "${SCRIPT_DIR}/.githooks/pre-commit" "${SCRIPT_DIR}/.githooks/commit-msg"

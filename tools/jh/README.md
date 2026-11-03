@@ -9,7 +9,8 @@ including references between local files. `jh generate device-defaults` reads
 the catalogue of HAL component types and writes or checks the generated
 header of their defaults. `scripts/sync_generated.py`, and through it the
 pre-commit hook and the gate, run that command through the launcher described
-below.
+below. `jh config inspect` evaluates a project's `hal_project_config.h` as the
+build reads it.
 
 Prepare the pinned host dependencies explicitly before configuring:
 
@@ -73,12 +74,13 @@ jh json inspect --file input.json --pointer /limits/max --output result.json --c
 jh json validate --file input.json --schema config/hardware/device_tree.schema.json --json
 jh generate device-defaults --root . --check
 jh generate device-defaults --root . --write --json
+jh config inspect --header examples/13_adc/hal_project_config.h --define HAL_TARGET_RP2040 --json
 ```
 
 Input paths are resolved against cwd captured once on entry. Windows arguments
 come from `wmain` and are converted from UTF-16 to UTF-8. Options accept
 `--name value` or `--name=value`; flags take no value. Unknown options, repeated
-options and extra command words fail. `-h` and `-V` abbreviate help and version.
+options other than `--define` and extra command words fail. `-h` and `-V` abbreviate help and version.
 `--` ends option parsing. A value beginning with `--` needs `--name=value`.
 An absent `--pointer` selects the root; names are not normalized to NFC.
 
@@ -169,6 +171,64 @@ supported result envelope. Omitting the option selects major 1. Within a
 major, clients must ignore unknown fields; existing field meanings and types
 are stable. A breaking change requires a new major.
 
+## Project configuration
+
+`jh config inspect` evaluates a project's `hal_project_config.h` the way
+`scripts/project_config.py` does. `--header <path>` names the header; a
+missing file is an empty configuration. Each `--define NAME[=VALUE]`
+predefines a macro, in order, as `-D` does. `--preinclude <path>` reads a
+header first, the way a device tree build reads its generated `jh_hardware.h`.
+The reader covers the same part of the preprocessor: object-like and
+function-like `#define`, `#undef`, the `#if` family with `defined` and integer
+expressions, quoted `#include` relative to the including file, `#pragma once`
+and `#error`; `#warning` and `#line` are ignored. `scripts/project_config.py`
+runs this command for CMake and the Python tools. The `jh_config` test checks
+the reader in-process; `jh_config_preprocessor` compares it with the
+preprocessor of a GCC or Clang compiler, also on every `hal_project_config.h`
+of the checkout outside `tests/hardware`.
+
+Without `--json` the command prints the defined macros as `#define` lines in
+definition order and reports an `#error` on stderr. With `--json` the result
+(`command: "config.inspect"`) has `header`, `preinclude`, the `files` read,
+the `targets` of `JH_PROJECT_TARGETS`, the `variants` of `JH_PROJECT_VARIANTS`
+with definitions in the `-D` form, the `macros` in definition order, the
+header's own `features`, the `dependencies` (unknown identifiers that decide a
+name), `directives` (every `#define` and `#undef` of the files read, in any
+branch: `file`, `line`, `directive`, `name` and the `text` after the name) and
+`error` (text and place of `#error`, or `null`). Each macro has `name`,
+`body`, `source`, `functionLike`, `parameters`, `unresolved` (names its value
+uses that the configuration does not define) and `integerState`: `value` with
+`integer`, `none` when the build has no integer for it, `outOfRange`, or
+`error` with `integerError` (`status`, `message`) when its value fails, such
+as an invalid literal or a value over the limit below; only that macro fails.
+A header that stops on `#error` is still a result, with exit code 0.
+
+`jh config directives --file <path>` lists the `#define` and `#undef` of one
+file in the same form without evaluating it, so also for a header the reader
+rejects; a missing file gives an empty list.
+
+Integer arithmetic is signed and 64-bit. A literal or a result outside that
+range in an operand a condition computes fails with `[JH-CFG-SCOPE] ... exceeds
+the signed 64-bit range of jh` (`HAL_EOVERFLOW`, exit 4), where the Python
+reader computes without limit; operands C does not compute are not checked. A
+macro value outside the range reports `outOfRange` instead of a number. Like C,
+and unlike the regular expressions of the Python reader, numbers and names are
+ASCII: a non-ASCII decimal digit cannot be evaluated, and a directive name
+followed by a non-ASCII character other than whitespace is rejected. A
+condition nests at most 256 levels, macros expand through at most 1000 levels
+and a file has at most 16 MiB. Expanding conditions and tracking the names a
+value depends on visit at most 1000000 tokens per read, and each value the
+command reports has 1000000 of its own, so one value never takes from another;
+each macro is scanned once per dependency question, so the work follows the
+size of the header, not the number of paths between its macros. A limit fails
+with `HAL_EOVERFLOW` and exit 4; Python stops on its recursion limit there or
+has no limit.
+
+A rejected header exits with 2 and `HAL_ECONFIG`. The message is the
+`[JH-CFG-*]` diagnostic of the Python reader; `code` holds its prefix and
+`source` the file and line. Invalid UTF-8 and an octal literal with 8 or 9
+give `HAL_EPROTO`, and an unreadable file exits with 3.
+
 ## Type catalogue and device defaults
 
 `jh generate device-defaults --root <checkout>` reads every `*.json` of
@@ -222,9 +282,9 @@ root, bindings directory or registry file exits with 3.
 |---|---|
 | 0 | Success, including an up-to-date output. |
 | 1 | `--check` found a missing or different output. |
-| 2 | Bad arguments, invalid JSON/schema, failed validation, a rejected type catalogue or an unresolved Pointer. |
+| 2 | Bad arguments, invalid JSON/schema, failed validation, a rejected type catalogue or project header, or an unresolved Pointer. |
 | 3 | Path, file, stdout or unexpected runtime failure. |
-| 4 | Allocation failure or an input/parser/validator/output limit. |
+| 4 | Allocation failure, an input/parser/validator/output limit or the 64-bit range of the project configuration reader. |
 
 These codes belong to this CLI. Existing `jh-vscode` commands keep their
 current entrypoint and exit codes.

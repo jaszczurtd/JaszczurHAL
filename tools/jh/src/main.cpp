@@ -1,3 +1,4 @@
+#include "../config/jh_project_config.h"
 #include "../hardware/jh_device_defaults.h"
 #include "../hardware/jh_type_catalogue.h"
 #include "../json/jh_json_file.h"
@@ -50,6 +51,9 @@ enum option_id {
   max_bytes,
   git,
   timeout_ms,
+  header,
+  define,
+  preinclude,
   machine,
   json_version,
   help,
@@ -76,6 +80,12 @@ constexpr option_spec options[] = {
      "Maximum input bytes (default 16777216, maximum 67108864)"},
     {"git", "<path>", "Absolute Git executable path (repository files)"},
     {"timeout-ms", "<count>", "Child process timeout; zero waits indefinitely"},
+    {"header", "<path>",
+     "Project hal_project_config.h to evaluate (config inspect)"},
+    {"define", "<NAME[=VALUE]>",
+     "Predefine a macro before the header; repeatable (config inspect)"},
+    {"preinclude", "<path>",
+     "Header read before the project header, like jh_hardware.h"},
     {"json", nullptr, "Write a versioned JSON result on stdout"},
     {"json-version", "<major>",
      "Require a supported JSON result major version (1)"},
@@ -88,7 +98,9 @@ enum command_id {
   inspect_command,
   validate_command,
   defaults_command,
-  repository_command
+  repository_command,
+  config_command,
+  directives_command
 };
 struct command_spec {
   const char *first, *second, *name;
@@ -108,6 +120,8 @@ const command_spec commands[] = {
      "files",
      "repository.files",
      {root, git, timeout_ms, max_bytes}},
+    {"config", "inspect", "config.inspect", {header, define, preinclude}},
+    {"config", "directives", "config.directives", {file}},
 };
 
 #ifdef _WIN32
@@ -144,6 +158,8 @@ void install_cancellation() {
 struct arguments {
   std::array<bool, option_count> present{};
   std::array<std::string, option_count> values;
+  /** Every --define, in order; the only repeatable option. */
+  std::vector<std::string> defines;
   std::vector<std::string> command;
 };
 struct context : jh::parse_location {
@@ -180,7 +196,7 @@ arguments parse_arguments(const std::vector<std::string> &argv) {
       ++id;
     if (id == option_count)
       throw failure{HAL_EINVAL, 2, "unknown option: " + text, {}, {}, {}};
-    if (result.present[id])
+    if (result.present[id] && id != define)
       throw failure{HAL_EINVAL, 2,  "option specified more than once: " + name,
                     {},         {}, {}};
     result.present[id] = true;
@@ -196,6 +212,8 @@ arguments parse_arguments(const std::vector<std::string> &argv) {
                                  result.values[id].size(), &bad),
                 2, "argument is not valid UTF-8");
       }
+      if (id == define)
+        result.defines.push_back(result.values[id]);
     } else if (equal != std::string::npos) {
       throw failure{HAL_EINVAL, 2,  "flag does not take a value: " + name,
                     {},         {}, {}};
@@ -212,9 +230,13 @@ std::string help_text() {
       "       jh generate device-defaults --root <path> (--check | --write)"
       " [options]\n"
       "       jh repository files --root <path> --git <executable> "
-      "[options]\n\n"
-      "Read JSON, select a value and optionally compare or write it, or\n"
-      "generate the C defaults of the HAL component types.\n";
+      "[options]\n"
+      "       jh config inspect [--header <path>] [--define <NAME[=VALUE]>]..."
+      " [--preinclude <path>]\n"
+      "       jh config directives --file <path>\n\n"
+      "Read JSON, select a value and optionally compare or write it,\n"
+      "generate the C defaults of the HAL component types, or evaluate a\n"
+      "project's hal_project_config.h as the build reads it.\n";
   for (const auto &option : options) {
     text += "  --";
     text += option.name;
@@ -268,6 +290,44 @@ public:
   void boolean(const char *name, bool value) {
     key(name);
     require(jb_json_writer_bool(&writer, value), 4, "cannot write result flag");
+  }
+  void signed_number(const char *name, int64_t value) {
+    key(name);
+    require(jb_json_writer_i64(&writer, value), 4,
+            "cannot write result number");
+  }
+  void null(const char *name) {
+    key(name);
+    require(jb_json_writer_null(&writer), 4, "cannot write result null");
+  }
+  /** Open an array under name, or as an array item when name is null. */
+  void array_begin(const char *name) {
+    if (name != nullptr)
+      key(name);
+    require(jb_json_writer_array_begin(&writer), 4,
+            "cannot start result array");
+  }
+  void array_end() {
+    require(jb_json_writer_array_end(&writer), 4, "cannot close result array");
+  }
+  /** Open an object under name, or as an array item when name is null. */
+  void object_begin(const char *name) {
+    if (name != nullptr)
+      key(name);
+    require(jb_json_writer_object_begin(&writer), 4,
+            "cannot start result object");
+  }
+  void object_end() {
+    require(jb_json_writer_object_end(&writer), 4,
+            "cannot close result object");
+  }
+  template <class Strings>
+  void strings(const char *name, const Strings &values) {
+    array_begin(name);
+    for (const std::string &value : values)
+      require(jb_json_writer_string(&writer, span(value)), 4,
+              "cannot write result string");
+    array_end();
   }
   void node(jb_json_node_t value) {
     key("value");
@@ -647,6 +707,206 @@ int repository_files(context &ctx, const std::string &base) {
   return 0;
 }
 
+void write_directives(result_writer &result,
+                      const std::vector<jh::config::directive> &directives) {
+  result.array_begin("directives");
+  for (const auto &item : directives) {
+    result.object_begin(nullptr);
+    result.string("file", item.file);
+    result.number("line", item.line);
+    result.string("directive", item.undef ? "undef" : "define");
+    result.string("name", item.name);
+    result.string("text", item.text);
+    result.object_end();
+  }
+  result.array_end();
+}
+
+size_t directive_bytes(const std::vector<jh::config::directive> &directives) {
+  size_t bytes = 0;
+  for (const auto &item : directives)
+    bytes += item.file.size() + item.name.size() + item.text.size() + 96;
+  return bytes;
+}
+
+/* The #define/#undef of one file without evaluating it: the checks that look
+ * at any branch, also of a header the reader rejects. */
+int config_directives(context &ctx, const std::string &base) {
+  require_value(ctx.args, file, "config directives requires --file");
+  const auto path = jh::absolute_path(ctx.args.values[file], base);
+  ctx.source = path;
+  const auto directives = jh::config::read_directives(path);
+  if (!ctx.json) {
+    std::string text;
+    for (const auto &item : directives)
+      text += std::to_string(item.line) +
+              (item.undef ? " undef " : " define ") + item.name + '\n';
+    stdout_bytes(text);
+    return 0;
+  }
+  result_writer result(path.size() + directive_bytes(directives) + 1024);
+  result.string("command", "config.directives");
+  result.string("status", "HAL_OK");
+  result.string("file", path);
+  write_directives(result, directives);
+  stdout_bytes(result.finish());
+  return 0;
+}
+
+const char *integer_state(jh::config::integer_kind kind) {
+  switch (kind) {
+  case jh::config::integer_kind::value:
+    return "value";
+  case jh::config::integer_kind::out_of_range:
+    return "outOfRange";
+  default:
+    return "none";
+  }
+}
+
+int config_inspect(context &ctx, const std::string &base) {
+  const auto &args = ctx.args;
+  const auto path_of = [&](option_id id) {
+    return args.present[id] ? jh::absolute_path(args.values[id], base)
+                            : std::string();
+  };
+  if ((args.present[header] && args.values[header].empty()) ||
+      (args.present[preinclude] && args.values[preinclude].empty()))
+    throw failure{HAL_EINVAL, 2,  "--header and --preinclude need a path",
+                  {},         {}, {}};
+  const std::string header_path = path_of(header);
+  const std::string preinclude_path = path_of(preinclude);
+  ctx.source = header_path;
+  const auto config = jh::config::read_project_config(header_path, args.defines,
+                                                      preinclude_path);
+  const auto macros = config.macros.ordered();
+  std::vector<jh::config::integer_value> integers;
+  std::vector<std::set<std::string>> unresolved;
+  // Each value is a query with a budget of its own. A value the reader cannot
+  // give (an invalid literal, a jh limit) fails only that macro, and the
+  // caller decides: configure stops on an invalid literal, and on a value
+  // over a limit only when the build reads it.
+  std::vector<jh::failure> value_errors;
+  size_t bytes = header_path.size() + preinclude_path.size() +
+                 config.error_message.size() + config.error_source.size();
+  for (const auto *item : macros) {
+    jh::config::macro_value value;
+    jh::failure error{HAL_OK, 0, {}, {}, {}, {}};
+    try {
+      value = config.value(item->name);
+    } catch (const jh::failure &failed) {
+      error = failed;
+      bytes += error.message.size() + 64;
+    }
+    value_errors.push_back(std::move(error));
+    integers.push_back(value.integer);
+    unresolved.push_back(std::move(value.unresolved));
+    bytes += item->name.size() + item->body.size() + item->source.size() + 64;
+    for (const auto &name : unresolved.back())
+      bytes += name.size() + 8;
+    for (const auto &parameter : item->parameters)
+      bytes += parameter.size() + 8;
+  }
+  for (const auto &file : config.files)
+    bytes += file.size() + 8;
+  bytes += directive_bytes(config.directives);
+  for (const auto &item : config.variants) {
+    bytes += item.id.size() + item.description.size() + item.source.size() + 64;
+    for (const auto &definition : item.definitions)
+      bytes += definition.size() + 8;
+  }
+  for (const auto &[name, unknown] : config.dependencies) {
+    bytes += name.size() + 32;
+    for (const auto &item : unknown)
+      bytes += item.size() + 8;
+  }
+  if (!ctx.json) {
+    std::string text;
+    for (const auto *item : macros) {
+      text += "#define " + item->name;
+      if (item->function_like) {
+        text += '(';
+        for (size_t i = 0; i < item->parameters.size(); ++i)
+          text += (i != 0 ? "," : "") + item->parameters[i];
+        text += ')';
+      }
+      if (!item->body.empty())
+        text += ' ' + item->body;
+      text += '\n';
+    }
+    stdout_bytes(text);
+    if (config.stopped)
+      std::fprintf(stderr, "%s: #error %s\n", config.error_source.c_str(),
+                   config.error_message.c_str());
+    return 0;
+  }
+  result_writer result(bytes);
+  result.string("command", "config.inspect");
+  result.string("status", "HAL_OK");
+  result.string("header", header_path);
+  result.string("preinclude", preinclude_path);
+  result.strings("files", config.files);
+  result.strings("targets", config.targets);
+  result.array_begin("variants");
+  for (const auto &item : config.variants) {
+    result.object_begin(nullptr);
+    result.string("id", item.id);
+    result.string("description", item.description);
+    result.strings("definitions", item.definitions);
+    result.string("source", item.source);
+    result.object_end();
+  }
+  result.array_end();
+  result.array_begin("macros");
+  for (size_t i = 0; i < macros.size(); ++i) {
+    const auto &item = *macros[i];
+    result.object_begin(nullptr);
+    result.string("name", item.name);
+    result.string("body", item.body);
+    result.string("source", item.source);
+    result.boolean("functionLike", item.function_like);
+    result.strings("parameters", item.parameters);
+    const auto &error = value_errors[i];
+    if (error.status != HAL_OK) {
+      result.string("integerState", "error");
+      result.object_begin("integerError");
+      result.string("status", hal_status_to_string(error.status));
+      result.string("message", error.message);
+      result.object_end();
+    } else {
+      result.string("integerState", integer_state(integers[i].kind));
+      if (integers[i].kind == jh::config::integer_kind::value)
+        result.signed_number("integer", integers[i].value);
+    }
+    result.strings("unresolved", unresolved[i]);
+    result.object_end();
+  }
+  result.array_end();
+  std::vector<std::string> features;
+  for (const auto *item : config.features())
+    features.push_back(item->name);
+  result.strings("features", features);
+  result.array_begin("dependencies");
+  for (const auto &[name, unknown] : config.dependencies) {
+    result.object_begin(nullptr);
+    result.string("name", name);
+    result.strings("unknown", unknown);
+    result.object_end();
+  }
+  result.array_end();
+  write_directives(result, config.directives);
+  if (config.stopped) {
+    result.object_begin("error");
+    result.string("message", config.error_message);
+    result.string("source", config.error_source);
+    result.object_end();
+  } else {
+    result.null("error");
+  }
+  stdout_bytes(result.finish());
+  return 0;
+}
+
 const command_spec *select_command(const std::vector<std::string> &words) {
   if (words.empty())
     return nullptr;
@@ -736,6 +996,10 @@ int run(const std::vector<std::string> &argv) {
       return validate(ctx, base);
     if (ctx.command == &commands[defaults_command])
       return generate_defaults(ctx, base);
+    if (ctx.command == &commands[config_command])
+      return config_inspect(ctx, base);
+    if (ctx.command == &commands[directives_command])
+      return config_directives(ctx, base);
     return inspect(ctx, base);
   } catch (const failure &error) {
     if (ctx.located) {

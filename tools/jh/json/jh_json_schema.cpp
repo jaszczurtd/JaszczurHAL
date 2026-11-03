@@ -1,4 +1,5 @@
 #include "jh_json_schema.h"
+#include "jh_python_repr.h"
 #include <algorithm>
 #include <array>
 #include <cstring>
@@ -274,33 +275,22 @@ struct engine {
     }
     return true;
   }
+  // repr() of s in the diagnostic arena, one work unit per input byte.
   text quoted(view s) {
-    text out(&temp);
-    const char quote =
-        s.find('\'') != view::npos && s.find('"') == view::npos ? '"' : '\'';
-    out += quote;
-    constexpr char hex[] = "0123456789abcdef";
-    for (char byte : s) {
-      const auto c = static_cast<unsigned char>(byte);
-      charge();
-      if (c == '\\' || c == static_cast<unsigned char>(quote)) {
-        out += '\\';
-        out += static_cast<char>(c);
-      } else if (c == '\n')
-        out += "\\n";
-      else if (c == '\r')
-        out += "\\r";
-      else if (c == '\t')
-        out += "\\t";
-      else if (c < 32 || c == 127) {
-        out += "\\x";
-        out += hex[c >> 4];
-        out += hex[c & 15];
-      } else
-        out += static_cast<char>(c);
-    }
-    out += quote;
-    return out;
+    struct sink {
+      engine *self;
+      text out;
+    } target{this, text(&temp)};
+    jh::python_repr(
+        s,
+        [](void *user, view piece, size_t consumed) {
+          auto &state = *static_cast<sink *>(user);
+          for (size_t i = 0; i < consumed; ++i)
+            state.self->charge();
+          state.out += piece;
+        },
+        &target);
+    return std::move(target.out);
   }
   text repr(node n, size_t nested = 0) {
     text result(&temp);

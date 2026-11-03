@@ -1,4 +1,5 @@
 #include "jh_type_catalogue.h"
+#include "jh_python_repr.h"
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
@@ -26,15 +27,8 @@ std::string python_repr(view value) {
     return value.boolean() ? "True" : "False";
   case JB_JSON_NUMBER:
     return value.raw();
-  case JB_JSON_STRING: {
-    std::string text = "'";
-    for (char c : value.string()) {
-      if (c == '\\' || c == '\'')
-        text += '\\';
-      text += c;
-    }
-    return text + "'";
-  }
+  case JB_JSON_STRING:
+    return jh::python_repr(value.string());
   default: {
     std::string text = "[";
     bool first = true;

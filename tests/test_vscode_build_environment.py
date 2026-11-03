@@ -200,6 +200,9 @@ with tempfile.TemporaryDirectory(prefix="jh build env spacje ") as temporary_tex
         {
             "JH_TEST_WINDOWS_HOST": "1",
             "JH_WINDOWS_HOST_ENVIRONMENT": str(state_path),
+            # The prepared jh host CLI, as the examples dispatcher passes it:
+            # the simulated Windows CMake cannot run the bootstrap here.
+            "JH_EXECUTABLE": sys.executable,
         },
         clear=False,
     ), mock.patch.object(runtime, "run_command", side_effect=fake_run):

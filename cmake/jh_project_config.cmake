@@ -25,6 +25,44 @@ endfunction()
 # one target and variant, exactly as the compiler sees it before the HAL
 # headers. Every build reads project configuration through these helpers.
 
+# jh_project_config_tool(<out-var> <JaszczurHAL root> <scratch dir>)
+#
+# The jh host CLI that evaluates the header. Configure never builds it: it
+# takes JH_EXECUTABLE from the environment (jh-vscode, the examples dispatcher
+# and the gate pass it) unless JH_EXECUTABLE_ROOT names another checkout, or
+# the one scripts/jh_bootstrap.cmake verifies as built from these sources by
+# runmefirst, the gate or scripts/jh.
+function(jh_project_config_tool OUT_VAR ROOT SCRATCH)
+    if(DEFINED ENV{JH_EXECUTABLE} AND EXISTS "$ENV{JH_EXECUTABLE}")
+        set(_jh_pt_same TRUE)
+        if(DEFINED ENV{JH_EXECUTABLE_ROOT} AND NOT "$ENV{JH_EXECUTABLE_ROOT}" STREQUAL "")
+            file(REAL_PATH "$ENV{JH_EXECUTABLE_ROOT}" _jh_pt_given)
+            file(REAL_PATH "${ROOT}" _jh_pt_root)
+            if(NOT _jh_pt_given STREQUAL _jh_pt_root)
+                set(_jh_pt_same FALSE)
+            endif()
+        endif()
+        if(_jh_pt_same)
+            set(${OUT_VAR} "$ENV{JH_EXECUTABLE}" PARENT_SCOPE)
+            return()
+        endif()
+    endif()
+    set(_jh_pt_result "${SCRATCH}/jh-tool.txt")
+    file(REMOVE "${_jh_pt_result}")
+    execute_process(
+        COMMAND "${CMAKE_COMMAND}" "-DJH_ROOT=${ROOT}" -DJH_VERIFY_ONLY=ON
+            "-DJH_RESULT_FILE=${_jh_pt_result}" -P "${ROOT}/scripts/jh_bootstrap.cmake"
+        RESULT_VARIABLE _jh_pt_code
+        OUTPUT_VARIABLE _jh_pt_output
+        ERROR_VARIABLE _jh_pt_output)
+    if(NOT _jh_pt_code EQUAL 0 OR NOT EXISTS "${_jh_pt_result}")
+        string(STRIP "${_jh_pt_output}" _jh_pt_output)
+        message(FATAL_ERROR "Project configuration needs the jh host CLI: ${_jh_pt_output}")
+    endif()
+    file(STRINGS "${_jh_pt_result}" _jh_pt_lines LIMIT_COUNT 1 ENCODING UTF-8)
+    set(${OUT_VAR} "${_jh_pt_lines}" PARENT_SCOPE)
+endfunction()
+
 # Hand JH_PROJECT_CONFIG_VARIABLES, the variables it names,
 # JH_PROJECT_CONFIG_LOADED and the extra names in ARGN from a reading function
 # to its caller; a name the function left undefined is unset there too.
@@ -56,7 +94,13 @@ function(jh_read_project_config)
     cmake_parse_arguments(PARSE_ARGV 0 _JH_PC ""
         "ROOT;CONFIG_DIR;TARGET;VARIANT;OUTPUT_DIR;HARDWARE_HEADER" "DEFINES")
     jh_find_python(_jh_pc_python)
+    file(MAKE_DIRECTORY "${_JH_PC_OUTPUT_DIR}")
+    jh_project_config_tool(_jh_pc_tool "${_JH_PC_ROOT}" "${_JH_PC_OUTPUT_DIR}")
+    # Both together: an inherited JH_EXECUTABLE_ROOT of another checkout would
+    # make project_config.py reject the tool and prepare one itself.
     set(_jh_pc_command
+        "${CMAKE_COMMAND}" -E env "JH_EXECUTABLE=${_jh_pc_tool}"
+        "JH_EXECUTABLE_ROOT=${_JH_PC_ROOT}"
         "${_jh_pc_python}" "${_JH_PC_ROOT}/scripts/project_config.py" cmake
         --target "${_JH_PC_TARGET}"
         --output "${_JH_PC_OUTPUT_DIR}/jh_project_config.cmake")
@@ -181,6 +225,17 @@ function(jh_project_value OUT_VAR NAME)
             "uses ${JH_PROJECT_UNRESOLVED_${NAME}}, which the project "
             "configuration does not define, so the build cannot read it; "
             "give ${NAME} a value the header computes itself")
+    endif()
+    if(DEFINED JH_PROJECT_RANGE_${NAME})
+        message(FATAL_ERROR
+            "[JH-CFG-SCOPE] ${JH_PROJECT_CONFIG_HEADER}: the value of ${NAME} "
+            "(${JH_PROJECT_RANGE_${NAME}}) exceeds the signed 64-bit range of "
+            "jh, so the build cannot read it")
+    endif()
+    if(DEFINED JH_PROJECT_LIMIT_${NAME})
+        message(FATAL_ERROR
+            "${JH_PROJECT_LIMIT_${NAME}}, so the build cannot read the value "
+            "of ${NAME}")
     endif()
     if(DEFINED JH_PROJECT_INT_${NAME})
         set(${OUT_VAR} "${JH_PROJECT_INT_${NAME}}" PARENT_SCOPE)

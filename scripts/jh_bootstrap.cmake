@@ -4,7 +4,17 @@ cmake_minimum_required(VERSION 3.22)
 #
 #   cmake -DJH_ROOT=<checkout> [-DJH_RESULT_FILE=<file>] [-DJH_ARCH=x64|x86]
 #         [-DJH_OUTPUT_ROOT=<dir>] [-DJH_GENERATOR=<name>] [-DJH_JOBS=<n>]
-#         [-DJH_BUILD_TYPE=<config>] -P scripts/jh_bootstrap.cmake
+#         [-DJH_BUILD_TYPE=<config>] [-DJH_VERIFY_ONLY=ON]
+#         -P scripts/jh_bootstrap.cmake
+#
+# JH_VERIFY_ONLY returns a published executable built from exactly these
+# sources and fails when there is none, without building or creating
+# anything: firmware configure uses it, while runmefirst, the gate and the
+# development entries (jh-vscode, the examples dispatcher) prepare the tool
+# beforehand. It prefers the current key and otherwise takes any result of
+# this host variant whose manifest records the same source key (the inputs
+# and dependencies without compiler, generator and CMake), so a configure
+# with another CMake or PATH than the preparation still finds the tool.
 #
 # The key covers every input of the tool build: the tools/jh sources, the
 # CMake modules and pins they read, this script, the verified revisions of
@@ -371,11 +381,55 @@ string(APPEND host_text "buildType=${JH_BUILD_TYPE}\ncmake=${CMAKE_VERSION}\n")
 set(deps_text "jhbase ${jhbase_key}\nutf8proc ${utf8proc_ref}\npcre2 ${pcre2_ref}\n")
 string(SHA256 full_key "${host_text}${deps_text}${inputs}")
 string(SUBSTRING "${full_key}" 0 24 key)
+string(SHA256 source_key "${deps_text}${inputs}")
 set(key_dir "${JH_OUTPUT_ROOT}/${variant}/${key}")
 set(exe "${key_dir}/bin/${exe_name}")
 
 # ---------------------------------------------------------------------------
 # Reuse or build under the key's lock
+if(JH_VERIFY_ONLY)
+  set(prepare "run ./runmefirst.sh (Windows: runmefirst.ps1), a jh-vscode build or scripts/jh once")
+  set(found "")
+  set(damaged FALSE)
+  file(GLOB candidates LIST_DIRECTORIES TRUE "${JH_OUTPUT_ROOT}/${variant}/*")
+  list(SORT candidates)
+  list(REMOVE_ITEM candidates "${key_dir}")
+  foreach(candidate IN ITEMS "${key_dir}" LISTS candidates)
+    if(NOT EXISTS "${candidate}/bin/manifest.json")
+      continue()
+    endif()
+    file(READ "${candidate}/bin/manifest.json" text)
+    string(JSON recorded_source ERROR_VARIABLE error GET "${text}" sourceKey)
+    string(JSON recorded_key ERROR_VARIABLE key_error GET "${text}" key)
+    if(error OR key_error OR NOT recorded_source STREQUAL source_key)
+      continue()
+    endif()
+    # The same lock as a build of that key: a running build finishes first.
+    file(LOCK "${candidate}/lock" GUARD PROCESS TIMEOUT 1800 RESULT_VARIABLE lock_status)
+    if(NOT lock_status EQUAL 0)
+      jh_fail("Cannot lock ${candidate}: ${lock_status}")
+    endif()
+    jh_published_ok("${candidate}" "${recorded_key}" "${exe_name}" reusable)
+    file(LOCK "${candidate}/lock" RELEASE)
+    if(reusable)
+      set(found "${candidate}/bin/${exe_name}")
+      break()
+    endif()
+    set(damaged TRUE)
+  endforeach()
+  if(found STREQUAL "" AND damaged)
+    jh_fail("The prepared jh for these sources below ${JH_OUTPUT_ROOT} is incomplete or damaged; ${prepare}")
+  elseif(found STREQUAL "")
+    jh_fail("jh is not prepared for this checkout and host (key ${key} below ${JH_OUTPUT_ROOT}); ${prepare}")
+  endif()
+  set(exe "${found}")
+  if(DEFINED JH_RESULT_FILE AND NOT JH_RESULT_FILE STREQUAL "")
+    file(WRITE "${JH_RESULT_FILE}" "${exe}\n")
+  else()
+    message(STATUS "[jh-bootstrap] ${exe}")
+  endif()
+  return()
+endif()
 file(MAKE_DIRECTORY "${key_dir}")
 file(LOCK "${key_dir}/lock" GUARD PROCESS TIMEOUT 1800 RESULT_VARIABLE lock_status)
 if(NOT lock_status EQUAL 0)
@@ -448,7 +502,7 @@ if(NOT reusable)
   file(SHA256 "${stage}/${exe_name}" exe_sha)
   set(manifest "{}")
   string(JSON manifest SET "${manifest}" formatVersion 1)
-  foreach(field "key;${key}" "variant;${variant}" "os;${os}" "root;${JH_ROOT}"
+  foreach(field "key;${key}" "sourceKey;${source_key}" "variant;${variant}" "os;${os}" "root;${JH_ROOT}"
       "dependencyRoot;${dependency_root}" "generator;${JH_GENERATOR}" "platform;${platform}"
       "buildType;${JH_BUILD_TYPE}" "cmake;${CMAKE_VERSION}")
     list(GET field 0 name)

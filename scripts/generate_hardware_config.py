@@ -305,10 +305,10 @@ class Finalize:
                 raise self.fail("JH-HW-FEATURE", f"{name} belongs to a generated header",
                                 where.pop("source", None), **where)
         for path in sorted({Path(item).resolve() for item in build.config.files} - {self.header_file}):
-            for line, kind, name in project_config.macro_directives(path):
-                if OWNED_MACROS.fullmatch(name):
-                    raise self.fail("JH-HW-FEATURE", f"#{kind} {name}: the macro belongs to a "
-                                    "generated header", path, line=line)
+            for item in build.config.file_directives(path):
+                if OWNED_MACROS.fullmatch(item.name):
+                    raise self.fail("JH-HW-FEATURE", f"#{item.kind} {item.name}: the macro belongs to a "
+                                    "generated header", path, line=item.line)
 
     def check_hardware(self, document: dict[str, Any], build: project_config.BuildConfig,
                        features: list[str]) -> None:

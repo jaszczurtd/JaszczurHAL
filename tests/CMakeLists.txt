@@ -1159,13 +1159,12 @@ add_test(NAME test_generated_artifacts
         ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/sync_generated.py
         --check
 )
-# Compares the hal_project_config.h reader with the compiler's preprocessor
-# (GCC/Clang -E -dM).
+# The build part of project_config.py over the jh reader; the reader itself
+# is tested in tools/jh (jh_config, jh_config_preprocessor).
 add_test(NAME test_project_config
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_project_config.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
-        ${CMAKE_C_COMPILER}
 )
 
 add_test(NAME test_vscode_native_workflow

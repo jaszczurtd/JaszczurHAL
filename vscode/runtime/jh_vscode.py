@@ -3704,10 +3704,24 @@ def configure_cmake_project(config: dict[str, Any], project_dir: Path) -> int:
     cmd.extend(removed_cmake_cache_args(config, build_dir))
     cmd.extend(cmake_cache_args(config, project_dir))
     cmd.extend(platform_cmake_cache_args(config))
+    # Configure only verifies the jh host CLI; prepare it with the same CMake
+    # and environment, and hand its path to the configure.
+    environment = cmake_process_environment()
+    project_config = hal_script("project_config")
+    try:
+        jh = project_config.jh_executable(cmake_program(config), environment)
+    except project_config.ProjectConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_CONFIG
+    environment = {
+        **(os.environ if environment is None else environment),
+        "JH_EXECUTABLE": jh,
+        "JH_EXECUTABLE_ROOT": str(jaszczurhal_root()),
+    }
     status = run_command(
         cmd,
         verbose=as_bool(config.get("verbose")),
-        environment=cmake_process_environment(),
+        environment=environment,
     )
     if status != 0:
         return status

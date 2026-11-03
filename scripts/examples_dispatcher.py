@@ -420,6 +420,19 @@ def build(args: argparse.Namespace) -> int:
         except (ValueError, RuntimeError, OSError) as error:
             print(f"error: {error}; run scripts/ensure_ccache.sh", file=sys.stderr)
             return 1
+    # The builds only verify the jh host CLI: prepare it once and hand its
+    # path to every jh-vscode child.
+    import project_config
+
+    try:
+        project_config.jh_executable()
+    except project_config.ProjectConfigError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    if cache:
+        # jh_executable() published the tool in this process's environment.
+        for name in ("JH_EXECUTABLE", "JH_EXECUTABLE_ROOT"):
+            cache[1][name] = os.environ[name]
     worker_options = {"build_environment": cache[1]} if cache else {}
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {

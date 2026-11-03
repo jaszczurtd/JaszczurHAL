@@ -29,16 +29,21 @@ function(jh_tool_target target)
     target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow -fno-rtti)
   endif()
 endfunction()
-add_library(jh_schema STATIC json/jh_json_schema.cpp)
+# The schema validator and repr() of Python strings, which every command
+# quotes in its diagnostics.
+add_library(jh_schema STATIC json/jh_json_schema.cpp json/jh_python_repr.cpp)
 target_include_directories(jh_schema PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/json")
-target_link_libraries(jh_schema PUBLIC jb::host PRIVATE pcre2-8-static)
+target_link_libraries(jh_schema PUBLIC jb::host PRIVATE pcre2-8-static jb::unicode)
 jh_tool_target(jh_schema)
 # Host modules of the commands: JSON files, the type catalogue, the device
-# defaults generator and generated-artifact publishing.
+# defaults generator, generated-artifact publishing and the project
+# configuration reader.
 add_library(jh_host STATIC json/jh_json_file.cpp hardware/jh_type_catalogue.cpp
-  hardware/jh_device_defaults.cpp src/jh_generated_output.cpp)
+  hardware/jh_device_defaults.cpp src/jh_generated_output.cpp
+  config/jh_project_config.cpp)
 target_include_directories(jh_host PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/json"
-  "${CMAKE_CURRENT_SOURCE_DIR}/hardware" "${CMAKE_CURRENT_SOURCE_DIR}/src")
+  "${CMAKE_CURRENT_SOURCE_DIR}/hardware" "${CMAKE_CURRENT_SOURCE_DIR}/src"
+  "${CMAKE_CURRENT_SOURCE_DIR}/config")
 target_link_libraries(jh_host PUBLIC jh_schema jb::host jb::unicode)
 jh_tool_target(jh_host)
 add_executable(jh src/main.cpp)
@@ -82,11 +87,25 @@ if(BUILD_TESTING)
   add_test(NAME jh_settings_compat COMMAND "${Python3_EXECUTABLE}"
       "${CMAKE_CURRENT_SOURCE_DIR}/tests/settings_compat.py"
       "$<TARGET_FILE:jh_settings_probe>" "${CMAKE_CURRENT_SOURCE_DIR}/../..")
+  # The hal_project_config.h reader: jh_config checks it in-process;
+  # jh_config_preprocessor also compares it with the preprocessor of a GCC or
+  # Clang compiler on fixed headers and on every hal_project_config.h of this
+  # checkout outside tests/hardware (MSVC has no -E -dM).
+  add_executable(jh_config_test tests/test_project_config.cpp)
+  target_link_libraries(jh_config_test PRIVATE jh_host)
+  jh_tool_target(jh_config_test)
+  add_test(NAME jh_config COMMAND jh_config_test "${CMAKE_CURRENT_BINARY_DIR}")
   set_tests_properties(jh_schema jh_schema_compat jh_device_defaults jh_settings
-    jh_settings_compat PROPERTIES TIMEOUT 120)
+    jh_settings_compat jh_config PROPERTIES TIMEOUT 120)
+  if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    add_test(NAME jh_config_preprocessor COMMAND jh_config_test
+      "${CMAKE_CURRENT_BINARY_DIR}/preprocessor" "${CMAKE_C_COMPILER}"
+      "${CMAKE_CURRENT_SOURCE_DIR}/../..")
+    set_tests_properties(jh_config_preprocessor PROPERTIES TIMEOUT 300)
+  endif()
   # The native test programs; the gate runs them under Valgrind (memcheck)
   # and the sanitizers (sanitizer-fuzz).
-  set_tests_properties(jh_schema jh_settings PROPERTIES LABELS memcheck)
+  set_tests_properties(jh_schema jh_settings jh_config PROPERTIES LABELS memcheck)
   add_test(NAME jh_cli COMMAND "${CMAKE_COMMAND}" "-DJH=$<TARGET_FILE:jh>"
     "-DJH_BUILD=${CMAKE_CURRENT_BINARY_DIR}" "-DJH_CONFIG=$<CONFIG>"
     "-DJH_SUFFIX=${CMAKE_EXECUTABLE_SUFFIX}"

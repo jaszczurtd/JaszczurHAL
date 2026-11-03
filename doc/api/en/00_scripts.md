@@ -77,6 +77,8 @@ Sets up Debian, Ubuntu, and compatible systems. Re-running the script restores t
 - checks for persistent LAN-scoped OTA rules for the TCP/8266 callback and
   UDP/8266 discovery replies, and asks before changing the firewall or
   installing `iptables-persistent`;
+- builds the jh host CLI (`scripts/jh --version`), which firmware configure
+  only verifies;
 - configures the repository Git hooks.
 
 The script uses `sudo` for system packages, `/usr/local/bin`, the udev rule,
@@ -109,8 +111,9 @@ gate's `tools` stage runs it so.
 Idempotent native Windows setup. It prints its complete plan before making a
 change, uses short user-local tool/build roots, creates the pinned Python 3.12
 environment with hash-verified pyserial, synchronizes source components and the
-pinned ccache, and resolves CMake, Ninja, GNU Arm, GNU RISC-V, OpenOCD, and
-picotool. Compatible
+pinned ccache, resolves CMake, Ninja, GNU Arm, GNU RISC-V, OpenOCD, and
+picotool, and builds the jh host CLI with the resolved CMake (`-VerifyOnly`
+only checks that one is built from the current sources). Compatible
 system tools are reused unless `-Force` is selected. A system OpenOCD is reused
 only when its required interface and target scripts can also be resolved;
 otherwise setup falls back to the authenticated managed archive.
@@ -189,7 +192,8 @@ only list of checks: a local run executes them in order, and the Linux CI jobs
 run the same stages with `--stage NAME[,NAME...]`, each exactly once, after
 installing their tools with `scripts/install_host_tools.sh`. The example
 builds are the exception: `--list-local-stages` names them, and they run only
-locally.
+locally. Before the first stage the gate prepares the jh host CLI, which the
+firmware and library configures of the stages only verify.
 `tests/test_ci_gate_stages.py` fails when the workflow and the list drift
 apart. `--commit [REV]` runs the gate on a clean checkout of `REV` (default
 `HEAD`) in `~/.cache/jaszczurhal/commit-gate/<id>`, outside the repository
@@ -288,6 +292,19 @@ tree such as the hook's index snapshot builds without them;
 reuse the tool this checkout already built for the same inputs;
 `JH_JHBASE_DIR` selects an external jhbase whose content joins the key;
 `JH_BOOTSTRAP_CMAKE` selects the cmake executable.
+
+`-DJH_VERIFY_ONLY=ON` builds nothing and creates nothing: it returns a
+published executable built from the current sources, or fails with the
+command that prepares one. It prefers the current key and otherwise takes any
+result of the same host variant whose manifest records the same `sourceKey`
+(the inputs and dependencies without compiler, generator, build type and
+CMake version), so a configure with another CMake or PATH than the
+preparation still finds the tool. Firmware and library configures use this
+mode; `runmefirst.sh`, `runmefirst.ps1`, `runalltests.sh`, `jh-vscode` and
+the examples dispatcher prepare the tool beforehand and pass its path to
+CMake and to the processes they start in `JH_EXECUTABLE`, with
+`JH_EXECUTABLE_ROOT` naming the checkout. Another checkout, such as a copy a
+test makes, ignores them and verifies its own tool.
 `tools/jh/tests/check_bootstrap.cmake` covers these scenarios in the
 `jh_bootstrap` test of the tool's CTest suite.
 
@@ -297,9 +314,11 @@ The Unix and Windows launchers start one public Python entrypoint and shared
 firmware-project CLI. The Windows launcher validates Python 3 plus pyserial and
 preserves the CLI arguments and exit-code behavior. Firmware configuration uses
 Ninja by default, passes the active Python interpreter, exports compile
-commands, and resolves platform picotool/toolchain paths. Native Windows CMake
-trees use the bootstrap's short build root while final artifacts keep their
-manifest paths.
+commands, and resolves platform picotool/toolchain paths. Before configuring
+it prepares the jh host CLI through the bootstrap, with the same CMake and
+environment, and passes it to the configure in `JH_EXECUTABLE`. Native Windows
+CMake trees use the bootstrap's short build root while final artifacts keep
+their manifest paths.
 
 `debug-tools` reports the verified OpenOCD, Arm-capable GDB,
 scripts root, and target configuration used by Cortex-Debug. Generated Linux
@@ -803,14 +822,26 @@ can compile and link those package artifacts without invoking Python.
 
 ### `scripts/project_config.py`
 
-Reads a project's `hal_project_config.h` the way the C preprocessor does, for
-one target and variant. CMake (the firmware dispatcher and the static library
-builds), `jh-vscode`, the feature lint, the ESP-IDF runner, the VS Code task
-generator, and the examples dispatcher all read project configuration through
-it. Its `cmake` command writes one build's features, definitions, targets,
-variants, and macro values as a CMake file. Diagnostics use the
-`[JH-CFG-TARGET]`, `[JH-CFG-VARIANT]`, `[JH-CFG-ERROR]`, and `[JH-CFG-SCOPE]`
-prefixes. The header rules are described in
+Gives the Python tools and CMake one build's project configuration. The
+header itself is evaluated by `jh config inspect`, the way the C preprocessor
+does, for one target and variant; the
+[jh README](../../../tools/jh/README.md#project-configuration) describes the
+reader and its 64-bit arithmetic. This module turns its result into objects
+and adds what depends on the board and feature registries: the build of a
+target and variant, its features and the `cmake` command, which writes one
+build's features, definitions, targets, variants, and macro values as a CMake
+file. CMake (the firmware dispatcher and the static library builds),
+`jh-vscode`, the feature lint, the ESP-IDF runner, the VS Code task generator,
+and the examples dispatcher read project configuration through it. It takes
+the tool from `JH_EXECUTABLE` (unless `JH_EXECUTABLE_ROOT` names another
+checkout) or prepares it through the bootstrap and publishes both variables
+for the processes it starts. CMake passes it the verified tool with
+`JH_EXECUTABLE_ROOT`, so configure never prepares one. A value outside the
+64-bit range or over a limit of `jh` has no integer, and only reading that
+value through `jh_project_value()` fails; an invalid literal in any value
+fails the configure. Diagnostics use the `[JH-CFG-TARGET]`,
+`[JH-CFG-VARIANT]`, `[JH-CFG-ERROR]`, and `[JH-CFG-SCOPE]` prefixes. The
+header rules are described in
 [Targets and variants](../../en/FwProjectWorkflow.md#targets-and-variants).
 
 ### `scripts/device_tree_project.py`

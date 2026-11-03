@@ -22,6 +22,21 @@ macro(read_fixture DIRECTORY)
         ${ARGN})
 endmacro()
 
+# A chain of macros below the work limit of each jh query and a value far
+# above it, followed by a constant.
+function(limit_fixture_text OUT_VAR)
+    set(_jh_text "#define K0 1\n")
+    foreach(_jh_level RANGE 1 16)
+        math(EXPR _jh_previous "${_jh_level} - 1")
+        string(APPEND _jh_text
+            "#define K${_jh_level} (K${_jh_previous} + K${_jh_previous})\n")
+    endforeach()
+    string(REPEAT "K16 + " 15 _jh_terms)
+    string(APPEND _jh_text "#define OVER_LIMIT (${_jh_terms}K16)\n"
+        "#define HAL_RP_CORE1_STACK_SIZE 2048\n")
+    set(${OUT_VAR} "${_jh_text}" PARENT_SCOPE)
+endfunction()
+
 function(write_fixture NAME TEXT)
     set(_jh_fixture "${JH_TEST_BINARY_DIR}/jh_project_feature_${NAME}")
     file(REMOVE_RECURSE "${_jh_fixture}")
@@ -97,6 +112,21 @@ if(DEFINED JH_PROJECT_FEATURE_FAILURE_CASE)
             "#define FLASH_BYTES PICO_FLASH_SIZE_BYTES\n#define HAL_RP_FLASH_EEPROM_SIZE (FLASH_BYTES / 256)\n")
         read_fixture("${FIXTURE}")
         jh_project_value(_jh_unused HAL_RP_FLASH_EEPROM_SIZE)
+    elseif(_jh_case STREQUAL "range-value")
+        write_fixture(failure
+            "#define HAL_RP_CORE1_STACK_SIZE 0xFFFFFFFFFFFFFFFFull\n")
+        read_fixture("${FIXTURE}")
+        jh_project_value(_jh_unused HAL_RP_CORE1_STACK_SIZE)
+    elseif(_jh_case STREQUAL "limit-value")
+        limit_fixture_text(_jh_limit_text)
+        write_fixture(failure "${_jh_limit_text}")
+        read_fixture("${FIXTURE}")
+        jh_project_value(_jh_unused OVER_LIMIT)
+    elseif(_jh_case STREQUAL "literal-value")
+        # Unlike a limit, an invalid literal fails even in an unused value.
+        write_fixture(failure
+            "#define UNUSED_VALUE 08\n#define HAL_RP_CORE1_STACK_SIZE 2048\n")
+        read_fixture("${FIXTURE}")
     elseif(_jh_case STREQUAL "uncertain-feature")
         write_fixture(failure
             "#ifdef SDK_ONLY\n#define HAL_ENABLE_WIFI\n#endif\n")
@@ -173,6 +203,57 @@ jh_project_value(_jh_baud HAL_DEBUG_DEFAULT_BAUD)
 expect_equal("${_jh_baud}" "115200" "Integer value")
 jh_project_value(_jh_endpoint HAL_ENDPOINT)
 expect_equal("${_jh_endpoint}" "\"https://example.invalid/*\"" "Text value")
+# A jh prepared for another checkout (JH_EXECUTABLE_ROOT) is not used: the
+# reader takes the tool verified for this one, so the same header reads alike.
+set(_jh_saved_tool "$ENV{JH_EXECUTABLE}")
+set(_jh_saved_tool_root "$ENV{JH_EXECUTABLE_ROOT}")
+set(ENV{JH_EXECUTABLE} "${CMAKE_CURRENT_LIST_FILE}")
+set(ENV{JH_EXECUTABLE_ROOT} "${JH_TEST_BINARY_DIR}")
+jh_project_config_tool(_jh_tool "${JH_ROOT}" "${FIXTURE}/generated")
+if(_jh_tool STREQUAL "${CMAKE_CURRENT_LIST_FILE}")
+    message(FATAL_ERROR "The jh of another checkout (JH_EXECUTABLE_ROOT) was used")
+endif()
+read_fixture("${FIXTURE}")
+expect_equal("${JH_PROJECT_VARIANTS}" "PROBE;AUDIO" "Variants with another checkout's jh")
+# Configure only verifies: the reader runs the jh CMake verified, never a
+# build of its own. The output root below holds this checkout's jh under
+# another directory, which the verification accepts by its source key, and a
+# file where a build of the current key would go, so any build fails.
+set(_jh_saved_output_root "$ENV{JH_OUTPUT_ROOT}")
+unset(ENV{JH_EXECUTABLE})
+jh_project_config_tool(_jh_published "${JH_ROOT}" "${FIXTURE}/generated")
+get_filename_component(_jh_bin "${_jh_published}" DIRECTORY)
+get_filename_component(_jh_key_dir "${_jh_bin}" DIRECTORY)
+get_filename_component(_jh_key "${_jh_key_dir}" NAME)
+get_filename_component(_jh_variant_dir "${_jh_key_dir}" DIRECTORY)
+get_filename_component(_jh_variant "${_jh_variant_dir}" NAME)
+get_filename_component(_jh_exe_name "${_jh_published}" NAME)
+set(_jh_output_root "${JH_TEST_BINARY_DIR}/jh_project_feature_output_root")
+file(REMOVE_RECURSE "${_jh_output_root}")
+file(COPY "${_jh_bin}" DESTINATION "${_jh_output_root}/${_jh_variant}/copy")
+file(WRITE "${_jh_output_root}/${_jh_variant}/${_jh_key}" "no build here\n")
+set(ENV{JH_OUTPUT_ROOT} "${_jh_output_root}")
+set(ENV{JH_EXECUTABLE} "${CMAKE_CURRENT_LIST_FILE}")
+read_fixture("${FIXTURE}")
+expect_equal("${JH_PROJECT_VARIANTS}" "PROBE;AUDIO" "Variants with the verified jh")
+jh_project_config_tool(_jh_tool "${JH_ROOT}" "${FIXTURE}/generated")
+expect_equal("${_jh_tool}" "${_jh_output_root}/${_jh_variant}/copy/bin/${_jh_exe_name}"
+    "The verified jh")
+set(ENV{JH_OUTPUT_ROOT} "${_jh_saved_output_root}")
+file(REMOVE_RECURSE "${_jh_output_root}")
+# The Python tools inherit the environment the same way.
+jh_find_python(_jh_python)
+execute_process(
+    COMMAND "${_jh_python}" "${JH_ROOT}/scripts/project_config.py" cmake
+        --target rp2040 --config-dir "${FIXTURE}"
+        --output "${FIXTURE}/generated/other-root.cmake"
+    RESULT_VARIABLE _jh_other_result
+    ERROR_VARIABLE _jh_other_error)
+if(NOT _jh_other_result EQUAL 0)
+    message(FATAL_ERROR "project_config.py used another checkout's jh: ${_jh_other_error}")
+endif()
+set(ENV{JH_EXECUTABLE} "${_jh_saved_tool}")
+set(ENV{JH_EXECUTABLE_ROOT} "${_jh_saved_tool_root}")
 jh_build_define_value(_jh_stack HAL_RP_CORE1_STACK_SIZE
     HAL_RP_CORE1_STACK_SIZE=2048u)
 expect_equal("${_jh_stack}" "4096" "Project value wins over the board")
@@ -327,6 +408,16 @@ jh_cmake_defines_contain(_jh_stm_tls_enabled HAL_ENABLE_TLS
     -DHAL_ENABLE_TLS=1)
 expect_equal("${_jh_stm_tls_enabled}" "TRUE" "STM32 -DHAL_ENABLE_TLS=1")
 
+# A value over the work limit of jh fails only the build that asks for it
+# (limit-value below); the other values read as usual.
+limit_fixture_text(_jh_limit_text)
+write_fixture(limit "${_jh_limit_text}")
+read_fixture("${FIXTURE}")
+jh_project_value(_jh_after_limit HAL_RP_CORE1_STACK_SIZE)
+expect_equal("${_jh_after_limit}" "2048" "A constant after a value over the limit")
+jh_project_value(_jh_below_limit K16)
+expect_equal("${_jh_below_limit}" "65536" "A value below the limit")
+
 function(expect_failures DIAGNOSTIC)
     foreach(_jh_failure_case IN LISTS ARGN)
         execute_process(
@@ -344,6 +435,12 @@ function(expect_failures DIAGNOSTIC)
             message(FATAL_ERROR "Feature failure case passed: ${_jh_failure_case}")
         endif()
         set(_jh_failure_output "${_jh_failure_stdout}\n${_jh_failure_stderr}")
+        string(FIND "${_jh_failure_output}" "Traceback" _jh_traceback_index)
+        if(NOT _jh_traceback_index EQUAL -1)
+            message(FATAL_ERROR
+                "Feature failure case ends in a Python traceback: "
+                "${_jh_failure_case}\n${_jh_failure_output}")
+        endif()
         string(FIND "${_jh_failure_output}" "[${DIAGNOSTIC}]" _jh_diagnostic_index)
         if(_jh_diagnostic_index EQUAL -1)
             message(FATAL_ERROR
@@ -370,7 +467,8 @@ expect_failures(JH-CFG-VALUE
     library-define-zero
     library-variable-zero
     stm-helper-other)
-expect_failures(JH-CFG-SCOPE uncertain-value uncertain-feature sdk-value)
+expect_failures(JH-CFG-SCOPE uncertain-value uncertain-feature sdk-value range-value
+    limit-value literal-value)
 expect_failures(JH-CFG-VARIANT unknown-variant)
 expect_failures(JH-CFG-PARITY
     board-requested-mismatch

@@ -24,7 +24,6 @@ from codegen_support import (
 )
 import device_tree_project
 import project_config
-from project_config import preprocessor_logical_lines
 from repository_layout import FEATURE_CMAKE_OUTPUT, FEATURE_HEADER_OUTPUT
 
 
@@ -35,10 +34,7 @@ DOMAIN_PATTERN = re.compile(r"^[a-z][a-z0-9-]*$")
 BUILD_SOURCE_PATTERN = re.compile(
     r"^src/[A-Za-z0-9_./+-]+\.(?:c|cc|cpp|S)$"
 )
-HEADER_DEFINITION_PATTERN = re.compile(
-    r"^[ \t]*#[ \t]*define[ \t]+"
-    r"(HAL_(?:ENABLE|DISABLE)_[A-Z0-9_]+)(.*)$"
-)
+HEADER_FEATURE_PREFIX = re.compile(r"HAL_(?:ENABLE|DISABLE)_[A-Z0-9_]")
 FRAGMENT_FIELDS = {"$schema", "schemaVersion", "domain", "symbols"}
 SYMBOL_FIELDS = {
     "kind",
@@ -816,23 +812,19 @@ def lint_header(path: Path, model: FeatureModel) -> list[str]:
     variant, and that the project configuration reader accepts the header."""
     try:
         config = project_config.read_project_config(path)
-        text = path.read_text(encoding="utf-8")
     except project_config.ProjectConfigError as error:
         return [str(error)]
-    except OSError as error:
-        raise RegistryError(f"{path}: cannot read lint input: {error}") from error
     findings: list[str] = []
-    for line_number, line in preprocessor_logical_lines(text):
-        match = HEADER_DEFINITION_PATTERN.match(line)
-        if not match:
+    # Every #define of a HAL feature in the header, in any branch.
+    for item in config.file_directives(path):
+        if item.kind != "define" or not HEADER_FEATURE_PREFIX.match(item.name):
             continue
-        raw_value = match.group(2).strip()
         findings.extend(
             validate_requested_symbol(
                 path,
-                str(line_number),
-                match.group(1),
-                raw_value if raw_value else None,
+                str(item.line),
+                item.name,
+                item.text if item.text else None,
                 model,
             )
         )

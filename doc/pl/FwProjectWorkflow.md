@@ -368,10 +368,12 @@ Reguły zależne od parametrów konfiguracji, systemu kompilacji, możliwości p
 
 Plik `hal_project_config.h` jest odczytywany przed automatycznym wykryciem platformy i utworzeniem pochodnych makr platformy oraz płytki. Umieszczaj w nim wyłącznie makra: bezpośrednie definicje `HAL_TARGET_*`, `HAL_BOARD_PROFILE_*`, `HAL_ENABLE_*` i parametrów konfiguracji. Nie dołączaj nagłówków JaszczurHAL ani nie uzależniaj zawartości od `HAL_TARGET_IS_*` / `HAL_BOARD_IS_*`.
 
-Wszystkie narzędzia odczytują nagłówek przez `scripts/project_config.py`, który przetwarza go tak jak preprocesor C dla wybranej platformy i wariantu. Warunki mogą korzystać z makra wybranej platformy (`HAL_TARGET_RP2040`, `HAL_TARGET_STM32G474` itd.), definicji wariantu, `defined()`, wyrażeń całkowitych i makr zdefiniowanych w samym nagłówku. Dyrektywa `#include "..."` w cudzysłowie szuka pliku względem pliku, który go dołącza. Jeżeli funkcja HAL albo wartość odczytywana przez kompilację, np. rozmiar stosu lub rezerwacji flash, zależy od identyfikatora, którego kompilacja nie przekazuje do kompilatora, także przez lokalny alias, kompilacja i linter rejestru funkcji kończą się błędem `[JH-CFG-SCOPE]`. To samo dotyczy takiej wartości obliczanej z nazwy, której nagłówek nie definiuje, np. `(PICO_FLASH_SIZE_BYTES / 256)`: tę wartość zna tylko kompilator, więc wpisz w nagłówku liczbę.
+Wszystkie narzędzia odczytują nagłówek przez `scripts/project_config.py`, który zleca jego obliczenie CLI hosta `jh` (`jh config inspect`), tak jak zrobiłby to preprocesor C dla wybranej platformy i wariantu. To narzędzie przygotowują `runmefirst`, `jh-vscode` i dispatcher przykładów; configure tylko je sprawdza. Warunki mogą korzystać z makra wybranej platformy (`HAL_TARGET_RP2040`, `HAL_TARGET_STM32G474` itd.), definicji wariantu, `defined()`, wyrażeń całkowitych i makr zdefiniowanych w samym nagłówku. Dyrektywa `#include "..."` w cudzysłowie szuka pliku względem pliku, który go dołącza. Jeżeli funkcja HAL albo wartość odczytywana przez kompilację, np. rozmiar stosu lub rezerwacji flash, zależy od identyfikatora, którego kompilacja nie przekazuje do kompilatora, także przez lokalny alias, kompilacja i linter rejestru funkcji kończą się błędem `[JH-CFG-SCOPE]`. To samo dotyczy takiej wartości obliczanej z nazwy, której nagłówek nie definiuje, np. `(PICO_FLASH_SIZE_BYTES / 256)`: tę wartość zna tylko kompilator, więc wpisz w nagłówku liczbę.
 
-Czytnik oblicza liczby całkowite ze znakiem, bez zawijania po 64 bitach.
-Warunki nie powinny zależeć od konwersji do liczb bez znaku ani przepełnienia.
+Czytnik oblicza liczby całkowite ze znakiem na 64 bitach i sprawdza zakres:
+obliczany warunek spoza tego zakresu kończy się błędem `[JH-CFG-SCOPE]` zamiast
+zawinięcia, a wartości makra spoza zakresu kompilacja nie odczyta. Warunki nie
+powinny zależeć od konwersji do liczb bez znaku ani przepełnienia.
 Ujemna liczba bitów w wykonywanym przesunięciu jest interpretowana według
 rozszerzenia GCC; Clang daje inny wynik. W przenośnych nagłówkach używaj
 nieujemnej liczby bitów. Operandy pominięte przez `&&`, `||` i `?:` są

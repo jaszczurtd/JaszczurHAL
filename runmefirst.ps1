@@ -345,6 +345,12 @@ Invoke-Checked $VenvPython $toolArguments 'Preparing native Windows tools'
 
 Add-ResolvedToolsToPath
 Sync-HostEnvironment
+# Firmware configure only verifies the jh host CLI, so it is built here with
+# the managed CMake (jh-vscode and the examples dispatcher also prepare it).
+$jhArguments = @("-DJH_ROOT=$RepoRoot")
+if ($VerifyOnly) { $jhArguments += '-DJH_VERIFY_ONLY=ON' }
+$jhArguments += @('-P', (Join-Path $RepoRoot 'scripts\jh_bootstrap.cmake'))
+Invoke-Checked 'cmake' $jhArguments 'Preparing the jh host CLI'
 if (-not $FirmwareOnly) {
     $cortexDebugArguments = @(
         $CortexDebugSettings, '--host-environment', $HostEnvironment
