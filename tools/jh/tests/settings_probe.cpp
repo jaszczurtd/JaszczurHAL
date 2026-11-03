@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
   if (argc != 2)
     return 64;
   constexpr size_t limit = 16 * 1024 * 1024;
-  std::string output;
+  jh::owned_string output; // append_text appends to an owned_string.
   try {
     jh::parse_location where;
     const auto file = jh::read_settings(where, argv[1], limit);

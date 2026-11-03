@@ -29,11 +29,17 @@ function(jh_tool_target target)
     target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow -fno-rtti)
   endif()
 endfunction()
+# C++ owners of the jhbase string and vector, which every module below uses
+# instead of the standard containers.
+add_library(jh_base STATIC base/jh_containers.cpp)
+target_include_directories(jh_base PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/base")
+target_link_libraries(jh_base PUBLIC jb::host)
+jh_tool_target(jh_base)
 # The schema validator and repr() of Python strings, which every command
 # quotes in its diagnostics.
 add_library(jh_schema STATIC json/jh_json_schema.cpp json/jh_python_repr.cpp)
 target_include_directories(jh_schema PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/json")
-target_link_libraries(jh_schema PUBLIC jb::host PRIVATE pcre2-8-static jb::unicode)
+target_link_libraries(jh_schema PUBLIC jh_base jb::host PRIVATE pcre2-8-static jb::unicode)
 jh_tool_target(jh_schema)
 # Host modules of the commands: JSON files, the type catalogue, the device
 # defaults generator, generated-artifact publishing and the project
@@ -95,8 +101,13 @@ if(BUILD_TESTING)
   target_link_libraries(jh_config_test PRIVATE jh_host)
   jh_tool_target(jh_config_test)
   add_test(NAME jh_config COMMAND jh_config_test "${CMAKE_CURRENT_BINARY_DIR}")
+  # The C++ owners of the jhbase containers and the lists of unified_diff.
+  add_executable(jh_containers_test tests/test_containers.cpp)
+  target_link_libraries(jh_containers_test PRIVATE jh_host)
+  jh_tool_target(jh_containers_test)
+  add_test(NAME jh_containers COMMAND jh_containers_test)
   set_tests_properties(jh_schema jh_schema_compat jh_device_defaults jh_settings
-    jh_settings_compat jh_config PROPERTIES TIMEOUT 120)
+    jh_settings_compat jh_config jh_containers PROPERTIES TIMEOUT 120)
   if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     add_test(NAME jh_config_preprocessor COMMAND jh_config_test
       "${CMAKE_CURRENT_BINARY_DIR}/preprocessor" "${CMAKE_C_COMPILER}"
@@ -105,7 +116,8 @@ if(BUILD_TESTING)
   endif()
   # The native test programs; the gate runs them under Valgrind (memcheck)
   # and the sanitizers (sanitizer-fuzz).
-  set_tests_properties(jh_schema jh_settings jh_config PROPERTIES LABELS memcheck)
+  set_tests_properties(jh_schema jh_settings jh_config jh_containers
+    PROPERTIES LABELS memcheck)
   add_test(NAME jh_cli COMMAND "${CMAKE_COMMAND}" "-DJH=$<TARGET_FILE:jh>"
     "-DJH_BUILD=${CMAKE_CURRENT_BINARY_DIR}" "-DJH_CONFIG=$<CONFIG>"
     "-DJH_SUFFIX=${CMAKE_EXECUTABLE_SUFFIX}"

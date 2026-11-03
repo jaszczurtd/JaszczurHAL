@@ -8,12 +8,12 @@
  * validates. C++17; exceptions stay inside the tool and never cross the jhbase
  * C API.
  */
+#include "jh_containers.h"
 #include "jh_json_schema.h"
 #include <jb/file.h>
 #include <jb/json_tree.h>
 #include <memory>
-#include <string>
-#include <vector>
+#include <string_view>
 
 namespace jh {
 
@@ -23,23 +23,23 @@ namespace jh {
 struct failure {
   hal_status_t status;
   int exit_code;
-  std::string message;
-  std::string code, source, pointer;
+  owned_string message;
+  owned_string code, source, pointer;
 };
 
 /** Throw failure unless status is HAL_OK. */
 void require(hal_status_t status, int exit_code, const char *message);
-jb_json_span_t span(const std::string &text);
+jb_json_span_t span(std::string_view text);
 jb_json_span_t span(const char *text);
-std::string copied(jb_json_span_t text);
+owned_string copied(jb_json_span_t text);
 /** Output sink of the jhbase writer and formatter that appends to the
- * std::string at user. HAL_ENOMEM or HAL_EOVERFLOW when it cannot grow.
+ * owned_string at user. HAL_ENOMEM or HAL_EOVERFLOW when it cannot grow.
  */
 hal_status_t append_text(void *user, const char *data, size_t length);
 /** Resolve path lexically against an absolute base (jb_path_resolve). */
-std::string absolute_path(const std::string &path, const std::string &base);
+owned_string absolute_path(const char *path, const char *base);
 /** Percent-escaped identity of a file path for schema URIs. */
-std::string schema_identity(const std::string &path);
+owned_string schema_identity(std::string_view path);
 
 /** Owner of bytes read by jb_file_read. */
 struct file_owner {
@@ -52,7 +52,7 @@ struct file_owner {
 
 /** Where the last parse failed; located is set only after a parse error. */
 struct parse_location {
-  std::string source;
+  owned_string source;
   jb_json_error_t error{};
   size_t line = 0, column = 0;
   bool located = false;
@@ -61,10 +61,10 @@ struct parse_location {
 /** A parsed file: its bytes, tokens, document, path and schema identity. */
 struct json_document {
   file_owner input;
-  std::vector<jb_json_token_t> tokens;
+  owned_array<jb_json_token_t> tokens;
   jb_json_doc_t doc{};
-  std::string uri;
-  std::string identity;
+  owned_string uri;
+  owned_string identity;
 };
 
 /** Read and parse one file of at most limit bytes. With hardware_numbers the
@@ -74,8 +74,7 @@ struct json_document {
  * 3 (file) or 4 (limits).
  */
 std::unique_ptr<json_document> read_document(parse_location &where,
-                                             const std::string &path,
-                                             size_t limit,
+                                             const char *path, size_t limit,
                                              bool hardware_numbers = false);
 
 /** Destroys an owned jhbase tree. */
@@ -101,12 +100,12 @@ struct settings_file {
  * (HAL_ETYPE for another root, otherwise invalid JSON), 3 (file) or 4 (limits);
  * a parse error locates the place in the file, comments included.
  */
-settings_file read_settings(parse_location &where, const std::string &path,
+settings_file read_settings(parse_location &where, const char *path,
                             size_t limit);
 
 /** One validation failure as the CLI reports it. */
 struct schema_report {
-  std::string pointer, uri, rule, reason, message;
+  owned_string pointer, uri, rule, reason, message;
 };
 
 /** Schema documents loaded by reference and the reports of one validation. */
@@ -114,12 +113,12 @@ struct schema_files {
   parse_location &where;
   size_t max_bytes;
   size_t schema_bytes = 0;
-  std::vector<std::unique_ptr<json_document>> documents;
-  std::vector<schema_report> reports;
+  owned_list<json_document> documents;
+  owned_list<schema_report> reports;
   schema_files(parse_location &location, size_t limit)
       : where(location), max_bytes(limit) {}
   /** Load the root schema; its document stays first in documents. */
-  const json_document &root(const std::string &path);
+  const json_document &root(const char *path);
 };
 
 /** jh_json_schema_load_fn over schema_files: local files only. */
@@ -135,7 +134,7 @@ const jh_json_schema_limits_t &schema_limits();
  * on first use and reused afterwards.
  */
 hal_status_t validate_with(schema_files &state, const json_document &instance,
-                           std::vector<unsigned char> &scratch);
+                           owned_array<unsigned char> &scratch);
 
 } // namespace jh
 #endif

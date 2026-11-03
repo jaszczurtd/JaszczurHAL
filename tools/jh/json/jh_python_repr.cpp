@@ -4,17 +4,23 @@
 
 namespace jh {
 namespace {
-std::string escaped(uint32_t scalar, char kind, unsigned digits) {
+/* A backslash, kind and digits hex digits of scalar: at most 10 bytes. */
+struct escape {
+  char bytes[10];
+  size_t length;
+  std::string_view view() const { return {bytes, length}; }
+};
+
+escape escaped(uint32_t scalar, char kind, unsigned digits) {
   constexpr char hex[] = "0123456789abcdef";
-  std::string out = "\\";
-  out += kind;
+  escape out{{'\\', kind}, 2};
   for (unsigned shift = digits * 4; shift != 0; shift -= 4)
-    out += hex[(scalar >> (shift - 4)) & 15];
+    out.bytes[out.length++] = hex[(scalar >> (shift - 4)) & 15];
   return out;
 }
 
 void append_piece(void *user, std::string_view piece, size_t) {
-  static_cast<std::string *>(user)->append(piece);
+  static_cast<owned_string *>(user)->append(piece);
 }
 } // namespace
 
@@ -29,7 +35,8 @@ void python_repr(std::string_view text, repr_piece_fn piece, void *user) {
     size_t used = 1;
     if (jb_utf8_decode(text.data() + i, text.size() - i, &scalar, &used) !=
         HAL_OK) {
-      piece(user, escaped(static_cast<unsigned char>(text[i]), 'x', 2), 1);
+      piece(user, escaped(static_cast<unsigned char>(text[i]), 'x', 2).view(),
+            1);
       ++i;
       continue;
     }
@@ -43,7 +50,7 @@ void python_repr(std::string_view text, repr_piece_fn piece, void *user) {
     } else if (scalar == '\r') {
       piece(user, "\\r", used);
     } else if (scalar < 0x20 || scalar == 0x7f) {
-      piece(user, escaped(scalar, 'x', 2), used);
+      piece(user, escaped(scalar, 'x', 2).view(), used);
     } else if (scalar < 0x7f) {
       piece(user, text.substr(i, used), used);
     } else {
@@ -53,9 +60,10 @@ void python_repr(std::string_view text, repr_piece_fn piece, void *user) {
         piece(user, text.substr(i, used), used);
       else
         piece(user,
-              scalar < 0x100     ? escaped(scalar, 'x', 2)
-              : scalar < 0x10000 ? escaped(scalar, 'u', 4)
-                                 : escaped(scalar, 'U', 8),
+              (scalar < 0x100     ? escaped(scalar, 'x', 2)
+               : scalar < 0x10000 ? escaped(scalar, 'u', 4)
+                                  : escaped(scalar, 'U', 8))
+                  .view(),
               used);
     }
     i += used;
@@ -63,8 +71,8 @@ void python_repr(std::string_view text, repr_piece_fn piece, void *user) {
   piece(user, quote_text, 0);
 }
 
-std::string python_repr(std::string_view text) {
-  std::string out;
+owned_string python_repr(std::string_view text) {
+  owned_string out;
   python_repr(text, append_piece, &out);
   return out;
 }

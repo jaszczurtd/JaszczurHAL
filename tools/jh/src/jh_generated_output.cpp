@@ -13,27 +13,33 @@ struct opcode {
   size_t a_begin, a_end, b_begin, b_end;
 };
 
-std::vector<std::string> split_lines(const std::string &text) {
-  std::vector<std::string> lines;
+/* Lines of text without their terminators, borrowing its bytes. */
+owned_array<std::string_view> split_lines(std::string_view text) {
+  owned_array<std::string_view> lines;
   size_t start = 0;
   while (start < text.size()) {
     size_t end = text.find('\n', start);
-    if (end == std::string::npos)
+    if (end == std::string_view::npos)
       end = text.size();
     size_t stop = end;
     if (stop > start && text[stop - 1] == '\r')
       --stop;
-    lines.emplace_back(text, start, stop - start);
+    lines.push_back(text.substr(start, stop - start));
     start = end + 1;
   }
   return lines;
 }
 
+void repeat(owned_array<op> &script, op tag, size_t count) {
+  for (size_t index = 0; index < count; ++index)
+    script.push_back(tag);
+}
+
 /* Edit script between the two sequences: common prefix and suffix first,
  * then a longest common subsequence of the middle while its table stays
  * small; larger middles are reported as one removal and one insertion. */
-std::vector<opcode> opcodes(const std::vector<std::string> &a,
-                            const std::vector<std::string> &b) {
+owned_array<opcode> opcodes(const owned_array<std::string_view> &a,
+                            const owned_array<std::string_view> &b) {
   size_t prefix = 0;
   while (prefix < a.size() && prefix < b.size() && a[prefix] == b[prefix])
     ++prefix;
@@ -42,11 +48,12 @@ std::vector<opcode> opcodes(const std::vector<std::string> &a,
          a[a.size() - 1 - suffix] == b[b.size() - 1 - suffix])
     ++suffix;
   const size_t n = a.size() - prefix - suffix, m = b.size() - prefix - suffix;
-  std::vector<op> script;
+  owned_array<op> script;
   constexpr size_t table_limit = 4000000;
   if (n != 0 && m != 0 && m <= table_limit / n) {
     const size_t width = m + 1;
-    std::vector<uint32_t> table((n + 1) * width, 0);
+    owned_array<uint32_t> table;
+    table.resize((n + 1) * width);
     for (size_t i = n; i-- > 0;)
       for (size_t j = m; j-- > 0;) {
         const uint32_t down = table[(i + 1) * width + j];
@@ -69,13 +76,13 @@ std::vector<opcode> opcodes(const std::vector<std::string> &a,
         ++j;
       }
     }
-    script.insert(script.end(), n - i, op::remove);
-    script.insert(script.end(), m - j, op::insert);
+    repeat(script, op::remove, n - i);
+    repeat(script, op::insert, m - j);
   } else {
-    script.insert(script.end(), n, op::remove);
-    script.insert(script.end(), m, op::insert);
+    repeat(script, op::remove, n);
+    repeat(script, op::insert, m);
   }
-  std::vector<opcode> result;
+  owned_array<opcode> result;
   const auto append = [&](op tag, size_t a_count, size_t b_count) {
     if (!result.empty() && result.back().tag == tag) {
       result.back().a_end += a_count;
@@ -95,28 +102,48 @@ std::vector<opcode> opcodes(const std::vector<std::string> &a,
   return result;
 }
 
-std::string format_range(size_t start, size_t stop) {
+/* A hunk range as difflib writes it, in a buffer of the call. */
+struct range_text {
+  char bytes[48];
+  size_t length;
+  std::string_view view() const { return {bytes, length}; }
+};
+
+range_text format_range(size_t start, size_t stop) {
   size_t beginning = start + 1;
   const size_t length = stop - start;
-  if (length == 1)
-    return std::to_string(beginning);
-  if (length == 0)
-    --beginning;
-  return std::to_string(beginning) + "," + std::to_string(length);
+  range_text out{};
+  int written;
+  if (length == 1) {
+    written = std::snprintf(out.bytes, sizeof out.bytes, "%zu", beginning);
+  } else {
+    if (length == 0)
+      --beginning;
+    written = std::snprintf(out.bytes, sizeof out.bytes, "%zu,%zu", beginning,
+                            length);
+  }
+  out.length = written > 0 ? static_cast<size_t>(written) : 0;
+  return out;
+}
+
+owned_string joined(std::string_view head, std::string_view tail) {
+  owned_string out(head);
+  out.append(tail);
+  return out;
 }
 } // namespace
 
-std::vector<std::string>
-unified_diff(const std::vector<std::string> &from_lines,
-             const std::vector<std::string> &to_lines, const std::string &from,
-             const std::string &to) {
+owned_list<owned_string>
+unified_diff(const owned_array<std::string_view> &from_lines,
+             const owned_array<std::string_view> &to_lines,
+             std::string_view from, std::string_view to) {
   constexpr size_t context = 3;
-  std::vector<opcode> codes = opcodes(from_lines, to_lines);
-  std::vector<std::string> output;
+  owned_array<opcode> codes = opcodes(from_lines, to_lines);
+  owned_list<owned_string> output;
   if (codes.empty())
     return output;
-  if (codes.front().tag == op::equal) {
-    opcode &first = codes.front();
+  if (codes[0].tag == op::equal) {
+    opcode &first = codes[0];
     first.a_begin =
         std::max(first.a_begin, first.a_end - std::min(first.a_end, context));
     first.b_begin =
@@ -127,73 +154,79 @@ unified_diff(const std::vector<std::string> &from_lines,
     last.a_end = std::min(last.a_end, last.a_begin + context);
     last.b_end = std::min(last.b_end, last.b_begin + context);
   }
-  std::vector<std::vector<opcode>> groups;
-  std::vector<opcode> group;
+  owned_list<owned_array<opcode>> groups;
+  owned_array<opcode> group;
   for (opcode code : codes) {
     if (code.tag == op::equal && code.a_end - code.a_begin > 2 * context) {
       group.push_back(
           {code.tag, code.a_begin, std::min(code.a_end, code.a_begin + context),
            code.b_begin, std::min(code.b_end, code.b_begin + context)});
-      groups.push_back(std::move(group));
-      group.clear();
+      // The moved-from group is empty again.
+      groups.emplace_back(std::move(group));
       code.a_begin = std::max(code.a_begin, code.a_end - context);
       code.b_begin = std::max(code.b_begin, code.b_end - context);
     }
     group.push_back(code);
   }
-  if (!group.empty() && !(group.size() == 1 && group.front().tag == op::equal))
-    groups.push_back(std::move(group));
+  if (!group.empty() && !(group.size() == 1 && group[0].tag == op::equal))
+    groups.emplace_back(std::move(group));
   if (groups.empty())
     return output;
-  output.push_back("--- " + from);
-  output.push_back("+++ " + to);
-  for (const auto &hunk : groups) {
-    output.push_back(
-        "@@ -" + format_range(hunk.front().a_begin, hunk.back().a_end) + " +" +
-        format_range(hunk.front().b_begin, hunk.back().b_end) + " @@");
+  output.emplace_back(joined("--- ", from));
+  output.emplace_back(joined("+++ ", to));
+  for (size_t index = 0; index < groups.size(); ++index) {
+    const owned_array<opcode> &hunk = groups[index];
+    const opcode &first = hunk[0];
+    const opcode &last = hunk[hunk.size() - 1];
+    owned_string header("@@ -");
+    header.append(format_range(first.a_begin, last.a_end).view());
+    header.append(" +");
+    header.append(format_range(first.b_begin, last.b_end).view());
+    header.append(" @@");
+    output.emplace_back(std::move(header));
     for (const opcode &code : hunk) {
       if (code.tag == op::equal) {
         for (size_t i = code.a_begin; i < code.a_end; ++i)
-          output.push_back(" " + from_lines[i]);
+          output.emplace_back(joined(" ", from_lines[i]));
       } else if (code.tag == op::remove) {
         for (size_t i = code.a_begin; i < code.a_end; ++i)
-          output.push_back("-" + from_lines[i]);
+          output.emplace_back(joined("-", from_lines[i]));
       } else {
         for (size_t j = code.b_begin; j < code.b_end; ++j)
-          output.push_back("+" + to_lines[j]);
+          output.emplace_back(joined("+", to_lines[j]));
       }
     }
   }
   return output;
 }
 
-bool write_generated(const std::string &path, const std::string &content) {
+bool write_generated(const char *path, std::string_view content) {
   bool changed = false;
-  require(jb_file_write_atomic(path.c_str(), content.data(), content.size(),
-                               false, &changed),
+  require(jb_file_write_atomic(path, content.data(), content.size(), false,
+                               &changed),
           3, "cannot publish generated output");
   return changed;
 }
 
-bool check_generated(const std::string &path, const std::string &content,
-                     size_t diff_limit, const std::string &label) {
+bool check_generated(const char *path, std::string_view content,
+                     size_t diff_limit, std::string_view label) {
   file_owner existing;
   const hal_status_t status =
-      jb_file_read(path.c_str(), 64 * 1024 * 1024, &existing.data);
+      jb_file_read(path, 64 * 1024 * 1024, &existing.data);
   if (status == HAL_ENOENT) {
-    std::fprintf(stderr, "error: missing generated artifact %s\n",
-                 path.c_str());
+    std::fprintf(stderr, "error: missing generated artifact %s\n", path);
     return false;
   }
   require(status, status == HAL_EOVERFLOW || status == HAL_ENOMEM ? 4 : 3,
           "cannot read generated output");
-  const std::string actual(reinterpret_cast<const char *>(existing.data.data),
-                           existing.data.length);
+  const std::string_view actual(
+      reinterpret_cast<const char *>(existing.data.data), existing.data.length);
   if (actual == content)
     return true;
-  std::fprintf(stderr, "error: stale generated artifact %s\n", path.c_str());
-  const auto lines =
-      unified_diff(split_lines(actual), split_lines(content), path, label);
+  std::fprintf(stderr, "error: stale generated artifact %s\n", path);
+  const auto from_lines = split_lines(actual);
+  const auto to_lines = split_lines(content);
+  const auto lines = unified_diff(from_lines, to_lines, path, label);
   for (size_t index = 0; index < lines.size(); ++index) {
     if (index == diff_limit) {
       std::fputs("... diff truncated ...\n", stderr);

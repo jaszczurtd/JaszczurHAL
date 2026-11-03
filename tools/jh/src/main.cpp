@@ -3,6 +3,7 @@
 #include "../hardware/jh_type_catalogue.h"
 #include "../json/jh_json_file.h"
 #include "jh_generated_output.h"
+#include "jh_stl_bridge.h"
 #include <algorithm>
 #include <array>
 #include <charconv>
@@ -253,8 +254,9 @@ std::string help_text() {
 
 class result_writer {
   jb_json_writer_t writer{};
-  std::vector<unsigned char> scratch;
-  std::string text;
+  jh::owned_array<unsigned char> scratch;
+  // append_text appends to an owned_string.
+  jh::owned_string text;
 
 public:
   explicit result_writer(size_t input_bytes, size_t keys = 32) {
@@ -277,7 +279,7 @@ public:
     require(jb_json_writer_key(&writer, span(name)), 4,
             "cannot write result key");
   }
-  void string(const char *name, const std::string &value) {
+  void string(const char *name, std::string_view value) {
     key(name);
     require(jb_json_writer_string(&writer, span(value)), 4,
             "cannot write result string");
@@ -334,7 +336,7 @@ public:
     require(jb_json_writer_node(&writer, value), 4,
             "cannot write selected JSON");
   }
-  void schema_errors(const std::vector<jh::schema_report> &errors) {
+  void schema_errors(const jh::owned_list<jh::schema_report> &errors) {
     key("errors");
     require(jb_json_writer_array_begin(&writer), 4,
             "cannot start schema errors");
@@ -351,13 +353,13 @@ public:
     }
     require(jb_json_writer_array_end(&writer), 4, "cannot close schema errors");
   }
-  void paths(const std::string &bytes) {
+  void paths(std::string_view bytes) {
     key("paths");
     require(jb_json_writer_array_begin(&writer), 4, "cannot start paths");
     size_t begin = 0;
     while (begin < bytes.size()) {
       const size_t nul = bytes.find('\0', begin);
-      const size_t end = nul == std::string::npos ? bytes.size() : nul;
+      const size_t end = nul == std::string_view::npos ? bytes.size() : nul;
       if (end != begin) {
         size_t bad = 0;
         const jb_json_span_t path{bytes.data() + begin, end - begin};
@@ -365,7 +367,7 @@ public:
                 "repository path is not UTF-8; use raw output");
         require(jb_json_writer_string(&writer, path), 4, "cannot write path");
       }
-      if (nul == std::string::npos)
+      if (nul == std::string_view::npos)
         break;
       begin = end + 1;
     }
@@ -378,7 +380,7 @@ public:
     number("termSignal", static_cast<size_t>(value.term_signal));
     number("nativeError", value.native_error);
   }
-  std::string finish() {
+  jh::owned_string finish() {
     require(jb_json_writer_object_end(&writer), 4, "cannot close result");
     size_t count;
     require(jb_json_writer_finish(&writer, &count), 4, "cannot finish result");
@@ -387,7 +389,7 @@ public:
   }
 };
 
-void stdout_bytes(const std::string &text) {
+void stdout_bytes(std::string_view text) {
   if (std::fwrite(text.data(), 1, text.size(), stdout) != text.size() ||
       std::fflush(stdout) != 0)
     throw failure{HAL_EIO, 3, "cannot write stdout", {}, {}, {}};
@@ -423,7 +425,8 @@ int inspect(context &ctx, const std::string &base) {
   if (args.present[check] && !args.present[output])
     throw failure{HAL_EINVAL, 2, "--check requires --output", {}, {}, {}};
   auto owned = jh::read_document(
-      ctx, jh::absolute_path(args.values[file], base), input_limit(args));
+      ctx, jh::stl::absolute_path(args.values[file], base).c_str(),
+      input_limit(args));
   const auto &document = owned->doc;
   const auto &tokens = owned->tokens;
   const auto bytes = document.input;
@@ -435,7 +438,7 @@ int inspect(context &ctx, const std::string &base) {
   bool changed = false;
   std::string destination;
   if (args.present[output]) {
-    destination = jh::absolute_path(args.values[output], base);
+    destination = jh::stl::absolute_path(args.values[output], base);
     std::string content(raw.data, raw.length);
     content += '\n';
     require(jb_file_write_atomic(destination.c_str(), content.data(),
@@ -474,12 +477,12 @@ int validate(context &ctx, const std::string &base) {
     throw failure{HAL_EINVAL, 2,  "json validate requires --file and --schema",
                   {},         {}, {}};
   const size_t max = input_limit(args);
-  const auto input_path = jh::absolute_path(args.values[file], base);
-  auto input = jh::read_document(ctx, input_path, max);
+  const auto input_path = jh::stl::absolute_path(args.values[file], base);
+  auto input = jh::read_document(ctx, input_path.c_str(), max);
   jh::schema_files state(ctx, max);
   const auto &root_schema =
-      state.root(jh::absolute_path(args.values[schema], base));
-  std::vector<unsigned char> scratch;
+      state.root(jh::stl::absolute_path(args.values[schema], base).c_str());
+  jh::owned_array<unsigned char> scratch;
   const auto status = jh::validate_with(state, *input, scratch);
   ctx.source = input_path;
   for (const auto &error : state.reports) {
@@ -516,7 +519,7 @@ int generate_defaults(context &ctx, const std::string &base) {
                   {},
                   {}};
   constexpr size_t limit = 16 * 1024 * 1024;
-  auto hal_root = jh::absolute_path(args.values[root], base);
+  auto hal_root = jh::stl::absolute_path(args.values[root], base);
   // A root given as "." resolves with a trailing separator; report it plain.
   if (hal_root.size() > 1 &&
       (hal_root.back() == '/' || hal_root.back() == '\\') &&
@@ -524,13 +527,16 @@ int generate_defaults(context &ctx, const std::string &base) {
     hal_root.pop_back();
   const auto bindings_dir =
       args.present[bindings]
-          ? jh::absolute_path(args.values[bindings], base)
-          : jh::absolute_path("config/hardware/bindings", hal_root);
-  const auto out_root = args.present[output_root]
-                            ? jh::absolute_path(args.values[output_root], base)
-                            : hal_root;
+          ? jh::stl::absolute_path(args.values[bindings], base)
+          : jh::stl::absolute_path("config/hardware/bindings", hal_root);
+  const auto out_root =
+      args.present[output_root]
+          ? jh::stl::absolute_path(args.values[output_root], base)
+          : hal_root;
   const auto artifacts = jh::read_document(
-      ctx, jh::absolute_path("config/tooling/artifacts.json", hal_root), limit);
+      ctx,
+      jh::stl::absolute_path("config/tooling/artifacts.json", hal_root).c_str(),
+      limit);
   jb_json_node_t artifacts_root;
   require(jb_json_root(&artifacts->doc, &artifacts_root), 2,
           "artifacts.json has no root");
@@ -548,24 +554,25 @@ int generate_defaults(context &ctx, const std::string &base) {
                   {},
                   {}};
   const std::string header_relative = header_entry.string();
-  const auto output_path = jh::absolute_path(header_relative, out_root);
+  const auto output_path = jh::stl::absolute_path(header_relative, out_root);
   const auto features = jh::hardware::hal_features(ctx, hal_root, limit);
   const auto capabilities =
       jh::hardware::board_capabilities(ctx, hal_root, limit);
   const auto types = jh::hardware::load_hal_catalogue(
-      ctx, jh::absolute_path("config/hardware", hal_root), bindings_dir, limit);
+      ctx, jh::stl::absolute_path("config/hardware", hal_root), bindings_dir,
+      limit);
   jh::hardware::check_catalogue(types, &features, &capabilities);
   const std::string content = jh::hardware::render_device_defaults(types);
   ctx.source = output_path;
   bool changed = false;
   bool current = true;
   if (args.present[write_mode]) {
-    changed = jh::write_generated(output_path, content);
+    changed = jh::write_generated(output_path.c_str(), content);
     if (!ctx.json)
       stdout_bytes("generated 1 device defaults artifacts (" +
                    std::to_string(changed ? 1 : 0) + " changed)\n");
   } else {
-    current = jh::check_generated(output_path, content, 40,
+    current = jh::check_generated(output_path.c_str(), content, 40,
                                   "generated:" + header_relative);
     changed = !current;
     if (current && !ctx.json)
@@ -618,7 +625,8 @@ hal_status_t stream_bytes(FILE *stream, const char *data, size_t length) {
 struct repository_output {
   bool capture;
   size_t limit;
-  std::string bytes;
+  // append_text appends to an owned_string.
+  jh::owned_string bytes;
 };
 
 hal_status_t repository_bytes(void *user, jb_process_stream_t stream,
@@ -644,8 +652,8 @@ int repository_files(context &ctx, const std::string &base) {
   if (args.present[max_bytes] && !ctx.json)
     throw failure{HAL_EINVAL, 2,  "repository --max-bytes requires --json",
                   {},         {}, {}};
-  const auto directory = jh::absolute_path(args.values[root], base);
-  const auto executable = jh::absolute_path(args.values[git], base);
+  const auto directory = jh::stl::absolute_path(args.values[root], base);
+  const auto executable = jh::stl::absolute_path(args.values[git], base);
   const auto timeout = static_cast<uint32_t>(count_option(
       args, timeout_ms, 0, UINT32_MAX,
       "--timeout-ms requires an integer between 0 and 4294967295"));
@@ -733,7 +741,7 @@ size_t directive_bytes(const std::vector<jh::config::directive> &directives) {
  * at any branch, also of a header the reader rejects. */
 int config_directives(context &ctx, const std::string &base) {
   require_value(ctx.args, file, "config directives requires --file");
-  const auto path = jh::absolute_path(ctx.args.values[file], base);
+  const auto path = jh::stl::absolute_path(ctx.args.values[file], base);
   ctx.source = path;
   const auto directives = jh::config::read_directives(path);
   if (!ctx.json) {
@@ -767,7 +775,7 @@ const char *integer_state(jh::config::integer_kind kind) {
 int config_inspect(context &ctx, const std::string &base) {
   const auto &args = ctx.args;
   const auto path_of = [&](option_id id) {
-    return args.present[id] ? jh::absolute_path(args.values[id], base)
+    return args.present[id] ? jh::stl::absolute_path(args.values[id], base)
                             : std::string();
   };
   if ((args.present[header] && args.values[header].empty()) ||

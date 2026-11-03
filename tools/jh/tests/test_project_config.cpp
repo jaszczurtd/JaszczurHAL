@@ -11,6 +11,7 @@
 #include "jh_json_file.h"
 #include "jh_project_config.h"
 #include "jh_python_repr.h"
+#include "jh_stl_bridge.h"
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
@@ -34,7 +35,7 @@ void expect(bool ok, const char *what) {
 
 std::string write(const std::string &directory, const char *name,
                   const std::string &bytes) {
-  const std::string path = jh::absolute_path(name, directory);
+  const std::string path = jh::stl::absolute_path(name, directory);
   bool changed = false;
   expect(jb_file_write_atomic(path.c_str(), bytes.data(), bytes.size(), false,
                               &changed) == HAL_OK,
@@ -54,8 +55,8 @@ jh::failure rejection(const std::string &header,
   return {HAL_OK, 0, {}, {}, {}, {}};
 }
 
-bool has(const std::string &text, const char *part) {
-  return text.find(part) != std::string::npos;
+bool has(std::string_view text, const char *part) {
+  return text.find(part) != std::string_view::npos;
 }
 
 void values_and_includes(const std::string &directory) {
@@ -616,7 +617,7 @@ void former_python_cases(const std::string &directory) {
   }
 
   const project_config empty = read_project_config(
-      jh::absolute_path("missing.h", directory), {"HAL_TARGET_MOCK"}, {});
+      jh::stl::absolute_path("missing.h", directory), {"HAL_TARGET_MOCK"}, {});
   expect(empty.files.empty() && empty.variants.empty() &&
              empty.macros.find("HAL_TARGET_MOCK") != nullptr,
          "a missing header is empty and predefined macros stay visible");
@@ -776,7 +777,7 @@ void preprocessor(const std::string &compiler, const std::string &root,
   }
   // GCC accepts negative shift counts in active operands; Clang does not.
   const auto shifts =
-      jh::absolute_path("shifts/hal_project_config.h", directory);
+      jh::stl::absolute_path("shifts/hal_project_config.h", directory);
   std::map<std::string, std::string> gcc;
   if (compiler_macros(compiler, directory, shifts, {}, &gcc) &&
       gcc.count("__GNUC__") != 0 && gcc.count("__clang__") == 0)
@@ -850,10 +851,11 @@ int main(int argc, char **argv) {
   }
   try {
     const std::string directory =
-        jh::absolute_path("project-config-test", argv[1]);
+        jh::stl::absolute_path("project-config-test", argv[1]);
     bool changed = false;
-    expect(jb_file_write_atomic(jh::absolute_path("marker", directory).c_str(),
-                                "", 0, false, &changed) == HAL_OK,
+    expect(jb_file_write_atomic(
+               jh::stl::absolute_path("marker", directory).c_str(), "", 0,
+               false, &changed) == HAL_OK,
            "work directory");
     values_and_includes(directory);
     stop_and_rejections(directory);

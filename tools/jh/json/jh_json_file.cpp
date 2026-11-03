@@ -1,7 +1,7 @@
 #include "jh_json_file.h"
 #include <algorithm>
 #include <cstring>
-#include <filesystem>
+#include <jb/filesystem.h>
 #include <jb/json_number.h>
 #include <new>
 #include <stdexcept>
@@ -13,17 +13,17 @@ void require(hal_status_t status, int exit_code, const char *message) {
     throw failure{status, exit_code, message, {}, {}, {}};
 }
 
-jb_json_span_t span(const std::string &text) {
+jb_json_span_t span(std::string_view text) {
   return {text.data(), text.size()};
 }
 jb_json_span_t span(const char *text) { return {text, std::strlen(text)}; }
-std::string copied(jb_json_span_t text) {
-  return std::string(text.data, text.length);
+owned_string copied(jb_json_span_t text) {
+  return owned_string(text.data, text.length);
 }
 
 hal_status_t append_text(void *user, const char *data, size_t length) {
   try {
-    static_cast<std::string *>(user)->append(data, length);
+    static_cast<owned_string *>(user)->append(std::string_view(data, length));
     return HAL_OK;
   } catch (const std::bad_alloc &) {
     return HAL_ENOMEM;
@@ -34,20 +34,31 @@ hal_status_t append_text(void *user, const char *data, size_t length) {
   }
 }
 
-std::string absolute_path(const std::string &path, const std::string &base) {
+namespace {
+/* The result of a jhbase path function that measures with (NULL, 0) and then
+ * writes a NUL-terminated path of the reported size. */
+template <class Write> owned_string path_result(Write write) {
   size_t needed;
-  require(jb_path_resolve(base.c_str(), path.c_str(), nullptr, 0, &needed), 3,
-          "cannot resolve path");
-  std::vector<char> bytes(needed);
-  require(jb_path_resolve(base.c_str(), path.c_str(), bytes.data(),
-                          bytes.size(), &needed),
-          3, "cannot resolve path");
-  return std::string(bytes.data(), needed - 1);
+  require(write(nullptr, 0, &needed), 3, "cannot resolve path");
+  owned_string result;
+  if (needed > 1) {
+    result.resize(needed - 1);
+    require(write(result.mutable_data(), needed, &needed), 3,
+            "cannot resolve path");
+  }
+  return result;
+}
+} // namespace
+
+owned_string absolute_path(const char *path, const char *base) {
+  return path_result([&](char *buffer, size_t capacity, size_t *needed) {
+    return jb_path_resolve(base, path, buffer, capacity, needed);
+  });
 }
 
-std::string schema_identity(const std::string &path) {
+owned_string schema_identity(std::string_view path) {
   constexpr char hex[] = "0123456789ABCDEF";
-  std::string result;
+  owned_string result;
   for (char byte : path) {
     auto c = static_cast<unsigned char>(byte);
 #ifdef _WIN32
@@ -96,7 +107,8 @@ void check_hardware_numbers(parse_location &where, json_document &owned) {
     size_t scratch_bytes;
     require(jb_json_float_workspace_size(node, 64, &scratch_bytes), 4,
             "number workspace overflow");
-    std::vector<unsigned char> scratch(scratch_bytes);
+    owned_array<unsigned char> scratch;
+    scratch.resize(scratch_bytes);
     const jb_json_float_options_t options{true, false,
                                           64 * token.length + 1000000};
     uint64_t bits;
@@ -106,22 +118,18 @@ void check_hardware_numbers(parse_location &where, json_document &owned) {
       where.error = {JB_JSON_ERROR_NONE, token.offset, SIZE_MAX, 0};
       where.located = true;
       (void)jb_json_locate(doc.input, token.offset, &where.line, &where.column);
-      throw failure{HAL_EPROTO,
-                    2,
-                    "number " + std::string(text, token.length) +
-                        " is outside the binary64 range or exceeds the "
-                        "conversion budget",
-                    {},
-                    {},
-                    {}};
+      owned_string message("number ");
+      message.append(std::string_view(text, token.length));
+      message.append(" is outside the binary64 range or exceeds the "
+                     "conversion budget");
+      throw failure{HAL_EPROTO, 2, std::move(message), {}, {}, {}};
     }
   }
 }
 } // namespace
 
 std::unique_ptr<json_document> read_document(parse_location &where,
-                                             const std::string &path,
-                                             size_t limit,
+                                             const char *path, size_t limit,
                                              bool hardware_numbers) {
   auto owned = std::make_unique<json_document>();
   owned->uri = path;
@@ -147,7 +155,8 @@ std::unique_ptr<json_document> read_document(parse_location &where,
   size_t scratch_bytes;
   require(jb_json_parse_workspace_size(&limits, &scratch_bytes), 4,
           "parser workspace overflow");
-  std::vector<unsigned char> scratch(scratch_bytes);
+  owned_array<unsigned char> scratch;
+  scratch.resize(scratch_bytes);
   parsed(jb_json_measure(bytes, &limits, {scratch.data(), scratch.size()},
                          &needed, &where.error));
   owned->tokens.resize(needed.node_count);
@@ -162,13 +171,12 @@ std::unique_ptr<json_document> read_document(parse_location &where,
   return owned;
 }
 
-settings_file read_settings(parse_location &where, const std::string &path,
+settings_file read_settings(parse_location &where, const char *path,
                             size_t limit) {
   where.source = path;
   where.located = false;
   file_owner input;
-  const hal_status_t read_status =
-      jb_file_read(path.c_str(), limit, &input.data);
+  const hal_status_t read_status = jb_file_read(path, limit, &input.data);
   if (read_status != HAL_ENOENT)
     require(read_status, exit_code_for(read_status, 3),
             "cannot read input file");
@@ -203,15 +211,17 @@ settings_file read_settings(parse_location &where, const std::string &path,
   require(jb_json_tree_root(result.tree.get(), &root), 2,
           "cannot read the settings root");
   require(jb_json_tree_type(root, &type), 2, "cannot read the settings root");
-  if (type != JB_JSON_OBJECT)
-    throw failure{HAL_ETYPE, 2,  path + " must contain a JSON object",
-                  {},        {}, {}};
+  if (type != JB_JSON_OBJECT) {
+    owned_string message(path);
+    message.append(" must contain a JSON object");
+    throw failure{HAL_ETYPE, 2, std::move(message), {}, {}, {}};
+  }
   return result;
 }
 
-const json_document &schema_files::root(const std::string &path) {
+const json_document &schema_files::root(const char *path) {
   documents.push_back(read_document(where, path, max_bytes));
-  const auto &loaded = *documents.front();
+  const auto &loaded = documents.front();
   schema_bytes = loaded.doc.input.length;
   return loaded;
 }
@@ -221,29 +231,36 @@ hal_status_t load_schema(void *user, jb_json_span_t base_uri,
                          jh_json_schema_source_t *out) {
   auto &state = *static_cast<schema_files *>(user);
   try {
-    const std::string ref = copied(reference);
-    if (ref.find(':') != std::string::npos || ref.rfind("//", 0) == 0 ||
-        ref.find('\\') != std::string::npos ||
-        ref.find('\0') != std::string::npos)
+    const std::string_view ref(reference.data, reference.length);
+    if (ref.find(':') != std::string_view::npos || ref.rfind("//", 0) == 0 ||
+        ref.find('\\') != std::string_view::npos ||
+        ref.find('\0') != std::string_view::npos)
       return HAL_EUNSUPPORTED;
+    const std::string_view base_identifier(base_uri.data, base_uri.length);
     const json_document *base_document = nullptr;
-    const auto base_identifier = copied(base_uri);
-    for (const auto &doc : state.documents)
-      if (doc->identity == base_identifier) {
-        base_document = doc.get();
+    for (size_t index = 0; index < state.documents.size(); ++index)
+      if (state.documents[index].identity.view() == base_identifier) {
+        base_document = &state.documents[index];
         break;
       }
     if (base_document == nullptr)
       return HAL_EINTERNAL;
-    const auto parent =
-        std::filesystem::u8path(base_document->uri).parent_path().u8string();
-    const auto path = absolute_path(ref, parent);
-    for (const auto &doc : state.documents) {
-      std::error_code error;
-      if (doc->uri == path ||
-          std::filesystem::equivalent(std::filesystem::u8path(doc->uri),
-                                      std::filesystem::u8path(path), error)) {
-        *out = {span(doc->identity), &doc->doc};
+    const owned_string parent =
+        path_result([&](char *buffer, size_t capacity, size_t *needed) {
+          return jb_fs_path_parent(base_document->uri.c_str(), buffer, capacity,
+                                   needed);
+        });
+    // A reference without NUL bytes (checked above) is a C string.
+    const owned_string relative(ref);
+    const owned_string path = absolute_path(relative.c_str(), parent.c_str());
+    for (size_t index = 0; index < state.documents.size(); ++index) {
+      const json_document &doc = state.documents[index];
+      // An entry that cannot be compared (missing, unreadable) is another file.
+      bool same = false;
+      if (doc.uri.view() == path.view() ||
+          (jb_fs_equivalent(doc.uri.c_str(), path.c_str(), &same) == HAL_OK &&
+           same)) {
+        *out = {span(doc.identity), &doc.doc};
         return HAL_OK;
       }
     }
@@ -253,11 +270,11 @@ hal_status_t load_schema(void *user, jb_json_span_t base_uri,
     if (state.schema_bytes >= total_limit)
       return HAL_EOVERFLOW;
     auto doc = read_document(
-        state.where, path,
+        state.where, path.c_str(),
         std::min(state.max_bytes, total_limit - state.schema_bytes));
     state.schema_bytes += doc->doc.input.length;
-    *out = {span(doc->identity), &doc->doc};
-    state.documents.push_back(std::move(doc));
+    const json_document &loaded = state.documents.push_back(std::move(doc));
+    *out = {span(loaded.identity), &loaded.doc};
     return HAL_OK;
   } catch (const failure &e) {
     return e.status;
@@ -271,9 +288,10 @@ hal_status_t load_schema(void *user, jb_json_span_t base_uri,
 hal_status_t collect_report(void *user, const jh_json_schema_error_t *error) {
   try {
     auto &reports = static_cast<schema_files *>(user)->reports;
-    reports.push_back({copied(error->instance_pointer),
-                       copied(error->schema_uri), copied(error->schema_pointer),
-                       copied(error->reason_code), copied(error->message)});
+    reports.push_back(std::make_unique<schema_report>(
+        schema_report{copied(error->instance_pointer),
+                      copied(error->schema_uri), copied(error->schema_pointer),
+                      copied(error->reason_code), copied(error->message)}));
     return HAL_OK;
   } catch (const std::bad_alloc &) {
     return HAL_ENOMEM;
@@ -291,10 +309,10 @@ const jh_json_schema_limits_t &schema_limits() {
 }
 
 hal_status_t validate_with(schema_files &state, const json_document &instance,
-                           std::vector<unsigned char> &scratch) {
+                           owned_array<unsigned char> &scratch) {
   if (state.documents.empty())
     throw failure{HAL_ESTATE, 3, "no root schema is loaded", {}, {}, {}};
-  const auto &root = *state.documents.front();
+  const auto &root = state.documents.front();
   const jh_json_schema_source_t source{span(root.identity), &root.doc};
   const auto &limits = schema_limits();
   if (scratch.empty()) {

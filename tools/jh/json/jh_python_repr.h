@@ -5,8 +5,8 @@
  * repr() of a Python str, which the diagnostics of the jh commands quote the
  * way the Python HAL tools did. C++17.
  */
+#include "jh_containers.h"
 #include <cstddef>
-#include <string>
 #include <string_view>
 
 namespace jh {
@@ -26,7 +26,7 @@ using repr_piece_fn = void (*)(void *user, std::string_view piece,
 void python_repr(std::string_view text, repr_piece_fn piece, void *user);
 
 /** repr() of UTF-8 text as one string. */
-std::string python_repr(std::string_view text);
+owned_string python_repr(std::string_view text);
 
 } // namespace jh
 #endif

@@ -453,6 +453,7 @@ JH_MEMCHECK_REQUIRED_TESTS=(
     jh_schema
     jh_settings
     jh_config
+    jh_containers
 )
 
 # run_memcheck BUILD LOG REQUIRED...: every native test labelled memcheck in

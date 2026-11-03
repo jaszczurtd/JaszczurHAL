@@ -1,5 +1,6 @@
 #include "jh_type_catalogue.h"
 #include "jh_python_repr.h"
+#include "jh_stl_bridge.h"
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
@@ -28,7 +29,7 @@ std::string python_repr(view value) {
   case JB_JSON_NUMBER:
     return value.raw();
   case JB_JSON_STRING:
-    return jh::python_repr(value.string());
+    return stl::python_repr(value.string());
   default: {
     std::string text = "[";
     bool first = true;
@@ -410,7 +411,7 @@ std::vector<std::string> json_files(const std::string &directory) {
   std::sort(names.begin(), names.end());
   std::vector<std::string> paths;
   for (const auto &name : names)
-    paths.push_back(absolute_path(name, directory));
+    paths.push_back(stl::absolute_path(name, directory));
   return paths;
 }
 
@@ -419,21 +420,22 @@ std::string file_name(const std::string &path) {
 }
 
 binding read_binding(parse_location &where, schema_files &schemas,
-                     std::vector<unsigned char> &scratch,
+                     owned_array<unsigned char> &scratch,
                      const std::string &path, const char *origin) {
   std::unique_ptr<json_document> document;
   try {
-    document = read_document(where, path, schemas.max_bytes, true);
+    document = read_document(where, path.c_str(), schemas.max_bytes, true);
   } catch (const failure &error) {
     if (error.exit_code != 2)
       throw;
-    fail(schema_code, path, "", error.message);
+    fail(schema_code, path, "", std::string(error.message));
   }
   if (validate_with(schemas, *document, scratch) != HAL_OK) {
     if (schemas.reports.empty())
       fail(schema_code, path, "", "the binding schema rejects this file");
     const auto &first = schemas.reports.front();
-    fail(schema_code, path, first.pointer, first.message);
+    fail(schema_code, path, std::string(first.pointer),
+         std::string(first.message));
   }
   binding entry;
   entry.path = path;
@@ -446,7 +448,7 @@ binding read_binding(parse_location &where, schema_files &schemas,
 std::set<std::string> object_keys(parse_location &where,
                                   const std::string &path, size_t max_bytes,
                                   const char *field) {
-  const auto document = read_document(where, path, max_bytes);
+  const auto document = read_document(where, path.c_str(), max_bytes);
   jb_json_node_t root;
   require(jb_json_root(&document->doc, &root), 2, "document has no root");
   view table;
@@ -551,7 +553,7 @@ std::string view::key() const {
 std::string view::raw() const {
   jb_json_span_t bytes;
   require(jb_json_raw(node, &bytes), 3, "cannot read a JSON value");
-  return copied(bytes);
+  return stl::copied(bytes);
 }
 
 bool view::boolean() const {
@@ -621,7 +623,8 @@ void fail(const std::string &code, const std::string &source,
 std::set<std::string> hal_features(parse_location &where,
                                    const std::string &root, size_t max_bytes) {
   std::set<std::string> features;
-  for (const auto &path : json_files(absolute_path("config/features", root))) {
+  for (const auto &path :
+       json_files(stl::absolute_path("config/features", root))) {
     const auto symbols = object_keys(where, path, max_bytes, "symbols");
     features.insert(symbols.begin(), symbols.end());
   }
@@ -631,7 +634,8 @@ std::set<std::string> hal_features(parse_location &where,
 std::set<std::string> board_capabilities(parse_location &where,
                                          const std::string &root,
                                          size_t max_bytes) {
-  return object_keys(where, absolute_path("boards/capabilities.json", root),
+  return object_keys(where,
+                     stl::absolute_path("boards/capabilities.json", root),
                      max_bytes, "capabilities");
 }
 
@@ -640,8 +644,8 @@ catalogue load_hal_catalogue(parse_location &where,
                              const std::string &bindings_dir,
                              size_t max_bytes) {
   schema_files schemas(where, max_bytes);
-  schemas.root(absolute_path("binding.schema.json", schema_dir));
-  std::vector<unsigned char> scratch;
+  schemas.root(stl::absolute_path("binding.schema.json", schema_dir).c_str());
+  owned_array<unsigned char> scratch;
   catalogue result;
   for (const auto &path : json_files(bindings_dir)) {
     binding entry = read_binding(where, schemas, scratch, path, "hal");

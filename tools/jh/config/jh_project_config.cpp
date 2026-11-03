@@ -1,6 +1,7 @@
 #include "jh_project_config.h"
 #include "../json/jh_json_file.h"
 #include "../json/jh_python_repr.h"
+#include "../src/jh_stl_bridge.h"
 #include <algorithm>
 #include <filesystem>
 #include <jb/file.h>
@@ -416,7 +417,7 @@ std::vector<std::string> condition_tokens(const std::string &input,
     const size_t end = start < text.size() ? token_end(text, start) : start;
     if (end == start)
       reject(source, "JH-CFG-SCOPE",
-             "cannot evaluate " + python_repr(text.substr(offset)));
+             "cannot evaluate " + stl::python_repr(text.substr(offset)));
     tokens.push_back(text.substr(start, end - start));
     offset = end;
   }
@@ -483,7 +484,7 @@ literal integer_literal(const std::string &token, const std::string &source) {
     // reader's own error, so no caller turns it into "no value".
     if (digit >= base)
       reject(source, "JH-CFG-SCOPE",
-             "invalid octal literal " + python_repr(token), HAL_EPROTO);
+             "invalid octal literal " + stl::python_repr(token), HAL_EPROTO);
     if (value > (static_cast<uint64_t>(int64_max) - digit) / base)
       in_range = false;
     else
@@ -707,7 +708,7 @@ class parser {
     }
     if (identifier(token))
       return 0; // An identifier left after expansion is 0, as in C.
-    fail("unexpected " + python_repr(token) + " in condition");
+    fail("unexpected " + stl::python_repr(token) + " in condition");
   }
 
 public:
@@ -716,7 +717,7 @@ public:
   int64_t parse() {
     const int64_t value = conditional(true);
     if (peek() != nullptr)
-      fail("unexpected " + python_repr(*peek()) + " in condition");
+      fail("unexpected " + stl::python_repr(*peek()) + " in condition");
     return value;
   }
 };
@@ -1023,7 +1024,7 @@ std::vector<variant> parse_variants(const macro *declaration) {
       reject(declaration->source, "JH-CFG-VARIANT",
              "a variant needs an id, a description and at least one "
              "definition: " +
-                 python_repr(entry));
+                 stl::python_repr(entry));
     const std::string &id = arguments[0];
     const std::string &description = arguments[1];
     const bool seen =
@@ -1031,7 +1032,7 @@ std::vector<variant> parse_variants(const macro *declaration) {
                     [&](const variant &item) { return item.id == id; });
     if (!variant_id(id) || seen)
       reject(declaration->source, "JH-CFG-VARIANT",
-             "variant id " + python_repr(id) +
+             "variant id " + stl::python_repr(id) +
                  " must be unique and use capital letters, digits and _, "
                  "starting with a letter");
     if (!string_literal(description))
@@ -1048,7 +1049,7 @@ std::vector<variant> parse_variants(const macro *declaration) {
           is_target_selector(name))
         reject(declaration->source, "JH-CFG-VARIANT",
                "variant " + id + " has invalid definition " +
-                   python_repr(arguments[i]));
+                   stl::python_repr(arguments[i]));
       // The -D form: the compiler takes no spaces around "=".
       result.definitions.push_back(has_value ? name + "=" + value : name);
     }
@@ -1069,7 +1070,8 @@ std::vector<std::string> parse_targets(const macro *declaration) {
     const std::string selector = strip(entry);
     if (!is_target_selector(selector) || contains(selectors, selector))
       reject(declaration->source, "JH-CFG-VARIANT",
-             std::string(targets_macro) + " entry " + python_repr(selector) +
+             std::string(targets_macro) + " entry " +
+                 stl::python_repr(selector) +
                  " must be one HAL_TARGET_* selector, listed once");
     selectors.push_back(selector);
   });
@@ -1399,12 +1401,12 @@ macro_table predefined_macros(const std::vector<std::string> &definitions) {
     size_t i = 0;
     if (text.empty() || !name_start(text[0]))
       reject("predefined", "JH-CFG-VALUE",
-             "invalid definition " + python_repr(definition));
+             "invalid definition " + stl::python_repr(definition));
     while (i < text.size() && name_part(text[i]))
       ++i;
     if (i < text.size() && text[i] != '=')
       reject("predefined", "JH-CFG-VALUE",
-             "invalid definition " + python_repr(definition));
+             "invalid definition " + stl::python_repr(definition));
     macro value;
     value.name = text.substr(0, i);
     value.body = i < text.size() ? strip(text.substr(i + 1)) : "1";

@@ -3,6 +3,7 @@
 // limits, the differences from Python and a path that is no file. A native
 // test, so the gate also runs it under Valgrind and the sanitizers.
 #include "jh_json_file.h"
+#include "jh_stl_bridge.h"
 #include <cstdio>
 #include <string>
 
@@ -17,7 +18,7 @@ void expect(bool ok, const char *what) {
 
 // The compact text of what read_settings returned, or its failure.
 struct outcome {
-  std::string text;
+  jh::owned_string text; // append_text appends to an owned_string.
   bool exists = false;
   jh::failure error{HAL_OK, 0, {}, {}, {}, {}};
   jh::parse_location where;
@@ -26,7 +27,7 @@ struct outcome {
 outcome read(const std::string &path, size_t limit = 65536) {
   outcome result;
   try {
-    const auto file = jh::read_settings(result.where, path, limit);
+    const auto file = jh::read_settings(result.where, path.c_str(), limit);
     result.exists = file.exists;
     jb_json_tree_view_t root;
     jh::require(jb_json_tree_root(file.tree.get(), &root), 2, "no root");
@@ -43,7 +44,7 @@ outcome read(const std::string &path, size_t limit = 65536) {
 
 std::string write(const std::string &directory, const char *name,
                   const std::string &bytes) {
-  const std::string path = jh::absolute_path(name, directory);
+  const std::string path = jh::stl::absolute_path(name, directory);
   bool changed = false;
   expect(jb_file_write_atomic(path.c_str(), bytes.data(), bytes.size(), false,
                               &changed) == HAL_OK,
@@ -68,7 +69,7 @@ void accepted_model(const std::string &directory) {
 }
 
 void missing_file(const std::string &directory) {
-  const auto result = read(jh::absolute_path("missing.json", directory));
+  const auto result = read(jh::stl::absolute_path("missing.json", directory));
   expect(result.error.status == HAL_OK && !result.exists && result.text == "{}",
          "a missing file reads as an empty object");
 }
