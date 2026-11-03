@@ -269,9 +269,13 @@ published executable with the given arguments; stdout stays with the tool
 and the bootstrap reports on stderr. The bootstrap needs CMake 3.22 or newer,
 Git and a host C11/C++17 compiler: GCC or Clang with Ninja or Make on Linux,
 Visual Studio 2019, 2022 or 2026 or `cl.exe` in PATH with `-Generator Ninja`
-on Windows. Visual Studio 2026 needs CMake 4.2 or newer. It downloads nothing; the managed checkouts come from
-`scripts/ensure_jhbase.sh`, `scripts/ensure_utf8proc.sh` and
-`scripts/ensure_pcre2.sh`.
+on Windows. A CMake older than the generator of the installed Visual Studio
+(2026 before CMake 4.2) builds with Ninja in the environment that
+`vcvarsall.bat` of that installation sets, with Ninja from PATH or from the
+installation; `scripts/jh_msvc_environment.cmake` takes that environment and
+keeps non-ASCII directories such as a user profile. The bootstrap downloads
+nothing; the managed checkouts come from `scripts/ensure_jhbase.sh`,
+`scripts/ensure_utf8proc.sh` and `scripts/ensure_pcre2.sh`.
 
 The key of a build covers the `tools/jh` sources, the CMake modules and pin
 files they read, the bootstrap script itself, the verified revisions of

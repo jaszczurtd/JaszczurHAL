@@ -4,7 +4,8 @@ cmake_minimum_required(VERSION 3.22)
 # interrupted one, keys every input and refuses a pin without its checkout.
 # JH_VERIFY_ONLY, which firmware configure uses, returns a ready result built
 # from the same sources and otherwise fails without building or creating
-# anything.
+# anything. On Windows the Visual Studio developer environment of the Ninja
+# build keeps non-ASCII directories.
 # Arguments: JH_HAL_SOURCE (this checkout), JH_WORK (scratch directory).
 if(NOT IS_DIRECTORY "${JH_HAL_SOURCE}" OR JH_WORK STREQUAL "")
   message(FATAL_ERROR "JH_HAL_SOURCE and JH_WORK are required")
@@ -19,7 +20,8 @@ set(output "${JH_WORK}/host-tools ż")
 foreach(path tools/jh cmake/jh_jhbase.cmake cmake/jh_pcre2.cmake cmake/jh_verify_pcre2.cmake
     cmake/jh_build_dir_guard.cmake cmake/jh_sanitizers.cmake cmake/jh_memcheck.cmake
     third_party/jhbase_version.conf third_party/pcre2_version.conf
-    config/tooling/managed_components.json scripts/jh_bootstrap.cmake scripts/jh scripts/jh.ps1 LICENSE)
+    config/tooling/managed_components.json scripts/jh_bootstrap.cmake scripts/jh_msvc_environment.cmake
+    scripts/jh scripts/jh.ps1 LICENSE)
   get_filename_component(parent "${copy}/${path}" DIRECTORY)
   file(MAKE_DIRECTORY "${parent}")
   if(IS_DIRECTORY "${JH_HAL_SOURCE}/${path}")
@@ -116,8 +118,10 @@ if(NOT verify_ready_exe STREQUAL first_exe OR verify_ready_output MATCHES "Build
   message(FATAL_ERROR "verify-only did not return the ready executable: ${verify_ready_output}")
 endif()
 # Another build configuration is another key, but the same sources: configure
-# with another CMake or PATH than the preparation still finds the tool.
-bootstrap(0 verify_other -DJH_VERIFY_ONLY=ON -DJH_BUILD_TYPE=Debug)
+# with another CMake or PATH than the preparation still finds the tool. It
+# selects no compiler either, so a generator whose compiler is missing (Ninja
+# outside a developer shell on Windows) does not stop it.
+bootstrap(0 verify_other -DJH_VERIFY_ONLY=ON -DJH_BUILD_TYPE=Debug -DJH_GENERATOR=Ninja)
 if(NOT verify_other_exe STREQUAL first_exe OR verify_other_output MATCHES "Building jh")
   message(FATAL_ERROR "verify-only did not match the sources of the ready executable: ${verify_other_output}")
 endif()
@@ -223,4 +227,36 @@ if(NOT code EQUAL 0)
   message(FATAL_ERROR "The launcher did not list the repository: ${code}\n${err}")
 endif()
 jh_expect_listing("${JH_WORK}/git.raw" "${JH_WORK}/launcher.raw" "The launcher changed the bytes of the tool's stdout")
+
+# 7. Windows: a CMake without the generator of the installed Visual Studio
+# builds in the developer environment of that installation. Taking it keeps a
+# non-ASCII directory of PATH and TEMP (a user profile) whatever the console
+# code page, and selects the compiler of each process architecture.
+if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
+  set(vswhere "$ENV{ProgramFiles\(x86\)}/Microsoft Visual Studio/Installer/vswhere.exe")
+  execute_process(COMMAND "${vswhere}" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64
+      -property installationPath
+    RESULT_VARIABLE code OUTPUT_VARIABLE vs_path OUTPUT_STRIP_TRAILING_WHITESPACE)
+  if(NOT code EQUAL 0 OR vs_path STREQUAL "")
+    message(FATAL_ERROR "No Visual Studio with the MSVC x64/x86 toolset: ${code}")
+  endif()
+  include("${copy}/scripts/jh_msvc_environment.cmake")
+  set(profile "${JH_WORK}/profile ż")
+  file(MAKE_DIRECTORY "${profile}")
+  file(TO_NATIVE_PATH "${profile}" profile)
+  foreach(arch x64 x86)
+    set(ENV{PATH} "${profile};$ENV{PATH}")
+    set(ENV{TEMP} "${profile}")
+    jh_enter_msvc_environment("${vs_path}" ${arch})
+    string(FIND "$ENV{PATH}" "${profile}" at)
+    if(at EQUAL -1 OR NOT "$ENV{TEMP}" STREQUAL profile)
+      message(FATAL_ERROR "The ${arch} developer environment lost ${profile}: TEMP=$ENV{TEMP}")
+    endif()
+    find_program(cl_${arch} NAMES cl NO_CACHE)
+    execute_process(COMMAND "${cl_${arch}}" RESULT_VARIABLE code OUTPUT_QUIET ERROR_VARIABLE banner)
+    if(NOT banner MATCHES "Version [0-9.]+ for ${arch}")
+      message(FATAL_ERROR "The ${arch} developer environment runs another cl.exe: ${cl_${arch}}\n${banner}")
+    endif()
+  endforeach()
+endif()
 message(STATUS "jh bootstrap: PASS")

@@ -291,8 +291,12 @@ uruchamiają opublikowany program z podanymi argumentami; stdout należy do
 narzędzia, a bootstrap raportuje na stderr. Bootstrap wymaga CMake co najmniej
 3.22, Gita i hostowego kompilatora C11/C++17: GCC albo Clang z Ninja lub Make
 na Linuksie, Visual Studio 2019, 2022 lub 2026 albo `cl.exe` w PATH
-z `-Generator Ninja` na Windows. Visual Studio 2026 wymaga CMake co najmniej
-4.2. Niczego nie pobiera; zarządzane checkouty przygotowują
+z `-Generator Ninja` na Windows. CMake starszy niż generator zainstalowanego
+Visual Studio (2026 przed CMake 4.2) buduje przez Ninja w środowisku, które
+ustawia `vcvarsall.bat` tej instalacji; Ninja pochodzi z PATH albo z instalacji.
+To środowisko przejmuje `scripts/jh_msvc_environment.cmake`, zachowując katalogi
+ze znakami spoza ASCII, np. profil użytkownika.
+Niczego nie pobiera; zarządzane checkouty przygotowują
 `scripts/ensure_jhbase.sh`, `scripts/ensure_utf8proc.sh`
 i `scripts/ensure_pcre2.sh`.
 

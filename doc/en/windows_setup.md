@@ -4,9 +4,11 @@
 
 *Also available in [Polish](../pl/windows_setup.md).*
 
-The JaszczurHAL setup script prepares a firmware development environment directly on Windows. It installs pinned tools without WSL, Git Bash, winget, Chocolatey, or a globally installed toolchain.
+The JaszczurHAL setup script prepares a firmware development environment directly on Windows. It installs pinned tools without WSL, Git Bash, winget, Chocolatey, or a globally installed firmware toolchain.
 
 The minimum supported system is Windows 10 1809 (build 17763), AMD64. Install Git for Windows and VS Code before cloning and opening the repository. The setup script manages Python, CMake, Ninja, GNU Arm Embedded, GNU RISC-V, OpenOCD, picotool, ccache, pyserial, and pinned source dependencies. On first use, the ESP32-S3 runner also prepares the pinned ESP-IDF revision and its official target tools in `third_party\esp-idf` and `%USERPROFILE%\.espressif`. The GNU Arm check includes GDB. Reusing an OpenOCD installation requires the CMSIS-DAP, ST-Link, RP2040, RP2350, and STM32G4 scripts used by the generated debug configurations.
+
+Setup also builds the jh host CLI, which reads the project configuration when CMake configures firmware. It needs Visual Studio 2019, 2022 or 2026 with the MSVC x64/x86 toolset; the Build Tools edition with the C++ build tools workload is enough. The managed CMake predates the Visual Studio 2026 generator, so with that release setup builds jh with Ninja in the developer environment of the installation.
 
 ## Host settings
 

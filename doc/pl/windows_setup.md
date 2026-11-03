@@ -4,7 +4,7 @@
 
 *Dostępne również [po angielsku](../en/windows_setup.md).*
 
-Skrypt konfiguracyjny JaszczurHAL przygotowuje środowisko do tworzenia firmware bezpośrednio w Windows. Instaluje ustalone wersje narzędzi bez WSL, Git Bash, wingetu i Chocolatey; nie wymaga też globalnej instalacji zestawu narzędzi kompilacyjnych.
+Skrypt konfiguracyjny JaszczurHAL przygotowuje środowisko do tworzenia firmware bezpośrednio w Windows. Instaluje ustalone wersje narzędzi bez WSL, Git Bash, wingetu i Chocolatey; nie wymaga też globalnej instalacji zestawu narzędzi do kompilacji firmware.
 
 Minimalna obsługiwana wersja systemu to Windows 10 1809 (build 17763) na
 platformie AMD64. Git for Windows oraz VS Code muszą być już zainstalowane,
@@ -18,6 +18,12 @@ przechowywane w `third_party\esp-idf` oraz
 Sprawdzenie kompletności GNU Arm obejmuje GDB, a ponowne wykorzystanie
 OpenOCD wymaga skryptów CMSIS-DAP, ST-Link, RP2040, RP2350 i STM32G4
 używanych przez generowane konfiguracje debugowania.
+
+Skrypt buduje też hostowe CLI jh, które odczytuje konfigurację projektu, gdy CMake konfiguruje firmware.
+Do tego potrzebne jest Visual Studio 2019, 2022 lub 2026 z zestawem narzędzi MSVC x64/x86; wystarczy
+wydanie Build Tools z pakietem roboczym narzędzi kompilacji C++. Zarządzany CMake jest starszy niż
+generator Visual Studio 2026, dlatego przy tym wydaniu skrypt buduje jh przez Ninja w środowisku
+deweloperskim danej instalacji.
 
 ## Ustawienia hosta
 

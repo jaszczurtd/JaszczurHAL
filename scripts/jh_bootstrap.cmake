@@ -35,9 +35,12 @@ cmake_minimum_required(VERSION 3.22)
 # JH_JHBASE_DIR selects an external jhbase.
 #
 # Prerequisites on the host: CMake 3.22+, Git, a C11/C++17 compiler (GCC or
-# Clang with Ninja or Make on Linux; Visual Studio 2019, 2022 or 2026 (2026
-# needs CMake 4.2+), or cl.exe with Ninja, on Windows). The managed checkouts
-# come from scripts/ensure_jhbase.sh, scripts/ensure_utf8proc.sh and
+# Clang with Ninja or Make on Linux; Visual Studio 2019, 2022 or 2026, or
+# cl.exe with Ninja, on Windows). A CMake without the Visual Studio generator
+# of the installed release (2026 before CMake 4.2) builds with Ninja and the
+# environment of that installation's vcvarsall.bat, so Ninja must be in PATH
+# or come with the installation. The managed checkouts come from
+# scripts/ensure_jhbase.sh, scripts/ensure_utf8proc.sh and
 # scripts/ensure_pcre2.sh; this script never downloads anything.
 
 function(jh_fail message)
@@ -107,6 +110,8 @@ function(jh_read_compiler_info work out_pointer_size out_path out_id out_version
   set(${out_id} "${CMAKE_CXX_COMPILER_ID}" PARENT_SCOPE)
   set(${out_version} "${CMAKE_CXX_COMPILER_VERSION}" PARENT_SCOPE)
 endfunction()
+
+include("${CMAKE_CURRENT_LIST_DIR}/jh_msvc_environment.cmake")
 
 # The published executable of a key directory is usable: its manifest records
 # this key and the file still has the recorded SHA-256.
@@ -230,7 +235,52 @@ elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
     jh_fail("JH_ARCH must be x64 or x86, got ${JH_ARCH}")
   endif()
   set(variant "windows-${JH_ARCH}")
-  if(JH_GENERATOR STREQUAL "Ninja")
+  if(JH_VERIFY_ONLY)
+    # Verification builds nothing and takes any result of these sources for
+    # this variant, so it selects no compiler or generator: a configure whose
+    # CMake does not know the installed Visual Studio still finds the tool.
+    set(compiler_identity "")
+  elseif(NOT JH_GENERATOR STREQUAL "Ninja")
+    set(vswhere "$ENV{ProgramFiles\(x86\)}/Microsoft Visual Studio/Installer/vswhere.exe")
+    if(NOT EXISTS "${vswhere}")
+      jh_fail("vswhere.exe is missing; install Visual Studio Build Tools 2022 or 2026 with the MSVC x64/x86 toolset")
+    endif()
+    jh_first_line(vs_path "${vswhere}" -latest -products * -requires
+      Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)
+    jh_first_line(vs_version "${vswhere}" -latest -products * -requires
+      Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationVersion)
+    if(vs_path STREQUAL "" OR NOT vs_version MATCHES "^([0-9]+)\\.")
+      jh_fail("No Visual Studio with the MSVC x64/x86 toolset was found")
+    endif()
+    set(vs_major "${CMAKE_MATCH_1}")
+    file(TO_CMAKE_PATH "${vs_path}" vs_path)
+    if(vs_major EQUAL 18)
+      set(JH_GENERATOR "Visual Studio 18 2026")
+    elseif(vs_major EQUAL 17)
+      set(JH_GENERATOR "Visual Studio 17 2022")
+    elseif(vs_major EQUAL 16)
+      set(JH_GENERATOR "Visual Studio 16 2019")
+    else()
+      jh_fail("Unsupported Visual Studio version ${vs_version}; 2019, 2022 or 2026 is required")
+    endif()
+    if(vs_major EQUAL 18 AND CMAKE_VERSION VERSION_LESS 4.2)
+      # CMake has the Visual Studio 2026 generator since 4.2. An older one
+      # builds with Ninja and the compiler of that installation, as its
+      # developer shell would; the Ninja of the caller's PATH comes first.
+      find_program(ninja_program NAMES ninja NO_CACHE)
+      jh_enter_msvc_environment("${vs_path}" "${JH_ARCH}")
+      if(NOT ninja_program)
+        find_program(ninja_program NAMES ninja NO_CACHE)
+      endif()
+      if(NOT ninja_program)
+        jh_fail("Visual Studio ${vs_version} needs CMake 4.2 or newer, this is ${CMAKE_VERSION}, or Ninja in PATH")
+      endif()
+      set(JH_GENERATOR Ninja)
+    else()
+      set(compiler_identity "msvc ${vs_version} ${vs_path} ${platform}")
+    endif()
+  endif()
+  if(NOT JH_VERIFY_ONLY AND JH_GENERATOR STREQUAL "Ninja")
     find_program(found_cl NAMES cl NO_CACHE)
     if(NOT found_cl)
       jh_fail("cl.exe is not in PATH; open the ${JH_ARCH} developer shell or use the Visual Studio generator")
@@ -248,33 +298,6 @@ elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
     set(compiler_cxx "${found_cl}")
     set(compiler_identity "${found_cl} ${compiler_version} ${cl_target}")
     set(platform "")
-  else()
-    set(vswhere "$ENV{ProgramFiles\(x86\)}/Microsoft Visual Studio/Installer/vswhere.exe")
-    if(NOT EXISTS "${vswhere}")
-      jh_fail("vswhere.exe is missing; install Visual Studio Build Tools 2022 or 2026 with the MSVC x64/x86 toolset")
-    endif()
-    jh_first_line(vs_path "${vswhere}" -latest -products * -requires
-      Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)
-    jh_first_line(vs_version "${vswhere}" -latest -products * -requires
-      Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationVersion)
-    if(vs_path STREQUAL "" OR NOT vs_version MATCHES "^([0-9]+)\\.")
-      jh_fail("No Visual Studio with the MSVC x64/x86 toolset was found")
-    endif()
-    if(CMAKE_MATCH_1 EQUAL 18)
-      # CMake has the Visual Studio 2026 generator since 4.2.
-      if(CMAKE_VERSION VERSION_LESS 4.2)
-        jh_fail("Visual Studio ${vs_version} needs CMake 4.2 or newer, this is ${CMAKE_VERSION}; use a newer CMake or the Ninja generator in a developer shell")
-      endif()
-      set(JH_GENERATOR "Visual Studio 18 2026")
-    elseif(CMAKE_MATCH_1 EQUAL 17)
-      set(JH_GENERATOR "Visual Studio 17 2022")
-    elseif(CMAKE_MATCH_1 EQUAL 16)
-      set(JH_GENERATOR "Visual Studio 16 2019")
-    else()
-      jh_fail("Unsupported Visual Studio version ${vs_version}; 2019, 2022 or 2026 is required")
-    endif()
-    file(TO_CMAKE_PATH "${vs_path}" vs_path)
-    set(compiler_identity "msvc ${vs_version} ${vs_path} ${platform}")
   endif()
 else()
   jh_fail("Unsupported host ${CMAKE_HOST_SYSTEM_NAME}; jh builds on Linux and Windows")
@@ -362,7 +385,7 @@ list(APPEND tool_files
   cmake/jh_build_dir_guard.cmake cmake/jh_sanitizers.cmake cmake/jh_memcheck.cmake
   third_party/jhbase_version.conf
   third_party/pcre2_version.conf config/tooling/managed_components.json
-  scripts/jh_bootstrap.cmake)
+  scripts/jh_bootstrap.cmake scripts/jh_msvc_environment.cmake)
 list(SORT tool_files)
 list(REMOVE_DUPLICATES tool_files)
 set(inputs "")
@@ -449,6 +472,9 @@ if(NOT reusable)
     "-DCMAKE_BUILD_TYPE=${JH_BUILD_TYPE}" -DBUILD_TESTING=OFF)
   if(NOT platform STREQUAL "")
     list(APPEND configure_arguments -A "${platform}")
+  endif()
+  if(ninja_program)
+    list(APPEND configure_arguments "-DCMAKE_MAKE_PROGRAM=${ninja_program}")
   endif()
   if(NOT compiler_c STREQUAL "")
     list(APPEND configure_arguments "-DCMAKE_C_COMPILER=${compiler_c}"
