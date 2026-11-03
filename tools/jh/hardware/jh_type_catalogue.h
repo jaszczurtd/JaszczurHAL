@@ -8,7 +8,7 @@
  * features, capabilities, cycles). Failures throw jh::failure with the
  * device tree specification's code, source file and JSON Pointer.
  */
-#include "../json/jh_json_file.h"
+#include "jh_adapters.h"
 #include <jb/literal.h>
 #include <map>
 #include <set>

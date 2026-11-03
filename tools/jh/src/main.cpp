@@ -1,8 +1,7 @@
 #include "../config/jh_project_config.h"
 #include "../hardware/jh_device_defaults.h"
 #include "../hardware/jh_type_catalogue.h"
-#include "../json/jh_json_file.h"
-#include "jh_generated_output.h"
+#include "jh_adapters.h"
 #include "jh_stl_bridge.h"
 #include <algorithm>
 #include <array>
@@ -336,18 +335,19 @@ public:
     require(jb_json_writer_node(&writer, value), 4,
             "cannot write selected JSON");
   }
-  void schema_errors(const jh::owned_list<jh::schema_report> &errors) {
+  void schema_errors(const jh::schema_files &files) {
     key("errors");
     require(jb_json_writer_array_begin(&writer), 4,
             "cannot start schema errors");
-    for (const auto &error : errors) {
+    for (size_t index = 0; index < files.report_count(); ++index) {
+      const jh_schema_report_t &error = files.report(index);
       require(jb_json_writer_object_begin(&writer), 4,
               "cannot start schema error");
-      string("instancePointer", error.pointer);
-      string("schemaUri", error.uri);
-      string("schemaPointer", error.rule);
-      string("reason", error.reason);
-      string("message", error.message);
+      string("instancePointer", jh::view(error.pointer));
+      string("schemaUri", jh::view(error.uri));
+      string("schemaPointer", jh::view(error.rule));
+      string("reason", jh::view(error.reason));
+      string("message", jh::view(error.message));
       require(jb_json_writer_object_end(&writer), 4,
               "cannot close schema error");
     }
@@ -428,7 +428,6 @@ int inspect(context &ctx, const std::string &base) {
       ctx, jh::stl::absolute_path(args.values[file], base).c_str(),
       input_limit(args));
   const auto &document = owned->doc;
-  const auto &tokens = owned->tokens;
   const auto bytes = document.input;
   jb_json_node_t selected;
   require(jb_json_pointer_get(&document, span(args.values[pointer]), &selected),
@@ -448,12 +447,12 @@ int inspect(context &ctx, const std::string &base) {
   const bool stale = args.present[check] && changed;
   if (ctx.json) {
     const size_t keys = static_cast<size_t>(
-        std::count_if(tokens.begin(), tokens.end(),
+        std::count_if(document.tokens, document.tokens + document.token_count,
                       [](const auto &token) { return token.has_key; }));
     result_writer result(bytes.length, keys);
     result.string("command", "json.inspect");
     result.string("status", stale ? "HAL_ESTATE" : "HAL_OK");
-    result.string("source", ctx.source);
+    result.string("source", jh::view(ctx.source));
     result.string("pointer", args.values[pointer]);
     result.node(selected);
     if (args.present[output]) {
@@ -482,26 +481,27 @@ int validate(context &ctx, const std::string &base) {
   jh::schema_files state(ctx, max);
   const auto &root_schema =
       state.root(jh::stl::absolute_path(args.values[schema], base).c_str());
-  jh::owned_array<unsigned char> scratch;
-  const auto status = jh::validate_with(state, *input, scratch);
-  ctx.source = input_path;
-  for (const auto &error : state.reports) {
+  const auto status = jh::validate_with(state, *input);
+  jh::assign(ctx.source, input_path);
+  for (size_t index = 0; index < state.report_count(); ++index) {
+    const auto error_pointer = jh::view(state.report(index).pointer);
+    const auto error_message = jh::view(state.report(index).message);
     std::fprintf(stderr, "%s:", input_path.c_str());
-    if (error.pointer.empty())
+    if (error_pointer.empty())
       (void)std::fputc('/', stderr);
     else
-      (void)std::fwrite(error.pointer.data(), 1, error.pointer.size(), stderr);
+      (void)std::fwrite(error_pointer.data(), 1, error_pointer.size(), stderr);
     (void)std::fputs(": ", stderr);
-    (void)std::fwrite(error.message.data(), 1, error.message.size(), stderr);
+    (void)std::fwrite(error_message.data(), 1, error_message.size(), stderr);
     (void)std::fputc('\n', stderr);
   }
   if (ctx.json) {
-    result_writer result(1024 * 1024, state.reports.size() * 8);
+    result_writer result(1024 * 1024, state.report_count() * 8);
     result.string("command", "json.validate");
     result.string("status", hal_status_to_string(status));
     result.string("source", input_path);
-    result.string("schema", root_schema.uri);
-    result.schema_errors(state.reports);
+    result.string("schema", jh::view(root_schema.uri));
+    result.schema_errors(state);
     stdout_bytes(result.finish());
   }
   return status == HAL_OK ? 0 : 2;
@@ -563,7 +563,7 @@ int generate_defaults(context &ctx, const std::string &base) {
       limit);
   jh::hardware::check_catalogue(types, &features, &capabilities);
   const std::string content = jh::hardware::render_device_defaults(types);
-  ctx.source = output_path;
+  jh::assign(ctx.source, output_path);
   bool changed = false;
   bool current = true;
   if (args.present[write_mode]) {
@@ -669,7 +669,7 @@ int repository_files(context &ctx, const std::string &base) {
   process_options.output = repository_bytes;
   process_options.canceled = canceled;
   process_options.context = &output;
-  ctx.source = directory;
+  jh::assign(ctx.source, directory);
   install_cancellation();
   if (std::fflush(stdout) != 0 || std::fflush(stderr) != 0)
     throw failure{HAL_EIO, 3,  "cannot flush output before process launch",
@@ -742,7 +742,7 @@ size_t directive_bytes(const std::vector<jh::config::directive> &directives) {
 int config_directives(context &ctx, const std::string &base) {
   require_value(ctx.args, file, "config directives requires --file");
   const auto path = jh::stl::absolute_path(ctx.args.values[file], base);
-  ctx.source = path;
+  jh::assign(ctx.source, path);
   const auto directives = jh::config::read_directives(path);
   if (!ctx.json) {
     std::string text;
@@ -784,7 +784,7 @@ int config_inspect(context &ctx, const std::string &base) {
                   {},         {}, {}};
   const std::string header_path = path_of(header);
   const std::string preinclude_path = path_of(preinclude);
-  ctx.source = header_path;
+  jh::assign(ctx.source, header_path);
   const auto config = jh::config::read_project_config(header_path, args.defines,
                                                       preinclude_path);
   const auto macros = config.macros.ordered();
@@ -1011,7 +1011,7 @@ int run(const std::vector<std::string> &argv) {
     return inspect(ctx, base);
   } catch (const failure &error) {
     if (ctx.located) {
-      std::fprintf(stderr, "%s:%zu:%zu: %s (%s)\n", ctx.source.c_str(),
+      std::fprintf(stderr, "%s:%zu:%zu: %s (%s)\n", jb_string_data(&ctx.source),
                    ctx.line, ctx.column, error.message.c_str(),
                    hal_status_to_string(error.status));
     } else {
@@ -1019,7 +1019,8 @@ int run(const std::vector<std::string> &argv) {
                    hal_status_to_string(error.status));
     }
     if (ctx.json) {
-      result_writer result(ctx.source.size() + error.message.size() + 1024);
+      result_writer result(jb_string_size(&ctx.source) + error.message.size() +
+                           1024);
       result.string("command",
                     ctx.command == nullptr ? "jh" : ctx.command->name);
       result.string("status", hal_status_to_string(error.status));
@@ -1031,8 +1032,8 @@ int run(const std::vector<std::string> &argv) {
         result.string("source", error.source);
         result.string("pointer", error.pointer);
       } else {
-        if (!ctx.source.empty())
-          result.string("source", ctx.source);
+        if (jb_string_size(&ctx.source) != 0)
+          result.string("source", jh::view(ctx.source));
         if (ctx.args.present[pointer])
           result.string("pointer", ctx.args.values[pointer]);
       }

@@ -136,8 +136,9 @@ depth 128. Exhaustion returns `HAL_EOVERFLOW` before publishing any error prefix
 The internal C API in [jh_json_schema.h](json/jh_json_schema.h) accepts caller-owned
 scratch, custom limits and optional document/report callbacks.
 
-`jh::read_settings` in [jh_json_file.h](json/jh_json_file.h) reads VS Code
-files and project manifests the way `load_json_file` of the Python tools does.
+`jh_json_read_settings` in [jh_json_file.h](json/jh_json_file.h), called as
+`jh::read_settings` from the C++ modules, reads VS Code files and project
+manifests the way `load_json_file` of the Python tools does.
 It accepts comments outside strings, the last value of a repeated name and
 `NaN`/`Infinity`. A missing file reads as an empty object, and the root must
 be an object. Numbers keep their original tokens. Unlike Python, it rejects a
@@ -293,3 +294,16 @@ Install the executable and the licenses of PCRE2, jhbase, Ryu, utf8proc and
 JaszczurHAL with `cmake --install <build> --config Release
 --component jh --prefix <destination>`. The binary can be moved with its
 installation prefix; it does not require the source tree to run.
+
+## Sources
+
+The C modules of the tool build as C11. [jh_failure.h](base/jh_failure.h)
+defines the failure record each C function fills for its caller.
+[jh_json_file.h](json/jh_json_file.h) reads JSON files, VS Code settings and
+the schema documents a validation loads, [jh_python_repr.h](json/jh_python_repr.h)
+quotes text as Python's `repr()` does, and
+[jh_generated_output.h](src/jh_generated_output.h) publishes and checks
+generated artifacts. The schema validator, the project configuration reader,
+the type catalogue and `main.cpp` are still C++. They call the C modules
+through the owners and exceptions in [cxx/](cxx/), which go away with the last
+C++ caller.

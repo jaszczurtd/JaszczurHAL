@@ -1188,12 +1188,14 @@ zgłoszenie zatrzymuje bramkę.
 
 Uruchamia zarządzany PMD Copy/Paste Detector dla źródeł C/C++ utrzymywanych w
 repozytorium oraz plików Pythona w
-`scripts/`. Każda grupa duplikatów C/C++ produkcyjnych, testowych lub
+`scripts/`. Skan produkcyjny obejmuje `src/` i CLI hosta `jh` w `tools/jh/`,
+a skan testów `tests/`, `examples/` i `tools/jh/tests/`. Każda grupa duplikatów C/C++ produkcyjnych, testowych lub
 przykładowych od 100 tokenów oraz każda grupa skryptów Python od 50 tokenów
 powoduje niepowodzenie kontroli; nie ma listy bazowej ani akceptowanego długu. Implementacje
 generowane i dostarczone przez firmy trzecie są wykluczone. Raport podaje również udział
 zduplikowanych tokenów łącznie oraz dla zakresów mock, RP2040, STM32G474,
-wspólnego kodu, pozostałego kodu przenośnego oraz skryptów Pythona. Nakładające
+wspólnego kodu, pozostałego kodu przenośnego, narzędzi hosta oraz skryptów
+Pythona. Nakładające
 się zakresy tokenów są liczone tylko raz. Deterministyczne listy źródeł oraz
 raporty XML są zapisywane do żądanego katalogu wyjściowego poniżej
 `.build/`.

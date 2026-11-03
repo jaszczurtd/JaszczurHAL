@@ -1,7 +1,5 @@
 #include "jh_project_config.h"
-#include "../json/jh_json_file.h"
-#include "../json/jh_python_repr.h"
-#include "../src/jh_stl_bridge.h"
+#include "jh_stl_bridge.h"
 #include <algorithm>
 #include <filesystem>
 #include <jb/file.h>

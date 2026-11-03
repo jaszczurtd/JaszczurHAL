@@ -8,9 +8,8 @@
 // compiler's preprocessor (-E -dM): the equivalence headers below and every
 // hal_project_config.h of the checkout outside tests/hardware, for each
 // target selector and variant.
-#include "jh_json_file.h"
+#include "jh_adapters.h"
 #include "jh_project_config.h"
-#include "jh_python_repr.h"
 #include "jh_stl_bridge.h"
 #include <algorithm>
 #include <cstdio>

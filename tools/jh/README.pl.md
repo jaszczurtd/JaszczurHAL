@@ -141,9 +141,9 @@ identyfikatory dokumentów do 32768 bajtów. Zdekodowana wartość ma najwyżej
 [jh_json_schema.h](json/jh_json_schema.h) przyjmuje scratch użytkownika,
 własne limity i opcjonalne callbacki dokumentów oraz raportów.
 
-`jh::read_settings` z [jh_json_file.h](json/jh_json_file.h) czyta pliki
-VS Code i manifesty projektów tak samo jak `load_json_file` w narzędziach
-Pythona. Przyjmuje komentarze poza stringami, ostatnią wartość powtórzonej
+`jh_json_read_settings` z [jh_json_file.h](json/jh_json_file.h), wołane
+z modułów C++ jako `jh::read_settings`, czyta pliki VS Code i manifesty
+projektów tak samo jak `load_json_file` w narzędziach Pythona. Przyjmuje komentarze poza stringami, ostatnią wartość powtórzonej
 nazwy oraz `NaN`/`Infinity`. Brakujący plik daje pusty obiekt, a korzeń musi
 być obiektem. Liczby zachowują oryginalne tokeny. W odróżnieniu od Pythona
 odrzuca escape `\u` niesparowanego surogatu, stosuje limity parsera (256
@@ -302,3 +302,16 @@ entrypoint i kody zakończenia.
 Executable oraz licencje PCRE2, jhbase, Ryu, utf8proc i JaszczurHAL instaluje
 `cmake --install <build> --config Release --component jh --prefix <destination>`. Program można przenieść wraz z prefixem
 instalacji; do uruchomienia nie potrzebuje drzewa źródeł.
+
+## Źródła
+
+Moduły C narzędzia kompilują się jako C11. [jh_failure.h](base/jh_failure.h)
+definiuje rekord błędu, który każda funkcja C wypełnia dla wywołującego.
+[jh_json_file.h](json/jh_json_file.h) czyta pliki JSON, ustawienia VS Code
+i dokumenty schematów wczytywane podczas walidacji,
+[jh_python_repr.h](json/jh_python_repr.h) cytuje tekst tak jak `repr()`
+w Pythonie, a [jh_generated_output.h](src/jh_generated_output.h) publikuje
+i sprawdza generowane artefakty. Walidator schematów, czytnik konfiguracji
+projektu, katalog typów i `main.cpp` są jeszcze w C++. Korzystają z modułów C
+przez właścicieli zasobów i wyjątki z [cxx/](cxx/), które znikną razem
+z ostatnim wywołującym w C++.

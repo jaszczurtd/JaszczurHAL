@@ -4,12 +4,11 @@
 /** @file jh_stl_bridge.h
  * Transitional calls for the jh modules that still keep paths and messages in
  * standard strings (main.cpp, the type catalogue, the configuration reader
- * and their tests). The JSON file and repr() layer takes borrowed views and
- * returns jhbase-backed owners; these functions convert at the call. The
+ * and their tests). The adapters of the C layer take borrowed views and
+ * return jhbase-backed owners; these functions convert at the call. The
  * header goes away with the last module that needs it.
  */
-#include "jh_json_file.h"
-#include "jh_python_repr.h"
+#include "jh_adapters.h"
 #include <string>
 
 namespace jh::stl {

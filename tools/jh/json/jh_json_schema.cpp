@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <exception>
 #include <jb/array.h>
 #include <jb/json_number.h>
 #include <jb/json_pointer.h>
@@ -275,21 +276,32 @@ struct engine {
     }
     return true;
   }
-  // repr() of s in the diagnostic arena, one work unit per input byte.
+  // repr() of s in the diagnostic arena, one work unit per input byte. The
+  // budget and the arena throw; the exception waits outside the C call.
   text quoted(view s) {
     struct sink {
       engine *self;
       text out;
-    } target{this, text(&temp)};
-    jh::python_repr(
-        s,
-        [](void *user, view piece, size_t consumed) {
+      std::exception_ptr error;
+    } target{this, text(&temp), nullptr};
+    const hal_status_t status = jh_python_repr(
+        span(s),
+        [](void *user, jb_json_span_t piece, size_t consumed) {
           auto &state = *static_cast<sink *>(user);
-          for (size_t i = 0; i < consumed; ++i)
-            state.self->charge();
-          state.out += piece;
+          try {
+            for (size_t i = 0; i < consumed; ++i)
+              state.self->charge();
+            state.out += bytes(piece);
+            return HAL_OK;
+          } catch (...) {
+            state.error = std::current_exception();
+            return HAL_ECANCELED;
+          }
         },
         &target);
+    if (target.error)
+      std::rethrow_exception(target.error);
+    check(status);
     return std::move(target.out);
   }
   text repr(node n, size_t nested = 0) {

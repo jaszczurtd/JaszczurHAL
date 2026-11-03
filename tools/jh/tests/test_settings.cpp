@@ -2,7 +2,7 @@
 // missing file, the root type, parse errors located in the original file,
 // limits, the differences from Python and a path that is no file. A native
 // test, so the gate also runs it under Valgrind and the sanitizers.
-#include "jh_json_file.h"
+#include "jh_adapters.h"
 #include "jh_stl_bridge.h"
 #include <cstdio>
 #include <string>

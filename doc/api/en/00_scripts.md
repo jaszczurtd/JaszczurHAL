@@ -1116,12 +1116,14 @@ fails it.
 ### `scripts/run_cpd.py`
 
 Runs the managed PMD Copy/Paste Detector over owned C/C++ implementation
-sources and Python files below `scripts/`. Every production, test, or example
+sources and Python files below `scripts/`. The production scan covers `src/`
+and the `jh` host CLI in `tools/jh/`; the test scan covers `tests/`,
+`examples/` and `tools/jh/tests/`. Every production, test, or example
 C/C++ duplicate group from 100 tokens and every Python-script group from 50
 tokens blocks the gate; there is no baseline or accepted-debt list. Generated
 and vendored implementations are excluded. The report also gives
 duplicate-token coverage globally and for the mock, RP2040, STM32G474, shared,
-remaining portable, and Python-script scopes. Overlapping token ranges count
+remaining portable, host-tool, and Python-script scopes. Overlapping token ranges count
 only once. Deterministic source lists and XML reports are written to the
 requested output directory below `.build/`.
 

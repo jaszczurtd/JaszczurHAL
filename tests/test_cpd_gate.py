@@ -196,16 +196,17 @@ class CpdGateTests(unittest.TestCase):
         self.assertEqual(800, coverage["global"].total_tokens)
         self.assertAlmostEqual(31.25, coverage["global"].percentage)
 
-    def test_python_scripts_have_a_distinct_coverage_scope(self) -> None:
+    def test_scripts_and_host_tools_have_distinct_coverage_scopes(self) -> None:
         report = cpd.CpdReport(
             [],
-            {"scripts/tool.py": 75},
+            {"scripts/tool.py": 75, "tools/jh/json/reader.c": 25},
         )
         coverage = {item.scope: item for item in cpd.duplicate_coverage(report)}
         self.assertEqual(75, coverage["scripts-python"].total_tokens)
-        self.assertEqual(75, coverage["global"].total_tokens)
+        self.assertEqual(25, coverage["tools"].total_tokens)
+        self.assertEqual(100, coverage["global"].total_tokens)
 
-    def test_main_runs_the_blocking_python_scripts_scan(self) -> None:
+    def test_main_scans_the_host_tools_and_python_scripts(self) -> None:
         empty_report = cpd.CpdReport([], {})
         with tempfile.TemporaryDirectory(prefix="jh-cpd-main-") as text:
             with (
@@ -243,6 +244,18 @@ class CpdGateTests(unittest.TestCase):
         script_sources = run_scan.call_args_list[2].args[5]
         self.assertTrue(script_sources)
         self.assertTrue(all(path.suffix == ".py" for path in script_sources))
+        # The jh CLI is owned code: its implementation with the library, its
+        # tests with the other tests.
+        production, tests = (
+            {path.relative_to(ROOT).as_posix() for path in call.args[5]}
+            for call in run_scan.call_args_list[:2]
+        )
+        self.assertIn("tools/jh/json/jh_json_file.c", production)
+        self.assertIn("tools/jh/src/main.cpp", production)
+        self.assertFalse(
+            any(path.startswith("tools/jh/tests/") for path in production)
+        )
+        self.assertIn("tools/jh/tests/c_layer_consumer.c", tests)
 
 
 if __name__ == "__main__":

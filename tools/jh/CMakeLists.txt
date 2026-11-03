@@ -21,36 +21,51 @@ jh_add_jhbase()
 include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/jh_pcre2.cmake")
 jh_add_pcre2()
 get_target_property(_jh_regex_source pcre2-8-static SOURCE_DIR)
+# Language levels and warnings of every jh target: C11 for its C sources, as
+# jhbase builds them, and C++17 without RTTI for its C++ sources.
 function(jh_tool_target target)
-  set_target_properties(${target} PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+  set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF
+    CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
   if(MSVC)
-    target_compile_options(${target} PRIVATE /W4 /WX /utf-8 /EHsc /GR-)
+    target_compile_options(${target} PRIVATE /W4 /WX /utf-8 $<$<COMPILE_LANGUAGE:CXX>:/EHsc>
+      $<$<COMPILE_LANGUAGE:CXX>:/GR->)
   else()
-    target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow -fno-rtti)
+    target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -Wpedantic -Wconversion -Wshadow
+      $<$<COMPILE_LANGUAGE:C>:-Wvla> $<$<COMPILE_LANGUAGE:C>:-Wstrict-prototypes>
+      $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>)
   endif()
 endfunction()
-# C++ owners of the jhbase string and vector, which every module below uses
-# instead of the standard containers.
-add_library(jh_base STATIC base/jh_containers.cpp)
-target_include_directories(jh_base PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/base")
-target_link_libraries(jh_base PUBLIC jb::host)
-jh_tool_target(jh_base)
-# The schema validator and repr() of Python strings, which every command
-# quotes in its diagnostics.
-add_library(jh_schema STATIC json/jh_json_schema.cpp json/jh_python_repr.cpp)
+# The failure record of the C modules and repr() of Python strings, which
+# every command quotes in its diagnostics. C11.
+add_library(jh_core STATIC base/jh_failure.c json/jh_python_repr.c)
+target_include_directories(jh_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/base"
+  "${CMAKE_CURRENT_SOURCE_DIR}/json")
+target_link_libraries(jh_core PUBLIC jb::host PRIVATE jb::unicode)
+jh_tool_target(jh_core)
+# The schema validator, C++ behind its C API.
+add_library(jh_schema STATIC json/jh_json_schema.cpp)
 target_include_directories(jh_schema PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/json")
-target_link_libraries(jh_schema PUBLIC jh_base jb::host PRIVATE pcre2-8-static jb::unicode)
+target_link_libraries(jh_schema PUBLIC jb::host PRIVATE jh_core pcre2-8-static jb::unicode)
 jh_tool_target(jh_schema)
-# Host modules of the commands: JSON files, the type catalogue, the device
-# defaults generator, generated-artifact publishing and the project
-# configuration reader.
-add_library(jh_host STATIC json/jh_json_file.cpp hardware/jh_type_catalogue.cpp
-  hardware/jh_device_defaults.cpp src/jh_generated_output.cpp
-  config/jh_project_config.cpp)
-target_include_directories(jh_host PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/json"
-  "${CMAKE_CURRENT_SOURCE_DIR}/hardware" "${CMAKE_CURRENT_SOURCE_DIR}/src"
+# JSON files, VS Code settings, schema documents and generated-artifact
+# publishing. C11.
+add_library(jh_files STATIC json/jh_json_file.c src/jh_generated_output.c)
+target_include_directories(jh_files PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(jh_files PUBLIC jh_core jh_schema jb::host)
+jh_tool_target(jh_files)
+# Transitional C++: owners of the jhbase string and vector, and the
+# exceptions and owners the C++ modules below use over the C modules above.
+add_library(jh_cxx STATIC cxx/jh_containers.cpp cxx/jh_adapters.cpp)
+target_include_directories(jh_cxx PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/cxx")
+target_link_libraries(jh_cxx PUBLIC jh_files jb::host)
+jh_tool_target(jh_cxx)
+# C++ modules of the commands: the type catalogue, the device defaults
+# generator and the project configuration reader.
+add_library(jh_host STATIC hardware/jh_type_catalogue.cpp
+  hardware/jh_device_defaults.cpp config/jh_project_config.cpp)
+target_include_directories(jh_host PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/hardware"
   "${CMAKE_CURRENT_SOURCE_DIR}/config")
-target_link_libraries(jh_host PUBLIC jh_schema jb::host jb::unicode)
+target_link_libraries(jh_host PUBLIC jh_cxx jb::host jb::unicode)
 jh_tool_target(jh_host)
 add_executable(jh src/main.cpp)
 target_link_libraries(jh PRIVATE jh_host)
@@ -101,11 +116,12 @@ if(BUILD_TESTING)
   target_link_libraries(jh_config_test PRIVATE jh_host)
   jh_tool_target(jh_config_test)
   add_test(NAME jh_config COMMAND jh_config_test "${CMAKE_CURRENT_BINARY_DIR}")
-  # The C++ owners of the jhbase containers and the lists of unified_diff.
-  add_executable(jh_containers_test tests/test_containers.cpp)
-  target_link_libraries(jh_containers_test PRIVATE jh_host)
+  # The C++ owners of the jhbase containers and the adapters, with the C
+  # layer used from a C translation unit.
+  add_executable(jh_containers_test tests/test_containers.cpp tests/c_layer_consumer.c)
+  target_link_libraries(jh_containers_test PRIVATE jh_cxx)
   jh_tool_target(jh_containers_test)
-  add_test(NAME jh_containers COMMAND jh_containers_test)
+  add_test(NAME jh_containers COMMAND jh_containers_test "${CMAKE_CURRENT_BINARY_DIR}")
   set_tests_properties(jh_schema jh_schema_compat jh_device_defaults jh_settings
     jh_settings_compat jh_config jh_containers PROPERTIES TIMEOUT 120)
   if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")

@@ -1,7 +1,7 @@
 // Reads one file with jh::read_settings and prints the compact tree, or
 // "ERROR <status> <exit code>" after a failure. settings_compat.py compares
 // the result with load_json_file of the Python tools.
-#include "jh_json_file.h"
+#include "jh_adapters.h"
 #include <cstdio>
 #include <string>
 

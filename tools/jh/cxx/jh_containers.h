@@ -68,6 +68,8 @@ public:
   bool empty() const noexcept { return size() == 0; }
   std::string_view view() const noexcept { return {c_str(), size()}; }
   operator std::string_view() const noexcept { return view(); }
+  /** The jhbase string itself, for C functions that write into it. */
+  jb_string_t *raw() noexcept { return &value_; }
 
   /** Byte comparison with another owner, a view, a std::string or a C string.
    */

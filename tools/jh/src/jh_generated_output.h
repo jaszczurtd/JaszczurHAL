@@ -4,32 +4,51 @@
 /** @file jh_generated_output.h
  * Publishing and checking one generated artifact: atomic replacement that
  * keeps an identical file, or a comparison that changes nothing and prints a
- * bounded unified diff of the drift.
+ * bounded unified diff of the drift. C11.
  */
-#include "jh_containers.h"
-#include <cstddef>
-#include <string_view>
+#include "jh_failure.h"
+#include <stdbool.h>
+#include <stddef.h>
 
-namespace jh {
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-/** Publish content at path atomically; returns whether the file changed. */
-bool write_generated(const char *path, std::string_view content);
+/** Publish content at path atomically; changed reports whether the file
+ * changed. A failure has exit code 3.
+ */
+hal_status_t jh_write_generated(const char *path, jb_json_span_t content,
+                                bool *changed, jh_failure_t *failure);
 
 /** Compare content with the file at path without changing anything. A missing
  * or different file is reported on stderr, the difference as a unified diff
- * of at most diff_limit lines labelled path and label, and false is returned.
+ * of at most diff_limit lines labelled path and label, and current is false.
+ * An unreadable file fails with exit code 3 (4 for its size or memory).
  */
-bool check_generated(const char *path, std::string_view content,
-                     size_t diff_limit, std::string_view label);
+hal_status_t jh_check_generated(const char *path, jb_json_span_t content,
+                                size_t diff_limit, jb_json_span_t label,
+                                bool *current, jh_failure_t *failure);
 
-/** Unified diff lines (context 3) between two line sequences, without line
- * terminators, headed by --- from and +++ to. Equal inputs give no lines.
- * The lines borrow their text, which must outlive the call.
+/** One line of a unified diff, prefix followed by text, without a line
+ * terminator. Both are borrowed for the call. A status other than HAL_OK
+ * stops the diff.
  */
-owned_list<owned_string>
-unified_diff(const owned_array<std::string_view> &from_lines,
-             const owned_array<std::string_view> &to_lines,
-             std::string_view from, std::string_view to);
+typedef hal_status_t (*jh_diff_line_fn)(void *user, jb_json_span_t prefix,
+                                        jb_json_span_t text);
 
-} // namespace jh
+/** Write the unified diff lines (context 3) between two line sequences, as
+ * difflib.unified_diff with lineterm="" writes them: --- from and +++ to,
+ * then the hunks. Equal inputs give no lines. Returns HAL_OK, the first
+ * status of line other than HAL_OK, or the status of a container that cannot
+ * grow (HAL_ENOMEM, HAL_EOVERFLOW).
+ */
+hal_status_t jh_unified_diff(const jb_json_span_t *from_lines,
+                             size_t from_count, const jb_json_span_t *to_lines,
+                             size_t to_count, jb_json_span_t from,
+                             jb_json_span_t to, jh_diff_line_fn line,
+                             void *user);
+
+#ifdef __cplusplus
+}
+#endif
 #endif

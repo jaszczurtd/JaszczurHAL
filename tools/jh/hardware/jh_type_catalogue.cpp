@@ -1,5 +1,4 @@
 #include "jh_type_catalogue.h"
-#include "jh_python_repr.h"
 #include "jh_stl_bridge.h"
 #include <algorithm>
 #include <cstdint>
@@ -420,7 +419,6 @@ std::string file_name(const std::string &path) {
 }
 
 binding read_binding(parse_location &where, schema_files &schemas,
-                     owned_array<unsigned char> &scratch,
                      const std::string &path, const char *origin) {
   std::unique_ptr<json_document> document;
   try {
@@ -430,12 +428,12 @@ binding read_binding(parse_location &where, schema_files &schemas,
       throw;
     fail(schema_code, path, "", std::string(error.message));
   }
-  if (validate_with(schemas, *document, scratch) != HAL_OK) {
-    if (schemas.reports.empty())
+  if (validate_with(schemas, *document) != HAL_OK) {
+    if (schemas.report_count() == 0)
       fail(schema_code, path, "", "the binding schema rejects this file");
-    const auto &first = schemas.reports.front();
-    fail(schema_code, path, std::string(first.pointer),
-         std::string(first.message));
+    const auto &first = schemas.report(0);
+    fail(schema_code, path, std::string(jh::view(first.pointer)),
+         std::string(jh::view(first.message)));
   }
   binding entry;
   entry.path = path;
@@ -645,10 +643,9 @@ catalogue load_hal_catalogue(parse_location &where,
                              size_t max_bytes) {
   schema_files schemas(where, max_bytes);
   schemas.root(stl::absolute_path("binding.schema.json", schema_dir).c_str());
-  owned_array<unsigned char> scratch;
   catalogue result;
   for (const auto &path : json_files(bindings_dir)) {
-    binding entry = read_binding(where, schemas, scratch, path, "hal");
+    binding entry = read_binding(where, schemas, path, "hal");
     std::string expected = entry.compatible;
     std::replace(expected.begin(), expected.end(), ',', '-');
     expected += ".json";

@@ -1,12 +1,12 @@
-// The C++ owners of the jhbase containers (base/jh_containers.h): copies,
+// The C++ owners of the jhbase containers (cxx/jh_containers.h): copies,
 // moves and self-assignment, element ownership in owned_list, the exceptions
-// for failed jhbase operations, copies of jh::failure (MSVC copies a thrown
-// object byte for byte when it has no copy constructor) and the owned lists of
-// unified_diff. A native test, so the gate also runs it under Valgrind and the
-// sanitizers.
+// for failed jhbase operations and copies of jh::failure (MSVC copies a thrown
+// object byte for byte when it has no copy constructor). The C layer itself
+// runs from c_layer_consumer.c, a C11 translation unit, with files in the
+// directory of the argument. A native test, so the gate also runs it under
+// Valgrind and the sanitizers.
+#include "jh_adapters.h"
 #include "jh_containers.h"
-#include "jh_generated_output.h"
-#include "jh_json_file.h"
 #include <cstdint>
 #include <cstdio>
 #include <exception>
@@ -204,70 +204,20 @@ void errors() {
   expect(rethrown, "a stored and rethrown failure keeps its fields");
 }
 
-bool same_lines(const jh::owned_list<jh::owned_string> &lines,
-                const char *const *expected, size_t count) {
-  if (lines.size() != count)
-    return false;
-  for (size_t index = 0; index < count; ++index)
-    if (lines[index] != expected[index])
-      return false;
-  return true;
-}
-
-void diff() {
-  // Expected lines from difflib.unified_diff(..., lineterm="").
-  jh::owned_array<std::string_view> from, to;
-  for (const char *line : {"a", "b", "c"})
-    from.push_back(line);
-  for (const char *line : {"a", "B", "c"})
-    to.push_back(line);
-  const char *const one_hunk[] = {
-      "--- from", "+++ to", "@@ -1,3 +1,3 @@", " a", "-b", "+B", " c"};
-  expect(same_lines(jh::unified_diff(from, to, "from", "to"), one_hunk, 7),
-         "unified diff of one changed line");
-  expect(jh::unified_diff(from, from, "from", "to").empty(),
-         "equal inputs give no lines");
-
-  // Seven equal lines between the changes: one more than twice the context,
-  // so the diff splits into two hunks.
-  const char *const names[] = {"L1", "L2", "L3", "L4",  "L5",  "L6",
-                               "L7", "L8", "L9", "L10", "L11", "L12"};
-  jh::owned_array<std::string_view> before, after;
-  for (const char *name : names) {
-    before.push_back(name);
-    after.push_back(name);
-  }
-  after[1] = "X";
-  after[9] = "Y";
-  const char *const two_hunks[] = {"--- from",
-                                   "+++ to",
-                                   "@@ -1,5 +1,5 @@",
-                                   " L1",
-                                   "-L2",
-                                   "+X",
-                                   " L3",
-                                   " L4",
-                                   " L5",
-                                   "@@ -7,6 +7,6 @@",
-                                   " L7",
-                                   " L8",
-                                   " L9",
-                                   "-L10",
-                                   "+Y",
-                                   " L11",
-                                   " L12"};
-  expect(
-      same_lines(jh::unified_diff(before, after, "from", "to"), two_hunks, 17),
-      "unified diff splits a gap of seven equal lines into two hunks");
-}
 } // namespace
 
-int main() {
+extern "C" int jh_test_c_layer(const char *directory);
+
+int main(int argc, char **argv) {
+  if (argc != 2) {
+    std::fprintf(stderr, "usage: jh_containers_test <work directory>\n");
+    return 2;
+  }
   strings();
   arrays();
   lists();
   errors();
-  diff();
+  failures += jh_test_c_layer(argv[1]);
   if (failures == 0)
     std::printf("containers: all checks passed\n");
   return failures == 0 ? 0 : 1;

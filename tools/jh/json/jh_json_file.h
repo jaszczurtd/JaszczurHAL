@@ -5,136 +5,136 @@
  * JSON files for the jh host commands: bounded reads, parsed documents that
  * keep their bytes alive, VS Code files and project manifests, lexical path
  * resolution and the schema document loader shared by every command that
- * validates. C++17; exceptions stay inside the tool and never cross the jhbase
- * C API.
+ * validates. C11. Each function records its failure in a caller-owned
+ * jh_failure_t: exit code 2 for invalid JSON, 3 for files and 4 for limits
+ * and memory.
  */
-#include "jh_containers.h"
+#include "jh_failure.h"
 #include "jh_json_schema.h"
 #include <jb/file.h>
 #include <jb/json_tree.h>
-#include <memory>
-#include <string_view>
+#include <jb/vector.h>
+#include <stdbool.h>
 
-namespace jh {
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-/** A failed operation: status, process exit code and a human message. Hardware
- * catalogue failures also carry their code, source file and JSON Pointer.
+/** Resolve path lexically against an absolute base (jb_path_resolve) and
+ * replace out with the result. A failure has exit code 3.
  */
-struct failure {
-  hal_status_t status;
-  int exit_code;
-  owned_string message;
-  owned_string code, source, pointer;
-};
+hal_status_t jh_absolute_path(const char *path, const char *base,
+                              jb_string_t *out, jh_failure_t *failure);
 
-/** Throw failure unless status is HAL_OK. */
-void require(hal_status_t status, int exit_code, const char *message);
-jb_json_span_t span(std::string_view text);
-jb_json_span_t span(const char *text);
-owned_string copied(jb_json_span_t text);
-/** Output sink of the jhbase writer and formatter that appends to the
- * owned_string at user. HAL_ENOMEM or HAL_EOVERFLOW when it cannot grow.
+/** Where the last read went and where its parse failed: source names the
+ * file, located is set only after a parse error, with the jhbase error and
+ * its one-based line and byte column.
  */
-hal_status_t append_text(void *user, const char *data, size_t length);
-/** Resolve path lexically against an absolute base (jb_path_resolve). */
-owned_string absolute_path(const char *path, const char *base);
-/** Percent-escaped identity of a file path for schema URIs. */
-owned_string schema_identity(std::string_view path);
+typedef struct {
+  jb_string_t source;
+  jb_json_error_t error;
+  size_t line, column;
+  bool located;
+} jh_json_location_t;
 
-/** Owner of bytes read by jb_file_read. */
-struct file_owner {
-  jb_file_data_t data{};
-  file_owner() = default;
-  file_owner(const file_owner &) = delete;
-  file_owner &operator=(const file_owner &) = delete;
-  ~file_owner() { jb_file_release(&data); }
-};
-
-/** Where the last parse failed; located is set only after a parse error. */
-struct parse_location {
-  owned_string source;
-  jb_json_error_t error{};
-  size_t line = 0, column = 0;
-  bool located = false;
-};
-
-/** A parsed file: its bytes, tokens, document, path and schema identity. */
-struct json_document {
-  file_owner input;
-  owned_array<jb_json_token_t> tokens;
-  jb_json_doc_t doc{};
-  owned_string uri;
-  owned_string identity;
-};
-
-/** Read and parse one file of at most limit bytes. With hardware_numbers the
- * hardware loader policy applies: a token with a fraction or exponent must
- * keep a finite, nonzero magnitude in binary64, or the read fails with
- * HAL_EPROTO at the token. Failures throw with exit code 2 (invalid JSON),
- * 3 (file) or 4 (limits).
+/** Start an empty location on the host heap. where must be zero or
+ * destroyed.
  */
-std::unique_ptr<json_document> read_document(parse_location &where,
-                                             const char *path, size_t limit,
-                                             bool hardware_numbers = false);
+void jh_json_location_init(jh_json_location_t *where);
+/** Release the location and reset it to zero. */
+void jh_json_location_destroy(jh_json_location_t *where);
 
-/** Destroys an owned jhbase tree. */
-struct tree_deleter {
-  void operator()(jb_json_tree_t *tree) const { jb_json_tree_destroy(tree); }
-};
-using tree_owner = std::unique_ptr<jb_json_tree_t, tree_deleter>;
+/** A parsed file: its bytes, the jb_json_token_t elements of tokens, the
+ * document over both, the path and its schema identity (the path with
+ * percent-escaped bytes outside the unreserved set). The document borrows the
+ * bytes and tokens, so a loaded document must not move.
+ */
+typedef struct {
+  jb_file_data_t input;
+  jb_vector_t tokens;
+  jb_json_doc_t doc;
+  jb_string_t uri, identity;
+} jh_json_document_t;
 
-/** A VS Code file or project manifest and whether it exists. */
-struct settings_file {
-  tree_owner tree;
-  bool exists = false;
-};
+/** Read and parse one file of at most limit bytes into out, which must be
+ * zero; path may point into where->source. With hardware_numbers the hardware
+ * loader policy applies: a token with a fraction or exponent must keep a
+ * finite, nonzero magnitude in binary64, or the read fails with HAL_EPROTO at
+ * the token. where records the path and, after a parse error, its place. On
+ * failure out is released.
+ */
+hal_status_t jh_json_read_document(jh_json_location_t *where, const char *path,
+                                   size_t limit, bool hardware_numbers,
+                                   jh_json_document_t *out,
+                                   jh_failure_t *failure);
+/** Release a document and reset it to zero. A zero document is harmless. */
+void jh_json_document_destroy(jh_json_document_t *document);
 
-/** Read a file of at most limit bytes as load_json_file of the Python HAL
- * tools reads VS Code files and project manifests: comments outside strings,
+/** Read a file of at most limit bytes (path may point into where->source) as
+ * load_json_file of the Python HAL tools reads VS Code files and project
+ * manifests: comments outside strings,
  * the last value of a repeated name and NaN/Infinity are accepted, a missing
  * file reads as an empty object and the root must be an object. Numbers keep
  * their tokens. Unlike Python, a `\u` escape of an unpaired surrogate is
  * rejected, the parser limits apply (256 nested containers, 100000 members
  * each) and an integer keeps its token at any length, where int() of Python
- * 3.11+ refuses more than 4300 digits. Failures throw with exit code 2
- * (HAL_ETYPE for another root, otherwise invalid JSON), 3 (file) or 4 (limits);
- * a parse error locates the place in the file, comments included.
+ * 3.11+ refuses more than 4300 digits. A root of another kind fails with
+ * HAL_ETYPE; a parse error locates the place in the file, comments included.
+ * out receives the tree, destroyed with jb_json_tree_destroy, and exists
+ * whether the file was there; on failure out is NULL.
  */
-settings_file read_settings(parse_location &where, const char *path,
-                            size_t limit);
+hal_status_t jh_json_read_settings(jh_json_location_t *where, const char *path,
+                                   size_t limit, jb_json_tree_t **out,
+                                   bool *exists, jh_failure_t *failure);
 
-/** One validation failure as the CLI reports it. */
-struct schema_report {
-  owned_string pointer, uri, rule, reason, message;
-};
-
-/** Schema documents loaded by reference and the reports of one validation. */
-struct schema_files {
-  parse_location &where;
-  size_t max_bytes;
-  size_t schema_bytes = 0;
-  owned_list<json_document> documents;
-  owned_list<schema_report> reports;
-  schema_files(parse_location &location, size_t limit)
-      : where(location), max_bytes(limit) {}
-  /** Load the root schema; its document stays first in documents. */
-  const json_document &root(const char *path);
-};
-
-/** jh_json_schema_load_fn over schema_files: local files only. */
-hal_status_t load_schema(void *user, jb_json_span_t base_uri,
-                         jb_json_span_t reference,
-                         jh_json_schema_source_t *out);
-/** jh_json_schema_report_fn appending to schema_files::reports. */
-hal_status_t collect_report(void *user, const jh_json_schema_error_t *error);
-/** The validation limits every jh command uses. */
-const jh_json_schema_limits_t &schema_limits();
-/** Validate instance against the root schema of state, replacing its reports.
- * Returns HAL_OK or HAL_ECONFIG; any other outcome throws. scratch is sized
- * on first use and reused afterwards.
+/** One validation failure as the CLI reports it: instance Pointer, schema
+ * identity, schema Pointer of the rule, reason code and message.
  */
-hal_status_t validate_with(schema_files &state, const json_document &instance,
-                           owned_array<unsigned char> &scratch);
+typedef struct {
+  jb_string_t pointer, uri, rule, reason, message;
+} jh_schema_report_t;
 
-} // namespace jh
+/** Schema documents loaded by reference and the reports of the last
+ * validation. Only local files are loaded, at most 256 of them and 64 MiB in
+ * all. A failed schema read records its place in where, which the files
+ * borrow.
+ */
+typedef struct {
+  jh_json_location_t *where;
+  size_t max_bytes;      /**< Limit of one schema file. */
+  size_t schema_bytes;   /**< Bytes of the loaded documents. */
+  jb_vector_t documents; /**< jh_json_document_t pointers, the root first. */
+  jb_vector_t reports;   /**< jh_schema_report_t of the last validation. */
+  jb_vector_t scratch;   /**< Validator workspace, sized on first use. */
+} jh_schema_files_t;
+
+/** Start empty schema files reading through where. files must be zero or
+ * destroyed; where must outlive them.
+ */
+void jh_schema_files_init(jh_schema_files_t *files, jh_json_location_t *where,
+                          size_t max_bytes);
+/** Release every document and report and reset files to zero. */
+void jh_schema_files_destroy(jh_schema_files_t *files);
+/** Load the root schema at path, which stays the first document. out may be
+ * NULL; the document lives as long as files.
+ */
+hal_status_t jh_schema_files_root(jh_schema_files_t *files, const char *path,
+                                  const jh_json_document_t **out,
+                                  jh_failure_t *failure);
+/** Number of reports of the last validation. */
+size_t jh_schema_files_report_count(const jh_schema_files_t *files);
+/** Report index of the last validation, or NULL past the end. */
+const jh_schema_report_t *jh_schema_files_report(const jh_schema_files_t *files,
+                                                 size_t index);
+/** Validate instance against the root schema with the limits of every jh
+ * command, replacing the reports. Returns HAL_OK for a valid instance and
+ * HAL_ECONFIG for an invalid one; any other status is recorded in failure.
+ */
+hal_status_t jh_schema_files_validate(jh_schema_files_t *files,
+                                      const jh_json_document_t *instance,
+                                      jh_failure_t *failure);
+
+#ifdef __cplusplus
+}
+#endif
 #endif

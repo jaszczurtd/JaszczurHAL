@@ -23,9 +23,15 @@ COVERAGE_SCOPE_ORDER = (
     "stm32g474",
     "portable-hal",
     "portable-other",
+    "tools",
     "scripts-python",
 )
+# The host tools are owned code: their implementation is scanned with the
+# library, their tests with the other tests.
+PRODUCTION_ROOTS = ("src", "tools/jh")
+TEST_ROOTS = ("tests", "examples", "tools/jh/tests")
 PRODUCTION_EXCLUDED_PREFIXES = (
+    "tools/jh/tests/",
     "src/hal/generated/",
     "src/hal/network/mqtt/PubSubClient/",
     "src/hal/timers/smart_timers/",
@@ -279,6 +285,8 @@ def run_scan(
 def _coverage_scope(path: str) -> str:
     if path.startswith("scripts/"):
         return "scripts-python"
+    if path.startswith("tools/"):
+        return "tools"
     if path.startswith("src/hal/impl/.mock/"):
         return "mock"
     if path.startswith("src/hal/impl/rp2040/"):
@@ -387,10 +395,10 @@ def main() -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
     try:
         pmd = resolve_pmd(repo_root, arguments.pmd)
-        production_sources = collect_sources(repo_root, ("src",), production=True)
-        test_sources = collect_sources(
-            repo_root, ("tests", "examples"), production=False
+        production_sources = collect_sources(
+            repo_root, PRODUCTION_ROOTS, production=True
         )
+        test_sources = collect_sources(repo_root, TEST_ROOTS, production=False)
         script_sources = collect_sources(
             repo_root,
             ("scripts",),
