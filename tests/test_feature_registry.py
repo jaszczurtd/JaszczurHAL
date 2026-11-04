@@ -38,6 +38,7 @@ TEST_ROOT = ROOT / ".build/tests/feature-registry"
 ESP_IDF_FAKE_INCLUDE = TEST_ROOT / "esp-idf-include"
 sys.path.insert(0, str(ROOT / "scripts"))
 import generate_hal_features  # noqa: E402
+import project_config  # noqa: E402
 from repository_layout import FEATURE_OUTPUTS as OUTPUTS  # noqa: E402
 
 
@@ -47,16 +48,21 @@ def run_generator(
     output_root: Path = ROOT,
     expected_success: bool = True,
 ) -> subprocess.CompletedProcess[str]:
+    # The artifacts come from `jh generate features`; --lint is still Python.
+    if arguments and arguments[0] in ("--write", "--check"):
+        command = [
+            project_config.jh_executable(ARGS.cmake or "cmake"),
+            "generate",
+            "features",
+            "--root",
+            str(ROOT),
+        ]
+        roots = ("--config-root", str(config_root), "--output-root", str(output_root))
+    else:
+        command = [sys.executable, str(GENERATOR)]
+        roots = ("--config-root", str(config_root))
     result = subprocess.run(
-        [
-            sys.executable,
-            str(GENERATOR),
-            *arguments,
-            "--config-root",
-            str(config_root),
-            "--output-root",
-            str(output_root),
-        ],
+        [*command, *arguments, *roots],
         check=False,
         capture_output=True,
         text=True,

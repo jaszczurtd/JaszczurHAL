@@ -295,7 +295,7 @@ void jh_json_document_destroy(jh_json_document_t *document) {
 /* The root of a settings tree must be an object. */
 static hal_status_t settings_root(const char *path, const jb_json_tree_t *tree,
                                   jh_failure_t *failure) {
-  jb_json_tree_view_t root;
+  jb_json_tree_view_t root = {0};
   jb_json_type_t type = JB_JSON_NULL;
   hal_status_t status = jh_require(failure, jb_json_tree_root(tree, &root), 2,
                                    "cannot read the settings root");
@@ -309,11 +309,13 @@ static hal_status_t settings_root(const char *path, const jb_json_tree_t *tree,
   return jh_fail(failure, HAL_ETYPE, 2, parts, COUNTOF(parts));
 }
 
-hal_status_t jh_json_read_settings(jh_json_location_t *where, const char *path,
-                                   size_t limit, jb_json_tree_t **out,
-                                   bool *exists, jh_failure_t *failure) {
-  if (where == NULL || path == NULL || out == NULL || exists == NULL)
-    return jh_fail_arguments(failure);
+/* Read the file at path into a tree with the reading flags. A missing file
+ * reads as an empty object when missing_as_empty is set, otherwise it fails;
+ * exists reports whether the file was there. */
+static hal_status_t read_tree(jh_json_location_t *where, const char *path,
+                              size_t limit, uint32_t flags,
+                              bool missing_as_empty, jb_json_tree_t **out,
+                              bool *exists, jh_failure_t *failure) {
   *out = NULL;
   *exists = false;
   hal_status_t status = jb_string_assign(&where->source, path, strlen(path));
@@ -325,21 +327,17 @@ hal_status_t jh_json_read_settings(jh_json_location_t *where, const char *path,
   where->located = false;
   jb_file_data_t input = {0};
   const hal_status_t read = jb_file_read(stored, limit, &input);
-  if (read != HAL_OK && read != HAL_ENOENT)
+  if (read != HAL_OK && (read != HAL_ENOENT || !missing_as_empty))
     return jh_fail_text(failure, read, exit_code_for(read, 3),
                         "cannot read input file");
-  // load_json_file reads a missing file as an empty object.
   const jb_json_span_t file_bytes = {(const char *)input.data, input.length};
   const jb_json_span_t bytes = read == HAL_ENOENT ? jh_span("{}") : file_bytes;
   const jb_json_limits_t limits = file_limits(limit);
   const jb_json_tree_limits_t tree_limits = {
       limits.max_nodes, limits.max_depth, limit, limits.max_key_compare_bytes};
-  const uint32_t python_reading = JB_JSON_TREE_COMMENTS |
-                                  JB_JSON_TREE_LAST_DUPLICATE |
-                                  JB_JSON_TREE_NONFINITE;
   jb_json_tree_t *tree = NULL;
-  status = jb_json_tree_parse(bytes, &limits, &tree_limits, python_reading,
-                              &tree, &where->error);
+  status = jb_json_tree_parse(bytes, &limits, &tree_limits, flags, &tree,
+                              &where->error);
   if (status != HAL_OK) {
     // The tree limits leave the code NONE and have no place in the file.
     if (where->error.code != JB_JSON_ERROR_NONE) {
@@ -350,8 +348,6 @@ hal_status_t jh_json_read_settings(jh_json_location_t *where, const char *path,
     status = jh_fail_text(failure, status, exit_code_for(status, 2),
                           "invalid JSON or parser limit exceeded");
   }
-  if (status == HAL_OK)
-    status = settings_root(stored, tree, failure);
   jb_file_release(&input);
   if (status != HAL_OK) {
     if (tree != NULL)
@@ -361,6 +357,38 @@ hal_status_t jh_json_read_settings(jh_json_location_t *where, const char *path,
   *out = tree;
   *exists = read == HAL_OK;
   return HAL_OK;
+}
+
+hal_status_t jh_json_read_settings(jh_json_location_t *where, const char *path,
+                                   size_t limit, jb_json_tree_t **out,
+                                   bool *exists, jh_failure_t *failure) {
+  if (where == NULL || path == NULL || out == NULL || exists == NULL)
+    return jh_fail_arguments(failure);
+  // load_json_file reads a missing file as an empty object.
+  const uint32_t python_reading = JB_JSON_TREE_COMMENTS |
+                                  JB_JSON_TREE_LAST_DUPLICATE |
+                                  JB_JSON_TREE_NONFINITE;
+  hal_status_t status =
+      read_tree(where, path, limit, python_reading, true, out, exists, failure);
+  if (status == HAL_OK)
+    status = settings_root(jb_string_data(&where->source), *out, failure);
+  if (status != HAL_OK && *out != NULL) {
+    jb_json_tree_destroy(*out);
+    *out = NULL;
+    *exists = false;
+  }
+  return status;
+}
+
+hal_status_t jh_json_read_value(jh_json_location_t *where, const char *path,
+                                size_t limit, jb_json_tree_t **out,
+                                jh_failure_t *failure) {
+  if (where == NULL || path == NULL || out == NULL)
+    return jh_fail_arguments(failure);
+  bool exists = false;
+  return read_tree(where, path, limit,
+                   JB_JSON_TREE_LAST_DUPLICATE | JB_JSON_TREE_NONFINITE, false,
+                   out, &exists, failure);
 }
 
 static void report_destroy(jh_schema_report_t *report) {

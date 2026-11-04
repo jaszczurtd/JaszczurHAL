@@ -6,6 +6,7 @@
  * way the Python HAL tools did. C11.
  */
 #include <jb/json.h>
+#include <jb/json_tree.h>
 #include <jb/string.h>
 
 #ifdef __cplusplus
@@ -35,6 +36,20 @@ hal_status_t jh_python_repr(jb_json_span_t text, jh_repr_piece_fn piece,
  * string (HAL_ENOMEM, HAL_EOVERFLOW) is returned.
  */
 hal_status_t jh_python_repr_append(jb_string_t *out, jb_json_span_t text);
+
+/** Append repr() of the Python value json.loads makes of value: objects as
+ * dict and arrays as list (", " and ": " separators), strings as
+ * jh_python_repr, true/false/null as True/False/None, an integer token as int
+ * and any other number as float (nan, inf, shortest round-trip digits in the
+ * fixed or exponent notation repr() chooses). A number of any length rounds
+ * as float() rounds it, from its first 768 significant digits and whether a
+ * nonzero digit follows; inf stands only for a value past the binary64 range.
+ * On failure out keeps its previous bytes; a tree error, HAL_ENOMEM, or
+ * HAL_EOVERFLOW for a full string or an exhausted conversion budget is
+ * returned.
+ */
+hal_status_t jh_python_repr_json_append(jb_string_t *out,
+                                        jb_json_tree_view_t value);
 
 #ifdef __cplusplus
 }

@@ -268,6 +268,36 @@ hal_status_t jh_write_generated(const char *path, jb_json_span_t content,
       3, "cannot publish generated output");
 }
 
+bool jh_generated_path_relative(jb_json_span_t path) {
+  if (path.data == NULL || path.length == 0 || path.data[0] == '/' ||
+      path.data[0] == '\\' || (path.length > 1 && path.data[1] == ':'))
+    return false;
+  size_t start = 0;
+  for (size_t at = 0; at <= path.length; ++at) {
+    if (at < path.length && path.data[at] != '/' && path.data[at] != '\\')
+      continue;
+    if (at - start == 2 && path.data[start] == '.' &&
+        path.data[start + 1] == '.')
+      return false;
+    start = at + 1;
+  }
+  return true;
+}
+
+hal_status_t jh_write_generated_mode(const char *path, jb_json_span_t content,
+                                     uint32_t mode, bool *changed,
+                                     jh_failure_t *failure) {
+  if (path == NULL || changed == NULL ||
+      (content.data == NULL && content.length != 0))
+    return jh_fail_arguments(failure);
+  *changed = false;
+  return jh_require(failure,
+                    jb_file_write_atomic_mode(path, content.data,
+                                              content.length, false, mode,
+                                              changed),
+                    3, "cannot publish generated output");
+}
+
 /* Lines of text without their terminators (LF or CR LF), borrowing its
  * bytes. */
 static hal_status_t split_lines(jb_json_span_t text, jb_vector_t *lines) {

@@ -169,7 +169,7 @@ Ochronę stosu włączają dwie niezależne opcje:
 | `HAL_ENABLE_ST7567` | `hal_display.h` + `hal/display/drivers/st7567_driver.h` | `hal/display/drivers/hal_display.cpp` + `hal/display/drivers/st7567_driver.cpp` | Surowa monochromatyczna fasada/backend ST7567 przez HAL I2C lub SPI/GPIO (propaguje DISPLAY + I2C; transport SPI wymaga dodatkowo SPI) |
 | `HAL_ENABLE_SSD16XX` | `hal_display.h` + `hal/display/drivers/ssd16xx_driver.h` | fasada display + współdzielony transport EPD + sterownik SSD16xx | Surowy backend EPD MONO10 SSD1608/SSD1673/SSD1675A/SSD1680/SSD1681 (propaguje DISPLAY + SPI) |
 | `HAL_ENABLE_UC81XX` | `hal_display.h` + `hal/display/drivers/uc81xx_driver.h` | fasada display + współdzielony transport EPD + sterownik UC81xx | Surowy backend EPD MONO10 UC8175/UC8176/UC8151D/UC8179 (propaguje DISPLAY + SPI) |
-| `HAL_ENABLE_CRYPTO` | `hal_crypto.h` + `hal_sc_auth.h` | `hal_crypto.cpp` + `hal_sc_auth.cpp` | Base64, MD5, SHA-256, HMAC-SHA256, ChaCha20-Poly1305 |
+| `HAL_ENABLE_CRYPTO` | `hal_crypto.h` + `hal_sc_auth.h` | `hal_crypto.cpp` + `hal_sc_auth.cpp` + `jh_sha256.c` | Base64, MD5, SHA-256, HMAC-SHA256, ChaCha20-Poly1305 |
 | `HAL_ENABLE_CRC` | `hal_crc.h` | `hal_crc.cpp` | generyczne sumy kontrolne CRC-8/16/32 dla integralności (włączane automatycznie przez ONEWIRE/DS18B20) |
 | `HAL_ENABLE_CELLULAR_MODEM` | `hal_modem_at.h` | `hal_modem_at.cpp` | *(fasada - wymaga backendu rodziny modemów, np. `HAL_ENABLE_A7670`)* |
 | `HAL_ENABLE_A7670` | `hal_simcom_a76xx.h` | `hal_simcom_a76xx.cpp` | Sterownik rodziny SimCom A76xx (propaguje CELLULAR_MODEM + UART) |

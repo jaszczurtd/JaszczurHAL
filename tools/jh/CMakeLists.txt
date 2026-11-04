@@ -53,11 +53,22 @@ add_library(jh_files STATIC json/jh_json_file.c src/jh_generated_output.c)
 target_include_directories(jh_files PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(jh_files PUBLIC jh_core jh_schema jb::host)
 jh_tool_target(jh_files)
+# The SHA-256 core of HAL (hal_sha256_* delegates to it), which needs no HAL
+# configuration, and the feature registry generator. C11.
+add_library(jh_sha256 STATIC "${CMAKE_CURRENT_SOURCE_DIR}/../../src/hal/security/jh_sha256.c")
+target_include_directories(jh_sha256 PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../../src")
+# hal/core/hal_layout_check.h, which the header includes, needs jb/abi.h.
+target_link_libraries(jh_sha256 PUBLIC jb::status)
+jh_tool_target(jh_sha256)
+add_library(jh_registry STATIC config/jh_feature_registry.c)
+target_include_directories(jh_registry PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/config")
+target_link_libraries(jh_registry PUBLIC jh_files PRIVATE jh_sha256 jb::unicode)
+jh_tool_target(jh_registry)
 # Transitional C++: owners of the jhbase string and vector, and the
 # exceptions and owners the C++ modules below use over the C modules above.
 add_library(jh_cxx STATIC cxx/jh_containers.cpp cxx/jh_adapters.cpp)
 target_include_directories(jh_cxx PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/cxx")
-target_link_libraries(jh_cxx PUBLIC jh_files jb::host)
+target_link_libraries(jh_cxx PUBLIC jh_files jh_registry jb::host)
 jh_tool_target(jh_cxx)
 # C++ modules of the commands: the type catalogue, the device defaults
 # generator and the project configuration reader.

@@ -7,9 +7,10 @@ zapisać albo sprawdzić plik wynikowy. Korzysta z parsera i API plików jhbase.
 `jh json validate` sprawdza dokument według podzbioru schematów sprzętowych,
 także z odwołaniami między lokalnymi plikami. `jh generate device-defaults`
 czyta katalog typów komponentów HAL i zapisuje albo sprawdza generowany
-nagłówek ich wartości domyślnych. `scripts/sync_generated.py`, a przez niego
-hook pre-commit i bramka, uruchamiają to polecenie przez opisany niżej
-launcher. `jh config inspect` odczytuje `hal_project_config.h` projektu tak,
+nagłówek ich wartości domyślnych, a `jh generate features` robi to samo
+z nagłówkiem i danymi CMake rejestru funkcji HAL. `scripts/sync_generated.py`,
+a przez niego hook pre-commit i bramka, uruchamiają oba polecenia przez
+opisany niżej launcher. `jh config inspect` odczytuje `hal_project_config.h` projektu tak,
 jak widzi go kompilacja.
 
 Przed konfiguracją przygotuj zależności hosta w wersjach wskazanych przez repozytorium:
@@ -238,6 +239,42 @@ diagnostyka `[JH-CFG-*]` czytnika Pythona; `code` zawiera jej prefiks, a
 dają `HAL_EPROTO`. Plik, którego nie da się przeczytać, kończy polecenie
 kodem 3.
 
+## Rejestr funkcji
+
+`jh generate features --root <checkout> (--write | --check)` czyta rejestr
+funkcji HAL: `config/features.schema.json` i wszystkie fragmenty
+`config/features/*.json` w kolejności nazw, także ukryte. `--config-root`
+wskazuje inny katalog konfiguracji. Każdy plik jest czytany tak jak przez
+`json.loads`: przyjmuje ostatnią wartość powtórzonej nazwy oraz `NaN`
+i `Infinity`, ale nie komentarze. Polecenie stosuje reguły
+`scripts/generate_hal_features.py`: dokładne zestawy pól, wzorce symboli,
+domen i ścieżek źródeł, zależności zarządzane wymienione w schemacie, relacje
+do znanych symboli, brak cykli `implies`, symetryczne konflikty i brak
+konfliktu w domknięciu symbolu. Komunikaty zachowują brzmienie tego skryptu.
+
+`--write` publikuje `src/hal/generated/jh_hal_features.h`
+i `cmake/generated/jh_hal_features.cmake` z trybem 0644 i nie zmienia plików
+o identycznej treści; `--check` porównuje je i wypisuje unified diff
+najwyżej 80 linii na plik. Ścieżki pochodzą z `config/tooling/artifacts.json`
+i są liczone względem `--output-root` (domyślnie `<root>`); ścieżka
+absolutna, z dyskiem albo z segmentem `..` kończy się kodem 2, zanim cokolwiek
+zostanie zapisane. Digesty rejestru
+i schematu to SHA-256 zwartego JSON-u z posortowanymi kluczami i ucieczkami
+ASCII, jaki zapisuje `json.dumps(sort_keys=True, ensure_ascii=True)`.
+Z `--json` wynik zawiera `command: "generate.features"`, `status` (`HAL_OK`
+albo `HAL_ESTATE` dla brakującego lub nieaktualnego artefaktu), `root`,
+`config`, `output`, `changed` (liczbę plików zapisanych lub z poprawionym
+trybem 0644; przy `--check` liczbę plików różniących się od wyniku)
+i `checkOnly`.
+
+Polecenie kończy się kodem 0 przy sukcesie, 1, gdy `--check` znajdzie
+rozbieżność, 2 przy niepoprawnym rejestrze lub pliku rejestru, którego nie da
+się odczytać albo zapisać, i 4 przy braku pamięci. W odróżnieniu od generatora
+Pythona odrzuca escape `\u` niesparowanego surogatu, zgłasza `kind` będący
+tablicą lub obiektem jako zwykły błąd, gdzie Python kończył się tracebackiem,
+i zachowuje w digeście schematu zapis liczby z częścią ułamkową lub
+wykładnikiem, gdzie Python zapisałby liczbę zmiennoprzecinkową.
+
 ## Katalog typów i wartości domyślne urządzeń
 
 `jh generate device-defaults --root <checkout>` czyta każdy `*.json`
@@ -259,8 +296,9 @@ Liczba zapisana z ułamkiem albo wykładnikiem musi też zachować skończoną,
 niezerową wartość w binary64, tak jak wymagał loader Pythona.
 
 Ścieżka nagłówka pochodzi z `generatedArtifacts.deviceDefaultsHeader`
-w `config/tooling/artifacts.json`, względem `--output-root` (domyślnie root).
-`--bindings <katalog>` czyta inny katalog typów, np. zmienione kopie w testach.
+w `config/tooling/artifacts.json`, względem `--output-root` (domyślnie root);
+ścieżka absolutna, z dyskiem albo z segmentem `..` kończy się kodem 2, zanim
+cokolwiek zostanie zapisane. `--bindings <katalog>` czyta inny katalog typów, np. zmienione kopie w testach.
 Wymagana jest dokładnie jedna z opcji `--write` i `--check`. `--write`
 publikuje nagłówek przez atomowe API plików, zostawia identyczny plik
 nietknięty i wypisuje `generated 1 device defaults artifacts (N changed)`.
@@ -292,7 +330,7 @@ Brak roota, katalogu typów albo pliku rejestru daje kod 3.
 |---|---|
 | 0 | Sukces, także aktualny plik wynikowy. |
 | 1 | `--check` wykrył brak pliku albo różnicę. |
-| 2 | Błędne argumenty, niepoprawny JSON/schemat, nieudana walidacja, odrzucony katalog typów lub nagłówek projektu albo nierozwiązany Pointer. |
+| 2 | Błędne argumenty, niepoprawny JSON/schemat, nieudana walidacja, odrzucony katalog typów, rejestr funkcji lub nagłówek projektu albo nierozwiązany Pointer. |
 | 3 | Błąd ścieżki, pliku, stdout lub nieoczekiwany błąd runtime. |
 | 4 | Brak pamięci, przekroczony limit wejścia, parsera, walidatora lub wyjścia albo 64-bitowy zakres czytnika konfiguracji projektu. |
 
@@ -311,7 +349,10 @@ definiuje rekord błędu, który każda funkcja C wypełnia dla wywołującego.
 i dokumenty schematów wczytywane podczas walidacji,
 [jh_python_repr.h](json/jh_python_repr.h) cytuje tekst tak jak `repr()`
 w Pythonie, a [jh_generated_output.h](src/jh_generated_output.h) publikuje
-i sprawdza generowane artefakty. Walidator schematów, czytnik konfiguracji
+i sprawdza generowane artefakty. [jh_feature_registry.h](config/jh_feature_registry.h)
+wczytuje rejestr funkcji HAL i renderuje jego artefakty; digesty liczy rdzeń
+SHA-256 HAL z [jh_sha256.h](../../src/hal/security/jh_sha256.h), który
+narzędzie kompiluje samodzielnie. Walidator schematów, czytnik konfiguracji
 projektu, katalog typów i `main.cpp` są jeszcze w C++. Korzystają z modułów C
 przez właścicieli zasobów i wyjątki z [cxx/](cxx/), które znikną razem
 z ostatnim wywołującym w C++.

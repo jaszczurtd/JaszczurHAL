@@ -74,13 +74,7 @@ bool hal_chacha20_poly1305_decrypt(
     uint8_t *plaintext);
 
 // SHA-256 / HMAC-SHA256 (FIPS 180-4 + RFC 2104)
-typedef struct {
-    uint32_t state[8];
-    uint64_t bit_count;
-    uint8_t buffer[HAL_HMAC_SHA256_BLOCK_BYTES];
-    size_t buffer_len;
-    bool initialized;
-} hal_sha256_context_t;
+typedef jh_sha256_context_t hal_sha256_context_t; // hal/security/jh_sha256.h
 
 hal_status_t hal_sha256_init_ex(hal_sha256_context_t *context);
 hal_status_t hal_sha256_update_ex(hal_sha256_context_t *context,

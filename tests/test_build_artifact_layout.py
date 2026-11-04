@@ -383,7 +383,7 @@ def hook_scenarios(work: Path) -> None:
 with tempfile.TemporaryDirectory() as hook_work:
     hook_scenarios(Path(hook_work))
 for duplicated_generator in (
-    "scripts/generate_hal_features.py --write",
+    "generate features --root",
     "scripts/generate_board_config.py --boards-root boards --write-static",
     "scripts/examples_dispatcher.py generate-template",
     "scripts/examples_dispatcher.py generate",

@@ -162,7 +162,7 @@ Stack protection uses two independent opt-ins:
 | `HAL_ENABLE_ST7567` | `hal_display.h` + `hal/display/drivers/st7567_driver.h` | `hal/display/drivers/hal_display.cpp` + `hal/display/drivers/st7567_driver.cpp` | ST7567 raw monochrome facade/backend over HAL I2C or SPI/GPIO (propagates DISPLAY + I2C; SPI transport also needs SPI) |
 | `HAL_ENABLE_SSD16XX` | `hal_display.h` + `hal/display/drivers/ssd16xx_driver.h` | display facade + shared EPD transport + SSD16xx driver | SSD1608/SSD1673/SSD1675A/SSD1680/SSD1681 raw MONO10 EPD backend (propagates DISPLAY + SPI) |
 | `HAL_ENABLE_UC81XX` | `hal_display.h` + `hal/display/drivers/uc81xx_driver.h` | display facade + shared EPD transport + UC81xx driver | UC8175/UC8176/UC8151D/UC8179 raw MONO10 EPD backend (propagates DISPLAY + SPI) |
-| `HAL_ENABLE_CRYPTO` | `hal_crypto.h` + `hal_sc_auth.h` | `hal_crypto.cpp` + `hal_sc_auth.cpp` | Base64, MD5, SHA-256, HMAC-SHA256, ChaCha20-Poly1305 |
+| `HAL_ENABLE_CRYPTO` | `hal_crypto.h` + `hal_sc_auth.h` | `hal_crypto.cpp` + `hal_sc_auth.cpp` + `jh_sha256.c` | Base64, MD5, SHA-256, HMAC-SHA256, ChaCha20-Poly1305 |
 | `HAL_ENABLE_CRC` | `hal_crc.h` | `hal_crc.cpp` | generic CRC-8/16/32 checksums for integrity (auto-enabled by ONEWIRE/DS18B20) |
 | `HAL_ENABLE_CELLULAR_MODEM` | `hal_modem_at.h` | `hal_modem_at.cpp` | *(facade - needs a modem-family backend such as `HAL_ENABLE_A7670`)* |
 | `HAL_ENABLE_A7670` | `hal_simcom_a76xx.h` | `hal_simcom_a76xx.cpp` | SimCom A76xx-family driver (propagates CELLULAR_MODEM + UART) |

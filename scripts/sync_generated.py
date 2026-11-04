@@ -45,8 +45,9 @@ class GeneratorStep:
 GENERATOR_STEPS = (
     GeneratorStep(
         "HAL feature registry",
-        (("scripts/generate_hal_features.py", "--write"),),
-        (("scripts/generate_hal_features.py", "--check"),),
+        (("generate", "features", "--root", str(REPO_ROOT), "--write"),),
+        (("generate", "features", "--root", str(REPO_ROOT), "--check"),),
+        host_cli=True,
     ),
     GeneratorStep(
         "static board registry",

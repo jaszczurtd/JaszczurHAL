@@ -7,9 +7,10 @@ writes or checks an output file. It uses the jhbase parser and file API.
 `jh json validate` checks a document against the hardware schema subset,
 including references between local files. `jh generate device-defaults` reads
 the catalogue of HAL component types and writes or checks the generated
-header of their defaults. `scripts/sync_generated.py`, and through it the
-pre-commit hook and the gate, run that command through the launcher described
-below. `jh config inspect` evaluates a project's `hal_project_config.h` as the
+header of their defaults, and `jh generate features` does the same for the
+header and CMake data of the HAL feature registry. `scripts/sync_generated.py`,
+and through it the pre-commit hook and the gate, run both commands through the
+launcher described below. `jh config inspect` evaluates a project's `hal_project_config.h` as the
 build reads it.
 
 Prepare the pinned host dependencies explicitly before configuring:
@@ -230,6 +231,40 @@ A rejected header exits with 2 and `HAL_ECONFIG`. The message is the
 `source` the file and line. Invalid UTF-8 and an octal literal with 8 or 9
 give `HAL_EPROTO`, and an unreadable file exits with 3.
 
+## Feature registry
+
+`jh generate features --root <checkout> (--write | --check)` reads the HAL
+feature registry: `config/features.schema.json` and every
+`config/features/*.json` fragment in name order, hidden names included.
+`--config-root` reads another configuration directory. Each file is read the
+way `json.loads` reads it: the last value of a repeated name, `NaN` and
+`Infinity` are accepted, comments are not. The command then applies the rules
+of `scripts/generate_hal_features.py`: exact fields, the symbol, domain and
+source path patterns, the managed dependencies the schema lists, relations to
+known symbols, no `implies` cycle, symmetric conflicts and no conflict inside
+the closure of a symbol. Messages keep the wording of that script.
+
+`--write` publishes `src/hal/generated/jh_hal_features.h` and
+`cmake/generated/jh_hal_features.cmake` with mode 0644 and leaves identical
+files untouched; `--check` compares them and prints a unified diff of at most
+80 lines per file. Their paths come from `config/tooling/artifacts.json` and
+are relative to `--output-root` (default `<root>`); an absolute path, a drive
+or a `..` segment fails with exit code 2 before anything is written. The
+registry and schema
+digests are the SHA-256 of the compact JSON with sorted keys and ASCII escapes
+that `json.dumps(sort_keys=True, ensure_ascii=True)` writes. With `--json`
+the result has `command: "generate.features"`, `status` (`HAL_OK`, or
+`HAL_ESTATE` for a missing or stale artifact), `root`, `config`, `output`,
+`changed` (the number of files written or given mode 0644; with `--check`,
+the number of files that differ) and `checkOnly`.
+
+The command exits with 0 on success, 1 when `--check` finds drift, 2 for an
+invalid registry or a registry file it cannot read or write, and 4 when memory
+runs out. Unlike the Python generator, it rejects a `\u` escape of an unpaired
+surrogate, reports a `kind` of an array or object as a regular finding where
+Python stopped with a traceback, and keeps the spelling of a number with a
+fraction or exponent in the schema digest, where Python would write the float.
+
 ## Type catalogue and device defaults
 
 `jh generate device-defaults --root <checkout>` reads every `*.json` of
@@ -251,7 +286,8 @@ nonzero magnitude in binary64, as the Python loader required.
 
 The header path comes from `generatedArtifacts.deviceDefaultsHeader` in
 `config/tooling/artifacts.json`, relative to `--output-root` (default: the
-root). `--bindings <dir>` reads another directory of types, for tests on
+root); an absolute path, a drive or a `..` segment fails with exit code 2
+before anything is written. `--bindings <dir>` reads another directory of types, for tests on
 edited copies. Exactly one of `--write` and `--check` is required. `--write`
 publishes the header through the atomic file API, keeping an identical file
 untouched, and prints `generated 1 device defaults artifacts (N changed)`.
@@ -283,7 +319,7 @@ root, bindings directory or registry file exits with 3.
 |---|---|
 | 0 | Success, including an up-to-date output. |
 | 1 | `--check` found a missing or different output. |
-| 2 | Bad arguments, invalid JSON/schema, failed validation, a rejected type catalogue or project header, or an unresolved Pointer. |
+| 2 | Bad arguments, invalid JSON/schema, failed validation, a rejected type catalogue, feature registry or project header, or an unresolved Pointer. |
 | 3 | Path, file, stdout or unexpected runtime failure. |
 | 4 | Allocation failure, an input/parser/validator/output limit or the 64-bit range of the project configuration reader. |
 
@@ -303,7 +339,10 @@ defines the failure record each C function fills for its caller.
 the schema documents a validation loads, [jh_python_repr.h](json/jh_python_repr.h)
 quotes text as Python's `repr()` does, and
 [jh_generated_output.h](src/jh_generated_output.h) publishes and checks
-generated artifacts. The schema validator, the project configuration reader,
+generated artifacts. [jh_feature_registry.h](config/jh_feature_registry.h)
+loads the HAL feature registry and renders its artifacts; its digests use the
+SHA-256 core of HAL in [jh_sha256.h](../../src/hal/security/jh_sha256.h),
+which the tool compiles on its own. The schema validator, the project configuration reader,
 the type catalogue and `main.cpp` are still C++. They call the C modules
 through the owners and exceptions in [cxx/](cxx/), which go away with the last
 C++ caller.

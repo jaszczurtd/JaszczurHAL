@@ -22,6 +22,8 @@
 
 #ifdef HAL_ENABLE_CRYPTO
 
+#include "hal/security/jh_sha256.h"
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -226,15 +228,10 @@ bool hal_base64_decode(const char *input, size_t input_len, uint8_t *output,
  * @brief Incremental SHA-256 context.
  *
  * Treat the fields as private implementation state. The concrete layout keeps
- * the context allocation deterministic on embedded targets.
+ * the context allocation deterministic on embedded targets. The type is the
+ * state of the SHA-256 core in hal/security/jh_sha256.h.
  */
-typedef struct {
-  uint32_t state[8];
-  uint64_t bit_count;
-  uint8_t buffer[HAL_HMAC_SHA256_BLOCK_BYTES];
-  size_t buffer_len;
-  bool initialized;
-} hal_sha256_context_t;
+typedef jh_sha256_context_t hal_sha256_context_t;
 
 /** @brief Initialise an incremental SHA-256 calculation. */
 hal_status_t hal_sha256_init_ex(hal_sha256_context_t *context);

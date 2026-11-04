@@ -204,7 +204,7 @@ repository = stage_body("stage_repository")
 require("scripts/sync_generated.py --check" in repository,
         "the repository stage does not fail on generated drift")
 for bypass in (
-    "scripts/generate_hal_features.py --check",
+    "generate features --root",
     "scripts/generate_board_config.py --boards-root boards --check-static",
     "scripts/vscode_library_workspace.py sync-vscode --check",
     "scripts/examples_dispatcher.py check-template",

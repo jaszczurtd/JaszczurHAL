@@ -152,9 +152,149 @@ static void aliasing(const char *directory) {
   jh_failure_destroy(&failure);
 }
 
+/* jh_json_read_value reads a file the way json.loads does (the last value of
+ * a repeated name at the first name's place, NaN and Infinity), and
+ * jh_python_repr_json_append writes what repr() writes for the result. */
+static void python_repr(const char *directory) {
+  static const char input[] =
+      "{\"b\": 1, \"b\": [1e16, 1e15, 1e-4, 1e-5, -0.0, 1.0, 1E2, 2.5e-7, 0.1, "
+      "123456789012345678.0, NaN, -Infinity, 18446744073709551616, -0, true, "
+      "null, \"a'b\", \"a\\\"b\", \"\\u00e9\\n\"], \"a\": {\"k\": []}}";
+  static const char expected[] =
+      "{'b': [1e+16, 1000000000000000.0, 0.0001, 1e-05, -0.0, 1.0, 100.0, "
+      "2.5e-07, 0.1, 1.2345678901234568e+17, nan, -inf, 18446744073709551616, "
+      "0, True, None, \"a'b\", 'a\"b', '\xc3\xa9\\n'], 'a': {'k': []}}";
+  jh_failure_t failure;
+  jh_failure_init(&failure);
+  jb_string_t path = {0}, out = {0};
+  bool changed = false;
+  expect(jb_string_init(&out, jb_heap_allocator()) == HAL_OK &&
+             jh_absolute_path("c-layer-repr.json", directory, &path,
+                              &failure) == HAL_OK &&
+             jb_file_write_atomic(jb_string_data(&path), input,
+                                  COUNTOF(input) - 1, false,
+                                  &changed) == HAL_OK,
+         "repr fixture file");
+  jh_json_location_t where;
+  jh_json_location_init(&where);
+  jb_json_tree_t *tree = NULL;
+  jb_json_tree_view_t root = {0};
+  expect(jh_json_read_value(&where, path_in_source(&where, &path), 4096, &tree,
+                            &failure) == HAL_OK &&
+             jb_json_tree_root(tree, &root) == HAL_OK &&
+             jh_python_repr_json_append(&out, root) == HAL_OK &&
+             equals(&out, expected),
+         "repr() of a json.loads value");
+  if (tree != NULL)
+    jb_json_tree_destroy(tree);
+  tree = NULL;
+  expect(jh_absolute_path("c-layer-missing.json", directory, &path, &failure) ==
+                 HAL_OK &&
+             jh_json_read_value(&where, jb_string_data(&path), 4096, &tree,
+                                &failure) == HAL_ENOENT &&
+             tree == NULL && failure.exit_code == 3,
+         "a missing value file fails");
+  jh_json_location_destroy(&where);
+  jb_string_destroy(&out);
+  jb_string_destroy(&path);
+  jh_failure_destroy(&failure);
+}
+
+/* Append count copies of digit. */
+static bool append_digits(jb_string_t *text, char digit, size_t count) {
+  return jb_string_resize(text, jb_string_size(text) + count, digit) == HAL_OK;
+}
+
+static bool append_text(jb_string_t *text, const char *literal) {
+  return jb_string_append(text, literal, strlen(literal)) == HAL_OK;
+}
+
+/* Regressions: float() of a number past the conversion budget came out as
+ * inf. Numbers of any length round as float() rounds them, and only a value
+ * past 2^1024 - 2^970 is an infinity. */
+static void float_repr(const char *directory) {
+  static const char bound[] =
+      "17976931348623158079372897140530341507993413271003782693617377898044496"
+      "82927647509466490179775872070963302864166928879109465555478519404026306"
+      "57488671505820681908902000708383676273854845817711531764475730270069855"
+      "57136695962284291481986083493647529271907416844436551070434271155969950"
+      "8093042880177904174497792";
+  static const char midpoint[] =
+      "1.00000000000000011102230246251565404236316680908203125";
+  static const char expected[] =
+      "[0.1111111111111111, inf, -inf, 1.7976931348623157e+308, "
+      "1.0000000000000002, 1.0, inf, 0.0, -0.0, 5e-324, 0.0, 0.1, 1.0, inf, "
+      "-0.0, 1.7976931348623157e+308]";
+  char below[sizeof bound];
+  memcpy(below, bound, sizeof bound);
+  below[sizeof bound - 2] = '1'; /* bound - 1 */
+  jh_failure_t failure;
+  jh_failure_init(&failure);
+  jb_string_t input = {0}, path = {0}, out = {0};
+  bool built = jb_string_init(&input, jb_heap_allocator()) == HAL_OK &&
+               jb_string_init(&out, jb_heap_allocator()) == HAL_OK &&
+               append_text(&input, "[0.") && append_digits(&input, '1', 5000) &&
+               append_text(&input, ", ") && append_text(&input, bound) &&
+               append_text(&input, ".0, -") && append_text(&input, bound) &&
+               append_text(&input, ".0, ") && append_text(&input, below) &&
+               append_text(&input, ".") && append_digits(&input, '9', 800) &&
+               append_text(&input, ", ") && append_text(&input, midpoint) &&
+               append_digits(&input, '0', 1000) && append_text(&input, "1, ") &&
+               append_text(&input, midpoint) &&
+               append_text(&input, ", 1e309, 1e-400, -1e-400, "
+                                   "2.4703282292062328e-324, "
+                                   "2.4703282292062327e-324, 0.") &&
+               append_digits(&input, '0', 400) &&
+               append_text(&input, "1e400, ") &&
+               append_digits(&input, '9', 2000) &&
+               append_text(&input, "e-2000, 1e99999999999999999999, "
+                                   "-0e-99999999999999999999, "
+                                   "1.7976931348623157e308]");
+  bool changed = false;
+  expect(built &&
+             jh_absolute_path("c-layer-floats.json", directory, &path,
+                              &failure) == HAL_OK &&
+             jb_file_write_atomic(jb_string_data(&path), jb_string_data(&input),
+                                  jb_string_size(&input), false,
+                                  &changed) == HAL_OK,
+         "float fixture file");
+  jh_json_location_t where;
+  jh_json_location_init(&where);
+  jb_json_tree_t *tree = NULL;
+  jb_json_tree_view_t root = {0};
+  expect(jh_json_read_value(&where, jb_string_data(&path), 65536, &tree,
+                            &failure) == HAL_OK &&
+             jb_json_tree_root(tree, &root) == HAL_OK &&
+             jh_python_repr_json_append(&out, root) == HAL_OK &&
+             equals(&out, expected),
+         "float() rounding and range of long numbers");
+  if (tree != NULL)
+    jb_json_tree_destroy(tree);
+  jh_json_location_destroy(&where);
+  jb_string_destroy(&out);
+  jb_string_destroy(&path);
+  jb_string_destroy(&input);
+  jh_failure_destroy(&failure);
+}
+
+/* Artifact paths from artifacts.json stay below the root they are joined to. */
+static void artifact_paths(void) {
+  static const char *const inside[] = {
+      "src/hal/generated/x.h", "a/./b", "a..b/c", "..a", "a/b..", "x"};
+  static const char *const outside[] = {
+      "", "/x", "\\x", "C:x", "..", "../x", "a/..", "a\\..\\b", "a/../../x"};
+  for (size_t i = 0; i < COUNTOF(inside); ++i)
+    expect(jh_generated_path_relative(jh_span(inside[i])), inside[i]);
+  for (size_t i = 0; i < COUNTOF(outside); ++i)
+    expect(!jh_generated_path_relative(jh_span(outside[i])), outside[i]);
+}
+
 int jh_test_c_layer(const char *directory) {
   failures = 0;
   diff();
+  artifact_paths();
   aliasing(directory);
+  python_repr(directory);
+  float_repr(directory);
   return failures;
 }

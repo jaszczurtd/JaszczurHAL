@@ -153,6 +153,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/can/mcp2515/hal_can_mcp2515_config.cpp
     ${SRC}/hal/can/mcp251xfd/mcp251xfd_driver.cpp
     ${SRC}/hal/security/hal_crypto.cpp
+    ${SRC}/hal/security/jh_sha256.c
     ${SRC}/hal/security/hal_crc.cpp
     ${SRC}/hal/audio/hal_pga2311.cpp
     ${SRC}/hal/network/wireguard/core/crypto/blake2s.c

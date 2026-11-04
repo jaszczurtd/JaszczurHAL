@@ -382,6 +382,7 @@ function(jh_add_rp_ota_boot_target BOOT_TARGET)
         "${SRC}/hal/network/ota/jh_ota_image.cpp"
         "${SRC}/hal/network/ota/jh_ota_swap_engine.cpp"
         "${SRC}/hal/security/hal_crypto.cpp"
+        "${SRC}/hal/security/jh_sha256.c"
         "${SRC}/hal/security/hal_crc.cpp")
     target_include_directories("${BOOT_TARGET}" PRIVATE
         "${SRC}"

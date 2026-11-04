@@ -87,6 +87,16 @@ hal_status_t jh_json_read_settings(jh_json_location_t *where, const char *path,
                                    size_t limit, jb_json_tree_t **out,
                                    bool *exists, jh_failure_t *failure);
 
+/** Read a file of at most limit bytes (path may point into where->source) as
+ * json.loads reads it: the last value of a repeated name and NaN/Infinity are
+ * accepted, comments are not, and a missing file fails. A value of any kind
+ * may be the root. Numbers keep their tokens. out receives the tree,
+ * destroyed with jb_json_tree_destroy; on failure out is NULL.
+ */
+hal_status_t jh_json_read_value(jh_json_location_t *where, const char *path,
+                                size_t limit, jb_json_tree_t **out,
+                                jh_failure_t *failure);
+
 /** One validation failure as the CLI reports it: instance Pointer, schema
  * identity, schema Pointer of the rule, reason code and message.
  */

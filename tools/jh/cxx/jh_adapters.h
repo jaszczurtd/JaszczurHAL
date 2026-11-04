@@ -11,6 +11,7 @@
  */
 #include "jh_containers.h"
 #include "jh_failure.h"
+#include "jh_feature_registry.h"
 #include "jh_generated_output.h"
 #include "jh_json_file.h"
 #include "jh_python_repr.h"
@@ -134,6 +135,24 @@ struct schema_files : jh_schema_files_t {
  */
 hal_status_t validate_with(schema_files &state,
                            const jh_json_document_t &instance);
+
+/** A jh_feature_registry_t released with its owner. */
+struct feature_registry : jh_feature_registry_t {
+  feature_registry() noexcept : jh_feature_registry_t() {
+    jh_feature_registry_init(this);
+  }
+  feature_registry(const feature_registry &) = delete;
+  feature_registry &operator=(const feature_registry &) = delete;
+  ~feature_registry() { jh_feature_registry_destroy(this); }
+};
+
+/** jh_feature_outputs_t released with its owner. */
+struct feature_outputs : jh_feature_outputs_t {
+  feature_outputs() noexcept : jh_feature_outputs_t() {}
+  feature_outputs(const feature_outputs &) = delete;
+  feature_outputs &operator=(const feature_outputs &) = delete;
+  ~feature_outputs() { jh_feature_outputs_destroy(this); }
+};
 
 /** jh_python_repr_append into a new string. */
 owned_string python_repr(std::string_view text);

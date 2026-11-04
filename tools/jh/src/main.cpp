@@ -46,6 +46,7 @@ enum option_id {
   root,
   bindings,
   output_root,
+  config_root,
   write_mode,
   check,
   max_bytes,
@@ -72,7 +73,9 @@ constexpr option_spec options[] = {
     {"bindings", "<path>",
      "Directory of HAL types (default: <root>/config/hardware/bindings)"},
     {"output-root", "<path>",
-     "Root the generated header path is relative to (default: <root>)"},
+     "Root the generated artifact paths are relative to (default: <root>)"},
+    {"config-root", "<path>",
+     "Configuration the feature registry reads (default: <root>/config)"},
     {"write", nullptr, "Refresh the generated artifact"},
     {"check", nullptr,
      "Compare the output without changing files; exit 1 on drift"},
@@ -98,6 +101,7 @@ enum command_id {
   inspect_command,
   validate_command,
   defaults_command,
+  features_command,
   repository_command,
   config_command,
   directives_command
@@ -116,6 +120,10 @@ const command_spec commands[] = {
      "device-defaults",
      "generate.device-defaults",
      {root, bindings, output_root, write_mode, check}},
+    {"generate",
+     "features",
+     "generate.features",
+     {root, config_root, output_root, write_mode, check}},
     {"repository",
      "files",
      "repository.files",
@@ -229,14 +237,17 @@ std::string help_text() {
       "       jh json validate --file <path> --schema <path> [--json]\n"
       "       jh generate device-defaults --root <path> (--check | --write)"
       " [options]\n"
+      "       jh generate features --root <path> (--check | --write)"
+      " [options]\n"
       "       jh repository files --root <path> --git <executable> "
       "[options]\n"
       "       jh config inspect [--header <path>] [--define <NAME[=VALUE]>]..."
       " [--preinclude <path>]\n"
       "       jh config directives --file <path>\n\n"
       "Read JSON, select a value and optionally compare or write it,\n"
-      "generate the C defaults of the HAL component types, or evaluate a\n"
-      "project's hal_project_config.h as the build reads it.\n";
+      "generate the C defaults of the HAL component types or the feature\n"
+      "registry artifacts, or evaluate a project's hal_project_config.h as\n"
+      "the build reads it.\n";
   for (const auto &option : options) {
     text += "  --";
     text += option.name;
@@ -507,24 +518,32 @@ int validate(context &ctx, const std::string &base) {
   return status == HAL_OK ? 0 : 2;
 }
 
-int generate_defaults(context &ctx, const std::string &base) {
-  const auto &args = ctx.args;
-  require_value(args, root, "generate device-defaults requires --root");
+// The HAL checkout of a generator: --root resolved against base, without the
+// trailing separator a root given as "." resolves with.
+std::string generator_root(const arguments &args, const std::string &base,
+                           const char *command) {
+  require_value(args, root,
+                (std::string(command) + " requires --root").c_str());
   if (args.present[write_mode] == args.present[check])
     throw failure{HAL_EINVAL,
                   2,
-                  "generate device-defaults requires exactly one of --write "
-                  "and --check",
+                  std::string(command) +
+                      " requires exactly one of --write and --check",
                   {},
                   {},
                   {}};
-  constexpr size_t limit = 16 * 1024 * 1024;
   auto hal_root = jh::stl::absolute_path(args.values[root], base);
-  // A root given as "." resolves with a trailing separator; report it plain.
   if (hal_root.size() > 1 &&
       (hal_root.back() == '/' || hal_root.back() == '\\') &&
       !(hal_root.size() == 3 && hal_root[1] == ':'))
     hal_root.pop_back();
+  return hal_root;
+}
+
+int generate_defaults(context &ctx, const std::string &base) {
+  const auto &args = ctx.args;
+  constexpr size_t limit = 16 * 1024 * 1024;
+  const auto hal_root = generator_root(args, base, "generate device-defaults");
   const auto bindings_dir =
       args.present[bindings]
           ? jh::stl::absolute_path(args.values[bindings], base)
@@ -554,6 +573,16 @@ int generate_defaults(context &ctx, const std::string &base) {
                   {},
                   {}};
   const std::string header_relative = header_entry.string();
+  if (!jh_generated_path_relative(
+          {header_relative.data(), header_relative.size()}))
+    throw failure{HAL_ECONFIG,
+                  2,
+                  "config/tooling/artifacts.json: "
+                  "generatedArtifacts.deviceDefaultsHeader must be "
+                  "repository-relative",
+                  {},
+                  {},
+                  {}};
   const auto output_path = jh::stl::absolute_path(header_relative, out_root);
   const auto features = jh::hardware::hal_features(ctx, hal_root, limit);
   const auto capabilities =
@@ -586,6 +615,51 @@ int generate_defaults(context &ctx, const std::string &base) {
     result.string("bindings", bindings_dir);
     result.string("output", output_path);
     result.boolean("changed", changed);
+    result.boolean("checkOnly", args.present[check]);
+    stdout_bytes(result.finish());
+  }
+  return current ? 0 : 1;
+}
+
+int generate_features(context &ctx, const std::string &base) {
+  const auto &args = ctx.args;
+  constexpr size_t limit = 16 * 1024 * 1024;
+  const auto hal_root = generator_root(args, base, "generate features");
+  const auto config_dir =
+      args.present[config_root]
+          ? jh::stl::absolute_path(args.values[config_root], base)
+          : jh::stl::absolute_path("config", hal_root);
+  const auto out_root =
+      args.present[output_root]
+          ? jh::stl::absolute_path(args.values[output_root], base)
+          : hal_root;
+  jh::feature_registry registry;
+  jh::feature_outputs outputs;
+  jh::failure_record failed;
+  failed.check(jh_feature_registry_load(&registry, config_dir.c_str(), limit,
+                                        &failed.value));
+  failed.check(
+      jh_feature_outputs_read(hal_root.c_str(), &outputs, &failed.value));
+  size_t changed = 0;
+  bool current = true;
+  failed.check(jh_feature_registry_publish(
+      &registry, &outputs, out_root.c_str(), args.present[check], &changed,
+      &current, &failed.value));
+  if (!ctx.json) {
+    if (args.present[write_mode])
+      stdout_bytes("generated 2 feature artifacts (" + std::to_string(changed) +
+                   " changed)\n");
+    else if (current)
+      stdout_bytes("verified 2 generated feature artifacts\n");
+  } else {
+    result_writer result(hal_root.size() + config_dir.size() + out_root.size() +
+                         1024);
+    result.string("command", "generate.features");
+    result.string("status", current ? "HAL_OK" : "HAL_ESTATE");
+    result.string("root", hal_root);
+    result.string("config", config_dir);
+    result.string("output", out_root);
+    result.number("changed", changed);
     result.boolean("checkOnly", args.present[check]);
     stdout_bytes(result.finish());
   }
@@ -1004,6 +1078,8 @@ int run(const std::vector<std::string> &argv) {
       return validate(ctx, base);
     if (ctx.command == &commands[defaults_command])
       return generate_defaults(ctx, base);
+    if (ctx.command == &commands[features_command])
+      return generate_features(ctx, base);
     if (ctx.command == &commands[config_command])
       return config_inspect(ctx, base);
     if (ctx.command == &commands[directives_command])

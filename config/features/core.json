@@ -37,7 +37,8 @@
           "src/hal/network/wireguard/core/crypto/crypto.c",
           "src/hal/network/wireguard/core/crypto/poly1305-donna.c",
           "src/hal/security/hal_crypto.cpp",
-          "src/hal/security/hal_sc_auth.cpp"
+          "src/hal/security/hal_sc_auth.cpp",
+          "src/hal/security/jh_sha256.c"
         ]
       }
     },

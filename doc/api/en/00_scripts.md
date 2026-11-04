@@ -277,8 +277,9 @@ keeps non-ASCII directories such as a user profile. The bootstrap downloads
 nothing; the managed checkouts come from `scripts/ensure_jhbase.sh`,
 `scripts/ensure_utf8proc.sh` and `scripts/ensure_pcre2.sh`.
 
-The key of a build covers the `tools/jh` sources, the CMake modules and pin
-files they read, the bootstrap script itself, the verified revisions of
+The key of a build covers the `tools/jh` sources and the files outside
+`tools/jh` that `scripts/jh_tool_inputs.cmake` lists (the CMake modules and
+pin files they read, the bootstrap scripts and the HAL SHA-256 core), the verified revisions of
 jhbase, utf8proc and PCRE2, the host variant, the compiler, the generator,
 the build type and the CMake version. The result lives in
 `.build/host-tools/<variant>/<key>/bin` with a `manifest.json` that records
@@ -775,10 +776,12 @@ per-build board generation.
 ### `scripts/generate_hal_features.py`
 
 Validates the closed `HAL_ENABLE_*` / `HAL_DISABLE_*` namespace and the
-target-independent dependency graph under `config/features/`. `--write`
-atomically refreshes the tracked production C header and CMake resolver, while
-`--check` compares them without writing. `--lint` accepts repeatable
-`--input-root` arguments. It checks the feature definitions of every
+target-independent dependency graph under `config/features/` for the Python
+tools that import it, and lints feature requests. The tracked production C
+header and CMake resolver come from `jh generate features`
+([jh README](../../../tools/jh/README.md#feature-registry)), which
+`scripts/sync_generated.py` runs. The command line requires `--lint`, which
+accepts repeatable `--input-root` arguments. It checks the feature definitions of every
 `hal_project_config.h`, in every branch and every variant, for unknown
 symbols, unsupported `=0` values, and direct requests for derived symbols, and
 reports headers the project configuration reader cannot evaluate. A project
@@ -818,8 +821,9 @@ active target and variant, exposes the result through
 while passing direct requests to CMake.
 
 Conditional defaults, provider choices, board capability checks, and target
-constraints remain in `hal_config.h`. The `repository` gate stage runs `--check`
-and strict raw/effective lint; CI uploads the deterministic resolution report. Installed RP and
+constraints remain in `hal_config.h`. The `repository` gate stage checks both
+artifacts through `scripts/sync_generated.py --check` and runs strict
+raw/effective lint; CI uploads the deterministic resolution report. Installed RP and
 STM32G474 packages carry the generated feature/board headers, resolved board
 JSON, link-signature header, and reference source; a direct compiler consumer
 can compile and link those package artifacts without invoking Python.

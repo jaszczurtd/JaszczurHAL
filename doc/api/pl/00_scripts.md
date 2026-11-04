@@ -300,8 +300,9 @@ Niczego nie pobiera; zarządzane checkouty przygotowują
 `scripts/ensure_jhbase.sh`, `scripts/ensure_utf8proc.sh`
 i `scripts/ensure_pcre2.sh`.
 
-Klucz buildu obejmuje źródła `tools/jh`, czytane przez nie moduły CMake
-i pliki pinów, sam skrypt bootstrapu, zweryfikowane rewizje jhbase, utf8proc
+Klucz buildu obejmuje źródła `tools/jh` oraz pliki spoza `tools/jh`
+wymienione w `scripts/jh_tool_inputs.cmake` (czytane przez nie moduły CMake
+i pliki pinów, skrypty bootstrapu i rdzeń SHA-256 HAL), zweryfikowane rewizje jhbase, utf8proc
 i PCRE2, wariant hosta, kompilator, generator, typ buildu i wersję CMake.
 Wynik leży w `.build/host-tools/<wariant>/<klucz>/bin` razem z `manifest.json`
 zapisującym te wejścia i SHA-256 programu; ponowne użycie wymaga tego samego
@@ -830,10 +831,12 @@ generowania płytki dla każdej kompilacji.
 ### `scripts/generate_hal_features.py`
 
 Waliduje zamkniętą przestrzeń nazw `HAL_ENABLE_*` / `HAL_DISABLE_*` oraz
-niezależny od targetu graf zależności pod `config/features/`. `--write`
-atomowo odświeża wersjonowany, produkcyjny nagłówek C oraz mechanizm
-rozwiązywania zależności w CMake,
-natomiast `--check` porównuje je bez zapisywania. `--lint` akceptuje
+niezależny od targetu graf zależności pod `config/features/` dla importujących
+go narzędzi Pythona oraz sprawdza żądania modułów. Wersjonowany, produkcyjny
+nagłówek C i mechanizm rozwiązywania zależności w CMake generuje
+`jh generate features`
+([README jh](../../../tools/jh/README.pl.md#rejestr-funkcji)), uruchamiany
+przez `scripts/sync_generated.py`. Wywołanie wymaga `--lint`, który akceptuje
 powtarzalne argumenty `--input-root`. Sprawdza definicje modułów w każdym
 `hal_project_config.h`, we wszystkich gałęziach i wariantach, pod kątem
 nieznanych symboli, nieobsługiwanych wartości `=0` oraz bezpośrednich żądań
@@ -877,7 +880,8 @@ CMake.
 
 Warunkowe wartości domyślne, wybór providera, sprawdzanie cech płytki
 oraz ograniczenia targetu pozostają w `hal_config.h`. Etap `repository`
-uruchamia `--check` oraz ścisłą analizę konfiguracji źródłowej i wynikowej,
+sprawdza oba artefakty przez `scripts/sync_generated.py --check` i uruchamia
+ścisłą analizę konfiguracji źródłowej i wynikowej,
 a CI publikuje deterministyczny raport. Zainstalowane pakiety RP i STM32G474 zawierają
 generowane nagłówki modułów i płytki, rozwiązany JSON płytki, nagłówek sygnatury
 linkowania oraz źródło referencyjne; projekt korzystający bezpośrednio z

@@ -380,12 +380,8 @@ include("${JH_ROOT}/cmake/jh_verify_pcre2.cmake")
 file(GLOB_RECURSE tool_files LIST_DIRECTORIES FALSE RELATIVE "${JH_ROOT}" "${JH_ROOT}/tools/jh/*")
 # Documentation beside the sources is not an input of the build.
 list(FILTER tool_files EXCLUDE REGEX "\\.md$")
-list(APPEND tool_files
-  cmake/jh_jhbase.cmake cmake/jh_pcre2.cmake cmake/jh_verify_pcre2.cmake
-  cmake/jh_build_dir_guard.cmake cmake/jh_sanitizers.cmake cmake/jh_memcheck.cmake
-  third_party/jhbase_version.conf
-  third_party/pcre2_version.conf config/tooling/managed_components.json
-  scripts/jh_bootstrap.cmake scripts/jh_msvc_environment.cmake)
+include("${CMAKE_CURRENT_LIST_DIR}/jh_tool_inputs.cmake")
+list(APPEND tool_files ${JH_TOOL_INPUTS})
 list(SORT tool_files)
 list(REMOVE_DUPLICATES tool_files)
 set(inputs "")
