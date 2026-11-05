@@ -11,7 +11,8 @@ nagłówek ich wartości domyślnych, a `jh generate features` robi to samo
 z nagłówkiem i danymi CMake rejestru funkcji HAL. `scripts/sync_generated.py`,
 a przez niego hook pre-commit i bramka, uruchamiają oba polecenia przez
 opisany niżej launcher. `jh config inspect` odczytuje `hal_project_config.h` projektu tak,
-jak widzi go kompilacja.
+jak widzi go kompilacja. `jh feature list` i `jh feature resolve` podają
+rejestr funkcji oraz rozwiązane funkcje, o które prosi jedna kompilacja.
 
 Przed konfiguracją przygotuj zależności hosta w wersjach wskazanych przez repozytorium:
 
@@ -274,6 +275,55 @@ Pythona odrzuca escape `\u` niesparowanego surogatu, zgłasza `kind` będący
 tablicą lub obiektem jako zwykły błąd, gdzie Python kończył się tracebackiem,
 i zachowuje w digeście schematu zapis liczby z częścią ułamkową lub
 wykładnikiem, gdzie Python zapisałby liczbę zmiennoprzecinkową.
+
+`jh feature list` i `jh feature resolve` czytają ten sam rejestr,
+z `--config-root` albo `<root>/config`, i zgłaszają te same błędy.
+`feature list` wypisuje jedną linię na symbol z jego rodzajem i domeną. Wynik
+`--json` (`command: "feature.list"`) zawiera `config`, `registryDigest`,
+`registrySchemaDigest` i `features` w kolejności nazw, każdy z polami `name`,
+`domain`, `kind`, `implies`, `requires`, `conflicts`, `featureSources`,
+`portableSources`, `dependencies`, `note` (`null`, gdy go nie ma) i `closure`,
+czyli wszystkim, co symbol włącza bezpośrednio lub przez inne symbole.
+
+`feature resolve` rozwiązuje funkcje, o które prosi jedna kompilacja, tak jak
+robią to narzędzia HAL dla konfiguracji projektu. Każde
+`--request <SYMBOL[=VALUE]>` to jedno żądanie; `--source` na tej samej
+pozycji mówi, skąd pochodzi, a bez `--source` żądania mają źródła
+`command-line:--request[<n>]`. `--file <path>` podaje zamiast nich żądania
+w pliku JSON czytanym jak `json.loads`:
+`{"requests": [{"request": "<SYMBOL[=VALUE]>", "source": "<text>"}]}`, gdzie
+każdy obiekt ma dokładnie te dwa napisy. Korzystają z niego narzędzia HAL, bo
+źródła powtarzane w wierszu poleceń przekraczają 32767 znaków dopuszczalnych
+w Windows. `--target <id>` dodaje każde
+`--required-feature` tego targetu ze źródłem
+`target:<id>:requiredFeatures[<n>]`, chyba że kompilacja już o nie prosi.
+`--context` nazywa konfigurację w zgłoszeniach (domyślnie `command line`).
+Polecenie wypisuje rozwiązane symbole, po jednym w linii, a zgłoszenia na
+stderr:
+
+- `[JH-CFG-UNKNOWN]`, `[JH-CFG-VALUE]` (wartość inna niż brak lub `1`)
+  i `[JH-CFG-DERIVED]` dla jednego żądania, po jego źródle;
+- `[JH-CFG-REDUNDANT]` dla symbolu żądanego więcej niż raz,
+  `[JH-CFG-REQUIRES]` i `[JH-CFG-CONFLICT]` dla rozwiązanego zbioru oraz
+  `[JH-CFG-TARGET-REQUIRED]`, gdy kompilacja prosi o bliźniaka `HAL_DISABLE_`
+  wymaganej funkcji, po kontekście.
+
+Z `--json` wynik (`command: "feature.resolve"`) zawiera `config`,
+`registryDigest`, `context`, `target` (`null`, gdy go nie ma),
+`requestedFeatures` (poprawne jawne żądania), `resolvedFeatures` (je, funkcje
+targetu i to, co włączają), `resolvedFeaturesDigest` (SHA-256 rozwiązanych
+nazw połączonych znakami nowej linii), `provenance` (źródła każdego symbolu)
+i `findings`. Kod wyjścia 1 oznacza zgłoszenia, ze `status: "HAL_ECONFIG"`;
+2 niepoprawny rejestr, argumenty albo plik żądań; 3 plik żądań, którego nie da
+się odczytać.
+
+`scripts/generate_hal_features.py` daje swoim importerom ten model i te
+rozwiązania: każdy rejestr czyta raz na proces, dopóki jego pliki się nie
+zmienią, a każdą listę żądań rozwiązuje raz. W odróżnieniu od tego skryptu
+polecenia podają funkcje w kolejności nazw, gdzie Python zachowywał kolejność
+fragmentów i dokumentów, i cytują źródło żądania bez zmian, gdzie Python
+przepuszczał jego część przed pierwszym dwukropkiem przez `pathlib.Path`
+(`./h.h` stawało się `h.h`).
 
 ## Katalog typów i wartości domyślne urządzeń
 

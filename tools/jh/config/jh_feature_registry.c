@@ -33,6 +33,25 @@ static hal_status_t append_span(jb_string_t *out, jb_json_span_t text) {
                           : jb_string_append(out, text.data, text.length);
 }
 
+/* Append text unless an earlier append failed. */
+static void put(jb_string_t *out, hal_status_t *status, const char *text) {
+  if (*status == HAL_OK)
+    *status = append(out, text);
+}
+
+static void put_span(jb_string_t *out, hal_status_t *status,
+                     jb_json_span_t text) {
+  if (*status == HAL_OK)
+    *status = append_span(out, text);
+}
+
+static void put_number(jb_string_t *out, hal_status_t *status, int value) {
+  char number[16];
+  const int written = snprintf(number, sizeof number, "%d", value);
+  if (*status == HAL_OK)
+    *status = jb_string_append(out, number, (size_t)written);
+}
+
 /* ---- Lists of owned strings in code point order ---- */
 
 static hal_status_t list_init(jb_vector_t *list) {
@@ -1393,26 +1412,459 @@ hal_status_t jh_feature_registry_load(jh_feature_registry_t *registry,
   return status;
 }
 
+/* ---- Resolving requests ---- */
+
+hal_status_t jh_feature_registry_closure(const jh_feature_registry_t *registry,
+                                         size_t index, jb_vector_t *indices) {
+  if (registry == NULL || indices == NULL ||
+      index >= jb_vector_size(&registry->features))
+    return HAL_EINVAL;
+  return closure(&registry->features, index, indices);
+}
+
+void jh_feature_resolution_init(jh_feature_resolution_t *resolution) {
+  static const jh_feature_resolution_t empty = {0};
+  *resolution = empty;
+  // Initialization only checks its arguments, which are valid here.
+  (void)list_init(&resolution->requested);
+  (void)list_init(&resolution->resolved);
+  (void)jb_vector_init(&resolution->provenance, sizeof(jh_feature_provenance_t),
+                       heap());
+  (void)list_init(&resolution->findings);
+}
+
+void jh_feature_resolution_destroy(jh_feature_resolution_t *resolution) {
+  static const jh_feature_resolution_t empty = {0};
+  for (size_t i = 0; i < jb_vector_size(&resolution->provenance); ++i) {
+    jh_feature_provenance_t *entry = jb_vector_at(&resolution->provenance, i);
+    jb_string_destroy(&entry->symbol);
+    list_destroy(&entry->sources);
+  }
+  jb_vector_destroy(&resolution->provenance);
+  list_destroy(&resolution->requested);
+  list_destroy(&resolution->resolved);
+  list_destroy(&resolution->findings);
+  *resolution = empty;
+}
+
+/* Move a finding into the resolution; message is released on failure. */
+static hal_status_t push_finding(jh_feature_resolution_t *resolution,
+                                 jb_string_t *message, hal_status_t status) {
+  if (status == HAL_OK)
+    status = jb_vector_append(&resolution->findings, message, 1);
+  if (status != HAL_OK)
+    jb_string_destroy(message);
+  return status;
+}
+
+/* The finding made of count parts. */
+static hal_status_t add_finding(jh_feature_resolution_t *resolution,
+                                const jb_json_span_t *parts, size_t count) {
+  jb_string_t message = {0};
+  hal_status_t status = jb_string_init(&message, heap());
+  for (size_t i = 0; i < count; ++i)
+    put_span(&message, &status, parts[i]);
+  return push_finding(resolution, &message, status);
+}
+
+/* validate_requested_symbol: the findings of one request, and whether it
+ * takes part in the resolution. */
+static hal_status_t check_request(const jh_feature_registry_t *registry,
+                                  const jh_feature_request_t *request,
+                                  jh_feature_resolution_t *resolution,
+                                  bool *valid) {
+  // Python split the source at its first colon and joined the parts again,
+  // so a finding starts with the source, and with ":$" when it has none.
+  const jb_json_span_t path = request->source;
+  const bool located =
+      path.length != 0 && memchr(path.data, ':', path.length) != NULL;
+  const jb_json_span_t location = jh_span(located ? "" : ":$");
+  const jb_json_span_t symbol = request->symbol;
+  const size_t index = find_feature(&registry->features, symbol);
+  *valid = false;
+  if (index == SIZE_MAX) {
+    const jb_json_span_t parts[] = {
+        path, location, jh_span(": [JH-CFG-UNKNOWN] unknown feature "), symbol};
+    return add_finding(resolution, parts, COUNTOF(parts));
+  }
+  const bool enabled =
+      !request->has_value || jh_span_equal(request->value, jh_span("1"));
+  hal_status_t status = HAL_OK;
+  if (!enabled && jh_span_equal(request->value, jh_span("0"))) {
+    const jb_json_span_t parts[] = {
+        path, location, jh_span(": [JH-CFG-VALUE] "), symbol,
+        jh_span("=0 is unsupported; omit the symbol to disable it")};
+    status = add_finding(resolution, parts, COUNTOF(parts));
+  } else if (!enabled) {
+    jb_string_t message = {0};
+    status = jb_string_init(&message, heap());
+    const jb_json_span_t parts[] = {path, location,
+                                    jh_span(": [JH-CFG-VALUE] "), symbol,
+                                    jh_span(" has unsupported value ")};
+    for (size_t i = 0; i < COUNTOF(parts); ++i)
+      put_span(&message, &status, parts[i]);
+    if (status == HAL_OK)
+      status = jh_python_repr_append(
+          &message, request->value.length == 0 ? jh_span("") : request->value);
+    status = push_finding(resolution, &message, status);
+  }
+  const bool derived = feature_at(&registry->features, index)->derived;
+  if (status == HAL_OK && derived) {
+    const jb_json_span_t parts[] = {path, location,
+                                    jh_span(": [JH-CFG-DERIVED] "), symbol,
+                                    jh_span(" cannot be requested directly")};
+    status = add_finding(resolution, parts, COUNTOF(parts));
+  }
+  *valid = enabled && !derived;
+  return status;
+}
+
+static int compare_requests(const void *left, const void *right) {
+  return compare_text(((const jh_feature_request_t *)left)->symbol,
+                      ((const jh_feature_request_t *)right)->symbol);
+}
+
+static int compare_spans(const void *left, const void *right) {
+  return compare_text(*(const jb_json_span_t *)left,
+                      *(const jb_json_span_t *)right);
+}
+
+/* One requested symbol and its sources, count requests long: the redundant
+ * request finding, the provenance entry and the requested name. */
+static hal_status_t add_requested(jh_feature_resolution_t *resolution,
+                                  jb_json_span_t context,
+                                  const jh_feature_request_t *group,
+                                  size_t count, jb_vector_t *sources) {
+  jb_vector_clear(sources);
+  hal_status_t status = HAL_OK;
+  for (size_t i = 0; status == HAL_OK && i < count; ++i)
+    status = jb_vector_append(sources, &group[i].source, 1);
+  if (status != HAL_OK)
+    return status;
+  jb_json_span_t *spans = jb_vector_data(sources);
+  qsort(spans, count, sizeof *spans, compare_spans);
+  size_t unique = 1;
+  for (size_t i = 1; i < count; ++i)
+    if (compare_text(spans[i], spans[unique - 1]) != 0)
+      spans[unique++] = spans[i];
+  if (count > 1) {
+    jb_string_t message = {0};
+    char times[32];
+    const int written = snprintf(times, sizeof times, "%zu", count);
+    status = jb_string_init(&message, heap());
+    put_span(&message, &status, context);
+    put(&message, &status, ": [JH-CFG-REDUNDANT] ");
+    put_span(&message, &status, group->symbol);
+    put(&message, &status, " is requested ");
+    put_span(&message, &status, (jb_json_span_t){times, (size_t)written});
+    put(&message, &status, " times by ");
+    for (size_t i = 0; i < unique; ++i) {
+      if (i != 0)
+        put(&message, &status, ", ");
+      put_span(&message, &status, spans[i]);
+    }
+    status = push_finding(resolution, &message, status);
+  }
+  jh_feature_provenance_t entry = {0};
+  if (status == HAL_OK)
+    status = jb_string_init(&entry.symbol, heap());
+  if (status == HAL_OK)
+    status = list_init(&entry.sources);
+  put_span(&entry.symbol, &status, group->symbol);
+  for (size_t i = 0; status == HAL_OK && i < unique; ++i)
+    status = list_push(&entry.sources, spans[i]);
+  if (status == HAL_OK)
+    status = jb_vector_append(&resolution->provenance, &entry, 1);
+  if (status != HAL_OK) {
+    jb_string_destroy(&entry.symbol);
+    list_destroy(&entry.sources);
+    return status;
+  }
+  return list_push(&resolution->requested, group->symbol);
+}
+
+/* The findings of the resolved set: missing requirements and conflicts,
+ * each conflicting pair once. */
+static hal_status_t check_resolved(const jb_vector_t *features,
+                                   const unsigned char *marks,
+                                   jb_json_span_t context,
+                                   jh_feature_resolution_t *resolution) {
+  hal_status_t status = HAL_OK;
+  for (size_t i = 0; status == HAL_OK && i < jb_vector_size(features); ++i) {
+    if (!marks[i])
+      continue;
+    const jh_feature_t *feature = feature_at(features, i);
+    const jb_json_span_t name = text_of(&feature->name);
+    for (size_t r = 0;
+         status == HAL_OK && r < jb_vector_size(&feature->requirements); ++r) {
+      const jb_json_span_t requirement =
+          text_of(list_at(&feature->requirements, r));
+      if (marks[find_feature(features, requirement)])
+        continue;
+      const jb_json_span_t parts[] = {context, jh_span(": [JH-CFG-REQUIRES] "),
+                                      name, jh_span(" requires "), requirement};
+      status = add_finding(resolution, parts, COUNTOF(parts));
+    }
+    for (size_t c = 0;
+         status == HAL_OK && c < jb_vector_size(&feature->conflicts); ++c) {
+      const jb_json_span_t conflict = text_of(list_at(&feature->conflicts, c));
+      if (!marks[find_feature(features, conflict)] ||
+          compare_text(name, conflict) >= 0)
+        continue;
+      const jb_json_span_t parts[] = {context, jh_span(": [JH-CFG-CONFLICT] "),
+                                      name, jh_span(" conflicts with "),
+                                      conflict};
+      status = add_finding(resolution, parts, COUNTOF(parts));
+    }
+  }
+  return status;
+}
+
+/* resolve_feature_requests into resolution, after any findings it holds. */
+static hal_status_t resolve_requests(const jh_feature_registry_t *registry,
+                                     const jh_feature_request_t *requests,
+                                     size_t count, jb_json_span_t context,
+                                     jh_feature_resolution_t *resolution) {
+  const jb_vector_t *features = &registry->features;
+  jb_vector_t valid = {0}, sources = {0}, marks = {0}, implied = {0};
+  hal_status_t status =
+      jb_vector_init(&valid, sizeof(jh_feature_request_t), heap());
+  if (status == HAL_OK)
+    status = jb_vector_init(&sources, sizeof(jb_json_span_t), heap());
+  if (status == HAL_OK)
+    status = jb_vector_init(&marks, 1, heap());
+  if (status == HAL_OK)
+    status = jb_vector_init(&implied, sizeof(size_t), heap());
+  if (status == HAL_OK)
+    status = jb_vector_resize(&marks, jb_vector_size(features));
+  for (size_t i = 0; status == HAL_OK && i < count; ++i) {
+    bool usable = false;
+    status = check_request(registry, &requests[i], resolution, &usable);
+    if (status == HAL_OK && usable)
+      status = jb_vector_append(&valid, &requests[i], 1);
+  }
+  const size_t total = jb_vector_size(&valid);
+  if (status == HAL_OK && total > 1)
+    qsort(jb_vector_data(&valid), total, sizeof(jh_feature_request_t),
+          compare_requests);
+  const jh_feature_request_t *sorted = jb_vector_const_data(&valid);
+  for (size_t first = 0, last = 0; status == HAL_OK && first < total;
+       first = last) {
+    last = first + 1;
+    while (last < total &&
+           jh_span_equal(sorted[last].symbol, sorted[first].symbol))
+      ++last;
+    status = add_requested(resolution, context, &sorted[first], last - first,
+                           &sources);
+    const size_t index = find_feature(features, sorted[first].symbol);
+    if (status == HAL_OK)
+      status = closure(features, index, &implied);
+    unsigned char *marked = jb_vector_data(&marks);
+    marked[index] = 1;
+    for (size_t i = 0; status == HAL_OK && i < jb_vector_size(&implied); ++i)
+      marked[*(const size_t *)jb_vector_const_at(&implied, i)] = 1;
+  }
+  const unsigned char *marked = jb_vector_const_data(&marks);
+  for (size_t i = 0; status == HAL_OK && i < jb_vector_size(features); ++i)
+    if (marked[i])
+      status = list_push(&resolution->resolved,
+                         text_of(&feature_at(features, i)->name));
+  if (status == HAL_OK)
+    status = check_resolved(features, marked, context, resolution);
+  if (status == HAL_OK) {
+    jh_sha256_context_t digest_context;
+    jh_sha256_init(&digest_context);
+    for (size_t i = 0; i < jb_vector_size(&resolution->resolved); ++i) {
+      const jb_string_t *name = list_at(&resolution->resolved, i);
+      if (i != 0)
+        jh_sha256_update(&digest_context, (const uint8_t *)"\n", 1);
+      jh_sha256_update(&digest_context, (const uint8_t *)jb_string_data(name),
+                       jb_string_size(name));
+    }
+    uint8_t digest[JH_SHA256_DIGEST_BYTES];
+    jh_sha256_final(&digest_context, digest);
+    hex_digest(digest, resolution->digest);
+  }
+  jb_vector_destroy(&implied);
+  jb_vector_destroy(&marks);
+  jb_vector_destroy(&sources);
+  jb_vector_destroy(&valid);
+  return status;
+}
+
+static bool requested(const jh_feature_request_t *requests, size_t count,
+                      jb_json_span_t symbol) {
+  for (size_t i = 0; i < count; ++i)
+    if (jh_span_equal(requests[i].symbol, symbol))
+      return true;
+  return false;
+}
+
+/* The provenance of a target's required symbol gains its source. */
+static hal_status_t add_target_source(jh_feature_resolution_t *resolution,
+                                      jb_json_span_t symbol,
+                                      jb_json_span_t source) {
+  jb_vector_t *provenance = &resolution->provenance;
+  for (size_t i = 0; i < jb_vector_size(provenance); ++i) {
+    jh_feature_provenance_t *entry = jb_vector_at(provenance, i);
+    if (compare_text(text_of(&entry->symbol), symbol) != 0)
+      continue;
+    size_t at = 0;
+    while (at < jb_vector_size(&entry->sources) &&
+           compare_text(text_of(list_at(&entry->sources, at)), source) < 0)
+      ++at;
+    if (at < jb_vector_size(&entry->sources) &&
+        compare_text(text_of(list_at(&entry->sources, at)), source) == 0)
+      return HAL_OK;
+    jb_string_t item = {0};
+    hal_status_t status = jb_string_init(&item, heap());
+    put_span(&item, &status, source);
+    if (status == HAL_OK)
+      status = jb_vector_insert(&entry->sources, at, &item, 1);
+    if (status != HAL_OK)
+      jb_string_destroy(&item);
+    return status;
+  }
+  jh_feature_provenance_t entry = {0};
+  hal_status_t status = jb_string_init(&entry.symbol, heap());
+  if (status == HAL_OK)
+    status = list_init(&entry.sources);
+  put_span(&entry.symbol, &status, symbol);
+  if (status == HAL_OK)
+    status = list_push(&entry.sources, source);
+  if (status == HAL_OK)
+    status = jb_vector_append(provenance, &entry, 1);
+  if (status != HAL_OK) {
+    jb_string_destroy(&entry.symbol);
+    list_destroy(&entry.sources);
+  }
+  return status;
+}
+
+/* resolve_target_feature_requests: the target's required features join the
+ * resolution, and only the explicit requests stay requested. */
+static hal_status_t resolve_target(const jh_feature_registry_t *registry,
+                                   const jh_feature_request_t *requests,
+                                   size_t count, jb_json_span_t context,
+                                   const jh_feature_target_t *target,
+                                   jh_feature_resolution_t *resolution) {
+  static const char enable[] = "HAL_ENABLE_";
+  jb_vector_t all = {0}, sources = {0};
+  jb_string_t disabled = {0};
+  hal_status_t status =
+      jb_vector_init(&all, sizeof(jh_feature_request_t), heap());
+  if (status == HAL_OK)
+    status = list_init(&sources);
+  if (status == HAL_OK)
+    status = jb_string_init(&disabled, heap());
+  if (status == HAL_OK && count != 0)
+    status = jb_vector_append(&all, requests, count);
+  for (size_t i = 0; status == HAL_OK && i < target->required_count; ++i) {
+    char index[32];
+    const int written = snprintf(index, sizeof index, "%zu", i);
+    jb_string_t source = {0};
+    status = jb_string_init(&source, heap());
+    put(&source, &status, "target:");
+    put_span(&source, &status, target->id);
+    put(&source, &status, ":requiredFeatures[");
+    put_span(&source, &status, (jb_json_span_t){index, (size_t)written});
+    put(&source, &status, "]");
+    if (status == HAL_OK)
+      status = jb_vector_append(&sources, &source, 1);
+    if (status != HAL_OK)
+      jb_string_destroy(&source);
+  }
+  for (size_t i = 0; status == HAL_OK && i < target->required_count; ++i) {
+    jb_json_span_t symbol = target->required[i];
+    if (symbol.length >= 2 &&
+        memcmp(symbol.data + symbol.length - 2, "=1", 2) == 0)
+      symbol.length -= 2;
+    // str.replace(..., 1): the first occurrence, wherever it is.
+    size_t at = 0;
+    while (at + sizeof enable - 1 <= symbol.length &&
+           memcmp(symbol.data + at, enable, sizeof enable - 1) != 0)
+      ++at;
+    jb_string_clear(&disabled);
+    if (at + sizeof enable - 1 <= symbol.length) {
+      put_span(&disabled, &status, (jb_json_span_t){symbol.data, at});
+      put(&disabled, &status, "HAL_DISABLE_");
+      put_span(&disabled, &status,
+               (jb_json_span_t){symbol.data + at + sizeof enable - 1,
+                                symbol.length - at - (sizeof enable - 1)});
+    } else {
+      put_span(&disabled, &status, symbol);
+    }
+    if (status == HAL_OK && requested(requests, count, text_of(&disabled))) {
+      const jb_json_span_t parts[] = {context,
+                                      jh_span(": [JH-CFG-TARGET-REQUIRED] "),
+                                      target->id,
+                                      jh_span(" requires "),
+                                      symbol,
+                                      jh_span("; "),
+                                      text_of(&disabled),
+                                      jh_span(" cannot be requested")};
+      status = add_finding(resolution, parts, COUNTOF(parts));
+    }
+    if (status == HAL_OK && !requested(requests, count, symbol)) {
+      const jh_feature_request_t item = {symbol, jh_span("1"),
+                                         text_of(list_at(&sources, i)), true};
+      status = jb_vector_append(&all, &item, 1);
+    }
+  }
+  if (status == HAL_OK)
+    status = resolve_requests(registry, jb_vector_const_data(&all),
+                              jb_vector_size(&all), context, resolution);
+  for (size_t i = 0; status == HAL_OK && i < target->required_count; ++i) {
+    jb_json_span_t symbol = target->required[i];
+    if (symbol.length >= 2 &&
+        memcmp(symbol.data + symbol.length - 2, "=1", 2) == 0)
+      symbol.length -= 2;
+    status =
+        add_target_source(resolution, symbol, text_of(list_at(&sources, i)));
+  }
+  jb_vector_t *names = &resolution->requested;
+  size_t kept = 0;
+  for (size_t i = 0; status == HAL_OK && i < jb_vector_size(names); ++i) {
+    jb_string_t *name = jb_vector_at(names, i);
+    if (!requested(requests, count, text_of(name))) {
+      jb_string_destroy(name);
+      continue;
+    }
+    jb_string_t *slot = jb_vector_at(names, kept++);
+    if (slot != name)
+      *slot = *name;
+  }
+  if (status == HAL_OK)
+    status = jb_vector_resize(names, kept);
+  jb_string_destroy(&disabled);
+  list_destroy(&sources);
+  jb_vector_destroy(&all);
+  return status;
+}
+
+hal_status_t jh_feature_resolve(const jh_feature_registry_t *registry,
+                                const jh_feature_request_t *requests,
+                                size_t count, jb_json_span_t context,
+                                const jh_feature_target_t *target,
+                                jh_feature_resolution_t *resolution,
+                                jh_failure_t *failure) {
+  if (registry == NULL || resolution == NULL ||
+      (count != 0 && requests == NULL) ||
+      (target != NULL && target->required_count != 0 &&
+       target->required == NULL) ||
+      jb_vector_size(&resolution->findings) != 0 ||
+      jb_vector_size(&resolution->requested) != 0 ||
+      jb_vector_size(&resolution->provenance) != 0)
+    return jh_fail_arguments(failure);
+  const hal_status_t status =
+      target == NULL
+          ? resolve_requests(registry, requests, count, context, resolution)
+          : resolve_target(registry, requests, count, context, target,
+                           resolution);
+  return storage(failure, status);
+}
+
 /* ---- Generated artifacts ---- */
-
-/* Append text unless an earlier append failed. */
-static void put(jb_string_t *out, hal_status_t *status, const char *text) {
-  if (*status == HAL_OK)
-    *status = append(out, text);
-}
-
-static void put_span(jb_string_t *out, hal_status_t *status,
-                     jb_json_span_t text) {
-  if (*status == HAL_OK)
-    *status = append_span(out, text);
-}
-
-static void put_number(jb_string_t *out, hal_status_t *status, int value) {
-  char number[16];
-  const int written = snprintf(number, sizeof number, "%d", value);
-  if (*status == HAL_OK)
-    *status = jb_string_append(out, number, (size_t)written);
-}
 
 /* The header lines after the feature graph, before the verbose report. */
 static const char verbose_preamble[] =

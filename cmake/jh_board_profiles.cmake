@@ -1,4 +1,5 @@
 include_guard(GLOBAL)
+include("${CMAKE_CURRENT_LIST_DIR}/jh_project_config.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/jh_project_features.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/jh_python.cmake")
 
@@ -59,11 +60,13 @@ function(jh_generate_board_config)
         endif()
     endforeach()
 
-    jh_find_python(_jh_board_python)
+    # The generator reads the feature registry through jh.
+    jh_python_with_tool(_jh_board_python "${JH_BOARD_ROOT}"
+        "${JH_BOARD_OUTPUT_DIR}")
     if(NOT JH_BOARD_BOARD)
         execute_process(
             COMMAND
-                "${_jh_board_python}"
+                ${_jh_board_python}
                 "${JH_BOARD_ROOT}/scripts/generate_board_config.py"
                 --boards-root "${JH_BOARD_ROOT}/boards"
                 --target "${JH_BOARD_TARGET}"
@@ -83,7 +86,7 @@ function(jh_generate_board_config)
             "${JH_BOARD_OUTPUT_DIR}/${JH_BOARD_BOARD}")
     endif()
     set(_command
-        "${_jh_board_python}"
+        ${_jh_board_python}
         "${JH_BOARD_ROOT}/scripts/generate_board_config.py"
         --boards-root "${JH_BOARD_ROOT}/boards"
         --target "${JH_BOARD_TARGET}"

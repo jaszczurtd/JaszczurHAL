@@ -146,6 +146,16 @@ struct feature_registry : jh_feature_registry_t {
   ~feature_registry() { jh_feature_registry_destroy(this); }
 };
 
+/** A jh_feature_resolution_t released with its owner. */
+struct feature_resolution : jh_feature_resolution_t {
+  feature_resolution() noexcept : jh_feature_resolution_t() {
+    jh_feature_resolution_init(this);
+  }
+  feature_resolution(const feature_resolution &) = delete;
+  feature_resolution &operator=(const feature_resolution &) = delete;
+  ~feature_resolution() { jh_feature_resolution_destroy(this); }
+};
+
 /** jh_feature_outputs_t released with its owner. */
 struct feature_outputs : jh_feature_outputs_t {
   feature_outputs() noexcept : jh_feature_outputs_t() {}

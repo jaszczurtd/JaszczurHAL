@@ -775,9 +775,13 @@ per-build board generation.
 
 ### `scripts/generate_hal_features.py`
 
-Validates the closed `HAL_ENABLE_*` / `HAL_DISABLE_*` namespace and the
-target-independent dependency graph under `config/features/` for the Python
-tools that import it, and lints feature requests. The tracked production C
+Gives the Python tools that import it the closed `HAL_ENABLE_*` /
+`HAL_DISABLE_*` namespace and the target-independent dependency graph under
+`config/features/` as `jh feature list` validates them, and the resolution of
+feature requests from `jh feature resolve`
+([jh README](../../../tools/jh/README.md#feature-registry)); each registry is
+read once per process until its files change. It also lints feature
+requests. The tracked production C
 header and CMake resolver come from `jh generate features`
 ([jh README](../../../tools/jh/README.md#feature-registry)), which
 `scripts/sync_generated.py` runs. The command line requires `--lint`, which

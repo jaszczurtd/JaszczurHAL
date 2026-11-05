@@ -830,9 +830,13 @@ generowania płytki dla każdej kompilacji.
 
 ### `scripts/generate_hal_features.py`
 
-Waliduje zamkniętą przestrzeń nazw `HAL_ENABLE_*` / `HAL_DISABLE_*` oraz
-niezależny od targetu graf zależności pod `config/features/` dla importujących
-go narzędzi Pythona oraz sprawdza żądania modułów. Wersjonowany, produkcyjny
+Daje importującym go narzędziom Pythona zamkniętą przestrzeń nazw
+`HAL_ENABLE_*` / `HAL_DISABLE_*` i niezależny od targetu graf zależności pod
+`config/features/` w postaci sprawdzonej przez `jh feature list` oraz
+rozwiązania żądań z `jh feature resolve`
+([README jh](../../../tools/jh/README.pl.md#rejestr-funkcji)); każdy rejestr
+czyta raz na proces, dopóki jego pliki się nie zmienią. Sprawdza też żądania
+modułów. Wersjonowany, produkcyjny
 nagłówek C i mechanizm rozwiązywania zależności w CMake generuje
 `jh generate features`
 ([README jh](../../../tools/jh/README.pl.md#rejestr-funkcji)), uruchamiany

@@ -12,11 +12,36 @@ file(MAKE_DIRECTORY "${_source}")
 file(COPY "${JH_ROOT}/boards" "${JH_ROOT}/config" DESTINATION "${_source}")
 file(COPY "${JH_ROOT}/scripts/" DESTINATION "${_source}/scripts"
     FILES_MATCHING PATTERN "*.py" PATTERN "__pycache__" EXCLUDE)
+file(COPY "${JH_ROOT}/scripts/jh_tool_inputs.cmake" DESTINATION "${_source}/scripts")
+# The generator reads the feature registry through jh. The copy has its
+# scripts but no tools/, so it uses a copy of the jh of JH_ROOT, which a case
+# below replaces.
+include("${JH_ROOT}/cmake/jh_project_config.cmake")
+jh_project_config_tool(_jh_tool "${JH_ROOT}" "${_fixture}")
+# On POSIX a backslash is a file name character: the copy sits in such a
+# directory, which the build depends on under that very name.
+# file(MAKE_DIRECTORY) would take the backslash for a separator.
+get_filename_component(_jh_tool_name "${_jh_tool}" NAME)
+if(CMAKE_HOST_WIN32)
+    set(_jh_tool_dir "${_fixture}/tool")
+    file(MAKE_DIRECTORY "${_jh_tool_dir}")
+else()
+    set(_jh_tool_dir "${_fixture}/tool\\dir")
+    execute_process(COMMAND mkdir -p "${_jh_tool_dir}" COMMAND_ERROR_IS_FATAL ANY)
+endif()
+set(_jh_tool_copy "${_jh_tool_dir}/${_jh_tool_name}")
+file(COPY_FILE "${_jh_tool}" "${_jh_tool_copy}")
+set(ENV{JH_EXECUTABLE} "${_jh_tool_copy}")
+set(ENV{JH_EXECUTABLE_ROOT} "${_source}")
 file(WRITE "${_source}/CMakeLists.txt"
     "cmake_minimum_required(VERSION 3.22)\n"
     "project(board_config_dependencies NONE)\n"
+    # CMake records the file it reads under the normalized path, the jh inputs
+    # reach it through the root below.
+    "include(\"\${CMAKE_CURRENT_SOURCE_DIR}/scripts/jh_tool_inputs.cmake\")\n"
     "include(\"${JH_ROOT}/cmake/jh_board_profiles.cmake\")\n"
-    "jh_generate_board_config(ROOT \"\${CMAKE_CURRENT_SOURCE_DIR}\"\n"
+    # A root spelt with .., as the static libraries pass theirs.
+    "jh_generate_board_config(ROOT \"\${CMAKE_CURRENT_SOURCE_DIR}/scripts/..\"\n"
     "    TARGET rp2040 BOARD pico\n"
     "    OUTPUT_DIR \"\${CMAKE_BINARY_DIR}/generated\")\n"
     "add_custom_target(probe ALL COMMAND \"\${CMAKE_COMMAND}\" -E true)\n")
@@ -40,7 +65,14 @@ function(run_step NAME EXPECT_SUCCESS EXPECT_TEXT)
     endif()
 endfunction()
 
-run_step(configure TRUE "" "${CMAKE_COMMAND}" -S "${_source}" -B "${_build}")
+# Ninja, where available, rejects a file the build depends on under two
+# spellings.
+find_program(_ninja ninja)
+set(_generator "")
+if(_ninja)
+    set(_generator -G Ninja)
+endif()
+run_step(configure TRUE "" "${CMAKE_COMMAND}" -S "${_source}" -B "${_build}" ${_generator})
 run_step(build TRUE "" "${CMAKE_COMMAND}" --build "${_build}")
 
 # Each case breaks one generator input, expects the next incremental build to
@@ -79,3 +111,22 @@ check_input(generator-module scripts/codegen_support.py
 check_input(new-descriptor boards/profiles/zz-new.json
     unused "{\"id\": \"zz-new\"}"
     "zz-new")
+
+# The generator runs with jh: another executable, or one rebuilt in place,
+# makes the next build generate again. A tool without a JSON result fails it,
+# the real one builds again.
+file(COPY_FILE "${CMAKE_COMMAND}" "${_jh_tool_copy}")
+file(TOUCH "${_jh_tool_copy}")
+run_step(tool-replaced FALSE "gave no result" "${CMAKE_COMMAND}" --build "${_build}")
+file(COPY_FILE "${_jh_tool}" "${_jh_tool_copy}")
+file(TOUCH "${_jh_tool_copy}")
+run_step(tool-restored TRUE "" "${CMAKE_COMMAND}" --build "${_build}")
+
+# A new file among the jh sources needs another jh, which configure verifies:
+# the next build configures again.
+file(WRITE "${_source}/tools/jh/new-input.c" "\n")
+execute_process(COMMAND "${CMAKE_COMMAND}" --build "${_build}"
+    RESULT_VARIABLE _result OUTPUT_VARIABLE _stdout ERROR_VARIABLE _stderr)
+if(NOT _result EQUAL 0 OR NOT "${_stdout}${_stderr}" MATCHES "Configuring done")
+    message(FATAL_ERROR "a new jh source did not reconfigure the build:\n${_stdout}${_stderr}")
+endif()

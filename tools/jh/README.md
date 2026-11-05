@@ -11,7 +11,8 @@ header of their defaults, and `jh generate features` does the same for the
 header and CMake data of the HAL feature registry. `scripts/sync_generated.py`,
 and through it the pre-commit hook and the gate, run both commands through the
 launcher described below. `jh config inspect` evaluates a project's `hal_project_config.h` as the
-build reads it.
+build reads it. `jh feature list` and `jh feature resolve` give the feature
+registry and the features one build requests, resolved.
 
 Prepare the pinned host dependencies explicitly before configuring:
 
@@ -264,6 +265,53 @@ runs out. Unlike the Python generator, it rejects a `\u` escape of an unpaired
 surrogate, reports a `kind` of an array or object as a regular finding where
 Python stopped with a traceback, and keeps the spelling of a number with a
 fraction or exponent in the schema digest, where Python would write the float.
+
+`jh feature list` and `jh feature resolve` read the same registry, from
+`--config-root` or `<root>/config`, and fail the same way. `feature list`
+prints one line per symbol with its kind and domain. Its `--json` result
+(`command: "feature.list"`) has `config`, `registryDigest`,
+`registrySchemaDigest` and `features` in name order, each with `name`,
+`domain`, `kind`, `implies`, `requires`, `conflicts`, `featureSources`,
+`portableSources`, `dependencies`, `note` (`null` without one) and `closure`,
+everything the symbol implies directly or through other symbols.
+
+`feature resolve` resolves the features one build requests, as the HAL tools
+do for a project configuration. Each `--request <SYMBOL[=VALUE]>` is one
+request; the `--source` at the same position names where it comes from, and
+without `--source` the requests are `command-line:--request[<n>]`. `--file
+<path>` gives the requests in a JSON file instead, read like `json.loads`:
+`{"requests": [{"request": "<SYMBOL[=VALUE]>", "source": "<text>"}]}`, each
+object with exactly these two strings. The HAL tools use it, since sources
+repeated on the command line outgrow the 32767 characters Windows allows.
+`--target
+<id>` adds each `--required-feature` of that target under the source
+`target:<id>:requiredFeatures[<n>]`, unless the build requests it already.
+`--context` names the configuration in findings (default `command line`).
+The command prints the resolved symbols, one per line, and the findings on
+stderr:
+
+- `[JH-CFG-UNKNOWN]`, `[JH-CFG-VALUE]` (a value other than none or `1`) and
+  `[JH-CFG-DERIVED]` for one request, after its source;
+- `[JH-CFG-REDUNDANT]` for a symbol requested more than once,
+  `[JH-CFG-REQUIRES]` and `[JH-CFG-CONFLICT]` for the resolved set, and
+  `[JH-CFG-TARGET-REQUIRED]` when the build requests the `HAL_DISABLE_` twin
+  of a required feature, after the context.
+
+With `--json` the result (`command: "feature.resolve"`) has `config`,
+`registryDigest`, `context`, `target` (`null` without one),
+`requestedFeatures` (the valid explicit requests), `resolvedFeatures` (them,
+the target's and what they imply), `resolvedFeaturesDigest` (SHA-256 of the
+resolved names joined by line feeds), `provenance` (the sources of each
+symbol) and `findings`. Exit code 1 means findings, with `status:
+"HAL_ECONFIG"`; 2 an invalid registry, arguments or request file; 3 a request
+file that cannot be read.
+
+`scripts/generate_hal_features.py` gives its importers this model and these
+resolutions, each registry read once per process until its files change and
+each request list resolved once. Unlike that script, the commands list the
+features in name order, where Python kept fragment and document order, and
+quote a request source as given, where Python passed its part before the first
+colon through `pathlib.Path` (`./h.h` became `h.h`).
 
 ## Type catalogue and device defaults
 

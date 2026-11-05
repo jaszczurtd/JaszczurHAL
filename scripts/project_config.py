@@ -192,20 +192,29 @@ def _config_from(result: dict[str, Any]) -> ProjectConfig:
     )
 
 
-def _run_jh(arguments: list[str]) -> dict[str, Any]:
-    """The JSON result of one jh command; a rejection raises like the reader."""
+def run_jh(
+    arguments: list[str], error_type: type[Exception] = ProjectConfigError
+) -> tuple[int, dict[str, Any]]:
+    """The exit code and JSON result of one jh command; error_type when it
+    gives no result."""
     result = subprocess.run([jh_executable(), *arguments, "--json"], capture_output=True, check=False)
     try:
         output = json.loads(result.stdout.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ProjectConfigError(
+        raise error_type(
             f"[JH-CFG-SCOPE] jh {' '.join(arguments[:2])} gave no result (exit {result.returncode}): "
             f"{result.stderr.decode('utf-8', 'replace').strip()}"
         ) from error
-    if result.returncode != 0:
+    return result.returncode, output
+
+
+def _run_jh(arguments: list[str]) -> dict[str, Any]:
+    """The JSON result of one jh command; a rejection raises like the reader."""
+    returncode, output = run_jh(arguments)
+    if returncode != 0:
         if output.get("status") == "HAL_EPROTO":
             raise ValueError(output.get("message", "invalid input"))
-        raise ProjectConfigError(output.get("message", f"jh exit {result.returncode}"))
+        raise ProjectConfigError(output.get("message", f"jh exit {returncode}"))
     return output
 
 

@@ -363,6 +363,137 @@ foreach(field featureHeader featureCmake deviceDefaultsHeader)
     endif()
   endforeach()
 endforeach()
+# feature list gives the registry the generator writes, with closures;
+# feature resolve one build's resolution, findings and provenance.
+invoke(0 feature list --root "${JH_HAL_SOURCE}" --json)
+status(HAL_OK)
+set(registry "${stdout}")
+string(JSON registry_digest GET "${registry}" registryDigest)
+file(READ "${JH_HAL_SOURCE}/${features_header}" tracked_header)
+if(NOT tracked_header MATCHES "JH_HAL_FEATURE_REGISTRY_DIGEST \"${registry_digest}\"")
+  message(FATAL_ERROR "feature list and the generated header disagree on the registry digest")
+endif()
+string(JSON feature_count LENGTH "${registry}" features)
+math(EXPR last_feature "${feature_count} - 1")
+set(implying "")
+foreach(index RANGE ${last_feature})
+  string(JSON implies_count LENGTH "${registry}" features ${index} implies)
+  string(JSON kind GET "${registry}" features ${index} kind)
+  if(implies_count GREATER 0 AND kind STREQUAL "feature")
+    string(JSON implying GET "${registry}" features ${index} name)
+    string(JSON closure GET "${registry}" features ${index} closure)
+    string(JSON direct GET "${registry}" features ${index} implies 0)
+    if(NOT closure MATCHES "\"${direct}\"")
+      message(FATAL_ERROR "The closure of ${implying} lacks ${direct}: ${closure}")
+    endif()
+    break()
+  endif()
+endforeach()
+invoke(0 feature list --config-root "${JH_HAL_SOURCE}/config")
+if(NOT stdout MATCHES "(^|\n)${implying} feature [a-z-]+\n")
+  message(FATAL_ERROR "feature list text lacks ${implying}: ${stdout}")
+endif()
+invoke(0 feature resolve --root "${JH_HAL_SOURCE}" --request ${implying})
+if(NOT stdout MATCHES "(^|\n)${direct}\n" OR NOT stderr STREQUAL "")
+  message(FATAL_ERROR "feature resolve did not resolve what ${implying} implies: ${stdout} ${stderr}")
+endif()
+invoke(1 feature resolve --root "${JH_HAL_SOURCE}" --context "ctx ż"
+  --request ${implying} --source "h ż.h:3" --request HAL_ENABLE_NOT_REGISTERED --source "h ż.h:4"
+  --request "${implying}=0" --source "h ż.h:5" --request ${implying} --source "nowhere"
+  --target "t ż" --required-feature "${direct}=1" --required-feature "${implying}" --json)
+status(HAL_ECONFIG)
+function(json_strings variable)
+  string(JSON count LENGTH "${stdout}" ${ARGN})
+  set(items "")
+  if(count GREATER 0)
+    math(EXPR last "${count} - 1")
+    foreach(index RANGE ${last})
+      string(JSON item GET "${stdout}" ${ARGN} ${index})
+      list(APPEND items "${item}")
+    endforeach()
+  endif()
+  set(${variable} "${items}" PARENT_SCOPE)
+endfunction()
+json_strings(requested requestedFeatures)
+json_strings(sources provenance ${implying})
+json_strings(required_sources provenance ${direct})
+json_strings(resolved_names resolvedFeatures)
+list(JOIN resolved_names "\n" resolved_text)
+string(SHA256 resolved_digest "${resolved_text}")
+string(JSON reported_digest GET "${stdout}" resolvedFeaturesDigest)
+json_strings(finding_list findings)
+list(JOIN finding_list "\n" findings)
+foreach(expected
+    "h ż.h:4: \\[JH-CFG-UNKNOWN\\] unknown feature HAL_ENABLE_NOT_REGISTERED"
+    "h ż.h:5: \\[JH-CFG-VALUE\\] ${implying}=0 is unsupported"
+    "ctx ż: \\[JH-CFG-REDUNDANT\\] ${implying} is requested 2 times by h ż.h:3, nowhere")
+  if(NOT findings MATCHES "${expected}" OR NOT stderr MATCHES "${expected}")
+    message(FATAL_ERROR "feature resolve lacks the finding ${expected}: ${findings} ${stderr}")
+  endif()
+endforeach()
+if(NOT requested STREQUAL "${implying}"
+    OR NOT sources STREQUAL "h ż.h:3;nowhere;target:t ż:requiredFeatures[1]"
+    OR NOT "target:t ż:requiredFeatures[0]" IN_LIST required_sources
+    OR NOT direct IN_LIST resolved_names
+    OR NOT resolved_digest STREQUAL reported_digest)
+  message(FATAL_ERROR "feature resolve requested, provenance or digest is wrong: ${stdout}")
+endif()
+invoke(2 feature resolve --config-root "${cycle_config}" --request ${implying} --json)
+status(HAL_ECONFIG)
+if(NOT stderr MATCHES "feature registry: implies cycle")
+  message(FATAL_ERROR "feature resolve accepted a registry with an implies cycle: ${stderr}")
+endif()
+foreach(arguments "feature;list" "feature;resolve;--request;${implying}"
+    "feature;resolve;--root;${JH_HAL_SOURCE};--request;${implying};--source;a;--source;b"
+    "feature;resolve;--root;${JH_HAL_SOURCE};--required-feature;${direct}"
+    "feature;list;--root;${JH_HAL_SOURCE};--request;${implying}"
+    "feature;list;--root;${JH_HAL_SOURCE};--config-root=")
+  invoke(2 ${arguments} --json)
+  status(HAL_EINVAL)
+endforeach()
+# --file gives the requests and sources whole: this source alone outgrows the
+# 32767 characters of a Windows command line.
+string(REPEAT "p" 40000 long_directory)
+set(long_source "/${long_directory}/h ż.h:7")
+set(escaped_source "esc\\aped \"q\" ż:2")
+set(request_file "${JH_WORK}/requests ż.json")
+file(WRITE "${request_file}" "{\"requests\": [
+  {\"request\": \"${implying}\", \"source\": \"${long_source}\"},
+  {\"source\": \"esc\\\\aped \\\"q\\\" \\u017c:2\", \"request\": \"HAL_ENABLE_NOT_REGISTERED=1\"}]}")
+invoke(1 feature resolve --root "${JH_HAL_SOURCE}" --file "${request_file}" --json)
+status(HAL_ECONFIG)
+json_strings(sources provenance ${implying})
+json_strings(requested requestedFeatures)
+json_strings(finding_list findings)
+if(NOT sources STREQUAL long_source OR NOT requested STREQUAL implying
+    OR NOT "${escaped_source}: [JH-CFG-UNKNOWN] unknown feature HAL_ENABLE_NOT_REGISTERED"
+    IN_LIST finding_list)
+  message(FATAL_ERROR "feature resolve --file lost a request or source: ${stdout}")
+endif()
+# A registry failure does not name the request file it never read.
+invoke(2 feature resolve --config-root "${cycle_config}" --file "${request_file}" --json)
+string(JSON source_name ERROR_VARIABLE source_error GET "${stdout}" source)
+if(NOT stderr MATCHES "implies cycle" OR NOT source_error)
+  message(FATAL_ERROR "feature resolve named the request file for a registry failure: ${stdout}")
+endif()
+foreach(text [=[[]]=] [=[{"requests": {}}]=] [=[{"requests": [], "other": 1}]=]
+    [=[{"requests": [{"request": "HAL_ENABLE_X"}]}]=]
+    [=[{"requests": [{"request": "HAL_ENABLE_X", "source": 1}]}]=]
+    [=[{"requests": [{"request": "HAL_ENABLE_X", "source": "s", "other": 1}]}]=])
+  file(WRITE "${JH_WORK}/bad-requests.json" "${text}")
+  invoke(2 feature resolve --root "${JH_HAL_SOURCE}" --file "${JH_WORK}/bad-requests.json" --json)
+  status(HAL_ETYPE)
+  string(JSON source_name GET "${stdout}" source)
+  if(NOT source_name STREQUAL "${JH_WORK}/bad-requests.json")
+    message(FATAL_ERROR "feature resolve accepted the request file ${text}: ${stdout}")
+  endif()
+endforeach()
+invoke(3 feature resolve --root "${JH_HAL_SOURCE}" --file "${JH_WORK}/missing.json" --json)
+status(HAL_ENOENT)
+foreach(arguments "--file;${request_file};--request;${implying}" "--file=")
+  invoke(2 feature resolve --root "${JH_HAL_SOURCE}" ${arguments} --json)
+  status(HAL_EINVAL)
+endforeach()
 foreach(arguments "generate;features;--check" "generate;features;--root;${JH_HAL_SOURCE}"
     "generate;features;--root;${JH_HAL_SOURCE};--check;--write"
     "generate;features;--root;${JH_HAL_SOURCE};--check;--bindings;${JH_WORK}"

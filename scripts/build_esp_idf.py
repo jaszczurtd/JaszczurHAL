@@ -1255,7 +1255,7 @@ def resolve_build_model(
             repo_root, config_dir, target, variant, features, definitions, header_path
         )
     try:
-        _, resolved_features, _ = generate_board_config.resolve_features(
+        _, resolved_features, _, _ = generate_board_config.resolve_features(
             requested_features, target_descriptor
         )
     except generate_board_config.DescriptorError as error:

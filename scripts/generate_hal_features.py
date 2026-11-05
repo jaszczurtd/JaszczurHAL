@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Validate the HAL feature registry for its Python importers and lint feature
-requests; `jh generate features` writes and checks the generated artifacts."""
+"""The HAL feature registry for its Python importers, read from `jh feature
+list` and resolved by `jh feature resolve`, and the lint of feature requests;
+`jh generate features` writes and checks the generated artifacts."""
 
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 import hashlib
 import json
@@ -13,35 +14,17 @@ import os
 from pathlib import Path
 import re
 import sys
+import tempfile
 from typing import Any, Iterable
 
-from codegen_support import (
-    atomic_write_text,
-    load_json_object,
-    require_exact_fields,
-    validation_error,
-)
+from codegen_support import atomic_write_text, load_json_object
 import device_tree_project
 import project_config
 
 
 SCHEMA_VERSION = 1
 SYMBOL_PATTERN = re.compile(r"^HAL_(?:ENABLE|DISABLE)_[A-Z0-9_]+$")
-DOMAIN_PATTERN = re.compile(r"^[a-z][a-z0-9-]*$")
-BUILD_SOURCE_PATTERN = re.compile(
-    r"^src/[A-Za-z0-9_./+-]+\.(?:c|cc|cpp|S)$"
-)
 HEADER_FEATURE_PREFIX = re.compile(r"HAL_(?:ENABLE|DISABLE)_[A-Z0-9_]")
-FRAGMENT_FIELDS = {"$schema", "schemaVersion", "domain", "symbols"}
-SYMBOL_FIELDS = {
-    "kind",
-    "implies",
-    "requires",
-    "conflicts",
-    "buildEffects",
-    "note",
-}
-BUILD_EFFECT_FIELDS = {"featureSources", "portableSources", "dependencies"}
 IGNORED_INPUT_PARTS = {".build", ".git", "third_party"}
 # Device-test firmware is never read by the default checks (AGENTS.md); the
 # opt-in hardware-fixture checks lint it with --include-hardware-fixtures.
@@ -52,9 +35,7 @@ class RegistryError(ValueError):
     """Feature registry validation failure with actionable context."""
 
 
-fail = partial(validation_error, RegistryError)
 load_json = partial(load_json_object, error_type=RegistryError)
-exact_fields = partial(require_exact_fields, error_type=RegistryError)
 atomic_write = partial(
     atomic_write_text, error_type=RegistryError, mode=0o644
 )
@@ -78,33 +59,25 @@ class Feature:
 
 @dataclass(frozen=True)
 class FeatureModel:
-    """Validated feature registry."""
+    """Validated feature registry of one configuration root."""
 
     features: dict[str, Feature]
     digest: str
     schema_digest: str
+    config_root: str = field(compare=False, repr=False)
+    closures: dict[str, tuple[str, ...]] = field(compare=False, repr=False)
+    # Resolutions jh gave for this registry, by their arguments.
+    resolutions: dict[Any, Any] = field(
+        default_factory=dict, compare=False, repr=False
+    )
 
     def closure(self, name: str) -> tuple[str, ...]:
-        resolved: set[str] = set()
-        pending = list(self.features[name].implies)
-        while pending:
-            dependency = pending.pop()
-            if dependency in resolved:
-                continue
-            resolved.add(dependency)
-            pending.extend(self.features[dependency].implies)
-        return tuple(sorted(resolved))
+        return self.closures[name]
 
     def resolve_many(self, requested: Iterable[str]) -> tuple[str, ...]:
         resolved = set(requested)
-        pending = list(resolved)
-        while pending:
-            current = pending.pop()
-            for dependency in self.features[current].implies:
-                if dependency in resolved:
-                    continue
-                resolved.add(dependency)
-                pending.append(dependency)
+        for name in list(resolved):
+            resolved.update(self.closures[name])
         return tuple(sorted(resolved))
 
     def resolve_build_effects(
@@ -141,322 +114,70 @@ class FeatureResolution:
     requested: tuple[str, ...]
     resolved: tuple[str, ...]
     provenance: dict[str, tuple[str, ...]]
+    digest: str
 
 
-def normalize_relation(
-    path: Path, json_path: str, value: Any
-) -> tuple[str, ...]:
-    if not isinstance(value, list):
-        fail(path, json_path, value, "an array of feature symbols")
-    normalized: list[str] = []
-    for index, symbol in enumerate(value):
-        if not isinstance(symbol, str) or not SYMBOL_PATTERN.fullmatch(symbol):
-            fail(
-                path,
-                f"{json_path}[{index}]",
-                symbol,
-                "a HAL_ENABLE_* or HAL_DISABLE_* symbol",
+def _jh_result(arguments: list[str], accepted: tuple[int, ...] = (0,)) -> dict[str, Any]:
+    """The JSON result of one jh feature command; RegistryError with the jh
+    message for any other exit code."""
+    returncode, output = project_config.run_jh(arguments, RegistryError)
+    if returncode not in accepted:
+        raise RegistryError(output.get("message", f"jh exit {returncode}"))
+    return output
+
+
+def _registry_state(config_root: Path) -> tuple[Any, ...] | None:
+    """Names, sizes and modification times of the registry files; None when
+    they cannot be listed, and then no result is kept."""
+    try:
+        schema = (config_root / "features.schema.json").stat()
+        with os.scandir(config_root / "features") as entries:
+            fragments = sorted(
+                (entry.name, entry.stat().st_size, entry.stat().st_mtime_ns)
+                for entry in entries
             )
-        normalized.append(symbol)
-    if len(set(normalized)) != len(normalized):
-        fail(path, json_path, value, "unique feature symbols")
-    return tuple(sorted(normalized))
+    except OSError:
+        return None
+    return (schema.st_size, schema.st_mtime_ns, tuple(fragments))
 
 
-def normalize_build_sources(
-    path: Path, json_path: str, value: Any
-) -> tuple[str, ...]:
-    if not isinstance(value, list):
-        fail(path, json_path, value, "an array of repository source paths")
-    normalized: list[str] = []
-    for index, source in enumerate(value):
-        if not isinstance(source, str) or not BUILD_SOURCE_PATTERN.fullmatch(source):
-            fail(
-                path,
-                f"{json_path}[{index}]",
-                source,
-                "a source path below src/",
-            )
-        normalized.append(source)
-    if len(set(normalized)) != len(normalized):
-        fail(path, json_path, value, "unique repository source paths")
-    return tuple(sorted(normalized))
-
-
-def normalize_build_dependencies(
-    path: Path, json_path: str, value: Any, allowed: frozenset[str]
-) -> tuple[str, ...]:
-    if not isinstance(value, list):
-        fail(path, json_path, value, "an array of managed dependency names")
-    normalized: list[str] = []
-    for index, dependency in enumerate(value):
-        if not isinstance(dependency, str) or dependency not in allowed:
-            fail(
-                path,
-                f"{json_path}[{index}]",
-                dependency,
-                "one of " + ", ".join(sorted(allowed)),
-            )
-        normalized.append(dependency)
-    if len(set(normalized)) != len(normalized):
-        fail(path, json_path, value, "unique managed dependency names")
-    return tuple(sorted(normalized))
-
-
-def validate_fragment(
-    path: Path,
-    document: dict[str, Any],
-    managed_dependencies: frozenset[str],
-) -> dict[str, Feature]:
-    exact_fields(path, "$", document, FRAGMENT_FIELDS, FRAGMENT_FIELDS)
-    if document["$schema"] != "../features.schema.json":
-        fail(path, "$.$schema", document["$schema"], "'../features.schema.json'")
-    schema_version = document["schemaVersion"]
-    if type(schema_version) is not int or schema_version != SCHEMA_VERSION:
-        fail(path, "$.schemaVersion", schema_version, "the integer 1")
-    domain = document["domain"]
-    if not isinstance(domain, str) or not DOMAIN_PATTERN.fullmatch(domain):
-        fail(path, "$.domain", domain, "a lower-case domain identifier")
-    if path.stem != domain:
-        fail(path, "$.domain", domain, f"the filename stem {path.stem!r}")
-    symbols = document["symbols"]
-    if not isinstance(symbols, dict) or not symbols:
-        fail(path, "$.symbols", symbols, "a non-empty symbol object")
-
-    result: dict[str, Feature] = {}
-    for name, raw_record in symbols.items():
-        symbol_path = f"$.symbols.{name}"
-        if not isinstance(name, str) or not SYMBOL_PATTERN.fullmatch(name):
-            fail(path, symbol_path, name, "a HAL_ENABLE_* or HAL_DISABLE_* symbol")
-        record = exact_fields(path, symbol_path, raw_record, set(), SYMBOL_FIELDS)
-        kind = record.get("kind", "feature")
-        if kind not in {"feature", "derived"}:
-            fail(path, f"{symbol_path}.kind", kind, "'feature' or 'derived'")
-        note = record.get("note")
-        if note is not None and (not isinstance(note, str) or not note.strip()):
-            fail(path, f"{symbol_path}.note", note, "a non-empty string")
-        raw_build_effects = record.get("buildEffects", {})
-        if not isinstance(raw_build_effects, dict):
-            fail(
-                path,
-                f"{symbol_path}.buildEffects",
-                raw_build_effects,
-                "an object",
-            )
-        build_effects = exact_fields(
-            path,
-            f"{symbol_path}.buildEffects",
-            raw_build_effects,
-            set(),
-            BUILD_EFFECT_FIELDS,
-        )
-        feature_sources = normalize_build_sources(
-            path,
-            f"{symbol_path}.buildEffects.featureSources",
-            build_effects.get("featureSources", []),
-        )
-        portable_sources = normalize_build_sources(
-            path,
-            f"{symbol_path}.buildEffects.portableSources",
-            build_effects.get("portableSources", []),
-        )
-        overlap = set(feature_sources) & set(portable_sources)
-        if overlap:
-            fail(
-                path,
-                f"{symbol_path}.buildEffects",
-                sorted(overlap),
-                "disjoint featureSources and portableSources",
-            )
-        build_dependencies = normalize_build_dependencies(
-            path,
-            f"{symbol_path}.buildEffects.dependencies",
-            build_effects.get("dependencies", []),
-            managed_dependencies,
-        )
-        result[name] = Feature(
-            name=name,
-            domain=domain,
-            kind=kind,
-            implies=normalize_relation(
-                path, f"{symbol_path}.implies", record.get("implies", [])
-            ),
-            requires=normalize_relation(
-                path, f"{symbol_path}.requires", record.get("requires", [])
-            ),
-            conflicts=normalize_relation(
-                path, f"{symbol_path}.conflicts", record.get("conflicts", [])
-            ),
-            feature_sources=feature_sources,
-            portable_sources=portable_sources,
-            build_dependencies=build_dependencies,
-            note=note.strip() if note is not None else None,
-        )
-    return result
-
-
-def detect_implies_cycles(features: dict[str, Feature]) -> None:
-    visiting: list[str] = []
-    visited: set[str] = set()
-
-    def visit(name: str) -> None:
-        if name in visiting:
-            start = visiting.index(name)
-            cycle = visiting[start:] + [name]
-            raise RegistryError(
-                "feature registry: implies cycle: " + " -> ".join(cycle)
-            )
-        if name in visited:
-            return
-        visiting.append(name)
-        for dependency in features[name].implies:
-            visit(dependency)
-        visiting.pop()
-        visited.add(name)
-
-    for name in sorted(features):
-        visit(name)
-
-
-def normalized_digest(features: dict[str, Feature]) -> str:
-    document = {
-        "schemaVersion": SCHEMA_VERSION,
-        "symbols": {
-            name: {
-                "domain": feature.domain,
-                "kind": feature.kind,
-                "implies": list(feature.implies),
-                "requires": list(feature.requires),
-                "conflicts": list(feature.conflicts),
-                "buildEffects": {
-                    "featureSources": list(feature.feature_sources),
-                    "portableSources": list(feature.portable_sources),
-                    "dependencies": list(feature.build_dependencies),
-                },
-                "note": feature.note,
-            }
-            for name, feature in sorted(features.items())
-        },
-    }
-    serialized = json.dumps(
-        document, sort_keys=True, separators=(",", ":"), ensure_ascii=True
-    )
-    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
-
-
-def json_digest(value: Any) -> str:
-    serialized = json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
-    )
-    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+_MODELS: dict[str, tuple[tuple[Any, ...], FeatureModel]] = {}
 
 
 def load_registry(config_root: Path) -> FeatureModel:
-    schema_path = config_root / "features.schema.json"
-    schema = load_json(schema_path)
-    if schema.get("$schema") != "https://json-schema.org/draft/2020-12/schema":
-        fail(
-            schema_path,
-            "$.$schema",
-            schema.get("$schema"),
-            "the JSON Schema 2020-12 URI",
-        )
-    managed_dependencies_value = (
-        schema.get("$defs", {}).get("managedBuildDependency", {}).get("enum")
-    )
-    if (
-        not isinstance(managed_dependencies_value, list)
-        or not managed_dependencies_value
-        or any(
-            not isinstance(value, str) or not DOMAIN_PATTERN.fullmatch(value)
-            for value in managed_dependencies_value
-        )
-        or len(set(managed_dependencies_value)) != len(managed_dependencies_value)
-    ):
-        fail(
-            schema_path,
-            "$.$defs.managedBuildDependency.enum",
-            managed_dependencies_value,
-            "unique lower-case managed dependency names",
-        )
-    managed_dependencies = frozenset(managed_dependencies_value)
-    features_root = config_root / "features"
-    try:
-        fragments = sorted(features_root.glob("*.json"))
-    except OSError as error:
-        raise RegistryError(f"{features_root}: cannot list fragments: {error}") from error
-    if not fragments:
-        raise RegistryError(f"{features_root}: no feature fragments found")
-
-    features: dict[str, Feature] = {}
-    owners: dict[str, Path] = {}
-    for path in fragments:
-        for name, feature in validate_fragment(
-            path, load_json(path), managed_dependencies
-        ).items():
-            if name in features:
-                raise RegistryError(
-                    f"{path}: $.symbols.{name}: duplicate symbol; "
-                    f"first declared in {owners[name]}"
-                )
-            features[name] = feature
-            owners[name] = path
-
-    for name, feature in sorted(features.items()):
-        for relation_name, related in (
-            ("implies", feature.implies),
-            ("requires", feature.requires),
-            ("conflicts", feature.conflicts),
-        ):
-            for target in related:
-                if target == name:
-                    raise RegistryError(
-                        f"{owners[name]}: $.symbols.{name}.{relation_name}: "
-                        "a feature cannot reference itself"
-                    )
-                if target not in features:
-                    raise RegistryError(
-                        f"{owners[name]}: $.symbols.{name}.{relation_name}: "
-                        f"unknown symbol {target!r}"
-                    )
-        if name.startswith("HAL_DISABLE_") and feature.kind != "feature":
-            raise RegistryError(
-                f"{owners[name]}: $.symbols.{name}.kind: "
-                "HAL_DISABLE_* symbols cannot be derived"
-            )
-        if name.startswith("HAL_DISABLE_") and (
-            feature.feature_sources
-            or feature.portable_sources
-            or feature.build_dependencies
-        ):
-            raise RegistryError(
-                f"{owners[name]}: $.symbols.{name}.buildEffects: "
-                "HAL_DISABLE_* symbols cannot add build inputs"
-            )
-
-    detect_implies_cycles(features)
+    """The registry below config_root as `jh feature list` validates it, kept
+    for this process until its files change; RegistryError when jh rejects
+    it."""
+    root = Path(config_root)
+    key = str(root.absolute())
+    state = _registry_state(root)
+    cached = _MODELS.get(key)
+    if cached is not None and state is not None and cached[0] == state:
+        return cached[1]
+    output = _jh_result(["feature", "list", f"--config-root={root}"])
     model = FeatureModel(
-        features=features,
-        digest=normalized_digest(features),
-        schema_digest=json_digest(schema),
+        features={
+            item["name"]: Feature(
+                name=item["name"],
+                domain=item["domain"],
+                kind=item["kind"],
+                implies=tuple(item["implies"]),
+                requires=tuple(item["requires"]),
+                conflicts=tuple(item["conflicts"]),
+                feature_sources=tuple(item["featureSources"]),
+                portable_sources=tuple(item["portableSources"]),
+                build_dependencies=tuple(item["dependencies"]),
+                note=item["note"],
+            )
+            for item in output["features"]
+        },
+        digest=output["registryDigest"],
+        schema_digest=output["registrySchemaDigest"],
+        config_root=key,
+        closures={item["name"]: tuple(item["closure"]) for item in output["features"]},
     )
-
-    for name, feature in sorted(features.items()):
-        for target in feature.conflicts:
-            if name not in features[target].conflicts:
-                raise RegistryError(
-                    f"{owners[name]}: $.symbols.{name}.conflicts: "
-                    f"{target} must declare the symmetric conflict"
-                )
-        active = {name, *model.closure(name)}
-        for active_name in sorted(active):
-            conflict = active & set(features[active_name].conflicts)
-            if conflict:
-                target = sorted(conflict)[0]
-                raise RegistryError(
-                    f"feature registry: {name} resolves to conflicting symbols "
-                    f"{active_name} and {target}"
-                )
+    if state is not None:
+        _MODELS[key] = (state, model)
     return model
 
 
@@ -644,63 +365,62 @@ def display_source(source: str, roots: list[Path]) -> str:
     return source
 
 
+def _resolve(
+    requests: list[FeatureRequest],
+    model: FeatureModel,
+    context: str,
+    target: str | None,
+    required: tuple[str, ...],
+) -> tuple[FeatureResolution, list[str]]:
+    """The resolution and findings `jh feature resolve` gives, once per
+    distinct request list for a registry."""
+    key = (tuple(requests), context, target, required)
+    cached = model.resolutions.get(key)
+    if cached is None:
+        arguments = [
+            "feature",
+            "resolve",
+            f"--config-root={model.config_root}",
+            f"--context={context}",
+        ]
+        if target is not None:
+            arguments.append(f"--target={target}")
+            arguments += [f"--required-feature={item}" for item in required]
+        # Every source repeats a header path: as arguments they outgrow the
+        # 32767 characters of a Windows command line.
+        listed = {
+            "requests": [
+                {
+                    "request": request.symbol
+                    + ("" if request.value is None else f"={request.value}"),
+                    "source": request.source,
+                }
+                for request in requests
+            ]
+        }
+        with tempfile.TemporaryDirectory(prefix="jh-resolve-") as directory:
+            request_file = Path(directory) / "requests.json"
+            request_file.write_text(json.dumps(listed), encoding="utf-8")
+            output = _jh_result([*arguments, f"--file={request_file}"], (0, 1))
+        cached = (
+            FeatureResolution(
+                tuple(output["requestedFeatures"]),
+                tuple(output["resolvedFeatures"]),
+                {symbol: tuple(sources) for symbol, sources in output["provenance"].items()},
+                output["resolvedFeaturesDigest"],
+            ),
+            tuple(output["findings"]),
+        )
+        model.resolutions[key] = cached
+    return cached[0], list(cached[1])
+
+
 def resolve_feature_requests(
     requests: list[FeatureRequest],
     model: FeatureModel,
     context: str,
 ) -> tuple[FeatureResolution, list[str]]:
-    findings: list[str] = []
-    valid: list[FeatureRequest] = []
-    for request in requests:
-        request_findings = validate_requested_symbol(
-            Path(request.source.split(":", 1)[0]),
-            request.source.split(":", 1)[1] if ":" in request.source else "$",
-            request.symbol,
-            request.value,
-            model,
-        )
-        findings.extend(request_findings)
-        if (
-            request.symbol in model.features
-            and request.value in {None, "1"}
-            and model.features[request.symbol].kind != "derived"
-        ):
-            valid.append(request)
-
-    by_symbol: dict[str, list[FeatureRequest]] = {}
-    for request in valid:
-        by_symbol.setdefault(request.symbol, []).append(request)
-    for symbol, entries in sorted(by_symbol.items()):
-        sources = sorted({entry.source for entry in entries})
-        if len(entries) > 1:
-            findings.append(
-                f"{context}: [JH-CFG-REDUNDANT] {symbol} is requested "
-                f"{len(entries)} times by {', '.join(sources)}"
-            )
-
-    requested = tuple(sorted(by_symbol))
-    resolved = model.resolve_many(requested)
-    resolved_set = set(resolved)
-    for symbol in resolved:
-        feature = model.features[symbol]
-        for requirement in feature.requires:
-            if requirement not in resolved_set:
-                findings.append(
-                    f"{context}: [JH-CFG-REQUIRES] {symbol} requires "
-                    f"{requirement}"
-                )
-        for conflict in feature.conflicts:
-            if conflict in resolved_set and symbol < conflict:
-                findings.append(
-                    f"{context}: [JH-CFG-CONFLICT] {symbol} conflicts with "
-                    f"{conflict}"
-                )
-
-    provenance = {
-        symbol: tuple(sorted({entry.source for entry in entries}))
-        for symbol, entries in sorted(by_symbol.items())
-    }
-    return FeatureResolution(requested, resolved, provenance), findings
+    return _resolve(requests, model, context, None, ())
 
 
 def resolve_target_feature_requests(
@@ -712,52 +432,11 @@ def resolve_target_feature_requests(
 ) -> tuple[FeatureResolution, list[str]]:
     """Resolve explicit requests together with target-mandated features."""
     if target is None or target_descriptor is None:
-        return resolve_feature_requests(requests, model, context)
-
-    explicit_symbols = {request.symbol for request in requests}
-    required_features = target_descriptor.get("requiredFeatures", [])
-    required_requests: list[FeatureRequest] = []
-    findings: list[str] = []
-    for index, raw_feature in enumerate(required_features):
-        symbol = str(raw_feature).removesuffix("=1")
-        source = f"target:{target}:requiredFeatures[{index}]"
-        disabled = symbol.replace("HAL_ENABLE_", "HAL_DISABLE_", 1)
-        if disabled in explicit_symbols:
-            findings.append(
-                f"{context}: [JH-CFG-TARGET-REQUIRED] {target} requires "
-                f"{symbol}; {disabled} cannot be requested"
-            )
-        if symbol not in explicit_symbols:
-            required_requests.append(FeatureRequest(symbol, "1", source))
-
-    resolution, resolution_findings = resolve_feature_requests(
-        [*requests, *required_requests], model, context
+        return _resolve(requests, model, context, None, ())
+    required = tuple(
+        str(item) for item in target_descriptor.get("requiredFeatures", [])
     )
-    findings.extend(resolution_findings)
-    provenance = dict(resolution.provenance)
-    for index, raw_feature in enumerate(required_features):
-        symbol = str(raw_feature).removesuffix("=1")
-        source = f"target:{target}:requiredFeatures[{index}]"
-        provenance[symbol] = tuple(
-            sorted({*provenance.get(symbol, ()), source})
-        )
-    return (
-        FeatureResolution(
-            tuple(
-                symbol
-                for symbol in resolution.requested
-                if symbol in explicit_symbols
-            ),
-            resolution.resolved,
-            provenance,
-        ),
-        findings,
-    )
-
-
-def resolved_features_digest(features: Iterable[str]) -> str:
-    normalized = "\n".join(sorted(features))
-    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    return _resolve(requests, model, context, target, required)
 
 
 def effective_matrix_digest(records: list[dict[str, Any]]) -> str:
@@ -798,7 +477,7 @@ def feature_resolution_record(
         "variant": variant,
         "requestedFeatures": list(resolution.requested),
         "resolvedFeatures": list(resolution.resolved),
-        "resolvedFeaturesDigest": resolved_features_digest(resolution.resolved),
+        "resolvedFeaturesDigest": resolution.digest,
         "provenance": {
             symbol: list(sources)
             for symbol, sources in resolution.provenance.items()
@@ -854,6 +533,7 @@ def lint_effective_inputs(
                 symbol: tuple(display_source(source, roots) for source in sources)
                 for symbol, sources in resolution.provenance.items()
             },
+            resolution.digest,
         )
         records.append(
             feature_resolution_record(

@@ -42,9 +42,11 @@ function(jh_device_tree_build OUT_VAR CONFIG_DIR)
 endfunction()
 
 function(_jh_hardware_generator)
-    jh_find_python(_jh_hw_python)
+    # The generator reads the project configuration and the feature registry
+    # through jh.
+    jh_python_with_tool(_jh_hw_python "${JH_HW_ROOT}" "${JH_HW_SCRATCH}")
     execute_process(
-        COMMAND "${_jh_hw_python}" "${JH_HW_ROOT}/scripts/generate_hardware_config.py"
+        COMMAND ${_jh_hw_python} "${JH_HW_ROOT}/scripts/generate_hardware_config.py"
             ${ARGN}
         RESULT_VARIABLE _jh_hw_result
         ERROR_VARIABLE _jh_hw_error)
@@ -82,6 +84,7 @@ function(jh_generate_hardware_config)
         endif()
     endforeach()
     set(JH_HW_ROOT "${_JH_HC_ROOT}")
+    set(JH_HW_SCRATCH "${_JH_HC_OUTPUT_DIR}")
     set(_jh_hc_out "${_JH_HC_OUTPUT_DIR}")
     set(_jh_hc_root_args "")
     if(NOT "${_JH_HC_OUTPUT_ROOT}" STREQUAL "")
@@ -209,6 +212,7 @@ function(jh_finalize_hardware_abi)
         list(APPEND _jh_fa_command "--compiler-flag=${_jh_fa_flag}")
     endforeach()
     set(JH_HW_ROOT "${JH_HARDWARE_ROOT}")
+    set(JH_HW_SCRATCH "${CMAKE_CURRENT_BINARY_DIR}")
     _jh_hardware_generator(${_jh_fa_command})
     include("${JH_BOARD_GENERATED_DIR}/jh_hardware_config.cmake")
     foreach(_jh_fa_variable IN LISTS JH_HARDWARE_CONFIG_VARIABLES)

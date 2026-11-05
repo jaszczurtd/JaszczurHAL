@@ -345,7 +345,7 @@ class Finalize:
         self.check_ownership(build)
         requested = build.requested_features()
         try:
-            _, resolved, _ = boards_module.resolve_features(requested, target)
+            _, resolved, _, _ = boards_module.resolve_features(requested, target)
         except boards_module.DescriptorError as error:
             raise self.fail("JH-HW-FEATURE", str(error)) from error
         self.check_hardware(document, build, list(resolved))

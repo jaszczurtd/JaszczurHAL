@@ -25,13 +25,66 @@ endfunction()
 # one target and variant, exactly as the compiler sees it before the HAL
 # headers. Every build reads project configuration through these helpers.
 
+# _jh_normal_path(<out-var> <path>)
+#
+# path absolute without . and .. components and without a trailing
+# separator, as CMake records the files it reads: Ninja rejects one file under
+# two spellings (a root such as link_libraries/x/../..). Windows separators
+# become /; elsewhere a backslash is an ordinary file name character and stays.
+function(_jh_normal_path OUT_VAR PATH)
+    set(_jh_np_path "${PATH}")
+    if(CMAKE_HOST_WIN32)
+        file(TO_CMAKE_PATH "${_jh_np_path}" _jh_np_path)
+    endif()
+    # a/b/.. normalizes to a/, which a joined name would turn into a//name.
+    cmake_path(ABSOLUTE_PATH _jh_np_path NORMALIZE)
+    if(NOT _jh_np_path MATCHES "^(/|[A-Za-z]:/)$")
+        string(REGEX REPLACE "/+$" "" _jh_np_path "${_jh_np_path}")
+    endif()
+    set(${OUT_VAR} "${_jh_np_path}" PARENT_SCOPE)
+endfunction()
+
+# _jh_tool_configure_depends(<JaszczurHAL root> <jh executable>)
+#
+# The generators run with this jh, so the build reconfigures when the
+# executable changes and when the inputs of its bootstrap key below root
+# change (tools/jh and JH_TOOL_INPUTS): new sources need another jh, which
+# configure then verifies. Once per root and tool in a directory.
+function(_jh_tool_configure_depends ROOT TOOL)
+    if(CMAKE_SCRIPT_MODE_FILE)
+        return()
+    endif()
+    _jh_normal_path(_jh_td_root "${ROOT}")
+    _jh_normal_path(_jh_td_tool "${TOOL}")
+    get_property(_jh_td_seen DIRECTORY PROPERTY JH_TOOL_CONFIGURE_DEPENDS)
+    if("${_jh_td_root}|${_jh_td_tool}" IN_LIST _jh_td_seen)
+        return()
+    endif()
+    set_property(DIRECTORY APPEND PROPERTY JH_TOOL_CONFIGURE_DEPENDS
+        "${_jh_td_root}|${_jh_td_tool}")
+    set(_jh_td_files "${_jh_td_tool}")
+    if(EXISTS "${_jh_td_root}/scripts/jh_tool_inputs.cmake")
+        include("${_jh_td_root}/scripts/jh_tool_inputs.cmake")
+        foreach(_jh_td_input IN LISTS JH_TOOL_INPUTS)
+            if(EXISTS "${_jh_td_root}/${_jh_td_input}")
+                list(APPEND _jh_td_files "${_jh_td_root}/${_jh_td_input}")
+            endif()
+        endforeach()
+    endif()
+    jh_config_glob(_jh_td_pattern "${_jh_td_root}/tools/jh" "*")
+    file(GLOB_RECURSE _jh_td_sources CONFIGURE_DEPENDS "${_jh_td_pattern}")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+        ${_jh_td_files} ${_jh_td_sources})
+endfunction()
+
 # jh_project_config_tool(<out-var> <JaszczurHAL root> <scratch dir>)
 #
 # The jh host CLI that evaluates the header. Configure never builds it: it
 # takes JH_EXECUTABLE from the environment (jh-vscode, the examples dispatcher
 # and the gate pass it) unless JH_EXECUTABLE_ROOT names another checkout, or
 # the one scripts/jh_bootstrap.cmake verifies as built from these sources by
-# runmefirst, the gate or scripts/jh.
+# runmefirst, the gate or scripts/jh. Either way the build depends on the
+# tool (_jh_tool_configure_depends).
 function(jh_project_config_tool OUT_VAR ROOT SCRATCH)
     if(DEFINED ENV{JH_EXECUTABLE} AND EXISTS "$ENV{JH_EXECUTABLE}")
         set(_jh_pt_same TRUE)
@@ -43,6 +96,7 @@ function(jh_project_config_tool OUT_VAR ROOT SCRATCH)
             endif()
         endif()
         if(_jh_pt_same)
+            _jh_tool_configure_depends("${ROOT}" "$ENV{JH_EXECUTABLE}")
             set(${OUT_VAR} "$ENV{JH_EXECUTABLE}" PARENT_SCOPE)
             return()
         endif()
@@ -60,7 +114,24 @@ function(jh_project_config_tool OUT_VAR ROOT SCRATCH)
         message(FATAL_ERROR "Project configuration needs the jh host CLI: ${_jh_pt_output}")
     endif()
     file(STRINGS "${_jh_pt_result}" _jh_pt_lines LIMIT_COUNT 1 ENCODING UTF-8)
+    _jh_tool_configure_depends("${ROOT}" "${_jh_pt_lines}")
     set(${OUT_VAR} "${_jh_pt_lines}" PARENT_SCOPE)
+endfunction()
+
+# jh_python_with_tool(<out-var> <JaszczurHAL root> <scratch dir>)
+#
+# The command that runs a HAL Python script with the jh host CLI
+# jh_project_config_tool() finds for root: Python under cmake -E env with
+# JH_EXECUTABLE and JH_EXECUTABLE_ROOT. Both together: an inherited
+# JH_EXECUTABLE_ROOT of another checkout would make the script reject the tool
+# and prepare one itself.
+function(jh_python_with_tool OUT_VAR ROOT SCRATCH)
+    jh_find_python(_jh_pw_python)
+    file(MAKE_DIRECTORY "${SCRATCH}")
+    jh_project_config_tool(_jh_pw_tool "${ROOT}" "${SCRATCH}")
+    set(${OUT_VAR}
+        "${CMAKE_COMMAND}" -E env "JH_EXECUTABLE=${_jh_pw_tool}"
+        "JH_EXECUTABLE_ROOT=${ROOT}" "${_jh_pw_python}" PARENT_SCOPE)
 endfunction()
 
 # Hand JH_PROJECT_CONFIG_VARIABLES, the variables it names,
@@ -93,15 +164,9 @@ endmacro()
 function(jh_read_project_config)
     cmake_parse_arguments(PARSE_ARGV 0 _JH_PC ""
         "ROOT;CONFIG_DIR;TARGET;VARIANT;OUTPUT_DIR;HARDWARE_HEADER" "DEFINES")
-    jh_find_python(_jh_pc_python)
-    file(MAKE_DIRECTORY "${_JH_PC_OUTPUT_DIR}")
-    jh_project_config_tool(_jh_pc_tool "${_JH_PC_ROOT}" "${_JH_PC_OUTPUT_DIR}")
-    # Both together: an inherited JH_EXECUTABLE_ROOT of another checkout would
-    # make project_config.py reject the tool and prepare one itself.
+    jh_python_with_tool(_jh_pc_python "${_JH_PC_ROOT}" "${_JH_PC_OUTPUT_DIR}")
     set(_jh_pc_command
-        "${CMAKE_COMMAND}" -E env "JH_EXECUTABLE=${_jh_pc_tool}"
-        "JH_EXECUTABLE_ROOT=${_JH_PC_ROOT}"
-        "${_jh_pc_python}" "${_JH_PC_ROOT}/scripts/project_config.py" cmake
+        ${_jh_pc_python} "${_JH_PC_ROOT}/scripts/project_config.py" cmake
         --target "${_JH_PC_TARGET}"
         --output "${_JH_PC_OUTPUT_DIR}/jh_project_config.cmake")
     if(NOT "${_JH_PC_CONFIG_DIR}" STREQUAL "")

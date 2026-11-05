@@ -1068,7 +1068,7 @@ def validate_target(path: Path, target: dict[str, Any]) -> set[Any]:
             for item in normalized_supported
             if feature_model.features[item.removesuffix("=1")].kind != "derived"
         ]
-        _, resolved_supported, _ = resolve_features(requestable_supported, target)
+        _, resolved_supported, _, _ = resolve_features(requestable_supported, target)
         resolved_supported_symbols = set(resolved_supported)
         if supported_symbols != resolved_supported_symbols:
             missing = sorted(resolved_supported_symbols - supported_symbols)
@@ -1634,7 +1634,9 @@ def validate_definitions(definitions: list[str]) -> None:
 
 def resolve_features(
     features: list[str], target: dict[str, Any]
-) -> tuple[list[str], list[str], dict[str, list[str]]]:
+) -> tuple[list[str], list[str], dict[str, list[str]], str]:
+    """Requested and resolved features, their provenance and the digest of the
+    resolved set."""
     normalized = normalize_features(features)
     required = normalize_features(target.get("requiredFeatures", []))
     requested_symbols = {item.removesuffix("=1") for item in normalized}
@@ -1682,7 +1684,7 @@ def resolve_features(
         symbol = definition.removesuffix("=1")
         source = f"target:{target['id']}:requiredFeatures[{index}]"
         provenance[symbol] = sorted({*provenance.get(symbol, []), source})
-    return requested, list(resolution.resolved), provenance
+    return requested, list(resolution.resolved), provenance, resolution.digest
 
 
 def macro_suffix(identifier: str) -> str:
@@ -2396,12 +2398,12 @@ def build_outputs(
     resolved and the values it owns: the definitions its header carries,
     those still passed to the compiler, its components and its digest for
     the link signature. Without them the outputs are the board's."""
-    requested_features, resolved_features, feature_provenance = resolve_features(
-        requested_feature_inputs, target
-    )
-    resolved_features_digest = generate_hal_features.resolved_features_digest(
-        resolved_features
-    )
+    (
+        requested_features,
+        resolved_features,
+        feature_provenance,
+        resolved_features_digest,
+    ) = resolve_features(requested_feature_inputs, target)
     feature_contract = [
         f"hal.profileId={board['hal']['profileId']}",
         *(f"{feature}=1" for feature in resolved_features),

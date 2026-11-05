@@ -1539,9 +1539,7 @@ def resolve_hal_features(
         "registryDigest": model.digest,
         "requestedFeatures": list(resolution.requested),
         "resolvedFeatures": list(resolution.resolved),
-        "resolvedFeaturesDigest": features.resolved_features_digest(
-            resolution.resolved
-        ),
+        "resolvedFeaturesDigest": resolution.digest,
         "provenance": {
             symbol: list(sources)
             for symbol, sources in resolution.provenance.items()

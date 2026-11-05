@@ -55,6 +55,11 @@ enum option_id {
   header,
   define,
   preinclude,
+  context_label,
+  target,
+  request,
+  source,
+  required_feature,
   machine,
   json_version,
   help,
@@ -65,7 +70,8 @@ struct option_spec {
   const char *name, *value, *description;
 };
 constexpr option_spec options[] = {
-    {"file", "<path>", "Read this JSON file"},
+    {"file", "<path>",
+     "Read this JSON file (feature resolve: the requests with their sources)"},
     {"schema", "<path>", "Validate with this local schema (json validate)"},
     {"pointer", "<path>", "Select a plain RFC 6901 pointer (default: root)"},
     {"output", "<path>", "Atomically write the selected JSON value"},
@@ -89,6 +95,15 @@ constexpr option_spec options[] = {
      "Predefine a macro before the header; repeatable (config inspect)"},
     {"preinclude", "<path>",
      "Header read before the project header, like jh_hardware.h"},
+    {"context", "<text>",
+     "Configuration the resolution findings name (default: command line)"},
+    {"target", "<id>", "Target whose required features join the resolution"},
+    {"request", "<SYMBOL[=VALUE]>",
+     "Request a feature; repeatable (feature resolve)"},
+    {"source", "<text>",
+     "Source of the request at the same position; repeatable"},
+    {"required-feature", "<SYMBOL[=1]>",
+     "Feature the target requires; repeatable, needs --target"},
     {"json", nullptr, "Write a versioned JSON result on stdout"},
     {"json-version", "<major>",
      "Require a supported JSON result major version (1)"},
@@ -104,7 +119,9 @@ enum command_id {
   features_command,
   repository_command,
   config_command,
-  directives_command
+  directives_command,
+  feature_list_command,
+  feature_resolve_command
 };
 struct command_spec {
   const char *first, *second, *name;
@@ -130,6 +147,12 @@ const command_spec commands[] = {
      {root, git, timeout_ms, max_bytes}},
     {"config", "inspect", "config.inspect", {header, define, preinclude}},
     {"config", "directives", "config.directives", {file}},
+    {"feature", "list", "feature.list", {root, config_root}},
+    {"feature",
+     "resolve",
+     "feature.resolve",
+     {root, config_root, context_label, target, request, source,
+      required_feature, file}},
 };
 
 #ifdef _WIN32
@@ -166,8 +189,8 @@ void install_cancellation() {
 struct arguments {
   std::array<bool, option_count> present{};
   std::array<std::string, option_count> values;
-  /** Every --define, in order; the only repeatable option. */
-  std::vector<std::string> defines;
+  /** Every value of a repeatable option, in order. */
+  std::array<std::vector<std::string>, option_count> lists;
   std::vector<std::string> command;
 };
 struct context : jh::parse_location {
@@ -204,7 +227,9 @@ arguments parse_arguments(const std::vector<std::string> &argv) {
       ++id;
     if (id == option_count)
       throw failure{HAL_EINVAL, 2, "unknown option: " + text, {}, {}, {}};
-    if (result.present[id] && id != define)
+    const bool repeatable =
+        id == define || id == request || id == source || id == required_feature;
+    if (result.present[id] && !repeatable)
       throw failure{HAL_EINVAL, 2,  "option specified more than once: " + name,
                     {},         {}, {}};
     result.present[id] = true;
@@ -220,8 +245,8 @@ arguments parse_arguments(const std::vector<std::string> &argv) {
                                  result.values[id].size(), &bad),
                 2, "argument is not valid UTF-8");
       }
-      if (id == define)
-        result.defines.push_back(result.values[id]);
+      if (repeatable)
+        result.lists[id].push_back(result.values[id]);
     } else if (equal != std::string::npos) {
       throw failure{HAL_EINVAL, 2,  "flag does not take a value: " + name,
                     {},         {}, {}};
@@ -243,11 +268,17 @@ std::string help_text() {
       "[options]\n"
       "       jh config inspect [--header <path>] [--define <NAME[=VALUE]>]..."
       " [--preinclude <path>]\n"
-      "       jh config directives --file <path>\n\n"
+      "       jh config directives --file <path>\n"
+      "       jh feature list (--root <path> | --config-root <path>)\n"
+      "       jh feature resolve (--root <path> | --config-root <path>)"
+      " [--request <SYMBOL[=VALUE]> [--source <text>]]... [options]\n"
+      "       jh feature resolve (--root <path> | --config-root <path>)"
+      " --file <path> [options]\n\n"
       "Read JSON, select a value and optionally compare or write it,\n"
       "generate the C defaults of the HAL component types or the feature\n"
-      "registry artifacts, or evaluate a project's hal_project_config.h as\n"
-      "the build reads it.\n";
+      "registry artifacts, evaluate a project's hal_project_config.h as\n"
+      "the build reads it, or list the feature registry and resolve the\n"
+      "features one build requests.\n";
   for (const auto &option : options) {
     text += "  --";
     text += option.name;
@@ -332,6 +363,21 @@ public:
   void object_end() {
     require(jb_json_writer_object_end(&writer), 4,
             "cannot close result object");
+  }
+  /** One string in an open array. */
+  void string_item(std::string_view value) {
+    require(jb_json_writer_string(&writer, span(value)), 4,
+            "cannot write result string");
+  }
+  /** An array of the jb_string_t elements of list. */
+  void string_list(const char *name, const jb_vector_t &list) {
+    array_begin(name);
+    for (size_t i = 0; i < jb_vector_size(&list); ++i)
+      require(jb_json_writer_string(
+                  &writer, span(jh::view(*static_cast<const jb_string_t *>(
+                               jb_vector_const_at(&list, i))))),
+              4, "cannot write result string");
+    array_end();
   }
   template <class Strings>
   void strings(const char *name, const Strings &values) {
@@ -518,8 +564,18 @@ int validate(context &ctx, const std::string &base) {
   return status == HAL_OK ? 0 : 2;
 }
 
-// The HAL checkout of a generator: --root resolved against base, without the
-// trailing separator a root given as "." resolves with.
+// --root resolved against base, without the trailing separator a root given
+// as "." resolves with.
+std::string checkout_root(const arguments &args, const std::string &base) {
+  auto hal_root = jh::stl::absolute_path(args.values[root], base);
+  if (hal_root.size() > 1 &&
+      (hal_root.back() == '/' || hal_root.back() == '\\') &&
+      !(hal_root.size() == 3 && hal_root[1] == ':'))
+    hal_root.pop_back();
+  return hal_root;
+}
+
+// The HAL checkout of a generator.
 std::string generator_root(const arguments &args, const std::string &base,
                            const char *command) {
   require_value(args, root,
@@ -532,12 +588,7 @@ std::string generator_root(const arguments &args, const std::string &base,
                   {},
                   {},
                   {}};
-  auto hal_root = jh::stl::absolute_path(args.values[root], base);
-  if (hal_root.size() > 1 &&
-      (hal_root.back() == '/' || hal_root.back() == '\\') &&
-      !(hal_root.size() == 3 && hal_root[1] == ':'))
-    hal_root.pop_back();
-  return hal_root;
+  return checkout_root(args, base);
 }
 
 int generate_defaults(context &ctx, const std::string &base) {
@@ -664,6 +715,271 @@ int generate_features(context &ctx, const std::string &base) {
     stdout_bytes(result.finish());
   }
   return current ? 0 : 1;
+}
+
+// The configuration a feature command reads: --config-root, else
+// <root>/config.
+std::string feature_config(const arguments &args, const std::string &base,
+                           const char *command) {
+  if (args.present[config_root]) {
+    require_value(args, config_root, "--config-root needs a path");
+    return jh::stl::absolute_path(args.values[config_root], base);
+  }
+  require_value(
+      args, root,
+      (std::string(command) + " requires --root or --config-root").c_str());
+  return jh::stl::absolute_path("config", checkout_root(args, base));
+}
+
+size_t list_bytes(const jb_vector_t &list) {
+  size_t bytes = 0;
+  for (size_t i = 0; i < jb_vector_size(&list); ++i)
+    bytes += jb_string_size(static_cast<const jb_string_t *>(
+                 jb_vector_const_at(&list, i))) +
+             8;
+  return bytes;
+}
+
+/* Every registered symbol with its relations, build inputs and closure. */
+int feature_list(context &ctx, const std::string &base) {
+  constexpr size_t limit = 16 * 1024 * 1024;
+  const auto config_dir = feature_config(ctx.args, base, "feature list");
+  jh::feature_registry registry;
+  jh::failure_record failed;
+  failed.check(jh_feature_registry_load(&registry, config_dir.c_str(), limit,
+                                        &failed.value));
+  const auto feature = [&](size_t index) {
+    return static_cast<const jh_feature_t *>(
+        jb_vector_const_at(&registry.features, index));
+  };
+  const size_t count = jb_vector_size(&registry.features);
+  if (!ctx.json) {
+    std::string text;
+    for (size_t i = 0; i < count; ++i)
+      text += std::string(jh::view(feature(i)->name)) +
+              (feature(i)->derived ? " derived " : " feature ") +
+              std::string(jh::view(feature(i)->domain)) + '\n';
+    stdout_bytes(text);
+    return 0;
+  }
+  struct indices {
+    jb_vector_t value{};
+    indices() {
+      (void)jb_vector_init(&value, sizeof(size_t), jb_heap_allocator());
+    }
+    indices(const indices &) = delete;
+    indices &operator=(const indices &) = delete;
+    ~indices() { jb_vector_destroy(&value); }
+  } implied;
+  size_t bytes = config_dir.size() + 1024;
+  for (size_t i = 0; i < count; ++i) {
+    const jh_feature_t &item = *feature(i);
+    bytes += jb_string_size(&item.name) * (count + 1) +
+             jb_string_size(&item.domain) + jb_string_size(&item.note) +
+             list_bytes(item.implies) + list_bytes(item.requirements) +
+             list_bytes(item.conflicts) + list_bytes(item.feature_sources) +
+             list_bytes(item.portable_sources) + list_bytes(item.dependencies) +
+             256;
+  }
+  result_writer result(bytes);
+  result.string("command", "feature.list");
+  result.string("status", "HAL_OK");
+  result.string("config", config_dir);
+  result.string("registryDigest", registry.digest);
+  result.string("registrySchemaDigest", registry.schema_digest);
+  result.array_begin("features");
+  for (size_t i = 0; i < count; ++i) {
+    const jh_feature_t &item = *feature(i);
+    result.object_begin(nullptr);
+    result.string("name", jh::view(item.name));
+    result.string("domain", jh::view(item.domain));
+    result.string("kind", item.derived ? "derived" : "feature");
+    result.string_list("implies", item.implies);
+    result.string_list("requires", item.requirements);
+    result.string_list("conflicts", item.conflicts);
+    result.string_list("featureSources", item.feature_sources);
+    result.string_list("portableSources", item.portable_sources);
+    result.string_list("dependencies", item.dependencies);
+    if (item.has_note)
+      result.string("note", jh::view(item.note));
+    else
+      result.null("note");
+    require(jh_feature_registry_closure(&registry, i, &implied.value), 4,
+            "cannot list the implied features");
+    result.array_begin("closure");
+    for (size_t j = 0; j < jb_vector_size(&implied.value); ++j)
+      result.string_item(
+          jh::view(feature(*static_cast<const size_t *>(
+                               jb_vector_const_at(&implied.value, j)))
+                       ->name));
+    result.array_end();
+    result.object_end();
+  }
+  result.array_end();
+  stdout_bytes(result.finish());
+  return 0;
+}
+
+/* The requests of feature resolve --file, read like json.loads: an object
+ * with only "requests", an array of objects with only a string "request"
+ * (SYMBOL[=VALUE]) and a string "source". */
+void request_file(context &ctx, const std::string &path, size_t limit,
+                  std::vector<std::string> &texts,
+                  std::vector<std::string> &sources) {
+  jb_json_tree_t *raw = nullptr;
+  jh::failure_record failed;
+  failed.check(
+      jh_json_read_value(&ctx, path.c_str(), limit, &raw, &failed.value));
+  const jh::tree_owner tree(raw);
+  const auto type_of = [](jb_json_tree_view_t value) {
+    jb_json_type_t type = JB_JSON_NULL;
+    (void)jb_json_tree_type(value, &type);
+    return type;
+  };
+  // key of an object with exactly members members.
+  const auto member = [&](jb_json_tree_view_t object, const char *key,
+                          size_t members, jb_json_tree_view_t *out) {
+    size_t count = 0;
+    return type_of(object) == JB_JSON_OBJECT &&
+           jb_json_tree_count(object, &count) == HAL_OK && count == members &&
+           jb_json_tree_find(object, span(key), out) == HAL_OK;
+  };
+  const auto text = [&](jb_json_tree_view_t value, std::string &out) {
+    jb_json_span_t bytes;
+    if (type_of(value) != JB_JSON_STRING ||
+        jb_json_tree_text(value, &bytes) != HAL_OK)
+      return false;
+    out.assign(bytes.data, bytes.length);
+    return true;
+  };
+  jb_json_tree_view_t root_value, list;
+  size_t count = 0;
+  if (jb_json_tree_root(tree.get(), &root_value) != HAL_OK ||
+      !member(root_value, "requests", 1, &list) ||
+      type_of(list) != JB_JSON_ARRAY ||
+      jb_json_tree_count(list, &count) != HAL_OK)
+    throw failure{HAL_ETYPE, 2,  "request file needs only a requests array",
+                  {},        {}, {}};
+  for (size_t i = 0; i < count; ++i) {
+    jb_json_tree_view_t item, value;
+    texts.emplace_back();
+    sources.emplace_back();
+    if (jb_json_tree_at(list, i, &item) != HAL_OK ||
+        !member(item, "request", 2, &value) || !text(value, texts.back()) ||
+        !member(item, "source", 2, &value) || !text(value, sources.back()))
+      throw failure{HAL_ETYPE,
+                    2,
+                    "request file /requests/" + std::to_string(i) +
+                        " needs only a string request and source",
+                    {},
+                    {},
+                    {}};
+  }
+}
+
+/* The features one build requests, resolved like the build resolves them;
+ * findings are reported on stderr and give exit code 1. */
+int feature_resolve(context &ctx, const std::string &base) {
+  const auto &args = ctx.args;
+  constexpr size_t limit = 16 * 1024 * 1024;
+  const auto config_dir = feature_config(args, base, "feature resolve");
+  std::vector<std::string> texts = args.lists[request];
+  std::vector<std::string> sources = args.lists[source];
+  if (!sources.empty() && sources.size() != texts.size())
+    throw failure{
+        HAL_EINVAL, 2,  "feature resolve takes one --source per --request",
+        {},         {}, {}};
+  if (args.present[file]) {
+    require_value(args, file, "--file needs a path");
+    if (!texts.empty())
+      throw failure{HAL_EINVAL, 2,  "--file replaces --request and --source",
+                    {},         {}, {}};
+  }
+  if (args.present[required_feature] && !args.present[target])
+    throw failure{HAL_EINVAL, 2,  "--required-feature requires --target",
+                  {},         {}, {}};
+  for (size_t i = sources.size(); i < texts.size(); ++i)
+    sources.push_back("command-line:--request[" + std::to_string(i) + "]");
+  jh::feature_registry registry;
+  jh::failure_record failed;
+  failed.check(jh_feature_registry_load(&registry, config_dir.c_str(), limit,
+                                        &failed.value));
+  // Read after the registry, whose failures must not name this file.
+  if (args.present[file])
+    request_file(ctx, jh::stl::absolute_path(args.values[file], base), limit,
+                 texts, sources);
+  std::vector<jh_feature_request_t> requests;
+  for (size_t i = 0; i < texts.size(); ++i) {
+    const std::string_view text = texts[i];
+    const size_t equal = text.find('=');
+    jh_feature_request_t item{};
+    item.symbol = span(text.substr(0, equal));
+    item.has_value = equal != std::string_view::npos;
+    item.value = item.has_value ? span(text.substr(equal + 1)) : span("");
+    item.source = span(sources[i]);
+    requests.push_back(item);
+  }
+  std::vector<jb_json_span_t> required;
+  for (const auto &item : args.lists[required_feature])
+    required.push_back(span(item));
+  const jh_feature_target_t target_value{span(args.values[target]),
+                                         required.data(), required.size()};
+  const std::string context_text =
+      args.present[context_label] ? args.values[context_label] : "command line";
+  jh::feature_resolution resolution;
+  failed.check(jh_feature_resolve(
+      &registry, requests.data(), requests.size(), span(context_text),
+      args.present[target] ? &target_value : nullptr, &resolution,
+      &failed.value));
+  const size_t findings = jb_vector_size(&resolution.findings);
+  std::string report;
+  for (size_t i = 0; i < findings; ++i)
+    report += std::string(jh::view(*static_cast<const jb_string_t *>(
+                  jb_vector_const_at(&resolution.findings, i)))) +
+              '\n';
+  (void)std::fwrite(report.data(), 1, report.size(), stderr);
+  if (!ctx.json) {
+    std::string text;
+    for (size_t i = 0; i < jb_vector_size(&resolution.resolved); ++i)
+      text += std::string(jh::view(*static_cast<const jb_string_t *>(
+                  jb_vector_const_at(&resolution.resolved, i)))) +
+              '\n';
+    stdout_bytes(text);
+    return findings == 0 ? 0 : 1;
+  }
+  const size_t entries = jb_vector_size(&resolution.provenance);
+  size_t bytes = config_dir.size() + context_text.size() +
+                 args.values[target].size() + report.size() +
+                 2 * list_bytes(resolution.resolved) + 1024;
+  for (size_t i = 0; i < entries; ++i) {
+    const auto &entry = *static_cast<const jh_feature_provenance_t *>(
+        jb_vector_const_at(&resolution.provenance, i));
+    bytes += jb_string_size(&entry.symbol) + list_bytes(entry.sources) + 16;
+  }
+  result_writer result(bytes, entries);
+  result.string("command", "feature.resolve");
+  result.string("status", findings == 0 ? "HAL_OK" : "HAL_ECONFIG");
+  result.string("config", config_dir);
+  result.string("registryDigest", registry.digest);
+  result.string("context", context_text);
+  if (args.present[target])
+    result.string("target", args.values[target]);
+  else
+    result.null("target");
+  result.string_list("requestedFeatures", resolution.requested);
+  result.string_list("resolvedFeatures", resolution.resolved);
+  result.string("resolvedFeaturesDigest", resolution.digest);
+  result.object_begin("provenance");
+  for (size_t i = 0; i < entries; ++i) {
+    const auto &entry = *static_cast<const jh_feature_provenance_t *>(
+        jb_vector_const_at(&resolution.provenance, i));
+    result.string_list(std::string(jh::view(entry.symbol)).c_str(),
+                       entry.sources);
+  }
+  result.object_end();
+  result.string_list("findings", resolution.findings);
+  stdout_bytes(result.finish());
+  return findings == 0 ? 0 : 1;
 }
 
 hal_status_t stream_bytes(FILE *stream, const char *data, size_t length) {
@@ -859,8 +1175,8 @@ int config_inspect(context &ctx, const std::string &base) {
   const std::string header_path = path_of(header);
   const std::string preinclude_path = path_of(preinclude);
   jh::assign(ctx.source, header_path);
-  const auto config = jh::config::read_project_config(header_path, args.defines,
-                                                      preinclude_path);
+  const auto config = jh::config::read_project_config(
+      header_path, args.lists[define], preinclude_path);
   const auto macros = config.macros.ordered();
   std::vector<jh::config::integer_value> integers;
   std::vector<std::set<std::string>> unresolved;
@@ -1084,6 +1400,10 @@ int run(const std::vector<std::string> &argv) {
       return config_inspect(ctx, base);
     if (ctx.command == &commands[directives_command])
       return config_directives(ctx, base);
+    if (ctx.command == &commands[feature_list_command])
+      return feature_list(ctx, base);
+    if (ctx.command == &commands[feature_resolve_command])
+      return feature_resolve(ctx, base);
     return inspect(ctx, base);
   } catch (const failure &error) {
     if (ctx.located) {

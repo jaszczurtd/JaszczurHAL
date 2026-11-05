@@ -1851,9 +1851,28 @@ require(
     "redundant requested feature changed the resolved closure",
 )
 require(
-    generate_hal_features.resolved_features_digest(minimal.resolved)
-    == generate_hal_features.resolved_features_digest(redundant.resolved),
+    minimal.digest == redundant.digest,
     "equal resolved closures produced different oracle digests",
+)
+# Each request repeats the header path of its source; together they outgrow a
+# Windows command line (32767 characters) and here also ARG_MAX of Linux.
+long_header = "/" + "p" * 24000 + "/hal_project_config.h"
+long_requests = [
+    generate_hal_features.FeatureRequest(symbol, None, f"{long_header}:{line}")
+    for line, symbol in enumerate(
+        sorted(name for name, item in model.features.items() if item.kind == "feature"), 1
+    )
+]
+long_resolution = generate_hal_features.resolve_feature_requests(
+    long_requests, model, "test:long sources"
+)[0]
+require(
+    len(long_requests) > 90
+    and all(
+        long_resolution.provenance.get(request.symbol) == (request.source,)
+        for request in long_requests
+    ),
+    "resolver lost requests with long sources",
 )
 
 constraints_model = generate_hal_features.load_registry(constraints)
