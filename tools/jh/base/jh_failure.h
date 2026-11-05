@@ -4,11 +4,12 @@
 /** @file jh_failure.h
  * The failure a jh operation records for its caller: the status, the exit
  * code of the command and a message. The C modules of jh return the status
- * and fill a record the caller owns. Also the span helpers those modules
- * share. C11.
+ * and fill a record the caller owns. Also the span helpers and lists of owned
+ * strings those modules share. C11.
  */
 #include <jb/json.h>
 #include <jb/string.h>
+#include <jb/vector.h>
 #include <stdbool.h>
 
 #ifdef __cplusplus
@@ -45,7 +46,7 @@ hal_status_t jh_fail(jh_failure_t *failure, hal_status_t status, int exit_code,
 hal_status_t jh_fail_text(jh_failure_t *failure, hal_status_t status,
                           int exit_code, const char *message);
 /** Record a failed jhbase container operation: status, exit code 4 and no
- * message. Returns status.
+ * message. Returns status; HAL_OK records nothing.
  */
 hal_status_t jh_fail_storage(jh_failure_t *failure, hal_status_t status);
 /** Record HAL_EINVAL with exit code 3 for a call that lacks a required
@@ -62,6 +63,28 @@ hal_status_t jh_require(jh_failure_t *failure, hal_status_t status,
 jb_json_span_t jh_span(const char *text);
 /** Whether two spans hold the same bytes. */
 bool jh_span_equal(jb_json_span_t a, jb_json_span_t b);
+/** The bytes of a jhbase string as a span. text is required. */
+jb_json_span_t jh_string_span(const jb_string_t *text);
+/** Order of two spans by their bytes: code point order for UTF-8. */
+int jh_span_compare(jb_json_span_t a, jb_json_span_t b);
+
+/* Lists of owned strings: jb_vector_t of jb_string_t on the host heap. */
+
+/** Start an empty list. */
+hal_status_t jh_list_init(jb_vector_t *list);
+/** The string at index, which must be in range. */
+const jb_string_t *jh_list_at(const jb_vector_t *list, size_t index);
+/** Append a copy of text. */
+hal_status_t jh_list_push(jb_vector_t *list, jb_json_span_t text);
+/** Append the concatenation of count parts. */
+hal_status_t jh_list_push_parts(jb_vector_t *list, const jb_json_span_t *parts,
+                                size_t count);
+/** Sort the strings in code point order. */
+void jh_list_sort(jb_vector_t *list);
+/** Whether the list holds text. */
+bool jh_list_contains(const jb_vector_t *list, jb_json_span_t text);
+/** Release every string and the list. */
+void jh_list_destroy(jb_vector_t *list);
 
 #ifdef __cplusplus
 }

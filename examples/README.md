@@ -155,7 +155,7 @@ with `scripts/ensure_ccache.sh` or the component updater. The quality gate
 applies the same cache to all CMake builds: host tests and sanitizers, firmware,
 libraries, examples, and CMake builds started by tests. Clean configuration,
 linking and test execution still run. Preprocessor-only probes (`-E`), including
-those in `test_feature_registry`, are not cached.
+those of the feature registry tests, are not cached.
 
 The cache defaults to `${XDG_CACHE_HOME:-$HOME/.cache}/jaszczurhal/ccache` on
 Linux and `%LOCALAPPDATA%/jaszczurhal/ccache` on Windows. `JH_COMPILER_CACHE_DIR`

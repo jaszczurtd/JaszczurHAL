@@ -8,26 +8,7 @@ set(input "${JH_WORK}/dane ż.json")
 set(output "${JH_WORK}/generated/result.json")
 file(WRITE "${input}" "{\"a/b\":[18446744073709551615,\"ż\"],\"~1\":true}\n")
 
-function(invoke expected)
-  execute_process(COMMAND "${JH}" ${ARGN} WORKING_DIRECTORY "${JH_WORK}/cwd"
-    RESULT_VARIABLE code OUTPUT_VARIABLE out ERROR_VARIABLE err ENCODING UTF-8)
-  if(NOT code STREQUAL "${expected}")
-    message(FATAL_ERROR "jh ${ARGN}: expected exit ${expected}, got ${code}\n${out}\n${err}")
-  endif()
-  set(stdout "${out}" PARENT_SCOPE)
-  set(stderr "${err}" PARENT_SCOPE)
-endfunction()
-
-function(status expected)
-  string(JSON format ERROR_VARIABLE error GET "${stdout}" formatVersion)
-  if(error OR NOT format EQUAL 1)
-    message(FATAL_ERROR "stdout is not one versioned JSON result: ${stdout}")
-  endif()
-  string(JSON actual GET "${stdout}" status)
-  if(NOT actual STREQUAL expected)
-    message(FATAL_ERROR "Expected ${expected}, got ${stdout}")
-  endif()
-endfunction()
+include("${CMAKE_CURRENT_LIST_DIR}/cli_helpers.cmake")
 
 invoke(0 --help)
 if(NOT stdout MATCHES "json inspect" OR NOT stderr STREQUAL "")
@@ -402,18 +383,6 @@ invoke(1 feature resolve --root "${JH_HAL_SOURCE}" --context "ctx ż"
   --request "${implying}=0" --source "h ż.h:5" --request ${implying} --source "nowhere"
   --target "t ż" --required-feature "${direct}=1" --required-feature "${implying}" --json)
 status(HAL_ECONFIG)
-function(json_strings variable)
-  string(JSON count LENGTH "${stdout}" ${ARGN})
-  set(items "")
-  if(count GREATER 0)
-    math(EXPR last "${count} - 1")
-    foreach(index RANGE ${last})
-      string(JSON item GET "${stdout}" ${ARGN} ${index})
-      list(APPEND items "${item}")
-    endforeach()
-  endif()
-  set(${variable} "${items}" PARENT_SCOPE)
-endfunction()
 json_strings(requested requestedFeatures)
 json_strings(sources provenance ${implying})
 json_strings(required_sources provenance ${direct})
@@ -443,11 +412,72 @@ status(HAL_ECONFIG)
 if(NOT stderr MATCHES "feature registry: implies cycle")
   message(FATAL_ERROR "feature resolve accepted a registry with an implies cycle: ${stderr}")
 endif()
+# feature lint checks the requests of every header and manifest below the
+# input roots, skipping build trees and tests/hardware unless asked;
+# config manifest checks one manifest as jh-vscode reads it.
+set(lint_root "${JH_WORK}/lint ż")
+file(WRITE "${lint_root}/app/hal_project_config.h"
+  "#define ${implying}\n#define HAL_ENABLE_NOT_REGISTERED\n#define ${implying} 0\n"
+  "#define JH_PROJECT_VARIANTS(X) X(V, \"v\", ${direct}=2)\n")
+file(WRITE "${lint_root}/app/.vscode/jaszczurhal.project.json"
+  "{\"variants\": [], \"cmake\": {\"cache\": {\"JH_VARIANT\": \"x\", \"${implying}\": 1}}}\n")
+file(WRITE "${lint_root}/build-out/hal_project_config.h" "#define HAL_ENABLE_SKIPPED\n")
+file(WRITE "${lint_root}/tests/hardware/hal_project_config.h" "#define HAL_ENABLE_FIXTURE\n")
+set(app_header "${lint_root}/app/hal_project_config.h")
+set(app_manifest "${lint_root}/app/.vscode/jaszczurhal.project.json")
+invoke(1 feature lint --root "${JH_HAL_SOURCE}" --input-root "${lint_root}")
+slashed(lint_text "${stderr}")
+foreach(expected
+    "error: ${app_header}:2: \\[JH-CFG-UNKNOWN\\] unknown feature HAL_ENABLE_NOT_REGISTERED"
+    "error: ${app_header}:3: \\[JH-CFG-VALUE\\] ${implying}=0 is unsupported"
+    "error: ${app_header}:JH_PROJECT_VARIANTS\\(V\\): \\[JH-CFG-VALUE\\] ${direct} has unsupported value '2'"
+    "error: ${app_manifest}: \\[JH-CFG-MANIFEST\\] 'variants' is not a manifest field"
+    "error: ${app_manifest}: cmake.cache.JH_VARIANT: \\[JH-CFG-MANIFEST\\] the manifest does not pick a variant"
+    "error: ${app_manifest}: cmake.cache.${implying}: \\[JH-CFG-MANIFEST\\] project configuration belongs"
+    "linted 2 feature inputs: 6 finding\\(s\\)")
+  if(NOT lint_text MATCHES "${expected}")
+    message(FATAL_ERROR "feature lint lacks ${expected}: ${stderr}")
+  endif()
+endforeach()
+if(stderr MATCHES "SKIPPED|FIXTURE")
+  message(FATAL_ERROR "feature lint read a build tree or tests/hardware: ${stderr}")
+endif()
+invoke(0 feature lint --root "${JH_HAL_SOURCE}" --input-root "${lint_root}" --report-only
+  --include-hardware-fixtures --json)
+status(HAL_OK)
+# Findings hold semicolons, so count them as JSON.
+string(JSON lint_input_count LENGTH "${stdout}" inputs)
+string(JSON lint_finding_count LENGTH "${stdout}" findings)
+if(NOT lint_input_count EQUAL 3 OR NOT lint_finding_count EQUAL 7
+    OR NOT stderr MATCHES "warning: [^\n]*HAL_ENABLE_FIXTURE")
+  message(FATAL_ERROR "feature lint --include-hardware-fixtures --report-only is wrong (${lint_input_count} inputs, ${lint_finding_count} findings): ${stderr}")
+endif()
+invoke(2 feature lint --root "${JH_HAL_SOURCE}" --input-root "${lint_root}/nothing" --json)
+status(HAL_ENOENT)
+if(NOT stderr MATCHES "lint input root does not exist")
+  message(FATAL_ERROR "A missing lint root was not reported: ${stderr}")
+endif()
+file(WRITE "${lint_root}/commented.json" "// a comment\n{\"example\": 1}\n")
+invoke(1 config manifest --file "${lint_root}/commented.json" --label "m ż" --json)
+status(HAL_ECONFIG)
+json_strings(manifest_findings findings)
+if(NOT manifest_findings MATCHES "^m ż: \\[JH-CFG-MANIFEST\\] 'example' is not a manifest field")
+  message(FATAL_ERROR "config manifest did not read the commented manifest: ${stdout}")
+endif()
+invoke(0 config manifest --file "${lint_root}/absent.json" --json)
+status(HAL_OK)
+string(JSON manifest_exists GET "${stdout}" exists)
+if(manifest_exists)
+  message(FATAL_ERROR "A missing manifest was reported as present: ${stdout}")
+endif()
 foreach(arguments "feature;list" "feature;resolve;--request;${implying}"
     "feature;resolve;--root;${JH_HAL_SOURCE};--request;${implying};--source;a;--source;b"
     "feature;resolve;--root;${JH_HAL_SOURCE};--required-feature;${direct}"
     "feature;list;--root;${JH_HAL_SOURCE};--request;${implying}"
-    "feature;list;--root;${JH_HAL_SOURCE};--config-root=")
+    "feature;list;--root;${JH_HAL_SOURCE};--config-root="
+    "feature;lint;--config-root;${JH_HAL_SOURCE}/config"
+    "feature;lint;--root;${JH_HAL_SOURCE};--request;${implying}"
+    "config;manifest" "config;manifest;--file;x;--input-root;y")
   invoke(2 ${arguments} --json)
   status(HAL_EINVAL)
 endforeach()
@@ -484,6 +514,7 @@ foreach(text [=[[]]=] [=[{"requests": {}}]=] [=[{"requests": [], "other": 1}]=]
   invoke(2 feature resolve --root "${JH_HAL_SOURCE}" --file "${JH_WORK}/bad-requests.json" --json)
   status(HAL_ETYPE)
   string(JSON source_name GET "${stdout}" source)
+  slashed(source_name "${source_name}")
   if(NOT source_name STREQUAL "${JH_WORK}/bad-requests.json")
     message(FATAL_ERROR "feature resolve accepted the request file ${text}: ${stdout}")
   endif()

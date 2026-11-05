@@ -1147,8 +1147,19 @@ add_test(NAME test_feature_registry
 add_test(NAME test_feature_registry_cmake
     COMMAND ${CMAKE_COMMAND}
         -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
+        -DJH_TEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/test_feature_registry.cmake
 )
+# GCC and Clang only: the probes read macro dumps (-dM).
+if(NOT MSVC)
+    add_test(NAME test_feature_preprocessor
+        COMMAND ${CMAKE_COMMAND}
+            -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
+            -DJH_CC=${CMAKE_C_COMPILER}
+            -DJH_TEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/test_feature_preprocessor.cmake
+    )
+endif()
 add_test(NAME test_tooling_contract
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_tooling_contract.py

@@ -12,7 +12,9 @@ z nagłówkiem i danymi CMake rejestru funkcji HAL. `scripts/sync_generated.py`,
 a przez niego hook pre-commit i bramka, uruchamiają oba polecenia przez
 opisany niżej launcher. `jh config inspect` odczytuje `hal_project_config.h` projektu tak,
 jak widzi go kompilacja. `jh feature list` i `jh feature resolve` podają
-rejestr funkcji oraz rozwiązane funkcje, o które prosi jedna kompilacja.
+rejestr funkcji oraz rozwiązane funkcje, o które prosi jedna kompilacja;
+`jh feature lint` sprawdza żądania funkcji w nagłówkach i manifestach
+projektów.
 
 Przed konfiguracją przygotuj zależności hosta w wersjach wskazanych przez repozytorium:
 
@@ -325,6 +327,42 @@ fragmentów i dokumentów, i cytują źródło żądania bez zmian, gdzie Python
 przepuszczał jego część przed pierwszym dwukropkiem przez `pathlib.Path`
 (`./h.h` stawało się `h.h`).
 
+`jh feature lint` sprawdza żądania funkcji w projektach według tego samego
+rejestru. Czyta każdy `hal_project_config.h`
+i `.vscode/jaszczurhal.project.json` pod każdym `--input-root` (korzeń będący
+plikiem jest jedynym wejściem; domyślnie `<root>`). Pomija katalogi o nazwach
+`.build`, `.git` i `third_party` oraz zaczynające się od `build`, dowiązania
+do katalogów i `tests/hardware`, chyba że podano `--include-hardware-fixtures`.
+W nagłówku sprawdza każde `#define` nazwy `HAL_ENABLE_*` lub `HAL_DISABLE_*`,
+w dowolnej gałęzi, i każdą definicję `JH_PROJECT_VARIANTS(X)`, zgłaszając to
+samo co `feature resolve` dla pojedynczego żądania. Nagłówek odrzucony przez
+czytnik konfiguracji projektu daje jedno zgłoszenie z komunikatem czytnika.
+Manifest jest czytany tak jak przez `json.loads` i dostaje zgłoszenia
+`config manifest`. Polecenie wypisuje posortowane zgłoszenia jako `error:`
+(albo `warning:` z `--report-only`) oraz `linted <n> feature inputs: ...`.
+Z `--json` wynik (`command: "feature.lint"`) zawiera `config`, `reportOnly`,
+`inputs` i `findings`. Kod wyjścia 1 oznacza zgłoszenia bez `--report-only`;
+2 niepoprawny rejestr, brakujący korzeń wejścia albo manifest, który nie jest
+obiektem JSON.
+
+`jh config manifest --file <ścieżka> [--label <tekst>]` zgłasza konfigurację
+projektu, którą manifest zawiera, choć należy ona do `hal_project_config.h`:
+pola `variants` i `example`, a w `cmake.cache` albo
+`targetProfiles.<target>.cmake.cache` klucz `JH_VARIANT`, klucze
+`EXTRA_HAL_DEFINES`, `JH_EXTRA_DEFINES` i `JH_PROJECT_SOURCES` oraz symbole
+funkcji HAL. Każde zgłoszenie ma `[JH-CFG-MANIFEST]` po etykiecie
+(domyślnie ścieżce). Manifest jest czytany tak jak przez jh-vscode:
+komentarze są dozwolone, a brak pliku nie daje zgłoszeń. `jh-vscode`
+i dispatcher przykładów sprawdzają manifesty przez to polecenie. Z `--json`
+wynik (`command: "config.manifest"`) zawiera `file`, `label`, `exists`
+i `findings`; kod wyjścia 1 oznacza zgłoszenia.
+
+W odróżnieniu od `generate_hal_features.py --lint` lint zgłasza nagłówek
+z niepoprawnym UTF-8 albo błędnym literałem ósemkowym jako zwykłe zgłoszenie,
+gdzie Python kończył się tracebackiem. Plik, który nie jest poprawnym JSON-em,
+zarówno w lincie, jak i w rejestrze, podaje przyczynę z jhbase z linią
+i kolumną, gdzie Python podawał przyczynę ze swojego modułu `json`.
+
 ## Katalog typów i wartości domyślne urządzeń
 
 `jh generate device-defaults --root <checkout>` czyta każdy `*.json`
@@ -394,15 +432,18 @@ instalacji; do uruchomienia nie potrzebuje drzewa źródeł.
 ## Źródła
 
 Moduły C narzędzia kompilują się jako C11. [jh_failure.h](base/jh_failure.h)
-definiuje rekord błędu, który każda funkcja C wypełnia dla wywołującego.
+definiuje rekord błędu, który każda funkcja C wypełnia dla wywołującego, oraz
+wspólne dla modułów spany i listy napisów.
 [jh_json_file.h](json/jh_json_file.h) czyta pliki JSON, ustawienia VS Code
 i dokumenty schematów wczytywane podczas walidacji,
 [jh_python_repr.h](json/jh_python_repr.h) cytuje tekst tak jak `repr()`
 w Pythonie, a [jh_generated_output.h](src/jh_generated_output.h) publikuje
 i sprawdza generowane artefakty. [jh_feature_registry.h](config/jh_feature_registry.h)
-wczytuje rejestr funkcji HAL i renderuje jego artefakty; digesty liczy rdzeń
-SHA-256 HAL z [jh_sha256.h](../../src/hal/security/jh_sha256.h), który
-narzędzie kompiluje samodzielnie. Walidator schematów, czytnik konfiguracji
+wczytuje rejestr funkcji HAL, renderuje jego artefakty i rozwiązuje żądania
+funkcji; digesty liczy rdzeń SHA-256 HAL z
+[jh_sha256.h](../../src/hal/security/jh_sha256.h), który narzędzie kompiluje
+samodzielnie. [jh_feature_lint.h](config/jh_feature_lint.h) wyszukuje wejścia
+lintu funkcji i sprawdza manifesty projektów. Walidator schematów, czytnik konfiguracji
 projektu, katalog typów i `main.cpp` są jeszcze w C++. Korzystają z modułów C
 przez właścicieli zasobów i wyjątki z [cxx/](cxx/), które znikną razem
 z ostatnim wywołującym w C++.

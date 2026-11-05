@@ -1056,6 +1056,19 @@ with tempfile.TemporaryDirectory(prefix="jh-vscode-feature-values-") as temp_dir
         write_feature_value_fixture(project, **fields)
         require_manifest_rejection(run_feature_value_dump(project), location)
     base_invalid = fixture_root / "manifest-0"
+    # The helper reads the manifest file; a parsed manifest would look like a
+    # missing file without findings, so it must be refused, not pass.
+    invalid_manifest = base_invalid / ".vscode" / "jaszczurhal.project.json"
+    require(
+        workflow_runtime.manifest_configuration_findings(invalid_manifest),
+        "the manifest path gave no findings",
+    )
+    try:
+        workflow_runtime.manifest_configuration_findings(load_json(invalid_manifest))
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("a parsed manifest was accepted instead of its path")
     for action in ("build", "upload"):
         args = workflow_runtime.build_parser().parse_args(
             [action, "--project", str(base_invalid)]

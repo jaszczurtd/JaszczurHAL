@@ -835,13 +835,13 @@ Daje importującym go narzędziom Pythona zamkniętą przestrzeń nazw
 `config/features/` w postaci sprawdzonej przez `jh feature list` oraz
 rozwiązania żądań z `jh feature resolve`
 ([README jh](../../../tools/jh/README.pl.md#rejestr-funkcji)); każdy rejestr
-czyta raz na proces, dopóki jego pliki się nie zmienią. Sprawdza też żądania
-modułów. Wersjonowany, produkcyjny
+czyta raz na proces, dopóki jego pliki się nie zmienią. Jego `--lint`
+uruchamia `jh feature lint` i dodaje lint efektywny. Wersjonowany, produkcyjny
 nagłówek C i mechanizm rozwiązywania zależności w CMake generuje
 `jh generate features`
 ([README jh](../../../tools/jh/README.pl.md#rejestr-funkcji)), uruchamiany
 przez `scripts/sync_generated.py`. Wywołanie wymaga `--lint`, który akceptuje
-powtarzalne argumenty `--input-root`. Sprawdza definicje modułów w każdym
+powtarzalne argumenty `--input-root`. `jh feature lint` sprawdza definicje modułów w każdym
 `hal_project_config.h`, we wszystkich gałęziach i wariantach, pod kątem
 nieznanych symboli, nieobsługiwanych wartości `=0` oraz bezpośrednich żądań
 symboli pochodnych. Zgłasza też nagłówki, których mechanizm odczytu

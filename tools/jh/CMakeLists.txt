@@ -60,7 +60,8 @@ target_include_directories(jh_sha256 PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../../s
 # hal/core/hal_layout_check.h, which the header includes, needs jb/abi.h.
 target_link_libraries(jh_sha256 PUBLIC jb::status)
 jh_tool_target(jh_sha256)
-add_library(jh_registry STATIC config/jh_feature_registry.c)
+add_library(jh_registry STATIC config/jh_feature_registry.c
+  config/jh_feature_lint.c)
 target_include_directories(jh_registry PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/config")
 target_link_libraries(jh_registry PUBLIC jh_files PRIVATE jh_sha256 jb::unicode)
 jh_tool_target(jh_registry)
@@ -154,6 +155,13 @@ if(BUILD_TESTING)
     "-DJH_JHBASE=${_jh_cli_jhbase}" "-DJH_PCRE2=${_jh_regex_source}"
     "-DJH_WORK=${CMAKE_CURRENT_BINARY_DIR}/cli-check #% ż" -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_cli.cmake")
   set_tests_properties(jh_cli PROPERTIES TIMEOUT 120)
+  # The feature registry commands on edited copies of the HAL configuration.
+  add_test(NAME jh_features COMMAND "${CMAKE_COMMAND}" "-DJH=$<TARGET_FILE:jh>"
+    "-DJH_HAL_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}/../.."
+    "-DJH_WORK=${CMAKE_CURRENT_BINARY_DIR}/features-check ż"
+    "-DJH_CC=${CMAKE_C_COMPILER}" "-DJH_CC_ID=${CMAKE_C_COMPILER_ID}"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_features.cmake")
+  set_tests_properties(jh_features PROPERTIES TIMEOUT 300)
   # The launcher bootstrap: builds this tool from an exported tree with the
   # checkouts of this checkout, so it runs for several minutes.
   add_test(NAME jh_bootstrap COMMAND "${CMAKE_COMMAND}"

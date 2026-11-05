@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """The HAL feature registry for its Python importers, read from `jh feature
-list` and resolved by `jh feature resolve`, and the lint of feature requests;
-`jh generate features` writes and checks the generated artifacts."""
+list` and resolved by `jh feature resolve`; --lint runs `jh feature lint` and
+adds the effective lint. `jh generate features` writes and checks the
+generated artifacts."""
 
 from __future__ import annotations
 
@@ -12,30 +13,22 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import re
 import sys
 import tempfile
 from typing import Any, Iterable
 
-from codegen_support import atomic_write_text, load_json_object
+from codegen_support import atomic_write_text
 import device_tree_project
 import project_config
 
 
 SCHEMA_VERSION = 1
-SYMBOL_PATTERN = re.compile(r"^HAL_(?:ENABLE|DISABLE)_[A-Z0-9_]+$")
-HEADER_FEATURE_PREFIX = re.compile(r"HAL_(?:ENABLE|DISABLE)_[A-Z0-9_]")
-IGNORED_INPUT_PARTS = {".build", ".git", "third_party"}
-# Device-test firmware is never read by the default checks (AGENTS.md); the
-# opt-in hardware-fixture checks lint it with --include-hardware-fixtures.
-HARDWARE_FIXTURE_DIR = ("tests", "hardware")
 
 
 class RegistryError(ValueError):
     """Feature registry validation failure with actionable context."""
 
 
-load_json = partial(load_json_object, error_type=RegistryError)
 atomic_write = partial(
     atomic_write_text, error_type=RegistryError, mode=0o644
 )
@@ -181,141 +174,43 @@ def load_registry(config_root: Path) -> FeatureModel:
     return model
 
 
-def is_hardware_fixture_dir(path: Path) -> bool:
-    return tuple(path.parts[-2:]) == HARDWARE_FIXTURE_DIR
-
-
-def iter_lint_inputs(root: Path, include_hardware: bool = False) -> list[Path]:
-    if root.is_file():
-        return [root]
-    if not root.is_dir():
-        raise RegistryError(f"{root}: lint input root does not exist")
-    inputs: list[Path] = []
-    for directory, directory_names, file_names in os.walk(root):
-        directory_path = Path(directory)
-        directory_names[:] = sorted(
-            name
-            for name in directory_names
-            if name not in IGNORED_INPUT_PARTS
-            and not name.startswith("build")
-            and (include_hardware
-                 or not is_hardware_fixture_dir(directory_path / name))
-        )
-        for name in sorted(file_names):
-            if name in {"hal_project_config.h", "jaszczurhal.project.json"}:
-                inputs.append(directory_path / name)
-    return sorted(inputs)
-
-
-def validate_requested_symbol(
-    path: Path,
-    location: str,
-    symbol: str,
-    value: str | None,
-    model: FeatureModel,
-) -> list[str]:
-    findings: list[str] = []
-    prefix = f"{path}:{location}"
-    if symbol not in model.features:
-        findings.append(f"{prefix}: [JH-CFG-UNKNOWN] unknown feature {symbol}")
-        return findings
-    if value not in {None, "1"}:
-        if value == "0":
-            findings.append(
-                f"{prefix}: [JH-CFG-VALUE] {symbol}=0 is unsupported; "
-                "omit the symbol to disable it"
-            )
-        else:
-            findings.append(
-                f"{prefix}: [JH-CFG-VALUE] {symbol} has unsupported value {value!r}"
-            )
-    if model.features[symbol].kind == "derived":
-        findings.append(
-            f"{prefix}: [JH-CFG-DERIVED] {symbol} cannot be requested directly"
-        )
-    return findings
-
-
-def lint_header(path: Path, model: FeatureModel) -> list[str]:
-    """Check every feature the header can request, in any branch and in any
-    variant, and that the project configuration reader accepts the header."""
-    try:
-        config = project_config.read_project_config(path)
-    except project_config.ProjectConfigError as error:
-        return [str(error)]
-    findings: list[str] = []
-    # Every #define of a HAL feature in the header, in any branch.
-    for item in config.file_directives(path):
-        if item.kind != "define" or not HEADER_FEATURE_PREFIX.match(item.name):
-            continue
-        findings.extend(
-            validate_requested_symbol(
-                path,
-                str(item.line),
-                item.name,
-                item.text if item.text else None,
-                model,
-            )
-        )
-    for variant in config.variants:
-        for definition in variant.definitions:
-            symbol, separator, value = definition.partition("=")
-            if SYMBOL_PATTERN.fullmatch(symbol):
-                findings.extend(
-                    validate_requested_symbol(
-                        path,
-                        f"{project_config.VARIANTS_MACRO}({variant.id})",
-                        symbol,
-                        value if separator else None,
-                        model,
-                    )
-                )
-    return findings
-
-
-def lint_manifest(path: Path, model: FeatureModel) -> list[str]:
-    """A manifest holds no project configuration; report what it carries."""
-    del model
-    return load_workflow_runtime().manifest_configuration_findings(
-        load_json(path), str(path)
-    )
-
-
 def lint_inputs(
     roots: list[Path],
-    model: FeatureModel,
+    config_root: str,
     report_only: bool,
     include_hardware: bool = False,
-) -> bool:
-    files: set[Path] = set()
-    for root in roots:
-        files.update(iter_lint_inputs(root.resolve(), include_hardware))
-    findings: list[str] = []
-    for path in sorted(files):
-        if path.name == "hal_project_config.h":
-            findings.extend(lint_header(path, model))
-        else:
-            findings.extend(lint_manifest(path, model))
-    for finding in sorted(findings):
-        label = "warning" if report_only else "error"
+) -> dict[str, Any]:
+    """`jh feature lint` of the roots: the inputs it read and its findings.
+    Device-test firmware (tests/hardware) is left out unless
+    include_hardware, for the opt-in hardware-fixture checks (AGENTS.md)."""
+    arguments = [
+        "feature",
+        "lint",
+        f"--config-root={config_root}",
+        *(f"--input-root={root}" for root in roots),
+    ]
+    if report_only:
+        arguments.append("--report-only")
+    if include_hardware:
+        arguments.append("--include-hardware-fixtures")
+    return _jh_result(arguments, (0, 1))
+
+
+def report(findings: list[str], count: int, noun: str, report_only: bool) -> bool:
+    """Print findings the way `jh feature lint` does; whether the lint passes."""
+    label = "warning" if report_only else "error"
+    for finding in findings:
         print(f"{label}: {finding}", file=sys.stderr)
     if findings:
-        print(
-            f"linted {len(files)} feature inputs: {len(findings)} finding(s)",
-            file=sys.stderr,
-        )
+        print(f"linted {count} {noun}: {len(findings)} finding(s)", file=sys.stderr)
     else:
-        print(f"linted {len(files)} feature inputs: no findings")
+        print(f"linted {count} {noun}: no findings")
     return report_only or not findings
 
 
-def effective_inputs(
-    roots: list[Path], include_hardware: bool = False
-) -> tuple[list[Path], list[Path]]:
-    files: set[Path] = set()
-    for root in roots:
-        files.update(iter_lint_inputs(root.resolve(), include_hardware))
-
+def effective_inputs(files: list[Path]) -> tuple[list[Path], list[Path]]:
+    """The projects (a .vscode/jaszczurhal.project.json) and the headers
+    outside them among the lint inputs."""
     projects: set[Path] = set()
     for path in files:
         if (
@@ -507,15 +402,22 @@ def lint_effective_inputs(
     report_only: bool,
     resolution_output: Path | None,
     include_hardware: bool = False,
+    inputs: list[Path] | None = None,
 ) -> bool:
     """Resolve every build each project configures, the way jh-vscode and
     CMake do: targets and variants from hal_project_config.h, boards from the
-    manifest."""
+    manifest. inputs are the files `jh feature lint` read below roots; without
+    them the lint runs first."""
     workflow = load_workflow_runtime()
     targets = project_config.load_targets()
     findings: list[str] = []
     records: list[dict[str, Any]] = []
-    projects, standalone_headers = effective_inputs(roots, include_hardware)
+    if inputs is None:
+        inputs = [
+            Path(item)
+            for item in lint_inputs(roots, model.config_root, True, include_hardware)["inputs"]
+        ]
+    projects, standalone_headers = effective_inputs(inputs)
 
     def record(
         project_display: str,
@@ -601,20 +503,10 @@ def lint_effective_inputs(
     )
     if resolution_output is not None:
         write_resolution_report(resolution_output.resolve(), model, records)
-    for finding in sorted(set(findings)):
-        label = "warning" if report_only else "error"
-        print(f"{label}: {finding}", file=sys.stderr)
-    if findings:
-        print(
-            f"linted {len(records)} effective feature configurations: "
-            f"{len(set(findings))} finding(s)",
-            file=sys.stderr,
-        )
-    else:
-        print(
-            f"linted {len(records)} effective feature configurations: no findings"
-        )
-    return report_only or not findings
+    return report(
+        sorted(set(findings)), len(records), "effective feature configurations",
+        report_only,
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -645,19 +537,24 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     try:
-        model = load_registry(args.config_root.resolve())
+        config_root = args.config_root.resolve()
         input_roots = args.input_root or [Path(__file__).resolve().parents[1]]
-        raw_valid = lint_inputs(
-            input_roots, model, args.report_only, args.include_hardware_fixtures
+        raw = lint_inputs(
+            input_roots, str(config_root), args.report_only,
+            args.include_hardware_fixtures,
+        )
+        raw_valid = report(
+            raw["findings"], len(raw["inputs"]), "feature inputs", args.report_only
         )
         effective_valid = True
         if args.effective:
             effective_valid = lint_effective_inputs(
                 input_roots,
-                model,
+                load_registry(config_root),
                 args.report_only,
                 args.resolution_output,
                 args.include_hardware_fixtures,
+                [Path(item) for item in raw["inputs"]],
             )
         return 0 if raw_valid and effective_valid else 1
     except RegistryError as error:

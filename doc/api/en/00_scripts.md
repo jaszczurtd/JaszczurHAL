@@ -780,12 +780,12 @@ Gives the Python tools that import it the closed `HAL_ENABLE_*` /
 `config/features/` as `jh feature list` validates them, and the resolution of
 feature requests from `jh feature resolve`
 ([jh README](../../../tools/jh/README.md#feature-registry)); each registry is
-read once per process until its files change. It also lints feature
-requests. The tracked production C
+read once per process until its files change. Its `--lint` runs
+`jh feature lint` and adds the effective lint. The tracked production C
 header and CMake resolver come from `jh generate features`
 ([jh README](../../../tools/jh/README.md#feature-registry)), which
 `scripts/sync_generated.py` runs. The command line requires `--lint`, which
-accepts repeatable `--input-root` arguments. It checks the feature definitions of every
+accepts repeatable `--input-root` arguments. `jh feature lint` checks the feature definitions of every
 `hal_project_config.h`, in every branch and every variant, for unknown
 symbols, unsupported `=0` values, and direct requests for derived symbols, and
 reports headers the project configuration reader cannot evaluate. A project

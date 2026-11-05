@@ -11,6 +11,7 @@
  * and memory exhaustion 4. C11.
  */
 #include "jh_failure.h"
+#include <jb/json_tree.h>
 #include <jb/string.h>
 #include <jb/vector.h>
 #include <stdbool.h>
@@ -38,6 +39,12 @@ typedef struct {
   char digest[65];        /**< SHA-256 of the normalized registry, hex. */
   char schema_digest[65]; /**< SHA-256 of the schema document, hex. */
 } jh_feature_registry_t;
+
+/** Whether text is a feature symbol: HAL_ENABLE_ or HAL_DISABLE_ followed by
+ * one or more of A-Z, 0-9 and _. With prefix_only, whether text starts with
+ * a prefix and one such character, as the #define the feature lint checks.
+ */
+bool jh_feature_symbol(jb_json_span_t text, bool prefix_only);
 
 /** Start an empty registry; registry must be zero or destroyed. */
 void jh_feature_registry_init(jh_feature_registry_t *registry);
@@ -67,6 +74,17 @@ typedef struct {
   jb_json_span_t symbol, value, source;
   bool has_value;
 } jh_feature_request_t;
+
+/** Append to findings (jb_string_t elements) what one request breaks: an
+ * unknown symbol, a value other than none or 1, a derived symbol, each
+ * message starting with the source (followed by :$ when it holds no colon).
+ * valid, when not NULL, reports whether the request would take part in a
+ * resolution. Fails only for missing arguments and memory (exit code 4).
+ */
+hal_status_t jh_feature_check_request(const jh_feature_registry_t *registry,
+                                      const jh_feature_request_t *request,
+                                      jb_vector_t *findings, bool *valid,
+                                      jh_failure_t *failure);
 
 /** The target whose required features a resolution adds: its id and the
  * entries of its requiredFeatures, each SYMBOL or SYMBOL=1.
@@ -121,6 +139,17 @@ hal_status_t jh_feature_resolve(const jh_feature_registry_t *registry,
                                 const jh_feature_target_t *target,
                                 jh_feature_resolution_t *resolution,
                                 jh_failure_t *failure);
+
+/** Read path, at most limit bytes, as json.loads reads it, with an object at
+ * its root, the way the registry fragments and the manifests the feature
+ * lint checks are read: "<path>: invalid JSON: <reason>" or "<path>: $: got
+ * <value>; expected an object" with exit code 2. *tree receives the tree;
+ * destroy it with jb_json_tree_destroy whenever it is not NULL.
+ */
+hal_status_t jh_feature_load_object(const char *path, size_t limit,
+                                    jb_json_tree_t **tree,
+                                    jb_json_tree_view_t *root,
+                                    jh_failure_t *failure);
 
 /** Replace out with the generated header of the feature graph. */
 hal_status_t jh_feature_registry_header(const jh_feature_registry_t *registry,

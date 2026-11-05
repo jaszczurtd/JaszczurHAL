@@ -1,4 +1,5 @@
 #include "jh_failure.h"
+#include <stdlib.h>
 #include <string.h>
 
 void jh_failure_init(jh_failure_t *failure) {
@@ -41,6 +42,8 @@ hal_status_t jh_fail_text(jh_failure_t *failure, hal_status_t status,
 }
 
 hal_status_t jh_fail_storage(jh_failure_t *failure, hal_status_t status) {
+  if (status == HAL_OK)
+    return HAL_OK;
   jb_string_clear(&failure->message);
   failure->status = status;
   failure->exit_code = 4;
@@ -67,4 +70,66 @@ jb_json_span_t jh_span(const char *text) {
 bool jh_span_equal(jb_json_span_t a, jb_json_span_t b) {
   return a.length == b.length &&
          (a.length == 0 || memcmp(a.data, b.data, a.length) == 0);
+}
+
+jb_json_span_t jh_string_span(const jb_string_t *text) {
+  const jb_json_span_t span = {jb_string_data(text), jb_string_size(text)};
+  return span;
+}
+
+int jh_span_compare(jb_json_span_t a, jb_json_span_t b) {
+  const size_t shorter = a.length < b.length ? a.length : b.length;
+  const int order = shorter == 0 ? 0 : memcmp(a.data, b.data, shorter);
+  if (order != 0)
+    return order;
+  return a.length < b.length ? -1 : a.length > b.length ? 1 : 0;
+}
+
+hal_status_t jh_list_init(jb_vector_t *list) {
+  return jb_vector_init(list, sizeof(jb_string_t), jb_heap_allocator());
+}
+
+const jb_string_t *jh_list_at(const jb_vector_t *list, size_t index) {
+  return jb_vector_const_at(list, index);
+}
+
+hal_status_t jh_list_push(jb_vector_t *list, jb_json_span_t text) {
+  return jh_list_push_parts(list, &text, 1);
+}
+
+hal_status_t jh_list_push_parts(jb_vector_t *list, const jb_json_span_t *parts,
+                                size_t count) {
+  jb_string_t item = {0};
+  hal_status_t status = jb_string_init(&item, jb_heap_allocator());
+  for (size_t i = 0; status == HAL_OK && i < count; ++i)
+    if (parts[i].length != 0)
+      status = jb_string_append(&item, parts[i].data, parts[i].length);
+  if (status == HAL_OK)
+    status = jb_vector_append(list, &item, 1);
+  if (status != HAL_OK)
+    jb_string_destroy(&item);
+  return status;
+}
+
+static int compare_strings(const void *left, const void *right) {
+  return jh_span_compare(jh_string_span(left), jh_string_span(right));
+}
+
+void jh_list_sort(jb_vector_t *list) {
+  if (jb_vector_size(list) > 1)
+    qsort(jb_vector_data(list), jb_vector_size(list), sizeof(jb_string_t),
+          compare_strings);
+}
+
+bool jh_list_contains(const jb_vector_t *list, jb_json_span_t text) {
+  for (size_t i = 0; i < jb_vector_size(list); ++i)
+    if (jh_span_compare(jh_string_span(jh_list_at(list, i)), text) == 0)
+      return true;
+  return false;
+}
+
+void jh_list_destroy(jb_vector_t *list) {
+  for (size_t i = 0; i < jb_vector_size(list); ++i)
+    jb_string_destroy(jb_vector_at(list, i));
+  jb_vector_destroy(list);
 }

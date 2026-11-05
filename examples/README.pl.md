@@ -159,7 +159,7 @@ Przygotuj je przez `scripts/ensure_ccache.sh` lub updater komponentów. Bramka
 stosuje wspólny cache do wszystkich buildów CMake: testów hosta i sanitizerów,
 firmware, bibliotek, przykładów oraz buildów uruchamianych wewnątrz testów.
 Nadal wykonuje konfigurację od zera, linkowanie i testy. Sondy samego
-preprocessora (`-E`), w tym używane przez `test_feature_registry`, nie są cachowane.
+preprocessora (`-E`), w tym używane przez testy rejestru funkcji, nie są cachowane.
 
 Domyślny cache znajduje się w `${XDG_CACHE_HOME:-$HOME/.cache}/jaszczurhal/ccache`
 na Linuksie oraz `%LOCALAPPDATA%/jaszczurhal/ccache` na Windows.

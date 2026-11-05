@@ -97,6 +97,12 @@ hal_status_t jh_json_read_value(jh_json_location_t *where, const char *path,
                                 size_t limit, jb_json_tree_t **out,
                                 jh_failure_t *failure);
 
+/** The type of a tree value, JB_JSON_NULL for a view jhbase rejects. */
+jb_json_type_t jh_json_type(jb_json_tree_view_t value);
+/** Whether object is an object with a member key, borrowed into out. */
+bool jh_json_member(jb_json_tree_view_t object, const char *key,
+                    jb_json_tree_view_t *out);
+
 /** One validation failure as the CLI reports it: instance Pointer, schema
  * identity, schema Pointer of the rule, reason code and message.
  */

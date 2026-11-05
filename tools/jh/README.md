@@ -12,7 +12,8 @@ header and CMake data of the HAL feature registry. `scripts/sync_generated.py`,
 and through it the pre-commit hook and the gate, run both commands through the
 launcher described below. `jh config inspect` evaluates a project's `hal_project_config.h` as the
 build reads it. `jh feature list` and `jh feature resolve` give the feature
-registry and the features one build requests, resolved.
+registry and the features one build requests, resolved; `jh feature lint`
+checks the feature requests of project headers and manifests.
 
 Prepare the pinned host dependencies explicitly before configuring:
 
@@ -313,6 +314,41 @@ features in name order, where Python kept fragment and document order, and
 quote a request source as given, where Python passed its part before the first
 colon through `pathlib.Path` (`./h.h` became `h.h`).
 
+`jh feature lint` checks the feature requests of projects against the same
+registry. It reads every `hal_project_config.h` and
+`.vscode/jaszczurhal.project.json` below each `--input-root` (a file root is
+its own input; default `<root>`), skipping directories named `.build`, `.git`
+or `third_party` or starting with `build`, links to directories, and
+`tests/hardware` unless `--include-hardware-fixtures` is given. For a header
+it checks every `#define` of a `HAL_ENABLE_*` or `HAL_DISABLE_*` name, in any
+branch, and every definition of `JH_PROJECT_VARIANTS(X)`, with the request
+findings of `feature resolve`; a header the project configuration reader
+rejects is one finding with the reader's message. A manifest is read like
+`json.loads` reads it and gets the findings of `config manifest`. The command
+prints the findings sorted, as `error:` (or `warning:` with `--report-only`),
+and `linted <n> feature inputs: ...`. With `--json` the result
+(`command: "feature.lint"`) has `config`, `reportOnly`, `inputs` and
+`findings`. Exit code 1 means findings without `--report-only`; 2 an invalid
+registry, a missing input root or a manifest that is not a JSON object.
+
+`jh config manifest --file <path> [--label <text>]` reports the project
+configuration a manifest carries although it belongs in
+`hal_project_config.h`: the fields `variants` and `example`, and in
+`cmake.cache` or `targetProfiles.<target>.cmake.cache` the key `JH_VARIANT`,
+the keys `EXTRA_HAL_DEFINES`, `JH_EXTRA_DEFINES` and `JH_PROJECT_SOURCES` and
+HAL feature symbols, each finding with `[JH-CFG-MANIFEST]` after the label
+(default: the path). It reads the manifest as jh-vscode does: comments are
+allowed and a missing file has no findings. `jh-vscode` and the examples
+dispatcher check manifests through it. With `--json` the result
+(`command: "config.manifest"`) has `file`, `label`, `exists` and `findings`;
+exit code 1 means findings.
+
+Unlike `generate_hal_features.py --lint`, the lint reports a header with
+invalid UTF-8 or an invalid octal literal as a finding where Python stopped
+with a traceback. A file that is not valid JSON, for the lint as for the
+registry, names the jhbase reason with its line and column where Python gave
+the reason of its `json` module.
+
 ## Type catalogue and device defaults
 
 `jh generate device-defaults --root <checkout>` reads every `*.json` of
@@ -382,15 +418,18 @@ installation prefix; it does not require the source tree to run.
 ## Sources
 
 The C modules of the tool build as C11. [jh_failure.h](base/jh_failure.h)
-defines the failure record each C function fills for its caller.
+defines the failure record each C function fills for its caller, and the
+spans and lists of owned strings the modules share.
 [jh_json_file.h](json/jh_json_file.h) reads JSON files, VS Code settings and
 the schema documents a validation loads, [jh_python_repr.h](json/jh_python_repr.h)
 quotes text as Python's `repr()` does, and
 [jh_generated_output.h](src/jh_generated_output.h) publishes and checks
 generated artifacts. [jh_feature_registry.h](config/jh_feature_registry.h)
-loads the HAL feature registry and renders its artifacts; its digests use the
-SHA-256 core of HAL in [jh_sha256.h](../../src/hal/security/jh_sha256.h),
-which the tool compiles on its own. The schema validator, the project configuration reader,
+loads the HAL feature registry, renders its artifacts and resolves feature
+requests; its digests use the SHA-256 core of HAL in
+[jh_sha256.h](../../src/hal/security/jh_sha256.h), which the tool compiles on
+its own. [jh_feature_lint.h](config/jh_feature_lint.h) finds the inputs of the
+feature lint and checks project manifests. The schema validator, the project configuration reader,
 the type catalogue and `main.cpp` are still C++. They call the C modules
 through the owners and exceptions in [cxx/](cxx/), which go away with the last
 C++ caller.

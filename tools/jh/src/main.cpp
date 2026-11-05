@@ -1,3 +1,4 @@
+#include "../config/jh_feature_lint.h"
 #include "../config/jh_project_config.h"
 #include "../hardware/jh_device_defaults.h"
 #include "../hardware/jh_type_catalogue.h"
@@ -60,6 +61,10 @@ enum option_id {
   request,
   source,
   required_feature,
+  input_root,
+  report_only,
+  include_hardware,
+  label,
   machine,
   json_version,
   help,
@@ -104,6 +109,13 @@ constexpr option_spec options[] = {
      "Source of the request at the same position; repeatable"},
     {"required-feature", "<SYMBOL[=1]>",
      "Feature the target requires; repeatable, needs --target"},
+    {"input-root", "<path>",
+     "File or directory the feature lint reads; repeatable (default: <root>)"},
+    {"report-only", nullptr, "Report lint findings as warnings, exit 0"},
+    {"include-hardware-fixtures", nullptr,
+     "Also lint tests/hardware (hardware-fixture checks only)"},
+    {"label", "<text>",
+     "Name of the manifest in findings (config manifest; default: path)"},
     {"json", nullptr, "Write a versioned JSON result on stdout"},
     {"json-version", "<major>",
      "Require a supported JSON result major version (1)"},
@@ -121,7 +133,9 @@ enum command_id {
   config_command,
   directives_command,
   feature_list_command,
-  feature_resolve_command
+  feature_resolve_command,
+  feature_lint_command,
+  manifest_command
 };
 struct command_spec {
   const char *first, *second, *name;
@@ -153,6 +167,11 @@ const command_spec commands[] = {
      "feature.resolve",
      {root, config_root, context_label, target, request, source,
       required_feature, file}},
+    {"feature",
+     "lint",
+     "feature.lint",
+     {root, config_root, input_root, report_only, include_hardware}},
+    {"config", "manifest", "config.manifest", {file, label}},
 };
 
 #ifdef _WIN32
@@ -227,8 +246,8 @@ arguments parse_arguments(const std::vector<std::string> &argv) {
       ++id;
     if (id == option_count)
       throw failure{HAL_EINVAL, 2, "unknown option: " + text, {}, {}, {}};
-    const bool repeatable =
-        id == define || id == request || id == source || id == required_feature;
+    const bool repeatable = id == define || id == request || id == source ||
+                            id == required_feature || id == input_root;
     if (result.present[id] && !repeatable)
       throw failure{HAL_EINVAL, 2,  "option specified more than once: " + name,
                     {},         {}, {}};
@@ -273,12 +292,16 @@ std::string help_text() {
       "       jh feature resolve (--root <path> | --config-root <path>)"
       " [--request <SYMBOL[=VALUE]> [--source <text>]]... [options]\n"
       "       jh feature resolve (--root <path> | --config-root <path>)"
-      " --file <path> [options]\n\n"
+      " --file <path> [options]\n"
+      "       jh feature lint (--root <path> | --config-root <path>)"
+      " [--input-root <path>]... [options]\n"
+      "       jh config manifest --file <path> [--label <text>]\n\n"
       "Read JSON, select a value and optionally compare or write it,\n"
       "generate the C defaults of the HAL component types or the feature\n"
       "registry artifacts, evaluate a project's hal_project_config.h as\n"
-      "the build reads it, or list the feature registry and resolve the\n"
-      "features one build requests.\n";
+      "the build reads it, or list the feature registry, resolve the\n"
+      "features one build requests and lint the feature requests of project\n"
+      "headers and manifests.\n";
   for (const auto &option : options) {
     text += "  --";
     text += option.name;
@@ -831,22 +854,16 @@ void request_file(context &ctx, const std::string &path, size_t limit,
   failed.check(
       jh_json_read_value(&ctx, path.c_str(), limit, &raw, &failed.value));
   const jh::tree_owner tree(raw);
-  const auto type_of = [](jb_json_tree_view_t value) {
-    jb_json_type_t type = JB_JSON_NULL;
-    (void)jb_json_tree_type(value, &type);
-    return type;
-  };
   // key of an object with exactly members members.
-  const auto member = [&](jb_json_tree_view_t object, const char *key,
-                          size_t members, jb_json_tree_view_t *out) {
+  const auto member = [](jb_json_tree_view_t object, const char *key,
+                         size_t members, jb_json_tree_view_t *out) {
     size_t count = 0;
-    return type_of(object) == JB_JSON_OBJECT &&
-           jb_json_tree_count(object, &count) == HAL_OK && count == members &&
-           jb_json_tree_find(object, span(key), out) == HAL_OK;
+    return jh_json_member(object, key, out) &&
+           jb_json_tree_count(object, &count) == HAL_OK && count == members;
   };
-  const auto text = [&](jb_json_tree_view_t value, std::string &out) {
+  const auto text = [](jb_json_tree_view_t value, std::string &out) {
     jb_json_span_t bytes;
-    if (type_of(value) != JB_JSON_STRING ||
+    if (jh_json_type(value) != JB_JSON_STRING ||
         jb_json_tree_text(value, &bytes) != HAL_OK)
       return false;
     out.assign(bytes.data, bytes.length);
@@ -856,7 +873,7 @@ void request_file(context &ctx, const std::string &path, size_t limit,
   size_t count = 0;
   if (jb_json_tree_root(tree.get(), &root_value) != HAL_OK ||
       !member(root_value, "requests", 1, &list) ||
-      type_of(list) != JB_JSON_ARRAY ||
+      jh_json_type(list) != JB_JSON_ARRAY ||
       jb_json_tree_count(list, &count) != HAL_OK)
     throw failure{HAL_ETYPE, 2,  "request file needs only a requests array",
                   {},        {}, {}};
@@ -980,6 +997,159 @@ int feature_resolve(context &ctx, const std::string &base) {
   result.string_list("findings", resolution.findings);
   stdout_bytes(result.finish());
   return findings == 0 ? 0 : 1;
+}
+
+/* lint_header: what every #define of a HAL feature in the header, in any
+ * branch, and every variant definition breaks; a header the reader rejects
+ * is one finding. */
+void lint_header(const jh_feature_registry_t &registry, const std::string &path,
+                 jb_vector_t *findings) {
+  jh::config::project_config config;
+  try {
+    config = jh::config::read_project_config(path, {}, {});
+  } catch (const failure &error) {
+    require(jh_list_push(findings, span(error.message)), 4,
+            "cannot store a lint finding");
+    return;
+  }
+  const std::string &header = config.files.empty() ? path : config.files[0];
+  const auto check = [&](std::string_view symbol, bool has_value,
+                         std::string_view value, const std::string &source) {
+    jh_feature_request_t item{};
+    item.symbol = span(symbol);
+    item.has_value = has_value;
+    item.value = span(value);
+    item.source = span(source);
+    jh::failure_record failed;
+    failed.check(jh_feature_check_request(&registry, &item, findings, nullptr,
+                                          &failed.value));
+  };
+  for (const auto &item : config.directives)
+    if (!item.undef && item.file == header &&
+        jh_feature_symbol(span(item.name), true))
+      check(item.name, !item.text.empty(), item.text,
+            path + ':' + std::to_string(item.line));
+  for (const auto &item : config.variants)
+    for (const auto &definition : item.definitions) {
+      const std::string_view text = definition;
+      const size_t equal = text.find('=');
+      const std::string_view symbol = text.substr(0, equal);
+      if (jh_feature_symbol(span(symbol), false))
+        check(symbol, equal != std::string_view::npos,
+              equal == std::string_view::npos ? std::string_view()
+                                              : text.substr(equal + 1),
+              path + ":JH_PROJECT_VARIANTS(" + item.id + ")");
+    }
+}
+
+/* generate_hal_features.py --lint: the feature requests of every header and
+ * manifest below the input roots; findings fail unless --report-only. */
+int feature_lint(context &ctx, const std::string &base) {
+  const auto &args = ctx.args;
+  constexpr size_t limit = 16 * 1024 * 1024;
+  const auto config_dir = feature_config(args, base, "feature lint");
+  std::vector<std::string> roots;
+  for (const auto &item : args.lists[input_root])
+    roots.push_back(jh::stl::absolute_path(item, base));
+  if (roots.empty()) {
+    require_value(args, root, "feature lint requires --input-root or --root");
+    roots.push_back(checkout_root(args, base));
+  }
+  jh::feature_registry registry;
+  jh::failure_record failed;
+  failed.check(jh_feature_registry_load(&registry, config_dir.c_str(), limit,
+                                        &failed.value));
+  jh::string_list found;
+  for (const auto &item : roots)
+    failed.check(jh_feature_lint_inputs(item.c_str(),
+                                        args.present[include_hardware],
+                                        &found.value, &failed.value));
+  jh_list_sort(&found.value);
+  std::vector<std::string> inputs;
+  for (size_t i = 0; i < found.size(); ++i)
+    if (inputs.empty() || inputs.back() != found[i])
+      inputs.emplace_back(found[i]);
+  jh::string_list findings;
+  for (const auto &path : inputs) {
+    const size_t slash = path.find_last_of("/\\");
+    if (path.compare(slash + 1, std::string::npos, "hal_project_config.h") ==
+        0) {
+      lint_header(registry, path, &findings.value);
+      continue;
+    }
+    jb_json_tree_t *tree = nullptr;
+    jb_json_tree_view_t manifest{};
+    const hal_status_t loaded = jh_feature_load_object(
+        path.c_str(), limit, &tree, &manifest, &failed.value);
+    const jh::tree_owner owner(tree);
+    failed.check(loaded);
+    failed.check(jh_manifest_findings(manifest, span(path), &findings.value,
+                                      &failed.value));
+  }
+  jh_list_sort(&findings.value);
+  const bool report_only_mode = args.present[report_only];
+  const std::string label = report_only_mode ? "warning: " : "error: ";
+  std::string report;
+  for (size_t i = 0; i < findings.size(); ++i)
+    report += label + std::string(findings[i]) + '\n';
+  const std::string summary =
+      "linted " + std::to_string(inputs.size()) + " feature inputs: " +
+      (findings.size() == 0 ? std::string("no findings")
+                            : std::to_string(findings.size()) + " finding(s)") +
+      '\n';
+  if (findings.size() != 0 && !ctx.json)
+    report += summary;
+  (void)std::fwrite(report.data(), 1, report.size(), stderr);
+  const bool passed = report_only_mode || findings.size() == 0;
+  if (!ctx.json) {
+    if (findings.size() == 0)
+      stdout_bytes(summary);
+    return passed ? 0 : 1;
+  }
+  size_t bytes = config_dir.size() + report.size() + 1024;
+  for (const auto &path : inputs)
+    bytes += path.size() + 8;
+  result_writer result(bytes);
+  result.string("command", "feature.lint");
+  result.string("status", passed ? "HAL_OK" : "HAL_ECONFIG");
+  result.string("config", config_dir);
+  result.boolean("reportOnly", report_only_mode);
+  result.strings("inputs", inputs);
+  result.string_list("findings", findings.value);
+  stdout_bytes(result.finish());
+  return passed ? 0 : 1;
+}
+
+/* The project configuration a manifest carries although it belongs in
+ * hal_project_config.h, read as jh-vscode reads a manifest. */
+int config_manifest(context &ctx, const std::string &base) {
+  const auto &args = ctx.args;
+  require_value(args, file, "config manifest requires --file");
+  const auto path = jh::stl::absolute_path(args.values[file], base);
+  const std::string name = args.present[label] ? args.values[label] : path;
+  const auto manifest = jh::read_settings(ctx, path.c_str(), 16 * 1024 * 1024);
+  jb_json_tree_view_t document{};
+  require(jb_json_tree_root(manifest.tree.get(), &document), 4,
+          "cannot read the manifest");
+  jh::string_list findings;
+  jh::failure_record failed;
+  failed.check(jh_manifest_findings(document, span(name), &findings.value,
+                                    &failed.value));
+  std::string report;
+  for (size_t i = 0; i < findings.size(); ++i)
+    report += std::string(findings[i]) + '\n';
+  (void)std::fwrite(report.data(), 1, report.size(), stderr);
+  if (ctx.json) {
+    result_writer result(path.size() + name.size() + report.size() + 1024);
+    result.string("command", "config.manifest");
+    result.string("status", findings.size() == 0 ? "HAL_OK" : "HAL_ECONFIG");
+    result.string("file", path);
+    result.string("label", name);
+    result.boolean("exists", manifest.exists);
+    result.string_list("findings", findings.value);
+    stdout_bytes(result.finish());
+  }
+  return findings.size() == 0 ? 0 : 1;
 }
 
 hal_status_t stream_bytes(FILE *stream, const char *data, size_t length) {
@@ -1404,6 +1574,10 @@ int run(const std::vector<std::string> &argv) {
       return feature_list(ctx, base);
     if (ctx.command == &commands[feature_resolve_command])
       return feature_resolve(ctx, base);
+    if (ctx.command == &commands[feature_lint_command])
+      return feature_lint(ctx, base);
+    if (ctx.command == &commands[manifest_command])
+      return config_manifest(ctx, base);
     return inspect(ctx, base);
   } catch (const failure &error) {
     if (ctx.located) {

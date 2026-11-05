@@ -223,7 +223,7 @@ def example_vscode_files(example_dir: Path) -> dict[str, Any]:
     manifest itself is written by hand."""
     manifest = read_manifest(example_dir)
     findings = workflow().manifest_configuration_findings(
-        manifest, str(example_dir / MANIFEST)
+        example_dir / MANIFEST, str(example_dir / MANIFEST)
     )
     if findings:
         raise ValueError("\n".join(findings))

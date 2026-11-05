@@ -138,7 +138,7 @@ static hal_status_t zeroed(jb_vector_t *scratch, size_t bytes,
                            jh_failure_t *failure) {
   jb_vector_clear(scratch);
   const hal_status_t status = jb_vector_resize(scratch, bytes);
-  return status == HAL_OK ? HAL_OK : jh_fail_storage(failure, status);
+  return jh_fail_storage(failure, status);
 }
 
 static jb_json_workspace_t workspace_of(jb_vector_t *scratch) {
@@ -654,4 +654,16 @@ hal_status_t jh_schema_files_validate(jh_schema_files_t *files,
   return jh_fail_text(failure, status,
                       exit_code_for(status, file_error ? 3 : 2),
                       "cannot validate schema or validation limit exceeded");
+}
+
+jb_json_type_t jh_json_type(jb_json_tree_view_t value) {
+  jb_json_type_t type = JB_JSON_NULL;
+  (void)jb_json_tree_type(value, &type);
+  return type;
+}
+
+bool jh_json_member(jb_json_tree_view_t object, const char *key,
+                    jb_json_tree_view_t *out) {
+  return jh_json_type(object) == JB_JSON_OBJECT &&
+         jb_json_tree_find(object, jh_span(key), out) == HAL_OK;
 }

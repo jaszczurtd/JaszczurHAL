@@ -151,14 +151,6 @@ SECTION_HEADER_RE = re.compile(
 MANIFEST_NAME = ".vscode/jaszczurhal.project.json"
 # The project configuration lives only in hal_project_config.h; a manifest
 # that tries to carry it is rejected.
-PROJECT_CONFIGURATION_MANIFEST_FIELDS = ("variants", "example")
-PROJECT_CONFIGURATION_CACHE_KEYS = {
-    "EXTRA_HAL_DEFINES",
-    "JH_EXTRA_DEFINES",
-    "JH_PROJECT_SOURCES",
-    "JH_VARIANT",
-}
-HAL_FEATURE_SYMBOL_RE = re.compile(r"HAL_(?:ENABLE|DISABLE)_[A-Z0-9_]+")
 REGION_OVERFLOW_RE = re.compile(r"region [`'](?P<region>[^`']+)[`'] overflowed by (?P<bytes>\d+) bytes")
 SECTION_WILL_NOT_FIT_RE = re.compile(
     r"section [`'](?P<section>[^`']+)[`'] will not fit in region [`'](?P<region>[^`']+)[`']"
@@ -895,44 +887,23 @@ def normalize_manifest(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def manifest_configuration_findings(
-    manifest: dict[str, Any], label: str = MANIFEST_NAME
+    path: Path, label: str = MANIFEST_NAME
 ) -> list[str]:
-    """Project configuration a manifest carries although it belongs in
-    hal_project_config.h: removed fields and CMake cache entries that would
-    define HAL features, pass definitions or pick sources and variants."""
-    findings = [
-        f"{label}: [JH-CFG-MANIFEST] '{field}' is not a manifest "
-        "field; declare targets with JH_PROJECT_TARGETS(X) and variants with "
-        "JH_PROJECT_VARIANTS(X) in hal_project_config.h"
-        for field in PROJECT_CONFIGURATION_MANIFEST_FIELDS
-        if field in manifest
-    ]
-    caches: list[tuple[str, Any]] = [("cmake.cache", manifest.get("cmake"))]
-    profiles = manifest.get("targetProfiles")
-    if isinstance(profiles, dict):
-        caches.extend(
-            (f"targetProfiles.{target}.cmake.cache", profile.get("cmake"))
-            for target, profile in profiles.items()
-            if isinstance(profile, dict)
+    """Project configuration the manifest at path carries although it belongs
+    in hal_project_config.h, as `jh config manifest` reports it: removed
+    fields and CMake cache entries that would define HAL features, pass
+    definitions or pick sources and variants. A missing file has no findings,
+    so anything but a path (such as the parsed manifest) is a TypeError."""
+    if not isinstance(path, (str, os.PathLike)):
+        raise TypeError(
+            f"manifest_configuration_findings takes the manifest path, not {type(path).__name__}"
         )
-    for location, cmake in caches:
-        cache = cmake.get("cache") if isinstance(cmake, dict) else None
-        if not isinstance(cache, dict):
-            continue
-        for key in cache:
-            if key == "JH_VARIANT":
-                findings.append(
-                    f"{label}: {location}.{key}: [JH-CFG-MANIFEST] "
-                    "the manifest does not pick a variant; pass --variant"
-                )
-            elif key in PROJECT_CONFIGURATION_CACHE_KEYS or HAL_FEATURE_SYMBOL_RE.fullmatch(
-                str(key)
-            ):
-                findings.append(
-                    f"{label}: {location}.{key}: [JH-CFG-MANIFEST] "
-                    "project configuration belongs in hal_project_config.h"
-                )
-    return findings
+    returncode, output = hal_script("project_config").run_jh(
+        ["config", "manifest", f"--file={path}", f"--label={label}"], ValueError
+    )
+    if returncode not in (0, 1):
+        raise ValueError(output.get("message", f"jh exit {returncode}"))
+    return list(output["findings"])
 
 
 _HAL_SCRIPTS: dict[str, Any] = {}
@@ -1199,7 +1170,7 @@ def load_project_config(
     vscode_dir = project_dir / ".vscode"
     manifest = load_json_file(vscode_dir / "jaszczurhal.project.json")
     settings = load_json_file(vscode_dir / "settings.json")
-    findings = manifest_configuration_findings(manifest)
+    findings = manifest_configuration_findings(vscode_dir / "jaszczurhal.project.json")
     if findings:
         raise ValueError("\n".join(findings))
 

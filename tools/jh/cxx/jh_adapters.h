@@ -146,6 +146,19 @@ struct feature_registry : jh_feature_registry_t {
   ~feature_registry() { jh_feature_registry_destroy(this); }
 };
 
+/** A list of owned strings (jh_list_init) released with its owner. */
+struct string_list {
+  jb_vector_t value{};
+  string_list() noexcept { (void)jh_list_init(&value); }
+  string_list(const string_list &) = delete;
+  string_list &operator=(const string_list &) = delete;
+  ~string_list() { jh_list_destroy(&value); }
+  size_t size() const { return jb_vector_size(&value); }
+  std::string_view operator[](size_t index) const {
+    return view(*jh_list_at(&value, index));
+  }
+};
+
 /** A jh_feature_resolution_t released with its owner. */
 struct feature_resolution : jh_feature_resolution_t {
   feature_resolution() noexcept : jh_feature_resolution_t() {
