@@ -11,6 +11,7 @@
 #include <jb/string.h>
 #include <jb/vector.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -67,6 +68,28 @@ bool jh_span_equal(jb_json_span_t a, jb_json_span_t b);
 jb_json_span_t jh_string_span(const jb_string_t *text);
 /** Order of two spans by their bytes: code point order for UTF-8. */
 int jh_span_compare(jb_json_span_t a, jb_json_span_t b);
+/** The file name of path without its last suffix, as Python's Path.stem:
+ * the part after the last slash or backslash, up to its last dot unless that
+ * dot starts the name. The result points into path.
+ */
+jb_json_span_t jh_span_path_stem(jb_json_span_t path);
+
+/* Text built piece by piece: each jh_put* appends only while *status is
+ * HAL_OK and stores the result of the append in *status, so a sequence of
+ * calls needs one check at its end. */
+
+/** Append the NUL-terminated text to out. */
+hal_status_t jh_append(jb_string_t *out, const char *text);
+/** Append the bytes of text; an empty span appends nothing. */
+hal_status_t jh_append_span(jb_string_t *out, jb_json_span_t text);
+/** jh_append while *status is HAL_OK. */
+void jh_put(jb_string_t *out, hal_status_t *status, const char *text);
+/** jh_append_span while *status is HAL_OK. */
+void jh_put_span(jb_string_t *out, hal_status_t *status, jb_json_span_t text);
+/** A jb_json_sink_fn appending to the jb_string_t at user. */
+hal_status_t jh_string_sink(void *user, const char *data, size_t length);
+/** The decimal text of value while *status is HAL_OK. */
+void jh_put_int64(jb_string_t *out, hal_status_t *status, int64_t value);
 
 /* Lists of owned strings: jb_vector_t of jb_string_t on the host heap. */
 

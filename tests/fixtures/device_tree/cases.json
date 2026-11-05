@@ -362,6 +362,16 @@
       }
     },
     {
+      "file": "invalid/unexposed-board-signal.json",
+      "schema": "device_tree.schema.json",
+      "expected": "semantic",
+      "error": "JH-HW-PIN-RANGE",
+      "at": "/assemblies/zero/nets/blue/endpoint",
+      "input": {
+        "assembly": "zero"
+      }
+    },
+    {
       "file": "valid/released-pin/device_tree.json",
       "schema": "device_tree.schema.json",
       "expected": "accept",

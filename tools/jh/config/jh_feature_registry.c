@@ -1,14 +1,13 @@
 #include "jh_feature_registry.h"
 #include "hal/security/jh_sha256.h"
 #include "jh_generated_output.h"
+#include "jh_json_check.h"
 #include "jh_json_file.h"
 #include "jh_python_repr.h"
 #include <jb/array.h>
 #include <jb/filesystem.h>
 #include <jb/json_tree.h>
 #include <jb/json_writer.h>
-#include <jb/unicode.h>
-#include <jb/utf8.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,150 +17,6 @@
 #define JH_FEATURE_GENERATOR_VERSION 2
 
 static const jb_allocator_t *heap(void) { return jb_heap_allocator(); }
-
-static hal_status_t append(jb_string_t *out, const char *text) {
-  return jb_string_append(out, text, strlen(text));
-}
-
-static hal_status_t append_span(jb_string_t *out, jb_json_span_t text) {
-  return text.length == 0 ? HAL_OK
-                          : jb_string_append(out, text.data, text.length);
-}
-
-/* Append text unless an earlier append failed. */
-static void put(jb_string_t *out, hal_status_t *status, const char *text) {
-  if (*status == HAL_OK)
-    *status = append(out, text);
-}
-
-static void put_span(jb_string_t *out, hal_status_t *status,
-                     jb_json_span_t text) {
-  if (*status == HAL_OK)
-    *status = append_span(out, text);
-}
-
-static void put_number(jb_string_t *out, hal_status_t *status, int value) {
-  char number[16];
-  const int written = snprintf(number, sizeof number, "%d", value);
-  if (*status == HAL_OK)
-    *status = jb_string_append(out, number, (size_t)written);
-}
-
-/* Python's repr of a list of strings: ['a', 'b']. */
-static hal_status_t repr_list(jb_string_t *out, const jb_vector_t *list) {
-  hal_status_t status = append(out, "[");
-  for (size_t index = 0; status == HAL_OK && index < jb_vector_size(list);
-       ++index) {
-    if (index != 0)
-      status = append(out, ", ");
-    if (status == HAL_OK)
-      status =
-          jh_python_repr_append(out, jh_string_span(jh_list_at(list, index)));
-  }
-  return status == HAL_OK ? append(out, "]") : status;
-}
-
-/* ---- Failures with the wording of generate_hal_features.py ---- */
-
-static hal_status_t fail_message(jh_failure_t *failure,
-                                 const jb_string_t *message) {
-  const jb_json_span_t part = jh_string_span(message);
-  return jh_fail(failure, HAL_ECONFIG, 2, &part, 1);
-}
-
-/* "{path}: {json_path}: got {got}; expected {expected}". */
-static hal_status_t fail_got(jh_failure_t *failure, jb_json_span_t path,
-                             jb_json_span_t json_path, const jb_string_t *got,
-                             const char *expected) {
-  jb_string_t message = {0};
-  hal_status_t status = jb_string_init(&message, heap());
-  if (status == HAL_OK)
-    status = append_span(&message, path);
-  if (status == HAL_OK)
-    status = append(&message, ": ");
-  if (status == HAL_OK)
-    status = append_span(&message, json_path);
-  if (status == HAL_OK)
-    status = append(&message, ": got ");
-  if (status == HAL_OK)
-    status = append_span(&message, jh_string_span(got));
-  if (status == HAL_OK)
-    status = append(&message, "; expected ");
-  if (status == HAL_OK)
-    status = append(&message, expected);
-  status = status == HAL_OK ? fail_message(failure, &message)
-                            : jh_fail_storage(failure, status);
-  jb_string_destroy(&message);
-  return status;
-}
-
-/* fail_got with the repr of a JSON value, or None for an absent one. */
-static hal_status_t fail_value(jh_failure_t *failure, jb_json_span_t path,
-                               jb_json_span_t json_path,
-                               const jb_json_tree_view_t *value,
-                               const char *expected) {
-  jb_string_t got = {0};
-  hal_status_t status = jb_string_init(&got, heap());
-  if (status == HAL_OK)
-    status = value == NULL ? append(&got, "None")
-                           : jh_python_repr_json_append(&got, *value);
-  status = status == HAL_OK ? fail_got(failure, path, json_path, &got, expected)
-                            : jh_fail_storage(failure, status);
-  jb_string_destroy(&got);
-  return status;
-}
-
-/* fail_got with the repr of a list of strings. */
-static hal_status_t fail_list(jh_failure_t *failure, jb_json_span_t path,
-                              jb_json_span_t json_path, const jb_vector_t *list,
-                              const char *expected) {
-  jb_string_t got = {0};
-  hal_status_t status = jb_string_init(&got, heap());
-  if (status == HAL_OK)
-    status = repr_list(&got, list);
-  status = status == HAL_OK ? fail_got(failure, path, json_path, &got, expected)
-                            : jh_fail_storage(failure, status);
-  jb_string_destroy(&got);
-  return status;
-}
-
-/* A failure message joined from NUL-terminated parts and spans. */
-static hal_status_t fail_parts(jh_failure_t *failure,
-                               const jb_json_span_t *parts, size_t count) {
-  return jh_fail(failure, HAL_ECONFIG, 2, parts, count);
-}
-
-/* ---- JSON values ---- */
-
-static bool is_string(jb_json_tree_view_t value, jb_json_span_t *text) {
-  return jh_json_type(value) == JB_JSON_STRING &&
-         jb_json_tree_text(value, text) == HAL_OK;
-}
-
-static size_t count_of(jb_json_tree_view_t value) {
-  size_t count = 0;
-  (void)jb_json_tree_count(value, &count);
-  return count;
-}
-
-/* A JSON path: the base followed by a suffix. */
-static hal_status_t json_path(jb_string_t *out, jb_json_span_t base,
-                              const char *suffix) {
-  jb_string_clear(out);
-  hal_status_t status = append_span(out, base);
-  return status == HAL_OK ? append(out, suffix) : status;
-}
-
-/* "{base}[{index}]". */
-static hal_status_t indexed_path(jb_string_t *out, jb_json_span_t base,
-                                 size_t index) {
-  char number[32];
-  const int written = snprintf(number, sizeof number, "[%zu]", index);
-  jb_string_clear(out);
-  hal_status_t status = append_span(out, base);
-  return status == HAL_OK ? jb_string_append(out, number, (size_t)written)
-                          : status;
-}
 
 /* ---- Patterns of generate_hal_features.py ---- */
 
@@ -218,32 +73,6 @@ static bool source_path(jb_json_span_t text) {
   return false;
 }
 
-/* Python's str.strip(): whitespace that str.isspace() accepts on both ends;
- * false for text that is not valid UTF-8. */
-static bool strip(jb_json_span_t text, jb_json_span_t *out) {
-  size_t begin = 0, end = 0;
-  bool content = false;
-  for (size_t at = 0; at < text.length;) {
-    uint32_t scalar = 0;
-    size_t used = 0;
-    jb_unicode_properties_t properties = {0};
-    if (jb_utf8_decode(text.data + at, text.length - at, &scalar, &used) !=
-            HAL_OK ||
-        jb_unicode_properties(scalar, &properties) != HAL_OK)
-      return false;
-    if (!properties.whitespace) {
-      if (!content)
-        begin = at;
-      content = true;
-      end = at + used;
-    }
-    at += used;
-  }
-  out->data = text.data + begin;
-  out->length = content ? end - begin : 0;
-  return true;
-}
-
 /* ---- Fragments ---- */
 
 typedef struct {
@@ -253,66 +82,6 @@ typedef struct {
   const jb_vector_t *managed; /* managed dependency names */
   jh_failure_t *failure;
 } fragment_t;
-
-/* require_exact_fields: an object with every required and only allowed
- * fields. */
-static hal_status_t
-exact_fields(fragment_t *f, jb_json_span_t path_text, jb_json_tree_view_t value,
-             const char *const *required, size_t required_count,
-             const char *const *allowed, size_t allowed_count) {
-  if (jh_json_type(value) != JB_JSON_OBJECT)
-    return fail_value(f->failure, f->path, path_text, &value, "an object");
-  jb_vector_t missing = {0}, unknown = {0};
-  hal_status_t status = jh_list_init(&missing);
-  if (status == HAL_OK)
-    status = jh_list_init(&unknown);
-  for (size_t i = 0; status == HAL_OK && i < required_count; ++i) {
-    jb_json_tree_view_t found = {0};
-    if (!jh_json_member(value, required[i], &found))
-      status = jh_list_push(&missing, jh_span(required[i]));
-  }
-  for (size_t i = 0; status == HAL_OK && i < count_of(value); ++i) {
-    jb_json_tree_view_t item = {0};
-    jb_json_span_t key = {NULL, 0};
-    status = jb_json_tree_at(value, i, &item);
-    if (status == HAL_OK)
-      status = jb_json_tree_key(item, &key);
-    bool known = false;
-    for (size_t a = 0; status == HAL_OK && a < allowed_count; ++a)
-      known = known || jh_span_compare(key, jh_span(allowed[a])) == 0;
-    if (status == HAL_OK && !known)
-      status = jh_list_push(&unknown, key);
-  }
-  if (status != HAL_OK) {
-    status = jh_fail_storage(f->failure, status);
-  } else if (jb_vector_size(&missing) != 0 || jb_vector_size(&unknown) != 0) {
-    const bool absent = jb_vector_size(&missing) != 0;
-    const char *const *names = absent ? required : allowed;
-    const size_t names_count = absent ? required_count : allowed_count;
-    jb_string_t expected = {0};
-    jb_vector_t sorted = {0};
-    status = jb_string_init(&expected, heap());
-    if (status == HAL_OK)
-      status = jh_list_init(&sorted);
-    for (size_t i = 0; status == HAL_OK && i < names_count; ++i)
-      status = jh_list_push(&sorted, jh_span(names[i]));
-    jh_list_sort(&sorted);
-    jh_list_sort(absent ? &missing : &unknown);
-    if (status == HAL_OK)
-      status = append(&expected, absent ? "required fields " : "only fields ");
-    if (status == HAL_OK)
-      status = repr_list(&expected, &sorted);
-    status = status == HAL_OK ? fail_list(f->failure, f->path, path_text,
-                                          absent ? &missing : &unknown,
-                                          jb_string_data(&expected))
-                              : jh_fail_storage(f->failure, status);
-    jh_list_destroy(&sorted);
-    jb_string_destroy(&expected);
-  }
-  jh_list_destroy(&unknown);
-  jh_list_destroy(&missing);
-  return status;
-}
 
 /* One kind of list of a symbol and the message of each of its checks. */
 typedef struct {
@@ -338,15 +107,15 @@ static hal_status_t normalized_list(fragment_t *f, jb_json_span_t path_text,
   if (value == NULL)
     return HAL_OK;
   if (jh_json_type(*value) != JB_JSON_ARRAY)
-    return fail_value(f->failure, f->path, path_text, value, rule->array);
+    return jh_check_value(f->failure, f->path, path_text, value, rule->array);
   hal_status_t status = HAL_OK;
-  for (size_t i = 0; status == HAL_OK && i < count_of(*value); ++i) {
+  for (size_t i = 0; status == HAL_OK && i < jh_json_count(*value); ++i) {
     jb_json_tree_view_t item = {0};
     jb_json_span_t text = {NULL, 0};
     status = jh_fail_storage(f->failure, jb_json_tree_at(*value, i, &item));
     if (status != HAL_OK)
       break;
-    const bool text_item = is_string(item, &text);
+    const bool text_item = jh_json_string(item, &text);
     bool valid = false;
     if (rule == &relation_rule)
       valid = text_item && jh_feature_symbol(text, false);
@@ -355,34 +124,36 @@ static hal_status_t normalized_list(fragment_t *f, jb_json_span_t path_text,
     else
       valid = text_item && jh_list_contains(f->managed, text);
     if (!valid) {
-      status =
-          jh_fail_storage(f->failure, indexed_path(&f->scratch, path_text, i));
+      status = jh_fail_storage(f->failure,
+                               jh_json_path_index(&f->scratch, path_text, i));
       if (status != HAL_OK)
         break;
       if (rule->item != NULL)
-        return fail_value(f->failure, f->path, jh_string_span(&f->scratch),
-                          &item, rule->item);
+        return jh_check_value(f->failure, f->path, jh_string_span(&f->scratch),
+                              &item, rule->item);
       jb_string_t expected = {0};
       status = jb_string_init(&expected, heap());
       if (status == HAL_OK)
-        status = append(&expected, "one of ");
+        status = jh_append(&expected, "one of ");
       for (size_t d = 0; status == HAL_OK && d < jb_vector_size(f->managed);
            ++d) {
         if (d != 0)
-          status = append(&expected, ", ");
+          status = jh_append(&expected, ", ");
         if (status == HAL_OK)
-          status =
-              append_span(&expected, jh_string_span(jh_list_at(f->managed, d)));
+          status = jh_append_span(&expected,
+                                  jh_string_span(jh_list_at(f->managed, d)));
       }
-      status = status == HAL_OK ? fail_value(f->failure, f->path,
-                                             jh_string_span(&f->scratch), &item,
-                                             jb_string_data(&expected))
-                                : jh_fail_storage(f->failure, status);
+      status =
+          status == HAL_OK
+              ? jh_check_value(f->failure, f->path, jh_string_span(&f->scratch),
+                               &item, jb_string_data(&expected))
+              : jh_fail_storage(f->failure, status);
       jb_string_destroy(&expected);
       return status;
     }
     if (jh_list_contains(out, text))
-      return fail_value(f->failure, f->path, path_text, value, rule->unique);
+      return jh_check_value(f->failure, f->path, path_text, value,
+                            rule->unique);
     status = jh_fail_storage(f->failure, jh_list_push(out, text));
   }
   jh_list_sort(out);
@@ -437,9 +208,9 @@ static hal_status_t read_symbol(fragment_t *f, jb_json_span_t domain,
   jb_string_t symbol_path = {0};
   hal_status_t status = jb_string_init(&symbol_path, heap());
   if (status == HAL_OK)
-    status = append(&symbol_path, "$.symbols.");
+    status = jh_append(&symbol_path, "$.symbols.");
   if (status == HAL_OK)
-    status = append_span(&symbol_path, name);
+    status = jh_append_span(&symbol_path, name);
   if (status != HAL_OK) {
     jb_string_destroy(&symbol_path);
     return jh_fail_storage(f->failure, status);
@@ -453,33 +224,34 @@ static hal_status_t read_symbol(fragment_t *f, jb_json_span_t domain,
     if (status == HAL_OK)
       status = jh_python_repr_append(&got, name);
     status = status == HAL_OK
-                 ? fail_got(f->failure, f->path, base, &got,
-                            "a HAL_ENABLE_* or HAL_DISABLE_* symbol")
+                 ? jh_check_got(f->failure, f->path, base, jh_string_span(&got),
+                                "a HAL_ENABLE_* or HAL_DISABLE_* symbol")
                  : jh_fail_storage(f->failure, status);
     jb_string_destroy(&got);
   }
   if (status == HAL_OK)
-    status = exact_fields(f, base, record, NULL, 0, symbol_fields,
-                          COUNTOF(symbol_fields));
+    status = jh_check_exact_fields(f->failure, f->path, base, record, NULL, 0,
+                                   symbol_fields, COUNTOF(symbol_fields));
   // kind
   if (status == HAL_OK) {
     const jb_json_tree_view_t *kind = optional(record, "kind", &slot);
     bool known = kind == NULL;
-    if (kind != NULL && is_string(*kind, &text)) {
+    if (kind != NULL && jh_json_string(*kind, &text)) {
       known = jh_span_compare(text, jh_span("feature")) == 0 ||
               jh_span_compare(text, jh_span("derived")) == 0;
       out->derived = jh_span_compare(text, jh_span("derived")) == 0;
     }
     if (!known) {
-      status =
-          jh_fail_storage(f->failure, json_path(&f->json_path, base, ".kind"));
+      status = jh_fail_storage(f->failure,
+                               jh_json_path_join(&f->json_path, base, ".kind"));
       if (status == HAL_OK)
-        status =
-            jh_json_type(*kind) == JB_JSON_NULL
-                ? fail_value(f->failure, f->path, jh_string_span(&f->json_path),
-                             NULL, "'feature' or 'derived'")
-                : fail_value(f->failure, f->path, jh_string_span(&f->json_path),
-                             kind, "'feature' or 'derived'");
+        status = jh_json_type(*kind) == JB_JSON_NULL
+                     ? jh_check_value(f->failure, f->path,
+                                      jh_string_span(&f->json_path), NULL,
+                                      "'feature' or 'derived'")
+                     : jh_check_value(f->failure, f->path,
+                                      jh_string_span(&f->json_path), kind,
+                                      "'feature' or 'derived'");
     }
   }
   // note: an absent or null note is no note
@@ -487,16 +259,17 @@ static hal_status_t read_symbol(fragment_t *f, jb_json_span_t domain,
     const jb_json_tree_view_t *note = optional(record, "note", &slot);
     if (note != NULL && jh_json_type(*note) != JB_JSON_NULL) {
       jb_json_span_t stripped = {NULL, 0};
-      if (!is_string(*note, &text) || !strip(text, &stripped) ||
+      if (!jh_json_string(*note, &text) || !jh_python_strip(text, &stripped) ||
           stripped.length == 0) {
-        status = jh_fail_storage(f->failure,
-                                 json_path(&f->json_path, base, ".note"));
+        status = jh_fail_storage(
+            f->failure, jh_json_path_join(&f->json_path, base, ".note"));
         if (status == HAL_OK)
           status =
-              fail_value(f->failure, f->path, jh_string_span(&f->json_path),
-                         note, "a non-empty string");
+              jh_check_value(f->failure, f->path, jh_string_span(&f->json_path),
+                             note, "a non-empty string");
       } else {
-        status = jh_fail_storage(f->failure, append_span(&out->note, stripped));
+        status =
+            jh_fail_storage(f->failure, jh_append_span(&out->note, stripped));
         out->has_note = true;
       }
     }
@@ -507,8 +280,8 @@ static hal_status_t read_symbol(fragment_t *f, jb_json_span_t domain,
   if (status == HAL_OK) {
     effects = optional(record, "buildEffects", &effects_slot);
     if (effects != NULL) {
-      status = jh_fail_storage(f->failure,
-                               json_path(&f->json_path, base, ".buildEffects"));
+      status = jh_fail_storage(
+          f->failure, jh_json_path_join(&f->json_path, base, ".buildEffects"));
       jb_string_t effects_path = {0};
       if (status == HAL_OK)
         status =
@@ -516,14 +289,16 @@ static hal_status_t read_symbol(fragment_t *f, jb_json_span_t domain,
       if (status == HAL_OK)
         status = jh_fail_storage(
             f->failure,
-            append_span(&effects_path, jh_string_span(&f->json_path)));
+            jh_append_span(&effects_path, jh_string_span(&f->json_path)));
       if (status == HAL_OK)
-        status =
-            jh_json_type(*effects) == JB_JSON_NULL
-                ? fail_value(f->failure, f->path, jh_string_span(&effects_path),
-                             NULL, "an object")
-                : exact_fields(f, jh_string_span(&effects_path), *effects, NULL,
-                               0, effect_fields, COUNTOF(effect_fields));
+        status = jh_json_type(*effects) == JB_JSON_NULL
+                     ? jh_check_value(f->failure, f->path,
+                                      jh_string_span(&effects_path), NULL,
+                                      "an object")
+                     : jh_check_exact_fields(f->failure, f->path,
+                                             jh_string_span(&effects_path),
+                                             *effects, NULL, 0, effect_fields,
+                                             COUNTOF(effect_fields));
       jb_string_destroy(&effects_path);
     }
   }
@@ -547,13 +322,14 @@ static hal_status_t read_symbol(fragment_t *f, jb_json_span_t domain,
           status = jh_fail_storage(f->failure, jh_list_push(&overlap, source));
       }
       if (status == HAL_OK && jb_vector_size(&overlap) != 0) {
-        status = jh_fail_storage(
-            f->failure, json_path(&f->json_path, base, ".buildEffects"));
+        status =
+            jh_fail_storage(f->failure, jh_json_path_join(&f->json_path, base,
+                                                          ".buildEffects"));
         if (status == HAL_OK)
-          status = fail_list(f->failure, f->path, jh_string_span(&f->json_path),
-                             &overlap,
-                             "disjoint featureSources and "
-                             "portableSources");
+          status = jh_check_list(f->failure, f->path,
+                                 jh_string_span(&f->json_path), &overlap,
+                                 "disjoint featureSources and "
+                                 "portableSources");
       }
       jh_list_destroy(&overlap);
       if (status != HAL_OK)
@@ -566,8 +342,8 @@ static hal_status_t read_symbol(fragment_t *f, jb_json_span_t domain,
     jb_string_t list_path = {0};
     status = jh_fail_storage(f->failure, jb_string_init(&list_path, heap()));
     if (status == HAL_OK)
-      status = jh_fail_storage(f->failure,
-                               json_path(&list_path, base, effect_suffix[e]));
+      status = jh_fail_storage(
+          f->failure, jh_json_path_join(&list_path, base, effect_suffix[e]));
     if (status == HAL_OK)
       status = normalized_list(f, jh_string_span(&list_path), list,
                                effect_rules[e], effect_lists[e]);
@@ -581,11 +357,11 @@ static hal_status_t read_symbol(fragment_t *f, jb_json_span_t domain,
     status =
         jh_fail_storage(f->failure, jb_string_init(&relation_path, heap()));
     if (status == HAL_OK)
-      status =
-          jh_fail_storage(f->failure, json_path(&relation_path, base, "."));
+      status = jh_fail_storage(f->failure,
+                               jh_json_path_join(&relation_path, base, "."));
     if (status == HAL_OK)
       status =
-          jh_fail_storage(f->failure, append(&relation_path, relations[r]));
+          jh_fail_storage(f->failure, jh_append(&relation_path, relations[r]));
     if (status == HAL_OK)
       status = normalized_list(f, jh_string_span(&relation_path),
                                optional(record, relations[r], &slot),
@@ -593,27 +369,11 @@ static hal_status_t read_symbol(fragment_t *f, jb_json_span_t domain,
     jb_string_destroy(&relation_path);
   }
   if (status == HAL_OK)
-    status = jh_fail_storage(f->failure, append_span(&out->name, name));
+    status = jh_fail_storage(f->failure, jh_append_span(&out->name, name));
   if (status == HAL_OK)
-    status = jh_fail_storage(f->failure, append_span(&out->domain, domain));
+    status = jh_fail_storage(f->failure, jh_append_span(&out->domain, domain));
   jb_string_destroy(&symbol_path);
   return status;
-}
-
-/* The filename stem: the name without its last suffix. */
-static jb_json_span_t stem_of(jb_json_span_t path) {
-  size_t begin = path.length;
-  while (begin > 0 && path.data[begin - 1] != '/' &&
-         path.data[begin - 1] != '\\')
-    --begin;
-  size_t end = path.length;
-  for (size_t at = path.length; at > begin + 1; --at)
-    if (path.data[at - 1] == '.') {
-      end = at - 1;
-      break;
-    }
-  const jb_json_span_t stem = {path.data + begin, end - begin};
-  return stem;
 }
 
 /* validate_fragment: the header fields of one fragment, then its symbols,
@@ -622,46 +382,49 @@ static hal_status_t read_fragment(fragment_t *f, jb_json_tree_view_t document,
                                   size_t owner, jb_vector_t *features) {
   static const char *const fields[] = {"$schema", "schemaVersion", "domain",
                                        "symbols"};
-  hal_status_t status = exact_fields(f, jh_span("$"), document, fields,
-                                     COUNTOF(fields), fields, COUNTOF(fields));
+  hal_status_t status =
+      jh_check_exact_fields(f->failure, f->path, jh_span("$"), document, fields,
+                            COUNTOF(fields), fields, COUNTOF(fields));
   jb_json_tree_view_t value = {0};
   jb_json_span_t text = {NULL, 0};
   if (status == HAL_OK && jh_json_member(document, "$schema", &value) &&
-      !(is_string(value, &text) &&
+      !(jh_json_string(value, &text) &&
         jh_span_compare(text, jh_span("../features.schema.json")) == 0))
-    status = fail_value(f->failure, f->path, jh_span("$.$schema"), &value,
-                        "'../features.schema.json'");
+    status = jh_check_value(f->failure, f->path, jh_span("$.$schema"), &value,
+                            "'../features.schema.json'");
   if (status == HAL_OK && jh_json_member(document, "schemaVersion", &value) &&
       !(jh_json_type(value) == JB_JSON_NUMBER &&
         jb_json_tree_text(value, &text) == HAL_OK &&
         jh_span_compare(text, jh_span("1")) == 0))
-    status = fail_value(f->failure, f->path, jh_span("$.schemaVersion"), &value,
-                        "the integer 1");
+    status = jh_check_value(f->failure, f->path, jh_span("$.schemaVersion"),
+                            &value, "the integer 1");
   jb_json_span_t domain = {NULL, 0};
   if (status == HAL_OK && jh_json_member(document, "domain", &value) &&
-      !(is_string(value, &domain) && domain_name(domain)))
-    status = fail_value(f->failure, f->path, jh_span("$.domain"), &value,
-                        "a lower-case domain identifier");
-  if (status == HAL_OK && jh_span_compare(stem_of(f->path), domain) != 0) {
+      !(jh_json_string(value, &domain) && domain_name(domain)))
+    status = jh_check_value(f->failure, f->path, jh_span("$.domain"), &value,
+                            "a lower-case domain identifier");
+  if (status == HAL_OK &&
+      jh_span_compare(jh_span_path_stem(f->path), domain) != 0) {
     jb_string_t expected = {0};
     status = jh_fail_storage(f->failure, jb_string_init(&expected, heap()));
     if (status == HAL_OK)
-      status =
-          jh_fail_storage(f->failure, append(&expected, "the filename stem "));
+      status = jh_fail_storage(f->failure,
+                               jh_append(&expected, "the filename stem "));
     if (status == HAL_OK)
       status = jh_fail_storage(
-          f->failure, jh_python_repr_append(&expected, stem_of(f->path)));
+          f->failure,
+          jh_python_repr_append(&expected, jh_span_path_stem(f->path)));
     if (status == HAL_OK)
-      status = fail_value(f->failure, f->path, jh_span("$.domain"), &value,
-                          jb_string_data(&expected));
+      status = jh_check_value(f->failure, f->path, jh_span("$.domain"), &value,
+                              jb_string_data(&expected));
     jb_string_destroy(&expected);
   }
   jb_json_tree_view_t symbols = {0};
   if (status == HAL_OK && jh_json_member(document, "symbols", &symbols) &&
-      (jh_json_type(symbols) != JB_JSON_OBJECT || count_of(symbols) == 0))
-    status = fail_value(f->failure, f->path, jh_span("$.symbols"), &symbols,
-                        "a non-empty symbol object");
-  for (size_t i = 0; status == HAL_OK && i < count_of(symbols); ++i) {
+      (jh_json_type(symbols) != JB_JSON_OBJECT || jh_json_count(symbols) == 0))
+    status = jh_check_value(f->failure, f->path, jh_span("$.symbols"), &symbols,
+                            "a non-empty symbol object");
+  for (size_t i = 0; status == HAL_OK && i < jh_json_count(symbols); ++i) {
     jb_json_tree_view_t record = {0};
     jb_json_span_t name = {NULL, 0};
     status = jh_fail_storage(f->failure, jb_json_tree_at(symbols, i, &record));
@@ -767,22 +530,27 @@ static hal_status_t check_relations(const jh_feature_registry_t *registry,
         jb_string_t message = {0};
         hal_status_t status = jb_string_init(&message, heap());
         if (status == HAL_OK)
-          status = append_span(&message, owner);
+          status = jh_append_span(&message, owner);
         if (status == HAL_OK)
-          status = append(&message, ": $.symbols.");
+          status = jh_append(&message, ": $.symbols.");
         if (status == HAL_OK)
-          status = append_span(&message, name);
+          status = jh_append_span(&message, name);
         if (status == HAL_OK)
-          status = append(&message, ".");
+          status = jh_append(&message, ".");
         if (status == HAL_OK)
-          status = append(&message, relation_names[r]);
+          status = jh_append(&message, relation_names[r]);
         if (status == HAL_OK)
-          status = append(&message, self ? ": a feature cannot reference itself"
-                                         : ": unknown symbol ");
+          status =
+              jh_append(&message, self ? ": a feature cannot reference itself"
+                                       : ": unknown symbol ");
         if (status == HAL_OK && !self)
           status = append_repr(&message, target);
-        status = status == HAL_OK ? fail_message(failure, &message)
-                                  : jh_fail_storage(failure, status);
+        status =
+            status == HAL_OK
+                ? jh_check_fail(
+                      failure,
+                      (const jb_json_span_t[]){jh_string_span(&message)}, 1)
+                : jh_fail_storage(failure, status);
         jb_string_destroy(&message);
         return status;
       }
@@ -798,7 +566,7 @@ static hal_status_t check_relations(const jh_feature_registry_t *registry,
     if (rule != NULL) {
       const jb_json_span_t parts[] = {owner, jh_span(": $.symbols."), name,
                                       jh_span(rule)};
-      return fail_parts(failure, parts, COUNTOF(parts));
+      return jh_check_fail(failure, parts, COUNTOF(parts));
     }
   }
   return HAL_OK;
@@ -845,23 +613,27 @@ static hal_status_t check_cycles(const jh_feature_registry_t *registry,
         jb_string_t message = {0};
         status = jb_string_init(&message, heap());
         if (status == HAL_OK)
-          status = append(&message, "feature registry: implies cycle: ");
+          status = jh_append(&message, "feature registry: implies cycle: ");
         bool started = false;
         for (size_t d = 0; status == HAL_OK && d <= depth; ++d) {
           const size_t at = *(const size_t *)jb_vector_const_at(&path, d);
           started = started || at == target;
           if (!started)
             continue;
-          status = append_span(&message,
-                               jh_string_span(&feature_at(features, at)->name));
+          status = jh_append_span(
+              &message, jh_string_span(&feature_at(features, at)->name));
           if (status == HAL_OK)
-            status = append(&message, " -> ");
+            status = jh_append(&message, " -> ");
         }
         if (status == HAL_OK)
-          status = append_span(
+          status = jh_append_span(
               &message, jh_string_span(&feature_at(features, target)->name));
-        status = status == HAL_OK ? fail_message(failure, &message)
-                                  : jh_fail_storage(failure, status);
+        status =
+            status == HAL_OK
+                ? jh_check_fail(
+                      failure,
+                      (const jb_json_span_t[]){jh_string_span(&message)}, 1)
+                : jh_fail_storage(failure, status);
         jb_string_destroy(&message);
         break;
       }
@@ -940,7 +712,7 @@ static hal_status_t check_conflicts(const jh_feature_registry_t *registry,
           target,
           jh_span(" must declare the symmetric conflict")};
       jb_vector_destroy(&active);
-      return fail_parts(failure, parts, COUNTOF(parts));
+      return jh_check_fail(failure, parts, COUNTOF(parts));
     }
     status = closure(features, i, &active);
     // The closure never holds the symbol itself: cycles are rejected first.
@@ -970,7 +742,7 @@ static hal_status_t check_conflicts(const jh_feature_registry_t *registry,
             jh_span(" and "),
             other};
         jb_vector_destroy(&active);
-        return fail_parts(failure, parts, COUNTOF(parts));
+        return jh_check_fail(failure, parts, COUNTOF(parts));
       }
     }
   }
@@ -984,10 +756,6 @@ static hal_status_t check_conflicts(const jh_feature_registry_t *registry,
 static hal_status_t sha_sink(void *user, const char *data, size_t length) {
   jh_sha256_update(user, (const uint8_t *)data, length);
   return HAL_OK;
-}
-
-static hal_status_t string_sink(void *user, const char *data, size_t length) {
-  return jb_string_append(user, data, length);
 }
 
 static void hex_digest(const uint8_t digest[JH_SHA256_DIGEST_BYTES],
@@ -1045,7 +813,7 @@ static hal_status_t normalized_document(const jb_vector_t *features,
   const jb_json_workspace_t work = {jb_vector_data(&scratch),
                                     jb_vector_size(&scratch)};
   if (status == HAL_OK)
-    status = jb_json_writer_init(&writer, &limits, work, string_sink, out);
+    status = jb_json_writer_init(&writer, &limits, work, jh_string_sink, out);
   if (status == HAL_OK)
     status = jb_json_writer_object_begin(&writer);
   if (status == HAL_OK)
@@ -1138,56 +906,6 @@ static hal_status_t registry_digest(const jb_vector_t *features, char out[65]) {
 
 /* ---- Loading ---- */
 
-/* "{path}: invalid JSON: {reason}", with the line and column of a parse
- * error. */
-static hal_status_t fail_json(jh_failure_t *failure, jb_json_span_t path,
-                              const jh_json_location_t *where,
-                              const jh_failure_t *reason) {
-  if (reason->status == HAL_ENOMEM)
-    return jh_fail_storage(failure, HAL_ENOMEM);
-  char place[64] = "";
-  if (where->located)
-    (void)snprintf(place, sizeof place, " (line %zu, column %zu)", where->line,
-                   where->column);
-  const jb_json_span_t parts[] = {path, jh_span(": invalid JSON: "),
-                                  jh_string_span(&reason->message),
-                                  jh_span(place)};
-  return fail_parts(failure, parts, COUNTOF(parts));
-}
-
-/* load_json_object: a file as json.loads reads it, whose root must be an
- * object. */
-static hal_status_t load_object(jb_json_span_t path, size_t limit,
-                                jb_json_tree_t **tree,
-                                jb_json_tree_view_t *root,
-                                jh_failure_t *failure) {
-  jh_json_location_t where;
-  jh_failure_t reason;
-  jh_json_location_init(&where);
-  jh_failure_init(&reason);
-  hal_status_t status =
-      jh_json_read_value(&where, path.data, limit, tree, &reason);
-  if (status != HAL_OK)
-    status = fail_json(failure, path, &where, &reason);
-  if (status == HAL_OK)
-    status = jh_fail_storage(failure, jb_json_tree_root(*tree, root));
-  if (status == HAL_OK && jh_json_type(*root) != JB_JSON_OBJECT)
-    status = fail_value(failure, path, jh_span("$"), root, "an object");
-  jh_failure_destroy(&reason);
-  jh_json_location_destroy(&where);
-  return status;
-}
-
-hal_status_t jh_feature_load_object(const char *path, size_t limit,
-                                    jb_json_tree_t **tree,
-                                    jb_json_tree_view_t *root,
-                                    jh_failure_t *failure) {
-  if (path == NULL || tree == NULL || root == NULL)
-    return jh_fail_arguments(failure);
-  *tree = NULL;
-  return load_object(jh_span(path), limit, tree, root, failure);
-}
-
 /* The managed dependency names of the schema's managedBuildDependency enum. */
 static hal_status_t managed_dependencies(jb_json_span_t schema_path,
                                          jb_json_tree_view_t schema,
@@ -1199,21 +917,22 @@ static hal_status_t managed_dependencies(jb_json_span_t schema_path,
       jh_json_member(definitions, "managedBuildDependency", &dependency) &&
       jh_json_member(dependency, "enum", &values);
   bool valid =
-      found && jh_json_type(values) == JB_JSON_ARRAY && count_of(values);
+      found && jh_json_type(values) == JB_JSON_ARRAY && jh_json_count(values);
   hal_status_t status = HAL_OK;
-  for (size_t i = 0; valid && status == HAL_OK && i < count_of(values); ++i) {
+  for (size_t i = 0; valid && status == HAL_OK && i < jh_json_count(values);
+       ++i) {
     jb_json_tree_view_t item = {0};
     jb_json_span_t text = {NULL, 0};
     status = jh_fail_storage(failure, jb_json_tree_at(values, i, &item));
-    valid = status == HAL_OK && is_string(item, &text) && domain_name(text) &&
-            !jh_list_contains(out, text);
+    valid = status == HAL_OK && jh_json_string(item, &text) &&
+            domain_name(text) && !jh_list_contains(out, text);
     if (valid)
       status = jh_fail_storage(failure, jh_list_push(out, text));
   }
   if (status != HAL_OK)
     return status;
   if (!valid)
-    return fail_value(
+    return jh_check_value(
         failure, schema_path, jh_span("$.$defs.managedBuildDependency.enum"),
         found ? &values : NULL, "unique lower-case managed dependency names");
   jh_list_sort(out);
@@ -1231,12 +950,12 @@ static hal_status_t fragment_names(jb_json_span_t features_root,
     const jb_json_span_t parts[] = {features_root,
                                     jh_span(": cannot list fragments: "),
                                     jh_span(hal_status_to_string(listed))};
-    return fail_parts(failure, parts, COUNTOF(parts));
+    return jh_check_fail(failure, parts, COUNTOF(parts));
   }
   if (jb_vector_size(names) == 0) {
     const jb_json_span_t parts[] = {features_root,
                                     jh_span(": no feature fragments found")};
-    return fail_parts(failure, parts, COUNTOF(parts));
+    return jh_check_fail(failure, parts, COUNTOF(parts));
   }
   jh_list_sort(names);
   return HAL_OK;
@@ -1273,7 +992,8 @@ static hal_status_t read_fragments(jh_feature_registry_t *registry,
     jb_json_tree_t *tree = NULL;
     jb_json_tree_view_t document = {0};
     const size_t first = jb_vector_size(&registry->features);
-    status = load_object(f.path, limit, &tree, &document, failure);
+    status =
+        jh_check_load_object(f.path.data, limit, &tree, &document, failure);
     if (status == HAL_OK)
       status = read_fragment(&f, document, owner, &registry->features);
     if (tree != NULL)
@@ -1291,7 +1011,7 @@ static hal_status_t read_fragments(jh_feature_registry_t *registry,
             f.path, jh_span(": $.symbols."), jh_string_span(&feature->name),
             jh_span(": duplicate symbol; first declared in "),
             jh_string_span(jh_list_at(&registry->fragments, earlier->owner))};
-        status = fail_parts(failure, parts, COUNTOF(parts));
+        status = jh_check_fail(failure, parts, COUNTOF(parts));
         break;
       }
     }
@@ -1324,17 +1044,17 @@ hal_status_t jh_feature_registry_load(jh_feature_registry_t *registry,
     status = jh_absolute_path("features.schema.json", config_root, &schema_path,
                               failure);
   if (status == HAL_OK)
-    status = load_object(jh_string_span(&schema_path), limit, &schema,
-                         &schema_root, failure);
+    status = jh_check_load_object(jb_string_data(&schema_path), limit, &schema,
+                                  &schema_root, failure);
   if (status == HAL_OK) {
     const bool present = jh_json_member(schema_root, "$schema", &value);
-    if (!(present && is_string(value, &text) &&
+    if (!(present && jh_json_string(value, &text) &&
           jh_span_compare(
               text, jh_span("https://json-schema.org/draft/2020-12/schema")) ==
               0))
-      status = fail_value(failure, jh_string_span(&schema_path),
-                          jh_span("$.$schema"), present ? &value : NULL,
-                          "the JSON Schema 2020-12 URI");
+      status = jh_check_value(failure, jh_string_span(&schema_path),
+                              jh_span("$.$schema"), present ? &value : NULL,
+                              "the JSON Schema 2020-12 URI");
   }
   if (status == HAL_OK)
     status = managed_dependencies(jh_string_span(&schema_path), schema_root,
@@ -1448,7 +1168,7 @@ static hal_status_t check_request(const jh_feature_registry_t *registry,
                                     jh_span(": [JH-CFG-VALUE] "), symbol,
                                     jh_span(" has unsupported value ")};
     for (size_t i = 0; i < COUNTOF(parts); ++i)
-      put_span(&message, &status, parts[i]);
+      jh_put_span(&message, &status, parts[i]);
     if (status == HAL_OK)
       status = jh_python_repr_append(
           &message, request->value.length == 0 ? jh_span("") : request->value);
@@ -1512,16 +1232,16 @@ static hal_status_t add_requested(jh_feature_resolution_t *resolution,
     char times[32];
     const int written = snprintf(times, sizeof times, "%zu", count);
     status = jb_string_init(&message, heap());
-    put_span(&message, &status, context);
-    put(&message, &status, ": [JH-CFG-REDUNDANT] ");
-    put_span(&message, &status, group->symbol);
-    put(&message, &status, " is requested ");
-    put_span(&message, &status, (jb_json_span_t){times, (size_t)written});
-    put(&message, &status, " times by ");
+    jh_put_span(&message, &status, context);
+    jh_put(&message, &status, ": [JH-CFG-REDUNDANT] ");
+    jh_put_span(&message, &status, group->symbol);
+    jh_put(&message, &status, " is requested ");
+    jh_put_span(&message, &status, (jb_json_span_t){times, (size_t)written});
+    jh_put(&message, &status, " times by ");
     for (size_t i = 0; i < unique; ++i) {
       if (i != 0)
-        put(&message, &status, ", ");
-      put_span(&message, &status, spans[i]);
+        jh_put(&message, &status, ", ");
+      jh_put_span(&message, &status, spans[i]);
     }
     status = push_finding(&resolution->findings, &message, status);
   }
@@ -1530,7 +1250,7 @@ static hal_status_t add_requested(jh_feature_resolution_t *resolution,
     status = jb_string_init(&entry.symbol, heap());
   if (status == HAL_OK)
     status = jh_list_init(&entry.sources);
-  put_span(&entry.symbol, &status, group->symbol);
+  jh_put_span(&entry.symbol, &status, group->symbol);
   for (size_t i = 0; status == HAL_OK && i < unique; ++i)
     status = jh_list_push(&entry.sources, spans[i]);
   if (status == HAL_OK)
@@ -1682,7 +1402,7 @@ static hal_status_t add_target_source(jh_feature_resolution_t *resolution,
       return HAL_OK;
     jb_string_t item = {0};
     hal_status_t status = jb_string_init(&item, heap());
-    put_span(&item, &status, source);
+    jh_put_span(&item, &status, source);
     if (status == HAL_OK)
       status = jb_vector_insert(&entry->sources, at, &item, 1);
     if (status != HAL_OK)
@@ -1693,7 +1413,7 @@ static hal_status_t add_target_source(jh_feature_resolution_t *resolution,
   hal_status_t status = jb_string_init(&entry.symbol, heap());
   if (status == HAL_OK)
     status = jh_list_init(&entry.sources);
-  put_span(&entry.symbol, &status, symbol);
+  jh_put_span(&entry.symbol, &status, symbol);
   if (status == HAL_OK)
     status = jh_list_push(&entry.sources, source);
   if (status == HAL_OK)
@@ -1728,11 +1448,11 @@ static hal_status_t resolve_target(const jh_feature_registry_t *registry,
     const int written = snprintf(index, sizeof index, "%zu", i);
     jb_string_t source = {0};
     status = jb_string_init(&source, heap());
-    put(&source, &status, "target:");
-    put_span(&source, &status, target->id);
-    put(&source, &status, ":requiredFeatures[");
-    put_span(&source, &status, (jb_json_span_t){index, (size_t)written});
-    put(&source, &status, "]");
+    jh_put(&source, &status, "target:");
+    jh_put_span(&source, &status, target->id);
+    jh_put(&source, &status, ":requiredFeatures[");
+    jh_put_span(&source, &status, (jb_json_span_t){index, (size_t)written});
+    jh_put(&source, &status, "]");
     if (status == HAL_OK)
       status = jb_vector_append(&sources, &source, 1);
     if (status != HAL_OK)
@@ -1750,13 +1470,13 @@ static hal_status_t resolve_target(const jh_feature_registry_t *registry,
       ++at;
     jb_string_clear(&disabled);
     if (at + sizeof enable - 1 <= symbol.length) {
-      put_span(&disabled, &status, (jb_json_span_t){symbol.data, at});
-      put(&disabled, &status, "HAL_DISABLE_");
-      put_span(&disabled, &status,
-               (jb_json_span_t){symbol.data + at + sizeof enable - 1,
-                                symbol.length - at - (sizeof enable - 1)});
+      jh_put_span(&disabled, &status, (jb_json_span_t){symbol.data, at});
+      jh_put(&disabled, &status, "HAL_DISABLE_");
+      jh_put_span(&disabled, &status,
+                  (jb_json_span_t){symbol.data + at + sizeof enable - 1,
+                                   symbol.length - at - (sizeof enable - 1)});
     } else {
-      put_span(&disabled, &status, symbol);
+      jh_put_span(&disabled, &status, symbol);
     }
     if (status == HAL_OK &&
         requested(requests, count, jh_string_span(&disabled))) {
@@ -1852,51 +1572,51 @@ hal_status_t jh_feature_registry_header(const jh_feature_registry_t *registry,
   jb_vector_t implied = {0};
   hal_status_t status = jb_vector_init(&implied, sizeof(size_t), heap());
   jb_string_clear(out);
-  put(out, &status,
-      "#ifndef JH_HAL_GENERATED_FEATURE_GRAPH_INCLUDED\n"
-      "#define JH_HAL_GENERATED_FEATURE_GRAPH_INCLUDED 1\n"
-      "/* Generated by jh generate features; do not edit. */\n"
-      "#define JH_HAL_FEATURE_SCHEMA_VERSION ");
-  put_number(out, &status, JH_FEATURE_SCHEMA_VERSION);
-  put(out, &status, "\n#define JH_HAL_FEATURE_GENERATOR_VERSION ");
-  put_number(out, &status, JH_FEATURE_GENERATOR_VERSION);
-  put(out, &status, "\n#define JH_HAL_FEATURE_REGISTRY_DIGEST \"");
-  put(out, &status, registry->digest);
-  put(out, &status, "\"\n#define JH_HAL_FEATURE_SCHEMA_DIGEST \"");
-  put(out, &status, registry->schema_digest);
-  put(out, &status, "\"\n\n");
+  jh_put(out, &status,
+         "#ifndef JH_HAL_GENERATED_FEATURE_GRAPH_INCLUDED\n"
+         "#define JH_HAL_GENERATED_FEATURE_GRAPH_INCLUDED 1\n"
+         "/* Generated by jh generate features; do not edit. */\n"
+         "#define JH_HAL_FEATURE_SCHEMA_VERSION ");
+  jh_put_int64(out, &status, JH_FEATURE_SCHEMA_VERSION);
+  jh_put(out, &status, "\n#define JH_HAL_FEATURE_GENERATOR_VERSION ");
+  jh_put_int64(out, &status, JH_FEATURE_GENERATOR_VERSION);
+  jh_put(out, &status, "\n#define JH_HAL_FEATURE_REGISTRY_DIGEST \"");
+  jh_put(out, &status, registry->digest);
+  jh_put(out, &status, "\"\n#define JH_HAL_FEATURE_SCHEMA_DIGEST \"");
+  jh_put(out, &status, registry->schema_digest);
+  jh_put(out, &status, "\"\n\n");
   for (size_t i = 0; i < count; ++i) {
     const jh_feature_t *feature = feature_at(features, i);
     if (!feature->derived)
       continue;
-    put(out, &status, "#if defined(");
-    put_span(out, &status, jh_string_span(&feature->name));
-    put(out, &status, ")\n#error \"[JH-CFG-DERIVED] ");
-    put_span(out, &status, jh_string_span(&feature->name));
-    put(out, &status, " cannot be requested directly\"\n#endif\n\n");
+    jh_put(out, &status, "#if defined(");
+    jh_put_span(out, &status, jh_string_span(&feature->name));
+    jh_put(out, &status, ")\n#error \"[JH-CFG-DERIVED] ");
+    jh_put_span(out, &status, jh_string_span(&feature->name));
+    jh_put(out, &status, " cannot be requested directly\"\n#endif\n\n");
   }
   for (size_t i = 0; status == HAL_OK && i < count; ++i) {
     status = closure(features, i, &implied);
     if (status != HAL_OK || jb_vector_size(&implied) == 0)
       continue;
     const jb_json_span_t name = jh_string_span(&feature_at(features, i)->name);
-    put(out, &status, "/* Resolved implications of ");
-    put_span(out, &status, name);
-    put(out, &status, ". */\n#if defined(");
-    put_span(out, &status, name);
-    put(out, &status, ")\n");
+    jh_put(out, &status, "/* Resolved implications of ");
+    jh_put_span(out, &status, name);
+    jh_put(out, &status, ". */\n#if defined(");
+    jh_put_span(out, &status, name);
+    jh_put(out, &status, ")\n");
     for (size_t d = 0; d < jb_vector_size(&implied); ++d) {
       const jb_json_span_t dependency = jh_string_span(
           &feature_at(features,
                       *(const size_t *)jb_vector_const_at(&implied, d))
                ->name);
-      put(out, &status, "#if !defined(");
-      put_span(out, &status, dependency);
-      put(out, &status, ")\n#define ");
-      put_span(out, &status, dependency);
-      put(out, &status, " 1\n#endif\n");
+      jh_put(out, &status, "#if !defined(");
+      jh_put_span(out, &status, dependency);
+      jh_put(out, &status, ")\n#define ");
+      jh_put_span(out, &status, dependency);
+      jh_put(out, &status, " 1\n#endif\n");
     }
-    put(out, &status, "#endif\n\n");
+    jh_put(out, &status, "#endif\n\n");
   }
   for (size_t i = 0; i < count; ++i) {
     const jh_feature_t *feature = feature_at(features, i);
@@ -1904,42 +1624,42 @@ hal_status_t jh_feature_registry_header(const jh_feature_registry_t *registry,
     for (size_t r = 0; r < jb_vector_size(&feature->requirements); ++r) {
       const jb_json_span_t requirement =
           jh_string_span(jh_list_at(&feature->requirements, r));
-      put(out, &status, "#if defined(");
-      put_span(out, &status, name);
-      put(out, &status, ") && !defined(");
-      put_span(out, &status, requirement);
-      put(out, &status, ")\n#error \"[JH-CFG-REQUIRES] ");
-      put_span(out, &status, name);
-      put(out, &status, " requires ");
-      put_span(out, &status, requirement);
-      put(out, &status, "\"\n#endif\n\n");
+      jh_put(out, &status, "#if defined(");
+      jh_put_span(out, &status, name);
+      jh_put(out, &status, ") && !defined(");
+      jh_put_span(out, &status, requirement);
+      jh_put(out, &status, ")\n#error \"[JH-CFG-REQUIRES] ");
+      jh_put_span(out, &status, name);
+      jh_put(out, &status, " requires ");
+      jh_put_span(out, &status, requirement);
+      jh_put(out, &status, "\"\n#endif\n\n");
     }
     for (size_t c = 0; c < jb_vector_size(&feature->conflicts); ++c) {
       const jb_json_span_t conflict =
           jh_string_span(jh_list_at(&feature->conflicts, c));
       if (jh_span_compare(name, conflict) >= 0)
         continue;
-      put(out, &status, "#if defined(");
-      put_span(out, &status, name);
-      put(out, &status, ") && defined(");
-      put_span(out, &status, conflict);
-      put(out, &status, ")\n#error \"[JH-CFG-CONFLICT] ");
-      put_span(out, &status, name);
-      put(out, &status, " conflicts with ");
-      put_span(out, &status, conflict);
-      put(out, &status, "\"\n#endif\n\n");
+      jh_put(out, &status, "#if defined(");
+      jh_put_span(out, &status, name);
+      jh_put(out, &status, ") && defined(");
+      jh_put_span(out, &status, conflict);
+      jh_put(out, &status, ")\n#error \"[JH-CFG-CONFLICT] ");
+      jh_put_span(out, &status, name);
+      jh_put(out, &status, " conflicts with ");
+      jh_put_span(out, &status, conflict);
+      jh_put(out, &status, "\"\n#endif\n\n");
     }
   }
-  put(out, &status, verbose_preamble);
+  jh_put(out, &status, verbose_preamble);
   for (size_t i = 0; i < count; ++i) {
     const jb_json_span_t name = jh_string_span(&feature_at(features, i)->name);
-    put(out, &status, "#if defined(");
-    put_span(out, &status, name);
-    put(out, &status, ")\n#pragma message(\"HAL_CONFIG: ");
-    put_span(out, &status, name);
-    put(out, &status, "\")\n#endif\n");
+    jh_put(out, &status, "#if defined(");
+    jh_put_span(out, &status, name);
+    jh_put(out, &status, ")\n#pragma message(\"HAL_CONFIG: ");
+    jh_put_span(out, &status, name);
+    jh_put(out, &status, "\")\n#endif\n");
   }
-  put(out, &status, "#endif /* generated HAL_CONFIG_VERBOSE report */\n");
+  jh_put(out, &status, "#endif /* generated HAL_CONFIG_VERBOSE report */\n");
   jb_vector_destroy(&implied);
   return status;
 }
@@ -1949,15 +1669,15 @@ static void put_set(jb_string_t *out, hal_status_t *status, const char *prefix,
                     jb_json_span_t name, const char *suffix,
                     const jb_vector_t *values, const jb_vector_t *features,
                     bool indices) {
-  put(out, status, "set(");
-  put(out, status, prefix);
-  put_span(out, status, name);
-  put(out, status, suffix);
+  jh_put(out, status, "set(");
+  jh_put(out, status, prefix);
+  jh_put_span(out, status, name);
+  jh_put(out, status, suffix);
   if (jb_vector_size(values) == 0) {
-    put(out, status, " \"\")\n");
+    jh_put(out, status, " \"\")\n");
     return;
   }
-  put(out, status, "\n");
+  jh_put(out, status, "\n");
   for (size_t i = 0; i < jb_vector_size(values); ++i) {
     const jb_json_span_t value =
         indices
@@ -1966,11 +1686,11 @@ static void put_set(jb_string_t *out, hal_status_t *status, const char *prefix,
                               *(const size_t *)jb_vector_const_at(values, i))
                        ->name)
             : jh_string_span(jh_list_at(values, i));
-    put(out, status, "    \"");
-    put_span(out, status, value);
-    put(out, status, "\"\n");
+    jh_put(out, status, "    \"");
+    jh_put_span(out, status, value);
+    jh_put(out, status, "\"\n");
   }
-  put(out, status, ")\n");
+  jh_put(out, status, ")\n");
 }
 
 /* The resolution functions after the per-symbol data. */
@@ -2122,37 +1842,37 @@ hal_status_t jh_feature_registry_cmake(const jh_feature_registry_t *registry,
       status = jh_list_push(&derived, jh_string_span(&feature->name));
   }
   jb_string_clear(out);
-  put(out, &status,
-      "# Generated by jh generate features; do not edit.\n"
-      "include_guard(GLOBAL)\n\n"
-      "set(JH_HAL_FEATURE_SCHEMA_VERSION ");
-  put_number(out, &status, JH_FEATURE_SCHEMA_VERSION);
-  put(out, &status, ")\nset(JH_HAL_FEATURE_GENERATOR_VERSION ");
-  put_number(out, &status, JH_FEATURE_GENERATOR_VERSION);
-  put(out, &status, ")\nset(JH_HAL_FEATURE_REGISTRY_DIGEST \"");
-  put(out, &status, registry->digest);
-  put(out, &status, "\")\nset(JH_HAL_FEATURE_SCHEMA_DIGEST \"");
-  put(out, &status, registry->schema_digest);
-  put(out, &status, "\")\n\n");
+  jh_put(out, &status,
+         "# Generated by jh generate features; do not edit.\n"
+         "include_guard(GLOBAL)\n\n"
+         "set(JH_HAL_FEATURE_SCHEMA_VERSION ");
+  jh_put_int64(out, &status, JH_FEATURE_SCHEMA_VERSION);
+  jh_put(out, &status, ")\nset(JH_HAL_FEATURE_GENERATOR_VERSION ");
+  jh_put_int64(out, &status, JH_FEATURE_GENERATOR_VERSION);
+  jh_put(out, &status, ")\nset(JH_HAL_FEATURE_REGISTRY_DIGEST \"");
+  jh_put(out, &status, registry->digest);
+  jh_put(out, &status, "\")\nset(JH_HAL_FEATURE_SCHEMA_DIGEST \"");
+  jh_put(out, &status, registry->schema_digest);
+  jh_put(out, &status, "\")\n\n");
   put_set(out, &status, "JH_HAL_FEATURE_SYMBOLS", jh_span(""), "", &names,
           features, false);
-  put(out, &status, "\n");
+  jh_put(out, &status, "\n");
   put_set(out, &status, "JH_HAL_FEATURE_DERIVED_SYMBOLS", jh_span(""), "",
           &derived, features, false);
-  put(out, &status, "\n");
+  jh_put(out, &status, "\n");
   for (size_t i = 0; status == HAL_OK && i < count; ++i) {
     const jh_feature_t *feature = feature_at(features, i);
     const jb_json_span_t name = jh_string_span(&feature->name);
     status = closure(features, i, &implied);
-    put(out, &status, "set(JH_HAL_FEATURE_");
-    put_span(out, &status, name);
-    put(out, &status, "_DOMAIN \"");
-    put_span(out, &status, jh_string_span(&feature->domain));
-    put(out, &status, "\")\nset(JH_HAL_FEATURE_");
-    put_span(out, &status, name);
-    put(out, &status, "_KIND \"");
-    put(out, &status, feature->derived ? "derived" : "feature");
-    put(out, &status, "\")\n");
+    jh_put(out, &status, "set(JH_HAL_FEATURE_");
+    jh_put_span(out, &status, name);
+    jh_put(out, &status, "_DOMAIN \"");
+    jh_put_span(out, &status, jh_string_span(&feature->domain));
+    jh_put(out, &status, "\")\nset(JH_HAL_FEATURE_");
+    jh_put_span(out, &status, name);
+    jh_put(out, &status, "_KIND \"");
+    jh_put(out, &status, feature->derived ? "derived" : "feature");
+    jh_put(out, &status, "\")\n");
     put_set(out, &status, "JH_HAL_FEATURE_", name, "_IMPLIES",
             &feature->implies, features, false);
     put_set(out, &status, "JH_HAL_FEATURE_", name, "_TRANSITIVE_IMPLIES",
@@ -2173,10 +1893,10 @@ hal_status_t jh_feature_registry_cmake(const jh_feature_registry_t *registry,
       put_set(out, &status, "JH_HAL_FEATURE_", name,
               "_BUILD_EFFECT_DEPENDENCIES", &feature->dependencies, features,
               false);
-    put(out, &status, "\n");
+    jh_put(out, &status, "\n");
   }
   for (size_t i = 0; i < COUNTOF(cmake_functions); ++i)
-    put(out, &status, cmake_functions[i]);
+    jh_put(out, &status, cmake_functions[i]);
   jb_vector_destroy(&implied);
   jh_list_destroy(&derived);
   jh_list_destroy(&names);
@@ -2219,7 +1939,7 @@ static hal_status_t artifact_path(const jh_json_document_t *artifacts,
     const jb_json_span_t parts[] = {
         jh_span("config/tooling/artifacts.json lacks generatedArtifacts."),
         jh_span(key)};
-    return fail_parts(failure, parts, COUNTOF(parts));
+    return jh_check_fail(failure, parts, COUNTOF(parts));
   }
   // Joined to the output root before anything is written: never outside it.
   if (jh_generated_path_relative(text))
@@ -2227,7 +1947,7 @@ static hal_status_t artifact_path(const jh_json_document_t *artifacts,
   const jb_json_span_t parts[] = {
       jh_span("config/tooling/artifacts.json: generatedArtifacts."),
       jh_span(key), jh_span(" must be repository-relative")};
-  return fail_parts(failure, parts, COUNTOF(parts));
+  return jh_check_fail(failure, parts, COUNTOF(parts));
 }
 
 hal_status_t jh_feature_outputs_read(const char *root,
@@ -2252,7 +1972,8 @@ hal_status_t jh_feature_outputs_read(const char *root,
   if (status == HAL_OK &&
       jh_json_read_document(&where, jb_string_data(&path), 1024 * 1024, false,
                             &artifacts, &reason) != HAL_OK)
-    status = fail_json(failure, jh_string_span(&path), &where, &reason);
+    status =
+        jh_check_json_error(failure, jh_string_span(&path), &where, &reason);
   if (status == HAL_OK)
     status =
         artifact_path(&artifacts, "featureHeader", &outputs->header, failure);
@@ -2320,10 +2041,10 @@ hal_status_t jh_feature_registry_publish(const jh_feature_registry_t *registry,
       continue;
     }
     jb_string_clear(&label);
-    status = jh_fail_storage(failure, append(&label, "generated:"));
+    status = jh_fail_storage(failure, jh_append(&label, "generated:"));
     if (status == HAL_OK)
       status = jh_fail_storage(
-          failure, append_span(&label, jh_string_span(relative[i])));
+          failure, jh_append_span(&label, jh_string_span(relative[i])));
     bool file_current = true;
     if (status == HAL_OK)
       status = jh_check_generated(

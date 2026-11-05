@@ -147,31 +147,6 @@ static hal_status_t walk(const char *root, bool include_hardware,
   return status;
 }
 
-/* Path.resolve(): the real path of an existing root, else root itself.
- * Windows paths lose the \\?\ prefix of a drive path, as os.path.realpath
- * drops it. */
-static hal_status_t resolved(const char *root, jb_string_t *out) {
-  size_t required = 0;
-  hal_status_t status = jb_fs_realpath(root, NULL, 0, &required);
-  if (status == HAL_ENOENT || (status == HAL_EOVERFLOW && required == 0))
-    return jb_string_assign(out, root, strlen(root));
-  if (status != HAL_OK && status != HAL_EOVERFLOW)
-    return status;
-  status = jb_string_resize(out, required, '\0');
-  if (status == HAL_OK)
-    status =
-        jb_fs_realpath(root, jb_string_mutable_data(out), required, &required);
-  if (status == HAL_OK)
-    status = jb_string_resize(out, required - 1, '\0');
-#ifdef _WIN32
-  const char *text = jb_string_data(out);
-  if (status == HAL_OK && jb_string_size(out) >= 7 &&
-      memcmp(text, "\\\\?\\", 4) == 0 && text[5] == ':' && text[6] == '\\')
-    status = jb_string_assign(out, text + 4, jb_string_size(out) - 4);
-#endif
-  return status;
-}
-
 hal_status_t jh_feature_lint_inputs(const char *root, bool include_hardware,
                                     jb_vector_t *inputs,
                                     jh_failure_t *failure) {
@@ -180,7 +155,7 @@ hal_status_t jh_feature_lint_inputs(const char *root, bool include_hardware,
   jb_string_t top = {0};
   hal_status_t status = jb_string_init(&top, jb_heap_allocator());
   if (status == HAL_OK)
-    status = resolved(root, &top);
+    status = jh_resolved_path(root, &top);
   jb_fs_info_t info = {0};
   const bool found = status == HAL_OK &&
                      jb_fs_status(jb_string_data(&top), true, &info) == HAL_OK;

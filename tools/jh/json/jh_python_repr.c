@@ -475,3 +475,27 @@ hal_status_t jh_python_repr_json_append(jb_string_t *out,
   jb_string_destroy(&quoted);
   return status;
 }
+
+bool jh_python_strip(jb_json_span_t text, jb_json_span_t *out) {
+  size_t begin = 0, end = 0;
+  bool content = false;
+  for (size_t at = 0; at < text.length;) {
+    uint32_t scalar = 0;
+    size_t used = 0;
+    jb_unicode_properties_t properties = {0};
+    if (jb_utf8_decode(text.data + at, text.length - at, &scalar, &used) !=
+            HAL_OK ||
+        jb_unicode_properties(scalar, &properties) != HAL_OK)
+      return false;
+    if (!properties.whitespace) {
+      if (!content)
+        begin = at;
+      content = true;
+      end = at + used;
+    }
+    at += used;
+  }
+  out->data = text.data + begin;
+  out->length = content ? end - begin : 0;
+  return true;
+}

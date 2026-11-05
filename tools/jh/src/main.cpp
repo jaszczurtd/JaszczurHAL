@@ -65,6 +65,7 @@ enum option_id {
   report_only,
   include_hardware,
   label,
+  boards_root,
   machine,
   json_version,
   help,
@@ -102,7 +103,9 @@ constexpr option_spec options[] = {
      "Header read before the project header, like jh_hardware.h"},
     {"context", "<text>",
      "Configuration the resolution findings name (default: command line)"},
-    {"target", "<id>", "Target whose required features join the resolution"},
+    {"target", "<id>",
+     "Target whose required features join the resolution (board default: "
+     "the target whose default board to print)"},
     {"request", "<SYMBOL[=VALUE]>",
      "Request a feature; repeatable (feature resolve)"},
     {"source", "<text>",
@@ -116,6 +119,9 @@ constexpr option_spec options[] = {
      "Also lint tests/hardware (hardware-fixture checks only)"},
     {"label", "<text>",
      "Name of the manifest in findings (config manifest; default: path)"},
+    {"boards-root", "<path>",
+     "Board registry directory the board commands read (default: "
+     "<root>/boards)"},
     {"json", nullptr, "Write a versioned JSON result on stdout"},
     {"json-version", "<major>",
      "Require a supported JSON result major version (1)"},
@@ -135,7 +141,10 @@ enum command_id {
   feature_list_command,
   feature_resolve_command,
   feature_lint_command,
-  manifest_command
+  manifest_command,
+  board_list_command,
+  board_validate_command,
+  board_default_command
 };
 struct command_spec {
   const char *first, *second, *name;
@@ -172,6 +181,9 @@ const command_spec commands[] = {
      "feature.lint",
      {root, config_root, input_root, report_only, include_hardware}},
     {"config", "manifest", "config.manifest", {file, label}},
+    {"board", "list", "board.list", {root, boards_root}},
+    {"board", "validate", "board.validate", {root, boards_root}},
+    {"board", "default", "board.default", {root, boards_root, target}},
 };
 
 #ifdef _WIN32
@@ -295,13 +307,16 @@ std::string help_text() {
       " --file <path> [options]\n"
       "       jh feature lint (--root <path> | --config-root <path>)"
       " [--input-root <path>]... [options]\n"
-      "       jh config manifest --file <path> [--label <text>]\n\n"
+      "       jh config manifest --file <path> [--label <text>]\n"
+      "       jh board (list | validate) --root <path> [--boards-root <path>]\n"
+      "       jh board default --root <path> [--boards-root <path>]"
+      " --target <id>\n\n"
       "Read JSON, select a value and optionally compare or write it,\n"
       "generate the C defaults of the HAL component types or the feature\n"
       "registry artifacts, evaluate a project's hal_project_config.h as\n"
       "the build reads it, or list the feature registry, resolve the\n"
       "features one build requests and lint the feature requests of project\n"
-      "headers and manifests.\n";
+      "headers and manifests, or validate and list the board registry.\n";
   for (const auto &option : options) {
     text += "  --";
     text += option.name;
@@ -409,6 +424,17 @@ public:
       require(jb_json_writer_string(&writer, span(value)), 4,
               "cannot write result string");
     array_end();
+  }
+  /** A tree value under name, or as an array item when name is null. */
+  void tree(const char *name, jb_json_tree_view_t value) {
+    if (name != nullptr)
+      key(name);
+    require(jh_json_write_tree(&writer, value), 4, "cannot write result tree");
+  }
+  /** The fixed tables of the board registry as members of the result. */
+  void board_tables() {
+    require(jh_board_write_tables(&writer), 4,
+            "cannot write the board registry tables");
   }
   void node(jb_json_node_t value) {
     key("value");
@@ -1079,8 +1105,8 @@ int feature_lint(context &ctx, const std::string &base) {
     }
     jb_json_tree_t *tree = nullptr;
     jb_json_tree_view_t manifest{};
-    const hal_status_t loaded = jh_feature_load_object(
-        path.c_str(), limit, &tree, &manifest, &failed.value);
+    const hal_status_t loaded = jh_check_load_object(path.c_str(), limit, &tree,
+                                                     &manifest, &failed.value);
     const jh::tree_owner owner(tree);
     failed.check(loaded);
     failed.check(jh_manifest_findings(manifest, span(path), &findings.value,
@@ -1122,6 +1148,149 @@ int feature_lint(context &ctx, const std::string &base) {
 
 /* The project configuration a manifest carries although it belongs in
  * hal_project_config.h, read as jh-vscode reads a manifest. */
+// The board registry of --boards-root, else <root>/boards, with the
+// component, feature and hardware registries of --root.
+void load_boards(context &ctx, const std::string &base, const char *command,
+                 jh::board_registry &registry, std::string &boards) {
+  constexpr size_t limit = 16 * 1024 * 1024;
+  require_value(ctx.args, root,
+                (std::string(command) + " requires --root").c_str());
+  const auto hal_root = checkout_root(ctx.args, base);
+  if (ctx.args.present[boards_root]) {
+    require_value(ctx.args, boards_root, "--boards-root needs a path");
+    boards = jh::stl::absolute_path(ctx.args.values[boards_root], base);
+  } else {
+    boards = jh::stl::absolute_path("boards", hal_root);
+  }
+  jh::failure_record failed;
+  failed.check(jh_board_registry_load(&registry, hal_root.c_str(),
+                                      boards.c_str(), limit, &failed.value));
+}
+
+size_t tree_bytes(jb_json_tree_view_t value) {
+  const jb_json_tree_format_t compact{64 * 1024 * 1024, 0, false, false};
+  size_t written = 0;
+  require(jb_json_tree_format(
+              value, &compact,
+              [](void *, const char *, size_t) { return HAL_OK; }, nullptr,
+              &written),
+          4, "cannot measure the board registry");
+  return written;
+}
+
+/* The targets and boards with their descriptors, the capabilities, the
+ * component registry and the fixed tables. */
+int board_list(context &ctx, const std::string &base) {
+  jh::board_registry registry;
+  std::string boards;
+  load_boards(ctx, base, "board list", registry, boards);
+  const auto descriptor = [](const jb_vector_t &list, size_t index) {
+    return static_cast<const jh_board_descriptor_t *>(
+        jb_vector_const_at(&list, index));
+  };
+  if (!ctx.json) {
+    std::string text;
+    for (const auto *list : {&registry.targets, &registry.boards})
+      for (size_t i = 0; i < jb_vector_size(list); ++i)
+        text += std::string(list == &registry.targets ? "target " : "board ") +
+                std::string(jh::view(descriptor(*list, i)->id)) + '\n';
+    stdout_bytes(text);
+    return 0;
+  }
+  size_t bytes = boards.size() + tree_bytes(registry.capabilities) + 65536;
+  for (const auto *list : {&registry.targets, &registry.boards})
+    for (size_t i = 0; i < jb_vector_size(list); ++i)
+      bytes += tree_bytes(descriptor(*list, i)->root) +
+               jb_string_size(&descriptor(*list, i)->path) + 64;
+  result_writer result(bytes, bytes / 4);
+  result.string("command", "board.list");
+  result.string("status", "HAL_OK");
+  result.string("boardsRoot", jh::view(registry.boards_root));
+  for (const auto *list : {&registry.targets, &registry.boards}) {
+    result.array_begin(list == &registry.targets ? "targets" : "boards");
+    for (size_t i = 0; i < jb_vector_size(list); ++i) {
+      const jh_board_descriptor_t &item = *descriptor(*list, i);
+      result.object_begin(nullptr);
+      result.string("id", jh::view(item.id));
+      result.string("path", jh::view(item.path));
+      result.tree("descriptor", item.root);
+      result.object_end();
+    }
+    result.array_end();
+  }
+  result.tree("capabilities", registry.capabilities);
+  result.array_begin("components");
+  for (size_t i = 0; i < jb_vector_size(&registry.components); ++i) {
+    const auto &component = *static_cast<const jh_board_component_t *>(
+        jb_vector_const_at(&registry.components, i));
+    result.object_begin(nullptr);
+    result.string("id", jh::view(component.id));
+    result.string_list("providers", component.providers);
+    result.string("slot", jh::view(component.slot));
+    result.object_end();
+  }
+  result.array_end();
+  result.board_tables();
+  stdout_bytes(result.finish());
+  return 0;
+}
+
+int board_validate(context &ctx, const std::string &base) {
+  jh::board_registry registry;
+  std::string boards;
+  load_boards(ctx, base, "board validate", registry, boards);
+  const size_t targets = jb_vector_size(&registry.targets);
+  const size_t count = jb_vector_size(&registry.boards);
+  if (!ctx.json) {
+    stdout_bytes("validated " + std::to_string(targets) + " targets and " +
+                 std::to_string(count) + " boards\n");
+    return 0;
+  }
+  result_writer result(boards.size() + 1024);
+  result.string("command", "board.validate");
+  result.string("status", "HAL_OK");
+  result.string("boardsRoot", jh::view(registry.boards_root));
+  result.number("targets", targets);
+  result.number("boards", count);
+  stdout_bytes(result.finish());
+  return 0;
+}
+
+/* The default board of a known target. */
+int board_default(context &ctx, const std::string &base) {
+  jh::board_registry registry;
+  std::string boards;
+  load_boards(ctx, base, "board default", registry, boards);
+  const jh_board_descriptor_t *selected =
+      ctx.args.present[target] && !ctx.args.values[target].empty()
+          ? jh_board_registry_find(&registry.targets,
+                                   span(ctx.args.values[target]))
+          : nullptr;
+  if (selected == nullptr)
+    throw failure{HAL_ECONFIG, 2,  "board default requires a known --target",
+                  {},          {}, {}};
+  jb_json_tree_view_t value{};
+  jb_json_span_t board{nullptr, 0};
+  require(jb_json_tree_find(selected->root, span("defaultBoard"), &value) ==
+                      HAL_OK &&
+                  jb_json_tree_text(value, &board) == HAL_OK
+              ? HAL_OK
+              : HAL_EINTERNAL,
+          4, "cannot read the default board");
+  const std::string_view text(board.data, board.length);
+  if (!ctx.json) {
+    stdout_bytes(std::string(text) + '\n');
+    return 0;
+  }
+  result_writer result(text.size() + 1024);
+  result.string("command", "board.default");
+  result.string("status", "HAL_OK");
+  result.string("target", jh::view(selected->id));
+  result.string("board", text);
+  stdout_bytes(result.finish());
+  return 0;
+}
+
 int config_manifest(context &ctx, const std::string &base) {
   const auto &args = ctx.args;
   require_value(args, file, "config manifest requires --file");
@@ -1578,6 +1747,12 @@ int run(const std::vector<std::string> &argv) {
       return feature_lint(ctx, base);
     if (ctx.command == &commands[manifest_command])
       return config_manifest(ctx, base);
+    if (ctx.command == &commands[board_list_command])
+      return board_list(ctx, base);
+    if (ctx.command == &commands[board_validate_command])
+      return board_validate(ctx, base);
+    if (ctx.command == &commands[board_default_command])
+      return board_default(ctx, base);
     return inspect(ctx, base);
   } catch (const failure &error) {
     if (ctx.located) {

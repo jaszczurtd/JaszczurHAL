@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "bindings": [
+    "../bindings/gpio-output.json"
+  ],
+  "nodes": {
+    "status": {
+      "compatible": "test,gpio-output"
+    },
+    "blue": {
+      "compatible": "test,gpio-output"
+    }
+  },
+  "assemblies": {
+    "zero": {
+      "target": "rp2040",
+      "board": "rp2040-zero",
+      "clock": {
+        "tree": "default"
+      },
+      "statusLed": {
+        "node": "status"
+      },
+      "releaseReservations": [
+        "status-led"
+      ],
+      "nets": {
+        "blue": {
+          "endpoint": {
+            "domain": "soc-gpio",
+            "id": 16
+          },
+          "owner": "blue.out"
+        }
+      },
+      "nodes": {
+        "status": {
+          "present": true,
+          "pins": {
+            "out": 14
+          }
+        },
+        "blue": {
+          "present": true,
+          "pins": {
+            "out": {
+              "net": "blue"
+            }
+          }
+        }
+      }
+    }
+  }
+}

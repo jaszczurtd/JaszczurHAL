@@ -120,6 +120,10 @@ bool hal_tcp_socket_can_send(hal_tcp_socket_t socket);
 
 /**
  * @brief Check whether a TCP client socket is currently connected.
+ *
+ * A socket whose peer closed its side stays connected until every received
+ * byte has been read, so a receive that returns 0 bytes followed by false
+ * here marks the end of the stream.
  * @param socket Socket handle returned by @ref hal_tcp_socket_open.
  * @return true when the socket handle is valid and connected.
  */

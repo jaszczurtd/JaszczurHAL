@@ -99,7 +99,8 @@ class Phase3RegistryAndBuildTests(unittest.TestCase):
             (set(esp_idf.ESP_IDF_TARGET_SOURCES) & supported) <= set(EXPECTED_RESOLVED)
         )
         self.assertEqual(target["supportedFeatures"], sorted(supported))
-        esp_idf.generate_board_config.validate_target(target_path, target)
+        targets, _, _ = esp_idf.generate_board_config.load_registry(ROOT / "boards")
+        self.assertEqual(targets["esp32s3"], target)
 
     def test_fixture_resolves_all_phase3_features(self) -> None:
         model = resolve_model(ROOT, FIXTURE)

@@ -1705,6 +1705,11 @@ void hal_tcp_listener_close(hal_tcp_listener_t listener);
   `HAL_EAGAIN` when `tcp_write()` temporarily lacks queue memory.
 - `hal_tcp_socket_recv(...)` returns bytes read, `0` on timeout/no data/peer
   close, or `<0` for invalid handles/arguments.
+- `hal_tcp_socket_is_connected(...)` returns `false` once the peer has closed
+  its side and every received byte has been read. Bytes that arrived before
+  the close stay readable, so after a `0` from `hal_tcp_socket_recv(...)`
+  this call tells the end of the stream apart from an idle connection on
+  every backend.
 - `hal_tcp_socket_can_recv(...)` and `hal_tcp_socket_can_send(...)` are
   non-consuming readiness probes for compatibility layers such as BSD
   `select()`.

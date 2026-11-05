@@ -1,4 +1,6 @@
 #include "jh_failure.h"
+#include <inttypes.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -77,12 +79,57 @@ jb_json_span_t jh_string_span(const jb_string_t *text) {
   return span;
 }
 
+hal_status_t jh_append(jb_string_t *out, const char *text) {
+  return jb_string_append(out, text, strlen(text));
+}
+
+hal_status_t jh_append_span(jb_string_t *out, jb_json_span_t text) {
+  return text.length == 0 ? HAL_OK
+                          : jb_string_append(out, text.data, text.length);
+}
+
+void jh_put(jb_string_t *out, hal_status_t *status, const char *text) {
+  if (*status == HAL_OK)
+    *status = jh_append(out, text);
+}
+
+void jh_put_span(jb_string_t *out, hal_status_t *status, jb_json_span_t text) {
+  if (*status == HAL_OK)
+    *status = jh_append_span(out, text);
+}
+
+hal_status_t jh_string_sink(void *user, const char *data, size_t length) {
+  return jb_string_append(user, data, length);
+}
+
+void jh_put_int64(jb_string_t *out, hal_status_t *status, int64_t value) {
+  char number[24];
+  const int written = snprintf(number, sizeof number, "%" PRId64, value);
+  if (*status == HAL_OK)
+    *status = jb_string_append(out, number, (size_t)written);
+}
+
 int jh_span_compare(jb_json_span_t a, jb_json_span_t b) {
   const size_t shorter = a.length < b.length ? a.length : b.length;
   const int order = shorter == 0 ? 0 : memcmp(a.data, b.data, shorter);
   if (order != 0)
     return order;
   return a.length < b.length ? -1 : a.length > b.length ? 1 : 0;
+}
+
+jb_json_span_t jh_span_path_stem(jb_json_span_t path) {
+  size_t begin = path.length;
+  while (begin > 0 && path.data[begin - 1] != '/' &&
+         path.data[begin - 1] != '\\')
+    --begin;
+  size_t end = path.length;
+  for (size_t at = path.length; at > begin + 1; --at)
+    if (path.data[at - 1] == '.') {
+      end = at - 1;
+      break;
+    }
+  const jb_json_span_t stem = {path.data + begin, end - begin};
+  return stem;
 }
 
 hal_status_t jh_list_init(jb_vector_t *list) {

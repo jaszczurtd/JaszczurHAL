@@ -140,17 +140,6 @@ hal_status_t jh_feature_resolve(const jh_feature_registry_t *registry,
                                 jh_feature_resolution_t *resolution,
                                 jh_failure_t *failure);
 
-/** Read path, at most limit bytes, as json.loads reads it, with an object at
- * its root, the way the registry fragments and the manifests the feature
- * lint checks are read: "<path>: invalid JSON: <reason>" or "<path>: $: got
- * <value>; expected an object" with exit code 2. *tree receives the tree;
- * destroy it with jb_json_tree_destroy whenever it is not NULL.
- */
-hal_status_t jh_feature_load_object(const char *path, size_t limit,
-                                    jb_json_tree_t **tree,
-                                    jb_json_tree_view_t *root,
-                                    jh_failure_t *failure);
-
 /** Replace out with the generated header of the feature graph. */
 hal_status_t jh_feature_registry_header(const jh_feature_registry_t *registry,
                                         jb_string_t *out);

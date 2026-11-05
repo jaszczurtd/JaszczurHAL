@@ -8,6 +8,7 @@
 #include <jb/json.h>
 #include <jb/json_tree.h>
 #include <jb/string.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -50,6 +51,12 @@ hal_status_t jh_python_repr_append(jb_string_t *out, jb_json_span_t text);
  */
 hal_status_t jh_python_repr_json_append(jb_string_t *out,
                                         jb_json_tree_view_t value);
+
+/** Python's str.strip(): out receives text without the whitespace
+ * str.isspace() accepts on both ends (empty for whitespace only). False for
+ * text that is not valid UTF-8, with out unchanged.
+ */
+bool jh_python_strip(jb_json_span_t text, jb_json_span_t *out);
 
 #ifdef __cplusplus
 }

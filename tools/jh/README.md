@@ -349,6 +349,58 @@ with a traceback. A file that is not valid JSON, for the lint as for the
 registry, names the jhbase reason with its line and column where Python gave
 the reason of its `json` module.
 
+## Board registry
+
+`jh board validate --root <checkout>` checks the board registry below
+`--boards-root` (default `<root>/boards`): `capabilities.json`, then every
+`targets/*.json` and every `profiles/*.json` in name order, each read the way
+`json.loads` reads it. Descriptors refer to registries below `--root`, which
+the command reads too: the component registry
+`config/tooling/board_components.json`, the feature registry and the clock
+schemas. It applies the rules `scripts/generate_board_config.py` applied:
+exact fields, IDs and macros, capability bits, pin sets, devices with their
+roles and buses, CAN channels, components, USB identities, pin reservations,
+clock inputs and sources, unique board IDs, profile IDs and selectors, and a
+compatible default and source fallback board for every target. Messages keep
+the wording of that script, `<file>: <JSON path>: got <value>; expected
+<rule>`. On success the command prints `validated <n> targets and <m>
+boards`; with `--json` the result (`command: "board.validate"`) has
+`boardsRoot`, `targets` and `boards` with the two counts.
+
+`jh board list` checks the same registry and prints `target <id>` and
+`board <id>` lines. Its `--json` result (`command: "board.list"`) has
+`boardsRoot`, `targets` and `boards`, each entry with `id`, `path` and the
+`descriptor` as read, `capabilities`, `components` with `id`, `providers` and
+`slot`, and the tables the generators use: `deviceRoles`, `canControllers`,
+`canTransceivers`, `canChannelSignals`, `busDeviceKind` and
+`singleEndpointDeviceKinds`. `jh board default --target <id>` prints the
+default board of a known target; its `--json` result
+(`command: "board.default"`) has `target` and `board`.
+
+The commands exit with 0 on success, 2 for an invalid registry, a registry
+file they cannot read or an unknown target, and 4 when memory runs out.
+`scripts/generate_board_config.py` gives its importers this model, the
+registry from `load_registry()` and the `COMPONENT_REGISTRY` and
+`CAN_CONTROLLERS` tables, each registry read once per process until its files
+change.
+
+Unlike that script, the commands accept in an integer field only a number
+written without a fraction or exponent and within the signed 64-bit range.
+They reject `true` and `false`, for example in a capability `bit`, where
+Python took them as 1 and 0; the schema validator rejects them too. They also
+reject `1.0`, which Python accepted where it compared the value, as in
+`schemaVersion` or a pin ID, and which the schema validator treats as an
+integer. Python also accepted larger integers, for example in memory sizes,
+`cores` or `profileId`. The ranges of one pin set cover at most 65536 pins
+(`expected a range within 65536 pins`), while Python expanded every range
+into a set and ran out of memory on a large `last`.
+
+The commands list a set in a message in sorted order, where Python used its
+set order, which changes from one run to the next. A value of the wrong type or a missing member is a regular message
+where Python stopped with a `TypeError`, `KeyError` or `AttributeError`, and
+a file that cannot be read gives `invalid JSON: cannot read input file`
+instead of the operating system's error text.
+
 ## Type catalogue and device defaults
 
 `jh generate device-defaults --root <checkout>` reads every `*.json` of

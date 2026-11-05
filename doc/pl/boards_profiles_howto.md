@@ -32,8 +32,9 @@ tree opisuje [poradnik projektu firmware](FwProjectWorkflow.md).
 - `profiles/<id>.json` opisuje fizyczną płytkę;
 - `capabilities.json` przypisuje stałe bity cech sprzętowych;
 - `board.schema.json` zawiera wyłącznie informacje pomocnicze dla edytora;
-- `scripts/generate_board_config.py` odpowiada za sprawdzanie poprawności
-  strukturalnej i semantycznej.
+- `jh board validate` odpowiada za sprawdzanie poprawności strukturalnej
+  i semantycznej ([README jh](../../tools/jh/README.pl.md#rejestr-płytek));
+  `scripts/generate_board_config.py` czyta od niego sprawdzony rejestr.
 
 Identyfikatory deskryptorów muszą mieć zapis kebab-case i odpowiadać nazwom plików. Błędem są nieznane pola, powtórzone identyfikatory, niezgodne pary platforma-płytka, nieprawidłowe punkty połączeń, nieznane cechy lub komponenty oraz zapis wyników poza `.build`.
 

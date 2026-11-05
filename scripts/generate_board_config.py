@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Validate board descriptors and generate resolved build configuration."""
+"""Generate resolved build configuration from the board registry that
+`jh board list` validates."""
 
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 from functools import partial
 import hashlib
 import json
@@ -16,25 +18,16 @@ from typing import Any
 from codegen_support import (
     atomic_write_text,
     check_generated_outputs,
-    load_json_object,
     require_exact_fields,
     validation_error,
     write_generated_outputs,
 )
-import clock_registry
 import generate_hal_features
-import hardware_schema
+import project_config
 from repository_layout import (
     BOARD_COMPONENTS_CMAKE_OUTPUT,
     BOARD_FALLBACK_HEADER_OUTPUT,
     BOARD_REGISTRY_HEADER_OUTPUT,
-)
-from tooling_contract import (
-    ToolingContractError,
-    load_tooling_contract,
-    require_list,
-    require_string,
-    require_string_list,
 )
 
 
@@ -43,231 +36,111 @@ class DescriptorError(ValueError):
 
 
 fail = partial(validation_error, DescriptorError)
-load_json = partial(load_json_object, error_type=DescriptorError)
 exact_fields = partial(require_exact_fields, error_type=DescriptorError)
 atomic_write = partial(atomic_write_text, error_type=DescriptorError)
 
-
-COMMON_FIELDS = {
-    "$schema",
-    "schemaVersion",
-    "kind",
-    "id",
-    "displayName",
-    "description",
-    "status",
-}
-TARGET_FIELDS = COMMON_FIELDS | {
-    "usbDevice",
-    "architecture",
-    "hal",
-    "build",
-    "gpio",
-    "clockInputs",
-    "memory",
-    "defaultBoard",
-    "sourceFallbackBoard",
-    "components",
-    "requiredFeatures",
-    "supportedFeatures",
-}
-BOARD_FIELDS = COMMON_FIELDS | {
-    "compatibleTargets",
-    "build",
-    "hal",
-    "memory",
-    "gpio",
-    "capabilities",
-    "devices",
-    "peripherals",
-    "components",
-    "constraints",
-    "programming",
-    "can",
-    "clockSources",
-}
-
-
-def load_component_registry() -> dict[str, dict[str, Any]]:
-    source = "board_components.json"
-    document = load_tooling_contract(source)
-    records = require_list(document, "components", source=source)
-    registry: dict[str, dict[str, Any]] = {}
-    for index, raw_record in enumerate(records):
-        record_source = f"{source}: components[{index}]"
-        if not isinstance(raw_record, dict):
-            raise ToolingContractError(f"{record_source} must be an object")
-        identifier = require_string(
-            raw_record.get("id"), "id", source=record_source
-        )
-        if identifier in registry:
-            raise ToolingContractError(
-                f"{record_source}: duplicate id {identifier!r}"
-            )
-        providers = require_string_list(
-            raw_record.get("providers"), "providers", source=record_source
-        )
-        registry[identifier] = {
-            "providers": set(providers),
-            "slot": require_string(
-                raw_record.get("slot"), "slot", source=record_source
-            ),
-        }
-    return registry
-
-
-COMPONENT_REGISTRY = load_component_registry()
-SINGLE_ENDPOINT_DEVICE_KINDS = {
-    "gpio": {"activeLevel"},
-    "component-gpio": {"activeLevel"},
-    "addressable": {"protocol", "pixelOrder"},
-}
-BUS_DEVICE_KIND = "bus-device"
-# Declarative schema for multi-pin bus devices. Machinery below is role
-# agnostic; every entry here is data describing one device role.
-DEVICE_ROLE_REGISTRY = {
-    "sx1262-radio": {
-        "busKinds": {"spi"},
-        "macroPrefix": "HAL_BOARD_LORA_RADIO",
-        "signals": {
-            "sck": "required",
-            "mosi": "required",
-            "miso": "required",
-            "cs": "required",
-            "reset": "required",
-            "busy": "required",
-            "dio1": "required",
-            "rfSwitchA": "conditional",
-            "rfSwitchB": "conditional",
-        },
-        "attributes": {
-            "minFrequencyHz": {"type": "uint32", "min": 1},
-            "maxFrequencyHz": {"type": "uint32", "min": 1},
-            "maxSpiClockHz": {"type": "uint32", "min": 1},
-            "defaultSpiClockHz": {"type": "uint32", "min": 1},
-            "minTxPowerDbm": {"type": "int8"},
-            "maxTxPowerDbm": {"type": "int8"},
-            "regulator": {"type": "enum", "values": ["ldo", "dcdc"]},
-            "rfSwitchMode": {
-                "type": "enum",
-                "values": [
-                    "none",
-                    "dio2",
-                    "single-gpio",
-                    "dio2-single-gpio",
-                    "dual-gpio",
-                ],
-            },
-            "tcxoControl": {"type": "enum", "values": ["none", "dio3"]},
-            "tcxoVoltage": {
-                "type": "enum",
-                "values": [
-                    "1v6",
-                    "1v7",
-                    "1v8",
-                    "2v2",
-                    "2v4",
-                    "2v7",
-                    "3v0",
-                    "3v3",
-                ],
-                "conditional": True,
-            },
-            "tcxoStartupUs": {"type": "uint32", "min": 1, "conditional": True},
-            "rfSwitchIdleLevelA": {"type": "bool", "conditional": True},
-            "rfSwitchRxLevelA": {"type": "bool", "conditional": True},
-            "rfSwitchTxLevelA": {"type": "bool", "conditional": True},
-            "rfSwitchIdleLevelB": {"type": "bool", "conditional": True},
-            "rfSwitchRxLevelB": {"type": "bool", "conditional": True},
-            "rfSwitchTxLevelB": {"type": "bool", "conditional": True},
-        },
-        "ordered": [
-            ("minFrequencyHz", "maxFrequencyHz"),
-            ("minTxPowerDbm", "maxTxPowerDbm"),
-            ("defaultSpiClockHz", "maxSpiClockHz"),
-        ],
-        "requires": [
-            {
-                "when": (
-                    "rfSwitchMode",
-                    {"single-gpio", "dio2-single-gpio", "dual-gpio"},
-                ),
-                "signals": ["rfSwitchA"],
-                "attributes": [
-                    "rfSwitchIdleLevelA",
-                    "rfSwitchRxLevelA",
-                    "rfSwitchTxLevelA",
-                ],
-            },
-            {
-                "when": ("rfSwitchMode", {"dual-gpio"}),
-                "signals": ["rfSwitchB"],
-                "attributes": [
-                    "rfSwitchIdleLevelB",
-                    "rfSwitchRxLevelB",
-                    "rfSwitchTxLevelB",
-                ],
-            },
-            {
-                "when": ("tcxoControl", {"dio3"}),
-                "attributes": ["tcxoVoltage", "tcxoStartupUs"],
-            },
-        ],
-    }
-}
-# CAN controllers a board can wire channels to: the targets that have them,
-# their instance count and the HAL_CAN_BACKEND_* suffix of the generated table.
-CAN_CONTROLLERS = {
-    "stm32g474-fdcan": {
-        "targets": {"stm32g474"},
-        "instances": 3,
-        "backend": "STM32G474_FDCAN",
-    },
-}
-CAN_TRANSCEIVERS = {"mcp2562fd", "generic"}
-CAN_CHANNEL_SIGNALS = ("rx", "tx", "standby")
-ID_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-MACRO_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
-CAMEL_PATTERN = re.compile(r"^[a-z][a-zA-Z0-9]*$")
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 STM32_PIN_PATTERN = re.compile(r"^P([A-Z])([0-9]|1[0-5])$")
 FEATURE_PATTERN = re.compile(
     r"^(?:-D)?(HAL_(?:ENABLE|DISABLE)_[A-Z0-9_]+)(?:=(.*))?$"
 )
 
 
-def validate_common(path: Path, descriptor: dict[str, Any], kind: str) -> None:
-    allowed = TARGET_FIELDS if kind == "target" else BOARD_FIELDS
-    exact_fields(
-        path,
-        "$",
-        descriptor,
-        COMMON_FIELDS - {"$schema"},
-        allowed,
+@dataclass(frozen=True)
+class BoardRegistry:
+    """One board registry as `jh board list` validated it. The component,
+    device-role and CAN tables come from jh, which owns them."""
+
+    targets: dict[str, dict[str, Any]]
+    boards: dict[str, dict[str, Any]]
+    capabilities: dict[str, Any]
+    components: dict[str, dict[str, Any]]
+    device_roles: dict[str, dict[str, Any]]
+    can_controllers: dict[str, dict[str, Any]]
+    bus_device_kind: str
+
+
+def _registry_state(boards_root: Path) -> tuple[Any, ...] | None:
+    """Names, sizes and modification times of the registry inputs; None when
+    they cannot be listed, and then no result is kept."""
+    try:
+        inputs = [
+            REPOSITORY_ROOT / "config" / "tooling" / "board_components.json",
+            boards_root / "capabilities.json",
+            *sorted((boards_root / "targets").glob("*.json")),
+            *sorted((boards_root / "profiles").glob("*.json")),
+        ]
+        return tuple(
+            (str(path), status.st_size, status.st_mtime_ns)
+            for path, status in ((path, path.stat()) for path in inputs)
+        )
+    except OSError:
+        return None
+
+
+_MODELS: dict[str, tuple[tuple[Any, ...], BoardRegistry]] = {}
+
+
+def registry_model(boards_root: Path) -> BoardRegistry:
+    """The registry below boards_root as `jh board list` validates it, kept
+    for this process until its files change; DescriptorError with the jh
+    message when jh rejects it."""
+    root = Path(boards_root).absolute()
+    key = str(root)
+    state = _registry_state(root)
+    cached = _MODELS.get(key)
+    if cached is not None and state is not None and cached[0] == state:
+        return cached[1]
+    returncode, output = project_config.run_jh(
+        ["board", "list", f"--root={REPOSITORY_ROOT}", f"--boards-root={root}"],
+        DescriptorError,
     )
-    if descriptor["schemaVersion"] != 1:
-        fail(path, "$.schemaVersion", descriptor["schemaVersion"], "1")
-    if descriptor["kind"] != kind:
-        fail(path, "$.kind", descriptor["kind"], repr(kind))
-    identifier = descriptor["id"]
-    if not isinstance(identifier, str) or not ID_PATTERN.fullmatch(identifier):
-        fail(path, "$.id", identifier, "a kebab-case identifier")
-    if path.stem != identifier:
-        fail(path, "$.id", identifier, f"the filename stem {path.stem!r}")
-    for field in ("displayName", "description"):
-        if not isinstance(descriptor[field], str) or not descriptor[field].strip():
-            fail(path, f"$.{field}", descriptor[field], "a non-empty string")
-    if descriptor["status"] not in {
-        "supported",
-        "experimental",
-        "skeleton",
-        "deprecated",
-    }:
-        fail(path, "$.status", descriptor["status"], "a supported status")
+    if returncode != 0:
+        raise DescriptorError(output.get("message", f"jh exit {returncode}"))
+    model = BoardRegistry(
+        targets={item["id"]: item["descriptor"] for item in output["targets"]},
+        boards={item["id"]: item["descriptor"] for item in output["boards"]},
+        capabilities=output["capabilities"],
+        components={
+            item["id"]: {"providers": set(item["providers"]), "slot": item["slot"]}
+            for item in output["components"]
+        },
+        device_roles=output["deviceRoles"],
+        can_controllers={
+            name: {**item, "targets": set(item["targets"])}
+            for name, item in output["canControllers"].items()
+        },
+        bus_device_kind=output["busDeviceKind"],
+    )
+    if state is not None:
+        _MODELS[key] = (state, model)
+    return model
 
 
-def endpoint_key(endpoint: dict[str, Any]) -> tuple[str, Any]:
-    return endpoint["domain"], endpoint.get("id")
+def load_registry(
+    boards_root: Path,
+) -> tuple[
+    dict[str, dict[str, Any]],
+    dict[str, dict[str, Any]],
+    dict[str, Any],
+]:
+    """Targets, boards and capabilities of the registry below boards_root."""
+    model = registry_model(boards_root)
+    return model.targets, model.boards, model.capabilities
 
+
+def _tables() -> BoardRegistry:
+    """The jh tables, read with the registry of this repository."""
+    return registry_model(REPOSITORY_ROOT / "boards")
+
+
+def __getattr__(name: str) -> Any:
+    """COMPONENT_REGISTRY and CAN_CONTROLLERS for importers, from jh."""
+    if name == "COMPONENT_REGISTRY":
+        return _tables().components
+    if name == "CAN_CONTROLLERS":
+        return _tables().can_controllers
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 def expand_pin_set(path: Path, json_path: str, value: Any) -> set[Any]:
     pin_set = exact_fields(path, json_path, value, set(), {"ranges", "values"})
@@ -305,1284 +178,9 @@ def expand_pin_set(path: Path, json_path: str, value: Any) -> set[Any]:
     return result
 
 
-def validate_endpoint(
-    path: Path,
-    json_path: str,
-    endpoint: Any,
-    valid_pins: set[Any],
-    components: set[str],
-) -> None:
-    if not isinstance(endpoint, dict):
-        fail(path, json_path, endpoint, "an endpoint object")
-    domain = endpoint.get("domain")
-    if domain == "soc-gpio":
-        exact_fields(path, json_path, endpoint, {"domain", "id"}, {"domain", "id"})
-        if endpoint["id"] not in valid_pins:
-            fail(path, f"{json_path}.id", endpoint["id"], "a target valid pin")
-    elif domain == "component-gpio":
-        exact_fields(
-            path,
-            json_path,
-            endpoint,
-            {"domain", "component", "id", "halPin"},
-            {"domain", "component", "id", "halPin"},
-        )
-        component_known = endpoint["component"] in components
-        if endpoint["component"] == "cyw43" and {
-            "cyw43-pico-pio",
-            "cyw43-stm32-gspi",
-        } & components:
-            component_known = True
-        if not component_known:
-            fail(
-                path,
-                f"{json_path}.component",
-                endpoint["component"],
-                "a component selected by the resolved profile",
-            )
-        if not isinstance(endpoint["id"], int) or not isinstance(
-            endpoint["halPin"], int
-        ):
-            fail(path, json_path, endpoint, "integer component id and halPin")
-    else:
-        fail(path, f"{json_path}.domain", domain, "soc-gpio or component-gpio")
-
-
 def board_device_owner(device_id: str) -> str:
     """Reservation owner of a board device: board.<device-id in kebab case>."""
     return "board." + re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "-", device_id).lower()
-
-
-def require_hard_owner(
-    path: Path,
-    json_path: str,
-    pin: Any,
-    hard_reserved: dict[Any, str],
-    owner: str,
-) -> None:
-    """A board consumer may use a hard-reserved pin only when it owns it."""
-    if hard_reserved.get(pin) != owner:
-        fail(
-            path,
-            json_path,
-            pin,
-            f"a pin covered by a hard gpio reservation owned by {owner}",
-        )
-
-
-def validate_role_registry() -> None:
-    """Guard the declarative role specs against unreachable conditionals."""
-    for role, spec in DEVICE_ROLE_REGISTRY.items():
-        if not ID_PATTERN.fullmatch(role):
-            raise DescriptorError(f"device role {role!r}: expected a kebab-case ID")
-        if not MACRO_PATTERN.fullmatch(spec["macroPrefix"]):
-            raise DescriptorError(f"device role {role!r}: expected a C macro prefix")
-        gated_signals: set[str] = set()
-        gated_attributes: set[str] = set()
-        for rule in spec["requires"]:
-            gate, allowed = rule["when"]
-            gate_spec = spec["attributes"].get(gate)
-            if gate_spec is None or gate_spec["type"] != "enum":
-                raise DescriptorError(
-                    f"device role {role!r}: gate {gate!r} is not an enum attribute"
-                )
-            unknown = allowed - set(gate_spec["values"])
-            if unknown:
-                raise DescriptorError(
-                    f"device role {role!r}: gate {gate!r} values {sorted(unknown)} "
-                    "are not declared by the attribute"
-                )
-            if gate_spec.get("conditional"):
-                raise DescriptorError(
-                    f"device role {role!r}: gate {gate!r} must be required"
-                )
-            gated_signals.update(rule.get("signals", ()))
-            gated_attributes.update(rule.get("attributes", ()))
-        for name, mode in spec["signals"].items():
-            if not CAMEL_PATTERN.fullmatch(name):
-                raise DescriptorError(
-                    f"device role {role!r}: signal {name!r} is not camelCase"
-                )
-            if mode not in {"required", "conditional"}:
-                raise DescriptorError(
-                    f"device role {role!r}: signal {name!r} has mode {mode!r}"
-                )
-            if (mode == "conditional") != (name in gated_signals):
-                raise DescriptorError(
-                    f"device role {role!r}: signal {name!r} must be conditional "
-                    "exactly when a requires rule gates it"
-                )
-        for name, attribute in spec["attributes"].items():
-            if not CAMEL_PATTERN.fullmatch(name):
-                raise DescriptorError(
-                    f"device role {role!r}: attribute {name!r} is not camelCase"
-                )
-            if attribute["type"] not in {"uint32", "int8", "bool", "enum"}:
-                raise DescriptorError(
-                    f"device role {role!r}: attribute {name!r} has an unknown type"
-                )
-            if attribute["type"] == "enum" and not attribute.get("values"):
-                raise DescriptorError(
-                    f"device role {role!r}: attribute {name!r} declares no values"
-                )
-            if bool(attribute.get("conditional")) != (name in gated_attributes):
-                raise DescriptorError(
-                    f"device role {role!r}: attribute {name!r} must be conditional "
-                    "exactly when a requires rule gates it"
-                )
-        for lower, upper in spec["ordered"]:
-            for name in (lower, upper):
-                if spec["attributes"].get(name, {}).get("type") not in {
-                    "uint32",
-                    "int8",
-                }:
-                    raise DescriptorError(
-                        f"device role {role!r}: ordered pair uses non-numeric "
-                        f"attribute {name!r}"
-                    )
-
-
-def validate_device_attributes(
-    path: Path,
-    json_path: str,
-    role: str,
-    spec: dict[str, Any],
-    attributes: Any,
-    active: set[str],
-) -> None:
-    if not isinstance(attributes, dict):
-        fail(path, json_path, attributes, "an object")
-    expected = {
-        name
-        for name, attribute in spec["attributes"].items()
-        if not attribute.get("conditional") or name in active
-    }
-    missing = sorted(expected - attributes.keys())
-    unknown = sorted(attributes.keys() - expected)
-    if missing:
-        fail(path, json_path, missing, f"required {role} attributes {missing}")
-    if unknown:
-        fail(
-            path,
-            json_path,
-            unknown,
-            f"only attributes required by the active {role} configuration",
-        )
-    for name, value in attributes.items():
-        attribute = spec["attributes"][name]
-        item_path = f"{json_path}.{name}"
-        kind = attribute["type"]
-        if kind == "bool":
-            if not isinstance(value, bool):
-                fail(path, item_path, value, "a boolean")
-        elif kind == "enum":
-            if value not in attribute["values"]:
-                fail(path, item_path, value, f"one of {attribute['values']}")
-        else:
-            low, high = (0, 0xFFFFFFFF) if kind == "uint32" else (-128, 127)
-            low = max(low, attribute.get("min", low))
-            if not isinstance(value, int) or isinstance(value, bool):
-                fail(path, item_path, value, f"an {kind} integer")
-            if value < low or value > high:
-                fail(path, item_path, value, f"an {kind} integer in [{low}, {high}]")
-    for lower, upper in spec["ordered"]:
-        if lower in attributes and upper in attributes:
-            if attributes[lower] > attributes[upper]:
-                fail(
-                    path,
-                    f"{json_path}.{lower}",
-                    attributes[lower],
-                    f"a value not greater than {upper} ({attributes[upper]})",
-                )
-
-
-def validate_bus_device(
-    path: Path,
-    json_path: str,
-    device: dict[str, Any],
-    valid_pins: set[Any],
-    components: set[str],
-    hard_reserved: dict[Any, str],
-    owner: str,
-) -> None:
-    exact_fields(
-        path,
-        json_path,
-        device,
-        {"kind", "role", "bus", "signals", "attributes"},
-        {"kind", "role", "bus", "signals", "attributes"},
-    )
-    role = device["role"]
-    if role not in DEVICE_ROLE_REGISTRY:
-        fail(path, f"{json_path}.role", role, "a known device role")
-    spec = DEVICE_ROLE_REGISTRY[role]
-    bus = exact_fields(
-        path, f"{json_path}.bus", device["bus"], {"kind", "index"}, {"kind", "index"}
-    )
-    if bus["kind"] not in spec["busKinds"]:
-        fail(
-            path,
-            f"{json_path}.bus.kind",
-            bus["kind"],
-            f"one of {sorted(spec['busKinds'])}",
-        )
-    if not isinstance(bus["index"], int) or isinstance(bus["index"], bool):
-        fail(path, f"{json_path}.bus.index", bus["index"], "an integer bus index")
-    if bus["index"] < 0 or bus["index"] > 0xFE:
-        fail(path, f"{json_path}.bus.index", bus["index"], "a bus index in [0, 254]")
-    signals = device["signals"]
-    if not isinstance(signals, dict):
-        fail(path, f"{json_path}.signals", signals, "an object")
-    unknown_signals = sorted(signals.keys() - spec["signals"].keys())
-    if unknown_signals:
-        fail(
-            path,
-            f"{json_path}.signals",
-            unknown_signals,
-            f"only signals declared by role {role}",
-        )
-    attributes = device["attributes"]
-    declared = attributes if isinstance(attributes, dict) else {}
-    active_signals: set[str] = set()
-    active_attributes: set[str] = set()
-    for rule in spec["requires"]:
-        gate, allowed = rule["when"]
-        if declared.get(gate) in allowed:
-            active_signals.update(rule.get("signals", ()))
-            active_attributes.update(rule.get("attributes", ()))
-    validate_device_attributes(
-        path,
-        f"{json_path}.attributes",
-        role,
-        spec,
-        attributes,
-        active_attributes,
-    )
-    expected_signals = {
-        name
-        for name, mode in spec["signals"].items()
-        if mode == "required" or name in active_signals
-    }
-    missing_signals = sorted(expected_signals - signals.keys())
-    extra_signals = sorted(signals.keys() - expected_signals)
-    if missing_signals:
-        fail(
-            path,
-            f"{json_path}.signals",
-            missing_signals,
-            f"required {role} signals {missing_signals}",
-        )
-    if extra_signals:
-        fail(
-            path,
-            f"{json_path}.signals",
-            extra_signals,
-            f"only signals required by the active {role} configuration",
-        )
-    seen: dict[tuple[Any, ...], str] = {}
-    for name in sorted(signals):
-        signal_path = f"{json_path}.signals.{name}"
-        endpoint = signals[name]
-        validate_endpoint(path, signal_path, endpoint, valid_pins, components)
-        # Component GPIO IDs are only unique per component, so keep it in the key.
-        key = (*endpoint_key(endpoint), endpoint.get("component"))
-        if key in seen:
-            fail(path, signal_path, endpoint, f"a pin not already used by {seen[key]}")
-        seen[key] = name
-        if endpoint["domain"] == "soc-gpio":
-            require_hard_owner(path, signal_path, endpoint["id"], hard_reserved, owner)
-
-
-def validate_device(
-    path: Path,
-    json_path: str,
-    device: Any,
-    valid_pins: set[Any],
-    components: set[str],
-    hard_reserved: dict[Any, str],
-    owner: str,
-) -> None:
-    if not isinstance(device, dict) or not isinstance(device.get("kind"), str):
-        fail(path, json_path, device, "a device object with a kind")
-    kind = device["kind"]
-    if kind == BUS_DEVICE_KIND:
-        validate_bus_device(
-            path, json_path, device, valid_pins, components, hard_reserved, owner
-        )
-        return
-    if kind not in SINGLE_ENDPOINT_DEVICE_KINDS:
-        fail(
-            path,
-            f"{json_path}.kind",
-            kind,
-            f"one of {sorted({BUS_DEVICE_KIND, *SINGLE_ENDPOINT_DEVICE_KINDS})}",
-        )
-    exact_fields(
-        path,
-        json_path,
-        device,
-        {"kind", "endpoint"},
-        {"kind", "endpoint", *SINGLE_ENDPOINT_DEVICE_KINDS[kind]},
-    )
-    endpoint = device["endpoint"]
-    validate_endpoint(path, f"{json_path}.endpoint", endpoint, valid_pins, components)
-    if endpoint["domain"] == "soc-gpio" and endpoint["id"] in hard_reserved:
-        require_hard_owner(path, f"{json_path}.endpoint", endpoint["id"], hard_reserved, owner)
-
-
-def validate_can_channel(
-    path: Path,
-    json_path: str,
-    board: dict[str, Any],
-    channel: Any,
-) -> dict[str, Any]:
-    """Check the controller, instance and attributes of one CAN channel."""
-    exact_fields(
-        path,
-        json_path,
-        channel,
-        {"controller", "instance", "rx", "tx", "transceiver", "maxBitrateHz"},
-        {
-            "controller",
-            "instance",
-            "rx",
-            "tx",
-            "standby",
-            "standbyActiveHigh",
-            "transceiver",
-            "maxBitrateHz",
-        },
-    )
-    controller = CAN_CONTROLLERS.get(channel["controller"])
-    if controller is None:
-        fail(
-            path,
-            f"{json_path}.controller",
-            channel["controller"],
-            f"one of {sorted(CAN_CONTROLLERS)}",
-        )
-    if not set(board["compatibleTargets"]) <= controller["targets"]:
-        fail(
-            path,
-            f"{json_path}.controller",
-            channel["controller"],
-            "a controller present on every compatible target",
-        )
-    instance = channel["instance"]
-    if (
-        not isinstance(instance, int)
-        or isinstance(instance, bool)
-        or not 1 <= instance <= controller["instances"]
-    ):
-        fail(
-            path,
-            f"{json_path}.instance",
-            instance,
-            f"an instance in [1, {controller['instances']}]",
-        )
-    if ("standby" in channel) != ("standbyActiveHigh" in channel):
-        fail(path, json_path, sorted(channel), "standby and standbyActiveHigh together")
-    if "standbyActiveHigh" in channel and not isinstance(
-        channel["standbyActiveHigh"], bool
-    ):
-        fail(
-            path,
-            f"{json_path}.standbyActiveHigh",
-            channel["standbyActiveHigh"],
-            "a boolean",
-        )
-    if channel["transceiver"] not in CAN_TRANSCEIVERS:
-        fail(
-            path,
-            f"{json_path}.transceiver",
-            channel["transceiver"],
-            f"one of {sorted(CAN_TRANSCEIVERS)}",
-        )
-    rate = channel["maxBitrateHz"]
-    if (
-        not isinstance(rate, int)
-        or isinstance(rate, bool)
-        or not 1 <= rate <= 0xFFFFFFFF
-    ):
-        fail(path, f"{json_path}.maxBitrateHz", rate, "a uint32 integer of at least 1")
-    return controller
-
-
-def validate_can(
-    path: Path,
-    board: dict[str, Any],
-    valid_pins: set[Any],
-    components: set[str],
-    hard_reserved: dict[Any, str],
-) -> None:
-    """Validate the CAN channels a board wires to its controllers.
-
-    Pin routing to an instance is checked by the controller backend at run
-    time; here every signal must be a target pin, used once and covered by a
-    hard reservation, and every instance is wired at most once.
-    """
-    if "can" not in board:
-        return
-    can = exact_fields(path, "$.can", board["can"], {"channels"}, {"channels"})
-    channels = can["channels"]
-    if not isinstance(channels, list) or not channels:
-        fail(path, "$.can.channels", channels, "a non-empty channel array")
-    instances: dict[tuple[str, int], int] = {}
-    pins_seen: dict[Any, str] = {}
-    for index, channel in enumerate(channels):
-        json_path = f"$.can.channels[{index}]"
-        validate_can_channel(path, json_path, board, channel)
-        key = (channel["controller"], channel["instance"])
-        if key in instances:
-            fail(
-                path,
-                f"{json_path}.instance",
-                channel["instance"],
-                f"an instance not already wired by channel {instances[key]}",
-            )
-        instances[key] = index
-        for signal in CAN_CHANNEL_SIGNALS:
-            if signal not in channel:
-                continue
-            signal_path = f"{json_path}.{signal}"
-            endpoint = channel[signal]
-            validate_endpoint(path, signal_path, endpoint, valid_pins, components)
-            if endpoint["domain"] != "soc-gpio":
-                fail(path, signal_path, endpoint, "a SoC GPIO endpoint")
-            if endpoint["id"] in pins_seen:
-                fail(
-                    path,
-                    signal_path,
-                    endpoint["id"],
-                    f"a pin not already used by {pins_seen[endpoint['id']]}",
-                )
-            pins_seen[endpoint["id"]] = signal_path
-            require_hard_owner(path, signal_path, endpoint["id"], hard_reserved, "board.can")
-
-
-def validate_components(
-    path: Path, json_path: str, components: Any, provider: str
-) -> set[str]:
-    if not isinstance(components, dict):
-        fail(path, json_path, components, "an object")
-    slots: dict[str, str] = {}
-    for component_id, config in components.items():
-        if component_id not in COMPONENT_REGISTRY:
-            fail(path, f"{json_path}.{component_id}", config, "a known component ID")
-        entry = COMPONENT_REGISTRY[component_id]
-        if provider not in entry["providers"]:
-            fail(
-                path,
-                f"{json_path}.{component_id}",
-                provider,
-                f"one of {sorted(entry['providers'])}",
-            )
-        exact_fields(
-            path,
-            f"{json_path}.{component_id}",
-            config,
-            {"mode"},
-            {"mode"},
-        )
-        if config["mode"] not in {"required", "board-owned", "feature-gated"}:
-            fail(
-                path,
-                f"{json_path}.{component_id}.mode",
-                config["mode"],
-                "required, board-owned, or feature-gated",
-            )
-        slot = entry["slot"]
-        if slot in slots and slots[slot] != component_id:
-            fail(
-                path,
-                json_path,
-                [slots[slot], component_id],
-                f"one component in exclusive slot {slot}",
-            )
-        slots[slot] = component_id
-    return set(components)
-
-
-def validate_usb_ids(path: Path, location: str, value: Any) -> dict[str, Any]:
-    usb = exact_fields(path, location, value, {"vid", "pid"}, {"vid", "pid"})
-    for field in ("vid", "pid"):
-        if (not isinstance(usb[field], int) or isinstance(usb[field], bool)
-                or not 0 <= usb[field] <= 0xFFFF):
-            fail(path, f"{location}.{field}", usb[field], "a 16-bit USB identifier")
-    return usb
-
-
-def validate_target(path: Path, target: dict[str, Any]) -> set[Any]:
-    validate_common(path, target, "target")
-    if "usbDevice" in target:
-        validate_usb_ids(path, "$.usbDevice", target["usbDevice"])
-    architecture = exact_fields(
-        path,
-        "$.architecture",
-        target["architecture"],
-        {
-            "vendor",
-            "family",
-            "soc",
-            "isa",
-            "cores",
-            "mcuName",
-            "mcuSubtype",
-            "cpuArchName",
-            "hasFpu",
-            "backendName",
-        },
-        {
-            "vendor",
-            "family",
-            "soc",
-            "isa",
-            "cores",
-            "mcuName",
-            "mcuSubtype",
-            "cpuArchName",
-            "hasFpu",
-            "backendName",
-        },
-    )
-    if not isinstance(architecture["cores"], int) or architecture["cores"] < 1:
-        fail(path, "$.architecture.cores", architecture["cores"], "a positive integer")
-    for field in (
-        "vendor",
-        "family",
-        "soc",
-        "isa",
-        "mcuName",
-        "mcuSubtype",
-        "cpuArchName",
-        "backendName",
-    ):
-        if not isinstance(architecture[field], str) or not architecture[field]:
-            fail(
-                path,
-                f"$.architecture.{field}",
-                architecture[field],
-                "a non-empty string",
-            )
-    if not isinstance(architecture["hasFpu"], bool):
-        fail(
-            path,
-            "$.architecture.hasFpu",
-            architecture["hasFpu"],
-            "a boolean",
-        )
-    hal = exact_fields(
-        path, "$.hal", target["hal"], {"targetSelector"}, {"targetSelector"}
-    )
-    if not MACRO_PATTERN.fullmatch(hal["targetSelector"]):
-        fail(path, "$.hal.targetSelector", hal["targetSelector"], "a C macro")
-    build = exact_fields(
-        path,
-        "$.build",
-        target["build"],
-        {"provider", "recipe"},
-        {"provider", "recipe", "platform", "idfTarget"},
-    )
-    if build["provider"] not in {
-        "pico-sdk", "jh-stm32-baremetal", "esp-idf", "host"
-    }:
-        fail(path, "$.build.provider", build["provider"], "a supported provider")
-    if build["provider"] == "pico-sdk" and "platform" not in build:
-        fail(path, "$.build.platform", None, "a Pico SDK platform")
-    if build["provider"] == "esp-idf" and (
-        not isinstance(build.get("idfTarget"), str)
-        or not ID_PATTERN.fullmatch(build["idfTarget"])
-    ):
-        fail(path, "$.build.idfTarget", build.get("idfTarget"), "an ESP-IDF target ID")
-    gpio = exact_fields(
-        path,
-        "$.gpio",
-        target["gpio"],
-        {"pinIdFormat", "validPins", "halEncoding"},
-        {"pinIdFormat", "validPins", "halEncoding", "traits"},
-    )
-    valid_pins = expand_pin_set(path, "$.gpio.validPins", gpio["validPins"])
-    if gpio["pinIdFormat"] == "integer":
-        if any(not isinstance(pin, int) for pin in valid_pins):
-            fail(path, "$.gpio.validPins", sorted(valid_pins), "integer pin IDs")
-    elif gpio["pinIdFormat"] == "stm32-port-pin":
-        if any(
-            not isinstance(pin, str) or not STM32_PIN_PATTERN.fullmatch(pin)
-            for pin in valid_pins
-        ):
-            fail(path, "$.gpio.validPins", sorted(valid_pins), "STM32 PxN pin IDs")
-    else:
-        fail(
-            path,
-            "$.gpio.pinIdFormat",
-            gpio["pinIdFormat"],
-            "integer or stm32-port-pin",
-        )
-    exact_fields(
-        path,
-        "$.gpio.halEncoding",
-        gpio["halEncoding"],
-        {"kind"},
-        {"kind"},
-    )
-    traits = gpio.get("traits", {})
-    if not isinstance(traits, dict):
-        fail(path, "$.gpio.traits", traits, "an object")
-    for trait_id, pin_set in traits.items():
-        if not ID_PATTERN.fullmatch(trait_id):
-            fail(path, f"$.gpio.traits.{trait_id}", trait_id, "a kebab-case ID")
-        trait_pins = expand_pin_set(path, f"$.gpio.traits.{trait_id}", pin_set)
-        if not trait_pins <= valid_pins:
-            fail(path, f"$.gpio.traits.{trait_id}", sorted(trait_pins - valid_pins), "target valid pins")
-    validate_clock_inputs(path, target, valid_pins)
-    memory = exact_fields(
-        path,
-        "$.memory",
-        target["memory"],
-        {"regions", "ramUsableBytes"},
-        {"regions", "ramUsableBytes", "externalRam"},
-    )
-    if not isinstance(memory["regions"], dict):
-        fail(path, "$.memory.regions", memory["regions"], "an object")
-    ram_total_bytes = 0
-    for region_id, region in memory["regions"].items():
-        exact_fields(
-            path,
-            f"$.memory.regions.{region_id}",
-            region,
-            {"kind", "sizeBytes", "dmaCapable"},
-            {"kind", "sizeBytes", "dmaCapable"},
-        )
-        if region["kind"] not in {"ram", "flash"}:
-            fail(path, f"$.memory.regions.{region_id}.kind", region["kind"], "ram or flash")
-        if not isinstance(region["sizeBytes"], int) or region["sizeBytes"] <= 0:
-            fail(
-                path,
-                f"$.memory.regions.{region_id}.sizeBytes",
-                region["sizeBytes"],
-                "a positive integer",
-            )
-        if not isinstance(region["dmaCapable"], bool):
-            fail(
-                path,
-                f"$.memory.regions.{region_id}.dmaCapable",
-                region["dmaCapable"],
-                "a boolean",
-            )
-        if region["kind"] == "ram":
-            ram_total_bytes += region["sizeBytes"]
-    if (
-        not isinstance(memory["ramUsableBytes"], int)
-        or memory["ramUsableBytes"] < 0
-        or memory["ramUsableBytes"] > ram_total_bytes
-    ):
-        fail(
-            path,
-            "$.memory.ramUsableBytes",
-            memory["ramUsableBytes"],
-            f"an integer in range 0..{ram_total_bytes}",
-        )
-    external_ram = memory.get("externalRam")
-    if external_ram is not None:
-        external_ram = exact_fields(
-            path, "$.memory.externalRam", external_ram,
-            {"interfaces", "maxBytes"}, {"interfaces", "maxBytes"}
-        )
-        interfaces = external_ram["interfaces"]
-        if (
-            not isinstance(interfaces, list) or not interfaces
-            or any(item not in {"quad", "octal"} for item in interfaces)
-            or len(set(interfaces)) != len(interfaces)
-        ):
-            fail(path, "$.memory.externalRam.interfaces", interfaces, "unique quad/octal interfaces")
-        if not isinstance(external_ram["maxBytes"], int) or external_ram["maxBytes"] <= 0:
-            fail(path, "$.memory.externalRam.maxBytes", external_ram["maxBytes"], "a positive integer")
-    if not isinstance(target["defaultBoard"], str):
-        fail(path, "$.defaultBoard", target["defaultBoard"], "a board ID")
-    if "sourceFallbackBoard" in target and not isinstance(
-        target["sourceFallbackBoard"], str
-    ):
-        fail(
-            path,
-            "$.sourceFallbackBoard",
-            target["sourceFallbackBoard"],
-            "a board ID",
-        )
-    validate_components(path, "$.components", target["components"], build["provider"])
-    required_features = target.get("requiredFeatures", [])
-    if not isinstance(required_features, list) or any(
-        not isinstance(item, str) for item in required_features
-    ):
-        fail(path, "$.requiredFeatures", required_features, "a feature symbol array")
-    if len(normalize_features(required_features)) != len(required_features):
-        fail(path, "$.requiredFeatures", required_features, "unique feature symbols")
-    supported_features = target.get("supportedFeatures")
-    if supported_features is not None:
-        if not isinstance(supported_features, list) or any(
-            not isinstance(item, str) or not item.startswith("HAL_ENABLE_")
-            for item in supported_features
-        ):
-            fail(
-                path,
-                "$.supportedFeatures",
-                supported_features,
-                "a HAL_ENABLE_* feature symbol array",
-            )
-        normalized_supported = normalize_features(supported_features)
-        if len(normalized_supported) != len(supported_features):
-            fail(
-                path,
-                "$.supportedFeatures",
-                supported_features,
-                "unique feature symbols",
-            )
-        required_symbols = {
-            item.removesuffix("=1") for item in normalize_features(required_features)
-        }
-        supported_symbols = {
-            item.removesuffix("=1") for item in normalized_supported
-        }
-        if not required_symbols <= supported_symbols:
-            fail(
-                path,
-                "$.supportedFeatures",
-                supported_features,
-                "a superset of target-required features",
-            )
-        try:
-            feature_model = generate_hal_features.load_registry(
-                Path(__file__).resolve().parents[1] / "config"
-            )
-        except generate_hal_features.RegistryError as error:
-            raise DescriptorError(str(error)) from error
-        unknown_supported = sorted(supported_symbols - feature_model.features.keys())
-        if unknown_supported:
-            fail(
-                path,
-                "$.supportedFeatures",
-                unknown_supported,
-                "registered HAL feature symbols",
-            )
-        requestable_supported = [
-            item
-            for item in normalized_supported
-            if feature_model.features[item.removesuffix("=1")].kind != "derived"
-        ]
-        _, resolved_supported, _, _ = resolve_features(requestable_supported, target)
-        resolved_supported_symbols = set(resolved_supported)
-        if supported_symbols != resolved_supported_symbols:
-            missing = sorted(resolved_supported_symbols - supported_symbols)
-            unreachable = sorted(supported_symbols - resolved_supported_symbols)
-            details = []
-            if missing:
-                details.append(f"missing closure {missing}")
-            if unreachable:
-                details.append(f"unreachable entries {unreachable}")
-            fail(
-                path,
-                "$.supportedFeatures",
-                supported_features,
-                "the exact closure of requestable supported features ("
-                + "; ".join(details)
-                + ")",
-            )
-    resolve_features([], target)
-    return valid_pins
-
-
-def validate_clock_inputs(path: Path, target: dict[str, Any], valid_pins: set[Any]) -> None:
-    """SoC clock inputs, with the GPIOs each kind of source occupies; an
-    oscillator pad outside the GPIO namespace has an empty list."""
-    if "clockInputs" not in target:
-        fail(path, "$.clockInputs", None, "the SoC clock inputs, {} when there are none")
-    inputs = target["clockInputs"]
-    error = hardware_schema.SchemaSet().first_error("clock_inputs.schema.json", inputs)
-    if error is not None:
-        fail(path, "$.clockInputs" + error.pointer.replace("/", "."), inputs, error.message)
-    for key, kinds in inputs.items():
-        for kind, pins in kinds.items():
-            if not set(pins) <= valid_pins:
-                fail(path, f"$.clockInputs.{key}.{kind}", pins, "target valid pins")
-
-
-def validate_clock_sources(
-    path: Path,
-    board: dict[str, Any],
-    targets: dict[str, dict[str, Any]],
-    valid_pins: set[Any],
-    components: set[str],
-    hard_reserved: dict[Any, str],
-) -> None:
-    """Oscillators fitted on the board, in the device tree specification's
-    form. A source drives a clock input of every board target and lists
-    exactly the GPIOs its kind occupies there, each hard-reserved by
-    clock.<source>."""
-    sources = board.get("clockSources")
-    if sources is None:
-        return
-    error = hardware_schema.SchemaSet().first_error("clock_sources.schema.json", sources)
-    if error is not None:
-        fail(path, "$.clockSources" + error.pointer.replace("/", "."), sources, error.message)
-    for key, source in sources.items():
-        for target_id in board["compatibleTargets"]:
-            problems = clock_registry.source_problems(targets[target_id]["clockInputs"], key, source)
-            if problems:
-                fail(path, f"$.clockSources.{key}", source,
-                     f"a source on a {target_id} clock input ({problems[0]})")
-        for index, endpoint in enumerate(source["pins"]):
-            json_path = f"$.clockSources.{key}.pins[{index}]"
-            validate_endpoint(path, json_path, endpoint, valid_pins, components)
-            require_hard_owner(path, json_path, endpoint["id"], hard_reserved, f"clock.{key}")
-
-
-def validate_board(
-    path: Path,
-    board: dict[str, Any],
-    targets: dict[str, dict[str, Any]],
-    target_pins: dict[str, set[Any]],
-    capabilities: dict[str, Any],
-) -> None:
-    validate_common(path, board, "board")
-    compatible = board["compatibleTargets"]
-    if not isinstance(compatible, list) or not compatible:
-        fail(path, "$.compatibleTargets", compatible, "a non-empty target ID array")
-    if len(set(compatible)) != len(compatible):
-        fail(path, "$.compatibleTargets", compatible, "unique target IDs")
-    for target_id in compatible:
-        if target_id not in targets:
-            fail(path, "$.compatibleTargets", target_id, "a known target ID")
-    build = exact_fields(
-        path,
-        "$.build",
-        board["build"],
-        {"provider"},
-        {"provider", "board"},
-    )
-    providers = {targets[target_id]["build"]["provider"] for target_id in compatible}
-    if providers != {build["provider"]}:
-        fail(path, "$.build.provider", build["provider"], f"target provider {providers}")
-    if build["provider"] == "pico-sdk" and "board" not in build:
-        fail(path, "$.build.board", None, "a Pico SDK board")
-    hal = exact_fields(
-        path,
-        "$.hal",
-        board["hal"],
-        {
-            "profileId",
-            "selector",
-            "legacySelectors",
-            "autoDetectSelectors",
-        },
-        {
-            "profileId",
-            "selector",
-            "legacySelectors",
-            "autoDetectSelectors",
-        },
-    )
-    if not isinstance(hal["profileId"], int) or hal["profileId"] < 1:
-        fail(path, "$.hal.profileId", hal["profileId"], "a positive integer")
-    if not isinstance(hal["selector"], str) or not MACRO_PATTERN.fullmatch(
-        hal["selector"]
-    ):
-        fail(path, "$.hal.selector", hal["selector"], "a C macro")
-    if not isinstance(hal["legacySelectors"], list) or any(
-        not isinstance(item, str) or not MACRO_PATTERN.fullmatch(item)
-        for item in hal["legacySelectors"]
-    ):
-        fail(path, "$.hal.legacySelectors", hal["legacySelectors"], "C macro array")
-    if len(set(hal["legacySelectors"])) != len(hal["legacySelectors"]):
-        fail(
-            path,
-            "$.hal.legacySelectors",
-            hal["legacySelectors"],
-            "unique C macros",
-        )
-    if not isinstance(hal["autoDetectSelectors"], list) or any(
-        not isinstance(item, str) or not MACRO_PATTERN.fullmatch(item)
-        for item in hal["autoDetectSelectors"]
-    ):
-        fail(
-            path,
-            "$.hal.autoDetectSelectors",
-            hal["autoDetectSelectors"],
-            "C macro array",
-        )
-    if len(set(hal["autoDetectSelectors"])) != len(hal["autoDetectSelectors"]):
-        fail(
-            path,
-            "$.hal.autoDetectSelectors",
-            hal["autoDetectSelectors"],
-            "unique C macros",
-        )
-    memory = exact_fields(
-        path, "$.memory", board["memory"], {"flash"}, {"flash", "psram"}
-    )
-    flash = exact_fields(
-        path,
-        "$.memory.flash",
-        memory["flash"],
-        {"source", "expectedBytes"},
-        {"source", "expectedBytes"},
-    )
-    if flash["source"] not in {"sdk", "target", "none"}:
-        fail(path, "$.memory.flash.source", flash["source"], "sdk, target, or none")
-    if not isinstance(flash["expectedBytes"], int) or flash["expectedBytes"] < 0:
-        fail(
-            path,
-            "$.memory.flash.expectedBytes",
-            flash["expectedBytes"],
-            "a non-negative integer",
-        )
-    psram = memory.get("psram")
-    if psram is not None:
-        psram = exact_fields(
-            path, "$.memory.psram", psram,
-            {"interface", "sizeBytes"}, {"interface", "sizeBytes"}
-        )
-        if psram["interface"] not in {"quad", "octal"}:
-            fail(path, "$.memory.psram.interface", psram["interface"], "quad or octal")
-        if not isinstance(psram["sizeBytes"], int) or psram["sizeBytes"] <= 0:
-            fail(path, "$.memory.psram.sizeBytes", psram["sizeBytes"], "a positive integer")
-        for target_id in compatible:
-            support = targets[target_id]["memory"].get("externalRam")
-            if (
-                support is None
-                or psram["interface"] not in support["interfaces"]
-                or psram["sizeBytes"] > support["maxBytes"]
-            ):
-                fail(path, "$.memory.psram", psram, f"external RAM supported by target {target_id}")
-    programming = board.get("programming")
-    if programming is not None:
-        programming = exact_fields(
-            path,
-            "$.programming",
-            programming,
-            {"transport", "usb", "reset", "boot"},
-            {"transport", "usb", "reset", "boot"},
-        )
-        if build["provider"] != "esp-idf":
-            fail(
-                path,
-                "$.programming",
-                programming,
-                "programming metadata for an ESP-IDF board",
-            )
-        if programming["transport"] not in {
-            "usb-serial-jtag",
-            "usb-uart-bridge",
-        }:
-            fail(
-                path,
-                "$.programming.transport",
-                programming["transport"],
-                "usb-serial-jtag or usb-uart-bridge",
-            )
-        validate_usb_ids(path, "$.programming.usb", programming["usb"])
-        expected_control = (
-            {"reset": "usb-serial-jtag-control-lines", "boot": "usb-serial-jtag-control-lines"}
-            if programming["transport"] == "usb-serial-jtag"
-            else {"reset": "dtr-rts-en", "boot": "dtr-rts-io0"}
-        )
-        for field in ("reset", "boot"):
-            if programming[field] != expected_control[field]:
-                fail(
-                    path,
-                    f"$.programming.{field}",
-                    programming[field],
-                    expected_control[field],
-                )
-    component_ids = validate_components(
-        path, "$.components", board["components"], build["provider"]
-    )
-    target_component_ids = set()
-    for target_id in compatible:
-        target_component_ids.update(targets[target_id]["components"])
-    resolved_components = component_ids | target_component_ids
-    gpio = exact_fields(
-        path,
-        "$.gpio",
-        board["gpio"],
-        {"exposedPins", "reservations", "aliases"},
-        {"exposedPins", "connectors", "reservations", "aliases"},
-    )
-    exposed = expand_pin_set(path, "$.gpio.exposedPins", gpio["exposedPins"])
-    valid_union = set().union(*(target_pins[target_id] for target_id in compatible))
-    if not exposed <= valid_union:
-        fail(path, "$.gpio.exposedPins", sorted(exposed - valid_union), "target valid pins")
-    for connector_id, connector in gpio.get("connectors", {}).items():
-        exact_fields(
-            path,
-            f"$.gpio.connectors.{connector_id}",
-            connector,
-            {"pins"},
-            {"pins"},
-        )
-        if not isinstance(connector["pins"], list):
-            fail(path, f"$.gpio.connectors.{connector_id}.pins", connector["pins"], "an array")
-        for index, endpoint in enumerate(connector["pins"]):
-            validate_endpoint(
-                path,
-                f"$.gpio.connectors.{connector_id}.pins[{index}]",
-                endpoint,
-                valid_union,
-                resolved_components,
-            )
-    if not isinstance(gpio["reservations"], dict):
-        fail(path, "$.gpio.reservations", gpio["reservations"], "an object")
-    hard_reserved: dict[Any, str] = {}
-    for reservation_id, reservation in gpio["reservations"].items():
-        exact_fields(
-            path,
-            f"$.gpio.reservations.{reservation_id}",
-            reservation,
-            {"pins", "owner", "strength", "reason"},
-            {"pins", "owner", "strength", "reason"},
-        )
-        if reservation["strength"] not in {"hard", "soft"}:
-            fail(
-                path,
-                f"$.gpio.reservations.{reservation_id}.strength",
-                reservation["strength"],
-                "hard or soft",
-            )
-        if not isinstance(reservation["pins"], list) or not reservation["pins"]:
-            fail(path, f"$.gpio.reservations.{reservation_id}.pins", reservation["pins"], "a non-empty array")
-        for index, endpoint in enumerate(reservation["pins"]):
-            validate_endpoint(
-                path,
-                f"$.gpio.reservations.{reservation_id}.pins[{index}]",
-                endpoint,
-                valid_union,
-                resolved_components,
-            )
-            if reservation["strength"] == "hard" and endpoint["domain"] == "soc-gpio":
-                hard_reserved[endpoint["id"]] = reservation["owner"]
-    if not isinstance(gpio["aliases"], dict):
-        fail(path, "$.gpio.aliases", gpio["aliases"], "an object")
-    for alias_id, alias in gpio["aliases"].items():
-        exact_fields(
-            path,
-            f"$.gpio.aliases.{alias_id}",
-            alias,
-            {"endpoint"},
-            {"endpoint"},
-        )
-        validate_endpoint(
-            path,
-            f"$.gpio.aliases.{alias_id}.endpoint",
-            alias["endpoint"],
-            valid_union,
-            resolved_components,
-        )
-    if not isinstance(board["capabilities"], dict):
-        fail(path, "$.capabilities", board["capabilities"], "an object")
-    unknown_capabilities = set(board["capabilities"]) - set(capabilities)
-    if unknown_capabilities:
-        fail(path, "$.capabilities", sorted(unknown_capabilities), "known capability IDs")
-    missing_capabilities = {
-        capability_id
-        for capability_id, config in capabilities.items()
-        if config.get("status") != "reserved"
-    } - set(board["capabilities"])
-    if missing_capabilities:
-        fail(path, "$.capabilities", sorted(missing_capabilities), "all active capability IDs")
-    for capability_id, value in board["capabilities"].items():
-        exact_fields(
-            path,
-            f"$.capabilities.{capability_id}",
-            value,
-            {"present"},
-            {"present"},
-        )
-        if not isinstance(value["present"], bool):
-            fail(path, f"$.capabilities.{capability_id}.present", value["present"], "a boolean")
-    if board["capabilities"].get("cyw43", {}).get("present"):
-        has_transport = bool(
-            {"cyw43-pico-pio", "cyw43-stm32-gspi"} & resolved_components
-        )
-        if not has_transport or "cyw43-lwip" not in resolved_components:
-            fail(path, "$.capabilities.cyw43", True, "CYW43 components")
-    if not isinstance(board["devices"], dict):
-        fail(path, "$.devices", board["devices"], "an object")
-    roles_seen: dict[str, str] = {}
-    for device_id, device in board["devices"].items():
-        if not CAMEL_PATTERN.fullmatch(device_id):
-            fail(path, f"$.devices.{device_id}", device_id, "a camelCase device ID")
-        validate_device(
-            path,
-            f"$.devices.{device_id}",
-            device,
-            valid_union,
-            resolved_components,
-            hard_reserved,
-            board_device_owner(device_id),
-        )
-        role = device.get("role")
-        if role is not None:
-            if role in roles_seen:
-                fail(
-                    path,
-                    f"$.devices.{device_id}.role",
-                    role,
-                    f"a role not already declared by {roles_seen[role]}",
-                )
-            roles_seen[role] = device_id
-    if not isinstance(board["peripherals"], dict):
-        fail(path, "$.peripherals", board["peripherals"], "an object")
-    validate_can(path, board, valid_union, resolved_components, hard_reserved)
-    validate_clock_sources(path, board, targets, valid_union, resolved_components, hard_reserved)
-
-
-def load_registry(
-    boards_root: Path,
-) -> tuple[
-    dict[str, dict[str, Any]],
-    dict[str, dict[str, Any]],
-    dict[str, Any],
-]:
-    validate_role_registry()
-    capability_document = load_json(boards_root / "capabilities.json")
-    exact_fields(
-        boards_root / "capabilities.json",
-        "$",
-        capability_document,
-        {"schemaVersion", "capabilities"},
-        {"schemaVersion", "capabilities"},
-    )
-    if capability_document["schemaVersion"] != 1:
-        fail(
-            boards_root / "capabilities.json",
-            "$.schemaVersion",
-            capability_document["schemaVersion"],
-            "1",
-        )
-    capabilities = capability_document["capabilities"]
-    if not isinstance(capabilities, dict):
-        fail(boards_root / "capabilities.json", "$.capabilities", capabilities, "an object")
-    bits: set[int] = set()
-    macros: set[str] = set()
-    for capability_id, config in capabilities.items():
-        if not ID_PATTERN.fullmatch(capability_id):
-            fail(boards_root / "capabilities.json", f"$.capabilities.{capability_id}", capability_id, "a kebab-case ID")
-        exact_fields(
-            boards_root / "capabilities.json",
-            f"$.capabilities.{capability_id}",
-            config,
-            {"bit", "macro", "stateModel", "runtimeOwner"},
-            {"bit", "macro", "stateModel", "runtimeOwner", "status"},
-        )
-        if not isinstance(config["bit"], int) or config["bit"] < 0 or config["bit"] > 31:
-            fail(boards_root / "capabilities.json", f"$.capabilities.{capability_id}.bit", config["bit"], "an integer from 0 through 31")
-        if config["bit"] in bits:
-            fail(boards_root / "capabilities.json", f"$.capabilities.{capability_id}.bit", config["bit"], "a unique capability bit")
-        bits.add(config["bit"])
-        if not isinstance(config["macro"], str) or not MACRO_PATTERN.fullmatch(config["macro"]) or config["macro"] in macros:
-            fail(boards_root / "capabilities.json", f"$.capabilities.{capability_id}.macro", config["macro"], "a unique C macro")
-        macros.add(config["macro"])
-        if config["stateModel"] not in {"static", "lifecycle"}:
-            fail(boards_root / "capabilities.json", f"$.capabilities.{capability_id}.stateModel", config["stateModel"], "static or lifecycle")
-    targets: dict[str, dict[str, Any]] = {}
-    target_pins: dict[str, set[Any]] = {}
-    for path in sorted((boards_root / "targets").glob("*.json")):
-        descriptor = load_json(path)
-        validate_target(path, descriptor)
-        if descriptor["id"] in targets:
-            fail(path, "$.id", descriptor["id"], "a globally unique target ID")
-        targets[descriptor["id"]] = descriptor
-        target_pins[descriptor["id"]] = expand_pin_set(
-            path, "$.gpio.validPins", descriptor["gpio"]["validPins"]
-        )
-    boards: dict[str, dict[str, Any]] = {}
-    profile_ids: dict[int, Path] = {}
-    selectors: dict[str, Path] = {}
-    auto_detect_selectors: dict[str, Path] = {}
-    for path in sorted((boards_root / "profiles").glob("*.json")):
-        descriptor = load_json(path)
-        validate_board(path, descriptor, targets, target_pins, capabilities)
-        board_id = descriptor["id"]
-        if board_id in boards:
-            fail(path, "$.id", board_id, "a globally unique board ID")
-        hal = descriptor["hal"]
-        for value, seen, json_path in (
-            (hal["profileId"], profile_ids, "$.hal.profileId"),
-            (hal["selector"], selectors, "$.hal.selector"),
-        ):
-            if value in seen:
-                fail(path, json_path, value, f"a unique value; first used by {seen[value]}")
-            seen[value] = path
-        for selector in hal["autoDetectSelectors"]:
-            if selector in auto_detect_selectors:
-                fail(
-                    path,
-                    "$.hal.autoDetectSelectors",
-                    selector,
-                    "a globally unique auto-detection selector",
-                )
-            auto_detect_selectors[selector] = path
-        boards[board_id] = descriptor
-    for board_id, board in boards.items():
-        path = boards_root / "profiles" / f"{board_id}.json"
-        for legacy_selector in board["hal"]["legacySelectors"]:
-            if legacy_selector in selectors:
-                fail(
-                    path,
-                    "$.hal.legacySelectors",
-                    legacy_selector,
-                    "a selector distinct from every primary board selector",
-                )
-            if legacy_selector in auto_detect_selectors:
-                fail(
-                    path,
-                    "$.hal.legacySelectors",
-                    legacy_selector,
-                    "a selector distinct from every provider auto-detection selector",
-                )
-    for selector, path in auto_detect_selectors.items():
-        if selector in selectors:
-            fail(
-                path,
-                "$.hal.autoDetectSelectors",
-                selector,
-                "a selector distinct from every primary board selector",
-            )
-    legacy_targets: dict[tuple[str, str], Path] = {}
-    for board_id, board in boards.items():
-        path = boards_root / "profiles" / f"{board_id}.json"
-        for legacy_selector in board["hal"]["legacySelectors"]:
-            for target_id in board["compatibleTargets"]:
-                key = (legacy_selector, target_id)
-                if key in legacy_targets:
-                    fail(
-                        path,
-                        "$.hal.legacySelectors",
-                        legacy_selector,
-                        f"an unambiguous selector for target {target_id!r}; "
-                        f"first used by {legacy_targets[key]}",
-                    )
-                legacy_targets[key] = path
-    for target_id, target in targets.items():
-        default_board = target["defaultBoard"]
-        if default_board not in boards or target_id not in boards[default_board]["compatibleTargets"]:
-            fail(
-                boards_root / "targets" / f"{target_id}.json",
-                "$.defaultBoard",
-                default_board,
-                "a compatible board ID",
-            )
-        source_fallback_board = target.get("sourceFallbackBoard")
-        if source_fallback_board is not None and (
-            source_fallback_board not in boards
-            or target_id
-            not in boards[source_fallback_board]["compatibleTargets"]
-        ):
-            fail(
-                boards_root / "targets" / f"{target_id}.json",
-                "$.sourceFallbackBoard",
-                source_fallback_board,
-                "a compatible board ID",
-            )
-    return targets, boards, capabilities
 
 
 def normalize_features(features: list[str]) -> list[str]:
@@ -1759,13 +357,14 @@ def append_gpio_mask(
 
 def device_config_lines(board: dict[str, Any]) -> list[str]:
     """Materialize bus-device facts for every known role."""
+    tables = _tables()
     devices = {
         device["role"]: device
         for device in board["devices"].values()
-        if device["kind"] == BUS_DEVICE_KIND
+        if device["kind"] == tables.bus_device_kind
     }
     lines = ["#define HAL_BOARD_DEVICE_PIN_NONE 0xFFu"]
-    for role, spec in sorted(DEVICE_ROLE_REGISTRY.items()):
+    for role, spec in sorted(tables.device_roles.items()):
         prefix = spec["macroPrefix"]
         device = devices.get(role)
         lines.append(f"#define {prefix}_PRESENT {1 if device else 0}")
@@ -1821,7 +420,7 @@ def can_config_lines(board: dict[str, Any]) -> list[str]:
             pin_text(standby) if standby is not None else "HAL_BOARD_DEVICE_PIN_NONE"
         )
         rows.append(
-            f"X({CAN_CONTROLLERS[channel['controller']]['backend']}, "
+            f"X({_tables().can_controllers[channel['controller']]['backend']}, "
             f"{channel['instance']}u, {pin_text(channel['rx'])}, "
             f"{pin_text(channel['tx'])}, {standby_pin}, "
             f"{1 if channel.get('standbyActiveHigh') else 0}, "
@@ -2316,14 +915,15 @@ def static_generated_outputs(
 
 def render_board_components_cmake() -> str:
     """Render the CMake view of the authoritative board-component registry."""
+    components = _tables().components
     lines = [
         "# Generated by generate_board_config.py; do not edit.",
         "set(JH_BOARD_COMPONENT_IDS",
-        *(f"    {identifier}" for identifier in COMPONENT_REGISTRY),
+        *(f"    {identifier}" for identifier in components),
         ")",
         "",
     ]
-    for identifier, entry in COMPONENT_REGISTRY.items():
+    for identifier, entry in components.items():
         key = identifier.replace("-", "_")
         providers = ";".join(sorted(entry["providers"]))
         lines.extend(

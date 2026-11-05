@@ -222,6 +222,26 @@ uint16_t start_websocket_server(const char *path) {
   return 0u;
 }
 
+// Connect to the WebSocket server on @p port and complete the handshake for
+// "/ws"; the server then counts one open client.
+hal_tcp_socket_t open_websocket_client(uint16_t port) {
+  hal_tcp_socket_t client = connect_client(port);
+  send_all(client, "GET /ws HTTP/1.1\r\n"
+                   "Host: local\r\n"
+                   "Upgrade: websocket\r\n"
+                   "Connection: Upgrade\r\n"
+                   "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+                   "Sec-WebSocket-Version: 13\r\n\r\n");
+  char response[512];
+  size_t length = 0u;
+  TEST_ASSERT_TRUE(
+      receive_until(client, "\r\n\r\n", response, sizeof(response), &length));
+  TEST_ASSERT_NOT_NULL(strstr(response, "HTTP/1.1 101"));
+  TEST_ASSERT_NOT_NULL(strstr(response, "s3pPLMBiTxaQ9kYGzzhZRbK+xOo="));
+  TEST_ASSERT_EQUAL_UINT(1u, hal_websocket_client_count());
+  return client;
+}
+
 hal_status_t pong_handler(const hal_http_request_t *request,
                           hal_http_response_t *response, void *user) {
   (void)request;
@@ -357,6 +377,9 @@ void test_tcp_peer_close_reads_as_end_of_stream(void) {
       HAL_OK, hal_tcp_socket_recv_ex(server, &byte, 1u, kWaitMs, &received));
   TEST_ASSERT_EQUAL_UINT(0u, received);
   TEST_ASSERT_TRUE(hal_tcp_socket_can_recv(server));
+  // getpeername() still succeeds here; the end of stream ends the connection,
+  // as on the lwIP backend.
+  TEST_ASSERT_FALSE(hal_tcp_socket_is_connected(server));
 
   // Writing to the closed peer fails with a status; the process gets no
   // SIGPIPE. The first writes may still be accepted before the reset arrives.
@@ -367,6 +390,34 @@ void test_tcp_peer_close_reads_as_end_of_stream(void) {
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
   }
   TEST_ASSERT_EQUAL_INT(HAL_EIO, status);
+
+  hal_tcp_socket_close(server);
+  hal_tcp_listener_close(listener);
+}
+
+void test_tcp_peer_close_keeps_unread_bytes_connected(void) {
+  hal_tcp_listener_t listener = NULL;
+  hal_tcp_socket_t client = NULL;
+  hal_tcp_socket_t server = NULL;
+  connected_pair(&listener, &client, &server);
+
+  // A peer may send its last bytes (a WebSocket Close frame) and close at
+  // once; they stay readable after the FIN.
+  send_all(client, "bye");
+  hal_tcp_socket_close(client);
+  const Clock::time_point start = Clock::now();
+  while (!hal_tcp_socket_can_recv(server) && elapsed_ms(start) < kWaitMs) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  TEST_ASSERT_TRUE(hal_tcp_socket_is_connected(server));
+  char buffer[8];
+  TEST_ASSERT_TRUE(receive_until(server, "bye", buffer, sizeof(buffer), NULL));
+  bool connected = true;
+  while (connected && elapsed_ms(start) < kWaitMs) {
+    connected = hal_tcp_socket_is_connected(server);
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  TEST_ASSERT_FALSE(connected);
 
   hal_tcp_socket_close(server);
   hal_tcp_listener_close(listener);
@@ -557,21 +608,7 @@ void test_http_server_answers_on_loopback_address(void) {
 
 void test_websocket_broadcast_reaches_loopback_client(void) {
   const uint16_t port = start_websocket_server("/ws");
-
-  hal_tcp_socket_t client = connect_client(port);
-  send_all(client, "GET /ws HTTP/1.1\r\n"
-                   "Host: local\r\n"
-                   "Upgrade: websocket\r\n"
-                   "Connection: Upgrade\r\n"
-                   "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
-                   "Sec-WebSocket-Version: 13\r\n\r\n");
-  char response[512];
-  size_t length = 0u;
-  TEST_ASSERT_TRUE(
-      receive_until(client, "\r\n\r\n", response, sizeof(response), &length));
-  TEST_ASSERT_NOT_NULL(strstr(response, "HTTP/1.1 101"));
-  TEST_ASSERT_NOT_NULL(strstr(response, "s3pPLMBiTxaQ9kYGzzhZRbK+xOo="));
-  TEST_ASSERT_EQUAL_UINT(1u, hal_websocket_client_count());
+  hal_tcp_socket_t client = open_websocket_client(port);
 
   size_t sent_count = 0u;
   TEST_ASSERT_EQUAL_INT(HAL_OK,
@@ -593,6 +630,21 @@ void test_websocket_broadcast_reaches_loopback_client(void) {
   TEST_ASSERT_EQUAL_UINT(sizeof(frame), total);
   TEST_ASSERT_EQUAL_MEMORY(frame, received, sizeof(frame));
   hal_tcp_socket_close(client);
+}
+
+void test_websocket_server_drops_a_client_whose_tcp_closes(void) {
+  const uint16_t port = start_websocket_server("/ws");
+  hal_tcp_socket_t client = open_websocket_client(port);
+
+  // The peer closes TCP without a Close frame while the server has nothing to
+  // send; polling alone must free the client slot.
+  hal_tcp_socket_close(client);
+  const Clock::time_point start = Clock::now();
+  while (hal_websocket_client_count() > 0u && elapsed_ms(start) < kWaitMs) {
+    hal_websocket_server_poll();
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  TEST_ASSERT_EQUAL_UINT(0u, hal_websocket_client_count());
 }
 
 // A child process that lives for about two seconds; it inherits every
@@ -883,6 +935,7 @@ int main(void) {
   RUN_TEST(test_tcp_round_trip_over_loopback);
   RUN_TEST(test_tcp_receive_waits_for_its_timeout);
   RUN_TEST(test_tcp_peer_close_reads_as_end_of_stream);
+  RUN_TEST(test_tcp_peer_close_keeps_unread_bytes_connected);
   RUN_TEST(test_tcp_send_to_a_peer_that_stops_reading_does_not_block);
   RUN_TEST(test_tcp_connect_to_closed_port_is_refused);
   RUN_TEST(test_tcp_listener_address_in_use_and_rebind_after_close);
@@ -891,6 +944,7 @@ int main(void) {
   RUN_TEST(test_resolver_handles_names_literals_and_capacity);
   RUN_TEST(test_http_server_answers_on_loopback_address);
   RUN_TEST(test_websocket_broadcast_reaches_loopback_client);
+  RUN_TEST(test_websocket_server_drops_a_client_whose_tcp_closes);
   RUN_TEST(test_sockets_are_not_inherited_by_child_processes);
   // Last: the teardown invalidates every open handle.
   RUN_TEST(test_teardown_ends_blocked_waits_in_other_threads);

@@ -30,7 +30,9 @@ Version-controlled source data is stored in `boards/`:
 - `profiles/<id>.json` describes a physical board;
 - `capabilities.json` assigns stable capability bits;
 - `board.schema.json` provides editor assistance only;
-- `scripts/generate_board_config.py` owns structural and semantic validation.
+- `jh board validate` owns structural and semantic validation
+  ([jh README](../../tools/jh/README.md#board-registry));
+  `scripts/generate_board_config.py` reads the validated registry from it.
 
 Descriptor IDs must use kebab-case and match their filenames. Unknown fields, duplicate IDs, incompatible target/board pairs, invalid endpoints, unknown capabilities or components, and output outside `.build` all cause errors.
 

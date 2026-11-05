@@ -287,6 +287,21 @@ static inline intptr_t jh_native_recv(jh_native_fd_t fd, void *buffer,
 #endif
 }
 
+/**
+ * Look at the next received byte without consuming it, after a readiness wait
+ * (Winsock has no MSG_DONTWAIT). 0 means end of stream: the peer closed its
+ * side and no received bytes remain.
+ */
+static inline intptr_t jh_native_peek_byte(jh_native_fd_t fd, uint8_t *out) {
+#if defined(JH_NATIVE_SOCKETS_LWIP)
+  return lwip_recv(fd, out, 1u, MSG_PEEK | MSG_DONTWAIT);
+#elif defined(JH_NATIVE_SOCKETS_WINSOCK)
+  return recv(fd, (char *)out, 1, MSG_PEEK);
+#else
+  return recv(fd, out, 1u, MSG_PEEK | MSG_DONTWAIT);
+#endif
+}
+
 static inline intptr_t jh_native_sendto(jh_native_fd_t fd, const void *data,
                                         size_t length,
                                         const struct sockaddr *address,

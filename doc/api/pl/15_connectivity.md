@@ -1786,6 +1786,11 @@ void hal_tcp_listener_close(hal_tcp_listener_t listener);
 - `hal_tcp_socket_recv(...)` zwraca liczbę odczytanych bajtów, `0` po upływie
   timeoutu, przy braku danych lub po zamknięciu połączenia przez peera, albo
   wartość `<0` dla nieprawidłowego uchwytu lub argumentu.
+- `hal_tcp_socket_is_connected(...)` zwraca `false`, gdy peer zamknął swoją
+  stronę połączenia, a wszystkie odebrane bajty zostały już odczytane. Bajty,
+  które dotarły przed zamknięciem, nadal można odczytać. Po wyniku `0`
+  z `hal_tcp_socket_recv(...)` ta funkcja pozwala więc na każdym backendzie
+  odróżnić koniec strumienia od połączenia, na którym chwilowo nic się nie dzieje.
 - `hal_tcp_socket_can_recv(...)` i `hal_tcp_socket_can_send(...)` sprawdzają
   gotowość bez pobierania danych. Są przeznaczone między innymi dla warstw
   zgodności takich jak BSD `select()`.

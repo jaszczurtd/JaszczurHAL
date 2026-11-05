@@ -518,8 +518,29 @@ bool tcp_socket_is_connected(void *socket) {
   }
   sockaddr_storage peer = {};
   jh_native_socklen_t size = static_cast<jh_native_socklen_t>(sizeof(peer));
-  return jh_native_getpeername(token->descriptor,
-                               reinterpret_cast<sockaddr *>(&peer), &size) == 0;
+  if (jh_native_getpeername(token->descriptor,
+                            reinterpret_cast<sockaddr *>(&peer), &size) != 0) {
+    return false;
+  }
+  // getpeername() keeps succeeding after the peer's FIN. As on the lwIP
+  // backend, the socket stays connected only while the peer's side is open or
+  // received bytes remain to be read.
+  const hal_status_t readable =
+      wait_for_descriptor(token->descriptor, true, false, 0u);
+  if (readable == HAL_EAGAIN) {
+    return true;
+  }
+  if (readable != HAL_OK) {
+    return false;
+  }
+  uint8_t next = 0u;
+  const intptr_t peeked = jh_native_peek_byte(token->descriptor, &next);
+  if (peeked >= 0) {
+    return peeked > 0;
+  }
+  const jh_native_error_t error = jh_native_classify(jh_native_last_error());
+  return error == JH_NATIVE_ERR_WOULD_BLOCK ||
+         error == JH_NATIVE_ERR_INTERRUPTED;
 }
 
 void tcp_socket_shutdown(void *socket) {

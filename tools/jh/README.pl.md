@@ -363,6 +363,61 @@ gdzie Python kończył się tracebackiem. Plik, który nie jest poprawnym JSON-e
 zarówno w lincie, jak i w rejestrze, podaje przyczynę z jhbase z linią
 i kolumną, gdzie Python podawał przyczynę ze swojego modułu `json`.
 
+## Rejestr płytek
+
+`jh board validate --root <checkout>` sprawdza rejestr płytek w katalogu
+`--boards-root` (domyślnie `<root>/boards`): najpierw `capabilities.json`,
+potem wszystkie `targets/*.json` i `profiles/*.json` w kolejności nazw,
+każdy plik tak, jak czyta go `json.loads`. Deskryptory odwołują się do
+rejestrów w `--root`, więc polecenie czyta również rejestr komponentów
+`config/tooling/board_components.json`, rejestr funkcji i schematy zegarów.
+Stosuje reguły, które stosował `scripts/generate_board_config.py`: dokładne
+pola, identyfikatory i makra, bity cech, zbiory pinów, urządzenia z ich
+rolami i magistralami, kanały CAN, komponenty, identyfikatory USB,
+rezerwacje pinów, wejścia i źródła zegarów, unikalne identyfikatory płytek
+i profili oraz selektory, a dla każdego targetu zgodną płytkę domyślną
+i zastępczą. Komunikaty zachowują brzmienie z tego skryptu:
+`<plik>: <ścieżka JSON>: got <wartość>; expected <reguła>`. Po udanym
+sprawdzeniu polecenie wypisuje `validated <n> targets and <m> boards`;
+z `--json` wynik (`command: "board.validate"`) zawiera `boardsRoot` oraz
+liczby `targets` i `boards`.
+
+`jh board list` sprawdza ten sam rejestr i wypisuje wiersze `target <id>`
+i `board <id>`. Z `--json` wynik (`command: "board.list"`) zawiera
+`boardsRoot`, `targets` i `boards`, w każdej pozycji `id`, `path`
+i przeczytany `descriptor`, dalej `capabilities`, `components` z `id`,
+`providers` i `slot` oraz tabele używane przez generatory: `deviceRoles`,
+`canControllers`, `canTransceivers`, `canChannelSignals`, `busDeviceKind`
+i `singleEndpointDeviceKinds`. `jh board default --target <id>` wypisuje
+płytkę domyślną znanego targetu; jego wynik `--json`
+(`command: "board.default"`) zawiera `target` i `board`.
+
+Polecenia kończą się kodem 0 po sukcesie, 2 przy niepoprawnym rejestrze,
+pliku rejestru, którego nie da się odczytać, albo nieznanym targecie, a 4
+przy braku pamięci. `scripts/generate_board_config.py` udostępnia ten model
+swoim importerom: rejestr z `load_registry()` oraz tabele
+`COMPONENT_REGISTRY` i `CAN_CONTROLLERS`, każdy rejestr czytany raz na proces,
+dopóki jego pliki się nie zmienią.
+
+W odróżnieniu od tego skryptu polecenia przyjmują w polu liczby całkowitej
+tylko liczbę zapisaną bez części ułamkowej i wykładnika, mieszczącą się
+w 64-bitowym zakresie ze znakiem. Odrzucają `true` i `false`, np. w `bit`
+cechy, które Python brał jako 1 i 0; walidator schematów też je odrzuca.
+Odrzucają również `1.0`, które Python przyjmował tam, gdzie porównywał
+wartość, np. w `schemaVersion` albo identyfikatorze pinu, a walidator
+schematów uznaje za liczbę całkowitą. Python przyjmował też większe liczby,
+np. w rozmiarach pamięci, `cores` czy `profileId`. Zakresy jednego zbioru
+pinów obejmują najwyżej 65536 pinów (`expected a range within 65536 pins`),
+a Python rozwijał każdy zakres w zbiór i przy dużym `last` wyczerpywał
+pamięć.
+
+Polecenia wypisują zbiór w komunikacie posortowany, a Python podawał go
+w kolejności swojego zbioru, zmiennej między uruchomieniami. Wartość złego typu albo brak wymaganego pola dają zwykły
+komunikat tam, gdzie Python kończył się wyjątkiem `TypeError`, `KeyError` lub
+`AttributeError`. Plik, którego nie da się odczytać, daje
+`invalid JSON: cannot read input file` zamiast tekstu błędu systemu
+operacyjnego.
+
 ## Katalog typów i wartości domyślne urządzeń
 
 `jh generate device-defaults --root <checkout>` czyta każdy `*.json`

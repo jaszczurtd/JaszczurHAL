@@ -47,9 +47,10 @@ add_library(jh_schema STATIC json/jh_json_schema.cpp)
 target_include_directories(jh_schema PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/json")
 target_link_libraries(jh_schema PUBLIC jb::host PRIVATE jh_core pcre2-8-static jb::unicode)
 jh_tool_target(jh_schema)
-# JSON files, VS Code settings, schema documents and generated-artifact
-# publishing. C11.
-add_library(jh_files STATIC json/jh_json_file.c src/jh_generated_output.c)
+# JSON files, VS Code settings, schema documents, the validation failures of
+# the registry readers and generated-artifact publishing. C11.
+add_library(jh_files STATIC json/jh_json_file.c json/jh_json_check.c
+  src/jh_generated_output.c)
 target_include_directories(jh_files PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(jh_files PUBLIC jh_core jh_schema jb::host)
 jh_tool_target(jh_files)
@@ -61,9 +62,9 @@ target_include_directories(jh_sha256 PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../../s
 target_link_libraries(jh_sha256 PUBLIC jb::status)
 jh_tool_target(jh_sha256)
 add_library(jh_registry STATIC config/jh_feature_registry.c
-  config/jh_feature_lint.c)
+  config/jh_feature_lint.c config/jh_board_registry.c)
 target_include_directories(jh_registry PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/config")
-target_link_libraries(jh_registry PUBLIC jh_files PRIVATE jh_sha256 jb::unicode)
+target_link_libraries(jh_registry PUBLIC jh_files PRIVATE jh_sha256)
 jh_tool_target(jh_registry)
 # Transitional C++: owners of the jhbase string and vector, and the
 # exceptions and owners the C++ modules below use over the C modules above.

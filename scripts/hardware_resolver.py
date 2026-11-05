@@ -751,8 +751,13 @@ class WiringCheck:
         return {"domain": "soc-gpio", "id": value["id"]}
 
     def usable(self, endpoint: dict[str, Any], owner: str, source: Path, at: str,
-               errors: Collector, board_owner: str | None = None) -> bool:
-        """Hard reservation, then soft reservation, then exposure."""
+               errors: Collector, board_owner: str | None = None,
+               owner_signal: str | None = None) -> bool:
+        """Hard reservation, then soft reservation, then exposure. A pin the
+        board does not expose reaches only its board device: a net there
+        needs that device as owner or a project owner with the same signal
+        (``out`` of a GPIO LED, ``in`` of a button, ``data`` of an
+        addressable LED); releasing a reservation does not wire the pin."""
         if endpoint["domain"] != "soc-gpio":
             return True
         pin = endpoint["id"]
@@ -771,11 +776,19 @@ class WiringCheck:
                 errors.add("JH-HW-RESERVATION", source, at,
                            f"{pin} is soft-reserved by {item['owner']}; release {self.soft[pin]} first")
                 return False
-        if pin not in self.exposed and ("soc", pin) not in self.board_owner and not (
-                pin in self.soft and self.soft[pin] in self.released):
+        if pin in self.exposed:
+            return True
+        board_signal = self.board_owner.get(("soc", pin))
+        if board_signal is None:
             errors.add("JH-HW-PIN-RANGE", source, at, f"{self.r.board['id']} does not expose {pin}")
             return False
-        return True
+        device, _, signal = board_signal.rpartition(".")
+        if board_owner == device or (board_owner is None and owner_signal == signal):
+            return True
+        errors.add("JH-HW-PIN-RANGE", source, at,
+                   f"{self.r.board['id']} does not expose {pin}; only {board_signal} reaches it, "
+                   f"so a net there needs an owner with signal {signal}")
+        return False
 
     def board_node(self, owner: str) -> str | None:
         for path, node in self.r.nodes.items():
@@ -815,9 +828,10 @@ class WiringCheck:
             if endpoint is None:
                 continue
             key = self.key(endpoint)
-            owner_node = net["owner"].rpartition(".")[0]
+            owner_node, _, owner_signal = net["owner"].rpartition(".")
             board_owner = owner_node if owner_node.split(".")[0] == "board" else None
-            if not self.usable(endpoint, f"net.{name}", self.r.path, at, errors, board_owner):
+            if not self.usable(endpoint, f"net.{name}", self.r.path, at, errors, board_owner,
+                               owner_signal):
                 continue
             self.nets[name] = {"endpoint": endpoint, "owner": net["owner"], "members": [],
                                "board": self.board_owner.get(key)}

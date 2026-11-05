@@ -746,9 +746,12 @@ Git's filename bytes, tracked/untracked selection and ignore rules.
 
 ### `scripts/generate_board_config.py`
 
-Validates the JSON target, board, and capability descriptors under `boards/`
-and resolves one target/board pair into generated CMake configuration and
-machine-readable metadata. CMake and the board tests call it directly.
+Reads the JSON target, board, and capability descriptors under `boards/` as
+`jh board list` validates them
+([jh README](../../../tools/jh/README.md#board-registry)), each registry once per
+process until its files change, and resolves one target/board pair into
+generated CMake configuration and machine-readable metadata. CMake and the
+board tests call it directly.
 `--validate-only` checks the complete registry, `--list targets|boards` and
 `--default-board` provide discovery, while `--feature` and `--define` add the
 validated build overlay used for generated output. `--output-dir` and

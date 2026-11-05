@@ -13,6 +13,7 @@
 #include "jh_json_schema.h"
 #include <jb/file.h>
 #include <jb/json_tree.h>
+#include <jb/json_writer.h>
 #include <jb/vector.h>
 #include <stdbool.h>
 
@@ -25,6 +26,12 @@ extern "C" {
  */
 hal_status_t jh_absolute_path(const char *path, const char *base,
                               jb_string_t *out, jh_failure_t *failure);
+
+/** Path.resolve() of an existing root: its real path, else root itself, in
+ * out. A Windows drive path loses the \\?\ prefix, as os.path.realpath
+ * drops it. Fails only with the status of the filesystem or the string.
+ */
+hal_status_t jh_resolved_path(const char *root, jb_string_t *out);
 
 /** Where the last read went and where its parse failed: source names the
  * file, located is set only after a parse error, with the jhbase error and
@@ -46,11 +53,13 @@ void jh_json_location_destroy(jh_json_location_t *where);
 
 /** A parsed file: its bytes, the jb_json_token_t elements of tokens, the
  * document over both, the path and its schema identity (the path with
- * percent-escaped bytes outside the unreserved set). The document borrows the
+ * percent-escaped bytes outside the unreserved set). A document parsed from
+ * memory keeps its bytes in text instead of input. The document borrows the
  * bytes and tokens, so a loaded document must not move.
  */
 typedef struct {
   jb_file_data_t input;
+  jb_string_t text;
   jb_vector_t tokens;
   jb_json_doc_t doc;
   jb_string_t uri, identity;
@@ -67,6 +76,14 @@ hal_status_t jh_json_read_document(jh_json_location_t *where, const char *path,
                                    size_t limit, bool hardware_numbers,
                                    jh_json_document_t *out,
                                    jh_failure_t *failure);
+/** Parse a copy of text, at most limit bytes, into out, which must be zero,
+ * as the document uri names (its identity for schema references and the
+ * source where records). On failure out is released.
+ */
+hal_status_t jh_json_parse_document(jh_json_location_t *where, const char *uri,
+                                    jb_json_span_t text, size_t limit,
+                                    jh_json_document_t *out,
+                                    jh_failure_t *failure);
 /** Release a document and reset it to zero. A zero document is harmless. */
 void jh_json_document_destroy(jh_json_document_t *document);
 
@@ -97,6 +114,11 @@ hal_status_t jh_json_read_value(jh_json_location_t *where, const char *path,
                                 size_t limit, jb_json_tree_t **out,
                                 jh_failure_t *failure);
 
+/** Write value, with every member and item, to writer: numbers keep their
+ * tokens and objects their member order. Writer errors propagate.
+ */
+hal_status_t jh_json_write_tree(jb_json_writer_t *writer,
+                                jb_json_tree_view_t value);
 /** The type of a tree value, JB_JSON_NULL for a view jhbase rejects. */
 jb_json_type_t jh_json_type(jb_json_tree_view_t value);
 /** Whether object is an object with a member key, borrowed into out. */

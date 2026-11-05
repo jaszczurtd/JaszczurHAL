@@ -9,10 +9,12 @@
  * jhbase container throws what check_container() throws. The header goes away
  * with the last C++ caller. C++17.
  */
+#include "jh_board_registry.h"
 #include "jh_containers.h"
 #include "jh_failure.h"
 #include "jh_feature_registry.h"
 #include "jh_generated_output.h"
+#include "jh_json_check.h"
 #include "jh_json_file.h"
 #include "jh_python_repr.h"
 #include <memory>
@@ -135,6 +137,16 @@ struct schema_files : jh_schema_files_t {
  */
 hal_status_t validate_with(schema_files &state,
                            const jh_json_document_t &instance);
+
+/** A jh_board_registry_t released with its owner. */
+struct board_registry : jh_board_registry_t {
+  board_registry() noexcept : jh_board_registry_t() {
+    jh_board_registry_init(this);
+  }
+  board_registry(const board_registry &) = delete;
+  board_registry &operator=(const board_registry &) = delete;
+  ~board_registry() { jh_board_registry_destroy(this); }
+};
 
 /** A jh_feature_registry_t released with its owner. */
 struct feature_registry : jh_feature_registry_t {

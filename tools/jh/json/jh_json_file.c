@@ -264,6 +264,28 @@ static hal_status_t read_document(jh_json_location_t *where, const char *path,
                           : HAL_OK;
 }
 
+hal_status_t jh_resolved_path(const char *root, jb_string_t *out) {
+  size_t required = 0;
+  hal_status_t status = jb_fs_realpath(root, NULL, 0, &required);
+  if (status == HAL_ENOENT || (status == HAL_EOVERFLOW && required == 0))
+    return jb_string_assign(out, root, strlen(root));
+  if (status != HAL_OK && status != HAL_EOVERFLOW)
+    return status;
+  status = jb_string_resize(out, required, '\0');
+  if (status == HAL_OK)
+    status =
+        jb_fs_realpath(root, jb_string_mutable_data(out), required, &required);
+  if (status == HAL_OK)
+    status = jb_string_resize(out, required - 1, '\0');
+#ifdef _WIN32
+  const char *text = jb_string_data(out);
+  if (status == HAL_OK && jb_string_size(out) >= 7 &&
+      memcmp(text, "\\\\?\\", 4) == 0 && text[5] == ':' && text[6] == '\\')
+    status = jb_string_assign(out, text + 4, jb_string_size(out) - 4);
+#endif
+  return status;
+}
+
 hal_status_t jh_json_read_document(jh_json_location_t *where, const char *path,
                                    size_t limit, bool hardware_numbers,
                                    jh_json_document_t *out,
@@ -283,9 +305,43 @@ hal_status_t jh_json_read_document(jh_json_location_t *where, const char *path,
   return status;
 }
 
+hal_status_t jh_json_parse_document(jh_json_location_t *where, const char *uri,
+                                    jb_json_span_t text, size_t limit,
+                                    jh_json_document_t *out,
+                                    jh_failure_t *failure) {
+  const jb_allocator_t *heap = jb_heap_allocator();
+  if (where == NULL || uri == NULL || out == NULL ||
+      (text.data == NULL && text.length != 0) ||
+      jb_string_init(&out->uri, heap) != HAL_OK ||
+      jb_string_init(&out->identity, heap) != HAL_OK ||
+      jb_string_init(&out->text, heap) != HAL_OK ||
+      jb_vector_init(&out->tokens, sizeof(jb_json_token_t), heap) != HAL_OK)
+    return jh_fail_arguments(failure);
+  const size_t length = strlen(uri);
+  hal_status_t status = jb_string_assign(&out->uri, uri, length);
+  if (status == HAL_OK)
+    status = schema_identity(jb_string_data(&out->uri), length, &out->identity);
+  if (status == HAL_OK)
+    status =
+        jb_string_assign(&where->source, jb_string_data(&out->uri), length);
+  if (status == HAL_OK && text.length != 0)
+    status = jb_string_assign(&out->text, text.data, text.length);
+  if (status != HAL_OK)
+    status = jh_fail_storage(failure, status);
+  if (status == HAL_OK)
+    status =
+        parse_document(where, jh_string_span(&out->text), limit, out, failure);
+  if (status == HAL_OK)
+    where->located = false;
+  else
+    jh_json_document_destroy(out);
+  return status;
+}
+
 void jh_json_document_destroy(jh_json_document_t *document) {
   static const jh_json_document_t empty = {0};
   jb_file_release(&document->input);
+  jb_string_destroy(&document->text);
   jb_vector_destroy(&document->tokens);
   jb_string_destroy(&document->uri);
   jb_string_destroy(&document->identity);
@@ -654,6 +710,53 @@ hal_status_t jh_schema_files_validate(jh_schema_files_t *files,
   return jh_fail_text(failure, status,
                       exit_code_for(status, file_error ? 3 : 2),
                       "cannot validate schema or validation limit exceeded");
+}
+
+hal_status_t jh_json_write_tree(jb_json_writer_t *writer,
+                                jb_json_tree_view_t value) {
+  jb_json_type_t type = JB_JSON_NULL;
+  hal_status_t status = jb_json_tree_type(value, &type);
+  jb_json_span_t text = {NULL, 0};
+  bool flag = false;
+  size_t count = 0;
+  if (status != HAL_OK)
+    return status;
+  switch (type) {
+  case JB_JSON_NULL:
+    return jb_json_writer_null(writer);
+  case JB_JSON_BOOL:
+    status = jb_json_tree_get_bool(value, &flag);
+    return status == HAL_OK ? jb_json_writer_bool(writer, flag) : status;
+  case JB_JSON_NUMBER:
+  case JB_JSON_STRING:
+    status = jb_json_tree_text(value, &text);
+    if (status != HAL_OK)
+      return status;
+    return type == JB_JSON_NUMBER ? jb_json_writer_number(writer, text)
+                                  : jb_json_writer_string(writer, text);
+  default:
+    break;
+  }
+  const bool object = type == JB_JSON_OBJECT;
+  status = object ? jb_json_writer_object_begin(writer)
+                  : jb_json_writer_array_begin(writer);
+  if (status == HAL_OK)
+    status = jb_json_tree_count(value, &count);
+  for (size_t index = 0; status == HAL_OK && index < count; ++index) {
+    jb_json_tree_view_t item = {0};
+    status = jb_json_tree_at(value, index, &item);
+    if (status == HAL_OK && object) {
+      status = jb_json_tree_key(item, &text);
+      if (status == HAL_OK)
+        status = jb_json_writer_key(writer, text);
+    }
+    if (status == HAL_OK)
+      status = jh_json_write_tree(writer, item);
+  }
+  if (status == HAL_OK)
+    status = object ? jb_json_writer_object_end(writer)
+                    : jb_json_writer_array_end(writer);
+  return status;
 }
 
 jb_json_type_t jh_json_type(jb_json_tree_view_t value) {

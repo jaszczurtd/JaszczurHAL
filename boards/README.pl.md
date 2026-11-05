@@ -1,7 +1,9 @@
 # Deskryptory płytek
 
 Ten katalog jest miarodajnym źródłem definicji targetów i fizycznych płytek
-JaszczurHAL. `scripts/generate_board_config.py` sprawdza deskryptory i tworzy
+JaszczurHAL. Deskryptory sprawdza `jh board validate`
+([README jh](../tools/jh/README.pl.md#rejestr-płytek)).
+`scripts/generate_board_config.py` czyta od niego sprawdzony rejestr i tworzy
 w katalogu `.build` konfigurację CMake i C/C++ używaną podczas buildu. Utrzymuje
 również przechowywany w repozytorium rejestr oraz zastępczą konfigurację
 źródłową, używaną wtedy, gdy profil nie został wygenerowany podczas buildu.
@@ -10,7 +12,7 @@ również przechowywany w repozytorium rejestr oraz zastępczą konfigurację
 - `targets/` opisuje targety buildu dla poszczególnych MCU i ISA.
 - `profiles/` opisuje fizyczne płytki.
 - `board.schema.json` pomaga wyłącznie edytorowi. Za walidację odpowiada
-  generator.
+  `jh`.
 
 Aplikacje wybierają stabilne identyfikatory `target` i `board`. Nie mogą
 analizować tych plików w czasie działania.

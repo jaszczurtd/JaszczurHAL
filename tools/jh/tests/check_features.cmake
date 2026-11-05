@@ -3,7 +3,9 @@ cmake_minimum_required(VERSION 3.22)
 # configuration: what generation depends on, the registries it rejects, the
 # rules requires and conflicts add to the artifacts, resolution and the raw
 # lint of project headers and manifests. The facts of the tracked registry are
-# checked by tests/test_feature_registry.cmake.
+# checked by tests/test_feature_registry.cmake. At the end, the pin-set bound
+# and the unique capability bits of the board registry on an edited copy of
+# boards/.
 if(NOT EXISTS "${JH}" OR NOT IS_DIRECTORY "${JH_HAL_SOURCE}/config/features")
   message(FATAL_ERROR "jh_features needs JH and JH_HAL_SOURCE")
 endif()
@@ -324,3 +326,33 @@ endif()
 header_findings("#if defined(SDK_ONLY_SWITCH)\n#define HAL_ENABLE_WIFI\n#endif\n" 0 "")
 # The checkout lints clean.
 lint(0)
+
+# The board registry bounds the ranges of one pin set to 65536 pins, so a
+# huge last fails instead of being expanded (the Python validator ran out of
+# memory there). 2^32 wraps a 32-bit size_t, where only the span check holds.
+file(COPY "${JH_HAL_SOURCE}/boards" DESTINATION "${JH_WORK}/board-limit")
+set(board_target "${JH_WORK}/board-limit/boards/targets/rp2040.json")
+file(READ "${board_target}" board_text)
+function(valid_pins ranges expected)
+  string(JSON text SET "${board_text}" gpio validPins ranges "${ranges}")
+  file(WRITE "${board_target}" "${text}")
+  invoke(${expected} board validate --root "${JH_HAL_SOURCE}" --boards-root "${JH_WORK}/board-limit/boards")
+  if(expected EQUAL 2 AND NOT stderr MATCHES "expected a range within 65536 pins")
+    message(FATAL_ERROR "Pin set ${ranges} failed for another reason: ${stderr}")
+  endif()
+endfunction()
+valid_pins("[{\"first\": 0, \"last\": 65535}]" 0)
+valid_pins("[{\"first\": 0, \"last\": 65536}]" 2)
+valid_pins("[{\"first\": 0, \"last\": 32767}, {\"first\": 32768, \"last\": 65536}]" 2)
+valid_pins("[{\"first\": 0, \"last\": 4294967296}]" 2)
+# Two capabilities on one bit: the later one fails. string(JSON SET) writes
+# the members in name order, so usb-device follows cyw43.
+file(WRITE "${board_target}" "${board_text}")
+set(board_capabilities "${JH_WORK}/board-limit/boards/capabilities.json")
+file(READ "${board_capabilities}" text)
+string(JSON text SET "${text}" capabilities cyw43 bit 0)
+file(WRITE "${board_capabilities}" "${text}")
+invoke(2 board validate --root "${JH_HAL_SOURCE}" --boards-root "${JH_WORK}/board-limit/boards")
+if(NOT stderr MATCHES "capabilities\\.usb-device\\.bit: got 0; expected a unique capability bit")
+  message(FATAL_ERROR "A repeated capability bit passed or gave another reason: ${stderr}")
+endif()

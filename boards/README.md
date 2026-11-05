@@ -1,14 +1,16 @@
 # Board descriptors
 
 This directory is the source of truth for JaszczurHAL target and physical
-board definitions. `scripts/generate_board_config.py` validates the descriptors,
-emits build-time CMake and C/C++ configuration below `.build`, and maintains the
+board definitions. `jh board validate` validates the descriptors
+([jh README](../tools/jh/README.md#board-registry)).
+`scripts/generate_board_config.py` reads the validated registry from it, emits
+build-time CMake and C/C++ configuration below `.build`, and maintains the
 tracked registry and source fallback used without a build-generated profile.
 
 - `capabilities.json` assigns stable public capability bits.
 - `targets/` describes MCU/ISA build targets.
 - `profiles/` describes physical boards.
-- `board.schema.json` is editor assistance only. The generator owns validation.
+- `board.schema.json` is editor assistance only. `jh` owns validation.
 
 Applications select a stable `target` and `board` ID. They must not parse these
 files at runtime.

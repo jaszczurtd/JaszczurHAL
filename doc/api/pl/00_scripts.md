@@ -795,10 +795,12 @@ reguły ignorowania Gita.
 
 ### `scripts/generate_board_config.py`
 
-Sprawdza deskryptory JSON targetów, płytek i ich cech sprzętowych w `boards/`, a
-następnie na podstawie wybranej pary target/płytka generuje konfigurację CMake
-oraz metadane do odczytu maszynowego. CMake i testy płytek wywołują skrypt
-bezpośrednio. `--validate-only` sprawdza kompletny rejestr.
+Czyta deskryptory JSON targetów, płytek i ich cech sprzętowych w `boards/`
+w postaci sprawdzonej przez `jh board list`
+([README jh](../../../tools/jh/README.pl.md#rejestr-płytek)), każdy rejestr raz
+na proces, dopóki jego pliki się nie zmienią. Następnie na podstawie wybranej
+pary target/płytka generuje konfigurację CMake oraz metadane do odczytu
+maszynowego. CMake i testy płytek wywołują skrypt bezpośrednio. `--validate-only` sprawdza kompletny rejestr.
 `--list targets|boards` oraz `--default-board` udostępniają listy dostępnych
 pozycji,
 natomiast `--feature` i `--define` dodają sprawdzoną warstwę konfiguracji
