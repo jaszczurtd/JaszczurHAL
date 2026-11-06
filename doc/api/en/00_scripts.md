@@ -948,15 +948,20 @@ package's configuration digest with the one the application generates.
 
 ### `scripts/clock_registry.py`
 
-Checks the clock trees in `config/hardware/clocks/<target>.json`. It confirms
-that every target has a registry, that the output frequencies of each tree
-follow from its parameters, and that every board provides the clock sources
-the default tree of each of its targets needs. It also compares the trees with
-the code that sets the clocks, the STM32G474 startup headers and the pinned
-Pico SDK defaults, and fails when a HAL build file or example overrides a Pico
-SDK clock macro. `--esp-sdkconfig TARGET=PATH`, which may be repeated, also
-compares an ESP-IDF build's `sdkconfig` with the default tree of `TARGET`. The
-`esp-idf` gate stage passes the configurations of its fixture builds.
+Gives `hardware_resolver.py` and `generate_hardware_config.py` the clock trees
+of `config/hardware/clocks/<target>.json` as `jh clock list` reads them: the
+trees by target, the board component behind each STM32G474 tree and, for a
+board, target and tree, why the board cannot run the tree. The result is read
+once per process until the clock or board registry files change.
+`jh clock check` checks the registry: the output frequencies of each tree
+follow from its parameters, every board provides the clock sources of the
+default tree of each of its targets, the trees match the STM32G474 startup
+headers and the pinned Pico SDK defaults, and no HAL build file or example
+overrides a Pico SDK clock macro. With `--esp-sdkconfig TARGET=PATH`, which
+may be repeated, it also compares an ESP-IDF build's `sdkconfig` with the
+default tree of `TARGET`; the `esp-idf` gate stage passes the configurations
+of its fixture builds. The [jh README](../../../tools/jh/README.md) describes
+both commands.
 
 ### `scripts/tooling_contract.py` and `scripts/repository_layout.py`
 

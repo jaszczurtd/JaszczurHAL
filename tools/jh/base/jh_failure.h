@@ -7,6 +7,7 @@
  * and fill a record the caller owns. Also the span helpers and lists of owned
  * strings those modules share. C11.
  */
+#include <jb/array.h>
 #include <jb/json.h>
 #include <jb/string.h>
 #include <jb/vector.h>
@@ -86,6 +87,14 @@ hal_status_t jh_append_span(jb_string_t *out, jb_json_span_t text);
 void jh_put(jb_string_t *out, hal_status_t *status, const char *text);
 /** jh_append_span while *status is HAL_OK. */
 void jh_put_span(jb_string_t *out, hal_status_t *status, jb_json_span_t text);
+/** Replace out with the concatenation of count parts. */
+hal_status_t jh_join(jb_string_t *out, const jb_json_span_t *parts,
+                     size_t count);
+/** An array of spans and its count, the parts and count arguments of
+ * jh_join, jh_fail and jh_list_push_parts. C only (compound literal). */
+#define JH_PARTS(...)                                                          \
+  ((const jb_json_span_t[]){__VA_ARGS__}),                                     \
+      COUNTOF(((const jb_json_span_t[]){__VA_ARGS__}))
 /** A jb_json_sink_fn appending to the jb_string_t at user. */
 hal_status_t jh_string_sink(void *user, const char *data, size_t length);
 /** The decimal text of value while *status is HAL_OK. */

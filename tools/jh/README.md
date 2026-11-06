@@ -13,7 +13,9 @@ and through it the pre-commit hook and the gate, run both commands through the
 launcher described below. `jh config inspect` evaluates a project's `hal_project_config.h` as the
 build reads it. `jh feature list` and `jh feature resolve` give the feature
 registry and the features one build requests, resolved; `jh feature lint`
-checks the feature requests of project headers and manifests.
+checks the feature requests of project headers and manifests. `jh board`
+validates and lists the board registry, and `jh clock` the clock tree
+registry.
 
 Prepare the pinned host dependencies explicitly before configuring:
 
@@ -401,6 +403,82 @@ where Python stopped with a `TypeError`, `KeyError` or `AttributeError`, and
 a file that cannot be read gives `invalid JSON: cannot read input file`
 instead of the operating system's error text.
 
+## Clock registry
+
+`jh clock check --root <checkout>` checks the clock trees of
+`config/hardware/clocks/<target>.json` (`--clocks` reads another directory)
+against the board registry of `--boards-root` and the code that sets the
+clocks. Every registry file is read with the hardware loader, validated with
+`config/hardware/clock_tree.schema.json` and must be named after its
+`target`. The command then confirms that every target has a registry, that the
+output frequencies of each tree follow from its backend parameters, that only
+STM32G474 has trees besides `default` (the HAL never sets the Pico SDK,
+ESP-IDF or mock clock), that every required source is a clock input of its
+target, and that every board provides the sources the default tree of each
+of its targets needs. Last, it compares the trees with the STM32G474 startup
+headers and the pinned Pico SDK defaults, and fails when a `.cmake`, `.txt`,
+`.h`, `.c` or `.cpp` file below `cmake`, `link_libraries`, `src`, `config` or
+`examples` defines a Pico SDK clock macro. `--esp-sdkconfig TARGET=PATH`, which
+may be repeated, also compares the `sdkconfig` of an ESP-IDF build with the
+default tree of `TARGET`; the `esp-idf` gate stage passes the configurations
+of its fixture builds. On success the command prints
+`[OK] clock registry: <n> targets, <m> trees`; with `--json` the result
+(`command: "clock.check"`) has `clocks`, `targets`, `trees` and
+`espSdkconfigs`.
+
+`jh clock list` prints one `<target> <tree>` line per tree. Its `--json`
+result (`command: "clock.list"`) has `clocks`, `targets` with `id`, `path` and
+the `registry` file as read, `stm32g474TreeComponents` (the board component
+that makes the startup code build each STM32G474 tree, `null` for none) and
+`boardSources`: for every board, compatible target and tree of that target,
+the `errors` with the `pointer` into the board's `clockSources` and the
+`message`. The listing reads the trees and the board profiles and targets
+the way `json.loads` reads them, without checking them: `jh clock check` and
+`jh board validate` do.
+`scripts/clock_registry.py` gives `hardware_resolver.py` and
+`generate_hardware_config.py` this listing, read once per process until its
+files change.
+
+A check that fails has exit code 1 and the message of
+`scripts/clock_registry.py` before the port, printed as `jh: <message>
+(<status>)` instead of `[ERROR] clock registry: <message>`. A registry file with invalid
+JSON has exit code 2, a file the command cannot read 3, an invalid argument
+2 and memory exhaustion 4.
+
+The commands differ from that script in these cases:
+
+- The formulas compute with numbers and booleans as Python does, floats and
+  floor division of floats included, but an integer result past the signed
+  64-bit range or a zero divisor gives
+  `the parameters divide by zero or overflow 64-bit arithmetic` or
+  `the parameters overflow 64-bit arithmetic`, and a string parameter gives
+  `parameter <name> is <value>, the frequencies need a number`. Python
+  computed with integers of any size, stopped with `ZeroDivisionError` or
+  `TypeError`, and for a string `cpuFreqMhz` repeated the string a million
+  times.
+- A missing `pllQ` of a tree that takes FDCAN from PLL Q is
+  `missing parameters ['pllQ']`, and a target an `--esp-sdkconfig` names
+  without a registry or a parameter is a regular message, where Python stopped
+  with `KeyError`.
+- The registry files are read like the other hardware files: a repeated name,
+  a non-finite number or an unpaired surrogate is `<file>: invalid JSON:
+  <reason>` with the line and column, and so is broken JSON, where Python
+  stopped with a traceback. A file that cannot be read names the file and the status instead
+  of the operating system's error text.
+- The boards come from the validated board registry, so a board that
+  `jh board validate` rejects fails the check with that message, where the
+  script read the profiles without validation.
+- Headers and build files are read as bytes, with CR LF and lone CR read as
+  LF, as Python read them. In the patterns, `\s`, `\w`, `\b` and `\d` know
+  ASCII only, where Python's `re` also counted other Unicode letters, digits
+  and spaces. A header that is not valid UTF-8 is checked as well, where
+  Python stopped with `UnicodeDecodeError`.
+- From each start position a pattern search may take 64 steps per byte of
+  the file, and at least ten million, which covers backtracking over a whole
+  file. A search that needs more stops the check with exit code 4 and
+  `<file>: the pattern search stopped: <reason>`; Python's `re` has no such
+  limit.
+
 ## Type catalogue and device defaults
 
 `jh generate device-defaults --root <checkout>` reads every `*.json` of
@@ -481,7 +559,11 @@ loads the HAL feature registry, renders its artifacts and resolves feature
 requests; its digests use the SHA-256 core of HAL in
 [jh_sha256.h](../../src/hal/security/jh_sha256.h), which the tool compiles on
 its own. [jh_feature_lint.h](config/jh_feature_lint.h) finds the inputs of the
-feature lint and checks project manifests. The schema validator, the project configuration reader,
+feature lint and checks project manifests.
+[jh_board_registry.h](config/jh_board_registry.h) loads and validates the board
+registry, and [jh_clock_registry.h](config/jh_clock_registry.h) the clock tree
+registry with the checks of the code that sets the clocks. The schema
+validator, the project configuration reader,
 the type catalogue and `main.cpp` are still C++. They call the C modules
 through the owners and exceptions in [cxx/](cxx/), which go away with the last
 C++ caller.

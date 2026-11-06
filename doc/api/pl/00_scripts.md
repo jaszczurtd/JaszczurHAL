@@ -1002,16 +1002,21 @@ z tym, który generuje sama aplikacja.
 
 ### `scripts/clock_registry.py`
 
-Sprawdza drzewa zegarów w `config/hardware/clocks/<target>.json`. Potwierdza,
-że każdy target ma swój rejestr, że częstotliwości wyjściowe każdego drzewa
-wynikają z jego parametrów i że każda płytka ma źródła zegara, których
-potrzebuje domyślne drzewo każdego z jej targetów. Porównuje też drzewa
-z kodem, który faktycznie ustawia zegary: z nagłówkami startowymi STM32G474
-i domyślnymi ustawieniami przypiętego Pico SDK. Zgłasza błąd, gdy plik
-kompilacji HAL albo przykład nadpisuje makro zegara Pico SDK. Opcja
+Udostępnia modułom `hardware_resolver.py` i `generate_hardware_config.py`
+drzewa zegarów z `config/hardware/clocks/<target>.json` tak, jak czyta je
+`jh clock list`: drzewa każdego targetu, komponent płytki stojący za każdym
+drzewem STM32G474 oraz, dla płytki, targetu i drzewa, powody, dla których
+płytka nie może pracować z tym drzewem. Wynik jest czytany raz na proces,
+dopóki nie zmienią się pliki rejestru zegarów albo płytek. Rejestr sprawdza
+`jh clock check`: częstotliwości wyjściowe każdego drzewa muszą wynikać z jego
+parametrów, każda płytka musi mieć źródła zegara domyślnego drzewa każdego
+z jej targetów, drzewa muszą zgadzać się z nagłówkami startowymi STM32G474
+i domyślnymi ustawieniami przypiętego Pico SDK, a żaden plik kompilacji HAL
+ani przykład nie może nadpisywać makra zegara Pico SDK. Opcja
 `--esp-sdkconfig TARGET=PATH`, którą można powtórzyć, porównuje dodatkowo
-`sdkconfig` kompilacji ESP-IDF z domyślnym drzewem `TARGET`. Etap bramki
-`esp-idf` przekazuje konfiguracje swoich kompilacji fixture'ów.
+`sdkconfig` kompilacji ESP-IDF z domyślnym drzewem `TARGET`; etap bramki
+`esp-idf` przekazuje konfiguracje swoich kompilacji fixture'ów. Oba polecenia
+opisuje [README jh](../../../tools/jh/README.pl.md).
 
 ### `scripts/tooling_contract.py` oraz `scripts/repository_layout.py`
 

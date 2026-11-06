@@ -454,6 +454,7 @@ JH_MEMCHECK_REQUIRED_TESTS=(
     jh_settings
     jh_config
     jh_containers
+    jh_clocks
 )
 
 # run_memcheck BUILD LOG REQUIRED...: every native test labelled memcheck in
@@ -746,7 +747,7 @@ stage_esp_idf() {
             --clean
 
     info "Checking the ESP-IDF clock configuration against the clock registry..."
-    python3 "${SCRIPT_DIR}/scripts/clock_registry.py" \
+    "${JH_EXECUTABLE}" clock check --root "${SCRIPT_DIR}" \
         --esp-sdkconfig "esp32s3=${phase3}/sdkconfig" \
         --esp-sdkconfig "esp32=${gamepad}/sdkconfig"
 

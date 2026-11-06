@@ -5,7 +5,9 @@ cmake_minimum_required(VERSION 3.22)
 # lint of project headers and manifests. The facts of the tracked registry are
 # checked by tests/test_feature_registry.cmake. At the end, the pin-set bound
 # and the unique capability bits of the board registry on an edited copy of
-# boards/.
+# boards/. Last, the clock commands: their arguments, a rejected registry and
+# the listing the hardware resolver reads; the module itself is checked by
+# jh_clocks and the checkout by tests/test_clock_registry.cmake.
 if(NOT EXISTS "${JH}" OR NOT IS_DIRECTORY "${JH_HAL_SOURCE}/config/features")
   message(FATAL_ERROR "jh_features needs JH and JH_HAL_SOURCE")
 endif()
@@ -355,4 +357,68 @@ file(WRITE "${board_capabilities}" "${text}")
 invoke(2 board validate --root "${JH_HAL_SOURCE}" --boards-root "${JH_WORK}/board-limit/boards")
 if(NOT stderr MATCHES "capabilities\\.usb-device\\.bit: got 0; expected a unique capability bit")
   message(FATAL_ERROR "A repeated capability bit passed or gave another reason: ${stderr}")
+endif()
+
+# Clock registry commands. A TARGET=PATH without either half is refused
+# before anything is read.
+foreach(item "esp32s3" "=x" "esp32s3=")
+  invoke(2 clock check --root "${JH_HAL_SOURCE}" "--esp-sdkconfig=${item}" --json)
+  status(HAL_EINVAL)
+endforeach()
+# A registry check failure has exit code 1 and the message of the check.
+file(COPY "${JH_HAL_SOURCE}/config/hardware/clocks" DESTINATION "${JH_WORK}/clock-copy")
+set(clock_file "${JH_WORK}/clock-copy/clocks/esp32s3.json")
+file(READ "${clock_file}" text)
+string(JSON text SET "${text}" trees default frequenciesHz cpu 240000000)
+file(WRITE "${clock_file}" "${text}")
+invoke(1 clock check --root "${JH_HAL_SOURCE}" --clocks "${JH_WORK}/clock-copy/clocks" --json)
+status(HAL_ECONFIG)
+string(JSON message GET "${stdout}" message)
+if(NOT message STREQUAL "esp32s3/default: frequencies {'cpu': 240000000} do not follow from the parameters {'cpu': 160000000}")
+  message(FATAL_ERROR "Clock check gave another message: ${message}")
+endif()
+# The listing does not check the trees: it reads them, names the board
+# component of each STM32G474 tree and lists the source problems of every
+# board, compatible target and tree.
+invoke(0 clock list --root "${JH_HAL_SOURCE}" --clocks "${JH_WORK}/clock-copy/clocks" --json)
+status(HAL_OK)
+string(JSON cpu GET "${stdout}" targets 1 registry trees default frequenciesHz cpu)
+string(JSON default_component TYPE "${stdout}" stm32g474TreeComponents default)
+string(JSON hse_component GET "${stdout}" stm32g474TreeComponents hse-160mhz)
+if(NOT cpu EQUAL 240000000 OR NOT default_component STREQUAL "NULL" OR
+   NOT hse_component STREQUAL "stm32g474-hse-24mhz")
+  message(FATAL_ERROR "Clock listing changed: ${stdout}")
+endif()
+string(JSON entries LENGTH "${stdout}" boardSources)
+if(entries EQUAL 0)
+  message(FATAL_ERROR "Clock listing has no board sources: ${stdout}")
+endif()
+invoke(0 clock list --root "${JH_HAL_SOURCE}" --clocks "${JH_WORK}/clock-copy/clocks")
+if(NOT stdout MATCHES "stm32g474 hse-160mhz\n")
+  message(FATAL_ERROR "Clock listing lacks its trees: ${stdout}")
+endif()
+file(REMOVE "${JH_WORK}/clock-copy/clocks/esp32.json")
+invoke(0 clock list --root "${JH_HAL_SOURCE}" --clocks "${JH_WORK}/clock-copy/clocks" --json)
+file(WRITE "${JH_WORK}/clock-copy/clocks/broken.json" "{\"target\": \"broken\",")
+invoke(2 clock list --root "${JH_HAL_SOURCE}" --clocks "${JH_WORK}/clock-copy/clocks" --json)
+string(JSON message GET "${stdout}" message)
+if(NOT message MATCHES "broken\\.json: invalid JSON")
+  message(FATAL_ERROR "A broken clock file gave another message: ${message}")
+endif()
+# Boards are checked in the order of their IDs, as sorted() of a dict did:
+# pico before pico-w, although pico-w.json sorts before pico.json.
+file(COPY "${JH_HAL_SOURCE}/boards" DESTINATION "${JH_WORK}/clock-boards")
+set(profiles "${JH_WORK}/clock-boards/boards/profiles")
+file(READ "${profiles}/pico.json" text)
+string(JSON text REMOVE "${text}" clockSources xosc)
+file(WRITE "${profiles}/pico.json" "${text}")
+file(READ "${profiles}/picow.json" text)
+string(JSON text REMOVE "${text}" clockSources xosc)
+string(JSON text SET "${text}" id "\"pico-w\"")
+file(REMOVE "${profiles}/picow.json")
+file(WRITE "${profiles}/pico-w.json" "${text}")
+invoke(1 clock check --root "${JH_HAL_SOURCE}" --boards-root "${JH_WORK}/clock-boards/boards" --json)
+string(JSON message GET "${stdout}" message)
+if(NOT message STREQUAL "pico: default rp2040 tree: no xosc source")
+  message(FATAL_ERROR "Boards were not checked in ID order: ${message}")
 endif()

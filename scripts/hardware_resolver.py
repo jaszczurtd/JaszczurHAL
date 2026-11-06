@@ -89,7 +89,8 @@ class Registry:
 
 def load_registry(boards_root: Path = BOARDS_ROOT) -> Registry:
     targets, boards, capabilities = boards_module.load_registry(boards_root)
-    return Registry(targets, boards, capabilities, clock_registry.load_registry(), boards_root)
+    return Registry(targets, boards, capabilities,
+                    clock_registry.load_registry(boards_root=boards_root), boards_root)
 
 
 @dataclass
@@ -500,8 +501,8 @@ class Resolver:
             raise HardwareError("JH-HW-CLOCK", self.path, at,
                                 f"{self.target['id']} supports the trees {sorted(trees)}")
         tree = trees[name]
-        problems = clock_registry.board_sources_satisfy(self.board, tree,
-                                                        self.target.get("clockInputs", {}))
+        problems = clock_registry.board_sources_satisfy(self.assembly["board"], self.target["id"],
+                                                        name, self.registry.boards_root)
         if problems:
             raise HardwareError("JH-HW-CLOCK", self.path, at, "; ".join(problems))
         sources = {key: self.board["clockSources"][key] for key in tree["requiredSources"]}

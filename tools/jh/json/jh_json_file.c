@@ -264,6 +264,36 @@ static hal_status_t read_document(jh_json_location_t *where, const char *path,
                           : HAL_OK;
 }
 
+hal_status_t jh_path_join(const char *base, const char *name,
+                          jb_string_t *out) {
+  size_t required = 0;
+  hal_status_t status = jb_fs_path_join(base, name, NULL, 0, &required);
+  if (status != HAL_OK && status != HAL_EOVERFLOW)
+    return status;
+  status = jb_string_resize(out, required, '\0');
+  if (status == HAL_OK)
+    status = jb_fs_path_join(base, name, jb_string_mutable_data(out), required,
+                             &required);
+  return status == HAL_OK ? jb_string_resize(out, required - 1u, '\0') : status;
+}
+
+static hal_status_t collect_json(void *context, const char *name,
+                                 const jb_fs_info_t *info) {
+  (void)info;
+  const size_t length = strlen(name);
+  if (length < 5 || strcmp(name + length - 5, ".json") != 0)
+    return HAL_OK;
+  return jh_list_push(context, jh_span(name));
+}
+
+hal_status_t jh_json_names(const char *directory, jb_vector_t *names) {
+  const hal_status_t listed = jb_fs_list(directory, collect_json, names);
+  if (listed != HAL_OK && listed != HAL_ENOENT)
+    return listed;
+  jh_list_sort(names);
+  return HAL_OK;
+}
+
 hal_status_t jh_resolved_path(const char *root, jb_string_t *out) {
   size_t required = 0;
   hal_status_t status = jb_fs_realpath(root, NULL, 0, &required);

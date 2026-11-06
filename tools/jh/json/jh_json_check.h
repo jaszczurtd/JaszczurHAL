@@ -79,6 +79,14 @@ hal_status_t jh_repr_list(jb_string_t *out, const jb_vector_t *list);
 bool jh_json_string(jb_json_tree_view_t value, jb_json_span_t *text);
 /** The members of an object or the items of an array; zero otherwise. */
 size_t jh_json_count(jb_json_tree_view_t value);
+/** isinstance(value, int) and not bool: an integer token (no fraction or
+ * exponent) within int64_t, in *out. */
+bool jh_json_int64(jb_json_tree_view_t value, int64_t *out);
+/** The name of an object member; empty for any other view. */
+jb_json_span_t jh_json_key(jb_json_tree_view_t member);
+/** The member or item at index of an object or array; a zero view past the
+ * end. */
+jb_json_tree_view_t jh_json_item(jb_json_tree_view_t container, size_t index);
 /** out becomes base followed by the NUL-terminated suffix. */
 hal_status_t jh_json_path_join(jb_string_t *out, jb_json_span_t base,
                                const char *suffix);

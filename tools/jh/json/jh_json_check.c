@@ -186,6 +186,48 @@ size_t jh_json_count(jb_json_tree_view_t value) {
   return count;
 }
 
+bool jh_json_int64(jb_json_tree_view_t value, int64_t *out) {
+  jb_json_span_t text = {NULL, 0};
+  if (jh_json_type(value) != JB_JSON_NUMBER ||
+      jb_json_tree_text(value, &text) != HAL_OK || text.length == 0)
+    return false;
+  const bool negative = text.data[0] == '-';
+  size_t at = negative ? 1u : 0u;
+  if (at == text.length)
+    return false;
+  uint64_t magnitude = 0;
+  for (; at < text.length; ++at) {
+    const char digit = text.data[at];
+    if (digit < '0' || digit > '9')
+      return false;
+    const uint64_t value_of = (uint64_t)(digit - '0');
+    if (magnitude > (UINT64_MAX - value_of) / 10u)
+      return false;
+    magnitude = magnitude * 10u + value_of;
+  }
+  const uint64_t limit = negative ? (uint64_t)INT64_MAX + 1u : INT64_MAX;
+  if (magnitude > limit)
+    return false;
+  if (negative)
+    *out =
+        magnitude == (uint64_t)INT64_MAX + 1u ? INT64_MIN : -(int64_t)magnitude;
+  else
+    *out = (int64_t)magnitude;
+  return true;
+}
+
+jb_json_span_t jh_json_key(jb_json_tree_view_t member) {
+  jb_json_span_t key = {NULL, 0};
+  (void)jb_json_tree_key(member, &key);
+  return key;
+}
+
+jb_json_tree_view_t jh_json_item(jb_json_tree_view_t container, size_t index) {
+  jb_json_tree_view_t item = {0};
+  (void)jb_json_tree_at(container, index, &item);
+  return item;
+}
+
 hal_status_t jh_json_path_join(jb_string_t *out, jb_json_span_t base,
                                const char *suffix) {
   jb_string_clear(out);

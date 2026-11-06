@@ -1348,9 +1348,10 @@ add_test(NAME test_check_vulnerabilities
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
 add_test(NAME test_clock_registry
-    COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_CURRENT_SOURCE_DIR}/test_clock_registry.py
-        ${CMAKE_CURRENT_SOURCE_DIR}/..
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
+        -DJH_TEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_clock_registry.cmake
 )
 add_test(NAME test_hardware_data
     COMMAND ${Python3_EXECUTABLE}

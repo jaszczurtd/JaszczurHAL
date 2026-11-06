@@ -20,7 +20,6 @@ from repo_root import hal_include_dirs, repo_root  # noqa: E402
 ROOT = repo_root(sys.argv, __file__)
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import clock_registry  # noqa: E402
 import generate_hardware_config as generator  # noqa: E402
 from hardware_model import HardwareError  # noqa: E402
 import hardware_output  # noqa: E402
@@ -139,17 +138,6 @@ class SpecificationCases(unittest.TestCase):
                 self.assertEqual(Path(error.source).resolve(), path.resolve())
                 if "related" in case:
                     self.assertEqual(tuple(case["related"]), error.related)
-
-    def test_clock_source_cases(self) -> None:
-        stm32_inputs = REGISTRY.targets["stm32g474"]["clockInputs"]
-        for case in CASES["cases"]:
-            if "clockTree" not in case:
-                continue
-            with self.subTest(file=case["file"]):
-                trees = hardware_schema.load_json(FIXTURES / case["clockRegistry"])["trees"]
-                errors = clock_registry.source_errors(hardware_schema.load_json(FIXTURES / case["file"]),
-                                                      trees[case["clockTree"]], stm32_inputs)
-                self.assertEqual(case["at"], errors[0][0])
 
     def test_selection_cases(self) -> None:
         for case in CASES["selectionCases"]:

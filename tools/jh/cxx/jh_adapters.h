@@ -10,6 +10,7 @@
  * with the last C++ caller. C++17.
  */
 #include "jh_board_registry.h"
+#include "jh_clock_registry.h"
 #include "jh_containers.h"
 #include "jh_failure.h"
 #include "jh_feature_registry.h"
@@ -146,6 +147,16 @@ struct board_registry : jh_board_registry_t {
   board_registry(const board_registry &) = delete;
   board_registry &operator=(const board_registry &) = delete;
   ~board_registry() { jh_board_registry_destroy(this); }
+};
+
+/** A jh_clock_registry_t released with its owner. */
+struct clock_registry : jh_clock_registry_t {
+  clock_registry() noexcept : jh_clock_registry_t() {
+    jh_clock_registry_init(this);
+  }
+  clock_registry(const clock_registry &) = delete;
+  clock_registry &operator=(const clock_registry &) = delete;
+  ~clock_registry() { jh_clock_registry_destroy(this); }
 };
 
 /** A jh_feature_registry_t released with its owner. */

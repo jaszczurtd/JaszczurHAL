@@ -27,6 +27,15 @@ extern "C" {
 hal_status_t jh_absolute_path(const char *path, const char *base,
                               jb_string_t *out, jh_failure_t *failure);
 
+/** out becomes base joined with name (jb_fs_path_join). */
+hal_status_t jh_path_join(const char *base, const char *name, jb_string_t *out);
+
+/** sorted(directory.glob("*.json")): append the names ending in .json, in code
+ * point order, to names (jb_string_t elements). A missing directory has none;
+ * any other listing failure returns its status with names unsorted.
+ */
+hal_status_t jh_json_names(const char *directory, jb_vector_t *names);
+
 /** Path.resolve() of an existing root: its real path, else root itself, in
  * out. A Windows drive path loses the \\?\ prefix, as os.path.realpath
  * drops it. Fails only with the status of the filesystem or the string.

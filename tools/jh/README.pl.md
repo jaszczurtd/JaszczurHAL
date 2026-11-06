@@ -14,7 +14,8 @@ opisany niżej launcher. `jh config inspect` odczytuje `hal_project_config.h` pr
 jak widzi go kompilacja. `jh feature list` i `jh feature resolve` podają
 rejestr funkcji oraz rozwiązane funkcje, o które prosi jedna kompilacja;
 `jh feature lint` sprawdza żądania funkcji w nagłówkach i manifestach
-projektów.
+projektów. `jh board` sprawdza i wypisuje rejestr płytek, a `jh clock` rejestr
+drzew zegarów.
 
 Przed konfiguracją przygotuj zależności hosta w wersjach wskazanych przez repozytorium:
 
@@ -418,6 +419,82 @@ komunikat tam, gdzie Python kończył się wyjątkiem `TypeError`, `KeyError` lu
 `invalid JSON: cannot read input file` zamiast tekstu błędu systemu
 operacyjnego.
 
+## Rejestr zegarów
+
+`jh clock check --root <checkout>` sprawdza drzewa zegarów
+z `config/hardware/clocks/<target>.json` (`--clocks` wskazuje inny katalog)
+względem rejestru płytek z `--boards-root` i kodu, który ustawia zegary.
+Każdy plik rejestru czyta loaderem plików sprzętowych, sprawdza schematem
+`config/hardware/clock_tree.schema.json` i wymaga nazwy zgodnej z polem
+`target`. Następnie potwierdza, że każdy target ma swój rejestr, że
+częstotliwości wyjściowe każdego drzewa wynikają z parametrów backendu, że
+drzewa inne niż `default` ma tylko STM32G474 (HAL nie ustawia zegara Pico SDK,
+ESP-IDF ani mocka), że każde wymagane źródło jest wejściem zegara swojego
+targetu i że każda płytka ma źródła, których potrzebuje domyślne drzewo każdego
+z jej targetów. Na końcu porównuje drzewa z nagłówkami startowymi STM32G474
+i domyślnymi ustawieniami przypiętego Pico SDK. Zgłasza błąd, gdy plik `.cmake`,
+`.txt`, `.h`, `.c` albo `.cpp` w katalogach `cmake`, `link_libraries`, `src`,
+`config` lub `examples` definiuje makro zegara Pico SDK. Opcja
+`--esp-sdkconfig TARGET=PATH`, którą można powtórzyć, porównuje dodatkowo
+`sdkconfig` kompilacji ESP-IDF z domyślnym drzewem `TARGET`; etap bramki
+`esp-idf` przekazuje konfiguracje swoich kompilacji fixture'ów. Po udanym
+sprawdzeniu polecenie wypisuje `[OK] clock registry: <n> targets, <m> trees`;
+z `--json` wynik (`command: "clock.check"`) zawiera `clocks`, `targets`, `trees`
+i `espSdkconfigs`.
+
+`jh clock list` wypisuje wiersz `<target> <drzewo>` dla każdego drzewa.
+Z `--json` wynik (`command: "clock.list"`) zawiera `clocks`, `targets` z `id`,
+`path` i przeczytanym plikiem `registry`, `stm32g474TreeComponents` (komponent
+płytki, przy którym kod startowy buduje dane drzewo STM32G474, `null`, gdy
+nie trzeba żadnego) oraz `boardSources`: dla każdej płytki, zgodnego targetu
+i drzewa tego targetu listę `errors` z `pointer` do `clockSources` płytki
+i `message`. Lista czyta drzewa oraz profile i targety płytek tak, jak czyta
+je `json.loads`, bez sprawdzania: robią to `jh clock check`
+i `jh board validate`.
+`scripts/clock_registry.py` udostępnia tę listę modułom `hardware_resolver.py`
+i `generate_hardware_config.py`, czytając ją raz na proces, dopóki jej pliki
+się nie zmienią.
+
+Nieudana kontrola kończy się kodem 1 i komunikatem, który podawał
+`scripts/clock_registry.py` przed portem, wypisanym jako `jh: <komunikat>
+(<status>)` zamiast `[ERROR] clock registry: <komunikat>`. Plik rejestru z niepoprawnym JSON
+daje kod 2, plik, którego nie da się odczytać, kod 3, niepoprawny argument
+kod 2, a brak pamięci kod 4.
+
+Polecenia różnią się od tego skryptu w następujących przypadkach:
+
+- Wzory liczą na liczbach i wartościach logicznych tak jak Python, także na
+  liczbach zmiennoprzecinkowych z dzieleniem całkowitym. Wynik całkowity poza
+  64-bitowym zakresem ze znakiem albo dzielnik zero daje
+  `the parameters divide by zero or overflow 64-bit arithmetic` lub
+  `the parameters overflow 64-bit arithmetic`, a parametr tekstowy
+  `parameter <nazwa> is <wartość>, the frequencies need a number`. Python
+  liczył na dowolnie dużych liczbach całkowitych, kończył się wyjątkiem
+  `ZeroDivisionError` lub `TypeError`, a tekstowe `cpuFreqMhz` powtarzał
+  milion razy.
+- Brak `pllQ` w drzewie, które bierze zegar FDCAN z PLL Q, daje
+  `missing parameters ['pllQ']`, a target wskazany w `--esp-sdkconfig` bez
+  rejestru albo parametru daje zwykły komunikat tam, gdzie Python kończył się
+  wyjątkiem `KeyError`.
+- Pliki rejestru są czytane jak inne pliki sprzętowe: powtórzona nazwa, liczba
+  nieskończona albo samotny surogat dają `<plik>: invalid JSON: <powód>`
+  z wierszem i kolumną, tak samo jak uszkodzony JSON, przy którym Python
+  kończył się tracebackiem. Plik, którego nie da się odczytać, daje komunikat z nazwą pliku i statusem
+  zamiast tekstu błędu systemu operacyjnego.
+- Płytki pochodzą ze sprawdzonego rejestru płytek, więc płytka odrzucana przez
+  `jh board validate` przerywa kontrolę tym komunikatem, a skrypt czytał
+  profile bez sprawdzania.
+- Nagłówki i pliki kompilacji są czytane jako bajty; CR LF i samotne CR
+  czytane są jako LF, tak jak w Pythonie. We wzorcach `\s`, `\w`, `\b` i `\d`
+  obejmują tylko ASCII, a moduł `re` Pythona uznawał też inne litery, cyfry
+  i spacje Unicode. Nagłówek, który nie jest poprawnym UTF-8, też podlega
+  sprawdzeniu, a Python kończył się na nim wyjątkiem `UnicodeDecodeError`.
+- Od każdej pozycji startowej wyszukiwanie wzorca może wykonać 64 kroki na bajt
+  pliku, co najmniej dziesięć milionów, co wystarcza na cofanie się przez cały
+  plik. Wyszukiwanie, które potrzebuje więcej, przerywa kontrolę kodem 4
+  i komunikatem `<plik>: the pattern search stopped: <powód>`; moduł `re`
+  Pythona nie ma takiego limitu.
+
 ## Katalog typów i wartości domyślne urządzeń
 
 `jh generate device-defaults --root <checkout>` czyta każdy `*.json`
@@ -498,7 +575,11 @@ wczytuje rejestr funkcji HAL, renderuje jego artefakty i rozwiązuje żądania
 funkcji; digesty liczy rdzeń SHA-256 HAL z
 [jh_sha256.h](../../src/hal/security/jh_sha256.h), który narzędzie kompiluje
 samodzielnie. [jh_feature_lint.h](config/jh_feature_lint.h) wyszukuje wejścia
-lintu funkcji i sprawdza manifesty projektów. Walidator schematów, czytnik konfiguracji
+lintu funkcji i sprawdza manifesty projektów.
+[jh_board_registry.h](config/jh_board_registry.h) wczytuje i sprawdza rejestr
+płytek, a [jh_clock_registry.h](config/jh_clock_registry.h) rejestr drzew
+zegarów razem z kontrolami kodu, który ustawia zegary. Walidator schematów,
+czytnik konfiguracji
 projektu, katalog typów i `main.cpp` są jeszcze w C++. Korzystają z modułów C
 przez właścicieli zasobów i wyjątki z [cxx/](cxx/), które znikną razem
 z ostatnim wywołującym w C++.

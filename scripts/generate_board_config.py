@@ -60,7 +60,7 @@ class BoardRegistry:
     bus_device_kind: str
 
 
-def _registry_state(boards_root: Path) -> tuple[Any, ...] | None:
+def registry_state(boards_root: Path) -> tuple[Any, ...] | None:
     """Names, sizes and modification times of the registry inputs; None when
     they cannot be listed, and then no result is kept."""
     try:
@@ -87,7 +87,7 @@ def registry_model(boards_root: Path) -> BoardRegistry:
     message when jh rejects it."""
     root = Path(boards_root).absolute()
     key = str(root)
-    state = _registry_state(root)
+    state = registry_state(root)
     cached = _MODELS.get(key)
     if cached is not None and state is not None and cached[0] == state:
         return cached[1]

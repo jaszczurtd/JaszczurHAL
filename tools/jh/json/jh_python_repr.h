@@ -52,6 +52,18 @@ hal_status_t jh_python_repr_append(jb_string_t *out, jb_json_span_t text);
 hal_status_t jh_python_repr_json_append(jb_string_t *out,
                                         jb_json_tree_view_t value);
 
+/** float() of a JSON number token as json.loads reads it: NaN, Infinity and
+ * -Infinity, a magnitude past the binary64 range as an infinity, one below
+ * it as a signed zero, and otherwise the nearest binary64 value from the
+ * first 768 significant digits and whether a nonzero digit follows. Returns
+ * HAL_OK, HAL_EINVAL for missing arguments or the status of the conversion.
+ */
+hal_status_t jh_python_float(jb_json_span_t token, double *out);
+/** Append repr() of a Python float: the shortest round-trip digits in the
+ * fixed or exponent notation repr() chooses, nan, inf, -inf, 0.0 or -0.0.
+ * On failure out keeps its previous bytes.
+ */
+hal_status_t jh_python_float_append(jb_string_t *out, double value);
 /** Python's str.strip(): out receives text without the whitespace
  * str.isspace() accepts on both ends (empty for whitespace only). False for
  * text that is not valid UTF-8, with out unchanged.

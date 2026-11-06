@@ -356,49 +356,92 @@ static bool overflows(const decimal_t *value) {
   return true;
 }
 
+hal_status_t jh_python_float(jb_json_span_t token, double *out) {
+  if (token.data == NULL || out == NULL)
+    return HAL_EINVAL;
+  if (span_is(token, "NaN")) {
+    const uint64_t bits = 0x7ff8000000000000u;
+    memcpy(out, &bits, sizeof *out);
+    return HAL_OK;
+  }
+  if (span_is(token, "Infinity") || span_is(token, "-Infinity")) {
+    const uint64_t bits =
+        token.data[0] == '-' ? 0xfff0000000000000u : 0x7ff0000000000000u;
+    memcpy(out, &bits, sizeof *out);
+    return HAL_OK;
+  }
+  // The range is decided here and the conversion gets at most KEPT_DIGITS
+  // digits: an exhausted conversion budget is an error, never an infinity.
+  decimal_t decimal = {0};
+  decimal_form(token, &decimal);
+  uint64_t bits = 0;
+  if (decimal.count == 0 || decimal.exponent < -400) {
+    bits = decimal.negative ? 0x8000000000000000u : 0u;
+  } else if (overflows(&decimal)) {
+    bits = decimal.negative ? 0xfff0000000000000u : 0x7ff0000000000000u;
+  } else {
+    char canonical[KEPT_DIGITS + 32];
+    size_t used = 0;
+    if (decimal.negative)
+      canonical[used++] = '-';
+    canonical[used++] = '0';
+    canonical[used++] = '.';
+    memcpy(canonical + used, decimal.digits, decimal.count);
+    used += decimal.count;
+    if (decimal.sticky)
+      canonical[used++] = '1';
+    used += (size_t)snprintf(canonical + used, sizeof canonical - used, "e%lld",
+                             decimal.exponent);
+    const jb_json_span_t form = {canonical, used};
+    const hal_status_t converted = token_bits(form, &bits);
+    if (converted != HAL_OK)
+      return converted;
+  }
+  memcpy(out, &bits, sizeof *out);
+  return HAL_OK;
+}
+
+/* repr() of a float appended to out, possibly in parts. */
+static hal_status_t append_float(jb_string_t *out, double value) {
+  uint64_t bits;
+  memcpy(&bits, &value, sizeof bits);
+  const bool negative = (bits >> 63) != 0;
+  if ((bits & 0x7ff0000000000000u) == 0x7ff0000000000000u)
+    return append_literal(out, (bits & 0x000fffffffffffffu) != 0 ? "nan"
+                               : negative                        ? "-inf"
+                                                                 : "inf");
+  if ((bits & 0x7fffffffffffffffu) == 0)
+    return append_literal(out, negative ? "-0.0" : "0.0");
+  char spelled[64];
+  size_t length = 0;
+  const hal_status_t status = shortest(value, spelled, sizeof spelled, &length);
+  return status == HAL_OK ? append_float_digits(out, spelled, length) : status;
+}
+
+hal_status_t jh_python_float_append(jb_string_t *out, double value) {
+  if (out == NULL)
+    return HAL_EINVAL;
+  // Built aside, so a failure leaves out as it was.
+  jb_string_t spelled = {0};
+  hal_status_t status = jb_string_init(&spelled, &out->allocator);
+  if (status == HAL_OK)
+    status = append_float(&spelled, value);
+  if (status == HAL_OK)
+    status = jb_string_append(out, jb_string_data(&spelled),
+                              jb_string_size(&spelled));
+  jb_string_destroy(&spelled);
+  return status;
+}
+
 /* repr() of the int or float json.loads makes of a number token. */
 static hal_status_t append_number(jb_string_t *out, jb_json_span_t token) {
   if (integer_token(token))
     return span_is(token, "-0")
                ? append_literal(out, "0")
                : jb_string_append(out, token.data, token.length);
-  if (span_is(token, "NaN"))
-    return append_literal(out, "nan");
-  if (span_is(token, "Infinity") || span_is(token, "-Infinity"))
-    return append_literal(out, token.data[0] == '-' ? "-inf" : "inf");
-  // The range is decided here and the conversion gets at most KEPT_DIGITS
-  // digits: an exhausted conversion budget is an error, never an infinity.
-  decimal_t decimal = {0};
-  decimal_form(token, &decimal);
-  if (decimal.count == 0 || decimal.exponent < -400)
-    return append_literal(out, decimal.negative ? "-0.0" : "0.0");
-  if (overflows(&decimal))
-    return append_literal(out, decimal.negative ? "-inf" : "inf");
-  char canonical[KEPT_DIGITS + 32];
-  size_t used = 0;
-  if (decimal.negative)
-    canonical[used++] = '-';
-  canonical[used++] = '0';
-  canonical[used++] = '.';
-  memcpy(canonical + used, decimal.digits, decimal.count);
-  used += decimal.count;
-  if (decimal.sticky)
-    canonical[used++] = '1';
-  used += (size_t)snprintf(canonical + used, sizeof canonical - used, "e%lld",
-                           decimal.exponent);
-  uint64_t bits = 0;
-  const jb_json_span_t form = {canonical, used};
-  const hal_status_t converted = token_bits(form, &bits);
-  if (converted != HAL_OK)
-    return converted;
-  if ((bits & 0x7fffffffffffffffu) == 0)
-    return append_literal(out, (bits >> 63) != 0 ? "-0.0" : "0.0");
-  double value;
-  memcpy(&value, &bits, sizeof value);
-  char spelled[64];
-  size_t length = 0;
-  const hal_status_t status = shortest(value, spelled, sizeof spelled, &length);
-  return status == HAL_OK ? append_float_digits(out, spelled, length) : status;
+  double value = 0.0;
+  const hal_status_t converted = jh_python_float(token, &value);
+  return converted == HAL_OK ? append_float(out, value) : converted;
 }
 
 static hal_status_t append_value(jb_string_t *out, jb_json_tree_view_t value);

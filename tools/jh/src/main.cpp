@@ -66,6 +66,8 @@ enum option_id {
   include_hardware,
   label,
   boards_root,
+  clocks_dir,
+  esp_sdkconfig,
   machine,
   json_version,
   help,
@@ -122,6 +124,12 @@ constexpr option_spec options[] = {
     {"boards-root", "<path>",
      "Board registry directory the board commands read (default: "
      "<root>/boards)"},
+    {"clocks", "<path>",
+     "Clock registry directory the clock commands read (default: "
+     "<root>/config/hardware/clocks)"},
+    {"esp-sdkconfig", "<TARGET=PATH>",
+     "Also check the sdkconfig an ESP-IDF build of TARGET wrote; repeatable "
+     "(clock check)"},
     {"json", nullptr, "Write a versioned JSON result on stdout"},
     {"json-version", "<major>",
      "Require a supported JSON result major version (1)"},
@@ -144,7 +152,9 @@ enum command_id {
   manifest_command,
   board_list_command,
   board_validate_command,
-  board_default_command
+  board_default_command,
+  clock_check_command,
+  clock_list_command
 };
 struct command_spec {
   const char *first, *second, *name;
@@ -184,6 +194,11 @@ const command_spec commands[] = {
     {"board", "list", "board.list", {root, boards_root}},
     {"board", "validate", "board.validate", {root, boards_root}},
     {"board", "default", "board.default", {root, boards_root, target}},
+    {"clock",
+     "check",
+     "clock.check",
+     {root, boards_root, clocks_dir, esp_sdkconfig}},
+    {"clock", "list", "clock.list", {root, boards_root, clocks_dir}},
 };
 
 #ifdef _WIN32
@@ -259,7 +274,8 @@ arguments parse_arguments(const std::vector<std::string> &argv) {
     if (id == option_count)
       throw failure{HAL_EINVAL, 2, "unknown option: " + text, {}, {}, {}};
     const bool repeatable = id == define || id == request || id == source ||
-                            id == required_feature || id == input_root;
+                            id == required_feature || id == input_root ||
+                            id == esp_sdkconfig;
     if (result.present[id] && !repeatable)
       throw failure{HAL_EINVAL, 2,  "option specified more than once: " + name,
                     {},         {}, {}};
@@ -310,13 +326,18 @@ std::string help_text() {
       "       jh config manifest --file <path> [--label <text>]\n"
       "       jh board (list | validate) --root <path> [--boards-root <path>]\n"
       "       jh board default --root <path> [--boards-root <path>]"
-      " --target <id>\n\n"
+      " --target <id>\n"
+      "       jh clock check --root <path> [--boards-root <path>]"
+      " [--clocks <path>] [--esp-sdkconfig <TARGET=PATH>]...\n"
+      "       jh clock list --root <path> [--boards-root <path>]"
+      " [--clocks <path>]\n\n"
       "Read JSON, select a value and optionally compare or write it,\n"
       "generate the C defaults of the HAL component types or the feature\n"
       "registry artifacts, evaluate a project's hal_project_config.h as\n"
       "the build reads it, or list the feature registry, resolve the\n"
       "features one build requests and lint the feature requests of project\n"
-      "headers and manifests, or validate and list the board registry.\n";
+      "headers and manifests, validate and list the board registry, or\n"
+      "check and list the clock tree registry.\n";
   for (const auto &option : options) {
     text += "  --";
     text += option.name;
@@ -1291,6 +1312,173 @@ int board_default(context &ctx, const std::string &base) {
   return 0;
 }
 
+// The clock registry of --clocks, else <root>/config/hardware/clocks, with
+// the clock tree schema of --root.
+void load_clocks(context &ctx, const std::string &base,
+                 jh::clock_registry &registry, std::string &directory) {
+  constexpr size_t limit = 16 * 1024 * 1024;
+  const auto hal_root = checkout_root(ctx.args, base);
+  if (ctx.args.present[clocks_dir]) {
+    require_value(ctx.args, clocks_dir, "--clocks needs a path");
+    directory = jh::stl::absolute_path(ctx.args.values[clocks_dir], base);
+  } else {
+    directory = jh::stl::absolute_path("config/hardware/clocks", hal_root);
+  }
+  jh::failure_record failed;
+  failed.check(jh_clock_registry_load(&registry, hal_root.c_str(),
+                                      directory.c_str(), limit, &failed.value));
+}
+
+/* clock_registry.py: the registry against the targets, boards, STM32G474
+ * startup headers, pinned Pico SDK and HAL build files, and each
+ * --esp-sdkconfig TARGET=PATH against its target. */
+int clock_check(context &ctx, const std::string &base) {
+  constexpr size_t limit = 16 * 1024 * 1024;
+  require_value(ctx.args, root, "clock check requires --root");
+  std::vector<std::pair<std::string, std::string>> sdkconfigs;
+  for (const auto &item : ctx.args.lists[esp_sdkconfig]) {
+    const size_t equal = item.find('=');
+    if (equal == std::string::npos || equal == 0 || equal + 1 == item.size())
+      throw failure{HAL_EINVAL, 2,  "--esp-sdkconfig needs TARGET=PATH",
+                    {},         {}, {}};
+    sdkconfigs.emplace_back(
+        item.substr(0, equal),
+        jh::stl::absolute_path(item.substr(equal + 1), base));
+  }
+  jh::clock_registry clocks;
+  std::string directory;
+  load_clocks(ctx, base, clocks, directory);
+  jh::board_registry boards;
+  std::string boards_dir;
+  load_boards(ctx, base, "clock check", boards, boards_dir);
+  const auto hal_root = checkout_root(ctx.args, base);
+  const auto port =
+      jh::stl::absolute_path("src/hal/impl/stm32g474/port", hal_root);
+  const auto sdk = jh::stl::absolute_path("third_party/pico-sdk/src", hal_root);
+  jh::failure_record failed;
+  failed.check(jh_clock_check_registry(&clocks, &boards, &failed.value));
+  failed.check(jh_clock_check_boards(&clocks, &boards, &failed.value));
+  failed.check(
+      jh_clock_check_stm32g474(&clocks, port.c_str(), limit, &failed.value));
+  failed.check(
+      jh_clock_check_pico_sdk(&clocks, sdk.c_str(), limit, &failed.value));
+  failed.check(
+      jh_clock_check_no_hal_override(hal_root.c_str(), limit, &failed.value));
+  for (const auto &[target_id, path] : sdkconfigs)
+    failed.check(jh_clock_check_esp_sdkconfig(
+        &clocks, span(target_id), path.c_str(), limit, &failed.value));
+  const size_t targets = jb_vector_size(&clocks.files);
+  const size_t trees = jh_clock_registry_tree_count(&clocks);
+  if (!ctx.json) {
+    stdout_bytes("[OK] clock registry: " + std::to_string(targets) +
+                 " targets, " + std::to_string(trees) + " trees\n");
+    return 0;
+  }
+  result_writer result(directory.size() + 1024);
+  result.string("command", "clock.check");
+  result.string("status", "HAL_OK");
+  result.string("clocks", directory);
+  result.number("targets", targets);
+  result.number("trees", trees);
+  result.number("espSdkconfigs", sdkconfigs.size());
+  stdout_bytes(result.finish());
+  return 0;
+}
+
+/* The trees of each target as load_registry read them, the board component
+ * behind each STM32G474 tree and, for every board, compatible target and
+ * tree of that target, why the board cannot run the tree. */
+int clock_list(context &ctx, const std::string &base) {
+  jh::clock_registry clocks;
+  std::string directory;
+  require_value(ctx.args, root, "clock list requires --root");
+  load_clocks(ctx, base, clocks, directory);
+  const auto file = [&clocks](size_t index) {
+    return static_cast<const jh_clock_file_t *>(
+        jb_vector_const_at(&clocks.files, index));
+  };
+  if (!ctx.json) {
+    std::string text;
+    for (size_t i = 0; i < jb_vector_size(&clocks.files); ++i) {
+      jb_json_tree_view_t trees{};
+      (void)jh_json_member(file(i)->root, "trees", &trees);
+      for (size_t t = 0; t < jh_json_count(trees); ++t) {
+        const jb_json_span_t name = jh_json_key(jh_json_item(trees, t));
+        text += std::string(jh::view(file(i)->target)) + ' ' +
+                std::string(name.data, name.length) + '\n';
+      }
+    }
+    stdout_bytes(text);
+    return 0;
+  }
+  const auto hal_root = checkout_root(ctx.args, base);
+  std::string boards_dir;
+  if (ctx.args.present[boards_root]) {
+    require_value(ctx.args, boards_root, "--boards-root needs a path");
+    boards_dir = jh::stl::absolute_path(ctx.args.values[boards_root], base);
+  } else {
+    boards_dir = jh::stl::absolute_path("boards", hal_root);
+  }
+  size_t bytes = directory.size() + boards_dir.size() + 1024 * 1024;
+  for (size_t i = 0; i < jb_vector_size(&clocks.files); ++i)
+    bytes += tree_bytes(file(i)->root) + jb_string_size(&file(i)->path) + 64;
+  result_writer result(bytes, bytes / 4);
+  result.string("command", "clock.list");
+  result.string("status", "HAL_OK");
+  result.string("clocks", directory);
+  result.array_begin("targets");
+  for (size_t i = 0; i < jb_vector_size(&clocks.files); ++i) {
+    result.object_begin(nullptr);
+    result.string("id", jh::view(file(i)->target));
+    result.string("path", jh::view(file(i)->path));
+    result.tree("registry", file(i)->root);
+    result.object_end();
+  }
+  result.array_end();
+  result.object_begin("stm32g474TreeComponents");
+  for (size_t i = 0; i < jh_clock_stm32g474_tree_count; ++i) {
+    const auto &entry = jh_clock_stm32g474_trees[i];
+    if (entry.component == nullptr)
+      result.null(entry.tree);
+    else
+      result.string(entry.tree, entry.component);
+  }
+  result.object_end();
+  result.array_begin("boardSources");
+  const auto write = [](void *user, jb_json_span_t board, jb_json_span_t target,
+                        jb_json_span_t tree,
+                        const jb_vector_t *errors) noexcept -> hal_status_t {
+    try {
+      auto &out = *static_cast<result_writer *>(user);
+      out.object_begin(nullptr);
+      out.string("board", std::string_view(board.data, board.length));
+      out.string("target", std::string_view(target.data, target.length));
+      out.string("tree", std::string_view(tree.data, tree.length));
+      out.array_begin("errors");
+      for (size_t e = 0; e < jb_vector_size(errors); ++e) {
+        const auto &error = *static_cast<const jh_clock_source_error_t *>(
+            jb_vector_const_at(errors, e));
+        out.object_begin(nullptr);
+        out.string("pointer", jh::view(error.pointer));
+        out.string("message", jh::view(error.message));
+        out.object_end();
+      }
+      out.array_end();
+      out.object_end();
+      return HAL_OK;
+    } catch (...) {
+      return HAL_ENOMEM;
+    }
+  };
+  jh::failure_record failed;
+  failed.check(jh_clock_board_sources(&clocks, boards_dir.c_str(),
+                                      16 * 1024 * 1024, write, &result,
+                                      &failed.value));
+  result.array_end();
+  stdout_bytes(result.finish());
+  return 0;
+}
+
 int config_manifest(context &ctx, const std::string &base) {
   const auto &args = ctx.args;
   require_value(args, file, "config manifest requires --file");
@@ -1753,6 +1941,10 @@ int run(const std::vector<std::string> &argv) {
       return board_validate(ctx, base);
     if (ctx.command == &commands[board_default_command])
       return board_default(ctx, base);
+    if (ctx.command == &commands[clock_check_command])
+      return clock_check(ctx, base);
+    if (ctx.command == &commands[clock_list_command])
+      return clock_list(ctx, base);
     return inspect(ctx, base);
   } catch (const failure &error) {
     if (ctx.located) {

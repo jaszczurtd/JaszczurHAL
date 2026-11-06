@@ -75,6 +75,18 @@ hal_status_t jh_board_registry_load(jh_board_registry_t *registry,
 const jh_board_descriptor_t *
 jh_board_registry_find(const jb_vector_t *descriptors, jb_json_span_t id);
 
+/** source_problems of clock_registry.py: problem receives the first reason
+ * the clock source object source (kind, pins) cannot drive the clock input
+ * key of a target with the clockInputs object inputs, or becomes empty when
+ * it can: the target has no such input for the kind, or the source lists
+ * other pin IDs than the kind occupies. Fails only with the status of the
+ * string.
+ */
+hal_status_t jh_board_clock_source_problem(jb_json_tree_view_t inputs,
+                                           jb_json_span_t key,
+                                           jb_json_tree_view_t source,
+                                           jb_string_t *problem);
+
 /** Write the fixed tables the registry validates against as members of the
  * open JSON object of writer: "deviceRoles" (busKinds, macroPrefix, signals
  * with their mode, attributes with type and their min, values and

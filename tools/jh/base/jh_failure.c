@@ -98,6 +98,15 @@ void jh_put_span(jb_string_t *out, hal_status_t *status, jb_json_span_t text) {
     *status = jh_append_span(out, text);
 }
 
+hal_status_t jh_join(jb_string_t *out, const jb_json_span_t *parts,
+                     size_t count) {
+  jb_string_clear(out);
+  hal_status_t status = HAL_OK;
+  for (size_t i = 0; i < count; ++i)
+    jh_put_span(out, &status, parts[i]);
+  return status;
+}
+
 hal_status_t jh_string_sink(void *user, const char *data, size_t length) {
   return jb_string_append(user, data, length);
 }

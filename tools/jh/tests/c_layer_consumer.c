@@ -8,6 +8,7 @@
 #include "jh_python_repr.h"
 #include <jb/array.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 int jh_test_c_layer(const char *directory);
@@ -289,6 +290,40 @@ static void artifact_paths(void) {
     expect(!jh_generated_path_relative(jh_span(outside[i])), outside[i]);
 }
 
+/* An allocator that refuses every request while blocked. */
+typedef struct {
+  bool blocked;
+} gate_t;
+
+static void *gate_allocate(void *context, size_t bytes) {
+  const gate_t *gate = context;
+  return gate->blocked ? NULL : malloc(bytes);
+}
+
+static void gate_release(void *context, void *data) {
+  (void)context;
+  free(data);
+}
+
+/* jh_python_float_append keeps the previous bytes when it cannot grow the
+ * string, as jh_python_repr_append does. */
+static void float_append_failure(void) {
+  gate_t gate = {false};
+  const jb_allocator_t allocator = {&gate, gate_allocate, gate_release};
+  jb_string_t out = {0};
+  expect(jb_string_init(&out, &allocator) == HAL_OK &&
+             jb_string_append(&out, "x", 1) == HAL_OK,
+         "gated string");
+  gate.blocked = true;
+  expect(jh_python_float_append(&out, -1.25) == HAL_ENOMEM && equals(&out, "x"),
+         "a failed float repr leaves the string as it was");
+  gate.blocked = false;
+  expect(jh_python_float_append(&out, -1.25) == HAL_OK &&
+             equals(&out, "x-1.25"),
+         "the float repr after the failure");
+  jb_string_destroy(&out);
+}
+
 int jh_test_c_layer(const char *directory) {
   failures = 0;
   diff();
@@ -296,5 +331,6 @@ int jh_test_c_layer(const char *directory) {
   aliasing(directory);
   python_repr(directory);
   float_repr(directory);
+  float_append_failure();
   return failures;
 }

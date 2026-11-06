@@ -62,9 +62,9 @@ target_include_directories(jh_sha256 PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../../s
 target_link_libraries(jh_sha256 PUBLIC jb::status)
 jh_tool_target(jh_sha256)
 add_library(jh_registry STATIC config/jh_feature_registry.c
-  config/jh_feature_lint.c config/jh_board_registry.c)
+  config/jh_feature_lint.c config/jh_board_registry.c config/jh_clock_registry.c)
 target_include_directories(jh_registry PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/config")
-target_link_libraries(jh_registry PUBLIC jh_files PRIVATE jh_sha256)
+target_link_libraries(jh_registry PUBLIC jh_files PRIVATE jh_sha256 pcre2-8-static)
 jh_tool_target(jh_registry)
 # Transitional C++: owners of the jhbase string and vector, and the
 # exceptions and owners the C++ modules below use over the C modules above.
@@ -135,8 +135,16 @@ if(BUILD_TESTING)
   target_link_libraries(jh_containers_test PRIVATE jh_cxx)
   jh_tool_target(jh_containers_test)
   add_test(NAME jh_containers COMMAND jh_containers_test "${CMAKE_CURRENT_BINARY_DIR}")
+  # The clock tree registry module on edited copies of the registry and on
+  # the clock source cases of tests/fixtures/device_tree.
+  get_filename_component(_jh_hal_root "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
+  add_executable(jh_clocks_test tests/test_clocks.c)
+  target_link_libraries(jh_clocks_test PRIVATE jh_registry)
+  jh_tool_target(jh_clocks_test)
+  add_test(NAME jh_clocks COMMAND jh_clocks_test "${_jh_hal_root}"
+    "${CMAKE_CURRENT_BINARY_DIR}")
   set_tests_properties(jh_schema jh_schema_compat jh_device_defaults jh_settings
-    jh_settings_compat jh_config jh_containers PROPERTIES TIMEOUT 120)
+    jh_settings_compat jh_config jh_containers jh_clocks PROPERTIES TIMEOUT 120)
   if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     add_test(NAME jh_config_preprocessor COMMAND jh_config_test
       "${CMAKE_CURRENT_BINARY_DIR}/preprocessor" "${CMAKE_C_COMPILER}"
@@ -145,7 +153,7 @@ if(BUILD_TESTING)
   endif()
   # The native test programs; the gate runs them under Valgrind (memcheck)
   # and the sanitizers (sanitizer-fuzz).
-  set_tests_properties(jh_schema jh_settings jh_config jh_containers
+  set_tests_properties(jh_schema jh_settings jh_config jh_containers jh_clocks
     PROPERTIES LABELS memcheck)
   add_test(NAME jh_cli COMMAND "${CMAKE_COMMAND}" "-DJH=$<TARGET_FILE:jh>"
     "-DJH_BUILD=${CMAKE_CURRENT_BINARY_DIR}" "-DJH_CONFIG=$<CONFIG>"
