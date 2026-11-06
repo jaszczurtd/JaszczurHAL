@@ -16,14 +16,17 @@ Synchronizacja wszystkich komponentów:
 ```
 
 Skrypt pobiera brakujące komponenty i zastępuje każdą instalację, której wersja
-lub commit Git różni się od konfiguracji zapisanej w repozytorium. Aby
-sprawdzić obecne instalacje bez wprowadzania zmian, uruchom:
+lub commit Git różni się od konfiguracji zapisanej w repozytorium. Następnie
+uaktualnia SBOM, `security/sbom.cdx.json`, gdy piny zmieniają jego treść;
+`--no-sbom` pomija ten krok. Aby sprawdzić obecne instalacje bez wprowadzania
+zmian, uruchom:
 
 ```bash
 ./third_party/update_components.sh --verify-only
 ```
 
-`runmefirst.sh` uruchamia go po instalacji zależności wymaganych w Linuksie.
+`runmefirst.sh` uruchamia go z `--no-sbom` po instalacji zależności wymaganych
+w Linuksie, tak samo jak każdy linuksowy job CI.
 `runmefirst.ps1` używa tego samego menedżera komponentów w Pythonie w natywnym
 środowisku Windows. Poszczególne skrypty `scripts/ensure_*.sh` pozostają
 dostępne jako wyspecjalizowane wrappery zachowujące zgodność w systemach

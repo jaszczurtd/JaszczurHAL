@@ -172,5 +172,6 @@ sudo apt-get update
 sudo apt-get install -y "${PACKAGES[@]}"
 install_osv_scanner
 install_cve_bin_tool
-"${REPO_ROOT}/third_party/update_components.sh"
+# CI checks the committed SBOM; refreshing it here would hide a stale one.
+"${REPO_ROOT}/third_party/update_components.sh" --no-sbom
 check_tools

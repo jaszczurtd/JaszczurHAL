@@ -15,15 +15,17 @@ Synchronize all components with:
 ```
 
 The updater fetches missing components and replaces any installation whose
-version or Git commit differs from its tracked configuration. To check the
-current installations without changing them, run:
+version or Git commit differs from its tracked configuration. Then it updates
+the SBOM, `security/sbom.cdx.json`, when the pins change its content;
+`--no-sbom` skips that step. To check the current installations without
+changing them, run:
 
 ```bash
 ./third_party/update_components.sh --verify-only
 ```
 
-`runmefirst.sh` invokes the updater after installing its Linux host
-prerequisites. `runmefirst.ps1` uses the same Python component manager for
+`runmefirst.sh` invokes the updater with `--no-sbom` after installing its Linux
+host prerequisites, as every Linux CI job does. `runmefirst.ps1` uses the same Python component manager for
 native Windows. Individual `scripts/ensure_*.sh` helpers remain available as
 focused Unix compatibility launchers, while the central updater is the normal
 entry point.

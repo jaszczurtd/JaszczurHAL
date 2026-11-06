@@ -16,7 +16,7 @@ Uruchamiaj polecenia z katalogu głównego repozytorium, chyba że instrukcja ws
 |---|---|---|
 | Przygotowanie stacji roboczej Debian/Ubuntu | `./runmefirst.sh` | Instaluje wymagane narzędzia hostowe, toolchain ARM, narzędzia analizy i bezpieczeństwa, obsługę USB oraz integrację z VS Code przez `scripts/install_host_tools.sh`, ten sam skrypt, którego używa linuksowe CI; synchronizuje zarządzane komponenty i konfiguruje hooki Git. |
 | Przygotowanie natywnej stacji roboczej Windows | `powershell -NoProfile -ExecutionPolicy Bypass -File .\runmefirst.ps1` | Przygotowuje zarządzane środowisko Pythona w wersji wskazanej przez repozytorium, natywne toolchainy, komponenty źródłowe i ścieżki użytkownika Cortex-Debug, a następnie sprawdza konfigurację hosta Windows. |
-| Synchronizacja zarządzanych zależności | `./third_party/update_components.sh` | Pobiera brakujące komponenty i zastępuje zarządzane instalacje niezgodne z wersjami zapisanymi w repozytorium. |
+| Synchronizacja zarządzanych zależności | `./third_party/update_components.sh` | Pobiera brakujące komponenty, zastępuje zarządzane instalacje niezgodne z wersjami zapisanymi w repozytorium i uaktualnia SBOM, gdy piny zmieniają jego treść. |
 | Weryfikacja zależności bez ich zmiany | `./third_party/update_components.sh --verify-only` | Sprawdza wersje wszystkich zarządzanych komponentów, commity, wymagane pliki, brak lokalnych zmian w przypiętych checkoutach (także w submodułach), stan archiwum PMD, zbudowane picotool i cppcheck oraz stempel łańcucha narzędzi RISC-V. |
 | Odświeżenie wszystkich wersjonowanych plików generowanych | `python3 scripts/sync_generated.py --write` | Uruchamia generatory funkcji, płytek, wartości domyślnych urządzeń, przykładów, głównego VS Code oraz SBOM i wypisuje każdy plik zmieniony podczas synchronizacji. |
 | Weryfikacja wszystkich wersjonowanych plików generowanych | `python3 scripts/sync_generated.py --check` | Uruchamia każdy generator w trybie weryfikacji tylko do odczytu i zgłasza błąd, gdy pliku wynikowego brakuje lub jest on nieaktualny. |
@@ -96,9 +96,9 @@ Instaluje narzędzia kontroli jakości i generowanych projektów: kompilatory,
 CMake, Ninja, Python z PyYAML, Java, Valgrind, narzędzia Clang do sanitizerów
 i fuzzowania, clang-tidy, clang-format, toolchain Arm z newlib, OpenOCD,
 `gdb-multiarch`, obsługę portu szeregowego, libusb, rsync, `osv-scanner` oraz
-`cve-bin-tool`. Potem uruchamia `third_party/update_components.sh`, który
-buduje też przypięty cppcheck, a na końcu sprawdza każde wymagane polecenie
-i moduł Pythona. Wołają go `runmefirst.sh` i każdy linuksowy job CI, więc
+`cve-bin-tool`. Potem uruchamia `third_party/update_components.sh --no-sbom`,
+który buduje też przypięty cppcheck i zostawia SBOM z commita do sprawdzenia
+przez bramkę, a na końcu sprawdza każde wymagane polecenie i moduł Pythona. Wołają go `runmefirst.sh` i każdy linuksowy job CI, więc
 lokalna kontrola i CI pracują na tym samym zestawie narzędzi. Wydanie `osv-scanner`
 i commit upstream `cve-bin-tool` są przypięte w `third_party/osv_scanner_version.conf`
 i `third_party/cve_bin_tool_version.conf`, instalowane po sprawdzeniu SHA-256
@@ -197,6 +197,17 @@ komponentów oznaczonych jako `clean`. Weryfikacja picotool obejmuje jego wymaga
 polecenia oraz możliwości USB/podpisywania włączone przez aktualnie dostępne
 zależności. Weryfikacja cppcheck sprawdza zgłaszaną wersję, addon MISRA obok
 pliku wykonywalnego i stempel builda.
+
+Po udanej synchronizacji skrypt generuje SBOM od nowa i podmienia
+`security/sbom.cdx.json` tylko wtedy, gdy zmieniła się jego treść. SBOM
+zapisuje wersję i commit każdego pinu, także pinów odczytanych ze świeżo
+zsynchronizowanego checkoutu jhbase, więc zaraz po zmianie pinu drzewo robocze
+przechodzi kontrolę SBOM w bramce. `--verify-only` i `--help` nigdy nie
+zapisują tego pliku, a `--no-sbom` pomija odświeżenie. `scripts/install_host_tools.sh`
+przekazuje `--no-sbom`, dzięki czemu `runmefirst.sh` i każdy linuksowy job CI
+zostawiają SBOM z commita, a bramka nadal odrzuca nieaktualny plik.
+`runmefirst.ps1` woła menedżer komponentów bezpośrednio i nie zmienia SBOM.
+
 Układ wersji zapisanych w repozytorium i katalogów opisano w dokumencie
 [Zarządzane komponenty zewnętrzne](../../../third_party/README.pl.md).
 

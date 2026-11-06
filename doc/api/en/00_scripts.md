@@ -16,7 +16,7 @@ Run commands from the repository root unless a section states otherwise. Use `--
 |---|---|---|
 | Prepare a Debian/Ubuntu workstation | `./runmefirst.sh` | Installs host, ARM, analysis, security, USB, and VS Code workflow prerequisites through `scripts/install_host_tools.sh`, the script Linux CI uses; synchronizes managed components; configures Git hooks. |
 | Prepare a native Windows workstation | `powershell -NoProfile -ExecutionPolicy Bypass -File .\runmefirst.ps1` | Prepares the pinned managed Python environment, native toolchains, source components, Cortex-Debug user paths, and the Windows host self-check. |
-| Synchronize managed dependencies | `./third_party/update_components.sh` | Fetches missing components and replaces managed installations that differ from tracked pins. |
+| Synchronize managed dependencies | `./third_party/update_components.sh` | Fetches missing components, replaces managed installations that differ from tracked pins, and updates the SBOM when the pins change it. |
 | Verify dependencies without changing them | `./third_party/update_components.sh --verify-only` | Checks all managed component versions, commits, required files, that no pinned checkout has local edits (submodules included), PMD archive state, the built picotool and cppcheck, and the RISC-V toolchain stamp. |
 | Refresh all tracked generated files | `python3 scripts/sync_generated.py --write` | Runs the feature, board, device default, example, root VS Code, and SBOM generators and lists every file changed during synchronization. |
 | Verify all tracked generated files | `python3 scripts/sync_generated.py --check` | Runs every generator in read-only verification mode and fails on missing or stale output. |
@@ -93,8 +93,9 @@ Installs the tools of the quality gate and of generated projects: compilers,
 CMake, Ninja, Python with PyYAML, Java, Valgrind, Clang sanitizer and fuzz
 tooling, clang-tidy, clang-format, the Arm toolchain with newlib, OpenOCD,
 `gdb-multiarch`, serial, libusb, rsync, `osv-scanner` and `cve-bin-tool`. It then runs
-`third_party/update_components.sh`, which also builds the pinned cppcheck, and
-ends by checking every required command and Python module. `runmefirst.sh` and
+`third_party/update_components.sh --no-sbom`, which also builds the pinned
+cppcheck and leaves the committed SBOM for the gate to check, and ends by
+checking every required command and Python module. `runmefirst.sh` and
 every Linux CI job call it, so a local gate and CI run with the same tool set.
 The `osv-scanner` release and `cve-bin-tool` upstream commit are pinned in
 `third_party/osv_scanner_version.conf` and
@@ -182,6 +183,17 @@ checkout only for components marked `clean`. picotool verification includes its 
 capabilities enabled by the currently available dependencies. cppcheck
 verification checks the reported version, the MISRA addon beside the
 executable, and the build stamp.
+
+After a successful synchronization the launcher regenerates the SBOM and
+replaces `security/sbom.cdx.json` only when its content differs. The SBOM
+records the version and commit of each pin, including the pins read from the
+freshly synchronized jhbase checkout, so the working tree passes the gate's
+SBOM check right after a pin change. `--verify-only` and `--help` never write
+the file, and `--no-sbom` skips the refresh. `scripts/install_host_tools.sh`
+passes `--no-sbom`: `runmefirst.sh` and every Linux CI job keep the committed
+SBOM, and the gate still rejects a stale one. `runmefirst.ps1` calls the
+component manager directly and leaves the SBOM unchanged.
+
 See [Managed Third-Party Components](../../../third_party/README.md) for the pin and
 directory layout.
 

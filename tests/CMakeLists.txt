@@ -1578,6 +1578,14 @@ add_test(NAME test_install_host_tools
         ${CMAKE_CURRENT_SOURCE_DIR}/test_install_host_tools.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
+if(UNIX)
+    add_test(NAME test_update_components
+        COMMAND ${CMAKE_COMMAND}
+            -DJH_ROOT=${CMAKE_SOURCE_DIR}
+            "-DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/update components"
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/test_update_components.cmake
+    )
+endif()
 add_test(NAME test_board_generator
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_board_generator.py

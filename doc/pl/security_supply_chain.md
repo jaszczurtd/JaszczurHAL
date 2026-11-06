@@ -232,8 +232,8 @@ Utwórz tag dopiero po włączeniu commitu wydania do `main`. CI uruchamiane prz
 ## Aktualizowanie komponentu
 
 1. W przypadku zarządzanego komponentu zewnętrznego zaktualizuj wskazaną wersję
-   w `third_party/*_version.conf` i uruchom `./third_party/update_components.sh`.
-   W przypadku kodu dołączonego do repozytorium zaktualizuj źródła w ich
+   w `third_party/*_version.conf` i uruchom `./third_party/update_components.sh`;
+   skrypt odświeża też SBOM na podstawie nowych pinów. W przypadku kodu dołączonego do repozytorium zaktualizuj źródła w ich
    dotychczasowej lokalizacji.
 2. Zachowaj oryginalne pliki licencji i informacje o autorstwie.
 3. Dla komponentu z polem `pin` wersja, commit i purl wynikają z pliku
@@ -244,8 +244,9 @@ Utwórz tag dopiero po włączeniu commitu wydania do `main`. CI uruchamiane prz
 4. Dla ESP-IDF odśwież `security/esp_idf_tools.json` na podstawie pliku
    `tools.json` z ustalonej wersji frameworka i zarządzanego środowiska Python,
    a następnie sprawdź licencję każdego narzędzia.
-5. Przed uruchomieniem `./runalltests.sh` na drzewie roboczym odśwież
-   wygenerowane artefakty, w tym SBOM, przez
+5. Po zmianie inwentarza, zapisu narzędzi ESP-IDF lub kodu dołączonego do
+   repozytorium, przed uruchomieniem `./runalltests.sh` na drzewie roboczym,
+   odśwież wygenerowane artefakty, w tym SBOM, przez
    `python3 scripts/sync_generated.py --write`: bramka odrzuca nieaktualne
    artefakty. Przy commicie hook pre-commit powtarza to dla pinów dodanych
    do commita i dołącza wynik; przejrzyj zmiany artefaktów, które wypisze.

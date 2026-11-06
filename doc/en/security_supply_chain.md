@@ -242,8 +242,8 @@ Create the release tag only after its commit has been merged into `main`. Tag-tr
 
 1. For a managed external component, update its tracked
    `third_party/*_version.conf` pin and run
-   `./third_party/update_components.sh`. For bundled code, update the source in
-   its existing location.
+   `./third_party/update_components.sh`; it also refreshes the SBOM from the
+   new pins. For bundled code, update the source in its existing location.
 2. Preserve upstream license files and attribution.
 3. For a pinned component the version, commit and purl follow the
    `*_version.conf` automatically; update `security/third_party.json` only for
@@ -252,7 +252,8 @@ Create the release tag only after its commit has been merged into `main`. Tag-tr
    a release.
 4. For ESP-IDF, refresh `security/esp_idf_tools.json` from the pinned
    `tools.json` and managed Python environment, then review every tool license.
-5. Run `python3 scripts/sync_generated.py --write` to refresh the generated
+5. After editing the inventory, the ESP-IDF tool snapshot or bundled code, run
+   `python3 scripts/sync_generated.py --write` to refresh the generated
    artifacts, including the SBOM, before `./runalltests.sh` checks the
    working tree: the gate rejects stale artifacts. On commit the pre-commit
    hook repeats this for the staged pins and adds the result to the commit;
