@@ -56,6 +56,23 @@ hal_status_t jh_epd_spi_reset(jh_epd_spi_t *transport, uint32_t pulse_delay_ms);
 hal_status_t jh_epd_spi_wait_idle(jh_epd_spi_t *transport);
 hal_status_t jh_epd_spi_command(jh_epd_spi_t *transport, uint8_t command,
                                 const uint8_t *data, size_t len);
+/**
+ * @brief Send byte rows under one command and SPI transaction, skipping
+ * padding.
+ * @param transport Initialized transport; NULL returns HAL_EUNINIT.
+ * @param command Controller command byte.
+ * @param data Source bytes; may be NULL only when row_bytes is zero.
+ * @param row_bytes Bytes transmitted per row; zero sends only the command.
+ * @param stride Bytes between row starts, at least row_bytes.
+ * @param rows Positive row count; must be one for a command without data.
+ * @return HAL_EINVAL for invalid sizes or overflow; otherwise the transport
+ * status. The caller provides (rows - 1) * stride + row_bytes readable bytes.
+ * The device is released even if a row write fails.
+ */
+hal_status_t jh_epd_spi_command_strided(jh_epd_spi_t *transport,
+                                        uint8_t command, const uint8_t *data,
+                                        size_t row_bytes, size_t stride,
+                                        size_t rows);
 hal_status_t jh_epd_spi_command_pattern(jh_epd_spi_t *transport,
                                         uint8_t command, uint8_t pattern,
                                         size_t len);

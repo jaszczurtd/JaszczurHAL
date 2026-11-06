@@ -79,6 +79,28 @@ hal_status_t jh_ssd16xx_write(jh_ssd16xx_t *dev, uint16_t x, uint16_t y,
                               uint16_t width, uint16_t height,
                               const uint8_t *buffer, size_t buf_size,
                               bool refresh);
+/**
+ * @brief Write a MONO10 rectangle with source padding and optional refresh.
+ * @param dev Initialized, awake controller; NULL returns HAL_EUNINIT.
+ * @param x Destination column in the current rotation.
+ * @param y Destination row in the current rotation.
+ * @param width Rectangle width in pixels, greater than zero.
+ * @param height Rectangle height in pixels, greater than zero.
+ * @param pitch Source width in pixels, at least width. At rotations 0/180,
+ * this is the byte stride between 8-row pages (y and height aligned to 8).
+ * At 90/270, pitch, x and width must be multiples of 8; stride is pitch / 8.
+ * @param buffer Non-NULL source; final row/page padding may be omitted.
+ * @param buf_size Available source bytes.
+ * @param refresh Refresh once after writing; false leaves a pending full
+ * refresh. Partial refresh needs a partial profile and no pending full
+ * refresh; otherwise the write commits the full refresh for the whole panel.
+ * @return HAL_EINVAL for invalid geometry or source size, HAL_ESTATE while
+ * suspended, or the transport/refresh status.
+ */
+hal_status_t jh_ssd16xx_write_pitched(jh_ssd16xx_t *dev, uint16_t x, uint16_t y,
+                                      uint16_t width, uint16_t height,
+                                      uint16_t pitch, const uint8_t *buffer,
+                                      size_t buf_size, bool refresh);
 hal_status_t jh_ssd16xx_refresh(jh_ssd16xx_t *dev,
                                 jh_ssd16xx_refresh_mode_t mode);
 hal_status_t jh_ssd16xx_set_rotation(jh_ssd16xx_t *dev, uint8_t rotation);

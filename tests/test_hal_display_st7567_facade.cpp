@@ -2,6 +2,11 @@
 #include "utils/unity.h"
 
 void hal_mock_spi_reset(void);
+size_t hal_mock_spi_get_tx(uint8_t bus, uint8_t *out, size_t max_len);
+void hal_mock_spi_fail_next_write(uint8_t bus, bool fail);
+bool hal_mock_spi_transaction_active(uint8_t bus);
+int hal_mock_spi_get_lock_depth(uint8_t bus);
+bool hal_mock_gpio_get_state(uint8_t pin);
 
 void setUp(void) { hal_mock_spi_reset(); }
 void tearDown(void) {}
@@ -58,23 +63,62 @@ void test_st7567_raw_write_validates_format_and_page_alignment(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_write_raw_ex(4u, 8u, &desc, page));
 }
 
-void test_st7567_raw_write_still_rejects_padded_pitch(void) {
+void test_st7567_raw_write_skips_padding_between_pages(void) {
   const hal_display_st7567_config_t config = st7567_config();
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_init_st7567_ex(&config));
-  const uint8_t page[16] = {};
-  const hal_display_buffer_desc_t desc = {
-      HAL_DISPLAY_PIXEL_FORMAT_MONO10, 9u, 8u, 8u, sizeof(page), false};
+  // Two three-column pages with two padding bytes, omitted on the last page.
+  const uint8_t pixels[] = {0xA1u, 0xB2u, 0xC3u, 0xEEu,
+                            0xEEu, 0xD4u, 0xE5u, 0xF6u};
+  hal_display_buffer_desc_t desc = {
+      HAL_DISPLAY_PIXEL_FORMAT_MONO10, 5u, 3u, 16u, sizeof(pixels), false};
+  const uint8_t expected[] = {0x04u, 0x10u, 0xB1u, 0xA1u, 0xB2u, 0xC3u,
+                              0x04u, 0x10u, 0xB2u, 0xD4u, 0xE5u, 0xF6u};
+  uint8_t tx[32] = {};
+  for (unsigned polarity = 0u; polarity < 2u; ++polarity) {
+    desc.pixel_format = polarity == 0u ? HAL_DISPLAY_PIXEL_FORMAT_MONO10
+                                       : HAL_DISPLAY_PIXEL_FORMAT_MONO01;
+    TEST_ASSERT_EQUAL_INT(HAL_OK,
+                          hal_display_set_pixel_format_ex(desc.pixel_format));
+    hal_mock_spi_reset();
+    TEST_ASSERT_EQUAL_INT(HAL_OK,
+                          hal_display_write_raw_ex(4u, 8u, &desc, pixels));
+    TEST_ASSERT_EQUAL_size_t(sizeof(expected),
+                             hal_mock_spi_get_tx(0u, tx, sizeof(tx)));
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, tx, sizeof(expected));
+  }
+  hal_mock_spi_reset();
+  --desc.buf_size;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_display_write_raw_ex(4u, 8u, &desc, pixels));
+  TEST_ASSERT_EQUAL_size_t(0u, hal_mock_spi_get_tx(0u, tx, sizeof(tx)));
+  ++desc.buf_size;
+  desc.pitch = 2u;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_display_write_raw_ex(4u, 8u, &desc, pixels));
+  desc.pitch = 5u;
+  desc.height = 15u;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_display_write_raw_ex(4u, 8u, &desc, pixels));
+  TEST_ASSERT_EQUAL_size_t(0u, hal_mock_spi_get_tx(0u, tx, sizeof(tx)));
 
-  /* Page-tiled buffer: no well-defined per-pixel-row byte boundary, so
-   * pitch > width must keep failing until a page-granularity design lands. */
-  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED,
-                        hal_display_write_raw_ex(0u, 0u, &desc, page));
+  // A single page never reads trailing padding, even at the largest pitch.
+  desc.height = 8u;
+  desc.pitch = UINT16_MAX;
+  desc.buf_size = 3u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_display_write_raw_ex(4u, 8u, &desc, pixels));
+  hal_mock_spi_fail_next_write(0u, true);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO,
+                        hal_display_write_raw_ex(4u, 8u, &desc, pixels));
+  TEST_ASSERT_FALSE(hal_mock_spi_transaction_active(0u));
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_spi_get_lock_depth(0u));
+  TEST_ASSERT_TRUE(hal_mock_gpio_get_state(10u));
 }
 
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_st7567_capabilities_expose_page_layout);
   RUN_TEST(test_st7567_raw_write_validates_format_and_page_alignment);
-  RUN_TEST(test_st7567_raw_write_still_rejects_padded_pitch);
+  RUN_TEST(test_st7567_raw_write_skips_padding_between_pages);
   return UNITY_END();
 }

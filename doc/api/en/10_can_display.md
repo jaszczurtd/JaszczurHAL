@@ -693,7 +693,7 @@ typedef enum {
 
 typedef struct {
     hal_display_pixel_format_t pixel_format;
-    uint16_t pitch;           // pixels between consecutive source rows
+    uint16_t pitch;           // source width in pixels; determines row/page stride
     uint16_t width;           // rectangle width in pixels
     uint16_t height;          // rectangle height in pixels
     size_t buf_size;          // available source-buffer bytes
@@ -897,17 +897,18 @@ int  hal_display_prepare_text_v(char *display_txt, size_t display_txt_size,
   Test the returned capability mask before selecting a rotation.
 - **Capabilities and raw buffers:** Query the active backend with
   `hal_display_get_capabilities_ex()`, then use only advertised formats and
-  alignments with `hal_display_write_raw_ex()`. `pitch` is in pixels. TFT and
-  RGB OLED backends (and the mock) accept `pitch > width`: each source row is
-  streamed separately inside one addressing window, so the caller's buffer
-  only needs real bytes up to the last row's `width` pixels -- trailing
-  padding past that does not need to be backed by memory. Page-tiled or
-  per-call-reconfiguring backends still require `pitch == width` and return
-  `HAL_EUNSUPPORTED` otherwise: ST7567 always (a byte encodes 8 stacked pixel
-  rows, so there is no per-pixel-row boundary), SSD16xx at rotation 0/180
-  (tiling flips with rotation), and UC81xx (its write call re-applies the
-  panel profile on every invocation, so splitting it per row would replay
-  that side effect once per row). ST7567 accepts `MONO01`/`MONO10`, reports
+  alignments with `hal_display_write_raw_ex()`. `pitch` is the source width
+  in pixels and must be at least `width`. TFT, RGB OLED, ST7567, SSD16xx,
+  UC81xx and the mock accept `pitch > width`. RGB565 rows start `pitch * 2`
+  bytes apart. ST7567 and SSD16xx at rotation 0/180 store 8 vertical pixels
+  per byte: pages start `pitch` bytes apart, with `y` and `height` aligned
+  to 8 pixels. SSD16xx at 90/270 and UC81xx use horizontal packing: rows
+  start `pitch / 8` bytes apart, and `x`, `width` and `pitch` must be
+  multiples of 8. Invalid alignment or insufficient `buf_size` returns
+  `HAL_EINVAL` before sending pixel data. Padding is skipped; the last
+  row/page needs only its pixel bytes, without trailing padding. EPD
+  writes stream each RAM plane under one command and apply panel configuration
+  and refresh to the whole rectangle. ST7567 accepts `MONO01`/`MONO10`, reports
   `HAL_DISPLAY_SCREEN_INFO_MONO_VTILED`, and requires `y` and `height` aligned
   to 8 pixels. Use `hal_display_set_pixel_format_ex()` before changing the
   ST7567 monochrome polarity.
@@ -924,7 +925,11 @@ Set `frame_incomplete=true` when loading one or more areas without an immediate
 panel update. Finish the batch with `hal_display_flush_ex()`; deferred writes
 use a full refresh so the controller's old/new RAM stays coherent without the
 facade retaining caller buffers. With `frame_incomplete=false`, a configured
-partial profile is selected before the area write and refresh. The cycle can
+partial profile is selected before the area write and refresh. A pending full
+refresh takes precedence: after deferred writes, or after UC81xx
+initialization, which loads blank RAM without refreshing the panel, the next
+such write loads its area like a deferred write and refreshes the whole panel
+with the full profile. The cycle can
 also be selected explicitly with
 `hal_display_epd_refresh_ex(HAL_DISPLAY_EPD_REFRESH_FULL/PARTIAL)`; requesting
 partial refresh for a pending full-refresh batch returns `HAL_ESTATE`, while a

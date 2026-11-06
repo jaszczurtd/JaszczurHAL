@@ -7,6 +7,7 @@
 #ifdef HAL_ENABLE_SSD16XX
 
 #include "hal/core/jh_endian.h"
+#include "hal/display/hal_display_internal.h"
 
 #include <string.h>
 
@@ -419,18 +420,43 @@ hal_status_t jh_ssd16xx_write(jh_ssd16xx_t *dev, uint16_t x, uint16_t y,
                               uint16_t width, uint16_t height,
                               const uint8_t *buffer, size_t buf_size,
                               bool refresh) {
+  return jh_ssd16xx_write_pitched(dev, x, y, width, height, width, buffer,
+                                  buf_size, refresh);
+}
+
+hal_status_t jh_ssd16xx_write_pitched(jh_ssd16xx_t *dev, uint16_t x, uint16_t y,
+                                      uint16_t width, uint16_t height,
+                                      uint16_t pitch, const uint8_t *buffer,
+                                      size_t buf_size, bool refresh) {
   if (dev == NULL || !dev->initialized || dev->suspended) {
     return dev == NULL || !dev->initialized ? HAL_EUNINIT : HAL_ESTATE;
   }
-  const size_t required = ((size_t)width * height) / 8u;
-  if (buffer == NULL || width == 0u || height == 0u || required == 0u ||
+  const bool vertical =
+      dev->config.rotation == 0u || dev->config.rotation == 2u;
+  if (buffer == NULL || width == 0u || height == 0u || pitch < width ||
+      (vertical ? ((y | height) & 7u) != 0u
+                : ((x | width | pitch) & 7u) != 0u)) {
+    return HAL_EINVAL;
+  }
+  const size_t row_bytes = vertical ? width : width / 8u;
+  const size_t stride = vertical ? pitch : pitch / 8u;
+  const size_t rows = vertical ? height / 8u : height;
+  size_t required;
+  if (hal_status_is_error(
+          jh_display_buffer_span(row_bytes, stride, rows, &required)) ||
       buf_size < required) {
     return HAL_EINVAL;
   }
+  /* A partial refresh drives only pixels whose old and new RAM differ, so it
+   * would leave areas of a pending full refresh stale. While one is pending,
+   * the write loads its area like a deferred write and commits the full
+   * refresh, as hal_display_flush_ex() would. */
+  const bool refresh_partial =
+      refresh && dev->config.partial_profile != NULL &&
+      !(dev->refresh_pending &&
+        dev->pending_refresh_mode == JH_SSD16XX_REFRESH_FULL);
   const jh_ssd16xx_refresh_mode_t mode =
-      refresh && dev->config.partial_profile != NULL
-          ? JH_SSD16XX_REFRESH_PARTIAL
-          : JH_SSD16XX_REFRESH_FULL;
+      refresh_partial ? JH_SSD16XX_REFRESH_PARTIAL : JH_SSD16XX_REFRESH_FULL;
   hal_status_t status = set_profile(dev, mode);
   if (hal_status_is_error(status)) {
     return status;
@@ -439,32 +465,40 @@ hal_status_t jh_ssd16xx_write(jh_ssd16xx_t *dev, uint16_t x, uint16_t y,
   if (hal_status_is_error(status)) {
     return status;
   }
-  status = command(dev, SSD16XX_CMD_WRITE_RAM, buffer, required);
+  status = jh_epd_spi_command_strided(&dev->transport, SSD16XX_CMD_WRITE_RAM,
+                                      buffer, row_bytes, stride, rows);
   if (hal_status_is_error(status)) {
     return status;
   }
   dev->refresh_pending = true;
   dev->pending_refresh_mode = mode;
-  if (!refresh) {
-    if (dev->config.partial_profile == NULL) {
-      return HAL_OK;
+  if (mode == JH_SSD16XX_REFRESH_FULL) {
+    /* A full refresh does not keep the old image that later partial
+     * refreshes compare against, so maintain it here. */
+    if (dev->config.partial_profile != NULL) {
+      status = set_window(dev, x, y, width, height);
+      if (hal_status_is_ok(status)) {
+        status = jh_epd_spi_command_strided(&dev->transport,
+                                            SSD16XX_CMD_WRITE_RED_RAM, buffer,
+                                            row_bytes, stride, rows);
+      }
     }
-    status = set_window(dev, x, y, width, height);
-    return hal_status_is_error(status)
-               ? status
-               : command(dev, SSD16XX_CMD_WRITE_RED_RAM, buffer, required);
+    return hal_status_is_ok(status) && refresh
+               ? jh_ssd16xx_refresh(dev, JH_SSD16XX_REFRESH_FULL)
+               : status;
   }
-  status = jh_ssd16xx_refresh(dev, mode);
+  status = jh_ssd16xx_refresh(dev, JH_SSD16XX_REFRESH_PARTIAL);
   if (hal_status_is_error(status)) {
     return status;
   }
-  if (mode == JH_SSD16XX_REFRESH_PARTIAL) {
-    status = set_window(dev, x, y, width, height);
-    if (hal_status_is_ok(status)) {
-      status = command(dev, SSD16XX_CMD_WRITE_RAM, buffer, required);
-    }
-  }
-  return status;
+  /* The partial refresh swaps the controller's RAM roles; write the new image
+   * again so the next update starts from it. */
+  status = set_window(dev, x, y, width, height);
+  return hal_status_is_error(status)
+             ? status
+             : jh_epd_spi_command_strided(&dev->transport,
+                                          SSD16XX_CMD_WRITE_RAM, buffer,
+                                          row_bytes, stride, rows);
 }
 
 hal_status_t jh_ssd16xx_suspend(jh_ssd16xx_t *dev) {

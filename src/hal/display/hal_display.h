@@ -271,19 +271,18 @@ typedef struct {
  * Descriptor for a rectangular pixel buffer.
  *
  * - width/height describe the updated rectangle in pixels.
- * - pitch is the number of pixels between consecutive rows in the source
- *   buffer. pitch > width (row padding) is supported on row-major,
- *   pixel-addressable backends (RGB565 TFT/RGB-OLED, and the mock). It is
- *   still rejected with HAL_EUNSUPPORTED on backends whose wire format
- *   tiles several pixel rows into one byte plane (ST7567 always; SSD16xx at
- *   rotation 0/180) or whose write call re-applies panel configuration on
- *   every invocation (UC81xx) -- see hal_display_write_raw_ex() in
- *   drivers/hal_display.cpp for the per-backend reasoning. When buf_size
- *   only needs to cover the pixels actually read, the last row's trailing
- *   padding does not need to be backed by real memory.
+ * - pitch is the source width in pixels, at least width. RGB565 rows start
+ *   pitch * 2 bytes apart. For ST7567 and SSD16xx at rotation 0/180, each
+ *   byte holds 8 vertical pixels and pages start pitch bytes apart; y and
+ *   height must be multiples of 8. For SSD16xx at 90/270 and UC81xx, rows
+ *   start pitch / 8 bytes apart; x, width and pitch must be multiples of 8.
+ *   These backends accept pitch > width and do not read padding. buf_size
+ *   only needs to cover the last row/page's pixels, without trailing padding.
+ *   Unbuffered SSD1306 still requires pitch == width.
  * - buf_size is the available source-buffer size in bytes.
- * - frame_incomplete lets future streaming backends keep a panel transaction
- *   open across several area writes.
+ * - frame_incomplete defers the EPD refresh until hal_display_flush_ex().
+ *   A later write without it commits that full refresh for the whole panel.
+ *   Each write closes its SPI transaction. ST7567 writes pages immediately.
  */
 typedef struct {
   hal_display_pixel_format_t pixel_format;

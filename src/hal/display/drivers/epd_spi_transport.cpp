@@ -7,6 +7,7 @@
 
 #if defined(HAL_ENABLE_SSD16XX) || defined(HAL_ENABLE_UC81XX)
 
+#include "hal/display/hal_display_internal.h"
 #include "hal/gpio/hal_gpio.h"
 #include "hal/spi/hal_spi.h"
 #include "hal/spi/hal_spi_device.h"
@@ -116,19 +117,37 @@ hal_status_t jh_epd_spi_wait_idle(jh_epd_spi_t *transport) {
 
 hal_status_t jh_epd_spi_command(jh_epd_spi_t *transport, uint8_t command,
                                 const uint8_t *data, size_t len) {
-  if (transport == NULL || !transport->initialized ||
-      (len > 0u && data == NULL)) {
-    return transport == NULL || !transport->initialized ? HAL_EUNINIT
-                                                        : HAL_EINVAL;
+  return jh_epd_spi_command_strided(transport, command, data, len, len, 1u);
+}
+
+hal_status_t jh_epd_spi_command_strided(jh_epd_spi_t *transport,
+                                        uint8_t command, const uint8_t *data,
+                                        size_t row_bytes, size_t stride,
+                                        size_t rows) {
+  if (transport == NULL || !transport->initialized) {
+    return HAL_EUNINIT;
+  }
+  size_t span;
+  if ((row_bytes > 0u && data == NULL) ||
+      hal_status_is_error(
+          jh_display_buffer_span(row_bytes, stride, rows, &span))) {
+    return HAL_EINVAL;
   }
   hal_status_t status = begin_transaction(transport);
   if (hal_status_is_error(status)) {
     return status;
   }
   status = write_command_prefix(transport, command);
-  if (hal_status_is_ok(status) && len > 0u) {
+  if (hal_status_is_ok(status) && row_bytes > 0u) {
     hal_gpio_write(jh_display_pin_u8(transport->config.dc_pin), true);
-    status = hal_spi_write(transport->spi_device.bus, data, len);
+    if (stride == row_bytes) {
+      status = hal_spi_write(transport->spi_device.bus, data, span);
+    } else {
+      for (size_t row = 0u; row < rows && hal_status_is_ok(status); ++row) {
+        status = hal_spi_write(transport->spi_device.bus, data + row * stride,
+                               row_bytes);
+      }
+    }
   }
   return hal_spi_device_finish(&transport->spi_device, status);
 }

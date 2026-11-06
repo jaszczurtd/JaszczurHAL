@@ -723,7 +723,7 @@ typedef enum {
 
 typedef struct {
     hal_display_pixel_format_t pixel_format;
-    uint16_t pitch;           // liczba pikseli między kolejnymi wierszami źródłowymi
+    uint16_t pitch;           // szerokość źródła w pikselach; określa odstęp wierszy/stron
     uint16_t width;           // szerokość prostokąta w pikselach
     uint16_t height;          // wysokość prostokąta w pikselach
     size_t buf_size;          // dostępne bajty bufora źródłowego
@@ -929,18 +929,19 @@ int  hal_display_prepare_text_v(char *display_txt, size_t display_txt_size,
 - **Obsługiwane formaty i bezpośredni zapis bufora:** Pobierz właściwości aktywnego
   backendu przez `hal_display_get_capabilities_ex()`, a w
   `hal_display_write_raw_ex()` używaj wyłącznie zadeklarowanych formatów i wyrównań.
-  `pitch` jest podawany w pikselach. Backendy TFT i RGB OLED oraz mock akceptują
-  `pitch > width`: każdy wiersz źródłowy jest przesyłany osobno w ramach
-  jednego okna adresowania, więc bufor wywołującego musi zawierać dane tylko
-  do `width` pikseli ostatniego wiersza - pamięć nie musi obejmować paddingu
-  występującego za nimi. Backendy o układzie stronicowym albo
-  rekonfigurujące profil panelu przy każdym wywołaniu nadal wymagają
-  `pitch == width` i w przeciwnym razie zwracają `HAL_EUNSUPPORTED`: ST7567
-  zawsze, ponieważ jeden bajt koduje osiem pionowo ułożonych pikseli, więc
-  poszczególne wiersze pikseli nie mają własnych granic bajtowych; SSD16xx
-  przy rotacji 0/180, ponieważ rotacja zmienia kierunek układu; oraz UC81xx,
-  ponieważ każde wywołanie zapisu ponownie stosuje profil panelu, a podział
-  danych na wiersze powtarzałby ten efekt dla każdego z nich.
+  `pitch` oznacza szerokość bufora źródłowego w pikselach i musi wynosić
+  co najmniej `width`. TFT, RGB OLED, ST7567, SSD16xx, UC81xx oraz mock
+  akceptują `pitch > width`. W RGB565 początki wierszy dzieli `pitch * 2`
+  bajtów. ST7567 i SSD16xx przy rotacji 0/180 zapisują 8 pionowych pikseli
+  w bajcie: początki stron dzieli `pitch` bajtów, a `y` i `height` muszą
+  być wielokrotnością 8. SSD16xx przy 90/270 oraz UC81xx pakują piksele
+  poziomo: początki wierszy dzieli `pitch / 8` bajtów, a `x`, `width`
+  i `pitch` muszą być wielokrotnością 8. Nieprawidłowe wyrównanie lub
+  za mały `buf_size` zwraca `HAL_EINVAL` przed wysłaniem danych pikseli.
+  Sterownik pomija padding; ostatni wiersz lub strona wymaga tylko bajtów
+  pikseli, bez końcowego paddingu. Zapis EPD przesyła każdą płaszczyznę RAM
+  pod jedną komendą i stosuje konfigurację panelu oraz odświeżenie do całego
+  prostokąta.
   ST7567 akceptuje `MONO01`/`MONO10`, zwraca `HAL_DISPLAY_SCREEN_INFO_MONO_VTILED`
   i wymaga, aby `y` oraz `height` były wyrównane do 8 pikseli. Użyj
   `hal_display_set_pixel_format_ex()` przed zmianą polaryzacji monochromatycznej
@@ -962,7 +963,11 @@ natychmiastowego odświeżania panelu. Zakończ serię wywołaniem
 dzięki czemu stara i nowa pamięć obrazu kontrolera pozostają spójne, a wspólna
 warstwa nie musi zachowywać buforów przekazanych przez wywołującego. Przy
 `frame_incomplete=false` skonfigurowany profil częściowy jest wybierany przed
-zapisem obszaru i jego odświeżeniem. Cykl można również wybrać jawnie za pomocą
+zapisem obszaru i jego odświeżeniem. Pierwszeństwo ma oczekujące pełne
+odświeżenie: po odłożonych zapisach albo po inicjalizacji UC81xx, która ładuje
+pustą pamięć obrazu bez odświeżania panelu, kolejny taki zapis ładuje obszar
+jak zapis odłożony i odświeża cały panel profilem pełnym. Cykl można również
+wybrać jawnie za pomocą
 `hal_display_epd_refresh_ex(HAL_DISPLAY_EPD_REFRESH_FULL/PARTIAL)`; żądanie
 odświeżenia częściowego dla oczekującej partii pełnego odświeżenia zwraca
 `HAL_ESTATE`, natomiast brakujący profil częściowy zwraca

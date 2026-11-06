@@ -78,6 +78,28 @@ hal_status_t jh_uc81xx_write(jh_uc81xx_t *dev, uint16_t x, uint16_t y,
                              uint16_t width, uint16_t height,
                              const uint8_t *buffer, size_t buf_size,
                              bool refresh);
+/**
+ * @brief Write a padded, horizontally packed MONO10 rectangle.
+ * @param dev Initialized, awake controller; NULL returns HAL_EUNINIT.
+ * @param x Destination column, aligned to 8 pixels.
+ * @param y Destination row in pixels.
+ * @param width Positive rectangle width, aligned to 8 pixels.
+ * @param height Positive rectangle height in pixels.
+ * @param pitch Source width in pixels, at least width and aligned to 8.
+ * @param buffer Non-NULL source; each row starts pitch / 8 bytes apart.
+ * @param buf_size Available bytes; final row padding may be omitted.
+ * @param refresh Refresh once after writing; false leaves a pending full
+ * refresh. Without a pending full refresh, the rectangle's window refreshes
+ * with the partial profile, or the full one if none is configured. With one
+ * pending (initialization leaves it too), the whole panel gets a full refresh.
+ * @return HAL_EINVAL for invalid geometry or source size, HAL_ESTATE while
+ * suspended, or the transport/refresh status. Profile and partial-mode setup
+ * apply once to the whole rectangle, including any controller RAM copy.
+ */
+hal_status_t jh_uc81xx_write_pitched(jh_uc81xx_t *dev, uint16_t x, uint16_t y,
+                                     uint16_t width, uint16_t height,
+                                     uint16_t pitch, const uint8_t *buffer,
+                                     size_t buf_size, bool refresh);
 hal_status_t jh_uc81xx_refresh(jh_uc81xx_t *dev, jh_uc81xx_refresh_mode_t mode);
 hal_status_t jh_uc81xx_suspend(jh_uc81xx_t *dev);
 hal_status_t jh_uc81xx_resume(jh_uc81xx_t *dev);

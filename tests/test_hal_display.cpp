@@ -1,5 +1,6 @@
 #include "hal/core/hal_array.h"
 #include "hal/display/hal_display.h"
+#include "hal/display/hal_display_internal.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "utils/unity.h"
 #include <string.h>
@@ -11,6 +12,48 @@ void setUp(void) {
 }
 
 void tearDown(void) {}
+
+void test_display_buffer_span_handles_padding_and_size_limits(void) {
+  static const struct {
+    size_t row_bytes;
+    size_t stride;
+    size_t rows;
+    size_t expected;
+  } cases[] = {
+      {2u, 4u, 3u, 10u},
+      {2u, 2u, 3u, 6u},
+      {2u, SIZE_MAX, 1u, 2u},
+      {0u, 0u, 1u, 0u},
+      {0u, SIZE_MAX, 1u, 0u},
+      {1u, SIZE_MAX - 1u, 2u, SIZE_MAX},
+      {1u, 1u, SIZE_MAX, SIZE_MAX},
+  };
+  for (size_t i = 0u; i < COUNTOF(cases); ++i) {
+    size_t span = 42u;
+    TEST_ASSERT_EQUAL_INT(HAL_OK, jh_display_buffer_span(cases[i].row_bytes,
+                                                         cases[i].stride,
+                                                         cases[i].rows, &span));
+    TEST_ASSERT_EQUAL_size_t(cases[i].expected, span);
+  }
+
+  static const struct {
+    size_t row_bytes;
+    size_t stride;
+    size_t rows;
+  } invalid[] = {
+      {2u, 2u, 0u},       {2u, 1u, 1u},       {0u, 0u, 2u},
+      {2u, SIZE_MAX, 2u}, {2u, 2u, SIZE_MAX},
+  };
+  for (size_t i = 0u; i < COUNTOF(invalid); ++i) {
+    size_t span = 42u;
+    TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                          jh_display_buffer_span(invalid[i].row_bytes,
+                                                 invalid[i].stride,
+                                                 invalid[i].rows, &span));
+    TEST_ASSERT_EQUAL_size_t(42u, span);
+  }
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, jh_display_buffer_span(2u, 2u, 1u, NULL));
+}
 
 void test_configure_sets_dimensions(void) {
   TEST_ASSERT_TRUE(hal_display_configure(240, 320, 1, false, false));
@@ -496,6 +539,7 @@ void test_custom_mono_text_and_direct_mode_statuses(void) {
 
 int main(void) {
   UNITY_BEGIN();
+  RUN_TEST(test_display_buffer_span_handles_padding_and_size_limits);
   RUN_TEST(test_custom_mono_text_and_direct_mode_statuses);
   RUN_TEST(test_configure_sets_dimensions);
   RUN_TEST(test_ili9341_ex_validates_its_config);

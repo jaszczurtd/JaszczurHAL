@@ -251,9 +251,11 @@ hal_status_t hal_display_write_raw_ex(uint16_t x, uint16_t y,
         desc->pixel_format != HAL_DISPLAY_PIXEL_FORMAT_RGB565_NATIVE) {
       return HAL_EUNSUPPORTED;
     }
-    const size_t required = (size_t)(desc->height - 1u) * desc->pitch * 2u +
-                            (size_t)desc->width * 2u;
-    if (desc->buf_size < required) {
+    size_t required;
+    if (hal_status_is_error(jh_display_buffer_span((size_t)desc->width * 2u,
+                                                   (size_t)desc->pitch * 2u,
+                                                   desc->height, &required)) ||
+        desc->buf_size < required) {
       return HAL_EINVAL;
     }
   }

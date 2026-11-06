@@ -7,6 +7,7 @@
 #ifdef HAL_ENABLE_UC81XX
 
 #include "hal/core/jh_endian.h"
+#include "hal/display/hal_display_internal.h"
 #include "hal/system/hal_system.h"
 
 #include <string.h>
@@ -331,18 +332,43 @@ hal_status_t jh_uc81xx_write(jh_uc81xx_t *dev, uint16_t x, uint16_t y,
                              uint16_t width, uint16_t height,
                              const uint8_t *buffer, size_t buf_size,
                              bool refresh) {
+  return jh_uc81xx_write_pitched(dev, x, y, width, height, width, buffer,
+                                 buf_size, refresh);
+}
+
+hal_status_t jh_uc81xx_write_pitched(jh_uc81xx_t *dev, uint16_t x, uint16_t y,
+                                     uint16_t width, uint16_t height,
+                                     uint16_t pitch, const uint8_t *buffer,
+                                     size_t buf_size, bool refresh) {
   if (dev == NULL || !dev->initialized || dev->suspended) {
     return dev == NULL || !dev->initialized ? HAL_EUNINIT : HAL_ESTATE;
   }
-  const size_t required = (size_t)width * height / 8u;
-  if (buffer == NULL || width == 0u || height == 0u || (width & 7u) != 0u ||
-      (x & 7u) != 0u || (uint32_t)x + width > dev->config.width ||
-      (uint32_t)y + height > dev->config.height || buf_size < required) {
+  if (buffer == NULL || width == 0u || height == 0u || pitch < width ||
+      ((width | pitch) & 7u) != 0u || (x & 7u) != 0u ||
+      (uint32_t)x + width > dev->config.width ||
+      (uint32_t)y + height > dev->config.height) {
     return HAL_EINVAL;
   }
+  const size_t row_bytes = width / 8u;
+  const size_t stride = pitch / 8u;
+  size_t required;
+  if (hal_status_is_error(
+          jh_display_buffer_span(row_bytes, stride, height, &required)) ||
+      buf_size < required) {
+    return HAL_EINVAL;
+  }
+  /* A refresh inside PTIN covers only the partial window, so it would leave
+   * the rest of a pending full refresh (initialization or deferred writes)
+   * stale. While one is pending, the write loads its area like a deferred
+   * write and commits the whole panel after PTOUT, as hal_display_flush_ex()
+   * would. */
+  const bool refresh_window =
+      refresh && !(dev->refresh_pending &&
+                   dev->pending_refresh_mode == JH_UC81XX_REFRESH_FULL);
   const jh_uc81xx_refresh_mode_t mode =
-      refresh && dev->config.partial_profile != NULL ? JH_UC81XX_REFRESH_PARTIAL
-                                                     : JH_UC81XX_REFRESH_FULL;
+      refresh_window && dev->config.partial_profile != NULL
+          ? JH_UC81XX_REFRESH_PARTIAL
+          : JH_UC81XX_REFRESH_FULL;
   const uc81xx_quirks_t *quirks = quirks_for(dev->config.controller);
   if (quirks == NULL) {
     return HAL_ESTATE;
@@ -359,13 +385,14 @@ hal_status_t jh_uc81xx_write(jh_uc81xx_t *dev, uint16_t x, uint16_t y,
   if (hal_status_is_error(status)) {
     return status;
   }
-  status = command(dev, UC81XX_CMD_DTM2, buffer, required);
+  status = jh_epd_spi_command_strided(&dev->transport, UC81XX_CMD_DTM2, buffer,
+                                      row_bytes, stride, height);
   if (hal_status_is_error(status)) {
     return status;
   }
   dev->refresh_pending = true;
   dev->pending_refresh_mode = mode;
-  if (refresh) {
+  if (refresh_window) {
     status = set_border(dev, false);
     if (hal_status_is_ok(status)) {
       status = jh_uc81xx_refresh(dev, mode);
@@ -377,12 +404,16 @@ hal_status_t jh_uc81xx_write(jh_uc81xx_t *dev, uint16_t x, uint16_t y,
   if (hal_status_is_ok(status) && !quirks->auto_copy) {
     status = set_partial_window(dev, x, y, width, height);
     if (hal_status_is_ok(status)) {
-      status = command(dev, refresh ? UC81XX_CMD_DTM2 : UC81XX_CMD_DTM1, buffer,
-                       required);
+      status = jh_epd_spi_command_strided(
+          &dev->transport, refresh_window ? UC81XX_CMD_DTM2 : UC81XX_CMD_DTM1,
+          buffer, row_bytes, stride, height);
     }
   }
   if (hal_status_is_ok(status)) {
     status = command(dev, UC81XX_CMD_PTOUT, NULL, 0u);
+  }
+  if (hal_status_is_ok(status) && refresh && !refresh_window) {
+    status = jh_uc81xx_refresh(dev, JH_UC81XX_REFRESH_FULL);
   }
   return status;
 }
