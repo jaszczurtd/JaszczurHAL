@@ -88,6 +88,7 @@ def manifest_selection(example_dir: Path, manifest: dict[str, Any]) -> tuple[str
 def settings_for(example_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
     from vscode_task_config import (
         cmake_tools_configure_settings,
+        project_view_settings,
         vscode_entry_settings,
     )
 
@@ -102,9 +103,10 @@ def settings_for(example_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
         "jaszczurhal.verbose": False,
         "jaszczurhal.root": "../..",
         **vscode_entry_settings("../../vscode/entry/jh-vscode"),
-        "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
-        "C_Cpp.default.compileCommands": f"{output_dir}/compile_commands_patched.json",
-        "C_Cpp.errorSquiggles": "enabled",
+        # As in a project outside the library, IntelliSense follows the
+        # database of the last refresh, base or variant: a CMake Tools
+        # provider would serve its own base configure instead.
+        **project_view_settings(f"{output_dir}/compile_commands_patched.json"),
         "cmake.sourceDirectory": "${workspaceFolder}/../../cmake/jh_firmware_project",
         "cmake.buildDirectory": f"{build_dir}/cmake-tools/{target}-{assembly or board}",
         "cmake.generator": "Ninja",
@@ -118,7 +120,6 @@ def settings_for(example_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
             project_cache=dict(manifest["cmake"]["cache"]),
             assembly=assembly,
         ),
-        "search.exclude": {"**/.build": True},
     }
 
 

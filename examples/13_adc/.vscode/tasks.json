@@ -357,6 +357,23 @@
             "problemMatcher": "$gcc"
         },
         {
+            "label": "Project: Refresh IntelliSense variant: SCAN",
+            "detail": "Update IntelliSense data for the SCAN variant: Continuous ADC scan example.",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "refresh-intellisense",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "SCAN"
+            ],
+            "problemMatcher": []
+        },
+        {
             "label": "Project: Check device tree",
             "detail": "Check every assembly of device_tree.json after each save and list the problems at their place in the file.",
             "type": "shell",

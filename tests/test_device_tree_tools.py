@@ -437,9 +437,10 @@ class VsCodeFiles(unittest.TestCase):
         self.assertIn("are current", rerun.stdout)
 
     def test_projects_read_intellisense_from_the_compile_database(self) -> None:
-        # A project outside the library has no configuration provider, so
-        # CMake Tools never replaces the database the refresh writes; .build
-        # stays in the explorer and out of search.
+        # A project, also a library example, has no configuration provider,
+        # so CMake Tools never replaces the database the refresh writes, base
+        # or variant (13_adc has SCAN); .build stays in the explorer and out
+        # of search.
         directory = WORK / "generated project"
         if directory.exists():
             shutil.rmtree(directory)
@@ -447,14 +448,13 @@ class VsCodeFiles(unittest.TestCase):
                         "--output", str(directory), "--name", "Generated"],
                        check=True, capture_output=True, text=True)
         generated = json.loads((directory / ".vscode" / "settings.json").read_text(encoding="utf-8"))
-        for settings in (generated, examples_dispatcher.reference_settings()):
+        example = examples_dispatcher.settings_for(
+            ROOT / "examples" / "13_adc", examples_dispatcher.read_manifest(ROOT / "examples" / "13_adc"))
+        for settings in (generated, examples_dispatcher.reference_settings(), example):
             self.assertEqual("", settings["C_Cpp.default.configurationProvider"])
             self.assertTrue(settings["C_Cpp.default.compileCommands"])
             self.assertNotIn(".build", json.dumps(settings.get("files.exclude", {})))
             self.assertEqual({"**/.build": True}, settings["search.exclude"])
-        example = examples_dispatcher.settings_for(
-            ROOT / "examples" / "13_adc", examples_dispatcher.read_manifest(ROOT / "examples" / "13_adc"))
-        self.assertNotIn(".build", json.dumps(example.get("files.exclude", {})))
         # An existing project keeps its own keys and exclusions.
         settings = {"C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
                     "files.exclude": {"**/.build": True, "**/*.o": True},

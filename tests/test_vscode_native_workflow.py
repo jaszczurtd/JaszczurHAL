@@ -471,6 +471,7 @@ with tempfile.TemporaryDirectory(prefix="jh-vscode-variants-") as temp_dir:
     for action, label in (
         ("build", "Project: Build variant: BENCH"),
         ("upload", "Project: Upload variant: BENCH"),
+        ("refresh-intellisense", "Project: Refresh IntelliSense variant: BENCH"),
     ):
         require(
             variant_tasks.get(label, {}).get("args")

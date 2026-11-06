@@ -5,9 +5,12 @@
     "jaszczurhal.vscodeEntry": "../../vscode/entry/jh-vscode",
     "jaszczurhal.vscodeEntryWindows": "../../vscode/entry/jh-vscode.cmd",
     "cortex-debug.gdbPath.linux": "gdb-multiarch",
-    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "C_Cpp.default.configurationProvider": "",
     "C_Cpp.default.compileCommands": "${workspaceFolder}/../../.build/examples/17_audio_output/rp2040/pico/compile_commands_patched.json",
     "C_Cpp.errorSquiggles": "enabled",
+    "search.exclude": {
+        "**/.build": true
+    },
     "cmake.sourceDirectory": "${workspaceFolder}/../../cmake/jh_firmware_project",
     "cmake.buildDirectory": "${workspaceFolder}/../../.build/examples/17_audio_output/cmake-tools/rp2040-pico",
     "cmake.generator": "Ninja",
@@ -19,8 +22,5 @@
         "JH_MODULE_NAME": "17_audio_output",
         "JH_ROOT": "${workspaceFolder}/../..",
         "JH_ASSEMBLY": "pico"
-    },
-    "search.exclude": {
-        "**/.build": true
     }
 }

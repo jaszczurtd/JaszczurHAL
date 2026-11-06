@@ -59,9 +59,9 @@ VSCODE_ENTRY_WINDOWS_CONFIG = "${config:jaszczurhal.vscodeEntryWindows}"
 
 # Single source of truth for .vscode/extensions.json across every generator.
 # cpptools drives IntelliSense over the patched compile database, cmake-tools
-# configures the firmware CMake project (and is the examples'
-# C_Cpp.default.configurationProvider; projects outside the library have none,
-# see project_view_settings), cortex-debug owns the launch.json configuration
+# configures the firmware CMake project. Examples and external projects use
+# compileCommands without a configuration provider (see project_view_settings).
+# cortex-debug owns the launch.json configuration
 # and serial-monitor sits beside the jh-vscode monitor actions.
 VSCODE_EXTENSION_RECOMMENDATIONS = [
     "ms-vscode.cpptools",
@@ -411,7 +411,7 @@ BUILD_DIR_GLOB = "**/.build"
 
 
 def project_view_settings(compile_commands: str) -> dict[str, Any]:
-    """settings.json keys of a firmware project outside the library.
+    """settings.json keys shared by examples and external firmware projects.
 
     IntelliSense reads only the compile database written by Project: Refresh
     IntelliSense. Without a configuration provider, CMake Tools never
@@ -855,6 +855,16 @@ def project_tasks_document(
                 detail=f"Build and upload {variant_subject}.",
                 args=["upload", *variant_args],
                 problemMatcher="$gcc",
+            )
+        )
+        # IntelliSense follows only refresh-intellisense; without this task
+        # the editor keeps the base build's defines after a variant build.
+        tasks.append(
+            vscode_entry_task(
+                label=f"Project: Refresh IntelliSense variant: {variant_id}",
+                detail=f"Update IntelliSense data for {variant_subject}.",
+                args=["refresh-intellisense", *variant_args],
+                problemMatcher=[],
             )
         )
     if device_tree_project.device_tree_path(project_dir) is not None:

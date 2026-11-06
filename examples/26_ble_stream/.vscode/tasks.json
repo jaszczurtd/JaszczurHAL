@@ -356,6 +356,23 @@
             "problemMatcher": "$gcc"
         },
         {
+            "label": "Project: Refresh IntelliSense variant: COMMANDS",
+            "detail": "Update IntelliSense data for the COMMANDS variant: Authenticated BLE command example.",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "refresh-intellisense",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "COMMANDS"
+            ],
+            "problemMatcher": []
+        },
+        {
             "label": "Project: Build variant: COMMANDS_FREERTOS",
             "detail": "Build the COMMANDS_FREERTOS variant: Authenticated BLE command example with FreeRTOS.",
             "type": "shell",
@@ -389,6 +406,23 @@
                 "COMMANDS_FREERTOS"
             ],
             "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Project: Refresh IntelliSense variant: COMMANDS_FREERTOS",
+            "detail": "Update IntelliSense data for the COMMANDS_FREERTOS variant: Authenticated BLE command example with FreeRTOS.",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "refresh-intellisense",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "COMMANDS_FREERTOS"
+            ],
+            "problemMatcher": []
         },
         {
             "label": "Project: Check device tree",

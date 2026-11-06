@@ -355,6 +355,23 @@
             "problemMatcher": "$gcc"
         },
         {
+            "label": "Project: Refresh IntelliSense variant: PROBE",
+            "detail": "Update IntelliSense data for the PROBE variant: LoRa radio checks that do not transmit.",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "refresh-intellisense",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "PROBE"
+            ],
+            "problemMatcher": []
+        },
+        {
             "label": "Project: Build variant: RESPONDER",
             "detail": "Build the RESPONDER variant: LoRa ping/pong responder.",
             "type": "shell",
@@ -388,6 +405,23 @@
                 "RESPONDER"
             ],
             "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Project: Refresh IntelliSense variant: RESPONDER",
+            "detail": "Update IntelliSense data for the RESPONDER variant: LoRa ping/pong responder.",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "refresh-intellisense",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "RESPONDER"
+            ],
+            "problemMatcher": []
         },
         {
             "label": "Project: Build variant: SF7",
@@ -425,6 +459,23 @@
             "problemMatcher": "$gcc"
         },
         {
+            "label": "Project: Refresh IntelliSense variant: SF7",
+            "detail": "Update IntelliSense data for the SF7 variant: LoRa initiator with the SF7/6 dBm test settings.",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "refresh-intellisense",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "SF7"
+            ],
+            "problemMatcher": []
+        },
+        {
             "label": "Project: Build variant: RESPONDER_SF7",
             "detail": "Build the RESPONDER_SF7 variant: LoRa responder with the SF7/6 dBm test settings.",
             "type": "shell",
@@ -458,6 +509,23 @@
                 "RESPONDER_SF7"
             ],
             "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Project: Refresh IntelliSense variant: RESPONDER_SF7",
+            "detail": "Update IntelliSense data for the RESPONDER_SF7 variant: LoRa responder with the SF7/6 dBm test settings.",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "refresh-intellisense",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "RESPONDER_SF7"
+            ],
+            "problemMatcher": []
         },
         {
             "label": "Project: Build variant: LINK",
@@ -495,6 +563,23 @@
             "problemMatcher": "$gcc"
         },
         {
+            "label": "Project: Refresh IntelliSense variant: LINK",
+            "detail": "Update IntelliSense data for the LINK variant: LoRa echo-command initiator with fragmentation and retries.",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "refresh-intellisense",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "LINK"
+            ],
+            "problemMatcher": []
+        },
+        {
             "label": "Project: Build variant: LINK_RESPONDER",
             "detail": "Build the LINK_RESPONDER variant: LoRa echo-command responder with fragmentation and retries.",
             "type": "shell",
@@ -528,6 +613,23 @@
                 "LINK_RESPONDER"
             ],
             "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Project: Refresh IntelliSense variant: LINK_RESPONDER",
+            "detail": "Update IntelliSense data for the LINK_RESPONDER variant: LoRa echo-command responder with fragmentation and retries.",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "refresh-intellisense",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "LINK_RESPONDER"
+            ],
+            "problemMatcher": []
         },
         {
             "label": "Project: Check device tree",

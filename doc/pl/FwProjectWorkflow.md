@@ -440,10 +440,13 @@ Wariant wybierasz przez `jh-vscode build --variant <id>` lub
 `jh-vscode upload --variant <id>`, w samym CMake przez `-DJH_VARIANT=<id>`,
 a w skrypcie ESP-IDF przez `--variant <id>`. W VS Code to samo robią
 wygenerowane zadania `Project: Build variant: <id>` i
-`Project: Upload variant: <id>`. `jh-vscode` kompiluje wariant jako moduł
-`<module>_<id>` do `<buildDir>/variants/<id>`, z własnym drzewem CMake
-i plikami wynikowymi. Wariant nigdy więc nie zastępuje firmware bazowego,
-także gdy manifest zostawia `JH_ARTIFACT_DIR` z wartością domyślną.
+`Project: Upload variant: <id>`. IntelliSense pokazuje build bazowy, dopóki nie
+uruchomisz `Project: Refresh IntelliSense variant: <id>`, a zadanie
+`Project: Refresh IntelliSense` przywraca build bazowy. `jh-vscode` kompiluje
+wariant jako moduł `<module>_<id>` do `<buildDir>/variants/<id>`, z własnym
+drzewem CMake i plikami wynikowymi. Wariant nigdy więc nie zastępuje
+firmware bazowego, także gdy manifest zostawia `JH_ARTIFACT_DIR` z wartością
+domyślną.
 
 Wszystkie warianty kompilują te same pliki źródłowe. Wariant z inną aplikacją
 trzyma ją w osobnym pliku, który najpierw dołącza `<hal/core/hal_config.h>`,

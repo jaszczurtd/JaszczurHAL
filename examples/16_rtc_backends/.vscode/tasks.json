@@ -356,6 +356,23 @@
             "problemMatcher": "$gcc"
         },
         {
+            "label": "Project: Refresh IntelliSense variant: DISPLAY_CLOCK",
+            "detail": "Update IntelliSense data for the DISPLAY_CLOCK variant: DS3231 clock with an ILI9341 display.",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "refresh-intellisense",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "DISPLAY_CLOCK"
+            ],
+            "problemMatcher": []
+        },
+        {
             "label": "Project: Check device tree",
             "detail": "Check every assembly of device_tree.json after each save and list the problems at their place in the file.",
             "type": "shell",

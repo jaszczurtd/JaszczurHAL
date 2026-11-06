@@ -354,6 +354,23 @@
             "problemMatcher": "$gcc"
         },
         {
+            "label": "Project: Refresh IntelliSense variant: AVRCP",
+            "detail": "Update IntelliSense data for the AVRCP variant: A2DP speaker with AVRCP volume control.",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "refresh-intellisense",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "AVRCP"
+            ],
+            "problemMatcher": []
+        },
+        {
             "label": "Project: Build variant: BLE_A2DP",
             "detail": "Build the BLE_A2DP variant: A2DP speaker with BLE and Classic support in one image.",
             "type": "shell",
@@ -387,6 +404,23 @@
                 "BLE_A2DP"
             ],
             "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Project: Refresh IntelliSense variant: BLE_A2DP",
+            "detail": "Update IntelliSense data for the BLE_A2DP variant: A2DP speaker with BLE and Classic support in one image.",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "refresh-intellisense",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "BLE_A2DP"
+            ],
+            "problemMatcher": []
         },
         {
             "label": "Project: Check device tree",

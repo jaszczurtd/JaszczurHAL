@@ -355,6 +355,23 @@
             "problemMatcher": "$gcc"
         },
         {
+            "label": "Project: Refresh IntelliSense variant: CLASSIC_SCAN",
+            "detail": "Update IntelliSense data for the CLASSIC_SCAN variant: Classic Bluetooth device and service discovery example.",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "refresh-intellisense",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "CLASSIC_SCAN"
+            ],
+            "problemMatcher": []
+        },
+        {
             "label": "Project: Build variant: HID_HOST",
             "detail": "Build the HID_HOST variant: Generic Classic HID descriptor and report example.",
             "type": "shell",
@@ -390,6 +407,23 @@
             "problemMatcher": "$gcc"
         },
         {
+            "label": "Project: Refresh IntelliSense variant: HID_HOST",
+            "detail": "Update IntelliSense data for the HID_HOST variant: Generic Classic HID descriptor and report example.",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "refresh-intellisense",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "HID_HOST"
+            ],
+            "problemMatcher": []
+        },
+        {
             "label": "Project: Build variant: BLE",
             "detail": "Build the BLE variant: Classic gamepad example with a BLE observer.",
             "type": "shell",
@@ -423,6 +457,23 @@
                 "BLE"
             ],
             "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Project: Refresh IntelliSense variant: BLE",
+            "detail": "Update IntelliSense data for the BLE variant: Classic gamepad example with a BLE observer.",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "refresh-intellisense",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "BLE"
+            ],
+            "problemMatcher": []
         },
         {
             "label": "Project: Check device tree",

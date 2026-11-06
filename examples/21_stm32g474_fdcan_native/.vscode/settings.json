@@ -5,9 +5,12 @@
     "jaszczurhal.vscodeEntry": "../../vscode/entry/jh-vscode",
     "jaszczurhal.vscodeEntryWindows": "../../vscode/entry/jh-vscode.cmd",
     "cortex-debug.gdbPath.linux": "gdb-multiarch",
-    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "C_Cpp.default.configurationProvider": "",
     "C_Cpp.default.compileCommands": "${workspaceFolder}/../../.build/examples/21_stm32g474_fdcan_native/stm32g474/nucleo-canhat/compile_commands_patched.json",
     "C_Cpp.errorSquiggles": "enabled",
+    "search.exclude": {
+        "**/.build": true
+    },
     "cmake.sourceDirectory": "${workspaceFolder}/../../cmake/jh_firmware_project",
     "cmake.buildDirectory": "${workspaceFolder}/../../.build/examples/21_stm32g474_fdcan_native/cmake-tools/stm32g474-nucleo-canhat",
     "cmake.generator": "Ninja",
@@ -19,8 +22,5 @@
         "JH_MODULE_NAME": "21_stm32g474_fdcan_native",
         "JH_ROOT": "${workspaceFolder}/../..",
         "JH_ASSEMBLY": "nucleo-canhat"
-    },
-    "search.exclude": {
-        "**/.build": true
     }
 }

@@ -447,7 +447,10 @@ Select a variant with `jh-vscode build --variant <id>` or
 `jh-vscode upload --variant <id>`, with `-DJH_VARIANT=<id>` in plain CMake, or
 with `--variant <id>` for the ESP-IDF runner. The generated tasks
 `Project: Build variant: <id>` and `Project: Upload variant: <id>` do the same
-from VS Code. `jh-vscode` builds the variant as module `<module>_<id>` into
+from VS Code. IntelliSense keeps showing the base build until you run
+`Project: Refresh IntelliSense variant: <id>`, and
+`Project: Refresh IntelliSense` switches back to the base build.
+`jh-vscode` builds the variant as module `<module>_<id>` into
 `<buildDir>/variants/<id>` with its own CMake tree and artifacts, so it never
 replaces the base firmware, also when the manifest leaves `JH_ARTIFACT_DIR` to
 its default.
