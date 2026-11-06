@@ -1,4 +1,5 @@
 #include "hal/core/hal_compiler.h"
+#include "hal/serial/hal_serial_session_vocabulary.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -13,6 +14,10 @@ static uint32_t *select_counter(uint32_t *counter, uint32_t *calls) {
 }
 
 int compiler_atomic_c_probe(void) {
+  if (hal_serial_session_vocabulary_default.cmd_bye != NULL ||
+      hal_serial_session_vocabulary_default.reply_auth_failed_entropy != NULL) {
+    return 13;
+  }
   bool flag = false;
   HAL_ATOMIC_STORE(&flag, true, HAL_ATOMIC_RELEASE);
   if (!HAL_ATOMIC_LOAD(&flag, HAL_ATOMIC_ACQUIRE) ||

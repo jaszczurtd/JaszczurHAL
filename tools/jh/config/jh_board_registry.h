@@ -27,7 +27,8 @@ typedef struct {
   jb_string_t name; /**< The string ID when text is set. */
 } jh_board_pin_t;
 
-/** One descriptor file as json.loads reads it. */
+/** One descriptor file as json.loads reads it, except that the tree holds
+ * every USB ID (vid, pid) as an integer, also one written as a "0x" string. */
 typedef struct {
   jb_string_t id, path;
   jb_json_tree_t *tree;

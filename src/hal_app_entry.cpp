@@ -23,9 +23,7 @@
  * If the client enables HAL_ENABLE_APP_TASK1 but does not define app_task1(),
  * the weak stub below is linked instead and does nothing.
  */
-extern "C" __attribute__((weak)) void app_task1(void) {
-  /* intentionally empty */
-}
+HAL_WEAK_FUNCTION(void, app_task1, (void)) { /* intentionally empty */ }
 
 #if HAL_TARGET_IS_RP
 

@@ -1,4 +1,5 @@
 #include "jh_json_schema.h"
+#include "jh_failure.h"
 #include "jh_python_repr.h"
 #include <algorithm>
 #include <array>
@@ -709,13 +710,10 @@ struct engine {
       const view encoded = whole.substr(hash + 1);
       text decoded(&temp);
       const auto hex = [](char c) -> unsigned {
-        if (c >= '0' && c <= '9')
-          return static_cast<unsigned>(c - '0');
-        if (c >= 'a' && c <= 'f')
-          return static_cast<unsigned>(c - 'a' + 10);
-        if (c >= 'A' && c <= 'F')
-          return static_cast<unsigned>(c - 'A' + 10);
-        throw stopped{HAL_EINVAL};
+        const int digit = jh_hex_digit(c);
+        if (digit < 0)
+          throw stopped{HAL_EINVAL};
+        return static_cast<unsigned>(digit);
       };
       for (size_t i = 0; i < encoded.size(); ++i) {
         charge();

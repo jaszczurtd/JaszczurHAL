@@ -15,7 +15,7 @@
   },
   "programming": {
     "transport": "usb-serial-jtag",
-    "usb": { "vid": 12346, "pid": 4097 },
+    "usb": { "vid": "0x303A", "pid": "0x1001" },
     "reset": "usb-serial-jtag-control-lines",
     "boot": "usb-serial-jtag-control-lines"
   },

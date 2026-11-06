@@ -1,6 +1,7 @@
 #include "hal/core/hal_compiler.h"
 #include "hal/core/hal_memory.h"
 #include "hal/security/hal_crc.h"
+#include "hal/serial/hal_serial_session_vocabulary.h"
 
 #include <cstdint>
 #include <cstdlib>
@@ -41,6 +42,11 @@ static HAL_NORETURN void never_taken(void) {
 }
 
 int main(int argc, char **) {
+  if (hal_serial_session_vocabulary_default.cmd_bye != nullptr ||
+      hal_serial_session_vocabulary_default.reply_auth_failed_entropy !=
+          nullptr) {
+    fail(13);
+  }
   static constexpr uint8_t check[] = {'1', '2', '3', '4', '5',
                                       '6', '7', '8', '9'};
 

@@ -90,24 +90,8 @@ typedef struct {
  */
 static const hal_serial_session_vocabulary_t
     hal_serial_session_vocabulary_default = {
-        .cmd_bye = NULL,
-        .cmd_auth_begin = NULL,
-        .cmd_auth_prove = NULL,
-        .cmd_reboot_bootloader = NULL,
-        .reply_bye_ok = NULL,
-        .reply_unknown_cmd = NULL,
-        .reply_not_ready_hello_required = NULL,
-        .reply_auth_challenge_fmt = NULL,
-        .reply_auth_ok = NULL,
-        .reply_auth_failed_no_challenge = NULL,
-        .reply_auth_failed_bad_length = NULL,
-        .reply_auth_failed_bad_hex = NULL,
-        .reply_auth_failed_key_derivation = NULL,
-        .reply_auth_failed_mac_compute = NULL,
-        .reply_auth_failed_bad_mac = NULL,
-        .reply_not_authorized = NULL,
-        .reply_reboot_ok = NULL,
-        .reply_auth_failed_entropy = NULL,
+        NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+        NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 };
 
 /**

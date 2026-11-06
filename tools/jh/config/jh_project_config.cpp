@@ -1,4 +1,5 @@
 #include "jh_project_config.h"
+#include "jh_failure.h"
 #include "jh_stl_bridge.h"
 #include <algorithm>
 #include <filesystem>
@@ -127,9 +128,6 @@ bool ascii_letter(char c) {
 bool ascii_digit(char c) { return c >= '0' && c <= '9'; }
 bool name_start(char c) { return ascii_letter(c) || c == '_'; }
 bool name_part(char c) { return name_start(c) || ascii_digit(c); }
-bool hex_digit(char c) {
-  return ascii_digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
-}
 
 bool identifier(const std::string &text) {
   if (text.empty() || !name_start(text[0]))
@@ -357,9 +355,9 @@ size_t token_end(const std::string &text, size_t i) {
   const char c = text[i];
   const char next = i + 1 < size ? text[i + 1] : 0;
   if (c == '0' && (next == 'x' || next == 'X') && i + 2 < size &&
-      hex_digit(text[i + 2])) {
+      jh_hex_digit(text[i + 2]) >= 0) {
     size_t j = i + 2;
-    while (j < size && hex_digit(text[j]))
+    while (j < size && jh_hex_digit(text[j]) >= 0)
       ++j;
     return literal_suffix(text, j);
   }

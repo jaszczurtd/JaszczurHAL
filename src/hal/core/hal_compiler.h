@@ -66,6 +66,63 @@
 #define HAL_NORETURN
 #endif
 
+/** @def HAL_WEAK_FUNCTION(result, name, parameters)
+ *  @brief Defines a replaceable default function with C linkage.
+ *  @param result Return type (use a typedef if it contains a comma).
+ *  @param name Unqualified function name at global scope.
+ *  @param parameters Parenthesized parameter list, including parameter names.
+ *
+ *  Follow the macro with the function body. Declare the public function
+ *  normally in its header, with C linkage in C++. A normal definition in
+ *  another linked object replaces the default; callers use the public name.
+ *  Define at most one default per function. Do not use this for C++ overloads,
+ *  static/inline functions or non-default calling conventions.
+ *
+ *  GNU uses a weak definition. MSVC/clang-cl on x86/x64 use /alternatename
+ *  and a separate fallback symbol. The object containing this macro MUST
+ *  participate in the link: link it directly, or reference another ordinary
+ *  symbol from that object when it lives in a static library. A reference to
+ *  the default function alone cannot extract that object on MSVC. Likewise,
+ *  link a replacement explicitly; archive scanning is not an override policy.
+ *
+ *  @code
+ *  HAL_WEAK_FUNCTION(int, application_hook, (int value)) { return value; }
+ *  @endcode
+ */
+#ifdef __cplusplus
+#define JH_COMPILER_C_LINKAGE extern "C"
+#else
+#define JH_COMPILER_C_LINKAGE extern
+#endif
+
+#if defined(_MSC_VER) && (HAL_COMPILER_IS_MSVC || HAL_COMPILER_IS_GNU_LIKE)
+#if defined(_M_IX86)
+#define JH_COMPILER_C_SYMBOL_PREFIX "_"
+#elif defined(_M_X64) && !defined(_M_ARM64EC)
+#define JH_COMPILER_C_SYMBOL_PREFIX ""
+#endif
+#ifdef JH_COMPILER_C_SYMBOL_PREFIX
+#define JH_COMPILER_WEAK_FUNCTION(result, name, parameters)                    \
+  JH_COMPILER_C_LINKAGE result __cdecl name parameters;                        \
+  __pragma(comment(linker,                                                     \
+                   "/alternatename:" JH_COMPILER_C_SYMBOL_PREFIX #name         \
+                   "=" JH_COMPILER_C_SYMBOL_PREFIX "jh_weak_default_" #name))  \
+      JH_COMPILER_C_LINKAGE result __cdecl jh_weak_default_##name parameters
+#endif
+#elif HAL_COMPILER_IS_GNU_LIKE
+#define JH_COMPILER_WEAK_FUNCTION(result, name, parameters)                    \
+  JH_COMPILER_C_LINKAGE __attribute__((weak)) result name parameters
+#endif
+
+/* Fail at the use site on unsupported linkers, without preventing unrelated
+ * portable helpers from being used. Never silently turn a default strong. */
+#ifndef JH_COMPILER_WEAK_FUNCTION
+#define JH_COMPILER_WEAK_FUNCTION(result, name, parameters)                    \
+  HAL_WEAK_FUNCTION_requires_a_supported_linker
+#endif
+#define HAL_WEAK_FUNCTION(result, name, parameters)                            \
+  JH_COMPILER_WEAK_FUNCTION(result, name, parameters)
+
 /** @def HAL_NO_STACK_PROTECTOR
  *  @brief Excludes a function from compiler stack-canary instrumentation.
  *

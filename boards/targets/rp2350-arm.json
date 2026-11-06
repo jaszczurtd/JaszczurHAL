@@ -19,7 +19,7 @@
     "backendName": "rp/pico-sdk"
   },
   "hal": { "targetSelector": "HAL_TARGET_RP2350_ARM" },
-  "usbDevice": { "vid": 11914, "pid": 9 },
+  "usbDevice": { "vid": "0x2E8A", "pid": "0x0009" },
   "build": { "provider": "pico-sdk", "recipe": "rp-pico", "platform": "rp2350-arm-s" },
   "gpio": {
     "pinIdFormat": "integer",

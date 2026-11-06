@@ -411,7 +411,7 @@ require(
     esp32_board["programming"]
     == {
         "transport": "usb-serial-jtag",
-        "usb": {"vid": 0x303A, "pid": 0x1001},
+        "usb": {"vid": "0x303A", "pid": "0x1001"},
         "reset": "usb-serial-jtag-control-lines",
         "boot": "usb-serial-jtag-control-lines",
     },

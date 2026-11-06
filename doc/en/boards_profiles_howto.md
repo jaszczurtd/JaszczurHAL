@@ -84,13 +84,19 @@ The Waveshare ESP32-S3-Zero describes its native USB Serial/JTAG programmer as:
 ```json
 "programming": {
   "transport": "usb-serial-jtag",
-  "usb": { "vid": 12346, "pid": 4097 },
+  "usb": { "vid": "0x303A", "pid": "0x1001" },
   "reset": "usb-serial-jtag-control-lines",
   "boot": "usb-serial-jtag-control-lines"
 }
 ```
 
-The decimal USB values are `303a:1001` in the usual hexadecimal display.
+A USB ID is either an integer or a string with `0x` followed by hexadecimal
+digits. The digits may be upper or lower case and may start with zeros, so
+`"0x303a"` and `"0x0303A"` give the same ID, but the value must fit in 16 bits.
+`jh` rejects `"0X303A"`, a bare `"0x"` and `"0x10000"` with exit code 2. Tools
+reading the registry always receive the number, whichever form the descriptor
+uses.
+
 `jh-vscode` derives its identity verifier from these board facts; manifests do
 not duplicate them. The Phase 1 hardware closure verified this programming
 identity, three complete three-image flashes, ESP32-S3/two-core detection, 4 MiB
@@ -129,7 +135,7 @@ Each generated GPIO set (exposed pins, `hard` and `soft` reservations, the targe
 A profile combining a base board with an add-on module must preserve the base board's physical devices, aliases, and public HAL definitions. Do not remove a device such as `HAL_LED_BUILTIN` merely to reuse its pin: the device remains electrically connected and may load or switch the shared line. Choose non-conflicting wiring instead. A PCB modification, such as opening a solder bridge, requires a separate profile that explicitly describes the modification.
 
 Targets may declare default application USB IDs in `usbDevice` (`vid` and
-`pid`, both 16-bit integers). Tooling inherits these defaults; firmware reads
+`pid`, written like the programmer IDs above). Tooling inherits these defaults; firmware reads
 the generated `HAL_TARGET_USB_VID` and `HAL_TARGET_USB_PID` facts. Explicit
 project IDs override application defaults. Fixed programmer IDs come from
 the board's `programming.usb` instead. A target without USB metadata receives

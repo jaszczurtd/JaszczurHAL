@@ -92,13 +92,19 @@ opisany następująco:
 ```json
 "programming": {
   "transport": "usb-serial-jtag",
-  "usb": { "vid": 12346, "pid": 4097 },
+  "usb": { "vid": "0x303A", "pid": "0x1001" },
   "reset": "usb-serial-jtag-control-lines",
   "boot": "usb-serial-jtag-control-lines"
 }
 ```
 
-Dziesiętne wartości USB to `303a:1001` w zwykłym zapisie szesnastkowym.
+ID USB można zapisać jako liczbę całkowitą albo jako napis z `0x` i cyframi
+szesnastkowymi. Cyfry mogą być małe lub wielkie, a zapis może zaczynać się od
+zer, więc `"0x303a"` i `"0x0303A"` oznaczają to samo ID. Wartość musi jednak
+mieścić się w 16 bitach. `jh` odrzuca `"0X303A"`, samo `"0x"` i `"0x10000"`,
+kończąc pracę z kodem 2. Narzędzia czytające rejestr zawsze dostają liczbę,
+niezależnie od zapisu w deskryptorze.
+
 Na podstawie tych danych `jh-vscode` tworzy mechanizm sprawdzania tożsamości
 urządzenia; nie trzeba powielać ich w manifestach. Końcowe testy sprzętowe
 fazy 1 potwierdziły tożsamość interfejsu programowania, trzy pełne operacje
@@ -138,7 +144,7 @@ Każdy wygenerowany zbiór GPIO (piny wyprowadzone, rezerwacje `hard` i `soft`, 
 Profil złożony z płytki bazowej i dodatkowego modułu musi zachować fizyczne urządzenia płytki, aliasy i publiczne definicje HAL. Nie usuwaj np. `HAL_LED_BUILTIN` tylko po to, aby przeznaczyć jego pin dla modułu: dioda nadal jest elektrycznie podłączona i może obciążać lub przełączać wspólną linię. Wybierz połączenia bez konfliktów. Modyfikacja PCB, np. rozwarcie mostka lutowniczego, wymaga osobnego profilu z jednoznacznym opisem przeróbki.
 
 Target może podać domyślne ID aplikacyjnego USB w `usbDevice` (`vid` i `pid`,
-obie wartości jako liczby 16-bitowe). Narzędzia dziedziczą te wartości,
+zapisane tak samo jak ID programatora powyżej). Narzędzia dziedziczą te wartości,
 a firmware odczytuje wygenerowane `HAL_TARGET_USB_VID` i `HAL_TARGET_USB_PID`.
 Jawne ID projektu zastępują wartości domyślne aplikacji. Stałe ID programatora
 pochodzą z `programming.usb` w opisie płytki. Target bez metadanych USB nie

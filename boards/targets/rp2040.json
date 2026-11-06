@@ -19,7 +19,7 @@
     "backendName": "rp/pico-sdk"
   },
   "hal": { "targetSelector": "HAL_TARGET_RP2040" },
-  "usbDevice": { "vid": 11914, "pid": 10 },
+  "usbDevice": { "vid": "0x2E8A", "pid": "0x000A" },
   "build": { "provider": "pico-sdk", "recipe": "rp-pico", "platform": "rp2040" },
   "gpio": {
     "pinIdFormat": "integer",

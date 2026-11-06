@@ -82,6 +82,12 @@ size_t jh_json_count(jb_json_tree_view_t value);
 /** isinstance(value, int) and not bool: an integer token (no fraction or
  * exponent) within int64_t, in *out. */
 bool jh_json_int64(jb_json_tree_view_t value, int64_t *out);
+/** A hardware identifier from 0 through maximum, in *out: an integer as
+ * jh_json_int64 reads it, or a string of 0x followed by hexadecimal digits of
+ * either case. Leading zeros are allowed and do not count towards the range,
+ * so "0x0303A" is 0x303A; "0x", "0X1" and any other character fail. */
+bool jh_json_hardware_id(jb_json_tree_view_t value, uint32_t maximum,
+                         uint32_t *out);
 /** The name of an object member; empty for any other view. */
 jb_json_span_t jh_json_key(jb_json_tree_view_t member);
 /** The member or item at index of an object or array; a zero view past the

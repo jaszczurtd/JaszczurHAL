@@ -1927,25 +1927,29 @@ static hal_status_t validate_components(const check_t *c, jb_json_span_t at,
   return status;
 }
 
-/* validate_usb_ids. */
+/* The members of a USB identity, in descriptor order. */
+static const char *const usb_id_fields[] = {"vid", "pid"};
+
+/* validate_usb_ids: each member an integer or a "0x" string up to 0xFFFF. */
 static hal_status_t validate_usb_ids(const check_t *c, jb_json_span_t at,
                                      jb_json_tree_view_t value) {
-  static const char *const fields[] = {"vid", "pid"};
   hal_status_t status =
-      exact(c, at, value, fields, COUNTOF(fields), fields, COUNTOF(fields));
+      exact(c, at, value, usb_id_fields, COUNTOF(usb_id_fields), usb_id_fields,
+            COUNTOF(usb_id_fields));
   jb_string_t place = {0};
   if (status == HAL_OK)
     status = storage(c, text_init(&place));
-  for (size_t i = 0; status == HAL_OK && i < COUNTOF(fields); ++i) {
-    const jb_json_tree_view_t id = field(value, fields[i]);
-    int64_t number = 0;
-    if (jh_json_int64(id, &number) && number >= 0 && number <= 0xFFFF)
+  for (size_t i = 0; status == HAL_OK && i < COUNTOF(usb_id_fields); ++i) {
+    const jb_json_tree_view_t id = field(value, usb_id_fields[i]);
+    uint32_t number = 0;
+    if (jh_json_hardware_id(id, 0xFFFFu, &number))
       continue;
-    status = storage(
-        c, jh_join(&place, JH_PARTS(at, jh_span("."), jh_span(fields[i]))));
+    status = storage(c, jh_join(&place, JH_PARTS(at, jh_span("."),
+                                                 jh_span(usb_id_fields[i]))));
     if (status == HAL_OK)
-      status =
-          fail_value(c, jh_string_span(&place), &id, "a 16-bit USB identifier");
+      status = fail_value(c, jh_string_span(&place), &id,
+                          "a 16-bit USB identifier (an integer or a 0x "
+                          "hexadecimal string)");
   }
   jb_string_destroy(&place);
   return status;
@@ -3745,6 +3749,54 @@ static hal_status_t check_board_unique(loader_t *l, const check_t *c,
   return status;
 }
 
+/* The USB identity of a validated descriptor as integers: a "0x" string
+ * becomes the number it spells, so every reader of the model, the JSON of
+ * jh board list included, gets integers. Members keep their positions. */
+static hal_status_t
+usb_ids_as_numbers(const check_t *c, jh_board_descriptor_t *item, bool target) {
+  jb_json_tree_view_t usb = {0}, programming = {0};
+  if (target ? !member(item->root, "usbDevice", &usb)
+             : absent(item->root, "programming", &programming))
+    return HAL_OK;
+  if (!target)
+    usb = field(programming, "usb");
+  uint32_t ids[COUNTOF(usb_id_fields)] = {0};
+  bool text = false;
+  for (size_t i = 0; i < COUNTOF(usb_id_fields); ++i) {
+    const jb_json_tree_view_t id = field(usb, usb_id_fields[i]);
+    text = text || jh_json_type(id) == JB_JSON_STRING;
+    (void)jh_json_hardware_id(id, 0xFFFFu, &ids[i]);
+  }
+  if (!text)
+    return HAL_OK;
+  jb_string_t overlay = {0};
+  hal_status_t status = text_init(&overlay);
+  jh_put(&overlay, &status,
+         target ? "{\"usbDevice\": {" : "{\"programming\": {\"usb\": {");
+  for (size_t i = 0; i < COUNTOF(usb_id_fields); ++i) {
+    jh_put(&overlay, &status, i == 0 ? "\"" : ", \"");
+    jh_put(&overlay, &status, usb_id_fields[i]);
+    jh_put(&overlay, &status, "\": ");
+    jh_put_int64(&overlay, &status, ids[i]);
+  }
+  jh_put(&overlay, &status, target ? "}}" : "}}}");
+  jb_json_tree_t *numbers = NULL;
+  jb_json_tree_view_t view = {0};
+  if (status == HAL_OK)
+    status = jh_json_tree_from_text(jh_string_span(&overlay), &numbers);
+  if (status == HAL_OK)
+    status = jb_json_tree_root(numbers, &view);
+  if (status == HAL_OK)
+    status = jb_json_tree_merge(item->tree, view);
+  // The merge invalidated every view of the descriptor tree.
+  if (status == HAL_OK)
+    status = jb_json_tree_root(item->tree, &item->root);
+  if (numbers != NULL)
+    jb_json_tree_destroy(numbers);
+  jb_string_destroy(&overlay);
+  return storage(c, status);
+}
+
 /* Read and validate every descriptor of boards_root/<kind>. */
 static hal_status_t load_descriptors(loader_t *l, bool targets) {
   jh_board_registry_t *registry = l->registry;
@@ -3790,6 +3842,9 @@ static hal_status_t load_descriptors(loader_t *l, bool targets) {
       status = check_board_unique(l, &c, item.root);
     if (status == HAL_OK)
       status = jh_fail_storage(l->failure, jh_append_span(&item.id, id));
+    // Last: the conversion invalidates id, which points into the tree.
+    if (status == HAL_OK)
+      status = usb_ids_as_numbers(&c, &item, targets);
     if (status == HAL_OK)
       status = jh_fail_storage(l->failure, jb_vector_append(list, &item, 1));
     if (status != HAL_OK)

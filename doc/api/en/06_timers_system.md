@@ -1154,6 +1154,7 @@ Use common macros instead of repeating compiler-specific conditions. The header 
 #define HAL_COMPILER_IS_MSVC      0 or 1
 
 #define HAL_NORETURN          ...  // function never returns
+#define HAL_WEAK_FUNCTION(result, name, parameters) ... // replaceable C function
 #define HAL_NO_STACK_PROTECTOR ... // omit stack-canary instrumentation
 #define HAL_FORCE_INLINE      ...  // inline specifier plus a forced-inline request
 #define HAL_TRAP()            ...  // stop immediately at an unrecoverable point
@@ -1208,6 +1209,29 @@ HAL_PACKED_END
 ```
 
 Writing `inline` next to `HAL_FORCE_INLINE` duplicates the specifier on GNU and raises C4141 on MSVC, so the macro carries it.
+
+Define an optional default implementation with the same syntax in C and C++:
+
+```c
+HAL_WEAK_FUNCTION(int, application_hook, (int value)) {
+    return value;
+}
+```
+
+Declare `application_hook` normally in the public header, with `extern "C"`
+when included from C++. A normal definition in another linked object replaces
+the default. The macro supports global functions with C linkage and the default
+calling convention; it does not support overloads, `static` or `inline`.
+Use at most one default per function. GNU uses a weak definition; MSVC and
+clang-cl on x86/x64 use a separate fallback symbol and `/alternatename`.
+
+The object containing the default must participate in the link. Link it
+directly, or reference another ordinary symbol from that object when it lives
+in a static library. On MSVC, a reference to the optional function alone does
+not extract the fallback object from a library. Also link the replacement
+explicitly: archive scanning can satisfy a reference with a default before
+extracting a replacement. Keep defaults out of libraries that provide a
+hardware implementation.
 
 `HAL_PACKED` packs one structure on purpose. A `#pragma pack` left open around
 HAL includes would pack HAL types as well, so every HAL header that defines a

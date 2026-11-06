@@ -1234,6 +1234,7 @@ Używaj wspólnych makr zamiast powielać warunki zależne od kompilatora. Nagł
 #define HAL_COMPILER_IS_MSVC      0 or 1
 
 #define HAL_NORETURN          ...  // function never returns
+#define HAL_WEAK_FUNCTION(result, name, parameters) ... // replaceable C function
 #define HAL_NO_STACK_PROTECTOR ... // omit stack-canary instrumentation
 #define HAL_FORCE_INLINE      ...  // inline specifier plus a forced-inline request
 #define HAL_TRAP()            ...  // stop immediately at an unrecoverable point
@@ -1296,6 +1297,29 @@ HAL_PACKED_END
 Napisanie `inline` obok `HAL_FORCE_INLINE` powoduje zduplikowanie
 specyfikatora na GNU i podnosi ostrzeżenie C4141 na MSVC, dlatego to makro
 zawiera ten specyfikator.
+
+Domyślną implementację opcjonalnej funkcji definiuj jednakowo w C i C++:
+
+```c
+HAL_WEAK_FUNCTION(int, application_hook, (int value)) {
+    return value;
+}
+```
+
+W publicznym nagłówku zadeklaruj `application_hook` zwyczajnie, z `extern "C"`
+dla C++. Zwykła definicja w innym linkowanym obiekcie zastępuje domyślną.
+Makro obsługuje funkcje globalne z wiązaniem C i domyślną konwencją wywołania;
+nie obsługuje przeciążeń, `static` ani `inline`. Dla jednej funkcji definiuj
+najwyżej jeden fallback. GNU używa definicji weak, a MSVC i clang-cl na
+x86/x64 osobnego symbolu fallbacku i `/alternatename`.
+
+Obiekt z domyślną implementacją musi uczestniczyć w linkowaniu. Dołącz go
+bezpośrednio albo odwołaj się do innego zwykłego symbolu z tego obiektu,
+jeśli znajduje się w bibliotece statycznej. W MSVC samo odwołanie do
+opcjonalnej funkcji nie wyciąga obiektu fallbacku z biblioteki. Także
+implementację zastępującą dołącz jawnie: linker może rozwiązać odwołanie
+fallbackiem, zanim wyciągnie zamiennik z archiwum. Pomijaj fallbacki
+w bibliotekach zawierających implementację sprzętową.
 
 `HAL_PACKED` celowo pakuje jedną strukturę. `#pragma pack` pozostawione
 otwarte wokół include'ów HAL spakowałoby też typy HAL, dlatego każdy nagłówek

@@ -216,6 +216,34 @@ bool jh_json_int64(jb_json_tree_view_t value, int64_t *out) {
   return true;
 }
 
+bool jh_json_hardware_id(jb_json_tree_view_t value, uint32_t maximum,
+                         uint32_t *out) {
+  int64_t number = 0;
+  if (jh_json_int64(value, &number)) {
+    if (number < 0 || (uint64_t)number > maximum)
+      return false;
+    *out = (uint32_t)number;
+    return true;
+  }
+  jb_json_span_t text = {NULL, 0};
+  if (!jh_json_string(value, &text) || text.length < 3 || text.data[0] != '0' ||
+      text.data[1] != 'x')
+    return false;
+  // The total never exceeds maximum before a digit is added, so it fits in
+  // 64 bits however many leading zeros the string has.
+  uint64_t total = 0;
+  for (size_t at = 2; at < text.length; ++at) {
+    const int digit = jh_hex_digit(text.data[at]);
+    if (digit < 0)
+      return false;
+    total = total * 16u + (uint64_t)digit;
+    if (total > maximum)
+      return false;
+  }
+  *out = (uint32_t)total;
+  return true;
+}
+
 jb_json_span_t jh_json_key(jb_json_tree_view_t member) {
   jb_json_span_t key = {NULL, 0};
   (void)jb_json_tree_key(member, &key);

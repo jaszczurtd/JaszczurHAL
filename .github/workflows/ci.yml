@@ -320,13 +320,15 @@ jobs:
 
           & $state.tools.cmake --build $build --parallel 2 `
             --target test_host_compiler_smoke test_cpu_only_bss `
+              test_weak_function_object_default test_weak_function_object_override `
+              test_weak_function_archive_default test_weak_function_archive_override `
               test_hal_config_headers_c test_hal_config_headers_cpp `
               test_bsd_socket_headers_c test_hal_host_network
           if ($LASTEXITCODE -ne 0) { throw 'MSVC host API tests failed to compile.' }
 
           $ctest = Join-Path (Split-Path -Parent $state.tools.cmake) 'ctest.exe'
           & $ctest --test-dir $build --output-on-failure `
-            -R '^(test_host_compiler_smoke|test_cpu_only_bss|test_hal_config_headers_c|test_hal_config_headers_cpp|test_bsd_socket_headers_c|test_hal_host_network)$'
+            -R '^(test_host_compiler_smoke|test_weak_function_.*|test_cpu_only_bss|test_hal_config_headers_c|test_hal_config_headers_cpp|test_bsd_socket_headers_c|test_hal_host_network)$'
           if ($LASTEXITCODE -ne 0) { throw 'MSVC host API tests failed.' }
           $inventory = (& $ctest --test-dir $build --show-only=json-v1 |
             Out-String) | ConvertFrom-Json

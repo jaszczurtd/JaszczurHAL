@@ -517,7 +517,7 @@ DRESULT disk_ioctl(BYTE pdrv, BYTE cmd, void *buff) {
   }
 }
 
-extern "C" __attribute__((weak)) DWORD get_fattime(void) {
+HAL_WEAK_FUNCTION(DWORD, get_fattime, (void)) {
   return ((DWORD)(2025u - 1980u) << 25) | ((DWORD)1u << 21) | ((DWORD)1u << 16);
 }
 

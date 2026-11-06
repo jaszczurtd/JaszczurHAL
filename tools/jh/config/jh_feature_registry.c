@@ -885,15 +885,9 @@ static hal_status_t registry_digest(const jb_vector_t *features, char out[65]) {
   hal_status_t status = jb_string_init(&text, heap());
   if (status == HAL_OK)
     status = normalized_document(features, &text);
-  const size_t length = jb_string_size(&text);
-  const jb_json_limits_t limits = {length,     length + 1,        8, length, 64,
-                                   length + 1, length * 64 + 4096};
-  const jb_json_tree_limits_t tree_limits = {length + 1, 8, length,
-                                             length * 64 + 4096};
   jb_json_tree_view_t root = {0};
   if (status == HAL_OK)
-    status = jb_json_tree_parse(jh_string_span(&text), &limits, &tree_limits, 0,
-                                &tree, NULL);
+    status = jh_json_tree_from_text(jh_string_span(&text), &tree);
   if (status == HAL_OK)
     status = jb_json_tree_root(tree, &root);
   if (status == HAL_OK)

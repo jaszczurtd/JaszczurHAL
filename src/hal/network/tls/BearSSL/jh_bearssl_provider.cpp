@@ -8,13 +8,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-__attribute__((weak)) jh_bearssl_client_t *jh_bearssl_client_allocate(void) {
+HAL_WEAK_FUNCTION(jh_bearssl_client_t *, jh_bearssl_client_allocate, (void)) {
   return static_cast<jh_bearssl_client_t *>(
       calloc(1u, sizeof(jh_bearssl_client_t)));
 }
 
-__attribute__((weak)) void
-jh_bearssl_client_release(jh_bearssl_client_t *provider) {
+HAL_WEAK_FUNCTION(void, jh_bearssl_client_release,
+                  (jh_bearssl_client_t * provider)) {
   if (provider != NULL) {
     memset(provider, 0, sizeof(*provider));
     free(provider);

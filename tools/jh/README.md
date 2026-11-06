@@ -372,7 +372,8 @@ boards`; with `--json` the result (`command: "board.validate"`) has
 `jh board list` checks the same registry and prints `target <id>` and
 `board <id>` lines. Its `--json` result (`command: "board.list"`) has
 `boardsRoot`, `targets` and `boards`, each entry with `id`, `path` and the
-`descriptor` as read, `capabilities`, `components` with `id`, `providers` and
+`descriptor` as read (a USB ID written as a `0x` string becomes its number,
+in the same place), `capabilities`, `components` with `id`, `providers` and
 `slot`, and the tables the generators use: `deviceRoles`, `canControllers`,
 `canTransceivers`, `canChannelSignals`, `busDeviceKind` and
 `singleEndpointDeviceKinds`. `jh board default --target <id>` prints the
@@ -395,7 +396,9 @@ reject `1.0`, which Python accepted where it compared the value, as in
 integer. Python also accepted larger integers, for example in memory sizes,
 `cores` or `profileId`. The ranges of one pin set cover at most 65536 pins
 (`expected a range within 65536 pins`), while Python expanded every range
-into a set and ran out of memory on a large `last`.
+into a set and ran out of memory on a large `last`. A USB `vid` or `pid` may
+also be a string with `0x` and hexadecimal digits, which the script did not
+accept ([board profile guide](../../doc/en/boards_profiles_howto.md)).
 
 The commands list a set in a message in sorted order, where Python used its
 set order, which changes from one run to the next. A value of the wrong type or a missing member is a regular message

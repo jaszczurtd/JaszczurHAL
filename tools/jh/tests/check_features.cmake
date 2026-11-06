@@ -3,9 +3,9 @@ cmake_minimum_required(VERSION 3.22)
 # configuration: what generation depends on, the registries it rejects, the
 # rules requires and conflicts add to the artifacts, resolution and the raw
 # lint of project headers and manifests. The facts of the tracked registry are
-# checked by tests/test_feature_registry.cmake. At the end, the pin-set bound
-# and the unique capability bits of the board registry on an edited copy of
-# boards/. Last, the clock commands: their arguments, a rejected registry and
+# checked by tests/test_feature_registry.cmake. At the end, the pin-set bound,
+# the unique capability bits and the USB identities of the board registry on
+# edited copies of boards/. Last, the clock commands: their arguments, a rejected registry and
 # the listing the hardware resolver reads; the module itself is checked by
 # jh_clocks and the checkout by tests/test_clock_registry.cmake.
 if(NOT EXISTS "${JH}" OR NOT IS_DIRECTORY "${JH_HAL_SOURCE}/config/features")
@@ -358,6 +358,80 @@ invoke(2 board validate --root "${JH_HAL_SOURCE}" --boards-root "${JH_WORK}/boar
 if(NOT stderr MATCHES "capabilities\\.usb-device\\.bit: got 0; expected a unique capability bit")
   message(FATAL_ERROR "A repeated capability bit passed or gave another reason: ${stderr}")
 endif()
+
+# A USB identity is an integer or 0x with hexadecimal digits of either case
+# up to 0xFFFF; leading zeros do not count towards the range, and nothing may
+# follow the digits, not even a line feed. board.schema.json, which only the
+# editor reads, gives the same verdict, except for 1.0: JSON Schema counts it
+# as an integer. A descriptor lists exactly as the same file with decimal IDs,
+# for a board's programmer and for a target's application defaults, so each
+# ID becomes its number in its own place. The files are edited as text, since
+# string(JSON SET) and string(JSON MEMBER) put the members in name order.
+file(COPY "${JH_HAL_SOURCE}/boards" DESTINATION "${JH_WORK}/board-usb")
+set(usb_boards "${JH_WORK}/board-usb/boards")
+# Write text to file with the USB object usb, which text must contain,
+# replaced by replacement.
+function(write_usb file text usb replacement)
+  string(FIND "${text}" "${usb}" at)
+  if(at EQUAL -1)
+    message(FATAL_ERROR "${file} has no ${usb}")
+  endif()
+  string(REPLACE "${usb}" "${replacement}" text "${text}")
+  file(WRITE "${file}" "${text}")
+endfunction()
+# The JSON listing of the copy, in variable.
+function(usb_listing variable)
+  invoke(0 board list --root "${JH_HAL_SOURCE}" --boards-root "${usb_boards}" --json)
+  set(${variable} "${stdout}" PARENT_SCOPE)
+endfunction()
+# The listing of the copy must be the text decimal, the listing with the
+# same IDs in decimal.
+function(usb_listed what decimal)
+  usb_listing(listing)
+  if(NOT listing STREQUAL decimal)
+    message(FATAL_ERROR "${what} is listed differently from decimal IDs:\n${listing}\n${decimal}")
+  endif()
+endfunction()
+set(usb_profile "${usb_boards}/profiles/waveshare-esp32-s3-zero.json")
+file(READ "${usb_profile}" usb_profile_text)
+set(usb_profile_ids "\"usb\": { \"vid\": \"0x303A\", \"pid\": \"0x1001\" }")
+write_usb("${usb_profile}" "${usb_profile_text}" "${usb_profile_ids}"
+  "\"usb\": { \"vid\": 12346, \"pid\": 4097 }")
+usb_listing(usb_decimal)
+# jh board validate and the schema must exit with expected and schema. pid
+# stays the integer 4097, so a converted vid listed after it would show.
+function(usb_vid value expected schema)
+  write_usb("${usb_profile}" "${usb_profile_text}" "${usb_profile_ids}"
+    "\"usb\": { \"vid\": ${value}, \"pid\": 4097 }")
+  invoke(${expected} board validate --root "${JH_HAL_SOURCE}" --boards-root "${usb_boards}")
+  if(expected EQUAL 2 AND NOT stderr MATCHES
+     "waveshare-esp32-s3-zero\\.json: \\$\\.programming\\.usb\\.vid: got [^\n]*; expected a 16-bit USB identifier")
+    message(FATAL_ERROR "USB VID ${value} failed for another reason: ${stderr}")
+  endif()
+  invoke(${schema} json validate --file "${usb_profile}" --schema "${JH_HAL_SOURCE}/boards/board.schema.json")
+endfunction()
+foreach(value IN ITEMS "\"0x303A\"" "\"0x303a\"" "\"0x0303A\"" "\"0x00000000303A\"" "12346")
+  usb_vid("${value}" 0 0)
+  usb_listed("USB VID ${value}" "${usb_decimal}")
+endforeach()
+usb_vid("\"0x0\"" 0 0)
+usb_vid("\"0x0000FFFF\"" 0 0)
+foreach(value IN ITEMS "\"0x\"" "\"0x303G\"" "\"0X303A\"" "\"303A\"" "\" 0x303A\"" "\"0x303A\\n\""
+              "\"0x10000\"" "\"0x000010000\"" "65536" "-1" "true")
+  usb_vid("${value}" 2 2)
+endforeach()
+usb_vid("1.0" 2 0)
+file(WRITE "${usb_profile}" "${usb_profile_text}")
+usb_listed("${usb_profile_ids}" "${usb_decimal}")
+set(usb_target "${usb_boards}/targets/rp2040.json")
+file(READ "${usb_target}" usb_target_text)
+set(usb_target_ids "\"usbDevice\": { \"vid\": \"0x2E8A\", \"pid\": \"0x000A\" }")
+write_usb("${usb_target}" "${usb_target_text}" "${usb_target_ids}"
+  "\"usbDevice\": { \"vid\": 11914, \"pid\": 10 }")
+usb_listing(usb_decimal)
+write_usb("${usb_target}" "${usb_target_text}" "${usb_target_ids}"
+  "\"usbDevice\": { \"vid\": \"0x2E8A\", \"pid\": \"0x000a\" }")
+usb_listed("rp2040 usbDevice" "${usb_decimal}")
 
 # Clock registry commands. A TARGET=PATH without either half is refused
 # before anything is read.

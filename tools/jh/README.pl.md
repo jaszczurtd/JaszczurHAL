@@ -386,7 +386,8 @@ liczby `targets` i `boards`.
 `jh board list` sprawdza ten sam rejestr i wypisuje wiersze `target <id>`
 i `board <id>`. Z `--json` wynik (`command: "board.list"`) zawiera
 `boardsRoot`, `targets` i `boards`, w każdej pozycji `id`, `path`
-i przeczytany `descriptor`, dalej `capabilities`, `components` z `id`,
+i przeczytany `descriptor` (ID USB zapisane jako napis `0x` zamienia się
+w tym samym miejscu na liczbę), dalej `capabilities`, `components` z `id`,
 `providers` i `slot` oraz tabele używane przez generatory: `deviceRoles`,
 `canControllers`, `canTransceivers`, `canChannelSignals`, `busDeviceKind`
 i `singleEndpointDeviceKinds`. `jh board default --target <id>` wypisuje
@@ -410,7 +411,9 @@ schematów uznaje za liczbę całkowitą. Python przyjmował też większe liczb
 np. w rozmiarach pamięci, `cores` czy `profileId`. Zakresy jednego zbioru
 pinów obejmują najwyżej 65536 pinów (`expected a range within 65536 pins`),
 a Python rozwijał każdy zakres w zbiór i przy dużym `last` wyczerpywał
-pamięć.
+pamięć. USB `vid` i `pid` mogą być też napisem z `0x` i cyframi
+szesnastkowymi, którego skrypt nie przyjmował
+([poradnik profili płytek](../../doc/pl/boards_profiles_howto.md)).
 
 Polecenia wypisują zbiór w komunikacie posortowany, a Python podawał go
 w kolejności swojego zbioru, zmiennej między uruchomieniami. Wartość złego typu albo brak wymaganego pola dają zwykły

@@ -121,6 +121,15 @@ static jb_json_limits_t file_limits(size_t limit) {
   return limits;
 }
 
+hal_status_t jh_json_tree_from_text(jb_json_span_t text, jb_json_tree_t **out) {
+  const size_t length = text.length;
+  const jb_json_limits_t limits = {length,     length + 1,        8, length, 64,
+                                   length + 1, length * 64 + 4096};
+  const jb_json_tree_limits_t tree_limits = {length + 1, 8, length,
+                                             length * 64 + 4096};
+  return jb_json_tree_parse(text, &limits, &tree_limits, 0, out, NULL);
+}
+
 /* HAL_OK, or the parse failure located in bytes. */
 static hal_status_t parsed(jh_json_location_t *where, jb_json_span_t bytes,
                            hal_status_t status, jh_failure_t *failure) {

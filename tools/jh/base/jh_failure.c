@@ -126,6 +126,16 @@ int jh_span_compare(jb_json_span_t a, jb_json_span_t b) {
   return a.length < b.length ? -1 : a.length > b.length ? 1 : 0;
 }
 
+int jh_hex_digit(char c) {
+  if (c >= '0' && c <= '9')
+    return c - '0';
+  if (c >= 'a' && c <= 'f')
+    return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F')
+    return c - 'A' + 10;
+  return -1;
+}
+
 jb_json_span_t jh_span_path_stem(jb_json_span_t path) {
   size_t begin = path.length;
   while (begin > 0 && path.data[begin - 1] != '/' &&

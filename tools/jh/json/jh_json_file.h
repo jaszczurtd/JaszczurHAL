@@ -96,6 +96,13 @@ hal_status_t jh_json_parse_document(jh_json_location_t *where, const char *uri,
 /** Release a document and reset it to zero. A zero document is harmless. */
 void jh_json_document_destroy(jh_json_document_t *document);
 
+/** Parse strict JSON text that jh composed itself into a tree with limits
+ * sized by its length (nesting up to 8 containers, numbers up to 64 bytes).
+ * *out must be NULL and receives the tree only on success; the status is
+ * that of jb_json_tree_parse.
+ */
+hal_status_t jh_json_tree_from_text(jb_json_span_t text, jb_json_tree_t **out);
+
 /** Read a file of at most limit bytes (path may point into where->source) as
  * load_json_file of the Python HAL tools reads VS Code files and project
  * manifests: comments outside strings,

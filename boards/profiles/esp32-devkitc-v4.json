@@ -14,7 +14,7 @@
   },
   "programming": {
     "transport": "usb-uart-bridge",
-    "usb": { "vid": 4292, "pid": 60000 },
+    "usb": { "vid": "0x10C4", "pid": "0xEA60" },
     "reset": "dtr-rts-en",
     "boot": "dtr-rts-io0"
   },

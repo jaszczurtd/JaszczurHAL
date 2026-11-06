@@ -102,7 +102,13 @@ foreach(_primitive IN ITEMS
         jh_secure_random_bytes
         jh_secure_zeroize
         jh_constant_time_compare)
-    if(NOT _security_source_contents MATCHES "${_primitive}[ \t\r\n]*\\(")
+    if(_primitive STREQUAL "jh_secure_random_bytes")
+        set(_definition
+            "HAL_WEAK_FUNCTION\\([ \t\r\n]*hal_status_t,[ \t\r\n]*${_primitive},[ \t\r\n]*\\(")
+    else()
+        set(_definition "${_primitive}[ \t\r\n]*\\(")
+    endif()
+    if(NOT _security_source_contents MATCHES "${_definition}")
         message(FATAL_ERROR "Shared security primitive is missing: ${_primitive}")
     endif()
 endforeach()

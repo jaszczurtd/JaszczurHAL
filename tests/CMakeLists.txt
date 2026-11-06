@@ -60,6 +60,8 @@ target_include_directories(test_host_compiler_smoke PRIVATE
 jh_enable_host_warnings(test_host_compiler_smoke ERRORS)
 add_test(NAME test_host_compiler_smoke COMMAND test_host_compiler_smoke)
 
+add_subdirectory(weak_function)
+
 add_executable(test_cpu_only_bss
     test_cpu_only_bss.c test_cpu_only_bss.cpp)
 target_compile_definitions(test_cpu_only_bss PRIVATE HAL_TARGET_MOCK=1)

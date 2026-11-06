@@ -74,6 +74,9 @@ int jh_span_compare(jb_json_span_t a, jb_json_span_t b);
  * dot starts the name. The result points into path.
  */
 jb_json_span_t jh_span_path_stem(jb_json_span_t path);
+/** The value of an ASCII hexadecimal digit (0-9, a-f or A-F), or -1 for any
+ * other byte. */
+int jh_hex_digit(char c);
 
 /* Text built piece by piece: each jh_put* appends only while *status is
  * HAL_OK and stores the result of the append in *status, so a sequence of

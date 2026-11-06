@@ -11,9 +11,7 @@
 /* The RP2040 BearSSL ABI expects this random hook. hal_tls additionally
  * injects caller-validated entropy explicitly; the shared platform source
  * lives in rp2040_secure_random.cpp. */
-extern "C" __attribute__((weak)) uint32_t __picoRand(void) {
-  return get_rand_32();
-}
+HAL_WEAK_FUNCTION(uint32_t, __picoRand, (void)) { return get_rand_32(); }
 
 #endif
 #endif
