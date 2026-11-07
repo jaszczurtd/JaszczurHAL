@@ -50,6 +50,24 @@ RP2040, RP2350 i ESP32 pozostawiają bufory w zwykłym BSS, a mock używa
 pamięci hosta. Zwykły SRAM jest poprawnym wyborem; makro nie zapewnia dostępu
 DMA ani synchronizacji. Sprawdź w ELF/mapie łączne zużycie RAM, heap i stosów.
 
+## Dane zachowywane przy resecie
+
+`HAL_NOINIT` z `<hal/core/hal_memory.h>` umieszcza niezainicjalizowany obiekt
+statyczny poza pamięcią zerowaną przy starcie:
+
+```c
+HAL_NOINIT static uint32_t retained_marker;
+```
+
+RP2040/RP2350 używają sekcji `.uninitialized_data` Pico SDK. STM32G474 i
+ESP32 używają `.noinit`.
+
+Pomiń inicjalizator. Zachowanie danych wymaga obsługi w linkerze i kodzie
+startowym targetu; po uruchomieniu sprawdź dane przed ich użyciem. Utrata
+zasilania ich nie zachowuje. Buildy mock używają zwykłej pamięci statycznej
+i nie emulują zachowania danych przy resecie. `NOINIT` w
+`<utils/tools_common_defs.h>` pozostaje aliasem dla istniejącego kodu.
+
 ## Asercje
 
 `HAL_ASSERT(cond, msg)` z `<hal/core/hal_assert.h>` sprawdza `cond` raz

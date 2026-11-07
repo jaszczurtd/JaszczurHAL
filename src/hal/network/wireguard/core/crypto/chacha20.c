@@ -142,7 +142,7 @@ static void chacha20_block(struct chacha20_ctx *ctx, uint8_t *stream) {
 }
 
 void chacha20(struct chacha20_ctx *ctx, uint8_t *out, const uint8_t *in,
-              uint32_t len) {
+              size_t len) {
   uint8_t output[CHACHA20_BLOCK_SIZE];
   uint32_t i;
 

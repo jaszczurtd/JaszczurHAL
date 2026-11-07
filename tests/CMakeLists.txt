@@ -46,6 +46,7 @@ add_test(NAME test_host_warning_profiles
 add_executable(test_host_compiler_smoke
     test_host_compiler_smoke.cpp
     test_host_compiler_atomic.c
+    test_host_project_config.c
     test_host_compiler_portable.cpp
     ${CMAKE_SOURCE_DIR}/src/hal/security/hal_crc.cpp)
 target_compile_definitions(test_host_compiler_smoke PRIVATE
@@ -56,6 +57,7 @@ target_compile_definitions(test_host_compiler_smoke PRIVATE
 set_source_files_properties(test_host_compiler_portable.cpp PROPERTIES
     COMPILE_DEFINITIONS "HAL_COMPILER_IS_GNU_LIKE=0;HAL_COMPILER_IS_MSVC=0")
 target_include_directories(test_host_compiler_smoke PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/project_config/selected
     ${CMAKE_SOURCE_DIR}/src)
 jh_enable_host_warnings(test_host_compiler_smoke ERRORS)
 add_test(NAME test_host_compiler_smoke COMMAND test_host_compiler_smoke)

@@ -6,8 +6,8 @@
 #include "hal/temperature/hal_thermocouple.h"
 #include "hal/temperature/jh_thermocouple_provider.h"
 
+#include <cstddef>
 #include <math.h>
-#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -15,8 +15,10 @@ struct hal_thermocouple_impl_s {
   const jh_thermocouple_provider_t *provider;
   bool in_use;
   hal_mutex_t mutex;
-  alignas(max_align_t) uint8_t
-      provider_context[JH_THERMOCOUPLE_PROVIDER_CONTEXT_SIZE];
+  union {
+    uint8_t provider_context[JH_THERMOCOUPLE_PROVIDER_CONTEXT_SIZE];
+    std::max_align_t provider_alignment;
+  };
 };
 
 namespace {
@@ -49,7 +51,7 @@ bool provider_fits(const jh_thermocouple_provider_t *provider) {
          provider->ops->read != nullptr && provider->ops->get_type != nullptr &&
          provider->ops->is_enabled != nullptr &&
          provider->context_size <= JH_THERMOCOUPLE_PROVIDER_CONTEXT_SIZE &&
-         provider->context_alignment <= alignof(max_align_t);
+         provider->context_alignment <= alignof(std::max_align_t);
 }
 
 hal_status_t unsupported(hal_thermocouple_t handle, const char *function) {

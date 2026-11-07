@@ -11,6 +11,8 @@
  * JH_HARDWARE_HEADER, so the project configuration sees the JH_HW_* macros of
  * the selected assembly. Only that named file is loaded; a jh_hardware.h found
  * elsewhere on the include path never enables this.
+ * The project configuration follows include-directory order. Angle brackets
+ * prevent MSVC from preferring a parent header's directory over that order.
  */
 
 #if defined(JH_HARDWARE_HEADER)
@@ -18,7 +20,7 @@
 #endif
 
 #if defined(__has_include)
-#if __has_include("hal_project_config.h")
-#include "hal_project_config.h"
+#if __has_include(<hal_project_config.h>)
+#include <hal_project_config.h>
 #endif
 #endif

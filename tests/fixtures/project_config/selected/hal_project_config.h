@@ -1,0 +1,2 @@
+#pragma once
+#define JH_TEST_PROJECT_CONFIG_SELECTED 1

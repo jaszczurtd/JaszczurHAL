@@ -49,6 +49,24 @@ RP2350 and ESP32 keep them in normal BSS, and mock builds use host storage.
 Ordinary SRAM is a valid mapping; the annotation grants no DMA access or
 synchronization. Check the ELF/map for the total RAM, heap and stack budget.
 
+## Data retained across reset
+
+`HAL_NOINIT` from `<hal/core/hal_memory.h>` places an uninitialized static
+object outside the memory cleared at startup:
+
+```c
+HAL_NOINIT static uint32_t retained_marker;
+```
+
+RP2040/RP2350 use Pico SDK's `.uninitialized_data` section. STM32G474 and
+ESP32 use `.noinit`.
+
+Omit the initializer. Retention requires the target's linker and startup
+support; validate the stored data before using it after boot. Power loss
+does not preserve it. Mock builds use ordinary static storage and do not
+emulate reset retention. `NOINIT` in `<utils/tools_common_defs.h>` remains
+an alias for existing code.
+
 ## Assertions
 
 `HAL_ASSERT(cond, msg)` from `<hal/core/hal_assert.h>` checks `cond` once

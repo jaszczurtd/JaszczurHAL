@@ -1,4 +1,5 @@
 #include "hal/core/hal_compiler.h"
+#include "hal/core/hal_memory.h"
 #include "hal/serial/hal_serial_session_vocabulary.h"
 
 #include <stdbool.h>
@@ -8,12 +9,16 @@ typedef struct {
   uint32_t marker;
 } atomic_pointer_probe_t;
 
+HAL_NOINIT static volatile uint32_t retained_c_probe;
+
 static uint32_t *select_counter(uint32_t *counter, uint32_t *calls) {
   ++*calls;
   return counter;
 }
 
 int compiler_atomic_c_probe(void) {
+  /* Compile the placement annotation; mock storage cannot test retention. */
+  (void)&retained_c_probe;
   if (hal_serial_session_vocabulary_default.cmd_bye != NULL ||
       hal_serial_session_vocabulary_default.reply_auth_failed_entropy != NULL) {
     return 13;

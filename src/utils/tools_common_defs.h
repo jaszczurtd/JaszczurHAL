@@ -7,6 +7,7 @@
  */
 
 #include <hal/core/hal_bits.h>
+#include <hal/core/hal_memory.h>
 #include <stdint.h>
 
 #include "tools_logger_config.h"
@@ -29,12 +30,10 @@
 #define C_INIT_VAL 0xdeadbeef
 
 /**
- * @brief Place variable in `.noinit` section.
- *
- * Value survives soft reset and can be used for reboot diagnostics.
+ * @brief Compatibility name for HAL_NOINIT; mock builds use normal storage.
  */
 #ifndef NOINIT
-#define NOINIT __attribute__((section(".noinit")))
+#define NOINIT HAL_NOINIT
 #endif
 
 /** @brief DTC status: no change. */

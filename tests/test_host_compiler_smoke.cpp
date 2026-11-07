@@ -2,6 +2,7 @@
 #include "hal/core/hal_memory.h"
 #include "hal/security/hal_crc.h"
 #include "hal/serial/hal_serial_session_vocabulary.h"
+#include "utils/tools_common_defs.h"
 
 #include <cstdint>
 #include <cstdlib>
@@ -20,9 +21,12 @@ static_assert(sizeof(packed_probe) == 5u,
 extern uint32_t portable_clz32_probe(uint32_t value);
 extern void portable_abort_probe(int guard);
 extern "C" int compiler_atomic_c_probe(void);
+extern "C" int compiler_project_config_probe(void);
 
 static void HAL_RAM_FUNC(first_callback)(void) {}
 static void second_callback(void) {}
+
+NOINIT static volatile uint32_t retained_cpp_probe;
 
 struct atomic_cpp_pointer_probe {
   uint32_t marker;
@@ -42,6 +46,11 @@ static HAL_NORETURN void never_taken(void) {
 }
 
 int main(int argc, char **) {
+  if (compiler_project_config_probe() != 1) {
+    fail(15);
+  }
+  /* Compile the compatibility alias; mock storage cannot test retention. */
+  (void)&retained_cpp_probe;
   if (hal_serial_session_vocabulary_default.cmd_bye != nullptr ||
       hal_serial_session_vocabulary_default.reply_auth_failed_entropy !=
           nullptr) {

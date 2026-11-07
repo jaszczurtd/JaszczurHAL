@@ -323,7 +323,19 @@ moduły, których używasz:
 #define HAL_ENABLE_PWM_FREQ
 ```
 
-Plik jest wykrywany przez `__has_include("hal_project_config.h")` przed automatycznym wyborem platformy. Umieszczaj w nim wyłącznie makra - bez dołączania innych nagłówków i bez warunków opartych na wyznaczanych później `HAL_TARGET_IS_*` lub `HAL_BOARD_IS_*`. Definicje funkcji mogą zależeć od makra platformy (`HAL_TARGET_RP2040`, `HAL_TARGET_STM32G474` itd.) i od definicji wybranego wariantu, ponieważ każde narzędzie przetwarza nagłówek tak jak preprocesor, dla jednej platformy i jednego wariantu. Funkcja zależna od czegoś, czego kompilacja nie przekazuje do kompilatora, kończy kompilację błędem `[JH-CFG-SCOPE]`. Zobacz [platformy i warianty](../../pl/FwProjectWorkflow.md#platformy-i-warianty).
+Plik jest wykrywany przez `__has_include(<hal_project_config.h>)` przed
+automatycznym wyborem platformy. Wybiera go pierwszy pasujący katalog na
+ścieżce include. W MSVC samo umieszczenie `hal_project_config.h` obok nagłówka
+dołączającego HAL nie wystarcza: dodaj ten katalog do ścieżki include,
+aby kompilator użył tej konfiguracji.
+Umieszczaj w pliku wyłącznie makra - bez dołączania innych nagłówków i bez
+warunków opartych na wyznaczanych później `HAL_TARGET_IS_*` lub `HAL_BOARD_IS_*`.
+Definicje funkcji mogą zależeć od makra platformy (`HAL_TARGET_RP2040`,
+`HAL_TARGET_STM32G474` itd.) i od definicji wybranego wariantu, ponieważ każde
+narzędzie przetwarza nagłówek tak jak preprocesor, dla jednej platformy i jednego
+wariantu. Funkcja zależna od czegoś, czego kompilacja nie przekazuje do
+kompilatora, kończy kompilację błędem `[JH-CFG-SCOPE]`. Zobacz
+[platformy i warianty](../../pl/FwProjectWorkflow.md#platformy-i-warianty).
 
 <a id="flaga-dostępności-freertos"></a>
 

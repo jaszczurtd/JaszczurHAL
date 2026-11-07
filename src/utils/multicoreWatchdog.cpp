@@ -1,5 +1,6 @@
 
 #include "multicoreWatchdog.h"
+#include "hal/core/hal_memory.h"
 #include "hal/core/hal_mutex_once.h"
 #include "hal/serial/hal_serial.h"
 #include "hal/timers/smart_timers/SmartTimers.h"
@@ -31,10 +32,10 @@ static volatile bool started_a = false;
 static volatile bool core1 = false;
 static volatile bool started_b = false;
 
-NOINIT bool _core0;
-NOINIT bool _started_a;
-NOINIT bool _core1;
-NOINIT bool _started_b;
+HAL_NOINIT bool _core0;
+HAL_NOINIT bool _started_a;
+HAL_NOINIT bool _core1;
+HAL_NOINIT bool _started_b;
 
 static SmartTimers watchdogTimer;
 static hal_mutex_t watchdogTickMutex = NULL;

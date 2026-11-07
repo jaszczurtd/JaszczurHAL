@@ -48,17 +48,6 @@
 
 static const uint8_t zero[CHACHA20_BLOCK_SIZE] = {0};
 
-static void chacha20_xor_stream(struct chacha20_ctx *ctx, uint8_t *dst,
-                                const uint8_t *src, size_t len) {
-  while (len > 0u) {
-    uint32_t chunk = (len > (size_t)UINT32_MAX) ? UINT32_MAX : (uint32_t)len;
-    chacha20(ctx, dst, src, chunk);
-    dst += chunk;
-    src += chunk;
-    len -= chunk;
-  }
-}
-
 // 2.6.  Generating the Poly1305 Key Using ChaCha20
 static void generate_poly1305_key(struct poly1305_context *poly1305_state,
                                   struct chacha20_ctx *chacha20_state,
@@ -109,7 +98,6 @@ void chacha20poly1305_encrypt(uint8_t *dst, const uint8_t *src, size_t src_len,
   struct poly1305_context poly1305_state;
   struct chacha20_ctx chacha20_state;
   uint8_t block[8];
-  size_t padded_len;
 
   // First, a Poly1305 one-time key is generated from the 256-bit key and nonce
   // using the procedure described in Section 2.6.
@@ -125,14 +113,12 @@ void chacha20poly1305_encrypt(uint8_t *dst, const uint8_t *src, size_t src_len,
   poly1305_update(&poly1305_state, ad, ad_len);
   // - padding1 -- the padding is up to 15 zero bytes, and it brings the total
   // length so far to an integral multiple of 16
-  padded_len = (ad_len + 15) & 0xFFFFFFF0; // Round up to next 16 bytes
-  poly1305_update(&poly1305_state, zero, padded_len - ad_len);
+  poly1305_pad16(&poly1305_state, ad_len);
   // - The ciphertext
   poly1305_update(&poly1305_state, dst, src_len);
   // - padding2 -- the padding is up to 15 zero bytes, and it brings the total
   // length so far to an integral multiple of 16.
-  padded_len = (src_len + 15) & 0xFFFFFFF0; // Round up to next 16 bytes
-  poly1305_update(&poly1305_state, zero, padded_len - src_len);
+  poly1305_pad16(&poly1305_state, src_len);
   // - The length of the additional data in octets (as a 64-bit little-endian
   // integer)
   U64TO8_LITTLE(block, (uint64_t)ad_len);
@@ -162,8 +148,7 @@ bool chacha20poly1305_decrypt(uint8_t *dst, const uint8_t *src, size_t src_len,
   struct chacha20_ctx chacha20_state;
   uint8_t block[8];
   uint8_t mac[POLY1305_MAC_SIZE];
-  size_t padded_len;
-  int dst_len;
+  size_t dst_len;
   bool result = false;
 
   // Decryption is similar [to encryption] with the following differences:
@@ -189,15 +174,13 @@ bool chacha20poly1305_decrypt(uint8_t *dst, const uint8_t *src, size_t src_len,
     poly1305_update(&poly1305_state, ad, ad_len);
     // - padding1 -- the padding is up to 15 zero bytes, and it brings the total
     // length so far to an integral multiple of 16
-    padded_len = (ad_len + 15) & 0xFFFFFFF0; // Round up to next 16 bytes
-    poly1305_update(&poly1305_state, zero, padded_len - ad_len);
+    poly1305_pad16(&poly1305_state, ad_len);
     // - The ciphertext (note the Poly1305 function is still run on the AAD and
     // the ciphertext, not the plaintext)
     poly1305_update(&poly1305_state, src, dst_len);
     // - padding2 -- the padding is up to 15 zero bytes, and it brings the total
     // length so far to an integral multiple of 16.
-    padded_len = (dst_len + 15) & 0xFFFFFFF0; // Round up to next 16 bytes
-    poly1305_update(&poly1305_state, zero, padded_len - dst_len);
+    poly1305_pad16(&poly1305_state, dst_len);
     // - The length of the additional data in octets (as a 64-bit little-endian
     // integer)
     U64TO8_LITTLE(block, (uint64_t)ad_len);
@@ -250,7 +233,7 @@ bool chacha20poly1305_encrypt_ietf_detached(
   generate_poly1305_key_ietf(&poly1305_state, &chacha20_state, key, nonce);
 
   if (text_len > 0u) {
-    chacha20_xor_stream(&chacha20_state, ciphertext, plaintext, text_len);
+    chacha20(&chacha20_state, ciphertext, plaintext, text_len);
   }
 
   if (ad_len > 0u) {
@@ -318,7 +301,7 @@ bool chacha20poly1305_decrypt_ietf_detached(
   poly1305_finish(&poly1305_state, mac);
   if (crypto_equal(mac, tag, POLY1305_MAC_SIZE)) {
     if (text_len > 0u) {
-      chacha20_xor_stream(&chacha20_state, plaintext, ciphertext, text_len);
+      chacha20(&chacha20_state, plaintext, ciphertext, text_len);
     }
     result = true;
   }

@@ -76,14 +76,7 @@ static void chacha20_xor_stream_ietf(
   struct chacha20_ctx ctx;
   chacha20_init_ietf(&ctx, key, counter, nonce);
 
-  size_t offset = 0u;
-  while (offset < input_len) {
-    size_t remaining = input_len - offset;
-    uint32_t chunk =
-        (remaining > (size_t)UINT32_MAX) ? UINT32_MAX : (uint32_t)remaining;
-    chacha20(&ctx, output + offset, input + offset, chunk);
-    offset += (size_t)chunk;
-  }
+  chacha20(&ctx, output, input, input_len);
 
   crypto_zero(&ctx, sizeof(ctx));
 }

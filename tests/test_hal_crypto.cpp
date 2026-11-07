@@ -280,14 +280,20 @@ void test_chacha20_rejects_invalid_arguments(void) {
 }
 
 void test_chacha20_and_aead_reject_wraparound_for_very_large_lengths(void) {
-  const size_t too_large_len =
-      ((size_t)UINT32_MAX * HAL_CHACHA20_BLOCK_BYTES) + 1u;
-
   uint8_t key[HAL_CHACHA20_KEY_BYTES] = {0};
   uint8_t nonce[HAL_CHACHA20_NONCE_BYTES] = {0};
-  uint8_t aad[1] = {0x11u};
   uint8_t input[1] = {0x42u};
   uint8_t output[1] = {0xA5u};
+
+  TEST_ASSERT_FALSE(
+      hal_chacha20_xor(key, UINT32_MAX, nonce, input, SIZE_MAX, output));
+  TEST_ASSERT_EQUAL_UINT8(0xA5u, output[0]);
+
+  /* AEAD starts at counter 1: its limit cannot fit in 32-bit size_t. */
+#if SIZE_MAX > UINT32_MAX
+  const size_t too_large_len =
+      ((size_t)UINT32_MAX * HAL_CHACHA20_BLOCK_BYTES) + 1u;
+  uint8_t aad[1] = {0x11u};
   uint8_t ciphertext[1] = {0x33u};
   uint8_t plaintext[1] = {0xCCu};
   uint8_t tag[HAL_CHACHA20_POLY1305_TAG_BYTES];
@@ -314,6 +320,7 @@ void test_chacha20_and_aead_reject_wraparound_for_very_large_lengths(void) {
       key, nonce, aad, sizeof(aad), ciphertext, too_large_len, tag, plaintext));
   TEST_ASSERT_EQUAL_INT(0,
                         memcmp(plaintext_before, plaintext, sizeof(plaintext)));
+#endif
 }
 
 void test_md5_hex_matches_known_vectors(void) {

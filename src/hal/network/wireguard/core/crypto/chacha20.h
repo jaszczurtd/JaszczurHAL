@@ -42,6 +42,7 @@
 
 #include "hal/core/hal_layout_check.h"
 
+#include <stddef.h>
 #include <stdint.h>
 
 #define CHACHA20_BLOCK_SIZE (64)
@@ -56,7 +57,7 @@ void chacha20_init(struct chacha20_ctx *ctx, const uint8_t *key,
 void chacha20_init_ietf(struct chacha20_ctx *ctx, const uint8_t *key,
                         uint32_t counter, const uint8_t nonce[12]);
 void chacha20(struct chacha20_ctx *ctx, uint8_t *out, const uint8_t *in,
-              uint32_t len);
+              size_t len);
 void hchacha20(uint8_t *out, const uint8_t *nonce, const uint8_t *key);
 
 #endif /* _CHACHA20_H_ */

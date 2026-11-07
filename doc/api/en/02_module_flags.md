@@ -322,8 +322,11 @@ modules you use:
 ```
 
 The target-selection path detects it via
-`__has_include("hal_project_config.h")` before target auto-detection. Keep the
-header macro-only and avoid includes or conditions based on derived
+`__has_include(<hal_project_config.h>)` before target auto-detection. The first
+matching directory on the include search path selects the header. On MSVC,
+placing `hal_project_config.h` beside a header that includes HAL is not enough:
+add that directory to the include search path for the compiler to use it.
+Keep the header macro-only and avoid includes or conditions based on derived
 `HAL_TARGET_IS_*` and `HAL_BOARD_IS_*` macros, which are resolved afterward.
 Feature definitions may depend on the target selector (`HAL_TARGET_RP2040`,
 `HAL_TARGET_STM32G474`, and so on) and on the definitions of the selected

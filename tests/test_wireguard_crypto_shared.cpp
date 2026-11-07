@@ -1,3 +1,5 @@
+#include "hal/core/hal_array.h"
+#include "hal/core/jh_endian.h"
 #include "support/crypto_test_vectors.h"
 #include "utils/unity.h"
 
@@ -35,7 +37,7 @@ void test_chacha20_init_ietf_matches_rfc8439_block_vector(void) {
                                 expected, sizeof(expected)));
 
   chacha20_init_ietf(&ctx, key, 1u, nonce);
-  chacha20(&ctx, block, zero_block, (uint32_t)sizeof(block));
+  chacha20(&ctx, block, zero_block, sizeof(block));
 
   TEST_ASSERT_EQUAL_INT(0, memcmp(expected, block, sizeof(block)));
 }
@@ -249,6 +251,124 @@ void test_chacha20poly1305_ietf_detached_rejects_invalid_arguments(void) {
       NULL, NULL, 0u, tag, aad, sizeof(aad), nonce, key));
 }
 
+void test_chacha20poly1305_matches_independent_aligned_vectors(void) {
+  // BearSSL aca13833b6f9ddffaea2041a01facc76829dc03b, independently
+  // checked with OpenSSL 3.0.13 ChaCha20-Poly1305. No HAL code generated these.
+  static const struct {
+    size_t aad_len;
+    size_t text_len;
+    const char *tag_hex;
+  } vectors[] = {
+      {0u, 0u, "a7578beb65f297eeacc41054f27f4ba3"},
+      {0u, 16u, "47839c175c04e45bb05126c6926a48e5"},
+      {0u, 32u, "887f14da2559c446a0c9d6a4704f97f9"},
+      {0u, 64u, "f8f2d40f06b955a78679bfd6200fd6c2"},
+      {0u, 128u, "d39436892fe1dd16803d13b5a86413e7"},
+      {16u, 0u, "4a12e7c7ffa31f633e95fe2a8ba6ddd2"},
+      {16u, 16u, "6e85d8e44c4e1d9ddbefe1f1c1540af8"},
+      {16u, 32u, "d1d4975c0b8560b6cb4bbd6ba0dcd588"},
+      {16u, 64u, "a36bde39a28b9e286cdfdb6b822c2cff"},
+      {16u, 128u, "28a2e755b80371aa791e7d446d4d95d0"},
+      {32u, 0u, "8110b6a03a6e36bb950bb83ad1ab868e"},
+      {32u, 16u, "6f4b2dd59f92ca895920b4ece4c4536d"},
+      {32u, 32u, "ffce2e379a45a029cef0636ed4e63b60"},
+      {32u, 64u, "e5995fbdc0da18ce3e0c6aad9a3dac7b"},
+      {32u, 128u, "0845609290b0b404764e3232355f6e7c"},
+      {64u, 0u, "7e3999f01d8cefc5c03f1834493f0f13"},
+      {64u, 16u, "9ae30ba4090fe6067d0be4df56f12d6d"},
+      {64u, 32u, "abfdefc11cd8446db38a392c3a932259"},
+      {64u, 64u, "fa03f0a8593a1fad6403038ee4c7b39d"},
+      {64u, 128u, "19c85fabc07e5d4929f8c206ba7a1a99"},
+      {128u, 0u, "d5406c9367c64c160a8abf9a6b0bb6ba"},
+      {128u, 16u, "17fb58fbf0ca7dba599c270fae22aebb"},
+      {128u, 32u, "d7ce0dd214d9d1499ba60f5854d093e2"},
+      {128u, 64u, "2e7e38d32a1d83a4c6546c918bc8a4cc"},
+      {128u, 128u, "bdbb11374276ad207f7837c037f7a0e8"},
+  };
+  static const char ciphertext_hex[] =
+      "8225e919eed4fc68c7f2831f655a5462892bbdc6805d61ec3432009cb7d540e6"
+      "384705fb1edbd604a9312a792d9eca51533889a29fb6e17f5c0fef0d63f4ef62"
+      "97fd43f77c31ecc7c89cd406fcc91fef7b7a87c9206d1fdb4cd26d2b2d1bb76e"
+      "8510555c110883f49e168ab311bb7816f5666aaed707cd935bfd543a938926a2";
+  const uint8_t key[32] = {0};
+  const uint64_t nonce_value = UINT64_C(0x0123456789abcdef);
+  uint8_t nonce[12] = {0};
+  jh_store_le64(nonce + 4u, nonce_value);
+  uint8_t plain[128];
+  uint8_t aad[128];
+  uint8_t expected_ciphertext[sizeof(plain)];
+  TEST_ASSERT_TRUE(hex_to_bytes(ciphertext_hex, expected_ciphertext,
+                                sizeof(expected_ciphertext)));
+  for (size_t i = 0; i < sizeof(plain); ++i) {
+    plain[i] = (uint8_t)i;
+  }
+  for (size_t i = 0; i < sizeof(aad); ++i) {
+    aad[i] = (uint8_t)(0xA0u + i);
+  }
+  for (size_t i = 0; i < COUNTOF(vectors); ++i) {
+    const size_t len = vectors[i].text_len;
+    const size_t ad_len = vectors[i].aad_len;
+    uint8_t expected[sizeof(plain) + 16u];
+    uint8_t legacy[sizeof(plain) + 16u];
+    uint8_t ietf[sizeof(plain)];
+    uint8_t tag[16];
+    uint8_t decoded[sizeof(plain)];
+    memcpy(expected, expected_ciphertext, len);
+    TEST_ASSERT_TRUE(
+        hex_to_bytes(vectors[i].tag_hex, expected + len, sizeof(tag)));
+    chacha20poly1305_encrypt(legacy, plain, len, aad, ad_len, nonce_value, key);
+    TEST_ASSERT_EQUAL_MEMORY(expected, legacy, len + sizeof(tag));
+    TEST_ASSERT_TRUE(chacha20poly1305_encrypt_ietf_detached(
+        ietf, tag, plain, len, aad, ad_len, nonce, key));
+    TEST_ASSERT_EQUAL_INT(0, memcmp(expected, ietf, len));
+    TEST_ASSERT_EQUAL_MEMORY(expected + len, tag, sizeof(tag));
+    TEST_ASSERT_TRUE(chacha20poly1305_decrypt(
+        decoded, expected, len + sizeof(tag), aad, ad_len, nonce_value, key));
+    TEST_ASSERT_EQUAL_INT(0, memcmp(plain, decoded, len));
+    memset(decoded, 0xA5, sizeof(decoded));
+    TEST_ASSERT_TRUE(chacha20poly1305_decrypt_ietf_detached(
+        decoded, expected, len, expected + len, aad, ad_len, nonce, key));
+    TEST_ASSERT_EQUAL_INT(0, memcmp(plain, decoded, len));
+  }
+}
+
+void test_chacha20poly1305_legacy_matches_ietf(void) {
+  const uint8_t key[32] = {0};
+  const uint64_t nonce_value = UINT64_C(0x0123456789abcdef);
+  uint8_t nonce[12] = {0};
+  jh_store_le64(nonce + 4u, nonce_value);
+  uint8_t plain[129];
+  uint8_t aad[17];
+  for (size_t i = 0; i < sizeof(plain); ++i) {
+    plain[i] = (uint8_t)i;
+  }
+  for (size_t i = 0; i < sizeof(aad); ++i) {
+    aad[i] = (uint8_t)(0xA0u + i);
+  }
+  const size_t lengths[] = {0u,  1u,  15u,  16u,  17u, 63u,
+                            64u, 65u, 127u, 128u, 129u};
+  const size_t aad_lengths[] = {0u, 1u, 15u, 16u, 17u};
+  for (size_t i = 0; i < COUNTOF(lengths); ++i) {
+    for (size_t j = 0; j < COUNTOF(aad_lengths); ++j) {
+      const size_t len = lengths[i];
+      const size_t ad_len = aad_lengths[j];
+      uint8_t legacy[sizeof(plain) + 16u];
+      uint8_t ietf[sizeof(plain)];
+      uint8_t tag[16];
+      uint8_t decoded[sizeof(plain)];
+      chacha20poly1305_encrypt(legacy, plain, len, aad, ad_len, nonce_value,
+                               key);
+      TEST_ASSERT_TRUE(chacha20poly1305_encrypt_ietf_detached(
+          ietf, tag, plain, len, aad, ad_len, nonce, key));
+      TEST_ASSERT_EQUAL_INT(0, memcmp(ietf, legacy, len));
+      TEST_ASSERT_EQUAL_MEMORY(tag, legacy + len, sizeof(tag));
+      TEST_ASSERT_TRUE(chacha20poly1305_decrypt(
+          decoded, legacy, len + sizeof(tag), aad, ad_len, nonce_value, key));
+      TEST_ASSERT_EQUAL_INT(0, memcmp(plain, decoded, len));
+    }
+  }
+}
+
 void test_wireguard_replay_window_accepts_zero_once_and_tracks_reordering(
     void) {
   wireguard_replay_state_t replay = {};
@@ -286,6 +406,8 @@ int main(void) {
   RUN_TEST(test_chacha20poly1305_roundtrip_and_tag_validation);
   RUN_TEST(test_chacha20poly1305_ietf_detached_matches_rfc8439_vector);
   RUN_TEST(test_chacha20poly1305_ietf_detached_rejects_invalid_arguments);
+  RUN_TEST(test_chacha20poly1305_matches_independent_aligned_vectors);
+  RUN_TEST(test_chacha20poly1305_legacy_matches_ietf);
   RUN_TEST(
       test_wireguard_replay_window_accepts_zero_once_and_tracks_reordering);
   RUN_TEST(test_wireguard_replay_window_handles_word_wrap_and_protocol_limit);

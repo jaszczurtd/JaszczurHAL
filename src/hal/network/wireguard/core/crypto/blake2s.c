@@ -107,12 +107,12 @@ void blake2s_update(blake2s_ctx *ctx, const void *in,
   size_t i;
 
   for (i = 0; i < inlen; i++) {
-    if (ctx->c == 64) {         // buffer full ?
-      ctx->t[0] += ctx->c;      // add counters
-      if (ctx->t[0] < ctx->c)   // carry overflow ?
-        ctx->t[1]++;            // high word
-      blake2s_compress(ctx, 0); // compress (not last)
-      ctx->c = 0;               // counter to zero
+    if (ctx->c == 64) {              // buffer full ?
+      ctx->t[0] += (uint32_t)ctx->c; // c is one 64-byte block
+      if (ctx->t[0] < ctx->c)        // carry overflow ?
+        ctx->t[1]++;                 // high word
+      blake2s_compress(ctx, 0);      // compress (not last)
+      ctx->c = 0;                    // counter to zero
     }
     ctx->b[ctx->c++] = ((const uint8_t *)in)[i];
   }
@@ -123,9 +123,9 @@ void blake2s_update(blake2s_ctx *ctx, const void *in,
 void blake2s_final(blake2s_ctx *ctx, void *out) {
   size_t i;
 
-  ctx->t[0] += ctx->c;    // mark last block offset
-  if (ctx->t[0] < ctx->c) // carry overflow
-    ctx->t[1]++;          // high word
+  ctx->t[0] += (uint32_t)ctx->c; // c is at most 64 bytes
+  if (ctx->t[0] < ctx->c)        // carry overflow
+    ctx->t[1]++;                 // high word
 
   while (ctx->c < 64) // fill up with zeros
     ctx->b[ctx->c++] = 0;

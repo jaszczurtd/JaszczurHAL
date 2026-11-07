@@ -6,6 +6,8 @@
 #include "hal/temperature/mcp9600/mcp9600_driver.h"
 #endif
 #include "utils/unity.h"
+#include <cstddef>
+#include <cstdint>
 #include <math.h>
 
 #ifdef HAL_ENABLE_MCP9600
@@ -55,17 +57,33 @@ void tearDown(void) {
 #endif
 }
 
+static void check_context_alignment(void *context, void *result) {
+  *static_cast<bool *>(result) =
+      reinterpret_cast<std::uintptr_t>(context) % alignof(std::max_align_t) ==
+      0u;
+}
+
+static void assert_context_aligned(hal_thermocouple_t handle) {
+  bool aligned = false;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_thermocouple_provider_visit_context(
+                                    handle, check_context_alignment, &aligned));
+  TEST_ASSERT_TRUE(aligned);
+}
+
 void test_init_returns_valid_handles(void) {
 #ifdef HAL_ENABLE_MCP9600
   TEST_ASSERT_NOT_NULL(mcp);
+  assert_context_aligned(mcp);
   hal_thermocouple_config_t c = mcp_cfg();
   hal_thermocouple_t tmp = nullptr;
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_thermocouple_init_ex(&c, &tmp));
   TEST_ASSERT_NOT_NULL(tmp);
+  assert_context_aligned(tmp);
   hal_thermocouple_deinit(tmp);
 #endif
 #ifdef HAL_ENABLE_MAX6675
   TEST_ASSERT_NOT_NULL(max);
+  assert_context_aligned(max);
 #endif
 }
 
@@ -126,6 +144,7 @@ void test_pool_exhaustion_and_slot_reuse(void) {
   for (; created < HAL_THERMOCOUPLE_MAX_INSTANCES - preallocated; ++created) {
     TEST_ASSERT_EQUAL_INT(HAL_OK,
                           hal_thermocouple_init_ex(&config, &handles[created]));
+    assert_context_aligned(handles[created]);
   }
   hal_thermocouple_t exhausted = nullptr;
   TEST_ASSERT_EQUAL_INT(HAL_ENOMEM,

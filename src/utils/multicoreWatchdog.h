@@ -33,7 +33,7 @@ extern "C" {
  *
  * If the system was previously reset by the watchdog, the user-supplied
  * @p function callback is invoked once with diagnostic values (core-alive
- * flags saved across the reboot via NOINIT RAM) before normal operation
+ * flags saved across the reboot via HAL_NOINIT) before normal operation
  * resumes.
  *
  * @param function Callback invoked once if the watchdog caused the reboot.

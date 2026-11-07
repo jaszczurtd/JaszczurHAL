@@ -6,6 +6,27 @@
 #include "hal/core/hal_compiler.h"
 #include "hal/core/hal_target.h"
 
+/** @def HAL_NOINIT
+ * @brief Place an uninitialized static object outside startup clearing.
+ * @note Use as `HAL_NOINIT static uint32_t retained;` without an initializer.
+ * RP uses `.uninitialized_data`; STM32G474 and ESP32 use `.noinit`. Requires
+ * the target's supported linker/startup. Validate the stored data before use:
+ * cold boot and power loss leave its value unspecified.
+ * Mock builds use ordinary static storage and do not emulate reset retention.
+ * Placement does not provide synchronization.
+ */
+#if HAL_TARGET_IS_MOCK
+#define HAL_NOINIT
+#elif !HAL_COMPILER_IS_GNU_LIKE
+#error "HAL_NOINIT requires a GNU-compatible firmware compiler"
+#elif HAL_TARGET_IS_RP
+#define HAL_NOINIT __attribute__((section(".uninitialized_data")))
+#elif HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_ESP32_FAMILY
+#define HAL_NOINIT __attribute__((section(".noinit")))
+#else
+#error "HAL_NOINIT has no mapping for this target"
+#endif
+
 /** @def HAL_RAM_FUNC(name)
  * @brief Place a named function in RAM and prevent its inlining into flash.
  * @param name Function identifier, identical in declaration and definition.

@@ -58,21 +58,21 @@ static const scalar_t sc_p = {LIMB(0x5812631a5cf5d3ed),
 static inline limb_t umaal(limb_t *carry, limb_t acc, limb_t mand,
                            limb_t mier) {
   dlimb_t tmp = (dlimb_t)mand * mier + acc + *carry;
-  *carry = tmp >> X25519_WBITS;
-  return tmp;
+  *carry = (limb_t)(tmp >> X25519_WBITS);
+  return (limb_t)tmp;
 }
 
 /* These functions are implemented in terms of umaal on ARM */
 static inline limb_t adc(limb_t *carry, limb_t acc, limb_t mand) {
   dlimb_t total = (dlimb_t)*carry + acc + mand;
-  *carry = total >> X25519_WBITS;
-  return total;
+  *carry = (limb_t)(total >> X25519_WBITS);
+  return (limb_t)total;
 }
 
 static inline limb_t adc0(limb_t *carry, limb_t acc) {
   dlimb_t total = (dlimb_t)*carry + acc;
-  *carry = total >> X25519_WBITS;
-  return total;
+  *carry = (limb_t)(total >> X25519_WBITS);
+  return (limb_t)total;
 }
 
 /* Precondition: carry is small.
@@ -104,13 +104,14 @@ static void sub(fe out, const fe a, const fe b) {
   unsigned i;
   sdlimb_t carry = -38;
   for (i = 0; i < NLIMBS; i++) {
-    out[i] = carry = carry + a[i] - b[i];
+    carry = carry + a[i] - b[i];
+    out[i] = (limb_t)carry;
     carry >>= X25519_WBITS;
   }
-  propagate(out, 1 + carry);
+  propagate(out, (limb_t)(1 + carry));
 }
 
-static void __attribute__((unused)) swapin(limb_t *x, const uint8_t *in) {
+static void swapin(limb_t *x, const uint8_t *in) {
   memcpy(x, in, sizeof(fe));
   unsigned i;
   for (i = 0; i < NLIMBS; i++) {
@@ -118,7 +119,7 @@ static void __attribute__((unused)) swapin(limb_t *x, const uint8_t *in) {
   }
 }
 
-static void __attribute__((unused)) swapout(uint8_t *out, limb_t *x) {
+static void swapout(uint8_t *out, limb_t *x) {
   unsigned i;
   for (i = 0; i < NLIMBS; i++) {
     x[i] = eswap_limb(x[i]);
@@ -194,10 +195,12 @@ static limb_t canon(fe x) {
   sdlimb_t carry = -19;
   limb_t res = 0;
   for (i = 0; i < NLIMBS; i++) {
-    res |= x[i] = carry += x[i];
+    carry += x[i];
+    x[i] = (limb_t)carry;
+    res |= x[i];
     carry >>= X25519_WBITS;
   }
-  return ((dlimb_t)res - 1) >> X25519_WBITS;
+  return (limb_t)(((dlimb_t)res - 1) >> X25519_WBITS);
 }
 
 static const limb_t a24[8] = {121665};
@@ -252,7 +255,7 @@ static void x25519_core(fe xs[5], const uint8_t scalar[X25519_BYTES],
         bytei |= 0x40;
       }
     }
-    limb_t doswap = -(limb_t)((bytei >> (i % 8)) & 1);
+    limb_t doswap = (limb_t)0 - (limb_t)((bytei >> (i % 8)) & 1);
     condswap(x2, x3, swap ^ doswap);
     swap = doswap;
 
