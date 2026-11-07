@@ -1,5 +1,6 @@
 # A build must reconfigure, and reject the registry again, whenever a file that
-# the board generator reads changes or a new descriptor appears.
+# the board generator (jh board config) reads changes, a new descriptor
+# appears or jh itself changes.
 if(NOT DEFINED JH_ROOT OR NOT DEFINED JH_TEST_BINARY_DIR)
     message(FATAL_ERROR "JH_ROOT and JH_TEST_BINARY_DIR are required")
 endif()
@@ -10,11 +11,8 @@ set(_build "${_source}/.build/probe")
 file(REMOVE_RECURSE "${_fixture}")
 file(MAKE_DIRECTORY "${_source}")
 file(COPY "${JH_ROOT}/boards" "${JH_ROOT}/config" DESTINATION "${_source}")
-file(COPY "${JH_ROOT}/scripts/" DESTINATION "${_source}/scripts"
-    FILES_MATCHING PATTERN "*.py" PATTERN "__pycache__" EXCLUDE)
 file(COPY "${JH_ROOT}/scripts/jh_tool_inputs.cmake" DESTINATION "${_source}/scripts")
-# The generator reads the feature registry through jh. The copy has its
-# scripts but no tools/, so it uses a copy of the jh of JH_ROOT, which a case
+# The copy has no tools/, so it uses a copy of the jh of JH_ROOT, which a case
 # below replaces.
 include("${JH_ROOT}/cmake/jh_project_config.cmake")
 jh_project_config_tool(_jh_tool "${JH_ROOT}" "${_fixture}")
@@ -105,19 +103,16 @@ check_input(profile-registry boards/profiles/pico.json
 check_input(component-registry config/tooling/board_components.json
     "\"id\": \"sx126x-radio\"" "\"id\": \"lora-radio\""
     "expected a known component ID")
-check_input(generator-module scripts/codegen_support.py
-    "def validation_error(" "raise SystemExit('generator module changed')\ndef validation_error("
-    "generator module changed")
 check_input(new-descriptor boards/profiles/zz-new.json
     unused "{\"id\": \"zz-new\"}"
     "zz-new")
 
-# The generator runs with jh: another executable, or one rebuilt in place,
-# makes the next build generate again. A tool without a JSON result fails it,
-# the real one builds again.
+# The generator is jh: another executable, or one rebuilt in place, makes the
+# next build generate again. A program that is not jh fails it, the real one
+# builds again.
 file(COPY_FILE "${CMAKE_COMMAND}" "${_jh_tool_copy}")
 file(TOUCH "${_jh_tool_copy}")
-run_step(tool-replaced FALSE "gave no result" "${CMAKE_COMMAND}" --build "${_build}")
+run_step(tool-replaced FALSE "Board profile generation failed" "${CMAKE_COMMAND}" --build "${_build}")
 file(COPY_FILE "${_jh_tool}" "${_jh_tool_copy}")
 file(TOUCH "${_jh_tool_copy}")
 run_step(tool-restored TRUE "" "${CMAKE_COMMAND}" --build "${_build}")

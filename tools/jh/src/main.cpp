@@ -1,3 +1,4 @@
+#include "../config/jh_board_outputs.h"
 #include "../config/jh_feature_lint.h"
 #include "../config/jh_project_config.h"
 #include "../hardware/jh_device_defaults.h"
@@ -68,6 +69,9 @@ enum option_id {
   boards_root,
   clocks_dir,
   esp_sdkconfig,
+  board_option,
+  feature_option,
+  output_dir,
   machine,
   json_version,
   help,
@@ -79,7 +83,8 @@ struct option_spec {
 };
 constexpr option_spec options[] = {
     {"file", "<path>",
-     "Read this JSON file (feature resolve: the requests with their sources)"},
+     "Read this JSON file (feature resolve: the requests with their sources; "
+     "board config: the values an assembly owns)"},
     {"schema", "<path>", "Validate with this local schema (json validate)"},
     {"pointer", "<path>", "Select a plain RFC 6901 pointer (default: root)"},
     {"output", "<path>", "Atomically write the selected JSON value"},
@@ -130,6 +135,13 @@ constexpr option_spec options[] = {
     {"esp-sdkconfig", "<TARGET=PATH>",
      "Also check the sdkconfig an ESP-IDF build of TARGET wrote; repeatable "
      "(clock check)"},
+    {"board", "<id>",
+     "Board to configure (board config; default: the target's default board)"},
+    {"feature", "<SYMBOL[=1]>",
+     "Request a HAL feature for the board configuration; repeatable"},
+    {"output-dir", "<path>",
+     "Directory the board configuration writes, below a .build directory or "
+     "--output-root"},
     {"json", nullptr, "Write a versioned JSON result on stdout"},
     {"json-version", "<major>",
      "Require a supported JSON result major version (1)"},
@@ -154,7 +166,9 @@ enum command_id {
   board_validate_command,
   board_default_command,
   clock_check_command,
-  clock_list_command
+  clock_list_command,
+  boards_command,
+  board_config_command
 };
 struct command_spec {
   const char *first, *second, *name;
@@ -199,6 +213,15 @@ const command_spec commands[] = {
      "clock.check",
      {root, boards_root, clocks_dir, esp_sdkconfig}},
     {"clock", "list", "clock.list", {root, boards_root, clocks_dir}},
+    {"generate",
+     "boards",
+     "generate.boards",
+     {root, boards_root, output_root, write_mode, check}},
+    {"board",
+     "config",
+     "board.config",
+     {root, boards_root, target, board_option, define, feature_option,
+      output_dir, output_root, file}},
 };
 
 #ifdef _WIN32
@@ -275,7 +298,7 @@ arguments parse_arguments(const std::vector<std::string> &argv) {
       throw failure{HAL_EINVAL, 2, "unknown option: " + text, {}, {}, {}};
     const bool repeatable = id == define || id == request || id == source ||
                             id == required_feature || id == input_root ||
-                            id == esp_sdkconfig;
+                            id == esp_sdkconfig || id == feature_option;
     if (result.present[id] && !repeatable)
       throw failure{HAL_EINVAL, 2,  "option specified more than once: " + name,
                     {},         {}, {}};
@@ -311,6 +334,8 @@ std::string help_text() {
       " [options]\n"
       "       jh generate features --root <path> (--check | --write)"
       " [options]\n"
+      "       jh generate boards --root <path> (--check | --write)"
+      " [--boards-root <path>] [--output-root <path>]\n"
       "       jh repository files --root <path> --git <executable> "
       "[options]\n"
       "       jh config inspect [--header <path>] [--define <NAME[=VALUE]>]..."
@@ -327,6 +352,8 @@ std::string help_text() {
       "       jh board (list | validate) --root <path> [--boards-root <path>]\n"
       "       jh board default --root <path> [--boards-root <path>]"
       " --target <id>\n"
+      "       jh board config --root <path> --target <id> [--board <id>]"
+      " (--output-dir <path> | --json) [options]\n"
       "       jh clock check --root <path> [--boards-root <path>]"
       " [--clocks <path>] [--esp-sdkconfig <TARGET=PATH>]...\n"
       "       jh clock list --root <path> [--boards-root <path>]"
@@ -336,7 +363,8 @@ std::string help_text() {
       "registry artifacts, evaluate a project's hal_project_config.h as\n"
       "the build reads it, or list the feature registry, resolve the\n"
       "features one build requests and lint the feature requests of project\n"
-      "headers and manifests, validate and list the board registry, or\n"
+      "headers and manifests, validate and list the board registry,\n"
+      "generate its artifacts and the configuration of one build, or\n"
       "check and list the clock tree registry.\n";
   for (const auto &option : options) {
     text += "  --";
@@ -661,6 +689,16 @@ std::string generator_root(const arguments &args, const std::string &base,
   return checkout_root(args, base);
 }
 
+// The relative path of generatedArtifacts.<key> in
+// config/tooling/artifacts.json.
+std::string artifact_path(const std::string &hal_root, const char *key) {
+  jh::owned_string relative;
+  jh::failure_record failed;
+  failed.check(jh_generated_artifact_paths(hal_root.c_str(), &key, 1,
+                                           relative.raw(), &failed.value));
+  return std::string(jh::view(*relative.raw()));
+}
+
 int generate_defaults(context &ctx, const std::string &base) {
   const auto &args = ctx.args;
   constexpr size_t limit = 16 * 1024 * 1024;
@@ -673,37 +711,8 @@ int generate_defaults(context &ctx, const std::string &base) {
       args.present[output_root]
           ? jh::stl::absolute_path(args.values[output_root], base)
           : hal_root;
-  const auto artifacts = jh::read_document(
-      ctx,
-      jh::stl::absolute_path("config/tooling/artifacts.json", hal_root).c_str(),
-      limit);
-  jb_json_node_t artifacts_root;
-  require(jb_json_root(&artifacts->doc, &artifacts_root), 2,
-          "artifacts.json has no root");
-  jh::hardware::view header_entry;
-  if (!jh::hardware::view{artifacts_root}.is(JB_JSON_OBJECT) ||
-      !jh::hardware::view{artifacts_root}
-           .member("generatedArtifacts")
-           .find("deviceDefaultsHeader", &header_entry) ||
-      !header_entry.is(JB_JSON_STRING))
-    throw failure{HAL_ECONFIG,
-                  2,
-                  "config/tooling/artifacts.json lacks "
-                  "generatedArtifacts.deviceDefaultsHeader",
-                  {},
-                  {},
-                  {}};
-  const std::string header_relative = header_entry.string();
-  if (!jh_generated_path_relative(
-          {header_relative.data(), header_relative.size()}))
-    throw failure{HAL_ECONFIG,
-                  2,
-                  "config/tooling/artifacts.json: "
-                  "generatedArtifacts.deviceDefaultsHeader must be "
-                  "repository-relative",
-                  {},
-                  {},
-                  {}};
+  const std::string header_relative =
+      artifact_path(hal_root, "deviceDefaultsHeader");
   const auto output_path = jh::stl::absolute_path(header_relative, out_root);
   const auto features = jh::hardware::hal_features(ctx, hal_root, limit);
   const auto capabilities =
@@ -1179,7 +1188,8 @@ void load_boards(context &ctx, const std::string &base, const char *command,
   const auto hal_root = checkout_root(ctx.args, base);
   if (ctx.args.present[boards_root]) {
     require_value(ctx.args, boards_root, "--boards-root needs a path");
-    boards = jh::stl::absolute_path(ctx.args.values[boards_root], base);
+    // Path.resolve(), as generate_board_config.py did: links before "..".
+    boards = jh::stl::python_resolve(ctx.args.values[boards_root], base);
   } else {
     boards = jh::stl::absolute_path("boards", hal_root);
   }
@@ -1309,6 +1319,115 @@ int board_default(context &ctx, const std::string &base) {
   result.string("target", jh::view(selected->id));
   result.string("board", text);
   stdout_bytes(result.finish());
+  return 0;
+}
+
+/* The checked-in artifacts of the board registry: write or check them. */
+int generate_boards(context &ctx, const std::string &base) {
+  const auto &args = ctx.args;
+  const auto hal_root = generator_root(args, base, "generate boards");
+  jh::board_registry registry;
+  std::string boards;
+  load_boards(ctx, base, "generate boards", registry, boards);
+  const auto out_root =
+      args.present[output_root]
+          ? jh::stl::absolute_path(args.values[output_root], base)
+          : hal_root;
+  size_t changed = 0;
+  bool current = true;
+  jh::failure_record failed;
+  failed.check(jh_board_static_publish(&registry, hal_root.c_str(),
+                                       out_root.c_str(), args.present[check],
+                                       &changed, &current, &failed.value));
+  if (!ctx.json) {
+    if (args.present[write_mode])
+      stdout_bytes("generated 3 board artifacts (" + std::to_string(changed) +
+                   " changed)\n");
+    else if (current)
+      stdout_bytes("verified 3 generated board artifacts\n");
+  } else {
+    result_writer result(hal_root.size() + boards.size() + out_root.size() +
+                         1024);
+    result.string("command", "generate.boards");
+    result.string("status", current ? "HAL_OK" : "HAL_ESTATE");
+    result.string("root", hal_root);
+    result.string("boardsRoot", jh::view(registry.boards_root));
+    result.string("output", out_root);
+    result.number("changed", changed);
+    result.boolean("checkOnly", args.present[check]);
+    stdout_bytes(result.finish());
+  }
+  return current ? 0 : 1;
+}
+
+/* The build configuration of one target and board: write its files below a
+ * managed output directory, return them as JSON, or both. */
+int board_config(context &ctx, const std::string &base) {
+  const auto &args = ctx.args;
+  jh::board_registry registry;
+  std::string boards;
+  load_boards(ctx, base, "board config", registry, boards);
+  const auto hal_root = checkout_root(args, base);
+  jh::string_list definitions, features;
+  for (const auto &item : args.lists[define])
+    require(jh_list_push(&definitions.value, jh::span(item)), 4,
+            "cannot store the definitions");
+  for (const auto &item : args.lists[feature_option])
+    require(jh_list_push(&features.value, jh::span(item)), 4,
+            "cannot store the feature requests");
+  // The output paths resolve as Path.resolve() did in
+  // generate_board_config.py, a link before a ".." that follows it; the
+  // assembly file, an input of jh alone, as every other jh input.
+  const auto path = [&](option_id id, bool resolve) {
+    if (!args.present[id] || args.values[id].empty())
+      return std::string();
+    return resolve ? jh::stl::python_resolve(args.values[id], base)
+                   : jh::stl::absolute_path(args.values[id], base);
+  };
+  const auto directory = path(output_dir, true),
+             managed = path(output_root, true), assembly = path(file, false);
+  const auto optional = [](const std::string &text) {
+    return text.empty() ? nullptr : text.c_str();
+  };
+  const jh_board_config_request_t request{&registry,
+                                          hal_root.c_str(),
+                                          jh::span(args.values[target]),
+                                          jh::span(args.values[board_option]),
+                                          &definitions.value,
+                                          &features.value,
+                                          optional(directory),
+                                          optional(managed),
+                                          optional(assembly),
+                                          ctx.json,
+                                          16 * 1024 * 1024};
+  jh_board_config_result_t result{};
+  require(jh_board_config_result_init(&result), 4,
+          "cannot start the board configuration");
+  struct result_owner {
+    jh_board_config_result_t *value;
+    ~result_owner() { jh_board_config_result_destroy(value); }
+  } owner{&result};
+  jh::failure_record failed;
+  failed.check(jh_board_configure(&request, &result, &failed.value));
+  if (!ctx.json)
+    return 0;
+  size_t bytes = jb_string_size(&result.output_dir) + 4096;
+  for (size_t i = 0; i < JH_BOARD_OUTPUT_COUNT; ++i)
+    bytes += jb_string_size(&result.outputs.content[i]) + 64;
+  result_writer json(bytes);
+  json.string("command", "board.config");
+  json.string("status", "HAL_OK");
+  json.string("target", jh::view(result.target));
+  json.string("board", jh::view(result.board));
+  if (jb_string_size(&result.output_dir) != 0) {
+    json.string("outputDir", jh::view(result.output_dir));
+    json.number("changed", result.changed);
+  }
+  json.object_begin("files");
+  for (size_t i = 0; i < JH_BOARD_OUTPUT_COUNT; ++i)
+    json.string(jh_board_output_names[i], jh::view(result.outputs.content[i]));
+  json.object_end();
+  stdout_bytes(json.finish());
   return 0;
 }
 
@@ -1943,6 +2062,10 @@ int run(const std::vector<std::string> &argv) {
       return board_default(ctx, base);
     if (ctx.command == &commands[clock_check_command])
       return clock_check(ctx, base);
+    if (ctx.command == &commands[boards_command])
+      return generate_boards(ctx, base);
+    if (ctx.command == &commands[board_config_command])
+      return board_config(ctx, base);
     if (ctx.command == &commands[clock_list_command])
       return clock_list(ctx, base);
     return inspect(ctx, base);

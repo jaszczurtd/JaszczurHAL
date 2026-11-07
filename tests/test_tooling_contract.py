@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
 import sys
 import unittest
 
@@ -17,6 +18,7 @@ if str(SCRIPTS) not in sys.path:
 
 import component_manager
 import generate_board_config
+import project_config
 import repository_layout
 from tooling_contract import ToolingContractError, load_tooling_contract
 
@@ -78,11 +80,16 @@ class ToolingContractTests(unittest.TestCase):
         identifiers = tuple(item["id"] for item in document["components"])
         self.assertEqual(identifiers, tuple(generate_board_config.COMPONENT_REGISTRY))
 
-        generated_path = ROOT / repository_layout.BOARD_COMPONENTS_CMAKE_OUTPUT
-        self.assertEqual(
-            generated_path.read_text(encoding="utf-8"),
-            generate_board_config.render_board_components_cmake(),
+        # jh generate boards renders the CMake view of the catalogue.
+        result = subprocess.run(
+            [project_config.jh_executable(), "generate", "boards",
+             f"--root={ROOT}", "--check"],
+            capture_output=True, text=True, check=False,
         )
+        self.assertEqual(0, result.returncode, result.stderr)
+        generated_path = ROOT / repository_layout.BOARD_COMPONENTS_CMAKE_OUTPUT
+        self.assertIn("set(JH_BOARD_COMPONENT_IDS",
+                      generated_path.read_text(encoding="utf-8"))
         cmake_entrypoint = (ROOT / "cmake/jh_board_components.cmake").read_text(
             encoding="utf-8"
         )

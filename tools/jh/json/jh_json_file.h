@@ -36,11 +36,40 @@ hal_status_t jh_path_join(const char *base, const char *name, jb_string_t *out);
  */
 hal_status_t jh_json_names(const char *directory, jb_vector_t *names);
 
+/** One file jh_walk_files finds: its path, its path relative to the walked
+ * root with the separator of the host, and its name. HAL_OK continues the
+ * walk; any other status ends it and becomes its result.
+ */
+typedef hal_status_t (*jh_walk_fn)(void *user, const char *path,
+                                   jb_json_span_t relative, const char *name);
+
+/** Path.rglob("*") of directory in sorted order: for each name in code point
+ * order, visit a regular file (also through a link) and descend into a
+ * directory that is not a link; relative prefixes the relative paths. A
+ * missing directory or one that is a file has nothing. A listing failure
+ * records "<directory>: cannot list: <status>" with exit code 3.
+ */
+hal_status_t jh_walk_files(const char *directory, jb_json_span_t relative,
+                           jh_walk_fn visit, void *user, jh_failure_t *failure);
+
 /** Path.resolve() of an existing root: its real path, else root itself, in
  * out. A Windows drive path loses the \\?\ prefix, as os.path.realpath
  * drops it. Fails only with the status of the filesystem or the string.
  */
 hal_status_t jh_resolved_path(const char *root, jb_string_t *out);
+
+/** Path(base, path).resolve(), as os.path.realpath(strict=False) computes it,
+ * in out. A relative path joins base, or the process working directory when
+ * base is NULL. On POSIX the components resolve from left to right: a
+ * symbolic link becomes its target before a later ".." takes the parent, "."
+ * drops out and a part that does not exist stays as written. Windows first
+ * normalizes the joined path lexically, as ntpath.realpath does, and then
+ * takes the real path of its longest existing prefix (jh_resolved_path). A
+ * link that cannot be read or more than 40 links fail with exit code 3, memory
+ * with 4.
+ */
+hal_status_t jh_python_resolve(const char *path, const char *base,
+                               jb_string_t *out, jh_failure_t *failure);
 
 /** Where the last read went and where its parse failed: source names the
  * file, located is set only after a parse error, with the jhbase error and

@@ -61,7 +61,7 @@ target_include_directories(jh_sha256 PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../../s
 # hal/core/hal_layout_check.h, which the header includes, needs jb/abi.h.
 target_link_libraries(jh_sha256 PUBLIC jb::status)
 jh_tool_target(jh_sha256)
-add_library(jh_registry STATIC config/jh_feature_registry.c
+add_library(jh_registry STATIC config/jh_feature_registry.c config/jh_board_outputs.c
   config/jh_feature_lint.c config/jh_board_registry.c config/jh_clock_registry.c)
 target_include_directories(jh_registry PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/config")
 target_link_libraries(jh_registry PUBLIC jh_files PRIVATE jh_sha256 pcre2-8-static)
@@ -144,7 +144,9 @@ if(BUILD_TESTING)
   add_test(NAME jh_clocks COMMAND jh_clocks_test "${_jh_hal_root}"
     "${CMAKE_CURRENT_BINARY_DIR}")
   set_tests_properties(jh_schema jh_schema_compat jh_device_defaults jh_settings
-    jh_settings_compat jh_config jh_containers jh_clocks PROPERTIES TIMEOUT 120)
+    jh_settings_compat jh_config jh_containers PROPERTIES TIMEOUT 120)
+  # jh_clocks under Valgrind in the gate took 117.7 s of the former 120 s.
+  set_tests_properties(jh_clocks PROPERTIES TIMEOUT 300)
   if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     add_test(NAME jh_config_preprocessor COMMAND jh_config_test
       "${CMAKE_CURRENT_BINARY_DIR}/preprocessor" "${CMAKE_C_COMPILER}"

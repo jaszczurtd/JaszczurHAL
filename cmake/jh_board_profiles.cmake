@@ -1,7 +1,6 @@
 include_guard(GLOBAL)
 include("${CMAKE_CURRENT_LIST_DIR}/jh_project_config.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/jh_project_features.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/jh_python.cmake")
 
 function(jh_generate_board_config)
     set(options)
@@ -60,17 +59,17 @@ function(jh_generate_board_config)
         endif()
     endforeach()
 
-    # The generator reads the feature registry through jh.
-    jh_python_with_tool(_jh_board_python "${JH_BOARD_ROOT}"
+    # jh generates the configuration; the build reconfigures when it changes.
+    file(MAKE_DIRECTORY "${JH_BOARD_OUTPUT_DIR}")
+    jh_project_config_tool(_jh_board_tool "${JH_BOARD_ROOT}"
         "${JH_BOARD_OUTPUT_DIR}")
     if(NOT JH_BOARD_BOARD)
         execute_process(
             COMMAND
-                ${_jh_board_python}
-                "${JH_BOARD_ROOT}/scripts/generate_board_config.py"
-                --boards-root "${JH_BOARD_ROOT}/boards"
-                --target "${JH_BOARD_TARGET}"
-                --default-board
+                "${_jh_board_tool}" board default
+                "--root=${JH_BOARD_ROOT}"
+                "--boards-root=${JH_BOARD_ROOT}/boards"
+                "--target=${JH_BOARD_TARGET}"
             RESULT_VARIABLE _jh_default_board_result
             OUTPUT_VARIABLE _jh_default_board
             ERROR_VARIABLE _jh_default_board_error
@@ -86,20 +85,20 @@ function(jh_generate_board_config)
             "${JH_BOARD_OUTPUT_DIR}/${JH_BOARD_BOARD}")
     endif()
     set(_command
-        ${_jh_board_python}
-        "${JH_BOARD_ROOT}/scripts/generate_board_config.py"
-        --boards-root "${JH_BOARD_ROOT}/boards"
-        --target "${JH_BOARD_TARGET}"
-        --output-dir "${JH_BOARD_OUTPUT_DIR}")
+        "${_jh_board_tool}" board config
+        "--root=${JH_BOARD_ROOT}"
+        "--boards-root=${JH_BOARD_ROOT}/boards"
+        "--target=${JH_BOARD_TARGET}"
+        "--board=${JH_BOARD_BOARD}"
+        "--output-dir=${JH_BOARD_OUTPUT_DIR}")
     if(JH_BOARD_OUTPUT_ROOT)
-        list(APPEND _command --output-root "${JH_BOARD_OUTPUT_ROOT}")
+        list(APPEND _command "--output-root=${JH_BOARD_OUTPUT_ROOT}")
     endif()
-    list(APPEND _command --board "${JH_BOARD_BOARD}")
     foreach(_define IN LISTS JH_BOARD_DEFINES)
-        list(APPEND _command --define "${_define}")
+        list(APPEND _command "--define=${_define}")
     endforeach()
     foreach(_feature IN LISTS _jh_board_requested)
-        list(APPEND _command --requested-feature "${_feature}")
+        list(APPEND _command "--feature=${_feature}")
     endforeach()
 
     execute_process(

@@ -1,5 +1,8 @@
 #include "jh_generated_output.h"
+#include "jh_json_check.h"
+#include "jh_json_file.h"
 #include <jb/file.h>
+#include <jb/filesystem.h>
 #include <jb/vector.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -391,5 +394,189 @@ hal_status_t jh_check_generated(const char *path, jb_json_span_t content,
     status = print_diff(actual, content, path, diff_limit, label, failure);
   }
   jb_file_release(&existing);
+  return status;
+}
+
+/* The relative path of generatedArtifacts.<key> in artifacts, in out. */
+static hal_status_t artifact_path(const jh_json_document_t *artifacts,
+                                  const char *key, jb_string_t *out,
+                                  jh_failure_t *failure) {
+  jb_json_node_t root = {0}, generated = {0}, entry = {0};
+  jb_json_span_t text = {NULL, 0};
+  jb_json_type_t type = JB_JSON_NULL;
+  bool found =
+      jb_json_root(&artifacts->doc, &root) == HAL_OK &&
+      jb_json_find(root, jh_span("generatedArtifacts"), &generated) == HAL_OK &&
+      jb_json_find(generated, jh_span(key), &entry) == HAL_OK &&
+      jb_json_type(entry, &type) == HAL_OK && type == JB_JSON_STRING;
+  if (found) {
+    size_t needed = 0;
+    hal_status_t status = jb_json_string_copy(entry, NULL, 0, &needed);
+    if (status == HAL_OK)
+      status = jb_string_resize(out, needed, '\0');
+    if (status == HAL_OK && needed != 0)
+      status = jb_json_string_copy(entry, jb_string_mutable_data(out), needed,
+                                   &needed);
+    if (status != HAL_OK)
+      return jh_fail_storage(failure, status);
+    text = jh_string_span(out);
+    found = text.length != 0 && memchr(text.data, '\0', text.length) == NULL;
+  }
+  if (!found) {
+    const jb_json_span_t parts[] = {
+        jh_span("config/tooling/artifacts.json lacks generatedArtifacts."),
+        jh_span(key)};
+    return jh_check_fail(failure, parts, COUNTOF(parts));
+  }
+  // Joined to the output root before anything is written: never outside it.
+  if (jh_generated_path_relative(text))
+    return HAL_OK;
+  const jb_json_span_t parts[] = {
+      jh_span("config/tooling/artifacts.json: generatedArtifacts."),
+      jh_span(key), jh_span(" must be repository-relative")};
+  return jh_check_fail(failure, parts, COUNTOF(parts));
+}
+
+hal_status_t jh_generated_artifact_paths(const char *root,
+                                         const char *const *keys, size_t count,
+                                         jb_string_t *paths,
+                                         jh_failure_t *failure) {
+  if (root == NULL || (count != 0 && (keys == NULL || paths == NULL)))
+    return jh_fail_arguments(failure);
+  jb_string_t path = {0};
+  jh_json_document_t artifacts = {0};
+  jh_json_location_t where;
+  jh_failure_t reason;
+  jh_json_location_init(&where);
+  jh_failure_init(&reason);
+  hal_status_t status =
+      jh_fail_storage(failure, jb_string_init(&path, jb_heap_allocator()));
+  if (status == HAL_OK)
+    status =
+        jh_absolute_path("config/tooling/artifacts.json", root, &path, failure);
+  /* A file that cannot be read fails with its status and exit code 3, text
+   * that does not parse as invalid JSON with exit code 2. */
+  if (status == HAL_OK &&
+      jh_json_read_document(&where, jb_string_data(&path), 1024 * 1024, false,
+                            &artifacts, &reason) != HAL_OK)
+    status = reason.exit_code == 3 && !where.located
+                 ? jh_fail(failure, reason.status, 3,
+                           JH_PARTS(jh_string_span(&path), jh_span(": "),
+                                    jh_string_span(&reason.message)))
+                 : jh_check_json_error(failure, jh_string_span(&path), &where,
+                                       &reason);
+  for (size_t i = 0; status == HAL_OK && i < count; ++i)
+    status = artifact_path(&artifacts, keys[i], &paths[i], failure);
+  jh_json_document_destroy(&artifacts);
+  jh_failure_destroy(&reason);
+  jh_json_location_destroy(&where);
+  jb_string_destroy(&path);
+  return status;
+}
+
+/* Create the directory of path with its parents, as the Python generators
+ * did before writing. */
+static hal_status_t make_parent(const char *path, jh_failure_t *failure) {
+  jb_string_t parent = {0};
+  size_t required = 0;
+  hal_status_t status =
+      jh_fail_storage(failure, jb_string_init(&parent, jb_heap_allocator()));
+  hal_status_t measured = jb_fs_path_parent(path, NULL, 0, &required);
+  if (status == HAL_OK && measured != HAL_OK && measured != HAL_EOVERFLOW)
+    status = jh_fail_storage(failure, measured);
+  if (status == HAL_OK)
+    status =
+        jh_fail_storage(failure, jb_string_resize(&parent, required, '\0'));
+  if (status == HAL_OK)
+    status = jh_fail_storage(
+        failure, jb_fs_path_parent(path, jb_string_mutable_data(&parent),
+                                   required, &required));
+  if (status == HAL_OK) {
+    const hal_status_t made = jb_fs_mkdir(jb_string_data(&parent), true);
+    if (made != HAL_OK)
+      status = jh_fail(failure, made, 3,
+                       JH_PARTS(jh_span(jb_string_data(&parent)),
+                                jh_span(": cannot create directory: "),
+                                jh_span(hal_status_to_string(made))));
+  }
+  jb_string_destroy(&parent);
+  return status;
+}
+
+/* A failed write or read of an artifact, as the Python generators reported
+ * it: "{path}: cannot write/read generated output: {status}". */
+static hal_status_t fail_output(jh_failure_t *failure, jb_json_span_t path,
+                                const char *action) {
+  if (jb_string_size(&failure->message) == 0)
+    return failure->status;
+  const hal_status_t status = failure->status;
+  const jb_json_span_t parts[] = {path, jh_span(action),
+                                  jh_span(hal_status_to_string(status))};
+  (void)jh_fail(failure, status, 2, parts, COUNTOF(parts));
+  return status;
+}
+
+hal_status_t jh_publish_generated(const char *output_root,
+                                  const jh_generated_file_t *files,
+                                  size_t count, bool check, uint32_t mode,
+                                  size_t diff_limit, size_t *changed,
+                                  bool *current, jh_failure_t *failure) {
+  if (output_root == NULL || (count != 0 && files == NULL) || changed == NULL ||
+      current == NULL)
+    return jh_fail_arguments(failure);
+  *changed = 0;
+  *current = true;
+  jb_string_t relative = {0}, path = {0}, label = {0};
+  hal_status_t status =
+      jh_fail_storage(failure, jb_string_init(&relative, jb_heap_allocator()));
+  if (status == HAL_OK)
+    status =
+        jh_fail_storage(failure, jb_string_init(&path, jb_heap_allocator()));
+  if (status == HAL_OK)
+    status =
+        jh_fail_storage(failure, jb_string_init(&label, jb_heap_allocator()));
+  for (size_t i = 0; status == HAL_OK && i < count; ++i) {
+    status =
+        jh_fail_storage(failure, jh_join(&relative, &files[i].relative, 1));
+    if (status == HAL_OK)
+      status = jh_absolute_path(jb_string_data(&relative), output_root, &path,
+                                failure);
+    if (status != HAL_OK)
+      break;
+    if (!check) {
+      bool file_changed = false;
+      status = make_parent(jb_string_data(&path), failure);
+      if (status == HAL_OK)
+        status = mode == 0 ? jh_write_generated(jb_string_data(&path),
+                                                files[i].content, &file_changed,
+                                                failure)
+                           : jh_write_generated_mode(jb_string_data(&path),
+                                                     files[i].content, mode,
+                                                     &file_changed, failure);
+      if (status != HAL_OK)
+        status = fail_output(failure, jh_string_span(&path),
+                             ": cannot write generated output: ");
+      *changed += file_changed ? 1u : 0u;
+      continue;
+    }
+    jb_string_clear(&label);
+    status = jh_fail_storage(failure, jh_append(&label, "generated:"));
+    if (status == HAL_OK)
+      status =
+          jh_fail_storage(failure, jh_append_span(&label, files[i].relative));
+    bool file_current = true;
+    if (status == HAL_OK)
+      status = jh_check_generated(jb_string_data(&path), files[i].content,
+                                  diff_limit, jh_string_span(&label),
+                                  &file_current, failure);
+    if (status != HAL_OK)
+      status = fail_output(failure, jh_string_span(&path),
+                           ": cannot read generated output: ");
+    *current = *current && file_current;
+    *changed += file_current ? 0u : 1u;
+  }
+  jb_string_destroy(&label);
+  jb_string_destroy(&path);
+  jb_string_destroy(&relative);
   return status;
 }

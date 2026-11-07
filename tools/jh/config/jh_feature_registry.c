@@ -1904,95 +1904,26 @@ void jh_feature_outputs_destroy(jh_feature_outputs_t *outputs) {
   *outputs = empty;
 }
 
-/* One generatedArtifacts entry of artifacts.json. */
-static hal_status_t artifact_path(const jh_json_document_t *artifacts,
-                                  const char *key, jb_string_t *out,
-                                  jh_failure_t *failure) {
-  jb_json_node_t root = {0}, generated = {0}, entry = {0};
-  jb_json_span_t text = {NULL, 0};
-  jb_json_type_t type = JB_JSON_NULL;
-  bool found =
-      jb_json_root(&artifacts->doc, &root) == HAL_OK &&
-      jb_json_find(root, jh_span("generatedArtifacts"), &generated) == HAL_OK &&
-      jb_json_find(generated, jh_span(key), &entry) == HAL_OK &&
-      jb_json_type(entry, &type) == HAL_OK && type == JB_JSON_STRING;
-  if (found) {
-    size_t needed = 0;
-    hal_status_t status = jb_json_string_copy(entry, NULL, 0, &needed);
-    if (status == HAL_OK)
-      status = jb_string_resize(out, needed, '\0');
-    if (status == HAL_OK && needed != 0)
-      status = jb_json_string_copy(entry, jb_string_mutable_data(out), needed,
-                                   &needed);
-    if (status != HAL_OK)
-      return jh_fail_storage(failure, status);
-    text = jh_string_span(out);
-    found = text.length != 0 && memchr(text.data, '\0', text.length) == NULL;
-  }
-  if (!found) {
-    const jb_json_span_t parts[] = {
-        jh_span("config/tooling/artifacts.json lacks generatedArtifacts."),
-        jh_span(key)};
-    return jh_check_fail(failure, parts, COUNTOF(parts));
-  }
-  // Joined to the output root before anything is written: never outside it.
-  if (jh_generated_path_relative(text))
-    return HAL_OK;
-  const jb_json_span_t parts[] = {
-      jh_span("config/tooling/artifacts.json: generatedArtifacts."),
-      jh_span(key), jh_span(" must be repository-relative")};
-  return jh_check_fail(failure, parts, COUNTOF(parts));
-}
-
 hal_status_t jh_feature_outputs_read(const char *root,
                                      jh_feature_outputs_t *outputs,
                                      jh_failure_t *failure) {
   if (root == NULL || outputs == NULL)
     return jh_fail_arguments(failure);
-  jb_string_t path = {0};
-  jh_json_document_t artifacts = {0};
-  jh_json_location_t where;
-  jh_failure_t reason;
-  jh_json_location_init(&where);
-  jh_failure_init(&reason);
-  hal_status_t status = jh_fail_storage(failure, jb_string_init(&path, heap()));
-  if (status == HAL_OK)
-    status = jh_fail_storage(failure, jb_string_init(&outputs->header, heap()));
-  if (status == HAL_OK)
-    status = jh_fail_storage(failure, jb_string_init(&outputs->cmake, heap()));
+  static const char *const keys[] = {"featureHeader", "featureCmake"};
+  jb_string_t paths[COUNTOF(keys)] = {{0}};
+  hal_status_t status = HAL_OK;
+  for (size_t i = 0; status == HAL_OK && i < COUNTOF(paths); ++i)
+    status = jh_fail_storage(failure, jb_string_init(&paths[i], heap()));
   if (status == HAL_OK)
     status =
-        jh_absolute_path("config/tooling/artifacts.json", root, &path, failure);
-  if (status == HAL_OK &&
-      jh_json_read_document(&where, jb_string_data(&path), 1024 * 1024, false,
-                            &artifacts, &reason) != HAL_OK)
-    status =
-        jh_check_json_error(failure, jh_string_span(&path), &where, &reason);
-  if (status == HAL_OK)
-    status =
-        artifact_path(&artifacts, "featureHeader", &outputs->header, failure);
-  if (status == HAL_OK)
-    status =
-        artifact_path(&artifacts, "featureCmake", &outputs->cmake, failure);
-  if (status != HAL_OK)
-    jh_feature_outputs_destroy(outputs);
-  jh_json_document_destroy(&artifacts);
-  jh_failure_destroy(&reason);
-  jh_json_location_destroy(&where);
-  jb_string_destroy(&path);
-  return status;
-}
-
-/* A failed write or read of an artifact, as generate_hal_features.py
- * reports it: "{path}: cannot write/read generated output: {status}". */
-static hal_status_t fail_output(jh_failure_t *failure, jb_json_span_t path,
-                                const char *action) {
-  if (jb_string_size(&failure->message) == 0)
-    return failure->status;
-  const hal_status_t status = failure->status;
-  const jb_json_span_t parts[] = {path, jh_span(action),
-                                  jh_span(hal_status_to_string(status))};
-  (void)jh_fail(failure, status, 2, parts, COUNTOF(parts));
+        jh_generated_artifact_paths(root, keys, COUNTOF(keys), paths, failure);
+  if (status == HAL_OK) {
+    outputs->header = paths[0];
+    outputs->cmake = paths[1];
+    return HAL_OK;
+  }
+  for (size_t i = 0; i < COUNTOF(paths); ++i)
+    jb_string_destroy(&paths[i]);
   return status;
 }
 
@@ -2004,54 +1935,25 @@ hal_status_t jh_feature_registry_publish(const jh_feature_registry_t *registry,
   if (registry == NULL || outputs == NULL || output_root == NULL ||
       changed == NULL || current == NULL)
     return jh_fail_arguments(failure);
-  *changed = 0;
-  *current = true;
-  const jb_string_t *relative[] = {&outputs->header, &outputs->cmake};
-  jb_string_t content = {0}, path = {0}, label = {0};
+  jb_string_t header = {0}, cmake = {0};
   hal_status_t status =
-      jh_fail_storage(failure, jb_string_init(&content, heap()));
+      jh_fail_storage(failure, jb_string_init(&header, heap()));
   if (status == HAL_OK)
-    status = jh_fail_storage(failure, jb_string_init(&path, heap()));
+    status = jh_fail_storage(failure, jb_string_init(&cmake, heap()));
   if (status == HAL_OK)
-    status = jh_fail_storage(failure, jb_string_init(&label, heap()));
-  for (size_t i = 0; status == HAL_OK && i < COUNTOF(relative); ++i) {
-    status = jh_fail_storage(
-        failure, i == 0 ? jh_feature_registry_header(registry, &content)
-                        : jh_feature_registry_cmake(registry, &content));
-    if (status == HAL_OK)
-      status = jh_absolute_path(jb_string_data(relative[i]), output_root, &path,
-                                failure);
-    if (status != HAL_OK)
-      break;
-    if (!check) {
-      bool file_changed = false;
-      status = jh_write_generated_mode(jb_string_data(&path),
-                                       jh_string_span(&content), 0644,
-                                       &file_changed, failure);
-      if (status != HAL_OK)
-        status = fail_output(failure, jh_string_span(&path),
-                             ": cannot write generated output: ");
-      *changed += file_changed ? 1u : 0u;
-      continue;
-    }
-    jb_string_clear(&label);
-    status = jh_fail_storage(failure, jh_append(&label, "generated:"));
-    if (status == HAL_OK)
-      status = jh_fail_storage(
-          failure, jh_append_span(&label, jh_string_span(relative[i])));
-    bool file_current = true;
-    if (status == HAL_OK)
-      status = jh_check_generated(
-          jb_string_data(&path), jh_string_span(&content), 80,
-          jh_string_span(&label), &file_current, failure);
-    if (status != HAL_OK)
-      status = fail_output(failure, jh_string_span(&path),
-                           ": cannot read generated output: ");
-    *current = *current && file_current;
-    *changed += file_current ? 0u : 1u;
+    status =
+        jh_fail_storage(failure, jh_feature_registry_header(registry, &header));
+  if (status == HAL_OK)
+    status =
+        jh_fail_storage(failure, jh_feature_registry_cmake(registry, &cmake));
+  if (status == HAL_OK) {
+    const jh_generated_file_t files[] = {
+        {jh_string_span(&outputs->header), jh_string_span(&header)},
+        {jh_string_span(&outputs->cmake), jh_string_span(&cmake)}};
+    status = jh_publish_generated(output_root, files, COUNTOF(files), check,
+                                  0644, 80, changed, current, failure);
   }
-  jb_string_destroy(&label);
-  jb_string_destroy(&path);
-  jb_string_destroy(&content);
+  jb_string_destroy(&cmake);
+  jb_string_destroy(&header);
   return status;
 }

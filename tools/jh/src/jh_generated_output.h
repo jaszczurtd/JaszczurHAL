@@ -35,6 +35,40 @@ hal_status_t jh_write_generated_mode(const char *path, jb_json_span_t content,
  */
 bool jh_generated_path_relative(jb_json_span_t path);
 
+/** Read the relative paths of the count keys of generatedArtifacts in
+ * <root>/config/tooling/artifacts.json into paths[0..count), strings the
+ * caller started. An unreadable file fails with its status and exit code 3,
+ * one that does not parse as invalid JSON. A key that is absent, empty or not
+ * a string fails with
+ * "config/tooling/artifacts.json lacks generatedArtifacts.<key>", one that
+ * jh_generated_path_relative rejects with "config/tooling/artifacts.json:
+ * generatedArtifacts.<key> must be repository-relative"; both exit code 2.
+ */
+hal_status_t jh_generated_artifact_paths(const char *root,
+                                         const char *const *keys, size_t count,
+                                         jb_string_t *paths,
+                                         jh_failure_t *failure);
+
+/** One generated artifact: its path relative to an output root and its
+ * content, both borrowed. */
+typedef struct {
+  jb_json_span_t relative, content;
+} jh_generated_file_t;
+
+/** Write the count files below output_root (changed counts the files written
+ * or given mode), with the POSIX permission bits mode or, when mode is zero,
+ * those a new file gets; or, with check, compare them without changing
+ * anything (changed counts the files that differ, current reports whether
+ * all match, each drift a diff of at most diff_limit lines labelled
+ * generated:<relative>). A failed write or read becomes "<path>: cannot write
+ * generated output: <status>" (or read) with exit code 2.
+ */
+hal_status_t jh_publish_generated(const char *output_root,
+                                  const jh_generated_file_t *files,
+                                  size_t count, bool check, uint32_t mode,
+                                  size_t diff_limit, size_t *changed,
+                                  bool *current, jh_failure_t *failure);
+
 /** Compare content with the file at path without changing anything. A missing
  * or different file is reported on stderr, the difference as a unified diff
  * of at most diff_limit lines labelled path and label, and current is false.

@@ -19,6 +19,12 @@ inline std::string absolute_path(const std::string &path,
   return std::string(jh::absolute_path(path.c_str(), base.c_str()));
 }
 
+/** jh::python_resolve as a standard string. */
+inline std::string python_resolve(const std::string &path,
+                                  const std::string &base) {
+  return std::string(jh::python_resolve(path.c_str(), base.c_str()));
+}
+
 /** jh::python_repr as a standard string. */
 inline std::string python_repr(std::string_view text) {
   return std::string(jh::python_repr(text));

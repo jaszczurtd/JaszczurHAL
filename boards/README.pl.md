@@ -3,10 +3,10 @@
 Ten katalog jest miarodajnym źródłem definicji targetów i fizycznych płytek
 JaszczurHAL. Deskryptory sprawdza `jh board validate`
 ([README jh](../tools/jh/README.pl.md#rejestr-płytek)).
-`scripts/generate_board_config.py` czyta od niego sprawdzony rejestr i tworzy
-w katalogu `.build` konfigurację CMake i C/C++ używaną podczas buildu. Utrzymuje
-również przechowywany w repozytorium rejestr oraz zastępczą konfigurację
-źródłową, używaną wtedy, gdy profil nie został wygenerowany podczas buildu.
+`jh board config` zapisuje ze sprawdzonego rejestru konfigurację CMake i C/C++
+jednej kompilacji w katalogu `.build`, a `jh generate boards` utrzymuje
+przechowywany w repozytorium rejestr oraz zastępczą konfigurację źródłową,
+używaną wtedy, gdy profil nie został wygenerowany podczas buildu.
 
 - `capabilities.json` przypisuje stabilne publiczne bity reprezentujące możliwości.
 - `targets/` opisuje targety buildu dla poszczególnych MCU i ISA.

@@ -2,8 +2,9 @@ if(NOT DEFINED JH_ROOT)
     message(FATAL_ERROR "JH_ROOT is required")
 endif()
 
-set(_generator "${JH_ROOT}/scripts/generate_board_config.py")
-file(READ "${_generator}" _generator_text)
+# The generated fallback header holds the facts of every target.
+set(_generated "${JH_ROOT}/src/hal/generated/jh_board_fallback_config.h")
+file(READ "${_generated}" _generated_text)
 
 foreach(_fact IN ITEMS
         HAL_TARGET_DESCRIPTOR_ID
@@ -15,7 +16,7 @@ foreach(_fact IN ITEMS
         HAL_TARGET_HAS_FPU
         HAL_TARGET_RAM_TOTAL_BYTES
         HAL_TARGET_RAM_USABLE_BYTES)
-    string(FIND "${_generator_text}" "${_fact}" _fact_pos)
+    string(FIND "${_generated_text}" "#define ${_fact} " _fact_pos)
     if(_fact_pos EQUAL -1)
         message(FATAL_ERROR "Board generator does not emit ${_fact}")
     endif()

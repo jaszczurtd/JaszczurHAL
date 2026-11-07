@@ -11,6 +11,7 @@
  * and memory exhaustion 4. C11.
  */
 #include "jh_failure.h"
+#include "jh_feature_registry.h"
 #include <jb/json_tree.h>
 #include <jb/json_writer.h>
 #include <stdbool.h>
@@ -97,6 +98,101 @@ hal_status_t jh_board_clock_source_problem(jb_json_tree_view_t inputs,
  * of each kind besides kind and endpoint).
  */
 hal_status_t jh_board_write_tables(jb_json_writer_t *writer);
+
+/** One signal of a bus device role and whether a device must wire it
+ * ("required") or only under a rule ("conditional"). */
+typedef struct {
+  const char *name, *mode;
+} jh_board_role_signal_t;
+
+/** One attribute of a bus device role: its type ("uint32", "int8", "bool" or
+ * "enum"), the minimum of an integer, the allowed values of an enum and
+ * whether only a rule makes it apply. */
+typedef struct {
+  const char *name, *type;
+  bool has_min;
+  int64_t min;
+  const char *const *values;
+  size_t value_count;
+  bool conditional;
+} jh_board_role_attribute_t;
+
+/** Two attributes of a role where lower may not exceed upper. */
+typedef struct {
+  const char *lower, *upper;
+} jh_board_role_order_t;
+
+/** The signals and attributes a gate attribute value enables. */
+typedef struct {
+  const char *gate;
+  const char *const *allowed; /**< In code point order. */
+  size_t allowed_count;
+  const char *const *signals;
+  size_t signal_count;
+  const char *const *attributes;
+  size_t attribute_count;
+} jh_board_role_rule_t;
+
+/** One bus device role: the bus kinds it accepts, the prefix of its
+ * generated macros, its signals, attributes, ordered pairs and rules. */
+typedef struct {
+  const char *role;
+  const char *const *bus_kinds; /**< In code point order. */
+  size_t bus_kind_count;
+  const char *macro_prefix;
+  const jh_board_role_signal_t *signals;
+  size_t signal_count;
+  const jh_board_role_attribute_t *attributes;
+  size_t attribute_count;
+  const jh_board_role_order_t *ordered;
+  size_t ordered_count;
+  const jh_board_role_rule_t *rules;
+  size_t rule_count;
+} jh_board_role_t;
+
+/** A CAN controller a board can wire channels to: the targets that have it,
+ * its instance count and the HAL_CAN_BACKEND_* suffix of the generated table.
+ */
+typedef struct {
+  const char *id;
+  const char *const *targets; /**< In code point order. */
+  size_t target_count;
+  int64_t instances;
+  const char *backend;
+} jh_board_can_controller_t;
+
+/** The bus device roles in code point order of their names; *count receives
+ * their number. */
+const jh_board_role_t *jh_board_roles(size_t *count);
+/** The CAN controller with id, or NULL. */
+const jh_board_can_controller_t *jh_board_can_controller(jb_json_span_t id);
+/** The device kind of multi-pin bus devices ("bus-device"). */
+const char *jh_board_bus_device_kind(void);
+
+/** normalize_features of generate_board_config.py: append to out (an empty
+ * list of jb_string_t) the sorted unique SYMBOL=1 entries of the strings of
+ * features, each stripped, without a leading -D, a feature symbol optionally
+ * followed by =1. Any other entry fails with exit code 2 and the wording of
+ * the script.
+ */
+hal_status_t jh_board_normalize_features(const jb_vector_t *features,
+                                         jb_vector_t *out,
+                                         jh_failure_t *failure);
+
+/** resolve_features of generate_board_config.py: resolve normalized, the
+ * jh_board_normalize_features entries of the request, with the required
+ * features of target against features into an empty resolution. A required
+ * feature whose HAL_DISABLE_ twin is requested and any finding of the
+ * resolution fail with exit code 2. requested holds the symbols of
+ * normalized, provenance one entry per requested and required symbol, a
+ * required one with the source target:<id>:requiredFeatures[<index>] (index
+ * in the normalized requirements) besides any command-line source.
+ */
+hal_status_t jh_board_resolve_features(const jh_feature_registry_t *features,
+                                       jb_json_tree_view_t target,
+                                       const jb_vector_t *normalized,
+                                       jh_feature_resolution_t *resolution,
+                                       jh_failure_t *failure);
 
 #ifdef __cplusplus
 }

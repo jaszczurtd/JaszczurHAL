@@ -743,10 +743,11 @@ application interface, and build commands.
 
 Single repository-level runner for every tracked generated artifact. `--write`
 refreshes the feature registry, static board registry, device type defaults,
-example VS Code files, root VS Code files, and repository SBOM. The device
-type defaults come from `jh generate device-defaults` through the launcher
-`scripts/jh` (`scripts/jh.ps1` on Windows), which builds the tool first when
-its inputs changed; the other steps are Python scripts. `--check` invokes
+example VS Code files, root VS Code files, and repository SBOM. The first
+three come from `jh generate features`, `jh generate boards` and
+`jh generate device-defaults` through the launcher `scripts/jh`
+(`scripts/jh.ps1` on Windows), which builds the tool first when its inputs
+changed; the other steps are Python scripts. `--check` invokes
 their read-only verification modes and fails on missing or stale output. The runner snapshots tracked and
 non-ignored files before execution, then prints the paths changed during the
 run. `--report-file <path>` also stores that final list for callers such as
@@ -758,35 +759,20 @@ Git's filename bytes, tracked/untracked selection and ignore rules.
 
 ### `scripts/generate_board_config.py`
 
-Reads the JSON target, board, and capability descriptors under `boards/` as
-`jh board list` validates them
-([jh README](../../../tools/jh/README.md#board-registry)), each registry once per
-process until its files change, and resolves one target/board pair into
-generated CMake configuration and machine-readable metadata. CMake and the
-board tests call it directly.
-`--validate-only` checks the complete registry, `--list targets|boards` and
-`--default-board` provide discovery, while `--feature` and `--define` add the
-validated build overlay used for generated output. `--output-dir` and
-`--output-root` must stay within the caller-owned build tree. Provider/backend
-definitions are projected consistently into
-`jh_board_resolved.json.boardCompileDefinitions`, generated
-`JH_BOARD_COMPILE_DEFINITIONS`, and `jh_board_config.h` macros for direct
-compiler use. The generated GCC/Clang link-signature reference uses a
-`constructor, used` root so target/board/feature mismatches remain link errors
-with section garbage collection enabled.
+Gives the Python tools that import it the target, board and capability
+descriptors under `boards/` as `jh board list` validates them, each registry
+read once per process until its files change, and the files of one build from
+`jh board config` ([jh README](../../../tools/jh/README.md#board-registry)).
+`build_outputs()` returns those files for a target and board; the hardware
+configuration generator passes the board and the values of a device tree
+assembly. `generate()` writes them for the ESP-IDF build.
 
-The generated header also exposes the selected target descriptor ID, backend,
-MCU and subtype names, CPU description and core count, FPU presence, and
-total/usable RAM as `HAL_TARGET_*` facts. System architecture snapshots consume
-those facts directly. Board-specific program-flash capacity remains available
-as `HAL_BOARD_EXPECTED_FLASH_BYTES`.
-
-`--write-static` refreshes the tracked `jh_board_registry.h`,
-`jh_board_fallback_config.h`, and board-component CMake registry. The first two
-come from `boards/`; the CMake projection comes from
-`config/tooling/board_components.json`. `--check-static` rejects missing or
-stale copies. The `repository` gate stage runs the check independently of
-per-build board generation.
+Its command line runs the same commands: `--validate-only`,
+`--list targets|boards` and `--default-board` read the registry, a target
+with `--output-dir` (and optionally `--board`, `--output-root`, `--feature`
+and `--define`) runs `jh board config`, and `--write-static` or
+`--check-static` runs `jh generate boards`. CMake calls `jh` directly; the
+board tests still use this command line.
 
 ### `scripts/generate_hal_features.py`
 

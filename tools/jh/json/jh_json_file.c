@@ -1,8 +1,14 @@
+#ifndef _WIN32
+#define _POSIX_C_SOURCE 200809L /* readlink */
+#endif
 #include "jh_json_file.h"
 #include <jb/array.h>
 #include <jb/filesystem.h>
 #include <jb/json_number.h>
 #include <string.h>
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 
 /* Exit code 4 for an exhausted limit or allocation, otherwise the given one. */
 static int exit_code_for(hal_status_t status, int otherwise) {
@@ -303,6 +309,68 @@ hal_status_t jh_json_names(const char *directory, jb_vector_t *names) {
   return HAL_OK;
 }
 
+static hal_status_t collect_entry(void *context, const char *name,
+                                  const jb_fs_info_t *info) {
+  (void)info;
+  return jh_list_push(context, jh_span(name));
+}
+
+hal_status_t jh_walk_files(const char *directory, jb_json_span_t relative,
+                           jh_walk_fn visit, void *user,
+                           jh_failure_t *failure) {
+  if (directory == NULL || visit == NULL ||
+      (relative.data == NULL && relative.length != 0))
+    return jh_fail_arguments(failure);
+  jb_vector_t names = {0};
+  jb_string_t path = {0}, child = {0};
+  hal_status_t status = jh_fail_storage(failure, jh_list_init(&names));
+  if (status == HAL_OK)
+    status =
+        jh_fail_storage(failure, jb_string_init(&path, jb_heap_allocator()));
+  if (status == HAL_OK)
+    status =
+        jh_fail_storage(failure, jb_string_init(&child, jb_heap_allocator()));
+  if (status == HAL_OK) {
+    const hal_status_t listed = jb_fs_list(directory, collect_entry, &names);
+    if (listed == HAL_ENOMEM)
+      status = jh_fail_storage(failure, listed);
+    else if (listed != HAL_OK && listed != HAL_ENOENT && listed != HAL_ETYPE)
+      status = jh_fail(failure, listed, 3,
+                       JH_PARTS(jh_span(directory), jh_span(": cannot list: "),
+                                jh_span(hal_status_to_string(listed))));
+    jh_list_sort(&names);
+  }
+#ifdef _WIN32
+  static const char separator[] = "\\";
+#else
+  static const char separator[] = "/";
+#endif
+  for (size_t i = 0; status == HAL_OK && i < jb_vector_size(&names); ++i) {
+    const char *name = jb_string_data(jh_list_at(&names, i));
+    status = jh_fail_storage(failure, jh_path_join(directory, name, &path));
+    if (status == HAL_OK)
+      status = jh_fail_storage(
+          failure, jh_join(&child, JH_PARTS(relative, jh_span(separator),
+                                            jh_span(name))));
+    jb_fs_info_t entry, target;
+    if (status != HAL_OK ||
+        jb_fs_status(jb_string_data(&path), false, &entry) != HAL_OK)
+      continue;
+    const bool link = entry.kind == JB_FS_LINK;
+    const bool followed =
+        jb_fs_status(jb_string_data(&path), true, &target) == HAL_OK;
+    if (followed && target.kind == JB_FS_REGULAR)
+      status = visit(user, jb_string_data(&path), jh_string_span(&child), name);
+    else if (!link && entry.kind == JB_FS_DIRECTORY)
+      status = jh_walk_files(jb_string_data(&path), jh_string_span(&child),
+                             visit, user, failure);
+  }
+  jb_string_destroy(&child);
+  jb_string_destroy(&path);
+  jh_list_destroy(&names);
+  return status;
+}
+
 hal_status_t jh_resolved_path(const char *root, jb_string_t *out) {
   size_t required = 0;
   hal_status_t status = jb_fs_realpath(root, NULL, 0, &required);
@@ -322,6 +390,269 @@ hal_status_t jh_resolved_path(const char *root, jb_string_t *out) {
       memcmp(text, "\\\\?\\", 4) == 0 && text[5] == ':' && text[6] == '\\')
     status = jb_string_assign(out, text + 4, jb_string_size(out) - 4);
 #endif
+  return status;
+}
+
+/* path joined to base, or to the working directory when base is NULL: on
+ * POSIX as written, as pathlib joins; on Windows normalized lexically, as
+ * ntpath.realpath does before it resolves anything. */
+static hal_status_t joined_path(const char *path, const char *base,
+                                jb_string_t *out, jh_failure_t *failure) {
+  jb_string_t cwd = {0};
+  hal_status_t status = HAL_OK;
+  if (base == NULL) {
+    size_t needed = 0;
+    status =
+        jh_fail_storage(failure, jb_string_init(&cwd, jb_heap_allocator()));
+    const hal_status_t measured =
+        status == HAL_OK ? jb_fs_cwd(NULL, 0, &needed) : status;
+    if (status == HAL_OK && measured != HAL_OK && measured != HAL_EOVERFLOW)
+      status =
+          jh_require(failure, measured, 3, "cannot read the working directory");
+    if (status == HAL_OK)
+      status = jh_fail_storage(failure, jb_string_resize(&cwd, needed, '\0'));
+    if (status == HAL_OK)
+      status = jh_require(
+          failure, jb_fs_cwd(jb_string_mutable_data(&cwd), needed, &needed), 3,
+          "cannot read the working directory");
+    if (status == HAL_OK)
+      status =
+          jh_fail_storage(failure, jb_string_resize(&cwd, needed - 1, '\0'));
+    base = jb_string_data(&cwd);
+  }
+#ifdef _WIN32
+  if (status == HAL_OK)
+    status = jh_absolute_path(path, base, out, failure);
+#else
+  bool absolute = false;
+  if (status == HAL_OK)
+    status = jh_require(failure, jb_fs_path_is_absolute(path, &absolute), 3,
+                        "cannot resolve path");
+  if (status == HAL_OK)
+    status = jh_fail_storage(failure,
+                             jb_string_assign(out, absolute ? path : base,
+                                              strlen(absolute ? path : base)));
+  if (status == HAL_OK && !absolute) {
+    status = jh_fail_storage(failure, jb_string_append(out, "/", 1));
+    if (status == HAL_OK)
+      status =
+          jh_fail_storage(failure, jb_string_append(out, path, strlen(path)));
+  }
+#endif
+  jb_string_destroy(&cwd);
+  return status;
+}
+
+#ifndef _WIN32
+enum { LINK_LIMIT = 40, LINK_BYTES = 1024 * 1024 };
+
+/* The target of the symbolic link path, as os.readlink returns it. */
+static hal_status_t read_link(const char *path, jb_string_t *out) {
+  for (size_t capacity = 256; capacity <= LINK_BYTES; capacity *= 2) {
+    hal_status_t status = jb_string_resize(out, capacity, '\0');
+    if (status != HAL_OK)
+      return status;
+    const ssize_t length =
+        readlink(path, jb_string_mutable_data(out), capacity);
+    if (length < 0)
+      return HAL_EIO;
+    if ((size_t)length < capacity)
+      return jb_string_resize(out, (size_t)length, '\0');
+  }
+  return HAL_EOVERFLOW;
+}
+
+/* posixpath._joinrealpath: append the components of rest (length bytes) to
+ * path, a resolved absolute path without links ("" for the root). A link
+ * resolves in the directory that holds it; links counts every link followed. */
+static hal_status_t join_real(jb_string_t *path, const char *rest,
+                              size_t length, unsigned *links,
+                              jh_failure_t *failure) {
+  jb_string_t target = {0};
+  hal_status_t status =
+      jh_fail_storage(failure, jb_string_init(&target, jb_heap_allocator()));
+  for (size_t at = 0; status == HAL_OK && at < length;) {
+    size_t end = at;
+    while (end < length && rest[end] != '/')
+      ++end;
+    const char *name = rest + at;
+    const size_t size = end - at;
+    at = end + 1;
+    if (size == 0 || (size == 1 && name[0] == '.'))
+      continue;
+    const size_t before = jb_string_size(path);
+    if (size == 2 && name[0] == '.' && name[1] == '.') {
+      const char *text = jb_string_data(path);
+      size_t cut = before;
+      while (cut > 0 && text[cut - 1] != '/')
+        --cut;
+      status = jh_fail_storage(
+          failure, jb_string_resize(path, cut > 0 ? cut - 1 : 0, '\0'));
+      continue;
+    }
+    status = jh_fail_storage(failure, jb_string_append(path, "/", 1));
+    if (status == HAL_OK)
+      status = jh_fail_storage(failure, jb_string_append(path, name, size));
+    jb_fs_info_t info = {0};
+    const hal_status_t seen =
+        status == HAL_OK ? jb_fs_status(jb_string_data(path), false, &info)
+                         : status;
+    if (status == HAL_OK && seen == HAL_ENOMEM)
+      status = jh_fail_storage(failure, seen);
+    /* Like Python, any other failure to inspect the entry means no link. */
+    if (status != HAL_OK || seen != HAL_OK || info.kind != JB_FS_LINK)
+      continue;
+    if (++*links > LINK_LIMIT) {
+      status =
+          jh_fail(failure, HAL_EIO, 3,
+                  JH_PARTS(jh_string_span(path),
+                           jh_span(": too many levels of symbolic links")));
+      continue;
+    }
+    const hal_status_t read = read_link(jb_string_data(path), &target);
+    if (read == HAL_ENOMEM)
+      status = jh_fail_storage(failure, read);
+    else if (read != HAL_OK)
+      status = jh_fail(failure, read, 3,
+                       JH_PARTS(jh_string_span(path),
+                                jh_span(": cannot read the symbolic link: "),
+                                jh_span(hal_status_to_string(read))));
+    if (status == HAL_OK)
+      status = jh_fail_storage(
+          failure, jb_string_resize(path,
+                                    jb_string_size(&target) != 0 &&
+                                            jb_string_data(&target)[0] == '/'
+                                        ? 0
+                                        : before,
+                                    '\0'));
+    if (status == HAL_OK)
+      status = join_real(path, jb_string_data(&target), jb_string_size(&target),
+                         links, failure);
+  }
+  jb_string_destroy(&target);
+  return status;
+}
+#else
+/* The real path of the longest existing prefix of the absolute, normalized
+ * path followed by the rest. */
+static hal_status_t existing_prefix(const char *path, jb_string_t *out) {
+  jb_string_t head = {0}, tail = {0}, name = {0};
+  hal_status_t status = jb_string_init(&head, jb_heap_allocator());
+  if (status == HAL_OK)
+    status = jb_string_init(&tail, jb_heap_allocator());
+  if (status == HAL_OK)
+    status = jb_string_init(&name, jb_heap_allocator());
+  if (status == HAL_OK)
+    status = jb_string_assign(&head, path, strlen(path));
+  while (status == HAL_OK) {
+    size_t required = 0;
+    const hal_status_t real =
+        jb_fs_realpath(jb_string_data(&head), NULL, 0, &required);
+    if (real != HAL_ENOENT)
+      break;
+    size_t parent_size = 0, name_size = 0;
+    status = jb_fs_path_parent(jb_string_data(&head), NULL, 0, &parent_size);
+    if (status == HAL_EOVERFLOW)
+      status = HAL_OK;
+    (void)jb_fs_path_filename(jb_string_data(&head), NULL, 0, &name_size);
+    if (status != HAL_OK || name_size <= 1)
+      break;
+    status = jb_string_resize(&name, name_size, '\0');
+    if (status == HAL_OK)
+      status = jb_fs_path_filename(jb_string_data(&head),
+                                   jb_string_mutable_data(&name), name_size,
+                                   &name_size);
+    if (status == HAL_OK)
+      status = jb_string_resize(&name, name_size - 1, '\0');
+    if (status == HAL_OK && jb_string_size(&tail) != 0) {
+      status = jb_string_append(&name, "/", 1);
+      if (status == HAL_OK)
+        status = jb_string_append(&name, jb_string_data(&tail),
+                                  jb_string_size(&tail));
+    }
+    if (status == HAL_OK)
+      status =
+          jb_string_assign(&tail, jb_string_data(&name), jb_string_size(&name));
+    jb_string_t parent = {0};
+    if (status == HAL_OK)
+      status = jb_string_init(&parent, jb_heap_allocator());
+    if (status == HAL_OK)
+      status = jb_string_resize(&parent, parent_size, '\0');
+    if (status == HAL_OK)
+      status = jb_fs_path_parent(jb_string_data(&head),
+                                 jb_string_mutable_data(&parent), parent_size,
+                                 &parent_size);
+    if (status == HAL_OK)
+      status = jb_string_resize(&parent, parent_size - 1, '\0');
+    if (status == HAL_OK &&
+        jh_span_equal(jh_string_span(&parent), jh_string_span(&head)))
+      status = HAL_ENOENT;
+    if (status == HAL_OK)
+      status = jb_string_assign(&head, jb_string_data(&parent),
+                                jb_string_size(&parent));
+    jb_string_destroy(&parent);
+  }
+  if (status == HAL_ENOENT)
+    status = HAL_OK;
+  if (status == HAL_OK)
+    status = jh_resolved_path(jb_string_data(&head), out);
+  if (status == HAL_OK && jb_string_size(&tail) != 0) {
+    jb_string_t joined = {0};
+    status = jb_string_init(&joined, jb_heap_allocator());
+    if (status == HAL_OK)
+      status =
+          jh_path_join(jb_string_data(out), jb_string_data(&tail), &joined);
+    if (status == HAL_OK)
+      status = jb_string_assign(out, jb_string_data(&joined),
+                                jb_string_size(&joined));
+    jb_string_destroy(&joined);
+  }
+  jb_string_destroy(&name);
+  jb_string_destroy(&tail);
+  jb_string_destroy(&head);
+  return status;
+}
+#endif
+
+hal_status_t jh_python_resolve(const char *path, const char *base,
+                               jb_string_t *out, jh_failure_t *failure) {
+  if (path == NULL || out == NULL)
+    return jh_fail_arguments(failure);
+  jb_string_t joined = {0}, resolved = {0};
+  hal_status_t status =
+      jh_fail_storage(failure, jb_string_init(&joined, jb_heap_allocator()));
+  if (status == HAL_OK)
+    status = jh_fail_storage(failure,
+                             jb_string_init(&resolved, jb_heap_allocator()));
+  if (status == HAL_OK)
+    status = joined_path(path, base, &joined, failure);
+#ifdef _WIN32
+  if (status == HAL_OK) {
+    const hal_status_t real =
+        existing_prefix(jb_string_data(&joined), &resolved);
+    if (real == HAL_ENOMEM)
+      status = jh_fail_storage(failure, real);
+    else if (real != HAL_OK)
+      status = jh_fail(failure, real, 3,
+                       JH_PARTS(jh_string_span(&joined),
+                                jh_span(": cannot resolve: "),
+                                jh_span(hal_status_to_string(real))));
+  }
+#else
+  unsigned links = 0;
+  if (status == HAL_OK)
+    status = join_real(&resolved, jb_string_data(&joined),
+                       jb_string_size(&joined), &links, failure);
+  if (status == HAL_OK && jb_string_size(&resolved) == 0)
+    status = jh_fail_storage(failure, jb_string_assign(&resolved, "/", 1));
+#endif
+  if (status == HAL_OK) {
+    jb_string_destroy(out);
+    *out = resolved;
+    resolved = (jb_string_t){0};
+  }
+  jb_string_destroy(&resolved);
+  jb_string_destroy(&joined);
   return status;
 }
 

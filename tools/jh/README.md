@@ -8,14 +8,15 @@ writes or checks an output file. It uses the jhbase parser and file API.
 including references between local files. `jh generate device-defaults` reads
 the catalogue of HAL component types and writes or checks the generated
 header of their defaults, and `jh generate features` does the same for the
-header and CMake data of the HAL feature registry. `scripts/sync_generated.py`,
-and through it the pre-commit hook and the gate, run both commands through the
-launcher described below. `jh config inspect` evaluates a project's `hal_project_config.h` as the
+header and CMake data of the HAL feature registry. `jh generate boards`
+writes or checks the board files the repository keeps.
+`scripts/sync_generated.py`, and through it the pre-commit hook and the gate,
+run these generators through the launcher described below. `jh config inspect` evaluates a project's `hal_project_config.h` as the
 build reads it. `jh feature list` and `jh feature resolve` give the feature
 registry and the features one build requests, resolved; `jh feature lint`
 checks the feature requests of project headers and manifests. `jh board`
-validates and lists the board registry, and `jh clock` the clock tree
-registry.
+validates and lists the board registry and writes the configuration of one
+build, and `jh clock` checks and lists the clock tree registry.
 
 Prepare the pinned host dependencies explicitly before configuring:
 
@@ -84,8 +85,9 @@ jh config inspect --header examples/13_adc/hal_project_config.h --define HAL_TAR
 
 Input paths are resolved against cwd captured once on entry. Windows arguments
 come from `wmain` and are converted from UTF-16 to UTF-8. Options accept
-`--name value` or `--name=value`; flags take no value. Unknown options, repeated
-options other than `--define` and extra command words fail. `-h` and `-V` abbreviate help and version.
+`--name value` or `--name=value`; flags take no value. Unknown options, extra
+command words and a repeated option that the help does not mark as repeatable
+fail. `-h` and `-V` abbreviate help and version.
 `--` ends option parsing. A value beginning with `--` needs `--name=value`.
 An absent `--pointer` selects the root; names are not normalized to NFC.
 
@@ -380,12 +382,82 @@ in the same place), `capabilities`, `components` with `id`, `providers` and
 default board of a known target; its `--json` result
 (`command: "board.default"`) has `target` and `board`.
 
-The commands exit with 0 on success, 2 for an invalid registry, a registry
-file they cannot read or an unknown target, and 4 when memory runs out.
-`scripts/generate_board_config.py` gives its importers this model, the
-registry from `load_registry()` and the `COMPONENT_REGISTRY` and
+`jh generate boards --root <checkout> (--write | --check)` writes the three
+board files the repository keeps, at the paths of
+`config/tooling/artifacts.json` below `--output-root` (default `<root>`):
+`jh_board_registry.h` with the profile enum and the capability bits,
+`jh_board_fallback_config.h` with the selector rules and the facts of every
+target and board for a build that has no generated configuration, and
+`jh_board_components_registry.cmake` with the component catalogue for CMake.
+The files follow the registry of `--boards-root`. `--write` creates missing
+directories and prints `generated 3 board artifacts (<n> changed)`.
+`--check` changes nothing and prints `verified 3 generated board artifacts`;
+on drift it names each missing file, shows each stale one as a diff of at
+most 120 lines and exits with 1.
+
+`jh board config --root <checkout> --target <id>` writes the configuration of
+one build for the board of `--board`, by default the target's default board:
+
+- `jh_board_config.cmake` with the `JH_BOARD_*` variables CMake reads;
+- `jh_board_config.h` with the `HAL_TARGET_*` and `HAL_BOARD_*` facts and the
+  board definitions as macros;
+- `jh_link_contract.h` with its definition and reference sources, the link
+  signature of target, board and features;
+- `jh_board_resolved.json` with the resolved build;
+- `generation.d`, the JSON files the generation read below `--boards-root` and
+  `<root>/config`.
+
+`--feature` requests a HAL feature and may repeat; the requests resolve with
+the required features of the target and everything they imply. `--define`
+passes a build definition, which may not hold a generator expression, may
+name a feature symbol only bare or with `=1`, and may not select the
+`HAL_BOARD_PROFILE_*` or `HAL_CYW43_PROFILE_*` selector of another board.
+`--output-dir` must lie below `--output-root`, or below the `.build`
+directory next to `--boards-root` when there is none; that root must have a
+`.build` component or lie below the directory in `JH_MANAGED_BUILD_ROOT`.
+These paths and `--boards-root` resolve as Python's `Path.resolve()` does, so
+outside Windows a symbolic link resolves before a `..` that follows it. The
+command creates the directory, removes a `jh_board_registry.h` an older
+generator left there and rewrites only the files that changed. Its `--json`
+result (`command: "board.config"`) has `target`, `board`, `files` with the
+text of all seven files, and `outputDir` and `changed` when it wrote them;
+with `--json`, `--output-dir` is optional. `cmake/jh_board_profiles.cmake`
+runs the command during configure, and the build configures again when a
+file of `generation.d`, a new JSON file below either directory or the `jh`
+executable changes.
+
+The generated header gives the facts of the selected target: descriptor ID,
+backend, MCU and subtype names, CPU description and core count, FPU presence
+and total and usable RAM, and of the board `HAL_BOARD_EXPECTED_FLASH_BYTES`.
+The board definitions appear the same way in
+`jh_board_resolved.json.boardCompileDefinitions`,
+`JH_BOARD_COMPILE_DEFINITIONS` and the header. The reference source keeps the
+signature symbol with `constructor, used` on GCC and Clang, so a mismatch of
+target, board or features stays a link error when the linker drops unused
+sections.
+
+`--file <path>` names a JSON object with the values a device tree assembly
+owns: `board`, the board descriptor the assembly resolved; `headerDefinitions`
+and `cmakeDefinitions`, the definitions in the header and on the compiler
+command line; `components`; `headerPrelude`, lines that follow the includes of
+`jh_board_config.h`; `generationExtra`, further inputs that end `generation.d`;
+and `contractHash`, the digest in the signature symbol. An absent member keeps
+the board's value.
+
+The commands exit with 0 on success, 1 when `generate boards --check` finds
+drift, 2 for an invalid registry, a registry file or `--file` they cannot
+read, an unknown target or board, a rejected request or an output file they
+cannot write, 3 when `board config` cannot resolve or create the output
+directory or remove an older `jh_board_registry.h` from it, and 4 when memory
+runs out. `scripts/generate_board_config.py` gives its importers this model,
+the registry from `load_registry()` and the `COMPONENT_REGISTRY` and
 `CAN_CONTROLLERS` tables, each registry read once per process until its files
-change.
+change, and the files of one build from `jh board config`.
+
+The files keep the bytes `generate_board_config.py` wrote, except for the
+generator named in their first comment. `generation.d` lists the JSON inputs
+and the given extra inputs but no Python modules: CMake records the `jh`
+executable and its sources itself.
 
 Unlike that script, the commands accept in an integer field only a number
 written without a fraction or exponent and within the signed 64-bit range.

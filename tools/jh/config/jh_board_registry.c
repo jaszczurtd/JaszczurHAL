@@ -396,47 +396,11 @@ static hal_status_t fail_pins(const check_t *c, jb_json_span_t at,
 
 /* ---- Fixed tables ---- */
 
-typedef struct {
-  const char *name, *mode;
-} role_signal_t;
-
-typedef struct {
-  const char *name, *type;
-  bool has_min;
-  int64_t min;
-  const char *const *values;
-  size_t value_count;
-  bool conditional;
-} role_attribute_t;
-
-typedef struct {
-  const char *lower, *upper;
-} role_order_t;
-
-typedef struct {
-  const char *gate;
-  const char *const *allowed; /* in code point order */
-  size_t allowed_count;
-  const char *const *signals;
-  size_t signal_count;
-  const char *const *attributes;
-  size_t attribute_count;
-} role_rule_t;
-
-typedef struct {
-  const char *role;
-  const char *const *bus_kinds; /* in code point order */
-  size_t bus_kind_count;
-  const char *macro_prefix;
-  const role_signal_t *signals;
-  size_t signal_count;
-  const role_attribute_t *attributes;
-  size_t attribute_count;
-  const role_order_t *ordered;
-  size_t ordered_count;
-  const role_rule_t *rules;
-  size_t rule_count;
-} role_spec_t;
+typedef jh_board_role_signal_t role_signal_t;
+typedef jh_board_role_attribute_t role_attribute_t;
+typedef jh_board_role_order_t role_order_t;
+typedef jh_board_role_rule_t role_rule_t;
+typedef jh_board_role_t role_spec_t;
 
 /* The declarative schema of multi-pin bus devices: the checks below are role
  * agnostic, every entry is data describing one device role. */
@@ -506,16 +470,8 @@ static const role_spec_t device_roles[] = {
      sx1262_attributes, COUNTOF(sx1262_attributes), sx1262_ordered,
      COUNTOF(sx1262_ordered), sx1262_rules, COUNTOF(sx1262_rules)}};
 
-/* CAN controllers a board can wire channels to: the targets that have them,
- * their instance count and the HAL_CAN_BACKEND_* suffix of the generated
- * table. */
-typedef struct {
-  const char *id;
-  const char *const *targets; /* in code point order */
-  size_t target_count;
-  int64_t instances;
-  const char *backend;
-} can_controller_t;
+/* CAN controllers a board can wire channels to. */
+typedef jh_board_can_controller_t can_controller_t;
 
 static const char *const fdcan_targets[] = {"stm32g474"};
 static const can_controller_t can_controllers[] = {
@@ -732,6 +688,21 @@ static const can_controller_t *find_controller(jb_json_tree_view_t value) {
       return &can_controllers[i];
   return NULL;
 }
+
+const jh_board_role_t *jh_board_roles(size_t *count) {
+  if (count != NULL)
+    *count = COUNTOF(device_roles);
+  return device_roles;
+}
+
+const jh_board_can_controller_t *jh_board_can_controller(jb_json_span_t id) {
+  for (size_t i = 0; i < COUNTOF(can_controllers); ++i)
+    if (jh_span_compare(id, jh_span(can_controllers[i].id)) == 0)
+      return &can_controllers[i];
+  return NULL;
+}
+
+const char *jh_board_bus_device_kind(void) { return bus_device_kind; }
 
 /* ---- Component registry: config/tooling/board_components.json ---- */
 
@@ -2055,10 +2026,11 @@ static hal_status_t fail_quoted(jh_failure_t *failure, const char *prefix,
   return status;
 }
 
-/* normalize_features: the sorted unique SYMBOL=1 entries of the strings. */
-static hal_status_t normalize_features(const jb_vector_t *features,
-                                       jb_vector_t *out,
-                                       jh_failure_t *failure) {
+hal_status_t jh_board_normalize_features(const jb_vector_t *features,
+                                         jb_vector_t *out,
+                                         jh_failure_t *failure) {
+  if (features == NULL || out == NULL)
+    return jh_fail_arguments(failure);
   hal_status_t status = HAL_OK;
   jb_string_t entry = {0};
   status = jh_fail_storage(failure, text_init(&entry));
@@ -2155,16 +2127,41 @@ static hal_status_t disabled_twin(jb_json_span_t symbol, jb_string_t *out) {
   return jh_join(out, JH_PARTS(symbol));
 }
 
-/* resolve_features: the resolved symbols of the normalized requests and the
- * target's required features, as the board configuration resolves them. */
-static hal_status_t resolve_features(loader_t *l, jb_json_tree_view_t target,
-                                     const jb_vector_t *normalized,
-                                     jb_vector_t *resolved) {
-  jh_failure_t *failure = l->failure;
+/* Whether the SYMBOL=1 entries of list hold symbol. */
+static bool requests_symbol(const jb_vector_t *list, jb_json_span_t symbol) {
+  for (size_t i = 0; i < jb_vector_size(list); ++i)
+    if (jh_span_compare(symbol_of(jh_list_at(list, i)), symbol) == 0)
+      return true;
+  return false;
+}
+
+/* Add source to the provenance of symbol, keeping its sources sorted. */
+static hal_status_t add_provenance(jb_vector_t *provenance,
+                                   jb_json_span_t symbol,
+                                   jb_json_span_t source) {
+  for (size_t i = 0; i < jb_vector_size(provenance); ++i) {
+    jh_feature_provenance_t *entry = jb_vector_at(provenance, i);
+    if (jh_span_compare(jh_string_span(&entry->symbol), symbol) != 0)
+      continue;
+    if (jh_list_contains(&entry->sources, source))
+      return HAL_OK;
+    const hal_status_t status = jh_list_push(&entry->sources, source);
+    jh_list_sort(&entry->sources);
+    return status;
+  }
+  /* Every requirement is a request of the resolution, so it has an entry. */
+  return HAL_EINTERNAL;
+}
+
+hal_status_t jh_board_resolve_features(const jh_feature_registry_t *features,
+                                       jb_json_tree_view_t target,
+                                       const jb_vector_t *normalized,
+                                       jh_feature_resolution_t *resolution,
+                                       jh_failure_t *failure) {
+  if (features == NULL || normalized == NULL || resolution == NULL)
+    return jh_fail_arguments(failure);
   jb_vector_t raw = {0}, required = {0}, sources = {0}, requests = {0};
   jb_string_t text = {0};
-  jh_feature_resolution_t resolution;
-  jh_feature_resolution_init(&resolution);
   hal_status_t status = jh_fail_storage(failure, jh_list_init(&raw));
   if (status == HAL_OK)
     status = jh_fail_storage(failure, jh_list_init(&required));
@@ -2180,17 +2177,13 @@ static hal_status_t resolve_features(loader_t *l, jb_json_tree_view_t target,
   if (status == HAL_OK && member(target, "requiredFeatures", &list))
     status = jh_fail_storage(failure, strings_of(list, &raw));
   if (status == HAL_OK)
-    status = normalize_features(&raw, &required, failure);
+    status = jh_board_normalize_features(&raw, &required, failure);
   jb_json_span_t id = {NULL, 0};
   (void)jh_json_string(field(target, "id"), &id);
   for (size_t i = 0; status == HAL_OK && i < jb_vector_size(&required); ++i) {
     const jb_json_span_t symbol = symbol_of(jh_list_at(&required, i));
     status = jh_fail_storage(failure, disabled_twin(symbol, &text));
-    bool twin = false;
-    for (size_t r = 0; status == HAL_OK && r < jb_vector_size(normalized); ++r)
-      twin = twin || jh_span_compare(symbol_of(jh_list_at(normalized, r)),
-                                     jh_string_span(&text)) == 0;
-    if (status == HAL_OK && twin)
+    if (status == HAL_OK && requests_symbol(normalized, jh_string_span(&text)))
       status =
           fail_plain(failure, JH_PARTS(jh_span("[JH-CFG-TARGET-REQUIRED] "), id,
                                        jh_span(" requires "), symbol,
@@ -2206,74 +2199,95 @@ static hal_status_t resolve_features(loader_t *l, jb_json_tree_view_t target,
                                                      "feature"),
                                              jh_span(index))));
   }
+  /* Every requirement gets its target source; a requested one is no request
+   * of its own. */
   for (size_t i = 0; status == HAL_OK && i < jb_vector_size(&required); ++i) {
-    const jb_json_span_t symbol = symbol_of(jh_list_at(&required, i));
-    bool requested = false;
-    for (size_t r = 0; r < jb_vector_size(normalized); ++r)
-      requested =
-          requested ||
-          jh_span_compare(symbol_of(jh_list_at(normalized, r)), symbol) == 0;
     (void)snprintf(index, sizeof index, "[%zu]", i);
-    if (!requested)
-      status = jh_fail_storage(
-          failure,
-          jh_list_push_parts(&sources, JH_PARTS(jh_span("target:"), id,
-                                                jh_span(":requiredFeatures"),
-                                                jh_span(index))));
+    status = jh_fail_storage(
+        failure,
+        jh_list_push_parts(&sources, JH_PARTS(jh_span("target:"), id,
+                                              jh_span(":requiredFeatures"),
+                                              jh_span(index))));
   }
   /* The requests borrow the entries and sources, which no longer grow. */
-  size_t source = 0;
-  for (size_t i = 0; status == HAL_OK && i < jb_vector_size(normalized); ++i) {
+  const size_t requested_count = jb_vector_size(normalized);
+  for (size_t i = 0; status == HAL_OK && i < requested_count; ++i) {
     const jh_feature_request_t request = {
         symbol_of(jh_list_at(normalized, i)), jh_span("1"),
-        jh_string_span(jh_list_at(&sources, source++)), true};
+        jh_string_span(jh_list_at(&sources, i)), true};
     status = jh_fail_storage(failure, jb_vector_append(&requests, &request, 1));
   }
   for (size_t i = 0; status == HAL_OK && i < jb_vector_size(&required); ++i) {
     const jb_json_span_t symbol = symbol_of(jh_list_at(&required, i));
-    bool requested = false;
-    for (size_t r = 0; r < jb_vector_size(normalized); ++r)
-      requested =
-          requested ||
-          jh_span_compare(symbol_of(jh_list_at(normalized, r)), symbol) == 0;
-    if (requested)
+    if (requests_symbol(normalized, symbol))
       continue;
     const jh_feature_request_t request = {
-        symbol, jh_span("1"), jh_string_span(jh_list_at(&sources, source++)),
-        true};
+        symbol, jh_span("1"),
+        jh_string_span(jh_list_at(&sources, requested_count + i)), true};
     status = jh_fail_storage(failure, jb_vector_append(&requests, &request, 1));
   }
   if (status == HAL_OK)
-    status = loaded_features(l);
-  if (status == HAL_OK)
     status = jh_feature_resolve(
-        &l->features, jb_vector_data(&requests), jb_vector_size(&requests),
-        jh_span("board configuration"), NULL, &resolution, failure);
-  if (status == HAL_OK && jb_vector_size(&resolution.findings) != 0) {
+        features, jb_vector_data(&requests), jb_vector_size(&requests),
+        jh_span("board configuration"), NULL, resolution, failure);
+  if (status == HAL_OK && jb_vector_size(&resolution->findings) != 0) {
     jb_string_clear(&text);
     for (size_t i = 0;
-         status == HAL_OK && i < jb_vector_size(&resolution.findings); ++i) {
+         status == HAL_OK && i < jb_vector_size(&resolution->findings); ++i) {
       jh_put(&text, &status, i == 0 ? "" : "\n");
       jh_put_span(&text, &status,
-                  jh_string_span(jh_list_at(&resolution.findings, i)));
+                  jh_string_span(jh_list_at(&resolution->findings, i)));
     }
     status = status == HAL_OK
                  ? fail_plain(failure, JH_PARTS(jh_string_span(&text)))
                  : jh_fail_storage(failure, status);
   }
-  for (size_t i = 0; status == HAL_OK && resolved != NULL &&
-                     i < jb_vector_size(&resolution.resolved);
-       ++i)
+  /* requested: the symbols of the explicit requests in their order. */
+  if (status == HAL_OK) {
+    jh_list_destroy(&resolution->requested);
+    status = jh_fail_storage(failure, jh_list_init(&resolution->requested));
+  }
+  for (size_t i = 0; status == HAL_OK && i < requested_count; ++i)
     status = jh_fail_storage(
-        failure,
-        jh_list_push(resolved,
-                     jh_string_span(jh_list_at(&resolution.resolved, i))));
-  jh_feature_resolution_destroy(&resolution);
+        failure, jh_list_push(&resolution->requested,
+                              symbol_of(jh_list_at(normalized, i))));
+  for (size_t i = 0; status == HAL_OK && i < jb_vector_size(&required); ++i) {
+    status = add_provenance(
+        &resolution->provenance, symbol_of(jh_list_at(&required, i)),
+        jh_string_span(jh_list_at(&sources, requested_count + i)));
+    if (status == HAL_EINTERNAL)
+      status = jh_fail_text(failure, status, 4,
+                            "board feature provenance lacks a requirement");
+    else
+      status = jh_fail_storage(failure, status);
+  }
   jb_vector_destroy(&requests);
   jb_string_destroy(&text);
   jh_list_destroy(&sources);
   jh_list_destroy(&required);
   jh_list_destroy(&raw);
+  return status;
+}
+
+/* resolve_features: the resolved symbols of the normalized requests and the
+ * target's required features, as the board configuration resolves them. */
+static hal_status_t resolve_features(loader_t *l, jb_json_tree_view_t target,
+                                     const jb_vector_t *normalized,
+                                     jb_vector_t *resolved) {
+  jh_feature_resolution_t resolution;
+  jh_feature_resolution_init(&resolution);
+  hal_status_t status = loaded_features(l);
+  if (status == HAL_OK)
+    status = jh_board_resolve_features(&l->features, target, normalized,
+                                       &resolution, l->failure);
+  for (size_t i = 0; status == HAL_OK && resolved != NULL &&
+                     i < jb_vector_size(&resolution.resolved);
+       ++i)
+    status = jh_fail_storage(
+        l->failure,
+        jh_list_push(resolved,
+                     jh_string_span(jh_list_at(&resolution.resolved, i))));
+  jh_feature_resolution_destroy(&resolution);
   return status;
 }
 
@@ -2694,7 +2708,7 @@ static hal_status_t validate_target_features(loader_t *l, const check_t *c,
   if (status == HAL_OK && has_required)
     status = storage(c, strings_of(features, &raw));
   if (status == HAL_OK)
-    status = normalize_features(&raw, &required, c->failure);
+    status = jh_board_normalize_features(&raw, &required, c->failure);
   if (status == HAL_OK && jb_vector_size(&required) != jb_vector_size(&raw))
     status = fail_value(c, jh_span("$.requiredFeatures"), &features,
                         "unique feature symbols");
@@ -2706,7 +2720,8 @@ static hal_status_t validate_target_features(loader_t *l, const check_t *c,
     if (status == HAL_OK)
       status = storage(c, strings_of(listed, &supported_raw));
     if (status == HAL_OK)
-      status = normalize_features(&supported_raw, &supported, c->failure);
+      status =
+          jh_board_normalize_features(&supported_raw, &supported, c->failure);
     if (status == HAL_OK &&
         jb_vector_size(&supported) != jb_vector_size(&supported_raw))
       status = fail_value(c, jh_span("$.supportedFeatures"), &listed,

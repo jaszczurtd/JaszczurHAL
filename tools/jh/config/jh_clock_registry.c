@@ -1949,12 +1949,6 @@ static bool scanned_suffix(const char *name) {
   return false;
 }
 
-static hal_status_t collect_entry(void *context, const char *name,
-                                  const jb_fs_info_t *info) {
-  (void)info;
-  return jh_list_push(context, jh_span(name));
-}
-
 /* The match in path relative to the scanned root: "<relative> sets a Pico
  * SDK clock macro: <match>". relative uses the separator of the host. */
 static hal_status_t scan_file(override_scan_t *scan, const char *path,
@@ -1976,58 +1970,10 @@ static hal_status_t scan_file(override_scan_t *scan, const char *path,
       JH_PARTS(relative, jh_span(" sets a Pico SDK clock macro: "), match));
 }
 
-/* Path.rglob("*") of directory in sorted order: each name, then the contents
- * of a directory that is not a link. */
-static hal_status_t scan_directory(override_scan_t *scan, const char *directory,
-                                   jb_json_span_t relative) {
-  jb_vector_t names = {0};
-  jb_string_t path = {0}, child = {0};
-  hal_status_t status = jh_fail_storage(scan->failure, jh_list_init(&names));
-  if (status == HAL_OK)
-    status = jh_fail_storage(scan->failure, text_init(&path));
-  if (status == HAL_OK)
-    status = jh_fail_storage(scan->failure, text_init(&child));
-  if (status == HAL_OK) {
-    const hal_status_t listed = jb_fs_list(directory, collect_entry, &names);
-    if (listed == HAL_ENOMEM)
-      status = jh_fail_storage(scan->failure, listed);
-    else if (listed != HAL_OK && listed != HAL_ENOENT && listed != HAL_ETYPE)
-      status = jh_fail(scan->failure, listed, 3,
-                       JH_PARTS(jh_span(directory), jh_span(": cannot list: "),
-                                jh_span(hal_status_to_string(listed))));
-    jh_list_sort(&names);
-  }
-#ifdef _WIN32
-  static const char separator[] = "\\";
-#else
-  static const char separator[] = "/";
-#endif
-  for (size_t i = 0;
-       status == HAL_OK && !scan->found && i < jb_vector_size(&names); ++i) {
-    const char *name = jb_string_data(jh_list_at(&names, i));
-    status =
-        jh_fail_storage(scan->failure, jh_path_join(directory, name, &path));
-    if (status == HAL_OK)
-      status = jh_fail_storage(
-          scan->failure, jh_join(&child, JH_PARTS(relative, jh_span(separator),
-                                                  jh_span(name))));
-    jb_fs_info_t entry, target;
-    if (status != HAL_OK ||
-        jb_fs_status(jb_string_data(&path), false, &entry) != HAL_OK)
-      continue;
-    const bool link = entry.kind == JB_FS_LINK;
-    const bool followed =
-        jb_fs_status(jb_string_data(&path), true, &target) == HAL_OK;
-    if (followed && target.kind == JB_FS_REGULAR && scanned_suffix(name))
-      status = scan_file(scan, jb_string_data(&path), jh_string_span(&child));
-    else if (!link && entry.kind == JB_FS_DIRECTORY)
-      status =
-          scan_directory(scan, jb_string_data(&path), jh_string_span(&child));
-  }
-  jb_string_destroy(&child);
-  jb_string_destroy(&path);
-  jh_list_destroy(&names);
-  return status;
+/* A file of the scanned trees: scanned when its suffix is one of them. */
+static hal_status_t scan_entry(void *user, const char *path,
+                               jb_json_span_t relative, const char *name) {
+  return scanned_suffix(name) ? scan_file(user, path, relative) : HAL_OK;
 }
 
 hal_status_t jh_clock_check_no_hal_override(const char *root, size_t limit,
@@ -2046,7 +1992,8 @@ hal_status_t jh_clock_check_no_hal_override(const char *root, size_t limit,
        ++i) {
     status = jh_fail_storage(failure, jh_path_join(root, bases[i], &path));
     if (status == HAL_OK)
-      status = scan_directory(&scan, jb_string_data(&path), jh_span(bases[i]));
+      status = jh_walk_files(jb_string_data(&path), jh_span(bases[i]),
+                             scan_entry, &scan, failure);
   }
   jb_string_destroy(&path);
   jb_string_destroy(&scan.text);

@@ -205,7 +205,7 @@ require("scripts/sync_generated.py --check" in repository,
         "the repository stage does not fail on generated drift")
 for bypass in (
     "generate features --root",
-    "scripts/generate_board_config.py --boards-root boards --check-static",
+    "generate boards --root",
     "scripts/vscode_library_workspace.py sync-vscode --check",
     "scripts/examples_dispatcher.py check-template",
     "scripts/check_sbom.sh",

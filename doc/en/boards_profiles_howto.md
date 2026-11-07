@@ -13,7 +13,7 @@ JaszczurHAL selects hardware with two stable IDs:
 
 A target identifies the MCU, instruction-set architecture (ISA), toolchain, and build configuration. A board profile describes physical hardware: flash, exposed and reserved pins, on-board devices, capabilities, and build components. Application features must still be enabled through `HAL_ENABLE_*`. The presence of hardware does not enable its software support automatically.
 
-Available profiles are stored in `boards/profiles/*.json`. List their IDs with `python3 scripts/generate_board_config.py --boards-root boards --list boards`. ESP32-S3 provides the implemented core and peripheral modules and the network services described as Phase 3.
+Available profiles are stored in `boards/profiles/*.json`. List their IDs with `scripts/jh board list --root .` (on Windows `scripts/jh.ps1`), which prints a `target <id>` or `board <id>` line for each descriptor. ESP32-S3 provides the implemented core and peripheral modules and the network services described as Phase 3.
 
 Before importing the toolchain, the generator checks target compatibility, flash size, pins, components, and feature dependencies. It also generates a fallback configuration for direct source-level selection from the same descriptors. Board names and compile-time settings therefore remain consistent without a configuration generated for a particular build.
 
@@ -31,8 +31,8 @@ Version-controlled source data is stored in `boards/`:
 - `capabilities.json` assigns stable capability bits;
 - `board.schema.json` provides editor assistance only;
 - `jh board validate` owns structural and semantic validation
-  ([jh README](../../tools/jh/README.md#board-registry));
-  `scripts/generate_board_config.py` reads the validated registry from it.
+  ([jh README](../../tools/jh/README.md#board-registry)); `jh board config`
+  and `jh generate boards` generate files from the validated registry.
 
 Descriptor IDs must use kebab-case and match their filenames. Unknown fields, duplicate IDs, incompatible target/board pairs, invalid endpoints, unknown capabilities or components, and output outside `.build` all cause errors.
 
@@ -239,23 +239,18 @@ Every official build checks the resolved component list. An unknown component, p
 Validate all tracked descriptors:
 
 ```bash
-python3 scripts/generate_board_config.py \
-  --boards-root boards \
-  --validate-only
+scripts/jh board validate --root .
 ```
 
 Generate one resolved profile:
 
 ```bash
-python3 scripts/generate_board_config.py \
-  --boards-root boards \
+scripts/jh board config --root . \
   --target rp2040 \
   --board rp2040-zero \
   --output-dir .build/generated/boards/rp2040/rp2040-zero \
-  --requested-feature HAL_ENABLE_RGB_LED
+  --feature HAL_ENABLE_RGB_LED
 ```
-
-`--feature` remains a compatibility spelling for `--requested-feature`.
 
 Refresh or verify all tracked generated artifacts, including the source-level
 board projections:
@@ -275,12 +270,12 @@ The deterministic output contains:
 - `jh_link_contract.h`;
 - link-signature definition and reference translation units;
 - `generation.d`, the list of every file the generator read: descriptors from
-  `--boards-root`, the feature and tooling registries, and its own Python
-  modules.
+  `--boards-root` and the JSON files of the registries under `config/`.
 
 The generator alone knows its inputs. CMake reconfigures when a file from
-`generation.d` changes, and watches the patterns in `JH_BOARD_INPUT_GLOBS`
-(from `jh_board_config.cmake`) to notice new descriptors.
+`generation.d` changes or the `jh` program changes, and watches the patterns
+in `JH_BOARD_INPUT_GLOBS` (from `jh_board_config.cmake`) to notice new
+descriptors.
 
 Firmware does not parse JSON. CMake runs the generator before importing Pico SDK, then uses the generated platform and board settings. `hal_board.h` always uses the version-controlled registry. It reads the board configuration generated for the build when available, or the stored fallback otherwise.
 

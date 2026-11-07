@@ -3,9 +3,10 @@
 This directory is the source of truth for JaszczurHAL target and physical
 board definitions. `jh board validate` validates the descriptors
 ([jh README](../tools/jh/README.md#board-registry)).
-`scripts/generate_board_config.py` reads the validated registry from it, emits
-build-time CMake and C/C++ configuration below `.build`, and maintains the
-tracked registry and source fallback used without a build-generated profile.
+`jh board config` writes the CMake and C/C++ configuration of one build below
+`.build` from the validated registry, and `jh generate boards` maintains the
+stored registry and the source fallback used without a build-generated
+profile.
 
 - `capabilities.json` assigns stable public capability bits.
 - `targets/` describes MCU/ISA build targets.

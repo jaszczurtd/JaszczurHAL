@@ -1665,8 +1665,6 @@ generation_inputs = (radio_output / "generation.d").read_text(encoding="utf-8").
 for expected_input in (
     radio_root / "capabilities.json",
     radio_root / "profiles/rp2040-zero.json",
-    GENERATOR.parent / "codegen_support.py",
-    GENERATOR.parent / "tooling_contract.py",
     ROOT / "config/tooling/board_components.json",
 ):
     require(

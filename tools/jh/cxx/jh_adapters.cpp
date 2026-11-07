@@ -56,6 +56,13 @@ owned_string absolute_path(const char *path, const char *base) {
   return result;
 }
 
+owned_string python_resolve(const char *path, const char *base) {
+  owned_string result;
+  failure_record failed;
+  failed.check(jh_python_resolve(path, base, result.raw(), &failed.value));
+  return result;
+}
+
 std::unique_ptr<json_document> read_document(parse_location &where,
                                              const char *path, size_t limit,
                                              bool hardware_numbers) {

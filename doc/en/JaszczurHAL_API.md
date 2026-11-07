@@ -194,7 +194,7 @@ profile from `boards/profiles/`; the generator emits the matching
 are the authoritative profile inventory. List the current IDs with:
 
 ```bash
-python3 scripts/generate_board_config.py --boards-root boards --list boards
+scripts/jh board list --root .
 ```
 
 The ESP32-S3 component provides `hal_board` using generated target, board, and link metadata. A declared hardware capability remains `HAL_BOARD_CAP_INACTIVE` until the responsible module reports that it is available or has failed.

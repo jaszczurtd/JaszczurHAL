@@ -62,6 +62,8 @@ void assign(jb_string_t &text, std::string_view value);
 hal_status_t append_text(void *user, const char *data, size_t length);
 /** jh_absolute_path as an owned string. */
 owned_string absolute_path(const char *path, const char *base);
+/** jh_python_resolve as an owned string. */
+owned_string python_resolve(const char *path, const char *base);
 
 /** Owner of bytes read by jb_file_read. */
 struct file_owner {

@@ -204,7 +204,7 @@ W nowej aplikacji opieraj obsługę sprzętu na API HAL. Korzystaj z modułów n
 Makra `HAL_TARGET_*` identyfikują mikrokontroler i architekturę zestawu instrukcji (ISA). `JH_BOARD` wybiera profil fizycznej płytki z `boards/profiles/`; generator tworzy odpowiadający mu selektor `HAL_BOARD_PROFILE_*` i konfigurację platformy. Dostępne profile są zdefiniowane w deskryptorach płytek. Aby wyświetlić ich identyfikatory, uruchom:
 
 ```bash
-python3 scripts/generate_board_config.py --boards-root boards --list boards
+scripts/jh board list --root .
 ```
 
 Komponent ESP32-S3 udostępnia API `hal_board` na podstawie wygenerowanych danych platformy, płytki i konfiguracji linkowania. Zadeklarowana funkcja sprzętowa pozostaje w stanie `HAL_BOARD_CAP_INACTIVE`, dopóki obsługujący ją moduł nie zgłosi gotowości albo błędu.

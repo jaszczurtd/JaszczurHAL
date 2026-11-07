@@ -8,14 +8,16 @@ zapisać albo sprawdzić plik wynikowy. Korzysta z parsera i API plików jhbase.
 także z odwołaniami między lokalnymi plikami. `jh generate device-defaults`
 czyta katalog typów komponentów HAL i zapisuje albo sprawdza generowany
 nagłówek ich wartości domyślnych, a `jh generate features` robi to samo
-z nagłówkiem i danymi CMake rejestru funkcji HAL. `scripts/sync_generated.py`,
-a przez niego hook pre-commit i bramka, uruchamiają oba polecenia przez
-opisany niżej launcher. `jh config inspect` odczytuje `hal_project_config.h` projektu tak,
+z nagłówkiem i danymi CMake rejestru funkcji HAL. `jh generate boards`
+zapisuje albo sprawdza pliki płytek przechowywane w repozytorium.
+`scripts/sync_generated.py`, a przez niego hook pre-commit i bramka,
+uruchamiają te generatory przez opisany niżej launcher. `jh config inspect` odczytuje `hal_project_config.h` projektu tak,
 jak widzi go kompilacja. `jh feature list` i `jh feature resolve` podają
 rejestr funkcji oraz rozwiązane funkcje, o które prosi jedna kompilacja;
 `jh feature lint` sprawdza żądania funkcji w nagłówkach i manifestach
-projektów. `jh board` sprawdza i wypisuje rejestr płytek, a `jh clock` rejestr
-drzew zegarów.
+projektów. `jh board` sprawdza i wypisuje rejestr płytek oraz zapisuje
+konfigurację jednej kompilacji, a `jh clock` sprawdza i wypisuje rejestr drzew
+zegarów.
 
 Przed konfiguracją przygotuj zależności hosta w wersjach wskazanych przez repozytorium:
 
@@ -85,8 +87,8 @@ jh config inspect --header examples/13_adc/hal_project_config.h --define HAL_TAR
 Ścieżki wejściowe są rozwiązywane względem cwd odczytanego raz na wejściu.
 Argumenty Windows pochodzą z `wmain` i są zamieniane z UTF-16 na UTF-8.
 Opcje przyjmują `--name value` albo `--name=value`; flagi nie mają wartości.
-Nieznane opcje, opcje powtórzone (poza `--define`) i dodatkowe słowa polecenia
-dają błąd.
+Nieznane opcje, dodatkowe słowa polecenia i powtórzona opcja, której pomoc nie
+opisuje jako powtarzalnej, dają błąd.
 `-h` i `-V` oznaczają pomoc oraz wersję. `--` kończy analizę opcji.
 Wartość zaczynająca się od `--` wymaga zapisu `--name=value`.
 Brak `--pointer` wybiera root; nazwy nie są normalizowane do NFC.
@@ -394,12 +396,83 @@ i `singleEndpointDeviceKinds`. `jh board default --target <id>` wypisuje
 płytkę domyślną znanego targetu; jego wynik `--json`
 (`command: "board.default"`) zawiera `target` i `board`.
 
-Polecenia kończą się kodem 0 po sukcesie, 2 przy niepoprawnym rejestrze,
-pliku rejestru, którego nie da się odczytać, albo nieznanym targecie, a 4
-przy braku pamięci. `scripts/generate_board_config.py` udostępnia ten model
-swoim importerom: rejestr z `load_registry()` oraz tabele
-`COMPONENT_REGISTRY` i `CAN_CONTROLLERS`, każdy rejestr czytany raz na proces,
-dopóki jego pliki się nie zmienią.
+`jh generate boards --root <checkout> (--write | --check)` zapisuje trzy pliki
+płytek przechowywane w repozytorium, pod ścieżkami z
+`config/tooling/artifacts.json` w katalogu `--output-root` (domyślnie
+`<root>`): `jh_board_registry.h` z enumeracją profili i bitami cech,
+`jh_board_fallback_config.h` z regułami selektorów i parametrami każdego
+targetu i płytki dla kompilacji bez wygenerowanej konfiguracji oraz
+`jh_board_components_registry.cmake` z katalogiem komponentów dla CMake.
+Pliki wynikają z rejestru w `--boards-root`. `--write` tworzy brakujące
+katalogi i wypisuje `generated 3 board artifacts (<n> changed)`. `--check`
+niczego nie zmienia i wypisuje `verified 3 generated board artifacts`; gdy
+pliki się rozjechały, podaje nazwę każdego brakującego, pokazuje każdy
+nieaktualny jako diff o najwyżej 120 liniach i kończy się kodem 1.
+
+`jh board config --root <checkout> --target <id>` zapisuje konfigurację
+jednej kompilacji dla płytki z `--board`, domyślnie płytki domyślnej targetu:
+
+- `jh_board_config.cmake` ze zmiennymi `JH_BOARD_*`, które czyta CMake;
+- `jh_board_config.h` z parametrami `HAL_TARGET_*` i `HAL_BOARD_*` oraz
+  definicjami płytki w postaci makr;
+- `jh_link_contract.h` wraz z plikami definicji i referencji, czyli sygnaturę
+  linkowania targetu, płytki i funkcji;
+- `jh_board_resolved.json` z rozwiązaną konfiguracją;
+- `generation.d`, czyli pliki JSON przeczytane w `--boards-root`
+  i `<root>/config`.
+
+`--feature` żąda funkcji HAL i może się powtarzać; żądania rozwiązują się
+razem z funkcjami wymaganymi przez target i wszystkim, co z nich wynika.
+`--define` przekazuje definicję kompilacji. Nie może ona zawierać generator
+expression, symbol funkcji może podać tylko sam albo z `=1` i nie może
+wybierać selektora `HAL_BOARD_PROFILE_*` ani `HAL_CYW43_PROFILE_*` innej
+płytki. `--output-dir` musi leżeć w `--output-root`, a bez tej opcji
+w katalogu `.build` obok `--boards-root`; ten katalog główny musi mieć
+składnik `.build` albo leżeć w katalogu z `JH_MANAGED_BUILD_ROOT`. Te ścieżki
+i `--boards-root` są rozwiązywane tak jak w `Path.resolve()` Pythona, więc poza
+Windows dowiązanie symboliczne zostaje rozwiązane przed następującym po nim
+`..`. Polecenie tworzy katalog wyjściowy, usuwa `jh_board_registry.h`
+pozostawiony tam przez starszy generator i zapisuje tylko zmienione pliki. Jego wynik `--json`
+(`command: "board.config"`) zawiera `target`, `board`, `files` z treścią
+wszystkich siedmiu plików, a po zapisie także `outputDir` i `changed`;
+z `--json` opcja `--output-dir` jest nieobowiązkowa.
+`cmake/jh_board_profiles.cmake` uruchamia polecenie podczas konfiguracji,
+a kompilacja konfiguruje się ponownie po zmianie pliku z `generation.d`,
+nowym pliku JSON w którymś z tych katalogów albo zmianie programu `jh`.
+
+Generowany nagłówek podaje parametry wybranego targetu: identyfikator
+deskryptora, backend, nazwy MCU i podtypu, opis CPU i liczbę rdzeni, obecność
+FPU oraz całkowity i użyteczny rozmiar RAM, a dla płytki
+`HAL_BOARD_EXPECTED_FLASH_BYTES`. Definicje płytki trafiają w tej samej postaci
+do `jh_board_resolved.json.boardCompileDefinitions`,
+`JH_BOARD_COMPILE_DEFINITIONS` i nagłówka. Plik referencji utrzymuje symbol
+sygnatury atrybutami `constructor, used` w GCC i Clang, więc niezgodność
+targetu, płytki albo funkcji pozostaje błędem linkowania także wtedy, gdy
+linker usuwa nieużywane sekcje.
+
+`--file <path>` wskazuje obiekt JSON z wartościami, które należą do montażu
+device tree: `board`, czyli deskryptor płytki rozwiązany przez montaż;
+`headerDefinitions` i `cmakeDefinitions`, czyli definicje w nagłówku
+i w wierszu poleceń kompilatora; `components`; `headerPrelude`, czyli wiersze
+po dyrektywach include w `jh_board_config.h`; `generationExtra`, czyli
+dodatkowe wejścia na końcu `generation.d`; oraz `contractHash`, czyli skrót
+w symbolu sygnatury. Brakujące pole zostawia wartość płytki.
+
+Polecenia kończą się kodem 0 po sukcesie, 1, gdy `generate boards --check`
+znajdzie rozbieżność, 2 przy niepoprawnym rejestrze, pliku rejestru albo
+`--file`, którego nie da się odczytać, nieznanym targecie albo płytce,
+odrzuconym żądaniu i pliku wyniku, którego nie da się zapisać, 3, gdy
+`board config` nie może rozwiązać ani utworzyć katalogu wyjściowego albo
+usunąć z niego starszego `jh_board_registry.h`, a 4 przy braku pamięci.
+`scripts/generate_board_config.py` udostępnia ten model swoim importerom:
+rejestr z `load_registry()`, tabele `COMPONENT_REGISTRY` i `CAN_CONTROLLERS`,
+każdy rejestr czytany raz na proces, dopóki jego pliki się nie zmienią, oraz
+pliki jednej kompilacji z `jh board config`.
+
+Pliki mają te same bajty, które zapisywał `generate_board_config.py`, poza
+nazwą generatora w pierwszym komentarzu. `generation.d` zawiera wejścia JSON
+i podane dodatkowe wejścia, ale nie moduły Pythona: program `jh` i jego
+źródła CMake rejestruje sam.
 
 W odróżnieniu od tego skryptu polecenia przyjmują w polu liczby całkowitej
 tylko liczbę zapisaną bez części ułamkowej i wykładnika, mieszczącą się

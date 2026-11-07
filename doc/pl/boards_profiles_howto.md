@@ -15,7 +15,7 @@ JaszczurHAL wybiera platformę i płytkę za pomocą dwóch stałych identyfikat
 
 Platforma docelowa (target) określa mikrokontroler, architekturę zestawu instrukcji (ISA), zestaw narzędzi i sposób kompilacji. Profil płytki opisuje konkretny sprzęt: pamięć flash, wyprowadzone i zarezerwowane piny, wbudowane urządzenia, możliwości sprzętowe oraz komponenty dobierane podczas kompilacji. Funkcje aplikacji nadal trzeba włączać przez `HAL_ENABLE_*`. Sama obecność sprzętu nie włącza jego obsługi.
 
-Dostępne profile są zapisane w `boards/profiles/*.json`. Ich identyfikatory wyświetla polecenie `python3 scripts/generate_board_config.py --boards-root boards --list boards`. ESP32-S3 udostępnia zaimplementowane moduły podstawowe i peryferia oraz funkcje sieciowe i usługi określone w dokumentacji jako faza 3.
+Dostępne profile są zapisane w `boards/profiles/*.json`. Ich identyfikatory wyświetla polecenie `scripts/jh board list --root .` (na Windows `scripts/jh.ps1`), które dla każdego deskryptora wypisuje wiersz `target <id>` albo `board <id>`. ESP32-S3 udostępnia zaimplementowane moduły podstawowe i peryferia oraz funkcje sieciowe i usługi określone w dokumentacji jako faza 3.
 
 Przed załadowaniem narzędzi kompilacji generator sprawdza zgodność platformy, rozmiar pamięci flash, piny, komponenty i zależności funkcji. Z tych samych deskryptorów tworzy również konfigurację zastępczą do bezpośredniego wyboru płytki w kodzie. Nazwy płytek i ustawienia kompilacji pozostają dzięki temu jednakowe także bez konfiguracji wygenerowanej dla konkretnej kompilacji.
 
@@ -34,7 +34,8 @@ tree opisuje [poradnik projektu firmware](FwProjectWorkflow.md).
 - `board.schema.json` zawiera wyłącznie informacje pomocnicze dla edytora;
 - `jh board validate` odpowiada za sprawdzanie poprawności strukturalnej
   i semantycznej ([README jh](../../tools/jh/README.pl.md#rejestr-płytek));
-  `scripts/generate_board_config.py` czyta od niego sprawdzony rejestr.
+  `jh board config` i `jh generate boards` tworzą pliki ze sprawdzonego
+  rejestru.
 
 Identyfikatory deskryptorów muszą mieć zapis kebab-case i odpowiadać nazwom plików. Błędem są nieznane pola, powtórzone identyfikatory, niezgodne pary platforma-płytka, nieprawidłowe punkty połączeń, nieznane cechy lub komponenty oraz zapis wyników poza `.build`.
 
@@ -246,24 +247,18 @@ Każda oficjalna konfiguracja sprawdza wynikową listę komponentów. Nieznany k
 Sprawdź wszystkie deskryptory przechowywane w repozytorium:
 
 ```bash
-python3 scripts/generate_board_config.py \
-  --boards-root boards \
-  --validate-only
+scripts/jh board validate --root .
 ```
 
 Wygeneruj końcową konfigurację jednego profilu:
 
 ```bash
-python3 scripts/generate_board_config.py \
-  --boards-root boards \
+scripts/jh board config --root . \
   --target rp2040 \
   --board rp2040-zero \
   --output-dir .build/generated/boards/rp2040/rp2040-zero \
-  --requested-feature HAL_ENABLE_RGB_LED
+  --feature HAL_ENABLE_RGB_LED
 ```
-
-`--feature` pozostaje aliasem `--requested-feature` zachowanym dla zgodności
-wstecznej.
 
 Odśwież lub sprawdź wszystkie pliki generowane przechowywane w repozytorium, łącznie z konfiguracją zastępczą używaną bezpośrednio przez źródła:
 
@@ -283,12 +278,11 @@ Deterministycznie wygenerowany zestaw plików obejmuje:
 - jednostki translacji definiujące sygnaturę linkowania oraz odwołujące się
   do niej;
 - `generation.d`, czyli listę wszystkich plików odczytanych przez generator:
-  deskryptorów z `--boards-root`, rejestrów funkcji i narzędzi oraz jego
-  własnych modułów Pythona.
+  deskryptorów z `--boards-root` i plików JSON rejestrów w `config/`.
 
 Tylko generator wie, co czyta. CMake ponawia konfigurację po zmianie pliku
-z `generation.d`, a nowe deskryptory wychwytuje według wzorców
-z `JH_BOARD_INPUT_GLOBS` (z `jh_board_config.cmake`).
+z `generation.d` albo programu `jh`, a nowe deskryptory wychwytuje według
+wzorców z `JH_BOARD_INPUT_GLOBS` (z `jh_board_config.cmake`).
 
 Firmware nie analizuje JSON. CMake uruchamia generator przed importem Pico SDK, a następnie używa wygenerowanych ustawień platformy i płytki. `hal_board.h` zawsze korzysta z rejestru w repozytorium. Konfigurację płytki odczytuje z plików wygenerowanych dla kompilacji, a przy ich braku - z zapisanej konfiguracji zastępczej.
 

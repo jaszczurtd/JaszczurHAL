@@ -51,18 +51,9 @@ GENERATOR_STEPS = (
     ),
     GeneratorStep(
         "static board registry",
-        ((
-            "scripts/generate_board_config.py",
-            "--boards-root",
-            "boards",
-            "--write-static",
-        ),),
-        ((
-            "scripts/generate_board_config.py",
-            "--boards-root",
-            "boards",
-            "--check-static",
-        ),),
+        (("generate", "boards", "--root", str(REPO_ROOT), "--write"),),
+        (("generate", "boards", "--root", str(REPO_ROOT), "--check"),),
+        host_cli=True,
     ),
     GeneratorStep(
         "device type defaults",

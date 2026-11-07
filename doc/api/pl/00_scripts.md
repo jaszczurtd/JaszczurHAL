@@ -789,10 +789,10 @@ Macierz targetów, interfejs aplikacji i polecenia kompilacji opisano w dokumenc
 Jeden skrypt obsługuje wszystkie wersjonowane pliki generowane. `--write`
 odświeża rejestr funkcji, statyczny rejestr płytek, wartości domyślne typów
 urządzeń, pliki VS Code przykładów, główne pliki VS Code oraz SBOM repozytorium.
-Wartości domyślne typów urządzeń daje `jh generate device-defaults`,
-uruchamiane przez launcher `scripts/jh` (`scripts/jh.ps1` na Windows), który
-najpierw buduje narzędzie, gdy zmieniły się jego wejścia; pozostałe kroki to
-skrypty Pythona. `--check` wywołuje ich tryby weryfikacji tylko do odczytu
+Trzy pierwsze dają `jh generate features`, `jh generate boards`
+i `jh generate device-defaults`, uruchamiane przez launcher `scripts/jh`
+(`scripts/jh.ps1` na Windows), który najpierw buduje narzędzie, gdy zmieniły
+się jego wejścia; pozostałe kroki to skrypty Pythona. `--check` wywołuje ich tryby weryfikacji tylko do odczytu
 i kończy się niepowodzeniem, jeśli brakuje pliku wyjściowego albo jest on
 nieaktualny. Przed uruchomieniem skrypt zapisuje stan plików wersjonowanych oraz
 nieignorowanych, a po zakończeniu wypisuje wykryte zmiany.
@@ -806,40 +806,21 @@ reguły ignorowania Gita.
 
 ### `scripts/generate_board_config.py`
 
-Czyta deskryptory JSON targetów, płytek i ich cech sprzętowych w `boards/`
-w postaci sprawdzonej przez `jh board list`
-([README jh](../../../tools/jh/README.pl.md#rejestr-płytek)), każdy rejestr raz
-na proces, dopóki jego pliki się nie zmienią. Następnie na podstawie wybranej
-pary target/płytka generuje konfigurację CMake oraz metadane do odczytu
-maszynowego. CMake i testy płytek wywołują skrypt bezpośrednio. `--validate-only` sprawdza kompletny rejestr.
-`--list targets|boards` oraz `--default-board` udostępniają listy dostępnych
-pozycji,
-natomiast `--feature` i `--define` dodają sprawdzoną warstwę konfiguracji
-kompilacji używaną dla generowanego wyjścia. `--output-dir` i `--output-root`
-muszą pozostać wewnątrz drzewa kompilacji wskazanego przez kod wywołujący.
-Definicje providera i backendu są zapisywane spójnie w
-`jh_board_resolved.json.boardCompileDefinitions`, generowanego
-`JH_BOARD_COMPILE_DEFINITIONS` oraz makr `jh_board_config.h` do
-bezpośredniego użycia przez kompilator. Generowana referencja sygnatury
-linkowania GCC/Clang używa symbolu głównego oznaczonego atrybutami
-`constructor, used`, dzięki czemu
-niezgodność targetu, płytki lub modułów powoduje błąd linkowania także przy
-włączonym usuwaniu nieużywanych sekcji.
+Udostępnia importującym go narzędziom Pythona deskryptory targetów, płytek
+i ich cech w `boards/` w postaci sprawdzonej przez `jh board list`, każdy
+rejestr czytany raz na proces, dopóki jego pliki się nie zmienią, oraz pliki
+jednej kompilacji z `jh board config`
+([README jh](../../../tools/jh/README.pl.md#rejestr-płytek)). `build_outputs()`
+zwraca te pliki dla targetu i płytki; generator konfiguracji sprzętu przekazuje
+płytkę i wartości montażu device tree. `generate()` zapisuje je dla kompilacji
+ESP-IDF.
 
-Generowany nagłówek udostępnia również identyfikator wybranego deskryptora
-targetu, backend, nazwy MCU i podtypu, opis CPU i liczbę rdzeni, obecność
-FPU oraz całkowity i użyteczny rozmiar RAM przez makra `HAL_TARGET_*`.
-Informacje o bieżącej konfiguracji systemu są odczytywane bezpośrednio z tych
-makr. Pojemność flash przeznaczonego na program, właściwa dla danej płytki,
-jest dostępna jako
-`HAL_BOARD_EXPECTED_FLASH_BYTES`.
-
-`--write-static` odświeża wersjonowane `jh_board_registry.h`,
-`jh_board_fallback_config.h` oraz rejestr CMake komponentów płytki. Dwa
-pierwsze pochodzą z `boards/`; projekcja CMake pochodzi z
-`config/tooling/board_components.json`. `--check-static` odrzuca brakujące
-lub nieaktualne pliki. Etap `repository` uruchamia sprawdzenie niezależnie od
-generowania płytki dla każdej kompilacji.
+Wiersz poleceń skryptu uruchamia te same polecenia: `--validate-only`,
+`--list targets|boards` i `--default-board` czytają rejestr, target
+z `--output-dir` (oraz opcjonalnie `--board`, `--output-root`, `--feature`
+i `--define`) uruchamia `jh board config`, a `--write-static` albo
+`--check-static` uruchamia `jh generate boards`. CMake woła `jh`
+bezpośrednio; z wiersza poleceń skryptu korzystają jeszcze testy płytek.
 
 ### `scripts/generate_hal_features.py`
 
