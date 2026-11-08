@@ -1718,14 +1718,8 @@ void jh_board_outputs_destroy(jh_board_outputs_t *outputs) {
 /* Path.as_posix(): / separators on Windows; elsewhere a backslash is a file
  * name character. */
 static void put_posix(emit_t *e, jb_json_span_t path) {
-#ifdef _WIN32
-  for (size_t i = 0; e->status == HAL_OK && i < path.length; ++i) {
-    const char c = path.data[i] == '\\' ? '/' : path.data[i];
-    e->status = jb_string_append(e->out, &c, 1);
-  }
-#else
-  put_span(e, path);
-#endif
+  if (e->status == HAL_OK)
+    e->status = jh_append_posix(e->out, path);
 }
 
 /* The input roots of a generation: the boards directory and the config
@@ -2538,19 +2532,6 @@ static hal_status_t assembly_read(const char *path, size_t limit,
   return status;
 }
 
-/* The parent directory of an absolute path, lexically. */
-static hal_status_t parent_path(const char *path, jb_string_t *out) {
-  size_t required = 0;
-  hal_status_t status = jb_fs_path_parent(path, NULL, 0, &required);
-  if (status != HAL_OK && status != HAL_EOVERFLOW)
-    return status;
-  status = jb_string_resize(out, required, '\0');
-  if (status == HAL_OK)
-    status = jb_fs_path_parent(path, jb_string_mutable_data(out), required,
-                               &required);
-  return status == HAL_OK ? jb_string_resize(out, required - 1, '\0') : status;
-}
-
 hal_status_t jh_board_configure(const jh_board_config_request_t *request,
                                 jh_board_config_result_t *result,
                                 jh_failure_t *failure) {
@@ -2622,9 +2603,8 @@ hal_status_t jh_board_configure(const jh_board_config_request_t *request,
     status =
         jh_board_check_selectors(board->root, request->definitions, failure);
   if (status == HAL_OK && request->output_dir != NULL) {
-    status = jh_fail_storage(
-        failure,
-        parent_path(jb_string_data(&registry->boards_root), &repository));
+    status = jh_path_parent(jb_string_data(&registry->boards_root), &repository,
+                            failure);
     if (status == HAL_OK)
       status = jh_board_managed_output(
           request->output_dir, request->output_root,

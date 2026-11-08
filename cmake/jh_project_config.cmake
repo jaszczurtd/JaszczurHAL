@@ -21,7 +21,7 @@ function(jh_config_glob OUT_VAR CONFIG_DIR NAME)
     set(${OUT_VAR} "${_jh_cg_dir}/${NAME}" PARENT_SCOPE)
 endfunction()
 
-# The project's hal_project_config.h evaluated by scripts/project_config.py for
+# The project's hal_project_config.h evaluated by jh config cmake for
 # one target and variant, exactly as the compiler sees it before the HAL
 # headers. Every build reads project configuration through these helpers.
 
@@ -164,9 +164,10 @@ endmacro()
 function(jh_read_project_config)
     cmake_parse_arguments(PARSE_ARGV 0 _JH_PC ""
         "ROOT;CONFIG_DIR;TARGET;VARIANT;OUTPUT_DIR;HARDWARE_HEADER" "DEFINES")
-    jh_python_with_tool(_jh_pc_python "${_JH_PC_ROOT}" "${_JH_PC_OUTPUT_DIR}")
+    file(MAKE_DIRECTORY "${_JH_PC_OUTPUT_DIR}")
+    jh_project_config_tool(_jh_pc_tool "${_JH_PC_ROOT}" "${_JH_PC_OUTPUT_DIR}")
     set(_jh_pc_command
-        ${_jh_pc_python} "${_JH_PC_ROOT}/scripts/project_config.py" cmake
+        "${_jh_pc_tool}" config cmake --root "${_JH_PC_ROOT}"
         --target "${_JH_PC_TARGET}"
         --output "${_JH_PC_OUTPUT_DIR}/jh_project_config.cmake")
     if(NOT "${_JH_PC_CONFIG_DIR}" STREQUAL "")

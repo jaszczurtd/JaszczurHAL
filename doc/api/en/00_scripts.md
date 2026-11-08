@@ -366,8 +366,9 @@ Every runner accepts `--target`, `--board`, `--all-features`, `--library-only`,
 `--freertos`, `--project-config`, repeatable `-D`, `--output`, `--clean`, and
 `--jobs`; the default output is `.build/static/<target>/<board>/`.
 `--project-config` names one directory. Its `hal_project_config.h` and the
-`-D` definitions are evaluated by `scripts/project_config.py`, the same reader
-that project builds use.
+`-D` definitions are evaluated by `jh config build` through the
+`scripts/project_config.py` adapter. CMake uses `jh config cmake` with the
+same evaluator.
 
 When that directory holds `device_tree.json`, the runner builds from it like a
 firmware project: `--assembly` and `--variant` select, `--target` only narrows
@@ -765,14 +766,8 @@ read once per process until its files change, and the files of one build from
 `jh board config` ([jh README](../../../tools/jh/README.md#board-registry)).
 `build_outputs()` returns those files for a target and board; the hardware
 configuration generator passes the board and the values of a device tree
-assembly. `generate()` writes them for the ESP-IDF build.
-
-Its command line runs the same commands: `--validate-only`,
-`--list targets|boards` and `--default-board` read the registry, a target
-with `--output-dir` (and optionally `--board`, `--output-root`, `--feature`
-and `--define`) runs `jh board config`, and `--write-static` or
-`--check-static` runs `jh generate boards`. CMake calls `jh` directly; the
-board tests still use this command line.
+assembly. `generate()` writes them for the ESP-IDF build. The script has no
+command line: CMake and `scripts/sync_generated.py` call `jh` directly.
 
 ### `scripts/generate_hal_features.py`
 
@@ -835,21 +830,23 @@ can compile and link those package artifacts without invoking Python.
 
 ### `scripts/project_config.py`
 
-Gives the Python tools and CMake one build's project configuration. The
-header itself is evaluated by `jh config inspect`, the way the C preprocessor
-does, for one target and variant; the
+Adapts the native project configuration commands for Python tools. The
+header is evaluated by `jh config inspect`, the way the C preprocessor
+does; `jh config build` selects a target and variant and collects feature
+requests with their sources. The
 [jh README](../../../tools/jh/README.md#project-configuration) describes the
-reader and its 64-bit arithmetic. This module turns its result into objects
-and adds what depends on the board and feature registries: the build of a
-target and variant, its features and the `cmake` command, which writes one
-build's features, definitions, targets, variants, and macro values as a CMake
-file. CMake (the firmware dispatcher and the static library builds),
-`jh-vscode`, the feature lint, the ESP-IDF runner, the VS Code task generator,
-and the examples dispatcher read project configuration through it. It takes
+reader and its 64-bit arithmetic. This module turns the results into objects
+for `jh-vscode`, the feature lint, the ESP-IDF runner, the VS Code task
+generator and the examples dispatcher. It takes
 the tool from `JH_EXECUTABLE` (unless `JH_EXECUTABLE_ROOT` names another
 checkout) or prepares it through the bootstrap and publishes both variables
-for the processes it starts. CMake passes it the verified tool with
-`JH_EXECUTABLE_ROOT`, so configure never prepares one. A value outside the
+for the processes it starts.
+
+The `cmake` subcommand forwards its arguments to `jh config cmake`. That
+native command checks the build's feature requests and writes its features,
+definitions, targets, variants and macro values as a CMake file. CMake calls
+it directly, without this adapter or Python, after verifying the prepared
+tool; configure never builds the tool. A value outside the
 64-bit range or over a limit of `jh` has no integer, and only reading that
 value through `jh_project_value()` fails; an invalid literal in any value
 fails the configure. Diagnostics use the `[JH-CFG-TARGET]`,

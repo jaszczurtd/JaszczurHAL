@@ -1,21 +1,18 @@
-#!/usr/bin/env python3
 """The board registry for the HAL scripts that import it: the model `jh board
 list` validates and the build configuration `jh board config` generates.
 
 `jh generate boards` writes the checked-in board artifacts and `jh board config`
 the files of one build; this module keeps the Python view of both for its
-importers and runs them from its command line."""
+importers."""
 
 from __future__ import annotations
 
-import argparse
 from dataclasses import dataclass
 from functools import partial
 import json
 import os
 from pathlib import Path
 import re
-import subprocess
 import sys
 import tempfile
 from typing import Any
@@ -449,111 +446,3 @@ def require_managed_output(
             f"output directory must be below {managed_root}, got {output_dir}"
         )
     return output_dir
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--target")
-    parser.add_argument("--board")
-    parser.add_argument("--boards-root", type=Path, required=True)
-    parser.add_argument("--output-dir", type=Path)
-    parser.add_argument("--output-root", type=Path)
-    parser.add_argument(
-        "--feature",
-        "--requested-feature",
-        dest="requested_feature",
-        action="append",
-        default=[],
-    )
-    parser.add_argument("--define", action="append", default=[])
-    parser.add_argument("--validate-only", action="store_true")
-    parser.add_argument("--list", choices=("targets", "boards"))
-    parser.add_argument("--default-board", action="store_true")
-    static_group = parser.add_mutually_exclusive_group()
-    static_group.add_argument("--write-static", action="store_true")
-    static_group.add_argument("--check-static", action="store_true")
-    return parser.parse_args()
-
-
-def main() -> int:
-    """The command line of the board generator, carried out by jh."""
-    args = parse_args()
-    boards_root = args.boards_root.resolve()
-    try:
-        targets, boards, _ = load_registry(boards_root)
-        normalize_features(args.requested_feature)
-        validate_definitions(args.define)
-        if args.write_static or args.check_static:
-            if any(
-                (
-                    args.target,
-                    args.board,
-                    args.output_dir,
-                    args.output_root,
-                    args.requested_feature,
-                    args.define,
-                    args.validate_only,
-                    args.list,
-                    args.default_board,
-                )
-            ):
-                raise DescriptorError(
-                    "static generation does not accept build selection arguments"
-                )
-            # jh writes the summary, and the drift of --check, itself.
-            return subprocess.run(
-                [
-                    project_config.jh_executable(),
-                    "generate",
-                    "boards",
-                    f"--root={REPOSITORY_ROOT}",
-                    f"--boards-root={boards_root}",
-                    f"--output-root={boards_root.parent}",
-                    "--write" if args.write_static else "--check",
-                ],
-                check=False,
-            ).returncode
-        if args.list:
-            values = targets if args.list == "targets" else boards
-            print("\n".join(sorted(values)))
-            return 0
-        if args.default_board:
-            if not args.target or args.target not in targets:
-                raise DescriptorError("--default-board requires a known --target")
-            print(targets[args.target]["defaultBoard"])
-            return 0
-        if args.validate_only:
-            if args.target or args.board or args.output_dir or args.output_root:
-                raise DescriptorError(
-                    "--validate-only does not accept target, board, output-dir, "
-                    "or output-root"
-                )
-            print(f"validated {len(targets)} targets and {len(boards)} boards")
-            return 0
-        if not args.target or not args.output_dir:
-            raise DescriptorError(
-                "generation requires --target and --output-dir"
-            )
-        command = [
-            "board",
-            "config",
-            f"--root={REPOSITORY_ROOT}",
-            f"--boards-root={boards_root}",
-            f"--target={args.target}",
-            f"--output-dir={args.output_dir.absolute()}",
-            *([f"--board={args.board}"] if args.board else []),
-            *([f"--output-root={args.output_root.absolute()}"] if args.output_root else []),
-            *(f"--define={item}" for item in args.define),
-            *(f"--feature={item}" for item in args.requested_feature),
-        ]
-        returncode, output = project_config.run_jh(command, DescriptorError)
-        if returncode != 0:
-            raise DescriptorError(output.get("message", f"jh exit {returncode}"))
-    except DescriptorError as error:
-        print(f"error: {error}", file=sys.stderr)
-        return 2
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

@@ -82,6 +82,29 @@ hal_status_t jh_absolute_path(const char *path, const char *base,
   return path_result(resolve_into, &args, out, failure);
 }
 
+hal_status_t jh_path_parent(const char *path, jb_string_t *out,
+                            jh_failure_t *failure) {
+  if (path == NULL || out == NULL)
+    return jh_fail_arguments(failure);
+  return path_result(parent_into, path, out, failure);
+}
+
+hal_status_t jh_append_posix(jb_string_t *out, jb_json_span_t path) {
+#ifdef _WIN32
+  const size_t start = jb_string_size(out);
+#endif
+  const hal_status_t status = jh_append_span(out, path);
+#ifdef _WIN32
+  if (status == HAL_OK) {
+    char *bytes = jb_string_mutable_data(out);
+    for (size_t i = start; i < jb_string_size(out); ++i)
+      if (bytes[i] == '\\')
+        bytes[i] = '/';
+  }
+#endif
+  return status;
+}
+
 /* Append path to out with bytes outside the unreserved set and the path
  * separators percent-escaped; Windows separators become '/'. */
 static hal_status_t schema_identity(const char *path, size_t length,
@@ -1139,4 +1162,10 @@ bool jh_json_member(jb_json_tree_view_t object, const char *key,
                     jb_json_tree_view_t *out) {
   return jh_json_type(object) == JB_JSON_OBJECT &&
          jb_json_tree_find(object, jh_span(key), out) == HAL_OK;
+}
+
+jb_json_tree_view_t jh_json_field(jb_json_tree_view_t object, const char *key) {
+  jb_json_tree_view_t out = {0};
+  (void)jh_json_member(object, key, &out);
+  return out;
 }

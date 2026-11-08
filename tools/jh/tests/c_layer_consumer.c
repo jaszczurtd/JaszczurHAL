@@ -324,6 +324,31 @@ static void float_append_failure(void) {
   jb_string_destroy(&out);
 }
 
+/* The CMake configuration uses the same path spelling as board outputs.
+ * Appending a path may grow the destination while its input aliases it. */
+static void build_paths(void) {
+  jb_string_t out = {0};
+  jh_failure_t failure;
+  jh_failure_init(&failure);
+  (void)jb_string_init(&out, jb_heap_allocator());
+  expect(jh_append(&out, "a\\b") == HAL_OK &&
+             jh_append_posix(&out, jh_string_span(&out)) == HAL_OK &&
+#ifdef _WIN32
+             equals(&out, "a\\ba/b"),
+#else
+             equals(&out, "a\\ba\\b"),
+#endif
+         "only the appended path changes separators on Windows");
+  expect(jh_path_parent("one/two/file", &out, &failure) == HAL_OK &&
+             jh_path_parent(jb_string_data(&out), &out, &failure) == HAL_OK &&
+             equals(&out, "one"),
+         "output parent with aliased input");
+  expect(jh_path_parent("file", &out, &failure) == HAL_OK && equals(&out, ""),
+         "relative file has an empty parent");
+  jb_string_destroy(&out);
+  jh_failure_destroy(&failure);
+}
+
 int jh_test_c_layer(const char *directory) {
   failures = 0;
   diff();
@@ -332,5 +357,6 @@ int jh_test_c_layer(const char *directory) {
   python_repr(directory);
   float_repr(directory);
   float_append_failure();
+  build_paths();
   return failures;
 }

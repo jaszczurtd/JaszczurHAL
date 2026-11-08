@@ -194,7 +194,7 @@ czyta inny nagłówek, tak jak kompilacja z device tree czyta wygenerowany
 i funkcyjne w `#define`, `#undef`, dyrektywy z rodziny `#if` z `defined`
 i wyrażeniami całkowitymi, `#include` w cudzysłowie względem pliku, który go
 zawiera, `#pragma once` i `#error`; `#warning` i `#line` pomija.
-`scripts/project_config.py` uruchamia to polecenie dla CMake i narzędzi
+`scripts/project_config.py` udostępnia wynik pozostałym narzędziom
 Pythona. Test `jh_config` sprawdza czytnik w jednym procesie, a
 `jh_config_preprocessor` porównuje go z preprocesorem kompilatora GCC albo
 Clang, także na każdym `hal_project_config.h` checkoutu poza `tests/hardware`.
@@ -220,6 +220,40 @@ nadal daje wynik i kod 0.
 `jh config directives --file <ścieżka>` wypisuje w tej samej postaci dyrektywy
 `#define` i `#undef` jednego pliku bez obliczania go, więc także dla nagłówka,
 którego czytnik nie przyjmuje; brakujący plik daje pustą listę.
+
+`jh config cmake --root <HAL> --target <id> --output <plik>` zapisuje
+konfigurację jednej kompilacji dla CMake. `--config-dir <katalog>` wybiera
+jej `hal_project_config.h`; bez tej opcji polecenie konfiguruje bibliotekę
+na podstawie targetu i definicji. `--variant <id>` wybiera zadeklarowany
+wariant, powtarzane `--define NAZWA[=WARTOŚĆ]` przekazuje dodatkowe definicje,
+a `--hardware-header <plik>` najpierw czyta wygenerowany nagłówek sprzętu.
+Polecenie sprawdza target, wariant i żądane funkcje przed zapisaniem pliku;
+identyczny plik pozostaje nietknięty. Zapis jest atomowy przez katalog
+wyjściowy: zwykły plik albo jego brak jest przyjmowany, dowiązanie
+symboliczne w miejscu wyjścia odrzucane z kodem wyjścia 3 (dawne polecenie
+w Pythonie pisało przez takie dowiązanie). Funkcja usunięta przez nagłówek
+projektu pozostaje wyłączona także wtedy, gdy żądał jej wariant.
+
+CMake wywołuje to polecenie bezpośrednio. Skrypty wejściowe przygotowują `jh`
+przed configure, a configure tylko sprawdza zgodność programu ze źródłami.
+Brakujący albo nieaktualny program daje komunikat z poleceniem przygotowania;
+configure go nie buduje. Wygenerowany plik zapisuje wszystkie przeczytane
+nagłówki, więc zmiana dołączonego nagłówka wywołuje reconfigure.
+
+`jh config build` przyjmuje ten sam wybór projektu i zwraca jego model przez
+`--json`, bez zapisu pliku CMake i rozwiązywania żądań funkcji. Wynik zawiera
+`config` (model `config.inspect`), `variant`, `definitions`,
+`definitionSources`, `requestedFeatures` i `featureRequests` (symbol,
+opcjonalna wartość i źródło każdego żądania). Adapter Pythona używa tego
+polecenia; jawne `--selector` i powtarzane `--required-feature` zachowują
+dane targetu przekazane przez importera zamiast wczytywać je z `--root`.
+Dyrektywa `#error` odrzuca kompilację i ustawia `configurationRejected`
+w błędzie JSON. Inne błędy pozostawiają tę flagę wyłączoną. Diagnostyka
+używa zwykłego prefiksu `jh:` i statusu na końcu komunikatu.
+
+Adapter przekazuje `--header` zamiast `--config-dir`, aby zachować względną
+ścieżkę podaną przez wywołującego w diagnostyce i źródłach definicji.
+Tych dwóch opcji nie można łączyć.
 
 Arytmetyka liczb całkowitych jest 64-bitowa ze znakiem. Literał albo wynik
 spoza tego zakresu w operandzie, który warunek oblicza, daje `[JH-CFG-SCOPE]
@@ -654,7 +688,11 @@ samodzielnie. [jh_feature_lint.h](config/jh_feature_lint.h) wyszukuje wejścia
 lintu funkcji i sprawdza manifesty projektów.
 [jh_board_registry.h](config/jh_board_registry.h) wczytuje i sprawdza rejestr
 płytek, a [jh_clock_registry.h](config/jh_clock_registry.h) rejestr drzew
-zegarów razem z kontrolami kodu, który ustawia zegary. Walidator schematów,
+zegarów razem z kontrolami kodu, który ustawia zegary.
+Moduł C11 [jh_project_build.h](config/jh_project_build.h) wybiera jedną
+kompilację projektu, zbiera żądane funkcje i generuje plik CMake. Otrzymuje
+model istniejącego czytnika przez przejściowy callback C++.
+Walidator schematów,
 czytnik konfiguracji
 projektu, katalog typów i `main.cpp` są jeszcze w C++. Korzystają z modułów C
 przez właścicieli zasobów i wyjątki z [cxx/](cxx/), które znikną razem

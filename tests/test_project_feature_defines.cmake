@@ -11,6 +11,20 @@ endif()
 include("${JH_ROOT}/cmake/jh_project_features.cmake")
 include("${JH_ROOT}/cmake/jh_project_config.cmake")
 
+# A prepared tool must let the CMake reader run without finding Python.
+if(JH_PROJECT_CONFIG_NO_PYTHON)
+    function(jh_find_python)
+        message(FATAL_ERROR "The native project reader requested Python")
+    endfunction()
+    jh_read_project_config(ROOT "${JH_ROOT}" TARGET rp2040
+        OUTPUT_DIR "${JH_TEST_BINARY_DIR}/no-python"
+        DEFINES HAL_ENABLE_CRC)
+    if(NOT JH_PROJECT_FEATURES STREQUAL "HAL_ENABLE_CRC")
+        message(FATAL_ERROR "The native project reader lost the requested feature")
+    endif()
+    return()
+endif()
+
 # Evaluate the header in DIRECTORY for rp2040 the way the firmware dispatcher
 # does; ARGN adds VARIANT <id>.
 macro(read_fixture DIRECTORY)
@@ -168,6 +182,13 @@ function(expect_equal ACTUAL EXPECTED WHAT)
 endfunction()
 
 # Features and values come from the header as the compiler sees it.
+execute_process(COMMAND "${CMAKE_COMMAND}" "-DJH_ROOT=${JH_ROOT}"
+    "-DJH_TEST_BINARY_DIR=${JH_TEST_BINARY_DIR}" -DJH_PROJECT_CONFIG_NO_PYTHON=ON
+    -P "${CMAKE_CURRENT_LIST_FILE}" RESULT_VARIABLE _jh_native_result
+    OUTPUT_VARIABLE _jh_native_output ERROR_VARIABLE _jh_native_error)
+if(NOT _jh_native_result EQUAL 0)
+    message(FATAL_ERROR "Configuration without Python failed: ${_jh_native_output}${_jh_native_error}")
+endif()
 write_fixture(main [=[
 #pragma once
 #define HAL_DISABLE_ASSERTS

@@ -389,9 +389,9 @@ Każdy runner przyjmuje `--target`, `--board`, `--all-features`,
 `--library-only`, `--freertos`, `--project-config`, powtarzalne `-D`,
 `--output`, `--clean` oraz `--jobs`; domyślny katalog wyjściowy to
 `.build/static/<target>/<board>/`. `--project-config` wskazuje jeden katalog.
-Jego `hal_project_config.h` i definicje `-D` przetwarza
-`scripts/project_config.py`, ten sam mechanizm, którego używają kompilacje
-projektów.
+Jego `hal_project_config.h` i definicje `-D` przetwarza `jh config build`
+przez adapter `scripts/project_config.py`. CMake używa `jh config cmake`
+z tym samym ewaluatorem.
 
 Gdy w tym katalogu leży `device_tree.json`, runner buduje z niego bibliotekę
 tak jak projekt firmware: wybór należy do `--assembly` i `--variant`,
@@ -813,14 +813,8 @@ jednej kompilacji z `jh board config`
 ([README jh](../../../tools/jh/README.pl.md#rejestr-płytek)). `build_outputs()`
 zwraca te pliki dla targetu i płytki; generator konfiguracji sprzętu przekazuje
 płytkę i wartości montażu device tree. `generate()` zapisuje je dla kompilacji
-ESP-IDF.
-
-Wiersz poleceń skryptu uruchamia te same polecenia: `--validate-only`,
-`--list targets|boards` i `--default-board` czytają rejestr, target
-z `--output-dir` (oraz opcjonalnie `--board`, `--output-root`, `--feature`
-i `--define`) uruchamia `jh board config`, a `--write-static` albo
-`--check-static` uruchamia `jh generate boards`. CMake woła `jh`
-bezpośrednio; z wiersza poleceń skryptu korzystają jeszcze testy płytek.
+ESP-IDF. Skrypt nie ma wiersza poleceń: CMake i `scripts/sync_generated.py`
+wołają `jh` bezpośrednio.
 
 ### `scripts/generate_hal_features.py`
 
@@ -887,20 +881,22 @@ kompilatora może skompilować i zlinkować te artefakty bez wywoływania Python
 
 ### `scripts/project_config.py`
 
-Daje narzędziom Pythona i CMake konfigurację projektu jednej kompilacji. Sam
-nagłówek oblicza `jh config inspect`, tak jak zrobiłby to preprocesor C, dla
-jednej platformy i jednego wariantu; czytnik i jego 64-bitową arytmetykę opisuje
-[README jh](../../../tools/jh/README.pl.md#konfiguracja-projektu). Ten moduł
-zamienia wynik na obiekty i dokłada to, co zależy od rejestrów płytek i funkcji:
-kompilację dla platformy i wariantu, jej funkcje i polecenie `cmake`, które
-zapisuje funkcje, definicje, platformy, warianty i wartości makr jednej
-kompilacji jako plik CMake. Konfigurację projektu odczytują przez niego CMake
-(dispatcher firmware i kompilacje bibliotek statycznych), `jh-vscode`, linter
-rejestru funkcji, skrypt ESP-IDF, generator zadań VS Code i dispatcher
-przykładów. Narzędzie bierze z `JH_EXECUTABLE` (chyba że `JH_EXECUTABLE_ROOT`
+Udostępnia narzędziom Pythona natywne polecenia konfiguracji projektu.
+Nagłówek oblicza `jh config inspect`, tak jak zrobiłby to preprocesor C;
+`jh config build` wybiera target i wariant oraz zbiera żądania funkcji
+wraz z ich źródłami. Czytnik i jego 64-bitową arytmetykę opisuje
+[README jh](../../../tools/jh/README.pl.md#konfiguracja-projektu). Moduł
+zamienia wyniki na obiekty dla `jh-vscode`, lintera funkcji, skryptu ESP-IDF,
+generatora zadań VS Code i dispatchera przykładów. Narzędzie bierze
+z `JH_EXECUTABLE` (chyba że `JH_EXECUTABLE_ROOT`
 wskazuje inny checkout) albo przygotowuje przez bootstrap i udostępnia obie
-zmienne uruchamianym procesom. CMake przekazuje mu sprawdzone narzędzie razem
-z `JH_EXECUTABLE_ROOT`, więc configure nigdy go nie przygotowuje. Wartość spoza
+zmienne uruchamianym procesom.
+
+Podpolecenie `cmake` przekazuje argumenty do `jh config cmake`. To natywne
+polecenie sprawdza żądane funkcje i zapisuje funkcje, definicje, targety,
+warianty i wartości makr jednej kompilacji jako plik CMake. CMake wywołuje
+je bezpośrednio, bez tego adaptera i Pythona, po sprawdzeniu przygotowanego
+programu; configure nie buduje narzędzia. Wartość spoza
 zakresu 64 bitów albo ponad limit `jh` nie ma liczby i błędem kończy się tylko
 odczyt tej wartości przez `jh_project_value()`; błędny literał w dowolnej
 wartości przerywa configure. Diagnostyka używa prefiksów

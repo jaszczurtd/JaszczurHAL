@@ -384,7 +384,7 @@ with tempfile.TemporaryDirectory() as hook_work:
     hook_scenarios(Path(hook_work))
 for duplicated_generator in (
     "generate features --root",
-    "scripts/generate_board_config.py --boards-root boards --write-static",
+    "generate boards --root",
     "scripts/examples_dispatcher.py generate-template",
     "scripts/examples_dispatcher.py generate",
     "scripts/vscode_library_workspace.py sync-vscode",

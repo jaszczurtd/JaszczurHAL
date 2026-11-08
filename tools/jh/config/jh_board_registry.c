@@ -107,13 +107,6 @@ static bool member(jb_json_tree_view_t object, const char *key,
   return jh_json_member(object, key, out);
 }
 
-/* The member key must exist: exact checked it. */
-static jb_json_tree_view_t field(jb_json_tree_view_t object, const char *key) {
-  jb_json_tree_view_t out = {0};
-  (void)jh_json_member(object, key, &out);
-  return out;
-}
-
 /* dict.get(key) is None: an absent member or a null. */
 static bool absent(jb_json_tree_view_t object, const char *key,
                    jb_json_tree_view_t *out) {
@@ -906,14 +899,14 @@ static hal_status_t validate_common(const check_t *c, jb_json_tree_view_t root,
                                        COUNTOF(common_required), board_fields,
                                        COUNTOF(board_fields));
   int64_t number = 0;
-  jb_json_tree_view_t value = field(root, "schemaVersion");
+  jb_json_tree_view_t value = jh_json_field(root, "schemaVersion");
   if (status == HAL_OK && !(jh_json_int64(value, &number) && number == 1))
     status = fail_value(c, jh_span("$.schemaVersion"), &value, "1");
-  value = field(root, "kind");
+  value = jh_json_field(root, "kind");
   if (status == HAL_OK && !string_is(value, target ? "target" : "board"))
     status = fail_value(c, jh_span("$.kind"), &value,
                         target ? "'target'" : "'board'");
-  value = field(root, "id");
+  value = jh_json_field(root, "id");
   jb_json_span_t id = {NULL, 0};
   if (status == HAL_OK && !(jh_json_string(value, &id) && id_pattern(id)))
     status = fail_value(c, jh_span("$.id"), &value, "a kebab-case identifier");
@@ -932,14 +925,14 @@ static hal_status_t validate_common(const check_t *c, jb_json_tree_view_t root,
   static const char *const texts[] = {"$.displayName", "$.description"};
   for (size_t i = 0; status == HAL_OK && i < COUNTOF(texts); ++i) {
     jb_json_span_t text = {NULL, 0}, stripped = {NULL, 0};
-    value = field(root, texts[i] + 2);
+    value = jh_json_field(root, texts[i] + 2);
     if (!(jh_json_string(value, &text) && jh_python_strip(text, &stripped) &&
           stripped.length != 0))
       status = fail_value(c, jh_span(texts[i]), &value, "a non-empty string");
   }
   static const char *const statuses[] = {"supported", "experimental",
                                          "skeleton", "deprecated"};
-  value = field(root, "status");
+  value = jh_json_field(root, "status");
   if (status == HAL_OK && !string_in(value, statuses, COUNTOF(statuses)))
     status = fail_value(c, jh_span("$.status"), &value, "a supported status");
   return status;
@@ -977,9 +970,10 @@ static hal_status_t expand_pin_set(const check_t *c, jb_json_span_t at,
         status = exact(c, jh_string_span(&item_place), item, bounds,
                        COUNTOF(bounds), bounds, COUNTOF(bounds));
       int64_t first = 0, last = 0;
-      if (status == HAL_OK && !(jh_json_int64(field(item, "first"), &first) &&
-                                jh_json_int64(field(item, "last"), &last) &&
-                                first >= 0 && last >= first))
+      if (status == HAL_OK &&
+          !(jh_json_int64(jh_json_field(item, "first"), &first) &&
+            jh_json_int64(jh_json_field(item, "last"), &last) && first >= 0 &&
+            last >= first))
         status = fail_value(c, jh_string_span(&item_place), &item,
                             "a non-negative ordered integer range");
       if (status == HAL_OK &&
@@ -1043,7 +1037,7 @@ static hal_status_t validate_endpoint(const check_t *c, jb_json_span_t at,
     static const char *const fields[] = {"domain", "id"};
     status = exact(c, at, endpoint, fields, COUNTOF(fields), fields,
                    COUNTOF(fields));
-    const jb_json_tree_view_t id = field(endpoint, "id");
+    const jb_json_tree_view_t id = jh_json_field(endpoint, "id");
     if (status == HAL_OK && !value_in_pins(valid_pins, id)) {
       status = storage(c, jh_json_path_join(&place, at, ".id"));
       if (status == HAL_OK)
@@ -1055,7 +1049,7 @@ static hal_status_t validate_endpoint(const check_t *c, jb_json_span_t at,
     static const char *const fields[] = {"domain", "component", "id", "halPin"};
     status = exact(c, at, endpoint, fields, COUNTOF(fields), fields,
                    COUNTOF(fields));
-    const jb_json_tree_view_t component = field(endpoint, "component");
+    const jb_json_tree_view_t component = jh_json_field(endpoint, "component");
     jb_json_span_t name = {NULL, 0};
     bool known = jh_json_string(component, &name) &&
                  component_selected(components, name);
@@ -1071,8 +1065,8 @@ static hal_status_t validate_endpoint(const check_t *c, jb_json_span_t at,
     }
     int64_t number = 0;
     if (status == HAL_OK &&
-        !(jh_json_int64(field(endpoint, "id"), &number) &&
-          jh_json_int64(field(endpoint, "halPin"), &number)))
+        !(jh_json_int64(jh_json_field(endpoint, "id"), &number) &&
+          jh_json_int64(jh_json_field(endpoint, "halPin"), &number)))
       status = fail_value(c, at, &endpoint, "integer component id and halPin");
   } else if (status == HAL_OK) {
     status = storage(c, jh_json_path_join(&place, at, ".domain"));
@@ -1349,10 +1343,10 @@ static hal_status_t endpoint_key(jb_json_tree_view_t endpoint,
   pin_key_t pin;
   jb_string_clear(out);
   hal_status_t status = HAL_OK;
-  if (jh_json_string(field(endpoint, "domain"), &text))
+  if (jh_json_string(jh_json_field(endpoint, "domain"), &text))
     jh_put_span(out, &status, text);
   jh_put(out, &status, "\x1f");
-  if (pin_key_of(field(endpoint, "id"), &pin)) {
+  if (pin_key_of(jh_json_field(endpoint, "id"), &pin)) {
     jh_put(out, &status, pin.text ? "s" : "i");
     if (pin.text)
       jh_put_span(out, &status, pin.name);
@@ -1416,7 +1410,7 @@ static hal_status_t validate_bus_device(const check_t *c, jb_json_span_t at,
       &expected, &missing, &seen_keys,      &seen_names};
   for (size_t i = 0; status == HAL_OK && i < COUNTOF(lists); ++i)
     status = storage(c, jh_list_init(lists[i]));
-  const jb_json_tree_view_t role = field(device, "role");
+  const jb_json_tree_view_t role = jh_json_field(device, "role");
   const role_spec_t *spec = status == HAL_OK ? find_role(role) : NULL;
   if (status == HAL_OK && spec == NULL) {
     status = storage(c, jh_json_path_join(&place, at, ".role"));
@@ -1424,13 +1418,13 @@ static hal_status_t validate_bus_device(const check_t *c, jb_json_span_t at,
       status =
           fail_value(c, jh_string_span(&place), &role, "a known device role");
   }
-  const jb_json_tree_view_t bus = field(device, "bus");
+  const jb_json_tree_view_t bus = jh_json_field(device, "bus");
   if (status == HAL_OK)
     status = storage(c, jh_json_path_join(&place, at, ".bus"));
   if (status == HAL_OK)
     status = exact(c, jh_string_span(&place), bus, bus_fields,
                    COUNTOF(bus_fields), bus_fields, COUNTOF(bus_fields));
-  const jb_json_tree_view_t bus_kind = field(bus, "kind");
+  const jb_json_tree_view_t bus_kind = jh_json_field(bus, "kind");
   if (status == HAL_OK &&
       !string_in(bus_kind, spec->bus_kinds, spec->bus_kind_count)) {
     jb_string_clear(&text);
@@ -1447,7 +1441,7 @@ static hal_status_t validate_bus_device(const check_t *c, jb_json_span_t at,
                                            jb_string_data(&text))
                               : storage(c, status);
   }
-  const jb_json_tree_view_t index = field(bus, "index");
+  const jb_json_tree_view_t index = jh_json_field(bus, "index");
   int64_t number = 0;
   if (status == HAL_OK && !jh_json_int64(index, &number)) {
     status = storage(c, jh_json_path_join(&place, at, ".bus.index"));
@@ -1461,7 +1455,7 @@ static hal_status_t validate_bus_device(const check_t *c, jb_json_span_t at,
       status = fail_value(c, jh_string_span(&place), &index,
                           "a bus index in [0, 254]");
   }
-  const jb_json_tree_view_t signals = field(device, "signals");
+  const jb_json_tree_view_t signals = jh_json_field(device, "signals");
   if (status == HAL_OK)
     status = storage(c, jh_json_path_join(&place, at, ".signals"));
   if (status == HAL_OK && !is_object(signals))
@@ -1474,7 +1468,7 @@ static hal_status_t validate_bus_device(const check_t *c, jb_json_span_t at,
     status =
         fail_role_list(c, jh_string_span(&place), &unknown,
                        "only signals declared by role ", spec->role, "", false);
-  const jb_json_tree_view_t attributes = field(device, "attributes");
+  const jb_json_tree_view_t attributes = jh_json_field(device, "attributes");
   if (status == HAL_OK)
     status = storage(
         c, active_names(spec, attributes, &active_signals, &active_attributes));
@@ -1536,8 +1530,9 @@ static hal_status_t validate_bus_device(const check_t *c, jb_json_span_t at,
       status = storage(c, jh_list_push(&seen_keys, jh_string_span(&key)));
     if (status == HAL_OK)
       status = storage(c, jh_list_push(&seen_names, name));
-    if (status == HAL_OK && string_is(field(endpoint, "domain"), "soc-gpio"))
-      status = require_hard_owner(c, signal_at, field(endpoint, "id"),
+    if (status == HAL_OK &&
+        string_is(jh_json_field(endpoint, "domain"), "soc-gpio"))
+      status = require_hard_owner(c, signal_at, jh_json_field(endpoint, "id"),
                                   pins->reserved, owner);
   }
   for (size_t i = 0; i < COUNTOF(lists); ++i)
@@ -1581,14 +1576,15 @@ static hal_status_t validate_device(const check_t *c, jb_json_span_t at,
   if (status == HAL_OK)
     status = exact(c, at, device, required, COUNTOF(required), allowed,
                    allowed_count);
-  const jb_json_tree_view_t endpoint = field(device, "endpoint");
+  const jb_json_tree_view_t endpoint = jh_json_field(device, "endpoint");
   if (status == HAL_OK)
     status = storage(c, jh_json_path_join(&place, at, ".endpoint"));
   if (status == HAL_OK)
     status = validate_endpoint(c, jh_string_span(&place), endpoint,
                                pins->valid_pins, pins->components);
-  const jb_json_tree_view_t id = field(endpoint, "id");
-  if (status == HAL_OK && string_is(field(endpoint, "domain"), "soc-gpio") &&
+  const jb_json_tree_view_t id = jh_json_field(endpoint, "id");
+  if (status == HAL_OK &&
+      string_is(jh_json_field(endpoint, "domain"), "soc-gpio") &&
       reserved_pin(pins->reserved, id))
     status = require_hard_owner(c, jh_string_span(&place), id, pins->reserved,
                                 owner);
@@ -1601,7 +1597,7 @@ static hal_status_t validate_device(const check_t *c, jb_json_span_t at,
 /* The compatibleTargets strings of a board are all among names. */
 static bool targets_within(jb_json_tree_view_t board, const char *const *names,
                            size_t count) {
-  const jb_json_tree_view_t targets = field(board, "compatibleTargets");
+  const jb_json_tree_view_t targets = jh_json_field(board, "compatibleTargets");
   for (size_t i = 0; i < jh_json_count(targets); ++i)
     if (!string_in(jh_json_item(targets, i), names, count))
       return false;
@@ -1625,7 +1621,8 @@ static hal_status_t validate_can_channel(const check_t *c, jb_json_span_t at,
     status = storage(c, text_init(&place));
   if (status == HAL_OK)
     status = storage(c, text_init(&text));
-  const jb_json_tree_view_t controller_value = field(channel, "controller");
+  const jb_json_tree_view_t controller_value =
+      jh_json_field(channel, "controller");
   const can_controller_t *controller =
       status == HAL_OK ? find_controller(controller_value) : NULL;
   if (status == HAL_OK)
@@ -1637,7 +1634,7 @@ static hal_status_t validate_can_channel(const check_t *c, jb_json_span_t at,
       !targets_within(board, controller->targets, controller->target_count))
     status = fail_value(c, jh_string_span(&place), &controller_value,
                         "a controller present on every compatible target");
-  const jb_json_tree_view_t instance = field(channel, "instance");
+  const jb_json_tree_view_t instance = jh_json_field(channel, "instance");
   int64_t number = 0;
   if (status == HAL_OK && !(jh_json_int64(instance, &number) && number >= 1 &&
                             number <= controller->instances)) {
@@ -1672,7 +1669,7 @@ static hal_status_t validate_can_channel(const check_t *c, jb_json_span_t at,
     if (status == HAL_OK)
       status = fail_value(c, jh_string_span(&place), &active_high, "a boolean");
   }
-  const jb_json_tree_view_t transceiver = field(channel, "transceiver");
+  const jb_json_tree_view_t transceiver = jh_json_field(channel, "transceiver");
   if (status == HAL_OK &&
       !string_in(transceiver, can_transceivers, COUNTOF(can_transceivers))) {
     status = storage(c, jh_json_path_join(&place, at, ".transceiver"));
@@ -1680,7 +1677,7 @@ static hal_status_t validate_can_channel(const check_t *c, jb_json_span_t at,
       status = fail_value(c, jh_string_span(&place), &transceiver,
                           "one of ['generic', 'mcp2562fd']");
   }
-  const jb_json_tree_view_t rate = field(channel, "maxBitrateHz");
+  const jb_json_tree_view_t rate = jh_json_field(channel, "maxBitrateHz");
   if (status == HAL_OK &&
       !(jh_json_int64(rate, &number) && number >= 1 && number <= 0xFFFFFFFF)) {
     status = storage(c, jh_json_path_join(&place, at, ".maxBitrateHz"));
@@ -1705,7 +1702,7 @@ static hal_status_t validate_can(const check_t *c, jb_json_tree_view_t board,
   static const char *const fields[] = {"channels"};
   hal_status_t status = exact(c, jh_span("$.can"), can, fields, COUNTOF(fields),
                               fields, COUNTOF(fields));
-  const jb_json_tree_view_t channels = field(can, "channels");
+  const jb_json_tree_view_t channels = jh_json_field(can, "channels");
   if (status == HAL_OK && !(is_array(channels) && jh_json_count(channels) != 0))
     status = fail_value(c, jh_span("$.can.channels"), &channels,
                         "a non-empty channel array");
@@ -1733,7 +1730,7 @@ static hal_status_t validate_can(const check_t *c, jb_json_tree_view_t board,
       status = validate_can_channel(c, jh_string_span(&at), board, channel,
                                     &controller);
     int64_t instance = 0;
-    (void)jh_json_int64(field(channel, "instance"), &instance);
+    (void)jh_json_int64(jh_json_field(channel, "instance"), &instance);
     jb_string_clear(&place);
     if (status == HAL_OK) {
       jh_put(&place, &status, controller->id);
@@ -1745,7 +1742,7 @@ static hal_status_t validate_can(const check_t *c, jb_json_tree_view_t board,
       if (jh_span_compare(jh_string_span(jh_list_at(&wired, w)),
                           jh_string_span(&place)) == 0) {
         jb_string_t where = {0};
-        const jb_json_tree_view_t value = field(channel, "instance");
+        const jb_json_tree_view_t value = jh_json_field(channel, "instance");
         status = storage(c, text_init(&where));
         if (status == HAL_OK)
           status = storage(
@@ -1775,9 +1772,10 @@ static hal_status_t validate_can(const check_t *c, jb_json_tree_view_t board,
       if (status == HAL_OK)
         status = validate_endpoint(c, signal_at, endpoint, pins->valid_pins,
                                    pins->components);
-      if (status == HAL_OK && !string_is(field(endpoint, "domain"), "soc-gpio"))
+      if (status == HAL_OK &&
+          !string_is(jh_json_field(endpoint, "domain"), "soc-gpio"))
         status = fail_value(c, signal_at, &endpoint, "a SoC GPIO endpoint");
-      const jb_json_tree_view_t id = field(endpoint, "id");
+      const jb_json_tree_view_t id = jh_json_field(endpoint, "id");
       pin_key_t key;
       const bool keyed = pin_key_of(id, &key);
       for (size_t u = 0; status == HAL_OK && keyed && u < jb_vector_size(&used);
@@ -1856,7 +1854,7 @@ static hal_status_t validate_components(const check_t *c, jb_json_span_t at,
                      fields, COUNTOF(fields));
     static const char *const modes[] = {"required", "board-owned",
                                         "feature-gated"};
-    const jb_json_tree_view_t mode = field(config, "mode");
+    const jb_json_tree_view_t mode = jh_json_field(config, "mode");
     if (status == HAL_OK && !string_in(mode, modes, COUNTOF(modes))) {
       status = storage(
           c, jh_join(&place, JH_PARTS(at, jh_span("."), id, jh_span(".mode"))));
@@ -1911,7 +1909,7 @@ static hal_status_t validate_usb_ids(const check_t *c, jb_json_span_t at,
   if (status == HAL_OK)
     status = storage(c, text_init(&place));
   for (size_t i = 0; status == HAL_OK && i < COUNTOF(usb_id_fields); ++i) {
-    const jb_json_tree_view_t id = field(value, usb_id_fields[i]);
+    const jb_json_tree_view_t id = jh_json_field(value, usb_id_fields[i]);
     uint32_t number = 0;
     if (jh_json_hardware_id(id, 0xFFFFu, &number))
       continue;
@@ -2179,7 +2177,7 @@ hal_status_t jh_board_resolve_features(const jh_feature_registry_t *features,
   if (status == HAL_OK)
     status = jh_board_normalize_features(&raw, &required, failure);
   jb_json_span_t id = {NULL, 0};
-  (void)jh_json_string(field(target, "id"), &id);
+  (void)jh_json_string(jh_json_field(target, "id"), &id);
   for (size_t i = 0; status == HAL_OK && i < jb_vector_size(&required); ++i) {
     const jb_json_span_t symbol = symbol_of(jh_list_at(&required, i));
     status = jh_fail_storage(failure, disabled_twin(symbol, &text));
@@ -2431,10 +2429,11 @@ static hal_status_t validate_architecture(const check_t *c,
   static const char *const texts[] = {"vendor",      "family",     "soc",
                                       "isa",         "mcuName",    "mcuSubtype",
                                       "cpuArchName", "backendName"};
-  const jb_json_tree_view_t architecture = field(target, "architecture");
+  const jb_json_tree_view_t architecture =
+      jh_json_field(target, "architecture");
   hal_status_t status = exact(c, jh_span("$.architecture"), architecture,
                               fields, COUNTOF(fields), fields, COUNTOF(fields));
-  const jb_json_tree_view_t cores = field(architecture, "cores");
+  const jb_json_tree_view_t cores = jh_json_field(architecture, "cores");
   int64_t number = 0;
   if (status == HAL_OK && !(jh_json_int64(cores, &number) && number >= 1))
     status = fail_value(c, jh_span("$.architecture.cores"), &cores,
@@ -2443,7 +2442,7 @@ static hal_status_t validate_architecture(const check_t *c,
   if (status == HAL_OK)
     status = storage(c, text_init(&at));
   for (size_t i = 0; status == HAL_OK && i < COUNTOF(texts); ++i) {
-    const jb_json_tree_view_t value = field(architecture, texts[i]);
+    const jb_json_tree_view_t value = jh_json_field(architecture, texts[i]);
     jb_json_span_t text = {NULL, 0};
     if (jh_json_string(value, &text) && text.length != 0)
       continue;
@@ -2452,7 +2451,7 @@ static hal_status_t validate_architecture(const check_t *c,
     if (status == HAL_OK)
       status = fail_value(c, jh_string_span(&at), &value, "a non-empty string");
   }
-  const jb_json_tree_view_t fpu = field(architecture, "hasFpu");
+  const jb_json_tree_view_t fpu = jh_json_field(architecture, "hasFpu");
   if (status == HAL_OK && !is_bool(fpu))
     status = fail_value(c, jh_span("$.architecture.hasFpu"), &fpu, "a boolean");
   jb_string_destroy(&at);
@@ -2463,24 +2462,24 @@ static hal_status_t validate_target_build(const check_t *c,
                                           jb_json_tree_view_t target,
                                           jb_json_span_t *provider) {
   static const char *const hal_fields[] = {"targetSelector"};
-  const jb_json_tree_view_t hal = field(target, "hal");
+  const jb_json_tree_view_t hal = jh_json_field(target, "hal");
   hal_status_t status =
       exact(c, jh_span("$.hal"), hal, hal_fields, COUNTOF(hal_fields),
             hal_fields, COUNTOF(hal_fields));
-  const jb_json_tree_view_t selector = field(hal, "targetSelector");
+  const jb_json_tree_view_t selector = jh_json_field(hal, "targetSelector");
   if (status == HAL_OK && !string_matches(selector, macro_pattern))
     status =
         fail_value(c, jh_span("$.hal.targetSelector"), &selector, "a C macro");
   static const char *const required[] = {"provider", "recipe"};
   static const char *const allowed[] = {"provider", "recipe", "platform",
                                         "idfTarget"};
-  const jb_json_tree_view_t build = field(target, "build");
+  const jb_json_tree_view_t build = jh_json_field(target, "build");
   if (status == HAL_OK)
     status = exact(c, jh_span("$.build"), build, required, COUNTOF(required),
                    allowed, COUNTOF(allowed));
   static const char *const providers[] = {"pico-sdk", "jh-stm32-baremetal",
                                           "esp-idf", "host"};
-  const jb_json_tree_view_t value = field(build, "provider");
+  const jb_json_tree_view_t value = jh_json_field(build, "provider");
   if (status == HAL_OK && !string_in(value, providers, COUNTOF(providers)))
     status = fail_value(c, jh_span("$.build.provider"), &value,
                         "a supported provider");
@@ -2505,13 +2504,13 @@ static hal_status_t validate_target_gpio(const check_t *c,
                                          "halEncoding"};
   static const char *const allowed[] = {"pinIdFormat", "validPins",
                                         "halEncoding", "traits"};
-  const jb_json_tree_view_t gpio = field(target, "gpio");
+  const jb_json_tree_view_t gpio = jh_json_field(target, "gpio");
   hal_status_t status = exact(c, jh_span("$.gpio"), gpio, required,
                               COUNTOF(required), allowed, COUNTOF(allowed));
   if (status == HAL_OK)
     status = expand_pin_set(c, jh_span("$.gpio.validPins"),
-                            field(gpio, "validPins"), valid_pins);
-  const jb_json_tree_view_t format = field(gpio, "pinIdFormat");
+                            jh_json_field(gpio, "validPins"), valid_pins);
+  const jb_json_tree_view_t format = jh_json_field(gpio, "pinIdFormat");
   const bool integer = string_is(format, "integer");
   const bool stm32 = string_is(format, "stm32-port-pin");
   bool fits = true;
@@ -2530,8 +2529,9 @@ static hal_status_t validate_target_gpio(const check_t *c,
                        integer ? "integer pin IDs" : "STM32 PxN pin IDs");
   static const char *const encoding[] = {"kind"};
   if (status == HAL_OK)
-    status = exact(c, jh_span("$.gpio.halEncoding"), field(gpio, "halEncoding"),
-                   encoding, COUNTOF(encoding), encoding, COUNTOF(encoding));
+    status = exact(c, jh_span("$.gpio.halEncoding"),
+                   jh_json_field(gpio, "halEncoding"), encoding,
+                   COUNTOF(encoding), encoding, COUNTOF(encoding));
   jb_json_tree_view_t traits = {0};
   const bool has_traits = member(gpio, "traits", &traits);
   if (status == HAL_OK && has_traits && !is_object(traits))
@@ -2572,10 +2572,10 @@ static hal_status_t validate_target_memory(const check_t *c,
                                         "externalRam"};
   static const char *const region_fields[] = {"kind", "sizeBytes",
                                               "dmaCapable"};
-  const jb_json_tree_view_t memory = field(target, "memory");
+  const jb_json_tree_view_t memory = jh_json_field(target, "memory");
   hal_status_t status = exact(c, jh_span("$.memory"), memory, required,
                               COUNTOF(required), allowed, COUNTOF(allowed));
-  const jb_json_tree_view_t regions = field(memory, "regions");
+  const jb_json_tree_view_t regions = jh_json_field(memory, "regions");
   if (status == HAL_OK && !is_object(regions))
     status = fail_value(c, jh_span("$.memory.regions"), &regions, "an object");
   jb_string_t at = {0}, place = {0}, text = {0};
@@ -2594,7 +2594,7 @@ static hal_status_t validate_target_memory(const check_t *c,
       status =
           exact(c, jh_string_span(&at), region, region_fields,
                 COUNTOF(region_fields), region_fields, COUNTOF(region_fields));
-    const jb_json_tree_view_t kind = field(region, "kind");
+    const jb_json_tree_view_t kind = jh_json_field(region, "kind");
     if (status == HAL_OK && !string_is(kind, "ram") &&
         !string_is(kind, "flash")) {
       status =
@@ -2602,7 +2602,7 @@ static hal_status_t validate_target_memory(const check_t *c,
       if (status == HAL_OK)
         status = fail_value(c, jh_string_span(&place), &kind, "ram or flash");
     }
-    const jb_json_tree_view_t size = field(region, "sizeBytes");
+    const jb_json_tree_view_t size = jh_json_field(region, "sizeBytes");
     int64_t bytes = 0;
     if (status == HAL_OK && !(jh_json_int64(size, &bytes) && bytes > 0)) {
       status = storage(
@@ -2611,7 +2611,7 @@ static hal_status_t validate_target_memory(const check_t *c,
         status =
             fail_value(c, jh_string_span(&place), &size, "a positive integer");
     }
-    const jb_json_tree_view_t dma = field(region, "dmaCapable");
+    const jb_json_tree_view_t dma = jh_json_field(region, "dmaCapable");
     if (status == HAL_OK && !is_bool(dma)) {
       status = storage(
           c, jh_json_path_join(&place, jh_string_span(&at), ".dmaCapable"));
@@ -2621,7 +2621,7 @@ static hal_status_t validate_target_memory(const check_t *c,
     if (status == HAL_OK && string_is(kind, "ram"))
       ram_total = bytes > INT64_MAX - ram_total ? INT64_MAX : ram_total + bytes;
   }
-  const jb_json_tree_view_t usable = field(memory, "ramUsableBytes");
+  const jb_json_tree_view_t usable = jh_json_field(memory, "ramUsableBytes");
   int64_t usable_bytes = 0;
   if (status == HAL_OK && !(jh_json_int64(usable, &usable_bytes) &&
                             usable_bytes >= 0 && usable_bytes <= ram_total)) {
@@ -2637,7 +2637,8 @@ static hal_status_t validate_target_memory(const check_t *c,
     static const char *const fields[] = {"interfaces", "maxBytes"};
     status = exact(c, jh_span("$.memory.externalRam"), external, fields,
                    COUNTOF(fields), fields, COUNTOF(fields));
-    const jb_json_tree_view_t interfaces = field(external, "interfaces");
+    const jb_json_tree_view_t interfaces =
+        jh_json_field(external, "interfaces");
     bool unique = is_array(interfaces) && jh_json_count(interfaces) != 0;
     for (size_t i = 0; unique && i < jh_json_count(interfaces); ++i) {
       const jb_json_tree_view_t item = jh_json_item(interfaces, i);
@@ -2652,7 +2653,7 @@ static hal_status_t validate_target_memory(const check_t *c,
     if (status == HAL_OK && !unique)
       status = fail_value(c, jh_span("$.memory.externalRam.interfaces"),
                           &interfaces, "unique quad/octal interfaces");
-    const jb_json_tree_view_t most = field(external, "maxBytes");
+    const jb_json_tree_view_t most = jh_json_field(external, "maxBytes");
     int64_t bytes = 0;
     if (status == HAL_OK && !(jh_json_int64(most, &bytes) && bytes > 0))
       status = fail_value(c, jh_span("$.memory.externalRam.maxBytes"), &most,
@@ -2821,7 +2822,7 @@ static hal_status_t validate_target(loader_t *l, const check_t *c,
     status = validate_clock_inputs(l, c, target, valid_pins);
   if (status == HAL_OK)
     status = validate_target_memory(c, target);
-  const jb_json_tree_view_t board = field(target, "defaultBoard");
+  const jb_json_tree_view_t board = jh_json_field(target, "defaultBoard");
   jb_json_span_t text = {NULL, 0};
   if (status == HAL_OK && !jh_json_string(board, &text))
     status = fail_value(c, jh_span("$.defaultBoard"), &board, "a board ID");
@@ -2835,7 +2836,7 @@ static hal_status_t validate_target(loader_t *l, const check_t *c,
     status = storage(c, jh_list_init(&ids));
   if (status == HAL_OK)
     status = validate_components(c, jh_span("$.components"),
-                                 field(target, "components"), provider,
+                                 jh_json_field(target, "components"), provider,
                                  &l->registry->components, &ids);
   jh_list_destroy(&ids);
   if (status == HAL_OK)
@@ -2852,7 +2853,7 @@ static hal_status_t ids_repr(jb_string_t *out, jb_json_tree_view_t array,
   for (size_t i = 0; status == HAL_OK && i < jh_json_count(array); ++i) {
     jb_json_tree_view_t item = jh_json_item(array, i);
     if (endpoint_ids)
-      item = field(item, "id");
+      item = jh_json_field(item, "id");
     if (i != 0)
       status = jh_append(out, ", ");
     if (status == HAL_OK)
@@ -2873,7 +2874,7 @@ static bool same_pins(jb_json_tree_view_t required, jb_json_tree_view_t pins) {
       pin_key_t wanted;
       jb_json_tree_view_t value = jh_json_item(from, i);
       if (pass == 1)
-        value = field(value, "id");
+        value = jh_json_field(value, "id");
       if (!pin_key_of(value, &wanted))
         return false;
       bool found = false;
@@ -2881,7 +2882,7 @@ static bool same_pins(jb_json_tree_view_t required, jb_json_tree_view_t pins) {
         pin_key_t key;
         jb_json_tree_view_t other = jh_json_item(to, j);
         if (pass == 0)
-          other = field(other, "id");
+          other = jh_json_field(other, "id");
         found = pin_key_of(other, &key) && key_compare(key, wanted) == 0;
       }
       if (!found)
@@ -2899,7 +2900,7 @@ hal_status_t jh_board_clock_source_problem(jb_json_tree_view_t inputs,
                                            jb_string_t *problem) {
   jb_json_tree_view_t kinds = {0}, required = {0};
   jb_json_span_t kind = {NULL, 0};
-  (void)jh_json_string(field(source, "kind"), &kind);
+  (void)jh_json_string(jh_json_field(source, "kind"), &kind);
   jb_string_clear(problem);
   hal_status_t status = HAL_OK;
   const bool has_kinds = jb_json_tree_find(inputs, key, &kinds) == HAL_OK;
@@ -2911,7 +2912,7 @@ hal_status_t jh_board_clock_source_problem(jb_json_tree_view_t inputs,
     jh_put_span(problem, &status, kind);
     return status;
   }
-  const jb_json_tree_view_t pins = field(source, "pins");
+  const jb_json_tree_view_t pins = jh_json_field(source, "pins");
   if (same_pins(required, pins))
     return HAL_OK;
   jh_put(problem, &status, "the ");
@@ -2952,7 +2953,8 @@ static hal_status_t validate_clock_sources(loader_t *l, const check_t *c,
                                 &pointer, &message);
   if (status == HAL_OK && !valid)
     status = fail_schema(c, "$.clockSources", &pointer, sources, &message);
-  const jb_json_tree_view_t compatible = field(board, "compatibleTargets");
+  const jb_json_tree_view_t compatible =
+      jh_json_field(board, "compatibleTargets");
   for (size_t i = 0; status == HAL_OK && i < jh_json_count(sources); ++i) {
     const jb_json_tree_view_t source = jh_json_item(sources, i);
     const jb_json_span_t key = jh_json_key(source);
@@ -2961,9 +2963,9 @@ static hal_status_t validate_clock_sources(loader_t *l, const check_t *c,
       (void)jh_json_string(jh_json_item(compatible, t), &target_id);
       const jh_board_descriptor_t *target =
           jh_board_registry_find(&l->registry->targets, target_id);
-      status = storage(
-          c, jh_board_clock_source_problem(field(target->root, "clockInputs"),
-                                           key, source, &problem));
+      status = storage(c, jh_board_clock_source_problem(
+                              jh_json_field(target->root, "clockInputs"), key,
+                              source, &problem));
       if (status != HAL_OK || jb_string_size(&problem) == 0)
         continue;
       status =
@@ -2975,7 +2977,7 @@ static hal_status_t validate_clock_sources(loader_t *l, const check_t *c,
                                      jh_span(" clock input ("),
                                      jh_string_span(&problem), jh_span(")")));
     }
-    const jb_json_tree_view_t source_pins = field(source, "pins");
+    const jb_json_tree_view_t source_pins = jh_json_field(source, "pins");
     if (status == HAL_OK)
       status = storage(c, jh_join(&owner, JH_PARTS(jh_span("clock."), key)));
     for (size_t p = 0; status == HAL_OK && p < jh_json_count(source_pins);
@@ -2990,9 +2992,9 @@ static hal_status_t validate_clock_sources(loader_t *l, const check_t *c,
         status = validate_endpoint(c, jh_string_span(&at), endpoint,
                                    pins->valid_pins, pins->components);
       if (status == HAL_OK)
-        status =
-            require_hard_owner(c, jh_string_span(&at), field(endpoint, "id"),
-                               pins->reserved, jh_string_span(&owner));
+        status = require_hard_owner(c, jh_string_span(&at),
+                                    jh_json_field(endpoint, "id"),
+                                    pins->reserved, jh_string_span(&owner));
     }
   }
   jb_string_destroy(&owner);
@@ -3050,22 +3052,22 @@ static hal_status_t validate_board_hal(const check_t *c,
                                        jb_json_tree_view_t board) {
   static const char *const fields[] = {
       "profileId", "selector", "legacySelectors", "autoDetectSelectors"};
-  const jb_json_tree_view_t hal = field(board, "hal");
+  const jb_json_tree_view_t hal = jh_json_field(board, "hal");
   hal_status_t status = exact(c, jh_span("$.hal"), hal, fields, COUNTOF(fields),
                               fields, COUNTOF(fields));
-  const jb_json_tree_view_t profile = field(hal, "profileId");
+  const jb_json_tree_view_t profile = jh_json_field(hal, "profileId");
   int64_t number = 0;
   if (status == HAL_OK && !(jh_json_int64(profile, &number) && number >= 1))
     status = fail_value(c, jh_span("$.hal.profileId"), &profile,
                         "a positive integer");
-  const jb_json_tree_view_t selector = field(hal, "selector");
+  const jb_json_tree_view_t selector = jh_json_field(hal, "selector");
   if (status == HAL_OK && !string_matches(selector, macro_pattern))
     status = fail_value(c, jh_span("$.hal.selector"), &selector, "a C macro");
   static const char *const lists[] = {"legacySelectors", "autoDetectSelectors"};
   static const char *const places[] = {"$.hal.legacySelectors",
                                        "$.hal.autoDetectSelectors"};
   for (size_t i = 0; status == HAL_OK && i < COUNTOF(lists); ++i) {
-    const jb_json_tree_view_t list = field(hal, lists[i]);
+    const jb_json_tree_view_t list = jh_json_field(hal, lists[i]);
     bool unique = true;
     if (!string_array(list, macro_pattern, &unique))
       status = fail_value(c, jh_span(places[i]), &list, "C macro array");
@@ -3081,19 +3083,19 @@ static hal_status_t validate_board_memory(loader_t *l, const check_t *c,
   static const char *const allowed[] = {"flash", "psram"};
   static const char *const flash_fields[] = {"source", "expectedBytes"};
   static const char *const psram_fields[] = {"interface", "sizeBytes"};
-  const jb_json_tree_view_t memory = field(board, "memory");
+  const jb_json_tree_view_t memory = jh_json_field(board, "memory");
   hal_status_t status = exact(c, jh_span("$.memory"), memory, required,
                               COUNTOF(required), allowed, COUNTOF(allowed));
-  const jb_json_tree_view_t flash = field(memory, "flash");
+  const jb_json_tree_view_t flash = jh_json_field(memory, "flash");
   if (status == HAL_OK)
     status = exact(c, jh_span("$.memory.flash"), flash, flash_fields,
                    COUNTOF(flash_fields), flash_fields, COUNTOF(flash_fields));
   static const char *const sources[] = {"sdk", "target", "none"};
-  const jb_json_tree_view_t source = field(flash, "source");
+  const jb_json_tree_view_t source = jh_json_field(flash, "source");
   if (status == HAL_OK && !string_in(source, sources, COUNTOF(sources)))
     status = fail_value(c, jh_span("$.memory.flash.source"), &source,
                         "sdk, target, or none");
-  const jb_json_tree_view_t expected = field(flash, "expectedBytes");
+  const jb_json_tree_view_t expected = jh_json_field(flash, "expectedBytes");
   int64_t number = 0;
   if (status == HAL_OK && !(jh_json_int64(expected, &number) && number >= 0))
     status = fail_value(c, jh_span("$.memory.flash.expectedBytes"), &expected,
@@ -3103,17 +3105,18 @@ static hal_status_t validate_board_memory(loader_t *l, const check_t *c,
     return status;
   status = exact(c, jh_span("$.memory.psram"), psram, psram_fields,
                  COUNTOF(psram_fields), psram_fields, COUNTOF(psram_fields));
-  const jb_json_tree_view_t interface = field(psram, "interface");
+  const jb_json_tree_view_t interface = jh_json_field(psram, "interface");
   if (status == HAL_OK && !string_is(interface, "quad") &&
       !string_is(interface, "octal"))
     status = fail_value(c, jh_span("$.memory.psram.interface"), &interface,
                         "quad or octal");
-  const jb_json_tree_view_t size = field(psram, "sizeBytes");
+  const jb_json_tree_view_t size = jh_json_field(psram, "sizeBytes");
   int64_t bytes = 0;
   if (status == HAL_OK && !(jh_json_int64(size, &bytes) && bytes > 0))
     status = fail_value(c, jh_span("$.memory.psram.sizeBytes"), &size,
                         "a positive integer");
-  const jb_json_tree_view_t compatible = field(board, "compatibleTargets");
+  const jb_json_tree_view_t compatible =
+      jh_json_field(board, "compatibleTargets");
   for (size_t t = 0; status == HAL_OK && t < jh_json_count(compatible); ++t) {
     jb_json_span_t id = {NULL, 0}, kind = {NULL, 0};
     (void)jh_json_string(jh_json_item(compatible, t), &id);
@@ -3122,15 +3125,18 @@ static hal_status_t validate_board_memory(loader_t *l, const check_t *c,
         jh_board_registry_find(&l->registry->targets, id);
     jb_json_tree_view_t support = {0};
     int64_t most = 0;
-    bool fits = !absent(field(target->root, "memory"), "externalRam", &support);
+    bool fits =
+        !absent(jh_json_field(target->root, "memory"), "externalRam", &support);
     if (fits) {
-      const jb_json_tree_view_t interfaces = field(support, "interfaces");
+      const jb_json_tree_view_t interfaces =
+          jh_json_field(support, "interfaces");
       bool listed = false;
       for (size_t i = 0; i < jh_json_count(interfaces); ++i)
         listed = listed ||
                  string_is(jh_json_item(interfaces, i),
                            string_is(interface, "quad") ? "quad" : "octal");
-      fits = listed && jh_json_int64(field(support, "maxBytes"), &most) &&
+      fits = listed &&
+             jh_json_int64(jh_json_field(support, "maxBytes"), &most) &&
              bytes <= most;
     }
     if (!fits)
@@ -3153,14 +3159,14 @@ static hal_status_t validate_programming(const check_t *c,
   if (status == HAL_OK && jh_span_compare(provider, jh_span("esp-idf")) != 0)
     status = fail_value(c, jh_span("$.programming"), &programming,
                         "programming metadata for an ESP-IDF board");
-  const jb_json_tree_view_t transport = field(programming, "transport");
+  const jb_json_tree_view_t transport = jh_json_field(programming, "transport");
   const bool jtag = string_is(transport, "usb-serial-jtag");
   if (status == HAL_OK && !jtag && !string_is(transport, "usb-uart-bridge"))
     status = fail_value(c, jh_span("$.programming.transport"), &transport,
                         "usb-serial-jtag or usb-uart-bridge");
   if (status == HAL_OK)
     status = validate_usb_ids(c, jh_span("$.programming.usb"),
-                              field(programming, "usb"));
+                              jh_json_field(programming, "usb"));
   static const char *const lines[] = {"reset", "boot"};
   static const char *const places[] = {"$.programming.reset",
                                        "$.programming.boot"};
@@ -3169,7 +3175,7 @@ static hal_status_t validate_programming(const check_t *c,
   static const char *const bridge_lines[] = {"dtr-rts-en", "dtr-rts-io0"};
   for (size_t i = 0; status == HAL_OK && i < COUNTOF(lines); ++i) {
     const char *wanted = jtag ? jtag_lines[i] : bridge_lines[i];
-    const jb_json_tree_view_t value = field(programming, lines[i]);
+    const jb_json_tree_view_t value = jh_json_field(programming, lines[i]);
     if (!string_is(value, wanted))
       status = fail_value(c, jh_span(places[i]), &value, wanted);
   }
@@ -3186,7 +3192,7 @@ static hal_status_t validate_board_gpio(const check_t *c,
                                          "aliases"};
   static const char *const allowed[] = {"exposedPins", "connectors",
                                         "reservations", "aliases"};
-  const jb_json_tree_view_t gpio = field(board, "gpio");
+  const jb_json_tree_view_t gpio = jh_json_field(board, "gpio");
   hal_status_t status = exact(c, jh_span("$.gpio"), gpio, required,
                               COUNTOF(required), allowed, COUNTOF(allowed));
   jb_vector_t exposed = {0}, outside = {0};
@@ -3201,7 +3207,7 @@ static hal_status_t validate_board_gpio(const check_t *c,
     status = storage(c, text_init(&place));
   if (status == HAL_OK)
     status = expand_pin_set(c, jh_span("$.gpio.exposedPins"),
-                            field(gpio, "exposedPins"), &exposed);
+                            jh_json_field(gpio, "exposedPins"), &exposed);
   if (status == HAL_OK)
     status = storage(c, pins_outside(&exposed, valid_union, &outside));
   if (status == HAL_OK && jb_vector_size(&outside) != 0)
@@ -3222,7 +3228,7 @@ static hal_status_t validate_board_gpio(const check_t *c,
     if (status == HAL_OK)
       status = exact(c, jh_string_span(&at), connector, fields, COUNTOF(fields),
                      fields, COUNTOF(fields));
-    const jb_json_tree_view_t pins = field(connector, "pins");
+    const jb_json_tree_view_t pins = jh_json_field(connector, "pins");
     if (status == HAL_OK)
       status =
           storage(c, jh_json_path_join(&place, jh_string_span(&at), ".pins"));
@@ -3241,7 +3247,7 @@ static hal_status_t validate_board_gpio(const check_t *c,
       jb_string_destroy(&item);
     }
   }
-  const jb_json_tree_view_t reservations = field(gpio, "reservations");
+  const jb_json_tree_view_t reservations = jh_json_field(gpio, "reservations");
   if (status == HAL_OK && !is_object(reservations))
     status = fail_value(c, jh_span("$.gpio.reservations"), &reservations,
                         "an object");
@@ -3253,7 +3259,7 @@ static hal_status_t validate_board_gpio(const check_t *c,
     if (status == HAL_OK)
       status = exact(c, jh_string_span(&at), reservation, fields,
                      COUNTOF(fields), fields, COUNTOF(fields));
-    const jb_json_tree_view_t strength = field(reservation, "strength");
+    const jb_json_tree_view_t strength = jh_json_field(reservation, "strength");
     const bool hard = string_is(strength, "hard");
     if (status == HAL_OK && !hard && !string_is(strength, "soft")) {
       status = storage(
@@ -3262,7 +3268,7 @@ static hal_status_t validate_board_gpio(const check_t *c,
         status =
             fail_value(c, jh_string_span(&place), &strength, "hard or soft");
     }
-    const jb_json_tree_view_t pins = field(reservation, "pins");
+    const jb_json_tree_view_t pins = jh_json_field(reservation, "pins");
     if (status == HAL_OK)
       status =
           storage(c, jh_json_path_join(&place, jh_string_span(&at), ".pins"));
@@ -3281,12 +3287,12 @@ static hal_status_t validate_board_gpio(const check_t *c,
                                    valid_union, components);
       jb_string_destroy(&item);
       if (status == HAL_OK && hard &&
-          string_is(field(endpoint, "domain"), "soc-gpio"))
-        status = storage(c, reserve(reserved, field(endpoint, "id"),
-                                    field(reservation, "owner")));
+          string_is(jh_json_field(endpoint, "domain"), "soc-gpio"))
+        status = storage(c, reserve(reserved, jh_json_field(endpoint, "id"),
+                                    jh_json_field(reservation, "owner")));
     }
   }
-  const jb_json_tree_view_t aliases = field(gpio, "aliases");
+  const jb_json_tree_view_t aliases = jh_json_field(gpio, "aliases");
   if (status == HAL_OK && !is_object(aliases))
     status = fail_value(c, jh_span("$.gpio.aliases"), &aliases, "an object");
   for (size_t i = 0; status == HAL_OK && i < jh_json_count(aliases); ++i) {
@@ -3301,9 +3307,9 @@ static hal_status_t validate_board_gpio(const check_t *c,
       status = storage(
           c, jh_json_path_join(&place, jh_string_span(&at), ".endpoint"));
     if (status == HAL_OK)
-      status =
-          validate_endpoint(c, jh_string_span(&place), field(alias, "endpoint"),
-                            valid_union, components);
+      status = validate_endpoint(c, jh_string_span(&place),
+                                 jh_json_field(alias, "endpoint"), valid_union,
+                                 components);
   }
   jb_string_destroy(&place);
   jb_string_destroy(&at);
@@ -3316,7 +3322,7 @@ static hal_status_t validate_board_capabilities(const check_t *c,
                                                 jb_json_tree_view_t board,
                                                 jb_json_tree_view_t registry,
                                                 const jb_vector_t *components) {
-  const jb_json_tree_view_t capabilities = field(board, "capabilities");
+  const jb_json_tree_view_t capabilities = jh_json_field(board, "capabilities");
   if (!is_object(capabilities))
     return fail_value(c, jh_span("$.capabilities"), &capabilities, "an object");
   jb_vector_t names = {0}, unknown = {0}, active = {0}, missing = {0};
@@ -3356,7 +3362,7 @@ static hal_status_t validate_board_capabilities(const check_t *c,
     if (status == HAL_OK)
       status = exact(c, jh_string_span(&at), value, fields, COUNTOF(fields),
                      fields, COUNTOF(fields));
-    const jb_json_tree_view_t present = field(value, "present");
+    const jb_json_tree_view_t present = jh_json_field(value, "present");
     if (status == HAL_OK && !is_bool(present)) {
       status = storage(
           c, jh_join(&at, JH_PARTS(jh_span("$.capabilities."),
@@ -3367,7 +3373,7 @@ static hal_status_t validate_board_capabilities(const check_t *c,
   }
   jb_json_tree_view_t cyw43 = {0};
   if (status == HAL_OK && member(capabilities, "cyw43", &cyw43) &&
-      truthy_bool(field(cyw43, "present"))) {
+      truthy_bool(jh_json_field(cyw43, "present"))) {
     const bool transport =
         jh_list_contains(components, jh_span("cyw43-pico-pio")) ||
         jh_list_contains(components, jh_span("cyw43-stm32-gspi"));
@@ -3387,7 +3393,7 @@ static hal_status_t validate_board_capabilities(const check_t *c,
 static hal_status_t validate_board_devices(const check_t *c,
                                            jb_json_tree_view_t board,
                                            const pins_context_t *pins) {
-  const jb_json_tree_view_t devices = field(board, "devices");
+  const jb_json_tree_view_t devices = jh_json_field(board, "devices");
   if (!is_object(devices))
     return fail_value(c, jh_span("$.devices"), &devices, "an object");
   jb_string_t at = {0}, owner = {0};
@@ -3443,7 +3449,8 @@ static hal_status_t validate_board_devices(const check_t *c,
 static hal_status_t validate_board(loader_t *l, const check_t *c,
                                    jb_json_tree_view_t board) {
   hal_status_t status = validate_common(c, board, false);
-  const jb_json_tree_view_t compatible = field(board, "compatibleTargets");
+  const jb_json_tree_view_t compatible =
+      jh_json_field(board, "compatibleTargets");
   bool unique = true;
   bool strings = status == HAL_OK && is_array(compatible) &&
                  jh_json_count(compatible) != 0;
@@ -3465,7 +3472,7 @@ static hal_status_t validate_board(loader_t *l, const check_t *c,
   }
   static const char *const build_required[] = {"provider"};
   static const char *const build_allowed[] = {"provider", "board"};
-  const jb_json_tree_view_t build = field(board, "build");
+  const jb_json_tree_view_t build = jh_json_field(board, "build");
   if (status == HAL_OK)
     status =
         exact(c, jh_span("$.build"), build, build_required,
@@ -3478,13 +3485,14 @@ static hal_status_t validate_board(loader_t *l, const check_t *c,
     (void)jh_json_string(jh_json_item(compatible, i), &id);
     const jh_board_descriptor_t *target =
         jh_board_registry_find(&l->registry->targets, id);
-    (void)jh_json_string(field(field(target->root, "build"), "provider"),
-                         &provider);
+    (void)jh_json_string(
+        jh_json_field(jh_json_field(target->root, "build"), "provider"),
+        &provider);
     if (!jh_list_contains(&providers, provider))
       status = storage(c, jh_list_push(&providers, provider));
   }
   jh_list_sort(&providers);
-  const jb_json_tree_view_t provider_value = field(build, "provider");
+  const jb_json_tree_view_t provider_value = jh_json_field(build, "provider");
   jb_json_span_t provider = {NULL, 0};
   const bool provider_text = jh_json_string(provider_value, &provider);
   if (status == HAL_OK &&
@@ -3529,14 +3537,15 @@ static hal_status_t validate_board(loader_t *l, const check_t *c,
                                        jb_heap_allocator()));
   if (status == HAL_OK)
     status = validate_components(c, jh_span("$.components"),
-                                 field(board, "components"), provider,
+                                 jh_json_field(board, "components"), provider,
                                  &l->registry->components, &components);
   for (size_t i = 0; status == HAL_OK && i < jh_json_count(compatible); ++i) {
     jb_json_span_t id = {NULL, 0};
     (void)jh_json_string(jh_json_item(compatible, i), &id);
     const jh_board_descriptor_t *target =
         jh_board_registry_find(&l->registry->targets, id);
-    const jb_json_tree_view_t listed = field(target->root, "components");
+    const jb_json_tree_view_t listed =
+        jh_json_field(target->root, "components");
     for (size_t k = 0; status == HAL_OK && k < jh_json_count(listed); ++k)
       if (!jh_list_contains(&components, jh_json_key(jh_json_item(listed, k))))
         status = storage(
@@ -3553,7 +3562,7 @@ static hal_status_t validate_board(loader_t *l, const check_t *c,
   const pins_context_t pins = {&valid_union, &components, &reserved};
   if (status == HAL_OK)
     status = validate_board_devices(c, board, &pins);
-  const jb_json_tree_view_t peripherals = field(board, "peripherals");
+  const jb_json_tree_view_t peripherals = jh_json_field(board, "peripherals");
   if (status == HAL_OK && !is_object(peripherals))
     status = fail_value(c, jh_span("$.peripherals"), &peripherals, "an object");
   if (status == HAL_OK)
@@ -3649,11 +3658,11 @@ static hal_status_t load_capabilities(loader_t *l) {
   if (status == HAL_OK)
     status = exact(&c, jh_span("$"), root, fields, COUNTOF(fields), fields,
                    COUNTOF(fields));
-  const jb_json_tree_view_t version = field(root, "schemaVersion");
+  const jb_json_tree_view_t version = jh_json_field(root, "schemaVersion");
   int64_t number = 0;
   if (status == HAL_OK && !(jh_json_int64(version, &number) && number == 1))
     status = fail_value(&c, jh_span("$.schemaVersion"), &version, "1");
-  registry->capabilities = field(root, "capabilities");
+  registry->capabilities = jh_json_field(root, "capabilities");
   const jb_json_tree_view_t capabilities = registry->capabilities;
   if (status == HAL_OK && !is_object(capabilities))
     status =
@@ -3677,7 +3686,7 @@ static hal_status_t load_capabilities(loader_t *l) {
     if (status == HAL_OK)
       status = exact(&c, jh_string_span(&at), config, required,
                      COUNTOF(required), allowed, COUNTOF(allowed));
-    const jb_json_tree_view_t bit = field(config, "bit");
+    const jb_json_tree_view_t bit = jh_json_field(config, "bit");
     int64_t index = 0;
     const bool in_range =
         jh_json_int64(bit, &index) && index >= 0 && index <= 31;
@@ -3691,7 +3700,7 @@ static hal_status_t load_capabilities(loader_t *l) {
     }
     if (status == HAL_OK)
       bits[index] = true;
-    const jb_json_tree_view_t macro = field(config, "macro");
+    const jb_json_tree_view_t macro = jh_json_field(config, "macro");
     jb_json_span_t text = {NULL, 0};
     if (status == HAL_OK &&
         !(jh_json_string(macro, &text) && macro_pattern(text) &&
@@ -3704,7 +3713,7 @@ static hal_status_t load_capabilities(loader_t *l) {
     }
     if (status == HAL_OK)
       status = storage(&c, jh_list_push(&macros, text));
-    const jb_json_tree_view_t model = field(config, "stateModel");
+    const jb_json_tree_view_t model = jh_json_field(config, "stateModel");
     if (status == HAL_OK && !string_is(model, "static") &&
         !string_is(model, "lifecycle")) {
       status = storage(&c, jh_join(&at, JH_PARTS(jh_span("$.capabilities."), id,
@@ -3724,9 +3733,9 @@ static hal_status_t load_capabilities(loader_t *l) {
  * not held by an earlier board. */
 static hal_status_t check_board_unique(loader_t *l, const check_t *c,
                                        jb_json_tree_view_t root) {
-  const jb_json_tree_view_t hal = field(root, "hal");
-  const jb_json_tree_view_t profile = field(hal, "profileId");
-  const jb_json_tree_view_t selector = field(hal, "selector");
+  const jb_json_tree_view_t hal = jh_json_field(root, "hal");
+  const jb_json_tree_view_t profile = jh_json_field(hal, "profileId");
+  const jb_json_tree_view_t selector = jh_json_field(hal, "selector");
   jb_string_t key = {0};
   hal_status_t status = storage(c, text_init(&key));
   int64_t number = 0;
@@ -3749,7 +3758,8 @@ static hal_status_t check_board_unique(loader_t *l, const check_t *c,
     if (status == HAL_OK)
       status = storage(c, seen_add(seen[v], text, c->path));
   }
-  const jb_json_tree_view_t automatic = field(hal, "autoDetectSelectors");
+  const jb_json_tree_view_t automatic =
+      jh_json_field(hal, "autoDetectSelectors");
   for (size_t i = 0; status == HAL_OK && i < jh_json_count(automatic); ++i) {
     const jb_json_tree_view_t item = jh_json_item(automatic, i);
     jb_json_span_t text = {NULL, 0};
@@ -3774,11 +3784,11 @@ usb_ids_as_numbers(const check_t *c, jh_board_descriptor_t *item, bool target) {
              : absent(item->root, "programming", &programming))
     return HAL_OK;
   if (!target)
-    usb = field(programming, "usb");
+    usb = jh_json_field(programming, "usb");
   uint32_t ids[COUNTOF(usb_id_fields)] = {0};
   bool text = false;
   for (size_t i = 0; i < COUNTOF(usb_id_fields); ++i) {
-    const jb_json_tree_view_t id = field(usb, usb_id_fields[i]);
+    const jb_json_tree_view_t id = jh_json_field(usb, usb_id_fields[i]);
     text = text || jh_json_type(id) == JB_JSON_STRING;
     (void)jh_json_hardware_id(id, 0xFFFFu, &ids[i]);
   }
@@ -3847,7 +3857,7 @@ static hal_status_t load_descriptors(loader_t *l, bool targets) {
       status = targets ? validate_target(l, &c, item.root, &item.valid_pins)
                        : validate_board(l, &c, item.root);
     jb_json_span_t id = {NULL, 0};
-    const jb_json_tree_view_t id_value = field(item.root, "id");
+    const jb_json_tree_view_t id_value = jh_json_field(item.root, "id");
     (void)jh_json_string(id_value, &id);
     if (status == HAL_OK && jh_board_registry_find(list, id) != NULL)
       status = fail_value(&c, jh_span("$.id"), &id_value,
@@ -3873,7 +3883,7 @@ static hal_status_t load_descriptors(loader_t *l, bool targets) {
 /* A selector of a list of the board's hal object, by index. */
 static jb_json_tree_view_t hal_list(const jh_board_descriptor_t *board,
                                     const char *name) {
-  return field(field(board->root, "hal"), name);
+  return jh_json_field(jh_json_field(board->root, "hal"), name);
 }
 
 /* Legacy selectors distinct from every primary and auto-detection selector
@@ -3929,7 +3939,7 @@ static hal_status_t check_selectors(loader_t *l) {
     const check_t c = {jh_string_span(&board->path), l->failure};
     const jb_json_tree_view_t list = hal_list(board, "legacySelectors");
     const jb_json_tree_view_t compatible =
-        field(board->root, "compatibleTargets");
+        jh_json_field(board->root, "compatibleTargets");
     for (size_t i = 0; status == HAL_OK && i < jh_json_count(list); ++i) {
       const jb_json_tree_view_t item = jh_json_item(list, i);
       jb_json_span_t text = {NULL, 0};
@@ -3981,14 +3991,14 @@ static hal_status_t check_default_boards(loader_t *l) {
       jb_json_tree_view_t value = {0};
       if (f == 1 && absent(target->root, fields[f], &value))
         continue;
-      value = field(target->root, fields[f]);
+      value = jh_json_field(target->root, fields[f]);
       jb_json_span_t id = {NULL, 0};
       (void)jh_json_string(value, &id);
       const jh_board_descriptor_t *board =
           jh_board_registry_find(&registry->boards, id);
       bool compatible = false;
       const jb_json_tree_view_t targets =
-          board != NULL ? field(board->root, "compatibleTargets")
+          board != NULL ? jh_json_field(board->root, "compatibleTargets")
                         : (jb_json_tree_view_t){0};
       for (size_t t = 0; board != NULL && t < jh_json_count(targets); ++t) {
         jb_json_span_t text = {NULL, 0};

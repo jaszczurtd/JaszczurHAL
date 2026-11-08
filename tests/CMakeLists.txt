@@ -1174,14 +1174,6 @@ add_test(NAME test_generated_artifacts
         ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/sync_generated.py
         --check
 )
-# The build part of project_config.py over the jh reader; the reader itself
-# is tested in tools/jh (jh_config, jh_config_preprocessor).
-add_test(NAME test_project_config
-    COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_CURRENT_SOURCE_DIR}/test_project_config.py
-        ${CMAKE_CURRENT_SOURCE_DIR}/..
-)
-
 add_test(NAME test_vscode_native_workflow
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_vscode_native_workflow.py
@@ -1591,10 +1583,12 @@ if(UNIX)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/test_update_components.cmake
     )
 endif()
-add_test(NAME test_board_generator
-    COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_CURRENT_SOURCE_DIR}/test_board_generator.py
-        ${CMAKE_CURRENT_SOURCE_DIR}/..
+add_test(NAME test_board_registry
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
+        -DJH_TEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+        -DPYTHON=${Python3_EXECUTABLE}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_board_registry.cmake
 )
 add_test(NAME test_documentation_links
     COMMAND ${Python3_EXECUTABLE}

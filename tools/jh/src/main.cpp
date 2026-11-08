@@ -1,5 +1,6 @@
 #include "../config/jh_board_outputs.h"
 #include "../config/jh_feature_lint.h"
+#include "../config/jh_project_build.h"
 #include "../config/jh_project_config.h"
 #include "../hardware/jh_device_defaults.h"
 #include "../hardware/jh_type_catalogue.h"
@@ -14,6 +15,7 @@
 #include <cwchar>
 #include <filesystem>
 #include <jb/array.h>
+#include <jb/filesystem.h>
 #include <jb/json_pointer.h>
 #include <jb/json_writer.h>
 #include <jb/process.h>
@@ -72,6 +74,10 @@ enum option_id {
   board_option,
   feature_option,
   output_dir,
+  project_directory,
+  variant_option,
+  hardware_header,
+  selector_option,
   machine,
   json_version,
   help,
@@ -142,6 +148,11 @@ constexpr option_spec options[] = {
     {"output-dir", "<path>",
      "Directory the board configuration writes, below a .build directory or "
      "--output-root"},
+    {"config-dir", "<path>", "Directory containing hal_project_config.h"},
+    {"variant", "<id>", "Declared project variant to build"},
+    {"hardware-header", "<path>",
+     "Generated jh_hardware.h read before the project"},
+    {"selector", "<macro>", "Explicit target selector (config build adapter)"},
     {"json", nullptr, "Write a versioned JSON result on stdout"},
     {"json-version", "<major>",
      "Require a supported JSON result major version (1)"},
@@ -168,7 +179,9 @@ enum command_id {
   clock_check_command,
   clock_list_command,
   boards_command,
-  board_config_command
+  board_config_command,
+  project_build_command,
+  project_cmake_command
 };
 struct command_spec {
   const char *first, *second, *name;
@@ -222,6 +235,16 @@ const command_spec commands[] = {
      "board.config",
      {root, boards_root, target, board_option, define, feature_option,
       output_dir, output_root, file}},
+    {"config",
+     "build",
+     "config.build",
+     {root, target, selector_option, required_feature, project_directory,
+      header, variant_option, define, hardware_header}},
+    {"config",
+     "cmake",
+     "config.cmake",
+     {root, target, project_directory, variant_option, define, hardware_header,
+      output}},
 };
 
 #ifdef _WIN32
@@ -267,6 +290,7 @@ struct context : jh::parse_location {
   bool json = false;
   const command_spec *command = nullptr;
   bool process_attempted = false;
+  bool configuration_rejected = false;
   jb_process_result_t process{};
 };
 
@@ -341,6 +365,9 @@ std::string help_text() {
       "       jh config inspect [--header <path>] [--define <NAME[=VALUE]>]..."
       " [--preinclude <path>]\n"
       "       jh config directives --file <path>\n"
+      "       jh config build --root <path> --target <id> [options] --json\n"
+      "       jh config cmake --root <path> --target <id> --output <path> "
+      "[options]\n"
       "       jh feature list (--root <path> | --config-root <path>)\n"
       "       jh feature resolve (--root <path> | --config-root <path>)"
       " [--request <SYMBOL[=VALUE]> [--source <text>]]... [options]\n"
@@ -1808,21 +1835,11 @@ const char *integer_state(jh::config::integer_kind kind) {
   }
 }
 
-int config_inspect(context &ctx, const std::string &base) {
-  const auto &args = ctx.args;
-  const auto path_of = [&](option_id id) {
-    return args.present[id] ? jh::stl::absolute_path(args.values[id], base)
-                            : std::string();
-  };
-  if ((args.present[header] && args.values[header].empty()) ||
-      (args.present[preinclude] && args.values[preinclude].empty()))
-    throw failure{HAL_EINVAL, 2,  "--header and --preinclude need a path",
-                  {},         {}, {}};
-  const std::string header_path = path_of(header);
-  const std::string preinclude_path = path_of(preinclude);
-  jh::assign(ctx.source, header_path);
-  const auto config = jh::config::read_project_config(
-      header_path, args.lists[define], preinclude_path);
+jh::owned_string config_result(const std::string &header_path,
+                               const std::vector<std::string> &definitions,
+                               const std::string &preinclude_path, bool json) {
+  const auto config = jh::config::read_project_config(header_path, definitions,
+                                                      preinclude_path);
   const auto macros = config.macros.ordered();
   std::vector<jh::config::integer_value> integers;
   std::vector<std::set<std::string>> unresolved;
@@ -1864,7 +1881,7 @@ int config_inspect(context &ctx, const std::string &base) {
     for (const auto &item : unknown)
       bytes += item.size() + 8;
   }
-  if (!ctx.json) {
+  if (!json) {
     std::string text;
     for (const auto *item : macros) {
       text += "#define " + item->name;
@@ -1878,11 +1895,10 @@ int config_inspect(context &ctx, const std::string &base) {
         text += ' ' + item->body;
       text += '\n';
     }
-    stdout_bytes(text);
     if (config.stopped)
       std::fprintf(stderr, "%s: #error %s\n", config.error_source.c_str(),
                    config.error_message.c_str());
-    return 0;
+    return jh::owned_string(text);
   }
   result_writer result(bytes);
   result.string("command", "config.inspect");
@@ -1947,7 +1963,233 @@ int config_inspect(context &ctx, const std::string &base) {
   } else {
     result.null("error");
   }
-  stdout_bytes(result.finish());
+  return result.finish();
+}
+
+int config_inspect(context &ctx, const std::string &base) {
+  const auto &args = ctx.args;
+  const auto path_of = [&](option_id id) {
+    return args.present[id] ? jh::stl::absolute_path(args.values[id], base)
+                            : std::string();
+  };
+  if ((args.present[header] && args.values[header].empty()) ||
+      (args.present[preinclude] && args.values[preinclude].empty()))
+    throw failure{HAL_EINVAL, 2,  "--header and --preinclude need a path",
+                  {},         {}, {}};
+  const auto header_path = path_of(header);
+  jh::assign(ctx.source, header_path);
+  stdout_bytes(config_result(header_path, args.lists[define],
+                             path_of(preinclude), ctx.json));
+  return 0;
+}
+
+// The existing reader and its JSON model remain C++ until the reader's port.
+// Both config.inspect and the C build module consume this same serialization.
+hal_status_t read_build_config(void *user, const char *header_path,
+                               const jb_vector_t *definitions,
+                               const char *preinclude_path,
+                               jb_json_tree_t **out, jh_failure_t *failed) {
+  try {
+    std::vector<std::string> predefined;
+    for (size_t i = 0; i < jb_vector_size(definitions); ++i)
+      predefined.emplace_back(jh::view(*jh_list_at(definitions, i)));
+    const auto json =
+        config_result(header_path, predefined, preinclude_path, true);
+    auto &bytes = *static_cast<size_t *>(user);
+    if (json.size() > SIZE_MAX - bytes)
+      return jh_fail_storage(failed, HAL_EOVERFLOW);
+    bytes += json.size();
+    return jh_fail_storage(failed, jh_json_tree_from_text(jh::span(json), out));
+  } catch (const jh::failure &error) {
+    const auto message = jh::span(error.message);
+    return jh_fail(failed, error.status, error.exit_code, &message, 1);
+  } catch (const std::bad_alloc &) {
+    return jh_fail_storage(failed, HAL_ENOMEM);
+  } catch (const std::length_error &) {
+    return jh_fail_storage(failed, HAL_EOVERFLOW);
+  } catch (const std::exception &error) {
+    return jh_fail_text(failed, HAL_EIO, 3, error.what());
+  } catch (...) {
+    return jh_fail_text(failed, HAL_EIO, 3, "project reader failed");
+  }
+}
+
+int config_build(context &ctx, const std::string &base, bool cmake) {
+  const auto &args = ctx.args;
+  if (cmake)
+    require_value(args, output, "config cmake requires --output");
+  if (!args.present[selector_option])
+    require_value(args, target,
+                  cmake ? "config cmake requires --target"
+                        : "config build requires --target");
+  jh::board_registry boards;
+  jh::string_list required, extra;
+  jh::owned_string selector;
+  jh::failure_record failed;
+  const auto append_option = [&](option_id id, jh::string_list &list,
+                                 bool strip_define) {
+    for (const auto &item : args.lists[id]) {
+      const std::string_view value(item);
+      const auto normalized =
+          strip_define && value.substr(0, 2) == "-D" ? value.substr(2) : value;
+      failed.check(jh_list_push(&list.value, jh::span(normalized)));
+    }
+  };
+  append_option(define, extra, cmake);
+  if (args.present[selector_option]) {
+    selector = args.values[selector_option];
+    append_option(required_feature, required, false);
+  } else {
+    std::string directory;
+    load_boards(ctx, base, cmake ? "config cmake" : "config build", boards,
+                directory);
+    const auto *descriptor =
+        jh_board_registry_find(&boards.targets, jh::span(args.values[target]));
+    if (descriptor == nullptr)
+      throw failure{HAL_ECONFIG,
+                    2,
+                    "[JH-CFG-TARGET] unknown target " +
+                        jh::stl::python_repr(args.values[target]),
+                    {},
+                    {},
+                    {}};
+    jb_json_tree_view_t hal{}, selected{}, needed{};
+    require(jb_json_tree_find(descriptor->root, jh::span("hal"), &hal), 2,
+            "target has no hal");
+    require(jb_json_tree_find(hal, jh::span("targetSelector"), &selected), 2,
+            "target has no selector");
+    jb_json_span_t selected_text{};
+    require(jb_json_tree_text(selected, &selected_text), 2,
+            "target selector is not text");
+    selector.assign({selected_text.data, selected_text.length});
+    if (jh_json_member(descriptor->root, "requiredFeatures", &needed))
+      for (size_t i = 0; i < jh_json_count(needed); ++i) {
+        jb_json_span_t feature{};
+        require(jb_json_tree_text(jh_json_item(needed, i), &feature), 2,
+                "target feature is not text");
+        failed.check(jh_list_push(&required.value, feature));
+      }
+  }
+  jh::owned_string header_path, hardware_path;
+  if (args.present[header]) {
+    require_value(args, header, "config build --header needs a path");
+    if (args.present[project_directory])
+      throw failure{HAL_EINVAL, 2,  "use either --header or --config-dir",
+                    {},         {}, {}};
+    header_path = args.values[header];
+  } else if (args.present[project_directory]) {
+    if (cmake)
+      failed.check(jh_python_resolve(args.values[project_directory].c_str(),
+                                     base.c_str(), header_path.raw(),
+                                     &failed.value));
+    else
+      header_path = args.values[project_directory];
+    jh::owned_string joined;
+    failed.check(jh_path_join(header_path.c_str(), "hal_project_config.h",
+                              joined.raw()));
+    header_path = std::move(joined);
+  }
+  if (args.present[hardware_header]) {
+    failed.check(jh_python_resolve(args.values[hardware_header].c_str(),
+                                   base.c_str(), hardware_path.raw(),
+                                   &failed.value));
+    if (cmake) {
+      jb_fs_info_t info{};
+      const auto checked = jb_fs_status(hardware_path.c_str(), true, &info);
+      if (checked != HAL_OK || info.kind != JB_FS_REGULAR)
+        throw failure{HAL_ECONFIG,
+                      2,
+                      "[JH-HW-GENERATION] " + args.values[hardware_header] +
+                          " does not exist; a device tree build reads its "
+                          "generated header",
+                      {},
+                      {},
+                      {}};
+    }
+  }
+  const jh_project_build_options_t build_options{
+      header_path.c_str(),
+      hardware_path.c_str(),
+      args.values[target].c_str(),
+      selector.c_str(),
+      args.values[variant_option].c_str(),
+      &required.value,
+      &extra.value};
+  jh_project_build_t build{};
+  jh_project_build_init(&build);
+  struct build_owner {
+    jh_project_build_t *value;
+    ~build_owner() { jh_project_build_destroy(value); }
+  } owner{&build};
+  size_t json_bytes = 0;
+  const auto evaluated = jh_project_build_evaluate(
+      &build_options, read_build_config, &json_bytes, &build, &failed.value);
+  ctx.configuration_rejected = build.rejected;
+  failed.check(evaluated);
+  jh::owned_string rendered, destination;
+  bool changed = false;
+  if (cmake) {
+    const auto hal_root = checkout_root(args, base);
+    const auto config_path = jh::stl::absolute_path("config", hal_root);
+    jh::feature_registry features;
+    failed.check(jh_feature_registry_load(&features, config_path.c_str(),
+                                          16 * 1024 * 1024, &failed.value));
+    failed.check(jh_project_build_validate(&build_options, &build, &features,
+                                           &failed.value));
+    failed.check(jh_project_build_cmake(&build_options, &build, &boards.targets,
+                                        rendered.raw(), &failed.value));
+    failed.check(jh_python_resolve(args.values[output].c_str(), base.c_str(),
+                                   destination.raw(), &failed.value));
+    jh::owned_string parent;
+    failed.check(
+        jh_path_parent(destination.c_str(), parent.raw(), &failed.value));
+    require(jb_fs_mkdir(parent.c_str(), true), 3,
+            "cannot create output directory");
+    failed.check(jh_project_build_write(destination.c_str(), jh::span(rendered),
+                                        &changed, &failed.value));
+  }
+  if (ctx.json) {
+    result_writer result(json_bytes + 2 * list_bytes(build.definitions) +
+                         2 * list_bytes(build.sources) + 4096);
+    result.string("command", cmake ? "config.cmake" : "config.build");
+    result.string("status", "HAL_OK");
+    result.string("header", header_path);
+    result.tree("config", build.config_root);
+    if (build.variant.tree)
+      result.tree("variant", build.variant);
+    else
+      result.null("variant");
+    result.string_list("definitions", build.definitions);
+    result.string_list("requestedFeatures", build.requested);
+    result.array_begin("definitionSources");
+    for (size_t i = 0; i < jb_vector_size(&build.effective_definitions); ++i) {
+      result.object_begin(nullptr);
+      result.string("definition",
+                    jh::view(*jh_list_at(&build.effective_definitions, i)));
+      result.string("source", jh::view(*jh_list_at(&build.sources, i)));
+      result.object_end();
+    }
+    result.array_end();
+    result.array_begin("featureRequests");
+    for (size_t i = 0; i < jb_vector_size(&build.requests); ++i) {
+      const auto &request = *static_cast<const jh_feature_request_t *>(
+          jb_vector_const_at(&build.requests, i));
+      result.object_begin(nullptr);
+      result.string("symbol", {request.symbol.data, request.symbol.length});
+      if (request.has_value)
+        result.string("value", {request.value.data, request.value.length});
+      else
+        result.null("value");
+      result.string("source", {request.source.data, request.source.length});
+      result.object_end();
+    }
+    result.array_end();
+    if (cmake) {
+      result.string("output", destination);
+      result.boolean("changed", changed);
+    }
+    stdout_bytes(result.finish());
+  }
   return 0;
 }
 
@@ -2044,6 +2286,10 @@ int run(const std::vector<std::string> &argv) {
       return generate_features(ctx, base);
     if (ctx.command == &commands[config_command])
       return config_inspect(ctx, base);
+    if (ctx.command == &commands[project_build_command])
+      return config_build(ctx, base, false);
+    if (ctx.command == &commands[project_cmake_command])
+      return config_build(ctx, base, true);
     if (ctx.command == &commands[directives_command])
       return config_directives(ctx, base);
     if (ctx.command == &commands[feature_list_command])
@@ -2085,6 +2331,9 @@ int run(const std::vector<std::string> &argv) {
                     ctx.command == nullptr ? "jh" : ctx.command->name);
       result.string("status", hal_status_to_string(error.status));
       result.string("message", error.message);
+      if (ctx.command == &commands[project_build_command] ||
+          ctx.command == &commands[project_cmake_command])
+        result.boolean("configurationRejected", ctx.configuration_rejected);
       if (ctx.process_attempted)
         result.process(ctx.process);
       if (!error.code.empty()) {

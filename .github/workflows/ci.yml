@@ -83,7 +83,6 @@ jobs:
             'tests/test_esp32s3_phase2.py',
             'tests/test_esp32s3_phase3.py',
             'tests/test_esp_ci_contract.py',
-            'tests/test_board_generator.py',
             'tests/test_tooling_contract.py',
             'tests/test_feature_registry.py'
           )
@@ -328,7 +327,7 @@ jobs:
 
           $ctest = Join-Path (Split-Path -Parent $state.tools.cmake) 'ctest.exe'
           & $ctest --test-dir $build --output-on-failure `
-            -R '^(test_host_compiler_smoke|test_weak_function_.*|test_cpu_only_bss|test_hal_config_headers_c|test_hal_config_headers_cpp|test_bsd_socket_headers_c|test_hal_host_network)$'
+            -R '^(test_host_compiler_smoke|test_weak_function_.*|test_cpu_only_bss|test_hal_config_headers_c|test_hal_config_headers_cpp|test_bsd_socket_headers_c|test_board_registry|test_hal_host_network)$'
           if ($LASTEXITCODE -ne 0) { throw 'MSVC host API tests failed.' }
           $inventory = (& $ctest --test-dir $build --show-only=json-v1 |
             Out-String) | ConvertFrom-Json

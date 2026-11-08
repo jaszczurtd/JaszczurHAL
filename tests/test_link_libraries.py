@@ -16,7 +16,6 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import board_registry
 import build_esp_idf
-from generate_board_config import load_registry
 
 
 def require(condition: bool, message: str) -> None:
@@ -42,40 +41,12 @@ COMMON_OPTIONS = (
     "--jobs",
 )
 
-targets, _, _ = load_registry(ROOT / "boards")
-for target_id, target in sorted(targets.items()):
-    provider = target["build"]["provider"]
-    if provider == "host":
-        continue
-    require(
-        provider in RUNNER_BY_PROVIDER,
-        f"{target_id}: provider {provider!r} has no linkable-library runner",
-    )
-    script, directory = RUNNER_BY_PROVIDER[provider]
-    require(
-        (ROOT / "scripts" / script).is_file(),
-        f"{target_id}: runner script is missing: scripts/{script}",
-    )
-    require(
-        (ROOT / "link_libraries" / directory).is_dir(),
-        f"{target_id}: runner directory is missing: link_libraries/{directory}",
-    )
-    facts = board_registry.target_facts(ROOT, target_id)
-    require(
-        facts["provider"] == provider
-        and facts["defaultBoard"] == target["defaultBoard"],
-        f"{target_id}: target-facts drifted from the registry",
-    )
+# The runner of each registry target and the facts board_registry.py gives
+# it are checked by tests/test_board_registry.cmake.
 require(
     set(board_registry.LINK_LIBRARY_PROVIDERS) == set(RUNNER_BY_PROVIDER),
     "board_registry.LINK_LIBRARY_PROVIDERS drifted from the runner table",
 )
-try:
-    board_registry.target_facts(ROOT, "no-such-target")
-except KeyError:
-    pass
-else:
-    raise AssertionError("target_facts accepted an unknown target")
 
 helper = (ROOT / "scripts" / "lib" / "build_artifacts.sh").read_text(encoding="utf-8")
 for provider, (script, _) in RUNNER_BY_PROVIDER.items():
@@ -148,9 +119,7 @@ full = build_esp_idf.resolve_build_model(
     definitions=[],
     all_features=True,
 )
-supported = {
-    item.removesuffix("=1") for item in targets["esp32s3"]["supportedFeatures"]
-}
+supported = set(board_registry.target_facts(ROOT, "esp32s3")["supportedFeatures"])
 require(
     set(full["resolvedFeatures"]) == supported,
     "--all-features does not resolve to the ESP32-S3 supportedFeatures closure",

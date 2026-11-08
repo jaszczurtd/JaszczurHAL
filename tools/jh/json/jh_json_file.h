@@ -30,6 +30,16 @@ hal_status_t jh_absolute_path(const char *path, const char *base,
 /** out becomes base joined with name (jb_fs_path_join). */
 hal_status_t jh_path_join(const char *base, const char *name, jb_string_t *out);
 
+/** Replace out with the lexical parent of path (jb_fs_path_parent).
+ * path may point into out. Failure keeps out unchanged and has exit code 3,
+ * or 4 for allocation failure. */
+hal_status_t jh_path_parent(const char *path, jb_string_t *out,
+                            jh_failure_t *failure);
+/** Append Path.as_posix() of path: backslashes become slashes on Windows,
+ * and remain filename characters elsewhere. path may point into out.
+ * A failed append leaves out unchanged. */
+hal_status_t jh_append_posix(jb_string_t *out, jb_json_span_t path);
+
 /** sorted(directory.glob("*.json")): append the names ending in .json, in code
  * point order, to names (jb_string_t elements). A missing directory has none;
  * any other listing failure returns its status with names unsorted.
@@ -169,6 +179,9 @@ jb_json_type_t jh_json_type(jb_json_tree_view_t value);
 /** Whether object is an object with a member key, borrowed into out. */
 bool jh_json_member(jb_json_tree_view_t object, const char *key,
                     jb_json_tree_view_t *out);
+/** The member key of object, borrowed; a zero view (type JB_JSON_NULL, tree
+ * NULL) when object is not an object or has no such member. */
+jb_json_tree_view_t jh_json_field(jb_json_tree_view_t object, const char *key);
 
 /** One validation failure as the CLI reports it: instance Pointer, schema
  * identity, schema Pointer of the rule, reason code and message.

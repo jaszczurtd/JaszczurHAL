@@ -1,4 +1,5 @@
-# Helpers of the CLI checks: run jh from JH_WORK/cwd and read its JSON result.
+# Helpers of the CLI checks: run jh from JH_WORK/cwd and read its JSON result,
+# and check the text and JSON it produces (also for tests/*.cmake).
 
 # Run jh with ARGN, require exit code expected and keep stdout and stderr.
 function(invoke expected)
@@ -30,6 +31,29 @@ function(slashed variable text)
     string(REPLACE "\\" "/" text "${text}")
   endif()
   set(${variable} "${text}" PARENT_SCOPE)
+endfunction()
+
+# Fail unless text contains, or lacks, fragment literally; what names it.
+function(contains text fragment what)
+  string(FIND "${text}" "${fragment}" at)
+  if(at EQUAL -1)
+    message(FATAL_ERROR "${what}: missing '${fragment}' in:\n${text}")
+  endif()
+endfunction()
+function(lacks text fragment what)
+  string(FIND "${text}" "${fragment}" at)
+  if(NOT at EQUAL -1)
+    message(FATAL_ERROR "${what}: unexpected '${fragment}' in:\n${text}")
+  endif()
+endfunction()
+
+# Fail unless the JSON value at path ARGN of json equals the JSON text expected.
+function(json_equals json expected what)
+  string(JSON actual GET "${json}" ${ARGN})
+  string(JSON same EQUAL "${actual}" "${expected}")
+  if(NOT same)
+    message(FATAL_ERROR "${what}: got ${actual}, expected ${expected}")
+  endif()
 endfunction()
 
 # The strings of the stdout array at the JSON path ARGN, as a CMake list; an

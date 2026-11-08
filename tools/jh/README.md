@@ -190,7 +190,7 @@ The reader covers the same part of the preprocessor: object-like and
 function-like `#define`, `#undef`, the `#if` family with `defined` and integer
 expressions, quoted `#include` relative to the including file, `#pragma once`
 and `#error`; `#warning` and `#line` are ignored. `scripts/project_config.py`
-runs this command for CMake and the Python tools. The `jh_config` test checks
+adapts this result for the remaining Python tools. The `jh_config` test checks
 the reader in-process; `jh_config_preprocessor` compares it with the
 preprocessor of a GCC or Clang compiler, also on every `hal_project_config.h`
 of the checkout outside `tests/hardware`.
@@ -214,6 +214,40 @@ A header that stops on `#error` is still a result, with exit code 0.
 `jh config directives --file <path>` lists the `#define` and `#undef` of one
 file in the same form without evaluating it, so also for a header the reader
 rejects; a missing file gives an empty list.
+
+`jh config cmake --root <HAL> --target <id> --output <file>` writes the
+configuration of one build for CMake. `--config-dir <directory>` selects its
+`hal_project_config.h`; without it, the command configures a library from
+the target and definitions alone. `--variant <id>` selects a declared
+variant, repeated `--define NAME[=VALUE]` supplies extra definitions, and
+`--hardware-header <file>` reads the generated hardware header first.
+The command checks the selected target, variant and feature requests before
+publishing the file, and preserves an identical output. The file is written
+atomically through the output directory: a regular file or a missing one is
+accepted, a symbolic link at the output path is refused with exit code 3
+(the former Python command wrote through such a link). A feature removed
+by the project header stays removed even if a variant requested it.
+
+CMake calls this command directly. The entry points prepare `jh` before
+configure; configure only verifies that the executable matches its sources.
+Missing or stale tools produce a preparation command rather than a build
+during configure. The generated file records all headers read, so changing
+an included header triggers reconfigure.
+
+`jh config build` accepts the same project selection and returns its model
+with `--json`, without writing a CMake file or resolving feature requests.
+The result contains `config` (the `config.inspect` model), `variant`,
+`definitions`, `definitionSources`, `requestedFeatures` and `featureRequests`
+(symbol, optional value and source for each request). The Python
+adapter uses this command; its explicit `--selector` and repeated
+`--required-feature` preserve target facts supplied by an importer instead
+of loading them from `--root`. A header `#error` rejects a build and sets
+`configurationRejected` in the JSON error. Other errors leave it false.
+Diagnostics use the usual `jh:` prefix and status suffix.
+
+The adapter supplies `--header` instead of `--config-dir` to retain the
+caller's relative path in diagnostics and definition sources. These two
+options cannot be combined.
 
 Integer arithmetic is signed and 64-bit. A literal or a result outside that
 range in an operand a condition computes fails with `[JH-CFG-SCOPE] ... exceeds
@@ -637,8 +671,11 @@ its own. [jh_feature_lint.h](config/jh_feature_lint.h) finds the inputs of the
 feature lint and checks project manifests.
 [jh_board_registry.h](config/jh_board_registry.h) loads and validates the board
 registry, and [jh_clock_registry.h](config/jh_clock_registry.h) the clock tree
-registry with the checks of the code that sets the clocks. The schema
-validator, the project configuration reader,
+registry with the checks of the code that sets the clocks.
+The C11 module [jh_project_build.h](config/jh_project_build.h) selects one
+project build, collects its feature requests and renders its CMake file.
+It receives the existing reader's model through a transitional C++ callback.
+The schema validator, the project configuration reader,
 the type catalogue and `main.cpp` are still C++. They call the C modules
 through the owners and exceptions in [cxx/](cxx/), which go away with the last
 C++ caller.

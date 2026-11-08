@@ -14,6 +14,118 @@ endif()
 include("${CMAKE_CURRENT_LIST_DIR}/cli_helpers.cmake")
 file(REMOVE_RECURSE "${JH_WORK}")
 file(MAKE_DIRECTORY "${JH_WORK}/cwd")
+
+# The two build cases formerly checked by tests/test_project_config.py.
+# SDK values remain unresolved; the compiler-independent value is an integer.
+set(project_probe "${JH_WORK}/project-build")
+file(MAKE_DIRECTORY "${project_probe}")
+file(WRITE "${project_probe}/hal_project_config.h"
+  "#define FLASH_BYTES PICO_FLASH_SIZE_BYTES\n"
+  "#define HAL_RP_FLASH_EEPROM_SIZE (FLASH_BYTES / 256)\n"
+  "#define HAL_RP_CORE1_STACK_SIZE (2u * 1024u)\n")
+invoke(0 config cmake --root "${JH_HAL_SOURCE}" --target rp2040
+  --config-dir "${project_probe}" --output "${project_probe}/generated.cmake")
+file(READ "${project_probe}/generated.cmake" project_values)
+contains("${project_values}"
+  "set(JH_PROJECT_UNRESOLVED_HAL_RP_FLASH_EEPROM_SIZE [=[PICO_FLASH_SIZE_BYTES]=])"
+  "SDK name in the CMake output")
+lacks("${project_values}" "JH_PROJECT_INT_HAL_RP_FLASH_EEPROM_SIZE" "Unresolved value")
+contains("${project_values}" "set(JH_PROJECT_INT_HAL_RP_CORE1_STACK_SIZE [=[2048]=])"
+  "Computed stack size")
+file(READ "${project_probe}/generated.cmake" project_bytes HEX)
+if(WIN32)
+  set(project_newline "0d0a")
+else()
+  set(project_newline "0a")
+endif()
+if(NOT project_bytes MATCHES "2e${project_newline}73657428")
+  message(FATAL_ERROR "CMake output changed the Python command's native line endings")
+endif()
+invoke(0 config cmake --root "${JH_HAL_SOURCE}" --target rp2040
+  --config-dir "${project_probe}" --output "${project_probe}/generated.cmake" --json)
+string(JSON project_changed GET "${stdout}" changed)
+if(project_changed)
+  message(FATAL_ERROR "An unchanged CMake output was rewritten")
+endif()
+if(UNIX)
+  # New CMake files follow the caller's umask; a later publication must keep
+  # the existing mode even when the invoking process uses another umask.
+  set(project_mode_file "${project_probe}/permissions.cmake")
+  execute_process(COMMAND sh -c "umask 027 && exec \"$0\" \"$@\"" "${JH}"
+    config cmake --root "${JH_HAL_SOURCE}" --target rp2040 --output "${project_mode_file}"
+    RESULT_VARIABLE project_mode_result)
+  if(NOT project_mode_result EQUAL 0)
+    message(FATAL_ERROR "Cannot create CMake file with umask 027")
+  endif()
+  execute_process(COMMAND stat -c %a "${project_mode_file}" OUTPUT_VARIABLE project_mode
+    COMMAND_ERROR_IS_FATAL ANY OUTPUT_STRIP_TRAILING_WHITESPACE)
+  if(NOT project_mode STREQUAL "640")
+    message(FATAL_ERROR "CMake file ignored umask: ${project_mode}")
+  endif()
+  execute_process(COMMAND sh -c "umask 077 && exec \"$0\" \"$@\"" "${JH}"
+    config cmake --root "${JH_HAL_SOURCE}" --target rp2040 --define HAL_ENABLE_CRC
+    --output "${project_mode_file}" RESULT_VARIABLE project_mode_result)
+  if(NOT project_mode_result EQUAL 0)
+    message(FATAL_ERROR "Cannot update CMake file with umask 077")
+  endif()
+  execute_process(COMMAND stat -c %a "${project_mode_file}" OUTPUT_VARIABLE project_mode
+    COMMAND_ERROR_IS_FATAL ANY OUTPUT_STRIP_TRAILING_WHITESPACE)
+  if(NOT project_mode STREQUAL "640")
+    message(FATAL_ERROR "CMake publication changed the existing mode: ${project_mode}")
+  endif()
+endif()
+
+# A variant's feature removed by the header must not return in the requests
+# or conflict with its replacement when config cmake validates the build.
+file(WRITE "${project_probe}/hal_project_config.h"
+  "#define JH_PROJECT_VARIANTS(X) X(NEW_RADIO, \"SX126X\", HAL_ENABLE_SX127X, NEW_RADIO=1)\n"
+  "#if defined(NEW_RADIO)\n#undef HAL_ENABLE_SX127X\n#define HAL_ENABLE_SX126X\n#endif\n")
+invoke(0 config build --root "${JH_HAL_SOURCE}" --target rp2040
+  --config-dir "${project_probe}" --variant NEW_RADIO --json)
+json_equals("${stdout}" "[\"HAL_ENABLE_SX126X\"]" "Final header feature requests" requestedFeatures)
+invoke(0 config cmake --root "${JH_HAL_SOURCE}" --target rp2040
+  --config-dir "${project_probe}" --variant NEW_RADIO --output "${project_probe}/generated.cmake")
+file(READ "${project_probe}/generated.cmake" project_values)
+contains("${project_values}" "set(JH_PROJECT_FEATURES [=[HAL_ENABLE_SX126X]=])"
+  "Validated replacement feature")
+file(MAKE_DIRECTORY "${project_probe}/inner")
+invoke(0 config build --selector HAL_TARGET_RP2040 --target rp2040
+  --header "../project-build/inner/../hal_project_config.h" --variant NEW_RADIO --json)
+string(JSON project_origin GET "${stdout}" definitionSources 0 source)
+contains("${project_origin}" "../project-build/inner/../hal_project_config.h:JH_PROJECT_VARIANTS"
+  "The Python caller's header spelling in definition sources")
+
+# Importers omit builds only for #error. A diagnostic that merely contains
+# its marker (for example an unknown variant name) must not hide that build.
+invoke(2 config build --root "${JH_HAL_SOURCE}" --target rp2040
+  --config-dir "${project_probe}" --variant "[JH-CFG-ERROR]" --json)
+string(JSON project_rejected GET "${stdout}" configurationRejected)
+if(project_rejected)
+  message(FATAL_ERROR "A variant error was mistaken for a header rejection")
+endif()
+file(WRITE "${project_probe}/hal_project_config.h" "#error unavailable on this target\n")
+invoke(2 config build --root "${JH_HAL_SOURCE}" --target rp2040
+  --config-dir "${project_probe}" --json)
+string(JSON project_rejected GET "${stdout}" configurationRejected)
+if(NOT project_rejected)
+  message(FATAL_ERROR "A header #error was not reported as a rejection")
+endif()
+
+# A registry permits target aliases using the same selector. The Python
+# selector-to-ID dictionary retains the last ID, rather than emitting both.
+file(COPY "${JH_HAL_SOURCE}/boards" "${JH_HAL_SOURCE}/config"
+  DESTINATION "${project_probe}/alias-registry")
+set(project_alias "${project_probe}/alias-registry/boards/targets/mock.json")
+file(READ "${project_alias}" project_alias_text)
+string(JSON project_alias_text SET "${project_alias_text}" hal targetSelector "\"HAL_TARGET_RP2040\"")
+file(WRITE "${project_alias}" "${project_alias_text}")
+file(WRITE "${project_probe}/hal_project_config.h"
+  "#define JH_PROJECT_TARGETS(X) X(HAL_TARGET_RP2040)\n")
+invoke(0 config cmake --root "${project_probe}/alias-registry" --target rp2040
+  --config-dir "${project_probe}" --output "${project_probe}/alias.cmake")
+file(READ "${project_probe}/alias.cmake" project_values)
+contains("${project_values}" "set(JH_PROJECT_TARGETS [=[rp2040]=])" "Selector-to-ID mapping")
+
 file(READ "${JH_HAL_SOURCE}/config/tooling/artifacts.json" artifacts)
 string(JSON features_header GET "${artifacts}" generatedArtifacts featureHeader)
 string(JSON features_cmake GET "${artifacts}" generatedArtifacts featureCmake)

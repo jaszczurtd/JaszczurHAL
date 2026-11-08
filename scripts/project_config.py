@@ -3,12 +3,11 @@
 
 The header is the single description of a project's build configuration:
 HAL features, values the build reads, and named build variants declared with
-``JH_PROJECT_VARIANTS(X)``. Every tool (CMake, jh-vscode, the feature lint,
-ESP-IDF) reads it through this module, so all of them see what the compiler
-sees for the same target, extra definitions and variant.
+``JH_PROJECT_VARIANTS(X)``. This adapter serves the remaining Python tools;
+CMake reads the same configuration directly with ``jh config cmake``.
 
-The evaluator is ``jh config inspect`` (tools/jh/config): this module runs it
-and turns its result into the objects below; tools/jh/README.md describes the
+The evaluators are ``jh config inspect`` and ``jh config build``: this module
+turns their results into the objects below; tools/jh/README.md describes the
 supported directives, the int64_t arithmetic with range checks and the limits.
 A condition may depend only on what the build passes to the compiler before
 the header (target selector, extra and variant definitions) and on the
@@ -330,6 +329,13 @@ class BuildConfig:
     variant: ProjectVariant | None
     extra_definitions: tuple[str, ...]
     config: ProjectConfig
+    # From ``jh config build``: each effective definition with its source,
+    # the requested feature names and the feature requests (symbol, value or
+    # None, source). evaluate_build() supplies them; a BuildConfig cannot be
+    # built without them.
+    sources: tuple[tuple[str, str], ...]
+    requested: tuple[str, ...]
+    requests: tuple[tuple[str, str | None, str], ...]
     # The assembly of a device tree build, whose jh_hardware.h the header
     # was read with.
     assembly: str | None = None
@@ -344,30 +350,13 @@ class BuildConfig:
         """Each definition with the place that asked for it. A feature
         definition the header removes with #undef is left out: the compiler
         sees the header's final state."""
-        sources = [
-            (definition, f"command-line:--define[{index}]")
-            for index, definition in enumerate(self.extra_definitions)
-        ]
-        if self.variant is not None:
-            origin = f"{self.header}:{VARIANTS_MACRO}({self.variant.id})"
-            sources.extend((definition, origin) for definition in self.variant.definitions)
-        return [
-            (definition, source)
-            for definition, source in sources
-            if not FEATURE_PATTERN.fullmatch(name := definition.split("=", 1)[0])
-            or name in self.config.macros
-        ]
+        return list(self.sources)
 
     def requested_features(self) -> list[str]:
         """Features the project asks for: the header's own and the ones the
         variant or extra definitions name. Target-required features are added
         by the feature resolver."""
-        requested = [macro.name for macro in self.config.features()]
-        for definition, _ in self.definition_sources():
-            name = definition.split("=", 1)[0]
-            if FEATURE_PATTERN.fullmatch(name) and name not in requested:
-                requested.append(name)
-        return requested
+        return list(self.requested)
 
     def label(self) -> str:
         target = self.target.id or "default"
@@ -402,46 +391,35 @@ def evaluate_build(
     no project header) only the definitions count. Raises when the target is
     not declared, the variant is unknown or the header stops on ``#error``.
     """
-    header = None if config_dir is None else config_dir / HEADER_NAME
-    selector = [target.selector] if target.selector else []
-    declarations = read_project_config(header, selector, hardware_header)
-    if declarations.targets and target.selector not in declarations.targets:
-        declared = ", ".join(declarations.targets)
-        raise ProjectConfigError(
-            f"{header}: [JH-CFG-TARGET] the project builds for {declared}, "
-            f"not {target.selector}"
-        )
-    variant = None
+    arguments = ["config", "build", f"--target={target.id}", f"--selector={target.selector}"]
+    if config_dir is not None:
+        arguments += ["--header", str(config_dir / HEADER_NAME)]
     if variant_id:
-        matches = [item for item in declarations.variants if item.id == variant_id]
-        if not matches:
-            known = ", ".join(item.id for item in declarations.variants) or "none"
-            raise ProjectConfigError(
-                f"{header}: [JH-CFG-VARIANT] unknown variant {variant_id!r}; "
-                f"declared: {known}"
-            )
-        variant = matches[0]
-    definitions = (*extra_definitions, *(variant.definitions if variant else ()))
-    config = read_project_config(
-        header, [*selector, *target.required_features, *definitions], hardware_header
+        arguments += ["--variant", variant_id]
+    if hardware_header is not None:
+        arguments += ["--hardware-header", str(hardware_header)]
+    arguments += [f"--required-feature={item}" for item in target.required_features]
+    arguments += [f"--define={item}" for item in extra_definitions]
+    returncode, result = run_jh(arguments)
+    if returncode != 0:
+        message = result.get("message", f"jh exit {returncode}")
+        if result.get("configurationRejected"):
+            raise ConfigurationRejected(message)
+        if result.get("status") == "HAL_EPROTO":
+            raise ValueError(message)
+        raise ProjectConfigError(message)
+    selected = result["variant"]
+    variant = None if selected is None else ProjectVariant(
+        selected["id"], selected["description"], tuple(selected["definitions"]), selected["source"]
     )
-    build = BuildConfig(header, target, variant, tuple(extra_definitions), config)
-    if config.error is not None:
-        message, source = config.error
-        raise ConfigurationRejected(
-            f"{source}: [JH-CFG-ERROR] {message} ({build.label()})"
-        )
-    uncertain = {
-        name: sorted(config.uncertain(name))
-        for name in config.dependencies
-        if FEATURE_PATTERN.fullmatch(name)
-    }
-    for name, unknown in sorted(uncertain.items()):
-        raise ProjectConfigError(
-            f"{header}: [JH-CFG-SCOPE] {name} depends on {', '.join(unknown)}, "
-            "which the build does not pass to the compiler before this header"
-        )
-    return build
+    return BuildConfig(
+        None if config_dir is None else config_dir / HEADER_NAME,
+        target, variant, tuple(extra_definitions), _config_from(result["config"]),
+        sources=tuple((item["definition"], item["source"]) for item in result["definitionSources"]),
+        requested=tuple(result["requestedFeatures"]),
+        requests=tuple((item["symbol"], item["value"], item["source"])
+                       for item in result["featureRequests"]),
+    )
 
 
 def available_builds(
@@ -470,58 +448,6 @@ def available_builds(
     return builds
 
 
-def _cmake_value(value: str) -> str:
-    fence = "="
-    while f"]{fence}]" in value:
-        fence += "="
-    return f"[{fence}[{value}]{fence}]"
-
-
-def cmake_lines(build: BuildConfig, targets: dict[str, TargetFacts]) -> list[str]:
-    config = build.config
-    values = {
-        "JH_PROJECT_CONFIG_HEADER": build.header.as_posix() if build.header else "",
-        "JH_PROJECT_CONFIG_FILES": ";".join(path.as_posix() for path in config.files),
-        "JH_PROJECT_TARGETS": ";".join(project_target_ids(config, targets)),
-        "JH_PROJECT_VARIANTS": ";".join(item.id for item in config.variants),
-        "JH_PROJECT_VARIANT": build.variant.id if build.variant else "",
-        "JH_PROJECT_DEFINITIONS": ";".join(build.definitions),
-        "JH_PROJECT_FEATURES": ";".join(build.requested_features()),
-    }
-    object_like = sorted(
-        name for name, macro in config.macros.items() if not macro.function_like
-    )
-    values["JH_PROJECT_MACROS"] = ";".join(object_like)
-    # A value jh cannot compute within its limits fails only the build that
-    # asks for it, as jh_project_value() refuses a value outside int64_t.
-    limited = {name for name in object_like if config.limit_error(name)}
-    for name in object_like:
-        values[f"JH_PROJECT_DEFINE_{name}"] = config.macros[name].body
-        if name in limited:
-            values[f"JH_PROJECT_LIMIT_{name}"] = config.limit_error(name)
-            continue
-        value = config.integer(name)
-        if value is not None:
-            values[f"JH_PROJECT_INT_{name}"] = str(value)
-        elif config.out_of_range(name):
-            # jh_project_value() refuses it rather than return the text.
-            values[f"JH_PROJECT_RANGE_{name}"] = config.macros[name].body
-    for name, unknown in sorted(config.dependencies.items()):
-        values[f"JH_PROJECT_UNCERTAIN_{name}"] = ";".join(sorted(unknown))
-    for name in object_like:
-        if name in limited:
-            continue
-        unresolved = config.unresolved(name)
-        if unresolved:
-            values[f"JH_PROJECT_UNRESOLVED_{name}"] = ";".join(sorted(unresolved))
-    # The CMake reader function hands exactly these to its caller.
-    values["JH_PROJECT_CONFIG_VARIABLES"] = ";".join(values)
-    return [
-        "# Generated by project_config.py; do not edit.",
-        *(f"set({name} {_cmake_value(value)})" for name, value in values.items()),
-    ]
-
-
 def resolve_build_features(build: BuildConfig, model: Any) -> tuple[Any, list[str]]:
     """Resolve the features one build requests against the feature registry
     ``model``: the header's own, the ones its definitions name and the
@@ -529,15 +455,8 @@ def resolve_build_features(build: BuildConfig, model: Any) -> tuple[Any, list[st
     import generate_hal_features
 
     requests = [
-        generate_hal_features.FeatureRequest(macro.name, macro.body or None, macro.source)
-        for macro in build.config.features()
+        generate_hal_features.FeatureRequest(*request) for request in build.requests
     ]
-    for definition, source in build.definition_sources():
-        name, separator, value = definition.partition("=")
-        if FEATURE_PATTERN.fullmatch(name):
-            requests.append(
-                generate_hal_features.FeatureRequest(name, value if separator else None, source)
-            )
     return generate_hal_features.resolve_target_feature_requests(
         requests,
         model,
@@ -548,53 +467,12 @@ def resolve_build_features(build: BuildConfig, model: Any) -> tuple[Any, list[st
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    import argparse
     import sys
-
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    commands = parser.add_subparsers(dest="command", required=True)
-    cmake = commands.add_parser("cmake", help="write one build's configuration for CMake")
-    cmake.add_argument("--config-dir", type=Path)
-    cmake.add_argument("--target", required=True)
-    cmake.add_argument("--variant", default="")
-    cmake.add_argument("--define", action="append", default=[])
-    # The generated jh_hardware.h of a device tree build, read before the
-    # header exactly as the hook loads it for the compiler.
-    cmake.add_argument("--hardware-header", type=Path)
-    cmake.add_argument("--output", type=Path, required=True)
-    args = parser.parse_args(argv)
-    try:
-        targets = load_targets()
-        if args.target not in targets:
-            raise ProjectConfigError(f"[JH-CFG-TARGET] unknown target {args.target!r}")
-        if args.hardware_header is not None and not args.hardware_header.is_file():
-            raise ProjectConfigError(
-                f"[JH-HW-GENERATION] {args.hardware_header} does not exist; "
-                "a device tree build reads its generated header"
-            )
-        build = evaluate_build(
-            args.config_dir.resolve() if args.config_dir else None,
-            targets[args.target],
-            args.variant or None,
-            [definition.removeprefix("-D") for definition in args.define],
-            args.hardware_header.resolve() if args.hardware_header else None,
-        )
-        import generate_hal_features
-
-        _, findings = resolve_build_features(
-            build, generate_hal_features.load_registry(REPOSITORY_ROOT / "config")
-        )
-        if findings:
-            raise ProjectConfigError("\n".join(findings))
-        # An invalid literal in any value fails here, as the reader rejects it.
-        text = "\n".join(cmake_lines(build, targets)) + "\n"
-    except (ProjectConfigError, ValueError) as error:
-        print(f"error: {error}", file=sys.stderr)
-        return 2
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    if not args.output.is_file() or args.output.read_text(encoding="utf-8") != text:
-        args.output.write_text(text, encoding="utf-8")
-    return 0
+    arguments = sys.argv[1:] if argv is None else list(argv)
+    return subprocess.run(
+        [jh_executable(), "config", *arguments, "--root", str(REPOSITORY_ROOT)],
+        check=False,
+    ).returncode
 
 
 if __name__ == "__main__":
