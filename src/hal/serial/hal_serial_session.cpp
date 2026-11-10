@@ -176,6 +176,9 @@ void handle_reboot_bootloader(hal_serial_session_t *session) {
 void handle_bye(hal_serial_session_t *session) {
   hal_serial_session_println(session,
                              HAL_SERIAL_SESSION_VOCAB(session, reply_bye_ok));
+  if (session->active) {
+    ++session->end_counter;
+  }
   session->active = false;
   session->last_activity_ms = hal_millis();
 #ifdef HAL_ENABLE_CRYPTO
@@ -329,6 +332,10 @@ bool hal_serial_session_is_active(const hal_serial_session_t *session) {
 
 uint32_t hal_serial_session_id(const hal_serial_session_t *session) {
   return session != nullptr ? session->session_id : 0u;
+}
+
+uint32_t hal_serial_session_end_count(const hal_serial_session_t *session) {
+  return session != nullptr ? session->end_counter : 0u;
 }
 
 hal_status_t

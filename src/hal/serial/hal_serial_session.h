@@ -65,6 +65,7 @@ typedef struct {
   bool active;
   uint32_t session_id;
   uint32_t hello_counter;
+  uint32_t end_counter;
   uint32_t last_activity_ms;
   uint8_t line_len;
   char line[HAL_SERIAL_SESSION_MAX_LINE + 1u];
@@ -139,6 +140,18 @@ bool hal_serial_session_is_active(const hal_serial_session_t *session);
 
 /** @brief Return the current session id, or zero for a NULL session. */
 uint32_t hal_serial_session_id(const hal_serial_session_t *session);
+
+/**
+ * @brief Return how many active sessions BYE has closed since init.
+ *
+ * A BYE and the next HELLO can be read by one hal_serial_session_poll(): the
+ * session is active before and after that poll, yet this count has moved,
+ * while a HELLO into an active session leaves it unchanged. The count wraps;
+ * compare it for change only.
+ *
+ * @return The count, or zero for a NULL session.
+ */
+uint32_t hal_serial_session_end_count(const hal_serial_session_t *session);
 
 /**
  * @brief Copy the sequence number of the request currently being dispatched.

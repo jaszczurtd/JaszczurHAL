@@ -463,6 +463,7 @@ typedef struct {
     bool        active;
     uint32_t    session_id;
     uint32_t    hello_counter;
+    uint32_t    end_counter;  // active sessions closed by BYE
     uint32_t    last_activity_ms;
     uint8_t     line_len;
     char        line[HAL_SERIAL_SESSION_MAX_LINE + 1u];
@@ -508,6 +509,7 @@ hal_status_t hal_serial_session_detach_unknown_handler(
 bool     hal_serial_session_is_active(const hal_serial_session_t *session);
 bool     hal_serial_session_is_authenticated(const hal_serial_session_t *session);
 uint32_t hal_serial_session_id(const hal_serial_session_t *session);
+uint32_t hal_serial_session_end_count(const hal_serial_session_t *session);
 hal_status_t hal_serial_session_current_request_seq(
                                  const hal_serial_session_t *session,
                                  uint16_t *out_seq);
@@ -536,7 +538,11 @@ Vocabulary-driven commands (R1.0 + R1.6 + R1.7):
   set), drops `active`, and clears auth state (when CRYPTO). Always
   succeeds; an inactive session simply repeats the OK reply. BYE lives
   outside `HAL_ENABLE_CRYPTO` so any session can be closed cleanly,
-  regardless of whether the AUTH path is compiled in.
+  regardless of whether the AUTH path is compiled in. Closing an active
+  session advances `hal_serial_session_end_count()`; a HELLO does not. A
+  caller that polls can therefore tell a BYE followed by HELLO within one
+  `hal_serial_session_poll()` from a lone HELLO, although the session is
+  active before and after that poll.
 - `cmd_auth_begin` - mints a fresh 16-byte challenge for the active session;
   the helper formats the challenge through `reply_auth_challenge_fmt` (must
   contain a `%s` for the hex bytes).

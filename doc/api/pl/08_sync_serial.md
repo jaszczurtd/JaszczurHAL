@@ -499,6 +499,7 @@ typedef struct {
     bool        active;
     uint32_t    session_id;
     uint32_t    hello_counter;
+    uint32_t    end_counter;  // aktywne sesje zamknięte przez BYE
     uint32_t    last_activity_ms;
     uint8_t     line_len;
     char        line[HAL_SERIAL_SESSION_MAX_LINE + 1u];
@@ -544,6 +545,7 @@ hal_status_t hal_serial_session_detach_unknown_handler(
 bool     hal_serial_session_is_active(const hal_serial_session_t *session);
 bool     hal_serial_session_is_authenticated(const hal_serial_session_t *session);
 uint32_t hal_serial_session_id(const hal_serial_session_t *session);
+uint32_t hal_serial_session_end_count(const hal_serial_session_t *session);
 hal_status_t hal_serial_session_current_request_seq(
                                  const hal_serial_session_t *session,
                                  uint16_t *out_seq);
@@ -572,7 +574,11 @@ Polecenia sterowane słownikiem (R1.0 + R1.6 + R1.7):
   CRYPTO. Polecenie zawsze kończy się powodzeniem; nieaktywna sesja po prostu
   ponownie odpowiada OK. Obsługa BYE nie zależy od `HAL_ENABLE_CRYPTO`, dlatego
   każdą sesję można poprawnie zamknąć niezależnie od tego, czy kod AUTH został
-  skompilowany.
+  skompilowany. Zamknięcie aktywnej sesji zwiększa
+  `hal_serial_session_end_count()`, a HELLO go nie zmienia. Kod odpytujący
+  sesję odróżni więc BYE i następne HELLO odczytane w jednym
+  `hal_serial_session_poll()` od samotnego HELLO, choć sesja jest aktywna przed
+  tym wywołaniem i po nim.
 - `cmd_auth_begin` - generuje świeże 16-bajtowe wyzwanie dla aktywnej sesji;
   funkcja formatuje wyzwanie przez `reply_auth_challenge_fmt` (musi
   zawierać `%s` dla bajtów hex).

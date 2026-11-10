@@ -815,6 +815,56 @@ void test_bye_resets_authenticated_state(void) {
   TEST_ASSERT_FALSE(s.challenge_pending);
 }
 
+// BYE and HELLO in one receive buffer, read by a single poll.
+static void inject_bye_then_hello(uint16_t seq) {
+  char bye[HAL_SERIAL_FRAME_LINE_MAX + 2u];
+  char hello[HAL_SERIAL_FRAME_LINE_MAX + 2u];
+  char both[2u * (HAL_SERIAL_FRAME_LINE_MAX + 2u)];
+  TEST_ASSERT_TRUE(build_framed_line(seq, "SC_BYE", bye, sizeof(bye), '\n'));
+  TEST_ASSERT_TRUE(build_framed_line((uint16_t)(seq + 1u), "HELLO", hello,
+                                     sizeof(hello), '\n'));
+  const int written = snprintf(both, sizeof(both), "%s%s", bye, hello);
+  TEST_ASSERT_TRUE(written > 0 && (size_t)written < sizeof(both));
+  hal_mock_serial_inject_rx(both, -1);
+}
+
+void test_end_count_moves_once_per_session_closed_by_bye(void) {
+  hal_serial_session_t s;
+  init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
+  TEST_ASSERT_EQUAL_UINT32(0u, hal_serial_session_end_count(&s));
+
+  // BYE on an inactive session closes nothing.
+  inject_framed_line(1u, "SC_BYE", '\n');
+  hal_serial_session_poll(&s);
+  TEST_ASSERT_EQUAL_UINT32(0u, hal_serial_session_end_count(&s));
+
+  // HELLO, also into an active session, ends nothing.
+  inject_framed_line(2u, "HELLO", '\n');
+  hal_serial_session_poll(&s);
+  inject_framed_line(3u, "HELLO", '\n');
+  hal_serial_session_poll(&s);
+  TEST_ASSERT_TRUE(hal_serial_session_is_active(&s));
+  TEST_ASSERT_EQUAL_UINT32(0u, hal_serial_session_end_count(&s));
+
+  inject_framed_line(4u, "SC_BYE", '\n');
+  hal_serial_session_poll(&s);
+  TEST_ASSERT_FALSE(hal_serial_session_is_active(&s));
+  TEST_ASSERT_EQUAL_UINT32(1u, hal_serial_session_end_count(&s));
+
+  // BYE and the next HELLO in one poll: active before and after, one end.
+  inject_framed_line(5u, "HELLO", '\n');
+  hal_serial_session_poll(&s);
+  inject_bye_then_hello(6u);
+  hal_serial_session_poll(&s);
+  TEST_ASSERT_TRUE(hal_serial_session_is_active(&s));
+  TEST_ASSERT_EQUAL_UINT32(2u, hal_serial_session_end_count(&s));
+
+  // Init starts counting again; a NULL session reads zero.
+  init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
+  TEST_ASSERT_EQUAL_UINT32(0u, hal_serial_session_end_count(&s));
+  TEST_ASSERT_EQUAL_UINT32(0u, hal_serial_session_end_count(NULL));
+}
+
 void test_poll_null_args_is_safe(void) {
   hal_serial_session_t s;
   init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
@@ -861,6 +911,7 @@ int main(void) {
   RUN_TEST(test_bye_clears_active_and_replies_ok);
   RUN_TEST(test_bye_idempotent_on_inactive_session);
   RUN_TEST(test_bye_resets_authenticated_state);
+  RUN_TEST(test_end_count_moves_once_per_session_closed_by_bye);
   RUN_TEST(test_poll_null_args_is_safe);
   return UNITY_END();
 }
