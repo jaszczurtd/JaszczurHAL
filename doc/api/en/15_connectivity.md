@@ -2032,6 +2032,24 @@ Configure a WireGuard tunnel and communicate with its peer through a shared inte
 
 #define HAL_WIREGUARD_IPV4_OCTETS 4u
 #define HAL_WIREGUARD_IP_STR_LEN 16u
+#define HAL_WIREGUARD_KEEPALIVE_DEFAULT_S 25u
+#define HAL_WIREGUARD_KEEPALIVE_MAX_S 180u
+
+typedef struct {
+  uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS];
+  const char *private_key;
+  const char *remote_peer_address;
+  const char *remote_peer_public_key;
+  uint16_t remote_peer_port;
+  const char *preshared_key;
+  uint8_t allowed_ip[HAL_WIREGUARD_IPV4_OCTETS];
+  uint8_t allowed_mask[HAL_WIREGUARD_IPV4_OCTETS];
+  uint16_t keepalive_s;
+} hal_wireguard_config_t;
+
+hal_status_t hal_wireguard_config_init(hal_wireguard_config_t *config);
+hal_status_t hal_wireguard_begin_config_ex(const hal_wireguard_config_t *config);
+bool hal_wireguard_begin_config(const hal_wireguard_config_t *config);
 
 bool hal_wireguard_parse_ipv4(const char *ip_text,
                               uint8_t out_ip[HAL_WIREGUARD_IPV4_OCTETS]);
@@ -2093,6 +2111,23 @@ bool hal_wireguard_kick_handshake_text(const char *probe_ip_text,
 - `hal_wireguard_peer_up_quick(...)` is a no-argument convenience check equivalent to `hal_wireguard_peer_up(NULL, 0u, NULL)`.
 - `hal_wireguard_kick_handshake(...)` triggers non-blocking handshake probe.
 - `hal_wireguard_kick_handshake_text(...)` parses dotted probe IP text and delegates to `hal_wireguard_kick_handshake(...)`.
+- `hal_wireguard_config_init(...)` resets a `hal_wireguard_config_t` to its
+  defaults: full tunnel, no preshared key and a keepalive of 25 s.
+- `hal_wireguard_begin_config_ex(...)` starts the tunnel from that
+  configuration and is the only start that sets a preshared key or the
+  keepalive interval. The `begin*` helpers above start without a preshared
+  key and with the 25 s keepalive. A `NULL` configuration, an empty key or
+  endpoint, port 0 or a keepalive above 180 s return `HAL_EINVAL` before the
+  stack is touched.
+- The preshared key is the base64 text of 32 bytes, as in a WireGuard
+  configuration file. Text that does not decode to 32 bytes makes the start
+  fail with `HAL_EIO` before the interface is added.
+- Persistent keepalive: 0 disables it and the maximum is 180 s, because a
+  session ends 180 s after its last traffic anyway. With a keepalive the
+  tunnel stays up behind NAT and renews its keys on its own; without one the
+  session ends after 180 s of silence and the next packet starts a new
+  handshake. The rekey thresholds follow the protocol's Keepalive-Timeout
+  constant, not the configured interval.
 - Starting the tunnel needs a synchronized wall clock. The tunnel accepts a
   handshake initiation from the peer only when its timestamp is newer than
   every initiation accepted before from the same peer key, also before
@@ -2115,7 +2150,9 @@ bool hal_wireguard_kick_handshake_text(const char *probe_ip_text,
 
 - **shared thematic implementation:** bundled protocol/crypto engine plus a private lwIP-extension
   port used by capability-advertised host-stack backends.
-- **impl/rp2040:** HAL-owned lwIP extension and secure platform hooks.
+- **impl/rp2040:** HAL-owned lwIP extension; the engine's keys come from
+  `jh_secure_random_bytes()`, the Pico SDK generator that on the RP2350 adds
+  the hardware TRNG.
 - **impl/stm32g474:** shared CYW43/lwIP underlay, hardware RNG entropy, and
   HAL-synchronized NTP time.
 - **impl/esp32:** shared WireGuard engine over the native ESP-IDF lwIP underlay,
@@ -2144,6 +2181,8 @@ const uint8_t *hal_mock_wireguard_get_last_allowed_ip(void);
 const uint8_t *hal_mock_wireguard_get_last_allowed_mask(void);
 const char *hal_mock_wireguard_get_last_remote_peer_address(void);
 uint16_t    hal_mock_wireguard_get_last_remote_peer_port(void);
+const char *hal_mock_wireguard_get_last_preshared_key(void);
+uint16_t    hal_mock_wireguard_get_last_keepalive_s(void);
 bool        hal_mock_wireguard_was_begin_advanced(void);
 const uint8_t *hal_mock_wireguard_get_last_probe_ip(void);
 uint16_t    hal_mock_wireguard_get_last_probe_port(void);

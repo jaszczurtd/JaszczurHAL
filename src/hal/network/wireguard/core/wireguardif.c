@@ -422,11 +422,13 @@ static void wireguardif_process_data_message(
           keypair->last_rx = now;
           peer->last_rx = now;
 
-          // Check to see if we should rekey
+          // Rekey rule of whitepaper 6.2. It counts with the protocol's
+          // Keepalive-Timeout, so the configured persistent keepalive does
+          // not move this threshold.
           if (keypair->initiator &&
-              wireguard_expired(keypair->keypair_millis,
-                                REJECT_AFTER_TIME - peer->keepalive_interval -
-                                    REKEY_TIMEOUT)) {
+              wireguard_expired(keypair->keypair_millis, REJECT_AFTER_TIME -
+                                                             KEEPALIVE_TIMEOUT -
+                                                             REKEY_TIMEOUT)) {
             peer->send_handshake = true;
           }
 
@@ -1082,8 +1084,7 @@ static bool should_send_initiation(struct wireguard_peer *peer) {
       result = true;
     } else if (peer->curr_keypair.valid && !peer->curr_keypair.initiator &&
                wireguard_expired(peer->curr_keypair.keypair_millis,
-                                 REJECT_AFTER_TIME -
-                                     peer->keepalive_interval)) {
+                                 REJECT_AFTER_TIME - KEEPALIVE_TIMEOUT)) {
       log_i(TAG "  curr_keypair expired");
       result = true;
     } else if (!peer->curr_keypair.valid && peer->active) {

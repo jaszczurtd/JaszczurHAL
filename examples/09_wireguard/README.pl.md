@@ -1,7 +1,8 @@
 # 09 - Połączenie z siecią przez WireGuard
 
-Przykład łączy urządzenie z WiFi, konfiguruje tunel WireGuard i co pięć sekund
-sprawdza połączenie z drugim końcem tunelu. Jeśli nie jest ono aktywne,
+Przykład łączy urządzenie z WiFi, konfiguruje tunel WireGuard przez
+`hal_wireguard_config_t` i co pięć sekund sprawdza połączenie z drugim końcem
+tunelu. Jeśli nie jest ono aktywne,
 wywołuje `hal_wireguard_kick_handshake_text()` z adresem testowym, aby
 zainicjować uzgadnianie połączenia.
 
@@ -11,7 +12,10 @@ W `app.c` ustaw dane WiFi oraz parametry tunelu: lokalny adres IP, klucz
 prywatny urządzenia, adres i port drugiej strony, jej klucz publiczny oraz
 sieć dostępną przez tunel. Odpowiadają im stałe `WIFI_*` i `WG_*`.
 `WG_PROBE_IP` i `WG_PROBE_PORT` określają adres oraz port używane do
-zainicjowania ruchu testowego.
+zainicjowania ruchu testowego. `WG_PRESHARED_KEY` to opcjonalny klucz
+preshared peera w base64; zostaw go pusty, gdy peer go nie ma. Tunel używa
+domyślnego keepalive 25 s, więc pozostaje zestawiony za NAT i sam odnawia
+klucze.
 
 Napisy `base64-private-key`, `base64-peer-public-key` i `vpn.example.com`
 są miejscami na własne dane, nie działającą konfiguracją. Skonfiguruj także

@@ -1,6 +1,7 @@
 #include "hal/network/jh_lwip_extension.h"
 #include "hal/network/wireguard/core/jh_wireguard_client.h"
 #include "hal/network/wireguard/core/wireguard-platform.h"
+#include "hal/network/wireguard/core/wireguard.h"
 #include "hal/network/wireguard/core/wireguard_allowed_ip.h"
 #include "hal/network/wireguard/core/wireguardif.h"
 #include "utils/unity.h"
@@ -60,6 +61,12 @@ uint8_t added_greatest_timestamp[WIREGUARDIF_TIMESTAMP_LEN];
 uint8_t engine_greatest_timestamp[WIREGUARDIF_TIMESTAMP_LEN];
 unsigned greatest_timestamp_reads;
 u8_t greatest_timestamp_read_index;
+// Keepalive and preshared key the client hands to the engine with the peer.
+uint16_t added_keep_alive;
+bool added_preshared_key_present;
+uint8_t added_preshared_key[WIREGUARD_SESSION_KEY_LEN];
+// 32 bytes of 0x01 in base64, the one key the scripted decoder below accepts.
+const char kPresharedKeyText[] = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=";
 
 // fake_tai64n_now() reports bytes 0..11: 0x0001020304050607 seconds and
 // 0x08090a0b nanoseconds. 120 s earlier, nanoseconds cleared:
@@ -209,6 +216,12 @@ err_t wireguardif_add_peer(netif *, wireguardif_peer *peer, u8_t *peer_index) {
   ++peer_add_count;
   std::memcpy(added_greatest_timestamp, peer->greatest_timestamp,
               sizeof(added_greatest_timestamp));
+  added_keep_alive = peer->keep_alive;
+  added_preshared_key_present = peer->preshared_key != nullptr;
+  if (added_preshared_key_present) {
+    std::memcpy(added_preshared_key, peer->preshared_key,
+                sizeof(added_preshared_key));
+  }
   if (add_peer_status == ERR_OK && peer_index != nullptr) {
     *peer_index = 3u;
   }
@@ -266,6 +279,25 @@ const jh_lwip_extension_port_t *jh_lwip_extension_platform_port(void) {
 }
 
 void wireguard_platform_init(void) { ++platform_init_count; }
+
+// The engine's base64 decoder, scripted: the 32-byte key, a one-byte value
+// and everything else as undecodable. The real decoder runs in
+// test_wireguardif_protocol.
+bool wireguard_base64_decode(const char *str, uint8_t *out, size_t *outlen) {
+  if (std::strcmp(str, kPresharedKeyText) == 0 && *outlen >= 32u) {
+    std::memset(out, 0x01, 32u);
+    *outlen = 32u;
+    return true;
+  }
+  if (std::strcmp(str, "AQ==") == 0 && *outlen >= 1u) {
+    out[0] = 0x01u;
+    *outlen = 1u;
+    return true;
+  }
+  return false;
+}
+
+void crypto_zero(void *dest, size_t len) { std::memset(dest, 0, len); }
 uint32_t wireguard_sys_now(void) { return extension_state.now_ms; }
 void wireguard_random_bytes(void *bytes, size_t size) {
   (void)fake_random_bytes(&extension_state, bytes, size);
@@ -313,10 +345,33 @@ void setUp(void) {
   std::memset(engine_greatest_timestamp, 0, sizeof(engine_greatest_timestamp));
   greatest_timestamp_reads = 0u;
   greatest_timestamp_read_index = WIREGUARDIF_INVALID_INDEX;
+  added_keep_alive = 0xFFFFu;
+  added_preshared_key_present = false;
+  std::memset(added_preshared_key, 0, sizeof(added_preshared_key));
   netif_default = &underlay_netif;
 }
 
 void tearDown(void) {}
+
+// A configuration like the facade's begin() helpers build: the default
+// keepalive, no preshared key, a full tunnel unless a network is given.
+hal_wireguard_config_t make_config(const uint8_t local_ip[4],
+                                   const char *public_key = "public",
+                                   const uint8_t *allowed_ip = nullptr,
+                                   const uint8_t *allowed_mask = nullptr) {
+  hal_wireguard_config_t config = {};
+  std::memcpy(config.local_ip, local_ip, sizeof(config.local_ip));
+  config.private_key = "private";
+  config.remote_peer_address = "wg.example";
+  config.remote_peer_public_key = public_key;
+  config.remote_peer_port = 51820u;
+  config.keepalive_s = HAL_WIREGUARD_KEEPALIVE_DEFAULT_S;
+  if (allowed_ip != nullptr && allowed_mask != nullptr) {
+    std::memcpy(config.allowed_ip, allowed_ip, sizeof(config.allowed_ip));
+    std::memcpy(config.allowed_mask, allowed_mask, sizeof(config.allowed_mask));
+  }
+  return config;
+}
 
 void test_extension_validates_and_balances_stack_guard(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, jh_lwip_extension_validate(&extension_port));
@@ -411,8 +466,7 @@ void test_inbound_allowed_ips_validates_inner_source_not_destination(void) {
 void test_full_tunnel_lifecycle_restores_route_and_resources(void) {
   JHWireGuardClient wireguard;
   const uint8_t local_ip[4] = {10u, 8u, 0u, 2u};
-  TEST_ASSERT_TRUE(
-      wireguard.begin(local_ip, "private", "wg.example", "public", 51820u));
+  TEST_ASSERT_TRUE(wireguard.begin(make_config(local_ip, "public")));
   TEST_ASSERT_TRUE(wireguard.is_initialized());
   TEST_ASSERT_EQUAL_PTR(&underlay_netif, captured_bind_netif);
   TEST_ASSERT_TRUE(netif_default != &underlay_netif);
@@ -439,9 +493,8 @@ void test_split_tunnel_keeps_default_route(void) {
   const uint8_t local_ip[4] = {10u, 8u, 0u, 2u};
   const uint8_t allowed_ip[4] = {10u, 20u, 0u, 0u};
   const uint8_t allowed_mask[4] = {255u, 255u, 0u, 0u};
-  TEST_ASSERT_TRUE(wireguard.begin_advanced(local_ip, "private", "wg.example",
-                                            "public", 51820u, allowed_ip,
-                                            allowed_mask));
+  TEST_ASSERT_TRUE(wireguard.begin(
+      make_config(local_ip, "public", allowed_ip, allowed_mask)));
   TEST_ASSERT_EQUAL_PTR(&underlay_netif, netif_default);
   wireguard.end();
   TEST_ASSERT_EQUAL_PTR(&underlay_netif, netif_default);
@@ -452,8 +505,7 @@ void test_peer_and_connect_failures_cleanup_then_reconnect(void) {
   JHWireGuardClient wireguard;
   const uint8_t local_ip[4] = {10u, 8u, 0u, 2u};
   add_peer_status = ERR_MEM;
-  TEST_ASSERT_FALSE(
-      wireguard.begin(local_ip, "private", "wg.example", "public", 51820u));
+  TEST_ASSERT_FALSE(wireguard.begin(make_config(local_ip, "public")));
   TEST_ASSERT_FALSE(wireguard.is_initialized());
   TEST_ASSERT_EQUAL_UINT32(1u, netif_remove_count);
   TEST_ASSERT_EQUAL_UINT32(1u, shutdown_count);
@@ -463,15 +515,13 @@ void test_peer_and_connect_failures_cleanup_then_reconnect(void) {
 
   add_peer_status = ERR_OK;
   connect_status = ERR_RTE;
-  TEST_ASSERT_FALSE(
-      wireguard.begin(local_ip, "private", "wg.example", "public", 51820u));
+  TEST_ASSERT_FALSE(wireguard.begin(make_config(local_ip, "public")));
   TEST_ASSERT_EQUAL_UINT32(1u, peer_remove_count);
   TEST_ASSERT_EQUAL_UINT32(2u, netif_remove_count);
   TEST_ASSERT_EQUAL_UINT32(2u, shutdown_count);
 
   connect_status = ERR_OK;
-  TEST_ASSERT_TRUE(
-      wireguard.begin(local_ip, "private", "wg.example", "public", 51820u));
+  TEST_ASSERT_TRUE(wireguard.begin(make_config(local_ip, "public")));
   wireguard.end();
   TEST_ASSERT_EQUAL_UINT32(3u, shutdown_count);
   TEST_ASSERT_EQUAL_UINT32(extension_state.enter_count,
@@ -485,9 +535,8 @@ void test_repeated_begin_end_does_not_leak_route_or_backend_state(void) {
   const uint8_t allowed_mask[4] = {255u, 255u, 0u, 0u};
 
   for (unsigned cycle = 0u; cycle < 5u; ++cycle) {
-    TEST_ASSERT_TRUE(wireguard.begin_advanced(local_ip, "private", "wg.example",
-                                              "public", 51820u, allowed_ip,
-                                              allowed_mask));
+    TEST_ASSERT_TRUE(wireguard.begin(
+        make_config(local_ip, "public", allowed_ip, allowed_mask)));
     TEST_ASSERT_TRUE(wireguard.is_initialized());
     TEST_ASSERT_EQUAL_PTR(&underlay_netif, netif_default);
     wireguard.end();
@@ -508,31 +557,27 @@ void test_stack_and_resolver_failures_do_not_mutate_lwip(void) {
   JHWireGuardClient wireguard;
   const uint8_t local_ip[4] = {10u, 8u, 0u, 2u};
   extension_state.random_status = HAL_EHW;
-  TEST_ASSERT_FALSE(
-      wireguard.begin(local_ip, "private", "wg.example", "public", 51820u));
+  TEST_ASSERT_FALSE(wireguard.begin(make_config(local_ip, "public")));
   TEST_ASSERT_EQUAL_UINT32(0u, extension_state.resolve_count);
   TEST_ASSERT_EQUAL_UINT32(0u, extension_state.enter_count);
   TEST_ASSERT_EQUAL_UINT32(0u, netif_add_count);
 
   extension_state.random_status = HAL_OK;
   extension_state.tai64n_status = HAL_ESTATE;
-  TEST_ASSERT_FALSE(
-      wireguard.begin(local_ip, "private", "wg.example", "public", 51820u));
+  TEST_ASSERT_FALSE(wireguard.begin(make_config(local_ip, "public")));
   TEST_ASSERT_EQUAL_UINT32(0u, extension_state.resolve_count);
   TEST_ASSERT_EQUAL_UINT32(0u, extension_state.enter_count);
   TEST_ASSERT_EQUAL_UINT32(0u, netif_add_count);
 
   extension_state.tai64n_status = HAL_OK;
   extension_state.resolve_status = HAL_ETIMEOUT;
-  TEST_ASSERT_FALSE(
-      wireguard.begin(local_ip, "private", "wg.example", "public", 51820u));
+  TEST_ASSERT_FALSE(wireguard.begin(make_config(local_ip, "public")));
   TEST_ASSERT_EQUAL_UINT32(0u, extension_state.enter_count);
   TEST_ASSERT_EQUAL_UINT32(0u, netif_add_count);
 
   extension_state.resolve_status = HAL_OK;
   extension_state.enter_status = HAL_EBUSY;
-  TEST_ASSERT_FALSE(
-      wireguard.begin(local_ip, "private", "wg.example", "public", 51820u));
+  TEST_ASSERT_FALSE(wireguard.begin(make_config(local_ip, "public")));
   TEST_ASSERT_EQUAL_UINT32(1u, extension_state.enter_count);
   TEST_ASSERT_EQUAL_UINT32(0u, extension_state.leave_count);
   TEST_ASSERT_EQUAL_UINT32(0u, netif_add_count);
@@ -542,8 +587,7 @@ void test_stack_and_resolver_failures_do_not_mutate_lwip(void) {
 void test_peer_endpoint_and_probe_retry_rate_limit(void) {
   JHWireGuardClient wireguard;
   const uint8_t local_ip[4] = {10u, 8u, 0u, 2u};
-  TEST_ASSERT_TRUE(
-      wireguard.begin(local_ip, "private", "wg.example", "public", 51820u));
+  TEST_ASSERT_TRUE(wireguard.begin(make_config(local_ip, "public")));
 
   peer_up_status = ERR_OK;
   IP_ADDR4(&peer_endpoint, 198u, 51u, 100u, 9u);
@@ -608,8 +652,7 @@ void test_begin_rejects_server_initiations_older_than_the_clock_tolerance(
     void) {
   JHWireGuardClient wireguard;
   const uint8_t local_ip[4] = {10u, 8u, 0u, 2u};
-  TEST_ASSERT_TRUE(
-      wireguard.begin(local_ip, "private", "wg.example", "public", 51820u));
+  TEST_ASSERT_TRUE(wireguard.begin(make_config(local_ip, "public")));
   TEST_ASSERT_EQUAL_HEX8_ARRAY(kClockFloorTimestamp, added_greatest_timestamp,
                                sizeof(kClockFloorTimestamp));
   wireguard.end();
@@ -626,30 +669,69 @@ void test_end_keeps_the_greatest_timestamp_for_the_same_server(void) {
   const uint8_t stale[WIREGUARDIF_TIMESTAMP_LEN] = {
       0x00u, 0x01u, 0x02u, 0x03u, 0x04u, 0x05u, 0x05u, 0x80u, 0u, 0u, 0u, 0u};
 
-  TEST_ASSERT_TRUE(
-      wireguard.begin(local_ip, "private", "wg.example", "server-a", 51820u));
+  TEST_ASSERT_TRUE(wireguard.begin(make_config(local_ip, "server-a")));
   std::memcpy(engine_greatest_timestamp, accepted, sizeof(accepted));
   TEST_ASSERT_EQUAL_INT(HAL_OK, wireguard.end());
   TEST_ASSERT_EQUAL_UINT32(1u, greatest_timestamp_reads);
   TEST_ASSERT_EQUAL_UINT8(3u, greatest_timestamp_read_index);
 
-  TEST_ASSERT_TRUE(
-      wireguard.begin(local_ip, "private", "wg.example", "server-a", 51820u));
+  TEST_ASSERT_TRUE(wireguard.begin(make_config(local_ip, "server-a")));
   TEST_ASSERT_EQUAL_HEX8_ARRAY(accepted, added_greatest_timestamp,
                                sizeof(accepted));
   TEST_ASSERT_EQUAL_INT(HAL_OK, wireguard.end());
 
-  TEST_ASSERT_TRUE(
-      wireguard.begin(local_ip, "private", "wg.example", "server-b", 51820u));
+  TEST_ASSERT_TRUE(wireguard.begin(make_config(local_ip, "server-b")));
   TEST_ASSERT_EQUAL_HEX8_ARRAY(kClockFloorTimestamp, added_greatest_timestamp,
                                sizeof(kClockFloorTimestamp));
   std::memcpy(engine_greatest_timestamp, stale, sizeof(stale));
   TEST_ASSERT_EQUAL_INT(HAL_OK, wireguard.end());
 
-  TEST_ASSERT_TRUE(
-      wireguard.begin(local_ip, "private", "wg.example", "server-b", 51820u));
+  TEST_ASSERT_TRUE(wireguard.begin(make_config(local_ip, "server-b")));
   TEST_ASSERT_EQUAL_HEX8_ARRAY(kClockFloorTimestamp, added_greatest_timestamp,
                                sizeof(kClockFloorTimestamp));
+  wireguard.end();
+}
+
+void test_begin_hands_the_preshared_key_and_keepalive_to_the_engine(void) {
+  JHWireGuardClient wireguard;
+  const uint8_t local_ip[4] = {10u, 8u, 0u, 2u};
+  hal_wireguard_config_t config = make_config(local_ip);
+  config.preshared_key = kPresharedKeyText;
+  config.keepalive_s = 0u;
+  TEST_ASSERT_TRUE(wireguard.begin(config));
+  TEST_ASSERT_TRUE(added_preshared_key_present);
+  TEST_ASSERT_EACH_EQUAL_HEX8(0x01u, added_preshared_key,
+                              sizeof(added_preshared_key));
+  TEST_ASSERT_EQUAL_UINT16(0u, added_keep_alive);
+  wireguard.end();
+
+  // An empty key text means no preshared key.
+  config.preshared_key = "";
+  config.keepalive_s = HAL_WIREGUARD_KEEPALIVE_MAX_S;
+  TEST_ASSERT_TRUE(wireguard.begin(config));
+  TEST_ASSERT_FALSE(added_preshared_key_present);
+  TEST_ASSERT_EQUAL_UINT16(HAL_WIREGUARD_KEEPALIVE_MAX_S, added_keep_alive);
+  wireguard.end();
+}
+
+void test_begin_rejects_a_bad_preshared_key_before_touching_lwip(void) {
+  JHWireGuardClient wireguard;
+  const uint8_t local_ip[4] = {10u, 8u, 0u, 2u};
+  const char *const bad_keys[] = {"AQ==", "not base64!"};
+  for (const char *bad_key : bad_keys) {
+    hal_wireguard_config_t config = make_config(local_ip);
+    config.preshared_key = bad_key;
+    TEST_ASSERT_FALSE(wireguard.begin(config));
+    TEST_ASSERT_FALSE(wireguard.is_initialized());
+  }
+  TEST_ASSERT_EQUAL_UINT32(0u, netif_add_count);
+  TEST_ASSERT_EQUAL_UINT32(0u, peer_add_count);
+  TEST_ASSERT_EQUAL_UINT32(0u, extension_state.enter_count);
+  TEST_ASSERT_EQUAL_UINT32(0u, extension_state.resolve_count);
+
+  TEST_ASSERT_TRUE(wireguard.begin(make_config(local_ip)));
+  TEST_ASSERT_FALSE(added_preshared_key_present);
+  TEST_ASSERT_EQUAL_UINT16(HAL_WIREGUARD_KEEPALIVE_DEFAULT_S, added_keep_alive);
   wireguard.end();
 }
 
@@ -667,5 +749,7 @@ int main(void) {
   RUN_TEST(
       test_begin_rejects_server_initiations_older_than_the_clock_tolerance);
   RUN_TEST(test_end_keeps_the_greatest_timestamp_for_the_same_server);
+  RUN_TEST(test_begin_hands_the_preshared_key_and_keepalive_to_the_engine);
+  RUN_TEST(test_begin_rejects_a_bad_preshared_key_before_touching_lwip);
   return UNITY_END();
 }

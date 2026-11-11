@@ -31,15 +31,21 @@ The engine includes the security fixes of
   reset at once;
 - inner packets other than IPv4 are always dropped, also where lwIP is built
   with IPv6;
-- the HChaCha20 state is wiped as well.
+- the HChaCha20 state is wiped as well;
+- the rekey thresholds of whitepaper 6.2 count with the protocol's
+  Keepalive-Timeout constant, not with the configured persistent keepalive
+  interval, which in upstream switches the initiator rule off and fires the
+  responder rule at once for long intervals.
 
 The JaszczurHAL integration replaced the target-specific wrapper with:
 
 - `wireguard_port.h`, which maps logging and timing helpers to public HAL APIs;
 - `wireguard-platform.c`, which obtains entropy, monotonic time, TAI64N, and
-  lwIP context through `jh_lwip_extension`;
+  lwIP context through `jh_lwip_extension`; every target port supplies the
+  entropy from `jh_secure_random_bytes()`;
 - `jh_wireguard_client.cpp`, which owns the private lwIP netif, peer, route,
-  timer, and teardown lifecycle using byte-array IPv4 values;
+  timer, and teardown lifecycle using byte-array IPv4 values, decodes the
+  optional preshared key and sets the persistent keepalive;
 - the public, target-neutral facade in `hal/network/wireguard/hal_wireguard.h`.
 
 ## Integration requirements
@@ -62,7 +68,8 @@ private interface.
 ## Current target coverage
 
 - RP2040/RP2350 through the shared JaszczurHAL lwIP extension;
-- STM32G474 with the shared CYW43/lwIP backend and hardware RNG entropy.
+- STM32G474 with the shared CYW43/lwIP backend and hardware RNG entropy;
+- the ESP32 family over the native ESP-IDF lwIP underlay.
 
 The shared sources remain IPv4-only. Outer and inner IPv6 support require
 separate future routing and traffic gates.

@@ -18,6 +18,8 @@ static const char *WG_PRIVATE_KEY = "base64-private-key";
 static const char *WG_PEER_HOST = "vpn.example.com";
 static const uint16_t WG_PEER_PORT = 51820;
 static const char *WG_PEER_PUBLIC_KEY = "base64-peer-public-key";
+/* Optional: the base64 preshared key of this peer, "" when it has none. */
+static const char *WG_PRESHARED_KEY = "";
 static const char *WG_ALLOWED_IP = "10.8.0.0";
 static const char *WG_ALLOWED_MASK = "255.255.255.0";
 static const char *WG_PROBE_IP = "10.8.0.1";
@@ -56,9 +58,22 @@ static void startWireGuard(void) {
     return;
   }
 
-  tunnel_started = hal_wireguard_begin_advanced_text(
-      WG_LOCAL_IP, WG_PRIVATE_KEY, WG_PEER_HOST, WG_PEER_PUBLIC_KEY,
-      WG_PEER_PORT, WG_ALLOWED_IP, WG_ALLOWED_MASK);
+  /* The keepalive keeps its default (HAL_WIREGUARD_KEEPALIVE_DEFAULT_S), so
+   * the tunnel stays up behind NAT and renews its keys on its own. */
+  hal_wireguard_config_t config;
+  tunnel_started =
+      hal_wireguard_config_init(&config) == HAL_OK &&
+      hal_wireguard_parse_ipv4(WG_LOCAL_IP, config.local_ip) &&
+      hal_wireguard_parse_ipv4(WG_ALLOWED_IP, config.allowed_ip) &&
+      hal_wireguard_parse_ipv4(WG_ALLOWED_MASK, config.allowed_mask);
+  if (tunnel_started) {
+    config.private_key = WG_PRIVATE_KEY;
+    config.remote_peer_address = WG_PEER_HOST;
+    config.remote_peer_public_key = WG_PEER_PUBLIC_KEY;
+    config.remote_peer_port = WG_PEER_PORT;
+    config.preshared_key = WG_PRESHARED_KEY;
+    tunnel_started = hal_wireguard_begin_config(&config);
+  }
   /* Initialization does not prove the peer is connected; serviceWireGuard
    * checks that. */
   if (tunnel_started) {

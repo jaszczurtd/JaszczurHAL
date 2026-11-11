@@ -256,6 +256,122 @@ void test_kick_handshake_requires_initialization_and_returns_driver_result(
   TEST_ASSERT_TRUE(hal_wireguard_kick_handshake(probe_ip, 5353u, 250u));
 }
 
+void test_config_init_sets_defaults_and_rejects_null(void) {
+  hal_wireguard_config_t config;
+  memset(&config, 0xA5, sizeof(config));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_wireguard_config_init(&config));
+  TEST_ASSERT_NULL(config.private_key);
+  TEST_ASSERT_NULL(config.remote_peer_address);
+  TEST_ASSERT_NULL(config.remote_peer_public_key);
+  TEST_ASSERT_NULL(config.preshared_key);
+  TEST_ASSERT_EQUAL_UINT16(0u, config.remote_peer_port);
+  TEST_ASSERT_EQUAL_UINT16(HAL_WIREGUARD_KEEPALIVE_DEFAULT_S,
+                           config.keepalive_s);
+  TEST_ASSERT_EACH_EQUAL_UINT8(0u, config.local_ip, 4);
+  TEST_ASSERT_EACH_EQUAL_UINT8(0u, config.allowed_ip, 4);
+  TEST_ASSERT_EACH_EQUAL_UINT8(0u, config.allowed_mask, 4);
+
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_wireguard_config_init(NULL));
+  TEST_ASSERT_TRUE(strlen(hal_mock_serial_last_line()) > 0);
+}
+
+void test_begin_config_passes_preshared_key_and_keepalive(void) {
+  const uint8_t local_ip[4] = {10u, 8u, 0u, 61u};
+  const uint8_t allowed_ip[4] = {192u, 168u, 30u, 0u};
+  const uint8_t allowed_mask[4] = {255u, 255u, 255u, 0u};
+  hal_wireguard_config_t config;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_wireguard_config_init(&config));
+  memcpy(config.local_ip, local_ip, sizeof(local_ip));
+  config.private_key = "priv-cfg";
+  config.remote_peer_address = "wg.example.com";
+  config.remote_peer_public_key = "pub-cfg";
+  config.remote_peer_port = 51820u;
+  config.preshared_key = "psk-cfg";
+  memcpy(config.allowed_ip, allowed_ip, sizeof(allowed_ip));
+  memcpy(config.allowed_mask, allowed_mask, sizeof(allowed_mask));
+  config.keepalive_s = 60u;
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_wireguard_begin_config_ex(&config));
+  TEST_ASSERT_TRUE(hal_wireguard_is_initialized());
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(local_ip,
+                                hal_mock_wireguard_get_last_local_ip(), 4);
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(allowed_ip,
+                                hal_mock_wireguard_get_last_allowed_ip(), 4);
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(allowed_mask,
+                                hal_mock_wireguard_get_last_allowed_mask(), 4);
+  TEST_ASSERT_EQUAL_STRING("psk-cfg",
+                           hal_mock_wireguard_get_last_preshared_key());
+  TEST_ASSERT_EQUAL_UINT16(60u, hal_mock_wireguard_get_last_keepalive_s());
+  TEST_ASSERT_TRUE(hal_mock_wireguard_was_begin_advanced());
+  hal_wireguard_end();
+
+  // The begin() helpers start without a preshared key and with the default
+  // keepalive.
+  TEST_ASSERT_TRUE(
+      hal_wireguard_begin(local_ip, "priv", "wg.example.com", "pub", 51820u));
+  TEST_ASSERT_EQUAL_STRING("", hal_mock_wireguard_get_last_preshared_key());
+  TEST_ASSERT_EQUAL_UINT16(HAL_WIREGUARD_KEEPALIVE_DEFAULT_S,
+                           hal_mock_wireguard_get_last_keepalive_s());
+  TEST_ASSERT_FALSE(hal_mock_wireguard_was_begin_advanced());
+  hal_wireguard_end();
+
+  // The all-zero network is the full tunnel, also through a configuration.
+  memset(config.allowed_ip, 0, sizeof(config.allowed_ip));
+  memset(config.allowed_mask, 0, sizeof(config.allowed_mask));
+  config.keepalive_s = 0u;
+  TEST_ASSERT_TRUE(hal_wireguard_begin_config(&config));
+  TEST_ASSERT_FALSE(hal_mock_wireguard_was_begin_advanced());
+  TEST_ASSERT_EQUAL_UINT16(0u, hal_mock_wireguard_get_last_keepalive_s());
+}
+
+void test_begin_config_checks_the_keepalive_range_and_required_fields(void) {
+  const uint8_t local_ip[4] = {10u, 8u, 0u, 62u};
+  hal_wireguard_config_t config;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_wireguard_config_init(&config));
+  memcpy(config.local_ip, local_ip, sizeof(local_ip));
+  config.private_key = "priv";
+  config.remote_peer_address = "wg.example.com";
+  config.remote_peer_public_key = "pub";
+  config.remote_peer_port = 51820u;
+
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_wireguard_begin_config_ex(NULL));
+  TEST_ASSERT_TRUE(strlen(hal_mock_serial_last_line()) > 0);
+
+  config.keepalive_s = HAL_WIREGUARD_KEEPALIVE_MAX_S + 1u;
+  hal_mock_serial_reset();
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_wireguard_begin_config_ex(&config));
+  TEST_ASSERT_FALSE(hal_wireguard_is_initialized());
+  TEST_ASSERT_TRUE(strlen(hal_mock_serial_last_line()) > 0);
+
+  config.keepalive_s = HAL_WIREGUARD_KEEPALIVE_MAX_S;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_wireguard_begin_config_ex(&config));
+  TEST_ASSERT_EQUAL_UINT16(HAL_WIREGUARD_KEEPALIVE_MAX_S,
+                           hal_mock_wireguard_get_last_keepalive_s());
+  hal_wireguard_end();
+
+  config.keepalive_s = HAL_WIREGUARD_KEEPALIVE_DEFAULT_S;
+  config.private_key = "";
+  hal_mock_serial_reset();
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_wireguard_begin_config_ex(&config));
+  TEST_ASSERT_TRUE(strlen(hal_mock_serial_last_line()) > 0);
+  config.private_key = "priv";
+  config.remote_peer_public_key = NULL;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_wireguard_begin_config_ex(&config));
+  config.remote_peer_public_key = "pub";
+  config.remote_peer_port = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_wireguard_begin_config_ex(&config));
+  TEST_ASSERT_FALSE(hal_wireguard_is_initialized());
+
+  // The engine's refusal, for example of a preshared key that does not
+  // decode, reaches the caller as HAL_EIO.
+  config.remote_peer_port = 51820u;
+  config.preshared_key = "bad";
+  hal_mock_wireguard_set_begin_result(false);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, hal_wireguard_begin_config_ex(&config));
+  TEST_ASSERT_FALSE(hal_wireguard_is_initialized());
+  TEST_ASSERT_EQUAL_STRING("bad", hal_mock_wireguard_get_last_preshared_key());
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_parse_ipv4_helper_validation);
@@ -265,6 +381,9 @@ int main(void) {
   RUN_TEST(test_begin_advanced_peer_up_and_kick);
   RUN_TEST(test_invalid_inputs_are_rejected);
   RUN_TEST(test_begin_failure_does_not_initialize_and_recovery_works);
+  RUN_TEST(test_config_init_sets_defaults_and_rejects_null);
+  RUN_TEST(test_begin_config_passes_preshared_key_and_keepalive);
+  RUN_TEST(test_begin_config_checks_the_keepalive_range_and_required_fields);
   RUN_TEST(test_peer_up_output_variants_and_down_state);
   RUN_TEST(
       test_kick_handshake_requires_initialization_and_returns_driver_result);

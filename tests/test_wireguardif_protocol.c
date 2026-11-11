@@ -60,6 +60,9 @@ static const char kClientPrivateKey[] =
     "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=";
 static const char kServerPrivateKey[] =
     "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=";
+// Two different preshared keys (whitepaper 5.4.3), set in setUp().
+static uint8_t s_preshared_key[WIREGUARD_SESSION_KEY_LEN];
+static uint8_t s_other_preshared_key[WIREGUARD_SESSION_KEY_LEN];
 
 // NO_SYS lwIP and the engine's platform hooks, driven by the test clock.
 u32_t sys_now(void) { return s_now_ms; }
@@ -173,7 +176,8 @@ static void start_node(struct netif *netif, struct wireguardif_init_data *init,
 static void add_peer(struct netif *netif, const char *public_key,
                      const ip_addr_t *endpoint, u16_t endpoint_port,
                      uint8_t allowed_host, uint8_t allowed_prefix_byte,
-                     const uint8_t *greatest_timestamp) {
+                     const uint8_t *greatest_timestamp,
+                     const uint8_t *preshared_key, uint16_t keep_alive) {
   struct wireguardif_peer peer;
   u8_t index = WIREGUARDIF_INVALID_INDEX;
   memset(&peer, 0, sizeof(peer));
@@ -184,7 +188,8 @@ static void add_peer(struct netif *netif, const char *public_key,
     peer.endpoint_ip = *endpoint;
     peer.endport_port = endpoint_port;
   }
-  peer.keep_alive = 0u; // no keep-alive traffic of its own in these tests
+  peer.preshared_key = preshared_key;
+  peer.keep_alive = keep_alive; // 0: no keep-alive traffic of its own
   if (greatest_timestamp != NULL) {
     memcpy(peer.greatest_timestamp, greatest_timestamp,
            sizeof(peer.greatest_timestamp));
@@ -205,8 +210,13 @@ static char s_client_public_key[64];
 static char s_server_public_key[64];
 
 // The server, with or without the client's configured endpoint, and the
-// client, configured to connect to the server.
-static void start_pair(bool server_knows_client_endpoint) {
+// client, configured to connect to the server, each with its own preshared
+// key (NULL for none) and persistent keepalive (0 for none).
+static void start_pair_with(bool server_knows_client_endpoint,
+                            const uint8_t *client_preshared_key,
+                            const uint8_t *server_preshared_key,
+                            uint16_t client_keep_alive,
+                            uint16_t server_keep_alive) {
   start_node(&s_client, &s_client_init, kClientPrivateKey, kClientPort, 2u);
   start_node(&s_server, &s_server_init, kServerPrivateKey, kServerPort, 1u);
   encode_public_key(&s_client, s_client_public_key,
@@ -214,11 +224,16 @@ static void start_pair(bool server_knows_client_endpoint) {
   encode_public_key(&s_server, s_server_public_key,
                     sizeof(s_server_public_key));
   add_peer(&s_client, s_server_public_key, &s_server_address, kServerPort, 0u,
-           0u, NULL);
+           0u, NULL, client_preshared_key, client_keep_alive);
   add_peer(&s_server, s_client_public_key,
            server_knows_client_endpoint ? &s_client_address : NULL,
-           server_knows_client_endpoint ? kClientPort : 0u, 2u, 255u, NULL);
+           server_knows_client_endpoint ? kClientPort : 0u, 2u, 255u, NULL,
+           server_preshared_key, server_keep_alive);
   TEST_ASSERT_EQUAL_INT(ERR_OK, wireguardif_connect(&s_client, 0u));
+}
+
+static void start_pair(bool server_knows_client_endpoint) {
+  start_pair_with(server_knows_client_endpoint, NULL, NULL, 0u, 0u);
 }
 
 // The client's next initiation, as it went out on the wire.
@@ -354,6 +369,8 @@ void setUp(void) {
   s_random_state = 0x2545f491u;
   s_sent_count = 0u;
   s_sent_overflow = false;
+  memset(s_preshared_key, 0x5a, sizeof(s_preshared_key));
+  memset(s_other_preshared_key, 0xa5, sizeof(s_other_preshared_key));
   IP_ADDR4(&s_client_address, 192, 0, 2, 10);
   IP_ADDR4(&s_rebound_address, 192, 0, 2, 11);
   IP_ADDR4(&s_server_address, 192, 0, 2, 20);
@@ -483,7 +500,8 @@ void test_a_restored_greatest_timestamp_rejects_a_replayed_initiation(void) {
   // Restart with the saved value: the replay is ignored.
   stop_node(&s_server);
   start_node(&s_server, &s_server_init, kServerPrivateKey, kServerPort, 1u);
-  add_peer(&s_server, s_client_public_key, NULL, 0u, 2u, 255u, greatest);
+  add_peer(&s_server, s_client_public_key, NULL, 0u, 2u, 255u, greatest, NULL,
+           0u);
   s_now_ms += 60000u;
   first = s_sent_count;
   deliver(&s_server, &initiation, &s_attacker_address, kAttackerPort);
@@ -494,7 +512,7 @@ void test_a_restored_greatest_timestamp_rejects_a_replayed_initiation(void) {
   // still does not become the endpoint.
   stop_node(&s_server);
   start_node(&s_server, &s_server_init, kServerPrivateKey, kServerPort, 1u);
-  add_peer(&s_server, s_client_public_key, NULL, 0u, 2u, 255u, NULL);
+  add_peer(&s_server, s_client_public_key, NULL, 0u, 2u, 255u, NULL, NULL, 0u);
   first = s_sent_count;
   deliver(&s_server, &initiation, &s_attacker_address, kAttackerPort);
   (void)response_to(first, &s_attacker_address, kAttackerPort);
@@ -683,6 +701,83 @@ void test_expired_previous_keypairs_are_destroyed(void) {
                         wireguardif_peer_is_up(&s_client, 0u, NULL, NULL));
 }
 
+// A preshared key enters the key derivation with the handshake response
+// (whitepaper 5.4.3): the tunnel comes up only when both sides hold the same
+// key.
+void test_peers_with_the_same_preshared_key_complete_the_handshake(void) {
+  start_pair_with(false, s_preshared_key, s_preshared_key, 0u, 0u);
+  (void)handshake_from(&s_client_address, kClientPort);
+  TEST_ASSERT_TRUE(peer_of(&s_client)->curr_keypair.valid);
+
+  const u32_t received_before = lwip_stats.ip.recv;
+  const datagram_t to_server = client_sends_inner_packet();
+  deliver(&s_server, &to_server, &s_client_address, kClientPort);
+  TEST_ASSERT_EQUAL_UINT32(received_before + 1u, lwip_stats.ip.recv);
+}
+
+// The server answers the initiation, which does not depend on the key, but
+// the client cannot read a response made with another key or with none, so
+// no session and no traffic follow.
+static void mismatched_keys_stall_the_handshake(const uint8_t *client_key,
+                                                const uint8_t *server_key) {
+  start_pair_with(false, client_key, server_key, 0u, 0u);
+  const datagram_t initiation = client_initiation();
+  size_t first = s_sent_count;
+  deliver(&s_server, &initiation, &s_client_address, kClientPort);
+  const datagram_t response =
+      response_to(first, &s_client_address, kClientPort);
+
+  first = s_sent_count;
+  deliver(&s_client, &response, &s_server_address, kServerPort);
+  TEST_ASSERT_EQUAL_UINT32(first, s_sent_count);
+  TEST_ASSERT_FALSE(peer_of(&s_client)->curr_keypair.valid);
+  TEST_ASSERT_FALSE(peer_of(&s_server)->curr_keypair.valid);
+  stop_node(&s_client);
+  stop_node(&s_server);
+}
+
+void test_a_preshared_key_mismatch_never_completes_the_handshake(void) {
+  mismatched_keys_stall_the_handshake(s_preshared_key, s_other_preshared_key);
+  mismatched_keys_stall_the_handshake(s_preshared_key, NULL);
+  mismatched_keys_stall_the_handshake(NULL, s_preshared_key);
+}
+
+// Whitepaper 6.2: the initiator starts a new handshake when it receives data
+// on a session older than Reject-After-Time - Keepalive-Timeout -
+// Rekey-Timeout (165 s); this engine's responder does so once its session is
+// Reject-After-Time - Keepalive-Timeout (170 s) old. Both count with the
+// protocol constant. Counting with the configured persistent keepalive made a
+// 180 s keepalive switch the first rule off and a 120 s keepalive fire the
+// second one after 60 s.
+void test_rekey_thresholds_do_not_follow_the_configured_keepalive(void) {
+  start_pair_with(false, NULL, NULL, 180u, 120u);
+  const uint32_t session_at = s_now_ms;
+  (void)handshake_from(&s_client_address, kClientPort);
+
+  s_now_ms = session_at + 60u * 1000u;
+  datagram_t to_client = sends_inner_packet(&s_server, 1u, 2u);
+  deliver(&s_client, &to_client, &s_server_address, kServerPort);
+  size_t first = s_sent_count;
+  TEST_ASSERT_EQUAL_INT(ERR_OK, wireguardif_poll(&s_client));
+  TEST_ASSERT_EQUAL_INT(ERR_OK, wireguardif_poll(&s_server));
+  TEST_ASSERT_EQUAL_UINT32(first, s_sent_count);
+
+  s_now_ms = session_at +
+             (REJECT_AFTER_TIME - KEEPALIVE_TIMEOUT - REKEY_TIMEOUT) * 1000u;
+  to_client = sends_inner_packet(&s_server, 1u, 2u);
+  deliver(&s_client, &to_client, &s_server_address, kServerPort);
+  first = s_sent_count;
+  TEST_ASSERT_EQUAL_INT(ERR_OK, wireguardif_poll(&s_client));
+  TEST_ASSERT_EQUAL_UINT8(MESSAGE_HANDSHAKE_INITIATION,
+                          message_type(sent_once_since(first)));
+
+  s_now_ms = session_at + (REJECT_AFTER_TIME - KEEPALIVE_TIMEOUT) * 1000u;
+  first = s_sent_count;
+  TEST_ASSERT_EQUAL_INT(ERR_OK, wireguardif_poll(&s_server));
+  TEST_ASSERT_EQUAL_UINT8(MESSAGE_HANDSHAKE_INITIATION,
+                          message_type(sent_once_since(first)));
+}
+
 // A 4-character block has at most two '=' and decodes to at least one byte.
 void test_base64_rejects_a_block_with_three_padding_characters(void) {
   uint8_t out[4];
@@ -714,6 +809,9 @@ int main(void) {
   RUN_TEST(test_peer_resets_after_three_reject_after_times_without_a_session);
   RUN_TEST(test_peer_reset_keeps_a_learned_endpoint_without_a_configured_one);
   RUN_TEST(test_expired_previous_keypairs_are_destroyed);
+  RUN_TEST(test_peers_with_the_same_preshared_key_complete_the_handshake);
+  RUN_TEST(test_a_preshared_key_mismatch_never_completes_the_handshake);
+  RUN_TEST(test_rekey_thresholds_do_not_follow_the_configured_keepalive);
   RUN_TEST(test_base64_rejects_a_block_with_three_padding_characters);
   return UNITY_END();
 }

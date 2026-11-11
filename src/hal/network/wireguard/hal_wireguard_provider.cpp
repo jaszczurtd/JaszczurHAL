@@ -23,24 +23,17 @@ hal_status_t ensure_mutex() {
 
 } // namespace
 
-hal_status_t jh_hal_wireguard_begin_provider(
-    const uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS], const char *private_key,
-    const char *remote_peer_address, const char *remote_peer_public_key,
-    uint16_t remote_peer_port, const uint8_t *allowed_ip,
-    const uint8_t *allowed_mask) {
+hal_status_t
+jh_hal_wireguard_begin_provider(const hal_wireguard_config_t *config) {
+  if (config == nullptr) {
+    return HAL_EINVAL;
+  }
   const hal_status_t mutex_status = ensure_mutex();
   if (mutex_status != HAL_OK) {
     return mutex_status;
   }
   hal_mutex_lock(s_wireguard_mutex);
-  const bool ok =
-      allowed_ip == nullptr
-          ? s_wireguard.begin(local_ip, private_key, remote_peer_address,
-                              remote_peer_public_key, remote_peer_port)
-          : s_wireguard.begin_advanced(local_ip, private_key,
-                                       remote_peer_address,
-                                       remote_peer_public_key, remote_peer_port,
-                                       allowed_ip, allowed_mask);
+  const bool ok = s_wireguard.begin(*config);
   hal_mutex_unlock(s_wireguard_mutex);
   return ok ? HAL_OK : HAL_EIO;
 }

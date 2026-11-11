@@ -2,6 +2,7 @@
 #define JH_LWIP_EXTENSION_PORT_COMMON_H
 
 #include "hal/network/hal_net.h"
+#include "hal/security/jh_secure_random.h"
 #include "hal/system/hal_system.h"
 #include "jh_lwip_extension.h"
 #include "jh_lwip_status.h"
@@ -13,6 +14,13 @@
 static inline hal_status_t jh_lwip_extension_resolve_ipv4(
     const char *host_or_ip, uint8_t out_address[JH_LWIP_EXTENSION_IPV4_SIZE]) {
   return hal_net_resolve_ipv4_ex(host_or_ip, out_address);
+}
+
+// Entropy for the engine's keys from the target's secure random provider, in
+// the shape of the port table's random_bytes operation.
+static inline hal_status_t
+jh_lwip_extension_secure_random_bytes(void *, void *buffer, size_t size) {
+  return jh_secure_random_bytes(buffer, size);
 }
 
 static inline hal_status_t

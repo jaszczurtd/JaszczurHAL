@@ -462,6 +462,9 @@ void jh_phase3_link_probe(void) {
   (void)hal_wireguard_begin_advanced_ex(local_ip, "private-key", "localhost",
                                         "public-key", 51820u, allowed_ip,
                                         allowed_mask);
+  hal_wireguard_config_t wireguard_config;
+  (void)hal_wireguard_config_init(&wireguard_config);
+  (void)hal_wireguard_begin_config_ex(&wireguard_config);
   (void)hal_wireguard_is_initialized();
   char peer_ip[HAL_WIREGUARD_IP_STR_LEN] = {};
   uint16_t peer_port = 0u;

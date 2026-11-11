@@ -963,6 +963,10 @@ const uint8_t *hal_mock_wireguard_get_last_allowed_mask(void);
 const char *hal_mock_wireguard_get_last_remote_peer_address(void);
 /** @brief Return endpoint port passed to hal_wireguard_begin*(). */
 uint16_t hal_mock_wireguard_get_last_remote_peer_port(void);
+/** @brief Return the preshared key text of the latest start ("" for none). */
+const char *hal_mock_wireguard_get_last_preshared_key(void);
+/** @brief Return the keepalive interval in seconds of the latest start. */
+uint16_t hal_mock_wireguard_get_last_keepalive_s(void);
 /** @brief Return true when latest start used hal_wireguard_begin_advanced*().
  */
 bool hal_mock_wireguard_was_begin_advanced(void);

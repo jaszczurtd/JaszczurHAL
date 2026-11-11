@@ -8,11 +8,8 @@
 extern "C" {
 #endif
 
-hal_status_t jh_hal_wireguard_begin_provider(
-    const uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS], const char *private_key,
-    const char *remote_peer_address, const char *remote_peer_public_key,
-    uint16_t remote_peer_port, const uint8_t *allowed_ip,
-    const uint8_t *allowed_mask);
+hal_status_t
+jh_hal_wireguard_begin_provider(const hal_wireguard_config_t *config);
 hal_status_t jh_hal_wireguard_end_provider(void);
 hal_status_t jh_hal_wireguard_is_initialized_provider(bool *out_initialized);
 hal_status_t jh_hal_wireguard_peer_up_provider(

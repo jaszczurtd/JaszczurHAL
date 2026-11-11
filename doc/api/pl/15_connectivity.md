@@ -2136,6 +2136,24 @@ Konfiguracja tunelu WireGuard i komunikacja z jego drugą stroną przez wspólny
 
 #define HAL_WIREGUARD_IPV4_OCTETS 4u
 #define HAL_WIREGUARD_IP_STR_LEN 16u
+#define HAL_WIREGUARD_KEEPALIVE_DEFAULT_S 25u
+#define HAL_WIREGUARD_KEEPALIVE_MAX_S 180u
+
+typedef struct {
+  uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS];
+  const char *private_key;
+  const char *remote_peer_address;
+  const char *remote_peer_public_key;
+  uint16_t remote_peer_port;
+  const char *preshared_key;
+  uint8_t allowed_ip[HAL_WIREGUARD_IPV4_OCTETS];
+  uint8_t allowed_mask[HAL_WIREGUARD_IPV4_OCTETS];
+  uint16_t keepalive_s;
+} hal_wireguard_config_t;
+
+hal_status_t hal_wireguard_config_init(hal_wireguard_config_t *config);
+hal_status_t hal_wireguard_begin_config_ex(const hal_wireguard_config_t *config);
+bool hal_wireguard_begin_config(const hal_wireguard_config_t *config);
 
 bool hal_wireguard_parse_ipv4(const char *ip_text,
                               uint8_t out_ip[HAL_WIREGUARD_IPV4_OCTETS]);
@@ -2207,6 +2225,21 @@ bool hal_wireguard_kick_handshake_text(const char *probe_ip_text,
   uzgadnianie.
 - `hal_wireguard_kick_handshake_text(...)` analizuje tekstowy adres IP sondy
   w zapisie kropkowym i wywołuje `hal_wireguard_kick_handshake(...)`.
+- `hal_wireguard_config_init(...)` przywraca `hal_wireguard_config_t` do
+  wartości domyślnych: pełny tunel, bez klucza preshared, keepalive 25 s.
+- `hal_wireguard_begin_config_ex(...)` uruchamia tunel z tej konfiguracji i
+  jako jedyne wywołanie ustawia klucz preshared oraz odstęp keepalive.
+  Powyższe funkcje `begin*` startują bez klucza preshared i z keepalive 25 s.
+  Konfiguracja `NULL`, pusty klucz lub adres, port 0 albo keepalive powyżej
+  180 s zwracają `HAL_EINVAL`, zanim stos zostanie dotknięty.
+- Klucz preshared to tekst base64 32 bajtów, jak w pliku konfiguracji
+  WireGuard. Tekst, który nie dekoduje się do 32 bajtów, kończy start błędem
+  `HAL_EIO`, zanim interfejs zostanie dodany.
+- Keepalive: 0 wyłącza, maksimum to 180 s, bo sesja i tak kończy się 180 s po
+  ostatnim ruchu. Z keepalive tunel pozostaje zestawiony za NAT i sam odnawia
+  klucze; bez niego sesja kończy się po 180 s ciszy, a kolejny pakiet
+  rozpoczyna nowe uzgadnianie. Progi odnowienia kluczy liczą się ze stałą
+  Keepalive-Timeout protokołu, nie z ustawionego odstępu.
 - Uruchomienie tunelu wymaga zsynchronizowanego zegara. Tunel przyjmuje
   inicjację uzgadniania od peera tylko wtedy, gdy jej znacznik czasu jest
   nowszy od każdej inicjacji przyjętej wcześniej dla tego samego klucza peera,
@@ -2231,8 +2264,9 @@ bool hal_wireguard_kick_handshake_text(const char *probe_ip_text,
 - **Wspólna implementacja modułu:** dołączony silnik protokołu
   i kryptografii wraz z prywatnym portem rozszerzenia lwIP. Korzystają z niego
   backendy stosu sieciowego, które deklarują tę funkcję.
-- **impl/rp2040:** rozszerzenie lwIP zarządzane przez HAL oraz bezpieczne
-  hooki platformowe.
+- **impl/rp2040:** rozszerzenie lwIP zarządzane przez HAL; klucze silnika
+  pochodzą z `jh_secure_random_bytes()`, generatora Pico SDK, który na RP2350
+  dokłada sprzętowy TRNG.
 - **impl/stm32g474:** wspólna bazowa warstwa sieciowa CYW43/lwIP, entropia ze
   sprzętowego RNG oraz czas NTP zsynchronizowany z HAL.
 - **impl/esp32:** wspólny silnik WireGuard nad natywną warstwą lwIP z ESP-IDF.
@@ -2264,6 +2298,8 @@ const uint8_t *hal_mock_wireguard_get_last_allowed_ip(void);
 const uint8_t *hal_mock_wireguard_get_last_allowed_mask(void);
 const char *hal_mock_wireguard_get_last_remote_peer_address(void);
 uint16_t    hal_mock_wireguard_get_last_remote_peer_port(void);
+const char *hal_mock_wireguard_get_last_preshared_key(void);
+uint16_t    hal_mock_wireguard_get_last_keepalive_s(void);
 bool        hal_mock_wireguard_was_begin_advanced(void);
 const uint8_t *hal_mock_wireguard_get_last_probe_ip(void);
 uint16_t    hal_mock_wireguard_get_last_probe_port(void);

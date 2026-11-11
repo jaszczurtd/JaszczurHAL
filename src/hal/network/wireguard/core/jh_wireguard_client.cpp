@@ -4,9 +4,11 @@
 
 #include "jh_wireguard_client.h"
 
+#include "crypto/crypto.h"
 #include "hal/core/jh_endian.h"
 #include "hal/network/jh_lwip_extension.h"
 #include "wireguard-platform.h"
+#include "wireguard.h"
 #include "wireguard_port.h"
 #include "wireguardif.h"
 
@@ -31,6 +33,21 @@ constexpr uint64_t kInitiationClockToleranceSeconds = 120u;
 constexpr size_t kPeerKeyTextCapacity = 4u * ((32u + 2u) / 3u) + 1u;
 static_assert(WIREGUARDIF_TIMESTAMP_LEN == JH_LWIP_EXTENSION_TAI64N_SIZE,
               "the clock and the engine use the same TAI64N layout");
+// The engine reads 0xFFFF as "use the engine default", so the facade's range
+// must stay below it, and a keepalive longer than a session is pointless.
+static_assert(HAL_WIREGUARD_KEEPALIVE_MAX_S < WIREGUARDIF_KEEPALIVE_DEFAULT,
+              "the keepalive range must exclude the engine's sentinel");
+static_assert(HAL_WIREGUARD_KEEPALIVE_MAX_S <= REJECT_AFTER_TIME,
+              "a keepalive cannot outlive the session");
+static_assert(HAL_WIREGUARD_KEEPALIVE_DEFAULT_S <=
+                  HAL_WIREGUARD_KEEPALIVE_MAX_S,
+              "the default keepalive must be in range");
+
+// Decoded preshared key on the stack, wiped when it goes out of scope.
+struct PresharedKey {
+  uint8_t bytes[WIREGUARD_SESSION_KEY_LEN] = {};
+  ~PresharedKey() { crypto_zero(bytes, sizeof(bytes)); }
+};
 
 struct netif s_wg_netif;
 struct netif *s_previous_default_netif;
@@ -127,31 +144,35 @@ void teardown_locked() {
 
 } // namespace
 
-bool JHWireGuardClient::begin(const uint8_t local_ip[4],
-                              const char *private_key,
-                              const char *remote_peer_address,
-                              const char *remote_peer_public_key,
-                              uint16_t remote_peer_port) {
-  static const uint8_t route_all[4] = {};
-  return begin_advanced(local_ip, private_key, remote_peer_address,
-                        remote_peer_public_key, remote_peer_port, route_all,
-                        route_all);
-}
-
-bool JHWireGuardClient::begin_advanced(const uint8_t local_ip[4],
-                                       const char *private_key,
-                                       const char *remote_peer_address,
-                                       const char *remote_peer_public_key,
-                                       uint16_t remote_peer_port,
-                                       const uint8_t allowed_ip[4],
-                                       const uint8_t allowed_mask[4]) {
+bool JHWireGuardClient::begin(const hal_wireguard_config_t &config) {
   if (initialized_) {
     return true;
   }
-  if (local_ip == nullptr || private_key == nullptr ||
-      remote_peer_address == nullptr || remote_peer_public_key == nullptr ||
-      allowed_ip == nullptr || allowed_mask == nullptr) {
+  const uint8_t *local_ip = config.local_ip;
+  const char *private_key = config.private_key;
+  const char *remote_peer_address = config.remote_peer_address;
+  const char *remote_peer_public_key = config.remote_peer_public_key;
+  const uint8_t *allowed_ip = config.allowed_ip;
+  const uint8_t *allowed_mask = config.allowed_mask;
+  if (private_key == nullptr || remote_peer_address == nullptr ||
+      remote_peer_public_key == nullptr) {
     return false;
+  }
+
+  // The optional preshared key: 32 bytes in base64, decoded before anything
+  // else so that a wrong key leaves the stack untouched. The engine copies
+  // it; the stack copy is wiped on every return.
+  PresharedKey preshared_key;
+  const uint8_t *preshared = nullptr;
+  if (config.preshared_key != nullptr && config.preshared_key[0] != '\0') {
+    size_t preshared_length = sizeof(preshared_key.bytes);
+    if (!wireguard_base64_decode(config.preshared_key, preshared_key.bytes,
+                                 &preshared_length) ||
+        preshared_length != sizeof(preshared_key.bytes)) {
+      log_e(TAG "Invalid preshared key: expected 32 base64-encoded bytes");
+      return false;
+    }
+    preshared = preshared_key.bytes;
   }
 
   const jh_lwip_extension_port_t *extension = jh_lwip_extension_platform_port();
@@ -239,13 +260,17 @@ bool JHWireGuardClient::begin_advanced(const uint8_t local_ip[4],
 
   struct wireguardif_peer peer = {};
   peer.public_key = remote_peer_public_key;
+  peer.preshared_key = preshared;
+  // 0 disables the keepalive; the facade keeps the value below the engine's
+  // 0xFFFF sentinel.
+  peer.keep_alive = config.keepalive_s;
   IP_ADDR4(&peer.allowed_ip, allowed_ip[0], allowed_ip[1], allowed_ip[2],
            allowed_ip[3]);
   IP_ADDR4(&peer.allowed_mask, allowed_mask[0], allowed_mask[1],
            allowed_mask[2], allowed_mask[3]);
   IP_ADDR4(&peer.endpoint_ip, ip4_addr1(&endpoint4), ip4_addr2(&endpoint4),
            ip4_addr3(&endpoint4), ip4_addr4(&endpoint4));
-  peer.endport_port = remote_peer_port;
+  peer.endport_port = config.remote_peer_port;
   memcpy(peer.greatest_timestamp, greatest_timestamp,
          sizeof(peer.greatest_timestamp));
 

@@ -13,8 +13,6 @@
 
 #include "drivers/rp2040/rp2040_cyw43_provider.h"
 
-#include <hardware/regs/addressmap.h>
-#include <hardware/regs/rosc.h>
 #include <lwip/ip_addr.h>
 #include <lwip/netif.h>
 #include <lwip/pbuf.h>
@@ -52,36 +50,6 @@ hal_status_t monotonic_ms(void *, uint32_t *out_millis) {
   return jh_lwip_extension_monotonic_ms(out_millis);
 }
 
-uint32_t hardware_random_word() {
-  uint32_t random = 0u;
-  volatile const uint32_t *random_bit =
-      reinterpret_cast<volatile const uint32_t *>(ROSC_BASE +
-                                                  ROSC_RANDOMBIT_OFFSET);
-  for (uint32_t bit = 0u; bit < 32u; ++bit) {
-    random = (random << 1u) | (*random_bit & 1u);
-  }
-  return random;
-}
-
-hal_status_t random_bytes(void *, void *buffer, size_t size) {
-  if (size > 0u && buffer == nullptr) {
-    return HAL_EINVAL;
-  }
-
-  uint8_t *output = static_cast<uint8_t *>(buffer);
-  while (size >= sizeof(uint32_t)) {
-    const uint32_t random = hardware_random_word();
-    memcpy(output, &random, sizeof(random));
-    output += sizeof(random);
-    size -= sizeof(random);
-  }
-  if (size > 0u) {
-    const uint32_t random = hardware_random_word();
-    memcpy(output, &random, size);
-  }
-  return HAL_OK;
-}
-
 hal_status_t tai64n_now(void *,
                         uint8_t out_tai64n[JH_LWIP_EXTENSION_TAI64N_SIZE]) {
   if (out_tai64n == nullptr) {
@@ -111,8 +79,15 @@ hal_status_t send_udp_probe(void *,
 }
 
 const jh_lwip_extension_port_t s_port = {
-    nullptr,      stack_enter,  stack_leave, underlay_netif, resolve_ipv4,
-    monotonic_ms, random_bytes, tai64n_now,  send_udp_probe,
+    nullptr,
+    stack_enter,
+    stack_leave,
+    underlay_netif,
+    resolve_ipv4,
+    monotonic_ms,
+    jh_lwip_extension_secure_random_bytes,
+    tai64n_now,
+    send_udp_probe,
 };
 
 } // namespace

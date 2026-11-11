@@ -1,7 +1,7 @@
 # 09 - Connecting through WireGuard
 
-This example connects to WiFi, configures a WireGuard tunnel, and checks the
-peer connection every five seconds. If the peer is not up, it calls
+This example connects to WiFi, configures a WireGuard tunnel through
+`hal_wireguard_config_t`, and checks the peer connection every five seconds. If the peer is not up, it calls
 `hal_wireguard_kick_handshake_text()` with a probe address to initiate a
 handshake.
 
@@ -11,7 +11,10 @@ Set the WiFi credentials and tunnel parameters in `app.c`: the local IP
 address, device private key, peer address and port, peer public key, and the
 network reachable through the tunnel. These are the `WIFI_*` and `WG_*`
 constants. `WG_PROBE_IP` and `WG_PROBE_PORT` select the destination used to
-initiate probe traffic.
+initiate probe traffic. `WG_PRESHARED_KEY` is the optional base64 preshared
+key of the peer; leave it empty when the peer has none. The tunnel keeps the
+default persistent keepalive of 25 s, so it stays up behind NAT and renews its
+keys on its own.
 
 `base64-private-key`, `base64-peer-public-key`, and `vpn.example.com` are
 placeholders, not a working configuration. Configure the remote peer as well.

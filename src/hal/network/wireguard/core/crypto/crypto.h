@@ -93,7 +93,15 @@
     (p)[0] = U8V((v) >> 56);                                                   \
   } while (0)
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void crypto_zero(void *dest, size_t len);
 bool crypto_equal(const void *a, const void *b, size_t size);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* _CRYPTO_H_ */

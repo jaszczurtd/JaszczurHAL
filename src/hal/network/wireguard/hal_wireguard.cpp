@@ -13,6 +13,7 @@
 #endif
 
 #include <stdio.h>
+#include <string.h>
 
 static hal_status_t validate_non_empty(const char *value, const char *fn,
                                        const char *name) {
@@ -38,6 +39,108 @@ static hal_status_t require_wireguard_ready(void) {
 #else
   return jh_network_require_ready();
 #endif
+}
+
+static hal_status_t validate_config(const hal_wireguard_config_t *config,
+                                    const char *fn) {
+  if (config == NULL) {
+    hal_derr("%s: config is NULL", fn);
+    return HAL_EINVAL;
+  }
+  hal_status_t status =
+      validate_non_empty(config->private_key, fn, "private_key");
+  if (status != HAL_OK) {
+    return status;
+  }
+  status = validate_non_empty(config->remote_peer_address, fn,
+                              "remote_peer_address");
+  if (status != HAL_OK) {
+    return status;
+  }
+  status = validate_non_empty(config->remote_peer_public_key, fn,
+                              "remote_peer_public_key");
+  if (status != HAL_OK) {
+    return status;
+  }
+  if (config->remote_peer_port == 0u) {
+    hal_derr("%s: remote_peer_port must be > 0", fn);
+    return HAL_EINVAL;
+  }
+  if (config->keepalive_s > HAL_WIREGUARD_KEEPALIVE_MAX_S) {
+    hal_derr("%s: keepalive_s %u is above %u s", fn,
+             (unsigned)config->keepalive_s,
+             (unsigned)HAL_WIREGUARD_KEEPALIVE_MAX_S);
+    return HAL_EINVAL;
+  }
+  return HAL_OK;
+}
+
+static hal_status_t begin_config(const hal_wireguard_config_t *config,
+                                 const char *fn) {
+  hal_status_t status = validate_config(config, fn);
+  if (status != HAL_OK) {
+    return status;
+  }
+  status = require_wireguard_ready();
+  if (status != HAL_OK) {
+    return status;
+  }
+  return jh_hal_wireguard_begin_provider(config);
+}
+
+// The begin() helpers: no preshared key, the default keepalive and, when
+// 'advanced', the AllowedIPs network.
+static hal_status_t
+begin_with(const char *fn, const uint8_t *local_ip, const char *private_key,
+           const char *remote_peer_address, const char *remote_peer_public_key,
+           uint16_t remote_peer_port, bool advanced, const uint8_t *allowed_ip,
+           const uint8_t *allowed_mask) {
+  hal_status_t status = validate_ip_ptr(local_ip, fn, "local_ip");
+  if (status != HAL_OK) {
+    return status;
+  }
+  if (advanced) {
+    status = validate_ip_ptr(allowed_ip, fn, "allowed_ip");
+    if (status != HAL_OK) {
+      return status;
+    }
+    status = validate_ip_ptr(allowed_mask, fn, "allowed_mask");
+    if (status != HAL_OK) {
+      return status;
+    }
+  }
+
+  hal_wireguard_config_t config;
+  (void)hal_wireguard_config_init(&config);
+  memcpy(config.local_ip, local_ip, sizeof(config.local_ip));
+  config.private_key = private_key;
+  config.remote_peer_address = remote_peer_address;
+  config.remote_peer_public_key = remote_peer_public_key;
+  config.remote_peer_port = remote_peer_port;
+  if (advanced) {
+    memcpy(config.allowed_ip, allowed_ip, sizeof(config.allowed_ip));
+    memcpy(config.allowed_mask, allowed_mask, sizeof(config.allowed_mask));
+  }
+  return begin_config(&config, fn);
+}
+
+hal_status_t hal_wireguard_config_init(hal_wireguard_config_t *config) {
+  if (config == NULL) {
+    hal_derr("hal_wireguard_config_init: config is NULL");
+    return HAL_EINVAL;
+  }
+  memset(config, 0, sizeof(*config));
+  config->keepalive_s = HAL_WIREGUARD_KEEPALIVE_DEFAULT_S;
+  return HAL_OK;
+}
+
+hal_status_t
+hal_wireguard_begin_config_ex(const hal_wireguard_config_t *config) {
+  return begin_config(config, "hal_wireguard_begin_config_ex");
+}
+
+bool hal_wireguard_begin_config(const hal_wireguard_config_t *config) {
+  return hal_status_to_bool(hal_wireguard_begin_config_ex(config));
 }
 
 hal_status_t
@@ -102,38 +205,9 @@ hal_wireguard_begin_ex(const uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS],
                        const char *private_key, const char *remote_peer_address,
                        const char *remote_peer_public_key,
                        uint16_t remote_peer_port) {
-  hal_status_t status =
-      validate_ip_ptr(local_ip, "hal_wireguard_begin_ex", "local_ip");
-  if (status != HAL_OK) {
-    return status;
-  }
-  status =
-      validate_non_empty(private_key, "hal_wireguard_begin_ex", "private_key");
-  if (status != HAL_OK) {
-    return status;
-  }
-  status = validate_non_empty(remote_peer_address, "hal_wireguard_begin_ex",
-                              "remote_peer_address");
-  if (status != HAL_OK) {
-    return status;
-  }
-  status = validate_non_empty(remote_peer_public_key, "hal_wireguard_begin_ex",
-                              "remote_peer_public_key");
-  if (status != HAL_OK) {
-    return status;
-  }
-  if (remote_peer_port == 0u) {
-    hal_derr("hal_wireguard_begin_ex: remote_peer_port must be > 0");
-    return HAL_EINVAL;
-  }
-  status = require_wireguard_ready();
-  if (status != HAL_OK) {
-    return status;
-  }
-
-  return jh_hal_wireguard_begin_provider(
-      local_ip, private_key, remote_peer_address, remote_peer_public_key,
-      remote_peer_port, nullptr, nullptr);
+  return begin_with("hal_wireguard_begin_ex", local_ip, private_key,
+                    remote_peer_address, remote_peer_public_key,
+                    remote_peer_port, false, NULL, NULL);
 }
 
 bool hal_wireguard_begin(const uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS],
@@ -177,50 +251,9 @@ hal_status_t hal_wireguard_begin_advanced_ex(
     uint16_t remote_peer_port,
     const uint8_t allowed_ip[HAL_WIREGUARD_IPV4_OCTETS],
     const uint8_t allowed_mask[HAL_WIREGUARD_IPV4_OCTETS]) {
-  hal_status_t status =
-      validate_ip_ptr(local_ip, "hal_wireguard_begin_advanced_ex", "local_ip");
-  if (status != HAL_OK) {
-    return status;
-  }
-  status = validate_non_empty(private_key, "hal_wireguard_begin_advanced_ex",
-                              "private_key");
-  if (status != HAL_OK) {
-    return status;
-  }
-  status =
-      validate_non_empty(remote_peer_address, "hal_wireguard_begin_advanced_ex",
-                         "remote_peer_address");
-  if (status != HAL_OK) {
-    return status;
-  }
-  status = validate_non_empty(remote_peer_public_key,
-                              "hal_wireguard_begin_advanced_ex",
-                              "remote_peer_public_key");
-  if (status != HAL_OK) {
-    return status;
-  }
-  if (remote_peer_port == 0u) {
-    hal_derr("hal_wireguard_begin_advanced_ex: remote_peer_port must be > 0");
-    return HAL_EINVAL;
-  }
-  status = validate_ip_ptr(allowed_ip, "hal_wireguard_begin_advanced_ex",
-                           "allowed_ip");
-  if (status != HAL_OK) {
-    return status;
-  }
-  status = validate_ip_ptr(allowed_mask, "hal_wireguard_begin_advanced_ex",
-                           "allowed_mask");
-  if (status != HAL_OK) {
-    return status;
-  }
-  status = require_wireguard_ready();
-  if (status != HAL_OK) {
-    return status;
-  }
-
-  return jh_hal_wireguard_begin_provider(
-      local_ip, private_key, remote_peer_address, remote_peer_public_key,
-      remote_peer_port, allowed_ip, allowed_mask);
+  return begin_with("hal_wireguard_begin_advanced_ex", local_ip, private_key,
+                    remote_peer_address, remote_peer_public_key,
+                    remote_peer_port, true, allowed_ip, allowed_mask);
 }
 
 bool hal_wireguard_begin_advanced(

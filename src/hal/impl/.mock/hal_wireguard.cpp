@@ -26,7 +26,9 @@ struct MockWireGuardState {
   char last_private_key[kTextBufferSize];
   char last_remote_peer_address[kTextBufferSize];
   char last_remote_peer_public_key[kTextBufferSize];
+  char last_preshared_key[kTextBufferSize];
   uint16_t last_remote_peer_port;
+  uint16_t last_keepalive_s;
   uint8_t peer_endpoint_ip[HAL_WIREGUARD_IPV4_OCTETS];
   uint16_t peer_endpoint_port;
   uint32_t peer_up_quick_call_count;
@@ -37,32 +39,45 @@ struct MockWireGuardState {
 
 MockWireGuardState s_wireguard;
 
+bool all_zero(const uint8_t octets[HAL_WIREGUARD_IPV4_OCTETS]) {
+  for (size_t index = 0u; index < HAL_WIREGUARD_IPV4_OCTETS; ++index) {
+    if (octets[index] != 0u) {
+      return false;
+    }
+  }
+  return true;
+}
+
 } // namespace
 
-hal_status_t jh_hal_wireguard_begin_provider(
-    const uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS], const char *private_key,
-    const char *remote_peer_address, const char *remote_peer_public_key,
-    uint16_t remote_peer_port, const uint8_t *allowed_ip,
-    const uint8_t *allowed_mask) {
-  memcpy(s_wireguard.last_local_ip, local_ip,
+hal_status_t
+jh_hal_wireguard_begin_provider(const hal_wireguard_config_t *config) {
+  if (config == nullptr) {
+    return HAL_EINVAL;
+  }
+  memcpy(s_wireguard.last_local_ip, config->local_ip,
          sizeof(s_wireguard.last_local_ip));
   snprintf(s_wireguard.last_private_key, sizeof(s_wireguard.last_private_key),
-           "%s", private_key);
+           "%s", config->private_key);
   snprintf(s_wireguard.last_remote_peer_address,
            sizeof(s_wireguard.last_remote_peer_address), "%s",
-           remote_peer_address);
+           config->remote_peer_address);
   snprintf(s_wireguard.last_remote_peer_public_key,
            sizeof(s_wireguard.last_remote_peer_public_key), "%s",
-           remote_peer_public_key);
-  s_wireguard.last_remote_peer_port = remote_peer_port;
-  s_wireguard.begin_advanced_called = false;
-  if (allowed_ip != nullptr) {
-    memcpy(s_wireguard.last_allowed_ip, allowed_ip,
-           sizeof(s_wireguard.last_allowed_ip));
-    memcpy(s_wireguard.last_allowed_mask, allowed_mask,
-           sizeof(s_wireguard.last_allowed_mask));
-    s_wireguard.begin_advanced_called = s_wireguard.begin_result;
-  }
+           config->remote_peer_public_key);
+  snprintf(s_wireguard.last_preshared_key,
+           sizeof(s_wireguard.last_preshared_key), "%s",
+           config->preshared_key != nullptr ? config->preshared_key : "");
+  s_wireguard.last_remote_peer_port = config->remote_peer_port;
+  s_wireguard.last_keepalive_s = config->keepalive_s;
+  memcpy(s_wireguard.last_allowed_ip, config->allowed_ip,
+         sizeof(s_wireguard.last_allowed_ip));
+  memcpy(s_wireguard.last_allowed_mask, config->allowed_mask,
+         sizeof(s_wireguard.last_allowed_mask));
+  // A split tunnel is any AllowedIPs network other than the all-zero one.
+  s_wireguard.begin_advanced_called =
+      s_wireguard.begin_result &&
+      !(all_zero(config->allowed_ip) && all_zero(config->allowed_mask));
   s_wireguard.initialized = s_wireguard.begin_result;
   return s_wireguard.begin_result ? HAL_OK : HAL_EIO;
 }
@@ -168,6 +183,14 @@ const char *hal_mock_wireguard_get_last_remote_peer_address(void) {
 
 uint16_t hal_mock_wireguard_get_last_remote_peer_port(void) {
   return s_wireguard.last_remote_peer_port;
+}
+
+const char *hal_mock_wireguard_get_last_preshared_key(void) {
+  return s_wireguard.last_preshared_key;
+}
+
+uint16_t hal_mock_wireguard_get_last_keepalive_s(void) {
+  return s_wireguard.last_keepalive_s;
 }
 
 bool hal_mock_wireguard_was_begin_advanced(void) {

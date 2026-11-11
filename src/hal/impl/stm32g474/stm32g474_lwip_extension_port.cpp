@@ -12,7 +12,6 @@
 #include "hal/network/jh_lwip_status.h"
 #include "hal/network/jh_network_backend.h"
 #include "hal/network/wireguard/core/crypto/crypto.h"
-#include "hal/security/jh_secure_random.h"
 #include "hal/system/hal_system.h"
 #include "hal/time/hal_time.h"
 
@@ -65,10 +64,6 @@ hal_status_t monotonic_ms(void *, uint32_t *out_millis) {
   return jh_lwip_extension_monotonic_ms(out_millis);
 }
 
-hal_status_t random_bytes(void *, void *buffer, size_t size) {
-  return jh_secure_random_bytes(buffer, size);
-}
-
 hal_status_t tai64n_now(void *,
                         uint8_t out_tai64n[JH_LWIP_EXTENSION_TAI64N_SIZE]) {
   if (out_tai64n == nullptr) {
@@ -98,8 +93,15 @@ hal_status_t send_udp_probe(void *,
 }
 
 const jh_lwip_extension_port_t s_port = {
-    nullptr,      stack_enter,  stack_leave, underlay_netif, resolve_ipv4,
-    monotonic_ms, random_bytes, tai64n_now,  send_udp_probe,
+    nullptr,
+    stack_enter,
+    stack_leave,
+    underlay_netif,
+    resolve_ipv4,
+    monotonic_ms,
+    jh_lwip_extension_secure_random_bytes,
+    tai64n_now,
+    send_udp_probe,
 };
 
 } // namespace
