@@ -4,6 +4,7 @@
 
 #include "jh_wireguard_client.h"
 
+#include "hal/core/jh_endian.h"
 #include "hal/network/jh_lwip_extension.h"
 #include "wireguard-platform.h"
 #include "wireguard_port.h"
@@ -18,11 +19,63 @@
 
 namespace {
 
+// Handshake initiations from the server carry a TAI64N timestamp that has to
+// grow (WireGuard 5.1). A fresh peer would accept one replayed old initiation,
+// which moves the endpoint, so begin() rejects initiations older than the
+// synchronized clock minus this tolerance, and the greatest timestamp is kept
+// across end()/begin() for the same server key. The tolerance covers the clock
+// difference to the server; rejecting a server initiation does not stop the
+// tunnel, because this client always initiates its own handshakes.
+constexpr uint64_t kInitiationClockToleranceSeconds = 120u;
+// Base64 text of a 32-byte public key and its terminator.
+constexpr size_t kPeerKeyTextCapacity = 4u * ((32u + 2u) / 3u) + 1u;
+static_assert(WIREGUARDIF_TIMESTAMP_LEN == JH_LWIP_EXTENSION_TAI64N_SIZE,
+              "the clock and the engine use the same TAI64N layout");
+
 struct netif s_wg_netif;
 struct netif *s_previous_default_netif;
 uint8_t s_peer_index = WIREGUARDIF_INVALID_INDEX;
 bool s_netif_added;
 bool s_default_route_changed;
+char s_peer_key[kPeerKeyTextCapacity];
+char s_kept_peer_key[kPeerKeyTextCapacity];
+uint8_t s_kept_timestamp[WIREGUARDIF_TIMESTAMP_LEN];
+
+// Copies a server key that fits the buffer; anything longer is not a valid
+// key and leaves the buffer empty.
+void copy_peer_key(char destination[kPeerKeyTextCapacity], const char *key) {
+  destination[0] = '\0';
+  if (key != nullptr && memchr(key, '\0', kPeerKeyTextCapacity) != nullptr) {
+    memcpy(destination, key, strlen(key) + 1u);
+  }
+}
+
+// The greatest timestamp the new peer starts with: the clock floor, or the
+// value kept from the previous session with the same server key when that is
+// greater.
+void seed_greatest_timestamp(const uint8_t now[WIREGUARDIF_TIMESTAMP_LEN],
+                             const char *peer_key,
+                             uint8_t out[WIREGUARDIF_TIMESTAMP_LEN]) {
+  const uint64_t seconds = jh_load_be64(now);
+  memset(out, 0, WIREGUARDIF_TIMESTAMP_LEN);
+  if (seconds > kInitiationClockToleranceSeconds) {
+    jh_store_be64(out, seconds - kInitiationClockToleranceSeconds);
+  }
+  if (s_kept_peer_key[0] != '\0' && strcmp(s_kept_peer_key, peer_key) == 0 &&
+      memcmp(s_kept_timestamp, out, WIREGUARDIF_TIMESTAMP_LEN) > 0) {
+    memcpy(out, s_kept_timestamp, WIREGUARDIF_TIMESTAMP_LEN);
+  }
+}
+
+void keep_greatest_timestamp() {
+  uint8_t greatest[WIREGUARDIF_TIMESTAMP_LEN] = {};
+  if (s_peer_key[0] != '\0' &&
+      wireguardif_peer_greatest_timestamp(&s_wg_netif, s_peer_index, greatest,
+                                          sizeof(greatest)) == ERR_OK) {
+    memcpy(s_kept_peer_key, s_peer_key, sizeof(s_kept_peer_key));
+    memcpy(s_kept_timestamp, greatest, sizeof(s_kept_timestamp));
+  }
+}
 
 bool ipv4_is_zero(const uint8_t address[4]) {
   return address[0] == 0u && address[1] == 0u && address[2] == 0u &&
@@ -57,6 +110,7 @@ void teardown_locked() {
     netif_remove(&s_wg_netif);
   }
   if (s_peer_index != WIREGUARDIF_INVALID_INDEX) {
+    keep_greatest_timestamp();
     (void)wireguardif_remove_peer(&s_wg_netif, s_peer_index);
   }
   if (s_wg_netif.state != nullptr) {
@@ -65,6 +119,7 @@ void teardown_locked() {
 
   memset(&s_wg_netif, 0, sizeof(s_wg_netif));
   s_peer_index = WIREGUARDIF_INVALID_INDEX;
+  s_peer_key[0] = '\0';
   s_netif_added = false;
   s_default_route_changed = false;
   s_previous_default_netif = nullptr;
@@ -120,12 +175,15 @@ bool JHWireGuardClient::begin_advanced(const uint8_t local_ip[4],
   uint8_t time_preflight[JH_LWIP_EXTENSION_TAI64N_SIZE] = {};
   const hal_status_t time_status =
       jh_lwip_extension_tai64n_now(extension, time_preflight);
-  memset(time_preflight, 0, sizeof(time_preflight));
   if (time_status != HAL_OK) {
     log_e(TAG "WireGuard wall-clock preflight failed: %s",
           hal_status_to_string(time_status));
     return false;
   }
+  uint8_t greatest_timestamp[WIREGUARDIF_TIMESTAMP_LEN] = {};
+  seed_greatest_timestamp(time_preflight, remote_peer_public_key,
+                          greatest_timestamp);
+  memset(time_preflight, 0, sizeof(time_preflight));
 
   wireguard_platform_init();
 
@@ -188,12 +246,15 @@ bool JHWireGuardClient::begin_advanced(const uint8_t local_ip[4],
   IP_ADDR4(&peer.endpoint_ip, ip4_addr1(&endpoint4), ip4_addr2(&endpoint4),
            ip4_addr3(&endpoint4), ip4_addr4(&endpoint4));
   peer.endport_port = remote_peer_port;
+  memcpy(peer.greatest_timestamp, greatest_timestamp,
+         sizeof(peer.greatest_timestamp));
 
   err_t status = wireguardif_add_peer(&s_wg_netif, &peer, &s_peer_index);
   if (status != ERR_OK) {
     teardown_locked();
     return false;
   }
+  copy_peer_key(s_peer_key, remote_peer_public_key);
 
   netif_set_up(&s_wg_netif);
   status = wireguardif_connect(&s_wg_netif, s_peer_index);

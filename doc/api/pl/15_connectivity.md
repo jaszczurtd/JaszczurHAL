@@ -2207,6 +2207,26 @@ bool hal_wireguard_kick_handshake_text(const char *probe_ip_text,
   uzgadnianie.
 - `hal_wireguard_kick_handshake_text(...)` analizuje tekstowy adres IP sondy
   w zapisie kropkowym i wywołuje `hal_wireguard_kick_handshake(...)`.
+- Uruchomienie tunelu wymaga zsynchronizowanego zegara. Tunel przyjmuje
+  inicjację uzgadniania od peera tylko wtedy, gdy jej znacznik czasu jest
+  nowszy od każdej inicjacji przyjętej wcześniej dla tego samego klucza peera,
+  także przed `hal_wireguard_end()`, oraz od odczytu zegara w chwili
+  `hal_wireguard_begin()` pomniejszonego o 120 s. Ten próg nie przesuwa się
+  później razem z zegarem, a reset urządzenia kasuje zapamiętane inicjacje.
+  Urządzenie samo rozpoczyna uzgadnianie, więc tunel zestawia się również
+  wtedy, gdy zegar peera się spóźnia.
+- Adres punktu końcowego peera zmieniają tylko dwa rodzaje pakietów: pakiet
+  danych lub keep-alive, który przeszedł uwierzytelnienie i nie jest
+  powtórzeniem, oraz poprawna odpowiedź na inicjację uzgadniania wysłaną przez
+  urządzenie. Na inicjację uzgadniania od peera, także przyjętą według
+  powyższych zasad, tunel odpowiada na jej adres źródłowy. Taka inicjacja nie
+  zmienia punktu końcowego i nie przerywa uzgadniania, które urządzenie już
+  rozpoczęło, więc powtórzona inicjacja nie przekieruje tunelu ani nie
+  zatrzyma jego uzgadniania.
+- Po 540 s bez nowej sesji tunel usuwa klucze i wraca do skonfigurowanego
+  punktu końcowego.
+- Tunel przenosi wyłącznie IPv4. Wewnętrzne pakiety IPv6 są odrzucane na każdej
+  platformie, także na ESP32, którego lwIP ma włączone IPv6.
 
 - **Wspólna implementacja modułu:** dołączony silnik protokołu
   i kryptografii wraz z prywatnym portem rozszerzenia lwIP. Korzystają z niego

@@ -2093,6 +2093,25 @@ bool hal_wireguard_kick_handshake_text(const char *probe_ip_text,
 - `hal_wireguard_peer_up_quick(...)` is a no-argument convenience check equivalent to `hal_wireguard_peer_up(NULL, 0u, NULL)`.
 - `hal_wireguard_kick_handshake(...)` triggers non-blocking handshake probe.
 - `hal_wireguard_kick_handshake_text(...)` parses dotted probe IP text and delegates to `hal_wireguard_kick_handshake(...)`.
+- Starting the tunnel needs a synchronized wall clock. The tunnel accepts a
+  handshake initiation from the peer only when its timestamp is newer than
+  every initiation accepted before from the same peer key, also before
+  `hal_wireguard_end()`, and newer than the clock reading at
+  `hal_wireguard_begin()` minus 120 s. That limit does not follow the clock
+  later on, and a device reset clears the remembered initiations. The device
+  starts its own handshakes, so the tunnel comes up even when the peer's clock
+  lags behind.
+- The peer endpoint follows the source address of two kinds of packets only:
+  authenticated, non-replayed data packets and keep-alives, and the valid
+  response to the device's own handshake initiation. A handshake initiation
+  from the peer, also one accepted under the rules above, gets its response at
+  its source address. It leaves the endpoint as it is and does not cancel a
+  handshake the device has already started, so a replayed initiation can
+  neither redirect the tunnel nor stall its handshake.
+- After 540 s without a new session the tunnel wipes its keys and goes back to
+  the configured endpoint.
+- Only IPv4 travels through the tunnel. Inner IPv6 packets are dropped on every
+  target, also on ESP32, whose lwIP is built with IPv6.
 
 - **shared thematic implementation:** bundled protocol/crypto engine plus a private lwIP-extension
   port used by capability-advertised host-stack backends.

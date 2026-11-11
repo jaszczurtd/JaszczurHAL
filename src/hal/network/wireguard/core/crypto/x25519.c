@@ -9,6 +9,7 @@
  * @brief Key exchange and signatures based on X25519.
  */
 #include "x25519.h"
+#include "crypto.h"
 #include <stdint.h>
 // #include "strobe.h"
 // #include "strobe_config.h"
@@ -311,6 +312,8 @@ int x25519(uint8_t out[X25519_BYTES], const uint8_t scalar[X25519_BYTES],
   mul((limb_t *)out, x2, z3, NLIMBS);
   int ret = canon((limb_t *)out);
 #endif
+  // Clear the ladder state from the stack
+  crypto_zero(xs, sizeof(xs));
   if (clamp)
     return ret;
   else

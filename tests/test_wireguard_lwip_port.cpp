@@ -54,6 +54,17 @@ unsigned shutdown_count;
 // sends their RSTs through the interface, so the device must still exist.
 void *state_at_remove;
 unsigned platform_init_count;
+// Greatest handshake timestamp the client hands to the engine with the peer,
+// and the value the engine reports back before the peer is removed.
+uint8_t added_greatest_timestamp[WIREGUARDIF_TIMESTAMP_LEN];
+uint8_t engine_greatest_timestamp[WIREGUARDIF_TIMESTAMP_LEN];
+unsigned greatest_timestamp_reads;
+u8_t greatest_timestamp_read_index;
+
+// fake_tai64n_now() reports bytes 0..11: 0x0001020304050607 seconds and
+// 0x08090a0b nanoseconds. 120 s earlier, nanoseconds cleared:
+const uint8_t kClockFloorTimestamp[WIREGUARDIF_TIMESTAMP_LEN] = {
+    0x00u, 0x01u, 0x02u, 0x03u, 0x04u, 0x05u, 0x05u, 0x8fu, 0u, 0u, 0u, 0u};
 
 hal_status_t fake_stack_enter(void *context, bool require_ipv4) {
   ExtensionState *state = static_cast<ExtensionState *>(context);
@@ -194,12 +205,26 @@ void wireguardif_shutdown(netif *network_interface) {
 
 void wireguardif_peer_init(wireguardif_peer *) {}
 
-err_t wireguardif_add_peer(netif *, wireguardif_peer *, u8_t *peer_index) {
+err_t wireguardif_add_peer(netif *, wireguardif_peer *peer, u8_t *peer_index) {
   ++peer_add_count;
+  std::memcpy(added_greatest_timestamp, peer->greatest_timestamp,
+              sizeof(added_greatest_timestamp));
   if (add_peer_status == ERR_OK && peer_index != nullptr) {
     *peer_index = 3u;
   }
   return add_peer_status;
+}
+
+err_t wireguardif_peer_greatest_timestamp(netif *, u8_t peer_index,
+                                          uint8_t *timestamp, size_t max_len) {
+  ++greatest_timestamp_reads;
+  greatest_timestamp_read_index = peer_index;
+  if (timestamp == nullptr || max_len < sizeof(engine_greatest_timestamp)) {
+    return ERR_ARG;
+  }
+  std::memcpy(timestamp, engine_greatest_timestamp,
+              sizeof(engine_greatest_timestamp));
+  return ERR_OK;
 }
 
 err_t wireguardif_remove_peer(netif *, u8_t) {
@@ -284,6 +309,10 @@ void setUp(void) {
   poll_count = 0u;
   shutdown_count = 0u;
   platform_init_count = 0u;
+  std::memset(added_greatest_timestamp, 0, sizeof(added_greatest_timestamp));
+  std::memset(engine_greatest_timestamp, 0, sizeof(engine_greatest_timestamp));
+  greatest_timestamp_reads = 0u;
+  greatest_timestamp_read_index = WIREGUARDIF_INVALID_INDEX;
   netif_default = &underlay_netif;
 }
 
@@ -572,6 +601,58 @@ void test_peer_endpoint_and_probe_retry_rate_limit(void) {
   wireguard.end();
 }
 
+// A fresh peer would accept one replayed initiation of the server and move its
+// endpoint (GHSA-7grw-r329-8g8c issue 4): begin() hands the engine the clock
+// minus the tolerance as the greatest timestamp seen.
+void test_begin_rejects_server_initiations_older_than_the_clock_tolerance(
+    void) {
+  JHWireGuardClient wireguard;
+  const uint8_t local_ip[4] = {10u, 8u, 0u, 2u};
+  TEST_ASSERT_TRUE(
+      wireguard.begin(local_ip, "private", "wg.example", "public", 51820u));
+  TEST_ASSERT_EQUAL_HEX8_ARRAY(kClockFloorTimestamp, added_greatest_timestamp,
+                               sizeof(kClockFloorTimestamp));
+  wireguard.end();
+}
+
+// end() keeps the greatest timestamp the engine accepted, so reconnecting to
+// the same server does not reopen the replay window; another server key, or
+// a kept value below the clock floor, starts from the floor.
+void test_end_keeps_the_greatest_timestamp_for_the_same_server(void) {
+  JHWireGuardClient wireguard;
+  const uint8_t local_ip[4] = {10u, 8u, 0u, 2u};
+  const uint8_t accepted[WIREGUARDIF_TIMESTAMP_LEN] = {
+      0x00u, 0x01u, 0x02u, 0x03u, 0x04u, 0x05u, 0x06u, 0x00u, 0u, 0u, 0u, 5u};
+  const uint8_t stale[WIREGUARDIF_TIMESTAMP_LEN] = {
+      0x00u, 0x01u, 0x02u, 0x03u, 0x04u, 0x05u, 0x05u, 0x80u, 0u, 0u, 0u, 0u};
+
+  TEST_ASSERT_TRUE(
+      wireguard.begin(local_ip, "private", "wg.example", "server-a", 51820u));
+  std::memcpy(engine_greatest_timestamp, accepted, sizeof(accepted));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, wireguard.end());
+  TEST_ASSERT_EQUAL_UINT32(1u, greatest_timestamp_reads);
+  TEST_ASSERT_EQUAL_UINT8(3u, greatest_timestamp_read_index);
+
+  TEST_ASSERT_TRUE(
+      wireguard.begin(local_ip, "private", "wg.example", "server-a", 51820u));
+  TEST_ASSERT_EQUAL_HEX8_ARRAY(accepted, added_greatest_timestamp,
+                               sizeof(accepted));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, wireguard.end());
+
+  TEST_ASSERT_TRUE(
+      wireguard.begin(local_ip, "private", "wg.example", "server-b", 51820u));
+  TEST_ASSERT_EQUAL_HEX8_ARRAY(kClockFloorTimestamp, added_greatest_timestamp,
+                               sizeof(kClockFloorTimestamp));
+  std::memcpy(engine_greatest_timestamp, stale, sizeof(stale));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, wireguard.end());
+
+  TEST_ASSERT_TRUE(
+      wireguard.begin(local_ip, "private", "wg.example", "server-b", 51820u));
+  TEST_ASSERT_EQUAL_HEX8_ARRAY(kClockFloorTimestamp, added_greatest_timestamp,
+                               sizeof(kClockFloorTimestamp));
+  wireguard.end();
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_extension_validates_and_balances_stack_guard);
@@ -583,5 +664,8 @@ int main(void) {
   RUN_TEST(test_repeated_begin_end_does_not_leak_route_or_backend_state);
   RUN_TEST(test_stack_and_resolver_failures_do_not_mutate_lwip);
   RUN_TEST(test_peer_endpoint_and_probe_retry_rate_limit);
+  RUN_TEST(
+      test_begin_rejects_server_initiations_older_than_the_clock_tolerance);
+  RUN_TEST(test_end_keeps_the_greatest_timestamp_for_the_same_server);
   return UNITY_END();
 }

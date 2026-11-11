@@ -2393,6 +2393,27 @@ target_compile_definitions(test_wireguardif_lwip_heap PRIVATE
 target_link_libraries(test_wireguardif_lwip_heap PRIVATE lwip_host_core hal_mock)
 jh_enable_host_warnings(test_wireguardif_lwip_heap ERRORS)
 add_test(NAME test_wireguardif_lwip_heap COMMAND test_wireguardif_lwip_heap)
+# Two real engines exchanging captured datagrams: replay, forged cookie,
+# short plaintext, rate limit and session reset (GHSA-7grw-r329-8g8c).
+add_executable(test_wireguardif_protocol
+    test_wireguardif_protocol.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/wireguard/core/wireguardif.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/wireguard/core/wireguard.c
+)
+target_include_directories(test_wireguardif_protocol BEFORE PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/lwip_host
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/wireguard/core
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_compile_definitions(test_wireguardif_protocol PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_WIREGUARD
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+target_link_libraries(test_wireguardif_protocol PRIVATE lwip_host_core hal_mock)
+jh_enable_host_warnings(test_wireguardif_protocol ERRORS)
+add_test(NAME test_wireguardif_protocol COMMAND test_wireguardif_protocol)
 add_executable(test_ntp_client
     test_ntp_client.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c

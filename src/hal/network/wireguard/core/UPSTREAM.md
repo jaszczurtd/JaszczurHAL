@@ -11,6 +11,28 @@ the later RP2040 adaptation by Marcin Kielesiński. Copyright,
 attribution, and redistribution terms are preserved in `LICENSE` and in the
 individual source headers.
 
+The engine includes the security fixes of
+[wireguard-lwip](https://github.com/smartalock/wireguard-lwip) up to commit
+`cfba916` (advisory GHSA-7grw-r329-8g8c), with these differences:
+
+- the client seeds the greatest handshake timestamp of the peer from the
+  synchronized clock and keeps it across `end()`/`begin()`, instead of the
+  upstream callback for saving it;
+- a handshake initiation does not move the peer endpoint: the response goes to
+  its source address and the endpoint follows authenticated transport packets
+  and the response to the device's own initiation, so a replayed initiation
+  that the timestamp check lets through (after a device reset, or one that
+  never arrived) cannot redirect the tunnel;
+- a received initiation is handled in a separate responder state of the
+  device, so neither such a replay nor a real initiation of the peer that
+  crosses ours cancels the initiation this device has in flight;
+- a peer reset after 540 s depends on a session flag rather than on a zero
+  timestamp, so a session created when the millisecond counter reads 0 is not
+  reset at once;
+- inner packets other than IPv4 are always dropped, also where lwIP is built
+  with IPv6;
+- the HChaCha20 state is wiped as well.
+
 The JaszczurHAL integration replaced the target-specific wrapper with:
 
 - `wireguard_port.h`, which maps logging and timing helpers to public HAL APIs;

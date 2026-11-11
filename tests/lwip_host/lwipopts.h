@@ -10,7 +10,8 @@
 #define SYS_LIGHTWEIGHT_PROT 0
 #define LWIP_TIMERS 1
 
-#define MEM_ALIGNMENT 4
+/* The host is 64-bit: heap blocks hold struct pbuf and its pointers. */
+#define MEM_ALIGNMENT 8
 #define MEM_LIBC_MALLOC 0
 #define MEM_SIZE (12u * 1024u)
 #define MEMP_MEM_MALLOC 0
@@ -38,7 +39,8 @@
 
 #define LWIP_NETIF_STATUS_CALLBACK 1
 #define LWIP_NETIF_LINK_CALLBACK 1
-#define MEMP_NUM_SYS_TIMEOUT (LWIP_NUM_SYS_TIMEOUT_INTERNAL + 1)
+/* One periodic timer per WireGuard engine: two in the protocol test. */
+#define MEMP_NUM_SYS_TIMEOUT (LWIP_NUM_SYS_TIMEOUT_INTERNAL + 2)
 
 #define LWIP_STATS 1
 #define MEM_STATS 1

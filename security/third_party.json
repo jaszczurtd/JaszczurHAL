@@ -410,7 +410,7 @@
       ],
       "upstream": "https://github.com/jaszczurtd/arduino-wireguard-pico-w",
       "feature_flags": ["HAL_ENABLE_WIREGUARD"],
-      "notes": "WireGuard-ESP32-derived protocol engine imported from the 0.1.8 JaszczurHAL fork commit and adapted to use the target-neutral lwIP extension."
+      "notes": "WireGuard-ESP32-derived protocol engine imported from the 0.1.8 JaszczurHAL fork commit and adapted to use the target-neutral lwIP extension. Includes the wireguard-lwip security fixes up to cfba916 (GHSA-7grw-r329-8g8c)."
     },
     {
       "name": "WireGuard crypto core",

@@ -138,6 +138,7 @@ void chacha20poly1305_encrypt(uint8_t *dst, const uint8_t *src, size_t src_len,
   // Make sure we leave nothing sensitive on the stack
   crypto_zero(&chacha20_state, sizeof(chacha20_state));
   crypto_zero(&block, sizeof(block));
+  crypto_zero(&poly1305_state, sizeof(poly1305_state));
 }
 
 // 2.8.  AEAD Construction (Decryption)
@@ -205,6 +206,12 @@ bool chacha20poly1305_decrypt(uint8_t *dst, const uint8_t *src, size_t src_len,
       chacha20(&chacha20_state, dst, src, dst_len);
       result = true;
     }
+
+    // Make sure we leave nothing sensitive on the stack
+    crypto_zero(&chacha20_state, sizeof(chacha20_state));
+    crypto_zero(&mac, sizeof(mac));
+    crypto_zero(&block, sizeof(block));
+    crypto_zero(&poly1305_state, sizeof(poly1305_state));
   }
   return result;
 }
@@ -255,6 +262,7 @@ bool chacha20poly1305_encrypt_ietf_detached(
 
   crypto_zero(&chacha20_state, sizeof(chacha20_state));
   crypto_zero(&block, sizeof(block));
+  crypto_zero(&poly1305_state, sizeof(poly1305_state));
   return true;
 }
 
@@ -309,6 +317,7 @@ bool chacha20poly1305_decrypt_ietf_detached(
   crypto_zero(&chacha20_state, sizeof(chacha20_state));
   crypto_zero(&block, sizeof(block));
   crypto_zero(&mac, sizeof(mac));
+  crypto_zero(&poly1305_state, sizeof(poly1305_state));
   return result;
 }
 

@@ -16,6 +16,19 @@ extern "C" {
  * or HAL_EHW when the RP CYW43 board hardware is respectively absent,
  * inactive or known to have failed. Pure IPv4 parsing remains available
  * without initialized network hardware.
+ *
+ * Starting the tunnel needs a synchronized wall clock. The tunnel accepts a
+ * handshake initiation from the peer only when its timestamp is newer than
+ * every initiation accepted before from the same peer key, also before
+ * hal_wireguard_end(), and newer than the clock reading at
+ * hal_wireguard_begin() minus 120 s. That limit does not follow the clock
+ * later on, and a device reset clears the remembered initiations. An accepted
+ * initiation gets its response at its source address. It neither moves the
+ * peer endpoint, which follows authenticated data packets and the response to
+ * the device's own handshake initiation, nor cancels a handshake the device
+ * has already started. The device starts its own handshakes, so the tunnel
+ * comes up even when the peer's clock lags behind. Only IPv4 packets travel
+ * through the tunnel.
  */
 
 #include "hal/core/hal_status.h"
