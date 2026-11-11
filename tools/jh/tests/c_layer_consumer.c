@@ -2,6 +2,7 @@
 // jh_unified_diff writes the lines difflib.unified_diff(..., lineterm="")
 // writes, and inputs that point into the string a call replaces keep their
 // bytes. test_containers.cpp runs jh_test_c_layer() with a work directory.
+#include "jh_config_expression.h"
 #include "jh_failure.h"
 #include "jh_generated_output.h"
 #include "jh_json_file.h"
@@ -349,6 +350,86 @@ static void build_paths(void) {
   jh_failure_destroy(&failure);
 }
 
+/* The C port replaces a list only after reading all borrowed input, and
+ * separates a numeric range failure from syntax and resource limits. The
+ * reader relies on that distinction when a macro has no integer value. */
+static void config_expression(void) {
+  jh_failure_t failure;
+  jh_failure_init(&failure);
+  jb_vector_t tokens = {0};
+  expect(jh_list_init(&tokens) == HAL_OK &&
+             jh_list_push(&tokens, jh_span("prefix 1 + 2")) == HAL_OK,
+         "expression input owner");
+  jb_json_span_t input = jh_string_span(jh_list_at(&tokens, 0));
+  input.data += 7;
+  input.length -= 7;
+  expect(jh_config_tokenize(input, &tokens, &failure) == HAL_OK &&
+             jb_vector_size(&tokens) == 3 &&
+             equals(jh_list_at(&tokens, 0), "1") &&
+             equals(jh_list_at(&tokens, 2), "2"),
+         "tokenization borrows a substring from the replaced list");
+  expect(jh_config_tokenize(jh_span("1 @"), &tokens, &failure) == HAL_ECONFIG &&
+             jb_vector_size(&tokens) == 3 &&
+             equals(jh_list_at(&tokens, 2), "2") &&
+             equals(&failure.message, "cannot evaluate ' @'"),
+         "failed tokenization preserves the list and unparsed whitespace");
+
+  const jb_json_span_t sum[] = {jh_string_span(jh_list_at(&tokens, 0)),
+                                jh_string_span(jh_list_at(&tokens, 1)),
+                                jh_string_span(jh_list_at(&tokens, 2))};
+  int64_t value = 42;
+  bool range_error = true;
+  expect(jh_config_expression(sum, COUNTOF(sum), &value, &range_error,
+                              &failure) == HAL_OK &&
+             value == 3 && !range_error,
+         "C expression result and cleared range flag");
+  const jb_json_span_t overflow[] = {jh_span("9223372036854775807"),
+                                     jh_span("+"), jh_span("1")};
+  expect(jh_config_expression(overflow, COUNTOF(overflow), &value, &range_error,
+                              &failure) == HAL_EOVERFLOW &&
+             range_error && value == 3 && failure.exit_code == 4 &&
+             equals(&failure.message, "9223372036854775807 + 1"),
+         "arithmetic range leaves the previous result");
+  const jb_json_span_t invalid[] = {jh_span("1"), jh_span("||"), jh_span("09")};
+  expect(jh_config_expression(invalid, COUNTOF(invalid), &value, &range_error,
+                              &failure) == HAL_EPROTO &&
+             !range_error && value == 3 && failure.exit_code == 2 &&
+             equals(&failure.message, "invalid octal literal '09'"),
+         "invalid skipped literal resets the range flag");
+
+  /* 257 unary operators cross the nesting limit without a numeric overflow. */
+  jb_vector_t nested = {0};
+  hal_status_t status =
+      jb_vector_init(&nested, sizeof(jb_json_span_t), jb_heap_allocator());
+  const jb_json_span_t negate = jh_span("!"), one = jh_span("1");
+  for (size_t i = 0; status == HAL_OK && i < 257; ++i)
+    status = jb_vector_append(&nested, &negate, 1);
+  if (status == HAL_OK)
+    status = jb_vector_append(&nested, &one, 1);
+  expect(status == HAL_OK, "nesting input");
+  if (status == HAL_OK) {
+    range_error = true;
+    expect(jh_config_expression(jb_vector_const_data(&nested),
+                                jb_vector_size(&nested), &value, &range_error,
+                                &failure) == HAL_EOVERFLOW &&
+               !range_error && value == 3 && failure.exit_code == 4 &&
+               equals(&failure.message, "condition nests more than 256 levels"),
+           "nesting limit is distinct from arithmetic range");
+  }
+  jb_vector_destroy(&nested);
+  expect(jh_config_expression(NULL, 0, &value, &range_error, &failure) ==
+                 HAL_ECONFIG &&
+             !range_error && value == 3 &&
+             equals(&failure.message, "expected operand in condition"),
+         "empty expression is a syntax failure");
+  expect(jh_config_tokenize((jb_json_span_t){NULL, 0}, &tokens, &failure) ==
+                 HAL_OK &&
+             jb_vector_size(&tokens) == 0,
+         "empty input releases the previous list");
+  jh_list_destroy(&tokens);
+  jh_failure_destroy(&failure);
+}
+
 int jh_test_c_layer(const char *directory) {
   failures = 0;
   diff();
@@ -358,5 +439,6 @@ int jh_test_c_layer(const char *directory) {
   float_repr(directory);
   float_append_failure();
   build_paths();
+  config_expression();
   return failures;
 }

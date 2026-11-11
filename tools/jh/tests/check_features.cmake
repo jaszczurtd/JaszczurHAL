@@ -799,10 +799,12 @@ if(NOT CMAKE_HOST_WIN32)
   # kernel and generate_board_config.py did; Windows removes ".." first.
   set(linked "${JH_WORK}/board-linked")
   file(MAKE_DIRECTORY "${linked}/.build/actual/child" "${linked}/.build/alias"
-    "${linked}/top" "${linked}/real/.build")
+    "${linked}/top" "${linked}/real/.build" "${JH_WORK}/outside")
   file(CREATE_LINK "../actual/child" "${linked}/.build/alias/link" SYMBOLIC)
   file(CREATE_LINK "actual/child" "${linked}/.build/later" SYMBOLIC)
-  file(CREATE_LINK "/" "${linked}/.build/absolute" SYMBOLIC)
+  # An absolute target outside the output root, not /: tools that follow
+  # links would walk the whole machine from a build tree that keeps it.
+  file(CREATE_LINK "${JH_WORK}/outside" "${linked}/.build/absolute" SYMBOLIC)
   file(CREATE_LINK "fresh" "${linked}/.build/dangling" SYMBOLIC)
   file(CREATE_LINK "loop" "${linked}/.build/loop" SYMBOLIC)
   file(CREATE_LINK "../real/.build/inner" "${linked}/top/link" SYMBOLIC)
@@ -817,11 +819,21 @@ if(NOT CMAKE_HOST_WIN32)
   config_writes("${linked}/.build/actual/relative" --output-root "${linked}/.build"
     --output-dir "../board-linked/.build/alias/link/../relative")
   # A relative JH_MANAGED_BUILD_ROOT too: to-root in that directory leads to
-  # the filesystem root, the output root without a .build component.
+  # the filesystem root, the output root without a .build component. Only /
+  # has none wherever the build lies, so the link goes before the result is
+  # checked: a failed case must not leave it either.
   file(CREATE_LINK "/" "${JH_WORK}/cwd/to-root" SYMBOLIC)
   set(ENV{JH_MANAGED_BUILD_ROOT} "to-root")
-  config_writes("${linked}/managed" --output-root "/" --output-dir "${linked}/managed")
+  execute_process(COMMAND "${JH}" board config --root "${JH_HAL_SOURCE}" --target rp2040
+      --output-root "/" --output-dir "${linked}/managed"
+    WORKING_DIRECTORY "${JH_WORK}/cwd" RESULT_VARIABLE code OUTPUT_VARIABLE stdout
+    ERROR_VARIABLE stderr ENCODING UTF-8)
   unset(ENV{JH_MANAGED_BUILD_ROOT})
+  file(REMOVE "${JH_WORK}/cwd/to-root")
+  if(NOT code STREQUAL "0" OR NOT EXISTS "${linked}/managed/jh_board_config.h")
+    message(FATAL_ERROR
+      "board config below a relative managed build root: exit ${code}\n${stdout}\n${stderr}")
+  endif()
   config_writes("${linked}/.build/actual/child/after" --output-root "${linked}/.build"
     --output-dir "${linked}/.build/missing/../later/after")
   config_writes("${linked}/.build/fresh" --output-root "${linked}/.build"
@@ -829,7 +841,8 @@ if(NOT CMAKE_HOST_WIN32)
   config_writes("${linked}/real/.build/linked-root" --output-root "${linked}/top/link/.."
     --output-dir "${linked}/real/.build/linked-root")
   file(REAL_PATH "${linked}" real_linked)
-  config_fails("output directory must be below ${real_linked}/.build, got /etc"
+  file(REAL_PATH "${JH_WORK}/outside" real_outside)
+  config_fails("output directory must be below ${real_linked}/.build, got ${real_outside}/etc"
     --target rp2040 --output-root "${linked}/.build"
     --output-dir "${linked}/.build/absolute/etc")
   invoke(3 board config --root "${JH_HAL_SOURCE}" --target rp2040 --json
@@ -951,4 +964,22 @@ invoke(2 generate boards --root "${JH_HAL_SOURCE}" --boards-root "${JH_WORK}/boa
 string(JSON message GET "${stdout}" message)
 if(NOT message STREQUAL "board 'pico2' requires target-specific fallback definitions")
   message(FATAL_ERROR "Target-specific board definitions gave another message: ${message}")
+endif()
+# No link left in the work directory may lead to a directory that holds it,
+# such as /: an editor indexer, grep -R or find -L would walk the whole tree
+# below it from the build directory, network mounts included. The checks make
+# links only outside Windows.
+if(NOT CMAKE_HOST_WIN32)
+  file(GLOB_RECURSE work_entries LIST_DIRECTORIES true "${JH_WORK}/*")
+  foreach(entry IN LISTS work_entries)
+    if(IS_SYMLINK "${entry}")
+      file(READ_SYMLINK "${entry}" target)
+      cmake_path(GET entry PARENT_PATH holder)
+      cmake_path(ABSOLUTE_PATH target BASE_DIRECTORY "${holder}" NORMALIZE)
+      cmake_path(IS_PREFIX target "${holder}" NORMALIZE encloses)
+      if(encloses)
+        message(FATAL_ERROR "${entry} links to ${target}, a directory that holds the link")
+      endif()
+    endif()
+  endforeach()
 endif()

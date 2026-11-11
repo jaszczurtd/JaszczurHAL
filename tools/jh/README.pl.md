@@ -692,8 +692,10 @@ zegarów razem z kontrolami kodu, który ustawia zegary.
 Moduł C11 [jh_project_build.h](config/jh_project_build.h) wybiera jedną
 kompilację projektu, zbiera żądane funkcje i generuje plik CMake. Otrzymuje
 model istniejącego czytnika przez przejściowy callback C++.
-Walidator schematów,
-czytnik konfiguracji
-projektu, katalog typów i `main.cpp` są jeszcze w C++. Korzystają z modułów C
+[jh_config_expression.h](config/jh_config_expression.h) udostępnia w C11
+operacje tekstowe czytnika, tokenizację warunków i arytmetykę ze znakiem
+na liczbach 64-bitowych. Czytnik dopisuje miejsce w źródle do komunikatów
+i rozwija makra przed obliczeniem wyrażenia. Walidator schematów, pozostała
+część czytnika, katalog typów i `main.cpp` są jeszcze w C++. Korzystają z modułów C
 przez właścicieli zasobów i wyjątki z [cxx/](cxx/), które znikną razem
 z ostatnim wywołującym w C++.

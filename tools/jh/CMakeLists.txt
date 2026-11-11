@@ -63,9 +63,9 @@ target_link_libraries(jh_sha256 PUBLIC jb::status)
 jh_tool_target(jh_sha256)
 add_library(jh_registry STATIC config/jh_feature_registry.c config/jh_board_outputs.c
   config/jh_feature_lint.c config/jh_board_registry.c config/jh_clock_registry.c
-  config/jh_project_build.c)
+  config/jh_project_build.c config/jh_config_expression.c)
 target_include_directories(jh_registry PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/config")
-target_link_libraries(jh_registry PUBLIC jh_files PRIVATE jh_sha256 pcre2-8-static)
+target_link_libraries(jh_registry PUBLIC jh_files PRIVATE jh_sha256 pcre2-8-static jb::unicode)
 jh_tool_target(jh_registry)
 # Transitional C++: owners of the jhbase string and vector, and the
 # exceptions and owners the C++ modules below use over the C modules above.

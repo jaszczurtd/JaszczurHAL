@@ -1,12 +1,11 @@
 #include "jh_project_config.h"
+#include "jh_config_expression.h"
 #include "jh_failure.h"
 #include "jh_stl_bridge.h"
 #include <algorithm>
 #include <filesystem>
 #include <jb/file.h>
-#include <jb/unicode.h>
 #include <jb/utf8.h>
-#include <limits>
 #include <system_error>
 
 namespace jh::config {
@@ -24,9 +23,6 @@ constexpr size_t max_include_depth = 16;
 // Limits of jh where Python has none or stops on its recursion limit.
 constexpr size_t max_file_bytes = 16 * 1024 * 1024;
 constexpr size_t max_macro_nesting = 1000;
-constexpr size_t max_condition_nesting = 256;
-constexpr int64_t int64_max = std::numeric_limits<int64_t>::max();
-constexpr int64_t int64_min = std::numeric_limits<int64_t>::min();
 
 /* A computed value outside int64_t; the caller decides what it means. */
 struct range_error {
@@ -60,79 +56,34 @@ struct work_budget {
 // Files are valid UTF-8; whitespace is str.isspace() of Python, everything
 // else the reader classifies is ASCII.
 
-uint32_t scalar_at(const std::string &text, size_t offset, size_t *length) {
-  uint32_t scalar = 0;
-  size_t used = 1;
-  if (jb_utf8_decode(text.data() + offset, text.size() - offset, &scalar,
-                     &used) != HAL_OK) {
-    scalar = static_cast<unsigned char>(text[offset]);
-    used = 1;
-  }
-  *length = used;
-  return scalar;
-}
-
 size_t scalar_length(const std::string &text, size_t offset) {
   size_t used;
-  (void)scalar_at(text, offset, &used);
+  (void)jh_config_scalar_at(span(text), offset, &used);
   return used;
 }
 
 bool space_at(const std::string &text, size_t offset, size_t *length) {
-  const auto byte = static_cast<unsigned char>(text[offset]);
-  if (byte < 0x80) {
-    // str.isspace() of ASCII: \t to \r, the separators 0x1C to 0x1F, space.
-    *length = 1;
-    return (byte >= 0x09 && byte <= 0x0D) || (byte >= 0x1C && byte <= 0x20);
-  }
-  const uint32_t scalar = scalar_at(text, offset, length);
-  jb_unicode_properties_t properties;
-  return jb_unicode_properties(scalar, &properties) == HAL_OK &&
-         properties.whitespace;
+  return jh_config_space_at(span(text), offset, length);
 }
 
 size_t skip_space(const std::string &text, size_t offset) {
-  size_t used;
-  while (offset < text.size() && space_at(text, offset, &used))
-    offset += used;
-  return offset;
-}
-
-size_t previous_scalar(const std::string &text, size_t end, size_t floor) {
-  size_t start = end - 1;
-  while (start > floor &&
-         (static_cast<unsigned char>(text[start]) & 0xC0) == 0x80)
-    --start;
-  return start;
+  return jh_config_skip_space(span(text), offset);
 }
 
 std::string rstrip(const std::string &text) {
-  size_t end = text.size(), used;
-  while (end > 0) {
-    const size_t start = previous_scalar(text, end, 0);
-    if (!space_at(text, start, &used))
-      break;
-    end = start;
-  }
-  return text.substr(0, end);
+  const auto result = jh_config_rstrip(span(text));
+  return std::string(result.data, result.length);
 }
 
 std::string strip(const std::string &text) {
-  const size_t begin = skip_space(text, 0);
-  return rstrip(text.substr(begin));
+  return rstrip(text.substr(skip_space(text, 0)));
 }
 
-bool ascii_letter(char c) {
-  return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
-}
-bool ascii_digit(char c) { return c >= '0' && c <= '9'; }
-bool name_start(char c) { return ascii_letter(c) || c == '_'; }
-bool name_part(char c) { return name_start(c) || ascii_digit(c); }
-
+bool ascii_digit(char c) { return jh_config_digit(c); }
+bool name_start(char c) { return jh_config_name_start(c); }
+bool name_part(char c) { return jh_config_name_part(c); }
 bool identifier(const std::string &text) {
-  if (text.empty() || !name_start(text[0]))
-    return false;
-  return std::all_of(text.begin() + 1, text.end(), name_part);
+  return jh_config_identifier(span(text));
 }
 
 bool feature_name(const std::string &name) {
@@ -341,382 +292,32 @@ bool split_directive(const std::string &text, const source_line &line,
 
 // ── Expressions ─────────────────────────────────────────────────────────────
 
-size_t literal_suffix(const std::string &text, size_t i) {
-  while (i < text.size() &&
-         std::string("uUlL").find(text[i]) != std::string::npos)
-    ++i;
-  return i;
-}
-
-/* End of the condition token at i, or i: the alternatives of _TOKEN in
- * their order (number, character, name, operator). */
-size_t token_end(const std::string &text, size_t i) {
-  const size_t size = text.size();
-  const char c = text[i];
-  const char next = i + 1 < size ? text[i + 1] : 0;
-  if (c == '0' && (next == 'x' || next == 'X') && i + 2 < size &&
-      jh_hex_digit(text[i + 2]) >= 0) {
-    size_t j = i + 2;
-    while (j < size && jh_hex_digit(text[j]) >= 0)
-      ++j;
-    return literal_suffix(text, j);
-  }
-  if (c == '0' && (next == 'b' || next == 'B') && i + 2 < size &&
-      (text[i + 2] == '0' || text[i + 2] == '1')) {
-    size_t j = i + 2;
-    while (j < size && (text[j] == '0' || text[j] == '1'))
-      ++j;
-    return literal_suffix(text, j);
-  }
-  if (ascii_digit(c)) {
-    size_t j = i;
-    while (j < size && ascii_digit(text[j]))
-      ++j;
-    return literal_suffix(text, j);
-  }
-  if (c == '\'') {
-    size_t j = i + 1, items = 0;
-    while (j < size && text[j] != '\'') {
-      if (text[j] == '\\') {
-        if (j + 1 >= size)
-          break;
-        j += 1 + scalar_length(text, j + 1);
-      } else {
-        j += scalar_length(text, j);
-      }
-      ++items;
-    }
-    if (items != 0 && j < size && text[j] == '\'')
-      return j + 1;
-  }
-  if (name_start(c)) {
-    size_t j = i + 1;
-    while (j < size && name_part(text[j]))
-      ++j;
-    return j;
-  }
-  for (const char *op : {"||", "&&", "==", "!=", "<=", ">=", "<<", ">>"})
-    if (c == op[0] && next == op[1])
-      return i + 2;
-  if (std::string("-+*/%<>!~&|^?:(),").find(c) != std::string::npos)
-    return i + 1;
-  return i;
+/* Transitional adapters for the reader and macro expansion still in C++. */
+void expression_check(hal_status_t status, const failure_record &record,
+                      const std::string &source, bool range = false) {
+  if (status == HAL_OK)
+    return;
+  if (jb_string_size(&record.value.message) == 0)
+    record.check(status);
+  const std::string detail(view(record.value.message));
+  if (range)
+    throw range_error{detail};
+  reject(source, "JH-CFG-SCOPE", detail, status, record.value.exit_code);
 }
 
 std::vector<std::string> condition_tokens(const std::string &input,
                                           const std::string &source) {
-  const std::string text = strip(input);
-  std::vector<std::string> tokens;
-  size_t offset = 0;
-  while (offset < text.size()) {
-    const size_t start = skip_space(text, offset);
-    const size_t end = start < text.size() ? token_end(text, start) : start;
-    if (end == start)
-      reject(source, "JH-CFG-SCOPE",
-             "cannot evaluate " + stl::python_repr(text.substr(offset)));
-    tokens.push_back(text.substr(start, end - start));
-    offset = end;
-  }
-  return tokens;
+  string_list tokens;
+  failure_record record;
+  expression_check(
+      jh_config_tokenize(span(input), &tokens.value, &record.value), record,
+      source);
+  std::vector<std::string> out;
+  out.reserve(tokens.size());
+  for (size_t i = 0; i < tokens.size(); ++i)
+    out.emplace_back(tokens[i]);
+  return out;
 }
-
-struct literal {
-  int64_t value;
-  bool in_range;
-};
-
-uint32_t character_value(const std::string &token) {
-  size_t used;
-  if (token[1] != '\\')
-    return scalar_at(token, 1, &used);
-  switch (token[2]) {
-  case 'n':
-    return 10;
-  case 't':
-    return 9;
-  case 'r':
-    return 13;
-  case '0':
-    return 0;
-  case '\\':
-    return 92;
-  case '\'':
-    return 39;
-  case '"':
-    return 34;
-  default:
-    return scalar_at(token, 2, &used);
-  }
-}
-
-literal integer_literal(const std::string &token, const std::string &source) {
-  if (token[0] == '\'')
-    return {static_cast<int64_t>(character_value(token)), true};
-  std::string digits = token;
-  while (!digits.empty() &&
-         std::string("uUlL").find(digits.back()) != std::string::npos)
-    digits.pop_back();
-  unsigned base = 10;
-  size_t start = 0;
-  if (digits.size() > 1 && digits[0] == '0' &&
-      (digits[1] == 'x' || digits[1] == 'X')) {
-    base = 16;
-    start = 2;
-  } else if (digits.size() > 1 && digits[0] == '0' &&
-             (digits[1] == 'b' || digits[1] == 'B')) {
-    base = 2;
-    start = 2;
-  } else if (digits.size() > 1 && digits[0] == '0') {
-    base = 8;
-  }
-  uint64_t value = 0;
-  bool in_range = true;
-  for (size_t i = start; i < digits.size(); ++i) {
-    const char c = digits[i];
-    const unsigned digit = ascii_digit(c)           ? unsigned(c - '0')
-                           : (c >= 'a' && c <= 'f') ? unsigned(c - 'a' + 10)
-                                                    : unsigned(c - 'A' + 10);
-    // Python int(text, 8) refuses 8 and 9; it raises ValueError, not the
-    // reader's own error, so no caller turns it into "no value".
-    if (digit >= base)
-      reject(source, "JH-CFG-SCOPE",
-             "invalid octal literal " + stl::python_repr(token), HAL_EPROTO);
-    if (value > (static_cast<uint64_t>(int64_max) - digit) / base)
-      in_range = false;
-    else
-      value = value * base + digit;
-  }
-  return {in_range ? static_cast<int64_t>(value) : 0, in_range};
-}
-
-std::string decimal(int64_t value) { return std::to_string(value); }
-
-[[noreturn]] void out_of_range(const std::string &detail) {
-  throw range_error{detail};
-}
-
-int64_t from_bits(uint64_t bits) {
-  // Two's complement without implementation-defined conversion.
-  if (bits <= static_cast<uint64_t>(int64_max))
-    return static_cast<int64_t>(bits);
-  return -static_cast<int64_t>(~bits) - 1;
-}
-
-class parser {
-  std::vector<std::string> tokens_;
-  size_t index_ = 0;
-  const std::string &source_;
-  size_t nesting_ = 0;
-
-  [[noreturn]] void fail(const std::string &detail) const {
-    reject(source_, "JH-CFG-SCOPE", detail);
-  }
-  const std::string *peek() const {
-    return index_ < tokens_.size() ? &tokens_[index_] : nullptr;
-  }
-  const std::string &take(const char *expected = nullptr) {
-    const std::string *token = peek();
-    if (token == nullptr || (expected != nullptr && *token != expected))
-      fail(std::string("expected ") + (expected ? expected : "operand") +
-           " in condition");
-    ++index_;
-    return *token;
-  }
-  /* One more nested construct: parentheses, a unary operator, a ?: branch. */
-  struct nested {
-    parser &owner;
-    explicit nested(parser &p) : owner(p) {
-      if (++owner.nesting_ > max_condition_nesting)
-        limit(owner.source_, "condition nests more than " +
-                                 std::to_string(max_condition_nesting) +
-                                 " levels");
-    }
-    ~nested() { --owner.nesting_; }
-    nested(const nested &) = delete;
-    nested &operator=(const nested &) = delete;
-  };
-
-  int64_t conditional(bool live) {
-    const int64_t condition = binary(0, live);
-    if (peek() == nullptr || *peek() != "?")
-      return condition;
-    take("?");
-    nested guard(*this);
-    const int64_t when_true = conditional(live && condition != 0);
-    take(":");
-    const int64_t when_false = conditional(live && condition == 0);
-    return condition != 0 ? when_true : when_false;
-  }
-
-  static bool at_level(size_t level, const std::string &op) {
-    static const std::vector<std::vector<std::string>> levels = {
-        {"||"},
-        {"&&"},
-        {"|"},
-        {"^"},
-        {"&"},
-        {"==", "!="},
-        {"<", ">", "<=", ">="},
-        {"<<", ">>"},
-        {"+", "-"},
-        {"*", "/", "%"}};
-    return contains(levels[level], op);
-  }
-  static constexpr size_t level_count = 10;
-
-  int64_t binary(size_t level, bool live) {
-    if (level == level_count)
-      return unary(live);
-    int64_t value = binary(level + 1, live);
-    while (peek() != nullptr && at_level(level, *peek())) {
-      const std::string op = take();
-      const bool decided =
-          (op == "&&" && value == 0) || (op == "||" && value != 0);
-      const int64_t right = binary(level + 1, live && !decided);
-      value = apply(op, value, right, live);
-    }
-    return value;
-  }
-
-  static int64_t shift(const std::string &op, int64_t left, int64_t right) {
-    std::string direction = op;
-    uint64_t count;
-    if (right >= 0) {
-      count = static_cast<uint64_t>(right);
-    } else {
-      // Negative counts follow GCC's preprocessor extension.
-      direction = op == "<<" ? ">>" : "<<";
-      count = static_cast<uint64_t>(-(right + 1)) + 1;
-    }
-    if (direction == ">>") {
-      if (count >= 64)
-        return left < 0 ? -1 : 0;
-      return left >= 0 ? left >> count : ~((~left) >> count);
-    }
-    if (left == 0)
-      return 0;
-    if (count > 63)
-      out_of_range(decimal(left) + " " + op + " " + decimal(right));
-    const int64_t largest = int64_max >> count;
-    if (left > largest || left < -largest - 1)
-      out_of_range(decimal(left) + " " + op + " " + decimal(right));
-    return from_bits(static_cast<uint64_t>(left) << count);
-  }
-
-  static bool multiply_overflows(int64_t left, int64_t right) {
-    if (left == 0 || right == 0)
-      return false;
-    if (left > 0)
-      return right > 0 ? left > int64_max / right : right < int64_min / left;
-    return right > 0 ? left < int64_min / right : right < int64_max / left;
-  }
-
-  int64_t apply(const std::string &op, int64_t left, int64_t right, bool live) {
-    if (!live)
-      return 0; // C parses an operand it skips but computes nothing.
-    const auto range = [&]() {
-      out_of_range(decimal(left) + " " + op + " " + decimal(right));
-    };
-    if ((op == "/" || op == "%") && right == 0)
-      fail("division by zero in condition");
-    if (op == "<<" || op == ">>")
-      return shift(op, left, right);
-    if (op == "/") {
-      if (left == int64_min && right == -1)
-        range();
-      return left / right;
-    }
-    if (op == "%")
-      return right == -1 ? 0 : left % right;
-    if (op == "+") {
-      if ((right > 0 && left > int64_max - right) ||
-          (right < 0 && left < int64_min - right))
-        range();
-      return left + right;
-    }
-    if (op == "-") {
-      if ((right < 0 && left > int64_max + right) ||
-          (right > 0 && left < int64_min + right))
-        range();
-      return left - right;
-    }
-    if (op == "*") {
-      if (multiply_overflows(left, right))
-        range();
-      return left * right;
-    }
-    const auto bits_left = static_cast<uint64_t>(left);
-    const auto bits_right = static_cast<uint64_t>(right);
-    if (op == "|")
-      return from_bits(bits_left | bits_right);
-    if (op == "^")
-      return from_bits(bits_left ^ bits_right);
-    if (op == "&")
-      return from_bits(bits_left & bits_right);
-    if (op == "||")
-      return left != 0 || right != 0 ? 1 : 0;
-    if (op == "&&")
-      return left != 0 && right != 0 ? 1 : 0;
-    if (op == "==")
-      return left == right ? 1 : 0;
-    if (op == "!=")
-      return left != right ? 1 : 0;
-    if (op == "<")
-      return left < right ? 1 : 0;
-    if (op == ">")
-      return left > right ? 1 : 0;
-    if (op == "<=")
-      return left <= right ? 1 : 0;
-    return left >= right ? 1 : 0;
-  }
-
-  int64_t unary(bool live) {
-    const std::string &token = take();
-    if (token == "!" || token == "~" || token == "-" || token == "+" ||
-        token == "(") {
-      nested guard(*this);
-      if (token == "(") {
-        const int64_t value = conditional(live);
-        take(")");
-        return value;
-      }
-      const int64_t value = unary(live);
-      if (token == "!")
-        return value == 0 ? 1 : 0;
-      if (token == "~")
-        return ~value;
-      if (token == "-") {
-        if (!live)
-          return 0;
-        if (value == int64_min)
-          out_of_range("-(" + decimal(value) + ")");
-        return -value;
-      }
-      return value;
-    }
-    if (ascii_digit(token[0]) || token[0] == '\'') {
-      const literal value = integer_literal(token, source_);
-      if (value.in_range)
-        return value.value;
-      if (live)
-        out_of_range("integer " + token);
-      return 0;
-    }
-    if (identifier(token))
-      return 0; // An identifier left after expansion is 0, as in C.
-    fail("unexpected " + stl::python_repr(token) + " in condition");
-  }
-
-public:
-  parser(std::vector<std::string> tokens, const std::string &source)
-      : tokens_(std::move(tokens)), source_(source) {}
-  int64_t parse() {
-    const int64_t value = conditional(true);
-    if (peek() != nullptr)
-      fail("unexpected " + stl::python_repr(*peek()) + " in condition");
-    return value;
-  }
-};
 
 size_t defined_operand(const std::vector<std::string> &tokens, size_t index,
                        const std::string &source, std::string *name) {
@@ -792,7 +393,17 @@ int64_t evaluate(const std::string &text, const macro_table &macros,
                  const std::string &source, work_budget &budget) {
   expansion expanded{macros, source, {}, {}, budget, {}};
   expanded.run(condition_tokens(text, source));
-  return parser(std::move(expanded.out), source).parse();
+  owned_array<jb_json_span_t> tokens;
+  tokens.reserve(expanded.out.size());
+  for (const auto &token : expanded.out)
+    tokens.push_back(span(token));
+  failure_record record;
+  int64_t value = 0;
+  bool range = false;
+  const auto status = jh_config_expression(tokens.data(), tokens.size(), &value,
+                                           &range, &record.value);
+  expression_check(status, record, source, range);
+  return value;
 }
 
 /* Names and punctuators of a directive argument or a macro body, as _PP_TOKEN
