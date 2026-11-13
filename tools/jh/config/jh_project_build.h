@@ -3,7 +3,8 @@
 
 /** @file jh_project_build.h
  * One target and variant of a project, and its CMake configuration. C11.
- * The header reader is supplied by the caller until its separate port to C.
+ * The header is read by jh_project_config.h; the build works on its
+ * config.inspect result, which config build also prints.
  */
 #include "jh_board_registry.h"
 #include "jh_feature_registry.h"
@@ -12,17 +13,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/** Read a header into the config.inspect JSON model. definitions contains
- * jb_string_t entries. Empty header/preinclude means none. On success *out
- * owns a tree; on failure it remains NULL and failure records the reason.
- * The callback must catch exceptions before returning through C.
- */
-typedef hal_status_t (*jh_project_read_fn)(void *user, const char *header,
-                                           const jb_vector_t *definitions,
-                                           const char *preinclude,
-                                           jb_json_tree_t **out,
-                                           jh_failure_t *failure);
 
 /** Borrowed inputs of one build. Empty header/preinclude means none. Relative
  * paths retain the caller's spelling in build diagnostics and request sources.
@@ -45,6 +35,9 @@ typedef struct {
   jb_vector_t definitions, effective_definitions, sources, requested, requests;
   jb_string_t label;
   bool rejected; /**< A header #error, as ConfigurationRejected in Python. */
+  /** JSON bytes of declarations and config together, for sizing a result
+   * that embeds them. */
+  size_t model_bytes;
 } jh_project_build_t;
 
 /** Initialize an empty result; no allocation. */
@@ -61,11 +54,12 @@ hal_status_t jh_project_build_write(const char *path, jb_json_span_t content,
 /** Evaluate declarations, select a variant, then evaluate the build and its
  * feature requests. Does not validate requests against the feature registry.
  * result must be empty and must be destroyed on success or failure. Invalid
- * configuration has exit code 2; a header #error also sets rejected.
+ * configuration has exit code 2; a header #error also sets rejected. A header
+ * the reader rejects fails with the message of the reader, without its code
+ * and place as separate fields.
  */
 hal_status_t
 jh_project_build_evaluate(const jh_project_build_options_t *options,
-                          jh_project_read_fn read, void *user,
                           jh_project_build_t *result, jh_failure_t *failure);
 /** Validate the evaluated requests through the shared feature resolver.
  * Findings are returned as one LF-separated configuration error, exit 2.

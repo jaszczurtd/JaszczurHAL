@@ -16,7 +16,8 @@ void failure_record::check(hal_status_t status) const {
   // A record without a message is a jhbase container that could not grow.
   if (jb_string_size(&value.message) == 0)
     check_container(status);
-  throw failure{status, value.exit_code, view(value.message), {}, {}, {}};
+  throw failure{status,           value.exit_code,    view(value.message),
+                view(value.code), view(value.source), {}};
 }
 
 jb_json_span_t span(std::string_view text) {

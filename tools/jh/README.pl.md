@@ -689,13 +689,14 @@ lintu funkcji i sprawdza manifesty projektów.
 [jh_board_registry.h](config/jh_board_registry.h) wczytuje i sprawdza rejestr
 płytek, a [jh_clock_registry.h](config/jh_clock_registry.h) rejestr drzew
 zegarów razem z kontrolami kodu, który ustawia zegary.
-Moduł C11 [jh_project_build.h](config/jh_project_build.h) wybiera jedną
-kompilację projektu, zbiera żądane funkcje i generuje plik CMake. Otrzymuje
-model istniejącego czytnika przez przejściowy callback C++.
-[jh_config_expression.h](config/jh_config_expression.h) udostępnia w C11
-operacje tekstowe czytnika, tokenizację warunków i arytmetykę ze znakiem
-na liczbach 64-bitowych. Czytnik dopisuje miejsce w źródle do komunikatów
-i rozwija makra przed obliczeniem wyrażenia. Walidator schematów, pozostała
-część czytnika, katalog typów i `main.cpp` są jeszcze w C++. Korzystają z modułów C
-przez właścicieli zasobów i wyjątki z [cxx/](cxx/), które znikną razem
-z ostatnim wywołującym w C++.
+[jh_project_config.h](config/jh_project_config.h) czyta
+`hal_project_config.h`: rozwija makra, rozstrzyga warunki, odczytuje
+deklaracje targetów i wariantów, śledzi nazwy, których nie widzi, i składa
+wynik `config inspect`. Operacje tekstowe czytnika, tokenizację warunków
+i arytmetykę ze znakiem na liczbach 64-bitowych udostępnia
+[jh_config_expression.h](config/jh_config_expression.h).
+[jh_project_build.h](config/jh_project_build.h) wybiera z tego wyniku jedną
+kompilację projektu, zbiera żądane funkcje i generuje plik CMake. Walidator
+schematów, katalog typów, generator `device-defaults` i `main.cpp` są jeszcze
+w C++. Korzystają z modułów C przez właścicieli zasobów i wyjątki
+z [cxx/](cxx/), które znikną razem z ostatnim wywołującym w C++.

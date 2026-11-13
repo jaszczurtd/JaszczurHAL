@@ -63,7 +63,8 @@ target_link_libraries(jh_sha256 PUBLIC jb::status)
 jh_tool_target(jh_sha256)
 add_library(jh_registry STATIC config/jh_feature_registry.c config/jh_board_outputs.c
   config/jh_feature_lint.c config/jh_board_registry.c config/jh_clock_registry.c
-  config/jh_project_build.c config/jh_config_expression.c)
+  config/jh_project_build.c config/jh_config_expression.c
+  config/jh_project_config.c)
 target_include_directories(jh_registry PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/config")
 target_link_libraries(jh_registry PUBLIC jh_files PRIVATE jh_sha256 pcre2-8-static jb::unicode)
 jh_tool_target(jh_registry)
@@ -73,10 +74,10 @@ add_library(jh_cxx STATIC cxx/jh_containers.cpp cxx/jh_adapters.cpp)
 target_include_directories(jh_cxx PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/cxx")
 target_link_libraries(jh_cxx PUBLIC jh_files jh_registry jb::host)
 jh_tool_target(jh_cxx)
-# C++ modules of the commands: the type catalogue, the device defaults
-# generator and the project configuration reader.
+# C++ modules of the commands: the type catalogue and the device defaults
+# generator.
 add_library(jh_host STATIC hardware/jh_type_catalogue.cpp
-  hardware/jh_device_defaults.cpp config/jh_project_config.cpp)
+  hardware/jh_device_defaults.cpp)
 target_include_directories(jh_host PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/hardware"
   "${CMAKE_CURRENT_SOURCE_DIR}/config")
 target_link_libraries(jh_host PUBLIC jh_cxx jb::host jb::unicode)
@@ -126,8 +127,8 @@ if(BUILD_TESTING)
   # jh_config_preprocessor also compares it with the preprocessor of a GCC or
   # Clang compiler on fixed headers and on every hal_project_config.h of this
   # checkout outside tests/hardware (MSVC has no -E -dM).
-  add_executable(jh_config_test tests/test_project_config.cpp)
-  target_link_libraries(jh_config_test PRIVATE jh_host)
+  add_executable(jh_config_test tests/test_project_config.c)
+  target_link_libraries(jh_config_test PRIVATE jh_registry)
   jh_tool_target(jh_config_test)
   add_test(NAME jh_config COMMAND jh_config_test "${CMAKE_CURRENT_BINARY_DIR}")
   # The C++ owners of the jhbase containers and the adapters, with the C
@@ -144,6 +145,10 @@ if(BUILD_TESTING)
   jh_tool_target(jh_clocks_test)
   add_test(NAME jh_clocks COMMAND jh_clocks_test "${_jh_hal_root}"
     "${CMAKE_CURRENT_BINARY_DIR}")
+  # The native test programs run under the memory ceiling of the host tests.
+  include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/jh_test_memory_limit.cmake")
+  jh_limit_test_memory(jh_schema_test jh_settings_test jh_settings_probe
+    jh_config_test jh_containers_test jh_clocks_test)
   set_tests_properties(jh_schema jh_schema_compat jh_device_defaults jh_settings
     jh_settings_compat jh_config jh_containers PROPERTIES TIMEOUT 120)
   # jh_clocks under Valgrind in the gate took 117.7 s of the former 120 s.

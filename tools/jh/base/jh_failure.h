@@ -20,12 +20,15 @@ extern "C" {
 
 /** One recorded failure; status stays HAL_OK until a failure is recorded.
  * A jhbase container that cannot grow leaves message empty, with exit code 4
- * and its status (HAL_ENOMEM or HAL_EOVERFLOW).
+ * and its status (HAL_ENOMEM or HAL_EOVERFLOW). code and source are set only
+ * by jh_fail_coded: the diagnostic code and the place the message starts
+ * with, which the --json error result reports as fields of their own.
  */
 typedef struct {
   hal_status_t status;
   int exit_code;
   jb_string_t message;
+  jb_string_t code, source;
 } jh_failure_t;
 
 /** Start an empty record whose message uses the host heap. failure is
@@ -38,12 +41,20 @@ void jh_failure_init(jh_failure_t *failure);
 void jh_failure_destroy(jh_failure_t *failure);
 
 /** Record status and exit_code with the concatenation of count message parts,
- * replacing an earlier record; a part may quote the earlier message. When the
+ * replacing an earlier record with its code and source; a part may quote the
+ * earlier message. When the
  * message cannot be stored, the record becomes the failure of its storage
  * (jh_fail_storage). Returns the recorded status.
  */
 hal_status_t jh_fail(jh_failure_t *failure, hal_status_t status, int exit_code,
                      const jb_json_span_t *parts, size_t count);
+/** jh_fail with the message "<source>: [<code>] <parts>", keeping code and
+ * source in the record. source and the parts may quote the earlier record.
+ */
+hal_status_t jh_fail_coded(jh_failure_t *failure, hal_status_t status,
+                           int exit_code, const char *code,
+                           jb_json_span_t source, const jb_json_span_t *parts,
+                           size_t count);
 /** jh_fail with one NUL-terminated message. */
 hal_status_t jh_fail_text(jh_failure_t *failure, hal_status_t status,
                           int exit_code, const char *message);

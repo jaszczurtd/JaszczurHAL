@@ -5,15 +5,19 @@
 #include <string.h>
 
 void jh_failure_init(jh_failure_t *failure) {
-  const jh_failure_t empty = {HAL_OK, 0, {0}};
+  const jh_failure_t empty = {HAL_OK, 0, {0}, {0}, {0}};
   *failure = empty;
   // Initialization only checks its arguments, which are valid here.
   (void)jb_string_init(&failure->message, jb_heap_allocator());
+  (void)jb_string_init(&failure->code, jb_heap_allocator());
+  (void)jb_string_init(&failure->source, jb_heap_allocator());
 }
 
 void jh_failure_destroy(jh_failure_t *failure) {
-  const jh_failure_t empty = {HAL_NONE, 0, {0}};
+  const jh_failure_t empty = {HAL_NONE, 0, {0}, {0}, {0}};
   jb_string_destroy(&failure->message);
+  jb_string_destroy(&failure->code);
+  jb_string_destroy(&failure->source);
   *failure = empty;
 }
 
@@ -32,9 +36,47 @@ hal_status_t jh_fail(jh_failure_t *failure, hal_status_t status, int exit_code,
   }
   jb_string_destroy(&failure->message);
   failure->message = message;
+  jb_string_clear(&failure->code);
+  jb_string_clear(&failure->source);
   failure->status = status;
   failure->exit_code = exit_code;
   return status;
+}
+
+hal_status_t jh_fail_coded(jh_failure_t *failure, hal_status_t status,
+                           int exit_code, const char *code,
+                           jb_json_span_t source, const jb_json_span_t *parts,
+                           size_t count) {
+  // source and the parts may quote the record: everything is built aside.
+  jb_string_t message = {0}, place = {0}, name = {0};
+  hal_status_t stored = jb_string_init(&message, jb_heap_allocator());
+  if (stored == HAL_OK)
+    stored = jb_string_init(&place, jb_heap_allocator());
+  if (stored == HAL_OK)
+    stored = jb_string_init(&name, jb_heap_allocator());
+  jh_put_span(&place, &stored, source);
+  jh_put(&name, &stored, code);
+  jh_put_span(&message, &stored, source);
+  jh_put(&message, &stored, ": [");
+  jh_put(&message, &stored, code);
+  jh_put(&message, &stored, "] ");
+  for (size_t index = 0; index < count; ++index)
+    jh_put_span(&message, &stored, parts[index]);
+  if (stored == HAL_OK) {
+    jb_string_destroy(&failure->message);
+    jb_string_destroy(&failure->code);
+    jb_string_destroy(&failure->source);
+    failure->message = message;
+    failure->code = name;
+    failure->source = place;
+    failure->status = status;
+    failure->exit_code = exit_code;
+    return status;
+  }
+  jb_string_destroy(&name);
+  jb_string_destroy(&place);
+  jb_string_destroy(&message);
+  return jh_fail_storage(failure, stored);
 }
 
 hal_status_t jh_fail_text(jh_failure_t *failure, hal_status_t status,
@@ -47,6 +89,8 @@ hal_status_t jh_fail_storage(jh_failure_t *failure, hal_status_t status) {
   if (status == HAL_OK)
     return HAL_OK;
   jb_string_clear(&failure->message);
+  jb_string_clear(&failure->code);
+  jb_string_clear(&failure->source);
   failure->status = status;
   failure->exit_code = 4;
   return status;

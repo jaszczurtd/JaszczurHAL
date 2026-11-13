@@ -507,6 +507,11 @@ public:
       key(name);
     require(jh_json_write_tree(&writer, value), 4, "cannot write result tree");
   }
+  /** The member "directives" of jh_config_directive_t elements. */
+  void directives(const jb_vector_t &list) {
+    require(jh_config_write_directives(&writer, &list), 4,
+            "cannot write the directives");
+  }
   /** The fixed tables of the board registry as members of the result. */
   void board_tables() {
     require(jh_board_write_tables(&writer), 4,
@@ -1087,42 +1092,53 @@ int feature_resolve(context &ctx, const std::string &base) {
  * is one finding. */
 void lint_header(const jh_feature_registry_t &registry, const std::string &path,
                  jb_vector_t *findings) {
-  jh::config::project_config config;
-  try {
-    config = jh::config::read_project_config(path, {}, {});
-  } catch (const failure &error) {
-    require(jh_list_push(findings, span(error.message)), 4,
+  jh::project_config config;
+  jh::failure_record read;
+  const auto status = jh_project_config_read(path.c_str(), nullptr, "", nullptr,
+                                             &config, &read.value);
+  if (status != HAL_OK && jb_string_size(&read.value.message) != 0) {
+    require(jh_list_push(findings, jh_string_span(&read.value.message)), 4,
             "cannot store a lint finding");
     return;
   }
-  const std::string &header = config.files.empty() ? path : config.files[0];
-  const auto check = [&](std::string_view symbol, bool has_value,
-                         std::string_view value, const std::string &source) {
+  read.check(status);
+  const auto header = jb_vector_size(&config.files) == 0
+                          ? span(path)
+                          : jh_string_span(jh_list_at(&config.files, 0));
+  const auto check = [&](jb_json_span_t symbol, bool has_value,
+                         jb_json_span_t value, const std::string &source) {
     jh_feature_request_t item{};
-    item.symbol = span(symbol);
+    item.symbol = symbol;
     item.has_value = has_value;
-    item.value = span(value);
+    item.value = value;
     item.source = span(source);
     jh::failure_record failed;
     failed.check(jh_feature_check_request(&registry, &item, findings, nullptr,
                                           &failed.value));
   };
-  for (const auto &item : config.directives)
-    if (!item.undef && item.file == header &&
-        jh_feature_symbol(span(item.name), true))
-      check(item.name, !item.text.empty(), item.text,
-            path + ':' + std::to_string(item.line));
-  for (const auto &item : config.variants)
-    for (const auto &definition : item.definitions) {
-      const std::string_view text = definition;
+  for (size_t i = 0; i < jb_vector_size(&config.directives); ++i) {
+    const auto &item = *static_cast<const jh_config_directive_t *>(
+        jb_vector_const_at(&config.directives, i));
+    if (!item.undef && jh_span_equal(jh_string_span(&item.file), header) &&
+        jh_feature_symbol(jh_string_span(&item.name), true))
+      check(jh_string_span(&item.name), jb_string_size(&item.text) != 0,
+            jh_string_span(&item.text), path + ':' + std::to_string(item.line));
+  }
+  for (size_t i = 0; i < jb_vector_size(&config.variants); ++i) {
+    const auto &item = *static_cast<const jh_config_variant_t *>(
+        jb_vector_const_at(&config.variants, i));
+    for (size_t j = 0; j < jb_vector_size(&item.definitions); ++j) {
+      const std::string_view text = jh::view(*jh_list_at(&item.definitions, j));
       const size_t equal = text.find('=');
       const std::string_view symbol = text.substr(0, equal);
       if (jh_feature_symbol(span(symbol), false))
-        check(symbol, equal != std::string_view::npos,
-              equal == std::string_view::npos ? std::string_view()
-                                              : text.substr(equal + 1),
-              path + ":JH_PROJECT_VARIANTS(" + item.id + ")");
+        check(span(symbol), equal != std::string_view::npos,
+              span(equal == std::string_view::npos ? std::string_view()
+                                                   : text.substr(equal + 1)),
+              path + ":JH_PROJECT_VARIANTS(" + std::string(jh::view(item.id)) +
+                  ")");
     }
+  }
 }
 
 /* generate_hal_features.py --lint: the feature requests of every header and
@@ -1778,192 +1794,39 @@ int repository_files(context &ctx, const std::string &base) {
   return 0;
 }
 
-void write_directives(result_writer &result,
-                      const std::vector<jh::config::directive> &directives) {
-  result.array_begin("directives");
-  for (const auto &item : directives) {
-    result.object_begin(nullptr);
-    result.string("file", item.file);
-    result.number("line", item.line);
-    result.string("directive", item.undef ? "undef" : "define");
-    result.string("name", item.name);
-    result.string("text", item.text);
-    result.object_end();
-  }
-  result.array_end();
-}
-
-size_t directive_bytes(const std::vector<jh::config::directive> &directives) {
-  size_t bytes = 0;
-  for (const auto &item : directives)
-    bytes += item.file.size() + item.name.size() + item.text.size() + 96;
-  return bytes;
-}
-
 /* The #define/#undef of one file without evaluating it: the checks that look
  * at any branch, also of a header the reader rejects. */
 int config_directives(context &ctx, const std::string &base) {
   require_value(ctx.args, file, "config directives requires --file");
   const auto path = jh::stl::absolute_path(ctx.args.values[file], base);
   jh::assign(ctx.source, path);
-  const auto directives = jh::config::read_directives(path);
-  if (!ctx.json) {
-    std::string text;
-    for (const auto &item : directives)
+  jh::directive_list directives;
+  jh::failure_record failed;
+  failed.check(jh_project_config_directives(path.c_str(), &directives.value,
+                                            &failed.value));
+  size_t bytes = 0;
+  std::string text;
+  for (size_t i = 0; i < jb_vector_size(&directives.value); ++i) {
+    const auto &item = *static_cast<const jh_config_directive_t *>(
+        jb_vector_const_at(&directives.value, i));
+    bytes += jb_string_size(&item.file) + jb_string_size(&item.name) +
+             jb_string_size(&item.text) + 96;
+    if (!ctx.json)
       text += std::to_string(item.line) +
-              (item.undef ? " undef " : " define ") + item.name + '\n';
+              (item.undef ? " undef " : " define ") +
+              std::string(jh::view(item.name)) + '\n';
+  }
+  if (!ctx.json) {
     stdout_bytes(text);
     return 0;
   }
-  result_writer result(path.size() + directive_bytes(directives) + 1024);
+  result_writer result(path.size() + bytes + 1024);
   result.string("command", "config.directives");
   result.string("status", "HAL_OK");
   result.string("file", path);
-  write_directives(result, directives);
+  result.directives(directives.value);
   stdout_bytes(result.finish());
   return 0;
-}
-
-const char *integer_state(jh::config::integer_kind kind) {
-  switch (kind) {
-  case jh::config::integer_kind::value:
-    return "value";
-  case jh::config::integer_kind::out_of_range:
-    return "outOfRange";
-  default:
-    return "none";
-  }
-}
-
-jh::owned_string config_result(const std::string &header_path,
-                               const std::vector<std::string> &definitions,
-                               const std::string &preinclude_path, bool json) {
-  const auto config = jh::config::read_project_config(header_path, definitions,
-                                                      preinclude_path);
-  const auto macros = config.macros.ordered();
-  std::vector<jh::config::integer_value> integers;
-  std::vector<std::set<std::string>> unresolved;
-  // Each value is a query with a budget of its own. A value the reader cannot
-  // give (an invalid literal, a jh limit) fails only that macro, and the
-  // caller decides: configure stops on an invalid literal, and on a value
-  // over a limit only when the build reads it.
-  std::vector<jh::failure> value_errors;
-  size_t bytes = header_path.size() + preinclude_path.size() +
-                 config.error_message.size() + config.error_source.size();
-  for (const auto *item : macros) {
-    jh::config::macro_value value;
-    jh::failure error{HAL_OK, 0, {}, {}, {}, {}};
-    try {
-      value = config.value(item->name);
-    } catch (const jh::failure &failed) {
-      error = failed;
-      bytes += error.message.size() + 64;
-    }
-    value_errors.push_back(std::move(error));
-    integers.push_back(value.integer);
-    unresolved.push_back(std::move(value.unresolved));
-    bytes += item->name.size() + item->body.size() + item->source.size() + 64;
-    for (const auto &name : unresolved.back())
-      bytes += name.size() + 8;
-    for (const auto &parameter : item->parameters)
-      bytes += parameter.size() + 8;
-  }
-  for (const auto &file : config.files)
-    bytes += file.size() + 8;
-  bytes += directive_bytes(config.directives);
-  for (const auto &item : config.variants) {
-    bytes += item.id.size() + item.description.size() + item.source.size() + 64;
-    for (const auto &definition : item.definitions)
-      bytes += definition.size() + 8;
-  }
-  for (const auto &[name, unknown] : config.dependencies) {
-    bytes += name.size() + 32;
-    for (const auto &item : unknown)
-      bytes += item.size() + 8;
-  }
-  if (!json) {
-    std::string text;
-    for (const auto *item : macros) {
-      text += "#define " + item->name;
-      if (item->function_like) {
-        text += '(';
-        for (size_t i = 0; i < item->parameters.size(); ++i)
-          text += (i != 0 ? "," : "") + item->parameters[i];
-        text += ')';
-      }
-      if (!item->body.empty())
-        text += ' ' + item->body;
-      text += '\n';
-    }
-    if (config.stopped)
-      std::fprintf(stderr, "%s: #error %s\n", config.error_source.c_str(),
-                   config.error_message.c_str());
-    return jh::owned_string(text);
-  }
-  result_writer result(bytes);
-  result.string("command", "config.inspect");
-  result.string("status", "HAL_OK");
-  result.string("header", header_path);
-  result.string("preinclude", preinclude_path);
-  result.strings("files", config.files);
-  result.strings("targets", config.targets);
-  result.array_begin("variants");
-  for (const auto &item : config.variants) {
-    result.object_begin(nullptr);
-    result.string("id", item.id);
-    result.string("description", item.description);
-    result.strings("definitions", item.definitions);
-    result.string("source", item.source);
-    result.object_end();
-  }
-  result.array_end();
-  result.array_begin("macros");
-  for (size_t i = 0; i < macros.size(); ++i) {
-    const auto &item = *macros[i];
-    result.object_begin(nullptr);
-    result.string("name", item.name);
-    result.string("body", item.body);
-    result.string("source", item.source);
-    result.boolean("functionLike", item.function_like);
-    result.strings("parameters", item.parameters);
-    const auto &error = value_errors[i];
-    if (error.status != HAL_OK) {
-      result.string("integerState", "error");
-      result.object_begin("integerError");
-      result.string("status", hal_status_to_string(error.status));
-      result.string("message", error.message);
-      result.object_end();
-    } else {
-      result.string("integerState", integer_state(integers[i].kind));
-      if (integers[i].kind == jh::config::integer_kind::value)
-        result.signed_number("integer", integers[i].value);
-    }
-    result.strings("unresolved", unresolved[i]);
-    result.object_end();
-  }
-  result.array_end();
-  std::vector<std::string> features;
-  for (const auto *item : config.features())
-    features.push_back(item->name);
-  result.strings("features", features);
-  result.array_begin("dependencies");
-  for (const auto &[name, unknown] : config.dependencies) {
-    result.object_begin(nullptr);
-    result.string("name", name);
-    result.strings("unknown", unknown);
-    result.object_end();
-  }
-  result.array_end();
-  write_directives(result, config.directives);
-  if (config.stopped) {
-    result.object_begin("error");
-    result.string("message", config.error_message);
-    result.string("source", config.error_source);
-    result.object_end();
-  } else {
-    result.null("error");
-  }
-  return result.finish();
 }
 
 int config_inspect(context &ctx, const std::string &base) {
@@ -1977,41 +1840,30 @@ int config_inspect(context &ctx, const std::string &base) {
     throw failure{HAL_EINVAL, 2,  "--header and --preinclude need a path",
                   {},         {}, {}};
   const auto header_path = path_of(header);
+  const auto preinclude_path = path_of(preinclude);
   jh::assign(ctx.source, header_path);
-  stdout_bytes(config_result(header_path, args.lists[define],
-                             path_of(preinclude), ctx.json));
-  return 0;
-}
-
-// The existing reader and its JSON model remain C++ until the reader's port.
-// Both config.inspect and the C build module consume this same serialization.
-hal_status_t read_build_config(void *user, const char *header_path,
-                               const jb_vector_t *definitions,
-                               const char *preinclude_path,
-                               jb_json_tree_t **out, jh_failure_t *failed) {
-  try {
-    std::vector<std::string> predefined;
-    for (size_t i = 0; i < jb_vector_size(definitions); ++i)
-      predefined.emplace_back(jh::view(*jh_list_at(definitions, i)));
-    const auto json =
-        config_result(header_path, predefined, preinclude_path, true);
-    auto &bytes = *static_cast<size_t *>(user);
-    if (json.size() > SIZE_MAX - bytes)
-      return jh_fail_storage(failed, HAL_EOVERFLOW);
-    bytes += json.size();
-    return jh_fail_storage(failed, jh_json_tree_from_text(jh::span(json), out));
-  } catch (const jh::failure &error) {
-    const auto message = jh::span(error.message);
-    return jh_fail(failed, error.status, error.exit_code, &message, 1);
-  } catch (const std::bad_alloc &) {
-    return jh_fail_storage(failed, HAL_ENOMEM);
-  } catch (const std::length_error &) {
-    return jh_fail_storage(failed, HAL_EOVERFLOW);
-  } catch (const std::exception &error) {
-    return jh_fail_text(failed, HAL_EIO, 3, error.what());
-  } catch (...) {
-    return jh_fail_text(failed, HAL_EIO, 3, "project reader failed");
+  jh::string_list definitions;
+  jh::failure_record failed;
+  for (const auto &item : args.lists[define])
+    failed.check(jh_list_push(&definitions.value, span(item)));
+  jh::project_config config;
+  failed.check(jh_project_config_read(header_path.c_str(), &definitions.value,
+                                      preinclude_path.c_str(), nullptr, &config,
+                                      &failed.value));
+  jh::owned_string text;
+  if (ctx.json) {
+    failed.check(jh_project_config_json(&config, header_path.c_str(),
+                                        preinclude_path.c_str(), text.raw(),
+                                        &failed.value));
+  } else {
+    failed.check(jh_project_config_text(&config, text.raw()));
+    if (config.stopped)
+      std::fprintf(stderr, "%s: #error %s\n",
+                   jb_string_data(&config.error_source),
+                   jb_string_data(&config.error_message));
   }
+  stdout_bytes(text);
+  return 0;
 }
 
 int config_build(context &ctx, const std::string &base, bool cmake) {
@@ -2121,9 +1973,8 @@ int config_build(context &ctx, const std::string &base, bool cmake) {
     jh_project_build_t *value;
     ~build_owner() { jh_project_build_destroy(value); }
   } owner{&build};
-  size_t json_bytes = 0;
-  const auto evaluated = jh_project_build_evaluate(
-      &build_options, read_build_config, &json_bytes, &build, &failed.value);
+  const auto evaluated =
+      jh_project_build_evaluate(&build_options, &build, &failed.value);
   ctx.configuration_rejected = build.rejected;
   failed.check(evaluated);
   jh::owned_string rendered, destination;
@@ -2149,7 +2000,7 @@ int config_build(context &ctx, const std::string &base, bool cmake) {
                                         &changed, &failed.value));
   }
   if (ctx.json) {
-    result_writer result(json_bytes + 2 * list_bytes(build.definitions) +
+    result_writer result(build.model_bytes + 2 * list_bytes(build.definitions) +
                          2 * list_bytes(build.sources) + 4096);
     result.string("command", cmake ? "config.cmake" : "config.build");
     result.string("status", "HAL_OK");

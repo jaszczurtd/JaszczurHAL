@@ -437,6 +437,37 @@ The thematic utility modules and their compatibility wrappers are covered by
 `multicoreWatchdog.cpp` is covered by `test_multicoreWatchdog` using a local
 logger-close stub plus HAL mocks.
 
+### Memory limit of test programs
+
+On Linux every native test program limits its own memory, 2 GiB by default.
+A defect that makes a test allocate without an end then fails that one test:
+allocation returns an error, Valgrind stops, or the ASan/TSan runtime ends the
+process. Without the limit such a program grows until the kernel kills
+processes of its own choice, and the desktop session can go down with them.
+
+`cmake/jh_test_memory_limit.cmake` links `tests/support/jh_test_memory_limit.c`
+into every executable defined below `tests/` and into the native tests of
+`tools/jh`. A regular build lowers the address space limit (`RLIMIT_AS`) before
+`main()`; under Valgrind the same limit also covers Valgrind itself. ASan and
+TSan builds reserve far more address space for their shadow memory, so there
+the file sets `hard_rss_limit_mb` of the sanitizer runtime instead.
+
+Choose another ceiling at configure time with
+`-DJH_TEST_MEMORY_LIMIT_MB=<MiB>`; `0` removes it. `test_memory_limit` starts a
+copy of itself that allocates without an end and checks that it stops below
+the ceiling.
+
+The limit is the second line of defence. A test of a work budget, a depth or
+a size limit should use input whose complete processing without that limit is
+still small, so that a broken limit shows up as a failed assertion right away.
+The work limit cases of `tools/jh/tests/test_project_config.c` expand a chain
+of 16 macros against a limit of 5000 tokens for that reason.
+
+The limit belongs to the test executables only. Python tests, CMake script
+tests and the `jh` tool they start run without it. Windows builds have no
+limit either: Windows refuses an allocation once the system commit limit is
+reached and does not kill other processes.
+
 ### Unity examples
 
 Minimal test file:

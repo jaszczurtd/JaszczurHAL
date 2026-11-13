@@ -437,6 +437,40 @@ Tematyczne moduły narzędziowe i ich adaptery zgodnościowe sprawdza
 Plik `multicoreWatchdog.cpp` sprawdza `test_multicoreWatchdog` z użyciem
 lokalnej zaślepki zamknięcia loggera i mocków HAL.
 
+### Limit pamięci programów testowych
+
+Na Linuksie każdy natywny program testowy sam ogranicza swoją pamięć,
+domyślnie do 2 GiB. Błąd, przez który test alokuje bez końca, kończy się wtedy
+niepowodzeniem tego jednego testu: alokacja zwraca błąd, Valgrind przerywa
+pracę albo runtime ASan/TSan zamyka proces. Bez limitu taki program rośnie,
+aż jądro zacznie zabijać wybrane przez siebie procesy, a razem z nimi może
+zniknąć cała sesja pulpitu.
+
+`cmake/jh_test_memory_limit.cmake` dołącza `tests/support/jh_test_memory_limit.c`
+do każdego pliku wykonywalnego zdefiniowanego w `tests/` i do natywnych testów
+`tools/jh`. W zwykłym buildzie plik obniża limit przestrzeni adresowej
+(`RLIMIT_AS`) przed `main()`; pod Valgrindem ten sam limit obejmuje także
+Valgrinda. Buildy ASan i TSan rezerwują na pamięć shadow znacznie więcej
+przestrzeni adresowej, dlatego tam plik ustawia `hard_rss_limit_mb` w runtime
+sanitizera.
+
+Inną wartość wybierzesz przy konfiguracji przez
+`-DJH_TEST_MEMORY_LIMIT_MB=<MiB>`; `0` usuwa limit. `test_memory_limit`
+uruchamia własną kopię, która alokuje bez końca, i sprawdza, że zatrzymuje się
+ona poniżej limitu.
+
+Limit pamięci jest drugą linią obrony. Test budżetu pracy, limitu głębokości
+albo rozmiaru powinien dostawać dane, których pełne przetworzenie bez tego
+limitu nadal jest małe. Zepsuty limit widać wtedy od razu jako niespełnioną
+asercję. Z tego powodu przypadki limitu pracy w
+`tools/jh/tests/test_project_config.c` rozwijają łańcuch 16 makr przy limicie
+5000 tokenów.
+
+Limit dotyczy wyłącznie plików wykonywalnych testów. Testy w Pythonie, testy
+w skryptach CMake i uruchamiane przez nie narzędzie `jh` działają bez niego.
+Buildy na Windows też go nie mają: Windows odmawia alokacji po wyczerpaniu
+limitu pamięci systemu i nie zabija innych procesów.
+
 ### Przykłady Unity
 
 Minimalny plik testowy:

@@ -3157,6 +3157,20 @@ if(JH_ENABLE_FUZZING)
     add_hal_fuzzer(fuzz_http_multipart)
 endif()
 
+# Every executable of this directory tree gets the memory ceiling of
+# cmake/jh_test_memory_limit.cmake; test_memory_limit shows that it stops a
+# program that allocates without an end.
+jh_test_memory_limit_active(_jh_test_memory_limited)
+if(_jh_test_memory_limited)
+    add_executable(test_memory_limit test_memory_limit.c)
+    target_compile_definitions(test_memory_limit PRIVATE
+        "JH_TEST_MEMORY_LIMIT_MB=${JH_TEST_MEMORY_LIMIT_MB}")
+    jh_enable_host_warnings(test_memory_limit ERRORS)
+    add_test(NAME test_memory_limit COMMAND test_memory_limit)
+    set_tests_properties(test_memory_limit PROPERTIES TIMEOUT 120)
+endif()
+jh_limit_test_memory_in_directory("${CMAKE_CURRENT_SOURCE_DIR}")
+
 # Memcheck direct native executables. Interpreter and script-mode tests exercise
 # their respective host tools, while cross-compiled firmware cannot run under
 # the host Valgrind process.

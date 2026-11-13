@@ -672,13 +672,14 @@ feature lint and checks project manifests.
 [jh_board_registry.h](config/jh_board_registry.h) loads and validates the board
 registry, and [jh_clock_registry.h](config/jh_clock_registry.h) the clock tree
 registry with the checks of the code that sets the clocks.
-The C11 module [jh_project_build.h](config/jh_project_build.h) selects one
-project build, collects its feature requests and renders its CMake file.
-It receives the existing reader's model through a transitional C++ callback.
-[jh_config_expression.h](config/jh_config_expression.h) provides the reader's
-text operations, condition tokenizer and signed 64-bit arithmetic in C11.
-The reader adds source locations to its diagnostics and handles macro
-expansion before evaluation. The schema validator, the rest of the reader,
-the type catalogue and `main.cpp` are still C++. They call the C modules
-through the owners and exceptions in [cxx/](cxx/), which go away with the last
-C++ caller.
+[jh_project_config.h](config/jh_project_config.h) reads
+`hal_project_config.h`: it expands macros, decides the conditions, parses the
+target and variant declarations, tracks the names it cannot see and renders
+the `config inspect` result. Its text operations, condition tokenizer and
+signed 64-bit arithmetic are in
+[jh_config_expression.h](config/jh_config_expression.h).
+[jh_project_build.h](config/jh_project_build.h) selects one project build from
+that result, collects its feature requests and renders its CMake file. The
+schema validator, the type catalogue, the device defaults generator and
+`main.cpp` are still C++. They call the C modules through the owners and
+exceptions in [cxx/](cxx/), which go away with the last C++ caller.

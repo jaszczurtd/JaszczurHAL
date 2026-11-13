@@ -68,6 +68,11 @@ hal_status_t jh_walk_files(const char *directory, jb_json_span_t relative,
  */
 hal_status_t jh_resolved_path(const char *root, jb_string_t *out);
 
+/** Replace out with the working directory of the process (jb_fs_cwd). A
+ * failure has exit code 3, memory 4.
+ */
+hal_status_t jh_working_directory(jb_string_t *out, jh_failure_t *failure);
+
 /** Path(base, path).resolve(), as os.path.realpath(strict=False) computes it,
  * in out. A relative path joins base, or the process working directory when
  * base is NULL. On POSIX the components resolve from left to right: a

@@ -17,6 +17,7 @@
 #include "jh_generated_output.h"
 #include "jh_json_check.h"
 #include "jh_json_file.h"
+#include "jh_project_config.h"
 #include "jh_python_repr.h"
 #include <memory>
 #include <string_view>
@@ -200,6 +201,25 @@ struct feature_outputs : jh_feature_outputs_t {
   feature_outputs(const feature_outputs &) = delete;
   feature_outputs &operator=(const feature_outputs &) = delete;
   ~feature_outputs() { jh_feature_outputs_destroy(this); }
+};
+
+/** A jh_project_config_t released with its owner. */
+struct project_config : jh_project_config_t {
+  project_config() noexcept : jh_project_config_t() {
+    jh_project_config_init(this);
+  }
+  project_config(const project_config &) = delete;
+  project_config &operator=(const project_config &) = delete;
+  ~project_config() { jh_project_config_destroy(this); }
+};
+
+/** A list of jh_config_directive_t released with its owner. */
+struct directive_list {
+  jb_vector_t value{};
+  directive_list() noexcept { (void)jh_config_directives_init(&value); }
+  directive_list(const directive_list &) = delete;
+  directive_list &operator=(const directive_list &) = delete;
+  ~directive_list() { jh_config_directives_destroy(&value); }
 };
 
 /** jh_python_repr_append into a new string. */

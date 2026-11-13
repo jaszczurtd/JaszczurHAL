@@ -1,6 +1,7 @@
 #include "jh_project_build.h"
 #include "jh_generated_output.h"
 #include "jh_json_check.h"
+#include "jh_project_config.h"
 #include "jh_python_repr.h"
 #include <jb/array.h>
 #include <jb/filesystem.h>
@@ -274,11 +275,41 @@ static hal_status_t feature_requests(const jh_project_build_options_t *options,
   return status;
 }
 
+/* Read the header for one set of definitions into the tree of its
+ * config.inspect result. */
+static hal_status_t read_model(const jh_project_build_options_t *options,
+                               const jb_vector_t *definitions,
+                               jb_json_tree_t **out, size_t *bytes,
+                               jh_failure_t *failure) {
+  jh_project_config_t config = {0};
+  jb_string_t json = {0};
+  jh_project_config_init(&config);
+  hal_status_t status = jb_string_init(&json, jb_heap_allocator());
+  if (status == HAL_OK)
+    status =
+        jh_project_config_read(options->header, definitions,
+                               options->preinclude, NULL, &config, failure);
+  if (status == HAL_OK)
+    status = jh_project_config_json(&config, options->header,
+                                    options->preinclude, &json, failure);
+  if (status == HAL_OK && jb_string_size(&json) > SIZE_MAX - *bytes)
+    status = HAL_EOVERFLOW;
+  if (status == HAL_OK) {
+    *bytes += jb_string_size(&json);
+    status = jh_json_tree_from_text(jh_string_span(&json), out);
+  }
+  jb_string_destroy(&json);
+  jh_project_config_destroy(&config);
+  // The build reports a rejected header by its message alone.
+  jb_string_clear(&failure->code);
+  jb_string_clear(&failure->source);
+  return status;
+}
+
 hal_status_t
 jh_project_build_evaluate(const jh_project_build_options_t *options,
-                          jh_project_read_fn read, void *user,
                           jh_project_build_t *result, jh_failure_t *failure) {
-  if (options == NULL || read == NULL || result == NULL || failure == NULL ||
+  if (options == NULL || result == NULL || failure == NULL ||
       options->header == NULL || options->preinclude == NULL ||
       options->target == NULL || options->selector == NULL ||
       options->variant == NULL || options->required == NULL ||
@@ -290,8 +321,8 @@ jh_project_build_evaluate(const jh_project_build_options_t *options,
   if (options->selector[0])
     status = jh_list_push(&predefined, jh_span(options->selector));
   if (status == HAL_OK)
-    status = read(user, options->header, &predefined, options->preinclude,
-                  &result->declarations, failure);
+    status = read_model(options, &predefined, &result->declarations,
+                        &result->model_bytes, failure);
   if (status == HAL_OK)
     status =
         jb_json_tree_root(result->declarations, &result->declarations_root);
@@ -307,8 +338,8 @@ jh_project_build_evaluate(const jh_project_build_options_t *options,
   if (status == HAL_OK)
     status = list_copy(&predefined, &result->definitions);
   if (status == HAL_OK)
-    status = read(user, options->header, &predefined, options->preinclude,
-                  &result->config, failure);
+    status = read_model(options, &predefined, &result->config,
+                        &result->model_bytes, failure);
   if (status == HAL_OK)
     status = jb_json_tree_root(result->config, &result->config_root);
   if (status == HAL_OK)

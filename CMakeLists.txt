@@ -20,6 +20,9 @@ endif()
 # ── Valgrind / CTest memcheck configuration ───────────────────────────────────
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/jh_memcheck.cmake)
 
+# ── Memory ceiling of the native test programs ────────────────────────────────
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/jh_test_memory_limit.cmake)
+
 # Include CTest to generate standard test metadata (including
 # DartConfiguration.tcl) and keep test tooling output clean.
 include(CTest)

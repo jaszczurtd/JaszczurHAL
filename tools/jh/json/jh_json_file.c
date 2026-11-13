@@ -50,8 +50,9 @@ static hal_status_t parent_into(const void *context, char *buffer,
 static hal_status_t path_result(path_write_fn produce, const void *context,
                                 jb_string_t *out, jh_failure_t *failure) {
   size_t needed;
-  hal_status_t status = jh_require(failure, produce(context, NULL, 0, &needed),
-                                   3, "cannot resolve path");
+  const hal_status_t measured = produce(context, NULL, 0, &needed);
+  hal_status_t status = jh_require(
+      failure, measured, exit_code_for(measured, 3), "cannot resolve path");
   if (status != HAL_OK)
     return status;
   jb_string_t result = {0};
@@ -60,11 +61,12 @@ static hal_status_t path_result(path_write_fn produce, const void *context,
     status = jb_string_resize(&result, needed - 1, '\0');
   if (status != HAL_OK)
     status = jh_fail_storage(failure, status);
-  else if (needed > 1)
-    status = jh_require(
-        failure,
-        produce(context, jb_string_mutable_data(&result), needed, &needed), 3,
-        "cannot resolve path");
+  else if (needed > 1) {
+    const hal_status_t written =
+        produce(context, jb_string_mutable_data(&result), needed, &needed);
+    status = jh_require(failure, written, exit_code_for(written, 3),
+                        "cannot resolve path");
+  }
   if (status != HAL_OK) {
     jb_string_destroy(&result);
     return status;
@@ -416,6 +418,26 @@ hal_status_t jh_resolved_path(const char *root, jb_string_t *out) {
   return status;
 }
 
+hal_status_t jh_working_directory(jb_string_t *out, jh_failure_t *failure) {
+  size_t needed = 0;
+  const hal_status_t measured = jb_fs_cwd(NULL, 0, &needed);
+  hal_status_t status = HAL_OK;
+  if (measured != HAL_OK && measured != HAL_EOVERFLOW)
+    status = jh_require(failure, measured, exit_code_for(measured, 3),
+                        "cannot read the working directory");
+  if (status == HAL_OK)
+    status = jh_fail_storage(failure, jb_string_resize(out, needed, '\0'));
+  if (status == HAL_OK) {
+    const hal_status_t written =
+        jb_fs_cwd(jb_string_mutable_data(out), needed, &needed);
+    status = jh_require(failure, written, exit_code_for(written, 3),
+                        "cannot read the working directory");
+  }
+  if (status == HAL_OK)
+    status = jh_fail_storage(failure, jb_string_resize(out, needed - 1, '\0'));
+  return status;
+}
+
 /* path joined to base, or to the working directory when base is NULL: on
  * POSIX as written, as pathlib joins; on Windows normalized lexically, as
  * ntpath.realpath does before it resolves anything. */
@@ -424,23 +446,10 @@ static hal_status_t joined_path(const char *path, const char *base,
   jb_string_t cwd = {0};
   hal_status_t status = HAL_OK;
   if (base == NULL) {
-    size_t needed = 0;
     status =
         jh_fail_storage(failure, jb_string_init(&cwd, jb_heap_allocator()));
-    const hal_status_t measured =
-        status == HAL_OK ? jb_fs_cwd(NULL, 0, &needed) : status;
-    if (status == HAL_OK && measured != HAL_OK && measured != HAL_EOVERFLOW)
-      status =
-          jh_require(failure, measured, 3, "cannot read the working directory");
     if (status == HAL_OK)
-      status = jh_fail_storage(failure, jb_string_resize(&cwd, needed, '\0'));
-    if (status == HAL_OK)
-      status = jh_require(
-          failure, jb_fs_cwd(jb_string_mutable_data(&cwd), needed, &needed), 3,
-          "cannot read the working directory");
-    if (status == HAL_OK)
-      status =
-          jh_fail_storage(failure, jb_string_resize(&cwd, needed - 1, '\0'));
+      status = jh_working_directory(&cwd, failure);
     base = jb_string_data(&cwd);
   }
 #ifdef _WIN32
